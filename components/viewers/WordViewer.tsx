@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { docLabels } from "@/lib/generation/i18n";
+import { ESSAY_DESIGNS } from "@/lib/languages";
 import type { AcademicDoc } from "@/lib/generation/types";
 import { docToFlow, titleModel, tocEntries, type FlowItem, type TitleModel } from "@/lib/viewers/flow";
 import type { ViewerKind } from "@/lib/viewers/kind";
@@ -20,6 +21,15 @@ export function WordViewer({
   const title = useMemo(() => titleModel(doc), [doc]);
   const toc = useMemo(() => tocEntries(doc), [doc]);
   const labels = useMemo(() => docLabels(doc.meta.language), [doc.meta.language]);
+  /**
+   * Sahifa ramkasi ko'ruvchida ham FAQAT inshoda — `render-docx.ts`
+   * dagi shart bilan bir xil. Aks holda ekranda ramka ko'rinib,
+   * yuklab olingan faylda bo'lmasdi.
+   */
+  const frame = useMemo(() => {
+    if (doc.meta.toolId !== "essay") return null;
+    return ESSAY_DESIGNS.find((d) => d.value === doc.meta.design)?.from ?? null;
+  }, [doc.meta.toolId, doc.meta.design]);
   const [zoom, setZoom] = useState(100);
   const [pages, setPages] = useState<FlowItem[][] | null>(null);
   const [page, setPage] = useState(1);
@@ -84,16 +94,6 @@ export function WordViewer({
     setPages(packed.length ? packed : [items]);
   }, [items]);
 
-  const pageOf = useMemo(() => {
-    const map = new Map<string, number>();
-    (pages ?? []).forEach((pg, i) => {
-      for (const it of pg) {
-        if (it.type === "h1") map.set(it.text.trim().toLowerCase(), i + 1);
-      }
-    });
-    return map;
-  }, [pages]);
-
   useEffect(() => {
     const root = scrollRef.current;
     if (!root || !pages) return;
@@ -156,7 +156,8 @@ export function WordViewer({
                       pageRefs.current[i] = el;
                     }}
                     data-page={i + 1}
-                    className="word-sheet"
+                    className={frame ? "word-sheet word-sheet--framed" : "word-sheet"}
+                    style={frame ? ({ "--sheet-frame": frame } as React.CSSProperties) : undefined}
                   >
                     {isTitle ? (
                       <TitlePage title={title} ribbon={ribbon} />
@@ -164,7 +165,7 @@ export function WordViewer({
                       <div className="word-inner">
                         {i === 1 && ribbon && pages?.[0]?.[0]?.type === "title" ? null : i === 0 ? ribbon : null}
                         {pg.map((it) => (
-                          <FlowBlock key={it.id} item={it} toc={toc} pageOf={pageOf} labels={labels} />
+                          <FlowBlock key={it.id} item={it} toc={toc} labels={labels} />
                         ))}
                       </div>
                     )}
@@ -183,8 +184,15 @@ export function WordViewer({
         ref={measureRef}
       >
         {items.map((it) => (
-          <div key={it.id}>
-            <FlowBlock item={it} toc={toc} pageOf={new Map()} labels={labels} />
+          /*
+           * `flow-root` — muhim: usiz bolaning vertikal chegarasi (masalan
+           * `.word-p` ning 10pt pastki margin'i) o'ram div'dan TASHQARIGA
+           * chiqib ketadi va `getBoundingClientRect()` uni hisoblamaydi.
+           * Natijada har band ~13–32 px kam o'lchanib, sahifaga haddan
+           * ziyod band joylanardi va matn varaqdan chiqib ketardi.
+           */
+          <div key={it.id} style={{ display: "flow-root" }}>
+            <FlowBlock item={it} toc={toc} labels={labels} />
           </div>
         ))}
       </div>
@@ -230,31 +238,34 @@ function TitlePage({ title, ribbon }: { title: TitleModel; ribbon: ReactNode }) 
 function FlowBlock({
   item,
   toc,
-  pageOf,
   labels,
 }: {
   item: FlowItem;
   toc: string[];
-  pageOf: Map<string, number>;
   labels: ReturnType<typeof docLabels>;
 }) {
   switch (item.type) {
     case "title":
       return <div className="h-[40mm]" />;
     case "toc":
+      /*
+       * Mundarija — DOCX bilan bir xil: raqamlangan ro'yxat, SAHIFA
+       * RAQAMISIZ.
+       *
+       * Ilgari bu yerda sahifa raqami va nuqtali yetakchi bor edi, DOCX
+       * da esa yo'q — ekran fayldan farq qilardi. Bundan tashqari
+       * sarlavha `shrink-0` bilan flex ichida turardi: uzun bob nomi
+       * o'ralmay, yetakchi va raqamni varaq chetidan tashqariga itarardi
+       * (aynan shu sababli mundarija ramkadan chiqib ketardi).
+       */
       return (
         <div>
           <div className="word-h1">{labels.toc}</div>
-          {toc.map((row) => {
-            const p = pageOf.get(row.trim().toLowerCase());
-            return (
-              <div key={row} className="flex items-baseline gap-2 text-[14pt]" style={{ textIndent: 0 }}>
-                <span className="shrink-0">{row}</span>
-                <span className="min-w-4 flex-1 border-b border-dotted border-neutral-400" />
-                <span className="tabular-nums">{p ?? ""}</span>
-              </div>
-            );
-          })}
+          {toc.map((row, i) => (
+            <div key={row} className="mb-1 text-[14pt] break-words hyphens-auto" style={{ textIndent: 0 }}>
+              {i + 1}. {row}
+            </div>
+          ))}
         </div>
       );
     case "abstract":

@@ -142,16 +142,31 @@ button {
   background: #fff;
   color: #111;
   position: relative;
+  /*
+   * Sahifadan oshgan kontent qo'shni varaq ustiga OQMASIN.
+   * Ilgari bu yo'q edi: sahifalash hisobi xato bo'lganda matn varaq
+   * chetidan chiqib, keyingi varaq kartasi ustiga tushardi va ramka
+   * chizig'i matn ustidan o'tardi.
+   */
+  overflow: hidden;
   box-shadow:
     0 1px 1px rgba(0, 0, 0, 0.08),
     0 8px 28px rgba(0, 0, 0, 0.22);
 }
 
-.word-sheet::after {
+/*
+ * Sahifa ramkasi — FAQAT inshoda.
+ *
+ * Ilgari ramka har bir varaqqa, har bir ko'ruvchida chizilardi. DOCX da
+ * esa u faqat inshoda bor (GOST ilmiy ishda ramka talab qilmaydi), ya'ni
+ * ekranda ko'ringan narsa yuklab olingan fayldan farq qilardi. Rang ham
+ * fayldagidek `design` dan olinadi.
+ */
+.word-sheet--framed::after {
   content: "";
   position: absolute;
   inset: 9mm 8mm 9mm 9mm;
-  border: 1.1pt solid #222;
+  border: 1.1pt solid var(--sheet-frame, #222);
   pointer-events: none;
 }
 

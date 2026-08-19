@@ -34,3 +34,12 @@ export function contentHeightPx(opts?: { footer?: boolean }) {
 export function contentWidthPx() {
   return A4.wPx - A4.padLeftPx - A4.padRightPx;
 }
+
+/** Yotiq (landscape) varaqdagi foydalanish mumkin bo'lgan balandlik. */
+export function landscapeContentHeightPx(opts?: { footer?: boolean }) {
+  const footer = opts?.footer === false ? 0 : A4.footerPx;
+  // `.word-inner-ls` padding: 12mm yuqori, 14mm past.
+  const padTop = Math.round((12 / 25.4) * 96);
+  const padBottom = Math.round((14 / 25.4) * 96);
+  return LANDSCAPE.hPx - padTop - padBottom - footer;
+}

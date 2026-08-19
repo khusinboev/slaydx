@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import type { AcademicDoc } from "@/lib/generation/types";
 import { A4 } from "@/lib/viewers/metrics";
+import { useMeasuredPages } from "./measure";
 import { ZoomFrame, Workspace } from "./sheet";
 import { ViewerToolbar } from "./toolbar";
 
@@ -27,12 +28,16 @@ export function GlossaryViewer({ doc }: { doc: AcademicDoc }) {
     return out;
   }, [doc]);
 
-  const pages = useMemo(() => {
-    const size = 8;
-    const chunks: Term[][] = [];
-    for (let i = 0; i < terms.length; i += size) chunks.push(terms.slice(i, i + size));
-    return chunks.length ? chunks : [[]];
-  }, [terms]);
+  /*
+   * Ilgari varaqqa QAT'IY 8 ta atama joylanardi. Izoh 280 belgigacha
+   * bo'lishi mumkin: 8 ta uzun atama ~1 180 px joy egallaydi, varaqda esa
+   * ~970 px bor — oxirgi kartochka varaqdan chiqib ketardi. Endi
+   * balandlik haqiqiy o'lchanadi.
+   */
+  const { pages: measured, measureNode } = useMeasuredPages(terms, (t) => <TermCard term={t} />, {
+    key: terms.map((t) => t.term).join("|"),
+  });
+  const pages = measured ?? [terms];
 
   const [zoom, setZoom] = useState(90);
   const [page, setPage] = useState(1);
@@ -82,14 +87,9 @@ export function GlossaryViewer({ doc }: { doc: AcademicDoc }) {
                 className="word-sheet"
               >
                 <div className="word-inner">
-                  <div className="grid grid-cols-1 gap-3">
-                    {chunk.map((t) => (
-                      <article key={t.term} className="rounded-lg border border-pink-200 bg-pink-50/40 px-4 py-3">
-                        <h3 className="text-[13pt] font-bold text-pink-900">{t.term}</h3>
-                        <p className="mt-1 text-[12pt] leading-snug text-stone-800">{t.def}</p>
-                      </article>
-                    ))}
-                  </div>
+                  {chunk.map((t) => (
+                    <TermCard key={t.term} term={t} />
+                  ))}
                 </div>
                 <div className="word-footer-num">{i + 2}</div>
               </div>
@@ -97,6 +97,16 @@ export function GlossaryViewer({ doc }: { doc: AcademicDoc }) {
           ))}
         </div>
       </Workspace>
+      {measureNode}
     </div>
+  );
+}
+
+function TermCard({ term }: { term: Term }) {
+  return (
+    <article className="mb-3 rounded-lg border border-pink-200 bg-pink-50/40 px-4 py-3">
+      <h3 className="text-[13pt] font-bold text-pink-900">{term.term}</h3>
+      <p className="mt-1 text-[12pt] leading-snug text-stone-800">{term.def}</p>
+    </article>
   );
 }

@@ -2,20 +2,40 @@
 
 import { useMemo, useRef, useState } from "react";
 import type { AcademicDoc } from "@/lib/generation/types";
-import { LANDSCAPE } from "@/lib/viewers/metrics";
+import { LANDSCAPE, landscapeContentHeightPx } from "@/lib/viewers/metrics";
+import { useMeasuredPages } from "./measure";
 import { ZoomFrame, Workspace } from "./sheet";
 import { ViewerToolbar } from "./toolbar";
 
-const ROWS = 8;
-
 export function TableViewer({ doc }: { doc: AcademicDoc }) {
   const table = doc.tables?.[0];
-  const chunks = useMemo(() => {
-    const rows = table?.rows ?? [];
-    const out: typeof rows[] = [];
-    for (let i = 0; i < rows.length; i += ROWS) out.push(rows.slice(i, i + ROWS));
-    return out.length ? out : [[]];
-  }, [table]);
+  /*
+   * Ilgari varaqqa QAT'IY 8 qator joylanardi. To'lib ketmasdi, lekin
+   * yotiq varaqning yarmidan ko'pi bo'sh qolardi: 34 haftalik xarita
+   * keraksiz ravishda 5 varaqqa cho'zilardi. Endi qator balandligi
+   * o'lchanadi. Chegaradan sarlavha qatori va izoh uchun joy ayiriladi.
+   */
+  const rows = useMemo(() => table?.rows ?? [], [table]);
+  const { pages: measured, measureNode } = useMeasuredPages(
+    rows,
+    (r) => (
+      <table className="word-table w-full text-[10pt]">
+        <tbody>
+          <tr>
+            {r.map((c, j) => (
+              <td key={j}>{c}</td>
+            ))}
+          </tr>
+        </tbody>
+      </table>
+    ),
+    {
+      limit: landscapeContentHeightPx() - 72,
+      className: "!w-[269mm] !text-[10pt] !leading-snug",
+      key: `${rows.length}:${table?.headers.length ?? 0}`,
+    },
+  );
+  const chunks = measured?.length ? measured : [rows];
   const [zoom, setZoom] = useState(80);
   const [page, setPage] = useState(1);
   const refs = useRef<(HTMLDivElement | null)[]>([]);
@@ -97,6 +117,7 @@ export function TableViewer({ doc }: { doc: AcademicDoc }) {
           ))}
         </div>
       </Workspace>
+      {measureNode}
     </div>
   );
 }
