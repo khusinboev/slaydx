@@ -125,7 +125,16 @@ npm run db:migrate   # migratsiyalar
 npm run worker       # alohida worker (WORKER_INLINE=false bilan)
 npm run bot          # Telegram bot (long-polling, lokal uchun)
 npm run topup -- <username> <miqdor> [points|quota|balance]
+npm run smoke        # uchidan-uchiga tutun sinovi (server ishlab turishi kerak)
 ```
+
+Uch xil tekshiruv bir-birini to'ldiradi:
+
+| Buyruq | Nimani tekshiradi |
+|---|---|
+| `npm run check` | Kod: tiplar, lint, birlik testlari |
+| `npm run smoke` | Tizim ishlayaptimi: kirish, sahifalar, ko'ruvchilar, yaratish→yuklab olish→o'chirish, xato yo'llari |
+| `node scripts/eval-services.mjs r1` | Chiqish SIFATI: hajm, slaydlar soni, speaker notes, uydirma manba |
 
 ---
 

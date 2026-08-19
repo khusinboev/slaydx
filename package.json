@@ -13,7 +13,8 @@
     "worker": "tsx --conditions=react-server scripts/worker.ts",
     "topup": "tsx --conditions=react-server scripts/topup.mts",
     "bot": "tsx --conditions=react-server scripts/bot.mts",
-    "check": "npm run typecheck && npm run lint && npm run test"
+    "check": "npm run typecheck && npm run lint && npm run test",
+    "smoke": "node scripts/smoke.mjs"
   },
   "dependencies": {
     "docx": "^9.7.1",
