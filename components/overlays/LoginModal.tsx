@@ -48,7 +48,7 @@ export function LoginModal() {
   );
 }
 
-type Stage = "start" | "code";
+type Stage = "start" | "code" | "phone" | "phoneCode";
 
 export function LoginForm({ onDone }: { onDone?: () => void }) {
   const router = useRouter();
@@ -59,6 +59,7 @@ export function LoginForm({ onDone }: { onDone?: () => void }) {
   const [stage, setStage] = useState<Stage>("start");
   const [ticket, setTicket] = useState<api.Ticket | null>(null);
   const [code, setCode] = useState("");
+  const [phone, setPhone] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hint, setHint] = useState<string | null>(null);
@@ -121,6 +122,143 @@ export function LoginForm({ onDone }: { onDone?: () => void }) {
     }
   }
 
+  /**
+   * Telefon orqali kirish — faqat `DEV_LOGIN_ENABLED` yoqilganda.
+   *
+   * Endpoint (`/api/auth/otp`) allaqachon bor edi va serverning `devLogin`
+   * bayrog'i ham klientga kelardi, lekin UI da unga yo'l yo'q edi: lokal
+   * muhitda Telegram botisiz umuman kirib bo'lmasdi. Prod da bayroq
+   * o'chiq (yoqilsa server ishga tushmaydi), demak bu yo'l chiqmaydi.
+   */
+  async function startPhone() {
+    setError(null);
+    const id = phone.trim();
+    if (id.length < 3) {
+      setError("Telefon raqamini kiriting");
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await api.requestOtp(id);
+      setStage("phoneCode");
+      setCode("");
+      // SMS ulanmagan — kod javobda qaytadi va shu yerda ko'rsatiladi.
+      setHint(res.devCode ? `Sinov kodi: ${res.devCode}` : "Kod yuborildi");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Kod so'ralmadi");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitPhoneCode(value: string) {
+    setError(null);
+    setBusy(true);
+    try {
+      const res = await api.verifyOtp(phone.trim(), value);
+      finish(res.user);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Kod noto'g'ri");
+      setCode("");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const phoneBlock = features?.devLogin ? (
+    <div className="mt-4 border-t pt-4">
+      {stage === "phone" || stage === "phoneCode" ? null : (
+        <button
+          type="button"
+          onClick={() => {
+            setStage("phone");
+            setError(null);
+            setHint(null);
+          }}
+          className="text-muted-foreground hover:text-foreground text-xs underline"
+        >
+          Telefon raqami orqali kirish
+        </button>
+      )}
+    </div>
+  ) : null;
+
+  if (stage === "phone" || stage === "phoneCode") {
+    return (
+      <div>
+        <h1 className="mb-1 text-xl font-semibold tracking-tight">Telefon orqali kirish</h1>
+        <p className="text-muted-foreground mb-6 text-sm">
+          SMS ulanmagan — kod ekranda ko&apos;rsatiladi (sinov rejimi).
+        </p>
+
+        <label htmlFor="login-phone" className="text-muted-foreground mb-1 block text-sm">
+          Telefon
+        </label>
+        <input
+          id="login-phone"
+          value={phone}
+          inputMode="tel"
+          autoComplete="tel"
+          disabled={busy || stage === "phoneCode"}
+          onChange={(e) => setPhone(e.target.value)}
+          placeholder="+998901234567"
+          className="border-input bg-background mb-3 h-11 w-full rounded-xl border px-3 disabled:opacity-60"
+        />
+
+        {stage === "phoneCode" ? (
+          <>
+            <label htmlFor="login-phone-code" className="text-muted-foreground mb-1 block text-sm">
+              Kod
+            </label>
+            <input
+              id="login-phone-code"
+              value={code}
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              disabled={busy}
+              onChange={(e) => {
+                const v = e.target.value.replace(/\D/g, "").slice(0, 5);
+                setCode(v);
+                if (v.length === 5) void submitPhoneCode(v);
+              }}
+              placeholder="•••••"
+              className="border-input bg-background mb-3 h-11 w-full rounded-xl border px-3 text-center text-lg tracking-[0.5em] disabled:opacity-60"
+            />
+          </>
+        ) : (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void startPhone()}
+            className="bg-primary text-primary-foreground mb-3 flex h-11 w-full items-center justify-center rounded-xl text-sm font-medium disabled:opacity-60"
+          >
+            {busy ? "So'ralmoqda..." : "Kod olish"}
+          </button>
+        )}
+
+        <button
+          type="button"
+          onClick={() => {
+            setStage("start");
+            setCode("");
+            setError(null);
+            setHint(null);
+          }}
+          className="text-muted-foreground hover:text-foreground h-10 px-1 text-xs"
+        >
+          Orqaga
+        </button>
+
+        {hint && !error ? <p className="text-muted-foreground mt-3 text-xs">{hint}</p> : null}
+        {error ? (
+          <p role="alert" className="text-destructive mt-3 text-xs">
+            {error}
+          </p>
+        ) : null}
+      </div>
+    );
+  }
+
   if (!features?.telegram) {
     return (
       <div>
@@ -129,6 +267,7 @@ export function LoginForm({ onDone }: { onDone?: () => void }) {
           Telegram kirish hali sozlanmagan. Administrator <code>TELEGRAM_BOT_TOKEN</code> ni
           qo&apos;shishi kerak.
         </p>
+        {phoneBlock}
       </div>
     );
   }
@@ -201,6 +340,8 @@ export function LoginForm({ onDone }: { onDone?: () => void }) {
           </div>
         </>
       )}
+
+      {phoneBlock}
 
       {hint && !error ? <p className="text-muted-foreground mt-3 text-xs">{hint}</p> : null}
       {error ? (
