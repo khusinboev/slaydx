@@ -1,15 +1,34 @@
-export const PRIMARY_LANGUAGES = [
+/**
+ * Hujjat CHIQISH tillari.
+ *
+ * Ro'yxatda faqat hujjat skeleti to'liq tarjima qilingan tillar turadi
+ * (`lib/generation/i18n.ts` dagi `SECTIONS`, `SLIDE_LABELS`, `DocLabels`).
+ * Ilgari bu yerda 18 ta til bor edi, lekin sarlavhalar faqat uch tilda:
+ * tojikcha maqola so'ragan foydalanuvchi tojikcha matn va O'ZBEKCHA
+ * «Kirish / Xulosa / Mundarija» olardi. Yangi til qo'shishdan oldin
+ * avval o'sha uch to'plamga tarjima yoziladi.
+ */
+export const TARGET_LANGUAGES = [
   { value: "uz", label: "O'zbekcha", flag: "🇺🇿" },
+  { value: "ru", label: "Русский", flag: "🇷🇺" },
+  { value: "en", label: "English", flag: "🇬🇧" },
+] as const;
+
+/**
+ * Tarjima uchun MANBA tillari.
+ *
+ * Bu ro'yxat kengroq va shunday qolishi kerak: manba tilini bilish faqat
+ * modelga ko'rsatma berish uchun kerak — hujjat sarlavhalari baribir
+ * chiqish tilida yoziladi. Nemis maqolasini o'zbekchaga tarjima qilish
+ * mumkin, aksi esa hozircha yo'q.
+ */
+export const SOURCE_LANGUAGES = [
+  ...TARGET_LANGUAGES,
   { value: "kaa", label: "Qaraqalpaqsha", flag: "🇺🇿" },
   { value: "kk", label: "Қазақ тілі", flag: "🇰🇿" },
   { value: "ky", label: "Кыргызча", flag: "🇰🇬" },
   { value: "tg", label: "Забони тоҷикӣ", flag: "🇹🇯" },
   { value: "tk", label: "Türkmençe", flag: "🇹🇲" },
-  { value: "ru", label: "Русский", flag: "🇷🇺" },
-  { value: "en", label: "English", flag: "🇬🇧" },
-] as const;
-
-export const EXTRA_LANGUAGES = [
   { value: "tr", label: "Türkçe", flag: "🇹🇷" },
   { value: "ar", label: "العربية", flag: "🇸🇦" },
   { value: "de", label: "Deutsch", flag: "🇩🇪" },
@@ -22,7 +41,12 @@ export const EXTRA_LANGUAGES = [
   { value: "pt", label: "Português", flag: "🇵🇹" },
 ] as const;
 
-export const ALL_LANGUAGES = [...PRIMARY_LANGUAGES, ...EXTRA_LANGUAGES];
+export const ALL_LANGUAGES = SOURCE_LANGUAGES;
+
+/** Hujjat shu tilda to'liq chiqa oladimi. */
+export function isTargetLanguage(code: string) {
+  return TARGET_LANGUAGES.some((l) => l.value === code);
+}
 
 export function languageName(code: string) {
   return ALL_LANGUAGES.find((l) => l.value === code)?.label ?? code;

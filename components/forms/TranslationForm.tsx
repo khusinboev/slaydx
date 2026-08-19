@@ -157,7 +157,7 @@ export function TranslationForm({ tool }: { tool: ToolConfig }) {
             Avtomatik aniqlash
           </button>
         </div>
-        <LanguagePicker compact value={values.sourceLang === "avto" ? "" : String(values.sourceLang)} onChange={(v) => setValues((s) => ({ ...s, sourceLang: v }))} />
+        <LanguagePicker compact scope="source" value={values.sourceLang === "avto" ? "" : String(values.sourceLang)} onChange={(v) => setValues((s) => ({ ...s, sourceLang: v }))} />
       </fieldset>
 
       <fieldset className="mb-6">

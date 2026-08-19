@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { EXTRA_LANGUAGES, ESSAY_DESIGNS, PRIMARY_LANGUAGES } from "@/lib/languages";
+import { ESSAY_DESIGNS, SOURCE_LANGUAGES, TARGET_LANGUAGES } from "@/lib/languages";
 import { cn } from "@/lib/cn";
 import type { FieldOption, FormValues, ToolField } from "@/lib/types";
 
@@ -84,17 +84,28 @@ export function ChipGroup({
   );
 }
 
+/**
+ * Til tanlagich.
+ *
+ * `scope="target"` (standart) — hujjat qaysi tilda chiqadi. Bu yerda faqat
+ * skeleti to'liq tarjima qilingan tillar ko'rsatiladi.
+ * `scope="source"` — tarjimada manba tili; ro'yxat kengroq.
+ */
 export function LanguagePicker({
   value,
   onChange,
   compact,
+  scope = "target",
 }: {
   value: string;
   onChange: (v: string) => void;
   compact?: boolean;
+  scope?: "target" | "source";
 }) {
   const [more, setMore] = useState(false);
-  const list = more ? [...PRIMARY_LANGUAGES, ...EXTRA_LANGUAGES] : PRIMARY_LANGUAGES;
+  const full = scope === "source";
+  const list = full && more ? SOURCE_LANGUAGES : TARGET_LANGUAGES;
+  const rest = SOURCE_LANGUAGES.length - TARGET_LANGUAGES.length;
   return (
     <div className="flex flex-wrap gap-2">
       {list.map((l) => {
@@ -115,13 +126,15 @@ export function LanguagePicker({
           </button>
         );
       })}
-      <button
-        type="button"
-        onClick={() => setMore((v) => !v)}
-        className="border-input bg-card hover:bg-muted rounded-full border px-3 py-1.5 text-sm"
-      >
-        {more ? "Kamroq" : compact ? "Ko'proq (+7)" : "Ko'proq (+10)"}
-      </button>
+      {full ? (
+        <button
+          type="button"
+          onClick={() => setMore((v) => !v)}
+          className="border-input bg-card hover:bg-muted rounded-full border px-3 py-1.5 text-sm"
+        >
+          {more ? "Kamroq" : `Ko'proq (+${rest})`}
+        </button>
+      ) : null}
     </div>
   );
 }
