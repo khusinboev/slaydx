@@ -21,6 +21,18 @@ import { cn } from "@/lib/cn";
  * (`meta.premiumVisuals` → rasm modeli, qadamlar soni va rasmlar soni).
  * Ikkalasi ham yorliqda ochiq yozilgan.
  */
+/**
+ * Auditoriya — himoya zali va 5-sinf bir xil deck olmasligi kerak.
+ * Chegaralar `AUDIENCE_RULES` da (`slide-templates.ts`).
+ */
+const AUDIENCE = [
+  { value: "auto", label: "Avtomatik" },
+  { value: "defense", label: "Himoya" },
+  { value: "lecture", label: "Ma'ruza" },
+  { value: "school", label: "Maktab darsi" },
+  { value: "pitch", label: "Pitch" },
+];
+
 const QUALITY = [
   { value: "standard", label: "Standart · 10 slayd · 3 000" },
   { value: "long", label: "Uzun · 14 slayd · 5 000" },
@@ -36,6 +48,7 @@ export function SlideForm({ tool }: { tool: ToolConfig }) {
     language: "uz",
     extra: "",
     quality: "standard",
+    slideAudience: "auto",
     titleSlide: true,
     slideTheme: "atlas",
     slideTemplate: "auto",
@@ -150,6 +163,17 @@ export function SlideForm({ tool }: { tool: ToolConfig }) {
       <fieldset className="mb-6">
         <Legend>Sifat / hajm</Legend>
         <ChipGroup options={QUALITY} value={String(values.quality)} onChange={(v) => set("quality", v)} />
+      </fieldset>
+      <fieldset className="mb-6">
+        <Legend>Kim uchun</Legend>
+        <p className="text-muted-foreground mb-3 text-sm">
+          Auditoriya shrift kattaligi va banddagi so‘z sonini belgilaydi. «Avtomatik» shablondan aniqlaydi.
+        </p>
+        <ChipGroup
+          options={AUDIENCE}
+          value={String(values.slideAudience || "auto")}
+          onChange={(v) => set("slideAudience", v)}
+        />
       </fieldset>
       <fieldset className="mb-6">
         <Legend>Shablon — tuzilma</Legend>

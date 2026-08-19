@@ -6,6 +6,7 @@ import { extractMeta } from "../lib/generation/meta.ts";
 import {
   SLIDE_TEMPLATES,
   SLIDE_TEMPLATE_BY_ID,
+  audienceRules,
   expandBeats,
 } from "../lib/generation/slide-templates.ts";
 import { fallbackSlides, wantSlides } from "../lib/generation/slide-write.ts";
@@ -208,4 +209,29 @@ test("ikki xil ogohlantirish aralashmaydi", () => {
   // Manba yo'q holat: qidiruv rejasi.
   // Manba bor holat: tekshirilmaganlik izohi. Ikkalasi turlicha matn.
   assert.notEqual(unverifiedReferenceNote("uz"), referenceSearchPlan("X", "", "uz").note);
+});
+
+// -------------------------------------------------------- auditoriya
+
+test("auditoriya tipografika va band chegarasini o'zgartiradi", () => {
+  const school = audienceRules("school", "lecture");
+  const defense = audienceRules("defense", "lecture");
+  assert.ok(school.bodyPt > defense.bodyPt, "maktabda shrift kattaroq");
+  assert.ok(school.minPt >= 20, "maktabda pol 20 pt dan past bo'lmasin");
+  assert.ok(school.maxBullets < defense.maxBullets, "maktabda band kamroq");
+});
+
+test("«auto» auditoriyani shablondan aniqlaydi", () => {
+  assert.deepEqual(audienceRules("auto", "defense"), audienceRules("defense", "lecture"));
+  assert.deepEqual(audienceRules("auto", "lesson"), audienceRules("school", "lecture"));
+  assert.deepEqual(audienceRules("auto", "pitch"), audienceRules("pitch", "lecture"));
+  // Noma'lum shablon — ma'ruza chegarasi.
+  assert.deepEqual(audienceRules("auto", "faq"), audienceRules("lecture", "lecture"));
+});
+
+test("auditoriya forma qiymatidan DocMeta ga o'tadi", () => {
+  assert.equal(slideMeta({ topic: "X" }).slideAudience, "auto");
+  assert.equal(slideMeta({ topic: "X", slideAudience: "school" }).slideAudience, "school");
+  // Noto'g'ri qiymat — «auto» ga qaytadi.
+  assert.equal(slideMeta({ topic: "X", slideAudience: "hacker" }).slideAudience, "auto");
 });

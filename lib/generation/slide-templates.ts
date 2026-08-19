@@ -28,6 +28,44 @@ export type SlideTemplateId = (typeof SLIDE_TEMPLATE_IDS)[number];
 
 export type SlideVisual = "classic" | "hero-split" | "cards" | "timeline" | "magazine" | "dense";
 
+/**
+ * Deck kim uchun qilinayotgani.
+ *
+ * Bitta dvigatel himoya komissiyasiga ham, 5-sinf darsiga ham bir xil
+ * deck berardi. Auditoriya tipografika chegarasini, banddagi so'z sonini
+ * va shablon tanlovini o'zgartiradi — zaldagi masofa va tayyorgarlik
+ * darajasi turlicha.
+ */
+export const SLIDE_AUDIENCES = ["auto", "defense", "lecture", "school", "pitch"] as const;
+export type SlideAudience = (typeof SLIDE_AUDIENCES)[number];
+
+export function isSlideAudience(v: string): v is SlideAudience {
+  return (SLIDE_AUDIENCES as readonly string[]).includes(v);
+}
+
+/** Auditoriya bo'yicha chegara: tana shrifti va banddagi eng ko'p so'z. */
+export const AUDIENCE_RULES: Record<Exclude<SlideAudience, "auto">, {
+  bodyPt: number;
+  minPt: number;
+  maxBullets: number;
+  bulletChars: number;
+  note: string;
+}> = {
+  defense: { bodyPt: 18, minPt: 15, maxBullets: 4, bulletChars: 120, note: "Komissiya: aniqlik va dalil." },
+  lecture: { bodyPt: 18, minPt: 15, maxBullets: 4, bulletChars: 120, note: "Talaba: tushuntirish va misol." },
+  school: { bodyPt: 24, minPt: 20, maxBullets: 3, bulletChars: 80, note: "O‘quvchi: sodda til, katta shrift." },
+  pitch: { bodyPt: 20, minPt: 16, maxBullets: 3, bulletChars: 90, note: "Investor: bitta fikr, bitta raqam." },
+};
+
+export function audienceRules(a: SlideAudience | undefined, tplId: SlideTemplateId) {
+  if (a && a !== "auto") return AUDIENCE_RULES[a];
+  // «auto»: shablon o'zi auditoriyani bildiradi.
+  if (tplId === "defense") return AUDIENCE_RULES.defense;
+  if (tplId === "lesson") return AUDIENCE_RULES.school;
+  if (tplId === "pitch") return AUDIENCE_RULES.pitch;
+  return AUDIENCE_RULES.lecture;
+}
+
 export type SlideBeat = {
   layout: SlideLayout;
   role: string;

@@ -1,4 +1,4 @@
-import type { SlideTemplateId, SlideVisual } from "./slide-templates";
+import type { SlideAudience, SlideTemplateId, SlideVisual } from "./slide-templates";
 
 export const SLIDE_LAYOUTS = [
   "title",
@@ -50,6 +50,7 @@ export type SlideDeck = {
   themeId: SlideThemeId;
   templateId: SlideTemplateId;
   visual: SlideVisual;
+  audience: SlideAudience;
   slides: SlideModel[];
 };
 

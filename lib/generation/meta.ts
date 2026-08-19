@@ -1,5 +1,5 @@
 import type { FormValues, ToolConfig } from "../types";
-import { isSlideTemplateId } from "./slide-templates";
+import { isSlideAudience, isSlideTemplateId } from "./slide-templates";
 import { isSlideThemeId } from "./slide-types";
 import type { DocMeta } from "./types";
 
@@ -59,6 +59,7 @@ export function extractMeta(tool: ToolConfig, values: FormValues): DocMeta {
   const slidePages =
     quality === "premium_long" ? 16 : quality === "long" ? 14 : quality === "premium" ? 12 : 10;
   const authorParts = parseAuthorLine(s(values, "author", s(values, "fullName")));
+  const audienceRaw = s(values, "slideAudience", "auto");
   const themeRaw = s(values, "slideTheme", "atlas");
   const templateRaw = s(values, "slideTemplate", "auto");
   return {
@@ -112,6 +113,7 @@ export function extractMeta(tool: ToolConfig, values: FormValues): DocMeta {
     // Formada belgilanmagan bo'lsa titul slaydi qoladi (eski xatti-harakat).
     titleSlide: values.titleSlide !== false,
     premiumVisuals: quality === "premium" || quality === "premium_long",
+    slideAudience: isSlideAudience(audienceRaw) ? audienceRaw : "auto",
     design: s(values, "design", "iris"),
   };
 }

@@ -1,5 +1,5 @@
 import type { FormValues, ToolConfig, ToolId } from "../types";
-import type { SlideTemplateId } from "./slide-templates";
+import type { SlideAudience, SlideTemplateId } from "./slide-templates";
 import type { SlideModel, SlideThemeId } from "./slide-types";
 
 export type GenImage = {
@@ -73,6 +73,8 @@ export type DocMeta = {
    * va VIZUAL SIFAT (shu bayroq). Ilgari premium hech nimani o'zgartirmasdi.
    */
   premiumVisuals: boolean;
+  /** Taqdimot kim uchun: himoya, ma'ruza, maktab darsi yoki pitch. */
+  slideAudience?: SlideAudience;
   design: string;
   slideTheme?: SlideThemeId;
   slideTemplate?: SlideTemplateId;

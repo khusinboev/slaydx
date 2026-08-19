@@ -117,7 +117,7 @@ export async function renderPptx(doc: AcademicDoc, fileName: string): Promise<Bu
 
   for (let i = 0; i < deck.slides.length; i++) {
     const slide = pptx.addSlide() as unknown as PptxSlide;
-    const plan = planSlide(deck.slides[i], theme, deck.visual, i, deck.slides.length);
+    const plan = planSlide(deck.slides[i], theme, deck.visual, i, deck.slides.length, deck.audience, deck.templateId);
     await paintPlan(slide, plan, imageCache);
     // Notiq eslatmasi. Ilgari `notesSlide` yaratilardi-yu, ichi bo'sh qolardi:
     // foydalanuvchi saytda eslatmani ko'rib, yuklab olgach yo'qotardi.

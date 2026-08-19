@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import type { SlideVisual } from "@/lib/generation/slide-templates";
+import type { SlideAudience, SlideTemplateId, SlideVisual } from "@/lib/generation/slide-templates";
 import type { SlideModel, SlideTheme } from "@/lib/generation/slide-types";
 import {
   boxStyle,
@@ -18,14 +18,18 @@ export function SlideCanvas({
   visual = "classic",
   index,
   total,
+  audience = "auto",
+  templateId = "lecture",
 }: {
   slide: SlideModel;
   theme: SlideTheme;
   visual?: SlideVisual;
   index: number;
   total: number;
+  audience?: SlideAudience;
+  templateId?: SlideTemplateId;
 }) {
-  const plan = planSlide(slide, theme, visual, index, total);
+  const plan = planSlide(slide, theme, visual, index, total, audience, templateId);
   return (
     <div
       className="relative overflow-hidden"

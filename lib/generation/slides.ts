@@ -17,6 +17,7 @@ export function buildSlideDeck(doc: AcademicDoc): SlideDeck {
       themeId,
       templateId: tpl.id,
       visual: tpl.visual,
+      audience: doc.meta.slideAudience ?? "auto",
       slides: doc.slides,
     };
   }
@@ -27,6 +28,7 @@ export function buildSlideDeck(doc: AcademicDoc): SlideDeck {
     themeId,
     templateId: tpl.id,
     visual: tpl.visual,
+    audience: doc.meta.slideAudience ?? "auto",
     slides: legacyFromSections(doc),
   };
 }

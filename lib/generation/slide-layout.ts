@@ -1,4 +1,4 @@
-import type { SlideVisual } from "./slide-templates";
+import { audienceRules, type SlideAudience, type SlideTemplateId, type SlideVisual } from "./slide-templates";
 import type { SlideModel, SlideTheme } from "./slide-types";
 
 /** Widescreen 16:9 in inches — same coordinate space as PPTX and the on-site viewer. */
@@ -520,7 +520,23 @@ function planHeading(layers: SlideLayer[], s: SlideModel, theme: SlideTheme, tex
   layers.push({ t: "rect", box: { x, y: 1.22, w: 1.1, h: 0.07 }, fill: { color: theme.accent } });
 }
 
-function planBullets(s: SlideModel, theme: SlideTheme, index: number, total: number, agenda: boolean): SlidePlan {
+/**
+ * Tana matni chegarasi auditoriyaga bog'liq: maktab sinfida 24 pt dan
+ * boshlanib 20 pt dan pastga tushmaydi, himoyada 18/15 yetarli.
+ *
+ * Chegara PARAMETR sifatida uzatiladi, modul o'zgaruvchisi sifatida emas —
+ * yashirin holat bu fayldа ilgari haqiqiy bug bergan (rasm keshi).
+ */
+type BodyType = ReturnType<typeof audienceRules>;
+
+function planBullets(
+  s: SlideModel,
+  theme: SlideTheme,
+  index: number,
+  total: number,
+  agenda: boolean,
+  bodyType: BodyType,
+): SlidePlan {
   const img = s.image?.url;
   const layers: SlideLayer[] = [];
   layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.bg } });
@@ -550,7 +566,7 @@ function planBullets(s: SlideModel, theme: SlideTheme, index: number, total: num
         box: lineBox,
         text: line,
         color: theme.text,
-        size: fitSize(line, lineBox, 18, 14),
+        size: fitSize(line, lineBox, bodyType.bodyPt, bodyType.minPt - 1),
         valign: "middle",
       });
     });
@@ -564,7 +580,7 @@ function planBullets(s: SlideModel, theme: SlideTheme, index: number, total: num
       color: theme.text,
       // Slide Law: tana matni 18 pt dan boshlanadi va 15 pt dan pastga
       // tushmaydi. Sig'masa — muammo kontentda, shriftda emas.
-      size: fitLines(items, bulletBox, 18, 15, 10),
+      size: fitLines(items, bulletBox, bodyType.bodyPt, bodyType.minPt, 10),
       paraSpace: 10,
     });
   }
@@ -942,7 +958,16 @@ function planTable(s: SlideModel, theme: SlideTheme, index: number, total: numbe
   return { bg: theme.bg, layers };
 }
 
-export function planSlide(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index: number, total: number): SlidePlan {
+export function planSlide(
+  s: SlideModel,
+  theme: SlideTheme,
+  visual: SlideVisual,
+  index: number,
+  total: number,
+  audience: SlideAudience = "auto",
+  templateId: SlideTemplateId = "lecture",
+): SlidePlan {
+  const bodyType = audienceRules(audience, templateId);
   switch (s.layout) {
     case "title":
       return planTitle(s, theme, visual, index, total);
@@ -953,7 +978,7 @@ export function planSlide(s: SlideModel, theme: SlideTheme, visual: SlideVisual,
     case "closing":
       return planOverlay(s, theme, index, total, "closing");
     case "agenda":
-      return planBullets(s, theme, index, total, true);
+      return planBullets(s, theme, index, total, true, bodyType);
     case "twoCol":
       return planTwoCol(s, theme, index, total, false);
     case "compare":
@@ -965,7 +990,7 @@ export function planSlide(s: SlideModel, theme: SlideTheme, visual: SlideVisual,
     case "table":
       return planTable(s, theme, index, total);
     default:
-      return planBullets(s, theme, index, total, false);
+      return planBullets(s, theme, index, total, false, bodyType);
   }
 }
 

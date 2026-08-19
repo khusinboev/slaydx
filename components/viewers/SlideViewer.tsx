@@ -130,7 +130,7 @@ export function SlideViewer({ doc }: { doc: AcademicDoc }) {
                       className="absolute top-0 left-0"
                       style={{ width: SLIDE.w, height: SLIDE.h, transform: "scale(0.117)", transformOrigin: "top left" }}
                     >
-                      <SlideCanvas slide={s} theme={theme} visual={deck.visual} index={idx} total={slides.length} />
+                      <SlideCanvas slide={s} theme={theme} visual={deck.visual} audience={deck.audience} templateId={deck.templateId} index={idx} total={slides.length} />
                     </span>
                   </span>
                   <span className="mt-1 block truncate text-[11px] text-white/70">{s.title}</span>
@@ -155,7 +155,7 @@ export function SlideViewer({ doc }: { doc: AcademicDoc }) {
                 style={{ width: SLIDE.w, height: SLIDE.h, transform: `scale(${scale})`, transformOrigin: "top left" }}
               >
                 {slide ? (
-                  <SlideCanvas slide={slide} theme={theme} visual={deck.visual} index={i} total={slides.length} />
+                  <SlideCanvas slide={slide} theme={theme} visual={deck.visual} audience={deck.audience} templateId={deck.templateId} index={i} total={slides.length} />
                 ) : null}
               </div>
             </div>
