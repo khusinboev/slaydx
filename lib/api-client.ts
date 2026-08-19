@@ -108,6 +108,8 @@ export type Features = {
   telegram: boolean;
   telegramBot: string | null;
   devLogin: boolean;
+  /** Server DOCX/PPTX ni PDF ga o'gira oladimi (LibreOffice o'rnatilganmi). */
+  pdf: boolean;
   payments: { click: boolean; payme: boolean };
 };
 
@@ -203,8 +205,8 @@ export function deleteGeneration(id: string) {
   return request<{ ok: boolean; refunded: boolean }>(`/api/generations/${id}`, { method: "DELETE" });
 }
 
-export function fileUrl(id: string) {
-  return `/api/generations/${id}/file`;
+export function fileUrl(id: string, format?: "pdf") {
+  return `/api/generations/${id}/file${format ? `?format=${format}` : ""}`;
 }
 
 /**
@@ -213,8 +215,8 @@ export function fileUrl(id: string) {
  * `<a download>` to'g'ridan-to'g'ri ishlatilmaydi: xato bo'lsa brauzer
  * jimgina JSON xato sahifasini `.docx` nomi bilan saqlab qo'yardi.
  */
-export async function downloadGeneration(id: string): Promise<void> {
-  const res = await fetch(fileUrl(id), { credentials: "same-origin" });
+export async function downloadGeneration(id: string, format?: "pdf"): Promise<void> {
+  const res = await fetch(fileUrl(id, format), { credentials: "same-origin" });
   if (!res.ok) {
     const data = (await res.json().catch(() => ({}))) as { error?: string };
     throw new ApiError(data.error || "Fayl yuklab olinmadi", res.status);

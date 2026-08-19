@@ -26,6 +26,18 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 
+# PDF eksport uchun LibreOffice.
+#
+# Faqat Writer va Impress filtrlari kerak — to'liq to'plam emas.
+# `ttf-liberation` Times New Roman va Arial bilan METRIK MOS: hujjat
+# maketi o'zgarmaydi, `font-noto` esa kirill va boshqa yozuvlarni yopadi.
+# Ular bo'lmasa PDF da matn kvadratchalarga aylanadi.
+#
+# Bu tasvirga ~400 MB qo'shadi. PDF kerak bo'lmasa shu qatorni olib
+# tashlash mumkin: `pdfAvailable()` `false` qaytaradi va UI da PDF
+# tugmasi umuman chiqmaydi.
+RUN apk add --no-cache       libreoffice-writer libreoffice-impress       ttf-liberation font-noto   && soffice --headless --version >/dev/null 2>&1 || true
+
 # Root ostida ishlatmaymiz.
 RUN addgroup -g 1001 -S nodejs && adduser -S nextjs -u 1001
 

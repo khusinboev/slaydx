@@ -1,6 +1,7 @@
 import { handler, json, optionalUser, requireUser } from "@/lib/server/api";
 import { clearSessionCookie, revokeAllSessions, revokeCurrentSession } from "@/lib/server/session";
 import { env, llmConfigured, paymentsConfigured } from "@/lib/server/env";
+import { pdfAvailable } from "@/lib/server/pdf";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,6 +17,7 @@ export const GET = handler("auth/session", async (req) => {
       telegram: Boolean(env.telegramBotToken),
       telegramBot: env.telegramBotUsername || null,
       devLogin: env.devLoginEnabled,
+      pdf: pdfAvailable(),
       payments: paymentsConfigured(),
     },
   });

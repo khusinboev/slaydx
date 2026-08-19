@@ -142,7 +142,7 @@ npm run topup -- <username> <miqdor> [points|quota|balance]
 | `GET\|PATCH /api/users/me` | Profil + tranzaksiyalar jurnali |
 | `GET\|POST /api/generations` | Ro'yxat / navbatga qo'yish |
 | `GET\|DELETE /api/generations/{id}` | Holat / o'chirish (navbatdagisi bekor qilinib puli qaytadi) |
-| `GET /api/generations/{id}/file` | DOCX / PPTX / PNG |
+| `GET /api/generations/{id}/file[?format=pdf]` | DOCX / PPTX / PNG; `format=pdf` — talab bo‘yicha PDF |
 | `GET /api/generations/{id}/assets/{assetId}` | Slayd va rasm mediasi |
 | `POST /api/extract` | Hujjatdan matn (DOCX, PDF, PPTX, XLSX, TXT) |
 | `POST /api/payments/orders` | To'lov buyurtmasi + provayder URL |
@@ -238,7 +238,6 @@ Telegram'ning **web** versiyasida ishlatmoqchi bo'lsangiz
   yuboruvchi provayder ulanmagan.
 - **i18n.** Interfeys matnlari kodda o'zbekcha qattiq yozilgan. Til tanlash
   generatsiya tiliga ta'sir qiladi, interfeysga emas.
-- **PDF eksport** yo'q (DOCX/PPTX bor).
 - **`npm audit`: 5 ta high.** Har biri tekshirildi va hozirgi ishlatishda
   erishib bo'lmaydi:
   - `next → sharp` (libvips CVE) — `next/image` umuman ishlatilmaydi va

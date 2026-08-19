@@ -21,6 +21,7 @@ import type { Generation } from "@/lib/types";
 export function ResultView({ id }: { id: string }) {
   const router = useRouter();
   const loggedIn = useAppStore((s) => s.loggedIn);
+  const features = useAppStore((s) => s.features);
   const sessionChecked = useAppStore((s) => s.sessionChecked);
   const upsert = useAppStore((s) => s.upsertGeneration);
   const drop = useAppStore((s) => s.dropGeneration);
@@ -56,17 +57,20 @@ export function ResultView({ id }: { id: string }) {
     return () => ctrl.abort();
   }, [id, loggedIn, sessionChecked, upsert]);
 
-  const onDownload = useCallback(async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      await api.downloadGeneration(id);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Yuklab olinmadi");
-    } finally {
-      setBusy(false);
-    }
-  }, [id]);
+  const onDownload = useCallback(
+    async (format?: "pdf") => {
+      setBusy(true);
+      setError(null);
+      try {
+        await api.downloadGeneration(id, format);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Yuklab olinmadi");
+      } finally {
+        setBusy(false);
+      }
+    },
+    [id],
+  );
 
   const onDelete = useCallback(async () => {
     setBusy(true);
@@ -127,6 +131,22 @@ export function ResultView({ id }: { id: string }) {
                 {gen.format.toUpperCase()}
               </span>
             </button>
+            {/*
+              PDF talab bo'yicha o'giriladi va bazada saqlanmaydi.
+              Server LibreOffice'siz bo'lsa bayroq `false` va tugma chiqmaydi.
+            */}
+            {features?.pdf && gen.format !== "png" ? (
+              <button
+                type="button"
+                className="bg-card inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm disabled:opacity-60"
+                disabled={busy || !gen.hasFile}
+                onClick={() => void onDownload("pdf")}
+                title="PDF ga o‘girib yuklab olish"
+              >
+                <Download className="size-4" />
+                PDF
+              </button>
+            ) : null}
             <button
               type="button"
               className="bg-card inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm disabled:opacity-60"
