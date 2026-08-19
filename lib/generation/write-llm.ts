@@ -6,7 +6,7 @@ import {
   blocksFromText,
   isGenericFiller,
   mapPool,
-  parseManualToc,
+  parseManualOutline,
   referenceSearchPlan,
   unverifiedReferenceNote,
   remainingMs,
@@ -86,15 +86,22 @@ async function buildOutline(meta: DocMeta, sys: string, L: ReturnType<typeof sec
   // Kurs ishida uch bob TUZILMA talabi — hajmga bog'liq emas. Ilgari
   // 10–15 betlik kurs ishi ikki bob olardi va referatdan farq qilmasdi.
   const chapterN = meta.toolId === "coursework" || long ? 3 : 2;
-  const manual = meta.tocMethod === "manual" ? parseManualToc(meta.tocText || meta.extra) : [];
+  const manual = meta.tocMethod === "manual" ? parseManualOutline(meta.tocText || meta.extra) : [];
 
   if (manual.length) {
-    const chapters: OutlineChapter[] = manual.map((title, i) => ({
-      title,
-      subs: [
-        { title: `${i + 1}.1`, brief: `«${meta.topic}»: ${title} ning mohiyati.` },
-        { title: `${i + 1}.2`, brief: `«${meta.topic}»: ${title} bo‘yicha tahlil va misol.` },
-      ],
+    // Foydalanuvchi yozgan ostmavzular saqlanadi; yozmagan bo'lsa —
+    // bobga ikkita ish sarlavhasi beriladi.
+    const chapters: OutlineChapter[] = manual.map((ch, i) => ({
+      title: ch.title,
+      subs: ch.subs.length
+        ? ch.subs.map((sub) => ({
+            title: sub,
+            brief: `«${meta.topic}» doirasida aynan shu masala: ${sub}.`,
+          }))
+        : [
+            { title: `${i + 1}.1`, brief: `«${meta.topic}»: ${ch.title} ning mohiyati.` },
+            { title: `${i + 1}.2`, brief: `«${meta.topic}»: ${ch.title} bo‘yicha tahlil va misol.` },
+          ],
     }));
     return { chapters };
   }
@@ -204,6 +211,35 @@ async function buildOutline(meta: DocMeta, sys: string, L: ReturnType<typeof sec
           },
         ],
   };
+}
+
+/**
+ * Rejani oldindan ko'rsatish uchun (`POST /api/outline`).
+ *
+ * Reja BEPUL: u bitta arzon chaqiruv, pulli qilish esa narxni bo'lish,
+ * qaytarish mantiqi va yangi tijoriy qoidalarni keltirardi. Bepul bo'lgani
+ * uchun foydalanuvchi rejani ko'rib tuzatadi va shundan keyin qimmat
+ * renderga o'tadi — natijada yaroqsiz hujjatlar va qaytarishlar kamayadi.
+ */
+export async function draftOutline(meta: DocMeta, deadline?: number): Promise<string | null> {
+  if (!llmEnabled()) return null;
+  const { chapters } = await buildOutline(meta, writerSystemPrompt(meta), sectionLabels(meta.language), deadline);
+  if (!chapters.length) return null;
+  // Matn ko'rinishi — foydalanuvchi uni to'g'ridan-to'g'ri tahrirlaydi va
+  // `parseManualOutline` uni qaytadan o'qiy oladi.
+  //
+  // Model ko'pincha sarlavhaga raqamni o'zi qo'shadi («1.1. Ta'rif»),
+  // shuning uchun o'z raqamimizni qo'yishdan oldin uni olib tashlaymiz —
+  // aks holda «1.1 1.1. Ta'rif» chiqadi.
+  const strip = (t: string) => t.replace(/^\d+(\.\d+)*[.)]?\s*/, "").trim() || t;
+  return chapters
+    .map((ch, i) =>
+      [
+        `${i + 1}. ${strip(ch.title)}`,
+        ...ch.subs.map((sub, j) => `  ${i + 1}.${j + 1} ${strip(sub.title)}`),
+      ].join("\n"),
+    )
+    .join("\n");
 }
 
 export async function writeWriterWithLlm(meta: DocMeta, deadline?: number): Promise<AcademicDoc | null> {

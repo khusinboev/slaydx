@@ -231,12 +231,40 @@ export function section(id: string, title: string, blocks: Block[]): DocSection 
   return { id, title, blocks };
 }
 
-/** Qo‘lda yozilgan mundarija qatorlaridan bob sarlavhalari. */
-export function parseManualToc(text: string): string[] {
-  return text
-    .split(/\n+/)
-    .map((s) => s.replace(/^\s*\d+[\).]\s*/, "").replace(/^[-*•]\s*/, "").trim())
-    .filter((s) => s.length >= 4 && s.length <= 160)
-    .filter((s) => !/^(kirish|xulosa|adabiyot|mundarija|содержание|introduction|conclusion|references)$/i.test(s))
-    .slice(0, 8);
+export type ManualChapter = { title: string; subs: string[] };
+
+const TOC_SKIP =
+  /^(kirish|xulosa|adabiyot|foydalanilgan|mundarija|reja|introduction|conclusion|references|contents|содержание|введение|заключение|литератур)/i;
+
+/**
+ * Qo'lda yozilgan rejani BOB va OSTMAVZULARGA ajratadi.
+ *
+ * Ilgari bu funksiya faqat bob sarlavhalarini qaytarardi va foydalanuvchi
+ * yozgan ostmavzular butunlay tashlab yuborilardi — o'rniga generic
+ * «1.1», «1.2» qo'yilardi. Ya'ni «mundarijani o'zim yozaman» tanlovi
+ * yarim yolg'on edi: reja qabul qilinardi-yu, tafsiloti yo'qolardi.
+ *
+ * Ostmavzu belgisi ikkita, ikkalasi ham bashorat qilinadigan:
+ *   — raqamlash «1.1», «2.3.1» ko'rinishida;
+ *   — qator ichkariga surilgan (kamida 2 bo'sh joy).
+ * Bandcha belgisi (`-`, `•`) o'zicha hal qilmaydi: ko'p foydalanuvchi
+ * boblarni ham bandcha bilan yozadi.
+ */
+export function parseManualOutline(text: string): ManualChapter[] {
+  const chapters: ManualChapter[] = [];
+  for (const raw of String(text ?? "").split(/\r?\n/)) {
+    if (!raw.trim()) continue;
+    const indent = (raw.match(/^[ \t]*/)?.[0] ?? "").replace(/\t/g, "  ").length;
+    const body = raw.trim().replace(/^[-*•]\s*/, "").trim();
+    if (!body || body.length > 200 || TOC_SKIP.test(body)) continue;
+    const numbered = /^\d+(\.\d+)+/.test(body);
+    const title = body.replace(/^[IVXLC]+[.)]\s*/i, "").replace(/^\d+(\.\d+)*[.)]?\s*/, "").trim() || body;
+    if (title.length < 3) continue;
+    if ((numbered || indent >= 2) && chapters.length) chapters[chapters.length - 1].subs.push(title);
+    else chapters.push({ title, subs: [] });
+  }
+  return chapters
+    .filter((c) => c.title.length >= 4)
+    .slice(0, 6)
+    .map((c) => ({ ...c, subs: c.subs.slice(0, 4) }));
 }

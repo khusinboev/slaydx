@@ -171,3 +171,39 @@ test("bo'lingan ro'yxatlar alohida <ul> bo'ladi", async () => {
   const html = renderHtml(d);
   assert.equal(html.split("<ul>").length - 1, 2);
 });
+
+// -------------------------------------------------- qo'lda yozilgan reja
+
+test("qo'lda yozilgan reja bob va ostmavzularga ajratiladi", async () => {
+  const { parseManualOutline } = await import("../lib/generation/quality.ts");
+  const plan = [
+    "Kirish",
+    "I bob. Nazariy asoslar",
+    "  1.1 Tushunchaning mohiyati",
+    "  1.2 Tasnif va turlari",
+    "II bob. Amaliy tahlil",
+    "  2.1 O'zbekiston tajribasi",
+    "Xulosa",
+    "Foydalanilgan adabiyotlar",
+  ].join("\n");
+  const out = parseManualOutline(plan);
+  assert.equal(out.length, 2, "ikkita bob kutilgan edi");
+  assert.deepEqual(out[0].subs, ["Tushunchaning mohiyati", "Tasnif va turlari"]);
+  assert.deepEqual(out[1].subs, ["O'zbekiston tajribasi"]);
+  // Kirish/Xulosa/Adabiyotlar bob emas — ular tuzilmada alohida.
+  assert.ok(!out.some((c) => /kirish|xulosa|adabiyot/i.test(c.title)));
+});
+
+test("raqamsiz va surilmagan reja — hammasi bob", async () => {
+  const { parseManualOutline } = await import("../lib/generation/quality.ts");
+  const out = parseManualOutline("Birinchi masala\nIkkinchi masala\nUchinchi masala");
+  assert.equal(out.length, 3);
+  assert.ok(out.every((c) => c.subs.length === 0));
+});
+
+test("bo'sh yoki yaroqsiz reja bo'sh ro'yxat qaytaradi", async () => {
+  const { parseManualOutline } = await import("../lib/generation/quality.ts");
+  assert.deepEqual(parseManualOutline(""), []);
+  assert.deepEqual(parseManualOutline("Kirish\nXulosa"), []);
+  assert.deepEqual(parseManualOutline("ab\ncd"), []);
+});

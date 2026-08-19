@@ -322,4 +322,15 @@ export async function extractText(file: File) {
   });
 }
 
+/**
+ * Ish rejasini oldindan olish. Bepul va kredit yechmaydi —
+ * `app/api/outline/route.ts` izohiga qarang.
+ */
+export async function draftOutline(slug: string, values: FormValues) {
+  return request<{ text: string }>("/api/outline", {
+    method: "POST",
+    body: JSON.stringify({ slug, values }),
+  });
+}
+
 export type { ToolId };

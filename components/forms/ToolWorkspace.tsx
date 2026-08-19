@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { FormValues, ToolConfig } from "@/lib/types";
 import { priceFor } from "@/lib/tools";
+import { draftOutline } from "@/lib/api-client";
 import { useAppStore, writerProfile } from "@/lib/store";
 import { useUi } from "@/lib/ui";
 import type { UserProfile } from "@/lib/types";
@@ -90,11 +91,39 @@ function StandardForm({ tool, profile }: { tool: ToolConfig; profile: UserProfil
   const set = (name: string, v: string | number | boolean) =>
     setValues((s) => ({ ...s, [name]: v }));
 
+  const [outlineBusy, setOutlineBusy] = useState(false);
+  // Reja tahriri bo'lgan vositalarda `tocText` asosiy joyda ko'rsatiladi,
+  // shuning uchun uni «qo'shimcha» ro'yxatidan chiqaramiz.
+  const hasOutline = tool.fields.some((f) => f.name === "tocMethod");
   const mainFields = tool.fields.filter((f) => !f.extra);
-  const extraFields = tool.fields.filter((f) => f.extra);
+  const extraFields = tool.fields.filter((f) => f.extra && !(hasOutline && f.name === "tocText"));
   const needsTopic = Boolean(tool.topicLegend);
   const fileMode = tool.modes && values.mode === "file";
   const price = useMemo(() => priceFor(tool, values), [tool, values]);
+
+  /**
+   * Rejani AI tuzadi va tahrirlash uchun ko'rsatadi.
+   *
+   * Bepul: kredit yechilmaydi. Foydalanuvchi rejani tuzatgach
+   * `tocMethod` «manual» ga o'tadi va dvigatel AYNAN shu rejani
+   * ishlatadi — ostmavzular ham saqlanadi.
+   */
+  async function makeOutline() {
+    setError(null);
+    if (!String(values.topic ?? "").trim()) {
+      setError("Avval mavzuni kiriting");
+      return;
+    }
+    setOutlineBusy(true);
+    try {
+      const { text } = await draftOutline(tool.slug, values);
+      setValues((s) => ({ ...s, tocText: text, tocMethod: "manual" }));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Reja tuzilmadi");
+    } finally {
+      setOutlineBusy(false);
+    }
+  }
 
   async function submit() {
     setError(null);
@@ -215,6 +244,33 @@ function StandardForm({ tool, profile }: { tool: ToolConfig; profile: UserProfil
         </fieldset>
       ) : null}
 
+      {hasOutline ? (
+        <fieldset className="mb-6">
+          <Legend>Ish rejasi</Legend>
+          <p className="text-muted-foreground mb-3 text-sm">
+            Rejani oldindan ko&apos;rib, tuzatib olishingiz mumkin — bu bepul. Tahrirlangan reja hujjat tuzilmasiga
+            aynan tushadi.
+          </p>
+          <button
+            type="button"
+            onClick={makeOutline}
+            disabled={outlineBusy || loading}
+            className="border-input bg-card hover:bg-muted mb-3 rounded-xl border px-4 py-2 text-sm disabled:opacity-60"
+          >
+            {outlineBusy ? "Reja tuzilmoqda…" : "AI reja tuzsin"}
+          </button>
+          <textarea
+            value={String(values.tocText ?? "")}
+            onChange={(e) => set("tocText", e.target.value)}
+            rows={String(values.tocText ?? "") ? 9 : 4}
+            className="border-input bg-card focus:ring-ring w-full rounded-xl border px-3.5 py-2.5 font-mono text-[13px] outline-none focus:ring-2"
+            placeholder={"1. Birinchi bob\n  1.1 Ostmavzu\n  1.2 Ostmavzu\n2. Ikkinchi bob"}
+          />
+          <p className="text-muted-foreground mt-2 text-xs">
+            Bo&apos;sh qoldirsangiz reja avtomatik tuziladi. Ostmavzuni ichkariga surib yoki «1.1» deb yozing.
+          </p>
+        </fieldset>
+      ) : null}
       {mainFields.map((f) => (
         <FieldBlock key={f.name} field={f} values={values} set={set} />
       ))}
