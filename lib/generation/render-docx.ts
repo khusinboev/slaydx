@@ -4,17 +4,16 @@ import {
   Document,
   Footer,
   HeadingLevel,
-  LeaderType,
   Packer,
   PageBorderDisplay,
   PageBorderOffsetFrom,
   PageNumber,
   Paragraph,
   ShadingType,
-  TabStopType,
   Table,
   TableCell,
   TableRow,
+  TabStopType,
   TextRun,
   WidthType,
 } from "docx";
@@ -61,6 +60,21 @@ function leftP(text: string, extra: RunExtra = {}): Paragraph {
     alignment: AlignmentType.LEFT,
     spacing: { after: 120, line: LINE },
     children: [run(text, extra)],
+  });
+}
+
+/**
+ * Titul sahifadagi imzo qatori: chapda yorliq, o'ngda imzo chizig'i.
+ *
+ * OTME da topshiriladigan ish imzolanadi — chiziqsiz titul «tayyor emas»
+ * ko'rinadi va talaba uni qo'lda chizib qo'shishga majbur bo'lardi.
+ */
+function signatureP(label: string): Paragraph {
+  return new Paragraph({
+    alignment: AlignmentType.LEFT,
+    spacing: { after: 120, line: LINE },
+    tabStops: [{ type: TabStopType.RIGHT, position: CONTENT_W }],
+    children: [run(label), new TextRun({ text: "\t", font: FONT, size: SIZE }), run("____________")],
   });
 }
 
@@ -112,25 +126,21 @@ function codeBox(text: string, caption?: string): Array<Paragraph | Table> {
   return out;
 }
 
-function tocLine(label: string, page: string): Paragraph {
+/**
+ * Mundarija qatori.
+ *
+ * Sahifa raqami ataylab qo'yilmaydi. Ilgari u `so'z / 280` formulasi bilan
+ * TAXMIN qilinardi va Word'dagi haqiqiy sahifaga deyarli hech qachon mos
+ * kelmasdi — ya'ni hujjat o'z mundarijasida yolg'on ma'lumot ko'tarib
+ * yurardi. Yo'q raqam noto'g'ri raqamdan yaxshi; haqiqiy raqam Word ning
+ * TOC maydoni bilan keladi (Sprint 4).
+ */
+function tocLine(label: string): Paragraph {
   return new Paragraph({
     alignment: AlignmentType.LEFT,
     spacing: { after: 80, line: LINE },
-    tabStops: [{ type: TabStopType.RIGHT, position: CONTENT_W, leader: LeaderType.DOT }],
-    children: [run(label), new TextRun({ text: "\t", font: FONT, size: SIZE }), run(page)],
+    children: [run(label)],
   });
-}
-
-function estimateTocPages(doc: AcademicDoc): string[] {
-  let page = doc.titlePage ? 3 : 2;
-  const pages: string[] = [];
-  for (const s of doc.sections) {
-    pages.push(String(page));
-    const words = s.blocks.reduce((n, b) => n + b.text.split(/\s+/).filter(Boolean).length, 0);
-    page += Math.max(1, Math.round(words / 280));
-  }
-  if (doc.references?.length) pages.push(String(page));
-  return pages;
 }
 
 function blockToParagraphs(b: Block): Array<Paragraph | Table> {
@@ -217,13 +227,13 @@ export async function renderDocx(doc: AcademicDoc): Promise<Uint8Array> {
     children.push(centerP(`«${meta.topic}»`, { bold: true, italics: true }));
     children.push(centerP(""));
     children.push(centerP(""));
-    if (meta.author) children.push(leftP(`${L.doneBy}: ${meta.author}`));
+    if (meta.author) children.push(signatureP(`${L.doneBy}: ${meta.author}`));
     if (meta.course || meta.group) {
       children.push(
         leftP([meta.course && L.course(meta.course), meta.group && L.group(meta.group)].filter(Boolean).join(", ")),
       );
     }
-    if (meta.teacher) children.push(leftP(`${L.supervisor}: ${meta.teacher}`));
+    if (meta.teacher) children.push(signatureP(`${L.supervisor}: ${meta.teacher}`));
     if (meta.subject && meta.subject.toLowerCase() !== meta.workLabel.toLowerCase()) {
       children.push(leftP(`${L.subject}: ${meta.subject}`));
     }
@@ -235,13 +245,12 @@ export async function renderDocx(doc: AcademicDoc): Promise<Uint8Array> {
   }
 
   if (doc.toc) {
-    const tocPages = estimateTocPages(doc);
     children.push(heading(L.toc, HeadingLevel.HEADING_1));
     doc.sections.forEach((s, i) => {
-      children.push(tocLine(`${i + 1}. ${s.title}`, tocPages[i] ?? ""));
+      children.push(tocLine(`${i + 1}. ${s.title}`));
     });
     if (doc.references?.length) {
-      children.push(tocLine(`${doc.sections.length + 1}. ${L.references}`, tocPages[doc.sections.length] ?? ""));
+      children.push(tocLine(`${doc.sections.length + 1}. ${L.references}`));
     }
     children.push(new Paragraph({ children: [run("")], pageBreakBefore: true }));
   }
@@ -264,6 +273,7 @@ export async function renderDocx(doc: AcademicDoc): Promise<Uint8Array> {
 
   if (doc.references?.length) {
     children.push(heading(L.references, HeadingLevel.HEADING_1));
+    if (doc.referencesNote) children.push(bodyP(doc.referencesNote));
     doc.references.forEach((r, i) => children.push(bodyP(`${i + 1}. ${r}`)));
   }
 
@@ -280,7 +290,15 @@ export async function renderDocx(doc: AcademicDoc): Promise<Uint8Array> {
   const blankFooter = new Footer({ children: [new Paragraph({})] });
   const hasTitle = Boolean(doc.titlePage);
   const design = ESSAY_DESIGNS.find((d) => d.value === meta.design);
-  const borderColor = meta.toolId === "essay" && design ? design.from.replace("#", "") : "222222";
+  /**
+   * Sahifa ramkasi — FAQAT insho uchun.
+   *
+   * Ilgari u barcha hujjatlarga (referat, kurs ishi, maqola, tezis) qora
+   * `#222222` rangda tushardi. GOST 7.32 va OTME uslubiy ko'rsatmalari
+   * ramka talab qilmaydi — aksincha, ilmiy ishda u havaskorlik belgisi.
+   * Inshoda esa `design` tanlovi aynan shu ramka rangi orqali ko'rinadi.
+   */
+  const essayBorder = meta.toolId === "essay" && design ? design.from.replace("#", "") : null;
 
   const document = new Document({
     styles: {
@@ -304,16 +322,20 @@ export async function renderDocx(doc: AcademicDoc): Promise<Uint8Array> {
               right: Math.round(1.5 * CM),
             },
             pageNumbers: { start: 1 },
-            borders: {
-              pageBorders: {
-                display: PageBorderDisplay.ALL_PAGES,
-                offsetFrom: PageBorderOffsetFrom.PAGE,
-              },
-              pageBorderTop: { style: BorderStyle.SINGLE, size: 12, space: 18, color: borderColor },
-              pageBorderRight: { style: BorderStyle.SINGLE, size: 12, space: 12, color: borderColor },
-              pageBorderBottom: { style: BorderStyle.SINGLE, size: 12, space: 18, color: borderColor },
-              pageBorderLeft: { style: BorderStyle.SINGLE, size: 12, space: 14, color: borderColor },
-            },
+            ...(essayBorder
+              ? {
+                  borders: {
+                    pageBorders: {
+                      display: PageBorderDisplay.ALL_PAGES,
+                      offsetFrom: PageBorderOffsetFrom.PAGE,
+                    },
+                    pageBorderTop: { style: BorderStyle.SINGLE, size: 12, space: 18, color: essayBorder },
+                    pageBorderRight: { style: BorderStyle.SINGLE, size: 12, space: 12, color: essayBorder },
+                    pageBorderBottom: { style: BorderStyle.SINGLE, size: 12, space: 18, color: essayBorder },
+                    pageBorderLeft: { style: BorderStyle.SINGLE, size: 12, space: 14, color: essayBorder },
+                  },
+                }
+              : {}),
           },
         },
         footers: hasTitle

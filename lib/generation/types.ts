@@ -64,6 +64,15 @@ export type DocMeta = {
   tocMethod: "ai" | "manual";
   tocText: string;
   includeVisuals: boolean;
+  /** Slaydda titul slaydi bo'lsinmi. Formadagi belgi shu yerga tushadi. */
+  titleSlide: boolean;
+  /**
+   * «Premium» paketlar tanlanganmi.
+   *
+   * Paketlar ikki o'lchovda farqlanadi: HAJM (`targetPages` — slaydlar soni)
+   * va VIZUAL SIFAT (shu bayroq). Ilgari premium hech nimani o'zgartirmasdi.
+   */
+  premiumVisuals: boolean;
   design: string;
   slideTheme?: SlideThemeId;
   slideTemplate?: SlideTemplateId;
@@ -76,6 +85,11 @@ export type AcademicDoc = {
   sections: DocSection[];
   tables?: DocTable[];
   references?: string[];
+  /**
+   * Adabiyotlar ro'yxati tasdiqlanmagan bo'lsa ko'rsatiladigan izoh.
+   * Uydirma muallif/DOI yozish o'rniga foydalanuvchi ogohlantiriladi.
+   */
+  referencesNote?: string;
   abstracts?: { lang: string; label: string; text: string; keywords: string }[];
   slideTheme?: SlideThemeId;
   slideTemplate?: SlideTemplateId;

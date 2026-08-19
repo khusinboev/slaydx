@@ -82,7 +82,9 @@ export function renderHtml(doc: AcademicDoc): string {
     .join("");
 
   const refs = doc.references?.length
-    ? `<section><h2>${L.references}</h2><ol>${doc.references.map((r) => `<li>${esc(r)}</li>`).join("")}</ol></section>`
+    ? `<section><h2>${L.references}</h2>${
+        doc.referencesNote ? `<p>${esc(doc.referencesNote)}</p>` : ""
+      }<ol>${doc.references.map((r) => `<li>${esc(r)}</li>`).join("")}</ol></section>`
     : "";
 
   return `<!doctype html><html lang="${esc(meta.language || "uz")}"><head><meta charset="utf-8"/><title>${esc(meta.topic)}</title>
