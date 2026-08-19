@@ -99,43 +99,68 @@ async function buildOutline(meta: DocMeta, sys: string, L: ReturnType<typeof sec
     return { chapters };
   }
 
-  const raw = await llmComplete(
-    sys,
-    [
-      `«${meta.topic}» uchun ${chapterN} bobli reja. JSON:`,
-      `{"chapters":[{"title":"","subs":[{"title":"1.1 ...","brief":"2 gap"}]}]}`,
-      `Har bobda 2–3 ostmavzu. Sarlavha mavzuga xos (umumiy «Nazariy asoslar» emas).`,
-      `brief — shu ostmavzuda nima yozilishini 1–2 gapda.`,
-      meta.extra ? `Qo‘shimcha: ${meta.extra}` : "",
-    ]
-      .filter(Boolean)
-      .join("\n"),
-    1200,
-    { json: true, timeoutMs: Math.min(40_000, remainingMs(deadline)) },
-  );
-  const data = parseLlmObject<{ chapters?: OutlineChapter[] }>(raw);
-  const chapters = (data?.chapters ?? [])
-    .map((c, i) => {
-      const title = String(c?.title || "").trim();
-      const subs = Array.isArray(c?.subs)
-        ? c.subs
-            .map((s) => ({
-              title: String(s?.title || "").trim(),
-              brief: String(s?.brief || "").trim(),
-            }))
-            .filter((s) => s.title)
-            .slice(0, 3)
-        : [];
-      if (!title || !subs.length) return null;
-      return {
-        title: title.length > 8 ? title : i === 0 ? L.chapterTheory(meta.topic) : L.chapterPractice,
-        subs,
-      };
-    })
-    .filter((x): x is OutlineChapter => Boolean(x))
-    .slice(0, chapterN);
+  const ask = (timeoutMs: number) =>
+    llmComplete(
+      sys,
+      [
+        `«${meta.topic}» uchun ${chapterN} bobli reja. JSON:`,
+        `{"chapters":[{"title":"","subs":[{"title":"1.1 ...","brief":"2 gap"}]}]}`,
+        `Har bobda 2–3 ostmavzu. Sarlavha mavzuga xos (umumiy «Nazariy asoslar» emas).`,
+        `brief — shu ostmavzuda nima yozilishini 1–2 gapda.`,
+        meta.extra ? `Qo‘shimcha: ${meta.extra}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n"),
+      1200,
+      { json: true, timeoutMs },
+    );
 
-  if (chapters.length >= 2) return { chapters };
+  const parse = (text: string | null) => {
+    const data = parseLlmObject<{ chapters?: OutlineChapter[] }>(text);
+    const chapters = (data?.chapters ?? [])
+      .map((c, i) => {
+        const title = String(c?.title || "").trim();
+        const subs = Array.isArray(c?.subs)
+          ? c.subs
+              .map((sub) => ({
+                title: String(sub?.title || "").trim(),
+                brief: String(sub?.brief || "").trim(),
+              }))
+              .filter((sub) => sub.title)
+              .slice(0, 3)
+          : [];
+        if (!title || !subs.length) return null;
+        return {
+          title: title.length > 8 ? title : i === 0 ? L.chapterTheory(meta.topic) : L.chapterPractice,
+          subs,
+        };
+      })
+      .filter((x): x is OutlineChapter => Boolean(x))
+      .slice(0, chapterN);
+    return { chapters, parsed: Boolean(data) };
+  };
+
+  /**
+   * Rejaga ikkinchi urinish beriladi.
+   *
+   * Reja butun hujjat tuzilmasini belgilaydi: u yiqilsa bob sarlavhalari
+   * generic bo'lib qoladi («I BOB. ... NAZARIY ASOSLARI») va ish
+   * shablonga o'xshab ketadi. `llmComplete` tarmoq xatosida qayta uradi,
+   * lekin javob KELIB parse bo'lmasa urinmaydi — shu bo'shliq yopiladi.
+   */
+  let raw = await ask(Math.min(40_000, remainingMs(deadline)));
+  let out = parse(raw);
+  if (out.chapters.length < 2 && remainingMs(deadline) > 25_000) {
+    console.warn(
+      "[outline] qayta urinish:",
+      raw === null ? "javob yo‘q" : `javob ${raw.length} belgi, parse ${out.parsed ? "ok" : "yiqildi"}`,
+    );
+    raw = await ask(Math.min(30_000, remainingMs(deadline)));
+    out = parse(raw);
+  }
+  if (out.chapters.length >= 2) return { chapters: out.chapters };
+
+  console.warn("[outline] zaxira reja ishlatildi");
 
   return {
     chapters: long
@@ -188,14 +213,39 @@ export async function writeWriterWithLlm(meta: DocMeta, deadline?: number): Prom
   const topic = meta.topic;
   const pages = Math.max(4, meta.targetPages || 8);
   const want = targetWords(pages);
-  const perChapterParas = Math.min(10, Math.max(4, Math.round(want / 450)));
-
   const { chapters } = await buildOutline(meta, sys, L, deadline);
 
-  type Job = { id: string; title: string; brief: string; min: number; split?: boolean };
+  /**
+   * Har OSTMAVZU alohida yoziladi va boshqalarning ro'yxatini biladi.
+   *
+   * Ilgari bitta chaqiruv butun bobni yozar, keyin matn ostmavzular
+   * soniga MATEMATIK bo'linardi (`mid = ceil(bloklar / ostmavzular)`).
+   * Ikki oqibati bor edi: 1.1 sarlavhasi ostida 1.2 ning matni turishi
+   * mumkin edi, va boblar bir-birini ko'rmagani uchun bir xil fikrni
+   * qayta-qayta yozardi.
+   *
+   * Endi har ostmavzu o'z sarlavhasi uchun yoziladi va promptda boshqa
+   * ostmavzular sanab o'tiladi («bular boshqa joyda yoritiladi»).
+   * Chaqiruvlar soni ortadi, lekin har biri kichikroq — pool 3 da
+   * umumiy vaqt deyarli o'zgarmaydi.
+   */
+  type Job = {
+    id: string;
+    kind: "intro" | "sub" | "outro";
+    title: string;
+    brief: string;
+    min: number;
+  };
+
+  const allSubs = chapters.flatMap((ch) => ch.subs.map((s) => s.title));
+  const subCount = Math.max(1, allSubs.length);
+  // Kirish va xulosa hajmning ~25% ini oladi, qolgani ostmavzularga.
+  const perSub = Math.max(3, Math.min(9, Math.round((want * 0.75) / subCount / 105)));
+
   const jobs: Job[] = [
     {
       id: "kirish",
+      kind: "intro",
       title: L.intro,
       brief:
         meta.toolId === "coursework"
@@ -203,18 +253,32 @@ export async function writeWriterWithLlm(meta: DocMeta, deadline?: number): Prom
           : `Faqat «${topic}» haqida: dolzarblik, maqsad, 3–4 vazifa, obyekt/predmet, usul.`,
       min: Math.max(3, Math.round(pages / 4)),
     },
-    ...chapters.map((ch, i) => ({
-      id: `bob${i + 1}`,
-      title: ch.title,
-      brief: ch.subs.map((s) => `${s.title}: ${s.brief}`).join("\n"),
-      min: perChapterParas,
-      split: true,
-      subs: ch.subs,
-    })),
+    ...chapters.flatMap((ch, ci) =>
+      ch.subs.map((sub, si) => ({
+        id: `bob${ci + 1}-${si + 1}`,
+        kind: "sub" as const,
+        title: sub.title,
+        brief: [
+          `Bob: ${ch.title}`,
+          `Shu ostmavzuda aynan nima yoziladi: ${sub.brief}`,
+          allSubs.length > 1
+            ? `Ishning BOSHQA ostmavzulari (ular alohida yoritiladi — TAKRORLAMANG): ${allSubs
+                .filter((t) => t !== sub.title)
+                .join("; ")}`
+            : "",
+        ]
+          .filter(Boolean)
+          .join("\n"),
+        min: perSub,
+      })),
+    ),
     {
       id: "xulosa",
+      kind: "outro",
       title: L.conclusion,
-      brief: `3–5 ta aniq xulosa va amaliy tavsiya. Takror shior bo‘lmasin.`,
+      brief: `3–5 ta aniq xulosa va amaliy tavsiya. Ish boblari: ${chapters
+        .map((c) => c.title)
+        .join("; ")}. Boblardagi jumlalarni ko‘chirmang, umumlashtiring.`,
       min: 3,
     },
   ];
@@ -222,7 +286,8 @@ export async function writeWriterWithLlm(meta: DocMeta, deadline?: number): Prom
   const written = await mapPool(jobs, 3, async (item) => {
     const left = remainingMs(deadline);
     if (left < 5_000) return { item, blocks: [] as Block[] };
-    let blocks = await writeSection(sys, item.title, item.brief, meta, item.min, Math.min(45_000, left));
+    const budget = item.kind === "sub" ? 38_000 : 45_000;
+    let blocks = await writeSection(sys, item.title, item.brief, meta, item.min, Math.min(budget, left));
     if (!blocks.length && remainingMs(deadline) > 8_000) {
       blocks = await writeSection(
         sys,
@@ -230,30 +295,34 @@ export async function writeWriterWithLlm(meta: DocMeta, deadline?: number): Prom
         item.brief,
         meta,
         Math.max(2, item.min - 2),
-        Math.min(35_000, remainingMs(deadline)),
+        Math.min(30_000, remainingMs(deadline)),
       );
-    }
-    if (item.split && "subs" in item && Array.isArray((item as Job & { subs: OutlineChapter["subs"] }).subs)) {
-      const subs = (item as Job & { subs: OutlineChapter["subs"] }).subs;
-      const mid = Math.ceil(blocks.length / Math.max(1, subs.length));
-      const withHeads: Block[] = [];
-      subs.forEach((sub, i) => {
-        withHeads.push({ kind: "h2", text: sub.title });
-        withHeads.push(...blocks.slice(i * mid, i === subs.length - 1 ? undefined : (i + 1) * mid));
-      });
-      if (withHeads.some((b) => b.kind === "p")) blocks = withHeads;
     }
     return { item, blocks };
   });
 
-  const sections: DocSection[] = [];
+  const byId = new Map<string, Block[]>();
   for (const { item, blocks } of written) {
-    if (!blocks.length) {
-      console.warn("[write-llm] empty section", item.id);
-      continue;
-    }
-    sections.push(section(item.id, item.title, blocks));
+    if (blocks.length) byId.set(item.id, blocks);
+    else console.warn("[write-llm] empty section", item.id);
   }
+
+  const sections: DocSection[] = [];
+  const intro = byId.get("kirish");
+  if (intro) sections.push(section("kirish", L.intro, intro));
+  chapters.forEach((ch, ci) => {
+    const blocks: Block[] = [];
+    ch.subs.forEach((sub, si) => {
+      const b = byId.get(`bob${ci + 1}-${si + 1}`);
+      if (!b?.length) return;
+      // Sarlavha endi AYNAN o'z matni ustida turadi.
+      blocks.push({ kind: "h2", text: sub.title }, ...b);
+    });
+    if (blocks.some((b) => b.kind === "p")) sections.push(section(`bob${ci + 1}`, ch.title, blocks));
+  });
+  const outro = byId.get("xulosa");
+  if (outro) sections.push(section("xulosa", L.conclusion, outro));
+
   if (sections.length < 3) {
     console.warn("[write-llm] too few sections", sections.length);
     return sections.length ? { meta, titlePage: true, toc: true, sections } : null;
@@ -277,10 +346,9 @@ export async function writeWriterWithLlm(meta: DocMeta, deadline?: number): Prom
     }
   }
 
-  // Kurs ishida jadval tuzilma talabi — «Jadval va rasmlar: Yo'q» tanlansa ham
-  // kamida bitta tasnif jadvali bo'ladi.
-  const wantsTable = meta.includeVisuals || meta.toolId === "coursework";
-  if (wantsTable && remainingMs(deadline) > 12_000) {
+  // Jadval foydalanuvchi tanloviga bo'ysunadi. «Yo'q» deganda jadval
+  // qo'shish — tanlovni jimgina bekor qilish bo'lardi.
+  if (meta.includeVisuals && remainingMs(deadline) > 12_000) {
     const tableRaw = await llmComplete(
       sys,
       `«${topic}» bo‘yicha 1 ta qisqa jadval. JSON: {"caption":"","headers":["",""],"rows":[["",""]]}. 3–5 qator. Uydirma foiz/DOI yo‘q. Atama yoki bosqich taqqoslash.`,
