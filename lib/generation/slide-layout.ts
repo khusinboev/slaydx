@@ -93,6 +93,10 @@ export function boxStyle(box: Box): { left: number; top: number; width: number; 
 }
 
 export function slideNotes(s: SlideModel) {
+  // Model yozgan notiq matni birinchi navbatda: u slaydni takrorlamaydi.
+  // Bo'lmasa — slayd mazmunidan tuzilgan zaxira eslatma.
+  const written = (s.notes || "").trim();
+  if (written) return written;
   if (s.layout === "quote") return [s.quote, s.quoteBy ? `— ${s.quoteBy}` : ""].filter(Boolean).join("\n");
   if (s.steps?.length) return s.steps.map((st) => `${st.n}. ${st.title}: ${st.text}`).join("\n");
   if (s.stats?.length) return s.stats.map((st) => `${st.value} — ${st.label}`).join("\n");
@@ -134,6 +138,13 @@ function pushChrome(
     layers.push({ t: "rect", box: { x: 0, y: 0, w: 0.28, h: H }, fill: { color: accent } });
     return;
   }
+  if (theme.chrome === "split") {
+    // Ilgari `split` alohida ishlanmagan va pastdagi `bar-left` ga tushib
+    // ketardi — ya'ni temaning `chrome` maydoni yolg'on va'da edi.
+    layers.push({ t: "rect", box: { x: 0, y: 0, w: mode === "left" ? RIGHT_IMG_X : W, h: 0.09 }, fill: { color: accent } });
+    layers.push({ t: "rect", box: { x: 0, y: 0, w: 0.09, h: H }, fill: { color: theme.accent2 } });
+    return;
+  }
   layers.push({ t: "rect", box: { x: 0, y: 0, w: 0.16, h: H }, fill: { color: accent } });
 }
 
@@ -167,6 +178,39 @@ function pushFooter(
   });
 }
 
+/**
+ * Matnni qutiga sig'diradigan eng katta shrift.
+ *
+ * Ilgari bu ish `pptxgenjs` ning `shrinkText` bayrog'iga topshirilgan edi.
+ * Ikki muammo bor edi: (1) u ba'zan matnni 11 pt gacha tushirib yuborardi —
+ * proyektorda o'qib bo'lmasdi; (2) sayt ko'ruvchisi kichraytirmasdi, ya'ni
+ * preview va yuklab olingan PPTX bir xil ko'rinmasdi. Endi o'lcham SHU
+ * YERDA hisoblanadi, demak ikkala chiqish ham bir xil bo'ladi.
+ */
+function fitSize(text: string, box: Box, base: number, min: number): number {
+  const chars = text.trim().length;
+  if (!chars) return base;
+  for (let size = base; size > min; size -= 1) {
+    const perLine = Math.max(1, Math.floor((box.w * 72) / (size * 0.5)));
+    const rows = Math.ceil(chars / perLine);
+    if (rows * size * 1.3 <= box.h * 72) return size;
+  }
+  return min;
+}
+
+/** Ko'p qatorli ro'yxat uchun: har band alohida qatordan boshlanadi. */
+function fitLines(lines: string[], box: Box, base: number, min: number, paraSpacePt = 0): number {
+  const items = lines.filter(Boolean);
+  if (!items.length) return base;
+  for (let size = base; size > min; size -= 1) {
+    const perLine = Math.max(1, Math.floor(((box.w - 0.28) * 72) / (size * 0.5)));
+    let rows = 0;
+    for (const l of items) rows += Math.max(1, Math.ceil(l.length / perLine));
+    if (rows * size * 1.3 + items.length * paraSpacePt <= box.h * 72) return size;
+  }
+  return min;
+}
+
 function photo(layers: SlideLayer[], url: string | undefined, box: Box, dim = 0) {
   if (!url) return;
   layers.push({ t: "image", box, url });
@@ -176,7 +220,10 @@ function photo(layers: SlideLayer[], url: string | undefined, box: Box, dim = 0)
 function planTitle(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index: number, total: number): SlidePlan {
   const img = s.image?.url;
   const layers: SlideLayer[] = [];
-  const kicker = s.kicker || "Taqdimot";
+  // Til-bog'liq matn modelda to'ldiriladi (`slide-write.ts`). Layout
+  // hech qachon o'zidan matn o'ylab topmaydi — aks holda ruscha yoki
+  // inglizcha deckda o'zbekcha so'z paydo bo'lardi.
+  const kicker = s.kicker || "";
 
   if (visual === "magazine" && img) {
     layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.titleBg } });
@@ -192,14 +239,26 @@ function planTitle(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
       uppercase: true,
       tracking: 2.2,
     });
+    const magTitleBox: Box = { x: 0.7, y: 4.5, w: 11.8, h: s.subtitle ? 1.35 : 1.7 };
     layers.push({
       t: "text",
-      box: { x: 0.7, y: 4.5, w: 11.8, h: 1.7 },
+      box: magTitleBox,
       text: s.title,
       color: theme.titleText,
-      size: 34,
+      size: fitSize(s.title, magTitleBox, 34, 22),
       bold: true,
     });
+    // Ilgari magazine tarmog'ida subtitle umuman chizilmasdi — model
+    // yozgan matn jimgina yo'qolardi.
+    if (s.subtitle) {
+      layers.push({
+        t: "text",
+        box: { x: 0.7, y: 5.95, w: 11.8, h: 0.72 },
+        text: s.subtitle,
+        color: theme.titleMuted,
+        size: 16,
+      });
+    }
     pushFooter(layers, s, theme, index, total, { x: 0.7, w: 12 }, true);
     return { bg: theme.titleBg, layers };
   }
@@ -381,7 +440,9 @@ function planOverlay(s: SlideModel, theme: SlideTheme, index: number, total: num
   const layers: SlideLayer[] = [];
   layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.titleBg } });
   if (img) {
-    photo(layers, img, photoSlot(kind)!, 0.52);
+    // Qorong'u temada fon allaqachon to'q — 0.52 qoplama fotoni butunlay
+    // yo'q qilardi. Yorug' temada esa oq matn uchun qoplama kerak.
+    photo(layers, img, photoSlot(kind)!, theme.darkContent ? 0.34 : 0.52);
   } else {
     pushChrome(layers, theme, "full");
   }
@@ -396,12 +457,13 @@ function planOverlay(s: SlideModel, theme: SlideTheme, index: number, total: num
       size: 48,
       bold: true,
     });
+    const quoteBox: Box = { x: panel.x + 0.45, y: panel.y + 0.95, w: panel.w - 0.9, h: 2.35 };
     layers.push({
       t: "text",
-      box: { x: panel.x + 0.45, y: panel.y + 0.95, w: panel.w - 0.9, h: 2.35 },
+      box: quoteBox,
       text: s.quote || s.title,
       color: theme.titleText,
-      size: 22,
+      size: fitSize(s.quote || s.title, quoteBox, 24, 16),
       italic: true,
     });
     if (s.quoteBy) {
@@ -431,7 +493,7 @@ function planOverlay(s: SlideModel, theme: SlideTheme, index: number, total: num
     layers.push({
       t: "text",
       box: { x: panel.x + 0.5, y: panel.y + 2.05, w: panel.w - 1, h: 0.85 },
-      text: s.subtitle || "Savollar va muhokama",
+      text: s.subtitle || "",
       color: theme.titleMuted,
       size: 16,
       align: "center",
@@ -443,12 +505,13 @@ function planOverlay(s: SlideModel, theme: SlideTheme, index: number, total: num
 }
 
 function planHeading(layers: SlideLayer[], s: SlideModel, theme: SlideTheme, textW: number, x: number) {
+  const headBox: Box = { x, y: 0.3, w: textW, h: 0.88 };
   layers.push({
     t: "text",
-    box: { x, y: 0.3, w: textW, h: 0.88 },
+    box: headBox,
     text: s.title,
     color: theme.text,
-    size: 22,
+    size: fitSize(s.title, headBox, 22, 16),
     bold: true,
   });
   layers.push({ t: "rect", box: { x, y: 1.22, w: 1.1, h: 0.07 }, fill: { color: theme.accent } });
@@ -464,36 +527,41 @@ function planBullets(s: SlideModel, theme: SlideTheme, index: number, total: num
   const x = M + 0.18;
   const tw = split ? LEFT_COL_W() : 12.1;
   planHeading(layers, s, theme, tw, x);
-  const items = (s.bullets ?? []).slice(0, 6);
+  const items = (s.bullets ?? []).slice(0, agenda ? 5 : 4);
   if (agenda) {
+    const rowH = items.length > 4 ? 0.7 : 0.76;
     items.forEach((line, i) => {
-      const y = 1.5 + i * 0.76;
+      const y = 1.5 + i * rowH;
       layers.push({
         t: "text",
         box: { x, y, w: 0.7, h: 0.7 },
         text: String(i + 1).padStart(2, "0"),
-        color: theme.accent,
+        color: theme.accentInk,
         size: 18,
         bold: true,
         valign: "middle",
       });
+      const lineBox: Box = { x: x + 0.78, y, w: tw - 0.85, h: rowH - 0.06 };
       layers.push({
         t: "text",
-        box: { x: x + 0.78, y, w: tw - 0.85, h: 0.7 },
+        box: lineBox,
         text: line,
         color: theme.text,
-        size: 18,
+        size: fitSize(line, lineBox, 18, 14),
         valign: "middle",
       });
     });
   } else {
+    const bulletBox: Box = { x, y: 1.5, w: tw, h: 5.35 };
     layers.push({
       t: "text",
-      box: { x, y: 1.5, w: tw, h: 5.35 },
+      box: bulletBox,
       lines: items,
       bullets: true,
       color: theme.text,
-      size: 17,
+      // Slide Law: tana matni 18 pt dan boshlanadi va 15 pt dan pastga
+      // tushmaydi. Sig'masa — muammo kontentda, shriftda emas.
+      size: fitLines(items, bulletBox, 18, 15, 10),
       paraSpace: 10,
     });
   }
@@ -517,7 +585,7 @@ function planTwoCol(s: SlideModel, theme: SlideTheme, index: number, total: numb
   for (const c of cols) {
     const fill = c.dark ? theme.titleBg : theme.surface;
     const ink = c.dark ? theme.titleText : theme.text;
-    const mute = c.dark ? theme.titleMuted : theme.accent;
+    const mute = c.dark ? theme.titleMuted : theme.accentInk;
     layers.push({ t: "rect", box: { x: c.x, y, w: colW, h }, fill: { color: fill }, radius: 0.08 });
     layers.push({
       t: "text",
@@ -527,18 +595,108 @@ function planTwoCol(s: SlideModel, theme: SlideTheme, index: number, total: numb
       size: 14,
       bold: true,
     });
+    const colLines = (c.lines ?? []).slice(0, 5);
+    const colBox: Box = { x: c.x + 0.28, y: y + 0.68, w: colW - 0.56, h: h - 0.9 };
     layers.push({
       t: "text",
-      box: { x: c.x + 0.28, y: y + 0.68, w: colW - 0.56, h: h - 0.9 },
-      lines: (c.lines ?? []).slice(0, 6),
+      box: colBox,
+      lines: colLines,
       bullets: true,
       color: ink,
-      size: 15,
+      size: fitLines(colLines, colBox, 16, 13, 8),
       paraSpace: 8,
     });
   }
   pushFooter(layers, s, theme, index, total, { x: M + 0.18, w: 12.2 }, false);
   return { bg: theme.bg, layers };
+}
+
+/**
+ * Stats qiymatidan sonni ajratadi.
+ *
+ * «95%» → 95, «2,3 mlrd» → 2300000000, «1 000 000» → 1000000.
+ * Kimyoviy formula yoki matn bo'lsa `null` — bunday qiymat diagrammaga
+ * tushmaydi va karta ko'rinishida qoladi.
+ */
+function parseStatNumber(value: string): number | null {
+  const t = value.replace(/\u00a0/g, " ").trim().toLowerCase();
+  // Formula yoki kod: harf+raqam aralashmasi (C6H12O6) — son emas.
+  if (/^[a-z]+\d/i.test(t)) return null;
+  const m = t.match(/-?\d[\d\s.,]*/);
+  if (!m) return null;
+  const raw = m[0].replace(/\s/g, "").replace(/,(?=\d{3}\b)/g, "").replace(",", ".");
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return null;
+  if (/mlrd|milliard|billion/.test(t)) return n * 1e9;
+  if (/mln|million/.test(t)) return n * 1e6;
+  if (/ming|thousand/.test(t)) return n * 1e3;
+  return n;
+}
+
+/**
+ * Raqamlar diagramma bo'lishi kerak, katta matn emas.
+ *
+ * Ilgari `stats` har doim 4 ta «katta raqam kartasi» edi: himoyada
+ * «natijalar» deb 4 ta matn kvadrati ko'rsatish ishonchsiz ko'rinardi va
+ * qiymatlarni bir-biri bilan taqqoslab bo'lmasdi. Endi kamida 3 ta o'qib
+ * bo'ladigan son bo'lsa, gorizontal ustunli diagramma chiziladi.
+ *
+ * Diagramma `rect` qatlamlaridan quriladi — `pptx.addChart` emas. Sabab:
+ * `planSlide` ham PPTX, ham saytdagi ko'ruvchi uchun yagona manba; native
+ * chart qo'shilsa preview eksportdan farq qila boshlardi.
+ */
+function planStatChart(
+  s: SlideModel,
+  theme: SlideTheme,
+  items: { value: string; label: string; n: number }[],
+  layers: SlideLayer[],
+  ink: string,
+): void {
+  const max = Math.max(...items.map((x) => Math.abs(x.n)), 1);
+  const labelW = 3.6;
+  const valueW = 1.5;
+  const x0 = M + 0.18;
+  const barX = x0 + labelW + 0.2;
+  const barMaxW = 12.25 - labelW - valueW - 0.6;
+  const top = 1.75;
+  const rowH = Math.min(1.15, (6.7 - top) / items.length);
+
+  items.forEach((it, i) => {
+    const y = top + i * rowH;
+    const barH = Math.min(0.52, rowH - 0.3);
+    const cy = y + (rowH - barH) / 2;
+    const labBox: Box = { x: x0, y, w: labelW, h: rowH - 0.1 };
+    layers.push({
+      t: "text",
+      box: labBox,
+      text: it.label,
+      color: ink,
+      size: fitSize(it.label, labBox, 15, 11),
+      valign: "middle",
+    });
+    // Fon yo'lakchasi — ustunlar qanchalik to'lganini ko'rsatadi.
+    layers.push({
+      t: "rect",
+      box: { x: barX, y: cy, w: barMaxW, h: barH },
+      fill: { color: theme.surface },
+      radius: 0.04,
+    });
+    layers.push({
+      t: "rect",
+      box: { x: barX, y: cy, w: Math.max(0.08, (Math.abs(it.n) / max) * barMaxW), h: barH },
+      fill: { color: i === 0 ? theme.accent : theme.accent2 },
+      radius: 0.04,
+    });
+    layers.push({
+      t: "text",
+      box: { x: barX + barMaxW + 0.14, y: cy - 0.06, w: valueW, h: barH + 0.12 },
+      text: it.value,
+      color: theme.accentInk,
+      size: 16,
+      bold: true,
+      valign: "middle",
+    });
+  });
 }
 
 function planStats(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index: number, total: number): SlidePlan {
@@ -548,19 +706,32 @@ function planStats(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
   const ink = dense ? theme.titleText : theme.text;
   layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: bg } });
   if (!dense) pushChrome(layers, theme, "full");
+  const titleBox: Box = { x: M + 0.18, y: 0.36, w: 12.2, h: 0.72 };
   layers.push({
     t: "text",
-    box: { x: M + 0.18, y: 0.36, w: 12.2, h: 0.72 },
+    box: titleBox,
     text: s.title,
     color: ink,
-    size: 24,
+    size: fitSize(s.title, titleBox, 24, 17),
     bold: true,
   });
-  const items = (s.stats ?? []).slice(0, 4);
-  const n = Math.max(1, items.length);
+
+  const items = (s.stats ?? []).slice(0, 5);
+  const numeric = items
+    .map((st) => ({ ...st, n: parseStatNumber(st.value) }))
+    .filter((x): x is { value: string; label: string; n: number } => x.n !== null);
+
+  if (numeric.length >= 3 && numeric.length === items.length) {
+    planStatChart(s, theme, numeric, layers, ink);
+    pushFooter(layers, s, theme, index, total, { x: M + 0.18, w: 12.2 }, dense);
+    return { bg, layers };
+  }
+
+  const cards = items.slice(0, 4);
+  const n = Math.max(1, cards.length);
   const gap = 0.22;
   const colW = (12.25 - gap * (n - 1)) / n;
-  items.forEach((st, i) => {
+  cards.forEach((st, i) => {
     const x = M + 0.18 + i * (colW + gap);
     layers.push({
       t: "rect",
@@ -568,22 +739,25 @@ function planStats(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
       fill: { color: dense ? "#ffffff" : theme.surface, alpha: dense ? 0.1 : 1 },
       radius: 0.1,
     });
+    const valBox: Box = { x: x + 0.12, y: 2.15, w: colW - 0.24, h: 1.35 };
     layers.push({
       t: "text",
-      box: { x: x + 0.12, y: 2.15, w: colW - 0.24, h: 1.35 },
+      box: valBox,
       text: st.value,
-      color: theme.accent,
-      size: 26,
+      // Yorug' kartada aksent matn `accentInk` dan — WCAG AA.
+      color: dense ? theme.accent : theme.accentInk,
+      size: fitSize(st.value, valBox, 30, 15),
       bold: true,
       align: "center",
       valign: "middle",
     });
+    const labBox: Box = { x: x + 0.18, y: 3.65, w: colW - 0.36, h: 2.3 };
     layers.push({
       t: "text",
-      box: { x: x + 0.18, y: 3.65, w: colW - 0.36, h: 2.3 },
+      box: labBox,
       text: st.label,
       color: dense ? theme.titleMuted : theme.muted,
-      size: 13,
+      size: fitSize(st.label, labBox, 15, 11),
       align: "center",
     });
   });
@@ -591,48 +765,90 @@ function planStats(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
   return { bg, layers };
 }
 
+/**
+ * Bosqichlar oqimi.
+ *
+ * Ilgari bu shunchaki bir qatorga tizilgan kartalar edi: 5 ta ustun 2.3
+ * dyuymgacha torayardi, matn 12 pt da 6–7 qatorga cho'zilardi va bosqichlar
+ * o'rtasida hech qanday bog'lanish belgisi yo'q edi — ya'ni «jarayon»
+ * ko'rinmasdi. Endi bir qatorda ko'pi bilan 4 ta karta, undan ortig'i ikki
+ * qatorga bo'linadi, kartalar orasiga esa yo'nalish o'qi qo'yiladi.
+ */
 function planProcess(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index: number, total: number): SlidePlan {
   const layers: SlideLayer[] = [];
   layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.bg } });
   pushChrome(layers, theme, "full");
   planHeading(layers, s, theme, 12.2, M + 0.18);
-  if (visual === "timeline") {
+
+  const items = (s.steps ?? []).slice(0, 6);
+  const n = Math.max(1, items.length);
+  const twoRows = n > 4;
+  const perRow = twoRows ? Math.ceil(n / 2) : n;
+  const rowGap = 0.3;
+  const top = 1.65;
+  const totalH = 6.85 - top;
+  const rowH = twoRows ? (totalH - rowGap) / 2 : totalH;
+
+  if (visual === "timeline" && !twoRows) {
     layers.push({ t: "rect", box: { x: M + 0.18, y: 1.42, w: 12.2, h: 0.07 }, fill: { color: theme.accent } });
   }
-  const items = (s.steps ?? []).slice(0, 5);
-  const n = Math.max(1, items.length);
-  const gap = 0.18;
-  const colW = (12.25 - gap * (n - 1)) / n;
+
+  const gap = 0.42;
+  const zoneW = 12.25;
+  const colW = (zoneW - gap * (perRow - 1)) / perRow;
+
   items.forEach((st, i) => {
-    const x = M + 0.18 + i * (colW + gap);
-    layers.push({ t: "rect", box: { x, y: 1.65, w: colW, h: 5.15 }, fill: { color: theme.surface }, radius: 0.08 });
+    const row = twoRows && i >= perRow ? 1 : 0;
+    const col = row === 1 ? i - perRow : i;
+    const inRow = row === 1 ? n - perRow : perRow;
+    const x = M + 0.18 + col * (colW + gap);
+    const y = top + row * (rowH + rowGap);
+
+    layers.push({ t: "rect", box: { x, y, w: colW, h: rowH }, fill: { color: theme.surface }, radius: 0.08 });
     layers.push({
       t: "text",
-      box: { x, y: 1.82, w: colW, h: 0.5 },
+      box: { x, y: y + 0.16, w: colW, h: 0.5 },
       text: st.n || String(i + 1),
-      color: theme.accent,
+      color: theme.accentInk,
       size: 18,
       bold: true,
       align: "center",
     });
+    const tBox: Box = { x: x + 0.12, y: y + 0.72, w: colW - 0.24, h: 0.95 };
     layers.push({
       t: "text",
-      box: { x: x + 0.12, y: 2.4, w: colW - 0.24, h: 1.05 },
+      box: tBox,
       text: st.title,
       color: theme.text,
-      size: 14,
+      size: fitSize(st.title, tBox, 16, 12),
       bold: true,
       align: "center",
     });
+    const dBox: Box = { x: x + 0.14, y: y + 1.78, w: colW - 0.28, h: rowH - 1.95 };
     layers.push({
       t: "text",
-      box: { x: x + 0.14, y: 3.5, w: colW - 0.28, h: 2.95 },
+      box: dBox,
       text: st.text,
       color: theme.muted,
-      size: 12,
+      size: fitSize(st.text, dBox, 14, 11),
       align: "center",
     });
+
+    // Yo'nalish o'qi — qatordagi oxirgi kartadan keyin qo'yilmaydi.
+    if (col < inRow - 1) {
+      layers.push({
+        t: "text",
+        box: { x: x + colW, y: y + rowH / 2 - 0.24, w: gap, h: 0.48 },
+        text: "→",
+        color: theme.accentInk,
+        size: 20,
+        bold: true,
+        align: "center",
+        valign: "middle",
+      });
+    }
   });
+
   pushFooter(layers, s, theme, index, total, { x: M + 0.18, w: 12.2 }, false);
   return { bg: theme.bg, layers };
 }

@@ -3,12 +3,22 @@ import { sourceBlock } from "./prompts";
 import { parseLlmJson } from "./json";
 import { llmComplete, llmEnabled } from "./llm";
 import { attachSlideImages } from "./slide-images";
-import { resolveSlideTemplate, type SlideTemplate } from "./slide-templates";
+import { expandBeats, resolveSlideTemplate, type SlideBeat, type SlideTemplate } from "./slide-templates";
 import { getSlideTheme } from "./slide-themes";
 import { isSlideLayout, type SlideLayout, type SlideModel, type SlideThemeId } from "./slide-types";
 import type { AcademicDoc, DocMeta } from "./types";
 
-const MAX_BULLETS = 6;
+/**
+ * Slide Law: bir slaydda 4 tadan ortiq band bo'lmasin, agenda'da 5 ta.
+ *
+ * Ilgari 6 ta band × 140 belgi = ~840 belgilik matn devori chiqardi va
+ * `shrinkText` uni 11 pt gacha kichraytirardi — proyektorda o'qib
+ * bo'lmasdi. Uzun izoh endi slaydga emas, notiq eslatmasiga tushadi.
+ */
+const MAX_BULLETS = 4;
+const MAX_AGENDA_ITEMS = 5;
+/** Bandning eng ko'p uzunligi — ~15 so'z. Promptda 12 so'z so'raladi. */
+const MAX_BULLET_CHARS = 120;
 
 function clip(text: string, n: number) {
   const t = String(text || "").replace(/\s+/g, " ").trim();
@@ -40,6 +50,7 @@ function normalizeSlide(raw: unknown, i: number, footer: string): SlideModel | n
     kicker: o.kicker ? clip(String(o.kicker), 40) : undefined,
     subtitle: o.subtitle ? clip(String(o.subtitle), 140) : undefined,
     footer,
+    notes: o.notes ? clip(String(o.notes), 700) : undefined,
     imageHint: o.imageHint ? clip(String(o.imageHint), 180) : undefined,
   };
   if (layout === "twoCol" || layout === "compare") {
@@ -88,7 +99,59 @@ function normalizeSlide(raw: unknown, i: number, footer: string): SlideModel | n
       : [];
     return { ...base, steps };
   }
-  return { ...base, bullets: arr(o.bullets, MAX_BULLETS, 140) };
+  const limit = layout === "agenda" ? MAX_AGENDA_ITEMS : MAX_BULLETS;
+  return { ...base, bullets: arr(o.bullets, limit, MAX_BULLET_CHARS) };
+}
+
+/**
+ * Slaydni shablon talab qilgan layoutga KELTIRADI (majburan bosib yozmaydi).
+ *
+ * Ilgari `s.layout = beats[i].layout` deb yozib yuborilardi: model `quote`
+ * yozgan bo'lsa-yu beat `stats` talab qilsa, iqtibos yo'qolib, `stats[]`
+ * bo'sh qolardi va slaydda «—» chiqardi. Endi:
+ *   — kerakli ma'lumot bor bo'lsa, shunchaki layout qo'yiladi;
+ *   — yo'qotishsiz o'girish mumkin bo'lsa, o'giriladi;
+ *   — o'girish uydirma raqam talab qilsa (stats), model layouti saqlanadi.
+ */
+export function coerceLayout(s: SlideModel, want: SlideLayout): SlideModel {
+  if (s.layout === want) return s;
+  const pool = (s.bullets?.length ? s.bullets : [s.subtitle, s.quote].filter(Boolean) as string[]).filter(Boolean);
+
+  if (want === "stats") {
+    // Raqamsiz stats — uydirma bo'lardi. Model nima yozgan bo'lsa shu qoladi.
+    return s.stats?.length ? { ...s, layout: want } : s;
+  }
+  if (want === "process") {
+    if (s.steps?.length) return { ...s, layout: want };
+    if (pool.length < 2) return s;
+    return {
+      ...s,
+      layout: want,
+      steps: pool.slice(0, 4).map((b, i) => {
+        const [head, ...rest] = b.split(/\s+[—–:-]\s+/);
+        return {
+          n: String(i + 1),
+          title: clip(head, 40),
+          text: clip(rest.join(" — ") || b, 90),
+        };
+      }),
+    };
+  }
+  if (want === "twoCol" || want === "compare") {
+    if (s.left?.length && s.right?.length) return { ...s, layout: want };
+    if (pool.length < 2) return s;
+    const mid = Math.ceil(pool.length / 2);
+    return { ...s, layout: want, left: pool.slice(0, mid), right: pool.slice(mid) };
+  }
+  if (want === "quote") {
+    const quote = s.quote || pool[0];
+    return quote ? { ...s, layout: want, quote: clip(quote, 220) } : s;
+  }
+  if (want === "section" || want === "closing" || want === "title") {
+    return { ...s, layout: want, subtitle: s.subtitle || pool[0] };
+  }
+  // bullets / agenda
+  return { ...s, layout: want, bullets: pool.length ? pool.slice(0, MAX_BULLETS) : s.bullets };
 }
 
 function parseDeckJson(raw: string, footer: string, want: number): SlideModel[] {
@@ -97,7 +160,7 @@ function parseDeckJson(raw: string, footer: string, want: number): SlideModel[] 
   return data.slides
     .map((s, i) => normalizeSlide(s, i, footer))
     .filter((s): s is SlideModel => Boolean(s))
-    .slice(0, Math.max(8, Math.min(18, want + 2)));
+    .slice(0, Math.max(6, Math.min(24, want + 2)));
 }
 
 function beatToSlide(beat: { layout: SlideLayout; role: string }, i: number, meta: DocMeta, footer: string): SlideModel {
@@ -105,10 +168,10 @@ function beatToSlide(beat: { layout: SlideLayout; role: string }, i: number, met
   const L = slideLabels(meta.language);
   const base: SlideModel = { id: `s${i}`, layout: beat.layout, title: beat.role, footer };
   if (beat.layout === "title") {
-    return { ...base, title: t, subtitle: beat.role, kicker: meta.subject || meta.workLabel };
+    return { ...base, title: t, subtitle: beat.role, kicker: meta.subject || L.presentation };
   }
   if (beat.layout === "closing") {
-    return { ...base, title: L.conclusion, subtitle: beat.role };
+    return { ...base, title: L.conclusion, subtitle: beat.role || L.questions };
   }
   if (beat.layout === "agenda") {
     return { ...base, title: beat.role, bullets: [`${t}: kirish`, "Asosiy qism", "Amaliyot", "Xulosa"] };
@@ -119,9 +182,9 @@ function beatToSlide(beat: { layout: SlideLayout; role: string }, i: number, met
   if (beat.layout === "compare" || beat.layout === "twoCol") {
     return {
       ...base,
-      leftTitle: beat.layout === "compare" ? "A" : "Chap",
+      leftTitle: "A",
       left: [`${t}: birinchi tomon`],
-      rightTitle: beat.layout === "compare" ? "B" : "O‘ng",
+      rightTitle: "B",
       right: [`${t}: ikkinchi tomon`],
     };
   }
@@ -144,11 +207,22 @@ function beatToSlide(beat: { layout: SlideLayout; role: string }, i: number, met
   return { ...base, bullets: [`${t}: ${beat.role}.`, "Mavzuga bog‘liq aniq band."] };
 }
 
-export function fallbackSlides(meta: DocMeta, tpl?: SlideTemplate): SlideModel[] {
+export function fallbackSlides(meta: DocMeta, tpl?: SlideTemplate, beats?: SlideBeat[]): SlideModel[] {
   const footer = [meta.author, meta.university].filter(Boolean).join(" · ");
   const template = tpl ?? resolveSlideTemplate(meta.slideTemplate, meta.topic, meta.extra);
-  const beats = template.beats.length ? template.beats : resolveSlideTemplate("lecture", meta.topic).beats;
-  return beats.map((b, i) => beatToSlide(b, i, meta, footer));
+  const base = beats ?? (template.beats.length ? template.beats : resolveSlideTemplate("lecture", meta.topic).beats);
+  const seq = meta.titleSlide === false ? base.filter((b) => b.layout !== "title") : base;
+  return seq.map((b, i) => beatToSlide(b, i, meta, footer));
+}
+
+/**
+ * Sifat paketi nechta slayd va'da qiladi.
+ * `meta.targetPages` — formadagi paket (standart 10, uzun 14, premium 12,
+ * premium uzun 16). Shablon beats'i bundan kam bo'lsa kengaytiriladi.
+ */
+export function wantSlides(meta: DocMeta, tpl: SlideTemplate): number {
+  const pack = Math.max(8, Math.min(20, meta.targetPages || 10));
+  return Math.max(tpl.beats.length || 8, pack);
 }
 
 function slideSystem(meta: DocMeta) {
@@ -160,8 +234,10 @@ function slideSystem(meta: DocMeta) {
     `Faqat JSON qaytaring. Matn qisqa, aniq, slaydga sig‘adigan.`,
     `QAT’IY TAQIQLANADI: umumiy pedagogika shablonlari (kompetensiya, auditoriya, UNESCO, differensiatsiya, «tashxis-baholash» sikli), mavzuga tegishli bo‘lmagan soha (masalan, dvigatel yoki «milliy ta’lim»).`,
     `YOZING: shu mavzuning o‘zi — ta’rif, tuzilish/jarayon, turlari, misol, ahamiyat, cheklov.`,
-    `Har bir bullet 1 gap, 140 belgidan oshmasin. Sarlavha 6–8 so‘z.`,
+    `Har slaydda ENG KO‘PI 4 ta bullet (agenda'da 5). Har bullet 1 gap, 12 so‘zdan oshmasin.`,
+    `Sarlavha to‘liq fikr, 6–10 so‘z. Uzun izohni bulletga emas, notes ga yozing.`,
     `Har slaydda imageHint: 12–20 so‘z, ANIQ vizual (inglizcha yoki o‘zbekcha), shu slayd mazmunidagi narsa/joy/asbob. Mavzudan chiqib ketmasin.`,
+    `Har slaydda notes: notiq OG‘ZAKI aytadigan matn, 40–80 so‘z. Slayddagi bandlarni takrorlamang — misol, izoh yoki savol qo‘shing.`,
     `title slaydning title maydoni foydalanuvchi mavzusini saqlasin.`,
     `kicker qisqa (2–4 so‘z), masalan «Biologiya» yoki «Taqdimot». Qo‘shimcha talabni kicker qilmang.`,
     `stats ga uydirma milliard/tonna/foiz YOZILMASIN. Formula, bosqich soni, ma’lum birlik (masalan C6H12O6, 2 bosqich) mumkin.`,
@@ -172,32 +248,44 @@ function slideSystem(meta: DocMeta) {
     .join("\n");
 }
 
-export async function writeSlidesWithLlm(meta: DocMeta, tpl: SlideTemplate): Promise<SlideModel[] | null> {
+export async function writeSlidesWithLlm(
+  meta: DocMeta,
+  tpl: SlideTemplate,
+  beats: SlideBeat[] = tpl.beats,
+): Promise<SlideModel[] | null> {
   if (!llmEnabled()) return null;
-  const want = tpl.beats.length || Math.max(8, Math.min(16, meta.targetPages || 10));
+  const plan = meta.titleSlide === false ? beats.filter((b) => b.layout !== "title") : beats;
+  const want = plan.length || Math.max(8, Math.min(20, meta.targetPages || 10));
   const footer = [meta.author, meta.university].filter(Boolean).join(" · ");
-  const seq = tpl.beats.map((b, i) => `${i + 1}) layout=${b.layout} — ${b.role}`).join("\n");
+  const seq = plan.map((b, i) => `${i + 1}) layout=${b.layout} — ${b.role}`).join("\n");
   const user = [
     `«${meta.topic}» bo‘yicha shablon: ${tpl.nameUz} (${tpl.blurb}).`,
-    `QAT’IY shu tartibdagi slaydlar (layout ni o‘zgartirmang):`,
+    `AYNAN ${want} ta slayd. QAT’IY shu tartibda (layout ni o‘zgartirmang):`,
     seq,
-    `Har slayd mazmuni shu rolga mos, mavzudan chiqmasin.`,
-    `JSON sxema: {"slides":[{"layout":"title|agenda|section|bullets|twoCol|compare|quote|stats|process|closing","kicker":"","title":"","subtitle":"","imageHint":"","bullets":[""],"leftTitle":"","left":[""],"rightTitle":"","right":[""],"quote":"","quoteBy":"","stats":[{"value":"","label":""}],"steps":[{"n":"1","title":"","text":""}]}]}`,
+    `Har slayd mazmuni shu rolga mos, mavzudan chiqmasin. Slaydlar bir-birini takrorlamasin.`,
+    `JSON sxema: {"slides":[{"layout":"title|agenda|section|bullets|twoCol|compare|quote|stats|process|closing","kicker":"","title":"","subtitle":"","imageHint":"","notes":"","bullets":[""],"leftTitle":"","left":[""],"rightTitle":"","right":[""],"quote":"","quoteBy":"","stats":[{"value":"","label":""}],"steps":[{"n":"1","title":"","text":""}]}]}`,
   ].join("\n");
-  const raw = await llmComplete(slideSystem(meta), user, 5000, { json: true, timeoutMs: 90_000 });
+  // Token byudjeti slaydlar soniga bog‘liq: 16 slayd + notes 5 000 tokenga
+  // sig‘masdi va oxirgi slaydlar kesilib ketardi.
+  const maxTokens = Math.min(9_000, 2_000 + want * 420);
+  const raw = await llmComplete(slideSystem(meta), user, maxTokens, { json: true, timeoutMs: 90_000 });
   if (!raw) return null;
   const slides = parseDeckJson(raw, footer, want);
-  if (slides.length < Math.min(6, tpl.beats.length || 8)) {
-    console.warn("[slide-write] too few slides", slides.length);
+  // Va’da qilingan hajmning 75% i — quyi chegara. Bundan kam bo‘lsa deck
+  // paketga mos kelmaydi; `null` qaytarib, chaqiruvchi pulni qaytaradi.
+  const floor = Math.max(6, Math.ceil(want * 0.75));
+  if (slides.length < floor) {
+    console.warn("[slide-write] too few slides", slides.length, "want", want);
     return null;
   }
-  if (tpl.beats.length) {
-    slides.forEach((s, i) => {
-      if (tpl.beats[i]) s.layout = tpl.beats[i].layout;
-    });
+  for (let i = 0; i < slides.length; i++) {
+    if (plan[i]) slides[i] = coerceLayout(slides[i], plan[i].layout);
   }
   const L = slideLabels(meta.language);
-  if (slides[0].layout !== "title") {
+  if (meta.titleSlide === false) {
+    // Foydalanuvchi titul slaydini xohlamadi — model baribir yozgan bo‘lsa olib tashlaymiz.
+    while (slides.length > 1 && slides[0].layout === "title") slides.shift();
+  } else if (slides[0].layout !== "title") {
     slides.unshift({
       id: "title-fix",
       layout: "title",
@@ -224,6 +312,12 @@ export async function writeSlidesWithLlm(meta: DocMeta, tpl: SlideTemplate): Pro
       footer,
     });
   }
+  // Interfeys matnlari MODELDA to'ldiriladi, layoutda emas: `planSlide`
+  // tilni bilmaydi va ilgari u yerda o'zbekcha «Savollar va muhokama» /
+  // «Taqdimot» qattiq yozilgan edi — ruscha taqdimot aralash chiqardi.
+  const last = slides[slides.length - 1];
+  if (last.layout === "closing" && !last.subtitle) last.subtitle = L.questions;
+  if (slides[0].layout === "title" && !slides[0].kicker) slides[0].kicker = L.presentation;
   return slides;
 }
 
@@ -231,11 +325,21 @@ export async function buildSlideAcademicDoc(meta: DocMeta, deadline?: number): P
   const themeId = (meta.slideTheme || "atlas") as SlideThemeId;
   getSlideTheme(themeId);
   const tpl = resolveSlideTemplate(meta.slideTemplate, meta.topic, meta.extra);
-  const slides = (await writeSlidesWithLlm(meta, tpl)) ?? fallbackSlides(meta, tpl);
+  // Sifat paketi shu yerda haqiqiy slaydlar soniga aylanadi.
+  const beats = expandBeats(tpl, wantSlides(meta, tpl));
+  const written = await writeSlidesWithLlm(meta, tpl, beats);
+  // Kalit bor, lekin matn yozilmadi — shablon deck bermaymiz. `beatToSlide`
+  // «Fotosintez: kirish / Asosiy qism / Amaliyot» kabi bo'sh slaydlar
+  // yaratadi va foydalanuvchi buni to'lagan ishi deb oladi. Xato bo'lsa
+  // worker kreditni qaytaradi.
+  if (!written && llmEnabled()) {
+    throw new Error("Taqdimot matni yozilmadi. Kredit qaytariladi — qayta urinib ko‘ring.");
+  }
+  const slides = written ?? fallbackSlides(meta, tpl, beats);
   // Matn tayyor — qolgan vaqtni rasmga beramiz, lekin PPTX yig'ish uchun
   // kamida ~12 soniya qoldiramiz.
   const budget = deadline ? Math.max(0, deadline - Date.now() - 12_000) : 60_000;
-  await attachSlideImages(slides, meta.topic, tpl.visual, budget);
+  await attachSlideImages(slides, meta.topic, tpl.visual, budget, { premium: meta.premiumVisuals });
   const sections = slides
     .filter((s) => s.layout !== "title" && s.layout !== "closing")
     .map((s) => ({
