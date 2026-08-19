@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { FormValues, ToolConfig } from "@/lib/types";
-import { priceFor } from "@/lib/tools";
+import { missingRequired, priceFor } from "@/lib/tools";
 import { draftOutline } from "@/lib/api-client";
 import { useAppStore, writerProfile } from "@/lib/store";
 import { useUi } from "@/lib/ui";
@@ -139,12 +139,11 @@ function StandardForm({ tool, profile }: { tool: ToolConfig; profile: UserProfil
       setError("Mavzu kiritilishi shart");
       return;
     }
-    const required = tool.fields.filter((f) => f.required && !f.extra);
-    for (const f of required) {
-      if (!String(values[f.name] ?? "").trim()) {
-        setError(`${f.legend} to‘ldirilishi kerak`);
-        return;
-      }
+    // Qoida bitta manbada (`lib/tools.ts`) — server ham shuni tekshiradi.
+    const missing = missingRequired(tool, values);
+    if (missing.length) {
+      setError(`${missing[0]} to‘ldirilishi kerak`);
+      return;
     }
     setLoading(true);
     try {

@@ -1,8 +1,7 @@
 import { ApiError, handler, json, limit, readJson, requireUser } from "@/lib/server/api";
 import { enqueueGeneration, listGenerations } from "@/lib/server/jobs";
 import { sanitizeValues } from "@/lib/server/validate";
-import { TOOL_BY_SLUG } from "@/lib/tools";
-import { priceFor, topicOf } from "@/lib/tools";
+import { missingRequired, priceFor, TOOL_BY_SLUG, topicOf } from "@/lib/tools";
 import { startInlineWorker } from "@/lib/server/worker";
 import { env } from "@/lib/server/env";
 
@@ -39,6 +38,18 @@ export const POST = handler("generations/create", async (req) => {
 
   const values = sanitizeValues(body.values);
   if (!values) throw new ApiError("Forma qiymatlari noto'g'ri", 400);
+
+  /**
+   * Majburiy maydonlar SERVERDA tekshiriladi.
+   *
+   * Ilgari tekshiruv faqat formada edi: to'g'ridan-to'g'ri yuborilgan
+   * so'rov universitetsiz yoki mavzusiz o'tib ketardi, ish navbatga
+   * tushardi va puli yechilardi — natija esa yaroqsiz hujjat bo'lardi.
+   */
+  const missing = missingRequired(tool, values);
+  if (missing.length) {
+    throw new ApiError(`To'ldirilmagan maydon: ${missing.join(", ")}`, 400, { missing });
+  }
 
   const price = priceFor(tool, values);
   const topic = topicOf(values, tool);

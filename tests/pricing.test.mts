@@ -1,6 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { TOOLS, TOOL_BY_ID, TOOL_BY_SLUG, isToolSlug, priceFor, topicOf } from "../lib/tools.ts";
+import {
+  isToolSlug,
+  missingRequired,
+  priceFor,
+  TOOLS,
+  TOOL_BY_ID,
+  TOOL_BY_SLUG,
+  topicOf,
+} from "../lib/tools.ts";
 
 /**
  * Narx — server tomonda hisoblanadi, shuning uchun uning barqarorligi
@@ -64,4 +72,39 @@ test("topicOf hech qachon bo'sh qaytarmaydi", () => {
     assert.ok(topicOf({}, tool).length > 0, tool.id);
   }
   assert.ok(topicOf({ topic: "   " }, TOOL_BY_ID.essay).length > 0);
+});
+
+// ------------------------------------------------- majburiy maydonlar
+
+test("OTME ishlari universitetsiz qabul qilinmaydi", () => {
+  const base = { topic: "Mavzu", author: "Aliyev A." };
+  for (const id of ["coursework", "referat", "thesis", "mustaqil-ish"] as const) {
+    const missing = missingRequired(TOOL_BY_ID[id], base);
+    assert.ok(
+      missing.some((m) => /muassasa/i.test(m)),
+      `${id}: universitet talab qilinishi kerak — ${JSON.stringify(missing)}`,
+    );
+  }
+  // Insho ko'pincha maktab ishi — undan talab qilinmaydi.
+  assert.equal(missingRequired(TOOL_BY_ID.essay, base).length, 0);
+});
+
+test("mavzu talab qilinadi, «fayl asosida» rejimida esa manba matni", () => {
+  const referat = TOOL_BY_ID.referat;
+  const full = { author: "A", university: "TDPU" };
+  assert.ok(missingRequired(referat, full).some((m) => /mavzu/i.test(m)));
+  assert.equal(missingRequired(referat, { ...full, topic: "X" }).length, 0);
+
+  // Fayl rejimida mavzu emas, manba matni kerak.
+  assert.ok(missingRequired(referat, { ...full, mode: "file" }).some((m) => /manba/i.test(m)));
+  assert.equal(missingRequired(referat, { ...full, mode: "file", sourceText: "matn" }).length, 0);
+});
+
+test("to'liq to'ldirilgan forma bo'sh ro'yxat qaytaradi", () => {
+  const ok = missingRequired(TOOL_BY_ID.coursework, {
+    topic: "O'qish ko'nikmasi",
+    author: "Karimova M.",
+    university: "TDPU",
+  });
+  assert.deepEqual(ok, []);
 });

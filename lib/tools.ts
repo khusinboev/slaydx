@@ -13,6 +13,20 @@ const TOPIC_FILE_MODES = [
   },
 ];
 
+/**
+ * Akademik ish uchun umumiy maydonlar.
+ *
+ * `universityRequired` — OTME ishlari (kurs ishi, referat, tezis,
+ * mustaqil ish) muassasa nomisiz qabul qilinmaydi, shuning uchun ular
+ * uchun maydon majburiy. Insho ko'pincha maktab ishi bo'lgani sababli
+ * undan talab qilinmaydi.
+ */
+function writerFields(opts: { universityRequired?: boolean } = {}): ToolConfig["fields"] {
+  return WRITER_FIELDS.map((f) =>
+    f.name === "university" && opts.universityRequired ? { ...f, required: true } : f,
+  );
+}
+
 const WRITER_FIELDS: ToolConfig["fields"] = [
   {
     kind: "text",
@@ -118,7 +132,7 @@ export const TOOLS: ToolConfig[] = [
     basePrice: 12000,
     fields: [
       { kind: "language", name: "language", legend: "Kurs ishi tilini tanlang" },
-      ...WRITER_FIELDS,
+      ...writerFields({ universityRequired: true }),
       {
         kind: "chips",
         name: "ministry",
@@ -195,7 +209,7 @@ export const TOOLS: ToolConfig[] = [
     basePrice: 3000,
     fields: [
       { kind: "language", name: "language", legend: "Referat tilini tanlang" },
-      ...WRITER_FIELDS,
+      ...writerFields({ universityRequired: true }),
       {
         kind: "chips",
         name: "pages",
@@ -228,7 +242,7 @@ export const TOOLS: ToolConfig[] = [
     basePrice: 2000,
     fields: [
       { kind: "language", name: "language", legend: "Insho tilini tanlang" },
-      ...WRITER_FIELDS,
+      ...writerFields({ universityRequired: false }),
       {
         kind: "design",
         name: "design",
@@ -373,7 +387,7 @@ export const TOOLS: ToolConfig[] = [
         placeholder: "Aliyev Ali — 4-kurs, 401-guruh",
         required: true,
       },
-      ...WRITER_FIELDS.filter((f) => f.name !== "author"),
+      ...writerFields({ universityRequired: true }).filter((f) => f.name !== "author"),
       {
         kind: "chips",
         name: "kind",
@@ -558,7 +572,7 @@ export const TOOLS: ToolConfig[] = [
     basePrice: 3000,
     fields: [
       { kind: "language", name: "language", legend: "Mustaqil ish tilini tanlang" },
-      ...WRITER_FIELDS,
+      ...writerFields({ universityRequired: true }),
       {
         kind: "chips",
         name: "pages",
@@ -655,6 +669,30 @@ export const TOOL_BY_ID = Object.fromEntries(TOOLS.map((t) => [t.id, t])) as Rec
  */
 export function isToolSlug(slug: string): boolean {
   return Object.prototype.hasOwnProperty.call(TOOL_BY_SLUG, slug);
+}
+
+/**
+ * To'ldirilmagan majburiy maydonlar ro'yxati.
+ *
+ * Bitta manba: klient ham, server ham shu funksiyani chaqiradi. Ilgari
+ * tekshiruv FAQAT formada edi — to'g'ridan-to'g'ri yuborilgan so'rov
+ * barcha talablarni chetlab o'tardi va universitetsiz, mavzusiz hujjat
+ * navbatga tushib, puli yechilardi.
+ */
+export function missingRequired(tool: ToolConfig, values: FormValues): string[] {
+  const out: string[] = [];
+  const filled = (name: string) => String(values[name] ?? "").trim().length > 0;
+
+  // «Fayl asosida» rejimida mavzu o'rniga manba matni bo'ladi.
+  const fileMode = Boolean(tool.modes) && String(values.mode ?? "") === "file";
+  if (tool.topicLegend && !fileMode && !filled("topic")) out.push(tool.topicLegend);
+  if (fileMode && !filled("sourceText")) out.push("Manba fayl matni");
+
+  for (const f of tool.fields) {
+    if (!f.required || f.extra) continue;
+    if (!filled(f.name)) out.push(f.legend);
+  }
+  return out;
 }
 
 export function priceFor(tool: ToolConfig, values: FormValues): number {
