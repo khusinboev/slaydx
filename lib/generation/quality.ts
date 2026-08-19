@@ -1,6 +1,16 @@
 import type { AcademicDoc, Block, DocSection } from "./types";
 
-export const WORDS_PER_PAGE = 280;
+/**
+ * Bir A4 betdagi real so'z soni.
+ *
+ * Times New Roman 14 pt, 1.5 interval, hoshiya 3 + 1.5 sm va 1.25 sm abzas
+ * sharoitida amalda ~230 so'z chiqadi. Ilgari bu yerda 280 turardi —
+ * natijada dvigatel o'z hajm hisobida ~22% shishirar va «20 bet» deb
+ * va'da qilingan ish Word'da 15 bet bo'lib ochilardi.
+ *
+ * Bu konstanta YAGONA manba: `scale.ts` ham shu yerdan oladi.
+ */
+export const WORDS_PER_PAGE = 230;
 
 export function cleanText(s: string): string {
   let t = String(s ?? "");
@@ -45,6 +55,60 @@ export function targetWords(pages: number): number {
   return Math.max(220, Math.round(Math.max(1, pages) * WORDS_PER_PAGE));
 }
 
+const UNVERIFIED_NOTE: Record<string, string> = {
+  uz: "Ro‘yxatni AI tuzgan va u TEKSHIRILMAGAN: muallif, nashriyot yoki yil noto‘g‘ri bo‘lishi mumkin. Har bir manbani kutubxona katalogidan tasdiqlang va ilmiy rahbaringiz bilan kelishing.",
+  ru: "Список составлен ИИ и НЕ ПРОВЕРЕН: автор, издательство или год могут быть неточными. Подтвердите каждый источник по каталогу библиотеки и согласуйте с научным руководителем.",
+  en: "This list was drafted by AI and is NOT VERIFIED: author, publisher or year may be inaccurate. Confirm each source in a library catalogue and agree it with your supervisor.",
+};
+
+/**
+ * Model bergan adabiyotlar uchun ogohlantirish.
+ *
+ * Jonli sinov ko‘rsatdi: model ishonarli ko‘rinadigan ro‘yxat yozadi —
+ * haqiqiy nashriyot nomlari, mantiqiy yillar. Lekin ularning to‘g‘riligini
+ * biz tekshira olmaymiz va LLM tafsilotlarni (yil, hammuallif, nashriyot)
+ * muntazam adashtiradi. Ro‘yxatni yashirish foydalanuvchiga yordam
+ * bermaydi — uni BELGILASH kerak: hujjatda ogohlantirish qoladi.
+ */
+export function unverifiedReferenceNote(language = "uz"): string {
+  return UNVERIFIED_NOTE[(language || "uz").slice(0, 2).toLowerCase()] ?? UNVERIFIED_NOTE.uz;
+}
+
+const REF_NOTE: Record<string, string> = {
+  uz: "Bu ro‘yxat tasdiqlanmagan. Quyidagi so‘rovlar bo‘yicha manbani o‘zingiz toping va ilmiy rahbaringiz bilan aniqlashtiring.",
+  ru: "Этот список не подтверждён. Найдите источники по приведённым запросам и уточните их с научным руководителем.",
+  en: "This list is not verified. Find the sources using the queries below and confirm them with your supervisor.",
+};
+
+/**
+ * Model ishonchli adabiyot bera olmaganda nima yoziladi.
+ *
+ * Ilgari bu holatda qattiq yozilgan «O‘quv qo‘llanma. – Toshkent: O‘qituvchi.»
+ * kabi to‘rt qator qo‘yilardi: format haqiqiy manbaga o‘xshardi, lekin
+ * muallif ham, nashriyot ham, yil ham uydirma edi. O‘qituvchi tekshirsa
+ * bu akademik halollik masalasiga aylanadi. Endi uydirma o‘rniga
+ * foydalanuvchiga qidiruv so‘rovlari beriladi.
+ */
+export function referenceSearchPlan(
+  topic: string,
+  subject = "",
+  language = "uz",
+): { note: string; queries: string[] } {
+  const t = topic.replace(/\s+/g, " ").trim();
+  const s = subject.replace(/\s+/g, " ").trim();
+  const base = s && s.toLowerCase() !== t.toLowerCase() ? `${t} ${s}` : t;
+  return {
+    note: REF_NOTE[(language || "uz").slice(0, 2).toLowerCase()] ?? REF_NOTE.uz,
+    queries: [
+      `${base} o‘quv qo‘llanma site:edu.uz`,
+      `${base} darslik pdf`,
+      `${base} ma’ruza matnlari`,
+      `${base} review article scholar.google.com`,
+      `${base} monografiya`,
+    ],
+  };
+}
+
 export function remainingMs(deadline?: number): number {
   if (!deadline) return 90_000;
   return Math.max(0, deadline - Date.now());
@@ -68,6 +132,7 @@ export async function mapPool<T, R>(
   return ret;
 }
 
+/** Shablon matnining o'ziga xos, boshqa hech qayerda uchramaydigan iboralari. */
 const GENERIC_RE = [
   /tizimli o[‘'`]rganishni talab qiladigan mavzu/i,
   /alohida fakt emas, balki bog[‘'`]liq tushunchalar/i,
@@ -75,12 +140,30 @@ const GENERIC_RE = [
   /tarjima matni topilmadi/i,
   /soha nazariyasi asoslari/i,
   /umumiy nazariy asoslar/i,
-  /tushuncha shakllanadi/i,
 ];
 
+/**
+ * Faqat QISQA matnda (jadval katagi, natija ustuni) shablon hisoblanadigan
+ * iboralar.
+ *
+ * Nega alohida: «tushuncha shakllanadi» texnologik xaritadagi bo'sh
+ * natija katagi sifatida shablon, lekin jonli nasrda mutlaqo o'rinli.
+ * Jonli sinovda insho «uning qalbida bir tushuncha shakllanadi» deb
+ * boshlangan edi va butun paragraf shablon deb tashlanardi.
+ */
+const GENERIC_SHORT_RE = [
+  /tushuncha shakllanadi/i,
+  /ko[‘'`]nikma mustahkamlanadi/i,
+  /mustaqil ishlay oladi/i,
+];
+
+/** Qisqa matn chegarasi — jadval katagi shu atrofda bo'ladi. */
+const SHORT_TEXT = 70;
+
 export function isGenericFiller(text: string): boolean {
-  const t = text.replace(/\s+/g, " ");
-  return GENERIC_RE.some((re) => re.test(t));
+  const t = text.replace(/\s+/g, " ").trim();
+  if (GENERIC_RE.some((re) => re.test(t))) return true;
+  return t.length <= SHORT_TEXT && GENERIC_SHORT_RE.some((re) => re.test(t));
 }
 
 const GENERIC_GLOSSARY = /^(mezon|metod|kompetensiya|tahlil|sintez|innovatsiya|refleksiya|differensiatsiya|integratsiya|indikator|resurs)$/i;

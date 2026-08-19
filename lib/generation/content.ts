@@ -1,3 +1,4 @@
+import { referenceSearchPlan } from "./quality";
 import type { AcademicDoc, Block, DocMeta, DocSection } from "./types";
 
 function p(text: string): Block {
@@ -21,17 +22,16 @@ function extraNote(meta: DocMeta): Block[] {
   return [p(`Qo‘shimcha talab: ${meta.extra}`)];
 }
 
+/**
+ * Shablon yo‘lida ham uydirma manba yozilmaydi — faqat qidiruv so‘rovlari.
+ * Sabab uchun `referenceSearchPlan` izohiga qarang.
+ */
 function refs(meta: DocMeta): string[] {
-  const year = new Date().getFullYear();
-  const topic = t(meta);
-  return [
-    `${topic}. O‘quv qo‘llanma / soha adabiyoti. – Toshkent: O‘qituvchi.`,
-    `Soha nazariyasi asoslari. O‘quv qo‘llanma. – Toshkent.`,
-    `Amaliy mashg‘ulotlar to‘plami. – Toshkent.`,
-    `O‘zbekiston Respublikasi Oliy ta’lim, fan va innovatsiyalar vazirligi. O‘quv-uslubiy ko‘rsatmalar. – Toshkent, ${year}.`,
-    `O‘quv-uslubiy qo‘llanma. – ${meta.city}.`,
-    `Ma’ruza matnlari. – Toshkent.`,
-  ];
+  return referenceSearchPlan(t(meta), meta.subject, meta.language).queries;
+}
+
+function refsNote(meta: DocMeta): string {
+  return referenceSearchPlan(t(meta), meta.subject, meta.language).note;
 }
 
 function kirish(meta: DocMeta, pages: number): Block[] {
@@ -161,6 +161,7 @@ function academicChapters(meta: DocMeta, work: string): AcademicDoc {
     toc: true,
     sections,
     references: refs(meta),
+    referencesNote: refsNote(meta),
   };
 }
 
@@ -262,6 +263,7 @@ function imradDoc(meta: DocMeta, label: string): AcademicDoc {
       ]),
     ],
     references: refs(meta),
+    referencesNote: refsNote(meta),
   };
 }
 

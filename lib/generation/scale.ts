@@ -1,19 +1,5 @@
+import { WORDS_PER_PAGE, wordCount } from "./quality";
 import type { AcademicDoc, Block, DocSection } from "./types";
-
-const WORDS_PER_PAGE = 280;
-
-function wordCount(doc: AcademicDoc): number {
-  let n = 0;
-  const add = (s: string) => {
-    n += s.trim().split(/\s+/).filter(Boolean).length;
-  };
-  for (const s of doc.sections) {
-    add(s.title);
-    for (const b of s.blocks) add(b.text);
-  }
-  for (const r of doc.references ?? []) add(r);
-  return n;
-}
 
 function p(text: string): Block {
   return { kind: "p", text };

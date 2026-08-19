@@ -1,5 +1,7 @@
 import { buildAcademicDoc } from "./content";
+import { llmEnabled as llmKeyPresent } from "./llm";
 import { extractMeta } from "./meta";
+import { targetWords, wordCount } from "./quality";
 import { renderDocx } from "./render-docx";
 import { renderHtml } from "./render-html";
 import { renderPptx } from "./render-pptx";
@@ -31,6 +33,22 @@ const NO_SCALE = new Set([
   "resume",
   "translation",
 ]);
+
+/**
+ * Hajm darvozasi qo'llanadigan vositalar.
+ *
+ * Bular foydalanuvchiga «N bet» deb va'da beradi va narxi ham shu betga
+ * bog'langan. Qolganlari (glossariy, dars rejasi, rezyume, tarjima…)
+ * bet bilan emas, tuzilma bilan o'lchanadi.
+ *
+ * IMRAD (`kind === "imrad"`) hozircha darvozadan tashqarida: uning o'z
+ * to'ldirish mexanizmi yo'q, shuning uchun darvoza uni faqat xatoga
+ * aylantirardi. Sprint 2 da IMRAD ga alohida to'ldirish qo'shiladi.
+ */
+const LENGTH_GATED = new Set(["referat", "coursework", "mustaqil-ish", "article", "thesis", "essay"]);
+
+/** Va'da qilingan hajmning shu ulushi majburiy. */
+const MIN_LENGTH_RATIO = 0.8;
 
 
 
@@ -69,8 +87,44 @@ export async function buildArtifact(
   if (tool.id === "translation" && !llmDoc) {
     throw new Error("Tarjima qilinmadi. Matn yoki fayldan yetarli matn olinmadi.");
   }
+
+  /**
+   * Kalit bor, lekin AI matn yozmadi — shablonga tushmaymiz.
+   *
+   * `content.ts` har qanday mavzuga bir xil matn beradi («… tizimli
+   * o'rganishni talab qiladigan mavzu», «… alohida fakt emas, balki
+   * bog'liq tushunchalar tizimi»). Ilgari shu matn `COMPLETED` bo'lib
+   * chiqardi va pul qaytmasdi. Endi xato qaytadi — worker kreditni
+   * o'zi qaytaradi. Shablon faqat kalitsiz (dev/demo) muhitda qoladi.
+   */
+  if (!llmDoc && llmKeyPresent()) {
+    throw new Error("Matn yozilmadi — AI javob bermadi. Kredit qaytariladi, qayta urinib ko‘ring.");
+  }
+
   let academic = llmDoc ?? buildAcademicDoc(meta, values);
   if (!llmDoc && !NO_SCALE.has(tool.id)) academic = scaleDoc(academic);
+
+  /**
+   * Hajm darvozasi.
+   *
+   * `writeWriterWithLlm` allaqachon 90% ga yetguncha qo'shimcha tahlil
+   * yozishga urinadi. Shundan keyin ham va'daning 80% i chiqmasa, ishni
+   * «tayyor» deb belgilash foydalanuvchini aldash bo'lardi: u 15–20 bet
+   * uchun to'lab, 9 betlik fayl olardi. Xato + kredit qaytishi halolroq.
+   */
+  if (llmDoc && LENGTH_GATED.has(tool.id) && meta.kind !== "imrad") {
+    const want = targetWords(meta.targetPages);
+    const got = wordCount(academic);
+    if (got < want * MIN_LENGTH_RATIO) {
+      const pages = Math.max(1, Math.round(got / 230));
+      console.warn(`[gen] length gate: ${tool.id} ${got}/${want} so'z`);
+      throw new Error(
+        `Matn hajmi yetarli chiqmadi (~${pages} bet, kerak: ${meta.pagesLabel} bet). ` +
+          `Kredit qaytariladi — qayta urinib ko‘ring yoki kichikroq hajm tanlang.`,
+      );
+    }
+  }
+
   const bytes = await renderDocx(academic);
   const suffix =
     tool.id === "translation"
