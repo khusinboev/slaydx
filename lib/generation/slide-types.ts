@@ -10,12 +10,14 @@ export const SLIDE_LAYOUTS = [
   "quote",
   "stats",
   "process",
+  "table",
   "closing",
 ] as const;
 
 export type SlideLayout = (typeof SLIDE_LAYOUTS)[number];
 
 export type SlideStat = { value: string; label: string };
+export type SlideTable = { headers: string[]; rows: string[][] };
 export type SlideStep = { n: string; title: string; text: string };
 
 export type SlideModel = {
@@ -33,6 +35,7 @@ export type SlideModel = {
   quoteBy?: string;
   stats?: SlideStat[];
   steps?: SlideStep[];
+  table?: SlideTable;
   footer?: string;
   /** Notiq nutqi — PPTX ning «Speaker notes» maydoniga tushadi. */
   notes?: string;

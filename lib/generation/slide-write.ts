@@ -84,6 +84,21 @@ function normalizeSlide(raw: unknown, i: number, footer: string): SlideModel | n
       : [];
     return { ...base, stats: stats.length ? stats : [{ value: "—", label: title }] };
   }
+  if (layout === "table") {
+    const src = (o.table ?? o) as Record<string, unknown>;
+    const headers = arr(src.headers, 5, 28);
+    const rows = Array.isArray(src.rows)
+      ? src.rows
+          .map((r) => arr(r, Math.max(1, headers.length), 60))
+          .filter((r) => r.some(Boolean))
+          .slice(0, 6)
+      : [];
+    // Jadvalsiz «table» slayd — bo'sh ramka. Bunday holda bandlarga qaytamiz.
+    if (headers.length < 2 || rows.length < 2) {
+      return { ...base, layout: "bullets", bullets: arr(o.bullets, MAX_BULLETS, MAX_BULLET_CHARS) };
+    }
+    return { ...base, table: { headers, rows } };
+  }
   if (layout === "process") {
     const steps = Array.isArray(o.steps)
       ? o.steps
@@ -120,6 +135,10 @@ export function coerceLayout(s: SlideModel, want: SlideLayout): SlideModel {
   if (want === "stats") {
     // Raqamsiz stats — uydirma bo'lardi. Model nima yozgan bo'lsa shu qoladi.
     return s.stats?.length ? { ...s, layout: want } : s;
+  }
+  if (want === "table") {
+    // Jadvalni bandlardan «yasash» ustunlarni o'ylab topishni talab qiladi.
+    return s.table?.rows.length ? { ...s, layout: want } : s;
   }
   if (want === "process") {
     if (s.steps?.length) return { ...s, layout: want };
@@ -241,6 +260,7 @@ function slideSystem(meta: DocMeta) {
     `title slaydning title maydoni foydalanuvchi mavzusini saqlasin.`,
     `kicker qisqa (2–4 so‘z), masalan «Biologiya» yoki «Taqdimot». Qo‘shimcha talabni kicker qilmang.`,
     `stats ga uydirma milliard/tonna/foiz YOZILMASIN. Formula, bosqich soni, ma’lum birlik (masalan C6H12O6, 2 bosqich) mumkin.`,
+    `table layout: 2–4 ustun, 2–5 qator. Katak matni qisqa (2–5 so‘z). Uydirma raqam emas — tasnif, qiyos yoki bosqich xossalari.`,
     meta.extra ? `Qo‘shimcha talab: ${meta.extra}` : "",
     sourceBlock(meta),
   ]
@@ -263,7 +283,7 @@ export async function writeSlidesWithLlm(
     `AYNAN ${want} ta slayd. QAT’IY shu tartibda (layout ni o‘zgartirmang):`,
     seq,
     `Har slayd mazmuni shu rolga mos, mavzudan chiqmasin. Slaydlar bir-birini takrorlamasin.`,
-    `JSON sxema: {"slides":[{"layout":"title|agenda|section|bullets|twoCol|compare|quote|stats|process|closing","kicker":"","title":"","subtitle":"","imageHint":"","notes":"","bullets":[""],"leftTitle":"","left":[""],"rightTitle":"","right":[""],"quote":"","quoteBy":"","stats":[{"value":"","label":""}],"steps":[{"n":"1","title":"","text":""}]}]}`,
+    `JSON sxema: {"slides":[{"layout":"title|agenda|section|bullets|twoCol|compare|quote|stats|process|closing","kicker":"","title":"","subtitle":"","imageHint":"","notes":"","bullets":[""],"leftTitle":"","left":[""],"rightTitle":"","right":[""],"quote":"","quoteBy":"","stats":[{"value":"","label":""}],"steps":[{"n":"1","title":"","text":""}],"table":{"headers":["",""],"rows":[["",""]]}}]}`,
   ].join("\n");
   // Token byudjeti slaydlar soniga bog‘liq: 16 slayd + notes 5 000 tokenga
   // sig‘masdi va oxirgi slaydlar kesilib ketardi.

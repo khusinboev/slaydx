@@ -111,6 +111,9 @@ export function slideNotes(s: SlideModel) {
       .filter((x, i, a) => x || a[i - 1])
       .join("\n");
   }
+  if (s.table?.rows.length) {
+    return [s.table.headers.join(" | "), ...s.table.rows.map((r) => r.join(" | "))].join("\n");
+  }
   if (s.bullets?.length) return s.bullets.map((b, i) => `${i + 1}. ${b}`).join("\n");
   return [s.subtitle, s.footer].filter(Boolean).join("\n");
 }
@@ -853,6 +856,92 @@ function planProcess(s: SlideModel, theme: SlideTheme, visual: SlideVisual, inde
   return { bg: theme.bg, layers };
 }
 
+/**
+ * Ma'lumot jadvali.
+ *
+ * `pptx.addTable` ATAYLAB ishlatilmaydi: u faqat PPTX da mavjud va
+ * saytdagi ko'ruvchi uni takrorlay olmasdi — `planSlide` ning yagona
+ * manba bo'lish xususiyati buzilardi. Jadval `rect` va `text`
+ * qatlamlaridan quriladi, shuning uchun preview eksport bilan bir xil.
+ *
+ * Sarlavha qatori `titleBg`/`titleText` juftidan foydalanadi — u
+ * `tests/themes.test.mts` da kontrast bo'yicha o'lchanadi.
+ */
+function planTable(s: SlideModel, theme: SlideTheme, index: number, total: number): SlidePlan {
+  const layers: SlideLayer[] = [];
+  layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.bg } });
+  pushChrome(layers, theme, "full");
+  planHeading(layers, s, theme, 12.2, M + 0.18);
+
+  const data = s.table ?? { headers: [], rows: [] };
+  const cols = Math.max(1, data.headers.length);
+  const rows = data.rows.slice(0, 6);
+  const x0 = M + 0.18;
+  const totalW = 12.25;
+  const colW = totalW / cols;
+  const top = 1.55;
+  const headH = 0.6;
+  const bodyH = Math.min(0.95, (6.75 - top - headH) / Math.max(1, rows.length));
+  const pad = 0.14;
+
+  // Sarlavha qatori.
+  layers.push({ t: "rect", box: { x: x0, y: top, w: totalW, h: headH }, fill: { color: theme.titleBg }, radius: 0.05 });
+  data.headers.forEach((h, i) => {
+    const box: Box = { x: x0 + i * colW + pad, y: top, w: colW - pad * 2, h: headH };
+    layers.push({
+      t: "text",
+      box,
+      text: h,
+      color: theme.titleText,
+      size: fitSize(h, box, 15, 11),
+      bold: true,
+      valign: "middle",
+    });
+  });
+
+  // Tana.
+  const bodyTop = top + headH;
+  layers.push({
+    t: "rect",
+    box: { x: x0, y: bodyTop, w: totalW, h: bodyH * rows.length },
+    fill: { color: theme.surface },
+  });
+  rows.forEach((row, r) => {
+    const y = bodyTop + r * bodyH;
+    if (r > 0) {
+      layers.push({
+        t: "rect",
+        box: { x: x0, y, w: totalW, h: 0.012 },
+        fill: { color: theme.muted, alpha: 0.28 },
+      });
+    }
+    for (let c = 0; c < cols; c++) {
+      if (c > 0) {
+        layers.push({
+          t: "rect",
+          box: { x: x0 + c * colW, y, w: 0.012, h: bodyH },
+          fill: { color: theme.muted, alpha: 0.2 },
+        });
+      }
+      const cell = row[c] ?? "";
+      if (!cell) continue;
+      const box: Box = { x: x0 + c * colW + pad, y, w: colW - pad * 2, h: bodyH };
+      layers.push({
+        t: "text",
+        box,
+        text: cell,
+        color: c === 0 ? theme.text : theme.muted,
+        size: fitSize(cell, box, 14, 10),
+        bold: c === 0,
+        valign: "middle",
+      });
+    }
+  });
+
+  pushFooter(layers, s, theme, index, total, { x: x0, w: 12.2 }, false);
+  return { bg: theme.bg, layers };
+}
+
 export function planSlide(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index: number, total: number): SlidePlan {
   switch (s.layout) {
     case "title":
@@ -873,6 +962,8 @@ export function planSlide(s: SlideModel, theme: SlideTheme, visual: SlideVisual,
       return planStats(s, theme, visual, index, total);
     case "process":
       return planProcess(s, theme, visual, index, total);
+    case "table":
+      return planTable(s, theme, index, total);
     default:
       return planBullets(s, theme, index, total, false);
   }

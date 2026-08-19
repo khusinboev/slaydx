@@ -149,3 +149,52 @@ test("stats ga o'girish uydirma raqam yaratmaydi", () => {
   const real: SlideModel = { id: "y", layout: "bullets", title: "T", stats: [{ value: "5", label: "a" }] };
   assert.equal(coerceLayout(real, "stats").layout, "stats");
 });
+
+// ---------------------------------------------------------------- table
+
+test("jadval sarlavha va qatorlari bilan chiziladi", () => {
+  const p = plan({
+    id: "t",
+    layout: "table",
+    title: "Qiyos",
+    table: {
+      headers: ["Mezon", "A", "B"],
+      rows: [
+        ["Samaradorlik", "Yuqori", "O'rta"],
+        ["Og'irlik", "Katta", "Kichik"],
+      ],
+    },
+  });
+  const shown = texts(p.layers).map((t) => t.text);
+  for (const cell of ["Mezon", "A", "B", "Samaradorlik", "Yuqori", "Kichik"]) {
+    assert.ok(shown.includes(cell), `«${cell}» chizilmadi`);
+  }
+  for (const l of p.layers) {
+    assert.ok(l.box.x + l.box.w <= 13.34 && l.box.y + l.box.h <= 7.51, "jadval chegaradan chiqdi");
+  }
+});
+
+test("jadvalga o'girish uydirma ustun yaratmaydi", () => {
+  const bullets: SlideModel = { id: "x", layout: "bullets", title: "T", bullets: ["Bir", "Ikki"] };
+  assert.equal(coerceLayout(bullets, "table").layout, "bullets");
+
+  const real: SlideModel = {
+    id: "y",
+    layout: "bullets",
+    title: "T",
+    table: { headers: ["A", "B"], rows: [["1", "2"]] },
+  };
+  assert.equal(coerceLayout(real, "table").layout, "table");
+});
+
+test("jadval eslatmasi qatorlarni o'z ichiga oladi", async () => {
+  const { slideNotes } = await import("../lib/generation/slide-layout.ts");
+  const notes = slideNotes({
+    id: "t",
+    layout: "table",
+    title: "Qiyos",
+    table: { headers: ["Mezon", "A"], rows: [["Narx", "Past"]] },
+  });
+  assert.match(notes, /Mezon/);
+  assert.match(notes, /Narx/);
+});
