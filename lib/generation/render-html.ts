@@ -63,14 +63,34 @@ export function renderHtml(doc: AcademicDoc): string {
     )
     .join("");
 
+  /**
+   * Ketma-ket kelgan `li` bloklarini bitta `<ul>` ga yig'adi.
+   *
+   * Ilgari bo'limdagi BARCHA ro'yxat bandlari ajratilib, oxiriga
+   * qo'yilardi: keys hujjatida topshiriqlar o'z vaziyatidan uzilib,
+   * kalitdan keyin chiqardi.
+   */
+  function sectionHtml(blocks: Block[]): string {
+    const out: string[] = [];
+    let list: Block[] = [];
+    const flush = () => {
+      if (!list.length) return;
+      out.push(`<ul>${list.map(blockHtml).join("")}</ul>`);
+      list = [];
+    };
+    for (const b of blocks) {
+      if (b.kind === "li") list.push(b);
+      else {
+        flush();
+        out.push(blockHtml(b));
+      }
+    }
+    flush();
+    return out.join("");
+  }
+
   const body = doc.sections
-    .map((s) => {
-      const lis = s.blocks.filter((b) => b.kind === "li");
-      const rest = s.blocks.filter((b) => b.kind !== "li");
-      return `<section><h2>${esc(s.title)}</h2>${rest.map(blockHtml).join("")}${
-        lis.length ? `<ul>${lis.map(blockHtml).join("")}</ul>` : ""
-      }</section>`;
-    })
+    .map((s) => `<section><h2>${esc(s.title)}</h2>${sectionHtml(s.blocks)}</section>`)
     .join("");
 
   const tables = (doc.tables ?? [])

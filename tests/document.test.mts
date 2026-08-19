@@ -125,3 +125,49 @@ test("mundarijada taxminiy sahifa raqami yo'q", async () => {
   const toc = text.slice(text.indexOf("MUNDARIJA"), text.indexOf("KIRISH", text.indexOf("MUNDARIJA") + 10));
   assert.doesNotMatch(toc, /\.{3,}\s*\d/, "nuqtali yetakchi + raqam qolmasligi kerak");
 });
+
+// -------------------------------------------------- HTML ko'rinish
+
+test("ro'yxat bandlari o'z joyida qoladi, oxiriga ko'chirilmaydi", async () => {
+  const { renderHtml } = await import("../lib/generation/render-html.ts");
+  const d = doc("referat", { topic: "X" });
+  d.sections = [
+    {
+      id: "keys",
+      title: "Keys 1",
+      blocks: [
+        { kind: "p", text: "Vaziyat tavsifi." },
+        { kind: "h3", text: "Topshiriqlar" },
+        { kind: "li", text: "Birinchi topshiriq" },
+        { kind: "li", text: "Ikkinchi topshiriq" },
+        { kind: "h3", text: "Kalit" },
+        { kind: "p", text: "Namunaviy javob." },
+      ],
+    },
+  ];
+  const html = renderHtml(d);
+  const body = html.slice(html.indexOf("Keys 1"));
+  assert.ok(
+    body.indexOf("Birinchi topshiriq") < body.indexOf("Kalit"),
+    "topshiriqlar kalitdan oldin turishi kerak",
+  );
+  assert.equal(body.split("<ul>").length - 1, 1, "ketma-ket bandlar bitta ro'yxatga yig'ilsin");
+});
+
+test("bo'lingan ro'yxatlar alohida <ul> bo'ladi", async () => {
+  const { renderHtml } = await import("../lib/generation/render-html.ts");
+  const d = doc("referat", { topic: "X" });
+  d.sections = [
+    {
+      id: "a",
+      title: "Bo'lim",
+      blocks: [
+        { kind: "li", text: "A1" },
+        { kind: "p", text: "Oraliq matn." },
+        { kind: "li", text: "B1" },
+      ],
+    },
+  ];
+  const html = renderHtml(d);
+  assert.equal(html.split("<ul>").length - 1, 2);
+});

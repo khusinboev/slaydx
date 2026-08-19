@@ -164,7 +164,10 @@ export const TOOLS: ToolConfig[] = [
       {
         kind: "chips",
         name: "images",
-        legend: "Jadval va rasmlar",
+        // Ilgari «Jadval va rasmlar» deb yozilgan, lekin dvigatel DOCX ga
+        // hech qachon rasm qo'ymagan — faqat jadval. Yorliq shu sababli
+        // aniqlashtirildi.
+        legend: "Tasnif jadvali qo'shilsinmi?",
         options: [
           { value: "yes", label: "Ha" },
           { value: "no", label: "Yo'q" },
