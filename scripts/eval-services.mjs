@@ -1,25 +1,59 @@
 #!/usr/bin/env node
 /**
- * Barcha vositalarni /api/generate orqali sinaydi, fayl saqlaydi, sifat balli beradi.
+ * Barcha vositalarni HAQIQIY navbat orqali sinaydi: POST /api/generations,
+ * so'ng holatni polling qiladi va tayyor faylni yuklab olib baholaydi.
+ *
+ * Ilgari bu skript `POST /api/generate` ga murojaat qilardi — bunday
+ * endpoint umuman yo'q. Ya'ni sifat nazorati yillar davomida yashil
+ * ko'rinib, hech narsani tekshirmasdi.
+ *
+ * Kirish kerak (barcha /api/generations endpointlari sessiya talab qiladi):
+ *   - EVAL_COOKIE="sodda_session=..."  yoki
+ *   - DEV_LOGIN_ENABLED=true bo'lsa skript o'zi OTP orqali kiradi.
+ *
+ * Foydalanish:
  *   node scripts/eval-services.mjs [round] [only-slug]
  */
 import { mkdir, writeFile } from "node:fs/promises";
-import { existsSync } from "node:fs";
 import path from "node:path";
 
 const ROUND = process.argv[2] || "r1";
 const ONLY = process.argv[3] || "";
 const BASE = process.env.EVAL_URL || "http://127.0.0.1:3000";
 const OUT = path.resolve(process.cwd(), "..", "namunalar", `eval-${ROUND}`);
+const EVAL_USER = process.env.EVAL_USER || "evalbot";
+/** Bitta ish uchun eng ko'p kutish — worker byudjeti 285 s. */
+const POLL_TIMEOUT_MS = Number(process.env.EVAL_TIMEOUT_MS || 330_000);
 
+/**
+ * Uydirma manba belgilari.
+ *
+ * Nashriyot nomining o'zi belgi EMAS: «– Toshkent: O'qituvchi, 2018» —
+ * haqiqiy nashriyot va model ba'zan to'g'ri yozadi. Xavfli narsa —
+ * tekshirib bo'lmaydigan aniqlik: DOI, ISSN, jurnal tomi/soni, havola.
+ * Bularni model deyarli har doim uydiradi.
+ */
+const FABRICATED_REF = [/doi\.org/i, /\bDOI[:\s]/i, /\bISSN\b/i, /\bISBN\b/i, /\bvol\.\s*\d/i, /https?:\/\//i];
+
+/** Sifat paketi nechta slayd va'da qiladi. */
+const SLIDE_PACK = { standard: 10, long: 14, premium: 12, premium_long: 16 };
+
+/**
+ * Shablon (filler) izlari.
+ *
+ * Ro'yxat ataylab tor: `kompetensiya` va `tushuncha shakllanadi` olib
+ * tashlandi, chunki ular jonli matnda ham uchraydi — pedagogika kurs
+ * ishida «kompetensiya» o'rinli atama, inshoda esa «qalbida bir tushuncha
+ * shakllanadi» oddiy jumla. Ular endi kerakli keysda `forbid` orqali
+ * tekshiriladi.
+ */
 const GENERIC = [
   /tizimli o[‘'`]rganishni talab qiladigan mavzu/i,
   /alohida fakt emas, balki bog/i,
   /tajriba bandi to[‘'`]ldirilmagan/i,
   /tarjima matni topilmadi/i,
   /soha nazariyasi asoslari/i,
-  /kompetensiya/i,
-  /tushuncha shakllanadi/i,
+  /umumiy nazariy asoslar/i,
 ];
 
 const CASES = [
@@ -36,7 +70,7 @@ const CASES = [
       pages: "2",
       design: "iris",
     },
-    minWords: 450,
+    minWords: 368, // 2 varaq × 230 × 0.8
     expect: ["Kirish", "Xulosa"],
   },
   {
@@ -53,7 +87,7 @@ const CASES = [
       city: "Toshkent",
       pages: "10-15",
     },
-    minWords: 1800,
+    minWords: 2392, // 13 bet × 230 × 0.8
     expect: ["Kirish", "Xulosa", "Adabiyot"],
   },
   {
@@ -72,7 +106,7 @@ const CASES = [
       images: "yes",
       tocMethod: "ai",
     },
-    minWords: 2200,
+    minWords: 3312, // 18 bet × 230 × 0.8
     expect: ["Kirish", "Xulosa"],
   },
   {
@@ -88,7 +122,7 @@ const CASES = [
       pages: "5-10",
       annotationLangs: "same",
     },
-    minWords: 1400,
+    minWords: 1472, // 8 bet × 230 × 0.8
     expect: ["Kirish"],
   },
   {
@@ -104,7 +138,7 @@ const CASES = [
       kind: "standard",
       pages: "5-10",
     },
-    minWords: 1400,
+    minWords: 1472, // 8 bet × 230 × 0.8
     expect: ["Kirish", "Xulosa"],
   },
   {
@@ -119,7 +153,7 @@ const CASES = [
       pages: "10-15",
       tocMethod: "ai",
     },
-    minWords: 1800,
+    minWords: 2392, // 13 bet × 230 × 0.8
     expect: ["Kirish"],
   },
   {
@@ -179,6 +213,7 @@ const CASES = [
     values: { subject: "Biologiya", weeklyHours: 2, totalHours: 68, extra: "8-sinf, o'simliklar fiziologiyasi", language: "uz" },
     minWords: 200,
     expect: ["Hafta", "Mavzu"],
+    forbid: ["tushuncha shakllanadi", "1-mavzu"],
   },
   {
     slug: "slide",
@@ -191,6 +226,20 @@ const CASES = [
     },
     minWords: 80,
     expect: ["Fotosintez"],
+    isPptx: true,
+  },
+  {
+    slug: "slide",
+    name: "slide-premium",
+    values: {
+      topic: "Alisher Navoiy hayoti va ijodi",
+      language: "uz",
+      quality: "premium_long",
+      slideTheme: "parchment",
+      slideTemplate: "bio",
+    },
+    minWords: 200,
+    expect: ["Navoiy"],
     isPptx: true,
   },
   {
@@ -215,25 +264,6 @@ function decodeEntities(s) {
     const map = { "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&apos;": "'", "&#39;": "'" };
     return map[m] || m;
   });
-}
-
-async function textFromDocx(buf) {
-  const { unzipSync, strFromU8 } = await import("fflate").catch(() => ({ unzipSync: null }));
-  if (!unzipSync) {
-    // fallback: treat as zip via unzip if jszip in node_modules
-    const JSZip = (await import("jszip")).default;
-    const zip = await JSZip.loadAsync(buf);
-    const file = zip.file("word/document.xml");
-    if (!file) return "";
-    const xml = await file.async("string");
-    return decodeEntities(
-      xml
-        .replace(/<\/w:p>/g, "\n")
-        .replace(/<w:t[^>]*>([^<]*)<\/w:t>/g, "$1")
-        .replace(/<[^>]+>/g, ""),
-    );
-  }
-  return "";
 }
 
 async function analyzeDocx(bytes) {
@@ -270,13 +300,46 @@ async function analyzePptx(bytes) {
     if (t.trim()) chunks.push(t.trim());
     if (/a:blip|p:pic/.test(xml)) images += 1;
   }
+  // Speaker notes — `notesSlide` fayllari doim yaratiladi, shuning uchun
+  // shunchaki mavjudligi emas, ICHIDA matn borligi tekshiriladi.
+  // (Bo'sh notes'da faqat slayd raqami turadi.)
+  let withNotes = 0;
+  for (const name of Object.keys(zip.files).filter((n) => /^ppt\/notesSlides\/notesSlide\d+\.xml$/i.test(n))) {
+    const xml = await zip.file(name).async("string");
+    const t = (xml.match(/<a:t[^>]*>([^<]*)<\/a:t>/g) || [])
+      .map((m) => m.replace(/<[^>]+>/g, ""))
+      .join(" ")
+      .trim();
+    if (t.replace(/\d+/g, "").trim().length > 20) withNotes += 1;
+  }
+
+  // Bullet zichligi: 15 belgidan uzun matn bo'laklari.
+  const lines = [];
+  for (const name of names) {
+    const xml = await zip.file(name).async("string");
+    for (const m of xml.match(/<a:t[^>]*>([^<]*)<\/a:t>/g) || []) {
+      const t = decodeEntities(m.replace(/<[^>]+>/g, "")).trim();
+      if (t.length > 15) lines.push(t);
+    }
+  }
+  const bulletWords = lines.length ? lines.reduce((n, t) => n + words(t), 0) / lines.length : 0;
+
   const text = chunks.join("\n\n");
-  return { text, words: words(text), slides: names.length, images };
+  return {
+    text,
+    words: words(text),
+    slides: names.length,
+    images,
+    withNotes,
+    maxLine: lines.reduce((n, t) => Math.max(n, t.length), 0),
+    bulletWords: Math.round(bulletWords * 10) / 10,
+  };
 }
 
 function score(c, info, html) {
   const issues = [];
   const text = `${info.text || ""}\n${html || ""}`;
+
   if (!c.isImage && info.words < c.minWords) issues.push(`so‘z ${info.words} < ${c.minWords}`);
   for (const re of GENERIC) {
     if (re.test(text)) issues.push(`shablon: ${re.source.slice(0, 28)}`);
@@ -288,35 +351,162 @@ function score(c, info, html) {
     if (new RegExp(e, "i").test(text)) issues.push(`taqiqlangan: ${e}`);
   }
   if (c.noTitleMinistry && /OLIY TA’LIM|OLIY TA'LIM, FAN/.test(text)) issues.push("ortiqcha titul");
-  if (c.isPptx && (info.slides || 0) < 8) issues.push(`slayd ${info.slides || 0} < 8`);
   if (c.isImage && !(info.bytes > 8000)) issues.push("rasm bo‘sh");
+
+  // --- Hujjat: manbalar halolligi ---
+  if (!c.isPptx && !c.isImage) {
+    for (const re of FABRICATED_REF) {
+      if (re.test(text)) issues.push(`uydirma manba: ${re.source.slice(0, 20)}`);
+    }
+    // Adabiyotlar bo'lsa, ular tekshirilmagani yozilgan bo'lishi SHART.
+    if (/ADABIYOT|ЛИТЕРАТУР|REFERENCES/i.test(text) && !/TEKSHIRILMAGAN|tasdiqlanmagan|НЕ ПРОВЕРЕН|NOT VERIFIED/i.test(text)) {
+      issues.push("manbalar ogohlantirishsiz");
+    }
+  }
+
+  // --- Taqdimot: Slide Law ---
+  if (c.isPptx) {
+    const want = SLIDE_PACK[c.values.quality || "standard"] || 10;
+    if ((info.slides || 0) < want) issues.push(`slayd ${info.slides || 0} < ${want} (paket)`);
+    if ((info.withNotes || 0) < Math.ceil((info.slides || 1) * 0.7)) {
+      issues.push(`notes ${info.withNotes || 0}/${info.slides || 0}`);
+    }
+    if ((info.bulletWords || 0) > 14) issues.push(`bullet ${info.bulletWords} so‘z > 14`);
+  }
   return issues;
+}
+
+// ---------------------------------------------------------------- kirish
+
+let COOKIE = process.env.EVAL_COOKIE || "";
+
+function headers(extra = {}) {
+  return {
+    "Content-Type": "application/json",
+    Origin: BASE,
+    "Sec-Fetch-Site": "same-origin",
+    ...(COOKIE ? { Cookie: COOKIE } : {}),
+    ...extra,
+  };
+}
+
+function takeCookie(res) {
+  const raw = res.headers.getSetCookie?.() ?? [res.headers.get("set-cookie")].filter(Boolean);
+  for (const line of raw) {
+    const m = /(^|,\s*)(sodda_session=[^;]+)/.exec(line);
+    if (m) COOKIE = m[2];
+  }
+}
+
+/**
+ * Sessiya ochadi. EVAL_COOKIE berilgan bo'lsa shu ishlatiladi,
+ * aks holda dev OTP (DEV_LOGIN_ENABLED=true) orqali kiriladi.
+ */
+async function login() {
+  if (COOKIE) return true;
+  const req = await fetch(`${BASE}/api/auth/otp?action=request`, {
+    method: "POST",
+    headers: headers(),
+    body: JSON.stringify({ identifier: EVAL_USER }),
+  });
+  const data = await req.json().catch(() => ({}));
+  if (!req.ok || !data.devCode) {
+    console.error(
+      `kirish yo‘q: ${data.error || req.status}. EVAL_COOKIE bering yoki DEV_LOGIN_ENABLED=true qo‘ying.`,
+    );
+    return false;
+  }
+  const ver = await fetch(`${BASE}/api/auth/otp?action=verify`, {
+    method: "POST",
+    headers: headers(),
+    body: JSON.stringify({ identifier: EVAL_USER, code: data.devCode }),
+  });
+  takeCookie(ver);
+  if (!ver.ok || !COOKIE) {
+    console.error("kirish tasdiqlanmadi:", ver.status);
+    return false;
+  }
+  console.log(`kirdi: ${EVAL_USER}`);
+  return true;
+}
+
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** Ish tugaguncha holatni so'rab turadi. */
+async function waitForJob(id) {
+  const until = Date.now() + POLL_TIMEOUT_MS;
+  let last = "";
+  while (Date.now() < until) {
+    const res = await fetch(`${BASE}/api/generations/${id}`, { headers: headers() });
+    if (!res.ok) return { status: "HTTP", error: `holat ${res.status}` };
+    const g = await res.json();
+    const gen = g.generation ?? g;
+    if (gen.step && gen.step !== last) last = gen.step;
+    if (gen.status === "COMPLETED") return { status: "COMPLETED", gen };
+    if (gen.status === "FAILED" || gen.status === "REVOKED") {
+      return { status: gen.status, error: gen.error || gen.step || "xato" };
+    }
+    await sleep(2500);
+  }
+  return { status: "TIMEOUT", error: `${Math.round(POLL_TIMEOUT_MS / 1000)}s ichida tugamadi` };
 }
 
 async function runOne(c) {
   const t0 = Date.now();
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 170_000);
   try {
-    const res = await fetch(`${BASE}/api/generate`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ slug: c.slug, values: c.values }),
-      signal: ctrl.signal,
-    });
-    const data = await res.json();
-    if (!res.ok || !data.base64) {
-      return { slug: c.slug, ok: false, ms: Date.now() - t0, error: data.error || `HTTP ${res.status}`, issues: ["generate fail"] };
+    // Navbat rate limit'i daqiqasiga 5 ta. Eval 14 ta keys yuboradi,
+    // shuning uchun 429 da kutib qayta urinamiz — aks holda vositalar
+    // «navbatga qo'yilmadi» deb yiqilib, sifat o'lchanmay qolardi.
+    let res, data;
+    for (let attempt = 0; attempt < 6; attempt++) {
+      res = await fetch(`${BASE}/api/generations`, {
+        method: "POST",
+        headers: headers(),
+        body: JSON.stringify({ slug: c.slug, values: c.values }),
+      });
+      data = await res.json().catch(() => ({}));
+      if (res.status !== 429) break;
+      await sleep(20_000);
     }
-    const bytes = Buffer.from(data.base64, "base64");
+    if (!res.ok || !data.id) {
+      return {
+        slug: c.slug,
+        ok: false,
+        ms: Date.now() - t0,
+        error: data.error || `HTTP ${res.status}`,
+        issues: ["navbatga qo‘yilmadi"],
+      };
+    }
+
+    const done = await waitForJob(data.id);
+    if (done.status !== "COMPLETED") {
+      return {
+        slug: c.slug,
+        ok: false,
+        ms: Date.now() - t0,
+        error: done.error,
+        issues: [`${done.status}: ${done.error}`],
+      };
+    }
+
+    const fileRes = await fetch(`${BASE}/api/generations/${data.id}/file`, { headers: headers() });
+    if (!fileRes.ok) {
+      return { slug: c.slug, ok: false, ms: Date.now() - t0, error: `fayl ${fileRes.status}`, issues: ["fayl yo‘q"] };
+    }
+    const bytes = Buffer.from(await fileRes.arrayBuffer());
+
     const ext = c.isImage ? "jpg" : c.isPptx ? "pptx" : "docx";
-    const fname = `${c.slug}__${String(c.values.topic || c.values.subject || c.values.prompt || "out").slice(0, 40).replace(/[^\p{L}\p{N}]+/gu, "-")}.${ext}`;
+    const fname = `${c.name || c.slug}__${String(c.values.topic || c.values.subject || c.values.prompt || "out")
+      .slice(0, 40)
+      .replace(/[^\p{L}\p{N}]+/gu, "-")}.${ext}`;
     await writeFile(path.join(OUT, fname), bytes);
+
     let info = { text: "", words: 0, bytes: bytes.length };
-    if (c.isImage) info = { text: data.html || "", words: 0, bytes: bytes.length };
+    if (c.isImage) info = { ...info };
     else if (c.isPptx) info = { ...info, ...(await analyzePptx(bytes)) };
     else info = { ...info, ...(await analyzeDocx(bytes)) };
-    const issues = score(c, info, data.html);
+
+    const issues = score(c, info, done.gen?.html || "");
     return {
       slug: c.slug,
       ok: issues.length === 0,
@@ -325,14 +515,15 @@ async function runOne(c) {
       bytes: bytes.length,
       slides: info.slides,
       images: info.images,
+      notes: info.withNotes,
+      bulletWords: info.bulletWords,
+      price: data.price,
       file: fname,
       issues,
       preview: (info.text || "").replace(/\s+/g, " ").slice(0, 220),
     };
   } catch (e) {
     return { slug: c.slug, ok: false, ms: Date.now() - t0, error: e.message, issues: ["exception"] };
-  } finally {
-    clearTimeout(timer);
   }
 }
 
@@ -349,20 +540,37 @@ async function pool(items, n, fn) {
   return out;
 }
 
-const cases = CASES.filter((c) => !ONLY || c.slug === ONLY);
+// Ixtiyoriy provayder o'chiq bo'lsa keysni chetlab o'tish uchun:
+//   EVAL_SKIP=rasm node scripts/eval-services.mjs
+const SKIP = new Set((process.env.EVAL_SKIP || "").split(",").map((x) => x.trim()).filter(Boolean));
+const cases = CASES.filter(
+  (c) => (!ONLY || c.slug === ONLY || c.name === ONLY) && !SKIP.has(c.slug) && !SKIP.has(c.name || ""),
+);
+if (SKIP.size) console.log(`chetlab o'tildi: ${[...SKIP].join(", ")}`);
 await mkdir(OUT, { recursive: true });
+
+if (!(await login())) process.exit(2);
+
 console.log(`eval ${ROUND} → ${OUT}  (${cases.length} vosita, ${BASE})`);
+// Parallel 2: navbat rate limit'i daqiqasiga 5 ta.
 const results = await pool(cases, 2, async (c) => {
-  console.log("…", c.slug);
+  const label = c.name || c.slug;
+  console.log("…", label);
   const r = await runOne(c);
-  console.log(r.ok ? "OK " : "FAIL", c.slug, `${Math.round(r.ms / 1000)}s`, r.words ?? "", (r.issues || []).join("; ") || r.error || "");
-  return r;
+  console.log(
+    r.ok ? "OK  " : "FAIL",
+    label.padEnd(16),
+    `${Math.round(r.ms / 1000)}s`,
+    (r.issues || []).join("; ") || r.error || "",
+  );
+  return { ...r, label };
 });
 await writeFile(path.join(OUT, "report.json"), JSON.stringify(results, null, 2));
 const fail = results.filter((r) => !r.ok);
 console.log("\n=== XULOSA ===");
 for (const r of results) {
-  console.log(`${r.ok ? "✓" : "✗"} ${r.slug.padEnd(20)} ${String(r.words ?? "-").padStart(5)} so‘z  ${(r.issues || []).join(" | ") || "pro"}`);
+  const shape = r.slides ? `${r.slides} slayd · ${r.notes ?? 0} notes` : `${r.words ?? "-"} so‘z`;
+  console.log(`${r.ok ? "✓" : "✗"} ${(r.label || r.slug).padEnd(18)} ${shape.padStart(18)}  ${(r.issues || []).join(" | ") || "pro"}`);
 }
 console.log(`\n${results.length - fail.length}/${results.length} o‘tdi`);
 process.exit(fail.length ? 1 : 0);

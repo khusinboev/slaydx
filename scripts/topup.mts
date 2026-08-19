@@ -23,8 +23,11 @@ if (!["points", "quota", "balance"].includes(rawWallet)) {
   process.exit(1);
 }
 
+// `local_id` ham qidiriladi: telefon/OTP orqali kirgan akkauntlarda
+// `username` bo'lmaydi va ular ilgari bu vosita uchun umuman
+// «topilmadi» edi.
 const user = await queryOne<{ id: string; name: string }>(
-  "SELECT id, name FROM users WHERE username = $1 OR telegram_id::text = $1",
+  "SELECT id, name FROM users WHERE username = $1 OR local_id = $1 OR telegram_id::text = $1",
   [username],
 );
 if (!user) {
