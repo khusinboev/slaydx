@@ -55,6 +55,7 @@ async function writeSection(
   meta: DocMeta,
   minParas: number,
   timeoutMs: number,
+  thinking = 0,
 ): Promise<Block[]> {
   if (timeoutMs < 4_000) return [];
   const user = [
@@ -65,7 +66,7 @@ async function writeSection(
     `Kamida ${minParas} ta to‘la paragraf (har biri 80–130 so‘z). Faqat shu bo‘lim.`,
     `Mavzuga xos atama, mexanizm yoki misol yozing. Umumiy shior va boshqa soha aralashmasin.`,
   ].join("\n");
-  const text = await llmComplete(sys, user, Math.min(7000, 900 + minParas * 420), { timeoutMs });
+  const text = await llmComplete(sys, user, Math.min(7000, 900 + minParas * 420), { timeoutMs, thinking });
   if (!text) {
     console.warn("[write-llm] empty response for", title);
     return [];
@@ -273,6 +274,12 @@ export async function writeWriterWithLlm(meta: DocMeta, deadline?: number): Prom
     min: number;
   };
 
+  /**
+   * Kurs ishi eng qimmat va eng talabchan ish — bo'lim yozishda modelga
+   * o'ylash byudjeti beriladi. Qolgan vositalarda 0: ular qisqaroq va
+   * tuzilmasi oldindan aniq, o'ylash faqat narx qo'shardi.
+   */
+  const thinking = meta.toolId === "coursework" ? 1024 : 0;
   const allSubs = chapters.flatMap((ch) => ch.subs.map((s) => s.title));
   const subCount = Math.max(1, allSubs.length);
   // Kirish va xulosa hajmning ~25% ini oladi, qolgani ostmavzularga.
@@ -323,7 +330,7 @@ export async function writeWriterWithLlm(meta: DocMeta, deadline?: number): Prom
     const left = remainingMs(deadline);
     if (left < 5_000) return { item, blocks: [] as Block[] };
     const budget = item.kind === "sub" ? 38_000 : 45_000;
-    let blocks = await writeSection(sys, item.title, item.brief, meta, item.min, Math.min(budget, left));
+    let blocks = await writeSection(sys, item.title, item.brief, meta, item.min, Math.min(budget, left), thinking);
     if (!blocks.length && remainingMs(deadline) > 8_000) {
       blocks = await writeSection(
         sys,

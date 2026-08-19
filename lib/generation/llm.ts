@@ -25,6 +25,16 @@ export function llmModel() {
 export type LlmOpts = {
   json?: boolean;
   timeoutMs?: number;
+  /**
+   * Gemini «o'ylash» byudjeti (token).
+   *
+   * Standart 0 — tez va arzon, qisqa JSON javoblar uchun to'g'ri.
+   * Lekin uzun akademik matnda o'ylash sifatni oshiradi: dalil
+   * zanjiri, takrorsiz tuzilma. Shuning uchun u faqat kerakli
+   * joyda (kurs ishi bo'limlari) yoqiladi — narxi bor.
+   * `GEMINI_THINKING_BUDGET` bilan bekor qilish mumkin.
+   */
+  thinking?: number;
 };
 
 /**
@@ -76,6 +86,12 @@ export async function llmComplete(
   return null;
 }
 
+function thinkingBudget(requested?: number): number {
+  const override = Number(process.env.GEMINI_THINKING_BUDGET);
+  if (Number.isFinite(override) && override >= 0) return Math.round(override);
+  return Math.max(0, Math.min(4096, Math.round(requested ?? 0)));
+}
+
 async function completeGemini(
   system: string,
   user: string,
@@ -102,7 +118,7 @@ async function completeGemini(
         generationConfig: {
           temperature: opts.json ? 0.4 : 0.5,
           maxOutputTokens: Math.max(maxTokens, 4096),
-          thinkingConfig: { thinkingBudget: 0 },
+          thinkingConfig: { thinkingBudget: thinkingBudget(opts.thinking) },
           ...(opts.json ? { responseMimeType: "application/json" } : {}),
         },
       }),

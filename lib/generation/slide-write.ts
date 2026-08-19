@@ -271,6 +271,21 @@ function slideSystem(meta: DocMeta, tpl: SlideTemplate) {
     `Har slaydda ENG KO‘PI ${rules.maxBullets} ta bullet (agenda'da 5). Har bullet 1 gap, ${Math.round(rules.bulletChars / 8)} so‘zdan oshmasin.`,
     audienceLine[meta.slideAudience && meta.slideAudience !== "auto" ? meta.slideAudience : ""] ??
       `${rules.note}`,
+    /**
+     * «Premium» paket endi KONTENTGA ham ta'sir qiladi.
+     *
+     * Ilgari u faqat rasm sifatini o'zgartirardi — matn standart paket
+     * bilan bir xil edi, ya'ni qimmatroq paket uchun to'lagan
+     * foydalanuvchi mazmunan bir xil deck olardi.
+     */
+    meta.premiumVisuals
+      ? [
+          `PREMIUM DARAJA:`,
+          `— notes 80–120 so‘z: notiq nima deyishi, misol va o‘tish jumlasi bilan;`,
+          `— kamida bitta slaydda taqqoslash mumkin bo‘lgan ANIQ ko‘rsatkichlar (stats), lekin uydirma emas — mavzuning o‘z birliklari;`,
+          `— kamida bitta slaydda qarama-qarshi qo‘yish (compare yoki twoCol) chuqur tahlil bilan.`,
+        ].join("\n")
+      : "",
     `Sarlavha to‘liq fikr, 6–10 so‘z. Uzun izohni bulletga emas, notes ga yozing.`,
     `Har slaydda imageHint: 12–20 so‘z, ANIQ vizual (inglizcha yoki o‘zbekcha), shu slayd mazmunidagi narsa/joy/asbob. Mavzudan chiqib ketmasin.`,
     `Har slaydda notes: notiq OG‘ZAKI aytadigan matn, 40–80 so‘z. Slayddagi bandlarni takrorlamang — misol, izoh yoki savol qo‘shing.`,
