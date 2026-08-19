@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
+import { BRAND_NAME } from "@/lib/brand";
 
-const BRAND = process.env.NEXT_PUBLIC_BRAND_NAME || "Sodda.ai";
+const BRAND = BRAND_NAME;
 
 /** PWA manifesti — telefonda «bosh ekranga qo'shish» ishlashi uchun. */
 export default function manifest(): MetadataRoute.Manifest {

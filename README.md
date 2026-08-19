@@ -230,9 +230,18 @@ Telegram'ning **web** versiyasida ishlatmoqchi bo'lsangiz
 
 ## Ma'lum cheklovlar
 
-- **Brend.** Interfeys va nom hali `sodda.ai` dan olingan. `NEXT_PUBLIC_BRAND_NAME`
-  o'zgaruvchisi bor, lekin logotip, matnlar va domen o'zingiznikiga almashtirilishi kerak
-  — bu huquqiy masala.
+- **Brend.** Nom va logo hali `sodda.ai` dan. Endi ular kodda qattiq
+  yozilmagan — `lib/brand.ts` yagona manba, ikkita o'zgaruvchi bilan
+  boshqariladi:
+
+  ```bash
+  NEXT_PUBLIC_BRAND_NAME=Mening.ai
+  NEXT_PUBLIC_BRAND_LOGO=/mening-logo.png   # public/ ichiga qo'ying
+  ```
+
+  Ular yon panel, sahifa sarlavhalari, manifest va **PPTX fayl
+  metadatasini** birdaniga o'zgartiradi. Domen esa alohida masala —
+  bu huquqiy jihat, ochilishdan oldin hal qilinishi kerak.
 - **SMS/telefon orqali kirish yo'q.** Yagona haqiqiy kirish yo'li — Telegram.
   `/api/auth/otp` endpointi bor va tekshiruvi to'g'ri, lekin kodni telefonga
   yuboruvchi provayder ulanmagan.

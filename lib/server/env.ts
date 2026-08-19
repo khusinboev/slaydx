@@ -1,4 +1,5 @@
 import "server-only";
+import { BRAND_NAME } from "../brand";
 
 /**
  * Serverdagi barcha sozlamalar shu yerdan o'qiladi.
@@ -51,7 +52,7 @@ export const env = {
   isProd,
   /** Absolyut tashqi manzil — cookie domeni, webhook va sitemap uchun kerak. */
   appUrl: str("APP_URL", isProd ? "" : "http://localhost:3000").replace(/\/+$/, ""),
-  brandName: str("NEXT_PUBLIC_BRAND_NAME", "Sodda.ai"),
+  brandName: BRAND_NAME,
 
   /**
    * Qo'shimcha ruxsat etilgan manzillar (vergul bilan).

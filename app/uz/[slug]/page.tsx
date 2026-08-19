@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { isToolSlug, TOOL_BY_SLUG } from "@/lib/tools";
 import { ToolWorkspace } from "@/components/forms/ToolWorkspace";
+import { BRAND_NAME } from "@/lib/brand";
 
 export function generateStaticParams() {
   return Object.keys(TOOL_BY_SLUG).map((slug) => ({ slug }));
@@ -16,7 +17,7 @@ export async function generateMetadata({
   const tool = TOOL_BY_SLUG[slug];
   if (!tool) return { title: "Topilmadi" };
   return {
-    title: `${tool.title} — Sodda.ai`,
+    title: `${tool.title} — ${BRAND_NAME}`,
     description: tool.description,
   };
 }

@@ -8,6 +8,7 @@ import { cn } from "@/lib/cn";
 import { creditTotal, useAppStore } from "@/lib/store";
 import { useUi } from "@/lib/ui";
 import { TOOL_ICONS } from "./icons";
+import { BRAND_LOGO, BRAND_NAME } from "@/lib/brand";
 
 const GROUPS = [
   { id: "mashhur", label: "Mashhur" },
@@ -46,14 +47,14 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           href="/uz"
           onClick={onNavigate}
           className={itemClass(pathname === "/uz")}
-          aria-label="SoddaAI"
+          aria-label={BRAND_NAME}
           style={{ height: 48 }}
         >
           {/* logo is a local static PNG; next/image not needed for 32px brand mark */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/logo.png" alt="Sodda.ai" width={32} height={32} className="size-8 rounded-lg object-cover" />
+          <img src={BRAND_LOGO} alt={BRAND_NAME} width={32} height={32} className="size-8 rounded-lg object-cover" />
           <span className="text-sidebar-foreground truncate text-[19px] leading-none font-medium">
-            Sodda.ai
+            {BRAND_NAME}
           </span>
           <House className="text-sidebar-foreground/90 ml-auto size-4 shrink-0" />
         </Link>

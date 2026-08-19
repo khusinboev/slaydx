@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono, Tinos } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/providers";
+import { BRAND_NAME } from "@/lib/brand";
 
 const geist = Geist({
   variable: "--font-geist",
@@ -24,7 +25,7 @@ const tinos = Tinos({
  * Brend nomi env dan keladi — o'z nomingizga o'tish bitta o'zgaruvchi
  * almashtirish bilan cheklanadi: nom, logo va domen o'zingizniki bo'lsin.
  */
-const BRAND = process.env.NEXT_PUBLIC_BRAND_NAME || "Sodda.ai";
+const BRAND = BRAND_NAME;
 const APP_URL = process.env.APP_URL || "http://localhost:3000";
 const DESCRIPTION =
   "Sun'iy intellekt yordamida slaydlar, insholar, kurs ishlari va boshqa hujjatlarni bir necha daqiqada yarating";

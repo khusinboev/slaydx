@@ -3,6 +3,7 @@ import { planSlide, slideNotes, SLIDE_IN, type SlideLayer, type SlidePlan } from
 import { buildSlideDeck } from "./slides";
 import { getSlideTheme } from "./slide-themes";
 import type { AcademicDoc, BuiltFile } from "./types";
+import { BRAND_SHORT } from "../brand";
 
 const W = SLIDE_IN.w;
 const H = SLIDE_IN.h;
@@ -108,7 +109,7 @@ export async function renderPptx(doc: AcademicDoc, fileName: string): Promise<Bu
   const pptx = new PptxGenJS();
   pptx.defineLayout({ name: "WIDE", width: W, height: H });
   pptx.layout = "WIDE";
-  pptx.author = doc.meta.author || "Sodda";
+  pptx.author = doc.meta.author || BRAND_SHORT;
   pptx.title = doc.meta.topic;
   pptx.subject = doc.meta.workLabel;
 
