@@ -10,12 +10,47 @@ export type ImageBytes = { data: string; type: "jpg" | "png"; w?: number; h?: nu
 export type FalSize = { width: number; height: number };
 
 const IMAGE_LAYOUTS = new Set(["title", "section", "bullets", "agenda", "quote", "closing"]);
-const MAX_IMAGES = 8;
 const FAL_DEFAULT_MODEL = "fal-ai/flux/schnell";
 
+/**
+ * Rasm byudjeti paketga bog'liq.
+ *
+ * Premium paketlarda ko'proq rasm va ko'proq inference qadami beriladi —
+ * «Premium» so'zi shu yerda haqiqiy farqqa aylanadi. Ilgari to'rttala
+ * paket ham 4 qadamli `schnell` va 8 ta rasm olardi.
+ */
+const IMAGE_LIMIT = { standard: 8, premium: 10 } as const;
+const STEPS = { standard: 4, premium: 8 } as const;
+
+export type VisualTier = { premium?: boolean; seed?: number };
+
+/**
+ * Mavzudan barqaror seed.
+ *
+ * Bitta deck ichidagi barcha rasmlar bir xil seed bilan chiziladi —
+ * shunda 8–10 rasm bitta «kamera»dan olingandek bir uslubda chiqadi.
+ * Ilgari seed berilmasdi va har slayd o'z uslubida bo'lardi: bir joyda
+ * akvarel, boshqasida foto, uchinchisida 3D — deck yamoqqa o'xshardi.
+ */
+export function seedFrom(topic: string): number {
+  let h = 2166136261;
+  for (const ch of topic) {
+    h ^= ch.codePointAt(0)!;
+    h = Math.imul(h, 16777619);
+  }
+  return Math.abs(h) % 1_000_000;
+}
+
+function falSteps(premium: boolean) {
+  const raw = Number(premium ? process.env.FAL_STEPS_PREMIUM : process.env.FAL_STEPS);
+  if (Number.isFinite(raw) && raw >= 1 && raw <= 50) return Math.round(raw);
+  return premium ? STEPS.premium : STEPS.standard;
+}
+
 /** `.env` dagi FAL_MODEL ni hurmat qiladi — ilgari URL qattiq yozilgan edi. */
-function falUrl() {
-  const model = (process.env.FAL_MODEL || FAL_DEFAULT_MODEL).trim().replace(/^\/+|\/+$/g, "");
+function falUrl(premium = false) {
+  const picked = premium ? process.env.FAL_MODEL_PREMIUM || process.env.FAL_MODEL : process.env.FAL_MODEL;
+  const model = (picked || FAL_DEFAULT_MODEL).trim().replace(/^\/+|\/+$/g, "");
   return `https://fal.run/${model || FAL_DEFAULT_MODEL}`;
 }
 
@@ -31,6 +66,7 @@ export async function generateFalImage(
   prompt: string,
   size: FalSize,
   deadline?: number,
+  tier: VisualTier = {},
 ): Promise<SlideImage | null> {
   const key = falKey();
   if (!key) {
@@ -41,7 +77,7 @@ export async function generateFalImage(
   const budget = deadline ? Math.min(45_000, Math.max(0, deadline - Date.now())) : 45_000;
   if (budget < 2_000) return null;
   try {
-    const res = await fetch(falUrl(), {
+    const res = await fetch(falUrl(tier.premium), {
       method: "POST",
       signal: AbortSignal.timeout(budget),
       headers: {
@@ -51,8 +87,9 @@ export async function generateFalImage(
       body: JSON.stringify({
         prompt,
         image_size: { width: size.width, height: size.height },
-        num_inference_steps: 4,
+        num_inference_steps: falSteps(Boolean(tier.premium)),
         num_images: 1,
+        ...(tier.seed == null ? {} : { seed: tier.seed }),
         enable_safety_checker: true,
         output_format: "jpeg",
       }),
@@ -136,16 +173,27 @@ export async function fetchImageBytes(url: string): Promise<ImageBytes | null> {
   }
 }
 
-async function persistImage(remote: SlideImage): Promise<SlideImage> {
+/**
+ * Rasmni o'zimizda saqlaymiz.
+ *
+ * `null` qaytishi muhim: ilgari yuklab olish yiqilsa provayderning
+ * MUDDATLI URL i qaytarilardi va bazaga yozilardi. Fayl bir necha soatdan
+ * keyin 404 bo'lardi — foydalanuvchi ochgan taqdimotda rasm o'rnida
+ * bo'shliq qolardi. Endi bunday rasm umuman biriktirilmaydi.
+ */
+async function persistImage(remote: SlideImage): Promise<SlideImage | null> {
   const bytes = await fetchImageBytes(remote.url);
-  if (!bytes) return remote;
+  if (!bytes) {
+    console.warn("[fal] rasm saqlanmadi, tashlandi");
+    return null;
+  }
   return { url: `data:${bytes.data}`, alt: remote.alt };
 }
 
 export async function searchSlideImages(query: string, limit = 6): Promise<SlideImage[]> {
   const q = query.replace(/\s+/g, " ").trim();
   if (!q) return [];
-  const n = Math.max(1, Math.min(limit, MAX_IMAGES));
+  const n = Math.max(1, Math.min(limit, IMAGE_LIMIT.premium));
   const out: SlideImage[] = [];
   const size = { width: 1024, height: 576 };
   for (let i = 0; i < n; i++) {
@@ -153,7 +201,10 @@ export async function searchSlideImages(query: string, limit = 6): Promise<Slide
       visualPrompt(q, i === 0 ? "cover" : `scene ${i + 1}`, i === 0 ? "title" : "section", size),
       size,
     );
-    if (im) out.push(await persistImage(im));
+    if (im) {
+      const kept = await persistImage(im);
+      if (kept) out.push(kept);
+    }
   }
   return out;
 }
@@ -186,16 +237,18 @@ export async function attachSlideImages(
   topic: string,
   visual: SlideVisual = "classic",
   budgetMs = 60_000,
+  tier: VisualTier = {},
 ) {
   if (!falKey()) {
     console.warn("[fal] skip images: no key");
     return slides;
   }
   const deadline = Date.now() + budgetMs;
+  const seed = tier.seed ?? seedFrom(topic);
   const jobs = slides
     .map((s, i) => ({ s, i }))
     .filter(({ s }) => IMAGE_LAYOUTS.has(s.layout) && !s.image)
-    .slice(0, MAX_IMAGES);
+    .slice(0, tier.premium ? IMAGE_LIMIT.premium : IMAGE_LIMIT.standard);
   if (!jobs.length) return slides;
 
   const prompts = await writeSlideImagePrompts(
@@ -214,8 +267,11 @@ export async function attachSlideImages(
     if (!slot) return null;
     const size = slotPixels(slot);
     const prompt = prompts[s.id] || composeSlideImagePrompt(topic, s, size);
-    const im = await generateFalImage(prompt, size, deadline);
-    if (im) s.image = await persistImage(im);
+    const im = await generateFalImage(prompt, size, deadline, { ...tier, seed });
+    if (im) {
+      const kept = await persistImage(im);
+      if (kept) s.image = kept;
+    }
     return im;
   });
   if (skipped) console.warn("[fal] image budget exhausted, skipped", skipped);
