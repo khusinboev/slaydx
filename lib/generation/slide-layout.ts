@@ -190,11 +190,27 @@ function pushFooter(
  * preview va yuklab olingan PPTX bir xil ko'rinmasdi. Endi o'lcham SHU
  * YERDA hisoblanadi, demak ikkala chiqish ham bir xil bo'ladi.
  */
+/**
+ * Belgining o'rtacha kengligi (em ulushida).
+ *
+ * `Calibri` tor shrift (~0.48 em), lekin u faqat Windows'da bor. macOS,
+ * Linux va LibreOffice uni almashtiradi va almashtiruv METRIK MOS
+ * bo'lishi shart emas: shu mashinada `fc-match Calibri` → Noto Sans
+ * (~0.53 em), ya'ni ayni matn ~10% kengroq chiziladi. Oldindan
+ * hisoblangan o'lcham esa aynan shu kenglikka tayanadi.
+ *
+ * Shuning uchun eng keng ehtimoliy almashtiruvga qarab hisoblaymiz:
+ * slayd biroz siyrakroq bo'ladi, lekin matn hech qayerda qutidan
+ * chiqmaydi. Shrift PPTX ichiga joylashtirilgandan keyin (kelajakdagi
+ * ish) buni 0.5 ga qaytarish mumkin.
+ */
+const CHAR_EM = 0.55;
+
 function fitSize(text: string, box: Box, base: number, min: number): number {
   const chars = text.trim().length;
   if (!chars) return base;
   for (let size = base; size > min; size -= 1) {
-    const perLine = Math.max(1, Math.floor((box.w * 72) / (size * 0.5)));
+    const perLine = Math.max(1, Math.floor((box.w * 72) / (size * CHAR_EM)));
     const rows = Math.ceil(chars / perLine);
     if (rows * size * 1.3 <= box.h * 72) return size;
   }
@@ -206,7 +222,7 @@ function fitLines(lines: string[], box: Box, base: number, min: number, paraSpac
   const items = lines.filter(Boolean);
   if (!items.length) return base;
   for (let size = base; size > min; size -= 1) {
-    const perLine = Math.max(1, Math.floor(((box.w - 0.28) * 72) / (size * 0.5)));
+    const perLine = Math.max(1, Math.floor(((box.w - 0.28) * 72) / (size * CHAR_EM)));
     let rows = 0;
     for (const l of items) rows += Math.max(1, Math.ceil(l.length / perLine));
     if (rows * size * 1.3 + items.length * paraSpacePt <= box.h * 72) return size;
