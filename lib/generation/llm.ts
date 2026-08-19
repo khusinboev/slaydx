@@ -27,6 +27,28 @@ export type LlmOpts = {
   timeoutMs?: number;
 };
 
+/**
+ * Chaqiruv natijasi.
+ *
+ * `retryable` — xato o'tkinchimi. Tarmoq uzilishi, 429 (rate limit) va
+ * 5xx qayta urinishga arziydi; 4xx (noto'g'ri so'rov, kalit) va to'liq
+ * timeout esa yo'q — timeout byudjetni allaqachon yeb bo'lgan.
+ */
+type LlmResult = { text: string | null; retryable?: boolean };
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/**
+ * LLM ga so'rov — o'tkinchi xatoda qayta urinish bilan.
+ *
+ * Nega kerak: jonli sinovda Gemini ga bir nechta parallel so'rov ketganda
+ * `fetch failed` uzilishi kuzatildi. Qayta urinish bo'lmagani uchun bitta
+ * uzilish BUTUN hujjatni yo'q qilardi — 4 ta bo'lim ham bo'sh qaytib,
+ * ish `FAILED` bo'lardi va foydalanuvchi hech narsa olmasdi.
+ *
+ * Timeout bo'yicha qayta urinilmaydi: byudjet allaqachon sarflangan,
+ * ikkinchi urinish worker muddatini buzardi.
+ */
 export async function llmComplete(
   system: string,
   user: string,
@@ -34,8 +56,23 @@ export async function llmComplete(
   opts: LlmOpts = {},
 ): Promise<string | null> {
   const provider = llmProvider();
-  if (provider === "gemini") return completeGemini(system, user, maxTokens, opts);
-  if (provider === "xai") return completeXai(system, user, maxTokens, opts);
+  if (!provider) return null;
+  const call = provider === "gemini" ? completeGemini : completeXai;
+  const budget = opts.timeoutMs ?? 40_000;
+  const started = Date.now();
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const left = budget - (Date.now() - started);
+    // Qayta urinish uchun kamida 6 soniya qolishi kerak.
+    if (attempt > 0 && left < 6_000) break;
+    const res = await call(system, user, maxTokens, {
+      ...opts,
+      timeoutMs: attempt === 0 ? budget : Math.min(left, budget),
+    });
+    if (res.text) return res.text;
+    if (!res.retryable) break;
+    await sleep(500 * 2 ** attempt);
+  }
   return null;
 }
 
@@ -44,9 +81,9 @@ async function completeGemini(
   user: string,
   maxTokens: number,
   opts: LlmOpts,
-): Promise<string | null> {
+): Promise<LlmResult> {
   const key = process.env.GEMINI_API_KEY;
-  if (!key) return null;
+  if (!key) return { text: null, retryable: false };
   const model = llmModel();
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? 40_000);
@@ -76,16 +113,18 @@ async function completeGemini(
     };
     if (!res.ok) {
       console.warn("[gemini]", res.status, data.error?.message ?? "request failed");
-      return null;
+      return { text: null, retryable: res.status === 429 || res.status >= 500 };
     }
     const text = data.candidates?.[0]?.content?.parts
       ?.map((p) => p.text ?? "")
       .join("")
       .trim();
-    return text || null;
+    return { text: text || null, retryable: false };
   } catch (e) {
-    console.warn("[gemini]", e instanceof Error ? e.message : "network error");
-    return null;
+    const message = e instanceof Error ? e.message : "network error";
+    console.warn("[gemini]", message);
+    // `aborted` — bizning timeout'imiz; qolgani tarmoq uzilishi.
+    return { text: null, retryable: !/abort/i.test(message) };
   } finally {
     clearTimeout(timer);
   }
@@ -96,9 +135,9 @@ async function completeXai(
   user: string,
   maxTokens: number,
   opts: LlmOpts,
-): Promise<string | null> {
+): Promise<LlmResult> {
   const key = process.env.XAI_API_KEY;
-  if (!key) return null;
+  if (!key) return { text: null, retryable: false };
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? 25_000);
   try {
@@ -117,15 +156,24 @@ async function completeXai(
           { role: "system", content: system },
           { role: "user", content: user },
         ],
+        // Gemini o'chib qolganda slayd/dars/glossariy JSON so'raydi;
+        // `response_format` bo'lmasa model matn qaytarib, parse yiqilardi.
+        ...(opts.json ? { response_format: { type: "json_object" } } : {}),
       }),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.warn("[xai]", res.status);
+      return { text: null, retryable: res.status === 429 || res.status >= 500 };
+    }
     const data = (await res.json()) as {
       choices?: { message?: { content?: string } }[];
     };
-    return data.choices?.[0]?.message?.content?.trim() || null;
-  } catch {
-    return null;
+    const text = data.choices?.[0]?.message?.content?.trim();
+    return { text: text || null, retryable: false };
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "network error";
+    console.warn("[xai]", message);
+    return { text: null, retryable: !/abort/i.test(message) };
   } finally {
     clearTimeout(timer);
   }
