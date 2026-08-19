@@ -156,7 +156,7 @@ export async function deleteGeneration(id: string, userId: string): Promise<bool
   return rows.length > 0;
 }
 
-/** Faqat navbatdagi ishni bekor qilish mumkin (REJA.md, 4-bosqich). */
+/** Faqat navbatdagi ishni bekor qilish mumkin. */
 export async function cancelGeneration(id: string, userId: string): Promise<boolean> {
   const rows = await query<{ id: string }>(
     `UPDATE generations

@@ -118,7 +118,7 @@ export const env = {
   },
 
   storageDir: str("STORAGE_DIR", ".data/files"),
-  /** Fayl necha soatdan keyin o'chadi (REJA.md: ~24 soat). */
+  /** Fayl necha soatdan keyin o'chadi (odatda ~24 soat). */
   fileTtlHours: int("FILE_TTL_HOURS", 72),
 
   click: {

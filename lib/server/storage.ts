@@ -7,7 +7,7 @@ import { env } from "./env";
  *
  * Ilgari fayl faqat brauzerdagi IndexedDB da edi — boshqa qurilmadan
  * kirilsa yo'q, brauzer tozalansa yo'q. Endi bayt bazada turadi va
- * `expires_at` bo'yicha avtomatik o'chadi (REJA.md, 5-bosqich TTL).
+ * `expires_at` bo'yicha avtomatik o'chadi (TTL).
  */
 
 /** Bazaga yoziladigan eng katta fayl. Kattaroq PPTX odatda rasm sifati muammosi. */

@@ -22,7 +22,7 @@ const tinos = Tinos({
 
 /**
  * Brend nomi env dan keladi — o'z nomingizga o'tish bitta o'zgaruvchi
- * (REJA.md, 1-bosqich: «nom, logo, domen o'zingizniki bo'lsin»).
+ * almashtirish bilan cheklanadi: nom, logo va domen o'zingizniki bo'lsin.
  */
 const BRAND = process.env.NEXT_PUBLIC_BRAND_NAME || "Sodda.ai";
 const APP_URL = process.env.APP_URL || "http://localhost:3000";

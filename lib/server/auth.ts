@@ -8,10 +8,10 @@ import { rowToUser, safeEqual, userColumns, type SessionUser } from "./session";
  * Telegram autentifikatsiyasi va zaxira OTP.
  *
  * Ikkala Telegram oqimi ham imzoni server tomonda tekshiradi — klientdan
- * kelgan `user_id` ga hech qachon ishonilmaydi (REJA.md dagi ogohlantirish).
+ * kelgan `user_id` ga hech qachon ishonilmaydi.
  */
 
-/** Yangi foydalanuvchiga beriladigan tanish bonusi (REJA.md, 3-bosqich). */
+/** Yangi foydalanuvchiga beriladigan tanish bonusi. */
 export const SIGNUP_BONUS_POINTS = 3000;
 
 export type TelegramProfile = {

@@ -226,7 +226,7 @@ Telegram'ning **web** versiyasida ishlatmoqchi bo'lsangiz
 
 - **Brend.** Interfeys va nom hali `sodda.ai` dan olingan. `NEXT_PUBLIC_BRAND_NAME`
   o'zgaruvchisi bor, lekin logotip, matnlar va domen o'zingiznikiga almashtirilishi kerak
-  (`REJA.md`, 1-bosqich) — bu huquqiy masala.
+  — bu huquqiy masala.
 - **SMS/telefon orqali kirish yo'q.** Yagona haqiqiy kirish yo'li — Telegram.
   `/api/auth/otp` endpointi bor va tekshiruvi to'g'ri, lekin kodni telefonga
   yuboruvchi provayder ulanmagan.
@@ -237,4 +237,3 @@ Telegram'ning **web** versiyasida ishlatmoqchi bo'lsangiz
   keladigan JPEG, lekin yangilanish chiqsa ko'tarish kerak.
 - Fayllar Postgres `BYTEA` da (25 MB chegara). Hajm o'sganda S3 ga ko'chirish kerak.
 
-Keyingi bosqichlar: `REJA.md`.

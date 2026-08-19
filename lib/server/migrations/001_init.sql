@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS users (
   photo_url       TEXT,
   language        TEXT NOT NULL DEFAULT 'uz',
 
-  -- Uch qatlamli hamyon (REJA.md, 3-bosqich). Hech qachon manfiy bo'lmaydi.
+  -- Uch qatlamli hamyon. Hech qachon manfiy bo'lmaydi.
   points          BIGINT NOT NULL DEFAULT 0 CHECK (points  >= 0),
   quota           BIGINT NOT NULL DEFAULT 0 CHECK (quota   >= 0),
   balance         BIGINT NOT NULL DEFAULT 0 CHECK (balance >= 0),

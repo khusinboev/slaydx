@@ -9,7 +9,5 @@ node_modules
 .data
 namunalar
 README.md
-REJA.md
-GENERATION_MANBA.md
 Dockerfile
 docker-compose.yml
