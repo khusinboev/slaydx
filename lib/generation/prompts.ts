@@ -45,6 +45,19 @@ export function writerSystemPrompt(meta: DocMeta): string {
     meta.kind === "imrad"
       ? `IMRAD: Introduction, Methods, Results, Discussion. Metodlar haqiqiy tahlil usuli bo‘lsin, uydirma tajriba emas.`
       : `Kirishda: shu mavzuning dolzarbligi, maqsad, vazifa, obyekt, metod.`,
+    // Kurs ishi referatdan 4 barobar qimmat, lekin ilgari bir xil dvigatel
+    // bilan yozilardi. Farq — talab darajasida: tadqiqot savoli, uch bob,
+    // manba bilan ishlash va aniq amaliy misol.
+    meta.toolId === "coursework"
+      ? [
+          `BU KURS ISHI — referat EMAS. Farqi qat’iy saqlansin:`,
+          `— kirishda ANIQ tadqiqot savoli savol shaklida yozilsin («… qanday ta’sir qiladi?»);`,
+          `— obyekt va predmet alohida ajratilsin;`,
+          `— uch bob: nazariy asos → tahlil → muammo va tavsiya;`,
+          `— har bobda O‘zbekiston sharoitidan kamida bitta aniq misol;`,
+          `— xulosada 5 ta raqamlangan, tekshirib bo‘ladigan xulosa.`,
+        ].join("\n")
+      : "",
     meta.extra ? `Qo‘shimcha talab: ${meta.extra}` : "",
     sourceBlock(meta),
   ]

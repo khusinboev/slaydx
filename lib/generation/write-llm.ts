@@ -7,6 +7,8 @@ import {
   isGenericFiller,
   mapPool,
   parseManualToc,
+  referenceSearchPlan,
+  unverifiedReferenceNote,
   remainingMs,
   section,
   splitCodeBlocks,
@@ -33,6 +35,10 @@ function wantsCodeSample(meta: DocMeta) {
 
 function isReferenceLine(r: string): boolean {
   if (r.length < 24 || r.length > 280) return false;
+  // Tekshirib bo'lmaydigan «aniqlik»: DOI, ISSN, jurnal tomi/soni va
+  // havolalar. Model bularni deyarli har doim uydiradi va aynan shular
+  // o'qituvchi tekshirganda fosh bo'ladi.
+  if (/doi[:\s.]|doi\.org|\bISSN\b|\bISBN\b|https?:\/\/|\bvol\.|\bno\.\s*\d|\bP\.\s*\d+[–-]\d+/i.test(r)) return false;
   if (/^(ushbu|tadqiqot|maqola|izoh|manba|quyida|mana|these|the following|ниже|данн)/i.test(r)) return false;
   const sentences = (r.match(/[.!?]\s+[A-ZА-ЯЁO‘]/g) ?? []).length;
   if (sentences > 3) return false;
@@ -77,7 +83,9 @@ type OutlineChapter = { title: string; subs: { title: string; brief: string }[] 
 async function buildOutline(meta: DocMeta, sys: string, L: ReturnType<typeof sectionLabels>, deadline?: number) {
   const pages = Math.max(4, meta.targetPages || 8);
   const long = pages >= 18;
-  const chapterN = long ? 3 : 2;
+  // Kurs ishida uch bob TUZILMA talabi — hajmga bog'liq emas. Ilgari
+  // 10–15 betlik kurs ishi ikki bob olardi va referatdan farq qilmasdi.
+  const chapterN = meta.toolId === "coursework" || long ? 3 : 2;
   const manual = meta.tocMethod === "manual" ? parseManualToc(meta.tocText || meta.extra) : [];
 
   if (manual.length) {
@@ -189,7 +197,10 @@ export async function writeWriterWithLlm(meta: DocMeta, deadline?: number): Prom
     {
       id: "kirish",
       title: L.intro,
-      brief: `Faqat «${topic}» haqida: dolzarblik, maqsad, 3–4 vazifa, obyekt/predmet, usul.`,
+      brief:
+        meta.toolId === "coursework"
+          ? `«${topic}» bo‘yicha: dolzarblik; ANIQ tadqiqot savoli (savol belgisi bilan); maqsad; 4 ta vazifa; obyekt va predmet ALOHIDA; tadqiqot usullari.`
+          : `Faqat «${topic}» haqida: dolzarblik, maqsad, 3–4 vazifa, obyekt/predmet, usul.`,
       min: Math.max(3, Math.round(pages / 4)),
     },
     ...chapters.map((ch, i) => ({
@@ -266,7 +277,10 @@ export async function writeWriterWithLlm(meta: DocMeta, deadline?: number): Prom
     }
   }
 
-  if (meta.includeVisuals && remainingMs(deadline) > 12_000) {
+  // Kurs ishida jadval tuzilma talabi — «Jadval va rasmlar: Yo'q» tanlansa ham
+  // kamida bitta tasnif jadvali bo'ladi.
+  const wantsTable = meta.includeVisuals || meta.toolId === "coursework";
+  if (wantsTable && remainingMs(deadline) > 12_000) {
     const tableRaw = await llmComplete(
       sys,
       `«${topic}» bo‘yicha 1 ta qisqa jadval. JSON: {"caption":"","headers":["",""],"rows":[["",""]]}. 3–5 qator. Uydirma foiz/DOI yo‘q. Atama yoki bosqich taqqoslash.`,
@@ -290,7 +304,7 @@ export async function writeWriterWithLlm(meta: DocMeta, deadline?: number): Prom
     remainingMs(deadline) > 8_000
       ? await llmComplete(
           sys,
-          `«${topic}» bo‘yicha 6–8 ta USLUBIY adabiyot qatori. Format: Muallif. Nom. – Shahar: Nashriyot, yil.\nSoxta DOI/jurnal/GOST YO‘Q. Umumiy darslik/qo‘llanma, faqat shu mavzu sohasida.`,
+          `«${topic}» bo‘yicha ${meta.toolId === "coursework" ? "8–10" : "6–8"} ta USLUBIY adabiyot qatori. Format: Muallif. Nom. – Shahar: Nashriyot, yil.\nSoxta DOI/ISSN/jurnal tomi/GOST YO‘Q. Umumiy darslik yoki qo‘llanma, faqat shu mavzu sohasida.`,
           700,
           { timeoutMs: Math.min(25_000, remainingMs(deadline)) },
         )
@@ -300,38 +314,100 @@ export async function writeWriterWithLlm(meta: DocMeta, deadline?: number): Prom
     .filter(isReferenceLine)
     .slice(0, 10);
 
+  /**
+   * Maqolaga annotatsiya va kalit so'zlar.
+   *
+   * Ilgari annotatsiya faqat IMRAD yo'lida bor edi. `kind=standard`
+   * maqola esa annotatsiyasiz chiqardi — bunday maqolani hech bir jurnal
+   * qabul qilmaydi, ya'ni vosita o'z vazifasini bajarmasdi.
+   */
+  let abstracts: AcademicDoc["abstracts"];
+  if (meta.toolId === "article" && remainingMs(deadline) > 12_000) {
+    const absRaw = await llmComplete(
+      sys,
+      `«${topic}» maqolasi uchun annotatsiya. JSON: {"text":"","keywords":""}. text — 4–6 gap: muammo, maqsad, yondashuv, xulosa. keywords — 5–7 ta atama, vergul bilan.`,
+      800,
+      { json: true, timeoutMs: Math.min(25_000, remainingMs(deadline)) },
+    );
+    const abs = parseLlmObject<{ text?: string; keywords?: string }>(absRaw);
+    const text = String(abs?.text ?? "").trim();
+    if (text.length > 80) {
+      abstracts = [
+        {
+          lang: meta.language,
+          label: L.abstract,
+          text: text.slice(0, 900),
+          keywords: String(abs?.keywords ?? topic).slice(0, 160),
+        },
+      ];
+    }
+  }
+
   const tables = (meta as DocMeta & { _tables?: AcademicDoc["tables"] })._tables;
+
+  // Model yetarli manba bermasa uydirmaymiz — qidiruv rejasini beramiz.
+  const refPlan = references.length >= 4 ? null : referenceSearchPlan(topic, meta.subject, meta.language);
 
   const doc: AcademicDoc = {
     meta,
     titlePage: true,
     toc: true,
     sections,
+    abstracts,
     tables,
-    references:
-      references.length >= 4
-        ? references
-        : [
-            `${topic}. O‘quv qo‘llanma. – Toshkent: O‘qituvchi, 2020.`,
-            `Soha bo‘yicha ma’ruza matnlari. – Toshkent, 2019.`,
-            `O‘zbekiston Respublikasi Oliy ta’lim, fan va innovatsiyalar vazirligi. O‘quv-uslubiy ko‘rsatmalar. – Toshkent, 2022.`,
-            `Umumiy nazariy asoslar. O‘quv-uslubiy qo‘llanma. – ${meta.city || "Toshkent"}, 2018.`,
-          ],
+    references: refPlan ? refPlan.queries : references,
+    // Ro'yxat qayerdan kelganiga qarab ogohlantirish. Model bergan
+    // manbalar ham TEKSHIRILMAGAN hisoblanadi — bu yerda jimlik
+    // foydalanuvchini akademik xavf ostida qoldirardi.
+    referencesNote: refPlan ? refPlan.note : unverifiedReferenceNote(meta.language),
   };
 
-  if (wordCount(doc) < want * 0.55 && remainingMs(deadline) > 20_000) {
+  /**
+   * Hajmni va'daga yetkazish.
+   *
+   * Ilgari bu bitta urinish edi va faqat 55% dan past bo'lgandagina ishga
+   * tushardi. Natijada «15–20 bet» so'ragan foydalanuvchi muntazam ravishda
+   * 12 bet olardi va bu hech qayerda qayd etilmasdi. Endi 90% ga
+   * yetguncha (yoki byudjet tugaguncha) qo'shimcha tahlil yoziladi;
+   * shundan keyin ham yetmasa `buildArtifact` ishni xato bilan yakunlaydi.
+   *
+   * Qo'shimchalar UMUMIY to'ldirgich emas — har biri mavzuning aniq
+   * qirrasini so'raydi, shuning uchun matn shablonga aylanmaydi.
+   */
+  const TOPUPS = [
+    {
+      id: "amaliy",
+      title: (t: string) => `${t}: amaliy tahlil`,
+      brief: (t: string) =>
+        `«${t}» bo‘yicha aniq misol, holat va raqamsiz kuzatish. O‘zbekiston sharoitidagi qo‘llanish. Oldingi boblarni takrorlamang.`,
+    },
+    {
+      id: "muammo",
+      title: (t: string) => `${t}: muammo va yechim`,
+      brief: (t: string) =>
+        `«${t}» bo‘yicha tipik qiyinchilik, uning sababi va amaliy yechim. Har band bitta muammoga bag‘ishlansin. Takror bo‘lmasin.`,
+    },
+  ];
+
+  for (const topup of TOPUPS) {
+    const have = wordCount(doc);
+    if (have >= want * 0.9) break;
+    if (remainingMs(deadline) < 25_000) {
+      console.warn("[write-llm] topup skipped: byudjet tugadi", have, "/", want);
+      break;
+    }
+    const need = want - have;
     const extra = await writeSection(
       sys,
-      `${topic}: chuqurlashtirish`,
-      `«${topic}» bo‘yicha qo‘shimcha tahlil: aniq misol, cheklov, amaliy qadam. Oldingi bobni takrorlamang.`,
+      topup.title(topic),
+      topup.brief(topic),
       meta,
-      4,
-      Math.min(40_000, remainingMs(deadline)),
+      Math.max(4, Math.min(12, Math.round(need / 110))),
+      Math.min(45_000, remainingMs(deadline)),
     );
-    if (extra.length) {
-      const insertAt = Math.max(1, sections.length - 1);
-      sections.splice(insertAt, 0, section("extra", `${topic}: chuqurlashtirish`, extra));
-    }
+    if (!extra.length) break;
+    const insertAt = Math.max(1, sections.length - 1);
+    sections.splice(insertAt, 0, section(topup.id, topup.title(topic), extra));
   }
 
   return doc;

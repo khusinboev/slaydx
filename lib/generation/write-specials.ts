@@ -84,6 +84,32 @@ export async function writeLessonWithLlm(meta: DocMeta, deadline?: number): Prom
   if (!data?.stages?.length) return null;
   const L = sectionLabels(meta.language);
   const stages = data.stages.slice(0, 8);
+  /**
+   * Daqiqalarni dars davomiyligiga moslash.
+   *
+   * Promptda «yig'indi ${d} ga teng bo'lsin» deyilgan, lekin hech qachon
+   * TEKSHIRILMAGAN: 45 daqiqalik darsda bosqichlar yig'indisi 60 yoki 35
+   * chiqardi va o'qituvchi buni qo'lda tuzatishga majbur bo'lardi.
+   * Endi nisbat saqlangan holda qayta taqsimlanadi, qoldiq esa eng katta
+   * bosqichga qo'shiladi.
+   */
+  const rawMinutes = stages.map((st) => Math.max(1, Math.round(Number(st.minutes) || 0) || 1));
+  const rawSum = rawMinutes.reduce((a, b) => a + b, 0);
+  const minutes =
+    rawSum === d ? rawMinutes : rawMinutes.map((m) => Math.max(1, Math.round((m / rawSum) * d)));
+  // Yaxlitlash qoldig'ini eng uzun bosqichga qo'shamiz/ayiramiz.
+  // Tsikl chegaralangan: har bosqich kamida 1 daqiqa bo'lgani uchun
+  // kamaytirish imkonsiz holat ham bo'lishi mumkin.
+  for (let guard = 0; guard < 200; guard++) {
+    const diff = d - minutes.reduce((a, b) => a + b, 0);
+    if (diff === 0) break;
+    const peak = Math.max(...minutes);
+    if (diff < 0 && peak <= 1) break;
+    minutes[minutes.indexOf(peak)] += diff > 0 ? 1 : -1;
+  }
+  stages.forEach((st, i) => {
+    st.minutes = minutes[i];
+  });
   const topicHits = stages.filter((st) =>
     `${st.title} ${st.activity}`.toLowerCase().includes(meta.topic.toLowerCase().slice(0, 12)),
   ).length;
@@ -299,12 +325,72 @@ export async function writeResumeWithLlm(
   const name = String(values.fullName || meta.author || "F.I.Sh");
   const contact = [values.location, values.email, values.phone].filter(Boolean).join(" · ") || meta.city;
 
+  /**
+   * Model kiritilmagan ish joyi yoki yilni qo'shmasligi kerak.
+   *
+   * Promptda «yil/joy uydirmang» deyilgan, lekin tekshirilmagan edi —
+   * rezyume esa hujjat emas, DA'VO: yo'q ish joyi yozilgan CV bilan
+   * suhbatga borish foydalanuvchi uchun jiddiy zarar.
+   *
+   * Tekshiruv ehtiyotkor: model qayta ifodalashi mumkin, shuning uchun
+   * yil ANIQ mos kelishi, tashkilot esa kamida bitta mazmunli bo'lakni
+   * kiritilgan matndan olishi talab qilinadi.
+   */
+  const inputFacts = [values.experience, values.education, values.summary, values.skills]
+    .map((x) => asText(x).toLowerCase())
+    .join(" ");
+  const inputYears = new Set(inputFacts.match(/\b(19|20)\d{2}\b/g) ?? []);
+
+  /** Tashkilot/joy nomi kiritilgan matndan olinganmi. */
+  function orgIsKnown(head: string): boolean {
+    if (!inputFacts.trim()) return true;
+    const tokens = head
+      .toLowerCase()
+      .replace(/\b(?:19|20)\d{2}\b/g, " ")
+      .split(/[^\p{L}\p{N}]+/u)
+      .filter((t) => t.length >= 4);
+    if (!tokens.length) return true;
+    return tokens.some((t) => inputFacts.includes(t));
+  }
+
+  /**
+   * Kiritilmagan yilni olib tashlaydi.
+   *
+   * Model ko'pincha mantiqiy, lekin O'YLAB TOPILGAN sana qo'shadi:
+   * bakalavr 2021-yilda tugagan bo'lsa, u «2017–2021» deb yozadi.
+   * Taxmin to'g'ri bo'lishi mumkin, lekin rezyume — da'vo hujjati:
+   * u yerda faqat foydalanuvchi bergan sana turishi kerak.
+   *
+   * Oraliqda bitta yil notanish bo'lsa butun oraliq olib tashlanadi —
+   * yarim oraliq («–2021») ma'nosiz.
+   */
+  function stripUnknownYears(text: string): string {
+    if (!inputYears.size) return text;
+    return text
+      .replace(/\b(?:19|20)\d{2}\s*[–—-]\s*(?:19|20)\d{2}\b/g, (range) =>
+        (range.match(/\b(?:19|20)\d{2}\b/g) ?? []).every((y) => inputYears.has(y)) ? range : "",
+      )
+      .replace(/\b(?:19|20)\d{2}\b/g, (y) => (inputYears.has(y) ? y : ""))
+      .replace(/\s*·\s*(?=·|$)/g, "")
+      .replace(/\s{2,}/g, " ")
+      .replace(/^[\s·,;—–-]+|[\s·,;—–-]+$/g, "")
+      .trim();
+  }
+
   const expBlocks: Block[] = [];
   let lastHead = "";
+  let dropped = 0;
   for (const item of expItems.slice(0, 4)) {
     if (!item || typeof item !== "object") continue;
     const o = item as Record<string, unknown>;
-    const head = [asText(o.period), asText(o.role), asText(o.org)].filter(Boolean).join(" — ");
+    const rawHead = [asText(o.period), asText(o.role), asText(o.org)].filter(Boolean).join(" — ");
+    // Uydirma ish joyi — butun band tashlanadi; uydirma yil — faqat yil.
+    if (rawHead && !orgIsKnown(rawHead)) {
+      console.warn("[resume] kiritilmagan ish joyi tashlandi:", rawHead.slice(0, 80));
+      dropped += 1;
+      continue;
+    }
+    const head = stripUnknownYears(rawHead);
     if (head && head !== lastHead) {
       expBlocks.push({ kind: "h3", text: clip(head, 120) });
       lastHead = head;
@@ -320,6 +406,9 @@ export async function writeResumeWithLlm(
     }
   }
   if (!expBlocks.length) {
+    // Hammasi filtrdan o'tmagan bo'lsa foydalanuvchi yozganini o'zini beramiz —
+    // uydirma tajribadan ko'ra xom matn yaxshiroq.
+    if (dropped) console.warn("[resume] barcha tajriba bandlari tashlandi, xom matn ishlatiladi");
     const rawExp = asText(values.experience);
     if (rawExp) expBlocks.push({ kind: "p", text: clip(rawExp, 800) });
   }
@@ -327,12 +416,12 @@ export async function writeResumeWithLlm(
   const eduBlocks: Block[] = [];
   for (const item of eduItems.slice(0, 3)) {
     if (!item || typeof item !== "object") {
-      const t = asText(item);
+      const t = stripUnknownYears(asText(item));
       if (t) eduBlocks.push({ kind: "p", text: t });
       continue;
     }
     const o = item as Record<string, unknown>;
-    const line = [asText(o.place), asText(o.degree), asText(o.years)].filter(Boolean).join(" · ");
+    const line = stripUnknownYears([asText(o.place), asText(o.degree), asText(o.years)].filter(Boolean).join(" · "));
     if (line) eduBlocks.push({ kind: "p", text: clip(line, 200) });
   }
 
@@ -359,7 +448,10 @@ export async function writeMapWithLlm(meta: DocMeta, deadline?: number): Promise
   const weekly = Math.max(1, meta.weeklyHours);
   const total = Math.max(weekly, meta.totalHours);
   const weeks = Math.max(8, Math.min(36, Math.round(total / weekly)));
-  const want = Math.min(weeks, 24);
+  // Ilgari 24 ta qator so'ralib, keyin `weeks` gacha TSIKL bilan
+  // to'ldirilardi — 34 haftalik xaritada mavzular takrorlanardi va
+  // hujjat yaroqsiz bo'lardi. Endi qancha hafta bo'lsa shuncha so'raymiz.
+  const want = weeks;
   const raw = await llmComplete(
     mapSystemPrompt(meta),
     [
@@ -403,12 +495,22 @@ export async function writeMapWithLlm(meta: DocMeta, deadline?: number): Promise
       });
     }
   }
-  if (weeksRows.length < 6) {
-    console.warn("[write-map] few topics", weeksRows.length, raw?.slice(0, 180));
+  // Takror mavzuni tashlaymiz: model ba'zan bir mavzuni ikki marta beradi.
+  const seen = new Set<string>();
+  const unique = weeksRows.filter((r) => {
+    const key = r.topic.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  // Va'da qilingan haftalarning kamida 70% i noyob mavzu bilan
+  // to'lmasa xarita yaroqsiz — tsikl bilan to'ldirmaymiz.
+  if (unique.length < Math.max(6, Math.ceil(weeks * 0.7))) {
+    console.warn("[write-map] few unique topics", unique.length, "want", weeks);
     return null;
   }
   const L = sectionLabels(meta.language);
-  const filled = Array.from({ length: weeks }, (_, i) => weeksRows[i] || weeksRows[i % weeksRows.length]);
+  const filled = unique.slice(0, weeks);
   const table: DocTable = {
     caption: L.yearPlan,
     headers: [...L.yearCols],
@@ -443,30 +545,35 @@ export async function writeImradWithLlm(meta: DocMeta, deadline?: number): Promi
   const sys = imradSystemPrompt(meta);
   const L = sectionLabels(meta.language);
   const topic = meta.topic;
-  const absPrompt =
+  /**
+   * Annotatsiya kalitlari HUJJAT TILIDAN olinadi.
+   *
+   * Ilgari asosiy annotatsiya doim `"uz"` kalitidan o'qilardi: ruscha
+   * maqolada model `"ru"` kalitini to'ldirar, kod esa `"uz"` ni izlab
+   * bo'sh qaytarardi — annotatsiya yo'qolardi. `all` rejimida esa ruscha
+   * maqola ikki marta ruscha annotatsiya olardi.
+   */
+  const primaryLang = ["uz", "ru", "en"].includes(meta.language) ? meta.language : "uz";
+  const absLangs =
     meta.annotationLangs === "all"
-      ? `JSON: {"uz":{"text":"","keywords":""},"en":{"text":"","keywords":""},"ru":{"text":"","keywords":""}}`
-      : `JSON: {"uz":{"text":"","keywords":""}}`;
+      ? [primaryLang, ...["uz", "en", "ru"].filter((c) => c !== primaryLang)]
+      : [primaryLang];
+  const absPrompt = `JSON: {${absLangs.map((c) => `"${c}":{"text":"","keywords":""}`).join(",")}}`;
   const absRaw = await llmComplete(sys, `Annotatsiya. ${absPrompt}. Mavzu: «${topic}». Har biri 4–6 gap.`, 900, {
     json: true,
     timeoutMs: Math.min(40_000, remainingMs(deadline) || 40_000),
   });
   const absData = (absRaw ? parseJson(absRaw) : null) as Record<string, { text?: string; keywords?: string }> | null;
-  const abstracts = (
-    [
-      { lang: meta.language, label: L.abstract, key: "uz" },
-      ...(meta.annotationLangs === "all"
-        ? [
-            { lang: "en", label: "Abstract", key: "en" },
-            { lang: "ru", label: "Аннотация", key: "ru" },
-          ]
-        : []),
-    ] as const
-  )
-    .map((a) => {
-      const x = absData?.[a.key];
+  const abstracts = absLangs
+    .map((code) => {
+      const x = absData?.[code];
       if (!x?.text) return null;
-      return { lang: a.lang, label: a.label, text: clip(x.text, 700), keywords: clip(x.keywords || topic, 120) };
+      return {
+        lang: code,
+        label: sectionLabels(code).abstract,
+        text: clip(x.text, 700),
+        keywords: clip(x.keywords || topic, 120),
+      };
     })
     .filter((x): x is { lang: string; label: string; text: string; keywords: string } => Boolean(x));
 

@@ -28,6 +28,28 @@ export function ministryTitle(code: string) {
 /** Manba matni promptga to‘liq ketmasin — token narxi va limit uchun. */
 export const SOURCE_TEXT_LIMIT = 24_000;
 
+/**
+ * Muallif satridan kurs va guruhni ajratadi.
+ *
+ * Formada alohida «kurs» va «guruh» maydonlari yo'q — foydalanuvchi
+ * hammasini bitta qatorga yozadi: «Aliyev Ali — 3-kurs, 301-guruh».
+ * Natijada titul sahifada `course`/`group` qatorlari doim bo'sh qolar,
+ * muallif o'rnida esa butun satr chiqar edi. Endi satr ajratiladi:
+ * titulda «Bajardi: Aliyev Ali» va alohida «3-kurs, 301-guruh».
+ */
+export function parseAuthorLine(raw: string): { name: string; course: string; group: string } {
+  const line = raw.replace(/\s+/g, " ").trim();
+  const course = line.match(/(\d{1,2})\s*-?\s*kurs/i)?.[1] ?? "";
+  const group = line.match(/([0-9]+[a-zA-Z]?)\s*-?\s*guruh/i)?.[1] ?? "";
+  const name = line
+    .replace(/\d{1,2}\s*-?\s*kurs/gi, "")
+    .replace(/[0-9]+[a-zA-Z]?\s*-?\s*guruh/gi, "")
+    .replace(/[\s,;—–-]+$/g, "")
+    .replace(/^[\s,;—–-]+/g, "")
+    .trim();
+  return { name: name || line, course, group };
+}
+
 export function extractMeta(tool: ToolConfig, values: FormValues): DocMeta {
   const topic = s(values, "topic", s(values, "subject", s(values, "targetRole", tool.title)));
   const pagesLabel = s(values, "pages", tool.id === "essay" ? "2" : tool.id === "coursework" ? "20-25" : "10-15");
@@ -36,6 +58,7 @@ export function extractMeta(tool: ToolConfig, values: FormValues): DocMeta {
   const quality = s(values, "quality", "standard");
   const slidePages =
     quality === "premium_long" ? 16 : quality === "long" ? 14 : quality === "premium" ? 12 : 10;
+  const authorParts = parseAuthorLine(s(values, "author", s(values, "fullName")));
   const themeRaw = s(values, "slideTheme", "atlas");
   const templateRaw = s(values, "slideTemplate", "auto");
   return {
@@ -45,7 +68,7 @@ export function extractMeta(tool: ToolConfig, values: FormValues): DocMeta {
     language: s(values, "language", "uz"),
     extra: s(values, "extra"),
     sourceText: s(values, "sourceText").slice(0, SOURCE_TEXT_LIMIT),
-    author: s(values, "author", s(values, "fullName")),
+    author: authorParts.name,
     university: s(values, "university").replace(/\s+/g, " "),
     faculty: s(values, "faculty").replace(/\s+/g, " "),
     department: s(values, "department").replace(/\s+/g, " "),
@@ -58,8 +81,9 @@ export function extractMeta(tool: ToolConfig, values: FormValues): DocMeta {
     ).replace(/\s+/g, " "),
     teacher: s(values, "teacher").replace(/\s+/g, " "),
     city: s(values, "city", "Toshkent"),
-    group: s(values, "group"),
-    course: s(values, "course"),
+    // Alohida maydon bo'lsa u ustun; bo'lmasa muallif satridan olinadi.
+    group: s(values, "group", authorParts.group),
+    course: s(values, "course", authorParts.course),
     ministry:
       s(
         values,
@@ -85,6 +109,9 @@ export function extractMeta(tool: ToolConfig, values: FormValues): DocMeta {
     tocMethod: s(values, "tocMethod", "ai") === "manual" ? "manual" : "ai",
     tocText: s(values, "tocText"),
     includeVisuals: s(values, "images", "yes") !== "no",
+    // Formada belgilanmagan bo'lsa titul slaydi qoladi (eski xatti-harakat).
+    titleSlide: values.titleSlide !== false,
+    premiumVisuals: quality === "premium" || quality === "premium_long",
     design: s(values, "design", "iris"),
   };
 }
