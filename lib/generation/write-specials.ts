@@ -235,19 +235,39 @@ export async function writeGlossaryWithLlm(meta: DocMeta, deadline?: number): Pr
 
 export async function writeKeysWithLlm(meta: DocMeta, deadline?: number): Promise<AcademicDoc | null> {
   if (!llmEnabled()) return null;
-  const raw = await llmComplete(
-    keysSystemPrompt(meta),
-    `JSON: {"intro":"","cases":[{"title":"","situation":"","tasks":["",""],"key":""}]}. «${meta.topic}» bo‘yicha 5 ta turlicha, aniq ism-vaziyatli keys. Umumiy «resurs cheklangan» shablon yo‘q.`,
-    2800,
-    { json: true, timeoutMs: Math.min(70_000, remainingMs(deadline) || 70_000) },
-  );
-  if (!raw) return null;
-  const data = parseJson(raw) as {
+  /**
+   * Ikkinchi urinish — kichikroq so'rov bilan.
+   *
+   * Bu vosita bitta chaqiruvli edi va 70 soniyalik timeout'ga tayanardi.
+   * Jonli sinovda model yuk ostida sekinlashganda so'rov timeout'ga
+   * urildi va butun ish `FAILED` bo'ldi — holbuki `glossary` va
+   * `lesson-plan` allaqachon ikkinchi urinishga ega. Timeout bo'yicha
+   * `llmComplete` qayta urinmaydi (byudjet sarflangan), shuning uchun
+   * qayta urinish shu yerda va YENGILROQ so'rov bilan bo'lishi kerak.
+   */
+  const ask = (timeoutMs: number, count: number) =>
+    llmComplete(
+      keysSystemPrompt(meta),
+      `JSON: {"intro":"","cases":[{"title":"","situation":"","tasks":["",""],"key":""}]}. «${meta.topic}» bo‘yicha ${count} ta turlicha, aniq ism-vaziyatli keys. Umumiy «resurs cheklangan» shablon yo‘q.`,
+      count >= 5 ? 2800 : 2000,
+      { json: true, timeoutMs },
+    );
+
+  type KeysData = {
     intro?: string;
     cases?: { title?: string; situation?: string; tasks?: string[]; key?: string }[];
-  } | null;
-  const cases = (data?.cases ?? []).slice(0, 5);
+  };
+  const pick = (raw: string | null) => ((raw ? parseJson(raw) : null) as KeysData | null)?.cases ?? [];
+
+  let data = (await ask(Math.min(60_000, remainingMs(deadline) || 60_000), 5)) as string | null;
+  let cases = pick(data).slice(0, 5);
+  if (cases.length < 3 && remainingMs(deadline) > 20_000) {
+    console.warn("[write-keys] qayta urinish:", cases.length, "keys");
+    data = await ask(Math.min(45_000, remainingMs(deadline)), 4);
+    cases = pick(data).slice(0, 5);
+  }
   if (cases.length < 3) return null;
+  const intro = ((data ? parseJson(data) : null) as KeysData | null)?.intro;
   const L = sectionLabels(meta.language);
   return {
     meta,
@@ -255,7 +275,7 @@ export async function writeKeysWithLlm(meta: DocMeta, deadline?: number): Promis
     toc: true,
     sections: [
       section("kirish", L.intro, [
-        { kind: "p", text: clip(data?.intro || L.keysIntroFallback(meta.topic), 400) },
+        { kind: "p", text: clip(intro || L.keysIntroFallback(meta.topic), 400) },
       ]),
       ...cases.map((c, i) =>
         section(`keys${i + 1}`, `${L.caseWord} ${i + 1}. ${clip(c.title || meta.topic, 60)}`, [
