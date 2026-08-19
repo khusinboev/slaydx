@@ -12,11 +12,20 @@ import { runGeneration } from "./runGeneration";
 import { SourceFileField } from "./SourceFileField";
 import { cn } from "@/lib/cn";
 
+/**
+ * Paket yorlig‘ida slaydlar soni ko‘rsatiladi.
+ *
+ * Ilgari faqat narx yozilardi va paket amalda hech narsani o‘zgartirmasdi —
+ * to‘rttasi ham 7–10 slayd berardi. Endi paket ikki o‘lchovda farqlanadi:
+ * HAJM (`meta.targetPages` → deck uzunligi) va VIZUAL SIFAT
+ * (`meta.premiumVisuals` → rasm modeli, qadamlar soni va rasmlar soni).
+ * Ikkalasi ham yorliqda ochiq yozilgan.
+ */
 const QUALITY = [
-  { value: "standard", label: "Standart · 3 000" },
-  { value: "long", label: "Uzun · 5 000" },
-  { value: "premium", label: "Premium · 6 000" },
-  { value: "premium_long", label: "Premium uzun · 8 000" },
+  { value: "standard", label: "Standart · 10 slayd · 3 000" },
+  { value: "long", label: "Uzun · 14 slayd · 5 000" },
+  { value: "premium", label: "Premium · 12 slayd · sifatli rasm · 6 000" },
+  { value: "premium_long", label: "Premium uzun · 16 slayd · sifatli rasm · 8 000" },
 ];
 
 export function SlideForm({ tool }: { tool: ToolConfig }) {

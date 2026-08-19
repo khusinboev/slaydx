@@ -1,5 +1,5 @@
 import { fetchImageBytes, type ImageBytes } from "./slide-images";
-import { planSlide, SLIDE_IN, type SlideLayer, type SlidePlan } from "./slide-layout";
+import { planSlide, slideNotes, SLIDE_IN, type SlideLayer, type SlidePlan } from "./slide-layout";
 import { buildSlideDeck } from "./slides";
 import { getSlideTheme } from "./slide-themes";
 import type { AcademicDoc, BuiltFile } from "./types";
@@ -15,6 +15,7 @@ type PptxSlide = {
   addShape: (name: string, opts: Record<string, unknown>) => void;
   addText: (text: unknown, opts: Record<string, unknown>) => void;
   addImage?: (opts: Record<string, unknown>) => void;
+  addNotes?: (text: string) => void;
 };
 
 /**
@@ -91,7 +92,10 @@ async function paintLayer(slide: PptxSlide, layer: SlideLayer, cache: ImageCache
     valign: layer.valign || "top",
     fontFace: layer.font || "Calibri",
     wrap: true,
-    shrinkText: true,
+    // Shrift `slide-layout.ts` dagi `fitSize`/`fitLines` bilan oldindan
+    // hisoblanadi. `shrinkText` yoqilsa PowerPoint uni yana kichraytiradi
+    // va sayt ko'ruvchisi bilan mos kelmay qoladi — preview ≠ eksport.
+    shrinkText: false,
     paraSpaceAfter: layer.paraSpace,
     charSpacing: layer.tracking,
     margin: 0,
@@ -115,6 +119,10 @@ export async function renderPptx(doc: AcademicDoc, fileName: string): Promise<Bu
     const slide = pptx.addSlide() as unknown as PptxSlide;
     const plan = planSlide(deck.slides[i], theme, deck.visual, i, deck.slides.length);
     await paintPlan(slide, plan, imageCache);
+    // Notiq eslatmasi. Ilgari `notesSlide` yaratilardi-yu, ichi bo'sh qolardi:
+    // foydalanuvchi saytda eslatmani ko'rib, yuklab olgach yo'qotardi.
+    const notes = slideNotes(deck.slides[i]);
+    if (notes) slide.addNotes?.(notes);
   }
 
   const buf = (await pptx.write({ outputType: "nodebuffer" })) as Buffer;
@@ -162,6 +170,8 @@ export function slideAcademicDoc(topic: string, extra: string, author: string, s
       tocMethod: "ai",
       tocText: "",
       includeVisuals: true,
+      titleSlide: true,
+      premiumVisuals: false,
       design: "iris",
       slideTheme: "atlas",
     },

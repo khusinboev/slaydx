@@ -374,6 +374,14 @@ export const SLIDE_TEMPLATE_BY_ID = Object.fromEntries(SLIDE_TEMPLATES.map((t) =
   SlideTemplate
 >;
 
+/**
+ * Mavzudan shablon taxmin qiladi.
+ *
+ * Naqshlar ATAYLAB tor: ilgari `/jarayon/` «Fotosintez jarayoni» ni,
+ * `/dars/` esa har qanday akademik mavzuni, `/muammo|yechim/` esa
+ * «Fotosintez muammolari» ni noto'g'ri ushlab olardi. Shubha bo'lsa
+ * `lecture` ga tushish xato shablondan yaxshiroq.
+ */
 export function inferSlideTemplate(topic: string, extra = ""): Exclude<SlideTemplateId, "auto"> {
   const t = `${topic} ${extra}`.toLowerCase();
   if (/pitch|startup|invest|biznes[- ]reja|sotuv|mahsulot lans/.test(t)) return "pitch";
@@ -381,21 +389,57 @@ export function inferSlideTemplate(topic: string, extra = ""): Exclude<SlideTemp
   if (/munozara|debat|bahs|tezisga qarshi/.test(t)) return "debate";
   if (/qiyos|solishtir|\bvs\b|farqi|ikkita yondashuv/.test(t)) return "compare";
   if (/keys|vaziyat|case study|holat tahlil/.test(t)) return "case";
-  if (/muammo|yechim|krizis|oldini olish/.test(t)) return "problem";
+  if (/muammo va yechim|muammolar va yechim|krizis|oldini olish yo‘l/.test(t)) return "problem";
   if (/hayoti va ijodi|tarjimai hol|biograf|shaxsiyat/.test(t)) return "bio";
   if (/asar tahlil|adabiy|she’r|roman |doston|navoiy|bobur/.test(t)) return "literature";
   if (/tarix|davri|xronolog|bosqichlari tarix/.test(t)) return "timeline";
   if (/tajriba|gipoteza|laborator|eksperiment|kuzatuv/.test(t)) return "science";
   if (/trening|seminar|workshop|amaliy mashg/.test(t)) return "workshop";
-  if (/dars|sinf|o‘quvchi|o'quvchi|mashg‘ulot mavzu/.test(t)) return "lesson";
+  if (/dars ishlanma|dars rejasi|ochiq dars|sinf soati/.test(t)) return "lesson";
   if (/brifing|qisqa hisobot|raqamlar/.test(t)) return "briefing";
   if (/hisobot|monitoring|ko‘rsatkich|kpi|natijalar tahlil/.test(t)) return "report";
   if (/faq|savol[- ]javob|tez-tez so‘ral/.test(t)) return "faq";
   if (/foto[- ]insho|lavha|galereya|vizual esse/.test(t)) return "gallery";
-  if (/hikoya|qissa|syujet|qahramon/.test(t)) return "story";
-  if (/qanday qilish|bosqichma|yo‘riqnoma|algoritm tartib|jarayon/.test(t)) return "process";
+  if (/hikoya qil|qissa|syujet|bosh qahramon/.test(t)) return "story";
+  if (/qanday qilish|bosqichma-bosqich|yo‘riqnoma|algoritm tartibi|jarayonning bosqichlari/.test(t)) return "process";
   if (/jurnal|esse|qarash|falsafa/.test(t)) return "magazine";
   return "lecture";
+}
+
+/**
+ * Shablon beats'i tugagach qo'shiladigan «chuqurlashtirish» slaydlari.
+ *
+ * Ilgari sifat paketi (standart/uzun/premium/premium uzun) slaydlar soniga
+ * umuman ta'sir qilmasdi: `want = tpl.beats.length` bo'lgani uchun 8 000
+ * tanga to'lagan foydalanuvchi 3 000 tangalik bilan bir xil deck olardi.
+ * Endi paket beats'ni shu ro'yxat bilan kengaytiradi.
+ */
+const FILLER_BEATS: SlideBeat[] = [
+  { layout: "bullets", role: "Aniq misol yoki amaliy holat" },
+  { layout: "twoCol", role: "Sabab va oqibat" },
+  { layout: "process", role: "Bosqichlar ketma-ketligi" },
+  { layout: "stats", role: "Eslab qolinadigan ko‘rsatkich" },
+  { layout: "quote", role: "Kalit jumla" },
+  { layout: "compare", role: "Ikki yondashuv qiyosi" },
+  { layout: "section", role: "Keyingi bo‘lim" },
+];
+
+/**
+ * Shablon beats'ini kerakli slaydlar soniga yetkazadi.
+ * `closing` doim oxirida qoladi; yonma-yon bir xil layout takrorlanmaydi.
+ */
+export function expandBeats(tpl: SlideTemplate, want: number): SlideBeat[] {
+  const beats = tpl.beats.length ? [...tpl.beats] : [...SLIDE_TEMPLATE_BY_ID.lecture.beats];
+  if (want <= beats.length) return beats;
+  const tail = beats[beats.length - 1]?.layout === "closing" ? beats.pop()! : null;
+  const target = want - (tail ? 1 : 0);
+  for (let i = 0, guard = 0; beats.length < target && guard < 64; i++, guard++) {
+    const cand = FILLER_BEATS[i % FILLER_BEATS.length];
+    if (beats[beats.length - 1]?.layout === cand.layout) continue;
+    beats.push(cand);
+  }
+  if (tail) beats.push(tail);
+  return beats;
 }
 
 export function resolveSlideTemplate(id: string | undefined, topic: string, extra = ""): SlideTemplate {
