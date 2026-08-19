@@ -72,7 +72,8 @@ if (!values) {
 }
 
 const t0 = Date.now();
-const file = await buildArtifact(tool, values);
+// Lokal sinov: worker bilan bir xil byudjet (~4.5 daqiqa).
+const file = await buildArtifact(tool, values, { deadline: Date.now() + 270_000 });
 const outDir = resolve(process.cwd(), "..", "namunalar", "eval-direct");
 mkdirSync(outDir, { recursive: true });
 const dest = resolve(outDir, file.fileName);

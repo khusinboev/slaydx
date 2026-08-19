@@ -52,24 +52,26 @@ const MIN_LENGTH_RATIO = 0.8;
 
 
 
-/**
- * Byudjet endi chaqiruvchidan keladi: navbatdagi worker uchun bu bir necha
- * daqiqa bo'lishi mumkin, HTTP so'rovi ichidagi zaxira yo'l uchun esa qisqa.
- */
-const BUILD_BUDGET_MS = 105_000;
-
 export type BuildOptions = {
-  /** Absolyut muddat (ms). Berilmasa standart byudjet ishlatiladi. */
-  deadline?: number;
+  /**
+   * Absolyut muddat (ms) — MAJBURIY.
+   *
+   * Ilgari bu ixtiyoriy edi va berilmasa 105 soniyalik standart byudjet
+   * ishlatilardi. Amalda uni hech kim ishlatmasdi (worker doim o'z
+   * muddatini uzatadi), lekin u jim turadigan tuzoq edi: opsiyasiz
+   * chaqiruvda 40 betlik kurs ishi yarim yozilib to'xtardi. Byudjet
+   * chaqiruvchining ongli qarori bo'lishi kerak.
+   */
+  deadline: number;
 };
 
 export async function buildArtifact(
   tool: ToolConfig,
   values: FormValues,
-  opts: BuildOptions = {},
+  opts: BuildOptions,
 ): Promise<BuiltFile> {
   const meta = extractMeta(tool, values);
-  const deadline = opts.deadline ?? Date.now() + BUILD_BUDGET_MS;
+  const deadline = opts.deadline;
 
   if (tool.id === "slide") {
     const slideDoc = await buildSlideAcademicDoc(meta, deadline);
