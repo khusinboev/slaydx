@@ -132,18 +132,36 @@ function pngSize(buf: Buffer): { w: number; h: number } | undefined {
   return { w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) };
 }
 
+/**
+ * Rasm turini BAYTLARDAN aniqlaydi, sarlavhadan emas.
+ *
+ * Ilgari tur `content-type` yoki URL kengaytmasidan olinardi va baytlar
+ * tekshirilmasdi. `pptxgenjs` ichidagi `image-size` esa formatni magic
+ * baytlar bo'yicha aniqlaydi — ya'ni ICNS/HEIF/JXL fayl «jpg» yorlig'i
+ * bilan o'tib, o'sha kutubxonaning DoS zaifligi bor parserlariga
+ * tushishi mumkin edi. Endi faqat haqiqiy PNG va JPEG qabul qilinadi.
+ */
+function sniffImageType(buf: Buffer): "png" | "jpg" | null {
+  if (buf.length >= 8 && buf.readUInt32BE(0) === 0x89504e47 && buf.readUInt32BE(4) === 0x0d0a1a0a) return "png";
+  if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return "jpg";
+  return null;
+}
+
 function decodeDataUrl(url: string): ImageBytes | null {
   const m = url.match(/^data:(image\/(?:png|jpeg|jpg));base64,(.+)$/i);
   if (!m) return null;
-  const type = /png/i.test(m[1]) ? "png" : "jpg";
-  const mime = type === "png" ? "image/png" : "image/jpeg";
   const buf = Buffer.from(m[2], "base64");
+  const type = sniffImageType(buf);
+  if (!type) return null;
+  const mime = type === "png" ? "image/png" : "image/jpeg";
   const dim = type === "png" ? pngSize(buf) : jpegSize(buf);
   return { data: `${mime};base64,${m[2]}`, type, ...dim };
 }
 
 /** Bitta rasm uchun chegara — xotirani himoyalaydi. */
 const MAX_IMAGE_BYTES = 12 * 1024 * 1024;
+
+export { sniffImageType };
 
 export async function fetchImageBytes(url: string): Promise<ImageBytes | null> {
   if (url.startsWith("data:")) return decodeDataUrl(url);
@@ -153,7 +171,6 @@ export async function fetchImageBytes(url: string): Promise<ImageBytes | null> {
   try {
     const res = await fetch(url, { signal: AbortSignal.timeout(20_000), redirect: "follow" });
     if (!res.ok) return null;
-    const mime = res.headers.get("content-type") || "";
     // Provayder rasm o'rniga katta narsa qaytarsa, oldindan to'xtatamiz.
     const declared = Number(res.headers.get("content-length") ?? 0);
     if (Number.isFinite(declared) && declared > MAX_IMAGE_BYTES) return null;
@@ -161,7 +178,11 @@ export async function fetchImageBytes(url: string): Promise<ImageBytes | null> {
     const buf = Buffer.from(await res.arrayBuffer());
     if (buf.length > MAX_IMAGE_BYTES) return null;
     if (buf.length < 800) return null;
-    const type = /png/i.test(mime) || url.includes(".png") ? "png" : "jpg";
+    const type = sniffImageType(buf);
+    if (!type) {
+      console.warn("[fal] rasm formati qo‘llab-quvvatlanmaydi, tashlandi");
+      return null;
+    }
     const dim = type === "png" ? pngSize(buf) : jpegSize(buf);
     return {
       data: `image/${type === "png" ? "png" : "jpeg"};base64,${buf.toString("base64")}`,

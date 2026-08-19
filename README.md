@@ -239,7 +239,20 @@ Telegram'ning **web** versiyasida ishlatmoqchi bo'lsangiz
 - **i18n.** Interfeys matnlari kodda o'zbekcha qattiq yozilgan. Til tanlash
   generatsiya tiliga ta'sir qiladi, interfeysga emas.
 - **PDF eksport** yo'q (DOCX/PPTX bor).
-- `pptxgenjs` → `image-size` da DoS advisory bor. Bizda rasm faqat fal.ai dan
-  keladigan JPEG, lekin yangilanish chiqsa ko'tarish kerak.
+- **`npm audit`: 5 ta high.** Har biri tekshirildi va hozirgi ishlatishda
+  erishib bo'lmaydi:
+  - `next → sharp` (libvips CVE) — `next/image` umuman ishlatilmaydi va
+    `next.config.ts` da `images` sozlamasi yo'q, ya'ni optimizator hech
+    qachon ishga tushmaydi;
+  - `next → postcss` (XSS, sourceMappingURL) — PostCSS faqat build
+    vaqtida, faqat bizning CSS ustida ishlaydi;
+  - `pptxgenjs → image-size` (ICNS/JXL/HEIF parserlarida DoS) — rasm
+    baytlari `sniffImageType` bilan tekshiriladi va faqat haqiqiy PNG
+    yoki JPEG o'tadi.
+
+  Tuzatish `next@16` ga o'tishni talab qiladi (breaking). Uni alohida
+  vazifa sifatida rejalashtiring; yuqoridagi tahlil eskirmasligi uchun
+  `next/image` yoki foydalanuvchi yuklaydigan rasm qo'shilsa qayta
+  ko'rib chiqing.
 - Fayllar Postgres `BYTEA` da (25 MB chegara). Hajm o'sganda S3 ga ko'chirish kerak.
 

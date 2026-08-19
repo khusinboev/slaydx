@@ -235,3 +235,28 @@ test("auditoriya forma qiymatidan DocMeta ga o'tadi", () => {
   // Noto'g'ri qiymat — «auto» ga qaytadi.
   assert.equal(slideMeta({ topic: "X", slideAudience: "hacker" }).slideAudience, "auto");
 });
+
+// ------------------------------------------------------- rasm xavfsizligi
+
+test("rasm turi baytlardan aniqlanadi, sarlavhadan emas", async () => {
+  const { sniffImageType } = await import("../lib/generation/slide-images.ts");
+  const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3, 4]);
+  const jpg = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 4]);
+  assert.equal(sniffImageType(png), "png");
+  assert.equal(sniffImageType(jpg), "jpg");
+});
+
+test("boshqa formatlar rad etiladi", async () => {
+  const { sniffImageType } = await import("../lib/generation/slide-images.ts");
+  // ICNS, HEIF va GIF — `image-size` da DoS advisory'si bor parserlar.
+  const cases: [string, Buffer][] = [
+    ["icns", Buffer.from([0x69, 0x63, 0x6e, 0x73, 0, 0, 0, 32])],
+    ["heif", Buffer.from([0, 0, 0, 24, 0x66, 0x74, 0x79, 0x70, 0x68, 0x65, 0x69, 0x63])],
+    ["gif", Buffer.from("GIF89a", "ascii")],
+    ["html", Buffer.from("<!doctype html>", "utf8")],
+    ["bo'sh", Buffer.alloc(0)],
+  ];
+  for (const [name, buf] of cases) {
+    assert.equal(sniffImageType(buf), null, `${name} qabul qilinmasligi kerak`);
+  }
+});
