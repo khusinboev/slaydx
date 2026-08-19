@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Bell, ChevronDown, Moon, PanelLeft, Search, Settings, Sun } from "lucide-react";
+import { Bell, ChevronDown, Moon, PanelLeft, Search, Settings, Sun, SunMoon } from "lucide-react";
 import { creditTotal, useAppStore } from "@/lib/store";
 import { THEME_OPTIONS, UI_LOCALES, useUi } from "@/lib/ui";
 import { cn } from "@/lib/cn";
@@ -20,6 +20,21 @@ export function TopBar({ onMenu }: { onMenu: () => void }) {
   const open = useUi((s) => s.open);
   const close = useUi((s) => s.close);
   const currentLocale = UI_LOCALES.find((l) => l.value === locale) ?? UI_LOCALES[0];
+
+  /**
+   * Mavzu tugmasi menyu ochmaydi — bosilganda navbatdagi rejimga o'tadi:
+   * yorug' → qorong'i → tizim → yorug'.
+   *
+   * Ikonka HOZIRGI REJIMNI ko'rsatadi, hal qilingan rangni emas: ilgari
+   * quyosh/oy `dark` klassiga qarab almashardi, ya'ni «tizim» rejimi
+   * umuman ko'rinmasdi — foydalanuvchi qaysi rejimda ekanini bilmasdi.
+   * «Tizim» uchun yarim quyosh-oy ikonkasi.
+   */
+  const themeIndex = Math.max(0, THEME_OPTIONS.findIndex((t) => t.value === theme));
+  const nextTheme = THEME_OPTIONS[(themeIndex + 1) % THEME_OPTIONS.length].value;
+  const themeLabel = THEME_OPTIONS[themeIndex].label;
+  const nextLabel = THEME_OPTIONS[(themeIndex + 1) % THEME_OPTIONS.length].label;
+  const ThemeIcon = theme === "light" ? Sun : theme === "dark" ? Moon : SunMoon;
 
   return (
     <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border/60 bg-[var(--page-bg)] px-3">
@@ -77,46 +92,15 @@ export function TopBar({ onMenu }: { onMenu: () => void }) {
         ) : null}
       </div>
 
-      <div className="relative">
-        <button
-          type="button"
-          onClick={() => (overlay === "theme" ? close() : open("theme"))}
-          className="hover:bg-accent relative flex size-10 scale-95 items-center justify-center rounded-full"
-          aria-label="Mavzuni almashtirish"
-        >
-          <Sun className="h-[1.2rem] w-[1.2rem] scale-100 rotate-0 dark:scale-0 dark:-rotate-90" />
-          <Moon className="absolute h-[1.2rem] w-[1.2rem] scale-0 rotate-90 dark:scale-100 dark:rotate-0" />
-          <span className="sr-only">Mavzuni almashtirish</span>
-        </button>
-        {overlay === "theme" ? (
-          <Menu onDismiss={close}>
-            {THEME_OPTIONS.map((t) => (
-              <button
-                key={t.value}
-                type="button"
-                className={cn(
-                  "hover:bg-muted w-full rounded-lg px-2.5 py-2 text-left text-sm",
-                  theme === t.value && "font-medium",
-                )}
-                onClick={() => {
-                  setTheme(t.value);
-                  close();
-                }}
-              >
-                {t.label}
-              </button>
-            ))}
-            <button
-              type="button"
-              className="hover:bg-muted text-muted-foreground flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm"
-              onClick={() => open("settings")}
-            >
-              <Settings className="size-3.5" />
-              Sozlamalar
-            </button>
-          </Menu>
-        ) : null}
-      </div>
+      <button
+        type="button"
+        onClick={() => setTheme(nextTheme)}
+        className="hover:bg-accent flex size-10 scale-95 items-center justify-center rounded-full"
+        title={`Mavzu: ${themeLabel}. Bosing — ${nextLabel}`}
+        aria-label={`Mavzu: ${themeLabel}. Almashtirish: ${nextLabel}`}
+      >
+        <ThemeIcon className="h-[1.2rem] w-[1.2rem]" />
+      </button>
 
       <button
         type="button"
@@ -170,6 +154,14 @@ export function TopBar({ onMenu }: { onMenu: () => void }) {
                 onClick={() => open("notifications")}
               >
                 Bildirishnomalar
+              </button>
+              <button
+                type="button"
+                className="hover:bg-muted flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm"
+                onClick={() => open("settings")}
+              >
+                <Settings className="size-3.5" />
+                Sozlamalar
               </button>
               <Link
                 href="/uz/purchase"

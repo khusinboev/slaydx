@@ -9,7 +9,6 @@ export type Overlay =
   | "notifications"
   | "pay"
   | "lang"
-  | "theme"
   | "sort"
   | "user"
   | null;
