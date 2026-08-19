@@ -69,6 +69,12 @@ npm run dev            # 1-terminal: web + worker
 npm run bot            # 2-terminal: Telegram bot (long-polling)
 ```
 
+> **Diqqat:** `WORKER_INLINE=true` (standart) bo'lganda worker web process
+> ichida **uzoq ishlaydigan tsikl** sifatida turadi va Next.js ning hot
+> reload'ini olmaydi. `lib/generation/` yoki `lib/server/` o'zgartirilsa
+> `npm run dev` ni **qayta ishga tushiring** — aks holda navbat eski kod
+> bilan ishlashda davom etadi va o'zgarish chiqmagandek ko'rinadi.
+
 [http://localhost:3000/uz](http://localhost:3000/uz)
 
 ### Telegram orqali kirish qanday ishlaydi
