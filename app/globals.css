@@ -1,26 +1,265 @@
 @import "tailwindcss";
 
+/*
+ * Tailwind v4 da `dark:` sukut bo'yicha `prefers-color-scheme` ga bog'langan.
+ * Bu ilova esa mavzuni `<html class="dark">` orqali almashtiradi (lib/store.ts
+ * `applyTheme`). Shu variant bo'lmasa, foydalanuvchi «Qorong'i» ni tanlaganda
+ * `dark:` yordamchilari umuman ishlamasdi (va tizimi qorong'i bo'lsa, yorug'
+ * rejimda noto'g'ri ishlardi).
+ */
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --radius: 0.625rem;
+  --background: #f7f7f7;
+  --foreground: #020618;
+  --card: #fff;
+  --card-foreground: #020618;
+  --popover: #fff;
+  --popover-foreground: #020618;
+  --primary: #0f172b;
+  --primary-foreground: #f8fafc;
+  --secondary: #f1f5f9;
+  --secondary-foreground: #0f172b;
+  --muted: #f1f5f9;
+  /* #62748e oq fonda 4.45:1 edi — WCAG AA (4.5:1) dan sal past. */
+  --muted-foreground: #5b6a82;
+  --accent: #f1f5f9;
+  --accent-foreground: #0f172b;
+  --destructive: #e40014;
+  --destructive-foreground: #f8fafc;
+  --success: #16a34a;
+  --border: #e2e8f0;
+  --input: #e2e8f0;
+  --ring: #90a1b9;
+  --sidebar: #ededed;
+  --sidebar-foreground: #020618;
+  --sidebar-primary: #0f172b;
+  --sidebar-primary-foreground: #f8fafc;
+  --sidebar-accent: #ffffff;
+  --sidebar-accent-foreground: #020618;
+  --sidebar-border: #e2e8f0;
+  --sidebar-ring: #90a1b9;
+  --page-bg: #f7f7f7;
+  --sidebar-width: 16rem;
+  --sidebar-width-icon: 3.5rem;
+}
+
+.dark {
+  --background: #202127;
+  --foreground: #f8fafc;
+  --sidebar: #161618;
+  --card: #2a2b32;
+  --card-foreground: #f8fafc;
+  --popover: #262629;
+  --popover-foreground: #f8fafc;
+  --primary: #e2e8f0;
+  --primary-foreground: #18181b;
+  --secondary: #28282c;
+  --secondary-foreground: #f8fafc;
+  --muted: #28282c;
+  --muted-foreground: #9f9fa9;
+  --accent: #28282c;
+  --accent-foreground: #f8fafc;
+  --destructive: #ff6568;
+  --border: #ffffff1a;
+  --input: #ffffff26;
+  --ring: #71717b;
+  --page-bg: #202127;
+  --sidebar-accent: #2a2b32;
+  --sidebar-accent-foreground: #f8fafc;
+  --sidebar-border: #ffffff1a;
+  /*
+   * Bular yetishmasdi: `.dark` faqat `--sidebar` ni qayta belgilar, matn rangi
+   * esa `:root` dan #020618 bo'lib qolardi. Natijada qorong'i yon panelda
+   * «MASHHUR» / «HUJJATLAR» sarlavhalari deyarli ko'rinmasdi (kontrast 1.16:1).
+   */
+  --sidebar-foreground: #f8fafc;
+  --sidebar-primary: #e2e8f0;
+  --sidebar-primary-foreground: #18181b;
+  --sidebar-ring: #71717b;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-page-bg: var(--page-bg);
+  --font-sans: var(--font-geist);
+  --font-doc: var(--font-tinos), "Times New Roman", Times, "Liberation Serif", serif;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  border-color: var(--border);
+}
+
+html,
+body {
+  height: 100%;
 }
 
 body {
-  background: var(--background);
+  background: var(--page-bg);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+}
+
+button {
+  cursor: pointer;
+}
+
+.scrollbar-thin {
+  scrollbar-width: thin;
+}
+
+.word-sheet {
+  width: 210mm;
+  height: 297mm;
+  background: #fff;
+  color: #111;
+  position: relative;
+  box-shadow:
+    0 1px 1px rgba(0, 0, 0, 0.08),
+    0 8px 28px rgba(0, 0, 0, 0.22);
+}
+
+.word-sheet::after {
+  content: "";
+  position: absolute;
+  inset: 9mm 8mm 9mm 9mm;
+  border: 1.1pt solid #222;
+  pointer-events: none;
+}
+
+.word-sheet-ls {
+  width: 297mm;
+  height: 210mm;
+}
+
+.word-inner {
+  box-sizing: border-box;
+  height: 100%;
+  padding: 20mm 15mm 20mm 30mm;
+  font-family: var(--font-doc);
+  font-size: 14pt;
+  line-height: 1.5;
+}
+
+.word-inner-ls {
+  padding: 12mm 14mm 14mm 14mm;
+  font-size: 11pt;
+  line-height: 1.35;
+}
+
+.word-p {
+  margin: 0 0 10pt;
+  text-align: justify;
+  text-indent: 1.25cm;
+}
+
+.word-h1 {
+  margin: 14pt 0 10pt;
+  font-size: 14pt;
+  font-weight: 700;
+  text-align: center;
+  text-transform: uppercase;
+  text-indent: 0;
+}
+
+.word-h2 {
+  margin: 12pt 0 6pt;
+  font-size: 14pt;
+  font-weight: 700;
+  text-align: left;
+  text-indent: 0;
+}
+
+.word-h3 {
+  margin: 10pt 0 6pt;
+  font-size: 14pt;
+  font-weight: 700;
+  text-indent: 0;
+}
+
+.word-li {
+  display: flex;
+  gap: 0.45em;
+  margin: 0 0 4pt 1.1cm;
+  text-align: justify;
+}
+
+.word-quote {
+  margin: 0 0 10pt 1cm;
+  font-style: italic;
+  text-indent: 0;
+}
+
+.word-footer-num {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 12mm;
+  text-align: center;
+  font-family: var(--font-doc);
+  font-size: 12pt;
+  line-height: 1;
+  color: #111;
+}
+
+.word-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 8pt 0 12pt;
+  font-size: 12pt;
+}
+
+.word-table th,
+.word-table td {
+  border: 1px solid #111;
+  padding: 4pt 6pt;
+  vertical-align: top;
+  text-align: left;
+  text-indent: 0;
+}
+
+.word-table th {
+  font-weight: 700;
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  .viewer-workspace {
+    background: #fff !important;
+    padding: 0 !important;
+  }
+  .word-sheet {
+    box-shadow: none;
+    break-after: page;
+  }
 }

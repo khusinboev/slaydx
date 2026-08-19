@@ -1,0 +1,15 @@
+node_modules
+.next
+.git
+.env
+.env.*
+!.env.example
+*.log
+*.tsbuildinfo
+.data
+namunalar
+README.md
+REJA.md
+GENERATION_MANBA.md
+Dockerfile
+docker-compose.yml

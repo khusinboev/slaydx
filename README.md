@@ -1,36 +1,240 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# sodda-web
 
-## Getting Started
+Ta'lim hujjatlarini AI bilan yaratuvchi web ilova: slayd, insho, kurs ishi, referat,
+maqola, tezis, rezyume, tarjima, glossariy, dars rejasi va boshqalar — 14 ta vosita.
 
-First, run the development server:
+Chiqish: **DOCX / PPTX / PNG**.
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+---
+
+## Arxitektura
+
+```
+Brauzer ──► Next.js Route Handlers ──► PostgreSQL
+                    │                      ▲
+                    │  navbatga qo'yadi    │ holat, fayl
+                    ▼                      │
+                 Worker ────► Gemini / xAI / fal.ai
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Hujjat **HTTP so'rovi ichida yaratilmaydi**. So'rov faqat vazifani navbatga qo'yadi;
+uni worker bajaradi, klient esa `GET /api/generations/{id}` bilan holatni kuzatadi.
+Shu sababli brauzer yopilsa ham ish davom etadi, uzun kurs ishi timeout ga urilmaydi
+va progress boshqa qurilmada ham ko'rinadi.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Qatlam | Joylashuv |
+|---|---|
+| UI | `app/`, `components/` |
+| API | `app/api/` |
+| Server mantiqi | `lib/server/` (auth, kredit, navbat, to'lov, fayl) |
+| Generatsiya dvigateli | `lib/generation/` |
+| Migratsiyalar | `lib/server/migrations/*.sql` |
+| Testlar | `tests/*.test.mts` |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+---
 
-## Learn More
+## Ishga tushirish
 
-To learn more about Next.js, take a look at the following resources:
+### 1. Baza
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+docker run -d --name sodda-pg \
+  -e POSTGRES_USER=sodda -e POSTGRES_PASSWORD=sodda -e POSTGRES_DB=sodda \
+  -p 5432:5432 postgres:16-alpine
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### 2. Sozlama
 
-## Deploy on Vercel
+```bash
+cp .env.example .env.local
+# Majburiy: DATABASE_URL
+# Prod uchun majburiy: SESSION_SECRET (openssl rand -base64 48)
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Kalitlarsiz ham ishlaydi:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Kalit yo'q | Nima bo'ladi |
+|---|---|
+| `GEMINI_API_KEY` / `XAI_API_KEY` | Matn shablondan yoziladi (LLM chaqirilmaydi) |
+| `FAL_KEY` | Slaydlar rasmsiz, «Rasm» vositasi ishlamaydi |
+| `TELEGRAM_BOT_TOKEN` | Telegram kirish o'chadi (OTP qoladi) |
+| `CLICK_*` / `PAYME_*` | To'lov usuli UI da «o'chiq» ko'rinadi |
+
+### 3. Ishga tushirish
+
+```bash
+npm install
+npm run db:migrate     # ixtiyoriy — server o'zi ham qiladi
+npm run dev            # 1-terminal: web + worker
+npm run bot            # 2-terminal: Telegram bot (long-polling)
+```
+
+[http://localhost:3000/uz](http://localhost:3000/uz)
+
+### Telegram orqali kirish qanday ishlaydi
+
+1. Sayt «chipta» ochadi (tasodifiy `nonce`) va `t.me/<bot>?start=<nonce>` havolasini beradi
+2. Foydalanuvchi Telegram'da **Start** bosadi → bot uni taniydi
+3. Bot 5 xonali kodni **aynan o'sha chatga** yuboradi
+4. Foydalanuvchi kodni saytga kiritadi → sessiya ochiladi
+
+Nega kod kerak: kodsiz, faqat `nonce` bilan avtomatik kirishda tajovuzkor o'z
+havolasini qurbonga yuborib, uning nomidan o'z brauzerida sessiya ocha olardi.
+Kod esa faqat qurbonning Telegramiga boradi.
+
+Chipta 5 daqiqa, 5 urinish. Mini App ichida kod so'ralmaydi — `initData` imzosi yetarli.
+
+**Prod da webhook:**
+
+```bash
+curl -F "url=https://<domen>/api/telegram/webhook" \
+     -F "secret_token=$CRON_SECRET" \
+     "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook"
+```
+
+Webhook ham, `npm run bot` ham bir xil `handleUpdate` ni chaqiradi.
+
+`DEV_LOGIN_ENABLED=true` bo'lsa zaxira OTP kodi javobda qaytadi (SMS ulanmagan).
+**Prod da bu bayroq yoqilsa server ishga tushmaydi** — himoya ataylab qattiq.
+
+### Docker bilan
+
+```bash
+export SESSION_SECRET=$(openssl rand -base64 48)
+docker compose up --build
+```
+
+`web` va `worker` alohida konteyner; migratsiya web ko'tarilganda qo'llanadi.
+
+---
+
+## Buyruqlar
+
+```bash
+npm run dev          # ishlab chiqish
+npm run build        # prod build
+npm run check        # typecheck + lint + test
+npm test             # faqat testlar
+npm run db:migrate   # migratsiyalar
+npm run worker       # alohida worker (WORKER_INLINE=false bilan)
+npm run bot          # Telegram bot (long-polling, lokal uchun)
+npm run topup -- <username> <miqdor> [points|quota|balance]
+```
+
+---
+
+## API
+
+| Endpoint | Nima qiladi |
+|---|---|
+| `GET /api/health` | Baza, navbat, yoqilgan imkoniyatlar. Baza tushsa 503 |
+| `POST /api/auth/telegram` | Login Widget yoki Mini App `initData` (imzo serverda tekshiriladi) |
+| `POST /api/auth/telegram/ticket[?action=verify]` | Kirish chiptasi: bot havolasi / kodni tasdiqlash |
+| `POST /api/telegram/webhook` | Telegram update (maxfiy sarlavha bilan himoyalangan) |
+| `POST /api/auth/otp?action=request\|verify` | Zaxira OTP (yetkazuvchi ulanmagan) |
+| `GET\|DELETE /api/auth/session` | Joriy sessiya / chiqish (`?all=1` — hamma joydan) |
+| `GET\|PATCH /api/users/me` | Profil + tranzaksiyalar jurnali |
+| `GET\|POST /api/generations` | Ro'yxat / navbatga qo'yish |
+| `GET\|DELETE /api/generations/{id}` | Holat / o'chirish (navbatdagisi bekor qilinib puli qaytadi) |
+| `GET /api/generations/{id}/file` | DOCX / PPTX / PNG |
+| `GET /api/generations/{id}/assets/{assetId}` | Slayd va rasm mediasi |
+| `POST /api/extract` | Hujjatdan matn (DOCX, PDF, PPTX, XLSX, TXT) |
+| `POST /api/payments/orders` | To'lov buyurtmasi + provayder URL |
+| `POST /api/payments/click` | Click Prepare/Complete webhook |
+| `POST /api/payments/payme` | Payme Merchant API (JSON-RPC) |
+
+Barcha `/api/generations*` va `/api/extract` **kirishni talab qiladi**.
+Egalik SQL darajasida tekshiriladi — id ni bilgan begona foydalanuvchi hech narsa ola olmaydi.
+
+---
+
+## Navbat kafolatlari
+
+- Yechish va navbatga qo'yish **bitta tranzaksiyada** — to'lanmagan ish navbatga tushmaydi
+- `FOR UPDATE SKIP LOCKED` — bir vazifani ikki worker olmaydi
+- Worker natijani yozishdan oldin **qulf hali o'zida ekanini** tekshiradi;
+  bo'lmasa natija tashlanadi (uzoq ish qayta navbatga tushgan holat)
+- Progress yangilanishi ayni paytda qulf «heartbeat»i — sog'lom uzoq ish
+  o'lik deb hisoblanmaydi
+- Osilib qolgan ish 2 urinishdan keyin `FAILED` bo'ladi va **puli qaytariladi**
+
+## Kredit modeli
+
+Uch qatlam, shu tartibda yechiladi: **ball** (bonus) → **kvota** (Pro) → **balans** (so'm).
+
+- Yangi akkaunt: 3 000 ball
+- Pro: 15 000 so'm / 30 kun / 15 000 kvota
+- Narx **serverda** hisoblanadi — klient yuborgan `price` e'tiborsiz qoladi
+- Har harakat `transactions` jurnaliga tushadi; balans jurnaldan qayta hisoblanishi mumkin
+- Yechish va navbatga qo'yish **bitta tranzaksiyada**
+- Xato yoki bekor qilishda pul **aynan olingan hamyonga** qaytadi
+- `reference` bo'yicha idempotent: bitta ish ikki marta yechilmaydi, bitta webhook ikki marta pul qo'shmaydi
+
+## To'lov
+
+`POST /api/payments/orders` buyurtma yaratadi va provayder URL ini qaytaradi.
+Kredit **faqat webhook tasdiqlagandan keyin** qo'shiladi.
+
+Provayder panelida webhook manzillari:
+
+```
+Click:  https://<domen>/api/payments/click     (Prepare va Complete uchun bir xil)
+Payme:  https://<domen>/api/payments/payme
+```
+
+Click imzosi MD5 formulasi bo'yicha, Payme esa `Basic Paycom:<KEY>` bilan tekshiriladi;
+ikkalasi ham doimiy vaqtli taqqoslash ishlatadi.
+
+---
+
+## Xavfsizlik
+
+**Autentifikatsiya**
+- Sessiya tokeni httpOnly cookie da; bazada faqat SHA-256 hashi
+- Telegram imzosi bot token bilan serverda tekshiriladi — klient `user_id` siga ishonilmaydi
+- Kirish kodi hash holida, 5 daqiqa, 5 urinish, bir martalik
+- Telegram akkaunti (`telegram_id`) va telefon akkaunti (`local_id`) **alohida fazolar** —
+  bir fazodagi identifikator boshqasidagi akkauntga tusha olmaydi
+
+**So'rov darajasida**
+- CSRF: `Origin` + `Sec-Fetch-Site` qat'iy tekshiriladi (holat o'zgartiruvchi metodlarda)
+- Rate limit: generatsiya 5/daqiqa va 60/soat, extract 20/5 daqiqa, chipta 10/5 daqiqa
+- Yuklangan fayl hajmi **tahlildan oldin** tekshiriladi; ZIP ochilish byudjeti bor (zip bomb)
+- Kutilmagan xato matni klientga chiqmaydi (faqat log da)
+- `/api/health` batafsil javobi `CRON_SECRET` talab qiladi
+
+**Ma'lumot**
+- Egalik SQL darajasida: id ni bilgan begona foydalanuvchi hujjat ham, rasm ham ola olmaydi
+- Fayl va media `FILE_TTL_HOURS` dan keyin, generatsiya yozuvlari 90 kundan keyin o'chadi
+- CSP, HSTS, nosniff, Referrer-Policy, Cross-Origin-Resource-Policy
+
+**Ma'lum cheklov:** `script-src` da `'unsafe-inline'` bor — Next.js inline runtime
+skriptlaridan foydalanadi. Nonce ga o'tish middleware talab qiladi.
+
+### Telegram Mini App haqida
+
+`X-Frame-Options` **ataylab qo'yilmagan**: u faqat bitta qiymatni qabul qiladi va
+Mini App ni (`web.telegram.org` iframe i) butunlay bloklardi. O'rniga CSP
+`frame-ancestors` ishlatiladi — u aniqroq va zamonaviy brauzerlarda XFO dan ustun.
+
+Telegram'ning **web** versiyasida ishlatmoqchi bo'lsangiz
+`SESSION_COOKIE_SAMESITE=none` qo'ying (HTTPS shart). Mobil ilovada kerak emas.
+
+---
+
+## Ma'lum cheklovlar
+
+- **Brend.** Interfeys va nom hali `sodda.ai` dan olingan. `NEXT_PUBLIC_BRAND_NAME`
+  o'zgaruvchisi bor, lekin logotip, matnlar va domen o'zingiznikiga almashtirilishi kerak
+  (`REJA.md`, 1-bosqich) — bu huquqiy masala.
+- **SMS/telefon orqali kirish yo'q.** Yagona haqiqiy kirish yo'li — Telegram.
+  `/api/auth/otp` endpointi bor va tekshiruvi to'g'ri, lekin kodni telefonga
+  yuboruvchi provayder ulanmagan.
+- **i18n.** Interfeys matnlari kodda o'zbekcha qattiq yozilgan. Til tanlash
+  generatsiya tiliga ta'sir qiladi, interfeysga emas.
+- **PDF eksport** yo'q (DOCX/PPTX bor).
+- `pptxgenjs` → `image-size` da DoS advisory bor. Bizda rasm faqat fal.ai dan
+  keladigan JPEG, lekin yangilanish chiqsa ko'tarish kerak.
+- Fayllar Postgres `BYTEA` da (25 MB chegara). Hajm o'sganda S3 ga ko'chirish kerak.
+
+Keyingi bosqichlar: `REJA.md`.

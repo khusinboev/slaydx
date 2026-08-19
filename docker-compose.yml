@@ -1,0 +1,66 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sodda
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sodda}
+      POSTGRES_DB: sodda
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sodda"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # Port faqat ichki tarmoqda — tashqariga chiqarmaymiz.
+    expose:
+      - "5432"
+
+  web:
+    build: .
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://sodda:${POSTGRES_PASSWORD:-sodda}@postgres:5432/sodda
+      APP_URL: ${APP_URL:-http://localhost:3000}
+      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET kerak — openssl rand -base64 48}
+      NEXT_PUBLIC_BRAND_NAME: ${NEXT_PUBLIC_BRAND_NAME:-Sodda.ai}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      NEXT_PUBLIC_TELEGRAM_BOT: ${NEXT_PUBLIC_TELEGRAM_BOT:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash}
+      FAL_KEY: ${FAL_KEY:-}
+      FAL_MODEL: ${FAL_MODEL:-fal-ai/flux/schnell}
+      CLICK_SERVICE_ID: ${CLICK_SERVICE_ID:-}
+      CLICK_MERCHANT_ID: ${CLICK_MERCHANT_ID:-}
+      CLICK_SECRET_KEY: ${CLICK_SECRET_KEY:-}
+      PAYME_MERCHANT_ID: ${PAYME_MERCHANT_ID:-}
+      PAYME_KEY: ${PAYME_KEY:-}
+      # Web faqat so'rovlarga javob beradi; navbatni alohida worker bajaradi.
+      WORKER_INLINE: "false"
+    ports:
+      - "${PORT:-3000}:3000"
+
+  worker:
+    build:
+      context: .
+      target: worker
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://sodda:${POSTGRES_PASSWORD:-sodda}@postgres:5432/sodda
+      APP_URL: ${APP_URL:-http://localhost:3000}
+      SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET kerak}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash}
+      FAL_KEY: ${FAL_KEY:-}
+      FAL_MODEL: ${FAL_MODEL:-fal-ai/flux/schnell}
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
+
+volumes:
+  pgdata:
