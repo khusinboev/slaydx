@@ -16,6 +16,7 @@ export const SLIDE_THEMES: SlideTheme[] = [
     text: "#0B1F3A",
     muted: "#5C6B7A",
     accent: "#C9A227",
+    accentInk: "#876D1A",
     accent2: "#0B1F3A",
     titleBg: "#0B1F3A",
     titleText: "#F7F4EC",
@@ -34,10 +35,11 @@ export const SLIDE_THEMES: SlideTheme[] = [
     text: "#134E4A",
     muted: "#5B7468",
     accent: "#0F766E",
+    accentInk: "#0F766E",
     accent2: "#F59E0B",
     titleBg: "#0F766E",
     titleText: "#FFFBEB",
-    titleMuted: "#FDE68A",
+    titleMuted: "#FDE996",
     chrome: "bar-top",
     darkContent: false,
   },
@@ -52,6 +54,7 @@ export const SLIDE_THEMES: SlideTheme[] = [
     text: "#E8EEF7",
     muted: "#9AA4B2",
     accent: "#22D3EE",
+    accentInk: "#22D3EE",
     accent2: "#64748B",
     titleBg: "#0B0D11",
     titleText: "#F8FAFC",
@@ -70,6 +73,7 @@ export const SLIDE_THEMES: SlideTheme[] = [
     text: "#3F1D1D",
     muted: "#7C5A4A",
     accent: "#7F1D1D",
+    accentInk: "#7F1D1D",
     accent2: "#B45309",
     titleBg: "#4A1515",
     titleText: "#FAF3E0",
@@ -88,6 +92,7 @@ export const SLIDE_THEMES: SlideTheme[] = [
     text: "#FAFAF9",
     muted: "#A8A29E",
     accent: "#8B5CF6",
+    accentInk: "#9266F7",
     accent2: "#F97316",
     titleBg: "#0C0A09",
     titleText: "#FAFAF9",
@@ -106,10 +111,11 @@ export const SLIDE_THEMES: SlideTheme[] = [
     text: "#0C4A6E",
     muted: "#64748B",
     accent: "#0284C7",
+    accentInk: "#0279B7",
     accent2: "#0EA5E9",
     titleBg: "#0369A1",
     titleText: "#F0F9FF",
-    titleMuted: "#BAE6FD",
+    titleMuted: "#BBE7FD",
     chrome: "bar-top",
     darkContent: false,
   },
@@ -124,6 +130,7 @@ export const SLIDE_THEMES: SlideTheme[] = [
     text: "#FAFAF9",
     muted: "#A8A29E",
     accent: "#F59E0B",
+    accentInk: "#F59E0B",
     accent2: "#78716C",
     titleBg: "#0C0A09",
     titleText: "#FFFBEB",
@@ -142,6 +149,7 @@ export const SLIDE_THEMES: SlideTheme[] = [
     text: "#14532D",
     muted: "#5C6B52",
     accent: "#15803D",
+    accentInk: "#15803D",
     accent2: "#A16207",
     titleBg: "#14532D",
     titleText: "#ECFDF3",
@@ -158,8 +166,9 @@ export const SLIDE_THEMES: SlideTheme[] = [
     bg: "#F4F7FB",
     surface: "#FFFFFF",
     text: "#1E3A5F",
-    muted: "#64748B",
+    muted: "#627288",
     accent: "#EA580C",
+    accentInk: "#C2490A",
     accent2: "#1E3A5F",
     titleBg: "#1E3A5F",
     titleText: "#FFF7ED",
@@ -178,6 +187,7 @@ export const SLIDE_THEMES: SlideTheme[] = [
     text: "#111111",
     muted: "#6B7280",
     accent: "#DC2626",
+    accentInk: "#DC2626",
     accent2: "#111111",
     titleBg: "#111111",
     titleText: "#FFFFFF",
@@ -194,8 +204,9 @@ export const SLIDE_THEMES: SlideTheme[] = [
     bg: "#F1F5F9",
     surface: "#FFFFFF",
     text: "#0F172A",
-    muted: "#64748B",
+    muted: "#617187",
     accent: "#0284C7",
+    accentInk: "#0275B1",
     accent2: "#334155",
     titleBg: "#334155",
     titleText: "#F8FAFC",
@@ -214,6 +225,7 @@ export const SLIDE_THEMES: SlideTheme[] = [
     text: "#881337",
     muted: "#9F1239",
     accent: "#DB2777",
+    accentInk: "#D22572",
     accent2: "#FB7185",
     titleBg: "#9D174D",
     titleText: "#FFF1F2",
@@ -232,6 +244,7 @@ export const SLIDE_THEMES: SlideTheme[] = [
     text: "#052E16",
     muted: "#3F6212",
     accent: "#047857",
+    accentInk: "#047857",
     accent2: "#B45309",
     titleBg: "#064E3B",
     titleText: "#ECFDF5",
@@ -250,6 +263,7 @@ export const SLIDE_THEMES: SlideTheme[] = [
     text: "#E2E8F0",
     muted: "#94A3B8",
     accent: "#34D399",
+    accentInk: "#34D399",
     accent2: "#38BDF8",
     titleBg: "#020617",
     titleText: "#ECFDF5",
@@ -268,6 +282,7 @@ export const SLIDE_THEMES: SlideTheme[] = [
     text: "#F4F1E8",
     muted: "#C5D5B8",
     accent: "#FDE68A",
+    accentInk: "#FDE68A",
     accent2: "#86EFAC",
     titleBg: "#122416",
     titleText: "#F8F5E8",
@@ -281,6 +296,35 @@ export const SLIDE_THEME_BY_ID = Object.fromEntries(SLIDE_THEMES.map((t) => [t.i
   SlideThemeId,
   SlideTheme
 >;
+
+/**
+ * WCAG 2.1 nisbiy yorqinlik va kontrast nisbati.
+ *
+ * Temalar qo'lda tanlangan va hech qachon o'lchanmagan edi: ba'zi
+ * palitralarda kulrang matn (`muted`) fon ustida chegaraviy chiqardi va
+ * proyektorda o'qilmasdi. `tests/themes.test.mts` har bir juftni tekshiradi.
+ */
+function channel(v: number): number {
+  const c = v / 255;
+  return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+}
+
+export function luminance(hex: string): number {
+  const h = hex.replace("#", "");
+  const full = h.length === 3 ? h.split("").map((c) => c + c).join("") : h;
+  const r = parseInt(full.slice(0, 2), 16);
+  const g = parseInt(full.slice(2, 4), 16);
+  const b = parseInt(full.slice(4, 6), 16);
+  return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+}
+
+/** 1 (bir xil) … 21 (qora/oq). WCAG AA matn uchun ≥ 4.5 talab qiladi. */
+export function contrastRatio(fg: string, bg: string): number {
+  const a = luminance(fg);
+  const b = luminance(bg);
+  const [hi, lo] = a > b ? [a, b] : [b, a];
+  return (hi + 0.05) / (lo + 0.05);
+}
 
 export function getSlideTheme(id?: string | null): SlideTheme {
   if (id && isSlideThemeId(id)) return SLIDE_THEME_BY_ID[id];
