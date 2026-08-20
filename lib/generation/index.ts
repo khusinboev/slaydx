@@ -41,9 +41,11 @@ const NO_SCALE = new Set([
  * bog'langan. Qolganlari (glossariy, dars rejasi, rezyume, tarjima…)
  * bet bilan emas, tuzilma bilan o'lchanadi.
  *
- * IMRAD (`kind === "imrad"`) hozircha darvozadan tashqarida: uning o'z
- * to'ldirish mexanizmi yo'q, shuning uchun darvoza uni faqat xatoga
- * aylantirardi. Sprint 2 da IMRAD ga alohida to'ldirish qo'shiladi.
+ * IMRAD ham darvoza ostida. Ilgari u istisno edi, chunki o'z
+ * to'ldirish mexanizmi yo'q edi — darvoza uni faqat xatoga aylantirardi.
+ * Endi `writeImradWithLlm` bo'lim hajmini `targetPages` dan hisoblaydi
+ * va yetmasa «Natijalar»/«Muhokama» ni chuqurlashtiradi, shuning uchun
+ * istisnoning sababi qolmadi.
  */
 const LENGTH_GATED = new Set(["referat", "coursework", "mustaqil-ish", "article", "thesis", "essay"]);
 
@@ -114,7 +116,7 @@ export async function buildArtifact(
    * «tayyor» deb belgilash foydalanuvchini aldash bo'lardi: u 15–20 bet
    * uchun to'lab, 9 betlik fayl olardi. Xato + kredit qaytishi halolroq.
    */
-  if (llmDoc && LENGTH_GATED.has(tool.id) && meta.kind !== "imrad") {
+  if (llmDoc && LENGTH_GATED.has(tool.id)) {
     const want = targetWords(meta.targetPages);
     const got = wordCount(academic);
     if (got < want * MIN_LENGTH_RATIO) {

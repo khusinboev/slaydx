@@ -10,7 +10,16 @@ import {
   resumeSystemPrompt,
   translationSystemPrompt,
 } from "./prompts";
-import { blocksFromText, cleanText, isGenericGlossaryTerm, mapPool, remainingMs, section } from "./quality";
+import {
+  blocksFromText,
+  cleanText,
+  isGenericGlossaryTerm,
+  mapPool,
+  remainingMs,
+  section,
+  targetWords,
+  wordCount,
+} from "./quality";
 import type { AcademicDoc, Block, DocMeta, DocSection, DocTable } from "./types";
 
 function asText(s: unknown): string {
@@ -653,43 +662,118 @@ export async function writeImradWithLlm(meta: DocMeta, deadline?: number): Promi
     })
     .filter((x): x is { lang: string; label: string; text: string; keywords: string } => Boolean(x));
 
+  /**
+   * IMRAD hajmi endi TANLANGAN BETGA bog'liq.
+   *
+   * Ilgari to'rt bo'limning har biriga qat'iy paragraf soni berilardi
+   * (3/2/3/3) va `meta.targetPages` umuman o'qilmasdi. Ya'ni «10–15 bet»
+   * uchun 8 000 tanga to'lagan foydalanuvchi «3–5 bet» uchun 4 000 tanga
+   * to'lagani bilan AYNAN bir xil hujjat olardi — bu P0-1 (slayd sifat
+   * paketi) nuqsonining hujjatdagi ko'rinishi edi.
+   *
+   * Ulushlar IMRAD me'yoriga mos: natija va muhokama eng katta qism,
+   * metodika eng kichigi. Paragraf ~105 so'z deb hisoblanadi (promptda
+   * shu so'raladi).
+   */
+  const want = targetWords(meta.targetPages);
+  const SHARE = { intro: 0.2, methods: 0.15, results: 0.35, discussion: 0.3 } as const;
+  const parasFor = (share: number, floor: number) =>
+    Math.max(floor, Math.min(12, Math.round((want * share) / 105)));
+
   const plan = [
     {
       id: "intro",
       title: L.imradIntro,
-      brief: `Tadqiqot savoli, nima ma’lum, bo‘shliq, maqsad. Faqat «${topic}». Kamida 3 paragraf.`,
+      brief: `Tadqiqot savoli, nima ma’lum, bo‘shliq, maqsad. Faqat «${topic}».`,
+      min: parasFor(SHARE.intro, 3),
     },
     {
       id: "methods",
       title: L.imradMethods,
-      brief: `Adabiyot tahlili, qiyoslash, tanlov mezoni, cheklov. Uydirma so‘rovnoma yo‘q. Kamida 2 paragraf.`,
+      brief: `Adabiyot tahlili, qiyoslash, tanlov mezoni, cheklov. Uydirma so‘rovnoma yo‘q.`,
+      min: parasFor(SHARE.methods, 2),
     },
     {
       id: "results",
       title: L.imradResults,
-      brief: `Asosiy tahliliy topilmalar: omillar, yondashuvlar, farqlar. Uydirma foiz yo‘q. Kamida 3 paragraf.`,
+      brief: `Asosiy tahliliy topilmalar: omillar, yondashuvlar, farqlar. Uydirma foiz yo‘q.`,
+      min: parasFor(SHARE.results, 3),
     },
     {
       id: "discussion",
       title: L.imradDiscussion,
-      brief: `Topilmalarning ahamiyati, cheklov, amaliy xulosa. Shior emas. Kamida 3 paragraf.`,
+      brief: `Topilmalarning ahamiyati, cheklov, amaliy xulosa. Shior emas.`,
+      min: parasFor(SHARE.discussion, 3),
     },
   ];
 
-  const written = await mapPool(plan, 3, async (item) => {
+  /** Bir bo'limni yozadi; token va timeout byudjeti paragraf soniga ergashadi. */
+  const writeImradSection = async (item: { title: string; brief: string; min: number }, min: number) => {
+    const timeoutMs = Math.min(45_000, remainingMs(deadline) || 45_000);
+    if (timeoutMs < 5_000) return [];
     const text = await llmComplete(
       sys,
-      `Bo‘lim: ${item.title}\nMavzu: ${topic}\n${item.brief}\nSarlavhani qayta yozmang.`,
-      2200,
-      { timeoutMs: Math.min(40_000, remainingMs(deadline) || 40_000) },
+      [
+        `Bo‘lim: ${item.title}`,
+        `Mavzu: ${topic}`,
+        item.brief,
+        `Kamida ${min} ta to‘la paragraf (har biri 80–130 so‘z). Sarlavhani qayta yozmang.`,
+      ].join("\n"),
+      Math.min(7000, 700 + min * 420),
+      { timeoutMs },
     );
-    return { item, blocks: text ? blocksFromText(text) : [] };
+    return text ? blocksFromText(text) : [];
+  };
+
+  const written = await mapPool(plan, 3, async (item) => {
+    let blocks = await writeImradSection(item, item.min);
+    // Bitta bo'sh bo'lim butun maqolani yo'q qiladi — bir marta qayta uriniladi.
+    if (!blocks.length && remainingMs(deadline) > 10_000) {
+      blocks = await writeImradSection(item, Math.max(2, item.min - 2));
+    }
+    return { item, blocks };
   });
 
   const sections: DocSection[] = [];
   for (const { item, blocks } of written) {
     if (blocks.length < 1) return null;
     sections.push(section(item.id, item.title, blocks));
+  }
+
+  /**
+   * Hajmni va'daga yetkazish.
+   *
+   * IMRAD ga yangi BO'LIM qo'shib bo'lmaydi — tuzilma qat'iy, beshinchi
+   * bo'lim uni buzadi. Shuning uchun mavjud «Natijalar» va «Muhokama»
+   * chuqurlashtiriladi: ikkalasi ham IMRAD da kengaytirishga ochiq va
+   * aynan shu yerda ko'proq tahlil kutiladi.
+   */
+  const deepen = [
+    {
+      id: "results",
+      brief: `«${topic}» bo‘yicha QO‘SHIMCHA topilmalar: yuqorida aytilmagan omil, qarama-qarshi dalil yoki alohida holat. Takrorlamang.`,
+    },
+    {
+      id: "discussion",
+      brief: `«${topic}» bo‘yicha QO‘SHIMCHA muhokama: cheklovlar, amaliy tavsiya va keyingi tadqiqot yo‘nalishi. Takrorlamang.`,
+    },
+  ];
+  for (const step of deepen) {
+    const doc = { meta, sections } as AcademicDoc;
+    if (wordCount(doc) >= want * 0.9) break;
+    if (remainingMs(deadline) < 25_000) {
+      console.warn("[imrad] chuqurlashtirish tashlandi: byudjet tugadi");
+      break;
+    }
+    const target = sections.find((x) => x.id === step.id);
+    if (!target) continue;
+    const need = want - wordCount(doc);
+    const extra = await writeImradSection(
+      { title: target.title, brief: step.brief, min: 0 },
+      Math.max(3, Math.min(10, Math.round(need / 110))),
+    );
+    if (!extra.length) break;
+    target.blocks.push(...extra);
   }
 
   const refRaw = await llmComplete(
