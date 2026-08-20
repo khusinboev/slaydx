@@ -275,7 +275,16 @@ export async function renderDocx(doc: AcademicDoc): Promise<Uint8Array> {
     children.push(bodyP(`${L.keywords}: ${a.keywords}`));
   }
 
+  /**
+   * Bo'sh bo'lim sarlavhasi chizilmaydi.
+   *
+   * Yozuv yo'llari bo'sh bo'lim qoldirmasligi kerak va endi qoldirmaydi,
+   * lekin renderer bunga TAYANMASLIGI lozim: matnsiz «KIRISH» sarlavhasi
+   * foydalanuvchi ko'radigan eng yomon nuqson — hujjat tugallanmagandek
+   * ko'rinadi. Bu yerdagi tekshiruv arzon va oxirgi to'siq.
+   */
   for (const s of doc.sections) {
+    if (!s.blocks.length) continue;
     children.push(heading(s.title.toUpperCase(), HeadingLevel.HEADING_1));
     for (const b of s.blocks) children.push(...blockToParagraphs(b));
   }

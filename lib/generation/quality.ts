@@ -280,13 +280,34 @@ export function parseManualOutline(text: string): ManualChapter[] {
  * Ikki hol alohida ushlanadi, chunki bitta keng qolip xavfli:
  * «IT sohasida», «3D modellashtirish» kabi sarlavhalar raqam bilan
  * boshlangandek ko'rinadi. Shuning uchun ajratuvchi belgi TALAB qilinadi.
+ *
+ * YOLG'IZ RIM HARFI — alohida hol. `I`, `V`, `X`, `L`, `C` bir vaqtning
+ * o'zida ham rim raqami, ham MUALLIF INITSIALI bo'lishi mumkin:
+ * «I. Karimov asarlarida…», «V. Vernadskiy ta'limoti», «L. Tolstoy
+ * romanlari». Ilgari ular raqam deb kesilar va familiya initsialsiz
+ * qolardi — adabiyot, tarix va biologiya ishlarida bu muntazam sodir
+ * bo'lardi. Endi yolg'iz harf faqat KALIT SO'Z bilan birga kelganda
+ * raqam hisoblanadi («I BOB.», «ГЛАВА I.», «CHAPTER I.»).
+ *
+ * Ikki harfdan boshlab noaniqlik yo'qoladi: «II.», «IV.», «IX.» hech
+ * qachon initsial emas, shuning uchun ular kalit so'zsiz ham kesiladi.
+ * Ikki qo'shaloq initsial («I.A. Karimov») ikkala qolipga ham tushmaydi —
+ * ulardan keyin bo'sh joy emas, nuqta keladi.
  */
 const ARABIC_LEAD = /^\d+(?:\.\d+)*\s*[.)]?\s+/;
-const ROMAN_LEAD = /^(?:(?:chapter|глава)\s+)?[ivxlc]{1,4}\s*[-–—]?\s*(?:bob|глава|chapter)?\s*[.)]\s+/i;
+/**
+ * Kalit so'zli rim raqami — uzunligidan qat'i nazar raqam.
+ * Kalit so'z ikki tomonda ham turishi mumkin: «I BOB.» (o'zbek) va
+ * «ГЛАВА I.» / «CHAPTER I.» (rus, ingliz).
+ */
+const ROMAN_KEYED =
+  /^(?:(?:chapter|глава|bob)\s+[ivxlc]{1,4}|[ivxlc]{1,4}\s*[-–—]?\s*(?:bob|глава|chapter))\s*[.)]?\s+/i;
+/** Kalit so'zsiz rim raqami — faqat ikki harfdan boshlab. */
+const ROMAN_BARE = /^[ivxlc]{2,4}\s*[-–—]?\s*[.)]\s+/i;
 
 export function stripHeadingNumber(title: string): string {
   const t = String(title ?? "").trim();
-  const cut = t.replace(ROMAN_LEAD, "").replace(ARABIC_LEAD, "").trim();
+  const cut = t.replace(ROMAN_KEYED, "").replace(ROMAN_BARE, "").replace(ARABIC_LEAD, "").trim();
   // Sarlavha butunlay raqamdan iborat bo'lsa (masalan «2.2»), asl matn
   // qoladi — bo'sh sarlavha raqamsizdan ham yomon.
   return cut.length >= 3 ? cut : t;

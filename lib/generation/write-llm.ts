@@ -590,7 +590,19 @@ export async function writeEssayWithLlm(meta: DocMeta, deadline?: number): Promi
     .filter((s) => s.paras.length);
   const conclusion = asParas(data?.conclusion);
 
-  if (intro.length + bodySecs.reduce((n, s) => n + s.paras.length, 0) + conclusion.length >= 4) {
+  /**
+   * Uchala qism ham TO'LIQ bo'lishi shart.
+   *
+   * Ilgari shart faqat JAMI paragraf soniga qo'yilgan edi (`>= 4`).
+   * Model `intro` ni bo'sh qaytarib, `sections` ni to'ldirsa — shart
+   * baribir bajarilar va hujjatga MATNSIZ «KIRISH» sarlavhasi tushardi
+   * (render har bo'limga sarlavha yozadi, ichi bo'sh bo'lsa ham).
+   * Kirishsiz yoki xulosasiz insho — tuzilmaviy jihatdan yaroqsiz,
+   * shuning uchun bunda pastdagi matnli zaxira yo'liga o'tamiz: u
+   * paragraflarni o'zi uchga bo'ladi va bo'sh bo'lim qoldirmaydi.
+   */
+  const bodyParas = bodySecs.reduce((n, s) => n + s.paras.length, 0);
+  if (intro.length && bodyParas && conclusion.length && intro.length + bodyParas + conclusion.length >= 4) {
     return {
       meta,
       titlePage: true,

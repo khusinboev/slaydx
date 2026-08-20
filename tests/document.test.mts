@@ -239,6 +239,68 @@ test("sarlavhadagi raqam olib tashlanadi, ammo raqamdan boshlangan so'z saqlanad
   assert.equal(romanNumeral(3), "III");
 });
 
+test("yolg'iz rim harfi muallif initsiali sifatida saqlanadi", async () => {
+  const { stripHeadingNumber } = await import("../lib/generation/quality.ts");
+
+  // `I`, `V`, `X`, `L`, `C` — ham rim raqami, ham initsial. Kalit so'zsiz
+  // ular initsial deb qaraladi, aks holda familiya initsialsiz qolardi.
+  assert.equal(
+    stripHeadingNumber("I. Karimov asarlarida ta'lim masalasi"),
+    "I. Karimov asarlarida ta'lim masalasi",
+  );
+  assert.equal(stripHeadingNumber("V. Vernadskiy ta'limoti"), "V. Vernadskiy ta'limoti");
+  assert.equal(stripHeadingNumber("L. Tolstoy romanlari"), "L. Tolstoy romanlari");
+  assert.equal(stripHeadingNumber("X. Sultonov ijodi"), "X. Sultonov ijodi");
+  assert.equal(stripHeadingNumber("C. Darwin nazariyasi"), "C. Darwin nazariyasi");
+
+  // Kalit so'z bilan kelsa — bu bob raqami, kesiladi.
+  assert.equal(stripHeadingNumber("I BOB. NAZARIY ASOSLAR"), "NAZARIY ASOSLAR");
+  assert.equal(stripHeadingNumber("ГЛАВА I. ТЕОРЕТИЧЕСКИЕ ОСНОВЫ"), "ТЕОРЕТИЧЕСКИЕ ОСНОВЫ");
+  assert.equal(stripHeadingNumber("CHAPTER I. FOUNDATIONS"), "FOUNDATIONS");
+
+  // Ikki harfdan boshlab noaniqlik yo'q — kalit so'zsiz ham kesiladi.
+  assert.equal(stripHeadingNumber("II. Amaliy tahlil"), "Amaliy tahlil");
+  assert.equal(stripHeadingNumber("IV. Bosqich natijalari"), "Bosqich natijalari");
+  assert.equal(stripHeadingNumber("IX. Xulosa qismi"), "Xulosa qismi");
+
+  // Qo'shaloq initsial hech qachon raqam emas.
+  assert.equal(stripHeadingNumber("I.A. Karimov merosi"), "I.A. Karimov merosi");
+});
+
+test("matnsiz bo'lim na hujjatda, na mundarijada chizilmaydi", async () => {
+  const { tocRows } = await import("../lib/generation/toc-model.ts");
+  const JSZip = (await import("jszip")).default;
+
+  const meta = extractMeta(TOOL_BY_ID["essay"], { topic: "Vatan", pages: "2" } as FormValues);
+  const doc = {
+    meta,
+    titlePage: false,
+    toc: false,
+    sections: [
+      { id: "kirish", title: "Kirish", blocks: [] },
+      {
+        id: "asosiy",
+        title: "Vatan tuygusi",
+        blocks: [{ kind: "p" as const, text: "A".repeat(120) }],
+      },
+      { id: "xulosa", title: "Xulosa", blocks: [] },
+    ],
+  } as unknown as AcademicDoc;
+
+  const zip = await JSZip.loadAsync(await renderDocx(doc));
+  const xml = await zip.file("word/document.xml")!.async("string");
+  const texts = [...xml.matchAll(/<w:t[^>]*>([^<]*)<\/w:t>/g)].map((m) => m[1]);
+
+  assert.ok(!texts.includes("KIRISH"), "bo'sh KIRISH sarlavhasi chizilmasligi kerak");
+  assert.ok(!texts.includes("XULOSA"), "bo'sh XULOSA sarlavhasi chizilmasligi kerak");
+  assert.ok(texts.some((t) => t.includes("VATAN")), "to'la bo'lim qolishi kerak");
+
+  assert.deepEqual(
+    tocRows(doc).map((r) => r.text),
+    ["Vatan tuygusi"],
+  );
+});
+
 test("mundarija modeli fayl va viewer uchun bir xil qatorlarni beradi", async () => {
   const { tocRows } = await import("../lib/generation/toc-model.ts");
 
@@ -255,7 +317,7 @@ test("mundarija modeli fayl va viewer uchun bir xil qatorlarni beradi", async ()
           { kind: "h2", text: "1.2. Tasnif" },
         ],
       },
-      { id: "xulosa", title: "Xulosa", blocks: [] },
+      { id: "xulosa", title: "Xulosa", blocks: [{ kind: "p", text: "matn" }] },
     ],
     references: ["Manba 1"],
   };

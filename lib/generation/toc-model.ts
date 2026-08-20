@@ -19,6 +19,10 @@ export type TocRow = { text: string; level: 1 | 2 };
 export function tocRows(doc: AcademicDoc): TocRow[] {
   const rows: TocRow[] = [];
   for (const s of doc.sections) {
+    // Matnsiz bo'lim hujjat tanasida chizilmaydi (`render-docx`), demak
+    // mundarijada ham turmasligi kerak — aks holda mundarija mavjud
+    // bo'lmagan bo'limga ishora qilardi.
+    if (!s.blocks.length) continue;
     rows.push({ text: s.title, level: 1 });
     for (const b of s.blocks) if (b.kind === "h2") rows.push({ text: b.text, level: 2 });
   }
