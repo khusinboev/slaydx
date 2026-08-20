@@ -134,6 +134,11 @@ Uch xil tekshiruv bir-birini to'ldiradi:
 |---|---|
 | `npm run check` | Kod: tiplar, lint, birlik testlari |
 | `npm run smoke` | Tizim ishlayaptimi: kirish, sahifalar, ko'ruvchilar, yaratish→yuklab olish→o'chirish, xato yo'llari |
+
+`smoke` LLM provayderi uzilganini MAHSULOT nuqsonidan ajratadi: kalit
+tugagan bo'lsa generatsiya yo'li «chetlab o'tildi» bo'ladi, lekin
+fail-closed va REFUND yo'li aksincha tekshiriladi — provayder uzilishi
+o'sha yo'lni sinash uchun eng yaxshi imkoniyat.
 | `node scripts/eval-services.mjs r1` | Chiqish SIFATI: hajm, slaydlar soni, speaker notes, uydirma manba, TARIF FARQI |
 
 `db:migrate`, `worker`, `topup`, `bot` va `smoke` `.env.local` ni o'zi

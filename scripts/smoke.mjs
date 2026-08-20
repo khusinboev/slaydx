@@ -23,8 +23,21 @@ const H = (extra = {}) => ({
   ...(COOKIE ? { Cookie: COOKIE } : {}),
   ...extra,
 });
-const pass = [], fail = [];
+const pass = [], fail = [], skip = [];
 const check = (name, ok, detail = "") => (ok ? pass : fail).push(`${name}${detail ? ` — ${detail}` : ""}`);
+const skipped = (name, why) => skip.push(`${name} — ${why}`);
+
+/**
+ * LLM provayderi yiqilganini MAHSULOT nuqsonidan ajratadi.
+ *
+ * Kalit tugagan yoki kvota bitgan bo'lsa tizim to'g'ri ishlagan bo'ladi:
+ * ish FAILED bo'ladi va kredit qaytadi. Buni «smoke yiqildi» deb
+ * ko'rsatish operatorni chalg'itadi — u kodda muammo izlay boshlaydi.
+ * Shuning uchun bunday holda mahsulot yo'li SKIP bo'ladi, lekin
+ * fail-closed va REFUND yo'li aksincha TEKSHIRILADI: provayder uzilishi
+ * bu yo'lni sinash uchun eng yaxshi imkoniyat.
+ */
+const PROVIDER_DOWN = /AI javob bermadi|prepayment|quota|RESOURCE_EXHAUSTED|429/i;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 async function login() {
@@ -59,6 +72,19 @@ async function viewers() {
 }
 
 async function journey() {
+  // Refundni tekshirish uchun boshlang'ich hisob kerak.
+  //
+  // UCHALA hamyon qo'shiladi: pul avval `points`, keyin `quota`, oxirida
+  // `balance` dan yechiladi. Faqat `balance` ga qaralsa tekshiruv bo'sh
+  // tasdiqqa aylanardi — ball bilan to'lagan foydalanuvchida u doim
+  // «0 → 0» ko'rsatardi.
+  const wallets = async () => {
+    const r = await (await fetch(`${B}/api/users/me`, { headers: H() })).json().catch(() => ({}));
+    const u = r?.user ?? {};
+    return Number(u.points ?? 0) + Number(u.quota ?? 0) + Number(u.balance ?? 0);
+  };
+  const before = await wallets();
+
   const create = await fetch(`${B}/api/generations`, {
     method: "POST", headers: H(),
     body: JSON.stringify({ slug: "essay", values: { topic: "Kitob — bilim manbai", language: "uz", pages: "1", author: "Test", design: "iris" } }),
@@ -73,6 +99,14 @@ async function journey() {
     gen = (await s.json()).generation;
     if (gen?.status === "COMPLETED" || gen?.status === "FAILED") break;
     await sleep(3000);
+  }
+  if (gen?.status === "FAILED" && PROVIDER_DOWN.test(gen.error || gen.step || "")) {
+    // Provayder yiqilgan — mahsulot yo'lini sinab bo'lmaydi, lekin
+    // fail-closed va refund AYNAN shu paytda tekshirilishi kerak.
+    skipped("yakunlandi", `LLM provayderi javob bermadi: ${(gen.error || "").slice(0, 70)}`);
+    const after = await wallets();
+    check("yiqilganda kredit qaytdi", after >= before, `${before} → ${after}`);
+    return;
   }
   check("yakunlandi", gen?.status === "COMPLETED", gen?.status ?? "javob yo'q");
   if (gen?.status !== "COMPLETED") return;
@@ -110,6 +144,7 @@ await pages(); await viewers(); await journey(); await errors();
 
 console.log("\n=== O'TDI ===");
 for (const p of pass) console.log("  ✓", p);
+if (skip.length) { console.log("\n=== CHETLAB O'TILDI ==="); for (const s of skip) console.log("  ~", s); }
 if (fail.length) { console.log("\n=== YIQILDI ==="); for (const f of fail) console.log("  ✗", f); }
-console.log(`\n${pass.length}/${pass.length + fail.length}`);
+console.log(`\n${pass.length}/${pass.length + fail.length}${skip.length ? ` (+${skip.length} chetlab o'tildi)` : ""}`);
 process.exit(fail.length ? 1 : 0);
