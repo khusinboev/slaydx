@@ -406,3 +406,40 @@ test("baholash rubrikasi to'liq bo'lmasa chiqmaydi", async () => {
   assert.equal(ok.filter((b) => b.kind === "li").length, 3);
   assert.equal(ok[ok.length - 1].text, "Jami: 10 ball");
 });
+
+/**
+ * Tarjimaning to'liqligi.
+ *
+ * Uch nuqson bir zanjirda edi:
+ *   1. forma 60 000 belgi qabul qilardi, dvigatel esa 48 000 ini ishlardi;
+ *   2. ortiqcha bo'lak `chunkSource` oxirida JIM kesilardi;
+ *   3. yiqilgan bo'lak bo'sh ro'yxat qaytarardi va qolgani `COMPLETED`
+ *      bo'lardi — foydalanuvchi yarim tarjimani to'liq deb olardi.
+ */
+test("uzun matn pul yechilishidan oldin rad etiladi", async () => {
+  const { preflightError, TRANSLATION_MAX_CHARS } = await import("../lib/tools.ts");
+  const tool = TOOL_BY_ID["translation"];
+
+  assert.equal(preflightError(tool, { sourceText: "salom" } as FormValues), null);
+  assert.equal(preflightError(tool, { sourceText: "x".repeat(TRANSLATION_MAX_CHARS) } as FormValues), null);
+
+  const tooLong = preflightError(tool, { sourceText: "x".repeat(TRANSLATION_MAX_CHARS + 1) } as FormValues);
+  assert.ok(tooLong && /juda uzun/i.test(tooLong), "uzun matn haqida aniq xabar bo'lishi kerak");
+
+  // Boshqa vositalarga bu chegara tegishli emas.
+  assert.equal(preflightError(TOOL_BY_ID["referat"], { sourceText: "x".repeat(100_000) } as FormValues), null);
+});
+
+test("chunkSource matnni jim kesmaydi", async () => {
+  const { chunkSource, MAX_CHUNKS } = await import("../lib/generation/write-specials.ts");
+
+  // Har abzas o'z bo'lagini egallaydigan eng yomon taqsimot.
+  const para = "A".repeat(2_500);
+  const chunks = chunkSource(Array.from({ length: 20 }, () => para).join("\n\n"), 4_000);
+
+  assert.equal(chunks.length, 20, "hamma abzas bo'lakka tushishi kerak");
+  assert.ok(chunks.length > MAX_CHUNKS, "bu holat chegaradan oshadi va xato berishi kerak");
+
+  // Hech bir belgi yo'qolmagan.
+  assert.equal(chunks.join("").replace(/\s/g, "").length, 20 * 2_500);
+});

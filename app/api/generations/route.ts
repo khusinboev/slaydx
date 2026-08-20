@@ -1,7 +1,7 @@
 import { ApiError, handler, json, limit, readJson, requireUser } from "@/lib/server/api";
 import { enqueueGeneration, listGenerations } from "@/lib/server/jobs";
 import { sanitizeValues } from "@/lib/server/validate";
-import { missingRequired, priceFor, TOOL_BY_SLUG, topicOf } from "@/lib/tools";
+import { missingRequired, preflightError, priceFor, TOOL_BY_SLUG, topicOf } from "@/lib/tools";
 import { startInlineWorker } from "@/lib/server/worker";
 import { env } from "@/lib/server/env";
 
@@ -50,6 +50,10 @@ export const POST = handler("generations/create", async (req) => {
   if (missing.length) {
     throw new ApiError(`To'ldirilmagan maydon: ${missing.join(", ")}`, 400, { missing });
   }
+
+  // «To'ldirilgan, lekin biz uddalay olmaymiz» — pul yechilishidan oldin.
+  const blocked = preflightError(tool, values);
+  if (blocked) throw new ApiError(blocked, 400);
 
   const price = priceFor(tool, values);
   const topic = topicOf(values, tool);

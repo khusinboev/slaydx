@@ -695,6 +695,39 @@ export function missingRequired(tool: ToolConfig, values: FormValues): string[] 
   return out;
 }
 
+/**
+ * Bir marta tarjima qilinadigan eng katta matn.
+ *
+ * `writeTranslationWithLlm` matnni 4 000 belgilik bo'laklarga bo'ladi va
+ * 12 tasini ishlaydi. Forma esa 60 000 belgi qabul qilardi — ya'ni uzun
+ * hujjat yuklagan foydalanuvchi puli yechilib, oxirgi 20% i JIM
+ * tashlangan tarjimani olardi. Chegara endi haqiqiy imkoniyatga teng va
+ * u pul yechilishidan OLDIN tekshiriladi.
+ */
+export const TRANSLATION_MAX_CHARS = 48_000;
+
+/**
+ * Pul yechilishidan oldingi tekshiruv.
+ *
+ * `missingRequired` «to'ldirilmagan maydon» ni ushlaydi, bu esa
+ * «to'ldirilgan, lekin biz uddalay olmaymiz» holatini. Ikkalasi ham
+ * navbatga qo'yishdan oldin ishlaydi, shunda foydalanuvchi bajarilmaydigan
+ * ish uchun to'lamaydi.
+ */
+export function preflightError(tool: ToolConfig, values: FormValues): string | null {
+  if (tool.id === "translation") {
+    const n = String(values.sourceText ?? "").length;
+    if (n > TRANSLATION_MAX_CHARS) {
+      return (
+        `Matn juda uzun: ${n.toLocaleString("uz-UZ")} belgi. ` +
+        `Bir marta ${TRANSLATION_MAX_CHARS.toLocaleString("uz-UZ")} belgigacha tarjima qilinadi — ` +
+        `hujjatni bo'laklarga bo'lib yuboring.`
+      );
+    }
+  }
+  return null;
+}
+
 export function priceFor(tool: ToolConfig, values: FormValues): number {
   if (tool.id === "image") {
     const n = Number(values.imageCount || 1);

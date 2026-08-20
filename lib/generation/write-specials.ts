@@ -723,7 +723,7 @@ export async function writeImradWithLlm(meta: DocMeta, deadline?: number): Promi
   };
 }
 
-function chunkSource(text: string, max = 3200) {
+export function chunkSource(text: string, max = 3200) {
   const paras = text.split(/\n{2,}/).map((s) => s.trim()).filter(Boolean);
   const chunks: string[] = [];
   let cur = "";
@@ -736,8 +736,23 @@ function chunkSource(text: string, max = 3200) {
     }
   }
   if (cur) chunks.push(cur);
-  return chunks.slice(0, 12);
+  return chunks;
 }
+
+/**
+ * Bir ishda tarjima qilinadigan eng ko'p bo'lak.
+ *
+ * Ilgari `chunkSource` oxirida `.slice(0, 12)` turardi — ortiqcha bo'lak
+ * JIM tashlanardi. Endi kesish yo'q: chegaradan oshsa ish xato bilan
+ * tugaydi va kredit qaytadi. `lib/tools.ts` dagi `TRANSLATION_MAX_CHARS`
+ * (48 000) buni forma darajasida oldini oladi; bu yer esa abzas
+ * taqsimoti yomon bo'lgan (har abzas o'z bo'lagini egallagan) holat
+ * uchun zaxira to'siq.
+ */
+export const MAX_CHUNKS = 15;
+
+/** Bo'laklar `POOL` tadan parallel ketadi. */
+const CHUNK_POOL = 3;
 
 const TRANSLATED_KINDS = new Set(["h2", "h3", "p", "li"]);
 
@@ -789,16 +804,55 @@ export async function writeTranslationWithLlm(
   const target = String(values.language || meta.language || "uz");
   const sourceLang = String(values.sourceLang || "avto");
   const chunks = chunkSource(source, 4000);
-  const parts = await mapPool(chunks, 2, async (chunk, i) => {
+  if (chunks.length > MAX_CHUNKS) {
+    throw new Error(
+      `Matn juda uzun: ${chunks.length} bo‘lak (eng ko‘pi ${MAX_CHUNKS}). ` +
+        `Kredit qaytariladi — hujjatni bo‘laklarga bo‘lib yuboring.`,
+    );
+  }
+
+  /**
+   * Bo'lak timeouti QOLGAN byudjetdan hisoblanadi.
+   *
+   * Ilgari har bo'lakka 70 s berilardi. 12 bo'lak 2 tadan ketsa bu
+   * 6 to'lqin × 70 s = 420 s, worker esa 285 s beradi — ya'ni uzun
+   * tarjima byudjetni oshirib, oxirgi bo'laklari bo'sh qaytardi.
+   * Endi to'lqinlar soniga bo'linadi va pool 3 ga ko'tarildi.
+   */
+  const waves = Math.max(1, Math.ceil(chunks.length / CHUNK_POOL));
+  const perChunkMs = Math.max(20_000, Math.min(70_000, Math.floor((remainingMs(deadline) || 210_000) / waves)));
+
+  const parts = await mapPool(chunks, CHUNK_POOL, async (chunk, i) => {
     const raw = await llmComplete(
       translationSystemPrompt(target, sourceLang),
       `Quyidagi matnni ${target} tiliga tarjima qiling. JSON: {"title":"","blocks":[{"kind":"h2|h3|p|li","text":""}]}.\nHar bo‘lak asl matndagi turini SAQLASIN: sarlavha — h2/h3, ro‘yxat bandi — li, oddiy matn — p.\nQism ${i + 1}/${chunks.length}.\n---\n${chunk}`,
       4000,
-      { json: true, timeoutMs: Math.min(70_000, remainingMs(deadline) || 70_000) },
+      { json: true, timeoutMs: perChunkMs },
     );
     const data = parseLlmObject<{ title?: string; blocks?: unknown; paragraphs?: unknown }>(raw);
     return { title: data?.title || "", blocks: translatedBlocks(data, raw) };
   });
+  /**
+   * Bo'lak yo'qolsa tarjima «tayyor» bo'lmaydi.
+   *
+   * Ilgari yiqilgan bo'lak shunchaki bo'sh ro'yxat qaytarardi va qolgani
+   * birlashtirilib `COMPLETED` bo'lardi: foydalanuvchi to'lagan hujjatning
+   * o'rtasidan bir necha sahifa JIM tushib qolardi va buni faqat asl
+   * matn bilan solishtirib bilish mumkin edi. Tarjimada to'liqlik —
+   * sifatning o'zi emas, mahsulotning shartI: yarim tarjima yaroqsiz.
+   *
+   * Shuning uchun bu yerda xato TASHLANADI (null emas): `buildArtifact`
+   * `null` ni «matn olinmadi» deb boshqacha xabar bilan qaytarardi,
+   * bu esa sababni yashirardi. Xato worker orqali kreditni qaytaradi.
+   */
+  const lost = parts.filter((p) => !p.blocks.length).length;
+  if (lost) {
+    throw new Error(
+      `Tarjima to‘liq chiqmadi: ${chunks.length} bo‘lakdan ${lost} tasi tarjima qilinmadi. ` +
+        `Kredit qaytariladi — qayta urinib ko‘ring yoki matnni kichikroq bo‘lib yuboring.`,
+    );
+  }
+
   const blocks = parts.flatMap((p) => p.blocks);
   const title = parts.find((p) => p.title)?.title || "";
   if (blocks.length < 1) return null;
