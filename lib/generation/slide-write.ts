@@ -94,7 +94,16 @@ function normalizeSlide(raw: unknown, i: number, footer: string, rules: BulletRu
   }
   if (layout === "table") {
     const src = (o.table ?? o) as Record<string, unknown>;
-    const headers = arr(src.headers, 5, 28);
+    /*
+     * Sarlavha uzunligi USTUNLAR SONIGA bog'liq.
+     *
+     * Qat'iy 28 belgi 3 ustunli jadvalda ham qirqardi: «Quyosh
+     * fotoelektr stansiyalari» (30 belgi) «…» bilan tugardi, holbuki
+     * ustun kengligi to'liq matnni ko'tarardi. `planTable` shriftni
+     * o'zi kichraytiradi, shuning uchun keng ustunda uzunroq matn xavfsiz.
+     */
+    const rawHeaders = arr(src.headers, 5, 60);
+    const headers = rawHeaders.map((h) => clip(h, rawHeaders.length <= 3 ? 40 : 26));
     const rows = Array.isArray(src.rows)
       ? src.rows
           .map((r) => arr(r, Math.max(1, headers.length), 60))
@@ -311,28 +320,101 @@ export async function writeSlidesWithLlm(
   const want = plan.length || Math.max(8, Math.min(20, meta.targetPages || 10));
   const footer = [meta.author, meta.university].filter(Boolean).join(" · ");
   const seq = plan.map((b, i) => `${i + 1}) layout=${b.layout} — ${b.role}`).join("\n");
-  const user = [
-    `«${meta.topic}» bo‘yicha shablon: ${tpl.nameUz} (${tpl.blurb}).`,
-    `AYNAN ${want} ta slayd. QAT’IY shu tartibda (layout ni o‘zgartirmang):`,
-    seq,
-    `Har slayd mazmuni shu rolga mos, mavzudan chiqmasin. Slaydlar bir-birini takrorlamasin.`,
-    `JSON sxema: {"slides":[{"layout":"title|agenda|section|bullets|twoCol|compare|quote|stats|process|closing","kicker":"","title":"","subtitle":"","imageHint":"","notes":"","bullets":[""],"leftTitle":"","left":[""],"rightTitle":"","right":[""],"quote":"","quoteBy":"","stats":[{"value":"","label":""}],"steps":[{"n":"1","title":"","text":""}],"table":{"headers":["",""],"rows":[["",""]]}}]}`,
-  ].join("\n");
-  // Token byudjeti slaydlar soniga bog‘liq: 16 slayd + notes 5 000 tokenga
-  // sig‘masdi va oxirgi slaydlar kesilib ketardi.
-  const maxTokens = Math.min(9_000, 2_000 + want * 420);
-  const raw = await llmComplete(slideSystem(meta, tpl), user, maxTokens, { json: true, timeoutMs: 90_000 });
-  if (!raw) return null;
-  const slides = parseDeckJson(raw, footer, want, rules);
+
+  /*
+   * Uzun deka BIR chaqiruvga sig'maydi.
+   *
+   * Token byudjetini kattalashtirish yetarli emas edi: 16 slayd + notes
+   * javobi chegaraga urilib, JSON o'rtasida kesilardi. Kesilgan JSON esa
+   * parse bo'lmaydi — ya'ni butun deka yo'qoladi, faqat oxirgi slaydlar
+   * emas. Shuning uchun reja bo'laklarga bo'linadi va har bo'lak alohida
+   * so'raladi; bittasi yiqilsa qolgani saqlanadi.
+   *
+   * Har chaqiruvga TO'LIQ ketma-ketlik beriladi — model o'z bo'lagi
+   * atrofida nima borligini bilmasa, slaydlar bir-birini takrorlaydi.
+   */
+  const CHUNK = 8;
+  const ranges: { from: number; to: number }[] = [];
+  if (plan.length > 10) {
+    for (let i = 0; i < plan.length; i += CHUNK) {
+      ranges.push({ from: i, to: Math.min(plan.length, i + CHUNK) });
+    }
+  } else {
+    ranges.push({ from: 0, to: plan.length });
+  }
+
+  const askRange = async (from: number, to: number, done: string[]): Promise<SlideModel[]> => {
+    const n = to - from;
+    const scoped = ranges.length > 1;
+    const user = [
+      `«${meta.topic}» bo‘yicha shablon: ${tpl.nameUz} (${tpl.blurb}).`,
+      scoped
+        ? `Butun taqdimot rejasi (${plan.length} slayd) — kontekst uchun:`
+        : `AYNAN ${want} ta slayd. QAT’IY shu tartibda (layout ni o‘zgartirmang):`,
+      seq,
+      scoped
+        ? `SIZ FAQAT ${from + 1}–${to} slaydlarni yozasiz — aynan ${n} ta, shu tartibda. Boshqa slaydlarni yozmang.`
+        : `Har slayd mazmuni shu rolga mos, mavzudan chiqmasin. Slaydlar bir-birini takrorlamasin.`,
+      done.length
+        ? `ALLAQACHON YOZILGAN slayd sarlavhalari — ularning mavzusini va raqamlarini TAKRORLAMANG:\n${done.map((t, i) => `${i + 1}) ${t}`).join("\n")}`
+        : "",
+      `JSON sxema: {"slides":[{"layout":"title|agenda|section|bullets|twoCol|compare|quote|stats|process|closing","kicker":"","title":"","subtitle":"","imageHint":"","notes":"","bullets":[""],"leftTitle":"","left":[""],"rightTitle":"","right":[""],"quote":"","quoteBy":"","stats":[{"value":"","label":""}],"steps":[{"n":"1","title":"","text":""}],"table":{"headers":["",""],"rows":[["",""]]}}]}`,
+    ].join("\n");
+    const maxTokens = Math.min(9_000, 2_000 + n * 420);
+    const raw = await llmComplete(slideSystem(meta, tpl), user, maxTokens, { json: true, timeoutMs: 90_000 });
+    if (!raw) {
+      console.warn("[slide-write] bo‘lak javobsiz", from + 1, "-", to);
+      return [];
+    }
+    return parseDeckJson(raw, footer, n, rules);
+  };
+
+  /*
+   * Natija ABSOLYUT o'rin bo'yicha yig'iladi.
+   *
+   * Oddiy birlashtirish (`flat()`) xavfli: bir bo'lak so'ralgandan bitta
+   * ko'p yoki kam slayd qaytarsa, undan keyingi hamma slayd bir qadam
+   * siljiydi va `coerceLayout` ularga BOSHQA rejadagi layoutni majburlab
+   * qo'yadi — masalan `quote` slaydini `stats` ga aylantiradi. Shuning
+   * uchun har slayd o'z o'rniga qo'yiladi, ortiqchasi kesiladi,
+   * yetishmagani esa faqat bo'sh joy qoldiradi.
+   */
+  /*
+   * Bo'laklar KETMA-KET so'raladi.
+   *
+   * Parallel variant tezroq edi (33s ga qarshi ~50s), lekin sinovda aniq
+   * kamchilik ko'rindi: 16 slaydli dekada 2- va 11-slayd deyarli bir xil
+   * chiqdi — ikkala bo'lak bir-birining nima yozganini bilmasdi. Reja
+   * ketma-ketligi rolni ajratadi, mazmunni esa yo'q. Endi keyingi bo'lak
+   * oldingilarning sarlavhalarini oladi.
+   */
+  const slots: (SlideModel | undefined)[] = new Array(plan.length);
+  const written: string[] = [];
+  const parts: SlideModel[][] = [];
+  for (const r of ranges) {
+    const got = await askRange(r.from, r.to, written);
+    parts.push(got);
+    for (const sl of got) if (sl.title) written.push(sl.title);
+  }
+  if (!plan.length) {
+    // Reja yo'q (`want` betlar sonidan chiqarilgan) — hizalashga asos yo'q.
+    slots.push(...parts.flat());
+  } else {
+    ranges.forEach((r, i) => {
+      parts[i].slice(0, r.to - r.from).forEach((sl, k) => {
+        slots[r.from + k] = sl;
+      });
+    });
+  }
+  const slides = slots
+    .map((sl, i) => (sl && plan[i] ? coerceLayout(sl, plan[i].layout, rules.maxBullets) : sl))
+    .filter((sl): sl is SlideModel => Boolean(sl));
   // Va’da qilingan hajmning 75% i — quyi chegara. Bundan kam bo‘lsa deck
   // paketga mos kelmaydi; `null` qaytarib, chaqiruvchi pulni qaytaradi.
   const floor = Math.max(6, Math.ceil(want * 0.75));
   if (slides.length < floor) {
     console.warn("[slide-write] too few slides", slides.length, "want", want);
     return null;
-  }
-  for (let i = 0; i < slides.length; i++) {
-    if (plan[i]) slides[i] = coerceLayout(slides[i], plan[i].layout, rules.maxBullets);
   }
   const L = slideLabels(meta.language);
   if (meta.titleSlide === false) {

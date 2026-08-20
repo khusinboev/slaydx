@@ -1,3 +1,5 @@
+import { romanNumeral } from "./quality";
+
 /**
  * Generatsiya tili.
  *
@@ -147,6 +149,8 @@ export type SectionLabels = {
   intro: string;
   main: string;
   conclusion: string;
+  /** «I BOB.» / «ГЛАВА I.» / «CHAPTER I.» — bob raqami sarlavha oldida. */
+  chapterPrefix: (n: number) => string;
   chapterTheory: (topic: string) => string;
   chapterAnalysis: string;
   chapterPractice: string;
@@ -168,6 +172,10 @@ export type SectionLabels = {
   caseWord: string;
   tasks: string;
   answerKey: string;
+  /** Keys uchun baholash rubrikasi. */
+  rubric: string;
+  points: string;
+  totalPoints: string;
   subjectPassport: string;
   yearPlan: string;
   yearCols: [string, string, string, string, string, string];
@@ -205,6 +213,7 @@ const SECTIONS: Record<string, SectionLabels> = {
     intro: "Kirish",
     main: "Asosiy qism",
     conclusion: "Xulosa",
+    chapterPrefix: (n) => `${romanNumeral(n)} BOB.`,
     chapterTheory: (t) => `I BOB. ${t.toUpperCase()}NING NAZARIY ASOSLARI`,
     chapterAnalysis: "II BOB. TAHLIL VA MEXANIZM",
     chapterPractice: "II BOB. AMALIY TAHLIL VA TAVSIYALAR",
@@ -225,6 +234,9 @@ const SECTIONS: Record<string, SectionLabels> = {
     caseWord: "Keys",
     tasks: "Topshiriqlar",
     answerKey: "Namunaviy kalit",
+    rubric: "Baholash mezonlari",
+    points: "ball",
+    totalPoints: "Jami",
     subjectPassport: "1. Fan pasporti",
     yearPlan: "O‘quv yili bo‘yicha taqsimot",
     yearCols: ["Hafta", "Soat", "Mavzu", "Metod", "Kutilgan natija", "Nazorat"],
@@ -259,6 +271,7 @@ const SECTIONS: Record<string, SectionLabels> = {
     intro: "Введение",
     main: "Основная часть",
     conclusion: "Заключение",
+    chapterPrefix: (n) => `ГЛАВА ${romanNumeral(n)}.`,
     chapterTheory: (t) => `ГЛАВА I. ТЕОРЕТИЧЕСКИЕ ОСНОВЫ ТЕМЫ «${t.toUpperCase()}»`,
     chapterAnalysis: "ГЛАВА II. АНАЛИЗ И МЕХАНИЗМ",
     chapterPractice: "ГЛАВА II. ПРАКТИЧЕСКИЙ АНАЛИЗ И РЕКОМЕНДАЦИИ",
@@ -279,6 +292,9 @@ const SECTIONS: Record<string, SectionLabels> = {
     caseWord: "Кейс",
     tasks: "Задания",
     answerKey: "Примерный ключ",
+    rubric: "Критерии оценивания",
+    points: "балл",
+    totalPoints: "Итого",
     subjectPassport: "1. Паспорт предмета",
     yearPlan: "Распределение по учебному году",
     yearCols: ["Неделя", "Часы", "Тема", "Метод", "Ожидаемый результат", "Контроль"],
@@ -313,6 +329,7 @@ const SECTIONS: Record<string, SectionLabels> = {
     intro: "Introduction",
     main: "Main body",
     conclusion: "Conclusion",
+    chapterPrefix: (n) => `CHAPTER ${romanNumeral(n)}.`,
     chapterTheory: (t) => `CHAPTER I. THEORETICAL FOUNDATIONS OF ${t.toUpperCase()}`,
     chapterAnalysis: "CHAPTER II. ANALYSIS AND MECHANISM",
     chapterPractice: "CHAPTER II. PRACTICAL ANALYSIS AND RECOMMENDATIONS",
@@ -333,6 +350,9 @@ const SECTIONS: Record<string, SectionLabels> = {
     caseWord: "Case",
     tasks: "Tasks",
     answerKey: "Model answer",
+    rubric: "Assessment criteria",
+    points: "points",
+    totalPoints: "Total",
     subjectPassport: "1. Subject passport",
     yearPlan: "Distribution across the academic year",
     yearCols: ["Week", "Hours", "Topic", "Method", "Expected outcome", "Assessment"],

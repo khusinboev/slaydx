@@ -204,6 +204,22 @@ export async function writeGlossaryWithLlm(meta: DocMeta, deadline?: number): Pr
     terms = pickTerms(data).filter((t) => !isGenericGlossaryTerm(t.term));
   }
   if (terms.length < 6) return null;
+  /*
+   * Alifbo tartibi — glossariy uchun asosiy talab.
+   *
+   * Ilgari atamalar model qaytargan tartibda chiqardi, ya'ni tasodifiy
+   * edi: o'quvchi kerakli atamani izlab butun ro'yxatni o'qib chiqishi
+   * kerak bo'lardi. Saralash `terms` ustida BIR MARTA bajariladi —
+   * matn qismi ham, jadval ham shu ro'yxatdan quriladi, shuning uchun
+   * ikkalasi bir xil tartibda qoladi.
+   *
+   * Taqqoslash hujjat tilida: kirill (ru) va lotin (uz/en) uchun
+   * tartib boshqacha. Boshidagi qo'shtirnoq va tirelar hisobga
+   * olinmaydi — «"Aksiya"» «B» dan keyin turib qolmasin.
+   */
+  const collator = new Intl.Collator(meta.language || "uz", { sensitivity: "base", numeric: true });
+  const sortKey = (t: string) => String(t).replace(/^[^\p{L}\p{N}]+/u, "").trim();
+  terms.sort((a, b) => collator.compare(sortKey(a.term), sortKey(b.term)));
   const L = sectionLabels(meta.language);
   const intro = data && typeof data === "object" ? (data as { intro?: string }).intro : "";
   return {
@@ -233,6 +249,35 @@ export async function writeGlossaryWithLlm(meta: DocMeta, deadline?: number): Pr
   };
 }
 
+/**
+ * Keys uchun baholash rubrikasi.
+ *
+ * Vosita ilgari faqat «namunaviy kalit» berardi — ya'ni TO'G'RI javobni.
+ * O'qituvchiga esa javobning o'zi emas, uni QANDAY baholash kerakligi
+ * kerak: qaysi mezon nechchi ball. Rubrikasiz keys darsda ishlatilganda
+ * har o'qituvchi o'zicha baholaydi.
+ *
+ * Model mezon bermasa yoki ball noto'g'ri kelsa — bo'lim umuman
+ * chiqmaydi. Yarim rubrika (mezoni bor, balli yo'q) yo'qdan yomonroq.
+ */
+export function rubricBlocks(
+  rubric: { criterion?: string; points?: unknown }[] | undefined,
+  L: ReturnType<typeof sectionLabels>,
+): Block[] {
+  if (!Array.isArray(rubric)) return [];
+  const rows = rubric
+    .map((r) => ({ criterion: clip(String(r?.criterion ?? ""), 140), points: Number(r?.points) }))
+    .filter((r) => r.criterion.length > 2 && Number.isFinite(r.points) && r.points > 0)
+    .slice(0, 5);
+  if (rows.length < 2) return [];
+  const total = rows.reduce((a, r) => a + r.points, 0);
+  return [
+    { kind: "h3", text: L.rubric },
+    ...rows.map((r) => ({ kind: "li" as const, text: `${r.criterion} — ${r.points} ${L.points}` })),
+    { kind: "p", text: `${L.totalPoints}: ${total} ${L.points}` },
+  ];
+}
+
 export async function writeKeysWithLlm(meta: DocMeta, deadline?: number): Promise<AcademicDoc | null> {
   if (!llmEnabled()) return null;
   /**
@@ -248,14 +293,24 @@ export async function writeKeysWithLlm(meta: DocMeta, deadline?: number): Promis
   const ask = (timeoutMs: number, count: number) =>
     llmComplete(
       keysSystemPrompt(meta),
-      `JSON: {"intro":"","cases":[{"title":"","situation":"","tasks":["",""],"key":""}]}. «${meta.topic}» bo‘yicha ${count} ta turlicha, aniq ism-vaziyatli keys. Umumiy «resurs cheklangan» shablon yo‘q.`,
+      [
+        `JSON: {"intro":"","cases":[{"title":"","situation":"","tasks":["",""],"key":"","rubric":[{"criterion":"","points":0}]}]}.`,
+        `«${meta.topic}» bo‘yicha ${count} ta turlicha, aniq ism-vaziyatli keys. Umumiy «resurs cheklangan» shablon yo‘q.`,
+        `rubric — o‘qituvchi shu keysni BAHOLASH uchun 3–4 ta mezon. Har mezon shu keysga xos (umumiy «to‘g‘ri javob» emas), ballar yig‘indisi 10.`,
+      ].join("\n"),
       count >= 5 ? 2800 : 2000,
       { json: true, timeoutMs },
     );
 
   type KeysData = {
     intro?: string;
-    cases?: { title?: string; situation?: string; tasks?: string[]; key?: string }[];
+    cases?: {
+      title?: string;
+      situation?: string;
+      tasks?: string[];
+      key?: string;
+      rubric?: { criterion?: string; points?: unknown }[];
+    }[];
   };
   const pick = (raw: string | null) => ((raw ? parseJson(raw) : null) as KeysData | null)?.cases ?? [];
 
@@ -284,6 +339,7 @@ export async function writeKeysWithLlm(meta: DocMeta, deadline?: number): Promis
           ...(c.tasks ?? []).slice(0, 4).map((t) => ({ kind: "li" as const, text: clip(t, 180) })),
           { kind: "h3", text: L.answerKey },
           { kind: "p", text: clip(c.key || "", 360) },
+          ...rubricBlocks(c.rubric, L),
         ]),
       ),
     ],
@@ -683,6 +739,45 @@ function chunkSource(text: string, max = 3200) {
   return chunks.slice(0, 12);
 }
 
+const TRANSLATED_KINDS = new Set(["h2", "h3", "p", "li"]);
+
+/**
+ * Tarjima bo'laklarini TURI bilan o'qiydi.
+ *
+ * Ilgari model faqat `paragraphs: string[]` qaytarardi va natija
+ * `kind: "p"` ga tekislanardi — ya'ni asl hujjatdagi sarlavhalar va
+ * ro'yxatlar yo'qolardi. Bu tizim prompti bilan ochiq ziddiyat edi:
+ * u «sarlavha, ro'yxat va paragraf chegaralarini saqlang» deb turardi,
+ * sxema esa buni ifodalashga imkon bermasdi.
+ *
+ * Eski shakl (`paragraphs`) va umuman JSON bo'lmagan javob ham
+ * qabul qilinadi — model har doim ham yangi sxemaga bo'ysunmaydi.
+ */
+export function translatedBlocks(
+  data: { blocks?: unknown; paragraphs?: unknown } | null,
+  raw: string | null,
+): Block[] {
+  if (Array.isArray(data?.blocks)) {
+    const out = data.blocks
+      .map((b) => {
+        const rec = b as { kind?: unknown; text?: unknown };
+        const text = String(rec?.text ?? "").trim();
+        if (text.length < 2) return null;
+        const kind = String(rec?.kind ?? "p");
+        return { kind: TRANSLATED_KINDS.has(kind) ? kind : "p", text } as Block;
+      })
+      .filter((b): b is Block => Boolean(b));
+    if (out.length) return out;
+  }
+  if (Array.isArray(data?.paragraphs)) {
+    return data.paragraphs
+      .map((x) => String(x ?? "").trim())
+      .filter((t) => t.length > 1)
+      .map((text) => ({ kind: "p" as const, text }));
+  }
+  return raw ? blocksFromText(raw) : [];
+}
+
 export async function writeTranslationWithLlm(
   meta: DocMeta,
   values: Record<string, unknown>,
@@ -697,21 +792,23 @@ export async function writeTranslationWithLlm(
   const parts = await mapPool(chunks, 2, async (chunk, i) => {
     const raw = await llmComplete(
       translationSystemPrompt(target, sourceLang),
-      `Quyidagi matnni ${target} tiliga tarjima qiling. JSON: {"title":"","paragraphs":[""]}.\nQism ${i + 1}/${chunks.length}.\n---\n${chunk}`,
+      `Quyidagi matnni ${target} tiliga tarjima qiling. JSON: {"title":"","blocks":[{"kind":"h2|h3|p|li","text":""}]}.\nHar bo‘lak asl matndagi turini SAQLASIN: sarlavha — h2/h3, ro‘yxat bandi — li, oddiy matn — p.\nQism ${i + 1}/${chunks.length}.\n---\n${chunk}`,
       4000,
       { json: true, timeoutMs: Math.min(70_000, remainingMs(deadline) || 70_000) },
     );
-    const data = parseLlmObject<{ title?: string; paragraphs?: unknown }>(raw);
-    const paras = Array.isArray(data?.paragraphs)
-      ? data!.paragraphs.map((x) => String(x ?? "").trim()).filter((s) => s.length > 1)
-      : raw
-        ? blocksFromText(raw).map((b) => b.text)
-        : [];
-    return { title: data?.title || "", paras };
+    const data = parseLlmObject<{ title?: string; blocks?: unknown; paragraphs?: unknown }>(raw);
+    return { title: data?.title || "", blocks: translatedBlocks(data, raw) };
   });
-  const paras = parts.flatMap((p) => p.paras);
+  const blocks = parts.flatMap((p) => p.blocks);
   const title = parts.find((p) => p.title)?.title || "";
-  if (paras.length < 1) return null;
+  if (blocks.length < 1) return null;
+  /*
+   * Model hujjat sarlavhasini `title` da HAM, birinchi `h2` bo'lagida ham
+   * qaytaradi. Bo'lim sarlavhasi `title` dan olingani uchun natijada
+   * bir xil matn ketma-ket ikki marta chiqardi.
+   */
+  const norm = (t: string) => t.toLocaleLowerCase("uz").replace(/[^\p{L}\p{N}]+/gu, "");
+  if (title && blocks[0].kind.startsWith("h") && norm(blocks[0].text) === norm(title)) blocks.shift();
   const L = sectionLabels(target);
   return {
     meta: { ...meta, topic: title || meta.topic },
@@ -723,11 +820,7 @@ export async function writeTranslationWithLlm(
         { kind: "p", text: `Tildan: ${sourceLang === "avto" ? "avtomatik" : sourceLang} → ${target}` },
         { kind: "p", text: `Hajm: ${source.length.toLocaleString("uz-UZ")} belgi` },
       ]),
-      section(
-        "body",
-        clip(title || L.translationBody, 80),
-        paras.map((t) => ({ kind: "p" as const, text: t })),
-      ),
+      section("body", clip(title || L.translationBody, 80), blocks),
     ],
   };
 }

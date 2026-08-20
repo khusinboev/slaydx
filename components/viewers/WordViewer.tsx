@@ -4,7 +4,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { docLabels } from "@/lib/generation/i18n";
 import { ESSAY_DESIGNS } from "@/lib/languages";
 import type { AcademicDoc } from "@/lib/generation/types";
-import { docToFlow, titleModel, tocEntries, type FlowItem, type TitleModel } from "@/lib/viewers/flow";
+import { docToFlow, titleModel, tocRows, type FlowItem, type TitleModel, type TocRow } from "@/lib/viewers/flow";
 import type { ViewerKind } from "@/lib/viewers/kind";
 import { A4, contentHeightPx } from "@/lib/viewers/metrics";
 import { ZoomFrame, Workspace } from "./sheet";
@@ -19,7 +19,7 @@ export function WordViewer({
 }) {
   const items = useMemo(() => docToFlow(doc), [doc]);
   const title = useMemo(() => titleModel(doc), [doc]);
-  const toc = useMemo(() => tocEntries(doc), [doc]);
+  const toc = useMemo(() => tocRows(doc), [doc]);
   const labels = useMemo(() => docLabels(doc.meta.language), [doc.meta.language]);
   /**
    * Sahifa ramkasi ko'ruvchida ham FAQAT inshoda — `render-docx.ts`
@@ -241,7 +241,7 @@ function FlowBlock({
   labels,
 }: {
   item: FlowItem;
-  toc: string[];
+  toc: TocRow[];
   labels: ReturnType<typeof docLabels>;
 }) {
   switch (item.type) {
@@ -262,8 +262,17 @@ function FlowBlock({
         <div>
           <div className="word-h1">{labels.toc}</div>
           {toc.map((row, i) => (
-            <div key={row} className="mb-1 text-[14pt] break-words hyphens-auto" style={{ textIndent: 0 }}>
-              {i + 1}. {row}
+            <div
+              key={`${i}-${row.text}`}
+              className="mb-1 text-[14pt] break-words hyphens-auto"
+              style={{
+                textIndent: 0,
+                fontWeight: row.level === 1 ? 700 : 400,
+                // DOCX dagi 0,75 sm bilan bir xil.
+                marginLeft: row.level === 2 ? "0.75cm" : 0,
+              }}
+            >
+              {row.level === 1 ? row.text.toUpperCase() : row.text}
             </div>
           ))}
         </div>

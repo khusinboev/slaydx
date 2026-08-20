@@ -10,6 +10,7 @@ import {
   PageNumber,
   Paragraph,
   ShadingType,
+  TableOfContents,
   Table,
   TableCell,
   TableRow,
@@ -20,6 +21,7 @@ import {
 import { ESSAY_DESIGNS } from "../languages";
 import { docLabels } from "./i18n";
 import { cleanText } from "./quality";
+import { tocRows } from "./toc-model";
 import type { AcademicDoc, Block } from "./types";
 
 const FONT = "Times New Roman";
@@ -78,6 +80,18 @@ function signatureP(label: string): Paragraph {
   });
 }
 
+/**
+ * Mundarija qatori. 2-daraja chapdan suriladi — bob va ostmavzu
+ * ko'z bilan ajralib tursin.
+ */
+function tocLine(text: string, level: 1 | 2): Paragraph {
+  return new Paragraph({
+    spacing: { line: LINE, after: 0 },
+    indent: { left: level === 2 ? Math.round(0.75 * CM) : 0 },
+    children: [run(text, { bold: level === 1 })],
+  });
+}
+
 function heading(text: string, level: (typeof HeadingLevel)[keyof typeof HeadingLevel]): Paragraph {
   return new Paragraph({
     heading: level,
@@ -124,23 +138,6 @@ function codeBox(text: string, caption?: string): Array<Paragraph | Table> {
     }),
   );
   return out;
-}
-
-/**
- * Mundarija qatori.
- *
- * Sahifa raqami ataylab qo'yilmaydi. Ilgari u `so'z / 280` formulasi bilan
- * TAXMIN qilinardi va Word'dagi haqiqiy sahifaga deyarli hech qachon mos
- * kelmasdi — ya'ni hujjat o'z mundarijasida yolg'on ma'lumot ko'tarib
- * yurardi. Yo'q raqam noto'g'ri raqamdan yaxshi; haqiqiy raqam Word ning
- * TOC maydoni bilan keladi (Sprint 4).
- */
-function tocLine(label: string): Paragraph {
-  return new Paragraph({
-    alignment: AlignmentType.LEFT,
-    spacing: { after: 80, line: LINE },
-    children: [run(label)],
-  });
 }
 
 function blockToParagraphs(b: Block): Array<Paragraph | Table> {
@@ -246,12 +243,29 @@ export async function renderDocx(doc: AcademicDoc): Promise<Uint8Array> {
 
   if (doc.toc) {
     children.push(heading(L.toc, HeadingLevel.HEADING_1));
-    doc.sections.forEach((s, i) => {
-      children.push(tocLine(`${i + 1}. ${s.title}`));
-    });
-    if (doc.references?.length) {
-      children.push(tocLine(`${doc.sections.length + 1}. ${L.references}`));
-    }
+    /*
+     * Mundarija Word MAYDONI ichida turadi, lekin tarkibini biz yozamiz.
+     *
+     * Yolg'iz maydon yetarli emas: LibreOffice (PDF eksporti shu orqali
+     * ishlaydi) uni to'ldirmaydi va mundarija BUTUNLAY bo'sh chiqadi —
+     * tekshirildi. Maydonsiz esa Word hech qachon haqiqiy sahifa
+     * raqamini qo'ya olmaydi. Shuning uchun ikkalasi birga: maydon ichiga
+     * tayyor paragraflar qo'yiladi — ular hamma joyda ko'rinadi, Word esa
+     * hujjat ochilganda maydonni yangilab, raqamlarni o'zi hisoblaydi.
+     *
+     * Sahifa raqami ATAYIN yozilmaydi: bu bosqichda uni faqat taxmin
+     * qilish mumkin, noto'g'ri raqam esa raqamsizdan yomonroq.
+     */
+    const tocEntries = tocRows(doc).map((r) =>
+      tocLine(r.level === 1 ? r.text.toUpperCase() : r.text, r.level),
+    );
+    children.push(
+      new TableOfContents(L.toc, {
+        hyperlink: true,
+        headingStyleRange: "1-2",
+        contentChildren: tocEntries,
+      }),
+    );
     children.push(new Paragraph({ children: [run("")], pageBreakBefore: true }));
   }
 
@@ -301,6 +315,8 @@ export async function renderDocx(doc: AcademicDoc): Promise<Uint8Array> {
   const essayBorder = meta.toolId === "essay" && design ? design.from.replace("#", "") : null;
 
   const document = new Document({
+    // Word hujjatni ochganda mundarija maydonini yangilaydi.
+    features: { updateFields: true },
     styles: {
       default: {
         document: {

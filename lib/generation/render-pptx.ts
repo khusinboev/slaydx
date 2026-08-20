@@ -1,5 +1,5 @@
 import { fetchImageBytes, type ImageBytes } from "./slide-images";
-import { planSlide, slideNotes, SLIDE_IN, type SlideLayer, type SlidePlan } from "./slide-layout";
+import { planSlide, PPTX_FONT, slideNotes, SLIDE_IN, type SlideLayer, type SlidePlan } from "./slide-layout";
 import { buildSlideDeck } from "./slides";
 import { getSlideTheme } from "./slide-themes";
 import type { AcademicDoc, BuiltFile } from "./types";
@@ -91,7 +91,7 @@ async function paintLayer(slide: PptxSlide, layer: SlideLayer, cache: ImageCache
     italic: layer.italic,
     align: layer.align || "left",
     valign: layer.valign || "top",
-    fontFace: layer.font || "Calibri",
+    fontFace: layer.font || PPTX_FONT,
     wrap: true,
     // Shrift `slide-layout.ts` dagi `fitSize`/`fitLines` bilan oldindan
     // hisoblanadi. `shrinkText` yoqilsa PowerPoint uni yana kichraytiradi

@@ -4,7 +4,28 @@ import type { SlideModel, SlideTheme } from "./slide-types";
 /** Widescreen 16:9 in inches — same coordinate space as PPTX and the on-site viewer. */
 export const SLIDE_IN = { w: 13.333, h: 7.5 } as const;
 export const PX_PER_IN = 96;
-export const SLIDE_FONT = 'Calibri, "Segoe UI", system-ui, sans-serif';
+/**
+ * Slayd shrifti — PPTX va sayt ko'ruvchisi uchun BITTA ro'yxat.
+ *
+ * `Calibri` edi, lekin u faqat Windows'da bor. macOS va Linux uni
+ * almashtiradi, almashtiruv esa metrik mos EMAS (bu mashinada
+ * `fc-match Calibri` → Noto Sans, ~10% kengroq) — ya'ni bir xil deck
+ * uch platformada uch xil joylashadi.
+ *
+ * `Arial` tanlandi, chunki u uchala platformada ham hal bo'ladi:
+ * Windows va macOS'da o'zi bor, Linux'da esa `fc-match Arial` →
+ * Liberation Sans, u Arial bilan METRIK MOS (belgilar kengligi bir xil)
+ * va o'zbek `ʻ` (U+02BB) belgisini chizadi.
+ *
+ * Bepul shriftlar (Open Sans, Noto Sans) ko'rib chiqildi va rad etildi:
+ * Open Sans'da U+02BB umuman yo'q — «oʻ», «gʻ» buziladi; Noto Sans esa
+ * Windows va macOS'da yo'q, ya'ni muammoni Linux'dan Windows'ga
+ * ko'chirardi (foydalanuvchilarimizning ko'pchiligi aynan Windows'da).
+ */
+/** PPTX `fontFace` — bitta nom (CSS ro'yxati emas). */
+export const PPTX_FONT = "Arial";
+
+export const SLIDE_FONT = 'Arial, "Liberation Sans", "Helvetica Neue", Helvetica, sans-serif';
 
 export type Box = { x: number; y: number; w: number; h: number };
 export type Fill = { color: string; alpha?: number };
@@ -193,16 +214,11 @@ function pushFooter(
 /**
  * Belgining o'rtacha kengligi (em ulushida).
  *
- * `Calibri` tor shrift (~0.48 em), lekin u faqat Windows'da bor. macOS,
- * Linux va LibreOffice uni almashtiradi va almashtiruv METRIK MOS
- * bo'lishi shart emas: shu mashinada `fc-match Calibri` → Noto Sans
- * (~0.53 em), ya'ni ayni matn ~10% kengroq chiziladi. Oldindan
- * hisoblangan o'lcham esa aynan shu kenglikka tayanadi.
- *
- * Shuning uchun eng keng ehtimoliy almashtiruvga qarab hisoblaymiz:
- * slayd biroz siyrakroq bo'ladi, lekin matn hech qayerda qutidan
- * chiqmaydi. Shrift PPTX ichiga joylashtirilgandan keyin (kelajakdagi
- * ish) buni 0.5 ga qaytarish mumkin.
+ * Arial va uning metrik-mos almashtiruvi Liberation Sans ~0.52 em.
+ * Bu yerda 0.55 turadi — ataylab biroz kengroq: hisob xatosi matnni
+ * qutidan CHIQARIB yuborishdan ko'ra, slaydni bir oz siyrak qoldirgani
+ * yaxshi. Calibri davridagi ~10% lik platformalararo tafovut endi yo'q,
+ * chunki uchala platformada ham metrikasi bir xil shrift chiziladi.
  */
 const CHAR_EM = 0.55;
 

@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { isToolSlug, TOOL_BY_SLUG } from "@/lib/tools";
 import { ToolWorkspace } from "@/components/forms/ToolWorkspace";
-import { BRAND_NAME } from "@/lib/brand";
 
 export function generateStaticParams() {
   return Object.keys(TOOL_BY_SLUG).map((slug) => ({ slug }));
@@ -16,10 +15,9 @@ export async function generateMetadata({
   const { slug } = await params;
   const tool = TOOL_BY_SLUG[slug];
   if (!tool) return { title: "Topilmadi" };
-  return {
-    title: `${tool.title} — ${BRAND_NAME}`,
-    description: tool.description,
-  };
+  // Brend nomini `app/layout.tsx` dagi `template` qo'shadi. Bu yerda
+  // qayta qo'shilsa «Slayd — Sodda.ai — Sodda.ai» chiqadi.
+  return { title: tool.title, description: tool.description };
 }
 
 export default async function ToolPage({ params }: { params: Promise<{ slug: string }> }) {

@@ -7,6 +7,8 @@ import type { NextConfig } from "next";
  * iframe ga joylashtirilishi (clickjacking), MIME sniffing va referrer
  * sizib chiqishi mumkin edi.
  */
+const isProd = process.env.NODE_ENV === "production";
+
 const securityHeaders = [
   { key: "X-Content-Type-Options", value: "nosniff" },
   // `X-Frame-Options` ataylab YO'Q.
@@ -28,9 +30,21 @@ const securityHeaders = [
     key: "Content-Security-Policy",
     value: [
       "default-src 'self'",
-      // Next.js inline runtime skriptlaridan foydalanadi. Nonce ga
-      // o'tish uchun middleware kerak — kelajakdagi yaxshilanish.
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://telegram.org",
+      /*
+       * `unsafe-eval` FAQAT ishlab chiqishda.
+       *
+       * Uni dev'da Turbopack talab qiladi (HMR modullarni `eval` bilan
+       * yuklaydi), prod to'plamida esa kerak emas. Ilgari ikkala muhitda
+       * ham turardi — ya'ni prodda bekorga ochiq edi.
+       *
+       * `unsafe-inline` qoladi va bu ONGLI qaror: undan qutulish uchun
+       * har so'rovga nonce qo'yuvchi middleware kerak, nonce esa
+       * OLDINDAN chizilgan sahifalar bilan mos kelmaydi — build chiqishi
+       * bo'yicha saytda SSG (`/uz/[slug]`, 14 yo'l) va statik sahifalar
+       * bor. Nonce ularning HTML'iga kirib ulgurmaydi va skriptlar
+       * bloklanadi, ya'ni sayt ishlamay qoladi. Almashuv arzimaydi.
+       */
+      `script-src 'self' 'unsafe-inline'${isProd ? "" : " 'unsafe-eval'"} https://telegram.org`,
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob:",
       "font-src 'self' data:",
@@ -50,6 +64,17 @@ const securityHeaders = [
 const nextConfig: NextConfig = {
   serverExternalPackages: ["unpdf", "pg"],
   poweredByHeader: false,
+  /*
+   * Next rasm optimizatorini o'chiramiz.
+   *
+   * `next/image` loyihada umuman ishlatilmaydi (grep bo'sh) — rasmlar
+   * `<img>` orqali beriladi. Optimizator esa `sharp` ni tortadi, unda
+   * `libvips` orqali kelgan 4 ta ochiq CVE bor (GHSA-f88m-g3jw-g9cj) va
+   * ular faqat Next 16 ga o'tish bilan yopiladi. Optimizator o'chirilsa
+   * `/_next/image` hech qanday tasvirni qayta ishlamaydi, ya'ni zaif
+   * kod yo'liga umuman kirilmaydi.
+   */
+  images: { unoptimized: true },
   // Konteynerda ishlash uchun minimal server to'plami.
   output: process.env.NEXT_OUTPUT === "standalone" ? "standalone" : undefined,
 

@@ -207,3 +207,140 @@ test("bo'sh yoki yaroqsiz reja bo'sh ro'yxat qaytaradi", async () => {
   assert.deepEqual(parseManualOutline("Kirish\nXulosa"), []);
   assert.deepEqual(parseManualOutline("ab\ncd"), []);
 });
+
+/**
+ * Mundarija raqamlashi.
+ *
+ * Muammo hujjatning PDF ko'rinishida topilgan: bob sarlavhasi RAQAMSIZ
+ * chiqardi («ICHKI YONUV DVIGATELLARIDA…»), ostidagi ostmavzu esa
+ * «1.1.» bo'lardi — «1» qaysi bobga tegishli ekani ko'rinmasdi. Sabab:
+ * raqamni model yozardi va u izchil emas edi.
+ *
+ * Endi raqam qurilish yo'li bilan qo'yiladi. Sinov ikki narsani
+ * ushlaydi: raqam ajratkichi ishonchli tanilishi va mundarija modeli
+ * fayl bilan viewer uchun bir xil qatorlarni berishi.
+ */
+test("sarlavhadagi raqam olib tashlanadi, ammo raqamdan boshlangan so'z saqlanadi", async () => {
+  const { stripHeadingNumber, romanNumeral } = await import("../lib/generation/quality.ts");
+
+  assert.equal(stripHeadingNumber("1.1. Ta'rif va mohiyat"), "Ta'rif va mohiyat");
+  assert.equal(stripHeadingNumber("I BOB. NAZARIY ASOSLAR"), "NAZARIY ASOSLAR");
+  assert.equal(stripHeadingNumber("ГЛАВА I. ТЕОРЕТИЧЕСКИЕ ОСНОВЫ"), "ТЕОРЕТИЧЕСКИЕ ОСНОВЫ");
+  assert.equal(stripHeadingNumber("CHAPTER II. PRACTICAL ANALYSIS"), "PRACTICAL ANALYSIS");
+
+  // Raqamga o'xshagan, lekin raqam BO'LMAGAN boshlanishlar buzilmasligi kerak.
+  assert.equal(stripHeadingNumber("IT sohasida raqamlashtirish"), "IT sohasida raqamlashtirish");
+  assert.equal(stripHeadingNumber("3D modellashtirish asoslari"), "3D modellashtirish asoslari");
+  assert.equal(stripHeadingNumber("COVID-19 pandemiyasi"), "COVID-19 pandemiyasi");
+  // Butunlay raqamdan iborat sarlavha bo'sh qolmaydi.
+  assert.equal(stripHeadingNumber("2.2"), "2.2");
+
+  assert.equal(romanNumeral(1), "I");
+  assert.equal(romanNumeral(3), "III");
+});
+
+test("mundarija modeli fayl va viewer uchun bir xil qatorlarni beradi", async () => {
+  const { tocRows } = await import("../lib/generation/toc-model.ts");
+
+  const doc = {
+    meta: { language: "uz" },
+    sections: [
+      { id: "kirish", title: "Kirish", blocks: [{ kind: "p", text: "matn" }] },
+      {
+        id: "bob1",
+        title: "I BOB. NAZARIY ASOSLAR",
+        blocks: [
+          { kind: "h2", text: "1.1. Tushuncha" },
+          { kind: "p", text: "matn" },
+          { kind: "h2", text: "1.2. Tasnif" },
+        ],
+      },
+      { id: "xulosa", title: "Xulosa", blocks: [] },
+    ],
+    references: ["Manba 1"],
+  };
+
+  const rows = tocRows(doc as never);
+  assert.deepEqual(
+    rows.map((r) => `${r.level}:${r.text}`),
+    [
+      "1:Kirish",
+      "1:I BOB. NAZARIY ASOSLAR",
+      "2:1.1. Tushuncha",
+      "2:1.2. Tasnif",
+      "1:Xulosa",
+      "1:FOYDALANILGAN ADABIYOTLAR",
+    ],
+  );
+  // Model o'zi raqam QO'SHMAYDI — aks holda «1. I BOB.» chiqadi.
+  assert.ok(!rows.some((r) => /^\d+\.\s+(I |Kirish|Xulosa)/.test(r.text)));
+});
+
+/**
+ * Tarjimada tuzilma saqlanishi.
+ *
+ * Nuqson: tizim prompti «sarlavha, ro'yxat va paragraf chegaralarini
+ * saqlang» deb turardi, JSON sxemasi esa faqat `paragraphs: string[]`
+ * berardi — ya'ni model tuzilmani IFODALAY olmasdi va chiqishda hamma
+ * narsa `kind: "p"` ga tekislanardi. Sinov yangi sxemani va eski
+ * javoblarga chidamlilikni ushlaydi.
+ */
+test("tarjima bo'laklari turini saqlaydi va eski javobga ham chidaydi", async () => {
+  const { translatedBlocks } = await import("../lib/generation/write-specials.ts");
+
+  const typed = translatedBlocks(
+    {
+      blocks: [
+        { kind: "h2", text: "Asosiy qism" },
+        { kind: "li", text: "Birinchi band" },
+        { kind: "p", text: "Oddiy matn" },
+        { kind: "table", text: "Noma'lum tur" },
+        { kind: "p", text: "x" },
+      ],
+    },
+    null,
+  );
+  assert.deepEqual(
+    typed.map((b) => b.kind),
+    // Noma'lum tur `p` ga tushadi; 1 belgili matn tashlanadi.
+    ["h2", "li", "p", "p"],
+  );
+
+  // Eski shakl — model yangi sxemaga bo'ysunmasa.
+  const legacy = translatedBlocks({ paragraphs: ["Birinchi", "Ikkinchi"] }, null);
+  assert.deepEqual(legacy, [
+    { kind: "p", text: "Birinchi" },
+    { kind: "p", text: "Ikkinchi" },
+  ]);
+
+  assert.deepEqual(translatedBlocks(null, null), []);
+});
+
+/**
+ * Keys rubrikasi.
+ *
+ * Yarim rubrika (mezoni bor, balli yo'q) yo'qdan yomonroq: o'qituvchi
+ * uni ko'radi-yu, baholay olmaydi. Shuning uchun to'liq bo'lmagan
+ * rubrika umuman chiqmaydi.
+ */
+test("baholash rubrikasi to'liq bo'lmasa chiqmaydi", async () => {
+  const { rubricBlocks } = await import("../lib/generation/write-specials.ts");
+  const { sectionLabels } = await import("../lib/generation/i18n.ts");
+  const L = sectionLabels("uz");
+
+  assert.deepEqual(rubricBlocks(undefined, L), []);
+  // Ballsiz mezonlar tashlanadi -> 2 tadan kam qoladi -> bo'lim yo'q.
+  assert.deepEqual(rubricBlocks([{ criterion: "Tahlil chuqurligi" }, { criterion: "Xulosa" }], L), []);
+
+  const ok = rubricBlocks(
+    [
+      { criterion: "NPV ni to'g'ri hisoblash", points: 4 },
+      { criterion: "Qoplash muddati", points: 3 },
+      { criterion: "Tavsiya asoslanganligi", points: 3 },
+    ],
+    L,
+  );
+  assert.equal(ok[0].kind, "h3");
+  assert.equal(ok.filter((b) => b.kind === "li").length, 3);
+  assert.equal(ok[ok.length - 1].text, "Jami: 10 ball");
+});

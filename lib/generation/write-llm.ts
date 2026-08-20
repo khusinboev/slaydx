@@ -13,8 +13,7 @@ import {
   section,
   splitCodeBlocks,
   targetWords,
-  wordCount,
-} from "./quality";
+  wordCount, stripHeadingNumber } from "./quality";
 import {
   writeGlossaryWithLlm,
   writeImradWithLlm,
@@ -81,7 +80,35 @@ async function writeSection(
 
 type OutlineChapter = { title: string; subs: { title: string; brief: string }[] };
 
+/**
+ * Reja raqamlashini QURILISH yo'li bilan izchil qiladi.
+ *
+ * Muammo aniq ko'ringan edi: model bob sarlavhasini raqamsiz, ostmavzuni
+ * esa «1.1.» qilib qaytarardi. Hujjatda bob RAQAMSIZ chiqib, ostidagi
+ * «1.1.» hech nimaga ishora qilmasdi — o'quvchi uchun «1» qayerdaligi
+ * noma'lum bo'lardi. Endi modeldan kelgan har qanday raqam olib
+ * tashlanadi va o'rniga bob tartibiga bog'langan raqam qo'yiladi:
+ * «I BOB. …» + «1.1.», «II BOB. …» + «2.1.».
+ *
+ * Shablon yo'li (`content.ts`) allaqachon shu ko'rinishda edi — ya'ni bu
+ * yangi uslub emas, LLM yo'lini mavjud uslubga tenglashtirish.
+ */
+function numberOutline(chapters: OutlineChapter[], L: ReturnType<typeof sectionLabels>): OutlineChapter[] {
+  return chapters.map((ch, i) => ({
+    title: `${L.chapterPrefix(i + 1)} ${stripHeadingNumber(ch.title).toUpperCase()}`,
+    subs: ch.subs.map((sub, j) => ({
+      ...sub,
+      title: `${i + 1}.${j + 1}. ${stripHeadingNumber(sub.title)}`,
+    })),
+  }));
+}
+
 async function buildOutline(meta: DocMeta, sys: string, L: ReturnType<typeof sectionLabels>, deadline?: number) {
+  const out = await rawOutline(meta, sys, L, deadline);
+  return { ...out, chapters: numberOutline(out.chapters, L) };
+}
+
+async function rawOutline(meta: DocMeta, sys: string, L: ReturnType<typeof sectionLabels>, deadline?: number) {
   const pages = Math.max(4, meta.targetPages || 8);
   const long = pages >= 18;
   // Kurs ishida uch bob TUZILMA talabi — hajmga bog'liq emas. Ilgari
@@ -226,18 +253,18 @@ export async function draftOutline(meta: DocMeta, deadline?: number): Promise<st
   if (!llmEnabled()) return null;
   const { chapters } = await buildOutline(meta, writerSystemPrompt(meta), sectionLabels(meta.language), deadline);
   if (!chapters.length) return null;
-  // Matn ko'rinishi — foydalanuvchi uni to'g'ridan-to'g'ri tahrirlaydi va
-  // `parseManualOutline` uni qaytadan o'qiy oladi.
-  //
-  // Model ko'pincha sarlavhaga raqamni o'zi qo'shadi («1.1. Ta'rif»),
-  // shuning uchun o'z raqamimizni qo'yishdan oldin uni olib tashlaymiz —
-  // aks holda «1.1 1.1. Ta'rif» chiqadi.
-  const strip = (t: string) => t.replace(/^\d+(\.\d+)*[.)]?\s*/, "").trim() || t;
+  /*
+   * Matn ko'rinishi — foydalanuvchi uni to'g'ridan-to'g'ri tahrirlaydi va
+   * `parseManualOutline` uni qaytadan o'qiy oladi.
+   *
+   * Raqam `buildOutline` da qo'yilgan («I BOB. …»), bu yerda esa tahrirga
+   * qulay oddiy ko'rinish kerak — shuning uchun qayta raqamlaymiz.
+   */
   return chapters
     .map((ch, i) =>
       [
-        `${i + 1}. ${strip(ch.title)}`,
-        ...ch.subs.map((sub, j) => `  ${i + 1}.${j + 1} ${strip(sub.title)}`),
+        `${i + 1}. ${stripHeadingNumber(ch.title)}`,
+        ...ch.subs.map((sub, j) => `  ${i + 1}.${j + 1} ${stripHeadingNumber(sub.title)}`),
       ].join("\n"),
     )
     .join("\n");

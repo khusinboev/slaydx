@@ -55,11 +55,7 @@ export function titleModel(doc: AcademicDoc): TitleModel {
   };
 }
 
-export function tocEntries(doc: AcademicDoc) {
-  const rows = doc.sections.map((s) => s.title);
-  if (doc.references?.length) rows.push(docLabels(doc.meta.language).references);
-  return rows;
-}
+export { tocRows, type TocRow } from "@/lib/generation/toc-model";
 
 export function docToFlow(doc: AcademicDoc): FlowItem[] {
   const items: FlowItem[] = [];

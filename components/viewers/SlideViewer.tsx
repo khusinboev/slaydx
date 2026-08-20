@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Maximize2, Minimize2, StickyNote, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Maximize2, Minimize2, Pause, Play, Presentation, RotateCcw, StickyNote, X } from "lucide-react";
 import type { AcademicDoc } from "@/lib/generation/types";
 import { slideNotes } from "@/lib/generation/slide-layout";
 import { getSlideTheme } from "@/lib/generation/slide-themes";
@@ -20,6 +20,7 @@ export function SlideViewer({ doc }: { doc: AcademicDoc }) {
   const [i, setI] = useState(0);
   const [present, setPresent] = useState(false);
   const [notesOn, setNotesOn] = useState(true);
+  const [presenter, setPresenter] = useState(false);
   const [zoom, setZoom] = useState(75);
   const [fitOn, setFitOn] = useState(true);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -40,7 +41,34 @@ export function SlideViewer({ doc }: { doc: AcademicDoc }) {
     });
     ro.observe(el);
     return () => ro.disconnect();
-  }, [present, notesOn]);
+  }, [present, notesOn, presenter]);
+
+  /*
+   * HAQIQIY to'liq ekran.
+   *
+   * Ilgari «taqdimot» faqat `fixed inset-0` edi: brauzer manzil satri va
+   * yorliqlari ekranda qolardi, proyektorda esa aynan shular ko'rinmasligi
+   * kerak. Fullscreen API rad etilishi mumkin (masalan foydalanuvchi
+   * harakatisiz chaqirilsa), shuning uchun xato yutiladi — bunday holda
+   * eski qoplama rejimi baribir ishlaydi.
+   */
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    if (present && !document.fullscreenElement) {
+      document.documentElement.requestFullscreen?.().catch(() => {});
+    } else if (!present && document.fullscreenElement) {
+      document.exitFullscreen?.().catch(() => {});
+    }
+  }, [present]);
+
+  // Brauzer to'liq ekrandan chiqsa (Esc, F11) — holat mos kelib qolsin.
+  useEffect(() => {
+    const sync = () => {
+      if (!document.fullscreenElement) setPresent(false);
+    };
+    document.addEventListener("fullscreenchange", sync);
+    return () => document.removeEventListener("fullscreenchange", sync);
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -53,7 +81,10 @@ export function SlideViewer({ doc }: { doc: AcademicDoc }) {
       } else if (e.key === "Home") go(0);
       else if (e.key === "End") go(slides.length - 1);
       else if (e.key === "Escape") setPresent(false);
-      else if (e.key.toLowerCase() === "f" || e.key === "F5") {
+      else if (e.key.toLowerCase() === "p") {
+        e.preventDefault();
+        setPresenter((v) => !v);
+      } else if (e.key.toLowerCase() === "f" || e.key === "F5") {
         e.preventDefault();
         setPresent((v) => !v);
       }
@@ -62,7 +93,44 @@ export function SlideViewer({ doc }: { doc: AcademicDoc }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [go, i, slides.length]);
 
+  /*
+   * Chiqish taymeri. Taqdimotchi uchun asosiy raqam — «qancha gapirdim»,
+   * shuning uchun u soat emas, o'tgan vaqt. Taqdimot boshlanganda o'zi
+   * yurib ketadi; to'xtatish va nolga qaytarish qo'lda.
+   */
+  const [elapsed, setElapsed] = useState(0);
+  const [running, setRunning] = useState(true);
+  useEffect(() => {
+    if (!present) return;
+    setElapsed(0);
+    setRunning(true);
+  }, [present]);
+  useEffect(() => {
+    if (!present || !running) return;
+    const t = setInterval(() => setElapsed((v) => v + 1), 1000);
+    return () => clearInterval(t);
+  }, [present, running]);
+  const clock = `${String(Math.floor(elapsed / 60)).padStart(2, "0")}:${String(elapsed % 60).padStart(2, "0")}`;
+
+  /*
+   * Keyingi slayd eskizining masshtabi O'LCHANADI.
+   *
+   * Yon paneldagi kenglik `min(34vw, 460px)` — ya'ni ekranga qarab
+   * o'zgaradi. Qat'iy masshtab (yon ustundagi 0.117 kabi) bu yerda
+   * noto'g'ri bo'lardi: keng monitorda eskiz ramkadan chiqib ketardi.
+   */
+  const nextRef = useRef<HTMLSpanElement>(null);
+  const [nextScale, setNextScale] = useState(0.2);
+  useEffect(() => {
+    const el = nextRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => setNextScale(el.getBoundingClientRect().width / SLIDE.w));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [present, presenter, i]);
+
   const slide = slides[i];
+  const next = slides[i + 1];
   const scale = present || fitOn ? Math.max(0.18, fitScale) : zoom / 100;
   const notes = slide ? slideNotes(slide) : "";
 
@@ -73,6 +141,14 @@ export function SlideViewer({ doc }: { doc: AcademicDoc }) {
           <span className="mr-2 text-sm tabular-nums">
             {i + 1} / {slides.length}
           </span>
+          <button
+            type="button"
+            title="Taqdimotchi rejimi (P)"
+            className={cn("hover:bg-white/10 rounded p-1.5", presenter && "bg-white/15")}
+            onClick={() => setPresenter((v) => !v)}
+          >
+            <Presentation className="size-4" />
+          </button>
           <button type="button" className="hover:bg-white/10 rounded p-1.5" onClick={() => setPresent(false)}>
             <X className="size-4" />
           </button>
@@ -186,6 +262,80 @@ export function SlideViewer({ doc }: { doc: AcademicDoc }) {
             </div>
           ) : null}
         </div>
+
+        {/*
+          Taqdimotchi paneli — FAQAT to'liq ekranda.
+          Bu ekran tinglovchiga emas, so'zlovchiga qaraydi: nima
+          gapirilishi (eslatma), nima kelayotgani (keyingi slayd) va
+          qancha vaqt ketgani. Shuning uchun u slayd MAYDONIDAN tashqarida
+          turadi — proyektorga ikkinchi ekran uzatilganda faqat chap
+          tomondagi slayd ko'chiriladi.
+        */}
+        {present && presenter ? (
+          <aside className="no-print flex w-[min(34vw,460px)] shrink-0 flex-col gap-3 overflow-y-auto border-l border-white/10 bg-[#141414] p-4 text-white">
+            <div className="flex items-center gap-2">
+              <span className="text-3xl font-semibold tabular-nums">{clock}</span>
+              <button
+                type="button"
+                title={running ? "To‘xtatish" : "Davom ettirish"}
+                className="hover:bg-white/10 rounded p-1.5 text-white/70"
+                onClick={() => setRunning((v) => !v)}
+              >
+                {running ? <Pause className="size-4" /> : <Play className="size-4" />}
+              </button>
+              <button
+                type="button"
+                title="Noldan"
+                className="hover:bg-white/10 rounded p-1.5 text-white/70"
+                onClick={() => setElapsed(0)}
+              >
+                <RotateCcw className="size-4" />
+              </button>
+              <span className="ml-auto text-sm text-white/50 tabular-nums">
+                {i + 1} / {slides.length}
+              </span>
+            </div>
+
+            <div>
+              <div className="mb-1 text-[11px] font-medium tracking-wide text-white/45 uppercase">Keyingi slayd</div>
+              {next ? (
+                <span
+                  ref={nextRef}
+                  className="relative block overflow-hidden rounded bg-black"
+                  style={{ aspectRatio: `${SLIDE.w} / ${SLIDE.h}` }}
+                >
+                  <span
+                    className="absolute top-0 left-0 origin-top-left"
+                    style={{ width: SLIDE.w, height: SLIDE.h, transform: `scale(${nextScale})` }}
+                  >
+                    <SlideCanvas
+                      slide={next}
+                      theme={theme}
+                      visual={deck.visual}
+                      audience={deck.audience}
+                      templateId={deck.templateId}
+                      index={i + 1}
+                      total={slides.length}
+                    />
+                  </span>
+                </span>
+              ) : (
+                <p className="text-sm text-white/50">Bu oxirgi slayd.</p>
+              )}
+            </div>
+
+            <div className="min-h-0 flex-1">
+              <div className="mb-1 text-[11px] font-medium tracking-wide text-white/45 uppercase">Eslatma</div>
+              <p className="whitespace-pre-wrap text-[15px] leading-relaxed text-white/85">
+                {notes || "Bu slayd uchun eslatma yo‘q."}
+              </p>
+            </div>
+
+            <p className="text-[11px] text-white/35">
+              Strelka — slayd almashtirish · P — bu panel · Esc — chiqish
+            </p>
+          </aside>
+        ) : null}
       </div>
     </div>
   );

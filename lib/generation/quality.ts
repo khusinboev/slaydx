@@ -268,3 +268,33 @@ export function parseManualOutline(text: string): ManualChapter[] {
     .slice(0, 6)
     .map((c) => ({ ...c, subs: c.subs.slice(0, 4) }));
 }
+
+/**
+ * Sarlavha boshidagi raqamlashni olib tashlaydi.
+ *
+ * Model sarlavhani o'zi raqamlaydi, lekin izchil emas: bir joyda «1.1.»,
+ * boshqasida «1.1», uchinchisida umuman yo'q. Shu sababli raqamni
+ * MODELDAN olmaymiz — tashlab yuboramiz va o'zimiz qo'yamiz. Natijada
+ * bob va ostmavzu raqamlari qurilish yo'li bilan izchil bo'ladi.
+ *
+ * Ikki hol alohida ushlanadi, chunki bitta keng qolip xavfli:
+ * «IT sohasida», «3D modellashtirish» kabi sarlavhalar raqam bilan
+ * boshlangandek ko'rinadi. Shuning uchun ajratuvchi belgi TALAB qilinadi.
+ */
+const ARABIC_LEAD = /^\d+(?:\.\d+)*\s*[.)]?\s+/;
+const ROMAN_LEAD = /^(?:(?:chapter|глава)\s+)?[ivxlc]{1,4}\s*[-–—]?\s*(?:bob|глава|chapter)?\s*[.)]\s+/i;
+
+export function stripHeadingNumber(title: string): string {
+  const t = String(title ?? "").trim();
+  const cut = t.replace(ROMAN_LEAD, "").replace(ARABIC_LEAD, "").trim();
+  // Sarlavha butunlay raqamdan iborat bo'lsa (masalan «2.2»), asl matn
+  // qoladi — bo'sh sarlavha raqamsizdan ham yomon.
+  return cut.length >= 3 ? cut : t;
+}
+
+const ROMAN = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"];
+
+/** 1 → «I». Chegaradan chiqsa arab raqami qaytadi. */
+export function romanNumeral(n: number): string {
+  return ROMAN[n - 1] ?? String(n);
+}
