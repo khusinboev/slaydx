@@ -198,3 +198,32 @@ test("jadval eslatmasi qatorlarni o'z ichiga oladi", async () => {
   assert.match(notes, /Mezon/);
   assert.match(notes, /Narx/);
 });
+
+/**
+ * Rasm byudjeti deka uzunligiga ergashadi.
+ *
+ * Nuqson: `premium` cheklovi 10 edi va 16 slaydli premium dekada rasm
+ * ko'tara oladigan slaydlar soni ham aynan 10 chiqardi — cheklov
+ * chegaraga tegib turardi, ya'ni shablon mixi ozgina o'zgarsa rasm jim
+ * yo'qola boshlardi.
+ */
+test("rasm byudjeti deka uzayganda o'sadi va sun'iy shift qo'ymaydi", async () => {
+  const { imageBudget } = await import("../lib/generation/slide-images.ts");
+
+  // Qisqa dekada eski quyi chegara saqlanadi.
+  assert.equal(imageBudget(10, false), 8);
+  assert.equal(imageBudget(10, true), 10);
+
+  // Uzun dekada byudjet 0.8 zichlikka ergashadi.
+  assert.equal(imageBudget(16, true), 13);
+  assert.equal(imageBudget(20, true), 16);
+  assert.equal(imageBudget(14, false), 12);
+
+  // 16 slaydli premium dekada mos slot 10 ta — byudjet undan KATTA
+  // bo'lishi kerak, aks holda cheklovning o'zi bog'lovchi bo'lib qoladi.
+  assert.ok(imageBudget(16, true) > 10);
+
+  // Buzuq kirish yiqilmaydi.
+  assert.equal(imageBudget(0, false), 8);
+  assert.equal(imageBudget(-5, true), 10);
+});

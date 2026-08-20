@@ -22,6 +22,24 @@ const FAL_DEFAULT_MODEL = "fal-ai/flux/schnell";
 const IMAGE_LIMIT = { standard: 8, premium: 10 } as const;
 const STEPS = { standard: 4, premium: 8 } as const;
 
+/**
+ * Rasm cheklovi deka uzunligiga bog'lanadi.
+ *
+ * Ilgari u qat'iy son edi: `premium` uchun 10. 16 slaydli premium dekada
+ * rasm ko'tara oladigan slaydlar soni ham AYNAN 10 chiqadi — ya'ni
+ * cheklov chegaraga tegib turardi va shablon mixi biroz o'zgarishi bilan
+ * rasm jim yo'qola boshlardi. Endi chegara 10 slaydlik dekadagi zichlikni
+ * (0.8) saqlaydi va hech qachon o'zi bog'lovchi bo'lmaydi.
+ *
+ * Bu rasm SONINI va'da qilish emas: forma «sifatli rasm» deb yozadi va
+ * uni model hamda qadamlar soni beradi. Bu shunchaki sun'iy shiftni
+ * olib tashlaydi — nechta rasm chiqishini layout mixi hal qiladi.
+ */
+export function imageBudget(slideCount: number, premium: boolean): number {
+  const base = premium ? IMAGE_LIMIT.premium : IMAGE_LIMIT.standard;
+  return Math.max(base, Math.ceil(Math.max(0, slideCount) * 0.8));
+}
+
 export type VisualTier = { premium?: boolean; seed?: number };
 
 /**
@@ -269,7 +287,7 @@ export async function attachSlideImages(
   const jobs = slides
     .map((s, i) => ({ s, i }))
     .filter(({ s }) => IMAGE_LAYOUTS.has(s.layout) && !s.image)
-    .slice(0, tier.premium ? IMAGE_LIMIT.premium : IMAGE_LIMIT.standard);
+    .slice(0, imageBudget(slides.length, Boolean(tier.premium)));
   if (!jobs.length) return slides;
 
   const prompts = await writeSlideImagePrompts(
