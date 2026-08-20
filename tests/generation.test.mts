@@ -260,3 +260,63 @@ test("boshqa formatlar rad etiladi", async () => {
     assert.equal(sniffImageType(buf), null, `${name} qabul qilinmasligi kerak`);
   }
 });
+
+/**
+ * Reja o'lchami betga ergashishi.
+ *
+ * Nuqson: kurs ishida doim 3 bob × ≤3 ostmavzu edi, ya'ni dvigatelning
+ * tuzilmaviy imkoniyati ~9 ostmavzu bilan cheklanardi. 25–30 va 40–45
+ * betlik kurs ishlari (18 000 va 24 000 tanga) hajm darvozasidan
+ * MUNTAZAM yiqilardi — jonli o'lchov ikkalasi ham ~5 000 so'zda
+ * to'xtaganini ko'rsatdi.
+ */
+test("reja o'lchami bet soniga ergashadi", async () => {
+  const { outlineShape } = await import("../lib/generation/write-llm.ts");
+
+  // Qisqa ish — ikki bob yetadi.
+  assert.deepEqual(outlineShape(8, "referat"), { chapters: 2, subs: 3 });
+
+  // Kurs ishi hajmidan qat'i nazar kamida uch bob (tuzilma talabi).
+  assert.deepEqual(outlineShape(8, "coursework"), { chapters: 3, subs: 3 });
+  assert.deepEqual(outlineShape(18, "referat"), { chapters: 3, subs: 3 });
+
+  // Uzun ishlarda hajm ostmavzular SONI orqali olinadi.
+  assert.deepEqual(outlineShape(28, "coursework"), { chapters: 4, subs: 4 });
+  assert.deepEqual(outlineShape(43, "coursework"), { chapters: 5, subs: 4 });
+
+  // Tuzilma monoton o'sadi — uzunroq ish hech qachon kichikroq reja olmaydi.
+  let prev = 0;
+  for (const p of [4, 8, 12, 18, 23, 28, 33, 38, 43]) {
+    const { chapters, subs } = outlineShape(p, "coursework");
+    assert.ok(chapters * subs >= prev, `${p} bet uchun reja kichrayib ketdi`);
+    prev = chapters * subs;
+  }
+});
+
+/**
+ * Tuzilmaviy imkoniyat va'dani qoplashi.
+ *
+ * Bu testning maqsadi — narx darajasi qo'shilganda uni jim buzib
+ * qo'ymaslik. Har tarif uchun reja nazariy jihatdan kerakli hajmni
+ * ko'tara olishi kerak, aks holda darvoza uni doim yiqitadi.
+ */
+test("har tarif uchun reja va'da qilingan hajmni ko'tara oladi", async () => {
+  const { outlineShape } = await import("../lib/generation/write-llm.ts");
+  const { targetWords } = await import("../lib/generation/quality.ts");
+
+  // Paragraf ~105 so'z; ostmavzuga eng ko'pi 6 paragraf so'raladi;
+  // kirish va xulosa hajmning ~25% ini beradi.
+  const PARA = 105;
+  const MAX_PER_SUB = 6;
+
+  for (const pages of [12, 18, 23, 28, 33, 38, 43]) {
+    const { chapters, subs } = outlineShape(pages, "coursework");
+    const body = chapters * subs * MAX_PER_SUB * PARA;
+    const capacity = body / 0.75; // kirish + xulosa ulushi bilan
+    const gate = targetWords(pages) * 0.8;
+    assert.ok(
+      capacity >= gate,
+      `${pages} bet: reja ${Math.round(capacity)} so'z ko'taradi, darvoza ${Math.round(gate)} so'z talab qiladi`,
+    );
+  }
+});

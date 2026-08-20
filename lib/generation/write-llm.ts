@@ -108,12 +108,37 @@ async function buildOutline(meta: DocMeta, sys: string, L: ReturnType<typeof sec
   return { ...out, chapters: numberOutline(out.chapters, L) };
 }
 
+/**
+ * Reja o'lchami — nechta bob va har bobda nechta ostmavzu.
+ *
+ * Ilgari bu deyarli qat'iy edi: kurs ishida doim 3 bob, har bobda ≤3
+ * ostmavzu. Natijada dvigatelning tuzilmaviy imkoniyati ~9 ostmavzu
+ * bilan cheklanardi va HAJM 45 betlik va'daga hech qachon yetmasdi —
+ * 25–30 va 40–45 betlik kurs ishlari (18 000 va 24 000 tanga) hajm
+ * darvozasidan MUNTAZAM yiqilardi. Jonli o'lchov: ikkalasi ham ~5 000
+ * so'zda to'xtardi, byudjetning esa uchdan ikkisi ishlatilmay qolardi.
+ *
+ * Sabab hajm emas, CHAQIRUV SONI edi: modeldan bitta javobda 9 paragraf
+ * so'ralganda u ~45% ini beradi. Uch marta 3 paragraf so'rash bir marta
+ * 9 paragraf so'rashdan ko'p matn beradi. Shuning uchun hajm endi
+ * chaqiruv soni orqali olinadi, chaqiruv kattaligi orqali emas.
+ *
+ * Bu bir vaqtning o'zida AKADEMIK jihatdan ham to'g'riroq: 45 betlik
+ * kurs ishi uch bobda emas, to'rt-besh bobda yoziladi.
+ */
+export function outlineShape(pages: number, toolId: string): { chapters: number; subs: number } {
+  const p = Math.max(4, pages || 8);
+  if (p >= 33) return { chapters: 5, subs: 4 };
+  if (p >= 23) return { chapters: 4, subs: 4 };
+  if (p >= 18 || toolId === "coursework") return { chapters: 3, subs: 3 };
+  return { chapters: 2, subs: 3 };
+}
+
 async function rawOutline(meta: DocMeta, sys: string, L: ReturnType<typeof sectionLabels>, deadline?: number) {
   const pages = Math.max(4, meta.targetPages || 8);
   const long = pages >= 18;
-  // Kurs ishida uch bob TUZILMA talabi — hajmga bog'liq emas. Ilgari
-  // 10–15 betlik kurs ishi ikki bob olardi va referatdan farq qilmasdi.
-  const chapterN = meta.toolId === "coursework" || long ? 3 : 2;
+  const shape = outlineShape(pages, meta.toolId);
+  const chapterN = shape.chapters;
   const manual = meta.tocMethod === "manual" ? parseManualOutline(meta.tocText || meta.extra) : [];
 
   if (manual.length) {
@@ -140,7 +165,7 @@ async function rawOutline(meta: DocMeta, sys: string, L: ReturnType<typeof secti
       [
         `«${meta.topic}» uchun ${chapterN} bobli reja. JSON:`,
         `{"chapters":[{"title":"","subs":[{"title":"1.1 ...","brief":"2 gap"}]}]}`,
-        `Har bobda 2–3 ostmavzu. Sarlavha mavzuga xos (umumiy «Nazariy asoslar» emas).`,
+        `Har bobda ${shape.subs === 3 ? "2–3" : `3–${shape.subs}`} ostmavzu. Sarlavha mavzuga xos (umumiy «Nazariy asoslar» emas).`,
         `brief — shu ostmavzuda nima yozilishini 1–2 gapda.`,
         meta.extra ? `Qo‘shimcha: ${meta.extra}` : "",
       ]
@@ -162,7 +187,7 @@ async function rawOutline(meta: DocMeta, sys: string, L: ReturnType<typeof secti
                 brief: String(sub?.brief || "").trim(),
               }))
               .filter((sub) => sub.title)
-              .slice(0, 3)
+              .slice(0, shape.subs)
           : [];
         if (!title || !subs.length) return null;
         return {
@@ -309,8 +334,16 @@ export async function writeWriterWithLlm(meta: DocMeta, deadline?: number): Prom
   const thinking = meta.toolId === "coursework" ? 1024 : 0;
   const allSubs = chapters.flatMap((ch) => ch.subs.map((s) => s.title));
   const subCount = Math.max(1, allSubs.length);
-  // Kirish va xulosa hajmning ~25% ini oladi, qolgani ostmavzularga.
-  const perSub = Math.max(3, Math.min(9, Math.round((want * 0.75) / subCount / 105)));
+  /**
+   * Kirish va xulosa hajmning ~25% ini oladi, qolgani ostmavzularga.
+   *
+   * Yuqori chegara 9 dan 6 ga TUSHIRILDI. Bu qarshi-intuitiv, lekin
+   * o'lchov shuni ko'rsatdi: modeldan bitta javobda 9 paragraf
+   * so'ralganda u ~45% ini beradi, 4–5 paragraf so'ralganda esa deyarli
+   * to'liq bajaradi. Hajm endi ostmavzular SONI orqali olinadi
+   * (`outlineShape`), chaqiruv kattaligi orqali emas.
+   */
+  const perSub = Math.max(3, Math.min(6, Math.round((want * 0.75) / subCount / 105)));
 
   const jobs: Job[] = [
     {
@@ -353,7 +386,16 @@ export async function writeWriterWithLlm(meta: DocMeta, deadline?: number): Prom
     },
   ];
 
-  const written = await mapPool(jobs, 3, async (item) => {
+  /**
+   * Parallellik ish soniga ergashadi.
+   *
+   * Qat'iy 3 da 22 ta bo'lim 8 to'lqin bo'lardi — 8 × 38 s = 304 s,
+   * worker esa 285 s beradi. Uzun ishlarda oxirgi to'lqinlar byudjetsiz
+   * qolib, bo'limlar bo'sh qaytardi. Chegara 6 — undan yuqorisi
+   * provayder tomonidan cheklanishi mumkin.
+   */
+  const pool = Math.min(6, Math.max(3, Math.ceil(jobs.length / 4)));
+  const written = await mapPool(jobs, pool, async (item) => {
     const left = remainingMs(deadline);
     if (left < 5_000) return { item, blocks: [] as Block[] };
     const budget = item.kind === "sub" ? 38_000 : 45_000;
@@ -512,6 +554,14 @@ export async function writeWriterWithLlm(meta: DocMeta, deadline?: number): Prom
    * Qo'shimchalar UMUMIY to'ldirgich emas — har biri mavzuning aniq
    * qirrasini so'raydi, shuning uchun matn shablonga aylanmaydi.
    */
+  /**
+   * Qo'shimcha tahlil burchaklari.
+   *
+   * Ikkita edi — 40 betlik ish uchun bu yetmasdi. Beshtaga chiqarildi va
+   * har biri mavzuning ALOHIDA qirrasini so'raydi, shuning uchun ro'yxat
+   * uzayishi matnni shablonga aylantirmaydi. Har bo'lim ≤6 paragraf:
+   * katta so'rov modeldan kam matn oladi (yuqoridagi `perSub` izohi).
+   */
   const TOPUPS = [
     {
       id: "amaliy",
@@ -525,8 +575,35 @@ export async function writeWriterWithLlm(meta: DocMeta, deadline?: number): Prom
       brief: (t: string) =>
         `«${t}» bo‘yicha tipik qiyinchilik, uning sababi va amaliy yechim. Har band bitta muammoga bag‘ishlansin. Takror bo‘lmasin.`,
     },
+    {
+      id: "qiyos",
+      title: (t: string) => `${t}: qiyosiy tahlil`,
+      brief: (t: string) =>
+        `«${t}» bo‘yicha kamida ikki yondashuv yoki maktabni QIYOSLANG: nimasi bilan farq qiladi, qaysi sharoitda qaysi biri ustun. Uydirma statistika yo‘q.`,
+    },
+    {
+      id: "tarix",
+      title: (t: string) => `${t}: shakllanish bosqichlari`,
+      brief: (t: string) =>
+        `«${t}» tushunchasining qanday shakllangani: bosqichlar, burilish nuqtalari, hozirgi holatga qanday kelingani. Sana uydirmang, umumiy davrlar bilan yozing.`,
+    },
+    {
+      id: "istiqbol",
+      title: (t: string) => `${t}: istiqbol va tavsiyalar`,
+      brief: (t: string) =>
+        `«${t}» bo‘yicha yaqin istiqbol, ochiq savollar va aniq tavsiyalar. Har tavsiya kimga qaratilganini ayting. Shior yo‘q.`,
+    },
   ];
 
+  /**
+   * Hajm yetguncha qo'shimcha bo'lim yoziladi.
+   *
+   * Ilgari birinchi bo'sh javobda butun tsikl `break` qilardi — bitta
+   * o'tkinchi xato qolgan burchaklarni ham bekor qilardi. Endi bo'sh
+   * javob shu burchakni tashlaydi, tsikl davom etadi; ketma-ket ikki
+   * yiqilishdan keyingina to'xtaydi (model umuman javob bermayapti).
+   */
+  let misses = 0;
   for (const topup of TOPUPS) {
     const have = wordCount(doc);
     if (have >= want * 0.9) break;
@@ -540,10 +617,14 @@ export async function writeWriterWithLlm(meta: DocMeta, deadline?: number): Prom
       topup.title(topic),
       topup.brief(topic),
       meta,
-      Math.max(4, Math.min(12, Math.round(need / 110))),
+      Math.max(3, Math.min(6, Math.round(need / 110))),
       Math.min(45_000, remainingMs(deadline)),
     );
-    if (!extra.length) break;
+    if (!extra.length) {
+      if (++misses >= 2) break;
+      continue;
+    }
+    misses = 0;
     const insertAt = Math.max(1, sections.length - 1);
     sections.splice(insertAt, 0, section(topup.id, topup.title(topic), extra));
   }
