@@ -18,6 +18,7 @@ import {
   remainingMs,
   section,
   targetWords,
+  unverifiedReferenceNote,
   wordCount,
 } from "./quality";
 import type { AcademicDoc, Block, DocMeta, DocSection, DocTable } from "./types";
@@ -841,6 +842,17 @@ export async function writeImradWithLlm(meta: DocMeta, deadline?: number): Promi
         ],
     sections,
     references: references.length >= 3 ? references : undefined,
+    /**
+     * Model bergan manbalar TEKSHIRILMAGAN deb belgilanadi.
+     *
+     * P0-4 yozuvchi yo'lida (`write-llm.ts`) va shablon yo'lida
+     * (`content.ts`) yopilgan edi, IMRAD esa e'tibordan chetda qolgan:
+     * u ro'yxatni ogohlantirishsiz chiqarardi. Aynan maqola — jurnalga
+     * yoki ilmiy rahbarga boradigan hujjat, ya'ni soxta manba eng ko'p
+     * zarar keltiradigan joy. Nuqsonni evalning yangi `article-imrad`
+     * keysi ushladi.
+     */
+    referencesNote: references.length >= 3 ? unverifiedReferenceNote(meta.language) : undefined,
   };
 }
 

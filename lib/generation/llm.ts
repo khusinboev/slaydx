@@ -17,7 +17,7 @@ export function llmEnabled() {
 
 export function llmModel() {
   if (llmProvider() === "gemini") {
-    return process.env.GEMINI_MODEL || "gemini-3.5-flash";
+    return process.env.GEMINI_MODEL || "gemini-3.7-flash";
   }
   return process.env.XAI_MODEL || "grok-4.3";
 }

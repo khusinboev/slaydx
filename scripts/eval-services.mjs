@@ -21,7 +21,17 @@ const ROUND = process.argv[2] || "r1";
 const ONLY = process.argv[3] || "";
 const BASE = process.env.EVAL_URL || "http://127.0.0.1:3000";
 const OUT = path.resolve(process.cwd(), "..", "namunalar", `eval-${ROUND}`);
-const EVAL_USER = process.env.EVAL_USER || "evalbot";
+/**
+ * Sinov kontenti QAYSI hisobda paydo bo'ladi.
+ *
+ * Bu egasining haqiqiy hisobi: eval chiqargan hujjatlar sayt interfeysida
+ * ochilib, ko'z bilan ko'rilishi kerak. Alohida «evalbot» hisobida ular
+ * hech kim ochmaydigan joyda yig'ilib qolardi — raqamlar yashil bo'lib,
+ * fayllarni esa hech kim ko'rmasdi.
+ *
+ * `smoke` ham xuddi shu hisobdan foydalanadi.
+ */
+const EVAL_USER = process.env.EVAL_USER || "+998997333896";
 /** Bitta ish uchun eng ko'p kutish — worker byudjeti 285 s. */
 const POLL_TIMEOUT_MS = Number(process.env.EVAL_TIMEOUT_MS || 330_000);
 

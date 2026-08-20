@@ -107,7 +107,7 @@ export const env = {
 
   gemini: {
     key: str("GEMINI_API_KEY"),
-    model: str("GEMINI_MODEL", "gemini-3.5-flash"),
+    model: str("GEMINI_MODEL", "gemini-3.7-flash"),
   },
   xai: {
     key: str("XAI_API_KEY"),
