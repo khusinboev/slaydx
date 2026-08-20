@@ -9,12 +9,12 @@
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
     "test": "tsx --conditions=react-server --test tests/*.test.mts",
-    "db:migrate": "tsx --conditions=react-server scripts/migrate.ts",
-    "worker": "tsx --conditions=react-server scripts/worker.ts",
-    "topup": "tsx --conditions=react-server scripts/topup.mts",
-    "bot": "tsx --conditions=react-server scripts/bot.mts",
+    "db:migrate": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/migrate.ts",
+    "worker": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/worker.ts",
+    "topup": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/topup.mts",
+    "bot": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/bot.mts",
     "check": "npm run typecheck && npm run lint && npm run test",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "node --env-file-if-exists=.env.local scripts/smoke.mjs"
   },
   "dependencies": {
     "docx": "^9.7.1",

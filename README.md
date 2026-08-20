@@ -134,7 +134,21 @@ Uch xil tekshiruv bir-birini to'ldiradi:
 |---|---|
 | `npm run check` | Kod: tiplar, lint, birlik testlari |
 | `npm run smoke` | Tizim ishlayaptimi: kirish, sahifalar, ko'ruvchilar, yaratish→yuklab olish→o'chirish, xato yo'llari |
-| `node scripts/eval-services.mjs r1` | Chiqish SIFATI: hajm, slaydlar soni, speaker notes, uydirma manba |
+| `node scripts/eval-services.mjs r1` | Chiqish SIFATI: hajm, slaydlar soni, speaker notes, uydirma manba, TARIF FARQI |
+
+`db:migrate`, `worker`, `topup`, `bot` va `smoke` `.env.local` ni o'zi
+o'qiydi (`--env-file-if-exists`). Ilgari faqat `next` uni yuklardi va
+qolgan skriptlar «DATABASE_URL sozlanmagan» deb yiqilardi.
+
+**Eval har vositaning ENG QIMMAT tarifini ham sinaydi.** Buni buzmang:
+loyihada uch marta shunday nuqson chiqdi — slayd sifat paketi, IMRAD
+maqola va uzun kurs ishi qimmatroq tarifda ARZONI bilan bir xil natija
+berardi. Eval bitta tarifda sinagani uchun uchalasi ham sezilmay qoldi.
+`TIER_PAIRS` aynan shuni tekshiradi va yiqilsa eval qizil bo'ladi.
+
+> **Diqqat:** `WORKER_INLINE=true` (standart) bo'lganda inline worker
+> hot reload OLMAYDI. `lib/generation/` ni o'zgartirgach dev serverni
+> qayta ishga tushiring, aks holda eval ESKI kodni sinaydi.
 
 ---
 
@@ -259,8 +273,9 @@ Telegram'ning **web** versiyasida ishlatmoqchi bo'lsangiz
 - **`npm audit`: 5 ta high.** Har biri tekshirildi va hozirgi ishlatishda
   erishib bo'lmaydi:
   - `next → sharp` (libvips CVE) — `next/image` umuman ishlatilmaydi va
-    `next.config.ts` da `images` sozlamasi yo'q, ya'ni optimizator hech
-    qachon ishga tushmaydi;
+    `next.config.ts` da `images: { unoptimized: true }` qo'yilgan, ya'ni
+    `/_next/image` hech qanday tasvirni qayta ishlamaydi va zaif kod
+    yo'liga umuman kirilmaydi;
   - `next → postcss` (XSS, sourceMappingURL) — PostCSS faqat build
     vaqtida, faqat bizning CSS ustida ishlaydi;
   - `pptxgenjs → image-size` (ICNS/JXL/HEIF parserlarida DoS) — rasm

@@ -10,7 +10,16 @@ import type { FormValues } from "../types";
 
 /** Oddiy matn maydoni (mavzu, ism, kafedra...). */
 const MAX_FIELD = 4_000;
-/** «Fayl asosida» va tarjima uchun manba matni. */
+/**
+ * «Fayl asosida» va tarjima uchun manba matni — XOM shift.
+ *
+ * Bundan qanchasi modelga ketishi vositaga bog'liq va u boshqa joyda
+ * hal qilinadi: `lib/generation/meta.ts` dagi `SOURCE_TEXT_LIMIT`
+ * (kontekst uchun 24 000) va `lib/tools.ts` dagi
+ * `TRANSLATION_MAX_CHARS` (tarjima uchun 48 000). Bu yerdagi son
+ * shunchaki «so'rov qanchalik katta bo'lishi mumkin» degan savolga
+ * javob beradi.
+ */
 const MAX_SOURCE = 60_000;
 /** Bitta formadagi maydonlar soni. */
 const MAX_KEYS = 80;

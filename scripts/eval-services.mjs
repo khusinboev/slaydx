@@ -242,6 +242,108 @@ const CASES = [
     expect: ["Navoiy"],
     isPptx: true,
   },
+  /**
+   * ENG QIMMAT TARIFLAR.
+   *
+   * Ilgari eval har vositani faqat BITTA (odatda eng arzon) tarifda
+   * sinardi: kurs ishi «15–20 bet», maqola «5–10 bet». Natijada
+   * 18 000–24 000 tangalik tariflar hech qachon tekshirilmasdi va
+   * ularning hajm darvozasidan MUNTAZAM yiqilishi sezilmay qoldi.
+   * Qoida: har vositaning eng qimmat tarifi ham sinovga tushadi —
+   * aynan u eng ko'p pul yo'qotadi.
+   */
+  {
+    name: "coursework-max",
+    slug: "coursework",
+    values: {
+      topic: "Umumiy o'rta ta'lim maktablarida ekologik tarbiyani tashkil etish",
+      language: "uz",
+      author: "Toshmatova Nilufar — 4-kurs, 402-guruh",
+      university: "TDPU",
+      faculty: "Pedagogika",
+      department: "Pedagogika nazariyasi",
+      subject: "Pedagogika",
+      teacher: "Prof. S. Nazarov",
+      city: "Toshkent",
+      ministry: "maktab",
+      pages: "40-45",
+      images: "yes",
+      tocMethod: "ai",
+    },
+    minWords: 7912, // 43 bet × 230 × 0.8
+    expect: ["Kirish", "Xulosa", "BOB"],
+  },
+  {
+    name: "referat-max",
+    slug: "referat",
+    values: {
+      topic: "Quyosh energetikasi va uning O'zbekistondagi istiqbollari",
+      language: "uz",
+      author: "Rahimov Sardor — 2-kurs, 205-guruh",
+      university: "Toshkent davlat texnika universiteti",
+      faculty: "Energetika",
+      department: "Qayta tiklanuvchi energiya",
+      subject: "Energetika",
+      city: "Toshkent",
+      pages: "25-30",
+    },
+    minWords: 5060, // 27.5 → 28 bet × 230 × 0.8
+    expect: ["Kirish", "Xulosa"],
+  },
+  /**
+   * IMRAD yo'li.
+   *
+   * Bu yo'l (`kind: "imrad"`) evalda UMUMAN yo'q edi, holbuki maqola va
+   * tezis uchun 8 000 tangagacha turadi. Ustiga u `targetPages` ni
+   * o'qimasdi — 4 000 va 8 000 tangalik maqola aynan bir xil chiqardi.
+   */
+  {
+    name: "article-imrad",
+    slug: "article",
+    values: {
+      topic: "Yoshlar orasida internet qaramligi",
+      kind: "imrad",
+      language: "uz",
+      author: "Saidova Sevara",
+      university: "O'zbekiston Milliy universiteti",
+      organization: "O'zbekiston Milliy universiteti",
+      email: "sevara@example.uz",
+      subject: "Ijtimoiy psixologiya",
+      city: "Toshkent",
+      pages: "10-15",
+      annotationLangs: "same",
+    },
+    minWords: 2300, // 12.5 → 13 bet × 230 × 0.8
+    expect: ["Annotatsiya", "Natija", "Muhokama"],
+  },
+  /**
+   * Uzun tarjima.
+   *
+   * Tarjima chegaraga yaqin matnda sinalmagan edi: bo'laklar jim
+   * kesilardi va yarim tarjima `COMPLETED` bo'lardi. `expect` oxirgi
+   * bo'lakning yetib kelganini tekshiradi.
+   */
+  {
+    name: "translation-long",
+    slug: "translation",
+    values: {
+      mode: "file",
+      fileName: "photosynthesis-long.txt",
+      language: "uz",
+      sourceLang: "en",
+      sourceText: Array.from(
+        { length: 30 },
+        (_, i) =>
+          `Part ${i + 1}. Photosynthesis converts light energy into chemical energy stored in glucose. ` +
+          `Chloroplasts contain chlorophyll, which absorbs light in the blue and red parts of the spectrum. ` +
+          `The light-dependent reactions occur in the thylakoid membrane and produce ATP and NADPH, which ` +
+          `the Calvin cycle then uses to fix carbon dioxide into three-carbon sugars.`,
+      ).join("\n\n"),
+    },
+    minWords: 900,
+    // Birinchi va OXIRGI bo'lak ham yetib kelishi shart — jim kesilish belgisi.
+    expect: ["1-", "30-"],
+  },
   {
     slug: "rasm",
     values: {
@@ -565,12 +667,53 @@ const results = await pool(cases, 2, async (c) => {
   );
   return { ...r, label };
 });
-await writeFile(path.join(OUT, "report.json"), JSON.stringify(results, null, 2));
+/**
+ * TARIF FARQI — qimmatroq paket haqiqatan ko'proq berishi shart.
+ *
+ * Bu nuqson loyihada UCH MARTA takrorlandi: slayd sifat paketi
+ * (`targetPages` o'qilmasdi), IMRAD maqola (bet soni e'tiborsiz edi) va
+ * uzun kurs ishi (tuzilma 3 bob bilan cheklangan edi). Har safar
+ * foydalanuvchi ikki baravar to'lab bir xil hujjat olardi va buni hech
+ * bir test ushlamasdi, chunki eval har vositani bitta tarifda sinardi.
+ *
+ * Shuning uchun juftlar ALOHIDA tekshiriladi: qimmat tarif arzonidan
+ * kamida shu ulushcha katta bo'lishi kerak.
+ */
+const TIER_PAIRS = [
+  { cheap: "coursework", rich: "coursework-max", minRatio: 1.6, note: "kurs ishi 15–20 → 40–45 bet" },
+  { cheap: "referat", rich: "referat-max", minRatio: 1.4, note: "referat 10–15 → 25–30 bet" },
+  { cheap: "slide", rich: "slide-premium", minRatio: 1.5, note: "slayd standart → premium uzun", field: "slides" },
+];
+
+const tierIssues = [];
+for (const pair of TIER_PAIRS) {
+  const a = results.find((r) => (r.label || r.slug) === pair.cheap);
+  const b = results.find((r) => (r.label || r.slug) === pair.rich);
+  if (!a?.ok || !b?.ok) continue; // yiqilgan keys o'z xatosi bilan qayd etilgan
+  const field = pair.field || "words";
+  const lo = a[field] || 0;
+  const hi = b[field] || 0;
+  const ratio = lo ? hi / lo : 0;
+  const ok = ratio >= pair.minRatio;
+  if (!ok) {
+    tierIssues.push(`${pair.note}: ${lo} → ${hi} (${ratio.toFixed(2)}×, kerak ≥${pair.minRatio}×)`);
+  }
+  console.log(`${ok ? "OK  " : "FAIL"} tarif farqi     ${pair.note}: ${lo} → ${hi} (${ratio.toFixed(2)}×)`);
+}
+
+await writeFile(
+  path.join(OUT, "report.json"),
+  JSON.stringify({ results, tierIssues }, null, 2),
+);
 const fail = results.filter((r) => !r.ok);
 console.log("\n=== XULOSA ===");
 for (const r of results) {
   const shape = r.slides ? `${r.slides} slayd · ${r.notes ?? 0} notes` : `${r.words ?? "-"} so‘z`;
   console.log(`${r.ok ? "✓" : "✗"} ${(r.label || r.slug).padEnd(18)} ${shape.padStart(18)}  ${(r.issues || []).join(" | ") || "pro"}`);
 }
+if (tierIssues.length) {
+  console.log("\n=== TARIF FARQI BUZILGAN ===");
+  for (const t of tierIssues) console.log(`✗ ${t}`);
+}
 console.log(`\n${results.length - fail.length}/${results.length} o‘tdi`);
-process.exit(fail.length ? 1 : 0);
+process.exit(fail.length || tierIssues.length ? 1 : 0);

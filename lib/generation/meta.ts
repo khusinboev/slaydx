@@ -25,7 +25,28 @@ export function ministryTitle(code: string) {
   return "O‘ZBEKISTON RESPUBLIKASI\nOLIY TA’LIM, FAN VA INNOVATSIYALAR VAZIRLIGI";
 }
 
-/** Manba matni promptga to‘liq ketmasin — token narxi va limit uchun. */
+/**
+ * Manba matnining PROMPTGA tushadigan qismi.
+ *
+ * Bu `lib/server/validate.ts` dagi `MAX_SOURCE` (60 000) bilan bir xil
+ * emas va bo'lmasligi ham kerak — ular boshqa savolga javob beradi:
+ *
+ *   `MAX_SOURCE`        — bazaga va so'rovga umuman nima kiradi (xom shift);
+ *   `SOURCE_TEXT_LIMIT` — shundan qanchasi MODELGA yuboriladi.
+ *
+ * Ikkalasi ham kerak, chunki vositalar manbani turlicha ishlatadi:
+ *   • referat/kurs ishi «fayl asosida» — manba KONTEKST, ya'ni undan
+ *     xulosa yoziladi; birinchi 24 000 belgi yetadi va token narxini
+ *     ushlab turadi;
+ *   • tarjima — manba MAHSULOTNING O'ZI, bir belgi ham yo'qolmasligi
+ *     kerak. Shuning uchun u `values.sourceText` ni XOM holda o'qiydi va
+ *     o'z chegarasiga (`TRANSLATION_MAX_CHARS`, 48 000) bo'ysunadi,
+ *     undan oshgani esa pul yechilishidan oldin rad etiladi
+ *     (`preflightError`).
+ *
+ * Ilgari bu bog'liqlik hech qayerda yozilmagandi va ikki konstanta
+ * bir-biriga zid ko'rinardi (P1-21).
+ */
 export const SOURCE_TEXT_LIMIT = 24_000;
 
 /**
