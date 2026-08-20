@@ -155,6 +155,10 @@ export type SectionLabels = {
   chapterAnalysis: string;
   chapterPractice: string;
   chapterProblems: string;
+  /** Hajmni to'ldirish uchun qo'shiladigan bobning nomi. */
+  chapterExtra: string;
+  /** Shu bobning ostmavzu nomlari (qo'shimcha tahlil burchaklari). */
+  extraAngles: { practical: string; problem: string; compare: string; history: string; outlook: string };
   sub11: string;
   sub12: string;
   sub21: string;
@@ -218,6 +222,14 @@ const SECTIONS: Record<string, SectionLabels> = {
     chapterAnalysis: "II BOB. TAHLIL VA MEXANIZM",
     chapterPractice: "II BOB. AMALIY TAHLIL VA TAVSIYALAR",
     chapterProblems: "III BOB. MUAMMO, YECHIM VA TAVSIYALAR",
+    chapterExtra: "QO‘SHIMCHA TAHLIL VA ISTIQBOL",
+    extraAngles: {
+      practical: "Amaliy tahlil va O‘zbekiston tajribasi",
+      problem: "Tipik qiyinchiliklar va ularning yechimi",
+      compare: "Yondashuvlarning qiyosiy tahlili",
+      history: "Shakllanish bosqichlari",
+      outlook: "Istiqbol va amaliy tavsiyalar",
+    },
     sub11: "1.1. Tushuncha, mohiyat va tasnif",
     sub12: "1.2. Asosiy unsurlari va bog‘liqlik",
     sub21: "2.1. Amaliy holat va muammolar",
@@ -276,6 +288,14 @@ const SECTIONS: Record<string, SectionLabels> = {
     chapterAnalysis: "ГЛАВА II. АНАЛИЗ И МЕХАНИЗМ",
     chapterPractice: "ГЛАВА II. ПРАКТИЧЕСКИЙ АНАЛИЗ И РЕКОМЕНДАЦИИ",
     chapterProblems: "ГЛАВА III. ПРОБЛЕМЫ, РЕШЕНИЯ И РЕКОМЕНДАЦИИ",
+    chapterExtra: "ДОПОЛНИТЕЛЬНЫЙ АНАЛИЗ И ПЕРСПЕКТИВЫ",
+    extraAngles: {
+      practical: "Практический анализ и опыт Узбекистана",
+      problem: "Типичные трудности и их решение",
+      compare: "Сравнительный анализ подходов",
+      history: "Этапы становления",
+      outlook: "Перспективы и практические рекомендации",
+    },
     sub11: "1.1. Понятие, сущность и классификация",
     sub12: "1.2. Основные элементы и взаимосвязи",
     sub21: "2.1. Практическая ситуация и проблемы",
@@ -334,6 +354,14 @@ const SECTIONS: Record<string, SectionLabels> = {
     chapterAnalysis: "CHAPTER II. ANALYSIS AND MECHANISM",
     chapterPractice: "CHAPTER II. PRACTICAL ANALYSIS AND RECOMMENDATIONS",
     chapterProblems: "CHAPTER III. PROBLEMS, SOLUTIONS AND RECOMMENDATIONS",
+    chapterExtra: "ADDITIONAL ANALYSIS AND OUTLOOK",
+    extraAngles: {
+      practical: "Practical analysis and local experience",
+      problem: "Typical difficulties and their solutions",
+      compare: "Comparative analysis of approaches",
+      history: "Stages of development",
+      outlook: "Outlook and practical recommendations",
+    },
     sub11: "1.1. Concept, essence and classification",
     sub12: "1.2. Core elements and relationships",
     sub21: "2.1. Practical situation and problems",

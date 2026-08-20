@@ -565,53 +565,62 @@ export async function writeWriterWithLlm(meta: DocMeta, deadline?: number): Prom
   /**
    * Qo'shimcha tahlil burchaklari.
    *
-   * Ikkita edi — 40 betlik ish uchun bu yetmasdi. Beshtaga chiqarildi va
-   * har biri mavzuning ALOHIDA qirrasini so'raydi, shuning uchun ro'yxat
+   * Ikkita edi — 40 betlik ish uchun yetmasdi, beshtaga chiqarildi. Har
+   * biri mavzuning ALOHIDA qirrasini so'raydi, shuning uchun ro'yxat
    * uzayishi matnni shablonga aylantirmaydi. Har bo'lim ≤6 paragraf:
    * katta so'rov modeldan kam matn oladi (yuqoridagi `perSub` izohi).
    */
+  const angles = L.extraAngles;
   const TOPUPS = [
     {
-      id: "amaliy",
-      title: (t: string) => `${t}: amaliy tahlil`,
+      label: angles.practical,
       brief: (t: string) =>
         `«${t}» bo‘yicha aniq misol, holat va raqamsiz kuzatish. O‘zbekiston sharoitidagi qo‘llanish. Oldingi boblarni takrorlamang.`,
     },
     {
-      id: "muammo",
-      title: (t: string) => `${t}: muammo va yechim`,
+      label: angles.problem,
       brief: (t: string) =>
         `«${t}» bo‘yicha tipik qiyinchilik, uning sababi va amaliy yechim. Har band bitta muammoga bag‘ishlansin. Takror bo‘lmasin.`,
     },
     {
-      id: "qiyos",
-      title: (t: string) => `${t}: qiyosiy tahlil`,
+      label: angles.compare,
       brief: (t: string) =>
         `«${t}» bo‘yicha kamida ikki yondashuv yoki maktabni QIYOSLANG: nimasi bilan farq qiladi, qaysi sharoitda qaysi biri ustun. Uydirma statistika yo‘q.`,
     },
     {
-      id: "tarix",
-      title: (t: string) => `${t}: shakllanish bosqichlari`,
+      label: angles.history,
       brief: (t: string) =>
         `«${t}» tushunchasining qanday shakllangani: bosqichlar, burilish nuqtalari, hozirgi holatga qanday kelingani. Sana uydirmang, umumiy davrlar bilan yozing.`,
     },
     {
-      id: "istiqbol",
-      title: (t: string) => `${t}: istiqbol va tavsiyalar`,
+      label: angles.outlook,
       brief: (t: string) =>
         `«${t}» bo‘yicha yaqin istiqbol, ochiq savollar va aniq tavsiyalar. Har tavsiya kimga qaratilganini ayting. Shior yo‘q.`,
     },
   ];
 
   /**
-   * Hajm yetguncha qo'shimcha bo'lim yoziladi.
+   * Qo'shimcha matn BITTA raqamlangan bobga yig'iladi.
    *
-   * Ilgari birinchi bo'sh javobda butun tsikl `break` qilardi — bitta
-   * o'tkinchi xato qolgan burchaklarni ham bekor qilardi. Endi bo'sh
-   * javob shu burchakni tashlaydi, tsikl davom etadi; ketma-ket ikki
-   * yiqilishdan keyingina to'xtaydi (model umuman javob bermayapti).
+   * Ilgari har burchak alohida, RAQAMSIZ bo'lim bo'lib «V BOB» bilan
+   * «XULOSA» orasiga tushardi va sarlavhasi mavzuni to'liq takrorlardi.
+   * Jonli hujjatda natija shunday ko'rindi — mundarijada ketma-ket besh
+   * qator, hammasi bir xil 60 belgi bilan boshlanadi:
+   *
+   *   UMUMIY O'RTA TA'LIM MAKTABLARIDA … : AMALIY TAHLIL
+   *   UMUMIY O'RTA TA'LIM MAKTABLARIDA … : MUAMMO VA YECHIM
+   *   …
+   *
+   * Kurs ishida raqamsiz bo'lim bo'lmaydi. Endi ular «VI BOB.
+   * QO'SHIMCHA TAHLIL VA ISTIQBOL» ichidagi 6.1, 6.2 … ostmavzulari
+   * bo'ladi va sarlavhalar mavzuni takrorlamaydi — bobning o'zi
+   * kontekstni beradi.
    */
+  const extraNo = chapters.length + 1;
+  const extraChapter = section("qoshimcha", `${L.chapterPrefix(extraNo)} ${L.chapterExtra}`, []);
+  let subNo = 0;
   let misses = 0;
+
   for (const topup of TOPUPS) {
     const have = wordCount(doc);
     if (have >= want * 0.9) break;
@@ -622,19 +631,27 @@ export async function writeWriterWithLlm(meta: DocMeta, deadline?: number): Prom
     const need = want - have;
     const extra = await writeSection(
       sys,
-      topup.title(topic),
+      topup.label,
       topup.brief(topic),
       meta,
       Math.max(3, Math.min(6, Math.round(need / 110))),
       Math.min(45_000, remainingMs(deadline)),
     );
+    /*
+     * Bo'sh javob shu burchakni tashlaydi, tsikl davom etadi. Ilgari
+     * birinchi bo'sh javobda `break` bo'lardi — bitta o'tkinchi xato
+     * qolgan burchaklarni ham bekor qilardi. Ketma-ket ikki yiqilish
+     * esa model umuman javob bermayotganini bildiradi.
+     */
     if (!extra.length) {
       if (++misses >= 2) break;
       continue;
     }
     misses = 0;
-    const insertAt = Math.max(1, sections.length - 1);
-    sections.splice(insertAt, 0, section(topup.id, topup.title(topic), extra));
+    // Bob birinchi muvaffaqiyatda kiritiladi — bo'sh bob qolmasin.
+    if (!subNo) sections.splice(Math.max(1, sections.length - 1), 0, extraChapter);
+    subNo += 1;
+    extraChapter.blocks.push({ kind: "h2", text: `${extraNo}.${subNo}. ${topup.label}` }, ...extra);
   }
 
   return doc;
