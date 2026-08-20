@@ -102,20 +102,7 @@ export async function writeLessonWithLlm(meta: DocMeta, deadline?: number): Prom
    * Endi nisbat saqlangan holda qayta taqsimlanadi, qoldiq esa eng katta
    * bosqichga qo'shiladi.
    */
-  const rawMinutes = stages.map((st) => Math.max(1, Math.round(Number(st.minutes) || 0) || 1));
-  const rawSum = rawMinutes.reduce((a, b) => a + b, 0);
-  const minutes =
-    rawSum === d ? rawMinutes : rawMinutes.map((m) => Math.max(1, Math.round((m / rawSum) * d)));
-  // Yaxlitlash qoldig'ini eng uzun bosqichga qo'shamiz/ayiramiz.
-  // Tsikl chegaralangan: har bosqich kamida 1 daqiqa bo'lgani uchun
-  // kamaytirish imkonsiz holat ham bo'lishi mumkin.
-  for (let guard = 0; guard < 200; guard++) {
-    const diff = d - minutes.reduce((a, b) => a + b, 0);
-    if (diff === 0) break;
-    const peak = Math.max(...minutes);
-    if (diff < 0 && peak <= 1) break;
-    minutes[minutes.indexOf(peak)] += diff > 0 ? 1 : -1;
-  }
+  const minutes = normalizeMinutes(stages.map((st) => st.minutes), d);
   stages.forEach((st, i) => {
     st.minutes = minutes[i];
   });
@@ -168,6 +155,92 @@ export async function writeLessonWithLlm(meta: DocMeta, deadline?: number): Prom
       },
     ],
   };
+}
+
+/**
+ * Dars bosqichlari daqiqasini davomiylikka moslaydi.
+ *
+ * Promptda «yig'indi ${duration} ga teng bo'lsin» deyilgan, lekin hech
+ * qachon TEKSHIRILMAGAN: 45 daqiqalik darsda bosqichlar yig'indisi 60
+ * yoki 35 chiqardi va o'qituvchi buni qo'lda tuzatardi. Nisbat
+ * saqlanadi, yaxlitlash qoldig'i esa eng uzun bosqichga qo'shiladi.
+ *
+ * Alohida funksiya, chunki bu sof arifmetika va u yiqilsa hujjat jim
+ * noto'g'ri chiqadi — aynan shunday mantiq testsiz qolmasligi kerak.
+ */
+export function normalizeMinutes(raw: unknown[], duration: number): number[] {
+  const d = Math.max(1, Math.round(duration) || 1);
+  const minutes = raw.map((m) => Math.max(1, Math.round(Number(m) || 0) || 1));
+  if (!minutes.length) return [];
+  const sum = minutes.reduce((a, b) => a + b, 0);
+  const scaled = sum === d ? minutes : minutes.map((m) => Math.max(1, Math.round((m / sum) * d)));
+  // Tsikl chegaralangan: har bosqich kamida 1 daqiqa bo'lgani uchun
+  // kamaytirish imkonsiz holat ham bo'lishi mumkin.
+  for (let guard = 0; guard < 500; guard++) {
+    const diff = d - scaled.reduce((a, b) => a + b, 0);
+    if (diff === 0) break;
+    const peak = Math.max(...scaled);
+    if (diff < 0 && peak <= 1) break;
+    scaled[scaled.indexOf(peak)] += diff > 0 ? 1 : -1;
+  }
+  return scaled;
+}
+
+/**
+ * Rezyume uchun fakt qo'riqchisi.
+ *
+ * Rezyume hujjat emas, DA'VO: yo'q ish joyi yozilgan CV bilan suhbatga
+ * borish foydalanuvchi uchun jiddiy zarar. Promptda «yil/joy uydirmang»
+ * deyilgan, lekin tekshirilmasdi.
+ *
+ * Ilgari bu mantiq `writeResumeWithLlm` ichidagi yopiq funksiyalar edi,
+ * ya'ni uni sinash uchun jonli LLM chaqiruvi kerak bo'lardi. Endi
+ * alohida — chunki u ikki xil qaror qabul qiladi va ikkalasi ham
+ * noto'g'ri bo'lishi mumkin:
+ *   • uydirma TASHKILOT — butun band tashlanadi;
+ *   • uydirma YIL — faqat yil o'chiriladi.
+ * Shu farq tufayli haqiqiy qayta ifodalash («15-maktab» → «15-sonli
+ * umumiy o'rta ta'lim maktabi») saqlanadi.
+ */
+export function resumeFactGuard(inputFacts: string) {
+  const facts = String(inputFacts ?? "").toLowerCase();
+  const years = new Set(facts.match(/\b(19|20)\d{2}\b/g) ?? []);
+
+  /** Tashkilot/joy nomi kiritilgan matndan olinganmi. */
+  function orgIsKnown(head: string): boolean {
+    if (!facts.trim()) return true;
+    const tokens = String(head ?? "")
+      .toLowerCase()
+      .replace(/\b(?:19|20)\d{2}\b/g, " ")
+      .split(/[^\p{L}\p{N}]+/u)
+      .filter((t) => t.length >= 4);
+    if (!tokens.length) return true;
+    return tokens.some((t) => facts.includes(t));
+  }
+
+  /**
+   * Kiritilmagan yilni olib tashlaydi.
+   *
+   * Model ko'pincha mantiqiy, lekin O'YLAB TOPILGAN sana qo'shadi:
+   * bakalavr 2021-yilda tugagan bo'lsa, u «2017–2021» deb yozadi.
+   * Oraliqda bitta yil notanish bo'lsa BUTUN oraliq olib tashlanadi —
+   * yarim oraliq («–2021») ma'nosiz.
+   */
+  function stripUnknownYears(text: string): string {
+    const t = String(text ?? "");
+    if (!years.size) return t;
+    return t
+      .replace(/\b(?:19|20)\d{2}\s*[–—-]\s*(?:19|20)\d{2}\b/g, (range) =>
+        (range.match(/\b(?:19|20)\d{2}\b/g) ?? []).every((y) => years.has(y)) ? range : "",
+      )
+      .replace(/\b(?:19|20)\d{2}\b/g, (y) => (years.has(y) ? y : ""))
+      .replace(/\s*·\s*(?=·|$)/g, "")
+      .replace(/\s{2,}/g, " ")
+      .replace(/^[\s·,;—–-]+|[\s·,;—–-]+$/g, "")
+      .trim();
+  }
+
+  return { orgIsKnown, stripUnknownYears };
 }
 
 function pickTerms(data: unknown): { term: string; def: string }[] {
@@ -424,43 +497,7 @@ export async function writeResumeWithLlm(
   const inputFacts = [values.experience, values.education, values.summary, values.skills]
     .map((x) => asText(x).toLowerCase())
     .join(" ");
-  const inputYears = new Set(inputFacts.match(/\b(19|20)\d{2}\b/g) ?? []);
-
-  /** Tashkilot/joy nomi kiritilgan matndan olinganmi. */
-  function orgIsKnown(head: string): boolean {
-    if (!inputFacts.trim()) return true;
-    const tokens = head
-      .toLowerCase()
-      .replace(/\b(?:19|20)\d{2}\b/g, " ")
-      .split(/[^\p{L}\p{N}]+/u)
-      .filter((t) => t.length >= 4);
-    if (!tokens.length) return true;
-    return tokens.some((t) => inputFacts.includes(t));
-  }
-
-  /**
-   * Kiritilmagan yilni olib tashlaydi.
-   *
-   * Model ko'pincha mantiqiy, lekin O'YLAB TOPILGAN sana qo'shadi:
-   * bakalavr 2021-yilda tugagan bo'lsa, u «2017–2021» deb yozadi.
-   * Taxmin to'g'ri bo'lishi mumkin, lekin rezyume — da'vo hujjati:
-   * u yerda faqat foydalanuvchi bergan sana turishi kerak.
-   *
-   * Oraliqda bitta yil notanish bo'lsa butun oraliq olib tashlanadi —
-   * yarim oraliq («–2021») ma'nosiz.
-   */
-  function stripUnknownYears(text: string): string {
-    if (!inputYears.size) return text;
-    return text
-      .replace(/\b(?:19|20)\d{2}\s*[–—-]\s*(?:19|20)\d{2}\b/g, (range) =>
-        (range.match(/\b(?:19|20)\d{2}\b/g) ?? []).every((y) => inputYears.has(y)) ? range : "",
-      )
-      .replace(/\b(?:19|20)\d{2}\b/g, (y) => (inputYears.has(y) ? y : ""))
-      .replace(/\s*·\s*(?=·|$)/g, "")
-      .replace(/\s{2,}/g, " ")
-      .replace(/^[\s·,;—–-]+|[\s·,;—–-]+$/g, "")
-      .trim();
-  }
+  const { orgIsKnown, stripUnknownYears } = resumeFactGuard(inputFacts);
 
   const expBlocks: Block[] = [];
   let lastHead = "";

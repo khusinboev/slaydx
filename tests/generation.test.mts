@@ -320,3 +320,105 @@ test("har tarif uchun reja va'da qilingan hajmni ko'tara oladi", async () => {
     );
   }
 });
+
+/**
+ * Dars daqiqalari yig'indisi darsning davomiyligiga teng bo'lishi.
+ *
+ * Promptda «yig'indi 45 ga teng bo'lsin» deyilgan, lekin hech qachon
+ * tekshirilmasdi: 45 daqiqalik darsda yig'indi 60 yoki 35 chiqardi.
+ */
+test("dars bosqichlari yig'indisi davomiylikka teng bo'ladi", async () => {
+  const { normalizeMinutes } = await import("../lib/generation/write-specials.ts");
+
+  const sum = (a: number[]) => a.reduce((x, y) => x + y, 0);
+
+  // Yig'indi katta — nisbat saqlanib kichrayadi.
+  const big = normalizeMinutes([10, 20, 20, 10], 45);
+  assert.equal(sum(big), 45);
+  assert.ok(big[1] >= big[0], "nisbat saqlanishi kerak");
+
+  // Yig'indi kichik — kattalashadi.
+  assert.equal(sum(normalizeMinutes([2, 3, 5], 45)), 45);
+
+  // Allaqachon to'g'ri bo'lsa tegilmaydi.
+  assert.deepEqual(normalizeMinutes([5, 10, 10, 8, 7, 5], 45), [5, 10, 10, 8, 7, 5]);
+
+  // Har bosqich kamida 1 daqiqa — bosqich davomiylikdan ko'p bo'lsa ham yiqilmaydi.
+  const tight = normalizeMinutes([1, 1, 1, 1, 1, 1, 1, 1], 5);
+  assert.ok(tight.every((m) => m >= 1));
+  assert.equal(tight.length, 8);
+
+  // Buzuq kirish.
+  assert.deepEqual(normalizeMinutes([], 45), []);
+  assert.equal(sum(normalizeMinutes([null, "abc", -3], 30)), 30);
+
+  for (const d of [30, 40, 45, 60, 80, 90]) {
+    assert.equal(sum(normalizeMinutes([7, 3, 12, 9, 4], d)), d, `${d} daqiqa uchun yig'indi mos emas`);
+  }
+});
+
+/**
+ * Rezyume fakt qo'riqchisi (P1-19).
+ *
+ * Rezyume hujjat emas, DA'VO: yo'q ish joyi yozilgan CV bilan suhbatga
+ * borish jiddiy zarar. Ikki xil qaror bor va ikkalasi ham noto'g'ri
+ * bo'lishi mumkin — shuning uchun ikkalasi ham alohida sinaladi.
+ */
+test("rezyumeda uydirma tashkilot tashlanadi, uydirma yil o'chiriladi", async () => {
+  const { resumeFactGuard } = await import("../lib/generation/write-specials.ts");
+
+  const input = "2019-yildan 15-maktabda biologiya o'qituvchisi. 2015-yilda TDPU bitirgan.";
+  const { orgIsKnown, stripUnknownYears } = resumeFactGuard(input);
+
+  // Haqiqiy qayta ifodalash SAQLANADI.
+  assert.ok(orgIsKnown("2019 — o'qituvchi — 15-sonli umumiy o'rta ta'lim maktabi"));
+  assert.ok(orgIsKnown("2015 — bitiruvchi — TDPU"));
+
+  // Umuman boshqa tashkilot — uydirma.
+  assert.ok(!orgIsKnown("2020 — metodist — Respublika ta'lim markazi"));
+
+  // Kiritilgan yil qoladi.
+  assert.ok(stripUnknownYears("2019 — o'qituvchi").includes("2019"));
+
+  // Uydirma yil o'chadi, matn qoladi.
+  const cleaned = stripUnknownYears("2017 — laborant");
+  assert.ok(!cleaned.includes("2017"), `uydirma yil qolib ketdi: ${cleaned}`);
+  assert.ok(cleaned.includes("laborant"), "matn saqlanishi kerak");
+
+  // Yarim oraliq ma'nosiz — butun oraliq o'chadi.
+  const range = stripUnknownYears("2017–2021 — bakalavr");
+  assert.ok(!/\d{4}/.test(range), `oraliq qolib ketdi: ${range}`);
+
+  // Foydalanuvchi umuman fakt bermasa filtr o'chadi — xom matnni yo'q qilmaydi.
+  const open = resumeFactGuard("");
+  assert.ok(open.orgIsKnown("Istalgan tashkilot"));
+  assert.equal(open.stripUnknownYears("2017–2021 — bakalavr"), "2017–2021 — bakalavr");
+});
+
+/**
+ * Uydirma adabiyot filtri (P0-4).
+ *
+ * Nashriyot nomining o'zi belgi emas — model ba'zan to'g'ri yozadi.
+ * Xavfli narsa tekshirib bo'lmaydigan aniqlik: DOI, ISSN, jurnal tomi,
+ * havola. Aynan shular o'qituvchi tekshirganda fosh bo'ladi.
+ */
+test("adabiyot filtri tekshirib bo'lmaydigan aniqlikni rad etadi", async () => {
+  const { isReferenceLine } = await import("../lib/generation/write-llm.ts");
+
+  // Ishonchli uslubiy manba — o'tadi.
+  assert.ok(isReferenceLine("Karimov A. Pedagogika asoslari. – Toshkent: O‘qituvchi, 2018."));
+  assert.ok(isReferenceLine("Smith J. Foundations of Reading. – London: Routledge, 2015."));
+
+  // Tekshirib bo'lmaydigan aniqlik — rad etiladi.
+  assert.ok(!isReferenceLine("Karimov A. Maqola nomi. doi:10.1234/abcd. 2019."));
+  assert.ok(!isReferenceLine("Karimov A. Maqola. ISSN 1234-5678. – Toshkent, 2019."));
+  assert.ok(!isReferenceLine("Karimov A. Maqola. https://example.uz/article. 2019."));
+  assert.ok(!isReferenceLine("Karimov A. Maqola // Jurnal. vol. 12, 2019."));
+
+  // Kirish gapi manba emas.
+  assert.ok(!isReferenceLine("Ushbu ro‘yxat quyidagi manbalar asosida tuzilgan, 2019."));
+
+  // Juda qisqa yoki juda uzun qator manba emas.
+  assert.ok(!isReferenceLine("Karimov, 2019."));
+  assert.ok(!isReferenceLine("K".repeat(300)));
+});

@@ -32,7 +32,15 @@ function wantsCodeSample(meta: DocMeta) {
   );
 }
 
-function isReferenceLine(r: string): boolean {
+/**
+ * Adabiyot qatori ishonchli ko'rinadimi.
+ *
+ * Uydirma manba akademik XAVF: o'qituvchi bitta soxta DOI ni tekshirsa
+ * butun ish shubha ostiga tushadi. Shuning uchun filtr tekshirib
+ * bo'lmaydigan «aniqlik»ni rad etadi (DOI, ISSN, jurnal tomi, havola) —
+ * model aynan shularni deyarli har doim o'ylab topadi.
+ */
+export function isReferenceLine(r: string): boolean {
   if (r.length < 24 || r.length > 280) return false;
   // Tekshirib bo'lmaydigan «aniqlik»: DOI, ISSN, jurnal tomi/soni va
   // havolalar. Model bularni deyarli har doim uydiradi va aynan shular
