@@ -114,6 +114,38 @@ docker compose up --build
 
 ---
 
+## Ishlab chiqarish (slaydxx.uz)
+
+Server: `root@194.163.136.239`, jild `/opt/slaydx`. Serverda boshqa
+loyihalar ham bor (`nodav-*` steki, uchta nginx sayti, bir nechta bot
+xizmati) — shuning uchun hamma narsa ajratilgan:
+
+| | |
+|---|---|
+| Compose proyekt nomi | `slaydx` (`docker compose -p slaydx`) |
+| Konteynerlar | `slaydx-web-1`, `slaydx-worker-1`, `slaydx-postgres-1` |
+| Port | `127.0.0.1:3000` — faqat localhost, nginx proxy qiladi |
+| Postgres | konteyner ichida, host portiga CHIQARILMAGAN |
+| nginx | `/etc/nginx/sites-available/slaydx`, `default_server` emas |
+| Kod | GitHub'dan faqat o'qish huquqli deploy kaliti bilan |
+
+```bash
+ssh root@194.163.136.239
+/opt/slaydx/deploy.sh          # main dan yangi versiya
+/opt/slaydx/enable-https.sh    # DNS tayyor bo'lgach — certbot
+docker compose -p slaydx logs -f web
+```
+
+Sirlar `/opt/slaydx/.env` da (huquq 600). `SESSION_SECRET`,
+`POSTGRES_PASSWORD` va `CRON_SECRET` shu server uchun alohida
+yaratilgan — lokal qiymatlar takrorlanmagan.
+
+**HTTPS hali yo'q:** `slaydxx.uz` DNS'da umuman ko'rinmaydi (A ham, NS
+ham yo'q). Domen shu serverga yo'naltirilgach `enable-https.sh` ni
+ishga tushiring — u avval DNS ni tekshiradi va mos kelmasa certbot'ni
+umuman chaqirmaydi, chunki muvaffaqiyatsiz urinishlar Let's Encrypt
+chegarasini yeydi.
+
 ## Buyruqlar
 
 > ⚠️ **`npm run build` ni dev server ishlab turganda bajarmang.**
