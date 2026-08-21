@@ -1,7 +1,7 @@
 /**
  * Brend — bitta manba.
  *
- * Loyiha `sodda.ai` klonidan boshlangan va nom kodning to'rt joyida
+ * Loyiha `sodda.ai` klonidan boshlangan edi va nom kodning to'rt joyida
  * qattiq yozilgan edi (yon panel, sahifa sarlavhasi, PPTX metadatasi),
  * fallback esa uch joyda takrorlangan. Nomni almashtirish — huquqiy
  * jihatdan ochilishdan oldin BAJARILISHI SHART bo'lgan ish — kod bo'ylab
@@ -14,8 +14,8 @@
  * `NEXT_PUBLIC_*` build vaqtida o'rnatiladi, shuning uchun bu modulni
  * ham server, ham klient komponentlari import qila oladi.
  */
-export const BRAND_NAME = process.env.NEXT_PUBLIC_BRAND_NAME || "Sodda.ai";
+export const BRAND_NAME = process.env.NEXT_PUBLIC_BRAND_NAME || "SlaydX";
 export const BRAND_LOGO = process.env.NEXT_PUBLIC_BRAND_LOGO || "/logo.png";
 
 /** Fayl metadatasi uchun: bo'shliqsiz, ASCII ga yaqin qisqa nom. */
-export const BRAND_SHORT = BRAND_NAME.split(/[\s.]+/)[0] || "Sodda";
+export const BRAND_SHORT = BRAND_NAME.split(/[\s.]+/)[0] || "SlaydX";

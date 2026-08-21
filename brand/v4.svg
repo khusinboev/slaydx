@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="t" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1e2f52"/><stop offset="1" stop-color="#0b1120"/></linearGradient>
+    <linearGradient id="x" x1="0.1" y1="0" x2="0.9" y2="1">
+      <stop offset="0" stop-color="#7dd3fc"/><stop offset="0.45" stop-color="#6366f1"/><stop offset="1" stop-color="#f43f5e"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="118" fill="url(#t)"/>
+
+  <!-- Deka: uchinchi va ikkinchi varaqlar ortda, biroz burilgan -->
+  <g transform="translate(256 262)">
+    <rect x="-138" y="-86" width="276" height="155" rx="22" fill="#ffffff" opacity="0.10" transform="rotate(-7)"/>
+    <rect x="-144" y="-82" width="288" height="162" rx="24" fill="#ffffff" opacity="0.20" transform="rotate(-3.5)"/>
+    <!-- Asosiy varaq 16:9 -->
+    <rect x="-150" y="-78" width="300" height="169" rx="26" fill="#f8fafc"/>
+    <!-- Varaqdagi kontent izlari -->
+    <g fill="#0f172b" opacity="0.13">
+      <rect x="-120" y="46" width="126" height="13" rx="6.5"/>
+      <rect x="-120" y="70" width="78"  height="13" rx="6.5"/>
+    </g>
+  </g>
+
+  <!-- X — HARF: og'ir, gradient, biroz qiya va varaq chegarasidan CHIQADI.
+       Ramka ichida markazlashgan nozik X «yopish» tugmasiga o'xshardi. -->
+  <g transform="translate(248 236) skewX(-8)" stroke="url(#x)" stroke-width="56" stroke-linecap="round">
+    <line x1="-84" y1="-84" x2="84" y2="84"/>
+    <line x1="84"  y1="-84" x2="-84" y2="84"/>
+  </g>
+</svg>

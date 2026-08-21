@@ -1,0 +1,16 @@
+<!-- 16–24 px uchun soddalashtirilgan variant: slayd kartasi va deka
+     olib tashlangan, faqat X qoladi va u qalinroq. To'liq belgi bu
+     o'lchamda loyqalanadi — favicon o'z shakliga ega bo'lishi kerak. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="t" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1e2f52"/><stop offset="1" stop-color="#0b1120"/></linearGradient>
+    <linearGradient id="x" x1="0.1" y1="0" x2="0.9" y2="1">
+      <stop offset="0" stop-color="#7dd3fc"/><stop offset="0.45" stop-color="#6366f1"/><stop offset="1" stop-color="#f43f5e"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="118" fill="url(#t)"/>
+  <g transform="translate(256 256) skewX(-8)" stroke="url(#x)" stroke-width="84" stroke-linecap="round">
+    <line x1="-96" y1="-96" x2="96" y2="96"/>
+    <line x1="96"  y1="-96" x2="-96" y2="96"/>
+  </g>
+</svg>

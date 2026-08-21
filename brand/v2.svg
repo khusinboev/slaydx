@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="t" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1b2a4a"/><stop offset="1" stop-color="#0b1120"/></linearGradient>
+    <linearGradient id="a" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7dd3fc"/><stop offset="1" stop-color="#2563eb"/></linearGradient>
+    <linearGradient id="b" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fda4af"/><stop offset="1" stop-color="#e11d48"/></linearGradient>
+    <mask id="cut"><rect width="512" height="512" fill="#fff"/>
+      <g transform="translate(256 256) rotate(45)"><rect x="-160" y="-52" width="320" height="104" rx="26" fill="#000"/></g>
+    </mask>
+  </defs>
+  <rect width="512" height="512" rx="118" fill="url(#t)"/>
+  <g transform="translate(256 256)">
+    <g mask="url(#cut)"><rect x="-160" y="-52" width="320" height="104" rx="26" transform="rotate(-45)" fill="url(#a)"/></g>
+    <rect x="-160" y="-52" width="320" height="104" rx="26" transform="rotate(45)" fill="url(#b)"/>
+    <g transform="rotate(45)" opacity="0.55">
+      <rect x="-118" y="-22" width="150" height="13" rx="6.5" fill="#fff"/>
+      <rect x="-118" y="6"  width="96"  height="13" rx="6.5" fill="#fff"/>
+    </g>
+  </g>
+</svg>

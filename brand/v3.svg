@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="t" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1b2a4a"/><stop offset="1" stop-color="#0b1120"/></linearGradient>
+    <linearGradient id="x" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#60a5fa"/><stop offset="0.55" stop-color="#818cf8"/><stop offset="1" stop-color="#f43f5e"/></linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="118" fill="url(#t)"/>
+  <!-- Ortidagi ikkinchi varaq — deka hissi -->
+  <rect x="128" y="132" width="256" height="144" rx="24" fill="#fff" opacity="0.13"/>
+  <!-- Asosiy slayd 16:9 -->
+  <rect x="104" y="164" width="304" height="171" rx="28" fill="#f8fafc"/>
+  <g transform="translate(256 249.5)" stroke="url(#x)" stroke-width="42" stroke-linecap="round">
+    <line x1="-52" y1="-46" x2="52" y2="46"/>
+    <line x1="52"  y1="-46" x2="-52" y2="46"/>
+  </g>
+</svg>
