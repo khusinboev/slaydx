@@ -34,10 +34,25 @@ const isProd = process.env.NODE_ENV === "production";
  * har deploy da barcha sessiyalar buziladi yoki (yomoni) hamma bir xil
  * standart kalitni ishlatadi va cookie qalbakilashtiriladi.
  */
+/**
+ * `next build` sahifa ma'lumotini yig'ayotgan payt.
+ *
+ * Build API route modullarini IMPORT qiladi, `NODE_ENV` esa allaqachon
+ * `production`. Sirlar bo'lsa build muhitida yo'q va BO'LMASLIGI ham
+ * kerak — ular konteynerga ishga tushirishda beriladi. Shu farq
+ * qilinmasa `docker build` «SESSION_SECRET yo'q» deb yiqiladi.
+ *
+ * Bu tekshiruvni zaiflashtirmaydi: build chiqishiga hech qanday
+ * server siri yozilmaydi (faqat `NEXT_PUBLIC_*` inline bo'ladi), va
+ * konteyner ishga tushganda modul haqiqiy muhit bilan qayta import
+ * qilinib, tekshiruv o'z kuchida qoladi.
+ */
+const isBuildPhase = process.env.NEXT_PHASE === "phase-production-build";
+
 function sessionSecret(): string {
   const secret = str("SESSION_SECRET");
   if (secret.length >= 32) return secret;
-  if (isProd) {
+  if (isProd && !isBuildPhase) {
     throw new Error(
       "SESSION_SECRET kamida 32 belgidan iborat bo'lishi kerak. " +
         "Yaratish: openssl rand -base64 48",

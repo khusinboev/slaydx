@@ -85,3 +85,40 @@ test("buzuq Origin rad etiladi", () => {
   assert.equal(checkOrigin(req({ origin: "not-a-url" })), false);
   assert.equal(checkOrigin(req({ origin: "javascript:alert(1)" })), false);
 });
+
+/**
+ * Sirlar build vaqtida talab qilinmaydi.
+ *
+ * `next build` sahifa ma'lumotini yig'ayotganda API route modullarini
+ * import qiladi va `NODE_ENV` allaqachon `production` bo'ladi. Sirlar esa
+ * build muhitida yo'q — ular konteynerga ishga tushirishda beriladi.
+ * Farq qilinmasa `docker build` «SESSION_SECRET yo'q» deb yiqiladi;
+ * aynan shu birinchi haqiqiy deployda sodir bo'ldi.
+ */
+test("SESSION_SECRET build bosqichida majburiy emas, ishga tushirishda majburiy", async () => {
+  const { execFileSync } = await import("node:child_process");
+
+  // Modul BIR MARTA import qilinganda tekshiruvni bajaradi, shuning uchun
+  // har holat alohida processda sinaladi.
+  const load = (patch: Record<string, string | undefined>) => {
+    const env = { ...process.env, NODE_ENV: "production", ...patch };
+    for (const [k, v] of Object.entries(patch)) if (v === undefined) delete env[k];
+    try {
+      execFileSync(
+        "npx",
+        ["tsx", "--conditions=react-server", "-e", 'import("./lib/server/env.ts").then(()=>process.exit(0))'],
+        { env: env as NodeJS.ProcessEnv, stdio: "ignore", timeout: 60_000 },
+      );
+      return "OK";
+    } catch {
+      return "THROW";
+    }
+  };
+
+  // Build bosqichi: sir yo'q bo'lsa ham import bo'ladi.
+  assert.equal(load({ NEXT_PHASE: "phase-production-build", SESSION_SECRET: undefined }), "OK");
+  // Ishga tushirish, sir yo'q: xato.
+  assert.equal(load({ NEXT_PHASE: undefined, SESSION_SECRET: undefined }), "THROW");
+  // Ishga tushirish, sir bor: o'tadi.
+  assert.equal(load({ NEXT_PHASE: undefined, SESSION_SECRET: "x".repeat(48) }), "OK");
+});
