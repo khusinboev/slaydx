@@ -45,6 +45,18 @@ function asLayout(v: unknown, fallback: SlideLayout): SlideLayout {
 
 type BulletRules = { maxBullets: number; bulletChars: number };
 
+/**
+ * Slayd `id` larini absolyut o'rin bo'yicha qayta raqamlaydi.
+ *
+ * `normalizeSlide` indeksni bo'lak ichidan oladi, shuning uchun uzun
+ * deka bo'laklardan yig'ilganda `s0…s7` bir necha marta uchraydi. Bu
+ * funksiya birlashtirishdan keyin chaqiriladi va noyoblikni bo'laklar
+ * soniga bog'liq bo'lmagan holda kafolatlaydi.
+ */
+export function renumberSlides(slides: SlideModel[]): SlideModel[] {
+  return slides.map((sl, i) => (sl.id === `s${i}` ? sl : { ...sl, id: `s${i}` }));
+}
+
 function normalizeSlide(raw: unknown, i: number, footer: string, rules: BulletRules): SlideModel | null {
   if (!raw || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
@@ -406,9 +418,30 @@ export async function writeSlidesWithLlm(
       });
     });
   }
-  const slides = slots
-    .map((sl, i) => (sl && plan[i] ? coerceLayout(sl, plan[i].layout, rules.maxBullets) : sl))
-    .filter((sl): sl is SlideModel => Boolean(sl));
+  /**
+   * `id` ABSOLYUT o'rin bo'yicha qayta beriladi.
+   *
+   * `normalizeSlide` indeksni BO'LAK ichidan oladi, ya'ni har bo'lak
+   * `s0` dan qayta boshlaydi. 16 slaydli deka ikki bo'lakdan yig'iladi
+   * va natijada `s0…s7` IKKI MARTA uchraydi. Uch oqibati bor edi:
+   *
+   *   1. React ko'ruvchida «two children with the same key» xatosi —
+   *      16 slaydli dekada 24 ta konsol xatosi;
+   *   2. bir xil kalitli bolalar dublikat yoki tushib qolishi mumkin,
+   *      ya'ni ko'ruvchi noto'g'ri slaydni ko'rsatishi mumkin;
+   *   3. eng jiddiyisi — `slide-images.ts` rasm promptini `prompts[s.id]`
+   *      bo'yicha izlaydi. Takroriy id bilan dekaning IKKINCHI yarmi
+   *      birinchi yarmining rasm promptini olardi, ya'ni premium
+   *      taqdimotda rasmlar takrorlanardi.
+   *
+   * Raqamlash birlashtirish va filtrlashdan KEYIN qilinadi — shunda
+   * bo'lakka bog'liq bo'lmagan holda noyoblik kafolatlanadi.
+   */
+  const slides = renumberSlides(
+    slots
+      .map((sl, i) => (sl && plan[i] ? coerceLayout(sl, plan[i].layout, rules.maxBullets) : sl))
+      .filter((sl): sl is SlideModel => Boolean(sl)),
+  );
   // Va’da qilingan hajmning 75% i — quyi chegara. Bundan kam bo‘lsa deck
   // paketga mos kelmaydi; `null` qaytarib, chaqiruvchi pulni qaytaradi.
   const floor = Math.max(6, Math.ceil(want * 0.75));

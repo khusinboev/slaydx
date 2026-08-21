@@ -227,3 +227,66 @@ test("rasm byudjeti deka uzayganda o'sadi va sun'iy shift qo'ymaydi", async () =
   assert.equal(imageBudget(0, false), 8);
   assert.equal(imageBudget(-5, true), 10);
 });
+
+/**
+ * Slayd `id` lari noyob bo'lishi shart.
+ *
+ * Nuqson: `normalizeSlide` indeksni BO'LAK ichidan olardi, ya'ni har
+ * bo'lak `s0` dan qayta boshlardi. 16 slaydli deka ikki bo'lakdan
+ * yig'iladi va `s0…s7` ikki marta chiqardi. Oqibati uchta edi: React
+ * ko'ruvchida 24 ta «same key» xatosi, ko'ruvchining noto'g'ri slayd
+ * ko'rsatish ehtimoli, va — eng jiddiyi — `slide-images.ts` rasm
+ * promptini `prompts[s.id]` bo'yicha izlagani uchun dekaning ikkinchi
+ * yarmi birinchi yarmining rasmini olardi.
+ */
+test("bo'laklardan yig'ilgan deka id lari qayta raqamlanadi", async () => {
+  const { renumberSlides } = await import("../lib/generation/slide-write.ts");
+
+  // Ikki bo'lakdan yig'ilgan 16 slaydli deka: har bo'lak `s0` dan boshlagan.
+  const chunked = Array.from({ length: 16 }, (_, i) => ({
+    id: `s${i % 8}`,
+    layout: "bullets" as const,
+    title: `Slayd ${i + 1}`,
+  }));
+  const ids = chunked.map((s) => s.id);
+  assert.notEqual(new Set(ids).size, ids.length, "sinov ma'lumoti takroriy bo'lishi kerak");
+
+  const fixed = renumberSlides(chunked);
+  const out = fixed.map((s) => s.id);
+  assert.equal(new Set(out).size, 16, "id lar noyob bo'lishi kerak");
+  assert.deepEqual(out, Array.from({ length: 16 }, (_, i) => `s${i}`));
+  // Mazmun tegilmaydi — faqat id.
+  assert.deepEqual(fixed.map((s) => s.title), chunked.map((s) => s.title));
+
+  // Allaqachon to'g'ri bo'lsa yangi obyekt yaratilmaydi.
+  const ok = [{ id: "s0", layout: "title" as const, title: "A" }];
+  assert.equal(renumberSlides(ok)[0], ok[0]);
+});
+
+test("deka slaydlarining id lari noyob va tartibli", async () => {
+  const { buildSlideAcademicDoc } = await import("../lib/generation/slide-write.ts");
+  const { extractMeta } = await import("../lib/generation/meta.ts");
+  const { TOOL_BY_ID } = await import("../lib/tools.ts");
+
+  // LLM kalitisiz `fallbackSlides` yo'li ishlaydi — id mantig'i o'sha.
+  const saved = process.env.GEMINI_API_KEY;
+  const savedX = process.env.XAI_API_KEY;
+  delete process.env.GEMINI_API_KEY;
+  delete process.env.XAI_API_KEY;
+  try {
+    for (const quality of ["standard", "premium_long"]) {
+      const meta = extractMeta(TOOL_BY_ID["slide"], {
+        topic: "Fotosintez jarayoni",
+        quality,
+      } as never);
+      const doc = await buildSlideAcademicDoc(meta, Date.now() + 20_000);
+      const ids = doc.slides!.map((s) => s.id);
+
+      assert.equal(new Set(ids).size, ids.length, `${quality}: id lar takrorlanmasligi kerak — ${ids.join(",")}`);
+      assert.deepEqual(ids, ids.map((_, i) => `s${i}`), `${quality}: id lar tartibda bo'lishi kerak`);
+    }
+  } finally {
+    if (saved) process.env.GEMINI_API_KEY = saved;
+    if (savedX) process.env.XAI_API_KEY = savedX;
+  }
+});

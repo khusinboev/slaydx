@@ -16,7 +16,21 @@ export function SlideViewer({ doc }: { doc: AcademicDoc }) {
   const theme = useMemo(() => getSlideTheme(deck.themeId), [deck.themeId]);
   // Rasm havolalari hujjat bilan birga serverdan keladi — brauzerdagi
   // IndexedDB dan qayta tiklash kerak emas.
-  const slides = deck.slides;
+  /**
+   * Eski dekalar uchun `id` qayta raqamlanadi.
+   *
+   * Bo'lakli generatsiya dastlab har bo'lakni `s0` dan boshlar edi, ya'ni
+   * 16 slaydli dekada `s0…s7` ikki marta uchrardi. Dvigatelda bu
+   * tuzatildi (`renumberSlides`), lekin BAZADAGI eski hujjatlar shundoq
+   * qolgan — ularni ochganda React «two children with the same key»
+   * xatosini beradi va bir xil kalitli slaydlarni dublikat qilib yoki
+   * tushirib qoldirishi mumkin. Ko'ruvchi saqlangan ma'lumotga
+   * tayanmasligi kerak.
+   */
+  const slides = useMemo(
+    () => (deck.slides ?? []).map((s, i) => (s.id === `s${i}` ? s : { ...s, id: `s${i}` })),
+    [deck.slides],
+  );
   const [i, setI] = useState(0);
   const [present, setPresent] = useState(false);
   const [notesOn, setNotesOn] = useState(true);
