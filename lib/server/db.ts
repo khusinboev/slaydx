@@ -13,8 +13,8 @@ import { env } from "./env";
  */
 
 type Globals = typeof globalThis & {
-  __soddaPool?: Pool;
-  __soddaMigrated?: Promise<void>;
+  __slaydxPool?: Pool;
+  __slaydxMigrated?: Promise<void>;
 };
 
 const g = globalThis as Globals;
@@ -23,8 +23,8 @@ export function pool(): Pool {
   if (!env.databaseUrl) {
     throw new Error("DATABASE_URL sozlanmagan — .env faylini tekshiring");
   }
-  if (!g.__soddaPool) {
-    g.__soddaPool = new Pool({
+  if (!g.__slaydxPool) {
+    g.__slaydxPool = new Pool({
       connectionString: env.databaseUrl,
       max: env.databasePoolMax,
       idleTimeoutMillis: 30_000,
@@ -35,7 +35,7 @@ export function pool(): Pool {
       query_timeout: 35_000,
       // Kutib qolgan tranzaksiya qulflarni ushlab turmasin.
       idle_in_transaction_session_timeout: 60_000,
-      application_name: "sodda-web",
+      application_name: "slaydx",
       // Boshqarilgan Postgres (Neon, Supabase, DO) odatda TLS talab qiladi,
       // lekin o'z sertifikati bilan. `sslmode` ni URL belgilaydi.
       ssl: /sslmode=(require|verify)/.test(env.databaseUrl)
@@ -43,11 +43,11 @@ export function pool(): Pool {
         : undefined,
     });
     // Bo'sh ulanishdagi xato butun processni yiqitmasin.
-    g.__soddaPool.on("error", (err) => {
+    g.__slaydxPool.on("error", (err) => {
       console.error("[db] idle client error:", err.message);
     });
   }
-  return g.__soddaPool;
+  return g.__slaydxPool;
 }
 
 export async function query<T extends QueryResultRow = QueryResultRow>(
@@ -137,12 +137,12 @@ export async function migrate(): Promise<void> {
 
 /** Har so'rovda emas, process boshiga bir marta migratsiya qiladi. */
 export function ensureMigrated(): Promise<void> {
-  if (!g.__soddaMigrated) {
-    g.__soddaMigrated = migrate().catch((e) => {
+  if (!g.__slaydxMigrated) {
+    g.__slaydxMigrated = migrate().catch((e) => {
       // Keyingi so'rov qayta urinsin — muzlatib qo'ymaymiz.
-      g.__soddaMigrated = undefined;
+      g.__slaydxMigrated = undefined;
       throw e;
     });
   }
-  return g.__soddaMigrated;
+  return g.__slaydxMigrated;
 }

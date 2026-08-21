@@ -8,7 +8,7 @@
  * ko'rinib, hech narsani tekshirmasdi.
  *
  * Kirish kerak (barcha /api/generations endpointlari sessiya talab qiladi):
- *   - EVAL_COOKIE="sodda_session=..."  yoki
+ *   - EVAL_COOKIE="slaydx_session=..."  yoki
  *   - DEV_LOGIN_ENABLED=true bo'lsa skript o'zi OTP orqali kiradi.
  *
  * Foydalanish:
@@ -20,7 +20,15 @@ import path from "node:path";
 const ROUND = process.argv[2] || "r1";
 const ONLY = process.argv[3] || "";
 const BASE = process.env.EVAL_URL || "http://127.0.0.1:3000";
-const OUT = path.resolve(process.cwd(), "..", "namunalar", `eval-${ROUND}`);
+/**
+ * Chiqish jildi repo ICHIDA.
+ *
+ * Ilgari u `../namunalar/` edi — repodan tashqarida, ya'ni loyihani
+ * klon qilgan odamda mavjud bo'lmagan jild. Endi `eval-out/` ichiga
+ * yoziladi va u `.gitignore` ostida: natijalar katta (bir tur ~13 MB)
+ * va ular kod emas, o'lchov.
+ */
+const OUT = path.resolve(process.cwd(), "eval-out", `eval-${ROUND}`);
 /**
  * Sinov kontenti QAYSI hisobda paydo bo'ladi.
  *
@@ -505,7 +513,7 @@ function headers(extra = {}) {
 function takeCookie(res) {
   const raw = res.headers.getSetCookie?.() ?? [res.headers.get("set-cookie")].filter(Boolean);
   for (const line of raw) {
-    const m = /(^|,\s*)(sodda_session=[^;]+)/.exec(line);
+    const m = /(^|,\s*)(slaydx_session=[^;]+)/.exec(line);
     if (m) COOKIE = m[2];
   }
 }

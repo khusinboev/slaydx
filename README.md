@@ -1,4 +1,4 @@
-# sodda-web
+# SlaydX
 
 Ta'lim hujjatlarini AI bilan yaratuvchi web ilova: slayd, insho, kurs ishi, referat,
 maqola, tezis, rezyume, tarjima, glossariy, dars rejasi va boshqalar — 14 ta vosita.
@@ -38,8 +38,8 @@ va progress boshqa qurilmada ham ko'rinadi.
 ### 1. Baza
 
 ```bash
-docker run -d --name sodda-pg \
-  -e POSTGRES_USER=sodda -e POSTGRES_PASSWORD=sodda -e POSTGRES_DB=sodda \
+docker run -d --name slaydx-pg \
+  -e POSTGRES_USER=slaydx -e POSTGRES_PASSWORD=slaydx -e POSTGRES_DB=slaydx \
   -p 5432:5432 postgres:16-alpine
 ```
 

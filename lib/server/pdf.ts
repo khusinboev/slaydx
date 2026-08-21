@@ -46,7 +46,7 @@ export async function toPdf(bytes: Uint8Array, fileName: string): Promise<Buffer
   if (!bin) return null;
   if (!bytes.byteLength || bytes.byteLength > MAX_INPUT_BYTES) return null;
 
-  const dir = await mkdtemp(join(tmpdir(), "sodda-pdf-"));
+  const dir = await mkdtemp(join(tmpdir(), "slaydx-pdf-"));
   try {
     // Fayl nomi buyruq qatoriga tushadi — faqat xavfsiz belgilar qoldiramiz.
     const ext = /\.pptx$/i.test(fileName) ? "pptx" : "docx";

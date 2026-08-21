@@ -3,13 +3,13 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_USER: sodda
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sodda}
-      POSTGRES_DB: sodda
+      POSTGRES_USER: slaydx
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-slaydx}
+      POSTGRES_DB: slaydx
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U sodda"]
+      test: ["CMD-SHELL", "pg_isready -U slaydx"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -24,7 +24,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgres://sodda:${POSTGRES_PASSWORD:-sodda}@postgres:5432/sodda
+      DATABASE_URL: postgres://slaydx:${POSTGRES_PASSWORD:-slaydx}@postgres:5432/slaydx
       APP_URL: ${APP_URL:-http://localhost:3000}
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET kerak — openssl rand -base64 48}
       NEXT_PUBLIC_BRAND_NAME: ${NEXT_PUBLIC_BRAND_NAME:-SlaydX}
@@ -53,7 +53,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgres://sodda:${POSTGRES_PASSWORD:-sodda}@postgres:5432/sodda
+      DATABASE_URL: postgres://slaydx:${POSTGRES_PASSWORD:-slaydx}@postgres:5432/slaydx
       APP_URL: ${APP_URL:-http://localhost:3000}
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET kerak}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}

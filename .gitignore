@@ -43,3 +43,6 @@ next-env.d.ts
 
 # lokal ma'lumot va jurnallar
 /.data
+
+# Eval chiqishi — o'lchov natijasi, kod emas
+eval-out/

@@ -14,7 +14,7 @@ import { query, queryOne } from "./db";
  *   - har sessiyani alohida bekor qilish mumkin.
  */
 
-export const SESSION_COOKIE = "sodda_session";
+export const SESSION_COOKIE = "slaydx_session";
 
 export type SessionUser = {
   id: string;

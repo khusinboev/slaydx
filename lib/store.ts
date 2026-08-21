@@ -151,7 +151,7 @@ export const useAppStore = create<AppState>()(
       },
     }),
     {
-      name: "sodda-web-ui",
+      name: "slaydx-ui",
       // Faqat interfeys sozlamalari. Hujjat va balans hech qachon
       // localStorage ga yozilmaydi — u yerda kvota ~5 MB va ma'lumot
       // qurilmada qolib ketardi.

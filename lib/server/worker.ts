@@ -38,7 +38,7 @@ const IDLE_POLL_MS = 1500;
 const BUSY_POLL_MS = 150;
 const HOUSEKEEPING_MS = 60_000;
 
-type Globals = typeof globalThis & { __soddaWorker?: boolean };
+type Globals = typeof globalThis & { __slaydxWorker?: boolean };
 const g = globalThis as Globals;
 
 let running = 0;
@@ -223,8 +223,8 @@ function sleep(ms: number) {
 
 /** Web process ichida bir marta ishga tushiradi. Ikkinchi chaqiruv e'tiborsiz. */
 export function startInlineWorker(): void {
-  if (g.__soddaWorker) return;
-  g.__soddaWorker = true;
+  if (g.__slaydxWorker) return;
+  g.__slaydxWorker = true;
   void loop().catch((e) => console.error("[worker] fatal:", e));
 }
 

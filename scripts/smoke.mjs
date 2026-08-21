@@ -47,7 +47,7 @@ async function login() {
   if (!d.devCode) return check("kirish", false, d.error || "kod yo'q");
   const ver = await fetch(`${B}/api/auth/otp?action=verify`, { method: "POST", headers: H(), body: JSON.stringify({ identifier: PHONE, code: d.devCode }) });
   const raw = ver.headers.getSetCookie?.() ?? [];
-  for (const line of raw) { const m = /(sodda_session=[^;]+)/.exec(line); if (m) COOKIE = m[1]; }
+  for (const line of raw) { const m = /(slaydx_session=[^;]+)/.exec(line); if (m) COOKIE = m[1]; }
   check("kirish", ver.ok && Boolean(COOKIE));
 }
 
