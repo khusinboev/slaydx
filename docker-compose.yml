@@ -39,10 +39,22 @@ services:
       CLICK_SECRET_KEY: ${CLICK_SECRET_KEY:-}
       PAYME_MERCHANT_ID: ${PAYME_MERCHANT_ID:-}
       PAYME_KEY: ${PAYME_KEY:-}
+      NEXT_PUBLIC_BRAND_LOGO: ${NEXT_PUBLIC_BRAND_LOGO:-/logo.png}
+      CLICK_MERCHANT_USER_ID: ${CLICK_MERCHANT_USER_ID:-}
+      PAYME_TEST_KEY: ${PAYME_TEST_KEY:-}
+      CRON_SECRET: ${CRON_SECRET:-}
+      FILE_TTL_HOURS: ${FILE_TTL_HOURS:-72}
+      SESSION_COOKIE_SAMESITE: ${SESSION_COOKIE_SAMESITE:-lax}
+      # Reverse proxy ortida turibmiz — `x-forwarded-for` ga ishonamiz,
+      # aks holda IP chegarasi hamma so'rovni bitta IP deb hisoblardi.
+      TRUST_PROXY: ${TRUST_PROXY:-true}
       # Web faqat so'rovlarga javob beradi; navbatni alohida worker bajaradi.
       WORKER_INLINE: "false"
     ports:
-      - "${PORT:-3000}:3000"
+      # FAQAT localhost. Umumiy serverda 0.0.0.0 ga bog'lash ilovani
+      # to'g'ridan-to'g'ri internetga ochib qo'yardi — nginx uni proxy
+      # qiladi va TLS ni o'zi tugatadi.
+      - "127.0.0.1:${PORT:-3000}:3000"
 
   worker:
     build:
@@ -60,7 +72,10 @@ services:
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.7-flash}
       FAL_KEY: ${FAL_KEY:-}
       FAL_MODEL: ${FAL_MODEL:-fal-ai/flux/schnell}
+      FAL_MODEL_PREMIUM: ${FAL_MODEL_PREMIUM:-}
+      GEMINI_THINKING_BUDGET: ${GEMINI_THINKING_BUDGET:-}
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
+      WORKER_JOB_TIMEOUT_MS: ${WORKER_JOB_TIMEOUT_MS:-300000}
 
 volumes:
   pgdata:
