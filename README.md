@@ -116,6 +116,17 @@ docker compose up --build
 
 ## Buyruqlar
 
+> ⚠️ **`npm run build` ni dev server ishlab turganda bajarmang.**
+> Ikkalasi ham bitta `.next` jildidan foydalanadi: build uni qayta yozadi
+> va dev server shundan keyin har so'rovga 500 qaytaradi
+> (`ENOENT … _buildManifest.js.tmp`). Xato build vaqtida emas, keyinroq
+> brauzerda «internal server error» bo'lib ko'rinadi, ya'ni sababi bilan
+> bog'lash qiyin. `npm run build` buni endi o'zi tekshiradi va to'xtaydi.
+> Tuzatish: dev serverni to'xtatib `rm -rf .next`.
+>
+> ⚠️ **Dvigatel kodini o'zgartirsangiz dev serverni qayta ishga tushiring** —
+> inline worker hot reload olmaydi va eski kodni ishlatishda davom etadi.
+
 ```bash
 npm run dev          # ishlab chiqish
 npm run build        # prod build
