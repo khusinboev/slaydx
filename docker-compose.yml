@@ -18,7 +18,14 @@ services:
       - "5432"
 
   web:
-    build: .
+    build:
+      context: .
+      # `target` MAJBURIY: Dockerfile dagi oxirgi bosqich `worker`, ya'ni
+      # target ko'rsatilmasa `web` servisi ham worker'ni ishga tushiradi
+      # va hech narsa portni tinglamaydi. Bu aynan shunday sodir bo'ldi —
+      # Docker yo'li lokal `npm run dev` bilan sinalgani uchun bu nuqson
+      # birinchi haqiqiy deploygacha ko'rinmadi.
+      target: runner
     restart: unless-stopped
     depends_on:
       postgres:
