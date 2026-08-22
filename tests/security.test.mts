@@ -101,7 +101,7 @@ test("SESSION_SECRET build bosqichida majburiy emas, ishga tushirishda majburiy"
   // Modul BIR MARTA import qilinganda tekshiruvni bajaradi, shuning uchun
   // har holat alohida processda sinaladi.
   const load = (patch: Record<string, string | undefined>) => {
-    const env = { ...process.env, NODE_ENV: "production", ...patch };
+    const env: Record<string, string | undefined> = { ...process.env, NODE_ENV: "production", ...patch };
     for (const [k, v] of Object.entries(patch)) if (v === undefined) delete env[k];
     try {
       execFileSync(

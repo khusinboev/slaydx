@@ -1,5 +1,6 @@
 import "server-only";
 import type { PoolClient } from "pg";
+import { randomUUID } from "node:crypto";
 import { query, transaction } from "./db";
 
 /**
@@ -216,6 +217,77 @@ export async function activatePro(
     [userId, String(days)],
   );
   return true;
+}
+
+/**
+ * Admin bitta hamyonni to'g'ridan-to'g'ri tuzatadi.
+ *
+ * `topUp`/`charge` dan farqi: ular haqiqiy pul harakati (to'lov,
+ * generatsiya narxi) uchun va ular bilan bir jurnalda turishi shart —
+ * moliyaviy hisobot ular ustida hisoblanadi. Admin tuzatishi boshqa
+ * `kind` bilan yoziladi (`admin_credit` / `admin_debit`), shuning uchun
+ * ikkalasi aralashib ketmaydi: "necha pul haqiqatan to'landi" degan
+ * savolga admin bergan bonus qo'shilib hisoblanmaydi.
+ *
+ * `wallet` — qaysi hamyon (`points` | `quota` | `balance`).
+ * `delta` musbat bo'lsa qo'shiladi, manfiy bo'lsa yechiladi; hamyon
+ * manfiyga tushishi CHECK constraint bilan ham, shu yerda ham
+ * to'silgan (aniq xabar uchun ikkalasi kerak).
+ */
+export type Wallet = "points" | "quota" | "balance";
+
+export type AdminAdjustResult =
+  | { ok: true; before: number; after: number }
+  | { ok: false; reason: "insufficient"; available: number };
+
+const WALLETS: readonly Wallet[] = ["points", "quota", "balance"];
+
+export async function adminAdjustWallet(
+  userId: string,
+  wallet: Wallet,
+  delta: number,
+  adminIdentity: string,
+  note = "",
+): Promise<AdminAdjustResult> {
+  // `wallet` SQL ustun nomiga to'g'ridan-to'g'ri interpolyatsiya qilinadi
+  // (parametrlashtirib bo'lmaydi — ustun nomi parametr emas). TypeScript
+  // turi buni chaqiruv vaqtida cheklaydi, lekin bu funksiya JSON'dan
+  // kelgan qiymat bilan ham chaqirilishi mumkin (API route orqali) —
+  // shuning uchun runtime tekshiruvi ham SHART, faqat TS turiga
+  // ishonib bo'lmaydi.
+  if (!WALLETS.includes(wallet)) throw new Error(`Noma'lum hamyon: ${wallet}`);
+  const amount = Math.trunc(delta);
+  if (amount === 0) return { ok: true, before: 0, after: 0 };
+
+  return transaction(async (client) => {
+    const res = await client.query<Record<Wallet, string>>(
+      `SELECT points, quota, balance FROM users WHERE id = $1 FOR UPDATE`,
+      [userId],
+    );
+    const row = res.rows[0];
+    if (!row) throw new Error("Foydalanuvchi topilmadi");
+    const before = Number(row[wallet]);
+    const after = before + amount;
+    if (after < 0) return { ok: false as const, reason: "insufficient" as const, available: before };
+
+    await client.query(`UPDATE users SET ${wallet} = ${wallet} + $2, updated_at = now() WHERE id = $1`, [
+      userId,
+      amount,
+    ]);
+    const deltaCol = `${wallet}_delta`;
+    await client.query(
+      `INSERT INTO transactions (user_id, kind, ${deltaCol}, reference, note)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [
+        userId,
+        amount >= 0 ? "admin_credit" : "admin_debit",
+        amount,
+        randomUUID(),
+        `${adminIdentity}${note ? `: ${note}` : ""}`,
+      ],
+    );
+    return { ok: true as const, before, after };
+  });
 }
 
 export type TransactionRow = {

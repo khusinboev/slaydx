@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { House, LogIn, Plus, User } from "lucide-react";
+import { House, LogIn, Plus, Shield, User } from "lucide-react";
 import { TOOLS } from "@/lib/tools";
 import { cn } from "@/lib/cn";
 import { creditTotal, useAppStore } from "@/lib/store";
@@ -104,6 +104,18 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       </div>
 
       <div className="mt-auto p-2">
+        {loggedIn && user?.isAdmin ? (
+          <Link
+            href="/uz/admin"
+            onClick={onNavigate}
+            className="hover:bg-white/70 dark:hover:bg-sidebar-accent mb-1 flex items-center gap-2.5 rounded-md px-3 py-2"
+          >
+            <span className="bg-muted flex size-8 items-center justify-center rounded-lg">
+              <Shield className="text-muted-foreground size-4" />
+            </span>
+            <span className="text-[15px] font-medium">Admin panel</span>
+          </Link>
+        ) : null}
         {loggedIn ? (
           <Link
             href="/uz/profile"

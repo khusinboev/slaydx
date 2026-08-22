@@ -3,6 +3,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { env } from "./env";
 import { query, queryOne } from "./db";
+import { isAdminPhone } from "./admin-phones";
 
 /**
  * Sessiya boshqaruvi.
@@ -38,6 +39,13 @@ export type SessionUser = {
   subject: string;
   teacher: string;
   city: string;
+  /**
+   * Faqat adminlik tekshiruvi uchun. Telegram orqali kirgan oddiy
+   * foydalanuvchida deyarli har doim `null` — Telegram login oqimi
+   * telefon raqamini bermaydi, admin uni botga bir marta ulashadi.
+   */
+  phone: string | null;
+  isAdmin: boolean;
 };
 
 type UserRow = {
@@ -63,6 +71,7 @@ type UserRow = {
   teacher: string;
   city: string;
   is_blocked: boolean;
+  phone: string | null;
 };
 
 export function rowToUser(r: UserRow): SessionUser {
@@ -90,6 +99,8 @@ export function rowToUser(r: UserRow): SessionUser {
     subject: r.subject,
     teacher: r.teacher,
     city: r.city,
+    phone: r.phone,
+    isAdmin: isAdminPhone(r.phone),
   };
 }
 
@@ -116,6 +127,7 @@ const USER_FIELDS = [
   "teacher",
   "city",
   "is_blocked",
+  "phone",
 ];
 
 /**

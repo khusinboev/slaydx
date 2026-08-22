@@ -52,6 +52,7 @@ services:
       CRON_SECRET: ${CRON_SECRET:-}
       FILE_TTL_HOURS: ${FILE_TTL_HOURS:-72}
       SESSION_COOKIE_SAMESITE: ${SESSION_COOKIE_SAMESITE:-lax}
+      SESSION_TTL_DAYS: ${SESSION_TTL_DAYS:-30}
       # Reverse proxy ortida turibmiz — `x-forwarded-for` ga ishonamiz,
       # aks holda IP chegarasi hamma so'rovni bitta IP deb hisoblardi.
       TRUST_PROXY: ${TRUST_PROXY:-true}
