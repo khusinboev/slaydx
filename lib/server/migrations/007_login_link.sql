@@ -1,0 +1,17 @@
+-- Kirish endi KOD emas, bir martalik HAVOLA orqali.
+--
+-- Eski oqim: bot 5 xonali kod yuborardi, foydalanuvchi uni saytga
+-- ko'chirib yozardi. Kod nega kerak edi — 004 dagi izohda: nonce'ning
+-- o'zi bilan avtomatik kirish bo'lsa, tajovuzkor o'z nonce'ini qurbonga
+-- yuborib, qurbon nomidan O'Z brauzerida sessiya ocha olardi.
+--
+-- Havola bu hujumni tuzilmaviy ravishda yopadi va kod kerak bo'lmaydi:
+-- sessiya nonce'ni YARATGAN brauzerda emas, HAVOLANI BOSGAN brauzerda
+-- ochiladi. Havola esa faqat qurbonning Telegram chatiga boradi. Ya'ni
+-- tajovuzkor o'z nonce'ini yuborsa ham, sessiya qurbonning o'z
+-- brauzerida, qurbonning o'z akkaunti bilan ochiladi — tajovuzkorga
+-- hech narsa tegmaydi.
+--
+-- Token xesh holida saqlanadi: baza o'qilsa ham havola tiklanmaydi.
+-- Bir martalik (`consumed_at`) va qisqa muddatli (`expires_at`).
+ALTER TABLE login_tickets ADD COLUMN IF NOT EXISTS token_hash TEXT;

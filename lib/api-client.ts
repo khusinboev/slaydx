@@ -100,6 +100,8 @@ export type ServerUser = {
   subject: string;
   teacher: string;
   city: string;
+  phone: string | null;
+  isAdmin: boolean;
 };
 
 export type Features = {
@@ -140,16 +142,15 @@ export function loginWithTelegram(payload: { initData?: string; widget?: Record<
 
 export type Ticket = { nonce: string; url: string; expiresAt: string };
 
-/** Telegram kirish chiptasi: bot havolasi + kod uchun nonce. */
+/**
+ * Telegram kirish chiptasi — bot havolasi.
+ *
+ * Sessiya bu chaqiruvdan emas, foydalanuvchi botdagi «Saytga kirish»
+ * tugmasini bosganda ochiladi (alohida oynada). Bu oyna sessiyani
+ * `fetchSession` bilan so'rab kutadi — `LoginModal` dagi polling shu.
+ */
 export function createLoginTicket() {
   return request<Ticket>("/api/auth/telegram/ticket", { method: "POST", body: "{}" });
-}
-
-export function redeemLoginTicket(nonce: string, code: string) {
-  return request<{ user: ServerUser }>("/api/auth/telegram/ticket?action=verify", {
-    method: "POST",
-    body: JSON.stringify({ nonce, code }),
-  });
 }
 
 export function logout(all = false) {
@@ -167,6 +168,51 @@ export type LedgerEntry = { id: string; kind: string; amount: number; note: stri
 
 export function fetchMe() {
   return request<{ user: ServerUser; transactions: LedgerEntry[] }>("/api/users/me");
+}
+
+/* ──────────────────────────── Admin ────────────────────────────────── */
+
+export type AdminUser = {
+  id: string;
+  name: string;
+  username: string | null;
+  telegramId: string | null;
+  localId: string | null;
+  phone: string | null;
+  points: number;
+  quota: number;
+  balance: number;
+  plan: string;
+  isBlocked: boolean;
+  createdAt: string;
+};
+
+export function fetchAdminUsers(q: string, page = 1) {
+  const params = new URLSearchParams({ page: String(page) });
+  if (q) params.set("q", q);
+  return request<{ users: AdminUser[]; total: number; page: number; pageSize: number }>(
+    `/api/admin/users?${params}`,
+  );
+}
+
+export function fetchAdminUser(id: string) {
+  return request<{ user: ServerUser; transactions: LedgerEntry[] }>(`/api/admin/users/${id}`);
+}
+
+export type Wallet = "points" | "quota" | "balance";
+
+export function adjustAdminWallet(id: string, wallet: Wallet, delta: number, note?: string) {
+  return request<{ user: ServerUser; before: number; after: number }>(`/api/admin/users/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ wallet, delta, note }),
+  });
+}
+
+export function setAdminBlocked(id: string, blocked: boolean) {
+  return request<{ user: ServerUser }>(`/api/admin/users/${id}`, {
+    method: "PUT",
+    body: JSON.stringify({ blocked }),
+  });
 }
 
 /* ──────────────────────────── Generations ─────────────────────────── */

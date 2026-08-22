@@ -1,9 +1,10 @@
 import "server-only";
-import { createHmac, randomBytes, randomInt } from "node:crypto";
+import { createHmac, randomBytes } from "node:crypto";
 import { env } from "./env";
 import { query, transaction } from "./db";
-import { safeEqual } from "./session";
+
 import { upsertTelegramUser, type TelegramProfile } from "./auth";
+import { isAdminPhone } from "./admin-phones";
 import type { SessionUser } from "./session";
 
 /**
@@ -15,7 +16,6 @@ import type { SessionUser } from "./session";
  */
 
 const TICKET_TTL_MS = 5 * 60_000;
-const MAX_ATTEMPTS = 5;
 
 export function botConfigured(): boolean {
   return Boolean(env.telegramBotToken);
@@ -67,15 +67,14 @@ export async function getMe(): Promise<{ id: number; username: string } | null> 
 
 /* ───────────────────────── Kirish chiptasi ───────────────────────── */
 
-export type Ticket = { nonce: string; url: string; expiresAt: string };
-
-function hashCode(nonce: string, code: string): string {
-  return createHmac("sha256", env.sessionSecret).update(`${nonce}:${code}`).digest("hex");
+function hashToken(token: string): string {
+  return createHmac("sha256", env.sessionSecret).update(token).digest("hex");
 }
 
-/** Sayt tomonda chipta ochadi va Telegram havolasini beradi. */
+export type Ticket = { nonce: string; url: string; expiresAt: string };
+
 export async function createTicket(botUsername: string): Promise<Ticket> {
-  // `start` parametri uchun faqat [A-Za-z0-9_-] ruxsat etiladi.
+  await purgeExpiredTickets();
   const nonce = randomBytes(24).toString("base64url");
   const expiresAt = new Date(Date.now() + TICKET_TTL_MS);
   await query(
@@ -90,62 +89,67 @@ export async function createTicket(botUsername: string): Promise<Ticket> {
 }
 
 /**
- * Bot `/start <nonce>` ni oldi: chiptani foydalanuvchiga bog'laydi,
- * kod yaratadi va shu chatga yuboradi.
+ * Bot `/start <nonce>` ni oldi: chiptani foydalanuvchiga bog'laydi va
+ * BIR MARTALIK KIRISH HAVOLASINI qaytaradi.
+ *
+ * Ilgari bu yerda 5 xonali kod yaratilardi va foydalanuvchi uni saytga
+ * ko'chirib yozardi. Havola ikki sababga ko'ra yaxshiroq:
+ *
+ *   — Foydalanuvchi uchun: bitta bosish, ko'chirish yo'q, xato yo'q.
+ *   — Xavfsizlik uchun: sessiya nonce'ni yaratgan brauzerda emas,
+ *     HAVOLANI BOSGAN brauzerda ochiladi. Havola esa faqat shu
+ *     Telegram chatiga boradi. Shuning uchun «o'z nonce'ini qurbonga
+ *     yuborish» hujumi ishlamaydi — kod o'ynagan rolni endi havolaning
+ *     yetkazilish kanali o'ynaydi.
+ *
+ * Token bazada faqat XESH holida turadi.
  */
 export async function attachTicket(nonce: string, profile: TelegramProfile): Promise<string | null> {
-  const code = String(randomInt(10_000, 100_000));
+  const token = randomBytes(32).toString("base64url");
   const rows = await query<{ nonce: string }>(
     `UPDATE login_tickets
         SET telegram_id = $2, username = $3, name = $4, photo_url = $5,
-            code_hash = $6, attempts = 0
+            token_hash = $6, attempts = 0
       WHERE nonce = $1 AND consumed_at IS NULL AND expires_at > now()
       RETURNING nonce`,
-    [nonce, profile.telegramId, profile.username, profile.name, profile.photoUrl, hashCode(nonce, code)],
+    [nonce, profile.telegramId, profile.username, profile.name, profile.photoUrl, hashToken(token)],
   );
-  return rows.length ? code : null;
+  if (!rows.length) return null;
+  return `${env.appUrl}/api/auth/telegram/enter?t=${token}`;
 }
 
 export type TicketCheck =
   | { ok: true; user: SessionUser }
-  | { ok: false; reason: "pending" | "expired" | "invalid" | "attempts" };
+  | { ok: false; reason: "expired" | "invalid" };
 
 /**
- * Foydalanuvchi kiritgan kodni tekshiradi va akkauntni ochadi.
- * Kod bir martalik: muvaffaqiyatli tekshiruvdan keyin chipta yopiladi.
+ * Kirish havolasidagi tokenni tekshiradi va akkauntni ochadi.
+ *
+ * Token bir martalik: birinchi muvaffaqiyatli tekshiruvda chipta
+ * yopiladi. Havola boshqa birovga yuborilsa ham ikkinchi marta
+ * ishlamaydi.
  */
-export async function redeemTicket(nonce: string, code: string): Promise<TicketCheck> {
-  const digits = code.replace(/\D/g, "");
-  if (digits.length !== 5) return { ok: false, reason: "invalid" };
+export async function redeemLoginToken(token: string): Promise<TicketCheck> {
+  const raw = String(token ?? "").trim();
+  if (raw.length < 20 || raw.length > 200) return { ok: false, reason: "invalid" };
 
   const profile = await transaction<TelegramProfile | TicketCheck>(async (client) => {
     const res = await client.query<{
-      code_hash: string | null;
+      nonce: string;
       telegram_id: string | null;
       username: string | null;
       name: string | null;
       photo_url: string | null;
-      attempts: number;
     }>(
-      `SELECT code_hash, telegram_id, username, name, photo_url, attempts
+      `SELECT nonce, telegram_id, username, name, photo_url
          FROM login_tickets
-        WHERE nonce = $1 AND consumed_at IS NULL AND expires_at > now()
+        WHERE token_hash = $1 AND consumed_at IS NULL AND expires_at > now()
         FOR UPDATE`,
-      [nonce],
+      [hashToken(raw)],
     );
     const t = res.rows[0];
-    if (!t) return { ok: false as const, reason: "expired" as const };
-    // Foydalanuvchi hali Telegram da Start bosmagan.
-    if (!t.code_hash || !t.telegram_id) return { ok: false as const, reason: "pending" as const };
-    if (t.attempts >= MAX_ATTEMPTS) {
-      await client.query("UPDATE login_tickets SET consumed_at = now() WHERE nonce = $1", [nonce]);
-      return { ok: false as const, reason: "attempts" as const };
-    }
-    if (!safeEqual(t.code_hash, hashCode(nonce, digits))) {
-      await client.query("UPDATE login_tickets SET attempts = attempts + 1 WHERE nonce = $1", [nonce]);
-      return { ok: false as const, reason: "invalid" as const };
-    }
-    await client.query("UPDATE login_tickets SET consumed_at = now() WHERE nonce = $1", [nonce]);
+    if (!t || !t.telegram_id) return { ok: false as const, reason: "expired" as const };
+    await client.query("UPDATE login_tickets SET consumed_at = now() WHERE nonce = $1", [t.nonce]);
     return {
       telegramId: String(t.telegram_id),
       username: t.username,
@@ -172,6 +176,7 @@ export type TelegramUpdate = {
     chat: { id: number };
     text?: string;
     from?: { id: number; username?: string; first_name?: string; last_name?: string };
+    contact?: { phone_number: string; user_id?: number };
   };
 };
 
@@ -191,29 +196,93 @@ async function isNewUpdate(updateId: number): Promise<boolean> {
  * qabul qilmaydi («Wrong HTTP URL»), shuning uchun lokal ishlab
  * chiqishda tugmasiz yuboramiz.
  */
-function publicSiteButton(): Record<string, unknown> {
-  const url = `${env.appUrl}/uz`;
+function publicSiteButton(path = "/uz", label = "Saytni ochish"): Record<string, unknown> {
+  const url = `${env.appUrl}${path}`;
   const isPublic = /^https:\/\//.test(url) && !/localhost|127\.0\.0\.1|0\.0\.0\.0/.test(url);
   if (!isPublic) return {};
-  return { reply_markup: { inline_keyboard: [[{ text: "Saytni ochish", url }]] } };
+  return { reply_markup: { inline_keyboard: [[{ text: label, url }]] } };
 }
 
 const WELCOME = [
   "Assalomu alaykum! 👋",
   "",
-  "Bu bot orqali saytga kirish kodini olasiz.",
-  "Saytda «Telegram orqali kirish» tugmasini bosing — kod shu yerga keladi.",
+  "Bu bot orqali saytga kirasiz.",
+  "Saytda «Telegram orqali kirish» tugmasini bosing — kirish havolasi shu yerga keladi.",
 ].join("\n");
 
 /**
  * `/start` va `/start <nonce>` ni qayta ishlaydi.
  * Boshqa xabarlarga qisqa yo'riqnoma qaytaradi.
  */
+/**
+ * Foydalanuvchi botga o'z kontaktini ulashdi (`/admin` javobi).
+ *
+ * Faqat O'ZINING kontaktini qabul qilamiz (`contact.user_id ===
+ * from.id`) — aks holda foydalanuvchi boshqa birovning vizit
+ * kartochkasini ulashib, o'sha raqam nomidan admin bo'lib ololardi.
+ *
+ * Raqam har doim saqlanadi (keyingi safar qayta ulashish shart
+ * bo'lmasin), lekin admin ekanligi HAR SAFAR `isAdminPhone` bilan
+ * qayta tekshiriladi — ro'yxatdan o'chirilgan raqam avtomatik
+ * huquqini yo'qotadi, saqlangan `phone` qatori o'zi hech narsani
+ * bermaydi.
+ *
+ * Foydalanuvchi hali saytga bir marta ham kirmagan bo'lsa (bazada
+ * akkaunti yo'q) — kontakt e'tiborsiz qoldiriladi: avval «Telegram
+ * orqali kirish» orqali akkaunt ochilishi kerak.
+ */
+async function handleContact(
+  chatId: number,
+  fromId: number,
+  contact: { phone_number: string; user_id?: number },
+): Promise<void> {
+  if (contact.user_id != null && contact.user_id !== fromId) {
+    await sendMessage(chatId, "Faqat o'zingizning raqamingizni ulashing.");
+    return;
+  }
+  const phone = `+${contact.phone_number.replace(/\D/g, "")}`;
+  let updated: { id: string }[];
+  try {
+    updated = await query<{ id: string }>(
+      "UPDATE users SET phone = $2, updated_at = now() WHERE telegram_id = $1 RETURNING id",
+      [String(fromId), phone],
+    );
+  } catch (e) {
+    // `users_phone_key` — bu raqam allaqachon BOSHQA akkauntga bog'langan
+    // (masalan, avval boshqa Telegram akkaunt bilan ulashilgan). Xato
+    // yutilib jim qolmasin — foydalanuvchi nima bo'lganini bilishi kerak.
+    const msg = e instanceof Error ? e.message : "";
+    if (/users_phone_key/.test(msg)) {
+      await sendMessage(chatId, "Bu raqam allaqachon boshqa akkauntga bog'langan.");
+      return;
+    }
+    throw e;
+  }
+  if (!updated.length) {
+    await sendMessage(
+      chatId,
+      "Avval saytga «Telegram orqali kirish» orqali bir marta kiring, keyin qaytadan /admin bosing.",
+    );
+    return;
+  }
+  if (isAdminPhone(phone)) {
+    await sendMessage(chatId, "✅ Admin sifatida tasdiqlandingiz.", publicSiteButton("/uz/admin", "🛠 Admin panel"));
+  } else {
+    await sendMessage(chatId, "Bu raqam admin ro'yxatida yo'q.");
+  }
+}
+
 export async function handleUpdate(update: TelegramUpdate): Promise<void> {
   if (!(await isNewUpdate(update.update_id))) return;
 
   const msg = update.message;
-  if (!msg?.from || !msg.text) return;
+  if (!msg?.from) return;
+
+  if (msg.contact) {
+    await handleContact(msg.chat.id, msg.from.id, msg.contact);
+    return;
+  }
+  if (!msg.text) return;
 
   const profile: TelegramProfile = {
     telegramId: String(msg.from.id),
@@ -223,6 +292,22 @@ export async function handleUpdate(update: TelegramUpdate): Promise<void> {
   };
 
   const text = msg.text.trim();
+
+  if (text.startsWith("/admin")) {
+    await sendMessage(
+      msg.chat.id,
+      "Admin sifatida tasdiqlash uchun raqamingizni ulashing.",
+      {
+        reply_markup: {
+          keyboard: [[{ text: "📱 Raqamni ulashish", request_contact: true }]],
+          resize_keyboard: true,
+          one_time_keyboard: true,
+        },
+      },
+    );
+    return;
+  }
+
   if (!text.startsWith("/start")) {
     await sendMessage(msg.chat.id, "Kod olish uchun saytdagi «Telegram orqali kirish» tugmasini bosing.");
     return;
@@ -234,8 +319,8 @@ export async function handleUpdate(update: TelegramUpdate): Promise<void> {
     return;
   }
 
-  const code = await attachTicket(nonce, profile);
-  if (!code) {
+  const link = await attachTicket(nonce, profile);
+  if (!link) {
     await sendMessage(
       msg.chat.id,
       "Bu havola eskirgan. Saytga qaytib «Telegram orqali kirish» tugmasini qayta bosing.",
@@ -246,10 +331,11 @@ export async function handleUpdate(update: TelegramUpdate): Promise<void> {
   await sendMessage(
     msg.chat.id,
     [
-      `Kirish kodingiz: <b>${code}</b>`,
+      "Kirish uchun quyidagi tugmani bosing 👇",
       "",
-      "Kodni saytdagi maydonga kiriting. 5 daqiqa amal qiladi.",
-      "Agar bu siz bo'lmasangiz — kodni hech kimga bermang.",
+      "Havola <b>bir martalik</b> va 5 daqiqa amal qiladi.",
+      "Agar bu siz bo'lmasangiz — havolani hech kimga yubormang.",
     ].join("\n"),
+    { reply_markup: { inline_keyboard: [[{ text: "🔑 Saytga kirish", url: link }]] } },
   );
 }

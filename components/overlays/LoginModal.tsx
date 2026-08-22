@@ -48,7 +48,7 @@ export function LoginModal() {
   );
 }
 
-type Stage = "start" | "code" | "phone" | "phoneCode";
+type Stage = "start" | "waiting" | "phone" | "phoneCode";
 
 export function LoginForm({ onDone }: { onDone?: () => void }) {
   const router = useRouter();
@@ -93,34 +93,50 @@ export function LoginForm({ onDone }: { onDone?: () => void }) {
     try {
       const t = await api.createLoginTicket();
       setTicket(t);
-      setStage("code");
-      setHint("Telegram'da «Start» tugmasini bosing — kod shu yerga keladi.");
-      // Yangi oyna: foydalanuvchi saytdan chiqib ketmasin.
+      setStage("waiting");
+      // Yangi oyna: foydalanuvchi saytdan chiqib ketmasin. Botda
+      // «Saytga kirish» havolasi shu OYNADA ochiladi — sessiya o'sha
+      // yerda o'rnatiladi, biz esa pastdagi effektda uni kutamiz.
       window.open(t.url, "_blank", "noopener,noreferrer");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Boshlanmadi");
+      setStage("start");
     } finally {
       setBusy(false);
     }
   }
 
-  async function submitCode(value: string) {
-    if (!ticket) return;
-    setError(null);
-    setBusy(true);
-    try {
-      const res = await api.redeemLoginTicket(ticket.nonce, value);
-      finish(res.user);
-    } catch (e) {
-      const err = e as api.ApiError;
-      // 409 — hali Start bosilmagan; bu xato emas, kutish holati.
-      if (err.status === 409) setHint(err.message);
-      else setError(err.message || "Kod noto'g'ri");
-      setCode("");
-    } finally {
-      setBusy(false);
-    }
-  }
+  /**
+   * Sessiyani kutish.
+   *
+   * Kirish havolasi BOSHQA oynada (Telegram) ochiladi va cookie'ni
+   * o'sha yerda o'rnatadi. Bu oyna buni faqat so'rab bilib oladi —
+   * shuning uchun "waiting" bosqichida sessiyani har 2 soniyada
+   * so'raymiz. Chipta 5 daqiqada eskiradi, shuning uchun shu muddatdan
+   * keyin polling ham to'xtaydi.
+   */
+  useEffect(() => {
+    if (stage !== "waiting" || !ticket) return;
+    const deadline = new Date(ticket.expiresAt).getTime();
+    const id = window.setInterval(async () => {
+      if (Date.now() > deadline) {
+        window.clearInterval(id);
+        setStage("start");
+        setError("Havola muddati tugadi. Qaytadan urinib ko'ring.");
+        return;
+      }
+      try {
+        const { user } = await api.fetchSession();
+        if (user) {
+          window.clearInterval(id);
+          finish(user);
+        }
+      } catch {
+        // Tarmoq xatosi — indamay keyingi tsiklda qayta uriniladi.
+      }
+    }, 2000);
+    return () => window.clearInterval(id);
+  }, [stage, ticket, finish]);
 
   /**
    * Telefon orqali kirish — faqat `DEV_LOGIN_ENABLED` yoqilganda.
@@ -292,26 +308,13 @@ export function LoginForm({ onDone }: { onDone?: () => void }) {
         <>
           <ol className="text-muted-foreground mb-4 space-y-1 text-sm">
             <li>1. Ochilgan Telegram chatida «Start» ni bosing</li>
-            <li>2. Bot yuborgan 5 xonali kodni shu yerga kiriting</li>
+            <li>2. Bot yuborgan «Saytga kirish» tugmasini bosing</li>
           </ol>
 
-          <label htmlFor="login-code" className="text-muted-foreground mb-1 block text-sm">
-            Kod
-          </label>
-          <input
-            id="login-code"
-            value={code}
-            inputMode="numeric"
-            autoComplete="one-time-code"
-            disabled={busy}
-            onChange={(e) => {
-              const v = e.target.value.replace(/\D/g, "").slice(0, 5);
-              setCode(v);
-              if (v.length === 5) void submitCode(v);
-            }}
-            placeholder="•••••"
-            className="border-input bg-background mb-3 h-11 w-full rounded-xl border px-3 text-center text-lg tracking-[0.5em] disabled:opacity-60"
-          />
+          <div className="border-border/60 mb-4 flex items-center justify-center gap-3 rounded-xl border py-6">
+            <span className="border-muted-foreground/30 border-t-primary size-5 animate-spin rounded-full border-2" />
+            <span className="text-muted-foreground text-sm">Telegram&apos;da tasdiqlanishi kutilmoqda...</span>
+          </div>
 
           <div className="flex gap-2">
             {ticket ? (
@@ -329,7 +332,6 @@ export function LoginForm({ onDone }: { onDone?: () => void }) {
               onClick={() => {
                 setStage("start");
                 setTicket(null);
-                setCode("");
                 setError(null);
                 setHint(null);
               }}
