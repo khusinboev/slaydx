@@ -10,7 +10,6 @@ export type Overlay =
   | "pay"
   | "lang"
   | "sort"
-  | "user"
   | null;
 
 type UiState = {

@@ -1,21 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { Bell, ChevronDown, Moon, PanelLeft, Search, Settings, Sun, SunMoon } from "lucide-react";
-import { creditTotal, useAppStore } from "@/lib/store";
+import { Bell, Moon, PanelLeft, Search, Sun, SunMoon } from "lucide-react";
+import { useAppStore } from "@/lib/store";
 import { THEME_OPTIONS, UI_LOCALES, useUi } from "@/lib/ui";
 import { cn } from "@/lib/cn";
 
 export function TopBar({ onMenu }: { onMenu: () => void }) {
-  const router = useRouter();
   const theme = useAppStore((s) => s.theme);
   const setTheme = useAppStore((s) => s.setTheme);
   const locale = useAppStore((s) => s.locale);
   const setLocale = useAppStore((s) => s.setLocale);
   const loggedIn = useAppStore((s) => s.loggedIn);
   const user = useAppStore((s) => s.user);
-  const signOut = useAppStore((s) => s.signOut);
   const overlay = useUi((s) => s.overlay);
   const open = useUi((s) => s.open);
   const close = useUi((s) => s.close);
@@ -112,78 +109,16 @@ export function TopBar({ onMenu }: { onMenu: () => void }) {
       </button>
 
       {loggedIn ? (
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() => (overlay === "user" ? close() : open("user"))}
-            className="hover:bg-accent flex h-9 items-center gap-1.5 rounded-full px-2"
-          >
-            <span className="bg-primary text-primary-foreground flex size-7 items-center justify-center rounded-lg text-xs font-semibold">
-              {(user?.name || "?").slice(0, 1).toUpperCase()}
-            </span>
-            <span className="hidden text-sm font-medium sm:inline">
-              {creditTotal(user).toLocaleString("uz-UZ")}
-            </span>
-            <ChevronDown className="text-muted-foreground size-3.5" />
-          </button>
-          {overlay === "user" ? (
-            <Menu onDismiss={close} align="end">
-              <button
-                type="button"
-                className="hover:bg-muted w-full rounded-lg px-2.5 py-2 text-left text-sm"
-                onClick={() => {
-                  close();
-                  router.push("/uz/profile");
-                }}
-              >
-                Profil
-              </button>
-              <button
-                type="button"
-                className="hover:bg-muted w-full rounded-lg px-2.5 py-2 text-left text-sm"
-                onClick={() => {
-                  close();
-                  router.push("/uz/purchase");
-                }}
-              >
-                Tariflar
-              </button>
-              <button
-                type="button"
-                className="hover:bg-muted w-full rounded-lg px-2.5 py-2 text-left text-sm"
-                onClick={() => open("notifications")}
-              >
-                Bildirishnomalar
-              </button>
-              <button
-                type="button"
-                className="hover:bg-muted flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm"
-                onClick={() => open("settings")}
-              >
-                <Settings className="size-3.5" />
-                Sozlamalar
-              </button>
-              <Link
-                href="/uz/purchase"
-                onClick={close}
-                className="hover:bg-muted block rounded-lg px-2.5 py-2 text-sm"
-              >
-                Balansni to&apos;ldirish
-              </Link>
-              <button
-                type="button"
-                className="hover:bg-muted w-full rounded-lg px-2.5 py-2 text-left text-sm"
-                onClick={() => {
-                  void signOut();
-                  close();
-                  router.push("/uz");
-                }}
-              >
-                Chiqish
-              </button>
-            </Menu>
-          ) : null}
-        </div>
+        // Profil, tariflar, sozlamalar va chiqish — hammasi endi /uz/profile
+        // sahifasining o'zida. Bu yerda ikkinchi marta takrorlash o'rniga
+        // faqat o'sha sahifaga o'tuvchi bitta avatar qoladi.
+        <Link
+          href="/uz/profile"
+          aria-label="Profil"
+          className="bg-primary text-primary-foreground ring-primary ring-offset-page-bg flex size-8 shrink-0 items-center justify-center rounded-full text-sm font-bold ring-2 ring-offset-2"
+        >
+          {(user?.name || "?").slice(0, 1).toUpperCase()}
+        </Link>
       ) : (
         <button
           type="button"

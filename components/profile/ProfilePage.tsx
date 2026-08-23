@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import * as api from "@/lib/api-client";
 import { creditTotal, useAppStore } from "@/lib/store";
 import { useUi } from "@/lib/ui";
@@ -93,38 +94,56 @@ export function ProfilePage() {
   return (
     <div className="mx-auto w-full max-w-4xl px-4 py-8">
       <div className="bg-card mb-6 rounded-2xl border p-6">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="bg-primary text-primary-foreground flex size-16 items-center justify-center rounded-2xl text-2xl font-semibold">
-              {(user.name || "?").slice(0, 1).toUpperCase()}
-            </div>
-            <div>
+        <div className="flex items-center gap-4">
+          <div className="bg-primary text-primary-foreground ring-primary ring-offset-card flex size-16 shrink-0 items-center justify-center rounded-full text-2xl font-bold ring-[3px] ring-offset-[3px]">
+            {(user.name || "?").slice(0, 1).toUpperCase()}
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
               <h1 className="text-xl font-semibold">{user.name || "Foydalanuvchi"}</h1>
-              <p className="text-muted-foreground text-sm">
-                {user.plan === "pro"
-                  ? `Pro${user.planExpiresAt ? ` · ${new Date(user.planExpiresAt).toLocaleDateString("uz-UZ")} gacha` : ""}`
-                  : "Bepul"}{" "}
-                · {creditTotal(user).toLocaleString("uz-UZ")} tanga
-              </p>
+              {user.plan === "pro" ? (
+                <span className="bg-primary text-primary-foreground rounded-full px-2 py-0.5 text-[10.5px] font-bold tracking-wide">
+                  PRO
+                </span>
+              ) : null}
             </div>
+            <p className="text-muted-foreground text-sm">
+              {user.plan === "pro" && user.planExpiresAt
+                ? `${new Date(user.planExpiresAt).toLocaleDateString("uz-UZ")} gacha · `
+                : ""}
+              {creditTotal(user).toLocaleString("uz-UZ")} tanga
+            </p>
           </div>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => void signOut(false)}
-              className="h-10 rounded-xl border px-4 text-sm"
-            >
-              Chiqish
-            </button>
-            <button
-              type="button"
-              onClick={() => void signOut(true)}
-              className="text-muted-foreground hover:text-foreground h-10 rounded-xl px-3 text-xs"
-              title="Barcha qurilmalardagi sessiyalarni bekor qiladi"
-            >
-              Hamma joydan
-            </button>
-          </div>
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Link
+            href="/uz/purchase"
+            className="border-primary text-primary h-9 rounded-xl border px-4 text-sm font-medium leading-9"
+          >
+            Tariflar
+          </Link>
+          <button
+            type="button"
+            onClick={() => open("settings")}
+            className="h-9 rounded-xl border px-4 text-sm"
+          >
+            Sozlamalar
+          </button>
+          <button
+            type="button"
+            onClick={() => void signOut(false)}
+            className="h-9 rounded-xl border px-4 text-sm"
+          >
+            Chiqish
+          </button>
+          <button
+            type="button"
+            onClick={() => void signOut(true)}
+            className="text-muted-foreground hover:text-foreground h-9 rounded-xl px-3 text-xs"
+            title="Barcha qurilmalardagi sessiyalarni bekor qiladi"
+          >
+            Hamma joydan chiqish
+          </button>
         </div>
         <div className="mt-6 grid grid-cols-3 gap-3 text-center">
           <Stat label="Ball" value={user.points} />
