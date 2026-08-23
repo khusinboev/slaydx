@@ -16,7 +16,7 @@ export type ToolId =
   | "mustaqil-ish"
   | "lesson-plan";
 
-export type ToolGroup = "mashhur" | "hujjatlar";
+export type ToolGroup = "umumiy" | "talaba" | "oqituvchi";
 
 export type JobStatus = "QUEUED" | "IN_PROGRESS" | "COMPLETED" | "FAILED" | "REVOKED";
 
