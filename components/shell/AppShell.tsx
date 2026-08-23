@@ -5,7 +5,6 @@ import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
 import { LoginModal } from "../overlays/LoginModal";
 import { SearchDialog } from "../overlays/SearchDialog";
-import { SettingsDialog } from "../overlays/SettingsDialog";
 import { NotificationsPanel } from "../overlays/NotificationsPanel";
 import { PayDialog } from "../overlays/PayDialog";
 import { useUi } from "@/lib/ui";
@@ -62,7 +61,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <LoginModal />
       <SearchDialog />
-      <SettingsDialog />
       <NotificationsPanel />
       <PayDialog />
     </div>

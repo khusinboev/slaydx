@@ -5,7 +5,6 @@ import { create } from "zustand";
 export type Overlay =
   | "login"
   | "search"
-  | "settings"
   | "notifications"
   | "pay"
   | "lang"

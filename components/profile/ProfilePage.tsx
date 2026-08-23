@@ -33,6 +33,10 @@ export function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Chiqish tasodifiy bosilib ketmasin — ikki bosqichli tasdiq: birinchi
+  // bosishda ogohlantirish chiqadi, ikkinchisida haqiqatan chiqadi.
+  const [confirmOut, setConfirmOut] = useState(false);
+  const [confirmAll, setConfirmAll] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -115,35 +119,13 @@ export function ProfilePage() {
             </p>
           </div>
         </div>
-        <div className="mt-4 flex flex-wrap gap-2">
+        <div className="mt-4">
           <Link
             href="/uz/purchase"
             className="border-primary text-primary h-9 rounded-xl border px-4 text-sm font-medium leading-9"
           >
             Tariflar
           </Link>
-          <button
-            type="button"
-            onClick={() => open("settings")}
-            className="h-9 rounded-xl border px-4 text-sm"
-          >
-            Sozlamalar
-          </button>
-          <button
-            type="button"
-            onClick={() => void signOut(false)}
-            className="h-9 rounded-xl border px-4 text-sm"
-          >
-            Chiqish
-          </button>
-          <button
-            type="button"
-            onClick={() => void signOut(true)}
-            className="text-muted-foreground hover:text-foreground h-9 rounded-xl px-3 text-xs"
-            title="Barcha qurilmalardagi sessiyalarni bekor qiladi"
-          >
-            Hamma joydan chiqish
-          </button>
         </div>
         <div className="mt-6 grid grid-cols-3 gap-3 text-center">
           <Stat label="Ball" value={user.points} />
@@ -206,6 +188,71 @@ export function ProfilePage() {
           </div>
         </div>
       ) : null}
+
+      <div className="bg-card mt-6 rounded-2xl border p-6">
+        <h2 className="text-lg font-semibold">Hisobdan chiqish</h2>
+        <p className="text-muted-foreground mt-1 mb-4 text-sm">
+          Bu qurilmadan yoki barcha qurilmalardan chiqishingiz mumkin.
+        </p>
+        <div className="flex flex-col items-start gap-3">
+          {confirmOut ? (
+            <div className="border-destructive/30 bg-destructive/5 flex flex-wrap items-center gap-3 rounded-xl border p-3">
+              <span className="text-sm font-medium">Rostdan ham chiqmoqchimisiz?</span>
+              <button
+                type="button"
+                onClick={() => void signOut(false)}
+                className="bg-destructive h-9 rounded-lg px-4 text-sm font-medium text-white"
+              >
+                Ha, chiqish
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmOut(false)}
+                className="h-9 rounded-lg border px-4 text-sm"
+              >
+                Bekor qilish
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirmOut(true)}
+              className="text-destructive border-destructive/40 hover:bg-destructive/10 h-10 rounded-xl border px-4 text-sm font-medium"
+            >
+              Chiqish
+            </button>
+          )}
+
+          {confirmAll ? (
+            <div className="border-destructive/30 bg-destructive/5 flex flex-wrap items-center gap-3 rounded-xl border p-3">
+              <span className="text-sm font-medium">Barcha qurilmalardan chiqasiz. Davom etamizmi?</span>
+              <button
+                type="button"
+                onClick={() => void signOut(true)}
+                className="bg-destructive h-9 rounded-lg px-4 text-sm font-medium text-white"
+              >
+                Ha, hammasidan chiqish
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmAll(false)}
+                className="h-9 rounded-lg border px-4 text-sm"
+              >
+                Bekor qilish
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setConfirmAll(true)}
+              className="text-muted-foreground hover:text-destructive text-sm underline-offset-2 hover:underline"
+              title="Barcha qurilmalardagi sessiyalarni bekor qiladi"
+            >
+              Hamma joydan chiqish
+            </button>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
