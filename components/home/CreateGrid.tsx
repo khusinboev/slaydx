@@ -19,8 +19,9 @@ export function CreateGrid() {
   if (!hydrated) return <div className="text-muted-foreground p-8 text-sm">Yuklanmoqda...</div>;
 
   const groups = [
-    { id: "mashhur", label: "Mashhur" },
-    { id: "hujjatlar", label: "Hujjatlar" },
+    { id: "umumiy", label: "Umumiy vositalar" },
+    { id: "talaba", label: "Talaba ishlari" },
+    { id: "oqituvchi", label: "O'qituvchi vositalari" },
   ] as const;
 
   return (
@@ -41,19 +42,18 @@ export function CreateGrid() {
                 <Link
                   key={t.id}
                   href={`/uz/${t.slug}`}
-                  className="bg-card hover:border-primary/40 rounded-2xl border p-4 transition-colors"
+                  style={{ ["--tc" as string]: t.tc }}
+                  className="bg-card hover:border-primary/40 overflow-hidden rounded-2xl border transition-colors"
                 >
-                  <div className="mb-3 flex items-center gap-2.5">
-                    {Icon ? (
-                      <Icon
-                        className="size-5 text-[rgb(var(--tc))]"
-                        style={{ ["--tc" as string]: t.tc }}
-                      />
-                    ) : null}
-                    <span className="font-medium">{t.title}</span>
+                  <div className="h-1 bg-[rgb(var(--tc))]" />
+                  <div className="p-4">
+                    <div className="mb-3 flex items-center gap-2.5">
+                      {Icon ? <Icon className="size-5 text-[rgb(var(--tc))]" /> : null}
+                      <span className="font-medium">{t.title}</span>
+                    </div>
+                    <p className="text-muted-foreground text-sm">{t.description}</p>
+                    <p className="mt-3 text-xs font-medium">{t.basePrice.toLocaleString("uz-UZ")} tanga dan</p>
                   </div>
-                  <p className="text-muted-foreground text-sm">{t.description}</p>
-                  <p className="mt-3 text-xs font-medium">{t.basePrice.toLocaleString("uz-UZ")} tanga dan</p>
                 </Link>
               );
             })}

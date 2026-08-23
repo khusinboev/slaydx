@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { House, LogIn, Plus, Shield, User } from "lucide-react";
+import { ChevronRight, Coins, House, LogIn, Plus, Shield, User } from "lucide-react";
 import { TOOLS } from "@/lib/tools";
 import { cn } from "@/lib/cn";
 import { creditTotal, useAppStore } from "@/lib/store";
@@ -11,8 +11,9 @@ import { TOOL_ICONS } from "./icons";
 import { BRAND_LOGO, BRAND_NAME } from "@/lib/brand";
 
 const GROUPS = [
-  { id: "mashhur", label: "Mashhur" },
-  { id: "hujjatlar", label: "Hujjatlar" },
+  { id: "umumiy", label: "Umumiy vositalar" },
+  { id: "talaba", label: "Talaba ishlari" },
+  { id: "oqituvchi", label: "O'qituvchi vositalari" },
 ] as const;
 
 function itemClass(active: boolean) {
@@ -120,17 +121,26 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
           <Link
             href="/uz/profile"
             onClick={onNavigate}
-            className="hover:bg-white/70 dark:hover:bg-sidebar-accent flex items-center gap-2.5 rounded-md px-3 py-2"
+            className="bg-sidebar-accent border-sidebar-border flex items-center gap-2.5 rounded-2xl border px-3 py-2.5 hover:opacity-90"
           >
-            <div className="bg-primary text-primary-foreground flex size-8 items-center justify-center rounded-lg text-sm font-semibold">
+            <div className="bg-primary text-primary-foreground ring-primary ring-offset-sidebar-accent flex size-9 shrink-0 items-center justify-center rounded-full text-sm font-bold ring-2 ring-offset-2">
               {(user?.name || "?").slice(0, 1).toUpperCase()}
             </div>
             <div className="min-w-0 flex-1">
-              <div className="truncate text-[15px] font-semibold">{user?.name || "Foydalanuvchi"}</div>
-              <div className="text-muted-foreground truncate text-xs">
-                {user?.plan === "pro" ? "Pro" : "Bepul"} · {total.toLocaleString("uz-UZ")} tanga
+              <div className="flex items-center gap-1.5">
+                <span className="truncate text-[14px] font-semibold">{user?.name || "Foydalanuvchi"}</span>
+                {user?.plan === "pro" ? (
+                  <span className="bg-primary text-primary-foreground shrink-0 rounded-full px-1.5 py-px text-[9.5px] font-bold tracking-wide">
+                    PRO
+                  </span>
+                ) : null}
+              </div>
+              <div className="text-muted-foreground mt-0.5 flex items-center gap-1 text-xs">
+                <Coins className="size-3" />
+                {total.toLocaleString("uz-UZ")} tanga
               </div>
             </div>
+            <ChevronRight className="text-muted-foreground size-4 shrink-0" />
           </Link>
         ) : (
           <button
