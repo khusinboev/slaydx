@@ -212,6 +212,7 @@ export function HomeFiles() {
               const tool = TOOL_BY_ID[g.type];
               return (
                 <div key={g.id} className="border-border/60 bg-card overflow-hidden rounded-xl border">
+                  {tool ? <div className="h-1" style={{ background: `rgb(${tool.tc})` }} /> : null}
                   <Link href={`/uz/files/${g.id}`} className="bg-muted block h-36 overflow-hidden sm:h-40">
                     <FilePreview gen={g} />
                   </Link>
