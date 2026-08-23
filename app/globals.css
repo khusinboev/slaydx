@@ -17,8 +17,10 @@
   --card-foreground: #2b2013;
   --popover: #fffdf9;
   --popover-foreground: #2b2013;
-  --primary: #d97706;
-  /* Oq matn #d97706 ustida 3.02:1 — WCAG AA (4.5:1) dan past edi; to'q jigarrang matn 5.72:1 beradi. */
+  /* #d97706 tugma/belgilangan holatlarda quyuq-jigarrang bo'lib ko'rinardi;
+     #f59e0b (tun rejimidagi bilan bir xil) ochroq va yorqinroq. */
+  --primary: #f59e0b;
+  /* Oq matn #f59e0b ustida past kontrast beradi; to'q jigarrang matn 8.49:1. */
   --primary-foreground: #1c1406;
   --secondary: #f3e9d8;
   --secondary-foreground: #2b2013;
@@ -36,7 +38,7 @@
   --ring: #d9b78a;
   --sidebar: #f3ead9;
   --sidebar-foreground: #2b2013;
-  --sidebar-primary: #d97706;
+  --sidebar-primary: #f59e0b;
   --sidebar-primary-foreground: #1c1406;
   --sidebar-accent: #fffdf9;
   --sidebar-accent-foreground: #2b2013;
