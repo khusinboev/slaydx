@@ -11,73 +11,75 @@
 
 :root {
   --radius: 0.625rem;
-  --background: #f7f7f7;
-  --foreground: #020618;
-  --card: #fff;
-  --card-foreground: #020618;
-  --popover: #fff;
-  --popover-foreground: #020618;
-  --primary: #0f172b;
-  --primary-foreground: #f8fafc;
-  --secondary: #f1f5f9;
-  --secondary-foreground: #0f172b;
-  --muted: #f1f5f9;
-  /* #62748e oq fonda 4.45:1 edi — WCAG AA (4.5:1) dan sal past. */
-  --muted-foreground: #5b6a82;
-  --accent: #f1f5f9;
-  --accent-foreground: #0f172b;
-  --destructive: #e40014;
-  --destructive-foreground: #f8fafc;
+  --background: #faf5ee;
+  --foreground: #2b2013;
+  --card: #fffdf9;
+  --card-foreground: #2b2013;
+  --popover: #fffdf9;
+  --popover-foreground: #2b2013;
+  --primary: #d97706;
+  /* Oq matn #d97706 ustida 3.02:1 — WCAG AA (4.5:1) dan past edi; to'q jigarrang matn 5.72:1 beradi. */
+  --primary-foreground: #1c1406;
+  --secondary: #f3e9d8;
+  --secondary-foreground: #2b2013;
+  --muted: #f3e9d8;
+  /* #8a7355 fonda 4.15:1 edi — WCAG AA (4.5:1) dan sal past. */
+  --muted-foreground: #6b5540;
+  --accent: #f3e9d8;
+  --accent-foreground: #2b2013;
+  /* #dc2626 fonda 4.45:1 edi — WCAG AA (4.5:1) dan sal past. */
+  --destructive: #b91c1c;
+  --destructive-foreground: #fff8ee;
   --success: #16a34a;
-  --border: #e2e8f0;
-  --input: #e2e8f0;
-  --ring: #90a1b9;
-  --sidebar: #ededed;
-  --sidebar-foreground: #020618;
-  --sidebar-primary: #0f172b;
-  --sidebar-primary-foreground: #f8fafc;
-  --sidebar-accent: #ffffff;
-  --sidebar-accent-foreground: #020618;
-  --sidebar-border: #e2e8f0;
-  --sidebar-ring: #90a1b9;
-  --page-bg: #f7f7f7;
+  --border: #ecdfc9;
+  --input: #ecdfc9;
+  --ring: #d9b78a;
+  --sidebar: #f3ead9;
+  --sidebar-foreground: #2b2013;
+  --sidebar-primary: #d97706;
+  --sidebar-primary-foreground: #1c1406;
+  --sidebar-accent: #fffdf9;
+  --sidebar-accent-foreground: #2b2013;
+  --sidebar-border: #ecdfc9;
+  --sidebar-ring: #d9b78a;
+  --page-bg: #faf5ee;
   --sidebar-width: 16rem;
   --sidebar-width-icon: 3.5rem;
 }
 
 .dark {
-  --background: #202127;
-  --foreground: #f8fafc;
-  --sidebar: #161618;
-  --card: #2a2b32;
-  --card-foreground: #f8fafc;
-  --popover: #262629;
-  --popover-foreground: #f8fafc;
-  --primary: #e2e8f0;
-  --primary-foreground: #18181b;
-  --secondary: #28282c;
-  --secondary-foreground: #f8fafc;
-  --muted: #28282c;
-  --muted-foreground: #9f9fa9;
-  --accent: #28282c;
-  --accent-foreground: #f8fafc;
-  --destructive: #ff6568;
-  --border: #ffffff1a;
-  --input: #ffffff26;
-  --ring: #71717b;
-  --page-bg: #202127;
-  --sidebar-accent: #2a2b32;
-  --sidebar-accent-foreground: #f8fafc;
-  --sidebar-border: #ffffff1a;
+  --background: #121014;
+  --foreground: #f3ece2;
+  --sidebar: #0c0b0d;
+  --card: #1c1a17;
+  --card-foreground: #f3ece2;
+  --popover: #1c1a17;
+  --popover-foreground: #f3ece2;
+  --primary: #f59e0b;
+  --primary-foreground: #1c1406;
+  --secondary: #232019;
+  --secondary-foreground: #f3ece2;
+  --muted: #232019;
+  --muted-foreground: #a89a86;
+  --accent: #232019;
+  --accent-foreground: #f3ece2;
+  --destructive: #f87171;
+  --border: #2e2820;
+  --input: #3a3126;
+  --ring: #8a7355;
+  --page-bg: #121014;
+  --sidebar-accent: #1c1a17;
+  --sidebar-accent-foreground: #f3ece2;
+  --sidebar-border: #2e2820;
   /*
    * Bular yetishmasdi: `.dark` faqat `--sidebar` ni qayta belgilar, matn rangi
    * esa `:root` dan #020618 bo'lib qolardi. Natijada qorong'i yon panelda
    * «MASHHUR» / «HUJJATLAR» sarlavhalari deyarli ko'rinmasdi (kontrast 1.16:1).
    */
-  --sidebar-foreground: #f8fafc;
-  --sidebar-primary: #e2e8f0;
-  --sidebar-primary-foreground: #18181b;
-  --sidebar-ring: #71717b;
+  --sidebar-foreground: #f3ece2;
+  --sidebar-primary: #f59e0b;
+  --sidebar-primary-foreground: #1c1406;
+  --sidebar-ring: #8a7355;
 }
 
 @theme inline {
