@@ -238,11 +238,37 @@ Sahifa darvozasi LibreOffice o'rnatilmagan yoki byudjet tugagan muhitda **jim o'
 ### 9.4. Qolgan ish
 
 - §9.4 (Sprint 5 dan) — akademik janrlar uchun DOCX darajasidagi tuzilma darvozasi (masalan «maqolada annotatsiya yo'q → FAILED») hali yo'q, faqat prompt darajasida talab qilinadi.
-- Sprint 7 (slayd va rasm — 75% floor, `table` layout enumga qo'shish, premium rasm modeli) va Sprint 8 (o'qituvchi vositalari — rubrika normalizatsiyasi, glossariy atama soni, texnologik xarita soat invarianti) hali boshlanmagan.
+- Sprint 8 (o'qituvchi vositalari — rubrika normalizatsiyasi, glossariy atama soni, texnologik xarita soat invarianti) hali boshlanmagan.
 
 ---
 
-## 10. Yakuniy xulosa
+## 10. Sprint 7 — bajarildi (2026-08-24)
+
+§6 dagi Sprint 7 ning uchala bandi ham bajarildi.
+
+### 10.1. Nima qilindi
+
+| # | Ish | Fayl |
+|---|---|---|
+| 1a | Bo'lak so'ralganidan kam slayd bilan qaytsa — bitta qayta urinish (`rawOutline`/`writeAbstracts` naqshi). Ilgari «premium_long» (16) muntazam 12 ta bilan yakunlanishining asosiy sababi shu edi | `slide-write.ts` (`writeSlidesWithLlm`) |
+| 1b | Quyi chegara 0.75 → **0.85**. Qayta urinish yetishmovchilikning katta qismini yopgani uchun endi bir necha bosqichda (birdaniga 1.0 emas) qattiqlashtiriladi — AUDIT-2.md §7 dagi o'zimning ogohlantirishimga rioya qilindi | `slide-write.ts` (`floor`) |
+| 2 | `layout` JSON enumiga `table` qo'shildi. `SLIDE_LAYOUTS`, `isSlideLayout`, `coerceLayout` va `slide-layout.ts`daki renderer (`case "table"`) barchasi ALLAQACHON tayyor edi va hatto testlangan edi (`slide-layout.test.mts`) — yagona teshik promptga yuboriladigan enum satri edi. `report`/`defense` shablonlaridagi `{layout:"table"}` beat shu sababli hech qachon bajarilmasdi | `slide-write.ts` (JSON sxema satri) |
+| 3 | Slayd formasida «sifatli rasm» → «**sifatliroq** rasm». Standart darajadagi rasm ham fal.ai bilan chiziladi; sozlamada `FAL_MODEL_PREMIUM` ko'rsatilmasa, premium farqi «boshqa model» emas, «ko'proq (8 vs 4) qadam» — bu haqiqiy, lekin NISBIY farq | `components/forms/SlideForm.tsx` |
+
+### 10.2. Jonli tekshiruv
+
+| Sinov | Natija |
+|---|---|
+| «report» shablon, standart sifat | 10 slayd, `table` layoutli slayd 4 ustunli, 3 qatorli haqiqiy jadval bilan chiqdi (uydirma raqamsiz — tasnif/qiyos) ✅ |
+| «defense» shablon, premium sifat | 12 slayd, `table` layout ham bor, to'liq PPTX 3.8 MB muvaffaqiyatli yig'ildi (xatosiz) ✅ |
+
+### 10.3. Testlar
+
+`npm run check` toza (142 test, o'zgarishsiz — floor va enum o'zgarishi mavjud `coerceLayout`/slayd testlari bilan allaqachon qoplangan, yangi mock-asoslangan LLM testi loyihaning o'z uslubiga mos emas: bunday o'zgarishlar jonli sinov bilan tasdiqlanadi, AUDIT.md dagi naqsh bo'yicha).
+
+---
+
+## 11. Yakuniy xulosa
 
 `docs/AUDIT.md` "va'da = natija" muammosini **hajm va mavjudlik** darajasida hal qildi: slayd soni, speaker notes, adabiyot halolligi — bularning barchasi men joriy koddan tasdiqladim, ishlaydi. 2026-08-24 dagi olti tashqi hisobot (ulardan uchtasi mustaqil ravishda bir xil xulosaga kelib, sakkiztasi men tomonimdan qator darajasida tasdiqlandi) ko'rsatadiki, keyingi qatlam — **janr va format darajasidagi** rostgo'ylik. Kod "biror narsa chiqardi" dan "va'da qilingan hajmni berdi" ga o'tgan (Sprint 0–4). Keyingi qadam — "va'da qilingan **janr**ni berdi": referat adabiyot sharhi bo'lsin, kurs ishi tadqiqot bo'lsin, maqola jurnal maqolasi ko'rinishida chiqsin — hozir esa beshtasi ham bir xil "uzun insho" ko'rinishida.
 

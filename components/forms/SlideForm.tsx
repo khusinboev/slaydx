@@ -33,11 +33,18 @@ const AUDIENCE = [
   { value: "pitch", label: "Pitch" },
 ];
 
+/*
+ * «Sifatli rasm» → «sifatliroq rasm»: standart paket ham fal.ai rasm
+ * bilan ishlaydi, premium esa (sozlamada FAL_MODEL_PREMIUM ko'rsatilmasa)
+ * bir xil modelning ko'proq (8 vs 4) qadamli chizilishi — bu haqiqiy,
+ * lekin NISBIY farq, «sifatli» (aksincha standart sifatsiz degandek
+ * o'qiladi) emas.
+ */
 const QUALITY = [
   { value: "standard", label: "Standart · 10 slayd · 3 000" },
   { value: "long", label: "Uzun · 14 slayd · 5 000" },
-  { value: "premium", label: "Premium · 12 slayd · sifatli rasm · 6 000" },
-  { value: "premium_long", label: "Premium uzun · 16 slayd · sifatli rasm · 8 000" },
+  { value: "premium", label: "Premium · 12 slayd · sifatliroq rasm · 6 000" },
+  { value: "premium_long", label: "Premium uzun · 16 slayd · sifatliroq rasm · 8 000" },
 ];
 
 export function SlideForm({ tool }: { tool: ToolConfig }) {

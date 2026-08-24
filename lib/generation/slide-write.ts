@@ -370,7 +370,16 @@ export async function writeSlidesWithLlm(
       done.length
         ? `ALLAQACHON YOZILGAN slayd sarlavhalari — ularning mavzusini va raqamlarini TAKRORLAMANG:\n${done.map((t, i) => `${i + 1}) ${t}`).join("\n")}`
         : "",
-      `JSON sxema: {"slides":[{"layout":"title|agenda|section|bullets|twoCol|compare|quote|stats|process|closing","kicker":"","title":"","subtitle":"","imageHint":"","notes":"","bullets":[""],"leftTitle":"","left":[""],"rightTitle":"","right":[""],"quote":"","quoteBy":"","stats":[{"value":"","label":""}],"steps":[{"n":"1","title":"","text":""}],"table":{"headers":["",""],"rows":[["",""]]}}]}`,
+      /*
+       * `layout` enumida «table» YO'Q edi, garchi pastdagi `table`
+       * ma'lumot maydoni va renderer (`slide-layout.ts` `case "table"`)
+       * allaqachon bor edi. Natijada `report`/`defense` shablonlarining
+       * `{ layout: "table", role: "..." }` beat'i model tomonidan hech
+       * qachon bajarilmasdi — model enumda yo'q qiymatni tanlay olmaydi,
+       * `coerceLayout` esa uni boshqa layoutga (odatda `bullets`) majburlab
+       * qo'yardi. Deck jadval va'da qilingan joyda ham jadvalsiz chiqardi.
+       */
+      `JSON sxema: {"slides":[{"layout":"title|agenda|section|bullets|twoCol|compare|quote|stats|process|table|closing","kicker":"","title":"","subtitle":"","imageHint":"","notes":"","bullets":[""],"leftTitle":"","left":[""],"rightTitle":"","right":[""],"quote":"","quoteBy":"","stats":[{"value":"","label":""}],"steps":[{"n":"1","title":"","text":""}],"table":{"headers":["",""],"rows":[["",""]]}}]}`,
     ].join("\n");
     const maxTokens = Math.min(9_000, 2_000 + n * 420);
     const raw = await llmComplete(slideSystem(meta, tpl), user, maxTokens, { json: true, timeoutMs: 90_000 });
@@ -404,7 +413,19 @@ export async function writeSlidesWithLlm(
   const written: string[] = [];
   const parts: SlideModel[][] = [];
   for (const r of ranges) {
-    const got = await askRange(r.from, r.to, written);
+    let got = await askRange(r.from, r.to, written);
+    /*
+     * Bo'lak so'ralganidan kam slayd bilan qaytishi mumkin (javob token
+     * chegarasiga urilishi yoki modelning shunchaki kamroq berishi
+     * mumkin) — bu asosiy sabab «premium_long» 16 ta emas 12 ta bilan
+     * yakunlanardi. Bitta qayta urinish (`rawOutline`/`writeAbstracts`
+     * naqshi) ko'pincha yetishmagan slaydlarni tiklaydi; yaxshiroq
+     * natija olinadi, yomoni tashlab yuboriladi.
+     */
+    if (got.length < r.to - r.from) {
+      const retry = await askRange(r.from, r.to, written);
+      if (retry.length > got.length) got = retry;
+    }
     parts.push(got);
     for (const sl of got) if (sl.title) written.push(sl.title);
   }
@@ -442,9 +463,19 @@ export async function writeSlidesWithLlm(
       .map((sl, i) => (sl && plan[i] ? coerceLayout(sl, plan[i].layout, rules.maxBullets) : sl))
       .filter((sl): sl is SlideModel => Boolean(sl)),
   );
-  // Va’da qilingan hajmning 75% i — quyi chegara. Bundan kam bo‘lsa deck
-  // paketga mos kelmaydi; `null` qaytarib, chaqiruvchi pulni qaytaradi.
-  const floor = Math.max(6, Math.ceil(want * 0.75));
+  /*
+   * Va'da qilingan hajmning quyi chegarasi. Bundan kam bo'lsa deck
+   * paketga mos kelmaydi; `null` qaytarib, chaqiruvchi pulni qaytaradi.
+   *
+   * Ilgari 0.75 edi — «premium_long» (16 slayd, 8 000 tanga) shu bilan
+   * 12 tasi bilan ham yakunlanardi, garchi foydalanuvchi aniq «16»
+   * ko'rgan bo'lsa ham. Yuqoridagi qayta urinish yetishmovchilikning
+   * katta qismini yopadi, shuning uchun chegara endi 0.85 — birdaniga
+   * 1.0 ga emas (ba'zi mavzularda ikkinchi urinishdan keyin ham bir-ikki
+   * slayd kam qolishi mumkin, buni butunlay rad etish ko'proq FAILED va
+   * qayta-urinishga olib keladi).
+   */
+  const floor = Math.max(6, Math.ceil(want * 0.85));
   if (slides.length < floor) {
     console.warn("[slide-write] too few slides", slides.length, "want", want);
     return null;
