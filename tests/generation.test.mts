@@ -423,6 +423,37 @@ test("adabiyot filtri tekshirib bo'lmaydigan aniqlikni rad etadi", async () => {
   assert.ok(!isReferenceLine("K".repeat(300)));
 });
 
+/**
+ * Matn ichi iqtibos [n] — faqat mavjud ro'yxat oralig'ida.
+ *
+ * Sprint 6: model manba ro'yxatidan tashqari raqam uydirishi yoki
+ * `refPlan` ishga tushib chop etiladigan ro'yxat butunlay boshqasiga
+ * (qidiruv so'rovlariga) almashtirilishi mumkin — ikkalasida ham
+ * osilib qolgan [n] iqtibossiz gapdan yomonroq.
+ */
+test("sanitizeCitations faqat oraliqdagi [n] ni saqlaydi", async () => {
+  const { sanitizeCitations } = await import("../lib/generation/quality.ts");
+
+  assert.equal(
+    sanitizeCitations("Bu jarayon energiya almashinuvini ta'minlaydi [2].", 5),
+    "Bu jarayon energiya almashinuvini ta'minlaydi [2].",
+  );
+  // Ro'yxatdan tashqari raqam — olib tashlanadi, gap qoladi.
+  assert.equal(
+    sanitizeCitations("Bu jarayon energiya almashinuvini ta'minlaydi [9].", 5),
+    "Bu jarayon energiya almashinuvini ta'minlaydi.",
+  );
+  // Ro'yxat butunlay yo'q (refPlan) — barcha [n] olib tashlanadi.
+  assert.equal(sanitizeCitations("Natija shuni ko'rsatadi [1].", 0), "Natija shuni ko'rsatadi.");
+  // Bir nechta iqtibos — faqat noto'g'risi olib tashlanadi.
+  assert.equal(
+    sanitizeCitations("Birinchi da'vo [1], ikkinchisi esa [12] edi.", 3),
+    "Birinchi da'vo [1], ikkinchisi esa edi.",
+  );
+  // Iqtibossiz matn o'zgarishsiz qoladi.
+  assert.equal(sanitizeCitations("Oddiy gap, raqamsiz.", 5), "Oddiy gap, raqamsiz.");
+});
+
 // ------------------------------------------------ janr differensiatsiyasi
 
 /**

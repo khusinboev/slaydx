@@ -8,6 +8,7 @@ import {
   mapPool,
   parseManualOutline,
   referenceSearchPlan,
+  sanitizeCitations,
   unverifiedReferenceNote,
   remainingMs,
   section,
@@ -55,6 +56,21 @@ export function isReferenceLine(r: string): boolean {
   return hasYear || hasPublisher;
 }
 
+/**
+ * Manbalarga havola qanday berilishi.
+ *
+ * Ro'yxat bo'sh bo'lsa (masalan `refPlan` ishga tushgan — real manba
+ * yetarli topilmagan) hech narsa qaytarilmaydi: mavjud bo'lmagan
+ * ro'yxatga [n] bilan ishora qilish uydirma iqtibosdan yaxshi emas.
+ */
+function citeInstruction(refs: string[]): string {
+  if (!refs.length) return "";
+  return [
+    `Quyidagi adabiyotlar ro‘yxati mavjud. Faqat aynan mos keladigan gapda, gap oxirida [n] shaklida ishora qiling (n — pastdagi raqam). Mos kelmasa hech narsa qo‘ymang. Ro‘yxatdan tashqari raqam UYDIRMANG, har paragrafga majburan iqtibos tiqmang:`,
+    ...refs.map((r, i) => `${i + 1}. ${r}`),
+  ].join("\n");
+}
+
 async function writeSection(
   sys: string,
   title: string,
@@ -63,6 +79,7 @@ async function writeSection(
   minParas: number,
   timeoutMs: number,
   thinking = 0,
+  refs: string[] = [],
 ): Promise<Block[]> {
   if (timeoutMs < 4_000) return [];
   const user = [
@@ -72,7 +89,10 @@ async function writeSection(
     `Nima yozish: ${brief}`,
     `Kamida ${minParas} ta to‘la paragraf (har biri 80–130 so‘z). Faqat shu bo‘lim.`,
     `Mavzuga xos atama, mexanizm yoki misol yozing. Umumiy shior va boshqa soha aralashmasin.`,
-  ].join("\n");
+    citeInstruction(refs),
+  ]
+    .filter(Boolean)
+    .join("\n");
   const text = await llmComplete(sys, user, Math.min(7000, 900 + minParas * 420), { timeoutMs, thinking });
   if (!text) {
     console.warn("[write-llm] empty response for", title);
@@ -129,6 +149,24 @@ function numberOutline(
 async function buildOutline(meta: DocMeta, sys: string, L: ReturnType<typeof sectionLabels>, deadline?: number) {
   const out = await rawOutline(meta, sys, L, deadline);
   return { ...out, chapters: numberOutline(out.chapters, L, isBobStyle(meta.toolId)) };
+}
+
+/**
+ * Yakuniy [n] tozalash.
+ *
+ * `writeSection` promptda manba raqamlarini beradi va model shulardan
+ * tashqarisini uydirmaslikni so'raladi, lekin va'da emas — kafolat kerak.
+ * `maxIndex` — foydalanuvchiga ko'rsatiladigan (`refPlan` bo'lsa 0)
+ * ro'yxatning uzunligi; undan tashqari [n] osilib qolgan iqtibos bo'lardi.
+ */
+function citeGuard(sections: DocSection[], maxIndex: number) {
+  for (const s of sections) {
+    for (const b of s.blocks) {
+      if (b.kind === "p" || b.kind === "li" || b.kind === "quote") {
+        b.text = sanitizeCitations(b.text, maxIndex);
+      }
+    }
+  }
 }
 
 /**
@@ -439,6 +477,35 @@ export async function writeWriterWithLlm(meta: DocMeta, deadline?: number): Prom
   const pages = Math.max(4, meta.targetPages || 8);
   const want = targetWords(pages);
   const { chapters } = await buildOutline(meta, sys, L, deadline);
+  const bobStyle = isBobStyle(meta.toolId);
+
+  /**
+   * Manbalar ENDI bo'limlar yozilishidan OLDIN so'raladi (ilgari oxirida
+   * edi). Sabab — matn ichi iqtibos ([n]): `writeSection` ro'yxatni
+   * ko'rmasa, gap oxiriga qaysi raqamni qo'yishni bilmaydi.
+   *
+   * Model 4 tadan kam ishonchli manba bersa, uydirmaymiz — foydalanuvchiga
+   * qidiruv rejasi ko'rsatiladi (`refPlan`). Shu holatda matn ichida ham
+   * iqtibos BERILMAYDI: printsipial ro'yxat (o'quvchi ko'radigan) bilan
+   * matndagi [n] mos kelmasa, bu ro'yxatdan ham yomonroq — osilib qolgan
+   * havola.
+   */
+  const refRaw =
+    remainingMs(deadline) > 8_000
+      ? await llmComplete(
+          sys,
+          `«${topic}» bo‘yicha ${meta.toolId === "coursework" ? "8–10" : "6–8"} ta USLUBIY adabiyot qatori. Format: Muallif. Nom. – Shahar: Nashriyot, yil.\nSoxta DOI/ISSN/jurnal tomi/GOST YO‘Q. Umumiy darslik yoki qo‘llanma, faqat shu mavzu sohasida.`,
+          700,
+          { timeoutMs: Math.min(25_000, remainingMs(deadline)) },
+        )
+      : null;
+  const references = (refRaw ? blocksFromText(refRaw).map((b) => b.text) : [])
+    .map((r) => r.replace(/\*\*/g, "").replace(/^[_*]+|[_*]+$/g, "").trim())
+    .filter(isReferenceLine)
+    .slice(0, 10);
+  // Model yetarli manba bermasa uydirmaymiz — qidiruv rejasini beramiz.
+  const refPlan = references.length >= 4 ? null : referenceSearchPlan(topic, meta.subject, meta.language);
+  const citeRefs = refPlan ? [] : references;
 
   /**
    * Har OSTMAVZU alohida yoziladi va boshqalarning ro'yxatini biladi.
@@ -532,7 +599,16 @@ export async function writeWriterWithLlm(meta: DocMeta, deadline?: number): Prom
     const left = remainingMs(deadline);
     if (left < 5_000) return { item, blocks: [] as Block[] };
     const budget = item.kind === "sub" ? 38_000 : 45_000;
-    let blocks = await writeSection(sys, item.title, item.brief, meta, item.min, Math.min(budget, left), thinking);
+    let blocks = await writeSection(
+      sys,
+      item.title,
+      item.brief,
+      meta,
+      item.min,
+      Math.min(budget, left),
+      thinking,
+      citeRefs,
+    );
     if (!blocks.length && remainingMs(deadline) > 8_000) {
       blocks = await writeSection(
         sys,
@@ -541,6 +617,8 @@ export async function writeWriterWithLlm(meta: DocMeta, deadline?: number): Prom
         meta,
         Math.max(2, item.min - 2),
         Math.min(30_000, remainingMs(deadline)),
+        0,
+        citeRefs,
       );
     }
     return { item, blocks };
@@ -570,7 +648,9 @@ export async function writeWriterWithLlm(meta: DocMeta, deadline?: number): Prom
 
   if (sections.length < 3) {
     console.warn("[write-llm] too few sections", sections.length);
-    return sections.length ? { meta, titlePage: true, toc: true, sections } : null;
+    if (!sections.length) return null;
+    citeGuard(sections, citeRefs.length);
+    return { meta, titlePage: true, toc: true, sections };
   }
 
   if (wantsCodeSample(meta) && remainingMs(deadline) > 12_000 && !sections.some((s) => s.blocks.some((b) => b.kind === "code"))) {
@@ -613,20 +693,6 @@ export async function writeWriterWithLlm(meta: DocMeta, deadline?: number): Prom
     }
   }
 
-  const refRaw =
-    remainingMs(deadline) > 8_000
-      ? await llmComplete(
-          sys,
-          `«${topic}» bo‘yicha ${meta.toolId === "coursework" ? "8–10" : "6–8"} ta USLUBIY adabiyot qatori. Format: Muallif. Nom. – Shahar: Nashriyot, yil.\nSoxta DOI/ISSN/jurnal tomi/GOST YO‘Q. Umumiy darslik yoki qo‘llanma, faqat shu mavzu sohasida.`,
-          700,
-          { timeoutMs: Math.min(25_000, remainingMs(deadline)) },
-        )
-      : null;
-  const references = (refRaw ? blocksFromText(refRaw).map((b) => b.text) : [])
-    .map((r) => r.replace(/\*\*/g, "").replace(/^[_*]+|[_*]+$/g, "").trim())
-    .filter(isReferenceLine)
-    .slice(0, 10);
-
   /**
    * Maqola/tezisga annotatsiya va kalit so'zlar.
    *
@@ -641,9 +707,6 @@ export async function writeWriterWithLlm(meta: DocMeta, deadline?: number): Prom
   }
 
   const tables = (meta as DocMeta & { _tables?: AcademicDoc["tables"] })._tables;
-
-  // Model yetarli manba bermasa uydirmaymiz — qidiruv rejasini beramiz.
-  const refPlan = references.length >= 4 ? null : referenceSearchPlan(topic, meta.subject, meta.language);
 
   const doc: AcademicDoc = {
     meta,
@@ -726,7 +789,10 @@ export async function writeWriterWithLlm(meta: DocMeta, deadline?: number): Prom
    * kontekstni beradi.
    */
   const extraNo = chapters.length + 1;
-  const extraChapter = section("qoshimcha", `${L.chapterPrefix(extraNo)} ${L.chapterExtra}`, []);
+  // Maqola/tezis (bobsiz janr) uchun ham «VI BOB.» chiqmasin — Sprint 5
+  // dagi jurnal/konferensiya uslubi shu yerda ham saqlanishi kerak.
+  const extraTitle = bobStyle ? `${L.chapterPrefix(extraNo)} ${L.chapterExtra}` : `${extraNo}. ${L.chapterExtra}`;
+  const extraChapter = section("qoshimcha", extraTitle, []);
   let subNo = 0;
   let misses = 0;
 
@@ -745,6 +811,8 @@ export async function writeWriterWithLlm(meta: DocMeta, deadline?: number): Prom
       meta,
       Math.max(3, Math.min(6, Math.round(need / 110))),
       Math.min(45_000, remainingMs(deadline)),
+      0,
+      citeRefs,
     );
     /*
      * Bo'sh javob shu burchakni tashlaydi, tsikl davom etadi. Ilgari
@@ -763,6 +831,7 @@ export async function writeWriterWithLlm(meta: DocMeta, deadline?: number): Prom
     extraChapter.blocks.push({ kind: "h2", text: `${extraNo}.${subNo}. ${topup.label}` }, ...extra);
   }
 
+  citeGuard(sections, citeRefs.length);
   return doc;
 }
 

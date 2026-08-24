@@ -328,6 +328,28 @@ export function stripHeadingNumber(title: string): string {
   return cut.length >= 3 ? cut : t;
 }
 
+const CITATION = /\s?\[(\d{1,2})\]/g;
+
+/**
+ * Matndagi [n] iqtiboslarni tozalaydi — faqat 1..maxIndex oralig'idagi
+ * raqamlar qoladi.
+ *
+ * Model paragraf yozganda promptda berilgan manba ro'yxatidan tashqari
+ * raqam UYDIRISHI mumkin (masalan ro'yxatda 6 ta manba bo'lsa ham
+ * «[9]» yozib qo'yishi), yoki `refPlan` ishga tushib chiqish
+ * ro'yxatidagi manbalar butunlay boshqasiga (qidiruv so'rovlariga)
+ * almashtirilganda ([n] endi hech narsaga ishora qilmay qoladi).
+ * Ikkalasida ham noto'g'ri/osilib qolgan iqtibosdan ko'ra iqtibossiz
+ * gap yaxshiroq — shuning uchun oraliqdan tashqari raqam olib
+ * tashlanadi, gap o'zi qoladi.
+ */
+export function sanitizeCitations(text: string, maxIndex: number): string {
+  return text.replace(CITATION, (whole, d: string) => {
+    const n = Number(d);
+    return n >= 1 && n <= maxIndex ? whole : "";
+  });
+}
+
 const ROMAN = ["I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X"];
 
 /** 1 → «I». Chegaradan chiqsa arab raqami qaytadi. */
