@@ -208,7 +208,41 @@ Bajarilmagan: referat/mustaqil ish/maqola/tezisning render-docx darajasidagi **t
 
 ---
 
-## 9. Yakuniy xulosa
+## 9. Sprint 6 — bajarildi (2026-08-24)
+
+§6 dagi Sprint 6 ning uchala bandi ham bajarildi va jonli Gemini + LibreOffice bilan tasdiqlandi.
+
+### 9.1. Nima qilindi
+
+| # | Ish | Fayl |
+|---|---|---|
+| 1 | Manba fayl 24 000 belgidan uzun bo'lsa, «fayl asosida» rejimida forma darhol ogohlantiradi: nechta belgi ishlatiladi, nechtasi tashlab ketiladi. Ilgari uzunlik ko'rsatilardi, lekin kesilish haqida hech narsa aytilmasdi | `components/forms/SourceFileField.tsx` |
+| 2 | Matn ichida `[n]` iqtibos: manbalar endi bo'limlar yozilishidan OLDIN so'raladi, `writeSection` ularni promptga beradi va modeldan mos gapda ko'rsatishni so'raydi. `refPlan` ishga tushsa (< 4 ishonchli manba) iqtibos umuman so'ralmaydi — chop etiladigan ro'yxat qidiruv so'rovlariga almashtirilgani uchun. Yakunida `citeGuard`/`sanitizeCitations` oraliqdan tashqari yoki osilib qolgan `[n]` larni tozalaydi | `write-llm.ts`, `quality.ts` |
+| 3 | Renderlangan sahifa soni darvozasi: `renderDocx` dan keyin LibreOffice orqali PDF ga o'giriladi (`toPdf`, mavjud infratuzilma), `unpdf`ning `getDocumentProxy(...).numPages` bilan haqiqiy sahifa soni sanaladi va diapazonning **pastki chegarasining 85%** idan kam bo'lsa `FAILED` + kredit qaytadi. So'z darvozasi diapazon o'rtachasiga (80%) qaraydi — bu esa pastki chegaraga, ikkinchi, mustaqil tekshiruv | `index.ts` (`buildArtifact`), `meta.ts` (`minPages`) |
+
+Sahifa darvozasi LibreOffice o'rnatilmagan yoki byudjet tugagan muhitda **jim o'tkazib yuboriladi** — ikkilamchi tekshiruv infratuzilma yetishmovchiligi tufayli to'g'ri hujjatni rad etmasligi kerak.
+
+### 9.2. Jonli tekshiruv
+
+| Sinov | Natija |
+|---|---|
+| Referat, 7 ta real manba | 30 paragrafda `[1]`–`[7]` iqtibos, 0 ta oraliqdan tashqari (Gemini) ✅ |
+| Referat «10–15 bet» kalibrlash | so'z 95% (2854/2990), PDF **13 bet** (pastki chegara 10) ✅ |
+| Kurs ishi «20–25 bet» kalibrlash | so'z 92% (4887/5290), PDF **21 bet** (pastki chegara 20 — chegaraga yaqin, aynan darvoza mo'ljallagan holat) ✅ |
+| To'liq `buildArtifact` (referat + kurs ishi) | Ikkalasi ham `FAILED` bermay, haqiqiy DOCX bilan yakunlandi — yolg'on musbat yo'q | ✅ |
+
+### 9.3. Testlar
+
+`npm run check` toza (142 test, 139 o'tdi, 3 skip, 0 xato). Yangi: `sanitizeCitations` (5 holat), `minPages` (5 holat).
+
+### 9.4. Qolgan ish
+
+- §9.4 (Sprint 5 dan) — akademik janrlar uchun DOCX darajasidagi tuzilma darvozasi (masalan «maqolada annotatsiya yo'q → FAILED») hali yo'q, faqat prompt darajasida talab qilinadi.
+- Sprint 7 (slayd va rasm — 75% floor, `table` layout enumga qo'shish, premium rasm modeli) va Sprint 8 (o'qituvchi vositalari — rubrika normalizatsiyasi, glossariy atama soni, texnologik xarita soat invarianti) hali boshlanmagan.
+
+---
+
+## 10. Yakuniy xulosa
 
 `docs/AUDIT.md` "va'da = natija" muammosini **hajm va mavjudlik** darajasida hal qildi: slayd soni, speaker notes, adabiyot halolligi — bularning barchasi men joriy koddan tasdiqladim, ishlaydi. 2026-08-24 dagi olti tashqi hisobot (ulardan uchtasi mustaqil ravishda bir xil xulosaga kelib, sakkiztasi men tomonimdan qator darajasida tasdiqlandi) ko'rsatadiki, keyingi qatlam — **janr va format darajasidagi** rostgo'ylik. Kod "biror narsa chiqardi" dan "va'da qilingan hajmni berdi" ga o'tgan (Sprint 0–4). Keyingi qadam — "va'da qilingan **janr**ni berdi": referat adabiyot sharhi bo'lsin, kurs ishi tadqiqot bo'lsin, maqola jurnal maqolasi ko'rinishida chiqsin — hozir esa beshtasi ham bir xil "uzun insho" ko'rinishida.
 

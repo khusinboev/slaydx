@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { TOOL_BY_ID } from "../lib/tools.ts";
-import { extractMeta, parseAuthorLine } from "../lib/generation/meta.ts";
+import { extractMeta, minPages, parseAuthorLine } from "../lib/generation/meta.ts";
 import { renderDocx } from "../lib/generation/render-docx.ts";
 import type { AcademicDoc } from "../lib/generation/types.ts";
 import type { FormValues } from "../lib/types.ts";
@@ -67,6 +67,23 @@ test("kurs/guruh yo'q satr o'zgarishsiz qoladi", () => {
     assert.equal(p.course, "");
     assert.equal(p.group, "");
   }
+});
+
+/**
+ * Post-render sahifa darvozasi PASTKI chegaraga qaraydi, o'rtachaga emas.
+ *
+ * «15–20 bet» va'da qilinganda foydalanuvchi kamida 15 ni kutadi.
+ * `parsePages` (targetPages uchun) o'rtachani beradi — bu funksiya esa
+ * ataylab pastki chegarani.
+ */
+test("minPages diapazonning pastki chegarasini qaytaradi", () => {
+  assert.equal(minPages("10-15", 8), 10);
+  assert.equal(minPages("40-45", 8), 40);
+  // Yagona son (insho «varaq») — o'zi qaytadi.
+  assert.equal(minPages("2", 8), 2);
+  // Bo'sh yoki buzuq qiymat — fallback.
+  assert.equal(minPages("", 8), 8);
+  assert.equal(minPages("noma'lum", 8), 8);
 });
 
 test("alohida maydon berilsa u satrdan ustun turadi", () => {

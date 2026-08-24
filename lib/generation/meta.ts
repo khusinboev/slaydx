@@ -18,6 +18,23 @@ function parsePages(raw: string, fallback: number) {
   return Number.isFinite(n) ? n : fallback;
 }
 
+/**
+ * Diapazonning PASTKI chegarasi — post-render sahifa darvozasi uchun.
+ *
+ * `parsePages` o'rtachani beradi (narx va matn hajmi hisobi uchun mos),
+ * lekin foydalanuvchiga «15–20 bet» deb va'da berilganda, u kamida 15
+ * bet kutadi — 18 emas. Renderlangan PDF shu pastki chegara bilan
+ * solishtiriladi.
+ */
+export function minPages(raw: string, fallback: number): number {
+  if (!raw) return fallback;
+  if (/^\d+$/.test(raw)) return Math.max(1, Number(raw));
+  const m = raw.match(/(\d+)\s*-\s*(\d+)/);
+  if (m) return Math.max(1, Number(m[1]));
+  const n = parseInt(raw, 10);
+  return Number.isFinite(n) ? n : fallback;
+}
+
 export function ministryTitle(code: string) {
   if (code === "maktab") {
     return "O‘ZBEKISTON RESPUBLIKASI\nMAKTABGACHA VA MAKTAB TA’LIMI VAZIRLIGI";
