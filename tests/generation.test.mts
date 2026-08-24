@@ -358,6 +358,52 @@ test("dars bosqichlari yig'indisi davomiylikka teng bo'ladi", async () => {
 });
 
 /**
+ * Keys rubrikasi balllari yig'indisi 10 ga tenglashishi (N-8).
+ *
+ * Prompt «ballar yig'indisi 10» deydi, lekin bu tavsiya edi — kod hech
+ * qachon tekshirmasdi. Model 7, 12 yoki 15 qaytarishi mumkin edi va
+ * o'qituvchi baholay olmaydigan rubrika chiqardi.
+ */
+test("keys rubrikasi balllari 10 ga normalizatsiya qilinadi", async () => {
+  const { rubricBlocks } = await import("../lib/generation/write-specials.ts");
+  const { sectionLabels } = await import("../lib/generation/i18n.ts");
+  const L = sectionLabels("uz");
+
+  const totalOf = (blocks: ReturnType<typeof rubricBlocks>) => {
+    const last = blocks[blocks.length - 1];
+    return last?.kind === "p" ? Number(last.text.match(/(\d+)/)?.[1]) : NaN;
+  };
+
+  // Model 7 ga teng yig'indi bergan — 10 ga ko'tariladi.
+  assert.equal(
+    totalOf(rubricBlocks([{ criterion: "To'liqlik", points: 3 }, { criterion: "Aniqlik", points: 4 }], L)),
+    10,
+  );
+  // Model 15 ga teng yig'indi bergan — 10 ga tushiriladi.
+  assert.equal(
+    totalOf(
+      rubricBlocks(
+        [
+          { criterion: "To'liqlik", points: 5 },
+          { criterion: "Aniqlik", points: 5 },
+          { criterion: "Asoslash", points: 5 },
+        ],
+        L,
+      ),
+    ),
+    10,
+  );
+  // Allaqachon 10 — o'zgarishsiz qoladi.
+  const already = rubricBlocks([{ criterion: "To'liqlik", points: 6 }, { criterion: "Aniqlik", points: 4 }], L);
+  assert.equal(totalOf(already), 10);
+  assert.match(already[1].kind === "li" ? already[1].text : "", /6 ball/);
+
+  // Ball raqami bo'lmasa yoki mezon kam bo'lsa — bo'lim chiqmaydi.
+  assert.deepEqual(rubricBlocks([{ criterion: "Yagona mezon", points: 5 }], L), []);
+  assert.deepEqual(rubricBlocks(undefined, L), []);
+});
+
+/**
  * Rezyume fakt qo'riqchisi (P1-19).
  *
  * Rezyume hujjat emas, DA'VO: yo'q ish joyi yozilgan CV bilan suhbatga

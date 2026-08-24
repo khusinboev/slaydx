@@ -353,10 +353,22 @@ export function rubricBlocks(
     .filter((r) => r.criterion.length > 2 && Number.isFinite(r.points) && r.points > 0)
     .slice(0, 5);
   if (rows.length < 2) return [];
-  const total = rows.reduce((a, r) => a + r.points, 0);
+  /**
+   * Ball yig'indisi 10 ga MAJBURAN tenglashtiriladi.
+   *
+   * Prompt «ballar yig'indisi 10» deb so'raydi, lekin bu tavsiya edi —
+   * hech narsa tekshirmasdi, model 8, 12 yoki 15 qaytarishi mumkin edi.
+   * O'qituvchi bunday rubrikani ishlata olmaydi. `normalizeMinutes`
+   * bilan BIR XIL algoritm qo'llaniladi (nisbat saqlab moslashtirish,
+   * qoldiqni eng kattasiga qo'shish) — u ham aslida «bir nechta qiymatni
+   * kamida 1 shart bilan aniq yig'indiga moslash» masalasi, faqat
+   * daqiqa emas, ball uchun.
+   */
+  const points = normalizeMinutes(rows.map((r) => r.points), 10);
+  const total = points.reduce((a, b) => a + b, 0);
   return [
     { kind: "h3", text: L.rubric },
-    ...rows.map((r) => ({ kind: "li" as const, text: `${r.criterion} — ${r.points} ${L.points}` })),
+    ...rows.map((r, i) => ({ kind: "li" as const, text: `${r.criterion} — ${points[i]} ${L.points}` })),
     { kind: "p", text: `${L.totalPoints}: ${total} ${L.points}` },
   ];
 }
@@ -634,12 +646,24 @@ export async function writeMapWithLlm(meta: DocMeta, deadline?: number): Promise
   }
   const L = sectionLabels(meta.language);
   const filled = unique.slice(0, weeks);
+  /**
+   * Soat ustuni yig'indisi `total` ga QAT'IY teng (N-11).
+   *
+   * Ilgari har qator doim `weekly` soat olardi. 70% chegara `filled.length`
+   * ni `weeks` dan kam qoldirsa (masalan 34 talab qilingan, 25 noyob mavzu
+   * topilgan), jadval yig'indisi `25 × weekly` bo'lib qolar, pasportdagi
+   * `total` esa (masalan 136) o'zgarmasdi — o'qituvchi ikkitasini
+   * solishtirsa mos kelmasdi. `normalizeMinutes` bilan bir xil algoritm:
+   * soatlar nisbat saqlab `total` ga taqsimlanadi — kamroq mavzu bo'lsa,
+   * har biriga biroz ko'proq soat (chuqurroq o'rganish), ko'p bo'lsa kamroq.
+   */
+  const hours = normalizeMinutes(new Array(filled.length).fill(weekly), total);
   const table: DocTable = {
     caption: L.yearPlan,
     headers: [...L.yearCols],
     rows: filled.map((row, i) => [
       String(i + 1),
-      String(weekly),
+      String(hours[i]),
       row.topic,
       row.method,
       row.result,

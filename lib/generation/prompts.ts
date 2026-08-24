@@ -202,7 +202,13 @@ export function lessonSystemPrompt(meta: DocMeta): string {
     `Fan: ${meta.subject}. Sinf: ${meta.grade}. Mavzu: «${meta.topic}». Davomiyligi: ${meta.duration} daq.`,
     `Bosqichlar shu mavzuga bog‘langan bo‘lsin (umumiy «salomlashish»dan tashqari aniq savol, mashq, misol).`,
     `Uydirma muallif va dastur nomi yozmang.`,
-  ].join("\n");
+    // Forma `extraOptional: true` bilan «Qo'shimcha talablar» maydonini
+    // ochadi (`tools.ts`), lekin bu qator yo'q edi — glossary/keys dan
+    // farqli, foydalanuvchi yozgani hech qayerga tushmasdi.
+    meta.extra ? `Qo‘shimcha talab: ${meta.extra}` : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 export function glossarySystemPrompt(meta: DocMeta): string {
