@@ -304,10 +304,25 @@ const ROMAN_KEYED =
   /^(?:(?:chapter|глава|bob)\s+[ivxlc]{1,4}|[ivxlc]{1,4}\s*[-–—]?\s*(?:bob|глава|chapter))\s*[.)]?\s+/i;
 /** Kalit so'zsiz rim raqami — faqat ikki harfdan boshlab. */
 const ROMAN_BARE = /^[ivxlc]{2,4}\s*[-–—]?\s*[.)]\s+/i;
+/**
+ * Kalit so'zli ARAB raqami — «1-BOB.», «2 BOB», «1-ГЛАВА».
+ *
+ * Model ba'zan rim o'rniga arab raqamini ishlatadi. Bu qolipsiz
+ * `ARABIC_LEAD` «1-BOB.» dagi «1» dan keyingi «-BOB» ni kesa olmaydi
+ * (u faqat `1.1` yoki `1.` shaklini kutadi), natijada kod o'z prefiksini
+ * («I BOB.») ustiga qo'shib «I BOB. 1-BOB. …» kabi qo'sh sarlavha
+ * chiqargan — jonli sinovda ko'rindi.
+ */
+const ARABIC_KEYED = /^\d{1,2}\s*[-–—]?\s*(?:bob|глава|chapter)\s*[.)]?\s+/i;
 
 export function stripHeadingNumber(title: string): string {
   const t = String(title ?? "").trim();
-  const cut = t.replace(ROMAN_KEYED, "").replace(ROMAN_BARE, "").replace(ARABIC_LEAD, "").trim();
+  const cut = t
+    .replace(ROMAN_KEYED, "")
+    .replace(ARABIC_KEYED, "")
+    .replace(ROMAN_BARE, "")
+    .replace(ARABIC_LEAD, "")
+    .trim();
   // Sarlavha butunlay raqamdan iborat bo'lsa (masalan «2.2»), asl matn
   // qoladi — bo'sh sarlavha raqamsizdan ham yomon.
   return cut.length >= 3 ? cut : t;

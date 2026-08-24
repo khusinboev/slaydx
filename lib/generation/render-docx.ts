@@ -205,7 +205,29 @@ export async function renderDocx(doc: AcademicDoc): Promise<Uint8Array> {
   const year = new Date().getFullYear();
   const children: Array<Paragraph | Table> = [];
 
-  if (doc.titlePage) {
+  if (doc.titlePage && meta.toolId === "article") {
+    /*
+     * Maqola formasi universitet/fakultet/kafedra emas, tashkilot/daraja/
+     * email yig'adi (haqiqiy muallif talaba bo'lmasligi ham mumkin —
+     * placeholder: «Talaba / PhD / dotsent»). Ilgari bu maydonlar
+     * to'plangan, viewer'da ko'ringan, lekin DOCX fayliga umuman
+     * tushmasdi — talaba-ish shabloni (vazirlik sarlavhasi, imzo
+     * chizig'i) chiqardi, degree esa hech qayerda ko'rinmasdi.
+     */
+    children.push(centerP(meta.workLabel.toUpperCase(), { bold: true, size: 32 }));
+    children.push(centerP(""));
+    children.push(centerP(`«${meta.topic}»`, { bold: true, italics: true }));
+    children.push(centerP(""));
+    children.push(centerP(""));
+    const authorLine = [meta.author, meta.degree].filter(Boolean).join(", ");
+    if (authorLine) children.push(centerP(authorLine, { bold: true }));
+    if (meta.organization) children.push(centerP(meta.organization));
+    if (meta.email) children.push(centerP(meta.email));
+    children.push(centerP(""));
+    children.push(centerP(""));
+    children.push(centerP(`${meta.city} — ${year}`, { bold: true }));
+    children.push(new Paragraph({ children: [run("")], pageBreakBefore: true }));
+  } else if (doc.titlePage) {
     const ministry = meta.ministry === "maktab" ? L.ministrySchool : L.ministryHigher;
     for (const line of ministry.split("\n")) {
       children.push(centerP(line, { bold: true, size: 24 }));

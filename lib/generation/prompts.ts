@@ -31,38 +31,154 @@ export function sourceBlock(meta: DocMeta): string {
   ].join("\n");
 }
 
-export function writerSystemPrompt(meta: DocMeta): string {
+/**
+ * Akademik yozuvchi xizmatlarining UMUMIY qatorlari.
+ *
+ * Ilgari referat, kurs ishi, mustaqil ish, maqola va tezis — beshtasi
+ * ham AYNAN bitta `writerSystemPrompt` dan o'tardi, farqi faqat kurs ishi
+ * uchun qo'shilgan bitta blok edi. Natijada narxda 2-4x farq bo'lsa ham,
+ * matnda janr farqi yo'q edi (referat = mustaqil ish, standart maqola =
+ * qisqa kurs ishi). Endi har janr o'z funksiyasiga ega
+ * (`lessonSystemPrompt`/`glossarySystemPrompt` naqshi bo'yicha), bu yerda
+ * esa faqat haqiqatan umumiy bo'lgan qatorlar.
+ */
+function writerCommonLines(meta: DocMeta): string[] {
   return [
     languageDirective(meta.language),
-    `Siz O‘zbekiston OTME talabalari uchun ${meta.workLabel.toLowerCase()} yozuvchi akademik muharrirsiz.`,
-    `Ish turi: ${meta.workLabel}. Mavzu: «${meta.topic}». Fan: ${meta.subject || "mavzudan aniqlang"}.`,
-    `Hajm yo‘nalishi: taxminan ${meta.targetPages} bet.`,
     `MAVZUGA QARAB YOZING. Texnika bo‘lsa: tuzilish, ishlash, nosozlik, xizmat. Biologiya/kimyo bo‘lsa: tuzilish, jarayon, sharoit. Adabiyot/tarix bo‘lsa: asar/davr, g‘oya, tahlil. Iqtisod bo‘lsa: mexanizm, omil, oqibat. Pedagogika mavzusi bo‘lsa — o‘sha haqda; aks holda ta’lim shablonini aralashtirmang.`,
     `QAT’IY TAQIQLANADI: mavzuga tegishli bo‘lmagan soha (masalan, dvigatel, sovutish, kompetensiya, UNESCO, «tashxis-baholash» sikli).`,
     styleLine(meta.language, `Uslub: akademik o‘zbek tili, 3-shaxs.`, `Style: academic prose, third person`),
     `Bo‘sh takrorlamang. Sarlavhani qayta yozmang.`,
     `Ishonchsiz aniq raqam, firma, GOST, DOI yoki iqtibos UYDIRMANG. Darslik darajasidagi tushuntirish yozing.`,
-    meta.kind === "imrad"
-      ? `IMRAD: Introduction, Methods, Results, Discussion. Metodlar haqiqiy tahlil usuli bo‘lsin, uydirma tajriba emas.`
-      : `Kirishda: shu mavzuning dolzarbligi, maqsad, vazifa, obyekt, metod.`,
-    // Kurs ishi referatdan 4 barobar qimmat, lekin ilgari bir xil dvigatel
-    // bilan yozilardi. Farq — talab darajasida: tadqiqot savoli, uch bob,
-    // manba bilan ishlash va aniq amaliy misol.
-    meta.toolId === "coursework"
-      ? [
-          `BU KURS ISHI — referat EMAS. Farqi qat’iy saqlansin:`,
-          `— kirishda ANIQ tadqiqot savoli savol shaklida yozilsin («… qanday ta’sir qiladi?»);`,
-          `— obyekt va predmet alohida ajratilsin;`,
-          `— uch bob: nazariy asos → tahlil → muammo va tavsiya;`,
-          `— har bobda O‘zbekiston sharoitidan kamida bitta aniq misol;`,
-          `— xulosada 5 ta raqamlangan, tekshirib bo‘ladigan xulosa.`,
-        ].join("\n")
-      : "",
-    meta.extra ? `Qo‘shimcha talab: ${meta.extra}` : "",
-    sourceBlock(meta),
+  ];
+}
+
+function writerTail(meta: DocMeta): string[] {
+  return [meta.extra ? `Qo‘shimcha talab: ${meta.extra}` : "", sourceBlock(meta)];
+}
+
+/**
+ * Kurs ishi — referatdan 4 barobar qimmat, tadqiqot xarakterli ish.
+ * Farq talab darajasida: tadqiqot savoli, uch bob, obyekt/predmet,
+ * O‘zbekiston misoli va tekshirib bo‘ladigan xulosalar majburiy.
+ */
+export function courseworkSystemPrompt(meta: DocMeta): string {
+  return [
+    `Siz O‘zbekiston OTME talabalari uchun kurs ishi yozuvchi akademik muharrirsiz.`,
+    `Ish turi: ${meta.workLabel}. Mavzu: «${meta.topic}». Fan: ${meta.subject || "mavzudan aniqlang"}.`,
+    `Hajm yo‘nalishi: taxminan ${meta.targetPages} bet.`,
+    ...writerCommonLines(meta),
+    `BU KURS ISHI — referat EMAS, TADQIQOT ishi. Farqi qat’iy saqlansin:`,
+    `— kirishda ANIQ tadqiqot savoli savol shaklida yozilsin («… qanday ta’sir qiladi?»);`,
+    `— obyekt va predmet alohida ajratilsin;`,
+    `— uch bob: nazariy asos → tahlil → muammo va tavsiya;`,
+    `— har bobda O‘zbekiston sharoitidan kamida bitta aniq misol;`,
+    `— xulosada 5 ta raqamlangan, tekshirib bo‘ladigan xulosa.`,
+    ...writerTail(meta),
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+/**
+ * Referat — adabiyot sharhi (literature review). Kurs ishidan farqi:
+ * YANGI tadqiqot da'vo qilinmaydi, obyekt/predmet talab qilinmaydi.
+ * Vazifa — mavjud manbalarni tanqidiy umumlashtirish.
+ */
+export function referatSystemPrompt(meta: DocMeta): string {
+  return [
+    `Siz O‘zbekiston OTME talabalari uchun referat (adabiyot sharhi) yozuvchi akademik muharrirsiz.`,
+    `Ish turi: ${meta.workLabel}. Mavzu: «${meta.topic}». Fan: ${meta.subject || "mavzudan aniqlang"}.`,
+    `Hajm yo‘nalishi: taxminan ${meta.targetPages} bet.`,
+    ...writerCommonLines(meta),
+    `BU REFERAT — kurs ishi EMAS, YANGI tadqiqot emas:`,
+    `— kirishda tadqiqot savoli SHART emas: mavzuning dolzarbligi va ushbu sharhning maqsadini yozing;`,
+    `— obyekt/predmet ajratish SHART emas;`,
+    `— asosiy qism — mavjud bilim va yondashuvlarni tanqidiy umumlashtirish, «biz aniqladik» emas, «manbalar ko‘rsatadiki» uslubida;`,
+    `— xulosa — yangi kashfiyot emas, ko‘rib chiqilgan manbalarning umumlashmasi.`,
+    ...writerTail(meta),
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+/**
+ * Mustaqil ish — nazariya + talabaning O'Z bajargan amaliy vazifasi.
+ * Referatdan farqi: sof adabiyot sharhi emas, talaba shaxsan bajargan
+ * hisob-kitob, misol yechish yoki mini-tahlil MAJBURIY.
+ */
+export function mustaqilIshSystemPrompt(meta: DocMeta): string {
+  return [
+    `Siz O‘zbekiston OTME talabalari uchun mustaqil ish yozuvchi akademik muharrirsiz.`,
+    `Ish turi: ${meta.workLabel}. Mavzu: «${meta.topic}». Fan: ${meta.subject || "mavzudan aniqlang"}.`,
+    `Hajm yo‘nalishi: taxminan ${meta.targetPages} bet.`,
+    ...writerCommonLines(meta),
+    `BU MUSTAQIL ISH — sof adabiyot sharhi (referat) EMAS:`,
+    `— kirishda: mavzuning dolzarbligi va talaba bu ishda nimani MUSTAQIL bajarishi (hisoblaydi/yechadi/tahlil qiladi) aniq aytilsin;`,
+    `— OXIRGI bob albatta talabaning O‘Z BAJARGAN amaliy vazifasi bo‘lsin: aniq misol yechish, hisob-kitob, kichik tahlil yoki taqqoslash — faqat nazariyani qayta bayon qilish EMAS;`,
+    `— shu bobda kamida bitta raqamli yoki qadamma-qadam natija bo‘lsin («men quyidagicha hisobladim/aniqladim»).`,
+    ...writerTail(meta),
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+/**
+ * Standart (bobli bo'lmagan) maqola — jurnal maqolasi ko'rinishida
+ * chiqishi kerak, kurs ishi shaklidagi «I BOB / II BOB» EMAS.
+ */
+export function articleSystemPrompt(meta: DocMeta): string {
+  return [
+    `Siz ilmiy jurnal uchun maqola muharririsiz.`,
+    `Mavzu: «${meta.topic}». Fan: ${meta.subject || "mavzudan aniqlang"}.`,
+    `Hajm yo‘nalishi: taxminan ${meta.targetPages} bet.`,
+    ...writerCommonLines(meta),
+    `BU JURNAL MAQOLASI — talaba kurs ishi EMAS:`,
+    `— «I BOB», «II BOB» kabi bob raqamlash ISHLATMANG; bo‘limlar oddiy nomlangan bo‘lsin (masalan «Muammoning qo‘yilishi», «Tahlil va muhokama»);`,
+    `— kirish qisqa: muammo, maqsad, ishning qiymati — bir necha paragraf, «vazifalar ro‘yxati» kabi byurokratik shakl kerak emas;`,
+    `— asosiy qism — tahlil va muhokama, «tadqiqot obyekti/predmeti» degan akademik-metodik bo‘limlar kerak emas;`,
+    `— xulosa — natijalarning qisqa, aniq umumlashmasi.`,
+    ...writerTail(meta),
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+/**
+ * Standart (IMRAD bo'lmagan) tezis — O'zbekistonda odatda 2-5 betlik
+ * konferensiya materiali: bob raqamisiz qisqa bo'limlar, annotatsiya
+ * majburiy.
+ */
+export function thesisSystemPrompt(meta: DocMeta): string {
+  return [
+    `Siz ilmiy konferensiya tezisi muharririsiz.`,
+    `Mavzu: «${meta.topic}». Fan: ${meta.subject || "mavzudan aniqlang"}.`,
+    `Hajm yo‘nalishi: taxminan ${meta.targetPages} bet.`,
+    ...writerCommonLines(meta),
+    `BU KONFERENSIYA TEZISI — kurs ishi yoki referat EMAS:`,
+    `— «I BOB», «II BOB» kabi bob raqamlash ISHLATMANG; 3–5 ta qisqa, nomlangan bo‘lim yetarli;`,
+    `— har bo‘lim ixcham (tezis — «qisqa bayon» degani), ortiqcha kirish-so‘zboshi kerak emas;`,
+    `— xulosa — tadqiqotning asosiy natijasi, bir necha gapda.`,
+    ...writerTail(meta),
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+/**
+ * Dispetcher: janrga mos promptni tanlaydi.
+ *
+ * `draftOutline` (bepul reja ko'rish) ham shu funksiyadan foydalanadi —
+ * demak reja bosqichidayoq janr farqi ko'rinadi, faqat yakuniy renderda
+ * emas.
+ */
+export function writerSystemPrompt(meta: DocMeta): string {
+  if (meta.toolId === "coursework") return courseworkSystemPrompt(meta);
+  if (meta.toolId === "referat") return referatSystemPrompt(meta);
+  if (meta.toolId === "mustaqil-ish") return mustaqilIshSystemPrompt(meta);
+  if (meta.toolId === "article") return articleSystemPrompt(meta);
+  if (meta.toolId === "thesis") return thesisSystemPrompt(meta);
+  return courseworkSystemPrompt(meta);
 }
 
 export function essaySystemPrompt(meta: DocMeta): string {

@@ -422,3 +422,82 @@ test("adabiyot filtri tekshirib bo'lmaydigan aniqlikni rad etadi", async () => {
   assert.ok(!isReferenceLine("Karimov, 2019."));
   assert.ok(!isReferenceLine("K".repeat(300)));
 });
+
+// ------------------------------------------------ janr differensiatsiyasi
+
+/**
+ * Referat, kurs ishi, mustaqil ish, maqola va tezis — beshtasi bir xil
+ * `WRITER` to'plamidan o'tadi (`write-llm.ts`), lekin ilgari deyarli bir
+ * xil promptga ega edi: farq faqat kurs ishi uchun qo'shilgan bitta blok
+ * bilan cheklangandi. Natijada referat va mustaqil ish MATNDA
+ * ajralmasdi, garchi narxda ajralsa ham. Bu testlar har janr o'ziga xos
+ * talab olishini qulflaydi.
+ */
+
+function writerMeta(toolId: "coursework" | "referat" | "mustaqil-ish" | "article" | "thesis", values: FormValues) {
+  return extractMeta(TOOL_BY_ID[toolId], { topic: "Sun'iy intellekt", ...values });
+}
+
+test("kurs ishi va referat endi bir xil promptga ega emas", async () => {
+  const { writerSystemPrompt } = await import("../lib/generation/prompts.ts");
+  const coursework = writerSystemPrompt(writerMeta("coursework", {}));
+  const referat = writerSystemPrompt(writerMeta("referat", {}));
+
+  // Kurs ishi — tadqiqot savoli, obyekt/predmet MAJBURIY.
+  assert.match(coursework, /tadqiqot savoli/i);
+  assert.match(coursework, /obyekt va predmet/i);
+
+  // Referat — aynan shu talab YO'Q, aksincha ochiq ravishda shart emasligi aytiladi.
+  assert.doesNotMatch(referat, /obyekt va predmet ALOHIDA/i);
+  assert.match(referat, /obyekt\/predmet ajratish SHART emas/i);
+  assert.match(referat, /adabiyot sharhi/i);
+});
+
+test("mustaqil ish promptida o'z bajargan amaliy vazifa talabi bor, referatda yo'q", async () => {
+  const { writerSystemPrompt } = await import("../lib/generation/prompts.ts");
+  const mustaqil = writerSystemPrompt(writerMeta("mustaqil-ish", {}));
+  const referat = writerSystemPrompt(writerMeta("referat", {}));
+
+  assert.match(mustaqil, /O‘Z BAJARGAN amaliy vazifasi/);
+  assert.doesNotMatch(referat, /O‘Z BAJARGAN amaliy vazifasi/);
+});
+
+test("standart maqola va tezis prompti BOB raqamlashni taqiqlaydi", async () => {
+  const { writerSystemPrompt } = await import("../lib/generation/prompts.ts");
+  const article = writerSystemPrompt(writerMeta("article", {}));
+  const thesis = writerSystemPrompt(writerMeta("thesis", {}));
+  const coursework = writerSystemPrompt(writerMeta("coursework", {}));
+
+  assert.match(article, /ISHLATMANG/);
+  assert.match(article, /I BOB/); // taqiq matnida tilga olinadi
+  assert.match(thesis, /ISHLATMANG/);
+  // Kurs ishida esa aksincha — uch bob talab qilinadi.
+  assert.match(coursework, /uch bob/i);
+});
+
+test("kirish ko'rsatmasi janrga qarab farqlanadi", async () => {
+  const { writerSystemPrompt } = await import("../lib/generation/prompts.ts");
+  const prompts = {
+    coursework: writerSystemPrompt(writerMeta("coursework", {})),
+    referat: writerSystemPrompt(writerMeta("referat", {})),
+    "mustaqil-ish": writerSystemPrompt(writerMeta("mustaqil-ish", {})),
+    article: writerSystemPrompt(writerMeta("article", {})),
+    thesis: writerSystemPrompt(writerMeta("thesis", {})),
+  };
+  // Har biri boshqalaridan farq qilishi kerak — beshtasi ham noyob.
+  const unique = new Set(Object.values(prompts));
+  assert.equal(unique.size, 5, "har janr o'ziga xos promptga ega bo'lishi kerak");
+});
+
+/**
+ * Bob-kitob raqamlash («I BOB.») faqat referat/kurs ishi/mustaqil ishda —
+ * maqola va tezis jurnal/konferensiya uslubida (oddiy «1.», «2.»).
+ */
+test("bob uslubi faqat akademik-kitob janrlarida", async () => {
+  const { isBobStyle } = await import("../lib/generation/write-llm.ts");
+  assert.equal(isBobStyle("coursework"), true);
+  assert.equal(isBobStyle("referat"), true);
+  assert.equal(isBobStyle("mustaqil-ish"), true);
+  assert.equal(isBobStyle("article"), false);
+  assert.equal(isBobStyle("thesis"), false);
+});

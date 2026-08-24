@@ -13,11 +13,11 @@ import type { FormValues } from "../lib/types.ts";
  * kurs/guruh titulga chiqishi, imzo qatorlari, ramka faqat inshoda.
  */
 
-function meta(toolId: "coursework" | "essay" | "referat", values: FormValues) {
+function meta(toolId: "coursework" | "essay" | "referat" | "article" | "thesis", values: FormValues) {
   return extractMeta(TOOL_BY_ID[toolId], values);
 }
 
-function doc(toolId: "coursework" | "essay" | "referat", values: FormValues): AcademicDoc {
+function doc(toolId: "coursework" | "essay" | "referat" | "article" | "thesis", values: FormValues): AcademicDoc {
   return {
     meta: meta(toolId, values),
     titlePage: true,
@@ -99,6 +99,36 @@ test("bajaruvchi va rahbar uchun imzo qatori bor", async () => {
     doc("coursework", { topic: "X", author: "Aliyev Ali", university: "TDPU", teacher: "Ergashov B." }),
   );
   assert.ok(text.split("____________").length - 1 >= 2, "ikkita imzo chizig'i kutilgan edi");
+});
+
+/**
+ * Maqola titul sahifasi — «talaba ishi» shabloni emas.
+ *
+ * Maqola formasi universitet emas, tashkilot/daraja/email yig'adi
+ * (muallif PhD/dotsent ham bo'lishi mumkin). Ilgari bu uch maydon
+ * viewerda ko'rinar, lekin DOCX faylida umuman render qilinmasdi —
+ * fayl esa vazirlik sarlavhali OTME shabloniga tushardi.
+ */
+test("maqola titulida vazirlik/universitet o'rniga muallif bloki chiqadi", async () => {
+  const text = await docxText(
+    doc("article", {
+      topic: "Qayta tiklanuvchi energiya",
+      author: "Aliyev Ali Valiyevich",
+      degree: "PhD",
+      organization: "Toshkent davlat texnika universiteti",
+      email: "ali@example.uz",
+    }),
+  );
+  assert.match(text, /PhD/);
+  assert.match(text, /Toshkent davlat texnika universiteti/);
+  assert.match(text, /ali@example\.uz/);
+  assert.doesNotMatch(text, /VAZIRLIGI/, "maqolada vazirlik sarlavhasi chiqmasligi kerak");
+});
+
+test("maqolada muallif/tashkilot bo'sh bo'lsa qatorlar tashlab ketiladi", async () => {
+  const text = await docxText(doc("article", { topic: "X", author: "Aliyev Ali" }));
+  assert.match(text, /Aliyev Ali/);
+  assert.doesNotMatch(text, /VAZIRLIGI/);
 });
 
 // -------------------------------------------------- ramka
@@ -227,6 +257,15 @@ test("sarlavhadagi raqam olib tashlanadi, ammo raqamdan boshlangan so'z saqlanad
   assert.equal(stripHeadingNumber("I BOB. NAZARIY ASOSLAR"), "NAZARIY ASOSLAR");
   assert.equal(stripHeadingNumber("ГЛАВА I. ТЕОРЕТИЧЕСКИЕ ОСНОВЫ"), "ТЕОРЕТИЧЕСКИЕ ОСНОВЫ");
   assert.equal(stripHeadingNumber("CHAPTER II. PRACTICAL ANALYSIS"), "PRACTICAL ANALYSIS");
+
+  /*
+   * Model rim o'rniga ARAB raqamini ham ishlatadi («1-BOB.»). Jonli
+   * sinovda bu qolipsiz qolib, `numberOutline` o'z prefiksini ustiga
+   * qo'shib «I BOB. 1-BOB. …» kabi qo'sh sarlavha chiqargan.
+   */
+  assert.equal(stripHeadingNumber("1-BOB. QAYTA TIKLANUVCHI ENERGIYA"), "QAYTA TIKLANUVCHI ENERGIYA");
+  assert.equal(stripHeadingNumber("2 BOB. Amaliy qism"), "Amaliy qism");
+  assert.equal(stripHeadingNumber("1-ГЛАВА. Введение"), "Введение");
 
   // Raqamga o'xshagan, lekin raqam BO'LMAGAN boshlanishlar buzilmasligi kerak.
   assert.equal(stripHeadingNumber("IT sohasida raqamlashtirish"), "IT sohasida raqamlashtirish");

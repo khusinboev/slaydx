@@ -101,9 +101,24 @@ type OutlineChapter = { title: string; subs: { title: string; brief: string }[] 
  * Shablon yo'li (`content.ts`) allaqachon shu ko'rinishda edi — ya'ni bu
  * yangi uslub emas, LLM yo'lini mavjud uslubga tenglashtirish.
  */
-function numberOutline(chapters: OutlineChapter[], L: ReturnType<typeof sectionLabels>): OutlineChapter[] {
+/**
+ * Maqola/tezis (standart) — jurnal/konferensiya janri, «I BOB» kitob
+ * bobi emas. Shu ikkitasidan boshqa barcha yozuvchi vositalar (kurs
+ * ishi, referat, mustaqil ish) bob-kitob uslubida qoladi.
+ */
+export function isBobStyle(toolId: string): boolean {
+  return toolId !== "article" && toolId !== "thesis";
+}
+
+function numberOutline(
+  chapters: OutlineChapter[],
+  L: ReturnType<typeof sectionLabels>,
+  bobStyle: boolean,
+): OutlineChapter[] {
   return chapters.map((ch, i) => ({
-    title: `${L.chapterPrefix(i + 1)} ${stripHeadingNumber(ch.title).toUpperCase()}`,
+    title: bobStyle
+      ? `${L.chapterPrefix(i + 1)} ${stripHeadingNumber(ch.title).toUpperCase()}`
+      : `${i + 1}. ${stripHeadingNumber(ch.title)}`,
     subs: ch.subs.map((sub, j) => ({
       ...sub,
       title: `${i + 1}.${j + 1}. ${stripHeadingNumber(sub.title)}`,
@@ -113,7 +128,7 @@ function numberOutline(chapters: OutlineChapter[], L: ReturnType<typeof sectionL
 
 async function buildOutline(meta: DocMeta, sys: string, L: ReturnType<typeof sectionLabels>, deadline?: number) {
   const out = await rawOutline(meta, sys, L, deadline);
-  return { ...out, chapters: numberOutline(out.chapters, L) };
+  return { ...out, chapters: numberOutline(out.chapters, L, isBobStyle(meta.toolId)) };
 }
 
 /**
@@ -303,6 +318,119 @@ export async function draftOutline(meta: DocMeta, deadline?: number): Promise<st
     .join("\n");
 }
 
+/**
+ * Kirish bo'limi uchun ko'rsatma — janrga qarab farqlanadi.
+ *
+ * Ilgari bitta ternary bor edi: kurs ishi vs «hammasi boshqa». Referat,
+ * mustaqil ish, maqola va tezis natijada bir xil «obyekt/predmet, 3-4
+ * vazifa» ko'rsatmasini olardi — aslida faqat kurs ishida shart.
+ */
+function introBrief(meta: DocMeta, topic: string): string {
+  if (meta.toolId === "coursework") {
+    return `«${topic}» bo‘yicha: dolzarblik; ANIQ tadqiqot savoli (savol belgisi bilan); maqsad; 4 ta vazifa; obyekt va predmet ALOHIDA; tadqiqot usullari.`;
+  }
+  if (meta.toolId === "referat") {
+    return `«${topic}» bo‘yicha: mavzuning dolzarbligi; ushbu adabiyot sharhining maqsadi; qanday manbalar ko‘rib chiqilishi. Tadqiqot savoli yoki obyekt/predmet SHART emas.`;
+  }
+  if (meta.toolId === "mustaqil-ish") {
+    return `«${topic}» bo‘yicha: dolzarblik, maqsad, va talaba bu ishda ANIQ nimani mustaqil bajarishi (hisoblaydi/yechadi/tahlil qiladi).`;
+  }
+  if (meta.toolId === "article") {
+    return `«${topic}» maqolasi uchun qisqa kirish: muammo, maqsad, ishning qiymati. «Vazifalar ro‘yxati», obyekt/predmet kabi akademik-metodik bo‘limlar YOZMANG.`;
+  }
+  if (meta.toolId === "thesis") {
+    return `«${topic}» tezisi uchun juda qisqa kirish: muammo va maqsad, 2–3 gapda.`;
+  }
+  return `Faqat «${topic}» haqida: dolzarblik, maqsad, 3–4 vazifa, obyekt/predmet, usul.`;
+}
+
+const ABSTRACT_LANG_NAMES: Record<string, string> = { uz: "o‘zbek", ru: "rus", en: "ingliz" };
+
+/**
+ * Annotatsiya — maqola/tezis uchun.
+ *
+ * Ilgari faqat `toolId === "article"` da ishlardi va doimo `meta.language`
+ * bitta tilida yozardi — forma esa «Barcha tillar (UZ+EN+RU)» tanlovini
+ * (`annotationLangs`) berardi, lekin u hech qayerda o'qilmasdi. Endi
+ * tezis ham qamraladi va `annotationLangs === "all"` bo'lsa uchala tilda
+ * ham (tarjima emas, mustaqil) yoziladi.
+ */
+async function askAbstracts(
+  sys: string,
+  topic: string,
+  meta: DocMeta,
+  langs: readonly string[],
+  timeoutMs: number,
+): Promise<NonNullable<AcademicDoc["abstracts"]>> {
+  const schema =
+    langs.length > 1
+      ? `JSON: {${langs.map((l) => `"${l}":{"text":"","keywords":""}`).join(",")}}`
+      : `JSON: {"text":"","keywords":""}`;
+  const raw = await llmComplete(
+    sys,
+    [
+      `«${topic}» ${meta.workLabel.toLowerCase()}i uchun annotatsiya.`,
+      langs.length > 1
+        ? `Har tilda MUSTAQIL yozilsin (bir-biridan tarjima emas): ${langs
+            .map((l) => ABSTRACT_LANG_NAMES[l] ?? l)
+            .join(", ")}.`
+        : "",
+      schema,
+      `text — 4–6 gap: muammo, maqsad, yondashuv, xulosa. keywords — 5–7 ta atama, vergul bilan.`,
+    ]
+      .filter(Boolean)
+      .join("\n"),
+    langs.length > 1 ? 1800 : 800,
+    { json: true, timeoutMs },
+  );
+  if (langs.length === 1) {
+    const abs = parseLlmObject<{ text?: string; keywords?: string }>(raw);
+    const text = String(abs?.text ?? "").trim();
+    if (text.length <= 80) return [];
+    return [
+      {
+        lang: langs[0],
+        label: sectionLabels(langs[0]).abstract,
+        text: text.slice(0, 900),
+        keywords: String(abs?.keywords ?? topic).slice(0, 160),
+      },
+    ];
+  }
+  const data = parseLlmObject<Record<string, { text?: string; keywords?: string }>>(raw);
+  const out: NonNullable<AcademicDoc["abstracts"]> = [];
+  for (const lang of langs) {
+    const text = String(data?.[lang]?.text ?? "").trim();
+    if (text.length <= 80) continue;
+    out.push({
+      lang,
+      label: sectionLabels(lang).abstract,
+      text: text.slice(0, 900),
+      keywords: String(data?.[lang]?.keywords ?? topic).slice(0, 160),
+    });
+  }
+  return out;
+}
+
+/**
+ * Bir martalik so'rov nozik: uch tilni bitta joyda so'rash ko'p tildagi
+ * ichma-ich JSON talab qiladi, model buni ba'zan yarim to'ldiradi.
+ * Maqolasiz annotatsiya jurnalga umuman yaroqsiz — shuning uchun
+ * `rawOutline` naqshi bo'yicha bitta qayta urinish beriladi.
+ */
+async function writeAbstracts(
+  sys: string,
+  topic: string,
+  meta: DocMeta,
+  deadline?: number,
+): Promise<AcademicDoc["abstracts"]> {
+  const langs = meta.annotationLangs === "all" ? (["uz", "ru", "en"] as const) : ([meta.language] as const);
+  let out = await askAbstracts(sys, topic, meta, langs, Math.min(25_000, remainingMs(deadline)));
+  if (out.length < langs.length && remainingMs(deadline) > 15_000) {
+    out = await askAbstracts(sys, topic, meta, langs, Math.min(20_000, remainingMs(deadline)));
+  }
+  return out.length ? out : undefined;
+}
+
 export async function writeWriterWithLlm(meta: DocMeta, deadline?: number): Promise<AcademicDoc | null> {
   if (!llmEnabled()) return null;
   const sys = writerSystemPrompt(meta);
@@ -358,10 +486,7 @@ export async function writeWriterWithLlm(meta: DocMeta, deadline?: number): Prom
       id: "kirish",
       kind: "intro",
       title: L.intro,
-      brief:
-        meta.toolId === "coursework"
-          ? `«${topic}» bo‘yicha: dolzarblik; ANIQ tadqiqot savoli (savol belgisi bilan); maqsad; 4 ta vazifa; obyekt va predmet ALOHIDA; tadqiqot usullari.`
-          : `Faqat «${topic}» haqida: dolzarblik, maqsad, 3–4 vazifa, obyekt/predmet, usul.`,
+      brief: introBrief(meta, topic),
       min: Math.max(3, Math.round(pages / 4)),
     },
     ...chapters.flatMap((ch, ci) =>
@@ -503,32 +628,16 @@ export async function writeWriterWithLlm(meta: DocMeta, deadline?: number): Prom
     .slice(0, 10);
 
   /**
-   * Maqolaga annotatsiya va kalit so'zlar.
+   * Maqola/tezisga annotatsiya va kalit so'zlar.
    *
-   * Ilgari annotatsiya faqat IMRAD yo'lida bor edi. `kind=standard`
-   * maqola esa annotatsiyasiz chiqardi — bunday maqolani hech bir jurnal
-   * qabul qilmaydi, ya'ni vosita o'z vazifasini bajarmasdi.
+   * Ilgari annotatsiya faqat `toolId === "article"` da bor edi — standart
+   * tezis annotatsiyasiz chiqardi, garchi forma `annotationLangs`
+   * tanlovini bersa ham. Endi ikkalasi ham qamraladi, `writeAbstracts`
+   * esa `annotationLangs === "all"` bo'lsa uch tilda ham yozadi.
    */
   let abstracts: AcademicDoc["abstracts"];
-  if (meta.toolId === "article" && remainingMs(deadline) > 12_000) {
-    const absRaw = await llmComplete(
-      sys,
-      `«${topic}» maqolasi uchun annotatsiya. JSON: {"text":"","keywords":""}. text — 4–6 gap: muammo, maqsad, yondashuv, xulosa. keywords — 5–7 ta atama, vergul bilan.`,
-      800,
-      { json: true, timeoutMs: Math.min(25_000, remainingMs(deadline)) },
-    );
-    const abs = parseLlmObject<{ text?: string; keywords?: string }>(absRaw);
-    const text = String(abs?.text ?? "").trim();
-    if (text.length > 80) {
-      abstracts = [
-        {
-          lang: meta.language,
-          label: L.abstract,
-          text: text.slice(0, 900),
-          keywords: String(abs?.keywords ?? topic).slice(0, 160),
-        },
-      ];
-    }
+  if ((meta.toolId === "article" || meta.toolId === "thesis") && remainingMs(deadline) > 12_000) {
+    abstracts = await writeAbstracts(sys, topic, meta, deadline);
   }
 
   const tables = (meta as DocMeta & { _tables?: AcademicDoc["tables"] })._tables;
