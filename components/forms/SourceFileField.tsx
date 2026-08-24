@@ -4,6 +4,7 @@ import { useState } from "react";
 import { FileText, Loader2 } from "lucide-react";
 import { EXTRACT_ACCEPT, EXTRACT_MAX_BYTES } from "@/lib/extract-text";
 import { extractText } from "@/lib/api-client";
+import { SOURCE_TEXT_LIMIT } from "@/lib/generation/meta";
 import { Legend } from "./fields";
 
 const MAX_MB = Math.round(EXTRACT_MAX_BYTES / (1024 * 1024));
@@ -99,7 +100,14 @@ export function SourceFileField({
         ) : null}
       </label>
       {error ? <p className="text-destructive mt-2 text-sm">{error}</p> : null}
-      {sourceText ? (
+      {sourceText && sourceText.length > SOURCE_TEXT_LIMIT ? (
+        <p className="mt-2 text-xs text-amber-600 dark:text-amber-500">
+          Matn olindi, lekin uzun: faylning faqat birinchi{" "}
+          {SOURCE_TEXT_LIMIT.toLocaleString("uz-UZ")} belgisi generatsiyada ishlatiladi (
+          {(sourceText.length - SOURCE_TEXT_LIMIT).toLocaleString("uz-UZ")} belgi qoladi). Muhim qism
+          boshida bo‘lishiga ishonch hosil qiling yoki faylni qisqartiring.
+        </p>
+      ) : sourceText ? (
         <p className="text-muted-foreground mt-2 text-xs">
           Matn olindi — hujjat shu manba asosida yoziladi.
         </p>
