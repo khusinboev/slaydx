@@ -58,6 +58,8 @@ export type DocMeta = {
   degree: string;
   weeklyHours: number;
   totalHours: number;
+  /** Glossariy: nechta atama so'ralsin (10/20/40). */
+  termCount: number;
   grade: number;
   duration: number;
   fileNameHint: string;

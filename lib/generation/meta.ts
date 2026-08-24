@@ -142,6 +142,7 @@ export function extractMeta(tool: ToolConfig, values: FormValues): DocMeta {
     degree: s(values, "degree"),
     weeklyHours: Number(values.weeklyHours || 4),
     totalHours: Number(values.totalHours || 136),
+    termCount: Math.max(6, Math.min(40, Number(values.termCount) || 10)),
     grade: Number(values.grade || 8),
     duration: Number(values.duration || 45),
     fileNameHint: topic.replace(/[^\p{L}\p{N}\- ]/gu, "").trim().slice(0, 60) || tool.slug,

@@ -513,6 +513,16 @@ export const TOOLS: ToolConfig[] = [
       },
       { kind: "language", name: "language", legend: "Qaysi tilda?" },
       {
+        kind: "chips",
+        name: "termCount",
+        legend: "Nechta atama kerak?",
+        options: [
+          { value: "10", label: "10 ta" },
+          { value: "20", label: "20 ta" },
+          { value: "40", label: "40 ta" },
+        ],
+      },
+      {
         kind: "textarea",
         name: "extra",
         legend: "Modul, mavzu chegarasi va boshqa qo'shimchalar",
@@ -786,6 +796,10 @@ export function priceFor(tool: ToolConfig, values: FormValues): number {
         "20-25": 8000,
       }[pages] ?? 4000
     );
+  }
+  if (tool.id === "glossary") {
+    const n = String(values.termCount ?? "10");
+    return { "10": 6000, "20": 9000, "40": 15000 }[n] ?? tool.basePrice;
   }
   return tool.basePrice;
 }

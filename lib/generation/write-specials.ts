@@ -244,7 +244,7 @@ export function resumeFactGuard(inputFacts: string) {
   return { orgIsKnown, stripUnknownYears };
 }
 
-function pickTerms(data: unknown): { term: string; def: string }[] {
+function pickTerms(data: unknown, limit: number): { term: string; def: string }[] {
   const bag = data && typeof data === "object" ? (data as Record<string, unknown>) : {};
   const raw = Array.isArray(data)
     ? data
@@ -261,32 +261,69 @@ function pickTerms(data: unknown): { term: string; def: string }[] {
     const def = clip(o.def ?? o.definition ?? o.izoh ?? o.text, 280);
     if (term && def) out.push({ term, def });
   }
-  return out.slice(0, 16);
+  return out.slice(0, limit);
 }
 
 export async function writeGlossaryWithLlm(meta: DocMeta, deadline?: number): Promise<AcademicDoc | null> {
   if (!llmEnabled()) return null;
-  const ask = async (timeoutMs: number) =>
+  const want = meta.termCount || 10;
+  const collected: { term: string; def: string }[] = [];
+  const seen = new Set<string>();
+  let intro = "";
+
+  const ask = (count: number, timeoutMs: number) =>
     llmComplete(
       glossarySystemPrompt(meta),
       [
         `JSON: {"intro":"","terms":[{"term":"","def":""}]}.`,
-        `«${meta.topic}» bo‘yicha 14 ta sohaga xos atama.`,
+        `«${meta.topic}» bo‘yicha ${count} ta sohaga xos atama.`,
         `TAQIQLANADI: kompetensiya, mezon, metod, tahlil, sintez, innovatsiya, refleksiya, differensiatsiya, integratsiya, indikator, resurs — agar bular shu sohaning maxsus termini bo‘lmasa.`,
         `Har izoh 2 aniq gap, shu soha misoli bilan.`,
-      ].join("\n"),
-      2600,
+        collected.length
+          ? `ALLAQACHON YOZILGAN atamalar — TAKRORLAMANG:\n${collected.map((t) => t.term).join(", ")}`
+          : "",
+      ]
+        .filter(Boolean)
+        .join("\n"),
+      Math.min(6000, 1200 + count * 130),
       { json: true, timeoutMs },
     );
-  let raw = await ask(Math.min(55_000, remainingMs(deadline) || 55_000));
-  let data = raw ? parseJson(raw) : null;
-  let terms = pickTerms(data).filter((t) => !isGenericGlossaryTerm(t.term));
-  if (terms.length < 8 && remainingMs(deadline) > 10_000) {
-    raw = await ask(Math.min(40_000, remainingMs(deadline)));
-    data = raw ? parseJson(raw) : null;
-    terms = pickTerms(data).filter((t) => !isGenericGlossaryTerm(t.term));
+
+  /**
+   * `termCount` (10/20/40) tanlovi endi narxni ham, so'ralayotgan sonni
+   * ham belgilaydi — ilgari doim qattiq yozilgan «14» so'ralar va
+   * `pickTerms` 16 tadan kesib tashlardi.
+   *
+   * 40 ta bitta chaqiruvda ishonchsiz: `write-llm.ts`dagi saboq bilan
+   * bir xil — modeldan bitta javobda ko'p element so'ralganda kamroq
+   * qaytadi. Shuning uchun so'rov 20 talik bo'laklarga bo'linadi va
+   * har bo'lak oldingi atamalarni ko'rib, takrorlamaslikka harakat
+   * qiladi.
+   */
+  const CHUNK = 20;
+  let guard = 0;
+  while (collected.length < want && guard < 4 && remainingMs(deadline) > 10_000) {
+    guard++;
+    const need = want - collected.length;
+    const raw = await ask(Math.min(CHUNK, need), Math.min(55_000, remainingMs(deadline) || 55_000));
+    const data = raw ? parseJson(raw) : null;
+    if (!intro) intro = (data && typeof data === "object" ? (data as { intro?: string }).intro : "") || "";
+    const batch = pickTerms(data, need + 6).filter((t) => !isGenericGlossaryTerm(t.term));
+    let added = 0;
+    for (const t of batch) {
+      const key = t.term.toLowerCase().trim();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      collected.push(t);
+      added++;
+    }
+    // Model progress bermay qo'ydi — tsiklni davom ettirish foydasiz.
+    if (!added) break;
   }
-  if (terms.length < 6) return null;
+  // Va'da qilingan sonning kamida 70% i — xuddi texnologik xaritadagi
+  // 70% chegara kabi (bir xil naqsh: to'liq to'ldirmasak, halol qisman).
+  if (collected.length < Math.max(6, Math.ceil(want * 0.7))) return null;
+  const terms = collected.slice(0, want);
   /*
    * Alifbo tartibi — glossariy uchun asosiy talab.
    *
@@ -304,7 +341,6 @@ export async function writeGlossaryWithLlm(meta: DocMeta, deadline?: number): Pr
   const sortKey = (t: string) => String(t).replace(/^[^\p{L}\p{N}]+/u, "").trim();
   terms.sort((a, b) => collator.compare(sortKey(a.term), sortKey(b.term)));
   const L = sectionLabels(meta.language);
-  const intro = data && typeof data === "object" ? (data as { intro?: string }).intro : "";
   return {
     meta,
     titlePage: true,
@@ -448,7 +484,7 @@ export async function writeResumeWithLlm(
 ): Promise<AcademicDoc | null> {
   if (!llmEnabled()) return null;
   const raw = await llmComplete(
-    resumeSystemPrompt(meta),
+    resumeSystemPrompt(meta, String(values.tone || "professional")),
     [
       `JSON: {"summary":"","experience":[{"period":"","org":"","role":"","bullets":[""]}],"education":[{"place":"","degree":"","years":""}],"skills":[""]}.`,
       `summary — 4–6 professional gap, natija bilan.`,

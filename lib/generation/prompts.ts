@@ -233,13 +233,25 @@ export function keysSystemPrompt(meta: DocMeta): string {
     .join("\n");
 }
 
-export function resumeSystemPrompt(meta: DocMeta): string {
+const RESUME_TONE: Record<string, string> = {
+  professional: "Uslub: rasmiy-professional, ishonchli va aniq.",
+  qisqa: "Uslub: juda qisqa va lo‘nda — har gap 1 fikr, sifatdosh va kirish so‘zlarsiz.",
+  ijodiy: "Uslub: jonli va ijodiy, lekin haligacha professional — o‘ziga xos, shablon emas.",
+};
+
+/**
+ * `tone` — `ResumeWizard.tsx` da forma maydoni (professional/qisqa/ijodiy),
+ * lekin ilgari hech qayerga uzatilmasdi: foydalanuvchi tanlagan uslub
+ * natijaga umuman ta'sir qilmasdi.
+ */
+export function resumeSystemPrompt(meta: DocMeta, tone: string): string {
   return [
     languageDirective(meta.language),
     `Siz professional rezyume muharririsiz.`,
     `Maqsadli lavozim: «${meta.topic}».`,
     `Berilgan faktni o‘zgartirmang va ish joyi/yil uydirmang.`,
     `XOM NUSXA QILMANG: summary 4–6 gap, tajriba 3–6 band (vazifa + natija), ta’lim 2–3 qator, ko‘nikmalar vergul bilan tartibli.`,
+    RESUME_TONE[tone] || RESUME_TONE.professional,
   ].join("\n");
 }
 

@@ -55,6 +55,21 @@ test("rasm soni narxga ta'sir qiladi", () => {
   assert.ok(priceFor(img, { imageCount: -5 }) > 0);
 });
 
+/**
+ * Glossariy atama soni narxga ta'sir qiladi (N-7).
+ *
+ * Ilgari atama soni tanlanmasdi — doim ~14 ta, doim 6 000 tanga. Endi
+ * 10/20/40 tanlanadi va narx shunga bog'liq; tanlanmasa (eski xatti-
+ * harakat) 10 talik — ya'ni asosiy narx — ishlatiladi.
+ */
+test("glossariy atama soni narxga ta'sir qiladi", () => {
+  const glossary = TOOL_BY_ID.glossary;
+  assert.equal(priceFor(glossary, { termCount: "10" }), 6000);
+  assert.ok(priceFor(glossary, { termCount: "20" }) > priceFor(glossary, { termCount: "10" }));
+  assert.ok(priceFor(glossary, { termCount: "40" }) > priceFor(glossary, { termCount: "20" }));
+  assert.equal(priceFor(glossary, {}), glossary.basePrice);
+});
+
 test("slug xaritasi to'liq va id bilan mos", () => {
   for (const tool of TOOLS) {
     assert.equal(TOOL_BY_SLUG[tool.slug], tool);
