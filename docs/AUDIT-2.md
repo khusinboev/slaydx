@@ -310,3 +310,11 @@ Sahifa darvozasi LibreOffice o'rnatilmagan yoki byudjet tugagan muhitda **jim o'
 `docs/AUDIT.md` "va'da = natija" muammosini **hajm va mavjudlik** darajasida hal qildi: slayd soni, speaker notes, adabiyot halolligi — bularning barchasi men joriy koddan tasdiqladim, ishlaydi. 2026-08-24 dagi olti tashqi hisobot (ulardan uchtasi mustaqil ravishda bir xil xulosaga kelib, sakkiztasi men tomonimdan qator darajasida tasdiqlandi) ko'rsatadiki, keyingi qatlam — **janr va format darajasidagi** rostgo'ylik. Kod "biror narsa chiqardi" dan "va'da qilingan hajmni berdi" ga o'tgan (Sprint 0–4). Keyingi qadam — "va'da qilingan **janr**ni berdi": referat adabiyot sharhi bo'lsin, kurs ishi tadqiqot bo'lsin, maqola jurnal maqolasi ko'rinishida chiqsin — hozir esa beshtasi ham bir xil "uzun insho" ko'rinishida.
 
 Bu ish katta qayta yozishni talab qilmaydi: loyihada bu naqsh (`lessonSystemPrompt`, `glossarySystemPrompt`, `keysSystemPrompt` — har biri alohida funksiya, alohida qoida) allaqachon **mavjud va ishlaydi**. Vazifa — shu naqshni akademik yozuvchi xizmatlariga ham qo'llash.
+
+### 12.1. Yopilish holati (2026-08-24 kuni oxiri)
+
+§6 dagi barcha to'rt sprint (5–8) bajarildi va jonli Gemini chaqiruvi bilan tasdiqlandi — 10 ta alohida commit, har biri `npm run check` (tsc + eslint + test) toza holatda. Bir nechta band rejadan tashqari qo'shildi, chunki jonli sinov ularni ochdi (bob raqamlash qo'sh prefiksi, insho hajm darvozasi 5 varaqda yiqilishi) — ikkalasi ham topilgach shu yerda tuzatildi, keyingi bosqichga qoldirilmadi.
+
+**Qolgan, ataylab bajarilmagan ish** (Sprint 5, §9.4 da qayd etilgan): akademik janrlar uchun render-docx darajasidagi qat'iy tuzilma darvozasi (masalan «maqolada annotatsiya yo'q → FAILED»). Bular hozircha faqat PROMPT darajasida talab qilinadi.
+
+**Keyingi qadam foydalanuvchi bilan kelishiladi:** bu hisobotning o'zi 2026-08-24 dagi 6 ta tashqi auditga asoslangan edi; o'sha auditning barcha aniq, tekshirilgan topilmalari endi yopildi. Davom etish uchun ikki yo'l bor — (a) qolgan tuzilma-darvoza ishini bajarish, yoki (b) joriy holatni qayta audit qilib, keyingi qatlamni aniqlash (yangi tashqi tahlil yoki mustaqil kod auditi bilan).
