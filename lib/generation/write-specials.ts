@@ -1,4 +1,4 @@
-import { sectionLabels } from "./i18n";
+import { langInfo, sectionLabels } from "./i18n";
 import { parseLlmJson, parseLlmObject } from "./json";
 import { llmComplete, llmEnabled } from "./llm";
 import {
@@ -1026,10 +1026,26 @@ export async function writeTranslationWithLlm(
     titlePage: false,
     toc: false,
     sections: [
+      /*
+       * Ilgari bu uch qator doim o'zbekcha edi ("Manba/Tildan/Hajm"),
+       * rus/ingliz tiliga tarjima qilingan hujjatda ham. `L` maqsad
+       * tilidan olinadi (`sectionLabels(target)`), shuning uchun endi
+       * shu bloklar ham tarjima tiliga mos chiqadi. Kod bilan raqam
+       * emas, INSON o'qiydigan til nomi ko'rsatiladi (`langInfo`).
+       */
       section("info", L.translation, [
-        { kind: "p", text: `Manba: ${String(values.fileName || "matn")}` },
-        { kind: "p", text: `Tildan: ${sourceLang === "avto" ? "avtomatik" : sourceLang} → ${target}` },
-        { kind: "p", text: `Hajm: ${source.length.toLocaleString("uz-UZ")} belgi` },
+        { kind: "p", text: L.translationSource(String(values.fileName || L.pastedText)) },
+        {
+          kind: "p",
+          // `native` (masalan «русский язык») o'quvchi uchun `name`
+          // («Russian» — bu modelga mo'ljallangan inglizcha yorliq)
+          // dan tabiiyroq o'qiladi.
+          text: L.translationDirection(
+            sourceLang === "avto" ? L.autoDetected : langInfo(sourceLang).native,
+            langInfo(target).native,
+          ),
+        },
+        { kind: "p", text: L.translationLength(source.length.toLocaleString("uz-UZ")) },
       ]),
       section("body", clip(title || L.translationBody, 80), blocks),
     ],

@@ -189,6 +189,16 @@ export type SectionLabels = {
   skills: string;
   translation: string;
   translationBody: string;
+  /** «Manba: fayl.docx» — tarjima info bloki. */
+  translationSource: (name: string) => string;
+  /** «Tildan: rus → o'zbek» — tarjima info bloki. */
+  translationDirection: (from: string, to: string) => string;
+  /** «Hajm: 12 000 belgi» — tarjima info bloki. */
+  translationLength: (n: string) => string;
+  /** Manba tili «avto» tanlanganda ko'rsatiladigan so'z. */
+  autoDetected: string;
+  /** Fayl yuklanmagan, matn joylashtirilgan bo'lsa — «Manba: …» o'rniga. */
+  pastedText: string;
   imradIntro: string;
   imradMethods: string;
   imradResults: string;
@@ -258,6 +268,11 @@ const SECTIONS: Record<string, SectionLabels> = {
     skills: "Ko‘nikmalar",
     translation: "Tarjima",
     translationBody: "Tarjima matni",
+    translationSource: (n) => `Manba: ${n}`,
+    translationDirection: (from, to) => `Tildan: ${from} → ${to}`,
+    translationLength: (n) => `Hajm: ${n} belgi`,
+    autoDetected: "avtomatik aniqlangan",
+    pastedText: "matn",
     imradIntro: "1. Kirish (Introduction)",
     imradMethods: "2. Metodlar (Methods)",
     imradResults: "3. Natijalar (Results)",
@@ -324,6 +339,11 @@ const SECTIONS: Record<string, SectionLabels> = {
     skills: "Навыки",
     translation: "Перевод",
     translationBody: "Текст перевода",
+    translationSource: (n) => `Источник: ${n}`,
+    translationDirection: (from, to) => `Язык: ${from} → ${to}`,
+    translationLength: (n) => `Объём: ${n} символов`,
+    autoDetected: "определён автоматически",
+    pastedText: "текст",
     imradIntro: "1. Введение (Introduction)",
     imradMethods: "2. Методы (Methods)",
     imradResults: "3. Результаты (Results)",
@@ -390,6 +410,11 @@ const SECTIONS: Record<string, SectionLabels> = {
     skills: "Skills",
     translation: "Translation",
     translationBody: "Translated text",
+    translationSource: (n) => `Source: ${n}`,
+    translationDirection: (from, to) => `Language: ${from} → ${to}`,
+    translationLength: (n) => `Length: ${n} characters`,
+    autoDetected: "auto-detected",
+    pastedText: "text",
     imradIntro: "1. Introduction",
     imradMethods: "2. Methods",
     imradResults: "3. Results",
