@@ -756,6 +756,12 @@ export function priceFor(tool: ToolConfig, values: FormValues): number {
       }[q] ?? 3000
     );
   }
+  if (tool.id === "essay") {
+    const pages = String(values.pages ?? "1");
+    // Ilgari 1 varaq ham, 5 varaq ham 2 000 tanga turardi — forma 1–5
+    // varaq tanlovini bersa ham, narx hech qachon o'zgarmasdi.
+    return { "1": 2000, "2": 2500, "3": 3000, "4": 3500, "5": 4000 }[pages] ?? 2000;
+  }
   if (tool.id === "referat" || tool.id === "mustaqil-ish") {
     const pages = String(values.pages ?? "10-15");
     return (

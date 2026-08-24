@@ -268,7 +268,44 @@ Sahifa darvozasi LibreOffice o'rnatilmagan yoki byudjet tugagan muhitda **jim o'
 
 ---
 
-## 11. Yakuniy xulosa
+## 11. Sprint 8 — bajarildi (2026-08-24)
+
+§6 dagi Sprint 8 ning barcha 7 bandi bajarildi.
+
+### 11.1. Nima qilindi
+
+| # | Ish | Fayl |
+|---|---|---|
+| 1 | `lessonSystemPrompt` ga `meta.extra` qo'shildi | `prompts.ts` |
+| 2 | Keys rubrikasi balllari 10 ga normalizatsiya (`normalizeMinutes` qayta ishlatildi) | `write-specials.ts` |
+| 3 | Texnologik xarita: soat ustuni yig'indisi `totalHours` ga qat'iy teng (o'sha `normalizeMinutes`) | `write-specials.ts` |
+| 4 | Glossariyga atama soni tanlovi (10/20/40) + mos narx; 20 dan ortiq so'rov bo'laklarga bo'linadi | `tools.ts`, `write-specials.ts`, `meta.ts`, `types.ts` |
+| 5 | Tarjima info bloki maqsad tiliga moslandi (alohida commit, avvalroq) | `i18n.ts`, `write-specials.ts` |
+| 6 | Rezyume `tone` maydoni `resumeSystemPrompt`ga ulandi | `prompts.ts`, `write-specials.ts` |
+| 7 | Insho narxi varaqqa bog'landi (1→2000 … 5→4000) | `tools.ts` |
+
+**Rejadan tashqari, lekin 7-band sabab bo'lgan qo'shimcha tuzatish:** narxni varaqqa bog'lagandan keyin jonli sinov 5 varaqlik inshoning hajm darvozasidan (890/1150 so'z, 77%) yiqilganini ko'rsatdi — bitta katta chaqiruvda 15 paragraf so'ralgani sabab (xuddi akademik yozuvchidagi `perSub` saboqi). Foydalanuvchiga endi 2× ko'proq (4000 tanga) to'latib, ishonchsizroq natija berish noto'g'ri bo'lardi, shuning uchun `writeEssayWithLlm` 3+ varaq uchun bo'lim-bo'lim yozishga o'tkazildi (mavjud `writeSection` qayta ishlatildi, yangi generatsiya mantiqi emas), muvaffaqiyatsiz bo'lsa eski bitta-chaqiruvli yo'lga qaytadi.
+
+### 11.2. Jonli tekshiruv
+
+| Sinov | Natija |
+|---|---|
+| Dars rejasi extra | Promptda bor ✅ |
+| Texnologik xarita, 34 hafta so'ralgan | 34/34 qator, soat yig'indisi 136/136 ✅ |
+| Keys, 4 ta keys | Barchasida "Jami: 10 ball" ✅ |
+| Tarjima → rus, → ingliz | Info bloki to'liq maqsad tilida, "avto" ham tarjima qilindi ✅ |
+| Glossariy 10 va 40 ta | Aniq so'ralgan son, 0 ta takror ✅ |
+| Rezyume, ikki ohang | Matn uslubi sezilarli farqlandi ✅ |
+| Insho 1/3/4/5 varaq (tuzatishdan OLDIN) | 5 varaq: 890/1150 so'z (77%) — **FAILED** ❌ |
+| Insho 1/3/4/5 varaq (tuzatishdan KEYIN) | 1200/1175/1177 so'z (barchasi ≥ kerakli 80%) — **hammasi o'tdi** ✅ |
+
+### 11.3. Testlar
+
+`npm run check` toza (145 test, 142 o'tdi, 3 skip, 0 xato). Yangi: glossariy va insho narx pog'onalari.
+
+---
+
+## 12. Yakuniy xulosa
 
 `docs/AUDIT.md` "va'da = natija" muammosini **hajm va mavjudlik** darajasida hal qildi: slayd soni, speaker notes, adabiyot halolligi — bularning barchasi men joriy koddan tasdiqladim, ishlaydi. 2026-08-24 dagi olti tashqi hisobot (ulardan uchtasi mustaqil ravishda bir xil xulosaga kelib, sakkiztasi men tomonimdan qator darajasida tasdiqlandi) ko'rsatadiki, keyingi qatlam — **janr va format darajasidagi** rostgo'ylik. Kod "biror narsa chiqardi" dan "va'da qilingan hajmni berdi" ga o'tgan (Sprint 0–4). Keyingi qadam — "va'da qilingan **janr**ni berdi": referat adabiyot sharhi bo'lsin, kurs ishi tadqiqot bo'lsin, maqola jurnal maqolasi ko'rinishida chiqsin — hozir esa beshtasi ham bir xil "uzun insho" ko'rinishida.
 

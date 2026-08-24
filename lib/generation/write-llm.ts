@@ -835,11 +835,73 @@ export async function writeWriterWithLlm(meta: DocMeta, deadline?: number): Prom
   return doc;
 }
 
+/**
+ * 3+ varaqlik insho — bo'lim-bo'lim so'raladi.
+ *
+ * Sabab akademik yozuvchidagi bilan bir xil (`perSub` izohi): bitta
+ * chaqiruvda 15 paragraf so'ralganda model ~60% ini beradi, 2–3
+ * paragraf so'ralganda esa deyarli to'liq bajaradi. Insho narxi endi
+ * varaqqa bog'liq (N-6) — 5 varaqlik insho 4 000 tanga, shuning uchun
+ * uni bitta katta, ishonchsiz chaqiruvga qoldirib bo'lmaydi.
+ *
+ * Mavjud `writeSection` (akademik yozuvchi uchun yozilgan) qayta
+ * ishlatiladi — yangi generatsiya mantiqi emas.
+ */
+async function writeEssayInChunks(
+  meta: DocMeta,
+  sys: string,
+  L: ReturnType<typeof sectionLabels>,
+  n: number,
+  deadline?: number,
+): Promise<AcademicDoc | null> {
+  const topic = meta.topic;
+  const angles = [
+    `«${topic}» mavzusini ochuvchi ANIQ shaxsiy tajriba yoki kuzatuv bilan yozing.`,
+    `«${topic}» ning jamiyat, millat yoki inson hayoti uchun ahamiyatini yoriting.`,
+    `«${topic}» bo‘yicha chuqurroq mulohaza, qarama-qarshi nuqtai nazar yoki kelajakka oid fikr bildiring.`,
+  ];
+  const jobs = [
+    { id: "kirish", title: L.intro, brief: `«${topic}» mavzusiga jonli kirish, o‘quvchini qiziqtiradigan boshlanish.`, min: 2 },
+    ...angles.map((brief, i) => ({ id: `bolim${i + 1}`, title: `${["I", "II", "III"][i]}`, brief, min: 3 })),
+    { id: "xulosa", title: L.conclusion, brief: `«${topic}» bo‘yicha shaxsiy xulosa va umumlashma. Boblarni takrorlamang.`, min: 2 },
+  ];
+  const written = await mapPool(jobs, 3, async (item) => {
+    const left = remainingMs(deadline);
+    if (left < 5_000) return { item, blocks: [] as Block[] };
+    return { item, blocks: await writeSection(sys, item.title, item.brief, meta, item.min, Math.min(35_000, left)) };
+  });
+  const byId = new Map<string, Block[]>();
+  for (const { item, blocks } of written) if (blocks.length) byId.set(item.id, blocks);
+
+  const intro = byId.get("kirish");
+  const bodySecs = angles.map((_, i) => byId.get(`bolim${i + 1}`)).filter((b): b is Block[] => Boolean(b?.length));
+  const conclusion = byId.get("xulosa");
+  if (!intro || !conclusion || bodySecs.length < 2) {
+    console.warn("[write-essay] bo‘lim yetishmadi", { intro: !!intro, body: bodySecs.length, conclusion: !!conclusion });
+    return null;
+  }
+  return {
+    meta,
+    titlePage: true,
+    toc: false,
+    sections: [
+      section("kirish", L.intro, intro),
+      ...bodySecs.map((blocks, i) => section(`asosiy${i + 1}`, `${L.main} ${i + 1}`, blocks)),
+      section("xulosa", L.conclusion, conclusion),
+    ],
+  };
+}
+
 export async function writeEssayWithLlm(meta: DocMeta, deadline?: number): Promise<AcademicDoc | null> {
   if (!llmEnabled()) return null;
   const sys = essaySystemPrompt(meta);
   const L = sectionLabels(meta.language);
   const n = Math.min(5, Math.max(1, meta.targetPages));
+  if (n >= 3) {
+    const chunked = await writeEssayInChunks(meta, sys, L, n, deadline);
+    if (chunked) return chunked;
+    console.warn("[write-essay] bo‘lib yozish yiqildi, bitta chaqiruvga qaytildi");
+  }
   const minParas = n <= 1 ? 4 : n <= 2 ? 7 : n * 3;
   const raw = await llmComplete(
     sys,

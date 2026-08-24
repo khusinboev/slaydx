@@ -35,6 +35,25 @@ test("kattaroq hajm — qimmatroq", () => {
   assert.ok(priceFor(ref, { pages: "25-30" }) > priceFor(ref, { pages: "10-15" }));
 });
 
+/**
+ * Insho narxi varaqqa bog'liq (N-6).
+ *
+ * Ilgari 1 varaq ham, 5 varaq ham 2 000 tanga turardi — forma 1–5
+ * varaq tanlovini bersa ham, `priceFor` da `essay` uchun alohida shart
+ * yo'q edi, shuning uchun har doim `tool.basePrice` qaytardi.
+ */
+test("insho narxi varaqqa bog'liq", () => {
+  const essay = TOOL_BY_ID.essay;
+  assert.equal(priceFor(essay, { pages: "1" }), essay.basePrice);
+  assert.ok(priceFor(essay, { pages: "5" }) > priceFor(essay, { pages: "1" }));
+  let prev = 0;
+  for (const p of ["1", "2", "3", "4", "5"]) {
+    const price = priceFor(essay, { pages: p });
+    assert.ok(price >= prev, `${p} varaq narxi kamayib ketdi`);
+    prev = price;
+  }
+});
+
 test("noma'lum hajm — standart narx, 0 emas", () => {
   const cw = TOOL_BY_ID.coursework;
   assert.equal(priceFor(cw, { pages: "yo'q-bunday" }), cw.basePrice);
