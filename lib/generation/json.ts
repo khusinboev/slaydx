@@ -95,6 +95,72 @@ function dropLastToken(text: string): string {
   return m ? t.slice(0, t.length - m[0].length) : t.slice(0, -1);
 }
 
+/** Bo'sh obyekt yoki bo'sh massiv — ya'ni hech qanday ma'lumot tutmaydigan idish. */
+function isEmptyContainer(v: unknown): boolean {
+  if (Array.isArray(v)) return v.length === 0;
+  return Boolean(v) && typeof v === "object" && Object.keys(v as object).length === 0;
+}
+
+/**
+ * Tiklashdan keyin OXIRIDA qolgan bo'sh idishni tashlaydi.
+ *
+ * Javob element boshida uzilsa (`…,{"title":"Uch`), tiklash o'sha
+ * tugallanmagan bo'lakni tashlab, ochiq qolgan `{` ni yopadi — natijada
+ * massiv oxirida `{}` paydo bo'ladi. Bu sintaktik jihatdan to'g'ri,
+ * lekin MA'NOSIZ va u hujjatgacha yetib borardi:
+ *
+ *   • `lessonDoc` — sarlavhasi «Bosqich», matni bo'sh dars bosqichi;
+ *   • `writeKeysWithLlm` — vaziyati ham, javobi ham bo'sh «Keys N» bo'limi.
+ *
+ * Faqat OXIRGI element tashlanadi va faqat tiklash yo'lida: o'rtadagi
+ * `{}` modeldan shunday kelgan bo'lishi mumkin, tugallangan javobga esa
+ * umuman tegilmaydi.
+ *
+ * Qisman to'ldirilgan element SAQLANADI: `{"title":"Y","minutes":20}`
+ * — `activity` si kesilgan bo'lsa ham foydali, uni tashlash modeldan
+ * kelgan matnni yo'qotish bo'lardi.
+ */
+function dropTrailingEmpty(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    const out = value.map(dropTrailingEmpty);
+    while (out.length && isEmptyContainer(out[out.length - 1])) out.pop();
+    return out;
+  }
+  if (value && typeof value === "object") {
+    const o = value as Record<string, unknown>;
+    const keys = Object.keys(o);
+    for (const key of keys) o[key] = dropTrailingEmpty(o[key]);
+    /*
+     * Obyektning OXIRGI kaliti ham shu holatga tushadi:
+     * `{"uz":{…},"en":{"text":"Hel` → `{uz:{…}, en:{}}`. JSON kalit
+     * tartibini saqlaydi, ya'ni oxirgi kalit — uzilish paytida
+     * yozilayotgani. Bo'sh annotatsiya `en: {}` chaqiruvchini «til
+     * keldi, lekin matni yo'q» degan noaniq holatga qo'yardi.
+     */
+    const last = keys[keys.length - 1];
+    if (last !== undefined && isEmptyContainer(o[last])) delete o[last];
+    return o;
+  }
+  return value;
+}
+
+/**
+ * Tiklash natijasi — bo'sh bo'lsa «tahlil qilinmadi» deb hisoblanadi.
+ *
+ * `"{"` kabi kirish sintaktik jihatdan `{}` ga tiklanadi, lekin unda
+ * hech qanday ma'lumot yo'q. Bunday natijani qaytarish chaqiruvchini
+ * chalg'itadi: `parseLlmObject` obyekt beradi, xizmat esa uning
+ * maydonlarini `undefined` deb topib, sababni bilmay qoladi. `null`
+ * halolroq — «model javob bermadi» aynan shu holat.
+ *
+ * TUGALLANGAN `{}` javobiga bu tegmaydi: u birinchi yo'ldan
+ * (`JSON.parse`) o'tadi va tiklashgacha yetib kelmaydi.
+ */
+function cleaned(parsed: unknown): unknown {
+  const out = dropTrailingEmpty(parsed);
+  return isEmptyContainer(out) ? undefined : out;
+}
+
 /**
  * Kesilgan JSON ni tiklaydi: ochiq satrni tashlaydi, keyin oxirgi
  * tugallanmagan bo'laklarni birma-bir olib tashlab, qavslarni yopib ko'radi.
@@ -112,9 +178,9 @@ function repairTruncated(body: string): unknown {
     if (!st.broken && !st.inString) {
       const candidate = trimmed + st.closers.join("");
       const parsed = tryParse(candidate);
-      if (parsed !== undefined) return parsed;
+      if (parsed !== undefined) return cleaned(parsed);
       const noTrailing = tryParse(candidate.replace(/,(\s*[}\]])/g, "$1"));
-      if (noTrailing !== undefined) return noTrailing;
+      if (noTrailing !== undefined) return cleaned(noTrailing);
     }
     head = dropLastToken(trimmed);
   }
