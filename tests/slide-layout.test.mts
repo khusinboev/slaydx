@@ -290,3 +290,59 @@ test("deka slaydlarining id lari noyob va tartibli", async () => {
     if (savedX) process.env.XAI_API_KEY = savedX;
   }
 });
+
+test("forma standartlaridan slayd pastki qatoriga muallif yetib boradi", async () => {
+  const { profileDefaults, TOOL_BY_ID } = await import("../lib/tools.ts");
+  const { extractMeta } = await import("../lib/generation/meta.ts");
+  const { fallbackSlides } = await import("../lib/generation/slide-write.ts");
+
+  /*
+   * AYNAN N-7 (Sprint 14). `SlideForm` o'z qiymatlarini noldan qurar va
+   * profildan hech narsa olmasdi, `StandardForm` esa olardi. Natijada
+   *
+   *   const footer = [meta.author, meta.university].filter(Boolean).join(" · ")
+   *
+   * slayd yo'lida DOIM bo'sh satr berardi: himoya taqdimotida ham muallif
+   * ismi ko'rinmasdi — ko'ruvchida ham, PPTX da ham.
+   *
+   * Sinov formadan slaydgacha bo'lgan BUTUN zanjirni bosib o'tadi:
+   * profil → forma standartlari → `extractMeta` → deck.
+   */
+  const profile = {
+    name: "Aliyev Ali",
+    author: "Aliyev Ali — 3-kurs, 301-guruh",
+    university: "Toshkent davlat universiteti",
+    faculty: "Fizika",
+    department: "Optika",
+    subject: "Fizika",
+    teacher: "Karimov B.",
+    city: "Samarqand",
+  };
+
+  const values = { ...profileDefaults(profile), topic: "Fotosintez", quality: "standard" };
+  const meta = extractMeta(TOOL_BY_ID.slide, values as never);
+
+  // `parseAuthorLine` kurs va guruhni ajratadi — pastki qatorda faqat ism qoladi.
+  assert.equal(meta.author, "Aliyev Ali");
+  assert.equal(meta.university, "Toshkent davlat universiteti");
+  assert.equal(meta.city, "Samarqand", "shahar ham profildan olinishi kerak");
+
+  const slides = fallbackSlides(meta);
+  const footers = slides.map((s) => s.footer ?? "");
+  assert.ok(
+    footers.every((f) => f.includes("Aliyev Ali")),
+    `har slaydda muallif bo'lishi kerak, chiqdi: ${JSON.stringify(footers[0])}`,
+  );
+  assert.ok(
+    footers.every((f) => f.includes("Toshkent davlat universiteti")),
+    "pastki qatorda muassasa ham bo'lishi kerak",
+  );
+
+  // Profil bo'sh bo'lsa pastki qator ham bo'sh — bu kutilgan holat,
+  // «F.I.Sh» kabi o'ylab topilgan qiymat qo'yilmaydi.
+  const blank = extractMeta(TOOL_BY_ID.slide, {
+    ...profileDefaults({}),
+    topic: "Fotosintez",
+  } as never);
+  assert.equal(fallbackSlides(blank)[0].footer, "");
+});

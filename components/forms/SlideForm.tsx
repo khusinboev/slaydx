@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import type { FormValues, ToolConfig } from "@/lib/types";
-import { priceFor } from "@/lib/tools";
+import type { FormValues, ToolConfig, UserProfile } from "@/lib/types";
+import { priceFor, profileDefaults } from "@/lib/tools";
 import { SLIDE_TEMPLATES } from "@/lib/generation/slide-templates";
 import { SLIDE_THEMES } from "@/lib/generation/slide-themes";
 import { ChipGroup, LanguagePicker, Legend, ModeSwitch, TextInput } from "./fields";
@@ -47,9 +47,19 @@ const QUALITY = [
   { value: "premium_long", label: "Premium uzun · 16 slayd · sifatliroq rasm · 8 000" },
 ];
 
-export function SlideForm({ tool }: { tool: ToolConfig }) {
+/**
+ * `profile` MAJBURIY prop — ixtiyoriy emas.
+ *
+ * Ilgari `SlideForm` o'z qiymatlarini noldan qurar va profildan hech
+ * narsa olmasdi (N-7). Natijada `meta.author` ham, `meta.university` ham
+ * bo'sh bo'lib, har slaydning pastki qatori bo'sh chiqardi — himoya
+ * taqdimotida ham muallif ismi ko'rinmasdi. Prop majburiy bo'lgani
+ * uchun simlashni unutish endi TypeScript xatosi.
+ */
+export function SlideForm({ tool, profile }: { tool: ToolConfig; profile: UserProfile }) {
   const router = useRouter();
-  const [values, setValues] = useState<FormValues>({
+  const [values, setValues] = useState<FormValues>(() => ({
+    ...profileDefaults(profile),
     mode: "topic",
     topic: "",
     language: "uz",
@@ -59,7 +69,7 @@ export function SlideForm({ tool }: { tool: ToolConfig }) {
     titleSlide: true,
     slideTheme: "atlas",
     slideTemplate: "auto",
-  });
+  }));
   const [extraOpen, setExtraOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [reading, setReading] = useState(false);

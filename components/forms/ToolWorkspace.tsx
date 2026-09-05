@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { FormValues, ToolConfig } from "@/lib/types";
-import { missingRequired, priceFor } from "@/lib/tools";
+import { missingRequired, priceFor, profileDefaults } from "@/lib/tools";
 import { draftOutline } from "@/lib/api-client";
 import { useAppStore, writerProfile } from "@/lib/store";
 import { useUi } from "@/lib/ui";
@@ -19,6 +19,9 @@ import { SourceFileField } from "./SourceFileField";
 
 function defaultsFor(tool: ToolConfig, profile: UserProfile): FormValues {
   const v: FormValues = {
+    // Muallif maydonlari yagona manbadan (`lib/tools.ts`) — `SlideForm`
+    // ham aynan shu ro'yxatni oladi, shuning uchun ular ajralib ketmaydi.
+    ...profileDefaults(profile),
     language: "uz",
     mode: tool.modes ? "topic" : "topic",
     topic: "",
@@ -43,13 +46,6 @@ function defaultsFor(tool: ToolConfig, profile: UserProfile): FormValues {
     titleSlide: true,
     weeklyHours: 4,
     totalHours: 136,
-    university: profile.university,
-    faculty: profile.faculty,
-    department: profile.department,
-    author: profile.author || profile.name,
-    subject: profile.subject,
-    teacher: profile.teacher,
-    city: profile.city || "Toshkent",
   };
   return v;
 }
@@ -72,12 +68,14 @@ export function ToolWorkspace({ tool }: { tool: ToolConfig }) {
     return <div className="text-muted-foreground p-8 text-sm">Yuklanmoqda...</div>;
   }
 
-  if (tool.custom === "slide") return <SlideForm tool={tool} />;
+  const profile = writerProfile(user);
+
+  if (tool.custom === "slide") return <SlideForm tool={tool} profile={profile} />;
   if (tool.custom === "resume") return <ResumeWizard tool={tool} />;
   if (tool.custom === "translation") return <TranslationForm tool={tool} />;
   if (tool.custom === "image") return <ImageStudio tool={tool} />;
 
-  return <StandardForm tool={tool} profile={writerProfile(user)} />;
+  return <StandardForm tool={tool} profile={profile} />;
 }
 
 function StandardForm({ tool, profile }: { tool: ToolConfig; profile: UserProfile }) {

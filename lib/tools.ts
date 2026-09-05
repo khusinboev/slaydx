@@ -1,4 +1,4 @@
-import type { FormValues, ToolConfig, ToolId } from "./types";
+import type { FormValues, ToolConfig, ToolId, UserProfile } from "./types";
 
 const TOPIC_FILE_MODES = [
   {
@@ -736,6 +736,33 @@ export function preflightError(tool: ToolConfig, values: FormValues): string | n
     }
   }
   return null;
+}
+
+/**
+ * Muallif ma'lumotlari — HAR qanday hujjatga tushadigan umumiy maydonlar.
+ *
+ * Nega `lib/tools.ts` da: bu forma qoidasi, ya'ni `missingRequired` va
+ * `priceFor` bilan bir joyda turishi kerak. Har forma o'z standartini
+ * qo'lda yozganda ular ajralib ketardi — aynan shunday bo'lgan edi
+ * (N-7): `StandardForm` profilni o'qir, `SlideForm` esa o'z qiymatlarini
+ * noldan qurib, `author` va `university` ni umuman olmasdi. Natijada
+ * `slide-write.ts` dagi
+ *
+ *   const footer = [meta.author, meta.university].filter(Boolean).join(" · ")
+ *
+ * har doim bo'sh satr berardi: himoya taqdimotida ham (deck da `defense`
+ * auditoriyasi bor!) muallif ismi ko'rinmasdi — ko'ruvchida ham, PPTX da ham.
+ */
+export function profileDefaults(profile: Partial<UserProfile>): FormValues {
+  return {
+    author: profile.author || profile.name || "",
+    university: profile.university || "",
+    faculty: profile.faculty || "",
+    department: profile.department || "",
+    subject: profile.subject || "",
+    teacher: profile.teacher || "",
+    city: profile.city || "Toshkent",
+  };
 }
 
 export function priceFor(tool: ToolConfig, values: FormValues): number {
