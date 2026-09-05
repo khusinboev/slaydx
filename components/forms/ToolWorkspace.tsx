@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { FormValues, ToolConfig } from "@/lib/types";
-import { missingRequired, priceFor, profileDefaults } from "@/lib/tools";
+import { missingRequired, priceFor, profileDefaults, toolBlockedReason } from "@/lib/tools";
 import { draftOutline } from "@/lib/api-client";
 import { useAppStore, writerProfile } from "@/lib/store";
 import { useUi } from "@/lib/ui";
@@ -54,6 +54,7 @@ export function ToolWorkspace({ tool }: { tool: ToolConfig }) {
   const loggedIn = useAppStore((s) => s.loggedIn);
   const sessionChecked = useAppStore((s) => s.sessionChecked);
   const user = useAppStore((s) => s.user);
+  const features = useAppStore((s) => s.features);
   const open = useUi((s) => s.open);
 
   // Sessiya serverdan tasdiqlanmaguncha login modalini ochmaymiz —
@@ -66,6 +67,27 @@ export function ToolWorkspace({ tool }: { tool: ToolConfig }) {
 
   if (!sessionChecked) {
     return <div className="text-muted-foreground p-8 text-sm">Yuklanmoqda...</div>;
+  }
+
+  /*
+   * Kalitsiz xizmat sotilmaydi (N-6).
+   *
+   * Kartochka `CreateGrid` da allaqachon o'chirilgan, lekin sahifani
+   * to'g'ridan-to'g'ri ochish mumkin: havola, zakladka, orqaga tugmasi.
+   * To'siq shu yerda ham bo'lishi kerak — aks holda foydalanuvchi to'lab,
+   * navbat kutib, faqat shundan keyin xato olardi.
+   */
+  const blocked = toolBlockedReason(tool, features);
+  if (blocked) {
+    return (
+      <div className="mx-auto max-w-2xl px-4 py-16 text-center">
+        <p className="font-medium">{tool.pageTitle}</p>
+        <p className="text-muted-foreground mt-2 text-sm">{blocked}</p>
+        <p className="text-muted-foreground mt-1 text-sm">
+          Hisobingizdan hech narsa yechilmadi.
+        </p>
+      </div>
+    );
   }
 
   const profile = writerProfile(user);

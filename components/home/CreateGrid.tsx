@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect } from "react";
-import { TOOLS } from "@/lib/tools";
+import { TOOLS, toolBlockedReason } from "@/lib/tools";
 import { TOOL_ICONS } from "../shell/icons";
 import { useAppStore } from "@/lib/store";
 import { useUi } from "@/lib/ui";
@@ -10,6 +10,7 @@ import { useUi } from "@/lib/ui";
 export function CreateGrid() {
   const hydrated = useAppStore((s) => s.hydrated);
   const loggedIn = useAppStore((s) => s.loggedIn);
+  const features = useAppStore((s) => s.features);
   const open = useUi((s) => s.open);
 
   useEffect(() => {
@@ -38,13 +39,15 @@ export function CreateGrid() {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {TOOLS.filter((t) => t.group === g.id).map((t) => {
               const Icon = TOOL_ICONS[t.icon];
-              return (
-                <Link
-                  key={t.id}
-                  href={`/uz/${t.slug}`}
-                  style={{ ["--tc" as string]: t.tc }}
-                  className="bg-card hover:border-primary/40 overflow-hidden rounded-2xl border transition-colors"
-                >
+              /*
+               * Kalitsiz xizmat SOTILMAYDI. Ilgari kartochka to'liq
+               * ko'rinar, foydalanuvchi to'lar, navbat kutar va faqat
+               * shundan keyin xato olardi (N-6). Kartochka yashirilmaydi
+               * — sabab ochiq yozilib, bosish o'chiriladi.
+               */
+              const blocked = toolBlockedReason(t, features);
+              const body = (
+                <>
                   <div className="h-1 bg-[rgb(var(--tc))]" />
                   <div className="p-4">
                     <div className="mb-3 flex items-center gap-2.5">
@@ -52,8 +55,38 @@ export function CreateGrid() {
                       <span className="font-medium">{t.title}</span>
                     </div>
                     <p className="text-muted-foreground text-sm">{t.description}</p>
-                    <p className="mt-3 text-xs font-medium">{t.basePrice.toLocaleString("uz-UZ")} tanga dan</p>
+                    {blocked ? (
+                      <p className="mt-3 text-xs font-medium text-amber-600 dark:text-amber-500">{blocked}</p>
+                    ) : (
+                      <p className="mt-3 text-xs font-medium">
+                        {t.basePrice.toLocaleString("uz-UZ")} tanga dan
+                      </p>
+                    )}
                   </div>
+                </>
+              );
+
+              if (blocked) {
+                return (
+                  <div
+                    key={t.id}
+                    style={{ ["--tc" as string]: t.tc }}
+                    aria-disabled
+                    className="bg-card overflow-hidden rounded-2xl border opacity-60"
+                  >
+                    {body}
+                  </div>
+                );
+              }
+
+              return (
+                <Link
+                  key={t.id}
+                  href={`/uz/${t.slug}`}
+                  style={{ ["--tc" as string]: t.tc }}
+                  className="bg-card hover:border-primary/40 overflow-hidden rounded-2xl border transition-colors"
+                >
+                  {body}
                 </Link>
               );
             })}

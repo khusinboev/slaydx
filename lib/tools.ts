@@ -800,6 +800,48 @@ export function profileDefaults(profile: Partial<UserProfile>): FormValues {
   };
 }
 
+/**
+ * Server imkoniyatlari — `/api/auth/session` qaytaradigan bayroqlar.
+ *
+ * `Features` turining kerakli qismi (klient `lib/api-client.ts` da to'liq
+ * ko'rinishini biladi). Bu modul sof bo'lishi kerak, shuning uchun tur
+ * shu yerda qayta e'lon qilinadi.
+ */
+export type ToolFeatures = { llm: boolean; images: boolean };
+
+/**
+ * Vosita hozir ishlay oladimi — yo'q bo'lsa SABABI.
+ *
+ * Bayroqlar `/api/auth/session` da allaqachon qaytarilardi, lekin UI da
+ * `llm` ham, `images` ham HECH QAYERDA o'qilmasdi (N-6). Natijasi:
+ *
+ *   • `FAL_KEY` yo'q → «Rasm generate» to'liq ko'rinar va sotilardi.
+ *     To'lov → navbat → `generateFalImage` «FAL_KEY missing» → xato →
+ *     qaytarish. Ya'ni «xizmat ishlamayapti» xabari eng qimmat yo'l
+ *     bilan yetkazilardi: pul qaytadi, vaqt qaytmaydi.
+ *
+ *   • `GEMINI_API_KEY` yo'q → `buildArtifact` xato TASHLAMAYDI (u faqat
+ *     kalit BOR bo'lgan holatda tashlaydi), shablon hujjat qaytadi va
+ *     to'liq narx olinadi. Foydalanuvchi har mavzuga bir xil umumiy
+ *     matn olardi — bu shablon yo'lining dev/demo maqsadi, sotuv emas.
+ *
+ * `features` hali kelmagan bo'lsa (`null`) hech narsa to'silmaydi:
+ * sessiya tekshiruvidan oldin vositani o'chirib qo'yish, uni bir lahza
+ * yo'q qilib ko'rsatish bo'lardi.
+ */
+export function toolBlockedReason(tool: ToolConfig, features?: ToolFeatures | null): string | null {
+  if (!features) return null;
+  if (tool.custom === "image") {
+    return features.images
+      ? null
+      : "Rasm xizmati vaqtincha o‘chiq: serverda rasm kaliti sozlanmagan.";
+  }
+  if (!features.llm) {
+    return "AI xizmati vaqtincha o‘chiq: serverda matn kaliti sozlanmagan.";
+  }
+  return null;
+}
+
 export function priceFor(tool: ToolConfig, values: FormValues): number {
   if (tool.id === "image") {
     const n = Number(values.imageCount || 1);
