@@ -119,10 +119,61 @@ export async function chargeInTx(
 }
 
 /**
+ * Yechilgan summaning `ratio` ulushini hamyonlar bo'yicha taqsimlaydi.
+ *
+ * Har komponentni alohida yaxlitlash summani nishondan chetlatadi
+ * (uch marta pastga yaxlitlash 2 tangagacha kam qaytarishi mumkin —
+ * bu foydalanuvchi zarariga). Shuning uchun avval NISHON hisoblanadi,
+ * so'ng qoldiq kasr qismi eng katta komponentlarga tarqatiladi.
+ * `slide-layout` va `normalizeMinutes` dagi bilan bir xil g'oya.
+ */
+export function splitRatio(parts: number[], ratio: number): number[] {
+  const total = parts.reduce((a, b) => a + b, 0);
+  const target = Math.round(total * ratio);
+  const out = parts.map((p) => Math.floor(p * ratio));
+  let left = target - out.reduce((a, b) => a + b, 0);
+  const order = parts
+    .map((p, i) => ({ i, frac: p * ratio - Math.floor(p * ratio) }))
+    .sort((a, b) => b.frac - a.frac);
+  for (const { i } of order) {
+    if (left <= 0) break;
+    // Qaytarish hech qachon yechilgandan oshmaydi.
+    if (out[i] >= parts[i]) continue;
+    out[i] += 1;
+    left -= 1;
+  }
+  return out;
+}
+
+/**
  * Yechilgan mablag'ni aynan olingan hamyonlarga qaytaradi.
  * Bir xil reference uchun qayta chaqirilsa hech narsa qilmaydi.
  */
 export async function refund(userId: string, reference: string, note = ""): Promise<boolean> {
+  return refundRatio(userId, reference, 1, note);
+}
+
+/**
+ * Ishning bir qismi bajarilmaganda — proporsional qaytarish.
+ *
+ * Nega to'liq xato emas: rasm vositasida 4 tadan 3 tasi kelgan bo'lsa,
+ * ishni yiqitish foydalanuvchini uchta yaxshi rasmdan ham mahrum
+ * qilardi. «Yetkazilganiga to'lash» ikkalasidan ham halolroq.
+ *
+ * Idempotentlik kaliti `refund` bilan BIR XIL (`reference`), ya'ni
+ * bitta ish uchun yo to'liq, yo qisman qaytarish bo'ladi — ikkalasi emas.
+ */
+export async function refundPartial(
+  userId: string,
+  reference: string,
+  ratio: number,
+  note = "",
+): Promise<boolean> {
+  if (!(ratio > 0)) return false;
+  return refundRatio(userId, reference, Math.min(1, ratio), note);
+}
+
+async function refundRatio(userId: string, reference: string, ratio: number, note: string): Promise<boolean> {
   return transaction(async (client) => {
     const done = await client.query("SELECT 1 FROM transactions WHERE kind = 'refund' AND reference = $1", [
       reference,
@@ -140,9 +191,10 @@ export async function refund(userId: string, reference: string, note = ""): Prom
     const row = charged.rows[0];
     if (!row) return false;
 
-    const points = -Number(row.points_delta);
-    const quota = -Number(row.quota_delta);
-    const balance = -Number(row.balance_delta);
+    const [points, quota, balance] = splitRatio(
+      [-Number(row.points_delta), -Number(row.quota_delta), -Number(row.balance_delta)],
+      ratio,
+    );
     if (points + quota + balance === 0) return false;
 
     await client.query("SELECT 1 FROM users WHERE id = $1 FOR UPDATE", [userId]);

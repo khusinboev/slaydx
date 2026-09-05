@@ -8,6 +8,14 @@ export type GenImage = {
   alt?: string;
   w: number;
   h: number;
+  /**
+   * Haqiqiy MIME (`image/png` yoki `image/jpeg`).
+   *
+   * `url` aktivga chiqarilgandan keyin `/api/.../assets/<id>` ko'rinishiga
+   * o'tadi va kengaytma yo'qoladi — ko'ruvchi yuklash nomini shundan
+   * oladi, aks holda PNG ham `.jpg` nomi bilan tushardi.
+   */
+  mime?: string;
 };
 
 export type Block =
@@ -120,6 +128,18 @@ export type BuiltFile = {
   fileName: string;
   mime: string;
   doc: AcademicDoc;
+  /**
+   * Va'da qilinganning qanchasi yetkazildi.
+   *
+   * Berilgan va `got < want` bo'lsa worker farqni qaytaradi. Rasm
+   * vositasi uchun kiritilgan: narx faqat SONGA bog'langan (4 ta = 6 000
+   * tanga), yetkazish esa tekshirilmasdi — 4 tadan 1 tasi kelsa ham ish
+   * `COMPLETED` bo'lib, pul to'liq yechilgan holida qolardi.
+   *
+   * Maydon ataylab universal: kelajakda slaydda «15 ta so'raldi, 12 tasi
+   * chiqdi» holatiga ham shu mexanizm qo'llanadi.
+   */
+  delivered?: { got: number; want: number };
 };
 
 export type BuildCtx = {

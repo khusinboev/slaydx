@@ -39,3 +39,19 @@ export function viewerKind(id: ToolId): ViewerKind {
       return "academic";
   }
 }
+
+/**
+ * Rasm MIME turidan fayl kengaytmasi.
+ *
+ * Ko'ruvchi ham, generator ham shu YAGONA manbadan foydalanadi.
+ * Ilgari ikkalasi mustaqil qaror qilardi va mos kelmasdi: generator
+ * PNG ni to'g'ri aniqlar, ko'ruvchidagi yuklash tugmasi esa qattiq
+ * yozilgan `.jpg` nomini berardi. Bu modulda server kodi yo'q, shuning
+ * uchun uni klient komponenti ham import qila oladi.
+ */
+export function imageExt(mime: string | undefined): string {
+  if (!mime) return "jpg";
+  if (/png/i.test(mime)) return "png";
+  if (/webp/i.test(mime)) return "webp";
+  return "jpg";
+}

@@ -14,7 +14,7 @@ const hasDb = Boolean(process.env.DATABASE_URL) && !process.env.DATABASE_URL!.in
 process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";
 
 test("kredit hisobi", { skip: hasDb ? false : "DATABASE_URL yo'q" }, async (t) => {
-  const { query, migrate, pool } = await import("../lib/server/db.ts");
+  const { query, migrate } = await import("../lib/server/db.ts");
   const { charge, refund, topUp, walletTotal } = await import("../lib/server/credits.ts");
 
   await migrate();
@@ -29,7 +29,8 @@ test("kredit hisobi", { skip: hasDb ? false : "DATABASE_URL yo'q" }, async (t) =
 
   t.after(async () => {
     await query("DELETE FROM users WHERE id = $1", [uid]);
-    await pool().end();
+    // Pool ATAYIN bu yerda yopilmaydi: fayldagi keyingi test ham shu
+    // ulanishdan foydalanadi. Yopish faqat oxirgi testda.
   });
 
   await t.test("hamyonlar navbat bilan yechiladi: ball → kvota → balans", async () => {
@@ -91,4 +92,53 @@ test("kredit hisobi", { skip: hasDb ? false : "DATABASE_URL yo'q" }, async (t) =
       balance: Number(r[0].balance),
     };
   }
+});
+
+/**
+ * Qisman qaytarish (Sprint 10).
+ *
+ * Rasm vositasida narx SONGA bog'langan (4 ta = 6 000 tanga), lekin
+ * yetkazish tekshirilmasdi: 4 tadan 1 tasi kelsa ham ish `COMPLETED`
+ * bo'lib, pul to'liq yechilgan holida qolardi.
+ */
+test("qisman qaytarish", { skip: hasDb ? false : "DATABASE_URL yo'q" }, async (t) => {
+  const { query, migrate, pool } = await import("../lib/server/db.ts");
+  const { charge, refund, refundPartial, walletTotal } = await import("../lib/server/credits.ts");
+
+  await migrate();
+  const suffix = `test-partial-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const rows = await query<{ id: string }>(
+    `INSERT INTO users (username, name, points, quota, balance)
+     VALUES ($1, 'Test', 0, 0, 6000) RETURNING id`,
+    [suffix],
+  );
+  const uid = String(rows[0].id);
+  t.after(async () => {
+    await query("DELETE FROM transactions WHERE user_id = $1", [uid]);
+    await query("DELETE FROM users WHERE id = $1", [uid]);
+    await pool().end();
+  });
+
+  const wallet = async () => {
+    const r = await query<{ points: string; quota: string; balance: string }>(
+      "SELECT points, quota, balance FROM users WHERE id = $1",
+      [uid],
+    );
+    return walletTotal({ points: Number(r[0].points), quota: Number(r[0].quota), balance: Number(r[0].balance) });
+  };
+
+  // 4 ta rasm uchun 6 000 tanga yechildi.
+  const ref = `job-${suffix}`;
+  const charged = await charge(uid, 6000, ref, "4 ta rasm");
+  assert.equal(charged.ok, true);
+  assert.equal(await wallet(), 0);
+
+  // 4 tadan 3 tasi keldi — chorak qismi qaytadi.
+  assert.equal(await refundPartial(uid, ref, 1 - 3 / 4, "3/4 yaratildi"), true);
+  assert.equal(await wallet(), 1500, "6 000 ning choragi qaytishi kerak");
+
+  // Ikkinchi urinish hech narsa qilmaydi va to'liq qaytarish ham bloklanadi.
+  assert.equal(await refundPartial(uid, ref, 0.25, "takror"), false);
+  assert.equal(await refund(uid, ref, "to'liq"), false, "qisman qaytarilgandan keyin to'liq qaytarish bo'lmaydi");
+  assert.equal(await wallet(), 1500, "balans o'zgarmasligi kerak");
 });

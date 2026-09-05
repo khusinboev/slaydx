@@ -1,4 +1,5 @@
 import { fetchImageBytes, generateFalImage } from "./slide-images";
+import { imageExt } from "../viewers/kind";
 import { parseLlmObject } from "./json";
 import { extractMeta } from "./meta";
 import { llmComplete, llmEnabled } from "./llm";
@@ -82,6 +83,12 @@ async function mapPool<T, R>(items: T[], limit: number, fn: (item: T, i: number)
   return ret;
 }
 
+/** `data:image/png;base64,...` dan MIME. Topilmasa JPEG deb hisoblanadi. */
+function mimeOf(dataUrl: string): string {
+  const m = /^data:([\w.+-]+\/[\w.+-]+);base64,/.exec(dataUrl);
+  return m ? m[1].toLowerCase() : "image/jpeg";
+}
+
 /**
  * `data:` URL dan baytlarni ajratadi.
  *
@@ -119,7 +126,14 @@ export async function buildImageArtifact(tool: ToolConfig, values: FormValues): 
     if (!im) return null;
     const bytes = await fetchImageBytes(im.url);
     const url = bytes ? `data:${bytes.data}` : im.url;
-    const out: GenImage = { id: `img${i + 1}`, url, alt: prompt.slice(0, 80), w: bytes?.w || ratio.w, h: bytes?.h || ratio.h };
+    const out: GenImage = {
+      id: `img${i + 1}`,
+      url,
+      alt: prompt.slice(0, 80),
+      w: bytes?.w || ratio.w,
+      h: bytes?.h || ratio.h,
+      mime: url.startsWith("data:") ? mimeOf(url) : undefined,
+    };
     return out;
   });
   const images = raw.filter((x): x is GenImage => Boolean(x));
@@ -143,29 +157,81 @@ export async function buildImageArtifact(tool: ToolConfig, values: FormValues): 
     imageRatio: ratio.id,
   };
 
-  // Yuklab olinadigan fayl — birinchi rasm. Uni baytga aylantira
-  // olmasak, bo'sh fayl saqlashdan ko'ra ochiq xato berish to'g'ri.
-  let first = images[0].url;
-  if (!first.startsWith("data:")) {
-    const fetched = await fetchImageBytes(first);
-    first = fetched ? `data:${fetched.data}` : "";
-  }
-  const bytes = first ? dataToBytes(first) : null;
-  if (!bytes) {
+  const files = await resolveImageFiles(images);
+  if (!files.length) {
     throw new Error("Rasm yuklab olinmadi. Qayta urinib ko‘ring.");
   }
 
-  const png = /^data:image\/png/i.test(first);
   const html = `<article><h1>${escapeHtml(prompt)}</h1><p>${images.length} rasm · ${ratio.id} · ${imageStyleById(styleId).name}</p></article>`;
+  const packed = await packImages(files, meta.fileNameHint || "rasm", count);
+  return { html, doc, ...packed };
+}
 
+export type ImageFile = { name: string; bytes: Uint8Array; mime: string };
+
+/**
+ * Rasmlarni baytga aylantiradi (kerak bo'lsa tarmoqdan yuklab).
+ *
+ * Ilgari faqat BIRINCHISI olinardi: foydalanuvchi 4 ta rasm uchun
+ * 6 000 tanga to'lar, `Yuklab olish` tugmasi esa bittasini berardi.
+ */
+async function resolveImageFiles(images: GenImage[]): Promise<ImageFile[]> {
+  const out: ImageFile[] = [];
+  for (const [i, im] of images.entries()) {
+    let url = im.url;
+    if (!url.startsWith("data:")) {
+      const fetched = await fetchImageBytes(url);
+      url = fetched ? `data:${fetched.data}` : "";
+    }
+    const bytes = url ? dataToBytes(url) : null;
+    if (!bytes) continue;
+    const mime = mimeOf(url);
+    out.push({ name: `rasm-${i + 1}.${imageExt(mime)}`, bytes, mime });
+  }
+  return out;
+}
+
+/**
+ * Yuklab olinadigan faylni yig'adi.
+ *
+ * Tarmoqdan ajratilgan: qadoqlash mantig'i (bittami yoki arxivmi,
+ * kengaytma qanday, kam yetkazildimi) sof funksiya bo'lib, sinovdan
+ * o'tkaziladi.
+ */
+export async function packImages(
+  files: ImageFile[],
+  base: string,
+  want: number,
+): Promise<Pick<BuiltFile, "bytes" | "fileName" | "mime" | "delivered">> {
+  /*
+   * Va'da qilinganidan kam chiqsa worker farqni qaytaradi.
+   *
+   * `fal` 429 yoki kontent filtri qaytarishi odatiy hol, ya'ni bu
+   * nazariy holat emas. Ilgari yagona tekshiruv `images.length === 0`
+   * edi: 4 tadan 1 tasi kelsa ish `COMPLETED` bo'lardi.
+   */
+  const delivered = files.length < want ? { got: files.length, want } : undefined;
+
+  if (files.length === 1) {
+    return {
+      // Kengaytma haqiqiy turga mos bo'lsin — ilgari PNG ham `.jpg`
+      // nomi bilan saqlanardi va ba'zi dasturlar uni ochmasdi.
+      fileName: `${base}.${imageExt(files[0].mime)}`,
+      mime: files[0].mime,
+      bytes: files[0].bytes,
+      ...(delivered ? { delivered } : {}),
+    };
+  }
+
+  // Bir nechta rasm — bitta arxiv. Bitta rasm uchun ZIP noqulay bo'lardi.
+  const JSZip = (await import("jszip")).default;
+  const zip = new JSZip();
+  for (const f of files) zip.file(f.name, f.bytes);
   return {
-    html,
-    bytes,
-    // Kengaytma haqiqiy turga mos bo'lsin — ilgari PNG ham `.jpg`
-    // nomi bilan saqlanardi va ba'zi dasturlar uni ochmasdi.
-    fileName: `${meta.fileNameHint || "rasm"}.${png ? "png" : "jpg"}`,
-    mime: png ? "image/png" : "image/jpeg",
-    doc,
+    bytes: await zip.generateAsync({ type: "uint8array" }),
+    fileName: `${base}-${files.length}ta.zip`,
+    mime: "application/zip",
+    ...(delivered ? { delivered } : {}),
   };
 }
 

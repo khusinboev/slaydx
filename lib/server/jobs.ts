@@ -251,6 +251,19 @@ export async function claimJob(workerId: string): Promise<ClaimedJob | null> {
  *
  * `false` qaytsa — natija tashlab yuborilishi kerak.
  */
+/**
+ * Haqiqiy fayl kengaytmasi.
+ *
+ * `generations.format` navbatga qo'yishda `tool.output` dan olinadi, ya'ni
+ * fayl hali yaratilmasdan oldin. Rasm vositasi bir nechta rasmni ZIP
+ * qilib beradi va yorliq «PNG» bo'lib qolardi — foydalanuvchi PNG deb
+ * bosib, `.zip` olardi. Yakunlashda yorliq haqiqiy faylga moslanadi.
+ */
+export function formatOf(fileName: string): string | null {
+  const ext = fileName.toLowerCase().match(/\.([a-z0-9]+)$/)?.[1];
+  return ext && ext.length <= 5 ? ext : null;
+}
+
 export async function completeJob(
   id: string,
   workerId: string,
@@ -265,6 +278,7 @@ export async function completeJob(
     `UPDATE generations
         SET status = 'COMPLETED', progress = 100, step = 'Tayyor',
             html = $3, doc_json = $4, file_name = $5, preview = $6,
+            format = COALESCE($7, format),
             finished_at = now(), locked_by = NULL, locked_at = NULL, error = NULL
       WHERE id = $1 AND locked_by = $2 AND status = 'IN_PROGRESS'
       RETURNING id`,
@@ -275,6 +289,7 @@ export async function completeJob(
       result.doc ? JSON.stringify(result.doc) : null,
       result.fileName,
       result.preview ? JSON.stringify(result.preview) : null,
+      formatOf(result.fileName),
     ],
   );
   return rows.length > 0;

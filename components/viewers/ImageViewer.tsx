@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { Download, Maximize2, X } from "lucide-react";
 import type { AcademicDoc, GenImage } from "@/lib/generation/types";
+import { imageExt } from "@/lib/viewers/kind";
 import { imageRatioById, imageStyleById } from "@/lib/generation/image-studio";
 import { cn } from "@/lib/cn";
 
@@ -95,6 +96,8 @@ export function ImageViewer({ doc }: { doc: AcademicDoc }) {
 function downloadImage(im: GenImage, i: number) {
   const a = document.createElement("a");
   a.href = im.url;
-  a.download = `rasm-${i + 1}.jpg`;
+  // Kengaytma haqiqiy turdan olinadi: PNG rasm `.jpg` nomi bilan
+  // yuklanganda ba'zi dasturlar uni ochmasdi.
+  a.download = `rasm-${i + 1}.${imageExt(im.mime)}`;
   a.click();
 }

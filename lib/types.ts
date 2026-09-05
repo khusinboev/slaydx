@@ -77,7 +77,7 @@ export type ToolConfig = {
   modes?: ToolMode[];
   fields: ToolField[];
   extraOptional?: boolean;
-  output: "docx" | "pptx" | "pdf" | "png";
+  output: "docx" | "pptx" | "png";
   custom?: "slide" | "resume" | "translation" | "image";
   basePrice: number;
 };
@@ -95,7 +95,14 @@ export type Generation = {
   values: FormValues;
   html: string;
   fileName: string;
-  format: "docx" | "pptx" | "pdf" | "png";
+  /**
+   * Yuklab olinadigan faylning haqiqiy formati.
+   *
+   * Navbatga qo'yishda `tool.output` dan olinadi, yakunlashda esa
+   * haqiqiy fayl nomiga moslanadi (bir nechta rasm — `zip`).
+   * `pdf` — talab bo'yicha o'girish natijasi, saqlanadigan format emas.
+   */
+  format: "docx" | "pptx" | "png" | "jpg" | "zip";
   progress: number;
   step: string;
   doc?: AcademicDoc;

@@ -578,3 +578,92 @@ test("bob uslubi faqat akademik-kitob janrlarida", async () => {
   assert.equal(isBobStyle("article"), false);
   assert.equal(isBobStyle("thesis"), false);
 });
+
+// -------------------------------------------------- yetkazib berish (Sprint 10)
+
+/**
+ * Rasm — 14 xizmatdan YAGONA sifat darvozasi yo'qi edi.
+ *
+ * Narx faqat SONGA bog'langan (4 ta = 6 000 tanga), yagona tekshiruv esa
+ * `images.length === 0` edi: 4 tadan 1 tasi kelsa ham ish `COMPLETED`
+ * bo'lib, pul to'liq yechilgan holida qolardi.
+ */
+test("bir nechta rasm arxivga yig'iladi, bittasi xom fayl bo'lib qoladi", async () => {
+  const { packImages } = await import("../lib/generation/image-studio.ts");
+  const JSZip = (await import("jszip")).default;
+
+  const file = (name: string, mime: string) => ({
+    name,
+    mime,
+    bytes: new Uint8Array(Array.from({ length: 300 }, (_, i) => i % 256)),
+  });
+
+  // Bitta rasm — arxiv emas, kengaytma haqiqiy MIME dan.
+  const one = await packImages([file("rasm-1.png", "image/png")], "manzara", 1);
+  assert.equal(one.mime, "image/png");
+  assert.equal(one.fileName, "manzara.png");
+  assert.equal(one.delivered, undefined, "to'liq yetkazilganda `delivered` bo'lmaydi");
+
+  // Uch rasm — ZIP, ichida uchalasi ham bor.
+  const many = await packImages(
+    [file("rasm-1.png", "image/png"), file("rasm-2.jpg", "image/jpeg"), file("rasm-3.png", "image/png")],
+    "manzara",
+    3,
+  );
+  assert.equal(many.mime, "application/zip");
+  assert.equal(many.fileName, "manzara-3ta.zip");
+  const zip = await JSZip.loadAsync(many.bytes);
+  assert.deepEqual(Object.keys(zip.files).sort(), ["rasm-1.png", "rasm-2.jpg", "rasm-3.png"]);
+});
+
+test("kam yetkazilgan rasm `delivered` bilan belgilanadi", async () => {
+  const { packImages } = await import("../lib/generation/image-studio.ts");
+  const bytes = new Uint8Array(300);
+
+  // 4 ta so'raldi, 2 tasi keldi — worker yarmini qaytaradi.
+  const short = await packImages(
+    [
+      { name: "rasm-1.png", mime: "image/png", bytes },
+      { name: "rasm-2.png", mime: "image/png", bytes },
+    ],
+    "rasm",
+    4,
+  );
+  assert.deepEqual(short.delivered, { got: 2, want: 4 });
+
+  // 4 ta so'raldi, 1 tasi keldi — ZIP emas, xom fayl, lekin baribir belgilanadi.
+  const one = await packImages([{ name: "rasm-1.jpg", mime: "image/jpeg", bytes }], "rasm", 4);
+  assert.deepEqual(one.delivered, { got: 1, want: 4 });
+  assert.equal(one.mime, "image/jpeg");
+});
+
+test("qaytariladigan ulush hamyonlar bo'yicha aniq taqsimlanadi", async () => {
+  const { splitRatio } = await import("../lib/server/credits.ts");
+
+  // Yig'indi HAR DOIM nishonga teng — har komponentni alohida pastga
+  // yaxlitlash foydalanuvchi zarariga 2 tangagacha kam qaytarardi.
+  for (const parts of [[1000, 500, 2000], [3, 3, 3], [7, 0, 0], [0, 0, 6000]]) {
+    for (const ratio of [0.25, 1 / 3, 0.5, 0.75, 1]) {
+      const out = splitRatio(parts, ratio);
+      const total = parts.reduce((a, b) => a + b, 0);
+      assert.equal(
+        out.reduce((a, b) => a + b, 0),
+        Math.round(total * ratio),
+        `${parts} × ${ratio}`,
+      );
+      // Qaytarish hech qachon yechilgandan oshmaydi.
+      out.forEach((v, i) => assert.ok(v <= parts[i] && v >= 0, `${parts} × ${ratio} -> ${out}`));
+    }
+  }
+});
+
+test("fayl formati yorlig'i haqiqiy faylga ergashadi", async () => {
+  const { formatOf } = await import("../lib/server/jobs.ts");
+
+  // Navbatga qo'yishda yorliq `tool.output` dan olinadi (rasm uchun `png`),
+  // lekin bir nechta rasm ZIP bo'lib chiqadi — yorliq yakunlashda tuzatiladi.
+  assert.equal(formatOf("manzara-3ta.zip"), "zip");
+  assert.equal(formatOf("manzara.png"), "png");
+  assert.equal(formatOf("kurs-ishi.docx"), "docx");
+  assert.equal(formatOf("nomsiz"), null, "kengaytmasiz nom yorliqni o'zgartirmasin");
+});

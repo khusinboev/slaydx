@@ -9,6 +9,12 @@ type Ctx = { params: Promise<{ id: string }> };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** LibreOffice PDF ga o'gira oladigan turlar. */
+const CONVERTIBLE = new Set([
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+]);
+
 /** Fayl nomidagi sarlavha injeksiyasini oldini oladi. */
 function contentDisposition(name: string): string {
   const ascii = name.replace(/[^\x20-\x7e]/g, "_").replace(/["\\]/g, "_");
@@ -38,8 +44,17 @@ export const GET = handler("generations/file", async (req, ctx: Ctx) => {
   const wantsPdf = new URL(req.url).searchParams.get("format") === "pdf";
   if (wantsPdf) {
     if (!pdfAvailable()) throw new ApiError("PDF o'girish bu serverda yoqilmagan", 503);
-    if (file.mime === "image/png" || file.mime.startsWith("image/")) {
-      throw new ApiError("Rasm allaqachon tayyor formatda", 400);
+    /*
+     * Ruxsat etilganlar RO'YXATI, taqiqlanganlar emas.
+     *
+     * Ilgari shart `image/*` ni rad etardi, ya'ni qolgan HAMMA narsa
+     * LibreOffice ga tushardi. Bir nechta rasm endi ZIP bo'lib keladi
+     * va u arxivni o'girishga urinish 90 soniyalik timeout bilan
+     * tugardi. Faqat LibreOffice haqiqatan o'gira oladigan turlar
+     * o'tkaziladi.
+     */
+    if (!CONVERTIBLE.has(file.mime)) {
+      throw new ApiError("Bu fayl allaqachon tayyor formatda", 400);
     }
     const pdf = await toPdf(new Uint8Array(file.bytes), file.fileName);
     if (!pdf) throw new ApiError("PDF tayyorlanmadi — qayta urinib ko'ring", 502);

@@ -15,7 +15,7 @@ import {
   type ClaimedJob,
   type GenerationPreview,
 } from "./jobs";
-import { refund } from "./credits";
+import { refund, refundPartial } from "./credits";
 import { deleteGenerationFile, putGenerationFile, purgeExpiredFiles } from "./storage";
 import { deleteAssets, extractAssets, purgeExpiredAssets, putAssets } from "./assets";
 import { purgeExpiredSessions } from "./session";
@@ -141,6 +141,23 @@ async function runJob(job: ClaimedJob): Promise<void> {
         deleteGenerationFile(job.id).catch(() => {}),
         deleteAssets(job.id).catch(() => {}),
       ]);
+    } else if (file.delivered && file.delivered.got < file.delivered.want) {
+      /*
+       * Va'da qilinganidan kam yetkazildi — farq qaytariladi.
+       *
+       * Ishni yiqitish noto'g'ri bo'lardi: 4 tadan 3 tasi kelgan bo'lsa,
+       * foydalanuvchi uchta yaxshi rasmni ham yo'qotardi. Narx esa faqat
+       * SONGA bog'langan (4 ta = 6 000 tanga), shuning uchun kam
+       * yetkazilganda to'liq pul olish halol emas.
+       */
+      const { got, want } = file.delivered;
+      const ok = await refundPartial(
+        job.userId,
+        job.id,
+        1 - got / want,
+        `${want} tadan ${got} tasi yaratildi — farq qaytarildi`,
+      );
+      console.warn(`[worker] job ${job.id}: qisman yetkazildi ${got}/${want}, qaytarish=${ok}`);
     }
   } catch (e) {
     const message = e instanceof Error ? e.message : "Yaratishda xatolik";
