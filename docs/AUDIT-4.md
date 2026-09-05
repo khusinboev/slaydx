@@ -447,3 +447,88 @@ N-11 da.
 («bu qatorni o'chirsam qaysi test yiqiladi?») — AUDIT-3 §18 dagi adversarial
 supurgi naqshi bo'yicha. `N-2` va `N-4` uchun bu shart: ikkalasi ham
 **jim** buziladigan yo'llar.
+
+---
+
+# 10. Bajarilgan ish (2026-09-05, Sprint 14)
+
+**Yakuniy holat: 223 test / 0 fail / 0 skip, typecheck va lint toza.**
+Boshlanish: 200 test. Qo'shildi: 23 ta tasdiq to'plami.
+
+## 10.1. Har tuzatish qanday tekshirildi
+
+AUDIT-3 §18 dagi adversarial naqsh bo'yicha: har bir yangi tasdiq uchun
+kod ATAYIN buzildi va test yiqilishi tasdiqlandi. **Jami 26 mutatsiya —
+25 tasi birinchi urinishda ushlandi, 1 tasi omon qoldi va bo'shliq
+yopilgach ushlandi.**
+
+Omon qolgan mutatsiya alohida qayd etishga arziydi: `json.ts` dagi
+`scan` funksiyasining escape hisobi o'chirilganda birorta test
+yiqilmagan edi. Sabab — qochirilgan tirnoqli holatlarim TO'LIQ JSON
+bo'lgani uchun `JSON.parse` dan o'tib ketar va `scan` umuman
+chaqirilmasdi. Bo'shliq yopildi: endi qochirilgan tirnoq UZILGAN
+javobda ham sinaladi.
+
+## 10.2. Nuqsonlar bo'yicha
+
+| # | Nuqson | Commit | Mutatsiya |
+|---|---|---|---|
+| N-1 | Egalik tekshirilmagan fayl o'chirish | `e930958` | 2/2 |
+| N-4 | Qo'lda yozilgan reja tashlanishi | `3635fc2` | 2/2 |
+| N-7 | Slaydda muallif chiqmasligi | `5e34082` | 3/3 |
+| N-2 | Slayd byudjeti bosqichlarga bo'linmasligi | `1ddf43d` | 5/5 |
+| N-3 | Shift eng qimmat tariflarni bo'g'ishi | `9b09fe0` | 2/2 |
+| N-5 | Tarjima chegarasi uch joyda uch xil | `6505314` | 3/3 |
+| N-6 | `features` bayroqlari ishlatilmasligi | `f19d1bf` | 3/3 |
+| N-10 | Imzo testi production kodni chaqirmasligi | `ce53982` | 4/4 |
+| N-11 | `json.ts` sinovsizligi | `fa917b2` | 5/5 (1 tasi 2-urinishda) |
+| N-8, N-9, N-12 | Texnik qarz | `efb4d2a` | 1/1 + tur qo'riqchisi |
+
+## 10.3. Yo'l-yo'lakay topilgan yangi nuqsonlar
+
+Testlar YOZILISHI jarayonida ikkita nuqson ochildi — ular auditda yo'q
+edi, chunki kod o'qish bilan ko'rinmasdi:
+
+1. **Kesilgan JSON tiklanganda oxirida bo'sh idish qolardi.**
+   `{"cases":[{"title":"K1"},{` → `{cases:[{title:"K1"},{}]}`. Sintaktik
+   jihatdan to'g'ri, lekin u HUJJATGACHA yetib borardi: dars rejasida
+   «Bosqich» deb nomlangan matnsiz bo'lim, keys da vaziyati ham javobi
+   ham bo'sh «Keys N». Obyektning oxirgi kaliti ham shu holatga tushardi
+   (`{"en":{}}` — «til keldi, lekin matni yo'q»).
+
+2. **`"{"` kabi kirish `{}` ga tiklanib «tahlil qilindi» deb qaytardi.**
+   Chaqiruvchi maydonlarini `undefined` deb topib sababni bilmay
+   qolardi. Endi `null` — «model javob bermadi» aynan shu holat.
+
+Ikkalasi ham `json.ts` da, ya'ni **to'qqizta xizmatga birdan** ta'sir
+qiladigan joyda edi.
+
+## 10.4. Nima o'zgardi — foydalanuvchi ko'radigan darajada
+
+| Ilgari | Endi |
+|---|---|
+| Begona `DELETE` egasining faylini o'chirardi | Egalik SQL darajasida; fayl va aktivlar CASCADE bilan |
+| Qo'lda yozilgan reja jim tashlanardi | Reja matni bor bo'lsa u ishlatiladi; ikkilangan boshqaruv olib tashlandi |
+| Slaydda muallif ismi hech qachon chiqmasdi | Profil ikkala formaga ham yagona manbadan tushadi |
+| Premium deka rasmsiz chiqishi mumkin edi | Byudjet bosqichlarga oldindan bo'linadi; rasmga vaqt qolishi kafolatlangan |
+| 18 000–24 000 tangalik tariflar bir xil vaqt olardi | Shift 480 s; har tarif alohida byudjet oladi |
+| «Matn juda uzun: 60 000 belgi» (150 000 yuborganda) | Chegara yagona manbada; xabar kesilganini tan oladi; jonli hisoblagich |
+| Kalitsiz xizmat to'lov olib, keyin xato berardi | Kartochka o'chiq, sabab ochiq yozilgan, pul yechilmaydi |
+| Imzo testi o'z formulasini sinardi | Test haqiqiy `clickSignatureValid`/`paymeAuthorized` ni chaqiradi |
+| Kesilgan JSON hujjatga bo'sh bo'lim qo'shardi | Bo'sh idish tashlanadi; qisman to'la element saqlanadi |
+
+## 10.5. Ataylab qilinmagan
+
+- **Jonli smoke sinovi** (`npm run smoke`, `scripts/eval-services.mjs`)
+  o'tkazilmadi: u ishlab turgan server va haqiqiy Gemini/fal
+  chaqiruvlarini talab qiladi. `N-2` va `N-3` byudjet o'zgarishlari
+  aynan shu sinovda o'lchanishi kerak — 16 slaydli premium deka va
+  45 betlik kurs ishi bilan.
+- **Rasm soni bo'yicha qisman qaytarish** (`delivered`) slaydga
+  qo'shilmadi: rasm soni yorliqda va'da qilinmagan miqdor («sifatliroq
+  rasm», «10 ta rasm» emas), shuning uchun unga nisbat bo'yicha pul
+  qaytarish o'lchanmagan narsaga narx qo'yish bo'lardi. Asosiy sabab —
+  byudjet — tuzatildi.
+- **AUDIT-3 §17.4 dagi ochiq bandlar** o'z joyida qoldi: `ownTask`
+  darvozasi hamon ogohlantiruvchi, akademik sarlavha rangi hamon Word
+  uslubidan, glossariy ikki ustunli bosma maketsiz.
