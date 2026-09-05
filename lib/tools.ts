@@ -706,13 +706,40 @@ export function missingRequired(tool: ToolConfig, values: FormValues): string[] 
 }
 
 /**
+ * Manba matni chegaralari — UCHALASI SHU YERDA, bir-biriga bog'langan.
+ *
+ * Ilgari ular uch faylga tarqalgan edi va bir-birini bilmasdi (N-4-audit,
+ * N-5). Foydalanuvchi uchun bu shunday ko'rinardi:
+ *
+ *   `/api/extract`  200 000 → «150 000 belgi tarjima qilinadi» deb yozardi;
+ *   `sanitizeValues` 60 000 → shu yerda JIM kesilardi;
+ *   `preflightError` 48 000 → «Matn juda uzun: 60 000 belgi» deb rad etardi.
+ *
+ * Ya'ni xatodagi son foydalanuvchi ko'rgan songa hech qachon mos
+ * kelmasdi: `preflightError` allaqachon KESILGAN matnni o'lchardi.
+ * Klientda esa umuman tekshiruv yo'q edi — yo'l boshidan noto'g'ri
+ * boshqarilardi.
+ *
+ * Endi ular bitta joyda va munosabati yozilgan. `validate.ts` shu
+ * konstantani import qiladi, ya'ni ular ajralib keta olmaydi.
+ */
+
+/**
+ * So'rovga umuman kiradigan XOM matn (`sanitizeValues`).
+ *
+ * Bu «biz nimani qabul qilamiz» savoliga javob beradi — «biz nimani
+ * uddalaymiz» ga emas. Undan oshgani kesiladi, shuning uchun server
+ * kesilgan matnning HAQIQIY uzunligini bila olmaydi: xato xabari shuni
+ * tan olishi kerak.
+ */
+export const MAX_SOURCE_CHARS = 60_000;
+
+/**
  * Bir marta tarjima qilinadigan eng katta matn.
  *
  * `writeTranslationWithLlm` matnni 4 000 belgilik bo'laklarga bo'ladi va
- * 12 tasini ishlaydi. Forma esa 60 000 belgi qabul qilardi — ya'ni uzun
- * hujjat yuklagan foydalanuvchi puli yechilib, oxirgi 20% i JIM
- * tashlangan tarjimani olardi. Chegara endi haqiqiy imkoniyatga teng va
- * u pul yechilishidan OLDIN tekshiriladi.
+ * eng ko'pi 15 tasini ishlaydi. Chegara haqiqiy imkoniyatga teng va u
+ * pul yechilishidan OLDIN tekshiriladi.
  */
 export const TRANSLATION_MAX_CHARS = 48_000;
 
@@ -728,8 +755,16 @@ export function preflightError(tool: ToolConfig, values: FormValues): string | n
   if (tool.id === "translation") {
     const n = String(values.sourceText ?? "").length;
     if (n > TRANSLATION_MAX_CHARS) {
+      /*
+       * Matn `MAX_SOURCE_CHARS` da kesilgan bo'lsa, bizdagi son
+       * foydalanuvchidagidan KICHIK. Aniq son o'rniga «dan ortiq» deyish
+       * halolroq: aks holda 150 000 belgi yuborgan odam «60 000 belgi»
+       * degan xatoni o'qib, nimani qisqartirishini tushunmasdi.
+       */
+      const clipped = n >= MAX_SOURCE_CHARS;
+      const size = `${n.toLocaleString("uz-UZ")}${clipped ? " dan ortiq" : ""}`;
       return (
-        `Matn juda uzun: ${n.toLocaleString("uz-UZ")} belgi. ` +
+        `Matn juda uzun: ${size} belgi. ` +
         `Bir marta ${TRANSLATION_MAX_CHARS.toLocaleString("uz-UZ")} belgigacha tarjima qilinadi — ` +
         `hujjatni bo'laklarga bo'lib yuboring.`
       );

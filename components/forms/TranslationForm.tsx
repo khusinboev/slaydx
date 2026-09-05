@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { FileText, Loader2 } from "lucide-react";
 import type { FormValues, ToolConfig } from "@/lib/types";
 import { languageName } from "@/lib/languages";
+import { preflightError, TRANSLATION_MAX_CHARS } from "@/lib/tools";
 import { LanguagePicker, Legend, ModeSwitch } from "./fields";
 import { ToolChrome } from "./ToolChrome";
 import { runGeneration } from "./runGeneration";
@@ -51,6 +52,14 @@ export function TranslationForm({ tool }: { tool: ToolConfig }) {
       }
       setValues((s) => ({ ...s, sourceText: extracted, fileName: f.name }));
       setFileMeta(`${f.name} · ${extracted.length.toLocaleString("uz-UZ")} belgi`);
+      // Ogohlantirish DARHOL, tugmani bosgandan keyin emas.
+      if (extracted.length > TRANSLATION_MAX_CHARS) {
+        setError(
+          `Fayldan ${extracted.length.toLocaleString("uz-UZ")} belgi olindi — bu bir martalik ` +
+            `chegaradan (${TRANSLATION_MAX_CHARS.toLocaleString("uz-UZ")}) ko'p. Matnni quyidagi ` +
+            `maydonda qisqartiring yoki hujjatni bo'laklarga bo'lib yuboring.`,
+        );
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Faylni o‘qib bo‘lmadi");
       setValues((s) => ({ ...s, sourceText: "" }));
@@ -72,6 +81,17 @@ export function TranslationForm({ tool }: { tool: ToolConfig }) {
     }
     if (source.length < 8) {
       setError("Matn juda qisqa");
+      return;
+    }
+    /*
+     * Uzunlik AYNAN shu yerda tekshiriladi — server ham tekshiradi, lekin
+     * u `sanitizeValues` da 60 000 belgida kesilgan matnni ko'radi va
+     * foydalanuvchi ko'rgan sonni ayta olmaydi. Qoida bitta manbada
+     * (`lib/tools.ts`), shuning uchun ikkalasi bir xil javob beradi.
+     */
+    const blocked = preflightError(tool, { ...values, sourceText: source });
+    if (blocked) {
+      setError(blocked);
       return;
     }
     setLoading(true);
@@ -121,7 +141,7 @@ export function TranslationForm({ tool }: { tool: ToolConfig }) {
                 rows={8}
                 className="border-input bg-card focus:ring-ring w-full rounded-xl border px-3.5 py-2.5 text-[15px] outline-none focus:ring-2"
               />
-              <p className="text-muted-foreground mt-1 text-xs">{text.length.toLocaleString("uz-UZ")} belgi tarjima qilinadi</p>
+              <CharCount n={text.length} />
             </div>
           ) : (
             <p className="text-muted-foreground mt-3 text-sm">
@@ -139,6 +159,7 @@ export function TranslationForm({ tool }: { tool: ToolConfig }) {
             className="border-input bg-card focus:ring-ring w-full rounded-xl border px-3.5 py-2.5 text-[15px] outline-none focus:ring-2"
             placeholder="Matnni shu yerga yozing yoki joylashtiring..."
           />
+          <CharCount n={text.length} />
         </fieldset>
       )}
 
@@ -168,5 +189,23 @@ export function TranslationForm({ tool }: { tool: ToolConfig }) {
         </p>
       </fieldset>
     </ToolChrome>
+  );
+}
+
+/**
+ * Jonli belgi hisoblagichi.
+ *
+ * Ilgari faqat fayl rejimida «N belgi tarjima qilinadi» yozilar va
+ * chegara umuman ko'rsatilmasdi: 150 000 belgi yuklagan foydalanuvchi
+ * shu yozuvni o'qib, tugmani bosib, keyingina rad javobini olardi.
+ * Chegara endi matn yozilayotgan paytdayoq ko'rinadi.
+ */
+function CharCount({ n }: { n: number }) {
+  const over = n > TRANSLATION_MAX_CHARS;
+  return (
+    <p className={over ? "mt-1 text-xs text-amber-600 dark:text-amber-500" : "text-muted-foreground mt-1 text-xs"}>
+      {n.toLocaleString("uz-UZ")} / {TRANSLATION_MAX_CHARS.toLocaleString("uz-UZ")} belgi
+      {over ? " — chegaradan oshdi, matnni qisqartiring yoki bo'laklarga bo'ling" : " tarjima qilinadi"}
+    </p>
   );
 }

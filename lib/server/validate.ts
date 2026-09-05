@@ -1,4 +1,5 @@
 import "server-only";
+import { MAX_SOURCE_CHARS } from "../tools";
 import type { FormValues } from "../types";
 
 /**
@@ -13,14 +14,17 @@ const MAX_FIELD = 4_000;
 /**
  * «Fayl asosida» va tarjima uchun manba matni — XOM shift.
  *
- * Bundan qanchasi modelga ketishi vositaga bog'liq va u boshqa joyda
+ * Qiymat `lib/tools.ts` dan IMPORT qilinadi va shu yerda takrorlanmaydi:
+ * u klient ham ko'radigan `TRANSLATION_MAX_CHARS` bilan bir juftlik
+ * bo'lib ishlaydi (`preflightError` matn kesilganini shu son orqali
+ * biladi). Ilgari ikkalasi ikki faylda mustaqil turar va xato xabari
+ * foydalanuvchi ko'rgan songa mos kelmasdi.
+ *
+ * Bundan qanchasi modelga ketishi vositaga bog'liq va uchinchi joyda
  * hal qilinadi: `lib/generation/meta.ts` dagi `SOURCE_TEXT_LIMIT`
- * (kontekst uchun 24 000) va `lib/tools.ts` dagi
- * `TRANSLATION_MAX_CHARS` (tarjima uchun 48 000). Bu yerdagi son
- * shunchaki «so'rov qanchalik katta bo'lishi mumkin» degan savolga
- * javob beradi.
+ * (kontekst uchun 24 000).
  */
-const MAX_SOURCE = 60_000;
+const MAX_SOURCE = MAX_SOURCE_CHARS;
 /** Bitta formadagi maydonlar soni. */
 const MAX_KEYS = 80;
 

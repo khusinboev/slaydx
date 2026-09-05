@@ -62,3 +62,55 @@ test("kalitlar soni cheklanadi", () => {
   for (let i = 0; i < 500; i++) big[`k${i}`] = "v";
   assert.ok(Object.keys(sanitizeValues(big)!).length <= 80);
 });
+
+test("tarjima chegarasi: xato xabari kesilgan matnni tan oladi", async () => {
+  const { sanitizeValues } = await import("../lib/server/validate.ts");
+  const { preflightError, TOOL_BY_ID, TRANSLATION_MAX_CHARS, MAX_SOURCE_CHARS } = await import(
+    "../lib/tools.ts"
+  );
+
+  /*
+   * AYNAN N-5 (Sprint 14). Uch chegara uch faylda mustaqil turardi:
+   *   /api/extract    200 000 → foydalanuvchiga «150 000 belgi» deb yozardi
+   *   sanitizeValues   60 000 → shu yerda JIM kesilardi
+   *   preflightError   48 000 → «Matn juda uzun: 60 000 belgi» deb rad etardi
+   * Xatodagi son foydalanuvchi ko'rgan songa hech qachon mos kelmasdi.
+   */
+
+  // Chegaralar bir-biriga bog'langan bo'lishi kerak, aks holda mantiq buziladi.
+  assert.ok(
+    TRANSLATION_MAX_CHARS < MAX_SOURCE_CHARS,
+    "tarjima chegarasi xom shiftdan kichik bo'lishi kerak",
+  );
+
+  const tool = TOOL_BY_ID.translation;
+
+  // 1) Chegara ichidagi matn o'tadi.
+  assert.equal(preflightError(tool, { sourceText: "a".repeat(TRANSLATION_MAX_CHARS) }), null);
+
+  // 2) Chegaradan oz oshgani — ANIQ son bilan rad etiladi.
+  const slightly = TRANSLATION_MAX_CHARS + 1;
+  const exact = preflightError(tool, { sourceText: "a".repeat(slightly) });
+  assert.ok(exact?.includes(slightly.toLocaleString("uz-UZ")), `aniq son kutilgan: ${exact}`);
+  assert.ok(!exact?.includes("dan ortiq"), "kesilmagan matnda «dan ortiq» bo'lmasligi kerak");
+
+  /*
+   * 3) Serverga KELIB TUSHGAN yo'l: uzun matn avval `sanitizeValues` da
+   *    kesiladi, keyin tekshiriladi. Xabar aniq son o'rniga «dan ortiq»
+   *    deyishi kerak — bizdagi son foydalanuvchidagidan kichik.
+   */
+  const huge = sanitizeValues({ sourceText: "a".repeat(150_000) });
+  assert.ok(huge, "sanitizeValues obyekt qaytarishi kerak");
+  assert.equal(String(huge.sourceText).length, MAX_SOURCE_CHARS, "xom shiftda kesilishi kerak");
+
+  const clipped = preflightError(tool, huge);
+  assert.ok(clipped, "kesilgan uzun matn ham rad etilishi kerak");
+  assert.ok(
+    clipped.includes("dan ortiq"),
+    `kesilgan matnda aniq son ko'rsatilmasligi kerak, chiqdi: ${clipped}`,
+  );
+  assert.ok(
+    clipped.includes(TRANSLATION_MAX_CHARS.toLocaleString("uz-UZ")),
+    "xabar haqiqiy chegarani aytishi kerak",
+  );
+});
