@@ -472,18 +472,77 @@ test("baholash rubrikasi to'liq bo'lmasa chiqmaydi", async () => {
  *   3. yiqilgan bo'lak bo'sh ro'yxat qaytarardi va qolgani `COMPLETED`
  *      bo'lardi — foydalanuvchi yarim tarjimani to'liq deb olardi.
  */
-test("uzun matn pul yechilishidan oldin rad etiladi", async () => {
-  const { preflightError, TRANSLATION_MAX_CHARS } = await import("../lib/tools.ts");
+test("matn uzunligi pul yechilishidan oldin tekshiriladi", async () => {
+  const { preflightError, TRANSLATION_MAX_CHARS, TRANSLATION_MIN_CHARS } = await import(
+    "../lib/tools.ts"
+  );
   const tool = TOOL_BY_ID["translation"];
 
-  assert.equal(preflightError(tool, { sourceText: "salom" } as FormValues), null);
+  // Ishlaydigan oraliq.
+  assert.equal(preflightError(tool, { sourceText: "Salom dunyo, bu sinov matni." } as FormValues), null);
   assert.equal(preflightError(tool, { sourceText: "x".repeat(TRANSLATION_MAX_CHARS) } as FormValues), null);
 
   const tooLong = preflightError(tool, { sourceText: "x".repeat(TRANSLATION_MAX_CHARS + 1) } as FormValues);
   assert.ok(tooLong && /juda uzun/i.test(tooLong), "uzun matn haqida aniq xabar bo'lishi kerak");
 
+  /*
+   * «To'ldirilgan, lekin juda qisqa» — `missingRequired` ushlamaydigan hol
+   * (P0-5, AUDIT-5). Bu qoida ilgari FAQAT `TranslationForm` ichida edi,
+   * ya'ni to'g'ridan-to'g'ri yuborilgan so'rov uni chetlab o'tardi.
+   */
+  const tooShort = preflightError(tool, { sourceText: "salom" } as FormValues);
+  assert.ok(tooShort && /qisqa/i.test(tooShort), `qisqa matn rad etilishi kerak: ${tooShort}`);
+  assert.equal(
+    preflightError(tool, { sourceText: "x".repeat(TRANSLATION_MIN_CHARS) } as FormValues),
+    null,
+    "chegaraning o'zi o'tishi kerak",
+  );
+  // Bo'sh matn `missingRequired` ning ishi — preflight uni takrorlamaydi.
+  assert.equal(preflightError(tool, { sourceText: "" } as FormValues), null);
+
   // Boshqa vositalarga bu chegara tegishli emas.
   assert.equal(preflightError(TOOL_BY_ID["referat"], { sourceText: "x".repeat(100_000) } as FormValues), null);
+});
+
+test("maxsus formali vositalar serverda ham tekshiriladi", async () => {
+  const { missingRequired, preflightError, TOOLS } = await import("../lib/tools.ts");
+
+  /*
+   * AYNAN P0-5 (AUDIT-5). `image`, `resume` va `translation` o'z
+   * formasini chizadi, shuning uchun `fields` bo'sh qolgan edi —
+   * `missingRequired` esa aynan `fields` ni aylanadi. Natijada uchala
+   * vosita ham serverda TEKSHIRILMASDI: bo'sh so'rov navbatga tushar,
+   * PUL YECHILAR, keyin dvigatel xato berib kredit qaytarardi.
+   */
+  const cases: [string, Record<string, unknown>, string][] = [
+    ["image", { prompt: "tog' manzarasi, quyosh botishi" }, "Rasm tavsifi"],
+    ["resume", { fullName: "Aliyev Ali", targetRole: "Dasturchi" }, "To'liq ism"],
+    ["translation", { sourceText: "Salom dunyo, bu sinov matni." }, "Tarjima qilinadigan matn"],
+  ];
+
+  for (const [id, good, legend] of cases) {
+    const tool = TOOL_BY_ID[id as keyof typeof TOOL_BY_ID];
+    const empty = missingRequired(tool, {} as FormValues);
+    assert.ok(empty.length > 0, `${id}: bo'sh so'rov rad etilishi kerak`);
+    assert.ok(empty.includes(legend), `${id}: xabarda «${legend}» bo'lishi kerak, chiqdi: ${empty}`);
+    assert.deepEqual(missingRequired(tool, good as FormValues), [], `${id}: to'g'ri so'rov o'tishi kerak`);
+  }
+
+  // Qisqa (lekin bo'sh emas) rasm tavsifi ham to'siladi.
+  const shortPrompt = preflightError(TOOL_BY_ID.image, { prompt: "ab" } as FormValues);
+  assert.ok(shortPrompt && /qisqa/i.test(shortPrompt), "qisqa rasm tavsifi rad etilishi kerak");
+
+  /*
+   * Deklaratsiya TOOLS ga biriktirilgani uchun har custom vosita kamida
+   * bitta majburiy maydonga ega bo'lishi kerak — yangi custom vosita
+   * qo'shilganda uni unutib qoldirmaslik uchun.
+   */
+  for (const tool of TOOLS.filter((t) => t.custom && t.custom !== "slide")) {
+    assert.ok(
+      tool.fields.some((f) => f.required),
+      `${tool.id}: maxsus formali vositada majburiy maydon e'lon qilinishi kerak`,
+    );
+  }
 });
 
 test("chunkSource matnni jim kesmaydi", async () => {
@@ -831,4 +890,84 @@ test("shablon glossariysida atama nomi takrorlanmaydi", async () => {
 
   // Sarlavhalar noyob bo'lishi kerak — ko'ruvchi ularni kalit sifatida ishlatadi.
   assert.equal(new Set(headings).size, headings.length, "atama sarlavhalari noyob bo'lishi kerak");
+});
+
+test("IMRAD annotatsiyasiz maqola qat'iy darvozadan o'tmaydi", async () => {
+  const { writeImradWithLlm } = await import("../lib/generation/write-specials.ts");
+  const { hardMissing } = await import("../lib/generation/structure.ts");
+  const { extractMeta } = await import("../lib/generation/meta.ts");
+  const { TOOL_BY_ID } = await import("../lib/tools.ts");
+
+  /*
+   * AYNAN P0-4 (AUDIT-5). `structure.ts` da annotatsiya QAT'IY darvoza
+   * deb e'lon qilingan (`HARD = {"abstract"}`), lekin IMRAD yo'li bo'sh
+   * annotatsiya o'rniga bir jumlalik stub qo'yardi:
+   *
+   *   «Maqolada «X» IMRAD tuzilmasi asosida yoritiladi»
+   *
+   * Natijada darvoza IMRAD da HECH QACHON ishga tushmasdi — qat'iy deb
+   * yozilgan tekshiruv amalda bezak edi. Jurnalga yuborib bo'lmaydigan
+   * «maqola» to'liq narxda COMPLETED bo'lardi.
+   *
+   * Sinov jonli LLM siz: `fetch` stub qilinadi. Annotatsiya so'roviga
+   * BO'SH javob, bo'lim so'rovlariga matn qaytariladi — ya'ni maqola
+   * yozildi, faqat annotatsiya chiqmadi.
+   */
+  const realFetch = globalThis.fetch;
+  const savedGemini = process.env.GEMINI_API_KEY;
+  const savedXai = process.env.XAI_API_KEY;
+  process.env.GEMINI_API_KEY = "test-key";
+  delete process.env.XAI_API_KEY;
+
+  const para = (n: number) =>
+    Array.from({ length: n }, (_, i) => `Bu ${i + 1}-paragraf. `.repeat(14)).join("\n\n");
+  let abstractCalls = 0;
+
+  globalThis.fetch = (async (_url: string, init?: { body?: string }) => {
+    const body = String(init?.body ?? "");
+    const isAbstract = body.includes("Annotatsiya.");
+    if (isAbstract) abstractCalls += 1;
+    // Annotatsiya — bo'sh JSON; bo'limlar — to'la matn.
+    const text = isAbstract ? "{}" : para(4);
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ candidates: [{ content: { parts: [{ text }] } }] }),
+    } as never;
+  }) as typeof fetch;
+
+  try {
+    const meta = extractMeta(TOOL_BY_ID.article, {
+      topic: "Quyosh energiyasi",
+      kind: "imrad",
+      pages: "3-5",
+    } as never);
+
+    const doc = await writeImradWithLlm(meta, Date.now() + 120_000);
+
+    assert.ok(doc, "bo'limlar yozilgani uchun hujjat qurilishi kerak");
+    assert.ok(doc.sections.length >= 4, "IMRAD to'rt bo'limi bo'lishi kerak");
+
+    // 1) Stub QO'YILMAYDI.
+    assert.ok(
+      !doc.abstracts?.length,
+      `annotatsiya bo'sh qolishi kerak, chiqdi: ${JSON.stringify(doc.abstracts)}`,
+    );
+
+    // 2) Qat'iy darvoza ENDI ishga tushadi — `buildArtifact` shuni tashlaydi.
+    assert.deepEqual(
+      hardMissing(meta, doc),
+      ["abstract"],
+      "annotatsiyasiz IMRAD maqolasi qat'iy darvozadan yiqilishi kerak",
+    );
+
+    // 3) Bitta o'tkinchi yiqilish butun maqolani yo'q qilmasligi uchun
+    //    qayta urinish bor.
+    assert.equal(abstractCalls, 2, "annotatsiyaga ikkinchi urinish berilishi kerak");
+  } finally {
+    globalThis.fetch = realFetch;
+    if (savedGemini === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = savedGemini;
+    if (savedXai !== undefined) process.env.XAI_API_KEY = savedXai;
+  }
 });

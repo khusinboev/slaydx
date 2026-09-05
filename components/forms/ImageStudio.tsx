@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Sparkles } from "lucide-react";
 import type { FormValues, ToolConfig } from "@/lib/types";
-import { formatTanga, priceFor } from "@/lib/tools";
+import { formatTanga, IMAGE_PROMPT_MIN, priceFor } from "@/lib/tools";
 import { IMAGE_RATIOS, IMAGE_STYLES } from "@/lib/generation/image-studio";
 import { cn } from "@/lib/cn";
 import { runGeneration } from "./runGeneration";
@@ -32,7 +32,9 @@ export function ImageStudio({ tool }: { tool: ToolConfig }) {
   async function submit() {
     setError(null);
     const prompt = String(values.prompt || "").trim();
-    if (prompt.length < 3) {
+    // Chegara `lib/tools.ts` da — server ham aynan shuni tekshiradi
+    // (`preflightError`). Matn bu yerda aniqroq, qoida esa bitta.
+    if (prompt.length < IMAGE_PROMPT_MIN) {
       setError("Nima chizish kerakligini yozing");
       return;
     }

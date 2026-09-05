@@ -787,23 +787,42 @@ export async function writeImradWithLlm(meta: DocMeta, deadline?: number): Promi
       ? [primaryLang, ...["uz", "en", "ru"].filter((c) => c !== primaryLang)]
       : [primaryLang];
   const absPrompt = `JSON: {${absLangs.map((c) => `"${c}":{"text":"","keywords":""}`).join(",")}}`;
-  const absRaw = await llmComplete(sys, `Annotatsiya. ${absPrompt}. Mavzu: «${topic}». Har biri 4–6 gap.`, 900, {
-    json: true,
-    timeoutMs: Math.min(40_000, remainingMs(deadline) || 40_000),
-  });
-  const absData = (absRaw ? parseJson(absRaw) : null) as Record<string, { text?: string; keywords?: string }> | null;
-  const abstracts = absLangs
-    .map((code) => {
-      const x = absData?.[code];
-      if (!x?.text) return null;
-      return {
-        lang: code,
-        label: sectionLabels(code).abstract,
-        text: clip(x.text, 700),
-        keywords: clip(x.keywords || topic, 120),
-      };
-    })
-    .filter((x): x is { lang: string; label: string; text: string; keywords: string } => Boolean(x));
+
+  const askAbstracts = async (timeoutMs: number) => {
+    if (timeoutMs < 5_000) return [];
+    const raw = await llmComplete(sys, `Annotatsiya. ${absPrompt}. Mavzu: «${topic}». Har biri 4–6 gap.`, 900, {
+      json: true,
+      timeoutMs,
+    });
+    const data = (raw ? parseJson(raw) : null) as Record<string, { text?: string; keywords?: string }> | null;
+    return absLangs
+      .map((code) => {
+        const x = data?.[code];
+        if (!x?.text) return null;
+        return {
+          lang: code,
+          label: sectionLabels(code).abstract,
+          text: clip(x.text, 700),
+          keywords: clip(x.keywords || topic, 120),
+        };
+      })
+      .filter((x): x is { lang: string; label: string; text: string; keywords: string } => Boolean(x));
+  };
+
+  /**
+   * Annotatsiyaga IKKINCHI urinish beriladi.
+   *
+   * `writeAbstracts` (`write-llm.ts`) allaqachon shunday ishlaydi, IMRAD
+   * esa bitta chaqiruvga tayanardi. Stub olib tashlanganidan keyin bu
+   * SHART bo'lib qoldi: bo'sh annotatsiya endi ishni yiqitadi, ya'ni
+   * bitta o'tkinchi timeout butun maqolani yo'q qilishi mumkin edi.
+   */
+  let abstracts = await askAbstracts(Math.min(40_000, remainingMs(deadline) || 40_000));
+  if (abstracts.length < absLangs.length && remainingMs(deadline) > 15_000) {
+    console.warn("[imrad] annotatsiyaga qayta urinish:", abstracts.length, "/", absLangs.length);
+    const retry = await askAbstracts(Math.min(25_000, remainingMs(deadline)));
+    if (retry.length > abstracts.length) abstracts = retry;
+  }
 
   /**
    * IMRAD hajmi endi TANLANGAN BETGA bog'liq.
@@ -935,16 +954,24 @@ export async function writeImradWithLlm(meta: DocMeta, deadline?: number): Promi
     meta,
     titlePage: true,
     toc: true,
-    abstracts: abstracts.length
-      ? abstracts
-      : [
-          {
-            lang: meta.language,
-            label: L.abstract,
-            text: `Maqolada «${topic}» IMRAD tuzilmasi asosida yoritiladi.`,
-            keywords: topic,
-          },
-        ],
+    /**
+     * Annotatsiya CHIQMASA — bo'sh qoladi, stub QO'YILMAYDI.
+     *
+     * Ilgari shu yerda bir jumlalik zaxira turardi: «Maqolada «X» IMRAD
+     * tuzilmasi asosida yoritiladi». Natijada `structure.ts` dagi
+     * `HARD = {"abstract"}` darvozasi IMRAD yo'lida HECH QACHON ishga
+     * tushmasdi — qat'iy deb e'lon qilingan tekshiruv amalda bezak edi.
+     *
+     * Zarar ikki tomonlama: jurnalga yuborib bo'lmaydigan «maqola»
+     * to'liq narxda `COMPLETED` bo'lardi, va o'sha bir jumla
+     * annotatsiya o'rnida turgani uchun foydalanuvchi nima
+     * yetishmayotganini ham bilmasdi.
+     *
+     * Endi bo'sh annotatsiya `hardMissing` orqali xatoga aylanadi va
+     * worker kreditni qaytaradi. Yuqoridagi qayta urinish shu qarorning
+     * narxini qoplaydi.
+     */
+    abstracts: abstracts.length ? abstracts : undefined,
     sections,
     references: references.length >= 3 ? references : undefined,
     /**

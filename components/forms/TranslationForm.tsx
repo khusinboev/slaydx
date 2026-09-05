@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { FileText, Loader2 } from "lucide-react";
 import type { FormValues, ToolConfig } from "@/lib/types";
 import { languageName } from "@/lib/languages";
-import { preflightError, TRANSLATION_MAX_CHARS } from "@/lib/tools";
+import { preflightError, TRANSLATION_MAX_CHARS, TRANSLATION_MIN_CHARS } from "@/lib/tools";
 import { LanguagePicker, Legend, ModeSwitch } from "./fields";
 import { ToolChrome } from "./ToolChrome";
 import { runGeneration } from "./runGeneration";
@@ -79,7 +79,7 @@ export function TranslationForm({ tool }: { tool: ToolConfig }) {
       setError(mode === "file" ? "Avval fayl tanlang — matn olingandan keyin tarjima boshlanadi." : "Tarjima qilinadigan matnni yozing.");
       return;
     }
-    if (source.length < 8) {
+    if (source.length < TRANSLATION_MIN_CHARS) {
       setError("Matn juda qisqa");
       return;
     }

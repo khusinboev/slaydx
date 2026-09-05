@@ -1,4 +1,4 @@
-import type { FormValues, ToolConfig, ToolId, UserProfile } from "./types";
+import type { FormValues, ToolConfig, ToolField, ToolId, UserProfile } from "./types";
 
 const TOPIC_FILE_MODES = [
   {
@@ -72,6 +72,40 @@ const WRITER_FIELDS: ToolConfig["fields"] = [
     placeholder: "Toshkent",
   },
 ];
+
+/**
+ * Maxsus formali vositalarning MAJBURIY maydonlari.
+ *
+ * `image`, `resume` va `translation` o'z formalarini chizadi
+ * (`ImageStudio`, `ResumeWizard`, `TranslationForm`), shuning uchun
+ * `fields` bo'sh qolgan edi. `missingRequired` esa aynan `fields` ni
+ * aylanadi — natijada serverda UCHALASI ham tekshirilmasdi:
+ *
+ *   missingRequired(image, {})       → []
+ *   missingRequired(resume, {})      → []
+ *   missingRequired(translation, {}) → []
+ *
+ * Ya'ni bo'sh so'rov navbatga tushar, PUL YECHILAR, keyin dvigatel
+ * xato berib kredit qaytarardi. Foydalanuvchi uchun bu «yaratilmoqda…»
+ * dan keyin kelgan tushunarsiz xato edi.
+ *
+ * Maydonlar shu yerda e'lon qilinadi, formada emas: `fields` — vosita
+ * SHARTNOMASI, custom forma esa uning muqobil chizuvchisi. Shartnoma
+ * bitta joyda tursa, klient va server bir xil javob beradi.
+ *
+ * `legend` xato xabarida ko'rinadi («To'ldirilmagan maydon: …»),
+ * shuning uchun u foydalanuvchi tilida yozilgan.
+ */
+const CUSTOM_REQUIRED: Record<string, ToolField[]> = {
+  image: [{ kind: "textarea", name: "prompt", legend: "Rasm tavsifi", required: true }],
+  resume: [
+    { kind: "text", name: "fullName", legend: "To'liq ism", required: true },
+    { kind: "text", name: "targetRole", legend: "Maqsadli lavozim", required: true },
+  ],
+  translation: [
+    { kind: "textarea", name: "sourceText", legend: "Tarjima qilinadigan matn", required: true },
+  ],
+};
 
 export const TOOLS: ToolConfig[] = [
   {
@@ -663,6 +697,15 @@ export const TOOLS: ToolConfig[] = [
   },
 ];
 
+/*
+ * Deklaratsiya TOOLS e'lonidan KEYIN biriktiriladi: `CUSTOM_REQUIRED`
+ * ro'yxatga qo'lda ko'chirilsa, ikkalasi ajralib ketishi mumkin edi.
+ */
+for (const tool of TOOLS) {
+  const extra = tool.custom ? CUSTOM_REQUIRED[tool.custom] : undefined;
+  if (extra) tool.fields = [...tool.fields, ...extra];
+}
+
 export const TOOL_BY_SLUG = Object.fromEntries(TOOLS.map((t) => [t.slug, t])) as Record<
   string,
   ToolConfig
@@ -751,7 +794,26 @@ export const TRANSLATION_MAX_CHARS = 48_000;
  * navbatga qo'yishdan oldin ishlaydi, shunda foydalanuvchi bajarilmaydigan
  * ish uchun to'lamaydi.
  */
+/** Rasm tavsifi shundan qisqa bo'lsa model uchun ma'no tashimaydi. */
+export const IMAGE_PROMPT_MIN = 3;
+/** Tarjima uchun eng kam matn — bundan qisqasi hujjat emas. */
+export const TRANSLATION_MIN_CHARS = 8;
+
 export function preflightError(tool: ToolConfig, values: FormValues): string | null {
+  /*
+   * «To'ldirilgan, lekin juda qisqa» — `missingRequired` ushlamaydigan
+   * hol. Ilgari bu tekshiruvlar FAQAT custom formalarda edi
+   * (`ImageStudio`: `< 3`, `TranslationForm`: `< 8`), ya'ni
+   * to'g'ridan-to'g'ri yuborilgan so'rov ularni chetlab o'tardi.
+   */
+  if (tool.custom === "image") {
+    const n = String(values.prompt ?? "").trim().length;
+    if (n > 0 && n < IMAGE_PROMPT_MIN) return "Rasm tavsifi juda qisqa — nima chizilishini yozing.";
+  }
+  if (tool.id === "translation") {
+    const n0 = String(values.sourceText ?? "").trim().length;
+    if (n0 > 0 && n0 < TRANSLATION_MIN_CHARS) return "Matn juda qisqa.";
+  }
   if (tool.id === "translation") {
     const n = String(values.sourceText ?? "").length;
     if (n > TRANSLATION_MAX_CHARS) {
