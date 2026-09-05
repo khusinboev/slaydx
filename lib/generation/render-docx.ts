@@ -26,6 +26,7 @@ import { ESSAY_DESIGNS } from "../languages";
 import { CM, contentHeight, contentWidth, profileFor, type DocProfile } from "./docx-profile";
 import { docLabels } from "./i18n";
 import { cleanText } from "./quality";
+import { titleModel } from "./title-model";
 import { tocRows } from "./toc-model";
 import type { AcademicDoc, Block, DocTable } from "./types";
 
@@ -378,64 +379,59 @@ export async function renderDocx(doc: AcademicDoc): Promise<Uint8Array> {
   const P = profileFor(meta);
   const K = makeKit(P);
   const L = docLabels(meta.language);
-  const year = new Date().getFullYear();
   const children: Array<Paragraph | Table> = [];
 
-  if (doc.titlePage && P.titlePage === "article") {
-    /*
-     * Maqola formasi universitet/fakultet/kafedra emas, tashkilot/daraja/
-     * email yig'adi (haqiqiy muallif talaba bo'lmasligi ham mumkin —
-     * placeholder: «Talaba / PhD / dotsent»). Ilgari bu maydonlar
-     * to'plangan, viewer'da ko'ringan, lekin DOCX fayliga umuman
-     * tushmasdi — talaba-ish shabloni (vazirlik sarlavhasi, imzo
-     * chizig'i) chiqardi, degree esa hech qayerda ko'rinmasdi.
-     */
-    children.push(K.centerP(meta.workLabel.toUpperCase(), { bold: true, size: 32 }));
-    children.push(K.centerP(""));
-    children.push(K.centerP(`«${meta.topic}»`, { bold: true, italics: true }));
-    children.push(K.centerP(""));
-    children.push(K.centerP(""));
-    const authorLine = [meta.author, meta.degree].filter(Boolean).join(", ");
-    if (authorLine) children.push(K.centerP(authorLine, { bold: true }));
-    if (meta.organization) children.push(K.centerP(meta.organization));
-    if (meta.email) children.push(K.centerP(meta.email));
-    children.push(K.centerP(""));
-    children.push(K.centerP(""));
-    children.push(K.centerP(`${meta.city} — ${year}`, { bold: true }));
-    children.push(new Paragraph({ children: [K.run("")], pageBreakBefore: true }));
-  } else if (doc.titlePage && P.titlePage === "gost") {
-    const ministry = meta.ministry === "maktab" ? L.ministrySchool : L.ministryHigher;
-    for (const l of ministry.split("\n")) {
-      children.push(K.centerP(l, { bold: true, size: 24 }));
+  /**
+   * Titul YAGONA modeldan chiziladi (`title-model.ts`).
+   *
+   * Ilgari bu yerda ikkita mustaqil blok turardi va sayt ko'ruvchisi
+   * uchinchi, o'z qolipini chizardi. Natijada maqola saytda TALABA ISHI
+   * bo'lib ko'rinar, faylda esa jurnal maqolasi chiqardi (AUDIT-5 P0-2).
+   * Endi model bitta joyda quriladi, bu yer faqat chizadi — `tocRows`
+   * va `planSlide` bilan bir xil naqsh.
+   */
+  if (doc.titlePage && P.titlePage !== "none") {
+    const T = titleModel(doc);
+    if (T.kind === "article") {
+      children.push(K.centerP(T.workLabel.toUpperCase(), { bold: true, size: 32 }));
+      children.push(K.centerP(""));
+      children.push(K.centerP(`«${T.topic}»`, { bold: true, italics: true }));
+      children.push(K.centerP(""));
+      children.push(K.centerP(""));
+      if (T.authorLine) children.push(K.centerP(T.authorLine, { bold: true }));
+      if (T.organization) children.push(K.centerP(T.organization));
+      if (T.email) children.push(K.centerP(T.email));
+      children.push(K.centerP(""));
+      children.push(K.centerP(""));
+      children.push(K.centerP(T.cityYear, { bold: true }));
+    } else {
+      for (const line of T.ministry) children.push(K.centerP(line, { bold: true, size: 24 }));
+      children.push(K.centerP(""));
+      // Ma'nosiz o'rinbosar («Oliy ta'lim muassasasi») chizilmaydi.
+      if (T.university && !/^oliy ta[’']lim muassasasi$/i.test(T.university)) {
+        children.push(K.centerP(T.university.toUpperCase(), { bold: true, size: 24 }));
+      }
+      children.push(K.centerP(""));
+      if (T.faculty) children.push(K.centerP(T.faculty));
+      if (T.department) children.push(K.centerP(T.department));
+      children.push(K.centerP(""));
+      children.push(K.centerP(""));
+      children.push(K.centerP(T.workLabel.toUpperCase(), { bold: true, size: 32 }));
+      children.push(K.centerP(""));
+      children.push(K.centerP(`«${T.topic}»`, { bold: true, italics: true }));
+      children.push(K.centerP(""));
+      children.push(K.centerP(""));
+      if (T.author) children.push(K.signatureP(`${T.labels.doneBy}: ${T.author}`));
+      if (T.courseLine) children.push(K.leftP(T.courseLine));
+      if (T.teacher) children.push(K.signatureP(`${T.labels.supervisor}: ${T.teacher}`));
+      if (T.subject && T.subject.toLowerCase() !== T.workLabel.toLowerCase()) {
+        children.push(K.leftP(`${T.labels.subject}: ${T.subject}`));
+      }
+      children.push(K.centerP(""));
+      children.push(K.centerP(""));
+      children.push(K.centerP(T.academicYear));
+      children.push(K.centerP(T.cityYear, { bold: true }));
     }
-    children.push(K.centerP(""));
-    if (meta.university && !/^oliy ta[’']lim muassasasi$/i.test(meta.university)) {
-      children.push(K.centerP(meta.university.toUpperCase(), { bold: true, size: 24 }));
-    }
-    children.push(K.centerP(""));
-    if (meta.faculty) children.push(K.centerP(L.faculty(meta.faculty)));
-    if (meta.department) children.push(K.centerP(L.department(meta.department)));
-    children.push(K.centerP(""));
-    children.push(K.centerP(""));
-    children.push(K.centerP(meta.workLabel.toUpperCase(), { bold: true, size: 32 }));
-    children.push(K.centerP(""));
-    children.push(K.centerP(`«${meta.topic}»`, { bold: true, italics: true }));
-    children.push(K.centerP(""));
-    children.push(K.centerP(""));
-    if (meta.author) children.push(K.signatureP(`${L.doneBy}: ${meta.author}`));
-    if (meta.course || meta.group) {
-      children.push(
-        K.leftP([meta.course && L.course(meta.course), meta.group && L.group(meta.group)].filter(Boolean).join(", ")),
-      );
-    }
-    if (meta.teacher) children.push(K.signatureP(`${L.supervisor}: ${meta.teacher}`));
-    if (meta.subject && meta.subject.toLowerCase() !== meta.workLabel.toLowerCase()) {
-      children.push(K.leftP(`${L.subject}: ${meta.subject}`));
-    }
-    children.push(K.centerP(""));
-    children.push(K.centerP(""));
-    children.push(K.centerP(L.academicYear(year, year + 1)));
-    children.push(K.centerP(`${meta.city} — ${year}`, { bold: true }));
     children.push(new Paragraph({ children: [K.run("")], pageBreakBefore: true }));
   }
 

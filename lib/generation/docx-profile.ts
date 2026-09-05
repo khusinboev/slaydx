@@ -23,7 +23,7 @@ export const CM = 567;
 const A4_W = 11906;
 const A4_H = 16838;
 
-export type DocProfileId = "gost" | "article" | "essay" | "resume" | "landscape" | "reference";
+export type DocProfileId = "gost" | "article" | "essay" | "resume" | "landscape" | "lesson" | "reference";
 
 export type DocProfile = {
   id: DocProfileId;
@@ -164,6 +164,32 @@ const PROFILES: Record<DocProfileId, DocProfile> = {
     tableSize: 20,
   },
   /**
+   * Dars ishlanmasi — PORTRET, jadval langarlangan.
+   *
+   * Ilgari u texnologik xarita bilan bitta `landscape` profilda edi,
+   * lekin albomning o'z asoslanishi (yuqorida) FAQAT xartaga tegishli:
+   * u 6 ustunli va «Mavzu» ustuniga 80 belgi sig'ishi kerak. Dars
+   * rejasida esa jadval 4 ustunli va u hujjatning KICHIK qismi —
+   * asosiysi bosqichlar nasri (6 bosqich × 700 belgigacha).
+   *
+   * Albomda o'sha nasr ~26 sm satrda chiqardi: bir qatorga 120+ belgi,
+   * ya'ni o'qish uchun yaroqsiz uzunlik. Bundan tashqari sayt ko'ruvchisi
+   * (`LessonViewer`) portret A4 chizardi — foydalanuvchi ko'rgan hujjat
+   * yuklab olganidan boshqa yo'nalishda edi (AUDIT-5 P0-3).
+   *
+   * Jadval langari `landscape` dan meros: vaqt jadvali dars xaritasidan
+   * KEYIN turishi kerak, hujjat oxirida emas.
+   */
+  lesson: {
+    id: "lesson",
+    page: GOST_PAGE,
+    type: { ...GOST_TYPE, size: 26, line: 312 },
+    heading: GOST_HEADING,
+    titlePage: "gost",
+    tablePlacement: "anchored",
+    tableSize: 20,
+  },
+  /**
    * Ma'lumotnoma (glossariy) — ketma-ket o'qilmaydi, IZLANADI.
    *
    * Atama sarlavhalari chapda turadi (markazda emas), ta'rif chekinishsiz
@@ -197,8 +223,9 @@ export function profileFor(meta: DocMeta): DocProfile {
     case "article":
       return PROFILES.article;
     case "texnologik-xarita":
-    case "lesson-plan":
       return PROFILES.landscape;
+    case "lesson-plan":
+      return PROFILES.lesson;
     case "glossary":
       return PROFILES.reference;
     default:

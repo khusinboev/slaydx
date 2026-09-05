@@ -15,45 +15,7 @@ export type FlowItem =
   | { type: "table"; id: string; table: DocTable }
   | { type: "ref"; id: string; n: number; text: string };
 
-export type TitleModel = {
-  labels: ReturnType<typeof docLabels>;
-  ministry: string[];
-  university: string;
-  faculty?: string;
-  department?: string;
-  workLabel: string;
-  topic: string;
-  author?: string;
-  courseLine?: string;
-  teacher?: string;
-  subject?: string;
-  cityYear: string;
-};
-
-export function titleModel(doc: AcademicDoc): TitleModel {
-  const { meta } = doc;
-  const L = docLabels(meta.language);
-  const year = new Date(Date.now()).getFullYear();
-  const faculty = meta.faculty ? L.faculty(meta.faculty) : undefined;
-  const department = meta.department ? L.department(meta.department) : undefined;
-  const courseLine = [meta.course && L.course(meta.course), meta.group && L.group(meta.group)]
-    .filter(Boolean)
-    .join(", ");
-  return {
-    labels: L,
-    ministry: (meta.ministry === "maktab" ? L.ministrySchool : L.ministryHigher).split("\n"),
-    university: meta.university,
-    faculty,
-    department,
-    workLabel: meta.workLabel,
-    topic: meta.topic,
-    author: meta.author || undefined,
-    courseLine: courseLine || undefined,
-    teacher: meta.teacher || undefined,
-    subject: meta.subject || undefined,
-    cityYear: `${meta.city || "Toshkent"} — ${year}`,
-  };
-}
+export { titleModel, type TitleModel } from "@/lib/generation/title-model";
 
 export { tocRows, type TocRow } from "@/lib/generation/toc-model";
 

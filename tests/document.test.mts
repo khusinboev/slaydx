@@ -631,16 +631,80 @@ test("rezyume profili akademik qolipni tashlaydi", async () => {
   assert.match(text, /2020–2024 — Dev/, "ish joyi sarlavhasi saqlanadi");
 });
 
-test("jadvalli hujjatlar albom yo'nalishida chiqadi", async () => {
-  for (const id of ["texnologik-xarita", "lesson-plan"] as const) {
-    const xml = await docxXml(anyDoc(id, { topic: "Fan", subject: "Fan", author: "A. Valiyev" }));
-    assert.match(xml, /w:orient="landscape"/, `${id} albom bo'lishi kerak`);
-    // `docx` albomda o'lchamlarni almashtiradi: kенг tomon oldinda.
-    assert.match(xml, /w:w="16838" w:h="11906"/, `${id} A4 albom o'lchami`);
-  }
+test("keng jadvalli hujjat albom, nasrli hujjat portret bo'ladi", async () => {
+  /*
+   * Texnologik xarita — 6 ustunli jadval, portretda «Mavzu» ustuni
+   * sig'maydi. Albom shu uchun tanlangan.
+   */
+  const map = await docxXml(anyDoc("texnologik-xarita", { topic: "Fan", subject: "Fan", author: "A. Valiyev" }));
+  assert.match(map, /w:orient="landscape"/, "texnologik xarita albom bo'lishi kerak");
+  // `docx` albomda o'lchamlarni almashtiradi: keng tomon oldinda.
+  assert.match(map, /w:w="16838" w:h="11906"/, "A4 albom o'lchami");
+
+  /*
+   * Dars rejasi ILGARI xarita bilan bitta profilda edi (AUDIT-5 P0-3).
+   * Lekin albomning asoslanishi FAQAT xaritaga tegishli: dars jadvali
+   * 4 ustunli va hujjatning kichik qismi — asosiysi bosqichlar nasri
+   * (6 bosqich × 700 belgigacha). Albomda o'sha nasr ~26 sm satrda
+   * chiqar, ya'ni o'qib bo'lmasdi. Ustiga `LessonViewer` portret A4
+   * chizardi — foydalanuvchi ko'rgan hujjat boshqa yo'nalishda edi.
+   */
+  const lesson = await docxXml(anyDoc("lesson-plan", { topic: "Kasrlar", subject: "Matematika", author: "A. Valiyev" }));
+  assert.match(lesson, /w:orient="portrait"/, "dars rejasi ko'ruvchi kabi portret bo'lishi kerak");
+  assert.match(lesson, /w:w="11906" w:h="16838"/, "A4 portret o'lchami");
+
   // Akademik ishlar portret bo'lib qoladi.
   const gost = await docxXml(anyDoc("coursework", { topic: "Mavzu", author: "A. Valiyev" }));
   assert.match(gost, /w:orient="portrait"/);
+});
+
+test("titul sahifasi ko'ruvchi va DOCX da bir xil modeldan chiziladi", async () => {
+  const { titleModel } = await import("../lib/generation/title-model.ts");
+
+  /*
+   * AYNAN P0-2 (AUDIT-5). `render-docx` `profileFor().titlePage` ga
+   * qarab IKKI xil titul chizardi, sayt ko'ruvchisi esa UCHINCHI,
+   * har doim GOST qolipini. Natijada jurnal maqolasi saytda TALABA ISHI
+   * bo'lib ko'rinardi: vazirlik sarlavhasi, «Bajardi», «Ilmiy rahbar»,
+   * o'quv yili — jurnalga hech qanday aloqasi yo'q qatorlar.
+   */
+  const fields = {
+    topic: "Quyosh energiyasi",
+    author: "Aliyev Ali",
+    degree: "PhD",
+    organization: "Toshkent davlat universiteti",
+    email: "ali@example.uz",
+    university: "Toshkent davlat universiteti",
+    teacher: "Karimov B.",
+  };
+
+  // ── Maqola: model «article», DOCX da vazirlik YO'Q, muallif bloki BOR
+  const articleDoc = anyDoc("article", fields);
+  const articleTitle = titleModel(articleDoc);
+  assert.equal(articleTitle.kind, "article", "maqola uchun jurnal tituli bo'lishi kerak");
+
+  const articleXml = await docxText(articleDoc);
+  assert.ok(!/VAZIRLIGI/i.test(articleXml), "maqola titulida vazirlik sarlavhasi bo'lmasligi kerak");
+  assert.ok(!/Ilmiy rahbar/i.test(articleXml), "maqolada «Ilmiy rahbar» qatori bo'lmasligi kerak");
+  assert.match(articleXml, /Aliyev Ali, PhD/, "muallif va daraja bitta qatorda");
+  assert.match(articleXml, /ali@example\.uz/, "email titulga tushishi kerak");
+
+  // ── Kurs ishi: model «gost», DOCX da vazirlik BOR
+  const courseDoc = anyDoc("coursework", fields);
+  const courseTitle = titleModel(courseDoc);
+  assert.equal(courseTitle.kind, "gost", "talaba ishi uchun GOST tituli");
+
+  const courseXml = await docxText(courseDoc);
+  assert.match(courseXml, /VAZIRLIGI/i, "talaba ishida vazirlik sarlavhasi bo'lishi kerak");
+  assert.match(courseXml, /Ilmiy rahbar/i, "talaba ishida rahbar qatori bo'lishi kerak");
+
+  /*
+   * Model ikkala tomonni ham boshqaradi: `titleModel` da yangi tur
+   * qo'shilsa, `WordViewer` dagi `TitlePage` ni ham TypeScript
+   * majburlaydi — jim ajralib ketish mumkin emas.
+   */
+  assert.equal(titleModel(anyDoc("thesis", fields)).kind, "gost");
+  assert.equal(titleModel(anyDoc("essay", fields)).kind, "gost");
 });
 
 test("langarli jadval o'z bo'limidan keyin turadi", async () => {
