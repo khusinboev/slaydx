@@ -862,9 +862,26 @@ test("bet soniga bog'liq bo'lmagan xizmatlar qat'iy byudjet oladi", async () => 
   // Rasm — eng tez, tarjima — eng sekin (bo'laklar to'lqinlarda ketadi).
   const image = budgetFor(TOOL_BY_ID.image, {} as FormValues, CAP);
   const translation = budgetFor(TOOL_BY_ID.translation, {} as FormValues, CAP);
-  const slide = budgetFor(TOOL_BY_ID.slide, { quality: "premium_long" } as FormValues, CAP);
+  const glossary = budgetFor(TOOL_BY_ID.glossary, {} as FormValues, CAP);
 
-  assert.ok(image < slide && slide < translation, `${image} < ${slide} < ${translation}`);
+  assert.ok(image < glossary && glossary < translation, `${image} < ${glossary} < ${translation}`);
+
+  /*
+   * Qat'iy byudjetli xizmat forma qiymatlariga umuman qaramaydi — mana shu
+   * ularni slayd va yozuvchi vositalardan ajratib turadi.
+   */
+  assert.equal(budgetFor(TOOL_BY_ID.image, { imageCount: 4 } as FormValues, CAP), image);
+  assert.equal(budgetFor(TOOL_BY_ID.glossary, { termCount: "40" } as FormValues, CAP), glossary);
+
+  /*
+   * Slayd ENDI bu ro'yxatda EMAS (N-2): u qat'iy 180 000 edi, ya'ni
+   * 10 slaydli standart paket ham, 16 slaydli `premium_long` ham (3 000 va
+   * 8 000 tanga) bir xil vaqt olardi. O'sish `slide-layout.test.mts` da
+   * batafsil sinaladi; bu yerda faqat qat'iy EMASLIGI qayd etiladi.
+   */
+  const slideSmall = budgetFor(TOOL_BY_ID.slide, { quality: "standard" } as FormValues, CAP);
+  const slideBig = budgetFor(TOOL_BY_ID.slide, { quality: "premium_long" } as FormValues, CAP);
+  assert.notEqual(slideSmall, slideBig, "slayd byudjeti paketga bog'liq bo'lishi kerak");
 });
 
 test("mapPool yagona manba — buzuq limit bilan ham natija yo'qotmaydi", async () => {

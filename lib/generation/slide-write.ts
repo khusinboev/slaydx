@@ -2,6 +2,7 @@ import { languageDirective, slideLabels } from "./i18n";
 import { sourceBlock } from "./prompts";
 import { parseLlmJson } from "./json";
 import { llmComplete, llmEnabled } from "./llm";
+import { remainingMs } from "./quality";
 import { attachSlideImages } from "./slide-images";
 import {
   audienceRules,
@@ -325,6 +326,7 @@ export async function writeSlidesWithLlm(
   meta: DocMeta,
   tpl: SlideTemplate,
   beats: SlideBeat[] = tpl.beats,
+  deadline?: number,
 ): Promise<SlideModel[] | null> {
   if (!llmEnabled()) return null;
   const rules = audienceRules(meta.slideAudience, tpl.id);
@@ -382,7 +384,26 @@ export async function writeSlidesWithLlm(
       `JSON sxema: {"slides":[{"layout":"title|agenda|section|bullets|twoCol|compare|quote|stats|process|table|closing","kicker":"","title":"","subtitle":"","imageHint":"","notes":"","bullets":[""],"leftTitle":"","left":[""],"rightTitle":"","right":[""],"quote":"","quoteBy":"","stats":[{"value":"","label":""}],"steps":[{"n":"1","title":"","text":""}],"table":{"headers":["",""],"rows":[["",""]]}}]}`,
     ].join("\n");
     const maxTokens = Math.min(9_000, 2_000 + n * 420);
-    const raw = await llmComplete(slideSystem(meta, tpl), user, maxTokens, { json: true, timeoutMs: 90_000 });
+    /*
+     * Timeout QOLGAN byudjetdan olinadi.
+     *
+     * Ilgari bu yerda qat'iy `90_000` turardi va `deadline` bu funksiyaga
+     * umuman yetib kelmasdi. 16 slaydli deka ikki bo'lak + qayta
+     * urinishlar bilan eng yomon holatda 4 × 90 = 360 s olardi, slaydga
+     * ajratilgan byudjet esa 180 s edi. Matn byudjetni yeb bo'lgach,
+     * `buildSlideAcademicDoc` rasmga manfiy vaqt hisoblar va rasm
+     * bosqichi JIM o'tkazib yuborilardi — aynan «sifatliroq rasm» deb
+     * 6 000–8 000 tanga to'langan premium paketlarda.
+     */
+    const left = remainingMs(deadline);
+    if (left < 8_000) {
+      console.warn("[slide-write] byudjet tugadi, bo‘lak tashlandi", from + 1, "-", to);
+      return [];
+    }
+    const raw = await llmComplete(slideSystem(meta, tpl), user, maxTokens, {
+      json: true,
+      timeoutMs: Math.min(90_000, left),
+    });
     if (!raw) {
       console.warn("[slide-write] bo‘lak javobsiz", from + 1, "-", to);
       return [];
@@ -422,7 +443,8 @@ export async function writeSlidesWithLlm(
      * naqshi) ko'pincha yetishmagan slaydlarni tiklaydi; yaxshiroq
      * natija olinadi, yomoni tashlab yuboriladi.
      */
-    if (got.length < r.to - r.from) {
+    // Qayta urinish faqat vaqt qolganda: u yaxshilash, majburiyat emas.
+    if (got.length < r.to - r.from && remainingMs(deadline) > 25_000) {
       const retry = await askRange(r.from, r.to, written);
       if (retry.length > got.length) got = retry;
     }
@@ -520,13 +542,52 @@ export async function writeSlidesWithLlm(
   return slides;
 }
 
+/** Byudjetsiz (test/dev) chaqiruv uchun taxminiy umumiy vaqt. */
+const SLIDE_FALLBACK_BUDGET_MS = 180_000;
+
+/** Matn bosqichiga ajratiladigan ulush. Qolgani rasmga, ozi yig'ishga. */
+const TEXT_SHARE = 0.62;
+/** PPTX yig'ish va saqlashga ajratiladigan zaxira. */
+const ASSEMBLY_MS = 12_000;
+
+export type SlideStageBudget = { textMs: number; imageMs: number; assemblyMs: number };
+
+/**
+ * Byudjetni bosqichlar orasida OLDINDAN taqsimlaydi.
+ *
+ * Ildiz sabab shu yerda edi: bosqichlar byudjetni bo'lishmasdi. Matn
+ * `writeSlidesWithLlm` da cheksiz (qat'iy 90 s × 4 chaqiruv) ishlar,
+ * rasm esa «qolganini» olardi:
+ *
+ *   const budget = deadline ? Math.max(0, deadline - Date.now() - 12_000) : 60_000;
+ *
+ * Matn byudjetni yeb bo'lsa bu ifoda 0 berar va `attachSlideImages`
+ * birinchi tekshiruvdayoq hamma slaydni o'tkazib yuborardi — deck
+ * `COMPLETED` bo'lib, rasmsiz chiqardi. Hech qanday signal yo'q,
+ * `console.warn` dan boshqa.
+ *
+ * Endi matn O'Z ulushini oladi va undan oshib keta olmaydi (u
+ * `deadline` ni haqiqatan o'qiydi), shuning uchun rasmga vaqt QOLISHI
+ * kafolatlanadi. Ulush 62/38 — matn og'irroq, chunki usiz deck umuman
+ * yo'q; lekin rasm hech qachon nolga tushmaydi.
+ */
+export function slideStageBudget(deadline?: number, now = Date.now()): SlideStageBudget {
+  const total = deadline ? Math.max(0, deadline - now) : SLIDE_FALLBACK_BUDGET_MS;
+  // Juda kichik byudjetda ham yig'ishga joy qoldiramiz, lekin hammasini emas.
+  const assemblyMs = Math.min(ASSEMBLY_MS, Math.round(total * 0.1));
+  const usable = Math.max(0, total - assemblyMs);
+  const textMs = Math.round(usable * TEXT_SHARE);
+  return { textMs, imageMs: usable - textMs, assemblyMs };
+}
+
 export async function buildSlideAcademicDoc(meta: DocMeta, deadline?: number): Promise<AcademicDoc> {
   const themeId = (meta.slideTheme || "atlas") as SlideThemeId;
   getSlideTheme(themeId);
   const tpl = resolveSlideTemplate(meta.slideTemplate, meta.topic, meta.extra);
   // Sifat paketi shu yerda haqiqiy slaydlar soniga aylanadi.
   const beats = expandBeats(tpl, wantSlides(meta, tpl));
-  const written = await writeSlidesWithLlm(meta, tpl, beats);
+  const stage = slideStageBudget(deadline);
+  const written = await writeSlidesWithLlm(meta, tpl, beats, Date.now() + stage.textMs);
   // Kalit bor, lekin matn yozilmadi — shablon deck bermaymiz. `beatToSlide`
   // «Fotosintez: kirish / Asosiy qism / Amaliyot» kabi bo'sh slaydlar
   // yaratadi va foydalanuvchi buni to'lagan ishi deb oladi. Xato bo'lsa
@@ -535,9 +596,13 @@ export async function buildSlideAcademicDoc(meta: DocMeta, deadline?: number): P
     throw new Error("Taqdimot matni yozilmadi. Kredit qaytariladi — qayta urinib ko‘ring.");
   }
   const slides = written ?? fallbackSlides(meta, tpl, beats);
-  // Matn tayyor — qolgan vaqtni rasmga beramiz, lekin PPTX yig'ish uchun
-  // kamida ~12 soniya qoldiramiz.
-  const budget = deadline ? Math.max(0, deadline - Date.now() - 12_000) : 60_000;
+  /*
+   * Matn erta tugagan bo'lsa ortgan vaqt ham rasmga o'tadi — ulush
+   * pastki chegara, shift emas. Yig'ish zaxirasi har doim ayriladi.
+   */
+  const budget = deadline
+    ? Math.max(0, deadline - Date.now() - stage.assemblyMs)
+    : stage.imageMs;
   await attachSlideImages(slides, meta.topic, tpl.visual, budget, { premium: meta.premiumVisuals });
   const sections = slides
     .filter((s) => s.layout !== "title" && s.layout !== "closing")

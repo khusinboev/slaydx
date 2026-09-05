@@ -346,3 +346,128 @@ test("forma standartlaridan slayd pastki qatoriga muallif yetib boradi", async (
   } as never);
   assert.equal(fallbackSlides(blank)[0].footer, "");
 });
+
+test("byudjet bosqichlar orasida oldindan taqsimlanadi", async () => {
+  const { slideStageBudget } = await import("../lib/generation/slide-write.ts");
+
+  /*
+   * AYNAN N-2 (Sprint 14). Ilgari bosqichlar byudjetni bo'lishmasdi:
+   * matn `writeSlidesWithLlm` da qat'iy 90 s × 4 chaqiruvgacha ishlar,
+   * rasm esa «qolganini» olardi —
+   *
+   *   const budget = deadline ? Math.max(0, deadline - Date.now() - 12_000) : 60_000;
+   *
+   * Matn byudjetni yeb bo'lsa bu 0 berardi va `attachSlideImages`
+   * BARCHA slaydni o'tkazib yuborardi: «sifatliroq rasm» deb 6 000–8 000
+   * tanga to'langan premium deck rasmsiz chiqardi, hech qanday signalsiz.
+   */
+  const now = 1_000_000;
+  const stage = slideStageBudget(now + 296_000, now);
+
+  // Eng muhim shart: rasmga vaqt QOLISHI kafolatlanadi.
+  assert.ok(stage.imageMs > 0, "rasm bosqichi hech qachon nolga tushmasligi kerak");
+  assert.ok(stage.textMs > 0, "matn bosqichi ham nolga tushmasligi kerak");
+  assert.ok(stage.assemblyMs > 0, "PPTX yig'ishga zaxira qolishi kerak");
+
+  // Yig'indi umumiy byudjetdan oshmasligi kerak — aks holda deadline buziladi.
+  assert.ok(
+    stage.textMs + stage.imageMs + stage.assemblyMs <= 296_000,
+    "bosqichlar yig'indisi umumiy byudjetdan oshmasligi kerak",
+  );
+
+  // Matn og'irroq (usiz deck umuman yo'q), lekin hammasini olmaydi.
+  assert.ok(stage.textMs > stage.imageMs, "matn ulushi kattaroq bo'lishi kerak");
+  assert.ok(stage.imageMs > 60_000, `16 slaydli deka rasmiga yetarli vaqt: ${stage.imageMs}ms`);
+
+  // Juda kichik byudjetda ham taqsimot buzilmaydi va manfiyga tushmaydi.
+  for (const total of [0, 5_000, 30_000, 90_000, 600_000]) {
+    const st = slideStageBudget(now + total, now);
+    assert.ok(st.textMs >= 0 && st.imageMs >= 0 && st.assemblyMs >= 0, `${total}: manfiy ulush yo'q`);
+    assert.ok(st.textMs + st.imageMs + st.assemblyMs <= total, `${total}: yig'indi oshmasligi kerak`);
+  }
+
+  // Byudjetsiz chaqiruv (test/dev) ham ishlaydigan taqsimot beradi.
+  const noDeadline = slideStageBudget(undefined, now);
+  assert.ok(noDeadline.textMs > 0 && noDeadline.imageMs > 0);
+});
+
+test("slayd byudjeti paketga qarab o'sadi", async () => {
+  const { budgetFor } = await import("../lib/generation/budget.ts");
+  const { TOOL_BY_ID } = await import("../lib/tools.ts");
+
+  const CAP = 900_000;
+  const forQuality = (quality: string) =>
+    budgetFor(TOOL_BY_ID.slide, { topic: "Fotosintez", quality } as never, CAP);
+
+  /*
+   * Ilgari slayd `FIXED` da qat'iy 180 000 edi: 10 slaydli standart paket
+   * ham, 16 slaydli `premium_long` ham (3 000 va 8 000 tanga) bir xil vaqt
+   * olardi — ya'ni qimmatroq paketda muvaffaqiyatsizlik ehtimoli yuqoriroq
+   * edi, xuddi kurs ishidagi N-3 kabi.
+   */
+  const standard = forQuality("standard");
+  const premium = forQuality("premium");
+  const long = forQuality("long");
+  const premiumLong = forQuality("premium_long");
+
+  assert.ok(standard < premium, "12 slayd 10 slayddan ko'proq vaqt olishi kerak");
+  assert.ok(premium < long, "14 slayd 12 slayddan ko'proq vaqt olishi kerak");
+  assert.ok(long < premiumLong, "16 slayd 14 slayddan ko'proq vaqt olishi kerak");
+
+  /*
+   * Eng uzun deka matn VA rasm bosqichlariga yetadigan vaqt olishi kerak.
+   * 16 slayd ikki bo'lakda yoziladi (~40 s har biri, qayta urinish bilan),
+   * so'ng 14 tagacha rasm chiziladi.
+   */
+  assert.ok(premiumLong >= 280_000, `premium_long byudjeti: ${premiumLong}ms`);
+
+  // Operatorning shifti hamon oxirgi so'z.
+  assert.equal(budgetFor(TOOL_BY_ID.slide, { quality: "premium_long" } as never, 200_000), 200_000);
+});
+
+test("byudjet tugagan bo'lsa slayd yozuvchisi tarmoqqa chiqmaydi", async () => {
+  const { writeSlidesWithLlm } = await import("../lib/generation/slide-write.ts");
+  const { resolveSlideTemplate, expandBeats } = await import("../lib/generation/slide-templates.ts");
+  const { extractMeta } = await import("../lib/generation/meta.ts");
+  const { TOOL_BY_ID } = await import("../lib/tools.ts");
+
+  /*
+   * `deadline` `writeSlidesWithLlm` ga UMUMAN yetib bormasdi (N-2): ichida
+   * qat'iy `timeoutMs: 90_000` turardi. Byudjet allaqachon tugagan bo'lsa
+   * ham u yana 4 tagacha 90 soniyalik chaqiruv qilar va `buildArtifact`
+   * ning butun byudjetini yeb qo'yardi.
+   *
+   * Tekshiruv vaqt bilan emas, CHAQIRUV SONI bilan: sekin/tez mashinada
+   * ham bir xil natija beradi.
+   */
+  const realFetch = globalThis.fetch;
+  const savedGemini = process.env.GEMINI_API_KEY;
+  const savedXai = process.env.XAI_API_KEY;
+  let calls = 0;
+  globalThis.fetch = (async (...args: Parameters<typeof fetch>) => {
+    calls += 1;
+    return realFetch(...args);
+  }) as typeof fetch;
+  // Kalit BOR — ya'ni `llmEnabled()` to'siq emas, to'siq byudjet bo'lishi kerak.
+  process.env.GEMINI_API_KEY = "test-key-not-used";
+  delete process.env.XAI_API_KEY;
+
+  try {
+    const meta = extractMeta(TOOL_BY_ID.slide, {
+      topic: "Fotosintez",
+      quality: "premium_long",
+    } as never);
+    const tpl = resolveSlideTemplate(meta.slideTemplate, meta.topic, meta.extra);
+    const beats = expandBeats(tpl, 16);
+
+    const out = await writeSlidesWithLlm(meta, tpl, beats, Date.now() - 1);
+
+    assert.equal(calls, 0, `byudjet tugaganda tarmoqqa chiqilmasligi kerak, chiqdi: ${calls} marta`);
+    assert.equal(out, null, "slayd chiqmasa `null` qaytishi kerak — worker kreditni qaytaradi");
+  } finally {
+    globalThis.fetch = realFetch;
+    if (savedGemini === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = savedGemini;
+    if (savedXai !== undefined) process.env.XAI_API_KEY = savedXai;
+  }
+});
