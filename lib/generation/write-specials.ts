@@ -91,7 +91,27 @@ export async function writeLessonWithLlm(meta: DocMeta, deadline?: number): Prom
     raw = await ask(Math.min(40_000, remainingMs(deadline)));
     data = (raw ? parseJson(raw) : null) as typeof data;
   }
+  return lessonDoc(meta, data);
+}
+
+export type LessonData = {
+  goal?: string;
+  tools?: string;
+  stages?: { title?: string; minutes?: number; activity?: string; result?: string }[];
+  homework?: string;
+};
+
+/**
+ * Dars rejasi hujjatini yig'adi — model javobidan, tarmoqsiz.
+ *
+ * Chaqiruvdan ajratilgan: bu yerda daqiqa normalizatsiyasi, mavzuga
+ * bog'liqlik tekshiruvi va jadval LANGARI bor. Yig'ish `writeLessonWithLlm`
+ * ichida turganda ularning hech biri sinovdan o'tkazilmasdi — mutatsiya
+ * supurgisi langarni o'chirib tashlaganda birorta test yiqilmagan edi.
+ */
+export function lessonDoc(meta: DocMeta, data: LessonData | null): AcademicDoc | null {
   if (!data?.stages?.length) return null;
+  const d = meta.duration || 45;
   const L = sectionLabels(meta.language);
   const stages = data.stages.slice(0, 8);
   /**
@@ -642,7 +662,23 @@ export async function writeMapWithLlm(meta: DocMeta, deadline?: number): Promise
     2800,
     { json: true, timeoutMs: Math.min(70_000, remainingMs(deadline) || 70_000) },
   );
-  const data = raw ? (parseJson(raw) as { intro?: string; topics?: unknown; weeks?: unknown } | null) : null;
+  const data = raw ? (parseJson(raw) as MapData | null) : null;
+  return mapDoc(meta, data);
+}
+
+export type MapData = { intro?: string; topics?: unknown; weeks?: unknown };
+
+/**
+ * Texnologik xarita hujjatini yig'adi — model javobidan, tarmoqsiz.
+ *
+ * `lessonDoc` bilan bir xil sabab: bu yerda takrorni tashlash, 70%
+ * chegara, soat invarianti va jadval LANGARI bor — hammasi
+ * `writeMapWithLlm` ichida turganda sinovsiz qolardi.
+ */
+export function mapDoc(meta: DocMeta, data: MapData | null): AcademicDoc | null {
+  const weekly = Math.max(1, meta.weeklyHours);
+  const total = Math.max(weekly, meta.totalHours);
+  const weeks = Math.max(8, Math.min(36, Math.round(total / weekly)));
 
   type Week = { topic: string; method: string; result: string; control: string };
   const weeksRows: Week[] = [];

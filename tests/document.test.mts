@@ -662,3 +662,142 @@ test("glossariy atamalarni ikki marta chizmaydi", async () => {
   const text = await docxText(doc);
   assert.equal(text.split("Entropiya").length - 1, 1, "atama bir marta chiqishi kerak");
 });
+
+/**
+ * Profil MAKETI — nafaqat shrift (Sprint 9 keyingi mutatsiya supurgisi).
+ *
+ * Dastlabki testlar shriftni va tekislashni tekshirardi, lekin sahifa
+ * chekinishi, sarlavha rangi va yon panel balandligini emas: ularni
+ * o'chirib qo'yish birorta testni yiqitmasdi.
+ */
+test("albom profili chekinishlarni ham toraytiradi", async () => {
+  const xml = await docxXml(anyDoc("texnologik-xarita", { topic: "Fan", subject: "Fan", author: "A." }));
+  const m = /<w:pgMar w:top="(\d+)" w:right="(\d+)" w:bottom="(\d+)" w:left="(\d+)"/.exec(xml);
+  assert.ok(m, "sahifa chekinishlari topilishi kerak");
+  const [top, right, bottom, left] = m!.slice(1).map(Number);
+
+  // GOST: chap 3 sm (1701). Albomda jadvalga joy kerak — 2 sm (1134).
+  assert.equal(left, Math.round(2 * 567), `chap chekinish: ${left}`);
+  assert.equal(top, Math.round(1.5 * 567));
+  assert.equal(bottom, Math.round(1.5 * 567));
+  assert.ok(left < 1701, "gost chekinishidan tor bo'lishi kerak");
+
+  // Foydali kenglik portret gost dagidan sezilarli katta.
+  const usable = 16838 - left - right;
+  assert.ok(usable > 14_000, `albom foydali kengligi: ${usable}`);
+});
+
+test("rezyume sarlavhasi qora, yon panel sahifani to'ldiradi", async () => {
+  const doc = anyDoc(
+    "resume",
+    { topic: "Dasturchi", fullName: "A. Valiyev" },
+    {
+      titlePage: false,
+      sections: [
+        { id: "summary", title: "Qisqacha", blocks: [{ kind: "p", text: "Matn." }, { kind: "p", text: "Toshkent" }] },
+        { id: "exp", title: "Tajriba", blocks: [{ kind: "li", text: "Natija." }] },
+      ],
+    },
+  );
+  const xml = await docxXml(doc);
+
+  /*
+   * Sarlavha rangi profildan keladi. Berilmasa Word ning «Heading 1»
+   * uslubi qoladi va u LibreOffice da to'q sariq chiqadi — ko'ruvchida
+   * esa sarlavha qora, faqat ostidagi chiziq rangli.
+   */
+  assert.match(xml, /<w:color w:val="1C1917"\/>/, "sarlavha matni qora bo'lishi kerak");
+
+  /*
+   * Yon panel sahifa balandligini to'ldiradi. Jadval katagi odatda faqat
+   * mazmuni qadar cho'ziladi va to'q panel varaqning yarmida uzilib
+   * qolardi.
+   */
+  const h = /<w:trHeight w:val="(\d+)"/.exec(xml);
+  assert.ok(h, "qator balandligi berilishi kerak");
+  assert.ok(Number(h![1]) > 12_000, `yon panel balandligi: ${h![1]}`);
+});
+
+/**
+ * Jadval langarini YOZUVCHI qo'yadi (mutatsiya supurgisi topgan teshik).
+ *
+ * `render-docx` langarni to'g'ri chizishi sinalgan edi, lekin
+ * `writeLessonWithLlm`/`writeMapWithLlm` uni umuman QO'YISHI sinalmagan:
+ * `anchor` satrini o'chirib tashlaganda birorta test yiqilmasdi va
+ * jadval jimgina hujjat oxiriga qaytardi.
+ */
+test("dars rejasi jadvali «Dars xaritasi» bo'limiga langarlanadi", async () => {
+  const { lessonDoc } = await import("../lib/generation/write-specials.ts");
+  const meta = extractMeta(TOOL_BY_ID["lesson-plan"], {
+    topic: "Oddiy kasrlar",
+    subject: "Matematika",
+    duration: 45,
+  } as FormValues);
+
+  const doc = lessonDoc(meta, {
+    goal: "Kasrlarni qo‘shishni o‘rgatish",
+    tools: "Doska, tarqatma",
+    homework: "42-bet, 7–9 misollar",
+    stages: [
+      { title: "Tashkiliy", minutes: 10, activity: "Oddiy kasrlar bo‘yicha 1/2 + 1/4 takrorlanadi", result: "Tayyor" },
+      { title: "Yangi mavzu", minutes: 20, activity: "Oddiy kasrlar qo‘shiladi: 1/2 + 1/3 = 5/6", result: "Biladi" },
+      { title: "Yakun", minutes: 30, activity: "Oddiy kasrlar bo‘yicha mustaqil ish", result: "Yechadi" },
+    ],
+  });
+
+  assert.ok(doc, "hujjat yig'ilishi kerak");
+  assert.equal(doc!.tables?.[0]?.anchor, "map", "jadval «map» bo'limiga langarlanadi");
+  assert.ok(doc!.sections.some((s) => s.id === "map"), "langar mavjud bo'limga ishora qilsin");
+
+  // Daqiqalar dars davomiyligiga tenglashadi (invariant shu yerda ham).
+  const rows = doc!.tables![0].rows;
+  assert.equal(rows.reduce((a, r) => a + Number(r[1]), 0), 45);
+
+  // Jadval haqiqatan o'z bo'limidan keyin chiziladi.
+  const text = await docxText(doc!);
+  assert.ok(text.indexOf("Yangi mavzu") < text.lastIndexOf("Yangi mavzu"), "bo'lim ham, jadval ham chiqadi");
+});
+
+test("texnologik xarita jadvali pasportga langarlanadi", async () => {
+  const { mapDoc } = await import("../lib/generation/write-specials.ts");
+  const meta = extractMeta(TOOL_BY_ID["texnologik-xarita"], {
+    topic: "Algebra",
+    subject: "Algebra",
+    weeklyHours: 2,
+    totalHours: 20,
+  } as FormValues);
+
+  const doc = mapDoc(meta, {
+    intro: "Xarita fan dasturiga muvofiq tuzilgan.",
+    weeks: Array.from({ length: 10 }, (_, i) => ({
+      topic: `${i + 1}-darsning aniq mavzusi: tenglamalar ${i + 1}`,
+      method: "Amaliy",
+      result: `Natija ${i + 1}`,
+      control: "Yozma",
+    })),
+  });
+
+  assert.ok(doc, "hujjat yig'ilishi kerak");
+  assert.equal(doc!.tables?.[0]?.anchor, "passport");
+  assert.ok(doc!.sections.some((s) => s.id === "passport"));
+
+  // Soat ustuni yig'indisi pasportdagi jami soatga QAT'IY teng.
+  const rows = doc!.tables![0].rows;
+  assert.equal(rows.reduce((a, r) => a + Number(r[1]), 0), 20);
+});
+
+test("xarita 70% dan kam noyob mavzuda hujjat bermaydi", async () => {
+  const { mapDoc } = await import("../lib/generation/write-specials.ts");
+  const meta = extractMeta(TOOL_BY_ID["texnologik-xarita"], {
+    topic: "Algebra",
+    subject: "Algebra",
+    weeklyHours: 2,
+    totalHours: 20,
+  } as FormValues);
+
+  // Hammasi bir xil mavzu — takror tashlangach 1 tasi qoladi.
+  const doc = mapDoc(meta, {
+    weeks: Array.from({ length: 10 }, () => ({ topic: "Bir xil mavzu", method: "Amaliy", result: "R", control: "Test" })),
+  });
+  assert.equal(doc, null, "takroriy xarita yaroqsiz — tsikl bilan to'ldirilmaydi");
+});

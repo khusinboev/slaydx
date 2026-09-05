@@ -113,8 +113,34 @@ function buildPreview(doc: AcademicDoc | null): GenerationPreview | null {
  * bu migratsiyadan oldin yaratilgan eski qator: unda global qiymat
  * ishlatiladi, shunda eski navbat ham to'g'ri tugaydi.
  */
-function jobBudget(job: ClaimedJob): number {
+export function jobBudget(job: Pick<ClaimedJob, "budgetMs">): number {
   return job.budgetMs > 0 ? job.budgetMs : env.worker.jobTimeoutMs;
+}
+
+/**
+ * `buildArtifact` ga beriladigan byudjet (ms).
+ *
+ * Qulf muddatidan biroz qisqa: ish `reclaimStaleJobs` uni o'lik deb
+ * hisoblashidan OLDIN o'zi tugashi va natijani yozishga ulgurishi kerak.
+ */
+export function jobDeadlineMs(job: Pick<ClaimedJob, "budgetMs">): number {
+  return Math.max(30_000, jobBudget(job) - 15_000);
+}
+
+/**
+ * Kam yetkazilganda qaytariladigan ulush. `null` — qaytarish shart emas.
+ *
+ * Alohida funksiya, chunki bu PUL qaroridir: `runJob` ichida qolganda
+ * uni sinovdan o'tkazib bo'lmasdi (haqiqiy navbat, worker qulfi va
+ * `buildArtifact` kerak bo'lardi), va aynan shu yo'l — 4 tadan 1 tasi
+ * kelganda foydalanuvchiga pul qaytishi — jim buzilsa hech kim
+ * sezmasdi.
+ */
+export function shortfallRatio(delivered?: { got: number; want: number }): number | null {
+  if (!delivered) return null;
+  const { got, want } = delivered;
+  if (!(want > 0) || got >= want) return null;
+  return 1 - Math.max(0, got) / want;
 }
 
 async function runJob(job: ClaimedJob): Promise<void> {
@@ -128,9 +154,7 @@ async function runJob(job: ClaimedJob): Promise<void> {
 
   const stop = progressTicker(job);
   try {
-    // Byudjet qulf muddatidan biroz qisqa: ish `reclaimStaleJobs`
-    // uni o'lik deb hisoblashidan oldin o'zi tugashi kerak.
-    const deadline = Date.now() + Math.max(30_000, jobBudget(job) - 15_000);
+    const deadline = Date.now() + jobDeadlineMs(job);
     const file = await buildArtifact(tool, job.values, { deadline });
 
     if (!file.bytes?.byteLength) {
@@ -163,7 +187,7 @@ async function runJob(job: ClaimedJob): Promise<void> {
         deleteGenerationFile(job.id).catch(() => {}),
         deleteAssets(job.id).catch(() => {}),
       ]);
-    } else if (file.delivered && file.delivered.got < file.delivered.want) {
+    } else if (shortfallRatio(file.delivered) !== null) {
       /*
        * Va'da qilinganidan kam yetkazildi — farq qaytariladi.
        *
@@ -172,11 +196,11 @@ async function runJob(job: ClaimedJob): Promise<void> {
        * SONGA bog'langan (4 ta = 6 000 tanga), shuning uchun kam
        * yetkazilganda to'liq pul olish halol emas.
        */
-      const { got, want } = file.delivered;
+      const { got, want } = file.delivered!;
       const ok = await refundPartial(
         job.userId,
         job.id,
-        1 - got / want,
+        shortfallRatio(file.delivered)!,
         `${want} tadan ${got} tasi yaratildi — farq qaytarildi`,
       );
       console.warn(`[worker] job ${job.id}: qisman yetkazildi ${got}/${want}, qaytarish=${ok}`);

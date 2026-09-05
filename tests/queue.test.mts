@@ -14,7 +14,7 @@ const hasDb = Boolean(process.env.DATABASE_URL) && !process.env.DATABASE_URL!.in
 process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";
 
 test("navbat byudjeti", { skip: hasDb ? false : "DATABASE_URL yo'q" }, async (t) => {
-  const { query, migrate, pool } = await import("../lib/server/db.ts");
+  const { query, migrate } = await import("../lib/server/db.ts");
   const { enqueueGeneration, claimJob } = await import("../lib/server/jobs.ts");
   const { budgetFor } = await import("../lib/generation/budget.ts");
   const { TOOL_BY_ID } = await import("../lib/tools.ts");
@@ -33,7 +33,8 @@ test("navbat byudjeti", { skip: hasDb ? false : "DATABASE_URL yo'q" }, async (t)
     await query("DELETE FROM generations WHERE user_id = $1", [uid]);
     await query("DELETE FROM transactions WHERE user_id = $1", [uid]);
     await query("DELETE FROM users WHERE id = $1", [uid]);
-    await pool().end();
+    // Pool ATAYIN bu yerda yopilmaydi — fayldagi keyingi testlar ham shu
+    // ulanishdan foydalanadi. Yopish faqat oxirgi testda.
   });
 
   const CAP = 900_000;
@@ -86,5 +87,139 @@ test("navbat byudjeti", { skip: hasDb ? false : "DATABASE_URL yo'q" }, async (t)
     assert.ok(claimed);
     assert.equal(claimed!.id, id);
     assert.equal(claimed!.budgetMs, 0, "0 — worker global qiymatga qaytishi uchun belgi");
+  });
+});
+
+/**
+ * Worker qarorlari va navbat SQL i (adversarial mutatsiya supurgisi
+ * ochgan teshiklar, 2026-09-05).
+ *
+ * Sprint 9–13 dan keyin o'tkazilgan supurgi shuni ko'rsatdiki, MANTIQ
+ * sinalgan (`budgetFor`, `splitRatio`, `formatOf`), lekin SIMLASH
+ * sinalmagan: worker byudjetni e'tiborsiz qoldirsa ham, `reclaimStaleJobs`
+ * global muddatga qaytsa ham, `completeJob` formatni yangilamasa ham
+ * birorta test yiqilmasdi.
+ */
+test("worker qarorlari", async (t) => {
+  const { jobBudget, jobDeadlineMs, shortfallRatio } = await import("../lib/server/worker.ts");
+  const { env } = await import("../lib/server/env.ts");
+
+  await t.test("byudjet qatordan olinadi, 0 bo'lsa globalga qaytadi", () => {
+    assert.equal(jobBudget({ budgetMs: 477_000 }), 477_000);
+    assert.equal(jobBudget({ budgetMs: 99_000 }), 99_000);
+    // Migratsiyadan oldingi qatorlar.
+    assert.equal(jobBudget({ budgetMs: 0 }), env.worker.jobTimeoutMs);
+    assert.equal(jobBudget({ budgetMs: -1 }), env.worker.jobTimeoutMs);
+  });
+
+  await t.test("generatsiya byudjeti qulf muddatidan qisqa", () => {
+    /*
+     * Ish `reclaimStaleJobs` uni o'lik deb hisoblashidan OLDIN tugab,
+     * natijani yozishga ulgurishi kerak — aks holda tugagan ish qayta
+     * navbatga tushardi.
+     */
+    assert.equal(jobDeadlineMs({ budgetMs: 477_000 }), 462_000);
+    assert.ok(jobDeadlineMs({ budgetMs: 477_000 }) < 477_000);
+
+    // Kichik ish ham ishlashga ulgursin — pastki chegara bor.
+    assert.equal(jobDeadlineMs({ budgetMs: 20_000 }), 30_000);
+
+    // Eski qator: global qiymatdan hisoblanadi, qattiq yozilgan emas.
+    assert.equal(jobDeadlineMs({ budgetMs: 0 }), Math.max(30_000, env.worker.jobTimeoutMs - 15_000));
+  });
+
+  await t.test("kam yetkazilganda qaytariladigan ulush", () => {
+    // To'liq yetkazildi — qaytarish yo'q.
+    assert.equal(shortfallRatio(undefined), null);
+    assert.equal(shortfallRatio({ got: 4, want: 4 }), null);
+    assert.equal(shortfallRatio({ got: 5, want: 4 }), null, "ortiqcha ham qaytarishga sabab emas");
+
+    // 4 tadan 3 tasi — chorak qaytadi.
+    assert.equal(shortfallRatio({ got: 3, want: 4 }), 0.25);
+    assert.equal(shortfallRatio({ got: 1, want: 4 }), 0.75);
+    assert.equal(shortfallRatio({ got: 1, want: 2 }), 0.5);
+
+    // Buzuq qiymat pul qaroriga aylanmasin.
+    assert.equal(shortfallRatio({ got: 0, want: 0 }), null);
+  });
+});
+
+test("navbat SQL i", { skip: hasDb ? false : "DATABASE_URL yo'q" }, async (t) => {
+  const { query, migrate, pool } = await import("../lib/server/db.ts");
+  const { enqueueGeneration, claimJob, completeJob, reclaimStaleJobs } = await import("../lib/server/jobs.ts");
+  const { TOOL_BY_ID } = await import("../lib/tools.ts");
+
+  await migrate();
+  const suffix = `test-sql-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const rows = await query<{ id: string }>(
+    `INSERT INTO users (username, name, points, quota, balance)
+     VALUES ($1, 'Test', 0, 0, 100000) RETURNING id`,
+    [suffix],
+  );
+  const uid = String(rows[0].id);
+  t.after(async () => {
+    await query("DELETE FROM generations WHERE user_id = $1", [uid]);
+    await query("DELETE FROM transactions WHERE user_id = $1", [uid]);
+    await query("DELETE FROM users WHERE id = $1", [uid]);
+    await pool().end();
+  });
+
+  const add = async (budgetMs: number) => {
+    const res = await enqueueGeneration({
+      userId: uid,
+      toolId: "essay",
+      topic: "sinov",
+      price: 10,
+      format: TOOL_BY_ID.essay.output,
+      values: {} as never,
+      budgetMs,
+    });
+    assert.equal(res.ok, true);
+    return res.ok ? res.id : "";
+  };
+
+  await t.test("uzun byudjetli sog'lom ish o'lik deb belgilanmaydi", async () => {
+    // Ikkita ish: biri qisqa byudjetli, biri uzun. Ikkalasi ham 2 daqiqa
+    // oldin qulflangan.
+    const shortJob = await add(60_000);
+    const longJob = await add(600_000);
+    await query(
+      `UPDATE generations SET status = 'IN_PROGRESS', attempts = 2,
+              locked_by = 'w', locked_at = now() - interval '2 minutes'
+        WHERE id = ANY($1::uuid[])`,
+      [[shortJob, longJob]],
+    );
+
+    const dead = await reclaimStaleJobs();
+    /*
+     * Qisqa byudjetli ish (60 s + 30 s zaxira) 2 daqiqada muddatini
+     * o'tkazgan; uzun byudjetli (600 s) esa hali sog'lom ishlayapti.
+     * Ilgari ikkalasi ham global 300 s bilan solishtirilar va uzun ish
+     * ham navbatga qaytarilishi mumkin edi.
+     */
+    assert.ok(dead.includes(shortJob), "muddati o'tgan ish yakunlanishi kerak");
+    assert.ok(!dead.includes(longJob), "sog'lom uzun ish tegilmasligi kerak");
+
+    const still = await query<{ status: string }>("SELECT status FROM generations WHERE id = $1", [longJob]);
+    assert.equal(still[0].status, "IN_PROGRESS");
+  });
+
+  await t.test("completeJob format yorlig'ini haqiqiy faylga moslaydi", async () => {
+    await query("UPDATE generations SET status = 'COMPLETED' WHERE user_id = $1 AND status = 'QUEUED'", [uid]);
+    const id = await add(99_000);
+
+    const claimed = await claimJob("w2");
+    assert.ok(claimed && claimed.id === id);
+
+    // Navbatga qo'yishda yorliq `tool.output` — insho uchun `docx`.
+    const before = await query<{ format: string }>("SELECT format FROM generations WHERE id = $1", [id]);
+    assert.equal(before[0].format, "docx");
+
+    // Haqiqiy fayl ZIP bo'lib chiqsa yorliq ham shunga o'tadi — foydalanuvchi
+    // «DOCX» tugmasini bosib `.zip` olmasin.
+    const won = await completeJob(id, "w2", { html: "", doc: null, fileName: "natija-3ta.zip", preview: null });
+    assert.equal(won, true);
+    const after = await query<{ format: string }>("SELECT format FROM generations WHERE id = $1", [id]);
+    assert.equal(after[0].format, "zip");
   });
 });

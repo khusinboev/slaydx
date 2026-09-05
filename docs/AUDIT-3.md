@@ -725,3 +725,51 @@ A-12 (`ResumeViewer` tuzilmani yo'qotishi) Sprint 9 bilan, A-13
   ma'lumotnoma tipografiyasi berildi, lekin haqiqiy ikki ustun
   `docx` da ko'p bo'limli hujjat talab qiladi — foyda hozircha
   murakkablikni oqlamaydi.
+
+
+---
+
+# 18. Qamrov auditi (2026-09-05, §17 dan keyin)
+
+§17 da «21 mutatsiya — 21 tasi ushlandi» deb yozilgan edi. Bu raqam
+**yetarlicha qattiq sinov emas**: o'sha mutatsiyalar men YOZGAN testlarga
+mos qilib tanlangan edi. Shundan keyin **adversarial** supurgi
+o'tkazildi — bu safar test yozilmagan joylar ataylab nishonga olindi.
+
+**Natija: 11 mutatsiyadan 11 tasi OMON QOLDI.** Ya'ni mantiq sinalgan
+edi (`budgetFor`, `splitRatio`, `formatOf`, `packImages`), lekin SIMLASH
+va MAKET sinalmagan.
+
+| Omon qolgan yo'l | Endi qanday yopildi |
+|---|---|
+| worker byudjetni e'tiborsiz qoldirsa | `jobBudget`/`jobDeadlineMs` eksport qilinib, birlik testi yozildi |
+| worker qisman qaytarishni hisoblamasa | Qaror `shortfallRatio()` ga ajratildi va sinaldi |
+| `reclaimStaleJobs` global muddatga qaytsa | Haqiqiy Postgres testi: qisqa byudjetli ish o'ladi, uzun byudjetli sog'lom ish tegilmaydi |
+| `completeJob` format yorlig'ini yangilamasa | Haqiqiy Postgres testi: `docx` → `zip` |
+| `generateArtifact` deadline global byudjetdan olinsa | `jobDeadlineMs` testi |
+| Rezyume yon paneli sahifani to'ldirmasa | `<w:trHeight>` XML da tekshiriladi |
+| Sarlavha rangi profildan olinmasa | `<w:color w:val="1C1917"/>` tekshiriladi |
+| Albom chekinishlari gost ga qaytsa | `<w:pgMar>` qiymatlari tekshiriladi |
+| Dars rejasi jadvali langarsiz qolsa | `lessonDoc()` ajratildi va langar sinaladi |
+| Xarita jadvali langarsiz qolsa | `mapDoc()` ajratildi; langar, soat invarianti va 70% chegara sinaladi |
+
+`lessonDoc` va `mapDoc` — `packImages` bilan bir xil naqsh: hujjat
+YIG'ISH tarmoq chaqiruvidan ajratiladi, shunda invariantlar (daqiqa
+normalizatsiyasi, soat yig'indisi, takror tashlash, langar) LLM siz
+sinaladi.
+
+## 18.1. Hali ham sinalmagan — ataylab
+
+Ikkita yo'l qasddan sinovsiz qoldi. Ikkalasi ham **bitta qatorli
+simlash bo'lib, sinalgan funksiyani chaqiradi**:
+
+| Yo'l | Nega sinalmagan |
+|---|---|
+| `runJob` dagi `else if (shortfallRatio(...) !== null)` shoxi | Sinash uchun haqiqiy navbat + worker qulfi + `buildArtifact` (ya'ni jonli `fal` chaqiruvi qisman yiqilishi) kerak — buni majburlab bo'lmaydi. Qaror mantig'i to'liq sinalgan |
+| `app/api/generations/route.ts` dagi `budgetFor(...)` chaqiruvi | HTTP + sessiya + autentifikatsiya stubi talab qiladi. `budgetFor` ning o'zi va uning navbatdagi natijasi (`tests/queue.test.mts`) sinalgan |
+
+Kelajakda `runJob` ga bog'liqlik inyeksiyasi qo'shilsa birinchisi
+yopiladi — hozircha real yo'lni test qulayligi uchun o'zgartirish
+foydadan ko'ra xavf ko'proq.
+
+**Yakuniy holat: 200 test, 0 skip, 0 fail.**
