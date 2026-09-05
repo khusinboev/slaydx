@@ -714,6 +714,17 @@ export async function writeWriterWithLlm(meta: DocMeta, deadline?: number): Prom
     }
   }
 
+  /**
+   * Jadval MAHALLIY o'zgaruvchida to'planadi.
+   *
+   * Ilgari u `(meta as DocMeta & { _tables })._tables` ga yozilardi —
+   * ya'ni `AcademicDoc` shartnomasi `as` bilan teshilardi. `meta` keyin
+   * `doc.meta` bo'lib `doc_json` ga serializatsiya qilinar, natijada
+   * jadval JSONB da IKKI marta saqlanar va `doc.meta._tables` sifatida
+   * ko'ruvchiga ham borardi.
+   */
+  let tables: AcademicDoc["tables"];
+
   // Jadval foydalanuvchi tanloviga bo'ysunadi. «Yo'q» deganda jadval
   // qo'shish — tanlovni jimgina bekor qilish bo'lardi.
   if (meta.includeVisuals && remainingMs(deadline) > 12_000) {
@@ -725,14 +736,13 @@ export async function writeWriterWithLlm(meta: DocMeta, deadline?: number): Prom
     );
     const tb = parseLlmObject<{ caption?: string; headers?: string[]; rows?: string[][] }>(tableRaw);
     if (tb?.headers?.length && tb.rows?.length) {
-      const docTables = [
+      tables = [
         {
           caption: String(tb.caption || topic).slice(0, 80),
           headers: tb.headers.map((h) => String(h).slice(0, 40)).slice(0, 5),
           rows: tb.rows.slice(0, 6).map((r) => r.map((c) => String(c).slice(0, 80))),
         },
       ];
-      (meta as DocMeta & { _tables?: typeof docTables })._tables = docTables;
     }
   }
 
@@ -748,8 +758,6 @@ export async function writeWriterWithLlm(meta: DocMeta, deadline?: number): Prom
   if ((meta.toolId === "article" || meta.toolId === "thesis") && remainingMs(deadline) > 12_000) {
     abstracts = await writeAbstracts(sys, topic, meta, deadline);
   }
-
-  const tables = (meta as DocMeta & { _tables?: AcademicDoc["tables"] })._tables;
 
   const doc: AcademicDoc = {
     meta,

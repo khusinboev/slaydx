@@ -5,6 +5,7 @@ import { FileText, Loader2 } from "lucide-react";
 import { EXTRACT_ACCEPT, EXTRACT_MAX_BYTES } from "@/lib/extract-text";
 import { extractText } from "@/lib/api-client";
 import { SOURCE_TEXT_LIMIT } from "@/lib/generation/meta";
+import { MAX_SOURCE_CHARS } from "@/lib/tools";
 import { Legend } from "./fields";
 
 const MAX_MB = Math.round(EXTRACT_MAX_BYTES / (1024 * 1024));
@@ -106,6 +107,18 @@ export function SourceFileField({
           {SOURCE_TEXT_LIMIT.toLocaleString("uz-UZ")} belgisi generatsiyada ishlatiladi (
           {(sourceText.length - SOURCE_TEXT_LIMIT).toLocaleString("uz-UZ")} belgi qoladi). Muhim qism
           boshida bo‘lishiga ishonch hosil qiling yoki faylni qisqartiring.
+          {/*
+            Ikkinchi, kattaroq shift ham bor va u JIM kesardi. Ikkalasini
+            ham aytish kerak: foydalanuvchi «nega faqat boshi ishlatildi»
+            degan savolga to‘liq javob olsin.
+          */}
+          {sourceText.length > MAX_SOURCE_CHARS ? (
+            <>
+              {" "}
+              Bundan tashqari, serverga eng ko‘pi {MAX_SOURCE_CHARS.toLocaleString("uz-UZ")} belgi
+              yuboriladi.
+            </>
+          ) : null}
         </p>
       ) : sourceText ? (
         <p className="text-muted-foreground mt-2 text-xs">

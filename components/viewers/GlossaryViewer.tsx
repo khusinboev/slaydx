@@ -87,8 +87,14 @@ export function GlossaryViewer({ doc }: { doc: AcademicDoc }) {
                 className="word-sheet"
               >
                 <div className="word-inner">
-                  {chunk.map((t) => (
-                    <TermCard key={t.term} term={t} />
+                  {/*
+                    Kalit INDEKS bo'yicha: atama nomi noyob bo'lishi
+                    kafolatlanmagan (shablon yo'lida takrorlanishi mumkin),
+                    takroriy React kaliti esa kartochkani tushirib
+                    qoldirishi mumkin.
+                  */}
+                  {chunk.map((t, j) => (
+                    <TermCard key={`${i}-${j}`} term={t} />
                   ))}
                 </div>
                 <div className="word-footer-num">{i + 2}</div>

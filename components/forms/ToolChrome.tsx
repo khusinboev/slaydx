@@ -23,7 +23,8 @@ export function ToolChrome({
   extraOpen?: boolean;
   onExtra?: () => void;
   submitLabel: string;
-  price: number;
+  /** `undefined` — narx hali ma'noga ega emas (masalan sehrgarning oraliq bosqichi). */
+  price?: number;
   disabled?: boolean;
   loading?: boolean;
   onSubmit: () => void;
@@ -68,7 +69,9 @@ export function ToolChrome({
           className="bg-primary text-primary-foreground disabled:opacity-50 flex h-12 w-full items-center justify-center gap-3 rounded-2xl text-[15px] font-medium"
         >
           <span>{loading ? "Yaratilmoqda..." : submitLabel}</span>
-          <span className="rounded-full bg-white/15 px-2.5 py-0.5 text-sm">{formatTanga(price)}</span>
+          {price === undefined ? null : (
+            <span className="rounded-full bg-white/15 px-2.5 py-0.5 text-sm">{formatTanga(price)}</span>
+          )}
         </button>
       </div>
     </div>

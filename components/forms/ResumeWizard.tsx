@@ -50,7 +50,12 @@ export function ResumeWizard({ tool }: { tool: ToolConfig }) {
     <ToolChrome
       title="Rezyume yaratuvchi"
       submitLabel={step < STEPS.length - 1 ? "Davom etish" : tool.submitLabel}
-      price={tool.basePrice}
+      /*
+       * Narx FAQAT oxirgi bosqichda. Ilgari «Davom etish» tugmasida ham
+       * «3 000 tanga» yozilib turardi — 1/5-bosqichda bu tugma pul
+       * yechadigandek ko'rinardi.
+       */
+      price={step === STEPS.length - 1 ? tool.basePrice : undefined}
       loading={loading}
       onSubmit={() => {
         if (step < STEPS.length - 1) setStep((s) => s + 1);

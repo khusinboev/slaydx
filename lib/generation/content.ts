@@ -292,10 +292,14 @@ function glossaryDoc(meta: DocMeta): AcademicDoc {
         p(`Ushbu glossariy «${topic}» bo‘yicha asosiy atamalarni qisqa va bir xil uslubda izohlaydi.`),
       ]),
       section("atamalar", "Atamalar ro‘yxati", [
-        ...terms.flatMap(([a, b]) => [
-          { kind: "h3" as const, text: `${topic}: ${a}` },
-          p(b),
-        ]),
+        /*
+         * Atama nomi `terms` da ALLAQACHON mavzuni tutadi
+         * («Fotosintez: tasnif»). Ilgari sarlavha yana prefikslanar va
+         * «Fotosintez: Fotosintez: tasnif» chiqardi. Bu faqat LLM
+         * kalitisiz yo'lda ko'rinadi — lekin aynan o'sha yo'l demolarda
+         * ishlatiladi.
+         */
+        ...terms.flatMap(([a, b]) => [{ kind: "h3" as const, text: a }, p(b)]),
       ]),
     ],
     tables: [{ caption: "Qisqa jadval", headers: ["Atama", "Izoh"], rows: terms }],

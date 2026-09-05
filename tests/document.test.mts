@@ -801,3 +801,34 @@ test("xarita 70% dan kam noyob mavzuda hujjat bermaydi", async () => {
   });
   assert.equal(doc, null, "takroriy xarita yaroqsiz — tsikl bilan to'ldirilmaydi");
 });
+
+test("shablon glossariysida atama nomi takrorlanmaydi", async () => {
+  const { buildAcademicDoc } = await import("../lib/generation/content.ts");
+  const { extractMeta } = await import("../lib/generation/meta.ts");
+  const { TOOL_BY_ID } = await import("../lib/tools.ts");
+
+  /*
+   * AYNAN N-9 (Sprint 14). `terms` massivida atama nomi ALLAQACHON
+   * mavzuni tutardi («Fotosintez: tasnif»), sarlavha esa yana
+   * prefikslanar va «Fotosintez: Fotosintez: tasnif» chiqardi.
+   *
+   * Bu faqat LLM kalitisiz yo'lda ko'rinadi — lekin aynan o'sha yo'l
+   * demolarda va kalitsiz muhitda ishlatiladi.
+   */
+  const meta = extractMeta(TOOL_BY_ID.glossary, { topic: "Fotosintez" } as never);
+  const doc = buildAcademicDoc(meta, {});
+
+  const headings = doc.sections
+    .flatMap((s) => s.blocks)
+    .filter((b) => b.kind === "h3")
+    .map((b) => b.text);
+
+  assert.ok(headings.length > 0, "atama sarlavhalari bo'lishi kerak");
+  for (const h of headings) {
+    const hits = h.split("Fotosintez").length - 1;
+    assert.ok(hits <= 1, `mavzu sarlavhada bir martadan ko'p takrorlanmasligi kerak: «${h}»`);
+  }
+
+  // Sarlavhalar noyob bo'lishi kerak — ko'ruvchi ularni kalit sifatida ishlatadi.
+  assert.equal(new Set(headings).size, headings.length, "atama sarlavhalari noyob bo'lishi kerak");
+});
