@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server";
-import { createHash } from "node:crypto";
 import { ensureMigrated } from "@/lib/server/db";
 import { env } from "@/lib/server/env";
-import { safeEqual } from "@/lib/server/session";
 import {
   attachTransaction,
   cancelOrder,
   findOrder,
   findOrderByTxn,
+  paymeAuthorized,
   settleOrder,
 } from "@/lib/server/payments";
 
@@ -53,33 +52,6 @@ function rpcResult(id: unknown, result: unknown) {
   return NextResponse.json({ jsonrpc: "2.0", id: id ?? null, result });
 }
 
-/**
- * `Authorization: Basic base64("Paycom:KEY")`.
- * Test va prod kalitlari alohida — ikkalasi ham qabul qilinadi.
- */
-function authorized(req: Request): boolean {
-  const header = req.headers.get("authorization") ?? "";
-  const [scheme, encoded] = header.split(" ");
-  if (scheme?.toLowerCase() !== "basic" || !encoded) return false;
-
-  let decoded: string;
-  try {
-    decoded = Buffer.from(encoded, "base64").toString("utf8");
-  } catch {
-    return false;
-  }
-  const sep = decoded.indexOf(":");
-  if (sep < 0) return false;
-  const login = decoded.slice(0, sep);
-  const password = decoded.slice(sep + 1);
-  if (login !== "Paycom") return false;
-
-  // Doimiy vaqtli taqqoslash — kalitni bayt-bayt topib bo'lmasin.
-  const hash = (s: string) => createHash("sha256").update(s).digest("hex");
-  const candidates = [env.payme.key, env.payme.testKey].filter(Boolean);
-  return candidates.some((k) => safeEqual(hash(k), hash(password)));
-}
-
 function orderIdFrom(params: Record<string, unknown>): string {
   const account = (params.account ?? {}) as Record<string, unknown>;
   return String(account.order_id ?? account.order ?? "").trim();
@@ -100,7 +72,9 @@ export async function POST(req: Request) {
   if (!env.payme.merchantId || (!env.payme.key && !env.payme.testKey)) {
     return rpcError(null, PAYME_ERRORS.AUTH, "Payme sozlanmagan");
   }
-  if (!authorized(req)) return rpcError(null, PAYME_ERRORS.AUTH);
+  if (!paymeAuthorized(req.headers.get("authorization"), [env.payme.key, env.payme.testKey])) {
+    return rpcError(null, PAYME_ERRORS.AUTH);
+  }
 
   await ensureMigrated();
 

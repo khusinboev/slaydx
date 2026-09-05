@@ -1,7 +1,8 @@
 import "server-only";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { query, queryOne, transaction } from "./db";
 import { activatePro, topUp } from "./credits";
+import { safeEqual } from "./session";
 
 /**
  * To'lov buyurtmalari va ularni kreditga aylantirish.
@@ -10,6 +11,99 @@ import { activatePro, topUp } from "./credits";
  * takrorlaydi. Har provayder tranzaksiyasi `transactions.reference`
  * bo'yicha unikal — ikkinchi chaqiruv pul qo'shmaydi.
  */
+
+/**
+ * ─────────────────────── Webhook autentifikatsiyasi ───────────────────────
+ *
+ * Imzo tekshiruvi ilgari route fayllari ichida yopiq funksiya edi va
+ * `tests/payments.test.mts` uni CHAQIRA olmasdi — test formulani o'zi
+ * qayta yozib, o'zi bilan solishtirardi (N-10). Ya'ni route dagi formula
+ * o'zgarsa test yashil qolaverardi, holbuki bu aynan «har kim to'ladim
+ * deb webhook yuborib, o'ziga bepul kredit yozdiradi» xavfi bo'lgan joy.
+ *
+ * Sir ARGUMENT sifatida uzatiladi, `env` dan o'qilmaydi: shunda
+ * funksiya sof bo'ladi (modul yuklanish tartibiga bog'liq emas) va
+ * bog'liqligi chaqiruv joyida ko'rinadi.
+ */
+
+export type ClickSignedParams = {
+  click_trans_id?: string;
+  service_id?: string;
+  merchant_trans_id?: string;
+  merchant_prepare_id?: string;
+  amount?: string;
+  action?: string;
+  sign_time?: string;
+  sign_string?: string;
+};
+
+/**
+ * Click imzosi:
+ *   md5(click_trans_id + service_id + SECRET + merchant_trans_id +
+ *       [merchant_prepare_id] + amount + action + sign_time)
+ *
+ * `merchant_prepare_id` FAQAT Complete (`action=1`) da qatnashadi — uni
+ * Prepare da ham qo'shish yoki Complete da tushirib qoldirish imzoni
+ * buzadi, ya'ni haqiqiy to'lov rad etiladi.
+ *
+ * MD5 kriptografik jihatdan kuchsiz, lekin protokol shuni talab qiladi;
+ * shu sababli route qo'shimcha ravishda `service_id`, summa va buyurtma
+ * holatini ham tekshiradi.
+ */
+export function clickSignatureValid(p: ClickSignedParams, secretKey: string): boolean {
+  if (!secretKey) return false;
+  const parts = [
+    p.click_trans_id ?? "",
+    p.service_id ?? "",
+    secretKey,
+    p.merchant_trans_id ?? "",
+    ...(p.action === "1" ? [p.merchant_prepare_id ?? ""] : []),
+    p.amount ?? "",
+    p.action ?? "",
+    p.sign_time ?? "",
+  ];
+  const expected = createHash("md5").update(parts.join("")).digest("hex");
+  return safeEqual(expected, String(p.sign_string ?? "").toLowerCase());
+}
+
+/**
+ * Payme: `Authorization: Basic base64("Paycom:KEY")`.
+ *
+ * Test va prod kalitlari alohida — ikkalasi ham qabul qilinadi.
+ * Taqqoslash doimiy vaqtda (SHA-256 dan keyin), shunda kalitni
+ * bayt-bayt topib bo'lmaydi.
+ */
+export function paymeAuthorized(header: string | null | undefined, keys: readonly string[]): boolean {
+  const valid = keys.filter(Boolean);
+  if (!valid.length) return false;
+
+  const [scheme, encoded] = String(header ?? "").split(" ");
+  if (scheme?.toLowerCase() !== "basic" || !encoded) return false;
+  /*
+   * Base64 shakli QAT'IY tekshiriladi.
+   *
+   * Node ning dekoderi noto'g'ri belgilarni JIM tashlab yuboradi:
+   * `Basic !!!<base64>` ham muvaffaqiyatli dekodlanadi. Kalit baribir
+   * to'g'ri bo'lishi shart, shuning uchun bu teshik emas — lekin
+   * «shakli buzuq» va «rad etildi» bir xil bo'lishi kerak, aks holda
+   * sarlavha tahlili haqidagi tasavvur kod bilan mos kelmaydi.
+   */
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(encoded)) return false;
+
+  let decoded: string;
+  try {
+    decoded = Buffer.from(encoded, "base64").toString("utf8");
+  } catch {
+    return false;
+  }
+  const sep = decoded.indexOf(":");
+  if (sep < 0) return false;
+  if (decoded.slice(0, sep) !== "Paycom") return false;
+  const password = decoded.slice(sep + 1);
+
+  const hash = (x: string) => createHash("sha256").update(x).digest("hex");
+  return valid.some((k) => safeEqual(hash(k), hash(password)));
+}
 
 /** Pro tarifi. Narx o'zgarsa faqat shu yer tahrirlanadi. */
 export const PRO_PLAN = {

@@ -1,9 +1,13 @@
 import { NextResponse } from "next/server";
-import { createHash } from "node:crypto";
 import { ensureMigrated } from "@/lib/server/db";
 import { env } from "@/lib/server/env";
-import { safeEqual } from "@/lib/server/session";
-import { attachTransaction, cancelOrder, findOrder, settleOrder } from "@/lib/server/payments";
+import {
+  attachTransaction,
+  cancelOrder,
+  clickSignatureValid,
+  findOrder,
+  settleOrder,
+} from "@/lib/server/payments";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -52,27 +56,6 @@ function reply(params: Partial<ClickParams>, error: number, note: string, extra:
   });
 }
 
-/**
- * sign_string = md5(click_trans_id + service_id + SECRET_KEY +
- *                   merchant_trans_id + [merchant_prepare_id] + amount +
- *                   action + sign_time)
- * `merchant_prepare_id` faqat Complete (action=1) da qatnashadi.
- */
-function verifySignature(p: ClickParams): boolean {
-  const parts = [
-    p.click_trans_id,
-    p.service_id,
-    env.click.secretKey,
-    p.merchant_trans_id,
-    ...(p.action === "1" ? [p.merchant_prepare_id ?? ""] : []),
-    p.amount,
-    p.action,
-    p.sign_time,
-  ];
-  const expected = createHash("md5").update(parts.join("")).digest("hex");
-  return safeEqual(expected, (p.sign_string ?? "").toLowerCase());
-}
-
 async function readParams(req: Request): Promise<ClickParams | null> {
   const type = req.headers.get("content-type") ?? "";
   try {
@@ -103,7 +86,7 @@ export async function POST(req: Request) {
   if (p.service_id !== env.click.serviceId) {
     return reply(p, CLICK_ERROR.SIGN, "service_id mos emas");
   }
-  if (!verifySignature(p)) {
+  if (!clickSignatureValid(p, env.click.secretKey)) {
     return reply(p, CLICK_ERROR.SIGN, "SIGN CHECK FAILED");
   }
 
