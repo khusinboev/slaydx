@@ -29,6 +29,15 @@ export type DocTable = {
   caption?: string;
   headers: string[];
   rows: string[][];
+  /**
+   * Shu `DocSection.id` dan KEYIN chizilsin.
+   *
+   * Ilgari barcha jadvallar hujjat oxirida, adabiyotlardan oldin
+   * turardi. Dars rejasi va texnologik xaritada jadval — hujjatning
+   * mazmuni, ilova emas: o'qituvchi darsni jadval bilan olib boradi.
+   * Langar berilmasa eski xatti-harakat saqlanadi.
+   */
+  anchor?: string;
 };
 
 export type DocMeta = {

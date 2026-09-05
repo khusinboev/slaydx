@@ -146,6 +146,10 @@ export async function writeLessonWithLlm(meta: DocMeta, deadline?: number): Prom
     tables: [
       {
         caption: L.timeTable,
+        // Vaqt jadvali dars xaritasidan KEYIN turadi: o'qituvchi darsni
+        // jadval bilan olib boradi, matn bilan emas. Langarsiz u hujjat
+        // oxirida, uy vazifasidan bir necha sahifa keyin qolardi.
+        anchor: "map",
         headers: [...L.timeCols],
         rows: stages.map((st) => [
           clip(st.title || L.stage, 40),
@@ -358,13 +362,16 @@ export async function writeGlossaryWithLlm(meta: DocMeta, deadline?: number): Pr
         ]),
       ),
     ],
-    tables: [
-      {
-        caption: L.shortTable,
-        headers: [...L.termCols],
-        rows: terms.map((t) => [String(t.term), clip(String(t.def), 200)]),
-      },
-    ],
+    /*
+     * «Qisqa jadval» ATAYIN yo'q.
+     *
+     * Ilgari shu yerda `tables` bo'lib, u yuqoridagi atamalarning
+     * AYNAN o'zini 200 belgigacha kesilgan holda qayta chizardi:
+     * 40 atamalik glossariy (15 000 tanga) DOCX da 80 ta yozuv berardi.
+     * Bu qo'shimcha qiymat emas, takror — ikkinchi nusxa birinchisidan
+     * kam ma'lumot tutardi. Atamalar `reference` profilida alifbo
+     * tartibida, chapga tekislangan holda bir marta chiqadi.
+     */
   };
 }
 
@@ -696,6 +703,8 @@ export async function writeMapWithLlm(meta: DocMeta, deadline?: number): Promise
   const hours = normalizeMinutes(new Array(filled.length).fill(weekly), total);
   const table: DocTable = {
     caption: L.yearPlan,
+    // Xaritada jadval — hujjatning MAZMUNI, ilova emas.
+    anchor: "passport",
     headers: [...L.yearCols],
     rows: filled.map((row, i) => [
       String(i + 1),

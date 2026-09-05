@@ -4,7 +4,7 @@ import { TOOL_BY_ID } from "../lib/tools.ts";
 import { extractMeta, minPages, parseAuthorLine } from "../lib/generation/meta.ts";
 import { renderDocx } from "../lib/generation/render-docx.ts";
 import type { AcademicDoc } from "../lib/generation/types.ts";
-import type { FormValues } from "../lib/types.ts";
+import type { FormValues, ToolId } from "../lib/types.ts";
 
 /**
  * Hujjat qobig'i: titul sahifa, muallif ma'lumotlari, ramka.
@@ -498,4 +498,167 @@ test("chunkSource matnni jim kesmaydi", async () => {
 
   // Hech bir belgi yo'qolmagan.
   assert.equal(chunks.join("").replace(/\s/g, "").length, 20 * 2_500);
+});
+
+// -------------------------------------------------- hujjat profillari (Sprint 9)
+
+/**
+ * DOCX ichidagi xom `word/document.xml`.
+ *
+ * `docxText` faqat ko'rinadigan matnni beradi; profil esa MAKETNI
+ * o'zgartiradi (shrift, tekislash, sahifa yo'nalishi), shuning uchun
+ * bu tekshiruvlar XML ustida ishlaydi.
+ */
+async function docxXml(d: AcademicDoc): Promise<string> {
+  const bytes = await renderDocx(d);
+  const JSZip = (await import("jszip")).default;
+  const zip = await JSZip.loadAsync(bytes);
+  return zip.file("word/document.xml")!.async("string");
+}
+
+function anyDoc(toolId: ToolId, values: FormValues, extra: Partial<AcademicDoc> = {}): AcademicDoc {
+  return {
+    meta: extractMeta(TOOL_BY_ID[toolId], values),
+    titlePage: true,
+    toc: false,
+    sections: [{ id: "kirish", title: "Kirish", blocks: [{ kind: "p", text: "Matn." }] }],
+    ...extra,
+  };
+}
+
+test("gost profili akademik tipografiyani saqlaydi", async () => {
+  const { profileById } = await import("../lib/generation/docx-profile.ts");
+  const gost = profileById("gost");
+
+  // Bu qiymatlar OTME/GOST talabidan kelib chiqadi va o'zgarmasligi kerak.
+  assert.equal(gost.type.font, "Times New Roman");
+  assert.equal(gost.type.size, 28, "14pt");
+  assert.equal(gost.type.line, 360, "1.5 interval");
+  assert.equal(gost.type.justify, true);
+  assert.equal(gost.page.margin.left, 3 * 567, "chap chekinish 3 sm");
+  assert.equal(gost.page.landscape, false);
+
+  const xml = await docxXml(anyDoc("referat", { topic: "Mavzu", author: "A. Valiyev" }));
+  assert.match(xml, /w:ascii="Times New Roman"/);
+  assert.match(xml, /<w:jc w:val="both"\/>/, "asosiy matn justify bo'lishi kerak");
+});
+
+test("rezyume profili akademik qolipni tashlaydi", async () => {
+  const doc = anyDoc(
+    "resume",
+    { topic: "Dasturchi", fullName: "A. Valiyev" },
+    {
+      titlePage: false,
+      sections: [
+        { id: "summary", title: "Qisqacha", blocks: [{ kind: "p", text: "Tajribali dasturchi." }, { kind: "p", text: "Toshkent · a@b.uz" }] },
+        { id: "exp", title: "Tajriba", blocks: [{ kind: "h3", text: "2020–2024 — Dev" }, { kind: "li", text: "Natija." }] },
+        { id: "skills", title: "Ko‘nikma", blocks: [{ kind: "p", text: "Node.js · SQL" }] },
+      ],
+    },
+  );
+  const xml = await docxXml(doc);
+
+  assert.match(xml, /w:ascii="Calibri"/, "sans shrift");
+  assert.doesNotMatch(xml, /w:ascii="Times New Roman"/, "akademik shrift qolmasligi kerak");
+  assert.doesNotMatch(xml, /<w:jc w:val="both"\/>/, "CV da justify bo'lmaydi");
+  assert.doesNotMatch(xml, /<w:jc w:val="center"\/>/, "CV da markazlashtirilgan sarlavha bo'lmaydi");
+  assert.match(xml, /w:fill="1C1917"/, "to'q yon panel");
+  assert.match(xml, /w:color="F97316"/, "sarlavha ostidagi chiziq");
+
+  // Yon panel ko'ruvchidagi tuzilmani takrorlaydi.
+  const text = await docxText(doc);
+  assert.match(text, /REZYUME/);
+  assert.match(text, /Node\.js · SQL/, "ko'nikmalar yon panelda");
+  assert.match(text, /2020–2024 — Dev/, "ish joyi sarlavhasi saqlanadi");
+});
+
+test("jadvalli hujjatlar albom yo'nalishida chiqadi", async () => {
+  for (const id of ["texnologik-xarita", "lesson-plan"] as const) {
+    const xml = await docxXml(anyDoc(id, { topic: "Fan", subject: "Fan", author: "A. Valiyev" }));
+    assert.match(xml, /w:orient="landscape"/, `${id} albom bo'lishi kerak`);
+    // `docx` albomda o'lchamlarni almashtiradi: kенг tomon oldinda.
+    assert.match(xml, /w:w="16838" w:h="11906"/, `${id} A4 albom o'lchami`);
+  }
+  // Akademik ishlar portret bo'lib qoladi.
+  const gost = await docxXml(anyDoc("coursework", { topic: "Mavzu", author: "A. Valiyev" }));
+  assert.match(gost, /w:orient="portrait"/);
+});
+
+test("langarli jadval o'z bo'limidan keyin turadi", async () => {
+  const table = { caption: "Jadval", anchor: "map", headers: ["A"], rows: [["QATOR"]] };
+  const doc = anyDoc("lesson-plan", { topic: "Kasrlar", subject: "Matematika", author: "A. Valiyev" }, {
+    sections: [
+      { id: "passport", title: "Pasport", blocks: [{ kind: "p", text: "PASPORT-MATNI" }] },
+      { id: "map", title: "Xarita", blocks: [{ kind: "p", text: "XARITA-MATNI" }] },
+      { id: "oxiri", title: "Oxirgi", blocks: [{ kind: "p", text: "OXIRGI-MATNI" }] },
+    ],
+    tables: [table],
+  });
+  const text = await docxText(doc);
+  const iMap = text.indexOf("XARITA-MATNI");
+  const iRow = text.indexOf("QATOR");
+  const iLast = text.indexOf("OXIRGI-MATNI");
+  assert.ok(iMap > 0 && iRow > 0 && iLast > 0, "uchala qism ham chiqishi kerak");
+  assert.ok(iRow > iMap, "jadval o'z bo'limidan keyin");
+  assert.ok(iRow < iLast, "jadval keyingi bo'limdan oldin");
+});
+
+test("langarsiz jadval eski joyida — oxirida qoladi", async () => {
+  const doc = anyDoc("coursework", { topic: "Mavzu", author: "A. Valiyev" }, {
+    sections: [
+      { id: "a", title: "A", blocks: [{ kind: "p", text: "BIRINCHI" }] },
+      { id: "b", title: "B", blocks: [{ kind: "p", text: "OXIRGI-BOLIM" }] },
+    ],
+    tables: [{ caption: "J", headers: ["H"], rows: [["QATOR"]] }],
+  });
+  const text = await docxText(doc);
+  assert.ok(text.indexOf("QATOR") > text.indexOf("OXIRGI-BOLIM"), "langarsiz jadval oxirida");
+});
+
+test("mavjud bo'lmagan langar jadvalni yo'qotmaydi", async () => {
+  const doc = anyDoc("lesson-plan", { topic: "T", subject: "F", author: "A." }, {
+    sections: [{ id: "bor", title: "Bor", blocks: [{ kind: "p", text: "MATN" }] }],
+    tables: [{ caption: "J", anchor: "yoq", headers: ["H"], rows: [["QATOR"]] }],
+  });
+  assert.match(await docxText(doc), /QATOR/, "langar topilmasa ham jadval chizilishi kerak");
+});
+
+test("jadval ustunlari haqiqiy kenglikka ega", async () => {
+  const doc = anyDoc("texnologik-xarita", { topic: "Fan", subject: "Fan", author: "A." }, {
+    tables: [{
+      caption: "Reja",
+      headers: ["№", "Soat", "Mavzu", "Metod", "Natija", "Nazorat"],
+      rows: [["1", "2", "Uzun mavzu nomi", "Ma’ruza", "Natija", "Test"]],
+    }],
+  });
+  const xml = await docxXml(doc);
+  const grid = [...xml.matchAll(/<w:gridCol w:w="(\d+)"\/>/g)].map((m) => Number(m[1]));
+  assert.equal(grid.length, 6);
+  /*
+   * Ilgari bu yerda oltita `w:w="100"` (0.18 sm) turardi — ma'nosiz grid,
+   * shuning uchun Word avtomatik maketga o'tib ustunlarni deyarli teng
+   * chizardi va «Mavzu» matni to'rt qatorga sinardi.
+   */
+  assert.ok(grid.every((w) => w > 400), `ustunlar haqiqiy kenglikda bo'lishi kerak: ${grid}`);
+  assert.ok(grid[2] > grid[0] * 4, "«Mavzu» ustuni «№» dan sezilarli keng");
+  assert.match(xml, /<w:tblLayout w:type="fixed"\/>/);
+});
+
+test("glossariy atamalarni ikki marta chizmaydi", async () => {
+  const { writeGlossaryWithLlm } = await import("../lib/generation/write-specials.ts");
+  // Kalitsiz muhitda yozuvchi `null` qaytaradi — bu yerda tuzilmani
+  // qo'lda quramiz va rendererning takror chizmasligini tekshiramiz.
+  assert.equal(typeof writeGlossaryWithLlm, "function");
+
+  const doc = anyDoc("glossary", { topic: "Fizika", author: "A.", termCount: 2 }, {
+    sections: [
+      { id: "kirish", title: "Kirish", blocks: [{ kind: "p", text: "Kirish matni." }] },
+      { id: "atamalar", title: "Atamalar", blocks: [
+        { kind: "h3", text: "Entropiya" },
+        { kind: "p", text: "Tartibsizlik o‘lchovi." },
+      ] },
+    ],
+  });
+  const text = await docxText(doc);
+  assert.equal(text.split("Entropiya").length - 1, 1, "atama bir marta chiqishi kerak");
 });
