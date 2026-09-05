@@ -63,6 +63,28 @@ function sessionSecret(): string {
   return "dev-only-insecure-session-secret-change-me-now";
 }
 
+/**
+ * `WORKER_JOB_TIMEOUT_MS` standarti — ishning YUQORI chegarasi.
+ *
+ * 300 000 edi va `budgetFor` ning bet formulasini eng qimmat tariflarda
+ * O'LIK qilib qo'yardi (N-3). 23 betdan yuqorida hisob doim shu shiftga
+ * urilardi, ya'ni to'rtta eng qimmat kurs ishi tarifi bir xil vaqt olardi:
+ *
+ *   25-30 bet (18 000 tanga) — xohladi 342 s, oldi 300 s
+ *   30-35 bet (20 000 tanga) — xohladi 387 s, oldi 300 s
+ *   35-40 bet (22 000 tanga) — xohladi 432 s, oldi 300 s
+ *   40-45 bet (24 000 tanga) — xohladi 477 s, oldi 300 s
+ *
+ * Ya'ni formula va standart shift bir-birini yolg'onga chiqarardi va
+ * hajm darvozasidan yiqilish ehtimoli aynan eng yuqori narxda eng katta
+ * edi. Endi shift eng katta ishning haqiqiy ehtiyojini qoplaydi.
+ *
+ * Bu qulf muddatini uzaytirmaydi: `reclaimStaleJobs` HAR ISHNING o'z
+ * `budget_ms` idan foydalanadi, global qiymat esa faqat migratsiyadan
+ * oldingi eski qatorlar uchun zaxira.
+ */
+export const DEFAULT_JOB_TIMEOUT_MS = 480_000;
+
 export const env = {
   isProd,
   /** Absolyut tashqi manzil — cookie domeni, webhook va sitemap uchun kerak. */
@@ -156,7 +178,7 @@ export const env = {
     /** Bitta processda parallel bajariladigan ish soni. */
     concurrency: int("WORKER_CONCURRENCY", 2),
     /** Bitta generatsiyaga ajratilgan maksimal vaqt. */
-    jobTimeoutMs: int("WORKER_JOB_TIMEOUT_MS", 300_000),
+    jobTimeoutMs: int("WORKER_JOB_TIMEOUT_MS", DEFAULT_JOB_TIMEOUT_MS),
     /** Worker shu processda avtomatik ishga tushsinmi. */
     inline: bool("WORKER_INLINE", true),
   },

@@ -952,3 +952,50 @@ test("qo'lda yozilgan reja bayroqqa qaramay ishlatiladi", async () => {
     "«manual» rejimidagi eski zaxira yo'l saqlanishi kerak",
   );
 });
+
+test("standart shift ostida har bir narx tarifi alohida byudjet oladi", async () => {
+  const { budgetFor } = await import("../lib/generation/budget.ts");
+  const { DEFAULT_JOB_TIMEOUT_MS } = await import("../lib/server/env.ts");
+  const { TOOL_BY_ID, priceFor } = await import("../lib/tools.ts");
+
+  /*
+   * AYNAN N-3 (Sprint 14). `WORKER_JOB_TIMEOUT_MS` standarti 300 000 edi
+   * va `budgetFor` ning bet formulasini 23 betdan yuqorida O'LIK qilib
+   * qo'yardi: to'rtta eng qimmat kurs ishi tarifi (18 000–24 000 tanga)
+   * bir xil 300 s olardi. Ya'ni formula va shift bir-birini yolg'onga
+   * chiqarar, hajm darvozasidan yiqilish ehtimoli esa aynan eng yuqori
+   * narxda eng katta edi.
+   *
+   * Qoida: narx oshsa, vaqt ham oshishi kerak. Tekshiruv AYNAN standart
+   * shift bilan bajariladi — muammo formulada emas, shiftda edi.
+   */
+  const tiers = ["10-15", "15-20", "20-25", "25-30", "30-35", "35-40", "40-45"];
+  const seen: { pages: string; price: number; budget: number }[] = tiers.map((pages) => ({
+    pages,
+    price: priceFor(TOOL_BY_ID.coursework, { pages } as FormValues),
+    budget: budgetFor(TOOL_BY_ID.coursework, { pages } as FormValues, DEFAULT_JOB_TIMEOUT_MS),
+  }));
+
+  for (let i = 1; i < seen.length; i++) {
+    const prev = seen[i - 1];
+    const cur = seen[i];
+    assert.ok(cur.price > prev.price, `${cur.pages} narxi ${prev.pages} dan yuqori bo'lishi kerak`);
+    assert.ok(
+      cur.budget > prev.budget,
+      `${cur.pages} (${cur.price} tanga) byudjeti ${prev.pages} (${prev.price} tanga) dan katta ` +
+        `bo'lishi kerak, lekin ${cur.budget} <= ${prev.budget} — shift formulani o'ldirgan`,
+    );
+  }
+
+  // Eng katta ish shiftga tegib turmasligi kerak: zaxira qolsin.
+  const biggest = seen[seen.length - 1].budget;
+  assert.ok(
+    biggest < DEFAULT_JOB_TIMEOUT_MS,
+    `40–45 bet (24 000 tanga) byudjeti ${biggest}ms, shift ${DEFAULT_JOB_TIMEOUT_MS}ms — ` +
+      `shiftga tegib tursa formula yana o'ladi`,
+  );
+
+  // Eng uzun slayd paketi ham shiftga sig'ishi kerak (N-2 bilan bir tugun).
+  const slide = budgetFor(TOOL_BY_ID.slide, { quality: "premium_long" } as FormValues, DEFAULT_JOB_TIMEOUT_MS);
+  assert.ok(slide < DEFAULT_JOB_TIMEOUT_MS, `premium_long deka byudjeti: ${slide}ms`);
+});
