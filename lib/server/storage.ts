@@ -87,8 +87,28 @@ export async function hasGenerationFile(generationId: string, userId: string): P
   return Boolean(row);
 }
 
-export async function deleteGenerationFile(generationId: string): Promise<void> {
-  await query("DELETE FROM generation_files WHERE generation_id = $1", [generationId]);
+/**
+ * Faylni o'chiradi — **egasi tekshirilgan holda**.
+ *
+ * `userId` MAJBURIY. Ilgari bu funksiya yolg'iz `generationId` ni olardi,
+ * `getGenerationFile` va `hasGenerationFile` esa allaqachon egalikni
+ * so'rardi — ya'ni naqsh bor edi, shu funksiya undan chetda qolgan edi.
+ * Natijada `DELETE /api/generations/{id}` egalik tekshiruvidan OLDIN uni
+ * chaqirar va begona `id` bilan kelgan so'rov 409 olsa ham, fayl
+ * allaqachon o'chgan bo'lardi.
+ *
+ * `randomUUID` ni topib bo'lmasligi himoya emas, tasodif — shuning
+ * uchun to'siq SQL darajasida turadi.
+ */
+export async function deleteGenerationFile(generationId: string, userId: string): Promise<void> {
+  await query(
+    `DELETE FROM generation_files f
+      USING generations g
+      WHERE f.generation_id = $1
+        AND g.id = f.generation_id
+        AND g.user_id = $2`,
+    [generationId, userId],
+  );
 }
 
 /** Muddati o'tgan fayllarni o'chiradi. Cron chaqiradi. */

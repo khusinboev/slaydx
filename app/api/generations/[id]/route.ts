@@ -1,6 +1,6 @@
 import { ApiError, handler, json, requireUser } from "@/lib/server/api";
 import { cancelGeneration, deleteGeneration, getGeneration } from "@/lib/server/jobs";
-import { deleteGenerationFile, hasGenerationFile } from "@/lib/server/storage";
+import { hasGenerationFile } from "@/lib/server/storage";
 import { refund } from "@/lib/server/credits";
 
 export const runtime = "nodejs";
@@ -23,7 +23,18 @@ export const GET = handler("generations/get", async (req, ctx: Ctx) => {
   return json({ generation: { ...gen, hasFile } });
 });
 
-/** O'chirish. Navbatdagi ish avval bekor qilinadi va puli qaytariladi. */
+/**
+ * O'chirish. Navbatdagi ish avval bekor qilinadi va puli qaytariladi.
+ *
+ * Fayl va aktivlar ALOHIDA o'chirilmaydi: `generation_files` ham,
+ * `generation_assets` ham `generations(id)` ga `ON DELETE CASCADE` bilan
+ * bog'langan, shuning uchun qator o'chishi bilan baytlar ham ketadi.
+ *
+ * Ilgari bu yerda `deleteGenerationFile(id)` egalik tekshiruvidan OLDIN
+ * chaqirilardi va u `user_id` ni so'ramasdi — begona `id` bilan kelgan
+ * so'rov 409 olsa ham, fayl allaqachon o'chgan bo'lardi. Aktivlar esa
+ * umuman o'chmasdi va TTL gacha bazada qolib ketardi.
+ */
 export const DELETE = handler("generations/delete", async (req, ctx: Ctx) => {
   const { user } = await requireUser(req);
   const { id } = await ctx.params;
@@ -34,7 +45,6 @@ export const DELETE = handler("generations/delete", async (req, ctx: Ctx) => {
     await refund(user.id, id, "Foydalanuvchi bekor qildi");
   }
 
-  await deleteGenerationFile(id);
   const removed = await deleteGeneration(id, user.id);
   if (!removed && !cancelled) {
     throw new ApiError("Ishlayotgan hujjatni o'chirib bo'lmaydi", 409);

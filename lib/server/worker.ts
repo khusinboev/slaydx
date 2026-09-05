@@ -184,7 +184,7 @@ async function runJob(job: ClaimedJob): Promise<void> {
       // yozganimizni tozalaymiz, aks holda begona natija qolib ketardi.
       console.warn(`[worker] job ${job.id}: qulf yo'qolgan, natija tashlandi`);
       await Promise.all([
-        deleteGenerationFile(job.id).catch(() => {}),
+        deleteGenerationFile(job.id, job.userId).catch(() => {}),
         deleteAssets(job.id).catch(() => {}),
       ]);
     } else if (shortfallRatio(file.delivered) !== null) {
