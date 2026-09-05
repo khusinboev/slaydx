@@ -808,3 +808,61 @@ test("mustaqil vazifa tekshiruvi to'ldiruvchi bobga aldanmaydi", async () => {
   };
   assert.deepEqual(missingStructure(meta, doc), [], "amaliy bob topilishi kerak");
 });
+
+// -------------------------------------------------- ish byudjeti (Sprint 12)
+
+/**
+ * Ilgari 14 xizmatning hammasiga bitta 300 s berilardi.
+ *
+ * 1 varaqlik insho 285 s lik slotni band qilar (`WORKER_CONCURRENCY=2`
+ * da o'tkazuvchanlikning yarmi), 45 betlik kurs ishi esa unga sig'masdi
+ * va hajm darvozasidan yiqilardi — ya'ni eng qimmat xizmatda (24 000
+ * tanga) muvaffaqiyatsizlik ehtimoli eng yuqori edi.
+ */
+test("byudjet ish hajmiga ergashadi", async () => {
+  const { budgetFor, MIN_BUDGET_MS } = await import("../lib/generation/budget.ts");
+  const { TOOL_BY_ID } = await import("../lib/tools.ts");
+  const CAP = 900_000;
+
+  const essay = budgetFor(TOOL_BY_ID.essay, { pages: "1" } as FormValues, CAP);
+  const big = budgetFor(TOOL_BY_ID.coursework, { pages: "40-45" } as FormValues, CAP);
+  const small = budgetFor(TOOL_BY_ID.coursework, { pages: "10-15" } as FormValues, CAP);
+
+  assert.ok(essay <= 120_000, `1 varaqlik insho tez tugashi kerak: ${essay}`);
+  /*
+   * 40–45 betlik kurs ishi 5 bob × 4 ostmavzu = 20 chaqiruv, qisman
+   * parallel — jonli o'lchovda ~420 s. Eski global 300 s bunga yetmasdi
+   * va ish hajm darvozasidan yiqilardi.
+   */
+  assert.ok(big >= 420_000, `45 betlik kurs ishiga yetarli vaqt kerak: ${big}`);
+  assert.ok(big > 300_000, "eski global byudjetdan (300 s) katta bo'lishi kerak");
+  assert.ok(big > small, "katta ish ko'proq vaqt olishi kerak");
+  assert.ok(small >= MIN_BUDGET_MS);
+});
+
+test("byudjet yuqori chegaradan oshmaydi", async () => {
+  const { budgetFor, MIN_BUDGET_MS } = await import("../lib/generation/budget.ts");
+  const { TOOL_BY_ID } = await import("../lib/tools.ts");
+
+  // `WORKER_JOB_TIMEOUT_MS` — operatorning yagona tutqichi; hech qanday
+  // hisob undan oshib keta olmasligi kerak.
+  const capped = budgetFor(TOOL_BY_ID.coursework, { pages: "40-45" } as FormValues, 200_000);
+  assert.equal(capped, 200_000);
+
+  // Chegara aqlsiz kichik bo'lsa ham eng kam byudjet saqlanadi —
+  // aks holda hech bir ish umuman tugay olmasdi.
+  assert.equal(budgetFor(TOOL_BY_ID.coursework, { pages: "40-45" } as FormValues, 1_000), MIN_BUDGET_MS);
+});
+
+test("bet soniga bog'liq bo'lmagan xizmatlar qat'iy byudjet oladi", async () => {
+  const { budgetFor } = await import("../lib/generation/budget.ts");
+  const { TOOL_BY_ID } = await import("../lib/tools.ts");
+  const CAP = 900_000;
+
+  // Rasm — eng tez, tarjima — eng sekin (bo'laklar to'lqinlarda ketadi).
+  const image = budgetFor(TOOL_BY_ID.image, {} as FormValues, CAP);
+  const translation = budgetFor(TOOL_BY_ID.translation, {} as FormValues, CAP);
+  const slide = budgetFor(TOOL_BY_ID.slide, { quality: "premium_long" } as FormValues, CAP);
+
+  assert.ok(image < slide && slide < translation, `${image} < ${slide} < ${translation}`);
+});

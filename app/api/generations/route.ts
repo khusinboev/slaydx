@@ -1,4 +1,5 @@
 import { ApiError, handler, json, limit, readJson, requireUser } from "@/lib/server/api";
+import { budgetFor } from "@/lib/generation/budget";
 import { enqueueGeneration, listGenerations } from "@/lib/server/jobs";
 import { sanitizeValues } from "@/lib/server/validate";
 import { missingRequired, preflightError, priceFor, TOOL_BY_SLUG, topicOf } from "@/lib/tools";
@@ -65,6 +66,10 @@ export const POST = handler("generations/create", async (req) => {
     price,
     format: tool.output,
     values,
+    // Byudjet ish HAJMIDAN hisoblanadi: 1 varaqlik insho 285 s lik
+    // slotni band qilmasin, 45 betlik kurs ishi esa unga sig'may
+    // yiqilmasin. `WORKER_JOB_TIMEOUT_MS` yuqori chegara bo'lib qoladi.
+    budgetMs: budgetFor(tool, values, env.worker.jobTimeoutMs),
   });
 
   if (!result.ok) {

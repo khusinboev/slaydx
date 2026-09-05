@@ -78,6 +78,8 @@ export type EnqueueInput = {
   price: number;
   format: string;
   values: FormValues;
+  /** Ishga ajratilgan vaqt (`budgetFor`). Worker va `reclaimStaleJobs` shundan foydalanadi. */
+  budgetMs: number;
 };
 
 export type EnqueueResult =
@@ -104,8 +106,8 @@ export async function enqueueGeneration(input: EnqueueInput): Promise<EnqueueRes
       return { ok: false as const, reason: charged.reason, required: charged.required, available: charged.available };
     }
     await client.query(
-      `INSERT INTO generations (id, user_id, tool_id, topic, price, format, values_json, step, expires_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'Navbatga qo''yildi', now() + ($8 || ' hours')::interval)`,
+      `INSERT INTO generations (id, user_id, tool_id, topic, price, format, values_json, step, budget_ms, expires_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'Navbatga qo''yildi', $8, now() + ($9 || ' hours')::interval)`,
       [
         id,
         input.userId,
@@ -114,6 +116,7 @@ export async function enqueueGeneration(input: EnqueueInput): Promise<EnqueueRes
         input.price,
         input.format,
         JSON.stringify(input.values),
+        Math.round(input.budgetMs),
         String(env.fileTtlHours),
       ],
     );
@@ -195,6 +198,8 @@ export type ClaimedJob = {
   values: FormValues;
   price: number;
   attempts: number;
+  /** Navbatga qo'yishda hisoblangan byudjet (ms). 0 — eski qator. */
+  budgetMs: number;
 };
 
 /**
@@ -211,6 +216,7 @@ export async function claimJob(workerId: string): Promise<ClaimedJob | null> {
     values_json: FormValues;
     price: string;
     attempts: number;
+    budget_ms: number;
   }>(
     `UPDATE generations g
         SET status = 'IN_PROGRESS',
@@ -227,7 +233,7 @@ export async function claimJob(workerId: string): Promise<ClaimedJob | null> {
          LIMIT 1
          FOR UPDATE SKIP LOCKED
       )
-      RETURNING g.id, g.user_id, g.tool_id, g.values_json, g.price, g.attempts`,
+      RETURNING g.id, g.user_id, g.tool_id, g.values_json, g.price, g.attempts, g.budget_ms`,
     [workerId],
   );
   if (!row) return null;
@@ -238,6 +244,7 @@ export async function claimJob(workerId: string): Promise<ClaimedJob | null> {
     values: row.values_json,
     price: Number(row.price),
     attempts: row.attempts,
+    budgetMs: Number(row.budget_ms) || 0,
   };
 }
 
@@ -316,6 +323,16 @@ export async function failJob(id: string, workerId: string, message: string): Pr
  */
 export async function reclaimStaleJobs(): Promise<string[]> {
   const timeoutSec = Math.round(env.worker.jobTimeoutMs / 1000);
+  /*
+   * Muddat HAR ISHNING o'z byudjetidan olinadi.
+   *
+   * Ilgari global `WORKER_JOB_TIMEOUT_MS` bilan solishtirilardi: 45
+   * betlik kurs ishi sog'lom ishlayotgan holida ham o'lik deb belgilanib,
+   * navbatga qaytarilishi mumkin edi. `budget_ms = 0` — eski qatorlar,
+   * ular uchun global qiymat qoladi. Ustiga 30 s qo'shiladi: worker
+   * byudjetni to'liq ishlatib, natijani yozishga ham ulgursin.
+   */
+  const staleFilter = `locked_at < now() - ((CASE WHEN budget_ms > 0 THEN budget_ms / 1000 ELSE $1::int END) + 30 || ' seconds')::interval`;
   return transaction(async (client) => {
     // Yana urinib ko'rish mumkin bo'lganlari navbatga qaytadi.
     await client.query(
@@ -325,7 +342,7 @@ export async function reclaimStaleJobs(): Promise<string[]> {
               step = 'Qayta navbatga qo''yildi'
         WHERE status = 'IN_PROGRESS'
           AND attempts < 2
-          AND locked_at < now() - ($1 || ' seconds')::interval`,
+          AND ${staleFilter}`,
       [String(timeoutSec)],
     );
     // Ikki marta uringanlari — yakuniy xato (pul chaqiruvchi tomonda qaytariladi).
@@ -336,7 +353,7 @@ export async function reclaimStaleJobs(): Promise<string[]> {
               locked_by = NULL, locked_at = NULL
         WHERE status = 'IN_PROGRESS'
           AND attempts >= 2
-          AND locked_at < now() - ($1 || ' seconds')::interval
+          AND ${staleFilter}
         RETURNING id`,
       [String(timeoutSec)],
     );

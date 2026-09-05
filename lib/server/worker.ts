@@ -63,7 +63,18 @@ function stepsFor(toolId: string): string[] {
  */
 function progressTicker(job: ClaimedJob) {
   const steps = stepsFor(job.toolId);
-  const expected = job.toolId === "slide" ? 60_000 : job.toolId === "image" ? 30_000 : 45_000;
+  /*
+   * Kutilayotgan davomiylik ishning O'Z byudjetidan olinadi.
+   *
+   * Ilgari u qattiq yozilgan edi (kurs ishi uchun 45 s), haqiqiy vaqt esa
+   * ~280 s. `1 - exp(-t/45000)` formulasi 90 soniyada 95% ga yetar va
+   * qolgan uch daqiqa progress qotib turardi — aynan yuqoridagi izohda
+   * «bo'lmaydi» deb yozilgan holat.
+   *
+   * 0.7 koeffitsienti: ishlar odatda byudjetni to'liq ishlatmaydi,
+   * shuning uchun 95% ga byudjet tugashidan biroz oldin yaqinlashadi.
+   */
+  const expected = Math.max(20_000, jobBudget(job) * 0.7);
   const started = Date.now();
   const timer = setInterval(() => {
     const ratio = 1 - Math.exp(-(Date.now() - started) / expected);
@@ -95,6 +106,17 @@ function buildPreview(doc: AcademicDoc | null): GenerationPreview | null {
   return { ...(url ? { url } : {}), ...(lines.length ? { lines } : {}) };
 }
 
+/**
+ * Ishga ajratilgan vaqt.
+ *
+ * Navbatga qo'yishda hisoblanadi va qatorda saqlanadi. `budget_ms = 0` —
+ * bu migratsiyadan oldin yaratilgan eski qator: unda global qiymat
+ * ishlatiladi, shunda eski navbat ham to'g'ri tugaydi.
+ */
+function jobBudget(job: ClaimedJob): number {
+  return job.budgetMs > 0 ? job.budgetMs : env.worker.jobTimeoutMs;
+}
+
 async function runJob(job: ClaimedJob): Promise<void> {
   const tool = TOOL_BY_ID[job.toolId as ToolId];
   if (!tool) {
@@ -108,7 +130,7 @@ async function runJob(job: ClaimedJob): Promise<void> {
   try {
     // Byudjet qulf muddatidan biroz qisqa: ish `reclaimStaleJobs`
     // uni o'lik deb hisoblashidan oldin o'zi tugashi kerak.
-    const deadline = Date.now() + Math.max(30_000, env.worker.jobTimeoutMs - 15_000);
+    const deadline = Date.now() + Math.max(30_000, jobBudget(job) - 15_000);
     const file = await buildArtifact(tool, job.values, { deadline });
 
     if (!file.bytes?.byteLength) {
