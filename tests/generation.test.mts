@@ -893,3 +893,45 @@ test("mapPool yagona manba — buzuq limit bilan ham natija yo'qotmaydi", async 
   });
   assert.deepEqual(out, [30, 10, 20]);
 });
+
+test("qo'lda yozilgan reja bayroqqa qaramay ishlatiladi", async () => {
+  const { manualOutlineOf } = await import("../lib/generation/write-llm.ts");
+
+  const plan = "1. Nazariy asoslar\n  1.1 Tushuncha\n  1.2 Tasnif\n2. Amaliy tahlil\n  2.1 Holat";
+
+  /*
+   * AYNAN N-4 (Sprint 14). Formada `tocMethod` ning standarti «ai» edi va
+   * u FAQAT «AI reja tuzsin» tugmasida «manual» ga o'tardi. Foydalanuvchi
+   * rejasini to'g'ridan-to'g'ri yozsa, dvigatel uni umuman o'qimasdi —
+   * 16 000–24 000 tangalik hujjat butunlay boshqa tuzilmada chiqardi.
+   */
+  const asAi = manualOutlineOf({ tocMethod: "ai", tocText: plan, extra: "" });
+  assert.equal(asAi.length, 2, "reja matni bor ekan, bayrog'idan qat'i nazar o'qilishi kerak");
+  assert.equal(asAi[0].title, "Nazariy asoslar");
+  assert.deepEqual(asAi[0].subs, ["Tushuncha", "Tasnif"]);
+  assert.equal(asAi[1].title, "Amaliy tahlil");
+
+  // `manual` bayrog'i bilan natija AYNAN bir xil — bayroq endi hech
+  // narsani hal qilmaydi, matn hal qiladi.
+  assert.deepEqual(manualOutlineOf({ tocMethod: "manual", tocText: plan, extra: "" }), asAi);
+
+  // Reja yozilmagan bo'lsa AI o'zi tuzadi (bo'sh ro'yxat).
+  assert.deepEqual(manualOutlineOf({ tocMethod: "ai", tocText: "", extra: "" }), []);
+  assert.deepEqual(manualOutlineOf({ tocMethod: "ai", tocText: "   \n  ", extra: "" }), []);
+
+  /*
+   * «Qo'shimcha talablar» reja EMAS. `extra` ga qaytish faqat aniq
+   * `manual` rejimida qoladi (eski xatti-harakat): aks holda har qanday
+   * qo'shimcha talab hujjat tuzilmasiga aylanib ketardi.
+   */
+  const extraOnly = "Iqtisodiy tahlilga urg'u bering\nGrafik qo'shing";
+  assert.deepEqual(
+    manualOutlineOf({ tocMethod: "ai", tocText: "", extra: extraOnly }),
+    [],
+    "«ai» rejimida qo'shimcha talab reja sifatida o'qilmasligi kerak",
+  );
+  assert.ok(
+    manualOutlineOf({ tocMethod: "manual", tocText: "", extra: extraOnly }).length > 0,
+    "«manual» rejimidagi eski zaxira yo'l saqlanishi kerak",
+  );
+});

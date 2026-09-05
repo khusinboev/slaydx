@@ -14,7 +14,7 @@ import {
   section,
   splitCodeBlocks,
   targetWords,
-  wordCount, stripHeadingNumber } from "./quality";
+  wordCount, stripHeadingNumber, type ManualChapter } from "./quality";
 import {
   writeGlossaryWithLlm,
   writeImradWithLlm,
@@ -213,12 +213,37 @@ export function outlineShape(pages: number, toolId: string): { chapters: number;
   return { chapters: 2, subs: 3 };
 }
 
+/**
+ * Foydalanuvchi yozgan reja — BAYROQ emas, MATN hal qiladi.
+ *
+ * Ilgari shart faqat `meta.tocMethod === "manual"` edi. Formada esa
+ * ikkita boshqaruv bir narsani boshqarardi: chips (`ai`/`manual`,
+ * standart `ai`) va reja matni maydoni. `tocMethod` FAQAT «AI reja
+ * tuzsin» tugmasi bosilganda `manual` ga o'tardi — ya'ni foydalanuvchi
+ * rejasini to'g'ridan-to'g'ri yozsa, u JIM tashlanardi va 16 000–24 000
+ * tangalik hujjat butunlay boshqa tuzilmada chiqardi. Maydon ostidagi
+ * yozuv («Bo'sh qoldirsangiz reja avtomatik tuziladi») aynan teskarisini
+ * va'da qilardi.
+ *
+ * Endi qoida bitta va soddaroq: reja matni bor bo'lsa — u ishlatiladi.
+ * Dvigatel UI bayrog'ining to'g'ri o'rnatilganiga tayanmasligi kerak;
+ * bo'sh matn baribir `[]` beradi, ya'ni reja avtomatik tuziladi.
+ *
+ * `extra` ga qaytish faqat ANIQ `manual` rejimida qoladi (eski
+ * xatti-harakat): «qo'shimcha talablar» maydoni reja emas, uni har
+ * safar reja deb o'qish noto'g'ri bo'lardi.
+ */
+export function manualOutlineOf(meta: Pick<DocMeta, "tocMethod" | "tocText" | "extra">): ManualChapter[] {
+  const text = meta.tocMethod === "manual" ? meta.tocText || meta.extra : meta.tocText;
+  return String(text ?? "").trim() ? parseManualOutline(text) : [];
+}
+
 async function rawOutline(meta: DocMeta, sys: string, L: ReturnType<typeof sectionLabels>, deadline?: number) {
   const pages = Math.max(4, meta.targetPages || 8);
   const long = pages >= 18;
   const shape = outlineShape(pages, meta.toolId);
   const chapterN = shape.chapters;
-  const manual = meta.tocMethod === "manual" ? parseManualOutline(meta.tocText || meta.extra) : [];
+  const manual = manualOutlineOf(meta);
 
   if (manual.length) {
     // Foydalanuvchi yozgan ostmavzular saqlanadi; yozmagan bo'lsa —

@@ -91,11 +91,30 @@ function StandardForm({ tool, profile }: { tool: ToolConfig; profile: UserProfil
   const set = (name: string, v: string | number | boolean) =>
     setValues((s) => ({ ...s, [name]: v }));
 
+  /**
+   * Reja matni va rejim bitta harakatda o'rnatiladi.
+   *
+   * Matn yozilsa — `manual`, tozalansa — `ai`. Ilgari `tocMethod`
+   * FAQAT «AI reja tuzsin» tugmasida o'zgarardi, shuning uchun qo'lda
+   * yozilgan reja dvigatelga «avtomatik» bayrog'i bilan borib, jim
+   * tashlanardi.
+   */
+  const setOutline = (text: string) =>
+    setValues((s) => ({ ...s, tocText: text, tocMethod: text.trim() ? "manual" : "ai" }));
+
   const [outlineBusy, setOutlineBusy] = useState(false);
   // Reja tahriri bo'lgan vositalarda `tocText` asosiy joyda ko'rsatiladi,
   // shuning uchun uni «qo'shimcha» ro'yxatidan chiqaramiz.
   const hasOutline = tool.fields.some((f) => f.name === "tocMethod");
-  const mainFields = tool.fields.filter((f) => !f.extra);
+  /*
+   * `tocMethod` chips i ATAYIN ko'rsatilmaydi.
+   *
+   * U reja matni maydoni bilan bitta narsani boshqarardi va ikkalasi
+   * bir-biriga zid bo'lishi mumkin edi: foydalanuvchi rejasini yozadi,
+   * chips esa «AI yaratishi» da qolib, reja jim tashlanardi. Endi
+   * signal bitta — matnning o'zi (`setOutline` va `manualOutlineOf`).
+   */
+  const mainFields = tool.fields.filter((f) => !f.extra && !(hasOutline && f.name === "tocMethod"));
   const extraFields = tool.fields.filter((f) => f.extra && !(hasOutline && f.name === "tocText"));
   const needsTopic = Boolean(tool.topicLegend);
   const fileMode = tool.modes && values.mode === "file";
@@ -117,7 +136,7 @@ function StandardForm({ tool, profile }: { tool: ToolConfig; profile: UserProfil
     setOutlineBusy(true);
     try {
       const { text } = await draftOutline(tool.slug, values);
-      setValues((s) => ({ ...s, tocText: text, tocMethod: "manual" }));
+      setOutline(text);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Reja tuzilmadi");
     } finally {
@@ -260,13 +279,14 @@ function StandardForm({ tool, profile }: { tool: ToolConfig; profile: UserProfil
           </button>
           <textarea
             value={String(values.tocText ?? "")}
-            onChange={(e) => set("tocText", e.target.value)}
+            onChange={(e) => setOutline(e.target.value)}
             rows={String(values.tocText ?? "") ? 9 : 4}
             className="border-input bg-card focus:ring-ring w-full rounded-xl border px-3.5 py-2.5 font-mono text-[13px] outline-none focus:ring-2"
             placeholder={"1. Birinchi bob\n  1.1 Ostmavzu\n  1.2 Ostmavzu\n2. Ikkinchi bob"}
           />
           <p className="text-muted-foreground mt-2 text-xs">
-            Bo&apos;sh qoldirsangiz reja avtomatik tuziladi. Ostmavzuni ichkariga surib yoki «1.1» deb yozing.
+            Bu yerga yozganingiz hujjat tuzilmasiga aynan tushadi. Bo&apos;sh qoldirsangiz reja avtomatik
+            tuziladi. Ostmavzuni ichkariga surib yoki «1.1» deb yozing.
           </p>
         </fieldset>
       ) : null}
