@@ -9,6 +9,7 @@ import { buildImageArtifact } from "./image-studio";
 import { buildSlideAcademicDoc } from "./slide-write";
 import { pdfAvailable, toPdf } from "../server/pdf";
 import { scaleDoc } from "./scale";
+import { hardMissing, missingStructure, needLabel } from "./structure";
 import { writeWithLlm } from "./write-llm";
 import type { BuiltFile } from "./types";
 import type { FormValues, ToolConfig } from "../types";
@@ -140,6 +141,33 @@ export async function buildArtifact(
       throw new Error(
         `Matn hajmi yetarli chiqmadi (~${pages} bet, kerak: ${meta.pagesLabel} bet). ` +
           `Kredit qaytariladi — qayta urinib ko‘ring yoki kichikroq hajm tanlang.`,
+      );
+    }
+  }
+
+  /**
+   * Tuzilma darvozasi — hajm darvozasining juftligi.
+   *
+   * Hajm darvozasi «yetarli yozildimi» ni so'raydi, bu esa «va'da
+   * qilingan JANR chiqdimi» ni. Ilgari janr talablari FAQAT promptda
+   * turardi: `writeAbstracts` ikki marta urinib ham javob olmasa,
+   * maqola annotatsiyasiz `COMPLETED` bo'lardi — ya'ni jurnalga
+   * yubora olmaydigan «maqola» uchun 8 000 tanga olinardi.
+   *
+   * Yumshoq talablar (jadval, mustaqil vazifa) faqat logga yoziladi:
+   * ular bezak yoki evristik aniqlanadi, to'liq yozilgan ishni ular
+   * uchun yiqitish foydalanuvchiga olganidan ko'proq zarar berardi.
+   */
+  if (llmDoc) {
+    const missing = missingStructure(meta, academic);
+    if (missing.length) {
+      console.warn(`[gen] structure: ${tool.id} — ${missing.map(needLabel).join(", ")} yo'q`);
+    }
+    const hard = hardMissing(meta, academic);
+    if (hard.length) {
+      throw new Error(
+        `Hujjat tuzilmasi to'liq chiqmadi (${hard.map(needLabel).join(", ")} yo'q). ` +
+          `Kredit qaytariladi — qayta urinib ko‘ring.`,
       );
     }
   }

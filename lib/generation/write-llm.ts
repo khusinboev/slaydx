@@ -170,6 +170,24 @@ function citeGuard(sections: DocSection[], maxIndex: number) {
 }
 
 /**
+ * To'ldiruvchi («qo'shimcha tahlil») bobi qaysi o'ringa qo'yiladi.
+ *
+ * Odatda u xulosadan oldin turadi. MUSTAQIL ISHDA esa oxirgi bob —
+ * talabaning O'Z bajargan amaliy vazifasi bo'lishi shart
+ * (`mustaqilIshSystemPrompt` aynan shuni talab qiladi), shuning uchun
+ * to'ldiruvchi undan ham OLDIN qo'yiladi.
+ *
+ * Jonli sinovda ko'rilgan holat: to'ldiruvchi bob amaliy bobdan keyin
+ * tushganda mustaqil ish referatdan farq qilmay qolardi — ikkalasi ham
+ * «QO'SHIMCHA TAHLIL VA ISTIQBOL» bilan tugardi va janrni belgilovchi
+ * amaliy bob o'rtada ko'milib ketardi.
+ */
+export function fillerInsertIndex(sectionCount: number, toolId: string): number {
+  const keepLast = toolId === "mustaqil-ish" ? 2 : 1;
+  return Math.max(1, sectionCount - keepLast);
+}
+
+/**
  * Reja o'lchami — nechta bob va har bobda nechta ostmavzu.
  *
  * Ilgari bu deyarli qat'iy edi: kurs ishida doim 3 bob, har bobda ≤3
@@ -826,7 +844,7 @@ export async function writeWriterWithLlm(meta: DocMeta, deadline?: number): Prom
     }
     misses = 0;
     // Bob birinchi muvaffaqiyatda kiritiladi — bo'sh bob qolmasin.
-    if (!subNo) sections.splice(Math.max(1, sections.length - 1), 0, extraChapter);
+    if (!subNo) sections.splice(fillerInsertIndex(sections.length, meta.toolId), 0, extraChapter);
     subNo += 1;
     extraChapter.blocks.push({ kind: "h2", text: `${extraNo}.${subNo}. ${topup.label}` }, ...extra);
   }

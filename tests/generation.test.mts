@@ -667,3 +667,144 @@ test("fayl formati yorlig'i haqiqiy faylga ergashadi", async () => {
   assert.equal(formatOf("kurs-ishi.docx"), "docx");
   assert.equal(formatOf("nomsiz"), null, "kengaytmasiz nom yorliqni o'zgartirmasin");
 });
+
+// -------------------------------------------------- tuzilma darvozasi (Sprint 11)
+
+/**
+ * Janr talablari ilgari FAQAT promptda turardi.
+ *
+ * `writeAbstracts` ikki marta urinib ham javob olmasa, maqola
+ * annotatsiyasiz `COMPLETED` bo'lardi — jurnalga yubora olmaydigan
+ * «maqola» uchun 8 000 tanga olinardi.
+ */
+test("janr o'z tuzilma talabiga ega", async () => {
+  const { structureNeeds } = await import("../lib/generation/structure.ts");
+  const { extractMeta } = await import("../lib/generation/meta.ts");
+  const { TOOL_BY_ID } = await import("../lib/tools.ts");
+  const m = (id: keyof typeof TOOL_BY_ID, v: Record<string, unknown> = {}) =>
+    extractMeta(TOOL_BY_ID[id], { topic: "Mavzu", ...v } as FormValues);
+
+  assert.deepEqual(structureNeeds(m("article")), ["abstract"]);
+  assert.deepEqual(structureNeeds(m("thesis")), ["abstract"]);
+  assert.deepEqual(structureNeeds(m("mustaqil-ish")), ["ownTask"]);
+
+  // Referat — sof adabiyot sharhi, qo'shimcha talab yo'q.
+  assert.deepEqual(structureNeeds(m("referat")), []);
+
+  // Jadval faqat foydalanuvchi vizual so'raganda kutiladi: «yo'q»
+  // deganini darvozaga aylantirish tanlovni jimgina bekor qilish bo'lardi.
+  // Forma maydoni `images` ("yes"/"no"), `DocMeta.includeVisuals` esa
+  // shundan hosil bo'ladi — test ham foydalanuvchi yuboradigan shaklni
+  // ishlatadi, ichki nomni emas.
+  assert.deepEqual(structureNeeds(m("coursework", { images: "yes" })), ["table"]);
+  assert.deepEqual(structureNeeds(m("coursework", { images: "no" })), []);
+});
+
+test("annotatsiyasiz maqola qat'iy darvozadan o'tmaydi", async () => {
+  const { missingStructure, hardMissing } = await import("../lib/generation/structure.ts");
+  const { extractMeta } = await import("../lib/generation/meta.ts");
+  const { TOOL_BY_ID } = await import("../lib/tools.ts");
+
+  const meta = extractMeta(TOOL_BY_ID.article, { topic: "Mavzu" } as FormValues);
+  const base = {
+    meta,
+    titlePage: true,
+    toc: true,
+    sections: [{ id: "kirish", title: "Kirish", blocks: [{ kind: "p" as const, text: "Matn." }] }],
+  };
+
+  assert.deepEqual(hardMissing(meta, base), ["abstract"]);
+  assert.deepEqual(missingStructure(meta, base), ["abstract"]);
+
+  const withAbstract = { ...base, abstracts: [{ lang: "uz", label: "Annotatsiya", text: "T", keywords: "k" }] };
+  assert.deepEqual(hardMissing(meta, withAbstract), []);
+});
+
+test("jadval talabi qat'iy emas — faqat kuzatiladi", async () => {
+  const { missingStructure, hardMissing } = await import("../lib/generation/structure.ts");
+  const { extractMeta } = await import("../lib/generation/meta.ts");
+  const { TOOL_BY_ID } = await import("../lib/tools.ts");
+
+  const meta = extractMeta(TOOL_BY_ID.coursework, { topic: "Mavzu", images: "yes" } as FormValues);
+  const doc = {
+    meta,
+    titlePage: true,
+    toc: true,
+    sections: [{ id: "bob1", title: "Bob", blocks: [{ kind: "p" as const, text: "Matn." }] }],
+  };
+  // Kuzatiladi, lekin to'liq yozilgan 24 000 tangalik ishni yiqitmaydi.
+  assert.deepEqual(missingStructure(meta, doc), ["table"]);
+  assert.deepEqual(hardMissing(meta, doc), []);
+});
+
+test("mustaqil ishning oxirgi bobi sof nazariya bo'lsa belgilanadi", async () => {
+  const { missingStructure, hardMissing } = await import("../lib/generation/structure.ts");
+  const { extractMeta } = await import("../lib/generation/meta.ts");
+  const { TOOL_BY_ID } = await import("../lib/tools.ts");
+
+  const meta = extractMeta(TOOL_BY_ID["mustaqil-ish"], { topic: "Mavzu" } as FormValues);
+  const doc = (lastText: string) => ({
+    meta,
+    titlePage: true,
+    toc: true,
+    sections: [
+      { id: "kirish", title: "Kirish", blocks: [{ kind: "p" as const, text: "Kirish." }] },
+      { id: "bob1", title: "Nazariya", blocks: [{ kind: "p" as const, text: "Nazariy qism." }] },
+      { id: "bob2", title: "Amaliy qism", blocks: [{ kind: "p" as const, text: lastText }] },
+      { id: "xulosa", title: "Xulosa", blocks: [{ kind: "p" as const, text: "Xulosa." }] },
+    ],
+  });
+
+  // Oxirgi bob raqamsiz — nazariya qayta bayoni, mustaqil vazifa emas.
+  assert.deepEqual(missingStructure(meta, doc("Tushuncha tizimli o‘rganishni talab qiladi.")), ["ownTask"]);
+
+  // Raqamli natija bor — talab bajarilgan.
+  assert.deepEqual(missingStructure(meta, doc("Hisob natijasi: 12 ta namunadan 9 tasi mos keldi.")), []);
+
+  // Hozircha KUZATUVDA: evristik aniqlash uchun darvoza qat'iy emas.
+  assert.deepEqual(hardMissing(meta, doc("Nazariy bayon.")), []);
+});
+
+test("to'ldiruvchi bob mustaqil ishning amaliy bobidan keyin qo'yilmaydi", async () => {
+  const { fillerInsertIndex } = await import("../lib/generation/write-llm.ts");
+
+  // [kirish, bob1, bob2, xulosa] — to'ldiruvchi xulosadan oldin.
+  assert.equal(fillerInsertIndex(4, "referat"), 3);
+  assert.equal(fillerInsertIndex(4, "coursework"), 3);
+
+  /*
+   * Mustaqil ishda oxirgi bob — talabaning o'z bajargan vazifasi, ya'ni
+   * to'ldiruvchi undan ham oldin turishi kerak. Jonli sinovda aks holda
+   * ikkala janr ham «QO'SHIMCHA TAHLIL VA ISTIQBOL» bilan tugardi.
+   */
+  assert.equal(fillerInsertIndex(4, "mustaqil-ish"), 2);
+
+  // Juda qisqa hujjatda ham kirishdan oldin tushmaydi.
+  assert.equal(fillerInsertIndex(2, "mustaqil-ish"), 1);
+  assert.equal(fillerInsertIndex(1, "mustaqil-ish"), 1);
+});
+
+test("mustaqil vazifa tekshiruvi to'ldiruvchi bobga aldanmaydi", async () => {
+  const { missingStructure } = await import("../lib/generation/structure.ts");
+  const { extractMeta } = await import("../lib/generation/meta.ts");
+  const { TOOL_BY_ID } = await import("../lib/tools.ts");
+
+  const meta = extractMeta(TOOL_BY_ID["mustaqil-ish"], { topic: "Mavzu" } as FormValues);
+  /*
+   * `qoshimcha` — hajm uchun qo'shiladigan umumiy bob. Ilgari tekshiruv
+   * «oxirgi bo'lim» ni olardi va aynan shu bobga tushib, raqamli
+   * natijali amaliy bobni umuman ko'rmasdi.
+   */
+  const doc = {
+    meta,
+    titlePage: true,
+    toc: true,
+    sections: [
+      { id: "kirish", title: "Kirish", blocks: [{ kind: "p" as const, text: "Kirish." }] },
+      { id: "bob2", title: "Amaliy qism", blocks: [{ kind: "p" as const, text: "12 ta tenglamadan 9 tasi yechildi." }] },
+      { id: "qoshimcha", title: "Qo‘shimcha tahlil", blocks: [{ kind: "p" as const, text: "Umumiy mulohaza." }] },
+      { id: "xulosa", title: "Xulosa", blocks: [{ kind: "p" as const, text: "Xulosa." }] },
+    ],
+  };
+  assert.deepEqual(missingStructure(meta, doc), [], "amaliy bob topilishi kerak");
+});
