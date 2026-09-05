@@ -1,6 +1,7 @@
 import { fetchImageBytes, generateFalImage } from "./slide-images";
 import { imageExt } from "../viewers/kind";
 import { parseLlmObject } from "./json";
+import { mapPool } from "./quality";
 import { extractMeta } from "./meta";
 import { llmComplete, llmEnabled } from "./llm";
 import type { AcademicDoc, BuiltFile, GenImage } from "./types";
@@ -69,19 +70,6 @@ async function expandPrompt(user: string, styleId: string, ratioId: string): Pro
   return scene.length > 12 ? scene : user;
 }
 
-async function mapPool<T, R>(items: T[], limit: number, fn: (item: T, i: number) => Promise<R>): Promise<R[]> {
-  const ret: R[] = new Array(items.length);
-  let next = 0;
-  async function worker() {
-    while (next < items.length) {
-      const i = next;
-      next += 1;
-      ret[i] = await fn(items[i], i);
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => worker()));
-  return ret;
-}
 
 /** `data:image/png;base64,...` dan MIME. Topilmasa JPEG deb hisoblanadi. */
 function mimeOf(dataUrl: string): string {

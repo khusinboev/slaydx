@@ -617,3 +617,111 @@ Kurs ishi uchun `expected = 45 s`, haqiqiy vaqt ≈ 280 s. `1 - exp(-t/45000)` f
 | DOCX o'rniga HTML→PDF ga o'tish | Foydalanuvchi **tahrirlanadigan** `.docx` topshiradi. PDF bu talabni buzadi. |
 | LISTEN/NOTIFY bilan polling'ni almashtirish | 150 ms band polling hozirgi yuk uchun yetarli; murakkablik hali oqlanmagan. Yuk o'lchangach qayta ko'riladi. |
 | Janr uchun alohida yozuvchi funksiyalar (5 ta) | Prompt + `genreShape` + `requires` uchtasi janr farqini yetarlicha ifodalaydi. 5 ta deyarli bir xil funksiya — takror, ajratish emas. |
+
+---
+
+# 17. Bajarilgan ish (2026-09-05)
+
+`§14` dagi besh sprintning **hammasi** bajarildi — 5 ta commit, har biri
+`npm run check` (tsc + eslint + test) va `npm run build` toza holatda.
+
+## 17.1. Har bosqichda qanday tekshirildi
+
+Bu sprintlarda uch qatlamli tekshiruv qo'llandi. Uchalasi ham **haqiqatan
+bajarildi**, ya'ni «testlar yozildi» degani «testlar ishlaydi» degani emas:
+
+| Qatlam | Nima qilindi |
+|---|---|
+| **Regressiya nusxasi** | Sprint 9 dan OLDIN 12 xizmatning `word/document.xml` chiqishi saqlanib, refaktordan keyin bayt-bayt solishtirildi |
+| **Mutatsiya sinovi** | Har yangi test uchun kod ATAYIN buzilib, testning yiqilishi tasdiqlandi. **21 mutatsiya — 21 tasi ham ushlandi** |
+| **Jonli sinov** | Haqiqiy Gemini, `fal` va LibreOffice bilan uchdan-uchiga; PDF ga o'girilib ko'z bilan ko'rildi |
+
+## 17.2. Sprint bo'yicha
+
+### Sprint 9 — Hujjat profili (`0b24558`)
+`docx-profile.ts`: 6 profil. Rezyume Calibri 10.5pt, chegarasiz ikki
+ustunli jadval, to'q yon panel sahifa balandligida. Xarita/dars rejasi
+albom (foydali kenglik 9354 → 14 400 twip). `DocTable.anchor`. Glossariy
+takrori olib tashlandi.
+
+**Regressiya isboti:** gost oilasining 8 xizmatida (`article`,
+`coursework`, `essay`, `keys`, `mustaqil-ish`, `referat`, `thesis`,
+`translation`) farq **faqat jadval gridida**, tashqarida **nol**.
+
+**Reja bo'yicha bo'lmagan tuzatish:** eski `<w:tblGrid>` da
+`w:w="100"` (0.18 sm) turgan — ma'nosiz grid, shuning uchun Word
+avtomatik maketga o'tib ustunlarni deyarli teng chizardi va texnologik
+xaritada «Mavzu» matni to'rt qatorga sinardi. Endi haqiqiy kengliklar +
+`tblLayout=fixed`.
+
+### Sprint 10 — Rasm halolligi (`104c7b5`)
+`refundPartial()` + `BuiltFile.delivered`. Bir nechta rasm ZIP da.
+`packImages()` tarmoqdan ajratildi. `generations.format` haqiqiy faylga
+moslanadi.
+
+**Yo'l-yo'lakay topilgan MUHIM nuqson:** `npm test` `.env.local` ni
+yuklamas ekan, shuning uchun bazaga bog'liq **uchta to'plam
+(`accounts`, `admin`, `credits`) hech qachon bajarilmagan** — doim
+`SKIP` bo'lgan. Skript boshqa skriptlar bilan bir xil
+`--env-file-if-exists` oldi: **153 test / 3 skip → 175 test / 0 skip**.
+
+**Jonli sinov:** 2 rasm 10.1 s da, ZIP 1032 KB, ichidagi ikkala fayl ham
+haqiqiy JPEG imzosi bilan.
+
+### Sprint 11 — Janr darvozalari (`fa31fc1`)
+`structure.ts`. Darvoza darajalari ataylab teng emas: annotatsiya —
+qat'iy, jadval — yumshoq va faqat `images=yes` bo'lganda, mustaqil
+vazifa — kuzatuvda.
+
+**Rejadan chetlanish va sababi:** reja bob SONINI janrga ajratishni
+tavsiya qilgandi. Kodni o'qib ma'lum bo'ldiki, `outlineShape` bob
+sonidan CHAQIRUV sonini, u esa HAJMNI belgilaydi — referatga sun'iy
+kamroq bob berish uni hajm darvozasidan yiqitardi. Shuning uchun bob
+soni umumiy qoldi, farq esa tuzilma talabiga ko'chirildi.
+
+**Jonli sinov haqiqiy nuqsonni ochdi:** to'ldiruvchi («qo'shimcha
+tahlil») bobi xulosadan oldin qo'yilar, ya'ni mustaqil ishda
+talabaning amaliy bobidan KEYIN tushardi — ikkala janr ham
+«QO'SHIMCHA TAHLIL VA ISTIQBOL» bilan tugar va janrni belgilovchi bob
+o'rtada ko'milib ketardi. `fillerInsertIndex()` bilan tuzatildi.
+Tuzatishdan keyin: mustaqil ish amaliy bob bilan tugaydi, oxirgi bobning
+**11/11 blokida raqamli natija** bor; referat esa adabiyot sharhi
+uslubida qoladi.
+
+### Sprint 12 — Byudjet adolati (`16b2ee0`)
+`budgetFor()` — 45 bet → 477 s, 1 varaq → 99 s. Migratsiya 009,
+`reclaimStaleJobs` har ishni o'z byudjeti bo'yicha baholaydi. Progress
+ticker ham shu manbadan. Yangi `tests/queue.test.mts` — haqiqiy
+Postgres ga qarshi uchdan-uchiga simlash testi.
+
+### Sprint 13 — Texnik qarz
+`mapPool` uchta nusxadan bittaga (`quality.ts`). Bu bir vaqtning o'zida
+**yashirin nuqsonni** ham yopdi: nusxalarda `limit <= 0` himoyasi yo'q
+edi — bunday chaqiruvda `Promise.all([])` darhol yakunlanib, natija
+massivi bo'sh kataklar bilan qaytardi (jim ma'lumot yo'qolishi).
+
+A-12 (`ResumeViewer` tuzilmani yo'qotishi) Sprint 9 bilan, A-13
+(o'lik `"pdf"` tipi) Sprint 10 bilan birga yopildi.
+
+## 17.3. Yakuniy holat
+
+| O'lchov | Audit boshida | Hozir |
+|---|---:|---:|
+| Testlar | 145 (3 tasi hech qachon ishlamagan) | **187, hammasi ishlaydi** |
+| Renderer ajratilishi | 3 / 14 | **9 / 14** |
+| Sifat darvozasi | 13 / 14 | **14 / 14** |
+| Tuzilma darvozasi | 0 janr | **4 janr** |
+| Yopilgan bandlar | — | **14 / 14** |
+
+## 17.4. Ataylab qoldirilgan
+
+- **`ownTask` darvozasi qat'iy emas.** Aniqlash evristik; jonli
+  statistika yig'ilgach qaror qilinadi. Hozircha faqat `console.warn`.
+- **Akademik hujjat sarlavhalari Word ning «Heading 1» uslub rangida
+  chiqadi** (LibreOffice da ko'k/to'q sariq). Bu auditdan oldin ham
+  shunday edi va gost chiqishini o'zgartirmaslik uchun tegilmadi —
+  alohida ko'rib chiqilsin.
+- **Glossariy uchun ikki ustunli bosma maket.** Takror olib tashlandi va
+  ma'lumotnoma tipografiyasi berildi, lekin haqiqiy ikki ustun
+  `docx` da ko'p bo'limli hujjat talab qiladi — foyda hozircha
+  murakkablikni oqlamaydi.

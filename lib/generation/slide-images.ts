@@ -1,3 +1,4 @@
+import { mapPool } from "./quality";
 import { photoSlot, slotPixels } from "./slide-layout";
 import { composeSlideImagePrompt, writeSlideImagePrompts } from "./slide-image-prompts";
 import type { SlideVisual } from "./slide-templates";
@@ -248,19 +249,6 @@ export async function searchSlideImages(query: string, limit = 6): Promise<Slide
   return out;
 }
 
-async function mapPool<T, R>(items: T[], limit: number, fn: (item: T, i: number) => Promise<R>): Promise<R[]> {
-  const ret: R[] = new Array(items.length);
-  let next = 0;
-  async function worker() {
-    while (next < items.length) {
-      const i = next;
-      next += 1;
-      ret[i] = await fn(items[i], i);
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => worker()));
-  return ret;
-}
 
 /**
  * Slaydlarga rasm biriktiradi.

@@ -866,3 +866,30 @@ test("bet soniga bog'liq bo'lmagan xizmatlar qat'iy byudjet oladi", async () => 
 
   assert.ok(image < slide && slide < translation, `${image} < ${slide} < ${translation}`);
 });
+
+test("mapPool yagona manba — buzuq limit bilan ham natija yo'qotmaydi", async () => {
+  const { mapPool } = await import("../lib/generation/quality.ts");
+
+  const items = [1, 2, 3, 4, 5];
+  const double = async (n: number) => n * 2;
+
+  assert.deepEqual(await mapPool(items, 2, double), [2, 4, 6, 8, 10]);
+  assert.deepEqual(await mapPool(items, 99, double), [2, 4, 6, 8, 10], "limit elementdan ko'p");
+  assert.deepEqual(await mapPool([], 3, double), []);
+
+  /*
+   * `limit <= 0` — nusxa ko'chirilgan variantlarda (`image-studio`,
+   * `slide-images`) himoya yo'q edi: `Array.from({length: 0})` bo'sh
+   * bo'lib, `Promise.all([])` darhol yakunlanar va natija massivi
+   * BO'SH KATAKLAR bilan qaytardi — jim ma'lumot yo'qolishi.
+   */
+  assert.deepEqual(await mapPool(items, 0, double), [2, 4, 6, 8, 10]);
+  assert.deepEqual(await mapPool(items, -3, double), [2, 4, 6, 8, 10]);
+
+  // Tartib saqlanadi, garchi bajarilish tartibi boshqacha bo'lsa ham.
+  const out = await mapPool([30, 10, 20], 3, async (ms) => {
+    await new Promise((r) => setTimeout(r, ms));
+    return ms;
+  });
+  assert.deepEqual(out, [30, 10, 20]);
+});
