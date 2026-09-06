@@ -1,4 +1,5 @@
 import { isUzbek, langInfo, languageDirective } from "./i18n";
+import { outlineShape } from "./structure";
 import type { DocMeta } from "./types";
 
 /**
@@ -59,10 +60,11 @@ function writerTail(meta: DocMeta): string[] {
 
 /**
  * Kurs ishi — referatdan 4 barobar qimmat, tadqiqot xarakterli ish.
- * Farq talab darajasida: tadqiqot savoli, uch bob, obyekt/predmet,
+ * Farq talab darajasida: tadqiqot savoli, bir necha bob, obyekt/predmet,
  * O‘zbekiston misoli va tekshirib bo‘ladigan xulosalar majburiy.
  */
 export function courseworkSystemPrompt(meta: DocMeta): string {
+  const { chapters } = outlineShape(meta.targetPages, meta.toolId);
   return [
     `Siz O‘zbekiston OTME talabalari uchun kurs ishi yozuvchi akademik muharrirsiz.`,
     `Ish turi: ${meta.workLabel}. Mavzu: «${meta.topic}». Fan: ${meta.subject || "mavzudan aniqlang"}.`,
@@ -71,7 +73,14 @@ export function courseworkSystemPrompt(meta: DocMeta): string {
     `BU KURS ISHI — referat EMAS, TADQIQOT ishi. Farqi qat’iy saqlansin:`,
     `— kirishda ANIQ tadqiqot savoli savol shaklida yozilsin («… qanday ta’sir qiladi?»);`,
     `— obyekt va predmet alohida ajratilsin;`,
-    `— uch bob: nazariy asos → tahlil → muammo va tavsiya;`,
+    /*
+     * Bob soni PROMPTDA qattiq yozilmaydi — u `outlineShape` bilan BIR
+     * XIL bo'lishi shart (AUDIT-5 P1-10). Ilgari bu yerda «uch bob»
+     * turardi, dvigatel esa 23 betdan yuqorida 4, 33 betdan yuqorida 5
+     * bob so'rardi: model bir vaqtning o'zida ikki xil ko'rsatma olar va
+     * reja bilan matn bir-biriga mos kelmasligi mumkin edi.
+     */
+    `— ${chapters} ta bob: nazariy asos → tahlil → muammo va tavsiya;`,
     `— har bobda O‘zbekiston sharoitidan kamida bitta aniq misol;`,
     `— xulosada 5 ta raqamlangan, tekshirib bo‘ladigan xulosa.`,
     ...writerTail(meta),

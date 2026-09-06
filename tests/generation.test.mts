@@ -548,8 +548,13 @@ test("standart maqola va tezis prompti BOB raqamlashni taqiqlaydi", async () => 
   assert.match(article, /ISHLATMANG/);
   assert.match(article, /I BOB/); // taqiq matnida tilga olinadi
   assert.match(thesis, /ISHLATMANG/);
-  // Kurs ishida esa aksincha — uch bob talab qilinadi.
-  assert.match(coursework, /uch bob/i);
+  /*
+   * Kurs ishida esa aksincha — boblar TALAB qilinadi. Son endi qattiq
+   * yozilmaydi, u `outlineShape` dan keladi (P1-10), shuning uchun
+   * tekshiruv shaklga qaraydi, aniq songa emas.
+   */
+  assert.match(coursework, /\d+ ta bob: nazariy asos/);
+  assert.ok(!/ISHLATMANG/.test(coursework), "kurs ishida bob taqiqlanmaydi");
 });
 
 test("kirish ko'rsatmasi janrga qarab farqlanadi", async () => {
@@ -998,4 +1003,144 @@ test("standart shift ostida har bir narx tarifi alohida byudjet oladi", async ()
   // Eng uzun slayd paketi ham shiftga sig'ishi kerak (N-2 bilan bir tugun).
   const slide = budgetFor(TOOL_BY_ID.slide, { quality: "premium_long" } as FormValues, DEFAULT_JOB_TIMEOUT_MS);
   assert.ok(slide < DEFAULT_JOB_TIMEOUT_MS, `premium_long deka byudjeti: ${slide}ms`);
+});
+
+test("standart hajm narx, dvigatel va formada bir xil", async () => {
+  const { TOOLS, TOOL_BY_ID, defaultPages, priceFor } = await import("../lib/tools.ts");
+  const { extractMeta } = await import("../lib/generation/meta.ts");
+
+  /*
+   * AYNAN P1-7 (AUDIT-5). Standart hajm UCH joyda mustaqil yozilgan edi:
+   * `priceFor`, `extractMeta` va formadagi `defaultsFor`. Ular ajralib
+   * ketgan edi — maqola va tezisda narx «3–5 bet» (4 000 tanga) tarifidan
+   * hisoblanar, dvigatel esa «10–15» (13 bet) yozardi. Ya'ni `pages` siz
+   * yuborilgan so'rov 4 000 tangaga 13 betlik ish so'rardi.
+   */
+  const withPages = TOOLS.filter((t) => t.fields.some((f) => f.name === "pages"));
+  assert.ok(withPages.length >= 5, "bet tanlovi bo'lgan vositalar topilishi kerak");
+
+  for (const tool of withPages) {
+    const fallback = defaultPages(tool.id);
+    const options = tool.fields.find((f) => f.name === "pages")!.options ?? [];
+
+    // 1) Standart formadagi haqiqiy tanlovlardan biri bo'lishi kerak.
+    assert.ok(
+      options.some((o) => o.value === fallback),
+      `${tool.id}: standart «${fallback}» forma tanlovlari orasida yo'q`,
+    );
+
+    // 2) `pages` siz narx AYNAN shu tarifning narxi bo'lishi kerak.
+    assert.equal(
+      priceFor(tool, {} as FormValues),
+      priceFor(tool, { pages: fallback } as FormValues),
+      `${tool.id}: standart narx tarif narxiga teng bo'lishi kerak`,
+    );
+
+    // 3) `pages` siz dvigatel AYNAN shu tarifning hajmini yozishi kerak.
+    assert.equal(
+      extractMeta(tool, { topic: "X" } as FormValues).targetPages,
+      extractMeta(tool, { topic: "X", pages: fallback } as FormValues).targetPages,
+      `${tool.id}: standart hajm tarif hajmiga teng bo'lishi kerak`,
+    );
+  }
+
+  // Aniq holat: maqola «3–5» tarifida qoladi, «10–15» ga sirg'alib ketmaydi.
+  assert.equal(extractMeta(TOOL_BY_ID.article, { topic: "X" } as FormValues).targetPages, 4);
+  assert.equal(extractMeta(TOOL_BY_ID.thesis, { topic: "X" } as FormValues).targetPages, 4);
+});
+
+test("kurs ishi prompti dvigatel so'ragan bob soniga mos keladi", async () => {
+  const { courseworkSystemPrompt } = await import("../lib/generation/prompts.ts");
+  const { outlineShape } = await import("../lib/generation/structure.ts");
+  const { extractMeta } = await import("../lib/generation/meta.ts");
+  const { TOOL_BY_ID } = await import("../lib/tools.ts");
+
+  /*
+   * AYNAN P1-10 (AUDIT-5). Promptda «uch bob» qattiq yozilgan edi,
+   * `outlineShape` esa 23 betdan yuqorida 4, 33 betdan yuqorida 5 bob
+   * so'rardi. Model bir vaqtning o'zida ikki xil ko'rsatma olardi:
+   * reja to'rt bobli, prompt esa uch bob deb turardi.
+   */
+  for (const pages of ["10-15", "20-25", "25-30", "30-35", "40-45"]) {
+    const meta = extractMeta(TOOL_BY_ID.coursework, { topic: "X", pages } as FormValues);
+    const want = outlineShape(meta.targetPages, meta.toolId).chapters;
+    const prompt = courseworkSystemPrompt(meta);
+
+    assert.ok(
+      prompt.includes(`${want} ta bob`),
+      `${pages}: promptda «${want} ta bob» bo'lishi kerak`,
+    );
+    // Qattiq yozilgan son qaytib kelmasin.
+    assert.ok(!/uch bob/i.test(prompt), `${pages}: promptda qattiq «uch bob» qolmasligi kerak`);
+  }
+});
+
+test("uzun insho ko'proq burchak oladi — `n` o'lik emas", async () => {
+  const { writeEssayWithLlm } = await import("../lib/generation/write-llm.ts");
+  const { extractMeta } = await import("../lib/generation/meta.ts");
+  const { TOOL_BY_ID } = await import("../lib/tools.ts");
+
+  /*
+   * AYNAN P1-3 (AUDIT-5). `writeEssayInChunks` `n` ni parametr sifatida
+   * qabul qilar, lekin tanada UMUMAN ishlatmasdi: 3, 4 va 5 varaqlik
+   * insho bir xil uchta burchakni olardi. 5 varaq uchun 4 000 tanga
+   * to'lagan foydalanuvchi 3 varaqlik (3 000 tanga) ish bilan bir xil
+   * chuqurlik olardi.
+   *
+   * Chuqurlik BURCHAK soni bilan o'lchanadi, paragraf bilan emas:
+   * modeldan ko'p paragraf so'ralganda u ulushini beradi, yangi burchak
+   * esa unga yangi savol beradi.
+   *
+   * O'lchov — bo'lim so'rovlari SONI, ya'ni tarmoq chaqiruvlari.
+   */
+  const realFetch = globalThis.fetch;
+  const savedGemini = process.env.GEMINI_API_KEY;
+  const savedXai = process.env.XAI_API_KEY;
+  process.env.GEMINI_API_KEY = "test-key";
+  delete process.env.XAI_API_KEY;
+
+  const body = Array.from({ length: 4 }, (_, i) => `Bu ${i + 1}-paragraf. `.repeat(16)).join("\n\n");
+
+  /** Bir insho yozadi va bo'lim sarlavhalarini qaytaradi. */
+  async function sectionsFor(pages: string): Promise<string[]> {
+    const titles: string[] = [];
+    globalThis.fetch = (async (_url: string, init?: { body?: string }) => {
+      const req = String(init?.body ?? "");
+      const m = req.match(/Bo‘lim sarlavhasi \(matnga qayta yozilmasin\): ([^\\n"]+)/);
+      if (m) titles.push(m[1]);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ candidates: [{ content: { parts: [{ text: body }] } }] }),
+      } as never;
+    }) as typeof fetch;
+
+    const meta = extractMeta(TOOL_BY_ID.essay, { topic: "Ona tilim", pages } as FormValues);
+    const doc = await writeEssayWithLlm(meta, Date.now() + 120_000);
+    assert.ok(doc, `${pages} varaq: insho yozilishi kerak`);
+    return titles;
+  }
+
+  try {
+    const three = await sectionsFor("3");
+    const four = await sectionsFor("4");
+    const five = await sectionsFor("5");
+
+    // Kirish + burchaklar + xulosa.
+    assert.equal(three.length, 5, `3 varaq: 3 burchak kutilgan, chiqdi ${three.join(",")}`);
+    assert.equal(four.length, 6, `4 varaq: 4 burchak kutilgan, chiqdi ${four.join(",")}`);
+    assert.equal(five.length, 7, `5 varaq: 5 burchak kutilgan, chiqdi ${five.join(",")}`);
+
+    // Chuqurlik MONOTON o'sishi kerak — narx ham shunday o'sadi.
+    assert.ok(three.length < four.length && four.length < five.length, "burchak soni o'sishi kerak");
+
+    // Burchak sarlavhalari takrorlanmaydi (I, II, III, …).
+    const roman = five.filter((t) => /^[IVX]+$/.test(t));
+    assert.equal(new Set(roman).size, roman.length, "burchak sarlavhalari noyob bo'lishi kerak");
+  } finally {
+    globalThis.fetch = realFetch;
+    if (savedGemini === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = savedGemini;
+    if (savedXai !== undefined) process.env.XAI_API_KEY = savedXai;
+  }
 });

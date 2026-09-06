@@ -904,6 +904,31 @@ export function toolBlockedReason(tool: ToolConfig, features?: ToolFeatures | nu
   return null;
 }
 
+/**
+ * Vosita uchun standart hajm — `pages` yuborilmaganda.
+ *
+ * Bu qiymat UCH joyda kerak va ilgari uchalasida MUSTAQIL yozilgan edi:
+ * `priceFor` (narx), `extractMeta` (dvigatel hajmi) va `defaultsFor`
+ * (forma). Ular ajralib ketgan edi (AUDIT-5 P1-7):
+ *
+ *   maqola/tezis — narx «3–5 bet» (4 000 tanga), dvigatel «10–15» (13 bet)
+ *   insho        — narx «1 varaq» (2 000), forma va dvigatel «2 varaq»
+ *
+ * Ya'ni `pages` siz yuborilgan so'rov 4 000 tangaga 13 betlik ish
+ * so'rardi. Forma har doim `pages` yuborgani uchun bu faqat
+ * to'g'ridan-to'g'ri API chaqiruvida ko'rinardi — lekin narx serverda
+ * hisoblangani bilan maqtangan tizimda bu teshik bo'lib qolardi.
+ *
+ * Qiymatlar formaning o'z standartiga tenglashtirildi: foydalanuvchi
+ * hech narsa tanlamasa nima ko'rsa, API ham shuni oladi.
+ */
+export function defaultPages(toolId: ToolId): string {
+  if (toolId === "essay") return "2";
+  if (toolId === "article" || toolId === "thesis") return "3-5";
+  if (toolId === "coursework") return "20-25";
+  return "10-15";
+}
+
 export function priceFor(tool: ToolConfig, values: FormValues): number {
   if (tool.id === "image") {
     const n = Number(values.imageCount || 1);
@@ -923,13 +948,13 @@ export function priceFor(tool: ToolConfig, values: FormValues): number {
     );
   }
   if (tool.id === "essay") {
-    const pages = String(values.pages ?? "1");
+    const pages = String(values.pages ?? defaultPages(tool.id));
     // Ilgari 1 varaq ham, 5 varaq ham 2 000 tanga turardi — forma 1–5
     // varaq tanlovini bersa ham, narx hech qachon o'zgarmasdi.
     return { "1": 2000, "2": 2500, "3": 3000, "4": 3500, "5": 4000 }[pages] ?? 2000;
   }
   if (tool.id === "referat" || tool.id === "mustaqil-ish") {
-    const pages = String(values.pages ?? "10-15");
+    const pages = String(values.pages ?? defaultPages(tool.id));
     return (
       {
         "10-15": 3000,
@@ -940,7 +965,7 @@ export function priceFor(tool: ToolConfig, values: FormValues): number {
     );
   }
   if (tool.id === "coursework") {
-    const pages = String(values.pages ?? "20-25");
+    const pages = String(values.pages ?? defaultPages(tool.id));
     return (
       {
         "10-15": 12000,
@@ -954,11 +979,11 @@ export function priceFor(tool: ToolConfig, values: FormValues): number {
     );
   }
   if (tool.id === "article") {
-    const pages = String(values.pages ?? "3-5");
+    const pages = String(values.pages ?? defaultPages(tool.id));
     return { "3-5": 4000, "5-10": 5000, "10-15": 8000 }[pages] ?? 4000;
   }
   if (tool.id === "thesis") {
-    const pages = String(values.pages ?? "3-5");
+    const pages = String(values.pages ?? defaultPages(tool.id));
     return (
       {
         "3-5": 4000,

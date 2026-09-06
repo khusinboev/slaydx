@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  defaultPages,
   isToolSlug,
   missingRequired,
   priceFor,
@@ -24,7 +25,22 @@ test("har bir vosita uchun narx musbat va butun son", () => {
 
 test("klient yuborgan 'price' e'tiborga olinmaydi", () => {
   const essay = TOOL_BY_ID.essay;
-  assert.equal(priceFor(essay, { price: 1, basePrice: 1 }), essay.basePrice);
+  /*
+   * Klient nima yuborsa ham narx SERVERDA hisoblanadi. Kutilgan qiymat
+   * `basePrice` emas, STANDART TARIF narxi (P1-7): standart hajm
+   * `defaultPages` dan keladi va insho uchun u «2 varaq» — dvigatel ham
+   * aynan shuncha yozadi. Ilgari narx «1 varaq» tarifidan (`basePrice`)
+   * hisoblanar, dvigatel esa 2 varaq yozardi.
+   */
+  const fromForged = priceFor(essay, { price: 1, basePrice: 1 });
+  assert.equal(fromForged, priceFor(essay, { pages: defaultPages(essay.id) }));
+  assert.notEqual(fromForged, 1, "klient qiymati narxga ta'sir qilmasligi kerak");
+
+  // Boshqa vositalarda ham soxta `price` e'tiborsiz qoladi.
+  assert.equal(
+    priceFor(TOOL_BY_ID.coursework, { price: 1, pages: "40-45" }),
+    priceFor(TOOL_BY_ID.coursework, { pages: "40-45" }),
+  );
 });
 
 test("kattaroq hajm — qimmatroq", () => {

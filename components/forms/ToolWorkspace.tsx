@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { FormValues, ToolConfig } from "@/lib/types";
-import { missingRequired, priceFor, profileDefaults, toolBlockedReason } from "@/lib/tools";
+import { defaultPages, missingRequired, priceFor, profileDefaults, toolBlockedReason } from "@/lib/tools";
 import { draftOutline } from "@/lib/api-client";
 import { useAppStore, writerProfile } from "@/lib/store";
 import { useUi } from "@/lib/ui";
@@ -27,14 +27,8 @@ function defaultsFor(tool: ToolConfig, profile: UserProfile): FormValues {
     topic: "",
     extra: "",
     design: "iris",
-    pages:
-      tool.id === "essay"
-        ? "2"
-        : tool.id === "article" || tool.id === "thesis"
-          ? "3-5"
-          : tool.id === "coursework"
-            ? "20-25"
-            : "10-15",
+    // Standart hajm narx va dvigatel bilan bitta manbadan (P1-7).
+    pages: defaultPages(tool.id),
     grade: 8,
     duration: "45",
     kind: "standard",

@@ -1,3 +1,4 @@
+import { defaultPages } from "../tools";
 import type { FormValues, ToolConfig } from "../types";
 import { isSlideAudience, isSlideTemplateId } from "./slide-templates";
 import { isSlideThemeId } from "./slide-types";
@@ -90,9 +91,14 @@ export function parseAuthorLine(raw: string): { name: string; course: string; gr
 
 export function extractMeta(tool: ToolConfig, values: FormValues): DocMeta {
   const topic = s(values, "topic", s(values, "subject", s(values, "targetRole", tool.title)));
-  const pagesLabel = s(values, "pages", tool.id === "essay" ? "2" : tool.id === "coursework" ? "20-25" : "10-15");
-  const fallbackPages =
-    tool.id === "essay" ? 2 : tool.id === "coursework" ? 22 : tool.id === "article" || tool.id === "thesis" ? 6 : 12;
+  /*
+   * Standart hajm `lib/tools.ts` dan — narx bilan BIR XIL manbadan
+   * (P1-7). Ilgari bu yerda o'z ro'yxati turar va maqola/tezis uchun
+   * «10–15» berardi, narx esa «3–5» tarifidan hisoblanardi.
+   */
+  const fallbackLabel = defaultPages(tool.id);
+  const pagesLabel = s(values, "pages", fallbackLabel);
+  const fallbackPages = parsePages(fallbackLabel, 12);
   const quality = s(values, "quality", "standard");
   const slidePages =
     quality === "premium_long" ? 16 : quality === "long" ? 14 : quality === "premium" ? 12 : 10;

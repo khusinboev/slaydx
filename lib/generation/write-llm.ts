@@ -6,7 +6,6 @@ import {
   blocksFromText,
   isGenericFiller,
   mapPool,
-  parseManualOutline,
   referenceSearchPlan,
   sanitizeCitations,
   unverifiedReferenceNote,
@@ -14,7 +13,8 @@ import {
   section,
   splitCodeBlocks,
   targetWords,
-  wordCount, stripHeadingNumber, type ManualChapter } from "./quality";
+  wordCount, stripHeadingNumber } from "./quality";
+import { manualOutlineOf, outlineShape } from "./structure";
 import {
   writeGlossaryWithLlm,
   writeImradWithLlm,
@@ -25,6 +25,13 @@ import {
   writeTranslationWithLlm,
 } from "./write-specials";
 import type { AcademicDoc, Block, DocMeta, DocSection } from "./types";
+
+/*
+ * `outlineShape` `structure.ts` ga ko'chirildi — uni PROMPT ham o'qishi
+ * kerak bo'lgani uchun (P1-10), `prompts.ts` esa `write-llm.ts` ni
+ * import qila olmaydi (aylanma bog'liqlik).
+ */
+export { manualOutlineOf, outlineShape } from "./structure";
 
 function wantsCodeSample(meta: DocMeta) {
   const t = `${meta.topic} ${meta.subject} ${meta.extra}`.toLowerCase();
@@ -185,57 +192,6 @@ function citeGuard(sections: DocSection[], maxIndex: number) {
 export function fillerInsertIndex(sectionCount: number, toolId: string): number {
   const keepLast = toolId === "mustaqil-ish" ? 2 : 1;
   return Math.max(1, sectionCount - keepLast);
-}
-
-/**
- * Reja o'lchami — nechta bob va har bobda nechta ostmavzu.
- *
- * Ilgari bu deyarli qat'iy edi: kurs ishida doim 3 bob, har bobda ≤3
- * ostmavzu. Natijada dvigatelning tuzilmaviy imkoniyati ~9 ostmavzu
- * bilan cheklanardi va HAJM 45 betlik va'daga hech qachon yetmasdi —
- * 25–30 va 40–45 betlik kurs ishlari (18 000 va 24 000 tanga) hajm
- * darvozasidan MUNTAZAM yiqilardi. Jonli o'lchov: ikkalasi ham ~5 000
- * so'zda to'xtardi, byudjetning esa uchdan ikkisi ishlatilmay qolardi.
- *
- * Sabab hajm emas, CHAQIRUV SONI edi: modeldan bitta javobda 9 paragraf
- * so'ralganda u ~45% ini beradi. Uch marta 3 paragraf so'rash bir marta
- * 9 paragraf so'rashdan ko'p matn beradi. Shuning uchun hajm endi
- * chaqiruv soni orqali olinadi, chaqiruv kattaligi orqali emas.
- *
- * Bu bir vaqtning o'zida AKADEMIK jihatdan ham to'g'riroq: 45 betlik
- * kurs ishi uch bobda emas, to'rt-besh bobda yoziladi.
- */
-export function outlineShape(pages: number, toolId: string): { chapters: number; subs: number } {
-  const p = Math.max(4, pages || 8);
-  if (p >= 33) return { chapters: 5, subs: 4 };
-  if (p >= 23) return { chapters: 4, subs: 4 };
-  if (p >= 18 || toolId === "coursework") return { chapters: 3, subs: 3 };
-  return { chapters: 2, subs: 3 };
-}
-
-/**
- * Foydalanuvchi yozgan reja — BAYROQ emas, MATN hal qiladi.
- *
- * Ilgari shart faqat `meta.tocMethod === "manual"` edi. Formada esa
- * ikkita boshqaruv bir narsani boshqarardi: chips (`ai`/`manual`,
- * standart `ai`) va reja matni maydoni. `tocMethod` FAQAT «AI reja
- * tuzsin» tugmasi bosilganda `manual` ga o'tardi — ya'ni foydalanuvchi
- * rejasini to'g'ridan-to'g'ri yozsa, u JIM tashlanardi va 16 000–24 000
- * tangalik hujjat butunlay boshqa tuzilmada chiqardi. Maydon ostidagi
- * yozuv («Bo'sh qoldirsangiz reja avtomatik tuziladi») aynan teskarisini
- * va'da qilardi.
- *
- * Endi qoida bitta va soddaroq: reja matni bor bo'lsa — u ishlatiladi.
- * Dvigatel UI bayrog'ining to'g'ri o'rnatilganiga tayanmasligi kerak;
- * bo'sh matn baribir `[]` beradi, ya'ni reja avtomatik tuziladi.
- *
- * `extra` ga qaytish faqat ANIQ `manual` rejimida qoladi (eski
- * xatti-harakat): «qo'shimcha talablar» maydoni reja emas, uni har
- * safar reja deb o'qish noto'g'ri bo'lardi.
- */
-export function manualOutlineOf(meta: Pick<DocMeta, "tocMethod" | "tocText" | "extra">): ManualChapter[] {
-  const text = meta.tocMethod === "manual" ? meta.tocText || meta.extra : meta.tocText;
-  return String(text ?? "").trim() ? parseManualOutline(text) : [];
 }
 
 async function rawOutline(meta: DocMeta, sys: string, L: ReturnType<typeof sectionLabels>, deadline?: number) {
@@ -906,15 +862,46 @@ async function writeEssayInChunks(
   deadline?: number,
 ): Promise<AcademicDoc | null> {
   const topic = meta.topic;
-  const angles = [
+  /**
+   * Chuqurlik `n` ga BOG'LIQ — richag paragraf emas, BURCHAK soni.
+   *
+   * Ilgari `n` parametr sifatida qabul qilinar, lekin tanada UMUMAN
+   * ishlatilmasdi (AUDIT-5 P1-3): 3, 4 va 5 varaqlik insho bir xil uchta
+   * burchakni olardi. Ya'ni 5 varaq uchun 4 000 tanga to'lagan
+   * foydalanuvchi 3 varaqlik (3 000 tanga) ish bilan bir xil chuqurlik
+   * olardi; farq faqat 80% hajm darvozasidan o'tishga tayanardi.
+   *
+   * Nega burchak, paragraf emas: `perSub` izohidagi o'lchov bu yerda ham
+   * amal qiladi — modeldan bitta bo'limda ko'p paragraf so'ralganda u
+   * ulushini beradi, kam so'ralganda deyarli to'liq bajaradi. Ya'ni
+   * «har bo'limda 4 paragraf» deyish hajmni ishonchli oshirmaydi.
+   * Yangi BURCHAK esa modelga yangi savol beradi — matn ham uzayadi,
+   * ham takrorga aylanmaydi. Insho uchun bu ayniqsa muhim: uzun insho
+   * «ko'proq gap» emas, «ko'proq qirra» bo'lishi kerak.
+   */
+  const ANGLES = [
     `«${topic}» mavzusini ochuvchi ANIQ shaxsiy tajriba yoki kuzatuv bilan yozing.`,
     `«${topic}» ning jamiyat, millat yoki inson hayoti uchun ahamiyatini yoriting.`,
     `«${topic}» bo‘yicha chuqurroq mulohaza, qarama-qarshi nuqtai nazar yoki kelajakka oid fikr bildiring.`,
+    `«${topic}» bo‘yicha adabiyot, tarix yoki xalq donishmandligidan misol keltirib, uni bugungi hayotga bog‘lang.`,
+    `«${topic}» ni bugungi yoshlar hayoti bilan bog‘lang: qanday o‘zgargan, nimasi saqlanib qolgan.`,
   ];
+  const ROMAN = ["I", "II", "III", "IV", "V"];
+  // 3 varaq → 3 burchak, 4 → 4, 5 → 5. Chegaradan chiqmaydi.
+  const angles = ANGLES.slice(0, Math.max(3, Math.min(ANGLES.length, n)));
+
+  /*
+   * Paragraf ~105 so'z (promptda shu so'raladi). Kirish va xulosa
+   * hajmning ~15% ini oladi, qolgani burchaklarga bo'linadi.
+   */
+  const want = targetWords(n);
+  const perEdge = Math.max(2, Math.min(4, Math.round((want * 0.15) / 105)));
+  const perBody = Math.max(2, Math.min(5, Math.round((want * 0.7) / angles.length / 105)));
+
   const jobs = [
-    { id: "kirish", title: L.intro, brief: `«${topic}» mavzusiga jonli kirish, o‘quvchini qiziqtiradigan boshlanish.`, min: 2 },
-    ...angles.map((brief, i) => ({ id: `bolim${i + 1}`, title: `${["I", "II", "III"][i]}`, brief, min: 3 })),
-    { id: "xulosa", title: L.conclusion, brief: `«${topic}» bo‘yicha shaxsiy xulosa va umumlashma. Boblarni takrorlamang.`, min: 2 },
+    { id: "kirish", title: L.intro, brief: `«${topic}» mavzusiga jonli kirish, o‘quvchini qiziqtiradigan boshlanish.`, min: perEdge },
+    ...angles.map((brief, i) => ({ id: `bolim${i + 1}`, title: ROMAN[i], brief, min: perBody })),
+    { id: "xulosa", title: L.conclusion, brief: `«${topic}» bo‘yicha shaxsiy xulosa va umumlashma. Boblarni takrorlamang.`, min: perEdge },
   ];
   const written = await mapPool(jobs, 3, async (item) => {
     const left = remainingMs(deadline);
