@@ -13,8 +13,9 @@
  * haqiqiy mahsulotni ko'rsatmasdi.
  *
  * Foydalanish:
- *   npm run seed -- <username> [slug ...]
+ *   npm run seed -- <username> [slug ... | all]
  *   npm run seed -- adkhambek_4 essay glossary lesson-plan
+ *   npm run seed -- adkhambek_4 all   # 14 turdagi vositaning HAMMASI
  *
  * Slug berilmasa standart to'plam ishlatiladi.
  */
@@ -27,6 +28,73 @@ import type { FormValues } from "../lib/types.ts";
 
 /** Namunalar `scripts/live-engine.mts` dagi keyslar bilan bir xil. */
 const SAMPLES: Record<string, FormValues> = {
+  coursework: {
+    topic: "Boshlang'ich sinf o'quvchilarida o'qish ko'nikmalarini rivojlantirish",
+    language: "uz",
+    author: "Abdujabbor Husinboyev — 3-kurs, 301-guruh",
+    university: "Toshkent davlat pedagogika universiteti",
+    faculty: "Boshlang'ich ta'lim",
+    department: "Pedagogika",
+    ministry: "oliy",
+    tocMethod: "ai",
+    pages: "20-25",
+    images: "yes",
+  },
+  referat: {
+    topic: "Iqlim o'zgarishi va uning O'zbekistonga ta'siri",
+    language: "uz",
+    author: "Abdujabbor Husinboyev — 2-kurs, 201-guruh",
+    university: "Toshkent davlat universiteti",
+    pages: "15-20",
+  },
+  resume: {
+    fullName: "Abdujabbor Husinboyev",
+    location: "Toshkent, O'zbekiston",
+    email: "info@slaydxx.uz",
+    phone: "+998997333896",
+    targetRole: "Frontend dasturchi",
+    summary: "3 yillik tajribaga ega, React va Next.js bilan ishlaydi.",
+    tone: "professional",
+    experience: "SlaydX — Frontend dasturchi (2023–hozirgacha): foydalanuvchi interfeyslarini ishlab chiqish.",
+    education: "Toshkent axborot texnologiyalari universiteti — Dasturiy injiniring (2020–2024)",
+    skills: "React, TypeScript, Next.js, Tailwind CSS",
+  },
+  thesis: {
+    topic: "Raqamli ta'limda sun'iy intellekt vositalarining o'rni",
+    language: "uz",
+    author: "Abdujabbor Husinboyev — 4-kurs, 401-guruh",
+    university: "Toshkent davlat universiteti",
+    kind: "standard",
+    pages: "5-10",
+    annotationLangs: "same",
+  },
+  translation: {
+    mode: "text",
+    sourceText:
+      "O'zbekiston Markaziy Osiyoda joylashgan mamlakat bo'lib, boy tarixiy va madaniy merosga ega. " +
+      "Samarqand, Buxoro va Xiva shaharlari Buyuk ipak yo'lining muhim bekatlari hisoblangan. " +
+      "So'nggi yillarda mamlakatda raqamli texnologiyalar va ta'lim sohasida katta islohotlar amalga oshirilmoqda.",
+    sourceLang: "uz",
+    language: "en",
+  },
+  keys: {
+    topic: "Pedagogika fanidan vaziyatli topshiriqlar",
+    language: "uz",
+  },
+  "mustaqil-ish": {
+    topic: "Suv resurslarini muhofaza qilish",
+    language: "uz",
+    author: "Abdujabbor Husinboyev — 2-kurs, 205-guruh",
+    university: "Toshkent davlat texnika universiteti",
+    pages: "15-20",
+    tocMethod: "ai",
+  },
+  image: {
+    prompt: "Registon maydoni erta tongda, tuman, qadimiy madrasalar, ko'k gumbazlar, keng kadr",
+    imageStyle: "photo",
+    imageRatio: "1:1",
+    imageCount: 1,
+  },
   essay: {
     topic: "Ona tilim — g‘ururim va iftixorim",
     pages: "5",
@@ -84,12 +152,22 @@ const SAMPLES: Record<string, FormValues> = {
 
 const DEFAULT_SLUGS = ["essay", "glossary", "lesson-plan", "article", "slide"];
 
+/*
+ * `SAMPLES` kaliti — tool ID (masalan `"lesson-plan"`), forma slug'i
+ * bilan bir xil bo'lishi shart emas (masalan `image` tool ID, `rasm`
+ * slug). Har biriga mos slug'ni `TOOL_BY_SLUG` dan emas, to'g'ridan-to'g'ri
+ * tool ro'yxatidan qidiramiz — pastdagi silliq siklda.
+ */
+const ALL_SLUGS = Object.values(TOOL_BY_SLUG)
+  .filter((t) => SAMPLES[t.id])
+  .map((t) => t.slug);
+
 const [username, ...slugArgs] = process.argv.slice(2);
 if (!username) {
-  console.error("Foydalanish: npm run seed -- <username> [slug ...]");
+  console.error("Foydalanish: npm run seed -- <username> [slug ... | all]");
   process.exit(1);
 }
-const slugs = slugArgs.length ? slugArgs : DEFAULT_SLUGS;
+const slugs = !slugArgs.length ? DEFAULT_SLUGS : slugArgs[0] === "all" ? ALL_SLUGS : slugArgs;
 
 const user = await queryOne<{ id: string; points: string; quota: string; balance: string }>(
   "SELECT id, points, quota, balance FROM users WHERE username = $1 OR phone = $1",
