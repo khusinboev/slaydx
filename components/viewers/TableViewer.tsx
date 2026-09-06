@@ -25,8 +25,11 @@ export function TableViewer({ doc }: { doc: AcademicDoc }) {
   // ham, ko'rinish ham SHU kengliklarda chiziladi, aks holda o'lchangan
   // qator balandligi haqiqiysidan farq qilardi (matn boshqacha o'raladi).
   const cols = useMemo(
-    () => columnPercents(table?.headers ?? []) ?? evenPercents(table?.headers.length ?? 1),
-    [table?.headers],
+    () =>
+      table?.widths ??
+      columnPercents(table?.headers ?? []) ??
+      evenPercents(table?.headers.length ?? 1),
+    [table?.widths, table?.headers],
   );
   const colGroup = (
     <colgroup>

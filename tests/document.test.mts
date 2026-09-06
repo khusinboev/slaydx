@@ -1449,18 +1449,13 @@ test("A9: jadval ustun kengliklari DOCX va ko'ruvchi uchun yagona manbadan", asy
 
   // Texnologik xarita — 6 ustun, «Mavzu» eng keng.
   assert.deepEqual(columnPercents(["№", "Soat", "Mavzu", "Metod", "Natija", "Nazorat"]), [5, 8, 33, 15, 25, 14]);
-  // Dars jadvali — 4 ustun, «Faoliyat» eng keng.
-  assert.deepEqual(columnPercents(["Bosqich", "Daqiqa", "Faoliyat", "Natija"]), [22, 10, 45, 23]);
-  // Notanish shakl — teng taqsimot.
+  assert.equal(columnPercents(["№", "Soat", "Mavzu", "Metod", "Natija", "Nazorat"])!.reduce((a, b) => a + b, 0), 100);
+  // Model bergan har qanday boshqa jadval — teng taqsimot (qat'iy qolip
+  // faqat 6 ustunli xarita uchun; dars jadvali `DocTable.widths` beradi).
   assert.equal(columnPercents(["A", "B", "C"]), null);
+  assert.equal(columnPercents(["Bosqich", "Daqiqa", "Faoliyat", "Natija"]), null);
   assert.deepEqual(evenPercents(3), [33, 33, 33]);
   assert.deepEqual(evenPercents(0), [100]);
-
-  // Yig'indi 100 ga yaqin (foizli grid).
-  for (const h of [["№", "Soat", "Mavzu", "Metod", "Natija", "Nazorat"], ["Bosqich", "Daqiqa", "Faoliyat", "Natija"]]) {
-    const sum = columnPercents(h)!.reduce((a, b) => a + b, 0);
-    assert.equal(sum, 100, `${h.length} ustun yig'indisi 100 bo'lishi kerak: ${sum}`);
-  }
 
   // DOCX renderi ham shu moduldan — grid nisbati saqlanadi.
   const xml = await docxXml(

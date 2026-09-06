@@ -38,6 +38,12 @@ export type DocTable = {
   headers: string[];
   rows: string[][];
   /**
+   * Ustun kengliklari (foiz). Berilmasa `table-columns.ts` ustun soniga
+   * qarab taxmin qiladi. DOCX (`render-docx`) va sayt ko'ruvchisi
+   * (`TableViewer`, `LessonViewer`) ikkalasi ham shu maydondan foydalanadi.
+   */
+  widths?: number[];
+  /**
    * Shu `DocSection.id` dan KEYIN chizilsin.
    *
    * Ilgari barcha jadvallar hujjat oxirida, adabiyotlardan oldin

@@ -123,9 +123,12 @@ export function LessonViewer({ doc }: { doc: AcademicDoc }) {
 
 function LessonBlock({ item }: { item: Item }) {
   if (item.k === "table") {
-    // Ustun kengliklari — DOCX bilan bir xil (`table-columns.ts`, A9).
+    // Ustun kengliklari — DOCX bilan bir xil: jadval bergani ustun (B5),
+    // bo'lmasa `table-columns.ts` (A9).
     const cols =
-      columnPercents(item.table.headers) ?? evenPercents(item.table.headers.length);
+      item.table.widths ??
+      columnPercents(item.table.headers) ??
+      evenPercents(item.table.headers.length);
     return (
       <div>
         {item.table.caption ? (

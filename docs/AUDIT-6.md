@@ -251,6 +251,34 @@ tekshirildi).
 
 Sprint 3 da o'zgarmagani: A1, A5, A8, B1, B2, B3 (ko'chirildi), B4, B5, C7, C9-C12, C14, D*.
 
-### Sprint 4-5
+### Sprint 4 — Sahifalash chekkasi + slayd/rasm mayda (2026-09-06)
 
-_(kelgusi — B3, B5, A5, C7, C11 + pagination bundle)_
+274 test (272 -> +2: A5, B5), typecheck + lint toza. A5 va B5 sof
+funksiya — mutatsiya bilan tekshirildi. Lesson `npm run live` + PDF ga
+render qilinib ko'z bilan ko'rildi (3 ustunli jadval, kesilishsiz).
+
+| Band | Nima qilindi | Fayllar |
+|---|---|---|
+| **A5** | `packPages`: annotatsiya blokining FAQAT BIRINCHISI yangi varaqdan; qolganlari ketma-ket oqadi (`render-docx` bilan bir xil). Ko'p tilli maqolada varaq raqami endi fayl bilan mos. | `paginate.ts` |
+| **B5** | Dars vaqt jadvali endi **sof vaqt rejasi**: «Bosqich · Daqiqa · Kutilgan natija» (3 ustun). «Faoliyat» ustuni olib tashlandi — u to'liq 2-4 gapli tavsifning o'rtadan `…` bilan kesilgan bo'lagi edi, nasrda allaqachon turgan matnning takrori. `DocTable.widths?` maydoni qo'shildi (DOCX + ko'ruvchi bir manbadan); `columnPercents` dan 4-ustunli qolip olib tashlandi (model bergan jadvalga xato qo'llanardi). Promptga `result` uzunligi cheklovi. Jonli lesson render qilinib **ko'z bilan** ko'rildi. | `write-specials.ts`, `types.ts`, `i18n.ts`, `table-columns.ts`, `render-docx.ts`, `TableViewer.tsx`, `LessonViewer.tsx` |
+| **C9** | `SlideViewer` fullscreen effektiga cleanup — komponent taqdimot rejimida unmount bo'lsa (brauzer «orqaga») `document.exitFullscreen()`. | `SlideViewer.tsx` |
+| **C11** | `ImageViewer` lightbox: `keydown` (Esc — yopish, `←`/`→` — rasm almashtirish). `downloadImage` anchor endi `document.body` ga qo'shiladi (Firefox talab qiladi). | `ImageViewer.tsx` |
+| **C12** | `SlideViewer` yon panel eskizi `scale(0.117)` qattiq emas — `ResizeObserver` bilan o'lchanadi. | `SlideViewer.tsx` |
+| **C14** | `render-pptx` `layer.uppercase` endi `layer.lines` ga ham qo'llanadi (sayt CSS `text-transform` bilan bir xil). Latent nomuvofiqlik yopildi. | `render-pptx.ts` |
+
+Sprint 4 da o'zgarmagani: A1, A8, B1, B2, B3, B4, C7, C10, D*.
+
+### Sprint 5 — Kesilish + halollik (kelgusi, jonli smoke shart)
+
+Qolgan bandlar: **B1** (overflow:hidden yagona blokni kesadi), **B2**
+(o'lchanmagan muqova varaqlari), **B3** (rezyume 1-sahifa qirqilishi),
+**C7** (`delivered` ni natija sahifasida ko'rsatish — DB migratsiyasi
+kerak). Bular sahifalash / render o'zgarishi bo'lgani uchun
+`npm run live` + PDF/PNG ga render qilib **ko'z bilan** ko'rishni talab
+qiladi (`AUDIT-5` standarti).
+
+### Kelajak (Sprint rejasidan tashqarida)
+
+**A1** (brend-muqova — mahsulot qarori, §5), **A8** (ko'ruvchi
+tipografiyasi profilga bog'lanmagan), **B4** (slayd `fitLines` evristikasi),
+**C10** (presenter dual-screen — Presentation API), **D1-D7**.

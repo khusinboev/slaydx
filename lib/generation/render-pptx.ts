@@ -75,9 +75,12 @@ async function paintLayer(slide: PptxSlide, layer: SlideLayer, cache: ImageCache
     });
     return;
   }
-  const raw = layer.uppercase ? (layer.text || "").toUpperCase() : layer.text;
+  // `uppercase` — matnga ham, ro'yxat bandlariga ham (sayt ko'ruvchisi
+  // CSS `text-transform` bilan ikkalasini ham o'zgartiradi).
+  const up = (s: string) => (layer.uppercase ? s.toUpperCase() : s);
+  const raw = up(layer.text || "");
   const payload = layer.lines
-    ? layer.lines.map((line) => ({ text: line, options: { bullet: Boolean(layer.bullets), breakLine: true } }))
+    ? layer.lines.map((line) => ({ text: up(line), options: { bullet: Boolean(layer.bullets), breakLine: true } }))
     : raw || "";
   if (Array.isArray(payload) ? payload.length === 0 : !payload) return;
   slide.addText(payload, {

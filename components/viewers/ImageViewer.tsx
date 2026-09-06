@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Download, Maximize2, X } from "lucide-react";
 import type { AcademicDoc, GenImage } from "@/lib/generation/types";
 import { imageExt } from "@/lib/viewers/kind";
@@ -13,6 +13,18 @@ export function ImageViewer({ doc }: { doc: AcademicDoc }) {
   const [open, setOpen] = useState<number | null>(null);
   const style = imageStyleById(doc.imageStyle || "photo");
   const ratio = imageRatioById(doc.imageRatio || "1:1");
+
+  // Lightbox ochiq bo'lganda klaviatura: Esc — yopish, ←/→ — almashtirish.
+  useEffect(() => {
+    if (open == null) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(null);
+      else if (e.key === "ArrowRight") setOpen((i) => (i == null ? i : Math.min(images.length - 1, i + 1)));
+      else if (e.key === "ArrowLeft") setOpen((i) => (i == null ? i : Math.max(0, i - 1)));
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, images.length]);
 
   const cols = useMemo(() => (images.length <= 1 ? 1 : images.length === 2 ? 2 : 2), [images.length]);
 
@@ -99,5 +111,9 @@ function downloadImage(im: GenImage, i: number) {
   // Kengaytma haqiqiy turdan olinadi: PNG rasm `.jpg` nomi bilan
   // yuklanganda ba'zi dasturlar uni ochmasdi.
   a.download = `rasm-${i + 1}.${imageExt(im.mime)}`;
+  a.rel = "noopener";
+  // Firefox `a.click()` ni faqat element DOM da bo'lsa bajaradi.
+  document.body.appendChild(a);
   a.click();
+  a.remove();
 }

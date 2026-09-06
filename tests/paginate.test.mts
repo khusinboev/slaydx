@@ -134,6 +134,44 @@ test("mundarija va annotatsiya yangi varaqdan boshlanadi", () => {
   assert.deepEqual(pages[2].map((x) => x.type), ["abstract", "p"]);
 });
 
+test("A5: ko'p tilli annotatsiya ketma-ket oqadi, har biri alohida varaqda emas", () => {
+  /*
+   * `annotationLangs: "all"` da uch tilli annotatsiya bo'ladi.
+   * `render-docx.ts` ularni orasida sahifa uzilishisiz chizadi; ilgari
+   * `packPages` har birini alohida varaqqa majburlar va ko'ruvchidagi
+   * varaq raqamlari fayldan ~2 taga siljirdi.
+   */
+  const abs = (n: string): FlowItem => ({
+    type: "abstract",
+    id: nextId(),
+    label: `Annotatsiya ${n}`,
+    text: "annotatsiya matni",
+    keywords: "kalit",
+  });
+  const items: FlowItem[] = [
+    { type: "toc", id: nextId() },
+    abs("uz"),
+    abs("en"),
+    abs("ru"),
+    h1("KIRISH"),
+    p("kirish matni"),
+  ];
+  // Uch annotatsiya bemalol bitta varaqqa sig'adi (3 × 120 px).
+  const pages = packPages(items, [80, 120, 120, 120, 40, 200], LIMIT);
+
+  // Toc — 1-varaq; uchala annotatsiya — 2-varaqda birga.
+  assert.deepEqual(pages[0].map((x) => x.type), ["toc"]);
+  const absPage = pages.find((pg) => pg.some((x) => x.type === "abstract"))!;
+  assert.equal(
+    absPage.filter((x) => x.type === "abstract").length,
+    3,
+    "uchala annotatsiya bitta varaqda bo'lishi kerak",
+  );
+  // Alohida "faqat annotatsiya" varag'i bo'lmasligi kerak.
+  const soloAbs = pages.filter((pg) => pg.length === 1 && pg[0].type === "abstract");
+  assert.equal(soloAbs.length, 0, `har biri alohida varaqda emas: ${pages.map((p) => p.map((x) => x.type).join("+")).join(" | ")}`);
+});
+
 test("o'lchanmagan band ham joy egallaydi", () => {
   /*
    * `getBoundingClientRect` hali chizilmagan elementga 0 qaytarishi

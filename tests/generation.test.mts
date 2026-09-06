@@ -357,6 +357,45 @@ test("dars bosqichlari yig'indisi davomiylikka teng bo'ladi", async () => {
   }
 });
 
+test("B5: dars vaqt jadvali sof vaqt rejasi — «Faoliyat» ustuni yo'q", async () => {
+  const { lessonDoc } = await import("../lib/generation/write-specials.ts");
+  const { extractMeta } = await import("../lib/generation/meta.ts");
+  const { TOOL_BY_ID } = await import("../lib/tools.ts");
+
+  /*
+   * Ilgari jadvalda «Faoliyat» ustuni bor edi — u to'liq 2-4 gapli
+   * tavsifning 120 belgida o'rtadan kesilgan bo'lagi (`…` bilan), nasrda
+   * (yuqorida) allaqachon turgan matnning yaroqsiz takrori. Endi jadval:
+   * bosqich · daqiqa · kutilgan natija (AUDIT-6 B5).
+   */
+  const meta = extractMeta(TOOL_BY_ID["lesson-plan"], { topic: "Kasrlar", subject: "Matematika", duration: "45" } as FormValues);
+  const longActivity =
+    "Birinchi qadamda o'quvchilar bilan salomlashiladi. Keyin doskaga 1/2 + 1/3 misoli yoziladi va batafsil tahlil qilinadi. Uchinchi bosqichda mustaqil ish beriladi.";
+  const doc = lessonDoc(meta, {
+    goal: "Umumiy maxrajga keltirishni o'rgatish",
+    tools: "Darslik, doska",
+    stages: Array.from({ length: 6 }, (_, i) => ({
+      title: `Bosqich ${i + 1}`,
+      minutes: 7,
+      activity: longActivity,
+      result: "O'quvchi kasrlarni umumiy maxrajga keltira oladi",
+    })),
+    homework: "Misollar yechish",
+  });
+  assert.ok(doc, "dars hujjati yozilishi kerak");
+  const table = doc.tables![0];
+  assert.equal(table.headers.length, 3, "jadval 3 ustunli (bosqich/daqiqa/natija)");
+  assert.deepEqual(table.widths, [42, 13, 45], "ustun kengliklari jadval bilan keladi");
+  const flat = table.rows.flat().join(" ");
+  assert.ok(!flat.includes("Keyin doskaga"), `activity jadvalga tushmasligi kerak: ${flat}`);
+  assert.ok(!flat.includes("\u2026"), "hech bir katak o'rtadan kesilmagan");
+  assert.match(table.rows[0][2], /kasrlarni umumiy maxrajga keltira oladi/);
+
+  // Xaritadagi NASR esa to'liq activity ni saqlaydi.
+  const mapText = doc.sections.find((s) => s.id === "map")!.blocks.map((b) => b.text).join(" ");
+  assert.ok(mapText.includes("Keyin doskaga"), "to'liq tavsif xaritada qoladi");
+});
+
 /**
  * Keys rubrikasi balllari yig'indisi 10 ga tenglashishi (N-8).
  *

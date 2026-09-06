@@ -180,7 +180,8 @@ export type SectionLabels = {
   lessonMap: string;
   homework: string;
   timeTable: string;
-  timeCols: [string, string, string, string];
+  /** Vaqt jadvali: bosqich · daqiqa · kutilgan natija (B5 — «Faoliyat» olib tashlandi). */
+  timeCols: [string, string, string];
   terms: string;
   shortTable: string;
   termCols: [string, string];
@@ -280,7 +281,7 @@ const SECTIONS: Record<string, SectionLabels> = {
     lessonMap: "Darsning texnologik xaritasi",
     homework: "Uyga vazifa",
     timeTable: "Vaqt taqsimoti",
-    timeCols: ["Bosqich", "Daqiqa", "Faoliyat", "Natija"],
+    timeCols: ["Bosqich", "Daqiqa", "Kutilgan natija"],
     terms: "Atamalar ro‘yxati",
     shortTable: "Qisqa jadval",
     termCols: ["Atama", "Izoh"],
@@ -361,7 +362,7 @@ const SECTIONS: Record<string, SectionLabels> = {
     lessonMap: "Технологическая карта урока",
     homework: "Домашнее задание",
     timeTable: "Распределение времени",
-    timeCols: ["Этап", "Минуты", "Деятельность", "Результат"],
+    timeCols: ["Этап", "Минуты", "Ожидаемый результат"],
     terms: "Список терминов",
     shortTable: "Краткая таблица",
     termCols: ["Термин", "Определение"],
@@ -442,7 +443,7 @@ const SECTIONS: Record<string, SectionLabels> = {
     lessonMap: "Lesson technology map",
     homework: "Homework",
     timeTable: "Time allocation",
-    timeCols: ["Stage", "Minutes", "Activity", "Outcome"],
+    timeCols: ["Stage", "Minutes", "Expected outcome"],
     terms: "List of terms",
     shortTable: "Summary table",
     termCols: ["Term", "Definition"],

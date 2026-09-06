@@ -37,6 +37,7 @@ function clip(s: unknown, n: number) {
   return t.length <= n ? t : `${t.slice(0, n - 1).trimEnd()}…`;
 }
 
+
 function pickMapMethod(topic: string, i: number): string {
   const t = topic.toLowerCase();
   if (/laborator|tajriba|mikroskop|preparat|hujayra/.test(t)) return "Laboratoriya";
@@ -76,6 +77,7 @@ export async function writeLessonWithLlm(meta: DocMeta, deadline?: number): Prom
         `6 bosqich, jami ${d} daq. Daqiqalar yig‘indisi ${d} ga teng bo‘lsin.`,
         `Har bosqichda «${meta.topic}» bo‘yicha ANIQ misol, savol yoki mashq (umumiy «salomlashish»dan tashqari).`,
         `activity 2–4 gap, konkret. Masalan kasr bo‘lsa 1/2+1/3 kabi misol.`,
+        `result — bitta qisqa gap (6–14 so‘z): bosqich oxirida o‘quvchi NIMANI biladi/bajaradi.`,
       ].join("\n"),
       2400,
       { json: true, timeoutMs },
@@ -170,12 +172,20 @@ export function lessonDoc(meta: DocMeta, data: LessonData | null): AcademicDoc |
         // jadval bilan olib boradi, matn bilan emas. Langarsiz u hujjat
         // oxirida, uy vazifasidan bir necha sahifa keyin qolardi.
         anchor: "map",
+        /*
+         * «Faoliyat» ustuni ATAYIN yo'q (AUDIT-6 B5).
+         *
+         * Ilgari u to'liq 2-4 gapli tavsifning 120 belgida o'rtadan
+         * kesilgan bo'lagi edi (`…` bilan) — nasrda (yuqorida) allaqachon
+         * to'liq turgan matnning yaroqsiz takrori. Jadval endi sof vaqt
+         * rejasi: bosqich · daqiqa · kutilgan natija.
+         */
+        widths: [42, 13, 45],
         headers: [...L.timeCols],
         rows: stages.map((st) => [
-          clip(st.title || L.stage, 40),
+          clip(st.title || L.stage, 44),
           String(st.minutes || ""),
-          clip(st.activity || "", 120),
-          clip(st.result || "", 80),
+          clip(st.result || "", 110),
         ]),
       },
     ],

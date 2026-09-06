@@ -12,8 +12,9 @@
 export function columnPercents(headers: string[]): number[] | null {
   // № | Soat | Mavzu | Metod | Natija | Nazorat  (texnologik xarita)
   if (headers.length === 6) return [5, 8, 33, 15, 25, 14];
-  // Bosqich | Daqiqa | Faoliyat | Natija  (dars rejasi)
-  if (headers.length === 4) return [22, 10, 45, 23];
+  // Dars rejasi jadvali endi `DocTable.widths` ni o'zi beradi (B5), shuning
+  // uchun bu yerda faqat 6 ustunli xarita qoladi — 4 ustunli qolip boshqa
+  // (model bergan) jadvalga xato qo'llanardi.
   return null;
 }
 

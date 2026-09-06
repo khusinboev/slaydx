@@ -39,6 +39,10 @@ export function SlideViewer({ doc }: { doc: AcademicDoc }) {
   const [fitOn, setFitOn] = useState(true);
   const stageRef = useRef<HTMLDivElement>(null);
   const [fitScale, setFitScale] = useState(0.6);
+  // Yon paneldagi eskiz masshtabi — O'LCHANADI (ilgari qat'iy 0.117 edi,
+  // ya'ni panel kengligi o'zgarsa eskiz ramkadan chiqib ketardi).
+  const railRef = useRef<HTMLElement>(null);
+  const [thumbScale, setThumbScale] = useState(0.117);
 
   const go = useCallback(
     (n: number) => setI(Math.max(0, Math.min(slides.length - 1, n))),
@@ -73,6 +77,11 @@ export function SlideViewer({ doc }: { doc: AcademicDoc }) {
     } else if (!present && document.fullscreenElement) {
       document.exitFullscreen?.().catch(() => {});
     }
+    return () => {
+      // Komponent taqdimot rejimida yopilsa (brauzer «orqaga», boshqa
+      // hujjatga o'tish) fullscreen'da qolib ketmasin.
+      if (present && document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+    };
   }, [present]);
 
   // Brauzer to'liq ekrandan chiqsa (Esc, F11) — holat mos kelib qolsin.
@@ -83,6 +92,20 @@ export function SlideViewer({ doc }: { doc: AcademicDoc }) {
     document.addEventListener("fullscreenchange", sync);
     return () => document.removeEventListener("fullscreenchange", sync);
   }, []);
+
+  // Eskiz konteynerining haqiqiy kengligidan masshtab.
+  useEffect(() => {
+    const el = railRef.current;
+    if (!el || present) return;
+    const measure = () => {
+      const w = el.querySelector<HTMLElement>("[data-thumb]")?.getBoundingClientRect().width ?? 0;
+      if (w > 0) setThumbScale(w / SLIDE.w);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [present, slides.length]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -233,7 +256,7 @@ export function SlideViewer({ doc }: { doc: AcademicDoc }) {
 
       <div className={cn("flex min-h-0 flex-1", present ? "bg-black" : "bg-[#1e1e1e]")}>
         {!present ? (
-          <aside className="hidden w-[200px] shrink-0 overflow-y-auto border-r border-white/10 bg-[#171717] p-2 md:block">
+          <aside ref={railRef} className="hidden w-[200px] shrink-0 overflow-y-auto border-r border-white/10 bg-[#171717] p-2 md:block">
             {slides.map((s, idx) => (
               <button
                 key={s.id}
@@ -244,6 +267,7 @@ export function SlideViewer({ doc }: { doc: AcademicDoc }) {
                 <span className="w-5 shrink-0 pt-6 text-right text-[11px] tabular-nums text-white/50">{idx + 1}</span>
                 <span className="min-w-0 flex-1">
                   <span
+                    data-thumb
                     className="relative block overflow-hidden rounded-[2px] bg-black shadow"
                     style={{
                       aspectRatio: `${SLIDE.w} / ${SLIDE.h}`,
@@ -252,7 +276,7 @@ export function SlideViewer({ doc }: { doc: AcademicDoc }) {
                   >
                     <span
                       className="absolute top-0 left-0"
-                      style={{ width: SLIDE.w, height: SLIDE.h, transform: "scale(0.117)", transformOrigin: "top left" }}
+                      style={{ width: SLIDE.w, height: SLIDE.h, transform: `scale(${thumbScale})`, transformOrigin: "top left" }}
                     >
                       <SlideCanvas slide={s} theme={theme} visual={deck.visual} audience={deck.audience} templateId={deck.templateId} index={idx} total={slides.length} />
                     </span>

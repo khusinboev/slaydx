@@ -272,8 +272,9 @@ type Kit = ReturnType<typeof makeKit>;
 
 function drawTable(K: Kit, tb: DocTable, out: Array<Paragraph | Table>) {
   if (tb.caption) out.push(K.centerP(tb.caption, { italics: true, size: 24 }));
-  // Ustun kengliklari — `table-columns.ts` (sayt ko'ruvchisi ham shu yerdan).
-  out.push(K.tableOf(tb.headers, tb.rows, columnPercents(tb.headers) ?? undefined));
+  // Ustun kengliklari: jadval o'zi bergani ustun, bo'lmasa `table-columns.ts`
+  // (sayt ko'ruvchisi ham aynan shu tartibda).
+  out.push(K.tableOf(tb.headers, tb.rows, tb.widths ?? columnPercents(tb.headers) ?? undefined));
 }
 
 /**

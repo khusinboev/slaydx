@@ -51,6 +51,7 @@ export function packPages(items: FlowItem[], rawHeights: number[], limit: number
   const pages: FlowItem[][] = [];
   let cur: FlowItem[] = [];
   let used = 0;
+  let sawAbstract = false;
 
   const flush = () => {
     if (cur.length) pages.push(cur);
@@ -68,8 +69,20 @@ export function packPages(items: FlowItem[], rawHeights: number[], limit: number
       return;
     }
 
-    // Mundarija va annotatsiya yangi varaqdan boshlanadi.
-    if (item.type === "toc" || item.type === "abstract") flush();
+    // Mundarija yangi varaqdan.
+    if (item.type === "toc") flush();
+    /*
+     * Annotatsiya bloki yangi varaqdan boshlanadi — lekin FAQAT BIRINCHISI.
+     * `annotationLangs: "all"` da uch tilli annotatsiya bo'ladi;
+     * `render-docx.ts` ularni orasida sahifa uzilishisiz ketma-ket
+     * chizadi. Ilgari bu yerda har biri alohida varaqqa majburlanardi va
+     * ko'ruvchidagi varaq raqamlari fayldan ~2 taga siljirdi (AUDIT-6 A5).
+     * Keyingi annotatsiyalar oddiy balandlik tekshiruvi bilan oqadi.
+     */
+    if (item.type === "abstract" && !sawAbstract) {
+      flush();
+      sawAbstract = true;
+    }
 
     /*
      * Sarlavha o'zi bilan birga keyingi matnni ham talab qiladi.
