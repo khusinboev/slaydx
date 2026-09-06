@@ -221,6 +221,21 @@ mutatsiya bilan tekshirildi (A6/A7/A2 — kod buzilganda test yiqiladi).
 
 Sprint 1 da o'zgarmagani: A1 (mahsulot qarori), A5/A8/A9, B*, C1 (Sprint 2), C4/C7/C9-C14, D*.
 
-### Sprint 2-5
+### Sprint 2 — Muddat (2026-09-06)
+
+269 test (o'zgarmadi — o'zgarish sof UI holati), typecheck + lint toza, prod
+build o'tadi.
+
+| Band | Nima qilindi | Fayllar |
+|---|---|---|
+| **C1** | `ResultView`: `completed && !hasFile` -> alohida "Hujjat muddati tugagan" kartasi + "Qaytadan yaratish" (`/uz/{slug}`) havolasi; yuklab olish / PDF tugmalari yashiriladi. Nav subtitleda: `expired` -> "Muddati tugagan"; 24 soatdan kam qolganda "N soatdan keyin o'chadi". `HomeFiles`: kartochkada "Muddati tugagan" yozuvi + preview `opacity-50`. | `ResultView.tsx`, `HomeFiles.tsx` |
+| **C13** | Alohida tuzatish shart emas — `expired` holatida ko'ruvchi umuman render qilinmaydi, ya'ni `academicDocFromHtml`/`toLegacyShape` zaxira yo'liga tushilmaydi. Non-expired'da `gen.doc` har doim bor (`BuiltFile.doc` majburiy). | — |
+
+Tavsiya (§6) — `FILE_TTL_HOURS` 72->168 — bu **kod emas**, egasi hal qiladi
+(`.env`, storage byudjeti). Sprintda bajarilmadi.
+
+Sprint 2 da o'zgarmagani: A1, A4, A5, A8, A9, B*, C4, C7, C9-C12, C14, D*.
+
+### Sprint 3-5
 
 _(kelgusi)_

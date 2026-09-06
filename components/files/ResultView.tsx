@@ -103,6 +103,20 @@ export function ResultView({ id }: { id: string }) {
 
   const tool = TOOL_BY_ID[gen.type];
   const running = gen.status === "QUEUED" || gen.status === "IN_PROGRESS";
+  const completed = gen.status === "COMPLETED";
+  /*
+   * «Muddati tugagan» — hujjat COMPLETED, lekin fayli endi yo'q.
+   *
+   * `FILE_TTL_HOURS` (72 s) o'tgach `purgeExpiredFiles` faylni,
+   * `purgeExpiredGenerations` esa `doc_json`/`html` ni NULL qiladi;
+   * `generations` qatori 90 kun `COMPLETED` bo'lib qoladi. Ilgari bu
+   * holatda sahifa «Tayyor» deb turar, ko'ruvchi esa «Hujjat matni
+   * topilmadi» yoki rasmda «qayta generate qiling» (chalg'ituvchi)
+   * ko'rsatardi. Endi u aniq belgilanadi.
+   */
+  const expired = completed && !gen.hasFile;
+  const msLeft = gen.expiresAt ? Date.parse(gen.expiresAt) - Date.now() : NaN;
+  const soonHrs = Number.isFinite(msLeft) && msLeft > 0 ? Math.round(msLeft / 3_600_000) : null;
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
@@ -117,12 +131,16 @@ export function ResultView({ id }: { id: string }) {
         <div className="min-w-0 flex-1">
           <h1 className="truncate text-[15px] font-semibold">{gen.topic}</h1>
           <p className="text-muted-foreground truncate text-xs">
-            {tool?.title} · {gen.status === "COMPLETED" ? "Tayyor" : gen.step} ·{" "}
+            {tool?.title} · {completed ? (expired ? "Muddati tugagan" : "Tayyor") : gen.step} ·{" "}
             {gen.price.toLocaleString("uz-UZ")} tanga
+            {completed && !expired && soonHrs != null && soonHrs <= 24
+              ? ` · ${soonHrs} soatdan keyin o‘chadi`
+              : ""}
           </p>
         </div>
-        {gen.status === "COMPLETED" ? (
+        {completed ? (
           <div className="flex shrink-0 gap-2">
+            {!expired ? (
             <button
               type="button"
               className="bg-primary text-primary-foreground inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm font-medium disabled:opacity-60"
@@ -135,6 +153,7 @@ export function ResultView({ id }: { id: string }) {
                 {gen.format.toUpperCase()}
               </span>
             </button>
+            ) : null}
             {/*
               PDF talab bo'yicha o'giriladi va bazada saqlanmaydi.
               Server LibreOffice'siz bo'lsa bayroq `false` va tugma chiqmaydi.
@@ -145,7 +164,7 @@ export function ResultView({ id }: { id: string }) {
               esa server 400 qaytarardi («Bu fayl allaqachon tayyor
               formatda») — ishlamaydigan tugma ko'rsatilmagani yaxshi.
             */}
-            {features?.pdf && PDF_CONVERTIBLE.has(gen.format) ? (
+            {!expired && features?.pdf && PDF_CONVERTIBLE.has(gen.format) ? (
               <button
                 type="button"
                 className="bg-card inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm disabled:opacity-60"
@@ -211,13 +230,29 @@ export function ResultView({ id }: { id: string }) {
         </div>
       ) : null}
 
-      {error && gen.status === "COMPLETED" ? (
+      {error && completed ? (
         <p role="alert" className="text-destructive px-4 pt-3 text-sm">
           {error}
         </p>
       ) : null}
 
-      {gen.status === "COMPLETED" ? (
+      {expired ? (
+        <div className="mx-auto w-full max-w-2xl px-4 py-8">
+          <div className="bg-card rounded-2xl border p-6">
+            <p className="font-medium">Hujjat muddati tugagan</p>
+            <p className="text-muted-foreground mt-1 text-sm">
+              Yaratilgan hujjatlar 72 soat saqlanadi. Bu hujjatning fayli va matni
+              o‘chirilgan — kerak bo‘lsa, uni qaytadan yarating.
+            </p>
+            <Link
+              href={tool ? `/uz/${tool.slug}` : "/uz/create"}
+              className="text-primary mt-4 inline-block text-sm font-medium"
+            >
+              Qaytadan yaratish
+            </Link>
+          </div>
+        </div>
+      ) : completed ? (
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           <ArtifactViewer gen={toLegacyShape(gen)} />
         </div>

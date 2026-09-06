@@ -231,17 +231,33 @@ export function HomeFiles() {
           <div className="grid grid-cols-2 gap-2 lg:grid-cols-3 xl:grid-cols-4">
             {list.map((g) => {
               const tool = TOOL_BY_ID[g.type];
+              // Muddati o'tgan (72 s): fayl va matn o'chgan, qator qolgan.
+              const expired =
+                g.status === "COMPLETED" &&
+                g.expiresAt != null &&
+                Date.parse(g.expiresAt) < Date.now();
               return (
                 <div key={g.id} className="border-border/60 bg-card overflow-hidden rounded-xl border">
                   {tool ? <div className="h-1" style={{ background: `rgb(${tool.tc})` }} /> : null}
-                  <Link href={`/uz/files/${g.id}`} className="bg-muted block h-36 overflow-hidden sm:h-40">
+                  <Link
+                    href={`/uz/files/${g.id}`}
+                    className={cn(
+                      "bg-muted block h-36 overflow-hidden sm:h-40",
+                      expired && "opacity-50",
+                    )}
+                  >
                     <FilePreview gen={g} />
                   </Link>
                   <div className="flex items-start justify-between gap-2 p-4">
                     <Link href={`/uz/files/${g.id}`} className="min-w-0">
                       <div className="truncate text-sm font-medium">{g.topic}</div>
                       <div className="text-muted-foreground mt-1 text-xs">
-                        {tool?.title} · {g.status === "COMPLETED" ? "Tayyor" : g.step}
+                        {tool?.title} ·{" "}
+                        {g.status === "COMPLETED"
+                          ? expired
+                            ? "Muddati tugagan"
+                            : "Tayyor"
+                          : g.step}
                       </div>
                     </Link>
                     <button
