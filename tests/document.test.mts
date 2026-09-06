@@ -1171,3 +1171,34 @@ test("buildArtifact yetkazilgan miqdorni faylga biriktiradi", async () => {
     if (savedXai !== undefined) process.env.XAI_API_KEY = savedXai;
   }
 });
+
+test("akademik sarlavha rangi qat'iy qora", async () => {
+  /*
+   * Rang berilmasa Word ning «Heading 1» uslubi qoladi: Word uni ko'k,
+   * LibreOffice esa ko'k/to'q sariq chizadi. Ya'ni PDF ga o'girilgan yoki
+   * LibreOffice da ochilgan HAR BIR topshiriladigan ish rangli
+   * sarlavhalar bilan chiqardi — OTME va GOST 7.32 talablarida ilmiy
+   * ishda bu havaskorlik belgisi.
+   *
+   * Nuqson AUDIT-3 §17.4 da ochiq qoldirilgan, AUDIT-4 §7 va AUDIT-5 §5
+   * da takrorlangan edi. Sprint 15 dagi jonli tekshiruvda renderlangan
+   * PDF ko'z bilan ko'rilgach tuzatildi.
+   */
+  const { profileById } = await import("../lib/generation/docx-profile.ts");
+
+  // Har bir profil sarlavha rangini ANIQ belgilashi kerak — Word uslubiga
+  // tayanish emas.
+  for (const id of ["gost", "article", "essay", "landscape", "lesson", "reference", "resume"] as const) {
+    const p = profileById(id);
+    assert.ok(p.heading.color, `${id}: sarlavha rangi belgilanishi kerak`);
+  }
+
+  // Akademik janrlarda u AYNAN qora.
+  for (const id of ["gost", "article", "essay", "landscape", "lesson"] as const) {
+    assert.equal(profileById(id).heading.color, "000000", `${id}: qora bo'lishi kerak`);
+  }
+
+  // Chiqishda ham ko'rinadi.
+  const xml = await docxXml(anyDoc("coursework", { topic: "Mavzu", author: "A. Valiyev" }));
+  assert.match(xml, /<w:color w:val="000000"\/>/, "DOCX da qora rang yozilishi kerak");
+});

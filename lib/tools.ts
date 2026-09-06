@@ -231,7 +231,14 @@ export const TOOLS: ToolConfig[] = [
     group: "talaba",
     icon: "book-open",
     tc: "20 184 166",
-    description: "Tadqiqot ishlarini yarating",
+    /*
+     * Ilgari «Tadqiqot ishlarini yarating» deb yozilgan edi, prompt esa
+     * aynan teskarisini talab qiladi: «BU REFERAT — YANGI tadqiqot
+     * emas» (AUDIT-5 P1-11). Kartochka kurs ishini va'da qilar,
+     * dvigatel adabiyot sharhini yozardi — foydalanuvchi nima
+     * sotib olayotganini bilmasdi.
+     */
+    description: "Manbalarni umumlashtirgan adabiyot sharhi",
     submitLabel: "Referatni yaratish",
     creatingLabel: "Referat yaratilmoqda...",
     createdLabel: "referat tayyor!",

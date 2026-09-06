@@ -88,7 +88,27 @@ const GOST_PAGE: DocProfile["page"] = {
   border: false,
 };
 
-const GOST_HEADING: DocProfile["heading"] = { align: "center", upper: true, rule: false };
+/**
+ * Akademik sarlavha — MARKAZDA, BOSH HARF, QORA.
+ *
+ * Rang ilgari berilmasdi va Word ning «Heading 1» uslubi qolardi. Word
+ * uni ko'k, LibreOffice esa ko'k/to'q sariq chizadi — ya'ni PDF ga
+ * o'girilgan yoki LibreOffice da ochilgan har bir topshiriladigan ish
+ * RANGLI sarlavhalar bilan chiqardi. OTME va GOST 7.32 talablarida ilmiy
+ * ishda rangli sarlavha havaskorlik belgisi.
+ *
+ * Nuqson AUDIT-3 §17.4 da «alohida ko'rib chiqilsin» deb qoldirilgan,
+ * AUDIT-4 §7 da qayd etilgan, AUDIT-5 §5 da takrorlangan edi. Sprint 15
+ * dagi jonli tekshiruvda renderlangan PDF ko'z bilan ko'rilgach
+ * tuzatildi: `#000000` maketni umuman o'zgartirmaydi, faqat rangni
+ * qat'iylashtiradi.
+ */
+const GOST_HEADING: DocProfile["heading"] = {
+  align: "center",
+  upper: true,
+  rule: false,
+  color: "000000",
+};
 
 const PROFILES: Record<DocProfileId, DocProfile> = {
   /** OTME/GOST talab qiladigan standart ilmiy ish ko'rinishi. */

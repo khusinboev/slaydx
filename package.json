@@ -14,7 +14,8 @@
     "topup": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/topup.mts",
     "bot": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/bot.mts",
     "check": "npm run typecheck && npm run lint && npm run test",
-    "smoke": "node --env-file-if-exists=.env.local scripts/smoke.mjs"
+    "smoke": "node --env-file-if-exists=.env.local scripts/smoke.mjs",
+    "live": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/live-engine.mts"
   },
   "dependencies": {
     "docx": "^9.7.1",
