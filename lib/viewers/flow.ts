@@ -13,6 +13,16 @@ export type FlowItem =
   | { type: "quote"; id: string; text: string }
   | { type: "code"; id: string; text: string; caption?: string }
   | { type: "table"; id: string; table: DocTable }
+  /**
+   * Adabiyotlar ro'yxati ustidagi ogohlantirish.
+   *
+   * DOCX da u chiziladi («Bu ro'yxat TEKSHIRILMAGAN…»), ko'ruvchida esa
+   * umuman yo'q edi (AUDIT-5 P1-6). Ya'ni foydalanuvchi saytda ishonchli
+   * ko'rinadigan ro'yxatni ko'rar, ogohlantirishni esa faqat faylni
+   * ochgandan keyin topardi — bu aynan akademik halollik uchun
+   * qo'shilgan matn.
+   */
+  | { type: "refNote"; id: string; text: string }
   | { type: "ref"; id: string; n: number; text: string };
 
 export { titleModel, type TitleModel } from "@/lib/generation/title-model";
@@ -69,6 +79,9 @@ export function docToFlow(doc: AcademicDoc): FlowItem[] {
       text: docLabels(doc.meta.language).references,
       sectionId: "refs",
     });
+    if (doc.referencesNote) {
+      items.push({ type: "refNote", id: id("refnote"), text: doc.referencesNote });
+    }
     doc.references.forEach((r, i) => items.push({ type: "ref", id: id("ref"), n: i + 1, text: r }));
   }
 

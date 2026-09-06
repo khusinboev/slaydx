@@ -134,8 +134,14 @@ export function ResultView({ id }: { id: string }) {
             {/*
               PDF talab bo'yicha o'giriladi va bazada saqlanmaydi.
               Server LibreOffice'siz bo'lsa bayroq `false` va tugma chiqmaydi.
+
+              Ro'yxat RUXSAT ETILGANLAR, taqiqlanganlar emas (AUDIT-5 P1-9):
+              shart `format !== "png"` edi, ya'ni bir nechta rasm uchun
+              chiqadigan ZIP ham o'tib ketardi. Tugma ko'rinar, bosilganda
+              esa server 400 qaytarardi («Bu fayl allaqachon tayyor
+              formatda») — ishlamaydigan tugma ko'rsatilmagani yaxshi.
             */}
-            {features?.pdf && gen.format !== "png" ? (
+            {features?.pdf && PDF_CONVERTIBLE.has(gen.format) ? (
               <button
                 type="button"
                 className="bg-card inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm disabled:opacity-60"
@@ -209,6 +215,14 @@ export function ResultView({ id }: { id: string }) {
     </div>
   );
 }
+
+/**
+ * LibreOffice PDF ga o'gira oladigan formatlar.
+ *
+ * Server tomonidagi `CONVERTIBLE` (mime bo'yicha) bilan juftlik —
+ * bu yerda foydalanuvchi ko'radigan yorliq bo'yicha.
+ */
+const PDF_CONVERTIBLE = new Set<Generation["format"]>(["docx", "pptx"]);
 
 /** Ko'ruvchilar hali eski `Generation` shaklini kutadi. */
 function toLegacyShape(g: api.GenerationDetail): Generation {

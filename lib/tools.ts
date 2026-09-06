@@ -743,7 +743,24 @@ export function missingRequired(tool: ToolConfig, values: FormValues): string[] 
 
   for (const f of tool.fields) {
     if (!f.required || f.extra) continue;
-    if (!filled(f.name)) out.push(f.legend);
+    if (!filled(f.name)) {
+      out.push(f.legend);
+      continue;
+    }
+    /*
+     * Sonli maydonda «to'ldirilgan» yetarli emas — DIAPAZON ham
+     * tekshirilishi kerak. `weeklyHours` uchun `min: 1` e'lon qilingan,
+     * lekin hech kim uni o'qimasdi: `"0"` uzunligi 1 bo'lgani uchun
+     * «to'ldirilgan» hisoblanar va serverdan o'tib ketardi (AUDIT-5
+     * §4.10). Keyin dvigatel `Math.max(1, weeklyHours)` bilan uni jim
+     * tuzatar — ya'ni foydalanuvchi kiritgan qiymat e'tiborsiz qolardi.
+     */
+    if (f.kind === "number") {
+      const n = Number(values[f.name]);
+      const low = f.min !== undefined && n < f.min;
+      const high = f.max !== undefined && n > f.max;
+      if (!Number.isFinite(n) || low || high) out.push(f.legend);
+    }
   }
   return out;
 }

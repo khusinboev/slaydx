@@ -216,3 +216,68 @@ test("kalitsiz xizmat sotilmaydi", async () => {
   const msg = toolBlockedReason(TOOL_BY_ID.image, noImages)!;
   assert.ok(msg.length > 20 && /kalit/i.test(msg), `sabab tushunarli bo'lishi kerak: ${msg}`);
 });
+
+test("sonli maydonda diapazon ham tekshiriladi", () => {
+  const map = TOOL_BY_ID["texnologik-xarita"];
+
+  /*
+   * AUDIT-5 §4.10. `weeklyHours` uchun `min: 1` e'lon qilingan, lekin
+   * hech kim uni o'qimasdi: `missingRequired` faqat «bo'sh emasmi» deb
+   * so'rardi va `"0"` uzunligi 1 bo'lgani uchun o'tib ketardi. Keyin
+   * dvigatel `Math.max(1, weeklyHours)` bilan uni JIM tuzatardi — ya'ni
+   * foydalanuvchi kiritgan qiymat e'tiborsiz qolar, xarita esa boshqa
+   * hafta soniga qurilardi.
+   */
+  const ok = { subject: "Biologiya", weeklyHours: 4, totalHours: 136 };
+  assert.deepEqual(missingRequired(map, ok), []);
+
+  assert.deepEqual(missingRequired(map, { ...ok, weeklyHours: 0 }), ["Haftalik soatlar"]);
+  assert.deepEqual(missingRequired(map, { ...ok, totalHours: 0 }), [
+    "Jami soatlar (o'quv yili bo'yicha)",
+  ]);
+
+  // Yuqori chegara ham amal qiladi (`max: 20`).
+  assert.deepEqual(missingRequired(map, { ...ok, weeklyHours: 99 }), ["Haftalik soatlar"]);
+
+  // Son bo'lmagan qiymat ham rad etiladi.
+  assert.deepEqual(missingRequired(map, { ...ok, weeklyHours: "ko'p" }), ["Haftalik soatlar"]);
+
+  // Matn maydonlariga bu qoida tegmaydi.
+  assert.deepEqual(missingRequired(map, { ...ok, subject: "0" }), [], "«0» matn sifatida to'g'ri");
+});
+
+test("manba ogohlantirishi ko'ruvchiga ham tushadi", async () => {
+  const { docToFlow } = await import("../lib/viewers/flow.ts");
+  const { extractMeta } = await import("../lib/generation/meta.ts");
+
+  /*
+   * AUDIT-5 P1-6. DOCX da adabiyotlar ustida «Bu ro'yxat TEKSHIRILMAGAN»
+   * ogohlantirishi chiziladi, ko'ruvchida esa umuman yo'q edi.
+   * Foydalanuvchi saytda ishonchli ko'rinadigan ro'yxatni ko'rar,
+   * ogohlantirishni faqat faylni ochgandan keyin topardi — bu aynan
+   * akademik halollik uchun qo'shilgan matn.
+   */
+  const meta = extractMeta(TOOL_BY_ID.referat, { topic: "Mavzu" });
+  const doc = {
+    meta,
+    titlePage: true,
+    toc: true,
+    sections: [{ id: "kirish", title: "Kirish", blocks: [{ kind: "p" as const, text: "Matn" }] }],
+    references: ["Muallif. Nom. – Toshkent: Nashriyot, 2020."],
+    referencesNote: "Bu ro'yxat tasdiqlanmagan.",
+  };
+
+  const flow = docToFlow(doc as never);
+  const note = flow.find((i) => i.type === "refNote");
+  assert.ok(note, "ogohlantirish oqimda bo'lishi kerak");
+  assert.equal((note as { text: string }).text, "Bu ro'yxat tasdiqlanmagan.");
+
+  // Ogohlantirish ro'yxatdan OLDIN turishi kerak.
+  const iNote = flow.findIndex((i) => i.type === "refNote");
+  const iRef = flow.findIndex((i) => i.type === "ref");
+  assert.ok(iNote >= 0 && iRef > iNote, "ogohlantirish manbalardan oldin");
+
+  // Ogohlantirish bo'lmasa ortiqcha element qo'shilmaydi.
+  const plain = docToFlow({ ...doc, referencesNote: undefined } as never);
+  assert.equal(plain.filter((i) => i.type === "refNote").length, 0);
+});

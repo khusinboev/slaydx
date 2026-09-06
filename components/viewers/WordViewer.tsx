@@ -393,6 +393,19 @@ function FlowBlock({
           </table>
         </div>
       );
+    case "refNote":
+      /*
+       * Manba ogohlantirishi DOCX da bor edi, ko'ruvchida yo'q (P1-6).
+       * Foydalanuvchi saytda ishonchli ko'rinadigan ro'yxatni ko'rar,
+       * «TEKSHIRILMAGAN» yozuvini esa faqat faylni ochgandan keyin
+       * topardi — bu aynan akademik halollik uchun qo'shilgan matn,
+       * shuning uchun u KO'RINISHDA ham turishi kerak.
+       */
+      return (
+        <p className="word-p text-[12pt] italic" style={{ textIndent: 0 }}>
+          {item.text}
+        </p>
+      );
     case "ref":
       return (
         <p className="word-p">
