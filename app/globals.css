@@ -210,11 +210,13 @@ button {
 }
 
 .word-h2 {
+  /* DOCX `subHeading`: before 240 (12pt), after 120 (6pt), chapda,
+     abzats chekinishi bilan (`P.type.firstLine` = 1.25 sm). */
   margin: 12pt 0 6pt;
   font-size: 14pt;
   font-weight: 700;
   text-align: left;
-  text-indent: 0;
+  text-indent: 1.25cm;
 }
 
 .word-h3 {
@@ -228,7 +230,9 @@ button {
   display: flex;
   gap: 0.45em;
   margin: 0 0 4pt 1.1cm;
-  text-align: justify;
+  /* DOCX bullet paragrafi tekislash BERMAYDI (`bodyP` dan farqli),
+     ya'ni Word uni chapga chizadi. */
+  text-align: left;
 }
 
 .word-quote {
@@ -244,7 +248,8 @@ button {
   bottom: 12mm;
   text-align: center;
   font-family: var(--font-doc);
-  font-size: 12pt;
+  /* DOCX `pageNumberRun`: size 22 yarim-punkt = 11pt. */
+  font-size: 11pt;
   line-height: 1;
   color: #111;
 }
@@ -253,7 +258,8 @@ button {
   width: 100%;
   border-collapse: collapse;
   margin: 8pt 0 12pt;
-  font-size: 12pt;
+  /* `DocProfile.tableSize` — gost/article/essay da 22 yarim-punkt = 11pt. */
+  font-size: 11pt;
 }
 
 .word-table th,

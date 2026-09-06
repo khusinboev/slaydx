@@ -122,6 +122,30 @@ function makeKit(P: DocProfile) {
   const sectionHeading = (text: string): Paragraph =>
     heading(P.heading.upper ? text.toUpperCase() : text, HeadingLevel.HEADING_1);
 
+  /**
+   * OSTMAVZU sarlavhasi («1.1. Tushuncha va tasnif») — chapda, abzats
+   * chekinishi bilan.
+   *
+   * Ilgari u `heading()` orqali chizilardi, ya'ni BOB sarlavhasi bilan
+   * bir xil — gost profilida MARKAZDA. Bu ikki jihatdan noto'g'ri edi:
+   *
+   *   • GOST 7.32 va OTME uslubiy ko'rsatmalarida struktura elementlari
+   *     (bob, mundarija, adabiyotlar) markazda, ostmavzu esa «абзацного
+   *     отступа» — abzats chekinishidan yoziladi;
+   *   • sayt ko'ruvchisi uni allaqachon CHAPDA chizardi (`.word-h2`),
+   *     ya'ni foydalanuvchi ko'rgan hujjat yuklab olganidan farq qilardi.
+   *
+   * Ya'ni bu yerda ko'ruvchi haq, fayl xato edi.
+   */
+  const subHeading = (text: string): Paragraph =>
+    new Paragraph({
+      heading: HeadingLevel.HEADING_2,
+      alignment: AlignmentType.LEFT,
+      spacing: { before: 240, after: 120, line },
+      ...(P.type.firstLine ? { indent: { firstLine: P.type.firstLine } } : {}),
+      children: [run(text, { bold: true, ...(P.heading.color ? { color: P.heading.color } : {}) })],
+    });
+
   const codeBox = (text: string, caption?: string): Array<Paragraph | Table> => {
     const out: Array<Paragraph | Table> = [];
     if (caption) out.push(centerP(caption, { italics: true, size: 22 }));
@@ -166,7 +190,7 @@ function makeKit(P: DocProfile) {
       case "h1":
         return [heading(b.text, HeadingLevel.HEADING_1)];
       case "h2":
-        return [heading(b.text, HeadingLevel.HEADING_2)];
+        return [subHeading(b.text)];
       case "h3":
         return [
           new Paragraph({

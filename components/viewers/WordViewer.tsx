@@ -232,7 +232,9 @@ function FlowBlock({
           {toc.map((row, i) => (
             <div
               key={`${i}-${row.text}`}
-              className="mb-1 text-[14pt] break-words hyphens-auto"
+              // DOCX `tocLine`: `spacing: { line, after: 0 }` — qatorlar
+              // orasida qo'shimcha bo'shliq yo'q.
+              className="text-[14pt] break-words hyphens-auto"
               style={{
                 textIndent: 0,
                 fontWeight: row.level === 1 ? 700 : 400,
@@ -250,8 +252,9 @@ function FlowBlock({
         <div>
           <div className="word-h1">{item.label}</div>
           <p className="word-p">{item.text}</p>
+          {/* DOCX da bu qator oddiy `bodyP` — kursivsiz. */}
           <p className="word-p">
-            <em>{labels.keywords}:</em> {item.keywords}
+            {labels.keywords}: {item.keywords}
           </p>
         </div>
       );
@@ -276,9 +279,11 @@ function FlowBlock({
       return (
         <div className="mb-3" style={{ textIndent: 0 }}>
           {item.caption ? (
-            <div className="mb-1 text-center text-[12pt] italic">{item.caption}</div>
+            // DOCX: `centerP(caption, { italics: true, size: 22 })` = 11 pt.
+            <div className="mb-1 text-center text-[11pt] italic">{item.caption}</div>
           ) : null}
-          <pre className="overflow-x-auto rounded-sm border border-neutral-300 bg-[#f2f2f2] px-3 py-2 font-mono text-[10.5pt] leading-snug whitespace-pre-wrap">
+          {/* DOCX: Consolas, size 20 yarim-punkt = 10 pt. */}
+          <pre className="overflow-x-auto rounded-sm border border-neutral-300 bg-[#f2f2f2] px-3 py-2 font-mono text-[10pt] leading-snug whitespace-pre-wrap">
             {item.text}
           </pre>
         </div>
@@ -319,11 +324,9 @@ function FlowBlock({
        * topardi — bu aynan akademik halollik uchun qo'shilgan matn,
        * shuning uchun u KO'RINISHDA ham turishi kerak.
        */
-      return (
-        <p className="word-p text-[12pt] italic" style={{ textIndent: 0 }}>
-          {item.text}
-        </p>
-      );
+      // DOCX da u oddiy `bodyP` — 14 pt, justify, 1.25 sm chekinish,
+      // kursivsiz. Ilgari bu yerda 12 pt kursiv edi va faylga mos kelmasdi.
+      return <p className="word-p">{item.text}</p>;
     case "ref":
       return (
         <p className="word-p">

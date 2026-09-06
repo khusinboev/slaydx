@@ -1262,3 +1262,121 @@ test("o'qituvchi hujjatlarida muassasa so'raladi va «Tuzuvchi» yoziladi", asyn
   const cw = await docxText(anyDoc("coursework", { topic: "Mavzu", author: "Aliyev Ali" }));
   assert.match(cw, /Bajardi: Aliyev Ali/, "kurs ishida «Bajardi» qoladi");
 });
+
+test("ostmavzu sarlavhasi chapda, abzats chekinishi bilan", async () => {
+  /*
+   * «Talaba ishlari» ko'ruvchisi (`WordViewer`) va DOCX solishtirilganda
+   * eng ko'zga tashlanadigan farq shu edi: `render-docx` `h2` ni
+   * `heading()` orqali chizar, gost profilida esa u MARKAZDA turardi —
+   * ya'ni har bir ostmavzu («1.1. Tushuncha va tasnif») faylda markazda,
+   * saytda chapda ko'rinardi.
+   *
+   * Bu yerda ko'ruvchi HAQ edi: GOST 7.32 va OTME uslubiy
+   * ko'rsatmalarida struktura elementlari (bob, mundarija, adabiyotlar)
+   * markazda, ostmavzu esa abzats chekinishidan yoziladi.
+   */
+  const doc = anyDoc("coursework", { topic: "Mavzu", author: "A. Valiyev" }, {
+    sections: [
+      {
+        id: "bob1",
+        title: "I BOB. NAZARIY ASOSLAR",
+        blocks: [
+          { kind: "h2", text: "1.1. Tushuncha va tasnif" },
+          { kind: "p", text: "Tana matni." },
+        ],
+      },
+    ],
+  });
+  const xml = await docxXml(doc);
+
+  // Ostmavzu paragrafi: HEADING_2 + chapga tekislash + chekinish.
+  const h2 = xml.match(/<w:p\b[^>]*>(?:(?!<\/w:p>).)*Heading2(?:(?!<\/w:p>).)*<\/w:p>/s);
+  assert.ok(h2, "HEADING_2 paragrafi topilishi kerak");
+  assert.match(h2[0], /w:jc w:val="left"/, "ostmavzu chapga tekislanishi kerak");
+  assert.match(h2[0], /w:firstLine="709"/, "abzats chekinishi (1.25 sm = 709 twip) bo'lishi kerak");
+
+  // Bob sarlavhasi esa MARKAZDA qoladi.
+  const h1 = xml.match(/<w:p\b[^>]*>(?:(?!<\/w:p>).)*Heading1(?:(?!<\/w:p>).)*<\/w:p>/s);
+  assert.ok(h1, "HEADING_1 paragrafi topilishi kerak");
+  assert.match(h1[0], /w:jc w:val="center"/, "bob sarlavhasi markazda qolishi kerak");
+});
+
+test("matnsiz bo'lim sarlavhasi na faylda, na ko'ruvchida chiziladi", async () => {
+  const { docToFlow, tocRows } = await import("../lib/viewers/flow.ts");
+
+  /*
+   * `render-docx` matnsiz bo'limni tashlab ketadi (`if (s.blocks.length)`)
+   * va `tocRows` ham. `docToFlow` esa har bo'limga sarlavha qo'yardi —
+   * saytda «KIRISH» sarlavhasi ostida hech narsa yo'q sahifa ko'rinar,
+   * faylda esa u umuman bo'lmasdi.
+   */
+  const doc = anyDoc("referat", { topic: "Mavzu", author: "A. Valiyev" }, {
+    sections: [
+      { id: "kirish", title: "Kirish", blocks: [{ kind: "p", text: "Bor matn." }] },
+      { id: "bosh", title: "BO'SH BO'LIM", blocks: [] },
+      { id: "xulosa", title: "Xulosa", blocks: [{ kind: "p", text: "Yakun." }] },
+    ],
+  });
+
+  const flow = docToFlow(doc);
+  const headings = flow.filter((i) => i.type === "h1").map((i) => (i as { text: string }).text);
+  assert.ok(!headings.includes("BO'SH BO'LIM"), `bo'sh bo'lim chizilmasligi kerak: ${headings}`);
+  assert.ok(headings.includes("Kirish") && headings.includes("Xulosa"));
+
+  // Mundarija ham, fayl ham uni ko'rsatmaydi — uchalasi bir xil qaror.
+  assert.ok(!tocRows(doc).some((r) => r.text === "BO'SH BO'LIM"));
+  const text = await docxText(doc);
+  assert.ok(!/BO'SH BO'LIM/.test(text), "faylda ham bo'lmasligi kerak");
+});
+
+test("ko'ruvchi CSS o'lchamlari hujjat profilidan chetlashmaydi", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const { profileById } = await import("../lib/generation/docx-profile.ts");
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+
+  /*
+   * Ko'ruvchi statik CSS bilan chiziladi, DOCX esa `DocProfile` dan.
+   * Ular ajralib ketsa foydalanuvchi saytda boshqa o'lchamdagi hujjatni
+   * ko'radi. Bu test ikkalasini BOG'LAYDI: profil qiymati o'zgarsa,
+   * CSS ham yangilanishi kerak.
+   *
+   * `docx` yarim-punktda o'lchaydi (22 = 11 pt), CSS esa punktda.
+   */
+  const gost = profileById("gost");
+  const pt = (halfPt: number) => halfPt / 2;
+
+  const rule = (selector: string) => {
+    const m = css.match(new RegExp(`\\${selector}\\s*\\{[^}]*\\}`, "s"));
+    assert.ok(m, `${selector} qoidasi topilishi kerak`);
+    return m[0];
+  };
+
+  // Tana matni: 28 yarim-punkt = 14 pt, 1.5 interval, justify, 1.25 sm.
+  assert.equal(pt(gost.type.size), 14);
+  assert.match(rule(".word-inner"), /font-size:\s*14pt/);
+  assert.match(rule(".word-inner"), /line-height:\s*1\.5/);
+  assert.match(rule(".word-p"), /text-align:\s*justify/);
+  assert.match(rule(".word-p"), /text-indent:\s*1\.25cm/);
+
+  // Jadval katagi: profildagi `tableSize`.
+  assert.match(
+    rule(".word-table"),
+    new RegExp(`font-size:\\s*${pt(gost.tableSize)}pt`),
+    `jadval katagi ${pt(gost.tableSize)}pt bo'lishi kerak (profil: ${gost.tableSize} yarim-punkt)`,
+  );
+
+  // Hoshiyalar: 2 sm / 1.5 sm / 2 sm / 3 sm (CM = 567 twip → mm).
+  const mm = (twip: number) => Math.round((twip / 567) * 10);
+  const m = gost.page.margin;
+  assert.match(
+    rule(".word-inner"),
+    new RegExp(`padding:\\s*${mm(m.top)}mm\\s+${mm(m.right)}mm\\s+${mm(m.bottom)}mm\\s+${mm(m.left)}mm`),
+    `hoshiyalar profil bilan bir xil bo'lishi kerak: ${mm(m.top)}/${mm(m.right)}/${mm(m.bottom)}/${mm(m.left)}mm`,
+  );
+
+  // Ostmavzu chapda va chekinishli — DOCX `subHeading` bilan bir xil.
+  assert.match(rule(".word-h2"), /text-align:\s*left/);
+  assert.match(rule(".word-h2"), /text-indent:\s*1\.25cm/);
+  // Bandlar tekislanmaydi (DOCX bullet paragrafi ham tekislamaydi).
+  assert.match(rule(".word-li"), /text-align:\s*left/);
+});

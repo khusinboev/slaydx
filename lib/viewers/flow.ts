@@ -48,6 +48,14 @@ export function docToFlow(doc: AcademicDoc): FlowItem[] {
   }
 
   for (const s of doc.sections) {
+    /*
+     * Matnsiz bo'lim sarlavhasi CHIZILMAYDI — `render-docx` da ham
+     * shunday (`if (s.blocks.length)`), `tocRows` ham uni tashlab
+     * ketadi. Ilgari faqat ko'ruvchi uni chizardi: saytda «KIRISH»
+     * sarlavhasi ostida hech narsa yo'q sahifa ko'rinar, faylda esa u
+     * umuman bo'lmasdi.
+     */
+    if (!s.blocks.length) continue;
     items.push({ type: "h1", id: id("h1"), text: s.title, sectionId: s.id });
     for (const b of s.blocks) items.push(blockItem(b, id));
   }
