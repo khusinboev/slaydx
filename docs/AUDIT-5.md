@@ -514,12 +514,7 @@ qo'shildi va qayta render bilan tekshirildi.
 - **P1-4 `ownTask` yumshoq** — AUDIT-3 §17.4 dagi qaror o'z kuchida:
   aniqlash evristik, jonli statistika yig'ilmaguncha darvoza
   foydalanuvchidan pul emas, ishonch olardi.
-- **P1-5 o'qituvchi vositalarida sayt muqovasi ≠ GOST titul** —
-  glossariy, keys, xarita va dars rejasida sayt o'z muqovasini, fayl esa
-  GOST titulini chizadi. Bu MAHSULOT qarori, xato emas: texnologik xarita
-  va dars ishlanmasi maktab ma'muriyatiga topshiriladi va titul kerak
-  bo'lishi mumkin, glossariy va keysda esa yo'q. Yechim (ko'ruvchiga titul
-  qo'shish yoki `titlePage: false`) egasining qarorini talab qiladi.
+- ~~P1-5~~ — **yopildi** (`208f4c8`), pastdagi §11.6 ga qarang.
 - **P1-12 premium slayd rasmsiz** — sababi (byudjet) Sprint 14 N-2 da
   tuzatildi. Rasm SONI bo'yicha qaytarish kiritilmadi: u yorliqda va'da
   qilinmagan miqdor.
@@ -527,3 +522,33 @@ qo'shildi va qayta render bilan tekshirildi.
   1 sahifaga qirqilishi, keys qayta urinishi birinchi partiyani
   o'chirishi, kurs ishida fayl rejimi yo'qligi, eval qamrovidagi
   bo'shliqlar.
+
+## 11.6. P1-5 — titul: bitta emas, uch qismli nuqson
+
+Dastlab bu «mahsulot qarori» deb qoldirilgan edi. Renderlangan titul
+ko'z bilan ko'rilgach ma'lum bo'ldiki, qaror talab qiladigan qismi
+YO'Q — uch qismning uchalasi ham aniq nuqson:
+
+**1. Forma muassasa nomini so'ramasdi.** To'rttala o'qituvchi vositasi
+ham DOCX titulini chizardi, lekin `fields` da `university` yo'q edi.
+Qiymat profildan JIM kelardi, profil maydonining yorlig'i esa «Oliy
+ta'lim muassasasi» — maktab o'qituvchisi u yerga o'z maktabini yozmaydi.
+Ya'ni amalda titulda bu qator **bo'sh qolardi**, va foydalanuvchi uni
+to'ldirishning hech qanday yo'li yo'q edi.
+
+**2. Titulda «Bajardi» turardi.** Bu talaba tili: talaba topshiriqni
+bajaradi. O'qituvchi esa dars ishlanmasini yoki texnologik xaritani
+TUZADI. `docLabels` ga `compiledBy` qo'shildi va `titleModel` janrga
+qarab tanlaydi — yorliq MODELDA hisoblanadi, chizuvchida emas.
+
+**3. Ko'ruvchi titulni umuman chizmasdi.** `TitlePage` `WordViewer` dan
+umumiy komponentga chiqarildi; `TitleSheet` endi to'rttala o'qituvchi
+ko'ruvchisida birinchi varaq.
+
+Natija ko'z bilan tekshirildi (PNG): vazirlik sarlavhasi → maktab nomi →
+DARS REJASI → «mavzu» → «Tuzuvchi: …» + imzo chizig'i → o'quv yili →
+shahar–yil. Sayt va fayl bir xil.
+
+**Saboq:** «bu mahsulot qarori» degan xulosa erta edi. Chiqishni
+renderlab ko'rmaguncha, nuqsonning nechta qismdan iboratligini bilib
+bo'lmaydi.
