@@ -7,6 +7,7 @@ import type { AcademicDoc } from "@/lib/generation/types";
 import { docToFlow, titleModel, tocRows, type FlowItem, type TocRow } from "@/lib/viewers/flow";
 import type { ViewerKind } from "@/lib/viewers/kind";
 import { A4, contentHeightPx } from "@/lib/viewers/metrics";
+import { packPages } from "@/lib/viewers/paginate";
 import { ZoomFrame, Workspace } from "./sheet";
 import { TitlePage } from "./TitlePage";
 import { ViewerToolbar } from "./toolbar";
@@ -61,38 +62,7 @@ export function WordViewer({
     if (!root) return;
     const kids = Array.from(root.children) as HTMLElement[];
     const hs = kids.map((el) => el.getBoundingClientRect().height);
-    const limit = contentHeightPx({ footer: true });
-    const packed: FlowItem[][] = [];
-    let cur: FlowItem[] = [];
-    let used = 0;
-
-    items.forEach((item, i) => {
-      const h = Math.max(8, hs[i] ?? 20);
-      if (item.type === "title") {
-        if (cur.length) packed.push(cur);
-        packed.push([item]);
-        cur = [];
-        used = 0;
-        return;
-      }
-      if ((item.type === "toc" || item.type === "abstract") && cur.length) {
-        packed.push(cur);
-        cur = [];
-        used = 0;
-      }
-      const keep = item.type === "h1" || item.type === "h2" || item.type === "h3";
-      const need = keep ? h + 36 : h;
-      if (cur.length && used + need > limit) {
-        packed.push(cur);
-        cur = [item];
-        used = h;
-      } else {
-        cur.push(item);
-        used += h;
-      }
-    });
-    if (cur.length) packed.push(cur);
-    setPages(packed.length ? packed : [items]);
+    setPages(packPages(items, hs, contentHeightPx({ footer: true })));
   }, [items]);
 
   useEffect(() => {
