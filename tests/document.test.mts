@@ -1204,7 +1204,7 @@ test("akademik sarlavha rangi qat'iy qora", async () => {
 });
 
 test("o'qituvchi hujjatlarida muassasa so'raladi va «Tuzuvchi» yoziladi", async () => {
-  const { TOOLS, TOOL_BY_ID } = await import("../lib/tools.ts");
+  const { TOOLS } = await import("../lib/tools.ts");
   const { titleModel } = await import("../lib/generation/title-model.ts");
 
   /*
