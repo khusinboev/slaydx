@@ -17,6 +17,7 @@
     "smoke": "node --env-file-if-exists=.env.local scripts/smoke.mjs",
     "live": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/live-engine.mts",
     "seed": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/seed-demo.mts",
+    "seed-images": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/seed-images.mts",
     "image-lab": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/image-lab.mts"
   },
   "dependencies": {
