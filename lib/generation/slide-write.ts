@@ -64,12 +64,24 @@ function normalizeSlide(raw: unknown, i: number, footer: string, rules: BulletRu
   const layout = asLayout(o.layout, "bullets");
   const title = clip(String(o.title ?? ""), 80);
   if (!title && layout !== "closing") return null;
+  /*
+   * `subtitle` chegarasi LAYOUTGA bog'liq — maketdan o'lchangan:
+   *
+   *   section  quti 7.3 × 1.45", 16 pt → ~325 belgi
+   *   closing  quti 8.95 × 0.85", 16 pt → ~160 belgi
+   *   title    muqova, qisqa qolishi kerak
+   *
+   * Ilgari hammasiga bitta 140 turardi va u aynan BO'SH slaydlarni
+   * to'ldirish imkoniyatini kesib tashlardi: section slaydda 325 belgi
+   * joy bo'lsa ham, 140 dan ortig'i tashlanardi.
+   */
+  const subtitleMax = layout === "section" ? 300 : layout === "closing" ? 160 : 140;
   const base: SlideModel = {
     id: `s${i}`,
     layout,
     title: title || "Slayd",
     kicker: o.kicker ? clip(String(o.kicker), 40) : undefined,
-    subtitle: o.subtitle ? clip(String(o.subtitle), 140) : undefined,
+    subtitle: o.subtitle ? clip(String(o.subtitle), subtitleMax) : undefined,
     footer,
     notes: o.notes ? clip(String(o.notes), 700) : undefined,
     imageHint: o.imageHint ? clip(String(o.imageHint), 180) : undefined,
@@ -78,9 +90,18 @@ function normalizeSlide(raw: unknown, i: number, footer: string, rules: BulletRu
     return {
       ...base,
       leftTitle: clip(String(o.leftTitle ?? (layout === "compare" ? "Birinchi" : "")), 40),
-      left: arr(o.left, 5, 110),
+      /*
+       * Ustunda 4 band × 120 belgi → 16 pt (o'lchangan). 130 belgida
+       * 14 pt ga tushadi, 5 band ham shunday — shuning uchun ikkala
+       * chegara ham shu yerda: 4 ta band, 120 belgi.
+       *
+       * Ilgari 5 × 110 edi. Chegara emas, so'rov muammo edi: jonli
+       * o'lchovda twoCol slaydda 8 band jami 172 belgi (21 belgi/band)
+       * chiqdi — bandlar to'liq gap emas, yorliq bo'lib qolgan edi.
+       */
+      left: arr(o.left, 4, 120),
       rightTitle: clip(String(o.rightTitle ?? (layout === "compare" ? "Ikkinchi" : "")), 40),
-      right: arr(o.right, 5, 110),
+      right: arr(o.right, 4, 120),
     };
   }
   if (layout === "quote") {
@@ -137,7 +158,16 @@ function normalizeSlide(raw: unknown, i: number, footer: string, rules: BulletRu
             const x = s as Record<string, unknown>;
             const t = clip(String(x.title ?? ""), 40);
             if (!t) return null;
-            return { n: String(x.n ?? n + 1), title: t, text: clip(String(x.text ?? ""), 90) };
+            /*
+             * 90 chegaraga TEGIB turardi (o'lchovda 4 bosqich × ~80
+             * belgi) — model uzunroq yozsa ham kesilardi.
+             *
+             * `planProcess` bu matnni `fitSize(..., 14, 11)` bilan
+             * chizadi, ya'ni kartalar tor va shrift 14 pt dan boshlanadi.
+             * 4 kartali qatorda quti ~276 belgi ko'taradi, shuning uchun
+             * 120 xavfsiz: to'liq gap sig'adi, shrift 14 pt da qoladi.
+             */
+            return { n: String(x.n ?? n + 1), title: t, text: clip(String(x.text ?? ""), 120) };
           })
           .filter((x): x is { n: string; title: string; text: string } => Boolean(x))
           .slice(0, 5)
@@ -290,7 +320,22 @@ function slideSystem(meta: DocMeta, tpl: SlideTemplate) {
     `Faqat JSON qaytaring. Matn qisqa, aniq, slaydga sig‘adigan.`,
     `QAT’IY TAQIQLANADI: umumiy pedagogika shablonlari (kompetensiya, auditoriya, UNESCO, differensiatsiya, «tashxis-baholash» sikli), mavzuga tegishli bo‘lmagan soha (masalan, dvigatel yoki «milliy ta’lim»).`,
     `YOZING: shu mavzuning o‘zi — ta’rif, tuzilish/jarayon, turlari, misol, ahamiyat, cheklov.`,
-    `Har slaydda ENG KO‘PI ${rules.maxBullets} ta bullet (agenda'da 5). Har bullet 1 gap, ${Math.round(rules.bulletChars / 8)} so‘zdan oshmasin.`,
+    /*
+     * ORALIQ beriladi, faqat yuqori chegara emas.
+     *
+     * Ilgari bu qator «ENG KO'PI N ta bullet … X so'zdan oshmasin» deb
+     * yozilgan edi — ya'ni modelga faqat SHIFT aytilardi. Model bunday
+     * ko'rsatmada tabiiy ravishda eng qisqa variantni tanlaydi: jonli
+     * o'lchovda 10 slaydli deka o'rtacha 174 belgi/slayd bergan, ruxsat
+     * etilgani esa 480 edi (36%). Slayd bo'sh ko'rinardi.
+     *
+     * Oraliq va POL ko'rsatilganda model oraliqni to'ldiradi. Bu
+     * `perSub` (write-llm.ts) dagi saboqning slayddagi ko'rinishi: nima
+     * SO'RALSA, shu keladi.
+     */
+    `Har slaydda ${rules.minBullets}–${rules.maxBullets} ta bullet (agenda'da 4–5).`,
+    `Har bullet — TO‘LIQ gap, ${Math.round((rules.bulletChars * 0.55) / 8)}–${Math.round(rules.bulletChars / 8)} so‘z. Bir-ikki so‘zli sarlavhasimon parcha YOZMANG: fikr tugallangan bo‘lsin.`,
+    `Bandlar bir-birini takrorlamasin — har biri yangi qirra: ta’rif, sabab, misol, oqibat, cheklov.`,
     audienceLine[meta.slideAudience && meta.slideAudience !== "auto" ? meta.slideAudience : ""] ??
       `${rules.note}`,
     /**
@@ -308,7 +353,24 @@ function slideSystem(meta: DocMeta, tpl: SlideTemplate) {
           `— kamida bitta slaydda qarama-qarshi qo‘yish (compare yoki twoCol) chuqur tahlil bilan.`,
         ].join("\n")
       : "",
-    `Sarlavha to‘liq fikr, 6–10 so‘z. Uzun izohni bulletga emas, notes ga yozing.`,
+    `Sarlavha to‘liq fikr, 6–10 so‘z.`,
+    /*
+     * BO'SH SLAYDLARNI to'ldirish.
+     *
+     * O'lchov: 10 slaydli dekaning 4 tasida (title, 2 × section,
+     * closing) tana matni UMUMAN yo'q edi — deka uzunligining 40% i.
+     * `planSection` va `planOverlay` bu slaydlarda `subtitle` ni
+     * chizadi, lekin promptda u so'ralmagan edi, shuning uchun model
+     * «Savollar va muhokama» kabi ikki so'z qaytarardi.
+     *
+     * Sig'im maketdan o'lchandi: section subtitle qutisi ~325 belgi,
+     * closing niki ~160 belgi ko'taradi.
+     */
+    `section slaydda subtitle — BO‘SH QOLMASIN: 20–35 so‘zlik kirish, shu bo‘limda nima ko‘rilishini aytadi.`,
+    `closing slaydda subtitle — 15–25 so‘zlik xulosa: asosiy fikr va keyingi qadam. «Savollar va muhokama» kabi bo‘sh ibora emas.`,
+    `twoCol va compare: har ustunda 3–4 band, har biri to‘liq gap (10–15 so‘z). Bir so‘zli yorliq emas.`,
+    `process: har bosqichning text maydoni to‘liq gap (10–15 so‘z) — nima qilinadi va natija nima.`,
+    `Uzun IZOHNI (nazariy chekinish, tarixiy tafsilot) notes ga yozing — bandlar to‘liq bo‘lsin, lekin izohga aylanmasin.`,
     `Har slaydda imageHint: 12–20 so‘z, ANIQ vizual (inglizcha yoki o‘zbekcha), shu slayd mazmunidagi narsa/joy/asbob. Mavzudan chiqib ketmasin.`,
     `Har slaydda notes: notiq OG‘ZAKI aytadigan matn, 40–80 so‘z. Slayddagi bandlarni takrorlamang — misol, izoh yoki savol qo‘shing.`,
     `title slaydning title maydoni foydalanuvchi mavzusini saqlasin.`,

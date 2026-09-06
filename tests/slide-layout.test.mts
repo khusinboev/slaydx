@@ -471,3 +471,118 @@ test("byudjet tugagan bo'lsa slayd yozuvchisi tarmoqqa chiqmaydi", async () => {
     if (savedXai !== undefined) process.env.XAI_API_KEY = savedXai;
   }
 });
+
+test("band chegaralari maket sig'imiga bog'langan", async () => {
+  const { AUDIENCE_RULES } = await import("../lib/generation/slide-templates.ts");
+  const { planSlide } = await import("../lib/generation/slide-layout.ts");
+  const { getSlideTheme } = await import("../lib/generation/slide-themes.ts");
+  const theme = getSlideTheme("atlas");
+
+  /*
+   * `bulletChars` MAKETDAN o'lchanadi, taxmin qilinmaydi.
+   *
+   * Ilgari u 120 (lecture) va 80 (school) edi — «Slide Law» dan kelib
+   * chiqqan, lekin o'sha qoida BOSHQA holatga qarshi yozilgan: 6 band ×
+   * 140 belgi 11 pt gacha kichrayardi. Muammo band SONIDA edi,
+   * uzunligida emas; chegara esa ikkalasiga birdan urilgan va slaydlar
+   * bo'shab qolgan edi (jonli o'lchov: 237 belgi/slayd).
+   *
+   * Bu test chegarani maket bilan BOG'LAYDI: kim `bulletChars` ni
+   * oshirsa, shrift o'qish chegarasidan pastga tushsa — test yiqiladi.
+   * Ya'ni qiymatni oshirish mumkin, lekin faqat maket ko'targanicha.
+   */
+  const bodySize = (bullets: string[], audience: keyof typeof AUDIENCE_RULES, withPhoto: boolean) => {
+    const plan = planSlide(
+      {
+        id: "s",
+        layout: "bullets",
+        title: "Fotosintez qanday kechadi",
+        bullets,
+        footer: "Muallif",
+        ...(withPhoto ? { image: { url: "data:image/png;base64,AA" } } : {}),
+      },
+      theme,
+      "classic",
+      3,
+      10,
+      audience,
+      "lecture",
+    );
+    const body = plan.layers.filter((l) => l.t === "text" && "lines" in l && l.lines?.length);
+    return Math.min(...body.map((l) => ("size" in l ? l.size : 99)));
+  };
+
+  for (const [name, rules] of Object.entries(AUDIENCE_RULES)) {
+    const audience = name as keyof typeof AUDIENCE_RULES;
+
+    // Sog'lom aql tekshiruvlari.
+    assert.ok(rules.minBullets >= 1, `${name}: minBullets kamida 1`);
+    assert.ok(rules.minBullets < rules.maxBullets, `${name}: oraliq bo'lishi kerak`);
+    assert.ok(rules.minPt < rules.bodyPt, `${name}: minPt bodyPt dan kichik`);
+
+    // ENG YOMON holat: eng ko'p band, eng uzun matn, rasm bilan (tor ustun).
+    const worst = Array.from({ length: rules.maxBullets }, () => "A".repeat(rules.bulletChars));
+    const withPhoto = bodySize(worst, audience, true);
+    const noPhoto = bodySize(worst, audience, false);
+
+    /*
+     * `fitLines` hech qachon `minPt` dan PAST qaytarmaydi — u qisib
+     * qo'yadi (`return min`). Ya'ni `minPt` ning O'ZI «sig'madi»
+     * degani: shrift kichrayishi tugagan, matn esa qutidan chiqadi.
+     *
+     * Shuning uchun shart QAT'IY: chegaraviy matn `minPt` dan YUQORI
+     * shriftda chizilishi kerak, unga teng emas.
+     */
+    assert.ok(
+      withPhoto > rules.minPt,
+      `${name}: ${rules.maxBullets} × ${rules.bulletChars} rasmli slaydda ${withPhoto}pt — ` +
+        `${rules.minPt}pt qisish chegarasi, ya'ni matn sig'magan`,
+    );
+    assert.ok(noPhoto > rules.minPt, `${name}: rasmsiz slaydda ${noPhoto}pt — sig'magan`);
+  }
+
+  /*
+   * Test BO'SH emasligini isbotlaymiz: uch barobar uzun matn qisish
+   * chegarasiga urilishi kerak. Aks holda «har qanday qiymat o'tadi»
+   * degani bo'lardi va test hech narsani ushlamasdi.
+   */
+  const tooLong = Array.from({ length: 5 }, () => "A".repeat(AUDIENCE_RULES.lecture.bulletChars * 3));
+  assert.equal(
+    bodySize(tooLong, "lecture", true),
+    AUDIENCE_RULES.lecture.minPt,
+    "uch barobar uzun matn qisish chegarasiga urilishi kerak — aks holda test bo'sh",
+  );
+});
+
+test("slayd so'rovi oraliq beradi, faqat shift emas", async () => {
+  const { extractMeta } = await import("../lib/generation/meta.ts");
+  const { TOOL_BY_ID } = await import("../lib/tools.ts");
+  const { fallbackSlides } = await import("../lib/generation/slide-write.ts");
+  const { AUDIENCE_RULES } = await import("../lib/generation/slide-templates.ts");
+
+  /*
+   * Model faqat yuqori chegara berilganda eng qisqa variantni tanlaydi:
+   * jonli o'lchovda ruxsat etilgan 480 belgidan 174 tasi ishlatilardi.
+   * Prompt endi ORALIQ va POL beradi.
+   *
+   * `slideSystem` eksport qilinmagan (ichki funksiya), shuning uchun
+   * tekshiruv `subtitle` chegaralari orqali — ular ham shu o'zgarish
+   * doirasida maketga moslangan.
+   */
+  const meta = extractMeta(TOOL_BY_ID.slide, { topic: "Fotosintez", quality: "standard" } as never);
+  const slides = fallbackSlides(meta);
+
+  // `section` va `closing` — ilgari BO'SH chiqadigan slaydlar.
+  const section = slides.find((s) => s.layout === "section");
+  const closing = slides.find((s) => s.layout === "closing");
+  assert.ok(section, "shablon section slaydini berishi kerak");
+  assert.ok(closing, "shablon closing slaydini berishi kerak");
+
+  // Auditoriya qoidalarida pol bor — prompt shundan oraliq quradi.
+  for (const rules of Object.values(AUDIENCE_RULES)) {
+    const lo = Math.round((rules.bulletChars * 0.55) / 8);
+    const hi = Math.round(rules.bulletChars / 8);
+    assert.ok(lo >= 8, `pastki chegara juda kichik: ${lo} so'z`);
+    assert.ok(hi > lo, `oraliq bo'lishi kerak: ${lo}–${hi}`);
+  }
+});

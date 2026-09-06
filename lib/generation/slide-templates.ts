@@ -43,18 +43,41 @@ export function isSlideAudience(v: string): v is SlideAudience {
   return (SLIDE_AUDIENCES as readonly string[]).includes(v);
 }
 
-/** Auditoriya bo'yicha chegara: tana shrifti va banddagi eng ko'p so'z. */
+/**
+ * Auditoriya bo'yicha chegara: tana shrifti, banddagi eng ko'p belgi va
+ * slaydda kutiladigan band SONI.
+ *
+ * `bulletChars` MAKETDAN o'lchangan, taxmin emas. `fitLines` bilan
+ * o'lchov (`planSlide`, rasmli va rasmsiz slaydda):
+ *
+ *   lecture/defense  4 × 165 → 18 pt / 17 pt      (minimum 15)
+ *   lecture/defense  4 × 200 → 18 pt / 16 pt
+ *   school           3 × 120 → 24 pt / 23 pt      (minimum 20)
+ *   school           4 × 140 → 20 pt
+ *
+ * Ilgari bu yerda 120 va 80 turardi. Ular «Slide Law» dan kelib chiqqan
+ * edi, lekin o'sha qoida boshqa holatga qarshi yozilgan: 6 band × 140
+ * belgi = ~840 belgi 11 pt gacha kichrayardi. Muammo BAND SONIDA edi,
+ * band UZUNLIGIDA emas — chegara esa ikkalasiga birdan urilgan.
+ *
+ * Natijasi jonli o'lchovda ko'rindi: 10 slaydli dekada o'rtacha 174
+ * belgi/slayd, ya'ni ruxsat etilganning 36% i. Slayd bo'shab qolgan edi.
+ *
+ * `minBullets` — YANGI. Promptga faqat yuqori chegara berilsa model
+ * tabiiy ravishda qisqa yozadi; oraliq berilganda u oraliqni to'ldiradi.
+ */
 export const AUDIENCE_RULES: Record<Exclude<SlideAudience, "auto">, {
   bodyPt: number;
   minPt: number;
+  minBullets: number;
   maxBullets: number;
   bulletChars: number;
   note: string;
 }> = {
-  defense: { bodyPt: 18, minPt: 15, maxBullets: 4, bulletChars: 120, note: "Komissiya: aniqlik va dalil." },
-  lecture: { bodyPt: 18, minPt: 15, maxBullets: 4, bulletChars: 120, note: "Talaba: tushuntirish va misol." },
-  school: { bodyPt: 24, minPt: 20, maxBullets: 3, bulletChars: 80, note: "O‘quvchi: sodda til, katta shrift." },
-  pitch: { bodyPt: 20, minPt: 16, maxBullets: 3, bulletChars: 90, note: "Investor: bitta fikr, bitta raqam." },
+  defense: { bodyPt: 18, minPt: 15, minBullets: 3, maxBullets: 4, bulletChars: 165, note: "Komissiya: aniqlik va dalil." },
+  lecture: { bodyPt: 18, minPt: 15, minBullets: 3, maxBullets: 4, bulletChars: 165, note: "Talaba: tushuntirish va misol." },
+  school: { bodyPt: 24, minPt: 20, minBullets: 2, maxBullets: 3, bulletChars: 120, note: "O‘quvchi: sodda til, katta shrift." },
+  pitch: { bodyPt: 20, minPt: 16, minBullets: 2, maxBullets: 3, bulletChars: 130, note: "Investor: bitta fikr, bitta raqam." },
 };
 
 export function audienceRules(a: SlideAudience | undefined, tplId: SlideTemplateId) {
