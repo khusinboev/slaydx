@@ -198,6 +198,26 @@ export type SectionLabels = {
   experience: string;
   education: string;
   skills: string;
+  /**
+   * Sayt ko'ruvchisi chizadigan qisqa yorliqlar.
+   *
+   * Bular DOCX da YO'Q (ko'ruvchi bezagi), lekin ru/en hujjatda ular
+   * o'zbekcha turib qolgani foydalanuvchiga aralash til ko'rsatardi
+   * (AUDIT-6 A4). Endi ular ham hujjat tiliga ergashadi.
+   */
+  viewerGlossary: string;
+  viewerKeys: string;
+  viewerLesson: string;
+  viewerMap: string;
+  viewerResume: string;
+  fieldContact: string;
+  fieldLanguage: string;
+  /** «(davomi)» — jadval bir necha varaqqa bo'linganda. */
+  continued: string;
+  /** «12 ta atama» / «12 терминов» — ko'ruvchi muqovasida. */
+  unitTerms: (n: number) => string;
+  /** «5 ta vaziyatli topshiriq» — ko'ruvchi muqovasida. */
+  unitCases: (n: number) => string;
   translation: string;
   translationBody: string;
   /** «Manba: fayl.docx» — tarjima info bloki. */
@@ -277,6 +297,16 @@ const SECTIONS: Record<string, SectionLabels> = {
     experience: "Ish tajribasi",
     education: "Ta’lim",
     skills: "Ko‘nikmalar",
+    viewerGlossary: "Glossariy",
+    viewerKeys: "Kalitlar (keys)",
+    viewerLesson: "Dars rejasi",
+    viewerMap: "Texnologik xarita",
+    viewerResume: "Rezyume",
+    fieldContact: "Aloqa",
+    fieldLanguage: "Til",
+    continued: "(davomi)",
+    unitTerms: (n) => `${n} ta atama`,
+    unitCases: (n) => `${n} ta vaziyatli topshiriq`,
     translation: "Tarjima",
     translationBody: "Tarjima matni",
     translationSource: (n) => `Manba: ${n}`,
@@ -348,6 +378,16 @@ const SECTIONS: Record<string, SectionLabels> = {
     experience: "Опыт работы",
     education: "Образование",
     skills: "Навыки",
+    viewerGlossary: "Глоссарий",
+    viewerKeys: "Кейсы",
+    viewerLesson: "План урока",
+    viewerMap: "Технологическая карта",
+    viewerResume: "Резюме",
+    fieldContact: "Контакты",
+    fieldLanguage: "Язык",
+    continued: "(продолжение)",
+    unitTerms: (n) => `${n} терминов`,
+    unitCases: (n) => `${n} ситуационных заданий`,
     translation: "Перевод",
     translationBody: "Текст перевода",
     translationSource: (n) => `Источник: ${n}`,
@@ -419,6 +459,16 @@ const SECTIONS: Record<string, SectionLabels> = {
     experience: "Work experience",
     education: "Education",
     skills: "Skills",
+    viewerGlossary: "Glossary",
+    viewerKeys: "Case studies",
+    viewerLesson: "Lesson plan",
+    viewerMap: "Technology map",
+    viewerResume: "Résumé",
+    fieldContact: "Contact",
+    fieldLanguage: "Language",
+    continued: "(continued)",
+    unitTerms: (n) => `${n} terms`,
+    unitCases: (n) => `${n} case tasks`,
     translation: "Translation",
     translationBody: "Translated text",
     translationSource: (n) => `Source: ${n}`,

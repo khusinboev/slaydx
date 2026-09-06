@@ -1,16 +1,19 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
+import { sectionLabels } from "@/lib/generation/i18n";
 import type { AcademicDoc } from "@/lib/generation/types";
 import { A4 } from "@/lib/viewers/metrics";
 import { useMeasuredPages } from "./measure";
 import { ZoomFrame, Workspace } from "./sheet";
 import { TitleSheet } from "./TitlePage";
 import { ViewerToolbar } from "./toolbar";
+import { useVisiblePage } from "./useVisiblePage";
 
 type Term = { term: string; def: string };
 
 export function GlossaryViewer({ doc }: { doc: AcademicDoc }) {
+  const L = sectionLabels(doc.meta.language);
   const terms: Term[] = useMemo(() => {
     if (doc.tables?.[0]) {
       return doc.tables[0].rows.map(([term, def]) => ({ term: term || "", def: def || "" }));
@@ -41,9 +44,10 @@ export function GlossaryViewer({ doc }: { doc: AcademicDoc }) {
   const pages = measured ?? [terms];
 
   const [zoom, setZoom] = useState(90);
-  const [page, setPage] = useState(1);
   const refs = useRef<(HTMLDivElement | null)[]>([]);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const total = 2 + pages.length;
+  const [page, setPage] = useVisiblePage(scrollRef, () => refs.current, [total, zoom]);
 
   function go(n: number) {
     const next = Math.max(1, Math.min(total, n));
@@ -54,7 +58,7 @@ export function GlossaryViewer({ doc }: { doc: AcademicDoc }) {
   return (
     <div className="flex h-full min-h-[70vh] flex-col">
       <ViewerToolbar zoom={zoom} onZoom={setZoom} page={page} pages={total} onPage={go} onFit={() => setZoom(90)} />
-      <Workspace>
+      <Workspace ref={scrollRef}>
         <div className="flex flex-col items-center gap-8">
           {/*
             Titul — DOCX dagi bilan AYNAN bir xil modeldan (P1-5).
@@ -78,9 +82,9 @@ export function GlossaryViewer({ doc }: { doc: AcademicDoc }) {
             >
               <div className="word-inner">
                 <div className="mb-6 border-b-4 border-pink-600 pb-3 text-center">
-                  <div className="text-[11pt] tracking-[0.2em] text-pink-700 uppercase">Glossariy</div>
+                  <div className="text-[11pt] tracking-[0.2em] text-pink-700 uppercase">{L.viewerGlossary}</div>
                   <h1 className="mt-2 text-[20pt] font-bold">{doc.meta.topic}</h1>
-                  <p className="mt-2 text-[12pt]">{terms.length} ta atama</p>
+                  <p className="mt-2 text-[12pt]">{L.unitTerms(terms.length)}</p>
                 </div>
                 {(doc.sections[0]?.blocks ?? []).map((b, i) => (
                   <p key={i} className="word-p">

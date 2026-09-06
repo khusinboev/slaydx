@@ -10,6 +10,7 @@ import { packPages } from "@/lib/viewers/paginate";
 import { ZoomFrame, Workspace } from "./sheet";
 import { TitlePage } from "./TitlePage";
 import { ViewerToolbar } from "./toolbar";
+import { useVisiblePage } from "./useVisiblePage";
 
 /**
  * Akademik / insho / maqola / tarjima hujjatining jonli ko'ruvchisi.
@@ -34,7 +35,6 @@ export function WordViewer({ doc }: { doc: AcademicDoc }) {
   }, [doc.meta.toolId, doc.meta.design]);
   const [zoom, setZoom] = useState(100);
   const [pages, setPages] = useState<FlowItem[][] | null>(null);
-  const [page, setPage] = useState(1);
   const measureRef = useRef<HTMLDivElement>(null);
   const stackRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -65,22 +65,9 @@ export function WordViewer({ doc }: { doc: AcademicDoc }) {
     setPages(packPages(items, hs, contentHeightPx({ footer: true })));
   }, [items]);
 
-  useEffect(() => {
-    const root = scrollRef.current;
-    if (!root || !pages) return;
-    const io = new IntersectionObserver(
-      (entries) => {
-        const vis = entries
-          .filter((e) => e.isIntersecting)
-          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
-        const idx = vis ? Number((vis.target as HTMLElement).dataset.page) : NaN;
-        if (Number.isFinite(idx)) setPage(idx);
-      },
-      { root, threshold: [0.4, 0.6] },
-    );
-    pageRefs.current.forEach((el) => el && io.observe(el));
-    return () => io.disconnect();
-  }, [pages, zoom]);
+  // Scroll paytida ko'rinib turgan varaqni kuzatish — barcha ko'ruvchilar
+  // uchun yagona hook (`useVisiblePage`).
+  const [page, setPage] = useVisiblePage(scrollRef, () => pageRefs.current, [pages, zoom]);
 
   function go(n: number) {
     const next = Math.max(1, Math.min(pages?.length ?? 1, n));

@@ -236,6 +236,21 @@ Tavsiya (§6) — `FILE_TTL_HOURS` 72->168 — bu **kod emas**, egasi hal qiladi
 
 Sprint 2 da o'zgarmagani: A1, A4, A5, A8, A9, B*, C4, C7, C9-C12, C14, D*.
 
-### Sprint 3-5
+### Sprint 3 — Lokalizatsiya + jadval + varaq raqami (2026-09-06)
 
-_(kelgusi)_
+272 test (271 -> +1 A9; A4 uchun 2 test Sprint 1 blokida hisoblangan),
+typecheck + lint toza, prod build o'tadi (A4 render-docx mutatsiya bilan
+tekshirildi).
+
+| Band | Nima qilindi | Fayllar |
+|---|---|---|
+| **A4** | `SectionLabels` ga 10 ta ko'ruvchi yorlig'i qo'shildi (uz/ru/en). `GlossaryViewer`, `KeysViewer`, `LessonViewer`, `TableViewer`, `ResumeViewer` muqova/yorliqlari endi `sectionLabels(doc.meta.language)` dan. `LessonViewer` `Til:` endi `languageName(code)` (xom kod emas). `render-docx` `resumeBody` ham lokalizatsiya qilindi -> ru/en rezyume ekran = fayl. `flow.ts` "(davomi)" ham. | `i18n.ts`, `Glossary/Keys/Lesson/Table/ResumeViewer.tsx`, `render-docx.ts`, `flow.ts` |
+| **A9** | `lib/generation/table-columns.ts` (yangi) — `columnPercents(headers)` DOCX va ko'ruvchi uchun yagona manba. `TableViewer` + `LessonViewer` jadvallariga `<colgroup>` + `table-layout: fixed` (o'lchov ham, ko'rinish ham). `.word-table td` ga `overflow-wrap: break-word`. | `table-columns.ts`, `render-docx.ts`, `TableViewer.tsx`, `LessonViewer.tsx`, `globals.css` |
+| **C4** | `components/viewers/useVisiblePage.ts` (yangi) — scroll paytida ko'rinib turgan varaqni kuzatuvchi umumiy `IntersectionObserver` hook. `WordViewer` migratsiya qilindi (o'z observeri o'chirildi), `Glossary/Keys/Lesson/TableViewer` ga qo'shildi (`Workspace` ga `ref`). Endi sichqoncha bilan varaqlanganda ham "3 / 8" yangilanadi. | `useVisiblePage.ts`, `WordViewer.tsx`, `Glossary/Keys/Lesson/TableViewer.tsx` |
+| **B3** | **Kechiktirildi** -> Sprint 5. Rezyume 1-sahifa qirqilishi — bu render o'zgarishi, boshqa sahifalash ishlari (B1, B2) bilan birga jonli smoke bilan qilinishi kerak. | — |
+
+Sprint 3 da o'zgarmagani: A1, A5, A8, B1, B2, B3 (ko'chirildi), B4, B5, C7, C9-C12, C14, D*.
+
+### Sprint 4-5
+
+_(kelgusi — B3, B5, A5, C7, C11 + pagination bundle)_

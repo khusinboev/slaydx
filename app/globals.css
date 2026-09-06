@@ -269,6 +269,9 @@ button {
   vertical-align: top;
   text-align: left;
   text-indent: 0;
+  /* `table-layout: fixed` (texnologik xarita / dars jadvali, AUDIT-6 A9)
+     bilan uzun uzluksiz so'z katakdan chiqib ketardi. */
+  overflow-wrap: break-word;
 }
 
 .word-table th {

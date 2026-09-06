@@ -1,20 +1,25 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
+import { sectionLabels } from "@/lib/generation/i18n";
+import { columnPercents, evenPercents } from "@/lib/generation/table-columns";
+import { languageName } from "@/lib/languages";
 import type { AcademicDoc, DocTable } from "@/lib/generation/types";
 import { A4 } from "@/lib/viewers/metrics";
 import { useMeasuredPages } from "./measure";
 import { ZoomFrame, Workspace } from "./sheet";
 import { TitleSheet } from "./TitlePage";
 import { ViewerToolbar } from "./toolbar";
+import { useVisiblePage } from "./useVisiblePage";
 
 /** Dars xaritasi oqimidagi band. */
 type Item = { k: "h1" | "h3" | "p"; text: string } | { k: "table"; table: DocTable };
 
 export function LessonViewer({ doc }: { doc: AcademicDoc }) {
+  const L = sectionLabels(doc.meta.language);
   const [zoom, setZoom] = useState(90);
-  const [page, setPage] = useState(1);
   const refs = useRef<(HTMLDivElement | null)[]>([]);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const passport = doc.sections.find((s) => s.id === "passport") ?? doc.sections[0];
   const map = doc.sections.find((s) => s.id === "map") ?? doc.sections[1];
   const table = doc.tables?.[0];
@@ -27,17 +32,18 @@ export function LessonViewer({ doc }: { doc: AcademicDoc }) {
    * bo'lgancha varaqqa bo'linadi.
    */
   const items = useMemo<Item[]>(() => {
-    const out: Item[] = [{ k: "h1", text: map?.title ?? "Dars xaritasi" }];
+    const out: Item[] = [{ k: "h1", text: map?.title ?? L.lessonMap }];
     for (const b of map?.blocks ?? []) out.push({ k: b.kind === "h3" ? "h3" : "p", text: b.text });
     if (table) out.push({ k: "table", table });
     return out;
-  }, [map, table]);
+  }, [map, table, L.lessonMap]);
 
   const { pages: measured, measureNode } = useMeasuredPages(items, (it) => <LessonBlock item={it} />, {
     key: `${items.length}:${map?.blocks.length ?? 0}:${table?.rows.length ?? 0}`,
   });
   const mapPages = measured ?? [items];
   const total = 2 + mapPages.length;
+  const [page, setPage] = useVisiblePage(scrollRef, () => refs.current, [total, zoom]);
 
   function go(n: number) {
     const next = Math.max(1, Math.min(total, n));
@@ -48,7 +54,7 @@ export function LessonViewer({ doc }: { doc: AcademicDoc }) {
   return (
     <div className="flex h-full min-h-[70vh] flex-col">
       <ViewerToolbar zoom={zoom} onZoom={setZoom} page={page} pages={total} onPage={go} onFit={() => setZoom(90)} />
-      <Workspace>
+      <Workspace ref={scrollRef}>
         <div className="flex flex-col items-center gap-8">
           {/*
             Titul — DOCX dagi bilan AYNAN bir xil modeldan (P1-5).
@@ -72,13 +78,13 @@ export function LessonViewer({ doc }: { doc: AcademicDoc }) {
             >
               <div className="word-inner">
                 <div className="mb-4 border-b-4 border-emerald-600 pb-3">
-                  <div className="text-[11pt] tracking-widest text-emerald-700 uppercase">Dars rejasi</div>
+                  <div className="text-[11pt] tracking-widest text-emerald-700 uppercase">{L.viewerLesson}</div>
                   <h1 className="mt-1 text-[18pt] font-bold">{doc.meta.topic}</h1>
                   <div className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1 text-[12pt]">
-                    <div>Fan: {doc.meta.subject || "—"}</div>
-                    <div>Sinf: {doc.meta.grade || "—"}</div>
-                    <div>Davomiyligi: {doc.meta.duration || 45} daq</div>
-                    <div>Til: {doc.meta.language}</div>
+                    <div>{L.fieldSubject}: {doc.meta.subject || "—"}</div>
+                    <div>{L.fieldGrade}: {doc.meta.grade || "—"}</div>
+                    <div>{L.fieldDuration}: {doc.meta.duration || 45} {L.minutesShort}</div>
+                    <div>{L.fieldLanguage}: {languageName(doc.meta.language)}</div>
                   </div>
                 </div>
                 {(passport?.blocks ?? []).map((b, i) => (
@@ -117,12 +123,20 @@ export function LessonViewer({ doc }: { doc: AcademicDoc }) {
 
 function LessonBlock({ item }: { item: Item }) {
   if (item.k === "table") {
+    // Ustun kengliklari — DOCX bilan bir xil (`table-columns.ts`, A9).
+    const cols =
+      columnPercents(item.table.headers) ?? evenPercents(item.table.headers.length);
     return (
       <div>
         {item.table.caption ? (
           <div className="mt-4 mb-1 text-center text-[12pt] italic">{item.table.caption}</div>
         ) : null}
-        <table className="word-table">
+        <table className="word-table" style={{ tableLayout: "fixed" }}>
+          <colgroup>
+            {cols.map((w, i) => (
+              <col key={i} style={{ width: `${w}%` }} />
+            ))}
+          </colgroup>
           <thead>
             <tr>
               {item.table.headers.map((h) => (

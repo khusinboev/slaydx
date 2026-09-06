@@ -24,8 +24,9 @@ import {
 } from "docx";
 import { ESSAY_DESIGNS } from "../languages";
 import { CM, contentHeight, contentWidth, profileFor, type DocProfile } from "./docx-profile";
-import { docLabels } from "./i18n";
+import { docLabels, sectionLabels } from "./i18n";
 import { cleanText } from "./quality";
+import { columnPercents } from "./table-columns";
 import { titleModel } from "./title-model";
 import { tocRows } from "./toc-model";
 import type { AcademicDoc, Block, DocTable } from "./types";
@@ -269,22 +270,10 @@ function makeKit(P: DocProfile) {
 
 type Kit = ReturnType<typeof makeKit>;
 
-/**
- * Ustun kengliklari — ustun soniga qarab.
- *
- * Faqat aniq tanish shakllar uchun; boshqasida teng taqsimot qoladi.
- */
-function columnWidths(headers: string[]): number[] | undefined {
-  // № | Soat | Mavzu | Metod | Natija | Nazorat  (texnologik xarita)
-  if (headers.length === 6) return [5, 8, 33, 15, 25, 14];
-  // Bosqich | Daqiqa | Faoliyat | Natija  (dars rejasi)
-  if (headers.length === 4) return [22, 10, 45, 23];
-  return undefined;
-}
-
 function drawTable(K: Kit, tb: DocTable, out: Array<Paragraph | Table>) {
   if (tb.caption) out.push(K.centerP(tb.caption, { italics: true, size: 24 }));
-  out.push(K.tableOf(tb.headers, tb.rows, columnWidths(tb.headers)));
+  // Ustun kengliklari — `table-columns.ts` (sayt ko'ruvchisi ham shu yerdan).
+  out.push(K.tableOf(tb.headers, tb.rows, columnPercents(tb.headers) ?? undefined));
 }
 
 /**
@@ -297,6 +286,9 @@ function drawTable(K: Kit, tb: DocTable, out: Array<Paragraph | Table>) {
  */
 function resumeBody(doc: AcademicDoc, K: Kit, P: DocProfile): Array<Paragraph | Table> {
   const { meta } = doc;
+  // Rezyume yorliqlari ham hujjat tiliga ergashadi — sayt ko'ruvchisi
+  // (`ResumeViewer`) bilan bir xil (AUDIT-6 A4).
+  const RL = sectionLabels(meta.language);
   const byId = Object.fromEntries(doc.sections.map((s) => [s.id, s]));
   const blocks = (id: string) => byId[id]?.blocks ?? [];
   const title = (id: string, fallback: string) => byId[id]?.title || fallback;
@@ -323,7 +315,8 @@ function resumeBody(doc: AcademicDoc, K: Kit, P: DocProfile): Array<Paragraph | 
   const aside: Paragraph[] = [
     new Paragraph({
       spacing: { after: 120, line: P.type.line },
-      children: [K.run("REZYUME", { size: 16, bold: true, color: "FDBA74" })],
+      // Ko'ruvchida CSS `uppercase` — DOCX da qo'lda.
+      children: [K.run(RL.viewerResume.toUpperCase(), { size: 16, bold: true, color: "FDBA74" })],
     }),
     new Paragraph({
       spacing: { after: 60, line: P.type.line },
@@ -333,23 +326,23 @@ function resumeBody(doc: AcademicDoc, K: Kit, P: DocProfile): Array<Paragraph | 
       spacing: { after: 60, line: P.type.line },
       children: [K.run(meta.topic, { size: 20, color: "FED7AA" })],
     }),
-    asideLabel("Aloqa"),
+    asideLabel(RL.fieldContact),
     ...contact.split(" · ").filter(Boolean).map(asideText),
   ];
   if (skills) {
-    aside.push(asideLabel("Ko‘nikmalar"));
+    aside.push(asideLabel(RL.skills));
     aside.push(asideText(skills));
   }
 
   const main: Array<Paragraph | Table> = [];
   if (summary) {
-    main.push(K.sectionHeading(title("summary", "Qisqacha")));
+    main.push(K.sectionHeading(title("summary", RL.summary)));
     main.push(K.bodyP(summary));
   }
   for (const id of ["exp", "edu"]) {
     const bs = blocks(id);
     if (!bs.length) continue;
-    main.push(K.sectionHeading(title(id, id === "exp" ? "Tajriba" : "Ta’lim")));
+    main.push(K.sectionHeading(title(id, id === "exp" ? RL.experience : RL.education)));
     for (const b of bs) main.push(...K.blockToParagraphs(b));
   }
 

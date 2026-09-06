@@ -1444,6 +1444,85 @@ test("A7: ma'nosiz o'rinbosar universitet titulda chizilmaydi", async () => {
   assert.equal(realModel.kind === "gost" && realModel.university, "TDPU");
 });
 
+test("A9: jadval ustun kengliklari DOCX va ko'ruvchi uchun yagona manbadan", async () => {
+  const { columnPercents, evenPercents } = await import("../lib/generation/table-columns.ts");
+
+  // Texnologik xarita — 6 ustun, «Mavzu» eng keng.
+  assert.deepEqual(columnPercents(["№", "Soat", "Mavzu", "Metod", "Natija", "Nazorat"]), [5, 8, 33, 15, 25, 14]);
+  // Dars jadvali — 4 ustun, «Faoliyat» eng keng.
+  assert.deepEqual(columnPercents(["Bosqich", "Daqiqa", "Faoliyat", "Natija"]), [22, 10, 45, 23]);
+  // Notanish shakl — teng taqsimot.
+  assert.equal(columnPercents(["A", "B", "C"]), null);
+  assert.deepEqual(evenPercents(3), [33, 33, 33]);
+  assert.deepEqual(evenPercents(0), [100]);
+
+  // Yig'indi 100 ga yaqin (foizli grid).
+  for (const h of [["№", "Soat", "Mavzu", "Metod", "Natija", "Nazorat"], ["Bosqich", "Daqiqa", "Faoliyat", "Natija"]]) {
+    const sum = columnPercents(h)!.reduce((a, b) => a + b, 0);
+    assert.equal(sum, 100, `${h.length} ustun yig'indisi 100 bo'lishi kerak: ${sum}`);
+  }
+
+  // DOCX renderi ham shu moduldan — grid nisbati saqlanadi.
+  const xml = await docxXml(
+    anyDoc("texnologik-xarita", { topic: "Fan", subject: "Fan", author: "A." }, {
+      tables: [{ caption: "Reja", headers: ["№", "Soat", "Mavzu", "Metod", "Natija", "Nazorat"], rows: [["1", "2", "M", "L", "N", "T"]] }],
+    }),
+  );
+  const grid = [...xml.matchAll(/<w:gridCol w:w="(\d+)"\/>/g)].map((m) => Number(m[1]));
+  assert.equal(grid.length, 6);
+  assert.ok(grid[2] > grid[0] * 4, "«Mavzu» ustuni «№» dan keng qoladi");
+});
+
+test("A4: ko'ruvchi yorliqlari hujjat tiliga ergashadi", async () => {
+  const { sectionLabels } = await import("../lib/generation/i18n.ts");
+  const { languageName } = await import("../lib/languages.ts");
+
+  // Uch tilda ham yangi ko'ruvchi maydonlari bor (bir tilda tushib qolsa
+  // ko'ruvchi `undefined` chizadi).
+  for (const code of ["uz", "ru", "en"] as const) {
+    const L = sectionLabels(code);
+    for (const key of ["viewerGlossary", "viewerKeys", "viewerLesson", "viewerMap", "viewerResume", "fieldContact", "fieldLanguage", "continued"] as const) {
+      assert.equal(typeof L[key], "string", `${code}.${key} bo'lishi kerak`);
+      assert.ok((L[key] as string).length > 0);
+    }
+    assert.equal(typeof L.unitTerms(3), "string");
+    assert.equal(typeof L.unitCases(3), "string");
+  }
+
+  // Ruscha va inglizcha aniq boshqa matn (o'zbekchaga tushib qolmagan).
+  assert.equal(sectionLabels("ru").viewerGlossary, "Глоссарий");
+  assert.equal(sectionLabels("en").viewerLesson, "Lesson plan");
+  assert.match(sectionLabels("ru").unitTerms(5), /5 терминов/);
+
+  // `LessonViewer` xom til kodi emas, til NOMINI ko'rsatadi (A4).
+  assert.equal(languageName("ru"), "Русский");
+  assert.equal(languageName("en"), "English");
+});
+
+test("A4: rezyume DOCX yorliqlari ham hujjat tiliga ergashadi", async () => {
+  /*
+   * `ResumeViewer` "Rezyume" / "Aloqa" / "Ko'nikmalar" ni qattiq o'zbekcha
+   * chizardi, DOCX `resumeBody` ham. Ruscha rezyumeda ekran va fayl bir
+   * xil o'zbekcha yorliq berardi. Endi ikkalasi ham `sectionLabels` dan.
+   */
+  const ruDoc = anyDoc(
+    "resume",
+    { topic: "Разработчик", fullName: "И. Петров", language: "ru" },
+    {
+      titlePage: false,
+      sections: [
+        { id: "summary", title: "Кратко о себе", blocks: [{ kind: "p", text: "Опытный разработчик." }, { kind: "p", text: "Москва" }] },
+        { id: "exp", title: "Опыт работы", blocks: [{ kind: "h3", text: "2020-2024 - Dev" }] },
+        { id: "skills", title: "Навыки", blocks: [{ kind: "p", text: "Node.js" }] },
+      ],
+    },
+  );
+  const text = await docxText(ruDoc);
+  assert.match(text, /РЕЗЮМЕ/, "ruscha rezyumeda «РЕЗЮМЕ»");
+  assert.match(text, /КОНТАКТЫ/, "ruscha «КОНТАКТЫ»");
+  assert.ok(!/REZYUME|ALOQA/.test(text), "o'zbekcha yorliq qolmasligi kerak");
+});
+
 test("A2: keys hujjatida mundarija yo'q (ko'ruvchi bilan bir xil)", async () => {
   const { writeKeysWithLlm } = await import("../lib/generation/write-specials.ts");
 

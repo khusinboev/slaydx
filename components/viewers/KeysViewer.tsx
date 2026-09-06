@@ -1,12 +1,14 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
+import { sectionLabels } from "@/lib/generation/i18n";
 import type { AcademicDoc, Block } from "@/lib/generation/types";
 import { A4 } from "@/lib/viewers/metrics";
 import { useMeasuredPages } from "./measure";
 import { ZoomFrame, Workspace } from "./sheet";
 import { TitleSheet } from "./TitlePage";
 import { ViewerToolbar } from "./toolbar";
+import { useVisiblePage } from "./useVisiblePage";
 
 /** Keys oqimidagi band. `head` — yangi keysning boshi. */
 type Item =
@@ -18,8 +20,8 @@ export function KeysViewer({ doc }: { doc: AcademicDoc }) {
   const intro = doc.sections.find((s) => s.id === "kirish");
   const cases = doc.sections.filter((s) => s.id !== "kirish");
   const [zoom, setZoom] = useState(90);
-  const [page, setPage] = useState(1);
   const refs = useRef<(HTMLDivElement | null)[]>([]);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   /*
    * Ilgari har keys QAT'IY bitta varaqqa joylanardi va uzunligi hech
@@ -46,17 +48,19 @@ export function KeysViewer({ doc }: { doc: AcademicDoc }) {
     },
   );
   const pages = measured ?? [items];
+  const total = 1 + pages.length;
+  const [page, setPage] = useVisiblePage(scrollRef, () => refs.current, [total, zoom]);
 
   function go(n: number) {
-    const next = Math.max(1, Math.min(1 + pages.length, n));
+    const next = Math.max(1, Math.min(total, n));
     setPage(next);
     refs.current[next - 1]?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   return (
     <div className="flex h-full min-h-[70vh] flex-col">
-      <ViewerToolbar zoom={zoom} onZoom={setZoom} page={page} pages={1 + pages.length} onPage={go} onFit={() => setZoom(90)} />
-      <Workspace>
+      <ViewerToolbar zoom={zoom} onZoom={setZoom} page={page} pages={total} onPage={go} onFit={() => setZoom(90)} />
+      <Workspace ref={scrollRef}>
         <div className="flex flex-col items-center gap-8">
           {/*
             Titul — DOCX dagi bilan AYNAN bir xil modeldan (P1-5).
@@ -97,11 +101,12 @@ export function KeysViewer({ doc }: { doc: AcademicDoc }) {
 
 function KeyBlock({ item, doc, count }: { item: Item; doc: AcademicDoc; count: number }) {
   if (item.k === "cover") {
+    const L = sectionLabels(doc.meta.language);
     return (
       <div className="mb-6 border-b-4 border-amber-500 pb-3">
-        <div className="text-[11pt] tracking-[0.2em] text-amber-700 uppercase">Kalitlar (keys)</div>
+        <div className="text-[11pt] tracking-[0.2em] text-amber-700 uppercase">{L.viewerKeys}</div>
         <h1 className="mt-2 text-[18pt] font-bold">{doc.meta.topic}</h1>
-        <p className="mt-1 text-[12pt]">{count} ta vaziyatli topshiriq</p>
+        <p className="mt-1 text-[12pt]">{L.unitCases(count)}</p>
       </div>
     );
   }

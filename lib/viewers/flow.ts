@@ -1,4 +1,4 @@
-import { docLabels } from "@/lib/generation/i18n";
+import { docLabels, sectionLabels } from "@/lib/generation/i18n";
 import type { AcademicDoc, Block, DocTable } from "@/lib/generation/types";
 
 export type FlowItem =
@@ -60,6 +60,7 @@ export function docToFlow(doc: AcademicDoc): FlowItem[] {
     for (const b of s.blocks) items.push(blockItem(b, id));
   }
 
+  const contd = sectionLabels(doc.meta.language).continued;
   for (const tb of doc.tables ?? []) {
     const rows = tb.rows;
     const chunk = 10;
@@ -71,7 +72,7 @@ export function docToFlow(doc: AcademicDoc): FlowItem[] {
           type: "table",
           id: id("tb"),
           table: {
-            caption: i === 0 ? tb.caption : tb.caption ? `${tb.caption} (davomi)` : undefined,
+            caption: i === 0 ? tb.caption : tb.caption ? `${tb.caption} ${contd}` : undefined,
             headers: tb.headers,
             rows: rows.slice(i, i + chunk),
           },
