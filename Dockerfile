@@ -65,8 +65,26 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
 COPY package.json package-lock.json ./
-# `tsx` devDependency, shuning uchun `--omit=dev` ishlatmaymiz.
-RUN npm ci && npm cache clean --force
+# `--include=dev` MAJBURIY va u `--omit=dev` ishlatmaslikdan KUCHLIROQ.
+# 
+# Yuqoridagi `ENV NODE_ENV=production` npm ga devDependencies ni
+# tashlab ketishni buyuradi — bayroqsiz ham. Ilgari bu yerda faqat
+# `npm ci` turar va izoh «--omit=dev ishlatmaymiz» deb tinchlantirardi,
+# amalda esa `tsx` O'RNATILMAS edi.
+# 
+# Oqibati jonli serverda ko'rindi: `CMD` dagi `npx tsx` har konteyner
+# ishga tushganda tsx ni INTERNETDAN yuklab olardi —
+# 
+# npm warn exec The following package was not found and will be
+# installed: tsx@4.23.13
+# 
+# Ya'ni npm registry yetib bo'lmasa worker umuman ko'tarilmaydi va
+# BARCHA generatsiya navbatda abadiy qotib qoladi. Deploy internetga
+# bog'liq bo'lib qolgan edi, tasvirga esa emas.
+# 
+# Yon foyda: `npm run topup` kabi admin vositalari ham ishlaydi — ular
+# `tsx` ni to'g'ridan-to'g'ri chaqiradi.
+RUN npm ci --include=dev && npm cache clean --force
 COPY lib ./lib
 COPY scripts ./scripts
 COPY tsconfig.json ./
@@ -74,4 +92,5 @@ COPY tsconfig.json ./
 RUN addgroup -g 1001 -S nodejs && adduser -S worker -u 1001 && chown -R worker:nodejs /app
 USER worker
 
-CMD ["npx", "tsx", "--conditions=react-server", "scripts/worker.ts"]
+# `npx` emas, to'g'ridan-to'g'ri o'rnatilgan ikkilik: tarmoqqa chiqmaydi.
+CMD ["./node_modules/.bin/tsx", "--conditions=react-server", "scripts/worker.ts"]
