@@ -406,3 +406,124 @@ Oldingi auditlarning katta qismi kodda yopilgan. Qayta ishlash — regressiya.
 | Dars rejasi | 7.5 | 7 | **5** | Orientatsiya tuzatilmasa yo‘q |
 
 **Xulosa:** foydalanuvchi 14 toifada hujjat **yarata oladi**, navbat va pul mexanikasi ishonchli. «Saytda jonli ko‘rish» slayd/rasm/akademik matnning **mazmuni** uchun ishlaydi, lekin maqola, dars, glossariy va keys da ko‘rinish **boshqa hujjat**. Ochilishdan oldin P0-1…P0-5 ni yopish — qolgani sprint rejasiga tushadi.
+
+---
+
+# 11. Bajarilgan ish (2026-09-06, Sprint 15)
+
+**Yakuniy holat: 234 test / 0 fail / 0 skip; typecheck, lint va build toza.**
+Sprint 14 boshida 200 test edi, Sprint 15 oxirida 234.
+
+## 11.1. Avval: hisobotni qayta bazalash
+
+AUDIT-5 Sprint 14 dan **oldingi** koddan yozilgan. Har bir P0/P1 da'vosi
+hozirgi kod bilan solishtirildi:
+
+| Da'vo | Holat |
+|---|---|
+| **P0-1** 300 s cap — «ochilish bloker» | Sprint 14 (N-3) da yopilgan. `DEFAULT_JOB_TIMEOUT_MS = 480_000`; byudjetlar 207→477 s, hammasi alohida |
+| §4.1 «slayd byudjeti barcha paketga 180 s» | Sprint 14 (N-2) da yopilgan |
+| **P1-8** tarjima 48k ogohlantirishi | Sprint 14 (N-5) da yopilgan |
+| **P2** rezyume narxi har qadamda | Sprint 14 (N-12) da yopilgan |
+| **P2** duplicate `tocMethod` | Sprint 14 (N-4) da yopilgan |
+| «~140+ unit test» | Aslida 200 edi, hozir 234 |
+
+**Bitta da'vo noto'g'ri.** P2 dagi «`toUpperCase` Oʻ/Gʻ buzilishi xavfi»
+empirik tekshirildi:
+
+```
+oʻzbek gʻalaba o‘quv  →  OʻZBEK GʻALABA O‘QUV
+```
+
+`ʻ` (U+02BB) modifikator harfi, `toUpperCase` unga tegmaydi. Soxta
+ijobiy — bu bandga vaqt sarflanmadi.
+
+## 11.2. Yopilgan bandlar
+
+| ID | Nuqson | Commit | Mutatsiya |
+|---|---|---|---|
+| P0-4 | IMRAD stub annotatsiya darvozani yolg'onga chiqarardi | `eb121ae` | 2/2 |
+| P0-5 | `image`/`resume`/`translation` serverda tekshirilmasdi | `eb121ae` | 2/2 |
+| P0-2 | Maqola saytda talaba tituli, faylda jurnal tituli | `66641ec` | 2/2 |
+| P0-3 | Dars rejasi saytda portret, faylda albom | `66641ec` | 1/1 |
+| P1-7 | `pages` standarti narx va dvigatelda ajralib ketgan | `388b4d3` | 2/2 |
+| P1-10 | Kurs ishi prompti «uch bob», dvigatel 4–5 | `388b4d3` | 1/1 |
+| P1-3 | `writeEssayInChunks` da `n` o'lik | `388b4d3` | 1/1 |
+| P1-1 | Slayd 0.85 floor, qisman qaytarish yo'q | `6187a73` | 2/2 |
+| P1-2 | Glossariy/xarita 70% floor, to'liq pul | `6187a73` | 2/2 |
+| P1-9 | ZIP rasmda PDF tugmasi | `44c68d1` | — |
+| P1-6 | `referencesNote` ko'ruvchida yo'q | `44c68d1` | 2/2 |
+| §4.10 | `weeklyHours: 0` serverdan o'tardi | `44c68d1` | 1/1 |
+| P1-11 | Referat UI «tadqiqot», yozuvchi «adabiyot sharhi» | `fb463f0` | — |
+| §5.3 | Akademik sarlavha Word uslubida (LibreOffice da KO'K) | `fb463f0` | 1/1 |
+
+**19 mutatsiya, 19 tasi ushlandi.**
+
+## 11.3. Asosiy tuzatishlarning mohiyati
+
+**Titul modeli yagona manbaga aylandi.** `render-docx` `profileFor()` ga
+qarab ikki xil titul chizar, sayt ko'ruvchisi esa uchinchi, har doim GOST
+qolipini chizardi. Endi `lib/generation/title-model.ts`
+(`toc-model.ts` naqshi) diskriminatsiyalangan tur beradi va ikkala
+renderer ham AYNAN shuni chizadi — yangi titul turi qo'shilsa TypeScript
+ikkalasini ham majburlaydi.
+
+**Dars rejasi profili ajratildi.** U texnologik xarita bilan bitta
+`landscape` profilda edi, lekin albomning O'Z asoslanishi faqat xaritaga
+tegishli (6 ustun). Dars jadvali 4 ustunli, asosiysi esa bosqichlar
+nasri — albomda u ~26 sm satrda, o'qib bo'lmaydigan uzunlikda chiqardi.
+Bu yerda **fayl** noto'g'ri edi, ko'ruvchi to'g'ri.
+
+**Insho chuqurligi richagi almashtirildi.** `n` ni paragraf soniga emas,
+BURCHAK soniga bog'ladik: modeldan ko'p paragraf so'ralganda u ulushini
+beradi, yangi burchak esa unga yangi savol beradi. 3/4/5 varaq →
+3/4/5 burchak. Uzun insho «ko'proq gap» emas, «ko'proq qirra».
+
+**`delivered` naqshi uch vositaga yoyildi.** Floor va va'da — ikki xil
+savol: floordan past → xato + to'liq qaytarish; floor va va'da orasida →
+yetkaziladi + FARQ qaytariladi. Rasm vositasi buni ishlatib turgan edi.
+
+## 11.4. Jonli tekshiruv (`npm run live`)
+
+AUDIT-4 §10.5 da «ataylab qilinmagan» deb qoldirilgan jonli sinov shu
+sprintda yozildi va o'tkazildi. `scripts/live-engine.mts` `buildArtifact`
+ni to'g'ridan-to'g'ri chaqiradi — server, sessiya va navbatsiz.
+
+Birinchi tur, `gemini-3.7-flash`, **5/5 keys**:
+
+| Keys | Vaqt | Natija |
+|---|---:|---|
+| `imrad` | 14.6 s | Annotatsiya 700 belgi, **stub emas** — P0-4 tasdiqlandi |
+| `essay` | 13.0 s | 5 burchak, 1317 so'z, 6 renderlangan bet — P1-3 tasdiqlandi |
+| `coursework` | 42.9 s | **4 bob** (prompt bilan mos), 13 ostmavzu, 4903 so'z, **20 bet** |
+| `glossary` | 8.1 s | 20/20 atama, alifbo tartibida |
+| `lesson` | 5.7 s | Daqiqalar yig'indisi **aynan 45** |
+
+Kutilmagan natija: kurs ishi 42.9 soniyada tugadi — AUDIT-5 qo'rqqan
+~420 s emas. Ya'ni N-3 dagi byudjet oshirilishi **zaxira** beradi, lekin
+bu model tezligida shift bo'g'iq nuqta emas edi. Byudjet baribir to'g'ri:
+sekinroq model yoki yuk ostida u yagona himoya.
+
+**Chiqishlar ko'z bilan ko'rildi.** DOCX → PDF → PNG. Shunda uchta
+auditda ochiq qolgan nuqson tasdiqlandi: akademik sarlavhalar
+LibreOffice da KO'K chiqardi. `GOST_HEADING` ga `color: "000000"`
+qo'shildi va qayta render bilan tekshirildi.
+
+## 11.5. Ataylab qoldirilgan
+
+- **P1-4 `ownTask` yumshoq** — AUDIT-3 §17.4 dagi qaror o'z kuchida:
+  aniqlash evristik, jonli statistika yig'ilmaguncha darvoza
+  foydalanuvchidan pul emas, ishonch olardi.
+- **P1-5 o'qituvchi vositalarida sayt muqovasi ≠ GOST titul** —
+  glossariy, keys, xarita va dars rejasida sayt o'z muqovasini, fayl esa
+  GOST titulini chizadi. Bu MAHSULOT qarori, xato emas: texnologik xarita
+  va dars ishlanmasi maktab ma'muriyatiga topshiriladi va titul kerak
+  bo'lishi mumkin, glossariy va keysda esa yo'q. Yechim (ko'ruvchiga titul
+  qo'shish yoki `titlePage: false`) egasining qarorini talab qiladi.
+- **P1-12 premium slayd rasmsiz** — sababi (byudjet) Sprint 14 N-2 da
+  tuzatildi. Rasm SONI bo'yicha qaytarish kiritilmadi: u yorliqda va'da
+  qilinmagan miqdor.
+- **P2 qolgan bandlar** — duplicate `extra` maydoni, rezyume ko'ruvchisi
+  1 sahifaga qirqilishi, keys qayta urinishi birinchi partiyani
+  o'chirishi, kurs ishida fayl rejimi yo'qligi, eval qamrovidagi
+  bo'shliqlar.
