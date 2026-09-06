@@ -1,3 +1,4 @@
+import type { DocTable } from "../generation/types";
 import type { FlowItem } from "./flow";
 
 /**
@@ -8,9 +9,32 @@ import type { FlowItem } from "./flow";
  * balandliklar ARGUMENT sifatida keladi, ya'ni qaror sof funksiyada.
  */
 
-/** Sarlavha — o'zidan keyingi matn bilan birga turishi kerak. */
+/**
+ * Sarlavha — o'zidan keyingi matn bilan birga turishi kerak.
+ *
+ * `table-head` ham shu qoidaga bo'ysunadi: jadval sarlavhasi (izoh +
+ * ustun nomlari) birinchi qatordan ajralib qolmasin (B1).
+ */
 function isHeading(item: FlowItem): boolean {
-  return item.type === "h1" || item.type === "h2" || item.type === "h3";
+  return item.type === "h1" || item.type === "h2" || item.type === "h3" || item.type === "table-head";
+}
+
+/**
+ * Eng yaqin oldingi `table-head`ning O'LCHANGAN balandligi.
+ *
+ * Jadvalning ikkinchi va keyingi qatorlari sarlavha bilan ZANJIRLANMAGAN
+ * (faqat birinchi qator `blockHeight` orqali birga turadi) — shuning
+ * uchun ular oddiy band sifatida paketlanadi. Lekin biri yangi varaqni
+ * BOSHLAB qolsa, ko'ruvchi u yerda jadval sarlavhasini QAYTA chizadi
+ * ("davomi" bilan) — shu balandlik oldindan zaxira qilinishi kerak,
+ * aks holda sintez qilingan sarlavha varaqdan chiqib ketishi mumkin.
+ */
+function tableHeaderHeightBefore(items: FlowItem[], heights: number[], i: number): number {
+  for (let j = i - 1; j >= 0; j--) {
+    if (items[j].type === "table-head") return heights[j];
+    if (items[j].type !== "table-row") return 0;
+  }
+  return 0;
 }
 
 /**
@@ -93,8 +117,16 @@ export function packPages(items: FlowItem[], rawHeights: number[], limit: number
     const need = isHeading(item) ? blockHeight(items, heights, i) : h;
     if (cur.length && used + need > limit) {
       flush();
+      /*
+       * Jadval qatori davom etayotgan bo'lsa (o'zidan oldingi band ham
+       * `table-row`), yangi varaq boshida ko'ruvchi sarlavhani QAYTADAN
+       * chizadi — bu band uchun ajratilgan joy shu sarlavha balandligini
+       * ham hisobga olishi kerak, aks holda keyingi qatorlar haqiqiy
+       * bo'sh joydan ko'proq band sig'adi deb hisoblanardi.
+       */
+      const reserve = item.type === "table-row" && items[i - 1]?.type === "table-row" ? tableHeaderHeightBefore(items, heights, i) : 0;
       cur = [item];
-      used = h;
+      used = h + reserve;
       return;
     }
 
@@ -104,4 +136,28 @@ export function packPages(items: FlowItem[], rawHeights: number[], limit: number
 
   if (cur.length) pages.push(cur);
   return pages.length ? pages : [items];
+}
+
+/**
+ * Har varaq uchun: agar u BEVOSITA `table-row` bilan boshlansa VA
+ * oldingi varaq ham jadval qatori (yoki sarlavhasi) bilan tugagan
+ * bo'lsa — bu varaq o'sha jadvalning DAVOMI. Ko'ruvchi shu holatda
+ * sarlavhani (izoh + ustun nomlari) "davomi" belgisi bilan qayta
+ * chizadi (B1). `null` — bu varaq yangi jadval bilan boshlanadi yoki
+ * umuman jadval bilan bog'liq emas.
+ *
+ * `WordViewer` ichida edi, DOM'siz sinash uchun shu yerga chiqarildi.
+ */
+export function continuationTableFor(pages: FlowItem[][]): (DocTable | null)[] {
+  const out: (DocTable | null)[] = [];
+  let lastTable: DocTable | null = null;
+  let prevEndedInTable = false;
+  for (const pg of pages) {
+    const startsWithRow = pg[0]?.type === "table-row";
+    out.push(startsWithRow && prevEndedInTable ? lastTable : null);
+    for (const it of pg) if (it.type === "table-head") lastTable = it.table;
+    const last = pg[pg.length - 1];
+    prevEndedInTable = last?.type === "table-head" || last?.type === "table-row";
+  }
+  return out;
 }

@@ -11,6 +11,7 @@ import { ViewerToolbar } from "./toolbar";
 import { useVisiblePage } from "./useVisiblePage";
 
 type Term = { term: string; def: string };
+type Item = { k: "cover"; topic: string; countLabel: string; label: string } | { k: "intro"; text: string } | { k: "term"; term: Term };
 
 export function GlossaryViewer({ doc }: { doc: AcademicDoc }) {
   const L = sectionLabels(doc.meta.language);
@@ -33,20 +34,32 @@ export function GlossaryViewer({ doc }: { doc: AcademicDoc }) {
   }, [doc]);
 
   /*
-   * Ilgari varaqqa QAT'IY 8 ta atama joylanardi. Izoh 280 belgigacha
-   * bo'lishi mumkin: 8 ta uzun atama ~1 180 px joy egallaydi, varaqda esa
-   * ~970 px bor — oxirgi kartochka varaqdan chiqib ketardi. Endi
-   * balandlik haqiqiy o'lchanadi.
+   * Ilgari "kirish" varag'i (badge + sarlavha + kirish matni) O'LCHANMAY
+   * qattiq bitta `word-sheet`ga chizilardi (AUDIT-6 B2) — uzun kirish
+   * matni `.word-sheet{overflow:hidden}` ostida jim kesilardi. Endi u
+   * ATAMALAR bilan BIR XIL o'lchov oqimida: "kirish -> atamalar" o'tishi
+   * majburiy yangi varaqdan boshlanadi (`breakBefore`), lekin kirishning
+   * o'zi kerak bo'lsa bir necha varaqqa bo'linadi.
    */
-  const { pages: measured, measureNode } = useMeasuredPages(terms, (t) => <TermCard term={t} />, {
-    key: terms.map((t) => t.term).join("|"),
+  const items = useMemo<Item[]>(() => {
+    const out: Item[] = [
+      { k: "cover", topic: doc.meta.topic, countLabel: L.unitTerms(terms.length), label: L.viewerGlossary },
+    ];
+    for (const b of doc.sections[0]?.blocks ?? []) out.push({ k: "intro", text: b.text });
+    for (const t of terms) out.push({ k: "term", term: t });
+    return out;
+  }, [doc, terms, L]);
+
+  const { pages: measured, measureNode } = useMeasuredPages(items, (it) => <GlossaryBlock item={it} />, {
+    breakBefore: (it, i) => it.k === "term" && items[i - 1]?.k !== "term",
+    key: `${doc.meta.topic}:${terms.length}:${doc.sections[0]?.blocks.length ?? 0}`,
   });
-  const pages = measured ?? [terms];
+  const pages = measured?.length ? measured : [items];
 
   const [zoom, setZoom] = useState(90);
   const refs = useRef<(HTMLDivElement | null)[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const total = 2 + pages.length;
+  const total = 1 + pages.length;
   const [page, setPage] = useVisiblePage(scrollRef, () => refs.current, [total, zoom]);
 
   function go(n: number) {
@@ -73,49 +86,21 @@ export function GlossaryViewer({ doc }: { doc: AcademicDoc }) {
               refs.current[0] = el;
             }}
           />
-          <ZoomFrame zoom={zoom / 100} width={A4.wPx} height={A4.hPx}>
-            <div
-              ref={(el) => {
-                refs.current[1] = el;
-              }}
-              className="word-sheet"
-            >
-              <div className="word-inner">
-                <div className="mb-6 border-b-4 border-pink-600 pb-3 text-center">
-                  <div className="text-[11pt] tracking-[0.2em] text-pink-700 uppercase">{L.viewerGlossary}</div>
-                  <h1 className="mt-2 text-[20pt] font-bold">{doc.meta.topic}</h1>
-                  <p className="mt-2 text-[12pt]">{L.unitTerms(terms.length)}</p>
-                </div>
-                {(doc.sections[0]?.blocks ?? []).map((b, i) => (
-                  <p key={i} className="word-p">
-                    {b.text}
-                  </p>
-                ))}
-              </div>
-              <div className="word-footer-num">2</div>
-            </div>
-          </ZoomFrame>
 
           {pages.map((chunk, i) => (
             <ZoomFrame key={i} zoom={zoom / 100} width={A4.wPx} height={A4.hPx}>
               <div
                 ref={(el) => {
-                  refs.current[i + 2] = el;
+                  refs.current[i + 1] = el;
                 }}
                 className="word-sheet"
               >
                 <div className="word-inner">
-                  {/*
-                    Kalit INDEKS bo'yicha: atama nomi noyob bo'lishi
-                    kafolatlanmagan (shablon yo'lida takrorlanishi mumkin),
-                    takroriy React kaliti esa kartochkani tushirib
-                    qoldirishi mumkin.
-                  */}
-                  {chunk.map((t, j) => (
-                    <TermCard key={`${i}-${j}`} term={t} />
+                  {chunk.map((it, j) => (
+                    <GlossaryBlock key={`${i}-${j}`} item={it} />
                   ))}
                 </div>
-                <div className="word-footer-num">{i + 3}</div>
+                <div className="word-footer-num">{i + 2}</div>
               </div>
             </ZoomFrame>
           ))}
@@ -124,6 +109,20 @@ export function GlossaryViewer({ doc }: { doc: AcademicDoc }) {
       {measureNode}
     </div>
   );
+}
+
+function GlossaryBlock({ item }: { item: Item }) {
+  if (item.k === "cover") {
+    return (
+      <div className="mb-6 border-b-4 border-pink-600 pb-3 text-center">
+        <div className="text-[11pt] tracking-[0.2em] text-pink-700 uppercase">{item.label}</div>
+        <h1 className="mt-2 text-[20pt] font-bold">{item.topic}</h1>
+        <p className="mt-2 text-[12pt]">{item.countLabel}</p>
+      </div>
+    );
+  }
+  if (item.k === "intro") return <p className="word-p">{item.text}</p>;
+  return <TermCard term={item.term} />;
 }
 
 function TermCard({ term }: { term: Term }) {

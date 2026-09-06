@@ -13,7 +13,11 @@ import { ViewerToolbar } from "./toolbar";
 import { useVisiblePage } from "./useVisiblePage";
 
 /** Dars xaritasi oqimidagi band. */
-type Item = { k: "h1" | "h3" | "p"; text: string } | { k: "table"; table: DocTable };
+type Item =
+  | { k: "cover"; label: string; topic: string; meta: [string, string][] }
+  | { k: "intro"; text: string }
+  | { k: "h1" | "h3" | "p"; text: string }
+  | { k: "table"; table: DocTable };
 
 export function LessonViewer({ doc }: { doc: AcademicDoc }) {
   const L = sectionLabels(doc.meta.language);
@@ -25,24 +29,40 @@ export function LessonViewer({ doc }: { doc: AcademicDoc }) {
   const table = doc.tables?.[0];
 
   /*
-   * Ilgari ko'ruvchi QAT'IY 2 varaqdan iborat edi: ikkinchisiga oltita
-   * bosqich (har biri sarlavha + 700 belgigacha matn) VA vaqt jadvali
-   * birga tiqilardi. Natijada oxirgi bosqichlar varaqdan chiqib, qo'shni
-   * varaq ustiga tushardi. Endi dars xaritasi o'lchanadi va kerak
-   * bo'lgancha varaqqa bo'linadi.
+   * Ilgari "pasport" varag'i (badge + sarlavha + meta-jadval + kirish
+   * matni) O'LCHANMAY qattiq bitta `word-sheet`ga chizilardi
+   * (AUDIT-6 B2) — uzun kirish matni jim kesilardi. Endi u dars
+   * xaritasi bilan BIR XIL o'lchov oqimida: xarita (`h1`) majburiy
+   * yangi varaqdan boshlanadi (`breakBefore`), pasport esa kerak
+   * bo'lsa bir necha varaqqa bo'linadi.
    */
   const items = useMemo<Item[]>(() => {
-    const out: Item[] = [{ k: "h1", text: map?.title ?? L.lessonMap }];
+    const out: Item[] = [
+      {
+        k: "cover",
+        label: L.viewerLesson,
+        topic: doc.meta.topic,
+        meta: [
+          [L.fieldSubject, doc.meta.subject || "—"],
+          [L.fieldGrade, String(doc.meta.grade || "—")],
+          [L.fieldDuration, `${doc.meta.duration || 45} ${L.minutesShort}`],
+          [L.fieldLanguage, languageName(doc.meta.language)],
+        ],
+      },
+    ];
+    for (const b of passport?.blocks ?? []) out.push({ k: "intro", text: b.text });
+    out.push({ k: "h1", text: map?.title ?? L.lessonMap });
     for (const b of map?.blocks ?? []) out.push({ k: b.kind === "h3" ? "h3" : "p", text: b.text });
     if (table) out.push({ k: "table", table });
     return out;
-  }, [map, table, L.lessonMap]);
+  }, [doc, passport, map, table, L]);
 
   const { pages: measured, measureNode } = useMeasuredPages(items, (it) => <LessonBlock item={it} />, {
-    key: `${items.length}:${map?.blocks.length ?? 0}:${table?.rows.length ?? 0}`,
+    breakBefore: (it) => it.k === "h1",
+    key: `${items.length}:${passport?.blocks.length ?? 0}:${map?.blocks.length ?? 0}:${table?.rows.length ?? 0}`,
   });
-  const mapPages = measured ?? [items];
-  const total = 2 + mapPages.length;
+  const pages = measured?.length ? measured : [items];
+  const total = pages.length;
   const [page, setPage] = useVisiblePage(scrollRef, () => refs.current, [total, zoom]);
 
   function go(n: number) {
@@ -69,39 +89,12 @@ export function LessonViewer({ doc }: { doc: AcademicDoc }) {
               refs.current[0] = el;
             }}
           />
-          <ZoomFrame zoom={zoom / 100} width={A4.wPx} height={A4.hPx}>
-            <div
-              ref={(el) => {
-                refs.current[1] = el;
-              }}
-              className="word-sheet"
-            >
-              <div className="word-inner">
-                <div className="mb-4 border-b-4 border-emerald-600 pb-3">
-                  <div className="text-[11pt] tracking-widest text-emerald-700 uppercase">{L.viewerLesson}</div>
-                  <h1 className="mt-1 text-[18pt] font-bold">{doc.meta.topic}</h1>
-                  <div className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1 text-[12pt]">
-                    <div>{L.fieldSubject}: {doc.meta.subject || "—"}</div>
-                    <div>{L.fieldGrade}: {doc.meta.grade || "—"}</div>
-                    <div>{L.fieldDuration}: {doc.meta.duration || 45} {L.minutesShort}</div>
-                    <div>{L.fieldLanguage}: {languageName(doc.meta.language)}</div>
-                  </div>
-                </div>
-                {(passport?.blocks ?? []).map((b, i) => (
-                  <p key={i} className="word-p">
-                    {b.text}
-                  </p>
-                ))}
-              </div>
-              <div className="word-footer-num">2</div>
-            </div>
-          </ZoomFrame>
 
-          {mapPages.map((chunk, i) => (
+          {pages.map((chunk, i) => (
             <ZoomFrame key={i} zoom={zoom / 100} width={A4.wPx} height={A4.hPx}>
               <div
                 ref={(el) => {
-                  refs.current[i + 2] = el;
+                  refs.current[i + 1] = el;
                 }}
                 className="word-sheet"
               >
@@ -110,7 +103,7 @@ export function LessonViewer({ doc }: { doc: AcademicDoc }) {
                     <LessonBlock key={k} item={it} />
                   ))}
                 </div>
-                <div className="word-footer-num">{i + 3}</div>
+                <div className="word-footer-num">{i + 2}</div>
               </div>
             </ZoomFrame>
           ))}
@@ -122,13 +115,26 @@ export function LessonViewer({ doc }: { doc: AcademicDoc }) {
 }
 
 function LessonBlock({ item }: { item: Item }) {
+  if (item.k === "cover") {
+    return (
+      <div className="mb-4 border-b-4 border-emerald-600 pb-3">
+        <div className="text-[11pt] tracking-widest text-emerald-700 uppercase">{item.label}</div>
+        <h1 className="mt-1 text-[18pt] font-bold">{item.topic}</h1>
+        <div className="mt-2 grid grid-cols-2 gap-x-6 gap-y-1 text-[12pt]">
+          {item.meta.map(([k, v]) => (
+            <div key={k}>
+              {k}: {v}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+  if (item.k === "intro") return <p className="word-p">{item.text}</p>;
   if (item.k === "table") {
     // Ustun kengliklari — DOCX bilan bir xil: jadval bergani ustun (B5),
     // bo'lmasa `table-columns.ts` (A9).
-    const cols =
-      item.table.widths ??
-      columnPercents(item.table.headers) ??
-      evenPercents(item.table.headers.length);
+    const cols = item.table.widths ?? columnPercents(item.table.headers) ?? evenPercents(item.table.headers.length);
     return (
       <div>
         {item.table.caption ? (

@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { docLabels } from "@/lib/generation/i18n";
+import { docLabels, sectionLabels } from "@/lib/generation/i18n";
+import { columnPercents, evenPercents } from "@/lib/generation/table-columns";
 import { ESSAY_DESIGNS } from "@/lib/languages";
-import type { AcademicDoc } from "@/lib/generation/types";
+import type { AcademicDoc, DocTable } from "@/lib/generation/types";
 import { docToFlow, titleModel, tocRows, type FlowItem, type TocRow } from "@/lib/viewers/flow";
 import { A4, contentHeightPx } from "@/lib/viewers/metrics";
-import { packPages } from "@/lib/viewers/paginate";
+import { continuationTableFor, packPages } from "@/lib/viewers/paginate";
 import { ZoomFrame, Workspace } from "./sheet";
 import { TitlePage } from "./TitlePage";
 import { ViewerToolbar } from "./toolbar";
@@ -24,6 +25,7 @@ export function WordViewer({ doc }: { doc: AcademicDoc }) {
   const title = useMemo(() => titleModel(doc), [doc]);
   const toc = useMemo(() => tocRows(doc), [doc]);
   const labels = useMemo(() => docLabels(doc.meta.language), [doc.meta.language]);
+  const continuedLabel = useMemo(() => sectionLabels(doc.meta.language).continued, [doc.meta.language]);
   /**
    * Sahifa ramkasi ko'ruvchida ham FAQAT inshoda — `render-docx.ts`
    * dagi shart bilan bir xil. Aks holda ekranda ramka ko'rinib,
@@ -64,6 +66,9 @@ export function WordViewer({ doc }: { doc: AcademicDoc }) {
     const hs = kids.map((el) => el.getBoundingClientRect().height);
     setPages(packPages(items, hs, contentHeightPx({ footer: true })));
   }, [items]);
+
+  // Sof funksiya `paginate.ts` da (mutatsiya bilan tekshirilgan).
+  const continuationTables = useMemo(() => (pages ? continuationTableFor(pages) : []), [pages]);
 
   // Scroll paytida ko'rinib turgan varaqni kuzatish — barcha ko'ruvchilar
   // uchun yagona hook (`useVisiblePage`).
@@ -117,9 +122,13 @@ export function WordViewer({ doc }: { doc: AcademicDoc }) {
                       <TitlePage title={title} />
                     ) : (
                       <div className="word-inner">
-                        {pg.map((it) => (
-                          <FlowBlock key={it.id} item={it} toc={toc} labels={labels} />
-                        ))}
+                        <PageBody
+                          items={pg}
+                          continuation={continuationTables[i] ?? null}
+                          continuedLabel={continuedLabel}
+                          toc={toc}
+                          labels={labels}
+                        />
                       </div>
                     )}
                     {!isTitle ? <div className="word-footer-num">{i + 1}</div> : null}
@@ -161,6 +170,137 @@ export function WordViewer({ doc }: { doc: AcademicDoc }) {
 }
 
 
+
+/**
+ * Bitta sahifaning bandlarini chizadi — `table-head`/`table-row`
+ * ketma-ketligini BITTA `<table>` ga yig'ib (B1).
+ *
+ * Nega alohida komponent: `<table>` va uning `<tr>` qatorlari bir xil
+ * DOM daraxtida bo'lishi SHART (HTML validligi va ko'rinish uchun),
+ * lekin paketlash ularni mustaqil bandlar sifatida ko'radi — bittasi
+ * ushbu varaqda, davomi keyingisida bo'lishi mumkin. Shuning uchun
+ * ketma-ket `table-head`/`table-row` bandlari bufer qilinib, BIR
+ * `<table>` sifatida chiqariladi; oddiy bandlar `FlowBlock` orqali
+ * o'zgarishsiz.
+ */
+function PageBody({
+  items,
+  continuation,
+  continuedLabel,
+  toc,
+  labels,
+}: {
+  items: FlowItem[];
+  continuation: DocTable | null;
+  continuedLabel: string;
+  toc: TocRow[];
+  labels: ReturnType<typeof docLabels>;
+}) {
+  const nodes: React.ReactNode[] = [];
+  let buf: Extract<FlowItem, { type: "table-head" | "table-row" }>[] = [];
+  let key = 0;
+
+  const flushTable = () => {
+    if (!buf.length) return;
+    const head = buf.find((it): it is Extract<FlowItem, { type: "table-head" }> => it.type === "table-head");
+    const table = head?.table ?? continuation;
+    const rows = buf.filter((it): it is Extract<FlowItem, { type: "table-row" }> => it.type === "table-row");
+    if (table) {
+      nodes.push(<TableGroup key={`tbl-${key++}`} table={table} rows={rows} continued={!head} continuedLabel={continuedLabel} />);
+    }
+    buf = [];
+  };
+
+  for (const it of items) {
+    if (it.type === "table-head" || it.type === "table-row") {
+      buf.push(it);
+      continue;
+    }
+    flushTable();
+    nodes.push(<FlowBlock key={it.id} item={it} toc={toc} labels={labels} />);
+  }
+  flushTable();
+
+  return <>{nodes}</>;
+}
+
+function tableCols(table: DocTable) {
+  return table.widths ?? columnPercents(table.headers) ?? evenPercents(table.headers.length);
+}
+
+function TableHeadOnly({ table }: { table: DocTable }) {
+  const cols = tableCols(table);
+  return (
+    <div>
+      {table.caption ? (
+        <div className="mb-1 text-center text-[12pt] italic" style={{ textIndent: 0 }}>
+          {table.caption}
+        </div>
+      ) : null}
+      <table className="word-table" style={{ tableLayout: "fixed" }}>
+        <colgroup>
+          {cols.map((w, i) => (
+            <col key={i} style={{ width: `${w}%` }} />
+          ))}
+        </colgroup>
+        <thead>
+          <tr>
+            {table.headers.map((h) => (
+              <th key={h}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+      </table>
+    </div>
+  );
+}
+
+function TableGroup({
+  table,
+  rows,
+  continued,
+  continuedLabel,
+}: {
+  table: DocTable;
+  rows: Extract<FlowItem, { type: "table-row" }>[];
+  continued: boolean;
+  continuedLabel: string;
+}) {
+  const cols = tableCols(table);
+  return (
+    <div>
+      {table.caption ? (
+        <div className="mb-1 text-center text-[12pt] italic" style={{ textIndent: 0 }}>
+          {table.caption}
+          {continued ? ` ${continuedLabel}` : ""}
+        </div>
+      ) : null}
+      <table className="word-table" style={{ tableLayout: "fixed" }}>
+        <colgroup>
+          {cols.map((w, i) => (
+            <col key={i} style={{ width: `${w}%` }} />
+          ))}
+        </colgroup>
+        <thead>
+          <tr>
+            {table.headers.map((h) => (
+              <th key={h}>{h}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.id}>
+              {r.row.map((c, j) => (
+                <td key={j}>{c}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
 
 function FlowBlock({
   item,
@@ -247,33 +387,28 @@ function FlowBlock({
           </pre>
         </div>
       );
-    case "table":
+    case "table-head":
+      /*
+       * FAQAT o'lchov uchun: o'zining mustaqil `<table>`sida (izoh +
+       * ustun nomlari, qatorsiz) — bu balandlik `paginate.ts` da
+       * "davomi" sarlavhasi uchun zaxira sifatida ishlatiladi.
+       * Haqiqiy sahifada bu band `PageBody`/`TableGroup` orqali,
+       * BIRINCHI qatori bilan bitta jadvalga birlashtirib chiziladi.
+       */
+      return <TableHeadOnly table={item.table} />;
+    case "table-row":
+      // FAQAT o'lchov uchun — mustaqil `<tr>` HTML da noto'g'ri
+      // o'lchanadi, shuning uchun o'z jadvaliga o'ralgan.
       return (
-        <div>
-          {item.table.caption ? (
-            <div className="mb-1 text-center text-[12pt] italic" style={{ textIndent: 0 }}>
-              {item.table.caption}
-            </div>
-          ) : null}
-          <table className="word-table">
-            <thead>
-              <tr>
-                {item.table.headers.map((h) => (
-                  <th key={h}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {item.table.rows.map((r, i) => (
-                <tr key={i}>
-                  {r.map((c, j) => (
-                    <td key={j}>{c}</td>
-                  ))}
-                </tr>
+        <table className="word-table">
+          <tbody>
+            <tr>
+              {item.row.map((c, j) => (
+                <td key={j}>{c}</td>
               ))}
-            </tbody>
-          </table>
-        </div>
+            </tr>
+          </tbody>
+        </table>
       );
     case "refNote":
       /*

@@ -106,6 +106,14 @@ export type Generation = {
   progress: number;
   step: string;
   doc?: AcademicDoc;
+  /**
+   * Va'da qilinganidan kam yetkazilgan bo'lsa (AUDIT-6 C7).
+   *
+   * Ilgari bu faqat qisman qaytarish tranzaksiyasining IZOHIDA
+   * qolardi — natija sahifasi "Tayyor" deb ko'rsatar, foydalanuvchi
+   * nega kam rasm/qator kelganini bilmasdi.
+   */
+  delivered?: { got: number; want: number };
 };
 
 export type UserProfile = {

@@ -223,3 +223,38 @@ test("navbat SQL i", { skip: hasDb ? false : "DATABASE_URL yo'q" }, async (t) =>
     assert.equal(after[0].format, "zip");
   });
 });
+
+test("rowToSummary: delivered_json -> delivered (Sprint 5, AUDIT-6 C7)", async () => {
+  const { rowToSummary } = await import("../lib/server/jobs.ts");
+
+  /*
+   * Ilgari `file.delivered` faqat qisman qaytarish tranzaksiyasining
+   * izohida qolardi — bazada umuman saqlanmasdi. `ResultView` uni
+   * ko'rsatishi uchun avval `rowToSummary` uni qatordan xulosaga
+   * to'g'ri o'tkazishi kerak.
+   */
+  const base = {
+    id: "g1",
+    user_id: "u1",
+    tool_id: "image",
+    topic: "Rasm",
+    status: "COMPLETED" as const,
+    price: "6000",
+    format: "zip",
+    progress: 100,
+    step: "Tayyor",
+    file_name: "rasm.zip",
+    error: null,
+    preview: null,
+    created_at: new Date("2026-01-01T00:00:00Z"),
+    started_at: null,
+    finished_at: new Date("2026-01-01T00:01:00Z"),
+    expires_at: null,
+  };
+
+  const withDelivered = rowToSummary({ ...base, delivered_json: { got: 3, want: 4 } });
+  assert.deepEqual(withDelivered.delivered, { got: 3, want: 4 });
+
+  const withoutDelivered = rowToSummary({ ...base, delivered_json: null });
+  assert.equal(withoutDelivered.delivered, undefined, "to'liq yetkazilganda maydon yo'q bo'lishi kerak");
+});

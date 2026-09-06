@@ -32,6 +32,7 @@ export type GenerationRow = {
   file_name: string;
   error: string | null;
   preview: GenerationPreview | null;
+  delivered_json: { got: number; want: number } | null;
   created_at: Date;
   started_at: Date | null;
   finished_at: Date | null;
@@ -40,7 +41,7 @@ export type GenerationRow = {
 
 const ROW_COLUMNS = `
   id, user_id, tool_id, topic, status, price, format, progress, step,
-  values_json, file_name, error, preview, created_at, started_at, finished_at, expires_at
+  values_json, file_name, error, preview, delivered_json, created_at, started_at, finished_at, expires_at
 `;
 
 /** Ro'yxat kartochkasi uchun yengil ko'rinish. */
@@ -68,6 +69,7 @@ export function rowToSummary(r: Omit<GenerationRow, "values_json" | "doc_json" |
     step: r.step,
     expiresAt: r.expires_at ? new Date(r.expires_at).toISOString() : null,
     error: r.error,
+    delivered: r.delivered_json ?? undefined,
   };
 }
 
@@ -279,13 +281,15 @@ export async function completeJob(
     doc: AcademicDoc | null;
     fileName: string;
     preview: GenerationPreview | null;
+    /** Va'da qilinganidan kam yetkazilgan bo'lsa (AUDIT-6 C7). */
+    delivered?: { got: number; want: number };
   },
 ): Promise<boolean> {
   const rows = await query<{ id: string }>(
     `UPDATE generations
         SET status = 'COMPLETED', progress = 100, step = 'Tayyor',
             html = $3, doc_json = $4, file_name = $5, preview = $6,
-            format = COALESCE($7, format),
+            format = COALESCE($7, format), delivered_json = $8,
             finished_at = now(), locked_by = NULL, locked_at = NULL, error = NULL
       WHERE id = $1 AND locked_by = $2 AND status = 'IN_PROGRESS'
       RETURNING id`,
@@ -297,6 +301,7 @@ export async function completeJob(
       result.fileName,
       result.preview ? JSON.stringify(result.preview) : null,
       formatOf(result.fileName),
+      result.delivered ? JSON.stringify(result.delivered) : null,
     ],
   );
   return rows.length > 0;

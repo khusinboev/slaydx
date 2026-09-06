@@ -11,15 +11,11 @@ import { TitleSheet } from "./TitlePage";
 import { ViewerToolbar } from "./toolbar";
 import { useVisiblePage } from "./useVisiblePage";
 
+type Item = { k: "cover"; label: string; topic: string; meta: [string, string][] } | { k: "intro"; text: string } | { k: "row"; row: string[] };
+
 export function TableViewer({ doc }: { doc: AcademicDoc }) {
   const L = sectionLabels(doc.meta.language);
   const table = doc.tables?.[0];
-  /*
-   * Ilgari varaqqa QAT'IY 8 qator joylanardi. To'lib ketmasdi, lekin
-   * yotiq varaqning yarmidan ko'pi bo'sh qolardi: 34 haftalik xarita
-   * keraksiz ravishda 5 varaqqa cho'zilardi. Endi qator balandligi
-   * o'lchanadi. Chegaradan sarlavha qatori va izoh uchun joy ayiriladi.
-   */
   const rows = useMemo(() => table?.rows ?? [], [table]);
   // Ustun kengliklari — DOCX bilan bir xil (`table-columns.ts`). O'lchov
   // ham, ko'rinish ham SHU kengliklarda chiziladi, aks holda o'lchangan
@@ -38,34 +34,65 @@ export function TableViewer({ doc }: { doc: AcademicDoc }) {
       ))}
     </colgroup>
   );
+
+  /*
+   * Ilgari "kirish" varag'i (badge + sarlavha + meta-kartochkalar +
+   * kirish matni) O'LCHANMAY qattiq bitta `word-sheet`ga chizilardi
+   * (AUDIT-6 B2) — uzun kirish matni jim kesilardi. Endi u jadval
+   * qatorlari bilan BIR XIL o'lchov oqimida: birinchi qator majburiy
+   * yangi varaqdan boshlanadi (`breakBefore`), kirish esa kerak bo'lsa
+   * bir necha varaqqa bo'linadi.
+   */
+  const items = useMemo<Item[]>(() => {
+    const out: Item[] = [
+      {
+        k: "cover",
+        label: L.viewerMap,
+        topic: doc.meta.subject || doc.meta.topic,
+        meta: [
+          [L.fieldWeeklyHours, String(doc.meta.weeklyHours || "—")],
+          [L.fieldTotalHours, String(doc.meta.totalHours || "—")],
+          [L.fieldWeeks, String(rows.length || "—")],
+        ],
+      },
+    ];
+    for (const b of doc.sections[0]?.blocks ?? []) out.push({ k: "intro", text: b.text });
+    for (const r of rows) out.push({ k: "row", row: r });
+    return out;
+  }, [doc, rows, L]);
+
   const { pages: measured, measureNode } = useMeasuredPages(
-    rows,
-    (r) => (
-      <table className="word-table w-full text-[10pt]" style={{ tableLayout: "fixed" }}>
-        {colGroup}
-        <tbody>
-          <tr>
-            {r.map((c, j) => (
-              <td key={j}>{c}</td>
-            ))}
-          </tr>
-        </tbody>
-      </table>
-    ),
+    items,
+    (it) =>
+      it.k === "row" ? (
+        <table className="word-table w-full text-[10pt]" style={{ tableLayout: "fixed" }}>
+          {colGroup}
+          <tbody>
+            <tr>
+              {it.row.map((c, j) => (
+                <td key={j}>{c}</td>
+              ))}
+            </tr>
+          </tbody>
+        </table>
+      ) : (
+        <TableCoverBlock item={it} />
+      ),
     {
       limit: landscapeContentHeightPx() - 72,
       className: "!w-[269mm] !text-[10pt] !leading-snug",
-      key: `${rows.length}:${table?.headers.length ?? 0}`,
+      breakBefore: (it, i) => it.k === "row" && items[i - 1]?.k !== "row",
+      key: `${rows.length}:${table?.headers.length ?? 0}:${doc.sections[0]?.blocks.length ?? 0}`,
     },
   );
-  const chunks = measured?.length ? measured : [rows];
+  const pages = measured?.length ? measured : [items];
   // `ZOOM_STEPS` ichidan (`toolbar.tsx` `+`/`−` shu ro'yxatda yuradi).
   // Ilgari 80 edi — ro'yxatda yo'q, `indexOf` = -1, `+` darhol 150 ga,
   // `−` 50 ga sakrardi.
   const [zoom, setZoom] = useState(75);
   const refs = useRef<(HTMLDivElement | null)[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const total = 2 + chunks.length;
+  const total = 1 + pages.length;
   const [page, setPage] = useVisiblePage(scrollRef, () => refs.current, [total, zoom]);
 
   function go(n: number) {
@@ -73,6 +100,12 @@ export function TableViewer({ doc }: { doc: AcademicDoc }) {
     setPage(next);
     refs.current[next - 1]?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
+
+  // Sahifadagi ilk qator jadval boshi bilan bir xil "davomi" belgisini
+  // olishi uchun — har bo'lakning o'zidan oldin "row" bo'lgan-bo'lmaganini
+  // bilish kerak: agar bo'lak "row" bilan boshlansa va bu ENG BIRINCHI
+  // "row" guruhi bo'lmasa, sarlavha "davomi" bo'ladi.
+  let sawFirstRow = false;
 
   return (
     <div className="flex h-full min-h-[70vh] flex-col">
@@ -87,80 +120,86 @@ export function TableViewer({ doc }: { doc: AcademicDoc }) {
           */}
           <TitleSheet
             doc={doc}
-            zoom={zoom} landscape
+            zoom={zoom}
+            landscape
             innerRef={(el) => {
               refs.current[0] = el;
             }}
           />
-          <ZoomFrame zoom={zoom / 100} width={LANDSCAPE.wPx} height={LANDSCAPE.hPx}>
-            <div
-              ref={(el) => {
-                refs.current[1] = el;
-              }}
-              className="word-sheet word-sheet-ls"
-            >
-              <div className="word-inner word-inner-ls">
-                <div className="mb-3 border-b-4 border-violet-600 pb-2">
-                  <div className="text-[10pt] tracking-widest text-violet-700 uppercase">{L.viewerMap}</div>
-                  <h1 className="text-[18pt] font-bold">{doc.meta.subject || doc.meta.topic}</h1>
-                </div>
-                <div className="mb-3 grid grid-cols-3 gap-3 text-[11pt]">
-                  <Info k={L.fieldWeeklyHours} v={String(doc.meta.weeklyHours || "—")} />
-                  <Info k={L.fieldTotalHours} v={String(doc.meta.totalHours || "—")} />
-                  <Info k={L.fieldWeeks} v={String(table?.rows.length || "—")} />
-                </div>
-                {(doc.sections[0]?.blocks ?? []).map((b, i) => (
-                  <p key={i} className="word-p text-[12pt]">
-                    {b.text}
-                  </p>
-                ))}
-              </div>
-              <div className="word-footer-num">2</div>
-            </div>
-          </ZoomFrame>
 
-          {chunks.map((rows, ci) => (
-            <ZoomFrame key={ci} zoom={zoom / 100} width={LANDSCAPE.wPx} height={LANDSCAPE.hPx}>
-              <div
-                ref={(el) => {
-                  refs.current[ci + 2] = el;
-                }}
-                className="word-sheet word-sheet-ls"
-              >
-                <div className="word-inner word-inner-ls">
-                  <div className="mb-2 text-[11pt] font-bold text-violet-800">
-                    {table?.caption}
-                    {ci > 0 ? ` ${L.continued}` : ""}
+          {pages.map((chunk, i) => {
+            const isTablePage = chunk[0]?.k === "row";
+            const continued = isTablePage && sawFirstRow;
+            if (isTablePage) sawFirstRow = true;
+            return (
+              <ZoomFrame key={i} zoom={zoom / 100} width={LANDSCAPE.wPx} height={LANDSCAPE.hPx}>
+                <div
+                  ref={(el) => {
+                    refs.current[i + 1] = el;
+                  }}
+                  className="word-sheet word-sheet-ls"
+                >
+                  <div className="word-inner word-inner-ls">
+                    {isTablePage ? (
+                      <>
+                        <div className="mb-2 text-[11pt] font-bold text-violet-800">
+                          {table?.caption}
+                          {continued ? ` ${L.continued}` : ""}
+                        </div>
+                        <table className="word-table text-[10pt]" style={{ tableLayout: "fixed" }}>
+                          {colGroup}
+                          <thead>
+                            <tr className="bg-violet-50">
+                              {(table?.headers ?? []).map((h) => (
+                                <th key={h}>{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {chunk.map((it, j) =>
+                              it.k === "row" ? (
+                                <tr key={j}>
+                                  {it.row.map((c, k) => (
+                                    <td key={k}>{c}</td>
+                                  ))}
+                                </tr>
+                              ) : null,
+                            )}
+                          </tbody>
+                        </table>
+                      </>
+                    ) : (
+                      chunk.map((it, j) => <TableCoverBlock key={j} item={it} />)
+                    )}
                   </div>
-                  <table className="word-table text-[10pt]" style={{ tableLayout: "fixed" }}>
-                    {colGroup}
-                    <thead>
-                      <tr className="bg-violet-50">
-                        {(table?.headers ?? []).map((h) => (
-                          <th key={h}>{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rows.map((r, i) => (
-                        <tr key={i}>
-                          {r.map((c, j) => (
-                            <td key={j}>{c}</td>
-                          ))}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                  <div className="word-footer-num">{i + 2}</div>
                 </div>
-                <div className="word-footer-num">{ci + 3}</div>
-              </div>
-            </ZoomFrame>
-          ))}
+              </ZoomFrame>
+            );
+          })}
         </div>
       </Workspace>
       {measureNode}
     </div>
   );
+}
+
+function TableCoverBlock({ item }: { item: Item }) {
+  if (item.k === "cover") {
+    return (
+      <div className="mb-3 border-b-4 border-violet-600 pb-2">
+        <div className="text-[10pt] tracking-widest text-violet-700 uppercase">{item.label}</div>
+        <h1 className="text-[18pt] font-bold">{item.topic}</h1>
+        <div className="mt-3 grid grid-cols-3 gap-3 text-[11pt]">
+          {item.meta.map(([k, v]) => (
+            <Info key={k} k={k} v={v} />
+          ))}
+        </div>
+      </div>
+    );
+  }
+  if (item.k === "intro") return <p className="word-p text-[12pt]">{item.text}</p>;
+  return null;
 }
 
 function Info({ k, v }: { k: string; v: string }) {

@@ -254,6 +254,18 @@ export function ResultView({ id }: { id: string }) {
         </div>
       ) : completed ? (
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          {gen.delivered ? (
+            /*
+             * Va'da qilinganidan kam yetkazilgan (AUDIT-6 C7).
+             *
+             * Ilgari bu farq faqat qisman qaytarish tranzaksiyasining
+             * izohida qolardi — sahifa "Tayyor" deb ko'rsatar,
+             * foydalanuvchi nega kam rasm/qator kelganini bilmasdi.
+             */
+            <p className="border-b bg-amber-50 px-4 py-2 text-center text-xs text-amber-800">
+              {gen.delivered.want} tadan {gen.delivered.got} tasi yaratildi — farq balansingizga qaytarildi.
+            </p>
+          ) : null}
           <ArtifactViewer gen={toLegacyShape(gen)} />
         </div>
       ) : null}

@@ -231,3 +231,137 @@ test("uzun hujjat chegaradan oshmaydi", () => {
     assert.ok(total <= LIMIT, `${n + 1}-varaq chegaradan oshdi: ${total} > ${LIMIT}`);
   });
 });
+
+// ── Jadval sahifalash (Sprint 5, B1) ─────────────────────────────────
+/*
+ * Ilgari BUTUN jadval (yoki 10 qatorlik qattiq bo'lak) bitta band edi:
+ * balandligi bitta varaqdan oshsa, `.word-sheet{overflow:hidden}`
+ * pastini jim kesardi. Endi har qator ALOHIDA band — sarlavha
+ * (`table-head`) birinchi qator bilan keep-with-next orqali turadi,
+ * qolgan qatorlar haqiqiy balandligi bo'yicha oqadi.
+ */
+
+const tableHead = (): FlowItem => ({ type: "table-head", id: nextId(), table: { headers: ["A"], rows: [] } });
+const row = (text = "qator"): FlowItem => ({ type: "table-row", id: nextId(), row: [text] });
+
+test("jadval sarlavhasi birinchi qator bilan birga turadi", () => {
+  const items = [p("to'ldiruvchi"), tableHead(), row("1")];
+  const heights = [700, 40, 220];
+
+  const pages = packPages(items, heights, LIMIT);
+
+  assert.equal(pages.length, 2);
+  assert.deepEqual(pages[1].map((x) => x.type), ["table-head", "table-row"], "sarlavha qatordan ajralib qolmasin");
+});
+
+test("davom etayotgan qator uchun sarlavha balandligi zaxira qilinadi", () => {
+  /*
+   * Ushbu test qadamlarni izohda yozilgan hisob-kitob bilan aynan
+   * mos: sabab — `paginate.ts` yangi varaq boshida ko'ruvchi jadval
+   * sarlavhasini QAYTA chizadi ("davomi" bilan), lekin bu sintez
+   * qilingan sarlavha `pages` massividagi haqiqiy band emas — shuning
+   * uchun uning balandligi ALOHIDA zaxira qilinishi SHART, aks holda
+   * keyingi qatorlar "bo'sh joy bor" deb noto'g'ri hisoblanadi.
+   */
+  const items = [tableHead(), row("1"), row("2"), row("3"), row("4")];
+  const heights = [40, 40, 800, 100, 810];
+
+  const pages = packPages(items, heights, LIMIT);
+
+  assert.equal(pages.length, 3, "sarlavha zaxirasi 3-qatorni yolg'iz qoldirishi kerak");
+  assert.deepEqual(pages[0].map((x) => x.type), ["table-head", "table-row", "table-row"]);
+  assert.deepEqual(
+    pages[1].map((it) => (it.type === "table-row" ? it.row[0] : it.type)),
+    ["3"],
+    "3-qator sarlavha zaxirasi tufayli 4-qator bilan bir varaqqa sig'masligi kerak",
+  );
+  assert.deepEqual(
+    pages[2].map((it) => (it.type === "table-row" ? it.row[0] : it.type)),
+    ["4"],
+  );
+});
+
+test("jadval qatorlari haqiqiy balandlik bo'yicha (qattiq 10ta emas) bo'linadi", () => {
+  // 20 ta qisqa qator BITTA varaqqa sig'ishi kerak — ilgari "10 ta"
+  // qattiq chegara ularni ikkiga bo'lib tashlardi.
+  const items = [tableHead(), ...Array.from({ length: 20 }, (_, i) => row(String(i)))];
+  const heights = [40, ...Array.from({ length: 20 }, () => 30)];
+
+  const pages = packPages(items, heights, LIMIT);
+
+  assert.equal(pages.length, 1, "20 ta qisqa qator (jami ~640px) bitta varaqqa sig'adi");
+});
+
+// ── Jadval davomiyligini aniqlash (Sprint 5, B1) ─────────────────────
+import { continuationTableFor } from "../lib/viewers/paginate.ts";
+
+test("continuationTableFor: davom etayotgan sahifa to'g'ri jadvalni topadi", () => {
+  const T = { headers: ["A"], rows: [] };
+  const head: FlowItem = { type: "table-head", id: "h1", table: T };
+  const r1: FlowItem = { type: "table-row", id: "r1", row: ["1"] };
+  const r2: FlowItem = { type: "table-row", id: "r2", row: ["2"] };
+
+  // 1-varaq: sarlavha+1-qator. 2-varaq: FAQAT 2-qator (davomi).
+  const pages = [[head, r1], [r2]];
+  const cont = continuationTableFor(pages);
+
+  assert.equal(cont[0], null, "yangi jadval boshlangan varaq davom emas");
+  assert.equal(cont[1], T, "faqat qator bilan boshlangan varaq oldingi jadvalning davomi");
+});
+
+test("continuationTableFor: prozaik varaqdan keyin jadval boshlansa davom emas", () => {
+  /*
+   * Agar oldingi varaq JADVAL bilan tugamagan bo'lsa (masalan oddiy
+   * paragraf), keyingi varaqdagi qator YANGI jadvalning boshi bo'lishi
+   * mumkin emas — lekin bu holat sun'iy: aslida sarlavhasiz qator hech
+   * qachon yolg'iz kelmaydi (keep-with-next kafolatlaydi). Test shunga
+   * qaramay funksiya HECH QACHON noto'g'ri jadval "eslab qolmasligini"
+   * tasdiqlaydi.
+   */
+  const T1 = { headers: ["A"], rows: [] };
+  const head1: FlowItem = { type: "table-head", id: "h1", table: T1 };
+  const r1: FlowItem = { type: "table-row", id: "r1", row: ["1"] };
+  const para: FlowItem = { type: "p", id: "p1", text: "oraliq matn" };
+
+  const pages = [[head1, r1], [para]];
+  const cont = continuationTableFor(pages);
+
+  assert.equal(cont[1], null, "prozadan keyin davomiylik yo'q");
+});
+
+test("continuationTableFor: ikkinchi jadval birinchisining davomi deb topilmaydi", () => {
+  const T1 = { headers: ["A"], rows: [] };
+  const T2 = { headers: ["B"], rows: [] };
+  const head1: FlowItem = { type: "table-head", id: "h1", table: T1 };
+  const r1: FlowItem = { type: "table-row", id: "r1", row: ["1"] };
+  const head2: FlowItem = { type: "table-head", id: "h2", table: T2 };
+  const r2: FlowItem = { type: "table-row", id: "r2", row: ["2"] };
+
+  // Bitta varaqda ikkinchi jadval ham to'liq boshlanadi (o'z sarlavhasi bilan).
+  const pages = [[head1, r1, head2, r2]];
+  const cont = continuationTableFor(pages);
+
+  assert.equal(cont[0], null);
+});
+
+test("continuationTableFor: orada proza kirsa eski jadval 'esda qolmaydi'", () => {
+  /*
+   * Himoya devori: agar ORADA jadval bilan bog'liq bo'lmagan varaq
+   * kirsa (masalan proza), undan KEYINGI varaqdagi qator — garchi u
+   * texnik jihatdan "table-row" bo'lsa ham — OLDINGI (uzoq qolgan)
+   * jadvalning davomi deb noto'g'ri belgilanmasligi kerak. Bu holat
+   * haqiqiy `packPages` chiqishida yuzaga kelmaydi (keep-with-next
+   * kafolatlaydi), lekin funksiya o'zi mustaqil ravishda to'g'ri
+   * bo'lishi kerak — kelajakda boshqa chaqiruvchi paydo bo'lsa ham.
+   */
+  const T = { headers: ["A"], rows: [] };
+  const head: FlowItem = { type: "table-head", id: "h1", table: T };
+  const r1: FlowItem = { type: "table-row", id: "r1", row: ["1"] };
+  const para: FlowItem = { type: "p", id: "p1", text: "oraliq matn" };
+  const strayRow: FlowItem = { type: "table-row", id: "r2", row: ["2"] };
+
+  const pages = [[head, r1], [para], [strayRow]];
+  const cont = continuationTableFor(pages);
+
+  assert.equal(cont[2], null, "orada proza kirgach eski jadval davomi deb hisoblanmasligi kerak");
+});

@@ -1,4 +1,4 @@
-import { docLabels, sectionLabels } from "@/lib/generation/i18n";
+import { docLabels } from "@/lib/generation/i18n";
 import type { AcademicDoc, Block, DocTable } from "@/lib/generation/types";
 
 export type FlowItem =
@@ -12,7 +12,16 @@ export type FlowItem =
   | { type: "li"; id: string; text: string }
   | { type: "quote"; id: string; text: string }
   | { type: "code"; id: string; text: string; caption?: string }
-  | { type: "table"; id: string; table: DocTable }
+  /**
+   * Jadval sarlavhasi (izoh + ustun nomlari) va har bir qator ALOHIDA
+   * band — B1: ilgari butun jadval (yoki 10 qatorlik bo'lak) BITTA
+   * band edi, uning balandligi bitta varaqdan oshsa `.word-sheet
+   * {overflow:hidden}` pastini jim kesardi. Endi har qator o'z
+   * balandligi bilan sig'gancha varaqqa oqadi, sarlavha esa BIRINCHI
+   * qator bilan birga turadi (`paginate.ts` dagi keep-with-next).
+   */
+  | { type: "table-head"; id: string; table: DocTable }
+  | { type: "table-row"; id: string; row: string[] }
   /**
    * Adabiyotlar ro'yxati ustidagi ogohlantirish.
    *
@@ -60,25 +69,9 @@ export function docToFlow(doc: AcademicDoc): FlowItem[] {
     for (const b of s.blocks) items.push(blockItem(b, id));
   }
 
-  const contd = sectionLabels(doc.meta.language).continued;
   for (const tb of doc.tables ?? []) {
-    const rows = tb.rows;
-    const chunk = 10;
-    if (rows.length <= chunk) {
-      items.push({ type: "table", id: id("tb"), table: tb });
-    } else {
-      for (let i = 0; i < rows.length; i += chunk) {
-        items.push({
-          type: "table",
-          id: id("tb"),
-          table: {
-            caption: i === 0 ? tb.caption : tb.caption ? `${tb.caption} ${contd}` : undefined,
-            headers: tb.headers,
-            rows: rows.slice(i, i + chunk),
-          },
-        });
-      }
-    }
+    items.push({ type: "table-head", id: id("tbh"), table: tb });
+    for (const row of tb.rows) items.push({ type: "table-row", id: id("tbr"), row });
   }
 
   if (doc.references?.length) {

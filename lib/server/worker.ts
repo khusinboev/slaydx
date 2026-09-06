@@ -178,6 +178,7 @@ async function runJob(job: ClaimedJob): Promise<void> {
       doc: extracted.doc,
       fileName: file.fileName,
       preview: buildPreview(extracted.doc),
+      delivered: file.delivered,
     });
     if (!won) {
       // Qulf boshqada (ish qayta navbatga tushgan yoki bekor qilingan) —

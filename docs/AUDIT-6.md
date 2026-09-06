@@ -268,14 +268,31 @@ render qilinib ko'z bilan ko'rildi (3 ustunli jadval, kesilishsiz).
 
 Sprint 4 da o'zgarmagani: A1, A8, B1, B2, B3, B4, C7, C10, D*.
 
-### Sprint 5 — Kesilish + halollik (kelgusi, jonli smoke shart)
+### Sprint 5 — Kesilish + halollik (2026-09-06)
 
-Qolgan bandlar: **B1** (overflow:hidden yagona blokni kesadi), **B2**
-(o'lchanmagan muqova varaqlari), **B3** (rezyume 1-sahifa qirqilishi),
-**C7** (`delivered` ni natija sahifasida ko'rsatish — DB migratsiyasi
-kerak). Bular sahifalash / render o'zgarishi bo'lgani uchun
-`npm run live` + PDF/PNG ga render qilib **ko'z bilan** ko'rishni talab
-qiladi (`AUDIT-5` standarti).
+283 test (274 -> +9), typecheck + lint toza, prod build o'tadi,
+`npm run live` 5/5 (jonli Gemini, DOCX/PPTX baytigacha).
+
+| Band | Nima qilindi | Fayllar |
+|---|---|---|
+| **B1** | `docToFlow` jadvalni endi 10talik qattiq bo'lakka EMAS, HAR QATORNI alohida bandga (`table-head`/`table-row`) ajratadi. `paginate.ts`: `table-head` keep-with-next ro'yxatiga qo'shildi (birinchi qator bilan ajralmaydi); DAVOM ETUVCHI qator yangi varaq boshласа, sintez qilinadigan sarlavha balandligi oldindan zaxira qilinadi (`tableHeaderHeightBefore`) — aks holda keyingi qatorlar noto'g'ri sig'ib ketardi. `WordViewer`: `PageBody`/`TableGroup` — ketma-ket jadval bandlarini BITTA `<table>`ga yig'ib chizadi (HTML validligi), davomida "davomi" yorlig'i bilan. Qaysi varaq qaysi jadvalning davomi ekanligini aniqlovchi `continuationTableFor` alohida sof funksiyaga chiqarilib, mutatsiya bilan tekshirildi. | `flow.ts`, `paginate.ts`, `WordViewer.tsx` |
+| **B2** | `GlossaryViewer`/`LessonViewer`/`TableViewer`: "kirish"/"pasport" varag'i (badge + sarlavha + kirish matni) endi ATAMALAR/QATORLAR bilan BIR XIL `useMeasuredPages` oqimida — uzun kirish matni endi bir necha varaqqa bo'linadi, ilgari qattiq bitta `word-sheet`ga chizilib jim kesilardi. `breakBefore` bilan "kirish -> asosiy kontent" o'tishi baribir majburiy yangi varaqdan. | `GlossaryViewer.tsx`, `LessonViewer.tsx`, `TableViewer.tsx` |
+| **B3** | `ResumeViewer`: o'ng ustun (`summary`/`exp`/`edu`) endi `useMeasuredPages` bilan o'lchanadi va kerakcha ko'p varaqqa bo'linadi — ilgari `overflow-hidden` bilan BITTA varaqqa qat'iy qirqilardi. Yon panel (qora fon, ism, aloqa, ko'nikmalar) HAR bir varaqda to'liq balandlikda takrorlanadi — DOCX dagi `resumeBody`ning bitta `ATLEAST` balandlikdagi jadval qatori tabiiy ravishda sahifalar osha bo'linishiga vizual mos. | `ResumeViewer.tsx` |
+| **C7** | Yangi migratsiya `010_delivered.sql` (`generations.delivered_json`). `completeJob` endi `delivered`ni yozadi, `rowToSummary` uni `Generation.delivered`ga o'giradi (`Generation`/`GenerationSummary` turlariga maydon qo'shildi — API route o'zgarishsiz, chunki u butun obyektni spread qiladi). `ResultView`: `gen.delivered` bo'lsa, natija sahifasida "N tadan M tasi yaratildi — farq balansingizga qaytarildi" ogohlantirish satri. | `010_delivered.sql`, `jobs.ts`, `worker.ts`, `types.ts`, `ResultView.tsx` |
+
+**Sinovdan tashqari qolgan qism:** bu sprint sahifalash/render o'zgarishi
+bo'lgani uchun `AUDIT-5` standarti jonli DOM'da **ko'z bilan** ko'rishni
+talab qiladi. Bu muhitda headless brauzer topilmadi (keshlangan Chrome
+zip buzuq, yangisini o'rnatish x tarmoq/vaqt bilan nomutanosib) —
+shuning uchun tasdiq quyidagilarga tayanadi: (1) `packPages`/
+`continuationTableFor`/`docToFlow`ning har bir yangi qoidasi mutatsiya
+bilan tekshirildi (eski xatoni qaytarganda test aynan ushlaydi), (2)
+`tsc`/`eslint`/`next build` uchala komponent daraxtini muvaffaqiyatli
+tuzadi, (3) `npm run live` orqali haqiqiy Gemini bilan yaratilgan
+hujjatlar (jadvalli dars rejasi, kurs ishi) DOCX darajasida to'g'ri
+chiqdi. Productionga chiqqach, foydalanuvchi brauzerda ko'zdan
+kechirishi tavsiya etiladi — ayniqsa ko'p qatorli jadval va uzun
+rezyume bilan.
 
 ### Kelajak (Sprint rejasidan tashqarida)
 

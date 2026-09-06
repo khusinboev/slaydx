@@ -1331,6 +1331,35 @@ test("matnsiz bo'lim sarlavhasi na faylda, na ko'ruvchida chiziladi", async () =
   assert.ok(!/BO'SH BO'LIM/.test(text), "faylda ham bo'lmasligi kerak");
 });
 
+test("docToFlow jadval qatorlarini ALOHIDA band qiladi (Sprint 5, B1)", async () => {
+  const { docToFlow } = await import("../lib/viewers/flow.ts");
+
+  /*
+   * Ilgari 10 qatordan oshgan jadval QATTIQ 10talik bo'laklarga
+   * kesilardi — bu son qator balandligiga bog'liq emas edi, ya'ni
+   * 10 ta uzun qator baribir bitta varaqdan oshib, jim kesilishi
+   * mumkin edi (AUDIT-6 B1). Endi har qator o'z balandligi bo'yicha
+   * `paginate.ts` da oqadi — `docToFlow` faqat bitta sarlavha (`table-head`)
+   * va har qatorga bitta `table-row` chiqarishi kerak, sonidan qat'iy
+   * nazar.
+   */
+  const doc = anyDoc("referat", { topic: "Mavzu", author: "A. Valiyev" }, {
+    sections: [{ id: "kirish", title: "Kirish", blocks: [{ kind: "p", text: "Matn." }] }],
+    tables: [{ headers: ["A"], rows: Array.from({ length: 23 }, (_, i) => [`Qator ${i}`]) }],
+  });
+
+  const flow = docToFlow(doc);
+  const heads = flow.filter((i) => i.type === "table-head");
+  const rows = flow.filter((i) => i.type === "table-row");
+  assert.equal(heads.length, 1, "bitta jadvalga bitta sarlavha");
+  assert.equal(rows.length, 23, "har qator ALOHIDA band bo'lishi kerak, 10talik bo'lak emas");
+  assert.deepEqual(
+    (rows[0] as { row: string[] }).row,
+    ["Qator 0"],
+    "qator matni saqlanishi kerak",
+  );
+});
+
 test("ko'ruvchi CSS o'lchamlari hujjat profilidan chetlashmaydi", async () => {
   const { readFile } = await import("node:fs/promises");
   const { profileById } = await import("../lib/generation/docx-profile.ts");
