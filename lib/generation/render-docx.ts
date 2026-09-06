@@ -421,7 +421,7 @@ export async function renderDocx(doc: AcademicDoc): Promise<Uint8Array> {
       children.push(K.centerP(`«${T.topic}»`, { bold: true, italics: true }));
       children.push(K.centerP(""));
       children.push(K.centerP(""));
-      if (T.author) children.push(K.signatureP(`${T.labels.doneBy}: ${T.author}`));
+      if (T.author) children.push(K.signatureP(`${T.authorLabel}: ${T.author}`));
       if (T.courseLine) children.push(K.leftP(T.courseLine));
       if (T.teacher) children.push(K.signatureP(`${T.labels.supervisor}: ${T.teacher}`));
       if (T.subject && T.subject.toLowerCase() !== T.workLabel.toLowerCase()) {

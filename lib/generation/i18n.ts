@@ -67,6 +67,14 @@ export type DocLabels = {
   references: string;
   keywords: string;
   doneBy: string;
+  /**
+   * O'qituvchi hujjatlarida muallif yorlig'i.
+   *
+   * «Bajardi» — TALABA tili: u topshiriq bajaradi. O'qituvchi esa dars
+   * ishlanmasini yoki texnologik xaritani TUZADI, shuning uchun
+   * titulda «Tuzuvchi» turishi kerak.
+   */
+  compiledBy: string;
   supervisor: string;
   subject: string;
   faculty: (name: string) => string;
@@ -83,6 +91,7 @@ const UZ: DocLabels = {
   references: "FOYDALANILGAN ADABIYOTLAR",
   keywords: "Kalit so‘zlar",
   doneBy: "Bajardi",
+  compiledBy: "Tuzuvchi",
   supervisor: "Ilmiy rahbar",
   subject: "Fan",
   faculty: (n) => `${n} fakulteti`,
@@ -99,6 +108,7 @@ const RU: DocLabels = {
   references: "СПИСОК ИСПОЛЬЗОВАННОЙ ЛИТЕРАТУРЫ",
   keywords: "Ключевые слова",
   doneBy: "Выполнил",
+  compiledBy: "Составитель",
   supervisor: "Научный руководитель",
   subject: "Предмет",
   faculty: (n) => `Факультет ${n}`,
@@ -115,6 +125,7 @@ const EN: DocLabels = {
   references: "REFERENCES",
   keywords: "Keywords",
   doneBy: "Prepared by",
+  compiledBy: "Compiled by",
   supervisor: "Supervisor",
   subject: "Subject",
   faculty: (n) => `Faculty of ${n}`,

@@ -1,13 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { docLabels } from "@/lib/generation/i18n";
 import { ESSAY_DESIGNS } from "@/lib/languages";
 import type { AcademicDoc } from "@/lib/generation/types";
-import { docToFlow, titleModel, tocRows, type FlowItem, type TitleModel, type TocRow } from "@/lib/viewers/flow";
+import { docToFlow, titleModel, tocRows, type FlowItem, type TocRow } from "@/lib/viewers/flow";
 import type { ViewerKind } from "@/lib/viewers/kind";
 import { A4, contentHeightPx } from "@/lib/viewers/metrics";
 import { ZoomFrame, Workspace } from "./sheet";
+import { TitlePage } from "./TitlePage";
 import { ViewerToolbar } from "./toolbar";
 
 export function WordViewer({
@@ -200,90 +201,7 @@ export function WordViewer({
   );
 }
 
-/**
- * Titul sahifasi — modeldagi TURGA qarab chiziladi.
- *
- * Ilgari bu komponent bitta GOST qolipini bilardi va maqola ham shu
- * qolipda ko'rinardi, DOCX esa jurnal titulini chizardi (AUDIT-5 P0-2).
- * Model endi `kind` bilan keladi, ya'ni yangi titul turi qo'shilsa
- * TypeScript shu yerni ham majburlaydi — jim ajralib ketish mumkin emas.
- */
-function TitlePage({ title, ribbon }: { title: TitleModel; ribbon: ReactNode }) {
-  if (title.kind === "article") {
-    /*
-     * Jurnal maqolasi: vazirlik sarlavhasi ham, «Bajardi/Rahbar» ham
-     * yo'q — muallif bloki bor. `render-docx.ts` dagi `article` tituli
-     * bilan bir xil tartib.
-     */
-    return (
-      <div className="word-inner flex flex-col">
-        {ribbon}
-        <div className="flex-1" />
-        <div className="text-center">
-          <div className="text-[16pt] font-bold uppercase">{title.workLabel}</div>
-          <div className="mt-6 text-[14pt] font-bold italic">«{title.topic}»</div>
-        </div>
-        <div className="mt-10 text-center text-[14pt] leading-[1.6]">
-          {title.authorLine ? <div className="font-bold">{title.authorLine}</div> : null}
-          {title.organization ? <div>{title.organization}</div> : null}
-          {title.email ? <div>{title.email}</div> : null}
-        </div>
-        <div className="flex-1" />
-        <div className="pb-2 text-center text-[14pt] font-bold">{title.cityYear}</div>
-      </div>
-    );
-  }
 
-  return (
-    <div className="word-inner flex flex-col">
-      {ribbon}
-      <div className="text-center text-[12pt] font-bold uppercase leading-[1.5]">
-        {title.ministry.map((l) => (
-          <div key={l}>{l}</div>
-        ))}
-      </div>
-      <div className="mt-4 text-center text-[12pt] font-bold uppercase">{title.university}</div>
-      <div className="mt-3 text-center text-[14pt]">
-        {title.faculty ? <div>{title.faculty}</div> : null}
-        {title.department ? <div>{title.department}</div> : null}
-      </div>
-      <div className="flex-1" />
-      <div className="text-center">
-        <div className="text-[16pt] font-bold uppercase">{title.workLabel}</div>
-        <div className="mt-4 text-[14pt] font-bold italic">«{title.topic}»</div>
-      </div>
-      <div className="flex-1" />
-      <div className="text-[14pt] leading-[1.5]">
-        {/*
-          Imzo chizig'i DOCX da bor (`signatureP`) — topshiriladigan ish
-          imzolanadi. Ko'ruvchida ham ko'rinsin, aks holda foydalanuvchi
-          faylni ochganda kutilmagan qatorni topadi.
-        */}
-        {title.author ? (
-          <div className="flex items-baseline gap-2">
-            <span>
-              {title.labels.doneBy}: {title.author}
-            </span>
-            <span className="flex-1 border-b border-black/60" />
-          </div>
-        ) : null}
-        {title.courseLine ? <div>{title.courseLine}</div> : null}
-        {title.teacher ? (
-          <div className="flex items-baseline gap-2">
-            <span>
-              {title.labels.supervisor}: {title.teacher}
-            </span>
-            <span className="flex-1 border-b border-black/60" />
-          </div>
-        ) : null}
-        {title.subject ? <div>{title.labels.subject}: {title.subject}</div> : null}
-      </div>
-      <div className="flex-1" />
-      <div className="text-center text-[14pt]">{title.academicYear}</div>
-      <div className="pb-2 text-center text-[14pt] font-bold">{title.cityYear}</div>
-    </div>
-  );
-}
 
 function FlowBlock({
   item,

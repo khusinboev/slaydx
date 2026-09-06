@@ -107,6 +107,38 @@ const CUSTOM_REQUIRED: Record<string, ToolField[]> = {
   ],
 };
 
+/**
+ * O'qituvchi vositalari uchun MUASSASA maydoni.
+ *
+ * To'rttala vosita ham (dars rejasi, texnologik xarita, glossariy,
+ * kalitlar) muassasa nomini so'ramasdi, lekin DOCX titul sahifasi uni
+ * CHIZARDI — qiymat profildan jim kelardi. Profil maydonining yorlig'i
+ * esa «Oliy ta'lim muassasasi»: maktab o'qituvchisi u yerga o'z
+ * maktabini yozmaydi, shuning uchun amalda titulda bu qator BO'SH
+ * qolardi (AUDIT-5 P1-5).
+ *
+ * Maydon MAJBURIY emas: glossariy yoki kalitlar shaxsiy ish daftari
+ * bo'lishi ham mumkin. Lekin so'ralishi shart — aks holda foydalanuvchi
+ * uni to'ldira olmaydi.
+ *
+ * `writerFields` dagi `university` dan alohida: yorliq va namuna
+ * maktabga mo'ljallangan, `author` esa «Bajardi» emas, «Tuzuvchi».
+ */
+const TEACHER_FIELDS: ToolField[] = [
+  {
+    kind: "text",
+    name: "university",
+    legend: "Ta'lim muassasasi nomi",
+    placeholder: "15-son umumiy o'rta ta'lim maktabi",
+  },
+  {
+    kind: "text",
+    name: "author",
+    legend: "Tuzuvchi (F.I.Sh)",
+    placeholder: "Karimova Dilnoza",
+  },
+];
+
 export const TOOLS: ToolConfig[] = [
   {
     id: "slide",
@@ -711,6 +743,17 @@ export const TOOLS: ToolConfig[] = [
 for (const tool of TOOLS) {
   const extra = tool.custom ? CUSTOM_REQUIRED[tool.custom] : undefined;
   if (extra) tool.fields = [...tool.fields, ...extra];
+  /*
+   * O'qituvchi vositalari titul sahifasini chizadi, lekin muassasa va
+   * tuzuvchini so'ramasdi — qiymat profildan jim kelar, forma esa uni
+   * ko'rsatmasdi. Maydonlar `extra: true` bo'lgan `extra` textarea dan
+   * OLDIN qo'shiladi, shunda ular asosiy qismda turadi.
+   */
+  if (tool.group === "oqituvchi") {
+    const rest = tool.fields.filter((f) => f.extra);
+    const main = tool.fields.filter((f) => !f.extra);
+    tool.fields = [...main, ...TEACHER_FIELDS, ...rest];
+  }
 }
 
 export const TOOL_BY_SLUG = Object.fromEntries(TOOLS.map((t) => [t.slug, t])) as Record<

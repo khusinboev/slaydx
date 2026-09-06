@@ -5,6 +5,7 @@ import type { AcademicDoc, DocTable } from "@/lib/generation/types";
 import { A4 } from "@/lib/viewers/metrics";
 import { useMeasuredPages } from "./measure";
 import { ZoomFrame, Workspace } from "./sheet";
+import { TitleSheet } from "./TitlePage";
 import { ViewerToolbar } from "./toolbar";
 
 /** Dars xaritasi oqimidagi band. */
@@ -36,7 +37,7 @@ export function LessonViewer({ doc }: { doc: AcademicDoc }) {
     key: `${items.length}:${map?.blocks.length ?? 0}:${table?.rows.length ?? 0}`,
   });
   const mapPages = measured ?? [items];
-  const total = 1 + mapPages.length;
+  const total = 2 + mapPages.length;
 
   function go(n: number) {
     const next = Math.max(1, Math.min(total, n));
@@ -49,10 +50,23 @@ export function LessonViewer({ doc }: { doc: AcademicDoc }) {
       <ViewerToolbar zoom={zoom} onZoom={setZoom} page={page} pages={total} onPage={go} />
       <Workspace>
         <div className="flex flex-col items-center gap-8">
+          {/*
+            Titul — DOCX dagi bilan AYNAN bir xil modeldan (P1-5).
+            Ilgari bu ko'ruvchi o'z muqovasini chizar, titul esa faqat
+            faylda bo'lardi: foydalanuvchi saytda ko'rgan hujjatning
+            BIRINCHI SAHIFASI yuklab olinganida boshqa edi.
+          */}
+          <TitleSheet
+            doc={doc}
+            zoom={zoom}
+            innerRef={(el) => {
+              refs.current[0] = el;
+            }}
+          />
           <ZoomFrame zoom={zoom / 100} width={A4.wPx} height={A4.hPx}>
             <div
               ref={(el) => {
-                refs.current[0] = el;
+                refs.current[1] = el;
               }}
               className="word-sheet"
             >
@@ -73,7 +87,7 @@ export function LessonViewer({ doc }: { doc: AcademicDoc }) {
                   </p>
                 ))}
               </div>
-              <div className="word-footer-num">1</div>
+              <div className="word-footer-num">2</div>
             </div>
           </ZoomFrame>
 
@@ -81,7 +95,7 @@ export function LessonViewer({ doc }: { doc: AcademicDoc }) {
             <ZoomFrame key={i} zoom={zoom / 100} width={A4.wPx} height={A4.hPx}>
               <div
                 ref={(el) => {
-                  refs.current[i + 1] = el;
+                  refs.current[i + 2] = el;
                 }}
                 className="word-sheet"
               >
@@ -90,7 +104,7 @@ export function LessonViewer({ doc }: { doc: AcademicDoc }) {
                     <LessonBlock key={k} item={it} />
                   ))}
                 </div>
-                <div className="word-footer-num">{i + 2}</div>
+                <div className="word-footer-num">{i + 3}</div>
               </div>
             </ZoomFrame>
           ))}

@@ -1,3 +1,4 @@
+import { TOOL_BY_ID } from "../tools";
 import { profileFor } from "./docx-profile";
 import { docLabels } from "./i18n";
 import type { AcademicDoc } from "./types";
@@ -27,6 +28,14 @@ export type TitleModel =
       workLabel: string;
       topic: string;
       author?: string;
+      /**
+       * Muallif qatorining yorlig'i — janrga qarab.
+       *
+       * «Bajardi» talaba tili; o'qituvchi dars ishlanmasini TUZADI.
+       * Yorliq modelda hisoblanadi, chizuvchida emas — aks holda DOCX
+       * va sayt uni mustaqil tanlar va ajralib ketardi.
+       */
+      authorLabel: string;
       courseLine?: string;
       teacher?: string;
       subject?: string;
@@ -78,6 +87,7 @@ export function titleModel(doc: AcademicDoc): TitleModel {
     workLabel: meta.workLabel,
     topic: meta.topic,
     author: meta.author || undefined,
+    authorLabel: TOOL_BY_ID[meta.toolId]?.group === "oqituvchi" ? L.compiledBy : L.doneBy,
     courseLine: courseLine || undefined,
     teacher: meta.teacher || undefined,
     subject: meta.subject || undefined,

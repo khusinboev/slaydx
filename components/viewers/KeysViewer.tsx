@@ -5,6 +5,7 @@ import type { AcademicDoc, Block } from "@/lib/generation/types";
 import { A4 } from "@/lib/viewers/metrics";
 import { useMeasuredPages } from "./measure";
 import { ZoomFrame, Workspace } from "./sheet";
+import { TitleSheet } from "./TitlePage";
 import { ViewerToolbar } from "./toolbar";
 
 /** Keys oqimidagi band. `head` — yangi keysning boshi. */
@@ -47,21 +48,34 @@ export function KeysViewer({ doc }: { doc: AcademicDoc }) {
   const pages = measured ?? [items];
 
   function go(n: number) {
-    const next = Math.max(1, Math.min(pages.length, n));
+    const next = Math.max(1, Math.min(1 + pages.length, n));
     setPage(next);
     refs.current[next - 1]?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   return (
     <div className="flex h-full min-h-[70vh] flex-col">
-      <ViewerToolbar zoom={zoom} onZoom={setZoom} page={page} pages={pages.length} onPage={go} />
+      <ViewerToolbar zoom={zoom} onZoom={setZoom} page={page} pages={1 + pages.length} onPage={go} />
       <Workspace>
         <div className="flex flex-col items-center gap-8">
+          {/*
+            Titul — DOCX dagi bilan AYNAN bir xil modeldan (P1-5).
+            Ilgari bu ko'ruvchi o'z muqovasini chizar, titul esa faqat
+            faylda bo'lardi: foydalanuvchi saytda ko'rgan hujjatning
+            BIRINCHI SAHIFASI yuklab olinganida boshqa edi.
+          */}
+          <TitleSheet
+            doc={doc}
+            zoom={zoom}
+            innerRef={(el) => {
+              refs.current[0] = el;
+            }}
+          />
           {pages.map((chunk, i) => (
             <ZoomFrame key={i} zoom={zoom / 100} width={A4.wPx} height={A4.hPx}>
               <div
                 ref={(el) => {
-                  refs.current[i] = el;
+                  refs.current[i + 1] = el;
                 }}
                 className="word-sheet"
               >
@@ -70,7 +84,7 @@ export function KeysViewer({ doc }: { doc: AcademicDoc }) {
                     <KeyBlock key={k} item={it} doc={doc} count={cases.length} />
                   ))}
                 </div>
-                {i === 0 ? null : <div className="word-footer-num">{i + 1}</div>}
+                <div className="word-footer-num">{i + 2}</div>
               </div>
             </ZoomFrame>
           ))}

@@ -1202,3 +1202,63 @@ test("akademik sarlavha rangi qat'iy qora", async () => {
   const xml = await docxXml(anyDoc("coursework", { topic: "Mavzu", author: "A. Valiyev" }));
   assert.match(xml, /<w:color w:val="000000"\/>/, "DOCX da qora rang yozilishi kerak");
 });
+
+test("o'qituvchi hujjatlarida muassasa so'raladi va «Tuzuvchi» yoziladi", async () => {
+  const { TOOLS, TOOL_BY_ID } = await import("../lib/tools.ts");
+  const { titleModel } = await import("../lib/generation/title-model.ts");
+
+  /*
+   * AYNAN P1-5 (AUDIT-5), uch qismli nuqson:
+   *
+   * 1. To'rttala o'qituvchi vositasi ham DOCX titulini chizardi, lekin
+   *    formada MUASSASA maydoni yo'q edi — qiymat profildan jim kelar,
+   *    profil yorlig'i esa «Oliy ta'lim muassasasi». Maktab o'qituvchisi
+   *    u yerga o'z maktabini yozmaydi, ya'ni titulda bu qator amalda
+   *    BO'SH qolardi.
+   * 2. Titulda «Bajardi» turardi — bu TALABA tili. O'qituvchi dars
+   *    ishlanmasini TUZADI.
+   * 3. Sayt ko'ruvchilari titulni umuman chizmasdi (bu qism
+   *    komponentlarda, bu yerda model darajasi sinaladi).
+   */
+  const teacher = TOOLS.filter((t) => t.group === "oqituvchi");
+  assert.equal(teacher.length, 4, "o'qituvchi guruhida to'rt vosita");
+
+  for (const tool of teacher) {
+    const names = tool.fields.map((f) => f.name);
+    assert.ok(names.includes("university"), `${tool.id}: muassasa maydoni so'ralishi kerak`);
+    assert.ok(names.includes("author"), `${tool.id}: tuzuvchi maydoni so'ralishi kerak`);
+
+    // Majburiy EMAS: glossariy shaxsiy ish daftari ham bo'lishi mumkin.
+    const uni = tool.fields.find((f) => f.name === "university")!;
+    assert.ok(!uni.required, `${tool.id}: muassasa majburiy bo'lmasligi kerak`);
+    // Yorliq maktabga mo'ljallangan, «Oliy ta'lim muassasasi» emas.
+    assert.ok(!/oliy/i.test(uni.legend), `${tool.id}: yorliq maktabga mos bo'lishi kerak`);
+
+    const model = titleModel(anyDoc(tool.id, { topic: "Mavzu", subject: "Fan", author: "Karimova D." }));
+    assert.equal(model.kind, "gost");
+    assert.equal(model.authorLabel, "Tuzuvchi", `${tool.id}: «Tuzuvchi» bo'lishi kerak`);
+  }
+
+  // Talaba ishlarida «Bajardi» qoladi.
+  for (const id of ["coursework", "referat", "essay", "thesis"] as const) {
+    const model = titleModel(anyDoc(id, { topic: "Mavzu", author: "Aliyev A." }));
+    assert.equal(model.kind, "gost");
+    assert.equal(model.authorLabel, "Bajardi", `${id}: «Bajardi» qolishi kerak`);
+  }
+
+  // Chiqishda ham ko'rinadi.
+  const lesson = await docxText(
+    anyDoc("lesson-plan", {
+      topic: "Kasrlar",
+      subject: "Matematika",
+      author: "Karimova Dilnoza",
+      university: "15-son umumiy o'rta ta'lim maktabi",
+    }),
+  );
+  assert.match(lesson, /Tuzuvchi: Karimova Dilnoza/, "titulda «Tuzuvchi» bo'lishi kerak");
+  assert.ok(!/Bajardi/.test(lesson), "dars rejasida «Bajardi» bo'lmasligi kerak");
+  assert.match(lesson, /15-SON UMUMIY O'RTA TA'LIM MAKTABI|15-son umumiy o'rta ta'lim maktabi/i);
+
+  const cw = await docxText(anyDoc("coursework", { topic: "Mavzu", author: "Aliyev Ali" }));
+  assert.match(cw, /Bajardi: Aliyev Ali/, "kurs ishida «Bajardi» qoladi");
+});
