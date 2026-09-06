@@ -1,6 +1,5 @@
 "use client";
 
-import type { ReactNode } from "react";
 import type { AcademicDoc } from "@/lib/generation/types";
 import { titleModel, type TitleModel } from "@/lib/viewers/flow";
 import { A4, LANDSCAPE } from "@/lib/viewers/metrics";
@@ -14,7 +13,7 @@ import { ZoomFrame } from "./sheet";
  * Model endi `kind` bilan keladi, ya'ni yangi titul turi qo'shilsa
  * TypeScript shu yerni ham majburlaydi — jim ajralib ketish mumkin emas.
  */
-export function TitlePage({ title, ribbon }: { title: TitleModel; ribbon?: ReactNode }) {
+export function TitlePage({ title }: { title: TitleModel }) {
   if (title.kind === "article") {
     /*
      * Jurnal maqolasi: vazirlik sarlavhasi ham, «Bajardi/Rahbar» ham
@@ -23,7 +22,6 @@ export function TitlePage({ title, ribbon }: { title: TitleModel; ribbon?: React
      */
     return (
       <div className="word-inner flex flex-col">
-        {ribbon}
         <div className="flex-1" />
         <div className="text-center">
           <div className="text-[16pt] font-bold uppercase">{title.workLabel}</div>
@@ -42,13 +40,14 @@ export function TitlePage({ title, ribbon }: { title: TitleModel; ribbon?: React
 
   return (
     <div className="word-inner flex flex-col">
-      {ribbon}
       <div className="text-center text-[12pt] font-bold uppercase leading-[1.5]">
         {title.ministry.map((l) => (
           <div key={l}>{l}</div>
         ))}
       </div>
-      <div className="mt-4 text-center text-[12pt] font-bold uppercase">{title.university}</div>
+      {title.university ? (
+        <div className="mt-4 text-center text-[12pt] font-bold uppercase">{title.university}</div>
+      ) : null}
       <div className="mt-3 text-center text-[14pt]">
         {title.faculty ? <div>{title.faculty}</div> : null}
         {title.department ? <div>{title.department}</div> : null}

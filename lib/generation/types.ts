@@ -97,6 +97,16 @@ export type DocMeta = {
   design: string;
   slideTheme?: SlideThemeId;
   slideTemplate?: SlideTemplateId;
+  /**
+   * Hujjat YARATILGAN yil — titul va «N–N+1 o'quv yili» shu yerdan.
+   *
+   * Ilgari `title-model.ts` uni `new Date()` dan olardi: DOCX baytlari
+   * yaratilganda muzlar, sayt ko'ruvchisi esa har ochilganda qayta
+   * hisoblardi. Yil chegarasida (dekabrda yaratilib, yanvarda ochilsa)
+   * ekrandagi titul «2026», yuklab olingan fayl «2025» bo'lib ajralardi.
+   * Endi yil `extractMeta` da bir marta muzlaydi.
+   */
+  year?: number;
 };
 
 export type AcademicDoc = {

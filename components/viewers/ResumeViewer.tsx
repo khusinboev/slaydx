@@ -28,7 +28,7 @@ export function ResumeViewer({ doc }: { doc: AcademicDoc }) {
 
   return (
     <div className="flex h-full min-h-[70vh] flex-col">
-      <ViewerToolbar zoom={zoom} onZoom={setZoom} page={1} pages={1} onPage={() => undefined} />
+      <ViewerToolbar zoom={zoom} onZoom={setZoom} page={1} pages={1} onPage={() => undefined} onFit={() => setZoom(100)} />
       <Workspace>
         <ZoomFrame zoom={zoom / 100} width={A4.wPx} height={A4.hPx}>
           <div className="word-sheet overflow-hidden">

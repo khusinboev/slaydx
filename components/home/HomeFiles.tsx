@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ArrowDownUp, ChevronDown, FolderOpen, Plus, Trash2 } from "lucide-react";
 import * as api from "@/lib/api-client";
@@ -52,6 +52,27 @@ export function HomeFiles() {
     } catch (e) {
       setError(e instanceof Error ? e.message : "O'chirilmadi");
     }
+  }
+
+  /*
+   * Ikki bosqichli o'chirish — birinchi bosish tugmani «qurollantiradi»,
+   * 3 s ichidagi ikkinchi bosishgina o'chiradi. Ilgari ro'yxatdagi bir
+   * bosish hujjatni darhol yo'q qilardi (undo yo'q).
+   */
+  const [confirmId, setConfirmId] = useState<string | null>(null);
+  const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (confirmTimer.current) clearTimeout(confirmTimer.current);
+  }, []);
+  function askDelete(id: string) {
+    if (confirmTimer.current) clearTimeout(confirmTimer.current);
+    if (confirmId === id) {
+      setConfirmId(null);
+      void onDelete(id);
+      return;
+    }
+    setConfirmId(id);
+    confirmTimer.current = setTimeout(() => setConfirmId(null), 3000);
   }
 
   const list = useMemo(() => {
@@ -225,11 +246,21 @@ export function HomeFiles() {
                     </Link>
                     <button
                       type="button"
-                      className="text-muted-foreground hover:text-destructive p-1"
-                      onClick={() => void onDelete(g.id)}
-                      aria-label={`${g.topic} — o'chirish`}
+                      className={cn(
+                        "inline-flex shrink-0 items-center gap-1 rounded p-1 text-xs",
+                        confirmId === g.id
+                          ? "text-destructive font-medium"
+                          : "text-muted-foreground hover:text-destructive",
+                      )}
+                      onClick={() => askDelete(g.id)}
+                      aria-label={
+                        confirmId === g.id
+                          ? `${g.topic} — o'chirishni tasdiqlang`
+                          : `${g.topic} — o'chirish`
+                      }
                     >
                       <Trash2 className="size-4" />
+                      {confirmId === g.id ? <span>Rostdan?</span> : null}
                     </button>
                   </div>
                 </div>

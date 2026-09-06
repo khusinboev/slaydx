@@ -55,7 +55,7 @@ export function KeysViewer({ doc }: { doc: AcademicDoc }) {
 
   return (
     <div className="flex h-full min-h-[70vh] flex-col">
-      <ViewerToolbar zoom={zoom} onZoom={setZoom} page={page} pages={1 + pages.length} onPage={go} />
+      <ViewerToolbar zoom={zoom} onZoom={setZoom} page={page} pages={1 + pages.length} onPage={go} onFit={() => setZoom(90)} />
       <Workspace>
         <div className="flex flex-col items-center gap-8">
           {/*

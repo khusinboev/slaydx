@@ -86,26 +86,60 @@ export function SlideViewer({ doc }: { doc: AcademicDoc }) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "ArrowRight" || e.key === "PageDown" || e.key === " ") {
+      /*
+       * Global `keydown` — lekin faqat o'rinli bo'lganda.
+       *
+       * Ilgari bu handler har doim ishlar va Space / PageUp / PageDown /
+       * Home / End / F5 ni ushlab `preventDefault` qilardi: qidiruv yoki
+       * to'lov oynasi ochiqligida ham slayd almashar, taqdimotda emas
+       * paytda F5 sahifani yangilash o'rniga taqdimotni ochardi.
+       */
+      const el = e.target as HTMLElement | null;
+      if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
+      if (!present && document.querySelector('[role="dialog"], [aria-modal="true"]')) return;
+
+      if (e.key === "Escape") {
+        setPresent(false);
+        return;
+      }
+      if (e.key === "ArrowRight") {
         e.preventDefault();
         go(i + 1);
-      } else if (e.key === "ArrowLeft" || e.key === "PageUp") {
+        return;
+      }
+      if (e.key === "ArrowLeft") {
         e.preventDefault();
         go(i - 1);
-      } else if (e.key === "Home") go(0);
-      else if (e.key === "End") go(slides.length - 1);
-      else if (e.key === "Escape") setPresent(false);
-      else if (e.key.toLowerCase() === "p") {
-        e.preventDefault();
-        setPresenter((v) => !v);
-      } else if (e.key.toLowerCase() === "f" || e.key === "F5") {
+        return;
+      }
+      if (e.key === "f") {
         e.preventDefault();
         setPresent((v) => !v);
+        return;
+      }
+      // Qolgan tugmalar FAQAT taqdimot rejimida — u yerda sahifa aylantirish
+      // yoki yangilash uchun boshqa ehtiyoj yo'q.
+      if (!present) return;
+      if (e.key === "PageDown" || e.key === " ") {
+        e.preventDefault();
+        go(i + 1);
+      } else if (e.key === "PageUp") {
+        e.preventDefault();
+        go(i - 1);
+      } else if (e.key === "Home") {
+        e.preventDefault();
+        go(0);
+      } else if (e.key === "End") {
+        e.preventDefault();
+        go(slides.length - 1);
+      } else if (e.key.toLowerCase() === "p") {
+        e.preventDefault();
+        setPresenter((v) => !v);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [go, i, slides.length]);
+  }, [go, i, slides.length, present]);
 
   /*
    * Chiqish taymeri. Taqdimotchi uchun asosiy raqam — «qancha gapirdim»,

@@ -42,8 +42,8 @@ export function ArtifactViewer({ gen }: { gen: Generation }) {
     case "essay":
     case "article":
     case "translation":
-      return <WordViewer doc={doc} variant={kind} />;
+      return <WordViewer doc={doc} />;
     default:
-      return <WordViewer doc={doc} variant="academic" />;
+      return <WordViewer doc={doc} />;
   }
 }

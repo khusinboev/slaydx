@@ -7,6 +7,7 @@ import { ArrowLeft, Download, Trash2 } from "lucide-react";
 import * as api from "@/lib/api-client";
 import { useAppStore } from "@/lib/store";
 import { TOOL_BY_ID } from "@/lib/tools";
+import { useConfirmClick } from "../overlays/useConfirmClick";
 import { ArtifactViewer } from "../viewers/ArtifactViewer";
 import type { Generation } from "@/lib/types";
 
@@ -85,6 +86,9 @@ export function ResultView({ id }: { id: string }) {
     }
   }, [id, drop, router]);
 
+  // Ikki bosqichli tasdiq — tasodifiy bosishda hujjat yo'qolmasin.
+  const del = useConfirmClick(() => void onDelete());
+
   if (sessionChecked && !loggedIn) {
     return (
       <Empty title="Kirish talab qilinadi" hint="Hujjatni ko'rish uchun avval tizimga kiring." />
@@ -155,12 +159,18 @@ export function ResultView({ id }: { id: string }) {
             ) : null}
             <button
               type="button"
-              className="bg-card inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm disabled:opacity-60"
+              className={
+                del.armed
+                  ? "bg-destructive text-destructive-foreground inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm font-medium disabled:opacity-60"
+                  : "bg-card inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm disabled:opacity-60"
+              }
               disabled={busy}
-              onClick={() => void onDelete()}
+              onClick={del.trigger}
             >
               <Trash2 className="size-4" />
-              <span className="hidden sm:inline">O&apos;chirish</span>
+              <span className={del.armed ? "inline" : "hidden sm:inline"}>
+                {del.armed ? "Rostdan?" : "O’chirish"}
+              </span>
             </button>
           </div>
         ) : null}
@@ -240,8 +250,21 @@ function toLegacyShape(g: api.GenerationDetail): Generation {
     format: g.format,
     progress: g.progress,
     step: g.step,
-    doc: g.doc ?? undefined,
+    doc: withFrozenYear(g.doc, g.createdAt),
   };
+}
+
+/**
+ * Sprint 14 dan oldingi `doc_json` da `meta.year` bo'lmaydi — `title-model`
+ * u yo'q bo'lsa render vaqti yiliga qaytadi. Bu yerda uni yaratilgan
+ * sanadan orqaga to'ldiramiz, shunda eski hujjat ham to'g'ri yil ko'rsatadi.
+ */
+function withFrozenYear(doc: api.GenerationDetail["doc"], createdAt: string): Generation["doc"] {
+  if (!doc) return undefined;
+  if (doc.meta.year) return doc;
+  const t = Date.parse(createdAt);
+  const year = Number.isFinite(t) ? new Date(t).getFullYear() : new Date().getFullYear();
+  return { ...doc, meta: { ...doc.meta, year } };
 }
 
 function Empty({ title, hint }: { title: string; hint: string }) {

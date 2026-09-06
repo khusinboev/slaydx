@@ -64,7 +64,9 @@ export function useMeasuredPages<T>(
       aria-hidden
       ref={ref}
       className={cn(
-        "pointer-events-none fixed top-0 -left-[12000px] w-[165mm] font-[family-name:var(--font-doc)] text-[14pt] leading-[1.5]",
+        // `invisible` — layout'da qoladi (o'lchov ishlaydi), lekin brauzer
+        // Ctrl+F uni o'tkazib yuboradi (matn ikki marta topilmaydi).
+        "invisible pointer-events-none fixed top-0 -left-[12000px] w-[165mm] font-[family-name:var(--font-doc)] text-[14pt] leading-[1.5]",
         opts.className,
       )}
     >

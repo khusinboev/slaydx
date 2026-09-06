@@ -37,7 +37,10 @@ export function TableViewer({ doc }: { doc: AcademicDoc }) {
     },
   );
   const chunks = measured?.length ? measured : [rows];
-  const [zoom, setZoom] = useState(80);
+  // `ZOOM_STEPS` ichidan (`toolbar.tsx` `+`/`−` shu ro'yxatda yuradi).
+  // Ilgari 80 edi — ro'yxatda yo'q, `indexOf` = -1, `+` darhol 150 ga,
+  // `−` 50 ga sakrardi.
+  const [zoom, setZoom] = useState(75);
   const [page, setPage] = useState(1);
   const refs = useRef<(HTMLDivElement | null)[]>([]);
   const total = 2 + chunks.length;
@@ -50,7 +53,7 @@ export function TableViewer({ doc }: { doc: AcademicDoc }) {
 
   return (
     <div className="flex h-full min-h-[70vh] flex-col">
-      <ViewerToolbar zoom={zoom} onZoom={setZoom} page={page} pages={total} onPage={go} />
+      <ViewerToolbar zoom={zoom} onZoom={setZoom} page={page} pages={total} onPage={go} onFit={() => setZoom(75)} />
       <Workspace>
         <div className="flex flex-col items-center gap-8">
           {/*

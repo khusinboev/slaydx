@@ -485,7 +485,16 @@ export async function writeKeysWithLlm(meta: DocMeta, deadline?: number): Promis
   return {
     meta,
     titlePage: true,
-    toc: true,
+    /*
+     * Mundarija ATAYIN yo'q (AUDIT-6 A2).
+     *
+     * Ilgari `toc: true` edi — DOCX mundarija varag'ini chizardi,
+     * `KeysViewer` esa chizmasdi. Foydalanuvchi saytda ko'rmagan sahifa
+     * faylda chiqar, varaq raqamlari esa siljirdi. Keys — 3–5 ta qisqa
+     * vaziyat; ular allaqachon «Keys 1», «Keys 2» deb raqamlangan, ya'ni
+     * mundarija qo'shimcha qiymat bermaydi (glossariy bilan bir xil qaror).
+     */
+    toc: false,
     sections: [
       section("kirish", L.intro, [
         { kind: "p", text: clip(intro || L.keysIntroFallback(meta.topic), 400) },

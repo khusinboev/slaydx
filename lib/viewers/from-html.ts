@@ -1,6 +1,12 @@
 import type { AcademicDoc, Block, DocSection } from "@/lib/generation/types";
 import type { Generation } from "@/lib/types";
 
+/** Hujjat yaratilgan yil — eski yozuvda `meta.year` bo'lmasa shu ishlatiladi. */
+function genYear(gen: Generation): number {
+  const t = gen.createdAt ? Date.parse(gen.createdAt) : NaN;
+  return Number.isFinite(t) ? new Date(t).getFullYear() : new Date().getFullYear();
+}
+
 export function academicDocFromHtml(html: string, gen: Generation): AcademicDoc {
   if (gen.doc) return gen.doc;
   if (typeof DOMParser === "undefined" || !html) return emptyDoc(gen);
@@ -73,6 +79,7 @@ export function academicDocFromHtml(html: string, gen: Generation): AcademicDoc 
       titleSlide: true,
       premiumVisuals: false,
       design: String(gen.values.design || "iris"),
+      year: genYear(gen),
     },
     titlePage: Boolean(cover) || gen.type !== "resume",
     toc: sections.length > 2,
@@ -118,6 +125,7 @@ function emptyDoc(gen: Generation): AcademicDoc {
       titleSlide: true,
       premiumVisuals: false,
       design: "iris",
+      year: genYear(gen),
     },
     titlePage: false,
     toc: false,

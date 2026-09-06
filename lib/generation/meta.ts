@@ -160,5 +160,8 @@ export function extractMeta(tool: ToolConfig, values: FormValues): DocMeta {
     premiumVisuals: quality === "premium" || quality === "premium_long",
     slideAudience: isSlideAudience(audienceRaw) ? audienceRaw : "auto",
     design: s(values, "design", "iris"),
+    // Yil SHU YERDA muzlaydi — `title-model.ts` uni `doc.meta` dan oladi,
+    // `new Date()` dan emas. Aks holda ekran va fayl yil chegarasida ajralardi.
+    year: new Date().getFullYear(),
   };
 }

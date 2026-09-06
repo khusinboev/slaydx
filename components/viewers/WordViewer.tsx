@@ -5,20 +5,20 @@ import { docLabels } from "@/lib/generation/i18n";
 import { ESSAY_DESIGNS } from "@/lib/languages";
 import type { AcademicDoc } from "@/lib/generation/types";
 import { docToFlow, titleModel, tocRows, type FlowItem, type TocRow } from "@/lib/viewers/flow";
-import type { ViewerKind } from "@/lib/viewers/kind";
 import { A4, contentHeightPx } from "@/lib/viewers/metrics";
 import { packPages } from "@/lib/viewers/paginate";
 import { ZoomFrame, Workspace } from "./sheet";
 import { TitlePage } from "./TitlePage";
 import { ViewerToolbar } from "./toolbar";
 
-export function WordViewer({
-  doc,
-  variant,
-}: {
-  doc: AcademicDoc;
-  variant: Extract<ViewerKind, "academic" | "essay" | "article" | "translation">;
-}) {
+/**
+ * Akademik / insho / maqola / tarjima hujjatining jonli ko'ruvchisi.
+ *
+ * Janrga bog'liq farq (insho ramkasi) `doc.meta.toolId` dan olinadi;
+ * ilgari bu yerda `variant` propi ham bor edi — u faqat ekranga xos
+ * lentalar uchun ishlatilardi, ular esa AUDIT-6 A3 da olib tashlandi.
+ */
+export function WordViewer({ doc }: { doc: AcademicDoc }) {
   const items = useMemo(() => docToFlow(doc), [doc]);
   const title = useMemo(() => titleModel(doc), [doc]);
   const toc = useMemo(() => tocRows(doc), [doc]);
@@ -88,21 +88,17 @@ export function WordViewer({
     pageRefs.current[next - 1]?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
-  const ribbon =
-    variant === "translation" ? (
-      <div className="mb-3 rounded-sm bg-emerald-700 px-2 py-1 text-center text-[11pt] font-bold text-white" style={{ textIndent: 0 }}>
-        TARJIMA
-      </div>
-    ) : variant === "essay" ? (
-      <div className="text-muted-foreground mb-2 text-center text-[11pt] italic" style={{ textIndent: 0 }}>
-        Badiiy-ilmiy insho
-      </div>
-    ) : variant === "article" ? (
-      <div className="mb-2 text-center text-[11pt]" style={{ textIndent: 0 }}>
-        {doc.meta.organization || doc.meta.university}
-        {doc.meta.email ? ` · ${doc.meta.email}` : ""}
-      </div>
-    ) : null;
+  /*
+   * Lenta ATAYIN yo'q (AUDIT-6 A3).
+   *
+   * Ilgari bu yerda «TARJIMA» yashil lenti, «Badiiy-ilmiy insho» kursiv
+   * qatori va maqola uchun «tashkilot · email» qatori chizilardi —
+   * `render-docx.ts` esa ularning hech birini chizmasdi. Ya'ni ekranda
+   * ko'rilgan birinchi sahifa yuklab olingan fayldan farq qilardi.
+   * Tarjima o'zini «Tarjima» bo'lim sarlavhasi bilan belgilaydi (ikkala
+   * chiqishda ham), insho — `design` rangidagi sahifa ramkasi bilan,
+   * maqola muallif/tashkilot ma'lumoti esa titulda allaqachon bor.
+   */
 
   return (
     <div className="flex h-full min-h-[70vh] flex-col">
@@ -131,10 +127,9 @@ export function WordViewer({
                     style={frame ? ({ "--sheet-frame": frame } as React.CSSProperties) : undefined}
                   >
                     {isTitle ? (
-                      <TitlePage title={title} ribbon={ribbon} />
+                      <TitlePage title={title} />
                     ) : (
                       <div className="word-inner">
-                        {i === 1 && ribbon && pages?.[0]?.[0]?.type === "title" ? null : i === 0 ? ribbon : null}
                         {pg.map((it) => (
                           <FlowBlock key={it.id} item={it} toc={toc} labels={labels} />
                         ))}
@@ -149,9 +144,16 @@ export function WordViewer({
         </Workspace>
       </div>
 
+      {/*
+        `invisible` (visibility:hidden) — MUHIM: element layout'da qoladi,
+        ya'ni `getBoundingClientRect()` haqiqiy balandlik beradi, lekin
+        brauzerning Ctrl+F qidiruvi uni O'TKAZIB YUBORADI. Ilgari faqat
+        ekrandan chiqarilardi (`-left-[12000px]`) va matn ikki marta
+        topilardi — hit soni 2×, kursor «bo'sh joyga» sakrardi.
+      */}
       <div
         aria-hidden
-        className="pointer-events-none fixed top-0 -left-[12000px] w-[165mm] font-[family-name:var(--font-doc)] text-[14pt] leading-[1.5]"
+        className="invisible pointer-events-none fixed top-0 -left-[12000px] w-[165mm] font-[family-name:var(--font-doc)] text-[14pt] leading-[1.5]"
         ref={measureRef}
       >
         {items.map((it) => (

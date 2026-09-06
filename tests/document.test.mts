@@ -1290,13 +1290,15 @@ test("ostmavzu sarlavhasi chapda, abzats chekinishi bilan", async () => {
   const xml = await docxXml(doc);
 
   // Ostmavzu paragrafi: HEADING_2 + chapga tekislash + chekinish.
-  const h2 = xml.match(/<w:p\b[^>]*>(?:(?!<\/w:p>).)*Heading2(?:(?!<\/w:p>).)*<\/w:p>/s);
+  // `[^]` = ixtiyoriy belgi (yangi qator ham) — `/s` bayrog'i `tsconfig`
+  // `target: ES2017` da xato beradi, `[^]` esa hamma joyda ishlaydi.
+  const h2 = xml.match(/<w:p\b[^>]*>(?:(?!<\/w:p>)[^])*Heading2(?:(?!<\/w:p>)[^])*<\/w:p>/);
   assert.ok(h2, "HEADING_2 paragrafi topilishi kerak");
   assert.match(h2[0], /w:jc w:val="left"/, "ostmavzu chapga tekislanishi kerak");
   assert.match(h2[0], /w:firstLine="709"/, "abzats chekinishi (1.25 sm = 709 twip) bo'lishi kerak");
 
   // Bob sarlavhasi esa MARKAZDA qoladi.
-  const h1 = xml.match(/<w:p\b[^>]*>(?:(?!<\/w:p>).)*Heading1(?:(?!<\/w:p>).)*<\/w:p>/s);
+  const h1 = xml.match(/<w:p\b[^>]*>(?:(?!<\/w:p>)[^])*Heading1(?:(?!<\/w:p>)[^])*<\/w:p>/);
   assert.ok(h1, "HEADING_1 paragrafi topilishi kerak");
   assert.match(h1[0], /w:jc w:val="center"/, "bob sarlavhasi markazda qolishi kerak");
 });
@@ -1379,4 +1381,112 @@ test("ko'ruvchi CSS o'lchamlari hujjat profilidan chetlashmaydi", async () => {
   assert.match(rule(".word-h2"), /text-indent:\s*1\.25cm/);
   // Bandlar tekislanmaydi (DOCX bullet paragrafi ham tekislamaydi).
   assert.match(rule(".word-li"), /text-align:\s*left/);
+});
+
+/* ─────────────────────────── AUDIT-6 · Sprint 1 ─────────────────────────── */
+
+test("A6: titul yili hujjat bilan muzlaydi, render vaqtidan olinmaydi", async () => {
+  const { titleModel } = await import("../lib/generation/title-model.ts");
+
+  /*
+   * Ilgari `title-model.ts` yilni `new Date()` dan olardi: DOCX baytlari
+   * yaratilganda muzlar, ko'ruvchi esa har ochilganda qayta hisoblardi.
+   * Dekabrda yaratilib yanvarda ochilgan hujjatda ekran «2026», fayl
+   * «2025» ko'rsatardi. Endi yil `meta.year` da muzlaydi.
+   */
+  const base = anyDoc("coursework", { topic: "Mavzu", author: "Aliyev A." });
+  const frozen = { ...base, meta: { ...base.meta, year: 2019 } };
+
+  const model = titleModel(frozen);
+  assert.equal(model.kind, "gost");
+  if (model.kind !== "gost") return;
+  assert.equal(model.cityYear, "Toshkent — 2019");
+  assert.ok(model.academicYear.includes("2019") && model.academicYear.includes("2020"));
+
+  // Fayl ham shu yilni chizadi — ya'ni ekran = fayl.
+  const xml = await docxText(frozen);
+  assert.match(xml, /Toshkent — 2019/);
+  assert.ok(!/202[3-9]/.test(xml), `faylda joriy yil bo'lmasligi kerak: ${xml.match(/20\d\d/g)}`);
+
+  // `meta.year` bo'lmasa (eski `doc_json`) render vaqti yiliga qaytadi —
+  // regressiya emas, avvalgi xatti-harakat.
+  const legacyModel = titleModel({ ...base, meta: { ...base.meta, year: undefined } });
+  assert.equal(legacyModel.kind === "gost" && legacyModel.cityYear, `Toshkent — ${new Date().getFullYear()}`);
+});
+
+test("A6: extractMeta yilni to'ldiradi", async () => {
+  const m = extractMeta(TOOL_BY_ID.referat, { topic: "X" } as FormValues);
+  assert.equal(m.year, new Date().getFullYear());
+});
+
+test("A7: ma'nosiz o'rinbosar universitet titulda chizilmaydi", async () => {
+  const { titleModel } = await import("../lib/generation/title-model.ts");
+
+  /*
+   * Ilgari bu shart FAQAT `render-docx.ts` da turardi — `TitlePage`
+   * (sayt) `«Oliy ta'lim muassasasi»` ni baribir chizardi. Endi model
+   * bitta qaror qiladi.
+   */
+  const placeholder = anyDoc("coursework", {
+    topic: "Mavzu",
+    author: "Aliyev A.",
+    university: "Oliy ta'lim muassasasi",
+  });
+  const m = titleModel(placeholder);
+  assert.equal(m.kind === "gost" && m.university, "", "o'rinbosar nom «» ga aylanishi kerak");
+
+  const xml = await docxText(placeholder);
+  assert.ok(!/OLIY TA'LIM MUASSASASI/i.test(xml), "faylda ham chizilmasligi kerak");
+
+  // Haqiqiy nom o'zgarishsiz o'tadi.
+  const realModel = titleModel(anyDoc("coursework", { topic: "Mavzu", author: "Aliyev A.", university: "TDPU" }));
+  assert.equal(realModel.kind, "gost");
+  assert.equal(realModel.kind === "gost" && realModel.university, "TDPU");
+});
+
+test("A2: keys hujjatida mundarija yo'q (ko'ruvchi bilan bir xil)", async () => {
+  const { writeKeysWithLlm } = await import("../lib/generation/write-specials.ts");
+
+  const realFetch = globalThis.fetch;
+  const savedGemini = process.env.GEMINI_API_KEY;
+  const savedXai = process.env.XAI_API_KEY;
+  process.env.GEMINI_API_KEY = "test-key";
+  delete process.env.XAI_API_KEY;
+
+  const keysJson = JSON.stringify({
+    intro: "Kirish matni yetarli uzunlikda bo'lishi uchun bir necha so'z.",
+    cases: Array.from({ length: 4 }, (_, i) => ({
+      title: `Vaziyat ${i + 1}`,
+      situation: `Aniq ism-vaziyatli keys ${i + 1} tavsifi, yetarlicha uzun.`,
+      tasks: ["Birinchi topshiriq", "Ikkinchi topshiriq"],
+      key: `Namunaviy kalit ${i + 1}.`,
+      rubric: [
+        { criterion: "Tahlil chuqurligi", points: 5 },
+        { criterion: "Asoslash", points: 5 },
+      ],
+    })),
+  });
+
+  globalThis.fetch = (async () =>
+    ({
+      ok: true,
+      status: 200,
+      json: async () => ({ candidates: [{ content: { parts: [{ text: keysJson }] } }] }),
+    }) as never) as typeof fetch;
+
+  try {
+    const meta = extractMeta(TOOL_BY_ID.keys, { topic: "Pedagogika", language: "uz" } as FormValues);
+    const doc = await writeKeysWithLlm(meta, Date.now() + 120_000);
+    assert.ok(doc, "keys hujjati yozilishi kerak");
+    assert.equal(doc.toc, false, "keys hujjatida `toc` yo'q bo'lishi kerak");
+
+    // Fayl ham mundarija sarlavhasini chizmaydi.
+    const textOut = await docxText(doc);
+    assert.ok(!/Mundarija/i.test(textOut), "DOCX da «Mundarija» sarlavhasi bo'lmasligi kerak");
+  } finally {
+    globalThis.fetch = realFetch;
+    if (savedGemini === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = savedGemini;
+    if (savedXai !== undefined) process.env.XAI_API_KEY = savedXai;
+  }
 });

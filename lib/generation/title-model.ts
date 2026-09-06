@@ -54,10 +54,25 @@ export type TitleModel =
       cityYear: string;
     };
 
+/**
+ * Ma'nosiz o'rinbosar universitet nomini tashlaydi.
+ *
+ * Ilgari bu shart FAQAT `render-docx.ts` da turardi — sayt ko'ruvchisi
+ * `«Oliy ta'lim muassasasi»` ni baribir chizardi. Endi model bitta
+ * qaror qiladi va ikkala renderer ham unga ergashadi.
+ */
+function cleanUniversity(raw: string): string {
+  const t = (raw || "").trim();
+  return /^oliy ta[’'`]lim muassasasi$/i.test(t) ? "" : t;
+}
+
 export function titleModel(doc: AcademicDoc): TitleModel {
   const { meta } = doc;
   const L = docLabels(meta.language);
-  const year = new Date(Date.now()).getFullYear();
+  // Yil hujjat bilan birga muzlaydi (`extractMeta`). Eski `doc_json` da
+  // `meta.year` bo'lmasligi mumkin — bunday holatda render vaqti yiliga
+  // qaytamiz (avvalgi xatti-harakat, ya'ni regressiya emas).
+  const year = meta.year || new Date(Date.now()).getFullYear();
   const cityYear = `${meta.city || "Toshkent"} — ${year}`;
 
   if (profileFor(meta).titlePage === "article") {
@@ -81,7 +96,7 @@ export function titleModel(doc: AcademicDoc): TitleModel {
     kind: "gost",
     labels: L,
     ministry: (meta.ministry === "maktab" ? L.ministrySchool : L.ministryHigher).split("\n"),
-    university: meta.university,
+    university: cleanUniversity(meta.university),
     faculty: meta.faculty ? L.faculty(meta.faculty) : undefined,
     department: meta.department ? L.department(meta.department) : undefined,
     workLabel: meta.workLabel,

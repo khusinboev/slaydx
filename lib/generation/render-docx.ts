@@ -431,8 +431,9 @@ export async function renderDocx(doc: AcademicDoc): Promise<Uint8Array> {
     } else {
       for (const line of T.ministry) children.push(K.centerP(line, { bold: true, size: 24 }));
       children.push(K.centerP(""));
-      // Ma'nosiz o'rinbosar («Oliy ta'lim muassasasi») chizilmaydi.
-      if (T.university && !/^oliy ta[’']lim muassasasi$/i.test(T.university)) {
+      // Ma'nosiz o'rinbosar («Oliy ta'lim muassasasi») `titleModel` da
+      // allaqachon "" ga aylantirilgan — bu yer faqat chizadi.
+      if (T.university) {
         children.push(K.centerP(T.university.toUpperCase(), { bold: true, size: 24 }));
       }
       children.push(K.centerP(""));
