@@ -81,6 +81,10 @@ services:
       FAL_KEY: ${FAL_KEY:-}
       FAL_MODEL: ${FAL_MODEL:-fal-ai/flux/schnell}
       FAL_MODEL_PREMIUM: ${FAL_MODEL_PREMIUM:-}
+      # `FAL_MODEL_PREMIUM` sozlangan bo'lsa ham, qadam soni shu yerdan
+      # o'tmasa `slide-images.ts` sukut bo'yicha 8 taga tushib qoladi —
+      # standalone «Rasm» vositasi endi shu (premium) yo'ldan ishlaydi.
+      FAL_STEPS_PREMIUM: ${FAL_STEPS_PREMIUM:-}
       GEMINI_THINKING_BUDGET: ${GEMINI_THINKING_BUDGET:-}
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
       WORKER_JOB_TIMEOUT_MS: ${WORKER_JOB_TIMEOUT_MS:-480000}

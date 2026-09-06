@@ -4,18 +4,82 @@ import { parseLlmObject } from "./json";
 import { mapPool } from "./quality";
 import { extractMeta } from "./meta";
 import { llmComplete, llmEnabled } from "./llm";
+import { groundUzbekScene } from "./uz-gazetteer";
 import type { AcademicDoc, BuiltFile, GenImage } from "./types";
 import type { FormValues, ToolConfig } from "../types";
 
+/**
+ * Uslub tavsiflari — har biri o'ziga xos VOSITA (medium) so'zlari va
+ * "bu FOTO EMAS" kabi inkor bilan yozilgan.
+ *
+ * Sababi: jonli tekshiruvda (`scripts/image-lab.mts`) bir xil sahna va
+ * seed bilan 8 ta uslubning 6 tasi (foto, kino, illyustratsiya, 3D,
+ * minimal, mahsulot) DEYARLI BIR XIL fotografik rasm chiqargani
+ * aniqlandi — foydalanuvchi xabar qilgan xato aynan shu edi. Sabab:
+ * `flux/schnell` past qadam sonida ("standard" = 4) tavsifni yuzaki
+ * o'qiydi va standart holatga (fotorealizm) qaytadi; "3D render" yoki
+ * "digital illustration" kabi yumshoq ishoralar buni yengolmaydi.
+ * Faqat kuchli, aniq lug'aviy signal ("bu FOTO EMAS", qog'oz donadorligi,
+ * moybo'yoq siljishi kabi) va inkor ishlaydi — "qalam" uslubi shu
+ * tarzda yozilgani uchun ilgari ham to'g'ri chiqqan edi.
+ */
 export const IMAGE_STYLES = [
-  { id: "photo", name: "Foto", blurb: "Haqiqiy surat", suffix: "Render as a photoreal photograph of THIS scene only." },
-  { id: "cinematic", name: "Kino", blurb: "Film kadri", suffix: "Render as a cinematic film still of THIS scene only." },
-  { id: "illustration", name: "Illustratsiya", blurb: "Chizma uslub", suffix: "Render as a polished digital illustration of THIS scene only." },
-  { id: "watercolor", name: "Akvarel", blurb: "Suv bo‘yoq", suffix: "Render as a watercolor painting of THIS scene only." },
-  { id: "render3d", name: "3D", blurb: "Render", suffix: "Render as a detailed 3D still of THIS scene only." },
-  { id: "minimal", name: "Minimal", blurb: "Toza kompozitsiya", suffix: "Render as a clean minimal photograph of THIS scene only." },
-  { id: "pencil", name: "Qalam", blurb: "Sketch", suffix: "Render THIS exact scene as a full-page graphite pencil illustration. Not a random sketch study. Not an animal unless the scene names one." },
-  { id: "product", name: "Mahsulot", blurb: "Katalog", suffix: "Render as catalog product photography of the named object only." },
+  {
+    id: "photo",
+    name: "Foto",
+    blurb: "Haqiqiy surat",
+    suffix:
+      "Render as a photoreal photograph of THIS scene only, shot on a full-frame DSLR, natural light, realistic skin and material textures, sharp focus.",
+  },
+  {
+    id: "cinematic",
+    name: "Kino",
+    blurb: "Film kadri",
+    suffix:
+      "Render as a still frame from a live-action movie: anamorphic lens flare, shallow depth of field with soft bokeh, teal-and-orange color grade, subtle film grain, slightly desaturated shadows, letterboxed cinematic framing of THIS scene only.",
+  },
+  {
+    id: "illustration",
+    name: "Illustratsiya",
+    blurb: "Chizma uslub",
+    suffix:
+      "This is NOT a photograph. Render as a FLAT DIGITAL VECTOR ILLUSTRATION of THIS scene: bold clean black outlines, simplified geometric shapes, a limited flat color palette with no photographic gradients, poster-art style, zero camera grain or realistic lighting.",
+  },
+  {
+    id: "watercolor",
+    name: "Akvarel",
+    blurb: "Suv bo‘yoq",
+    suffix:
+      "This is NOT a photograph. Render as a HAND-PAINTED WATERCOLOR of THIS scene on visibly textured cold-press paper: soft diffused pigment bleeds at every edge, dry-brush texture, visible paper grain showing through thin washes, muted pastel colors, no sharp photographic detail anywhere.",
+  },
+  {
+    id: "render3d",
+    name: "3D",
+    blurb: "Render",
+    suffix:
+      "This is NOT a photograph. Render as a STYLIZED 3D COMPUTER-GENERATED image of THIS scene (Blender/Octane look): smooth clay-like or matte plastic materials, visible ray-traced soft shadows, clean studio three-point lighting, slightly simplified low-poly geometry, no photographic skin or fabric texture.",
+  },
+  {
+    id: "minimal",
+    name: "Minimal",
+    blurb: "Toza kompozitsiya",
+    suffix:
+      "Render as a minimalist studio photograph of THIS scene: single flat pastel or seamless paper backdrop replacing any busy background, one subject small and centered, huge clean negative space around it, soft even studio lighting, no clutter, no crowd.",
+  },
+  {
+    id: "pencil",
+    name: "Qalam",
+    blurb: "Sketch",
+    suffix:
+      "This is NOT a photograph and NOT color. Render THIS exact scene as a full-page black-and-white graphite pencil illustration on white paper: visible hatching and cross-hatching strokes, uneven pencil pressure, paper tooth texture, zero color, zero photographic lighting. No artist signature, no monogram, no scribbled text anywhere in the image. Not a random sketch study. Not an animal unless the scene names one.",
+  },
+  {
+    id: "product",
+    name: "Mahsulot",
+    blurb: "Katalog",
+    suffix:
+      "Render as studio product photography of the named object only, isolated on a plain seamless white or neutral backdrop with no environment or background scene, soft even softbox lighting from multiple angles, sharp catalog-style focus.",
+  },
 ] as const;
 
 export const IMAGE_RATIOS = [
@@ -35,7 +99,7 @@ export function imageRatioById(id: string) {
   return IMAGE_RATIOS.find((s) => s.id === id) ?? IMAGE_RATIOS[0];
 }
 
-function composePrompt(scene: string, styleId: string, w: number, h: number) {
+export function composePrompt(scene: string, styleId: string, w: number, h: number) {
   const style = imageStyleById(styleId);
   const portrait = h > w;
   const frame = portrait
@@ -46,28 +110,48 @@ function composePrompt(scene: string, styleId: string, w: number, h: number) {
     style.suffix,
     frame,
     "Fill the entire frame. No large blank paper. No random animals or faces unless named.",
-    "No text, no letters, no watermark, no logo, no UI.",
+    /*
+     * Kuchaytirilgan taqiq: jonli tekshiruvda model haqiqiy binoga
+     * o'zi «CHAOSSU» kabi buzuq yozuv chizib qo'ygani aniqlandi —
+     * oddiy "no text" yetarli emas edi. Devor/peshtoq sirtini aniq
+     * bo'sh deb belgilash ko'proq ta'sir qiladi.
+     */
+    "Absolutely no text, letters, numbers, signage, plaques, inscriptions, watermark, logo, or UI anywhere in the image — walls and surfaces must be blank of any writing.",
   ].join(" ");
 }
 
+/**
+ * O'zbekistonga oid so'rovlarga aniq vizual faktlarni qo'shadi.
+ *
+ * LLM o'chirilgan yoki mavzuni tarjima qilishda tafsilotni tushirib
+ * qoldirgan taqdirda ham, tanilgan joy/taom uchun HAQIQIY ko'rinish
+ * har doim promptga yetib borishi kerak — shuning uchun bu qo'shimcha
+ * `expandPrompt` natijasidan QAT'IY NAZAR alohida qo'shiladi.
+ */
+export function withGrounding(scene: string, grounding: string): string {
+  return grounding ? `${scene.trim()} Known visual facts about this exact subject: ${grounding}.` : scene.trim();
+}
+
 async function expandPrompt(user: string, styleId: string, ratioId: string): Promise<string> {
-  if (!llmEnabled()) return user;
+  const grounding = groundUzbekScene(user);
+  if (!llmEnabled()) return withGrounding(user, grounding);
   const style = imageStyleById(styleId);
   const raw = await llmComplete(
     [
       "You write English prompts for a text-to-image model.",
       "The user may write Uzbek, Russian, or mixed text. Translate meaning, do not ignore it.",
       "Output JSON only: {\"scene\":\"...\"}.",
-      "scene = 1–3 sentences, concrete visual English: place, objects, time of day, camera.",
+      "scene = 1–4 sentences, concrete visual English: place, objects, time of day, camera.",
       "Keep every named place, object, and action. Do not replace the subject with a different idea.",
+      "If the request names a specific real place, food, or object, describe its ACTUAL known visual details precisely — do not fall back to a generic version of that category.",
       "Do not mention style, medium, pencil, camera brand, or text-in-image.",
     ].join(" "),
-    `User request: «${user}».\nStyle (ignore for subject, only know the medium later): ${style.name}.\nFrame: ${ratioId}.`,
-    400,
+    `User request: «${user}».\nStyle (ignore for subject, only know the medium later): ${style.name}.\nFrame: ${ratioId}.${grounding ? `\nKnown visual facts about this exact subject — reflect them: ${grounding}.` : ""}`,
+    500,
     { json: true, timeoutMs: 20_000 },
   );
   const scene = String(parseLlmObject<{ scene?: string }>(raw)?.scene || "").trim();
-  return scene.length > 12 ? scene : user;
+  return withGrounding(scene.length > 12 ? scene : user, grounding);
 }
 
 
@@ -110,7 +194,14 @@ export async function buildImageArtifact(tool: ToolConfig, values: FormValues): 
   const full = composePrompt(scene, styleId, ratio.w, ratio.h);
 
   const raw = await mapPool(Array.from({ length: count }, (_, i) => i), 2, async (i) => {
-    const im = await generateFalImage(full, size);
+    /*
+     * `rasm` — mustaqil pullik mahsulot (slaydga qo'shilgan to'ldiruvchi
+     * surat emas), shuning uchun `premium` bosqichni ishlatamiz: 4 emas,
+     * 8 qadam. Uslub ta'siri asosan promptga bog'liq (yuqoridagi izoh),
+     * lekin ko'proq qadam umumiy tafsilot va kompozitsiya sifatini
+     * oshiradi — ayniqsa haqiqiy joy nomlari uchun.
+     */
+    const im = await generateFalImage(full, size, undefined, { premium: true });
     if (!im) return null;
     const bytes = await fetchImageBytes(im.url);
     const url = bytes ? `data:${bytes.data}` : im.url;

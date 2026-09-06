@@ -9,11 +9,20 @@ import { IMAGE_RATIOS, IMAGE_STYLES } from "@/lib/generation/image-studio";
 import { cn } from "@/lib/cn";
 import { runGeneration } from "./runGeneration";
 
+/*
+ * Har biri gazetteer (`uz-gazetteer.ts`) tan oladigan kalit so'zni o'z
+ * ichiga oladi — shunda foydalanuvchi bosgan zahoti aniq vizual
+ * tafsilotlar bilan boyitilgan, haqiqiyroq rasm ko'radi.
+ */
 const EXAMPLES = [
-  "Toshkent kechasi, yomg‘irli ko‘cha, neon yorug‘lik, kino kadri",
-  "O‘zbek dasturxoni, non, choy, tabiiy yorug‘lik, mahsulot fotosi",
-  "Universitet kutubxonasi, talaba kitob o‘qiyapti, iliq yorug‘lik",
   "Registon maydoni erta tongda, tuman, keng kadr",
+  "Buxorodagi Poi Kalon minorasi kechqurun, yorug‘lik bilan",
+  "Laganda dam olayotgan issiq palov, bug‘i chiqib turibdi",
+  "Tandirdan yangi olingan non, uy sharoiti, tabiiy yorug‘lik",
+  "Atlas mato bozori, rang-barang rulonlar, quyosh nuri",
+  "Xivadagi Ichan qal'a devorlari, oqshom, sokin ko‘cha",
+  "Amir Temur haykali, qish kuni, qor yog‘moqda",
+  "Toshkent kechasi, yomg‘irli ko‘cha, neon yorug‘lik, kino kadri",
 ];
 
 export function ImageStudio({ tool }: { tool: ToolConfig }) {
