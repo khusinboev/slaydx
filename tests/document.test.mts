@@ -1035,3 +1035,139 @@ test("IMRAD annotatsiyasiz maqola qat'iy darvozadan o'tmaydi", async () => {
     if (savedXai !== undefined) process.env.XAI_API_KEY = savedXai;
   }
 });
+
+test("va'da qilingan miqdor kam chiqsa farq qaytariladi", async () => {
+  const { deliveredCount } = await import("../lib/generation/delivered.ts");
+  const { shortfallRatio } = await import("../lib/server/worker.ts");
+  const { extractMeta } = await import("../lib/generation/meta.ts");
+  const { mapWeeks } = await import("../lib/generation/write-specials.ts");
+
+  /*
+   * AYNAN P1-1 va P1-2 (AUDIT-5). Uchta vositada narx bevosita SONGA
+   * bog'langan va o'sha son foydalanuvchiga ochiq ko'rsatiladi:
+   *
+   *   slayd     — «Premium uzun · 16 slayd · 8 000»
+   *   glossariy — «40 ta atama», narx 6 000 / 9 000 / 15 000
+   *   xarita    — haftalar foydalanuvchi kiritgan soatlardan
+   *
+   * Ularning sifat darvozasi FLOOR edi (0.85 va 0.70) va u «umuman
+   * yaroqlimi» degan savolga javob beradi — «va'da bajarildimi» ga emas.
+   * 16 slayd o'rniga 14, 40 atama o'rniga 28 chiqsa ish COMPLETED bo'lar
+   * va TO'LIQ pul olinardi.
+   */
+
+  // ── Slayd: 16 va'da, 14 yetkazildi
+  const slideMeta = extractMeta(TOOL_BY_ID.slide, { topic: "X", quality: "premium_long" } as FormValues);
+  assert.equal(slideMeta.targetPages, 16, "premium_long 16 slayd va'da qiladi");
+  const deck = (n: number) =>
+    ({ meta: slideMeta, titlePage: true, toc: false, sections: [], slides: Array.from({ length: n }, (_, i) => ({ id: `s${i}`, layout: "bullets", title: `S${i}` })) }) as never;
+
+  assert.equal(deliveredCount(slideMeta, deck(16)), undefined, "to'liq deka qaytarishsiz");
+  assert.deepEqual(deliveredCount(slideMeta, deck(14)), { got: 14, want: 16 });
+  assert.equal(shortfallRatio(deliveredCount(slideMeta, deck(14))), 0.125, "8 000 dan 12.5% qaytadi");
+  // Nisbat suzuvchi son — `splitRatio` uni baribir yaxlitlaydi, shuning
+  // uchun tekshiruv aniq tenglik emas, yaqinlik bilan.
+  const near = (a: number | null, b: number, msg: string) =>
+    assert.ok(a !== null && Math.abs(a - b) < 1e-9, `${msg}: ${a}`);
+
+  // Ortiq yetkazish qaytarish sababi emas.
+  assert.equal(deliveredCount(slideMeta, deck(18)), undefined);
+
+  // ── Glossariy: 40 va'da, atamalar `h3` sarlavhalar
+  const gloMeta = extractMeta(TOOL_BY_ID.glossary, { topic: "X", termCount: "40" } as FormValues);
+  const gloDoc = (n: number) =>
+    ({
+      meta: gloMeta,
+      titlePage: true,
+      toc: false,
+      sections: [
+        { id: "kirish", title: "Kirish", blocks: [{ kind: "p", text: "Matn" }] },
+        {
+          id: "atamalar",
+          title: "Atamalar",
+          blocks: Array.from({ length: n }, (_, i) => ({ kind: "h3", text: `Atama ${i}` })),
+        },
+      ],
+    }) as never;
+
+  assert.equal(deliveredCount(gloMeta, gloDoc(40)), undefined);
+  // 70% darvozasi 28 tani o'tkazadi — ilgari 15 000 to'liq olinardi.
+  assert.deepEqual(deliveredCount(gloMeta, gloDoc(28)), { got: 28, want: 40 });
+  near(shortfallRatio(deliveredCount(gloMeta, gloDoc(28))), 0.3, "15 000 dan 30% qaytadi");
+
+  // ── Xarita: haftalar soatlardan
+  const mapMeta = extractMeta(TOOL_BY_ID["texnologik-xarita"], {
+    subject: "Biologiya",
+    weeklyHours: 4,
+    totalHours: 136,
+  } as FormValues);
+  const weeks = mapWeeks(mapMeta);
+  assert.equal(weeks, 34, "136 / 4 = 34 hafta");
+  const mapDocOf = (n: number) =>
+    ({
+      meta: mapMeta,
+      titlePage: true,
+      toc: false,
+      sections: [],
+      tables: [{ headers: ["A"], rows: Array.from({ length: n }, (_, i) => [`R${i}`]) }],
+    }) as never;
+
+  assert.equal(deliveredCount(mapMeta, mapDocOf(34)), undefined);
+  assert.deepEqual(deliveredCount(mapMeta, mapDocOf(24)), { got: 24, want: 34 });
+
+  // ── Qolgan vositalarda miqdor va'da qilinmaydi.
+  const cw = extractMeta(TOOL_BY_ID.coursework, { topic: "X" } as FormValues);
+  assert.equal(deliveredCount(cw, { meta: cw, titlePage: true, toc: true, sections: [] } as never), undefined);
+});
+
+test("buildArtifact yetkazilgan miqdorni faylga biriktiradi", async () => {
+  const { buildArtifact } = await import("../lib/generation/index.ts");
+  const { shortfallRatio } = await import("../lib/server/worker.ts");
+
+  /*
+   * Yuqoridagi test QARORNI sinaydi, bu esa SIMLASHNI: `buildArtifact`
+   * hisobni haqiqatan `BuiltFile.delivered` ga qo'yadimi. Aynan shunday
+   * bir qatorli simlash AUDIT-3 §18 da mutatsiyadan omon qolgan edi —
+   * mantiq sinalgan, ulanish esa yo'q.
+   *
+   * Jonli LLM kerak emas: kalitsiz muhitda `buildArtifact` shablon
+   * yo'liga tushadi (`content.ts`), u glossariy uchun qat'iy 12 atama
+   * beradi. Foydalanuvchi 40 ta so'ragan bo'lsa, farq qaytishi kerak.
+   */
+  const savedGemini = process.env.GEMINI_API_KEY;
+  const savedXai = process.env.XAI_API_KEY;
+  delete process.env.GEMINI_API_KEY;
+  delete process.env.XAI_API_KEY;
+
+  try {
+    const file = await buildArtifact(
+      TOOL_BY_ID.glossary,
+      { topic: "Fotosintez atamalari", termCount: "40", language: "uz" } as FormValues,
+      { deadline: Date.now() + 30_000 },
+    );
+
+    assert.ok(file.bytes.byteLength > 0, "DOCX chiqishi kerak");
+    assert.ok(file.delivered, "kam yetkazilgani `delivered` da qayd etilishi kerak");
+    assert.equal(file.delivered.want, 40, "va'da 40 atama");
+    assert.ok(file.delivered.got < 40, `shablon 40 ta bera olmaydi: ${file.delivered.got}`);
+    assert.ok(file.delivered.got > 0, "atamalar sanalishi kerak");
+
+    // Worker shu qiymatdan pul qaroriga o'tadi.
+    const ratio = shortfallRatio(file.delivered);
+    assert.ok(ratio !== null && ratio > 0 && ratio < 1, `qaytarish ulushi: ${ratio}`);
+
+    /*
+     * Miqdor va'da qilinmagan vositada maydon bo'sh qoladi — aks holda
+     * har hujjatda pul qaytarilardi.
+     */
+    const essay = await buildArtifact(
+      TOOL_BY_ID.essay,
+      { topic: "Ona tilim", pages: "1", author: "A. Valiyev" } as FormValues,
+      { deadline: Date.now() + 30_000 },
+    );
+    assert.equal(essay.delivered, undefined, "inshoda miqdor va'dasi yo'q");
+  } finally {
+    if (savedGemini !== undefined) process.env.GEMINI_API_KEY = savedGemini;
+    if (savedXai !== undefined) process.env.XAI_API_KEY = savedXai;
+  }
+});

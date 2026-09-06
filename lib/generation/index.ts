@@ -1,4 +1,5 @@
 import { buildAcademicDoc } from "./content";
+import { deliveredCount } from "./delivered";
 import { llmEnabled as llmKeyPresent } from "./llm";
 import { extractMeta, minPages } from "./meta";
 import { remainingMs, targetWords, wordCount } from "./quality";
@@ -96,6 +97,14 @@ export async function buildArtifact(
     const file = await renderPptx(slideDoc, `${meta.fileNameHint}.pptx`);
     file.html = renderHtml(slideDoc);
     file.doc = slideDoc;
+    /*
+     * Paket yorlig'i «16 slayd» deb yozadi va narx aynan shunga
+     * bog'langan. Sifat darvozasi 0.85 — u «umuman yaroqlimi» degan
+     * savolga javob beradi, «va'da bajarildimi» ga emas. 14 slayd
+     * yetkazilganda ish `COMPLETED` bo'lar va 8 000 tanga to'liq
+     * olinardi (AUDIT-5 P1-1). Endi farq qaytariladi.
+     */
+    file.delivered = deliveredCount(meta, slideDoc);
     return file;
   }
 
@@ -220,5 +229,13 @@ export async function buildArtifact(
     fileName: `${meta.fileNameHint}${suffix}`,
     mime: DOCX,
     doc: academic,
+    /*
+     * Glossariy va texnologik xaritada ham son VA'DA qilingan:
+     * «40 ta atama» tanlovi narxni belgilaydi (6/9/15 ming), haftalar
+     * esa foydalanuvchi kiritgan soatlardan chiqadi. Ikkalasining ham
+     * darvozasi 70% — ya'ni 40 atama uchun 15 000 to'lab 28 ta olish
+     * mumkin edi (AUDIT-5 P1-2).
+     */
+    delivered: deliveredCount(meta, academic),
   };
 }

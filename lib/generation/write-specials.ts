@@ -641,11 +641,21 @@ export async function writeResumeWithLlm(
   };
 }
 
-export async function writeMapWithLlm(meta: DocMeta, deadline?: number): Promise<AcademicDoc | null> {
-  if (!llmEnabled()) return null;
+/**
+ * Xaritadagi hafta soni — soatlardan hisoblanadi.
+ *
+ * Uch joyda kerak (`writeMapWithLlm`, `mapDoc`, `deliveredCount`) va
+ * ilgari uchalasida ham qo'lda takrorlangan edi.
+ */
+export function mapWeeks(meta: Pick<DocMeta, "weeklyHours" | "totalHours">): number {
   const weekly = Math.max(1, meta.weeklyHours);
   const total = Math.max(weekly, meta.totalHours);
-  const weeks = Math.max(8, Math.min(36, Math.round(total / weekly)));
+  return Math.max(8, Math.min(36, Math.round(total / weekly)));
+}
+
+export async function writeMapWithLlm(meta: DocMeta, deadline?: number): Promise<AcademicDoc | null> {
+  if (!llmEnabled()) return null;
+  const weeks = mapWeeks(meta);
   // Ilgari 24 ta qator so'ralib, keyin `weeks` gacha TSIKL bilan
   // to'ldirilardi — 34 haftalik xaritada mavzular takrorlanardi va
   // hujjat yaroqsiz bo'lardi. Endi qancha hafta bo'lsa shuncha so'raymiz.
@@ -678,7 +688,7 @@ export type MapData = { intro?: string; topics?: unknown; weeks?: unknown };
 export function mapDoc(meta: DocMeta, data: MapData | null): AcademicDoc | null {
   const weekly = Math.max(1, meta.weeklyHours);
   const total = Math.max(weekly, meta.totalHours);
-  const weeks = Math.max(8, Math.min(36, Math.round(total / weekly)));
+  const weeks = mapWeeks(meta);
 
   type Week = { topic: string; method: string; result: string; control: string };
   const weeksRows: Week[] = [];
