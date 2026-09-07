@@ -107,9 +107,14 @@ export async function enqueueGeneration(input: EnqueueInput): Promise<EnqueueRes
     if (!charged.ok) {
       return { ok: false as const, reason: charged.reason, required: charged.required, available: charged.available };
     }
+    /*
+     * `expires_at` endi berilmaydi — NULL bo'lib qoladi, ya'ni
+     * generatsiya va unga biriktirilgan fayl/aktiv MUDDATSIZ saqlanadi
+     * (`011_no_expiry.sql`, ilgari 72 soat edi).
+     */
     await client.query(
-      `INSERT INTO generations (id, user_id, tool_id, topic, price, format, values_json, step, budget_ms, expires_at)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'Navbatga qo''yildi', $8, now() + ($9 || ' hours')::interval)`,
+      `INSERT INTO generations (id, user_id, tool_id, topic, price, format, values_json, step, budget_ms)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, 'Navbatga qo''yildi', $8)`,
       [
         id,
         input.userId,
@@ -119,7 +124,6 @@ export async function enqueueGeneration(input: EnqueueInput): Promise<EnqueueRes
         input.format,
         JSON.stringify(input.values),
         Math.round(input.budgetMs),
-        String(env.fileTtlHours),
       ],
     );
     return { ok: true as const, id };
@@ -364,35 +368,6 @@ export async function reclaimStaleJobs(): Promise<string[]> {
     );
     return dead.rows.map((r) => r.id);
   });
-}
-
-/**
- * Eskirgan generatsiya qatorlarini o'chiradi.
- *
- * Fayl va aktivlar TTL bo'yicha o'chardi, lekin `generations` qatori
- * (`html` + `doc_json` bilan, ba'zan megabaytlab) abadiy qolardi —
- * baza vaqt o'tishi bilan cheksiz o'sardi.
- *
- * Muddati o'tgan yozuvda avval og'ir maydonlar tozalanadi, ancha
- * eskilari esa butunlay o'chadi (foydalanuvchi tarixi biroz saqlansin).
- */
-export async function purgeExpiredGenerations(): Promise<number> {
-  // 1-bosqich: muddati tugagan — kontentni tashlaymiz, qator qoladi.
-  await query(
-    `UPDATE generations
-        SET html = NULL, doc_json = NULL, preview = NULL
-      WHERE expires_at IS NOT NULL
-        AND expires_at < now()
-        AND (html IS NOT NULL OR doc_json IS NOT NULL)`,
-  );
-  // 2-bosqich: 90 kundan eski yozuvlar butunlay o'chadi.
-  const rows = await query<{ count: string }>(
-    `WITH gone AS (
-       DELETE FROM generations WHERE created_at < now() - interval '90 days' RETURNING 1
-     )
-     SELECT count(*)::text AS count FROM gone`,
-  );
-  return Number(rows[0]?.count ?? 0);
 }
 
 export async function queueDepth(): Promise<{ queued: number; running: number }> {

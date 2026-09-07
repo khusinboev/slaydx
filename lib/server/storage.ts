@@ -1,13 +1,15 @@
 import "server-only";
 import { query, queryOne } from "./db";
-import { env } from "./env";
 
 /**
  * Yaratilgan fayl bayti.
  *
  * Ilgari fayl faqat brauzerdagi IndexedDB da edi — boshqa qurilmadan
- * kirilsa yo'q, brauzer tozalansa yo'q. Endi bayt bazada turadi va
- * `expires_at` bo'yicha avtomatik o'chadi (TTL).
+ * kirilsa yo'q, brauzer tozalansa yo'q. Endi bayt bazada, MUDDATSIZ
+ * turadi — foydalanuvchi so'rovi bilan avtomatik muddat (edi: 72 soat)
+ * olib tashlandi (`011_no_expiry.sql`). Fayl faqat foydalanuvchi o'zi
+ * o'chirsa (`deleteGenerationFile`) yoki generatsiya o'chirilsa
+ * (`ON DELETE CASCADE`) yo'qoladi.
  */
 
 /** Bazaga yoziladigan eng katta fayl. Kattaroq PPTX odatda rasm sifati muammosi. */
@@ -17,7 +19,6 @@ export type StoredFileMeta = {
   fileName: string;
   mime: string;
   sizeBytes: number;
-  expiresAt: string;
 };
 
 export async function putGenerationFile(
@@ -30,23 +31,21 @@ export async function putGenerationFile(
         `Chegara — ${MAX_FILE_BYTES / 1024 / 1024} MB.`,
     );
   }
-  const expiresAt = new Date(Date.now() + env.fileTtlHours * 3_600_000);
   await query(
     `INSERT INTO generation_files (generation_id, file_name, mime, size_bytes, bytes, expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6)
+     VALUES ($1, $2, $3, $4, $5, NULL)
      ON CONFLICT (generation_id) DO UPDATE
         SET file_name = EXCLUDED.file_name,
             mime      = EXCLUDED.mime,
             size_bytes = EXCLUDED.size_bytes,
             bytes     = EXCLUDED.bytes,
-            expires_at = EXCLUDED.expires_at`,
-    [generationId, file.fileName, file.mime, file.bytes.byteLength, Buffer.from(file.bytes), expiresAt],
+            expires_at = NULL`,
+    [generationId, file.fileName, file.mime, file.bytes.byteLength, Buffer.from(file.bytes)],
   );
   return {
     fileName: file.fileName,
     mime: file.mime,
     sizeBytes: file.bytes.byteLength,
-    expiresAt: expiresAt.toISOString(),
   };
 }
 
@@ -65,8 +64,7 @@ export async function getGenerationFile(
        FROM generation_files f
        JOIN generations g ON g.id = f.generation_id
       WHERE f.generation_id = $1
-        AND g.user_id = $2
-        AND f.expires_at > now()`,
+        AND g.user_id = $2`,
     [generationId, userId],
   );
   if (!row) return null;
@@ -81,7 +79,7 @@ export async function hasGenerationFile(generationId: string, userId: string): P
     `SELECT 1
        FROM generation_files f
        JOIN generations g ON g.id = f.generation_id
-      WHERE f.generation_id = $1 AND g.user_id = $2 AND f.expires_at > now()`,
+      WHERE f.generation_id = $1 AND g.user_id = $2`,
     [generationId, userId],
   );
   return Boolean(row);
@@ -109,13 +107,4 @@ export async function deleteGenerationFile(generationId: string, userId: string)
         AND g.user_id = $2`,
     [generationId, userId],
   );
-}
-
-/** Muddati o'tgan fayllarni o'chiradi. Cron chaqiradi. */
-export async function purgeExpiredFiles(): Promise<number> {
-  const rows = await query<{ count: string }>(
-    `WITH gone AS (DELETE FROM generation_files WHERE expires_at < now() RETURNING 1)
-     SELECT count(*)::text AS count FROM gone`,
-  );
-  return Number(rows[0]?.count ?? 0);
 }

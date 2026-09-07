@@ -1,7 +1,6 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import { query, queryOne } from "./db";
-import { env } from "./env";
 import type { AcademicDoc } from "../generation/types";
 
 /**
@@ -66,15 +65,15 @@ export function extractAssets(
   return { doc: nextDoc, html: nextHtml, assets: [...assets.values()] };
 }
 
+/** Muddatsiz saqlanadi (`011_no_expiry.sql`) — generatsiya o'chsa CASCADE bilan ketadi. */
 export async function putAssets(generationId: string, assets: PendingAsset[]): Promise<void> {
   if (!assets.length) return;
-  const expiresAt = new Date(Date.now() + env.fileTtlHours * 3_600_000);
   for (const a of assets) {
     await query(
       `INSERT INTO generation_assets (generation_id, asset_id, mime, size_bytes, bytes, expires_at)
-       VALUES ($1, $2, $3, $4, $5, $6)
+       VALUES ($1, $2, $3, $4, $5, NULL)
        ON CONFLICT (generation_id, asset_id) DO NOTHING`,
-      [generationId, a.assetId, a.mime, a.bytes.byteLength, a.bytes, expiresAt],
+      [generationId, a.assetId, a.mime, a.bytes.byteLength, a.bytes],
     );
   }
 }
@@ -89,7 +88,7 @@ export async function getAsset(
     `SELECT a.bytes, a.mime
        FROM generation_assets a
        JOIN generations g ON g.id = a.generation_id
-      WHERE a.generation_id = $1 AND a.asset_id = $2 AND g.user_id = $3 AND a.expires_at > now()`,
+      WHERE a.generation_id = $1 AND a.asset_id = $2 AND g.user_id = $3`,
     [generationId, assetId, userId],
   );
   return row ?? null;
@@ -98,12 +97,4 @@ export async function getAsset(
 /** Bitta generatsiyaning barcha aktivlarini o'chiradi. */
 export async function deleteAssets(generationId: string): Promise<void> {
   await query("DELETE FROM generation_assets WHERE generation_id = $1", [generationId]);
-}
-
-export async function purgeExpiredAssets(): Promise<number> {
-  const rows = await query<{ count: string }>(
-    `WITH gone AS (DELETE FROM generation_assets WHERE expires_at < now() RETURNING 1)
-     SELECT count(*)::text AS count FROM gone`,
-  );
-  return Number(rows[0]?.count ?? 0);
 }

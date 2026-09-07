@@ -9,15 +9,14 @@ import {
   claimJob,
   completeJob,
   failJob,
-  purgeExpiredGenerations,
   reclaimStaleJobs,
   setProgress,
   type ClaimedJob,
   type GenerationPreview,
 } from "./jobs";
 import { refund, refundPartial } from "./credits";
-import { deleteGenerationFile, putGenerationFile, purgeExpiredFiles } from "./storage";
-import { deleteAssets, extractAssets, purgeExpiredAssets, putAssets } from "./assets";
+import { deleteGenerationFile, putGenerationFile } from "./storage";
+import { deleteAssets, extractAssets, putAssets } from "./assets";
 import { purgeExpiredSessions } from "./session";
 import { purgeRateLimits } from "./ratelimit";
 import { purgeExpiredTickets } from "./telegram";
@@ -244,9 +243,8 @@ async function housekeeping(): Promise<void> {
       );
       if (owner) await refund(String(owner.user_id), id, "Ish vaqti tugadi");
     }
-    await purgeExpiredFiles();
-    await purgeExpiredAssets();
-    await purgeExpiredGenerations();
+    // Fayl/aktiv/generatsiya endi MUDDATSIZ (`011_no_expiry.sql`) —
+    // bu yerda faqat haqiqatan vaqt bilan cheklangan narsalar tozalanadi.
     await purgeExpiredSessions();
     await purgeRateLimits();
     // Webhook rejimida bot processi bo'lmaydi, shuning uchun chipta va

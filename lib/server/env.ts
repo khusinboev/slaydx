@@ -156,8 +156,6 @@ export const env = {
   },
 
   storageDir: str("STORAGE_DIR", ".data/files"),
-  /** Fayl necha soatdan keyin o'chadi (odatda ~24 soat). */
-  fileTtlHours: int("FILE_TTL_HOURS", 72),
 
   click: {
     serviceId: str("CLICK_SERVICE_ID"),

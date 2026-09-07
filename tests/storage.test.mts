@@ -123,4 +123,29 @@ test("fayl egaligi", { skip: hasDb ? false : "DATABASE_URL yo'q" }, async (t) =>
     const assets = await query("SELECT 1 FROM generation_assets WHERE generation_id = $1", [id]);
     assert.equal(assets.length, 0, "aktivlar CASCADE bilan o'chishi kerak");
   });
+
+  /**
+   * 011_no_expiry.sql: fayl/aktiv/generatsiya endi MUDDATSIZ.
+   *
+   * `putGenerationFile` endi har doim `expires_at = NULL` yozadi, lekin
+   * bu yolg'iz o'zi yetarli emas — agar `getGenerationFile`/
+   * `hasGenerationFile` hamon `expires_at > now()` deb so'rasa, YANGI
+   * fayl ham (NULL bo'lgani uchun) "topilmadi" bo'lib qolardi. Shuning
+   * uchun bu yerda ATAYLAB o'tmishdagi muddat bilan qator yoziladi —
+   * eski TTL filtri qaytarilsa, aynan shu holat uni ushlaydi.
+   */
+  await t.test("o'tmishdagi expires_at bilan ham fayl o'qiladi (TTL olib tashlangan)", async () => {
+    const id = await mkGeneration(owner);
+    await query("UPDATE generation_files SET expires_at = now() - interval '1 year' WHERE generation_id = $1", [
+      id,
+    ]);
+
+    assert.equal(
+      await hasGenerationFile(id, owner),
+      true,
+      "o'tmishdagi expires_at endi hech narsani yashirmasligi kerak",
+    );
+    const file = await getGenerationFile(id, owner);
+    assert.ok(file, "muddati o'tgan (eski uslub) fayl ham o'qilishi kerak");
+  });
 });

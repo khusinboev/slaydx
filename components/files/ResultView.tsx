@@ -105,18 +105,16 @@ export function ResultView({ id }: { id: string }) {
   const running = gen.status === "QUEUED" || gen.status === "IN_PROGRESS";
   const completed = gen.status === "COMPLETED";
   /*
-   * «Muddati tugagan» — hujjat COMPLETED, lekin fayli endi yo'q.
+   * «Topilmadi» — hujjat COMPLETED, lekin fayli endi yo'q.
    *
-   * `FILE_TTL_HOURS` (72 s) o'tgach `purgeExpiredFiles` faylni,
-   * `purgeExpiredGenerations` esa `doc_json`/`html` ni NULL qiladi;
-   * `generations` qatori 90 kun `COMPLETED` bo'lib qoladi. Ilgari bu
-   * holatda sahifa «Tayyor» deb turar, ko'ruvchi esa «Hujjat matni
+   * Fayl/hujjat endi MUDDATSIZ saqlanadi (`011_no_expiry.sql`) — bu
+   * holat endi faqat kutilmagan sabab bilan (masalan qo'lda tozalash)
+   * yuzaga kelishi mumkin, lekin himoya sifatida qoldirilgan: aks
+   * holda sahifa «Tayyor» deb turar, ko'ruvchi esa «Hujjat matni
    * topilmadi» yoki rasmda «qayta generate qiling» (chalg'ituvchi)
-   * ko'rsatardi. Endi u aniq belgilanadi.
+   * ko'rsatardi.
    */
   const expired = completed && !gen.hasFile;
-  const msLeft = gen.expiresAt ? Date.parse(gen.expiresAt) - Date.now() : NaN;
-  const soonHrs = Number.isFinite(msLeft) && msLeft > 0 ? Math.round(msLeft / 3_600_000) : null;
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
@@ -131,11 +129,8 @@ export function ResultView({ id }: { id: string }) {
         <div className="min-w-0 flex-1">
           <h1 className="truncate text-[15px] font-semibold">{gen.topic}</h1>
           <p className="text-muted-foreground truncate text-xs">
-            {tool?.title} · {completed ? (expired ? "Muddati tugagan" : "Tayyor") : gen.step} ·{" "}
+            {tool?.title} · {completed ? (expired ? "Topilmadi" : "Tayyor") : gen.step} ·{" "}
             {gen.price.toLocaleString("uz-UZ")} tanga
-            {completed && !expired && soonHrs != null && soonHrs <= 24
-              ? ` · ${soonHrs} soatdan keyin o‘chadi`
-              : ""}
           </p>
         </div>
         {completed ? (
@@ -239,10 +234,9 @@ export function ResultView({ id }: { id: string }) {
       {expired ? (
         <div className="mx-auto w-full max-w-2xl px-4 py-8">
           <div className="bg-card rounded-2xl border p-6">
-            <p className="font-medium">Hujjat muddati tugagan</p>
+            <p className="font-medium">Hujjat topilmadi</p>
             <p className="text-muted-foreground mt-1 text-sm">
-              Yaratilgan hujjatlar 72 soat saqlanadi. Bu hujjatning fayli va matni
-              o‘chirilgan — kerak bo‘lsa, uni qaytadan yarating.
+              Bu hujjatning fayli topilmadi — kerak bo‘lsa, uni qaytadan yarating.
             </p>
             <Link
               href={tool ? `/uz/${tool.slug}` : "/uz/create"}

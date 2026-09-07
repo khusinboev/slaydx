@@ -282,7 +282,7 @@ ikkalasi ham doimiy vaqtli taqqoslash ishlatadi.
 
 **Ma'lumot**
 - Egalik SQL darajasida: id ni bilgan begona foydalanuvchi hujjat ham, rasm ham ola olmaydi
-- Fayl va media `FILE_TTL_HOURS` dan keyin, generatsiya yozuvlari 90 kundan keyin o'chadi
+- Fayl, media va generatsiya yozuvlari **muddatsiz** saqlanadi — avtomatik o'chirilish yo'q (foydalanuvchi o'zi o'chirmasa)
 - CSP, HSTS, nosniff, Referrer-Policy, Cross-Origin-Resource-Policy
 
 **Ma'lum cheklov:** `script-src` da `'unsafe-inline'` bor — Next.js inline runtime
