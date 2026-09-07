@@ -46,3 +46,8 @@ next-env.d.ts
 
 # Eval chiqishi — o'lchov natijasi, kod emas
 eval-out/
+
+# Claude Code loyiha hujjatlari — server/deploy tafsilotlari bor,
+# umumiy repo'ga tushmasligi kerak (foydalanuvchi so'rovi bilan)
+/CLAUDE.md
+/.claude/
