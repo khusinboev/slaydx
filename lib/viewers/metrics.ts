@@ -43,3 +43,14 @@ export function landscapeContentHeightPx(opts?: { footer?: boolean }) {
   const padBottom = Math.round((14 / 25.4) * 96);
   return LANDSCAPE.hPx - padTop - padBottom - footer;
 }
+
+/**
+ * Rezyume o'ng ustuni uchun foydali balandlik.
+ *
+ * `A4.hPx - 64 - 36` — ResumeViewer sheet'i `word-inner` o'rniga o'z
+ * `px-8 py-8` (2 × 32px) va pastki sahifa raqami (36px) ishlatadi;
+ * `contentHeightPx`dan farqi aynan shu maxsus chrome.
+ */
+export function resumeMainHeightPx() {
+  return A4.hPx - 64 - 36;
+}

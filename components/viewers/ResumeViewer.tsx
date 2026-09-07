@@ -3,7 +3,8 @@
 import { useMemo, useRef, useState } from "react";
 import { sectionLabels } from "@/lib/generation/i18n";
 import type { AcademicDoc, Block } from "@/lib/generation/types";
-import { A4 } from "@/lib/viewers/metrics";
+import { A4, resumeMainHeightPx } from "@/lib/viewers/metrics";
+import { type TextSplitter } from "@/lib/viewers/split";
 import { useMeasuredPages } from "./measure";
 import { ZoomFrame, Workspace } from "./sheet";
 import { ViewerToolbar } from "./toolbar";
@@ -12,9 +13,15 @@ import { useVisiblePage } from "./useVisiblePage";
 /** O'ng ustun oqimidagi band — DOCX `resumeBody` bilan bir xil tuzilma. */
 type MainItem = { k: "h2" | "h3" | "li" | "p"; text: string };
 
-/*
- * `main` ustuni endi py-8 (32px*2) ni ayirib, HAQIQIY balandligi
- * bo'yicha o'lchanadi — sahifa raqami uchun ozgina joy qoldirilgan.
+/* Uzun blok ham Word kabi qator orasidan bo'linadi. */
+const RESUME_SPLITTER: TextSplitter<MainItem> = {
+  takeText: (it) => (it.k === "p" || it.k === "li" ? it.text : null),
+  makePart: (it, part) => ({ ...it, text: part }),
+};
+
+/**
+ * `main` ustuni py-8 (32px*2) chiqarilgach, HAQIQIY balandligi bo'yicha
+ * o'lchanadi — sahifa raqami uchun ozgina joy qoldirilgan (`resumeMainHeightPx`).
  * Ilgari (AUDIT-6 B3) butun rezyume `overflow-hidden` bilan BITTA
  * varaqqa qat'iy qirqilardi: uzun tajriba pastdan jim yo'qolardi.
  * DOCX da esa `resumeBody` bitta jadval qatorini ATLEAST balandlikda
@@ -22,7 +29,6 @@ type MainItem = { k: "h2" | "h3" | "li" | "p"; text: string };
  * xuddi shunga o'xshab, yon panel HAR bir varaqda to'liq balandlikda
  * takrorlanadi, o'ng ustun esa kerakcha ko'p varaqqa bo'linadi.
  */
-const MAIN_LIMIT = A4.hPx - 64 - 36;
 
 export function ResumeViewer({ doc }: { doc: AcademicDoc }) {
   const L = sectionLabels(doc.meta.language);
@@ -52,9 +58,10 @@ export function ResumeViewer({ doc }: { doc: AcademicDoc }) {
   }, [byId, summary, L.summary, L.experience, L.education]);
 
   const { pages: measured, measureNode } = useMeasuredPages(mainItems, (it) => <MainBlock item={it} />, {
-    limit: MAIN_LIMIT,
+    limit: resumeMainHeightPx(),
     className: "w-[calc(210mm-72mm-4rem)]",
     key: mainItems.map((it) => `${it.k}:${it.text.length}`).join("|"),
+    split: RESUME_SPLITTER,
   });
   const pages = measured?.length ? measured : [mainItems];
   const total = pages.length;

@@ -6,6 +6,7 @@ import { columnPercents, evenPercents } from "@/lib/generation/table-columns";
 import { languageName } from "@/lib/languages";
 import type { AcademicDoc, DocTable } from "@/lib/generation/types";
 import { A4 } from "@/lib/viewers/metrics";
+import { type TextSplitter } from "@/lib/viewers/split";
 import { useMeasuredPages } from "./measure";
 import { ZoomFrame, Workspace } from "./sheet";
 import { TitleSheet } from "./TitlePage";
@@ -18,6 +19,12 @@ type Item =
   | { k: "intro"; text: string }
   | { k: "h1" | "h3" | "p"; text: string }
   | { k: "table"; table: DocTable };
+
+/* Uzun kirish/dars matni qator orasidan bo'linadi (Word kabi). */
+const LESSON_SPLITTER: TextSplitter<Item> = {
+  takeText: (it) => (it.k === "intro" || it.k === "p" ? it.text : null),
+  makePart: (it, part) => ({ ...it, text: part }),
+};
 
 export function LessonViewer({ doc }: { doc: AcademicDoc }) {
   const L = sectionLabels(doc.meta.language);
@@ -60,6 +67,7 @@ export function LessonViewer({ doc }: { doc: AcademicDoc }) {
   const { pages: measured, measureNode } = useMeasuredPages(items, (it) => <LessonBlock item={it} />, {
     breakBefore: (it) => it.k === "h1",
     key: `${items.length}:${passport?.blocks.length ?? 0}:${map?.blocks.length ?? 0}:${table?.rows.length ?? 0}`,
+    split: LESSON_SPLITTER,
   });
   const pages = measured?.length ? measured : [items];
   const total = pages.length;

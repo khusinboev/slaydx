@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import { sectionLabels } from "@/lib/generation/i18n";
 import type { AcademicDoc, Block } from "@/lib/generation/types";
 import { A4 } from "@/lib/viewers/metrics";
+import { type TextSplitter } from "@/lib/viewers/split";
 import { useMeasuredPages } from "./measure";
 import { ZoomFrame, Workspace } from "./sheet";
 import { TitleSheet } from "./TitlePage";
@@ -15,6 +16,14 @@ type Item =
   | { k: "cover" }
   | { k: "head"; index: number; title: string }
   | { k: "block"; block: Block };
+
+/* Uzun keys matni (vaziyat/topshiriq/javob) qator orasidan bo'linadi. */
+const KEYS_SPLITTER: TextSplitter<Item> = {
+  takeText: (it) =>
+    it.k === "block" && (it.block.kind === "p" || it.block.kind === "li") ? it.block.text : null,
+  makePart: (it, part) =>
+    it.k === "block" ? { ...it, block: { ...it.block, text: part } } : it,
+};
 
 export function KeysViewer({ doc }: { doc: AcademicDoc }) {
   const intro = doc.sections.find((s) => s.id === "kirish");
@@ -45,6 +54,7 @@ export function KeysViewer({ doc }: { doc: AcademicDoc }) {
     {
       key: `${cases.length}:${items.length}`,
       breakBefore: (it) => it.k === "head",
+      split: KEYS_SPLITTER,
     },
   );
   const pages = measured ?? [items];

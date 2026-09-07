@@ -6,12 +6,30 @@ import { columnPercents, evenPercents } from "@/lib/generation/table-columns";
 import { ESSAY_DESIGNS } from "@/lib/languages";
 import type { AcademicDoc, DocTable } from "@/lib/generation/types";
 import { docToFlow, titleModel, tocRows, type FlowItem, type TocRow } from "@/lib/viewers/flow";
-import { A4, contentHeightPx } from "@/lib/viewers/metrics";
+import { A4, contentHeightPx, ZOOM_STEPS } from "@/lib/viewers/metrics";
 import { continuationTableFor, packPages } from "@/lib/viewers/paginate";
+import { splitByHeight, type TextSplitter } from "@/lib/viewers/split";
 import { ZoomFrame, Workspace } from "./sheet";
 import { TitlePage } from "./TitlePage";
 import { ViewerToolbar } from "./toolbar";
 import { useVisiblePage } from "./useVisiblePage";
+
+/**
+ * Sahifadan uzun matnli bandlarni bo'lish (Word kabi).
+ *
+ * Faqat oddiy matn bandlari bo'linadi: sarlavha, titul, mundarija,
+ * annotatsiya va adabiyot qatori o'z yorlig'i/raqami bilan bog'langan,
+ * ularni bo'lish noto'g'ri bo'lardi. `id` ga `~idx` qo'shiladi — bo'laklar
+ * DOM kalitlarida noyob bo'lsin.
+ */
+const FLOW_SPLITTER: TextSplitter<FlowItem> = {
+  takeText: (it) =>
+    it.type === "p" || it.type === "li" || it.type === "quote" || it.type === "code" ? it.text : null,
+  makePart: (it, part, index) =>
+    it.type === "p" || it.type === "li" || it.type === "quote" || it.type === "code"
+      ? { ...it, text: part, id: `${it.id}~${index}` }
+      : it,
+};
 
 /**
  * Akademik / insho / maqola / tarjima hujjatining jonli ko'ruvchisi.
@@ -22,6 +40,10 @@ import { useVisiblePage } from "./useVisiblePage";
  */
 export function WordViewer({ doc }: { doc: AcademicDoc }) {
   const items = useMemo(() => docToFlow(doc), [doc]);
+  // Sahifadan uzun matnli bandlar bo'lib ko'rsatiladi (Word kabi) —
+  // yuqoridagi `FLOW_SPLITTER` izohiga qarang.
+  const [flow, setFlow] = useState<FlowItem[] | null>(null);
+  const renderItems = flow ?? items;
   const title = useMemo(() => titleModel(doc), [doc]);
   const toc = useMemo(() => tocRows(doc), [doc]);
   const labels = useMemo(() => docLabels(doc.meta.language), [doc.meta.language]);
@@ -48,7 +70,7 @@ export function WordViewer({ doc }: { doc: AcademicDoc }) {
     if (!el) return;
     const w = el.clientWidth - 32;
     const next = Math.max(50, Math.min(150, Math.round((w / A4.wPx) * 100)));
-    const snap = [50, 75, 90, 100, 125, 150].reduce((a, b) => (Math.abs(b - next) < Math.abs(a - next) ? b : a));
+    const snap = ZOOM_STEPS.reduce((a, b) => (Math.abs(b - next) < Math.abs(a - next) ? b : a));
     setZoom(snap);
   }, []);
 
@@ -64,8 +86,16 @@ export function WordViewer({ doc }: { doc: AcademicDoc }) {
     if (!root) return;
     const kids = Array.from(root.children) as HTMLElement[];
     const hs = kids.map((el) => el.getBoundingClientRect().height);
-    setPages(packPages(items, hs, contentHeightPx({ footer: true })));
-  }, [items]);
+    const next = splitByHeight(renderItems, hs, contentHeightPx({ footer: true }), FLOW_SPLITTER);
+    if (next.changed) {
+      // Uzun band bo'lingan — bo'laklar o'lchanishi uchun qayta chizamiz.
+      // Keyingi aylanishda `hs` yangi bo'laklarga mos keladi.
+      setFlow(next.list);
+      return;
+    }
+    setPages(packPages(renderItems, hs, contentHeightPx({ footer: true })));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- renderItems barqaror (flow ?? items), `flow` deps'da.
+  }, [items, flow]);
 
   // Sof funksiya `paginate.ts` da (mutatsiya bilan tekshirilgan).
   const continuationTables = useMemo(() => (pages ? continuationTableFor(pages) : []), [pages]);
@@ -152,7 +182,7 @@ export function WordViewer({ doc }: { doc: AcademicDoc }) {
         className="invisible pointer-events-none fixed top-0 -left-[12000px] w-[165mm] font-[family-name:var(--font-doc)] text-[14pt] leading-[1.5]"
         ref={measureRef}
       >
-        {items.map((it) => (
+        {renderItems.map((it) => (
           /*
            * `flow-root` — muhim: usiz bolaning vertikal chegarasi (masalan
            * `.word-p` ning 10pt pastki margin'i) o'ram div'dan TASHQARIGA

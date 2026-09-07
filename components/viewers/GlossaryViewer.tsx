@@ -4,6 +4,7 @@ import { useMemo, useRef, useState } from "react";
 import { sectionLabels } from "@/lib/generation/i18n";
 import type { AcademicDoc } from "@/lib/generation/types";
 import { A4 } from "@/lib/viewers/metrics";
+import { type TextSplitter } from "@/lib/viewers/split";
 import { useMeasuredPages } from "./measure";
 import { ZoomFrame, Workspace } from "./sheet";
 import { TitleSheet } from "./TitlePage";
@@ -12,6 +13,22 @@ import { useVisiblePage } from "./useVisiblePage";
 
 type Term = { term: string; def: string };
 type Item = { k: "cover"; topic: string; countLabel: string; label: string } | { k: "intro"; text: string } | { k: "term"; term: Term };
+
+/* Uzun kirish/atama izohi qator orasidan bo'linadi (Word kabi). */
+const GLOSSARY_SPLITTER: TextSplitter<Item> = {
+  takeText: (it) =>
+    it.k === "intro" ? it.text : it.k === "term" && it.term.def ? it.term.def : null,
+  makePart: (it, part) => (it.k === "term" ? { ...it, term: { ...it.term, def: part } } : { ...it, text: part }),
+};
+
+/**
+ * Kirish bo'limi — dvigatel `kirish` id bilan yaratadi. Html'dan qayta
+ * qurilgan eski yozuvda id'lar `s0`… — birinchi bo'lim zaxira.
+ */
+function introBlocks(doc: AcademicDoc) {
+  const s = doc.sections.find((x) => x.id === "kirish") ?? doc.sections[0];
+  return s?.blocks ?? [];
+}
 
 export function GlossaryViewer({ doc }: { doc: AcademicDoc }) {
   const L = sectionLabels(doc.meta.language);
@@ -45,7 +62,7 @@ export function GlossaryViewer({ doc }: { doc: AcademicDoc }) {
     const out: Item[] = [
       { k: "cover", topic: doc.meta.topic, countLabel: L.unitTerms(terms.length), label: L.viewerGlossary },
     ];
-    for (const b of doc.sections[0]?.blocks ?? []) out.push({ k: "intro", text: b.text });
+    for (const b of introBlocks(doc)) out.push({ k: "intro", text: b.text });
     for (const t of terms) out.push({ k: "term", term: t });
     return out;
   }, [doc, terms, L]);
@@ -53,6 +70,7 @@ export function GlossaryViewer({ doc }: { doc: AcademicDoc }) {
   const { pages: measured, measureNode } = useMeasuredPages(items, (it) => <GlossaryBlock item={it} />, {
     breakBefore: (it, i) => it.k === "term" && items[i - 1]?.k !== "term",
     key: `${doc.meta.topic}:${terms.length}:${doc.sections[0]?.blocks.length ?? 0}`,
+    split: GLOSSARY_SPLITTER,
   });
   const pages = measured?.length ? measured : [items];
 

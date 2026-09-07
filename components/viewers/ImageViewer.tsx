@@ -38,7 +38,11 @@ export function ImageViewer({ doc }: { doc: AcademicDoc }) {
       </div>
       <div className="min-h-0 flex-1 overflow-auto p-4 sm:p-6">
         {images.length === 0 ? (
-          <p className="text-center text-sm text-white/60">Rasm topilmadi. Qayta generate qiling.</p>
+          // `delivered` {got:0} bo'lsa worker farqni qaytargan — bu shunchaki
+          // xizmat javob bermaganini bildiradi, «qayta generate» adashmaydi.
+          <p className="text-center text-sm text-white/60">
+            Rasmlar yaratilmadi — farq balansingizga qaytarildi. Qayta urinib ko‘ring.
+          </p>
         ) : (
           <div className={cn("mx-auto grid max-w-6xl gap-3", cols === 1 ? "grid-cols-1" : "grid-cols-1 sm:grid-cols-2")}>
             {images.map((im, i) => (

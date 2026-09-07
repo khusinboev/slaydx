@@ -5,6 +5,7 @@ import { sectionLabels } from "@/lib/generation/i18n";
 import { columnPercents, evenPercents } from "@/lib/generation/table-columns";
 import type { AcademicDoc } from "@/lib/generation/types";
 import { LANDSCAPE, landscapeContentHeightPx } from "@/lib/viewers/metrics";
+import { type TextSplitter } from "@/lib/viewers/split";
 import { useMeasuredPages } from "./measure";
 import { ZoomFrame, Workspace } from "./sheet";
 import { TitleSheet } from "./TitlePage";
@@ -12,6 +13,22 @@ import { ViewerToolbar } from "./toolbar";
 import { useVisiblePage } from "./useVisiblePage";
 
 type Item = { k: "cover"; label: string; topic: string; meta: [string, string][] } | { k: "intro"; text: string } | { k: "row"; row: string[] };
+
+/* Uzun kirish matni qator orasidan bo'linadi (Word kabi). */
+const TABLE_SPLITTER: TextSplitter<Item> = {
+  takeText: (it) => (it.k === "intro" ? it.text : null),
+  makePart: (it, part) => ({ ...it, text: part }),
+};
+
+/**
+ * Kirish (fan pasporti) bo'limi — dvigatel `passport` id bilan yaratadi;
+ * eski yozuvlarda `kirish` ham bo'lishi mumkin. Id topilmasa birinchi
+ * bo'lim zaxira (html'dan qayta qurilgan doc'da id'lar `s0`…).
+ */
+function introBlocks(doc: AcademicDoc) {
+  const s = doc.sections.find((x) => x.id === "passport" || x.id === "kirish") ?? doc.sections[0];
+  return s?.blocks ?? [];
+}
 
 export function TableViewer({ doc }: { doc: AcademicDoc }) {
   const L = sectionLabels(doc.meta.language);
@@ -56,7 +73,7 @@ export function TableViewer({ doc }: { doc: AcademicDoc }) {
         ],
       },
     ];
-    for (const b of doc.sections[0]?.blocks ?? []) out.push({ k: "intro", text: b.text });
+    for (const b of introBlocks(doc)) out.push({ k: "intro", text: b.text });
     for (const r of rows) out.push({ k: "row", row: r });
     return out;
   }, [doc, rows, L]);
@@ -83,6 +100,7 @@ export function TableViewer({ doc }: { doc: AcademicDoc }) {
       className: "!w-[269mm] !text-[10pt] !leading-snug",
       breakBefore: (it, i) => it.k === "row" && items[i - 1]?.k !== "row",
       key: `${rows.length}:${table?.headers.length ?? 0}:${doc.sections[0]?.blocks.length ?? 0}`,
+      split: TABLE_SPLITTER,
     },
   );
   const pages = measured?.length ? measured : [items];
