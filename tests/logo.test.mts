@@ -40,9 +40,15 @@ function gifBytes(): Buffer {
   return Buffer.from([0x47, 0x49, 0x46, 0x38, 0x39, 0x61, 1, 2, 3, 4]);
 }
 
-/** `File`ning `BlobPart` tipi `Buffer`ni to'g'ridan-to'g'ri qabul qilmaydi. */
-function blobPart(b: Buffer): Uint8Array {
-  return Uint8Array.from(b);
+/**
+ * `File`ning `BlobPart` tipi `Buffer`ni to'g'ridan-to'g'ri qabul qilmaydi
+ * (`Buffer.buffer` `ArrayBufferLike` — `SharedArrayBuffer` ham bo'lishi
+ * mumkin). `extract.test.mts` dagi naqsh: haqiqiy `ArrayBuffer`ga kesib
+ * olib, shundan yangi `Uint8Array` yasaymiz.
+ */
+function blobPart(b: Buffer): Uint8Array<ArrayBuffer> {
+  const ab = b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) as ArrayBuffer;
+  return new Uint8Array(ab);
 }
 
 function formReq(file: File | null, extraHeaders: Record<string, string> = {}): Request {
