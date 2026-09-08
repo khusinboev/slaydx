@@ -949,6 +949,23 @@ test("dense yakuni hisobot sahifasi — chapga tekislangan, kichik sarlavha", ()
 
   assert.ok((texts(dense.layers).find((t) => t.text === s.title)?.size ?? 99) <= 26, "hujjat sahifasida sarlavha kichikroq");
   assert.equal(texts(classic.layers).find((t) => t.text === s.title)?.size, 32, "classic yakuni plakat o'lchamida");
+
+  /*
+   * Rasm ustidagi matn faqat QOPLAMAGA tayanmasin.
+   *
+   * PDF da ko'rilganda 0.68 qoplama yetmasdi: kadrdagi shakllar matn
+   * orqasida turardi va izoh deyarli yo'qolardi. Endi blok ostida
+   * deyarli shaffofmas tasma bor, kolontitul ostida ham shunday.
+   */
+  const band = rectsOf(dense.layers).find(
+    (l) => l.box.x === 0 && Number(l.box.w.toFixed(2)) === 13.33 && l.box.h > 2.5 && l.box.h < 4,
+  );
+  assert.ok(band, "matn bloki ostida to'la kenglikdagi tasma bo'lishi kerak");
+  assert.ok((band.fill?.alpha ?? 1) >= 0.9, `tasma deyarli shaffofmas bo'lsin: alpha=${band.fill?.alpha}`);
+  assert.ok(
+    rectsOf(dense.layers).some((l) => l.box.y === 6.9 && l.fill?.color === theme.titleBg && (l.fill?.alpha ?? 1) >= 0.9),
+    "kolontitul ham kadr ustida qolmasin",
+  );
 });
 
 test("cards iqtibosi yorug' sahifadagi kartada chiziladi", () => {

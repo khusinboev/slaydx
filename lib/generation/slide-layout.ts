@@ -604,7 +604,7 @@ function planOverlay(
     // Rasmsiz tasma yuqoriroq boshlanadi — aks holda sahifaning yuqori
     // yarmi bo'sh to'q maydon bo'lib qolardi (`planSectionMagazine` da
     // aynan shu nuqson PDF da ko'rilgan).
-    const bandY = img ? 3.35 : 2.2;
+    const bandY = img ? 3.35 : 2.0;
     layers.push({
       t: "rect",
       box: { x: 0, y: bandY, w: W, h: H - bandY },
@@ -617,7 +617,9 @@ function planOverlay(
     layers.push({ t: "rect", box: { x, y: bandY + 0.4, w: 1.7, h: 0.1 }, fill: { color: theme.accent } });
     if (kind === "quote") {
       const qText = s.quote || s.title;
-      const qBox: Box = { x, y: bandY + 0.72, w: tw, h: 2.05 };
+      // Quti ATAYLAB past: ilgari 2.05 edi va ikki qatorli iqtibosdan
+      // keyin muallifgacha bir dyuymlik bo'shliq qolardi (PDF da ko'rindi).
+      const qBox: Box = { x, y: bandY + 0.72, w: tw, h: 1.75 };
       layers.push({
         t: "text",
         box: qBox,
@@ -629,7 +631,7 @@ function planOverlay(
       if (s.quoteBy) {
         layers.push({
           t: "text",
-          box: { x, y: bandY + 2.9, w: tw, h: 0.42 },
+          box: { x, y: bandY + 2.6, w: tw, h: 0.42 },
           text: `— ${s.quoteBy}`,
           color: theme.titleMuted,
           size: 15,
@@ -638,7 +640,7 @@ function planOverlay(
         });
       }
     } else {
-      const tBox: Box = { x, y: bandY + 0.72, w: tw, h: 1.35 };
+      const tBox: Box = { x, y: bandY + 0.72, w: tw, h: 1.15 };
       layers.push({
         t: "text",
         box: tBox,
@@ -648,7 +650,7 @@ function planOverlay(
         bold: true,
       });
       if (s.subtitle) {
-        const sBox: Box = { x, y: bandY + 2.2, w: tw, h: 1.05 };
+        const sBox: Box = { x, y: bandY + 1.98, w: tw, h: 1.05 };
         layers.push({
           t: "text",
           box: sBox,
@@ -668,16 +670,39 @@ function planOverlay(
   // hujjat bo'lib qoladi.
   if (visual === "dense") {
     layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.titleBg } });
-    photo(layers, img, photoSlot(kind)!, theme.darkContent ? 0.5 : 0.68);
+    photo(layers, img, photoSlot(kind)!, theme.darkContent ? 0.34 : 0.5);
     layers.push({ t: "rect", box: { x: 0, y: 0, w: 0.14, h: H }, fill: { color: theme.accent } });
     const x = M + 0.18;
     const tw = 12.25;
-    layers.push({ t: "rect", box: { x, y: 1.5, w: tw, h: 0.035 }, fill: { color: theme.accent } });
+    /*
+     * Blok sahifa MARKAZIDA turadi, yuqorisida emas.
+     *
+     * Ilgari u y=1.5 dan boshlanardi va sarlavhadan keyin sahifaning
+     * pastki 3.5 dyuymi butunlay bo'sh qolardi — PDF da yakuniy slayd
+     * «yarim chizilgan» ko'rinardi. Qutilar ham qisqartirildi: sarlavha
+     * bilan izoh orasida deyarli bir dyuymlik bo'shliq bor edi.
+     */
+    const blockY = 2.55;
+    /*
+     * Matn ostidagi tasma.
+     *
+     * Ilgari dense tarmog'i faqat qoplamaga tayanardi (0.68). PDF da
+     * ko'rilganda kadrdagi shakllar matn ORQASIDA baribir ko'rinib
+     * turardi — «Xulosa» o'qilardi, izoh esa deyarli yo'qolardi.
+     * Endi blok ostida deyarli shaffofmas tasma bor, qoplama esa
+     * yumshoqroq: kadr tasmadan tashqarida ko'rinib qoladi.
+     */
+    layers.push({
+      t: "rect",
+      box: { x: 0, y: blockY - 0.45, w: W, h: 3.4 },
+      fill: { color: theme.titleBg, alpha: img ? 0.92 : 0 },
+    });
+    layers.push({ t: "rect", box: { x, y: blockY, w: tw, h: 0.035 }, fill: { color: theme.accent } });
     if (kind === "quote") {
       const qText = s.quote || s.title;
       layers.push({
         t: "text",
-        box: { x, y: 1.75, w: tw, h: 0.36 },
+        box: { x, y: blockY + 0.22, w: tw, h: 0.36 },
         text: s.title,
         color: theme.titleMuted,
         size: 13,
@@ -685,7 +710,7 @@ function planOverlay(
         uppercase: true,
         tracking: 1.5,
       });
-      const qBox: Box = { x, y: 2.25, w: tw, h: 1.9 };
+      const qBox: Box = { x, y: blockY + 0.7, w: tw, h: 1.5 };
       layers.push({
         t: "text",
         box: qBox,
@@ -697,14 +722,14 @@ function planOverlay(
       if (s.quoteBy) {
         layers.push({
           t: "text",
-          box: { x, y: 4.3, w: tw, h: 0.4 },
+          box: { x, y: blockY + 2.32, w: tw, h: 0.4 },
           text: `— ${s.quoteBy}`,
           color: theme.titleMuted,
           size: 14,
         });
       }
     } else {
-      const tBox: Box = { x, y: 1.8, w: tw, h: 1.1 };
+      const tBox: Box = { x, y: blockY + 0.25, w: tw, h: 0.85 };
       layers.push({
         t: "text",
         box: tBox,
@@ -714,16 +739,23 @@ function planOverlay(
         bold: true,
       });
       if (s.subtitle) {
-        const sBox: Box = { x, y: 3.05, w: tw, h: 1.5 };
+        const sBox: Box = { x, y: blockY + 1.2, w: tw, h: 1.3 };
         layers.push({
           t: "text",
           box: sBox,
           text: s.subtitle,
-          color: theme.titleMuted,
+          // Hisobot sahifasida izoh ham asosiy matn rangida: `titleMuted`
+          // (aksent) 16 pt da sarlavha ostidagi izoh emas, sarlavha osti
+          // yozuvidek ko'rinardi.
+          color: theme.titleText,
           size: fitSize(s.subtitle, sBox, 16, 12),
         });
       }
     }
+    // Kolontitul ham kadr ustida qolmasin: `titleMuted` faqat `titleBg`
+    // ustida o'lchangan (PDF da pastki qator kadrning och qismiga tushib
+    // deyarli ko'rinmay qolgandi).
+    if (img) layers.push({ t: "rect", box: { x: 0, y: 6.9, w: W, h: 0.6 }, fill: { color: theme.titleBg, alpha: 0.92 } });
     pushFooter(layers, s, theme, index, total, { x, w: tw }, true);
     return { bg: theme.titleBg, layers };
   }
@@ -735,14 +767,14 @@ function planOverlay(
     // Karta to'la to'ldirilgan, shuning uchun kadr deyarli qoplamasiz
     // qoladi — «foto + karta» ko'rinishi.
     photo(layers, img, photoSlot(kind)!, 0.12);
-    const card: Box = kind === "quote" ? { x: 1.3, y: 1.6, w: 10.7, h: 4.2 } : { x: 2.1, y: 2.0, w: 9.1, h: 3.5 };
+    const card: Box = kind === "quote" ? { x: 1.3, y: 1.9, w: 10.7, h: 3.4 } : { x: 2.1, y: 2.15, w: 9.1, h: 3.2 };
     layers.push({ t: "rect", box: card, fill: { color: theme.surface }, radius: 0.14 });
     layers.push({ t: "rect", box: { x: card.x, y: card.y, w: 0.12, h: card.h }, fill: { color: theme.accent }, radius: 0.06 });
     const tx = card.x + 0.6;
     const twc = card.w - 1.2;
     if (kind === "quote") {
       const qText = s.quote || s.title;
-      const qBox: Box = { x: tx, y: card.y + 0.5, w: twc, h: 2.6 };
+      const qBox: Box = { x: tx, y: card.y + 0.5, w: twc, h: 1.9 };
       layers.push({
         t: "text",
         box: qBox,
@@ -754,7 +786,7 @@ function planOverlay(
       if (s.quoteBy) {
         layers.push({
           t: "text",
-          box: { x: tx, y: card.y + 3.25, w: twc, h: 0.4 },
+          box: { x: tx, y: card.y + 2.5, w: twc, h: 0.4 },
           text: `— ${s.quoteBy}`,
           color: theme.accentInk,
           size: 14,
@@ -762,7 +794,7 @@ function planOverlay(
         });
       }
     } else {
-      const tBox: Box = { x: tx, y: card.y + 0.55, w: twc, h: 1.3 };
+      const tBox: Box = { x: tx, y: card.y + 0.55, w: twc, h: 1.0 };
       layers.push({
         t: "text",
         box: tBox,
@@ -772,7 +804,7 @@ function planOverlay(
         bold: true,
       });
       if (s.subtitle) {
-        const sBox: Box = { x: tx, y: card.y + 2.05, w: twc, h: 1.1 };
+        const sBox: Box = { x: tx, y: card.y + 1.75, w: twc, h: 1.1 };
         layers.push({
           t: "text",
           box: sBox,
@@ -1078,7 +1110,11 @@ function planTwoCol(
       layers.push({ t: "rect", box: { x: cx, y: top + 0.42, w: ruleW, h: 0.03 }, fill: { color: theme.accent } });
       const items = c.lines.slice(0, 6);
       const rowsTop = top + 0.6;
-      const rowH = (bottom - rowsTop) / Math.max(1, items.length);
+      // Qator balandligi CHEKLANADI: bo'sh joyni bo'lib yuborsa, uch banddan
+      // iborat ustun 1.6 dyuymlik qatorlarga cho'zilib «zich» emas, siyrak
+      // ko'rinardi — PDF da aynan shu ko'rindi. Endi qatorlar yuqorida zich
+      // turadi, ortiqcha joy pastda qoladi (hujjat sahifasidagi kabi).
+      const rowH = Math.min(1.05, (bottom - rowsTop) / Math.max(1, items.length));
       items.forEach((line, r) => {
         const y = rowsTop + r * rowH;
         if (r > 0) {
@@ -1190,8 +1226,8 @@ function planTwoCol(
       lines: lItems,
       bullets: true,
       color: theme.titleText,
-      size: fitLines(lItems, lBox, 15, 12, 8),
-      paraSpace: 8,
+      size: fitLines(lItems, lBox, 17, 13, 10),
+      paraSpace: 10,
     });
     const rx = RIGHT_COL_X();
     const rw = RIGHT_COL_W();
@@ -1214,8 +1250,8 @@ function planTwoCol(
       lines: rItems,
       bullets: true,
       color: theme.text,
-      size: fitLines(rItems, rBox, 17, 13, 10),
-      paraSpace: 10,
+      size: fitLines(rItems, rBox, 18, 14, 12),
+      paraSpace: 12,
     });
     pushFooter(layers, s, theme, index, total, { x: rx, w: rw }, false);
     return { bg: theme.bg, layers };
