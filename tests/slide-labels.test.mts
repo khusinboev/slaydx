@@ -87,8 +87,9 @@ describe("SlideLabels — 18 tilga tarjima", () => {
   });
 
   test("o'zbek, rus, qozoq, qirgiz, tojik, turkman — kirill yoki lotin (tg/kaa/kk/ky/tg/tk bo'yicha)", () => {
-    // tg, kaa, kk, ky — kirill
-    for (const code of ["tg", "kaa", "kk", "ky"]) {
+    // tg, kk, ky — kirill. `kaa` (qoraqalpoq) EMAS: O'zbekistonda uning
+    // rasmiy yozuvi lotin (ǵ, ń, ó, ú, ı) — pastdagi lotin ro'yxatida.
+    for (const code of ["tg", "kk", "ky"]) {
       const labels = slideLabels(code);
       // Ko'pi kirill bo'lishi kerak
       const kvorum = REQUIRED_KEYS.filter(
@@ -99,8 +100,8 @@ describe("SlideLabels — 18 tilga tarjima", () => {
       ).length;
       assert.ok(kvorum >= 3, `${code}: kirill yoki latin kerak`);
     }
-    // tk, tr — lotin
-    for (const code of ["tk", "tr"]) {
+    // tk, tr, kaa — lotin
+    for (const code of ["tk", "tr", "kaa"]) {
       const labels = slideLabels(code);
       assert.ok(
         REQUIRED_KEYS.some((k) =>
