@@ -748,8 +748,8 @@ export async function buildSlideAcademicDoc(meta: DocMeta, deadline?: number, op
    */
   const tpl = resolveDeckTemplate(meta);
   // Sifat paketi / slayder shu yerda haqiqiy slaydlar soniga aylanadi,
-  // foydalanuvchi bloklari esa shablon beats'iga kiritiladi.
-  const want = wantSlides(meta, tpl);
+  // foydalanuvchi bloklari esa shablon beats'iga kiritiladi (`deckBeats`
+  // ichida `wantSlides` chaqiriladi — ikkinchi nusxa saqlanmaydi).
   const beats = deckBeats(meta, tpl);
   const stage = slideStageBudget(deadline, Date.now(), { research: meta.internetSearch });
   /*
