@@ -77,10 +77,6 @@ function falKey() {
   return process.env.FAL_KEY?.trim() || "";
 }
 
-function visualPrompt(topic: string, title: string, layout: string, size: FalSize) {
-  return composeSlideImagePrompt(topic, { title, layout: layout as import("./slide-types").SlideLayout }, size);
-}
-
 export async function generateFalImage(
   prompt: string,
   size: FalSize,
@@ -229,26 +225,6 @@ async function persistImage(remote: SlideImage): Promise<SlideImage | null> {
   }
   return { url: `data:${bytes.data}`, alt: remote.alt };
 }
-
-export async function searchSlideImages(query: string, limit = 6): Promise<SlideImage[]> {
-  const q = query.replace(/\s+/g, " ").trim();
-  if (!q) return [];
-  const n = Math.max(1, Math.min(limit, IMAGE_LIMIT.premium));
-  const out: SlideImage[] = [];
-  const size = { width: 1024, height: 576 };
-  for (let i = 0; i < n; i++) {
-    const im = await generateFalImage(
-      visualPrompt(q, i === 0 ? "cover" : `scene ${i + 1}`, i === 0 ? "title" : "section", size),
-      size,
-    );
-    if (im) {
-      const kept = await persistImage(im);
-      if (kept) out.push(kept);
-    }
-  }
-  return out;
-}
-
 
 /**
  * Slaydlarga rasm biriktiradi.

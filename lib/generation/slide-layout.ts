@@ -222,12 +222,51 @@ function pushFooter(
  */
 const CHAR_EM = 0.55;
 
+/**
+ * So'z chegarasida ochko'zlik (greedy) bilan qatorlash — CSS matn oqimi
+ * (va PowerPoint) shu tartibda ishlaydi.
+ *
+ * AUDIT-6 B4: ilgari qator soni `ceil(chars / perLine)` bilan, ya'ni
+ * matn xuddi so'z oralig'i yo'qdek baholanardi. Real oqimda bitta so'z
+ * qatorga sig'may qolsa, qolgan joy BEKORGA ketadi va butun so'z keyingi
+ * qatorga o'tadi — bu haqiqiy qator sonini oshiradi. Zich banddagi
+ * matnda farq bir necha qatorgacha yetishi mumkin edi, natijada shrift
+ * kerakidan kattaroq tanlanib, matn quti ichida SIG'MAY qolardi (viewer
+ * va PPTX'da kesilish — ikkalasi ham shu funksiyaga tayanadi).
+ *
+ * Qatordan uzunroq bitta "so'z" (masalan URL) CSS `overflow-wrap:
+ * anywhere` kabi o'zi bir necha qatorga bo'linadi.
+ */
+function wrapRows(text: string, perLine: number): number {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return 0;
+  let rows = 1;
+  let col = 0;
+  for (const word of words) {
+    const w = word.length;
+    if (w > perLine) {
+      if (col > 0) rows += 1;
+      rows += Math.ceil(w / perLine) - 1;
+      col = w % perLine || perLine;
+      continue;
+    }
+    const next = col === 0 ? w : col + 1 + w;
+    if (next <= perLine) {
+      col = next;
+    } else {
+      rows += 1;
+      col = w;
+    }
+  }
+  return rows;
+}
+
 function fitSize(text: string, box: Box, base: number, min: number): number {
-  const chars = text.trim().length;
-  if (!chars) return base;
+  const t = text.trim();
+  if (!t) return base;
   for (let size = base; size > min; size -= 1) {
     const perLine = Math.max(1, Math.floor((box.w * 72) / (size * CHAR_EM)));
-    const rows = Math.ceil(chars / perLine);
+    const rows = wrapRows(t, perLine);
     if (rows * size * 1.3 <= box.h * 72) return size;
   }
   return min;
@@ -240,7 +279,7 @@ function fitLines(lines: string[], box: Box, base: number, min: number, paraSpac
   for (let size = base; size > min; size -= 1) {
     const perLine = Math.max(1, Math.floor(((box.w - 0.28) * 72) / (size * CHAR_EM)));
     let rows = 0;
-    for (const l of items) rows += Math.max(1, Math.ceil(l.length / perLine));
+    for (const l of items) rows += Math.max(1, wrapRows(l, perLine));
     if (rows * size * 1.3 + items.length * paraSpacePt <= box.h * 72) return size;
   }
   return min;

@@ -38,6 +38,21 @@ export function composeSlideImagePrompt(
   ].join(" ");
 }
 
+/**
+ * Bitta LLM chaqiruviga so'raladigan eng ko'p sahna.
+ *
+ * `attachSlideImages` (`slide-images.ts`) `imageBudget()` bilan buni
+ * oldindan cheklaydi: standart dekada <=8, 20 slaydli premium dekada
+ * <=16. Ilgari bu yerda qat'iy `8` turardi — `imageBudget` deka
+ * uzunligiga qarab o'sishga o'tgach (standart 10 dan), bu chegara
+ * ORTIDA qolib ketdi: 16 slaydli premium dekada 9–16-slaydlar rasmi
+ * `attachSlideImages`dagi `prompts[s.id] || composeSlideImagePrompt(...)`
+ * zaxirasi tufayli hech qachon YO'QOLMASDI, lekin doim LLM yozgan sahna
+ * o'rniga umumiy shablon promptidan chiqardi — aynan "premium" pulini
+ * to'lagan foydalanuvchi uchun sifat farqi shu yerda jimgina yo'qolardi.
+ */
+const MAX_PROMPT_JOBS = 16;
+
 export async function writeSlideImagePrompts(
   topic: string,
   slides: SlideModel[],
@@ -49,7 +64,7 @@ export async function writeSlideImagePrompts(
       return slot ? { s, size: slotPixels(slot) } : null;
     })
     .filter((x): x is { s: SlideModel; size: FalSize } => Boolean(x))
-    .slice(0, 8);
+    .slice(0, MAX_PROMPT_JOBS);
 
   const fallback: Record<string, string> = {};
   for (const { s, size } of jobs) {
@@ -76,7 +91,11 @@ export async function writeSlideImagePrompts(
       "JSON only: {\"prompts\":[{\"id\":\"s0\",\"scene\":\"...\"}]}",
     ].join(" "),
     `Deck topic: «${topic}».\nWrite one scene per slide:\n${list}`,
-    1800,
+    // Token byudjeti sahna soniga qarab o'sadi — qat'iy `1800` 8 ta ish
+    // uchun sozlangan edi, `MAX_PROMPT_JOBS` 16 ga ko'tarilgach javob
+    // chegaraga urilib kesilishi (va shu bilan butun JSON yiqilishi)
+    // mumkin edi.
+    Math.min(3600, 900 + jobs.length * 180),
     { json: true, timeoutMs: 35_000 },
   );
   if (!raw) return fallback;

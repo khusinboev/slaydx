@@ -52,6 +52,37 @@ test("chegaradan oshgan matn kichrayadi, lekin 15 pt dan pastga tushmaydi", () =
   assert.equal(extreme, 15, "haddan tashqari matnda pol 15 pt");
 });
 
+/**
+ * AUDIT-6 B4. Yuqoridagi ikki test `"a".repeat(n)` — bitta uzluksiz
+ * "so'z", bo'sh joysiz. Naql qator-hisoblash (`ceil(chars/perLine)`)
+ * aynan shu holatda TO'G'RI, chunki so'z chegarasi umuman yo'q — shuning
+ * uchun bu ikki test B4 ni ilgari ushlay olmagan.
+ *
+ * Real matnda so'zlar orasida bo'sh joy bor va ochko'z (greedy) qatorlash
+ * ba'zan qatorni to'liq to'ldirmay tugatadi (keyingi so'z sig'masa). Bu
+ * qator sonini oshiradi — quyidagi 4 bandning har biri 4 ta 43 belgili
+ * "so'z"dan iborat: ikkitasi bir qatorga sig'maydi, shuning uchun har
+ * band 4 alohida qatorni band qiladi. Eski (belgi-hisoblash) versiya buni
+ * bitta qatorga ozgina ortiqcha sig'gan deb hisoblab, shriftni 18 pt da
+ * qoldirardi — matn haqiqatda qutidan chiqib ketardi.
+ */
+test("so'z-o'ralish hisobga olinadi — band ichida bo'sh joy ketishi shriftni kichraytiradi", () => {
+  const word = (ch: string) => ch.repeat(43);
+  const bullet = [word("A"), word("B"), word("C"), word("D")].join(" ");
+  const size = texts(
+    plan({
+      id: "c",
+      layout: "bullets",
+      title: "Sarlavha",
+      bullets: Array.from({ length: 4 }, () => bullet),
+    }).layers,
+  ).find((t) => t.lines)?.size;
+  assert.ok(
+    size !== undefined && size < 18,
+    `so'z-o'ralish yo'qotilgan joy hisobga olinib, 18 pt dan kichrayishi kerak: ${size}`,
+  );
+});
+
 test("hech bir qatlam slayd chegarasidan chiqmaydi", () => {
   const samples: SlideModel[] = [
     { id: "1", layout: "title", title: "Uzun sarlavha ".repeat(4), kicker: "Fan", subtitle: "Izoh" },
@@ -226,6 +257,49 @@ test("rasm byudjeti deka uzayganda o'sadi va sun'iy shift qo'ymaydi", async () =
   // Buzuq kirish yiqilmaydi.
   assert.equal(imageBudget(0, false), 8);
   assert.equal(imageBudget(-5, true), 10);
+});
+
+/**
+ * `imageBudget` o'sganda rasm PROMPTI ham hammaga yetishi kerak.
+ *
+ * Nuqson: `writeSlideImagePrompts` (`slide-image-prompts.ts`) ichida
+ * qat'iy `.slice(0, 8)` turardi. `imageBudget` 16 slaydli premium dekada
+ * 13 tagacha rasm so'raganda, 9–13-slaydlar bu funksiyaning `fallback`
+ * xaritasiga umuman kirmasdi. `attachSlideImages` chaqiruv joyida
+ * `prompts[s.id] || composeSlideImagePrompt(...)` zaxirasi borligi uchun
+ * CRASH bo'lmasdi, lekin bu slaydlar doim LLM yozgan sahna o'rniga umumiy
+ * shablon promptidan chiqardi — sifat farqi jimgina yo'qolardi.
+ *
+ * LLM o'chirilgan holatda sinaladi (kalit yo'q): shunda funksiya faqat
+ * `fallback` xaritasini qaytaradi va MAP TO'LIQLIGI to'g'ridan-to'g'ri
+ * ko'rinadi — tarmoq/LLM javobini soxtalashtirish shart emas.
+ */
+test("rasm prompti imageBudget kengaygan dekaning barcha slaydiga yetadi", async () => {
+  const { writeSlideImagePrompts } = await import("../lib/generation/slide-image-prompts.ts");
+  const { imageBudget } = await import("../lib/generation/slide-images.ts");
+
+  const saved = process.env.GEMINI_API_KEY;
+  const savedX = process.env.XAI_API_KEY;
+  delete process.env.GEMINI_API_KEY;
+  delete process.env.XAI_API_KEY;
+  try {
+    const n = imageBudget(16, true); // 13
+    assert.ok(n > 8, `sinov ma'noli bo'lishi uchun 8 dan ko'p bo'lishi kerak: ${n}`);
+    const slides: SlideModel[] = Array.from({ length: n }, (_, i) => ({
+      id: `s${i}`,
+      layout: "bullets",
+      title: `Slayd ${i + 1}`,
+    }));
+    const prompts = await writeSlideImagePrompts("Fotosintez", slides, "classic");
+    for (const s of slides) {
+      assert.ok(prompts[s.id], `${s.id} uchun rasm prompti yo'q (jami ${n} tadan)`);
+    }
+  } finally {
+    if (saved === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = saved;
+    if (savedX === undefined) delete process.env.XAI_API_KEY;
+    else process.env.XAI_API_KEY = savedX;
+  }
 });
 
 /**
