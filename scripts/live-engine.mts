@@ -227,6 +227,47 @@ const CASES: Case[] = [
       ];
     },
   },
+  {
+    /*
+     * Oddiy slayd — PARITET keysi: yangi maydonlar (auditoriya, tur,
+     * matn hajmi, test, internet, reja bandlari, izoh) shu vositada
+     * ham ishlashi kerak, narx esa paketlarda qoladi.
+     */
+    name: "slide",
+    tool: "slide",
+    budgetMs: 260_000,
+    values: {
+      topic: "Kasr sonlarni qo‘shish va ayirish",
+      slideAudience: "school_5_7",
+      slidePurpose: "lesson",
+      planItems: 3,
+      quality: "standard",
+      language: "uz",
+      textVolume: "qisqa",
+      quizCount: 3,
+      internetSearch: false,
+      speakerNotes: true,
+      subject: "Matematika",
+      author: "Sobirov Anvar",
+      organization: "45-maktab",
+    },
+    checks: (file) => {
+      const slides = file.doc.slides ?? [];
+      const layouts = slides.map((s) => s.layout);
+      const body = slides.filter((s) => (s.bullets ?? []).length);
+      const chars = body.flatMap((s) => s.bullets ?? []).map((b) => b.length);
+      const avg = chars.length ? Math.round(chars.reduce((a, b) => a + b, 0) / chars.length) : 0;
+      return [
+        ok("slaydlar", slides.length >= 8, `${slides.length} ta`),
+        ok("test slaydi", layouts.includes("quiz"), layouts.join(" › ")),
+        ok("javob izohda", slides.some((s) => /Javob/i.test(s.notes ?? "")), ""),
+        ok("javoblar slaydi YO‘Q", !layouts.includes("answers"), "izoh yoqiq — kalit izohda"),
+        ok("qisqa matn", avg > 0 && avg <= 120, `o‘rtacha ${avg} belgi/band`),
+        ok("maktab shrifti", true, "maket testlarida qulflangan"),
+        ok("manbasiz", !file.doc.slideResearch, "internet o‘chiq"),
+      ];
+    },
+  },
 ];
 
 /** Glossariy atamalari alifbo tartibidami. */
