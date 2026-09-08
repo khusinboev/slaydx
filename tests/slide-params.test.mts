@@ -189,6 +189,7 @@ import { SLIDE_LAYOUTS, type SlideModel } from "../lib/generation/slide-types.ts
 import { blocksToBeats } from "../lib/generation/slide-blocks.ts";
 import { deckFooter } from "../lib/generation/slide-identity.ts";
 import { runSlideResearch } from "../lib/generation/slide-research.ts";
+import { composeSlideImagePrompt } from "../lib/generation/slide-image-prompts.ts";
 import { planSlide } from "../lib/generation/slide-layout.ts";
 import { getSlideTheme } from "../lib/generation/slide-themes.ts";
 import { fallbackSlides, resolveDeckTemplate } from "../lib/generation/slide-write.ts";
@@ -197,18 +198,14 @@ import type { SlideParamImpact } from "../lib/generation/slide-params.ts";
 /**
  * Hali ulanmagan ta'sirlar — ish paketlari bo'yicha. Har paket tugagach
  * o'z qatorini O'CHIRADI; ro'yxat o'sishi mumkin emas (pastdagi test).
- *   WP-B: blocks, agendaSlide, quizCount (beats)
- *   WP-E: topic, localExamples, slideImageStyle (images)
- *   Yopilgan: WP-A (keyIdeas, localExamples prompt), WP-D (research), WP-H (position, organization, quizCount prompt)
+ *   WP-B: blocks, agendaSlide, quizCount, internetSearch (beats)
+ *   Yopilgan: WP-A (prompt), WP-D (research), WP-E (images), WP-H (prompt)
  */
 const PENDING: Record<string, SlideParamImpact[]> = {
-  localExamples: ["images"],
   quizCount: ["beats"],
   blocks: ["beats"],
   agendaSlide: ["beats"],
   internetSearch: ["beats"],
-  slideImageStyle: ["images"],
-  topic: ["images"],
 };
 
 /** Har layout uchun boy namuna — qisqa matnda ba'zi ta'sirlar ko'rinmaydi. */
@@ -253,7 +250,8 @@ function probe(values: FormValues, tool = pro): Probe {
       SLIDE_LAYOUTS.map((l) => planSlide(sample(l, footer), theme, tpl.visual, 1, 10, m.slideAudience, tpl.id, { bodyType, logo })),
     ),
     price: String(priceFor(tool, { topic: "x", ...values })),
-    images: "",
+    // Rasm prompti — deterministik zaxira yo'li (`writeSlideImagePrompts` LLM siz shunga tushadi).
+    images: composeSlideImagePrompt(m.topic, sample("title", footer), { width: 1024, height: 576 }, m),
     research: "",
   };
 }
@@ -330,7 +328,7 @@ test("internetSearch: off → tarmoqqa chiqmaydi; on → aynan 1 ta google_searc
 });
 
 test("PENDING ro'yxati o'smaydi — faqat A/B/D/E/H paketlariga tegishli", () => {
-  const allowed = new Set(["localExamples", "quizCount", "blocks", "agendaSlide", "internetSearch", "slideImageStyle", "topic"]);
+  const allowed = new Set(["quizCount", "blocks", "agendaSlide", "internetSearch"]);
   for (const id of Object.keys(PENDING)) assert.ok(allowed.has(id), `${id}: PENDING ga yangi id qo'shilgan — ta'sirni ulang, kutishga qo'ymang`);
   for (const id of Object.keys(PENDING)) assert.ok(SLIDE_PARAMS.some((p) => p.id === id), `${id}: reyestrda yo'q`);
 });
