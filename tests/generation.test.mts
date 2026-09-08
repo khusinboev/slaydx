@@ -141,6 +141,25 @@ test("har shablonning o'z to'ldirgichlari bor va ular boshqasiniki emas", () => 
  * shablon hech bir bo'limda CHIZILMAYDI — foydalanuvchi uni umuman
  * tanlay olmaydi va buni faqat qo'lda ochib ko'rgandagina sezish mumkin.
  */
+/**
+ * Formadagi eskiz `visual` dan chiziladi. Yangi `visual` qo'shilib,
+ * `TemplateSketch` ga tarmoq qo'shilmasa, shablon jimgina `classic`
+ * eskizini oladi — ya'ni eskiz maketga YOLG'ON va'da beradi (AUDIT-7
+ * aynan shu nuqsonni yopgan edi, `lab` bilan u qaytib kelgan edi).
+ */
+test("har bir visual uchun formada eskiz tarmog'i bor", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const form = await readFile(new URL("../components/forms/SlideForm.tsx", import.meta.url), "utf8");
+  const used = new Set(SLIDE_TEMPLATES.map((t) => t.visual));
+  for (const v of used) {
+    if (v === "classic") continue; // zaxira tarmoq
+    assert.ok(
+      form.includes(`visual === "${v}"`),
+      `«${v}» maketi uchun TemplateSketch da tarmoq yo'q — eskiz classic ni ko'rsatadi`,
+    );
+  }
+});
+
 test("har bir shablon mavjud guruhga tegishli va guruhlar bo'sh emas", () => {
   const ids = new Set(SLIDE_TEMPLATE_GROUPS.map((g) => g.id as string));
   for (const tpl of SLIDE_TEMPLATES) {
