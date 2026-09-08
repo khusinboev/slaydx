@@ -538,7 +538,12 @@ test("maxsus formali vositalar serverda ham tekshiriladi", async () => {
    * bitta majburiy maydonga ega bo'lishi kerak — yangi custom vosita
    * qo'shilganda uni unutib qoldirmaslik uchun.
    */
-  for (const tool of TOOLS.filter((t) => t.custom && t.custom !== "slide")) {
+  /*
+   * `slide` va `pro-slide` istisno: ularda mavzu REJIMGA bog'liq (fayl
+   * rejimida mavzu o'rniga `sourceText`), shuning uchun u `fields` da
+   * emas, route'da `topicLegend`/fayl sharti bilan tekshiriladi.
+   */
+  for (const tool of TOOLS.filter((t) => t.custom && t.custom !== "slide" && t.custom !== "pro-slide")) {
     assert.ok(
       tool.fields.some((f) => f.required),
       `${tool.id}: maxsus formali vositada majburiy maydon e'lon qilinishi kerak`,

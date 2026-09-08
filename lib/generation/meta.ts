@@ -1,6 +1,24 @@
 import { defaultPages } from "../tools";
 import type { FormValues, ToolConfig } from "../types";
-import { isSlideAudience, normalizeTemplateId } from "./slide-templates";
+import { normalizeAudienceId } from "./slide-audience";
+import { isSlideBlockId, type SlideBlockId } from "./slide-blocks";
+import {
+  KEY_IDEAS_MAX,
+  KEY_IDEA_CHARS,
+  PLAN_ITEMS_DEFAULT,
+  PLAN_ITEMS_MAX,
+  PLAN_ITEMS_MIN,
+  PRO_SLIDE_DEFAULT,
+  PRO_SLIDE_MAX,
+  PRO_SLIDE_MIN,
+  QUIZ_COUNTS,
+  clampInt,
+  isSlideImageStyle,
+  isSlideTextVolume,
+  splitCsv,
+} from "./slide-params";
+import { isSlidePurpose, purposeDefaults } from "./slide-purpose";
+import { normalizeTemplateId } from "./slide-templates";
 import { isSlideThemeId } from "./slide-types";
 import type { DocMeta } from "./types";
 
@@ -100,12 +118,32 @@ export function extractMeta(tool: ToolConfig, values: FormValues): DocMeta {
   const pagesLabel = s(values, "pages", fallbackLabel);
   const fallbackPages = parsePages(fallbackLabel, 12);
   const quality = s(values, "quality", "standard");
+  /*
+   * Slaydlar soni: oddiy `slide` — paketdan (10/12/14/16), `pro-slide` —
+   * slayderdan (4–30). Ikkalasi ham `targetPages` ga tushadi; narx
+   * (`priceFor`) va byudjet (`budgetFor`) shu songa qaraydi.
+   */
   const slidePages =
-    quality === "premium_long" ? 16 : quality === "long" ? 14 : quality === "premium" ? 12 : 10;
+    tool.id === "pro-slide"
+      ? clampInt(values.slideCount, PRO_SLIDE_MIN, PRO_SLIDE_MAX, PRO_SLIDE_DEFAULT)
+      : quality === "premium_long" ? 16 : quality === "long" ? 14 : quality === "premium" ? 12 : 10;
   const authorParts = parseAuthorLine(s(values, "author", s(values, "fullName")));
-  const audienceRaw = s(values, "slideAudience", "auto");
   const themeRaw = s(values, "slideTheme", "atlas");
   const templateRaw = s(values, "slideTemplate", "auto");
+  const purposeRaw = s(values, "slidePurpose", "general");
+  const slidePurpose = isSlidePurpose(purposeRaw) ? purposeRaw : "general";
+  /*
+   * Bloklar: foydalanuvchi yuborgan bo'lsa u ustun (oq ro'yxat bilan),
+   * yubormasa taqdimot turining standarti. Bo'sh satr ≠ yubormagan:
+   * `blocks: ""` — ataylab hammasini o'chirgan.
+   */
+  const blocks: SlideBlockId[] =
+    values.blocks === undefined || values.blocks === null
+      ? purposeDefaults(slidePurpose).blocks
+      : splitCsv(values.blocks, 12, 24).filter(isSlideBlockId);
+  const textVolumeRaw = s(values, "textVolume", "standart");
+  const imageStyleRaw = s(values, "slideImageStyle", "photo");
+  const quizRaw = clampInt(values.quizCount, 0, 10, 0);
   return {
     toolId: tool.id,
     workLabel: tool.title,
@@ -138,8 +176,8 @@ export function extractMeta(tool: ToolConfig, values: FormValues): DocMeta {
         ? "maktab"
         : "oliy",
     kind: s(values, "kind", "standard"),
-    pagesLabel: tool.id === "slide" ? String(slidePages) : pagesLabel,
-    targetPages: tool.id === "slide" ? slidePages : parsePages(pagesLabel, fallbackPages),
+    pagesLabel: tool.id === "slide" || tool.id === "pro-slide" ? String(slidePages) : pagesLabel,
+    targetPages: tool.id === "slide" || tool.id === "pro-slide" ? slidePages : parsePages(pagesLabel, fallbackPages),
     slideTheme: isSlideThemeId(themeRaw) ? themeRaw : "atlas",
     // Eski (olib tashlangan) id ham qabul qilinadi: `normalizeTemplateId`
     // uni o‘rnini bosgan shablonga yo‘naltiradi, «auto» ga tashlamaydi.
@@ -160,7 +198,23 @@ export function extractMeta(tool: ToolConfig, values: FormValues): DocMeta {
     // Formada belgilanmagan bo'lsa titul slaydi qoladi (eski xatti-harakat).
     titleSlide: values.titleSlide !== false,
     premiumVisuals: quality === "premium" || quality === "premium_long",
-    slideAudience: isSlideAudience(audienceRaw) ? audienceRaw : "auto",
+    // Eski id lar (`school`, `defense`…) bazada qoladi — alias orqali yangi ro'yxatga.
+    slideAudience: normalizeAudienceId(s(values, "slideAudience", "auto")),
+    position: s(values, "position").replace(/\s+/g, " ").slice(0, 80),
+    logoAssetId: /^[0-9a-f]{8,64}$/i.test(s(values, "logoAssetId")) ? s(values, "logoAssetId").toLowerCase() : "",
+    slidePurpose,
+    keyIdeas: splitCsv(values.keyIdeas, KEY_IDEAS_MAX, KEY_IDEA_CHARS),
+    localExamples: values.localExamples === true,
+    blocks,
+    planItems: clampInt(values.planItems, PLAN_ITEMS_MIN, PLAN_ITEMS_MAX, PLAN_ITEMS_DEFAULT),
+    // Formada belgilanmagan bo'lsa reja slaydi qoladi (eski xatti-harakat).
+    agendaSlide: values.agendaSlide !== false,
+    textVolume: isSlideTextVolume(textVolumeRaw) ? textVolumeRaw : "standart",
+    // Faqat ruxsat etilgan sonlar (0/3/5/10) — oraliq qiymat eng yaqin pastkisiga.
+    quizCount: [...QUIZ_COUNTS].reverse().find((n) => n <= quizRaw) ?? 0,
+    internetSearch: values.internetSearch === true,
+    speakerNotes: values.speakerNotes !== false,
+    slideImageStyle: isSlideImageStyle(imageStyleRaw) ? imageStyleRaw : "photo",
     design: s(values, "design", "iris"),
     // Yil SHU YERDA muzlaydi — `title-model.ts` uni `doc.meta` dan oladi,
     // `new Date()` dan emas. Aks holda ekran va fayl yil chegarasida ajralardi.

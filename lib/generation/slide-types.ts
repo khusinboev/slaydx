@@ -12,6 +12,15 @@ export const SLIDE_LAYOUTS = [
   "process",
   "table",
   "closing",
+  /*
+   * AUDIT-9 bloklari. `quiz` — nazorat testi (savol + 4 variant, javob
+   * izohda yoki `answers` slaydida); `references` — tadqiqot manbalari;
+   * `answers` — izohlar o'chiq bo'lganda test javoblari. Maketlari
+   * `slide-layout-extra.ts` da (WP-C); dispatch `planSlide` da.
+   */
+  "quiz",
+  "references",
+  "answers",
 ] as const;
 
 export type SlideLayout = (typeof SLIDE_LAYOUTS)[number];
@@ -41,6 +50,12 @@ export type SlideModel = {
   notes?: string;
   imageHint?: string;
   image?: { url: string; alt?: string };
+  /** `quiz`: savol, aynan 4 variant, to'g'ri javob indeksi 0..3. */
+  quiz?: { q: string; options: string[]; answer: number }[];
+  /** `references`: manba nomi (domen) va izoh — tadqiqotdan, uydirma emas. */
+  refs?: { title: string; source: string }[];
+  /** `stats`: diagramma majburiy («Diagramma» bloki) — 2+ bir birlikli qiymatda ham chiziladi. */
+  chart?: boolean;
 };
 
 export type SlideDeck = {

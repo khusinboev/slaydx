@@ -848,10 +848,10 @@ test("band chegaralari maket sig'imiga bog'langan", async () => {
    * chegarasiga urilishi kerak. Aks holda «har qanday qiymat o'tadi»
    * degani bo'lardi va test hech narsani ushlamasdi.
    */
-  const tooLong = Array.from({ length: 5 }, () => "A".repeat(AUDIENCE_RULES.lecture.bulletChars * 3));
+  const tooLong = Array.from({ length: 5 }, () => "A".repeat(AUDIENCE_RULES.students_bachelor.bulletChars * 3));
   assert.equal(
-    bodySize(tooLong, "lecture", true),
-    AUDIENCE_RULES.lecture.minPt,
+    bodySize(tooLong, "students_bachelor", true),
+    AUDIENCE_RULES.students_bachelor.minPt,
     "uch barobar uzun matn qisish chegarasiga urilishi kerak — aks holda test bo'sh",
   );
 });
@@ -880,11 +880,20 @@ test("slayd so'rovi oraliq beradi, faqat shift emas", async () => {
   assert.ok(section, "shablon section slaydini berishi kerak");
   assert.ok(closing, "shablon closing slaydini berishi kerak");
 
-  // Auditoriya qoidalarida pol bor — prompt shundan oraliq quradi.
-  for (const rules of Object.values(AUDIENCE_RULES)) {
+  /*
+   * Auditoriya qoidalarida pol bor — prompt shundan oraliq quradi.
+   *
+   * Pol 8 edi — eng kichik auditoriya 5–7-sinf (120 belgi) bo'lganda.
+   * AUDIT-9 da 1–4-sinf (28 pt, 80 belgi → 6 so'z) qo'shildi: bu
+   * yoshda 6 so'zli gap TO'LIQ gap. 120 ga ko'tarib bo'lmaydi — 28 pt
+   * da 3 × 120 rasmli slaydga sig'maydi (yuqoridagi «eng yomon holat»
+   * sikli yiqiladi). Qoidaning maqsadi «yorliq emas, gap» — 5 so'z
+   * poli uni saqlaydi.
+   */
+  for (const [id, rules] of Object.entries(AUDIENCE_RULES)) {
     const lo = Math.round((rules.bulletChars * 0.55) / 8);
     const hi = Math.round(rules.bulletChars / 8);
-    assert.ok(lo >= 8, `pastki chegara juda kichik: ${lo} so'z`);
+    assert.ok(lo >= 5, `${id}: pastki chegara juda kichik: ${lo} so'z`);
     assert.ok(hi > lo, `oraliq bo'lishi kerak: ${lo}–${hi}`);
   }
 });

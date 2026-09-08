@@ -92,7 +92,9 @@ export async function buildArtifact(
   const meta = extractMeta(tool, values);
   const deadline = opts.deadline;
 
-  if (tool.id === "slide") {
+  // `pro-slide` ham shu dvigatel — farqi `extractMeta` (slayder, brif) va
+  // rasm provayderida (`pickProvider`), oqimda emas.
+  if (tool.id === "slide" || tool.id === "pro-slide") {
     const slideDoc = await buildSlideAcademicDoc(meta, deadline);
     const file = await renderPptx(slideDoc, `${meta.fileNameHint}.pptx`);
     file.html = renderHtml(slideDoc);

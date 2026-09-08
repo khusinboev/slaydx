@@ -425,7 +425,14 @@ test("«auto» auditoriyani shablondan aniqlaydi", () => {
 
 test("auditoriya forma qiymatidan DocMeta ga o'tadi", () => {
   assert.equal(slideMeta({ topic: "X" }).slideAudience, "auto");
-  assert.equal(slideMeta({ topic: "X", slideAudience: "school" }).slideAudience, "school");
+  /*
+   * Eski 4 id (`school`, `defense`, `lecture`, `pitch`) bazadagi `doc_json`
+   * da qoladi — ular «auto» ga tushmaydi, 14 talik yangi ro'yxatdagi
+   * o'rnini bosuvchisiga yo'naltiriladi (AUDIT-9 X-10).
+   */
+  assert.equal(slideMeta({ topic: "X", slideAudience: "school" }).slideAudience, "school_5_7");
+  assert.equal(slideMeta({ topic: "X", slideAudience: "defense" }).slideAudience, "students_master");
+  assert.equal(slideMeta({ topic: "X", slideAudience: "school_1_4" }).slideAudience, "school_1_4");
   // Noto'g'ri qiymat — «auto» ga qaytadi.
   assert.equal(slideMeta({ topic: "X", slideAudience: "hacker" }).slideAudience, "auto");
 });

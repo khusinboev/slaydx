@@ -2,6 +2,7 @@ import type { AcademicDoc, Delivered } from "./generation/types";
 
 export type ToolId =
   | "slide"
+  | "pro-slide"
   | "coursework"
   | "referat"
   | "essay"
@@ -78,7 +79,7 @@ export type ToolConfig = {
   fields: ToolField[];
   extraOptional?: boolean;
   output: "docx" | "pptx" | "png";
-  custom?: "slide" | "resume" | "translation" | "image";
+  custom?: "slide" | "pro-slide" | "resume" | "translation" | "image";
   basePrice: number;
 };
 

@@ -1,4 +1,5 @@
 import type { FormValues, ToolConfig, ToolField, ToolId, UserProfile } from "./types";
+import { PRO_SLIDE_DEFAULT, PRO_SLIDE_MAX, PRO_SLIDE_MIN, PRO_SLIDE_PER_SLIDE, clampInt } from "./generation/slide-params";
 
 const TOPIC_FILE_MODES = [
   {
@@ -159,6 +160,36 @@ export const TOOLS: ToolConfig[] = [
     output: "pptx",
     custom: "slide",
     basePrice: 3000,
+    fields: [],
+  },
+  {
+    /*
+     * PRO SLAYD — alohida vosita, alohida narx (AUDIT-9).
+     *
+     * Oddiy `slide` dan farqi: har mos slaydda AI chizgan rasm (Gemini),
+     * boy kontent brifi (auditoriya 14, taqdimot turi 9, tuzilma bloklari,
+     * asosiy g'oyalar, mahalliy misollar), slaydlar soni 4–30 erkin, narx
+     * har slaydga (`PRO_SLIDE_PER_SLIDE`). Forma `ProSlideForm` da,
+     * maydonlar `slide-params.ts` reyestridan chiziladi.
+     */
+    id: "pro-slide",
+    slug: "pro-slide",
+    title: "Pro slayd",
+    pageTitle: "Pro slayd",
+    group: "umumiy",
+    icon: "presentation",
+    tc: "192 38 211",
+    description: "Har slaydda AI chizgan rasm, boy brif, 4–30 slayd",
+    submitLabel: "Slaydlarni yaratish",
+    creatingLabel: "Pro taqdimot yaratilmoqda...",
+    createdLabel: "pro taqdimot tayyor!",
+    topicLegend: "Taqdimot mavzusini kiriting",
+    topicPlaceholder: "Masalan: Suvning tabiatdagi aylanishi",
+    modes: TOPIC_FILE_MODES,
+    extraOptional: true,
+    output: "pptx",
+    custom: "pro-slide",
+    basePrice: PRO_SLIDE_PER_SLIDE * PRO_SLIDE_MIN,
     fields: [],
   },
   {
@@ -1013,6 +1044,12 @@ export function priceFor(tool: ToolConfig, values: FormValues): number {
         premium_long: 8000,
       }[q] ?? 3000
     );
+  }
+  if (tool.id === "pro-slide") {
+    // Har slaydga narx; son `extractMeta` bilan bir xil klamp — narx va
+    // deka uzunligi ajralib ketmasin.
+    const n = clampInt(values.slideCount, PRO_SLIDE_MIN, PRO_SLIDE_MAX, PRO_SLIDE_DEFAULT);
+    return n * PRO_SLIDE_PER_SLIDE;
   }
   if (tool.id === "essay") {
     const pages = String(values.pages ?? defaultPages(tool.id));

@@ -1,31 +1,24 @@
-import { languageDirective, slideLabels } from "./i18n";
-import { sourceBlock } from "./prompts";
+import { slideLabels } from "./i18n";
 import { parseLlmJson } from "./json";
 import { llmComplete, llmEnabled } from "./llm";
 import { remainingMs } from "./quality";
+import { bodyRules, type BodyRules } from "./slide-audience";
+import { blocksToBeats } from "./slide-blocks";
 import { attachSlideImages } from "./slide-images";
-import {
-  audienceRules,
-  expandBeats,
-  resolveSlideTemplate,
-  type SlideBeat,
-  type SlideTemplate,
-} from "./slide-templates";
+import { SLIDE_MAX } from "./slide-params";
+import { deckJsonSchema, slideSystem, type SlidePromptCtx } from "./slide-prompt";
+import { runSlideResearch } from "./slide-research";
+import { expandBeats, resolveSlideTemplate, type SlideBeat, type SlideTemplate } from "./slide-templates";
 import { getSlideTheme } from "./slide-themes";
 import { isSlideLayout, type SlideLayout, type SlideModel, type SlideThemeId } from "./slide-types";
 import type { AcademicDoc, DocMeta } from "./types";
 
-/**
- * Slide Law: bir slaydda 3–4 tadan ortiq band bo'lmasin, agenda'da 5 ta.
- *
- * Ilgari 6 ta band × 140 belgi = ~840 belgilik matn devori chiqardi va
- * `shrinkText` uni 11 pt gacha kichraytirardi — proyektorda o'qib
- * bo'lmasdi. Uzun izoh endi slaydga emas, notiq eslatmasiga tushadi.
- *
- * Aniq chegara auditoriyaga bog'liq (`AUDIENCE_RULES`): maktab sinfida
- * 3 ta qisqa band, himoyada 4 ta.
+/*
+ * Slide Law: bir slaydda 3–4 tadan ortiq band bo'lmasin. Aniq chegara
+ * auditoriya × matn hajmidan (`bodyRules`): maktab sinfida 3 ta qisqa
+ * band, himoyada 4 ta. Agenda chegarasi endi `planItems` (3–6) —
+ * ilgari qat'iy 5 edi va forma tanlovi unga yetib bormasdi.
  */
-const MAX_AGENDA_ITEMS = 5;
 
 /**
  * Matn chegaralari — MAKETDAN o'lchangan, promptdagi so'z sonidan emas.
@@ -56,7 +49,7 @@ function asLayout(v: unknown, fallback: SlideLayout): SlideLayout {
   return typeof v === "string" && isSlideLayout(v) ? v : fallback;
 }
 
-type BulletRules = { maxBullets: number; bulletChars: number };
+type BulletRules = Pick<BodyRules, "maxBullets" | "bulletChars" | "agendaMax">;
 
 /**
  * Slayd `id` larini absolyut o'rin bo'yicha qayta raqamlaydi.
@@ -202,7 +195,7 @@ function normalizeSlide(raw: unknown, i: number, footer: string, rules: BulletRu
       : [];
     return { ...base, steps };
   }
-  const limit = layout === "agenda" ? MAX_AGENDA_ITEMS : rules.maxBullets;
+  const limit = layout === "agenda" ? rules.agendaMax : rules.maxBullets;
   return { ...base, bullets: arr(o.bullets, limit, rules.bulletChars) };
 }
 
@@ -328,96 +321,9 @@ export function fallbackSlides(meta: DocMeta, tpl?: SlideTemplate, beats?: Slide
  * premium uzun 16). Shablon beats'i bundan kam bo'lsa kengaytiriladi.
  */
 export function wantSlides(meta: DocMeta, tpl: SlideTemplate): number {
-  const pack = Math.max(8, Math.min(20, meta.targetPages || 10));
-  return Math.max(tpl.beats.length || 8, pack);
-}
-
-function slideSystem(meta: DocMeta, tpl: SlideTemplate) {
-  const rules = audienceRules(meta.slideAudience, tpl.id);
-  const audienceLine: Record<string, string> = {
-    defense: `AUDITORIYA — himoya komissiyasi. Bir slaydda tadqiqot savoli AYNAN savol shaklida bo‘lsin. Har da'vo ortida asos ko‘rinsin. Shior yo‘q.`,
-    lecture: `AUDITORIYA — talabalar. Har tushuncha ta'rif + misol bilan. Yangi atama kiritilsa darhol izohlansin.`,
-    school: `AUDITORIYA — maktab o‘quvchilari. Sodda gap, kundalik misol. Bir slaydda sinf 2 daqiqada bajaradigan mashq bo‘lsin.`,
-    pitch: `AUDITORIYA — investor. Bitta slayd — bitta fikr. Muammo, yechim va keyingi qadam aniq. Uydirma bozor raqami YO‘Q.`,
-  };
-  return [
-    languageDirective(meta.language),
-    `Siz professional taqdimot muallifisiz.`,
-    `Auditoriyasi: talaba / o‘qituvchi / himoya komissiyasi.`,
-    `Mavzu: «${meta.topic}». Fan: ${meta.subject || "—"}.`,
-    `Faqat JSON qaytaring. Matn qisqa, aniq, slaydga sig‘adigan.`,
-    `QAT’IY TAQIQLANADI: umumiy pedagogika shablonlari (kompetensiya, auditoriya, UNESCO, differensiatsiya, «tashxis-baholash» sikli), mavzuga tegishli bo‘lmagan soha (masalan, dvigatel yoki «milliy ta’lim»).`,
-    `YOZING: shu mavzuning o‘zi — ta’rif, tuzilish/jarayon, turlari, misol, ahamiyat, cheklov.`,
-    /*
-     * ORALIQ beriladi, faqat yuqori chegara emas.
-     *
-     * Ilgari bu qator «ENG KO'PI N ta bullet … X so'zdan oshmasin» deb
-     * yozilgan edi — ya'ni modelga faqat SHIFT aytilardi. Model bunday
-     * ko'rsatmada tabiiy ravishda eng qisqa variantni tanlaydi: jonli
-     * o'lchovda 10 slaydli deka o'rtacha 174 belgi/slayd bergan, ruxsat
-     * etilgani esa 480 edi (36%). Slayd bo'sh ko'rinardi.
-     *
-     * Oraliq va POL ko'rsatilganda model oraliqni to'ldiradi. Bu
-     * `perSub` (write-llm.ts) dagi saboqning slayddagi ko'rinishi: nima
-     * SO'RALSA, shu keladi.
-     */
-    `Har slaydda ${rules.minBullets}–${rules.maxBullets} ta bullet (agenda'da 4–5).`,
-    `Har bullet — TO‘LIQ gap, ${Math.round((rules.bulletChars * 0.55) / 8)}–${Math.round(rules.bulletChars / 8)} so‘z. Bir-ikki so‘zli sarlavhasimon parcha YOZMANG: fikr tugallangan bo‘lsin.`,
-    `Bandlar bir-birini takrorlamasin — har biri yangi qirra: ta’rif, sabab, misol, oqibat, cheklov.`,
-    audienceLine[meta.slideAudience && meta.slideAudience !== "auto" ? meta.slideAudience : ""] ??
-      `${rules.note}`,
-    /**
-     * «Premium» paket endi KONTENTGA ham ta'sir qiladi.
-     *
-     * Ilgari u faqat rasm sifatini o'zgartirardi — matn standart paket
-     * bilan bir xil edi, ya'ni qimmatroq paket uchun to'lagan
-     * foydalanuvchi mazmunan bir xil deck olardi.
-     */
-    meta.premiumVisuals
-      ? [
-          `PREMIUM DARAJA:`,
-          `— notes 80–120 so‘z: notiq nima deyishi, misol va o‘tish jumlasi bilan;`,
-          `— kamida bitta slaydda taqqoslash mumkin bo‘lgan ANIQ ko‘rsatkichlar (stats), lekin uydirma emas — mavzuning o‘z birliklari;`,
-          `— kamida bitta slaydda qarama-qarshi qo‘yish (compare yoki twoCol) chuqur tahlil bilan.`,
-        ].join("\n")
-      : "",
-    `Sarlavha to‘liq fikr, 6–10 so‘z.`,
-    /*
-     * BO'SH SLAYDLARNI to'ldirish.
-     *
-     * O'lchov: 10 slaydli dekaning 4 tasida (title, 2 × section,
-     * closing) tana matni UMUMAN yo'q edi — deka uzunligining 40% i.
-     * `planSection` va `planOverlay` bu slaydlarda `subtitle` ni
-     * chizadi, lekin promptda u so'ralmagan edi, shuning uchun model
-     * «Savollar va muhokama» kabi ikki so'z qaytarardi.
-     *
-     * Sig'im maketdan o'lchandi: section subtitle qutisi ~325 belgi,
-     * closing niki ~160 belgi ko'taradi.
-     */
-    `section slaydda subtitle — BO‘SH QOLMASIN: 20–35 so‘zlik kirish, shu bo‘limda nima ko‘rilishini aytadi.`,
-    `closing slaydda subtitle — 15–25 so‘zlik xulosa: asosiy fikr va keyingi qadam. «Savollar va muhokama» kabi bo‘sh ibora emas.`,
-    `twoCol va compare: har ustunda 3–4 band, har biri to‘liq gap (10–15 so‘z). Bir so‘zli yorliq emas.`,
-    `process: har bosqichning text maydoni to‘liq gap (10–15 so‘z) — nima qilinadi va natija nima.`,
-    `Uzun IZOHNI (nazariy chekinish, tarixiy tafsilot) notes ga yozing — bandlar to‘liq bo‘lsin, lekin izohga aylanmasin.`,
-    `Har slaydda imageHint: 12–20 so‘z, ANIQ vizual (inglizcha yoki o‘zbekcha), shu slayd mazmunidagi narsa/joy/asbob. Mavzudan chiqib ketmasin.`,
-    `Har slaydda notes: notiq OG‘ZAKI aytadigan matn, 40–80 so‘z. Slayddagi bandlarni takrorlamang — misol, izoh yoki savol qo‘shing.`,
-    `title slaydning title maydoni foydalanuvchi mavzusini saqlasin.`,
-    `kicker qisqa (2–4 so‘z), masalan «Biologiya» yoki «Taqdimot». Qo‘shimcha talabni kicker qilmang.`,
-    `stats ga uydirma milliard/tonna/foiz YOZILMASIN. Formula, bosqich soni, ma’lum birlik (masalan C6H12O6, 2 bosqich) mumkin.`,
-    /*
-     * Qator soni POLI 3 ga ko'tarildi.
-     *
-     * «2–5» so'ralganda model odatda 2 ta qator qaytarardi va jadval
-     * slaydning yuqori uchdan birida qolib, qolgani bo'sh chiqardi
-     * (jonli sinovda `report` shablonida aynan shu ko'rindi).
-     * `normalizeSlide` 6 tagacha qatorni qabul qiladi.
-     */
-    `table layout: 2–4 ustun, 3–5 qator. Katak matni qisqa (2–5 so‘z). Uydirma raqam emas — tasnif, qiyos yoki bosqich xossalari.`,
-    meta.extra ? `Qo‘shimcha talab: ${meta.extra}` : "",
-    sourceBlock(meta),
-  ]
-    .filter(Boolean)
-    .join("\n");
+  // 20 chegarasi pro slaydning 30 tasini jimgina 20 ga qirqardi.
+  const pack = Math.max(4, Math.min(SLIDE_MAX, meta.targetPages || 10));
+  return Math.max(Math.min(tpl.beats.length || 8, pack), pack);
 }
 
 export async function writeSlidesWithLlm(
@@ -425,11 +331,12 @@ export async function writeSlidesWithLlm(
   tpl: SlideTemplate,
   beats: SlideBeat[] = tpl.beats,
   deadline?: number,
+  ctx: SlidePromptCtx = {},
 ): Promise<SlideModel[] | null> {
   if (!llmEnabled()) return null;
-  const rules = audienceRules(meta.slideAudience, tpl.id);
+  const rules = bodyRules(meta, tpl.id);
   const plan = meta.titleSlide === false ? beats.filter((b) => b.layout !== "title") : beats;
-  const want = plan.length || Math.max(8, Math.min(20, meta.targetPages || 10));
+  const want = plan.length || Math.max(4, Math.min(SLIDE_MAX, meta.targetPages || 10));
   const footer = [meta.author, meta.university].filter(Boolean).join(" · ");
   const seq = plan.map((b, i) => `${i + 1}) layout=${b.layout} — ${b.role}`).join("\n");
 
@@ -479,7 +386,7 @@ export async function writeSlidesWithLlm(
        * `coerceLayout` esa uni boshqa layoutga (odatda `bullets`) majburlab
        * qo'yardi. Deck jadval va'da qilingan joyda ham jadvalsiz chiqardi.
        */
-      `JSON sxema: {"slides":[{"layout":"title|agenda|section|bullets|twoCol|compare|quote|stats|process|table|closing","kicker":"","title":"","subtitle":"","imageHint":"","notes":"","bullets":[""],"leftTitle":"","left":[""],"rightTitle":"","right":[""],"quote":"","quoteBy":"","stats":[{"value":"","label":""}],"steps":[{"n":"1","title":"","text":""}],"table":{"headers":["",""],"rows":[["",""]]}}]}`,
+      deckJsonSchema(),
     ].join("\n");
     const maxTokens = Math.min(9_000, 2_000 + n * 420);
     /*
@@ -498,7 +405,7 @@ export async function writeSlidesWithLlm(
       console.warn("[slide-write] byudjet tugadi, bo‘lak tashlandi", from + 1, "-", to);
       return [];
     }
-    const raw = await llmComplete(slideSystem(meta, tpl), user, maxTokens, {
+    const raw = await llmComplete(slideSystem(meta, tpl, ctx), user, maxTokens, {
       json: true,
       timeoutMs: Math.min(90_000, left),
     });
@@ -648,7 +555,11 @@ const TEXT_SHARE = 0.62;
 /** PPTX yig'ish va saqlashga ajratiladigan zaxira. */
 const ASSEMBLY_MS = 12_000;
 
-export type SlideStageBudget = { textMs: number; imageMs: number; assemblyMs: number };
+export type SlideStageBudget = { researchMs: number; textMs: number; imageMs: number; assemblyMs: number };
+
+/** Tadqiqot bosqichi (grounding) — usable ning shu ulushi, lekin 30 s dan oshmaydi. */
+const RESEARCH_SHARE = 0.08;
+const RESEARCH_MAX_MS = 30_000;
 
 /**
  * Byudjetni bosqichlar orasida OLDINDAN taqsimlaydi.
@@ -669,23 +580,39 @@ export type SlideStageBudget = { textMs: number; imageMs: number; assemblyMs: nu
  * kafolatlanadi. Ulush 62/38 — matn og'irroq, chunki usiz deck umuman
  * yo'q; lekin rasm hech qachon nolga tushmaydi.
  */
-export function slideStageBudget(deadline?: number, now = Date.now()): SlideStageBudget {
+export function slideStageBudget(
+  deadline?: number,
+  now = Date.now(),
+  opts: { research?: boolean } = {},
+): SlideStageBudget {
   const total = deadline ? Math.max(0, deadline - now) : SLIDE_FALLBACK_BUDGET_MS;
   // Juda kichik byudjetda ham yig'ishga joy qoldiramiz, lekin hammasini emas.
   const assemblyMs = Math.min(ASSEMBLY_MS, Math.round(total * 0.1));
-  const usable = Math.max(0, total - assemblyMs);
+  const afterAssembly = Math.max(0, total - assemblyMs);
+  // Tadqiqot faqat so'ralganda ulush oladi — aks holda matn/rasm to'liq.
+  const researchMs = opts.research ? Math.min(RESEARCH_MAX_MS, Math.round(afterAssembly * RESEARCH_SHARE)) : 0;
+  const usable = afterAssembly - researchMs;
   const textMs = Math.round(usable * TEXT_SHARE);
-  return { textMs, imageMs: usable - textMs, assemblyMs };
+  return { researchMs, textMs, imageMs: usable - textMs, assemblyMs };
 }
 
 export async function buildSlideAcademicDoc(meta: DocMeta, deadline?: number): Promise<AcademicDoc> {
   const themeId = (meta.slideTheme || "atlas") as SlideThemeId;
   getSlideTheme(themeId);
   const tpl = resolveSlideTemplate(meta.slideTemplate, meta.topic, meta.extra);
-  // Sifat paketi shu yerda haqiqiy slaydlar soniga aylanadi.
-  const beats = expandBeats(tpl, wantSlides(meta, tpl));
-  const stage = slideStageBudget(deadline);
-  const written = await writeSlidesWithLlm(meta, tpl, beats, Date.now() + stage.textMs);
+  // Sifat paketi / slayder shu yerda haqiqiy slaydlar soniga aylanadi,
+  // foydalanuvchi bloklari esa shablon beats'iga kiritiladi.
+  const want = wantSlides(meta, tpl);
+  const beats = blocksToBeats(meta, tpl, expandBeats(tpl, want), want);
+  const stage = slideStageBudget(deadline, Date.now(), { research: meta.internetSearch });
+  /*
+   * Tadqiqot deck yozuvidan OLDIN va alohida chaqiruvda: grounding JSON
+   * rejimi bilan birga ishlamaydi (jonli tasdiqlangan). Yiqilsa deck
+   * baribir yoziladi — `research: null`.
+   */
+  const research = stage.researchMs > 0 ? await runSlideResearch(meta, Date.now() + stage.researchMs) : null;
+  const ctx: SlidePromptCtx = { research };
+  const written = await writeSlidesWithLlm(meta, tpl, beats, Date.now() + stage.researchMs + stage.textMs, ctx);
   // Kalit bor, lekin matn yozilmadi — shablon deck bermaymiz. `beatToSlide`
   // «Fotosintez: kirish / Asosiy qism / Amaliyot» kabi bo'sh slaydlar
   // yaratadi va foydalanuvchi buni to'lagan ishi deb oladi. Xato bo'lsa
@@ -732,5 +659,6 @@ export async function buildSlideAcademicDoc(meta: DocMeta, deadline?: number): P
     slideTemplate: tpl.id,
     slides,
     slideImages: images,
+    slideResearch: research ?? undefined,
   };
 }

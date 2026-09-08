@@ -83,7 +83,12 @@ function sessionSecret(): string {
  * `budget_ms` idan foydalanadi, global qiymat esa faqat migratsiyadan
  * oldingi eski qatorlar uchun zaxira.
  */
-export const DEFAULT_JOB_TIMEOUT_MS = 480_000;
+/*
+ * 480 s edi. Pro slayd 30 slaydda ~570 s so'raydi (`budget.ts`) — shift
+ * yana formulani yolg'onga chiqarardi. Bu qulf muddatini uzaytirmaydi
+ * (`reclaimStaleJobs` har ishning o'z `budget_ms` ini o'qiydi).
+ */
+export const DEFAULT_JOB_TIMEOUT_MS = 660_000;
 
 export const env = {
   isProd,

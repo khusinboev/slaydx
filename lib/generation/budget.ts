@@ -51,6 +51,14 @@ const PER_PAGE_MS = 9_000;
  */
 const SLIDE_BASE_MS = 120_000;
 const SLIDE_PER_SLIDE_MS = 11_000;
+/*
+ * Pro slayd: 30 slayd × har mos slaydda rasm + ixtiyoriy tadqiqot
+ * chaqiruvi. Hisob (AUDIT-9 X-1): matn 4 bo'lak ≈ 220 s, rasm ~20 slot /
+ * 4 parallel ≈ 80 s, tadqiqot ≤30 s, yig'ish 12 s → 30 slaydda ~570 s.
+ * Oddiy formulaning 450 s i yetmasdi.
+ */
+const PRO_SLIDE_BASE_MS = 150_000;
+const PRO_SLIDE_PER_SLIDE_MS = 14_000;
 
 /**
  * @param cap Yuqori chegara (`WORKER_JOB_TIMEOUT_MS`). Byudjet undan
@@ -64,9 +72,11 @@ export function budgetFor(tool: ToolConfig, values: FormValues, cap: number): nu
     // Slaydda `targetPages` — betlar emas, SLAYDLAR soni (`extractMeta`).
     const size = extractMeta(tool, values).targetPages;
     want =
-      tool.id === "slide"
-        ? SLIDE_BASE_MS + size * SLIDE_PER_SLIDE_MS
-        : MIN_BUDGET_MS + size * PER_PAGE_MS;
+      tool.id === "pro-slide"
+        ? PRO_SLIDE_BASE_MS + size * PRO_SLIDE_PER_SLIDE_MS
+        : tool.id === "slide"
+          ? SLIDE_BASE_MS + size * SLIDE_PER_SLIDE_MS
+          : MIN_BUDGET_MS + size * PER_PAGE_MS;
   }
   return Math.max(MIN_BUDGET_MS, Math.min(want, Math.max(MIN_BUDGET_MS, cap)));
 }

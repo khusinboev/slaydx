@@ -1,6 +1,10 @@
 import type { FormValues, ToolConfig, ToolId } from "../types";
 import type { SlideAudience, SlideTemplateId } from "./slide-templates";
 import type { SlideModel, SlideThemeId } from "./slide-types";
+import type { SlideBlockId } from "./slide-blocks";
+import type { SlideImageStyle, SlideTextVolume } from "./slide-params";
+import type { SlidePurpose } from "./slide-purpose";
+import type { SlideResearch } from "./slide-research";
 
 export type GenImage = {
   id: string;
@@ -103,6 +107,37 @@ export type DocMeta = {
   design: string;
   slideTheme?: SlideThemeId;
   slideTemplate?: SlideTemplateId;
+  /*
+   * ── Slayd parametrlari (AUDIT-9). Har biri `lib/generation/slide-params.ts`
+   * reyestrida e'lon qilingan va differensial test bilan qulflangan —
+   * bezak maydon yo'q. Standart qiymatlar `extractMeta` da.
+   */
+  /** Muallif lavozimi («Fizika o‘qituvchisi») — titul va kolontitul. */
+  position: string;
+  /** Yuklangan logotip (`logo_uploads.asset_id`); bo'sh — logo yo'q. */
+  logoAssetId: string;
+  /** Taqdimot turi — standart shablon va tuzilma bloklarini beradi. */
+  slidePurpose: SlidePurpose;
+  /** 3 tagacha asosiy g'oya — har biri kamida bir slaydda ochiladi. */
+  keyIdeas: string[];
+  /** O‘zbekiston kontekstidagi misollar (matnda ham, rasm promptida ham). */
+  localExamples: boolean;
+  /** Tuzilma bloklari; bo'sh — taqdimot turi standarti. */
+  blocks: SlideBlockId[];
+  /** Reja slaydidagi bandlar soni (3–6). */
+  planItems: number;
+  /** Reja (agenda) slaydi bo'lsinmi. */
+  agendaSlide: boolean;
+  /** Matn hajmi — band soni/uzunligi; shrift poli o'zgarmaydi. */
+  textVolume: SlideTextVolume;
+  /** Nazorat testi savollari soni (0 — test yo'q). */
+  quizCount: number;
+  /** Gemini grounding bilan internet tadqiqoti. */
+  internetSearch: boolean;
+  /** Ma'ruzachi izohlari (PPTX notes) yozilsinmi. */
+  speakerNotes: boolean;
+  /** AI rasm uslubi. */
+  slideImageStyle: SlideImageStyle;
   /**
    * Hujjat YARATILGAN yil — titul va «N–N+1 o'quv yili» shu yerdan.
    *
@@ -192,6 +227,8 @@ export type AcademicDoc = {
    * keyin «nega bu deka rasmsiz chiqqan» degan savolga baza javob beradi.
    */
   slideImages?: SlideImageReport;
+  /** Internet tadqiqoti natijasi (faktlar, manbalar, ToS entry point). */
+  slideResearch?: SlideResearch;
   images?: GenImage[];
   imagePrompt?: string;
   imageScene?: string;
