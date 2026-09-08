@@ -177,3 +177,87 @@ test("dense diagrammasi 15 temaning hammasida o'qiladigan qoladi", () => {
     );
   }
 });
+
+// ------------------------------------------- N-8 / N-9: matn chegaralari
+
+/**
+ * Chegara MAKETDAN o'lchanadi, promptdagi so'z sonidan emas.
+ *
+ * Ilgari `steps.text` 120, `stats.label` 60 edi — ikkalasi ham «10–15
+ * so'z» ko'rsatmasidan chiqarilgan, quti sig'imidan emas. Jonli dekada
+ * bitta `timeline` slaydining TO'RTALA kartasi va bir necha `stats`
+ * yorlig'i gap o'rtasidan «…» bilan kesilgan edi.
+ */
+test("process qadam matni chegarasi kartaga sig'adi va so'ralgan hajmdan kam emas", async () => {
+  const { STEP_TEXT_MAX } = await import("../lib/generation/slide-write.ts");
+  const filler = "o".repeat(STEP_TEXT_MAX);
+  const p = planSlide(
+    {
+      id: "p",
+      layout: "process",
+      title: "Bosqichlar",
+      steps: [1, 2, 3, 4].map((n) => ({ n: String(n), title: `Bosqich ${n}`, text: filler })),
+    },
+    theme,
+    "timeline",
+    1,
+    10,
+  );
+  // Sig'im: chegaradagi matn qutidan chiqmasin va shrift polga urilmasin.
+  for (const l of p.layers) {
+    assert.ok(l.box.x + l.box.w <= 13.34 && l.box.y + l.box.h <= 7.51, "qatlam chegaradan chiqdi");
+  }
+  const body = texts(p.layers).filter((t) => t.text === filler);
+  assert.equal(body.length, 4, "to'rtala kartaning matni chizilishi kerak");
+  for (const t of body) {
+    assert.ok(t.size >= 12, `chegaradagi matn ${t.size} pt ga tushdi — quti kichik`);
+  }
+  /*
+   * Promptda «10–15 so'z» so'raladi. O'zbekcha o'rtacha so'z + probel
+   * ~9 belgi, ya'ni ko'rsatmaga TO'LIQ rioya qilgan model ~135 belgi
+   * yozadi. Chegara bundan past bo'lsa, o'z ko'rsatmamizga amal qilgan
+   * javobni o'zimiz kesib tashlaymiz.
+   */
+  assert.ok(STEP_TEXT_MAX >= 135, `chegara ${STEP_TEXT_MAX} — 15 so'zlik javob kesiladi`);
+});
+
+test("stats yorlig'i chegarasi kartaga ham, diagrammaga ham sig'adi", async () => {
+  const { STAT_LABEL_MAX } = await import("../lib/generation/slide-write.ts");
+  const label = "y".repeat(STAT_LABEL_MAX);
+  for (const visual of ["classic", "dense"] as const) {
+    // Karta ko'rinishi (formula aralashgani uchun diagramma chizilmaydi).
+    const cards = planSlide(
+      { id: "s", layout: "stats", title: "K", stats: [{ value: "C6H12O6", label }, { value: "2", label }, { value: "6", label }] },
+      theme, visual, 1, 10,
+    );
+    for (const l of cards.layers) {
+      assert.ok(l.box.x + l.box.w <= 13.34 && l.box.y + l.box.h <= 7.51, `${visual}: karta chegaradan chiqdi`);
+    }
+    assert.ok(
+      texts(cards.layers).filter((t) => t.text === label).every((t) => t.size >= 11),
+      `${visual}: karta yorlig'i pol shriftiga urildi`,
+    );
+    // Diagramma ko'rinishi — yorliq ustuni ancha tor.
+    const chart = planSlide(
+      { id: "s", layout: "stats", title: "K", stats: [{ value: "97.5%", label }, { value: "2.5%", label }, { value: "0.3%", label }] },
+      theme, visual, 1, 10,
+    );
+    assert.ok(
+      texts(chart.layers).filter((t) => t.text === label).every((t) => t.size >= 11),
+      `${visual}: diagramma yorlig'i pol shriftiga urildi`,
+    );
+  }
+  assert.ok(STAT_LABEL_MAX >= 90, `chegara ${STAT_LABEL_MAX} — o'rtacha yorliq kesiladi`);
+});
+
+test("stats kartasidagi yorliq quti ichida vertikal markazda", () => {
+  const p = planSlide(
+    { id: "s", layout: "stats", title: "K", stats: [{ value: "C6H12O6", label: "yakuniy mahsulot" }, { value: "2", label: "faza" }] },
+    theme, "classic", 1, 10,
+  );
+  const labels = texts(p.layers).filter((t) => t.text === "faza" || t.text === "yakuniy mahsulot");
+  assert.equal(labels.length, 2);
+  for (const l of labels) {
+    assert.equal(l.valign, "middle", "qisqa yorliq quti tepasiga yopishib qolmasin");
+  }
+});

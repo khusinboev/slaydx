@@ -27,6 +27,18 @@ import type { AcademicDoc, DocMeta } from "./types";
  */
 const MAX_AGENDA_ITEMS = 5;
 
+/**
+ * Matn chegaralari — MAKETDAN o'lchangan, promptdagi so'z sonidan emas.
+ *
+ * Ikkalasi ham `tests/slide-chart.test.mts` da ikki tomondan
+ * qulflangan: chegara maket sig'imidan OSHMASIN (aks holda matn qutidan
+ * chiqadi yoki shrift polga uriladi) va promptda SO'RALGAN hajmdan KAM
+ * bo'lmasin (aks holda ko'rsatmaga rioya qilgan model ham kesiladi —
+ * AUDIT-8 N-8/N-9 da aynan shu bo'lgan).
+ */
+export const STEP_TEXT_MAX = 160;
+export const STAT_LABEL_MAX = 110;
+
 function clip(text: string, n: number) {
   const t = String(text || "").replace(/\s+/g, " ").trim();
   return t.length <= n ? t : `${t.slice(0, n - 1).trimEnd()}…`;
@@ -118,7 +130,16 @@ function normalizeSlide(raw: unknown, i: number, footer: string, rules: BulletRu
             if (!s || typeof s !== "object") return null;
             const x = s as Record<string, unknown>;
             const value = clip(String(x.value ?? ""), 24);
-            const label = clip(String(x.label ?? ""), 60);
+            /*
+             * Yorliq chegarasi 60 edi va jonli dekalarda muntazam
+             * kesardi (`lesson`#6, `problem`#7 ning uchala yorlig'i,
+             * `case`#6 — AUDIT-8 N-9). Maket sig'imi ancha katta:
+             * `planStats` kartasida yorliq qutisi 3.58 × 2.3 dyuym va
+             * `fitSize(..., 15, 11)` bilan chiziladi — 11 pt da ~480
+             * belgi, diagramma ko'rinishida esa 3.6 × 1.05 da ~220.
+             * 110 ikkalasiga ham bemalol sig'adi.
+             */
+            const label = clip(String(x.label ?? ""), STAT_LABEL_MAX);
             return value ? { value, label } : null;
           })
           .filter((x): x is { value: string; label: string } => Boolean(x))
@@ -164,10 +185,17 @@ function normalizeSlide(raw: unknown, i: number, footer: string, rules: BulletRu
              *
              * `planProcess` bu matnni `fitSize(..., 14, 11)` bilan
              * chizadi, ya'ni kartalar tor va shrift 14 pt dan boshlanadi.
-             * 4 kartali qatorda quti ~276 belgi ko'taradi, shuning uchun
-             * 120 xavfsiz: to'liq gap sig'adi, shrift 14 pt da qoladi.
+             *
+             * 120 chegara MAKETDAN emas, promptdagi «10–15 so'z» dan
+             * kelib chiqqan edi va model undan uzunroq yozganda gapni
+             * O'RTASIDAN kesardi: jonli `timeline` dekasida bitta
+             * slaydning TO'RTALA kartasi ham «…» bilan tugagan
+             * (AUDIT-8 N-8). Quti sig'imi qayta o'lchandi — 4 kartali
+             * qatorda 2.47 × 1.75 dyuym: 14 pt da ~138 belgi, 11 pt da
+             * ~255. 160 shu oraliqda: to'liq gap sig'adi, eng yomon
+             * holatda shrift 13 pt ga tushadi, polga (11) yetmaydi.
              */
-            return { n: String(x.n ?? n + 1), title: t, text: clip(String(x.text ?? ""), 120) };
+            return { n: String(x.n ?? n + 1), title: t, text: clip(String(x.text ?? ""), STEP_TEXT_MAX) };
           })
           .filter((x): x is { n: string; title: string; text: string } => Boolean(x))
           .slice(0, 5)

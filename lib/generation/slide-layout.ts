@@ -1162,6 +1162,14 @@ function planStats(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
       align: "center",
       valign: "middle",
     });
+    /*
+     * Yorliq quti ICHIDA vertikal markazda.
+     *
+     * Quti 2.3 dyuym, yorliq esa odatda bir-ikki qator — u tepaga
+     * yopishib qolar va karta pastki yarmi bo'sh ko'rinardi (AUDIT-8
+     * N-4, `png/defense-06.png`). Quti o'lchami o'zgarmaydi (uzun
+     * yorliq hamon sig'adi), faqat matn markazlashtiriladi.
+     */
     const labBox: Box = { x: x + 0.18, y: 3.65, w: colW - 0.36, h: 2.3 };
     layers.push({
       t: "text",
@@ -1170,6 +1178,7 @@ function planStats(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
       color: dense ? theme.titleMuted : theme.muted,
       size: fitSize(st.label, labBox, 15, 11),
       align: "center",
+      valign: "middle",
     });
   });
   pushFooter(layers, s, theme, index, total, { x: M + 0.18, w: 12.2 }, dense);
