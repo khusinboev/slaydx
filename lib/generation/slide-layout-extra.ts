@@ -549,14 +549,42 @@ export function planReferences(s: SlideModel, theme: SlideTheme, visual: SlideVi
 // ─────────────────────────────────────────────────────────── answers
 
 /**
+ * Kalit rejimlari — javoblar SONIGA qarab (X-4).
+ *
+ * `hero` (1–2 javob): kalit varag'i bo'lib chiziladi — karta maydonni
+ * bo'lib oladi, matn markazda va yirik. `ANSWERS_ONE_COL_MAX` gacha
+ * bitta ustun (kalit tabiiy holda PASTGA o'qiladi), undan ortig'i ikki
+ * ustunga bo'linadi (10 savol 5 qatorli ikki ustunga bemalol sig'adi).
+ */
+const ANSWERS_HERO_MAX = 2;
+const ANSWERS_ONE_COL_MAX = 6;
+/** Kalitda ko'rsatiladigan eng ko'p javob (formadagi eng katta test — 10 ta). */
+const ANSWERS_MAX = 12;
+/** Shrift SHIFTI (poli auditoriyadan — `ctx.bodyType.minPt`). */
+const ANSWERS_PT_HERO = 60;
+const ANSWERS_PT_ROW = 40;
+/** Karta balandligining shriftga aylanish koeffitsienti — qator bo'yidan o'lchangan. */
+const ANSWERS_PT_RATIO = 0.42;
+
+/**
  * Test javoblari — «1 — B», «2 — D».
  *
- * Ikki ustunli: javoblar kalit varag'i sifatida o'qiladi, ustun bo'ylab
- * PASTGA (jadval kabi), keyin ikkinchi ustunga o'tadi.
+ * O'LCHAM JAVOBLAR SONIDAN kelib chiqadi. Jonli dekada (10 slayd,
+ * 7 blok) rejaga bitta savol sig'di va kalitda BITTA qator qoldi:
+ * qator qat'iy 1.15″ qutida, maydon o'rtasida chizilardi — 13.3×7.5″
+ * slaydning ~86% i bo'sh oq maydon bo'lib qolardi (AUDIT-8 N-3/N-5
+ * naqshining aynan o'zi). Endi qatorlar maydonni QOLDIQSIZ bo'lib
+ * oladi (`rowH = usable / rows`), 1–2 javob esa yirik kalit kartasiga
+ * aylanadi: matn qatlamlari qamragan balandlik 13% dan 64% ga chiqdi
+ * (o'lchov `tests/slide-quiz.test.mts` da qulflangan).
+ *
+ * Shrift karta bo'yiga qarab tanlanadi, lekin `fitSize` uni AUDITORIYA
+ * polidan (`ctx.bodyType.minPt`: ma'ruzada 15, maktabda 20–24 pt)
+ * pastga tushira olmaydi — Slide Law shu polda.
  */
 export function planAnswers(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index: number, total: number, ctx: PlanCtx): SlidePlan {
   const { pushFooter, fitSize } = LAYOUT_KIT;
-  const items = (s.bullets ?? []).filter(Boolean).slice(0, 12);
+  const items = (s.bullets ?? []).filter(Boolean).slice(0, ANSWERS_MAX);
   if (!items.length) return asList(s, [], theme, index, total, ctx);
 
   const dense = visual === "dense";
@@ -566,46 +594,55 @@ export function planAnswers(s: SlideModel, theme: SlideTheme, visual: SlideVisua
   const x = pageX();
   const ink = dense ? theme.titleText : theme.text;
 
-  /*
-   * Ustun soni javoblar SONIDAN.
-   *
-   * Ilgari ikkita ustun HAR DOIM chizilardi va uch javobli kalit «2 + 1»
-   * bo'lib, slaydning uchdan ikki qismi bo'sh qolardi (PDF da ko'rindi).
-   * Kalit varag'i tabiiy holda PASTGA o'qiladi, shuning uchun 6 tagacha
-   * javob bitta markazlashtirilgan ustunda qoladi; undan ortig'i ikki
-   * ustunga bo'linadi (10 savol 5 qatorli ikki ustunga bemalol sig'adi).
-   */
-  const cols = items.length > 6 ? 2 : 1;
-  const rows = Math.ceil(items.length / cols);
+  const n = items.length;
+  const hero = n <= ANSWERS_HERO_MAX;
+  const cols = n > ANSWERS_ONE_COL_MAX ? 2 : 1;
+  const rows = Math.ceil(n / cols);
   const gap = 0.3;
-  const colW = cols === 2 ? (12.1 - gap) / 2 : 6.9;
-  const x0 = cols === 2 ? x : x + (12.1 - colW) / 2;
+  // Bitta ustun kalitni O'QILADIGAN kenglikda ushlab turadi: yirik
+  // kartada matn markazda, oddiy qatorda esa chap chekkadan boshlanadi.
+  const colW = cols === 2 ? (12.1 - gap) / 2 : hero ? 10.2 : 8.2;
+  const x0 = x + (12.1 - (colW * cols + gap * (cols - 1))) / 2;
   const top = dense ? 1.45 : 1.55;
   const usable = BOTTOM - top;
-  const rowH = Math.min(1.15, usable / Math.max(1, rows));
-  const startY = top + Math.max(0, (usable - rowH * rows) / 2);
+  /*
+   * Qator balandligi endi CHEKLANMAYDI: qolgan bo'shliq qatorlarga
+   * to'liq taqsimlanadi. Ilgari `Math.min(1.15, …)` shifti bor edi va
+   * kam javobli kalit slayd o'rtasidagi kichkina karta bo'lib qolardi
+   * (markazlashtirish bo'sh maydonni faqat SURARDI, kamaytirmasdi).
+   */
+  const rowH = usable / rows;
+  const vgap = Math.min(0.26, rowH * 0.16);
   items.forEach((line, i) => {
     const c = Math.floor(i / rows);
     const r = i % rows;
     const cx = x0 + c * (colW + gap);
-    const y = startY + r * rowH;
-    const h = rowH - 0.12;
+    const y = top + r * rowH;
+    const h = rowH - vgap;
     layers.push({
       t: "rect",
       box: { x: cx, y, w: colW, h },
       fill: dense ? { color: "#ffffff", alpha: 0.08 } : { color: theme.surface },
-      radius: 0.06,
+      radius: hero ? 0.1 : 0.06,
     });
-    layers.push({ t: "rect", box: { x: cx, y, w: 0.07, h }, fill: { color: theme.accent } });
-    const textBox: Box = { x: cx + 0.32, y, w: colW - 0.5, h };
+    // Yirik kartada aksent tasma TEPADA (`quizCards` naqshi) — markazlashgan
+    // matnning yonidagi ingichka chiziq kartani qiyshiq ko'rsatardi.
+    if (hero) layers.push({ t: "rect", box: { x: cx, y, w: colW, h: 0.1 }, fill: { color: theme.accent }, radius: 0.04 });
+    else layers.push({ t: "rect", box: { x: cx, y, w: 0.07, h }, fill: { color: theme.accent } });
+    const textBox: Box = hero
+      ? { x: cx + 0.4, y: y + 0.16, w: colW - 0.8, h: h - 0.28 }
+      : { x: cx + 0.32, y, w: colW - 0.5, h };
+    const minPt = ctx.bodyType.minPt;
+    const basePt = Math.max(minPt, Math.min(hero ? ANSWERS_PT_HERO : ANSWERS_PT_ROW, Math.round(h * 72 * ANSWERS_PT_RATIO)));
     layers.push({
       t: "text",
       box: textBox,
       text: line,
       color: ink,
-      size: fitSize(line, textBox, 17, 12),
+      size: fitSize(line, textBox, basePt, minPt),
       bold: true,
       valign: "middle",
+      ...(hero ? { align: "center" as const } : {}),
     });
   });
   pushFooter(layers, s, theme, index, total, { x, w: 12.1 }, dense);
