@@ -1,6 +1,6 @@
 import { defaultPages } from "../tools";
 import type { FormValues, ToolConfig } from "../types";
-import { isSlideAudience, isSlideTemplateId } from "./slide-templates";
+import { isSlideAudience, normalizeTemplateId } from "./slide-templates";
 import { isSlideThemeId } from "./slide-types";
 import type { DocMeta } from "./types";
 
@@ -141,7 +141,9 @@ export function extractMeta(tool: ToolConfig, values: FormValues): DocMeta {
     pagesLabel: tool.id === "slide" ? String(slidePages) : pagesLabel,
     targetPages: tool.id === "slide" ? slidePages : parsePages(pagesLabel, fallbackPages),
     slideTheme: isSlideThemeId(themeRaw) ? themeRaw : "atlas",
-    slideTemplate: isSlideTemplateId(templateRaw) ? templateRaw : "auto",
+    // Eski (olib tashlangan) id ham qabul qilinadi: `normalizeTemplateId`
+    // uni o‘rnini bosgan shablonga yo‘naltiradi, «auto» ga tashlamaydi.
+    slideTemplate: normalizeTemplateId(templateRaw),
     annotationLangs: s(values, "annotationLangs", "same") === "all" ? "all" : "same",
     email: s(values, "email"),
     organization: s(values, "organization", s(values, "university")),

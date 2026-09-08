@@ -376,7 +376,15 @@ function slideSystem(meta: DocMeta, tpl: SlideTemplate) {
     `title slaydning title maydoni foydalanuvchi mavzusini saqlasin.`,
     `kicker qisqa (2–4 so‘z), masalan «Biologiya» yoki «Taqdimot». Qo‘shimcha talabni kicker qilmang.`,
     `stats ga uydirma milliard/tonna/foiz YOZILMASIN. Formula, bosqich soni, ma’lum birlik (masalan C6H12O6, 2 bosqich) mumkin.`,
-    `table layout: 2–4 ustun, 2–5 qator. Katak matni qisqa (2–5 so‘z). Uydirma raqam emas — tasnif, qiyos yoki bosqich xossalari.`,
+    /*
+     * Qator soni POLI 3 ga ko'tarildi.
+     *
+     * «2–5» so'ralganda model odatda 2 ta qator qaytarardi va jadval
+     * slaydning yuqori uchdan birida qolib, qolgani bo'sh chiqardi
+     * (jonli sinovda `report` shablonida aynan shu ko'rindi).
+     * `normalizeSlide` 6 tagacha qatorni qabul qiladi.
+     */
+    `table layout: 2–4 ustun, 3–5 qator. Katak matni qisqa (2–5 so‘z). Uydirma raqam emas — tasnif, qiyos yoki bosqich xossalari.`,
     meta.extra ? `Qo‘shimcha talab: ${meta.extra}` : "",
     sourceBlock(meta),
   ]

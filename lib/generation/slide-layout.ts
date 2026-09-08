@@ -75,6 +75,10 @@ export function photoSlot(layout: string, visual: SlideVisual = "classic"): Box 
     if (visual === "hero-split") return { x: 0, y: 0, w: LEFT_IMG_W, h: H };
     return { x: RIGHT_IMG_X, y: 0, w: W - RIGHT_IMG_X, h: H };
   }
+  // `magazine` bo'lim slaydi ham to'la ekran — muqova bilan bir tilda
+  // gapirsin. Bu slot rasm SO'ROVIGA ham tushadi (`slide-images.ts`),
+  // ya'ni fal.ai dan darhol 16:9 kadr so'raladi, keyin qirqilmaydi.
+  if (layout === "section" && visual === "magazine") return { x: 0, y: 0, w: W, h: H };
   return { x: RIGHT_IMG_X, y: 0, w: W - RIGHT_IMG_X, h: H };
 }
 
@@ -455,7 +459,64 @@ function RIGHT_COL_W() {
   return W - RIGHT_COL_X() - 0.42;
 }
 
-function planSection(s: SlideModel, theme: SlideTheme, index: number, total: number): SlidePlan {
+/**
+ * `magazine` maketidagi bo'lim slaydi: to'la ekran kadr va pastki matn
+ * tasmasi.
+ *
+ * Ilgari `magazine` faqat TITUL slaydiga ta'sir qilardi, ya'ni «Esse»
+ * yoki «Adabiyot» tanlagan foydalanuvchi 16 slaydning 15 tasini
+ * `classic` bilan bir xil olardi. Tasma rasmsiz ham chiziladi —
+ * fal.ai yiqilsa maket «buzilib» emas, shunchaki to'q muqova bo'lib
+ * qoladi.
+ */
+function planSectionMagazine(s: SlideModel, theme: SlideTheme, index: number, total: number): SlidePlan {
+  const layers: SlideLayer[] = [];
+  layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.titleBg } });
+  // To'q temada fon allaqachon qorong'i — qoplama fotoni yo'q qilmasin.
+  photo(layers, s.image?.url, { x: 0, y: 0, w: W, h: H }, theme.darkContent ? 0.3 : 0.44);
+  /*
+   * Matn tasmasi RASM BORLIGIGA qarab joylashadi.
+   *
+   * Ilgari u har doim pastda (y=4.15) turardi. Rasmsiz slaydda — ya'ni
+   * fal.ai kalitsiz yoki byudjet tugagan har bir generatsiyada — slaydning
+   * yuqori 4 dyuymi butunlay bo'sh to'q maydon bo'lib qolardi. PDF ga
+   * o'girib ko'rilganda aynan shu ko'rindi.
+   */
+  const img = Boolean(s.image?.url);
+  const bandY = img ? 4.15 : 2.35;
+  layers.push({
+    t: "rect",
+    box: { x: 0, y: bandY, w: W, h: H - bandY },
+    fill: { color: theme.titleBg, alpha: img ? 0.82 : 0 },
+  });
+  const x = 0.9;
+  const tw = W - 1.8;
+  layers.push({ t: "rect", box: { x, y: bandY + 0.35, w: 1.35, h: 0.08 }, fill: { color: theme.accent } });
+  const titleBox: Box = { x, y: bandY + 0.63, w: tw, h: 1.0 };
+  layers.push({
+    t: "text",
+    box: titleBox,
+    text: s.title,
+    color: theme.titleText,
+    size: fitSize(s.title, titleBox, 30, 20),
+    bold: true,
+  });
+  if (s.subtitle) {
+    const subBox: Box = { x, y: bandY + 1.71, w: tw, h: 1.14 };
+    layers.push({
+      t: "text",
+      box: subBox,
+      text: s.subtitle,
+      color: theme.titleMuted,
+      size: fitSize(s.subtitle, subBox, 16, 12),
+    });
+  }
+  pushFooter(layers, s, theme, index, total, { x, w: tw }, true);
+  return { bg: theme.titleBg, layers };
+}
+
+function planSection(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index: number, total: number): SlidePlan {
+  if (visual === "magazine") return planSectionMagazine(s, theme, index, total);
   const img = s.image?.url;
   const layers: SlideLayer[] = [];
   if (img) {
@@ -600,9 +661,70 @@ function planHeading(layers: SlideLayer[], s: SlideModel, theme: SlideTheme, tex
  */
 type BodyType = ReturnType<typeof audienceRules>;
 
+/**
+ * `cards` maketida bandlar RO'YXAT emas, alohida kartalar.
+ *
+ * `cards` `SlideVisual` da 21 shablon davridayoq bor edi, lekin
+ * `slide-layout.ts` da unga BIRORTA tarmoq yo'q edi: `compare`, `case`,
+ * `lesson`, `debate`, `workshop` — beshtasi ham `classic` bilan
+ * piksel-bapiksel bir xil chiqardi. Aynan shu «har xil shablon tanlasam
+ * ham bitta narsa chiqadi» shikoyatining vizual tomoni edi.
+ *
+ * Karta soni 4 tadan oshmaydi (`AUDIENCE_RULES.maxBullets`), shuning
+ * uchun 1 ta ustun (n≤2) yoki 2×2 to'r yetarli. Shrift `fitSize` bilan
+ * kartaning O'Z qutisiga sig'diriladi — ro'yxatdagi `fitLines` emas.
+ */
+function planBulletCards(
+  layers: SlideLayer[],
+  items: string[],
+  theme: SlideTheme,
+  zone: Box,
+  bodyType: BodyType,
+): void {
+  const n = Math.max(1, items.length);
+  const cols = n >= 3 ? 2 : 1;
+  const rows = Math.ceil(n / cols);
+  const gap = 0.24;
+  const cardW = (zone.w - gap * (cols - 1)) / cols;
+  const cardH = (zone.h - gap * (rows - 1)) / rows;
+  items.forEach((line, i) => {
+    const c = i % cols;
+    const r = Math.floor(i / cols);
+    const x = zone.x + c * (cardW + gap);
+    const y = zone.y + r * (cardH + gap);
+    /*
+     * Toq sondagi oxirgi karta ikki ustunni egallaydi.
+     *
+     * 3 ta band 2×2 to'rda chizilganda pastki o'ng burchak bo'sh qolardi
+     * — PDF da slayd «yarim to'ldirilgan» ko'rinardi.
+     */
+    const last = i === items.length - 1;
+    const w = last && cols === 2 && c === 0 ? zone.w : cardW;
+    layers.push({ t: "rect", box: { x, y, w, h: cardH }, fill: { color: theme.surface }, radius: 0.1 });
+    layers.push({ t: "rect", box: { x, y, w: 0.09, h: cardH }, fill: { color: theme.accent }, radius: 0.04 });
+    layers.push({
+      t: "text",
+      box: { x: x + 0.32, y: y + 0.2, w: 0.6, h: 0.42 },
+      text: String(i + 1).padStart(2, "0"),
+      color: theme.accentInk,
+      size: 15,
+      bold: true,
+    });
+    const textBox: Box = { x: x + 0.32, y: y + 0.72, w: w - 0.64, h: cardH - 0.94 };
+    layers.push({
+      t: "text",
+      box: textBox,
+      text: line,
+      color: theme.text,
+      size: fitSize(line, textBox, bodyType.bodyPt, bodyType.minPt),
+    });
+  });
+}
+
 function planBullets(
   s: SlideModel,
   theme: SlideTheme,
+  visual: SlideVisual,
   index: number,
   total: number,
   agenda: boolean,
@@ -618,6 +740,11 @@ function planBullets(
   const tw = split ? LEFT_COL_W() : 12.1;
   planHeading(layers, s, theme, tw, x);
   const items = (s.bullets ?? []).slice(0, agenda ? 5 : 4);
+  if (!agenda && visual === "cards" && items.length) {
+    planBulletCards(layers, items, theme, { x, y: 1.5, w: tw, h: 5.35 }, bodyType);
+    pushFooter(layers, s, theme, index, total, { x, w: tw }, false);
+    return { bg: theme.bg, layers };
+  }
   if (agenda) {
     const rowH = items.length > 4 ? 0.7 : 0.76;
     items.forEach((line, i) => {
@@ -875,9 +1002,18 @@ function planProcess(s: SlideModel, theme: SlideTheme, visual: SlideVisual, inde
   const twoRows = n > 4;
   const perRow = twoRows ? Math.ceil(n / 2) : n;
   const rowGap = 0.3;
-  const top = 1.65;
-  const totalH = 6.85 - top;
-  const rowH = twoRows ? (totalH - rowGap) / 2 : totalH;
+  const totalH = 6.85 - 1.65;
+  /*
+   * Bitta qatorli oqimda karta butun balandlikni EGALLAMAYDI.
+   *
+   * Ilgari `rowH = totalH` edi: 3 bosqichli slaydda karta 5.2 dyuym
+   * bo'lar, matni esa 1 dyuymga sig'ardi — pastki 4 dyuym bo'sh oq
+   * maydon bo'lib qolardi (PDF da ko'rindi). Endi karta 3.7 dyuymgacha
+   * va maydon markazida turadi. Ikki qatorli oqimda (5–6 bosqich)
+   * balandlik hamon to'liq bo'linadi.
+   */
+  const rowH = twoRows ? (totalH - rowGap) / 2 : Math.min(3.7, totalH);
+  const top = twoRows ? 1.65 : 1.65 + (totalH - rowH) / 2;
 
   if (visual === "timeline" && !twoRows) {
     layers.push({ t: "rect", box: { x: M + 0.18, y: 1.42, w: 12.2, h: 0.07 }, fill: { color: theme.accent } });
@@ -954,11 +1090,41 @@ function planProcess(s: SlideModel, theme: SlideTheme, visual: SlideVisual, inde
  * Sarlavha qatori `titleBg`/`titleText` juftidan foydalanadi — u
  * `tests/themes.test.mts` da kontrast bo'yicha o'lchanadi.
  */
-function planTable(s: SlideModel, theme: SlideTheme, index: number, total: number): SlidePlan {
+function planTable(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index: number, total: number): SlidePlan {
+  /*
+   * `dense` (himoya / hisobot) jadvali to'q sahifada chiziladi — xuddi
+   * shu maketdagi `stats` slaydi kabi. Ilgari `dense` FAQAT `stats` ga
+   * ta'sir qilardi, ya'ni 8 slaydli hisobotning bittasi farq qilardi.
+   *
+   * Rang juftliklari ATAYLAB `titleText`/`titleMuted` — ikkalasi ham
+   * `tests/themes.test.mts` da `titleBg` ga qarshi AA bo'yicha
+   * o'lchanadi. `accent` bu yerda ishlatilmaydi: uning to'q fondagi
+   * kontrasti o'lchanmagan.
+   */
+  const dense = visual === "dense";
+  const pageBg = dense ? theme.titleBg : theme.bg;
+  const headFill = dense ? "#ffffff" : theme.titleBg;
+  const headAlpha = dense ? 0.14 : 1;
+  const headInk = theme.titleText;
+  const bodyFill = dense ? "#ffffff" : theme.surface;
+  const bodyAlpha = dense ? 0.06 : 1;
+  const keyInk = dense ? theme.titleText : theme.text;
+  const cellInk = dense ? theme.titleMuted : theme.muted;
+  const ruleInk = dense ? theme.titleMuted : theme.muted;
+
   const layers: SlideLayer[] = [];
-  layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.bg } });
-  pushChrome(layers, theme, "full");
-  planHeading(layers, s, theme, 12.2, M + 0.18);
+  layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: pageBg } });
+  if (!dense) pushChrome(layers, theme, "full");
+  const headBox: Box = { x: M + 0.18, y: 0.3, w: 12.2, h: 0.88 };
+  layers.push({
+    t: "text",
+    box: headBox,
+    text: s.title,
+    color: dense ? theme.titleText : theme.text,
+    size: fitSize(s.title, headBox, 22, 16),
+    bold: true,
+  });
+  layers.push({ t: "rect", box: { x: M + 0.18, y: 1.22, w: 1.1, h: 0.07 }, fill: { color: theme.accent } });
 
   const data = s.table ?? { headers: [], rows: [] };
   const cols = Math.max(1, data.headers.length);
@@ -968,18 +1134,30 @@ function planTable(s: SlideModel, theme: SlideTheme, index: number, total: numbe
   const colW = totalW / cols;
   const top = 1.55;
   const headH = 0.6;
-  const bodyH = Math.min(0.95, (6.75 - top - headH) / Math.max(1, rows.length));
+  /*
+   * Qator balandligi chegarasi 0.95 edi: 3 qatorli jadval 6.75 dyuymlik
+   * maydonning atigi 2.85 ini egallar, pastki 1.75 dyuym bo'sh qolardi
+   * (PDF da ko'rindi, `dense` to'q sahifada ayniqsa yaqqol). 1.3 —
+   * jadval maydonini to'ldiradi, lekin 2 qatorli jadvalni ham
+   * cho'zilgan bantga aylantirmaydi.
+   */
+  const bodyH = Math.min(1.3, (6.75 - top - headH) / Math.max(1, rows.length));
   const pad = 0.14;
 
   // Sarlavha qatori.
-  layers.push({ t: "rect", box: { x: x0, y: top, w: totalW, h: headH }, fill: { color: theme.titleBg }, radius: 0.05 });
+  layers.push({
+    t: "rect",
+    box: { x: x0, y: top, w: totalW, h: headH },
+    fill: { color: headFill, alpha: headAlpha },
+    radius: 0.05,
+  });
   data.headers.forEach((h, i) => {
     const box: Box = { x: x0 + i * colW + pad, y: top, w: colW - pad * 2, h: headH };
     layers.push({
       t: "text",
       box,
       text: h,
-      color: theme.titleText,
+      color: headInk,
       size: fitSize(h, box, 15, 11),
       bold: true,
       valign: "middle",
@@ -991,7 +1169,7 @@ function planTable(s: SlideModel, theme: SlideTheme, index: number, total: numbe
   layers.push({
     t: "rect",
     box: { x: x0, y: bodyTop, w: totalW, h: bodyH * rows.length },
-    fill: { color: theme.surface },
+    fill: { color: bodyFill, alpha: bodyAlpha },
   });
   rows.forEach((row, r) => {
     const y = bodyTop + r * bodyH;
@@ -999,7 +1177,7 @@ function planTable(s: SlideModel, theme: SlideTheme, index: number, total: numbe
       layers.push({
         t: "rect",
         box: { x: x0, y, w: totalW, h: 0.012 },
-        fill: { color: theme.muted, alpha: 0.28 },
+        fill: { color: ruleInk, alpha: 0.28 },
       });
     }
     for (let c = 0; c < cols; c++) {
@@ -1007,7 +1185,7 @@ function planTable(s: SlideModel, theme: SlideTheme, index: number, total: numbe
         layers.push({
           t: "rect",
           box: { x: x0 + c * colW, y, w: 0.012, h: bodyH },
-          fill: { color: theme.muted, alpha: 0.2 },
+          fill: { color: ruleInk, alpha: 0.2 },
         });
       }
       const cell = row[c] ?? "";
@@ -1017,7 +1195,7 @@ function planTable(s: SlideModel, theme: SlideTheme, index: number, total: numbe
         t: "text",
         box,
         text: cell,
-        color: c === 0 ? theme.text : theme.muted,
+        color: c === 0 ? keyInk : cellInk,
         size: fitSize(cell, box, 14, 10),
         bold: c === 0,
         valign: "middle",
@@ -1025,8 +1203,8 @@ function planTable(s: SlideModel, theme: SlideTheme, index: number, total: numbe
     }
   });
 
-  pushFooter(layers, s, theme, index, total, { x: x0, w: 12.2 }, false);
-  return { bg: theme.bg, layers };
+  pushFooter(layers, s, theme, index, total, { x: x0, w: 12.2 }, dense);
+  return { bg: pageBg, layers };
 }
 
 export function planSlide(
@@ -1043,13 +1221,13 @@ export function planSlide(
     case "title":
       return planTitle(s, theme, visual, index, total);
     case "section":
-      return planSection(s, theme, index, total);
+      return planSection(s, theme, visual, index, total);
     case "quote":
       return planOverlay(s, theme, index, total, "quote");
     case "closing":
       return planOverlay(s, theme, index, total, "closing");
     case "agenda":
-      return planBullets(s, theme, index, total, true, bodyType);
+      return planBullets(s, theme, visual, index, total, true, bodyType);
     case "twoCol":
       return planTwoCol(s, theme, index, total, false);
     case "compare":
@@ -1059,9 +1237,9 @@ export function planSlide(
     case "process":
       return planProcess(s, theme, visual, index, total);
     case "table":
-      return planTable(s, theme, index, total);
+      return planTable(s, theme, visual, index, total);
     default:
-      return planBullets(s, theme, index, total, false, bodyType);
+      return planBullets(s, theme, visual, index, total, false, bodyType);
   }
 }
 
@@ -1073,6 +1251,8 @@ export function photoLayouts() {
 export function sidePhotoBox(s: SlideModel, visual: SlideVisual): Box | null {
   if (!hasPhoto(s)) return null;
   if (s.layout === "quote" || s.layout === "closing") return null;
-  if (s.layout === "title" && visual === "magazine") return null;
+  // `magazine` da title va section rasmi to'la ekran: matn ustiga
+  // ATAYLAB qo'yiladi (qoplama + tasma bilan), ya'ni «to'qnashuv» emas.
+  if (visual === "magazine" && (s.layout === "title" || s.layout === "section")) return null;
   return photoSlot(s.layout, visual);
 }

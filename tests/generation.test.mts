@@ -8,6 +8,9 @@ import {
   SLIDE_TEMPLATE_BY_ID,
   audienceRules,
   expandBeats,
+  inferSlideTemplate,
+  normalizeTemplateId,
+  type SlideTemplateId,
 } from "../lib/generation/slide-templates.ts";
 import { fallbackSlides, wantSlides } from "../lib/generation/slide-write.ts";
 import { slideNotes } from "../lib/generation/slide-layout.ts";
@@ -89,6 +92,123 @@ test("kengaytirilgan beats: closing oxirida, yonma-yon takror yo'q", () => {
     for (let i = 1; i < beats.length; i++) {
       assert.notEqual(beats[i].layout, beats[i - 1].layout, `${tpl.id} @${i}`);
     }
+  }
+});
+
+/**
+ * ILDIZ SABAB testi: «har xil shablon tanlasam ham bitta narsa chiqadi».
+ *
+ * Ilgari `FILLER_BEATS` HAMMA shablon uchun bitta generik ro'yxat edi va
+ * 16 slaydli deka shu ro'yxat bilan to'ldirilardi. Natijada har juft
+ * shablon oxirgi ~8 slaydda AYNAN bir xil (layout + rol matni) bo'lardi —
+ * o'lchovda o'rtacha 8.0/16 ustma-ust tushardi, ya'ni «premium uzun»
+ * paket shablonlarni bir-biriga yaqinlashtirardi.
+ *
+ * Endi to'ldirgichlar shablonning O'ZINIKI (`SlideTemplate.fillers`).
+ * Chegara 4/16 — bu testni yiqitish uchun umumiy ro'yxatga qaytish
+ * kifoya (qaytarilsa ustma-ust 8+ ga chiqadi).
+ */
+test("shablonlar 16 slaydli dekada bir-birining nusxasi emas", () => {
+  const tpls = SLIDE_TEMPLATES.filter((t) => t.id !== "auto");
+  const seq = tpls.map((t) => expandBeats(t, 16).map((b) => `${b.layout}|${b.role}`));
+  let worst = { pair: "", same: 0 };
+  for (let i = 0; i < tpls.length; i++) {
+    for (let j = i + 1; j < tpls.length; j++) {
+      let same = 0;
+      for (let k = 0; k < 16; k++) if (seq[i][k] === seq[j][k]) same += 1;
+      if (same > worst.same) worst = { pair: `${tpls[i].id} ~ ${tpls[j].id}`, same };
+    }
+  }
+  assert.ok(worst.same <= 4, `eng yaqin juftlik ${worst.pair}: 16 dan ${worst.same} tasi bir xil`);
+});
+
+test("har shablonning o'z to'ldirgichlari bor va ular boshqasiniki emas", () => {
+  const seen = new Map<string, string>();
+  for (const tpl of SLIDE_TEMPLATES) {
+    if (tpl.id === "auto") continue;
+    assert.ok(tpl.fillers.length >= 6, `${tpl.id}: to'ldirgich juda kam (${tpl.fillers.length})`);
+    for (const f of tpl.fillers) {
+      const owner = seen.get(f.role);
+      assert.equal(owner, undefined, `«${f.role}» roli ${owner} va ${tpl.id} da takrorlangan`);
+      seen.set(f.role, tpl.id);
+    }
+  }
+});
+
+/**
+ * Olib tashlangan shablon id lari bazadagi eski `doc_json` da qoladi.
+ * Ular «auto» ga tushmasligi kerak — aks holda eski taqdimot boshqa
+ * tuzilma bilan qayta render bo'lardi.
+ */
+test("olib tashlangan shablon id si o'rnini bosgan shablonga yo'naltiriladi", () => {
+  assert.equal(normalizeTemplateId("faq"), "lecture");
+  assert.equal(normalizeTemplateId("workshop"), "lesson");
+  assert.equal(normalizeTemplateId("debate"), "compare");
+  assert.equal(normalizeTemplateId("briefing"), "report");
+  assert.equal(normalizeTemplateId("story"), "case");
+  assert.equal(normalizeTemplateId("gallery"), "magazine");
+  // Amaldagi id o'zgarmaydi, butunlay noma'lumi «auto» ga tushadi.
+  assert.equal(normalizeTemplateId("defense"), "defense");
+  assert.equal(normalizeTemplateId("hech-qachon-bo'lmagan"), "auto");
+  // Forma yo'li ham shu jadvaldan o'tadi.
+  assert.equal(slideMeta({ topic: "X", slideTemplate: "gallery" }).slideTemplate, "magazine");
+});
+
+test("inferSlideTemplate faqat mavjud shablonni qaytaradi", () => {
+  const topics = [
+    "Fotosintez jarayoni",
+    "Munozara: sun'iy intellekt foydalimi",
+    "Trening: samarali muloqot",
+    "Brifing: yillik raqamlar",
+    "Foto-insho: Buxoro lavhalari",
+    "Hikoya qilib bering: bosh qahramon yo'li",
+    "Savol-javob: imtihonga tayyorgarlik",
+    "Alisher Navoiy hayoti va ijodi",
+  ];
+  for (const t of topics) {
+    const id = inferSlideTemplate(t);
+    assert.ok(SLIDE_TEMPLATE_BY_ID[id], `«${t}» → mavjud bo'lmagan shablon: ${id}`);
+    assert.notEqual(id, "auto", `«${t}» → «auto» qaytardi`);
+  }
+  // Olib tashlanganlarning naqshi yo'qolmadi — o'rnini bosganiga ketdi.
+  assert.equal(inferSlideTemplate("Munozara: sun'iy intellekt foydalimi"), "compare");
+  assert.equal(inferSlideTemplate("Trening: samarali muloqot"), "lesson");
+  assert.equal(inferSlideTemplate("Foto-insho: Buxoro lavhalari"), "magazine");
+});
+
+/**
+ * `visual` — yolg'on va'da bo'lmasin.
+ *
+ * `cards` `SlideVisual` da bor edi-yu `slide-layout.ts` da BIRORTA
+ * tarmog'i yo'q edi: 5 ta shablon `classic` bilan piksel-bapiksel bir
+ * xil chiqardi. Bu test har bir `visual` qiymati kamida bitta layoutda
+ * boshqacha reja berishini talab qiladi.
+ */
+test("har bir visual qiymati renderda haqiqiy farq beradi", async () => {
+  const { planSlide } = await import("../lib/generation/slide-layout.ts");
+  const { getSlideTheme } = await import("../lib/generation/slide-themes.ts");
+  const { SLIDE_LAYOUTS } = await import("../lib/generation/slide-types.ts");
+  const theme = getSlideTheme("atlas");
+  const sample = (layout: string) =>
+    ({
+      id: "s", layout, title: "Sarlavha matni", subtitle: "Izoh matni bu yerda.",
+      image: { url: "https://example.test/a.png" },
+      bullets: ["Birinchi band gapi.", "Ikkinchi band gapi.", "Uchinchi band gapi."],
+      left: ["chap"], right: ["o'ng"], quote: "Iqtibos.",
+      stats: [{ value: "2", label: "faza" }],
+      steps: [{ n: "1", title: "Bir", text: "Izoh" }],
+      table: { headers: ["A", "B"], rows: [["1", "2"], ["3", "4"]] },
+    }) as never;
+
+  const visuals = [...new Set(SLIDE_TEMPLATES.map((t) => t.visual))];
+  for (const v of visuals) {
+    if (v === "classic") continue;
+    const differs = SLIDE_LAYOUTS.some(
+      (layout) =>
+        JSON.stringify(planSlide(sample(layout), theme, v, 1, 10)) !==
+        JSON.stringify(planSlide(sample(layout), theme, "classic", 1, 10)),
+    );
+    assert.ok(differs, `«${v}» maketi «classic» bilan bir xil chiqmoqda`);
   }
 });
 
@@ -225,8 +345,12 @@ test("«auto» auditoriyani shablondan aniqlaydi", () => {
   assert.deepEqual(audienceRules("auto", "defense"), audienceRules("defense", "lecture"));
   assert.deepEqual(audienceRules("auto", "lesson"), audienceRules("school", "lecture"));
   assert.deepEqual(audienceRules("auto", "pitch"), audienceRules("pitch", "lecture"));
-  // Noma'lum shablon — ma'ruza chegarasi.
-  assert.deepEqual(audienceRules("auto", "faq"), audienceRules("lecture", "lecture"));
+  // Olib tashlangan/noma'lum shablon — ma'ruza chegarasi. Bazadagi eski
+  // `doc_json` da hamon `faq` turishi mumkin, shuning uchun kast bilan.
+  assert.deepEqual(
+    audienceRules("auto", "faq" as SlideTemplateId),
+    audienceRules("lecture", "lecture"),
+  );
 });
 
 test("auditoriya forma qiymatidan DocMeta ga o'tadi", () => {

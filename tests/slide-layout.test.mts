@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { planSlide, type SlideLayer } from "../lib/generation/slide-layout.ts";
+import { photoSlot, planSlide, type SlideLayer } from "../lib/generation/slide-layout.ts";
 import { getSlideTheme } from "../lib/generation/slide-themes.ts";
 import { coerceLayout } from "../lib/generation/slide-write.ts";
 import type { SlideModel } from "../lib/generation/slide-types.ts";
@@ -98,6 +98,97 @@ test("hech bir qatlam slayd chegarasidan chiqmaydi", () => {
       assert.ok(l.box.y + l.box.h <= 7.51, `${s.layout}: balandlikdan chiqdi`);
     }
   }
+});
+
+// ----------------------------------------------------------- visual maket
+
+/**
+ * `visual` HAR BIR tarmog'i alohida qulflanadi.
+ *
+ * Umumiy «visual farq beradi» testi yetarli emas: `magazine` titulda
+ * ham farq qilgani uchun bo'lim tarmog'i o'chirilsa ham u yashil
+ * qolaverardi (mutatsiya sinovida shu ko'rindi). Quyidagi uchtasi aynan
+ * o'z tarmog'iga qaraydi.
+ */
+test("cards maketida bandlar ro'yxat emas, alohida kartaga aylanadi", () => {
+  const s: SlideModel = {
+    id: "c",
+    layout: "bullets",
+    title: "Sarlavha",
+    bullets: ["Birinchi band gapi.", "Ikkinchi band gapi.", "Uchinchi band gapi."],
+  };
+  const asList = planSlide(s, theme, "classic", 1, 10);
+  const asCards = planSlide(s, theme, "cards", 1, 10);
+
+  // Ro'yxat: bitta `lines` qatlami. Karta: har band alohida `text`.
+  assert.ok(texts(asList.layers).some((t) => t.lines), "classic bandlarni ro'yxat qilib chizishi kerak");
+  assert.ok(!texts(asCards.layers).some((t) => t.lines), "cards da `lines` ro'yxati bo'lmasligi kerak");
+  for (const b of s.bullets ?? []) {
+    assert.ok(
+      texts(asCards.layers).some((t) => t.text === b),
+      `«${b}» kartada alohida matn bo'lishi kerak`,
+    );
+  }
+  // Har kartaga fon + aksent chizig'i — classic dan ko'proq to'rtburchak.
+  assert.ok(
+    rects(asCards.layers).length >= rects(asList.layers).length + 6,
+    "3 ta karta kamida 6 ta qo'shimcha to'rtburchak beradi",
+  );
+});
+
+test("magazine bo'lim slaydi to'la ekran kadr va pastki tasma beradi", () => {
+  const s: SlideModel = {
+    id: "m",
+    layout: "section",
+    title: "1-lavha",
+    subtitle: "Bo'lim kirishi.",
+    image: { url: "https://example.test/a.png" },
+  };
+  const mag = planSlide(s, theme, "magazine", 1, 10);
+  const classic = planSlide(s, theme, "classic", 1, 10);
+
+  const magImg = mag.layers.find((l) => l.t === "image");
+  const classicImg = classic.layers.find((l) => l.t === "image");
+  assert.ok(magImg, "magazine bo'limida rasm bo'lishi kerak");
+  assert.equal(Number(magImg.box.w.toFixed(2)), 13.33, "kadr to'la kenglikda");
+  assert.equal(Number(magImg.box.h.toFixed(2)), 7.5, "kadr to'la balandlikda");
+  assert.ok(classicImg && classicImg.box.w < 6, "classic da rasm yon ustunda qoladi");
+  assert.equal(mag.bg, theme.titleBg, "magazine bo'limi muqova foniga o'tadi");
+
+  // Rasmsiz ham tasma qoladi — fal.ai yiqilsa maket buzilmasin.
+  const noImg = planSlide({ ...s, image: undefined }, theme, "magazine", 1, 10);
+  assert.equal(noImg.bg, theme.titleBg);
+  assert.ok(texts(noImg.layers).some((t) => t.text === "1-lavha"));
+
+  /*
+   * `photoSlot` maketdan ALOHIDA tekshiriladi: u rasm SO'ROVIGA tushadi
+   * (`slide-images.ts` → `slotPixels`). Slot yon ustunda qolsa, fal.ai
+   * dan tik (5.2 × 7.5) kadr so'ralar va u to'la ekranga cho'zilib
+   * buzilardi — maketda esa bu ko'rinmasdi, chunki `planSectionMagazine`
+   * qutini o'zi yozadi.
+   */
+  const magSlot = photoSlot("section", "magazine");
+  assert.equal(Number(magSlot?.w.toFixed(2)), 13.33, "magazine bo'limi 16:9 kadr so'rashi kerak");
+  assert.equal(Number(magSlot?.h.toFixed(2)), 7.5);
+  assert.ok((photoSlot("section", "classic")?.w ?? 99) < 6, "classic da yon ustun kadri");
+});
+
+test("dense jadval to'q sahifada chiziladi", () => {
+  const s: SlideModel = {
+    id: "t",
+    layout: "table",
+    title: "Ko'rsatkichlar",
+    table: { headers: ["Mezon", "Qiymat"], rows: [["A", "1"], ["B", "2"]] },
+  };
+  const dense = planSlide(s, theme, "dense", 1, 10);
+  const classic = planSlide(s, theme, "classic", 1, 10);
+  assert.equal(dense.bg, theme.titleBg, "dense jadval muqova foniga o'tadi");
+  assert.equal(classic.bg, theme.bg, "classic jadval oddiy fonda qoladi");
+  // Katak matni to'q fonda o'qiladigan rangga o'tadi.
+  assert.ok(
+    texts(dense.layers).some((t) => t.text === "A" && t.color === theme.titleText),
+    "dense da birinchi ustun `titleText` bilan chizilishi kerak",
+  );
 });
 
 // -------------------------------------------------------------- process
