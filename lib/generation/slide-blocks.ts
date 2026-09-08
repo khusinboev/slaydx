@@ -238,8 +238,15 @@ function clumpAt(beats: SlideBeat[]): number {
  * tushib qolmasin, `reja` esa boshdan siljimasin).
  */
 function fits(beats: MarkedBeat[], at: number, beat: MarkedBeat): boolean {
-  const run = RUN_LAYOUTS.has(beat.layout);
-  if (!run && (beats[at - 1]?.layout === beat.layout || beats[at]?.layout === beat.layout)) return false;
+  /*
+   * `RUN_LAYOUTS` istisnosi bu yerga KERAK EMAS va ataylab yo'q.
+   * `fits` faqat `deClump` ning ko'chirish bosqichidan chaqiriladi,
+   * u esa `clumpAt` topgan takror ustida ishlaydi — `quiz` juftligi
+   * u yerga hech qachon yetib bormaydi. Istisnoni bu yerga ham
+   * yozish sinab bo'lmaydigan tarmoq qoldirardi (mutatsiya M14 aynan
+   * shuni ko'rsatdi: uni buzsa ham birorta test qizarmadi).
+   */
+  if (beats[at - 1]?.layout === beat.layout || beats[at]?.layout === beat.layout) return false;
   if (beat.anchor === undefined) return true;
   const r = anchorRank(beat.anchor);
   const prev = beats[at - 1]?.anchor;
