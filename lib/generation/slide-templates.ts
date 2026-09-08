@@ -113,6 +113,8 @@ export {
 export type SlideBeat = {
   layout: SlideLayout;
   role: string;
+  /** «Diagramma» bloki: `stats` majburiy chart rejimida (`blocksToBeats` qo'yadi, `SlideModel.chart` ga o'tadi). */
+  chart?: boolean;
 };
 
 export type SlideTemplate = {

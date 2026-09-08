@@ -229,6 +229,12 @@ export type AcademicDoc = {
   slideImages?: SlideImageReport;
   /** Internet tadqiqoti natijasi (faktlar, manbalar, ToS entry point). */
   slideResearch?: SlideResearch;
+  /**
+   * Logotip. Dvigatelga `data:` URL sifatida kiradi (PPTX baytni shu
+   * yerdan oladi), worker `extractAssets` bilan uni aktivga aylantiradi
+   * — ko'ruvchi `/api/generations/{id}/assets/{id}` ni o'qiydi.
+   */
+  slideLogo?: { url: string };
   images?: GenImage[];
   imagePrompt?: string;
   imageScene?: string;

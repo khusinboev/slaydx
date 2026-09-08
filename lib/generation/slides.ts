@@ -1,3 +1,5 @@
+import { bodyRules } from "./slide-audience";
+import { deckFooter } from "./slide-identity";
 import { resolveSlideTemplate } from "./slide-templates";
 import { getSlideTheme } from "./slide-themes";
 import type { SlideDeck, SlideModel, SlideThemeId } from "./slide-types";
@@ -9,19 +11,12 @@ export function buildSlideDeck(doc: AcademicDoc): SlideDeck {
   const themeId = (doc.slideTheme || doc.meta.slideTheme || "atlas") as SlideThemeId;
   getSlideTheme(themeId);
   const tpl = resolveSlideTemplate(doc.slideTemplate || doc.meta.slideTemplate, doc.meta.topic, doc.meta.extra);
-  if (doc.slides?.length) {
-    return {
-      topic: doc.meta.topic,
-      author: doc.meta.author,
-      workLabel: doc.meta.workLabel,
-      themeId,
-      templateId: tpl.id,
-      visual: tpl.visual,
-      audience: doc.meta.slideAudience ?? "auto",
-      slides: doc.slides,
-    };
-  }
-  return {
+  /*
+   * Deck darajasidagi qiymatlar BIR marta hisoblanadi va ikkala renderer
+   * (PPTX, ko'ruvchi) shu obyektdan o'qiydi. Eski `doc_json` da yangi
+   * meta maydonlari yo'q — `bodyRules`/`??` standartga tushadi.
+   */
+  const common = {
     topic: doc.meta.topic,
     author: doc.meta.author,
     workLabel: doc.meta.workLabel,
@@ -29,8 +24,12 @@ export function buildSlideDeck(doc: AcademicDoc): SlideDeck {
     templateId: tpl.id,
     visual: tpl.visual,
     audience: doc.meta.slideAudience ?? "auto",
-    slides: legacyFromSections(doc),
+    bodyType: bodyRules(doc.meta, tpl.id),
+    logo: doc.slideLogo?.url || undefined,
+    speakerNotes: doc.meta.speakerNotes !== false,
   };
+  if (doc.slides?.length) return { ...common, slides: doc.slides };
+  return { ...common, slides: legacyFromSections(doc) };
 }
 
 function clip(text: string, n: number) {
@@ -39,7 +38,7 @@ function clip(text: string, n: number) {
 }
 
 function legacyFromSections(doc: AcademicDoc): SlideModel[] {
-  const footer = [doc.meta.author, doc.meta.university].filter(Boolean).join(" · ");
+  const footer = deckFooter(doc.meta);
   const slides: SlideModel[] = [
     {
       id: "title",

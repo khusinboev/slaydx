@@ -82,6 +82,8 @@ export type BuildOptions = {
    * chaqiruvchining ongli qarori bo'lishi kerak.
    */
   deadline: number;
+  /** Slayd logotipi — `data:` URL; worker `logo_uploads` dan o'qib beradi (WP-F). */
+  logo?: string;
 };
 
 export async function buildArtifact(
@@ -95,7 +97,7 @@ export async function buildArtifact(
   // `pro-slide` ham shu dvigatel — farqi `extractMeta` (slayder, brif) va
   // rasm provayderida (`pickProvider`), oqimda emas.
   if (tool.id === "slide" || tool.id === "pro-slide") {
-    const slideDoc = await buildSlideAcademicDoc(meta, deadline);
+    const slideDoc = await buildSlideAcademicDoc(meta, deadline, { logo: opts.logo });
     const file = await renderPptx(slideDoc, `${meta.fileNameHint}.pptx`);
     file.html = renderHtml(slideDoc);
     file.doc = slideDoc;

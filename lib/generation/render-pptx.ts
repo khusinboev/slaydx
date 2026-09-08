@@ -71,7 +71,8 @@ async function paintLayer(slide: PptxSlide, layer: SlideLayer, cache: ImageCache
       y: box.y,
       w: box.w,
       h: box.h,
-      sizing: { type: "cover", w: box.w, h: box.h },
+      // `fit` ko'ruvchi bilan BIR XIL o'qiladi (`SlideCanvas` `objectFit`) — logo `contain`.
+      sizing: { type: layer.fit ?? "cover", w: box.w, h: box.h },
     });
     return;
   }
@@ -121,11 +122,14 @@ export async function renderPptx(doc: AcademicDoc, fileName: string): Promise<Bu
 
   for (let i = 0; i < deck.slides.length; i++) {
     const slide = pptx.addSlide() as unknown as PptxSlide;
-    const plan = planSlide(deck.slides[i], theme, deck.visual, i, deck.slides.length, deck.audience, deck.templateId);
+    const plan = planSlide(deck.slides[i], theme, deck.visual, i, deck.slides.length, deck.audience, deck.templateId, {
+      bodyType: deck.bodyType,
+      logo: deck.logo,
+    });
     await paintPlan(slide, plan, imageCache);
     // Notiq eslatmasi. Ilgari `notesSlide` yaratilardi-yu, ichi bo'sh qolardi:
     // foydalanuvchi saytda eslatmani ko'rib, yuklab olgach yo'qotardi.
-    const notes = slideNotes(deck.slides[i]);
+    const notes = slideNotes(deck.slides[i], deck.speakerNotes);
     if (notes) slide.addNotes?.(notes);
   }
 

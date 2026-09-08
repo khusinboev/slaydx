@@ -34,7 +34,8 @@ export function SlideViewer({ doc }: { doc: AcademicDoc }) {
   );
   const [i, setI] = useState(0);
   const [present, setPresent] = useState(false);
-  const [notesOn, setNotesOn] = useState(true);
+  // Standart holat hujjatdan: `speakerNotes=false` bo'lsa panel yopiq ochiladi.
+  const [notesOn, setNotesOn] = useState(deck.speakerNotes);
   const [presenter, setPresenter] = useState(false);
   const [zoom, setZoom] = useState(75);
   const [fitOn, setFitOn] = useState(true);
@@ -204,7 +205,7 @@ export function SlideViewer({ doc }: { doc: AcademicDoc }) {
   const slide = slides[i];
   const next = slides[i + 1];
   const scale = present || fitOn ? Math.max(0.18, fitScale) : zoom / 100;
-  const notes = slide ? slideNotes(slide) : "";
+  const notes = slide ? slideNotes(slide, deck.speakerNotes) : "";
 
   return (
     <div className={cn("flex min-h-0 flex-1 flex-col", present && "fixed inset-0 z-50 bg-black")}>
@@ -281,7 +282,7 @@ export function SlideViewer({ doc }: { doc: AcademicDoc }) {
                       className="absolute top-0 left-0"
                       style={{ width: SLIDE.w, height: SLIDE.h, transform: `scale(${thumbScale})`, transformOrigin: "top left" }}
                     >
-                      <SlideCanvas slide={s} theme={theme} visual={deck.visual} audience={deck.audience} templateId={deck.templateId} index={idx} total={slides.length} />
+                      <SlideCanvas slide={s} theme={theme} visual={deck.visual} audience={deck.audience} templateId={deck.templateId} bodyType={deck.bodyType} logo={deck.logo} index={idx} total={slides.length} />
                     </span>
                   </span>
                   <span className="mt-1 block truncate text-[11px] text-white/70">{s.title}</span>
@@ -306,7 +307,7 @@ export function SlideViewer({ doc }: { doc: AcademicDoc }) {
                 style={{ width: SLIDE.w, height: SLIDE.h, transform: `scale(${scale})`, transformOrigin: "top left" }}
               >
                 {slide ? (
-                  <SlideCanvas slide={slide} theme={theme} visual={deck.visual} audience={deck.audience} templateId={deck.templateId} index={i} total={slides.length} />
+                  <SlideCanvas slide={slide} theme={theme} visual={deck.visual} audience={deck.audience} templateId={deck.templateId} bodyType={deck.bodyType} logo={deck.logo} index={i} total={slides.length} />
                 ) : null}
               </div>
             </div>
@@ -388,7 +389,7 @@ export function SlideViewer({ doc }: { doc: AcademicDoc }) {
                       theme={theme}
                       visual={deck.visual}
                       audience={deck.audience}
-                      templateId={deck.templateId}
+                      templateId={deck.templateId} bodyType={deck.bodyType} logo={deck.logo}
                       index={i + 1}
                       total={slides.length}
                     />

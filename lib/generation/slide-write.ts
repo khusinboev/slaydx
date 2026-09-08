@@ -4,6 +4,8 @@ import { llmComplete, llmEnabled } from "./llm";
 import { remainingMs } from "./quality";
 import { bodyRules, type BodyRules } from "./slide-audience";
 import { blocksToBeats } from "./slide-blocks";
+import { deckFooter } from "./slide-identity";
+import { purposeDefaults } from "./slide-purpose";
 import { attachSlideImages } from "./slide-images";
 import { SLIDE_MAX } from "./slide-params";
 import { deckJsonSchema, slideSystem, type SlidePromptCtx } from "./slide-prompt";
@@ -59,6 +61,23 @@ type BulletRules = Pick<BodyRules, "maxBullets" | "bulletChars" | "agendaMax">;
  * funksiya birlashtirishdan keyin chaqiriladi va noyoblikni bo'laklar
  * soniga bog'liq bo'lmagan holda kafolatlaydi.
  */
+/**
+ * `references` slaydiga HAQIQIY manbalarni qo'yadi.
+ *
+ * Model `refs` ni tadqiqot ro'yxatidan ko'chirishi so'raladi, lekin u
+ * bo'sh qoldirishi yoki uydirishi mumkin. Tadqiqot bo'lsa — manbalar
+ * FAQAT undan (uydirma bo'lmasin); bo'lmasa model yozgani qoladi,
+ * `references` maketi buni «tekshirilmagan» deb belgilaydi (WP-C).
+ */
+function applyResearchRefs(slides: SlideModel[], ctx: SlidePromptCtx) {
+  const sources = ctx.research?.sources ?? [];
+  if (!sources.length) return;
+  for (const sl of slides) {
+    if (sl.layout !== "references") continue;
+    sl.refs = sources.slice(0, 6).map((src) => ({ title: src.title, source: src.uri }));
+  }
+}
+
 export function renumberSlides(slides: SlideModel[]): SlideModel[] {
   return slides.map((sl, i) => (sl.id === `s${i}` ? sl : { ...sl, id: `s${i}` }));
 }
@@ -308,7 +327,7 @@ function beatToSlide(beat: { layout: SlideLayout; role: string }, i: number, met
 }
 
 export function fallbackSlides(meta: DocMeta, tpl?: SlideTemplate, beats?: SlideBeat[]): SlideModel[] {
-  const footer = [meta.author, meta.university].filter(Boolean).join(" · ");
+  const footer = deckFooter(meta);
   const template = tpl ?? resolveSlideTemplate(meta.slideTemplate, meta.topic, meta.extra);
   const base = beats ?? (template.beats.length ? template.beats : resolveSlideTemplate("lecture", meta.topic).beats);
   const seq = meta.titleSlide === false ? base.filter((b) => b.layout !== "title") : base;
@@ -337,7 +356,7 @@ export async function writeSlidesWithLlm(
   const rules = bodyRules(meta, tpl.id);
   const plan = meta.titleSlide === false ? beats.filter((b) => b.layout !== "title") : beats;
   const want = plan.length || Math.max(4, Math.min(SLIDE_MAX, meta.targetPages || 10));
-  const footer = [meta.author, meta.university].filter(Boolean).join(" · ");
+  const footer = deckFooter(meta);
   const seq = plan.map((b, i) => `${i + 1}) layout=${b.layout} — ${b.role}`).join("\n");
 
   /*
@@ -488,8 +507,11 @@ export async function writeSlidesWithLlm(
   const slides = renumberSlides(
     slots
       .map((sl, i) => (sl && plan[i] ? coerceLayout(sl, plan[i].layout, rules.maxBullets) : sl))
+      // «Diagramma» bloki beat'dagi `chart` bayrog'ini slaydga o'tkazadi (WP-B qo'yadi).
+      .map((sl, i) => (sl && plan[i]?.chart ? { ...sl, chart: true } : sl))
       .filter((sl): sl is SlideModel => Boolean(sl)),
   );
+  applyResearchRefs(slides, ctx);
   /*
    * Va'da qilingan hajmning quyi chegarasi. Bundan kam bo'lsa deck
    * paketga mos kelmaydi; `null` qaytarib, chaqiruvchi pulni qaytaradi.
@@ -596,10 +618,31 @@ export function slideStageBudget(
   return { researchMs, textMs, imageMs: usable - textMs, assemblyMs };
 }
 
-export async function buildSlideAcademicDoc(meta: DocMeta, deadline?: number): Promise<AcademicDoc> {
+/**
+ * Deck shabloni: foydalanuvchi tanlagani → taqdimot turi standarti →
+ * mavzudan taxmin. YAGONA joy — differensial test ham shuni chaqiradi.
+ */
+export function resolveDeckTemplate(meta: DocMeta): SlideTemplate {
+  const purpose = purposeDefaults(meta.slidePurpose);
+  const wanted = !meta.slideTemplate || meta.slideTemplate === "auto" ? purpose.templateId : meta.slideTemplate;
+  return resolveSlideTemplate(wanted, meta.topic, meta.extra);
+}
+
+export type SlideBuildOpts = {
+  /** Logotip — `data:` URL (worker `logo_uploads` dan o'qiydi). */
+  logo?: string;
+};
+
+export async function buildSlideAcademicDoc(meta: DocMeta, deadline?: number, opts: SlideBuildOpts = {}): Promise<AcademicDoc> {
   const themeId = (meta.slideTheme || "atlas") as SlideThemeId;
   getSlideTheme(themeId);
-  const tpl = resolveSlideTemplate(meta.slideTemplate, meta.topic, meta.extra);
+  /*
+   * Shablon: foydalanuvchi tanlagan bo'lsa u; «auto» bo'lsa TAQDIMOT TURI
+   * standarti (dars → `lesson`, himoya → `defense`…); tur ham `general`
+   * bo'lsa — mavzudan (`inferSlideTemplate`). Ya'ni tur parametri o'z
+   * ta'sirini shu yerda ko'rsatadi, bloklar esa `blocksToBeats` da.
+   */
+  const tpl = resolveDeckTemplate(meta);
   // Sifat paketi / slayder shu yerda haqiqiy slaydlar soniga aylanadi,
   // foydalanuvchi bloklari esa shablon beats'iga kiritiladi.
   const want = wantSlides(meta, tpl);
@@ -660,5 +703,6 @@ export async function buildSlideAcademicDoc(meta: DocMeta, deadline?: number): P
     slides,
     slideImages: images,
     slideResearch: research ?? undefined,
+    slideLogo: opts.logo ? { url: opts.logo } : undefined,
   };
 }

@@ -14,6 +14,9 @@ const eslintConfig = [
   {
     ignores: [
       "node_modules/**",
+      // Agent worktree'lari (`git worktree`) — ularning yarim yozilgan
+      // yoki konfliktli fayllari asosiy daraxt lintini buzmasin (AUDIT-9).
+      ".claude/**",
       ".next/**",
       "out/**",
       "build/**",

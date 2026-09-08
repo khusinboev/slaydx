@@ -12,6 +12,7 @@ import { FieldBlock, ModeSwitch, TextInput, Legend } from "./fields";
 import { ToolChrome } from "./ToolChrome";
 import { runGeneration } from "./runGeneration";
 import { SlideForm } from "./SlideForm";
+import { ProSlideForm } from "./ProSlideForm";
 import { ResumeWizard } from "./ResumeWizard";
 import { TranslationForm } from "./TranslationForm";
 import { ImageStudio } from "./ImageStudio";
@@ -87,6 +88,7 @@ export function ToolWorkspace({ tool }: { tool: ToolConfig }) {
   const profile = writerProfile(user);
 
   if (tool.custom === "slide") return <SlideForm tool={tool} profile={profile} />;
+  if (tool.custom === "pro-slide") return <ProSlideForm tool={tool} profile={profile} />;
   if (tool.custom === "resume") return <ResumeWizard tool={tool} />;
   if (tool.custom === "translation") return <TranslationForm tool={tool} />;
   if (tool.custom === "image") return <ImageStudio tool={tool} />;

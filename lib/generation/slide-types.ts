@@ -1,3 +1,4 @@
+import type { BodyRules } from "./slide-audience";
 import type { SlideAudience, SlideTemplateId, SlideVisual } from "./slide-templates";
 
 export const SLIDE_LAYOUTS = [
@@ -67,6 +68,12 @@ export type SlideDeck = {
   visual: SlideVisual;
   audience: SlideAudience;
   slides: SlideModel[];
+  /** Auditoriya × matn hajmi — PPTX va ko'ruvchi `planSlide` ga BIR XIL beradi. */
+  bodyType: BodyRules;
+  /** Logotip URL (data: yoki asset) — har slaydga `planSlide` qo'shadi. */
+  logo?: string;
+  /** Ma'ruzachi izohlari yozilsinmi (PPTX notes + ko'ruvchi paneli standarti). */
+  speakerNotes: boolean;
 };
 
 export const SLIDE_THEME_IDS = [

@@ -182,3 +182,134 @@ test("byudjet: pro 30 slaydga yetadi, tadqiqot ulushi faqat so'ralganda", () => 
   assert.ok(withResearch.textMs < plain.textMs, "tadqiqot matndan ulush oladi");
   assert.ok(withResearch.imageMs > 0, "rasm nolga tushmaydi");
 });
+
+// ═══════════════════════════════════════════ DIFFERENSIAL ZOND — «bezak yo'q» kafolati
+
+import { SLIDE_LAYOUTS, type SlideModel } from "../lib/generation/slide-types.ts";
+import { blocksToBeats } from "../lib/generation/slide-blocks.ts";
+import { deckFooter } from "../lib/generation/slide-identity.ts";
+import { planSlide } from "../lib/generation/slide-layout.ts";
+import { getSlideTheme } from "../lib/generation/slide-themes.ts";
+import { fallbackSlides, resolveDeckTemplate } from "../lib/generation/slide-write.ts";
+import type { SlideParamImpact } from "../lib/generation/slide-params.ts";
+
+/**
+ * Hali ulanmagan ta'sirlar — ish paketlari bo'yicha. Har paket tugagach
+ * o'z qatorini O'CHIRADI; ro'yxat o'sishi mumkin emas (pastdagi test).
+ *   WP-A: keyIdeas, localExamples (prompt)     WP-H: position, organization, quizCount (prompt)
+ *   WP-B: blocks, agendaSlide, quizCount, internetSearch (beats)
+ *   WP-D: internetSearch (research)           WP-E: topic, localExamples, slideImageStyle (images)
+ */
+const PENDING: Record<string, SlideParamImpact[]> = {
+  keyIdeas: ["prompt"],
+  localExamples: ["prompt", "images"],
+  position: ["prompt"],
+  organization: ["prompt"],
+  quizCount: ["prompt", "beats"],
+  blocks: ["beats"],
+  agendaSlide: ["beats"],
+  internetSearch: ["research", "beats"],
+  slideImageStyle: ["images"],
+  topic: ["images"],
+};
+
+/** Har layout uchun boy namuna — qisqa matnda ba'zi ta'sirlar ko'rinmaydi. */
+function sample(layout: string, footer: string): SlideModel {
+  return {
+    id: "s", layout, title: "Suv aylanishining bosqichlari va ahamiyati", kicker: "Geografiya", footer,
+    subtitle: "Bug‘lanish, kondensatsiya va yog‘in bosqichlari, ularda ishtirok etadigan energiya manbalari ko‘rib chiqiladi.",
+    bullets: [
+      "Quyosh energiyasi okean yuzasidagi suvni bug‘lantiradi va bug‘ ko‘tariladi.",
+      "Yuqori qatlamda sovigan bug‘ mayda tomchilarga aylanib bulut hosil qiladi.",
+      "Og‘irlashgan tomchilar yog‘in sifatida yer yuzasiga qaytadi.",
+      "Yer osti suvlari daryo va ko‘llarni to‘ldiradi, aylanish yopiladi.",
+      "Inson faoliyati aylanishning tezligi va sifatiga ta’sir qiladi.",
+      "Iqlim o‘zgarishi yog‘in taqsimotini o‘zgartiradi.",
+    ],
+    leftTitle: "Bug‘lanish", left: ["Okean yuzasidan", "Energiya: quyosh"], rightTitle: "Kondensatsiya", right: ["Atmosferada", "Natija: bulut"],
+    quote: "Suv — sayyoradagi eng ko‘p aylanadigan modda.", quoteBy: "Gidrologiya",
+    stats: [{ value: "97.5%", label: "Okeanlar" }, { value: "2.5%", label: "Chuchuk" }, { value: "0.3%", label: "Daryolar" }],
+    steps: [{ n: "1", title: "Bug‘lanish", text: "Quyosh suvni isitadi" }, { n: "2", title: "Yog‘in", text: "Tomchilar tushadi" }],
+    table: { headers: ["Bosqich", "Joyi"], rows: [["Bug‘lanish", "Okean"], ["Yog‘in", "Quruqlik"], ["Oqim", "Daryo"]] },
+    quiz: [{ q: "Bug‘lanish qayerda?", options: ["Okean", "Bulut", "Daryo", "Muz"], answer: 0 }],
+    refs: [{ title: "president.uz", source: "https://president.uz" }],
+  } as SlideModel;
+}
+
+type Probe = Record<SlideParamImpact, string>;
+
+function probe(values: FormValues, tool = pro): Probe {
+  const m = extractMeta(tool, { topic: "Suv aylanishi", ...values });
+  const tpl = resolveDeckTemplate(m);
+  const want = wantSlides(m, tpl);
+  const beats = blocksToBeats(m, tpl, expandBeats(tpl, want), want);
+  const theme = getSlideTheme(m.slideTheme ?? "atlas");
+  const bodyType = bodyRules(m, tpl.id);
+  // Haqiqiy oqimda worker `logoAssetId` ni data URL ga aylantiradi; zond uchun mavjudligi yetarli.
+  const logo = m.logoAssetId ? "data:image/png;base64,iVBORw0KGgo=" : undefined;
+  const footer = deckFooter(m);
+  return {
+    prompt: slideSystem(m, tpl),
+    beats: JSON.stringify(fallbackSlides(m, tpl, beats).map((s) => s.layout)),
+    layout: JSON.stringify(
+      SLIDE_LAYOUTS.map((l) => planSlide(sample(l, footer), theme, tpl.visual, 1, 10, m.slideAudience, tpl.id, { bodyType, logo })),
+    ),
+    price: String(priceFor(tool, { topic: "x", ...values })),
+    images: "",
+    research: "",
+  };
+}
+
+test("differensial zond: reyestrdagi HAR parametr e'lon qilingan ta'sirini beradi", () => {
+  const failures: string[] = [];
+  for (const p of SLIDE_PARAMS) {
+    const tool = p.tools.includes("pro-slide") ? pro : slide;
+    const base = p.probeWith ?? {};
+    const a = probe({ ...base, [p.id]: p.probeA }, tool);
+    const b = probe({ ...base, [p.id]: p.probeB }, tool);
+    for (const impact of p.impacts) {
+      if (PENDING[p.id]?.includes(impact)) continue;
+      if (a[impact] === b[impact]) failures.push(`${p.id} → ${impact}`);
+    }
+  }
+  assert.deepEqual(failures, [], `bezak parametrlar (A va B bir xil chiqdi):\n  ${failures.join("\n  ")}`);
+});
+
+test("PENDING ro'yxati o'smaydi — faqat A/B/D/E/H paketlariga tegishli", () => {
+  const allowed = new Set(["keyIdeas", "localExamples", "position", "organization", "quizCount", "blocks", "agendaSlide", "internetSearch", "slideImageStyle", "topic"]);
+  for (const id of Object.keys(PENDING)) assert.ok(allowed.has(id), `${id}: PENDING ga yangi id qo'shilgan — ta'sirni ulang, kutishga qo'ymang`);
+  for (const id of Object.keys(PENDING)) assert.ok(SLIDE_PARAMS.some((p) => p.id === id), `${id}: reyestrda yo'q`);
+});
+
+test("logo: har layoutda qatlam qo'shiladi, contain, hech bir MATN qatlami bilan kesishmaydi", () => {
+  const theme = getSlideTheme("atlas");
+  const bodyType = bodyRules({ slideAudience: "auto", textVolume: "standart", planItems: 5 }, "lecture");
+  const LOGO = { x: 12.15, y: 0.18, w: 0.9, h: 0.45 };
+  const hits = (a: { x: number; y: number; w: number; h: number }, b: typeof LOGO) =>
+    a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+  for (const layout of SLIDE_LAYOUTS) {
+    for (const visual of ["classic", "cards", "dense", "timeline", "magazine", "hero-split"] as const) {
+      const s = sample(layout, "Muallif · Lavozim · TDPU");
+      const without = planSlide(s, theme, visual, 1, 10, "auto", "lecture", { bodyType });
+      const withLogo = planSlide(s, theme, visual, 1, 10, "auto", "lecture", { bodyType, logo: "data:image/png;base64,AA" });
+      const logoLayer = withLogo.layers.find((l) => l.t === "image" && l.url === "data:image/png;base64,AA");
+      assert.ok(logoLayer && logoLayer.t === "image" && logoLayer.fit === "contain", `${layout}/${visual}: logo qatlami yo'q yoki contain emas`);
+      assert.ok(withLogo.layers.length > without.layers.length, `${layout}/${visual}: logo qatlam qo'shmadi`);
+      for (const l of withLogo.layers) {
+        if (l.t !== "text") continue;
+        const txt = (l.text ?? l.lines?.join(" ") ?? "").trim();
+        if (!txt) continue;
+        assert.ok(!hits(l.box, LOGO), `${layout}/${visual}: matn «${txt.slice(0, 30)}» logo bilan kesishadi (${JSON.stringify(l.box)})`);
+      }
+      assert.ok(LOGO.x + LOGO.w <= 13.334 && LOGO.y >= 0, "logo qutisi slayd ichida");
+    }
+  }
+});
+
+test("speakerNotes=false — slideNotes bo'sh, deck standarti yopiq", async () => {
+  const { slideNotes } = await import("../lib/generation/slide-layout.ts");
+  const s = sample("bullets", "F");
+  assert.equal(slideNotes(s, false), "");
+  assert.ok(slideNotes(s, true).length > 0);
+  assert.ok(slideNotes(s).length > 0, "bayroq berilmasa eski xatti-harakat");
+});

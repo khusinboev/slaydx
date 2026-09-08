@@ -91,6 +91,71 @@ export function ChipGroup({
  * skeleti to'liq tarjima qilingan tillar ko'rsatiladi.
  * `scope="source"` — tarjimada manba tili; ro'yxat kengroq.
  */
+/**
+ * Bir nechta tanlash — tuzilma bloklari (Reja, Maqsadlar, Test…).
+ * `FormValues` massiv qabul qilmaydi: chaqiruvchi `joinCsv`/`splitCsv`
+ * (`slide-params.ts`) bilan satrga o'giradi — kodlash bitta joyda.
+ */
+export function MultiChipGroup({
+  options,
+  value,
+  onChange,
+}: {
+  options: FieldOption[];
+  value: string[];
+  onChange: (v: string[]) => void;
+}) {
+  const toggle = (id: string) => onChange(value.includes(id) ? value.filter((v) => v !== id) : [...value, id]);
+  return (
+    <div className="flex flex-wrap gap-2">
+      {options.map((o) => {
+        const on = value.includes(o.value);
+        return (
+          <button
+            key={o.value}
+            type="button"
+            aria-pressed={on}
+            onClick={() => toggle(o.value)}
+            className={cn(
+              "rounded-full border px-3.5 py-1.5 text-sm transition-colors",
+              on ? "border-primary bg-primary text-primary-foreground" : "border-input bg-card hover:bg-muted",
+            )}
+          >
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * Ha / Yo'q — ikki chip. Checkbox emas: qolgan forma chip'lar bilan
+ * yozilgan, ko'z bir xil naqshni ko'rsin (raqobatchi formasi ham shunday).
+ */
+export function Toggle({
+  checked,
+  onChange,
+  yes = "Ha",
+  no = "Yo‘q",
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  yes?: string;
+  no?: string;
+}) {
+  return (
+    <ChipGroup
+      options={[
+        { value: "yes", label: yes },
+        { value: "no", label: no },
+      ]}
+      value={checked ? "yes" : "no"}
+      onChange={(v) => onChange(v === "yes")}
+    />
+  );
+}
+
 export function LanguagePicker({
   value,
   onChange,

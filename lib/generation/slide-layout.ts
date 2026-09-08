@@ -1,4 +1,6 @@
-import { audienceRules, type SlideAudience, type SlideTemplateId, type SlideVisual } from "./slide-templates";
+import { bodyRules, type BodyRules } from "./slide-audience";
+import { planAnswers, planQuiz, planReferences } from "./slide-layout-extra";
+import type { SlideAudience, SlideTemplateId, SlideVisual } from "./slide-templates";
 import type { SlideModel, SlideTheme } from "./slide-types";
 
 /** Widescreen 16:9 in inches — same coordinate space as PPTX and the on-site viewer. */
@@ -32,7 +34,13 @@ export type Fill = { color: string; alpha?: number };
 
 export type SlideLayer =
   | { t: "rect"; box: Box; fill?: Fill; line?: { color: string; width: number }; radius?: number }
-  | { t: "image"; box: Box; url: string }
+  /**
+   * `fit` — `cover` (standart, kesadi) yoki `contain` (butun rasm sig'adi).
+   * Logo uchun `contain` shart: `cover` uni kesib tashlardi. Ikkala
+   * renderer (`render-pptx` `sizing`, `SlideCanvas` `objectFit`) shu
+   * maydonni BIR XIL o'qiydi — «ko'rdim = oldim».
+   */
+  | { t: "image"; box: Box; url: string; fit?: "cover" | "contain" }
   | {
       t: "text";
       box: Box;
@@ -117,7 +125,10 @@ export function boxStyle(box: Box): { left: number; top: number; width: number; 
   };
 }
 
-export function slideNotes(s: SlideModel) {
+export function slideNotes(s: SlideModel, enabled = true) {
+  // `speakerNotes=false` — YAGONA o'chirish nuqtasi: PPTX `addNotes` ham,
+  // ko'ruvchi «Eslatma» paneli ham shu funksiyani chaqiradi.
+  if (!enabled) return "";
   // Model yozgan notiq matni birinchi navbatda: u slaydni takrorlamaydi.
   // Bo'lmasa — slayd mazmunidan tuzilgan zaxira eslatma.
   const written = (s.notes || "").trim();
@@ -915,8 +926,9 @@ function planOverlay(
   return { bg: theme.titleBg, layers };
 }
 
-function planHeading(layers: SlideLayer[], s: SlideModel, theme: SlideTheme, textW: number, x: number) {
-  const headBox: Box = { x, y: 0.3, w: textW, h: 0.88 };
+function planHeading(layers: SlideLayer[], s: SlideModel, theme: SlideTheme, textW: number, x: number, reserve = 0) {
+  // Logo bo'lsa sarlavha o'ng yuqori burchakka kirmaydi — `fitSize` toraygan qutiga qarab shriftni o'zi tanlaydi.
+  const headBox: Box = { x, y: 0.3, w: textW - reserve, h: 0.88 };
   layers.push({
     t: "text",
     box: headBox,
@@ -935,7 +947,22 @@ function planHeading(layers: SlideLayer[], s: SlideModel, theme: SlideTheme, tex
  * Chegara PARAMETR sifatida uzatiladi, modul o'zgaruvchisi sifatida emas —
  * yashirin holat bu fayldа ilgari haqiqiy bug bergan (rasm keshi).
  */
-type BodyType = ReturnType<typeof audienceRules>;
+type BodyType = BodyRules;
+
+/**
+ * Har `plan*` ga beriladigan kontekst — deck darajasidagi qiymatlar.
+ *
+ * `bodyType` auditoriya × matn hajmi (`bodyRules`); `logo` — data/asset
+ * URL; `reserve` — logo bo'lsa YUQORI sarlavha qutilaridan ayriladigan
+ * kenglik (dyuym). Titul/bo'lim/iqtibos sarlavhalari y ≥ 2.0 da — ular
+ * logo bilan kesishmaydi, zaxira faqat y < 0.7 dagi sarlavhalarga.
+ */
+export type PlanCtx = { bodyType: BodyRules; logo?: string; reserve: number };
+
+/** Logo qutisi — o'ng yuqori burchak, kolontitul va sarlavhadan tashqarida. */
+export const LOGO_BOX: Box = { x: 12.15, y: 0.18, w: 0.9, h: 0.45 };
+/** Logo bo'lsa yuqori sarlavha qutisi shuncha toraytiriladi (logo + bo'shliq). */
+export const LOGO_RESERVE = 1.15;
 
 /** Bandlar orasidagi eng kichik oraliq (pt) — zich matnda aynan shu qoladi. */
 const BULLET_GAP_MIN = 10;
@@ -1120,8 +1147,9 @@ function planBullets(
   index: number,
   total: number,
   agenda: boolean,
-  bodyType: BodyType,
+  ctx: PlanCtx,
 ): SlidePlan {
+  const bodyType = ctx.bodyType;
   const img = s.image?.url;
   const layers: SlideLayer[] = [];
   layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.bg } });
@@ -1130,8 +1158,9 @@ function planBullets(
   if (split) photo(layers, img, photoSlot(agenda ? "agenda" : "bullets")!, 0);
   const x = M + 0.18;
   const tw = split ? LEFT_COL_W() : 12.1;
-  planHeading(layers, s, theme, tw, x);
-  const items = (s.bullets ?? []).slice(0, agenda ? 5 : 4);
+  planHeading(layers, s, theme, tw, x, ctx.reserve);
+  // Agenda chegarasi `planItems` dan (3–6) — ilgari qat'iy 5 edi.
+  const items = (s.bullets ?? []).slice(0, agenda ? bodyType.agendaMax : bodyType.maxBullets);
   if (!agenda && visual === "cards" && items.length) {
     planBulletCards(layers, items, theme, { x, y: 1.5, w: tw, h: 5.35 }, bodyType);
     pushFooter(layers, s, theme, index, total, { x, w: tw }, false);
@@ -1213,6 +1242,7 @@ function planTwoCol(
   index: number,
   total: number,
   compare: boolean,
+  ctx: PlanCtx,
 ): SlidePlan {
   const layers: SlideLayer[] = [];
   const sides = [
@@ -1230,7 +1260,7 @@ function planTwoCol(
     const x0 = M + 0.18;
     // Sarlavha `planHeading` dan EMAS: u `theme.text` bilan yozadi, u esa
     // to'q sahifada o'lchanmagan juft. To'q fonda faqat `titleText`.
-    const titleBox: Box = { x: x0, y: 0.34, w: zoneW, h: 0.7 };
+    const titleBox: Box = { x: x0, y: 0.34, w: zoneW - ctx.reserve, h: 0.7 };
     layers.push({
       t: "text",
       box: titleBox,
@@ -1292,7 +1322,7 @@ function planTwoCol(
     layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.bg } });
     const x0 = 0.7;
     const magW = W - 1.4;
-    const titleBox: Box = { x: x0, y: 0.5, w: magW, h: 1.05 };
+    const titleBox: Box = { x: x0, y: 0.5, w: magW - ctx.reserve, h: 1.05 };
     layers.push({
       t: "text",
       box: titleBox,
@@ -1348,7 +1378,7 @@ function planTwoCol(
     if (compare) layers.push({ t: "rect", box: { x: LEFT_IMG_W, y: 0, w: 0.07, h: H }, fill: { color: theme.accent } });
     const px = M + 0.05;
     const pw = LEFT_IMG_W - px - 0.45;
-    const titleBox: Box = { x: px, y: 0.62, w: pw, h: 1.5 };
+    const titleBox: Box = { x: px, y: 0.62, w: pw - ctx.reserve, h: 1.5 };
     layers.push({
       t: "text",
       box: titleBox,
@@ -1413,7 +1443,7 @@ function planTwoCol(
   if (visual === "timeline") {
     layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.bg } });
     pushChrome(layers, theme, "full");
-    planHeading(layers, s, theme, 12.2, M + 0.18);
+    planHeading(layers, s, theme, 12.2, M + 0.18, ctx.reserve);
     const gap = 0.45;
     const colW = (zoneW - gap) / 2;
     const top = 1.5;
@@ -1461,7 +1491,7 @@ function planTwoCol(
   if (visual === "cards") {
     layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.bg } });
     pushChrome(layers, theme, "full");
-    planHeading(layers, s, theme, 12.2, M + 0.18);
+    planHeading(layers, s, theme, 12.2, M + 0.18, ctx.reserve);
     const gap = 0.34;
     const colW = (zoneW - gap) / 2;
     const top = 1.45;
@@ -1510,7 +1540,7 @@ function planTwoCol(
   // ── classic: bazaviy ikki to'ldirilgan ustun.
   layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.bg } });
   pushChrome(layers, theme, "full");
-  planHeading(layers, s, theme, 12.2, M + 0.18);
+  planHeading(layers, s, theme, 12.2, M + 0.18, ctx.reserve);
   const colW = 5.85;
   const gap = 0.28;
   const y = 1.35;
@@ -1678,14 +1708,14 @@ function planStatChart(
   });
 }
 
-function planStats(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index: number, total: number): SlidePlan {
+function planStats(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index: number, total: number, ctx: PlanCtx): SlidePlan {
   const layers: SlideLayer[] = [];
   const dense = visual === "dense";
   const bg = dense ? theme.titleBg : theme.bg;
   const ink = dense ? theme.titleText : theme.text;
   layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: bg } });
   if (!dense) pushChrome(layers, theme, "full");
-  const titleBox: Box = { x: M + 0.18, y: 0.36, w: 12.2, h: 0.72 };
+  const titleBox: Box = { x: M + 0.18, y: 0.36, w: 12.2 - ctx.reserve, h: 0.72 };
   layers.push({
     t: "text",
     box: titleBox,
@@ -1764,11 +1794,11 @@ function planStats(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
  * ko'rinmasdi. Endi bir qatorda ko'pi bilan 4 ta karta, undan ortig'i ikki
  * qatorga bo'linadi, kartalar orasiga esa yo'nalish o'qi qo'yiladi.
  */
-function planProcess(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index: number, total: number): SlidePlan {
+function planProcess(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index: number, total: number, ctx: PlanCtx): SlidePlan {
   const layers: SlideLayer[] = [];
   layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.bg } });
   pushChrome(layers, theme, "full");
-  planHeading(layers, s, theme, 12.2, M + 0.18);
+  planHeading(layers, s, theme, 12.2, M + 0.18, ctx.reserve);
 
   const items = (s.steps ?? []).slice(0, 6);
   const n = Math.max(1, items.length);
@@ -1863,7 +1893,7 @@ function planProcess(s: SlideModel, theme: SlideTheme, visual: SlideVisual, inde
  * Sarlavha qatori `titleBg`/`titleText` juftidan foydalanadi — u
  * `tests/themes.test.mts` da kontrast bo'yicha o'lchanadi.
  */
-function planTable(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index: number, total: number): SlidePlan {
+function planTable(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index: number, total: number, ctx: PlanCtx): SlidePlan {
   /*
    * `dense` (himoya / hisobot) jadvali to'q sahifada chiziladi — xuddi
    * shu maketdagi `stats` slaydi kabi. Ilgari `dense` FAQAT `stats` ga
@@ -1888,7 +1918,7 @@ function planTable(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
   const layers: SlideLayer[] = [];
   layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: pageBg } });
   if (!dense) pushChrome(layers, theme, "full");
-  const headBox: Box = { x: M + 0.18, y: 0.3, w: 12.2, h: 0.88 };
+  const headBox: Box = { x: M + 0.18, y: 0.3, w: 12.2 - ctx.reserve, h: 0.88 };
   layers.push({
     t: "text",
     box: headBox,
@@ -1988,8 +2018,21 @@ export function planSlide(
   total: number,
   audience: SlideAudience = "auto",
   templateId: SlideTemplateId = "lecture",
+  opts: { bodyType?: BodyRules; logo?: string } = {},
 ): SlidePlan {
-  const bodyType = audienceRules(audience, templateId);
+  /*
+   * `bodyType` deck darajasida hisoblanadi (`buildSlideDeck` →
+   * `bodyRules(meta)`), chaqiruvchi bermasa auditoriyadan — eski chaqiruvlar
+   * (testlar) o'zgarmaydi. Logo bo'lsa yuqori sarlavhalar toraytiriladi.
+   */
+  const bodyType = opts.bodyType ?? bodyRules({ slideAudience: audience, textVolume: "standart", planItems: 5 }, templateId);
+  const ctx: PlanCtx = { bodyType, logo: opts.logo, reserve: opts.logo ? LOGO_RESERVE : 0 };
+  const plan = dispatch(s, theme, visual, index, total, ctx);
+  if (ctx.logo) pushLogo(plan, s, theme, ctx.logo);
+  return plan;
+}
+
+function dispatch(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index: number, total: number, ctx: PlanCtx): SlidePlan {
   switch (s.layout) {
     case "title":
       return planTitle(s, theme, visual, index, total);
@@ -2000,21 +2043,54 @@ export function planSlide(
     case "closing":
       return planOverlay(s, theme, visual, index, total, "closing");
     case "agenda":
-      return planBullets(s, theme, visual, index, total, true, bodyType);
+      return planBullets(s, theme, visual, index, total, true, ctx);
     case "twoCol":
-      return planTwoCol(s, theme, visual, index, total, false);
+      return planTwoCol(s, theme, visual, index, total, false, ctx);
     case "compare":
-      return planTwoCol(s, theme, visual, index, total, true);
+      return planTwoCol(s, theme, visual, index, total, true, ctx);
     case "stats":
-      return planStats(s, theme, visual, index, total);
+      return planStats(s, theme, visual, index, total, ctx);
     case "process":
-      return planProcess(s, theme, visual, index, total);
+      return planProcess(s, theme, visual, index, total, ctx);
     case "table":
-      return planTable(s, theme, visual, index, total);
+      return planTable(s, theme, visual, index, total, ctx);
+    case "quiz":
+      return planQuiz(s, theme, visual, index, total, ctx);
+    case "references":
+      return planReferences(s, theme, visual, index, total, ctx);
+    case "answers":
+      return planAnswers(s, theme, visual, index, total, ctx);
     default:
-      return planBullets(s, theme, visual, index, total, false, bodyType);
+      return planBullets(s, theme, visual, index, total, false, ctx);
   }
 }
+
+/**
+ * Logotip — HAR slaydda, o'ng yuqori burchak, YAGONA joyda.
+ *
+ * To'la ekran rasmli maketlarda (titul, bo'lim, iqtibos, yakun) logo
+ * ostiga yarim shaffof plashka — aks holda foto ustida yo'qolib ketadi.
+ * `fit: "contain"` — rasm nisbati qanday bo'lmasin, kesilmaydi.
+ */
+function pushLogo(plan: SlidePlan, s: SlideModel, theme: SlideTheme, url: string) {
+  const fullBleed = s.layout === "title" || s.layout === "section" || s.layout === "quote" || s.layout === "closing";
+  if (fullBleed) {
+    plan.layers.push({
+      t: "rect",
+      box: { x: LOGO_BOX.x - 0.08, y: LOGO_BOX.y - 0.06, w: LOGO_BOX.w + 0.16, h: LOGO_BOX.h + 0.12 },
+      fill: { color: theme.bg, alpha: 0.82 },
+      radius: 0.06,
+    });
+  }
+  plan.layers.push({ t: "image", box: { ...LOGO_BOX }, url, fit: "contain" });
+}
+
+/**
+ * Yangi maketlar uchun yordamchilar (`slide-layout-extra.ts`, WP-C).
+ * Bu fayl 2000 qatordan oshdi — yangi maket shu yerga emas, o'z fayliga
+ * yoziladi va faqat shu to'plamdan foydalanadi.
+ */
+export const LAYOUT_KIT = { planHeading, pushFooter, pushChrome, fitSize, fitLines, M, W, H };
 
 export function photoLayouts() {
   return ["title", "section", "bullets", "agenda", "quote", "closing"] as const;

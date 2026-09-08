@@ -1,6 +1,8 @@
 import type { CSSProperties } from "react";
 import type { SlideAudience, SlideTemplateId, SlideVisual } from "@/lib/generation/slide-templates";
+import type { BodyRules } from "@/lib/generation/slide-audience";
 import type { SlideModel, SlideTheme } from "@/lib/generation/slide-types";
+import { cn } from "@/lib/cn";
 import {
   boxStyle,
   cssColor,
@@ -20,6 +22,8 @@ export function SlideCanvas({
   total,
   audience = "auto",
   templateId = "lecture",
+  bodyType,
+  logo,
 }: {
   slide: SlideModel;
   theme: SlideTheme;
@@ -28,8 +32,11 @@ export function SlideCanvas({
   total: number;
   audience?: SlideAudience;
   templateId?: SlideTemplateId;
+  /** Deck darajasida (`buildSlideDeck`) — PPTX bilan bir xil qiymat. */
+  bodyType?: BodyRules;
+  logo?: string;
 }) {
-  const plan = planSlide(slide, theme, visual, index, total, audience, templateId);
+  const plan = planSlide(slide, theme, visual, index, total, audience, templateId, { bodyType, logo });
   return (
     <div
       className="relative overflow-hidden"
@@ -63,13 +70,20 @@ function LayerView({ layer }: { layer: SlideLayer }) {
     );
   }
   if (layer.t === "image") {
+    /*
+     * `fit` PPTX `sizing` bilan bir xil. `contain` (logo) uchun qora fon
+     * YO'Q: PPTX rasm ortiga hech narsa chizmaydi, ko'ruvchi esa fotoni
+     * yuklanguncha to'q fon bilan yopadi — logo ostida bu qora quti bo'lib
+     * ko'rinardi va «ko'rdim = oldim» buzilardi.
+     */
+    const fit = layer.fit ?? "cover";
     return (
-      <div className="absolute overflow-hidden bg-neutral-900" style={box}>
+      <div className={cn("absolute overflow-hidden", fit === "cover" && "bg-neutral-900")} style={box}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={layer.url}
           alt=""
-          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover", objectPosition: "center" }}
+          style={{ position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: fit, objectPosition: "center" }}
         />
       </div>
     );
