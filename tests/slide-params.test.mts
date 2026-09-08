@@ -198,15 +198,11 @@ import type { SlideParamImpact } from "../lib/generation/slide-params.ts";
 /**
  * Hali ulanmagan ta'sirlar — ish paketlari bo'yicha. Har paket tugagach
  * o'z qatorini O'CHIRADI; ro'yxat o'sishi mumkin emas (pastdagi test).
- *   WP-B: internetSearch (beats) — `references` beat'i
- *   Yopilgan: WP-A (prompt), WP-B (blocks, agendaSlide, quizCount), WP-D
- *   (research), WP-E (images), WP-H (prompt)
+ *   BO'SH — barcha paketlar ulandi (A, B, D, E, H). Bu ro'yxatga yangi
+ *   qator qo'shish = «bezak parametr» ni rasman tan olish; pastdagi
+ *   test uni taqiqlaydi.
  */
-const PENDING: Record<string, SlideParamImpact[]> = {
-  // WP-B: `internetSearch` yoqilganda manbalar KO'RINISHI kerak —
-  // `references` beat'i hali qo'shilmagan (agentga topshirilgan).
-  internetSearch: ["beats"],
-};
+const PENDING: Record<string, SlideParamImpact[]> = {};
 
 /** Har layout uchun boy namuna — qisqa matnda ba'zi ta'sirlar ko'rinmaydi. */
 function sample(layout: string, footer: string): SlideModel {
@@ -328,7 +324,7 @@ test("internetSearch: off → tarmoqqa chiqmaydi; on → aynan 1 ta google_searc
 });
 
 test("PENDING ro'yxati o'smaydi — faqat A/B/D/E/H paketlariga tegishli", () => {
-  const allowed = new Set(["internetSearch"]);
+  const allowed = new Set<string>([]);
   for (const id of Object.keys(PENDING)) assert.ok(allowed.has(id), `${id}: PENDING ga yangi id qo'shilgan — ta'sirni ulang, kutishga qo'ymang`);
   for (const id of Object.keys(PENDING)) assert.ok(SLIDE_PARAMS.some((p) => p.id === id), `${id}: reyestrda yo'q`);
 });

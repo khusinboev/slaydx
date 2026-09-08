@@ -74,15 +74,17 @@ function docFor(p: Profile): AcademicDoc {
   const tpl = resolveDeckTemplate(meta);
   const want = wantSlides(meta, tpl);
   const beats = blocksToBeats(meta, tpl, expandBeats(tpl, want), want);
-  return {
+  const doc: AcademicDoc = {
     meta,
-    title: meta.topic,
+    titlePage: false,
+    toc: false,
     sections: [],
     slides: fallbackSlides(meta, tpl, beats),
     slideTemplate: tpl.id,
-    slideTheme: meta.slideTheme,
-    ...(p.logo ? { slideLogo: { url: LOGO } } : {}),
-  } as AcademicDoc;
+  };
+  if (meta.slideTheme) doc.slideTheme = meta.slideTheme;
+  if (p.logo) doc.slideLogo = { url: LOGO };
+  return doc;
 }
 
 async function main() {
