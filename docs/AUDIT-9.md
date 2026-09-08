@@ -81,7 +81,8 @@ pro-slide`) beshta nuqsonni ochdi — hammasi shu sprintda tuzatildi.
 | X-2 | Vaqt tugagach ham so'rov ketardi — pul sarflanardi | `Date.now() >= deadline` sharti | ✅ `provider.minMs` (Gemini 30 s, fal 8 s) |
 | X-3 | **10 slayd so'ralgan deka 13 chiqdi** | `finalizeQuiz` savollarni rejadan KEYIN ajratardi | ✅ test slaydlari rejaga ko'chdi |
 | X-3b | `titleSlide: false` da deka **bir slaydga kalta** | titul filtri uzunlik muvozanatidan keyin ishlardi | ✅ `deckBeats` |
-| X-4/X-5 | «Javoblar» slaydi deyarli bo'sh; ko'p blok yoqilganda `quizCount` yo'qoladi | maket masshtabi; sig'im qoidasi | ⏳ |
+| X-4 | «Javoblar» slaydi deyarli bo'sh (1 javobda maydonning 14% i) | `planAnswers` javoblar soniga qarab masshtablanmasdi | ✅ 1–2 javob yirik kalit varag'i (96/72 pt), qamrov 14% → 63% |
+| X-5 | 7 blok yoqilgan 10 slaydli dekada `quizCount: 3` dan 1 ta savol qolardi | sig'im qoidasida test guruhi birinchi bo'lib qisqarardi | ✅ test guruhi tananing ≥1/3 ini oladi, o'rinni SHABLON standarti bergan blok bo'shatadi |
 
 X-3 alohida e'tiborga loyiq: pro narxi `slaydlar × 2 000 tanga`
 bo'lgani uchun uzunlik — hisob-kitob. Endi u `tests/slide-length.test.mts`
@@ -101,8 +102,14 @@ PDF → PNG:
   ko'rinadigan ta'sir berdi.
 - Kolontitulda muallif · lavozim · tashkilot (`position` yangi maydon).
 
-Yakuniy jonli natija: **10/10 slayd, 6 rasm, 7 manba, quiz + javoblar
-kaliti, izoh faylga tushmaydi** — 81 s.
+- «Javoblar» slaydi (X-4 dan keyin): ikkita katta karta, 72 pt li
+  «1 — A» / «2 — C» — kalit varag'idek o'qiladi.
+
+Yakuniy jonli natija: **10/10 slayd, 5 rasm, 6 manba, 2 quiz + javoblar
+kaliti, izoh faylga tushmaydi** — 42 s. Jonli to'plamning qolgan 5 keysi
+(maqola, insho, kurs ishi, glossariy, dars rejasi) ham yashil —
+regressiya yo'q; oddiy `slide` uchun alohida paritet keysi qo'shildi
+(10 slayd, 3 quiz, javob izohda, `textVolume: qisqa` → 56 belgi/band).
 
 ## 6. Ochiq qolgan bandlar
 
@@ -121,4 +128,5 @@ E `f807d1c`, B `693a0f1`/`0da2326`, F `dcbd23a`, H2 `68ac206`,
 G `06b301d`, C `7d71596`, X-1 `546107b`, X-2 `2897ab6`, X-3 `899c6d9`,
 X-3b `e9646e0`.
 
-Testlar: **520 unit + 21 ko'ruvchi**, `npm run check` yashil.
+X-4/X-5 `f208f4e`. Testlar: **530 unit + 21 ko'ruvchi**, `npm run check`
+yashil (0 xato, 0 ogohlantirish).
