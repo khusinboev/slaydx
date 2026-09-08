@@ -138,6 +138,7 @@ export async function generateFalImage(
 }
 
 export const falProvider: ImageProvider = {
+  minMs: 8_000,
   id: "fal",
   hasKey: () => Boolean(falKey()),
   fetchImage(ask: ImageAsk, deadline?: number) {

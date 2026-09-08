@@ -89,6 +89,13 @@ export type FalFailure =
 export type ImageProviderId = "fal" | "gemini";
 
 export interface ImageProvider {
+  /**
+   * Bitta rasm uchun ENG KAM ma'noli vaqt. Undan kam qolganda so'rov
+   * yuborilmaydi: javob baribir uzilib qoladi (o'lchov — Gemini 1K
+   * rasmi ~35 s), lekin token/pul sarflangan bo'lardi va hisobotda
+   * «failed» bo'lib ko'rinardi.
+   */
+  minMs: number;
   id: ImageProviderId;
   /**
    * Kalit sozlanganmi.

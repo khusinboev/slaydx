@@ -287,7 +287,13 @@ export async function attachSlideImages(
       report.blocked += 1;
       return null;
     }
-    if (Date.now() >= deadline) {
+    /*
+     * Qolgan vaqt bitta rasmga yetmasa — so'rov YUBORILMAYDI. Ilgari
+     * shart `Date.now() >= deadline` edi: 5 s qolganda ham so'rov
+     * ketardi, javob uzilardi va bu pul sarflab, hisobotda ham
+     * chalkash iz qoldirardi.
+     */
+    if (deadline - Date.now() < provider.minMs) {
       report.skipped += 1;
       return null;
     }

@@ -23,6 +23,7 @@ import path from "node:path";
 import { buildArtifact } from "../lib/generation/index.ts";
 import { extractMeta } from "../lib/generation/meta.ts";
 import { wordCount } from "../lib/generation/quality.ts";
+import { slideNotes } from "../lib/generation/slide-layout.ts";
 import { pdfAvailable, toPdf } from "../lib/server/pdf.ts";
 import { TOOL_BY_ID } from "../lib/tools.ts";
 import type { AcademicDoc, BuiltFile } from "../lib/generation/types.ts";
@@ -215,7 +216,12 @@ const CASES: Case[] = [
         ok("javoblar slaydi", layouts.includes("answers"), layouts.join(" › ")),
         ok("adabiyotlar", layouts.includes("references"), ""),
         ok("internet manbalari", !!research && research.sources.length > 0, `${research?.sources.length ?? 0} manba, ${research?.queries.length ?? 0} so'rov`),
-        ok("izoh o'chiq", slides.every((s) => !s.notes), ""),
+        /*
+         * Izoh o'chiq bo'lsa javoblar `notes` da QOLADI (ular «Javoblar»
+         * slaydidan tashqari zaxira), lekin FAYLGA tushmasligi kerak —
+         * shuni `slideNotes` bilan tekshiramiz, xom maydon bilan emas.
+         */
+        ok("izoh fayldan chiqmaydi", slides.every((s) => slideNotes(s, false) === ""), ""),
         ok("rasm bor", slides.some((s) => !!s.image), `${slides.filter((s) => !!s.image).length} rasm`),
         ok("footer", slides.some((s) => (s.footer ?? "").includes("Karimova")), slides[1]?.footer ?? ""),
       ];

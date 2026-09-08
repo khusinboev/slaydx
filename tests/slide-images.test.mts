@@ -8,7 +8,8 @@ import { composeSlideImagePrompt } from "../lib/generation/slide-image-prompts.t
 import { photoSlot, slotPixels } from "../lib/generation/slide-layout.ts";
 import { attachSlideImages, plannedImageSlots, imageBudget, PRO_IMAGE_LANES } from "../lib/generation/slide-images.ts";
 import { pickProvider, requestBudget } from "../lib/generation/image-provider.ts";
-import { aspectFor, requestGeminiImage, GEMINI_ASPECTS, GEMINI_IMAGE_CAP_MS } from "../lib/generation/image-provider-gemini.ts";
+import { aspectFor, requestGeminiImage, GEMINI_ASPECTS, GEMINI_IMAGE_CAP_MS, geminiProvider } from "../lib/generation/image-provider-gemini.ts";
+import { falProvider } from "../lib/generation/image-provider-fal.ts";
 import type { SlideModel } from "../lib/generation/slide-types.ts";
 
 /**
@@ -452,6 +453,32 @@ test("gemini rasm shifti fal nikidan katta va tana uzilishi timeout deb sanaladi
     const report = await attachSlideImages(slides, "Suv aylanishi", "classic", 60_000, { meta: meta({}, pro) });
     assert.equal(report.skipped, report.want);
     assert.equal(report.failed, 0);
+  } finally {
+    restore();
+  }
+});
+
+/*
+ * X-2b: qolgan vaqt bitta rasmga yetmasa so'rov YUBORILMASIN. Ilgari
+ * shart `Date.now() >= deadline` edi — 5 s qolganda ham so'rov ketardi,
+ * javob uzilardi, pul sarflanardi.
+ */
+test("byudjet provayder minimumidan kam bo'lsa so'rov yuborilmaydi (pul sarflanmaydi)", async () => {
+  const restore = geminiEnv();
+  let calls = 0;
+  globalThis.fetch = (async () => {
+    calls += 1;
+    return jsonRes(200, { steps: [] });
+  }) as unknown as typeof fetch;
+  try {
+    const slides = bulletDeck(4);
+    // Gemini minimumi 30 s — 10 s qolganda hech qanday so'rov ketmasin.
+    const report = await attachSlideImages(slides, "Suv aylanishi", "classic", 10_000, { meta: meta({}, pro) });
+    assert.equal(calls, 0, `byudjet yetmasa ham ${calls} so'rov yuborildi`);
+    assert.equal(report.skipped, report.want);
+    assert.equal(report.failed, 0);
+    assert.ok(geminiProvider.minMs >= 30_000, "Gemini minimumi o'lchovga mos emas");
+    assert.ok(falProvider.minMs < geminiProvider.minMs, "fal tezroq — minimumi ham kichik bo'lsin");
   } finally {
     restore();
   }

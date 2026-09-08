@@ -258,6 +258,7 @@ export async function requestGeminiImage(ask: ImageAsk, deadline?: number): Prom
 }
 
 export const geminiProvider: ImageProvider = {
+  minMs: 30_000,
   id: "gemini",
   hasKey: () => Boolean(geminiKey()),
   fetchImage: requestGeminiImage,
