@@ -276,15 +276,26 @@ function fitSize(text: string, box: Box, base: number, min: number): number {
   return min;
 }
 
+/**
+ * Ro'yxat berilgan shriftda necha QATOR egallashini hisoblaydi.
+ *
+ * `fitLines` (shrift tanlash) va `bulletGap` (bo'shliqni taqsimlash)
+ * ikkalasi ham shu funksiyaga tayanadi — aks holda biri boshqasidan
+ * boshqacha qator soni chiqarib, matn qutidan chiqib ketishi mumkin edi.
+ */
+function listRows(lines: string[], box: Box, size: number): number {
+  const perLine = Math.max(1, Math.floor(((box.w - 0.28) * 72) / (size * CHAR_EM)));
+  let rows = 0;
+  for (const l of lines) rows += Math.max(1, wrapRows(l, perLine));
+  return rows;
+}
+
 /** Ko'p qatorli ro'yxat uchun: har band alohida qatordan boshlanadi. */
 function fitLines(lines: string[], box: Box, base: number, min: number, paraSpacePt = 0): number {
   const items = lines.filter(Boolean);
   if (!items.length) return base;
   for (let size = base; size > min; size -= 1) {
-    const perLine = Math.max(1, Math.floor(((box.w - 0.28) * 72) / (size * CHAR_EM)));
-    let rows = 0;
-    for (const l of items) rows += Math.max(1, wrapRows(l, perLine));
-    if (rows * size * 1.3 + items.length * paraSpacePt <= box.h * 72) return size;
+    if (listRows(items, box, size) * size * 1.3 + items.length * paraSpacePt <= box.h * 72) return size;
   }
   return min;
 }
@@ -661,6 +672,44 @@ function planHeading(layers: SlideLayer[], s: SlideModel, theme: SlideTheme, tex
  */
 type BodyType = ReturnType<typeof audienceRules>;
 
+/** Bandlar orasidagi eng kichik oraliq (pt) — zich matnda aynan shu qoladi. */
+const BULLET_GAP_MIN = 10;
+/**
+ * Eng katta oraliq — tana shriftining ulushi sifatida.
+ *
+ * Bundan kattasi ro'yxatni ro'yxat bo'lmay qo'yadi: bandlar bir-biridan
+ * uzilib, alohida gaplar bo'lib ko'rinadi. 18 pt tanada 1.6× ≈ 29 pt,
+ * ya'ni qator balandligining ~1.2 baravari — havodor, lekin bog'liq.
+ */
+const BULLET_GAP_RATIO = 1.6;
+
+/**
+ * AUDIT-7 O-4. `classic` bandlari qutiga TEPADAN tizilar edi.
+ *
+ * `fitLines` shriftni tanlagach, oraliq har doim qat'iy 10 pt qolardi —
+ * ya'ni band qisqa bo'lsa (jonli o'lchovda 75–120 belgi odatiy) matn
+ * qutining faqat yuqori qismini egallab, pastki yarmi bo'sh oq maydon
+ * bo'lib qolardi. O'lchov: 3 × 48 belgi → 5.35″ qutining 26% i, pastda
+ * 3.96″ bo'sh joy. `cards` da bu muammo yo'q (kartalar maydonni bo'lib
+ * oladi), `classic` esa eng ko'p ishlatiladigan maket.
+ *
+ * Yechim shrift EMAS (u 18 pt shifti va auditoriya polida qulflangan),
+ * balki qolgan bo'shliq: u bandlar orasiga MUTANOSIB taqsimlanadi.
+ * Qolgani (chegara urilganda) `valign: "middle"` bilan tepa va pastga
+ * teng bo'linadi.
+ *
+ * Tartib muhim: avval shrift (o'qish qulayligi), keyin qoldiq. Shuning
+ * uchun uzun matnda (4 × 165 belgi) shrift ham, zichlik ham o'zgarmaydi
+ * — u yerda qoldiq deyarli yo'q va oraliq 10 pt atrofida qoladi.
+ */
+function bulletGap(lines: string[], box: Box, size: number): number {
+  const items = lines.filter(Boolean);
+  if (!items.length) return BULLET_GAP_MIN;
+  const slack = box.h * 72 - listRows(items, box, size) * size * 1.3;
+  const even = slack / items.length;
+  return Math.round(Math.max(BULLET_GAP_MIN, Math.min(size * BULLET_GAP_RATIO, even)));
+}
+
 /**
  * `cards` maketida bandlar RO'YXAT emas, alohida kartalar.
  *
@@ -721,6 +770,84 @@ function planBulletCards(
   });
 }
 
+/**
+ * `lab` maketi — laboratoriya daftari. AUDIT-7 O-3.
+ *
+ * `science` (Tajriba) ning `visual` i `classic` edi, ya'ni u `lecture`
+ * bilan piksel-bapiksel bir xil chizilardi — farqi faqat `beats` va rol
+ * matnida edi. Foydalanuvchi uchun bu «Tajriba» ni tanlaganida hech
+ * narsa o'zgarmagandek ko'rinardi.
+ *
+ * Endi tajriba slaydi kuzatuv daftariga o'xshaydi: chap chekkada
+ * o'lchov chizig'i (shkala) va uning bo'linmalari, har band esa
+ * raqamlangan KUZATUV QATORI — ostiga chizilgan ingichka chiziq bilan.
+ * Bu `cards` (alohida kartalar) dan ham, `classic` (bitta o'q ro'yxat)
+ * dan ham ko'zga tashlanadigan darajada boshqacha.
+ *
+ * Ranglar: matn faqat `text`/`accentInk` (ikkalasi ham `surface` ustida
+ * AA bo'yicha o'lchanadigan juftlik); `accent` faqat chiziq va
+ * bo'linmalarda — matn rangi sifatida ISHLATILMAYDI.
+ */
+function planLabRows(
+  layers: SlideLayer[],
+  items: string[],
+  theme: SlideTheme,
+  zone: Box,
+  bodyType: BodyType,
+): void {
+  const pad = 0.24;
+  const ruleX = zone.x + 0.62;
+  const textX = ruleX + 0.36;
+  const textW = zone.w - (textX - zone.x) - 0.28;
+  const top = zone.y + pad;
+  const usable = zone.h - pad * 2;
+
+  // Daftar varag'i.
+  layers.push({ t: "rect", box: zone, fill: { color: theme.surface }, radius: 0.1 });
+  // O'lchov chizig'i va uning mayda bo'linmalari (o'lchov asbobi hissi).
+  layers.push({ t: "rect", box: { x: ruleX, y: top, w: 0.022, h: usable }, fill: { color: theme.accent } });
+  const ticks = 20;
+  for (let i = 0; i <= ticks; i++) {
+    layers.push({
+      t: "rect",
+      box: { x: ruleX + 0.022, y: top + (usable * i) / ticks - 0.008, w: 0.11, h: 0.016 },
+      fill: { color: theme.accent, alpha: 0.42 },
+    });
+  }
+
+  const n = Math.max(1, items.length);
+  const rowH = usable / n;
+  items.forEach((line, i) => {
+    const y = top + i * rowH;
+    // Katta bo'linma — kuzatuv qatorining boshlanishi.
+    layers.push({ t: "rect", box: { x: ruleX + 0.022, y: y - 0.014, w: 0.26, h: 0.028 }, fill: { color: theme.accent } });
+    layers.push({
+      t: "text",
+      box: { x: zone.x + 0.14, y, w: 0.42, h: 0.4 },
+      text: String(i + 1).padStart(2, "0"),
+      color: theme.accentInk,
+      size: 14,
+      bold: true,
+      align: "right",
+    });
+    const textBox: Box = { x: textX, y: y + 0.06, w: textW, h: rowH - 0.32 };
+    layers.push({
+      t: "text",
+      box: textBox,
+      text: line,
+      color: theme.text,
+      size: fitSize(line, textBox, bodyType.bodyPt, bodyType.minPt),
+      valign: "middle",
+    });
+    // Kuzatuv qatorining ostidagi chiziq — daftar chizig'i.
+    layers.push({
+      t: "rect",
+      box: { x: textX, y: y + rowH - 0.16, w: textW, h: 0.01 },
+      fill: { color: theme.accent, alpha: 0.3 },
+    });
+  });
+}
+
 function planBullets(
   s: SlideModel,
   theme: SlideTheme,
@@ -742,6 +869,11 @@ function planBullets(
   const items = (s.bullets ?? []).slice(0, agenda ? 5 : 4);
   if (!agenda && visual === "cards" && items.length) {
     planBulletCards(layers, items, theme, { x, y: 1.5, w: tw, h: 5.35 }, bodyType);
+    pushFooter(layers, s, theme, index, total, { x, w: tw }, false);
+    return { bg: theme.bg, layers };
+  }
+  if (!agenda && visual === "lab" && items.length) {
+    planLabRows(layers, items, theme, { x, y: 1.5, w: tw, h: 5.35 }, bodyType);
     pushFooter(layers, s, theme, index, total, { x, w: tw }, false);
     return { bg: theme.bg, layers };
   }
@@ -770,16 +902,20 @@ function planBullets(
     });
   } else {
     const bulletBox: Box = { x, y: 1.5, w: tw, h: 5.35 };
+    // Slide Law: tana matni 18 pt dan boshlanadi va 15 pt dan pastga
+    // tushmaydi. Sig'masa — muammo kontentda, shriftda emas.
+    const size = fitLines(items, bulletBox, bodyType.bodyPt, bodyType.minPt, BULLET_GAP_MIN);
     layers.push({
       t: "text",
       box: bulletBox,
       lines: items,
       bullets: true,
       color: theme.text,
-      // Slide Law: tana matni 18 pt dan boshlanadi va 15 pt dan pastga
-      // tushmaydi. Sig'masa — muammo kontentda, shriftda emas.
-      size: fitLines(items, bulletBox, bodyType.bodyPt, bodyType.minPt, 10),
-      paraSpace: 10,
+      size,
+      // AUDIT-7 O-4: qoldiq bo'shliq bandlar orasiga taqsimlanadi...
+      paraSpace: bulletGap(items, bulletBox, size),
+      // ...chegara urilganda qolgani tepa va pastga TENG bo'linadi.
+      valign: "middle",
     });
   }
   pushFooter(layers, s, theme, index, total, { x, w: tw }, false);
