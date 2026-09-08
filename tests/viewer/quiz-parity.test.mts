@@ -55,9 +55,18 @@ test("ko'ruvchi to'g'ri javobni ko'rsatmaydi", () => {
 });
 
 test("dense test slaydi to'q sahifada chiziladi (PPTX bilan bir xil fon)", () => {
-  const html = render(quiz, "dense");
-  assert.ok(html.includes(`background:${theme.titleBg}`), "to'q sahifa foni ko'ruvchida yo'q");
-  for (const o of OPTIONS) assert.ok(html.includes(o), `dense: «${o}» varianti yo'q`);
+  /*
+   * Tekshiruv SAHNA (tashqi div) foniga qaraydi, HTML ning istalgan
+   * joyidagi rangga emas: `dense` maketi to'la ekranli to'q
+   * to'rtburchakni baribir chizadi, ya'ni «HTML da titleBg bormi»
+   * degan tekshiruv `plan.bg` yorug'ga qaytarilganda ham yashil
+   * qolardi. `plan.bg` esa PPTX slayd foniga to'g'ridan-to'g'ri
+   * tushadi — «ko'rdim = oldim» aynan shu qiymatda.
+   */
+  const stage = (html: string) => html.slice(0, html.indexOf(">") + 1);
+  assert.ok(stage(render(quiz, "dense")).includes(`background:${theme.titleBg}`), "dense sahnasi to'q bo'lishi kerak");
+  assert.ok(stage(render(quiz, "classic")).includes(`background:${theme.bg}`), "classic sahnasi yorug' qolsin");
+  for (const o of OPTIONS) assert.ok(render(quiz, "dense").includes(o), `dense: «${o}» varianti yo'q`);
 });
 
 test("javoblar slaydi ko'ruvchida to'liq chiziladi", () => {

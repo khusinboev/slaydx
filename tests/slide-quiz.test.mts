@@ -281,15 +281,21 @@ test("finalizeQuiz: testsiz dekaga tegmaydi", () => {
 });
 
 test("finalizeQuiz: javoblar slaydining sarlavhasi deka tiliga ergashadi", () => {
-  for (const language of ["uz", "ru", "en"]) {
+  const titles = ["uz", "ru", "en"].map((language) => {
     const slides = deck(quizSlide("s1", 2));
     finalizeQuiz(slides, { ...META, language, speakerNotes: false });
-    assert.equal(
-      slides.find((s) => s.layout === "answers")!.title,
-      slideLabels(language).answers,
-      `${language}: sarlavha o'z tilida bo'lishi kerak`,
-    );
-  }
+    const title = slides.find((s) => s.layout === "answers")!.title;
+    assert.equal(title, slideLabels(language).answers, `${language}: sarlavha yorliqdan olinishi kerak`);
+    return title;
+  });
+  /*
+   * Yorliqning O'ZI tarjima qilinganini ham tekshiramiz: yuqoridagi
+   * solishtiruv ikkala tomonni bitta manbadan oladi, ya'ni ruscha
+   * yorliq o'zbekcha qolib ketsa ham u yashil qolardi (mutatsiya M20
+   * aynan shuni ko'rsatdi). Ruscha dekada o'zbekcha sarlavha —
+   * AUDIT-6 A4 dagi aralash til nuqsoni.
+   */
+  assert.equal(new Set(titles).size, 3, `har til o'z yorlig'ini olishi kerak: ${titles.join(" / ")}`);
 });
 
 test("finalizeQuiz: deterministik — bir xil kirish, bir xil chiqish", () => {
