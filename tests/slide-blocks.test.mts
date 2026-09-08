@@ -35,7 +35,14 @@ import type { DocMeta } from "../lib/generation/types.ts";
  */
 
 const pro = TOOL_BY_ID["pro-slide"];
-type BlockMeta = Pick<DocMeta, "blocks" | "planItems" | "quizCount" | "agendaSlide" | "internetSearch" | "speakerNotes">;
+/*
+ * X-5: `slidePurpose` IXTIYORIY — u qaysi bloklar taqdimot TURIDAN
+ * kelganini (ya'ni foydalanuvchi qo'lda yoqmaganini) bildiradi.
+ * Berilmasa `general` standarti (`["reja"]`) ishlaydi va hech bir blok
+ * yon bermaydi — pastdagi eski testlar aynan shu holatda qoladi.
+ */
+type BlockMeta = Pick<DocMeta, "blocks" | "planItems" | "quizCount" | "agendaSlide" | "internetSearch" | "speakerNotes"> &
+  Partial<Pick<DocMeta, "slidePurpose">>;
 
 const bm = (v: Partial<BlockMeta> = {}): BlockMeta => ({
   blocks: [],
@@ -446,4 +453,159 @@ test("mavjud tuzilma qatorlari saqlandi (WP-0a shartnomasi buzilmasin)", () => {
   assert.match(p, /twoCol va compare/);
   assert.match(p, /table layout: 2–4 ustun, 3–5 qator/);
   assert.match(p, /stats ga uydirma milliard\/tonna\/foiz YOZILMASIN/);
+});
+
+// ───────────────────────────────────────────── 9-qoida (X-5): sig'im urushi
+
+/**
+ * X-5 — JONLI nuqson.
+ *
+ * 10 slaydli dekada 7 blok yoqilgan, `quizCount: 3`, izohlar o'chiq.
+ * Tanada 8 o'rin bor, boshqa bloklar 6 tasini oladi — ilgari test
+ * guruhi QOLGAN ikki o'rinni olardi va foydalanuvchi tanlagan 3 savol
+ * BITTAGA tushardi (kalit birinchi bo'lib joy egallagani uchun).
+ *
+ * `quizCount` — formada AYNAN tanlangan son, «Uyga vazifa» esa
+ * «Ochiq dars» TURINING standarti; endi standart blok yon beradi.
+ * Kutilgan taqsimot 8 o'rin uchun: 5 ta boshqa blok + 2 savol + kalit.
+ */
+const LIVE_BLOCKS = [...PURPOSE_DEFAULTS.open_lesson.blocks, "adabiyotlar"] as SlideBlockId[];
+
+test("X-5: sig'im yetmasa STANDART blok yon beradi, quizCount saqlanadi", () => {
+  const out = run(
+    { blocks: LIVE_BLOCKS, quizCount: 3, speakerNotes: false, slidePurpose: "open_lesson" },
+    "lesson",
+    10,
+  );
+  const tag = layouts(out).join(",");
+  assert.equal(out.length, 10, `uzunlik shartnomasi buzildi: ${tag}`);
+  assert.equal(out.filter((b) => b.layout === "quiz").length, 2, `savol slaydlari: ${tag}`);
+  assert.equal(out.filter((b) => b.layout === "answers").length, 1, `kalit: ${tag}`);
+  // Rol REJADAGI haqiqiy sonni aytadi — model rejadan ko'p savol yozmasin.
+  assert.match(roleOf(out, "quiz"), /jami 2 ta savol/);
+  // Yon bergan blok — dekadagi OXIRGI standart nomzod («Uyga vazifa»).
+  assert.equal(out.some((b) => b.role.startsWith("Uyga vazifa")), false, `uyga vazifa qolib ketdi: ${tag}`);
+  // Qolgan bloklarning hammasi joyida.
+  for (const role of ["Reja", "Maqsadlar", "Motivatsiya", "Amaliyot", "Adabiyotlar"]) {
+    assert.ok(out.some((b) => b.role.startsWith(role)), `${role} tashlab yuborildi: ${tag}`);
+  }
+
+  // Joy yetsa (14 slayd) hech kim yon bermaydi: 3 savol ham, uyga vazifa ham bor.
+  const roomy = run({ blocks: LIVE_BLOCKS, quizCount: 3, speakerNotes: false, slidePurpose: "open_lesson" }, "lesson", 14);
+  assert.equal(roomy.filter((b) => b.layout === "quiz").length, 3, "joy yetganda savollar to'liq qolsin");
+  assert.ok(roomy.some((b) => b.role.startsWith("Uyga vazifa")), "joy yetganda blok tashlanmasin");
+  assert.equal(roomy.length, 14);
+});
+
+/**
+ * Yon berish faqat TUR standartidan kelgan blokka tegishli.
+ *
+ * Bir xil blok ro'yxati bilan, lekin `slidePurpose: "general"` da
+ * (standarti — faqat `reja`) hamma blok QO'LDA yoqilgan hisoblanadi:
+ * yon beruvchi yo'q, ya'ni eski xatti-harakat qoladi. Aniqlik yo'q
+ * joyda hech narsa tashlanmaydi — bu 6-qoidaning kuchi.
+ */
+test("X-5: qo'lda yoqilgan blok yon BERMAYDI", () => {
+  const hand = run({ blocks: LIVE_BLOCKS, quizCount: 3, speakerNotes: false, slidePurpose: "general" }, "lesson", 10);
+  assert.equal(hand.length, 10);
+  assert.equal(hand.filter((b) => b.layout === "quiz").length, 1, "standart blok yo'q — savol guruhi qisqaradi");
+  assert.ok(hand.some((b) => b.role.startsWith("Uyga vazifa")), "qo'lda yoqilgan blok tashlandi");
+
+  /*
+   * `jadval` «Dars» turining standartida YO'Q — ya'ni u qo'lda
+   * qo'shilgan va yon beruvchilar ro'yxatiga kirmaydi; uning o'rniga
+   * standart «Uyga vazifa» beradi.
+   */
+  const mixed = run(
+    { blocks: [...PURPOSE_DEFAULTS.lesson.blocks, "test", "jadval"] as SlideBlockId[], quizCount: 3, speakerNotes: false, slidePurpose: "lesson" },
+    "lesson",
+    10,
+  );
+  assert.equal(mixed.length, 10);
+  assert.ok(mixed.some((b) => b.layout === "table"), "qo'lda qo'shilgan jadval tashlandi");
+  assert.equal(mixed.filter((b) => b.layout === "quiz").length, 2, "quizCount standart blokdan ustun turmadi");
+});
+
+/**
+ * Yon berish CHEKLANGAN: test guruhi tananing uchdan biridan ko'pini
+ * ololmaydi, ya'ni dars testga aylanmaydi. 10 savol so'ralgan 10
+ * slaydli dekada guruh 3 o'rindan oshmasligi kerak.
+ */
+test("X-5: test guruhi tananing uchdan biridan oshmaydi", () => {
+  const out = run({ blocks: LIVE_BLOCKS, quizCount: 10, speakerNotes: false, slidePurpose: "open_lesson" }, "lesson", 10);
+  const group = out.filter((b) => b.layout === "quiz" || b.layout === "answers").length;
+  assert.equal(out.length, 10);
+  assert.equal(group, 3, `test guruhi ${group} o'rin oldi — tananing yarmi`);
+  // Ya'ni beshta boshqa blok o'z o'rnida qoladi (bittasigina yon berdi).
+  assert.equal(out.filter((b) => b.layout !== "title" && b.layout !== "closing" && b.layout !== "quiz" && b.layout !== "answers").length, 5);
+});
+
+/**
+ * Yon berish UZUNLIK SHARTNOMASINI buzmaydi: tashlangan blok soni
+ * guruhga qo'shilgan o'rin soniga TENG. Supurish — 9 taqdimot turi ×
+ * savol soni × uzunlik.
+ */
+test("X-5 supurishi: yon berish uzunlikni o'zgartirmaydi", () => {
+  const fails: string[] = [];
+  let cases = 0;
+  for (const p of SLIDE_PURPOSES) {
+    const d = PURPOSE_DEFAULTS[p];
+    const tplId = d.templateId === "auto" ? "lecture" : d.templateId;
+    for (const quizCount of [0, 3, 5, 10]) {
+      for (const speakerNotes of [true, false]) {
+        for (const want of [6, 8, 10, 12, 16, 24]) {
+          /*
+           * 6-qoida hududi o'tkazib yuboriladi: bloklarning O'ZI
+           * `want` ga sig'masa deka ATAYLAB uzayadi (yuqoridagi
+           * «want bloklardan kichik» testi buni qulflaydi) va bu
+           * yerdagi tenglik o'lchovi ma'nosini yo'qotadi.
+           */
+          if (orderedBlocks(d.blocks, quizCount, false).length > want - 2) continue;
+          cases += 1;
+          const out = run({ blocks: d.blocks, quizCount, speakerNotes, slidePurpose: p }, tplId, want);
+          const tag = `${p}/quiz=${quizCount}/izoh=${speakerNotes}/want=${want}`;
+          if (out.length !== want) fails.push(`${tag} → ${out.length}`);
+          const q = out.filter((b) => b.layout === "quiz").length;
+          if (quizCount > 0 && q < 1) fails.push(`${tag}: savol so'ralgan, quiz beat yo'q`);
+          if (q > quizCount && quizCount > 0) fails.push(`${tag}: ${q} quiz beat (so'ralgan ${quizCount})`);
+          /*
+           * Yon berish faqat SIG'IM yetmaganda. Hamma blok va butun
+           * test guruhi tanaga sig'sa, birorta blok tashlanmasligi
+           * kerak — aks holda kafolat «bo'sh joyni ham tortib olish»
+           * ga aylanadi va blok o'rnini generik to'ldirgich egallaydi.
+           */
+          const on = orderedBlocks(d.blocks, quizCount, false);
+          const asked = on.some((b) => b.id === "test") ? Math.max(1, quizCount || QUIZ_COUNT_FALLBACK) : 0;
+          const needed = asked + (asked > 0 && speakerNotes === false ? 1 : 0);
+          if (on.filter((b) => b.id !== "test").length + needed <= want - 2) {
+            const roles = new Set(out.map((b) => b.role));
+            for (const blk of on) {
+              if (blk.id === "test") continue;
+              const role = blk.role({ planItems: 5, quizCount: quizCount || QUIZ_COUNT_FALLBACK });
+              if (!roles.has(role)) fails.push(`${tag}: joy yetgan holatda «${blk.id}» tashlandi`);
+            }
+          }
+        }
+      }
+    }
+  }
+  assert.ok(cases >= 300, `supurish kichik: ${cases}`);
+  assert.deepEqual(fails.slice(0, 10), [], `${fails.length}/${cases} holat:\n  ${fails.slice(0, 10).join("\n  ")}`);
+});
+
+/**
+ * Yon berish 6-QOIDADAN ustun turmaydi.
+ *
+ * Bloklarning O'ZI `want` ga sig'masa deka ataylab uzayadi va blok
+ * tashlanmaydi. Bunday holatda standart blokni tashlash 6-qoidani
+ * teskarisiga o'girardi (deka uzaymay, blok yo'qolardi), savol
+ * qo'shish esa dekani yana uzaytirardi — shuning uchun yon berish
+ * faqat joy BOR bo'lganda (`room > 0`) ishlaydi.
+ */
+test("X-5: bloklar `want` ga sig'masa yon berish YO'Q", () => {
+  const out = run({ blocks: [...SLIDE_BLOCK_IDS], quizCount: 3, speakerNotes: false, slidePurpose: "open_lesson" }, "lecture", 6);
+  assert.ok(out.length > 6, `deka uzayishi kerak edi: ${layouts(out).join(",")}`);
+  assert.equal(out.length, 2 + SLIDE_BLOCKS.length, `ortiqcha yoki kam slayd: ${layouts(out).join(",")}`);
+  assert.ok(out.some((b) => b.role.startsWith("Uyga vazifa")), "sig'im yo'q joyda standart blok tashlandi");
+  assert.equal(out.filter((b) => b.layout === "quiz").length, 1, "sig'im yo'q joyda savol qo'shildi");
 });
