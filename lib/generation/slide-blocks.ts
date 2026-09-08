@@ -395,6 +395,15 @@ function deClump(beats: MarkedBeat[], pool: SlideBeat[]): void {
  *      `meta.slidePurpose` kerak; u berilmasa (`general` standarti)
  *      yon beruvchi topilmaydi va eski xatti-harakat qoladi —
  *      ya'ni noaniqlikda hech qanday blok tashlanmaydi.
+ *
+ *      ESLATMA (bilib qoldirilgan farq). Yon bergan blok
+ *      `slide-prompt/structure.ts` ning umumiy «TUZILMA BLOKLARI»
+ *      qatorida qolib ketadi — u qator faqat deka NIYATINI aytadi,
+ *      slaydni to'ldirish qoidasi emas (har slaydning ko'rsatmasi
+ *      beat ROLIDAN keladi, u esa rejadan). Blokka TEGISHLI to'ldirish
+ *      qoidasi bor bloklar (`diagramma`, `adabiyotlar`, `reja`, `test`)
+ *      aynan shu sabab `YIELDING_BLOCKS` ga KIRITILMAGAN: ular tushib
+ *      qolsa prompt yolg'on va'da bergan bo'lardi (AUDIT-8 naqshi).
  */
 export function blocksToBeats(
   meta: Pick<DocMeta, "blocks" | "planItems" | "quizCount" | "agendaSlide" | "internetSearch" | "speakerNotes"> &
@@ -480,10 +489,10 @@ export function blocksToBeats(
    * hammasi ham qo'lda yoqilgan emas.
    *
    * Shuning uchun endi avval STANDART bloklar yon beradi:
-   *   `base`   — eski xatti-harakat (boshqa bloklardan qolgan joy);
-   *   `share`  — test guruhining KAFOLATLANGAN ulushi (tananing 1/3 i);
-   *   `givers` — tur standartidan kelgan, yon berishi mumkin bo'lgan
-   *              bloklar (`YIELDING_BLOCKS`), dekadagi tartibda.
+   *   `baseSlots` — eski xatti-harakat (boshqa bloklardan qolgan joy);
+   *   `share`     — test guruhining KAFOLATLANGAN ulushi (tananing 1/3 i);
+   *   `givers`    — tur standartidan kelgan, yon berishi mumkin bo'lgan
+   *                 bloklar (`YIELDING_BLOCKS`), dekadagi tartibda.
    * Ulushga yetmagan qismi `givers` ning OXIRIDAN olinadi: deka boshi
    * (reja, maqsadlar) mavzuni ochadi, test guruhi esa oxirda turadi —
    * unga joy eng yaqin qo'shnidan uzilgani tabiiy.
