@@ -570,9 +570,228 @@ function planSection(s: SlideModel, theme: SlideTheme, visual: SlideVisual, inde
   return { bg: theme.bg, layers };
 }
 
-function planOverlay(s: SlideModel, theme: SlideTheme, index: number, total: number, kind: "quote" | "closing"): SlidePlan {
+/**
+ * Iqtibos (`quote`) va yakuniy (`closing`) slayd — to'la ekran kadr
+ * ustidagi matn.
+ *
+ * AUDIT-7 O-2: `twoCol` bilan bir qatorda bu ikkisi ham `visual` ga
+ * javob bermasdi. `closing` HAR BIR dekada bor, `quote` esa 14 dan 11
+ * shablonda — ya'ni «shablonni almashtirdim, deka o'sha-o'sha» hissining
+ * yarmi shu funksiyadan kelardi.
+ *
+ *   magazine    markazlashgan panel emas, pastki tasmada yirik iqtibos
+ *   dense       hisobot sahifasi: chapga tekislangan, zich, kichik shrift
+ *   cards       yorug' sahifa + surface kartasi (fon rangining o'zi ham
+ *               o'zgaradi, ya'ni farq bir qarashda ko'rinadi)
+ *   classic/timeline/hero-split  bazaviy markazlashgan panel
+ */
+function planOverlay(
+  s: SlideModel,
+  theme: SlideTheme,
+  visual: SlideVisual,
+  index: number,
+  total: number,
+  kind: "quote" | "closing",
+): SlidePlan {
   const img = s.image?.url;
   const layers: SlideLayer[] = [];
+
+  // ── magazine: muqova tili. Panel yo'q — kadr to'la ekranda qoladi,
+  // matn esa pastki tasmada chapga tekislanib, yirik shriftda beriladi.
+  if (visual === "magazine") {
+    layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.titleBg } });
+    photo(layers, img, photoSlot(kind)!, theme.darkContent ? 0.32 : 0.5);
+    // Rasmsiz tasma yuqoriroq boshlanadi — aks holda sahifaning yuqori
+    // yarmi bo'sh to'q maydon bo'lib qolardi (`planSectionMagazine` da
+    // aynan shu nuqson PDF da ko'rilgan).
+    const bandY = img ? 3.35 : 2.2;
+    layers.push({
+      t: "rect",
+      box: { x: 0, y: bandY, w: W, h: H - bandY },
+      fill: { color: theme.titleBg, alpha: img ? 0.84 : 0 },
+    });
+    const x = 0.9;
+    const tw = W - 1.8;
+    // Iqtibos belgisi RASM emas, aksent brus: `accent` to'q fonda matn
+    // rangi sifatida o'lchanmagan (`tests/themes.test.mts`).
+    layers.push({ t: "rect", box: { x, y: bandY + 0.4, w: 1.7, h: 0.1 }, fill: { color: theme.accent } });
+    if (kind === "quote") {
+      const qText = s.quote || s.title;
+      const qBox: Box = { x, y: bandY + 0.72, w: tw, h: 2.05 };
+      layers.push({
+        t: "text",
+        box: qBox,
+        text: qText,
+        color: theme.titleText,
+        size: fitSize(qText, qBox, 32, 19),
+        bold: true,
+      });
+      if (s.quoteBy) {
+        layers.push({
+          t: "text",
+          box: { x, y: bandY + 2.9, w: tw, h: 0.42 },
+          text: `— ${s.quoteBy}`,
+          color: theme.titleMuted,
+          size: 15,
+          uppercase: true,
+          tracking: 1.2,
+        });
+      }
+    } else {
+      const tBox: Box = { x, y: bandY + 0.72, w: tw, h: 1.35 };
+      layers.push({
+        t: "text",
+        box: tBox,
+        text: s.title,
+        color: theme.titleText,
+        size: fitSize(s.title, tBox, 34, 22),
+        bold: true,
+      });
+      if (s.subtitle) {
+        const sBox: Box = { x, y: bandY + 2.2, w: tw, h: 1.05 };
+        layers.push({
+          t: "text",
+          box: sBox,
+          text: s.subtitle,
+          color: theme.titleMuted,
+          size: fitSize(s.subtitle, sBox, 17, 13),
+        });
+      }
+    }
+    if (img) layers.push({ t: "rect", box: { x: 0, y: 6.92, w: W, h: 0.58 }, fill: { color: "#000000", alpha: 0.35 } });
+    pushFooter(layers, s, theme, index, total, { x, w: tw }, true);
+    return { bg: theme.titleBg, layers };
+  }
+
+  // ── dense: himoya/hisobot yakuni. Rasm FON darajasiga tushiriladi,
+  // matn chapga tekislanadi va kichikroq bo'ladi — sahifa «plakat» emas,
+  // hujjat bo'lib qoladi.
+  if (visual === "dense") {
+    layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.titleBg } });
+    photo(layers, img, photoSlot(kind)!, theme.darkContent ? 0.5 : 0.68);
+    layers.push({ t: "rect", box: { x: 0, y: 0, w: 0.14, h: H }, fill: { color: theme.accent } });
+    const x = M + 0.18;
+    const tw = 12.25;
+    layers.push({ t: "rect", box: { x, y: 1.5, w: tw, h: 0.035 }, fill: { color: theme.accent } });
+    if (kind === "quote") {
+      const qText = s.quote || s.title;
+      layers.push({
+        t: "text",
+        box: { x, y: 1.75, w: tw, h: 0.36 },
+        text: s.title,
+        color: theme.titleMuted,
+        size: 13,
+        bold: true,
+        uppercase: true,
+        tracking: 1.5,
+      });
+      const qBox: Box = { x, y: 2.25, w: tw, h: 1.9 };
+      layers.push({
+        t: "text",
+        box: qBox,
+        text: qText,
+        color: theme.titleText,
+        size: fitSize(qText, qBox, 22, 15),
+        italic: true,
+      });
+      if (s.quoteBy) {
+        layers.push({
+          t: "text",
+          box: { x, y: 4.3, w: tw, h: 0.4 },
+          text: `— ${s.quoteBy}`,
+          color: theme.titleMuted,
+          size: 14,
+        });
+      }
+    } else {
+      const tBox: Box = { x, y: 1.8, w: tw, h: 1.1 };
+      layers.push({
+        t: "text",
+        box: tBox,
+        text: s.title,
+        color: theme.titleText,
+        size: fitSize(s.title, tBox, 26, 18),
+        bold: true,
+      });
+      if (s.subtitle) {
+        const sBox: Box = { x, y: 3.05, w: tw, h: 1.5 };
+        layers.push({
+          t: "text",
+          box: sBox,
+          text: s.subtitle,
+          color: theme.titleMuted,
+          size: fitSize(s.subtitle, sBox, 16, 12),
+        });
+      }
+    }
+    pushFooter(layers, s, theme, index, total, { x, w: tw }, true);
+    return { bg: theme.titleBg, layers };
+  }
+
+  // ── cards: sahifa yorug' qoladi (`bg`), matn esa `surface` kartasida —
+  // shu shablonlarning band slaydlaridagi karta tili bilan bir xil.
+  if (visual === "cards") {
+    layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.bg } });
+    // Karta to'la to'ldirilgan, shuning uchun kadr deyarli qoplamasiz
+    // qoladi — «foto + karta» ko'rinishi.
+    photo(layers, img, photoSlot(kind)!, 0.12);
+    const card: Box = kind === "quote" ? { x: 1.3, y: 1.6, w: 10.7, h: 4.2 } : { x: 2.1, y: 2.0, w: 9.1, h: 3.5 };
+    layers.push({ t: "rect", box: card, fill: { color: theme.surface }, radius: 0.14 });
+    layers.push({ t: "rect", box: { x: card.x, y: card.y, w: 0.12, h: card.h }, fill: { color: theme.accent }, radius: 0.06 });
+    const tx = card.x + 0.6;
+    const twc = card.w - 1.2;
+    if (kind === "quote") {
+      const qText = s.quote || s.title;
+      const qBox: Box = { x: tx, y: card.y + 0.5, w: twc, h: 2.6 };
+      layers.push({
+        t: "text",
+        box: qBox,
+        text: qText,
+        color: theme.text,
+        size: fitSize(qText, qBox, 24, 16),
+        italic: true,
+      });
+      if (s.quoteBy) {
+        layers.push({
+          t: "text",
+          box: { x: tx, y: card.y + 3.25, w: twc, h: 0.4 },
+          text: `— ${s.quoteBy}`,
+          color: theme.accentInk,
+          size: 14,
+          bold: true,
+        });
+      }
+    } else {
+      const tBox: Box = { x: tx, y: card.y + 0.55, w: twc, h: 1.3 };
+      layers.push({
+        t: "text",
+        box: tBox,
+        text: s.title,
+        color: theme.text,
+        size: fitSize(s.title, tBox, 30, 20),
+        bold: true,
+      });
+      if (s.subtitle) {
+        const sBox: Box = { x: tx, y: card.y + 2.05, w: twc, h: 1.1 };
+        layers.push({
+          t: "text",
+          box: sBox,
+          text: s.subtitle,
+          // `accentInk`/`surface` — o'lchangan juft. `muted` karta ustida
+          // o'lchanmagan, shuning uchun ishlatilmaydi.
+          color: theme.accentInk,
+          size: fitSize(s.subtitle, sBox, 16, 12),
+        });
+      }
+    }
+    // Pastki tasma to'la to'ldirilgan: kolontitul rangi (`muted`) faqat
+    // `bg` ustida o'lchangan, kadr ustida emas.
+    layers.push({ t: "rect", box: { x: 0, y: 6.9, w: W, h: 0.6 }, fill: { color: theme.bg } });
+    pushFooter(layers, s, theme, index, total, { x: M + 0.18, w: 12.2 }, false);
+    return { bg: theme.bg, layers };
+  }
+
+  // ── classic (va timeline / hero-split): markazlashgan panel.
   layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.titleBg } });
   if (img) {
     // Qorong'u temada fon allaqachon to'q — 0.52 qoplama fotoni butunlay
@@ -1538,9 +1757,9 @@ export function planSlide(
     case "section":
       return planSection(s, theme, visual, index, total);
     case "quote":
-      return planOverlay(s, theme, index, total, "quote");
+      return planOverlay(s, theme, visual, index, total, "quote");
     case "closing":
-      return planOverlay(s, theme, index, total, "closing");
+      return planOverlay(s, theme, visual, index, total, "closing");
     case "agenda":
       return planBullets(s, theme, visual, index, total, true, bodyType);
     case "twoCol":
