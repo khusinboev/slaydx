@@ -43,6 +43,10 @@ const IMAGE_LIMIT = { standard: 8, premium: 10 } as const;
  * uni model hamda qadamlar soni beradi. Bu shunchaki sun'iy shiftni
  * olib tashlaydi — nechta rasm chiqishini layout mixi hal qiladi.
  */
+/** Rasm so'rovlarining parallel yo'laklari — test ham shundan o'qiydi. */
+export const PRO_IMAGE_LANES = 5;
+export const IMAGE_LANES = 3;
+
 export function imageBudget(slideCount: number, premium: boolean): number {
   const base = premium ? IMAGE_LIMIT.premium : IMAGE_LIMIT.standard;
   return Math.max(base, Math.ceil(Math.max(0, slideCount) * 0.8));
@@ -270,10 +274,15 @@ export async function attachSlideImages(
   /*
    * Yo'laklik: pro dekada 30 tagacha rasm so'raladi, ya'ni 3 yo'lak
    * bilan navbat rasm byudjetidan uzunroq cho'zilib, oxirgi slaydlar
-   * doim `skipped` bo'lib qolardi. 4 — Gemini rasm chastota chegarasi
-   * ichida qoladigan eng katta qadam.
+   * doim `skipped` bo'lib qolardi.
+   *
+   * 5 — o'lchovdan chiqarilgan: bitta Gemini rasm so'rovi ~40 s
+   * (sarlavha 13 s + 2.3 MB tana ~20 s). 30 slaydli dekada ~21 rasm
+   * bo'ladi; 4 yo'lak bilan 6 to'lqin × 40 s = 240 s kerak, ammo rasm
+   * bosqichiga 201 s ajratiladi — ya'ni oxirgi to'lqin doim yo'qolardi.
+   * 5 yo'lakda 5 to'lqin ≈ 200 s byudjetga sig'adi.
    */
-  await mapPool(jobs, pro ? 4 : 3, async ({ s, size }) => {
+  await mapPool(jobs, pro ? PRO_IMAGE_LANES : IMAGE_LANES, async ({ s, size }) => {
     if (blockReason) {
       report.blocked += 1;
       return null;
