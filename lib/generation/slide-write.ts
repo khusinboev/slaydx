@@ -6,6 +6,7 @@ import { bodyRules, type BodyRules } from "./slide-audience";
 import { blocksToBeats } from "./slide-blocks";
 import { deckFooter } from "./slide-identity";
 import { purposeDefaults } from "./slide-purpose";
+import { finalizeQuiz } from "./slide-quiz";
 import { attachSlideImages } from "./slide-images";
 import { SLIDE_MAX } from "./slide-params";
 import { deckJsonSchema, slideSystem, type SlidePromptCtx } from "./slide-prompt";
@@ -33,6 +34,19 @@ import type { AcademicDoc, DocMeta } from "./types";
  */
 export const STEP_TEXT_MAX = 160;
 export const STAT_LABEL_MAX = 110;
+
+/**
+ * Nazorat testi chegaralari — `planQuiz` kartalaridan o'lchangan.
+ *
+ * Savol qutisi 12.1 x 1.25 dyuym va `fitSize(..., 26, 17)` bilan
+ * chiziladi: 17 pt da ~250 belgi sig'adi, ya'ni 120 xavfsiz. Variant
+ * kartasi 4.84 x 1.4 dyuym (`classic`), 15 pt polda ~150 belgi — 60
+ * belgi ikki qatordan oshmaydi. `QUIZ_MAX` esa formadagi `quizCount`
+ * ning yuqori chegarasi bilan bir xil.
+ */
+export const QUIZ_MAX = 10;
+export const QUIZ_Q_MAX = 120;
+export const QUIZ_OPTION_MAX = 60;
 
 function clip(text: string, n: number) {
   const t = String(text || "").replace(/\s+/g, " ").trim();
@@ -214,6 +228,70 @@ function normalizeSlide(raw: unknown, i: number, footer: string, rules: BulletRu
       : [];
     return { ...base, steps };
   }
+  if (layout === "quiz") {
+    /*
+     * Test savoli — MAKETDAN o'lchangan chegaralar bilan.
+     *
+     * `options` AYNAN 4 bo'lishi shart: `planQuiz` A/B/C/D kartalarini
+     * chizadi, ya'ni uch variantli savol bo'sh karta qoldirar, beshinchisi
+     * esa jimgina tushib qolardi — ikkala holatda ham `answer` indeksi
+     * boshqa variantga siljib, javob YOLG'ON bo'lardi. Shuning uchun
+     * variant soni mos kelmagan savol tashlanadi; birorta savol qolmasa
+     * slaydning O'ZI bandlarga tushadi (bo'sh test slaydi chiqmasin).
+     */
+    const quiz = Array.isArray(o.quiz)
+      ? o.quiz
+          .map((q) => {
+            if (!q || typeof q !== "object") return null;
+            const x = q as Record<string, unknown>;
+            const text = clip(String(x.q ?? ""), QUIZ_Q_MAX);
+            const options = arr(x.options, 4, QUIZ_OPTION_MAX);
+            if (!text || options.length !== 4) return null;
+            // Indeks 0..3 dan tashqarida bo'lsa qisiladi — «javobsiz savol» holati bo'lmasin.
+            const n = Number(x.answer);
+            const answer = Number.isFinite(n) ? Math.max(0, Math.min(3, Math.round(n))) : 0;
+            return { q: text, options, answer };
+          })
+          .filter((x): x is { q: string; options: string[]; answer: number } => Boolean(x))
+          .slice(0, QUIZ_MAX)
+      : [];
+    if (!quiz.length) {
+      return { ...base, layout: "bullets", bullets: arr(o.bullets, rules.maxBullets, rules.bulletChars) };
+    }
+    return { ...base, quiz };
+  }
+  if (layout === "references") {
+    /*
+     * Manbalar. `source` URL bo'lsa TO'LIQ saqlanadi (200 belgi) — uni
+     * `planReferences` o'zi qisqartirib chizadi, lekin `AcademicDoc` da
+     * havola butun qolishi kerak: foydalanuvchi uni bosib ochadi.
+     */
+    const refs = Array.isArray(o.refs)
+      ? o.refs
+          .map((r) => {
+            if (!r || typeof r !== "object") return null;
+            const x = r as Record<string, unknown>;
+            const title = clip(String(x.title ?? ""), 90);
+            const source = clip(String(x.source ?? ""), 200);
+            return title || source ? { title: title || source, source } : null;
+          })
+          .filter((x): x is { title: string; source: string } => Boolean(x))
+          .slice(0, 6)
+      : [];
+    // Manbasiz «adabiyotlar» — bo'sh ramka. Model bandlar yozgan bo'lsa ular qoladi.
+    if (!refs.length) {
+      return { ...base, layout: "references", bullets: arr(o.bullets, rules.maxBullets, rules.bulletChars) };
+    }
+    return { ...base, refs };
+  }
+  if (layout === "answers") {
+    /*
+     * Javoblar kaliti — bandlar naqshi, lekin chegara `maxBullets` (3–4)
+     * EMAS: kalitda savollar soncha qator bo'ladi (`quizCount` 10 tagacha)
+     * va `planAnswers` ularni ikki ustunga bo'lib chizadi.
+     */
+    return { ...base, bullets: arr(o.bullets, QUIZ_MAX, 40) };
+  }
   const limit = layout === "agenda" ? rules.agendaMax : rules.maxBullets;
   return { ...base, bullets: arr(o.bullets, limit, rules.bulletChars) };
 }
@@ -239,6 +317,14 @@ export function coerceLayout(s: SlideModel, want: SlideLayout, maxBullets = 4): 
   if (want === "table") {
     // Jadvalni bandlardan «yasash» ustunlarni o'ylab topishni talab qiladi.
     return s.table?.rows.length ? { ...s, layout: want } : s;
+  }
+  if (want === "quiz") {
+    // Savolsiz test — to'rtta variant ham, to'g'ri javob ham uydirma bo'lardi.
+    return s.quiz?.length ? { ...s, layout: want } : s;
+  }
+  if (want === "references") {
+    // Manbasiz adabiyotlar ro'yxati — uydirma havola. `stats` naqshi.
+    return s.refs?.length ? { ...s, layout: want } : s;
   }
   if (want === "process") {
     if (s.steps?.length) return { ...s, layout: want };
@@ -512,6 +598,7 @@ export async function writeSlidesWithLlm(
       .filter((sl): sl is SlideModel => Boolean(sl)),
   );
   applyResearchRefs(slides, ctx);
+  finalizeQuiz(slides, meta);
   /*
    * Va'da qilingan hajmning quyi chegarasi. Bundan kam bo'lsa deck
    * paketga mos kelmaydi; `null` qaytarib, chaqiruvchi pulni qaytaradi.
