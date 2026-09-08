@@ -14,7 +14,7 @@ import { composePrompt, withGrounding, IMAGE_STYLES, packImages } from "../lib/g
  * kimdir suffiksni yana yumshoq matnga qaytarib qo'ysa, test ushlaydi.
  */
 
-const NON_PHOTO_STYLES = ["illustration", "watercolor", "render3d", "pencil"];
+const NON_PHOTO_STYLES = ["illustration", "watercolor", "render3d", "pencil", "chalk"];
 
 test("foto bo'lmagan uslublar aniq «bu foto emas» signalini beradi", () => {
   for (const id of NON_PHOTO_STYLES) {
@@ -35,7 +35,9 @@ test("har bir uslubning lug'ati o'ziga xos — nusxa ko'chirish yo'q", () => {
 
 test("uslub identifikatorlari o'zgarmagan (forma ular bilan ishlaydi)", () => {
   const ids = IMAGE_STYLES.map((s) => s.id);
-  assert.deepEqual(ids, ["photo", "cinematic", "illustration", "watercolor", "render3d", "minimal", "pencil", "product"]);
+  // `chalk` WP-E da qo'shildi — slayd uslublari (`SLIDE_IMAGE_STYLES`)
+  // shu ro'yxatdan oziqlanadi, shuning uchun id lar shu yerda qulflanadi.
+  assert.deepEqual(ids, ["photo", "cinematic", "illustration", "watercolor", "render3d", "minimal", "pencil", "chalk", "product"]);
 });
 
 test("composePrompt — asosiy mavzu, uslub va freym birga keladi", () => {
