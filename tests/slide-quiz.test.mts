@@ -129,9 +129,21 @@ test("normalize: buzuq quiz maydoni slaydni bandlarga tushiradi", async () => {
   }
 });
 
-test("normalize: savol va variant chegaralari maketdan olingan", async () => {
+/*
+ * X-3 O'ZGARISHI. Ilgari bu test bitta slaydga solingan `QUIZ_MAX + 3`
+ * savoldan `QUIZ_MAX` ta SLAYD chiqishini kutardi — ya'ni dekaning
+ * REJADAN o'sishini rasman qulflab qo'ygan edi (aynan X-3 nuqsoni:
+ * 10 slayd so'ragan foydalanuvchi 20 slayd olardi). Endi reja nechta
+ * `quiz` slaydi bersa shuncha savol qoladi, ortiqchasi tashlanadi.
+ *
+ * `QUIZ_MAX` (normalizeSlide dagi `slice`) endi deka darajasida
+ * KO'RINMAYDI — ortiqcha savol baribir tashlanadi, ya'ni u himoya
+ * qatlami bo'lib qoldi. Uning o'rnini shu yerdagi UZUNLIK assertion'i
+ * egallaydi: haqiqiy xavf «savol → slayd» edi, u endi imkonsiz.
+ */
+test("normalize: savol/variant chegaralari maketdan; ortiqcha savol SLAYD yasamaydi", async () => {
   const { QUIZ_Q_MAX, QUIZ_OPTION_MAX, QUIZ_MAX } = await import("../lib/generation/slide-write.ts");
-  const slides = await deckFrom([
+  const model = [
     {
       layout: "quiz",
       title: "Test",
@@ -142,13 +154,27 @@ test("normalize: savol va variant chegaralari maketdan olingan", async () => {
       })),
     },
     ...filler(7),
-  ]);
+  ];
+  const slides = await deckFrom(model);
   const quizzes = body(slides).filter((s) => s.layout === "quiz");
-  assert.equal(quizzes.length, QUIZ_MAX, `${QUIZ_MAX} ta savol qolishi kerak, ${quizzes.length} ta chiqdi`);
-  for (const s of quizzes) {
-    assert.ok(s.quiz![0].q.length <= QUIZ_Q_MAX, `savol ${s.quiz![0].q.length} belgi`);
-    for (const o of s.quiz![0].options) assert.ok(o.length <= QUIZ_OPTION_MAX, `variant ${o.length} belgi`);
-  }
+  assert.equal(quizzes.length, 1, `reja bitta quiz slaydi bergan, ${quizzes.length} ta chiqdi`);
+  assert.equal(quizzes[0].quiz!.length, 1, "bitta slaydda bitta savol");
+  assert.equal(body(slides).length, model.length, "deka reja uzunligida qolishi kerak");
+  const q = quizzes[0].quiz![0];
+  assert.ok(q.q.length <= QUIZ_Q_MAX, `savol ${q.q.length} belgi`);
+  for (const o of q.options) assert.ok(o.length <= QUIZ_OPTION_MAX, `variant ${o.length} belgi`);
+
+  // Reja UCHTA quiz slaydi bersa — uchta savol, tartibi saqlangan holda.
+  const three = await deckFrom([
+    { ...goodQuiz, quiz: [1, 2, 3].map((n) => ({ q: `Savol ${n}?`, options: ["A", "B", "C", "D"], answer: 0 })) },
+    { ...goodQuiz, quiz: [{ q: "Ortiqcha 1?", options: ["A", "B", "C", "D"], answer: 1 }] },
+    { ...goodQuiz, quiz: [{ q: "Ortiqcha 2?", options: ["A", "B", "C", "D"], answer: 2 }] },
+    ...filler(5),
+  ]);
+  const got = body(three).filter((s) => s.layout === "quiz");
+  assert.equal(got.length, 3, "reja uchta quiz slaydi bergan");
+  assert.deepEqual(got.map((s) => s.quiz![0].q), ["Savol 1?", "Savol 2?", "Savol 3?"], "savollar slaydlarga taqsimlanmadi");
+  assert.equal(body(three).length, 8, "deka reja uzunligida qolishi kerak");
 });
 
 test("normalize: manbasiz references bandlar bilan qoladi, havola esa butun saqlanadi", async () => {
@@ -204,33 +230,68 @@ function quizSlide(id: string, n: number): SlideModel {
   };
 }
 
-function deck(quiz: SlideModel): SlideModel[] {
+/**
+ * REJADAGI deka — `blocksToBeats` beradigan shakl (X-3).
+ *
+ * Ilgari bu yordamchi BITTA ko'p savolli `quiz` slaydi berardi va
+ * `finalizeQuiz` uni ajratardi. Endi savol slaydlari rejada bor:
+ * test faqat ULARNI to'ldirishni sinaydi. `answers` ham rejadan
+ * keladi — funksiya slayd QO'SHMAYDI.
+ */
+function deck(quizzes: SlideModel[], answers = false): SlideModel[] {
   return [
     { id: "s0", layout: "title", title: "Suv aylanishi", footer: "F" },
-    quiz,
-    { id: "s2", layout: "closing", title: "Xulosa", footer: "F" },
+    ...quizzes,
+    ...(answers ? [{ id: "sa", layout: "answers" as const, title: "Kalit", bullets: ["model yozgan axlat"], footer: "F" }] : []),
+    { id: "sz", layout: "closing", title: "Xulosa", footer: "F" },
   ];
 }
 
-test("finalizeQuiz: har savol alohida slaydga ajraladi, id lar noyob qoladi", () => {
-  const slides = deck(quizSlide("s1", 3));
-  finalizeQuiz(slides, META);
-  const quizzes = slides.filter((s) => s.layout === "quiz");
-  assert.equal(quizzes.length, 3, "uchta savol — uchta slayd");
-  assert.deepEqual(quizzes.map((s) => s.quiz!.length), [1, 1, 1], "har slaydda bitta savol");
-  assert.deepEqual(quizzes.map((s) => s.quiz![0].q), ["Savol 1?", "Savol 2?", "Savol 3?"], "savol tartibi saqlanadi");
-  assert.equal(new Set(slides.map((s) => s.id)).size, slides.length, "id lar noyob bo'lishi kerak");
-  assert.equal(quizzes[0].id, "s1", "birinchi savol slaydning O'Z id sida qoladi");
-  for (const s of quizzes) {
-    assert.equal(s.title, "Nazorat testi", "sarlavha saqlanadi");
-    assert.equal(s.footer, "Muallif · TDPU", "kolontitul saqlanadi");
-  }
-  // Yakun slaydi oxirida qoladi.
-  assert.equal(slides[slides.length - 1].layout, "closing");
+/** Rejadagi `n` ta bo'sh savol slaydi — model hali savol yozmagan holat. */
+function emptyQuizzes(n: number): SlideModel[] {
+  return Array.from({ length: n }, (_, i) => ({ ...quizSlide(`q${i}`, 0), quiz: [] }));
+}
+
+/*
+ * X-3 O'ZGARISHI. Eski test «uchta savol — uchta slayd» deb AJRATISHNI
+ * qulflardi, ya'ni dekaning rejadan uzayishini shartnoma deb yozgan
+ * edi. Endi ajratish rejaga ko'chgan: bu yerda taqsimlash sinaladi va
+ * har uch holatda ham DEKA UZUNLIGI o'zgarmasligi talab qilinadi.
+ */
+test("finalizeQuiz: savollar rejadagi slaydlarga taqsimlanadi, uzunlik o'zgarmaydi", () => {
+  // (a) model hammasini BIRINCHI slaydga solgan.
+  const packed = deck([quizSlide("s1", 3), ...emptyQuizzes(2)]);
+  const beforeA = packed.length;
+  finalizeQuiz(packed, META);
+  const a = packed.filter((s) => s.layout === "quiz");
+  assert.equal(packed.length, beforeA, "deka uzunligi o'zgardi");
+  assert.deepEqual(a.map((s) => s.quiz!.length), [1, 1, 1], "har slaydda bitta savol");
+  assert.deepEqual(a.map((s) => s.quiz![0].q), ["Savol 1?", "Savol 2?", "Savol 3?"], "savol tartibi saqlanadi");
+  assert.equal(new Set(packed.map((s) => s.id)).size, packed.length, "id lar noyob bo'lishi kerak");
+  assert.equal(a[0].id, "s1", "slayd O'Z id sida qoladi");
+  for (const s of a) assert.equal(s.footer, "Muallif · TDPU", "kolontitul saqlanadi");
+  assert.equal(packed[packed.length - 1].layout, "closing", "yakun slaydi oxirida qoladi");
+
+  // (b) model REJADAN KO'P savol yozgan — ortiqchasi tashlanadi.
+  const many = deck([quizSlide("s1", 3), quizSlide("s2", 3)]);
+  finalizeQuiz(many, META);
+  const b = many.filter((s) => s.layout === "quiz");
+  assert.equal(many.length, 4, "ortiqcha savol slayd yasadi");
+  assert.deepEqual(b.map((s) => s.quiz![0].q), ["Savol 1?", "Savol 2?"], "birinchi ikkitasi qoladi, qolgani tashlanadi");
+
+  // (c) model REJADAN KAM savol yozgan — ortgan slayd o'z holicha qoladi.
+  const few = deck([quizSlide("s1", 1), ...emptyQuizzes(2)]);
+  finalizeQuiz(few, META);
+  assert.equal(few.length, 5, "kam savol deka uzunligini qisqartirdi");
+  assert.deepEqual(
+    few.filter((s) => s.layout === "quiz").map((s) => s.quiz!.length),
+    [1, 0, 0],
+    "bor savol birinchi slaydga, qolgani bo'sh qoladi",
+  );
 });
 
 test("finalizeQuiz: to'g'ri javob NOTIQ IZOHIGA yoziladi", () => {
-  const slides = deck(quizSlide("s1", 3));
+  const slides = deck([quizSlide("s1", 3), ...emptyQuizzes(2)]);
   finalizeQuiz(slides, META);
   const quizzes = slides.filter((s) => s.layout === "quiz");
   assert.deepEqual(
@@ -241,7 +302,7 @@ test("finalizeQuiz: to'g'ri javob NOTIQ IZOHIGA yoziladi", () => {
 
 test("finalizeQuiz: mavjud izoh ustiga yozilmaydi va takror chaqiruv qo'shmaydi", () => {
   const one = quizSlide("s1", 1);
-  const slides = deck({ ...one, notes: "Sinfga 2 daqiqa bering." });
+  const slides = deck([{ ...one, notes: "Sinfga 2 daqiqa bering." }]);
   finalizeQuiz(slides, META);
   const notes = slides.find((s) => s.layout === "quiz")!.notes!;
   assert.ok(notes.startsWith("Sinfga 2 daqiqa bering."), "model yozgan izoh saqlanadi");
@@ -250,20 +311,36 @@ test("finalizeQuiz: mavjud izoh ustiga yozilmaydi va takror chaqiruv qo'shmaydi"
   assert.equal(slides.find((s) => s.layout === "quiz")!.notes, notes, "ikkinchi chaqiruv javobni takrorlamaydi");
 });
 
-test("finalizeQuiz: speakerNotes=false bo'lsa javoblar slaydi yakundan OLDIN qo'shiladi", () => {
-  const slides = deck(quizSlide("s1", 3));
+/*
+ * X-3 O'ZGARISHI. Eski test `finalizeQuiz` javoblar slaydini
+ * QO'SHISHINI talab qilardi — aynan shu qo'shish dekani rejadan bir
+ * slaydga uzaytirardi. Endi slayd rejada (`blocksToBeats` 8-qoidasi),
+ * bu funksiya esa uni TO'LDIRADI. Shuning uchun assertion «qo'shildimi»
+ * dan «to'ldirildimi va uzunlik o'zgarmadimi» ga ko'chdi.
+ */
+test("finalizeQuiz: rejadagi javoblar slaydi to'ldiriladi, YANGI slayd qo'shilmaydi", () => {
+  const slides = deck([quizSlide("s1", 3), ...emptyQuizzes(2)], true);
+  const before = slides.length;
   finalizeQuiz(slides, { ...META, speakerNotes: false });
   const at = slides.findIndex((s) => s.layout === "answers");
-  assert.ok(at > 0, "javoblar slaydi qo'shilishi kerak");
+  assert.equal(slides.length, before, "javoblar slaydi QO'SHILDI — deka uzaydi");
   assert.equal(at, slides.length - 2, "yakun slaydidan OLDIN turishi kerak");
   assert.equal(slides[slides.length - 1].layout, "closing");
-  assert.deepEqual(slides[at].bullets, ["1 — A", "2 — B", "3 — C"]);
+  assert.deepEqual(slides[at].bullets, ["1 — A", "2 — B", "3 — C"], "model yozgani ustiga kalit yozilmadi");
   assert.equal(slides[at].title, slideLabels("uz").answers);
   assert.equal(slides[at].footer, "Muallif · TDPU", "kolontitul test slaydidan olinadi");
+
+  // Rejada `answers` yo'q (juda qisqa deka) — funksiya uni O'ZI qo'shmaydi.
+  const noKey = deck([quizSlide("s1", 3), ...emptyQuizzes(2)]);
+  finalizeQuiz(noKey, { ...META, speakerNotes: false });
+  assert.equal(noKey.some((s) => s.layout === "answers"), false, "rejada yo'q slayd qo'shildi — uzunlik shartnomasi buzildi");
+  assert.equal(noKey.length, 5, "deka uzunligi o'zgardi");
+  // Javob yo'qolmaydi — u har savol slaydining izohida qoladi.
+  assert.ok(noKey.filter((s) => s.layout === "quiz").every((s) => s.notes?.startsWith("Javob:")));
 });
 
-test("finalizeQuiz: izoh yoqiq bo'lsa javoblar slaydi qo'shilmaydi", () => {
-  const slides = deck(quizSlide("s1", 3));
+test("finalizeQuiz: izoh yoqiq bo'lsa rejada javoblar slaydi bo'lmaydi", () => {
+  const slides = deck([quizSlide("s1", 3), ...emptyQuizzes(2)]);
   finalizeQuiz(slides, { ...META, speakerNotes: true });
   assert.equal(slides.some((s) => s.layout === "answers"), false, "izoh yoqiq — javob izohda, alohida slayd shart emas");
   assert.equal(slides.length, 5, "3 savol + titul + yakun");
@@ -282,7 +359,7 @@ test("finalizeQuiz: testsiz dekaga tegmaydi", () => {
 
 test("finalizeQuiz: javoblar slaydining sarlavhasi deka tiliga ergashadi", () => {
   const titles = ["uz", "ru", "en"].map((language) => {
-    const slides = deck(quizSlide("s1", 2));
+    const slides = deck([quizSlide("s1", 2), ...emptyQuizzes(1)], true);
     finalizeQuiz(slides, { ...META, language, speakerNotes: false });
     const title = slides.find((s) => s.layout === "answers")!.title;
     assert.equal(title, slideLabels(language).answers, `${language}: sarlavha yorliqdan olinishi kerak`);
@@ -299,8 +376,8 @@ test("finalizeQuiz: javoblar slaydining sarlavhasi deka tiliga ergashadi", () =>
 });
 
 test("finalizeQuiz: deterministik — bir xil kirish, bir xil chiqish", () => {
-  const a = deck(quizSlide("s1", 4));
-  const b = deck(quizSlide("s1", 4));
+  const a = deck([quizSlide("s1", 4), ...emptyQuizzes(3)], true);
+  const b = deck([quizSlide("s1", 4), ...emptyQuizzes(3)], true);
   finalizeQuiz(a, { ...META, speakerNotes: false });
   finalizeQuiz(b, { ...META, speakerNotes: false });
   assert.equal(JSON.stringify(a), JSON.stringify(b));

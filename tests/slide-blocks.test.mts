@@ -35,7 +35,7 @@ import type { DocMeta } from "../lib/generation/types.ts";
  */
 
 const pro = TOOL_BY_ID["pro-slide"];
-type BlockMeta = Pick<DocMeta, "blocks" | "planItems" | "quizCount" | "agendaSlide" | "internetSearch">;
+type BlockMeta = Pick<DocMeta, "blocks" | "planItems" | "quizCount" | "agendaSlide" | "internetSearch" | "speakerNotes">;
 
 const bm = (v: Partial<BlockMeta> = {}): BlockMeta => ({
   blocks: [],
@@ -43,6 +43,9 @@ const bm = (v: Partial<BlockMeta> = {}): BlockMeta => ({
   quizCount: 0,
   agendaSlide: true,
   internetSearch: false,
+  // X-3: izohlar YOQIQ — javoblar izohda qoladi, rejaga `answers` slaydi
+  // KIRMAYDI. Kalit slaydini sinaydigan holatlar uni oshkora yozadi.
+  speakerNotes: true,
   ...v,
 });
 
@@ -57,14 +60,34 @@ const roleOf = (beats: SlideBeat[], layout: string) => beats.find((b) => b.layou
 
 // ───────────────────────────────────────────── 1/3-qoida: har blok dekaga tushadi
 
-test("test bloki → quiz beat; savollar soni roldan ko'rinadi", () => {
+/*
+ * X-3 O'ZGARISHI. Ilgari bu test bitta `quiz` beat va roldagi «N ta
+ * savol» matnini kutardi — savollarga ajratishni `finalizeQuiz` deka
+ * yozilgandan KEYIN qilardi va deka rejadan uzun chiqardi. Endi
+ * savollar soni REJADA: har savolga bitta `quiz` beat. Shuning uchun
+ * assertion «rolda son bormi» dan «AYNAN shuncha quiz beat bormi» ga
+ * ko'chdi — o'lchanadigan narsa aynan shu.
+ */
+test("test bloki → savol soncha quiz beat; son roldan ham ko'rinadi", () => {
   const on = run({ blocks: ["test"] }, "lecture", 10);
-  assert.ok(layouts(on).includes("quiz"), "test bloki quiz beat bermadi");
-  assert.match(roleOf(on, "quiz"), new RegExp(`${QUIZ_COUNT_FALLBACK} ta savol`), "son tanlanmagan — standart savol soni");
+  const q = on.filter((b) => b.layout === "quiz");
+  assert.equal(q.length, QUIZ_COUNT_FALLBACK, "son tanlanmagan — standart savol soncha quiz beat");
+  assert.match(q[0].role, new RegExp(`jami ${QUIZ_COUNT_FALLBACK} ta savol`), "rol jami sonni aytmadi");
+  assert.match(q[1].role, /2-savol/, "rol slaydning tartib raqamini aytmadi");
   // 3-qoida: son tanlangan bo'lsa blok belgisiz ham test so'ralgan.
-  const byCount = run({ blocks: [], quizCount: 10 }, "lecture", 10);
-  assert.ok(layouts(byCount).includes("quiz"), "quizCount>0 quiz beat bermadi");
-  assert.match(roleOf(byCount, "quiz"), /10 ta savol/);
+  const byCount = run({ blocks: [], quizCount: 10 }, "lecture", 14);
+  assert.equal(byCount.filter((b) => b.layout === "quiz").length, 10, "quizCount 10 ta quiz beat bermadi");
+  assert.match(roleOf(byCount, "quiz"), /jami 10 ta savol/);
+  /*
+   * Sig'magan savollar TASHLANADI va rol HAQIQIY sonni aytadi. 10
+   * slaydli dekada tana 8 ta (titul + yakun ayrilgan) — ya'ni 10
+   * savol sig'maydi. Rolda hamon «10 ta savol» tursa, model rejadan
+   * ko'p savol yozar va prompt bilan reja ajralib ketardi.
+   */
+  const tight = run({ blocks: [], quizCount: 10 }, "lecture", 10);
+  assert.equal(tight.filter((b) => b.layout === "quiz").length, 8, "sig'gani qadar quiz beat qo'yilmadi");
+  assert.match(roleOf(tight, "quiz"), /jami 8 ta savol/, "rol rejadagi HAQIQIY sonni aytishi kerak");
+  assert.equal(tight.length, 10, "uzunlik `want` da qolishi kerak");
   // Aksincha: ikkalasi ham yo'q — quiz yo'q.
   assert.ok(!layouts(run({}, "lecture", 10)).includes("quiz"), "so'ralmagan quiz paydo bo'ldi");
 });
@@ -248,7 +271,15 @@ test("title boshida, closing oxirida va BITTA, yonma-yon takror yo'q", () => {
         if (out.some((b) => b.layout === "closing")) {
           assert.equal(out[out.length - 1].layout, "closing", `${tag}: closing oxirda emas`);
         }
+        /*
+         * X-3: `quiz` — YAGONA istisno. 1 savol = 1 slayd bo'lgani
+         * uchun nazorat testi ATAYLAB ketma-ket qator bo'lib turadi
+         * (ilgari ham shunday chizilardi, faqat qator rejada emas,
+         * `finalizeQuiz` da tug'ilardi). Qolgan hamma maket uchun
+         * 5-qoida o'z kuchida.
+         */
         for (let i = 1; i < out.length; i++) {
+          if (out[i].layout === "quiz" && out[i - 1].layout === "quiz") continue;
           assert.notEqual(out[i].layout, out[i - 1].layout, `${tag}: @${i} yonma-yon ${out[i].layout}`);
         }
       }
@@ -356,14 +387,28 @@ test("agenda qatori reja bandlari SONINI aytadi (oraliqni emas)", () => {
   assert.doesNotMatch(promptFor({ blocks: "reja", agendaSlide: false }), /agenda: AYNAN/);
 });
 
-test("quiz qatori faqat test so'ralganda va savol soni bilan chiqadi", () => {
+/*
+ * X-3 O'ZGARISHI. Ilgari bu yerda «quiz layout: N ta savol» sinalardi
+ * va N promptdagi YAGONA son edi — model shuncha savolni BITTA
+ * slaydga solar, `finalizeQuiz` esa uni ajratib dekani uzaytirardi.
+ * Endi son REJADA (beats rollarida, `blocksToBeats`), prompt qatori
+ * esa faqat SLAYD ICHIDAGI sxemani aytadi. Ikki manba bo'lsa ular
+ * ajralib ketardi: reja 8 ta savolga joy topsa ham prompt 10 talab
+ * qilib turardi.
+ */
+test("quiz qatori faqat test so'ralganda chiqadi va bitta savol talab qiladi", () => {
   assert.doesNotMatch(promptFor({ blocks: "reja", quizCount: 0 }), /quiz layout/);
   const on = promptFor({ blocks: "reja", quizCount: 5 });
-  assert.match(on, /quiz layout: 5 ta savol/);
+  assert.match(on, /quiz layout: HAR quiz slaydida AYNAN BITTA savol/);
   assert.match(on, /AYNAN 4 variant \(options\)/);
   assert.match(on, /answer — to‘g‘ri variant indeksi 0\.\.3/);
-  // Blok bor, son yo'q — standart son.
-  assert.match(promptFor({ blocks: "reja,test", quizCount: 0 }), new RegExp(`quiz layout: ${QUIZ_COUNT_FALLBACK} ta savol`));
+  // Savol SONI promptda qotib qolmasin — u rejadan keladi.
+  assert.doesNotMatch(on, /quiz layout: \d+ ta savol/);
+  // Javob kalitini model yozmasin — uni `finalizeQuiz` to'ldiradi.
+  assert.match(on, /answers layout: javob kalitini O‘ZINGIZ yozmang/);
+  // Blok bor, son yo'q — qator baribir chiqadi (standart son rejada).
+  assert.match(promptFor({ blocks: "reja,test", quizCount: 0 }), /quiz layout: HAR quiz slaydida/);
+  assert.doesNotMatch(promptFor({ blocks: "reja" }), /answers layout/);
 });
 
 test("references qatori adabiyotlar blokida — va internet tadqiqotida ham", () => {
