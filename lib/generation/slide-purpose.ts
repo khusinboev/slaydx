@@ -31,18 +31,25 @@ export type PurposeDefaults = {
   label: string;
   templateId: SlideTemplateId;
   blocks: SlideBlockId[];
+  /**
+   * Promptga tushadigan 1–2 gaplik ko'rsatma — bu tur qanday YOZILISHI
+   * kerakligini aytadi (auditoriya «kimga»ni aytadi, bu «qanday»ni).
+   * `general` da bo'sh — mahsus ko'rsatma yo'q, `briefLines` qatorni
+   * umuman tashlaydi.
+   */
+  guidance: string;
 };
 
 export const PURPOSE_DEFAULTS: Record<SlidePurpose, PurposeDefaults> = {
-  general: { label: "Umumiy taqdimot", templateId: "auto", blocks: ["reja"] },
-  lesson: { label: "Dars (yangi mavzu)", templateId: "lesson", blocks: ["reja", "maqsadlar", "motivatsiya", "amaliyot", "uyga_vazifa"] },
-  lecture: { label: "Ma’ruza", templateId: "lecture", blocks: ["reja", "maqsadlar", "adabiyotlar"] },
-  seminar: { label: "Seminar / amaliy mashg‘ulot", templateId: "lecture", blocks: ["reja", "amaliyot", "jadval"] },
-  open_lesson: { label: "Ochiq dars / attestatsiya", templateId: "lesson", blocks: ["reja", "maqsadlar", "motivatsiya", "amaliyot", "test", "uyga_vazifa"] },
-  report: { label: "Hisobot / tahlil", templateId: "report", blocks: ["reja", "diagramma", "jadval"] },
-  training: { label: "Trening / master-klass", templateId: "lesson", blocks: ["maqsadlar", "motivatsiya", "amaliyot", "test"] },
-  defense: { label: "Himoya (kurs ishi / diplom)", templateId: "defense", blocks: ["reja", "diagramma", "jadval", "adabiyotlar"] },
-  pitch: { label: "Taklif / marketing", templateId: "pitch", blocks: ["motivatsiya", "diagramma"] },
+  general: { label: "Umumiy taqdimot", templateId: "auto", blocks: ["reja"], guidance: "" },
+  lesson: { label: "Dars (yangi mavzu)", templateId: "lesson", blocks: ["reja", "maqsadlar", "motivatsiya", "amaliyot", "uyga_vazifa"], guidance: "Yangi mavzu: avval nima uchun kerakligi, keyin tushuncha, keyin mashq." },
+  lecture: { label: "Ma’ruza", templateId: "lecture", blocks: ["reja", "maqsadlar", "adabiyotlar"], guidance: "Ta’rif + misol + cheklov." },
+  seminar: { label: "Seminar / amaliy mashg‘ulot", templateId: "lecture", blocks: ["reja", "amaliyot", "jadval"], guidance: "Amaliy: har bo‘limda auditoriya bajaradigan narsa bo‘lsin." },
+  open_lesson: { label: "Ochiq dars / attestatsiya", templateId: "lesson", blocks: ["reja", "maqsadlar", "motivatsiya", "amaliyot", "test", "uyga_vazifa"], guidance: "Attestatsiya: maqsad → jarayon → nazorat → refleksiya." },
+  report: { label: "Hisobot / tahlil", templateId: "report", blocks: ["reja", "diagramma", "jadval"], guidance: "Raqam va tavsiya — har xulosa ortida ko‘rsatkich turadi." },
+  training: { label: "Trening / master-klass", templateId: "lesson", blocks: ["maqsadlar", "motivatsiya", "amaliyot", "test"], guidance: "Master-klass: qadam, xato, natija." },
+  defense: { label: "Himoya (kurs ishi / diplom)", templateId: "defense", blocks: ["reja", "diagramma", "jadval", "adabiyotlar"], guidance: "Tadqiqot savoli SAVOL shaklida bo‘lsin, har da’vo ortida asos ko‘rinsin." },
+  pitch: { label: "Taklif / marketing", templateId: "pitch", blocks: ["motivatsiya", "diagramma"], guidance: "Bitta slayd — bitta fikr, uydirma bozor raqami YO‘Q." },
 };
 
 export function purposeDefaults(p: SlidePurpose | string | undefined): PurposeDefaults {
