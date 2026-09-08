@@ -82,7 +82,7 @@ export const SLIDE_PARAMS: SlideParam[] = [
   { id: "logoAssetId", tools: ["slide", "pro-slide"], encode: "string", probeA: "", probeB: "0123456789abcdef01234567", impacts: ["layout"] },
   { id: "subject", tools: ["slide", "pro-slide"], encode: "string", probeA: "Biologiya", probeB: "Kimyo", impacts: ["prompt"] },
   { id: "slideAudience", tools: ["slide", "pro-slide"], encode: "string", probeA: "school_1_4", probeB: "students_master", impacts: ["prompt", "layout"] },
-  { id: "slidePurpose", tools: ["slide", "pro-slide"], encode: "string", probeA: "lesson", probeB: "defense", impacts: ["beats"] },
+  { id: "slidePurpose", tools: ["slide", "pro-slide"], encode: "string", probeA: "lesson", probeB: "defense", impacts: ["beats", "prompt"] },
   { id: "keyIdeas", tools: ["pro-slide"], encode: "csv", probeA: "", probeB: "Suv bug‘lanadi,Bulut hosil bo‘ladi", impacts: ["prompt"] },
   { id: "localExamples", tools: ["slide", "pro-slide"], encode: "boolean", probeA: false, probeB: true, impacts: ["prompt", "images"] },
   { id: "blocks", tools: ["pro-slide"], encode: "csv", probeA: "reja", probeB: "reja,test,adabiyotlar", impacts: ["beats"] },

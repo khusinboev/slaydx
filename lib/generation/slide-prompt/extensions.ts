@@ -16,6 +16,13 @@ export function extensionLines(meta: DocMeta, tpl: SlideTemplate, ctx: SlideProm
     meta.speakerNotes === false
       ? `notes YOZMANG — notes maydonini bo‘sh qoldiring.`
       : `Har slaydda notes: notiq OG‘ZAKI aytadigan matn, 40–80 so‘z. Slayddagi bandlarni takrorlamang — misol, izoh yoki savol qo‘shing.`,
+    meta.quizCount > 0
+      ? `NAZORAT TESTI: ${meta.quizCount} ta savol quiz layoutda; javobni SLAYDGA yozmang — faqat answer indeksiga.`
+      : "",
+    // Izoh o'chiq bo'lsa javoblar yo'qolmasin — oxirida «Javoblar» slaydi (answers layout).
+    meta.speakerNotes === false && meta.quizCount > 0
+      ? `Test javoblari ma’ruzachi izohisiz ko‘rinmaydi — ular oxirgi «Javoblar» slaydida beriladi (answers layout).`
+      : "",
     meta.extra ? `Qo‘shimcha talab: ${meta.extra}` : "",
   ];
 }

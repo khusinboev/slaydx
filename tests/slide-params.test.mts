@@ -188,6 +188,7 @@ test("byudjet: pro 30 slaydga yetadi, tadqiqot ulushi faqat so'ralganda", () => 
 import { SLIDE_LAYOUTS, type SlideModel } from "../lib/generation/slide-types.ts";
 import { blocksToBeats } from "../lib/generation/slide-blocks.ts";
 import { deckFooter } from "../lib/generation/slide-identity.ts";
+import { runSlideResearch } from "../lib/generation/slide-research.ts";
 import { planSlide } from "../lib/generation/slide-layout.ts";
 import { getSlideTheme } from "../lib/generation/slide-themes.ts";
 import { fallbackSlides, resolveDeckTemplate } from "../lib/generation/slide-write.ts";
@@ -196,19 +197,16 @@ import type { SlideParamImpact } from "../lib/generation/slide-params.ts";
 /**
  * Hali ulanmagan ta'sirlar — ish paketlari bo'yicha. Har paket tugagach
  * o'z qatorini O'CHIRADI; ro'yxat o'sishi mumkin emas (pastdagi test).
- *   WP-A: keyIdeas, localExamples (prompt)     WP-H: position, organization, quizCount (prompt)
- *   WP-B: blocks, agendaSlide, quizCount, internetSearch (beats)
- *   WP-D: internetSearch (research)           WP-E: topic, localExamples, slideImageStyle (images)
+ *   WP-B: blocks, agendaSlide, quizCount (beats)
+ *   WP-E: topic, localExamples, slideImageStyle (images)
+ *   Yopilgan: WP-A (keyIdeas, localExamples prompt), WP-D (research), WP-H (position, organization, quizCount prompt)
  */
 const PENDING: Record<string, SlideParamImpact[]> = {
-  keyIdeas: ["prompt"],
-  localExamples: ["prompt", "images"],
-  position: ["prompt"],
-  organization: ["prompt"],
-  quizCount: ["prompt", "beats"],
+  localExamples: ["images"],
+  quizCount: ["beats"],
   blocks: ["beats"],
   agendaSlide: ["beats"],
-  internetSearch: ["research", "beats"],
+  internetSearch: ["beats"],
   slideImageStyle: ["images"],
   topic: ["images"],
 };
@@ -268,6 +266,7 @@ test("differensial zond: reyestrdagi HAR parametr e'lon qilingan ta'sirini berad
     const a = probe({ ...base, [p.id]: p.probeA }, tool);
     const b = probe({ ...base, [p.id]: p.probeB }, tool);
     for (const impact of p.impacts) {
+      if (impact === "research") continue; // async — pastdagi alohida zond
       if (PENDING[p.id]?.includes(impact)) continue;
       if (a[impact] === b[impact]) failures.push(`${p.id} → ${impact}`);
     }
@@ -275,8 +274,63 @@ test("differensial zond: reyestrdagi HAR parametr e'lon qilingan ta'sirini berad
   assert.deepEqual(failures, [], `bezak parametrlar (A va B bir xil chiqdi):\n  ${failures.join("\n  ")}`);
 });
 
+/**
+ * `research` ta'siri — tarmoq chaqiruvi izi. `runSlideResearch` async,
+ * shuning uchun alohida zond: fetch stub qilinadi, A va B qiymatda
+ * chaqiruvlar izi (soni, `google_search` bor-yo'qligi, JSON rejimi)
+ * farq qilishi shart. Kalitsiz muhitda ham ishlaydi (stub kalit qo'yadi).
+ */
+async function researchProbe(values: FormValues, tool = pro): Promise<string> {
+  const m = extractMeta(tool, { topic: "Suv aylanishi", ...values });
+  const realFetch = globalThis.fetch;
+  const savedGemini = process.env.GEMINI_API_KEY;
+  const savedXai = process.env.XAI_API_KEY;
+  process.env.GEMINI_API_KEY = "test-key";
+  delete process.env.XAI_API_KEY;
+  const trace: string[] = [];
+  globalThis.fetch = (async (url: string, init?: { body?: string }) => {
+    const body = String(init?.body ?? "");
+    trace.push(`${String(url).replace(/key=[^&]+/, "key=…")} search=${body.includes("google_search")} json=${body.includes("responseMimeType")}`);
+    return {
+      ok: true,
+      status: 200,
+      json: async () => ({ candidates: [{ content: { parts: [{ text: "Fakt 1.\nFakt 2." }] } }] }),
+    } as never;
+  }) as typeof fetch;
+  try {
+    await runSlideResearch(m, Date.now() + 60_000);
+  } finally {
+    globalThis.fetch = realFetch;
+    if (savedGemini === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = savedGemini;
+    if (savedXai === undefined) delete process.env.XAI_API_KEY;
+    else process.env.XAI_API_KEY = savedXai;
+  }
+  return JSON.stringify(trace);
+}
+
+test("differensial zond (research): internet qidiruvi parametrlari tarmoq izini o'zgartiradi", async () => {
+  const failures: string[] = [];
+  for (const p of SLIDE_PARAMS) {
+    if (!p.impacts.includes("research") || PENDING[p.id]?.includes("research")) continue;
+    const tool = p.tools.includes("pro-slide") ? pro : slide;
+    const base = p.probeWith ?? {};
+    const a = await researchProbe({ ...base, [p.id]: p.probeA }, tool);
+    const b = await researchProbe({ ...base, [p.id]: p.probeB }, tool);
+    if (a === b) failures.push(`${p.id} → research (${a})`);
+  }
+  assert.deepEqual(failures, [], `bezak parametrlar (tarmoq izi bir xil):\n  ${failures.join("\n  ")}`);
+});
+
+test("internetSearch: off → tarmoqqa chiqmaydi; on → aynan 1 ta google_search, JSON rejimisiz", async () => {
+  assert.equal(await researchProbe({ internetSearch: false }), "[]");
+  const on = JSON.parse(await researchProbe({ internetSearch: true })) as string[];
+  assert.equal(on.length, 1);
+  assert.match(on[0], /search=true json=false/);
+});
+
 test("PENDING ro'yxati o'smaydi — faqat A/B/D/E/H paketlariga tegishli", () => {
-  const allowed = new Set(["keyIdeas", "localExamples", "position", "organization", "quizCount", "blocks", "agendaSlide", "internetSearch", "slideImageStyle", "topic"]);
+  const allowed = new Set(["localExamples", "quizCount", "blocks", "agendaSlide", "internetSearch", "slideImageStyle", "topic"]);
   for (const id of Object.keys(PENDING)) assert.ok(allowed.has(id), `${id}: PENDING ga yangi id qo'shilgan — ta'sirni ulang, kutishga qo'ymang`);
   for (const id of Object.keys(PENDING)) assert.ok(SLIDE_PARAMS.some((p) => p.id === id), `${id}: reyestrda yo'q`);
 });
