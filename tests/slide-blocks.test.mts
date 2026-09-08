@@ -77,6 +77,65 @@ test("adabiyotlar bloki → references beat, internetSearch o'chiq bo'lsa ham", 
   // `end` ankori: closing dan DARHOL oldin.
   assert.equal(layouts(off)[off.length - 2], "references", "references closing dan oldin turmadi");
   assert.ok(!layouts(run({}, "lecture", 10)).includes("references"), "so'ralmagan references paydo bo'ldi");
+
+  /*
+   * `end` ankori TO'LDIRISH yo'lida ham buzilmasin. Shablon beats'idan
+   * uzunroq deka so'ralganda tana to'ldirgichlar bilan uzaytiriladi;
+   * ular oxiriga qo'shilsa «Adabiyotlar» dan KEYIN tushib qolardi va
+   * manbalar slaydi dekaning o'rtasida qolardi.
+   */
+  const cases: [SlideBlockId[], string, number, number][] = [
+    [["adabiyotlar"], "lecture", 16, 0],
+    [["adabiyotlar"], "lecture", 24, 0],
+    [["adabiyotlar"], "lesson", 20, 0],
+    [["adabiyotlar"], "pitch", 30, 0],
+    // Quyidagi uchtasi AYNAN to'ldirish yo'lini ushlaydi: bu yerda tana
+    // bloklar joylangandan KEYIN uzaytiriladi.
+    [["adabiyotlar", "amaliyot"], "lecture", 19, 5],
+    [["adabiyotlar", "maqsadlar", "uyga_vazifa"], "lecture", 7, 0],
+    [["adabiyotlar", "maqsadlar", "uyga_vazifa"], "lecture", 8, 5],
+  ];
+  for (const [blocks, tplId, want, quizCount] of cases) {
+    const long = run({ blocks, quizCount }, tplId, want);
+    const tag = `${tplId}/${want}/[${blocks}]`;
+    assert.equal(long[long.length - 1].layout, "closing", tag);
+    assert.equal(long[long.length - 2].layout, "references", `${tag}: to'ldirgich references dan KEYIN tushdi`);
+    assert.equal(long.filter((b) => b.layout === "references").length, 1, `${tag}: references takrorlandi`);
+  }
+});
+
+test("internetSearch=true references beat'ini keltiradi — blok belgisiz ham", () => {
+  /*
+   * Grounding manbalari hech qayerda ko'rsatilmasa, tadqiqot
+   * QILINGANI foydalanuvchiga ko'rinmaydi. `internetSearch` shu sabab
+   * beats'ga ta'sir qiladi (`slide-params.ts` da «beats» deb e'lon
+   * qilingan — bezak maydon emas).
+   */
+  const a = run({ blocks: [], internetSearch: true }, "lecture", 10);
+  assert.equal(a.filter((b) => b.layout === "references").length, 1, "internetSearch references bermadi");
+  assert.equal(a[a.length - 2].layout, "references", "references closing dan oldin turmadi");
+  assert.equal(a.length, 10, "uzunlik `want` da qolishi kerak");
+
+  // Blok bilan birga bo'lsa TAKRORLANMAYDI.
+  const b = run({ blocks: ["adabiyotlar"], internetSearch: true }, "lecture", 10);
+  assert.equal(b.filter((x) => x.layout === "references").length, 1, "references ikki marta qo'yildi");
+  assert.equal(b.length, 10);
+
+  // O'chiq va blok yo'q — references ham yo'q.
+  const off = run({ blocks: [], internetSearch: false }, "lecture", 10);
+  assert.ok(!layouts(off).includes("references"), "so'ralmagan references paydo bo'ldi");
+
+  // Hamma shablonda: bitta references, uzunlik `want`, takror yo'q.
+  for (const tpl of SLIDE_TEMPLATES) {
+    for (const want of [8, 12, 16, 24]) {
+      const out = run({ blocks: [], internetSearch: true }, tpl.id, want);
+      const tag = `${tpl.id}/${want}`;
+      assert.equal(out.filter((x) => x.layout === "references").length, 1, tag);
+      assert.equal(out[out.length - 2].layout, "references", `${tag}: references oxirida emas`);
+      assert.equal(out.length, want, `${tag}: uzunlik buzildi`);
+      for (let i = 1; i < out.length; i++) assert.notEqual(out[i].layout, out[i - 1].layout, `${tag} @${i}`);
+    }
+  }
 });
 
 test("diagramma bloki → stats beat va chart:true", () => {
@@ -307,13 +366,18 @@ test("quiz qatori faqat test so'ralganda va savol soni bilan chiqadi", () => {
   assert.match(promptFor({ blocks: "reja,test", quizCount: 0 }), new RegExp(`quiz layout: ${QUIZ_COUNT_FALLBACK} ta savol`));
 });
 
-test("references qatori faqat adabiyotlar blokida", () => {
+test("references qatori adabiyotlar blokida — va internet tadqiqotida ham", () => {
   assert.doesNotMatch(promptFor({ blocks: "reja" }), /references layout/);
-  // Internet tadqiqoti O'ZI qatorni keltirmaydi — blok keltiradi.
-  assert.doesNotMatch(promptFor({ blocks: "reja", internetSearch: true }), /references layout/);
   const on = promptFor({ blocks: "reja,adabiyotlar" });
   assert.match(on, /references layout: refs/);
   assert.match(on, /uydirma muallif\/DOI YOZMANG/);
+  /*
+   * Prompt beats bilan BIR manbadan: `internetSearch` `references`
+   * beat'ini keltiradi, demak uni to'ldirish qoidasi ham kerak —
+   * aks holda model manbalar slaydini ko'radi-yu, nima yozishni
+   * bilmaydi va slayd bo'sh chiqadi.
+   */
+  assert.match(promptFor({ blocks: "reja", internetSearch: true }), /references layout: refs/);
 });
 
 test("diagramma qatori faqat diagramma blokida va birlik talabini qo'yadi", () => {
