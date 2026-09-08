@@ -1,7 +1,8 @@
 # SlaydX
 
 Ta'lim hujjatlarini AI bilan yaratuvchi web ilova: slayd, insho, kurs ishi, referat,
-maqola, tezis, rezyume, tarjima, glossariy, dars rejasi va boshqalar — 14 ta vosita.
+maqola, tezis, rezyume, tarjima, glossariy, dars rejasi va boshqalar — 15 ta vosita
+(shundan ikkitasi taqdimot: oddiy **slayd** va **pro slayd**).
 
 Chiqish: **DOCX / PPTX / PNG**.
 
