@@ -165,13 +165,25 @@ function fillerPool(tpl: SlideTemplate, need: number): SlideBeat[] {
  * Yoqilgan bloklar — DEKADAGI tartibda (anchor bo'yicha).
  *
  * `blocksToBeats` ham, prompt ham (`slide-prompt/structure.ts`) aynan
- * shu tartibni ko'radi — «rejada shu tartibda» degan qator beats bilan
- * ajralib qolmasin.
+ * shu YAGONA ro'yxatni ko'radi: beats'da bor slayd promptda tushib
+ * qolsa, model uni qanday to'ldirishni bilmaydi (AUDIT-8 naqshi).
+ *
+ * Ikki blok belgisiz ham yoqiladi, chunki foydalanuvchi ularni boshqa
+ * maydon bilan SO'RAGAN bo'ladi:
+ *   `quizCount > 0`      → `test`
+ *   `internetSearch`     → `adabiyotlar`
+ * Ikkinchisining sababi: grounding manbalari hech qayerda
+ * ko'rsatilmasa, tadqiqot qilingani foydalanuvchiga umuman
+ * ko'rinmaydi — u to'lagan ish ko'zga tashlanmay qoladi.
  */
-export function orderedBlocks(blocks: readonly SlideBlockId[] | undefined, quizCount = 0): SlideBlock[] {
+export function orderedBlocks(
+  blocks: readonly SlideBlockId[] | undefined,
+  quizCount = 0,
+  internetSearch = false,
+): SlideBlock[] {
   const on = new Set<SlideBlockId>(blocks ?? []);
-  // Savollar soni tanlangan bo'lsa test SO'RALGAN — blok belgisiz ham.
   if (quizCount > 0) on.add("test");
+  if (internetSearch) on.add("adabiyotlar");
   return ANCHOR_ORDER.flatMap((a) => SLIDE_BLOCKS.filter((b) => b.anchor === a && on.has(b.id)));
 }
 
@@ -181,9 +193,36 @@ function clumpAt(beats: SlideBeat[]): number {
   return -1;
 }
 
-/** `layout` ni `at` ga qo'yish yonma-yon takror bermaydimi. */
-function fits(beats: SlideBeat[], at: number, layout: SlideLayout): boolean {
-  return beats[at - 1]?.layout !== layout && beats[at]?.layout !== layout;
+/**
+ * `beat` ni `at` ga qo'yish mumkinmi: yonma-yon takror bermasin VA
+ * bloklarning ankor tartibini buzmasin (`references` `quiz` dan oldin
+ * tushib qolmasin, `reja` esa boshdan siljimasin).
+ */
+function fits(beats: MarkedBeat[], at: number, beat: MarkedBeat): boolean {
+  if (beats[at - 1]?.layout === beat.layout || beats[at]?.layout === beat.layout) return false;
+  if (beat.anchor === undefined) return true;
+  const r = anchorRank(beat.anchor);
+  const prev = beats[at - 1]?.anchor;
+  const next = beats[at]?.anchor;
+  if (prev !== undefined && anchorRank(prev) > r) return false;
+  if (next !== undefined && anchorRank(next) < r) return false;
+  return true;
+}
+
+/**
+ * `p` va `p+1` ni almashtirish ANKOR tartibini buzmaydimi.
+ *
+ * Bu shartsiz almashtirish `references` ni ikki `bullets` blokning
+ * orasiga tashlardi: takror yo'qolardi, lekin «Adabiyotlar»
+ * `closing` dan darhol oldin turish shartini yo'qotardi.
+ */
+function swapOk(beats: MarkedBeat[], p: number): boolean {
+  const l = beats[p].anchor;
+  const r = beats[p + 1]?.anchor;
+  // Almashgach `r` chapga, `l` o'ngga o'tadi — tartib faqat `r <= l` da saqlanadi.
+  if (l !== undefined && r !== undefined) return anchorRank(r) <= anchorRank(l);
+  if (r === "end" || l === "after-title") return false;
+  return true;
 }
 
 /**
@@ -202,12 +241,12 @@ function deClump(beats: MarkedBeat[], pool: SlideBeat[]): void {
     const i = clumpAt(beats);
     if (i < 0) return;
     // 1) o'ng qo'shni bilan almashtirish
-    if (i + 1 < beats.length && beats[i + 1].layout !== beats[i - 1].layout && beats[i + 2]?.layout !== beats[i].layout) {
+    if (i + 1 < beats.length && beats[i + 1].layout !== beats[i - 1].layout && beats[i + 2]?.layout !== beats[i].layout && swapOk(beats, i)) {
       [beats[i], beats[i + 1]] = [beats[i + 1], beats[i]];
       continue;
     }
     // 2) chap qo'shni bilan almashtirish
-    if (i - 2 >= 0 && beats[i - 2].layout !== beats[i].layout && beats[i - 3]?.layout !== beats[i - 1].layout) {
+    if (i - 2 >= 0 && beats[i - 2].layout !== beats[i].layout && beats[i - 3]?.layout !== beats[i - 1].layout && swapOk(beats, i - 2)) {
       [beats[i - 1], beats[i - 2]] = [beats[i - 2], beats[i - 1]];
       continue;
     }
@@ -215,8 +254,8 @@ function deClump(beats: MarkedBeat[], pool: SlideBeat[]): void {
     const from = !beats[i].block ? i : !beats[i - 1].block ? i - 1 : i;
     const [beat] = beats.splice(from, 1);
     let at = -1;
-    for (let j = from + 1; j <= beats.length; j += 1) if (fits(beats, j, beat.layout)) { at = j; break; }
-    if (at < 0) for (let j = from - 1; j >= 0; j -= 1) if (fits(beats, j, beat.layout)) { at = j; break; }
+    for (let j = from + 1; j <= beats.length; j += 1) if (fits(beats, j, beat)) { at = j; break; }
+    if (at < 0) for (let j = from - 1; j >= 0; j -= 1) if (fits(beats, j, beat)) { at = j; break; }
     beats.splice(at < 0 ? from : at, 0, beat);
     if (at >= 0) continue;
     /*
@@ -245,7 +284,11 @@ function deClump(beats: MarkedBeat[], pool: SlideBeat[]): void {
  *      beat'lari butunlay olib tashlanadi.
  *   3. `quizCount > 0` testni SO'RAGAN demakdir: `test` bloki
  *      belgilanmagan bo'lsa ham `quiz` beat qo'yiladi. Aksi ham:
- *      blok bor, son yo'q — `QUIZ_COUNT_FALLBACK`.
+ *      blok bor, son yo'q — `QUIZ_COUNT_FALLBACK`. Xuddi shunday
+ *      `internetSearch` `references` beat'ini keltiradi — tadqiqot
+ *      manbalari ko'rsatilmasa tadqiqot QILINGANI ko'rinmaydi.
+ *      Ikkalasi ham takrorlanmaydi: blok allaqachon yoqilgan bo'lsa
+ *      bitta beat qoladi (`orderedBlocks` to'plam ustida ishlaydi).
  *   4. `title` doim boshida; `closing` doim oxirida va BITTA.
  *   5. Yonma-yon bir xil layout yo'q (`expandBeats` qoidasi saqlanadi).
  *   6. Uzunlik `want` ga keltiriladi: ortiqchasi to'ldirgich/oddiy
@@ -263,7 +306,7 @@ export function blocksToBeats(
 ): SlideBeat[] {
   const quizCount = (meta.quizCount ?? 0) > 0 ? meta.quizCount : QUIZ_COUNT_FALLBACK;
   const roleMeta = { planItems: meta.planItems || PLAN_ITEMS_DEFAULT, quizCount };
-  const on = orderedBlocks(meta.blocks, meta.quizCount ?? 0);
+  const on = orderedBlocks(meta.blocks, meta.quizCount ?? 0, meta.internetSearch === true);
   const asBeat = (blk: SlideBlock): MarkedBeat => ({
     layout: blk.layout,
     role: blk.role(roleMeta),

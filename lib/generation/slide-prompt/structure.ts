@@ -21,7 +21,14 @@ import type { SlidePromptCtx } from "./ctx";
 export function structureLines(meta: DocMeta, tpl: SlideTemplate, ctx: SlidePromptCtx): string[] {
   void tpl;
   void ctx;
-  const blocks = orderedBlocks(meta.blocks, meta.quizCount ?? 0);
+  /*
+   * Bloklar ro'yxati `blocksToBeats` bilan AYNAN bir manbadan —
+   * beats'da bor slayd promptda tushib qolsa, model uni qanday
+   * to'ldirishni bilmaydi va slayd bo'sh chiqadi (AUDIT-8).
+   * Shuning uchun `internetSearch` ham shu yerga uzatiladi: u
+   * `references` beat'ini keltiradi, demak qoidasi ham kerak.
+   */
+  const blocks = orderedBlocks(meta.blocks, meta.quizCount ?? 0, meta.internetSearch === true);
   const has = (id: string) => blocks.some((b) => b.id === id);
   // `blocksToBeats` bilan BIR XIL shart: reja bloki bor va agenda so'ralgan.
   const agenda = has("reja") && meta.agendaSlide !== false;
