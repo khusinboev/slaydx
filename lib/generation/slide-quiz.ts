@@ -8,15 +8,23 @@ import type { DocMeta } from "./types";
  * Maket (`slide-layout-extra.ts`) bitta slaydni chizadi, bu modul esa
  * test butun deka bo'ylab to'g'ri joylashishini ta'minlaydi:
  *
- *   1) bitta slaydda bir nechta savol bo'lsa — HAR SAVOL alohida
- *      slaydga. To'rt variantli savol slayd balandligining yarmini
- *      egallaydi; ikkitasi sig'sa ham o'qib bo'lmaydigan darajada
- *      mayda chiqardi;
+ *   1) har `quiz` slaydida AYNAN BITTA savol. To'rt variantli savol
+ *      slayd balandligining yarmini egallaydi; ikkitasi sig'sa ham
+ *      o'qib bo'lmaydigan darajada mayda chiqardi;
  *   2) to'g'ri javob NOTIQ IZOHIGA yoziladi — slaydda hech qachon
  *      ko'rinmaydi (aks holda savolning ma'nosi qolmaydi);
  *   3) izohlar o'chirilgan bo'lsa (`speakerNotes: false`) javoblar
- *      hech qayerda qolmasdi — shuning uchun deka oxiriga, yakun
- *      slaydidan OLDIN, `answers` slaydi qo'shiladi.
+ *      hech qayerda qolmasdi — shuning uchun REJADA yakun slaydidan
+ *      oldin `answers` slaydi turadi va bu modul uni TO'LDIRADI.
+ *
+ * UZUNLIK O'ZGARMAYDI (X-3). Ilgari bu modul savollarni slaydlarga
+ * AJRATARDI va `answers` ni QO'SHARDI: 10 slayd so'ragan foydalanuvchi
+ * `quizCount: 3` da 13, `quizCount: 10` da 20 slayd olardi. Va'da,
+ * narx (2 000 tanga × slayd), rasm byudjeti va `delivered` hisobi —
+ * hammasi rejadagi songa bog'langan, ya'ni «ortiqcha slayd» yaxshilik
+ * emas, buzilish edi. Endi savol slaydlari va javoblar kaliti
+ * `blocksToBeats` REJASIDA tug'iladi (8-qoida), bu modul esa faqat
+ * MAVJUD slaydlarni to'ldiradi.
  *
  * Funksiya deterministik: tashqi holat, vaqt yoki tasodif yo'q — bir
  * xil kirishda har doim bir xil natija.
@@ -41,33 +49,18 @@ export function answerIndex(answer: unknown, options: string[] = []): number {
   return Math.max(0, Math.min(max, Math.round(n)));
 }
 
-/** Savolli slaydlar — `quiz` maketi va kamida bitta savol. */
-function quizSlides(slides: SlideModel[]): SlideModel[] {
-  return slides.filter((s) => s.layout === "quiz" && (s.quiz?.length ?? 0) > 0);
-}
-
 /**
- * Ko'p savolli slaydni savol-ma-savol ajratadi.
+ * Deka bo'ylab savollarni YIG'ADI — deka tartibida.
  *
- * `title`, `footer` va boshqa maydonlar saqlanadi. Birinchi savol
- * slaydning O'Z `id` sida qoladi; qo'shimchalari `-q2`, `-q3` qo'shimchasi
- * bilan ketadi — takroriy `id` ko'ruvchida React kaliti to'qnashuvini va
- * `slide-images.ts` da prompt almashinuvini beradi (AUDIT-7 da o'lchangan).
+ * Model rejaga rioya qilmasligi mumkin: uchala savolni birinchi
+ * slaydga solib, qolgan ikki `quiz` slaydini bo'sh qoldirishi ham,
+ * har slaydga uchtadan yozishi ham uchraydi. Ikkala holatda ham
+ * manba bitta ro'yxat bo'ladi va u slaydlarga qayta taqsimlanadi.
  */
-function splitQuizSlides(slides: SlideModel[]): void {
-  if (!slides.some((s) => s.layout === "quiz" && (s.quiz?.length ?? 0) > 1)) return;
-  const next: SlideModel[] = [];
-  for (const s of slides) {
-    if (s.layout !== "quiz" || !s.quiz?.length) {
-      next.push(s);
-      continue;
-    }
-    s.quiz.forEach((q, i) => {
-      next.push(i === 0 ? { ...s, quiz: [q] } : { ...s, id: `${s.id}-q${i + 1}`, quiz: [q] });
-    });
-  }
-  slides.length = 0;
-  slides.push(...next);
+function collectQuestions(slides: SlideModel[]): NonNullable<SlideModel["quiz"]> {
+  const out: NonNullable<SlideModel["quiz"]> = [];
+  for (const s of slides) if (s.layout === "quiz" && s.quiz?.length) out.push(...s.quiz);
+  return out;
 }
 
 /** «Javob: B — Variant matni». Mavjud izohga qo'shiladi, ustiga yozilmaydi. */
@@ -83,27 +76,27 @@ function withAnswerNote(s: SlideModel): SlideModel {
 }
 
 /**
- * Javoblar slaydi — «1 — B», «2 — D».
+ * REJADAGI javoblar slaydini to'ldiradi — «1 — B», «2 — D».
  *
- * Yakun slaydidan OLDIN turadi: taqdimot «Xulosa» bilan tugashi kerak,
- * kalit varag'i bilan emas.
+ * Slayd QO'SHILMAYDI: u `blocksToBeats` da `answers` beat sifatida
+ * allaqachon rejalashtirilgan va yakun slaydidan oldin turadi
+ * (taqdimot «Xulosa» bilan tugashi kerak, kalit varag'i bilan emas).
+ * Reja unga joy topmagan bo'lsa (juda qisqa deka) javoblar baribir
+ * har savol slaydining IZOHIDA qoladi — ma'lumot yo'qolmaydi.
  */
-function insertAnswersSlide(slides: SlideModel[], quizzes: SlideModel[], meta: DocMeta): void {
+function fillAnswersSlide(slides: SlideModel[], quizzes: SlideModel[], meta: DocMeta): void {
+  const at = slides.findIndex((s) => s.layout === "answers");
+  if (at < 0) return;
   const L = slideLabels(meta.language);
-  const bullets = quizzes.map((s, i) => {
-    const q = s.quiz![0];
-    return `${i + 1} — ${QUIZ_LETTERS[answerIndex(q.answer, q.options)]}`;
-  });
-  const answers: SlideModel = {
-    id: "answers-fix",
-    layout: "answers",
+  slides[at] = {
+    ...slides[at],
     title: L.answers,
-    bullets,
-    footer: quizzes[quizzes.length - 1].footer,
+    bullets: quizzes.map((s, i) => {
+      const q = s.quiz![0];
+      return `${i + 1} — ${QUIZ_LETTERS[answerIndex(q.answer, q.options)]}`;
+    }),
+    footer: quizzes[quizzes.length - 1].footer ?? slides[at].footer,
   };
-  const last = slides[slides.length - 1];
-  if (last && last.layout === "closing") slides.splice(slides.length - 1, 0, answers);
-  else slides.push(answers);
 }
 
 /**
@@ -111,15 +104,29 @@ function insertAnswersSlide(slides: SlideModel[], quizzes: SlideModel[], meta: D
  *
  * `slide-write.ts` uni `applyResearchRefs` dan keyin — ya'ni matn
  * to'liq yig'ilgach, titul/yakun tuzatishlaridan oldin — chaqiradi.
+ *
+ * SLAYD SONI O'ZGARMAYDI: na qo'shiladi, na o'chiriladi. Model
+ * kutilganidan KO'P savol qaytarsa ortiqchasi tashlanadi, KAM
+ * qaytarsa ortgan `quiz` slaydlari o'z holicha qoladi (bo'sh savolli
+ * slayd `normalizeSlide` da allaqachon bandlarga tushgan bo'ladi).
  */
 export function finalizeQuiz(slides: SlideModel[], meta: DocMeta): void {
-  splitQuizSlides(slides);
-  if (!quizSlides(slides).length) return;
-  // Javob HAR DOIM izohga yoziladi — `speakerNotes` bayrog'i uni faqat
-  // KO'RSATISHNI o'chiradi (`slideNotes`), yozishni emas.
-  for (let i = 0; i < slides.length; i++) {
-    const s = slides[i];
-    if (s.layout === "quiz" && s.quiz?.length) slides[i] = withAnswerNote(s);
-  }
-  if (meta.speakerNotes === false) insertAnswersSlide(slides, quizSlides(slides), meta);
+  const at: number[] = [];
+  for (let i = 0; i < slides.length; i++) if (slides[i].layout === "quiz") at.push(i);
+  const pool = collectQuestions(slides);
+  if (!at.length || !pool.length) return;
+  /*
+   * Har slaydga BITTADAN savol, deka tartibida. `pool` rejadagi savol
+   * slaydlaridan uzun bo'lsa ortiqchasi TASHLANADI: uzunlik shartnomasi
+   * savollar sonidan ustun turadi (X-3) — foydalanuvchi slaydga to'lagan.
+   */
+  at.forEach((i, k) => {
+    const q = pool[k];
+    if (!q) return;
+    // Javob HAR DOIM izohga yoziladi — `speakerNotes` bayrog'i uni faqat
+    // KO'RSATISHNI o'chiradi (`slideNotes`), yozishni emas.
+    slides[i] = withAnswerNote({ ...slides[i], quiz: [q] });
+  });
+  const quizzes = at.map((i) => slides[i]).filter((s) => s.quiz?.length);
+  if (quizzes.length) fillAnswersSlide(slides, quizzes, meta);
 }

@@ -1,4 +1,4 @@
-import { QUIZ_COUNT_FALLBACK, orderedBlocks } from "../slide-blocks";
+import { orderedBlocks } from "../slide-blocks";
 import type { SlideTemplate } from "../slide-templates";
 import type { DocMeta } from "../types";
 import type { SlidePromptCtx } from "./ctx";
@@ -32,7 +32,6 @@ export function structureLines(meta: DocMeta, tpl: SlideTemplate, ctx: SlideProm
   const has = (id: string) => blocks.some((b) => b.id === id);
   // `blocksToBeats` bilan BIR XIL shart: reja bloki bor va agenda so'ralgan.
   const agenda = has("reja") && meta.agendaSlide !== false;
-  const quizCount = (meta.quizCount ?? 0) > 0 ? meta.quizCount : QUIZ_COUNT_FALLBACK;
 
   return [
     /*
@@ -58,9 +57,29 @@ export function structureLines(meta: DocMeta, tpl: SlideTemplate, ctx: SlideProm
      * chiqardi. Bu qator oraliqni emas, SONNI qo'yadi.
      */
     agenda ? `agenda: AYNAN ${meta.planItems} ta band, har biri 3–7 so‘z, raqamlanmagan.` : "",
+    /*
+     * SAVOLLAR SONI bu qatordan OLINDI (X-3).
+     *
+     * Ilgari bu yerda «${quizCount} ta savol» turardi va model shuncha
+     * savolni BITTA `quiz` slaydiga solardi; `finalizeQuiz` esa uni
+     * savol soncha slaydga ajratib, dekani rejadan uzun qilardi.
+     * Endi reja `blocksToBeats` da savol soncha `quiz` beat qo'yadi
+     * (8-qoida) va SON rollarda keladi («…jami 5 ta savol — 2-savol»).
+     * Bu qator faqat SLAYD ichidagi sxemani aytadi: bitta savol, 4
+     * variant. Ikkita manba bo'lsa ular ajralib ketardi — deka
+     * uzunligiga sig'magan savollar tashlanadi, prompt esa hamon eski
+     * sonni talab qilib turardi.
+     */
     has("test")
-      ? `quiz layout: ${quizCount} ta savol, har savolda AYNAN 4 variant (options), answer — to‘g‘ri variant indeksi 0..3, bittasi to‘g‘ri; savol shu dekaning mazmunidan; variantlar bir xil uzunlikda, «hammasi to‘g‘ri» yo‘q.`
+      ? `quiz layout: HAR quiz slaydida AYNAN BITTA savol (nechta savol kerakligi rejadagi quiz slaydlari sonidan ko‘rinadi), har savolda AYNAN 4 variant (options), answer — to‘g‘ri variant indeksi 0..3, bittasi to‘g‘ri; savol shu dekaning mazmunidan; variantlar bir xil uzunlikda, «hammasi to‘g‘ri» yo‘q. Savollar bir-birini takrorlamasin.`
       : "",
+    /*
+     * `answers` slaydi rejada bo'lsa (izohlar o'chiq) uni `finalizeQuiz`
+     * to'ldiradi — model yozgani baribir ustiga yoziladi. Shuning uchun
+     * modelga «vaqt sarflama» deb aytiladi: aks holda u kalitni
+     * O'YLAB TOPADI va uning javoblari savollarga mos kelmasdi.
+     */
+    has("test") ? `answers layout: javob kalitini O‘ZINGIZ yozmang — bo‘sh bullets qoldiring, kalit avtomatik to‘ldiriladi.` : "",
     has("adabiyotlar")
       ? `references layout: refs — faqat berilgan manbalardan (TADQIQOT bo‘limi), bo‘lmasa bo‘sh qoldiring; uydirma muallif/DOI YOZMANG.`
       : "",

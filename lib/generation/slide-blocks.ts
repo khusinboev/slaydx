@@ -63,6 +63,30 @@ export const SLIDE_BLOCK_BY_ID = Object.fromEntries(SLIDE_BLOCKS.map((b) => [b.i
 export const QUIZ_COUNT_FALLBACK = 3;
 
 /**
+ * Bitta `quiz` slaydiga sig'adigan savol soni.
+ *
+ * Maket qarori (WP-C, `slide-layout-extra.ts`): to'rt variantli savol
+ * slayd balandligining yarmini egallaydi, ikkitasi sig'sa ham o'qib
+ * bo'lmaydigan darajada mayda chiqadi. Ya'ni 1 savol = 1 slayd.
+ * X-3 da bu son REJAGA ko'chdi — nechta savol so'ralgan bo'lsa,
+ * shuncha `quiz` beat qo'yiladi va deka uzunligi keyin o'smaydi.
+ */
+export const QUIZ_PER_SLIDE = 1;
+
+/**
+ * Javoblar kaliti — izohlar o'chirilganda (`speakerNotes: false`)
+ * javoblar hech qayerda qolmaydi, shuning uchun REJAGA alohida
+ * `answers` slaydi kiradi. Ilgari uni `finalizeQuiz` deka yozilgandan
+ * KEYIN qo'shardi va deka rejadan bir slayd uzun chiqardi (X-3).
+ */
+const ANSWERS_ROLE = "Test javoblari kaliti — har savol raqami va to‘g‘ri variant harfi";
+
+/** Har `quiz` slaydining roli: modelga AYNAN bitta savol yozishni aytadi. */
+function quizRole(i: number, n: number): string {
+  return `Nazorat testi (jami ${n} ta savol) — ${i + 1}-savol: AYNAN bitta savol va 4 variant`;
+}
+
+/**
  * `chart` maydoni `SlideBeat` ga WP-0b da (koordinator) qo'shiladi.
  *
  * Bu ish oqimi WP-0a dan tarmoqlangani uchun tip bu yerda hali yo'q —
@@ -187,9 +211,24 @@ export function orderedBlocks(
   return ANCHOR_ORDER.flatMap((a) => SLIDE_BLOCKS.filter((b) => b.anchor === a && on.has(b.id)));
 }
 
+/**
+ * KETMA-KET kelishi ATAYLAB ruxsat etilgan maketlar.
+ *
+ * 5-qoida («yonma-yon bir xil layout yo'q») to'ldirgichlar dekani
+ * bir xil qilib qo'yishiga qarshi edi. Nazorat testi esa aksincha —
+ * 1 savol = 1 slayd bo'lgani uchun u ATAYLAB ketma-ket turadigan
+ * QATOR: 5 savolli test — 5 ta `quiz` slaydi qatorda. Ilgari bu
+ * qator rejada emas, `finalizeQuiz` da tug'ilardi (ya'ni qoida uni
+ * ko'rmasdi ham) — X-3 uni rejaga ko'chirgach, istisno OSHKORA
+ * yozilishi kerak bo'ldi.
+ */
+const RUN_LAYOUTS = new Set<SlideLayout>(["quiz"]);
+
 /** Yonma-yon bir xil layout turgan birinchi indeks; yo'q bo'lsa −1. */
 function clumpAt(beats: SlideBeat[]): number {
-  for (let i = 1; i < beats.length; i++) if (beats[i].layout === beats[i - 1].layout) return i;
+  for (let i = 1; i < beats.length; i++) {
+    if (beats[i].layout === beats[i - 1].layout && !RUN_LAYOUTS.has(beats[i].layout)) return i;
+  }
   return -1;
 }
 
@@ -199,6 +238,14 @@ function clumpAt(beats: SlideBeat[]): number {
  * tushib qolmasin, `reja` esa boshdan siljimasin).
  */
 function fits(beats: MarkedBeat[], at: number, beat: MarkedBeat): boolean {
+  /*
+   * `RUN_LAYOUTS` istisnosi bu yerga KERAK EMAS va ataylab yo'q.
+   * `fits` faqat `deClump` ning ko'chirish bosqichidan chaqiriladi,
+   * u esa `clumpAt` topgan takror ustida ishlaydi — `quiz` juftligi
+   * u yerga hech qachon yetib bormaydi. Istisnoni bu yerga ham
+   * yozish sinab bo'lmaydigan tarmoq qoldirardi (mutatsiya M14 aynan
+   * shuni ko'rsatdi: uni buzsa ham birorta test qizarmadi).
+   */
   if (beats[at - 1]?.layout === beat.layout || beats[at]?.layout === beat.layout) return false;
   if (beat.anchor === undefined) return true;
   const r = anchorRank(beat.anchor);
@@ -297,9 +344,17 @@ function deClump(beats: MarkedBeat[], pool: SlideBeat[]): void {
  *      yoqilsa deka `want` dan UZUN chiqadi: foydalanuvchining aniq
  *      tanlovi shablon uzunligidan ustun turadi.
  *   7. Deterministik: bir xil kirish → bir xil chiqish, tasodif yo'q.
+ *   8. TEST GURUHI (savol slaydlari + javoblar kaliti) TO'LIQ shu
+ *      yerda rejalashtiriladi va `want` ni HECH QACHON oshirmaydi
+ *      (X-3). Ilgari reja bitta `quiz` beat qo'yardi, `finalizeQuiz`
+ *      esa uni savol soncha slaydga ajratib, yana `answers` qo'shardi —
+ *      10 slayd so'ragan foydalanuvchi 13 slayd olardi. Endi savollar
+ *      soni rejaga tushadi, sig'magani esa TASHLANADI (6-qoidadan
+ *      farqli: qolgan bloklar tashlanmaydi, chunki ular alohida
+ *      slayd; ortiqcha savol esa BITTA blokning ichki hajmi).
  */
 export function blocksToBeats(
-  meta: Pick<DocMeta, "blocks" | "planItems" | "quizCount" | "agendaSlide" | "internetSearch">,
+  meta: Pick<DocMeta, "blocks" | "planItems" | "quizCount" | "agendaSlide" | "internetSearch" | "speakerNotes">,
   tpl: SlideTemplate,
   beats: SlideBeat[],
   want: number,
@@ -345,6 +400,52 @@ export function blocksToBeats(
    * bloklar uchun joy qoldirib.
    */
   const bodyWant = Math.max(0, want - (head ? 1 : 0) - (tail ? 1 : 0));
+
+  /*
+   * ── 8-qoida: TEST GURUHINI rejalashtirish.
+   *
+   * Har blok tanada AYNAN BITTA o'rin egallaydi (qo'shilgani mavjud
+   * beat'ning o'rnini oladi, qo'shilmagani yangi slayd bo'lib kiradi).
+   * Ya'ni tana `want` da qolishi uchun kerakli shart sodda:
+   *
+   *     blok beat'lari soni ≤ bodyWant
+   *
+   * Test guruhi shu tengsizlikning YON BERUVCHI tomoni: boshqa
+   * bloklardan qolgan `room` ga nechta savol slaydi sig'sa shuncha
+   * qo'yiladi. Sig'mas ekan — javoblar kaliti BIRINCHI bo'lib
+   * tashlanadi (javob baribir izohda qoladi), keyin ortiqcha
+   * savollar. Kamida bitta `quiz` slaydi qoladi: `test` — 6-qoida
+   * himoyasidagi foydalanuvchi BLOKI, faqat uning ichki hajmi
+   * qisqaradi.
+   */
+  const testOn = on.some((b) => b.id === "test");
+  const others = on.filter((b) => b.id !== "test" && !(b.id === "reja" && !keepAgenda));
+  const askQuiz = testOn ? Math.max(1, Math.ceil(quizCount / QUIZ_PER_SLIDE)) : 0;
+  const room = bodyWant - others.length;
+  const wantAnswers = askQuiz > 0 && meta.speakerNotes === false;
+  const quizBeats = askQuiz > 0 ? Math.max(1, Math.min(askQuiz, room - (wantAnswers ? 1 : 0))) : 0;
+  const answersBeat = wantAnswers && quizBeats + 1 <= room;
+
+  /**
+   * Dekaga tushishi kerak bo'lgan BLOK beat'lari — dekadagi tartibda.
+   *
+   * `test` bloki bu yerda guruhga YOYILADI: `quizBeats` ta `quiz` va
+   * (kerak bo'lsa) bitta `answers`. Shundan keyin quyidagi mantiq
+   * ular bilan oddiy bloklardek ishlaydi — uzunlik muvozanati,
+   * yonma-yon takror qoidasi va ankor tartibi ularni HISOBGA OLADI.
+   */
+  const wanted: MarkedBeat[] = [];
+  for (const blk of on) {
+    if (blk.id === "reja" && !keepAgenda) continue;
+    if (blk.id !== "test") {
+      wanted.push(asBeat(blk));
+      continue;
+    }
+    for (let i = 0; i < quizBeats; i += 1) {
+      wanted.push({ layout: "quiz", role: quizRole(i, quizBeats), block: "test", anchor: blk.anchor });
+    }
+    if (answersBeat) wanted.push({ layout: "answers", role: ANSWERS_ROLE, block: "test", anchor: blk.anchor });
+  }
 
   /** Tanani joyida `target` uzunlikka keltiradi; BLOKLARGA tegmaydi. */
   const resize = (out: MarkedBeat[], target: number): MarkedBeat[] => {
@@ -392,20 +493,22 @@ export function blocksToBeats(
   };
 
   /**
-   * 1-qoida: har blokni O'Z hududidagi mos layoutli beat bilan
+   * 1-qoida: har blok beat'ini O'Z hududidagi mos layoutli beat bilan
    * QO'SHADI (uzunlik o'zgarmaydi), qo'sha olmaganlarini qaytaradi.
+   *
+   * `!arr[i].block` sharti guruh uchun ham to'g'ri ishlaydi: allaqachon
+   * qo'shilgan `quiz` beat ikkinchi savolga qayta ishlatilmaydi.
    */
-  const mergeInto = (arr: MarkedBeat[]): SlideBlock[] => {
-    const rest: SlideBlock[] = [];
-    for (const blk of on) {
-      if (blk.id === "reja" && !keepAgenda) continue;
-      const [lo, hi] = mergeRange(blk.anchor, arr.length);
+  const mergeInto = (arr: MarkedBeat[]): MarkedBeat[] => {
+    const rest: MarkedBeat[] = [];
+    for (const blk of wanted) {
+      const [lo, hi] = mergeRange(blk.anchor as SlideBlockAnchor, arr.length);
       let at = -1;
       for (let i = lo; i < hi; i += 1) {
         if (arr[i].layout === blk.layout && !arr[i].block) { at = i; break; }
       }
       if (at < 0) rest.push(blk);
-      else arr[at] = asBeat(blk);
+      else arr[at] = { ...blk };
     }
     return rest;
   };
@@ -453,7 +556,7 @@ export function blocksToBeats(
       if (other === undefined || anchorRank(other) >= anchorRank(anchor)) break;
       at += 1;
     }
-    body.splice(at, 0, ...group.map(asBeat));
+    body.splice(at, 0, ...group.map((b) => ({ ...b })));
   }
 
   /*
