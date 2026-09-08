@@ -39,9 +39,12 @@ import { cn } from "@/lib/cn";
  * komponentlar bilan pastda o'zicha chiziladi, qolganini
  * `renderSlideParam` chizadi.
  */
-const SLIDE_FIELD_ORDER = slideParamsFor("slide")
+/** Inline (registry'dan tashqari o'zicha chiziluvchi) id lar — testda ham ishlatiladi. */
+export const SLIDE_INLINE_FIELD_IDS = ["topic", "language", "quality", "slideTemplate", "slideTheme", "extra"];
+
+export const SLIDE_FIELD_ORDER = slideParamsFor("slide")
   .map((p) => p.id)
-  .filter((id) => !["topic", "language", "quality", "slideTemplate", "slideTheme", "extra"].includes(id));
+  .filter((id) => !SLIDE_INLINE_FIELD_IDS.includes(id));
 
 /*
  * «Sifatli rasm» → «sifatliroq rasm»: standart paket ham fal.ai rasm

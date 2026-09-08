@@ -22,9 +22,18 @@ import { renderSlideParam, resetBlocksForPurpose } from "./slide-fields";
  * — ikkita mustaqil chizuvchi bo'lmasin). Qolgan hammasi
  * `renderSlideParam` orqali — `SlideForm` bilan bitta manba.
  *
- * «Qo'shimcha (ixtiyoriy)» yig'iluvchidagi tartib.
+ * Uchta eksport qilingan ro'yxat asosiy tanadagi (ikkiga bo'lingan —
+ * til tanlagichi orasiga kiradi) va «Qo'shimcha» bo'limidagi tartibni
+ * belgilaydi; JSX ULARNI TO'G'RIDAN-TO'G'RI chizadi (qo'lda alohida
+ * `renderSlideParam(...)` chaqiruvlari emas), shuning uchun bu
+ * ro'yxatlar va haqiqiy render bir-biridan AJRALIB KETA OLMAYDI —
+ * `tests/slide-form.test.mts` shu uchta ro'yxatni reyestr bilan
+ * to'g'ridan-to'g'ri solishtiradi.
  */
-const EXTRA_FIELD_ORDER = ["keyIdeas", "speakerNotes", "localExamples", "textVolume", "internetSearch", "quizCount", "titleSlide", "agendaSlide", "extra"];
+export const PRO_INLINE_FIELD_IDS = ["topic", "language", "slideTemplate", "slideTheme"];
+export const PRO_MAIN_FIELD_ORDER_1 = ["slideAudience", "slidePurpose", "blocks", "planItems", "subject", "slideCount"];
+export const PRO_MAIN_FIELD_ORDER_2 = ["slideImageStyle", "logoAssetId", "author", "position", "organization"];
+export const PRO_EXTRA_FIELD_ORDER = ["keyIdeas", "speakerNotes", "localExamples", "textVolume", "internetSearch", "quizCount", "titleSlide", "agendaSlide", "extra"];
 
 export function ProSlideForm({ tool, profile }: { tool: ToolConfig; profile: UserProfile }) {
   const router = useRouter();
@@ -90,7 +99,7 @@ export function ProSlideForm({ tool, profile }: { tool: ToolConfig; profile: Use
       title={tool.pageTitle}
       extra={
         <>
-          {EXTRA_FIELD_ORDER.map((id) => renderSlideParam(id, values, set))}
+          {PRO_EXTRA_FIELD_ORDER.map((id) => renderSlideParam(id, values, set))}
         </>
       }
       extraOpen={extraOpen}
@@ -132,12 +141,7 @@ export function ProSlideForm({ tool, profile }: { tool: ToolConfig; profile: Use
         </fieldset>
       )}
 
-      {renderSlideParam("slideAudience", values, set)}
-      {renderSlideParam("slidePurpose", values, set)}
-      {renderSlideParam("blocks", values, set)}
-      {renderSlideParam("planItems", values, set)}
-      {renderSlideParam("subject", values, set)}
-      {renderSlideParam("slideCount", values, set)}
+      {PRO_MAIN_FIELD_ORDER_1.map((id) => renderSlideParam(id, values, set))}
 
       <fieldset className="mb-6">
         <Legend>Taqdimot tili</Legend>
@@ -148,11 +152,7 @@ export function ProSlideForm({ tool, profile }: { tool: ToolConfig; profile: Use
         />
       </fieldset>
 
-      {renderSlideParam("slideImageStyle", values, set)}
-      {renderSlideParam("logoAssetId", values, set)}
-      {renderSlideParam("author", values, set)}
-      {renderSlideParam("position", values, set)}
-      {renderSlideParam("organization", values, set)}
+      {PRO_MAIN_FIELD_ORDER_2.map((id) => renderSlideParam(id, values, set))}
 
       <fieldset className="mb-6">
         <Legend>Shablon — tuzilma</Legend>
