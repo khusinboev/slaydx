@@ -298,9 +298,11 @@ async function persistImage(remote: SlideImage): Promise<SlideImage | null> {
  * Dekada nechta rasm SLOTI rejalashtirilgan — va'daning yagona manbasi.
  *
  * Ilgari bu ro'yxat faqat `attachSlideImages` ichida, yo'l-yo'lakay
- * hisoblanardi. Endi u ikki joyda kerak: rasm so'rashda va yetkazishni
- * o'lchashda (`delivered.ts`). Ikkinchi joyda qayta yozilsa, ikki nusxa
- * jimgina ajralib ketardi — shuning uchun bitta eksport funksiya.
+ * hisoblanardi va hech qayerga chiqmasdi. Endi undan chiqqan SON
+ * yetkazishni o'lchashda ham kerak (`delivered.ts`) — u yerda reja
+ * qayta hisoblanmaydi, shu funksiya bergan `want` hisobot orqali
+ * uzatiladi. Aks holda `photoSlot`/`imageBudget` o'zgarganda ikkita
+ * nusxa jimgina ajralib ketardi.
  *
  * `!s.image` filtri ATAYIN yo'q: allaqachon rasmi bor slayd ham
  * REJADAGI slot, u yetkazilgan deb sanaladi. Filtr chaqiruv joyida.
