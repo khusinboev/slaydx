@@ -17,6 +17,7 @@ import {
 import { refund, refundPartial } from "./credits";
 import { deleteGenerationFile, putGenerationFile } from "./storage";
 import { deleteAssets, extractAssets, putAssets } from "./assets";
+import { logoDataUrl } from "./logo";
 import { purgeExpiredSessions } from "./session";
 import { purgeRateLimits } from "./ratelimit";
 import { purgeExpiredTickets } from "./telegram";
@@ -160,7 +161,11 @@ async function runJob(job: ClaimedJob): Promise<void> {
   const stop = progressTicker(job);
   try {
     const deadline = Date.now() + jobDeadlineMs(job);
-    const file = await buildArtifact(tool, job.values, { deadline });
+    // `logoAssetId` bo'lsa foydalanuvchining o'z logotipi (`logo_uploads`)
+    // `data:` URL ga aylantiriladi. Topilmasa/bo'sh bo'lsa `undefined` —
+    // xato emas, deka logosiz chiqadi (`lib/server/logo.ts` izohiga qarang).
+    const logo = await logoDataUrl(job.userId, String(job.values.logoAssetId ?? ""));
+    const file = await buildArtifact(tool, job.values, { deadline, logo });
 
     if (!file.bytes?.byteLength) {
       throw new Error("Fayl bo'sh chiqdi — qayta urinib ko'ring");

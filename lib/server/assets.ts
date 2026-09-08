@@ -53,6 +53,13 @@ export function extractAssets(
         s.image?.url ? { ...s, image: { ...s.image, url: swap(s.image.url) ?? s.image.url } } : s,
       ),
       images: doc.images?.map((im) => ({ ...im, url: swap(im.url) ?? im.url })),
+      // Logotip `logo_uploads`dan `data:` URL sifatida keladi
+      // (`lib/server/logo.ts` `logoDataUrl`). PPTX uni build vaqtida
+      // shu `data:` dan o'qigan bo'ladi, ko'ruvchi esa — hamma boshqa
+      // rasm kabi — aktivdan (`slides[].image.url` naqshi).
+      slideLogo: doc.slideLogo?.url
+        ? { ...doc.slideLogo, url: swap(doc.slideLogo.url) ?? doc.slideLogo.url }
+        : doc.slideLogo,
     };
   }
 
