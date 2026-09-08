@@ -6,6 +6,7 @@ import { extractMeta } from "../lib/generation/meta.ts";
 import {
   SLIDE_TEMPLATES,
   SLIDE_TEMPLATE_BY_ID,
+  SLIDE_TEMPLATE_GROUPS,
   audienceRules,
   expandBeats,
   inferSlideTemplate,
@@ -132,6 +133,22 @@ test("har shablonning o'z to'ldirgichlari bor va ular boshqasiniki emas", () => 
       assert.equal(owner, undefined, `«${f.role}» roli ${owner} va ${tpl.id} da takrorlangan`);
       seen.set(f.role, tpl.id);
     }
+  }
+});
+
+/**
+ * Formadagi yig'iluvchi akkordeon guruhlarga tayanadi: guruhsiz qolgan
+ * shablon hech bir bo'limda CHIZILMAYDI — foydalanuvchi uni umuman
+ * tanlay olmaydi va buni faqat qo'lda ochib ko'rgandagina sezish mumkin.
+ */
+test("har bir shablon mavjud guruhga tegishli va guruhlar bo'sh emas", () => {
+  const ids = new Set(SLIDE_TEMPLATE_GROUPS.map((g) => g.id as string));
+  for (const tpl of SLIDE_TEMPLATES) {
+    assert.ok(ids.has(tpl.group), `${tpl.id}: noma'lum guruh «${tpl.group}»`);
+  }
+  for (const g of SLIDE_TEMPLATE_GROUPS) {
+    const n = SLIDE_TEMPLATES.filter((t) => t.id !== "auto" && t.group === g.id).length;
+    assert.ok(n >= 2, `«${g.label}» guruhida atigi ${n} ta shablon`);
   }
 });
 
