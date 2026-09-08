@@ -639,6 +639,7 @@ export async function buildSlideAcademicDoc(meta: DocMeta, deadline?: number): P
    */
   const images = await attachSlideImages(slides, meta.topic, tpl.visual, budget, {
     premium: meta.premiumVisuals,
+    meta,
   });
   const sections = slides
     .filter((s) => s.layout !== "title" && s.layout !== "closing")

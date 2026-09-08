@@ -74,6 +74,20 @@ export const IMAGE_STYLES = [
       "This is NOT a photograph and NOT color. Render THIS exact scene as a full-page black-and-white graphite pencil illustration on white paper: visible hatching and cross-hatching strokes, uneven pencil pressure, paper tooth texture, zero color, zero photographic lighting. No artist signature, no monogram, no scribbled text anywhere in the image. Not a random sketch study. Not an animal unless the scene names one.",
   },
   {
+    /*
+     * «Doska» — slayd uslublari (`SLIDE_IMAGE_STYLES`) uchun qo'shildi:
+     * dars taqdimotining eng tabiiy vositasi, va foto bo'lmagan uslublar
+     * ichida `pencil` dan aniq farqlanadi (rang bor, fon to'q, sirt
+     * boshqa). Bu `SLIDE_THEME_IDS` dagi `chalk` TEMASI emas — boshqa
+     * namespace, tasodifiy nom mosligi.
+     */
+    id: "chalk",
+    name: "Doska",
+    blurb: "Bo‘r chizma",
+    suffix:
+      "This is NOT a photograph. Render THIS scene as white and pale-yellow chalk drawing on a dark green classroom chalkboard: visible chalk dust, slightly smudged strokes, uneven hand-drawn lines, flat matte board texture, no photographic lighting.",
+  },
+  {
     id: "product",
     name: "Mahsulot",
     blurb: "Katalog",
