@@ -560,9 +560,17 @@ const ANSWERS_HERO_MAX = 2;
 const ANSWERS_ONE_COL_MAX = 6;
 /** Kalitda ko'rsatiladigan eng ko'p javob (formadagi eng katta test — 10 ta). */
 const ANSWERS_MAX = 12;
-/** Shrift SHIFTI (poli auditoriyadan — `ctx.bodyType.minPt`). */
-const ANSWERS_PT_HERO = 60;
-const ANSWERS_PT_ROW = 40;
+/**
+ * Shrift SHIFTI (poli auditoriyadan — `ctx.bodyType.minPt`).
+ *
+ * Ikkala son PDF da ko'z bilan tanlangan: 60 pt li yirik kalit 9.4″
+ * kartaning uchdan bir qismini ham egallamasdi va karta bo'sh
+ * ko'rinardi. Kalit qatori qisqa («1 — B», 5–6 belgi), shuning uchun
+ * bunday shrift ham bemalol sig'adi — `fitSize` uzun qator kelsa uni
+ * o'zi kichraytiradi.
+ */
+const ANSWERS_PT_HERO = 96;
+const ANSWERS_PT_ROW = 48;
 /** Karta balandligining shriftga aylanish koeffitsienti — qator bo'yidan o'lchangan. */
 const ANSWERS_PT_RATIO = 0.42;
 
@@ -575,8 +583,11 @@ const ANSWERS_PT_RATIO = 0.42;
  * slaydning ~86% i bo'sh oq maydon bo'lib qolardi (AUDIT-8 N-3/N-5
  * naqshining aynan o'zi). Endi qatorlar maydonni QOLDIQSIZ bo'lib
  * oladi (`rowH = usable / rows`), 1–2 javob esa yirik kalit kartasiga
- * aylanadi: matn qatlamlari qamragan balandlik 13% dan 64% ga chiqdi
- * (o'lchov `tests/slide-quiz.test.mts` da qulflangan).
+ * aylanadi. Matn qatlamlari qamragan balandlik (slayd balandligiga
+ * nisbatan) — o'lchangan: 1 javob 14% → 63%, 2 javob 27% → 56%,
+ * 3 javob 41% → 60%, 10 javob 63% → 59%. Ya'ni qamrov endi javoblar
+ * sonidan deyarli MUSTAQIL (o'lchov `tests/slide-quiz.test.mts` da
+ * qulflangan).
  *
  * Shrift karta bo'yiga qarab tanlanadi, lekin `fitSize` uni AUDITORIYA
  * polidan (`ctx.bodyType.minPt`: ma'ruzada 15, maktabda 20–24 pt)
