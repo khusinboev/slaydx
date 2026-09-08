@@ -751,3 +751,252 @@ test("slayd so'rovi oraliq beradi, faqat shift emas", async () => {
     assert.ok(hi > lo, `oraliq bo'lishi kerak: ${lo}–${hi}`);
   }
 });
+
+// ───────────────────────── AUDIT-7 O-2: twoCol / compare / quote / closing
+
+/**
+ * Deka uzunligining ~35% i shu to'rt maketga to'g'ri keladi, lekin ular
+ * 14 shablonning HECH BIRIDA farq qilmasdi — `visual` parametri
+ * `planTwoCol` va `planOverlay` ga umuman uzatilmasdi.
+ *
+ * Quyidagi tekshiruvlar HAR BIR tarmoqni ALOHIDA qulflaydi. Umumiy
+ * «visual farq beradi» testi ataylab yozilmagan: u bitta tarmoq tufayli
+ * yashil qolib, qolganlari o'chirilganini sezmasdi (AUDIT-7 da aynan shu
+ * naqsh mutatsiya sinovida ushlangan).
+ */
+
+const rectsOf = (ls: SlideLayer[]) => ls.filter((l): l is Extract<SlideLayer, { t: "rect" }> => l.t === "rect");
+
+const twoColSlide = (id: string): SlideModel => ({
+  id,
+  layout: "twoCol",
+  title: "Ikki faza",
+  leftTitle: "Yorug‘lik fazasi",
+  left: ["Tilakoid membranada kechadi", "ATP va NADPH hosil bo‘ladi", "Suv molekulasi parchalanadi"],
+  rightTitle: "Qorong‘i faza",
+  right: ["Stromada boradi", "Glyukoza yig‘iladi"],
+  footer: "A. Husinboyev · TDPU",
+});
+
+test("dense ikki ustuni to'q sahifada va zichroq — oltinchi band ham sig'adi", () => {
+  const s = twoColSlide("d");
+  s.left = ["b1", "b2", "b3", "b4", "b5", "b6"];
+  const dense = planSlide(s, theme, "dense", 1, 10);
+  const classic = planSlide(s, theme, "classic", 1, 10);
+
+  assert.equal(dense.bg, theme.titleBg, "dense ikki ustuni muqova foniga o'tadi");
+  assert.equal(classic.bg, theme.bg, "classic oddiy fonda qoladi");
+  // Zich sahifa 6 ta bandni ko'taradi, klassik ustun 5 tada to'xtaydi.
+  assert.ok(
+    texts(dense.layers).some((t) => t.text === "b6" && t.color === theme.titleText),
+    "dense da oltinchi band `titleText` bilan chizilishi kerak",
+  );
+  assert.ok(
+    !texts(classic.layers).some((t) => (t.lines ?? []).includes("b6")),
+    "classic ustuni beshta band bilan cheklanadi — test bo'sh bo'lmasligi uchun",
+  );
+});
+
+test("magazine ikki ustuni ustun ajratgichi va nuqtasiz abzas beradi", () => {
+  const s = twoColSlide("m");
+  const mag = planSlide(s, theme, "magazine", 1, 10);
+  const classic = planSlide(s, theme, "classic", 1, 10);
+
+  const isDivider = (l: Extract<SlideLayer, { t: "rect" }>) => l.box.w < 0.06 && l.box.h > 4 && l.box.y > 1;
+  assert.ok(rectsOf(mag.layers).some(isDivider), "magazine ustunlar orasiga tik ajratgich qo'yishi kerak");
+  assert.ok(!rectsOf(classic.layers).some(isDivider), "classic da bunday ajratgich yo'q");
+
+  assert.ok(
+    texts(mag.layers).some((t) => (t.lines?.length ?? 0) > 0 && !t.bullets),
+    "jurnal maketida bandlar nuqtasiz abzas bo'lib oqadi",
+  );
+  assert.ok(
+    texts(classic.layers).every((t) => !(t.lines?.length ?? 0) || t.bullets),
+    "classic da bandlar nuqtali ro'yxat",
+  );
+});
+
+test("hero-split ikki ustuni chap yarmini to'la balandlikdagi to'q panelga aylantiradi", () => {
+  const s = twoColSlide("h");
+  const hero = planSlide(s, theme, "hero-split", 1, 10);
+  const classic = planSlide(s, theme, "classic", 1, 10);
+
+  const isPanel = (l: Extract<SlideLayer, { t: "rect" }>) =>
+    l.box.x === 0 && l.box.y === 0 && l.box.h === 7.5 && l.box.w > 4 && l.box.w < 6 && l.fill?.color === theme.titleBg;
+  assert.ok(rectsOf(hero.layers).some(isPanel), "chap ustun to'la balandlikdagi to'q panelda bo'lishi kerak");
+  assert.ok(!rectsOf(classic.layers).some(isPanel), "classic da bunday panel yo'q");
+
+  // Panel ichidagi va tashqarisidagi matn har biri O'Z foni uchun
+  // o'lchangan juftdan rang oladi.
+  assert.ok(
+    texts(hero.layers).some((t) => t.lines?.includes("Tilakoid membranada kechadi") && t.color === theme.titleText),
+    "panel ichidagi chap ustun `titleText` bilan",
+  );
+  assert.ok(
+    texts(hero.layers).some((t) => t.lines?.includes("Stromada boradi") && t.color === theme.text),
+    "o'ng ustun yorug' tomonda `text` bilan",
+  );
+});
+
+test("timeline ikki ustuni bandlarni tik o'q bo'ylab nuqtalaydi", () => {
+  const s = twoColSlide("t");
+  const tl = planSlide(s, theme, "timeline", 1, 10);
+
+  const dots = rectsOf(tl.layers).filter((l) => l.radius === 0.11 && Number(l.box.w.toFixed(2)) === 0.22);
+  assert.equal(dots.length, 5, "har band uchun bitta nuqta (3 + 2)");
+  assert.ok(!texts(tl.layers).some((t) => (t.lines?.length ?? 0) > 0), "timeline da band ro'yxati qatlami bo'lmaydi");
+  for (const line of [...(s.left ?? []), ...(s.right ?? [])]) {
+    assert.ok(texts(tl.layers).some((t) => t.text === line), `«${line}» alohida matn bo'lishi kerak`);
+  }
+});
+
+test("cards ikki ustuni har bandni alohida kartaga soladi", () => {
+  const s = twoColSlide("c");
+  const cards = planSlide(s, theme, "cards", 1, 10);
+  const classic = planSlide(s, theme, "classic", 1, 10);
+
+  assert.ok(!texts(cards.layers).some((t) => (t.lines?.length ?? 0) > 0), "cards da ro'yxat qatlami yo'q");
+  for (const line of [...(s.left ?? []), ...(s.right ?? [])]) {
+    assert.ok(texts(cards.layers).some((t) => t.text === line), `«${line}» kartada alohida matn`);
+  }
+  // Har karta: fon + aksent chizig'i, ya'ni 5 band → 10 to'rtburchak;
+  // klassikda ustun boshiga bittadan, ya'ni 2 ta.
+  assert.ok(
+    rectsOf(cards.layers).length >= rectsOf(classic.layers).length + 8,
+    "5 ta karta kamida 8 ta qo'shimcha to'rtburchak beradi",
+  );
+});
+
+test("qiyos maketi cards va hero-split da chap tomonni belgilaydi", () => {
+  const cmp: SlideModel = { ...twoColSlide("q"), layout: "compare" };
+  const plain: SlideModel = { ...twoColSlide("q2"), layout: "twoCol" };
+
+  const darkCard = (p: ReturnType<typeof planSlide>) =>
+    rectsOf(p.layers).some((l) => l.fill?.color === theme.titleBg && l.box.h < 3 && l.box.w > 3);
+  assert.ok(darkCard(planSlide(cmp, theme, "cards", 1, 10)), "qiyosda chap ustun kartalari to'q bo'ladi");
+  assert.ok(!darkCard(planSlide(plain, theme, "cards", 1, 10)), "oddiy twoCol da to'q karta yo'q");
+
+  const seam = (p: ReturnType<typeof planSlide>) =>
+    rectsOf(p.layers).some((l) => Number(l.box.x.toFixed(2)) === 5.15 && l.box.h === 7.5 && l.fill?.color === theme.accent);
+  assert.ok(seam(planSlide(cmp, theme, "hero-split", 1, 10)), "hero-split qiyosida ikki tomon orasida chok");
+  assert.ok(!seam(planSlide(plain, theme, "hero-split", 1, 10)), "oddiy twoCol da chok yo'q");
+});
+
+test("magazine yakuni markazlashgan panel emas, to'la kenglikdagi tasma beradi", () => {
+  const s: SlideModel = {
+    id: "mc",
+    layout: "closing",
+    title: "Xulosa",
+    subtitle: "Fotosintez — hayot uchun energiya manbai.",
+    image: { url: "https://example.test/a.png" },
+  };
+  const mag = planSlide(s, theme, "magazine", 1, 10);
+  const classic = planSlide(s, theme, "classic", 1, 10);
+
+  assert.ok(texts(classic.layers).some((t) => t.align === "center"), "classic yakuni markazlashgan");
+  assert.ok(!texts(mag.layers).some((t) => t.align === "center"), "magazine yakuni chapga tekislanadi");
+  assert.ok(
+    rectsOf(mag.layers).some((l) => l.box.x === 0 && Number(l.box.w.toFixed(2)) === 13.33 && l.box.y > 3 && l.box.y < 4.2),
+    "matn to'la kenglikdagi pastki tasmada",
+  );
+});
+
+test("magazine iqtibosi tirnoq belgisi emas, aksent brus bilan ochiladi", () => {
+  const s: SlideModel = {
+    id: "mq",
+    layout: "quote",
+    title: "Iqtibos",
+    quote: "Barg — quyosh energiyasini oziq-ovqatga aylantiruvchi tabiiy zavod.",
+    quoteBy: "K. Timiryazev",
+  };
+  const mag = planSlide(s, theme, "magazine", 1, 10);
+  const classic = planSlide(s, theme, "classic", 1, 10);
+
+  assert.ok(texts(classic.layers).some((t) => t.text === "“"), "classic iqtibosi tirnoq belgisi bilan ochiladi");
+  assert.ok(!texts(mag.layers).some((t) => t.text === "“"), "magazine da tirnoq belgisi o'rniga brus");
+  const q = texts(mag.layers).find((t) => t.text === s.quote);
+  assert.ok(q?.bold && !q.italic, "jurnal iqtibosi qalin, kursiv emas");
+  // To'q sahifadagi HAR BIR matn `tests/themes.test.mts` o'lchaydigan
+  // juftdan rang oladi: `titleText`/`titleBg` yoki `titleMuted`/`titleBg`.
+  // (`accent` ning o'zini tekshirish yaramaydi — ba'zi temada u
+  // `titleMuted` bilan bir xil qiymatga ega, masalan `atlas`.)
+  for (const t of texts(mag.layers)) {
+    assert.ok(
+      [theme.titleText, theme.titleMuted].includes(t.color),
+      `magazine iqtibosida o'lchanmagan matn rangi: ${t.color}`,
+    );
+  }
+});
+
+test("dense yakuni hisobot sahifasi — chapga tekislangan, kichik sarlavha", () => {
+  const s: SlideModel = {
+    id: "dc",
+    layout: "closing",
+    title: "Xulosa va tavsiyalar",
+    subtitle: "Uch tavsiya amalga oshirishga tayyor.",
+    image: { url: "https://example.test/a.png" },
+  };
+  const dense = planSlide(s, theme, "dense", 1, 10);
+  const classic = planSlide(s, theme, "classic", 1, 10);
+
+  assert.ok(!texts(dense.layers).some((t) => t.align === "center"), "dense yakuni chapga tekislanadi");
+  const edge = (p: ReturnType<typeof planSlide>) =>
+    rectsOf(p.layers).some(
+      (l) => l.box.x === 0 && l.box.y === 0 && l.box.h === 7.5 && l.box.w > 0.1 && l.box.w < 0.2 && l.fill?.color === theme.accent,
+    );
+  assert.ok(edge(dense), "chap chekkada aksent ustun");
+  assert.ok(!edge(classic), "rasmli classic da chekka ustun yo'q");
+
+  assert.ok((texts(dense.layers).find((t) => t.text === s.title)?.size ?? 99) <= 26, "hujjat sahifasida sarlavha kichikroq");
+  assert.equal(texts(classic.layers).find((t) => t.text === s.title)?.size, 32, "classic yakuni plakat o'lchamida");
+});
+
+test("cards iqtibosi yorug' sahifadagi kartada chiziladi", () => {
+  const s: SlideModel = {
+    id: "cq",
+    layout: "quote",
+    title: "Iqtibos",
+    quote: "Barg — quyosh energiyasini oziq-ovqatga aylantiruvchi tabiiy zavod.",
+    quoteBy: "K. Timiryazev",
+    image: { url: "https://example.test/a.png" },
+  };
+  const cards = planSlide(s, theme, "cards", 1, 10);
+  const classic = planSlide(s, theme, "classic", 1, 10);
+
+  assert.equal(cards.bg, theme.bg, "cards iqtibosi yorug' sahifada qoladi");
+  assert.equal(classic.bg, theme.titleBg, "classic iqtibosi muqova fonida");
+  assert.ok(
+    rectsOf(cards.layers).some((l) => l.fill?.color === theme.surface && l.box.w > 8 && l.box.h > 3),
+    "iqtibos `surface` kartasida",
+  );
+  assert.equal(
+    texts(cards.layers).find((t) => t.text === s.quote)?.color,
+    theme.text,
+    "karta ustidagi matn `text`/`surface` o'lchangan juftidan",
+  );
+});
+
+test("to'rt maket hamma `visual` va temada chegara ichida qoladi", () => {
+  const visuals = ["classic", "cards", "dense", "timeline", "magazine", "hero-split"] as const;
+  const long = "Juda uzun band matni bo‘lib, u ustunga sig‘masligi mumkin. ".repeat(3);
+  const samples: SlideModel[] = [
+    twoColSlide("s1"),
+    { ...twoColSlide("s2"), layout: "compare" },
+    { id: "s3", layout: "twoCol", title: long, leftTitle: long, left: Array.from({ length: 7 }, () => long), rightTitle: "B", right: [long] },
+    { id: "s4", layout: "twoCol", title: "Bo‘sh" },
+    { id: "s5", layout: "quote", title: "Iqtibos", quote: long, quoteBy: "Muallif" },
+    { id: "s6", layout: "quote", title: "Iqtibos", quote: "Qisqa.", image: { url: "https://example.test/a.png" } },
+    { id: "s7", layout: "closing", title: long, subtitle: long },
+    { id: "s8", layout: "closing", title: "Xulosa", image: { url: "https://example.test/a.png" } },
+  ];
+  for (const visual of visuals) {
+    for (const s of samples) {
+      for (const l of planSlide(s, theme, visual, 1, 10).layers) {
+        assert.ok(l.box.x >= -0.01 && l.box.y >= -0.01, `${visual}/${s.id}: manfiy koordinata`);
+        assert.ok(l.box.w >= 0 && l.box.h >= 0, `${visual}/${s.id}: manfiy o'lcham`);
+        assert.ok(l.box.x + l.box.w <= 13.34, `${visual}/${s.id}: kenglikdan chiqdi`);
+        assert.ok(l.box.y + l.box.h <= 7.51, `${visual}/${s.id}: balandlikdan chiqdi`);
+      }
+    }
+  }
+});
