@@ -288,15 +288,24 @@ function quizTimeline(s: SlideModel, question: string, options: string[], theme:
   const top = 2.7;
   const n = Math.max(1, options.length);
   const rowH = (BOTTOM - top) / n;
+  /*
+   * Nuqta qator MATNI bilan bir markazda.
+   *
+   * Ilgari nuqta qatorning TEPASIGA (`y + 0.06`) qo'yilardi, matn esa
+   * `valign: "middle"` bilan markazda chizilardi — PDF da har nuqta o'z
+   * variantidan ~0.3 dyuym yuqorida turardi va o'q variantlar bilan
+   * emas, ular orasidagi bo'shliq bilan hizalangandek ko'rinardi.
+   */
+  const rowMid = (y: number) => y + (rowH - 0.14) / 2;
   // O'q birinchi nuqtaning markazidan oxirgisinikigacha — `planTwoCol` naqshi.
   layers.push({
     t: "rect",
-    box: { x: railX + 0.085, y: top + 0.17, w: 0.05, h: Math.max(0.05, (n - 1) * rowH) },
+    box: { x: railX + 0.085, y: rowMid(top), w: 0.05, h: Math.max(0.05, (n - 1) * rowH) },
     fill: { color: theme.accent, alpha: 0.5 },
   });
   options.forEach((line, i) => {
     const y = top + i * rowH;
-    layers.push({ t: "rect", box: { x: railX, y: y + 0.06, w: 0.22, h: 0.22 }, fill: { color: theme.accent }, radius: 0.11 });
+    layers.push({ t: "rect", box: { x: railX, y: rowMid(y) - 0.11, w: 0.22, h: 0.22 }, fill: { color: theme.accent }, radius: 0.11 });
     layers.push({
       t: "text",
       box: { x: railX + 0.42, y, w: 0.42, h: rowH - 0.14 },
@@ -487,9 +496,19 @@ export function planReferences(s: SlideModel, theme: SlideTheme, visual: SlideVi
   const srcInk = dense ? theme.titleMuted : theme.muted;
 
   const top = dense ? 1.4 : 1.5;
-  const rowH = Math.min(1.05, (6.35 - top) / Math.max(1, refs.length));
+  /*
+   * Qator balandligi CHEKLANGAN (uzun ro'yxat cho'zilib ketmasin), lekin
+   * qolgan bo'shliq tepa va pastga TENG bo'linadi.
+   *
+   * Ilgari qatorlar tepaga tizilardi: ikki manbali slaydda pastki ~3.5
+   * dyuym bo'sh oq maydon bo'lib qolardi (PDF da ko'rindi — AUDIT-8 dagi
+   * N-5 bilan bir xil naqsh).
+   */
+  const usable = 6.35 - top;
+  const rowH = Math.min(1.2, usable / Math.max(1, refs.length));
+  const startY = top + Math.max(0, (usable - rowH * refs.length) / 2);
   refs.forEach((ref, i) => {
-    const y = top + i * rowH;
+    const y = startY + i * rowH;
     layers.push({
       t: "text",
       box: { x, y: y + 0.04, w: 0.46, h: Math.max(0.3, rowH * 0.5) },
@@ -547,17 +566,29 @@ export function planAnswers(s: SlideModel, theme: SlideTheme, visual: SlideVisua
   const x = pageX();
   const ink = dense ? theme.titleText : theme.text;
 
-  const cols = items.length > 1 ? 2 : 1;
+  /*
+   * Ustun soni javoblar SONIDAN.
+   *
+   * Ilgari ikkita ustun HAR DOIM chizilardi va uch javobli kalit «2 + 1»
+   * bo'lib, slaydning uchdan ikki qismi bo'sh qolardi (PDF da ko'rindi).
+   * Kalit varag'i tabiiy holda PASTGA o'qiladi, shuning uchun 6 tagacha
+   * javob bitta markazlashtirilgan ustunda qoladi; undan ortig'i ikki
+   * ustunga bo'linadi (10 savol 5 qatorli ikki ustunga bemalol sig'adi).
+   */
+  const cols = items.length > 6 ? 2 : 1;
   const rows = Math.ceil(items.length / cols);
   const gap = 0.3;
-  const colW = (12.1 - gap * (cols - 1)) / cols;
+  const colW = cols === 2 ? (12.1 - gap) / 2 : 6.9;
+  const x0 = cols === 2 ? x : x + (12.1 - colW) / 2;
   const top = dense ? 1.45 : 1.55;
-  const rowH = Math.min(0.95, (BOTTOM - top) / Math.max(1, rows));
+  const usable = BOTTOM - top;
+  const rowH = Math.min(1.15, usable / Math.max(1, rows));
+  const startY = top + Math.max(0, (usable - rowH * rows) / 2);
   items.forEach((line, i) => {
     const c = Math.floor(i / rows);
     const r = i % rows;
-    const cx = x + c * (colW + gap);
-    const y = top + r * rowH;
+    const cx = x0 + c * (colW + gap);
+    const y = startY + r * rowH;
     const h = rowH - 0.12;
     layers.push({
       t: "rect",

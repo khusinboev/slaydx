@@ -472,14 +472,65 @@ test("references: uzun havola 60 belgida qisqaradi, model yozgan ro'yxat «teksh
   assert.ok(bullets.includes("Tekshirilmagan ro‘yxat"), "manbasiz slaydda ham izoh bo'lishi kerak");
 });
 
-test("answers maketi hamma javobni ikki ustunda chizadi", () => {
+/**
+ * PDF nuqsoni: uch javobli kalit «2 + 1» bo'lib bo'linardi va slaydning
+ * uchdan ikkisi bo'sh qolardi. Ustun soni endi javoblar soniga bog'liq.
+ */
+test("answers maketi ustun sonini javoblar soniga qarab tanlaydi", () => {
+  const columns = (n: number) => {
+    const p = plan({ ...answersModel, bullets: Array.from({ length: n }, (_, i) => `${i + 1} — ${QUIZ_LETTERS[i % 4]}`) });
+    const cards = rects(p.layers).filter((r) => r.fill?.color === theme.surface);
+    assert.equal(cards.length, n, `${n}: har javob o'z qatorida bo'lishi kerak`);
+    return new Set(cards.map((r) => Number(r.box.x.toFixed(2)))).size;
+  };
+  for (const n of [3, 5, 6]) assert.equal(columns(n), 1, `${n} javob bitta ustunda qolsin`);
+  for (const n of [7, 10, 12]) assert.equal(columns(n), 2, `${n} javob ikki ustunga bo'linsin`);
+
   const p = plan(answersModel);
   const drawn = allText(p);
   for (const b of answersModel.bullets!) assert.ok(drawn.includes(b), `«${b}» chizilmadi`);
-  const cards = rects(p.layers).filter((r) => r.fill?.color === theme.surface);
-  assert.equal(cards.length, answersModel.bullets!.length, "har javob o'z qatorida");
-  const xs = new Set(cards.map((r) => Number(r.box.x.toFixed(2))));
-  assert.equal(xs.size, 2, `ikki ustun kutilgan, ${xs.size} ta chiqdi`);
+});
+
+/**
+ * Bo'sh maydon: kam bandli slaydda blok tepaga yopishib qolmasin
+ * (AUDIT-8 N-5 naqshi — PDF da uchala maketda ham ko'rindi).
+ */
+test("kam bandli answers va references bloklari maydon markazida turadi", () => {
+  const gapOf = (p: { layers: SlideLayer[] }, fill: string) => {
+    const cards = rects(p.layers).filter((r) => r.fill?.color === fill);
+    const first = Math.min(...cards.map((r) => r.box.y));
+    const last = Math.max(...cards.map((r) => r.box.y + r.box.h));
+    return { top: first, bottom: last };
+  };
+  const answers = gapOf(plan({ ...answersModel, bullets: ["1 — A", "2 — B", "3 — C"] }), theme.surface);
+  assert.ok(answers.top > 1.9, `javoblar bloki tepaga yopishib qoldi (y=${answers.top})`);
+  assert.ok(answers.bottom > 4.6, `javoblar bloki maydonning yarmini ham egallamadi (${answers.bottom})`);
+
+  const refs = plan({ ...refsModel, refs: refsModel.refs!.slice(0, 2) });
+  const nums = texts(refs.layers).filter((t) => t.text === "01" || t.text === "02");
+  assert.equal(nums.length, 2);
+  assert.ok(Math.min(...nums.map((t) => t.box.y)) > 1.9, "manbalar bloki ham markazlashadi");
+});
+
+/**
+ * PDF nuqsoni: `timeline` da nuqta qatorning TEPASIDA, matn esa
+ * markazda chizilardi — har nuqta o'z variantidan ~0.3 dyuym yuqorida
+ * turar va o'q variantlar orasidagi bo'shliq bilan hizalangandek
+ * ko'rinardi.
+ */
+test("timeline quiz nuqtalari variant matni bilan bir markazda", () => {
+  const p = plan(quizModel, "timeline");
+  const dots = rects(p.layers).filter((r) => r.radius === 0.11 && r.fill?.color === theme.accent);
+  assert.equal(dots.length, 4, "har variantga bitta nuqta");
+  const rows = texts(p.layers).filter((t) => quizModel.quiz![0].options.includes(t.text ?? ""));
+  assert.equal(rows.length, 4);
+  dots.sort((a, b) => a.box.y - b.box.y);
+  rows.sort((a, b) => a.box.y - b.box.y);
+  dots.forEach((d, i) => {
+    const dotMid = d.box.y + d.box.h / 2;
+    const textMid = rows[i].box.y + rows[i].box.h / 2;
+    assert.ok(Math.abs(dotMid - textMid) < 0.02, `${i + 1}-nuqta ${Math.abs(dotMid - textMid).toFixed(2)}″ siljigan`);
+  });
 });
 
 test("answers: 12 tagacha javob shrift polidan yuqorida qoladi", () => {
