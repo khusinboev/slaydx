@@ -28,6 +28,14 @@
  */
 import { requestBudget, type FalFailure, type ImageAsk, type ImageProvider, type ImageResult } from "./image-provider";
 
+/**
+ * Bitta rasm so'rovining eng katta vaqti. O'lchov (2026-09-08,
+ * `gemini-3.1-flash-image`, 1K): sarlavha 13 s, to'liq tana 34 s.
+ * Shift ikki barobar zaxira bilan olingan — bosqich byudjeti baribir
+ * ustidan cheklaydi (`requestBudget` ikkalasining KICHIGINI oladi).
+ */
+export const GEMINI_IMAGE_CAP_MS = 120_000;
+
 const GEMINI_IMAGE_URL = "https://generativelanguage.googleapis.com/v1beta/interactions";
 const DEFAULT_MODEL = "gemini-3.1-flash-image";
 const DEFAULT_SIZE = "1K";
@@ -123,6 +131,26 @@ function findImagePart(node: unknown, depth = 0): ImagePart | null {
   return null;
 }
 
+/** Javobdagi birinchi matn bo'lagi — rad etish sababini ko'rsatadi. */
+function firstText(node: unknown, depth = 0): string {
+  if (node == null || depth > 8) return "";
+  if (Array.isArray(node)) {
+    for (const item of node) {
+      const hit = firstText(item, depth + 1);
+      if (hit) return hit;
+    }
+    return "";
+  }
+  if (typeof node !== "object") return "";
+  const rec = node as Record<string, unknown>;
+  if (typeof rec.text === "string" && rec.text.trim()) return rec.text.trim();
+  for (const value of Object.values(rec)) {
+    const hit = firstText(value, depth + 1);
+    if (hit) return hit;
+  }
+  return "";
+}
+
 function errorDetail(body: unknown): string {
   if (!body || typeof body !== "object") return "request failed";
   const rec = body as Record<string, unknown>;
@@ -142,7 +170,14 @@ export async function requestGeminiImage(ask: ImageAsk, deadline?: number): Prom
     console.warn("[gemini-image] GEMINI_API_KEY missing");
     return { ok: false, reason: "no-key", detail: "GEMINI_API_KEY yo'q" };
   }
-  const budget = requestBudget(deadline);
+  /*
+   * 45 s (fal uchun mos shift) Gemini uchun YETMAYDI: o'lchandi —
+   * sarlavhagacha ~13 s, keyin 2.3 MB base64 tanani o'qish yana ~20 s,
+   * uzunroq promptda 45 s dan oshadi. Abort esa `res.json()` ni
+   * yiqitardi va xato «javobda rasm yo'q» bo'lib ko'rinardi (jonli
+   * sinovda 7/7 rasm shu sabab yo'qoldi).
+   */
+  const budget = requestBudget(deadline, GEMINI_IMAGE_CAP_MS);
   if (budget === null) return { ok: false, reason: "timeout", detail: "byudjet 2 s dan kam" };
 
   try {
@@ -164,7 +199,20 @@ export async function requestGeminiImage(ask: ImageAsk, deadline?: number): Prom
         },
       }),
     });
-    const body: unknown = await res.json().catch(() => null);
+    let body: unknown = null;
+    try {
+      body = await res.json();
+    } catch (e) {
+      /*
+       * Sarlavha keldi-yu tana o'qilmadi — deyarli har doim byudjet
+       * tugagani (2 MB dan katta javob). Buni «rasm yo'q» deb yozish
+       * sababni yashiradi: hisobotda `skipped` bo'lishi kerak.
+       */
+      const aborted = e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError");
+      const line = `javob tanasi o'qilmadi (${e instanceof Error ? e.name : "xato"}, byudjet ${Math.round(budget / 1000)} s)`;
+      console.warn("[gemini-image]", line);
+      return { ok: false, reason: aborted ? "timeout" : "failed", detail: line };
+    }
     if (!res.ok) {
       const line = `${res.status} ${errorDetail(body)}`;
       const reason = geminiReason(res.status);
@@ -176,8 +224,20 @@ export async function requestGeminiImage(ask: ImageAsk, deadline?: number): Prom
     const steps = body && typeof body === "object" ? (body as Record<string, unknown>).steps : null;
     const part = findImagePart(steps);
     if (!part) {
-      console.warn("[gemini-image] javobda rasm yo'q");
-      return { ok: false, reason: "failed", detail: "javobda rasm yo'q" };
+      /*
+       * 200 keldi-yu rasm yo'q — bu odatda MODEL RAD ETGANI (xavfsizlik
+       * filtri yoki prompt tushunilmagani) yoki javob hali tugallanmagani.
+       * Sababsiz "rasm yo'q" jurnali bu holatni ajratib bo'lmas qiladi,
+       * shuning uchun bosqich turlari, holat va matn boshi yoziladi.
+       */
+      const rec = (body ?? {}) as Record<string, unknown>;
+      const kinds = Array.isArray(steps)
+        ? steps.map((st) => (st as Record<string, unknown>)?.type ?? "?").join(",")
+        : typeof steps;
+      const said = firstText(steps).slice(0, 160);
+      const line = `javobda rasm yo'q (status=${String(rec.status ?? "?")}, steps=[${kinds}]${said ? `, matn: ${said}` : ""})`;
+      console.warn("[gemini-image]", line);
+      return { ok: false, reason: "failed", detail: line };
     }
     /*
      * `data:` URL bo'lib chiqadi — `slide-images.ts` `persistImage` →

@@ -58,7 +58,7 @@ const SLIDE_PER_SLIDE_MS = 11_000;
  * Oddiy formulaning 450 s i yetmasdi.
  */
 const PRO_SLIDE_BASE_MS = 150_000;
-const PRO_SLIDE_PER_SLIDE_MS = 14_000;
+const PRO_SLIDE_PER_SLIDE_MS = 16_000;
 
 /**
  * @param cap Yuqori chegara (`WORKER_JOB_TIMEOUT_MS`). Byudjet undan

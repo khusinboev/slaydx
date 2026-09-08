@@ -6,9 +6,9 @@ import { extractMeta } from "../lib/generation/meta.ts";
 import { SLIDE_IMAGE_STYLES } from "../lib/generation/slide-params.ts";
 import { composeSlideImagePrompt } from "../lib/generation/slide-image-prompts.ts";
 import { photoSlot, slotPixels } from "../lib/generation/slide-layout.ts";
-import { attachSlideImages, plannedImageSlots, imageBudget } from "../lib/generation/slide-images.ts";
-import { pickProvider } from "../lib/generation/image-provider.ts";
-import { aspectFor, requestGeminiImage, GEMINI_ASPECTS } from "../lib/generation/image-provider-gemini.ts";
+import { attachSlideImages, plannedImageSlots, imageBudget, PRO_IMAGE_LANES } from "../lib/generation/slide-images.ts";
+import { pickProvider, requestBudget } from "../lib/generation/image-provider.ts";
+import { aspectFor, requestGeminiImage, GEMINI_ASPECTS, GEMINI_IMAGE_CAP_MS } from "../lib/generation/image-provider-gemini.ts";
 import type { SlideModel } from "../lib/generation/slide-types.ts";
 
 /**
@@ -404,9 +404,54 @@ test("gemini bloklansa hisobot fal bilan bir xil to'ldiriladi va so'rov to'xtayd
     assert.equal(report.skipped, 0, "bu vaqt muammosi EMAS");
     assert.match(String(report.blockReason), /Billing account is disabled/);
     assert.equal(slides.filter((s) => s.image).length, 0);
-    // Pro yo'lakligi 4 — shuncha so'rov yo'lda bo'lishi mumkin, ortig'i yo'q.
-    assert.ok(calls <= 4, `blokdan keyin to'xtashi kerak, yuborilgani: ${calls}`);
+    // Yo'lak soni KONSTANTADAN o'qiladi — shuncha so'rov yo'lda bo'lishi
+    // mumkin, ortig'i yo'q. Sehrli son yozilsa yo'laklik o'zgarganda test
+    // kodni emas, o'zini sinagan bo'lardi.
+    assert.ok(calls <= PRO_IMAGE_LANES, `blokdan keyin to'xtashi kerak, yuborilgani: ${calls}`);
     assert.ok(calls < report.want);
+  } finally {
+    restore();
+  }
+});
+
+/*
+ * X-2 (AUDIT-9, jonli sinovda topilgan): Gemini rasm so'rovining shifti
+ * fal ga mo'ljallangan 45 s edi. O'lchov: sarlavha ~13 s + 2.3 MB tanani
+ * o'qish ~20 s; uzunroq promptda 45 s dan oshadi va `res.json()` uzilib,
+ * xato «javobda rasm yo'q» (failed) bo'lib ko'rinardi — jonli dekada
+ * 7/7 rasm shu sabab yo'qolgan edi. Endi shift 120 s va uzilish
+ * `timeout` (skipped) deb tasniflanadi.
+ */
+test("gemini rasm shifti fal nikidan katta va tana uzilishi timeout deb sanaladi", async () => {
+  const restore = geminiEnv();
+  try {
+    assert.ok(GEMINI_IMAGE_CAP_MS >= 90_000, `shift juda kichik: ${GEMINI_IMAGE_CAP_MS}`);
+    // Byudjet shiftni ham, muddatni ham hisobga oladi — kichigi yutadi.
+    assert.equal(requestBudget(Date.now() + 300_000, GEMINI_IMAGE_CAP_MS), GEMINI_IMAGE_CAP_MS);
+
+    // 200 keldi, lekin tana o'qilmadi (uzildi) → `timeout`, `failed` emas.
+    globalThis.fetch = (async () => ({
+      ok: true,
+      status: 200,
+      json: async () => {
+        const e = new Error("The operation was aborted due to timeout");
+        e.name = "TimeoutError";
+        throw e;
+      },
+    })) as unknown as typeof fetch;
+    const res = await requestGeminiImage(
+      { prompt: "test", size: { width: 1024, height: 576 }, styleId: "photo" },
+      Date.now() + 120_000,
+    );
+    assert.equal(res.ok, false);
+    assert.equal(res.ok === false && res.reason, "timeout");
+    assert.match(res.ok === false ? res.detail : "", /tana/);
+
+    // Hisobotda bu `skipped` — «failed» emas: pul/kalit muammosi emas.
+    const slides = bulletDeck(2);
+    const report = await attachSlideImages(slides, "Suv aylanishi", "classic", 60_000, { meta: meta({}, pro) });
+    assert.equal(report.skipped, report.want);
+    assert.equal(report.failed, 0);
   } finally {
     restore();
   }
