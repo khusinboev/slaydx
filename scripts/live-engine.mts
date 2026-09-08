@@ -171,6 +171,56 @@ const CASES: Case[] = [
       ];
     },
   },
+  {
+    /*
+     * Pro-slayd: har parametr ta'sir qilishi shart (AUDIT-9). Bu keys
+     * brifni to'liq beradi — auditoriya, tur, bloklar, test, internet,
+     * izohsiz → «Javoblar» slaydi, logo yo'q (worker beradi).
+     */
+    name: "pro-slide",
+    tool: "pro-slide",
+    budgetMs: 400_000,
+    values: {
+      topic: "Orol dengizi fojiasi va uni tiklash choralari",
+      slideAudience: "school_8_9",
+      slidePurpose: "open_lesson",
+      blocks: "reja,maqsadlar,motivatsiya,amaliyot,test,uyga_vazifa,adabiyotlar",
+      planItems: 4,
+      slideCount: 10,
+      subject: "Geografiya",
+      language: "uz",
+      slideImageStyle: "illustration",
+      author: "Karimova Nilufar",
+      position: "Geografiya o‘qituvchisi",
+      organization: "Toshkent shahar 12-maktab",
+      keyIdeas: "Orol qurishi inson faoliyati oqibati\nOrolbo‘yida saksovul ekish\nSuvni tejash har kimga bog‘liq",
+      localExamples: true,
+      internetSearch: true,
+      quizCount: 3,
+      speakerNotes: false,
+      titleSlide: true,
+      agendaSlide: true,
+      textVolume: "standart",
+    },
+    checks: (file) => {
+      const slides = file.doc.slides ?? [];
+      const layouts = slides.map((s) => s.layout);
+      const research = file.doc.slideResearch;
+      const quiz = slides.filter((s) => s.layout === "quiz");
+      const leaked = quiz.filter((s) => (s.quiz ?? []).length === 0);
+      return [
+        ok("slaydlar soni", slides.length === 10, `${slides.length} / 10`),
+        ok("reja bandlari", (slides.find((s) => s.layout === "agenda")?.bullets?.length ?? 0) === 4, `${slides.find((s) => s.layout === "agenda")?.bullets?.length ?? 0} band`),
+        ok("test slaydi", quiz.length >= 1 && leaked.length === 0, `${quiz.length} ta quiz, bo'sh: ${leaked.length}`),
+        ok("javoblar slaydi", layouts.includes("answers"), layouts.join(" › ")),
+        ok("adabiyotlar", layouts.includes("references"), ""),
+        ok("internet manbalari", !!research && research.sources.length > 0, `${research?.sources.length ?? 0} manba, ${research?.queries.length ?? 0} so'rov`),
+        ok("izoh o'chiq", slides.every((s) => !s.notes), ""),
+        ok("rasm bor", slides.some((s) => !!s.image), `${slides.filter((s) => !!s.image).length} rasm`),
+        ok("footer", slides.some((s) => (s.footer ?? "").includes("Karimova")), slides[1]?.footer ?? ""),
+      ];
+    },
+  },
 ];
 
 /** Glossariy atamalari alifbo tartibidami. */
