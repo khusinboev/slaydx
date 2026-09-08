@@ -4,6 +4,7 @@ import { TOOL_BY_ID } from "../lib/tools.ts";
 import { extractMeta, minPages, parseAuthorLine } from "../lib/generation/meta.ts";
 import { renderDocx } from "../lib/generation/render-docx.ts";
 import type { AcademicDoc } from "../lib/generation/types.ts";
+import type { SlideModel } from "../lib/generation/slide-types.ts";
 import type { FormValues, ToolId } from "../lib/types.ts";
 
 /**
@@ -1594,5 +1595,289 @@ test("A2: keys hujjatida mundarija yo'q (ko'ruvchi bilan bir xil)", async () => 
     if (savedGemini === undefined) delete process.env.GEMINI_API_KEY;
     else process.env.GEMINI_API_KEY = savedGemini;
     if (savedXai !== undefined) process.env.XAI_API_KEY = savedXai;
+  }
+});
+
+// ── AUDIT-7 O-1: rasm kelmagani jim qolmasin ─────────────────────────
+
+/**
+ * Rasm bosqichi uchun umumiy sozlash.
+ *
+ * LLM kaliti O'CHIRILADI (`writeSlideImagePrompts` tarmoqqa chiqmasin —
+ * u holda faqat zaxira promptlar ishlatiladi), `FAL_KEY` esa QO'YILADI:
+ * `attachSlideImages` kalitsiz holatda umuman rasm va'da qilmaydi.
+ */
+function slideImageEnv() {
+  const saved = {
+    fal: process.env.FAL_KEY,
+    gemini: process.env.GEMINI_API_KEY,
+    xai: process.env.XAI_API_KEY,
+    fetch: globalThis.fetch,
+  };
+  process.env.FAL_KEY = "test-fal-key";
+  delete process.env.GEMINI_API_KEY;
+  delete process.env.XAI_API_KEY;
+  return () => {
+    globalThis.fetch = saved.fetch;
+    if (saved.fal === undefined) delete process.env.FAL_KEY;
+    else process.env.FAL_KEY = saved.fal;
+    if (saved.gemini === undefined) delete process.env.GEMINI_API_KEY;
+    else process.env.GEMINI_API_KEY = saved.gemini;
+    if (saved.xai === undefined) delete process.env.XAI_API_KEY;
+    else process.env.XAI_API_KEY = saved.xai;
+  };
+}
+
+const bulletDeck = (n: number): SlideModel[] =>
+  Array.from({ length: n }, (_, i) => ({
+    id: `s${i}`,
+    layout: "bullets" as const,
+    title: `Slayd ${i + 1}`,
+  }));
+
+/**
+ * AYNAN O-1 (AUDIT-7). Jonli sinovda fal.ai 19 ta so'rovning 19 tasini
+ *
+ *   [fal] 403 User is locked. Reason: TOP_UP.
+ *
+ * bilan rad etdi. Deka rasmsiz `COMPLETED` bo'ldi, «Premium uzun ·
+ * sifatliroq rasm · 8 000» ning butun narxi olindi va foydalanuvchi
+ * buni HECH QAYERDAN bilmadi: yagona signal `console.warn` edi, ya'ni
+ * faqat server jurnalida.
+ */
+test("fal.ai hisobni bloklasa rasm bosqichi buni hisobotga yozadi", async () => {
+  const { attachSlideImages } = await import("../lib/generation/slide-images.ts");
+  const restore = slideImageEnv();
+  let calls = 0;
+  globalThis.fetch = (async () => {
+    calls += 1;
+    return {
+      ok: false,
+      status: 403,
+      json: async () => ({ detail: "User is locked. Reason: TOP_UP." }),
+    } as never;
+  }) as typeof fetch;
+
+  try {
+    const slides = bulletDeck(16);
+    const report = await attachSlideImages(slides, "Fotosintez", "classic", 60_000, { premium: true });
+
+    assert.ok(report.want > 0, "premium dekada rasm sloti rejalashtirilishi kerak");
+    assert.equal(report.got, 0, "403 dan keyin bironta ham rasm biriktirilmasligi kerak");
+    assert.equal(report.blocked, report.want, "hamma slot bloklangan deb sanalishi kerak");
+    assert.equal(report.skipped, 0, "bu vaqt muammosi EMAS — `skipped` bilan aralashmasin");
+    assert.match(String(report.blockReason), /User is locked/, "sabab hisobotda qolishi kerak");
+    assert.equal(slides.filter((s) => s.image).length, 0);
+
+    /*
+     * Blok aniqlangach qolgan so'rov yuborilmaydi: javob kalit/hisob
+     * darajasida, ya'ni keyingisi ham albatta shu 403 ni oladi.
+     * `mapPool` yo'lakligi 3 — shuncha so'rov allaqachon yo'lda
+     * bo'lishi mumkin, undan ortig'i yo'q.
+     */
+    assert.ok(calls <= 3, `blokdan keyin so'rov to'xtashi kerak, yuborilgani: ${calls}`);
+    assert.ok(calls < report.want, `${report.want} ta o'rniga ${calls} ta so'rov ketishi kerak`);
+  } finally {
+    restore();
+  }
+});
+
+/**
+ * Ikkinchi holat — vaqt tugashi. Ilgari u ham, blok ham bir xil
+ * jimlik bilan o'tardi (`console.warn`), ya'ni jurnalga qarab «hisobni
+ * to'ldirish kerakmi yoki byudjetni oshirish kerakmi» degan savolga
+ * javob berib bo'lmasdi.
+ */
+test("byudjet tugagani blokdan alohida sanaladi", async () => {
+  const { attachSlideImages } = await import("../lib/generation/slide-images.ts");
+  const restore = slideImageEnv();
+  let calls = 0;
+  globalThis.fetch = (async () => {
+    calls += 1;
+    return { ok: false, status: 403, json: async () => ({ detail: "User is locked." }) } as never;
+  }) as typeof fetch;
+
+  try {
+    const slides = bulletDeck(16);
+    // Byudjet nol — birinchi tekshiruvdayoq hamma slot o'tkazib yuboriladi.
+    const report = await attachSlideImages(slides, "Fotosintez", "classic", 0, { premium: true });
+
+    assert.ok(report.want > 0);
+    assert.equal(report.skipped, report.want, "hamma slot «vaqt tugadi» deb sanalishi kerak");
+    assert.equal(report.blocked, 0, "vaqt tugashi blok emas");
+    assert.equal(calls, 0, "byudjet tugaganda provayderga so'rov ketmasligi kerak");
+  } finally {
+    restore();
+  }
+});
+
+/**
+ * Va'da qilingan rasm soni YAGONA manbadan (`plannedImageSlots`) —
+ * `deliveredCount` uni qayta hisoblamaydi. Ikkinchi nusxa `photoSlot`
+ * yoki `imageBudget` o'zgarganda jimgina ajralib ketardi.
+ */
+test("rasm va'dasi reja bilan bir xil songa asoslanadi", async () => {
+  const { attachSlideImages, plannedImageSlots, imageBudget } = await import(
+    "../lib/generation/slide-images.ts"
+  );
+  const restore = slideImageEnv();
+  globalThis.fetch = (async () =>
+    ({ ok: false, status: 403, json: async () => ({ detail: "User is locked." }) }) as never) as typeof fetch;
+
+  try {
+    const slides = bulletDeck(16);
+    const planned = plannedImageSlots(slides, "classic", true);
+    assert.equal(planned.length, imageBudget(16, true), "16 slaydli premium dekada byudjet bog'lovchi");
+
+    const report = await attachSlideImages(slides, "Fotosintez", "classic", 60_000, { premium: true });
+    assert.equal(report.want, planned.length, "hisobotdagi va'da reja bilan bir xil bo'lishi kerak");
+
+    // Kalitsiz muhitda rasm umuman va'da qilinmaydi — aks holda har
+    // lokal deka «kam yetkazildi» bo'lib, pul qaytarilardi.
+    delete process.env.FAL_KEY;
+    const noKey = await attachSlideImages(bulletDeck(16), "Fotosintez", "classic", 60_000, { premium: true });
+    assert.equal(noKey.want, 0, "FAL_KEY yo'q bo'lsa rasm va'da qilinmaydi");
+  } finally {
+    restore();
+  }
+});
+
+/**
+ * Hisobot `doc.slideImages` orqali `deliveredCount` ga yetib boradi va
+ * PULGA aylanadi.
+ *
+ * Ulush 0.25: paket narxlaridan chiqarilgan (`priceFor`) — slayd bahosi
+ * (5 000−3 000)/(14−10) = 500, ya'ni premium uzun 8 000 = 5 000 + 2×500
+ * + 2 000, «sifatliroq rasm» ustamasi 2 000 tanga = 8 000 ning 1/4 i.
+ */
+test("rasm nol kelganda premium dekadan ustama qaytariladi", async () => {
+  const { deliveredCount } = await import("../lib/generation/delivered.ts");
+  const { shortfallRatio } = await import("../lib/server/worker.ts");
+
+  const premiumMeta = extractMeta(TOOL_BY_ID.slide, {
+    topic: "Fotosintez",
+    quality: "premium_long",
+  } as FormValues);
+  const deck = (slides: number, images?: { want: number; got: number }) =>
+    ({
+      meta: premiumMeta,
+      titlePage: true,
+      toc: false,
+      sections: [],
+      slides: bulletDeck(slides),
+      ...(images
+        ? { slideImages: { ...images, blocked: images.want - images.got, skipped: 0, failed: 0 } }
+        : {}),
+    }) as never as AcademicDoc;
+
+  // 16 slayd to'liq, 13 rasmdan 0 tasi keldi.
+  const zero = deliveredCount(premiumMeta, deck(16, { want: 13, got: 0 }));
+  assert.deepEqual(zero, { got: 0, want: 13, unit: "rasm", refundShare: 0.25 });
+  assert.equal(shortfallRatio(zero), 0.25, "8 000 dan 2 000 tanga qaytadi");
+
+  // Yarmi kelgan bo'lsa qaytarish ham yarmi.
+  const half = deliveredCount(premiumMeta, deck(16, { want: 12, got: 6 }));
+  assert.equal(shortfallRatio(half), 0.125);
+
+  // To'liq yetkazilganda qaytarish yo'q.
+  assert.equal(deliveredCount(premiumMeta, deck(16, { want: 13, got: 13 })), undefined);
+
+  /*
+   * Hisobot yo'q (eski `doc_json`, yoki rasm bosqichi umuman
+   * ishlamagan muhit) — va'da ham yo'q. Aks holda har eski deka
+   * ochilganda «rasm kelmadi» deb pul qaytarilardi.
+   */
+  assert.equal(deliveredCount(premiumMeta, deck(16)), undefined, "hisobotsiz deka qaytarishsiz");
+});
+
+/**
+ * Standart paket yorlig'ida rasm haqida so'z yo'q («Standart · 10 slayd
+ * · 3 000») va narxda unga ustama ham yo'q — pul qaytarilmaydi. Lekin
+ * kamomad QAYD ETILADI: sahifa rasm chiqmaganini aytadi, sabab bazada
+ * qoladi.
+ */
+test("standart paketda rasm kamomadi qayd etiladi, lekin pul qaytmaydi", async () => {
+  const { deliveredCount } = await import("../lib/generation/delivered.ts");
+  const { shortfallRatio } = await import("../lib/server/worker.ts");
+
+  const stdMeta = extractMeta(TOOL_BY_ID.slide, { topic: "Fotosintez", quality: "standard" } as FormValues);
+  assert.equal(stdMeta.premiumVisuals, false);
+  const doc = {
+    meta: stdMeta,
+    titlePage: true,
+    toc: false,
+    sections: [],
+    slides: bulletDeck(10),
+    slideImages: { want: 8, got: 0, blocked: 8, skipped: 0, failed: 0 },
+  } as never as AcademicDoc;
+
+  const d = deliveredCount(stdMeta, doc);
+  assert.deepEqual(d, { got: 0, want: 8, unit: "rasm", refundShare: 0 });
+  assert.equal(shortfallRatio(d), null, "ustama olinmagan miqdor uchun pul qaytarilmaydi");
+});
+
+/**
+ * Slayd dekasida IKKI va'da bor (slayd soni va rasm soni), `delivered`
+ * maydoni esa bitta. Pul jihatdan og'irrog'i yoziladi.
+ */
+test("slayd va rasm kamomadidan og'irrog'i yoziladi", async () => {
+  const { deliveredCount } = await import("../lib/generation/delivered.ts");
+
+  const premiumMeta = extractMeta(TOOL_BY_ID.slide, {
+    topic: "Fotosintez",
+    quality: "premium_long",
+  } as FormValues);
+  const deck = (slides: number, images: { want: number; got: number }) =>
+    ({
+      meta: premiumMeta,
+      titlePage: true,
+      toc: false,
+      sections: [],
+      slides: bulletDeck(slides),
+      slideImages: { ...images, blocked: images.want - images.got, skipped: 0, failed: 0 },
+    }) as never as AcademicDoc;
+
+  // Slayd 14/16 → 0.125; rasm 0/13 → 1.0 × 0.25 = 0.25. Rasm og'irroq.
+  assert.equal(deliveredCount(premiumMeta, deck(14, { want: 13, got: 0 }))?.unit, "rasm");
+
+  // Slayd 8/16 → 0.5; rasm 12/13 → 0.077 × 0.25 ≈ 0.019. Slayd og'irroq.
+  assert.equal(deliveredCount(premiumMeta, deck(8, { want: 13, got: 12 }))?.unit, "slayd");
+});
+
+/**
+ * Uchdan-uchiga simlash: rasm bosqichining hisoboti `buildSlideAcademicDoc`
+ * dan `doc.slideImages` ga, u yerdan `deliveredCount` ga yetib boradimi.
+ * Aynan shu zanjir uzilgani uchun 403 jim qolgan edi.
+ */
+test("bloklangan hisob deka yo'lida `delivered` ga aylanadi", async () => {
+  const { buildSlideAcademicDoc } = await import("../lib/generation/slide-write.ts");
+  const { deliveredCount } = await import("../lib/generation/delivered.ts");
+  const { shortfallRatio } = await import("../lib/server/worker.ts");
+  const restore = slideImageEnv();
+  globalThis.fetch = (async () =>
+    ({
+      ok: false,
+      status: 403,
+      json: async () => ({ detail: "User is locked. Reason: TOP_UP." }),
+    }) as never) as typeof fetch;
+
+  try {
+    const meta = extractMeta(TOOL_BY_ID.slide, {
+      topic: "Fotosintez jarayoni",
+      quality: "premium_long",
+    } as FormValues);
+    const doc = await buildSlideAcademicDoc(meta, Date.now() + 30_000);
+
+    assert.ok(doc.slideImages, "rasm bosqichi hisoboti hujjatda saqlanishi kerak");
+    assert.ok(doc.slideImages.want > 0, "premium deka rasm va'da qiladi");
+    assert.equal(doc.slideImages.got, 0);
+
+    const d = deliveredCount(meta, doc);
+    assert.ok(d, "rasmsiz premium deka `delivered` bilan belgilanishi kerak");
+    assert.equal(d.unit, "rasm");
+    assert.equal(d.got, 0);
+    assert.ok(shortfallRatio(d)! > 0, "worker qisman qaytarishi kerak");
+  } finally {
+    restore();
   }
 });
