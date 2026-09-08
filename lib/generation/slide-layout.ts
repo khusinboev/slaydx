@@ -595,9 +595,260 @@ function planSection(s: SlideModel, theme: SlideTheme, visual: SlideVisual, inde
   return { bg: theme.bg, layers };
 }
 
-function planOverlay(s: SlideModel, theme: SlideTheme, index: number, total: number, kind: "quote" | "closing"): SlidePlan {
+/**
+ * Iqtibos (`quote`) va yakuniy (`closing`) slayd — to'la ekran kadr
+ * ustidagi matn.
+ *
+ * AUDIT-7 O-2: `twoCol` bilan bir qatorda bu ikkisi ham `visual` ga
+ * javob bermasdi. `closing` HAR BIR dekada bor, `quote` esa 14 dan 11
+ * shablonda — ya'ni «shablonni almashtirdim, deka o'sha-o'sha» hissining
+ * yarmi shu funksiyadan kelardi.
+ *
+ *   magazine    markazlashgan panel emas, pastki tasmada yirik iqtibos
+ *   dense       hisobot sahifasi: chapga tekislangan, zich, kichik shrift
+ *   cards       yorug' sahifa + surface kartasi (fon rangining o'zi ham
+ *               o'zgaradi, ya'ni farq bir qarashda ko'rinadi)
+ *   classic/timeline/hero-split  bazaviy markazlashgan panel
+ */
+function planOverlay(
+  s: SlideModel,
+  theme: SlideTheme,
+  visual: SlideVisual,
+  index: number,
+  total: number,
+  kind: "quote" | "closing",
+): SlidePlan {
   const img = s.image?.url;
   const layers: SlideLayer[] = [];
+
+  // ── magazine: muqova tili. Panel yo'q — kadr to'la ekranda qoladi,
+  // matn esa pastki tasmada chapga tekislanib, yirik shriftda beriladi.
+  if (visual === "magazine") {
+    layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.titleBg } });
+    photo(layers, img, photoSlot(kind)!, theme.darkContent ? 0.32 : 0.5);
+    // Rasmsiz tasma yuqoriroq boshlanadi — aks holda sahifaning yuqori
+    // yarmi bo'sh to'q maydon bo'lib qolardi (`planSectionMagazine` da
+    // aynan shu nuqson PDF da ko'rilgan).
+    const bandY = img ? 3.35 : 2.0;
+    layers.push({
+      t: "rect",
+      box: { x: 0, y: bandY, w: W, h: H - bandY },
+      fill: { color: theme.titleBg, alpha: img ? 0.84 : 0 },
+    });
+    const x = 0.9;
+    const tw = W - 1.8;
+    // Iqtibos belgisi RASM emas, aksent brus: `accent` to'q fonda matn
+    // rangi sifatida o'lchanmagan (`tests/themes.test.mts`).
+    layers.push({ t: "rect", box: { x, y: bandY + 0.4, w: 1.7, h: 0.1 }, fill: { color: theme.accent } });
+    if (kind === "quote") {
+      const qText = s.quote || s.title;
+      // Quti ATAYLAB past: ilgari 2.05 edi va ikki qatorli iqtibosdan
+      // keyin muallifgacha bir dyuymlik bo'shliq qolardi (PDF da ko'rindi).
+      const qBox: Box = { x, y: bandY + 0.72, w: tw, h: 1.75 };
+      layers.push({
+        t: "text",
+        box: qBox,
+        text: qText,
+        color: theme.titleText,
+        size: fitSize(qText, qBox, 32, 19),
+        bold: true,
+      });
+      if (s.quoteBy) {
+        layers.push({
+          t: "text",
+          box: { x, y: bandY + 2.6, w: tw, h: 0.42 },
+          text: `— ${s.quoteBy}`,
+          color: theme.titleMuted,
+          size: 15,
+          uppercase: true,
+          tracking: 1.2,
+        });
+      }
+    } else {
+      const tBox: Box = { x, y: bandY + 0.72, w: tw, h: 1.15 };
+      layers.push({
+        t: "text",
+        box: tBox,
+        text: s.title,
+        color: theme.titleText,
+        size: fitSize(s.title, tBox, 34, 22),
+        bold: true,
+      });
+      if (s.subtitle) {
+        const sBox: Box = { x, y: bandY + 1.98, w: tw, h: 1.05 };
+        layers.push({
+          t: "text",
+          box: sBox,
+          text: s.subtitle,
+          color: theme.titleMuted,
+          size: fitSize(s.subtitle, sBox, 17, 13),
+        });
+      }
+    }
+    if (img) layers.push({ t: "rect", box: { x: 0, y: 6.92, w: W, h: 0.58 }, fill: { color: "#000000", alpha: 0.35 } });
+    pushFooter(layers, s, theme, index, total, { x, w: tw }, true);
+    return { bg: theme.titleBg, layers };
+  }
+
+  // ── dense: himoya/hisobot yakuni. Rasm FON darajasiga tushiriladi,
+  // matn chapga tekislanadi va kichikroq bo'ladi — sahifa «plakat» emas,
+  // hujjat bo'lib qoladi.
+  if (visual === "dense") {
+    layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.titleBg } });
+    photo(layers, img, photoSlot(kind)!, theme.darkContent ? 0.34 : 0.5);
+    layers.push({ t: "rect", box: { x: 0, y: 0, w: 0.14, h: H }, fill: { color: theme.accent } });
+    const x = M + 0.18;
+    const tw = 12.25;
+    /*
+     * Blok sahifa MARKAZIDA turadi, yuqorisida emas.
+     *
+     * Ilgari u y=1.5 dan boshlanardi va sarlavhadan keyin sahifaning
+     * pastki 3.5 dyuymi butunlay bo'sh qolardi — PDF da yakuniy slayd
+     * «yarim chizilgan» ko'rinardi. Qutilar ham qisqartirildi: sarlavha
+     * bilan izoh orasida deyarli bir dyuymlik bo'shliq bor edi.
+     */
+    const blockY = 2.55;
+    /*
+     * Matn ostidagi tasma.
+     *
+     * Ilgari dense tarmog'i faqat qoplamaga tayanardi (0.68). PDF da
+     * ko'rilganda kadrdagi shakllar matn ORQASIDA baribir ko'rinib
+     * turardi — «Xulosa» o'qilardi, izoh esa deyarli yo'qolardi.
+     * Endi blok ostida deyarli shaffofmas tasma bor, qoplama esa
+     * yumshoqroq: kadr tasmadan tashqarida ko'rinib qoladi.
+     */
+    layers.push({
+      t: "rect",
+      box: { x: 0, y: blockY - 0.45, w: W, h: 3.4 },
+      fill: { color: theme.titleBg, alpha: img ? 0.92 : 0 },
+    });
+    layers.push({ t: "rect", box: { x, y: blockY, w: tw, h: 0.035 }, fill: { color: theme.accent } });
+    if (kind === "quote") {
+      const qText = s.quote || s.title;
+      layers.push({
+        t: "text",
+        box: { x, y: blockY + 0.22, w: tw, h: 0.36 },
+        text: s.title,
+        color: theme.titleMuted,
+        size: 13,
+        bold: true,
+        uppercase: true,
+        tracking: 1.5,
+      });
+      const qBox: Box = { x, y: blockY + 0.7, w: tw, h: 1.5 };
+      layers.push({
+        t: "text",
+        box: qBox,
+        text: qText,
+        color: theme.titleText,
+        size: fitSize(qText, qBox, 22, 15),
+        italic: true,
+      });
+      if (s.quoteBy) {
+        layers.push({
+          t: "text",
+          box: { x, y: blockY + 2.32, w: tw, h: 0.4 },
+          text: `— ${s.quoteBy}`,
+          color: theme.titleMuted,
+          size: 14,
+        });
+      }
+    } else {
+      const tBox: Box = { x, y: blockY + 0.25, w: tw, h: 0.85 };
+      layers.push({
+        t: "text",
+        box: tBox,
+        text: s.title,
+        color: theme.titleText,
+        size: fitSize(s.title, tBox, 26, 18),
+        bold: true,
+      });
+      if (s.subtitle) {
+        const sBox: Box = { x, y: blockY + 1.2, w: tw, h: 1.3 };
+        layers.push({
+          t: "text",
+          box: sBox,
+          text: s.subtitle,
+          // Hisobot sahifasida izoh ham asosiy matn rangida: `titleMuted`
+          // (aksent) 16 pt da sarlavha ostidagi izoh emas, sarlavha osti
+          // yozuvidek ko'rinardi.
+          color: theme.titleText,
+          size: fitSize(s.subtitle, sBox, 16, 12),
+        });
+      }
+    }
+    // Kolontitul ham kadr ustida qolmasin: `titleMuted` faqat `titleBg`
+    // ustida o'lchangan (PDF da pastki qator kadrning och qismiga tushib
+    // deyarli ko'rinmay qolgandi).
+    if (img) layers.push({ t: "rect", box: { x: 0, y: 6.9, w: W, h: 0.6 }, fill: { color: theme.titleBg, alpha: 0.92 } });
+    pushFooter(layers, s, theme, index, total, { x, w: tw }, true);
+    return { bg: theme.titleBg, layers };
+  }
+
+  // ── cards: sahifa yorug' qoladi (`bg`), matn esa `surface` kartasida —
+  // shu shablonlarning band slaydlaridagi karta tili bilan bir xil.
+  if (visual === "cards") {
+    layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.bg } });
+    // Karta to'la to'ldirilgan, shuning uchun kadr deyarli qoplamasiz
+    // qoladi — «foto + karta» ko'rinishi.
+    photo(layers, img, photoSlot(kind)!, 0.12);
+    const card: Box = kind === "quote" ? { x: 1.3, y: 1.9, w: 10.7, h: 3.4 } : { x: 2.1, y: 2.15, w: 9.1, h: 3.2 };
+    layers.push({ t: "rect", box: card, fill: { color: theme.surface }, radius: 0.14 });
+    layers.push({ t: "rect", box: { x: card.x, y: card.y, w: 0.12, h: card.h }, fill: { color: theme.accent }, radius: 0.06 });
+    const tx = card.x + 0.6;
+    const twc = card.w - 1.2;
+    if (kind === "quote") {
+      const qText = s.quote || s.title;
+      const qBox: Box = { x: tx, y: card.y + 0.5, w: twc, h: 1.9 };
+      layers.push({
+        t: "text",
+        box: qBox,
+        text: qText,
+        color: theme.text,
+        size: fitSize(qText, qBox, 24, 16),
+        italic: true,
+      });
+      if (s.quoteBy) {
+        layers.push({
+          t: "text",
+          box: { x: tx, y: card.y + 2.5, w: twc, h: 0.4 },
+          text: `— ${s.quoteBy}`,
+          color: theme.accentInk,
+          size: 14,
+          bold: true,
+        });
+      }
+    } else {
+      const tBox: Box = { x: tx, y: card.y + 0.55, w: twc, h: 1.0 };
+      layers.push({
+        t: "text",
+        box: tBox,
+        text: s.title,
+        color: theme.text,
+        size: fitSize(s.title, tBox, 30, 20),
+        bold: true,
+      });
+      if (s.subtitle) {
+        const sBox: Box = { x: tx, y: card.y + 1.75, w: twc, h: 1.1 };
+        layers.push({
+          t: "text",
+          box: sBox,
+          text: s.subtitle,
+          // `accentInk`/`surface` — o'lchangan juft. `muted` karta ustida
+          // o'lchanmagan, shuning uchun ishlatilmaydi.
+          color: theme.accentInk,
+          size: fitSize(s.subtitle, sBox, 16, 12),
+        });
+      }
+    }
+    // Pastki tasma to'la to'ldirilgan: kolontitul rangi (`muted`) faqat
+    // `bg` ustida o'lchangan, kadr ustida emas.
+    layers.push({ t: "rect", box: { x: 0, y: 6.9, w: W, h: 0.6 }, fill: { color: theme.bg } });
+    pushFooter(layers, s, theme, index, total, { x: M + 0.18, w: 12.2 }, false);
+    return { bg: theme.bg, layers };
+  }
+
+  // ── classic (va timeline / hero-split): markazlashgan panel.
   layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.titleBg } });
   if (img) {
     // Qorong'u temada fon allaqachon to'q — 0.52 qoplama fotoni butunlay
@@ -936,8 +1187,327 @@ function planBullets(
   return { bg: theme.bg, layers };
 }
 
-function planTwoCol(s: SlideModel, theme: SlideTheme, index: number, total: number, compare: boolean): SlidePlan {
+/**
+ * Ikki ustunli slayd (`twoCol`) va qiyos (`compare`).
+ *
+ * AUDIT-7 O-2: bu maket 14 shablonning HAMMASIDA piksel-bapiksel bir xil
+ * chiqardi — `visual` parametri unga umuman yetib bormasdi. Holbuki
+ * `twoCol` HAR BIR shablonning beats yoki fillers ro'yxatida bor
+ * (`SLIDE_TEMPLATES`), ya'ni foydalanuvchi shablonni almashtirganda
+ * dekaning uchdan bir qismi o'zgarmagan holda qolardi.
+ *
+ * Endi har bir `visual` uchun alohida tarmoq bor va u shablonning
+ * `nameUz`/`blurb` va'dasiga mos keladi:
+ *
+ *   dense       to'q hisobot sahifasi, ramkasiz zich qatorlar (6 tagacha)
+ *   magazine    jurnal tarqatmasi: yirik sarlavha + ustun ajratgichi
+ *   hero-split  chap ustun to'la balandlikdagi to'q panel
+ *   timeline    har ustun tik o'q bo'ylab nuqtalar
+ *   cards       har band alohida karta
+ *   classic     bazaviy: ikki to'ldirilgan ustun
+ */
+function planTwoCol(
+  s: SlideModel,
+  theme: SlideTheme,
+  visual: SlideVisual,
+  index: number,
+  total: number,
+  compare: boolean,
+): SlidePlan {
   const layers: SlideLayer[] = [];
+  const sides = [
+    { head: s.leftTitle || "", lines: s.left ?? [] },
+    { head: s.rightTitle || "", lines: s.right ?? [] },
+  ];
+  const zoneX = M + 0.12;
+  const zoneW = 12.25;
+  const bottom = 6.85;
+
+  // ── dense: himoya/hisobot. To'q sahifa, karta yo'q, qatorlar orasida
+  // faqat ingichka ajratgich — bir slaydga ko'proq dalil sig'adi.
+  if (visual === "dense") {
+    layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.titleBg } });
+    const x0 = M + 0.18;
+    // Sarlavha `planHeading` dan EMAS: u `theme.text` bilan yozadi, u esa
+    // to'q sahifada o'lchanmagan juft. To'q fonda faqat `titleText`.
+    const titleBox: Box = { x: x0, y: 0.34, w: zoneW, h: 0.7 };
+    layers.push({
+      t: "text",
+      box: titleBox,
+      text: s.title,
+      color: theme.titleText,
+      size: fitSize(s.title, titleBox, 22, 16),
+      bold: true,
+    });
+    layers.push({ t: "rect", box: { x: x0, y: 1.1, w: zoneW, h: 0.035 }, fill: { color: theme.accent } });
+    const gap = 0.4;
+    const colW = (zoneW - gap) / 2;
+    const top = 1.45;
+    sides.forEach((c, i) => {
+      const cx = x0 + i * (colW + gap);
+      layers.push({
+        t: "text",
+        box: { x: cx, y: top, w: colW, h: 0.36 },
+        text: c.head,
+        color: theme.titleMuted,
+        size: 13,
+        bold: true,
+        uppercase: true,
+        tracking: 1.4,
+      });
+      // Qiyosda chap ustun to'la kenglikdagi aksent chiziq bilan belgilanadi.
+      const ruleW = compare && i === 0 ? colW : 1.2;
+      layers.push({ t: "rect", box: { x: cx, y: top + 0.42, w: ruleW, h: 0.03 }, fill: { color: theme.accent } });
+      const items = c.lines.slice(0, 6);
+      const rowsTop = top + 0.6;
+      // Qator balandligi CHEKLANADI: bo'sh joyni bo'lib yuborsa, uch banddan
+      // iborat ustun 1.6 dyuymlik qatorlarga cho'zilib «zich» emas, siyrak
+      // ko'rinardi — PDF da aynan shu ko'rindi. Endi qatorlar yuqorida zich
+      // turadi, ortiqcha joy pastda qoladi (hujjat sahifasidagi kabi).
+      const rowH = Math.min(1.05, (bottom - rowsTop) / Math.max(1, items.length));
+      items.forEach((line, r) => {
+        const y = rowsTop + r * rowH;
+        if (r > 0) {
+          layers.push({ t: "rect", box: { x: cx, y, w: colW, h: 0.012 }, fill: { color: theme.titleMuted, alpha: 0.4 } });
+        }
+        const box: Box = { x: cx, y: y + 0.08, w: colW, h: rowH - 0.16 };
+        layers.push({
+          t: "text",
+          box,
+          text: line,
+          color: theme.titleText,
+          size: fitSize(line, box, 15, 11),
+          valign: "middle",
+        });
+      });
+    });
+    pushFooter(layers, s, theme, index, total, { x: x0, w: zoneW }, true);
+    return { bg: theme.titleBg, layers };
+  }
+
+  // ── magazine: tarqatma sahifa. Karta ham, ramka ham yo'q — yirik
+  // sarlavha, ostidagi to'la kenglikdagi chiziq va ustunlar orasidagi
+  // tik ajratgich. Bandlar nuqtasiz abzas bo'lib oqadi.
+  if (visual === "magazine") {
+    layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.bg } });
+    const x0 = 0.7;
+    const magW = W - 1.4;
+    const titleBox: Box = { x: x0, y: 0.5, w: magW, h: 1.05 };
+    layers.push({
+      t: "text",
+      box: titleBox,
+      text: s.title,
+      color: theme.text,
+      size: fitSize(s.title, titleBox, 34, 22),
+      bold: true,
+    });
+    layers.push({ t: "rect", box: { x: x0, y: 1.68, w: magW, h: 0.045 }, fill: { color: theme.accent } });
+    const top = 2.0;
+    const divW = 0.035;
+    const gap = 0.5;
+    const colW = (magW - gap * 2 - divW) / 2;
+    layers.push({
+      t: "rect",
+      box: { x: x0 + colW + gap, y: top, w: divW, h: bottom - top },
+      fill: { color: theme.accent, alpha: 0.55 },
+    });
+    sides.forEach((c, i) => {
+      const cx = x0 + i * (colW + gap * 2 + divW);
+      layers.push({
+        t: "text",
+        box: { x: cx, y: top, w: colW, h: 0.44 },
+        text: c.head,
+        color: theme.accentInk,
+        size: 15,
+        bold: true,
+        uppercase: true,
+        tracking: 1.6,
+      });
+      const items = c.lines.slice(0, 4);
+      const bodyBox: Box = { x: cx, y: top + 0.6, w: colW, h: bottom - top - 0.6 };
+      layers.push({
+        t: "text",
+        box: bodyBox,
+        lines: items,
+        color: theme.text,
+        size: fitLines(items, bodyBox, 19, 14, 14),
+        paraSpace: 14,
+      });
+    });
+    pushFooter(layers, s, theme, index, total, { x: x0, w: magW }, false);
+    return { bg: theme.bg, layers };
+  }
+
+  // ── hero-split: titul slaydidagi kabi chap yarim to'q panel. Slayd
+  // sarlavhasi ham, chap ustun ham shu panel ichida — «muammo/yechim» va
+  // «pitch» shablonlari aynan shu qarama-qarshilikka quriladi.
+  if (visual === "hero-split") {
+    layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.bg } });
+    layers.push({ t: "rect", box: { x: 0, y: 0, w: LEFT_IMG_W, h: H }, fill: { color: theme.titleBg } });
+    // Qiyosda ikki tomon orasiga tik chok qo'yiladi.
+    if (compare) layers.push({ t: "rect", box: { x: LEFT_IMG_W, y: 0, w: 0.07, h: H }, fill: { color: theme.accent } });
+    const px = M + 0.05;
+    const pw = LEFT_IMG_W - px - 0.45;
+    const titleBox: Box = { x: px, y: 0.62, w: pw, h: 1.5 };
+    layers.push({
+      t: "text",
+      box: titleBox,
+      text: s.title,
+      color: theme.titleText,
+      size: fitSize(s.title, titleBox, 26, 17),
+      bold: true,
+    });
+    layers.push({ t: "rect", box: { x: px, y: 2.25, w: 1.2, h: 0.08 }, fill: { color: theme.accent } });
+    layers.push({
+      t: "text",
+      box: { x: px, y: 2.55, w: pw, h: 0.4 },
+      text: sides[0].head,
+      color: theme.titleMuted,
+      size: 14,
+      bold: true,
+      uppercase: true,
+      tracking: 1.4,
+    });
+    const lItems = sides[0].lines.slice(0, 5);
+    const lBox: Box = { x: px, y: 3.05, w: pw, h: 3.75 };
+    layers.push({
+      t: "text",
+      box: lBox,
+      lines: lItems,
+      bullets: true,
+      color: theme.titleText,
+      size: fitLines(lItems, lBox, 17, 13, 10),
+      paraSpace: 10,
+    });
+    const rx = RIGHT_COL_X();
+    const rw = RIGHT_COL_W();
+    layers.push({
+      t: "text",
+      box: { x: rx, y: 0.75, w: rw, h: 0.4 },
+      text: sides[1].head,
+      color: theme.accentInk,
+      size: 14,
+      bold: true,
+      uppercase: true,
+      tracking: 1.4,
+    });
+    layers.push({ t: "rect", box: { x: rx, y: 1.22, w: 1.2, h: 0.07 }, fill: { color: theme.accent } });
+    const rItems = sides[1].lines.slice(0, 5);
+    const rBox: Box = { x: rx, y: 1.5, w: rw, h: 5.35 };
+    layers.push({
+      t: "text",
+      box: rBox,
+      lines: rItems,
+      bullets: true,
+      color: theme.text,
+      size: fitLines(rItems, rBox, 18, 14, 12),
+      paraSpace: 12,
+    });
+    pushFooter(layers, s, theme, index, total, { x: rx, w: rw }, false);
+    return { bg: theme.bg, layers };
+  }
+
+  // ── timeline: har ustun tik o'q. `process` maketidagi gorizontal
+  // chiziqning ikki ustunli varianti — bandlar ketma-ketlik bo'lib
+  // o'qiladi, oddiy ro'yxat emas.
+  if (visual === "timeline") {
+    layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.bg } });
+    pushChrome(layers, theme, "full");
+    planHeading(layers, s, theme, 12.2, M + 0.18);
+    const gap = 0.45;
+    const colW = (zoneW - gap) / 2;
+    const top = 1.5;
+    sides.forEach((c, i) => {
+      const cx = zoneX + i * (colW + gap);
+      layers.push({
+        t: "text",
+        box: { x: cx, y: top, w: colW, h: 0.38 },
+        text: c.head,
+        color: theme.accentInk,
+        size: 14,
+        bold: true,
+        uppercase: true,
+        tracking: 1.4,
+      });
+      const items = c.lines.slice(0, 5);
+      const n = Math.max(1, items.length);
+      const rowsTop = top + 0.55;
+      const rowH = (bottom - rowsTop) / n;
+      const railX = cx + 0.16;
+      // O'q birinchi nuqtaning markazidan oxirgisinikigacha cho'ziladi.
+      layers.push({
+        t: "rect",
+        box: { x: railX + 0.085, y: rowsTop + 0.15, w: 0.05, h: Math.max(0.05, (n - 1) * rowH) },
+        fill: { color: theme.accent },
+      });
+      items.forEach((line, r) => {
+        const y = rowsTop + r * rowH;
+        layers.push({
+          t: "rect",
+          box: { x: railX, y: y + 0.04, w: 0.22, h: 0.22 },
+          fill: { color: theme.accent },
+          radius: 0.11,
+        });
+        const box: Box = { x: cx + 0.62, y, w: colW - 0.62, h: rowH - 0.18 };
+        layers.push({ t: "text", box, text: line, color: theme.text, size: fitSize(line, box, 16, 12) });
+      });
+    });
+    pushFooter(layers, s, theme, index, total, { x: M + 0.18, w: 12.2 }, false);
+    return { bg: theme.bg, layers };
+  }
+
+  // ── cards: ustun ichidagi har band alohida karta. `planBulletCards`
+  // bilan bir tilda gapiradi, lekin ikki ustunli.
+  if (visual === "cards") {
+    layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.bg } });
+    pushChrome(layers, theme, "full");
+    planHeading(layers, s, theme, 12.2, M + 0.18);
+    const gap = 0.34;
+    const colW = (zoneW - gap) / 2;
+    const top = 1.45;
+    sides.forEach((c, i) => {
+      const dark = compare && i === 0;
+      const cx = zoneX + i * (colW + gap);
+      layers.push({
+        t: "text",
+        box: { x: cx + 0.06, y: top, w: colW - 0.12, h: 0.38 },
+        text: c.head,
+        color: theme.accentInk,
+        size: 14,
+        bold: true,
+        uppercase: true,
+        tracking: 1.4,
+      });
+      const items = c.lines.slice(0, 4);
+      const n = Math.max(1, items.length);
+      const cardsTop = top + 0.5;
+      const cardGap = 0.16;
+      const cardH = (bottom - cardsTop - cardGap * (n - 1)) / n;
+      items.forEach((line, r) => {
+        const y = cardsTop + r * (cardH + cardGap);
+        layers.push({
+          t: "rect",
+          box: { x: cx, y, w: colW, h: cardH },
+          fill: { color: dark ? theme.titleBg : theme.surface },
+          radius: 0.1,
+        });
+        layers.push({ t: "rect", box: { x: cx, y, w: 0.09, h: cardH }, fill: { color: theme.accent }, radius: 0.04 });
+        const box: Box = { x: cx + 0.32, y: y + 0.16, w: colW - 0.56, h: cardH - 0.32 };
+        layers.push({
+          t: "text",
+          box,
+          text: line,
+          color: dark ? theme.titleText : theme.text,
+          size: fitSize(line, box, 16, 12),
+          valign: "middle",
+        });
+      });
+    });
+    pushFooter(layers, s, theme, index, total, { x: M + 0.18, w: 12.2 }, false);
+    return { bg: theme.bg, layers };
+  }
+
+  // ── classic: bazaviy ikki to'ldirilgan ustun.
   layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.bg } });
   pushChrome(layers, theme, "full");
   planHeading(layers, s, theme, 12.2, M + 0.18);
@@ -946,8 +1516,8 @@ function planTwoCol(s: SlideModel, theme: SlideTheme, index: number, total: numb
   const y = 1.35;
   const h = 5.5;
   const cols = [
-    { x: M + 0.12, head: s.leftTitle, lines: s.left, dark: compare },
-    { x: M + 0.12 + colW + gap, head: s.rightTitle, lines: s.right, dark: false },
+    { x: zoneX, head: s.leftTitle, lines: s.left, dark: compare },
+    { x: zoneX + colW + gap, head: s.rightTitle, lines: s.right, dark: false },
   ];
   for (const c of cols) {
     const fill = c.dark ? theme.titleBg : theme.surface;
@@ -1426,15 +1996,15 @@ export function planSlide(
     case "section":
       return planSection(s, theme, visual, index, total);
     case "quote":
-      return planOverlay(s, theme, index, total, "quote");
+      return planOverlay(s, theme, visual, index, total, "quote");
     case "closing":
-      return planOverlay(s, theme, index, total, "closing");
+      return planOverlay(s, theme, visual, index, total, "closing");
     case "agenda":
       return planBullets(s, theme, visual, index, total, true, bodyType);
     case "twoCol":
-      return planTwoCol(s, theme, index, total, false);
+      return planTwoCol(s, theme, visual, index, total, false);
     case "compare":
-      return planTwoCol(s, theme, index, total, true);
+      return planTwoCol(s, theme, visual, index, total, true);
     case "stats":
       return planStats(s, theme, visual, index, total);
     case "process":
