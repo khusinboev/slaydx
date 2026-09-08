@@ -141,12 +141,49 @@ const SAMPLES: Record<string, FormValues> = {
     topic: "Fotosintez jarayoni",
     quality: "standard",
     language: "uz",
-    slideAudience: "lecture",
+    // AUDIT-9: oddiy vosita ham boy brif oladi — namuna shuni ko'rsatsin.
+    slideAudience: "school_8_9",
+    slidePurpose: "lesson",
     slideTemplate: "auto",
     slideTheme: "atlas",
     titleSlide: true,
+    agendaSlide: true,
+    planItems: 4,
+    textVolume: "standart",
+    quizCount: 3,
+    speakerNotes: true,
+    localExamples: true,
+    subject: "Biologiya",
     author: "Abdujabbor Husinboyev",
-    university: "SlaydX",
+    position: "Biologiya o‘qituvchisi",
+    organization: "SlaydX",
+  },
+  /*
+   * Pro slayd (AUDIT-9) — namunada BARCHA yangi imkoniyat ko'rinsin:
+   * tuzilma bloklari, asosiy g'oyalar, internet qidiruvi (manbalar
+   * slaydi), test + javoblar kaliti (izoh o'chiq), rasm uslubi.
+   * 12 slayd × 2 000 = 24 000 tanga.
+   */
+  "pro-slide": {
+    topic: "Orol dengizi fojiasi va uni tiklash choralari",
+    slideCount: 12,
+    language: "uz",
+    slideAudience: "school_8_9",
+    slidePurpose: "open_lesson",
+    blocks: "reja,maqsadlar,motivatsiya,amaliyot,test,uyga_vazifa,adabiyotlar",
+    planItems: 4,
+    keyIdeas: "Orol qurishi inson faoliyati oqibati\nOrolbo‘yida saksovul ekish\nSuvni tejash har kimga bog‘liq",
+    localExamples: true,
+    internetSearch: true,
+    quizCount: 3,
+    speakerNotes: false,
+    textVolume: "standart",
+    slideImageStyle: "illustration",
+    slideTheme: "atlas",
+    subject: "Geografiya",
+    author: "Abdujabbor Husinboyev",
+    position: "Geografiya o‘qituvchisi",
+    organization: "SlaydX",
   },
 };
 
