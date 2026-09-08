@@ -504,20 +504,256 @@ export function sectionLabels(code: string): SectionLabels {
   return SECTIONS[(code || "uz").toLowerCase()] ?? SECTIONS.uz;
 }
 
-/** Slayd shabloni sarlavhalari (LLM ishlamay qolganda va titul/yakun slaydda). */
+/**
+ * Slayd shabloni sarlavhalari (LLM ishlamay qolganda va titul/yakun slaydda).
+ *
+ * Bu yorliqlarni KOD yozadi, model emas — shuning uchun ular tanlangan
+ * tilga ergashishi shart. `quiz`/`references`/`answers` yangi maketlar
+ * uchun (`slide-layout-extra.ts`), `goals`/`homework`/`practice` esa
+ * tuzilma bloklari uchun (`slide-blocks.ts`).
+ */
 export type SlideLabels = {
   agenda: string;
   conclusion: string;
   questions: string;
   presentation: string;
+  /** Nazorat testi slaydining sarlavhasi. */
+  quiz: string;
+  /** Adabiyotlar/manbalar slaydi. */
+  references: string;
+  /** Test javoblari slaydi — izoh o’chiq bo‘lganda `finalizeQuiz` qo‘shadi. */
+  answers: string;
+  goals: string;
+  homework: string;
+  practice: string;
 };
 
 const SLIDE_LABELS: Record<string, SlideLabels> = {
-  uz: { agenda: "Reja", conclusion: "Xulosa", questions: "Savollar va muhokama", presentation: "Taqdimot" },
-  ru: { agenda: "План", conclusion: "Заключение", questions: "Вопросы и обсуждение", presentation: "Презентация" },
-  en: { agenda: "Agenda", conclusion: "Conclusion", questions: "Questions and discussion", presentation: "Presentation" },
+  uz: {
+    agenda: "Reja",
+    conclusion: "Xulosa",
+    questions: "Savollar va muhokama",
+    presentation: "Taqdimot",
+    quiz: "Nazorat testi",
+    references: "Foydalanilgan adabiyotlar",
+    answers: "Test javoblari",
+    goals: "Maqsadlar",
+    homework: "Uyga vazifa",
+    practice: "Amaliyot",
+  },
+  ru: {
+    agenda: "План",
+    conclusion: "Заключение",
+    questions: "Вопросы и обсуждение",
+    presentation: "Презентация",
+    quiz: "Контрольный тест",
+    references: "Использованная литература",
+    answers: "Ответы к тесту",
+    goals: "Цели",
+    homework: "Домашнее задание",
+    practice: "Практика",
+  },
+  en: {
+    agenda: "Agenda",
+    conclusion: "Conclusion",
+    questions: "Questions and discussion",
+    presentation: "Presentation",
+    quiz: "Quiz",
+    references: "References",
+    answers: "Answer key",
+    goals: "Goals",
+    homework: "Homework",
+    practice: "Practice",
+  },
+  kaa: {
+    agenda: "Reja",
+    conclusion: "Қорытынды",
+    questions: "Сўралар және талқылау",
+    presentation: "Тақдимот",
+    quiz: "Назорат сынауы",
+    references: "Пайдаланылған әдебиеттер",
+    answers: "Сынау жауаптары",
+    goals: "Мақсаттар",
+    homework: "Үй жұмысы",
+    practice: "Әмелиёт",
+  },
+  kk: {
+    agenda: "Күнтізбе",
+    conclusion: "Қорытындысы",
+    questions: "Сұрақтар және талқылау",
+    presentation: "Ұсыну",
+    quiz: "Бақылау сынағы",
+    references: "Пайдаланған әдебиеттер",
+    answers: "Тест жауабы",
+    goals: "Міндеттер",
+    homework: "Үй тапсырмасы",
+    practice: "Практикум",
+  },
+  ky: {
+    agenda: "Күндөм",
+    conclusion: "Корытынды",
+    questions: "Суроолор жана талкуу",
+    presentation: "Сунуштама",
+    quiz: "Контроль тести",
+    references: "Колдонулган адабият",
+    answers: "Тест жооптору",
+    goals: "Максаттар",
+    homework: "Үй тапшырмасы",
+    practice: "Практика",
+  },
+  tg: {
+    agenda: "Барномаи кор",
+    conclusion: "Хулоса",
+    questions: "Саволҳо ва баҳс",
+    presentation: "Пешкеши",
+    quiz: "Санҷишҳои назоратӣ",
+    references: "Адабиёти истифодашуда",
+    answers: "Ҷавобҳои санҷиш",
+    goals: "Ҳадафҳо",
+    homework: "Бахши хонагӣ",
+    practice: "Амалиёт",
+  },
+  tk: {
+    agenda: "Düşündiriş",
+    conclusion: "Netice",
+    questions: "Soraglar we ara",
+    presentation: "Takdym",
+    quiz: "Şekil testi",
+    references: "Edebyatlar",
+    answers: "Test jogaplary",
+    goals: "Maksatlar",
+    homework: "Öy işi",
+    practice: "Praktika",
+  },
+  tr: {
+    agenda: "Gündem",
+    conclusion: "Sonuç",
+    questions: "Sorular ve tartışma",
+    presentation: "Sunum",
+    quiz: "Kısa sınav",
+    references: "Kaynaklar",
+    answers: "Sınav yanıtları",
+    goals: "Hedefler",
+    homework: "Ödev",
+    practice: "Uygulama",
+  },
+  ar: {
+    agenda: "جدول الأعمال",
+    conclusion: "الخلاصة",
+    questions: "الأسئلة والمناقشة",
+    presentation: "العرض التقديمي",
+    quiz: "اختبار قصير",
+    references: "المراجع المستخدمة",
+    answers: "إجابات الاختبار",
+    goals: "الأهداف",
+    homework: "الواجب المنزلي",
+    practice: "التطبيق العملي",
+  },
+  de: {
+    agenda: "Agenda",
+    conclusion: "Fazit",
+    questions: "Fragen und Diskussion",
+    presentation: "Präsentation",
+    quiz: "Quiz",
+    references: "Literaturverzeichnis",
+    answers: "Quizantworten",
+    goals: "Ziele",
+    homework: "Hausaufgaben",
+    practice: "Praxis",
+  },
+  fr: {
+    agenda: "Ordre du jour",
+    conclusion: "Conclusion",
+    questions: "Questions et discussion",
+    presentation: "Présentation",
+    quiz: "Quiz",
+    references: "Références",
+    answers: "Réponses au quiz",
+    goals: "Objectifs",
+    homework: "Devoirs",
+    practice: "Pratique",
+  },
+  es: {
+    agenda: "Orden del día",
+    conclusion: "Conclusión",
+    questions: "Preguntas y debate",
+    presentation: "Presentación",
+    quiz: "Cuestionario",
+    references: "Referencias",
+    answers: "Respuestas",
+    goals: "Objetivos",
+    homework: "Tarea",
+    practice: "Práctica",
+  },
+  zh: {
+    agenda: "议程",
+    conclusion: "结论",
+    questions: "问题和讨论",
+    presentation: "演讲",
+    quiz: "测验",
+    references: "参考资料",
+    answers: "答案",
+    goals: "目标",
+    homework: "作业",
+    practice: "实践",
+  },
+  ko: {
+    agenda: "의제",
+    conclusion: "결론",
+    questions: "질문 및 토론",
+    presentation: "발표",
+    quiz: "퀴즈",
+    references: "참고자료",
+    answers: "답변",
+    goals: "목표",
+    homework: "과제",
+    practice: "실습",
+  },
+  ja: {
+    agenda: "アジェンダ",
+    conclusion: "結論",
+    questions: "質問と討議",
+    presentation: "プレゼンテーション",
+    quiz: "クイズ",
+    references: "参考資料",
+    answers: "回答",
+    goals: "目標",
+    homework: "宿題",
+    practice: "実習",
+  },
+  it: {
+    agenda: "Ordine del giorno",
+    conclusion: "Conclusione",
+    questions: "Domande e discussione",
+    presentation: "Presentazione",
+    quiz: "Quiz",
+    references: "Riferimenti",
+    answers: "Risposte del quiz",
+    goals: "Obiettivi",
+    homework: "Compiti",
+    practice: "Pratica",
+  },
+  pt: {
+    agenda: "Agenda",
+    conclusion: "Conclusão",
+    questions: "Perguntas e discussão",
+    presentation: "Apresentação",
+    quiz: "Questionário",
+    references: "Referências",
+    answers: "Respostas",
+    goals: "Objetivos",
+    homework: "Tarefa",
+    practice: "Prática",
+  },
 };
 
+/**
+ * Slayd yorliqlarini olish.
+ *
+ * Noma'lum kod → en (hujjat tili noma'lum bo'lsa, inglizcha xavfsiz).
+ * Bo'sh kod → uz (standart).
+ */
 export function slideLabels(code: string): SlideLabels {
-  return SLIDE_LABELS[(code || "uz").toLowerCase()] ?? SLIDE_LABELS.uz;
+  const normalized = (code || "uz").toLowerCase();
+  return SLIDE_LABELS[normalized] ?? SLIDE_LABELS.en;
 }
