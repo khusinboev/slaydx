@@ -160,6 +160,58 @@ test("extractAssets: slideLogo umuman yo'q bo'lsa xato bermaydi", () => {
 // Haqiqiy Postgres kerak (DATABASE_URL bo'lsa ishlaydi, aks holda skip).
 // ---------------------------------------------------------------------------
 
+/**
+ * EGALIK — BAZASIZ ham qulflanadi.
+ *
+ * Pastdagi to'liq oqim testi haqiqiy Postgres talab qiladi va `npm run
+ * check` da O'TKAZIB YUBORILADI — ya'ni loyihaning eng qattiq qoidasi
+ * («egalik SQL darajasida», `CLAUDE.md`) CI da sinovsiz qolardi.
+ * Shuning uchun bu yerda hovuzning `query` metodi ushlanadi va
+ * `getLogo` yuboradigan SQL matni tekshiriladi: `user_id` predikati
+ * yo'qolsa test qizil bo'ladi, baza bo'lmasa ham.
+ */
+test("getLogo: egalik predikati SQL da (bazasiz — hovuz so'rovi ushlanadi)", async (t) => {
+  const { pool } = await import("../lib/server/db.ts");
+  const p = pool();
+  const seen: { text: string; params: unknown[] }[] = [];
+  t.mock.method(p, "query", async (text: string, params: unknown[]) => {
+    seen.push({ text, params });
+    return { rows: [], rowCount: 0 };
+  });
+
+  assert.equal(await getLogo("7", "a".repeat(24)), null);
+  assert.equal(seen.length, 1, "getLogo aynan bitta so'rov yuborishi kerak");
+  const sql = seen[0].text.replace(/\s+/g, " ");
+  assert.match(sql, /FROM logo_uploads/);
+  assert.match(sql, /WHERE user_id = \$1/, "egalik SQL da bo'lishi SHART — route darajasi yetarli emas");
+  assert.match(sql, /asset_id = \$2/);
+  assert.deepEqual(seen[0].params, ["7", "a".repeat(24)]);
+
+  // `logoDataUrl` ham AYNAN shu yo'ldan o'tadi (o'z so'rovini yozmaydi).
+  seen.length = 0;
+  assert.equal(await logoDataUrl("7", "b".repeat(24)), undefined);
+  assert.match(seen[0]?.text.replace(/\s+/g, " ") ?? "", /WHERE user_id = \$1/);
+});
+
+/** `putLogo` ham foydalanuvchiga bog'lab yozadi — begona qatorga yozilmasin. */
+test("putLogo: user_id bilan yoziladi va ON CONFLICT (user_id, asset_id) (bazasiz)", async (t) => {
+  const { pool } = await import("../lib/server/db.ts");
+  const p = pool();
+  const seen: { text: string; params: unknown[] }[] = [];
+  t.mock.method(p, "query", async (text: string, params: unknown[]) => {
+    seen.push({ text, params });
+    return { rows: [], rowCount: 1 };
+  });
+
+  const bytes = pngBytes();
+  const saved = await putLogo("42", bytes, "image/png");
+  const sql = seen[0].text.replace(/\s+/g, " ");
+  assert.match(sql, /INSERT INTO logo_uploads \(user_id, asset_id/);
+  assert.match(sql, /ON CONFLICT \(user_id, asset_id\) DO NOTHING/);
+  assert.equal(seen[0].params[0], "42");
+  assert.equal(seen[0].params[1], saved.assetId);
+});
+
 test("logo_uploads: egalik, ON CONFLICT, uploadLogo to'liq yo'li, worker uzatish naqshi", {
   skip: hasDb ? false : "DATABASE_URL yo'q",
 }, async (t) => {
