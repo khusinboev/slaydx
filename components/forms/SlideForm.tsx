@@ -16,6 +16,8 @@ import { ChipGroup, LanguagePicker, Legend, ModeSwitch, TextInput } from "./fiel
 import { ToolChrome } from "./ToolChrome";
 import { runGeneration } from "./runGeneration";
 import { SourceFileField } from "./SourceFileField";
+import { slideParamsFor } from "@/lib/generation/slide-params";
+import { renderSlideParam } from "./slide-fields";
 import { cn } from "@/lib/cn";
 
 /**
@@ -27,17 +29,22 @@ import { cn } from "@/lib/cn";
  * (`meta.premiumVisuals` → rasm modeli, qadamlar soni va rasmlar soni).
  * Ikkalasi ham yorliqda ochiq yozilgan.
  */
+
 /**
- * Auditoriya — himoya zali va 5-sinf bir xil deck olmasligi kerak.
- * Chegaralar `AUDIENCE_RULES` da (`slide-templates.ts`).
+ * `ProSlideForm` bilan bitta manba (WP-G): oddiy `slide` maydonlari
+ * REYESTRDAN chiziladi, `slideParamsFor("slide")` da bo'lmagan id
+ * (masalan `position`, `blocks`, `slideCount`, `keyIdeas`) bu yerda
+ * ko'rinmaydi — `tests/slide-form.test.mts` qamrov testi buni tekshiradi.
+ * `topic`/`language`/`quality`/`slideTemplate`/`slideTheme` mavjud
+ * komponentlar bilan pastda o'zicha chiziladi, qolganini
+ * `renderSlideParam` chizadi.
  */
-const AUDIENCE = [
-  { value: "auto", label: "Avtomatik" },
-  { value: "defense", label: "Himoya" },
-  { value: "lecture", label: "Ma'ruza" },
-  { value: "school", label: "Maktab darsi" },
-  { value: "pitch", label: "Pitch" },
-];
+/** Inline (registry'dan tashqari o'zicha chiziluvchi) id lar — testda ham ishlatiladi. */
+export const SLIDE_INLINE_FIELD_IDS = ["topic", "language", "quality", "slideTemplate", "slideTheme", "extra"];
+
+export const SLIDE_FIELD_ORDER = slideParamsFor("slide")
+  .map((p) => p.id)
+  .filter((id) => !SLIDE_INLINE_FIELD_IDS.includes(id));
 
 /*
  * «Sifatli rasm» → «sifatliroq rasm»: standart paket ham fal.ai rasm
@@ -72,7 +79,17 @@ export function SlideForm({ tool, profile }: { tool: ToolConfig; profile: UserPr
     extra: "",
     quality: "standard",
     slideAudience: "auto",
+    slidePurpose: "general",
+    planItems: 5,
+    textVolume: "standart",
+    quizCount: 0,
+    slideImageStyle: "photo",
     titleSlide: true,
+    agendaSlide: true,
+    localExamples: false,
+    internetSearch: false,
+    speakerNotes: true,
+    logoAssetId: "",
     slideTheme: "atlas",
     slideTemplate: "auto",
   }));
@@ -111,18 +128,7 @@ export function SlideForm({ tool, profile }: { tool: ToolConfig; profile: UserPr
   return (
     <ToolChrome
       title={tool.pageTitle}
-      extra={
-        <fieldset>
-          <Legend>Qo&apos;shimcha talablar</Legend>
-          <textarea
-            value={String(values.extra ?? "")}
-            onChange={(e) => set("extra", e.target.value)}
-            rows={3}
-            className="border-input bg-card focus:ring-ring w-full rounded-xl border px-3.5 py-2.5 text-[15px] outline-none focus:ring-2"
-            placeholder="Rejalar, uslub, auditoriya..."
-          />
-        </fieldset>
-      }
+      extra={renderSlideParam("extra", values, set)}
       extraOpen={extraOpen}
       onExtra={() => setExtraOpen((v) => !v)}
       submitLabel={tool.submitLabel}
@@ -181,23 +187,17 @@ export function SlideForm({ tool, profile }: { tool: ToolConfig; profile: UserPr
       )}
       <fieldset className="mb-6">
         <Legend>Taqdimot tili</Legend>
-        <LanguagePicker value={String(values.language || "uz")} onChange={(v) => set("language", v)} />
+        <LanguagePicker
+          value={String(values.language || "uz")}
+          onChange={(v) => set("language", v)}
+          scope="source"
+        />
       </fieldset>
       <fieldset className="mb-6">
         <Legend>Sifat / hajm</Legend>
         <ChipGroup options={QUALITY} value={String(values.quality)} onChange={(v) => set("quality", v)} />
       </fieldset>
-      <fieldset className="mb-6">
-        <Legend>Kim uchun</Legend>
-        <p className="text-muted-foreground mb-3 text-sm">
-          Auditoriya shrift kattaligi va banddagi so‘z sonini belgilaydi. «Avtomatik» shablondan aniqlaydi.
-        </p>
-        <ChipGroup
-          options={AUDIENCE}
-          value={String(values.slideAudience || "auto")}
-          onChange={(v) => set("slideAudience", v)}
-        />
-      </fieldset>
+      {SLIDE_FIELD_ORDER.map((id) => renderSlideParam(id, values, set))}
       <fieldset className="mb-6">
         <Legend>Shablon — tuzilma</Legend>
         <p className="text-muted-foreground mb-3 text-sm">
@@ -210,14 +210,6 @@ export function SlideForm({ tool, profile }: { tool: ToolConfig; profile: UserPr
         <p className="text-muted-foreground mb-3 text-sm">Faqat palitra. Tuzilma o‘zgarmaydi.</p>
         <ColorPicker value={String(values.slideTheme || "atlas")} onChange={(v) => set("slideTheme", v)} />
       </fieldset>
-      <label className="mb-4 flex items-center gap-2 text-sm">
-        <input
-          type="checkbox"
-          checked={Boolean(values.titleSlide)}
-          onChange={(e) => set("titleSlide", e.target.checked)}
-        />
-        Titul slaydini qo&apos;shish
-      </label>
     </ToolChrome>
   );
 }
@@ -230,7 +222,7 @@ export function SlideForm({ tool, profile }: { tool: ToolConfig; profile: UserPr
  * TANLANGAN shablon ko'rinadi, ochilganda esa shablonlar guruhma-guruh
  * (akkordeon) — bir vaqtda bitta guruh ochiq.
  */
-function TemplatePicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+export function TemplatePicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   const current = SLIDE_TEMPLATE_BY_ID[normalizeTemplateId(value)] ?? SLIDE_TEMPLATE_BY_ID.auto;
   const [open, setOpen] = useState(false);
   // Ochilganda foydalanuvchi turgan guruh ochiq bo'lsin — tanlovini
@@ -437,7 +429,7 @@ function TemplateSketch({ id, visual }: { id: string; visual: SlideVisual }) {
   );
 }
 
-function ColorPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+export function ColorPicker({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   return (
     <div className="flex flex-wrap gap-2">
       {SLIDE_THEMES.map((t) => {

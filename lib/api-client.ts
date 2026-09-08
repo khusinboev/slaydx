@@ -370,6 +370,35 @@ export async function extractText(file: File) {
   });
 }
 
+/* ────────────────────────────── Logotip ────────────────────────────── */
+
+/**
+ * Pro slayd logotipini yuklaydi (`LogoField`).
+ *
+ * Server shartnomasi (WP-F, parallel yozilgan): `POST /api/uploads/logo`,
+ * `multipart/form-data`, maydon `file`. Xato matnlari `request()` dan
+ * kelgan server xabaridan QAT'IY NAZAR shu yerda status bo'yicha
+ * qattiq belgilanadi — klient nima ko'rsatishini bilishi uchun serverning
+ * aniq so'z tanlashiga qaram bo'lmaslik kerak.
+ */
+export async function uploadLogo(file: File): Promise<{ assetId: string; mime: string; size: number }> {
+  const form = new FormData();
+  form.append("file", file);
+  try {
+    return await request<{ assetId: string; mime: string; size: number }>("/api/uploads/logo", {
+      method: "POST",
+      body: form,
+    });
+  } catch (e) {
+    if (e instanceof ApiError) {
+      if (e.status === 413) throw new ApiError("Logo 2 MB dan katta", e.status, e.data);
+      if (e.status === 415) throw new ApiError("Faqat PNG yoki JPEG", e.status, e.data);
+      if (e.status === 429) throw new ApiError("Juda ko‘p urinish", e.status, e.data);
+    }
+    throw e;
+  }
+}
+
 /**
  * Ish rejasini oldindan olish. Bepul va kredit yechmaydi —
  * `app/api/outline/route.ts` izohiga qarang.
