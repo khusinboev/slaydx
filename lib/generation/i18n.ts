@@ -504,18 +504,67 @@ export function sectionLabels(code: string): SectionLabels {
   return SECTIONS[(code || "uz").toLowerCase()] ?? SECTIONS.uz;
 }
 
-/** Slayd shabloni sarlavhalari (LLM ishlamay qolganda va titul/yakun slaydda). */
+/**
+ * Slayd shabloni sarlavhalari (LLM ishlamay qolganda va titul/yakun slaydda).
+ *
+ * Bu yorliqlarni KOD yozadi, model emas — shuning uchun ular tanlangan
+ * tilga ergashishi shart. `quiz`/`references`/`answers` yangi maketlar
+ * uchun (`slide-layout-extra.ts`), `goals`/`homework`/`practice` esa
+ * tuzilma bloklari uchun (`slide-blocks.ts`).
+ */
 export type SlideLabels = {
   agenda: string;
   conclusion: string;
   questions: string;
   presentation: string;
+  /** Nazorat testi slaydining sarlavhasi. */
+  quiz: string;
+  /** Adabiyotlar/manbalar slaydi. */
+  references: string;
+  /** Test javoblari slaydi — izoh o’chiq bo‘lganda `finalizeQuiz` qo‘shadi. */
+  answers: string;
+  goals: string;
+  homework: string;
+  practice: string;
 };
 
 const SLIDE_LABELS: Record<string, SlideLabels> = {
-  uz: { agenda: "Reja", conclusion: "Xulosa", questions: "Savollar va muhokama", presentation: "Taqdimot" },
-  ru: { agenda: "План", conclusion: "Заключение", questions: "Вопросы и обсуждение", presentation: "Презентация" },
-  en: { agenda: "Agenda", conclusion: "Conclusion", questions: "Questions and discussion", presentation: "Presentation" },
+  uz: {
+    agenda: "Reja",
+    conclusion: "Xulosa",
+    questions: "Savollar va muhokama",
+    presentation: "Taqdimot",
+    quiz: "Nazorat testi",
+    references: "Foydalanilgan adabiyotlar",
+    answers: "Test javoblari",
+    goals: "Maqsadlar",
+    homework: "Uyga vazifa",
+    practice: "Amaliyot",
+  },
+  ru: {
+    agenda: "План",
+    conclusion: "Заключение",
+    questions: "Вопросы и обсуждение",
+    presentation: "Презентация",
+    quiz: "Контрольный тест",
+    references: "Использованная литература",
+    answers: "Ответы к тесту",
+    goals: "Цели",
+    homework: "Домашнее задание",
+    practice: "Практика",
+  },
+  en: {
+    agenda: "Agenda",
+    conclusion: "Conclusion",
+    questions: "Questions and discussion",
+    presentation: "Presentation",
+    quiz: "Quiz",
+    references: "References",
+    answers: "Answer key",
+    goals: "Goals",
+    homework: "Homework",
+    practice: "Practice",
+  },
 };
 
 export function slideLabels(code: string): SlideLabels {
