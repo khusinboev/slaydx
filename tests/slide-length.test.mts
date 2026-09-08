@@ -3,11 +3,9 @@ import assert from "node:assert/strict";
 import { TOOL_BY_ID } from "../lib/tools.ts";
 import type { FormValues } from "../lib/types.ts";
 import { extractMeta } from "../lib/generation/meta.ts";
-import { blocksToBeats } from "../lib/generation/slide-blocks.ts";
 import { finalizeQuiz } from "../lib/generation/slide-quiz.ts";
 import { PRO_SLIDE_MAX, PRO_SLIDE_MIN, QUIZ_COUNTS } from "../lib/generation/slide-params.ts";
-import { expandBeats } from "../lib/generation/slide-templates.ts";
-import { fallbackSlides, resolveDeckTemplate, wantSlides } from "../lib/generation/slide-write.ts";
+import { deckBeats, fallbackSlides, resolveDeckTemplate, wantSlides } from "../lib/generation/slide-write.ts";
 import type { SlideModel } from "../lib/generation/slide-types.ts";
 
 /**
@@ -67,8 +65,7 @@ function build(v: FormValues, perQuiz: number): Built {
   const meta = extractMeta(pro, { topic: "Suv aylanishi", ...v });
   const tpl = resolveDeckTemplate(meta);
   const want = wantSlides(meta, tpl);
-  const beats = blocksToBeats(meta, tpl, expandBeats(tpl, want), want);
-  const slides = fallbackSlides(meta, tpl, beats);
+  const slides = fallbackSlides(meta, tpl, deckBeats(meta, tpl));
   for (const s of slides) if (s.layout === "quiz") s.quiz = questions(perQuiz);
   finalizeQuiz(slides, meta);
   return { want, slides, layouts: slides.map((s) => s.layout) };
@@ -85,8 +82,9 @@ test("supurish: yakuniy deka uzunligi HAR DOIM wantSlides ga teng", () => {
     for (const quizCount of QUIZ_COUNTS) {
       for (const speakerNotes of [true, false]) {
         for (const agendaSlide of [true, false]) {
+          for (const titleSlide of [true, false]) {
           for (const slideTemplate of TEMPLATES) {
-            const v = { slideCount, quizCount, speakerNotes, agendaSlide, slideTemplate };
+            const v = { slideCount, quizCount, speakerNotes, agendaSlide, titleSlide, slideTemplate };
             /*
              * `perQuiz` ikki qiymatda: 1 — model rejaga rioya qilgan
              * holat; `quizCount` — model HAR slaydga so'ralgan sonni
@@ -97,9 +95,10 @@ test("supurish: yakuniy deka uzunligi HAR DOIM wantSlides ga teng", () => {
               cases += 1;
               const b = build(v, perQuiz);
               if (b.slides.length !== b.want) {
-                fails.push(`${slideTemplate}/n=${slideCount}/quiz=${quizCount}/izoh=${speakerNotes}/reja=${agendaSlide}/perQuiz=${perQuiz} → ${b.slides.length} (kutilgan ${b.want})`);
+                fails.push(`${slideTemplate}/n=${slideCount}/quiz=${quizCount}/izoh=${speakerNotes}/reja=${agendaSlide}/titul=${titleSlide}/perQuiz=${perQuiz} → ${b.slides.length} (kutilgan ${b.want})`);
               }
             }
+          }
           }
         }
       }
@@ -265,22 +264,25 @@ test("adabiyotlar bloki bilan: quiz → answers → references → closing", () 
 });
 
 /**
- * `titleSlide: false` — X-3 dan ALOHIDA, hali ochiq nuqson.
+ * `titleSlide: false` — X-3b.
  *
- * `wantSlides` titul bayrog'ini bilmaydi, `fallbackSlides` esa titul
- * beat'ini filtrlaydi: deka `want − 1` chiqadi. Bu test uni QULFLAB
- * qo'yadi (tasodifan o'zgarib ketmasin) va shu bilan birga hujjat
- * bo'lib xizmat qiladi: tuzatish `wantSlides` da, ya'ni boshqa ish
- * oqimida. Test soni bo'yicha o'lchov: farq AYNAN bitta slayd —
- * savollar soniga bog'liq emas.
+ * Ilgari titul beat'i rejada qolib, `fallbackSlides` da OXIRIDA
+ * filtrlanardi: deka `want − 1` chiqardi, ya'ni 10 slayd uchun
+ * to'lagan foydalanuvchi 9 ta olardi. Endi filtr `deckBeats` ichida,
+ * uzunlik muvozanatidan OLDIN — bo'shliq mazmunli slayd bilan
+ * to'ldiriladi.
  */
-test("titleSlide: false — deka aynan bitta slaydga qisqaradi (X-3 dan tashqari nuqson)", () => {
+test("titleSlide: false — uzunlik saqlanadi, titul slaydi esa yo'q", () => {
   for (const quizCount of QUIZ_COUNTS) {
     for (const speakerNotes of [true, false]) {
       const b = build({ slideCount: 12, quizCount, speakerNotes, titleSlide: false }, Math.max(1, quizCount));
       const tag = `quiz=${quizCount}/izoh=${speakerNotes}`;
-      assert.equal(b.slides.length, b.want - 1, tag);
-      assert.notEqual(b.layouts[0], "title", `${tag}: titul so'ralmagan edi`);
+      assert.equal(b.slides.length, b.want, tag);
+      assert.equal(b.layouts.includes("title"), false, `${tag}: titul so'ralmagan edi`);
+      // Titul yoqilganda AYNAN bitta titul bo'ladi — taqqoslash uchun.
+      const on = build({ slideCount: 12, quizCount, speakerNotes, titleSlide: true }, Math.max(1, quizCount));
+      assert.equal(on.slides.length, on.want, tag);
+      assert.equal(count(on, "title"), 1, tag);
     }
   }
 });

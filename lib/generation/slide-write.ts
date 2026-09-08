@@ -431,6 +431,23 @@ export function wantSlides(meta: DocMeta, tpl: SlideTemplate): number {
   return Math.max(Math.min(tpl.beats.length || 8, pack), pack);
 }
 
+/**
+ * Deka rejasi — YAGONA manba (`buildSlideAcademicDoc`, zaxira yo'l va
+ * differensial zond shuni chaqiradi).
+ *
+ * Titul slaydi RAD ETILGANDA u `blocksToBeats` dan OLDIN olib
+ * tashlanadi. Ilgari filtr keyin ishlardi va deka bir slayd kalta
+ * chiqardi: `pro-slide` da narx `slideCount × 2 000 tanga` bo'lgani
+ * uchun bu to'g'ridan-to'g'ri kam yetkazish edi (10 ta so'rab 9 ta
+ * olish). Endi uzunlik muvozanati bo'shliqni to'ldiradi.
+ */
+export function deckBeats(meta: DocMeta, tpl: SlideTemplate): SlideBeat[] {
+  const want = wantSlides(meta, tpl);
+  const base = expandBeats(tpl, want);
+  const seed = meta.titleSlide === false ? base.filter((b) => b.layout !== "title") : base;
+  return blocksToBeats(meta, tpl, seed, want);
+}
+
 export async function writeSlidesWithLlm(
   meta: DocMeta,
   tpl: SlideTemplate,
@@ -733,7 +750,7 @@ export async function buildSlideAcademicDoc(meta: DocMeta, deadline?: number, op
   // Sifat paketi / slayder shu yerda haqiqiy slaydlar soniga aylanadi,
   // foydalanuvchi bloklari esa shablon beats'iga kiritiladi.
   const want = wantSlides(meta, tpl);
-  const beats = blocksToBeats(meta, tpl, expandBeats(tpl, want), want);
+  const beats = deckBeats(meta, tpl);
   const stage = slideStageBudget(deadline, Date.now(), { research: meta.internetSearch });
   /*
    * Tadqiqot deck yozuvidan OLDIN va alohida chaqiruvda: grounding JSON
