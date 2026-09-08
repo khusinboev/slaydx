@@ -141,6 +141,25 @@ test("har shablonning o'z to'ldirgichlari bor va ular boshqasiniki emas", () => 
  * shablon hech bir bo'limda CHIZILMAYDI — foydalanuvchi uni umuman
  * tanlay olmaydi va buni faqat qo'lda ochib ko'rgandagina sezish mumkin.
  */
+/**
+ * Formadagi eskiz `visual` dan chiziladi. Yangi `visual` qo'shilib,
+ * `TemplateSketch` ga tarmoq qo'shilmasa, shablon jimgina `classic`
+ * eskizini oladi — ya'ni eskiz maketga YOLG'ON va'da beradi (AUDIT-7
+ * aynan shu nuqsonni yopgan edi, `lab` bilan u qaytib kelgan edi).
+ */
+test("har bir visual uchun formada eskiz tarmog'i bor", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const form = await readFile(new URL("../components/forms/SlideForm.tsx", import.meta.url), "utf8");
+  const used = new Set(SLIDE_TEMPLATES.map((t) => t.visual));
+  for (const v of used) {
+    if (v === "classic") continue; // zaxira tarmoq
+    assert.ok(
+      form.includes(`visual === "${v}"`),
+      `«${v}» maketi uchun TemplateSketch da tarmoq yo'q — eskiz classic ni ko'rsatadi`,
+    );
+  }
+});
+
 test("har bir shablon mavjud guruhga tegishli va guruhlar bo'sh emas", () => {
   const ids = new Set(SLIDE_TEMPLATE_GROUPS.map((g) => g.id as string));
   for (const tpl of SLIDE_TEMPLATES) {
@@ -226,6 +245,40 @@ test("har bir visual qiymati renderda haqiqiy farq beradi", async () => {
         JSON.stringify(planSlide(sample(layout), theme, "classic", 1, 10)),
     );
     assert.ok(differs, `«${v}» maketi «classic» bilan bir xil chiqmoqda`);
+  }
+});
+
+/**
+ * AUDIT-7 O-3. `science` (Tajriba) `lecture` (Ma'ruza) ning nusxasi edi:
+ * ikkalasining `visual` i `classic`, ya'ni bir xil kontent ikkalasida
+ * PIKSEL-BAPIKSEL bir xil chizilardi — farq faqat `beats` va rol matnida
+ * qolgan edi. Foydalanuvchi «Tajriba» ni tanlab hech narsa
+ * o'zgarmaganini ko'rardi.
+ *
+ * Yuqoridagi umumiy test buni ushlay olmasdi: u `visual` QIYMATLARINI
+ * sanaydi, ikki shablonning ayni bir qiymatni baham ko'rishini emas.
+ */
+test("science shabloni lecture bilan bir xil chizilmaydi", async () => {
+  const { planSlide } = await import("../lib/generation/slide-layout.ts");
+  const { getSlideTheme } = await import("../lib/generation/slide-themes.ts");
+  const theme = getSlideTheme("atlas");
+  const science = SLIDE_TEMPLATE_BY_ID.science;
+  const lecture = SLIDE_TEMPLATE_BY_ID.lecture;
+
+  assert.notEqual(science.visual, lecture.visual, "«Tajriba» ma'ruza bilan bitta maketda qolmasin");
+
+  const s = {
+    id: "k", layout: "bullets", title: "Kuzatuv natijalari",
+    bullets: ["Birinchi kuzatuv.", "Ikkinchi kuzatuv.", "Uchinchi kuzatuv."],
+  } as never;
+  const draw = (v: typeof science.visual) => JSON.stringify(planSlide(s, theme, v, 1, 10));
+  assert.notEqual(draw(science.visual), draw(lecture.visual), "kuzatuv slaydi bir xil chizilmoqda");
+
+  // Va u boshqa BIRORTA shablonning maketi bilan ham ustma-ust tushmasin —
+  // aks holda «o'z maketi» yana nusxaga aylanadi.
+  for (const tpl of SLIDE_TEMPLATES) {
+    if (tpl.id === "science") continue;
+    assert.notEqual(tpl.visual, science.visual, `${tpl.id} «Tajriba» bilan bitta maketni baham ko'rmoqda`);
   }
 });
 

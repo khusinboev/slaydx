@@ -69,12 +69,18 @@ export const LEGACY_TEMPLATE_ALIASES: Record<string, SlideTemplateId> = {
  *
  *   classic     bazaviy: sarlavha + band ro'yxati
  *   cards       bandlar alohida kartalarda (ro'yxat emas)
+ *   lab         bandlar laboratoriya daftarining raqamlangan kuzatuv
+ *               qatorlarida: chap chekkada o'lchov chizig'i (`planLabRows`)
  *   dense       stats to'q fonda, jadval zich
  *   timeline    process gorizontal chiziqda
  *   magazine    title VA section to'la ekran rasm + pastki matn tasmasi
  *   hero-split  title chap yarmi rasm
+ *
+ * Yangi qiymat qo'shsangiz — `slide-layout.ts` da unga HAQIQIY tarmoq
+ * yozing. Yuqoridagi ro'yxat va'da, `tests/generation.test.mts` dagi
+ * «har bir visual qiymati renderda haqiqiy farq beradi» esa uni tekshiradi.
  */
-export type SlideVisual = "classic" | "hero-split" | "cards" | "timeline" | "magazine" | "dense";
+export type SlideVisual = "classic" | "hero-split" | "cards" | "lab" | "timeline" | "magazine" | "dense";
 
 /** Formadagi yig'iluvchi guruhlar. */
 export const SLIDE_TEMPLATE_GROUPS = [
@@ -253,7 +259,9 @@ export const SLIDE_TEMPLATES: SlideTemplate[] = [
     nameUz: "Tajriba",
     blurb: "Gipoteza, usul, kuzatuv, xulosa",
     group: "dars",
-    visual: "classic",
+    // AUDIT-7 O-3: ilgari `classic` edi — ya'ni `lecture` bilan aynan bir
+    // xil chizilardi. `lab` tajriba daftari maketini beradi.
+    visual: "lab",
     beats: [
       { layout: "title", role: "Tajriba savoli" },
       { layout: "agenda", role: "Ish reja" },

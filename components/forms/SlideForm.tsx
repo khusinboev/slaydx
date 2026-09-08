@@ -395,6 +395,28 @@ function TemplateSketch({ id, visual }: { id: string; visual: SlideVisual }) {
       </div>
     );
   }
+  if (visual === "lab") {
+    // `planLabRows`: daftar varag'i, chap chekkada bo'linmali o'lchov
+    // chizig'i, raqamlangan kuzatuv qatorlari.
+    return (
+      <div className="flex h-16 gap-1.5 bg-white px-2 py-2">
+        <div className="relative w-1 shrink-0 bg-amber-500">
+          <div className="absolute -right-1 top-0 flex h-full flex-col justify-between">
+            {[0, 1, 2, 3, 4].map((n) => (
+              <div key={n} className="h-px w-1.5 bg-amber-500/60" />
+            ))}
+          </div>
+        </div>
+        <div className="flex flex-1 flex-col justify-around pl-1.5">
+          {[1, 2, 3].map((n) => (
+            <div key={n} className="border-b border-slate-200 pb-0.5">
+              <div className="h-1 w-full rounded bg-slate-300" style={{ width: `${100 - n * 12}%` }} />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
   if (visual === "hero-split") {
     return (
       <div className="flex h-16 bg-slate-100">

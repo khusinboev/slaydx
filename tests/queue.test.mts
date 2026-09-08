@@ -258,3 +258,47 @@ test("rowToSummary: delivered_json -> delivered (Sprint 5, AUDIT-6 C7)", async (
   const withoutDelivered = rowToSummary({ ...base, delivered_json: null });
   assert.equal(withoutDelivered.delivered, undefined, "to'liq yetkazilganda maydon yo'q bo'lishi kerak");
 });
+
+/**
+ * `unit` va `refundShare` ham qatordan xulosaga o'tishi kerak (AUDIT-7 O-1).
+ *
+ * Natija sahifasidagi jumla shu ikkisiga tayanadi: `unit` — nima
+ * sanalgani («13 tadan 0 ta RASM»), `refundShare` — «farq balansingizga
+ * qaytarildi» qismi yozilishi kerakmi. Ular yo'qolsa banner slayd
+ * kamomadi bilan rasm kamomadini ajratmay qolardi.
+ */
+test("rowToSummary: delivered_json `unit` va `refundShare` ni ham o'tkazadi", async () => {
+  const { rowToSummary } = await import("../lib/server/jobs.ts");
+
+  const row = {
+    id: "g2",
+    user_id: "u1",
+    tool_id: "slide",
+    topic: "Fotosintez",
+    status: "COMPLETED" as const,
+    price: "8000",
+    format: "pptx",
+    progress: 100,
+    step: "Tayyor",
+    file_name: "deka.pptx",
+    error: null,
+    preview: null,
+    created_at: new Date("2026-01-01T00:00:00Z"),
+    started_at: null,
+    finished_at: new Date("2026-01-01T00:01:00Z"),
+    expires_at: null,
+    delivered_json: { got: 0, want: 13, unit: "rasm", refundShare: 0.25 },
+  };
+
+  assert.deepEqual(rowToSummary(row).delivered, {
+    got: 0,
+    want: 13,
+    unit: "rasm",
+    refundShare: 0.25,
+  });
+
+  // Eski qatorda bu maydonlar yo'q — sahifa eski jumlani ko'rsatadi.
+  const old = rowToSummary({ ...row, delivered_json: { got: 3, want: 4 } });
+  assert.equal(old.delivered?.unit, undefined);
+  assert.equal(old.delivered?.refundShare, undefined);
+});

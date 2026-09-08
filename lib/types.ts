@@ -1,4 +1,4 @@
-import type { AcademicDoc } from "./generation/types";
+import type { AcademicDoc, Delivered } from "./generation/types";
 
 export type ToolId =
   | "slide"
@@ -113,7 +113,7 @@ export type Generation = {
    * qolardi — natija sahifasi "Tayyor" deb ko'rsatar, foydalanuvchi
    * nega kam rasm/qator kelganini bilmasdi.
    */
-  delivered?: { got: number; want: number };
+  delivered?: Delivered;
 };
 
 export type UserProfile = {

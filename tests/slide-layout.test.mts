@@ -136,6 +136,143 @@ test("cards maketida bandlar ro'yxat emas, alohida kartaga aylanadi", () => {
   );
 });
 
+/**
+ * AUDIT-7 O-3. `lab` — `science` (Tajriba) ning O'Z maketi.
+ *
+ * Ilgari `science` ning `visual` i `classic` edi, ya'ni `lecture` bilan
+ * piksel-bapiksel bir xil chizilardi. Quyidagi test aynan `lab`
+ * tarmog'iga qaraydi: uni `planBullets` dan olib tashlasangiz — yiqiladi.
+ */
+test("lab maketi bandlarni raqamlangan kuzatuv qatorlariga aylantiradi", () => {
+  const s: SlideModel = {
+    id: "l",
+    layout: "bullets",
+    title: "Kuzatuv natijalari",
+    bullets: ["Birinchi kuzatuv.", "Ikkinchi kuzatuv.", "Uchinchi kuzatuv."],
+  };
+  const asLab = planSlide(s, theme, "lab", 1, 10);
+  const asClassic = planSlide(s, theme, "classic", 1, 10);
+  const asCards = planSlide(s, theme, "cards", 1, 10);
+
+  // Ro'yxat emas: har band alohida `text` qatlami.
+  assert.ok(!texts(asLab.layers).some((t) => t.lines), "lab da `lines` ro'yxati bo'lmasligi kerak");
+  for (const b of s.bullets ?? []) {
+    assert.ok(texts(asLab.layers).some((t) => t.text === b), `«${b}» alohida qator bo'lishi kerak`);
+  }
+  // Raqamlangan: har qatorga «01», «02», «03».
+  for (const n of ["01", "02", "03"]) {
+    assert.ok(texts(asLab.layers).some((t) => t.text === n), `«${n}» kuzatuv raqami yo'q`);
+  }
+  // Chap chekkadagi o'lchov chizig'i — ingichka va baland to'rtburchak.
+  const rule = rects(asLab.layers).find((r) => r.box.w < 0.05 && r.box.h > 4 && r.box.y >= 1.4);
+  assert.ok(rule, "chap chekkada o'lchov chizig'i bo'lishi kerak");
+  // Bo'linmalar (shkala) — chiziq yonidagi ko'plab mayda to'rtburchak.
+  const ticks = rects(asLab.layers).filter((r) => r.box.h < 0.05 && r.box.w < 0.3 && r.box.y >= 1.4);
+  assert.ok(ticks.length >= 15, `o'lchov bo'linmalari kam: ${ticks.length}`);
+
+  // Va u boshqa ikkala maketning nusxasi emas.
+  assert.notEqual(JSON.stringify(asLab), JSON.stringify(asClassic), "lab classic bilan bir xil");
+  assert.notEqual(JSON.stringify(asLab), JSON.stringify(asCards), "lab cards bilan bir xil");
+});
+
+test("lab qatlamlari slayd chegarasidan chiqmaydi", () => {
+  for (const n of [1, 2, 3, 4]) {
+    const s: SlideModel = {
+      id: `l${n}`,
+      layout: "bullets",
+      title: "Kuzatuv",
+      bullets: Array.from({ length: n }, (_, i) => `Kuzatuv bandi ${i + 1} ` + "matn ".repeat(20)),
+      // Rasmli (yarim kenglik) holat ham tekshiriladi.
+      image: n % 2 === 0 ? { url: "https://example.test/a.png" } : undefined,
+    };
+    for (const l of planSlide(s, theme, "lab", 1, 10).layers) {
+      assert.ok(l.box.x >= -0.01 && l.box.y >= -0.01, `lab/${n}: manfiy koordinata`);
+      assert.ok(l.box.x + l.box.w <= 13.34, `lab/${n}: kenglikdan chiqdi`);
+      assert.ok(l.box.y + l.box.h <= 7.51, `lab/${n}: balandlikdan chiqdi`);
+      assert.ok(l.box.w > 0 && l.box.h > 0, `lab/${n}: bo'sh quti`);
+    }
+  }
+});
+
+// ------------------------------------------------- bandlarni taqsimlash
+
+/**
+ * AUDIT-7 O-4. `classic` band slaydi bandlarni qutiga TEPADAN tizardi
+ * va oraliq har doim qat'iy 10 pt qolardi. Qisqa bandda (jonli
+ * o'lchovda 75–120 belgi odatiy) matn 5.35″ qutining atigi 26% ini
+ * egallab, pastda 3.96″ bo'sh oq maydon qolardi.
+ *
+ * Quyidagi uchta test uch xil narsani qulflaydi va har biri O'Z
+ * mutatsiyasiga javob beradi:
+ *   1) oraliq qoldiqqa qarab O'SADI (`paraSpace: 10` ga qaytarilsa yiqiladi);
+ *   2) qoldiq tepa/pastga TENG bo'linadi (`valign` olib tashlansa yiqiladi);
+ *   3) oraliq CHEKLANGAN va uzun matnda zich qoladi (chegara olib
+ *      tashlansa yoki `fitLines` tartibi buzilsa yiqiladi).
+ */
+const bodyOf = (bullets: string[]) =>
+  texts(plan({ id: "g", layout: "bullets", title: "Sarlavha", bullets }).layers).find((t) => t.lines)!;
+
+/** Berilgan uzunlikda realistik o'zbekcha band — «aaa…» emas, so'zli. */
+const WORDS =
+  "fotosintez bosqichidagi kimyoviy o‘zgarishlar ketma-ketligi va ularning o‘simlik hujayrasi energetikasi uchun ahamiyati batafsil ko‘rib chiqiladi hamda tajriba natijasi bilan solishtiriladi".split(" ");
+function bullet(n: number, chars: number) {
+  let s = `${n}-band:`;
+  for (let i = 0; s.length < chars; i++) s += " " + WORDS[i % WORDS.length];
+  return s;
+}
+const bullets = (n: number, chars: number) => Array.from({ length: n }, (_, i) => bullet(i + 1, chars));
+
+// Jonli o'lchovda odatiy hajm: 3 band × ~50 belgi. Aynan shu holat
+// ilgari qutining 26% ini egallab, pastda 3.96″ bo'sh joy qoldirardi.
+const SHORT = bullets(3, 45);
+// «Slide Law» hajmi — `AUDIENCE_RULES.bulletChars` chegarasi.
+const LAW = bullets(4, 165);
+// Chegaradan ancha oshgan zich matn.
+const DENSE = bullets(4, 320);
+
+test("qisqa bandlar quti bo'ylab taqsimlanadi — pastki yarmi bo'sh qolmaydi", () => {
+  const short = bodyOf(SHORT);
+  assert.equal(short.size, 18, "qisqa matnda shrift 18 pt shiftida qolishi kerak");
+  assert.ok(
+    (short.paraSpace ?? 0) > 20,
+    `qisqa bandda oraliq qoldiqqa qarab o'sishi kerak, qat'iy 10 pt da qolmasin: ${short.paraSpace}`,
+  );
+});
+
+test("oraliq mutanosib — zich matnda u qaytib kichrayadi", () => {
+  const short = bodyOf(SHORT).paraSpace ?? 0;
+  const dense = bodyOf(DENSE).paraSpace ?? 0;
+  assert.ok(
+    dense < short - 5,
+    `oraliq qoldiqqa ergashishi kerak (o'zgarmas son emas): qisqa=${short} zich=${dense}`,
+  );
+  assert.ok(dense >= 10, `oraliq eski poldan pastga tushmasin: ${dense}`);
+});
+
+test("qolgan bo'shliq tepa va pastga teng bo'linadi", () => {
+  assert.equal(bodyOf(SHORT).valign, "middle", "band bloki vertikal markazlashtirilishi kerak");
+});
+
+test("Slide Law hajmi zich qoladi va oraliq cheklangan", () => {
+  // 4 × 165 — auditoriya tipografikasi buzilmaydi, shrift shiftda.
+  const law = bodyOf(LAW);
+  assert.equal(law.size, 18, `Slide Law hajmi 18 pt da qolishi kerak: ${law.size}`);
+
+  for (const [name, set] of [["qisqa", SHORT], ["law", LAW], ["zich", DENSE], ["bitta", bullets(1, 30)]] as const) {
+    const b = bodyOf(set);
+    // Chegara: ro'yxat ro'yxatligicha qolsin — oraliq qator balandligining
+    // ikki baravaridan oshmasin, aks holda bandlar bir-biridan uziladi.
+    assert.ok(
+      (b.paraSpace ?? 0) <= b.size * 2,
+      `${name}: oraliq chegaradan oshdi (${b.paraSpace} > ${b.size * 2}) — ro'yxat ro'yxat bo'lmay qoladi`,
+    );
+    // Va hech qachon qutiga sig'maydigan darajada emas: har band kamida
+    // bitta qator, ya'ni qator+oraliq yig'indisi 5.35″ dan oshmasin.
+    const need = set.length * (b.size * 1.3 + (b.paraSpace ?? 0));
+    assert.ok(need <= 5.35 * 72, `${name}: bandlar qutiga sig'maydi (${need.toFixed(0)}pt > 385pt)`);
+  }
+});
+
 test("magazine bo'lim slaydi to'la ekran kadr va pastki tasma beradi", () => {
   const s: SlideModel = {
     id: "m",

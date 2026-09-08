@@ -115,6 +115,56 @@ export type DocMeta = {
   year?: number;
 };
 
+/**
+ * Va'da qilingan MIQDORNING qanchasi yetkazildi.
+ *
+ * Bitta joyda turadi, chunki uni to'rt qatlam o'qiydi: dvigatel
+ * (`delivered.ts`, `image-studio.ts`), worker (`shortfallRatio` →
+ * `refundPartial`), baza (`delivered_json`) va natija sahifasi.
+ */
+export type Delivered = {
+  got: number;
+  want: number;
+  /**
+   * Nima sanaladi — natija sahifasidagi jumla shu so'z bilan yoziladi
+   * («16 tadan 14 ta slayd yaratildi»).
+   *
+   * Ilgari maydon faqat `{got, want}` edi va jumla «16 tadan 14 tasi»
+   * bo'lardi. Slayd dekasida endi IKKI xil miqdor kam chiqishi mumkin —
+   * slayd va rasm — ya'ni sonning o'zi noaniq: foydalanuvchi ekranda
+   * 16 slaydni ko'rib turib «13 tadan 0 tasi» ni slayd deb o'qirdi.
+   *
+   * Ixtiyoriy: bazadagi eski qatorlarda yo'q, ularda eski jumla qoladi.
+   */
+  unit?: string;
+  /**
+   * Kamomad narxning qancha ULUSHIGA tegishli (0..1). Yo'q bo'lsa 1 —
+   * butun narx shu songa bog'langan (rasm vositasi, glossariy, xarita).
+   *
+   * Slayd rasmi uchun 1 dan kichik: rasm chiqmasa ham matn, maket va
+   * PPTX yetkazilgan — to'liq qaytarish tekin deka berish bo'lardi.
+   * 0 — «qayd etiladi, lekin pul qaytarilmaydi» (paket rasm uchun
+   * ustama olmagan holat).
+   */
+  refundShare?: number;
+};
+
+/** Rasm bosqichi natijasi — `slide-images.ts` `attachSlideImages` dan. */
+export type SlideImageReport = {
+  /** Rejalashtirilgan slot (va'da). */
+  want: number;
+  /** Haqiqatan biriktirilgan rasm. */
+  got: number;
+  /** Provayder hisob/kalit sababli rad etgan so'rovlar (403/401/402). */
+  blocked: number;
+  /** Vaqt tugagani uchun umuman yuborilmagan so'rovlar. */
+  skipped: number;
+  /** Qolgan sabablar: timeout, tarmoq, format, saqlanmadi. */
+  failed: number;
+  /** Bloklash sababi — jurnal uchun (masalan «403 User is locked»). */
+  blockReason?: string;
+};
+
 export type AcademicDoc = {
   meta: DocMeta;
   titlePage: boolean;
@@ -131,6 +181,17 @@ export type AcademicDoc = {
   slideTheme?: SlideThemeId;
   slideTemplate?: SlideTemplateId;
   slides?: SlideModel[];
+  /**
+   * Rasm bosqichi nima qilgani — `deliveredCount` uchun YAGONA manba.
+   *
+   * Nega dokumentda: `attachSlideImages` reja sonini (`plannedImageSlots`)
+   * o'zi biladi, `deliveredCount` esa undan keyin, boshqa modulda
+   * chaqiriladi. Rejani u yerda QAYTA hisoblash ikkita nusxa bo'lardi va
+   * ular jimgina ajralib ketardi (aynan shu naqsh `AUDIT-5`/`AUDIT-6`
+   * da bir necha marta topilgan). Qiymat `doc_json` bilan saqlanadi —
+   * keyin «nega bu deka rasmsiz chiqqan» degan savolga baza javob beradi.
+   */
+  slideImages?: SlideImageReport;
   images?: GenImage[];
   imagePrompt?: string;
   imageScene?: string;
@@ -152,10 +213,11 @@ export type BuiltFile = {
    * tanga), yetkazish esa tekshirilmasdi — 4 tadan 1 tasi kelsa ham ish
    * `COMPLETED` bo'lib, pul to'liq yechilgan holida qolardi.
    *
-   * Maydon ataylab universal: kelajakda slaydda «15 ta so'raldi, 12 tasi
-   * chiqdi» holatiga ham shu mexanizm qo'llanadi.
+   * Maydon ataylab universal: slaydda ham «16 ta so'raldi, 14 tasi
+   * chiqdi» (slayd) va «13 ta so'raldi, 0 tasi chiqdi» (rasm) shu
+   * mexanizmdan o'tadi.
    */
-  delivered?: { got: number; want: number };
+  delivered?: Delivered;
 };
 
 export type BuildCtx = {
