@@ -3,6 +3,7 @@ import { photoSlot, slotPixels } from "./slide-layout";
 import { composeSlideImagePrompt, writeSlideImagePrompts } from "./slide-image-prompts";
 import type { SlideVisual } from "./slide-templates";
 import type { SlideModel } from "./slide-types";
+import type { SlideImageReport } from "./types";
 
 export type SlideImage = { url: string; alt?: string };
 
@@ -77,20 +78,61 @@ function falKey() {
   return process.env.FAL_KEY?.trim() || "";
 }
 
-export async function generateFalImage(
+/**
+ * Rasm so'rovi NEGA yiqilgani.
+ *
+ * Ilgari hamma yiqilish bitta `null` edi va bitta `console.warn` bilan
+ * o'tardi. Jonli sinovda 19 ta so'rovning hammasi
+ * `[fal] 403 User is locked. Reason: TOP_UP.` bilan rad etildi — ya'ni
+ * HISOB bloklangan edi — lekin bu jurnalda vaqt tugagan holatdan
+ * (`budget exhausted`) hech nima bilan farq qilmasdi. Ikkisining
+ * yechimi butunlay boshqa: birinchisi hisobni to'ldirishni talab
+ * qiladi, ikkinchisi byudjetni.
+ */
+export type FalFailure =
+  /** Kalit umuman sozlanmagan. */
+  | "no-key"
+  /** Hisob yoki kalit rad etdi: 401/402/403. Qayta urinish ma'nosiz. */
+  | "blocked"
+  /** So'rov cheklovi (429) — vaqtinchalik. */
+  | "rate"
+  /** Vaqt yetmadi (byudjet yoki timeout). */
+  | "timeout"
+  /** Qolgan hammasi: 5xx, tarmoq, javobda rasm yo'q. */
+  | "failed";
+
+export type FalResult =
+  | { ok: true; image: SlideImage }
+  | { ok: false; reason: FalFailure; detail: string };
+
+/**
+ * HTTP javob kodini sababga o'giradi.
+ *
+ * 402/403 — hisob (to'lov, blok), 401 — kalit. Ikkalasi ham
+ * «qayta urinma, hisobni ko'r» degani, shuning uchun bitta guruh.
+ */
+function falReason(status: number): FalFailure {
+  if (status === 401 || status === 402 || status === 403) return "blocked";
+  if (status === 429) return "rate";
+  return "failed";
+}
+
+/** Baytlar bilan emas, sabab bilan qaytadi — chaqiruvchi jurnalni ajratsin. */
+export async function requestFalImage(
   prompt: string,
   size: FalSize,
   deadline?: number,
   tier: VisualTier = {},
-): Promise<SlideImage | null> {
+): Promise<FalResult> {
   const key = falKey();
   if (!key) {
     console.warn("[fal] FAL_KEY missing");
-    return null;
+    return { ok: false, reason: "no-key", detail: "FAL_KEY yo'q" };
   }
   // Umumiy byudjetdan oshib ketmaslik uchun timeout ni qisqartiramiz.
   const budget = deadline ? Math.min(45_000, Math.max(0, deadline - Date.now())) : 45_000;
-  if (budget < 2_000) return null;
+  // Ilgari bu jimgina `null` edi — vaqt tugagani xato bilan aralashardi.
+  if (budget < 2_000) return { ok: false, reason: "timeout", detail: "byudjet 2 s dan kam" };
   try {
     const res = await fetch(falUrl(tier.premium), {
       method: "POST",
@@ -115,16 +157,42 @@ export async function generateFalImage(
       error?: string;
     };
     if (!res.ok) {
-      console.warn("[fal]", res.status, typeof data.detail === "string" ? data.detail : data.error || "request failed");
-      return null;
+      const detail = typeof data.detail === "string" ? data.detail : data.error || "request failed";
+      const reason = falReason(res.status);
+      // Hisob bloklangani — jurnalda XATO darajasida: bu operator
+      // aralashuvini talab qiladi, o'z-o'zidan tuzalmaydi.
+      const line = `${res.status} ${detail}`;
+      if (reason === "blocked") console.error("[fal] provayder rad etdi (hisob/kalit):", line);
+      else console.warn("[fal]", line);
+      return { ok: false, reason, detail: line };
     }
     const url = data.images?.[0]?.url;
-    if (!url) return null;
-    return { url, alt: prompt.slice(0, 80) };
+    if (!url) return { ok: false, reason: "failed", detail: "javobda rasm yo'q" };
+    return { ok: true, image: { url, alt: prompt.slice(0, 80) } };
   } catch (e) {
-    console.warn("[fal]", e instanceof Error ? e.message : "network");
-    return null;
+    const msg = e instanceof Error ? e.message : "network";
+    console.warn("[fal]", msg);
+    // `AbortSignal.timeout` → `TimeoutError`: byudjet tugagani, xato emas.
+    const timedOut = e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError");
+    return { ok: false, reason: timedOut ? "timeout" : "failed", detail: msg };
   }
+}
+
+/**
+ * Eski, sodda imzo — rasm yoki `null`.
+ *
+ * `image-studio.ts` (rasm vositasi) va `scripts/image-lab.mts` shuni
+ * ishlatadi: ularda yiqilish sababi alohida hisoblanmaydi, chunki u
+ * yerda yetkazish soni fayllar bo'yicha o'lchanadi (`packImages`).
+ */
+export async function generateFalImage(
+  prompt: string,
+  size: FalSize,
+  deadline?: number,
+  tier: VisualTier = {},
+): Promise<SlideImage | null> {
+  const res = await requestFalImage(prompt, size, deadline, tier);
+  return res.ok ? res.image : null;
 }
 
 function jpegSize(buf: Buffer): { w: number; h: number } | undefined {
@@ -227,6 +295,34 @@ async function persistImage(remote: SlideImage): Promise<SlideImage | null> {
 }
 
 /**
+ * Dekada nechta rasm SLOTI rejalashtirilgan — va'daning yagona manbasi.
+ *
+ * Ilgari bu ro'yxat faqat `attachSlideImages` ichida, yo'l-yo'lakay
+ * hisoblanardi va hech qayerga chiqmasdi. Endi undan chiqqan SON
+ * yetkazishni o'lchashda ham kerak (`delivered.ts`) — u yerda reja
+ * qayta hisoblanmaydi, shu funksiya bergan `want` hisobot orqali
+ * uzatiladi. Aks holda `photoSlot`/`imageBudget` o'zgarganda ikkita
+ * nusxa jimgina ajralib ketardi.
+ *
+ * `!s.image` filtri ATAYIN yo'q: allaqachon rasmi bor slayd ham
+ * REJADAGI slot, u yetkazilgan deb sanaladi. Filtr chaqiruv joyida.
+ */
+export function plannedImageSlots(
+  slides: SlideModel[],
+  visual: SlideVisual = "classic",
+  premium = false,
+): { s: SlideModel; size: FalSize }[] {
+  return slides
+    .filter((s) => IMAGE_LAYOUTS.has(s.layout))
+    .slice(0, imageBudget(slides.length, premium))
+    .map((s) => {
+      const slot = photoSlot(s.layout, visual);
+      return slot ? { s, size: slotPixels(slot) } : null;
+    })
+    .filter((x): x is { s: SlideModel; size: FalSize } => x !== null);
+}
+
+/**
  * Slaydlarga rasm biriktiradi.
  *
  * `budgetMs` — butun rasm bosqichiga ajratilgan vaqt. Rasmlar ketma-ket
@@ -234,6 +330,12 @@ async function persistImage(remote: SlideImage): Promise<SlideImage | null> {
  * so'rov `maxDuration` dan oshib ketishi va butun taqdimot yo'qolishi mumkin
  * edi. Vaqt tugasa qolgan slaydlar shunchaki rasmsiz qoladi — deck baribir
  * tayyor bo'ladi.
+ *
+ * Qaytaradi: bosqich HISOBOTI (`SlideImageReport`). Ilgari `slides`
+ * qaytarardi va chaqiruvchi natijani e'tiborsiz qoldirardi — rasm nol
+ * kelgani hech qayerga yozilmasdi, ya'ni na worker, na natija sahifasi
+ * bundan xabar topardi. Hisobot `doc.slideImages` ga tushadi va u yerdan
+ * `deliveredCount` pul qaroriga aylantiradi.
  */
 export async function attachSlideImages(
   slides: SlideModel[],
@@ -241,18 +343,27 @@ export async function attachSlideImages(
   visual: SlideVisual = "classic",
   budgetMs = 60_000,
   tier: VisualTier = {},
-) {
+): Promise<SlideImageReport> {
+  const planned = plannedImageSlots(slides, visual, Boolean(tier.premium));
+  const report: SlideImageReport = {
+    want: planned.length,
+    got: 0,
+    blocked: 0,
+    skipped: 0,
+    failed: 0,
+  };
   if (!falKey()) {
+    // Kalitsiz muhitda (dev/test) rasm umuman va'da qilinmaydi — aks
+    // holda har lokal deka «kam yetkazildi» bo'lib chiqardi.
     console.warn("[fal] skip images: no key");
-    return slides;
+    return { ...report, want: 0 };
   }
+  if (!report.want) return report;
+
   const deadline = Date.now() + budgetMs;
   const seed = tier.seed ?? seedFrom(topic);
-  const jobs = slides
-    .map((s, i) => ({ s, i }))
-    .filter(({ s }) => IMAGE_LAYOUTS.has(s.layout) && !s.image)
-    .slice(0, imageBudget(slides.length, Boolean(tier.premium)));
-  if (!jobs.length) return slides;
+  const jobs = planned.filter(({ s }) => !s.image);
+  report.got = report.want - jobs.length;
 
   const prompts = await writeSlideImagePrompts(
     topic,
@@ -260,23 +371,63 @@ export async function attachSlideImages(
     visual,
   );
 
-  let skipped = 0;
-  await mapPool(jobs, 3, async ({ s }) => {
-    if (Date.now() >= deadline) {
-      skipped += 1;
+  /*
+   * Hisob bloklangach qolgan so'rovlar yuborilmaydi.
+   *
+   * Jonli sinovda 19 ta so'rovning 19 tasi ham bir xil 403 bilan
+   * qaytdi — ya'ni 18 tasi oldindan ma'lum javob uchun vaqt sarfladi.
+   * Blok kalit/hisob darajasida bo'lgani uchun keyingi so'rov ham
+   * albatta shu javobni oladi.
+   */
+  let blockReason = "";
+  await mapPool(jobs, 3, async ({ s, size }) => {
+    if (blockReason) {
+      report.blocked += 1;
       return null;
     }
-    const slot = photoSlot(s.layout, visual);
-    if (!slot) return null;
-    const size = slotPixels(slot);
-    const prompt = prompts[s.id] || composeSlideImagePrompt(topic, s, size);
-    const im = await generateFalImage(prompt, size, deadline, { ...tier, seed });
-    if (im) {
-      const kept = await persistImage(im);
-      if (kept) s.image = kept;
+    if (Date.now() >= deadline) {
+      report.skipped += 1;
+      return null;
     }
-    return im;
+    const prompt = prompts[s.id] || composeSlideImagePrompt(topic, s, size);
+    const res = await requestFalImage(prompt, size, deadline, { ...tier, seed });
+    if (!res.ok) {
+      if (res.reason === "blocked" || res.reason === "no-key") {
+        report.blocked += 1;
+        if (!blockReason) blockReason = res.detail;
+      } else if (res.reason === "timeout") report.skipped += 1;
+      else report.failed += 1;
+      return null;
+    }
+    const kept = await persistImage(res.image);
+    if (kept) {
+      s.image = kept;
+      report.got += 1;
+    } else {
+      report.failed += 1;
+    }
+    return kept;
   });
-  if (skipped) console.warn("[fal] image budget exhausted, skipped", skipped);
-  return slides;
+  if (blockReason) report.blockReason = blockReason;
+
+  /*
+   * Uch xil yiqilish — uch xil satr.
+   *
+   * Ilgari ikkalasi ham bir xil jimlik bilan o'tardi: bloklangan hisob
+   * ham, tugagan byudjet ham faqat `console.warn` qoldirardi va
+   * `[fal] image budget exhausted` satri hisob blokida ham chiqardi.
+   * Endi blok XATO darajasida va sababi bilan yoziladi.
+   */
+  if (report.blocked) {
+    console.error(
+      `[fal] HISOB/KALIT BLOKLANGAN — ${report.got}/${report.want} rasm chizildi, ${report.blocked} so‘rov rad etildi. Sabab: ${blockReason || "noma’lum"}. Kredit qisman qaytariladi.`,
+    );
+  }
+  if (report.skipped) {
+    console.warn(`[fal] vaqt tugadi — ${report.skipped} slayd rasmsiz qoldi (${report.got}/${report.want})`);
+  }
+  if (report.failed) {
+    console.warn(`[fal] ${report.failed} so‘rov boshqa sabab bilan yiqildi (${report.got}/${report.want})`);
+  }
+  return report;
 }

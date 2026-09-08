@@ -673,7 +673,18 @@ export async function buildSlideAcademicDoc(meta: DocMeta, deadline?: number): P
   const budget = deadline
     ? Math.max(0, deadline - Date.now() - stage.assemblyMs)
     : stage.imageMs;
-  await attachSlideImages(slides, meta.topic, tpl.visual, budget, { premium: meta.premiumVisuals });
+  /*
+   * Rasm bosqichining hisoboti SAQLANADI.
+   *
+   * Ilgari bu chaqiruvning natijasi tashlab yuborilardi: fal.ai hamma
+   * so'rovni rad etsa ham (jonli sinovda 19/19 — `403 User is locked`)
+   * deka `COMPLETED` bo'lib, rasmsiz chiqar, foydalanuvchi esa buni
+   * faqat ekranga qarab taxmin qilardi. Endi hisobot `doc.slideImages`
+   * ga tushadi va `deliveredCount` uni pul qaroriga aylantiradi.
+   */
+  const images = await attachSlideImages(slides, meta.topic, tpl.visual, budget, {
+    premium: meta.premiumVisuals,
+  });
   const sections = slides
     .filter((s) => s.layout !== "title" && s.layout !== "closing")
     .map((s) => ({
@@ -692,5 +703,6 @@ export async function buildSlideAcademicDoc(meta: DocMeta, deadline?: number): P
     slideTheme: themeId,
     slideTemplate: tpl.id,
     slides,
+    slideImages: images,
   };
 }

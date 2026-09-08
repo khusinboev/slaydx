@@ -257,7 +257,21 @@ export function ResultView({ id }: { id: string }) {
              * foydalanuvchi nega kam rasm/qator kelganini bilmasdi.
              */
             <p className="border-b bg-amber-50 px-4 py-2 text-center text-xs text-amber-800">
-              {gen.delivered.want} tadan {gen.delivered.got} tasi yaratildi — farq balansingizga qaytarildi.
+              {/*
+               * `unit` — nima sanalgani («slayd», «rasm», «atama»).
+               * Slayd dekasida ikkita miqdor kam chiqishi mumkin, ya'ni
+               * sonning o'zi noaniq edi: foydalanuvchi ekranda 16 ta
+               * slaydni ko'rib turib «13 tadan 0 tasi» ni slayd deb
+               * o'qirdi. Eski qatorlarda maydon yo'q — jumla o'zgarmaydi.
+               */}
+              {gen.delivered.want} tadan {gen.delivered.got}{" "}
+              {gen.delivered.unit ? `ta ${gen.delivered.unit}` : "tasi"} yaratildi
+              {/*
+               * Pul qaytmagan holatda (`refundShare: 0` — paket bu miqdor
+               * uchun ustama olmagan) «farq qaytarildi» deyish yolg'on
+               * bo'lardi, lekin kamomadning o'zi baribir aytiladi.
+               */}
+              {(gen.delivered.refundShare ?? 1) > 0 ? " — farq balansingizga qaytarildi." : "."}
             </p>
           ) : null}
           <ArtifactViewer gen={toLegacyShape(gen)} />
