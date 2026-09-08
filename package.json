@@ -13,12 +13,13 @@
     "worker": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/worker.ts",
     "topup": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/topup.mts",
     "bot": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/bot.mts",
-    "check": "npm run typecheck && npm run lint && npm run test",
+    "check": "npm run typecheck && npm run lint && npm run test && npm run test:viewer",
     "smoke": "node --env-file-if-exists=.env.local scripts/smoke.mjs",
     "live": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/live-engine.mts",
     "seed": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/seed-demo.mts",
     "seed-images": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/seed-images.mts",
-    "image-lab": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/image-lab.mts"
+    "image-lab": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/image-lab.mts",
+    "test:viewer": "tsx --tsconfig tsconfig.viewer.json --test tests/viewer/*.test.mts"
   },
   "dependencies": {
     "docx": "^9.7.1",
