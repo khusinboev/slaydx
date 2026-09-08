@@ -141,6 +141,39 @@ test("worker qarorlari", async (t) => {
 
     // Buzuq qiymat pul qaroriga aylanmasin.
     assert.equal(shortfallRatio({ got: 0, want: 0 }), null);
+
+    /*
+     * KONTENT UMUMAN BO'LMASA — TO'LIQ QAYTARILADI, ulushdan qat'i
+     * nazar. Ulush qisman kamomadni o'lchash uchun: matn va maket
+     * yetkazilgan, faqat rasm kam chiqqan. Nol yetkazishda esa
+     * foydalanuvchi va'da qilingan turning butunini olmaydi.
+     */
+    assert.equal(shortfallRatio({ got: 0, want: 13, refundShare: 0.25 }), 1, "premium: to'liq");
+    assert.equal(shortfallRatio({ got: 0, want: 8, refundShare: 0 }), 1, "standart: to'liq");
+    assert.equal(shortfallRatio({ got: 0, want: 4 }), 1, "ulushsiz vosita: to'liq");
+    // Bitta bo'lsa ham yetkazilgan bo'lsa — ulush bo'yicha qisman.
+    assert.equal(shortfallRatio({ got: 1, want: 13, refundShare: 0.25 }), (1 - 1 / 13) * 0.25);
+    assert.equal(shortfallRatio({ got: 1, want: 8, refundShare: 0 }), null);
+  });
+
+  await t.test("qaytarish formulasi yagona manbadan o'qiladi", async () => {
+    /*
+     * Formula ilgari IKKI joyda alohida yozilgan edi (`delivered.ts`
+     * dagi `weight` va worker dagi `shortfallRatio`), izohda esa «bir
+     * xil formula» deb va'da qilinardi. Bu loyihada bir necha marta
+     * jimgina ajralishga olib kelgan naqsh.
+     */
+    const { refundRatio } = await import("../lib/generation/delivered.ts");
+    const cases = [
+      { got: 0, want: 13, refundShare: 0.25 },
+      { got: 6, want: 12, refundShare: 0.25 },
+      { got: 3, want: 4 },
+      { got: 0, want: 8, refundShare: 0 },
+      { got: 4, want: 4 },
+    ];
+    for (const c of cases) {
+      assert.equal(shortfallRatio(c), refundRatio(c), JSON.stringify(c));
+    }
   });
 });
 

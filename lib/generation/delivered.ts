@@ -56,12 +56,16 @@ export type { Delivered } from "./types";
 const IMAGE_PRICE_SHARE = 0.25;
 
 /**
- * Standart/uzun paketda ulush NOL.
+ * Standart/uzun paketda QISMAN kamomad uchun ulush NOL.
  *
  * Yorliqda («Standart · 10 slayd · 3 000») rasm haqida so'z yo'q va
- * narxda unga ustama ham yo'q — pul qaytarish uchun asos bo'lmaydi.
- * Lekin kamomad baribir QAYD ETILADI (`refundShare: 0`): natija
- * sahifasi rasm chiqmaganini aytadi va sabab bazada qoladi.
+ * narxda unga ustama ham yo'q — 4 tadan 3 tasi chiqqani pul qaytarishga
+ * asos bo'lmaydi. Kamomad baribir QAYD ETILADI: natija sahifasi rasm
+ * kam chiqqanini aytadi va sabab bazada qoladi.
+ *
+ * Bu ulush RASM UMUMAN chiqmagan holatga TEGISHLI EMAS — u holat
+ * `refundRatio` da paketdan qat'i nazar to'liq qaytarish bilan
+ * yopiladi.
  */
 const IMAGE_PRICE_SHARE_STANDARD = 0;
 
@@ -85,9 +89,36 @@ function imagesDelivered(meta: DocMeta, doc: AcademicDoc): Delivered | undefined
   };
 }
 
-/** Kamomadning PUL og'irligi — `shortfallRatio` bilan bir xil formula. */
+/**
+ * Kamomad narxning qancha ULUSHINI qaytarishga sabab bo'ladi — YAGONA
+ * manba. Worker (`shortfallRatio`) ham, ikkita kamomaddan og'irrog'ini
+ * tanlash ham shu funksiyadan o'qiydi.
+ *
+ * Ilgari formula IKKI joyda alohida yozilgan edi (`weight` va
+ * `shortfallRatio`) va izohda «bir xil formula» deb va'da qilinardi —
+ * bu loyihada bir necha marta «ekranda bitta xil, faylda boshqa xil»
+ * nuqsoniga olib kelgan naqsh.
+ *
+ * **HECH NARSA yetkazilmagan bo'lsa — TO'LIQ qaytariladi**, ulushdan
+ * qat'i nazar. Ulush («rasm narxning chorak qismi») QISMAN kamomadni
+ * o'lchash uchun: matn va maket yetkazilgan, faqat rasm kam chiqqan.
+ * Rasm UMUMAN bo'lmasa, foydalanuvchi va'da qilingan mahsulotning bir
+ * qismini emas, butun bir turini olmaydi — bunda ulush bilan
+ * o'lchashning ma'nosi yo'q.
+ */
+export function refundRatio(d: Delivered | undefined): number | null {
+  if (!d) return null;
+  const { got, want } = d;
+  if (!(want > 0) || got >= want) return null;
+  if (got <= 0) return 1;
+  const share = d.refundShare ?? 1;
+  if (!(share > 0)) return null;
+  return Math.min(1, (1 - got / want) * share);
+}
+
+/** Kamomadning PUL og'irligi — qaytariladigan ulush. */
 function weight(d: Delivered): number {
-  return (1 - Math.max(0, d.got) / d.want) * (d.refundShare ?? 1);
+  return refundRatio(d) ?? 0;
 }
 
 /**

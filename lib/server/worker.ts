@@ -22,6 +22,7 @@ import { purgeRateLimits } from "./ratelimit";
 import { purgeExpiredTickets } from "./telegram";
 import { queryOne } from "./db";
 import type { ToolId } from "../types";
+import { refundRatio } from "../generation/delivered";
 import type { AcademicDoc, Delivered } from "../generation/types";
 
 /**
@@ -135,23 +136,16 @@ export function jobDeadlineMs(job: Pick<ClaimedJob, "budgetMs">): number {
  * kelganda foydalanuvchiga pul qaytishi — jim buzilsa hech kim
  * sezmasdi.
  */
+/**
+ * Kamomad uchun qaytariladigan ulush.
+ *
+ * Formula `lib/generation/delivered.ts` da — u yerda kamomadning O'ZI
+ * hisoblanadi, ya'ni ikkalasi bitta manbadan o'qiydi. Bu yerda faqat
+ * worker uchun qulay nom va tashqi qobiq qoladi (testlar shu nomga
+ * murojaat qiladi).
+ */
 export function shortfallRatio(delivered?: Delivered): number | null {
-  if (!delivered) return null;
-  const { got, want } = delivered;
-  if (!(want > 0) || got >= want) return null;
-  /*
-   * `refundShare` — kamomad narxning qancha ULUSHIGA tegishli ekani.
-   *
-   * Yo'q bo'lsa 1: narx to'liq shu songa bog'langan (rasm vositasi —
-   * «4 ta = 6 000», glossariy — «40 atama», xarita — haftalar), ya'ni
-   * eski xatti-harakat. Slayd RASMI uchun esa 1 dan kichik: rasm
-   * chiqmasa ham matn, maket va PPTX yetkazilgan — to'liq qaytarish
-   * dekani tekinga berish bo'lardi. 0 bo'lsa (paket rasm uchun ustama
-   * olmagan) pul qaytarilmaydi, lekin kamomad baribir qayd etiladi.
-   */
-  const share = delivered.refundShare ?? 1;
-  if (!(share > 0)) return null;
-  return Math.min(1, (1 - Math.max(0, got) / want) * share);
+  return refundRatio(delivered);
 }
 
 async function runJob(job: ClaimedJob): Promise<void> {

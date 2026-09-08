@@ -1770,10 +1770,16 @@ test("rasm nol kelganda premium dekadan ustama qaytariladi", async () => {
         : {}),
     }) as never as AcademicDoc;
 
-  // 16 slayd to'liq, 13 rasmdan 0 tasi keldi.
+  /*
+   * 16 slayd to'liq, 13 rasmdan 0 tasi keldi — HECH NARSA yetkazilmadi.
+   *
+   * Mahsulot qarori: kontent umuman bo'lmasa TO'LIQ qaytariladi. Ulush
+   * (0.25) QISMAN kamomadni o'lchash uchun — u yozuvda saqlanadi, lekin
+   * nol yetkazishda hisobga olinmaydi.
+   */
   const zero = deliveredCount(premiumMeta, deck(16, { want: 13, got: 0 }));
   assert.deepEqual(zero, { got: 0, want: 13, unit: "rasm", refundShare: 0.25 });
-  assert.equal(shortfallRatio(zero), 0.25, "8 000 dan 2 000 tanga qaytadi");
+  assert.equal(shortfallRatio(zero), 1, "rasm umuman chiqmasa 8 000 ning hammasi qaytadi");
 
   // Yarmi kelgan bo'lsa qaytarish ham yarmi.
   const half = deliveredCount(premiumMeta, deck(16, { want: 12, got: 6 }));
@@ -1792,28 +1798,38 @@ test("rasm nol kelganda premium dekadan ustama qaytariladi", async () => {
 
 /**
  * Standart paket yorlig'ida rasm haqida so'z yo'q («Standart · 10 slayd
- * · 3 000») va narxda unga ustama ham yo'q — pul qaytarilmaydi. Lekin
- * kamomad QAYD ETILADI: sahifa rasm chiqmaganini aytadi, sabab bazada
- * qoladi.
+ * · 3 000») va narxda unga ustama ham yo'q — QISMAN kamomad uchun pul
+ * qaytarilmaydi, lekin u QAYD ETILADI.
+ *
+ * Rasm UMUMAN chiqmasa esa paketdan qat'i nazar to'liq qaytariladi:
+ * foydalanuvchi va'da qilingan mahsulotning bir qismini emas, butun
+ * bir turini olmaydi.
  */
-test("standart paketda rasm kamomadi qayd etiladi, lekin pul qaytmaydi", async () => {
+test("standart paketda qisman kamomad qayd etiladi, nol kamomadda pul to'liq qaytadi", async () => {
   const { deliveredCount } = await import("../lib/generation/delivered.ts");
   const { shortfallRatio } = await import("../lib/server/worker.ts");
 
   const stdMeta = extractMeta(TOOL_BY_ID.slide, { topic: "Fotosintez", quality: "standard" } as FormValues);
   assert.equal(stdMeta.premiumVisuals, false);
-  const doc = {
-    meta: stdMeta,
-    titlePage: true,
-    toc: false,
-    sections: [],
-    slides: bulletDeck(10),
-    slideImages: { want: 8, got: 0, blocked: 8, skipped: 0, failed: 0 },
-  } as never as AcademicDoc;
+  const doc = (got: number) =>
+    ({
+      meta: stdMeta,
+      titlePage: true,
+      toc: false,
+      sections: [],
+      slides: bulletDeck(10),
+      slideImages: { want: 8, got, blocked: 8 - got, skipped: 0, failed: 0 },
+    }) as never as AcademicDoc;
 
-  const d = deliveredCount(stdMeta, doc);
-  assert.deepEqual(d, { got: 0, want: 8, unit: "rasm", refundShare: 0 });
-  assert.equal(shortfallRatio(d), null, "ustama olinmagan miqdor uchun pul qaytarilmaydi");
+  // Qisman: 8 tadan 5 tasi keldi — qayd etiladi, pul qaytmaydi.
+  const partial = deliveredCount(stdMeta, doc(5));
+  assert.deepEqual(partial, { got: 5, want: 8, unit: "rasm", refundShare: 0 });
+  assert.equal(shortfallRatio(partial), null, "ustama olinmagan miqdorning QISMI uchun pul qaytmaydi");
+
+  // Nol: bitta ham rasm chiqmadi — to'liq qaytariladi.
+  const zero = deliveredCount(stdMeta, doc(0));
+  assert.deepEqual(zero, { got: 0, want: 8, unit: "rasm", refundShare: 0 });
+  assert.equal(shortfallRatio(zero), 1, "rasm umuman chiqmasa standart paketda ham to'liq qaytadi");
 });
 
 /**
