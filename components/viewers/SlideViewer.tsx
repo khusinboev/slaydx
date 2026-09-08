@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Maximize2, Minimize2, Pause, Play, Presentation, RotateCcw, StickyNote, X } from "lucide-react";
 import type { AcademicDoc } from "@/lib/generation/types";
 import { slideNotes } from "@/lib/generation/slide-layout";
+import { SLIDE_TEMPLATE_BY_ID } from "@/lib/generation/slide-templates";
 import { getSlideTheme } from "@/lib/generation/slide-themes";
 import { buildSlideDeck } from "@/lib/generation/slides";
 import { SLIDE } from "@/lib/viewers/metrics";
@@ -246,8 +247,10 @@ export function SlideViewer({ doc }: { doc: AcademicDoc }) {
                 <StickyNote className="size-3.5" />
                 Eslatma
               </button>
+              {/* Interfeys o'zbekcha: xom `id` («magazine», «problem») emas,
+                  shablonning formada ko'ringan nomi. */}
               <span className="hidden text-xs text-white/50 lg:inline">
-                {deck.templateId} · {theme.nameUz}
+                {SLIDE_TEMPLATE_BY_ID[deck.templateId]?.nameUz ?? deck.templateId} · {theme.nameUz}
               </span>
             </>
           }
