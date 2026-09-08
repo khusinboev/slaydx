@@ -1,4 +1,5 @@
 import { PLAN_ITEMS_DEFAULT } from "./slide-params";
+import { purposeDefaults } from "./slide-purpose";
 import type { SlideLayout } from "./slide-types";
 import { expandBeats, type SlideBeat, type SlideTemplate } from "./slide-templates";
 import type { DocMeta } from "./types";
@@ -80,6 +81,39 @@ export const QUIZ_PER_SLIDE = 1;
  * KEYIN qo'shardi va deka rejadan bir slayd uzun chiqardi (X-3).
  */
 const ANSWERS_ROLE = "Test javoblari kaliti — har savol raqami va to‘g‘ri variant harfi";
+
+/**
+ * Sig'im yetmaganda test guruhi tananing eng ko'pi bilan `1/TEST_SHARE`
+ * ulushini oladi (X-5).
+ *
+ * Nega shift kerak. `quizCount` — foydalanuvchi ANIQ kiritgan son, ya'ni
+ * u shablondan kelgan standart blokdan ustun. Lekin cheklovsiz ustunlik
+ * darsni testga aylantirardi: 10 slaydli dekada 3 savol + kalit qo'yish
+ * uchun BESHTA blokdan ikkitasini tashlash kerak bo'lardi va mazmun
+ * slaydlaridan uchtagina qolardi. Uchdan bir — o'lchangan muvozanat:
+ * 8 ta tanali dekada test guruhi 3 o'rin oladi (2 savol + kalit), qolgan
+ * beshtasi mazmun bo'lib qoladi.
+ */
+const TEST_SHARE = 3;
+
+/**
+ * Sig'im yetmaganda YON BERADIGAN bloklar (X-5).
+ *
+ * Faqat shu bloklar tashlanishi mumkin, va faqat ular taqdimot TURINING
+ * standartidan kelgan bo'lsa (`purposeDefaults`) — ya'ni foydalanuvchi
+ * ularni formada QO'LDA yoqmagan bo'lsa.
+ *
+ * Ro'yxatdan chiqarilganlar va sababi:
+ *   `reja`        — o'z maydonlari bor (`agendaSlide`, `planItems`), ya'ni
+ *                   `quizCount` bilan bir darajadagi aniq tanlov;
+ *   `test`        — guruhning O'ZI;
+ *   `adabiyotlar` — `internetSearch` uni so'raydi va `structure.ts` da
+ *                   o'z prompt qoidasi bor;
+ *   `diagramma`   — `structure.ts` da o'z qoidasi bor (`chart: true`).
+ * Oxirgi ikkisi uchun sabab bitta: rejadan tushib qolgan blokning prompt
+ * qatori modelga YOLG'ON va'da bo'lardi (AUDIT-8 naqshi).
+ */
+const YIELDING_BLOCKS = new Set<SlideBlockId>(["maqsadlar", "motivatsiya", "amaliyot", "uyga_vazifa", "jadval"]);
 
 /** Har `quiz` slaydining roli: modelga AYNAN bitta savol yozishni aytadi. */
 function quizRole(i: number, n: number): string {
@@ -352,9 +386,28 @@ function deClump(beats: MarkedBeat[], pool: SlideBeat[]): void {
  *      soni rejaga tushadi, sig'magani esa TASHLANADI (6-qoidadan
  *      farqli: qolgan bloklar tashlanmaydi, chunki ular alohida
  *      slayd; ortiqcha savol esa BITTA blokning ichki hajmi).
+ *   9. SIG'IM YETMASA AVVAL STANDART BLOK YON BERADI (X-5). Test
+ *      guruhi tananing kamida `1/TEST_SHARE` ulushiga haqli; unga
+ *      yetmagan o'rin taqdimot TURIDAN kelgan (`purposeDefaults`)
+ *      va `YIELDING_BLOCKS` ro'yxatidagi bloklardan olinadi. Sabab:
+ *      `quizCount` — foydalanuvchi formada AYNAN tanlagan son,
+ *      standart blok esa turning taklifi. Aniq ajratish uchun
+ *      `meta.slidePurpose` kerak; u berilmasa (`general` standarti)
+ *      yon beruvchi topilmaydi va eski xatti-harakat qoladi —
+ *      ya'ni noaniqlikda hech qanday blok tashlanmaydi.
+ *
+ *      ESLATMA (bilib qoldirilgan farq). Yon bergan blok
+ *      `slide-prompt/structure.ts` ning umumiy «TUZILMA BLOKLARI»
+ *      qatorida qolib ketadi — u qator faqat deka NIYATINI aytadi,
+ *      slaydni to'ldirish qoidasi emas (har slaydning ko'rsatmasi
+ *      beat ROLIDAN keladi, u esa rejadan). Blokka TEGISHLI to'ldirish
+ *      qoidasi bor bloklar (`diagramma`, `adabiyotlar`, `reja`, `test`)
+ *      aynan shu sabab `YIELDING_BLOCKS` ga KIRITILMAGAN: ular tushib
+ *      qolsa prompt yolg'on va'da bergan bo'lardi (AUDIT-8 naqshi).
  */
 export function blocksToBeats(
-  meta: Pick<DocMeta, "blocks" | "planItems" | "quizCount" | "agendaSlide" | "internetSearch" | "speakerNotes">,
+  meta: Pick<DocMeta, "blocks" | "planItems" | "quizCount" | "agendaSlide" | "internetSearch" | "speakerNotes"> &
+    Partial<Pick<DocMeta, "slidePurpose">>,
   tpl: SlideTemplate,
   beats: SlideBeat[],
   want: number,
@@ -423,8 +476,45 @@ export function blocksToBeats(
   const askQuiz = testOn ? Math.max(1, Math.ceil(quizCount / QUIZ_PER_SLIDE)) : 0;
   const room = bodyWant - others.length;
   const wantAnswers = askQuiz > 0 && meta.speakerNotes === false;
-  const quizBeats = askQuiz > 0 ? Math.max(1, Math.min(askQuiz, room - (wantAnswers ? 1 : 0))) : 0;
-  const answersBeat = wantAnswers && quizBeats + 1 <= room;
+  /*
+   * ── X-5: `quizCount` STANDART bloklardan ustun.
+   *
+   * Ilgari test guruhi boshqa bloklardan QOLGAN joyni olardi va
+   * birinchi bo'lib u qisqarardi: 10 slaydli, 7 blokli dekada
+   * `quizCount: 3` dan bitta savol qolgan edi (tanada 8 o'rin, 6 tasi
+   * boshqa bloklarda). Lekin `quizCount` — foydalanuvchi formada
+   * AYNAN tanlagan son (0/3/5/10 chip'i), boshqa bloklar esa
+   * ko'pincha taqdimot TURINING standarti: `meta.blocks` ni forma
+   * `purposeDefaults` dan to'ldirib yuboradi, ya'ni belgilanganining
+   * hammasi ham qo'lda yoqilgan emas.
+   *
+   * Shuning uchun endi avval STANDART bloklar yon beradi:
+   *   `baseSlots` — eski xatti-harakat (boshqa bloklardan qolgan joy);
+   *   `share`     — test guruhining KAFOLATLANGAN ulushi (tananing 1/3 i);
+   *   `givers`    — tur standartidan kelgan, yon berishi mumkin bo'lgan
+   *                 bloklar (`YIELDING_BLOCKS`), dekadagi tartibda.
+   * Ulushga yetmagan qismi `givers` ning OXIRIDAN olinadi: deka boshi
+   * (reja, maqsadlar) mavzuni ochadi, test guruhi esa oxirda turadi —
+   * unga joy eng yaqin qo'shnidan uzilgani tabiiy.
+   *
+   * `room <= 0` da yon berish YO'Q: bunda bloklar allaqachon `want` ga
+   * sig'magan va deka 6-qoidaga ko'ra uzaygan; blok tashlash o'sha
+   * qoidani teskarisiga o'girardi, savol qo'shish esa dekani yana
+   * uzaytirardi.
+   *
+   * UZUNLIK SHARTNOMASI saqlanadi: tashlangan blok soni guruhga
+   * qo'shilgan o'rin soniga TENG, ya'ni `wanted` uzunligi o'zgarmaydi.
+   */
+  const need = askQuiz > 0 ? askQuiz + (wantAnswers ? 1 : 0) : 0;
+  const baseSlots = askQuiz > 0 ? Math.max(1, Math.min(need, room)) : 0;
+  const share = askQuiz > 0 && room > 0 ? Math.min(need, Math.max(1, Math.ceil(bodyWant / TEST_SHARE))) : 0;
+  const std = new Set(purposeDefaults(meta.slidePurpose).blocks);
+  const givers = others.filter((b) => YIELDING_BLOCKS.has(b.id) && std.has(b.id));
+  const yielded = Math.max(0, Math.min(givers.length, share - baseSlots));
+  const dropped = new Set(givers.slice(givers.length - yielded).map((b) => b.id));
+  const slots = baseSlots + yielded;
+  const quizBeats = askQuiz > 0 ? Math.max(1, Math.min(askQuiz, slots - (wantAnswers ? 1 : 0))) : 0;
+  const answersBeat = wantAnswers && quizBeats + 1 <= slots;
 
   /**
    * Dekaga tushishi kerak bo'lgan BLOK beat'lari — dekadagi tartibda.
@@ -437,6 +527,8 @@ export function blocksToBeats(
   const wanted: MarkedBeat[] = [];
   for (const blk of on) {
     if (blk.id === "reja" && !keepAgenda) continue;
+    // X-5: standart blok test guruhiga o'z o'rnini berdi.
+    if (dropped.has(blk.id)) continue;
     if (blk.id !== "test") {
       wanted.push(asBeat(blk));
       continue;

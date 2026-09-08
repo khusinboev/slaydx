@@ -4,7 +4,7 @@ import { extractMeta } from "../lib/generation/meta.ts";
 import { slideLabels } from "../lib/generation/i18n.ts";
 import { planSlide, type SlideLayer } from "../lib/generation/slide-layout.ts";
 import { finalizeQuiz, QUIZ_LETTERS } from "../lib/generation/slide-quiz.ts";
-import { bodyRules } from "../lib/generation/slide-audience.ts";
+import { SLIDE_AUDIENCES, bodyRules } from "../lib/generation/slide-audience.ts";
 import { SLIDE_THEMES, getSlideTheme } from "../lib/generation/slide-themes.ts";
 import { resolveSlideTemplate } from "../lib/generation/slide-templates.ts";
 import { coerceLayout, writeSlidesWithLlm } from "../lib/generation/slide-write.ts";
@@ -430,6 +430,11 @@ test("uchala maket 15 tema × 6 visual da chegara ichida qoladi", () => {
     answersModel,
     { ...answersModel, id: "a2", bullets: Array.from({ length: 12 }, (_, i) => `${i + 1} — ${QUIZ_LETTERS[i % 4]}`) },
     { ...answersModel, id: "a3", bullets: [] },
+    // X-4: yirik kalit rejimi (1–2 javob) ham chegara ichida qolsin —
+    // karta maydonni bo'lib oladi, ya'ni pastki chegaraga eng yaqin holat.
+    { ...answersModel, id: "a4", bullets: ["1 — B"] },
+    { ...answersModel, id: "a5", bullets: ["1 — B", "2 — D"] },
+    { ...answersModel, id: "a6", bullets: [long, long] },
   ];
   for (const t of SLIDE_THEMES) {
     const th = getSlideTheme(t.id);
@@ -571,8 +576,15 @@ test("answers maketi ustun sonini javoblar soniga qarab tanlaydi", () => {
 /**
  * Bo'sh maydon: kam bandli slaydda blok tepaga yopishib qolmasin
  * (AUDIT-8 N-5 naqshi — PDF da uchala maketda ham ko'rindi).
+ *
+ * X-4 O'ZGARISHI. `answers` uchun MARKAZLASHTIRISH yetarli emasligi
+ * aniqlandi: u bo'sh maydonni faqat SURADI. Kalit endi maydonni
+ * qoldiqsiz bo'lib oladi, ya'ni «tepaga yopishib qolmadimi» o'lchovi
+ * o'z ma'nosini yo'qotdi — uning o'rniga QAMROV o'lchanadi (pastdagi
+ * test). Bu yerda faqat sarlavha bilan kesishmaslik va maydonning
+ * yarmidan oshib tushish qoladi. `references` esa hamon markazlashadi.
  */
-test("kam bandli answers va references bloklari maydon markazida turadi", () => {
+test("kam bandli answers va references bloklari maydonni bo'sh qoldirmaydi", () => {
   const gapOf = (p: { layers: SlideLayer[] }, fill: string) => {
     const cards = rects(p.layers).filter((r) => r.fill?.color === fill);
     const first = Math.min(...cards.map((r) => r.box.y));
@@ -580,8 +592,8 @@ test("kam bandli answers va references bloklari maydon markazida turadi", () => 
     return { top: first, bottom: last };
   };
   const answers = gapOf(plan({ ...answersModel, bullets: ["1 — A", "2 — B", "3 — C"] }), theme.surface);
-  assert.ok(answers.top > 1.9, `javoblar bloki tepaga yopishib qoldi (y=${answers.top})`);
-  assert.ok(answers.bottom > 4.6, `javoblar bloki maydonning yarmini ham egallamadi (${answers.bottom})`);
+  assert.ok(answers.top > 1.4, `javoblar bloki sarlavha ustiga chiqdi (y=${answers.top})`);
+  assert.ok(answers.bottom > 6.3, `javoblar bloki maydon oxirigacha yetmadi (${answers.bottom})`);
 
   const refs = plan({ ...refsModel, refs: refsModel.refs!.slice(0, 2) });
   const nums = texts(refs.layers).filter((t) => t.text === "01" || t.text === "02");
@@ -616,4 +628,118 @@ test("answers: 12 tagacha javob shrift polidan yuqorida qoladi", () => {
   for (const t of texts(p.layers).filter((x) => many.includes(x.text ?? ""))) {
     assert.ok(t.size >= 12, `javob matni ${t.size} pt ga tushdi`);
   }
+});
+
+// ═══════════════════════════════════════════ X-4: kalitning BO'SH MAYDONI
+
+/** «1 — A», «2 — B»… — `finalizeQuiz` yozadigan kalit qatorlari. */
+const key = (n: number) => Array.from({ length: n }, (_, i) => `${i + 1} — ${QUIZ_LETTERS[i % 4]}`);
+
+/**
+ * Matn qatlamlari qamragan BALANDLIK ulushi (slayd balandligiga nisbatan).
+ *
+ * Ustma-ust tushgan qutilar bir marta sanaladi — ikki ustunli kalitda
+ * o'ng ustun chapining balandligini TAKRORLAYDI, oddiy yig'indi esa
+ * qamrovni ikki barobar ko'rsatib, o'lchovni yolg'on qilardi.
+ */
+function textCover(p: { layers: SlideLayer[] }, only: string[]): number {
+  const spans = texts(p.layers)
+    .filter((t) => only.includes(t.text ?? ""))
+    .map((t) => [t.box.y, t.box.y + t.box.h] as [number, number])
+    .sort((a, b) => a[0] - b[0]);
+  let covered = 0;
+  let cur: [number, number] | null = null;
+  for (const [a, b] of spans) {
+    if (!cur || a > cur[1]) {
+      if (cur) covered += cur[1] - cur[0];
+      cur = [a, b];
+    } else if (b > cur[1]) cur[1] = b;
+  }
+  if (cur) covered += cur[1] - cur[0];
+  return covered / 7.5;
+}
+
+/**
+ * X-4 — jonli PDF nuqsoni.
+ *
+ * Rejaga bitta savol sig'di, ya'ni kalitda BITTA qator qoldi: u qat'iy
+ * 1.15″ qutida, maydon o'rtasida chizilar va 13.3×7.5″ slaydning ~86% i
+ * bo'sh qolardi (AUDIT-8 N-3/N-5 naqshi). O'lchov aynan shu nuqsonni
+ * ushlaydi: qamrov 1 javobda ham slayd balandligining kamida 45% i.
+ * Nuqson vaqtidagi qiymat — 13.7%.
+ */
+test("answers: 1 javobda ham kalit slaydning kamida 45% ini egallaydi", () => {
+  const worst: string[] = [];
+  for (const n of [1, 2, 3, 6, 7, 10, 12]) {
+    const items = key(n);
+    for (const visual of VISUALS) {
+      const share = textCover(plan({ ...answersModel, bullets: items }, visual), items);
+      if (share < 0.45) worst.push(`${n} javob/${visual}: ${(share * 100).toFixed(0)}%`);
+    }
+  }
+  assert.deepEqual(worst, [], `kalit bo'sh maydon qoldirdi:\n  ${worst.join("\n  ")}`);
+  // Kalit maydonni QOLDIQSIZ bo'lib oladi: qamrov javob sonidan deyarli
+  // mustaqil — 1 javob bilan 10 javob orasidagi farq 15% dan kam.
+  const one = textCover(plan({ ...answersModel, bullets: key(1) }), key(1));
+  const ten = textCover(plan({ ...answersModel, bullets: key(10) }), key(10));
+  assert.ok(Math.abs(one - ten) < 0.15, `1 javob ${(one * 100).toFixed(0)}%, 10 javob ${(ten * 100).toFixed(0)}%`);
+});
+
+/**
+ * 1–2 javob — YIRIK kalit varag'i: keng karta, markazlashgan matn,
+ * yirik shrift. 3 tadan boshlab oddiy ustun rejimi (chapdan boshlanadi).
+ */
+test("answers: 1–2 javob yirik kalit kartasi, 3 dan boshlab oddiy ustun", () => {
+  for (const n of [1, 2]) {
+    const items = key(n);
+    const p = plan({ ...answersModel, bullets: items });
+    const cards = rects(p.layers).filter((r) => r.fill?.color === theme.surface);
+    assert.equal(cards.length, n, `${n}: har javobga bitta karta`);
+    assert.ok(cards[0].box.w > 9, `${n}: yirik kalit kartasi tor qoldi (${cards[0].box.w.toFixed(1)}″)`);
+    const rows = texts(p.layers).filter((t) => items.includes(t.text ?? ""));
+    assert.equal(rows.length, n);
+    for (const t of rows) {
+      assert.equal(t.align, "center", `${n}: yirik kalit matni markazda emas`);
+      assert.ok(t.size >= 40, `${n}: yirik kalit shrifti ${t.size} pt — kalit varag'i bo'lib ko'rinmaydi`);
+    }
+    /*
+     * Aksent tasma yirik kartada TEPADA va aynan karta kengligida.
+     * Tekshiruv karta koordinatasiga bog'lanadi: `pushChrome` ning
+     * sahifa bo'ylab aksent chizig'i («bar-top» temalari) ham «keng va
+     * ingichka» edi va umumiy shart uni karta tasmasi deb qabul qilardi.
+     */
+    for (const card of cards) {
+      assert.ok(
+        rects(p.layers).some(
+          (r) => r.fill?.color === theme.accent && r.box.x === card.box.x && r.box.y === card.box.y && r.box.w === card.box.w && r.box.h < 0.2,
+        ),
+        `${n}: yirik kartada tepa tasma yo'q`,
+      );
+    }
+  }
+  const three = key(3);
+  const rows3 = texts(plan({ ...answersModel, bullets: three }).layers).filter((t) => three.includes(t.text ?? ""));
+  assert.equal(rows3.length, 3);
+  for (const t of rows3) assert.equal(t.align, undefined, "3 javob oddiy ustunda chapdan o'qiladi");
+});
+
+/**
+ * Slide Law: kalit shrifti ham auditoriya polida qoladi (maktabda 20–24,
+ * ma'ruzada 15 pt). Ilgari bu maketda pol qo'lda 12 pt qilib yozilgan edi
+ * — ya'ni 8–9 sinf uchun tanlangan 20 pt poli kalit slaydida ishlamasdi.
+ */
+test("answers shrifti AUDITORIYA polidan pastga tushmaydi", () => {
+  const fails: string[] = [];
+  for (const audience of SLIDE_AUDIENCES) {
+    if (audience === "auto") continue;
+    const bt = bodyRules({ slideAudience: audience, textVolume: "kop", planItems: 5 }, "lesson");
+    for (const n of [1, 6, 12]) {
+      const items = key(n);
+      const p = planSlide({ ...answersModel, bullets: items }, theme, "classic", 1, 10, audience, "lesson");
+      for (const t of texts(p.layers).filter((x) => items.includes(x.text ?? ""))) {
+        if (t.size < bt.minPt) fails.push(`${audience}/${n}: ${t.size} pt < ${bt.minPt} pt`);
+      }
+    }
+  }
+  assert.deepEqual(fails, [], `shrift poli buzildi:\n  ${fails.join("\n  ")}`);
 });

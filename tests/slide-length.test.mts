@@ -4,6 +4,8 @@ import { TOOL_BY_ID } from "../lib/tools.ts";
 import type { FormValues } from "../lib/types.ts";
 import { extractMeta } from "../lib/generation/meta.ts";
 import { finalizeQuiz } from "../lib/generation/slide-quiz.ts";
+import { QUIZ_COUNT_FALLBACK } from "../lib/generation/slide-blocks.ts";
+import { PURPOSE_DEFAULTS, SLIDE_PURPOSES } from "../lib/generation/slide-purpose.ts";
 import { PRO_SLIDE_MAX, PRO_SLIDE_MIN, QUIZ_COUNTS } from "../lib/generation/slide-params.ts";
 import { deckBeats, fallbackSlides, resolveDeckTemplate, wantSlides } from "../lib/generation/slide-write.ts";
 import type { SlideModel } from "../lib/generation/slide-types.ts";
@@ -285,4 +287,75 @@ test("titleSlide: false — uzunlik saqlanadi, titul slaydi esa yo'q", () => {
       assert.equal(count(on, "title"), 1, tag);
     }
   }
+});
+
+/**
+ * X-5 — JONLI holat, rejadan slaydgacha.
+ *
+ * 10 slayd, 7 blok, `quizCount: 3`, izohlar o'chiq. Ilgari test guruhi
+ * boshqa bloklardan QOLGAN joyni olardi va foydalanuvchi tanlagan 3
+ * savoldan BITTASI qolardi — ya'ni formadagi aniq son shablon
+ * standartlari orasida yo'qolardi. Endi standart blok («Uyga vazifa»)
+ * yon beradi: 2 savol + kalit. Uzunlik shartnomasi buzilmaydi.
+ *
+ * Son AYNAN qulflanadi: `TEST_SHARE` (tananing uchdan biri) shifti
+ * o'zgarsa yoki yon berish yo'qolsa shu yerda ushlanadi.
+ */
+test("X-5: 10 slayd + 7 blok + quizCount 3 → 2 savol slaydi, kalit va uzunlik 10", () => {
+  const v = {
+    slideCount: 10,
+    quizCount: 3,
+    speakerNotes: false,
+    slidePurpose: "open_lesson",
+    blocks: "reja,maqsadlar,motivatsiya,amaliyot,test,uyga_vazifa,adabiyotlar",
+    slideTemplate: "lesson",
+  };
+  const b = build(v, 4);
+  const tag = b.layouts.join(",");
+  assert.equal(b.want, 10, tag);
+  assert.equal(b.slides.length, 10, tag);
+  assert.equal(count(b, "quiz"), 2, `savol slaydlari: ${tag}`);
+  assert.equal(count(b, "answers"), 1, `kalit: ${tag}`);
+  // Kalit AYNAN ikki qatorli — X-4 dagi «yirik kalit» rejimiga tushadi.
+  const key = b.slides.find((s) => s.layout === "answers")!;
+  assert.deepEqual(key.bullets, ["1 — A", "2 — B"], `kalit savollarga mos emas: ${JSON.stringify(key.bullets)}`);
+  // Tartib: savollar → kalit → adabiyotlar → yakun.
+  assert.equal(b.layouts[b.slides.length - 1], "closing", tag);
+  assert.equal(b.layouts[b.slides.length - 2], "references", tag);
+  assert.ok(b.layouts.indexOf("answers") > b.layouts.lastIndexOf("quiz"), tag);
+
+  // Bir slayd kengroq deka — yon berish SHART emas, uchala savol ham qoladi.
+  const roomy = build({ ...v, slideCount: 12 }, 4);
+  assert.equal(roomy.slides.length, 12);
+  assert.equal(count(roomy, "quiz"), 3, `12 slaydda savollar to'liq qolishi kerak: ${roomy.layouts.join(",")}`);
+  assert.equal(count(roomy, "answers"), 1);
+});
+
+/**
+ * X-5 supurishi: yon berish UZUNLIKKA tegmaydi.
+ *
+ * Yuqoridagi asosiy supurish `slidePurpose` ni bermaydi (ya'ni
+ * `general` standarti — yon beruvchi blok yo'q), shuning uchun yangi
+ * tarmoq alohida supuriladi: 9 tur × savol soni × izoh × uzunlik.
+ */
+test("X-5 supurishi: taqdimot turi standarti bilan ham uzunlik wantSlides ga teng", () => {
+  const fails: string[] = [];
+  let cases = 0;
+  for (const slidePurpose of SLIDE_PURPOSES) {
+    const blocks = PURPOSE_DEFAULTS[slidePurpose].blocks.join(",");
+    for (const quizCount of QUIZ_COUNTS) {
+      for (const speakerNotes of [true, false]) {
+        for (const slideCount of [8, 10, 12, 16, 24]) {
+          cases += 1;
+          const b = build({ slideCount, quizCount, speakerNotes, slidePurpose, blocks }, Math.max(1, quizCount));
+          const tag = `${slidePurpose}/n=${slideCount}/quiz=${quizCount}/izoh=${speakerNotes}`;
+          if (b.slides.length !== b.want) fails.push(`${tag} → ${b.slides.length} (kutilgan ${b.want})`);
+          if (quizCount > 0 && count(b, "quiz") < 1) fails.push(`${tag}: test so'ralgan, quiz slaydi yo'q`);
+          if (count(b, "quiz") > Math.max(quizCount, QUIZ_COUNT_FALLBACK)) fails.push(`${tag}: ortiqcha quiz slaydi`);
+        }
+      }
+    }
+  }
+  assert.ok(cases >= 300, `supurish kichik: ${cases}`);
+  assert.deepEqual(fails.slice(0, 10), [], `${fails.length}/${cases} holat:\n  ${fails.slice(0, 10).join("\n  ")}`);
 });
