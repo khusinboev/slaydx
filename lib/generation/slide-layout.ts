@@ -303,10 +303,24 @@ function planTitle(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
   // inglizcha deckda o'zbekcha so'z paydo bo'lardi.
   const kicker = s.kicker || "";
 
-  if (visual === "magazine" && img) {
+  /*
+   * `magazine` titul RASMSIZ ham o'z maketida qoladi.
+   *
+   * Ilgari sharti `visual === "magazine" && img` edi va rasm kelmagan
+   * dekada muqova pastdagi umumiy tarmoqqa tushardi — «Esse»,
+   * «Adabiyot», «Hayotnoma» tanlagan foydalanuvchi `classic` bilan
+   * AYNAN bir xil titul olardi. fal.ai bloklangan davrda bu 100%
+   * hollarda sodir bo'lgan (AUDIT-8 N-7: `magazine-01.png` bilan
+   * `lecture-01.png` ni ajratib bo'lmasdi).
+   *
+   * `hero-split` bu muammodan xoli edi — u rasm o'rniga rangli blok
+   * chizadi. Shu naqsh bu yerga ham ko'chirildi: qoplama faqat rasm
+   * bo'lganda kerak, to'q muqova esa har doim.
+   */
+  if (visual === "magazine") {
     layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.titleBg } });
     photo(layers, img, photoSlot("title", "magazine")!, 0.42);
-    layers.push({ t: "rect", box: { x: 0, y: 3.85, w: W, h: 3.65 }, fill: { color: "#000000", alpha: 0.55 } });
+    layers.push({ t: "rect", box: { x: 0, y: 3.85, w: W, h: 3.65 }, fill: { color: "#000000", alpha: img ? 0.55 : 0 } });
     layers.push({
       t: "text",
       box: { x: 0.7, y: 4.1, w: 11.8, h: 0.38 },
@@ -862,12 +876,32 @@ function parseStatNumber(value: string): number | null {
  * `planSlide` ham PPTX, ham saytdagi ko'ruvchi uchun yagona manba; native
  * chart qo'shilsa preview eksportdan farq qila boshlardi.
  */
+/**
+ * Qiymatning BIRLIGI: «97.5%» → «%», «4 bosqich» → «bosqich», «12» → «».
+ *
+ * Gorizontal diagramma faqat BIR XIL birlikli qiymatlarda ma'noli.
+ * Jonli sinovda `report` shablonida «97.5%», «2.5%» va «4 bosqich»
+ * bitta o'qqa chizilgan edi: 4 soni 97.5 ga nisbatan o'lchanib, uchinchi
+ * ustun deyarli nolga tushardi — diagramma YOLG'ON taqqoslash
+ * ko'rsatardi (AUDIT-8 N-2). Birliklar har xil bo'lsa karta ko'rinishi
+ * to'g'riroq: u qiymatlarni bir-biriga nisbatan o'lchamaydi.
+ */
+export function statUnit(value: string): string {
+  return String(value)
+    .toLowerCase()
+    .replace(/\u00a0/g, " ")
+    .replace(/-?\d[\d\s.,]*/, " ")
+    .replace(/\b(mlrd|milliard|billion|mln|million|ming|thousand)\b/g, " ")
+    .replace(/[^\p{L}%°]/gu, "");
+}
+
 function planStatChart(
   s: SlideModel,
   theme: SlideTheme,
   items: { value: string; label: string; n: number }[],
   layers: SlideLayer[],
   ink: string,
+  dense: boolean,
 ): void {
   const max = Math.max(...items.map((x) => Math.abs(x.n)), 1);
   const labelW = 3.6;
@@ -891,24 +925,46 @@ function planStatChart(
       size: fitSize(it.label, labBox, 15, 11),
       valign: "middle",
     });
-    // Fon yo'lakchasi — ustunlar qanchalik to'lganini ko'rsatadi.
+    /*
+     * Fon yo'lakchasi — ustunlar qanchalik to'lganini ko'rsatadi.
+     *
+     * Rangi SAHIFAGA bog'liq. Ilgari qat'iy `theme.surface` (yorug' krem)
+     * edi, `dense` sahifa esa to'q — natijada to'q fonda TO'LA
+     * uzunlikdagi oq tasmalar chiqar va diagramma teskari o'qilardi:
+     * 2.5% li qator ham «to'la» ko'rinardi (AUDIT-8 N-1,
+     * `png/report-02.png`).
+     */
     layers.push({
       t: "rect",
       box: { x: barX, y: cy, w: barMaxW, h: barH },
-      fill: { color: theme.surface },
+      fill: dense ? { color: "#ffffff", alpha: 0.14 } : { color: theme.surface },
       radius: 0.04,
     });
+    /*
+     * To'q sahifada HAMMA ustun `accent` dan.
+     *
+     * Yorug' sahifada birinchi ustun `accent`, qolgani `accent2` bilan
+     * ajratilgan. To'q sahifada esa `accent2` (ko'p temada bo'g'iq
+     * ko'k/kulrang) shaffof oq yo'lakcha bilan qo'shilib ketadi — PDF da
+     * 2.5% va 0.3% li ustunlar UMUMAN ko'rinmasdi. Bu yerda urg'u emas,
+     * o'qilishi ustun turadi.
+     */
     layers.push({
       t: "rect",
       box: { x: barX, y: cy, w: Math.max(0.08, (Math.abs(it.n) / max) * barMaxW), h: barH },
-      fill: { color: i === 0 ? theme.accent : theme.accent2 },
+      fill: { color: dense || i === 0 ? theme.accent : theme.accent2 },
       radius: 0.04,
     });
     layers.push({
       t: "text",
       box: { x: barX + barMaxW + 0.14, y: cy - 0.06, w: valueW, h: barH + 0.12 },
       text: it.value,
-      color: theme.accentInk,
+      /*
+       * `accentInk` faqat `bg` va `surface` (yorug') ga qarshi
+       * o'lchangan (`tests/themes.test.mts`). To'q sahifada o'lchangan
+       * juftlik — `titleText`/`titleBg`.
+       */
+      color: dense ? theme.titleText : theme.accentInk,
       size: 16,
       bold: true,
       valign: "middle",
@@ -938,8 +994,10 @@ function planStats(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
     .map((st) => ({ ...st, n: parseStatNumber(st.value) }))
     .filter((x): x is { value: string; label: string; n: number } => x.n !== null);
 
-  if (numeric.length >= 3 && numeric.length === items.length) {
-    planStatChart(s, theme, numeric, layers, ink);
+  // Diagramma faqat qiymatlar TAQQOSLANADIGAN bo'lsa (bir xil birlik).
+  const oneUnit = new Set(numeric.map((x) => statUnit(x.value))).size <= 1;
+  if (numeric.length >= 3 && numeric.length === items.length && oneUnit) {
+    planStatChart(s, theme, numeric, layers, ink, dense);
     pushFooter(layers, s, theme, index, total, { x: M + 0.18, w: 12.2 }, dense);
     return { bg, layers };
   }
