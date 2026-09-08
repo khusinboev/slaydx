@@ -192,7 +192,8 @@ tashqarida, alohida qaror.
 | **3 — Lokalizatsiya + jadval + rezyume** | A4, A9, B3, C4 | O'rtacha |
 | **4 — Halollik + mayda** | A5, B5, C7, C11 | O'rtacha — migratsiya |
 | **5 — Kesilish + slayd** | B1, B2, C9, C12, C14 | Yuqori — sahifalash o'zgarishi, jonli smoke shart |
-| **Kelajak** | A1 (qaror), A8, B4, C10, D1-D7 | — |
+| **6 — Slayd dvigateli auditi** | B4 | Past — sof funksiya |
+| **Kelajak** | A1 (qaror), A8, C10, D1-D7 | — |
 
 Verifikatsiya standarti (`AUDIT-5` dan): sof funksiya o'zgarsa — before-snapshot +
 mutatsiya-test; jonli DOCX/PPTX render qilib ko'z bilan ko'rish (Sprint 5 shart).
@@ -294,8 +295,23 @@ chiqdi. Productionga chiqqach, foydalanuvchi brauzerda ko'zdan
 kechirishi tavsiya etiladi — ayniqsa ko'p qatorli jadval va uzun
 rezyume bilan.
 
+### Sprint 6 — Slayd dvigateli chuqur auditi (2026-09-08)
+
+296 test (294 -> +2), typecheck + lint toza. Ikkalasi ham mutatsiya bilan
+tekshirildi (eski kodga qaytarilganda test aynan yiqiladi — B4 uchun
+`git stash` bilan qayta ishlab tekshirildi). Rasm prompti tuzatmasi jonli
+Gemini bilan ham o'lchandi (13/13 slayd LLM sahnasini oldi, ~3.2 s).
+
+| Band | Nima qilindi | Fayllar |
+|---|---|---|
+| **B4** | `fitSize`/`fitLines` endi yangi `wrapRows()` orqali so'z chegarasida ochko'zlik (greedy) bilan qatorlaydi, `ceil(chars/perLine)` o'rniga. Eski usul so'z-o'ralishda yo'qolgan joyni hisobga olmasdi — zich bandda (masalan 4 ta 43 belgili so'zdan iborat matn) shrift kerakidan kattaroq tanlanib, matn haqiqatda quti balandligidan CHIQIB ketardi (viewer + PPTX'da kesilish, ikkalasi ham shu funksiyaga tayanadi). Eski `"a".repeat(n)` testlari buni ushlay olmasdi — bo'sh joysiz uzluksiz matnda ikkala hisob usuli ham bir xil natija beradi, shuning uchun yangi so'z-oraliqli test qo'shildi. | `slide-layout.ts`, `tests/slide-layout.test.mts` |
+| — | (yon topilma, AUDIT-6 asl ro'yxatida yo'q) `writeSlideImagePrompts` dagi qat'iy `.slice(0, 8)` `imageBudget()` dan ORQADA qolgan edi: 16 slaydli premium dekada 13 tagacha rasm so'ralsa ham, 9-13-slaydlar doim umumiy shablon promptidan chiqardi (LLM yozgan sahna emas) — `attachSlideImages` dagi zaxira tufayli xatosiz, lekin "premium" sifat farqi jimgina yo'qolardi. Chegara 16 ga ko'tarildi (`imageBudget`ning haqiqiy maksimumi — 20 slaydli premium deka), token byudjeti sahna soniga qarab o'sadi. | `slide-image-prompts.ts` |
+| — | (yon topilma) Hech qayerda chaqirilmagan `searchSlideImages` va uning yagona chaqiruvchisi yo'qolgach o'lik qolgan `visualPrompt` olib tashlandi. | `slide-images.ts` |
+
+Sprint 6 da o'zgarmagani: A1, A8, B1, B2, B3, C7, C10, D*.
+
 ### Kelajak (Sprint rejasidan tashqarida)
 
 **A1** (brend-muqova — mahsulot qarori, §5), **A8** (ko'ruvchi
-tipografiyasi profilga bog'lanmagan), **B4** (slayd `fitLines` evristikasi),
-**C10** (presenter dual-screen — Presentation API), **D1-D7**.
+tipografiyasi profilga bog'lanmagan), **C10** (presenter dual-screen —
+Presentation API), **D1-D7**. (**B4** Sprint 6 da yopildi.)
