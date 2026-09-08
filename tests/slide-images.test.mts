@@ -465,16 +465,17 @@ test("gemini rasm shifti fal nikidan katta va tana uzilishi timeout deb sanaladi
  */
 test("byudjet provayder minimumidan kam bo'lsa so'rov yuborilmaydi (pul sarflanmaydi)", async () => {
   const restore = geminiEnv();
-  let calls = 0;
-  globalThis.fetch = (async () => {
-    calls += 1;
+  // RASM so'rovlari sanaladi — prompt yozuvchi LLM chaqiruvi alohida.
+  let imageCalls = 0;
+  globalThis.fetch = (async (url: string) => {
+    if (String(url).includes("/interactions")) imageCalls += 1;
     return jsonRes(200, { steps: [] });
   }) as unknown as typeof fetch;
   try {
     const slides = bulletDeck(4);
-    // Gemini minimumi 30 s — 10 s qolganda hech qanday so'rov ketmasin.
+    // Gemini minimumi 30 s — 10 s qolganda hech qanday rasm so'rovi ketmasin.
     const report = await attachSlideImages(slides, "Suv aylanishi", "classic", 10_000, { meta: meta({}, pro) });
-    assert.equal(calls, 0, `byudjet yetmasa ham ${calls} so'rov yuborildi`);
+    assert.equal(imageCalls, 0, `byudjet yetmasa ham ${imageCalls} rasm so'rovi yuborildi`);
     assert.equal(report.skipped, report.want);
     assert.equal(report.failed, 0);
     assert.ok(geminiProvider.minMs >= 30_000, "Gemini minimumi o'lchovga mos emas");
