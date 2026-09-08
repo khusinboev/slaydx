@@ -4,7 +4,7 @@ import { query, queryOne, transaction } from "./db";
 import { chargeInTx } from "./credits";
 import { env } from "./env";
 import type { FormValues, Generation, JobStatus, ToolId } from "../types";
-import type { AcademicDoc } from "../generation/types";
+import type { AcademicDoc, Delivered } from "../generation/types";
 
 /**
  * Generatsiya navbati.
@@ -32,7 +32,7 @@ export type GenerationRow = {
   file_name: string;
   error: string | null;
   preview: GenerationPreview | null;
-  delivered_json: { got: number; want: number } | null;
+  delivered_json: Delivered | null;
   created_at: Date;
   started_at: Date | null;
   finished_at: Date | null;
@@ -286,7 +286,7 @@ export async function completeJob(
     fileName: string;
     preview: GenerationPreview | null;
     /** Va'da qilinganidan kam yetkazilgan bo'lsa (AUDIT-6 C7). */
-    delivered?: { got: number; want: number };
+    delivered?: Delivered;
   },
 ): Promise<boolean> {
   const rows = await query<{ id: string }>(

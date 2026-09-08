@@ -1063,7 +1063,10 @@ test("va'da qilingan miqdor kam chiqsa farq qaytariladi", async () => {
     ({ meta: slideMeta, titlePage: true, toc: false, sections: [], slides: Array.from({ length: n }, (_, i) => ({ id: `s${i}`, layout: "bullets", title: `S${i}` })) }) as never;
 
   assert.equal(deliveredCount(slideMeta, deck(16)), undefined, "to'liq deka qaytarishsiz");
-  assert.deepEqual(deliveredCount(slideMeta, deck(14)), { got: 14, want: 16 });
+  // `unit` — natija sahifasidagi jumla shu so'z bilan yoziladi. Slayd
+  // dekasida endi ikki xil miqdor kam chiqishi mumkin (slayd va rasm),
+  // ya'ni sonning o'zi qaysi va'da ekanini aytmaydi.
+  assert.deepEqual(deliveredCount(slideMeta, deck(14)), { got: 14, want: 16, unit: "slayd" });
   assert.equal(shortfallRatio(deliveredCount(slideMeta, deck(14))), 0.125, "8 000 dan 12.5% qaytadi");
   // Nisbat suzuvchi son — `splitRatio` uni baribir yaxlitlaydi, shuning
   // uchun tekshiruv aniq tenglik emas, yaqinlik bilan.
@@ -1092,7 +1095,7 @@ test("va'da qilingan miqdor kam chiqsa farq qaytariladi", async () => {
 
   assert.equal(deliveredCount(gloMeta, gloDoc(40)), undefined);
   // 70% darvozasi 28 tani o'tkazadi — ilgari 15 000 to'liq olinardi.
-  assert.deepEqual(deliveredCount(gloMeta, gloDoc(28)), { got: 28, want: 40 });
+  assert.deepEqual(deliveredCount(gloMeta, gloDoc(28)), { got: 28, want: 40, unit: "atama" });
   near(shortfallRatio(deliveredCount(gloMeta, gloDoc(28))), 0.3, "15 000 dan 30% qaytadi");
 
   // ── Xarita: haftalar soatlardan
@@ -1113,7 +1116,7 @@ test("va'da qilingan miqdor kam chiqsa farq qaytariladi", async () => {
     }) as never;
 
   assert.equal(deliveredCount(mapMeta, mapDocOf(34)), undefined);
-  assert.deepEqual(deliveredCount(mapMeta, mapDocOf(24)), { got: 24, want: 34 });
+  assert.deepEqual(deliveredCount(mapMeta, mapDocOf(24)), { got: 24, want: 34, unit: "hafta" });
 
   // ── Qolgan vositalarda miqdor va'da qilinmaydi.
   const cw = extractMeta(TOOL_BY_ID.coursework, { topic: "X" } as FormValues);

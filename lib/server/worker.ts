@@ -22,7 +22,7 @@ import { purgeRateLimits } from "./ratelimit";
 import { purgeExpiredTickets } from "./telegram";
 import { queryOne } from "./db";
 import type { ToolId } from "../types";
-import type { AcademicDoc } from "../generation/types";
+import type { AcademicDoc, Delivered } from "../generation/types";
 
 /**
  * Navbatni bajaruvchi worker.
@@ -135,11 +135,23 @@ export function jobDeadlineMs(job: Pick<ClaimedJob, "budgetMs">): number {
  * kelganda foydalanuvchiga pul qaytishi — jim buzilsa hech kim
  * sezmasdi.
  */
-export function shortfallRatio(delivered?: { got: number; want: number }): number | null {
+export function shortfallRatio(delivered?: Delivered): number | null {
   if (!delivered) return null;
   const { got, want } = delivered;
   if (!(want > 0) || got >= want) return null;
-  return 1 - Math.max(0, got) / want;
+  /*
+   * `refundShare` — kamomad narxning qancha ULUSHIGA tegishli ekani.
+   *
+   * Yo'q bo'lsa 1: narx to'liq shu songa bog'langan (rasm vositasi —
+   * «4 ta = 6 000», glossariy — «40 atama», xarita — haftalar), ya'ni
+   * eski xatti-harakat. Slayd RASMI uchun esa 1 dan kichik: rasm
+   * chiqmasa ham matn, maket va PPTX yetkazilgan — to'liq qaytarish
+   * dekani tekinga berish bo'lardi. 0 bo'lsa (paket rasm uchun ustama
+   * olmagan) pul qaytarilmaydi, lekin kamomad baribir qayd etiladi.
+   */
+  const share = delivered.refundShare ?? 1;
+  if (!(share > 0)) return null;
+  return Math.min(1, (1 - Math.max(0, got) / want) * share);
 }
 
 async function runJob(job: ClaimedJob): Promise<void> {
@@ -187,7 +199,7 @@ async function runJob(job: ClaimedJob): Promise<void> {
         deleteGenerationFile(job.id, job.userId).catch(() => {}),
         deleteAssets(job.id).catch(() => {}),
       ]);
-    } else if (shortfallRatio(file.delivered) !== null) {
+    } else if (file.delivered && file.delivered.got < file.delivered.want) {
       /*
        * Va'da qilinganidan kam yetkazildi — farq qaytariladi.
        *
@@ -196,14 +208,19 @@ async function runJob(job: ClaimedJob): Promise<void> {
        * SONGA bog'langan (4 ta = 6 000 tanga), shuning uchun kam
        * yetkazilganda to'liq pul olish halol emas.
        */
-      const { got, want } = file.delivered!;
-      const ok = await refundPartial(
-        job.userId,
-        job.id,
-        shortfallRatio(file.delivered)!,
-        `${want} tadan ${got} tasi yaratildi — farq qaytarildi`,
-      );
-      console.warn(`[worker] job ${job.id}: qisman yetkazildi ${got}/${want}, qaytarish=${ok}`);
+      const { got, want, unit } = file.delivered;
+      const label = `${want} tadan ${got} ta${unit ? ` ${unit}` : "si"}`;
+      const ratio = shortfallRatio(file.delivered);
+      if (ratio === null) {
+        // `refundShare: 0` — kamomad bor, lekin narxda unga ustama yo'q
+        // (masalan standart paketda rasm). Jim o'tmasin: qayd etiladi.
+        console.warn(`[worker] job ${job.id}: kam yetkazildi ${label} — narxda ulushi yo'q, pul qaytarilmadi`);
+      } else {
+        const ok = await refundPartial(job.userId, job.id, ratio, `${label} yaratildi — farq qaytarildi`);
+        console.warn(
+          `[worker] job ${job.id}: qisman yetkazildi ${label}, ulush=${ratio.toFixed(3)}, qaytarish=${ok}`,
+        );
+      }
     }
   } catch (e) {
     const message = e instanceof Error ? e.message : "Yaratishda xatolik";
