@@ -7,7 +7,6 @@ import {
   liveDocOf,
   liveProgress,
   liveStep,
-  type LiveDeck,
   type SlideProgressEvent,
 } from "../lib/generation/slide-progress.ts";
 import type { SlideModel } from "../lib/generation/slide-types.ts";
