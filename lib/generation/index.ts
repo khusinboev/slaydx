@@ -7,6 +7,7 @@ import { renderDocx } from "./render-docx";
 import { renderHtml } from "./render-html";
 import { renderPptx } from "./render-pptx";
 import { buildImageArtifact } from "./image-studio";
+import type { SlideProgressSink } from "./slide-progress";
 import { buildSlideAcademicDoc } from "./slide-write";
 import { pdfAvailable, toPdf } from "../server/pdf";
 import { scaleDoc } from "./scale";
@@ -84,6 +85,12 @@ export type BuildOptions = {
   deadline: number;
   /** Slayd logotipi — `data:` URL; worker `logo_uploads` dan o'qib beradi (WP-F). */
   logo?: string;
+  /**
+   * Jonli generatsiya hodisalari — F1b da IMZO qabul qilinadi va
+   * `buildSlideAcademicDoc` ga uzatiladi, lekin dvigatel ichida hali
+   * chaqirilmaydi (L2 paketi to'ldiradi).
+   */
+  onProgress?: SlideProgressSink;
 };
 
 export async function buildArtifact(
@@ -97,7 +104,7 @@ export async function buildArtifact(
   // `pro-slide` ham shu dvigatel — farqi `extractMeta` (slayder, brif) va
   // rasm provayderida (`pickProvider`), oqimda emas.
   if (tool.id === "slide" || tool.id === "pro-slide") {
-    const slideDoc = await buildSlideAcademicDoc(meta, deadline, { logo: opts.logo });
+    const slideDoc = await buildSlideAcademicDoc(meta, deadline, { logo: opts.logo, onProgress: opts.onProgress });
     const file = await renderPptx(slideDoc, `${meta.fileNameHint}.pptx`);
     file.html = renderHtml(slideDoc);
     file.doc = slideDoc;

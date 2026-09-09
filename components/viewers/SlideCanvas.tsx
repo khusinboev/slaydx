@@ -111,31 +111,48 @@ function LayerView({ layer }: { layer: SlideLayer }) {
   };
   if (layer.lines?.length) {
     return (
-      <div className="absolute" style={style}>
+      <div
+        className="absolute"
+        style={style}
+        data-layer="text"
+        data-src-list={layer.srcLines ? "1" : undefined}
+      >
         <ul
           className={layer.bullets ? "w-full list-disc pl-[1.15em]" : "w-full list-none"}
           style={{ margin: 0, paddingLeft: layer.bullets ? "1.15em" : 0 }}
         >
-          {layer.lines.map((line, i) => (
-            /*
-             * `paraSpace` PUNKTDA o'lchanadi — `fitLines` uni `box.h * 72`
-             * (punkt) byudjetiga qo'shadi va `render-pptx.ts` uni
-             * `paraSpaceAfter` ga punkt sifatida uzatadi. Bu yerda u xom
-             * son bo'lib CSS PIKSELIGA tushardi, ya'ni ko'ruvchi bandlar
-             * orasini faylga qaraganda ~25% tor chizardi — «ko'rdim =
-             * oldim» buzilishi. Yonidagi `fontSize` allaqachon `ptToPx`
-             * dan o'tadi.
-             */
-            <li key={`${i}-${line.slice(0, 24)}`} style={{ marginBottom: ptToPx(layer.paraSpace ?? 8) }}>
-              {line}
-            </li>
-          ))}
+          {layer.lines.map((line, i) => {
+            const lineSrc = layer.srcLines?.[i];
+            return (
+              /*
+               * `paraSpace` PUNKTDA o'lchanadi — `fitLines` uni `box.h * 72`
+               * (punkt) byudjetiga qo'shadi va `render-pptx.ts` uni
+               * `paraSpaceAfter` ga punkt sifatida uzatadi. Bu yerda u xom
+               * son bo'lib CSS PIKSELIGA tushardi, ya'ni ko'ruvchi bandlar
+               * orasini faylga qaraganda ~25% tor chizardi — «ko'rdim =
+               * oldim» buzilishi. Yonidagi `fontSize` allaqachon `ptToPx`
+               * dan o'tadi.
+               */
+              <li
+                key={`${i}-${line.slice(0, 24)}`}
+                style={{ marginBottom: ptToPx(layer.paraSpace ?? 8) }}
+                data-src={lineSrc ? JSON.stringify(lineSrc) : undefined}
+              >
+                {line}
+              </li>
+            );
+          })}
         </ul>
       </div>
     );
   }
   return (
-    <div className="absolute" style={style}>
+    <div
+      className="absolute"
+      style={style}
+      data-layer="text"
+      data-src={layer.src ? JSON.stringify(layer.src) : undefined}
+    >
       {layer.text}
     </div>
   );

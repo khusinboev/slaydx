@@ -1,7 +1,7 @@
 import { bodyRules, type BodyRules } from "./slide-audience";
 import { planAnswers, planQuiz, planReferences } from "./slide-layout-extra";
 import type { SlideAudience, SlideTemplateId, SlideVisual } from "./slide-templates";
-import type { SlideModel, SlideTheme } from "./slide-types";
+import type { SlideModel, SlideSrc, SlideTheme } from "./slide-types";
 
 /** Widescreen 16:9 in inches — same coordinate space as PPTX and the on-site viewer. */
 export const SLIDE_IN = { w: 13.333, h: 7.5 } as const;
@@ -57,6 +57,16 @@ export type SlideLayer =
       tracking?: number;
       uppercase?: boolean;
       font?: string;
+      /**
+       * Manba ko'rsatkichi — bu matn `SlideModel` ning qaysi maydonidan
+       * chizilgan (ko'ruvchida joyida tahrirlash uchun). PPTX RENDERER BU
+       * MAYDONNI O'QIMAYDI — faqat ko'ruvchi (`SlideCanvas`) o'qiydi.
+       * Dekorativ qatlamlar (raqam, «→», A/B/C/D, sahifa raqami) `src`siz
+       * qoladi — ular tahrirlanmaydi.
+       */
+      src?: SlideSrc;
+      /** `lines` qatlami uchun — har bir qator o'z manbasiga ega bo'lishi mumkin. */
+      srcLines?: SlideSrc[];
     };
 
 export type SlidePlan = { bg: string; layers: SlideLayer[] };
@@ -1585,7 +1595,7 @@ function planTwoCol(
  * Kimyoviy formula yoki matn bo'lsa `null` — bunday qiymat diagrammaga
  * tushmaydi va karta ko'rinishida qoladi.
  */
-function parseStatNumber(value: string): number | null {
+export function parseStatNumber(value: string): number | null {
   const t = value.replace(/\u00a0/g, " ").trim().toLowerCase();
   // Formula yoki kod: harf+raqam aralashmasi (C6H12O6) — son emas.
   if (/^[a-z]+\d/i.test(t)) return null;

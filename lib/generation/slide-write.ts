@@ -10,11 +10,12 @@ import { finalizeQuiz } from "./slide-quiz";
 import { attachSlideImages } from "./slide-images";
 import { SLIDE_MAX } from "./slide-params";
 import { deckJsonSchema, slideSystem, type SlidePromptCtx } from "./slide-prompt";
+import type { SlideProgressSink } from "./slide-progress";
 import { runSlideResearch } from "./slide-research";
 import { expandBeats, resolveSlideTemplate, type SlideBeat, type SlideTemplate } from "./slide-templates";
 import { getSlideTheme } from "./slide-themes";
 import { isSlideLayout, type SlideLayout, type SlideModel, type SlideThemeId } from "./slide-types";
-import type { AcademicDoc, DocMeta } from "./types";
+import type { AcademicDoc, DocMeta, DocSection } from "./types";
 
 /*
  * Slide Law: bir slaydda 3–4 tadan ortiq band bo'lmasin. Aniq chegara
@@ -454,7 +455,10 @@ export async function writeSlidesWithLlm(
   beats: SlideBeat[] = tpl.beats,
   deadline?: number,
   ctx: SlidePromptCtx = {},
+  // F1b: imzo tayyorlanadi, hali ISHLATILMAYDI — chaqiruv L2 paketida.
+  onProgress?: SlideProgressSink,
 ): Promise<SlideModel[] | null> {
+  void onProgress;
   if (!llmEnabled()) return null;
   const rules = bodyRules(meta, tpl.id);
   const plan = meta.titleSlide === false ? beats.filter((b) => b.layout !== "title") : beats;
@@ -735,7 +739,33 @@ export function resolveDeckTemplate(meta: DocMeta): SlideTemplate {
 export type SlideBuildOpts = {
   /** Logotip — `data:` URL (worker `logo_uploads` dan o'qiydi). */
   logo?: string;
+  /**
+   * Jonli generatsiya hodisalari — F1b da IMZO qabul qilinadi, lekin
+   * hali chaqirilmaydi (L2 paketi `buildSlideAcademicDoc` tartibini
+   * `plan`/`stage`/`slide`/`deck`/`images`/`image`/`done` bilan to'ldiradi).
+   */
+  onProgress?: SlideProgressSink;
 };
+
+/**
+ * `AcademicDoc.sections` — slayd hujjatlari uchun matn ko'rinishi (DOCX
+ * eksporti/qidiruv kabi joylar shu yerdan foydalanadi). Ilgari
+ * `buildSlideAcademicDoc` ichida bir martalik inline kod edi; endi
+ * ajratilgan — jonli reduktor (`liveDocOf`) ham xohlasa shu funksiyani
+ * chaqirishi mumkin bo'ladi (V1 da `sections: []` bilan chegaralangan).
+ */
+export function slideSections(slides: SlideModel[]): DocSection[] {
+  return slides
+    .filter((s) => s.layout !== "title" && s.layout !== "closing")
+    .map((s) => ({
+      id: s.id,
+      title: s.title,
+      blocks: (s.bullets?.length ? s.bullets : [s.subtitle || s.quote || s.title]).map((text) => ({
+        kind: "p" as const,
+        text,
+      })),
+    }));
+}
 
 export async function buildSlideAcademicDoc(meta: DocMeta, deadline?: number, opts: SlideBuildOpts = {}): Promise<AcademicDoc> {
   const themeId = (meta.slideTheme || "atlas") as SlideThemeId;
@@ -788,16 +818,7 @@ export async function buildSlideAcademicDoc(meta: DocMeta, deadline?: number, op
     premium: meta.premiumVisuals,
     meta,
   });
-  const sections = slides
-    .filter((s) => s.layout !== "title" && s.layout !== "closing")
-    .map((s) => ({
-      id: s.id,
-      title: s.title,
-      blocks: (s.bullets?.length ? s.bullets : [s.subtitle || s.quote || s.title]).map((text) => ({
-        kind: "p" as const,
-        text,
-      })),
-    }));
+  const sections = slideSections(slides);
   return {
     meta,
     titlePage: true,

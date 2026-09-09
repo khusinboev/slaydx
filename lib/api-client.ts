@@ -31,7 +31,12 @@ export function setUnauthorizedHandler(fn: () => void) {
   onUnauthorized = fn;
 }
 
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+/**
+ * `lib/api-edit.ts` (tahrir API funksiyalari) shu funksiyani qayta
+ * ishlatadi — ikkinchi `fetch` o'ramini yozmaslik uchun. Boshqa hech
+ * qanday funksiya bu faylga QO'SHILMAYDI (tahrir alohida faylda).
+ */
+export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   let res: Response;
   try {
     res = await fetch(path, {
@@ -224,6 +229,17 @@ export type ServerGeneration = Omit<Generation, "values" | "doc" | "html"> & {
   expiresAt: string | null;
   error: string | null;
   preview: GenerationPreview | null;
+  /**
+   * Tahrir/jonli ustunlari (F1 poydevor) — HAMMASI ixtiyoriy va standart
+   * bilan, eski server javoblari (ustunlar hali yo'q) buzilmasligi uchun.
+   * Haqiqiy qiymatlarni keyingi paketlar (`E4`/`L4`) to'ldiradi.
+   */
+  docVersion?: number;
+  fileVersion?: number;
+  imageRedraws?: number;
+  editedAt?: string | null;
+  liveSeq?: number;
+  live?: unknown | null;
 };
 
 export type GenerationDetail = ServerGeneration & {
