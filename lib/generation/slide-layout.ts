@@ -80,13 +80,65 @@ const RIGHT_IMG_X = 8.1;
 const LEFT_IMG_W = 5.15;
 const TEXT_GAP = 0.28;
 
+/**
+ * Rasm TASMASI — kontent maketlari uchun (AUDIT-9 E2).
+ *
+ * `twoCol`/`compare`/`stats`/`process`/`table` ilgari rasm KO'TARMASDI:
+ * pro slaydning «har slaydga rasm» va'dasi shu sababli ~60% da qolardi
+ * (`docs/AUDIT-9.md`, «Ochiq qolgan bandlar»). Bu maketlarga to'la
+ * ekranli kadr ham, yarim ekranli yon ustun ham to'g'ri kelmaydi —
+ * ularning mazmuni (ikki ustun, diagramma, kartalar oqimi, jadval)
+ * kenglikni yeydi. Shuning uchun O'NG chekkada TOR tasma: 3.4″ × to'la
+ * balandlik, `cover`.
+ *
+ * Kenglik nima uchun aynan 3.4: undan tor tasma «xato bilan qolgan
+ * chiziq»day ko'rinadi, kengrog'i esa 3 ustunli jadval yoki 4 kartali
+ * oqimni o'qib bo'lmas darajada siqadi. 3.4″ da matn zonasi 12.25″ dan
+ * 8.57″ ga tushadi — ya'ni to'rtdan uch qismi qoladi.
+ *
+ * `slotPixels(STRIP_BOX)` → 464×1024, `aspectFor` uni Gemini ning
+ * mavjud nisbatlaridan `9:16` ga tushiradi — ya'ni provayderdan darhol
+ * TIK kadr so'raladi va `cover` deyarli qirqmaydi.
+ */
+const STRIP_W = 3.4;
+const STRIP_X = W - STRIP_W;
+/** Tasma bo'lganda kontent zonasidan ayriladigan kenglik (tasma + nafas). */
+const STRIP_CUT = STRIP_W + TEXT_GAP;
+const STRIP_LAYOUTS = new Set(["twoCol", "compare", "stats", "process", "table"]);
+
+/** Tasma qutisi — `photoSlot` shuni qaytaradi, `pushStrip` shuni chizadi. */
+const STRIP_BOX: Box = { x: STRIP_X, y: 0, w: STRIP_W, h: H };
+
+/**
+ * Shu slaydda tasma bormi — va bo'lsa, kontent zonasi qancha torayadi.
+ *
+ * `s.image` YO'Q bo'lsa 0 qaytadi va maket AYNAN eskicha quriladi
+ * (paritet `tests/slide-image-strip.test.mts` da `JSON.stringify` bilan
+ * qulflangan). Ya'ni rasmsiz deka bu o'zgarishdan umuman xabar topmaydi.
+ */
+function stripCut(s: SlideModel): number {
+  return s.image?.url && STRIP_LAYOUTS.has(s.layout) ? STRIP_CUT : 0;
+}
+
 function usesPhoto(layout: string) {
-  return layout === "title" || layout === "section" || layout === "bullets" || layout === "agenda" || layout === "quote" || layout === "closing";
+  return (
+    layout === "title" ||
+    layout === "section" ||
+    layout === "bullets" ||
+    layout === "agenda" ||
+    layout === "quote" ||
+    layout === "closing" ||
+    STRIP_LAYOUTS.has(layout)
+  );
 }
 
 /** Inch box where a photo sits for this layout — used before the image exists. */
 export function photoSlot(layout: string, visual: SlideVisual = "classic"): Box | null {
   if (!usesPhoto(layout)) return null;
+  // Tasma `visual` ga bog'liq EMAS: uning butun ma'nosi kontent
+  // zonasini bir xil miqdorda toraytirishda, olti tarmoq esa shu
+  // zonaning ichini har xil chizadi.
+  if (STRIP_LAYOUTS.has(layout)) return { ...STRIP_BOX };
   if (layout === "quote" || layout === "closing") return { x: 0, y: 0, w: W, h: H };
   if (layout === "title") {
     if (visual === "magazine") return { x: 0, y: 0, w: W, h: H };
@@ -325,6 +377,33 @@ function photo(layers: SlideLayer[], url: string | undefined, box: Box, dim = 0)
   if (!url) return;
   layers.push({ t: "image", box, url });
   if (dim > 0) layers.push({ t: "rect", box, fill: { color: "#000000", alpha: dim } });
+}
+
+/**
+ * Kontent maketidagi rasm tasmasi — BITTA joyda (AUDIT-9 E2).
+ *
+ * `planSlide` da `dispatch` dan KEYIN chaqiriladi: shunda beshta maket
+ * funksiyasidan birortasi tasmani chizishni unuta olmaydi, ular faqat
+ * `stripCut(s)` ni zonadan ayirishlari kifoya. Qatlam tartibi ham shu
+ * sababdan to'g'ri chiqadi — tasma sahifa fonidan va `pushChrome` ning
+ * to'la kenglikdagi tasmasidan YUQORIDA, logotipdan esa PASTDA.
+ *
+ * Uch qatlam: (1) `titleBg` taglik — rasm shaffof/kichik bo'lsa ham
+ * tasma o'rni ko'rinadi; (2) rasmning o'zi (`cover`); (3) matn zonasi
+ * bilan orasidagi aksent choki. Chok `dense` (to'q sahifa) va
+ * `magazine` (oq sahifa) da tasmani sahifadan ajratib turadi — usiz
+ * to'q rasm to'q sahifaga, och rasm oq sahifaga qo'shilib ketardi.
+ */
+function pushStrip(plan: SlidePlan, s: SlideModel, theme: SlideTheme): void {
+  const url = s.image?.url;
+  if (!url || !stripCut(s)) return;
+  plan.layers.push({ t: "rect", box: { ...STRIP_BOX }, fill: { color: theme.titleBg } });
+  plan.layers.push({ t: "image", box: { ...STRIP_BOX }, url });
+  plan.layers.push({
+    t: "rect",
+    box: { x: STRIP_X - 0.07, y: 0, w: 0.07, h: H },
+    fill: { color: theme.accent },
+  });
 }
 
 function planTitle(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index: number, total: number): SlidePlan {
@@ -1300,7 +1379,11 @@ function planTwoCol(
     { head: s.rightTitle || "", lines: s.right ?? [] },
   ];
   const zoneX = M + 0.12;
-  const zoneW = 12.25;
+  // AUDIT-9 E2: rasm tasmasi bo'lsa oltala tarmoq ham SHU zonadan
+  // torayadi — tasma o'ng chekkada, `pushStrip` chizadi. Rasmsiz
+  // slaydda `cut` = 0, ya'ni koordinatalar aynan eskicha.
+  const cut = stripCut(s);
+  const zoneW = 12.25 - cut;
   const bottom = 6.85;
 
   // ── dense: himoya/hisobot. To'q sahifa, karta yo'q, qatorlar orasida
@@ -1373,7 +1456,7 @@ function planTwoCol(
   if (visual === "magazine") {
     layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.bg } });
     const x0 = 0.7;
-    const magW = W - 1.4;
+    const magW = W - 1.4 - cut;
     const titleBox: Box = { x: x0, y: 0.5, w: magW - ctx.reserve, h: 1.05 };
     layers.push({
       t: "text",
@@ -1466,7 +1549,7 @@ function planTwoCol(
       srcLines: lItems.map((_, r) => ({ f: "left", i: r })),
     });
     const rx = RIGHT_COL_X();
-    const rw = RIGHT_COL_W();
+    const rw = RIGHT_COL_W() - cut;
     layers.push({
       t: "text",
       box: { x: rx, y: 0.75, w: rw, h: 0.4 },
@@ -1501,7 +1584,7 @@ function planTwoCol(
   if (visual === "timeline") {
     layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.bg } });
     pushChrome(layers, theme, "full");
-    planHeading(layers, s, theme, 12.2, M + 0.18, ctx.reserve);
+    planHeading(layers, s, theme, 12.2 - cut, M + 0.18, ctx.reserve);
     const gap = 0.45;
     const colW = (zoneW - gap) / 2;
     const top = 1.5;
@@ -1548,7 +1631,7 @@ function planTwoCol(
         });
       });
     });
-    pushFooter(layers, s, theme, index, total, { x: M + 0.18, w: 12.2 }, false);
+    pushFooter(layers, s, theme, index, total, { x: M + 0.18, w: 12.2 - cut }, false);
     return { bg: theme.bg, layers };
   }
 
@@ -1557,7 +1640,7 @@ function planTwoCol(
   if (visual === "cards") {
     layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.bg } });
     pushChrome(layers, theme, "full");
-    planHeading(layers, s, theme, 12.2, M + 0.18, ctx.reserve);
+    planHeading(layers, s, theme, 12.2 - cut, M + 0.18, ctx.reserve);
     const gap = 0.34;
     const colW = (zoneW - gap) / 2;
     const top = 1.45;
@@ -1601,15 +1684,15 @@ function planTwoCol(
         });
       });
     });
-    pushFooter(layers, s, theme, index, total, { x: M + 0.18, w: 12.2 }, false);
+    pushFooter(layers, s, theme, index, total, { x: M + 0.18, w: 12.2 - cut }, false);
     return { bg: theme.bg, layers };
   }
 
   // ── classic: bazaviy ikki to'ldirilgan ustun.
   layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.bg } });
   pushChrome(layers, theme, "full");
-  planHeading(layers, s, theme, 12.2, M + 0.18, ctx.reserve);
-  const colW = 5.85;
+  planHeading(layers, s, theme, 12.2 - cut, M + 0.18, ctx.reserve);
+  const colW = 5.85 - cut / 2;
   const gap = 0.28;
   const y = 1.35;
   const h = 5.5;
@@ -1644,7 +1727,7 @@ function planTwoCol(
       srcLines: colLines.map((_, r) => ({ f: i ? "right" : "left", i: r })),
     });
   });
-  pushFooter(layers, s, theme, index, total, { x: M + 0.18, w: 12.2 }, false);
+  pushFooter(layers, s, theme, index, total, { x: M + 0.18, w: 12.2 - cut }, false);
   return { bg: theme.bg, layers };
 }
 
@@ -1708,13 +1791,25 @@ function planStatChart(
   layers: SlideLayer[],
   ink: string,
   dense: boolean,
+  /**
+   * Diagramma zonasining kengligi — rasm tasmasi bo'lsa toraygan
+   * (AUDIT-9 E2). Ilgari bu yerda qat'iy `12.25` turardi, ya'ni
+   * ustunlar tasma ostiga kirib ketardi.
+   */
+  zoneW: number,
 ): void {
   const max = Math.max(...items.map((x) => Math.abs(x.n)), 1);
-  const labelW = 3.6;
+  /*
+   * Yorliq ustuni ZONAGA mutanosib. Qat'iy 3.6″ toraygan zonaning
+   * uchdan ikkisini yeb qo'yar va ustunlarga 2.9″ qolar edi — ya'ni
+   * 2.5% va 95% bir xil ko'rinardi. To'la kenglikda `min` 3.6 ni
+   * saqlaydi (paritet).
+   */
+  const labelW = Math.min(3.6, zoneW * 0.34);
   const valueW = 1.5;
   const x0 = M + 0.18;
   const barX = x0 + labelW + 0.2;
-  const barMaxW = 12.25 - labelW - valueW - 0.6;
+  const barMaxW = zoneW - labelW - valueW - 0.6;
   const top = 1.75;
   const rowH = Math.min(1.15, (6.7 - top) / items.length);
 
@@ -1782,12 +1877,15 @@ function planStatChart(
 
 function planStats(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index: number, total: number, ctx: PlanCtx): SlidePlan {
   const layers: SlideLayer[] = [];
+  // AUDIT-9 E2 — rasm tasmasi bo'lsa sarlavha, diagramma va kartalar
+  // zonasi shuncha torayadi.
+  const cut = stripCut(s);
   const dense = visual === "dense";
   const bg = dense ? theme.titleBg : theme.bg;
   const ink = dense ? theme.titleText : theme.text;
   layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: bg } });
   if (!dense) pushChrome(layers, theme, "full");
-  const titleBox: Box = { x: M + 0.18, y: 0.36, w: 12.2 - ctx.reserve, h: 0.72 };
+  const titleBox: Box = { x: M + 0.18, y: 0.36, w: 12.2 - cut - ctx.reserve, h: 0.72 };
   layers.push({
     t: "text",
     box: titleBox,
@@ -1805,15 +1903,15 @@ function planStats(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
   // Diagramma faqat qiymatlar TAQQOSLANADIGAN bo'lsa (bir xil birlik).
   const oneUnit = new Set(numeric.map((x) => statUnit(x.value))).size <= 1;
   if (numeric.length >= 3 && numeric.length === items.length && oneUnit) {
-    planStatChart(s, theme, numeric, layers, ink, dense);
-    pushFooter(layers, s, theme, index, total, { x: M + 0.18, w: 12.2 }, dense);
+    planStatChart(s, theme, numeric, layers, ink, dense, 12.25 - cut);
+    pushFooter(layers, s, theme, index, total, { x: M + 0.18, w: 12.2 - cut }, dense);
     return { bg, layers };
   }
 
   const cards = items.slice(0, 4);
   const n = Math.max(1, cards.length);
   const gap = 0.22;
-  const colW = (12.25 - gap * (n - 1)) / n;
+  const colW = (12.25 - cut - gap * (n - 1)) / n;
   cards.forEach((st, i) => {
     const x = M + 0.18 + i * (colW + gap);
     layers.push({
@@ -1855,7 +1953,7 @@ function planStats(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
       src: { f: "stats", i, k: "label" },
     });
   });
-  pushFooter(layers, s, theme, index, total, { x: M + 0.18, w: 12.2 }, dense);
+  pushFooter(layers, s, theme, index, total, { x: M + 0.18, w: 12.2 - cut }, dense);
   return { bg, layers };
 }
 
@@ -1870,13 +1968,22 @@ function planStats(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
  */
 function planProcess(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index: number, total: number, ctx: PlanCtx): SlidePlan {
   const layers: SlideLayer[] = [];
+  // AUDIT-9 E2 — rasm tasmasi bo'lsa oqim zonasi torayadi.
+  const cut = stripCut(s);
   layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.bg } });
   pushChrome(layers, theme, "full");
-  planHeading(layers, s, theme, 12.2, M + 0.18, ctx.reserve);
+  planHeading(layers, s, theme, 12.2 - cut, M + 0.18, ctx.reserve);
 
   const items = (s.steps ?? []).slice(0, 6);
   const n = Math.max(1, items.length);
-  const twoRows = n > 4;
+  /*
+   * Bir qatorga sig'adigan karta soni ZONAGA bog'liq (AUDIT-9 E2).
+   * Toraygan zonada 4 ta karta 1.83″ ga tushar, matn 11 pt polida ham
+   * sig'masdi — 4 bosqich endi 2×2 ga bo'linadi. Rasmsiz slaydda
+   * chegara eskicha 4.
+   */
+  const maxPerRow = cut ? 3 : 4;
+  const twoRows = n > maxPerRow;
   const perRow = twoRows ? Math.ceil(n / 2) : n;
   const rowGap = 0.3;
   const totalH = 6.85 - 1.65;
@@ -1893,11 +2000,11 @@ function planProcess(s: SlideModel, theme: SlideTheme, visual: SlideVisual, inde
   const top = twoRows ? 1.65 : 1.65 + (totalH - rowH) / 2;
 
   if (visual === "timeline" && !twoRows) {
-    layers.push({ t: "rect", box: { x: M + 0.18, y: 1.42, w: 12.2, h: 0.07 }, fill: { color: theme.accent } });
+    layers.push({ t: "rect", box: { x: M + 0.18, y: 1.42, w: 12.2 - cut, h: 0.07 }, fill: { color: theme.accent } });
   }
 
   const gap = 0.42;
-  const zoneW = 12.25;
+  const zoneW = 12.25 - cut;
   const colW = (zoneW - gap * (perRow - 1)) / perRow;
 
   items.forEach((st, i) => {
@@ -1955,7 +2062,7 @@ function planProcess(s: SlideModel, theme: SlideTheme, visual: SlideVisual, inde
     }
   });
 
-  pushFooter(layers, s, theme, index, total, { x: M + 0.18, w: 12.2 }, false);
+  pushFooter(layers, s, theme, index, total, { x: M + 0.18, w: 12.2 - cut }, false);
   return { bg: theme.bg, layers };
 }
 
@@ -1993,9 +2100,11 @@ function planTable(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
   const ruleInk = dense ? theme.titleMuted : theme.muted;
 
   const layers: SlideLayer[] = [];
+  // AUDIT-9 E2 — rasm tasmasi bo'lsa jadval zonasi torayadi.
+  const cut = stripCut(s);
   layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: pageBg } });
   if (!dense) pushChrome(layers, theme, "full");
-  const headBox: Box = { x: M + 0.18, y: 0.3, w: 12.2 - ctx.reserve, h: 0.88 };
+  const headBox: Box = { x: M + 0.18, y: 0.3, w: 12.2 - cut - ctx.reserve, h: 0.88 };
   layers.push({
     t: "text",
     box: headBox,
@@ -2010,7 +2119,7 @@ function planTable(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
   const cols = Math.max(1, data.headers.length);
   const rows = data.rows.slice(0, 6);
   const x0 = M + 0.18;
-  const totalW = 12.25;
+  const totalW = 12.25 - cut;
   const colW = totalW / cols;
   const top = 1.55;
   const headH = 0.6;
@@ -2085,7 +2194,7 @@ function planTable(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
     }
   });
 
-  pushFooter(layers, s, theme, index, total, { x: x0, w: 12.2 }, dense);
+  pushFooter(layers, s, theme, index, total, { x: x0, w: 12.2 - cut }, dense);
   return { bg: pageBg, layers };
 }
 
@@ -2107,6 +2216,8 @@ export function planSlide(
   const bodyType = opts.bodyType ?? bodyRules({ slideAudience: audience, textVolume: "standart", planItems: 5 }, templateId);
   const ctx: PlanCtx = { bodyType, logo: opts.logo, reserve: opts.logo ? LOGO_RESERVE : 0 };
   const plan = dispatch(s, theme, visual, index, total, ctx);
+  // Tasma `dispatch` dan KEYIN, logotipdan OLDIN — qatlam tartibi shu.
+  pushStrip(plan, s, theme);
   if (ctx.logo) pushLogo(plan, s, theme, ctx.logo);
   applyFontOverrides(plan, s);
   return plan;
@@ -2172,7 +2283,17 @@ function dispatch(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index: 
  * `fit: "contain"` — rasm nisbati qanday bo'lmasin, kesilmaydi.
  */
 function pushLogo(plan: SlidePlan, s: SlideModel, theme: SlideTheme, url: string) {
-  const fullBleed = s.layout === "title" || s.layout === "section" || s.layout === "quote" || s.layout === "closing";
+  /*
+   * Logo o'ng yuqori burchakda (`LOGO_BOX.x` = 12.15) — ya'ni rasm
+   * TASMASI ustida (AUDIT-9 E2, tasma x ≥ 9.93). Shuning uchun tasmali
+   * slayd ham to'la ekranli maketlar kabi plashka oladi.
+   */
+  const fullBleed =
+    s.layout === "title" ||
+    s.layout === "section" ||
+    s.layout === "quote" ||
+    s.layout === "closing" ||
+    stripCut(s) > 0;
   if (fullBleed) {
     plan.layers.push({
       t: "rect",
@@ -2192,7 +2313,7 @@ function pushLogo(plan: SlidePlan, s: SlideModel, theme: SlideTheme, url: string
 export const LAYOUT_KIT = { planHeading, pushFooter, pushChrome, fitSize, fitLines, M, W, H };
 
 export function photoLayouts() {
-  return ["title", "section", "bullets", "agenda", "quote", "closing"] as const;
+  return ["title", "section", "bullets", "agenda", "quote", "closing", "twoCol", "compare", "stats", "process", "table"] as const;
 }
 
 /** Text boxes that must not collide with a side photo (used by tests / QA). */

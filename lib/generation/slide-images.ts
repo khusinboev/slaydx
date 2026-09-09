@@ -19,7 +19,28 @@ export type { FalFailure } from "./image-provider";
 
 export type ImageBytes = { data: string; type: "jpg" | "png"; w?: number; h?: number };
 
-const IMAGE_LAYOUTS = new Set(["title", "section", "bullets", "agenda", "quote", "closing"]);
+/*
+ * Rasm ko'taradigan maketlar — `photoSlot` bilan BIR XIL ro'yxat.
+ *
+ * AUDIT-9 E2 da beshtasi qo'shildi (`twoCol`, `compare`, `stats`,
+ * `process`, `table`): ular endi o'ng chekkada tor rasm TASMASI oladi.
+ * Shu bilan pro deka amalda «har slaydga rasm» va'dasiga chiqadi —
+ * ilgari faqat ~60% slaydda slot bor edi va yorliqda shu halol
+ * yozilgan edi (`docs/AUDIT-9.md`).
+ */
+const IMAGE_LAYOUTS = new Set([
+  "title",
+  "section",
+  "bullets",
+  "agenda",
+  "quote",
+  "closing",
+  "twoCol",
+  "compare",
+  "stats",
+  "process",
+  "table",
+]);
 
 /**
  * Rasm byudjeti paketga bog'liq.
