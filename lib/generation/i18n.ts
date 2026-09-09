@@ -526,6 +526,8 @@ export type SlideLabels = {
   goals: string;
   homework: string;
   practice: string;
+  /** Ko'ruvchida «+ Slayd» bilan qo'shilgan bo'sh slaydning sarlavhasi. */
+  newSlide: string;
 };
 
 const SLIDE_LABELS: Record<string, SlideLabels> = {
@@ -540,6 +542,7 @@ const SLIDE_LABELS: Record<string, SlideLabels> = {
     goals: "Maqsadlar",
     homework: "Uyga vazifa",
     practice: "Amaliyot",
+    newSlide: "Yangi slayd",
   },
   ru: {
     agenda: "План",
@@ -552,6 +555,7 @@ const SLIDE_LABELS: Record<string, SlideLabels> = {
     goals: "Цели",
     homework: "Домашнее задание",
     practice: "Практика",
+    newSlide: "Новый слайд",
   },
   en: {
     agenda: "Agenda",
@@ -564,6 +568,7 @@ const SLIDE_LABELS: Record<string, SlideLabels> = {
     goals: "Goals",
     homework: "Homework",
     practice: "Practice",
+    newSlide: "New slide",
   },
   kaa: {
     agenda: "Reje",
@@ -576,6 +581,7 @@ const SLIDE_LABELS: Record<string, SlideLabels> = {
     goals: "Maqsetler",
     homework: "Úy tapsırması",
     practice: "Ámeliyat",
+    newSlide: "Jańa slayd",
   },
   kk: {
     agenda: "Жоспар",
@@ -588,6 +594,7 @@ const SLIDE_LABELS: Record<string, SlideLabels> = {
     goals: "Мақсаттар",
     homework: "Үй тапсырмасы",
     practice: "Практика",
+    newSlide: "Жаңа слайд",
   },
   ky: {
     agenda: "План",
@@ -600,6 +607,7 @@ const SLIDE_LABELS: Record<string, SlideLabels> = {
     goals: "Максаттар",
     homework: "Үй тапшырмасы",
     practice: "Практика",
+    newSlide: "Жаңы слайд",
   },
   tg: {
     agenda: "Барномаи кор",
@@ -612,6 +620,7 @@ const SLIDE_LABELS: Record<string, SlideLabels> = {
     goals: "Ҳадафҳо",
     homework: "Вазифаи хонагӣ",
     practice: "Амалия",
+    newSlide: "Слайди нав",
   },
   tk: {
     agenda: "Meýilnama",
@@ -624,6 +633,7 @@ const SLIDE_LABELS: Record<string, SlideLabels> = {
     goals: "Maksatlar",
     homework: "Öý işi",
     practice: "Amaly iş",
+    newSlide: "Täze slaýd",
   },
   tr: {
     agenda: "Gündem",
@@ -636,6 +646,7 @@ const SLIDE_LABELS: Record<string, SlideLabels> = {
     goals: "Hedefler",
     homework: "Ödev",
     practice: "Uygulama",
+    newSlide: "Yeni slayt",
   },
   ar: {
     agenda: "جدول الأعمال",
@@ -648,6 +659,7 @@ const SLIDE_LABELS: Record<string, SlideLabels> = {
     goals: "الأهداف",
     homework: "الواجب المنزلي",
     practice: "التطبيق العملي",
+    newSlide: "شريحة جديدة",
   },
   de: {
     agenda: "Agenda",
@@ -660,6 +672,7 @@ const SLIDE_LABELS: Record<string, SlideLabels> = {
     goals: "Ziele",
     homework: "Hausaufgaben",
     practice: "Praxis",
+    newSlide: "Neue Folie",
   },
   fr: {
     agenda: "Ordre du jour",
@@ -672,6 +685,7 @@ const SLIDE_LABELS: Record<string, SlideLabels> = {
     goals: "Objectifs",
     homework: "Devoirs",
     practice: "Pratique",
+    newSlide: "Nouvelle diapositive",
   },
   es: {
     agenda: "Orden del día",
@@ -684,6 +698,7 @@ const SLIDE_LABELS: Record<string, SlideLabels> = {
     goals: "Objetivos",
     homework: "Tarea",
     practice: "Práctica",
+    newSlide: "Nueva diapositiva",
   },
   zh: {
     agenda: "议程",
@@ -696,6 +711,7 @@ const SLIDE_LABELS: Record<string, SlideLabels> = {
     goals: "目标",
     homework: "作业",
     practice: "实践",
+    newSlide: "新幻灯片",
   },
   ko: {
     agenda: "의제",
@@ -708,6 +724,7 @@ const SLIDE_LABELS: Record<string, SlideLabels> = {
     goals: "목표",
     homework: "과제",
     practice: "실습",
+    newSlide: "새 슬라이드",
   },
   ja: {
     agenda: "アジェンダ",
@@ -720,6 +737,7 @@ const SLIDE_LABELS: Record<string, SlideLabels> = {
     goals: "目標",
     homework: "宿題",
     practice: "実習",
+    newSlide: "新しいスライド",
   },
   it: {
     agenda: "Ordine del giorno",
@@ -732,6 +750,7 @@ const SLIDE_LABELS: Record<string, SlideLabels> = {
     goals: "Obiettivi",
     homework: "Compiti",
     practice: "Pratica",
+    newSlide: "Nuova diapositiva",
   },
   pt: {
     agenda: "Agenda",
@@ -744,6 +763,7 @@ const SLIDE_LABELS: Record<string, SlideLabels> = {
     goals: "Objetivos",
     homework: "Tarefa",
     practice: "Prática",
+    newSlide: "Novo slide",
   },
 };
 
