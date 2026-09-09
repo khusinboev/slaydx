@@ -7,6 +7,8 @@ import type { SlideModel, SlideTheme } from "@/lib/generation/slide-types";
 import { SLIDE } from "@/lib/viewers/metrics";
 import { cn } from "@/lib/cn";
 import { SlideCanvas } from "./SlideCanvas";
+import { SkeletonSlide } from "./SkeletonSlide";
+import { ImageWaitPlaque } from "./ImageWaitPlaque";
 
 export type SlideStageOverlayCtx = { index: number; scale: number; slide: SlideModel };
 
@@ -36,6 +38,10 @@ export function SlideStage({
   presenter,
   onAdvance,
   overlay,
+  skeleton = false,
+  role,
+  imageWait = false,
+  reveal,
 }: {
   slide?: SlideModel;
   theme: SlideTheme;
@@ -55,6 +61,14 @@ export function SlideStage({
   presenter: boolean;
   onAdvance?: () => void;
   overlay?: (ctx: SlideStageOverlayCtx) => ReactNode;
+  /** L5 jonli: bu slaydning matni hali yozilmagan → eskiz. */
+  skeleton?: boolean;
+  /** Skelet yorlig'i (`LiveDeck.roles[i]`). */
+  role?: string;
+  /** L5 jonli: rasm hali kelmagan → `photoSlot` qutisida plashka. */
+  imageWait?: boolean;
+  /** L5 jonli: `SlideCanvas` ga uzatiladigan matn ulushi (0..1). */
+  reveal?: number;
 }) {
   const stageRef = useRef<HTMLDivElement>(null);
   const [fitScale, setFitScale] = useState(0.6);
@@ -87,8 +101,17 @@ export function SlideStage({
           className="absolute top-0 left-0 overflow-hidden"
           style={{ width: SLIDE.w, height: SLIDE.h, transform: `scale(${scale})`, transformOrigin: "top left" }}
         >
-          {slide ? (
-            <SlideCanvas slide={slide} theme={theme} visual={visual} audience={audience} templateId={templateId} bodyType={bodyType} logo={logo} index={index} total={total} />
+          {slide && skeleton ? <SkeletonSlide theme={theme} role={role} index={index} /> : null}
+          {slide && !skeleton ? (
+            <SlideCanvas slide={slide} theme={theme} visual={visual} audience={audience} templateId={templateId} bodyType={bodyType} logo={logo} index={index} total={total} reveal={reveal} />
+          ) : null}
+          {/*
+            Jonli qatlam sahna ICHIDA, slayd bilan bir masshtabda —
+            `overlay` sloti tahrirlash paketiniki va u masshtabdan
+            tashqarida turadi.
+          */}
+          {slide && !skeleton && imageWait ? (
+            <ImageWaitPlaque layout={slide.layout} visual={visual} theme={theme} />
           ) : null}
         </div>
         {overlay && slide ? <div className="absolute inset-0">{overlay({ index, scale, slide })}</div> : null}

@@ -7,14 +7,17 @@ import type { SlideModel, SlideTheme } from "@/lib/generation/slide-types";
 import { SLIDE } from "@/lib/viewers/metrics";
 import { cn } from "@/lib/cn";
 import { SlideCanvas } from "./SlideCanvas";
+import { SkeletonSlide } from "./SkeletonSlide";
 
 /**
  * Eskiz paneli — F2 bo'linishida `SlideViewer.tsx` dan AYNAN 1:1
  * ko'chirildi (xatti-harakat o'zgarmagan).
  *
- * `roles` va `marks` — keyingi paketlar (jonli generatsiya: qaysi slayd
- * yozilmoqda/tayyor, kim nima ustida ishlayapti) uchun. Hozircha faqat
- * TIP — hech narsa chizmaydi.
+ * L5 da `roles`/`marks` JONLI shoxlarni yoqadi:
+ *  - `marks` BERILMASA hech narsa o'zgarmaydi (tayyor hujjat yo'li);
+ *  - berilsa, `marks[idx]` yo'q slayd hali yozilmagan → `SkeletonSlide`
+ *    va sarlavha o'rniga `roles[idx]`;
+ *  - `marks[idx] === "writing"` → «yozilmoqda» nuqtasi.
  */
 export function SlideRail({
   slides,
@@ -39,19 +42,17 @@ export function SlideRail({
   logo?: string;
   i: number;
   go: (n: number) => void;
-  /** Ixtiyoriy — hozircha ishlatilmaydi (faqat tip). */
+  /** Reja bergan slayd vazifalari — skelet eskizining yorlig'i. */
   roles?: string[];
-  /** Ixtiyoriy — hozircha ishlatilmaydi (faqat tip). */
+  /**
+   * Jonli belgilar. BERILMASA panel butunlay eskicha ishlaydi; berilsa,
+   * xaritada YO'Q indeks «hali yozilmagan» degani.
+   */
   marks?: Record<number, "writing" | "done">;
 }) {
   // Eskiz konteynerining haqiqiy kengligidan masshtab (ilgari qat'iy
   // 0.117 edi, ya'ni panel kengligi o'zgarsa eskiz ramkadan chiqib
   // ketardi).
-  // Hozircha faqat tip — jonli generatsiya paketi ularni chizishni
-  // ulaguncha ishlatilmaydi (no-op).
-  void roles;
-  void marks;
-
   const railRef = useRef<HTMLElement>(null);
   const [thumbScale, setThumbScale] = useState(0.117);
 
@@ -70,7 +71,16 @@ export function SlideRail({
 
   return (
     <aside ref={railRef} className="hidden w-[200px] shrink-0 overflow-y-auto border-r border-white/10 bg-[#171717] p-2 md:block">
-      {slides.map((s, idx) => (
+      {slides.map((s, idx) => {
+        const mark = marks?.[idx];
+        /*
+         * `marks` yo'q → tayyor hujjat, hamma eskiz haqiqiy. Bor bo'lsa
+         * FAQAT `done` haqiqiy matn: `writing` ham, belgisiz ham hali
+         * yozilmagan (reja bergan bo'sh `SlideModel`), farqi shundaki
+         * `writing` da nuqta yonadi.
+         */
+        const pending = marks !== undefined && mark !== "done";
+        return (
         <button
           key={s.id}
           type="button"
@@ -91,13 +101,35 @@ export function SlideRail({
                 className="absolute top-0 left-0"
                 style={{ width: SLIDE.w, height: SLIDE.h, transform: `scale(${thumbScale})`, transformOrigin: "top left" }}
               >
-                <SlideCanvas slide={s} theme={theme} visual={visual} audience={audience} templateId={templateId} bodyType={bodyType} logo={logo} index={idx} total={slides.length} />
+                {pending ? (
+                  <SkeletonSlide theme={theme} role={roles?.[idx]} index={idx} compact />
+                ) : (
+                  <SlideCanvas slide={s} theme={theme} visual={visual} audience={audience} templateId={templateId} bodyType={bodyType} logo={logo} index={idx} total={slides.length} />
+                )}
               </span>
             </span>
-            <span className="mt-1 block truncate text-[11px] text-white/70">{s.title}</span>
+            {/*
+              Jonli shox ALOHIDA: `marks` berilmagan holatda tugma
+              ostidagi sarlavha HTML'i bo'linishdan oldingi bilan
+              bayt-baytiga bir xil qolishi kerak
+              (`tests/viewer/slide-viewer-seams.test.mts`).
+            */}
+            {marks === undefined ? (
+              <span className="mt-1 block truncate text-[11px] text-white/70">{s.title}</span>
+            ) : (
+              <span className="mt-1 flex items-center gap-1 text-[11px] text-white/70">
+                {mark === "writing" ? (
+                  <span className="slx-typing inline-block size-1.5 shrink-0 rounded-full bg-emerald-400" aria-hidden="true" />
+                ) : null}
+                {/* Hali yozilmagan slaydda sarlavha ham yo'q — reja bergan
+                    vazifa («Kirish», «Xulosa») undan foydaliroq. */}
+                <span className="truncate">{pending ? (roles?.[idx] ?? "Kutilmoqda…") : s.title}</span>
+              </span>
+            )}
           </span>
         </button>
-      ))}
+        );
+      })}
     </aside>
   );
 }

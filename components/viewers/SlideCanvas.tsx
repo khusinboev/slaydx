@@ -13,6 +13,7 @@ import {
   type SlideLayer,
 } from "@/lib/generation/slide-layout";
 import { SLIDE } from "@/lib/viewers/metrics";
+import { clipLines, revealBudgets, totalChars } from "@/lib/viewers/reveal";
 
 export function SlideCanvas({
   slide,
@@ -24,6 +25,7 @@ export function SlideCanvas({
   templateId = "lecture",
   bodyType,
   logo,
+  reveal,
 }: {
   slide: SlideModel;
   theme: SlideTheme;
@@ -35,8 +37,21 @@ export function SlideCanvas({
   /** Deck darajasida (`buildSlideDeck`) — PPTX bilan bir xil qiymat. */
   bodyType?: BodyRules;
   logo?: string;
+  /**
+   * Jonli «yozilmoqda»: ko'rsatiladigan matn ULUSHI, 0..1.
+   *
+   * `undefined` — STANDART yo'l: HTML tayyor hujjatdagi bilan AYNAN bir
+   * xil chiziladi (`tests/viewer/parity.test.mts` va `live.test.mts`
+   * paritet sinovlari shuni qo'riqlaydi). Faqat qiymat berilgandagina
+   * matn qatlamlari kumulyativ byudjet bo'yicha qisqartiriladi; rasm va
+   * to'rtburchaklar hech qachon qisqarmaydi — sahifa «sakramaydi»,
+   * ustiga matn yozilaveradi.
+   */
+  reveal?: number;
 }) {
   const plan = planSlide(slide, theme, visual, index, total, audience, templateId, { bodyType, logo });
+  const budgets =
+    reveal === undefined ? null : revealBudgets(plan.layers, Math.max(0, Math.min(1, reveal)) * totalChars(plan.layers));
   return (
     <div
       className="relative overflow-hidden"
@@ -48,13 +63,13 @@ export function SlideCanvas({
       }}
     >
       {plan.layers.map((layer, i) => (
-        <LayerView key={i} layer={layer} />
+        <LayerView key={i} layer={layer} budget={budgets ? budgets[i] : undefined} />
       ))}
     </div>
   );
 }
 
-function LayerView({ layer }: { layer: SlideLayer }) {
+function LayerView({ layer, budget }: { layer: SlideLayer; budget?: number }) {
   const box = boxStyle(layer.box);
   if (layer.t === "rect") {
     return (
@@ -121,7 +136,16 @@ function LayerView({ layer }: { layer: SlideLayer }) {
           className={layer.bullets ? "w-full list-disc pl-[1.15em]" : "w-full list-none"}
           style={{ margin: 0, paddingLeft: layer.bullets ? "1.15em" : 0 }}
         >
-          {layer.lines.map((line, i) => {
+          {/*
+            `budget === undefined` — standart yo'l: massiv AYNAN eskicha
+            aylanadi (paritet). Byudjet berilganda esa qisqartirilgan
+            qatorlar ro'yxati, lekin `key`/`data-src` uchun ASL indeks
+            saqlanadi — yozilib bo'lgan qator qayta «tug'ilmaydi».
+          */}
+          {(budget === undefined
+            ? layer.lines.map((line, i) => ({ line, i }))
+            : clipLines(layer.lines, budget)
+          ).map(({ line, i }) => {
             const lineSrc = layer.srcLines?.[i];
             return (
               /*
@@ -153,7 +177,7 @@ function LayerView({ layer }: { layer: SlideLayer }) {
       data-layer="text"
       data-src={layer.src ? JSON.stringify(layer.src) : undefined}
     >
-      {layer.text}
+      {budget === undefined ? layer.text : (layer.text ?? "").slice(0, budget)}
     </div>
   );
 }
