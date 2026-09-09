@@ -31,7 +31,7 @@ export function SlideRail({
   go,
   roles,
   marks,
-  editOn = false,
+  reorderOn = false,
   onReorder,
 }: {
   slides: SlideModel[];
@@ -52,11 +52,12 @@ export function SlideRail({
    */
   marks?: Record<number, "writing" | "done">;
   /**
-   * E6 tahrir: eskizlarni sudrab tartibini o'zgartirish. `false` bo'lsa
-   * (standart) panel HTML i bo'linishdan oldingi bilan bir xil qoladi —
-   * `draggable` atributi ham qo'yilmaydi.
+   * Eskizlarni sudrab tartiblash. Tayyor dekada DOIM yoqiq (tahrir
+   * rejimi endi yo'q — AUDIT-10); `false` bo'lsa (tahrir mumkin
+   * bo'lmagan yoki jonli deka) panel HTML i bo'linishdan oldingi bilan
+   * bir xil qoladi — `draggable` atributi ham qo'yilmaydi.
    */
-  editOn?: boolean;
+  reorderOn?: boolean;
   /** Yangi tartib: `order[yangi] = eski` (`{op:"reorder"}` bilan bir xil). */
   onReorder?: (order: number[]) => void;
 }) {
@@ -86,11 +87,14 @@ export function SlideRail({
    */
   const dragRef = useRef<number | null>(null);
   const [over, setOver] = useState<number | null>(null);
+  // Sudralayotgan eskiz — o'zi xiralashadi, ya'ni «bu ko'chmoqda».
+  const [dragging, setDragging] = useState<number | null>(null);
 
   const drop = (to: number) => {
     const from = dragRef.current;
     dragRef.current = null;
     setOver(null);
+    setDragging(null);
     if (from == null || from === to) return;
     // `order[yangi] = eski` — `applyDocOps` aynan shunday o'qiydi
     // (`slides = order.map(n => slides[n])`).
@@ -115,18 +119,19 @@ export function SlideRail({
           key={s.id}
           type="button"
           onClick={() => go(idx)}
-          data-thumb-index={editOn ? idx : undefined}
-          draggable={editOn || undefined}
+          data-thumb-index={reorderOn ? idx : undefined}
+          draggable={reorderOn || undefined}
           onDragStart={
-            editOn
+            reorderOn
               ? (e) => {
                   dragRef.current = idx;
+                  setDragging(idx);
                   e.dataTransfer?.setData?.("text/plain", String(idx));
                 }
               : undefined
           }
           onDragOver={
-            editOn
+            reorderOn
               ? (e) => {
                   // `preventDefault` bo'lmasa brauzer tashlashga ruxsat bermaydi.
                   e.preventDefault();
@@ -135,7 +140,7 @@ export function SlideRail({
               : undefined
           }
           onDrop={
-            editOn
+            reorderOn
               ? (e) => {
                   e.preventDefault();
                   drop(idx);
@@ -143,19 +148,35 @@ export function SlideRail({
               : undefined
           }
           onDragEnd={
-            editOn
+            reorderOn
               ? () => {
                   dragRef.current = null;
                   setOver(null);
+                  setDragging(null);
                 }
               : undefined
           }
           className={cn(
             "mb-2 flex w-full gap-1.5 rounded-sm p-1 text-left",
             idx === i ? "bg-white/10" : "hover:bg-white/5",
-            editOn && over === idx && "outline-2 outline-sky-400",
+            reorderOn && "relative",
+            reorderOn && dragging === idx && "opacity-40",
           )}
         >
+          {/*
+            TASHLASH JOYI — ajratkich chiziq, ramka emas: foydalanuvchi
+            eskiz «qayerga tushishini» ko'rishi kerak, «qaysi eskiz
+            ustida turganini» emas. Yuqoriga sudralganda chiziq nishon
+            eskizning USTIDA, pastga sudralganda OSTIDA chiziladi —
+            `order.splice` aynan shu joyga qo'yadi.
+          */}
+          {reorderOn && over === idx && dragging !== null && dragging !== idx ? (
+            <span
+              aria-hidden="true"
+              className="absolute right-0 left-0 h-0.5 rounded-full bg-sky-400"
+              style={dragging > idx ? { top: -2 } : { bottom: 2 }}
+            />
+          ) : null}
           <span className="w-5 shrink-0 pt-6 text-right text-[11px] tabular-nums text-white/50">{idx + 1}</span>
           <span className="min-w-0 flex-1">
             <span

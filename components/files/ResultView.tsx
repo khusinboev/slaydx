@@ -35,6 +35,16 @@ export function ResultView({ id }: { id: string }) {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
+  /**
+   * Ko'ruvchida saqlanmagan tahrir soni.
+   *
+   * «Saqlash» tugmasi ko'ruvchining asboblar panelida (tahrir aynan
+   * o'sha yerda bo'ladi), lekin «Yuklab olish» SHU sarlavha qatorida —
+   * shuning uchun saqlanmagan o'zgarish borligi bu yerda ham aytiladi.
+   * Aks holda foydalanuvchi ekranda ko'rgan slaydni emas, oldingi
+   * faylni olib ketardi («ko'rdim = oldim» buzilardi).
+   */
+  const [unsaved, setUnsaved] = useState(0);
 
   useEffect(() => {
     if (!sessionChecked || !loggedIn) return;
@@ -155,7 +165,12 @@ export function ResultView({ id }: { id: string }) {
           </p>
         </div>
         {completed ? (
-          <div className="flex shrink-0 gap-2">
+          <div className="flex shrink-0 items-center gap-2">
+            {unsaved > 0 ? (
+              <span className="hidden text-xs text-amber-600 sm:inline">
+                Saqlanmagan o‘zgarish: {unsaved} — avval «Saqlash»
+              </span>
+            ) : null}
             {!expired ? (
             <button
               type="button"
@@ -285,6 +300,7 @@ export function ResultView({ id }: { id: string }) {
             gen={toLegacyShape(gen)}
             detail={gen}
             onDetail={(g) => setGen((prev) => ({ ...(prev as api.GenerationDetail), ...(g as api.GenerationDetail) }))}
+            onDirty={setUnsaved}
           />
         </div>
       ) : null}

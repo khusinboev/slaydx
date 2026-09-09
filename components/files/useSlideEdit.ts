@@ -11,20 +11,26 @@ import {
   uploadSlideImage,
 } from "@/lib/api-edit";
 import { applyDocOps, inverseOps, type DocOp } from "@/lib/generation/slide-edit";
-import { IMAGE_REDRAW_LIMIT, REBUILD_DEBOUNCE_MS, UNDO_DEPTH } from "@/lib/generation/slide-limits";
+import { IMAGE_REDRAW_LIMIT, UNDO_DEPTH } from "@/lib/generation/slide-limits";
 import type { AcademicDoc } from "@/lib/generation/types";
 
 /**
  * Ko'ruvchidagi tahrirning KLIENT OQIMI.
  *
  * Bitta qoida butun faylni tushuntiradi: **ekrandagi hujjat darhol
- * o'zgaradi, server keyin quvib yetadi**. Foydalanuvchi Enter bosgan
- * zahoti `applyDocOps` yangi `doc` beradi va `planSlide` uni qayta
- * chizadi (shrift o'zi qayta hisoblanadi) — tarmoqni kutish yo'q.
- * Operatsiyalar navbatga tushadi, 400 ms koalessiya oynasidan keyin
- * BITTA `PATCH` bo'lib ketadi va ayni paytda faqat BITTA so'rov uchadi
- * (ikkinchisi navbatda kutadi) — aks holda ikki `PATCH` bir xil
- * `baseVersion` bilan yo'lga chiqib, ikkinchisi 409 olardi.
+ * o'zgaradi, serverga esa FAQAT foydalanuvchi «Saqlash» deganda
+ * boriladi**. Foydalanuvchi Enter bosgan zahoti `applyDocOps` yangi
+ * `doc` beradi va `planSlide` uni qayta chizadi (shrift o'zi qayta
+ * hisoblanadi) — tarmoqni kutish yo'q.
+ *
+ * AVTOMATIK SAQLASH YO'Q (AUDIT-10 talabi). Ilgari har tahrir 400 ms
+ * dan keyin `PATCH`, undan 3 s keyin `rebuild` chaqirardi: bir necha
+ * so'z yozgan foydalanuvchi o'nlab PATCH va bir nechta PPTX qayta
+ * yasashni ishga tushirardi va «qachon saqlandi?» degan savolga javob
+ * yo'q edi. Endi operatsiyalar navbatda YIG'ILADI, `pending` ularning
+ * sonini beradi, `save()` esa hammasini BITTA `PATCH` bilan yuboradi va
+ * darhol `rebuild` qiladi. Sahifadan chiqishda saqlanmagan navbat
+ * bo'lsa brauzer ogohlantiradi (`beforeunload`).
  *
  * Serverdan kelgan `generation` — YAGONA haqiqat: uning `doc` i
  * optimistik nusxaning o'rniga qo'yiladi (server chegara bo'yicha
@@ -34,11 +40,6 @@ import type { AcademicDoc } from "@/lib/generation/types";
  * hujjat serverdan QAYTA YUKLANADI va undo/redo steklari tozalanadi:
  * eski stek endi boshqa hujjatga tegishli bo'lardi va Ctrl+Z boshqa
  * slaydni buzardi.
- *
- * PPTX qayta yasash alohida: oxirgi MUVAFFAQIYATLI PATCH dan
- * `REBUILD_DEBOUNCE_MS` keyin bitta `rebuild`. Foydalanuvchi shu
- * oraliqda «Yuklab olish» ni bossa `ensureFresh()` kutishni kesib
- * o'tadi.
  */
 
 /** Bitta undo qadami — oldinga va orqaga operatsiyalar juftligi. */
@@ -55,8 +56,8 @@ export type EditGen = {
   raw: Record<string, unknown>;
 };
 
-/** Operatsiyalarni navbatda ushlab turish oynasi (ms). */
-export const EDIT_COALESCE_MS = 400;
+/** «Saqlandi ✓» belgisining ko'rinish vaqti (ms). */
+export const SAVED_FLASH_MS = 2000;
 
 /**
  * `gen` propi `unknown` bo'lib keladi (ko'ruvchi uni sahifadan xom
@@ -90,20 +91,24 @@ function num(v: unknown): number {
 export type SlideEdit = {
   /** Ekranga chiziladigan hujjat — tahrir yoqilmagan bo'lsa ham optimistik nusxa. */
   doc: AcademicDoc | null;
-  /** Tahrir tugmasi ko'rinadimi (tayyor slayd dekasi + yangi format). */
+  /** Tahrir mumkinmi (tayyor slayd dekasi + yangi format). */
   editable: boolean;
   /** `doc.slides` yo'q — eski format, tahrir mumkin emas. */
   legacy: boolean;
-  editOn: boolean;
-  setEditOn: (v: boolean | ((v: boolean) => boolean)) => void;
   /** Operatsiyalarni qo'llaydi; `false` — mahalliy tekshiruv rad etdi (xato `error` da). */
   run: (ops: DocOp[]) => boolean;
   undo: () => void;
   redo: () => void;
   canUndo: boolean;
   canRedo: boolean;
-  /** PATCH uchayotgani yoki navbatda op borligi. */
+  /** SAQLANMAGAN operatsiyalar soni — «Saqlash (N o'zgarish)». */
+  pending: number;
+  /** Navbatdagi hamma operatsiyani bitta PATCH bilan yuboradi va PPTX ni yangilaydi. */
+  save: () => Promise<void>;
+  /** PATCH uchayotgani. */
   saving: boolean;
+  /** Endigina saqlandi — «Saqlandi ✓» ({@link SAVED_FLASH_MS} ms). */
+  justSaved: boolean;
   /** PPTX hujjatdan orqada (yoki qayta yasalmoqda). */
   stale: boolean;
   rebuilding: boolean;
@@ -120,15 +125,12 @@ export type SlideEdit = {
 export function useSlideEdit({
   gen,
   onGen,
-  coalesceMs = EDIT_COALESCE_MS,
-  rebuildMs = REBUILD_DEBOUNCE_MS,
+  savedFlashMs = SAVED_FLASH_MS,
 }: {
   gen?: unknown;
   onGen?: (g: unknown) => void;
-  /** Testlar uchun — standart 400 ms. */
-  coalesceMs?: number;
-  /** Testlar uchun — standart `REBUILD_DEBOUNCE_MS`. */
-  rebuildMs?: number;
+  /** Testlar uchun — standart {@link SAVED_FLASH_MS}. */
+  savedFlashMs?: number;
 }): SlideEdit {
   const g = useMemo(() => asEditGen(gen), [gen]);
   const genId = g?.id ?? "";
@@ -140,10 +142,13 @@ export function useSlideEdit({
   const [fileVersion, setFileVersion] = useState(g?.fileVersion ?? 0);
   const [redraws, setRedraws] = useState(g?.imageRedraws ?? 0);
   const [saving, setSaving] = useState(false);
+  const [justSaved, setJustSaved] = useState(false);
   const [rebuilding, setRebuilding] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [editOn, setEditOn] = useState(false);
-  // Steklar REF da (async oqim ularni ko'radi), uzunliklari holatda (render).
+  // Saqlanmagan operatsiyalar REF da (async oqim ularni ko'radi), soni holatda.
+  const queueRef = useRef<DocOp[]>([]);
+  const [pending, setPending] = useState(0);
+  // Steklar REF da, uzunliklari holatda (render).
   const undoRef = useRef<UndoEntry[]>([]);
   const redoRef = useRef<UndoEntry[]>([]);
   const [stacks, setStacks] = useState({ undo: 0, redo: 0 });
@@ -159,18 +164,15 @@ export function useSlideEdit({
   onGenRef.current = onGen;
   rawRef.current = g?.raw ?? rawRef.current;
 
-  const queueRef = useRef<DocOp[]>([]);
   const inflightRef = useRef<Promise<void> | null>(null);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const rebuildTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flashRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const aliveRef = useRef(true);
 
   useEffect(() => {
     aliveRef.current = true;
     return () => {
       aliveRef.current = false;
-      if (timerRef.current) clearTimeout(timerRef.current);
-      if (rebuildTimerRef.current) clearTimeout(rebuildTimerRef.current);
+      if (flashRef.current) clearTimeout(flashRef.current);
     };
   }, []);
 
@@ -210,6 +212,26 @@ export function useSlideEdit({
     }
   }, [g]);
 
+  /*
+   * Saqlanmagan tahrir bilan sahifadan chiqish — OGOHLANTIRISH.
+   *
+   * Avtomatik saqlash olib tashlangani uchun bu himoya majburiy:
+   * yopilgan yorliq bilan birga yigirma daqiqalik tahrir yo'qolardi.
+   * Navbat bo'sh bo'lsa tinglovchi umuman ulanmaydi — brauzer bekorga
+   * «chiqasizmi?» so'ramasin.
+   */
+  useEffect(() => {
+    if (!pending) return;
+    if (typeof window === "undefined") return;
+    const onLeave = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      // Eski brauzerlar uchun (matn ko'rsatilmaydi, faqat bayroq).
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onLeave);
+    return () => window.removeEventListener("beforeunload", onLeave);
+  }, [pending]);
+
   /** Serverdan qayta yuklaydi va steklarni tozalaydi (409 va boshqa xatolardan keyin). */
   const reload = useCallback(async () => {
     if (!genId) return;
@@ -244,58 +266,57 @@ export function useSlideEdit({
     }
   }, [genId]);
 
-  const scheduleRebuild = useCallback(() => {
-    if (rebuildTimerRef.current) clearTimeout(rebuildTimerRef.current);
-    rebuildTimerRef.current = setTimeout(() => {
-      rebuildTimerRef.current = null;
-      // Navbatda op bo'lsa rebuild kutadi — yarim saqlangan hujjatdan fayl yasalmasin.
-      if (queueRef.current.length || inflightRef.current) {
-        scheduleRebuild();
-        return;
-      }
-      void doRebuild();
-    }, rebuildMs);
-  }, [doRebuild, rebuildMs]);
-
-  /** Navbatdagi hamma operatsiyani BITTA so'rovda yuboradi. */
-  const flush = useCallback((): Promise<void> => {
-    if (inflightRef.current) return inflightRef.current;
+  /**
+   * «Saqlash» — navbatdagi HAMMA operatsiya bitta `PATCH` da, keyin
+   * `rebuild`. Bir vaqtda faqat bitta so'rov uchadi (ikkinchi bosish
+   * birinchisini kutadi), aks holda ikki PATCH bir xil `baseVersion`
+   * bilan yo'lga chiqib, ikkinchisi 409 olardi.
+   */
+  const save = useCallback(async (): Promise<void> => {
+    if (inflightRef.current) await inflightRef.current;
+    if (!genId) return;
     const ops = queueRef.current;
-    if (!ops.length || !genId) return Promise.resolve();
+    if (!ops.length) return;
     queueRef.current = [];
+    setPending(0);
     setSaving(true);
+    if (flashRef.current) clearTimeout(flashRef.current);
+    setJustSaved(false);
     const p = (async () => {
+      let ok = false;
       try {
         const { generation } = await patchGenerationDoc(genId, versionRef.current, ops);
         if (aliveRef.current) adopt(generation);
-        scheduleRebuild();
+        ok = true;
       } catch (e) {
         if (aliveRef.current) setError(editErrorText(e));
         // Server HECH NARSANI qo'llamagan (PATCH atomar) — navbat tashlanadi
         // va haqiqat serverdan qayta olinadi.
         queueRef.current = [];
+        setPending(0);
         await reload();
       } finally {
         inflightRef.current = null;
-        if (aliveRef.current) setSaving(queueRef.current.length > 0);
+        if (aliveRef.current) setSaving(false);
       }
-      if (queueRef.current.length) await flushRef.current();
+      if (!ok) return;
+      if (ok) return;
+      // PPTX darhol quvib yetadi: «Saqlash» dan keyin «Yuklab olish»
+      // eski faylni bermasligi kerak.
+      await doRebuild();
+      if (!aliveRef.current) return;
+      setJustSaved(true);
+      flashRef.current = setTimeout(() => {
+        flashRef.current = null;
+        if (aliveRef.current) setJustSaved(false);
+      }, savedFlashMs);
     })();
     inflightRef.current = p;
-    return p;
-  }, [genId, adopt, reload, scheduleRebuild]);
+    await p;
+  }, [genId, adopt, reload, doRebuild, savedFlashMs]);
 
-  // `flush` o'zini rekursiv chaqiradi — ref orqali (halqa bo'lmasin).
-  const flushRef = useRef(flush);
-  flushRef.current = flush;
-
-  const schedule = useCallback(() => {
-    if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => {
-      timerRef.current = null;
-      void flushRef.current();
-    }, coalesceMs);
-  }, [coalesceMs]);
+  const saveRef = useRef(save);
+  saveRef.current = save;
 
   /** Optimistik qo'llash + navbatga qo'shish. Stek juftligi chaqiruvchida hal qilinadi. */
   const push = useCallback(
@@ -322,12 +343,12 @@ export function useSlideEdit({
       }
       bump();
       queueRef.current.push(...ops);
+      setPending(queueRef.current.length);
       setError(null);
-      setSaving(true);
-      schedule();
+      setJustSaved(false);
       return true;
     },
-    [genId, bump, schedule],
+    [genId, bump],
   );
 
   const run = useCallback((ops: DocOp[]) => push(ops, "new"), [push]);
@@ -349,34 +370,15 @@ export function useSlideEdit({
     bump();
   }, [push, bump]);
 
-  /** Kutayotgan hamma narsani darhol yuboradi (taymerlarni kesib). */
-  const flushNow = useCallback(async () => {
-    if (timerRef.current) {
-      clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
-    // Navbat bo'shab, uchayotgan so'rov tugaguncha — ikkinchi aylanish
-    // birinchisi paytida qo'shilgan operatsiyalarni ham oladi.
-    for (let i = 0; i < 8; i++) {
-      if (inflightRef.current) await inflightRef.current;
-      if (!queueRef.current.length) break;
-      await flushRef.current();
-    }
-  }, []);
-
   const ensureFresh = useCallback(async () => {
-    await flushNow();
-    if (rebuildTimerRef.current) {
-      clearTimeout(rebuildTimerRef.current);
-      rebuildTimerRef.current = null;
-    }
+    await saveRef.current();
     await doRebuild();
-  }, [flushNow, doRebuild]);
+  }, [doRebuild]);
 
   /*
    * Rasm operatsiyalari SERVERDA bajariladi (bayt yuklash, provayder
    * chaqiruvi) — optimistik nusxa yo'q. Ular hujjat versiyasini
-   * o'zgartirgani uchun avval navbat bo'shatiladi, keyin steklar
+   * o'zgartirgani uchun avval navbat SAQLANADI, keyin steklar
    * tozalanadi: undo eski slaydni qaytarsa yangi rasm jim yo'qolardi.
    */
   const afterImage = useCallback(
@@ -385,15 +387,14 @@ export function useSlideEdit({
       undoRef.current = [];
       redoRef.current = [];
       bump();
-      scheduleRebuild();
     },
-    [adopt, bump, scheduleRebuild],
+    [adopt, bump],
   );
 
   const uploadImage = useCallback(
     async (index: number, file: File) => {
       if (!genId) return;
-      await flushNow();
+      await saveRef.current();
       setSaving(true);
       try {
         const { generation } = await uploadSlideImage(genId, index, file, versionRef.current);
@@ -405,13 +406,13 @@ export function useSlideEdit({
         if (aliveRef.current) setSaving(false);
       }
     },
-    [genId, flushNow, afterImage, reload],
+    [genId, afterImage, reload],
   );
 
   const regenerateImage = useCallback(
     async (index: number, hint?: string) => {
       if (!genId) return;
-      await flushNow();
+      await saveRef.current();
       setSaving(true);
       try {
         const { generation } = await regenerateSlideImage(genId, index, versionRef.current, hint);
@@ -423,21 +424,22 @@ export function useSlideEdit({
         if (aliveRef.current) setSaving(false);
       }
     },
-    [genId, flushNow, afterImage, reload],
+    [genId, afterImage, reload],
   );
 
   return {
     doc: doc ?? g?.doc ?? null,
     editable,
     legacy,
-    editOn: editOn && editable,
-    setEditOn,
     run,
     undo,
     redo,
     canUndo: stacks.undo > 0,
     canRedo: stacks.redo > 0,
+    pending,
+    save,
     saving,
+    justSaved,
     stale: fileVersion < version,
     rebuilding,
     error,

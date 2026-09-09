@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Maximize2, Minimize2, Pause, Pencil, Play, Plus, Presentation, RotateCcw, StickyNote, Trash2, X } from "lucide-react";
+import { Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Maximize2, Minimize2, Pause, Play, Plus, Presentation, RotateCcw, Save, StickyNote, Trash2, X } from "lucide-react";
 import type { AcademicDoc } from "@/lib/generation/types";
 import { slideNotes } from "@/lib/generation/slide-layout";
 import { canConvert } from "@/lib/generation/slide-edit";
@@ -89,6 +89,7 @@ export function SlideViewer({
   overlay,
   gen,
   onGen,
+  onDirty,
 }: {
   doc: AcademicDoc;
   /**
@@ -106,6 +107,14 @@ export function SlideViewer({
   gen?: unknown;
   /** Tahrirdan keyin yangilangan generatsiya — sahifa holatiga qaytariladi. */
   onGen?: (g: unknown) => void;
+  /**
+   * SAQLANMAGAN operatsiyalar soni — sahifa sarlavhasiga.
+   *
+   * Saqlash tugmasi ko'ruvchining o'zida, lekin «Yuklab olish» yuqorida
+   * turadi: sahifa saqlanmagan tahrir borligini bilmasa, foydalanuvchi
+   * ekranda ko'rgan slaydni EMAS, eski faylni yuklab ketardi.
+   */
+  onDirty?: (n: number) => void;
 }) {
   const ed = useSlideEdit({ gen, onGen });
   /*
@@ -256,16 +265,25 @@ export function SlideViewer({
   /*
    * ═══ E6 TAHRIR ═══
    *
-   * Tahrir rejimi taqdimotda va jonli generatsiyada O'CHIQ: birinchisida
-   * ekranda tinglovchi bor, ikkinchisida hujjat hali serverda yozilmoqda
-   * (`doc_json` yakuniy emas — PATCH ustidan yozib yuborardi).
+   * Tahrir TUGMASI YO'Q — tayyor dekada u DOIM yoqiq (AUDIT-10):
+   * foydalanuvchi matn ustiga ikki marta bosadi va yozadi, «rejimga
+   * kirish» degan oraliq qadam yo'q. Faqat ikki holatda o'chadi:
+   * taqdimotda (ekranda tinglovchi bor) va jonli generatsiyada (hujjat
+   * hali serverda yozilmoqda — PATCH uni ustidan yozib yuborardi).
    */
-  const editOn = ed.editOn && !present && !lv;
-  const { run: runOps, undo, redo } = ed;
+  const editOn = ed.editable && !present && !lv;
+  const { run: runOps, undo, redo, save, pending } = ed;
 
   const onText = useCallback(
     (src: SlideSrc, value: string) => {
       runOps([{ op: "text", index: i, src, value }]);
+    },
+    [runOps, i],
+  );
+  /** Shrift o'lchami — matndan ALOHIDA op (`null` — «Standart»). */
+  const onStyle = useCallback(
+    (src: SlideSrc, size: number | null) => {
+      runOps([{ op: "style", index: i, src, size }]);
     },
     [runOps, i],
   );
@@ -333,6 +351,31 @@ export function SlideViewer({
     },
     [editOn, undo, redo],
   );
+
+  const onDirtyRef = useRef(onDirty);
+  onDirtyRef.current = onDirty;
+  useEffect(() => {
+    onDirtyRef.current?.(editOn ? pending : 0);
+  }, [pending, editOn]);
+
+  /*
+   * Ctrl+S — «Saqlash» ning klaviatura yo'li.
+   *
+   * `useSlideKeys` dan ALOHIDA tinglanadi, chunki u INPUT/TEXTAREA
+   * ichida umuman ishlamaydi: matn yozib turib Ctrl+S bosish esa aynan
+   * eng kerakli payt. Brauzerning «sahifani saqlash» oynasi ham
+   * to'xtatiladi.
+   */
+  useEffect(() => {
+    if (!editOn) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== "s") return;
+      e.preventDefault();
+      if (pending > 0) void save();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [editOn, save, pending]);
 
   useSlideKeys({
     go,
@@ -434,20 +477,10 @@ export function SlideViewer({
               </button>
               )}
 
-              {/* ═══ E6: tahrir boshqaruvi ═══ */}
-              {ed.editable && !lv ? (
-                <button
-                  type="button"
-                  className={cn(
-                    "hover:bg-white/10 inline-flex items-center gap-1 rounded px-2 py-1 text-xs",
-                    editOn && "bg-white/15",
-                  )}
-                  onClick={() => ed.setEditOn((v) => !v)}
-                >
-                  <Pencil className="size-3.5" />
-                  Tahrirlash
-                </button>
-              ) : null}
+              {/* ═══ E6: tahrir boshqaruvi ═══
+                  «Tahrirlash» TUGMASI YO'Q: tayyor dekada tahrir doim
+                  yoqiq, shuning uchun bu yerda faqat slayd ustidagi
+                  amallar turadi. */}
               {ed.legacy && !lv ? (
                 <span className="text-xs text-white/40">
                   Bu deka eski formatda — tahrirlab bo‘lmaydi
@@ -521,6 +554,38 @@ export function SlideViewer({
               <span className="hidden text-xs text-white/50 lg:inline">
                 {SLIDE_TEMPLATE_BY_ID[deck.templateId]?.nameUz ?? deck.templateId} · {theme.nameUz}
               </span>
+
+              {/*
+                «Saqlash» — o'ng chekkada, o'zgarish BO'LGANDA.
+                Avtomatik PATCH olib tashlangani uchun bu tugma yagona
+                yo'l: unda nechta o'zgarish kutayotgani yozilgan, bosilsa
+                hammasi bitta so'rovda ketadi va PPTX qayta yasaladi.
+                Ko'ruvchi asboblar paneli tanlandi (`ResultView` sarlavha
+                qatori emas): tahrir holati shu komponentda yashaydi va
+                tugma tahrir qilinayotgan joyning O'ZIDA, «Yuklab olish»
+                esa hujjat darajasidagi amal bo'lib yuqorida qoladi.
+              */}
+              {editOn && pending > 0 ? (
+                <button
+                  type="button"
+                  title="Saqlash (Ctrl+S)"
+                  disabled={ed.saving}
+                  className="inline-flex items-center gap-1 rounded bg-sky-500 px-2 py-1 text-xs font-medium text-white hover:bg-sky-400 disabled:opacity-60"
+                  onClick={() => void save()}
+                >
+                  <Save className="size-3.5" />
+                  {ed.saving ? "Saqlanmoqda…" : `Saqlash (${pending} o‘zgarish)`}
+                </button>
+              ) : null}
+              {editOn && pending === 0 && ed.saving ? (
+                <span className="text-xs text-white/60">Saqlanmoqda…</span>
+              ) : null}
+              {editOn && pending === 0 && !ed.saving && ed.justSaved ? (
+                <span className="inline-flex items-center gap-1 text-xs text-emerald-300">
+                  <Check className="size-3.5" />
+                  Saqlandi
+                </span>
+              ) : null}
             </>
           }
         />
@@ -540,7 +605,7 @@ export function SlideViewer({
             go={lv ? railGo : go}
             roles={lv?.roles}
             marks={marks}
-            editOn={editOn}
+            reorderOn={editOn}
             onReorder={onReorder}
           />
         ) : null}
@@ -585,6 +650,7 @@ export function SlideViewer({
                       redrawsLeft={ed.redrawsLeft}
                       busy={ed.saving}
                       onText={onText}
+                      onStyle={onStyle}
                       onImage={onSlideImage}
                       onUpload={(f) => void ed.uploadImage(ctx.index, f)}
                       onRegenerate={() => void ed.regenerateImage(ctx.index)}
@@ -615,8 +681,10 @@ export function SlideViewer({
                   saqlanmoqdami yoki PPTX hali eski. */}
               {ed.saving ? (
                 <span className="ml-3 shrink-0 text-white/50">Saqlanmoqda…</span>
-              ) : ed.rebuilding || (editOn && ed.stale) ? (
+              ) : ed.rebuilding ? (
                 <span className="ml-3 shrink-0 text-white/50">Fayl yangilanmoqda…</span>
+              ) : editOn && pending > 0 ? (
+                <span className="ml-3 shrink-0 text-amber-300/80">Saqlanmagan o‘zgarish: {pending}</span>
               ) : null}
               {ed.error ? (
                 <span role="alert" className="ml-3 min-w-0 truncate text-amber-300">
