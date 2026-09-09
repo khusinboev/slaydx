@@ -42,9 +42,8 @@ export const UI_LOCALES = [
 ] as const;
 
 export const THEME_OPTIONS = [
-  { value: "light", label: "Yorug'" },
-  { value: "dark", label: "Qorong'i" },
-  { value: "system", label: "Tizim" },
+  { value: "light", label: "Kun" },
+  { value: "dark", label: "Tun" },
 ] as const;
 
 export const FILE_FILTERS = [

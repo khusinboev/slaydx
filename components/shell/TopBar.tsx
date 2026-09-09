@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Bell, Moon, PanelLeft, Search, Sun, SunMoon } from "lucide-react";
+import { Bell, Moon, PanelLeft, Search, Sun } from "lucide-react";
 import { useAppStore } from "@/lib/store";
 import { THEME_OPTIONS, UI_LOCALES, useUi } from "@/lib/ui";
 import { cn } from "@/lib/cn";
@@ -19,19 +19,18 @@ export function TopBar({ onMenu }: { onMenu: () => void }) {
   const currentLocale = UI_LOCALES.find((l) => l.value === locale) ?? UI_LOCALES[0];
 
   /**
-   * Mavzu tugmasi menyu ochmaydi — bosilganda navbatdagi rejimga o'tadi:
-   * yorug' → qorong'i → tizim → yorug'.
+   * Mavzu tugmasi menyu ochmaydi — bosilganda ikkinchi rejimga o'tadi:
+   * Kun → Tun → Kun. «Tizim» rejimi olib tashlandi (WP5) — endi faqat
+   * ikkita mavzu bor, OS afzalligi FAQAT birinchi tashrifda bir marta
+   * o'qiladi (`resolveOsTheme`, `lib/store.ts`).
    *
-   * Ikonka HOZIRGI REJIMNI ko'rsatadi, hal qilingan rangni emas: ilgari
-   * quyosh/oy `dark` klassiga qarab almashardi, ya'ni «tizim» rejimi
-   * umuman ko'rinmasdi — foydalanuvchi qaysi rejimda ekanini bilmasdi.
-   * «Tizim» uchun yarim quyosh-oy ikonkasi.
+   * Ikonka HOZIRGI REJIMNI ko'rsatadi: Sun — Kun, Moon — Tun.
    */
   const themeIndex = Math.max(0, THEME_OPTIONS.findIndex((t) => t.value === theme));
   const nextTheme = THEME_OPTIONS[(themeIndex + 1) % THEME_OPTIONS.length].value;
   const themeLabel = THEME_OPTIONS[themeIndex].label;
   const nextLabel = THEME_OPTIONS[(themeIndex + 1) % THEME_OPTIONS.length].label;
-  const ThemeIcon = theme === "light" ? Sun : theme === "dark" ? Moon : SunMoon;
+  const ThemeIcon = theme === "dark" ? Moon : Sun;
 
   return (
     <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border/60 bg-[var(--page-bg)] px-3">

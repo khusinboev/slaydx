@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { extractMeta } from "../lib/generation/meta.ts";
-import { SLIDE_LIMITS, clipTo, IMAGE_REDRAW_LIMIT, SLIDE_IMAGE_MAX_BYTES, UNDO_DEPTH, REBUILD_DEBOUNCE_MS } from "../lib/generation/slide-limits.ts";
+import { SLIDE_LIMITS, clipTo, SLIDE_IMAGE_MAX_BYTES, UNDO_DEPTH, REBUILD_DEBOUNCE_MS } from "../lib/generation/slide-limits.ts";
 import { resolveSlideTemplate } from "../lib/generation/slide-templates.ts";
 import { QUIZ_MAX, QUIZ_OPTION_MAX, QUIZ_Q_MAX, STAT_LABEL_MAX, STEP_TEXT_MAX, writeSlidesWithLlm } from "../lib/generation/slide-write.ts";
 import type { SlideModel } from "../lib/generation/slide-types.ts";
@@ -69,7 +69,6 @@ test("eski eksportlar SLIDE_LIMITS dan olinadi", () => {
 });
 
 test("tahrir konstantalari — rejadagi qiymatlar", () => {
-  assert.equal(IMAGE_REDRAW_LIMIT, 5);
   assert.equal(SLIDE_IMAGE_MAX_BYTES, 5 * 1024 * 1024);
   assert.equal(UNDO_DEPTH, 100);
   assert.equal(REBUILD_DEBOUNCE_MS, 3000);

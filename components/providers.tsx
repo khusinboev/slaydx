@@ -30,13 +30,5 @@ export function Providers({ children }: { children: React.ReactNode }) {
     document.documentElement.setAttribute("dir", dir);
   }, [theme, dir, hydrated]);
 
-  useEffect(() => {
-    if (theme !== "system") return;
-    const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    const onChange = () => applyTheme("system");
-    mq.addEventListener("change", onChange);
-    return () => mq.removeEventListener("change", onChange);
-  }, [theme]);
-
   return children;
 }

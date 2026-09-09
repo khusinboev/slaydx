@@ -6,7 +6,7 @@ import * as api from "./api-client";
 import type { Features, ServerGeneration, ServerUser } from "./api-client";
 import type { UserProfile } from "./types";
 
-export type ThemeMode = "light" | "dark" | "system";
+export type ThemeMode = "light" | "dark";
 
 /**
  * Klient holati.
@@ -63,12 +63,38 @@ api.setUnauthorizedHandler(() => {
   });
 });
 
+/**
+ * OS afzalligini BIR MARTA o'qiydi (birinchi tashrifda standart qiymat
+ * uchun). SSR xavfsiz — `window`/`matchMedia` yo'q bo'lsa "light".
+ */
+export function resolveOsTheme(): ThemeMode {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return "light";
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
 export function applyTheme(theme: ThemeMode) {
   if (typeof document === "undefined") return;
-  const dark =
-    theme === "dark" ||
-    (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
-  document.documentElement.classList.toggle("dark", dark);
+  document.documentElement.classList.toggle("dark", theme === "dark");
+}
+
+/**
+ * `persist` `migrate`: eski `"system"` (yoki umuman noma'lum/yo'q)
+ * qiymatni bir martalik OS o'qishga aylantiradi. FAQAT localStorage'da
+ * eski (version < 2) yozuv bo'lsa chaqiriladi — yangi tashrifchi uchun
+ * (hech narsa saqlanmagan) `persist` bu funksiyani chaqirMAYDI, o'sha
+ * holat `onRehydrateStorage`da alohida qopqonlanadi (pastda).
+ */
+export function migrateUiPrefs(persisted: unknown): { theme: ThemeMode; locale?: string; dir?: "ltr" | "rtl" } {
+  const p = (persisted ?? {}) as { theme?: unknown; locale?: unknown; dir?: unknown };
+  const theme: ThemeMode = p.theme === "light" || p.theme === "dark" ? p.theme : resolveOsTheme();
+  // `undefined` KIRITILMAYDI (faqat haqiqiy qiymat bo'lsa maydon
+  // qo'shiladi) — `persist`ning standart merge'i sayoz (`{...state,
+  // ...persisted}`), aks holda noto'g'ri `locale: undefined` joriy
+  // holatdagi "uz"ni bosib yozardi.
+  const out: { theme: ThemeMode; locale?: string; dir?: "ltr" | "rtl" } = { theme };
+  if (typeof p.locale === "string") out.locale = p.locale;
+  if (p.dir === "rtl" || p.dir === "ltr") out.dir = p.dir;
+  return out;
 }
 
 export const useAppStore = create<AppState>()(
@@ -81,7 +107,10 @@ export const useAppStore = create<AppState>()(
       features: null,
       generations: [],
       generationsLoaded: false,
-      theme: "system",
+      // SSR uchun joy egallovchi — haqiqiy qiymat `onRehydrateStorage`da
+      // (birinchi tashrif → OS afzalligi) yoki `migrate`da (eski "system"
+      // → OS afzalligi) o'rnatiladi.
+      theme: "light",
       locale: "uz",
       dir: "ltr",
 
@@ -145,9 +174,10 @@ export const useAppStore = create<AppState>()(
         set({ dir });
       },
       resetUiPrefs: () => {
-        applyTheme("system");
+        const theme = resolveOsTheme();
+        applyTheme(theme);
         if (typeof document !== "undefined") document.documentElement.setAttribute("dir", "ltr");
-        set({ theme: "system", locale: "uz", dir: "ltr" });
+        set({ theme, locale: "uz", dir: "ltr" });
       },
     }),
     {
@@ -156,13 +186,28 @@ export const useAppStore = create<AppState>()(
       // localStorage ga yozilmaydi — u yerda kvota ~5 MB va ma'lumot
       // qurilmada qolib ketardi.
       partialize: (s) => ({ theme: s.theme, locale: s.locale, dir: s.dir }),
+      version: 2,
+      // Eski (`version < 2`, `"system"` yoki maydon yo'q) yozuvlarni
+      // bir martalik OS o'qishiga aylantiradi (`migrateUiPrefs`).
+      migrate: (persisted) => migrateUiPrefs(persisted),
       onRehydrateStorage: () => (state) => {
         if (!state) return;
         state.hydrated = true;
-        if (typeof document !== "undefined") {
-          applyTheme(state.theme);
-          document.documentElement.setAttribute("dir", state.dir ?? "ltr");
+        if (typeof window === "undefined" || typeof document === "undefined") return;
+        // Birinchi tashrif — localStorage'da HECH NARSA yo'q (`migrate`
+        // bu holatda umuman chaqirilmaydi, zustand'ning o'zi shunday
+        // ishlaydi) — standart qiymatni OS afzalligidan olamiz.
+        let raw: string | null = null;
+        try {
+          raw = window.localStorage.getItem("slaydx-ui");
+        } catch {
+          raw = null;
         }
+        if (raw === null || (state.theme !== "light" && state.theme !== "dark")) {
+          state.theme = resolveOsTheme();
+        }
+        applyTheme(state.theme);
+        document.documentElement.setAttribute("dir", state.dir ?? "ltr");
       },
     },
   ),
