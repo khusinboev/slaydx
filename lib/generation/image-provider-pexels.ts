@@ -43,8 +43,8 @@ export async function requestPexelsImage(ask: ImageAsk, deadline?: number): Prom
 
   const query = (ask.searchQuery || "").trim();
   if (!query) {
-    // Uslub `photo` emas (yoki chaqiruvchi so'rov bermagan, masalan
-    // `regenerateSlideImage` — u ataylab AI qayta chizishni xohlaydi).
+    // Uslub `photo` emas (yoki chaqiruvchi so'rov bermagan — ataylab AI
+    // chizishni xohlaydi).
     // Tarmoqqa CHIQILMAYDI: bu bepul kvota va vaqtni tejaydi.
     return { ok: false, reason: "failed", detail: "qidiruv so'rovi yo'q (uslub fotodan boshqa yoki berilmagan)" };
   }

@@ -58,8 +58,7 @@ export type ImageAsk = {
    *
    * `null`/`undefined` — bepul manba bu so'rov uchun ISHLATILMASIN:
    * `slideImageStyle` foto emas (illustration/chalk/minimal) yoki
-   * `regenerateSlideImage` (AI qayta chizish) kabi chaqiruvchi buni
-   * ataylab bermagan. Pexels/Pixabay provayderlari bu holatda darhol
+   * chaqiruvchi buni ataylab bermagan (AI chizishni xohlaydi). Pexels/Pixabay provayderlari bu holatda darhol
    * `failed` qaytaradi (tarmoqqa chiqmasdan) — `chainProvider` keyingi
    * bosqichga (oxir-oqibat fal) o'tadi. Gemini/fal buni e'tiborsiz
    * qoldiradi.
@@ -163,8 +162,8 @@ export function photoOrientation(size: { width: number; height: number }): "land
  * Bir nechta provayderni ZANJIRGA ulaydi (P3, «Oddiy vosita rasmi:
  * Pexels → Pixabay → fal», `docs/AUDIT-9.md`).
  *
- * Nega alohida funksiya. `attachSlideImages`/`regenerateSlideImage`
- * BITTA `ImageProvider` bilan ishlaydi — ular ichida "agar pexels
+ * Nega alohida funksiya. `attachSlideImages` BITTA `ImageProvider`
+ * bilan ishlaydi — ular ichida "agar pexels
  * yiqilsa pixabay'ni sina" degan mantiq YO'Q va bo'lishi ham shart
  * emas: shu bilim shu yerda qulflanadi, chaqiruvchi kod bitta
  * `fetchImage`ni chaqiraveradi, xuddi bitta provayder bilan
@@ -189,8 +188,8 @@ export function photoOrientation(size: { width: number; height: number }): "land
  * kuzatish shart emas.
  *
  * `seen` — YOPIQ holat, har chaqiruvda `chainProvider(...)` YANGI
- * tuziladi (`pickProvider` har `attachSlideImages`/`regenerateSlideImage`
- * chaqirig'ida qayta chaqiriladi), ya'ni bitta DEKA doirasida yashaydi:
+ * tuziladi (`pickProvider` har `attachSlideImages` chaqirig'ida qayta
+ * chaqiriladi), ya'ni bitta DEKA doirasida yashaydi:
  * boshqa foydalanuvchining generatsiyasi bilan aralashmaydi, xotira
  * to'planib qolmaydi.
  */

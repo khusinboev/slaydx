@@ -83,13 +83,29 @@ Loyiha strukturasi: **poydevor** (umumiy qatlam) → **1-to'lqin** (jonli genera
   - `srcLines?: SlideSrc[]` — bandlar uchun manbalar
   - `planSlide()` — `src` atributi qo'shib chizadi
 
-- **`components/viewers/SlideEditor.tsx`** (yangi)
-  - Overlay: tahrirlash textarea, DnD, Ctrl+Z, maket chiplar
+- **`lib/generation/slide-fonts.ts`** (Muharrir 2)
+  - `SLIDE_FONTS` — 8 xavfsiz shrift oilasi (`id`/`face`/`css`/`em`), PPTX `fontFace` va ko'ruvchi `font-family` bitta ro'yxatdan
+  - `isSlideFontId()`, `fontCss(face)`, `FONT_BY_ID`
+
+- **`lib/generation/slide-edit.ts`** (Muharrir 2)
+  - `style` op: `size?` va/yoki `font?` (`SlideModel.fontSize` / `SlideModel.font`)
+  - `list` op — ro'yxat butunicha (PowerPoint qutisi), `listCap()` chegarasi
+  - `imageRestore` op — `SlideModel.imageOrig` (asl AI rasm) ni qaytaradi; `image` op aslini `imageOrig` ga ko'chiradi
+
+- **`components/viewers/SlideEditor.tsx`** (Muharrir 2 — WYSIWYG)
+  - Sahna bilan bir masshtabli egizak konteyner, `contentEditable` maydon `textLayerStyle` bilan (oq textarea yo'q)
+  - Ro'yxat `<ul>` butunicha (Enter → yangi band), bitta matn `<div>`; Esc/Enter/blur/tashqariga bosish
+  - Shrift paneli: oila `<select>` + o'lcham; rasm: «O‘z rasmim», «Rasmsiz», «Rasmni qaytarish»
+  - `onEditing(key)` → `SlideStage.hideSrc` → `SlideCanvas` asl qatlamni yashiradi
+
+- **`components/files/EditActions.tsx`** (Muharrir 2)
+  - Sahifa sarlavhasida `[Asliga qaytarish (2 bosish)] [Saqlash · N] [Saqlandi ✓]` — `SlideViewer.onEditState` dan
+  - `useSlideEdit.discard()` — saqlanmagan navbatni tashlaydi (tarmoqsiz)
 
 - **`components/viewers/SlideViewer.tsx`** (o'zgaradi)
-  - `SlideViewer({ doc, live?, overlay? })`
-  - `live` qiymatida jonli ko'rish
-  - `overlay` qiymatida tahrirlash
+  - `SlideViewer({ doc, live?, overlay?, gen?, onGen?, onEditState? })`
+  - `live` qiymatida jonli ko'rish, `gen` bilan tahrir
+  - Asboblar paneli minimal (Muharrir 2): sahifa/zoom/to'liq ekran + slayd «O‘chirish»; eslatma paneli yo'q (taqdimotchi rejimida qoladi)
 
 - **`components/viewers/SlideRail.tsx`** (yangi)
   - Slaydlarning mini ko'rish
@@ -101,6 +117,7 @@ Loyiha strukturasi: **poydevor** (umumiy qatlam) → **1-to'lqin** (jonli genera
 - **`components/viewers/SlideCanvas.tsx`** (o'zgaradi)
   - `data-src` atributi — matn manba
   - `reveal?: number` — jonli kitob effekti
+  - `textLayerStyle(layer)` — matn qatlami CSS i (muharrir bilan bitta), `hideSrc?` — tahrirlanayotgan qatlamni yashirish
 
 - **`components/viewers/SkeletonSlide.tsx`** (yangi)
   - Shimmer — deka yaratilayotgani kulamkesi
@@ -147,7 +164,11 @@ Loyiha strukturasi: **poydevor** (umumiy qatlam) → **1-to'lqin** (jonli genera
 
 ### Testlar
 
-- **`tests/slide-edit.test.mts`** — `applyDocOps` muhim qoidalari
+- **`tests/slide-edit.test.mts`** — `applyDocOps` muhim qoidalari (+ `list`, `imageRestore`, `imageOrig`)
+- **`tests/slide-fonts.test.mts`**, **`tests/slide-font-size.test.mts`** — shrift reyestri, `style.font`, `applyFontOverrides`
+- **`tests/ui/slide-editor.test.mts`** — WYSIWYG muharrir (contentEditable, ro'yxat qutisi, shrift paneli, rasm tugmalari)
+- **`tests/ui/slide-viewer-edit.test.mts`** — ko'ruvchi + `EditActions` tarmoq oqimi (bitta PATCH, discard, Ctrl+S/Z)
+- **`tests/ui/theme.test.mts`** — Kun/Tun (tizim rejimi yo'q), OS rejimi migratsiyasi
 - **`tests/slide-limits.test.mts`** — chegara va normallashtirish
 - **`tests/slide-progress.test.mts`** — `applyLiveEvent`
 - **`tests/slide-convert.test.mts`** — maket o'girrish
