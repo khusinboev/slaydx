@@ -139,6 +139,16 @@ export async function commitDocOps(id: string, userId: string, baseVersion: numb
 export type RebuildResult = { fileVersion: number; docVersion: number; rebuilt: boolean };
 
 /**
+ * Render seami — standarti `renderPptx`.
+ *
+ * Test uchun kerak: `renderPptx` PPTX ni haqiqatan yasaydi (sekin) va
+ * uni ATAYLAB yiqitib bo'lmaydi, holbuki eng muhim kafolat aynan shu —
+ * «render yiqilsa bazaga hech narsa yozilmaydi». Route'lar bu
+ * parametrni HECH QACHON bermaydi, ya'ni ishlab turgan yo'l bitta.
+ */
+export type RebuildDeps = { render?: typeof renderPptx };
+
+/**
  * PPTX ni joriy `doc` dan qayta yasaydi.
  *
  * Tartib QAT'IY:
@@ -157,14 +167,19 @@ export type RebuildResult = { fileVersion: number; docVersion: number; rebuilt: 
  * < $3` esa sekinroq tugagan ESKI render yangisini orqaga surmasligini
  * ta'minlaydi (bunda bayt ham yozilmaydi).
  */
-export async function rebuildFile(id: string, userId: string): Promise<RebuildResult> {
+export async function rebuildFile(
+  id: string,
+  userId: string,
+  deps: RebuildDeps = {},
+): Promise<RebuildResult> {
   const cur = await loadDocForEdit(id, userId);
   if (cur.fileVersion >= cur.docVersion) {
     return { fileVersion: cur.fileVersion, docVersion: cur.docVersion, rebuilt: false };
   }
   const target = cur.docVersion;
 
-  const built = await renderPptx(cur.doc, cur.fileName, {
+  const render = deps.render ?? renderPptx;
+  const built = await render(cur.doc, cur.fileName, {
     // Rasm faqat SHU generatsiyaning aktivlaridan olinadi (egalik SQL
     // da, `getAsset`) — tashqi URL yuklanmaydi, ya'ni SSRF yo'q.
     resolveImage: assetImageResolver(id, userId),
@@ -199,13 +214,17 @@ export async function rebuildFile(id: string, userId: string): Promise<RebuildRe
  * Slayd bo'lmagan vositalarda `doc_version` ham, `file_version` ham 0 —
  * shart hech qachon bajarilmaydi va eski yo'l o'zgarmaydi.
  */
-export async function ensureFreshFile(id: string, userId: string): Promise<void> {
+export async function ensureFreshFile(
+  id: string,
+  userId: string,
+  deps: RebuildDeps = {},
+): Promise<void> {
   const v = await getVersions(id, userId);
   if (!v) return; // Yo'q yoki begona — 404 ni fayl yo'lining o'zi beradi.
   if (v.status !== "COMPLETED") return;
   if (!EDIT_TOOLS.has(v.toolId)) return;
   if (v.fileVersion >= v.docVersion) return;
-  await rebuildFile(id, userId);
+  await rebuildFile(id, userId, deps);
 }
 
 /**
