@@ -278,6 +278,52 @@ button {
   font-weight: 700;
 }
 
+/*
+  Jonli generatsiya (L5) — skelet eskizi va «yozilmoqda» nuqtasi.
+
+  Ikkalasi ham `prefers-reduced-motion` da to'xtaydi: harakat MA'LUMOT
+  emas, faqat «ish ketyapti» ishorasi — matnning o'zi va tasmadagi
+  raqamlar baribir o'qiladi.
+*/
+@keyframes slx-shimmer {
+  0% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.45;
+  }
+}
+
+.slx-shimmer {
+  animation: slx-shimmer 1.6s ease-in-out infinite;
+}
+
+@keyframes slx-typing {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(0.6);
+    opacity: 0.45;
+  }
+}
+
+.slx-typing {
+  animation: slx-typing 1.1s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .slx-shimmer,
+  .slx-typing {
+    animation: none;
+  }
+}
+
 @media print {
   .no-print {
     display: none !important;
