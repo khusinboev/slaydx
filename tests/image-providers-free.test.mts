@@ -67,6 +67,13 @@ const JPEG_1PX_BYTES = Buffer.from(
   "/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==",
   "base64",
 );
+/*
+ * `fetchImageBytes` 800 baytdan kichik javobni «rasm emas» deb tashlaydi
+ * (SSRF/bo'sh javob himoyasi) — 1 pikselli JPEG shundan kichik edi va
+ * butun zanjir «hech narsa yetkazilmadi» bo'lib chiqardi. Haqiqiy rasm
+ * kabi to'ldiramiz (JPEG sarlavhasi saqlanadi, sniff o'tadi).
+ */
+const JPEG_PADDED = Buffer.concat([Buffer.from(JPEG_1PX_BYTES), Buffer.alloc(1200, 0)]);
 
 /**
  * `fetchImageBytes` ning IKKINCHI bosqichi — Pexels/Pixabay/fal `https:`
@@ -80,7 +87,7 @@ function imgRes() {
     ok: true,
     status: 200,
     headers: { get: () => null },
-    arrayBuffer: async () => JPEG_1PX_BYTES,
+    arrayBuffer: async () => JPEG_PADDED,
   } as unknown as Response;
 }
 
@@ -476,8 +483,11 @@ test("attachSlideImages: pexels rate bersa (blok emas) pixabay har slaydda qayta
       hits.push("pixabay");
       return jsonRes(200, { hits: [{ largeImageURL: "https://pixabay.example/ok.jpg" }] });
     }
-    hits.push("fal");
-    return jsonRes(200, { images: [{ url: "https://fal.example/z.jpg" }] });
+    if (u.startsWith("https://fal.run/")) {
+      hits.push("fal");
+      return jsonRes(200, { images: [{ url: "https://fal.example/z.jpg" }] });
+    }
+    return imgRes(); // rasm baytlarini yuklab olish bosqichi (pixabay/fal URL'lari)
   }) as unknown as typeof fetch;
   try {
     const report = await attachSlideImages(deck(3), "Suv aylanishi", "classic", 60_000, { meta: meta() });
@@ -503,8 +513,11 @@ test("attachSlideImages: pexels va pixabay ikkalasi ham yiqilsa fal yakuniy zaxi
       hits.push("pixabay");
       return jsonRes(500, {});
     }
-    hits.push("fal");
-    return jsonRes(200, { images: [{ url: "https://fal.example/z.jpg" }] });
+    if (u.startsWith("https://fal.run/")) {
+      hits.push("fal");
+      return jsonRes(200, { images: [{ url: "https://fal.example/z.jpg" }] });
+    }
+    return imgRes(); // rasm baytlarini yuklab olish bosqichi (pixabay/fal URL'lari)
   }) as unknown as typeof fetch;
   try {
     const report = await attachSlideImages(deck(3), "Suv aylanishi", "classic", 60_000, { meta: meta() });
