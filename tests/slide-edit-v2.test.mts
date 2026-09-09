@@ -2,9 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { extractMeta } from "../lib/generation/meta.ts";
 import { slideLabels } from "../lib/generation/i18n.ts";
-import { applyDocOps, inverseOps, parseDocOps, readSlideField, FOOTER_MAX } from "../lib/generation/slide-edit.ts";
+import { applyDocOps, inverseOps, parseDocOps, readSlideField, writeSlideField, FOOTER_MAX } from "../lib/generation/slide-edit.ts";
 import { QUIZ_LETTERS } from "../lib/generation/slide-quiz.ts";
-import type { DocOp } from "../lib/generation/slide-edit.ts";
+import { buildSlideDeck } from "../lib/generation/slides.ts";
+import type { DocOp, EditRules } from "../lib/generation/slide-edit.ts";
 import type { SlideModel } from "../lib/generation/slide-types.ts";
 import type { AcademicDoc } from "../lib/generation/types.ts";
 import { TOOL_BY_ID } from "../lib/tools.ts";
@@ -44,6 +45,8 @@ function failure(doc: AcademicDoc, ops: DocOp[]): { error: string; at: number } 
   assert.equal(r.ok, false, "operatsiya rad etilishi kerak edi");
   return r as { ok: false; error: string; at: number };
 }
+
+const rules: EditRules = buildSlideDeck(rawDoc([{ id: "s0", layout: "bullets", title: "x" }])).bodyType;
 
 // ═══════════════════════════════════════════ 1. `footer` op
 
@@ -118,6 +121,19 @@ test("parseDocOps: footer op — «value» string bo'lishi shart", () => {
   assert.ok(ok.ok && ok.ops[0].op === "footer");
   assert.equal(parseDocOps([{ op: "footer" }]).ok, false);
   assert.equal(parseDocOps([{ op: "footer", value: 5 }]).ok, false);
+});
+
+test("writeSlideField: {f:'footer'} — DEKA darajasida, bitta slaydga yozib bo'lmaydi", () => {
+  const r = writeSlideField(threeSlides[0], { f: "footer" }, "Yangi", rules);
+  assert.equal(r.ok, false);
+  assert.match((r as { ok: false; error: string }).error, /footer op/);
+});
+
+test("{op:'text', src:{f:'footer'}} — applyDocOps ham xuddi shu xatoni qaytaradi", () => {
+  // Klient xato o'rniga {op:"footer"} ishlatishi kerak — umumiy "text" yo'li orqali kirsa ham rad etilsin.
+  const f = failure(rawDoc(threeSlides), [{ op: "text", index: 0, src: { f: "footer" }, value: "Yangi" }]);
+  assert.match(f.error, /footer op/);
+  assert.equal(f.at, 0);
 });
 
 // ═══════════════════════════════════════════ 2. `answer` op
@@ -230,4 +246,16 @@ test("parseDocOps: answer op — index/q/answer son bo'lishi shart", () => {
   assert.equal(parseDocOps([{ op: "answer", index: 0, q: "0", answer: 2 }]).ok, false);
   assert.equal(parseDocOps([{ op: "answer", index: 0, q: 0, answer: "2" }]).ok, false);
   assert.equal(parseDocOps([{ op: "answer", q: 0, answer: 2 }]).ok, false, "«index» yo'q");
+});
+
+test("parseDocOps: answer op — manfiy q/answer rad etiladi (`num` 0..999 talab qiladi)", () => {
+  /*
+   * MUTATSIYA: `num()` faqat `v >= 0` ni tekshiradi — agar bu shart olib
+   * tashlansa (masalan `Number.isInteger` yetarli deb hisoblansa), manfiy
+   * `q`/`answer` parse bosqichidan o'tib ketardi (keyin `applyDocOps`da
+   * `quiz?.[op.q]` `undefined` bo'lib "Bunday savol yo'q" bilan tutilardi —
+   * lekin bu xato turi noto'g'ri, chegara PARSE bosqichida bo'lishi kerak).
+   */
+  assert.equal(parseDocOps([{ op: "answer", index: 0, q: -1, answer: 0 }]).ok, false);
+  assert.equal(parseDocOps([{ op: "answer", index: 0, q: 0, answer: -1 }]).ok, false);
 });
