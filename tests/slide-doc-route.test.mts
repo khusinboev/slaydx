@@ -218,6 +218,16 @@ test("commitDocOps: baseVersion mos kelmasa — 409 {code:'version'} va UPDATE u
   assert.equal(e.extra.code, "version");
   assert.equal(e.extra.docVersion, 7);
   assert.equal(found(seen, /UPDATE generations/).length, 0, "yozish urinishi bo'lmasligi kerak");
+  /*
+   * E4 dan qolgan band: `commitDocOps` ICHIDAGI `loadDocForEdit`
+   * chaqirig'i ham egalik SQLidan o'tishi qulflanadi — bu yerda
+   * alohida test emas, xuddi shu `commitDocOps` yo'lida. MUTATSIYA:
+   * `getGenerationForEdit` dan `AND user_id = $2` olib tashlansa (yoki
+   * boshqa userning hujjatini ko'rsatib yuborsa), shu assertion
+   * qizaradi.
+   */
+  assert.match(seen[0].text, /WHERE id = \$1 AND user_id = \$2/, "commitDocOps ichidagi o'qish ham egalik SQL da");
+  assert.deepEqual(seen[0].params, [GEN, USER]);
 });
 
 test("commitDocOps: UPDATE 0 qator qaytarsa — 409 {code:'version', docVersion} (optimistik qulf)", async (t) => {
@@ -337,12 +347,28 @@ test("patchDocFromRequest: baseVersion yo'q/yaroqsiz — 400", async (t) => {
 });
 
 test("patchDocFromRequest: tana 300 KB dan katta — 413 (o'qilmasdan)", async (t) => {
+  /*
+   * MUTATSIYA: chegara ATAYLAB o'zining eksport qilingan konstantasidan
+   * emas, ABSOLYUT sondan (`300 * 1024`) hisoblanadi. Agar shu tekshiruv
+   * `DOC_PATCH_MAX_BYTES + 1` bilan yozilsa, kimdir konstantani
+   * (masalan 300 KB dan 3 MB ga) o'zgartirib qo'ysa ham test baribir
+   * "yashil" qolardi — chunki ikkalasi ham BIR XIL o'zgargan
+   * konstantadan olinadi. Absolyut son bilan konstantaning o'zi ham
+   * (quyidagi tenglik bilan), chegara ham mustaqil tasdiqlanadi.
+   */
+  assert.equal(DOC_PATCH_MAX_BYTES, 300 * 1024, "hujjatlashtirilgan chegara — API jadvali shu songa tayanadi");
+
   const seen = mockDb(t, { forEdit: editRow() });
   const req = patchReq({ baseVersion: 3, ops: textOp }, {
-    "content-length": String(DOC_PATCH_MAX_BYTES + 1),
+    "content-length": String(300 * 1024 + 1),
   });
   await expectApiError(patchDocFromRequest(req, GEN, USER), 413);
   assert.equal(seen.length, 0);
+
+  // Chegaraning o'zi (300 KB, ortig'i emas) — o'qilishi kerak (413 emas).
+  mockDb(t, { forEdit: editRow({ doc_version: 3 }), updateDoc: { doc_version: 4 }, detail: detailRow() });
+  const okReq = patchReq({ baseVersion: 3, ops: textOp }, { "content-length": String(300 * 1024) });
+  await patchDocFromRequest(okReq, GEN, USER);
 });
 
 test("patchDocFromRequest: ops massiv emas — 400, tana obyekt emas — 400", async (t) => {
