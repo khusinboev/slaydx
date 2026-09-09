@@ -32,12 +32,24 @@ const USER = "u-42";
 
 const meta = extractMeta(TOOL_BY_ID.slide, { topic: "Suv aylanishi", slideTemplate: "lecture" } as never);
 
-// index 0 — rasm joyi bor (title); index 1 — rasm joyi bor (bullets);
-// index 2 — rasm joyi YO'Q (stats) — 422 yo'li uchun.
+/*
+ * index 0 — rasm joyi bor (title); index 1 — rasm joyi bor (bullets);
+ * index 2 — rasm joyi YO'Q — 422 yo'li uchun.
+ *
+ * Ilgari uchinchisi `stats` edi. AUDIT-9 E2 dan keyin `stats` rasm
+ * TASMASINI ko'taradi (`photoSlot` null qaytarmaydi), ya'ni u 422 ni
+ * boshqa sinamas edi. `quiz` — savol va to'rtta variant butun kenglikni
+ * egallaydi, tasmaga o'rin yo'q.
+ */
 const slides: SlideModel[] = [
   { id: "s0", layout: "title", title: "Suv aylanishi", subtitle: "Kirish" },
   { id: "s1", layout: "bullets", title: "Bandlar", bullets: ["Bir.", "Ikki."] },
-  { id: "s2", layout: "stats", title: "Statistika", stats: [{ value: "71%", label: "Yer yuzasi" }] },
+  {
+    id: "s2",
+    layout: "quiz",
+    title: "Nazorat",
+    quiz: [{ q: "Bug'lanish qayerda?", options: ["Okeanda", "Bulutda", "Daryoda", "Muzda"], answer: 0 }],
+  },
 ];
 
 function docOf(list: SlideModel[] = slides): AcademicDoc {
