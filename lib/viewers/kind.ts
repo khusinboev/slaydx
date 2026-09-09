@@ -16,6 +16,7 @@ export type ViewerKind =
 export function viewerKind(id: ToolId): ViewerKind {
   switch (id) {
     case "slide":
+    case "pro-slide":
       return "slides";
     case "resume":
       return "resume";
