@@ -26,6 +26,8 @@ import type { SlideImageStyle } from "./slide-params";
 import type { DocMeta } from "./types";
 import { falProvider } from "./image-provider-fal";
 import { geminiProvider } from "./image-provider-gemini";
+import { pexelsProvider } from "./image-provider-pexels";
+import { pixabayProvider } from "./image-provider-pixabay";
 
 /**
  * Rasm so'rovi — provayderga yetadigan HAMMA narsa.
@@ -50,6 +52,28 @@ export type ImageAsk = {
    * provayder uni shunchaki e'tiborsiz qoldiradi.
    */
   premium?: boolean;
+  /**
+   * Bepul stock-foto qidiruv so'rovi (P3) — `image-search-query.ts`
+   * `searchQueryFor` bergan 2-5 so'zli inglizcha so'rov.
+   *
+   * `null`/`undefined` — bepul manba bu so'rov uchun ISHLATILMASIN:
+   * `slideImageStyle` foto emas (illustration/chalk/minimal) yoki
+   * `regenerateSlideImage` (AI qayta chizish) kabi chaqiruvchi buni
+   * ataylab bermagan. Pexels/Pixabay provayderlari bu holatda darhol
+   * `failed` qaytaradi (tarmoqqa chiqmasdan) — `chainProvider` keyingi
+   * bosqichga (oxir-oqibat fal) o'tadi. Gemini/fal buni e'tiborsiz
+   * qoldiradi.
+   */
+  searchQuery?: string | null;
+  /**
+   * Shu deka ichida ALLAQACHON ishlatilgan foto URL lari.
+   *
+   * `chainProvider` egallaydi va har chaqiruvdan oldin qo'yadi — bitta
+   * dekada bir xil stock foto ikki marta chiqmasin (`per_page=5`
+   * natijadan birinchi ISHLATILMAGANI tanlanadi). Fal/Gemini buni
+   * e'tiborsiz qoldiradi — ular har doim yangi rasm CHIZADI.
+   */
+  seen?: Set<string>;
 };
 
 /** `slide-images.ts` `persistImage` ga beriladigan manzil: `https:` yoki `data:`. */
@@ -86,7 +110,7 @@ export type FalFailure =
   /** Qolgan hammasi: 5xx, tarmoq, javobda rasm yo'q. */
   | "failed";
 
-export type ImageProviderId = "fal" | "gemini";
+export type ImageProviderId = "fal" | "gemini" | "pexels" | "pixabay";
 
 export interface ImageProvider {
   /**
@@ -122,18 +146,99 @@ export function requestBudget(deadline: number | undefined, cap = 45_000): numbe
 }
 
 /**
+ * Stock-foto API lari kutgan nisbat so'zi (P3).
+ *
+ * Pexels UCHTA qiymat qabul qiladi (`landscape`/`portrait`/`square`),
+ * Pixabay ikkita (`horizontal`/`vertical`) — har provayder o'z faylida
+ * shu natijani o'ziga mos so'zga o'giradi. Yagona joyda hisoblanishi
+ * kerak: ikkalasi ham AYNAN bir xil slot o'lchamidan (`ask.size`)
+ * kelib chiqadi.
+ */
+export function photoOrientation(size: { width: number; height: number }): "landscape" | "portrait" | "square" {
+  if (size.width === size.height) return "square";
+  return size.width > size.height ? "landscape" : "portrait";
+}
+
+/**
+ * Bir nechta provayderni ZANJIRGA ulaydi (P3, «Oddiy vosita rasmi:
+ * Pexels → Pixabay → fal», `docs/AUDIT-9.md`).
+ *
+ * Nega alohida funksiya. `attachSlideImages`/`regenerateSlideImage`
+ * BITTA `ImageProvider` bilan ishlaydi — ular ichida "agar pexels
+ * yiqilsa pixabay'ni sina" degan mantiq YO'Q va bo'lishi ham shart
+ * emas: shu bilim shu yerda qulflanadi, chaqiruvchi kod bitta
+ * `fetchImage`ni chaqiraveradi, xuddi bitta provayder bilan
+ * ishlagandek.
+ *
+ * Qoidalar:
+ *   — kalitsiz provayder UMUMAN chaqirilmaydi (tarmoqqa chiqmaydi);
+ *   — `no-key`/`failed`/`rate`/`timeout`/natija yo'q — keyingisiga
+ *     o'tiladi (bepul manba muvaffaqiyatsiz bo'lsa fal baribir ishlasin);
+ *   — `blocked` HAM keyingisiga o'tadi, lekin shu provayder ID si
+ *     DEKA OXIRIGACHA "bloklangan" deb belgilanadi (`blockedIds`) —
+ *     har slaydda qayta 403 kutib vaqt sarflanmasin;
+ *   — hech biri berolmasa OXIRGI urinishning natijasi qaytariladi —
+ *     odatda shu fal bo'ladi, ya'ni `attachSlideImages`ning fal/Gemini
+ *     uchun mo'ljallangan `blocked` qisqa tutashuvi ZANJIR OXIRIDA ham
+ *     to'g'ri ishlaydi (regressiya yo'q).
+ *
+ * `id` ATAYLAB birinchi provayderning EMAS, `"fal"` — chaqiruvchi kod
+ * (`pickProvider` regressiya testi, jurnal yorlig'i) buni "oddiy slayd
+ * rasm yo'li" deb taniydi; zanjirning qaysi bo'g'ini haqiqatan
+ * yetkazgani natijaning O'ZIDA (`image.url` manbasi) ko'rinadi, alohida
+ * kuzatish shart emas.
+ *
+ * `seen` — YOPIQ holat, har chaqiruvda `chainProvider(...)` YANGI
+ * tuziladi (`pickProvider` har `attachSlideImages`/`regenerateSlideImage`
+ * chaqirig'ida qayta chaqiriladi), ya'ni bitta DEKA doirasida yashaydi:
+ * boshqa foydalanuvchining generatsiyasi bilan aralashmaydi, xotira
+ * to'planib qolmaydi.
+ */
+export function chainProvider(providers: ImageProvider[]): ImageProvider {
+  const seen = new Set<string>();
+  const blockedIds = new Set<ImageProviderId>();
+  return {
+    id: "fal",
+    minMs: Math.min(...providers.map((p) => p.minMs)),
+    hasKey: () => providers.some((p) => p.hasKey()),
+    async fetchImage(ask: ImageAsk, deadline?: number): Promise<ImageResult> {
+      let last: ImageResult = { ok: false, reason: "no-key", detail: "provayderlar sozlanmagan" };
+      for (const provider of providers) {
+        if (!provider.hasKey() || blockedIds.has(provider.id)) continue;
+        const res = await provider.fetchImage({ ...ask, seen }, deadline);
+        if (res.ok) {
+          seen.add(res.image.url);
+          return res;
+        }
+        if (res.reason === "blocked") blockedIds.add(provider.id);
+        last = res;
+      }
+      return last;
+    },
+  };
+}
+
+/**
  * Qaysi vosita — qaysi provayder.
  *
  * `pro-slide` — slaydiga alohida to'lanadigan pullik mahsulot, shuning
  * uchun u qimmatroq va matnni to'g'ri tushunadigan Gemini rasm modeliga
- * boradi. Oddiy `slide` esa fal.ai da qoladi: eski xatti-harakat
- * O'ZGARMAYDI, ya'ni bu ish oqimi hech qanday regressiya keltirmaydi.
+ * boradi.
  *
- * `meta` berilmasa — fal. Shu tanlov `attachSlideImages` ning eski
- * (meta'siz) chaqiruvlarini, `scripts/image-lab.mts` ni va mavjud
- * testlarni o'z holida qoldiradi.
+ * Oddiy `slide` esa endi ZANJIR (P3): avval BEPUL stock-foto manbalar
+ * (Pexels → Pixabay), ular kalitsiz/yiqilsa yoki uslub foto bo'lmasa
+ * (`searchQueryFor` `null` qaytaradi) — fal.ai. Kalitlar YO'Q bo'lgan
+ * muhitda (hozirgi dev/test standarti) zanjir bir zumda fal'ga tushadi
+ * — ya'ni ESKI xatti-harakat O'ZGARMAYDI, regressiya yo'q
+ * (`tests/slide-images.test.mts`).
+ *
+ * `meta` berilmasa — fal (zanjir ichida, kalitsiz manbalar sakrab
+ * o'tiladi). Shu tanlov `attachSlideImages` ning eski (meta'siz)
+ * chaqiruvlarini, `scripts/image-lab.mts` ni va mavjud testlarni o'z
+ * holida qoldiradi.
  */
 export function pickProvider(meta?: Pick<DocMeta, "toolId"> | null): ImageProvider {
   const toolId: ToolId | undefined = meta?.toolId;
-  return toolId === "pro-slide" ? geminiProvider : falProvider;
+  if (toolId === "pro-slide") return geminiProvider;
+  return chainProvider([pexelsProvider, pixabayProvider, falProvider]);
 }
