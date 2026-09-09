@@ -355,7 +355,15 @@ test("rasmsiz maket geometriyasi E2 dan oldingi bilan AYNAN teng (barmoq izi)", 
   const hash = createHash("sha256").update(rows.join("\n")).digest("hex").slice(0, 32);
   assert.equal(
     hash,
-    "dd1adb15a82b3b6bbb97aa9b4681b11b",
+    /*
+     * Yangilangan: AUDIT-8 N-3 (`planStatChart` qatorlari foydali
+     * balandlikni qoldiqsiz bo'lib oladi) va N-10 (`process` timeline
+     * relsi sarlavha chizig'idan uzoqlashtirildi, tugun nuqtalari
+     * qo'shildi) — ikkalasi ham `stats`/`process` GEOMETRIYASINI
+     * ataylab o'zgartiradi. Tafsilot: `docs/AUDIT-8.md`, «N-3…N-10
+     * yopilishi». Eski xesh: dd1adb15a82b3b6bbb97aa9b4681b11b.
+     */
+    "23b6f081e48c642414a88a1d96fdcce6",
     "rasmsiz maket geometriyasi o'zgardi — tasma kodi rasmsiz slaydga sizib o'tgan bo'lishi mumkin",
   );
 });

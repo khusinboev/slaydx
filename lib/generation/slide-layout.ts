@@ -597,6 +597,18 @@ function RIGHT_COL_W() {
 }
 
 /**
+ * Bo'lim slaydining FOYDALI zonasi (AUDIT-8 N-5/N-6).
+ *
+ * Yuqori chegara — chrome tasmasi (0.12) va logotip qutisidan (y ≤ 0.63)
+ * pastda; quyi chegara — kolontituldan (`FOOT_Y` = 7.14) yuqorida.
+ * Maket ham, `tests/slide-layout-audit8.test.mts` dagi qamrov/markaz
+ * o'lchovi ham AYNAN shu ikki sondan foydalanadi — aks holda test o'z
+ * zonasini o'zi o'ylab topgan bo'lardi.
+ */
+export const SECTION_TOP = 1.15;
+export const SECTION_BOTTOM = 6.5;
+
+/**
  * `magazine` maketidagi bo'lim slaydi: to'la ekran kadr va pastki matn
  * tasmasi.
  *
@@ -620,14 +632,72 @@ function planSectionMagazine(s: SlideModel, theme: SlideTheme, index: number, to
    * o'girib ko'rilganda aynan shu ko'rindi.
    */
   const img = Boolean(s.image?.url);
-  const bandY = img ? 4.15 : 2.35;
+  const x = 0.9;
+  const tw = W - 1.8;
+
+  if (!img) {
+    /*
+     * AUDIT-8 N-6. Rasmsiz `magazine` bo'limi hamon SIYRAK edi.
+     *
+     * AUDIT-8 da tasma 4.15 dan 2.35 ga ko'tarilgan, lekin qutilar
+     * o'sha-o'sha qolgan: matn 2.98 dan 5.20 gacha, ya'ni foydali
+     * zonaning 41% i. Yuqorida 1.8″, pastda 1.3″ to'q bo'shliq —
+     * jurnal muqovasi emas, «yuklanmagan sahifa» taassuroti.
+     *
+     * Rasm o'rnini DEKORATIV element egallaydi: yirik bo'lim raqami va
+     * to'la kenglikdagi ingichka chiziq (jurnal ruknining naqshi).
+     * Raqam modeldan emas — shuning uchun `src` OLMAYDI (dekorativ
+     * qatlamlar qoidasi, `tests/slide-src.test.mts`).
+     */
+    const numBox: Box = { x, y: 0.72, w: 4.2, h: 1.5 };
+    layers.push({
+      t: "text",
+      box: numBox,
+      text: String(index + 1).padStart(2, "0"),
+      color: theme.accent,
+      size: 84,
+      bold: true,
+      valign: "middle",
+    });
+    layers.push({ t: "rect", box: { x, y: 2.42, w: tw, h: 0.02 }, fill: { color: theme.titleMuted, alpha: 0.55 } });
+
+    // Matn bloki zonaning qolgan qismini QOPLAYDI (qat'iy y emas).
+    const titleH = 1.5;
+    const subH = 1.55;
+    const barY = 2.86;
+    layers.push({ t: "rect", box: { x, y: barY, w: 1.35, h: 0.08 }, fill: { color: theme.accent } });
+    const titleBox: Box = { x, y: barY + 0.3, w: tw, h: titleH };
+    layers.push({
+      t: "text",
+      box: titleBox,
+      text: s.title,
+      color: theme.titleText,
+      size: fitSize(s.title, titleBox, 40, 24),
+      bold: true,
+      valign: "middle",
+      src: { f: "title" },
+    });
+    if (s.subtitle) {
+      const subBox: Box = { x, y: barY + 0.3 + titleH + 0.28, w: tw, h: subH };
+      layers.push({
+        t: "text",
+        box: subBox,
+        text: s.subtitle,
+        color: theme.titleMuted,
+        size: fitSize(s.subtitle, subBox, 18, 13),
+        src: { f: "subtitle" },
+      });
+    }
+    pushFooter(layers, s, theme, index, total, { x, w: tw }, true);
+    return { bg: theme.titleBg, layers };
+  }
+
+  const bandY = 4.15;
   layers.push({
     t: "rect",
     box: { x: 0, y: bandY, w: W, h: H - bandY },
-    fill: { color: theme.titleBg, alpha: img ? 0.82 : 0 },
+    fill: { color: theme.titleBg, alpha: 0.82 },
   });
-  const x = 0.9;
-  const tw = W - 1.8;
   layers.push({ t: "rect", box: { x, y: bandY + 0.35, w: 1.35, h: 0.08 }, fill: { color: theme.accent } });
   const titleBox: Box = { x, y: bandY + 0.63, w: tw, h: 1.0 };
   layers.push({
@@ -689,27 +759,50 @@ function planSection(s: SlideModel, theme: SlideTheme, visual: SlideVisual, inde
   }
   layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.bg } });
   pushChrome(layers, theme, "full");
-  layers.push({ t: "rect", box: { x: 0.72, y: 3.15, w: 1.4, h: 0.08 }, fill: { color: theme.accent } });
+  /*
+   * AUDIT-8 N-5. Blok QAT'IY koordinatalarda turardi (sarlavha 2.2,
+   * chiziq 3.15, subtitle 3.4–4.8) — ya'ni 6.9 dyuymlik sahifaning
+   * pastki ~2.1 dyuymi HAR DOIM bo'sh oq maydon edi, matn qanday
+   * bo'lishidan qat'i nazar. `section` 12 shablonda bor, ya'ni bu
+   * nuqson deyarli har dekada bir necha marta takrorlanardi.
+   *
+   * Endi ikki narsa o'zgardi: (1) qutilar kattaroq — sarlavha 1.25,
+   * subtitle 1.9 dyuym, ya'ni matn maydonni haqiqatan egallaydi;
+   * (2) blok butunligicha zonada VERTIKAL MARKAZLASHTIRILADI, shuning
+   * uchun subtitlesiz slaydda ham «tepaga yopishgan» ko'rinish yo'q.
+   */
+  const x = 0.72;
+  const tw = 11.6;
+  const titleH = 1.25;
+  const subH = 1.9;
+  const ruleH = 0.08;
+  const blockH = titleH + 0.2 + ruleH + (s.subtitle ? 0.24 + subH : 0);
+  const y0 = SECTION_TOP + Math.max(0, (SECTION_BOTTOM - SECTION_TOP - blockH) / 2);
+  const titleBox: Box = { x, y: y0, w: tw, h: titleH };
   layers.push({
     t: "text",
-    box: { x: 0.72, y: 2.2, w: 11.6, h: 0.9 },
+    box: titleBox,
     text: s.title,
     color: theme.text,
-    size: 32,
+    // Ilgari qat'iy 32 pt edi — uzun bo'lim nomi qutidan chiqardi.
+    size: fitSize(s.title, titleBox, 32, 22),
     bold: true,
+    valign: "middle",
     src: { f: "title" },
   });
+  layers.push({ t: "rect", box: { x, y: y0 + titleH + 0.2, w: 1.4, h: ruleH }, fill: { color: theme.accent } });
   if (s.subtitle) {
+    const subBox: Box = { x, y: y0 + titleH + 0.2 + ruleH + 0.24, w: tw, h: subH };
     layers.push({
       t: "text",
-      box: { x: 0.72, y: 3.4, w: 11.6, h: 1.4 },
+      box: subBox,
       text: s.subtitle,
       color: theme.muted,
-      size: 18,
+      size: fitSize(s.subtitle, subBox, 18, 14),
       src: { f: "subtitle" },
     });
   }
-  pushFooter(layers, s, theme, index, total, { x: 0.72, w: 12 }, false);
+  pushFooter(layers, s, theme, index, total, { x, w: 12 }, false);
   return { bg: theme.bg, layers };
 }
 
@@ -1775,6 +1868,14 @@ export function parseStatNumber(value: string): number | null {
  * ko'rsatardi (AUDIT-8 N-2). Birliklar har xil bo'lsa karta ko'rinishi
  * to'g'riroq: u qiymatlarni bir-biriga nisbatan o'lchamaydi.
  */
+/**
+ * Diagramma zonasi — sarlavha ostidan kolontitulgacha (AUDIT-8 N-3).
+ * Maket ham, qamrov o'lchovi (`tests/slide-layout-audit8.test.mts`) ham
+ * shu ikki sondan foydalanadi.
+ */
+export const CHART_TOP = 1.75;
+export const CHART_BOTTOM = 6.7;
+
 export function statUnit(value: string): string {
   return String(value)
     .toLowerCase()
@@ -1810,12 +1911,31 @@ function planStatChart(
   const x0 = M + 0.18;
   const barX = x0 + labelW + 0.2;
   const barMaxW = zoneW - labelW - valueW - 0.6;
-  const top = 1.75;
-  const rowH = Math.min(1.15, (6.7 - top) / items.length);
+  const top = CHART_TOP;
+  const chartBottom = CHART_BOTTOM;
+  /*
+   * AUDIT-8 N-3. Qator balandligida SHIFT bor edi (`Math.min(1.15, …)`).
+   *
+   * 3 qiymatli diagrammada (jonli dekada eng ko'p uchraydigan holat)
+   * qatorlar 1.75 dan 5.10 gacha bo'lar, pastda 1.60 dyuym — foydali
+   * maydonning UCHDAN BIRI — bo'sh qolardi (`png/report-02.png`).
+   * Shift 4 qiymatda ham 0.45″ qoldirardi.
+   *
+   * Yechim `planAnswers` (AUDIT-9 X-4) naqshi bilan bir xil: qatorlar
+   * foydali balandlikni QOLDIQSIZ bo'lib oladi. Markazlashtirish bu
+   * yerda yordam bermasdi — u bo'shliqni faqat SURARDI.
+   */
+  const rowH = (chartBottom - top) / items.length;
 
   items.forEach((it, i) => {
     const y = top + i * rowH;
-    const barH = Math.min(0.52, rowH - 0.3);
+    /*
+     * Ustun qalinligi endi qatorga MUTANOSIB: qat'iy 0.52″ qoldirilsa,
+     * baland qatorda ingichka tasma katta oq maydonda suzib qolardi.
+     * Pol (0.34) 5 qiymatli zich diagrammani, shift (0.9) esa 3
+     * qiymatlisini «lentaga» aylantirib yubormaydi.
+     */
+    const barH = Math.max(0.34, Math.min(0.9, rowH * 0.45));
     const cy = y + (rowH - barH) / 2;
     const labBox: Box = { x: x0, y, w: labelW, h: rowH - 0.1 };
     layers.push({
@@ -1999,13 +2119,43 @@ function planProcess(s: SlideModel, theme: SlideTheme, visual: SlideVisual, inde
   const rowH = twoRows ? (totalH - rowGap) / 2 : Math.min(3.7, totalH);
   const top = twoRows ? 1.65 : 1.65 + (totalH - rowH) / 2;
 
-  if (visual === "timeline" && !twoRows) {
-    layers.push({ t: "rect", box: { x: M + 0.18, y: 1.42, w: 12.2 - cut, h: 0.07 }, fill: { color: theme.accent } });
-  }
-
   const gap = 0.42;
   const zoneW = 12.25 - cut;
   const colW = (zoneW - gap * (perRow - 1)) / perRow;
+
+  /*
+   * AUDIT-8 N-10. Rels `y=1.42` da turardi — `planHeading` ning aksent
+   * chizig'i esa `y=1.22` da (`h=0.07`). Ikkalasi bir xil qalinlik va
+   * bir xil rangda, orasi bor-yo'g'i 0.13″ — PDF da bu «qo'sh chiziq»
+   * bo'lib ko'rinardi, ya'ni rels vaqt o'qi emas, sarlavha bezagining
+   * takrori bo'lib o'qilardi.
+   *
+   * Endi rels sarlavhadan UZOQLASHTIRILADI va kartalarning ustiga,
+   * ular bilan BOG'LANGAN holda chiziladi: chiziq birinchi kartaning
+   * markazidan oxirgisinikigacha, har karta ustida esa tugun nuqtasi
+   * (`planTwoCol` ning tik o'qi bilan bir tilda). Bu bir vaqtning
+   * o'zida sarlavha bilan kartalar orasidagi bo'shliqni ham to'ldiradi.
+   */
+  if (visual === "timeline" && !twoRows && perRow >= 2) {
+    const nodeD = 0.22;
+    const railY = top - 0.42;
+    const centerOf = (i: number) => M + 0.18 + i * (colW + gap) + colW / 2;
+    const first = centerOf(0);
+    const last = centerOf(perRow - 1);
+    layers.push({
+      t: "rect",
+      box: { x: first, y: railY, w: last - first, h: 0.05 },
+      fill: { color: theme.accent, alpha: 0.55 },
+    });
+    for (let i = 0; i < perRow; i++) {
+      layers.push({
+        t: "rect",
+        box: { x: centerOf(i) - nodeD / 2, y: railY + 0.025 - nodeD / 2, w: nodeD, h: nodeD },
+        fill: { color: theme.accent },
+        radius: nodeD / 2,
+      });
+    }
+  }
 
   items.forEach((st, i) => {
     const row = twoRows && i >= perRow ? 1 : 0;
