@@ -9,8 +9,7 @@ import { useAppStore } from "@/lib/store";
 import { TOOL_BY_ID } from "@/lib/tools";
 import { useConfirmClick } from "../overlays/useConfirmClick";
 import { ArtifactViewer } from "../viewers/ArtifactViewer";
-import { SlideViewer } from "../viewers/SlideViewer";
-import { asLiveView } from "../viewers/SlideViewer";
+import { SlideViewer, asLiveView } from "../viewers/SlideViewer";
 import { liveDocOf, type LiveDeck } from "@/lib/generation/slide-progress";
 import { viewerKind } from "@/lib/viewers/kind";
 import type { Generation } from "@/lib/types";
@@ -120,21 +119,6 @@ export function ResultView({ id }: { id: string }) {
    */
   const expired = completed && !gen.hasFile;
 
-  /*
-   * JONLI KO'RUVCHI (L5).
-   *
-   * `IN_PROGRESS` da slayd vositasi uchun deka allaqachon qurilyapti —
-   * uni progress bar ortiga yashirish o'rniga ekranga chiqaramiz.
-   * Shartlar UCHTA va hammasi kerak: ish ketyapti, jonli holat bor va
-   * bu SLAYD vositasi (matn hujjatlarida hozircha jonli model yo'q,
-   * `liveDocOf` ularga hech narsa bermaydi). Bittasi tushsa — eski
-   * progress kartochkasi, ya'ni yiqilish xavfsiz tomonga.
-   */
-  const live =
-    running && viewerKind(gen.type) === "slides"
-      ? asLiveView(gen.live as LiveDeck | null | undefined)
-      : null;
-
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
       <nav className="no-print bg-background/95 sticky top-0 z-10 flex items-center gap-2 border-b px-3 py-2 sm:px-4">
@@ -209,35 +193,7 @@ export function ResultView({ id }: { id: string }) {
         ) : null}
       </nav>
 
-      {running && live ? (
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <SlideViewer
-            doc={withFrozenYear(liveDocOf(live as LiveDeck), gen.createdAt) as NonNullable<Generation["doc"]>}
-            live={live}
-          />
-        </div>
-      ) : null}
-
-      {running && !live ? (
-        <div className="mx-auto w-full max-w-2xl px-4 py-8">
-          <div className="bg-card rounded-2xl border p-6">
-            <p className="mb-2 font-medium">{tool?.creatingLabel ?? "Yaratilmoqda..."}</p>
-            <p className="text-muted-foreground mb-4 text-sm">{gen.step}</p>
-            <div
-              className="bg-muted h-2 overflow-hidden rounded-full"
-              role="progressbar"
-              aria-valuenow={gen.progress}
-              aria-valuemin={0}
-              aria-valuemax={100}
-            >
-              <div className="bg-primary h-full transition-all" style={{ width: `${gen.progress}%` }} />
-            </div>
-            <p className="text-muted-foreground mt-4 text-xs">
-              Sahifani yopsangiz ham ish davom etadi — keyin «Mening fayllarim» dan ochasiz.
-            </p>
-          </div>
-        </div>
-      ) : null}
+      {running ? <RunningPanel gen={gen} /> : null}
 
       {gen.status === "FAILED" || gen.status === "REVOKED" ? (
         <div className="mx-auto w-full max-w-2xl px-4 py-8">
@@ -305,6 +261,53 @@ export function ResultView({ id }: { id: string }) {
           <ArtifactViewer gen={toLegacyShape(gen)} />
         </div>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * Ish ketayotgandagi maydon — JONLI ko'ruvchi yoki eski progress bar.
+ *
+ * Alohida komponent, chunki tanlov qoidasi shu yerda va uni SSR bilan
+ * to'g'ridan-to'g'ri sinash mumkin (`ResultView`ning o'zi sessiya va
+ * pollingga bog'liq, SSR da esa hali «Yuklanmoqda…» holatida bo'ladi).
+ *
+ * Shartlar UCHTA va hammasi kerak: bu SLAYD vositasi (matn hujjatlarida
+ * jonli model yo'q — `liveDocOf` ularga hech narsa bermaydi), jonli
+ * holat kelgan va uning shakli to'g'ri. Bittasi tushsa — eski progress
+ * kartochkasi, ya'ni yiqilish xavfsiz tomonga.
+ */
+export function RunningPanel({ gen }: { gen: api.GenerationDetail }) {
+  const tool = TOOL_BY_ID[gen.type];
+  const live =
+    viewerKind(gen.type) === "slides" ? asLiveView(gen.live as LiveDeck | null | undefined) : null;
+
+  if (live) {
+    return (
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <SlideViewer doc={withFrozenYear(liveDocOf(live), gen.createdAt)!} live={live} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="mx-auto w-full max-w-2xl px-4 py-8">
+      <div className="bg-card rounded-2xl border p-6">
+        <p className="mb-2 font-medium">{tool?.creatingLabel ?? "Yaratilmoqda..."}</p>
+        <p className="text-muted-foreground mb-4 text-sm">{gen.step}</p>
+        <div
+          className="bg-muted h-2 overflow-hidden rounded-full"
+          role="progressbar"
+          aria-valuenow={gen.progress}
+          aria-valuemin={0}
+          aria-valuemax={100}
+        >
+          <div className="bg-primary h-full transition-all" style={{ width: `${gen.progress}%` }} />
+        </div>
+        <p className="text-muted-foreground mt-4 text-xs">
+          Sahifani yopsangiz ham ish davom etadi — keyin «Mening fayllarim» dan ochasiz.
+        </p>
+      </div>
     </div>
   );
 }

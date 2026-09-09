@@ -2,19 +2,24 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { LiveStage } from "@/lib/generation/slide-progress";
-import type { SlideModel } from "@/lib/generation/slide-types";
+import type { SlideModel, SlideThemeId } from "@/lib/generation/slide-types";
+import type { SlideTemplateId } from "@/lib/generation/slide-templates";
+import type { DocMeta } from "@/lib/generation/types";
 
 /**
  * Ko'ruvchi jonli holatdan NIMANI o'qishini bildiruvchi tip.
  *
  * `LiveDeck` (dvigatel reduktorining chiqishi) bu shaklga strukturaviy
- * mos keladi, lekin ko'ruvchi undan kengroq narsa TALAB QILMAYDI: mavzu,
- * shablon va boshqa maydonlar `liveDocOf` orqali `AcademicDoc` ga aylanib
- * keladi. Tip shu yerda — hook ham, tasma ham, eskiz paneli ham buni
+ * mos keladi, ya'ni `liveDocOf(live)` ni to'g'ridan-to'g'ri chaqirsa
+ * bo'ladi. Tip shu yerda — hook ham, tasma ham, eskiz paneli ham buni
  * ishlatadi va `SlideViewer` ga aylanma import kerak bo'lmaydi.
  */
 export type LiveView = {
   stage: LiveStage;
+  meta: DocMeta;
+  theme: SlideThemeId;
+  template: SlideTemplateId;
+  logo?: string;
   /** 0..99 — haqiqiy foiz, soxta egri chiziq emas. */
   progress: number;
   step: string;

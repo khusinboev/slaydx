@@ -35,6 +35,8 @@ export function asLiveView(live: unknown): LiveView | null {
   if (!Array.isArray(v.written) || !Array.isArray(v.roles) || !Array.isArray(v.imageWait)) return null;
   if (!v.images || typeof v.images.got !== "number" || typeof v.images.want !== "number") return null;
   if (typeof v.progress !== "number" || typeof v.step !== "string") return null;
+  // `liveDocOf` shu uchtasisiz hujjat qura olmaydi.
+  if (!v.meta || typeof v.meta !== "object" || typeof v.theme !== "string" || typeof v.template !== "string") return null;
   return v as LiveView;
 }
 
@@ -136,7 +138,8 @@ export function SlideViewer({
   }, [lv, slides.length]);
 
   const written = useMemo(() => lv?.written ?? [], [lv]);
-  const skeleton = Boolean(lv && marks && marks[i] === undefined);
+  // Sahnada ham FAQAT `done` haqiqiy matn — qolganida skelet.
+  const skeleton = Boolean(lv && marks && marks[i] !== "done");
   /*
    * Yozish animatsiyasi uchun matn hajmi — sahnadagi slaydning O'ZI
    * (`planSlide` qatlamlari). Slayd hali yo'q yoki skelet bo'lsa
@@ -370,7 +373,9 @@ export function SlideViewer({
             </div>
           ) : null}
 
-          {!present && notesOn ? (
+          {/* Jonli rejimda eslatma paneli ham yopiq — matn `deck`
+              hodisasidan keyin qayta yoziladi, yarimi yolg'on bo'lardi. */}
+          {!present && notesOn && !lv ? (
             <div className="no-print max-h-28 shrink-0 overflow-y-auto border-t border-white/10 bg-[#2b2b2b] px-4 py-2">
               <div className="mb-1 text-[11px] font-medium tracking-wide text-white/45 uppercase">Eslatma</div>
               <p className="whitespace-pre-wrap text-[13px] leading-snug text-white/80">{notes || "Bu slayd uchun eslatma yo‘q."}</p>

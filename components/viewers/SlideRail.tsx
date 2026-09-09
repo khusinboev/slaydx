@@ -73,8 +73,13 @@ export function SlideRail({
     <aside ref={railRef} className="hidden w-[200px] shrink-0 overflow-y-auto border-r border-white/10 bg-[#171717] p-2 md:block">
       {slides.map((s, idx) => {
         const mark = marks?.[idx];
-        // `marks` yo'q → tayyor hujjat, hamma eskiz haqiqiy.
-        const pending = marks !== undefined && mark === undefined;
+        /*
+         * `marks` yo'q → tayyor hujjat, hamma eskiz haqiqiy. Bor bo'lsa
+         * FAQAT `done` haqiqiy matn: `writing` ham, belgisiz ham hali
+         * yozilmagan (reja bergan bo'sh `SlideModel`), farqi shundaki
+         * `writing` da nuqta yonadi.
+         */
+        const pending = marks !== undefined && mark !== "done";
         return (
         <button
           key={s.id}
