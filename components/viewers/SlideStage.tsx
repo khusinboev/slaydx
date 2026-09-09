@@ -121,7 +121,13 @@ export function SlideStage({
             <ImageWaitPlaque layout={slide.layout} visual={visual} theme={theme} />
           ) : null}
         </div>
-        {overlay && slide ? <div className="absolute inset-0">{overlay({ index, scale, slide })}</div> : null}
+        {/*
+          O'ram `pointer-events-none`: aks holda u butun sahnani yopib, ikki
+          bosishni O'ZIGA oladi va `data-src` li matnga yetkazmaydi (jsdom
+          hit-testing qilmaydi — bu faqat haqiqiy brauzerda ko'rindi).
+          Ichidagi tugmalar/maydonlar `pointer-events-auto` bilan ishlaydi.
+        */}
+        {overlay && slide ? <div className="pointer-events-none absolute inset-0">{overlay({ index, scale, slide })}</div> : null}
       </div>
     </div>
   );

@@ -479,6 +479,8 @@ export function SlideEditor({
   const boxStyleNow: CSSProperties | null = editLayer
     ? {
         ...textLayerStyle(editLayer),
+        // `SlideCanvas` da `className="absolute"` beradi — bu yerda stilning o'zida.
+        position: "absolute",
         overflow: "visible",
         outline: "2px solid #0EA5E9",
         outlineOffset: 2,

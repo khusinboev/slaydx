@@ -75,6 +75,15 @@ test("gen berilsa (COMPLETED, doc.slides bor) — tahrir DARHOL yoqiq", () => {
   assert.ok(!html.includes("Eslatma"), "eslatma tugmasi va paneli olib tashlangan");
   assert.ok(!html.includes("Yuqoriga") && !html.includes("Pastga"), "▲/▼ olib tashlangan");
   assert.ok(!html.includes("Asl holatga qaytarish"), "server doc_prev tugmasi UI da yo'q");
+  /*
+   * Overlay o'rami `pointer-events-none` bo'lishi SHART: aks holda u butun
+   * sahnani yopib ikki bosishni o'ziga oladi va `data-src` li matnga
+   * yetkazmaydi — brauzerda «hech narsa bo'lmayapti» (jsdom hit-testing
+   * qilmagani uchun UI testlar buni ko'rmagan, faqat Playwright ko'rdi).
+   */
+  const wrap = html.indexOf("data-slide-editor");
+  const before = html.slice(Math.max(0, wrap - 400), wrap);
+  assert.ok(before.includes('class="pointer-events-none absolute inset-0"'), "overlay o'rami hodisalarni o'tkazib yuborishi kerak");
 });
 
 test("«Tahrirlash» tugmasi HTML da UMUMAN yo'q", () => {
