@@ -223,7 +223,16 @@ export function plannedImageSlots(
  * `photo` uslubi, `imageBudget` shifti — ya'ni eski chaqiruvlar
  * (`scripts/image-lab.mts`, mavjud testlar) regressiyasiz ishlaydi.
  */
-export type AttachImageOpts = VisualTier & { meta?: DocMeta };
+export type AttachImageOpts = VisualTier & {
+  meta?: DocMeta;
+  /**
+   * Jonli generatsiya ilgaklari — F1b da IMZO qo'shiladi, hali
+   * chaqirilmaydi (L2 paketi chaqiradi). `onPlanned` rasm rejasi
+   * hisoblangach (indekslar), `onImage` har rasm biriktirilganda.
+   */
+  onPlanned?: (indexes: number[]) => void;
+  onImage?: (index: number, url: string) => void;
+};
 
 export async function attachSlideImages(
   slides: SlideModel[],
