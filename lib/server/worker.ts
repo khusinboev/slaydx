@@ -12,11 +12,11 @@ import {
   reclaimStaleJobs,
   setProgress,
   type ClaimedJob,
-  type GenerationPreview,
 } from "./jobs";
 import { refund, refundPartial } from "./credits";
 import { deleteGenerationFile, putGenerationFile } from "./storage";
 import { deleteAssets, extractAssets, putAssets } from "./assets";
+import { buildPreview } from "./preview";
 import { logoDataUrl } from "./logo";
 import { purgeExpiredSessions } from "./session";
 import { purgeRateLimits } from "./ratelimit";
@@ -24,7 +24,7 @@ import { purgeExpiredTickets } from "./telegram";
 import { queryOne } from "./db";
 import type { ToolId } from "../types";
 import { refundRatio } from "../generation/delivered";
-import type { AcademicDoc, Delivered } from "../generation/types";
+import type { Delivered } from "../generation/types";
 
 /**
  * Navbatni bajaruvchi worker.
@@ -85,26 +85,6 @@ function progressTicker(job: ClaimedJob) {
     void setProgress(job.id, WORKER_ID, progress, steps[idx]).catch(() => {});
   }, 2000);
   return () => clearInterval(timer);
-}
-
-/**
- * Ro'yxat kartochkasi uchun kichik ko'rinish.
- *
- * Ro'yxat endpointi butun hujjatni qaytarmaydi, shuning uchun rasm
- * havolasi va bir necha qator matn shu yerda oldindan tayyorlanadi.
- */
-function buildPreview(doc: AcademicDoc | null): GenerationPreview | null {
-  if (!doc) return null;
-  const url =
-    doc.images?.find((im) => im.url)?.url || doc.slides?.find((s) => s.image?.url)?.image?.url;
-  const lines = (doc.sections ?? [])
-    .flatMap((s) => s.blocks.filter((b) => b.kind === "p" || b.kind === "h2" || b.kind === "li"))
-    .map((b) => b.text.trim())
-    .filter((t) => t.length > 12)
-    .slice(0, 5)
-    .map((t) => t.slice(0, 160));
-  if (!url && !lines.length) return null;
-  return { ...(url ? { url } : {}), ...(lines.length ? { lines } : {}) };
 }
 
 /**
