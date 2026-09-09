@@ -151,6 +151,12 @@ export function SlideViewer({
   const [fitOn, setFitOn] = useState(true);
 
   const lv = useMemo(() => asLiveView(live), [live]);
+  /**
+   * Ko'ruvchi sahifaga BOG'LANGANmi (tayyor generatsiya yoki jonli
+   * oqim). Mobil eskiz tasmasi faqat shunda chiziladi — `gen`/`live`
+   * siz render F2 paritet fiksturasi bilan qulflangan.
+   */
+  const connected = gen !== undefined || live !== undefined;
 
   const go = useCallback(
     (n: number) => setI(Math.max(0, Math.min(slides.length - 1, n))),
@@ -280,6 +286,24 @@ export function SlideViewer({
     },
     [runOps, i],
   );
+  /*
+   * Kolontitul DEKA darajasida — `index` YO'Q: `applyDocOps` uni barcha
+   * slaydga yozadi. Shuning uchun `onText` dan alohida ilgak (matn
+   * operatsiyasi `footer` ni ataylab rad etadi).
+   */
+  const onFooter = useCallback(
+    (value: string) => {
+      runOps([{ op: "footer", value }]);
+    },
+    [runOps],
+  );
+  /** Test kaliti — javoblar slaydi `applyDocOps` ichida qayta yig'iladi. */
+  const onAnswer = useCallback(
+    (q: number, answer: number) => {
+      runOps([{ op: "answer", index: i, q, answer }]);
+    },
+    [runOps, i],
+  );
   /** Shrift o'lchami — matndan ALOHIDA op (`null` — «Standart»). */
   const onStyle = useCallback(
     (src: SlideSrc, size: number | null) => {
@@ -326,6 +350,13 @@ export function SlideViewer({
   );
   // Ikki bosqichli tasdiq — bir bosishda slayd yo'qolmasin (undo bor, lekin baribir).
   const delSlide = useConfirmClick(onDeleteSlide);
+  /*
+   * «Asl holatga qaytarish» ham IKKI bosishda: u butun dekani birinchi
+   * tahrirdan oldingi holatga qaytaradi va Ctrl+Z bilan ortga qaytmaydi
+   * (steklar tozalanadi) — bitta tasodifiy bosish soatlab ishni
+   * yo'qotardi.
+   */
+  const restoreDeck = useConfirmClick(() => void ed.restore());
 
   /*
    * Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y. `useSlideKeys` bu ilgakni
@@ -549,6 +580,28 @@ export function SlideViewer({
                 </>
               ) : null}
 
+              {/*
+                «Asl holatga qaytarish» — FAQAT serverda `doc_prev` bo'lsa
+                (`hasPrev`), ya'ni deka bir marta bo'lsa ham tahrirlangan.
+                Tahrirlanmagan dekada tugma umuman chiqmaydi: bosilsa
+                server 409 `no_prev` qaytarardi.
+              */}
+              {editOn && ed.hasPrev ? (
+                <button
+                  type="button"
+                  title="Dekani birinchi tahrirdan oldingi holatga qaytarish"
+                  disabled={ed.saving || ed.rebuilding}
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded px-2 py-1 text-xs disabled:opacity-40",
+                    restoreDeck.armed ? "bg-amber-500/85 text-white" : "hover:bg-white/10",
+                  )}
+                  onClick={restoreDeck.trigger}
+                >
+                  <RotateCcw className="size-3.5" />
+                  {restoreDeck.armed ? "Rostdan qaytarilsinmi?" : "Asl holatga qaytarish"}
+                </button>
+              ) : null}
+
               {/* Interfeys o'zbekcha: xom `id` («magazine», «problem») emas,
                   shablonning formada ko'ringan nomi. */}
               <span className="hidden text-xs text-white/50 lg:inline">
@@ -651,6 +704,8 @@ export function SlideViewer({
                       redrawsLeft={ed.redrawsLeft}
                       busy={ed.saving}
                       onText={onText}
+                      onFooter={onFooter}
+                      onAnswer={onAnswer}
                       onStyle={onStyle}
                       onImage={onSlideImage}
                       onUpload={(f) => void ed.uploadImage(ctx.index, f)}
@@ -666,6 +721,35 @@ export function SlideViewer({
           />
 
           {lv ? <LiveStrip live={lv} /> : null}
+
+          {/*
+            MOBIL eskiz tasmasi — yon panel `md:` dan past ekranda
+            `hidden`, ya'ni telefonda deka umuman ko'rinmasdi.
+
+            Shart `connected`: `gen`/`live` siz ko'ruvchi SSR HTML i
+            F2 fikstura bilan BAYT-BAYTIGA qulflangan
+            (`tests/viewer/slide-viewer-seams.test.mts`) va unga yangi
+            tugun qo'shib bo'lmaydi. Ishlab turgan IKKALA yo'l ham
+            tasmani oladi: `ArtifactViewer` → `gen`, `RunningPanel` → `live`.
+          */}
+          {!present && connected ? (
+            <SlideRail
+              variant="strip"
+              slides={slides}
+              theme={theme}
+              visual={deck.visual}
+              audience={deck.audience}
+              templateId={deck.templateId}
+              bodyType={deck.bodyType}
+              logo={deck.logo}
+              i={i}
+              go={lv ? railGo : go}
+              roles={lv?.roles}
+              marks={marks}
+              reorderOn={editOn}
+              onMove={onMove}
+            />
+          ) : null}
 
           {!present ? (
             <div className="no-print flex h-9 shrink-0 items-center gap-2 border-t border-white/10 bg-[#252525] px-3 text-[12px] text-white/70">

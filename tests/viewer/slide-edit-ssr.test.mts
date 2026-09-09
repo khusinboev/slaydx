@@ -126,3 +126,59 @@ test("mumkin bo'lmagan maket chipi chizilmaydi", () => {
   assert.ok(!html.includes("Ikki ustun"), "muqovadan ikki ustunga o'girib bo'lmaydi");
   assert.ok(!html.includes("Jadval"), "muqovadan jadvalga o'girib bo'lmaydi");
 });
+
+// ══════════════════════════════════ Mobil eskiz tasmasi
+
+/**
+ * `md:` dan past ekranda yon eskiz paneli `hidden` — telefonda deka
+ * umuman ko'rinmasdi. Tasma o'sha ma'lumotni gorizontal beradi va
+ * FAQAT bog'langan ko'ruvchida chiziladi (`gen` yoki `live`): `gen`siz
+ * SSR HTML i F2 fiksturasi bilan bayt-baytiga qulflangan
+ * (`slide-viewer-seams`), unga yangi tugun qo'shib bo'lmaydi.
+ */
+test("mobil tasma SSR da chiziladi va `md:` dan yashirinadi", () => {
+  const doc = docWithSlides();
+  const html = renderToStaticMarkup(h(SlideViewer, { doc, gen: completedGen(doc) }));
+  assert.ok(html.includes('data-rail="strip"'), "tasma HTML da bo'lishi kerak");
+  assert.ok(html.includes("md:hidden"), "tasma katta ekranda yashirinadi (yon panel bor)");
+  // Har slaydga bitta eskiz — sahna emas, aynan tasma ichidagilar.
+  const marks = html.match(/data-strip-index="\d+"/g) ?? [];
+  assert.equal(marks.length, slides.length, "har slaydga bitta eskiz");
+});
+
+test("gen/live bo'lmasa tasma chizilmaydi (F2 paritet fiksturasi)", () => {
+  const html = renderToStaticMarkup(h(SlideViewer, { doc: docWithSlides() }));
+  assert.ok(!html.includes('data-rail="strip"'), "passiv ko'ruvchi HTML i o'zgarmasligi kerak");
+});
+
+test("jonli rejimda tasma SKELET eskizlar bilan chiziladi", () => {
+  const doc = docWithSlides();
+  const live = {
+    stage: "text",
+    meta: { topic: "Namunaviy mavzu", author: "Aliyev Ali", workLabel: "Taqdimot", speakerNotes: true },
+    theme: "atlas",
+    template: "lecture",
+    progress: 20,
+    step: "Matn yozilmoqda · 1/2 slayd",
+    roles: ["Muqova", "Kirish"],
+    slides,
+    written: [0],
+    final: false,
+    imageWait: [],
+    images: { got: 0, want: 0 },
+  };
+  const html = renderToStaticMarkup(h(SlideViewer, { doc, live }));
+  assert.ok(html.includes('data-rail="strip"'), "jonli ko'ruvchida ham tasma bor");
+  // Hali yozilmagan slayd o'rniga reja bergan vazifa ko'rinadi.
+  assert.ok(html.includes("Kirish"), "yozilmagan eskiz roli bilan ko'rsatiladi");
+  /*
+   * Ikkita skelet: yon panelda va TASMADA (sahnada esa 0-slayd
+   * yozilgan). Tasma skeletni chizmasa — bitta bo'lib qolardi, ya'ni
+   * telefonda yozilmagan slayd «tayyor»dek ko'rinardi.
+   */
+  assert.equal(
+    (html.match(/data-skeleton="1"/g) ?? []).length,
+    2,
+    "yozilmagan slayd yon panelda ham, tasmada ham skelet bo'lishi kerak",
+  );
+});
