@@ -27,7 +27,6 @@ Loyiha strukturasi: **poydevor** (umumiy qatlam) → **1-to'lqin** (jonli genera
 - **`lib/generation/slide-limits.ts`** (yangi)
   - `SLIDE_LIMITS` — har maydon uchun belgilangan chegara (title 80, subtitle 140…)
   - `clipTo(text, maxChars)` — harmoniya bilan qisqartirish
-  - `IMAGE_REDRAW_LIMIT=5` (dekaga qayta chizish)
   - `UNDO_DEPTH=100`, `REBUILD_DEBOUNCE_MS=3000`
 
 - **`lib/generation/slide-edit.ts`** (yangi, izomorf)
@@ -60,7 +59,6 @@ Loyiha strukturasi: **poydevor** (umumiy qatlam) → **1-to'lqin** (jonli genera
 
 - **`lib/server/slide-image.ts`** (yangi)
   - `uploadSlideImage()` — multipart fayl upload, asset simpletoring
-  - `regenerateSlideImage()` — qayta chizish, limit tekshiruvi
 
 - **`lib/server/preview.ts`** (yangi)
   - `buildPreview()` — deka XML/HTML ko'rish (worker dan ko'chdi)
@@ -69,7 +67,6 @@ Loyiha strukturasi: **poydevor** (umumiy qatlam) → **1-to'lqin** (jonli genera
   - `setLive(id, workerId, live)` — jonli dekani yozish
   - `updateGenerationDoc()` — doc_version ubaytish
   - `markFileVersion()` — file_version ubaytish
-  - `reserveRedraw() / releaseRedraw()` — rasm qayta chizish saylagichi
 
 - **`lib/server/assets.ts`** (o'zgaradi)
   - `assetImageResolver()` — renderPptx uchun aktiv resolver
@@ -127,7 +124,6 @@ Loyiha strukturasi: **poydevor** (umumiy qatlam) → **1-to'lqin** (jonli genera
   - `patchGenerationDoc()` — PATCH /api/generations/{id}/doc
   - `rebuildGeneration()` — POST .../rebuild
   - `uploadSlideImage()` — POST .../slides/{i}/image
-  - `regenerateSlideImage()` — POST .../image/regenerate
 
 - **`lib/api-client.ts`** (o'zgaradi)
   - `mergeLive()` — yangi `live` olamni qadimgi bilan birlashtrish
@@ -148,9 +144,6 @@ Loyiha strukturasi: **poydevor** (umumiy qatlam) → **1-to'lqin** (jonli genera
 
 - **`app/api/generations/[id]/slides/[index]/image/route.ts`** (yangi)
   - `POST` — `uploadSlideImage()`
-
-- **`app/api/generations/[id]/slides/[index]/image/regenerate/route.ts`** (yangi)
-  - `POST` — `regenerateSlideImage()` limit tekshiruvi
 
 ### Testlar
 

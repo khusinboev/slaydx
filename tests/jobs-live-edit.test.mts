@@ -30,8 +30,6 @@ const {
   reclaimStaleJobs,
   updateGenerationDoc,
   markFileVersion,
-  reserveRedraw,
-  releaseRedraw,
   getVersions,
   getGenerationForEdit,
   rowToSummary,
@@ -259,7 +257,7 @@ test("getGeneration: SQL matnida since CASE va egalik predikati bor", async (t) 
 });
 
 // ---------------------------------------------------------------------------
-// updateGenerationDoc / markFileVersion / reserveRedraw / releaseRedraw / getVersions / getGenerationForEdit
+// updateGenerationDoc / markFileVersion / getVersions / getGenerationForEdit
 // ---------------------------------------------------------------------------
 
 function fakeClient(rows: unknown[]) {
@@ -308,29 +306,6 @@ test("markFileVersion: file_version < $v predikati, egalik bor", async () => {
   const q = sql(calls[0]);
   assert.match(q, /SET\s+file_version = \$3/);
   assert.match(q, /WHERE id = \$1 AND user_id = \$2 AND file_version < \$3/);
-});
-
-test("reserveRedraw: image_redraws < $limit va status='COMPLETED' BITTA predikatda (TOCTOU yo'q)", async (t) => {
-  const seen = mockQuery(t, [{ image_redraws: 2 }]);
-  const out = await reserveRedraw("gen-1", "u1", 5);
-  assert.equal(out, 2);
-  const q = sql(seen[0]);
-  assert.match(q, /image_redraws = image_redraws \+ 1/);
-  assert.match(q, /WHERE id = \$1 AND user_id = \$2 AND status = 'COMPLETED' AND image_redraws < \$3/);
-});
-
-test("reserveRedraw: limit tugagan bo'lsa — null", async (t) => {
-  mockQuery(t, []);
-  const out = await reserveRedraw("gen-1", "u1", 5);
-  assert.equal(out, null);
-});
-
-test("releaseRedraw: GREATEST(image_redraws-1,0), egalik bilan", async (t) => {
-  const seen = mockQuery(t, []);
-  await releaseRedraw("gen-1", "u1");
-  const q = sql(seen[0]);
-  assert.match(q, /GREATEST\(image_redraws - 1, 0\)/);
-  assert.match(q, /WHERE id = \$1 AND user_id = \$2/);
 });
 
 test("getVersions: egalik SQL da, kerakli maydonlarni qaytaradi", async (t) => {

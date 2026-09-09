@@ -97,9 +97,6 @@ export const SLIDE_LIMITS = {
 
 export type SlideLimits = typeof SLIDE_LIMITS;
 
-/** Bitta dekaga bepul qayta chizish soni. */
-export const IMAGE_REDRAW_LIMIT = 5;
-
 /** Foydalanuvchi yuklaydigan slayd rasmi (PNG/JPEG) uchun yuqori chegara. */
 export const SLIDE_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 

@@ -5,15 +5,16 @@ import type { SlideModel } from "../lib/generation/slide-types.ts";
 
 /**
  * E5 — slayd rasm serveri (`lib/server/slide-image.ts` va uni chaqiradigan
- * `image`/`image/regenerate` route'lari).
+ * `image` route'i).
  *
- * BAZASIZ va TARMOQSIZ: `pool().query`/`pool().connect()` (`tests/slide-doc-route.test.mts`
- * naqshi) VA `globalThis.fetch` (`tests/slide-images.test.mts` naqshi)
- * ikkalasi ham ushlanadi. Route funksiyalarining o'zi chaqirilmaydi —
- * `cookies()` Next so'rov konteksti ichida ishlaydi; route'lar bu
- * fayldagi AYNAN shu funksiyalarni (`uploadSlideImage`,
- * `regenerateSlideImage`) chaqiradi, ya'ni sinov haqiqiy kod yo'lini
- * sinaydi.
+ * BAZASIZ: `pool().query`/`pool().connect()` (`tests/slide-doc-route.test.mts`
+ * naqshi) ushlanadi. Route funksiyasining o'zi chaqirilmaydi — `cookies()`
+ * Next so'rov konteksti ichida ishlaydi; route bu fayldagi AYNAN shu
+ * funksiyani (`uploadSlideImage`) chaqiradi, ya'ni sinov haqiqiy kod
+ * yo'lini sinaydi.
+ *
+ * AI bilan qayta chizish (`regenerateSlideImage`) va uning testlari
+ * olib tashlandi (Muharrir 2 / WP4b).
  */
 
 process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";
@@ -21,9 +22,8 @@ process.env.DATABASE_URL = process.env.DATABASE_URL || "postgres://unused/unused
 
 const { pool } = await import("../lib/server/db.ts");
 const { ApiError } = await import("../lib/server/api.ts");
-const { uploadSlideImage, regenerateSlideImage } = await import("../lib/server/slide-image.ts");
-const { IMAGE_REDRAW_LIMIT, SLIDE_IMAGE_MAX_BYTES } = await import("../lib/generation/slide-limits.ts");
-const { seedFrom } = await import("../lib/generation/slide-images.ts");
+const { uploadSlideImage } = await import("../lib/server/slide-image.ts");
+const { SLIDE_IMAGE_MAX_BYTES } = await import("../lib/generation/slide-limits.ts");
 const { extractMeta } = await import("../lib/generation/meta.ts");
 const { TOOL_BY_ID } = await import("../lib/tools.ts");
 
@@ -65,8 +65,6 @@ type Rows = {
   detail?: Record<string, unknown> | null;
   updateDoc?: Record<string, unknown> | null;
   hasFile?: boolean;
-  /** `null` — limit tugagan (`reserveRedraw` 0 qator). */
-  reserve?: Record<string, unknown> | null;
 };
 
 function norm(s: string): string {
@@ -83,8 +81,6 @@ function mockDb(t: TestContext, rows: Rows): Seen[] {
     else if (/^SELECT doc_json, doc_version/.test(q)) out = rows.forEdit ? [rows.forEdit] : [];
     else if (/UPDATE generations SET doc_json/.test(q)) out = rows.updateDoc ? [rows.updateDoc] : [];
     else if (/FROM generation_files f JOIN generations/.test(q)) out = rows.hasFile ? [{ "?column?": 1 }] : [];
-    else if (/SET image_redraws = image_redraws \+ 1/.test(q)) out = rows.reserve ? [rows.reserve] : [];
-    else if (/SET image_redraws = GREATEST/.test(q)) out = []; // releaseRedraw — natija tekshirilmaydi
     else if (/INSERT INTO generation_assets/.test(q)) out = []; // putAssetBytes — ON CONFLICT DO NOTHING
     return { rows: out, rowCount: out.length };
   };
@@ -152,34 +148,6 @@ function detailRow(over: Record<string, unknown> = {}) {
     live_json_out: null,
     ...over,
   };
-}
-
-// ───────────────────────────────────────────── fetch stub (fal.ai)
-
-/** `slide-images.ts` `sniffImageType`ning tekshiradigan haqiqiy 1x1 JPEG bayti. */
-const JPEG_1PX =
-  "/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAACf/EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AKp//2Q==";
-
-function jsonRes(status: number, body: unknown) {
-  return { ok: status >= 200 && status < 300, status, json: async () => body } as never;
-}
-
-function falEnv() {
-  const saved = { fal: process.env.FAL_KEY, fetch: globalThis.fetch };
-  process.env.FAL_KEY = "test-fal-key";
-  return () => {
-    globalThis.fetch = saved.fetch;
-    if (saved.fal === undefined) delete process.env.FAL_KEY;
-    else process.env.FAL_KEY = saved.fal;
-  };
-}
-
-/** Har chaqiruvda muvaffaqiyatli fal javobi — so'rov tanasini `seen`ga yozadi. */
-function stubFalOk(seen: { body: Record<string, unknown> }[]) {
-  globalThis.fetch = (async (_url: string, init: RequestInit) => {
-    seen.push({ body: JSON.parse(String(init.body)) });
-    return jsonRes(200, { images: [{ url: `data:image/jpeg;base64,${JPEG_1PX}` }] });
-  }) as unknown as typeof fetch;
 }
 
 // ═══════════════════════════════════════════ uploadSlideImage
@@ -298,181 +266,3 @@ test("uploadSlideImage: rasm joyi bo'lmagan maketga yuklash — 422 (applyDocOps
   assert.equal(found(seen, /UPDATE generations SET doc_json/).length, 0);
 });
 
-// ═══════════════════════════════════════════ regenerateSlideImage
-
-test("regenerateSlideImage: indeks manfiy — 400, DB ga bormaydi", async (t) => {
-  const seen = mockDb(t, { forEdit: editRow() });
-  await expectApiError(regenerateSlideImage(GEN, USER, -1, 3), 400);
-  assert.equal(seen.length, 0);
-});
-
-test("regenerateSlideImage: maketda rasm joyi yo'q — 422, reserveRedraw ChAQIRILMAYDI", async (t) => {
-  const seen = mockDb(t, { forEdit: editRow({ doc_version: 3 }) });
-  await expectApiError(regenerateSlideImage(GEN, USER, 2, 3), 422);
-  /*
-   * MUTATSIYA: agar tekshiruv tartibi almashtirilsa (avval limit band
-   * qilinsa, keyin maket tekshirilsa), bu foydalanuvchining bepul
-   * limitini BEHUDA yeb qo'yardi — hech qanday rasm chizib bo'lmaydigan
-   * slaydda ham.
-   */
-  assert.equal(found(seen, /SET image_redraws = image_redraws \+ 1/).length, 0, "limit band qilinmasligi kerak");
-});
-
-test("regenerateSlideImage: reserveRedraw null — 409 {code:'redraw_limit'}, provayder CHAQIRILMAYDI", async (t) => {
-  const restore = falEnv();
-  const calls: unknown[] = [];
-  globalThis.fetch = (async () => {
-    calls.push(1);
-    return jsonRes(200, { images: [{ url: `data:image/jpeg;base64,${JPEG_1PX}` }] });
-  }) as unknown as typeof fetch;
-  try {
-    mockDb(t, { forEdit: editRow({ doc_version: 3, image_redraws: IMAGE_REDRAW_LIMIT }), reserve: null });
-    const e = await expectApiError(regenerateSlideImage(GEN, USER, 1, 3), 409);
-    assert.equal(e.extra.code, "redraw_limit");
-    assert.equal(e.extra.imageRedraws, IMAGE_REDRAW_LIMIT);
-    assert.equal(calls.length, 0, "limit tugagan bo'lsa pullik provayder chaqiruvi ketmasligi kerak");
-  } finally {
-    restore();
-  }
-});
-
-test("regenerateSlideImage: provayder 'failed' — 502, releaseRedraw chaqiriladi, commitDocOps chaqirilmaydi", async (t) => {
-  const restore = falEnv();
-  globalThis.fetch = (async () => jsonRes(500, { error: "internal" })) as unknown as typeof fetch;
-  try {
-    const seen = mockDb(t, {
-      forEdit: editRow({ doc_version: 3 }),
-      reserve: { image_redraws: 2 },
-    });
-    const e = await expectApiError(regenerateSlideImage(GEN, USER, 1, 3), 502);
-    assert.equal(e.extra.code, "failed");
-    assert.equal(found(seen, /SET image_redraws = GREATEST/).length, 1, "band qilingan limit qaytarilishi kerak");
-    assert.equal(found(seen, /UPDATE generations SET doc_json/).length, 0, "yiqilgan urinish yozilmasligi kerak");
-    assert.equal(found(seen, /INSERT INTO generation_assets/).length, 0, "hech qanday aktiv saqlanmasligi kerak");
-  } finally {
-    restore();
-  }
-});
-
-test("regenerateSlideImage: muvaffaqiyat — commitDocOps {op:'image', url} bilan, releaseRedraw ChAQIRILMAYDI", async (t) => {
-  const restore = falEnv();
-  const reqs: { body: Record<string, unknown> }[] = [];
-  stubFalOk(reqs);
-  try {
-    const seen = mockDb(t, {
-      forEdit: editRow({ doc_version: 3 }),
-      reserve: { image_redraws: 2 },
-      updateDoc: { doc_version: 4 },
-      detail: detailRow(),
-    });
-    const gen = await regenerateSlideImage(GEN, USER, 1, 3);
-    assert.equal(gen.docVersion, 4);
-
-    assert.equal(found(seen, /SET image_redraws = GREATEST/).length, 0, "muvaffaqiyatda limit qaytarilmaydi");
-    const upd = seen.find((s) => /UPDATE generations SET doc_json/.test(s.text))!;
-    const nextDoc = JSON.parse(String(upd.params[2])) as AcademicDoc;
-    assert.match(
-      nextDoc.slides![1].image!.url,
-      new RegExp(`^/api/generations/${GEN}/assets/[0-9a-f]+$`),
-      "yozilgan URL shu generatsiyaning aktiviga ishora qilishi kerak",
-    );
-  } finally {
-    restore();
-  }
-});
-
-test("regenerateSlideImage: seed HAR safar tasodifiy — seedFrom(topic) EMAS, ikki chaqiruv har xil beradi", async (t) => {
-  const restore = falEnv();
-  try {
-    const reqs1: { body: Record<string, unknown> }[] = [];
-    stubFalOk(reqs1);
-    mockDb(t, {
-      forEdit: editRow({ doc_version: 3 }),
-      reserve: { image_redraws: 2 },
-      updateDoc: { doc_version: 4 },
-      detail: detailRow(),
-    });
-    await regenerateSlideImage(GEN, USER, 1, 3);
-
-    const reqs2: { body: Record<string, unknown> }[] = [];
-    stubFalOk(reqs2);
-    mockDb(t, {
-      forEdit: editRow({ doc_version: 3 }),
-      reserve: { image_redraws: 2 },
-      updateDoc: { doc_version: 4 },
-      detail: detailRow(),
-    });
-    await regenerateSlideImage(GEN, USER, 1, 3);
-
-    const seed1 = reqs1[0].body.seed;
-    const seed2 = reqs2[0].body.seed;
-    assert.equal(typeof seed1, "number");
-    /*
-     * MUTATSIYA: agar `regenerateSlideImage` `seedFrom(topic)` ishlatsa
-     * (deka bilan bir xil), ikkala chaqiruv AYNAN bir xil seed berardi —
-     * bu assertion buni ushlaydi. Ehtimollik bilan tasodifiy ikkita
-     * qiymat tenglashib qolishi 1/1_000_000 — amalda ahamiyatsiz.
-     */
-    assert.notEqual(seed1, seed2, "har chaqiruv o'z tasodifiy seed'ini olishi kerak");
-    assert.notEqual(seed1, seedFrom("Suv aylanishi"), "deka seed'i ISHLATILMASLIGI kerak");
-  } finally {
-    restore();
-  }
-});
-
-test("regenerateSlideImage: hint promptga yetadi va imageHint sifatida ATOMIK yoziladi", async (t) => {
-  const restore = falEnv();
-  const reqs: { body: Record<string, unknown> }[] = [];
-  stubFalOk(reqs);
-  try {
-    const seen = mockDb(t, {
-      forEdit: editRow({ doc_version: 3 }),
-      reserve: { image_redraws: 2 },
-      updateDoc: { doc_version: 4 },
-      detail: detailRow(),
-    });
-    await regenerateSlideImage(GEN, USER, 1, 3, "qishloq maktabidagi sinf xonasi");
-
-    assert.match(
-      String(reqs[0].body.prompt),
-      /qishloq maktabidagi sinf xonasi/,
-      "berilgan ko'rsatma promptga tushishi kerak",
-    );
-
-    const writes = found(seen, /^UPDATE generations SET doc_json/);
-    assert.equal(writes.length, 1, "imageHint va rasm BITTA yozuvda (atomik) — reserveRedraw'dan ALOHIDA UPDATE");
-    const upd = seen.find((s) => /UPDATE generations SET doc_json/.test(s.text))!;
-    const nextDoc = JSON.parse(String(upd.params[2])) as AcademicDoc;
-    assert.equal(
-      nextDoc.slides![1].imageHint,
-      "qishloq maktabidagi sinf xonasi",
-      "hint slaydga saqlanishi kerak — keyingi safar ko'rinsin",
-    );
-  } finally {
-    restore();
-  }
-});
-
-test("regenerateSlideImage: baseVersion eskirgan — 409 {code:'version'}, providerdan KEYIN ham limit qaytariladi", async (t) => {
-  const restore = falEnv();
-  stubFalOk([]);
-  try {
-    const seen = mockDb(t, {
-      forEdit: editRow({ doc_version: 7 }),
-      reserve: { image_redraws: 2 },
-    });
-    const e = await expectApiError(regenerateSlideImage(GEN, USER, 1, 3), 409);
-    assert.equal(e.extra.code, "version");
-    /*
-     * `commitDocOps` o'zi ICHKARIDA yana bir marta `loadDocForEdit`
-     * chaqiradi va u yerda versiya solishtiriladi — provayder
-     * muvaffaqiyatli chizgan bo'lsa ham, versiya keksargan bo'lsa
-     * yozuv 409 bilan yiqiladi. Bu holatda ham limit ATAYLAB
-     * qaytarilishi kerak: foydalanuvchi bepul chizishni band qilib,
-     * hech narsaga erishmadi.
-     */
-    assert.equal(found(seen, /SET image_redraws = GREATEST/).length, 1);
-  } finally {
-    restore();
-  }
-});

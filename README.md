@@ -223,7 +223,6 @@ berardi. Eval bitta tarifda sinagani uchun uchalasi ham sezilmay qoldi.
 | `PATCH /api/generations/{id}/doc` | Slaydlarni tahrirlash (operatsiyalar ro'yxati) |
 | `POST /api/generations/{id}/rebuild` | PPTX faylni qayta yasash |
 | `POST /api/generations/{id}/slides/{index}/image` | Slaydga rasm yuklab olish |
-| `POST /api/generations/{id}/slides/{index}/image/regenerate` | Slayd rasmini qayta chizish |
 
 Barcha `/api/generations*` va `/api/extract` **kirishni talab qiladi**.
 Egalik SQL darajasida tekshiriladi — id ni bilgan begona foydalanuvchi hech narsa ola olmaydi.
@@ -273,14 +272,7 @@ Content-Type: application/json
 }
 ```
 
-PPTX qayta yasash avtomatik bo'ladi (3 sekund debounce). Rasm qayta chizish bepul — har dekaga 5 marta:
-
-```bash
-POST /api/generations/{id}/slides/{index}/image/regenerate
-Content-Type: application/json
-
-{ "baseVersion": 5, "hint": "suvning tomiga" }
-```
+PPTX qayta yasash avtomatik bo'ladi (3 sekund debounce).
 
 ---
 

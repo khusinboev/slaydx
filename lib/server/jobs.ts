@@ -53,7 +53,10 @@ export type GenerationRow = {
   doc_version?: number;
   /** PPTX oxirgi marta qaysi `doc_version`ga qarab yasalgan. */
   file_version?: number;
-  /** Bepul qayta chizish limiti — dekaga (`IMAGE_REDRAW_LIMIT`). */
+  /**
+   * Eski ustun — AI bilan qayta chizish olib tashlandi (Muharrir 2 /
+   * WP4b), migratsiya YO'Q, faqat o'qish uchun saqlanadi.
+   */
   image_redraws?: number;
   edited_at?: Date | null;
   /** Jonli generatsiya davri (`live_json` o'zgarganda oshadi). `live_json`ning o'zi ROW_COLUMNS da YO'Q. */
@@ -614,32 +617,6 @@ export async function markFileVersion(
     [id, userId, v],
   );
   return res.rows[0]?.file_version ?? null;
-}
-
-/**
- * Rasm qayta chizishni «band qiladi» — limit va egalik BITTA `UPDATE`
- * predikatida (TOCTOU yo'q: tekshirish va oshirish bir amal).
- * `null` — limit tugagan (yoki egalik/`status` mos kelmagan).
- */
-export async function reserveRedraw(id: string, userId: string, limit: number): Promise<number | null> {
-  const row = await queryOne<{ image_redraws: number }>(
-    `UPDATE generations
-        SET image_redraws = image_redraws + 1
-      WHERE id = $1 AND user_id = $2 AND status = 'COMPLETED' AND image_redraws < $3
-      RETURNING image_redraws`,
-    [id, userId, limit],
-  );
-  return row ? row.image_redraws : null;
-}
-
-/** Qayta chizish provayder xatosi bilan yiqilsa — band qilingan limitni qaytaradi. */
-export async function releaseRedraw(id: string, userId: string): Promise<void> {
-  await query(
-    `UPDATE generations
-        SET image_redraws = GREATEST(image_redraws - 1, 0)
-      WHERE id = $1 AND user_id = $2`,
-    [id, userId],
-  );
 }
 
 /** `GET …/file` faylni eskirgan bermasin deb tekshiradigan yengil so'rov. */
