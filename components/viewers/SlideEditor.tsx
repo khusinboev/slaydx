@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { Check, ImagePlus, Minus, Plus, RefreshCw, XCircle } from "lucide-react";
+import { Check, ImagePlus, Minus, Plus, XCircle } from "lucide-react";
 import type { SlideAudience, SlideTemplateId, SlideVisual } from "@/lib/generation/slide-templates";
 import type { BodyRules } from "@/lib/generation/slide-audience";
 import type { SlideModel, SlideSrc, SlideTheme } from "@/lib/generation/slide-types";
@@ -58,8 +58,6 @@ export type SlideEditorProps = {
   total: number;
   /** Sahna masshtabi (`SlideStageOverlayCtx.scale`). */
   scale: number;
-  /** Qolgan bepul qayta chizish. */
-  redrawsLeft: number;
   /** Rasm so'rovi ketayotgan bo'lsa tugmalar o'chadi. */
   busy?: boolean;
   onText: (src: SlideSrc, value: string) => void;
@@ -75,7 +73,6 @@ export type SlideEditorProps = {
   onStyle: (src: SlideSrc, size: number | null) => void;
   onImage: (url: null) => void;
   onUpload: (file: File) => void;
-  onRegenerate: () => void;
 };
 
 /** Ko'p qatorli tahrirga ruxsat etilgan maydonlar (Shift+Enter → yangi qator). */
@@ -126,7 +123,6 @@ export function SlideEditor({
   index,
   total,
   scale,
-  redrawsLeft,
   busy = false,
   onText,
   onFooter,
@@ -134,7 +130,6 @@ export function SlideEditor({
   onStyle,
   onImage,
   onUpload,
-  onRegenerate,
 }: SlideEditorProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -367,7 +362,7 @@ export function SlideEditor({
 
   /*
    * Rasm boshqaruvi — maketda rasm JOYI bo'lsa (rasm hali yo'q bo'lsa
-   * ham: «Qayta chizish» aynan shunda kerak). Logo qatlami ATAYLAB
+   * ham: «O‘z rasmim» aynan shunda kerak). Logo qatlami ATAYLAB
    * chetlab o'tiladi — `LOGO_BOX` bilan solishtiriladi.
    */
   const slot = photoSlot(slide.layout, visual);
@@ -427,16 +422,6 @@ export function SlideEditor({
           className="pointer-events-auto absolute flex flex-wrap items-start gap-1 p-1"
           style={{ left: imgPos.left, top: imgPos.top, width: imgPos.width }}
         >
-          <button
-            type="button"
-            disabled={busy || redrawsLeft <= 0}
-            title={redrawsLeft > 0 ? "Rasmni qaytadan chizish" : "Limit tugadi"}
-            className="inline-flex items-center gap-1 rounded bg-black/65 px-1.5 py-1 text-[11px] text-white hover:bg-black/85 disabled:opacity-50"
-            onClick={onRegenerate}
-          >
-            <RefreshCw className="size-3" />
-            Qayta chizish ({redrawsLeft}/5)
-          </button>
           <button
             type="button"
             disabled={busy}

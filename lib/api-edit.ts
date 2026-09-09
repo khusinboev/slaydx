@@ -14,9 +14,9 @@ import type { DocOp } from "./generation/slide-edit";
  *
  * Xato matnlari O'ZBEKCHA: server `{error}` bersa uni `request` ko'taradi,
  * lekin 409 lar faqat MASHINA uchun `{code}` yuboradi
- * (`version`/`status`/`legacy`/`redraw_limit`) — ularni foydalanuvchi
- * o'qiydigan jumlaga shu yerda o'giramiz, chunki uchala chaqiruv joyi
- * (matn, rasm, qayta chizish) bir xil jumlani kutadi.
+ * (`version`/`status`/`legacy`/`no_prev`) — ularni foydalanuvchi
+ * o'qiydigan jumlaga shu yerda o'giramiz, chunki ikkala chaqiruv joyi
+ * (matn, rasm) bir xil jumlani kutadi.
  */
 
 export type DocPatchResult = { generation: GenerationDetail };
@@ -27,7 +27,6 @@ const CODE_TEXT: Record<string, string> = {
   version: "Hujjat boshqa joyda o‘zgardi — eng yangi holat yuklandi, tahrirni qaytadan kiriting.",
   status: "Hujjat hozir band — birozdan keyin urinib ko‘ring.",
   legacy: "Bu deka eski formatda — tahrir qilib bo‘lmaydi.",
-  redraw_limit: "Qayta chizish limiti tugadi — bu dekada boshqa rasm chizilmaydi.",
 };
 
 /**
@@ -86,14 +85,6 @@ export function uploadSlideImage(id: string, index: number, file: File, baseVers
   return request<DocPatchResult>(`/api/generations/${id}/slides/${index}/image`, {
     method: "POST",
     body: fd,
-  });
-}
-
-/** Rasmni qaytadan chizdiradi (bepul, dekaga `IMAGE_REDRAW_LIMIT` marta). */
-export function regenerateSlideImage(id: string, index: number, baseVersion: number, hint?: string) {
-  return request<DocPatchResult>(`/api/generations/${id}/slides/${index}/image/regenerate`, {
-    method: "POST",
-    body: JSON.stringify(hint ? { baseVersion, hint } : { baseVersion }),
   });
 }
 

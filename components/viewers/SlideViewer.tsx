@@ -701,7 +701,6 @@ export function SlideViewer({
                       index={ctx.index}
                       total={slides.length}
                       scale={ctx.scale}
-                      redrawsLeft={ed.redrawsLeft}
                       busy={ed.saving}
                       onText={onText}
                       onFooter={onFooter}
@@ -709,7 +708,6 @@ export function SlideViewer({
                       onStyle={onStyle}
                       onImage={onSlideImage}
                       onUpload={(f) => void ed.uploadImage(ctx.index, f)}
-                      onRegenerate={() => void ed.regenerateImage(ctx.index)}
                     />
                   )
                 : undefined)

@@ -47,12 +47,11 @@ type Calls = {
   answer: [number, number][];
   style: [SlideSrc, number | null][];
   image: (string | null)[];
-  regen: number;
   upload: number;
 };
 
 function mount(slide: SlideModel) {
-  const calls: Calls = { text: [], footer: [], answer: [], style: [], image: [], regen: 0, upload: 0 };
+  const calls: Calls = { text: [], footer: [], answer: [], style: [], image: [], upload: 0 };
   const common = {
     slide,
     theme,
@@ -74,14 +73,12 @@ function mount(slide: SlideModel) {
         key: "editor",
         ...common,
         scale: 1,
-        redrawsLeft: 5,
         onText: (src: SlideSrc, value: string) => calls.text.push([src, value]),
         onFooter: (value: string) => calls.footer.push(value),
         onAnswer: (q: number, answer: number) => calls.answer.push([q, answer]),
         onStyle: (src: SlideSrc, size: number | null) => calls.style.push([src, size]),
         onImage: (url: null) => calls.image.push(url),
         onUpload: () => calls.upload++,
-        onRegenerate: () => calls.regen++,
       }),
     ),
   );
@@ -186,12 +183,11 @@ test("bandda Shift+Enter ham SAQLAYDI — band bir qatorli", () => {
   cleanup();
 });
 
-test("rasm boshqaruvi: qayta chizish limiti va «Rasmsiz» faqat rasm bor bo'lsa", () => {
-  const calls = mount(bulletsSlide());
-  assert.ok(screen.getByText("Qayta chizish (5/5)"), "rasm joyi bor maketda tugma chiqadi");
+test("rasm boshqaruvi: «Qayta chizish» YO'Q, «Rasmsiz» faqat rasm bor bo'lsa", () => {
+  mount(bulletsSlide());
+  assert.ok(screen.getByText("O‘z rasmim"), "rasm joyi bor maketda yuklash tugmasi chiqadi");
+  assert.equal(screen.queryByText(/Qayta chizish/) === null, true, "AI qayta chizish olib tashlangan");
   assert.equal(screen.queryByText("Rasmsiz") === null, true, "rasmi yo'q slaydda «Rasmsiz» kerak emas");
-  fireEvent.click(screen.getByText("Qayta chizish (5/5)"));
-  assert.equal(calls.regen, 1);
   cleanup();
 
   const withImage: SlideModel = {

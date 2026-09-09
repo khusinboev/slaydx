@@ -7,12 +7,11 @@ import {
   editErrorText,
   patchGenerationDoc,
   rebuildGeneration,
-  regenerateSlideImage,
   restoreGenerationDoc,
   uploadSlideImage,
 } from "@/lib/api-edit";
 import { applyDocOps, inverseOps, type DocOp } from "@/lib/generation/slide-edit";
-import { IMAGE_REDRAW_LIMIT, UNDO_DEPTH } from "@/lib/generation/slide-limits";
+import { UNDO_DEPTH } from "@/lib/generation/slide-limits";
 import type { AcademicDoc } from "@/lib/generation/types";
 
 /**
@@ -52,7 +51,6 @@ export type EditGen = {
   doc: AcademicDoc | null;
   docVersion: number;
   fileVersion: number;
-  imageRedraws: number;
   /**
    * Serverda `doc_prev` bormi — «Asl holatga qaytarish» tugmasi shuni
    * ko'rsatadi. `lib/api-client.ts` dagi tur bu maydonni hali e'lon
@@ -87,7 +85,6 @@ export function asEditGen(gen: unknown): EditGen | null {
     doc,
     docVersion: num(g.docVersion),
     fileVersion: num(g.fileVersion),
-    imageRedraws: num(g.imageRedraws),
     hasPrev: g.hasPrev === true,
     raw: g,
   };
@@ -123,8 +120,6 @@ export type SlideEdit = {
   rebuilding: boolean;
   error: string | null;
   clearError: () => void;
-  /** Qolgan bepul qayta chizish. */
-  redrawsLeft: number;
   /** Serverda BIRINCHI tahrirdan oldingi nusxa bormi («Asl holatga qaytarish»). */
   hasPrev: boolean;
   /**
@@ -136,7 +131,6 @@ export type SlideEdit = {
    */
   restore: () => Promise<void>;
   uploadImage: (index: number, file: File) => Promise<void>;
-  regenerateImage: (index: number, hint?: string) => Promise<void>;
   /** Navbatni bo'shatadi va kerak bo'lsa PPTX ni qayta yasaydi (yuklab olishdan oldin). */
   ensureFresh: () => Promise<void>;
 };
@@ -159,7 +153,6 @@ export function useSlideEdit({
   const [doc, setDoc] = useState<AcademicDoc | null>(g?.doc ?? null);
   const [version, setVersion] = useState(g?.docVersion ?? 0);
   const [fileVersion, setFileVersion] = useState(g?.fileVersion ?? 0);
-  const [redraws, setRedraws] = useState(g?.imageRedraws ?? 0);
   const [hasPrev, setHasPrev] = useState(g?.hasPrev ?? false);
   const [saving, setSaving] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
@@ -207,7 +200,6 @@ export function useSlideEdit({
       fileRef.current = num(gd.fileVersion);
       setVersion(versionRef.current);
       setFileVersion(fileRef.current);
-      setRedraws(num(gd.imageRedraws));
       setHasPrev((gd as Record<string, unknown>).hasPrev === true);
       rawRef.current = gd as Record<string, unknown>;
       onGenRef.current?.(gd);
@@ -229,7 +221,6 @@ export function useSlideEdit({
       setDoc(g.doc);
       setVersion(g.docVersion);
       setFileVersion(g.fileVersion);
-      setRedraws(g.imageRedraws);
       setHasPrev(g.hasPrev);
     }
   }, [g]);
@@ -464,24 +455,6 @@ export function useSlideEdit({
     [genId, afterImage, reload],
   );
 
-  const regenerateImage = useCallback(
-    async (index: number, hint?: string) => {
-      if (!genId) return;
-      await saveRef.current();
-      setSaving(true);
-      try {
-        const { generation } = await regenerateSlideImage(genId, index, versionRef.current, hint);
-        if (aliveRef.current) afterImage(generation);
-      } catch (e) {
-        if (aliveRef.current) setError(editErrorText(e));
-        if (editErrorCode(e) === "version") await reload();
-      } finally {
-        if (aliveRef.current) setSaving(false);
-      }
-    },
-    [genId, afterImage, reload],
-  );
-
   return {
     doc: doc ?? g?.doc ?? null,
     editable,
@@ -499,11 +472,9 @@ export function useSlideEdit({
     rebuilding,
     error,
     clearError: useCallback(() => setError(null), []),
-    redrawsLeft: Math.max(0, IMAGE_REDRAW_LIMIT - redraws),
     hasPrev,
     restore,
     uploadImage,
-    regenerateImage,
     ensureFresh,
   };
 }
