@@ -243,6 +243,20 @@ test("tayyor o'lcham ANIQ son beradi, «Standart» — null", () => {
   cleanup();
 });
 
+test("ikkinchi bandda ham o'lcham BUTUN ro'yxatga tegishli", () => {
+  const calls = mount(bulletsSlide());
+  const items = document.querySelectorAll("li[data-src]");
+  assert.equal(items.length, 2, "ikkita band bo'lishi kerak");
+  fireEvent.doubleClick(items[1] as HTMLElement);
+  assert.equal(box().value, "Ikkinchi band", "matn ikkinchi banddan ochiladi");
+  fireEvent.click(screen.getByLabelText("Shrift 36 pt"));
+  // `applyFontOverrides` kalit sifatida `srcLines[0]` ni o'qiydi —
+  // ikkinchi bandning kaliti bilan yuborilgan o'lcham HECH QAYERGA
+  // qo'llanmasdi (tanladim, hech narsa o'zgarmadi).
+  assert.deepEqual(calls.style, [[{ f: "bullets", i: 0 }, 36]]);
+  cleanup();
+});
+
 test("«Standart» o'lcham tanlanmagan bo'lsa O'CHIQ", () => {
   mount(bulletsSlide());
   fireEvent.doubleClick(firstBullet());

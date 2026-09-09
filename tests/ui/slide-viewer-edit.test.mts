@@ -318,6 +318,12 @@ test("eskizni sudrash → to'g'ri `reorder` tartibi", async () => {
   assert.equal(thumbs.length, 3);
   fireEvent.dragStart(thumbs[0]);
   fireEvent.dragOver(thumbs[1]);
+  // Tashlash JOYI ko'rinadi — foydalanuvchi eskiz qayerga tushishini
+  // bilmasa, sudrash ko'r-ko'rona bo'lardi.
+  assert.ok(
+    thumbs[1].querySelector(".bg-sky-400"),
+    "nishon eskizda tashlash chizig'i chiqishi kerak",
+  );
   fireEvent.drop(thumbs[1]);
   assert.ok(saveBtn(), "tartib o'zgarishi ham «Saqlash» ni chiqaradi");
   await act(async () => {
