@@ -106,4 +106,11 @@ Barcha 9 tekshiruv yashil (10/10 slayd, 2 quiz + javoblar, 6 manba,
 
 `main`: F0 `f8c33c8`, F1 `bb49a1f`, F2/F1a/F1b, L1 `565a3fd`, L2 `fcbe36b`,
 L4 `d3b911a`, E1 `c7c21fd`, L5 `4589731`, L3+E4 `d5a7c21`, E8 `3df0dda`,
-E5 `849257d`. Testlar: **751 unit + 43 viewer + 1 ui**, lint toza.
+E5 `849257d`, E6 `e924f29`+`825bf62`. Testlar: **751 unit + 49 viewer + 25 ui**, lint toza.
+
+Jonli kanal (worker → `live_json`) `scripts/live-worker.mts` bilan tasdiqlandi:
+`seq 0→12`, «Matn yozilmoqda · 1/10 … 9/10 slayd» → «Rasmlar · 0/6» →
+«Yig'ilmoqda…» → COMPLETED da `live_json = NULL`.
+
+Admin hisobida (`adkhambek_4`) serverda namunalar: slayd `382177a0…`,
+pro slayd `2d33bdee…` — ikkalasi COMPLETED.
