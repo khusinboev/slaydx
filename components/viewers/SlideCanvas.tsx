@@ -2,10 +2,12 @@ import type { CSSProperties } from "react";
 import type { SlideAudience, SlideTemplateId, SlideVisual } from "@/lib/generation/slide-templates";
 import type { BodyRules } from "@/lib/generation/slide-audience";
 import type { SlideModel, SlideTheme } from "@/lib/generation/slide-types";
+import { fontCss } from "@/lib/generation/slide-fonts";
 import { cn } from "@/lib/cn";
 import {
   boxStyle,
   cssColor,
+  layerKey,
   planSlide,
   ptToPx,
   SLIDE_FONT,
@@ -14,6 +16,52 @@ import {
 } from "@/lib/generation/slide-layout";
 import { SLIDE } from "@/lib/viewers/metrics";
 import { clipLines, revealBudgets, totalChars } from "@/lib/viewers/reveal";
+
+export type TextLayer = Extract<SlideLayer, { t: "text" }>;
+
+/**
+ * Matn qatlamining CSS i — YAGONA joy.
+ *
+ * `SlideCanvas` (passiv chizish) ham, `SlideEditor` (joyida tahrir) ham
+ * shu funksiyadan oladi: tahrir maydoni qatlam bilan AYNAN bir xil
+ * shrift/o'lcham/rang/tekislash/harf oralig'i bilan chiziladi — «ko'rdim
+ * = oldim» yozayotgan paytda ham amal qiladi.
+ *
+ * DIQQAT: kalitlar TARTIBI SSR `style=""` satrini belgilaydi
+ * (`tests/viewer/parity.test.mts` va boshqa paritet testlari HTML ni
+ * qulflagan) — mavjud kalitlarni qayta tartiblamang. `fontFamily` faqat
+ * qatlamda `font` bo'lganda, OXIRIGA qo'shiladi: standart holatda HTML
+ * o'zgarmaydi (ildiz `SLIDE_FONT` beradi).
+ */
+export function textLayerStyle(layer: TextLayer): CSSProperties {
+  const box = boxStyle(layer.box);
+  const align = layer.align === "center" ? "center" : layer.align === "right" ? "flex-end" : "flex-start";
+  const valign = layer.valign === "middle" ? "center" : layer.valign === "bottom" ? "flex-end" : "flex-start";
+  const style: CSSProperties = {
+    ...box,
+    color: layer.color,
+    fontSize: ptToPx(layer.size),
+    fontWeight: layer.bold ? 700 : 500,
+    fontStyle: layer.italic ? "italic" : "normal",
+    letterSpacing: layer.tracking ? layer.tracking * 0.6 : undefined,
+    textTransform: layer.uppercase ? "uppercase" : undefined,
+    lineHeight: 1.22,
+    display: "flex",
+    flexDirection: "column",
+    alignItems: align,
+    justifyContent: valign,
+    overflow: "hidden",
+    textAlign: layer.align || "left",
+    whiteSpace: "pre-wrap",
+    overflowWrap: "anywhere",
+    wordBreak: "break-word",
+  };
+  if (layer.font) {
+    const css = fontCss(layer.font);
+    if (css) style.fontFamily = css;
+  }
+  return style;
+}
 
 export function SlideCanvas({
   slide,
@@ -26,6 +74,7 @@ export function SlideCanvas({
   bodyType,
   logo,
   reveal,
+  hideSrc,
 }: {
   slide: SlideModel;
   theme: SlideTheme;
@@ -48,6 +97,13 @@ export function SlideCanvas({
    * ustiga matn yozilaveradi.
    */
   reveal?: number;
+  /**
+   * Tahrirlanayotgan qatlamning kaliti (`layerKey`) — o'sha qatlam
+   * `visibility: hidden` bilan chiziladi (joyi saqlanadi, matni
+   * ko'rinmaydi): ustida `SlideEditor` ning tahrir maydoni turadi, ikkisi
+   * bir-birining ustiga tushmasin. `undefined` — standart yo'l.
+   */
+  hideSrc?: string;
 }) {
   const plan = planSlide(slide, theme, visual, index, total, audience, templateId, { bodyType, logo });
   const budgets =
@@ -63,13 +119,18 @@ export function SlideCanvas({
       }}
     >
       {plan.layers.map((layer, i) => (
-        <LayerView key={i} layer={layer} budget={budgets ? budgets[i] : undefined} />
+        <LayerView
+          key={i}
+          layer={layer}
+          budget={budgets ? budgets[i] : undefined}
+          hidden={hideSrc !== undefined && layerKey(layer) === hideSrc}
+        />
       ))}
     </div>
   );
 }
 
-function LayerView({ layer, budget }: { layer: SlideLayer; budget?: number }) {
+function LayerView({ layer, budget, hidden = false }: { layer: SlideLayer; budget?: number; hidden?: boolean }) {
   const box = boxStyle(layer.box);
   if (layer.t === "rect") {
     return (
@@ -103,27 +164,9 @@ function LayerView({ layer, budget }: { layer: SlideLayer; budget?: number }) {
       </div>
     );
   }
-  const align = layer.align === "center" ? "center" : layer.align === "right" ? "flex-end" : "flex-start";
-  const valign = layer.valign === "middle" ? "center" : layer.valign === "bottom" ? "flex-end" : "flex-start";
-  const style: CSSProperties = {
-    ...box,
-    color: layer.color,
-    fontSize: ptToPx(layer.size),
-    fontWeight: layer.bold ? 700 : 500,
-    fontStyle: layer.italic ? "italic" : "normal",
-    letterSpacing: layer.tracking ? layer.tracking * 0.6 : undefined,
-    textTransform: layer.uppercase ? "uppercase" : undefined,
-    lineHeight: 1.22,
-    display: "flex",
-    flexDirection: "column",
-    alignItems: align,
-    justifyContent: valign,
-    overflow: "hidden",
-    textAlign: layer.align || "left",
-    whiteSpace: "pre-wrap",
-    overflowWrap: "anywhere",
-    wordBreak: "break-word",
-  };
+  const style = textLayerStyle(layer);
+  // Tahrir paytida qatlam KO'RINMAYDI, lekin joyini saqlaydi (`hideSrc`).
+  if (hidden) style.visibility = "hidden";
   if (layer.lines?.length) {
     return (
       <div

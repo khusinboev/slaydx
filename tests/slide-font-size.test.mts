@@ -68,3 +68,82 @@ test("parseDocOps va sanitize: fontSize faqat oraliqdagi sonlar bilan o'tadi", (
   const s = sanitizeSlideModel({ ...slide(), fontSize: { '{"f":"title"}': 40, '{"f":"subtitle"}': 500, x: "a" } }, ctx.genId, bodyType);
   assert.deepEqual(s?.fontSize, { '{"f":"title"}': 40 });
 });
+
+// ══════════════════════════════════ Shrift OILASI (`style.font` → `SlideModel.font` → `layer.font`)
+
+/** Sarlavha qatlami (tekshiruvlar uchun). */
+function titleLayer(s: SlideModel) {
+  const plan = planSlide(s, theme, "classic", 1, 10, "auto", "lecture", { bodyType });
+  const t = plan.layers.find((l) => l.t === "text" && l.src?.f === "title");
+  assert.ok(t && t.t === "text", "sarlavha qatlami topilmadi");
+  return t;
+}
+
+test("style op: font → modelga id, qatlamga face (PPTX fontFace va ko'ruvchi bir xil o'qiydi)", () => {
+  const r = applyDocOps(doc(), [{ op: "style", index: 0, src: { f: "title" }, font: "georgia" }], ctx);
+  assert.ok(r.ok);
+  const s = r.doc.slides![0];
+  assert.deepEqual(s.font, { '{"f":"title"}': "georgia" });
+  assert.equal(s.fontSize, undefined, "faqat oila o'zgardi — o'lcham xaritasi paydo bo'lmasin");
+  assert.equal(titleLayer(s).font, "Georgia");
+  assert.equal(titleLayer(slide()).font, undefined, "tanlanmagan qatlamda face yo'q — PPTX standart Arial oladi");
+  // Teskari op (`set`) oilani ham qaytaradi.
+  const inv = inverseOps(doc(), [{ op: "style", index: 0, src: { f: "title" }, font: "georgia" }], ctx);
+  const back = applyDocOps(r.doc, inv, ctx);
+  assert.ok(back.ok);
+  assert.equal(back.doc.slides![0].font, undefined);
+});
+
+test("style op: kengroq shrift o'lchamni KICHRAYTIRADI, tor shrift kattalashtirmaydi, tanlangan o'lchamga tegmaydi", () => {
+  const base = titleLayer(slide()).size;
+  const verdana = applyDocOps(doc(), [{ op: "style", index: 0, src: { f: "title" }, font: "verdana" }], ctx);
+  assert.ok(verdana.ok);
+  const vSize = titleLayer(verdana.doc.slides![0]).size;
+  // Verdana em 0.63 > Arial 0.55 → 0.55/0.63 ≈ 0.87.
+  assert.equal(vSize, Math.round(base * (0.55 / 0.63)), "kengroq shrift qutidan chiqmasin");
+  assert.ok(vSize < base);
+
+  const times = applyDocOps(doc(), [{ op: "style", index: 0, src: { f: "title" }, font: "times" }], ctx);
+  assert.ok(times.ok);
+  assert.equal(titleLayer(times.doc.slides![0]).size, base, "tor shrift KATTALASHTIRILMAYDI — balandlik byudjeti shu o'lcham uchun");
+
+  const both = applyDocOps(
+    doc(),
+    [
+      { op: "style", index: 0, src: { f: "title" }, size: 40 },
+      { op: "style", index: 0, src: { f: "title" }, font: "verdana" },
+    ],
+    ctx,
+  );
+  assert.ok(both.ok);
+  assert.equal(titleLayer(both.doc.slides![0]).size, 40, "foydalanuvchi tanlagan o'lcham qayta hisoblanmaydi");
+  assert.equal(titleLayer(both.doc.slides![0]).font, "Verdana");
+});
+
+test("style op: bitta op da ham o'lcham, ham oila; null oilani o'chiradi; noma'lum id / bo'sh op — rad", () => {
+  const r = applyDocOps(doc(), [{ op: "style", index: 0, src: { f: "title" }, size: 36, font: "cambria" }], ctx);
+  assert.ok(r.ok);
+  assert.deepEqual(r.doc.slides![0].fontSize, { '{"f":"title"}': 36 });
+  assert.deepEqual(r.doc.slides![0].font, { '{"f":"title"}': "cambria" });
+  const cleared = applyDocOps(r.doc, [{ op: "style", index: 0, src: { f: "title" }, font: null }], ctx);
+  assert.ok(cleared.ok);
+  assert.equal(cleared.doc.slides![0].font, undefined, "oxirgi oila o'chsa kalit ham yo'qoladi");
+  assert.deepEqual(cleared.doc.slides![0].fontSize, { '{"f":"title"}': 36 }, "o'lcham joyida qoladi");
+  assert.equal(applyDocOps(doc(), [{ op: "style", index: 0, src: { f: "title" }, font: "comic" as never }], ctx).ok, false, "reyestrdan tashqari shrift");
+  assert.equal(applyDocOps(doc(), [{ op: "style", index: 0, src: { f: "title" } }], ctx).ok, false, "na o'lcham, na oila — bo'sh op");
+});
+
+test("parseDocOps va sanitize: font faqat reyestr id lari bilan o'tadi", () => {
+  const p = parseDocOps([
+    { op: "style", index: 0, src: { f: "title" }, font: "tahoma" },
+    { op: "style", index: 0, src: { f: "title" }, font: null },
+    { op: "style", index: 0, src: { f: "bullets", i: 0 }, size: 20, font: "arial" },
+  ]);
+  assert.ok(p.ok && p.ops.length === 3);
+  assert.deepEqual(p.ops[0], { op: "style", index: 0, src: { f: "title" }, font: "tahoma" }, "size berilmasa kalit ham bo'lmaydi");
+  assert.equal(parseDocOps([{ op: "style", index: 0, src: { f: "title" }, font: "Tahoma" }]).ok, false, "face nomi id emas");
+  assert.equal(parseDocOps([{ op: "style", index: 0, src: { f: "title" } }]).ok, false, "bo'sh style");
+  assert.equal(parseDocOps([{ op: "style", index: 0, src: { f: "yo‘q" }, size: 20 }]).ok, false, "manba kanonik tekshiruvdan o'tmaydi");
+  const s = sanitizeSlideModel({ ...slide(), font: { '{"f":"title"}': "georgia", '{"f":"subtitle"}': "comic", x: 5 } }, ctx.genId, bodyType);
+  assert.deepEqual(s?.font, { '{"f":"title"}': "georgia" });
+});

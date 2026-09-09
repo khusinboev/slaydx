@@ -496,3 +496,113 @@ test("canConvert: shu slaydda mumkin bo'lmagan o'girish sababi bor", () => {
   assert.equal(typeof (r as { reason: string }).reason, "string");
   assert.notEqual((r as { reason: string }).reason, "");
 });
+
+// ═══════════════════════════════════════════ 9. `list` op — butun ro'yxat (PowerPoint kabi quti)
+
+test("list: butun ro'yxat almashadi, bo'sh bandlar tashlanadi, har band chegaraga qisqaradi", () => {
+  const doc = docOf([bullets]);
+  const long = "x".repeat(rules.bulletChars + 50);
+  const next = apply(doc, [{ op: "list", index: 0, field: "bullets", items: ["Yangi bir", "  ", "", "Yangi ikki", long] }]);
+  const list = next.slides![0].bullets!;
+  assert.deepEqual(list.slice(0, 2), ["Yangi bir", "Yangi ikki"], "bo'sh/faqat bo'shliq bandlar o'chadi");
+  assert.equal(list.length, 3);
+  assert.ok(list[2].length <= rules.bulletChars, "uzun band chegaraga qisqaradi");
+  // Bo'sh ro'yxat ham mumkin — foydalanuvchi hamma bandni o'chirdi.
+  assert.deepEqual(apply(doc, [{ op: "list", index: 0, field: "bullets", items: [] }]).slides![0].bullets, []);
+});
+
+test("list: band soni chegaradan oshsa 422 — hech narsa qo'llanmaydi", () => {
+  const doc = docOf([bullets]);
+  const tooMany = Array.from({ length: rules.maxBullets + 1 }, (_, i) => `Band ${i}`);
+  const f = failure(doc, [{ op: "list", index: 0, field: "bullets", items: tooMany }]);
+  assert.match(f.error, /tadan ortiq band/);
+  assert.equal(f.at, 0);
+  const max = Array.from({ length: rules.maxBullets }, (_, i) => `Band ${i}`);
+  assert.equal(apply(doc, [{ op: "list", index: 0, field: "bullets", items: max }]).slides![0].bullets!.length, rules.maxBullets);
+});
+
+test("list: ustunlar `colItems`/`colItem` chegarasi bilan, maketda yo'q maydon — xato", () => {
+  const doc = docOf([twoCol, bullets]);
+  const left = apply(doc, [{ op: "list", index: 0, field: "left", items: ["A", "B", "C"] }]);
+  assert.deepEqual(left.slides![0].left, ["A", "B", "C"]);
+  assert.deepEqual(left.slides![0].right, ["R1"], "boshqa ustun tegilmaydi");
+  const five = ["1", "2", "3", "4", "5"].slice(0, SLIDE_LIMITS.colItems + 1);
+  assert.match(failure(doc, [{ op: "list", index: 0, field: "right", items: five }]).error, /tadan ortiq band/);
+  assert.match(failure(doc, [{ op: "list", index: 1, field: "left", items: ["x"] }]).error, /ustun yo'q/);
+  assert.match(failure(doc, [{ op: "list", index: 0, field: "bullets", items: ["x"] }]).error, /bandlar yo'q/);
+  assert.match(failure(doc, [{ op: "list", index: 0, field: "steps" as never, items: [] }]).error, /Noma'lum ro'yxat/);
+});
+
+test("list: teskarisi — butun slayd (`set`), aylanma tenglik", () => {
+  const doc = docOf([bullets, twoCol]);
+  roundTrip(doc, [{ op: "list", index: 0, field: "bullets", items: ["Faqat bitta"] }], "list bullets");
+  roundTrip(doc, [{ op: "list", index: 1, field: "right", items: [] }], "list right (bo'sh)");
+});
+
+test("parse: list — field ro'yxatdan, items matnlar massivi", () => {
+  const ok = parseDocOps([{ op: "list", index: 0, field: "left", items: ["a", "b"] }]);
+  assert.equal(ok.ok, true);
+  assert.deepEqual((ok as { ops: DocOp[] }).ops[0], { op: "list", index: 0, field: "left", items: ["a", "b"] });
+  assert.equal(parseDocOps([{ op: "list", index: 0, field: "steps", items: [] }]).ok, false, "steps ro'yxat maydoni emas");
+  assert.equal(parseDocOps([{ op: "list", index: 0, field: "bullets", items: "a" }]).ok, false, "items massiv bo'lsin");
+  assert.equal(parseDocOps([{ op: "list", index: 0, field: "bullets", items: ["a", 1] }]).ok, false, "faqat matnlar");
+  assert.equal(parseDocOps([{ op: "list", field: "bullets", items: [] }]).ok, false, "index shart");
+});
+
+// ═══════════════════════════════════════════ 10. Asl rasm (`imageOrig`) va `imageRestore`
+
+test("image: o'chirish/almashtirish ASL rasmni `imageOrig` ga ko'chiradi — faqat BIRINCHI marta", () => {
+  const orig = { url: ASSET, alt: "Asl" };
+  const doc = docOf([{ ...bullets, image: orig }]);
+  const removed = apply(doc, [{ op: "image", index: 0, url: null }]);
+  assert.equal("image" in removed.slides![0], false);
+  assert.deepEqual(removed.slides![0].imageOrig, orig, "«Rasmsiz» asl rasmni saqlab qo'yadi");
+
+  const other = `/api/generations/${GEN}/assets/${"cd".repeat(12)}`;
+  const replaced = apply(doc, [{ op: "image", index: 0, url: other }]);
+  assert.deepEqual(replaced.slides![0].image, { url: other });
+  assert.deepEqual(replaced.slides![0].imageOrig, orig, "o'z rasmi qo'yilganda ham asl saqlanadi");
+
+  // Ikkinchi almashtirish aslni USTIDAN YOZMAYDI — foydalanuvchi doim AI rasmga qaytoladi.
+  const third = `/api/generations/${GEN}/assets/${"ef".repeat(12)}`;
+  const again = apply(replaced, [{ op: "image", index: 0, url: third }]);
+  assert.deepEqual(again.slides![0].imageOrig, orig);
+  const removedAgain = apply(replaced, [{ op: "image", index: 0, url: null }]);
+  assert.deepEqual(removedAgain.slides![0].imageOrig, orig);
+
+  // Rasmi yo'q slaydga rasm qo'yish `imageOrig` yaratmaydi (qaytaradigan narsa yo'q).
+  const fresh = apply(docOf([bullets]), [{ op: "image", index: 0, url: other }]);
+  assert.equal("imageOrig" in fresh.slides![0], false);
+});
+
+test("imageRestore: asl rasm qaytadi va `imageOrig` o'chadi; asl bo'lmasa xato", () => {
+  const orig = { url: ASSET, alt: "Asl" };
+  const doc = docOf([{ ...bullets, image: orig }]);
+  const removed = apply(doc, [{ op: "image", index: 0, url: null }]);
+  const restored = apply(removed, [{ op: "imageRestore", index: 0 }]);
+  assert.deepEqual(restored.slides![0].image, orig);
+  assert.equal("imageOrig" in restored.slides![0], false, "qaytarilgach asl nusxa kerak emas");
+  assert.deepEqual(restored, doc, "qaytarish aynan boshlang'ich hujjatni beradi");
+  assert.match(failure(docOf([bullets]), [{ op: "imageRestore", index: 0 }]).error, /asl rasm yo'q/);
+  // Rasmsiz maketga ko'chgan slaydda ham qaytarib bo'lmaydi (rasm hech qayerda chizilmasdi).
+  const noSlot = docOf([{ ...quiz, imageOrig: orig }]);
+  assert.match(failure(noSlot, [{ op: "imageRestore", index: 0 }]).error, /rasm joyi yo'q/);
+});
+
+test("imageRestore: teskarisi `set` — aylanma tenglik; parse index talab qiladi", () => {
+  const doc = docOf([{ ...bullets, image: { url: ASSET } }]);
+  roundTrip(doc, [{ op: "image", index: 0, url: null }], "image null (imageOrig bilan)");
+  roundTrip(apply(doc, [{ op: "image", index: 0, url: null }]), [{ op: "imageRestore", index: 0 }], "imageRestore");
+  const p = parseDocOps([{ op: "imageRestore", index: 2 }]);
+  assert.deepEqual((p as { ops: DocOp[] }).ops, [{ op: "imageRestore", index: 2 }]);
+  assert.equal(parseDocOps([{ op: "imageRestore" }]).ok, false);
+});
+
+test("sanitize/shape: `imageOrig` faqat O'Z aktividan, shakli `image` kabi tekshiriladi", () => {
+  const own = sanitizeSlideModel({ layout: "bullets", title: "T", imageOrig: { url: ASSET, alt: "a" } }, GEN, rules);
+  assert.deepEqual(own?.imageOrig, { url: ASSET, alt: "a" });
+  const alien = sanitizeSlideModel({ layout: "bullets", title: "T", imageOrig: { url: "https://evil.example/a.png" } }, GEN, rules);
+  assert.equal(alien?.imageOrig, undefined);
+  assert.equal(parseDocOps([{ op: "set", index: 0, slide: { layout: "bullets", title: "T", imageOrig: { url: 5 } } }]).ok, false, "url matn bo'lsin");
+  assert.equal(parseDocOps([{ op: "set", index: 0, slide: { layout: "bullets", title: "T", imageOrig: "x" } }]).ok, false);
+});

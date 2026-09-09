@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createElement as h } from "react";
 import { SlideCanvas } from "../../components/viewers/SlideCanvas.tsx";
+import { fontCss } from "../../lib/generation/slide-fonts.ts";
 import { planSlide, ptToPx } from "../../lib/generation/slide-layout.ts";
 import { getSlideTheme } from "../../lib/generation/slide-themes.ts";
 import type { SlideModel } from "../../lib/generation/slide-types.ts";
@@ -63,4 +64,40 @@ test("ko'ruvchi shrift o'lchamini ham punktdan o'giradi", () => {
     html.includes(`font-size:${ptToPx(listLayer.size)}px`),
     `shrift ${listLayer.size} pt → ${ptToPx(listLayer.size)}px bo'lishi kerak`,
   );
+});
+
+// ══════════════════════════════════ Shrift oilasi va `hideSrc` (tahrir qatlami uchun)
+
+test("qatlamda `font` bo'lsa ko'ruvchi `font-family` beradi — reyestrdagi CSS ro'yxati bilan", () => {
+  /*
+   * Tahoma ning `em` i Arial bilan bir xil (0.55) — `applyFontOverrides`
+   * o'lchamni qayta hisoblamaydi, ya'ni HTML dagi YAGONA farq
+   * `font-family` bo'lishi kerak. (Georgia/Verdana bilan o'lcham ham
+   * qisqarardi — u alohida, `slide-font-size.test` da sinalgan.)
+   */
+  const withFont: SlideModel = { ...slide, font: { '{"f":"title"}': "tahoma" } };
+  const plain = renderToStaticMarkup(h(SlideCanvas, { slide, theme, visual: "classic", index: 1, total: 10 }));
+  const html = renderToStaticMarkup(h(SlideCanvas, { slide: withFont, theme, visual: "classic", index: 1, total: 10 }));
+  const count = (s: string) => s.split("font-family:").length - 1;
+  assert.equal(count(plain), 1, "standart yo'lda faqat ildiz font-family (SLIDE_FONT)");
+  assert.equal(count(html), 2, "tanlangan qatlam o'z font-family sini oladi");
+  // React `"` ni `&quot;` qilib chizadi — reyestr CSS i ham shu shaklda qidiriladi.
+  const css = fontCss("Tahoma").replace(/"/g, "&quot;");
+  const tail = `;font-family:${css}"`;
+  assert.ok(html.includes(tail), "PPTX fontFace (Tahoma) bilan bir xil oiladan CSS ro'yxati, style OXIRIDA");
+  // Boshqa hamma narsa HTML da AYNAN o'zgarmaydi (bayt-baytiga).
+  assert.equal(html.replace(`;font-family:${css}`, ""), plain, "faqat tanlangan qatlam farq qilishi kerak");
+});
+
+test("`hideSrc` — faqat o'sha qatlam visibility:hidden, HTML boshqa joyda o'zgarmaydi", () => {
+  const plain = renderToStaticMarkup(h(SlideCanvas, { slide, theme, visual: "classic", index: 1, total: 10 }));
+  const key = '{"f":"bullets","i":0}';
+  const html = renderToStaticMarkup(h(SlideCanvas, { slide, theme, visual: "classic", index: 1, total: 10, hideSrc: key }));
+  assert.equal(html.split("visibility:hidden").length - 1, 1, "aynan bitta qatlam yashirinadi");
+  const i = html.indexOf("visibility:hidden");
+  const listStart = html.indexOf('data-src-list="1"');
+  assert.ok(i > 0 && listStart > i && listStart - i < 80, "yashiringan qatlam — bandlar ro'yxati (srcLines[0] kaliti)");
+  assert.equal(html.replace("visibility:hidden;", "").replace(";visibility:hidden", ""), plain, "qolgan HTML aynan eskicha");
+  const none = renderToStaticMarkup(h(SlideCanvas, { slide, theme, visual: "classic", index: 1, total: 10, hideSrc: '{"f":"quote"}' }));
+  assert.equal(none, plain, "mos qatlam bo'lmasa hech narsa yashirinmaydi");
 });

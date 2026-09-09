@@ -1,4 +1,5 @@
 import { slideLabels } from "./i18n";
+import { isSlideFontId, type SlideFontId } from "./slide-fonts";
 import { SLIDE_LIMITS, clipTo } from "./slide-limits";
 import { photoSlot } from "./slide-layout";
 import { refreshAnswerNote, rebuildAnswerKey } from "./slide-quiz";
@@ -38,12 +39,27 @@ export type DocOp =
   | { op: "insert"; index: number; slide: SlideModel }
   | { op: "set"; index: number; slide: SlideModel }
   | { op: "reorder"; order: number[] }
-  /** Shrift o'lchami (pt); `size: null` — standartga qaytarish. */
-  | { op: "style"; index: number; src: SlideSrc; size: number | null }
+  /**
+   * Shrift: `size` (pt) va/yoki `font` (`SLIDE_FONTS` id si); `null` —
+   * standartga qaytarish. Kamida bittasi berilishi shart.
+   */
+  | { op: "style"; index: number; src: SlideSrc; size?: number | null; font?: SlideFontId | null }
+  /**
+   * Ro'yxatni BUTUNICHA yozish — ko'ruvchida butun quti PowerPoint kabi
+   * tahrirlanadi (Enter → yangi band). Bo'sh bandlar tashlanadi, har band
+   * chegaraga qisqaradi, soni chegaradan oshsa xato. Teskarisi — `set`.
+   */
+  | { op: "list"; index: number; field: ListField; items: string[] }
+  /** Asl (AI) rasmni `imageOrig` dan qaytarish — u bo'lmasa xato. */
+  | { op: "imageRestore"; index: number }
   /** Kolontitul — DEKA darajasida, BARCHA slaydlarning `footer` maydoniga. */
   | { op: "footer"; value: string }
   /** Test javobini o'zgartirish: `slides[index].quiz[q].answer = answer` (0..3), javoblar kaliti qayta yig'iladi. */
   | { op: "answer"; index: number; q: number; answer: number };
+
+/** `list` op maydonlari — bir xil turdagi satrlar ro'yxati. */
+export type ListField = "bullets" | "left" | "right";
+export const LIST_FIELDS: readonly ListField[] = ["bullets", "left", "right"];
 
 /** Operatsiyalarni qo'llash konteksti — hozircha faqat generatsiya id si (aktiv egaligi). */
 export type EditCtx = { genId: string };
@@ -636,18 +652,21 @@ export function sanitizeSlideModel(raw: unknown, genId: string, rules: EditRules
     }
     if (Object.keys(fs).length) out.fontSize = fs;
   }
+  if (o.font && typeof o.font === "object" && !Array.isArray(o.font)) {
+    const ff: Record<string, SlideFontId> = {};
+    for (const [k, v] of Object.entries(o.font as Record<string, unknown>)) {
+      // Faqat reyestrdagi id — begona nom PPTX `fontFace` ga tushmasin.
+      if (k.length <= 80 && isSlideFontId(v)) ff[k] = v;
+    }
+    if (Object.keys(ff).length) out.font = ff;
+  }
   const hint = str(o.imageHint, SLIDE_LIMITS.imageHint);
   if (hint) out.imageHint = hint;
-  if (o.image && typeof o.image === "object") {
-    const im = o.image as Record<string, unknown>;
-    // Rasm FAQAT shu generatsiyaning aktivi bo'lishi mumkin (SSRF himoyasi).
-    if (typeof im.url === "string" && ownAssetUrlRe(genId).test(im.url)) {
-      const image: NonNullable<SlideModel["image"]> = { url: im.url };
-      const alt = str(im.alt, SLIDE_LIMITS.imageAlt);
-      if (alt) image.alt = alt;
-      out.image = image;
-    }
-  }
+  // Rasm (va asl rasm) FAQAT shu generatsiyaning aktivi bo'lishi mumkin (SSRF himoyasi).
+  const image = ownImage(o.image, genId, str);
+  if (image) out.image = image;
+  const orig = ownImage(o.imageOrig, genId, str);
+  if (orig) out.imageOrig = orig;
 
   const caps = bulletCaps(out, rules);
   const bullets = list(o.bullets, caps.max, caps.chars);
@@ -743,6 +762,21 @@ export function sanitizeSlideModel(raw: unknown, genId: string, rules: EditRules
   return out;
 }
 
+/** `{url, alt?}` — faqat o'z aktivi bo'lsa; aks holda `null`. */
+function ownImage(
+  raw: unknown,
+  genId: string,
+  str: (v: unknown, n: number) => string,
+): NonNullable<SlideModel["image"]> | null {
+  if (!raw || typeof raw !== "object") return null;
+  const im = raw as Record<string, unknown>;
+  if (typeof im.url !== "string" || !ownAssetUrlRe(genId).test(im.url)) return null;
+  const image: NonNullable<SlideModel["image"]> = { url: im.url };
+  const alt = str(im.alt, SLIDE_LIMITS.imageAlt);
+  if (alt) image.alt = alt;
+  return image;
+}
+
 // ═══════════════════════════════════════════════════════ Operatsiyalar
 
 function fail(error: string, at: number): EditResult {
@@ -787,15 +821,41 @@ export function applyDocOps(doc: AcademicDoc, ops: DocOp[], ctx: EditCtx): EditR
       }
       case "image": {
         const s = slides[idx];
+        /*
+         * ASL rasm BIRINCHI almashtirish/o'chirishda `imageOrig` ga ko'chadi
+         * («Rasmni qaytarish» uchun); keyingi almashtirishlar uni ustidan
+         * YOZMAYDI — foydalanuvchi har doim AI chizgan rasmga qaytoladi.
+         */
+        const keep = s.image && !s.imageOrig ? { imageOrig: s.image } : {};
         if (op.url === null) {
-          slides[idx] = without(s, "image");
+          slides[idx] = { ...without(s, "image"), ...keep };
           break;
         }
         if (typeof op.url !== "string" || !assetRe.test(op.url)) return fail("Rasm manzili bu generatsiyaga tegishli emas", at);
         // Maketda rasm joyi bo'lmasa rasm HECH QAYERDA chizilmasdi — jim yo'qolish o'rniga xato.
         if (!photoSlot(s.layout, deck.visual)) return fail("Bu maketda rasm joyi yo'q", at);
         const alt = op.alt ? clipTo(op.alt, SLIDE_LIMITS.imageAlt) : "";
-        slides[idx] = { ...s, image: alt ? { url: op.url, alt } : { url: op.url } };
+        slides[idx] = { ...s, ...keep, image: alt ? { url: op.url, alt } : { url: op.url } };
+        break;
+      }
+      case "imageRestore": {
+        const s = slides[idx];
+        if (!s.imageOrig) return fail("Qaytaradigan asl rasm yo'q", at);
+        if (!photoSlot(s.layout, deck.visual)) return fail("Bu maketda rasm joyi yo'q", at);
+        slides[idx] = { ...without(s, "imageOrig"), image: s.imageOrig };
+        break;
+      }
+      case "list": {
+        const s = slides[idx];
+        const field = op.field;
+        if (!LIST_FIELDS.includes(field)) return fail("Noma'lum ro'yxat maydoni", at);
+        if (!s[field]) return fail(field === "bullets" ? "Bu maketda bandlar yo'q" : "Bu maketda ustun yo'q", at);
+        if (!Array.isArray(op.items)) return fail("Bandlar ro'yxati kutilgan", at);
+        const caps = field === "bullets" ? bulletCaps(s, rules) : { max: SLIDE_LIMITS.colItems, chars: SLIDE_LIMITS.colItem };
+        // Bo'sh band — o'chirilgan band (`writeList` bilan bir xil ma'no).
+        const items = op.items.map((x) => clipTo(String(x ?? ""), caps.chars)).filter(Boolean);
+        if (items.length > caps.max) return fail(`Bu maketda ${caps.max} tadan ortiq band bo'lmaydi`, at);
+        slides[idx] = { ...s, [field]: items };
         break;
       }
       case "layout": {
@@ -835,16 +895,28 @@ export function applyDocOps(doc: AcademicDoc, ops: DocOp[], ctx: EditCtx): EditR
         break;
       }
       case "style": {
-        const size = op.size;
-        if (size !== null && (!Number.isFinite(size) || size < FONT_MIN || size > FONT_MAX)) return fail(`Shrift ${FONT_MIN}–${FONT_MAX} pt oralig'ida bo'lsin`, at);
+        if (op.size === undefined && op.font === undefined) return fail("«style» da o'lcham yoki shrift bo'lishi kerak", at);
         const key = JSON.stringify(op.src);
         const cur = slides[idx];
-        const map: Record<string, number> = { ...(cur.fontSize ?? {}) };
-        if (size === null) delete map[key];
-        else map[key] = Math.round(size);
         const next: SlideModel = { ...cur };
-        if (Object.keys(map).length) next.fontSize = map;
-        else delete next.fontSize;
+        if (op.size !== undefined) {
+          const size = op.size;
+          if (size !== null && (!Number.isFinite(size) || size < FONT_MIN || size > FONT_MAX)) return fail(`Shrift ${FONT_MIN}–${FONT_MAX} pt oralig'ida bo'lsin`, at);
+          const map: Record<string, number> = { ...(cur.fontSize ?? {}) };
+          if (size === null) delete map[key];
+          else map[key] = Math.round(size);
+          if (Object.keys(map).length) next.fontSize = map;
+          else delete next.fontSize;
+        }
+        if (op.font !== undefined) {
+          const font = op.font;
+          if (font !== null && !isSlideFontId(font)) return fail("Noma'lum shrift", at);
+          const map: Record<string, SlideFontId> = { ...(cur.font ?? {}) };
+          if (font === null) delete map[key];
+          else map[key] = font;
+          if (Object.keys(map).length) next.font = map;
+          else delete next.font;
+        }
         slides[idx] = next;
         break;
       }
@@ -942,7 +1014,7 @@ const MAX_OPS = 50;
 /** Bitta matn qiymati — eng uzun chegara (`notesEdit`) dan ham katta, lekin cheksiz emas. */
 const MAX_STR = 4000;
 
-const OP_NAMES = new Set(["text", "notes", "image", "layout", "add", "delete", "insert", "set", "reorder", "style", "footer", "answer"]);
+const OP_NAMES = new Set(["text", "notes", "image", "imageRestore", "list", "layout", "add", "delete", "insert", "set", "reorder", "style", "footer", "answer"]);
 /** Foydalanuvchi tanlay oladigan shrift oralig'i (pt). */
 export const FONT_MIN = 8;
 export const FONT_MAX = 96;
@@ -1046,7 +1118,8 @@ function slideShapeOk(v: unknown): boolean {
   if (!["id", "kicker", "subtitle", "quote", "quoteBy", "leftTitle", "rightTitle", "footer", "notes", "imageHint"].every((k) => strOpt(o[k]))) return false;
   if (!["bullets", "left", "right"].every((k) => strArr(o[k]))) return false;
   if (o.chart !== undefined && typeof o.chart !== "boolean") return false;
-  if (o.image !== undefined && (!o.image || typeof o.image !== "object" || typeof (o.image as Record<string, unknown>).url !== "string")) return false;
+  const imageOk = (x: unknown) => x === undefined || (Boolean(x) && typeof x === "object" && typeof (x as Record<string, unknown>).url === "string");
+  if (!imageOk(o.image) || !imageOk(o.imageOrig)) return false;
   for (const k of ["stats", "steps", "refs", "quiz"]) {
     const x = o[k];
     if (x !== undefined && (!Array.isArray(x) || x.some((y) => !y || typeof y !== "object" || Array.isArray(y)))) return false;
@@ -1082,9 +1155,20 @@ export function parseDocOps(raw: unknown): ParseResult {
       continue;
     }
     if (name === "style") {
-      if (!num(o.index) || !o.src || typeof o.src !== "object") return { ok: false, error: "«style» yaroqsiz" };
-      if (!(o.size === null || num(o.size))) return { ok: false, error: "Shrift o'lchami son bo'lishi kerak" };
-      ops.push({ op: "style", index: o.index as number, src: o.src as SlideSrc, size: o.size as number | null });
+      if (!num(o.index)) return { ok: false, error: "«style» yaroqsiz" };
+      // Manba kanonik shaklga keltiriladi — kalit (`JSON.stringify`) qatlamniki bilan bir xil bo'lsin.
+      const src = parseSrc(o.src);
+      if (!src) return { ok: false, error: "«src» yaroqsiz" };
+      if (o.size === undefined && o.font === undefined) return { ok: false, error: "«style» da o'lcham yoki shrift bo'lishi kerak" };
+      if (o.size !== undefined && !(o.size === null || num(o.size))) return { ok: false, error: "Shrift o'lchami son bo'lishi kerak" };
+      if (o.font !== undefined && !(o.font === null || isSlideFontId(o.font))) return { ok: false, error: "Noma'lum shrift" };
+      ops.push({
+        op: "style",
+        index: o.index as number,
+        src,
+        ...(o.size !== undefined ? { size: o.size as number | null } : {}),
+        ...(o.font !== undefined ? { font: o.font as SlideFontId | null } : {}),
+      });
       continue;
     }
     if (name === "add") {
@@ -1111,6 +1195,13 @@ export function parseDocOps(raw: unknown): ParseResult {
       if (!(o.url === null || typeof o.url === "string")) return { ok: false, error: "«url» yaroqsiz" };
       if (o.alt !== undefined && typeof o.alt !== "string") return { ok: false, error: "«alt» yaroqsiz" };
       ops.push({ op: "image", index, url: o.url as string | null, ...(typeof o.alt === "string" ? { alt: o.alt } : {}) });
+    } else if (name === "imageRestore") {
+      ops.push({ op: "imageRestore", index });
+    } else if (name === "list") {
+      const field = typeof o.field === "string" && (LIST_FIELDS as readonly string[]).includes(o.field) ? (o.field as ListField) : null;
+      if (!field) return { ok: false, error: "«field» yaroqsiz" };
+      if (!Array.isArray(o.items) || !o.items.every((x) => typeof x === "string")) return { ok: false, error: "«items» matnlar ro'yxati bo'lishi kerak" };
+      ops.push({ op: "list", index, field, items: o.items as string[] });
     } else if (name === "layout") {
       if (typeof o.layout !== "string" || !isSlideLayout(o.layout)) return { ok: false, error: "«layout» yaroqsiz" };
       ops.push({ op: "layout", index, layout: o.layout });

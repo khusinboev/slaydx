@@ -1,4 +1,5 @@
 import type { BodyRules } from "./slide-audience";
+import type { SlideFontId } from "./slide-fonts";
 import type { SlideAudience, SlideTemplateId, SlideVisual } from "./slide-templates";
 
 export const SLIDE_LAYOUTS = [
@@ -64,6 +65,19 @@ export type SlideModel = {
    * LLM yozmaydi; faqat ko'ruvchidagi tahrir (`style` op) to'ldiradi.
    */
   fontSize?: Record<string, number>;
+  /**
+   * Foydalanuvchi tanlagan shrift OILASI — kalit `fontSize` bilan bir xil
+   * (`src` JSON), qiymat `SLIDE_FONTS` reyestridagi `id`. `applyFontOverrides`
+   * qatlamga `face` yozadi — PPTX `fontFace` va ko'ruvchi `font-family`
+   * bir joydan. LLM yozmaydi; faqat `style` op to'ldiradi.
+   */
+  font?: Record<string, SlideFontId>;
+  /**
+   * ASL (AI chizgan) rasm — foydalanuvchi «Rasmsiz» qilganda yoki o'z
+   * rasmini qo'yganda `image` shu yerga ko'chadi, «Rasmni qaytarish»
+   * (`imageRestore` op) uni qaytaradi. `planSlide` bu maydonni CHIZMAYDI.
+   */
+  imageOrig?: { url: string; alt?: string };
 };
 
 export type SlideDeck = {

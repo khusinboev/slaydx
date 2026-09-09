@@ -1,4 +1,5 @@
 import { bodyRules, type BodyRules } from "./slide-audience";
+import { FONT_BY_ID, isSlideFontId } from "./slide-fonts";
 import { planAnswers, planQuiz, planReferences } from "./slide-layout-extra";
 import type { SlideAudience, SlideTemplateId, SlideVisual } from "./slide-templates";
 import type { SlideModel, SlideSrc, SlideTheme } from "./slide-types";
@@ -301,7 +302,7 @@ function pushFooter(
  * yaxshi. Calibri davridagi ~10% lik platformalararo tafovut endi yo'q,
  * chunki uchala platformada ham metrikasi bir xil shrift chiziladi.
  */
-const CHAR_EM = 0.55;
+export const CHAR_EM = 0.55;
 
 /**
  * So'z chegarasida ochko'zlik (greedy) bilan qatorlash — CSS matn oqimi
@@ -2414,21 +2415,48 @@ export function planSlide(
 }
 
 /**
- * Foydalanuvchi tanlagan shrift o'lchamlari (`s.fontSize`, kalit — `src`
- * JSON'i). Maket funksiyalari `fitSize` bilan o'z o'lchamini topadi; bu
- * yerda ustidan yozamiz — BITTA joyda, shuning uchun PPTX va ko'ruvchi
- * hech qachon ajralmaydi. `srcLines` qatlamida birinchi qatorning kaliti
- * butun ro'yxatga qo'llanadi (ro'yxat bitta qatlam).
+ * Matn qatlamining SHRIFT KALITI — `SlideModel.fontSize`/`font` xaritasi
+ * shu kalit bilan yuritiladi. `srcLines` qatlamida birinchi qatorning
+ * manbasi butun ro'yxatga tegishli (ro'yxat bitta qatlam). Ko'ruvchi
+ * (`SlideCanvas` `hideSrc`, `SlideEditor` panel) ham AYNI shu funksiyani
+ * ishlatadi — kalit qoidasi bitta joyda.
+ */
+export function layerKey(layer: SlideLayer): string | null {
+  if (layer.t !== "text") return null;
+  const src = layer.src ?? layer.srcLines?.find(Boolean);
+  return src ? JSON.stringify(src) : null;
+}
+
+/**
+ * Foydalanuvchi tanlagan shrift o'lchamlari (`s.fontSize`) va oilalari
+ * (`s.font`), kalit — `layerKey`. Maket funksiyalari `fitSize` bilan o'z
+ * o'lchamini topadi; bu yerda ustidan yozamiz — BITTA joyda, shuning uchun
+ * PPTX va ko'ruvchi hech qachon ajralmaydi.
+ *
+ * Shrift oilasi tanlanganda `face` qatlamga yoziladi (`render-pptx`
+ * `fontFace`, `SlideCanvas` `fontCss`). O'lcham FOYDALANUVCHI tanlamagan
+ * bo'lsa, u `fitSize` ning Arial (`CHAR_EM`) uchun hisobidan kelgan —
+ * kengroq shrift (Verdana) o'sha o'lchamda qutidan chiqib ketardi, shuning
+ * uchun `CHAR_EM / em` ga KICHRAYTIRILADI. Tor shrift (Times) esa
+ * kattalashtirilmaydi: balandlik byudjeti fit paytida shu o'lcham uchun
+ * hisoblangan, kattalashtirish qator sonini oshirib pastdan chiqarardi.
  */
 function applyFontOverrides(plan: SlidePlan, s: SlideModel): void {
   const fs = s.fontSize;
-  if (!fs) return;
+  const ff = s.font;
+  if (!fs && !ff) return;
   for (const layer of plan.layers) {
     if (layer.t !== "text") continue;
-    const key = layer.src ? JSON.stringify(layer.src) : layer.srcLines?.[0] ? JSON.stringify(layer.srcLines[0]) : null;
+    const key = layerKey(layer);
     if (!key) continue;
-    const size = fs[key];
-    if (typeof size === "number" && size > 0) layer.size = size;
+    const size = fs?.[key];
+    const sized = typeof size === "number" && size > 0;
+    if (sized) layer.size = size;
+    const id = ff?.[key];
+    const font = isSlideFontId(id) ? FONT_BY_ID[id] : undefined;
+    if (!font) continue;
+    layer.font = font.face;
+    if (!sized) layer.size = Math.max(1, Math.round(layer.size * Math.min(1, CHAR_EM / font.em)));
   }
 }
 
