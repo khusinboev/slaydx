@@ -38,7 +38,8 @@ export function useSlideKeys({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null;
-      if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
+      // `isContentEditable` jsdom da yo'q — atribut bo'yicha ham tekshiriladi (joyida tahrir `contenteditable` div).
+      if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName) || el.closest?.("[contenteditable]:not([contenteditable='false'])"))) return;
       if (!present && document.querySelector('[role="dialog"], [aria-modal="true"]')) return;
       if (extra?.(e)) return;
 

@@ -5,10 +5,11 @@ import { ChevronLeft, ChevronRight, Maximize2, Minimize2, Pause, Play, Presentat
 import type { AcademicDoc } from "@/lib/generation/types";
 import { slideNotes } from "@/lib/generation/slide-layout";
 import type { SlideSrc } from "@/lib/generation/slide-types";
+import type { ListField } from "@/lib/generation/slide-edit";
 import { useSlideEdit } from "../files/useSlideEdit";
 import type { EditActionsState } from "../files/EditActions";
 import { useConfirmClick } from "../overlays/useConfirmClick";
-import { SlideEditor } from "./SlideEditor";
+import { SlideEditor, type StylePatch } from "./SlideEditor";
 import { SLIDE_TEMPLATE_BY_ID } from "@/lib/generation/slide-templates";
 import { getSlideTheme } from "@/lib/generation/slide-themes";
 import { buildSlideDeck } from "@/lib/generation/slides";
@@ -268,10 +269,17 @@ export function SlideViewer({
     },
     [runOps, i],
   );
-  /** Shrift o'lchami — matndan ALOHIDA op (`null` — «Standart»). */
+  /** Ro'yxat BUTUNICHA (PowerPoint qutisi) — bitta `list` op. */
+  const onList = useCallback(
+    (field: ListField, items: string[]) => {
+      runOps([{ op: "list", index: i, field, items }]);
+    },
+    [runOps, i],
+  );
+  /** Shrift o'lchami/oilasi — matndan ALOHIDA op (`null` — «Standart»). */
   const onStyle = useCallback(
-    (src: SlideSrc, size: number | null) => {
-      runOps([{ op: "style", index: i, src, size }]);
+    (src: SlideSrc, patch: StylePatch) => {
+      runOps([{ op: "style", index: i, src, ...patch }]);
     },
     [runOps, i],
   );
@@ -554,6 +562,7 @@ export function SlideViewer({
                       scale={ctx.scale}
                       busy={ed.saving}
                       onText={onText}
+                      onList={onList}
                       onFooter={onFooter}
                       onAnswer={onAnswer}
                       onStyle={onStyle}

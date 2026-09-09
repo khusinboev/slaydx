@@ -313,7 +313,7 @@ test("taqdimot rejimida tahrir YO'Q", async () => {
   cleanup();
 });
 
-test("textarea fokusda Ctrl+Z ko'ruvchiga TEGMAYDI", async () => {
+test("tahrir maydonida (contentEditable) Ctrl+Z ko'ruvchiga TEGMAYDI", async () => {
   const s = stubServer();
   openEditor(s);
   // Bandli slaydga o'tamiz (muqovada ro'yxat yo'q).
@@ -334,14 +334,16 @@ test("textarea fokusda Ctrl+Z ko'ruvchiga TEGMAYDI", async () => {
   cleanup();
 });
 
-test("sahnada ikki bosish → matn (saqlangach) serverga yetib boradi", async () => {
+test("sahnada bandga ikki bosish → BUTUN ro'yxat (`list` op) saqlangach serverga yetib boradi", async () => {
   const s = stubServer();
   openEditor(s);
   fireEvent.click(document.querySelectorAll("[data-thumb-index]")[1]);
   fireEvent.doubleClick(stageQuery("li[data-src]"));
-  const ta = screen.getByLabelText("Matnni tahrirlash");
-  fireEvent.change(ta, { target: { value: "Tuzatilgan band" } });
-  fireEvent.keyDown(ta, { key: "Enter" });
+  const ul = screen.getByLabelText("Matnni tahrirlash");
+  assert.equal(ul.tagName, "UL", "ro'yxat butunicha, PowerPoint qutisi kabi");
+  const first = ul.querySelector("li") as HTMLElement;
+  first.textContent = "Tuzatilgan band";
+  fireEvent.mouseDown(document.body);
   await pause(50);
   assert.equal(s.calls.length, 0, "matn ham avtomatik yuborilmaydi");
   await act(async () => {
@@ -349,9 +351,9 @@ test("sahnada ikki bosish → matn (saqlangach) serverga yetib boradi", async ()
   });
   await pause(50);
   assert.deepEqual(ops(s.patches[0]), [
-    { op: "text", index: 1, src: { f: "bullets", i: 0 }, value: "Tuzatilgan band" },
+    { op: "list", index: 1, field: "bullets", items: ["Tuzatilgan band", "Ikki"] },
   ]);
-  assert.equal(s.doc.slides?.[1].bullets?.[0], "Tuzatilgan band", "server hujjatida ham o'zgargan");
+  assert.deepEqual(s.doc.slides?.[1].bullets, ["Tuzatilgan band", "Ikki"], "server hujjatida ham o'zgargan");
   cleanup();
 });
 
@@ -441,7 +443,7 @@ test("kolontitul sahnada tahrirlanadi → BUTUN dekaga `footer` opi", async () =
   openEditor(s);
   fireEvent.doubleClick(stageQuery('[data-src=\'{"f":"footer"}\']'));
   const ta = screen.getByLabelText("Matnni tahrirlash");
-  fireEvent.change(ta, { target: { value: "Aliyev · TDPU" } });
+  ta.textContent = "Aliyev · TDPU";
   fireEvent.keyDown(ta, { key: "Enter" });
   await act(async () => {
     fireEvent.click(saveBtn()!);

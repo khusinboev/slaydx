@@ -1,50 +1,60 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ClipboardEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { Check, ImagePlus, Minus, Plus, RotateCcw, XCircle } from "lucide-react";
 import type { SlideAudience, SlideTemplateId, SlideVisual } from "@/lib/generation/slide-templates";
 import type { BodyRules } from "@/lib/generation/slide-audience";
 import type { SlideModel, SlideSrc, SlideTheme } from "@/lib/generation/slide-types";
-import { FONT_MAX, FONT_MIN, readSlideField } from "@/lib/generation/slide-edit";
+import { FONT_MAX, FONT_MIN, listCap, readSlideField, type ListField } from "@/lib/generation/slide-edit";
+import { SLIDE_FONTS, isSlideFontId, type SlideFontId } from "@/lib/generation/slide-fonts";
 import { QUIZ_LETTERS } from "@/lib/generation/slide-quiz";
-import { SLIDE_LIMITS } from "@/lib/generation/slide-limits";
+import { SLIDE } from "@/lib/viewers/metrics";
 import { cn } from "@/lib/cn";
 import {
   LOGO_BOX,
   boxStyle,
+  layerKey,
   photoSlot,
   planSlide,
   ptToPx,
-  type SlideLayer,
 } from "@/lib/generation/slide-layout";
+import { textLayerStyle, type TextLayer } from "./SlideCanvas";
 
 /**
- * Tahrir QATLAMI — `SlideStage` ning `overlay` slotida.
+ * Tahrir QATLAMI — `SlideStage` ning `overlay` slotida (Muharrir 2).
  *
- * `SlideCanvas` PASSIV qoladi (SSR paritet testlari uni qulflagan):
- * u faqat har matn qatlamiga `data-src` yozadi, ya'ni «bu matn modelning
- * qaysi maydonidan chizilgan». Bu komponent shu atributni o'qiydi va
- * AYNI o'sha qutida `textarea` ochadi — shrift o'lchami, rangi, tekislashi
- * qatlamniki, shuning uchun matn joyidan qimirlamaydi.
+ * WYSIWYG: ikki bosilgan matn SLAYDNING O'ZIDA tahrirlanadi. Buning
+ * uchun overlay ichida sahna bilan BIR XIL masshtabli «egizak» konteyner
+ * bor (`transform: scale(scale)`), tahrir maydoni esa qatlamning aynan
+ * o'z qutisida, `textLayerStyle` — `SlideCanvas` bilan bitta funksiya —
+ * bilan chiziladi: shrift, o'lcham, rang, tekislash, harf oralig'i,
+ * uppercase hammasi qatlamniki. Oq quti YO'Q, faqat yupqa ko'k ramka.
+ * Asl qatlam bu paytda sahnada yashirinadi (`onEditing` → `hideSrc`),
+ * ikki matn ustma-ust tushmaydi.
  *
- * Masshtab QO'LDA ko'paytiriladi (`transform: scale()` EMAS): CSS
- * transformi ostidagi `textarea` da kursor va tanlash joyi siljib
- * ketadi. Overlay sahnaning masshtablanmagan ramkasida turgani uchun
- * ham koordinata, ham shrift `scale` ga ko'paytiriladi.
+ * Maydon `contentEditable` (textarea emas): matn qatlam bilan bir xil
+ * oqadi, ro'yxat esa `<ul>` ichida `<li>` lar bo'lib — Enter brauzerda
+ * yangi `<li>` (yangi band) yaratadi, bo'sh bandda Backspace uni o'chiradi,
+ * xuddi PowerPoint qutisi. Ro'yxat BUTUNICHA saqlanadi (`onList`, bitta
+ * `list` op), bitta matn `onText`/`onFooter`.
  *
- * SHRIFT PANELI — `textarea` ustidagi suzuvchi qatorcha: «−»/«+» va
- * tayyor o'lchamlar. Tanlov DARHOL `{op:"style"}` bo'lib ketadi
- * (optimistik), matn esa yopilganda `{op:"text"}` bo'ladi — ikkisi
- * ALOHIDA, chunki shrift tanlab ko'rish matnni yozib bo'lgunicha kerak.
- * Panel tugmalari `mousedown` da `preventDefault` qiladi: aks holda
- * `textarea` fokusni yo'qotib, tahrir har bosishda yopilardi.
+ * Maydon boshqarilmaydi (uncontrolled): React `initial` ni bir marta
+ * chizadi, keyin faqat DOM dan o'qiydi (`readText`/`readItems`) —
+ * boshqariladigan contentEditable da kursor har harfda sakraydi.
+ *
+ * SHRIFT PANELI — maydon ustidagi suzuvchi qatorcha (masshtabsiz, o'qish
+ * uchun): «−»/«+», tayyor o'lchamlar, «Standart» va shrift OILASI
+ * (`SLIDE_FONTS`). Tanlov DARHOL `{op:"style"}` bo'lib ketadi
+ * (optimistik) — matn hali yozilayotgan bo'lsa ham maydon yangi
+ * shrift/o'lchamda ko'rinadi.
  *
  * Hodisa ushlash: overlay o'zi `pointer-events-none` — ikki bosish
  * ostidagi `SlideCanvas` elementiga tegadi va SAHNA ramkasiga
  * ko'tariladi; biz shu ramkada tinglaymiz va `closest("[data-src]")`
- * bilan manbani topamiz. Shu sabab qatlamlar ustiga ko'rinmas «tutqich»
- * to'rtburchaklar qo'yish shart emas.
+ * bilan manbani topamiz.
  */
+
+export type StylePatch = { size?: number | null; font?: SlideFontId | null };
 
 export type SlideEditorProps = {
   slide: SlideModel;
@@ -61,6 +71,8 @@ export type SlideEditorProps = {
   /** Rasm so'rovi ketayotgan bo'lsa tugmalar o'chadi. */
   busy?: boolean;
   onText: (src: SlideSrc, value: string) => void;
+  /** Ro'yxat butunicha (`bullets`/`left`/`right`) — bitta `list` op. */
+  onList: (field: ListField, items: string[]) => void;
   /**
    * Kolontitul — DEKA darajasida (`{op:"footer"}`), shuning uchun
    * `onText` dan ALOHIDA: `writeSlideField` `footer` ni ataylab rad
@@ -69,8 +81,8 @@ export type SlideEditorProps = {
   onFooter: (value: string) => void;
   /** Test kaliti: `{op:"answer", q, answer}` — javoblar slaydi ham qayta yig'iladi. */
   onAnswer: (q: number, answer: number) => void;
-  /** Shrift o'lchami: `null` — «Standart» (model qiymatini o'chiradi). */
-  onStyle: (src: SlideSrc, size: number | null) => void;
+  /** Shrift o'lchami va/yoki oilasi: `null` — «Standart» (model qiymatini o'chiradi). */
+  onStyle: (src: SlideSrc, patch: StylePatch) => void;
   onImage: (url: null) => void;
   /** «Rasmni qaytarish» — asl AI rasm (`imageOrig`). */
   onRestoreImage: () => void;
@@ -85,22 +97,14 @@ function isMultiline(src: SlideSrc): boolean {
   return src.f === "steps" && src.k === "text";
 }
 
-/** Ro'yxatli maydonlar — «+ band» tugmasi shular uchun chiqadi. */
-type ListField = "bullets" | "left" | "right";
 function listFieldOf(src: SlideSrc | undefined): ListField | null {
   if (!src) return null;
   return src.f === "bullets" || src.f === "left" || src.f === "right" ? src.f : null;
 }
 
-type Pos = { left: number; top: number; width: number; height: number };
-
-type EditState = {
-  src: SlideSrc;
-  value: string;
-  initial: string;
-  pos: Pos;
-  multiline: boolean;
-};
+type EditState =
+  | { kind: "text"; key: string; src: SlideSrc; initial: string; multiline: boolean }
+  | { kind: "list"; key: string; field: ListField; initial: string[] };
 
 /**
  * Panelda taklif qilinadigan o'lchamlar (pt) — matn muharrirlaridagi
@@ -116,6 +120,77 @@ function clampFont(n: number): number {
   return Math.max(FONT_MIN, Math.min(FONT_MAX, Math.round(n)));
 }
 
+/**
+ * contentEditable dagi matnni o'qish — `innerText` jsdom da yo'q,
+ * `textContent` esa `<br>`/`<div>` qator ajratgichlarini yutadi.
+ * Brauzer Enter/Shift+Enter da har xil tugun yaratishi mumkin — hammasi
+ * `\n` ga tushadi.
+ */
+export function readText(el: Node): string {
+  let out = "";
+  const walk = (n: Node, first: boolean) => {
+    if (n.nodeType === 3) {
+      out += n.nodeValue ?? "";
+      return;
+    }
+    if (n.nodeType !== 1) return;
+    const tag = (n as Element).tagName;
+    if (tag === "BR") {
+      out += "\n";
+      return;
+    }
+    const block = tag === "DIV" || tag === "P" || tag === "LI";
+    if (block && !first && out && !out.endsWith("\n")) out += "\n";
+    let f = true;
+    for (const c of Array.from(n.childNodes)) {
+      walk(c, f);
+      f = false;
+    }
+  };
+  walk(el, true);
+  // Chrome bo'sh qatorga `<br>` qo'yadi — oxiridagi bitta ortiqcha ajratgich hisobga olinmaydi.
+  return out.replace(/\n$/, "");
+}
+
+/** Ro'yxat maydonidan bandlar: har `<li>` bitta band; ichidagi qo'lda yozilgan `\n` ham bandga ajratiladi. */
+export function readItems(ul: HTMLElement): string[] {
+  const lis = Array.from(ul.querySelectorAll("li"));
+  const raw = lis.length ? lis.map((li) => readText(li)) : [readText(ul)];
+  return raw
+    .flatMap((t) => t.split("\n"))
+    .map((t) => t.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+}
+
+function sameList(a: string[], b: string[]): boolean {
+  return a.length === b.length && a.every((x, i) => x === b[i]);
+}
+
+/** Kursor turgan joyga matn qo'yish — undo stekiga tushadigan yo'l bo'lsa o'sha, bo'lmasa Range API. */
+function insertAtCaret(el: HTMLElement, text: string) {
+  const d = document as Document & { execCommand?: (c: string, ui: boolean, v: string) => boolean };
+  if (typeof d.execCommand === "function") {
+    try {
+      if (d.execCommand("insertText", false, text)) return;
+    } catch {
+      // eski brauzer — pastdagi yo'l
+    }
+  }
+  const sel = window.getSelection?.();
+  const node = document.createTextNode(text);
+  if (sel && sel.rangeCount > 0 && el.contains(sel.anchorNode)) {
+    const range = sel.getRangeAt(0);
+    range.deleteContents();
+    range.insertNode(node);
+    range.setStartAfter(node);
+    range.collapse(true);
+    sel.removeAllRanges();
+    sel.addRange(range);
+  } else {
+    el.appendChild(node);
+  }
+}
+
 export function SlideEditor({
   slide,
   theme,
@@ -129,6 +204,7 @@ export function SlideEditor({
   scale,
   busy = false,
   onText,
+  onList,
   onFooter,
   onAnswer,
   onStyle,
@@ -139,6 +215,7 @@ export function SlideEditor({
 }: SlideEditorProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLElement | null>(null);
   const [edit, setEdit] = useState<EditState | null>(null);
   const editRef = useRef<EditState | null>(null);
   editRef.current = edit;
@@ -150,14 +227,25 @@ export function SlideEditor({
     [slide, theme, visual, index, total, audience, templateId, bodyType, logo],
   );
 
-  /** `src` ga mos qatlam — shrift/rang/tekislashni undan olamiz. */
-  const layerOf = useCallback(
-    (src: SlideSrc): SlideLayer | null => {
-      const key = JSON.stringify(src);
+  /** Kalit bo'yicha qatlam — har renderda qayta topiladi (shrift o'zgarsa yangi qatlam keladi). */
+  const layerByKey = useCallback(
+    (key: string): TextLayer | null => {
+      for (const l of plan.layers) {
+        if (l.t === "text" && layerKey(l) === key) return l;
+      }
+      return null;
+    },
+    [plan.layers],
+  );
+
+  /** `src` ga mos qatlam kaliti — bitta maydon `src` da, band `srcLines` da. */
+  const keyOf = useCallback(
+    (src: SlideSrc): string | null => {
+      const wanted = JSON.stringify(src);
       for (const l of plan.layers) {
         if (l.t !== "text") continue;
-        if (l.src && JSON.stringify(l.src) === key) return l;
-        if (l.srcLines?.some((s) => s && JSON.stringify(s) === key)) return l;
+        if (l.src && JSON.stringify(l.src) === wanted) return layerKey(l);
+        if (l.srcLines?.some((s) => s && JSON.stringify(s) === wanted)) return layerKey(l);
       }
       return null;
     },
@@ -165,93 +253,91 @@ export function SlideEditor({
   );
 
   const open = useCallback(
-    (src: SlideSrc, el: HTMLElement | null, initialOverride?: string) => {
-      const layer = layerOf(src);
-      const value = initialOverride ?? readSlideField(slide, src) ?? "";
-      /*
-       * Joy: iloji bo'lsa BOSILGAN elementning o'zidan (ro'yxatdagi
-       * bitta band butun qatlam qutisidan kichik). O'lchov bo'lmasa
-       * (SSR/jsdom — layout yo'q) qatlam qutisiga tushamiz.
-       */
-      const host = rootRef.current;
-      let pos: Pos | null = null;
-      if (el && host) {
-        const r = el.getBoundingClientRect();
-        const hr = host.getBoundingClientRect();
-        if (r.width > 0 && r.height > 0) {
-          pos = { left: r.left - hr.left, top: r.top - hr.top, width: r.width, height: r.height };
-        }
+    (src: SlideSrc) => {
+      const key = keyOf(src);
+      const layer = key ? layerByKey(key) : null;
+      if (!key || !layer) return;
+      const field = listFieldOf(layer.srcLines?.find(Boolean));
+      if (field && layer.srcLines && !layer.src) {
+        setEdit({ kind: "list", key, field, initial: (slide[field] ?? []).slice() });
+      } else {
+        setEdit({ kind: "text", key, src, initial: readSlideField(slide, src) ?? "", multiline: isMultiline(src) });
       }
-      if (!pos && layer) {
-        const b = boxStyle(layer.box);
-        pos = { left: b.left * scale, top: b.top * scale, width: b.width * scale, height: b.height * scale };
-      }
-      if (!pos) pos = { left: 0, top: 0, width: 200, height: 40 };
-
-      setEdit({ src, value, initial: value, pos, multiline: isMultiline(src) });
-      // Bir maydonli qatlam yashiriladi; ro'yxatda bitta band ochilgani uchun (hozircha) yo'q.
-      onEditing?.(layer && layer.t === "text" && layer.src ? JSON.stringify(layer.src) : null);
+      onEditing?.(key);
     },
-    [layerOf, slide, scale, onEditing],
+    [keyOf, layerByKey, slide, onEditing],
   );
 
   /*
-   * Ochilgan maydonning KO'RINISHI har renderda QAYTA hisoblanadi
-   * (holatda saqlanmaydi): shrift o'lchami o'zgarganda `slide` yangi
-   * `fontSize` bilan keladi va `textarea` darhol yangi o'lchamda
-   * ko'rinadi — «ko'rdim = oldim» tahrir paytida ham amal qiladi.
+   * Maydon ochilganda fokus va kursor OXIRIDA — foydalanuvchi darhol
+   * yozadi. Selection API bo'lmasa (eski muhit) fokusning o'zi yetadi.
    */
-  const editLayer = edit ? layerOf(edit.src) : null;
-  const editStyle: CSSProperties =
-    editLayer && editLayer.t === "text"
-      ? {
-          fontSize: ptToPx(editLayer.size) * scale,
-          color: editLayer.color,
-          fontWeight: editLayer.bold ? 700 : 500,
-          fontStyle: editLayer.italic ? "italic" : "normal",
-          textAlign: editLayer.align || "left",
-          lineHeight: 1.22,
-        }
-      : { fontSize: 14 * scale, color: theme.text ?? "#111", textAlign: "left" };
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!edit || !el) return;
+    el.focus();
+    try {
+      const sel = window.getSelection?.();
+      if (sel && typeof sel.selectAllChildren === "function") {
+        sel.selectAllChildren(el);
+        sel.collapseToEnd();
+      }
+    } catch {
+      // jsdom/eski brauzer — kursor joyi muhim emas
+    }
+  }, [edit]);
+
+  const editLayer = edit ? layerByKey(edit.key) : null;
 
   /*
-   * Shrift o'lchami QATLAMGA tegishli, bitta bandga emas: `planSlide`
-   * ro'yxatni BITTA matn qatlami qilib chizadi va `applyFontOverrides`
-   * kalit sifatida `srcLines[0]` ni o'qiydi. Shuning uchun bandda
-   * turganda ham op birinchi bandning manbasi bilan yuboriladi va panel
-   * buni ochiq aytadi («Barcha bandlar»).
+   * Shrift o'lchami/oilasi QATLAMGA tegishli, bitta bandga emas:
+   * `applyFontOverrides` kalit sifatida `layerKey` (birinchi band) ni
+   * o'qiydi. Panel buni ochiq aytadi («Barcha bandlar»).
    */
-  const styleSrc: SlideSrc | null = editLayer && editLayer.t === "text"
-    ? (editLayer.src ?? editLayer.srcLines?.find(Boolean) ?? null)
-    : null;
-  const wholeList = Boolean(editLayer && editLayer.t === "text" && !editLayer.src && editLayer.srcLines?.length);
-  const curSize = editLayer && editLayer.t === "text" ? Math.round(editLayer.size) : 0;
-  const hasOverride = Boolean(styleSrc && slide.fontSize?.[JSON.stringify(styleSrc)]);
+  const styleSrc: SlideSrc | null = editLayer ? (editLayer.src ?? editLayer.srcLines?.find(Boolean) ?? null) : null;
+  const wholeList = Boolean(editLayer && !editLayer.src && editLayer.srcLines?.length);
+  const curSize = editLayer ? Math.round(editLayer.size) : 0;
+  const hasOverride = Boolean(edit && slide.fontSize?.[edit.key]);
+  const curFontRaw = edit ? slide.font?.[edit.key] : undefined;
+  const curFont: SlideFontId | "" = isSlideFontId(curFontRaw) ? curFontRaw : "";
 
   const setSize = useCallback(
     (size: number | null) => {
-      if (!styleSrc) return;
-      onStyle(styleSrc, size);
+      if (styleSrc) onStyle(styleSrc, { size });
+    },
+    [styleSrc, onStyle],
+  );
+  const setFont = useCallback(
+    (font: SlideFontId | null) => {
+      if (styleSrc) onStyle(styleSrc, { font });
     },
     [styleSrc, onStyle],
   );
 
   const commit = useCallback(() => {
     const e = editRef.current;
+    const el = inputRef.current;
     // REF darhol bo'shatiladi: tashqariga bosish `mousedown` bilan
     // yopadi, keyin `blur` ham keladi — ikkinchisi bo'sh ref ko'rib
     // jim qaytadi, aks holda BIR tahrir ikki marta saqlanardi.
     editRef.current = null;
     setEdit(null);
     onEditing?.(null);
-    if (!e) return;
-    // O'zgarmagan matn uchun operatsiya YUBORILMAYDI — bo'sh PATCH
-    // hujjat versiyasini oshirib, PPTX ni bekorga qayta yasatardi.
-    if (e.value === e.initial) return;
-    // Kolontitul bitta slaydniki emas — butun dekaniki.
-    if (e.src.f === "footer") onFooter(e.value);
-    else onText(e.src, e.value);
-  }, [onText, onFooter, onEditing]);
+    if (!e || !el) return;
+    if (e.kind === "text") {
+      const value = readText(el);
+      // O'zgarmagan matn uchun operatsiya YUBORILMAYDI — bo'sh PATCH
+      // hujjat versiyasini oshirib, PPTX ni bekorga qayta yasatardi.
+      if (value === e.initial) return;
+      // Kolontitul bitta slaydniki emas — butun dekaniki.
+      if (e.src.f === "footer") onFooter(value);
+      else onText(e.src, value);
+      return;
+    }
+    const items = readItems(el);
+    if (sameList(items, e.initial)) return;
+    onList(e.field, items);
+  }, [onText, onFooter, onList, onEditing]);
 
   const cancel = useCallback(() => {
     skipBlurRef.current = true;
@@ -262,14 +348,10 @@ export function SlideEditor({
 
   /*
    * Ikki bosish — SAHNA ramkasida (overlay ning ota elementi). Aynan shu
-   * tugun `SlideCanvas` ni ham, bizni ham o'z ichiga oladi.
+   * tugun `SlideCanvas` ni ham, bizni ham o'z ichiga oladi. Tahrir
+   * maydonining o'zida ikki bosish (so'z tanlash) `data-src` ga tegmaydi.
    */
   useEffect(() => {
-    /*
-     * Sahna RAMKASI — slayd ham, overlay ham shu tugun ichida
-     * (`SlideStage` uni `data-slide-frame` bilan belgilaydi).
-     * Ramka topilmasa eng yaqin ota tugun (sinovdagi sodda tuzilma).
-     */
     const host = rootRef.current?.closest("[data-slide-frame]") ?? rootRef.current?.parentElement;
     if (!host) return;
     const onDbl = (ev: Event) => {
@@ -286,64 +368,73 @@ export function SlideEditor({
       }
       if (!src || typeof src !== "object" || typeof (src as { f?: unknown }).f !== "string") return;
       ev.preventDefault();
-      open(src, el);
+      open(src);
     };
     host.addEventListener("dblclick", onDbl);
     return () => host.removeEventListener("dblclick", onDbl);
   }, [open]);
 
   /*
-   * TASHQARIGA BITTA bosish tahrirni yopadi (va saqlaydi).
-   *
-   * `blur` ning o'zi yetmaydi: fokus olmaydigan joyga (sahna foni,
-   * asboblar paneli tugmasi) bosilganda ba'zi brauzerlarda `textarea`
-   * fokusni ushlab qoladi va foydalanuvchi «yopilmadi» deb o'ylaydi.
-   * Shrift PANELI ichidagi bosish tashqari HISOBLANMAYDI — u tahrirning
-   * o'z qismi.
+   * TASHQARIGA BITTA bosish tahrirni yopadi (va saqlaydi). Shrift
+   * PANELI ichidagi bosish tashqari HISOBLANMAYDI — u tahrirning o'z
+   * qismi.
    */
   useEffect(() => {
     if (!edit) return;
     const onDown = (ev: Event) => {
       const t = ev.target as HTMLElement | null;
-      if (t?.closest?.("[data-slide-edit-input]") || t?.closest?.("[data-slide-font-panel]")) return;
+      if (t?.closest?.("[data-slide-edit-box]") || t?.closest?.("[data-slide-font-panel]")) return;
       commit();
     };
     document.addEventListener("mousedown", onDown, true);
     return () => document.removeEventListener("mousedown", onDown, true);
   }, [edit, commit]);
 
-  /*
-   * «+ band» — ro'yxatli qatlam ostida. Yangi band ro'yxatning OXIRIGA
-   * (`i === length`) yoziladi: `writeSlideField` shu holatni «qo'shish»
-   * deb tushunadi.
-   */
-  const adders = useMemo(() => {
-    const out: { field: ListField; pos: Pos }[] = [];
-    for (const l of plan.layers) {
-      if (l.t !== "text" || !l.srcLines?.length) continue;
-      const field = listFieldOf(l.srcLines.find(Boolean));
-      if (!field) continue;
-      const list = slide[field] ?? [];
-      const cap =
-        field === "bullets"
-          ? slide.layout === "agenda"
-            ? bodyType.agendaMax
-            : bodyType.maxBullets
-          : SLIDE_LIMITS.colItems;
-      if (list.length >= cap) continue;
-      const b = boxStyle(l.box);
-      out.push({
-        field,
-        pos: {
-          left: b.left * scale,
-          top: (b.top + b.height) * scale,
-          width: b.width * scale,
-          height: 22,
-        },
-      });
+  /** Ro'yxatda Enter — brauzer yangi `<li>` yaratadi; chegarada bloklanadi. */
+  const listMax = edit?.kind === "list" ? listCap(slide, edit.field, bodyType).max : 0;
+
+  const onKeyDown = (e: ReactKeyboardEvent<HTMLElement>) => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      cancel();
+      return;
     }
-    return out;
-  }, [plan.layers, slide, bodyType.agendaMax, bodyType.maxBullets, scale]);
+    const cur = editRef.current;
+    if (!cur || e.key !== "Enter") return;
+    if (cur.kind === "list") {
+      const n = inputRef.current?.querySelectorAll("li").length ?? 0;
+      if (n >= listMax) e.preventDefault();
+      return;
+    }
+    if (e.shiftKey && cur.multiline) {
+      // Yangi qator MATN sifatida (`\n`) — `white-space: pre-wrap` uni chizadi, `readText` o'qiydi.
+      e.preventDefault();
+      if (inputRef.current) insertAtCaret(inputRef.current, "\n");
+      return;
+    }
+    e.preventDefault();
+    commit();
+  };
+
+  /** Faqat MATN qo'yiladi — HTML formatlash qatlamga sizmasin. */
+  const onPaste = (e: ClipboardEvent<HTMLElement>) => {
+    const text = e.clipboardData?.getData("text/plain");
+    if (text === undefined || text === null) return;
+    e.preventDefault();
+    if (inputRef.current) insertAtCaret(inputRef.current, text.replace(/\r\n?/g, "\n"));
+  };
+
+  const onBlur = (e: { relatedTarget: EventTarget | null }) => {
+    if (skipBlurRef.current) {
+      skipBlurRef.current = false;
+      return;
+    }
+    // Fokus shrift paneliga (masalan `<select>`) o'tsa — tahrir davom etadi.
+    const to = e.relatedTarget as HTMLElement | null;
+    if (to?.closest?.("[data-slide-font-panel]")) return;
+    commit();
+  };
 
   /*
    * TEST KALITI — variant qutilari ustidagi «✓» tugmalari.
@@ -351,29 +442,23 @@ export function SlideEditor({
    * `SlideCanvas` ga TEGILMAYDI: to'g'ri javob PPTX ga sizmasligi kerak
    * (ekranda kalitni ko'rsatib qo'yish testni ma'nosiz qilardi), shuning
    * uchun belgi FAQAT shu overlay ichida chiziladi. Joy variant matni
-   * qatlamining o'z qutisidan olinadi — olti `visual` tarmog'ining
-   * qaysi biri chizilgan bo'lsa ham tugma o'z variantining ustida
-   * turadi.
+   * qatlamining o'z qutisidan olinadi.
    */
   const answerSpots = useMemo(() => {
     if (!slide.quiz?.length) return [];
-    const out: { q: number; j: number; pos: Pos }[] = [];
+    const out: { q: number; j: number; pos: { left: number; top: number; width: number } }[] = [];
     for (const l of plan.layers) {
       if (l.t !== "text" || l.src?.f !== "quiz" || l.src.k !== "option") continue;
       const b = boxStyle(l.box);
-      out.push({
-        q: l.src.i,
-        j: l.src.j,
-        pos: { left: b.left * scale, top: b.top * scale, width: b.width * scale, height: b.height * scale },
-      });
+      out.push({ q: l.src.i, j: l.src.j, pos: { left: b.left * scale, top: b.top * scale, width: b.width * scale } });
     }
     return out;
   }, [plan.layers, slide.quiz, scale]);
 
   /*
    * Rasm boshqaruvi — maketda rasm JOYI bo'lsa (rasm hali yo'q bo'lsa
-   * ham: «O‘z rasmim» aynan shunda kerak). Logo qatlami ATAYLAB
-   * chetlab o'tiladi — `LOGO_BOX` bilan solishtiriladi.
+   * ham: «O‘z rasmim» aynan shunda kerak). Logo qatlami ATAYLAB chetlab
+   * o'tiladi — `LOGO_BOX` bilan solishtiriladi.
    */
   const slot = photoSlot(slide.layout, visual);
   const hasImage = Boolean(slide.image?.url);
@@ -383,23 +468,30 @@ export function SlideEditor({
       (l) => l.t === "image" && !(l.box.x === LOGO_BOX.x && l.box.y === LOGO_BOX.y && l.box.w === LOGO_BOX.w),
     );
     const b = boxStyle(imageLayer ? imageLayer.box : slot);
-    return { left: b.left * scale, top: b.top * scale, width: b.width * scale, height: b.height * scale };
+    return { left: b.left * scale, top: b.top * scale, width: b.width * scale };
   }, [slot, plan.layers, scale]);
+
+  /*
+   * Tahrir qutisi — QATLAM BILAN BIR XIL stil (`textLayerStyle`), faqat
+   * toshgan matn ko'rinsin (`overflow: visible`) va yupqa ramka. Fon
+   * YO'Q: slaydning o'zi ko'rinadi.
+   */
+  const boxStyleNow: CSSProperties | null = editLayer
+    ? {
+        ...textLayerStyle(editLayer),
+        overflow: "visible",
+        outline: "2px solid #0EA5E9",
+        outlineOffset: 2,
+        pointerEvents: "auto",
+        cursor: "text",
+      }
+    : null;
+  const panelTop = editLayer ? Math.round(boxStyle(editLayer.box).top * scale) : 0;
+  const panelLeft = editLayer ? Math.round(boxStyle(editLayer.box).left * scale) : 0;
+  const panelH = editLayer ? Math.round(boxStyle(editLayer.box).height * scale) : 0;
 
   return (
     <div ref={rootRef} className="pointer-events-none absolute inset-0" data-slide-editor>
-      {adders.map((a, i) => (
-        <button
-          key={`${a.field}-${i}`}
-          type="button"
-          className="pointer-events-auto absolute rounded bg-black/60 px-1.5 py-0.5 text-[11px] text-white hover:bg-black/80"
-          style={{ left: a.pos.left, top: a.pos.top, maxWidth: a.pos.width }}
-          onClick={() => open({ f: a.field, i: (slide[a.field] ?? []).length }, null, "")}
-        >
-          + band
-        </button>
-      ))}
-
       {answerSpots.map(({ q, j, pos }) => {
         const cur = slide.quiz?.[q]?.answer === j;
         return (
@@ -479,21 +571,41 @@ export function SlideEditor({
         </div>
       ) : null}
 
-      {edit && styleSrc ? (
+      {edit && editLayer && styleSrc ? (
         /*
-          Suzuvchi panel — maydonning USTIDA. Joy yetmasa (yuqori
-          qatlam) maydonning ostiga tushadi, aks holda sahnadan chiqib
-          ketardi.
+          Suzuvchi panel — maydonning USTIDA, masshtabsiz (o'qish uchun).
+          Joy yetmasa (yuqori qatlam) maydonning ostiga tushadi.
         */
         <div
           data-slide-font-panel
-          className="pointer-events-auto absolute z-10 flex max-w-[min(560px,95%)] flex-wrap items-center gap-1 rounded-md bg-[#2b2b2b] px-1.5 py-1 text-[11px] text-white/85 shadow-lg"
-          style={{ left: edit.pos.left, top: edit.pos.top >= 34 ? edit.pos.top - 34 : edit.pos.top + edit.pos.height + 4 }}
-          // Panelga bosganda `textarea` fokusni yo'qotmasin — aks holda
-          // `blur` tahrirni yopib, o'lcham tanlash imkonsiz bo'lardi.
-          onMouseDown={(e) => e.preventDefault()}
+          className="pointer-events-auto absolute z-10 flex max-w-[min(640px,95%)] flex-wrap items-center gap-1 rounded-md bg-[#2b2b2b] px-1.5 py-1 text-[11px] text-white/85 shadow-lg"
+          style={{ left: panelLeft, top: panelTop >= 34 ? panelTop - 34 : panelTop + panelH + 4 }}
+          // Panelga bosganda maydon fokusni yo'qotmasin — `<select>` bundan
+          // mustasno (u fokus olmasa ochilmaydi; `onBlur` uni tanib turadi).
+          onMouseDown={(e) => {
+            if ((e.target as HTMLElement).tagName !== "SELECT") e.preventDefault();
+          }}
         >
           <span className="px-1 text-white/45">{wholeList ? "Barcha bandlar" : "Shrift"}</span>
+          <select
+            aria-label="Shrift oilasi"
+            className="rounded bg-white/10 px-1 py-0.5 text-[11px] text-white outline-none"
+            value={curFont}
+            onChange={(e) => {
+              const v = e.target.value;
+              setFont(isSlideFontId(v) ? v : null);
+            }}
+          >
+            <option value="" className="text-black">
+              Standart (Arial)
+            </option>
+            {SLIDE_FONTS.map((f) => (
+              <option key={f.id} value={f.id} className="text-black">
+                {f.label}
+              </option>
+            ))}
+          </select>
+          <span className="mx-0.5 h-3.5 w-px bg-white/20" />
           <button
             type="button"
             aria-label="Shriftni kichraytirish"
@@ -541,42 +653,62 @@ export function SlideEditor({
         </div>
       ) : null}
 
-      {edit ? (
-        <textarea
-          autoFocus
-          data-slide-edit-input
-          aria-label="Matnni tahrirlash"
-          className="pointer-events-auto absolute resize-none rounded-sm bg-white/95 p-0.5 outline-2 outline-sky-500"
-          style={{
-            left: edit.pos.left,
-            top: edit.pos.top,
-            width: Math.max(60, edit.pos.width),
-            height: Math.max(24, edit.pos.height),
-            ...editStyle,
-          }}
-          value={edit.value}
-          onChange={(e) => setEdit((s) => (s ? { ...s, value: e.target.value } : s))}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") {
-              e.preventDefault();
-              e.stopPropagation();
-              cancel();
-              return;
-            }
-            if (e.key === "Enter" && !(e.shiftKey && edit.multiline)) {
-              e.preventDefault();
-              commit();
-            }
-          }}
-          onBlur={() => {
-            if (skipBlurRef.current) {
-              skipBlurRef.current = false;
-              return;
-            }
-            commit();
-          }}
-        />
-      ) : null}
+      {/*
+        EGIZAK konteyner — sahna bilan bir xil masshtab. Tahrir qutisi
+        qatlamning O'Z koordinatalarida (dyuym → px, `boxStyle`), ya'ni
+        `SlideCanvas` dagi qatlam bilan piksel-piksel ustma-ust.
+      */}
+      <div
+        className="pointer-events-none absolute top-0 left-0 origin-top-left"
+        style={{ width: SLIDE.w, height: SLIDE.h, transform: `scale(${scale})` }}
+      >
+        {edit && editLayer && boxStyleNow ? (
+          <div data-slide-edit-box style={boxStyleNow}>
+            {edit.kind === "text" ? (
+              <div
+                ref={(el) => {
+                  inputRef.current = el;
+                }}
+                contentEditable
+                suppressContentEditableWarning
+                role="textbox"
+                aria-multiline={edit.multiline}
+                aria-label="Matnni tahrirlash"
+                data-slide-edit-input
+                style={{ width: "100%", minHeight: "1em", outline: "none" }}
+                onKeyDown={onKeyDown}
+                onPaste={onPaste}
+                onBlur={onBlur}
+              >
+                {edit.initial}
+              </div>
+            ) : (
+              <ul
+                ref={(el) => {
+                  inputRef.current = el;
+                }}
+                contentEditable
+                suppressContentEditableWarning
+                role="textbox"
+                aria-multiline
+                aria-label="Matnni tahrirlash"
+                data-slide-edit-input
+                className={editLayer.bullets ? "w-full list-disc pl-[1.15em]" : "w-full list-none"}
+                style={{ margin: 0, paddingLeft: editLayer.bullets ? "1.15em" : 0, outline: "none", minHeight: "1em" }}
+                onKeyDown={onKeyDown}
+                onPaste={onPaste}
+                onBlur={onBlur}
+              >
+                {edit.initial.map((line, i) => (
+                  <li key={i} style={{ marginBottom: ptToPx(editLayer.paraSpace ?? 8) }}>
+                    {line}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ) : null}
+      </div>
     </div>
   );
 }

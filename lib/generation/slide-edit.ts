@@ -156,6 +156,15 @@ function bulletCaps(s: SlideModel, rules: EditRules): { max: number; chars: numb
 }
 
 /**
+ * Ro'yxat maydonining chegarasi (band soni va uzunligi) — `list` op va
+ * ko'ruvchidagi butun-quti muharriri (Enter → yangi band, chegarada
+ * bloklanadi) BITTA joydan o'qiydi.
+ */
+export function listCap(s: SlideModel, field: ListField, rules: EditRules): { max: number; chars: number } {
+  return field === "bullets" ? bulletCaps(s, rules) : { max: SLIDE_LIMITS.colItems, chars: SLIDE_LIMITS.colItem };
+}
+
+/**
  * Ro'yxatga yozish: bo'sh qiymat elementni O'CHIRADI, `i === length`
  * esa yangi element QO'SHADI (chegara ichida).
  */
@@ -851,7 +860,7 @@ export function applyDocOps(doc: AcademicDoc, ops: DocOp[], ctx: EditCtx): EditR
         if (!LIST_FIELDS.includes(field)) return fail("Noma'lum ro'yxat maydoni", at);
         if (!s[field]) return fail(field === "bullets" ? "Bu maketda bandlar yo'q" : "Bu maketda ustun yo'q", at);
         if (!Array.isArray(op.items)) return fail("Bandlar ro'yxati kutilgan", at);
-        const caps = field === "bullets" ? bulletCaps(s, rules) : { max: SLIDE_LIMITS.colItems, chars: SLIDE_LIMITS.colItem };
+        const caps = listCap(s, field, rules);
         // Bo'sh band — o'chirilgan band (`writeList` bilan bir xil ma'no).
         const items = op.items.map((x) => clipTo(String(x ?? ""), caps.chars)).filter(Boolean);
         if (items.length > caps.max) return fail(`Bu maketda ${caps.max} tadan ortiq band bo'lmaydi`, at);
