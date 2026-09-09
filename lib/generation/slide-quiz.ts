@@ -76,6 +76,29 @@ function withAnswerNote(s: SlideModel): SlideModel {
 }
 
 /**
+ * Javob izohini QAYTA hisoblaydi — ko'ruvchida variant tahrirlangach.
+ *
+ * `withAnswerNote` faqat QO'SHADI: mavjud «Javob: B — eski matn»
+ * qatorini ko'rib turib ikkinchisini yozmaydi, ya'ni foydalanuvchi B
+ * variantining matnini o'zgartirsa izohda ESKI matn qolib ketardi va
+ * ma'ruzachi slaydda yo'q javobni o'qirdi. Bu funksiya avval `Javob:`
+ * bilan boshlanuvchi HAMMA qatorni olib tashlaydi, keyin yangisini
+ * yozadi — natija joriy `quiz[0]` ga har doim mos.
+ *
+ * Sof: kirish slaydini o'zgartirmaydi, nusxa qaytaradi. Test bo'lmagan
+ * (yoki savolsiz) slayd o'zgarishsiz qaytadi.
+ */
+export function refreshAnswerNote(s: SlideModel): SlideModel {
+  if (!s.quiz?.length) return s;
+  const rest = (s.notes || "")
+    .split("\n")
+    .filter((line) => !line.trim().startsWith(ANSWER_PREFIX))
+    .join("\n")
+    .trim();
+  return withAnswerNote(rest === (s.notes || "").trim() ? s : { ...s, notes: rest || undefined });
+}
+
+/**
  * REJADAGI javoblar slaydini to'ldiradi — «1 — B», «2 — D».
  *
  * Slayd QO'SHILMAYDI: u `blocksToBeats` da `answers` beat sifatida

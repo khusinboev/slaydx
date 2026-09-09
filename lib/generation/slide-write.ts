@@ -4,6 +4,7 @@ import { llmComplete, llmEnabled } from "./llm";
 import { remainingMs } from "./quality";
 import { bodyRules, type BodyRules } from "./slide-audience";
 import { blocksToBeats } from "./slide-blocks";
+import { SLIDE_LIMITS } from "./slide-limits";
 import { deckFooter } from "./slide-identity";
 import { purposeDefaults } from "./slide-purpose";
 import { finalizeQuiz } from "./slide-quiz";
@@ -33,8 +34,8 @@ import type { AcademicDoc, DocMeta, DocSection } from "./types";
  * bo'lmasin (aks holda ko'rsatmaga rioya qilgan model ham kesiladi —
  * AUDIT-8 N-8/N-9 da aynan shu bo'lgan).
  */
-export const STEP_TEXT_MAX = 160;
-export const STAT_LABEL_MAX = 110;
+export const STEP_TEXT_MAX = SLIDE_LIMITS.stepText;
+export const STAT_LABEL_MAX = SLIDE_LIMITS.statLabel;
 
 /**
  * Nazorat testi chegaralari — `planQuiz` kartalaridan o'lchangan.
@@ -45,9 +46,9 @@ export const STAT_LABEL_MAX = 110;
  * belgi ikki qatordan oshmaydi. `QUIZ_MAX` esa formadagi `quizCount`
  * ning yuqori chegarasi bilan bir xil.
  */
-export const QUIZ_MAX = 10;
-export const QUIZ_Q_MAX = 120;
-export const QUIZ_OPTION_MAX = 60;
+export const QUIZ_MAX = SLIDE_LIMITS.quizMax;
+export const QUIZ_Q_MAX = SLIDE_LIMITS.quizQ;
+export const QUIZ_OPTION_MAX = SLIDE_LIMITS.quizOption;
 
 function clip(text: string, n: number) {
   const t = String(text || "").replace(/\s+/g, " ").trim();
@@ -101,7 +102,7 @@ function normalizeSlide(raw: unknown, i: number, footer: string, rules: BulletRu
   if (!raw || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
   const layout = asLayout(o.layout, "bullets");
-  const title = clip(String(o.title ?? ""), 80);
+  const title = clip(String(o.title ?? ""), SLIDE_LIMITS.title);
   if (!title && layout !== "closing") return null;
   /*
    * `subtitle` chegarasi LAYOUTGA bog'liq — maketdan o'lchangan:
@@ -114,21 +115,26 @@ function normalizeSlide(raw: unknown, i: number, footer: string, rules: BulletRu
    * to'ldirish imkoniyatini kesib tashlardi: section slaydda 325 belgi
    * joy bo'lsa ham, 140 dan ortig'i tashlanardi.
    */
-  const subtitleMax = layout === "section" ? 300 : layout === "closing" ? 160 : 140;
+  const subtitleMax =
+    layout === "section"
+      ? SLIDE_LIMITS.subtitleSection
+      : layout === "closing"
+        ? SLIDE_LIMITS.subtitleClosing
+        : SLIDE_LIMITS.subtitle;
   const base: SlideModel = {
     id: `s${i}`,
     layout,
     title: title || "Slayd",
-    kicker: o.kicker ? clip(String(o.kicker), 40) : undefined,
+    kicker: o.kicker ? clip(String(o.kicker), SLIDE_LIMITS.kicker) : undefined,
     subtitle: o.subtitle ? clip(String(o.subtitle), subtitleMax) : undefined,
     footer,
-    notes: o.notes ? clip(String(o.notes), 700) : undefined,
-    imageHint: o.imageHint ? clip(String(o.imageHint), 180) : undefined,
+    notes: o.notes ? clip(String(o.notes), SLIDE_LIMITS.notes) : undefined,
+    imageHint: o.imageHint ? clip(String(o.imageHint), SLIDE_LIMITS.imageHint) : undefined,
   };
   if (layout === "twoCol" || layout === "compare") {
     return {
       ...base,
-      leftTitle: clip(String(o.leftTitle ?? (layout === "compare" ? "Birinchi" : "")), 40),
+      leftTitle: clip(String(o.leftTitle ?? (layout === "compare" ? "Birinchi" : "")), SLIDE_LIMITS.colTitle),
       /*
        * Ustunda 4 band × 120 belgi → 16 pt (o'lchangan). 130 belgida
        * 14 pt ga tushadi, 5 band ham shunday — shuning uchun ikkala
@@ -138,16 +144,16 @@ function normalizeSlide(raw: unknown, i: number, footer: string, rules: BulletRu
        * o'lchovda twoCol slaydda 8 band jami 172 belgi (21 belgi/band)
        * chiqdi — bandlar to'liq gap emas, yorliq bo'lib qolgan edi.
        */
-      left: arr(o.left, 4, 120),
-      rightTitle: clip(String(o.rightTitle ?? (layout === "compare" ? "Ikkinchi" : "")), 40),
-      right: arr(o.right, 4, 120),
+      left: arr(o.left, SLIDE_LIMITS.colItems, SLIDE_LIMITS.colItem),
+      rightTitle: clip(String(o.rightTitle ?? (layout === "compare" ? "Ikkinchi" : "")), SLIDE_LIMITS.colTitle),
+      right: arr(o.right, SLIDE_LIMITS.colItems, SLIDE_LIMITS.colItem),
     };
   }
   if (layout === "quote") {
     return {
       ...base,
-      quote: clip(String(o.quote ?? o.subtitle ?? title), 220),
-      quoteBy: o.quoteBy ? clip(String(o.quoteBy), 60) : undefined,
+      quote: clip(String(o.quote ?? o.subtitle ?? title), SLIDE_LIMITS.quote),
+      quoteBy: o.quoteBy ? clip(String(o.quoteBy), SLIDE_LIMITS.quoteBy) : undefined,
     };
   }
   if (layout === "stats") {
@@ -156,7 +162,7 @@ function normalizeSlide(raw: unknown, i: number, footer: string, rules: BulletRu
           .map((s) => {
             if (!s || typeof s !== "object") return null;
             const x = s as Record<string, unknown>;
-            const value = clip(String(x.value ?? ""), 24);
+            const value = clip(String(x.value ?? ""), SLIDE_LIMITS.statValue);
             /*
              * Yorliq chegarasi 60 edi va jonli dekalarda muntazam
              * kesardi (`lesson`#6, `problem`#7 ning uchala yorlig'i,
@@ -170,7 +176,7 @@ function normalizeSlide(raw: unknown, i: number, footer: string, rules: BulletRu
             return value ? { value, label } : null;
           })
           .filter((x): x is { value: string; label: string } => Boolean(x))
-          .slice(0, 4)
+          .slice(0, SLIDE_LIMITS.statsMax)
       : [];
     return { ...base, stats: stats.length ? stats : [{ value: "—", label: title }] };
   }
@@ -184,13 +190,13 @@ function normalizeSlide(raw: unknown, i: number, footer: string, rules: BulletRu
      * ustun kengligi to'liq matnni ko'tarardi. `planTable` shriftni
      * o'zi kichraytiradi, shuning uchun keng ustunda uzunroq matn xavfsiz.
      */
-    const rawHeaders = arr(src.headers, 5, 60);
-    const headers = rawHeaders.map((h) => clip(h, rawHeaders.length <= 3 ? 40 : 26));
+    const rawHeaders = arr(src.headers, SLIDE_LIMITS.tableCols, SLIDE_LIMITS.tableHeaderRaw);
+    const headers = rawHeaders.map((h) => clip(h, rawHeaders.length <= 3 ? SLIDE_LIMITS.tableHeaderWide : SLIDE_LIMITS.tableHeader));
     const rows = Array.isArray(src.rows)
       ? src.rows
-          .map((r) => arr(r, Math.max(1, headers.length), 60))
+          .map((r) => arr(r, Math.max(1, headers.length), SLIDE_LIMITS.tableCell))
           .filter((r) => r.some(Boolean))
-          .slice(0, 6)
+          .slice(0, SLIDE_LIMITS.tableRows)
       : [];
     // Jadvalsiz «table» slayd — bo'sh ramka. Bunday holda bandlarga qaytamiz.
     if (headers.length < 2 || rows.length < 2) {
@@ -204,7 +210,7 @@ function normalizeSlide(raw: unknown, i: number, footer: string, rules: BulletRu
           .map((s, n) => {
             if (!s || typeof s !== "object") return null;
             const x = s as Record<string, unknown>;
-            const t = clip(String(x.title ?? ""), 40);
+            const t = clip(String(x.title ?? ""), SLIDE_LIMITS.stepTitle);
             if (!t) return null;
             /*
              * 90 chegaraga TEGIB turardi (o'lchovda 4 bosqich × ~80
@@ -225,7 +231,7 @@ function normalizeSlide(raw: unknown, i: number, footer: string, rules: BulletRu
             return { n: String(x.n ?? n + 1), title: t, text: clip(String(x.text ?? ""), STEP_TEXT_MAX) };
           })
           .filter((x): x is { n: string; title: string; text: string } => Boolean(x))
-          .slice(0, 5)
+          .slice(0, SLIDE_LIMITS.stepsMax)
       : [];
     return { ...base, steps };
   }
@@ -246,11 +252,11 @@ function normalizeSlide(raw: unknown, i: number, footer: string, rules: BulletRu
             if (!q || typeof q !== "object") return null;
             const x = q as Record<string, unknown>;
             const text = clip(String(x.q ?? ""), QUIZ_Q_MAX);
-            const options = arr(x.options, 4, QUIZ_OPTION_MAX);
-            if (!text || options.length !== 4) return null;
+            const options = arr(x.options, SLIDE_LIMITS.quizOptions, QUIZ_OPTION_MAX);
+            if (!text || options.length !== SLIDE_LIMITS.quizOptions) return null;
             // Indeks 0..3 dan tashqarida bo'lsa qisiladi — «javobsiz savol» holati bo'lmasin.
             const n = Number(x.answer);
-            const answer = Number.isFinite(n) ? Math.max(0, Math.min(3, Math.round(n))) : 0;
+            const answer = Number.isFinite(n) ? Math.max(0, Math.min(SLIDE_LIMITS.quizOptions - 1, Math.round(n))) : 0;
             return { q: text, options, answer };
           })
           .filter((x): x is { q: string; options: string[]; answer: number } => Boolean(x))
@@ -272,12 +278,12 @@ function normalizeSlide(raw: unknown, i: number, footer: string, rules: BulletRu
           .map((r) => {
             if (!r || typeof r !== "object") return null;
             const x = r as Record<string, unknown>;
-            const title = clip(String(x.title ?? ""), 90);
-            const source = clip(String(x.source ?? ""), 200);
+            const title = clip(String(x.title ?? ""), SLIDE_LIMITS.refTitle);
+            const source = clip(String(x.source ?? ""), SLIDE_LIMITS.refSource);
             return title || source ? { title: title || source, source } : null;
           })
           .filter((x): x is { title: string; source: string } => Boolean(x))
-          .slice(0, 6)
+          .slice(0, SLIDE_LIMITS.refsMax)
       : [];
     // Manbasiz «adabiyotlar» — bo'sh ramka. Model bandlar yozgan bo'lsa ular qoladi.
     if (!refs.length) {
@@ -291,7 +297,7 @@ function normalizeSlide(raw: unknown, i: number, footer: string, rules: BulletRu
      * EMAS: kalitda savollar soncha qator bo'ladi (`quizCount` 10 tagacha)
      * va `planAnswers` ularni ikki ustunga bo'lib chizadi.
      */
-    return { ...base, bullets: arr(o.bullets, QUIZ_MAX, 40) };
+    return { ...base, bullets: arr(o.bullets, QUIZ_MAX, SLIDE_LIMITS.answersItem) };
   }
   const limit = layout === "agenda" ? rules.agendaMax : rules.maxBullets;
   return { ...base, bullets: arr(o.bullets, limit, rules.bulletChars) };
