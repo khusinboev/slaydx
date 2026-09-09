@@ -230,6 +230,24 @@ test("eskizni sudrash → to'g'ri `reorder` tartibi", async () => {
   cleanup();
 });
 
+test("sudrash SURADI, almashtirmaydi (uzoqqa tashlash)", async () => {
+  const s = stubServer();
+  openEditor(s);
+  const thumbs = document.querySelectorAll("[data-thumb-index]");
+  // Qo'shni tashlashda «surish» va «almashtirish» BIR XIL natija beradi —
+  // farqi faqat uzoqroq tashlashda ko'rinadi, shuning uchun 0 → 2.
+  fireEvent.dragStart(thumbs[0]);
+  fireEvent.drop(thumbs[2]);
+  await pause(600);
+  assert.deepEqual(ops(s.patches[0]), [{ op: "reorder", order: [1, 2, 0] }]);
+  assert.deepEqual(
+    s.doc.slides?.map((x) => x.title),
+    ["Birinchi", "Ikkinchi", "Muqova"],
+    "sudralgan slayd oxiriga o'tadi, qolganlari yuqoriga suriladi",
+  );
+  cleanup();
+});
+
 test("o'chirish IKKI bosishda, bitta slaydli dekada tugma o'chiq", async () => {
   const s = stubServer();
   openEditor(s);
