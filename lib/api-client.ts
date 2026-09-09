@@ -255,6 +255,8 @@ export type ServerGeneration = Omit<Generation, "values" | "doc" | "html"> & {
   docVersion?: number;
   fileVersion?: number;
   imageRedraws?: number;
+  /** `doc_prev` bor — «Asl holatga qaytarish» tugmasi uchun (014_doc_prev). */
+  hasPrev?: boolean;
   editedAt?: string | null;
   liveSeq?: number;
   live?: unknown | null;

@@ -53,7 +53,8 @@ export function ViewerToolbar({
           <Maximize2 className="size-4" />
         </button>
       ) : null}
-      {extra ? <div className="ml-auto flex items-center gap-2">{extra}</div> : null}
+      {/* Mobil ekranda maket chiplari + tugmalar sig'masa gorizontal aylantiriladi (kesilmaydi). */}
+      {extra ? <div className="ml-auto flex max-w-full items-center gap-2 overflow-x-auto">{extra}</div> : null}
     </div>
   );
 }
