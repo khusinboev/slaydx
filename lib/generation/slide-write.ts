@@ -1,6 +1,6 @@
 import { slideLabels } from "./i18n";
 import { parseLlmJson } from "./json";
-import { llmComplete, llmEnabled } from "./llm";
+import { llmComplete, llmEnabled, llmStream } from "./llm";
 import { remainingMs } from "./quality";
 import { bodyRules, type BodyRules } from "./slide-audience";
 import { blocksToBeats } from "./slide-blocks";
@@ -369,6 +369,43 @@ function parseDeckJson(raw: string, footer: string, want: number, rules: BulletR
     .slice(0, Math.max(6, Math.min(24, want + 2)));
 }
 
+/**
+ * Qisman (hali oqimda kelayotgan) JSON dan TAYYOR slaydlarni ajratadi.
+ *
+ * `parseLlmJson` kesilgan javobni tiklaydi va YARIM to'ldirilgan
+ * oxirgi elementni ATAYIN saqlaydi (`json.ts` `dropTrailingEmpty`) —
+ * matn hujjatlarida u foydali, jonli slaydda esa ZARARLI: sarlavhasi
+ * bor-u bandlari hali kelmagan slayd ekranga «yozildi» bo'lib chiqar,
+ * keyin jimgina almashardi. Shuning uchun oqim davomida (`final:false`)
+ * faqat `length - 1` gacha bo'lgan elementlar tayyor deb sanaladi:
+ * ulardan keyin massivda yana element bor, ya'ni oldingisi to'liq
+ * yopilgan.
+ *
+ * `emitted` — shu bo'lakda ALLAQACHON chiqarilgan elementlar soni
+ * (bo'lak ichidagi NISBIY indeks). Qaytgan `index` ham nisbiy; absolyut
+ * o'ringa aylantirishni chaqiruvchi qiladi (`from + index`).
+ */
+export function extractNewSlides(
+  partial: string,
+  emitted: number,
+  footer: string,
+  rules: BulletRules,
+  opts: { final: boolean },
+): { index: number; slide: SlideModel }[] {
+  const data = parseLlmJson(partial) as { slides?: unknown } | null;
+  if (!Array.isArray(data?.slides)) return [];
+  const list = data.slides;
+  const ready = opts.final ? list.length : list.length - 1;
+  const out: { index: number; slide: SlideModel }[] = [];
+  for (let i = Math.max(0, emitted); i < ready; i += 1) {
+    const slide = normalizeSlide(list[i], i, footer, rules);
+    // `null` — sarlavhasiz element; o'tkazib yuboriladi, lekin keyingi
+    // elementlarni bloklamaydi (chaqiruvchi `index + 1` dan davom etadi).
+    if (slide) out.push({ index: i, slide });
+  }
+  return out;
+}
+
 function beatToSlide(beat: { layout: SlideLayout; role: string }, i: number, meta: DocMeta, footer: string): SlideModel {
   const t = meta.topic;
   const L = slideLabels(meta.language);
@@ -455,10 +492,13 @@ export async function writeSlidesWithLlm(
   beats: SlideBeat[] = tpl.beats,
   deadline?: number,
   ctx: SlidePromptCtx = {},
-  // F1b: imzo tayyorlanadi, hali ISHLATILMAYDI — chaqiruv L2 paketida.
+  /**
+   * Jonli hodisalar. Berilmasa — YO'L O'ZGARMAYDI: `llmComplete`,
+   * bitta javob, hech qanday oqim (mavjud `json:`-only fetch stublari
+   * va differensial zond aynan shu yo'ldan yuradi).
+   */
   onProgress?: SlideProgressSink,
 ): Promise<SlideModel[] | null> {
-  void onProgress;
   if (!llmEnabled()) return null;
   const rules = bodyRules(meta, tpl.id);
   const plan = meta.titleSlide === false ? beats.filter((b) => b.layout !== "title") : beats;
@@ -487,6 +527,29 @@ export async function writeSlidesWithLlm(
   } else {
     ranges.push({ from: 0, to: plan.length });
   }
+
+  /**
+   * Chiqarilgan ABSOLYUT indekslar — monotonlik qulfi.
+   *
+   * Ikki manba takror berishi mumkin: (1) `llmStream` ichidagi
+   * `withRetry` oqimni BOSHIDAN qayta boshlaydi, (2) `askRange` ning
+   * o'zi kam slayd qaytganda ikkinchi marta chaqiriladi. Ikkalasida
+   * ham bir xil indeks ikki xil matn bilan kelardi va ko'ruvchida
+   * slayd «orqaga» yozilardi. Bir marta chiqqan indeks boshqa
+   * chiqmaydi; yakuniy matnni `deck` hodisasi bir zarbada beradi.
+   */
+  const emittedAbs = new Set<number>();
+  const emitSlide = (abs: number, sl: SlideModel) => {
+    if (!onProgress || emittedAbs.has(abs)) return;
+    emittedAbs.add(abs);
+    const beat = plan[abs];
+    // Rejadagi maket va «diagramma» bayrog'i — YAKUNIY yig'ishdagi
+    // bilan bir xil qoida, aks holda jonli slayd bir maketda ko'rinib,
+    // `deck` kelganda boshqasiga sakrardi.
+    let out = beat ? coerceLayout(sl, beat.layout, rules.maxBullets) : sl;
+    if (beat?.chart) out = { ...out, chart: true };
+    onProgress({ type: "slide", index: abs, slide: { ...out } });
+  };
 
   const askRange = async (from: number, to: number, done: string[]): Promise<SlideModel[]> => {
     const n = to - from;
@@ -531,15 +594,56 @@ export async function writeSlidesWithLlm(
       console.warn("[slide-write] byudjet tugadi, bo‘lak tashlandi", from + 1, "-", to);
       return [];
     }
-    const raw = await llmComplete(slideSystem(meta, tpl, ctx), user, maxTokens, {
-      json: true,
-      timeoutMs: Math.min(90_000, left),
-    });
+    const system = slideSystem(meta, tpl, ctx);
+    const llmOpts = { json: true as const, timeoutMs: Math.min(90_000, left) };
+    /*
+     * Oqim OPT-IN: faqat `onProgress` bo'lganda va kill-switch
+     * o'chirilmaganda. `LLM_STREAM=false` da (yoki oqimni qo'llamaydigan
+     * provayderda) slaydlar baribir chiqadi — bo'lak tugagach, quyidagi
+     * `parseDeckJson` natijasidan guruh bo'lib.
+     */
+    const streaming = Boolean(onProgress) && process.env.LLM_STREAM !== "false";
+    let raw: string | null;
+    if (streaming) {
+      // Bo'lak ichidagi NISBIY hisoblagich — har oqim urinishi 0 dan
+      // qayta boshlanmaydi, chunki `emittedAbs` baribir takrorni to'sadi.
+      let relEmitted = 0;
+      /*
+       * Throttle: har SSE bo'lagida JSON ni qayta tahlil qilish qimmat
+       * (16 slaydli javobda yuzlab bo'lak). Ikki shart BIRGA: ≥300 ms
+       * o'tgan bo'lsin VA javobda yangi `}` paydo bo'lgan bo'lsin —
+       * yopilmagan obyekt ustida tahlil qilish yangi slayd bermaydi.
+       */
+      let lastAt = 0;
+      let lastCloses = 0;
+      raw = await llmStream(system, user, maxTokens, {
+        ...llmOpts,
+        onText: (partial) => {
+          let closes = 0;
+          for (let i = 0; i < partial.length; i += 1) if (partial.charCodeAt(i) === 125) closes += 1;
+          const now = Date.now();
+          if (closes === lastCloses || now - lastAt < 300) return;
+          lastCloses = closes;
+          lastAt = now;
+          for (const item of extractNewSlides(partial, relEmitted, footer, rules, { final: false })) {
+            relEmitted = item.index + 1;
+            emitSlide(from + item.index, item.slide);
+          }
+        },
+      });
+    } else {
+      raw = await llmComplete(system, user, maxTokens, llmOpts);
+    }
     if (!raw) {
       console.warn("[slide-write] bo‘lak javobsiz", from + 1, "-", to);
       return [];
     }
-    return parseDeckJson(raw, footer, n, rules);
+    const parsed = parseDeckJson(raw, footer, n, rules);
+    // Bo'lak yopildi — oqimda chiqmay qolgan (yoki umuman oqimsiz
+    // kelgan) indekslar SHU YERDA chiqadi. `n` dan ortig'i keyinroq
+    // kesiladi, shuning uchun hodisa ham berilmaydi.
+    if (onProgress) parsed.slice(0, n).forEach((sl, i) => emitSlide(from + i, sl));
+    return parsed;
   };
 
   /*
@@ -781,15 +885,51 @@ export async function buildSlideAcademicDoc(meta: DocMeta, deadline?: number, op
   // foydalanuvchi bloklari esa shablon beats'iga kiritiladi (`deckBeats`
   // ichida `wantSlides` chaqiriladi — ikkinchi nusxa saqlanmaydi).
   const beats = deckBeats(meta, tpl);
+  const live = opts.onProgress;
+  /*
+   * `plan` — LLM dan OLDIN, reja tayyor bo'lishi bilanoq.
+   *
+   * Shu bitta hodisa jonli ko'rinishning butun poydevori: streaming
+   * ishlamasa ham (`LLM_STREAM=false`, xAI, proksi buferlashi)
+   * foydalanuvchi darhol to'g'ri sondagi QURUQ sahifalarni ko'radi,
+   * matn esa keyin joyiga «yoziladi». Skelet aynan `fallbackSlides` —
+   * ya'ni indekslar `writeSlidesWithLlm` ichidagi `plan` massivi bilan
+   * bir xil qatorlanadi (ikkalasi ham `beats` dan, titul filtri ham
+   * `deckBeats` da allaqachon qo'llangan).
+   */
+  live?.({
+    type: "plan",
+    // NUSXA: `attachSlideImages` va titul tuzatishlari slaydlarni
+    // JOYIDA o'zgartiradi — hodisa obyektiga ta'sir qilmasin.
+    slides: structuredClone(fallbackSlides(meta, tpl, beats)),
+    roles: beats.map((b) => b.role),
+    meta,
+    theme: themeId,
+    template: tpl.id,
+    logo: opts.logo,
+  });
   const stage = slideStageBudget(deadline, Date.now(), { research: meta.internetSearch });
   /*
    * Tadqiqot deck yozuvidan OLDIN va alohida chaqiruvda: grounding JSON
    * rejimi bilan birga ishlamaydi (jonli tasdiqlangan). Yiqilsa deck
    * baribir yoziladi — `research: null`.
    */
+  // Tadqiqot BOSQICHI faqat haqiqatan izlanganda e'lon qilinadi —
+  // aks holda «Internetdan izlanmoqda…» yozuvi izlanmagan dekada ham
+  // chaqnab o'tardi.
+  if (stage.researchMs > 0) live?.({ type: "stage", stage: "research" });
   const research = stage.researchMs > 0 ? await runSlideResearch(meta, Date.now() + stage.researchMs) : null;
+  if (research) live?.({ type: "research", sources: research.sources?.length ?? 0 });
   const ctx: SlidePromptCtx = { research };
-  const written = await writeSlidesWithLlm(meta, tpl, beats, Date.now() + stage.researchMs + stage.textMs, ctx);
+  live?.({ type: "stage", stage: "text" });
+  const written = await writeSlidesWithLlm(
+    meta,
+    tpl,
+    beats,
+    Date.now() + stage.researchMs + stage.textMs,
+    ctx,
+    live,
+  );
   // Kalit bor, lekin matn yozilmadi — shablon deck bermaymiz. `beatToSlide`
   // «Fotosintez: kirish / Asosiy qism / Amaliyot» kabi bo'sh slaydlar
   // yaratadi va foydalanuvchi buni to'lagan ishi deb oladi. Xato bo'lsa
@@ -814,10 +954,24 @@ export async function buildSlideAcademicDoc(meta: DocMeta, deadline?: number, op
    * faqat ekranga qarab taxmin qilardi. Endi hisobot `doc.slideImages`
    * ga tushadi va `deliveredCount` uni pul qaroriga aylantiradi.
    */
+  /*
+   * `deck` — YAKUNIY matn, lekin rasmlardan OLDIN.
+   *
+   * Ataylab shu nuqtada: `writeSlidesWithLlm` qaytargandan keyin
+   * raqamlash (`renumberSlides`), manbalar, test javoblari va titul/
+   * yakun tuzatishlari allaqachon qo'llangan — ya'ni jonli ko'rinish
+   * shu zarbadan keyin oxirgi matnni ko'rsatadi. NUSXA, chunki
+   * `attachSlideImages` `slides` ni JOYIDA o'zgartiradi.
+   */
+  live?.({ type: "deck", slides: structuredClone(slides) });
+  live?.({ type: "stage", stage: "images" });
   const images = await attachSlideImages(slides, meta.topic, tpl.visual, budget, {
     premium: meta.premiumVisuals,
     meta,
+    onPlanned: live ? (indexes) => live({ type: "images", wait: [...indexes] }) : undefined,
+    onImage: live ? (index, url) => live({ type: "image", index, url }) : undefined,
   });
+  live?.({ type: "stage", stage: "assembly" });
   const sections = slideSections(slides);
   return {
     meta,

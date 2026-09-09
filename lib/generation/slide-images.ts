@@ -226,9 +226,13 @@ export function plannedImageSlots(
 export type AttachImageOpts = VisualTier & {
   meta?: DocMeta;
   /**
-   * Jonli generatsiya ilgaklari — F1b da IMZO qo'shiladi, hali
-   * chaqirilmaydi (L2 paketi chaqiradi). `onPlanned` rasm rejasi
-   * hisoblangach (indekslar), `onImage` har rasm biriktirilganda.
+   * Jonli generatsiya ilgaklari (L2).
+   *
+   * `onPlanned` — rasm KUTILAYOTGAN slaydlar indekslari, `jobs`
+   * hisoblangach bir marta (kalitsiz muhitda yoki slot bo'lmaganda
+   * bo'sh ro'yxat). `onImage` — har rasm slaydga BIRIKTIRILGANDA,
+   * ya'ni faqat `persistImage` muvaffaqiyatli bo'lganda; yiqilgan
+   * so'rov uchun umuman chaqirilmaydi.
    */
   onPlanned?: (indexes: number[]) => void;
   onImage?: (index: number, url: string) => void;
@@ -253,16 +257,28 @@ export async function attachSlideImages(
   };
   if (!provider.hasKey()) {
     // Kalitsiz muhitda (dev/test) rasm umuman va'da qilinmaydi — aks
-    // holda har lokal deka «kam yetkazildi» bo'lib chiqardi.
+    // holda har lokal deka «kam yetkazildi» bo'lib chiqardi. Jonli
+    // ko'rinishga ham BO'SH ro'yxat beriladi: «Rasm izlanmoqda…»
+    // plakati hech qachon kelmaydigan rasmni kutib qolmasin.
     console.warn(`[${provider.id}] skip images: no key`);
+    opts.onPlanned?.([]);
     return { ...report, want: 0 };
   }
-  if (!report.want) return report;
+  if (!report.want) {
+    opts.onPlanned?.([]);
+    return report;
+  }
 
   const deadline = Date.now() + budgetMs;
   const seed = opts.seed ?? seedFrom(topic);
   const jobs = planned.filter(({ s }) => !s.image);
   report.got = report.want - jobs.length;
+  /*
+   * Kutish ro'yxati — HAQIQATAN so'raladigan slaydlar (rasmi bor
+   * slaydlar `jobs` da yo'q). Indeks `slides` massividagi o'rin: jonli
+   * hodisa modeli id emas, indeks asosida ishlaydi.
+   */
+  opts.onPlanned?.(jobs.map(({ s }) => slides.indexOf(s)));
 
   const prompts = await writeSlideImagePrompts(
     topic,
@@ -323,6 +339,14 @@ export async function attachSlideImages(
     if (kept) {
       s.image = kept;
       report.got += 1;
+      /*
+       * Hodisa `persistImage` dan KEYIN — aynan `s.image = kept` bilan
+       * bir vaqtda. Undan oldin chiqarilsa jonli ko'rinishga uzoq
+       * provayder URL'i ketardi: u bir necha daqiqada muddati o'tadi,
+       * `renderPptx` esa uni umuman ko'rmaydi (`data:` kutadi) — ekran
+       * bilan fayl ajralib ketardi.
+       */
+      opts.onImage?.(slides.indexOf(s), kept.url);
     } else {
       report.failed += 1;
     }

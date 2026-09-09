@@ -116,6 +116,9 @@ export async function buildArtifact(
      * olinardi (AUDIT-5 P1-1). Endi farq qaytariladi.
      */
     file.delivered = deliveredCount(meta, slideDoc);
+    // `done` — PPTX yig'ilgandan KEYIN: jonli tasma «Tayyor» deganda
+    // fayl haqiqatan mavjud bo'lsin (`renderPptx` ham yiqilishi mumkin).
+    opts.onProgress?.({ type: "done" });
     return file;
   }
 

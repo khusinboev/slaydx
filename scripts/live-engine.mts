@@ -22,6 +22,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { buildArtifact } from "../lib/generation/index.ts";
 import { extractMeta } from "../lib/generation/meta.ts";
+import type { SlideProgressEvent } from "../lib/generation/slide-progress.ts";
 import { wordCount } from "../lib/generation/quality.ts";
 import { slideNotes } from "../lib/generation/slide-layout.ts";
 import { pdfAvailable, toPdf } from "../lib/server/pdf.ts";
@@ -301,7 +302,33 @@ async function runCase(c: Case) {
   process.stdout.write(`\n▶ ${c.name} (${tool.title}, byudjet ${c.budgetMs / 1000}s)\n`);
 
   try {
-    const file = await buildArtifact(tool, c.values, { deadline: Date.now() + c.budgetMs });
+    /*
+     * Jonli hodisalar STDOUT ga — bu skript «streaming ishladimi» ni
+     * ko'z bilan tekshirish uchun yagona joy. Vaqt tamg'asi muhim:
+     * `slide` hodisalari bo'lak TUGASHIDAN oldin kelsa, oqim haqiqatan
+     * ishlagan; hammasi bir soniyada guruh bo'lib kelsa — bo'lakli yo'l.
+     */
+    const onProgress = (ev: SlideProgressEvent) => {
+      const dt = ((Date.now() - started) / 1000).toFixed(1);
+      const tail =
+        ev.type === "slide"
+          ? ` #${ev.index} ${ev.slide.title}`
+          : ev.type === "stage"
+            ? ` ${ev.stage}`
+            : ev.type === "image"
+              ? ` #${ev.index}`
+              : ev.type === "plan"
+                ? ` ${ev.slides.length} slayd`
+                : ev.type === "deck"
+                  ? ` ${ev.slides.length} slayd`
+                  : ev.type === "images"
+                    ? ` ${ev.wait.length} kutilmoqda`
+                    : ev.type === "research"
+                      ? ` ${ev.sources} manba`
+                      : "";
+      process.stdout.write(`   ⟶ +${dt}s ${ev.type}${tail}\n`);
+    };
+    const file = await buildArtifact(tool, c.values, { deadline: Date.now() + c.budgetMs, onProgress });
     const secs = ((Date.now() - started) / 1000).toFixed(1);
     const pages = await pageCount(file);
     await writeFile(path.join(OUT, file.fileName), file.bytes);
