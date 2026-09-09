@@ -39,7 +39,6 @@ const {
 const { extractMeta } = await import("../lib/generation/meta.ts");
 const { TOOL_BY_ID } = await import("../lib/tools.ts");
 const { fallbackSlides } = await import("../lib/generation/slide-write.ts");
-const { renderPptx } = await import("../lib/generation/render-pptx.ts");
 
 const GEN = "a1b2c3d4-0000-4000-8000-000000000001";
 const USER = "u-42";
@@ -366,7 +365,7 @@ function fakeRender(fail = false) {
       mime: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
       doc,
     };
-  }) as typeof renderPptx;
+  }) as typeof import("../lib/generation/render-pptx.ts")["renderPptx"];
   return { render, calls };
 }
 
@@ -424,7 +423,7 @@ test("rebuildFile: TARTIB — render tranzaksiyadan TASHQARIDA, so'ng lock → m
       mime: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
       doc,
     };
-  }) as typeof renderPptx;
+  }) as typeof import("../lib/generation/render-pptx.ts")["renderPptx"];
 
   const out = await rebuildFile(GEN, USER, { render });
   assert.deepEqual(out, { fileVersion: 6, docVersion: 6, rebuilt: true });

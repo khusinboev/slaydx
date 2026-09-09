@@ -34,7 +34,8 @@ function withoutNotes(state: LiveDeck): LiveDeck {
   return {
     ...state,
     slides: state.slides.map((s: SlideModel) => {
-      const { notes: _notes, ...rest } = s;
+      const rest: SlideModel = { ...s };
+      delete rest.notes;
       return rest;
     }),
   };

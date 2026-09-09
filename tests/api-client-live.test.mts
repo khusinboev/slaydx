@@ -110,13 +110,6 @@ test("nextPollDelay: backoff 5000 dan oshmaydi", () => {
   assert.equal(nextPollDelay(g, 4000), 5000);
 });
 
-// MUTATSIYA: doim backoff qaytarsa (live tezlashtirish yo'qolsa).
-test("mutatsiya: nextPollDelay doim backoff qaytarsa, live-tezlashtirish testi buziladi", () => {
-  const g = gen({ status: "IN_PROGRESS", live: { step: "x" } });
-  const buggy = Math.min(5000, Math.round(1000 * 1.3));
-  assert.notEqual(buggy, 1200, "buzuq versiya 1200 bilan mos kelmasligi kerak edi");
-});
-
 // ---------------------------------------------------------------------------
 // pollGeneration — fetch stub bilan
 // ---------------------------------------------------------------------------
