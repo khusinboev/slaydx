@@ -10,17 +10,36 @@ type Ctx = { params: Promise<{ id: string }> };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/**
+ * `?since=` so'rov parametrini o'qiydi (L4 — jonli poll).
+ *
+ * Klient oxirgi ko'rgan `liveSeq` ni yuboradi. Noto'g'ri qiymat (raqam
+ * emas, manfiy) — e'tiborsiz qoldiriladi (`undefined`), ya'ni server
+ * o'zgarish bo'lgan-bo'lmaganidan qat'iy nazar `live` ni qaytaradi.
+ */
+export function parseSince(req: Request): number | undefined {
+  const raw = new URL(req.url).searchParams.get("since");
+  if (raw === null) return undefined;
+  const n = Number.parseInt(raw, 10);
+  return Number.isFinite(n) && n >= 0 ? n : undefined;
+}
+
 /** Bitta generatsiya holati — klient shu endpointni polling qiladi. */
 export const GET = handler("generations/get", async (req, ctx: Ctx) => {
   const { user } = await requireUser(req);
   const { id } = await ctx.params;
   if (!UUID.test(id)) throw new ApiError("Noto'g'ri id", 400);
 
-  const gen = await getGeneration(id, user.id);
+  const since = parseSince(req);
+  const gen = await getGeneration(id, user.id, { since });
   if (!gen) throw new ApiError("Topilmadi", 404);
 
   const hasFile = gen.status === "COMPLETED" ? await hasGenerationFile(id, user.id) : false;
-  return json({ generation: { ...gen, hasFile } });
+  // `live` faqat `getGeneration` uni qaytarganda qo'shiladi — kalit
+  // umuman yo'q bo'lsa klient eskisini saqlaydi (`mergeLive`).
+  const { live, ...rest } = gen;
+  const body = "live" in gen ? { ...rest, live, hasFile } : { ...rest, hasFile };
+  return json({ generation: body });
 });
 
 /**

@@ -252,8 +252,33 @@ export function listGenerations() {
   return request<{ generations: ServerGeneration[] }>("/api/generations");
 }
 
-export function getGeneration(id: string) {
-  return request<{ generation: GenerationDetail }>(`/api/generations/${id}`);
+export function getGeneration(id: string, since?: number) {
+  const qs = since != null ? `?since=${since}` : "";
+  return request<{ generation: GenerationDetail }>(`/api/generations/${id}${qs}`);
+}
+
+/**
+ * Server javobidagi `live` ni oldingi holat bilan qo'shadi (L4).
+ *
+ * `next.live === undefined` — server kalitni umuman yubormagan
+ * (o'zgarish yo'q, `since` mos kelgan): oldingi `live` saqlanadi.
+ * `null` esa haqiqiy qiymat — jonli deka yo'qligini bildiradi va
+ * saqlanmaydi.
+ */
+export function mergeLive(prev: GenerationDetail | null, next: GenerationDetail): GenerationDetail {
+  if (next.live !== undefined) return next;
+  return { ...next, live: prev?.live };
+}
+
+/**
+ * Keyingi so'rovgacha kutish vaqti.
+ *
+ * Jonli deka bor va ish hali `IN_PROGRESS` bo'lsa — tez-tez so'raymiz
+ * (1.2s), aks holda eski backoff (1s → 5s gacha o'sadi).
+ */
+export function nextPollDelay(g: GenerationDetail, delay: number): number {
+  if (g.status === "IN_PROGRESS" && g.live) return 1200;
+  return Math.min(5000, Math.round(delay * 1.3));
 }
 
 export function createGeneration(slug: string, values: FormValues) {
@@ -314,13 +339,15 @@ export async function pollGeneration(
   let delay = 1000;
   const deadline = Date.now() + 20 * 60_000;
   let networkErrors = 0;
+  let prev: GenerationDetail | null = null;
 
   for (;;) {
     if (signal?.aborted) throw new DOMException("Bekor qilindi", "AbortError");
 
     let generation: GenerationDetail;
     try {
-      generation = (await getGeneration(id)).generation;
+      const since = prev?.live != null ? prev.liveSeq : undefined;
+      generation = (await getGeneration(id, since)).generation;
       networkErrors = 0;
     } catch (e) {
       // Vaqtinchalik tarmoq uzilishida polling to'xtamasin, lekin
@@ -333,15 +360,17 @@ export async function pollGeneration(
       throw e;
     }
 
-    onTick(generation);
-    if (generation.status !== "QUEUED" && generation.status !== "IN_PROGRESS") return generation;
+    const merged = mergeLive(prev, generation);
+    prev = merged;
+    onTick(merged);
+    if (merged.status !== "QUEUED" && merged.status !== "IN_PROGRESS") return merged;
 
     // Worker o'chirilgan bo'lsa polling abadiy davom etmasin.
     if (Date.now() > deadline) {
       throw new ApiError("Ish juda uzoq davom etmoqda. Keyinroq «Mening fayllarim» dan tekshiring.", 504);
     }
     await new Promise((r) => setTimeout(r, delay));
-    delay = Math.min(5000, Math.round(delay * 1.3));
+    delay = nextPollDelay(merged, delay);
   }
 }
 
