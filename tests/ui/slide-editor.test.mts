@@ -43,6 +43,8 @@ function bulletsSlide(): SlideModel {
 
 type Calls = {
   text: [SlideSrc, string][];
+  footer: string[];
+  answer: [number, number][];
   style: [SlideSrc, number | null][];
   image: (string | null)[];
   regen: number;
@@ -50,7 +52,7 @@ type Calls = {
 };
 
 function mount(slide: SlideModel) {
-  const calls: Calls = { text: [], style: [], image: [], regen: 0, upload: 0 };
+  const calls: Calls = { text: [], footer: [], answer: [], style: [], image: [], regen: 0, upload: 0 };
   const common = {
     slide,
     theme,
@@ -74,6 +76,8 @@ function mount(slide: SlideModel) {
         scale: 1,
         redrawsLeft: 5,
         onText: (src: SlideSrc, value: string) => calls.text.push([src, value]),
+        onFooter: (value: string) => calls.footer.push(value),
+        onAnswer: (q: number, answer: number) => calls.answer.push([q, answer]),
         onStyle: (src: SlideSrc, size: number | null) => calls.style.push([src, size]),
         onImage: (url: null) => calls.image.push(url),
         onUpload: () => calls.upload++,
@@ -317,5 +321,95 @@ test("tashqariga bosish + blur BIR MARTA saqlaydi", () => {
   // operatsiya ketsa hujjat versiyasi bekorga oshardi.
   fireEvent.blur(ta);
   assert.equal(calls.text.length, 1);
+  cleanup();
+});
+
+// ══════════════════════════════════ Kolontitul (deka darajasida)
+
+/** Kolontitul qatlami — `pushFooter` uni har maketda chizadi. */
+function footerEl(): HTMLElement {
+  const el = document.querySelector('[data-src=\'{"f":"footer"}\']');
+  assert.ok(el, "kolontitul qatlamida data-src bo'lishi kerak");
+  return el as HTMLElement;
+}
+
+test("kolontitul ikki bosishda ochiladi va `onFooter` beradi (matn opi EMAS)", () => {
+  const slide: SlideModel = { ...bulletsSlide(), footer: "Aliyev · TDPU" };
+  const calls = mount(slide);
+  fireEvent.doubleClick(footerEl());
+  assert.equal(box().value, "Aliyev · TDPU", "maydon modeldagi kolontitul bilan ochiladi");
+  fireEvent.change(box(), { target: { value: "Aliyev · TDPU · 2026" } });
+  fireEvent.keyDown(box(), { key: "Enter" });
+  // MUTATSIYA: `commit` dagi `if (e.src.f === "footer")` shoxi olib
+  // tashlansa — `onText` chaqiriladi va server 422 «Kolontitul deka
+  // darajasida» qaytarardi (bitta slaydga yozib bo'lmaydi).
+  assert.deepEqual(calls.footer, ["Aliyev · TDPU · 2026"]);
+  assert.deepEqual(calls.text, [], "kolontitul matn operatsiyasiga tushmasligi kerak");
+  cleanup();
+});
+
+test("kolontitulsiz slaydda ham maydon BO'SH ochiladi (qo'shish yo'li)", () => {
+  const calls = mount(bulletsSlide());
+  fireEvent.doubleClick(footerEl());
+  assert.equal(box().value, "", "kolontitul yo'q — bo'sh maydon");
+  fireEvent.change(box(), { target: { value: "Yangi kolontitul" } });
+  fireEvent.keyDown(box(), { key: "Enter" });
+  assert.deepEqual(calls.footer, ["Yangi kolontitul"]);
+  cleanup();
+});
+
+test("o'zgarmagan kolontitul operatsiya bermaydi", () => {
+  const calls = mount({ ...bulletsSlide(), footer: "Aliyev · TDPU" });
+  fireEvent.doubleClick(footerEl());
+  fireEvent.blur(box());
+  assert.deepEqual(calls.footer, [], "bo'sh PATCH hujjat versiyasini bekorga oshirardi");
+  cleanup();
+});
+
+// ══════════════════════════════════ Test javobi
+
+function quizSlide(answer = 0): SlideModel {
+  return {
+    id: "s0",
+    layout: "quiz",
+    title: "Nazorat savoli",
+    quiz: [{ q: "Bug‘lanish qayerda kuchli?", options: ["Okean", "Bulut", "Daryo", "Muz"], answer }],
+  };
+}
+
+test("quiz: joriy to'g'ri javob belgilangan, boshqalari oddiy tugma", () => {
+  mount(quizSlide(0));
+  const marks = document.querySelectorAll("[data-answer-mark]");
+  assert.equal(marks.length, 4, "har variantga bitta belgi");
+  assert.equal(document.querySelectorAll('[data-answer-mark="current"]').length, 1, "to'g'ri javob BITTA");
+  assert.ok(screen.getByText("To‘g‘ri javob"), "joriy javob so'z bilan ham aytiladi");
+  const cur = screen.getByLabelText("A — to‘g‘ri javob");
+  assert.equal(cur.getAttribute("data-answer-mark"), "current", "modeldagi answer=0 → A belgilanadi");
+  assert.equal(cur.getAttribute("aria-pressed"), "true");
+  cleanup();
+});
+
+test("quiz: variant belgisiga bosish `onAnswer` beradi", () => {
+  const calls = mount(quizSlide(0));
+  fireEvent.click(screen.getByLabelText("C — to‘g‘ri javob"));
+  // MUTATSIYA: `onAnswer(q, j)` o'rniga `onAnswer(q, 0)` yozilsa — qizil.
+  assert.deepEqual(calls.answer, [[0, 2]]);
+  assert.deepEqual(calls.text, [], "javob tanlash matnni o'zgartirmaydi");
+  cleanup();
+});
+
+test("quiz: belgi modeldagi javobga ERGASHADI", () => {
+  mount(quizSlide(3));
+  assert.equal(
+    screen.getByLabelText("D — to‘g‘ri javob").getAttribute("data-answer-mark"),
+    "current",
+    "answer=3 → D",
+  );
+  cleanup();
+});
+
+test("quiz bo'lmagan slaydda javob belgilari CHIQMAYDI", () => {
+  mount(bulletsSlide());
+  assert.equal(document.querySelector("[data-answer-mark]") === null, true);
   cleanup();
 });

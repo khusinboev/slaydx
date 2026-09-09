@@ -267,6 +267,10 @@ function pushFooter(
     color,
     size: 11,
     valign: "middle",
+    // Kolontitul TAHRIRLANADI (AUDIT-10): ko'ruvchi shu ko'rsatkich
+    // orqali `{op:"footer"}` ga boradi. Yonidagi sahifa raqami esa
+    // modeldan emas — u `src`siz, dekorativ bo'lib qoladi.
+    src: { f: "footer" },
   });
   layers.push({
     t: "text",

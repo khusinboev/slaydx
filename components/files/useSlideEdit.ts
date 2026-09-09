@@ -8,6 +8,7 @@ import {
   patchGenerationDoc,
   rebuildGeneration,
   regenerateSlideImage,
+  restoreGenerationDoc,
   uploadSlideImage,
 } from "@/lib/api-edit";
 import { applyDocOps, inverseOps, type DocOp } from "@/lib/generation/slide-edit";
@@ -52,6 +53,13 @@ export type EditGen = {
   docVersion: number;
   fileVersion: number;
   imageRedraws: number;
+  /**
+   * Serverda `doc_prev` bormi — «Asl holatga qaytarish» tugmasi shuni
+   * ko'rsatadi. `lib/api-client.ts` dagi tur bu maydonni hali e'lon
+   * qilmagani uchun xom `gen` dan o'qiladi (server `rowToSummary` da
+   * `has_prev` ustunidan beradi).
+   */
+  hasPrev: boolean;
   /** `onGen` uchun — versiyalarni ustiga qo'yib qaytaramiz. */
   raw: Record<string, unknown>;
 };
@@ -80,6 +88,7 @@ export function asEditGen(gen: unknown): EditGen | null {
     docVersion: num(g.docVersion),
     fileVersion: num(g.fileVersion),
     imageRedraws: num(g.imageRedraws),
+    hasPrev: g.hasPrev === true,
     raw: g,
   };
 }
@@ -116,6 +125,16 @@ export type SlideEdit = {
   clearError: () => void;
   /** Qolgan bepul qayta chizish. */
   redrawsLeft: number;
+  /** Serverda BIRINCHI tahrirdan oldingi nusxa bormi («Asl holatga qaytarish»). */
+  hasPrev: boolean;
+  /**
+   * Dekani birinchi tahrirdan OLDINGI holatga qaytaradi.
+   *
+   * Saqlanmagan navbat TASHLANADI (uni yuborish qaytarilgan hujjat
+   * ustiga eski tahrirni qayta yozardi) va steklar tozalanadi: undo
+   * endi boshqa hujjatga tegishli bo'lardi. Keyin PPTX quvib yetadi.
+   */
+  restore: () => Promise<void>;
   uploadImage: (index: number, file: File) => Promise<void>;
   regenerateImage: (index: number, hint?: string) => Promise<void>;
   /** Navbatni bo'shatadi va kerak bo'lsa PPTX ni qayta yasaydi (yuklab olishdan oldin). */
@@ -141,6 +160,7 @@ export function useSlideEdit({
   const [version, setVersion] = useState(g?.docVersion ?? 0);
   const [fileVersion, setFileVersion] = useState(g?.fileVersion ?? 0);
   const [redraws, setRedraws] = useState(g?.imageRedraws ?? 0);
+  const [hasPrev, setHasPrev] = useState(g?.hasPrev ?? false);
   const [saving, setSaving] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
   const [rebuilding, setRebuilding] = useState(false);
@@ -188,6 +208,7 @@ export function useSlideEdit({
       setVersion(versionRef.current);
       setFileVersion(fileRef.current);
       setRedraws(num(gd.imageRedraws));
+      setHasPrev((gd as Record<string, unknown>).hasPrev === true);
       rawRef.current = gd as Record<string, unknown>;
       onGenRef.current?.(gd);
     },
@@ -209,6 +230,7 @@ export function useSlideEdit({
       setVersion(g.docVersion);
       setFileVersion(g.fileVersion);
       setRedraws(g.imageRedraws);
+      setHasPrev(g.hasPrev);
     }
   }, [g]);
 
@@ -374,6 +396,40 @@ export function useSlideEdit({
     await doRebuild();
   }, [doRebuild]);
 
+  /**
+   * «Asl holatga qaytarish» — server `doc_prev` dan tiklaydi.
+   *
+   * Navbat OLDIN tashlanadi, keyin so'rov ketadi: qaytarilgan hujjat
+   * ustiga saqlanmagan tahrirni yuborish «qaytardim, lekin baribir
+   * o'zgargan» degan holatga olib kelardi. Muvaffaqiyatdan keyin
+   * steklar ham bo'shaydi (Ctrl+Z endi boshqa hujjatga tegishli
+   * bo'lardi) va PPTX darhol quvib yetadi — `doc_version` oshgani
+   * uchun `doRebuild` ishga tushadi.
+   */
+  const restore = useCallback(async () => {
+    if (!genId) return;
+    if (inflightRef.current) await inflightRef.current;
+    queueRef.current = [];
+    setPending(0);
+    setSaving(true);
+    try {
+      const { generation } = await restoreGenerationDoc(genId);
+      if (!aliveRef.current) return;
+      adopt(generation);
+      undoRef.current = [];
+      redoRef.current = [];
+      bump();
+    } catch (e) {
+      if (aliveRef.current) setError(editErrorText(e));
+      // 409 (`no_prev`/`status`) — serverdagi haqiqat boshqa; qayta yuklaymiz.
+      if (editErrorCode(e)) await reload();
+      return;
+    } finally {
+      if (aliveRef.current) setSaving(false);
+    }
+    await doRebuild();
+  }, [genId, adopt, bump, reload, doRebuild]);
+
   /*
    * Rasm operatsiyalari SERVERDA bajariladi (bayt yuklash, provayder
    * chaqiruvi) — optimistik nusxa yo'q. Ular hujjat versiyasini
@@ -444,6 +500,8 @@ export function useSlideEdit({
     error,
     clearError: useCallback(() => setError(null), []),
     redrawsLeft: Math.max(0, IMAGE_REDRAW_LIMIT - redraws),
+    hasPrev,
+    restore,
     uploadImage,
     regenerateImage,
     ensureFresh,

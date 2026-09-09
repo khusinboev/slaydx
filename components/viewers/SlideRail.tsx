@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { SlideAudience, SlideTemplateId, SlideVisual } from "@/lib/generation/slide-templates";
 import type { BodyRules } from "@/lib/generation/slide-audience";
 import type { SlideModel, SlideTheme } from "@/lib/generation/slide-types";
@@ -33,6 +34,8 @@ export function SlideRail({
   marks,
   reorderOn = false,
   onReorder,
+  variant = "side",
+  onMove,
 }: {
   slides: SlideModel[];
   theme: SlideTheme;
@@ -60,6 +63,16 @@ export function SlideRail({
   reorderOn?: boolean;
   /** Yangi tartib: `order[yangi] = eski` (`{op:"reorder"}` bilan bir xil). */
   onReorder?: (order: number[]) => void;
+  /**
+   * `side` — yon ustun (standart, `md:` dan boshlab); `strip` — MOBIL
+   * gorizontal tasma (`md:` dan past). Ikkalasi ayni ma'lumotni
+   * chizadi, lekin tasmada sudrash YO'Q: teginish ekranida HTML5 DnD
+   * umuman ishlamaydi, shuning uchun tartib ◀/▶ tugmalari bilan
+   * o'zgaradi.
+   */
+  variant?: "side" | "strip";
+  /** Tasmadagi ◀/▶ — joriy slaydni bir qadam suradi (`SlideViewer.onMove`). */
+  onMove?: (dir: -1 | 1) => void;
 }) {
   // Eskiz konteynerining haqiqiy kengligidan masshtab (ilgari qat'iy
   // 0.117 edi, ya'ni panel kengligi o'zgarsa eskiz ramkadan chiqib
@@ -79,6 +92,18 @@ export function SlideRail({
     ro.observe(el);
     return () => ro.disconnect();
   }, [slides.length]);
+
+  /*
+   * Tasmada joriy eskiz KO'RINISHDA qolsin: gorizontal ro'yxatda
+   * `snap` faqat qo'l bilan surganda ishlaydi, strelka/avto-ergashish
+   * bilan almashgan slayd esa ekrandan chiqib ketardi. `scrollIntoView`
+   * jsdom da yo'q — ixtiyoriy chaqiruv (`?.`) bilan.
+   */
+  useEffect(() => {
+    if (variant !== "strip") return;
+    const el = railRef.current?.querySelector<HTMLElement>(`[data-strip-index="${i}"]`);
+    el?.scrollIntoView?.({ block: "nearest", inline: "center" });
+  }, [variant, i]);
 
   /*
    * Sudrash — NATIVE HTML5 DnD (kutubxona qo'shilmaydi). Sudralayotgan
@@ -102,6 +127,93 @@ export function SlideRail({
     order.splice(to, 0, ...order.splice(from, 1));
     onReorder?.(order);
   };
+
+  /*
+   * ═══ MOBIL TASMA ═══
+   *
+   * `md:` dan past ekranda yon ustun `hidden` — telefonda foydalanuvchi
+   * dekaning qayeridaligini UMUMAN ko'rmasdi (faqat «Slayd 3 / 12»
+   * yozuvi). Tasma o'sha ma'lumotni gorizontal, `snap` bilan beradi:
+   * bosh barmoq surib boradi, joriy eskiz o'zi markazga tortiladi.
+   *
+   * Sudrash bu yerda YO'Q — teginish ekranida HTML5 DnD ishlamaydi.
+   * O'rniga joriy eskizning tagida ◀/▶ turadi, ya'ni yon paneldagi
+   * ▲/▼ ning aynan o'zi. Jonli rejimda skelet eskizlar ham SHU tasmada
+   * (yon panel bilan bir xil `pending` qoidasi).
+   */
+  if (variant === "strip") {
+    return (
+      <aside
+        ref={railRef}
+        data-rail="strip"
+        className="slx-strip no-print flex shrink-0 gap-2 overflow-x-auto border-t border-white/10 bg-[#171717] p-2 md:hidden"
+        style={{ scrollSnapType: "x proximity" }}
+      >
+        {slides.map((s, idx) => {
+          const pending = marks !== undefined && marks[idx] !== "done";
+          const active = idx === i;
+          return (
+            <div key={s.id} className="w-24 shrink-0" style={{ scrollSnapAlign: "center" }}>
+              <button
+                type="button"
+                data-strip-index={idx}
+                aria-current={active ? "true" : undefined}
+                onClick={() => go(idx)}
+                className="block w-full"
+              >
+                <span
+                  data-thumb
+                  className="relative block overflow-hidden rounded-[2px] bg-black shadow"
+                  style={{
+                    aspectRatio: `${SLIDE.w} / ${SLIDE.h}`,
+                    outline: active ? `2px solid ${theme.accent}` : "1px solid rgba(255,255,255,0.12)",
+                  }}
+                >
+                  <span
+                    className="absolute top-0 left-0"
+                    style={{ width: SLIDE.w, height: SLIDE.h, transform: `scale(${thumbScale})`, transformOrigin: "top left" }}
+                  >
+                    {pending ? (
+                      <SkeletonSlide theme={theme} role={roles?.[idx]} index={idx} compact />
+                    ) : (
+                      <SlideCanvas slide={s} theme={theme} visual={visual} audience={audience} templateId={templateId} bodyType={bodyType} logo={logo} index={idx} total={slides.length} />
+                    )}
+                  </span>
+                </span>
+              </button>
+              <div className="mt-0.5 flex items-center gap-0.5 text-[10px] text-white/60">
+                <span className="tabular-nums">{idx + 1}</span>
+                {reorderOn && active ? (
+                  <>
+                    <button
+                      type="button"
+                      aria-label="Slaydni chapga surish"
+                      disabled={idx === 0}
+                      className="hover:bg-white/10 ml-auto rounded p-0.5 disabled:opacity-40"
+                      onClick={() => onMove?.(-1)}
+                    >
+                      <ChevronLeft className="size-3" />
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="Slaydni o‘ngga surish"
+                      disabled={idx >= slides.length - 1}
+                      className="hover:bg-white/10 rounded p-0.5 disabled:opacity-40"
+                      onClick={() => onMove?.(1)}
+                    >
+                      <ChevronRight className="size-3" />
+                    </button>
+                  </>
+                ) : (
+                  <span className="min-w-0 truncate">{pending ? (roles?.[idx] ?? "Kutilmoqda…") : s.title}</span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </aside>
+    );
+  }
 
   return (
     <aside ref={railRef} className="hidden w-[200px] shrink-0 overflow-y-auto border-r border-white/10 bg-[#171717] p-2 md:block">

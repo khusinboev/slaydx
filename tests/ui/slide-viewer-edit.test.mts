@@ -55,11 +55,17 @@ type Server = {
   version: number;
   /** Keyingi PATCH shu kod bilan yiqiladi (409 sinovi uchun). */
   failNext: string | null;
+  /**
+   * `doc_prev` — serverdagi «birinchi tahrirdan oldingi» nusxa.
+   * `null` bo'lsa `hasPrev: false` va «Asl holatga qaytarish» tugmasi
+   * umuman chizilmaydi (server bunday holatda 409 `no_prev` berardi).
+   */
+  prev: AcademicDoc | null;
 };
 
 /** Minimal server taqlidi — `applyDocOps` bilan haqiqiy hujjat yuritadi. */
 function stubServer(init: AcademicDoc = makeDoc()): Server {
-  const s: Server = { calls: [], patches: [], doc: init, version: 1, failNext: null };
+  const s: Server = { calls: [], patches: [], doc: init, version: 1, failNext: null, prev: null };
   const json = (status: number, data: unknown) =>
     new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
 
@@ -84,6 +90,14 @@ function stubServer(init: AcademicDoc = makeDoc()): Server {
       s.version += 1;
       return json(200, { generation: generation(s) });
     }
+    if (method === "POST" && url.endsWith("/doc/restore")) {
+      // Server `doc_json = doc_prev` qiladi va `doc_version` ni OSHIRADI
+      // (`file_version` esa joyida qoladi — fayl eskiradi).
+      if (!s.prev) return json(409, { code: "no_prev", error: "Asl holat saqlanmagan" });
+      s.doc = s.prev;
+      s.version += 1;
+      return json(200, { generation: generation(s) });
+    }
     if (method === "POST" && url.endsWith("/rebuild")) {
       return json(200, { fileVersion: s.version, docVersion: s.version, rebuilt: true });
     }
@@ -103,6 +117,7 @@ function generation(s: Server) {
     fileVersion: 1,
     imageRedraws: 0,
     hasFile: true,
+    hasPrev: s.prev !== null,
   };
 }
 
@@ -391,6 +406,133 @@ test("izoh maydoni `notes` operatsiyasini beradi", async () => {
   cleanup();
 });
 
+// ══════════════════════════════════ Kolontitul / test javobi / asl holat
+
+test("kolontitul sahnada tahrirlanadi → BUTUN dekaga `footer` opi", async () => {
+  const s = stubServer();
+  openEditor(s);
+  fireEvent.doubleClick(stageQuery('[data-src=\'{"f":"footer"}\']'));
+  const ta = screen.getByLabelText("Matnni tahrirlash");
+  fireEvent.change(ta, { target: { value: "Aliyev · TDPU" } });
+  fireEvent.keyDown(ta, { key: "Enter" });
+  await act(async () => {
+    fireEvent.click(saveBtn()!);
+  });
+  await pause(50);
+  // MUTATSIYA: `onFooter` o'rniga `{op:"text"}` yuborilsa — server 422
+  // «Kolontitul deka darajasida» qaytaradi va ikkala assertion qizil.
+  assert.deepEqual(ops(s.patches[0]), [{ op: "footer", value: "Aliyev · TDPU" }]);
+  assert.deepEqual(
+    s.doc.slides?.map((x) => x.footer),
+    ["Aliyev · TDPU", "Aliyev · TDPU", "Aliyev · TDPU"],
+    "kolontitul bitta slaydga emas, butun dekaga yoziladi",
+  );
+  cleanup();
+});
+
+test("test javobi ✓ bilan almashadi va javoblar kaliti qayta yig'iladi", async () => {
+  const quiz: SlideModel = {
+    id: "s0",
+    layout: "quiz",
+    title: "Nazorat",
+    quiz: [{ q: "Qaysi javob to‘g‘ri?", options: ["Okean", "Bulut", "Daryo", "Muz"], answer: 0 }],
+  };
+  const key: SlideModel = { id: "s1", layout: "answers", title: "Javoblar", bullets: ["1 — A"] };
+  const s = stubServer(makeDoc([quiz, key]));
+  openEditor(s);
+  fireEvent.click(screen.getByLabelText("C — to‘g‘ri javob"));
+  assert.equal(s.calls.length, 0, "javob ham «Saqlash» gacha kutadi");
+  await act(async () => {
+    fireEvent.click(saveBtn()!);
+  });
+  await pause(50);
+  assert.deepEqual(ops(s.patches[0]), [{ op: "answer", index: 0, q: 0, answer: 2 }]);
+  assert.equal(s.doc.slides?.[0].quiz?.[0].answer, 2, "server hujjatida ham javob o'zgargan");
+  assert.equal(s.doc.slides?.[1].bullets?.[0], "1 — C", "javoblar kaliti eskirib qolmasligi kerak");
+  cleanup();
+});
+
+test("«Asl holatga qaytarish» — `hasPrev` bo'lmasa tugma YO'Q", () => {
+  const s = stubServer();
+  openEditor(s);
+  assert.equal(
+    screen.queryByText("Asl holatga qaytarish") === null,
+    true,
+    "tahrirlanmagan dekada server 409 `no_prev` berardi",
+  );
+  cleanup();
+});
+
+test("«Asl holatga qaytarish» IKKI bosishda serverga boradi", async () => {
+  const s = stubServer();
+  s.prev = makeDoc([{ id: "s0", layout: "title", title: "ASL MUQOVA", subtitle: "Asl izoh" }]);
+  openEditor(s);
+  // Saqlanmagan tahrir ham bor — qaytarish uni TASHLASHI kerak.
+  fireEvent.click(screen.getByText("Slayd"));
+  assert.ok(saveBtn(), "navbatda o'zgarish bor");
+
+  fireEvent.click(screen.getByText("Asl holatga qaytarish"));
+  assert.equal(s.calls.length, 0, "birinchi bosish faqat tasdiq so'raydi");
+  await act(async () => {
+    fireEvent.click(screen.getByText("Rostdan qaytarilsinmi?"));
+  });
+  await pause(50);
+  const restores = s.calls.filter((c) => c.method === "POST" && c.url.endsWith("/doc/restore"));
+  assert.equal(restores.length, 1, "ikkinchi bosishda `POST …/doc/restore`");
+  assert.equal(s.patches.length, 0, "saqlanmagan navbat YUBORILMAYDI — u qaytarilgan hujjatni buzardi");
+  // DOM tugunini `=== null, true` bilan solishtiramiz: yiqilganda
+  // `node:assert` jsdom tugunini chizishga urinib jarayonni qotiradi (Y-2).
+  assert.equal(saveBtn() === null, true, "navbat tashlanadi");
+  assert.equal(
+    s.calls.filter((c) => c.url.endsWith("/rebuild")).length,
+    1,
+    "qaytarilgandan keyin PPTX ham quvib yetadi",
+  );
+  cleanup();
+});
+
+// ══════════════════════════════════ Mobil eskiz tasmasi
+
+test("mobil tasma: eskiz bosilsa sahna almashadi, ◀/▶ `reorder` beradi", async () => {
+  const s = stubServer();
+  openEditor(s);
+  const strip = document.querySelector('[data-rail="strip"]');
+  assert.ok(strip, "mobil tasma chizilishi kerak");
+  const items = strip!.querySelectorAll("[data-strip-index]");
+  assert.equal(items.length, 3, "har slaydga bitta eskiz");
+  // Sudrash tasmada YO'Q — teginish ekranida HTML5 DnD ishlamaydi.
+  assert.equal(strip!.querySelector("[draggable]") === null, true, "tasmada sudrash bo'lmasin");
+
+  fireEvent.click(items[1]);
+  assert.equal(
+    strip!.querySelectorAll("[data-strip-index]")[1].getAttribute("aria-current"),
+    "true",
+    "bosilgan eskiz joriy bo'ladi",
+  );
+
+  fireEvent.click(screen.getByLabelText("Slaydni chapga surish"));
+  await act(async () => {
+    fireEvent.click(saveBtn()!);
+  });
+  await pause(50);
+  assert.deepEqual(ops(s.patches[0]), [{ op: "reorder", order: [1, 0, 2] }]);
+  cleanup();
+});
+
+test("mobil tasma FAQAT joriy eskizda ko'chirish tugmalarini beradi", () => {
+  const s = stubServer();
+  openEditor(s);
+  // Birinchi slayd joriy — «chapga» tugmasi bor, lekin O'CHIQ.
+  const left = screen.getByLabelText("Slaydni chapga surish") as HTMLButtonElement;
+  assert.equal(left.disabled, true, "birinchi slaydni chapga surib bo'lmaydi");
+  assert.equal(
+    screen.getAllByLabelText("Slaydni o‘ngga surish").length,
+    1,
+    "tugmalar faqat joriy eskizda — aks holda tasma tugmalar to‘plamiga aylanardi",
+  );
+  cleanup();
+});
+
 // ══════════════════════════════════ Hook (qisqartirilgan taymerlar bilan)
 
 let hook: SlideEdit | null = null;
@@ -519,5 +661,43 @@ test("saqlanmagan o'zgarish bo'lsa sahifadan chiqish ogohlantiriladi", async () 
     await hook!.save();
   });
   assert.equal(ask(), false, "saqlangach ogohlantirish o'chadi");
+  cleanup();
+});
+
+test("restore: navbat, undo/redo steklari tozalanadi va hujjat serverdan keladi", async () => {
+  const s = stubServer();
+  s.prev = makeDoc([{ id: "s0", layout: "title", title: "ASL MUQOVA", subtitle: "Asl izoh" }]);
+  render(h(Harness, { gen: generation(s) }));
+  await act(async () => {
+    hook!.run([{ op: "text", index: 1, src: { f: "title" }, value: "Mahalliy sarlavha" }]);
+  });
+  assert.equal(hook!.canUndo, true, "operatsiyadan keyin undo bo'lishi kerak");
+  assert.equal(hook!.hasPrev, true, "server `doc_prev` borligini aytdi");
+
+  await act(async () => {
+    await hook!.restore();
+  });
+  // MUTATSIYA: `restore` da steklarni tozalash olib tashlansa — Ctrl+Z
+  // qaytarilgan hujjatga BOSHQA dekaning teskari opini qo'llardi.
+  assert.equal(hook!.canUndo, false, "steklar bo'shashi kerak");
+  assert.equal(hook!.canRedo, false);
+  assert.equal(hook!.pending, 0, "saqlanmagan navbat tashlanadi");
+  assert.equal(hook!.doc?.slides?.length, 1, "ekranda serverdan kelgan ASL deka");
+  assert.equal(hook!.doc?.slides?.[0].title, "ASL MUQOVA");
+  cleanup();
+});
+
+test("restore: `doc_prev` yo'q bo'lsa 409 `no_prev` xabari chiqadi", async () => {
+  const s = stubServer();
+  render(h(Harness, { gen: generation(s) }));
+  await act(async () => {
+    await hook!.restore();
+  });
+  assert.ok(hook!.error, "foydalanuvchiga sabab aytilishi kerak");
+  assert.equal(
+    s.calls.filter((c) => c.url.endsWith("/rebuild")).length,
+    0,
+    "yiqilgan restore fayl yasatmasin",
+  );
   cleanup();
 });

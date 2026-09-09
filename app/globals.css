@@ -324,6 +324,33 @@ button {
   }
 }
 
+/*
+  Mobil eskiz tasmasi (AUDIT-10) — gorizontal aylantirish.
+
+  Tasma balandligi ~90 px; brauzerning standart 15 px li gorizontal
+  aylantirgichi undan sezilarli qismini yeb qo'yadi va eskizlar
+  qisqaradi. Shuning uchun ingichka (yoki umuman ko'rinmas) aylantirgich
+  — surish `snap` bilan barmoq orqali bo'ladi, sichqoncha uchun esa
+  yupqa chiziq qoladi.
+*/
+.slx-strip {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+}
+
+.slx-strip::-webkit-scrollbar {
+  height: 6px;
+}
+
+.slx-strip::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.22);
+  border-radius: 3px;
+}
+
+.slx-strip::-webkit-scrollbar-track {
+  background: transparent;
+}
+
 @media print {
   .no-print {
     display: none !important;

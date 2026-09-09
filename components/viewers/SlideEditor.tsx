@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { ImagePlus, Minus, Plus, RefreshCw, XCircle } from "lucide-react";
+import { Check, ImagePlus, Minus, Plus, RefreshCw, XCircle } from "lucide-react";
 import type { SlideAudience, SlideTemplateId, SlideVisual } from "@/lib/generation/slide-templates";
 import type { BodyRules } from "@/lib/generation/slide-audience";
 import type { SlideModel, SlideSrc, SlideTheme } from "@/lib/generation/slide-types";
 import { FONT_MAX, FONT_MIN, readSlideField } from "@/lib/generation/slide-edit";
+import { QUIZ_LETTERS } from "@/lib/generation/slide-quiz";
 import { SLIDE_LIMITS } from "@/lib/generation/slide-limits";
 import { cn } from "@/lib/cn";
 import {
@@ -62,6 +63,14 @@ export type SlideEditorProps = {
   /** Rasm so'rovi ketayotgan bo'lsa tugmalar o'chadi. */
   busy?: boolean;
   onText: (src: SlideSrc, value: string) => void;
+  /**
+   * Kolontitul — DEKA darajasida (`{op:"footer"}`), shuning uchun
+   * `onText` dan ALOHIDA: `writeSlideField` `footer` ni ataylab rad
+   * etadi (bitta slaydga yozilsa deka ikkiga bo'linardi).
+   */
+  onFooter: (value: string) => void;
+  /** Test kaliti: `{op:"answer", q, answer}` — javoblar slaydi ham qayta yig'iladi. */
+  onAnswer: (q: number, answer: number) => void;
   /** Shrift o'lchami: `null` — «Standart» (model qiymatini o'chiradi). */
   onStyle: (src: SlideSrc, size: number | null) => void;
   onImage: (url: null) => void;
@@ -120,6 +129,8 @@ export function SlideEditor({
   redrawsLeft,
   busy = false,
   onText,
+  onFooter,
+  onAnswer,
   onStyle,
   onImage,
   onUpload,
@@ -233,8 +244,10 @@ export function SlideEditor({
     // O'zgarmagan matn uchun operatsiya YUBORILMAYDI — bo'sh PATCH
     // hujjat versiyasini oshirib, PPTX ni bekorga qayta yasatardi.
     if (e.value === e.initial) return;
-    onText(e.src, e.value);
-  }, [onText]);
+    // Kolontitul bitta slaydniki emas — butun dekaniki.
+    if (e.src.f === "footer") onFooter(e.value);
+    else onText(e.src, e.value);
+  }, [onText, onFooter]);
 
   const cancel = useCallback(() => {
     skipBlurRef.current = true;
@@ -328,6 +341,31 @@ export function SlideEditor({
   }, [plan.layers, slide, bodyType.agendaMax, bodyType.maxBullets, scale]);
 
   /*
+   * TEST KALITI — variant qutilari ustidagi «✓» tugmalari.
+   *
+   * `SlideCanvas` ga TEGILMAYDI: to'g'ri javob PPTX ga sizmasligi kerak
+   * (ekranda kalitni ko'rsatib qo'yish testni ma'nosiz qilardi), shuning
+   * uchun belgi FAQAT shu overlay ichida chiziladi. Joy variant matni
+   * qatlamining o'z qutisidan olinadi — olti `visual` tarmog'ining
+   * qaysi biri chizilgan bo'lsa ham tugma o'z variantining ustida
+   * turadi.
+   */
+  const answerSpots = useMemo(() => {
+    if (!slide.quiz?.length) return [];
+    const out: { q: number; j: number; pos: Pos }[] = [];
+    for (const l of plan.layers) {
+      if (l.t !== "text" || l.src?.f !== "quiz" || l.src.k !== "option") continue;
+      const b = boxStyle(l.box);
+      out.push({
+        q: l.src.i,
+        j: l.src.j,
+        pos: { left: b.left * scale, top: b.top * scale, width: b.width * scale, height: b.height * scale },
+      });
+    }
+    return out;
+  }, [plan.layers, slide.quiz, scale]);
+
+  /*
    * Rasm boshqaruvi — maketda rasm JOYI bo'lsa (rasm hali yo'q bo'lsa
    * ham: «Qayta chizish» aynan shunda kerak). Logo qatlami ATAYLAB
    * chetlab o'tiladi — `LOGO_BOX` bilan solishtiriladi.
@@ -356,6 +394,33 @@ export function SlideEditor({
           + band
         </button>
       ))}
+
+      {answerSpots.map(({ q, j, pos }) => {
+        const cur = slide.quiz?.[q]?.answer === j;
+        return (
+          <div
+            key={`ans-${q}-${j}`}
+            className="pointer-events-none absolute flex justify-end"
+            style={{ left: pos.left, top: pos.top, width: pos.width }}
+          >
+            <button
+              type="button"
+              data-answer-mark={cur ? "current" : "other"}
+              aria-pressed={cur}
+              aria-label={`${QUIZ_LETTERS[j] ?? j + 1} — to‘g‘ri javob`}
+              title={cur ? "Hozirgi to‘g‘ri javob" : "To‘g‘ri javob deb belgilash"}
+              className={cn(
+                "pointer-events-auto inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium",
+                cur ? "bg-emerald-500 text-white" : "bg-black/45 text-white/70 hover:bg-black/70",
+              )}
+              onClick={() => onAnswer(q, j)}
+            >
+              <Check className="size-3" />
+              {cur ? "To‘g‘ri javob" : QUIZ_LETTERS[j] ?? String(j + 1)}
+            </button>
+          </div>
+        );
+      })}
 
       {imgPos ? (
         <div

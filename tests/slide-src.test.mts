@@ -163,6 +163,10 @@ function readField(s: SlideModel, src: SlideSrc): string | undefined {
       return s.rightTitle;
     case "imageHint":
       return s.imageHint;
+    case "footer":
+      // `pushFooter` `s.footer || ""` chizadi — kolontitulsiz slaydda
+      // ham qatlam BOR (bo'sh matn bilan), shuning uchun zaxira `""`.
+      return s.footer ?? "";
     case "bullets":
       return s.bullets?.[src.i];
     case "left":
@@ -345,7 +349,17 @@ test("dekorativ qatlamlar (→, “, sahifa raqami, 2-xonali indeks) src'siz qol
   assert.ok(sawDecorative > 0, "dekorativ qatlam umuman topilmadi — naqsh sinovdan chetda qoldi");
 });
 
-test("pushFooter (matn + sahifa raqami) hech qachon src olmaydi", () => {
+/*
+ * AUDIT-10 (kolontitul tahriri): `pushFooter` MATNI endi `src` OLADI —
+ * foydalanuvchi kolontitul ustiga ikki bosib uni o'zgartiradi
+ * (`{op:"footer"}` butun dekaga yoziladi). Sahifa RAQAMI esa modelda
+ * yo'q (`index+1 / total`) va `src`siz qoladi: unga bosilganda
+ * tahrirlanadigan maydon bo'lmasdi.
+ *
+ * MUTATSIYA: `pushFooter` dagi `src: { f: "footer" }` olib tashlansa —
+ * birinchi assertion qizil; sahifa raqamiga `src` qo'shilsa — ikkinchisi.
+ */
+test("pushFooter: matn `footer` src oladi, sahifa raqami src'siz qoladi", () => {
   for (const layout of layoutsToTest()) {
     const model = { ...SAMPLES[layout]!, footer: "Fan nomi · Sinf" };
     for (const visual of VISUALS) {
@@ -354,7 +368,8 @@ test("pushFooter (matn + sahifa raqami) hech qachon src olmaydi", () => {
       assert.ok(pageNo, `${layout}/${visual}: sahifa raqami topilmadi`);
       assert.equal(pageNo!.src, undefined);
       const footerText = textLayers(plan.layers).find((l) => l.text === "Fan nomi · Sinf");
-      if (footerText) assert.equal(footerText.src, undefined);
+      assert.ok(footerText, `${layout}/${visual}: kolontitul qatlami topilmadi`);
+      assert.deepEqual(footerText!.src, { f: "footer" }, `${layout}/${visual}: kolontitul tahrirlanadigan bo'lishi kerak`);
     }
   }
 });
