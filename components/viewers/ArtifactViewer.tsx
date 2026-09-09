@@ -12,7 +12,22 @@ import { TableViewer } from "./TableViewer";
 import { WordViewer } from "./WordViewer";
 import { ImageViewer } from "./ImageViewer";
 
-export function ArtifactViewer({ gen }: { gen: Generation }) {
+export function ArtifactViewer({
+  gen,
+  detail,
+  onDetail,
+}: {
+  gen: Generation;
+  /**
+   * Serverdagi TO'LIQ generatsiya (`api.GenerationDetail`) — tahrir
+   * uchun (`docVersion`, `fileVersion`, `imageRedraws`). Ko'ruvchilar
+   * hali eski `Generation` shaklini kutgani uchun alohida prop:
+   * berilmasa hech narsa o'zgarmaydi va tahrir yoqilmaydi.
+   */
+  detail?: unknown;
+  /** Tahrirdan keyingi yangi holat — sahifa (`ResultView`) uni o'zlashtiradi. */
+  onDetail?: (g: unknown) => void;
+}) {
   const doc = gen.doc ?? academicDocFromHtml(gen.html, gen);
   const kind = viewerKind(gen.type);
 
@@ -20,7 +35,7 @@ export function ArtifactViewer({ gen }: { gen: Generation }) {
     case "slides":
       return (
         <div className="flex min-h-0 flex-1 flex-col">
-          <SlideViewer doc={doc} />
+          <SlideViewer doc={doc} gen={detail} onGen={onDetail} />
         </div>
       );
     case "resume":

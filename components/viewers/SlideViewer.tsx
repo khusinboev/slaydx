@@ -1,9 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ChevronLeft, ChevronRight, Maximize2, Minimize2, Pause, Play, Presentation, RotateCcw, StickyNote, X } from "lucide-react";
+import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Maximize2, Minimize2, Pause, Pencil, Play, Plus, Presentation, RotateCcw, StickyNote, Trash2, X } from "lucide-react";
 import type { AcademicDoc } from "@/lib/generation/types";
 import { slideNotes } from "@/lib/generation/slide-layout";
+import { canConvert } from "@/lib/generation/slide-edit";
+import { SLIDE_LAYOUTS, type SlideLayout, type SlideSrc } from "@/lib/generation/slide-types";
+import { useSlideEdit } from "../files/useSlideEdit";
+import { useConfirmClick } from "../overlays/useConfirmClick";
+import { SlideEditor } from "./SlideEditor";
 import { SLIDE_TEMPLATE_BY_ID } from "@/lib/generation/slide-templates";
 import { getSlideTheme } from "@/lib/generation/slide-themes";
 import { buildSlideDeck } from "@/lib/generation/slides";
@@ -54,6 +59,30 @@ export function asLiveView(live: unknown): LiveView | null {
  * e'lon qilinadi va uzatiladi — hech narsa chizmaydi va hech qanday
  * xatti-harakatni o'zgartirmaydi (no-op).
  */
+/**
+ * Maket chiplarining o'zbekcha nomlari.
+ *
+ * Interfeys o'zbekcha — foydalanuvchi `twoCol` yoki `references` degan
+ * xom `id` ni ko'rmasligi kerak. Ro'yxat `SLIDE_LAYOUTS` bilan to'liq:
+ * yangi maket qo'shilsa TypeScript shu yerni talab qiladi.
+ */
+const LAYOUT_UZ: Record<SlideLayout, string> = {
+  title: "Muqova",
+  agenda: "Reja",
+  section: "Bo‘lim",
+  bullets: "Bandlar",
+  twoCol: "Ikki ustun",
+  compare: "Taqqoslash",
+  quote: "Iqtibos",
+  stats: "Raqamlar",
+  process: "Bosqichlar",
+  table: "Jadval",
+  closing: "Yakun",
+  quiz: "Test",
+  references: "Manbalar",
+  answers: "Javoblar",
+};
+
 export function SlideViewer({
   doc,
   live,
@@ -70,12 +99,22 @@ export function SlideViewer({
   live?: unknown;
   /** `SlideStage` ustiga qatlam chizish sloti — berilmasa hech narsa chiqmaydi. */
   overlay?: (ctx: SlideStageOverlayCtx) => ReactNode;
-  /** Keyingi paket uchun — hozircha ishlatilmaydi. */
+  /**
+   * Tayyor generatsiya (`api.GenerationDetail`) — TAHRIR shu bilan
+   * yoqiladi. Berilmasa ko'ruvchi passiv (avvalgidek).
+   */
   gen?: unknown;
-  /** Keyingi paket uchun — hozircha ishlatilmaydi (no-op). */
+  /** Tahrirdan keyin yangilangan generatsiya — sahifa holatiga qaytariladi. */
   onGen?: (g: unknown) => void;
 }) {
-  const deck = useMemo(() => buildSlideDeck(doc), [doc]);
+  const ed = useSlideEdit({ gen, onGen });
+  /*
+   * Ekrandagi hujjat — tahrir qilingan OPTIMISTIK nusxa (bo'lmasa
+   * propdagisi). Deka, sahna, eskizlar va PPTX bir xil modeldan
+   * chiziladi: «ko'rdim = oldim».
+   */
+  const docNow = ed.doc ?? doc;
+  const deck = useMemo(() => buildSlideDeck(docNow), [docNow]);
   const theme = useMemo(() => getSlideTheme(deck.themeId), [deck.themeId]);
   // Rasm havolalari hujjat bilan birga serverdan keladi — brauzerdagi
   // IndexedDB dan qayta tiklash kerak emas.
@@ -102,16 +141,20 @@ export function SlideViewer({
   const [zoom, setZoom] = useState(75);
   const [fitOn, setFitOn] = useState(true);
 
-  // `gen`/`onGen` — tahrirlash paketiniki, bu yerda tegilmaydi (no-op).
-  void gen;
-  void onGen;
-
   const lv = useMemo(() => asLiveView(live), [live]);
 
   const go = useCallback(
     (n: number) => setI(Math.max(0, Math.min(slides.length - 1, n))),
     [slides.length],
   );
+
+  /*
+   * Oxirgi slaydni o'chirgandan keyin joriy indeks deka tashqarisida
+   * qolishi mumkin — sahna bo'sh ko'rinardi.
+   */
+  useEffect(() => {
+    setI((cur) => (cur > slides.length - 1 ? Math.max(0, slides.length - 1) : cur));
+  }, [slides.length]);
 
   /*
    * JONLI shoxlar.
@@ -209,7 +252,97 @@ export function SlideViewer({
   // yashirin bo'lgani holda klaviatura yo'li ochiq qolsa, yarim deka
   // to'liq ekranga chiqib ketardi.
   const noop = useCallback(() => {}, []);
-  useSlideKeys({ go, i, total: slides.length, present, setPresent: lv ? noop : setPresent, setPresenter: lv ? noop : setPresenter });
+
+  /*
+   * ═══ E6 TAHRIR ═══
+   *
+   * Tahrir rejimi taqdimotda va jonli generatsiyada O'CHIQ: birinchisida
+   * ekranda tinglovchi bor, ikkinchisida hujjat hali serverda yozilmoqda
+   * (`doc_json` yakuniy emas — PATCH ustidan yozib yuborardi).
+   */
+  const editOn = ed.editOn && !present && !lv;
+  const { run: runOps, undo, redo } = ed;
+
+  const onText = useCallback(
+    (src: SlideSrc, value: string) => {
+      runOps([{ op: "text", index: i, src, value }]);
+    },
+    [runOps, i],
+  );
+  const onSlideImage = useCallback(
+    (url: null) => {
+      runOps([{ op: "image", index: i, url }]);
+    },
+    [runOps, i],
+  );
+  const onLayout = useCallback(
+    (layout: SlideLayout) => {
+      runOps([{ op: "layout", index: i, layout }]);
+    },
+    [runOps, i],
+  );
+  const onAddSlide = useCallback(() => {
+    runOps([{ op: "add", after: i }]);
+    setI(i + 1);
+  }, [runOps, i]);
+  const onDeleteSlide = useCallback(() => {
+    runOps([{ op: "delete", index: i }]);
+  }, [runOps, i]);
+  const onReorder = useCallback(
+    (order: number[]) => {
+      runOps([{ op: "reorder", order }]);
+    },
+    [runOps],
+  );
+  /** ▲/▼ — qo'shni slayd bilan almashish (sudrashning klaviatura yo'li). */
+  const onMove = useCallback(
+    (dir: -1 | 1) => {
+      const to = i + dir;
+      if (to < 0 || to > slides.length - 1) return;
+      const order = slides.map((_, k) => k);
+      order[i] = to;
+      order[to] = i;
+      if (runOps([{ op: "reorder", order }])) setI(to);
+    },
+    [runOps, i, slides],
+  );
+  // Ikki bosqichli tasdiq — bir bosishda slayd yo'qolmasin (undo bor, lekin baribir).
+  const delSlide = useConfirmClick(onDeleteSlide);
+
+  /*
+   * Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y. `useSlideKeys` bu ilgakni
+   * INPUT/TEXTAREA filtridan KEYIN chaqiradi, ya'ni matn yozayotganda
+   * brauzerning o'z bekor qilishi ishlaydi.
+   */
+  const keysExtra = useCallback(
+    (e: KeyboardEvent) => {
+      if (!editOn) return false;
+      if (!(e.ctrlKey || e.metaKey)) return false;
+      const k = e.key.toLowerCase();
+      if (k === "z" && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+        return true;
+      }
+      if ((k === "z" && e.shiftKey) || k === "y") {
+        e.preventDefault();
+        redo();
+        return true;
+      }
+      return false;
+    },
+    [editOn, undo, redo],
+  );
+
+  useSlideKeys({
+    go,
+    i,
+    total: slides.length,
+    present,
+    setPresent: lv ? noop : setPresent,
+    setPresenter: lv ? noop : setPresenter,
+    extra: keysExtra,
+  });
 
   /*
    * Chiqish taymeri. Taqdimotchi uchun asosiy raqam — «qancha gapirdim»,
@@ -300,6 +433,89 @@ export function SlideViewer({
                 Eslatma
               </button>
               )}
+
+              {/* ═══ E6: tahrir boshqaruvi ═══ */}
+              {ed.editable && !lv ? (
+                <button
+                  type="button"
+                  className={cn(
+                    "hover:bg-white/10 inline-flex items-center gap-1 rounded px-2 py-1 text-xs",
+                    editOn && "bg-white/15",
+                  )}
+                  onClick={() => ed.setEditOn((v) => !v)}
+                >
+                  <Pencil className="size-3.5" />
+                  Tahrirlash
+                </button>
+              ) : null}
+              {ed.legacy && !lv ? (
+                <span className="text-xs text-white/40">
+                  Bu deka eski formatda — tahrirlab bo‘lmaydi
+                </span>
+              ) : null}
+
+              {editOn && slide ? (
+                <>
+                  {/* Maket chiplari — FAQAT mumkin bo'lganlari
+                      (`canConvert`): uydirma talab qiladigan o'girishlar
+                      (raqamsiz `stats`, bo'sh `quiz`) ko'rinmaydi. */}
+                  {SLIDE_LAYOUTS.filter((L) => canConvert(slide, L).ok).map((L) => (
+                    <button
+                      key={L}
+                      type="button"
+                      className={cn(
+                        "hover:bg-white/10 rounded px-1.5 py-1 text-[11px] text-white/70",
+                        slide.layout === L && "bg-white/15 text-white",
+                      )}
+                      onClick={() => onLayout(L)}
+                    >
+                      {LAYOUT_UZ[L]}
+                    </button>
+                  ))}
+                  <span className="mx-1 h-4 w-px bg-white/15" />
+                  <button
+                    type="button"
+                    title="Joriy slayddan keyin yangi slayd"
+                    className="hover:bg-white/10 inline-flex items-center gap-1 rounded px-2 py-1 text-xs"
+                    onClick={onAddSlide}
+                  >
+                    <Plus className="size-3.5" />
+                    Slayd
+                  </button>
+                  <button
+                    type="button"
+                    title={slides.length <= 1 ? "Oxirgi slaydni o‘chirib bo‘lmaydi" : "Slaydni o‘chirish"}
+                    disabled={slides.length <= 1}
+                    className={cn(
+                      "inline-flex items-center gap-1 rounded px-2 py-1 text-xs disabled:opacity-40",
+                      delSlide.armed ? "bg-red-500/80 text-white" : "hover:bg-white/10",
+                    )}
+                    onClick={delSlide.trigger}
+                  >
+                    <Trash2 className="size-3.5" />
+                    {delSlide.armed ? "Rostdan?" : "O‘chirish"}
+                  </button>
+                  <button
+                    type="button"
+                    title="Yuqoriga"
+                    disabled={i === 0}
+                    className="hover:bg-white/10 rounded p-1 disabled:opacity-40"
+                    onClick={() => onMove(-1)}
+                  >
+                    <ChevronUp className="size-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    title="Pastga"
+                    disabled={i >= slides.length - 1}
+                    className="hover:bg-white/10 rounded p-1 disabled:opacity-40"
+                    onClick={() => onMove(1)}
+                  >
+                    <ChevronDown className="size-3.5" />
+                  </button>
+                </>
+              ) : null}
+
               {/* Interfeys o'zbekcha: xom `id` («magazine», «problem») emas,
                   shablonning formada ko'ringan nomi. */}
               <span className="hidden text-xs text-white/50 lg:inline">
@@ -324,6 +540,8 @@ export function SlideViewer({
             go={lv ? railGo : go}
             roles={lv?.roles}
             marks={marks}
+            editOn={editOn}
+            onReorder={onReorder}
           />
         ) : null}
 
@@ -344,7 +562,36 @@ export function SlideViewer({
             notesOn={notesOn}
             presenter={presenter}
             onAdvance={() => go(i + 1)}
-            overlay={overlay}
+            /*
+              Tahrir qatlami — `overlay` slotida. Tashqi `overlay` propi
+              (agar berilgan bo'lsa) ustun: uni jonli paket ishlatadi va
+              ikkalasi bir vaqtda bo'lmaydi (tahrir jonlida o'chiq).
+            */
+            overlay={
+              overlay ??
+              (editOn
+                ? (ctx) => (
+                    <SlideEditor
+                      slide={ctx.slide}
+                      theme={theme}
+                      visual={deck.visual}
+                      audience={deck.audience}
+                      templateId={deck.templateId}
+                      bodyType={deck.bodyType}
+                      logo={deck.logo}
+                      index={ctx.index}
+                      total={slides.length}
+                      scale={ctx.scale}
+                      redrawsLeft={ed.redrawsLeft}
+                      busy={ed.saving}
+                      onText={onText}
+                      onImage={onSlideImage}
+                      onUpload={(f) => void ed.uploadImage(ctx.index, f)}
+                      onRegenerate={() => void ed.regenerateImage(ctx.index)}
+                    />
+                  )
+                : undefined)
+            }
             skeleton={skeleton}
             role={lv?.roles?.[i]}
             imageWait={Boolean(lv?.imageWait.includes(i))}
@@ -364,6 +611,18 @@ export function SlideViewer({
               <button type="button" className="hover:bg-white/10 rounded p-1" onClick={() => go(i + 1)}>
                 <ChevronRight className="size-3.5" />
               </button>
+              {/* Holat satri — tahrir qayerda ekanini aytadi: hujjat
+                  saqlanmoqdami yoki PPTX hali eski. */}
+              {ed.saving ? (
+                <span className="ml-3 shrink-0 text-white/50">Saqlanmoqda…</span>
+              ) : ed.rebuilding || (editOn && ed.stale) ? (
+                <span className="ml-3 shrink-0 text-white/50">Fayl yangilanmoqda…</span>
+              ) : null}
+              {ed.error ? (
+                <span role="alert" className="ml-3 min-w-0 truncate text-amber-300">
+                  {ed.error}
+                </span>
+              ) : null}
               <span className="ml-auto truncate">{deck.topic}</span>
               {lv ? null : (
                 <button type="button" className="hover:bg-white/10 ml-2 rounded p-1" onClick={() => setPresent(true)}>
@@ -378,7 +637,27 @@ export function SlideViewer({
           {!present && notesOn && !lv ? (
             <div className="no-print max-h-28 shrink-0 overflow-y-auto border-t border-white/10 bg-[#2b2b2b] px-4 py-2">
               <div className="mb-1 text-[11px] font-medium tracking-wide text-white/45 uppercase">Eslatma</div>
-              <p className="whitespace-pre-wrap text-[13px] leading-snug text-white/80">{notes || "Bu slayd uchun eslatma yo‘q."}</p>
+              {editOn && deck.speakerNotes && slide ? (
+                /*
+                  Tahrirda izoh — oddiy `textarea`, `blur` da saqlanadi.
+                  `key` slaydga bog'langan: slayd almashsa maydon yangi
+                  qiymat bilan qayta tug'iladi (boshqarilmagan maydon
+                  eski matnni ushlab qolardi).
+                */
+                <textarea
+                  key={`notes-${i}`}
+                  aria-label="Ma’ruzachi izohi"
+                  defaultValue={slide.notes ?? ""}
+                  placeholder="Bu slayd uchun eslatma…"
+                  className="h-20 w-full resize-none rounded bg-black/30 p-2 text-[13px] leading-snug text-white/90 outline-none focus:outline-1 focus:outline-sky-500"
+                  onBlur={(e) => {
+                    if ((slide.notes ?? "") === e.target.value) return;
+                    runOps([{ op: "notes", index: i, value: e.target.value }]);
+                  }}
+                />
+              ) : (
+                <p className="whitespace-pre-wrap text-[13px] leading-snug text-white/80">{notes || "Bu slayd uchun eslatma yo‘q."}</p>
+              )}
             </div>
           ) : null}
         </div>

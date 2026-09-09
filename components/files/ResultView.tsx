@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Download, Trash2 } from "lucide-react";
 import * as api from "@/lib/api-client";
+import { ensureGenerationFresh } from "@/lib/api-edit";
 import { useAppStore } from "@/lib/store";
 import { TOOL_BY_ID } from "@/lib/tools";
 import { useConfirmClick } from "../overlays/useConfirmClick";
@@ -66,6 +67,21 @@ export function ResultView({ id }: { id: string }) {
       setBusy(true);
       setError(null);
       try {
+        /*
+         * Ko'ruvchida tahrir qilingan bo'lsa PPTX hali ESKI bo'lishi
+         * mumkin (qayta yasash oxirgi tahrirdan 3 s keyin). Yuklab
+         * olishdan oldin faylni hujjat bilan tenglaymiz — «ko'rdim =
+         * oldim» aynan shu yerda buzilardi. Fayl yangi bo'lsa so'rov
+         * umuman ketmaydi.
+         */
+        if (gen) {
+          const r = await ensureGenerationFresh(gen);
+          if (r) {
+            setGen((prev) =>
+              prev ? { ...prev, fileVersion: r.fileVersion, docVersion: r.docVersion } : prev,
+            );
+          }
+        }
         await api.downloadGeneration(id, format);
       } catch (e) {
         setError(e instanceof Error ? e.message : "Yuklab olinmadi");
@@ -73,7 +89,7 @@ export function ResultView({ id }: { id: string }) {
         setBusy(false);
       }
     },
-    [id],
+    [id, gen],
   );
 
   const onDelete = useCallback(async () => {
@@ -118,6 +134,8 @@ export function ResultView({ id }: { id: string }) {
    * ko'rsatardi.
    */
   const expired = completed && !gen.hasFile;
+  /** Ko'ruvchida tahrir bo'lgan, PPTX hali qayta yasalmagan. */
+  const fileStale = (gen.fileVersion ?? 0) < (gen.docVersion ?? 0);
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
@@ -146,7 +164,12 @@ export function ResultView({ id }: { id: string }) {
               onClick={() => void onDownload()}
             >
               <Download className="size-4" />
-              <span className="hidden sm:inline">Yuklab olish</span>
+              {/*
+                Tahrirdan keyin fayl hujjatdan orqada qolgan bo'lsa
+                tugma shuni AYTADI (va bosilganda avval qayta yasaladi) —
+                foydalanuvchi eski PPTX ni olib ketmasin.
+              */}
+              <span className="hidden sm:inline">{fileStale || busy ? "Fayl yangilanmoqda…" : "Yuklab olish"}</span>
               <span className="text-primary-foreground/80 hidden text-xs md:inline">
                 {gen.format.toUpperCase()}
               </span>
@@ -258,7 +281,11 @@ export function ResultView({ id }: { id: string }) {
               {(gen.delivered.refundShare ?? 1) > 0 ? " — farq balansingizga qaytarildi." : "."}
             </p>
           ) : null}
-          <ArtifactViewer gen={toLegacyShape(gen)} />
+          <ArtifactViewer
+            gen={toLegacyShape(gen)}
+            detail={gen}
+            onDetail={(g) => setGen((prev) => ({ ...(prev as api.GenerationDetail), ...(g as api.GenerationDetail) }))}
+          />
         </div>
       ) : null}
     </div>
