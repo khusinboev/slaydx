@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { ImagePlus, RefreshCw, XCircle } from "lucide-react";
+import { ImagePlus, Minus, Plus, RefreshCw, XCircle } from "lucide-react";
 import type { SlideAudience, SlideTemplateId, SlideVisual } from "@/lib/generation/slide-templates";
 import type { BodyRules } from "@/lib/generation/slide-audience";
 import type { SlideModel, SlideSrc, SlideTheme } from "@/lib/generation/slide-types";
-import { readSlideField } from "@/lib/generation/slide-edit";
+import { FONT_MAX, FONT_MIN, readSlideField } from "@/lib/generation/slide-edit";
 import { SLIDE_LIMITS } from "@/lib/generation/slide-limits";
+import { cn } from "@/lib/cn";
 import {
   LOGO_BOX,
   boxStyle,
@@ -29,6 +30,13 @@ import {
  * transformi ostidagi `textarea` da kursor va tanlash joyi siljib
  * ketadi. Overlay sahnaning masshtablanmagan ramkasida turgani uchun
  * ham koordinata, ham shrift `scale` ga ko'paytiriladi.
+ *
+ * SHRIFT PANELI — `textarea` ustidagi suzuvchi qatorcha: «−»/«+» va
+ * tayyor o'lchamlar. Tanlov DARHOL `{op:"style"}` bo'lib ketadi
+ * (optimistik), matn esa yopilganda `{op:"text"}` bo'ladi — ikkisi
+ * ALOHIDA, chunki shrift tanlab ko'rish matnni yozib bo'lgunicha kerak.
+ * Panel tugmalari `mousedown` da `preventDefault` qiladi: aks holda
+ * `textarea` fokusni yo'qotib, tahrir har bosishda yopilardi.
  *
  * Hodisa ushlash: overlay o'zi `pointer-events-none` — ikki bosish
  * ostidagi `SlideCanvas` elementiga tegadi va SAHNA ramkasiga
@@ -54,6 +62,8 @@ export type SlideEditorProps = {
   /** Rasm so'rovi ketayotgan bo'lsa tugmalar o'chadi. */
   busy?: boolean;
   onText: (src: SlideSrc, value: string) => void;
+  /** Shrift o'lchami: `null` — «Standart» (model qiymatini o'chiradi). */
+  onStyle: (src: SlideSrc, size: number | null) => void;
   onImage: (url: null) => void;
   onUpload: (file: File) => void;
   onRegenerate: () => void;
@@ -79,9 +89,22 @@ type EditState = {
   value: string;
   initial: string;
   pos: Pos;
-  style: CSSProperties;
   multiline: boolean;
 };
+
+/**
+ * Panelda taklif qilinadigan o'lchamlar (pt) — matn muharrirlaridagi
+ * odatiy qator. Oraliq `FONT_MIN..FONT_MAX` ichida, ya'ni har tanlov
+ * serverdan o'tadi.
+ */
+export const FONT_PRESETS = [12, 14, 16, 18, 20, 24, 28, 32, 36, 44, 54, 66] as const;
+
+/** «−»/«+» qadami (pt). */
+const FONT_STEP = 2;
+
+function clampFont(n: number): number {
+  return Math.max(FONT_MIN, Math.min(FONT_MAX, Math.round(n)));
+}
 
 export function SlideEditor({
   slide,
@@ -97,6 +120,7 @@ export function SlideEditor({
   redrawsLeft,
   busy = false,
   onText,
+  onStyle,
   onImage,
   onUpload,
   onRegenerate,
@@ -152,25 +176,58 @@ export function SlideEditor({
       }
       if (!pos) pos = { left: 0, top: 0, width: 200, height: 40 };
 
-      const style: CSSProperties =
-        layer && layer.t === "text"
-          ? {
-              fontSize: ptToPx(layer.size) * scale,
-              color: layer.color,
-              fontWeight: layer.bold ? 700 : 500,
-              fontStyle: layer.italic ? "italic" : "normal",
-              textAlign: layer.align || "left",
-              lineHeight: 1.22,
-            }
-          : { fontSize: 14 * scale, color: theme.text ?? "#111", textAlign: "left" };
-
-      setEdit({ src, value, initial: value, pos, style, multiline: isMultiline(src) });
+      setEdit({ src, value, initial: value, pos, multiline: isMultiline(src) });
     },
-    [layerOf, slide, scale, theme.text],
+    [layerOf, slide, scale],
+  );
+
+  /*
+   * Ochilgan maydonning KO'RINISHI har renderda QAYTA hisoblanadi
+   * (holatda saqlanmaydi): shrift o'lchami o'zgarganda `slide` yangi
+   * `fontSize` bilan keladi va `textarea` darhol yangi o'lchamda
+   * ko'rinadi — «ko'rdim = oldim» tahrir paytida ham amal qiladi.
+   */
+  const editLayer = edit ? layerOf(edit.src) : null;
+  const editStyle: CSSProperties =
+    editLayer && editLayer.t === "text"
+      ? {
+          fontSize: ptToPx(editLayer.size) * scale,
+          color: editLayer.color,
+          fontWeight: editLayer.bold ? 700 : 500,
+          fontStyle: editLayer.italic ? "italic" : "normal",
+          textAlign: editLayer.align || "left",
+          lineHeight: 1.22,
+        }
+      : { fontSize: 14 * scale, color: theme.text ?? "#111", textAlign: "left" };
+
+  /*
+   * Shrift o'lchami QATLAMGA tegishli, bitta bandga emas: `planSlide`
+   * ro'yxatni BITTA matn qatlami qilib chizadi va `applyFontOverrides`
+   * kalit sifatida `srcLines[0]` ni o'qiydi. Shuning uchun bandda
+   * turganda ham op birinchi bandning manbasi bilan yuboriladi va panel
+   * buni ochiq aytadi («Barcha bandlar»).
+   */
+  const styleSrc: SlideSrc | null = editLayer && editLayer.t === "text"
+    ? (editLayer.src ?? editLayer.srcLines?.find(Boolean) ?? null)
+    : null;
+  const wholeList = Boolean(editLayer && editLayer.t === "text" && !editLayer.src && editLayer.srcLines?.length);
+  const curSize = editLayer && editLayer.t === "text" ? Math.round(editLayer.size) : 0;
+  const hasOverride = Boolean(styleSrc && slide.fontSize?.[JSON.stringify(styleSrc)]);
+
+  const setSize = useCallback(
+    (size: number | null) => {
+      if (!styleSrc) return;
+      onStyle(styleSrc, size);
+    },
+    [styleSrc, onStyle],
   );
 
   const commit = useCallback(() => {
     const e = editRef.current;
+    // REF darhol bo'shatiladi: tashqariga bosish `mousedown` bilan
+    // yopadi, keyin `blur` ham keladi — ikkinchisi bo'sh ref ko'rib
+    // jim qaytadi, aks holda BIR tahrir ikki marta saqlanardi.
+    editRef.current = null;
     setEdit(null);
     if (!e) return;
     // O'zgarmagan matn uchun operatsiya YUBORILMAYDI — bo'sh PATCH
@@ -181,6 +238,7 @@ export function SlideEditor({
 
   const cancel = useCallback(() => {
     skipBlurRef.current = true;
+    editRef.current = null;
     setEdit(null);
   }, []);
 
@@ -215,6 +273,26 @@ export function SlideEditor({
     host.addEventListener("dblclick", onDbl);
     return () => host.removeEventListener("dblclick", onDbl);
   }, [open]);
+
+  /*
+   * TASHQARIGA BITTA bosish tahrirni yopadi (va saqlaydi).
+   *
+   * `blur` ning o'zi yetmaydi: fokus olmaydigan joyga (sahna foni,
+   * asboblar paneli tugmasi) bosilganda ba'zi brauzerlarda `textarea`
+   * fokusni ushlab qoladi va foydalanuvchi «yopilmadi» deb o'ylaydi.
+   * Shrift PANELI ichidagi bosish tashqari HISOBLANMAYDI — u tahrirning
+   * o'z qismi.
+   */
+  useEffect(() => {
+    if (!edit) return;
+    const onDown = (ev: Event) => {
+      const t = ev.target as HTMLElement | null;
+      if (t?.closest?.("[data-slide-edit-input]") || t?.closest?.("[data-slide-font-panel]")) return;
+      commit();
+    };
+    document.addEventListener("mousedown", onDown, true);
+    return () => document.removeEventListener("mousedown", onDown, true);
+  }, [edit, commit]);
 
   /*
    * «+ band» — ro'yxatli qatlam ostida. Yangi band ro'yxatning OXIRIGA
@@ -329,6 +407,68 @@ export function SlideEditor({
         </div>
       ) : null}
 
+      {edit && styleSrc ? (
+        /*
+          Suzuvchi panel — maydonning USTIDA. Joy yetmasa (yuqori
+          qatlam) maydonning ostiga tushadi, aks holda sahnadan chiqib
+          ketardi.
+        */
+        <div
+          data-slide-font-panel
+          className="pointer-events-auto absolute z-10 flex max-w-[min(560px,95%)] flex-wrap items-center gap-1 rounded-md bg-[#2b2b2b] px-1.5 py-1 text-[11px] text-white/85 shadow-lg"
+          style={{ left: edit.pos.left, top: edit.pos.top >= 34 ? edit.pos.top - 34 : edit.pos.top + edit.pos.height + 4 }}
+          // Panelga bosganda `textarea` fokusni yo'qotmasin — aks holda
+          // `blur` tahrirni yopib, o'lcham tanlash imkonsiz bo'lardi.
+          onMouseDown={(e) => e.preventDefault()}
+        >
+          <span className="px-1 text-white/45">{wholeList ? "Barcha bandlar" : "Shrift"}</span>
+          <button
+            type="button"
+            aria-label="Shriftni kichraytirish"
+            className="hover:bg-white/15 rounded p-1 disabled:opacity-40"
+            disabled={curSize <= FONT_MIN}
+            onClick={() => setSize(clampFont(curSize - FONT_STEP))}
+          >
+            <Minus className="size-3" />
+          </button>
+          <span className="min-w-6 text-center tabular-nums" aria-label="Joriy shrift o‘lchami">
+            {curSize}
+          </span>
+          <button
+            type="button"
+            aria-label="Shriftni kattalashtirish"
+            className="hover:bg-white/15 rounded p-1 disabled:opacity-40"
+            disabled={curSize >= FONT_MAX}
+            onClick={() => setSize(clampFont(curSize + FONT_STEP))}
+          >
+            <Plus className="size-3" />
+          </button>
+          <span className="mx-0.5 h-3.5 w-px bg-white/20" />
+          {FONT_PRESETS.map((n) => (
+            <button
+              key={n}
+              type="button"
+              aria-label={`Shrift ${n} pt`}
+              className={cn(
+                "rounded px-1 py-0.5 tabular-nums",
+                curSize === n ? "bg-sky-500 text-white" : "hover:bg-white/15",
+              )}
+              onClick={() => setSize(n)}
+            >
+              {n}
+            </button>
+          ))}
+          <button
+            type="button"
+            className={cn("rounded px-1.5 py-0.5", hasOverride ? "hover:bg-white/15" : "text-white/35")}
+            disabled={!hasOverride}
+            onClick={() => setSize(null)}
+          >
+            Standart
+          </button>
+        </div>
+      ) : null}
+
       {edit ? (
         <textarea
           autoFocus
@@ -340,7 +480,7 @@ export function SlideEditor({
             top: edit.pos.top,
             width: Math.max(60, edit.pos.width),
             height: Math.max(24, edit.pos.height),
-            ...edit.style,
+            ...editStyle,
           }}
           value={edit.value}
           onChange={(e) => setEdit((s) => (s ? { ...s, value: e.target.value } : s))}

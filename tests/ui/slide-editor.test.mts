@@ -33,10 +33,16 @@ function bulletsSlide(): SlideModel {
   };
 }
 
-type Calls = { text: [SlideSrc, string][]; image: (string | null)[]; regen: number; upload: number };
+type Calls = {
+  text: [SlideSrc, string][];
+  style: [SlideSrc, number | null][];
+  image: (string | null)[];
+  regen: number;
+  upload: number;
+};
 
 function mount(slide: SlideModel) {
-  const calls: Calls = { text: [], image: [], regen: 0, upload: 0 };
+  const calls: Calls = { text: [], style: [], image: [], regen: 0, upload: 0 };
   const common = {
     slide,
     theme,
@@ -60,6 +66,7 @@ function mount(slide: SlideModel) {
         scale: 1,
         redrawsLeft: 5,
         onText: (src: SlideSrc, value: string) => calls.text.push([src, value]),
+        onStyle: (src: SlideSrc, size: number | null) => calls.style.push([src, size]),
         onImage: (url: null) => calls.image.push(url),
         onUpload: () => calls.upload++,
         onRegenerate: () => calls.regen++,
@@ -193,5 +200,97 @@ test("maketda rasm joyi bo'lmasa rasm tugmalari CHIQMAYDI", () => {
     table: { headers: ["A", "B"], rows: [["1", "2"]] },
   });
   assert.equal(screen.queryByText("O‘z rasmim"), null);
+  cleanup();
+});
+
+// ══════════════════════════════════ Shrift paneli
+
+/** Panel ko'rsatayotgan joriy o'lcham (qatlamdan hisoblangan). */
+function curFont(): number {
+  const el = screen.getByLabelText("Joriy shrift o‘lchami");
+  return Number(el.textContent);
+}
+
+test("shrift paneli tahrir bilan birga ochiladi, «Barcha bandlar» deb ogohlantiradi", () => {
+  mount(bulletsSlide());
+  assert.equal(screen.queryByText("Barcha bandlar"), null, "tahrirsiz panel bo'lmasin");
+  fireEvent.doubleClick(firstBullet());
+  assert.ok(screen.getByText("Barcha bandlar"), "ro'yxatda o'lcham butun qatlamga tegishli");
+  assert.ok(curFont() > 0, "joriy o'lcham qatlamdan olinadi");
+  cleanup();
+});
+
+test("«+» va «−» — style operatsiyasi, qadam 2 pt", () => {
+  const calls = mount(bulletsSlide());
+  fireEvent.doubleClick(firstBullet());
+  const size = curFont();
+  fireEvent.click(screen.getByLabelText("Shriftni kattalashtirish"));
+  assert.deepEqual(calls.style, [[{ f: "bullets", i: 0 }, size + 2]], "«+» o'lchamni oshiradi");
+  fireEvent.click(screen.getByLabelText("Shriftni kichraytirish"));
+  assert.deepEqual(calls.style[1], [{ f: "bullets", i: 0 }, size - 2], "«−» kamaytiradi");
+  cleanup();
+});
+
+test("tayyor o'lcham ANIQ son beradi, «Standart» — null", () => {
+  const withFont: SlideModel = { ...bulletsSlide(), fontSize: { '{"f":"bullets","i":0}': 44 } };
+  const calls = mount(withFont);
+  fireEvent.doubleClick(firstBullet());
+  assert.equal(curFont(), 44, "modeldagi o'lcham qatlamga qo'llangan bo'lishi kerak");
+  fireEvent.click(screen.getByLabelText("Shrift 24 pt"));
+  assert.deepEqual(calls.style, [[{ f: "bullets", i: 0 }, 24]]);
+  fireEvent.click(screen.getByText("Standart"));
+  assert.deepEqual(calls.style[1], [{ f: "bullets", i: 0 }, null]);
+  cleanup();
+});
+
+test("«Standart» o'lcham tanlanmagan bo'lsa O'CHIQ", () => {
+  mount(bulletsSlide());
+  fireEvent.doubleClick(firstBullet());
+  const btn = screen.getByText("Standart") as HTMLButtonElement;
+  assert.equal(btn.disabled, true, "o'chirishga narsa yo'q — tugma ishlamasin");
+  cleanup();
+});
+
+test("bir maydonli qatlamda panel «Shrift» deydi va o'z manbasini yuboradi", () => {
+  const calls = mount(bulletsSlide());
+  fireEvent.doubleClick(document.querySelector('[data-src=\'{"f":"title"}\']') as HTMLElement);
+  assert.ok(screen.getByText("Shrift"));
+  assert.equal(screen.queryByText("Barcha bandlar"), null);
+  fireEvent.click(screen.getByLabelText("Shrift 32 pt"));
+  assert.deepEqual(calls.style, [[{ f: "title" }, 32]]);
+  cleanup();
+});
+
+test("panelga bosish tahrirni YOPMAYDI (matn maydoni joyida qoladi)", () => {
+  const calls = mount(bulletsSlide());
+  fireEvent.doubleClick(firstBullet());
+  fireEvent.change(box(), { target: { value: "Yozilmoqda" } });
+  fireEvent.mouseDown(screen.getByLabelText("Shrift 20 pt"));
+  fireEvent.click(screen.getByLabelText("Shrift 20 pt"));
+  assert.equal(document.querySelectorAll("textarea").length, 1, "o'lcham tanlash matnni uzmasin");
+  assert.deepEqual(calls.text, [], "matn hali saqlanmagan");
+  cleanup();
+});
+
+test("tashqariga BITTA bosish tahrirni yopadi va saqlaydi", () => {
+  const calls = mount(bulletsSlide());
+  fireEvent.doubleClick(firstBullet());
+  fireEvent.change(box(), { target: { value: "Tashqariga bosildi" } });
+  fireEvent.mouseDown(document.body);
+  assert.deepEqual(calls.text, [[{ f: "bullets", i: 0 }, "Tashqariga bosildi"]]);
+  assert.equal(document.querySelectorAll("textarea").length, 0, "maydon yopiladi");
+  cleanup();
+});
+
+test("tashqariga bosish + blur BIR MARTA saqlaydi", () => {
+  const calls = mount(bulletsSlide());
+  fireEvent.doubleClick(firstBullet());
+  fireEvent.change(box(), { target: { value: "Bir marta" } });
+  const ta = box();
+  fireEvent.mouseDown(document.body);
+  // Brauzer `mousedown` dan keyin `blur` ni ham yuboradi — ikkinchi
+  // operatsiya ketsa hujjat versiyasi bekorga oshardi.
+  fireEvent.blur(ta);
+  assert.equal(calls.text.length, 1);
   cleanup();
 });
