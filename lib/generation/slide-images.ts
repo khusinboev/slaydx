@@ -2,6 +2,7 @@ import { mapPool } from "./quality";
 import { pickProvider } from "./image-provider";
 import { photoSlot, slotPixels } from "./slide-layout";
 import { composeSlideImagePrompt, writeSlideImagePrompts } from "./slide-image-prompts";
+import { searchQueryFor } from "./image-search-query";
 import type { SlideVisual } from "./slide-templates";
 import type { SlideModel } from "./slide-types";
 import type { DocMeta, SlideImageReport } from "./types";
@@ -323,8 +324,12 @@ export async function attachSlideImages(
       return null;
     }
     const prompt = prompts[s.id] || composeSlideImagePrompt(topic, s, size, opts.meta);
+    // `null` bo'lsa (uslub fotodan boshqa) bepul manbalar bu so'rovni
+    // sinamaydi — zanjir darhol fal ga tushadi (`image-provider.ts`
+    // `chainProvider`).
+    const searchQuery = searchQueryFor(topic, s, opts.meta);
     const res = await provider.fetchImage(
-      { prompt, size, styleId: opts.meta?.slideImageStyle ?? "photo", seed, premium: opts.premium },
+      { prompt, size, styleId: opts.meta?.slideImageStyle ?? "photo", seed, premium: opts.premium, searchQuery },
       deadline,
     );
     if (!res.ok) {
