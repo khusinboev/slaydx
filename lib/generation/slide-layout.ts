@@ -362,6 +362,7 @@ function planTitle(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
       bold: true,
       uppercase: true,
       tracking: 2.2,
+      src: { f: "kicker" },
     });
     const magTitleBox: Box = { x: 0.7, y: 4.5, w: 11.8, h: s.subtitle ? 1.35 : 1.7 };
     layers.push({
@@ -371,6 +372,7 @@ function planTitle(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
       color: theme.titleText,
       size: fitSize(s.title, magTitleBox, 34, 22),
       bold: true,
+      src: { f: "title" },
     });
     // Ilgari magazine tarmog'ida subtitle umuman chizilmasdi — model
     // yozgan matn jimgina yo'qolardi.
@@ -381,6 +383,7 @@ function planTitle(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
         text: s.subtitle,
         color: theme.titleMuted,
         size: 16,
+        src: { f: "subtitle" },
       });
     }
     pushFooter(layers, s, theme, index, total, { x: 0.7, w: 12 }, true);
@@ -402,6 +405,7 @@ function planTitle(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
       bold: true,
       uppercase: true,
       tracking: 1.6,
+      src: { f: "kicker" },
     });
     layers.push({
       t: "text",
@@ -410,6 +414,7 @@ function planTitle(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
       color: theme.text,
       size: 32,
       bold: true,
+      src: { f: "title" },
     });
     if (s.subtitle) {
       layers.push({
@@ -418,6 +423,7 @@ function planTitle(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
         text: s.subtitle,
         color: theme.muted,
         size: 16,
+        src: { f: "subtitle" },
       });
     }
     pushFooter(layers, s, theme, index, total, { x, w: tw }, false);
@@ -439,6 +445,7 @@ function planTitle(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
       bold: true,
       uppercase: true,
       tracking: 1.8,
+      src: { f: "kicker" },
     });
     layers.push({
       t: "text",
@@ -447,6 +454,7 @@ function planTitle(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
       color: theme.titleText,
       size: 32,
       bold: true,
+      src: { f: "title" },
     });
     if (s.subtitle) {
       layers.push({
@@ -455,6 +463,7 @@ function planTitle(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
         text: s.subtitle,
         color: theme.titleMuted,
         size: 16,
+        src: { f: "subtitle" },
       });
     }
     pushFooter(layers, s, theme, index, total, { x, w: tw }, true);
@@ -473,6 +482,7 @@ function planTitle(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
     bold: true,
     uppercase: true,
     tracking: 1.8,
+    src: { f: "kicker" },
   });
   layers.push({
     t: "text",
@@ -481,6 +491,7 @@ function planTitle(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
     color: theme.titleText,
     size: 36,
     bold: true,
+    src: { f: "title" },
   });
   if (s.subtitle) {
     layers.push({
@@ -489,6 +500,7 @@ function planTitle(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
       text: s.subtitle,
       color: theme.titleMuted,
       size: 16,
+      src: { f: "subtitle" },
     });
   }
   pushFooter(layers, s, theme, index, total, { x: M + 0.2, w: 12 }, true);
@@ -546,6 +558,7 @@ function planSectionMagazine(s: SlideModel, theme: SlideTheme, index: number, to
     color: theme.titleText,
     size: fitSize(s.title, titleBox, 30, 20),
     bold: true,
+    src: { f: "title" },
   });
   if (s.subtitle) {
     const subBox: Box = { x, y: bandY + 1.71, w: tw, h: 1.14 };
@@ -555,6 +568,7 @@ function planSectionMagazine(s: SlideModel, theme: SlideTheme, index: number, to
       text: s.subtitle,
       color: theme.titleMuted,
       size: fitSize(s.subtitle, subBox, 16, 12),
+      src: { f: "subtitle" },
     });
   }
   pushFooter(layers, s, theme, index, total, { x, w: tw }, true);
@@ -578,6 +592,7 @@ function planSection(s: SlideModel, theme: SlideTheme, visual: SlideVisual, inde
       color: theme.text,
       size: 26,
       bold: true,
+      src: { f: "title" },
     });
     layers.push({ t: "rect", box: { x, y: 3.32, w: 1.35, h: 0.07 }, fill: { color: theme.accent } });
     if (s.subtitle) {
@@ -587,6 +602,7 @@ function planSection(s: SlideModel, theme: SlideTheme, visual: SlideVisual, inde
         text: s.subtitle,
         color: theme.muted,
         size: 16,
+        src: { f: "subtitle" },
       });
     }
     pushFooter(layers, s, theme, index, total, { x, w: tw }, false);
@@ -602,6 +618,7 @@ function planSection(s: SlideModel, theme: SlideTheme, visual: SlideVisual, inde
     color: theme.text,
     size: 32,
     bold: true,
+    src: { f: "title" },
   });
   if (s.subtitle) {
     layers.push({
@@ -610,6 +627,7 @@ function planSection(s: SlideModel, theme: SlideTheme, visual: SlideVisual, inde
       text: s.subtitle,
       color: theme.muted,
       size: 18,
+      src: { f: "subtitle" },
     });
   }
   pushFooter(layers, s, theme, index, total, { x: 0.72, w: 12 }, false);
@@ -673,6 +691,7 @@ function planOverlay(
         color: theme.titleText,
         size: fitSize(qText, qBox, 32, 19),
         bold: true,
+        src: { f: "quote" },
       });
       if (s.quoteBy) {
         layers.push({
@@ -683,6 +702,7 @@ function planOverlay(
           size: 15,
           uppercase: true,
           tracking: 1.2,
+          src: { f: "quoteBy" },
         });
       }
     } else {
@@ -694,6 +714,7 @@ function planOverlay(
         color: theme.titleText,
         size: fitSize(s.title, tBox, 34, 22),
         bold: true,
+        src: { f: "title" },
       });
       if (s.subtitle) {
         const sBox: Box = { x, y: bandY + 1.98, w: tw, h: 1.05 };
@@ -703,6 +724,7 @@ function planOverlay(
           text: s.subtitle,
           color: theme.titleMuted,
           size: fitSize(s.subtitle, sBox, 17, 13),
+          src: { f: "subtitle" },
         });
       }
     }
@@ -755,6 +777,7 @@ function planOverlay(
         bold: true,
         uppercase: true,
         tracking: 1.5,
+        src: { f: "title" },
       });
       const qBox: Box = { x, y: blockY + 0.7, w: tw, h: 1.5 };
       layers.push({
@@ -764,6 +787,7 @@ function planOverlay(
         color: theme.titleText,
         size: fitSize(qText, qBox, 22, 15),
         italic: true,
+        src: { f: "quote" },
       });
       if (s.quoteBy) {
         layers.push({
@@ -772,6 +796,7 @@ function planOverlay(
           text: `— ${s.quoteBy}`,
           color: theme.titleMuted,
           size: 14,
+          src: { f: "quoteBy" },
         });
       }
     } else {
@@ -783,6 +808,7 @@ function planOverlay(
         color: theme.titleText,
         size: fitSize(s.title, tBox, 26, 18),
         bold: true,
+        src: { f: "title" },
       });
       if (s.subtitle) {
         const sBox: Box = { x, y: blockY + 1.2, w: tw, h: 1.3 };
@@ -795,6 +821,7 @@ function planOverlay(
           // yozuvidek ko'rinardi.
           color: theme.titleText,
           size: fitSize(s.subtitle, sBox, 16, 12),
+          src: { f: "subtitle" },
         });
       }
     }
@@ -828,6 +855,7 @@ function planOverlay(
         color: theme.text,
         size: fitSize(qText, qBox, 24, 16),
         italic: true,
+        src: { f: "quote" },
       });
       if (s.quoteBy) {
         layers.push({
@@ -837,6 +865,7 @@ function planOverlay(
           color: theme.accentInk,
           size: 14,
           bold: true,
+          src: { f: "quoteBy" },
         });
       }
     } else {
@@ -848,6 +877,7 @@ function planOverlay(
         color: theme.text,
         size: fitSize(s.title, tBox, 30, 20),
         bold: true,
+        src: { f: "title" },
       });
       if (s.subtitle) {
         const sBox: Box = { x: tx, y: card.y + 1.75, w: twc, h: 1.1 };
@@ -859,6 +889,7 @@ function planOverlay(
           // o'lchanmagan, shuning uchun ishlatilmaydi.
           color: theme.accentInk,
           size: fitSize(s.subtitle, sBox, 16, 12),
+          src: { f: "subtitle" },
         });
       }
     }
@@ -897,6 +928,7 @@ function planOverlay(
       color: theme.titleText,
       size: fitSize(s.quote || s.title, quoteBox, 24, 16),
       italic: true,
+      src: { f: "quote" },
     });
     if (s.quoteBy) {
       layers.push({
@@ -905,6 +937,7 @@ function planOverlay(
         text: `— ${s.quoteBy}`,
         color: theme.titleMuted,
         size: 14,
+        src: { f: "quoteBy" },
       });
     }
   } else {
@@ -921,6 +954,7 @@ function planOverlay(
       size: 32,
       bold: true,
       align: "center",
+      src: { f: "title" },
     });
     layers.push({
       t: "text",
@@ -929,6 +963,7 @@ function planOverlay(
       color: theme.titleMuted,
       size: 16,
       align: "center",
+      src: { f: "subtitle" },
     });
   }
   layers.push({ t: "rect", box: { x: 0, y: 6.92, w: W, h: 0.58 }, fill: { color: "#000000", alpha: 0.4 } });
@@ -946,6 +981,7 @@ function planHeading(layers: SlideLayer[], s: SlideModel, theme: SlideTheme, tex
     color: theme.text,
     size: fitSize(s.title, headBox, 22, 16),
     bold: true,
+    src: { f: "title" },
   });
   layers.push({ t: "rect", box: { x, y: 1.22, w: 1.1, h: 0.07 }, fill: { color: theme.accent } });
 }
@@ -1068,6 +1104,7 @@ function planBulletCards(
       text: line,
       color: theme.text,
       size: fitSize(line, textBox, bodyType.bodyPt, bodyType.minPt),
+      src: { f: "bullets", i },
     });
   });
 }
@@ -1140,6 +1177,7 @@ function planLabRows(
       color: theme.text,
       size: fitSize(line, textBox, bodyType.bodyPt, bodyType.minPt),
       valign: "middle",
+      src: { f: "bullets", i },
     });
     // Kuzatuv qatorining ostidagi chiziq — daftar chizig'i.
     layers.push({
@@ -1202,6 +1240,7 @@ function planBullets(
         color: theme.text,
         size: fitSize(line, lineBox, bodyType.bodyPt, bodyType.minPt - 1),
         valign: "middle",
+        src: { f: "bullets", i },
       });
     });
   } else {
@@ -1220,6 +1259,7 @@ function planBullets(
       paraSpace: bulletGap(items, bulletBox, size),
       // ...chegara urilganda qolgani tepa va pastga TENG bo'linadi.
       valign: "middle",
+      srcLines: items.map((_, i) => ({ f: "bullets", i })),
     });
   }
   pushFooter(layers, s, theme, index, total, { x, w: tw }, false);
@@ -1294,6 +1334,7 @@ function planTwoCol(
         bold: true,
         uppercase: true,
         tracking: 1.4,
+        src: { f: i ? "rightTitle" : "leftTitle" },
       });
       // Qiyosda chap ustun to'la kenglikdagi aksent chiziq bilan belgilanadi.
       const ruleW = compare && i === 0 ? colW : 1.2;
@@ -1318,6 +1359,7 @@ function planTwoCol(
           color: theme.titleText,
           size: fitSize(line, box, 15, 11),
           valign: "middle",
+          src: { f: i ? "right" : "left", i: r },
         });
       });
     });
@@ -1362,6 +1404,7 @@ function planTwoCol(
         bold: true,
         uppercase: true,
         tracking: 1.6,
+        src: { f: i ? "rightTitle" : "leftTitle" },
       });
       const items = c.lines.slice(0, 4);
       const bodyBox: Box = { x: cx, y: top + 0.6, w: colW, h: bottom - top - 0.6 };
@@ -1372,6 +1415,7 @@ function planTwoCol(
         color: theme.text,
         size: fitLines(items, bodyBox, 19, 14, 14),
         paraSpace: 14,
+        srcLines: items.map((_, r) => ({ f: i ? "right" : "left", i: r })),
       });
     });
     pushFooter(layers, s, theme, index, total, { x: x0, w: magW }, false);
@@ -1407,6 +1451,7 @@ function planTwoCol(
       bold: true,
       uppercase: true,
       tracking: 1.4,
+      src: { f: "leftTitle" },
     });
     const lItems = sides[0].lines.slice(0, 5);
     const lBox: Box = { x: px, y: 3.05, w: pw, h: 3.75 };
@@ -1418,6 +1463,7 @@ function planTwoCol(
       color: theme.titleText,
       size: fitLines(lItems, lBox, 17, 13, 10),
       paraSpace: 10,
+      srcLines: lItems.map((_, r) => ({ f: "left", i: r })),
     });
     const rx = RIGHT_COL_X();
     const rw = RIGHT_COL_W();
@@ -1430,6 +1476,7 @@ function planTwoCol(
       bold: true,
       uppercase: true,
       tracking: 1.4,
+      src: { f: "rightTitle" },
     });
     layers.push({ t: "rect", box: { x: rx, y: 1.22, w: 1.2, h: 0.07 }, fill: { color: theme.accent } });
     const rItems = sides[1].lines.slice(0, 5);
@@ -1442,6 +1489,7 @@ function planTwoCol(
       color: theme.text,
       size: fitLines(rItems, rBox, 18, 14, 12),
       paraSpace: 12,
+      srcLines: rItems.map((_, r) => ({ f: "right", i: r })),
     });
     pushFooter(layers, s, theme, index, total, { x: rx, w: rw }, false);
     return { bg: theme.bg, layers };
@@ -1468,6 +1516,7 @@ function planTwoCol(
         bold: true,
         uppercase: true,
         tracking: 1.4,
+        src: { f: i ? "rightTitle" : "leftTitle" },
       });
       const items = c.lines.slice(0, 5);
       const n = Math.max(1, items.length);
@@ -1489,7 +1538,14 @@ function planTwoCol(
           radius: 0.11,
         });
         const box: Box = { x: cx + 0.62, y, w: colW - 0.62, h: rowH - 0.18 };
-        layers.push({ t: "text", box, text: line, color: theme.text, size: fitSize(line, box, 16, 12) });
+        layers.push({
+          t: "text",
+          box,
+          text: line,
+          color: theme.text,
+          size: fitSize(line, box, 16, 12),
+          src: { f: i ? "right" : "left", i: r },
+        });
       });
     });
     pushFooter(layers, s, theme, index, total, { x: M + 0.18, w: 12.2 }, false);
@@ -1517,6 +1573,7 @@ function planTwoCol(
         bold: true,
         uppercase: true,
         tracking: 1.4,
+        src: { f: i ? "rightTitle" : "leftTitle" },
       });
       const items = c.lines.slice(0, 4);
       const n = Math.max(1, items.length);
@@ -1540,6 +1597,7 @@ function planTwoCol(
           color: dark ? theme.titleText : theme.text,
           size: fitSize(line, box, 16, 12),
           valign: "middle",
+          src: { f: i ? "right" : "left", i: r },
         });
       });
     });
@@ -1559,7 +1617,7 @@ function planTwoCol(
     { x: zoneX, head: s.leftTitle, lines: s.left, dark: compare },
     { x: zoneX + colW + gap, head: s.rightTitle, lines: s.right, dark: false },
   ];
-  for (const c of cols) {
+  cols.forEach((c, i) => {
     const fill = c.dark ? theme.titleBg : theme.surface;
     const ink = c.dark ? theme.titleText : theme.text;
     const mute = c.dark ? theme.titleMuted : theme.accentInk;
@@ -1571,6 +1629,7 @@ function planTwoCol(
       color: mute,
       size: 14,
       bold: true,
+      src: { f: i ? "rightTitle" : "leftTitle" },
     });
     const colLines = (c.lines ?? []).slice(0, 5);
     const colBox: Box = { x: c.x + 0.28, y: y + 0.68, w: colW - 0.56, h: h - 0.9 };
@@ -1582,8 +1641,9 @@ function planTwoCol(
       color: ink,
       size: fitLines(colLines, colBox, 16, 13, 8),
       paraSpace: 8,
+      srcLines: colLines.map((_, r) => ({ f: i ? "right" : "left", i: r })),
     });
-  }
+  });
   pushFooter(layers, s, theme, index, total, { x: M + 0.18, w: 12.2 }, false);
   return { bg: theme.bg, layers };
 }
@@ -1644,7 +1704,7 @@ export function statUnit(value: string): string {
 function planStatChart(
   s: SlideModel,
   theme: SlideTheme,
-  items: { value: string; label: string; n: number }[],
+  items: { value: string; label: string; n: number; idx: number }[],
   layers: SlideLayer[],
   ink: string,
   dense: boolean,
@@ -1670,6 +1730,7 @@ function planStatChart(
       color: ink,
       size: fitSize(it.label, labBox, 15, 11),
       valign: "middle",
+      src: { f: "stats", i: it.idx, k: "label" },
     });
     /*
      * Fon yo'lakchasi — ustunlar qanchalik to'lganini ko'rsatadi.
@@ -1714,6 +1775,7 @@ function planStatChart(
       size: 16,
       bold: true,
       valign: "middle",
+      src: { f: "stats", i: it.idx, k: "value" },
     });
   });
 }
@@ -1737,8 +1799,8 @@ function planStats(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
 
   const items = (s.stats ?? []).slice(0, 5);
   const numeric = items
-    .map((st) => ({ ...st, n: parseStatNumber(st.value) }))
-    .filter((x): x is { value: string; label: string; n: number } => x.n !== null);
+    .map((st, idx) => ({ ...st, n: parseStatNumber(st.value), idx }))
+    .filter((x): x is { value: string; label: string; n: number; idx: number } => x.n !== null);
 
   // Diagramma faqat qiymatlar TAQQOSLANADIGAN bo'lsa (bir xil birlik).
   const oneUnit = new Set(numeric.map((x) => statUnit(x.value))).size <= 1;
@@ -1771,6 +1833,7 @@ function planStats(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
       bold: true,
       align: "center",
       valign: "middle",
+      src: { f: "stats", i, k: "value" },
     });
     /*
      * Yorliq quti ICHIDA vertikal markazda.
@@ -1789,6 +1852,7 @@ function planStats(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
       size: fitSize(st.label, labBox, 15, 11),
       align: "center",
       valign: "middle",
+      src: { f: "stats", i, k: "label" },
     });
   });
   pushFooter(layers, s, theme, index, total, { x: M + 0.18, w: 12.2 }, dense);
@@ -1852,6 +1916,7 @@ function planProcess(s: SlideModel, theme: SlideTheme, visual: SlideVisual, inde
       size: 18,
       bold: true,
       align: "center",
+      src: { f: "steps", i, k: "n" },
     });
     const tBox: Box = { x: x + 0.12, y: y + 0.72, w: colW - 0.24, h: 0.95 };
     layers.push({
@@ -1862,6 +1927,7 @@ function planProcess(s: SlideModel, theme: SlideTheme, visual: SlideVisual, inde
       size: fitSize(st.title, tBox, 16, 12),
       bold: true,
       align: "center",
+      src: { f: "steps", i, k: "title" },
     });
     const dBox: Box = { x: x + 0.14, y: y + 1.78, w: colW - 0.28, h: rowH - 1.95 };
     layers.push({
@@ -1871,6 +1937,7 @@ function planProcess(s: SlideModel, theme: SlideTheme, visual: SlideVisual, inde
       color: theme.muted,
       size: fitSize(st.text, dBox, 14, 11),
       align: "center",
+      src: { f: "steps", i, k: "text" },
     });
 
     // Yo'nalish o'qi — qatordagi oxirgi kartadan keyin qo'yilmaydi.
@@ -1974,6 +2041,7 @@ function planTable(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
       size: fitSize(h, box, 15, 11),
       bold: true,
       valign: "middle",
+      src: { f: "table", k: "header", c: i },
     });
   });
 
@@ -2012,6 +2080,7 @@ function planTable(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
         size: fitSize(cell, box, 14, 10),
         bold: c === 0,
         valign: "middle",
+        src: { f: "table", k: "cell", r, c },
       });
     }
   });
