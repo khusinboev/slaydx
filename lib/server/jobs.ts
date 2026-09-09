@@ -55,12 +55,18 @@ export type GenerationRow = {
   edited_at?: Date | null;
   /** Jonli generatsiya davri (`live_json` o'zgarganda oshadi). `live_json`ning o'zi ROW_COLUMNS da YO'Q. */
   live_seq?: number;
+  /**
+   * `doc_prev IS NOT NULL` hisoblangan ustun (014_doc_prev.sql). `doc_prev`
+   * ning O'ZI bu ro'yxatga KIRMAYDI — u faqat `restoreDoc` o'qiydigan
+   * og'ir JSONB, ro'yxat/detal so'rovlarini og'irlashtirmasin.
+   */
+  has_prev?: boolean;
 };
 
 const ROW_COLUMNS = `
   id, user_id, tool_id, topic, status, price, format, progress, step,
   values_json, file_name, error, preview, delivered_json, created_at, started_at, finished_at, expires_at,
-  doc_version, file_version, image_redraws, edited_at, live_seq
+  doc_version, file_version, image_redraws, edited_at, live_seq, doc_prev IS NOT NULL AS has_prev
 `;
 
 /** Ro'yxat kartochkasi uchun yengil ko'rinish. */
@@ -75,6 +81,8 @@ export type GenerationSummary = Omit<Generation, "values" | "doc" | "html"> & {
   imageRedraws: number;
   editedAt: string | null;
   liveSeq: number;
+  /** Asl holatga qaytarish tugmasi shu bilan ko'rsatiladi/yashiriladi (`doc_prev` mavjudmi). */
+  hasPrev: boolean;
 };
 
 export function rowToSummary(
@@ -101,6 +109,7 @@ export function rowToSummary(
     imageRedraws: r.image_redraws ?? 0,
     editedAt: r.edited_at ? new Date(r.edited_at).toISOString() : null,
     liveSeq: r.live_seq ?? 0,
+    hasPrev: r.has_prev ?? false,
   };
 }
 
@@ -496,16 +505,26 @@ export async function queueDepth(): Promise<{ queued: number; running: number }>
  * yo'q) yoki jonli generatsiya davom etayotgan hujjatga tahrir tushib
  * qolmasin.
  */
+/**
+ * `opts.keepPrev` — `commitDocOps` BIRINCHI tahrirda (`doc_version = 0`)
+ * beradi: `doc_prev` shu paytdagi `doc_json`ga (ya'ni tahrirdan OLDINGI
+ * asl dekaga) o'rnatiladi. `COALESCE(doc_prev, doc_json)` — QO'SHIMCHA
+ * himoya: `commitDocOps` chaqiruv joyi buzilib har tahrirda `true`
+ * bersa ham, bir marta yozilgan `doc_prev` USTIDAN yozilmaydi
+ * (`014_doc_prev.sql`).
+ */
 export async function updateGenerationDoc(
   client: PoolClient,
   id: string,
   userId: string,
   expectedVersion: number,
   patch: { doc: AcademicDoc; html: string; preview: GenerationPreview | null },
+  opts?: { keepPrev?: boolean },
 ): Promise<number | null> {
+  const keepPrevSql = opts?.keepPrev ? ", doc_prev = COALESCE(doc_prev, doc_json)" : "";
   const res = await client.query<{ doc_version: number }>(
     `UPDATE generations
-        SET doc_json = $3, html = $4, preview = $5, doc_version = doc_version + 1, edited_at = now()
+        SET doc_json = $3, html = $4, preview = $5, doc_version = doc_version + 1, edited_at = now()${keepPrevSql}
       WHERE id = $1 AND user_id = $2 AND status = 'COMPLETED' AND doc_version = $6
       RETURNING doc_version`,
     [
@@ -516,6 +535,42 @@ export async function updateGenerationDoc(
       patch.preview ? JSON.stringify(patch.preview) : null,
       expectedVersion,
     ],
+  );
+  return res.rows[0]?.doc_version ?? null;
+}
+
+/** `POST …/doc/restore` uchun: `doc_prev` bormi, restore mumkinmi. */
+export async function getGenerationForRestore(
+  id: string,
+  userId: string,
+): Promise<{ docPrev: AcademicDoc | null; docVersion: number; status: JobStatus } | null> {
+  const row = await queryOne<{ doc_prev: AcademicDoc | null; doc_version: number; status: JobStatus }>(
+    `SELECT doc_prev, doc_version, status FROM generations WHERE id = $1 AND user_id = $2`,
+    [id, userId],
+  );
+  if (!row) return null;
+  return { docPrev: row.doc_prev, docVersion: row.doc_version, status: row.status };
+}
+
+/**
+ * Dekani `doc_prev`ga QAYTARADI — SQL ICHIDA (`doc_json = doc_prev`),
+ * ya'ni ikkinchi o'qishga hojat yo'q va poyga (asl qiymat o'zgargan
+ * bo'lishi mumkin) yo'q: yozilayotgan qiymat aynan HOZIRGI qatordan
+ * olinadi. `doc_prev IS NOT NULL` predikati — bo'sh restore 0 qator
+ * qaytaradi, chaqiruvchi buni 409 `no_prev`ga aylantiradi.
+ */
+export async function restoreGenerationDoc(
+  client: PoolClient,
+  id: string,
+  userId: string,
+  patch: { html: string; preview: GenerationPreview | null },
+): Promise<number | null> {
+  const res = await client.query<{ doc_version: number }>(
+    `UPDATE generations
+        SET doc_json = doc_prev, html = $3, preview = $4, doc_version = doc_version + 1, edited_at = now()
+      WHERE id = $1 AND user_id = $2 AND status = 'COMPLETED' AND doc_prev IS NOT NULL
+      RETURNING doc_version`,
+    [id, userId, patch.html, patch.preview ? JSON.stringify(patch.preview) : null],
   );
   return res.rows[0]?.doc_version ?? null;
 }

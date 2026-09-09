@@ -107,10 +107,10 @@ export function refreshAnswerNote(s: SlideModel): SlideModel {
  * Reja unga joy topmagan bo'lsa (juda qisqa deka) javoblar baribir
  * har savol slaydining IZOHIDA qoladi — ma'lumot yo'qolmaydi.
  */
-function fillAnswersSlide(slides: SlideModel[], quizzes: SlideModel[], meta: DocMeta): void {
+function fillAnswersSlide(slides: SlideModel[], quizzes: SlideModel[], lang: string): void {
   const at = slides.findIndex((s) => s.layout === "answers");
   if (at < 0) return;
-  const L = slideLabels(meta.language);
+  const L = slideLabels(lang);
   slides[at] = {
     ...slides[at],
     title: L.answers,
@@ -120,6 +120,24 @@ function fillAnswersSlide(slides: SlideModel[], quizzes: SlideModel[], meta: Doc
     }),
     footer: quizzes[quizzes.length - 1].footer ?? slides[at].footer,
   };
+}
+
+/**
+ * Javoblar kalitini (`answers` slaydi) deka bo'ylab QAYTA yig'adi.
+ *
+ * `finalizeQuiz` yakunlashda va ko'ruvchidagi `{op:"answer"}` tahriri
+ * (`slide-edit.ts`) BITTA variant o'zgarganda — ikkalasi ham shu
+ * funksiyani chaqiradi, ya'ni «1 — B» kaliti ikki yo'ldan ham AYNAN bir
+ * qoida bilan hisoblanadi (avval bu mantiq faqat `fillAnswersSlide`
+ * ichida, `finalizeQuiz`ga qulflangan edi).
+ *
+ * `slides` massivini JOYIDA o'zgartiradi (`finalizeQuiz` naqshi). `quiz`
+ * slaydi yo'q yoki barchasi bo'shsa — hech narsa qilinmaydi.
+ */
+export function rebuildAnswerKey(slides: SlideModel[], lang: string): void {
+  const quizzes = slides.filter((s) => s.layout === "quiz" && s.quiz?.length);
+  if (!quizzes.length) return;
+  fillAnswersSlide(slides, quizzes, lang);
 }
 
 /**
@@ -150,6 +168,5 @@ export function finalizeQuiz(slides: SlideModel[], meta: DocMeta): void {
     // KO'RSATISHNI o'chiradi (`slideNotes`), yozishni emas.
     slides[i] = withAnswerNote({ ...slides[i], quiz: [q] });
   });
-  const quizzes = at.map((i) => slides[i]).filter((s) => s.quiz?.length);
-  if (quizzes.length) fillAnswersSlide(slides, quizzes, meta);
+  rebuildAnswerKey(slides, meta.language);
 }

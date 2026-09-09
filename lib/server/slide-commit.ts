@@ -4,8 +4,10 @@ import { transaction } from "./db";
 import {
   getGeneration,
   getGenerationForEdit,
+  getGenerationForRestore,
   getVersions,
   markFileVersion,
+  restoreGenerationDoc,
   updateGenerationDoc,
 } from "./jobs";
 import { assetImageResolver } from "./assets";
@@ -121,7 +123,10 @@ export async function commitDocOps(id: string, userId: string, baseVersion: numb
   const preview = buildPreview(doc);
 
   const next = await transaction((client) =>
-    updateGenerationDoc(client, id, userId, baseVersion, { doc, html, preview }),
+    // `doc_version = 0` — hujjatning ILK tahriri: `doc_prev` shu paytdagi
+    // (hali tahrirlanmagan) dokni saqlab qoladi, «Asl holatga qaytarish»
+    // shuni o'qiydi (`014_doc_prev.sql`).
+    updateGenerationDoc(client, id, userId, baseVersion, { doc, html, preview }, { keepPrev: cur.docVersion === 0 }),
   );
   if (next == null) {
     // 0 qator: versiya oshib ketgan, egalik yo'qolgan yoki status
@@ -132,6 +137,38 @@ export async function commitDocOps(id: string, userId: string, baseVersion: numb
       code: "version",
       docVersion: fresh?.docVersion ?? cur.docVersion,
     });
+  }
+  return detail(id, userId);
+}
+
+/**
+ * Dekani BIRINCHI tahrirdan OLDINGI holatga qaytaradi («Asl holatga
+ * qaytarish»). `baseVersion` qabul qilmaydi — bitta tugma, keyingi
+ * bosishlar oxirgi `doc_prev`ga baribir qaytaradi (u `commitDocOps`da
+ * bir marta yozilgach o'zgarmaydi).
+ *
+ * `doc_prev` yo'q bo'lsa (hech qachon tahrirlanmagan yoki eski qator) —
+ * 409 `{code:"no_prev"}`. Render (`renderHtml`/`buildPreview`) TRANZAKSIYADAN
+ * OLDIN — `commitDocOps` bilan bir xil sabab (sof funksiya, ulanish
+ * ushlab turilmaydi).
+ */
+export async function restoreDoc(id: string, userId: string) {
+  const pre = await getGenerationForRestore(id, userId);
+  if (!pre) throw new ApiError("Topilmadi", 404);
+  if (pre.status !== "COMPLETED") {
+    throw new ApiError("Hujjat hali tayyor emas", 409, { code: "status", status: pre.status });
+  }
+  if (!pre.docPrev) throw new ApiError("Asl holat saqlanmagan", 409, { code: "no_prev" });
+
+  const html = renderHtml(pre.docPrev);
+  const preview = buildPreview(pre.docPrev);
+
+  const next = await transaction((client) => restoreGenerationDoc(client, id, userId, { html, preview }));
+  if (next == null) {
+    // Shu ikki so'rov orasida `status` COMPLETED bo'lmay qoldi yoki
+    // (nazariy) `doc_prev` NULL bo'lib qoldi — SQL predikati qaytadan
+    // tekshiradi, chaqiruvchiga 409 aynan shu sabab bilan qaytadi.
+    throw new ApiError("Asl holatni qaytarib bo'lmadi — qaytadan urinib ko'ring", 409, { code: "no_prev" });
   }
   return detail(id, userId);
 }
