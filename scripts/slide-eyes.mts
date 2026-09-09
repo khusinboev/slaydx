@@ -203,9 +203,176 @@ async function editProfile(): Promise<void> {
   process.stdout.write(`   PNG: ${OUT}/eyes-edit-*.png\n`);
 }
 
+/**
+ * Tik test kadri — tasmani KO'Z bilan tekshirish uchun (AUDIT-9 E2).
+ *
+ * Haqiqiy rasm kerak emas, kerak bo'lgani: (a) tik nisbat, (b) ko'zga
+ * tashlanadigan naqsh. Naqsh muhim — bir tekis rang bo'lsa `cover`
+ * qirqqanini ham, tasma chegarasi qayerdaligini ham PDF da ko'rib
+ * bo'lmaydi. Shuning uchun ko'ndalang yo'llar: kadr siqilgan yoki
+ * cho'zilgan bo'lsa, yo'llar orasi darhol notekis ko'rinadi.
+ */
+function tallPng(w = 232, h = 512): string {
+  const raw = Buffer.alloc((w * 3 + 1) * h);
+  let o = 0;
+  for (let y = 0; y < h; y++) {
+    raw[o++] = 0; // filter: none
+    const band = Math.floor(y / 32) % 2 === 0;
+    for (let x = 0; x < w; x++) {
+      const t = x / w;
+      raw[o++] = band ? 30 + t * 60 : 200 - t * 40;
+      raw[o++] = band ? 80 + t * 90 : 215 - t * 30;
+      raw[o++] = band ? 140 + t * 90 : 230 - t * 20;
+    }
+  }
+  const chunk = (type: string, body: Buffer) => {
+    const len = Buffer.alloc(4);
+    len.writeUInt32BE(body.length);
+    const td = Buffer.concat([Buffer.from(type, "ascii"), body]);
+    const crc = Buffer.alloc(4);
+    crc.writeUInt32BE(crc32(td) >>> 0);
+    return Buffer.concat([len, td, crc]);
+  };
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(w, 0);
+  ihdr.writeUInt32BE(h, 4);
+  ihdr[8] = 8;
+  ihdr[9] = 2; // truecolor
+  const png = Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk("IHDR", ihdr),
+    chunk("IDAT", deflateSync(raw)),
+    chunk("IEND", Buffer.alloc(0)),
+  ]);
+  return `data:image/png;base64,${png.toString("base64")}`;
+}
+
+let CRC_TABLE: number[] | null = null;
+function crc32(buf: Buffer): number {
+  if (!CRC_TABLE) {
+    CRC_TABLE = [];
+    for (let n = 0; n < 256; n++) {
+      let c = n;
+      for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+      CRC_TABLE[n] = c >>> 0;
+    }
+  }
+  let c = 0xffffffff;
+  for (const b of buf) c = CRC_TABLE[(c ^ b) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+/**
+ * `strip` profili — AUDIT-9 E2 rasm tasmasi.
+ *
+ * Beshta kontent maketi (`twoCol`, `compare`, `stats`, `process`,
+ * `table`) to'rt xil tarmoqda (`classic`, `dense`, `magazine`,
+ * `timeline`), har biri IKKI marta: rasm bilan va rasmsiz. Ikki nusxa
+ * yonma-yon turgani uchun PDF da darhol ko'rinadi — tasma qo'shilganda
+ * matn haqiqatan toraydimi, rasmsiz slayd esa eskicha qoldimi.
+ */
+async function stripProfile(): Promise<void> {
+  const img = { url: tallPng(), alt: "Tik test kadri" };
+  const tool = TOOL_BY_ID["pro-slide"];
+  const decks: Array<[string, string]> = [
+    ["classic", "lecture"],
+    ["dense", "defense"],
+    ["magazine", "literature"],
+    ["timeline", "timeline"],
+  ];
+  for (const [visual, tpl] of decks) {
+    const meta = extractMeta(tool, {
+      topic: "Rasm tasmasi sinovi",
+      slideTemplate: tpl,
+      slideTheme: "atlas",
+      slideCount: 10,
+      author: "Karimova Nilufar",
+      organization: "TDPU",
+      language: "uz",
+    } as FormValues);
+    const body = [
+      {
+        layout: "twoCol",
+        title: "Ikki ustunli slayd — tasma bilan",
+        leftTitle: "Ijobiy tomonlari",
+        left: ["Birinchi band gapi to'liq yozilgan.", "Ikkinchi band gapi.", "Uchinchi band gapi ham bor."],
+        rightTitle: "Salbiy tomonlari",
+        right: ["To'rtinchi band gapi.", "Beshinchi band gapi.", "Oltinchi band."],
+      },
+      {
+        layout: "compare",
+        title: "Qiyoslash slaydi — tasma bilan",
+        leftTitle: "Eski yondashuv",
+        left: ["Qo'lda hisoblash.", "Xatolik yuqori.", "Sekin."],
+        rightTitle: "Yangi yondashuv",
+        right: ["Avtomatik hisob.", "Xatolik past.", "Tez."],
+      },
+      {
+        layout: "stats",
+        title: "Ko'rsatkichlar — diagramma tarmog'i",
+        stats: [
+          { value: "95%", label: "O'quvchilar qoniqishi" },
+          { value: "72%", label: "Takroriy murojaat" },
+          { value: "31%", label: "Yillik o'sish" },
+          { value: "12%", label: "Yo'qotish darajasi" },
+        ],
+      },
+      {
+        layout: "stats",
+        title: "Ko'rsatkichlar — kartalar tarmog'i",
+        stats: [
+          { value: "95%", label: "O'quvchilar qoniqishi" },
+          { value: "12 mln", label: "Yillik aylanma" },
+          { value: "3,4x", label: "O'sish koeffitsiyenti" },
+          { value: "48 soat", label: "O'rtacha javob vaqti" },
+        ],
+      },
+      {
+        layout: "process",
+        title: "Bosqichlar oqimi — tasma bilan",
+        steps: [1, 2, 3, 4].map((n) => ({ n: `${n}`, title: `Bosqich ${n}`, text: "Bosqich mazmuni qisqacha izohlanadi." })),
+      },
+      {
+        layout: "table",
+        title: "Jadval — tasma bilan",
+        table: {
+          headers: ["Ko'rsatkich", "2023-yil", "2024-yil"],
+          rows: [
+            ["Umumiy daromad", "10 mlrd", "12 mlrd"],
+            ["Xarajatlar", "5 mlrd", "6 mlrd"],
+            ["Sof foyda", "5 mlrd", "6 mlrd"],
+          ],
+        },
+      },
+    ];
+    // Har maket ikki marta: avval rasm bilan, keyin rasmsiz (paritet).
+    const slides = body.flatMap((b, i) => [
+      { ...b, id: `img-${i}`, image: img },
+      { ...b, id: `bare-${i}`, title: b.title.replace("tasma bilan", "rasmsiz").replace("tarmog'i", "tarmog'i · rasmsiz") },
+    ]);
+    const doc: AcademicDoc = {
+      meta,
+      titlePage: false,
+      toc: false,
+      sections: [],
+      slides: slides as AcademicDoc["slides"],
+      slideTemplate: tpl,
+      slideTheme: "atlas",
+      slideLogo: { url: LOGO },
+    };
+    process.stdout.write(`▶ strip/${visual}: ${doc.slides?.length} slayd\n`);
+    await renderAndCapture(doc, `eyes-strip-${visual}`);
+  }
+  process.stdout.write(`   PNG: ${OUT}/eyes-strip-*.png\n`);
+}
+
 async function main() {
   await mkdir(OUT, { recursive: true });
   const only = process.argv.slice(2).filter((a) => !a.startsWith("-"));
+  if (only.includes("strip")) {
+    await stripProfile();
+    if (only.length === 1) return;
+  }
   const list = only.length ? PROFILES.filter((p) => only.includes(p.name)) : PROFILES;
 
   for (const p of list) {
