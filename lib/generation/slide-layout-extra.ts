@@ -66,7 +66,7 @@ function denseHead(layers: SlideLayer[], s: SlideModel, theme: SlideTheme, ctx: 
 }
 
 /** Ma'lumot kelmagan holat: maket buzilmasin — bandlar ro'yxati chiziladi. */
-function asList(s: SlideModel, lines: string[], theme: SlideTheme, index: number, total: number, ctx: PlanCtx, note?: string): SlidePlan {
+function asList(s: SlideModel, lines: string[], theme: SlideTheme, index: number, total: number, ctx: PlanCtx, note?: string, srcLines?: Array<{f: "quiz", i: number, k: "q"} | {f: "bullets", i: number}>): SlidePlan {
   const { pushFooter, fitLines } = LAYOUT_KIT;
   const layers: SlideLayer[] = [];
   lightHead(layers, s, theme, ctx);
@@ -80,6 +80,7 @@ function asList(s: SlideModel, lines: string[], theme: SlideTheme, index: number
     color: theme.text,
     size: fitLines(lines, box, ctx.bodyType.bodyPt, ctx.bodyType.minPt, 10),
     paraSpace: 10,
+    srcLines,
   });
   if (note) pushNote(layers, note, theme, x, 12.1, false);
   pushFooter(layers, s, theme, index, total, { x, w: 12.1 }, false);
@@ -143,6 +144,7 @@ function quizClassic(s: SlideModel, question: string, options: string[], theme: 
     color: theme.text,
     size: fitSize(question, qBox, 26, 17),
     bold: true,
+    src: { f: "quiz", i: 0, k: "q" },
   });
   const top = 3.0;
   const gap = 0.26;
@@ -170,6 +172,7 @@ function quizClassic(s: SlideModel, question: string, options: string[], theme: 
       color: theme.text,
       size: fitSize(line, textBox, ctx.bodyType.bodyPt, ctx.bodyType.minPt),
       valign: "middle",
+      src: { f: "quiz", i: 0, k: "option", j: i },
     });
   });
   pushFooter(layers, s, theme, index, total, { x, w: 12.1 }, false);
@@ -190,6 +193,7 @@ function quizDense(s: SlideModel, question: string, options: string[], theme: Sl
     color: theme.titleText,
     size: fitSize(question, qBox, 24, 16),
     bold: true,
+    src: { f: "quiz", i: 0, k: "q" },
   });
   const top = 2.75;
   const gap = 0.2;
@@ -218,6 +222,7 @@ function quizDense(s: SlideModel, question: string, options: string[], theme: Sl
       color: theme.titleText,
       size: fitSize(line, textBox, ctx.bodyType.bodyPt, ctx.bodyType.minPt),
       valign: "middle",
+      src: { f: "quiz", i: 0, k: "option", j: i },
     });
   });
   pushFooter(layers, s, theme, index, total, { x, w: 12.1 }, true);
@@ -238,6 +243,7 @@ function quizCards(s: SlideModel, question: string, options: string[], theme: Sl
     color: theme.text,
     size: fitSize(question, qBox, 25, 16),
     bold: true,
+    src: { f: "quiz", i: 0, k: "q" },
   });
   const top = 3.05;
   const gap = 0.3;
@@ -263,6 +269,7 @@ function quizCards(s: SlideModel, question: string, options: string[], theme: Sl
       text: line,
       color: theme.text,
       size: fitSize(line, textBox, ctx.bodyType.bodyPt, ctx.bodyType.minPt),
+      src: { f: "quiz", i: 0, k: "option", j: i },
     });
   });
   pushFooter(layers, s, theme, index, total, { x, w: 12.1 }, false);
@@ -283,6 +290,7 @@ function quizTimeline(s: SlideModel, question: string, options: string[], theme:
     color: theme.text,
     size: fitSize(question, qBox, 23, 16),
     bold: true,
+    src: { f: "quiz", i: 0, k: "q" },
   });
   const railX = x + 0.22;
   const top = 2.7;
@@ -323,6 +331,7 @@ function quizTimeline(s: SlideModel, question: string, options: string[], theme:
       color: theme.text,
       size: fitSize(line, textBox, ctx.bodyType.bodyPt, ctx.bodyType.minPt),
       valign: "middle",
+      src: { f: "quiz", i: 0, k: "option", j: i },
     });
   });
   pushFooter(layers, s, theme, index, total, { x, w: 12.1 }, false);
@@ -344,6 +353,7 @@ function quizMagazine(s: SlideModel, question: string, options: string[], theme:
     color: theme.text,
     size: fitSize(s.title, titleBox, 30, 20),
     bold: true,
+    src: { f: "title" },
   });
   layers.push({ t: "rect", box: { x: x0, y: 1.6, w: magW, h: 0.045 }, fill: { color: theme.accent } });
   const qBox: Box = { x: x0, y: 1.85, w: magW, h: 1.15 };
@@ -353,6 +363,7 @@ function quizMagazine(s: SlideModel, question: string, options: string[], theme:
     text: question,
     color: theme.text,
     size: fitSize(question, qBox, 24, 16),
+    src: { f: "quiz", i: 0, k: "q" },
   });
   const top = 3.15;
   const divW = 0.035;
@@ -382,6 +393,7 @@ function quizMagazine(s: SlideModel, question: string, options: string[], theme:
       text: line,
       color: theme.text,
       size: fitSize(line, textBox, 18, 13),
+      src: { f: "quiz", i: 0, k: "option", j: i },
     });
     layers.push({ t: "rect", box: { x: cx, y: cy + rowH - 0.18, w: colW, h: 0.012 }, fill: { color: theme.accent, alpha: 0.3 } });
   });
@@ -405,6 +417,7 @@ function quizHero(s: SlideModel, question: string, options: string[], theme: Sli
     color: theme.titleText,
     size: fitSize(s.title, titleBox, 24, 16),
     bold: true,
+    src: { f: "title" },
   });
   layers.push({ t: "rect", box: { x: px, y: 1.95, w: 1.2, h: 0.08 }, fill: { color: theme.accent } });
   const qBox: Box = { x: px, y: 2.25, w: pw, h: 3.6 };
@@ -414,6 +427,7 @@ function quizHero(s: SlideModel, question: string, options: string[], theme: Sli
     text: question,
     color: theme.titleText,
     size: fitSize(question, qBox, 22, 14),
+    src: { f: "quiz", i: 0, k: "q" },
   });
   const rx = PANEL_W + 0.55;
   const rw = W - rx - 0.55;
@@ -441,6 +455,7 @@ function quizHero(s: SlideModel, question: string, options: string[], theme: Sli
       color: theme.text,
       size: fitSize(line, textBox, ctx.bodyType.bodyPt, ctx.bodyType.minPt),
       valign: "middle",
+      src: { f: "quiz", i: 0, k: "option", j: i },
     });
   });
   pushFooter(layers, s, theme, index, total, { x: rx, w: rw }, false);
@@ -526,6 +541,7 @@ export function planReferences(s: SlideModel, theme: SlideTheme, visual: SlideVi
       color: titleInk,
       size: fitSize(ref.title || shortSource(ref.source), nameBox, 17, 12),
       bold: true,
+      src: { f: "refs", i, k: "title" },
     });
     const srcBox: Box = { x: x + 0.62, y: y + rowH * 0.56, w: w - 0.72, h: Math.max(0.24, rowH * 0.36) };
     layers.push({
@@ -534,6 +550,7 @@ export function planReferences(s: SlideModel, theme: SlideTheme, visual: SlideVi
       text: shortSource(ref.source),
       color: srcInk,
       size: fitSize(shortSource(ref.source), srcBox, 13, 10),
+      src: { f: "refs", i, k: "source" },
     });
     layers.push({
       t: "rect",
@@ -653,6 +670,7 @@ export function planAnswers(s: SlideModel, theme: SlideTheme, visual: SlideVisua
       size: fitSize(line, textBox, basePt, minPt),
       bold: true,
       valign: "middle",
+      src: { f: "bullets", i },
       ...(hero ? { align: "center" as const } : {}),
     });
   });
