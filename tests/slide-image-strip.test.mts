@@ -79,6 +79,33 @@ function sample(layout: (typeof LAYOUTS)[number], withImage: boolean): SlideMode
   return base as SlideModel;
 }
 
+/**
+ * Bir maketning IKKI TARMOQLI holatlari.
+ *
+ * `planStats` ichida ikki butunlay boshqa chizmasi bor: qiymatlar bir
+ * birlikda va uchtadan ko'p bo'lsa — DIAGRAMMA, aks holda — KARTALAR.
+ * Yuqoridagi `sample("stats")` to'rtta foiz beradi, ya'ni har doim
+ * diagramma tarmog'iga tushadi va kartalar tarmog'i sinovsiz qolardi
+ * (mutatsiya M11 aynan shu teshikdan o'tib ketgan edi: kartalar
+ * kengligidan `cut` olib tashlansa ham testlar yashil qolardi).
+ * Shuning uchun aralash birlikli ikkinchi namuna.
+ */
+function variants(layout: (typeof LAYOUTS)[number], withImage: boolean): Array<[string, SlideModel]> {
+  const out: Array<[string, SlideModel]> = [[layout, sample(layout, withImage)]];
+  if (layout === "stats") {
+    const cards = sample("stats", withImage) as SlideModel & { stats: Array<{ value: string; label: string }> };
+    // Aralash birlik → `oneUnit` false → KARTALAR tarmog'i.
+    cards.stats = [
+      { value: "95%", label: "O'quvchilar qoniqishi" },
+      { value: "12 mln", label: "Yillik aylanma" },
+      { value: "3,4x", label: "O'sish koeffitsiyenti" },
+      { value: "48 soat", label: "O'rtacha javob vaqti" },
+    ];
+    out.push(["stats-kartalar", cards]);
+  }
+  return out;
+}
+
 const plan = (s: SlideModel, visual: (typeof VISUALS)[number], th = theme, logo?: string) =>
   planSlide(s, th, visual, 1, 10, "auto", "lecture", { bodyType, logo });
 
@@ -145,16 +172,17 @@ test("rasm bo'lsa birorta matn qatlami tasma bilan kesishmaydi", () => {
     const th = getSlideTheme(t.id);
     for (const layout of LAYOUTS) {
       for (const visual of VISUALS) {
-        for (const logo of [undefined, IMG]) {
-          const p = plan(sample(layout, true), visual, th, logo);
-          for (const l of texts(p.layers)) {
-            assert.ok(
-              !overlaps(l.box, STRIP),
-              `${t.id}/${visual}/${layout}${logo ? "+logo" : ""}: «${(l.text ?? l.lines?.[0] ?? "").slice(0, 24)}» tasma ostiga kirdi ` +
-                `(x=${l.box.x.toFixed(2)}..${(l.box.x + l.box.w).toFixed(2)}, tasma ${STRIP.x.toFixed(2)} dan)`,
-            );
+        for (const [tag, model] of variants(layout, true))
+          for (const logo of [undefined, IMG]) {
+            const p = plan(model, visual, th, logo);
+            for (const l of texts(p.layers)) {
+              assert.ok(
+                !overlaps(l.box, STRIP),
+                `${t.id}/${visual}/${tag}${logo ? "+logo" : ""}: «${(l.text ?? l.lines?.[0] ?? "").slice(0, 24)}» tasma ostiga kirdi ` +
+                  `(x=${l.box.x.toFixed(2)}..${(l.box.x + l.box.w).toFixed(2)}, tasma ${STRIP.x.toFixed(2)} dan)`,
+              );
+            }
           }
-        }
       }
     }
   }
@@ -165,9 +193,10 @@ test("rasmli tasma 15 tema × 6 visual da chegaradan chiqmaydi va shrift polida 
     const th = getSlideTheme(t.id);
     for (const layout of LAYOUTS) {
       for (const visual of VISUALS) {
+        for (const [name, model] of variants(layout, true))
         for (const logo of [undefined, IMG]) {
-          const p = plan(sample(layout, true), visual, th, logo);
-          const tag = `${t.id}/${visual}/${layout}${logo ? "+logo" : ""}`;
+          const p = plan(model, visual, th, logo);
+          const tag = `${t.id}/${visual}/${name}${logo ? "+logo" : ""}`;
           for (const l of p.layers) {
             assert.ok(l.box.x >= -0.01 && l.box.y >= -0.01, `${tag}: manfiy koordinata`);
             assert.ok(l.box.w >= 0 && l.box.h >= 0, `${tag}: manfiy o'lcham (${l.box.w}×${l.box.h})`);
@@ -278,15 +307,16 @@ test("tasmali slaydda logotip ostiga plashka qo'yiladi", () => {
  */
 test("rasmsiz slaydda kontent zonasi to'la kenglikda qoladi (tasma zaxirasi olinmaydi)", () => {
   for (const layout of LAYOUTS) {
-    for (const visual of VISUALS) {
-      const p = plan(sample(layout, false), visual);
-      const right = Math.max(...texts(p.layers).map((l) => l.box.x + l.box.w));
-      assert.ok(
-        right > STRIP.x,
-        `${layout}/${visual}: rasmsiz slayd hamon to'la kenglikni egallashi kerak (eng o'ng qirra ${right.toFixed(2)}, tasma ${STRIP.x.toFixed(2)} dan)`,
-      );
-      assert.equal(images(p.layers).length, 0, `${layout}/${visual}: rasmsiz slaydda rasm qatlami bo'lmasin`);
-    }
+    for (const visual of VISUALS)
+      for (const [tag, model] of variants(layout, false)) {
+        const p = plan(model, visual);
+        const right = Math.max(...texts(p.layers).map((l) => l.box.x + l.box.w));
+        assert.ok(
+          right > STRIP.x,
+          `${tag}/${visual}: rasmsiz slayd hamon to'la kenglikni egallashi kerak (eng o'ng qirra ${right.toFixed(2)}, tasma ${STRIP.x.toFixed(2)} dan)`,
+        );
+        assert.equal(images(p.layers).length, 0, `${tag}/${visual}: rasmsiz slaydda rasm qatlami bo'lmasin`);
+      }
   }
 });
 
