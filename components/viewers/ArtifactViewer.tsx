@@ -16,6 +16,7 @@ export function ArtifactViewer({
   gen,
   detail,
   onDetail,
+  onDirty,
 }: {
   gen: Generation;
   /**
@@ -27,6 +28,8 @@ export function ArtifactViewer({
   detail?: unknown;
   /** Tahrirdan keyingi yangi holat — sahifa (`ResultView`) uni o'zlashtiradi. */
   onDetail?: (g: unknown) => void;
+  /** Saqlanmagan tahrir soni — sahifa sarlavhasi «Yuklab olish» yonida aytadi. */
+  onDirty?: (n: number) => void;
 }) {
   const doc = gen.doc ?? academicDocFromHtml(gen.html, gen);
   const kind = viewerKind(gen.type);
@@ -35,7 +38,7 @@ export function ArtifactViewer({
     case "slides":
       return (
         <div className="flex min-h-0 flex-1 flex-col">
-          <SlideViewer doc={doc} gen={detail} onGen={onDetail} />
+          <SlideViewer doc={doc} gen={detail} onGen={onDetail} onDirty={onDirty} />
         </div>
       );
     case "resume":

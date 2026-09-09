@@ -89,6 +89,7 @@ export function SlideViewer({
   overlay,
   gen,
   onGen,
+  onDirty,
 }: {
   doc: AcademicDoc;
   /**
@@ -106,6 +107,14 @@ export function SlideViewer({
   gen?: unknown;
   /** Tahrirdan keyin yangilangan generatsiya — sahifa holatiga qaytariladi. */
   onGen?: (g: unknown) => void;
+  /**
+   * SAQLANMAGAN operatsiyalar soni — sahifa sarlavhasiga.
+   *
+   * Saqlash tugmasi ko'ruvchining o'zida, lekin «Yuklab olish» yuqorida
+   * turadi: sahifa saqlanmagan tahrir borligini bilmasa, foydalanuvchi
+   * ekranda ko'rgan slaydni EMAS, eski faylni yuklab ketardi.
+   */
+  onDirty?: (n: number) => void;
 }) {
   const ed = useSlideEdit({ gen, onGen });
   /*
@@ -342,6 +351,12 @@ export function SlideViewer({
     },
     [editOn, undo, redo],
   );
+
+  const onDirtyRef = useRef(onDirty);
+  onDirtyRef.current = onDirty;
+  useEffect(() => {
+    onDirtyRef.current?.(editOn ? pending : 0);
+  }, [pending, editOn]);
 
   /*
    * Ctrl+S — «Saqlash» ning klaviatura yo'li.
