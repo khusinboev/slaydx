@@ -2,6 +2,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { query, queryOne } from "./db";
 import type { AcademicDoc } from "../generation/types";
+import type { ImageBytes } from "../generation/slide-images";
 
 /**
  * `data:` URL larni saqlanadigan aktivga aylantiradi.
@@ -24,6 +25,22 @@ export function assetUrl(generationId: string, assetId: string): string {
 }
 
 /**
+ * `data:` URL ni parslaydi va aktivga aylanadigan bayt/`assetId`ni
+ * qaytaradi. Bo'sh baytli yoki formati mos kelmagan URL uchun `null`.
+ *
+ * `extractAssets` ichidagi `swap` bilan BIR XIL SHA-256 hisoblanadi —
+ * shu tufayli bir xil rasm ikki joyda alohida yuklansa ham bitta
+ * aktivga tushadi (`putAssetBytes` ham shundan foydalanadi).
+ */
+export function assetFromDataUrl(url: string): { assetId: string; mime: string; bytes: Buffer } | null {
+  const m = DATA_URL.exec(url);
+  if (!m) return null;
+  const bytes = Buffer.from(m[2], "base64");
+  if (!bytes.byteLength) return null;
+  return { assetId: assetIdFor(bytes), mime: m[1], bytes };
+}
+
+/**
  * Hujjatdagi barcha `data:` URL larni havolaga almashtiradi va
  * saqlanishi kerak bo'lgan baytlarni qaytaradi.
  */
@@ -36,13 +53,10 @@ export function extractAssets(
 
   const swap = (url: string | undefined): string | undefined => {
     if (!url) return url;
-    const m = DATA_URL.exec(url);
-    if (!m) return url;
-    const bytes = Buffer.from(m[2], "base64");
-    if (!bytes.byteLength) return url;
-    const assetId = assetIdFor(bytes);
-    if (!assets.has(assetId)) assets.set(assetId, { assetId, mime: m[1], bytes });
-    return assetUrl(generationId, assetId);
+    const found = assetFromDataUrl(url);
+    if (!found) return url;
+    if (!assets.has(found.assetId)) assets.set(found.assetId, found);
+    return assetUrl(generationId, found.assetId);
   };
 
   let nextDoc = doc;
@@ -83,6 +97,52 @@ export async function putAssets(generationId: string, assets: PendingAsset[]): P
       [generationId, a.assetId, a.mime, a.bytes.byteLength, a.bytes],
     );
   }
+}
+
+/**
+ * Bitta rasm baytini to'g'ridan-to'g'ri aktivga yozadi (masalan qayta
+ * chizilgan/yuklangan slayd rasmi) va `assetId` qaytaradi.
+ *
+ * `assetIdFor` bilan bir xil SHA-256 — bir xil bayt ikki marta
+ * yuklansa `ON CONFLICT DO NOTHING` tufayli bitta qator qoladi.
+ */
+export async function putAssetBytes(generationId: string, mime: string, bytes: Buffer): Promise<string> {
+  const assetId = assetIdFor(bytes);
+  await putAssets(generationId, [{ assetId, mime, bytes }]);
+  return assetId;
+}
+
+/** O'z generatsiyasining aktiv URL naqshi — boshqa `id` bilan mos kelmaydi. */
+export const ASSET_URL_RE = /^\/api\/generations\/([^/]+)\/assets\/([0-9a-f]+)$/;
+
+/** Faqat SHU `generationId`ga tegishli aktiv URL bilan mos keladigan regex. */
+export function ownAssetUrlRe(generationId: string): RegExp {
+  return new RegExp(`^/api/generations/${generationId}/assets/([0-9a-f]+)$`);
+}
+
+/**
+ * Tahrirdan keyingi PPTX qayta render uchun rasm hal qiluvchi.
+ *
+ * Faqat `/api/generations/{SHU genId}/assets/{hex}` naqshiga mos URL
+ * `getAsset` (egalik SQL) bilan o'qiladi — boshqa URL (begona generatsiya,
+ * `https:`, ...) `null` qaytaradi va `getAsset` UMUMAN chaqirilmaydi
+ * (SSRF/IDOR himoyasi — `render-pptx.ts` `opts.resolveImage`).
+ */
+export function assetImageResolver(
+  generationId: string,
+  userId: string,
+): (url: string) => Promise<ImageBytes | null> {
+  const re = ownAssetUrlRe(generationId);
+  return async (url: string): Promise<ImageBytes | null> => {
+    const m = re.exec(url);
+    if (!m) return null;
+    const assetId = m[1];
+    const asset = await getAsset(generationId, assetId, userId);
+    if (!asset) return null;
+    const type: "jpg" | "png" = asset.mime === "image/png" ? "png" : "jpg";
+    const mime = type === "png" ? "image/png" : "image/jpeg";
+    return { data: `${mime};base64,${asset.bytes.toString("base64")}`, type };
+  };
 }
 
 /** Egalik SQL da tekshiriladi — begona hujjat rasmini ololmaydi. */
