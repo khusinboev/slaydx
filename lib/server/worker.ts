@@ -9,6 +9,7 @@ import {
   claimJob,
   completeJob,
   failJob,
+  heartbeat,
   reclaimStaleJobs,
   setProgress,
   type ClaimedJob,
@@ -18,6 +19,7 @@ import { deleteGenerationFile, putGenerationFile } from "./storage";
 import { deleteAssets, extractAssets, putAssets } from "./assets";
 import { buildPreview } from "./preview";
 import { logoDataUrl } from "./logo";
+import { LiveReporter } from "./live";
 import { purgeExpiredSessions } from "./session";
 import { purgeRateLimits } from "./ratelimit";
 import { purgeExpiredTickets } from "./telegram";
@@ -61,8 +63,15 @@ function stepsFor(toolId: string): string[] {
  * Progress 95% dan oshmaydi va asimptotik yaqinlashadi — tugagani
  * `completeJob` da 100% bo'ladi. Shu sababli "99% da qotib qolgan"
  * ko'rinish chiqmaydi.
+ *
+ * `live` berilgan bo'lsa (slayd/pro-slayd) va u allaqachon kamida bitta
+ * hodisa olgan bo'lsa (`live.started`), bu soxta egri chiziq HAQIQIY
+ * progress bilan bir vaqtda ikkalasi ham yozib, bir-birini bosib
+ * o'tmasin deb butunlay to'xtaydi — faqat `heartbeat` (qulfni tirik
+ * tutish) qoladi, haqiqiy `progress`/`step`ni endi `LiveReporter`
+ * (`setLive` orqali) yozadi.
  */
-function progressTicker(job: ClaimedJob) {
+export function progressTicker(job: ClaimedJob, live: LiveReporter | null) {
   const steps = stepsFor(job.toolId);
   /*
    * Kutilayotgan davomiylik ishning O'Z byudjetidan olinadi.
@@ -78,6 +87,11 @@ function progressTicker(job: ClaimedJob) {
   const expected = Math.max(20_000, jobBudget(job) * 0.7);
   const started = Date.now();
   const timer = setInterval(() => {
+    if (live?.started) {
+      // Qulf «heartbeat»i — `progress`/`step`ni endi `LiveReporter` yozadi.
+      void heartbeat(job.id, WORKER_ID).catch(() => {});
+      return;
+    }
     const ratio = 1 - Math.exp(-(Date.now() - started) / expected);
     const progress = Math.min(95, Math.round(5 + ratio * 90));
     const idx = Math.min(steps.length - 1, Math.floor((progress / 96) * steps.length));
@@ -138,14 +152,18 @@ async function runJob(job: ClaimedJob): Promise<void> {
     return;
   }
 
-  const stop = progressTicker(job);
+  // Faqat slayd/pro-slayd jonli deka yuboradi (`slide-write.ts`/`slide-images.ts`
+  // shu ikkisi uchun `onProgress` chaqiradi) — boshqa vositalarga reporter kerak
+  // emas.
+  const live = tool.id === "slide" || tool.id === "pro-slide" ? new LiveReporter(job.id, WORKER_ID) : null;
+  const stop = progressTicker(job, live);
   try {
     const deadline = Date.now() + jobDeadlineMs(job);
     // `logoAssetId` bo'lsa foydalanuvchining o'z logotipi (`logo_uploads`)
     // `data:` URL ga aylantiriladi. Topilmasa/bo'sh bo'lsa `undefined` —
     // xato emas, deka logosiz chiqadi (`lib/server/logo.ts` izohiga qarang).
     const logo = await logoDataUrl(job.userId, String(job.values.logoAssetId ?? ""));
-    const file = await buildArtifact(tool, job.values, { deadline, logo });
+    const file = await buildArtifact(tool, job.values, { deadline, logo, onProgress: live?.sink });
 
     if (!file.bytes?.byteLength) {
       throw new Error("Fayl bo'sh chiqdi — qayta urinib ko'ring");
@@ -210,6 +228,7 @@ async function runJob(job: ClaimedJob): Promise<void> {
       await refund(job.userId, job.id, `Xatolik: ${message}`.slice(0, 200));
     }
   } finally {
+    await live?.stop();
     stop();
   }
 }
