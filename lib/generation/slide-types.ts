@@ -153,7 +153,7 @@ export function isSlideLayout(v: string): v is SlideLayout {
  * ular tahrirlanmaydi. PPTX renderer bu maydonni o'qimaydi.
  */
 export type SlideSrc =
-  | { f: "title" | "subtitle" | "kicker" | "quote" | "quoteBy" | "leftTitle" | "rightTitle" | "imageHint" }
+  | { f: "title" | "subtitle" | "kicker" | "quote" | "quoteBy" | "leftTitle" | "rightTitle" | "imageHint" | "footer" }
   | { f: "bullets" | "left" | "right"; i: number }
   | { f: "stats"; i: number; k: "value" | "label" }
   | { f: "steps"; i: number; k: "n" | "title" | "text" }

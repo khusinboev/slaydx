@@ -34,6 +34,7 @@ const {
   rebuildFile,
   ensureFreshFile,
   patchDocFromRequest,
+  restoreDoc,
   DOC_PATCH_MAX_BYTES,
 } = await import("../lib/server/slide-commit.ts");
 const { extractMeta } = await import("../lib/generation/meta.ts");
@@ -66,6 +67,10 @@ type Rows = {
   updateDoc?: Record<string, unknown> | null;
   markFile?: Record<string, unknown> | null;
   hasFile?: boolean;
+  /** `getGenerationForRestore` (`POST …/doc/restore`). */
+  forRestore?: Record<string, unknown> | null;
+  /** `restoreGenerationDoc` UPDATE natijasi. */
+  restoreDoc?: Record<string, unknown> | null;
 };
 
 function norm(s: string): string {
