@@ -300,7 +300,6 @@ export function useSlideEdit({
         if (aliveRef.current) setSaving(false);
       }
       if (!ok) return;
-      if (ok) return;
       // PPTX darhol quvib yetadi: «Saqlash» dan keyin «Yuklab olish»
       // eski faylni bermasligi kerak.
       await doRebuild();
