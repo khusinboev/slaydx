@@ -114,3 +114,27 @@ Jonli kanal (worker → `live_json`) `scripts/live-worker.mts` bilan tasdiqlandi
 
 Admin hisobida (`adkhambek_4`) serverda namunalar: slayd `382177a0…`,
 pro slayd `2d33bdee…` — ikkalasi COMPLETED.
+
+## 6. Qo'shimcha (2026-09-10) — foydalanuvchi ekran rasmlari asosida
+
+| Talab | Holat |
+|---|---|
+| «Mening fayllarim» kartochkasida 1-slayd ko'ruvchidagidek | ✅ `preview.slide` + `FilePreview` `SlideCanvas` renderi; eski dekalar `scripts/backfill-preview.mts` bilan (serverda 21/21) |
+| Eskizlarni sudrab tartiblash doim | ✅ toggle'siz, tashlash chizig'i, ▲/▼ |
+| Ikki bosish → joyida tahrir + shrift o'lchami | ✅ `SlideModel.fontSize` (kalit — `src` JSON), `style` op, `applyFontOverrides` `planSlide` OXIRIDA — PPTX va ko'ruvchi bir xil; panel: −/+, 12…66, «Standart» |
+| Tashqariga bitta bosish yopadi, tepada «Saqlash» | ✅ qo'lda saqlash (bitta PATCH + rebuild), Ctrl+S, `beforeunload`; avtomatik PATCH yo'q |
+| «Tahrirlash» tugmasi olib tashlansin | ✅ |
+| E2 — rasm tasmalari | ✅ twoCol/compare/stats/process/table (`photoSlot` kengaytirildi) |
+| Pexels → Pixabay → fal | ✅ `chainProvider`, `searchQueryFor`; kalitlar `PEXELS_API_KEY`/`PIXABAY_API_KEY` (bo'lmasa fal — eskicha) |
+| Footer / test javobi tahriri, «asl holatga qaytarish» | ✅ `footer`/`answer` op'lari, `014_doc_prev.sql`, `POST …/doc/restore`, `hasPrev` — UI tugmalari keyingi qadam |
+
+**Y-2 (topildi va tuzatildi):** `tests/ui/*` da `assert.equal(<jsdom tugun>, null)` yiqilganda
+`node:assert` tugunni `util.inspect` bilan chizishga urinib jarayonni QOTIRIB, xotirani
+shishirar edi — `npm run test:ui` osilib, laptop OOM ga tushgan (VS Code qulashlari shundan).
+Qoida: DOM tugunini `=== null, true` bilan solishtiring; og'ir buyruqlar `systemd-run --scope
+-p MemoryMax=…` va `timeout -s KILL` ostida, ajratilgan holda.
+
+**Y-3 (haqiqiy nuqson):** taqdimot (`present`) rejimida tahrir qatlami chiqar edi — `editOn && !present`.
+
+Testlar: **800 unit + 56 ko'ruvchi + 40 UI** (xotira cheklovi bilan), tsc/lint toza.
+Deploy: `31cfe84` → `ec6a49c` (014 migratsiyasi).
