@@ -271,7 +271,7 @@ export function SlideViewer({
    * taqdimotda (ekranda tinglovchi bor) va jonli generatsiyada (hujjat
    * hali serverda yozilmoqda — PATCH uni ustidan yozib yuborardi).
    */
-  const editOn = ed.editable && !present && !lv;
+  const editOn = ed.editable && !lv;
   const { run: runOps, undo, redo, save, pending } = ed;
 
   const onText = useCallback(
