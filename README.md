@@ -220,9 +220,67 @@ berardi. Eval bitta tarifda sinagani uchun uchalasi ham sezilmay qoldi.
 | `POST /api/payments/orders` | To'lov buyurtmasi + provayder URL |
 | `POST /api/payments/click` | Click Prepare/Complete webhook |
 | `POST /api/payments/payme` | Payme Merchant API (JSON-RPC) |
+| `PATCH /api/generations/{id}/doc` | Slaydlarni tahrirlash (operatsiyalar ro'yxati) |
+| `POST /api/generations/{id}/rebuild` | PPTX faylni qayta yasash |
+| `POST /api/generations/{id}/slides/{index}/image` | Slaydga rasm yuklab olish |
+| `POST /api/generations/{id}/slides/{index}/image/regenerate` | Slayd rasmini qayta chizish |
 
 Barcha `/api/generations*` va `/api/extract` **kirishni talab qiladi**.
 Egalik SQL darajasida tekshiriladi — id ni bilgan begona foydalanuvchi hech narsa ola olmaydi.
+
+### Jonli generatsiya
+
+Dekaning yaratilishi jonli bo'lishi mumkin: `live` maydoni IN_PROGRESS sifatida hujjatni qaytaradi.
+
+```bash
+GET /api/generations/{id}[?since=<liveSeq>]
+```
+
+Javob:
+```json
+{
+  "generation": {
+    "id": "...",
+    "doc": { "slides": [...], "meta": {...} },
+    "liveSeq": 42,
+    "live": {
+      "stage": "images",
+      "progress": 0.7,
+      "step": "Rasmlar · 7/12 slayd · 3/9 rasm",
+      "slides": [...]
+    }
+  }
+}
+```
+
+`?since=42` qo'yilsa va `live_seq ≥ 42` bo'lsa `live` kalit qaytarilmaydi (o'zgarish yo'q).
+
+### Ko'ruvchida tahrirlash
+
+Tamamlangan dekani brauzerda tahrirlash mumkin. Operatsiyalar:
+
+```bash
+PATCH /api/generations/{id}/doc
+Content-Type: application/json
+
+{
+  "baseVersion": 5,
+  "ops": [
+    { "op": "text", "index": 2, "src": { "f": "title" }, "value": "Yangi sarlavha" },
+    { "op": "delete", "index": 3 },
+    { "op": "layout", "index": 1, "layout": "process" }
+  ]
+}
+```
+
+PPTX qayta yasash avtomatik bo'ladi (3 sekund debounce). Rasm qayta chizish bepul — har dekaga 5 marta:
+
+```bash
+POST /api/generations/{id}/slides/{index}/image/regenerate
+Content-Type: application/json
+
+{ "baseVersion": 5, "hint": "suvning tomiga" }
+```
 
 ---
 
