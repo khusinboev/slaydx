@@ -22,9 +22,9 @@ import type { SlideModel } from "../../lib/generation/slide-types.ts";
  * u qaytsa, foydalanuvchi yana ikki qadamli tahrirga qaytardi.
  */
 
-/** Tahrir boshqaruvi chizilganmi (maket chipi + tahrir qatlami). */
+/** Tahrir boshqaruvi chizilganmi (tahrir qatlami + slayd «O‘chirish»). */
 function hasEditUi(html: string): boolean {
-  return html.includes("data-slide-editor") && html.includes("Bo‘lim");
+  return html.includes("data-slide-editor") && html.includes("O‘chirish");
 }
 
 const slides: SlideModel[] = [
@@ -70,6 +70,11 @@ test("gen berilsa (COMPLETED, doc.slides bor) — tahrir DARHOL yoqiq", () => {
   const html = renderToStaticMarkup(h(SlideViewer, { doc, gen: completedGen(doc) }));
   assert.ok(hasEditUi(html), "tahrir boshqaruvi ko'rinishi kerak");
   assert.ok(!html.includes("eski formatda"), "yangi formatda ogohlantirish bo'lmasin");
+  // Muharrir 2: asboblar paneli minimal — chip, «+ Slayd», ▲/▼, eslatma YO'Q.
+  assert.ok(!html.includes("Bo‘lim") && !html.includes("Ikki ustun"), "maket chiplari olib tashlangan");
+  assert.ok(!html.includes("Eslatma"), "eslatma tugmasi va paneli olib tashlangan");
+  assert.ok(!html.includes("Yuqoriga") && !html.includes("Pastga"), "▲/▼ olib tashlangan");
+  assert.ok(!html.includes("Asl holatga qaytarish"), "server doc_prev tugmasi UI da yo'q");
 });
 
 test("«Tahrirlash» tugmasi HTML da UMUMAN yo'q", () => {
@@ -118,23 +123,13 @@ test("pro-slide ham tahrirlanadi", () => {
   assert.ok(hasEditUi(html), "pro-slide ham slayd dekasi");
 });
 
-test("mumkin bo'lmagan maket chipi chizilmaydi", () => {
-  const doc = docWithSlides();
-  const html = renderToStaticMarkup(h(SlideViewer, { doc, gen: completedGen(doc) }));
-  // Birinchi slayd — muqova: `canConvert` undan faqat `section`/`closing`
-  // ga o'girishga ruxsat beradi.
-  assert.ok(!html.includes("Ikki ustun"), "muqovadan ikki ustunga o'girib bo'lmaydi");
-  assert.ok(!html.includes("Jadval"), "muqovadan jadvalga o'girib bo'lmaydi");
-});
-
 // ══════════════════════════════════ Mobil eskiz tasmasi
 
 /**
  * `md:` dan past ekranda yon eskiz paneli `hidden` — telefonda deka
  * umuman ko'rinmasdi. Tasma o'sha ma'lumotni gorizontal beradi va
- * FAQAT bog'langan ko'ruvchida chiziladi (`gen` yoki `live`): `gen`siz
- * SSR HTML i F2 fiksturasi bilan bayt-baytiga qulflangan
- * (`slide-viewer-seams`), unga yangi tugun qo'shib bo'lmaydi.
+ * FAQAT bog'langan ko'ruvchida chiziladi (`gen` yoki `live`): passiv
+ * ko'ruvchi (`gen`siz) eskicha, tasmasiz qoladi.
  */
 test("mobil tasma SSR da chiziladi va `md:` dan yashirinadi", () => {
   const doc = docWithSlides();

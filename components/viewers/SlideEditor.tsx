@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import { Check, ImagePlus, Minus, Plus, XCircle } from "lucide-react";
+import { Check, ImagePlus, Minus, Plus, RotateCcw, XCircle } from "lucide-react";
 import type { SlideAudience, SlideTemplateId, SlideVisual } from "@/lib/generation/slide-templates";
 import type { BodyRules } from "@/lib/generation/slide-audience";
 import type { SlideModel, SlideSrc, SlideTheme } from "@/lib/generation/slide-types";
@@ -72,7 +72,11 @@ export type SlideEditorProps = {
   /** Shrift o'lchami: `null` — «Standart» (model qiymatini o'chiradi). */
   onStyle: (src: SlideSrc, size: number | null) => void;
   onImage: (url: null) => void;
+  /** «Rasmni qaytarish» — asl AI rasm (`imageOrig`). */
+  onRestoreImage: () => void;
   onUpload: (file: File) => void;
+  /** Tahrir ochilganda qatlam kaliti (`layerKey`), yopilganda `null` — sahna o'sha qatlamni yashiradi. */
+  onEditing?: (key: string | null) => void;
 };
 
 /** Ko'p qatorli tahrirga ruxsat etilgan maydonlar (Shift+Enter → yangi qator). */
@@ -129,7 +133,9 @@ export function SlideEditor({
   onAnswer,
   onStyle,
   onImage,
+  onRestoreImage,
   onUpload,
+  onEditing,
 }: SlideEditorProps) {
   const rootRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -183,8 +189,10 @@ export function SlideEditor({
       if (!pos) pos = { left: 0, top: 0, width: 200, height: 40 };
 
       setEdit({ src, value, initial: value, pos, multiline: isMultiline(src) });
+      // Bir maydonli qatlam yashiriladi; ro'yxatda bitta band ochilgani uchun (hozircha) yo'q.
+      onEditing?.(layer && layer.t === "text" && layer.src ? JSON.stringify(layer.src) : null);
     },
-    [layerOf, slide, scale],
+    [layerOf, slide, scale, onEditing],
   );
 
   /*
@@ -235,6 +243,7 @@ export function SlideEditor({
     // jim qaytadi, aks holda BIR tahrir ikki marta saqlanardi.
     editRef.current = null;
     setEdit(null);
+    onEditing?.(null);
     if (!e) return;
     // O'zgarmagan matn uchun operatsiya YUBORILMAYDI — bo'sh PATCH
     // hujjat versiyasini oshirib, PPTX ni bekorga qayta yasatardi.
@@ -242,13 +251,14 @@ export function SlideEditor({
     // Kolontitul bitta slaydniki emas — butun dekaniki.
     if (e.src.f === "footer") onFooter(e.value);
     else onText(e.src, e.value);
-  }, [onText, onFooter]);
+  }, [onText, onFooter, onEditing]);
 
   const cancel = useCallback(() => {
     skipBlurRef.current = true;
     editRef.current = null;
     setEdit(null);
-  }, []);
+    onEditing?.(null);
+  }, [onEditing]);
 
   /*
    * Ikki bosish — SAHNA ramkasida (overlay ning ota elementi). Aynan shu
@@ -440,6 +450,18 @@ export function SlideEditor({
             >
               <XCircle className="size-3" />
               Rasmsiz
+            </button>
+          ) : null}
+          {slide.imageOrig ? (
+            <button
+              type="button"
+              disabled={busy}
+              title="Asl (AI chizgan) rasmni qaytarish"
+              className="inline-flex items-center gap-1 rounded bg-black/65 px-1.5 py-1 text-[11px] text-white hover:bg-black/85 disabled:opacity-50"
+              onClick={onRestoreImage}
+            >
+              <RotateCcw className="size-3" />
+              Rasmni qaytarish
             </button>
           ) : null}
           <input

@@ -312,9 +312,8 @@ export function SlideRail({
             </span>
             {/*
               Jonli shox ALOHIDA: `marks` berilmagan holatda tugma
-              ostidagi sarlavha HTML'i bo'linishdan oldingi bilan
-              bayt-baytiga bir xil qolishi kerak
-              (`tests/viewer/slide-viewer-seams.test.mts`).
+              ostidagi sarlavha oddiy matn — passiv ko'ruvchi HTML i
+              jonli belgilar bilan og'irlashmaydi.
             */}
             {marks === undefined ? (
               <span className="mt-1 block truncate text-[11px] text-white/70">{s.title}</span>

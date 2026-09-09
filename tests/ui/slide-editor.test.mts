@@ -48,10 +48,11 @@ type Calls = {
   style: [SlideSrc, number | null][];
   image: (string | null)[];
   upload: number;
+  restore: number;
 };
 
 function mount(slide: SlideModel) {
-  const calls: Calls = { text: [], footer: [], answer: [], style: [], image: [], upload: 0 };
+  const calls: Calls = { text: [], footer: [], answer: [], style: [], image: [], upload: 0, restore: 0 };
   const common = {
     slide,
     theme,
@@ -79,6 +80,7 @@ function mount(slide: SlideModel) {
         onStyle: (src: SlideSrc, size: number | null) => calls.style.push([src, size]),
         onImage: (url: null) => calls.image.push(url),
         onUpload: () => calls.upload++,
+        onRestoreImage: () => calls.restore++,
       }),
     ),
   );
@@ -197,6 +199,23 @@ test("rasm boshqaruvi: «Qayta chizish» YO'Q, «Rasmsiz» faqat rasm bor bo'lsa
   const c2 = mount(withImage);
   fireEvent.click(screen.getByText("Rasmsiz"));
   assert.deepEqual(c2.image, [null]);
+  cleanup();
+});
+
+test("«Rasmni qaytarish» FAQAT asl rasm (`imageOrig`) bo'lganda chiqadi va `onRestoreImage` beradi", () => {
+  mount(bulletsSlide());
+  assert.equal(screen.queryByText("Rasmni qaytarish") === null, true, "qaytaradigan narsa yo'q — tugma yo'q");
+  cleanup();
+  const removed: SlideModel = {
+    ...bulletsSlide(),
+    imageOrig: { url: "/api/generations/gen1/assets/abcdef0123456789" },
+  };
+  const calls = mount(removed);
+  assert.equal(screen.queryByText("Rasmsiz") === null, true, "rasm yo'q — «Rasmsiz» ham yo'q");
+  fireEvent.click(screen.getByText("Rasmni qaytarish"));
+  // MUTATSIYA: tugma `onImage(null)` ga ulansa — `calls.image` to'ladi, `restore` 0 qoladi.
+  assert.equal(calls.restore, 1);
+  assert.deepEqual(calls.image, []);
   cleanup();
 });
 

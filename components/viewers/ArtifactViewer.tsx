@@ -1,6 +1,7 @@
 "use client";
 
 import type { Generation } from "@/lib/types";
+import type { EditActionsState } from "../files/EditActions";
 import { academicDocFromHtml } from "@/lib/viewers/from-html";
 import { viewerKind } from "@/lib/viewers/kind";
 import { GlossaryViewer } from "./GlossaryViewer";
@@ -16,7 +17,7 @@ export function ArtifactViewer({
   gen,
   detail,
   onDetail,
-  onDirty,
+  onEditState,
 }: {
   gen: Generation;
   /**
@@ -28,8 +29,8 @@ export function ArtifactViewer({
   detail?: unknown;
   /** Tahrirdan keyingi yangi holat — sahifa (`ResultView`) uni o'zlashtiradi. */
   onDetail?: (g: unknown) => void;
-  /** Saqlanmagan tahrir soni — sahifa sarlavhasi «Yuklab olish» yonida aytadi. */
-  onDirty?: (n: number) => void;
+  /** Tahrir holati (saqlanmagan soni, saqlash, bekor qilish) — sahifa sarlavhasidagi `EditActions` ga. */
+  onEditState?: (s: EditActionsState | null) => void;
 }) {
   const doc = gen.doc ?? academicDocFromHtml(gen.html, gen);
   const kind = viewerKind(gen.type);
@@ -38,7 +39,7 @@ export function ArtifactViewer({
     case "slides":
       return (
         <div className="flex min-h-0 flex-1 flex-col">
-          <SlideViewer doc={doc} gen={detail} onGen={onDetail} onDirty={onDirty} />
+          <SlideViewer doc={doc} gen={detail} onGen={onDetail} onEditState={onEditState} />
         </div>
       );
     case "resume":

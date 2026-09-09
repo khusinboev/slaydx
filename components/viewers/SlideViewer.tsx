@@ -1,12 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Check, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, Maximize2, Minimize2, Pause, Play, Plus, Presentation, RotateCcw, Save, StickyNote, Trash2, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Maximize2, Minimize2, Pause, Play, Presentation, RotateCcw, Trash2, X } from "lucide-react";
 import type { AcademicDoc } from "@/lib/generation/types";
 import { slideNotes } from "@/lib/generation/slide-layout";
-import { canConvert } from "@/lib/generation/slide-edit";
-import { SLIDE_LAYOUTS, type SlideLayout, type SlideSrc } from "@/lib/generation/slide-types";
+import type { SlideSrc } from "@/lib/generation/slide-types";
 import { useSlideEdit } from "../files/useSlideEdit";
+import type { EditActionsState } from "../files/EditActions";
 import { useConfirmClick } from "../overlays/useConfirmClick";
 import { SlideEditor } from "./SlideEditor";
 import { SLIDE_TEMPLATE_BY_ID } from "@/lib/generation/slide-templates";
@@ -46,50 +46,22 @@ export function asLiveView(live: unknown): LiveView | null {
 }
 
 /**
- * F2: yupqa kompozitor.
+ * Yupqa kompozitor: holatni ushlaydi va `SlideRail`, `SlideStage`,
+ * `useSlideKeys` bo'laklarini bog'laydi.
  *
- * `SlideViewer` avval bitta katta komponent edi — eskiz paneli, sahna va
- * klaviatura ishlovi endi mos ravishda `SlideRail`, `SlideStage`,
- * `useSlideKeys` ga ajratildi. Bu fayl faqat holatni ushlaydi va
- * bo'laklarni bog'laydi; render natijasi bo'linishdan OLDINGISI bilan
- * BIR XIL (`tests/viewer/slide-viewer-seams.test.mts`).
- *
- * `live`, `overlay`, `gen`, `onGen` — keyingi ikki paket (jonli
- * generatsiya va tahrirlash) uchun ochilgan joylar. Hozircha faqat
- * e'lon qilinadi va uzatiladi — hech narsa chizmaydi va hech qanday
- * xatti-harakatni o'zgartirmaydi (no-op).
+ * Asboblar paneli ATAYLAB minimal (Muharrir 2): sahifa/zoom/to'liq ekran
+ * va slayd «O‘chirish». Saqlash/bekor qilish sahifa SARLAVHASIDA
+ * (`EditActions`, `onEditState` orqali), eslatma paneli yo'q (taqdimotchi
+ * rejimida qoladi), maket chiplari, «+ Slayd», ▲/▼ yo'q — matn tahriri
+ * to'g'ridan-to'g'ri slaydning o'zida (`SlideEditor`).
  */
-/**
- * Maket chiplarining o'zbekcha nomlari.
- *
- * Interfeys o'zbekcha — foydalanuvchi `twoCol` yoki `references` degan
- * xom `id` ni ko'rmasligi kerak. Ro'yxat `SLIDE_LAYOUTS` bilan to'liq:
- * yangi maket qo'shilsa TypeScript shu yerni talab qiladi.
- */
-const LAYOUT_UZ: Record<SlideLayout, string> = {
-  title: "Muqova",
-  agenda: "Reja",
-  section: "Bo‘lim",
-  bullets: "Bandlar",
-  twoCol: "Ikki ustun",
-  compare: "Taqqoslash",
-  quote: "Iqtibos",
-  stats: "Raqamlar",
-  process: "Bosqichlar",
-  table: "Jadval",
-  closing: "Yakun",
-  quiz: "Test",
-  references: "Manbalar",
-  answers: "Javoblar",
-};
-
 export function SlideViewer({
   doc,
   live,
   overlay,
   gen,
   onGen,
-  onDirty,
+  onEditState,
 }: {
   doc: AcademicDoc;
   /**
@@ -108,13 +80,12 @@ export function SlideViewer({
   /** Tahrirdan keyin yangilangan generatsiya — sahifa holatiga qaytariladi. */
   onGen?: (g: unknown) => void;
   /**
-   * SAQLANMAGAN operatsiyalar soni — sahifa sarlavhasiga.
-   *
-   * Saqlash tugmasi ko'ruvchining o'zida, lekin «Yuklab olish» yuqorida
-   * turadi: sahifa saqlanmagan tahrir borligini bilmasa, foydalanuvchi
-   * ekranda ko'rgan slaydni EMAS, eski faylni yuklab ketardi.
+   * Tahrir holati sahifa sarlavhasiga (`EditActions`): saqlanmagan soni,
+   * saqlash va bekor qilish. «Yuklab olish» yuqorida turadi — sahifa
+   * saqlanmagan tahrir borligini bilmasa, foydalanuvchi ekranda ko'rgan
+   * slaydni EMAS, eski faylni yuklab ketardi. `null` — tahrir yo'q.
    */
-  onDirty?: (n: number) => void;
+  onEditState?: (s: EditActionsState | null) => void;
 }) {
   const ed = useSlideEdit({ gen, onGen });
   /*
@@ -125,8 +96,6 @@ export function SlideViewer({
   const docNow = ed.doc ?? doc;
   const deck = useMemo(() => buildSlideDeck(docNow), [docNow]);
   const theme = useMemo(() => getSlideTheme(deck.themeId), [deck.themeId]);
-  // Rasm havolalari hujjat bilan birga serverdan keladi — brauzerdagi
-  // IndexedDB dan qayta tiklash kerak emas.
   /**
    * Eski dekalar uchun `id` qayta raqamlanadi.
    *
@@ -134,9 +103,7 @@ export function SlideViewer({
    * 16 slaydli dekada `s0…s7` ikki marta uchrardi. Dvigatelda bu
    * tuzatildi (`renumberSlides`), lekin BAZADAGI eski hujjatlar shundoq
    * qolgan — ularni ochganda React «two children with the same key»
-   * xatosini beradi va bir xil kalitli slaydlarni dublikat qilib yoki
-   * tushirib qoldirishi mumkin. Ko'ruvchi saqlangan ma'lumotga
-   * tayanmasligi kerak.
+   * xatosini beradi. Ko'ruvchi saqlangan ma'lumotga tayanmasligi kerak.
    */
   const slides = useMemo(
     () => (deck.slides ?? []).map((s, i) => (s.id === `s${i}` ? s : { ...s, id: `s${i}` })),
@@ -144,8 +111,6 @@ export function SlideViewer({
   );
   const [i, setI] = useState(0);
   const [present, setPresent] = useState(false);
-  // Standart holat hujjatdan: `speakerNotes=false` bo'lsa panel yopiq ochiladi.
-  const [notesOn, setNotesOn] = useState(deck.speakerNotes);
   const [presenter, setPresenter] = useState(false);
   const [zoom, setZoom] = useState(75);
   const [fitOn, setFitOn] = useState(true);
@@ -153,8 +118,8 @@ export function SlideViewer({
   const lv = useMemo(() => asLiveView(live), [live]);
   /**
    * Ko'ruvchi sahifaga BOG'LANGANmi (tayyor generatsiya yoki jonli
-   * oqim). Mobil eskiz tasmasi faqat shunda chiziladi — `gen`/`live`
-   * siz render F2 paritet fiksturasi bilan qulflangan.
+   * oqim). Mobil eskiz tasmasi faqat shunda chiziladi — passiv ko'ruvchi
+   * (`gen`/`live` siz) eskicha qoladi.
    */
   const connected = gen !== undefined || live !== undefined;
 
@@ -269,16 +234,15 @@ export function SlideViewer({
   const noop = useCallback(() => {}, []);
 
   /*
-   * ═══ E6 TAHRIR ═══
+   * ═══ TAHRIR ═══
    *
-   * Tahrir TUGMASI YO'Q — tayyor dekada u DOIM yoqiq (AUDIT-10):
-   * foydalanuvchi matn ustiga ikki marta bosadi va yozadi, «rejimga
-   * kirish» degan oraliq qadam yo'q. Faqat ikki holatda o'chadi:
+   * Tahrir TUGMASI YO'Q — tayyor dekada u DOIM yoqiq: foydalanuvchi matn
+   * ustiga ikki marta bosadi va yozadi. Faqat ikki holatda o'chadi:
    * taqdimotda (ekranda tinglovchi bor) va jonli generatsiyada (hujjat
    * hali serverda yozilmoqda — PATCH uni ustidan yozib yuborardi).
    */
   const editOn = ed.editable && !lv;
-  const { run: runOps, undo, redo, save, pending } = ed;
+  const { run: runOps, undo, redo, save, pending, discard, saving, justSaved } = ed;
 
   const onText = useCallback(
     (src: SlideSrc, value: string) => {
@@ -317,15 +281,9 @@ export function SlideViewer({
     },
     [runOps, i],
   );
-  const onLayout = useCallback(
-    (layout: SlideLayout) => {
-      runOps([{ op: "layout", index: i, layout }]);
-    },
-    [runOps, i],
-  );
-  const onAddSlide = useCallback(() => {
-    runOps([{ op: "add", after: i }]);
-    setI(i + 1);
+  /** «Rasmni qaytarish» — asl AI rasm `imageOrig` dan. */
+  const onRestoreImage = useCallback(() => {
+    runOps([{ op: "imageRestore", index: i }]);
   }, [runOps, i]);
   const onDeleteSlide = useCallback(() => {
     runOps([{ op: "delete", index: i }]);
@@ -336,7 +294,7 @@ export function SlideViewer({
     },
     [runOps],
   );
-  /** ▲/▼ — qo'shni slayd bilan almashish (sudrashning klaviatura yo'li). */
+  /** Mobil tasmadagi ◀/▶ — qo'shni slayd bilan almashish (sudrashning teginish yo'li). */
   const onMove = useCallback(
     (dir: -1 | 1) => {
       const to = i + dir;
@@ -350,13 +308,14 @@ export function SlideViewer({
   );
   // Ikki bosqichli tasdiq — bir bosishda slayd yo'qolmasin (undo bor, lekin baribir).
   const delSlide = useConfirmClick(onDeleteSlide);
+
   /*
-   * «Asl holatga qaytarish» ham IKKI bosishda: u butun dekani birinchi
-   * tahrirdan oldingi holatga qaytaradi va Ctrl+Z bilan ortga qaytmaydi
-   * (steklar tozalanadi) — bitta tasodifiy bosish soatlab ishni
-   * yo'qotardi.
+   * Tahrirlanayotgan qatlam kaliti — `SlideCanvas` o'sha qatlamni
+   * yashiradi, ustida `SlideEditor` ning tahrir maydoni turadi (ikki
+   * matn ustma-ust tushmasin). Slayd almashsa tozalanadi.
    */
-  const restoreDeck = useConfirmClick(() => void ed.restore());
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  useEffect(() => setEditingKey(null), [i]);
 
   /*
    * Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y. `useSlideKeys` bu ilgakni
@@ -383,11 +342,17 @@ export function SlideViewer({
     [editOn, undo, redo],
   );
 
-  const onDirtyRef = useRef(onDirty);
-  onDirtyRef.current = onDirty;
+  /*
+   * Tahrir holati SAHIFAGA (`EditActions`). Ref orqali — har renderda
+   * yangi callback berilsa ham effekt qayta ishlamasin. Komponent
+   * yopilganda `null` — sarlavhada eskirgan tugma qolmasin.
+   */
+  const onEditStateRef = useRef(onEditState);
+  onEditStateRef.current = onEditState;
   useEffect(() => {
-    onDirtyRef.current?.(editOn ? pending : 0);
-  }, [pending, editOn]);
+    onEditStateRef.current?.(editOn ? { pending, saving, justSaved, save, discard } : null);
+  }, [editOn, pending, saving, justSaved, save, discard]);
+  useEffect(() => () => onEditStateRef.current?.(null), []);
 
   /*
    * Ctrl+S — «Saqlash» ning klaviatura yo'li.
@@ -456,6 +421,7 @@ export function SlideViewer({
 
   const slide = slides[i];
   const next = slides[i + 1];
+  // Eslatma FAQAT taqdimotchi paneliga — pastki panel yo'q (Muharrir 2).
   const notes = slide ? slideNotes(slide, deck.speakerNotes) : "";
 
   return (
@@ -489,116 +455,33 @@ export function SlideViewer({
           onPage={(n) => go(n - 1)}
           onFit={() => setFitOn(true)}
           /*
-           * Jonli generatsiya paytida taqdimot/to'liq ekran va eslatma
-           * YO'Q: deka hali yarim, uni proyektorga chiqarish ma'nosiz,
-           * eslatmalar esa `deck` hodisasidan keyin qayta yoziladi —
-           * yarim eslatma ko'rsatish yolg'on bo'lardi.
+           * Jonli generatsiya paytida taqdimot/to'liq ekran YO'Q: deka
+           * hali yarim, uni proyektorga chiqarish ma'nosiz.
            */
           onFullscreen={lv ? undefined : () => setPresent(true)}
           extra={
             <>
-              {lv ? null : (
-              <button
-                type="button"
-                className={cn("hover:bg-white/10 inline-flex items-center gap-1 rounded px-2 py-1 text-xs", notesOn && "bg-white/10")}
-                onClick={() => setNotesOn((v) => !v)}
-              >
-                <StickyNote className="size-3.5" />
-                Eslatma
-              </button>
-              )}
-
-              {/* ═══ E6: tahrir boshqaruvi ═══
-                  «Tahrirlash» TUGMASI YO'Q: tayyor dekada tahrir doim
-                  yoqiq, shuning uchun bu yerda faqat slayd ustidagi
-                  amallar turadi. */}
               {ed.legacy && !lv ? (
                 <span className="text-xs text-white/40">
                   Bu deka eski formatda — tahrirlab bo‘lmaydi
                 </span>
               ) : null}
 
+              {/* Slayd ustidagi YAGONA amal — o'chirish (ikki bosishda).
+                  Qolgan hamma tahrir slaydning o'zida yoki sahifa sarlavhasida. */}
               {editOn && slide ? (
-                <>
-                  {/* Maket chiplari — FAQAT mumkin bo'lganlari
-                      (`canConvert`): uydirma talab qiladigan o'girishlar
-                      (raqamsiz `stats`, bo'sh `quiz`) ko'rinmaydi. */}
-                  {SLIDE_LAYOUTS.filter((L) => canConvert(slide, L).ok).map((L) => (
-                    <button
-                      key={L}
-                      type="button"
-                      className={cn(
-                        "hover:bg-white/10 rounded px-1.5 py-1 text-[11px] text-white/70",
-                        slide.layout === L && "bg-white/15 text-white",
-                      )}
-                      onClick={() => onLayout(L)}
-                    >
-                      {LAYOUT_UZ[L]}
-                    </button>
-                  ))}
-                  <span className="mx-1 h-4 w-px bg-white/15" />
-                  <button
-                    type="button"
-                    title="Joriy slayddan keyin yangi slayd"
-                    className="hover:bg-white/10 inline-flex items-center gap-1 rounded px-2 py-1 text-xs"
-                    onClick={onAddSlide}
-                  >
-                    <Plus className="size-3.5" />
-                    Slayd
-                  </button>
-                  <button
-                    type="button"
-                    title={slides.length <= 1 ? "Oxirgi slaydni o‘chirib bo‘lmaydi" : "Slaydni o‘chirish"}
-                    disabled={slides.length <= 1}
-                    className={cn(
-                      "inline-flex items-center gap-1 rounded px-2 py-1 text-xs disabled:opacity-40",
-                      delSlide.armed ? "bg-red-500/80 text-white" : "hover:bg-white/10",
-                    )}
-                    onClick={delSlide.trigger}
-                  >
-                    <Trash2 className="size-3.5" />
-                    {delSlide.armed ? "Rostdan?" : "O‘chirish"}
-                  </button>
-                  <button
-                    type="button"
-                    title="Yuqoriga"
-                    disabled={i === 0}
-                    className="hover:bg-white/10 rounded p-1 disabled:opacity-40"
-                    onClick={() => onMove(-1)}
-                  >
-                    <ChevronUp className="size-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    title="Pastga"
-                    disabled={i >= slides.length - 1}
-                    className="hover:bg-white/10 rounded p-1 disabled:opacity-40"
-                    onClick={() => onMove(1)}
-                  >
-                    <ChevronDown className="size-3.5" />
-                  </button>
-                </>
-              ) : null}
-
-              {/*
-                «Asl holatga qaytarish» — FAQAT serverda `doc_prev` bo'lsa
-                (`hasPrev`), ya'ni deka bir marta bo'lsa ham tahrirlangan.
-                Tahrirlanmagan dekada tugma umuman chiqmaydi: bosilsa
-                server 409 `no_prev` qaytarardi.
-              */}
-              {editOn && ed.hasPrev ? (
                 <button
                   type="button"
-                  title="Dekani birinchi tahrirdan oldingi holatga qaytarish"
-                  disabled={ed.saving || ed.rebuilding}
+                  title={slides.length <= 1 ? "Oxirgi slaydni o‘chirib bo‘lmaydi" : "Slaydni o‘chirish"}
+                  disabled={slides.length <= 1}
                   className={cn(
                     "inline-flex items-center gap-1 rounded px-2 py-1 text-xs disabled:opacity-40",
-                    restoreDeck.armed ? "bg-amber-500/85 text-white" : "hover:bg-white/10",
+                    delSlide.armed ? "bg-red-500/80 text-white" : "hover:bg-white/10",
                   )}
-                  onClick={restoreDeck.trigger}
+                  onClick={delSlide.trigger}
                 >
-                  <RotateCcw className="size-3.5" />
-                  {restoreDeck.armed ? "Rostdan qaytarilsinmi?" : "Asl holatga qaytarish"}
+                  <Trash2 className="size-3.5" />
+                  {delSlide.armed ? "Rostdan?" : "O‘chirish"}
                 </button>
               ) : null}
 
@@ -607,38 +490,6 @@ export function SlideViewer({
               <span className="hidden text-xs text-white/50 lg:inline">
                 {SLIDE_TEMPLATE_BY_ID[deck.templateId]?.nameUz ?? deck.templateId} · {theme.nameUz}
               </span>
-
-              {/*
-                «Saqlash» — o'ng chekkada, o'zgarish BO'LGANDA.
-                Avtomatik PATCH olib tashlangani uchun bu tugma yagona
-                yo'l: unda nechta o'zgarish kutayotgani yozilgan, bosilsa
-                hammasi bitta so'rovda ketadi va PPTX qayta yasaladi.
-                Ko'ruvchi asboblar paneli tanlandi (`ResultView` sarlavha
-                qatori emas): tahrir holati shu komponentda yashaydi va
-                tugma tahrir qilinayotgan joyning O'ZIDA, «Yuklab olish»
-                esa hujjat darajasidagi amal bo'lib yuqorida qoladi.
-              */}
-              {editOn && pending > 0 ? (
-                <button
-                  type="button"
-                  title="Saqlash (Ctrl+S)"
-                  disabled={ed.saving}
-                  className="inline-flex items-center gap-1 rounded bg-sky-500 px-2 py-1 text-xs font-medium text-white hover:bg-sky-400 disabled:opacity-60"
-                  onClick={() => void save()}
-                >
-                  <Save className="size-3.5" />
-                  {ed.saving ? "Saqlanmoqda…" : `Saqlash (${pending} o‘zgarish)`}
-                </button>
-              ) : null}
-              {editOn && pending === 0 && ed.saving ? (
-                <span className="text-xs text-white/60">Saqlanmoqda…</span>
-              ) : null}
-              {editOn && pending === 0 && !ed.saving && ed.justSaved ? (
-                <span className="inline-flex items-center gap-1 text-xs text-emerald-300">
-                  <Check className="size-3.5" />
-                  Saqlandi
-                </span>
-              ) : null}
             </>
           }
         />
@@ -677,9 +528,9 @@ export function SlideViewer({
             present={present}
             zoom={zoom}
             fitOn={fitOn}
-            notesOn={notesOn}
             presenter={presenter}
             onAdvance={() => go(i + 1)}
+            hideSrc={editOn && !present && editingKey ? editingKey : undefined}
             /*
               Tahrir qatlami — `overlay` slotida. Tashqi `overlay` propi
               (agar berilgan bo'lsa) ustun: uni jonli paket ishlatadi va
@@ -687,7 +538,7 @@ export function SlideViewer({
             */
             overlay={
               overlay ??
-              // Taqdimot (`present`) rejimida tahrir qatlami YO'Q — ikki bosish, panel, textarea chiqmaydi.
+              // Taqdimot (`present`) rejimida tahrir qatlami YO'Q — ikki bosish, panel, maydon chiqmaydi.
               (editOn && !present
                 ? (ctx) => (
                     <SlideEditor
@@ -707,7 +558,9 @@ export function SlideViewer({
                       onAnswer={onAnswer}
                       onStyle={onStyle}
                       onImage={onSlideImage}
+                      onRestoreImage={onRestoreImage}
                       onUpload={(f) => void ed.uploadImage(ctx.index, f)}
+                      onEditing={setEditingKey}
                     />
                   )
                 : undefined)
@@ -722,13 +575,10 @@ export function SlideViewer({
 
           {/*
             MOBIL eskiz tasmasi — yon panel `md:` dan past ekranda
-            `hidden`, ya'ni telefonda deka umuman ko'rinmasdi.
-
-            Shart `connected`: `gen`/`live` siz ko'ruvchi SSR HTML i
-            F2 fikstura bilan BAYT-BAYTIGA qulflangan
-            (`tests/viewer/slide-viewer-seams.test.mts`) va unga yangi
-            tugun qo'shib bo'lmaydi. Ishlab turgan IKKALA yo'l ham
-            tasmani oladi: `ArtifactViewer` → `gen`, `RunningPanel` → `live`.
+            `hidden`, ya'ni telefonda deka umuman ko'rinmasdi. Shart
+            `connected`: passiv ko'ruvchi (`gen`/`live` siz) eskicha
+            qoladi. Ishlab turgan IKKALA yo'l ham tasmani oladi:
+            `ArtifactViewer` → `gen`, `RunningPanel` → `live`.
           */}
           {!present && connected ? (
             <SlideRail
@@ -760,14 +610,12 @@ export function SlideViewer({
               <button type="button" className="hover:bg-white/10 rounded p-1" onClick={() => go(i + 1)}>
                 <ChevronRight className="size-3.5" />
               </button>
-              {/* Holat satri — tahrir qayerda ekanini aytadi: hujjat
-                  saqlanmoqdami yoki PPTX hali eski. */}
+              {/* Holat satri — hujjat saqlanmoqdami yoki PPTX hali eski.
+                  Saqlanmagan soni sahifa sarlavhasida (`EditActions`). */}
               {ed.saving ? (
                 <span className="ml-3 shrink-0 text-white/50">Saqlanmoqda…</span>
               ) : ed.rebuilding ? (
                 <span className="ml-3 shrink-0 text-white/50">Fayl yangilanmoqda…</span>
-              ) : editOn && pending > 0 ? (
-                <span className="ml-3 shrink-0 text-amber-300/80">Saqlanmagan o‘zgarish: {pending}</span>
               ) : null}
               {ed.error ? (
                 <span role="alert" className="ml-3 min-w-0 truncate text-amber-300">
@@ -779,35 +627,6 @@ export function SlideViewer({
                 <button type="button" className="hover:bg-white/10 ml-2 rounded p-1" onClick={() => setPresent(true)}>
                   {present ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
                 </button>
-              )}
-            </div>
-          ) : null}
-
-          {/* Jonli rejimda eslatma paneli ham yopiq — matn `deck`
-              hodisasidan keyin qayta yoziladi, yarimi yolg'on bo'lardi. */}
-          {!present && notesOn && !lv ? (
-            <div className="no-print max-h-28 shrink-0 overflow-y-auto border-t border-white/10 bg-[#2b2b2b] px-4 py-2">
-              <div className="mb-1 text-[11px] font-medium tracking-wide text-white/45 uppercase">Eslatma</div>
-              {editOn && deck.speakerNotes && slide ? (
-                /*
-                  Tahrirda izoh — oddiy `textarea`, `blur` da saqlanadi.
-                  `key` slaydga bog'langan: slayd almashsa maydon yangi
-                  qiymat bilan qayta tug'iladi (boshqarilmagan maydon
-                  eski matnni ushlab qolardi).
-                */
-                <textarea
-                  key={`notes-${i}`}
-                  aria-label="Ma’ruzachi izohi"
-                  defaultValue={slide.notes ?? ""}
-                  placeholder="Bu slayd uchun eslatma…"
-                  className="h-20 w-full resize-none rounded bg-black/30 p-2 text-[13px] leading-snug text-white/90 outline-none focus:outline-1 focus:outline-sky-500"
-                  onBlur={(e) => {
-                    if ((slide.notes ?? "") === e.target.value) return;
-                    runOps([{ op: "notes", index: i, value: e.target.value }]);
-                  }}
-                />
-              ) : (
-                <p className="whitespace-pre-wrap text-[13px] leading-snug text-white/80">{notes || "Bu slayd uchun eslatma yo‘q."}</p>
               )}
             </div>
           ) : null}

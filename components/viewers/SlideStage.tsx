@@ -13,13 +13,12 @@ import { ImageWaitPlaque } from "./ImageWaitPlaque";
 export type SlideStageOverlayCtx = { index: number; scale: number; slide: SlideModel };
 
 /**
- * Sahna — F2 bo'linishida `SlideViewer.tsx` dan AYNAN 1:1 ko'chirildi
- * (xatti-harakat o'zgarmagan): `fitScale` shu yerda o'lchanadi va
- * `zoom`/`fitOn` bilan birga effektiv masshtabga aylanadi.
+ * Sahna — `fitScale` shu yerda o'lchanadi va `zoom`/`fitOn` bilan birga
+ * effektiv masshtabga aylanadi.
  *
- * `overlay` — keyingi paketlar (jonli generatsiya, tahrirlash) sahna
- * ustiga `absolute inset-0` qatlamda o'z elementini chizishi uchun.
- * Berilmasa hech narsa qo'shilmaydi.
+ * `overlay` — tahrirlash qatlami (`SlideEditor`) sahna ustiga `absolute
+ * inset-0` qatlamda o'z elementini chizishi uchun. Berilmasa hech narsa
+ * qo'shilmaydi.
  */
 export function SlideStage({
   slide,
@@ -34,7 +33,6 @@ export function SlideStage({
   present,
   zoom,
   fitOn,
-  notesOn,
   presenter,
   onAdvance,
   overlay,
@@ -42,6 +40,7 @@ export function SlideStage({
   role,
   imageWait = false,
   reveal,
+  hideSrc,
 }: {
   slide?: SlideModel;
   theme: SlideTheme;
@@ -56,8 +55,7 @@ export function SlideStage({
   present: boolean;
   zoom: number;
   fitOn: boolean;
-  /** `fitScale` effektini qayta o'lchash kerakligini bildiruvchi holatlar. */
-  notesOn: boolean;
+  /** `fitScale` effektini qayta o'lchash kerakligini bildiruvchi holat. */
   presenter: boolean;
   onAdvance?: () => void;
   overlay?: (ctx: SlideStageOverlayCtx) => ReactNode;
@@ -69,6 +67,8 @@ export function SlideStage({
   imageWait?: boolean;
   /** L5 jonli: `SlideCanvas` ga uzatiladigan matn ulushi (0..1). */
   reveal?: number;
+  /** Tahrirlanayotgan qatlam kaliti — `SlideCanvas` uni yashiradi (ustida tahrir maydoni turadi). */
+  hideSrc?: string;
 }) {
   const stageRef = useRef<HTMLDivElement>(null);
   const [fitScale, setFitScale] = useState(0.6);
@@ -83,7 +83,7 @@ export function SlideStage({
     });
     ro.observe(el);
     return () => ro.disconnect();
-  }, [present, notesOn, presenter]);
+  }, [present, presenter]);
 
   const scale = present || fitOn ? Math.max(0.18, fitScale) : zoom / 100;
 
@@ -99,9 +99,8 @@ export function SlideStage({
         /*
           Tahrir qatlami hodisalarni SHU ramkada tinglaydi: bu yagona
           tugun bo'lib, ichida ham slayd (`data-src` li matnlar), ham
-          overlay bor. Atribut FAQAT overlay bo'lganda yoziladi — aks
-          holda SSR HTML i bo'linishdan oldingidan farq qilardi
-          (`slide-viewer-seams` testi).
+          overlay bor. Atribut FAQAT overlay bo'lganda yoziladi — passiv
+          ko'ruvchi HTML i o'zgarmasin.
         */
         data-slide-frame={overlay ? "" : undefined}
       >
@@ -111,7 +110,7 @@ export function SlideStage({
         >
           {slide && skeleton ? <SkeletonSlide theme={theme} role={role} index={index} /> : null}
           {slide && !skeleton ? (
-            <SlideCanvas slide={slide} theme={theme} visual={visual} audience={audience} templateId={templateId} bodyType={bodyType} logo={logo} index={index} total={total} reveal={reveal} />
+            <SlideCanvas slide={slide} theme={theme} visual={visual} audience={audience} templateId={templateId} bodyType={bodyType} logo={logo} index={index} total={total} reveal={reveal} hideSrc={hideSrc} />
           ) : null}
           {/*
             Jonli qatlam sahna ICHIDA, slayd bilan bir masshtabda —

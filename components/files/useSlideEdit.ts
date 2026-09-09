@@ -133,6 +133,15 @@ export type SlideEdit = {
   uploadImage: (index: number, file: File) => Promise<void>;
   /** Navbatni bo'shatadi va kerak bo'lsa PPTX ni qayta yasaydi (yuklab olishdan oldin). */
   ensureFresh: () => Promise<void>;
+  /**
+   * «Asliga qaytarish» — SAQLANMAGAN o'zgarishlarni bekor qiladi.
+   *
+   * Faqat klientda: navbat tashlanadi, ekran oxirgi serverdan qabul
+   * qilingan hujjatga (`baseDocRef`) qaytadi, undo/redo tozalanadi.
+   * Serverga so'rov KETMAYDI (`restore` dan farqi shu — u `doc_prev` ni,
+   * ya'ni saqlangan tahrirlarni ham qaytaradi).
+   */
+  discard: () => void;
 };
 
 export function useSlideEdit({
@@ -170,6 +179,8 @@ export function useSlideEdit({
   }, []);
 
   const docRef = useRef(doc);
+  // Oxirgi SAQLANGAN (serverdan kelgan) hujjat — `discard` shunga qaytaradi.
+  const baseDocRef = useRef<AcademicDoc | null>(g?.doc ?? null);
   const versionRef = useRef(version);
   const fileRef = useRef(fileVersion);
   const onGenRef = useRef(onGen);
@@ -194,6 +205,7 @@ export function useSlideEdit({
     (gd: Partial<GenerationDetail> & Record<string, unknown>) => {
       if (gd.doc && typeof gd.doc === "object") {
         docRef.current = gd.doc as AcademicDoc;
+        baseDocRef.current = gd.doc as AcademicDoc;
         setDoc(gd.doc as AcademicDoc);
       }
       versionRef.current = num(gd.docVersion);
@@ -216,6 +228,7 @@ export function useSlideEdit({
     if (!g) return;
     if (docRef.current === null || g.docVersion > versionRef.current) {
       docRef.current = g.doc;
+      baseDocRef.current = g.doc;
       versionRef.current = g.docVersion;
       fileRef.current = g.fileVersion;
       setDoc(g.doc);
@@ -387,6 +400,22 @@ export function useSlideEdit({
     await doRebuild();
   }, [doRebuild]);
 
+  const discard = useCallback(() => {
+    queueRef.current = [];
+    setPending(0);
+    const base = baseDocRef.current;
+    if (base) {
+      docRef.current = base;
+      setDoc(base);
+    }
+    // Steklar ham tozalanadi: Ctrl+Z endi bekor qilingan tahrirni «qaytarib» qo'ymasin.
+    undoRef.current = [];
+    redoRef.current = [];
+    bump();
+    setError(null);
+    setJustSaved(false);
+  }, [bump]);
+
   /**
    * «Asl holatga qaytarish» — server `doc_prev` dan tiklaydi.
    *
@@ -476,5 +505,6 @@ export function useSlideEdit({
     restore,
     uploadImage,
     ensureFresh,
+    discard,
   };
 }

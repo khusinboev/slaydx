@@ -1,9 +1,10 @@
 import "./setup.ts";
 import test, { afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { createElement as h, act } from "react";
+import { createElement as h, act, useState } from "react";
 import { render, fireEvent, screen, cleanup } from "@testing-library/react";
 import { SlideViewer } from "../../components/viewers/SlideViewer.tsx";
+import { EditActions, type EditActionsState } from "../../components/files/EditActions.tsx";
 import { useSlideEdit, type SlideEdit } from "../../components/files/useSlideEdit.ts";
 import { applyDocOps, type DocOp } from "../../lib/generation/slide-edit.ts";
 import type { AcademicDoc } from "../../lib/generation/types.ts";
@@ -152,6 +153,16 @@ function stageQuery(sel: string): HTMLElement {
 }
 
 /**
+ * Sahifa taqlidi: `ResultView` kabi — `SlideViewer` tahrir holatini
+ * `onEditState` bilan yuqoriga beradi, sarlavhadagi `EditActions` uni
+ * chizadi. Saqlash/bekor qilish tugmalari AYNAN shu yo'l bilan sinaladi.
+ */
+function Page({ doc, gen }: { doc: AcademicDoc; gen: unknown }) {
+  const [st, setSt] = useState<EditActionsState | null>(null);
+  return h("div", null, h(EditActions, { state: st }), h(SlideViewer, { doc, gen, onEditState: setSt }));
+}
+
+/**
  * Ko'ruvchini TAHRIRGA TAYYOR holda ochadi.
  *
  * «Tahrirlash» tugmasi YO'Q (AUDIT-10): tayyor deka ochilishi bilan
@@ -159,55 +170,73 @@ function stageQuery(sel: string): HTMLElement {
  * «rejimga kirish» qadamini qaytarsa, quyidagi testlar darhol yiqiladi.
  */
 function openEditor(s: Server) {
-  render(h(SlideViewer, { doc: s.doc, gen: generation(s) }));
+  render(h(Page, { doc: s.doc, gen: generation(s) }));
 }
 
-/** «Saqlash (N o'zgarish)» tugmasi (yo'q bo'lsa `null`). */
+/** Sarlavhadagi «Saqlash · N» tugmasi (yo'q bo'lsa `null`). */
 function saveBtn(): HTMLElement | null {
-  return screen.queryByText(/^Saqlash \(/);
+  return screen.queryByText(/^Saqlash · /);
 }
 
-test("«Tahrirlash» tugmasi YO'Q — maket chiplari darhol ko'rinadi", () => {
+/**
+ * Saqlanmagan operatsiya hosil qilishning ENG SODDA yo'li — mobil
+ * tasmadagi ◀/▶ (joriy slaydni qo'shnisi bilan almashtiradi, bitta
+ * `reorder`). Toolbar da «+ Slayd» endi yo'q (Muharrir 2).
+ */
+function moveRight() {
+  fireEvent.click(screen.getByLabelText("Slaydni o‘ngga surish"));
+}
+function moveLeft() {
+  fireEvent.click(screen.getByLabelText("Slaydni chapga surish"));
+}
+
+test("asboblar paneli minimal: faqat «O‘chirish» — chip, «+ Slayd», ▲/▼, Eslatma, Saqlash YO'Q", () => {
   const s = stubServer();
   openEditor(s);
   assert.equal(screen.queryByText("Tahrirlash") === null, true, "tahrir rejimi tugmasi olib tashlangan");
-  assert.ok(screen.getByText("Slayd"), "«+ Slayd» tugmasi");
-  assert.ok(screen.getByText("O‘chirish"), "o'chirish tugmasi");
-  // Muqova slaydidan faqat `section`/`closing` ga o'girish mumkin —
-  // `canConvert` qolgan chiplarni umuman chizmaydi.
-  assert.ok(screen.getByText("Bo‘lim"), "mumkin bo'lgan maket chipi");
-  assert.equal(screen.queryByText("Jadval") === null, true, "mumkin bo'lmagan maket chipi chiqmasligi kerak");
+  assert.ok(screen.getByText("O‘chirish"), "o'chirish tugmasi qoladi");
+  assert.equal(screen.queryByText("Slayd") === null, true, "«+ Slayd» yo'q");
+  assert.equal(screen.queryByText("Bo‘lim") === null, true, "maket chiplari yo'q");
+  assert.equal(screen.queryByTitle("Yuqoriga") === null, true, "▲ yo'q");
+  assert.equal(screen.queryByText("Eslatma") === null, true, "eslatma tugmasi/paneli yo'q");
+  assert.equal(screen.queryByLabelText("Ma’ruzachi izohi") === null, true, "izoh maydoni yo'q");
+  assert.equal(screen.queryByText("Asl holatga qaytarish") === null, true, "server doc_prev tugmasi UI da yo'q");
+  assert.equal(saveBtn() === null, true, "o'zgarishsiz saqlash tugmasi yo'q");
+  assert.equal(screen.queryByText("Asliga qaytarish") === null, true, "o'zgarishsiz bekor qilish ham yo'q");
   cleanup();
 });
 
 test("AVTOMATIK PATCH YO'Q — taymer o'tsa ham serverga borilmaydi", async () => {
   const s = stubServer();
   openEditor(s);
-  const add = screen.getByText("Slayd");
-  fireEvent.click(add);
-  fireEvent.click(add);
-  fireEvent.click(add);
+  moveRight();
+  moveRight();
+  moveLeft();
   await pause(1200);
   assert.equal(s.calls.length, 0, "«Saqlash» bosilmaguncha bironta so'rov ketmasligi kerak");
   assert.ok(saveBtn(), "o'rniga «Saqlash» tugmasi paydo bo'ladi");
-  assert.equal(saveBtn()?.textContent?.includes("3 o‘zgarish"), true, "tugma nechta o'zgarishni aytadi");
+  assert.equal(saveBtn()?.textContent, "Saqlash · 3", "tugma faqat sonni aytadi");
+  assert.ok(screen.getByText("Asliga qaytarish"), "o'zgarish bor — bekor qilish ham chiqadi");
   cleanup();
 });
 
 test("«Saqlash» — yig'ilgan op'lar BITTA PATCH, keyin rebuild", async () => {
   const s = stubServer();
   openEditor(s);
-  const add = screen.getByText("Slayd");
-  fireEvent.click(add);
-  fireEvent.click(add);
-  fireEvent.click(add);
+  moveRight();
+  moveRight();
+  moveLeft();
   await act(async () => {
     fireEvent.click(saveBtn()!);
   });
   await pause(50);
   assert.equal(s.patches.length, 1, "uchala op bitta so'rovda ketishi kerak");
   assert.equal(ops(s.patches[0]).length, 3);
-  assert.equal(s.doc.slides?.length, 6, "server ham uchta slayd qo'shgan bo'lishi kerak");
+  assert.deepEqual(
+    s.doc.slides?.map((x) => x.title),
+    ["Birinchi", "Muqova", "Ikkinchi"],
+    "server ham uchala almashtirishni qo'llagan bo'lishi kerak",
+  );
   assert.equal(
     s.calls.filter((c) => c.url.endsWith("/rebuild")).length,
     1,
@@ -221,34 +250,34 @@ test("«Saqlash» — yig'ilgan op'lar BITTA PATCH, keyin rebuild", async () => 
 test("Ctrl+S ham saqlaydi", async () => {
   const s = stubServer();
   openEditor(s);
-  fireEvent.click(screen.getByText("Slayd"));
+  moveRight();
   await act(async () => {
     fireEvent.keyDown(document.body, { key: "s", ctrlKey: true });
   });
   await pause(50);
   assert.equal(s.patches.length, 1);
-  assert.deepEqual(ops(s.patches[0]), [{ op: "add", after: 0 }]);
+  assert.deepEqual(ops(s.patches[0]), [{ op: "reorder", order: [1, 0, 2] }]);
   cleanup();
 });
 
 test("Ctrl+Z saqlanmagan operatsiyani BEKOR qiladi — serverga hech narsa bormaydi", async () => {
   const s = stubServer();
   openEditor(s);
-  fireEvent.click(screen.getByText("Slayd"));
-  assert.equal(saveBtn()?.textContent?.includes("1 o‘zgarish"), true);
+  moveRight();
+  assert.equal(saveBtn()?.textContent, "Saqlash · 1");
 
   fireEvent.keyDown(document.body, { key: "z", ctrlKey: true });
   await pause(100);
   assert.equal(s.calls.length, 0, "bekor qilish tarmoqqa chiqmaydi");
-  // Qo'shish + o'chirish — ikkalasi ham navbatda, hujjat esa asl holatida.
-  assert.equal(saveBtn()?.textContent?.includes("2 o‘zgarish"), true);
+  // Almashtirish + teskarisi — ikkalasi ham navbatda, hujjat esa asl holatida.
+  assert.equal(saveBtn()?.textContent, "Saqlash · 2");
 
   await act(async () => {
     fireEvent.click(saveBtn()!);
   });
   await pause(50);
-  assert.deepEqual(ops(s.patches[0]), [{ op: "add", after: 0 }, { op: "delete", index: 1 }]);
-  assert.equal(s.doc.slides?.length, 3, "bekor qilingandan keyin deka asl holatida");
+  assert.deepEqual(ops(s.patches[0]), [{ op: "reorder", order: [1, 0, 2] }, { op: "reorder", order: [1, 0, 2] }]);
+  assert.deepEqual(s.doc.slides?.map((x) => x.title), ["Muqova", "Birinchi", "Ikkinchi"], "bekor qilingandan keyin deka asl holatida");
   cleanup();
 });
 
@@ -289,7 +318,7 @@ test("textarea fokusda Ctrl+Z ko'ruvchiga TEGMAYDI", async () => {
   openEditor(s);
   // Bandli slaydga o'tamiz (muqovada ro'yxat yo'q).
   fireEvent.click(document.querySelectorAll("[data-thumb-index]")[1]);
-  fireEvent.click(screen.getByText("Slayd"));
+  moveRight();
   const before = saveBtn()?.textContent;
 
   // Matn maydonini ochamiz va aynan unda Ctrl+Z bosamiz — bu brauzerning
@@ -392,17 +421,16 @@ test("o'chirish IKKI bosishda, bitta slaydli dekada tugma o'chiq", async () => {
   cleanup();
 });
 
-test("izoh maydoni `notes` operatsiyasini beradi", async () => {
+test("o'chirish sahnadagi qatlamni yashiradi va yopilganda qaytaradi (hideSrc)", () => {
   const s = stubServer();
   openEditor(s);
-  const notes = screen.getByLabelText("Ma’ruzachi izohi") as HTMLTextAreaElement;
-  fireEvent.change(notes, { target: { value: "Bu yerda sekin gapiraman" } });
-  fireEvent.blur(notes);
-  await act(async () => {
-    fireEvent.click(saveBtn()!);
-  });
-  await pause(50);
-  assert.deepEqual(ops(s.patches[0]), [{ op: "notes", index: 0, value: "Bu yerda sekin gapiraman" }]);
+  const title = stageQuery('[data-src=\'{"f":"title"}\']');
+  assert.equal(title.style.visibility, "", "tahrirsiz qatlam ko'rinadi");
+  fireEvent.doubleClick(title);
+  // MUTATSIYA: `onEditing` → `setEditingKey` → `hideSrc` zanjiri uzilsa — qizil.
+  assert.equal(stageQuery('[data-src=\'{"f":"title"}\']').style.visibility, "hidden", "tahrir ochilganda asl matn yashirinadi");
+  fireEvent.keyDown(screen.getByLabelText("Matnni tahrirlash"), { key: "Escape" });
+  assert.equal(stageQuery('[data-src=\'{"f":"title"}\']').style.visibility, "", "yopilganda qaytadi");
   cleanup();
 });
 
@@ -452,42 +480,56 @@ test("test javobi ✓ bilan almashadi va javoblar kaliti qayta yig'iladi", async
   cleanup();
 });
 
-test("«Asl holatga qaytarish» — `hasPrev` bo'lmasa tugma YO'Q", () => {
-  const s = stubServer();
-  openEditor(s);
-  assert.equal(
-    screen.queryByText("Asl holatga qaytarish") === null,
-    true,
-    "tahrirlanmagan dekada server 409 `no_prev` berardi",
-  );
-  cleanup();
-});
-
-test("«Asl holatga qaytarish» IKKI bosishda serverga boradi", async () => {
+test("«Asliga qaytarish» IKKI bosishda saqlanmagan o'zgarishlarni bekor qiladi — serverga BORMAYDI", async () => {
   const s = stubServer();
   s.prev = makeDoc([{ id: "s0", layout: "title", title: "ASL MUQOVA", subtitle: "Asl izoh" }]);
   openEditor(s);
-  // Saqlanmagan tahrir ham bor — qaytarish uni TASHLASHI kerak.
-  fireEvent.click(screen.getByText("Slayd"));
-  assert.ok(saveBtn(), "navbatda o'zgarish bor");
+  moveRight();
+  moveRight();
+  assert.equal(saveBtn()?.textContent, "Saqlash · 2");
+  assert.equal(document.querySelectorAll("[data-thumb-index]")[0].textContent?.includes("Birinchi"), true, "ekranda almashgan tartib");
 
-  fireEvent.click(screen.getByText("Asl holatga qaytarish"));
-  assert.equal(s.calls.length, 0, "birinchi bosish faqat tasdiq so'raydi");
+  fireEvent.click(screen.getByText("Asliga qaytarish"));
+  assert.ok(screen.getByText("Rostdan?"), "birinchi bosish faqat tasdiq so'raydi");
+  assert.ok(saveBtn(), "hali bekor qilinmagan");
   await act(async () => {
-    fireEvent.click(screen.getByText("Rostdan qaytarilsinmi?"));
+    fireEvent.click(screen.getByText("Rostdan?"));
   });
   await pause(50);
-  const restores = s.calls.filter((c) => c.method === "POST" && c.url.endsWith("/doc/restore"));
-  assert.equal(restores.length, 1, "ikkinchi bosishda `POST …/doc/restore`");
-  assert.equal(s.patches.length, 0, "saqlanmagan navbat YUBORILMAYDI — u qaytarilgan hujjatni buzardi");
+  assert.equal(s.calls.length, 0, "bekor qilish klientda — na PATCH, na restore, na rebuild");
   // DOM tugunini `=== null, true` bilan solishtiramiz: yiqilganda
   // `node:assert` jsdom tugunini chizishga urinib jarayonni qotiradi (Y-2).
   assert.equal(saveBtn() === null, true, "navbat tashlanadi");
-  assert.equal(
-    s.calls.filter((c) => c.url.endsWith("/rebuild")).length,
-    1,
-    "qaytarilgandan keyin PPTX ham quvib yetadi",
+  assert.equal(screen.queryByText("Asliga qaytarish") === null, true, "o'zgarish qolmadi — tugma ham yo'q");
+  // MUTATSIYA: `discard` da `baseDocRef` ga qaytarish olib tashlansa — eskizlar almashgan tartibda qoladi.
+  assert.equal(document.querySelectorAll("[data-thumb-index]")[0].textContent?.includes("Muqova"), true, "ekran oxirgi SAQLANGAN holatga qaytadi");
+  // Ctrl+Z bekor qilingan tahrirni «qaytarib» qo'ymaydi (steklar tozalangan).
+  fireEvent.keyDown(document.body, { key: "z", ctrlKey: true });
+  await pause(50);
+  assert.equal(saveBtn() === null, true, "undo steki bo'sh");
+  cleanup();
+});
+
+test("«Asliga qaytarish» faqat saqlanMAGAN tahrirni tashlaydi — saqlangani qoladi", async () => {
+  const s = stubServer();
+  openEditor(s);
+  moveRight();
+  await act(async () => {
+    fireEvent.click(saveBtn()!);
+  });
+  await pause(50);
+  assert.equal(s.patches.length, 1, "birinchi o'zgarish saqlandi");
+  moveRight();
+  // Ikki bosish IKKI alohida hodisa: birinchisi «Rostdan?» ni chizadi, ikkinchisi bekor qiladi.
+  fireEvent.click(screen.getByText("Asliga qaytarish"));
+  fireEvent.click(screen.getByText("Rostdan?"));
+  await pause(50);
+  assert.deepEqual(
+    Array.from(document.querySelectorAll("[data-thumb-index]")).map((el) => (el.textContent?.includes("Muqova") ? "Muqova" : el.textContent?.includes("Birinchi") ? "Birinchi" : "Ikkinchi")),
+    ["Birinchi", "Muqova", "Ikkinchi"],
+    "saqlangan almashtirish qoladi, saqlanmagani ketadi",
   );
+  assert.equal(s.patches.length, 1, "bekor qilish serverga bormaydi");
   cleanup();
 });
 
@@ -661,6 +703,25 @@ test("saqlanmagan o'zgarish bo'lsa sahifadan chiqish ogohlantiriladi", async () 
     await hook!.save();
   });
   assert.equal(ask(), false, "saqlangach ogohlantirish o'chadi");
+  cleanup();
+});
+
+test("discard (hook): navbat va steklar tozalanadi, hujjat oxirgi saqlanganga qaytadi, tarmoq yo'q", async () => {
+  const s = stubServer();
+  render(h(Harness, { gen: generation(s) }));
+  await act(async () => {
+    hook!.run([{ op: "text", index: 1, src: { f: "title" }, value: "Mahalliy sarlavha" }]);
+  });
+  assert.equal(hook!.doc?.slides?.[1].title, "Mahalliy sarlavha", "optimistik nusxa ekranda");
+  assert.equal(hook!.pending, 1);
+  await act(async () => {
+    hook!.discard();
+  });
+  assert.equal(hook!.pending, 0);
+  assert.equal(hook!.canUndo, false);
+  assert.equal(hook!.canRedo, false);
+  assert.equal(hook!.doc?.slides?.[1].title, "Birinchi", "serverdan kelgan oxirgi hujjat");
+  assert.equal(s.calls.length, 0, "discard tarmoqqa chiqmaydi");
   cleanup();
 });
 

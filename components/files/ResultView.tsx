@@ -9,6 +9,7 @@ import { ensureGenerationFresh } from "@/lib/api-edit";
 import { useAppStore } from "@/lib/store";
 import { TOOL_BY_ID } from "@/lib/tools";
 import { useConfirmClick } from "../overlays/useConfirmClick";
+import { EditActions, type EditActionsState } from "./EditActions";
 import { ArtifactViewer } from "../viewers/ArtifactViewer";
 import { SlideViewer, asLiveView } from "../viewers/SlideViewer";
 import { liveDocOf, type LiveDeck } from "@/lib/generation/slide-progress";
@@ -36,15 +37,12 @@ export function ResultView({ id }: { id: string }) {
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   /**
-   * Ko'ruvchida saqlanmagan tahrir soni.
-   *
-   * «Saqlash» tugmasi ko'ruvchining asboblar panelida (tahrir aynan
-   * o'sha yerda bo'ladi), lekin «Yuklab olish» SHU sarlavha qatorida —
-   * shuning uchun saqlanmagan o'zgarish borligi bu yerda ham aytiladi.
-   * Aks holda foydalanuvchi ekranda ko'rgan slaydni emas, oldingi
-   * faylni olib ketardi («ko'rdim = oldim» buzilardi).
+   * Ko'ruvchi tahririning holati — «Asliga qaytarish» va «Saqlash · N»
+   * SHU sarlavha qatorida, «Yuklab olish» yonida turadi: foydalanuvchi
+   * faylni olishdan oldin saqlanmagan o'zgarish borligini aynan shu
+   * yerda ko'radi («ko'rdim = oldim»). Holatning o'zi `SlideViewer` da.
    */
-  const [unsaved, setUnsaved] = useState(0);
+  const [editState, setEditState] = useState<EditActionsState | null>(null);
 
   useEffect(() => {
     if (!sessionChecked || !loggedIn) return;
@@ -166,11 +164,7 @@ export function ResultView({ id }: { id: string }) {
         </div>
         {completed ? (
           <div className="flex shrink-0 items-center gap-2">
-            {unsaved > 0 ? (
-              <span className="hidden text-xs text-amber-600 sm:inline">
-                Saqlanmagan o‘zgarish: {unsaved} — avval «Saqlash»
-              </span>
-            ) : null}
+            <EditActions state={editState} />
             {!expired ? (
             <button
               type="button"
@@ -300,7 +294,7 @@ export function ResultView({ id }: { id: string }) {
             gen={toLegacyShape(gen)}
             detail={gen}
             onDetail={(g) => setGen((prev) => ({ ...(prev as api.GenerationDetail), ...(g as api.GenerationDetail) }))}
-            onDirty={setUnsaved}
+            onEditState={setEditState}
           />
         </div>
       ) : null}

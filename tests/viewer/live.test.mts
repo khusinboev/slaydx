@@ -255,14 +255,15 @@ test("SlideViewer: live berilsa rail'da roles va tasma chiqadi, jonli belgilar b
   assert.ok(html.includes("Sarlavha slaydi"));
 });
 
-test("SlideViewer: live'da taqdimot/to'liq ekran/eslatma tugmalari yashirin", () => {
+test("SlideViewer: live'da taqdimot/to'liq ekran tugmasi yashirin", () => {
   const plain = renderToStaticMarkup(h(SlideViewer, { doc: sampleDoc() }));
-  assert.ok(plain.includes("Eslatma"), "tayyor hujjatda eslatma tugmasi bor");
   assert.ok(plain.includes("To‘liq ekran"), "tayyor hujjatda to'liq ekran tugmasi bor");
+  // Muharrir 2: eslatma tugmasi/paneli endi hech qaysi rejimda yo'q (faqat taqdimotchi panelida).
+  assert.ok(!plain.includes(">Eslatma<"), "eslatma tugmasi olib tashlangan");
 
   const live = renderToStaticMarkup(h(SlideViewer, { doc: sampleDoc(), live: sampleLive() }));
   assert.ok(!live.includes("To‘liq ekran"), "jonli rejimda to'liq ekran tugmasi bo'lmasin");
-  assert.ok(!live.includes(">Eslatma<"), "jonli rejimda eslatma tugmasi bo'lmasin");
+  assert.ok(!live.includes(">Eslatma<"), "jonli rejimda ham eslatma tugmasi bo'lmasin");
 });
 
 test("SlideViewer: live berilmasa jonli hech narsa chizilmaydi", () => {
