@@ -68,6 +68,16 @@ export function rebuildGeneration(id: string) {
   return request<RebuildResult>(`/api/generations/${id}/rebuild`, { method: "POST" });
 }
 
+/**
+ * Dekani BIRINCHI tahrirdan OLDINGI holatga qaytaradi («Asl holatga
+ * qaytarish»). Tana yo'q — server `doc_prev`dan o'zi tiklaydi. `doc_prev`
+ * yo'q bo'lsa 409 `{code:"no_prev"}` — `editErrorText`/`editErrorCode`
+ * boshqa 409 kodlar bilan bir xil ishlanadi.
+ */
+export function restoreGenerationDoc(id: string) {
+  return request<DocPatchResult>(`/api/generations/${id}/doc/restore`, { method: "POST" });
+}
+
 /** Foydalanuvchi rasmini slaydga qo'yadi (multipart — `Content-Type` ni brauzer yozadi). */
 export function uploadSlideImage(id: string, index: number, file: File, baseVersion: number) {
   const fd = new FormData();

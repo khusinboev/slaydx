@@ -34,6 +34,7 @@ const {
   rebuildFile,
   ensureFreshFile,
   patchDocFromRequest,
+  restoreDoc,
   DOC_PATCH_MAX_BYTES,
 } = await import("../lib/server/slide-commit.ts");
 const { extractMeta } = await import("../lib/generation/meta.ts");
@@ -66,6 +67,10 @@ type Rows = {
   updateDoc?: Record<string, unknown> | null;
   markFile?: Record<string, unknown> | null;
   hasFile?: boolean;
+  /** `getGenerationForRestore` (`POST …/doc/restore`). */
+  forRestore?: Record<string, unknown> | null;
+  /** `restoreGenerationDoc` UPDATE natijasi. */
+  restoreDoc?: Record<string, unknown> | null;
 };
 
 function norm(s: string): string {
@@ -84,8 +89,10 @@ function mockDb(t: TestContext, rows: Rows): Seen[] {
     const q = norm(text);
     let out: unknown[] = [];
     if (/live_json_out/.test(q)) out = rows.detail ? [rows.detail] : [];
+    else if (/^SELECT doc_prev, doc_version, status/.test(q)) out = rows.forRestore ? [rows.forRestore] : [];
     else if (/^SELECT doc_json, doc_version/.test(q)) out = rows.forEdit ? [rows.forEdit] : [];
     else if (/^SELECT doc_version, file_version, tool_id/.test(q)) out = rows.versions ? [rows.versions] : [];
+    else if (/SET doc_json = doc_prev/.test(q)) out = rows.restoreDoc ? [rows.restoreDoc] : [];
     else if (/UPDATE generations SET doc_json/.test(q)) out = rows.updateDoc ? [rows.updateDoc] : [];
     else if (/SET file_version = \$3/.test(q)) out = rows.markFile ? [rows.markFile] : [];
     else if (/FROM generation_files f JOIN generations/.test(q)) out = rows.hasFile ? [{ "?column?": 1 }] : [];
@@ -155,6 +162,16 @@ function detailRow(over: Record<string, unknown> = {}) {
     html: "<html></html>",
     doc_json: docOf(),
     live_json_out: null,
+    ...over,
+  };
+}
+
+/** `getGenerationForRestore` qaytaradigan qator. */
+function restoreRow(over: Record<string, unknown> = {}) {
+  return {
+    doc_prev: docOf(),
+    doc_version: 4,
+    status: "COMPLETED",
     ...over,
   };
 }
@@ -311,6 +328,149 @@ test("commitDocOps: html doc bilan BITTA tranzaksiyada yoziladi (alohida UPDATE 
   const writes = found(seen, /^UPDATE generations SET/);
   assert.equal(writes.length, 1, "bitta yozuv — doc, html va preview birga");
   assert.match(writes[0], /SET doc_json = \$3, html = \$4, preview = \$5/);
+});
+
+test("commitDocOps: BIRINCHI tahrir (doc_version=0) — keepPrev, doc_prev = COALESCE(doc_prev, doc_json)", async (t) => {
+  /*
+   * `014_doc_prev.sql` — «Asl holatga qaytarish» faqat ILK tahrirda
+   * (`doc_version = 0`) asl dekani `doc_prev`ga saqlab qoladi.
+   *
+   * MUTATSIYA: `commitDocOps`dagi `{ keepPrev: cur.docVersion === 0 }`
+   * shartini olib tashlasak (yoki doim `true` bersak), 2-tahrirdagi test
+   * ham SQL da `COALESCE` ni ko'rardi — quyidagi ikkinchi assertion
+   * (docVersion=3 holati) buni ushlaydi.
+   */
+  const seen = mockDb(t, {
+    forEdit: editRow({ doc_version: 0 }),
+    updateDoc: { doc_version: 1 },
+    detail: detailRow(),
+  });
+  await commitDocOps(GEN, USER, 0, textOp);
+  const upd = seen.find((s) => /UPDATE generations SET/.test(s.text))!;
+  assert.match(upd.text, /doc_prev = COALESCE\(doc_prev, doc_json\)/);
+});
+
+test("commitDocOps: KEYINGI tahrirlarda (doc_version>0) — doc_prev TEGILMAYDI", async (t) => {
+  const seen = mockDb(t, {
+    forEdit: editRow({ doc_version: 3 }),
+    updateDoc: { doc_version: 4 },
+    detail: detailRow(),
+  });
+  await commitDocOps(GEN, USER, 3, textOp);
+  const upd = seen.find((s) => /UPDATE generations SET/.test(s.text))!;
+  assert.doesNotMatch(upd.text, /doc_prev/, "COALESCE faqat ILK tahrirda qo'shiladi");
+});
+
+// ═══════════════════════════════════════════ restoreDoc (POST …/doc/restore)
+
+test("restoreDoc: qator yo'q (yoki begona egа) — 404", async (t) => {
+  const seen = mockDb(t, { forRestore: null });
+  await expectApiError(restoreDoc(GEN, USER), 404);
+  assert.equal(seen.length, 1);
+  assert.match(seen[0].text, /WHERE id = \$1 AND user_id = \$2/);
+  assert.deepEqual(seen[0].params, [GEN, USER]);
+});
+
+test("restoreDoc: hali tayyor emas — 409 {code:'status'}", async (t) => {
+  mockDb(t, { forRestore: restoreRow({ status: "IN_PROGRESS" }) });
+  const e = await expectApiError(restoreDoc(GEN, USER), 409);
+  assert.equal(e.extra.code, "status");
+  assert.equal(e.extra.status, "IN_PROGRESS");
+});
+
+test("restoreDoc: doc_prev NULL (hech qachon tahrirlanmagan) — 409 {code:'no_prev'}, UPDATE ketmaydi", async (t) => {
+  const seen = mockDb(t, { forRestore: restoreRow({ doc_prev: null }) });
+  const e = await expectApiError(restoreDoc(GEN, USER), 409);
+  assert.equal(e.extra.code, "no_prev");
+  /*
+   * MUTATSIYA: `restoreDoc`dagi `if (!pre.docPrev) throw ...` tekshiruvi
+   * olib tashlansa, kod baribir tranzaksiyaga kirib SQL yuborardi (SQL
+   * predikati `doc_prev IS NOT NULL` uni 0 qatorga aylantirib, boshqa
+   * xato xabari — "qaytadan urinib ko'ring" — chiqardi). Bu assertion
+   * xato TURINI (aynan shu tekshiruv ishlaganini) ushlaydi.
+   */
+  assert.equal(found(seen, /^BEGIN$/).length, 0, "doc_prev yo'qligi darhol rad etiladi — tranzaksiya ochilmaydi");
+});
+
+test("restoreDoc: muvaffaqiyat — doc_json = doc_prev, egalik va predikatlar SQL da", async (t) => {
+  // `doc_prev` ATAYLAB o'ziga xos bo'lim sarlavhasi bilan — pastdagi
+  // assertion render aynan SHU dokdan (joriy `doc_json` emas)
+  // qurilganini isbotlaydi. `renderHtml` faqat `doc.sections`ni chizadi
+  // (bu testdagi `docOf` ni har doim `sections: []` bilan qurgani uchun
+  // shu yerda qo'lda to'ldiriladi — haqiqiy yo'lda `applyDocOps`
+  // `sectionsOf` bilan avtomatik yig'adi).
+  const prevDoc: AcademicDoc = {
+    ...docOf([{ id: "s0", layout: "bullets", title: "ASL SARLAVHA — tahrirdan oldingi", bullets: ["B."] }]),
+    sections: [{ id: "s0", title: "ASL SARLAVHA — tahrirdan oldingi", blocks: [{ kind: "li", text: "B." }] }],
+  };
+  const seen = mockDb(t, {
+    forRestore: restoreRow({ doc_prev: prevDoc }),
+    restoreDoc: { doc_version: 5 },
+    detail: detailRow({ doc_version: 5, has_prev: true }),
+    hasFile: true,
+  });
+
+  const gen = await restoreDoc(GEN, USER);
+
+  // Javob `GET /api/generations/{id}` bilan bir xil shaklda (`commitDocOps` naqshi).
+  assert.equal(gen.docVersion, 5);
+  assert.equal(gen.id, GEN);
+  assert.ok(gen.doc?.slides?.length);
+
+  const upd = seen.find((s) => /SET doc_json = doc_prev/.test(s.text));
+  assert.ok(upd, "restoreGenerationDoc UPDATE yuborilishi kerak");
+  assert.match(upd!.text, /AND user_id = \$2/, "egalik SQL da");
+  assert.match(upd!.text, /AND status = 'COMPLETED'/, "faqat tayyor hujjat qaytariladi");
+  assert.match(upd!.text, /AND doc_prev IS NOT NULL/, "bo'sh restore SQL darajasida ham rad etiladi");
+  /*
+   * MUTATSIYA: `restoreDoc` `renderHtml(pre.docPrev)` o'rniga joriy
+   * (tahrirlangan) dokdan render qilsa, bu qator "ASL SARLAVHA" ni
+   * TOPMAS edi — chunki `pre.docPrev` render kirishi sifatida faqat shu
+   * yo'l bilan ishlatiladi ($3 — html, restoreGenerationDoc chaqiruvida).
+   */
+  assert.ok(String(upd!.params[2]).includes("ASL SARLAVHA"), "html doc_prev'dan qurilishi kerak");
+
+  // Yozish TRANZAKSIYADA (BEGIN … UPDATE … COMMIT).
+  const idx = sqls(seen).indexOf(upd!.text);
+  assert.equal(sqls(seen)[idx - 1], "BEGIN");
+});
+
+test("restoreDoc: UPDATE 0 qator qaytarsa (poyga — shu oraliqda status/doc_prev o'zgargan) — 409 {code:'no_prev'}", async (t) => {
+  /*
+   * MUTATSIYA: `restoreGenerationDoc`dan `AND doc_prev IS NOT NULL` yoki
+   * `AND status = 'COMPLETED'` olib tashlansa, haqiqiy bazada bu poyga
+   * holati jimgina 200 bo'lib ketardi. Shu yerda `restoreDoc == null`
+   * bo'lgan holat (SQL 0 qator qaytargan) alohida tekshiriladi.
+   */
+  mockDb(t, { forRestore: restoreRow(), restoreDoc: null });
+  const e = await expectApiError(restoreDoc(GEN, USER), 409);
+  assert.equal(e.extra.code, "no_prev");
+});
+
+// ═══════════════════════════════════════════ hasPrev (rowToSummary → GenerationSummary)
+
+test("commitDocOps javobi: hasPrev — `has_prev` SQL ustunidan to'g'ridan-to'g'ri o'qiladi", async (t) => {
+  mockDb(t, {
+    forEdit: editRow({ doc_version: 3 }),
+    updateDoc: { doc_version: 4 },
+    detail: detailRow({ has_prev: true }),
+  });
+  const gen = await commitDocOps(GEN, USER, 3, textOp);
+  assert.equal(gen.hasPrev, true);
+
+  mockDb(t, {
+    forEdit: editRow({ doc_version: 3 }),
+    updateDoc: { doc_version: 4 },
+    detail: detailRow({ has_prev: false }),
+  });
+  const gen2 = await commitDocOps(GEN, USER, 3, textOp);
+  /*
+   * MUTATSIYA: `rowToSummary`dagi `hasPrev: r.has_prev ?? false` o'rniga
+   * doim `true` (yoki doim `false`) qaytarilsa, shu ikki qarama-qarshi
+   * holat (true/false) orasidagi farq yo'qolib, ikkala assertiondan
+   * biri qizaradi.
+   */
+  assert.equal(gen2.hasPrev, false);
 });
 
 // ═══════════════════════════════════════════ parseDocOps / tana
