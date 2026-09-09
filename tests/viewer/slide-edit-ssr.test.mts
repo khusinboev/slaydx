@@ -81,9 +81,11 @@ test("gen berilsa (COMPLETED, doc.slides bor) — tahrir DARHOL yoqiq", () => {
    * yetkazmaydi — brauzerda «hech narsa bo'lmayapti» (jsdom hit-testing
    * qilmagani uchun UI testlar buni ko'rmagan, faqat Playwright ko'rdi).
    */
-  const wrap = html.indexOf("data-slide-editor");
-  const before = html.slice(Math.max(0, wrap - 400), wrap);
-  assert.ok(before.includes('class="pointer-events-none absolute inset-0"'), "overlay o'rami hodisalarni o'tkazib yuborishi kerak");
+  // O'ram (SlideStage) + ildiz (SlideEditor, `data-slide-editor`) — ikkalasi ham `pointer-events-none`.
+  assert.ok(
+    html.includes('<div class="pointer-events-none absolute inset-0"><div class="pointer-events-none absolute inset-0" data-slide-editor'),
+    "overlay o'rami hodisalarni o'tkazib yuborishi kerak",
+  );
 });
 
 test("«Tahrirlash» tugmasi HTML da UMUMAN yo'q", () => {
