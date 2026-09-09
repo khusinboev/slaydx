@@ -15,6 +15,7 @@ import {
   type DocOp,
   type EditRules,
 } from "../lib/generation/slide-edit.ts";
+import { photoSlot } from "../lib/generation/slide-layout.ts";
 import { SLIDE_LIMITS } from "../lib/generation/slide-limits.ts";
 import { renumberSlides } from "../lib/generation/slide-write.ts";
 import { buildSlideDeck } from "../lib/generation/slides.ts";
@@ -273,15 +274,44 @@ test("apply: rasm URL i FAQAT shu generatsiya aktivi", () => {
   assert.equal("image" in removed.slides![0], false);
 });
 
+/*
+ * AUDIT-9 E2 dan keyin `table`/`process` ham rasm ko'taradi (o'ng
+ * chekkadagi tor tasma) — shuning uchun «rasm joyi yo'q» namunasi endi
+ * `quiz`. Unda savol + to'rtta variant butun kenglikni egallaydi, ya'ni
+ * tasmaga o'rin YO'Q (`photoSlot` → null).
+ */
 test("apply: maketda rasm joyi bo'lmasa rasm qo'yilmaydi", () => {
-  const doc = docOf([table]);
+  const doc = docOf([quiz]);
   assert.match(failure(doc, [{ op: "image", index: 0, url: ASSET }]).error, /rasm joyi yo'q/);
+  // Tasmali maketga esa QO'YILADI — E2 ning to'g'ri tomoni.
+  assert.deepEqual(apply(docOf([table]), [{ op: "image", index: 0, url: ASSET }]).slides![0].image, { url: ASSET });
 });
 
-test("apply: maket o'zgarganda rasm joyi yo'qolsa rasm tushadi", () => {
+/**
+ * Maket o'zgarganda rasm taqdiri — QOIDA bo'yicha, ro'yxat bo'yicha emas.
+ *
+ * Ilgari bu yerda bitta juftlik («bullets → process, rasm tushadi»)
+ * qat'iy yozilgan edi. AUDIT-9 E2 dan keyin `process` rasm TASMASINI
+ * ko'taradi va o'sha yozuv yolg'onga aylandi. Endi test invariantni
+ * o'zini sinaydi: rasm AYNAN `photoSlot` bor maketlarda qoladi. Ro'yxat
+ * kelajakda yana o'zgarsa, test o'zi ergashadi.
+ */
+test("apply: maket o'zgarganda rasm rasm joyi bo'yicha saqlanadi yoki tushadi", () => {
   const doc = docOf([{ ...bullets, image: { url: ASSET } }]);
-  const conv = apply(doc, [{ op: "layout", index: 0, layout: "process" }]);
-  assert.equal("image" in conv.slides![0], false, "process maketida rasm joyi yo'q");
+  const visual = buildSlideDeck(doc).visual;
+  let checked = 0;
+  for (const to of ["twoCol", "compare", "process", "stats", "quote", "quiz", "table", "section"] as const) {
+    if (!canConvert(doc.slides![0], to).ok) continue;
+    checked += 1;
+    const conv = apply(doc, [{ op: "layout", index: 0, layout: to }]);
+    const hasSlot = photoSlot(to, visual) !== null;
+    assert.equal(
+      "image" in conv.slides![0],
+      hasSlot,
+      `${to}: rasm ${hasSlot ? "qolishi" : "tushishi"} kerak edi (photoSlot ${hasSlot ? "bor" : "yo'q"})`,
+    );
+  }
+  assert.ok(checked >= 3, `kamida uchta o'girish sinalishi kerak, sinaldi: ${checked}`);
 });
 
 test("apply: add — hujjat tilidagi «Yangi slayd», footer qo'shnidan", () => {

@@ -197,10 +197,21 @@ test("ImageWaitPlaque: AYNAN photoSlot qutisida turadi", () => {
 });
 
 test("ImageWaitPlaque: rasm joyi yo'q maketda umuman chizilmaydi", () => {
-  // `table` maketi `usesPhoto` ro'yxatida yo'q → `photoSlot` null.
-  assert.equal(photoSlot("table", "classic"), null);
-  const html = renderToStaticMarkup(h(ImageWaitPlaque, { layout: "table", visual: "classic", theme }));
+  /*
+   * Ilgari bu yerda `table` turardi. AUDIT-9 E2 dan keyin `table` o'ng
+   * chekkada rasm TASMASINI ko'taradi, ya'ni `photoSlot` quti qaytaradi
+   * va plashka ham chizilishi KERAK. Rasm joyi qolmagan maket — `quiz`.
+   */
+  assert.equal(photoSlot("quiz", "classic"), null);
+  const html = renderToStaticMarkup(h(ImageWaitPlaque, { layout: "quiz", visual: "classic", theme }));
   assert.equal(html, "", "quti yo'q ekan, plashka matn ustiga tushmasligi kerak");
+
+  // Tasmali maketda esa plashka AYNAN tasma qutisida turadi.
+  const strip = photoSlot("table", "classic");
+  assert.ok(strip, "table endi rasm tasmasini ko'taradi (E2)");
+  const stripCss = boxStyle(strip!);
+  const stripHtml = renderToStaticMarkup(h(ImageWaitPlaque, { layout: "table", visual: "classic", theme }));
+  assert.ok(stripHtml.includes(`width:${stripCss.width}px`), "plashka tasma kengligida bo'lishi kerak");
 });
 
 test("LiveStrip: bosqich, haqiqiy foiz va sanoqlar", () => {
