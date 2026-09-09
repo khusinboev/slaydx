@@ -40,6 +40,9 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.7-flash}
       FAL_KEY: ${FAL_KEY:-}
+      # Bepul foto manbalari (oddiy slayd): Pexels → Pixabay → fal (AUDIT-10 P3)
+      PEXELS_API_KEY: ${PEXELS_API_KEY:-}
+      PIXABAY_API_KEY: ${PIXABAY_API_KEY:-}
       FAL_MODEL: ${FAL_MODEL:-fal-ai/flux/schnell}
       CLICK_SERVICE_ID: ${CLICK_SERVICE_ID:-}
       CLICK_MERCHANT_ID: ${CLICK_MERCHANT_ID:-}
@@ -79,6 +82,9 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.7-flash}
       FAL_KEY: ${FAL_KEY:-}
+      # Bepul foto manbalari (oddiy slayd): Pexels → Pixabay → fal (AUDIT-10 P3)
+      PEXELS_API_KEY: ${PEXELS_API_KEY:-}
+      PIXABAY_API_KEY: ${PIXABAY_API_KEY:-}
       FAL_MODEL: ${FAL_MODEL:-fal-ai/flux/schnell}
       FAL_MODEL_PREMIUM: ${FAL_MODEL_PREMIUM:-}
       # `FAL_MODEL_PREMIUM` sozlangan bo'lsa ham, qadam soni shu yerdan
