@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Maximize2, Minimize2, Pause, Play, Presentation, RotateCcw, StickyNote, X } from "lucide-react";
 import type { AcademicDoc } from "@/lib/generation/types";
 import { slideNotes } from "@/lib/generation/slide-layout";
@@ -11,41 +11,8 @@ import { SLIDE } from "@/lib/viewers/metrics";
 import { cn } from "@/lib/cn";
 import { ViewerToolbar } from "./toolbar";
 import { SlideCanvas } from "./SlideCanvas";
-import { SlideRail } from "./SlideRail";
-import { SlideStage, type SlideStageOverlayCtx } from "./SlideStage";
-import { useSlideKeys } from "./useSlideKeys";
 
-/**
- * F2: yupqa kompozitor.
- *
- * `SlideViewer` avval bitta katta komponent edi — eskiz paneli, sahna va
- * klaviatura ishlovi endi mos ravishda `SlideRail`, `SlideStage`,
- * `useSlideKeys` ga ajratildi. Bu fayl faqat holatni ushlaydi va
- * bo'laklarni bog'laydi; render natijasi bo'linishdan OLDINGISI bilan
- * BIR XIL (`tests/viewer/slide-viewer-seams.test.mts`).
- *
- * `live`, `overlay`, `gen`, `onGen` — keyingi ikki paket (jonli
- * generatsiya va tahrirlash) uchun ochilgan joylar. Hozircha faqat
- * e'lon qilinadi va uzatiladi — hech narsa chizmaydi va hech qanday
- * xatti-harakatni o'zgartirmaydi (no-op).
- */
-export function SlideViewer({
-  doc,
-  live,
-  overlay,
-  gen,
-  onGen,
-}: {
-  doc: AcademicDoc;
-  /** Keyin: `LiveView` tipi bilan almashtiriladi. Hozircha ishlatilmaydi. */
-  live?: unknown;
-  /** `SlideStage` ustiga qatlam chizish sloti — berilmasa hech narsa chiqmaydi. */
-  overlay?: (ctx: SlideStageOverlayCtx) => ReactNode;
-  /** Keyingi paket uchun — hozircha ishlatilmaydi. */
-  gen?: unknown;
-  /** Keyingi paket uchun — hozircha ishlatilmaydi (no-op). */
-  onGen?: (g: unknown) => void;
-}) {
+export function SlideViewerOld({ doc }: { doc: AcademicDoc }) {
   const deck = useMemo(() => buildSlideDeck(doc), [doc]);
   const theme = useMemo(() => getSlideTheme(deck.themeId), [deck.themeId]);
   // Rasm havolalari hujjat bilan birga serverdan keladi — brauzerdagi
@@ -72,17 +39,29 @@ export function SlideViewer({
   const [presenter, setPresenter] = useState(false);
   const [zoom, setZoom] = useState(75);
   const [fitOn, setFitOn] = useState(true);
-
-  // Keyingi paketlar `live`/`gen`/`onGen` orqali ulanadi — hozircha
-  // qabul qilinadi va o'tkaziladi, xolos (no-op).
-  void live;
-  void gen;
-  void onGen;
+  const stageRef = useRef<HTMLDivElement>(null);
+  const [fitScale, setFitScale] = useState(0.6);
+  // Yon paneldagi eskiz masshtabi — O'LCHANADI (ilgari qat'iy 0.117 edi,
+  // ya'ni panel kengligi o'zgarsa eskiz ramkadan chiqib ketardi).
+  const railRef = useRef<HTMLElement>(null);
+  const [thumbScale, setThumbScale] = useState(0.117);
 
   const go = useCallback(
     (n: number) => setI(Math.max(0, Math.min(slides.length - 1, n))),
     [slides.length],
   );
+
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(() => {
+      const r = el.getBoundingClientRect();
+      const pad = present ? 24 : 32;
+      setFitScale(Math.min((r.width - pad) / SLIDE.w, (r.height - pad) / SLIDE.h));
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [present, notesOn, presenter]);
 
   /*
    * HAQIQIY to'liq ekran.
@@ -116,7 +95,76 @@ export function SlideViewer({
     return () => document.removeEventListener("fullscreenchange", sync);
   }, []);
 
-  useSlideKeys({ go, i, total: slides.length, present, setPresent, setPresenter });
+  // Eskiz konteynerining haqiqiy kengligidan masshtab.
+  useEffect(() => {
+    const el = railRef.current;
+    if (!el || present) return;
+    const measure = () => {
+      const w = el.querySelector<HTMLElement>("[data-thumb]")?.getBoundingClientRect().width ?? 0;
+      if (w > 0) setThumbScale(w / SLIDE.w);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [present, slides.length]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      /*
+       * Global `keydown` — lekin faqat o'rinli bo'lganda.
+       *
+       * Ilgari bu handler har doim ishlar va Space / PageUp / PageDown /
+       * Home / End / F5 ni ushlab `preventDefault` qilardi: qidiruv yoki
+       * to'lov oynasi ochiqligida ham slayd almashar, taqdimotda emas
+       * paytda F5 sahifani yangilash o'rniga taqdimotni ochardi.
+       */
+      const el = e.target as HTMLElement | null;
+      if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
+      if (!present && document.querySelector('[role="dialog"], [aria-modal="true"]')) return;
+
+      if (e.key === "Escape") {
+        setPresent(false);
+        return;
+      }
+      if (e.key === "ArrowRight") {
+        e.preventDefault();
+        go(i + 1);
+        return;
+      }
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        go(i - 1);
+        return;
+      }
+      if (e.key === "f") {
+        e.preventDefault();
+        setPresent((v) => !v);
+        return;
+      }
+      // Qolgan tugmalar FAQAT taqdimot rejimida — u yerda sahifa aylantirish
+      // yoki yangilash uchun boshqa ehtiyoj yo'q.
+      if (!present) return;
+      if (e.key === "PageDown" || e.key === " ") {
+        e.preventDefault();
+        go(i + 1);
+      } else if (e.key === "PageUp") {
+        e.preventDefault();
+        go(i - 1);
+      } else if (e.key === "Home") {
+        e.preventDefault();
+        go(0);
+      } else if (e.key === "End") {
+        e.preventDefault();
+        go(slides.length - 1);
+      } else if (e.key.toLowerCase() === "p") {
+        e.preventDefault();
+        setPresenter((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [go, i, slides.length, present]);
 
   /*
    * Chiqish taymeri. Taqdimotchi uchun asosiy raqam — «qancha gapirdim»,
@@ -156,6 +204,7 @@ export function SlideViewer({
 
   const slide = slides[i];
   const next = slides[i + 1];
+  const scale = present || fitOn ? Math.max(0.18, fitScale) : zoom / 100;
   const notes = slide ? slideNotes(slide, deck.speakerNotes) : "";
 
   return (
@@ -211,38 +260,58 @@ export function SlideViewer({
 
       <div className={cn("flex min-h-0 flex-1", present ? "bg-black" : "bg-[#1e1e1e]")}>
         {!present ? (
-          <SlideRail
-            slides={slides}
-            theme={theme}
-            visual={deck.visual}
-            audience={deck.audience}
-            templateId={deck.templateId}
-            bodyType={deck.bodyType}
-            logo={deck.logo}
-            i={i}
-            go={go}
-          />
+          <aside ref={railRef} className="hidden w-[200px] shrink-0 overflow-y-auto border-r border-white/10 bg-[#171717] p-2 md:block">
+            {slides.map((s, idx) => (
+              <button
+                key={s.id}
+                type="button"
+                onClick={() => go(idx)}
+                className={cn("mb-2 flex w-full gap-1.5 rounded-sm p-1 text-left", idx === i ? "bg-white/10" : "hover:bg-white/5")}
+              >
+                <span className="w-5 shrink-0 pt-6 text-right text-[11px] tabular-nums text-white/50">{idx + 1}</span>
+                <span className="min-w-0 flex-1">
+                  <span
+                    data-thumb
+                    className="relative block overflow-hidden rounded-[2px] bg-black shadow"
+                    style={{
+                      aspectRatio: `${SLIDE.w} / ${SLIDE.h}`,
+                      outline: idx === i ? `2px solid ${theme.accent}` : "1px solid rgba(255,255,255,0.12)",
+                    }}
+                  >
+                    <span
+                      className="absolute top-0 left-0"
+                      style={{ width: SLIDE.w, height: SLIDE.h, transform: `scale(${thumbScale})`, transformOrigin: "top left" }}
+                    >
+                      <SlideCanvas slide={s} theme={theme} visual={deck.visual} audience={deck.audience} templateId={deck.templateId} bodyType={deck.bodyType} logo={deck.logo} index={idx} total={slides.length} />
+                    </span>
+                  </span>
+                  <span className="mt-1 block truncate text-[11px] text-white/70">{s.title}</span>
+                </span>
+              </button>
+            ))}
+          </aside>
         ) : null}
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <SlideStage
-            slide={slide}
-            theme={theme}
-            visual={deck.visual}
-            audience={deck.audience}
-            templateId={deck.templateId}
-            bodyType={deck.bodyType}
-            logo={deck.logo}
-            index={i}
-            total={slides.length}
-            present={present}
-            zoom={zoom}
-            fitOn={fitOn}
-            notesOn={notesOn}
-            presenter={presenter}
-            onAdvance={() => go(i + 1)}
-            overlay={overlay}
-          />
+          <div
+            ref={stageRef}
+            className="flex min-h-0 flex-1 items-center justify-center"
+            onClick={() => present && go(i + 1)}
+          >
+            <div
+              style={{ width: SLIDE.w * scale, height: SLIDE.h * scale }}
+              className={cn("relative", !present && "shadow-2xl")}
+            >
+              <div
+                className="absolute top-0 left-0 overflow-hidden"
+                style={{ width: SLIDE.w, height: SLIDE.h, transform: `scale(${scale})`, transformOrigin: "top left" }}
+              >
+                {slide ? (
+                  <SlideCanvas slide={slide} theme={theme} visual={deck.visual} audience={deck.audience} templateId={deck.templateId} bodyType={deck.bodyType} logo={deck.logo} index={i} total={slides.length} />
+                ) : null}
+              </div>
+            </div>
+          </div>
 
           {!present ? (
             <div className="no-print flex h-9 shrink-0 items-center gap-2 border-t border-white/10 bg-[#252525] px-3 text-[12px] text-white/70">
