@@ -87,10 +87,20 @@ Ctrl+Z). `npm run check` endi 4 yo'l: typecheck+lint+unit+viewer+ui.
 
 | № | Topilma | Holat |
 |---|---|---|
-| Y-1 | Gemini prepaid krediti tugagan — `429 credits depleted`; serverdagi worker ham yiqilmoqda (kredit qaytariladi) | ⏳ foydalanuvchi to'ldiradi |
+| Y-1 | Gemini prepaid krediti tugagan — `429 credits depleted`; serverdagi worker ham yiqilmoqda (kredit qaytariladi) | ✅ vaqtinchalik kalit (lokal); serverga — foydalanuvchi ruxsati bilan |
 
-_(kredit tiklangach: `npm run live -- slide pro-slide` hodisalar jurnali,
-brauzerda skelet → typing → rasm, tahrir → PPTX paritet)_
+**Jonli oqim isboti** (`npm run live -- pro-slide`, 10 slayd, internet, 3 test):
+
+```
++0.0s  plan 10 slayd            ← skelet LLM dan OLDIN
++5.8s  research 6 manba
++7.0s  slide #0 … +11.8s slide #9   ← 10 slayd 4.8 s ichida BIRMA-BIR (oqim)
++11.8s deck · images 5 kutilmoqda
++28.6s image #1 … +35.0s image #0   ← rasmlar tartibsiz, indeks bilan
++35.2s done                      ← jami 35 s (AUDIT-9 da 81 s edi)
+```
+Barcha 9 tekshiruv yashil (10/10 slayd, 2 quiz + javoblar, 6 manba,
+5 rasm, izoh faylda yo'q, kolontitul).
 
 ## 5. Bajarilish yozuvi
 
