@@ -484,3 +484,127 @@ test("byudjet provayder minimumidan kam bo'lsa so'rov yuborilmaydi (pul sarflanm
     restore();
   }
 });
+
+// ───────────────────────────────────────────── 6. Jonli ilgaklar (L2)
+
+/*
+ * `onPlanned` / `onImage` — jonli ko'rinishning rasm tomoni.
+ *
+ * Ikki nuqson shu ilgaklarsiz qaytardi: (1) rasmi kelmaydigan slayd
+ * ustida «Rasm izlanmoqda…» plakati abadiy turardi (kalitsiz muhitda
+ * yoki so'rov yiqilganda), (2) hodisa `persistImage` dan OLDIN
+ * chiqarilsa jonli ko'rinishga provayderning vaqtinchalik URL'i
+ * ketardi — u bir necha daqiqada o'lik havolaga aylanadi va PPTX ichida
+ * umuman yo'q (`renderPptx` `data:` kutadi).
+ */
+test("onPlanned kutish ro'yxatini, onImage faqat SAQLANGAN rasmni beradi", async () => {
+  const restore = geminiEnv();
+  globalThis.fetch = (async (url: string) => {
+    if (!String(url).includes("/interactions")) return jsonRes(200, { candidates: [] });
+    return jsonRes(200, geminiOkBody());
+  }) as unknown as typeof fetch;
+  try {
+    const slides = bulletDeck(4);
+    let planned: number[] | null = null;
+    const got: { index: number; url: string }[] = [];
+    const report = await attachSlideImages(slides, "Suv aylanishi", "classic", 60_000, {
+      meta: meta({}, pro),
+      onPlanned: (ix) => {
+        planned = ix;
+      },
+      onImage: (index, url) => got.push({ index, url }),
+    });
+
+    assert.deepEqual(planned, [0, 1, 2, 3], "kutish ro'yxati `slides` INDEKSLARI bo'lishi kerak");
+    assert.equal(got.length, report.got);
+    assert.equal(got.length, 4);
+    assert.deepEqual(
+      got.map((g) => g.index).sort((a, b) => a - b),
+      [0, 1, 2, 3],
+    );
+    for (const g of got) {
+      // AYNAN saqlangan qiymat: `data:` URL, provayder havolasi emas.
+      assert.ok(g.url.startsWith("data:image/"), g.url.slice(0, 40));
+      assert.equal(slides[g.index].image?.url, g.url, "hodisa slaydga qo'yilgan qiymatni bersin");
+    }
+  } finally {
+    restore();
+  }
+});
+
+test("rasm yiqilsa onImage chaqirilmaydi, kalitsiz muhitda onPlanned bo'sh keladi", async () => {
+  const restore = geminiEnv();
+  globalThis.fetch = (async (url: string) => {
+    if (!String(url).includes("/interactions")) return jsonRes(200, { candidates: [] });
+    return jsonRes(403, { error: { message: "Billing account is disabled" } });
+  }) as unknown as typeof fetch;
+  try {
+    let planned: number[] | null = null;
+    let images = 0;
+    const report = await attachSlideImages(bulletDeck(4), "Suv aylanishi", "classic", 60_000, {
+      meta: meta({}, pro),
+      onPlanned: (ix) => {
+        planned = ix;
+      },
+      onImage: () => {
+        images += 1;
+      },
+    });
+    assert.equal(report.got, 0);
+    assert.equal(images, 0, "yiqilgan so'rov uchun `image` hodisasi bo'lmasin");
+    assert.deepEqual(planned, [0, 1, 2, 3], "reja baribir e'lon qilinadi — plakat ko'rinsin");
+
+    // Kalitsiz: kutish ro'yxati BO'SH, aks holda plakat abadiy turardi.
+    delete process.env.GEMINI_API_KEY;
+    let dry: number[] | null = null;
+    const none = await attachSlideImages(bulletDeck(4), "Suv aylanishi", "classic", 60_000, {
+      meta: meta({}, pro),
+      onPlanned: (ix) => {
+        dry = ix;
+      },
+      onImage: () => {
+        images += 1;
+      },
+    });
+    assert.equal(none.want, 0);
+    assert.deepEqual(dry, [], "kalitsiz muhitda hech narsa kutilmaydi");
+    assert.equal(images, 0);
+  } finally {
+    restore();
+  }
+});
+
+/*
+ * `onImage` ning O'RNI: `persistImage` dan KEYIN.
+ *
+ * Provayder «ok» qaytarishi rasm SAQLANDI degani emas — baytlar
+ * `fetchImageBytes` da sniff qilinadi va PNG/JPEG bo'lmasa tashlanadi
+ * (`report.failed`). Ilgak `persistImage` dan oldin tursa, ko'ruvchi
+ * hech qachon slaydga tushmaydigan rasmni «keldi» deb ko'rsatardi va
+ * PPTX bilan ekran ajralib ketardi.
+ */
+test("provayder ok, lekin baytlar rasm emas — onImage chaqirilmaydi", async () => {
+  const restore = geminiEnv();
+  // `image/jpeg` deb e'lon qilingan, aslida oddiy matn — sniff to'sadi.
+  // 64 belgidan UZUN bo'lishi shart: `findImagePart` qisqa qatorni shovqin deb tashlaydi,
+  // ya'ni test provayder darajasida yiqilib, sniff yo'liga umuman yetib bormasdi.
+  const junk = Buffer.from("bu rasm emas, shunchaki matn — ".repeat(8)).toString("base64");
+  globalThis.fetch = (async (url: string) => {
+    if (!String(url).includes("/interactions")) return jsonRes(200, { candidates: [] });
+    return jsonRes(200, geminiOkBody(junk));
+  }) as unknown as typeof fetch;
+  try {
+    const slides = bulletDeck(4);
+    const got: string[] = [];
+    const report = await attachSlideImages(slides, "Suv aylanishi", "classic", 60_000, {
+      meta: meta({}, pro),
+      onImage: (_i, url) => got.push(url),
+    });
+    assert.equal(report.got, 0, "sniff dan o'tmagan bayt yetkazilgan deb sanalmasin");
+    assert.equal(report.failed, report.want);
+    assert.equal(slides.filter((x) => x.image).length, 0);
+    assert.deepEqual(got, [], "saqlanmagan rasm uchun `image` hodisasi bo'lmasin");
+  } finally {
+    restore();
+  }
+});
