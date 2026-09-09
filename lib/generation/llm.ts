@@ -190,13 +190,46 @@ function thinkingBudget(requested?: number): number {
 }
 
 type GeminiCandidate = {
-  content?: { parts?: { text?: string }[] };
+  /** `thought: true` — modelning ichki o'ylashi, javob matni EMAS. */
+  content?: { parts?: { text?: string; thought?: boolean }[] };
   groundingMetadata?: {
     webSearchQueries?: string[];
     groundingChunks?: { web?: { uri?: string; title?: string } }[];
     searchEntryPoint?: { renderedContent?: string };
   };
 };
+
+/**
+ * Gemini so'rov tanasi — oqimli va oqimsiz yo'l uchun YAGONA nusxa.
+ *
+ * `streamGenerateContent` va `generateContent` AYNAN bir xil tanani
+ * kutadi, va ular orasida farq paydo bo'lishi eng yomon nosozlik
+ * bo'lardi: 4xx da oqim oqimsiz yo'lga tushadi — agar tana boshqacha
+ * bo'lsa foydalanuvchi zaxira yo'lda BOSHQA javob olardi (masalan JSON
+ * rejimisiz matn) va parse jimgina yiqilardi. Shuning uchun tana bitta
+ * joyda quriladi.
+ */
+function geminiBody(system: string, user: string, maxTokens: number, opts: LlmOpts): string {
+  return JSON.stringify({
+    system_instruction: { parts: [{ text: system }] },
+    contents: [{ role: "user", parts: [{ text: user }] }],
+    // Qidiruv vositasi — faqat so'ralganda va `generationConfig` dan
+    // TASHQARIDA, tana darajasida (jonli tasdiqlangan).
+    ...(opts.grounding ? { tools: [{ google_search: {} }] } : {}),
+    generationConfig: {
+      temperature: opts.json ? 0.4 : 0.5,
+      /*
+       * O'ylaydigan modelda `maxOutputTokens` O'YLASHNI HAM qamraydi:
+       * chegara past bo'lsa model o'ylab bo'lgach javobga token
+       * qolmagani uchun bo'sh kandidat qaytaradi. Shu sabab pastki
+       * chegara 4096.
+       */
+      maxOutputTokens: Math.max(maxTokens, 4096),
+      thinkingConfig: { thinkingBudget: thinkingBudget(opts.thinking) },
+      ...(opts.json ? { responseMimeType: "application/json" } : {}),
+    },
+  });
+}
 
 async function completeGemini(
   system: string,
@@ -218,25 +251,7 @@ async function completeGemini(
         "Content-Type": "application/json",
         "x-goog-api-key": key,
       },
-      body: JSON.stringify({
-        system_instruction: { parts: [{ text: system }] },
-        contents: [{ role: "user", parts: [{ text: user }] }],
-        // Qidiruv vositasi — faqat so'ralganda va `generationConfig` dan
-        // TASHQARIDA, tana darajasida (jonli tasdiqlangan).
-        ...(opts.grounding ? { tools: [{ google_search: {} }] } : {}),
-        generationConfig: {
-          temperature: opts.json ? 0.4 : 0.5,
-          /*
-           * O'ylaydigan modelda `maxOutputTokens` O'YLASHNI HAM qamraydi:
-           * chegara past bo'lsa model o'ylab bo'lgach javobga token
-           * qolmagani uchun bo'sh kandidat qaytaradi. Shu sabab pastki
-           * chegara 4096.
-           */
-          maxOutputTokens: Math.max(maxTokens, 4096),
-          thinkingConfig: { thinkingBudget: thinkingBudget(opts.thinking) },
-          ...(opts.json ? { responseMimeType: "application/json" } : {}),
-        },
-      }),
+      body: geminiBody(system, user, maxTokens, opts),
     });
     const data = (await res.json()) as {
       error?: { message?: string };
@@ -278,6 +293,221 @@ async function completeGemini(
   } finally {
     clearTimeout(timer);
   }
+}
+
+/* ------------------------------------------------------------------ *
+ * OQIM (SSE) — `llmStream`
+ * ------------------------------------------------------------------ */
+
+/** Bitta SSE `data:` bo'lagi. */
+type GeminiStreamChunk = {
+  error?: { message?: string; code?: number };
+  promptFeedback?: { blockReason?: string };
+  candidates?: GeminiCandidate[];
+};
+
+/**
+ * Kandidat qismlaridan javob matni — `thought` qismlari TASHLANADI.
+ *
+ * O'ylash yoqilganda Gemini o'z mulohazasini ham `parts` ichida, lekin
+ * `thought: true` bayrog'i bilan yuboradi. Filtrsiz u foydalanuvchiga
+ * javob sifatida oqib chiqardi — JSON deck rejimida esa mulohaza matni
+ * JSON ning oldiga yopishib, parse ni ham buzardi.
+ */
+function candidateText(cand: GeminiCandidate | undefined): string {
+  return (cand?.content?.parts ?? [])
+    .filter((part) => part.thought !== true)
+    .map((part) => part.text ?? "")
+    .join("");
+}
+
+/** Bitta SSE qatorining ma'nosi. */
+type SseLine =
+  | { kind: "text"; text: string }
+  | { kind: "blocked" }
+  | { kind: "error"; message: string; retryable: boolean }
+  | { kind: "skip" };
+
+const SSE_SKIP: SseLine = { kind: "skip" };
+
+/**
+ * Bitta SSE qatorini o'qish.
+ *
+ * Bo'sh qatorlar, `event:`/izoh qatorlari va `[DONE]` e'tiborsiz.
+ * Buzuq JSON ham tashlanadi: oqim o'rtasidagi bitta nuqsonli bo'lak
+ * uchun butun hujjatni yo'qotish mantiqsiz.
+ */
+function parseSseLine(raw: string): SseLine {
+  // SSE spetsifikatsiyasi `\r\n` ga ruxsat beradi. `\r` qolib ketsa
+  // `JSON.parse` yiqiladi va BUTUN oqim jimgina bo'sh qaytardi.
+  const line = raw.endsWith("\r") ? raw.slice(0, -1) : raw;
+  if (!line.startsWith("data:")) return SSE_SKIP;
+  const payload = line.slice(5).trim();
+  if (payload === "" || payload === "[DONE]") return SSE_SKIP;
+  let chunk: GeminiStreamChunk;
+  try {
+    chunk = JSON.parse(payload) as GeminiStreamChunk;
+  } catch {
+    return SSE_SKIP;
+  }
+  if (chunk.error) {
+    const code = chunk.error.code ?? 0;
+    return {
+      kind: "error",
+      message: chunk.error.message ?? "stream error",
+      retryable: code === 429 || code >= 500,
+    };
+  }
+  // Xavfsizlik filtri: matn kelmaydi va qayta urinish ham yordam bermaydi.
+  if (chunk.promptFeedback?.blockReason) return { kind: "blocked" };
+  const text = candidateText(chunk.candidates?.[0]);
+  return text === "" ? SSE_SKIP : { kind: "text", text };
+}
+
+/**
+ * Gemini SSE oqimi — bitta urinish.
+ *
+ * `onText` HAR SAFAR to'plangan TO'LIQ matnni oladi (delta emas): shu
+ * tufayli chaqiruvchi bitta bo'lakni o'tkazib yuborsa ham holat to'g'ri
+ * qoladi. Bitta urinish ichida matn faqat o'sadi, lekin QAYTA
+ * urinishda oqim boshidan boshlanadi va `onText` yana qisqa matn bilan
+ * chaqiriladi — monotonlikni chaqiruvchi o'zi ta'minlashi kerak
+ * (`emittedAbs`).
+ */
+async function streamGemini(
+  system: string,
+  user: string,
+  maxTokens: number,
+  opts: LlmOpts,
+  onText: (partial: string) => void,
+): Promise<Attempt<string>> {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) return { value: null, retryable: false };
+  const model = llmModel();
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse`;
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      // `AbortSignal.timeout` taymeri unref qilingan — jarayonni
+      // ushlab qolmaydi (`completeGemini` dagi `setTimeout` dan farqi).
+      signal: AbortSignal.timeout(opts.timeoutMs ?? 40_000),
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": key,
+      },
+      body: geminiBody(system, user, maxTokens, opts),
+    });
+    if (!res.ok) {
+      const err = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
+      console.warn("[gemini:stream]", res.status, err?.error?.message ?? "request failed");
+      if (res.status === 429 || res.status >= 500) return { value: null, retryable: true };
+      /*
+       * Boshqa 4xx — oqim endpointining O'ZI rad etdi (proksi uni
+       * bilmaydi, model oqimni qo'llamaydi, `alt=sse` bloklangan).
+       * Qayta urinish AYNAN shu javobni berardi, shuning uchun SHU
+       * urinishda oqimsiz yo'lga tushamiz: foydalanuvchi jonli matnni
+       * yo'qotadi, lekin hujjatni oladi.
+       */
+      const fallback = await completeGemini(system, user, maxTokens, opts);
+      if (fallback.value) onText(fallback.value.text);
+      return { value: fallback.value?.text ?? null, retryable: fallback.retryable };
+    }
+    if (!res.body) {
+      // Oqim tanasi yo'q (proksi buferladi yoki `json:`-only stub) —
+      // butun javobni bir marta o'qiymiz, bitta `onText`.
+      const data = (await res.json()) as GeminiStreamChunk;
+      const whole = candidateText(data.candidates?.[0]).trim();
+      if (!whole) return { value: null, retryable: false };
+      onText(whole);
+      return { value: whole, retryable: false };
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    /*
+     * Bo'lak chegarasi qator chegarasi EMAS: bitta `data:` qatori ikki
+     * bo'lakka bo'linishi mumkin, hatto JSON satrining o'rtasidan.
+     * Shuning uchun to'liq qator yig'ilmaguncha buferda saqlanadi.
+     */
+    let buf = "";
+    let text = "";
+    for (;;) {
+      const { done, value } = await reader.read();
+      buf += done ? decoder.decode() : decoder.decode(value, { stream: true });
+      // Oxirida newline'siz qolgan quyruq ham to'liq qator.
+      if (done && buf !== "" && !buf.endsWith("\n")) buf += "\n";
+      let stop: SseLine | null = null;
+      let nl = buf.indexOf("\n");
+      while (nl >= 0) {
+        const ev = parseSseLine(buf.slice(0, nl));
+        buf = buf.slice(nl + 1);
+        if (ev.kind === "text") {
+          text += ev.text;
+          onText(text);
+        } else if (ev.kind !== "skip") {
+          stop = ev;
+          break;
+        }
+        nl = buf.indexOf("\n");
+      }
+      if (stop) {
+        await reader.cancel().catch(() => {});
+        if (stop.kind === "blocked") {
+          console.warn("[gemini:stream] javob bloklandi");
+          return { value: null, retryable: false };
+        }
+        console.warn("[gemini:stream]", stop.message);
+        return { value: null, retryable: stop.retryable };
+      }
+      if (done) break;
+    }
+    const full = text.trim();
+    if (!full) return { value: null, retryable: false };
+    return { value: full, retryable: false };
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "network error";
+    console.warn("[gemini:stream]", message);
+    // `aborted` — bizning timeout'imiz; qolgani tarmoq uzilishi.
+    return { value: null, retryable: !/abort/i.test(message) };
+  }
+}
+
+/**
+ * Oqimli chaqiruv — matn yozilayotgan payt ko'rinsin uchun.
+ *
+ * `llmComplete` dan farqi faqat shu: natija bir xil (to'liq matn yoki
+ * `null`), lekin yo'lda `onText` to'plangan matn bilan chaqiriladi.
+ * Ataylab ALOHIDA funksiya: mavjud chaqiruvchilarning hech biri
+ * o'zgarmaydi va oqim faqat progress kerak bo'lgan joyda yoqiladi.
+ *
+ * Oqimsiz yo'lga uchta chiqish bor va uchalasi ham `onText` ni BIR
+ * MARTA to'liq matn bilan chaqiradi — chaqiruvchi uchun ikki yo'l
+ * farqsiz:
+ *   1. `LLM_STREAM=false` — kill-switch (oqim ishonchsiz chiqsa
+ *      serverni qayta yig'masdan o'chirish);
+ *   2. xAI provayderi — u yerda oqim qo'llanmaydi;
+ *   3. Gemini oqim endpointi 4xx bersa (`streamGemini` ichida).
+ */
+export async function llmStream(
+  system: string,
+  user: string,
+  maxTokens = 1200,
+  opts: LlmOpts & { onText: (partial: string) => void },
+): Promise<string | null> {
+  const { onText, ...rest } = opts;
+  assertGroundingMode(rest);
+  const provider = llmProvider();
+  if (!provider) return null;
+  if (provider !== "gemini" || process.env.LLM_STREAM === "false") {
+    const res = await runLlm(system, user, maxTokens, rest);
+    if (!res) return null;
+    onText(res.text);
+    return res.text;
+  }
+  const budget = rest.timeoutMs ?? 40_000;
+  return withRetry(budget, (timeoutMs) =>
+    streamGemini(system, user, maxTokens, { ...rest, timeoutMs }, onText),
+  );
 }
 
 async function completeXai(
