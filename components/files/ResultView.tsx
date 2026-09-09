@@ -9,6 +9,10 @@ import { useAppStore } from "@/lib/store";
 import { TOOL_BY_ID } from "@/lib/tools";
 import { useConfirmClick } from "../overlays/useConfirmClick";
 import { ArtifactViewer } from "../viewers/ArtifactViewer";
+import { SlideViewer } from "../viewers/SlideViewer";
+import { asLiveView } from "../viewers/SlideViewer";
+import { liveDocOf, type LiveDeck } from "@/lib/generation/slide-progress";
+import { viewerKind } from "@/lib/viewers/kind";
 import type { Generation } from "@/lib/types";
 
 /**
@@ -116,6 +120,21 @@ export function ResultView({ id }: { id: string }) {
    */
   const expired = completed && !gen.hasFile;
 
+  /*
+   * JONLI KO'RUVCHI (L5).
+   *
+   * `IN_PROGRESS` da slayd vositasi uchun deka allaqachon qurilyapti —
+   * uni progress bar ortiga yashirish o'rniga ekranga chiqaramiz.
+   * Shartlar UCHTA va hammasi kerak: ish ketyapti, jonli holat bor va
+   * bu SLAYD vositasi (matn hujjatlarida hozircha jonli model yo'q,
+   * `liveDocOf` ularga hech narsa bermaydi). Bittasi tushsa — eski
+   * progress kartochkasi, ya'ni yiqilish xavfsiz tomonga.
+   */
+  const live =
+    running && viewerKind(gen.type) === "slides"
+      ? asLiveView(gen.live as LiveDeck | null | undefined)
+      : null;
+
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
       <nav className="no-print bg-background/95 sticky top-0 z-10 flex items-center gap-2 border-b px-3 py-2 sm:px-4">
@@ -190,7 +209,16 @@ export function ResultView({ id }: { id: string }) {
         ) : null}
       </nav>
 
-      {running ? (
+      {running && live ? (
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <SlideViewer
+            doc={withFrozenYear(liveDocOf(live as LiveDeck), gen.createdAt) as NonNullable<Generation["doc"]>}
+            live={live}
+          />
+        </div>
+      ) : null}
+
+      {running && !live ? (
         <div className="mx-auto w-full max-w-2xl px-4 py-8">
           <div className="bg-card rounded-2xl border p-6">
             <p className="mb-2 font-medium">{tool?.creatingLabel ?? "Yaratilmoqda..."}</p>

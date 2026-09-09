@@ -14,6 +14,29 @@ import { SlideCanvas } from "./SlideCanvas";
 import { SlideRail } from "./SlideRail";
 import { SlideStage, type SlideStageOverlayCtx } from "./SlideStage";
 import { useSlideKeys } from "./useSlideKeys";
+import { useReveal, type LiveView } from "./useReveal";
+import { LiveStrip } from "./LiveStrip";
+import { totalChars } from "@/lib/viewers/reveal";
+import { planSlide } from "@/lib/generation/slide-layout";
+
+export type { LiveView };
+
+/**
+ * `live` propi `unknown` bo'lib keladi (transport paketi uni serverdan
+ * xom JSON sifatida oladi). Ko'ruvchi ishonchsiz ma'lumotdan chizmasligi
+ * uchun shakl SHU YERDA bir marta tekshiriladi: kerakli maydonlardan
+ * biri yetishmasa jonli rejim umuman yoqilmaydi va oddiy ko'ruvchi
+ * ishlaydi.
+ */
+export function asLiveView(live: unknown): LiveView | null {
+  if (!live || typeof live !== "object") return null;
+  const v = live as Partial<LiveView>;
+  if (!Array.isArray(v.slides) || v.slides.length === 0) return null;
+  if (!Array.isArray(v.written) || !Array.isArray(v.roles) || !Array.isArray(v.imageWait)) return null;
+  if (!v.images || typeof v.images.got !== "number" || typeof v.images.want !== "number") return null;
+  if (typeof v.progress !== "number" || typeof v.step !== "string") return null;
+  return v as LiveView;
+}
 
 /**
  * F2: yupqa kompozitor.
@@ -37,7 +60,11 @@ export function SlideViewer({
   onGen,
 }: {
   doc: AcademicDoc;
-  /** Keyin: `LiveView` tipi bilan almashtiriladi. Hozircha ishlatilmaydi. */
+  /**
+   * Jonli generatsiya holati (`LiveDeck` — `lib/generation/slide-progress.ts`).
+   * Xom `unknown` keladi va `asLiveView` bilan tekshiriladi; `null`
+   * bo'lsa ko'ruvchi tayyor hujjatdagidek ishlaydi.
+   */
   live?: unknown;
   /** `SlideStage` ustiga qatlam chizish sloti — berilmasa hech narsa chiqmaydi. */
   overlay?: (ctx: SlideStageOverlayCtx) => ReactNode;
@@ -73,15 +100,74 @@ export function SlideViewer({
   const [zoom, setZoom] = useState(75);
   const [fitOn, setFitOn] = useState(true);
 
-  // Keyingi paketlar `live`/`gen`/`onGen` orqali ulanadi — hozircha
-  // qabul qilinadi va o'tkaziladi, xolos (no-op).
-  void live;
+  // `gen`/`onGen` — tahrirlash paketiniki, bu yerda tegilmaydi (no-op).
   void gen;
   void onGen;
+
+  const lv = useMemo(() => asLiveView(live), [live]);
 
   const go = useCallback(
     (n: number) => setI(Math.max(0, Math.min(slides.length - 1, n))),
     [slides.length],
+  );
+
+  /*
+   * JONLI shoxlar.
+   *
+   * `marks` — eskiz paneliga: xaritada YO'Q indeks «hali yozilmagan».
+   * `writing` esa navbatdagi (yozilayotgan) BITTA slayd: `written` da
+   * yo'q eng kichik indeks. Shu sabab «yozilmoqda» nuqtasi doim bitta
+   * joyda turadi va foydalanuvchi qayerda ish ketayotganini ko'radi.
+   */
+  const marks = useMemo(() => {
+    if (!lv) return undefined;
+    const done = new Set(lv.written);
+    const m: Record<number, "writing" | "done"> = {};
+    for (const idx of done) m[idx] = "done";
+    if (!lv.final) {
+      for (let k = 0; k < slides.length; k++) {
+        if (!done.has(k)) {
+          m[k] = "writing";
+          break;
+        }
+      }
+    }
+    return m;
+  }, [lv, slides.length]);
+
+  const written = useMemo(() => lv?.written ?? [], [lv]);
+  const skeleton = Boolean(lv && marks && marks[i] === undefined);
+  /*
+   * Yozish animatsiyasi uchun matn hajmi — sahnadagi slaydning O'ZI
+   * (`planSlide` qatlamlari). Slayd hali yo'q yoki skelet bo'lsa
+   * hisoblanmaydi.
+   */
+  const chars = useMemo(() => {
+    const s = slides[i];
+    if (!lv || !s || skeleton) return 0;
+    return totalChars(planSlide(s, theme, deck.visual, i, slides.length, deck.audience, deck.templateId, { bodyType: deck.bodyType, logo: deck.logo }).layers);
+  }, [lv, slides, i, skeleton, theme, deck.visual, deck.audience, deck.templateId, deck.bodyType, deck.logo]);
+
+  const reveal = useReveal({ index: i, written, final: lv?.final ?? true, chars, enabled: Boolean(lv) });
+
+  /*
+   * Avtomatik ergashish: yangi slayd yozilganda sahna unga sakraydi.
+   * Foydalanuvchi eskizni bosishi bilan to'xtaydi — o'qiyotgan slayd
+   * oyoq ostidan tortib olinmasin.
+   */
+  const [follow, setFollow] = useState(true);
+  const lastWritten = written.length ? Math.max(...written) : -1;
+  useEffect(() => {
+    if (!lv || !follow || lastWritten < 0) return;
+    setI((cur) => (lastWritten > cur ? Math.min(lastWritten, slides.length - 1) : cur));
+  }, [lv, follow, lastWritten, slides.length]);
+
+  const railGo = useCallback(
+    (n: number) => {
+      setFollow(false);
+      go(n);
+    },
+    [go],
   );
 
   /*
@@ -116,7 +202,11 @@ export function SlideViewer({
     return () => document.removeEventListener("fullscreenchange", sync);
   }, []);
 
-  useSlideKeys({ go, i, total: slides.length, present, setPresent, setPresenter });
+  // Jonli rejimda F/P klavishlari ham taqdimotni ochmasin — tugmalari
+  // yashirin bo'lgani holda klaviatura yo'li ochiq qolsa, yarim deka
+  // to'liq ekranga chiqib ketardi.
+  const noop = useCallback(() => {}, []);
+  useSlideKeys({ go, i, total: slides.length, present, setPresent: lv ? noop : setPresent, setPresenter: lv ? noop : setPresenter });
 
   /*
    * Chiqish taymeri. Taqdimotchi uchun asosiy raqam — «qancha gapirdim»,
@@ -188,9 +278,16 @@ export function SlideViewer({
           pages={slides.length}
           onPage={(n) => go(n - 1)}
           onFit={() => setFitOn(true)}
-          onFullscreen={() => setPresent(true)}
+          /*
+           * Jonli generatsiya paytida taqdimot/to'liq ekran va eslatma
+           * YO'Q: deka hali yarim, uni proyektorga chiqarish ma'nosiz,
+           * eslatmalar esa `deck` hodisasidan keyin qayta yoziladi —
+           * yarim eslatma ko'rsatish yolg'on bo'lardi.
+           */
+          onFullscreen={lv ? undefined : () => setPresent(true)}
           extra={
             <>
+              {lv ? null : (
               <button
                 type="button"
                 className={cn("hover:bg-white/10 inline-flex items-center gap-1 rounded px-2 py-1 text-xs", notesOn && "bg-white/10")}
@@ -199,6 +296,7 @@ export function SlideViewer({
                 <StickyNote className="size-3.5" />
                 Eslatma
               </button>
+              )}
               {/* Interfeys o'zbekcha: xom `id` («magazine», «problem») emas,
                   shablonning formada ko'ringan nomi. */}
               <span className="hidden text-xs text-white/50 lg:inline">
@@ -220,7 +318,9 @@ export function SlideViewer({
             bodyType={deck.bodyType}
             logo={deck.logo}
             i={i}
-            go={go}
+            go={lv ? railGo : go}
+            roles={lv?.roles}
+            marks={marks}
           />
         ) : null}
 
@@ -242,7 +342,13 @@ export function SlideViewer({
             presenter={presenter}
             onAdvance={() => go(i + 1)}
             overlay={overlay}
+            skeleton={skeleton}
+            role={lv?.roles?.[i]}
+            imageWait={Boolean(lv?.imageWait.includes(i))}
+            reveal={reveal}
           />
+
+          {lv ? <LiveStrip live={lv} /> : null}
 
           {!present ? (
             <div className="no-print flex h-9 shrink-0 items-center gap-2 border-t border-white/10 bg-[#252525] px-3 text-[12px] text-white/70">
@@ -256,9 +362,11 @@ export function SlideViewer({
                 <ChevronRight className="size-3.5" />
               </button>
               <span className="ml-auto truncate">{deck.topic}</span>
-              <button type="button" className="hover:bg-white/10 ml-2 rounded p-1" onClick={() => setPresent(true)}>
-                {present ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
-              </button>
+              {lv ? null : (
+                <button type="button" className="hover:bg-white/10 ml-2 rounded p-1" onClick={() => setPresent(true)}>
+                  {present ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
+                </button>
+              )}
             </div>
           ) : null}
 
