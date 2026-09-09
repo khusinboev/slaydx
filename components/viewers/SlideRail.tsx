@@ -31,6 +31,8 @@ export function SlideRail({
   go,
   roles,
   marks,
+  editOn = false,
+  onReorder,
 }: {
   slides: SlideModel[];
   theme: SlideTheme;
@@ -49,6 +51,14 @@ export function SlideRail({
    * xaritada YO'Q indeks «hali yozilmagan» degani.
    */
   marks?: Record<number, "writing" | "done">;
+  /**
+   * E6 tahrir: eskizlarni sudrab tartibini o'zgartirish. `false` bo'lsa
+   * (standart) panel HTML i bo'linishdan oldingi bilan bir xil qoladi —
+   * `draggable` atributi ham qo'yilmaydi.
+   */
+  editOn?: boolean;
+  /** Yangi tartib: `order[yangi] = eski` (`{op:"reorder"}` bilan bir xil). */
+  onReorder?: (order: number[]) => void;
 }) {
   // Eskiz konteynerining haqiqiy kengligidan masshtab (ilgari qat'iy
   // 0.117 edi, ya'ni panel kengligi o'zgarsa eskiz ramkadan chiqib
@@ -69,6 +79,26 @@ export function SlideRail({
     return () => ro.disconnect();
   }, [slides.length]);
 
+  /*
+   * Sudrash — NATIVE HTML5 DnD (kutubxona qo'shilmaydi). Sudralayotgan
+   * indeks `dataTransfer` da EMAS, ref da: jsdom da `dataTransfer`
+   * yo'q va ba'zi brauzerlarda `dragover` paytida o'qib bo'lmaydi.
+   */
+  const dragRef = useRef<number | null>(null);
+  const [over, setOver] = useState<number | null>(null);
+
+  const drop = (to: number) => {
+    const from = dragRef.current;
+    dragRef.current = null;
+    setOver(null);
+    if (from == null || from === to) return;
+    // `order[yangi] = eski` — `applyDocOps` aynan shunday o'qiydi
+    // (`slides = order.map(n => slides[n])`).
+    const order = slides.map((_, k) => k);
+    order.splice(to, 0, ...order.splice(from, 1));
+    onReorder?.(order);
+  };
+
   return (
     <aside ref={railRef} className="hidden w-[200px] shrink-0 overflow-y-auto border-r border-white/10 bg-[#171717] p-2 md:block">
       {slides.map((s, idx) => {
@@ -85,7 +115,46 @@ export function SlideRail({
           key={s.id}
           type="button"
           onClick={() => go(idx)}
-          className={cn("mb-2 flex w-full gap-1.5 rounded-sm p-1 text-left", idx === i ? "bg-white/10" : "hover:bg-white/5")}
+          data-thumb-index={editOn ? idx : undefined}
+          draggable={editOn || undefined}
+          onDragStart={
+            editOn
+              ? (e) => {
+                  dragRef.current = idx;
+                  e.dataTransfer?.setData?.("text/plain", String(idx));
+                }
+              : undefined
+          }
+          onDragOver={
+            editOn
+              ? (e) => {
+                  // `preventDefault` bo'lmasa brauzer tashlashga ruxsat bermaydi.
+                  e.preventDefault();
+                  if (over !== idx) setOver(idx);
+                }
+              : undefined
+          }
+          onDrop={
+            editOn
+              ? (e) => {
+                  e.preventDefault();
+                  drop(idx);
+                }
+              : undefined
+          }
+          onDragEnd={
+            editOn
+              ? () => {
+                  dragRef.current = null;
+                  setOver(null);
+                }
+              : undefined
+          }
+          className={cn(
+            "mb-2 flex w-full gap-1.5 rounded-sm p-1 text-left",
+            idx === i ? "bg-white/10" : "hover:bg-white/5",
+            editOn && over === idx && "outline-2 outline-sky-400",
+          )}
         >
           <span className="w-5 shrink-0 pt-6 text-right text-[11px] tabular-nums text-white/50">{idx + 1}</span>
           <span className="min-w-0 flex-1">

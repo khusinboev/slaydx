@@ -96,6 +96,14 @@ export function SlideStage({
       <div
         style={{ width: SLIDE.w * scale, height: SLIDE.h * scale }}
         className={cn("relative", !present && "shadow-2xl")}
+        /*
+          Tahrir qatlami hodisalarni SHU ramkada tinglaydi: bu yagona
+          tugun bo'lib, ichida ham slayd (`data-src` li matnlar), ham
+          overlay bor. Atribut FAQAT overlay bo'lganda yoziladi — aks
+          holda SSR HTML i bo'linishdan oldingidan farq qilardi
+          (`slide-viewer-seams` testi).
+        */
+        data-slide-frame={overlay ? "" : undefined}
       >
         <div
           className="absolute top-0 left-0 overflow-hidden"
