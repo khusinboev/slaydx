@@ -634,7 +634,8 @@ export function SlideViewer({
             */
             overlay={
               overlay ??
-              (editOn
+              // Taqdimot (`present`) rejimida tahrir qatlami YO'Q — ikki bosish, panel, textarea chiqmaydi.
+              (editOn && !present
                 ? (ctx) => (
                     <SlideEditor
                       slide={ctx.slide}

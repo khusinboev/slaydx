@@ -155,13 +155,13 @@ function saveBtn(): HTMLElement | null {
 test("«Tahrirlash» tugmasi YO'Q — maket chiplari darhol ko'rinadi", () => {
   const s = stubServer();
   openEditor(s);
-  assert.equal(screen.queryByText("Tahrirlash"), null, "tahrir rejimi tugmasi olib tashlangan");
+  assert.equal(screen.queryByText("Tahrirlash") === null, true, "tahrir rejimi tugmasi olib tashlangan");
   assert.ok(screen.getByText("Slayd"), "«+ Slayd» tugmasi");
   assert.ok(screen.getByText("O‘chirish"), "o'chirish tugmasi");
   // Muqova slaydidan faqat `section`/`closing` ga o'girish mumkin —
   // `canConvert` qolgan chiplarni umuman chizmaydi.
   assert.ok(screen.getByText("Bo‘lim"), "mumkin bo'lgan maket chipi");
-  assert.equal(screen.queryByText("Jadval"), null, "mumkin bo'lmagan maket chipi chiqmasligi kerak");
+  assert.equal(screen.queryByText("Jadval") === null, true, "mumkin bo'lmagan maket chipi chiqmasligi kerak");
   cleanup();
 });
 
@@ -262,10 +262,10 @@ test("taqdimot rejimida tahrir YO'Q", async () => {
   await act(async () => {
     fireEvent.keyDown(document.body, { key: "f" });
   });
-  assert.equal(document.querySelector("[data-slide-editor]"), null, "taqdimotda tahrir qatlami yo'q");
+  assert.equal(document.querySelector("[data-slide-editor]") === null, true, "taqdimotda tahrir qatlami yo'q");
   const li = document.querySelector("li[data-src]");
   if (li) fireEvent.doubleClick(li as HTMLElement);
-  assert.equal(screen.queryByLabelText("Matnni tahrirlash"), null, "ikki bosish maydon ochmasligi kerak");
+  assert.equal(screen.queryByLabelText("Matnni tahrirlash") === null, true, "ikki bosish maydon ochmasligi kerak");
   cleanup();
 });
 

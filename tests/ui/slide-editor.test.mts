@@ -185,7 +185,7 @@ test("bandda Shift+Enter ham SAQLAYDI — band bir qatorli", () => {
 test("rasm boshqaruvi: qayta chizish limiti va «Rasmsiz» faqat rasm bor bo'lsa", () => {
   const calls = mount(bulletsSlide());
   assert.ok(screen.getByText("Qayta chizish (5/5)"), "rasm joyi bor maketda tugma chiqadi");
-  assert.equal(screen.queryByText("Rasmsiz"), null, "rasmi yo'q slaydda «Rasmsiz» kerak emas");
+  assert.equal(screen.queryByText("Rasmsiz") === null, true, "rasmi yo'q slaydda «Rasmsiz» kerak emas");
   fireEvent.click(screen.getByText("Qayta chizish (5/5)"));
   assert.equal(calls.regen, 1);
   cleanup();
@@ -201,13 +201,16 @@ test("rasm boshqaruvi: qayta chizish limiti va «Rasmsiz» faqat rasm bor bo'lsa
 });
 
 test("maketda rasm joyi bo'lmasa rasm tugmalari CHIQMAYDI", () => {
-  mount({
-    id: "s0",
-    layout: "table",
-    title: "Jadval",
-    table: { headers: ["A", "B"], rows: [["1", "2"]] },
-  });
-  assert.equal(screen.queryByText("O‘z rasmim"), null);
+  /*
+   * E2 dan keyin `table` ham rasm joyiga ega — rasm joyi YO'Q maket
+   * endi `answers` (javoblar kaliti). DIQQAT: DOM tugunini to'g'ridan-
+   * to'g'ri `assert.equal(el, null)` bilan solishtirmang — yiqilganda
+   * `node:assert` jsdom tugunini `util.inspect` bilan chizishga urinib
+   * jarayonni QOTIRIB qo'yadi va xotirani shishiradi (aynan shu test
+   * `npm run test:ui` ni osib, VS Code'ni OOM ga olib borgan edi).
+   */
+  mount({ id: "s0", layout: "answers", title: "Javoblar", bullets: ["1 — A", "2 — C"] });
+  assert.equal(screen.queryByText("O‘z rasmim") === null, true, "rasm joyi yo'q maketda rasm tugmasi chiqmasligi kerak");
   cleanup();
 });
 
@@ -221,7 +224,7 @@ function curFont(): number {
 
 test("shrift paneli tahrir bilan birga ochiladi, «Barcha bandlar» deb ogohlantiradi", () => {
   mount(bulletsSlide());
-  assert.equal(screen.queryByText("Barcha bandlar"), null, "tahrirsiz panel bo'lmasin");
+  assert.equal(screen.queryByText("Barcha bandlar") === null, true, "tahrirsiz panel bo'lmasin");
   fireEvent.doubleClick(firstBullet());
   assert.ok(screen.getByText("Barcha bandlar"), "ro'yxatda o'lcham butun qatlamga tegishli");
   assert.ok(curFont() > 0, "joriy o'lcham qatlamdan olinadi");
@@ -277,7 +280,7 @@ test("bir maydonli qatlamda panel «Shrift» deydi va o'z manbasini yuboradi", (
   const calls = mount(bulletsSlide());
   fireEvent.doubleClick(document.querySelector('[data-src=\'{"f":"title"}\']') as HTMLElement);
   assert.ok(screen.getByText("Shrift"));
-  assert.equal(screen.queryByText("Barcha bandlar"), null);
+  assert.equal(screen.queryByText("Barcha bandlar") === null, true);
   fireEvent.click(screen.getByLabelText("Shrift 32 pt"));
   assert.deepEqual(calls.style, [[{ f: "title" }, 32]]);
   cleanup();
