@@ -26,22 +26,43 @@ type PptxSlide = {
  */
 type ImageCache = Map<string, ImageBytes | null>;
 
-async function loadImage(cache: ImageCache, url: string): Promise<ImageBytes | null> {
+/**
+ * `opts.resolveImage` — tahrirdan keyingi qayta render uchun: saqlangan
+ * `doc_json` dagi rasm URL'lari `/api/generations/…/assets/…` (aktiv),
+ * `fetchImageBytes` esa faqat `data:`/`https:` ni tushunadi. Berilgan
+ * bo'lsa AVVAL shu chaqiriladi, `null` qaytsa (begona/nomos URL) odatdagi
+ * yo'lga (`fetchImageBytes`) qaytiladi.
+ */
+async function loadImage(
+  cache: ImageCache,
+  url: string,
+  resolveImage?: (url: string) => Promise<ImageBytes | null>,
+): Promise<ImageBytes | null> {
   const hit = cache.get(url);
   if (hit !== undefined) return hit;
-  const img = await fetchImageBytes(url);
+  const img = (resolveImage ? await resolveImage(url) : null) ?? (await fetchImageBytes(url));
   cache.set(url, img);
   return img;
 }
 
-async function paintPlan(slide: PptxSlide, plan: SlidePlan, cache: ImageCache) {
+async function paintPlan(
+  slide: PptxSlide,
+  plan: SlidePlan,
+  cache: ImageCache,
+  resolveImage?: (url: string) => Promise<ImageBytes | null>,
+) {
   slide.addShape("rect", { x: 0, y: 0, w: W, h: H, fill: { color: hx(plan.bg) } });
   for (const layer of plan.layers) {
-    await paintLayer(slide, layer, cache);
+    await paintLayer(slide, layer, cache, resolveImage);
   }
 }
 
-async function paintLayer(slide: PptxSlide, layer: SlideLayer, cache: ImageCache) {
+async function paintLayer(
+  slide: PptxSlide,
+  layer: SlideLayer,
+  cache: ImageCache,
+  resolveImage?: (url: string) => Promise<ImageBytes | null>,
+) {
   if (layer.t === "rect") {
     const fill = layer.fill
       ? {
@@ -62,7 +83,7 @@ async function paintLayer(slide: PptxSlide, layer: SlideLayer, cache: ImageCache
   }
   if (layer.t === "image") {
     if (!slide.addImage) return;
-    const img = await loadImage(cache, layer.url);
+    const img = await loadImage(cache, layer.url, resolveImage);
     if (!img) return;
     const box = layer.box;
     slide.addImage({
@@ -107,7 +128,11 @@ async function paintLayer(slide: PptxSlide, layer: SlideLayer, cache: ImageCache
   });
 }
 
-export async function renderPptx(doc: AcademicDoc, fileName: string): Promise<BuiltFile> {
+export async function renderPptx(
+  doc: AcademicDoc,
+  fileName: string,
+  opts?: { resolveImage?: (url: string) => Promise<ImageBytes | null> },
+): Promise<BuiltFile> {
   const imageCache: ImageCache = new Map();
   const PptxGenJS = (await import("pptxgenjs")).default;
   const pptx = new PptxGenJS();
@@ -126,7 +151,7 @@ export async function renderPptx(doc: AcademicDoc, fileName: string): Promise<Bu
       bodyType: deck.bodyType,
       logo: deck.logo,
     });
-    await paintPlan(slide, plan, imageCache);
+    await paintPlan(slide, plan, imageCache, opts?.resolveImage);
     // Notiq eslatmasi. Ilgari `notesSlide` yaratilardi-yu, ichi bo'sh qolardi:
     // foydalanuvchi saytda eslatmani ko'rib, yuklab olgach yo'qotardi.
     const notes = slideNotes(deck.slides[i], deck.speakerNotes);
