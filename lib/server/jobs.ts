@@ -1,5 +1,6 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
+import type { PoolClient } from "pg";
 import { query, queryOne, transaction } from "./db";
 import { chargeInTx } from "./credits";
 import { env } from "./env";
@@ -37,11 +38,29 @@ export type GenerationRow = {
   started_at: Date | null;
   finished_at: Date | null;
   expires_at: Date | null;
+  /*
+   * `?` — 013_live_edit.sql dan OLDINGI test qatorlari (masalan
+   * `tests/queue.test.mts` dagi qo'lda yasalgan literal'lar) bu
+   * maydonlarsiz ham to'g'ri tип tekshiruvidan o'tsin. Haqiqiy SQL
+   * qatorida ular HAR DOIM bor (ustunlar `NOT NULL DEFAULT`) —
+   * `rowToSummary` `?? 0`/`?? null` bilan shu «eski qator» holatini
+   * ham xavfsiz yopadi.
+   */
+  /** Tahrir optimistik qulfi (013_live_edit.sql). */
+  doc_version?: number;
+  /** PPTX oxirgi marta qaysi `doc_version`ga qarab yasalgan. */
+  file_version?: number;
+  /** Bepul qayta chizish limiti — dekaga (`IMAGE_REDRAW_LIMIT`). */
+  image_redraws?: number;
+  edited_at?: Date | null;
+  /** Jonli generatsiya davri (`live_json` o'zgarganda oshadi). `live_json`ning o'zi ROW_COLUMNS da YO'Q. */
+  live_seq?: number;
 };
 
 const ROW_COLUMNS = `
   id, user_id, tool_id, topic, status, price, format, progress, step,
-  values_json, file_name, error, preview, delivered_json, created_at, started_at, finished_at, expires_at
+  values_json, file_name, error, preview, delivered_json, created_at, started_at, finished_at, expires_at,
+  doc_version, file_version, image_redraws, edited_at, live_seq
 `;
 
 /** Ro'yxat kartochkasi uchun yengil ko'rinish. */
@@ -51,9 +70,16 @@ export type GenerationSummary = Omit<Generation, "values" | "doc" | "html"> & {
   expiresAt: string | null;
   error: string | null;
   preview: GenerationPreview | null;
+  docVersion: number;
+  fileVersion: number;
+  imageRedraws: number;
+  editedAt: string | null;
+  liveSeq: number;
 };
 
-export function rowToSummary(r: Omit<GenerationRow, "values_json" | "doc_json" | "html">): GenerationSummary {
+export function rowToSummary(
+  r: Omit<GenerationRow, "values_json" | "doc_json" | "html" | "live_json">,
+): GenerationSummary {
   return {
     preview: r.preview ?? null,
     id: r.id,
@@ -70,6 +96,11 @@ export function rowToSummary(r: Omit<GenerationRow, "values_json" | "doc_json" |
     expiresAt: r.expires_at ? new Date(r.expires_at).toISOString() : null,
     error: r.error,
     delivered: r.delivered_json ?? undefined,
+    docVersion: r.doc_version ?? 0,
+    fileVersion: r.file_version ?? 0,
+    imageRedraws: r.image_redraws ?? 0,
+    editedAt: r.edited_at ? new Date(r.edited_at).toISOString() : null,
+    liveSeq: r.live_seq ?? 0,
   };
 }
 
@@ -142,16 +173,31 @@ export async function listGenerations(userId: string, limit = 100): Promise<Gene
   return rows.map(rowToSummary);
 }
 
+/**
+ * `opts.since` — klient oxirgi ko'rgan `liveSeq`. Berilgan bo'lsa va
+ * jonli deka o'sha vaqtdan beri o'zgarmagan bo'lsa, javobda `live`
+ * KALITI UMUMAN YO'Q (`undefined`) — klient eskisini saqlaydi, hech
+ * qachon eski qiymat qayta yuborilmaydi. `liveSeq` esa har doim bor.
+ */
 export async function getGeneration(
   id: string,
   userId: string,
-): Promise<(GenerationSummary & { html: string | null; doc: AcademicDoc | null }) | null> {
-  const row = await queryOne<GenerationRow>(
-    `SELECT ${ROW_COLUMNS}, html, doc_json FROM generations WHERE id = $1 AND user_id = $2`,
-    [id, userId],
+  opts?: { since?: number },
+): Promise<
+  (GenerationSummary & { html: string | null; doc: AcademicDoc | null; live?: unknown | null }) | null
+> {
+  const since = opts?.since ?? null;
+  const row = await queryOne<GenerationRow & { live_json_out: unknown | null }>(
+    `SELECT ${ROW_COLUMNS}, html, doc_json,
+       CASE WHEN status = 'IN_PROGRESS' AND ($3::int IS NULL OR live_seq > $3)
+            THEN live_json END AS live_json_out
+       FROM generations WHERE id = $1 AND user_id = $2`,
+    [id, userId, since],
   );
   if (!row) return null;
-  return { ...rowToSummary(row), html: row.html, doc: row.doc_json };
+  const base = { ...rowToSummary(row), html: row.html, doc: row.doc_json };
+  const changed = row.status === "IN_PROGRESS" && (since == null || (row.live_seq ?? 0) > since);
+  return changed ? { ...base, live: row.live_json_out ?? null } : base;
 }
 
 export async function deleteGeneration(id: string, userId: string): Promise<boolean> {
@@ -197,6 +243,53 @@ export async function setProgress(
   );
 }
 
+/**
+ * Jonli dekani yozadi va shu bilan birga navbat qulfini «tirik» tutadi
+ * (`locked_at`) — alohida `heartbeat` chaqirish shart emas.
+ *
+ * `progress`/`step` bu yerda HAQIQIY qiymat — `progressTicker`ning
+ * soxta `1 − e^(−t/T)` egri chizig'i o'rnini bosadi (rejaning
+ * "Progress manbasi" qarori). Qulf boshqada bo'lsa (`locked_by`
+ * mos kelmasa) yoki ish `IN_PROGRESS` bo'lmasa — `null`, `live_seq`
+ * OSHMAYDI.
+ */
+export async function setLive(
+  id: string,
+  workerId: string,
+  live: unknown,
+  progress: number,
+  step: string,
+): Promise<number | null> {
+  const row = await queryOne<{ live_seq: number }>(
+    `UPDATE generations
+        SET live_json = $3, live_seq = live_seq + 1, progress = $4, step = $5, locked_at = now()
+      WHERE id = $1 AND locked_by = $2 AND status = 'IN_PROGRESS'
+      RETURNING live_seq`,
+    [
+      id,
+      workerId,
+      JSON.stringify(live ?? null),
+      Math.max(0, Math.min(99, Math.round(progress))),
+      step.slice(0, 200),
+    ],
+  );
+  return row ? row.live_seq : null;
+}
+
+/**
+ * `setLive` orasida uzoq tanaffus bo'lsa (masalan LLM javob kutilmoqda)
+ * ham qulfni tirik tutish uchun — `reclaimStaleJobs` noto'g'ri o'lik
+ * deb hisoblamasin.
+ */
+export async function heartbeat(id: string, workerId: string): Promise<void> {
+  await query(
+    `UPDATE generations
+        SET locked_at = now()
+      WHERE id = $1 AND locked_by = $2 AND status = 'IN_PROGRESS'`,
+    [id, workerId],
+  );
+}
+
 export type ClaimedJob = {
   id: string;
   userId: string;
@@ -231,7 +324,8 @@ export async function claimJob(workerId: string): Promise<ClaimedJob | null> {
             started_at = COALESCE(started_at, now()),
             attempts = attempts + 1,
             progress = 5,
-            step = 'Boshlandi'
+            step = 'Boshlandi',
+            live_json = NULL
       WHERE g.id = (
         SELECT id FROM generations
          WHERE status = 'QUEUED' AND run_after <= now()
@@ -294,7 +388,8 @@ export async function completeJob(
         SET status = 'COMPLETED', progress = 100, step = 'Tayyor',
             html = $3, doc_json = $4, file_name = $5, preview = $6,
             format = COALESCE($7, format), delivered_json = $8,
-            finished_at = now(), locked_by = NULL, locked_at = NULL, error = NULL
+            finished_at = now(), locked_by = NULL, locked_at = NULL, error = NULL,
+            live_json = NULL
       WHERE id = $1 AND locked_by = $2 AND status = 'IN_PROGRESS'
       RETURNING id`,
     [
@@ -316,7 +411,8 @@ export async function failJob(id: string, workerId: string, message: string): Pr
   const rows = await query<{ id: string }>(
     `UPDATE generations
         SET status = 'FAILED', progress = 100, step = 'Xatolik',
-            error = $3, finished_at = now(), locked_by = NULL, locked_at = NULL
+            error = $3, finished_at = now(), locked_by = NULL, locked_at = NULL,
+            live_json = NULL
       WHERE id = $1 AND locked_by = $2 AND status = 'IN_PROGRESS'
       RETURNING id`,
     [id, workerId, message.slice(0, 500)],
@@ -348,7 +444,8 @@ export async function reclaimStaleJobs(): Promise<string[]> {
       `UPDATE generations
           SET status = 'QUEUED', locked_by = NULL, locked_at = NULL,
               run_after = now() + interval '5 seconds',
-              step = 'Qayta navbatga qo''yildi'
+              step = 'Qayta navbatga qo''yildi',
+              live_json = NULL
         WHERE status = 'IN_PROGRESS'
           AND attempts < 2
           AND ${staleFilter}`,
@@ -359,7 +456,8 @@ export async function reclaimStaleJobs(): Promise<string[]> {
       `UPDATE generations
           SET status = 'FAILED', progress = 100, step = 'Xatolik',
               error = 'Ish vaqti tugadi', finished_at = now(),
-              locked_by = NULL, locked_at = NULL
+              locked_by = NULL, locked_at = NULL,
+              live_json = NULL
         WHERE status = 'IN_PROGRESS'
           AND attempts >= 2
           AND ${staleFilter}
@@ -378,4 +476,171 @@ export async function queueDepth(): Promise<{ queued: number; running: number }>
      FROM generations`,
   );
   return { queued: Number(row?.queued ?? 0), running: Number(row?.running ?? 0) };
+}
+
+// ---------------------------------------------------------------------------
+// Ko'ruvchida tahrirlash (2-qism) — poydevor.
+//
+// Bu funksiyalar `PoolClient` qabul qiladi: `commitDocOps`/`rebuildFile`
+// (E4/E5) doc/html/preview/file_version yozuvini BITTA tranzaksiyada
+// (kerak bo'lsa advisory lock ostida) bajaradi — `query`/`transaction`
+// wrapperi emas, chaqiruvchi client'ni to'g'ridan-to'g'ri ishlatadi.
+// ---------------------------------------------------------------------------
+
+/**
+ * Tahrirni yozadi — **faqat** `doc_version` chaqiruvchi kutgan qiymatga
+ * teng bo'lsa (optimistik qulf). Boshqa foydalanuvchi/tab parallel
+ * tahrir qilgan bo'lsa `null` — chaqiruvchi 409 qaytaradi.
+ *
+ * `status = 'COMPLETED'` predikati: hali tayyor bo'lmagan (`doc_json`
+ * yo'q) yoki jonli generatsiya davom etayotgan hujjatga tahrir tushib
+ * qolmasin.
+ */
+export async function updateGenerationDoc(
+  client: PoolClient,
+  id: string,
+  userId: string,
+  expectedVersion: number,
+  patch: { doc: AcademicDoc; html: string; preview: GenerationPreview | null },
+): Promise<number | null> {
+  const res = await client.query<{ doc_version: number }>(
+    `UPDATE generations
+        SET doc_json = $3, html = $4, preview = $5, doc_version = doc_version + 1, edited_at = now()
+      WHERE id = $1 AND user_id = $2 AND status = 'COMPLETED' AND doc_version = $6
+      RETURNING doc_version`,
+    [
+      id,
+      userId,
+      JSON.stringify(patch.doc),
+      patch.html,
+      patch.preview ? JSON.stringify(patch.preview) : null,
+      expectedVersion,
+    ],
+  );
+  return res.rows[0]?.doc_version ?? null;
+}
+
+/**
+ * PPTX qayta yasalgach `file_version`ni oshiradi.
+ *
+ * `file_version < $v` sharti: parallel ikkita rebuild bir-birini ORQAGA
+ * surmasin (eskisi keyinroq tugasa ham yangi versiyani bosib yozmaydi).
+ */
+export async function markFileVersion(
+  client: PoolClient,
+  id: string,
+  userId: string,
+  v: number,
+): Promise<number | null> {
+  const res = await client.query<{ file_version: number }>(
+    `UPDATE generations
+        SET file_version = $3
+      WHERE id = $1 AND user_id = $2 AND file_version < $3
+      RETURNING file_version`,
+    [id, userId, v],
+  );
+  return res.rows[0]?.file_version ?? null;
+}
+
+/**
+ * Rasm qayta chizishni «band qiladi» — limit va egalik BITTA `UPDATE`
+ * predikatida (TOCTOU yo'q: tekshirish va oshirish bir amal).
+ * `null` — limit tugagan (yoki egalik/`status` mos kelmagan).
+ */
+export async function reserveRedraw(id: string, userId: string, limit: number): Promise<number | null> {
+  const row = await queryOne<{ image_redraws: number }>(
+    `UPDATE generations
+        SET image_redraws = image_redraws + 1
+      WHERE id = $1 AND user_id = $2 AND status = 'COMPLETED' AND image_redraws < $3
+      RETURNING image_redraws`,
+    [id, userId, limit],
+  );
+  return row ? row.image_redraws : null;
+}
+
+/** Qayta chizish provayder xatosi bilan yiqilsa — band qilingan limitni qaytaradi. */
+export async function releaseRedraw(id: string, userId: string): Promise<void> {
+  await query(
+    `UPDATE generations
+        SET image_redraws = GREATEST(image_redraws - 1, 0)
+      WHERE id = $1 AND user_id = $2`,
+    [id, userId],
+  );
+}
+
+/** `GET …/file` faylni eskirgan bermasin deb tekshiradigan yengil so'rov. */
+export async function getVersions(
+  id: string,
+  userId: string,
+): Promise<{
+  docVersion: number;
+  fileVersion: number;
+  toolId: string;
+  fileName: string;
+  status: JobStatus;
+} | null> {
+  const row = await queryOne<{
+    doc_version: number;
+    file_version: number;
+    tool_id: string;
+    file_name: string;
+    status: JobStatus;
+  }>(
+    `SELECT doc_version, file_version, tool_id, file_name, status
+       FROM generations WHERE id = $1 AND user_id = $2`,
+    [id, userId],
+  );
+  if (!row) return null;
+  return {
+    docVersion: row.doc_version,
+    fileVersion: row.file_version,
+    toolId: row.tool_id,
+    fileName: row.file_name,
+    status: row.status,
+  };
+}
+
+/**
+ * `PATCH …/doc` uchun to'liq holat — `FOR UPDATE` EMAS (oddiy SELECT):
+ * qulflash `updateGenerationDoc`ning `doc_version = $expected` sharti
+ * bilan optimistik tarzda hal qilinadi, alohida qator qulfi kerak emas.
+ */
+export async function getGenerationForEdit(
+  id: string,
+  userId: string,
+): Promise<{
+  doc: AcademicDoc | null;
+  docVersion: number;
+  fileVersion: number;
+  imageRedraws: number;
+  toolId: string;
+  fileName: string;
+  topic: string;
+  status: JobStatus;
+} | null> {
+  const row = await queryOne<{
+    doc_json: AcademicDoc | null;
+    doc_version: number;
+    file_version: number;
+    image_redraws: number;
+    tool_id: string;
+    file_name: string;
+    topic: string;
+    status: JobStatus;
+  }>(
+    `SELECT doc_json, doc_version, file_version, image_redraws, tool_id, file_name, topic, status
+       FROM generations WHERE id = $1 AND user_id = $2`,
+    [id, userId],
+  );
+  if (!row) return null;
+  return {
+    doc: row.doc_json,
+    docVersion: row.doc_version,
+    fileVersion: row.file_version,
+    imageRedraws: row.image_redraws,
+    toolId: row.tool_id,
+    fileName: row.file_name,
+    topic: row.topic,
+    status: row.status,
+  };
 }

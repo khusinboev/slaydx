@@ -1,4 +1,5 @@
 import "server-only";
+import type { PoolClient } from "pg";
 import { query, queryOne } from "./db";
 
 /**
@@ -21,9 +22,16 @@ export type StoredFileMeta = {
   sizeBytes: number;
 };
 
+/**
+ * `client` — tahrirdan keyingi qayta render (`rebuildFile`) bitta
+ * tranzaksiya ichida `markFileVersion` bilan birga yozishi uchun
+ * (advisory lock ostida) ixtiyoriy `PoolClient`; berilmasa hovuzning
+ * o'zi ishlatiladi (mavjud xatti-harakat o'zgarmaydi).
+ */
 export async function putGenerationFile(
   generationId: string,
   file: { bytes: Uint8Array; mime: string; fileName: string },
+  client?: PoolClient,
 ): Promise<StoredFileMeta> {
   if (file.bytes.byteLength > MAX_FILE_BYTES) {
     throw new Error(
@@ -31,17 +39,20 @@ export async function putGenerationFile(
         `Chegara — ${MAX_FILE_BYTES / 1024 / 1024} MB.`,
     );
   }
-  await query(
-    `INSERT INTO generation_files (generation_id, file_name, mime, size_bytes, bytes, expires_at)
+  const sql = `INSERT INTO generation_files (generation_id, file_name, mime, size_bytes, bytes, expires_at)
      VALUES ($1, $2, $3, $4, $5, NULL)
      ON CONFLICT (generation_id) DO UPDATE
         SET file_name = EXCLUDED.file_name,
             mime      = EXCLUDED.mime,
             size_bytes = EXCLUDED.size_bytes,
             bytes     = EXCLUDED.bytes,
-            expires_at = NULL`,
-    [generationId, file.fileName, file.mime, file.bytes.byteLength, Buffer.from(file.bytes)],
-  );
+            expires_at = NULL`;
+  const params = [generationId, file.fileName, file.mime, file.bytes.byteLength, Buffer.from(file.bytes)];
+  if (client) {
+    await client.query(sql, params);
+  } else {
+    await query(sql, params);
+  }
   return {
     fileName: file.fileName,
     mime: file.mime,
