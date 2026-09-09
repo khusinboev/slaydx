@@ -14,6 +14,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import path from "node:path";
+import { deflateSync } from "node:zlib";
 import { TOOL_BY_ID } from "../lib/tools.ts";
 import type { FormValues } from "../lib/types.ts";
 import { extractMeta } from "../lib/generation/meta.ts";
@@ -283,7 +284,7 @@ async function stripProfile(): Promise<void> {
   for (const [visual, tpl] of decks) {
     const meta = extractMeta(tool, {
       topic: "Rasm tasmasi sinovi",
-      slideTemplate: tpl,
+      slideTemplate: tpl as AcademicDoc["slideTemplate"],
       slideTheme: "atlas",
       slideCount: 10,
       author: "Karimova Nilufar",
@@ -356,7 +357,7 @@ async function stripProfile(): Promise<void> {
       toc: false,
       sections: [],
       slides: slides as AcademicDoc["slides"],
-      slideTemplate: tpl,
+      slideTemplate: tpl as AcademicDoc["slideTemplate"],
       slideTheme: "atlas",
       slideLogo: { url: LOGO },
     };
