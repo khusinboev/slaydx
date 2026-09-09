@@ -86,7 +86,23 @@ Manba — foydalanuvchi ekran rasmi (pro slayd ko'ruvchisi) va 4 ta talab.
   yiqiladi — test muhit kalitlarini o'zi tozalashi kerak (`delete
   process.env.PEXELS_API_KEY` kabi). Tegilmadi — alohida band.
 
+## 4a. Brauzerda topilgan nuqson (deploydan keyin)
+
+**Y-5:** foydalanuvchi «ikki marta bosyapman, hech nima bo'lmayapti» dedi.
+Playwright/Chromium (`/uz/editor-lab` vaqtinchalik sahifa) darhol ko'rsatdi:
+`SlideStage` dagi overlay o'rami `<div class="absolute inset-0">` butun
+sahnani yopib, `dblclick` ni O'ZIGA olardi — `closest("[data-src]")` bo'sh.
+jsdom hit-testing qilmagani uchun 70 ta UI test buni ko'rmagan. Tuzatish:
+o'ram `pointer-events-none` (`b7a15e2`), tahrir qutisiga `position:absolute`,
+SSR test o'ram+ildiz ketma-ketligini qulflaydi (`42fdb76`, mutatsiya ushlanadi).
+Brauzerda tasdiqlandi: sarlavha tahriri, ro'yxatda Enter → yangi band, shrift
+select (tahrir ochiq qoladi, Georgia darhol), tashqariga bosish → «Saqlash · 2»,
+Shift+Enter yangi qator, Esc bekor. **Saboq:** hodisa/hit-test o'zgarishlarini
+faqat jsdom bilan yopish mumkin emas — Playwright (`~/.cache/ms-playwright`
+da Chromium bor) bilan bitta smoke shart.
+
 ## 5. Bajarilish yozuvi
 
 `main`: WP4a `30205b2` → WP2 `1529bb1` → WP1 `278ead8` → (agent, worktree)
-WP4b `68ddc0b` + WP5 `02962c6` → merge `21043fa` → WP3 `ca415dc` → hujjat.
+WP4b `68ddc0b` + WP5 `02962c6` → merge `21043fa` → WP3 `ca415dc` → hujjat `ef3acdb`
+(deploy #1) → Y-5 `b7a15e2`, `42fdb76` (deploy #2, 2026-09-10).
