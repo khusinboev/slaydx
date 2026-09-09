@@ -338,11 +338,11 @@ const SSE_SKIP: SseLine = { kind: "skip" };
  * uchun butun hujjatni yo'qotish mantiqsiz.
  */
 function parseSseLine(raw: string): SseLine {
-  // SSE spetsifikatsiyasi `\r\n` ga ruxsat beradi. `\r` qolib ketsa
-  // `JSON.parse` yiqiladi va BUTUN oqim jimgina bo'sh qaytardi.
-  const line = raw.endsWith("\r") ? raw.slice(0, -1) : raw;
-  if (!line.startsWith("data:")) return SSE_SKIP;
-  const payload = line.slice(5).trim();
+  if (!raw.startsWith("data:")) return SSE_SKIP;
+  // `trim()` — bu yerda `\r` ni ham oladi: SSE spetsifikatsiyasi `\r\n`
+  // ga ruxsat beradi va qator buferi faqat `\n` bo'yicha kesadi, ya'ni
+  // `\r` payload oxirida qolib ketadi (`[DONE]` solishtiruvini buzardi).
+  const payload = raw.slice(5).trim();
   if (payload === "" || payload === "[DONE]") return SSE_SKIP;
   let chunk: GeminiStreamChunk;
   try {
