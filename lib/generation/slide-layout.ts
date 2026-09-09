@@ -2108,7 +2108,27 @@ export function planSlide(
   const ctx: PlanCtx = { bodyType, logo: opts.logo, reserve: opts.logo ? LOGO_RESERVE : 0 };
   const plan = dispatch(s, theme, visual, index, total, ctx);
   if (ctx.logo) pushLogo(plan, s, theme, ctx.logo);
+  applyFontOverrides(plan, s);
   return plan;
+}
+
+/**
+ * Foydalanuvchi tanlagan shrift o'lchamlari (`s.fontSize`, kalit — `src`
+ * JSON'i). Maket funksiyalari `fitSize` bilan o'z o'lchamini topadi; bu
+ * yerda ustidan yozamiz — BITTA joyda, shuning uchun PPTX va ko'ruvchi
+ * hech qachon ajralmaydi. `srcLines` qatlamida birinchi qatorning kaliti
+ * butun ro'yxatga qo'llanadi (ro'yxat bitta qatlam).
+ */
+function applyFontOverrides(plan: SlidePlan, s: SlideModel): void {
+  const fs = s.fontSize;
+  if (!fs) return;
+  for (const layer of plan.layers) {
+    if (layer.t !== "text") continue;
+    const key = layer.src ? JSON.stringify(layer.src) : layer.srcLines?.[0] ? JSON.stringify(layer.srcLines[0]) : null;
+    if (!key) continue;
+    const size = fs[key];
+    if (typeof size === "number" && size > 0) layer.size = size;
+  }
 }
 
 function dispatch(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index: number, total: number, ctx: PlanCtx): SlidePlan {

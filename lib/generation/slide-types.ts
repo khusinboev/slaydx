@@ -57,6 +57,13 @@ export type SlideModel = {
   refs?: { title: string; source: string }[];
   /** `stats`: diagramma majburiy («Diagramma» bloki) — 2+ bir birlikli qiymatda ham chiziladi. */
   chart?: boolean;
+  /**
+   * Foydalanuvchi tanlagan shrift o'lchamlari (pt) — kalit `SlideSrc`
+   * ning JSON matni (masalan `{"f":"title"}`). `planSlide` OXIRIDA shu
+   * qatlamga qo'llanadi, ya'ni PPTX ham, ko'ruvchi ham bir xil o'qiydi.
+   * LLM yozmaydi; faqat ko'ruvchidagi tahrir (`style` op) to'ldiradi.
+   */
+  fontSize?: Record<string, number>;
 };
 
 export type SlideDeck = {
