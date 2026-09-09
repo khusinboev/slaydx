@@ -1,9 +1,12 @@
 import { ApiError, handler, requireUser } from "@/lib/server/api";
 import { pdfAvailable, pdfFileName, toPdf } from "@/lib/server/pdf";
+import { ensureFreshFile } from "@/lib/server/slide-commit";
 import { getGenerationFile } from "@/lib/server/storage";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+/** Eskirgan slayd fayli avval qayta yasaladi (`ensureFreshFile`) — PPTX render vaqti. */
+export const maxDuration = 60;
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -31,6 +34,20 @@ export const GET = handler("generations/file", async (req, ctx: Ctx) => {
   const { user } = await requireUser(req);
   const { id } = await ctx.params;
   if (!UUID.test(id)) throw new ApiError("Noto'g'ri id", 400);
+
+  /*
+   * ESKIRGAN FAYL HECH QACHON BERILMAYDI.
+   *
+   * Ko'ruvchida tahrir qilingandan keyin `doc_version` oshadi, PPTX esa
+   * klientning 3 soniyalik debounce'idan keyingi `POST …/rebuild` bilan
+   * yangilanadi. Foydalanuvchi shu oraliqda «Yuklab olish» ni bossa,
+   * ilgari ekrandagidan FARQ QILADIGAN eski fayl tushardi — bu
+   * loyihaning asosiy va'dasini («ko'rdim = oldim») buzardi. Shuning
+   * uchun bu yerda versiya tekshiriladi va kerak bo'lsa avval qayta
+   * yasaladi. Slayd bo'lmagan vositalarda ikkala versiya ham 0 —
+   * qo'shimcha ish bo'lmaydi.
+   */
+  await ensureFreshFile(id, user.id);
 
   const file = await getGenerationFile(id, user.id);
   if (!file) throw new ApiError("Fayl topilmadi yoki muddati tugagan", 404);
