@@ -420,6 +420,25 @@ test("PPTX saqlashdan keyin BIR marta qayta yasaladi", async () => {
   cleanup();
 });
 
+test("«Saqlandi ✓» belgisi saqlangach yonadi va o'zi so'nadi", async () => {
+  const s = stubServer();
+  render(h(Harness, { gen: generation(s) }));
+  await act(async () => {
+    hook!.run([{ op: "add", after: 0 }]);
+  });
+  assert.equal(hook!.justSaved, false, "saqlashdan OLDIN belgi yonmasin");
+  await act(async () => {
+    await hook!.save();
+  });
+  // Tugma «Saqlash» dan «Saqlandi ✓» ga o'tadi — foydalanuvchi
+  // o'zgarish serverga yetganini KO'RADI, taxmin qilmaydi.
+  assert.equal(hook!.justSaved, true, "saqlangach belgi yonadi");
+  assert.equal(hook!.saving, false, "«Saqlanmoqda…» tugagan bo'ladi");
+  await pause(60);
+  assert.equal(hook!.justSaved, false, "belgi savedFlashMs dan keyin o'zi so'nadi");
+  cleanup();
+});
+
 test("409 → hujjat serverdan qayta yuklanadi, steklar bo'shaydi", async () => {
   const s = stubServer();
   render(h(Harness, { gen: generation(s) }));

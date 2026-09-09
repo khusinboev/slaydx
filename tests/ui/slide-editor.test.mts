@@ -1,5 +1,5 @@
 import "./setup.ts";
-import test from "node:test";
+import test, { afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { createElement as h } from "react";
 import { render, fireEvent, screen, cleanup } from "@testing-library/react";
@@ -20,6 +20,14 @@ import type { SlideModel, SlideSrc } from "../../lib/generation/slide-types.ts";
  * foydalanuvchi boshqa slaydning matnini tahrirlaydi yoki har bosishda
  * bo'sh PATCH ketadi.
  */
+
+/*
+ * Har testdan keyin DOM tozalanadi: yiqilgan test o'z ramkasini
+ * qoldirsa, keyingi testlarda `getByLabelText` «bir nechta element»
+ * deb yiqilardi va MUTATSIYA jadvali qaysi assertion sinishini
+ * ko'rsatolmasdi (hammasi qizil bo'lardi).
+ */
+afterEach(() => cleanup());
 
 const theme = getSlideTheme("atlas");
 const rules = bodyRules({ planItems: 6, textVolume: "standart" }, "lecture");
