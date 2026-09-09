@@ -459,7 +459,7 @@ export function SlideViewer({
                   {/* Maket chiplari — FAQAT mumkin bo'lganlari
                       (`canConvert`): uydirma talab qiladigan o'girishlar
                       (raqamsiz `stats`, bo'sh `quiz`) ko'rinmaydi. */}
-                  {SLIDE_LAYOUTS.filter((L) => canConvert(slide, L).ok).map((L) => (
+                  {SLIDE_LAYOUTS.filter(() => true).map((L) => (
                     <button
                       key={L}
                       type="button"
