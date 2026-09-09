@@ -6,6 +6,9 @@ import { chargeInTx } from "./credits";
 import { env } from "./env";
 import type { FormValues, Generation, JobStatus, ToolId } from "../types";
 import type { AcademicDoc, Delivered } from "../generation/types";
+import type { SlideModel, SlideThemeId } from "../generation/slide-types";
+import type { SlideAudience, SlideTemplateId, SlideVisual } from "../generation/slide-templates";
+import type { BodyRules } from "../generation/slide-audience";
 
 /**
  * Generatsiya navbati.
@@ -63,8 +66,24 @@ const ROW_COLUMNS = `
   doc_version, file_version, image_redraws, edited_at, live_seq
 `;
 
+/**
+ * Slayd dekalari uchun BIRINCHI slaydning to'liq maket modeli — kartochka
+ * uni `SlideCanvas` bilan ko'ruvchidagidek chizadi ("ko'rdim = oldim").
+ * `notes` (notiq matni) qasddan YO'Q — kartochkada ishlatilmaydi, faqat
+ * hajmni oshiradi (`lib/server/preview.ts` `buildPreview`).
+ */
+export type GenerationPreviewSlide = {
+  model: Omit<SlideModel, "notes">;
+  themeId: SlideThemeId;
+  templateId: SlideTemplateId;
+  visual: SlideVisual;
+  audience: SlideAudience;
+  bodyType: BodyRules;
+  logo?: string;
+};
+
 /** Ro'yxat kartochkasi uchun yengil ko'rinish. */
-export type GenerationPreview = { url?: string; lines?: string[] };
+export type GenerationPreview = { url?: string; lines?: string[]; slide?: GenerationPreviewSlide };
 
 export type GenerationSummary = Omit<Generation, "values" | "doc" | "html"> & {
   expiresAt: string | null;

@@ -1,7 +1,11 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { FileText, Image as ImageIcon, Presentation } from "lucide-react";
-import type { ServerGeneration } from "@/lib/api-client";
+import type { GenerationPreviewSlide, ServerGeneration } from "@/lib/api-client";
+import { getSlideTheme } from "@/lib/generation/slide-themes";
+import { SLIDE } from "@/lib/viewers/metrics";
+import { SlideCanvas } from "../viewers/SlideCanvas";
 
 /**
  * Ro'yxatdagi kartochka ko'rinishi.
@@ -9,7 +13,9 @@ import type { ServerGeneration } from "@/lib/api-client";
  * Ilgari bu komponent butun hujjatni (`gen.doc`) va IndexedDB dagi
  * rasmlarni yuklab, slaydni to'liq render qilardi — bosh sahifada 20 ta
  * kartochka uchun bu og'ir edi. Endi server tayyorlagan kichik `preview`
- * ishlatiladi: bitta rasm havolasi yoki bir necha qator matn.
+ * ishlatiladi: slayd dekalari uchun BIRINCHI slaydning to'liq maketi
+ * (`preview.slide` — `SlideCanvas` bilan ko'ruvchidagidek chiziladi),
+ * qolganlar uchun bitta rasm havolasi yoki bir necha qator matn.
  */
 export function FilePreview({ gen }: { gen: ServerGeneration }) {
   const running = gen.status === "QUEUED" || gen.status === "IN_PROGRESS";
@@ -33,6 +39,11 @@ export function FilePreview({ gen }: { gen: ServerGeneration }) {
         <FileText className="text-muted-foreground size-8 opacity-50" />
       </div>
     );
+  }
+
+  const slide = gen.preview?.slide;
+  if (slide) {
+    return <SlideThumb slide={slide} />;
   }
 
   const url = gen.preview?.url;
@@ -65,6 +76,57 @@ export function FilePreview({ gen }: { gen: ServerGeneration }) {
   return (
     <div className="bg-[#eef1f4] flex h-full items-center justify-center">
       <Icon className="text-muted-foreground size-8" />
+    </div>
+  );
+}
+
+/**
+ * Birinchi slaydning haqiqiy renderi — `SlideCanvas` (1280×720) kartochka
+ * kengligiga `scale` bilan kichraytiriladi. `SlideRail.tsx` eskizi bilan
+ * AYNAN bir xil naqsh: chin o'lcham `absolute`/`top:0,left:0` bilan
+ * chiziladi, atrofdagi qop (`overflow:hidden`) ortiqchasini kesadi.
+ *
+ * Standart `scale` (0.13) — o'lchov effektidan OLDIN SSR/birinchi
+ * render uchun taxminiy qiymat (`tests/viewer/file-preview.test.mts`
+ * SSR HTML da `SlideCanvas` chiqishini shu holatda tekshiradi);
+ * `ResizeObserver` haqiqiy kengligini o'lchagach aniqlaydi.
+ */
+function SlideThumb({ slide }: { slide: GenerationPreviewSlide }) {
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(0.13);
+
+  useEffect(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const measure = () => {
+      const w = el.getBoundingClientRect().width;
+      if (w > 0) setScale(w / SLIDE.w);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const theme = getSlideTheme(slide.themeId);
+  return (
+    <div ref={wrapRef} className="relative h-full w-full overflow-hidden bg-black">
+      <div
+        className="pointer-events-none absolute top-0 left-0"
+        style={{ width: SLIDE.w, height: SLIDE.h, transform: `scale(${scale})`, transformOrigin: "top left" }}
+      >
+        <SlideCanvas
+          slide={slide.model}
+          theme={theme}
+          visual={slide.visual}
+          audience={slide.audience}
+          templateId={slide.templateId}
+          bodyType={slide.bodyType}
+          logo={slide.logo}
+          index={0}
+          total={1}
+        />
+      </div>
     </div>
   );
 }

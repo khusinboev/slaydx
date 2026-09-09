@@ -2,6 +2,9 @@
 
 import type { AcademicDoc } from "./generation/types";
 import type { FormValues, Generation, JobStatus, ToolId } from "./types";
+import type { SlideModel, SlideThemeId } from "./generation/slide-types";
+import type { SlideAudience, SlideTemplateId, SlideVisual } from "./generation/slide-templates";
+import type { BodyRules } from "./generation/slide-audience";
 
 /**
  * Server API bilan yagona aloqa nuqtasi.
@@ -222,8 +225,23 @@ export function setAdminBlocked(id: string, blocked: boolean) {
 
 /* ──────────────────────────── Generations ─────────────────────────── */
 
+/**
+ * Slayd dekalari uchun BIRINCHI slaydning to'liq maket modeli — kartochka
+ * (`FilePreview.tsx`) uni `SlideCanvas` bilan ko'ruvchidagidek chizadi
+ * ("ko'rdim = oldim"). `lib/server/jobs.ts`dagi bir xil nom bilan mos.
+ */
+export type GenerationPreviewSlide = {
+  model: Omit<SlideModel, "notes">;
+  themeId: SlideThemeId;
+  templateId: SlideTemplateId;
+  visual: SlideVisual;
+  audience: SlideAudience;
+  bodyType: BodyRules;
+  logo?: string;
+};
+
 /** Ro'yxat kartochkasi uchun server tayyorlagan kichik ko'rinish. */
-export type GenerationPreview = { url?: string; lines?: string[] };
+export type GenerationPreview = { url?: string; lines?: string[]; slide?: GenerationPreviewSlide };
 
 export type ServerGeneration = Omit<Generation, "values" | "doc" | "html"> & {
   expiresAt: string | null;
