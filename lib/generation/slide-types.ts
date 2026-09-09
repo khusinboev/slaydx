@@ -136,3 +136,22 @@ export function isSlideThemeId(v: string): v is SlideThemeId {
 export function isSlideLayout(v: string): v is SlideLayout {
   return (SLIDE_LAYOUTS as readonly string[]).includes(v);
 }
+
+/**
+ * Manba ko'rsatkichi — matn qatlami `SlideModel` ning qaysi maydonidan
+ * chizilgan (ko'ruvchida joyida tahrirlash uchun). Faqat `plan*`
+ * funksiyalari biladi: `s.quote || s.title` zaxirasi, `— quoteBy`
+ * prefiksi, `shortSource()` kabi transformatsiyalar bor. Dekorativ
+ * qatlamlar (raqam, «→», A/B/C/D, sahifa raqami) ko'rsatkichsiz qoladi —
+ * ular tahrirlanmaydi. PPTX renderer bu maydonni o'qimaydi.
+ */
+export type SlideSrc =
+  | { f: "title" | "subtitle" | "kicker" | "quote" | "quoteBy" | "leftTitle" | "rightTitle" | "imageHint" }
+  | { f: "bullets" | "left" | "right"; i: number }
+  | { f: "stats"; i: number; k: "value" | "label" }
+  | { f: "steps"; i: number; k: "n" | "title" | "text" }
+  | { f: "refs"; i: number; k: "title" | "source" }
+  | { f: "quiz"; i: number; k: "q" }
+  | { f: "quiz"; i: number; k: "option"; j: number }
+  | { f: "table"; k: "header"; c: number }
+  | { f: "table"; k: "cell"; r: number; c: number };
