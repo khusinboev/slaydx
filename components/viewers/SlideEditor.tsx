@@ -189,7 +189,12 @@ export function SlideEditor({
    * tugun `SlideCanvas` ni ham, bizni ham o'z ichiga oladi.
    */
   useEffect(() => {
-    const host = rootRef.current?.parentElement;
+    /*
+     * Sahna RAMKASI — slayd ham, overlay ham shu tugun ichida
+     * (`SlideStage` uni `data-slide-frame` bilan belgilaydi).
+     * Ramka topilmasa eng yaqin ota tugun (sinovdagi sodda tuzilma).
+     */
+    const host = rootRef.current?.closest("[data-slide-frame]") ?? rootRef.current?.parentElement;
     if (!host) return;
     const onDbl = (ev: Event) => {
       const target = ev.target as HTMLElement | null;

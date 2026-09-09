@@ -22,7 +22,7 @@ import type { SlideModel, SlideSrc } from "../../lib/generation/slide-types.ts";
  */
 
 const theme = getSlideTheme("atlas");
-const rules = bodyRules({}, "lecture");
+const rules = bodyRules({ planItems: 6, textVolume: "standart" }, "lecture");
 
 function bulletsSlide(): SlideModel {
   return {
