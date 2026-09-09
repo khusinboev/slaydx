@@ -137,26 +137,33 @@ function sectionBlock(visual: "classic" | "magazine", s: SlideModel = sectionSli
 
 /**
  * N-5. `planSection` (classic) qat'iy koordinatalarda turardi: blok
- * 2.20–4.80, ya'ni 5.35″ zonaning 48.6% i, markazdan 0.33″ yuqorida va
- * pastda 2.7″ bo'sh sahifa. `section` 12 shablonda bor.
+ * 2.20–4.80, markazdan 0.33″ yuqorida, pastda ~2.7″ bo'sh sahifa.
+ * `section` 12 shablonda bor.
  *
- * Auditning talabi: «markaz YOKI qamrov ≥ 50%». Bu yerda IKKALASI ham
- * tekshiriladi — biri o'zi yetarli emas (markazlashtirish bo'shliqni
- * faqat suradi, kattalashtirish esa blokni pastga og'diradi).
+ * Auditning talabi: «markaz YOKI qamrov ≥ 50%». Bu yerda MARKAZ
+ * o'lchanadi, chunki qamrov ulushi bu maketda YOLG'ON o'lchov bo'lardi:
+ * u QUTINI sanaydi, siyohni emas. Birinchi urinishda subtitle qutisi
+ * 1.9″ qilingan edi va o'lchov 68% ko'rsatardi — PDF da esa bir qatorli
+ * subtitle qutining tepasida turib, pastki yarmi baribir bo'sh edi.
+ * Shuning uchun qutilar endi `inkHeight` bilan siyohga tenglashtirilgan
+ * va markaz o'lchovi HAQIQATAN ko'rinadigan narsani o'lchaydi.
+ *
+ * «Maydonni to'ldirish» esa TIPOGRAFIKA bilan: ajratgich sarlavhasi
+ * 32 pt emas, 44 pt dan boshlanadi (ikkinchi assertion).
  */
-test("N-5: classic bo'lim bloki markazda va zonaning yarmidan ko'pini egallaydi", () => {
+test("N-5: classic bo'lim bloki vertikal markazda", () => {
   const b = sectionBlock("classic");
-  assert.ok(
-    b.coverage >= 0.5,
-    `classic bo'lim bloki zonaning ${(b.coverage * 100).toFixed(0)}% ini egalladi (kamida 50%)`,
-  );
   assert.ok(
     Math.abs(b.centerOffset) <= 0.15,
     `classic bo'lim bloki markazdan ${r3(b.centerOffset)}″ siljigan (ruxsat 0.15″)`,
   );
+  const title = texts(b.plan.layers).find((t) => t.src?.f === "title");
+  assert.ok(title && title.size >= 34, `ajratgich sarlavhasi ${title?.size} pt — maydonni to'ldirmaydi`);
+  // Quti siyohga teng: bir qatorli sarlavha 1.2″ dan baland quti olmasin.
+  assert.ok(title!.box.h <= 1.2, `sarlavha qutisi ${r3(title!.box.h)}″ — siyohdan katta, markaz yolg'on chiqadi`);
 });
 
-/** Subtitlesiz bo'lim ham tepaga yopishib qolmasin — faqat markaz o'lchovi. */
+/** Subtitlesiz bo'lim ham tepaga yopishib qolmasin — markaz o'lchovi. */
 test("N-5: subtitlesiz bo'lim sarlavhasi ham vertikal markazda", () => {
   const b = sectionBlock("classic", { ...sectionSlide, subtitle: undefined });
   assert.ok(
@@ -166,16 +173,23 @@ test("N-5: subtitlesiz bo'lim sarlavhasi ham vertikal markazda", () => {
 });
 
 /**
- * N-6. Rasmsiz `magazine` bo'limi: matn 2.98–5.20 (zonaning 41.5% i),
- * tepada 1.8″ va pastda 1.3″ to'q bo'shliq. Rasm o'rnini dekorativ
- * element egallashi kerak.
+ * N-6. Rasmsiz `magazine` bo'limi: matn 2.98–5.20, tepada 1.8″ va
+ * pastda 1.3″ to'q bo'shliq — «yuklanmagan sahifa» taassuroti.
+ *
+ * Yechim rasmli variantning NAQSHINI takrorlaydi: matn bloki pastga
+ * langar tashlaydi, tepani esa dekorativ element egallaydi. Shuning
+ * uchun o'lchov ham markaz emas, LANGAR: blok tugashi zona quyi
+ * chegarasiga yopishgan bo'lishi kerak.
  */
-test("N-6: rasmsiz magazine bo'limi matn bloki bilan zonani qoplaydi", () => {
+test("N-6: rasmsiz magazine bloki zona quyi chegarasiga langar tashlaydi", () => {
   const b = sectionBlock("magazine");
+  const gap = SECTION_BOTTOM - b.bottom;
   assert.ok(
-    b.coverage >= 0.5,
-    `rasmsiz magazine bloki zonaning ${(b.coverage * 100).toFixed(0)}% ini egalladi (kamida 50%)`,
+    Math.abs(gap) <= 0.35,
+    `rasmsiz magazine bloki ostida ${r3(gap)}″ bo'shliq qoldi (ruxsat 0.35″)`,
   );
+  // Va u sahifaning pastki yarmida — ya'ni «o'rtada osilgan» emas.
+  assert.ok(b.top > (SECTION_TOP + SECTION_BOTTOM) / 2, "matn bloki pastki yarmda turishi kerak");
 });
 
 test("N-6: rasmsiz magazine bo'limida dekorativ element bo'sh maydonni to'ldiradi", () => {

@@ -363,6 +363,21 @@ function listRows(lines: string[], box: Box, size: number): number {
   return rows;
 }
 
+/**
+ * Matn shu kenglikda va shriftda HAQIQATAN necha dyuym egallaydi.
+ *
+ * `fitSize` teskari savolga javob beradi («shu qutiga qaysi shrift
+ * sig'adi»), bu esa to'g'ridan-to'g'riga: «shu matnning siyohi qancha
+ * baland». Blokni vertikal markazlashtirish uchun aynan shu kerak —
+ * quti balandligi bo'yicha markazlashtirilsa, YARIM BO'SH quti ham
+ * «to'la» hisoblanib, blok ko'zga baribir tepada ko'rinardi
+ * (AUDIT-8 N-5 ni birinchi urinishda aynan shu «yopgan» edi).
+ */
+function inkHeight(text: string, w: number, size: number): number {
+  const perLine = Math.max(1, Math.floor((w * 72) / (size * CHAR_EM)));
+  return (wrapRows(text, perLine) * size * 1.3) / 72;
+}
+
 /** Ko'p qatorli ro'yxat uchun: har band alohida qatordan boshlanadi. */
 function fitLines(lines: string[], box: Box, base: number, min: number, paraSpacePt = 0): number {
   const items = lines.filter(Boolean);
@@ -649,42 +664,51 @@ function planSectionMagazine(s: SlideModel, theme: SlideTheme, index: number, to
      * Raqam modeldan emas — shuning uchun `src` OLMAYDI (dekorativ
      * qatlamlar qoidasi, `tests/slide-src.test.mts`).
      */
-    const numBox: Box = { x, y: 0.72, w: 4.2, h: 1.5 };
     layers.push({
       t: "text",
-      box: numBox,
+      box: { x, y: 1.05, w: 4.2, h: 1.75 },
       text: String(index + 1).padStart(2, "0"),
       color: theme.accent,
-      size: 84,
+      size: 96,
       bold: true,
       valign: "middle",
     });
-    layers.push({ t: "rect", box: { x, y: 2.42, w: tw, h: 0.02 }, fill: { color: theme.titleMuted, alpha: 0.55 } });
+    layers.push({ t: "rect", box: { x, y: 3.25, w: tw, h: 0.02 }, fill: { color: theme.titleMuted, alpha: 0.55 } });
 
-    // Matn bloki zonaning qolgan qismini QOPLAYDI (qat'iy y emas).
-    const titleH = 1.5;
-    const subH = 1.55;
-    const barY = 2.86;
-    layers.push({ t: "rect", box: { x, y: barY, w: 1.35, h: 0.08 }, fill: { color: theme.accent } });
-    const titleBox: Box = { x, y: barY + 0.3, w: tw, h: titleH };
+    /*
+     * Matn bloki PASTGA langar tashlaydi — rasmli variantdagi pastki
+     * tasma bilan bir naqsh (jurnal muqovasi: rukn tepada, sarlavha
+     * pastda). Qutilar siyoh balandligiga teng, shuning uchun blok
+     * qayerda tugashi PDF da ham aynan shu yerda ko'rinadi.
+     */
+    const barH = 0.08;
+    // Blok hech qachon rukn chizig'idan yuqoriga chiqmasin — shuning
+    // uchun qutilar mavjud balandlikka QIRQILADI (uzun sarlavhali
+    // chegara holati; `fitSize` poliga urilganda ham chegara ushlanadi).
+    const avail = SECTION_BOTTOM - 3.5 - barH - 0.3 - (s.subtitle ? 0.3 : 0);
+    const titleSize = fitSize(s.title, { x, y: 0, w: tw, h: 2.0 }, 40, 24);
+    const titleH = Math.min(avail * (s.subtitle ? 0.62 : 1), Math.max(0.62, inkHeight(s.title, tw, titleSize)));
+    const subSize = s.subtitle ? fitSize(s.subtitle, { x, y: 0, w: tw, h: 1.5 }, 20, 13) : 0;
+    const subH = s.subtitle ? Math.min(avail - titleH, Math.max(0.32, inkHeight(s.subtitle, tw, subSize))) : 0;
+    const blockH = barH + 0.3 + titleH + (s.subtitle ? 0.3 + subH : 0);
+    const barY = SECTION_BOTTOM - blockH;
+    layers.push({ t: "rect", box: { x, y: barY, w: 1.35, h: barH }, fill: { color: theme.accent } });
     layers.push({
       t: "text",
-      box: titleBox,
+      box: { x, y: barY + barH + 0.3, w: tw, h: titleH },
       text: s.title,
       color: theme.titleText,
-      size: fitSize(s.title, titleBox, 40, 24),
+      size: titleSize,
       bold: true,
-      valign: "middle",
       src: { f: "title" },
     });
     if (s.subtitle) {
-      const subBox: Box = { x, y: barY + 0.3 + titleH + 0.28, w: tw, h: subH };
       layers.push({
         t: "text",
-        box: subBox,
+        box: { x, y: barY + barH + 0.3 + titleH + 0.3, w: tw, h: subH },
         text: s.subtitle,
         color: theme.titleMuted,
-        size: fitSize(s.subtitle, subBox, 18, 13),
+        size: subSize,
         src: { f: "subtitle" },
       });
     }
@@ -773,32 +797,44 @@ function planSection(s: SlideModel, theme: SlideTheme, visual: SlideVisual, inde
    */
   const x = 0.72;
   const tw = 11.6;
-  const titleH = 1.25;
-  const subH = 1.9;
   const ruleH = 0.08;
-  const blockH = titleH + 0.2 + ruleH + (s.subtitle ? 0.24 + subH : 0);
+  /*
+   * Bo'lim slaydi — AJRATGICH. Shuning uchun sarlavha 32 pt emas,
+   * 44 pt dan boshlanadi: qisqa bo'lim nomi maydonni o'zi to'ldiradi,
+   * uzuni esa `fitSize` bilan 26 pt gacha tushadi.
+   */
+  const titleSize = fitSize(s.title, { x, y: 0, w: tw, h: 2.2 }, 44, 26);
+  const subSize = s.subtitle ? fitSize(s.subtitle, { x, y: 0, w: tw, h: 1.6 }, 22, 15) : 0;
+  // Chegara holati: `fitSize` poliga urilgan uzun matn qutini zonadan
+  // chiqarib yuborishi mumkin — shuning uchun qirqiladi.
+  const avail = SECTION_BOTTOM - SECTION_TOP - 0.26 - ruleH - (s.subtitle ? 0.3 : 0);
+  const titleH = Math.min(avail * (s.subtitle ? 0.6 : 1), Math.max(0.6, inkHeight(s.title, tw, titleSize)));
+  const subH = s.subtitle ? Math.min(avail - titleH, Math.max(0.35, inkHeight(s.subtitle, tw, subSize))) : 0;
+  /*
+   * Qutilar SIYOH balandligiga teng — shuning uchun markazlashtirish
+   * ko'zga ham markaz bo'lib ko'rinadi. Yarim bo'sh baland quti bilan
+   * markazlashtirish o'lchovda «to'g'ri», PDF da esa hamon tepaga
+   * yopishgan blok berardi.
+   */
+  const blockH = titleH + 0.26 + ruleH + (s.subtitle ? 0.3 + subH : 0);
   const y0 = SECTION_TOP + Math.max(0, (SECTION_BOTTOM - SECTION_TOP - blockH) / 2);
-  const titleBox: Box = { x, y: y0, w: tw, h: titleH };
   layers.push({
     t: "text",
-    box: titleBox,
+    box: { x, y: y0, w: tw, h: titleH },
     text: s.title,
     color: theme.text,
-    // Ilgari qat'iy 32 pt edi — uzun bo'lim nomi qutidan chiqardi.
-    size: fitSize(s.title, titleBox, 32, 22),
+    size: titleSize,
     bold: true,
-    valign: "middle",
     src: { f: "title" },
   });
-  layers.push({ t: "rect", box: { x, y: y0 + titleH + 0.2, w: 1.4, h: ruleH }, fill: { color: theme.accent } });
+  layers.push({ t: "rect", box: { x, y: y0 + titleH + 0.26, w: 1.4, h: ruleH }, fill: { color: theme.accent } });
   if (s.subtitle) {
-    const subBox: Box = { x, y: y0 + titleH + 0.2 + ruleH + 0.24, w: tw, h: subH };
     layers.push({
       t: "text",
-      box: subBox,
+      box: { x, y: y0 + titleH + 0.26 + ruleH + 0.3, w: tw, h: subH },
       text: s.subtitle,
       color: theme.muted,
-      size: fitSize(s.subtitle, subBox, 18, 14),
+      size: subSize,
       src: { f: "subtitle" },
     });
   }
