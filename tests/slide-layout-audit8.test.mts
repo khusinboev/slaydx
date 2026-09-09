@@ -151,8 +151,8 @@ test("N-5: classic bo'lim bloki markazda va zonaning yarmidan ko'pini egallaydi"
     `classic bo'lim bloki zonaning ${(b.coverage * 100).toFixed(0)}% ini egalladi (kamida 50%)`,
   );
   assert.ok(
-    Math.abs(b.centerOffset) <= 0.25,
-    `classic bo'lim bloki markazdan ${r3(b.centerOffset)}″ siljigan (ruxsat 0.25″)`,
+    Math.abs(b.centerOffset) <= 0.15,
+    `classic bo'lim bloki markazdan ${r3(b.centerOffset)}″ siljigan (ruxsat 0.15″)`,
   );
 });
 
