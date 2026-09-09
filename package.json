@@ -13,13 +13,14 @@
     "worker": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/worker.ts",
     "topup": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/topup.mts",
     "bot": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/bot.mts",
-    "check": "npm run typecheck && npm run lint && npm run test && npm run test:viewer",
+    "check": "npm run typecheck && npm run lint && npm run test && npm run test:viewer && npm run test:ui",
     "smoke": "node --env-file-if-exists=.env.local scripts/smoke.mjs",
     "live": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/live-engine.mts",
     "seed": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/seed-demo.mts",
     "seed-images": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/seed-images.mts",
     "image-lab": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/image-lab.mts",
-    "test:viewer": "tsx --tsconfig tsconfig.viewer.json --test tests/viewer/*.test.mts"
+    "test:viewer": "tsx --tsconfig tsconfig.viewer.json --test tests/viewer/*.test.mts",
+    "test:ui": "tsx --tsconfig tsconfig.viewer.json --test tests/ui/*.test.mts"
   },
   "dependencies": {
     "docx": "^9.7.1",
@@ -37,12 +38,16 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/react": "^16.3.3",
+    "@types/jsdom": "^30.0.0",
     "@types/node": "^20",
     "@types/pg": "^8.21.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "^15.5.23",
+    "jsdom": "^30.0.1",
     "tailwindcss": "^4",
     "tsx": "^4.23.12",
     "typescript": "^5"
