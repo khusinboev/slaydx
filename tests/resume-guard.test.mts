@@ -174,11 +174,18 @@ test("5: tashkilot tekshiruvi NFKC + kichik harf; qayta ifodalash saqlanadi", ()
   // Fakt umuman bo'lmasa filtr o'chadi.
   assert.ok(orgIsKnown("Istalgan tashkilot", ""));
 
-  // Nomzod ajratish: 2+ bosh harfli so'z yoki 3+ belgili qisqartma.
-  assert.deepEqual(orgCandidates("Ishladi Artel Electronics kompaniyasida"), ["Artel Electronics"]);
+  // Nomzod ajratish: MARKERLI bosh harfli birikma yoki 3+ belgili qisqartma.
+  assert.deepEqual(orgCandidates("Ishladi Global Trade LLC kompaniyasida"), ["LLC", "Global Trade LLC"]);
+  assert.deepEqual(orgCandidates("Toshkent Davlat Universiteti bitiruvchisi"), ["Davlat Universiteti"]);
   assert.deepEqual(orgCandidates("ACCA sertifikatiga ega"), ["ACCA"]);
   // Nemis oti — YOLG'IZ bosh harfli so'z nomzod EMAS (aks holda nemischa qisqacha buziladi).
   assert.deepEqual(orgCandidates("Spezialist mit Erfahrung in der Finanzanalyse"), []);
+  // Lavozim, mahsulot va texnologiya nomi TASHKILOT EMAS (jonli sinov, uz→en).
+  assert.deepEqual(orgCandidates("Results-oriented Financial Analyst with budgeting experience"), []);
+  assert.deepEqual(orgCandidates("Builds dashboards in Power BI and Microsoft Excel"), []);
+  assert.deepEqual(orgCandidates("Owns the Management Reporting cycle"), []);
+  // Marker o'zbekcha qo'shimcha bilan ham topiladi.
+  assert.ok(orgCandidates("metodist Respublika Taʼlim Markazida ishlagan").length > 0);
 });
 
 /**
@@ -194,19 +201,24 @@ test("5: lavozim va daraja TARJIMASI saqlanadi — ular ish beruvchi emas", () =
   const r = run(
     out({
       experience: [
-        { id: "e1", role: "Lead Financial Analyst", bullets: [{ text: "Built the annual budget model." }] },
+        { id: "e1", role: "Senior IFRS Reporting Analyst", bullets: [{ text: "Built the annual budget model." }] },
         { id: "e2", role: "Financial Analyst", bullets: [{ text: "Prepared weekly profitability reports." }] },
       ],
-      education: [{ id: "d1", degree: "Master of Business Administration" }],
+      education: [{ id: "d1", degree: "CIMA Advanced Diploma in Management Accounting" }],
     }),
     { language: "en" },
   );
-  assert.equal(r.out.experience[0].role, "Lead Financial Analyst", "lavozim tarjimasi qaytarilmasligi kerak");
+  assert.equal(r.out.experience[0].role, "Senior IFRS Reporting Analyst", "lavozim tarjimasi qaytarilmasligi kerak");
   assert.equal(r.out.experience[1].role, "Financial Analyst");
-  assert.equal(r.out.education[0].degree, "Master of Business Administration", "daraja tarjimasi qaytarilmasligi kerak");
-  // «Business Administration» kirish faktlarida YO'Q — eski qoida uni «uydirma tashkilot» deb qaytarardi.
-  assert.deepEqual(orgCandidates("Master of Business Administration"), ["Business Administration"]);
-  assert.ok(!orgIsKnown("Business Administration", inputFacts(input)));
+  assert.equal(r.out.education[0].degree, "CIMA Advanced Diploma in Management Accounting", "daraja tarjimasi qaytarilmasligi kerak");
+  // «IFRS» va «MBA» kirish faktlarida YO'Q — tekshiruv qo'llansa ikkalasi ham qaytarilardi.
+  assert.deepEqual(orgCandidates("Senior IFRS Reporting Analyst"), ["IFRS"]);
+  assert.deepEqual(orgCandidates("CIMA Advanced Diploma in Management Accounting"), ["CIMA"]);
+  assert.ok(!orgIsKnown("IFRS", inputFacts(input)), "IFRS kirish faktlarida yo'q");
+  assert.ok(!orgIsKnown("CIMA", inputFacts(input)), "CIMA kirish faktlarida yo'q");
+  // «Corporate» markerdan emas: «corp» faqat AYNAN mos kelganda hisoblanadi.
+  assert.deepEqual(orgCandidates("Leads the Corporate Finance team"), []);
+  assert.deepEqual(orgCandidates("Runs Fundamental Analysis weekly"), []);
   assert.equal(r.report.revertedFields, 0);
   // Ish beruvchi/muassasa nomi model javobiga UMUMAN kirmaydi — xavf yo'q.
   assert.ok(!("company" in r.out.experience[0]));
@@ -220,7 +232,7 @@ test("5: band matnida uydirma tashkilot bo'lsa band tushadi (ai band)", () => {
         {
           id: "e1",
           role: "Tahlilchi",
-          bullets: [{ text: "Byudjet modelini tuzdi." }, { text: "Respublika Taʼlim Markazi bilan ishladi.", ai: true }],
+          bullets: [{ text: "Byudjet modelini tuzdi." }, { text: "Loyihada Respublika Taʼlim Markazi bilan ishladi.", ai: true }],
         },
       ],
     }),
@@ -251,7 +263,7 @@ test("6: qisqachadan uydirma yil yoki uydirma tashkilot bo'lgan JUMLA tashlanadi
   const r = run(
     out({
       summary:
-        "Byudjetlashtirish bo‘yicha tajribali mutaxassis. 2013-yildan boshlab moliya sohasida. Artel Electronics kompaniyasida byudjet modelini tuzgan. Respublika Taʼlim Markazida metodist bo‘lgan.",
+        "Byudjetlashtirish bo‘yicha tajribali mutaxassis. 2013-yildan boshlab moliya sohasida. Ish joyi Artel Electronics kompaniyasida byudjet modelini tuzgan. Keyin Respublika Taʼlim Markazida metodist bo‘lgan.",
     }),
   );
   assert.match(r.out.summary, /Byudjetlashtirish bo‘yicha tajribali mutaxassis\./);
@@ -259,6 +271,75 @@ test("6: qisqachadan uydirma yil yoki uydirma tashkilot bo'lgan JUMLA tashlanadi
   assert.doesNotMatch(r.out.summary, /2013/, "uydirma yilli jumla tashlanadi");
   assert.doesNotMatch(r.out.summary, /Taʼlim Markazida/, "uydirma tashkilotli jumla tashlanadi");
   assert.equal(r.report.droppedSentences, 2);
+  assert.deepEqual(r.report.summaryDrops.map((d) => d.reason), ["yil", "tashkilot"], "sabab jurnalga yoziladi");
+});
+
+/**
+ * JONLI SINOV REGRESSIYASI (uz kirish → en chiqish, uchinchi nuqson).
+ *
+ * Qo'riqchi qisqachaning ENG KUCHLI jumlasini tashlab yuborardi:
+ * «Financial Analyst» ikki bosh harfli so'z sifatida tashkilot nomzodi
+ * bo'lar, o'zbekcha kirish faktlari («Moliya tahlilchisi») bilan mos
+ * kelmas va «uydirma» sanalardi. Natijada summary 220 dan pastga
+ * tushardi. Endi nomzod bo'lish uchun TASHKILOT MARKERI kerak.
+ */
+test("6: chiqish tili boshqa bo'lganda lavozim/texnologiya nomi jumlani TASHLAMAYDI", () => {
+  const en =
+    "Results-oriented Financial Analyst with over 5 years of experience specializing in corporate budgeting and financial modeling. " +
+    "Builds Management Reporting dashboards in Power BI and Microsoft Excel for retail and manufacturing companies.";
+  const r = run(out({ summary: en }), { language: "en" });
+  assert.equal(r.out.summary, en, "inglizcha jumlalar butunligicha qolishi kerak");
+  assert.equal(r.report.droppedSentences, 0);
+  assert.deepEqual(r.report.summaryDrops, []);
+});
+
+test("6: MARKERLI va kirishda yo'q tashkilot bo'lsa jumla baribir tashlanadi", () => {
+  const r = run(
+    out({
+      summary: "Experienced financial analyst. Led the reporting migration at Global Trade LLC for two years.",
+    }),
+    { language: "en" },
+  );
+  assert.match(r.out.summary, /Experienced financial analyst\./);
+  assert.doesNotMatch(r.out.summary, /Global Trade LLC/, "markerli uydirma ish beruvchi tashlanadi");
+  assert.deepEqual(r.report.summaryDrops.map((d) => d.reason), ["tashkilot"]);
+});
+
+/**
+ * NEMIS holati (jonli sinov, `--lang de`).
+ *
+ * Nemis tilida HAR ot bosh harf bilan yoziladi, ya'ni ketma-ket bosh
+ * harfli so'zlar odatiy hodisa: «Budgetierung, Management-Reporting und
+ * Kostenoptimierung». Eski (markersiz) qoida ularni tashkilot nomzodi
+ * deb olar va nemischa qisqachaning butun birinchi jumlasini tashlardi.
+ * Marker talabi shu holatni ham yopadi.
+ */
+test("6: nemis chiqishida bosh harfli otlar jumlani TASHLAMAYDI, GmbH esa tashlaydi", () => {
+  const de =
+    "Erfahrene Finanzanalystin mit fünfjähriger Praxis in Budgetierung, Management-Reporting und Kostenoptimierung. " +
+    "Verantwortet die Monatsberichte für Produktions- und Handelsunternehmen.";
+  const ok = run(out({ summary: de }), { language: "de" });
+  assert.equal(ok.out.summary, de, "nemischa jumlalar butunligicha qolishi kerak");
+  assert.deepEqual(ok.report.summaryDrops, []);
+  assert.deepEqual(orgCandidates("Budgetierung, Management-Reporting und Kostenoptimierung"), []);
+
+  // Markerli va kirishda yo'q ish beruvchi esa baribir tashlanadi.
+  const bad = run(
+    out({ summary: `${de} Leitete die Berichtsmigration bei Global Trade GmbH.` }),
+    { language: "de" },
+  );
+  assert.doesNotMatch(bad.out.summary, /Global Trade GmbH/);
+  assert.match(bad.out.summary, /Management-Reporting/, "yaxshi jumlalar saqlanadi");
+  assert.deepEqual(bad.report.summaryDrops.map((d) => d.reason), ["tashkilot"]);
+});
+
+test("6: KIRISHDAGI ish beruvchi nomi markerli birikmada ham qoladi", () => {
+  const r = run(
+    out({ summary: "Financial analyst. Built the budget model at Artel Electronics Company for five years." }),
+    { language: "en" },
+  );
+  assert.match(r.out.summary, /Artel Electronics Company/, "kirishdagi kompaniya tashlanmasligi kerak");
+  assert.equal(r.report.droppedSentences, 0);
 });
 
 test("6: barcha jumla tashlansa qisqacha bo'sh qaytadi (chaqiruvchi zaxiraga o'tadi)", () => {

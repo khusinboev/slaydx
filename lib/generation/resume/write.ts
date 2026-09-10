@@ -284,7 +284,11 @@ export async function buildResumeDoc(
     return null;
   }
 
-  const ask = (u: string) => complete(system, u, 3200, { json: true, timeoutMs: Math.min(70_000, budget()) });
+  let attempts = 0;
+  const ask = (u: string) => {
+    attempts++;
+    return complete(system, u, 3200, { json: true, timeoutMs: Math.min(70_000, budget()) });
+  };
   const check = (raw: string | null) => {
     const parsed = parseResumeLlm(raw, input, meta);
     if (!parsed) return null;
@@ -309,6 +313,21 @@ export async function buildResumeDoc(
   if (!best) return null;
 
   const guarded = best.guarded;
+  /*
+   * Qayta so'rovdan KEYIN ham qisqa qolgan holat alohida yoziladi.
+   * Tashlangan jumlalarni QAYTA TIKLAMAYMIZ — uydirma yil yoki uydirma
+   * tashkilotli jumlani uzunlik uchun qaytarish qo'riqchining butun
+   * ma'nosini yo'qotardi. Lekin sabab bog'lanadigan bo'lishi kerak:
+   * ilgari «summary 201 belgi» va «jumla 1» ikki alohida qatorda turar
+   * va ularni bog'lash faqat qo'lda bo'lardi.
+   */
+  if (guarded.out.summary.length < MIN_SUMMARY_CHARS) {
+    console.warn(
+      `[resume] summary qisqa qoldi: ${guarded.out.summary.length} belgi (kerak ${MIN_SUMMARY_CHARS}), ` +
+        `qayta so'rov ${attempts > 1 ? "yordam bermadi" : "o'tkazilmadi (byudjet yetmadi)"}; ` +
+        `qo'riqchi ${guarded.report.droppedSentences} jumla tashlagan`,
+    );
+  }
   deps.onReport?.(guarded.report);
   const r = guarded.report;
   if (r.unknownRows || r.revertedFields || r.droppedSentences || r.droppedBullets || r.strippedYears) {
