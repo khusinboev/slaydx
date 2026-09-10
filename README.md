@@ -217,7 +217,9 @@ berardi. Eval bitta tarifda sinagani uchun uchalasi ham sezilmay qoldi.
 | `GET\|DELETE /api/generations/{id}` | Holat / o'chirish (navbatdagisi bekor qilinib puli qaytadi) |
 | `GET /api/generations/{id}/file[?format=pdf]` | DOCX / PPTX / PNG; `format=pdf` — talab bo‘yicha PDF |
 | `GET /api/generations/{id}/assets/{assetId}` | Slayd va rasm mediasi |
-| `POST /api/extract` | Hujjatdan matn (DOCX, PDF, PPTX, XLSX, TXT) |
+| `POST /api/extract` | Hujjatdan matn (DOCX, PDF, PPTX, XLSX, TXT) — «fayl asosida» rejimlar uchun |
+| `POST /api/uploads/source` · `DELETE /api/uploads/source/{assetId}` | Tarjimon manba fayli (≤20 MB): bayt saqlanadi, `chars` (tarjima qilinadigan segmentlar) hisoblanadi — narx shundan; skanlangan PDF 422 |
+| `POST /api/uploads/template` · `GET` · `DELETE /{assetId}` | «O'z shablonim» (pro-slayd) PPTX namunasi |
 | `POST /api/payments/orders` | To'lov buyurtmasi + provayder URL |
 | `POST /api/payments/click` | Click Prepare/Complete webhook |
 | `POST /api/payments/payme` | Payme Merchant API (JSON-RPC) |
@@ -225,7 +227,7 @@ berardi. Eval bitta tarifda sinagani uchun uchalasi ham sezilmay qoldi.
 | `POST /api/generations/{id}/rebuild` | PPTX faylni qayta yasash |
 | `POST /api/generations/{id}/slides/{index}/image` | Slaydga rasm yuklab olish |
 
-Barcha `/api/generations*` va `/api/extract` **kirishni talab qiladi**.
+Barcha `/api/generations*`, `/api/extract` va `/api/uploads/*` **kirishni talab qiladi**.
 Egalik SQL darajasida tekshiriladi — id ni bilgan begona foydalanuvchi hech narsa ola olmaydi.
 
 ### Jonli generatsiya
