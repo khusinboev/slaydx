@@ -7,6 +7,7 @@ import type { SlideBlockId } from "./slide-blocks";
 import type { SlideImageStyle, SlideTextVolume } from "./slide-params";
 import type { SlidePurpose } from "./slide-purpose";
 import type { SlideResearch } from "./slide-research";
+import type { ResumeModel } from "./resume/model";
 
 export type GenImage = {
   id: string;
@@ -258,6 +259,14 @@ export type AcademicDoc = {
   customTemplate?: CustomTemplate;
   /** Tarjima hisoboti (Tarjimon 2): aniqlangan til, glossariy, ogohlantirishlar, asl↔tarjima juftlari. */
   translation?: TranslationReport;
+  /**
+   * Rezyume modeli (Rezyume 2, AUDIT-15) — `slides` bilan bir xil naqsh:
+   * DOCX (`resume/render-docx.ts`) va ko'ruvchi (`ResumePage`) ikkalasi
+   * `planResume(doc.resume)` dan chizadi. `sections` esa `resumeSections`
+   * bilan sintez qilinadi (karta, qidiruv, eski kod). Eski qatorlarda yo'q —
+   * `legacyResumeModel(doc)` bilan o'qiladi.
+   */
+  resume?: ResumeModel;
   images?: GenImage[];
   imagePrompt?: string;
   imageScene?: string;
