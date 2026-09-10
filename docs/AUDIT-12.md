@@ -44,9 +44,9 @@ pro 3 877 → **1 111 px**; Sozlamalar ochiq: 1 471 / 1 660 px.
   segment/switch, slayder → narx, profil).
 - Brauzer (Playwright/Chromium): ikkala forma balandligi, Sozlamalar
   ochilishi, slayder → «5,500 tanga» / «50,000 tanga».
-- `npm run check`: natija «Bajarilish yozuvi» da.
+- Yakuniy: typecheck ✅, lint ✅, **unit 809/817 (0 fail, 8 skip; `.env.local`siz — u bilan 2 ta Y-4 testi, AUDIT-11)**, **viewer 57/57**, **UI 74/74** (6G xotira chegarasi ostida).
 
 ## 4. Bajarilish yozuvi
 
-`main`: WP1 `b341446` → WP2 `98cafcf` → WP3 `a3da3b9` → hujjat. Deploy: 015
-migratsiyasi avtomatik (`ensureMigrated`).
+`main`: WP1 `b341446` → WP2 `98cafcf` → WP3 `a3da3b9` → WP4 `82191e7` → hujjat.
+Deploy 2026-09-10: 015 migratsiyasi avtomatik (`ensureMigrated`), `schema_migrations` tekshirildi.
