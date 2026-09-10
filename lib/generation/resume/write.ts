@@ -27,7 +27,6 @@ import {
   hasCodeLabels,
   resumeLabels,
   sanitizeLabels,
-  sortDesc,
   type ResumeBullet,
   type ResumeModel,
   type ResumeSkill,
@@ -51,8 +50,18 @@ export const RESUME_JSON_SCHEMA =
   '{"summary":"","headline":"","labels":{"summary":"","experience":"","education":"","certificates":"","languages":"","skills":"","links":"","contact":"","present":"","resume":""},' +
   '"experience":[{"id":"","role":"","bullets":[{"text":"","ai":false}]}],"education":[{"id":"","degree":""}],"skills":[{"text":"","ai":false}]}';
 
-/** Qisqacha uzunligi shundan past bo'lsa javob yaroqsiz — bir marta qayta so'raladi. */
-export const MIN_SUMMARY_CHARS = 150;
+/**
+ * QO'RIQCHIDAN KEYINGI qisqacha uzunligi shundan past bo'lsa javob
+ * yaroqsiz — bir marta qat'iy qayta so'raladi.
+ *
+ * Darvoza ataylab qo'riqchidan KEYIN (jonli sinov, uz→en): model 240
+ * belgi yozgan, qo'riqchi uydirma yilli bitta jumlani tashlagan va
+ * natija 173 belgiga tushgan edi — eski darvoza (parse'dan keyin, 150)
+ * buni umuman ko'rmasdi. Promptdagi pastki chegara ham shu sababdan
+ * 250: model odatda pastki chegaraga yaqin yozadi, bitta jumla
+ * tashlansa ham 220 dan yuqori qolishi kerak.
+ */
+export const MIN_SUMMARY_CHARS = 200;
 
 /* ────────────────────────── promptlar ────────────────────────── */
 
@@ -66,9 +75,9 @@ export function resumeSystemPrompt(meta: DocMeta, input: ResumeInput): string {
     `Target role: «${headline}».`,
     `Rules:`,
     `1. NEVER invent an employer, job title, date, degree, institution, certificate or language. Use ONLY the facts given below, keyed by "id", and keep them in the given id order.`,
-    `2. VERBATIM — copy unchanged: the person's name, phone number, e-mail, URLs, every year and month, and organisation names written in the Latin script. Do not translate, expand or abbreviate them.`,
+    `2. VERBATIM — copy unchanged: the person's name, phone number, e-mail, URLs, every year and month, and organisation names written in the Latin script. Do not translate, expand or abbreviate them. Everything else — job titles, academic degrees, bullet text, skills, the summary — MUST be written in the output language, even when the facts below are given in another language.`,
     `3. Every bullet = action verb + scope + measurable result. Remove duplicates and merge overlapping bullets. At most ${RESUME_LIMITS.bullets} bullets per job, each at most ${RESUME_LIMITS.bulletChars} characters.`,
-    `4. "summary" — between 220 and 700 characters, written for the target role «${headline}»; no first-person pronouns, no clichés like "hard-working team player".`,
+    `4. "summary" — between 250 and 700 characters, written for the target role «${headline}»; no first-person pronouns, no clichés like "hard-working team player".`,
     enrich
       ? `5. ENRICHMENT IS ON: for each job you MAY ADD at most ${AI_BULLETS_PER_JOB} extra bullets describing duties or outcomes that are typical for that exact job title, and at most ${AI_SKILLS_MAX} extra profession-relevant skills. Mark every added item with "ai": true. An added item must contain NO number, NO client or company name and NO date — it describes a typical responsibility, never a measured achievement.`
       : `5. ENRICHMENT IS OFF: add NOTHING. You may only rewrite, merge, shorten and reorder what the user wrote. Never output "ai": true.`,
@@ -120,8 +129,10 @@ export function resumeUserPrompt(meta: DocMeta, input: ResumeInput): string {
 
 /** Qayta urinishdagi qat'iyroq ko'rsatma (tarjima dvigatelidagi naqsh). */
 export const RESUME_STRICT_SUFFIX =
-  `\nThe previous answer was rejected: it was not valid JSON or "summary" was shorter than ${MIN_SUMMARY_CHARS} characters.` +
-  ` Answer again with ONLY the JSON object, no prose, no markdown fence. "summary" must be at least 220 characters.`;
+  `\nThe previous answer was rejected: it was not valid JSON, or "summary" was shorter than ${MIN_SUMMARY_CHARS} characters` +
+  ` once sentences with invented years or invented organisation names had been removed.` +
+  ` Answer again with ONLY the JSON object, no prose, no markdown fence. "summary" must be at least 250 characters and must not` +
+  ` mention any year or organisation that is absent from the facts.`;
 
 /* ────────────────────────── javobni o'qish ────────────────────────── */
 
@@ -208,17 +219,22 @@ export function mergeLlm(input: ResumeInput, out: ResumeLlmOut, meta: DocMeta, p
   const roleById = new Map(out.experience.map((e) => [e.id, e]));
   const degreeById = new Map(out.education.map((e) => [e.id, e]));
 
+  /*
+   * Tartiblash BU YERDA EMAS — `draftModel` da (`sortDesc`), bitta
+   * joyda. Model javobi sanaga TEGMAYDI (kompaniya va davr kirishdan),
+   * shuning uchun birlashtirishdan keyin tartib o'zgara olmaydi va
+   * ikkinchi `sortDesc` faqat o'lik kod bo'lardi: uni buzsa ham hech
+   * bir test qizarmasdi (mutatsiya tekshiruvida aniqlandi).
+   */
   let enriched = false;
-  base.experience = sortDesc(
-    base.experience.map((e) => {
-      const row = roleById.get(e.id);
-      if (!row) return e;
-      const bullets: ResumeBullet[] = row.bullets.map((b) => (b.ai === true ? { text: b.text, ai: true } : { text: b.text }));
-      if (bullets.some((b) => b.ai)) enriched = true;
-      return { ...e, role: row.role || e.role, bullets: bullets.length ? bullets : e.bullets };
-    }),
-  );
-  base.education = sortDesc(base.education.map((e) => ({ ...e, degree: degreeById.get(e.id)?.degree || e.degree })));
+  base.experience = base.experience.map((e) => {
+    const row = roleById.get(e.id);
+    if (!row) return e;
+    const bullets: ResumeBullet[] = row.bullets.map((b) => (b.ai === true ? { text: b.text, ai: true } : { text: b.text }));
+    if (bullets.some((b) => b.ai)) enriched = true;
+    return { ...e, role: row.role || e.role, bullets: bullets.length ? bullets : e.bullets };
+  });
+  base.education = base.education.map((e) => ({ ...e, degree: degreeById.get(e.id)?.degree || e.degree }));
 
   if (out.summary) base.summary = out.summary;
   if (!input.identity.headline && out.headline) base.identity = { ...base.identity, headline: out.headline };
@@ -269,16 +285,30 @@ export async function buildResumeDoc(
   }
 
   const ask = (u: string) => complete(system, u, 3200, { json: true, timeoutMs: Math.min(70_000, budget()) });
+  const check = (raw: string | null) => {
+    const parsed = parseResumeLlm(raw, input, meta);
+    if (!parsed) return null;
+    return { parsed, guarded: guardResume(input, parsed, { enrich: meta.enrich !== false, language: meta.language }) };
+  };
 
-  let out = parseResumeLlm(await ask(user), input, meta);
-  if ((!out || out.summary.length < MIN_SUMMARY_CHARS) && budget() >= MIN_BUDGET_MS) {
-    console.warn("[resume] javob yaroqsiz (qisqacha qisqa yoki JSON buzuq) — qat'iy qayta so'rov");
-    const retry = parseResumeLlm(await ask(user + RESUME_STRICT_SUFFIX), input, meta);
-    if (retry && (!out || retry.summary.length > out.summary.length)) out = retry;
+  /*
+   * Uzunlik darvozasi QO'RIQCHIDAN KEYIN o'lchanadi — u qisqachani
+   * qisqartirishi mumkin (uydirma yilli jumla tashlanadi), ya'ni
+   * parse'dan keyingi o'lchov haqiqiy natijani ko'rsatmaydi.
+   */
+  let best = check(await ask(user));
+  if ((!best || best.guarded.out.summary.length < MIN_SUMMARY_CHARS) && budget() >= MIN_BUDGET_MS) {
+    const why = !best
+      ? "JSON buzuq"
+      : `qisqacha ${best.guarded.out.summary.length} belgi (kerak ${MIN_SUMMARY_CHARS}); tashlangan jumlalar: ` +
+        (best.guarded.report.summaryDrops.map((d) => `${d.reason} — «${d.text}»`).join(" | ") || "yo'q");
+    console.warn(`[resume] javob yaroqsiz (${why}) — qat'iy qayta so'rov`);
+    const retry = check(await ask(user + RESUME_STRICT_SUFFIX));
+    if (retry && (!best || retry.guarded.out.summary.length > best.guarded.out.summary.length)) best = retry;
   }
-  if (!out) return null;
+  if (!best) return null;
 
-  const guarded = guardResume(input, out, { enrich: meta.enrich !== false, language: meta.language });
+  const guarded = best.guarded;
   deps.onReport?.(guarded.report);
   const r = guarded.report;
   if (r.unknownRows || r.revertedFields || r.droppedSentences || r.droppedBullets || r.strippedYears) {
@@ -286,6 +316,7 @@ export async function buildResumeDoc(
       `[resume] qo'riqchi: noma'lum qator ${r.unknownRows}, tiklangan ${r.restoredRows}, qaytarilgan maydon ${r.revertedFields}, ` +
         `yil tozalangan ${r.strippedYears}, band ${r.droppedBullets}, ko'nikma ${r.droppedSkills}, jumla ${r.droppedSentences}`,
     );
+    for (const d of r.summaryDrops) console.warn(`[resume] qisqachadan tashlandi (${d.reason}): «${d.text}»`);
   }
 
   const model = mergeLlm(input, guarded.out, meta, opts.photo);
