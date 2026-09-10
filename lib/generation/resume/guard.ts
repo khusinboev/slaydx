@@ -158,17 +158,73 @@ export function orgIsKnown(head: string, facts: string): boolean {
 }
 
 /**
+ * TASHKILOT MARKERLARI — huquqiy shakl va muassasa turi.
+ *
+ * Bitta joyda, chunki `orgCandidates` ning butun aniqligi shu ro'yxatga
+ * suyanadi.
+ *
+ * Moslash ikki xil: uzunligi `MARKER_PREFIX_MIN` (5) dan kam bo'lmagan
+ * marker PREFIKS sifatida ham ishlaydi — o'zbek qo'shimchalari uchun
+ * («markaz» → «markazida», «universitet» → «universiteti»); qolganlari
+ * (llc, ooo, corp, bank, fund…) AYNAN mos kelishi kerak.
+ *
+ * Nega qisqalari prefiks EMAS: «corp» prefiksi «Corporate Finance» ni,
+ * «fund» esa «Fundamental Analysis» ni tashkilot deb ko'rsatardi —
+ * ya'ni tuzatmoqchi bo'lgan yolg'on ijobiy qaytib kelardi. «Clinic»
+ * («Clinical Research») shu sababdan ro'yxatda yo'q; uning o'rniga
+ * «klinika», «hospital», «shifoxona» turadi.
+ */
+export const ORG_MARKERS = [
+  // Huquqiy shakl
+  "inc", "llc", "ltd", "limited", "plc", "corp", "corporation", "korporatsiya",
+  "gmbh", "ag", "sa", "sas", "srl", "bv", "nv",
+  "mchj", "qmj", "ooo", "zao", "oao", "pao", "jsc", "llp", "aj", "atj",
+  // Muassasa turi
+  "bank", "banki", "group", "guruh", "holding", "xolding", "company", "kompaniya", "firma",
+  "university", "universitet", "institute", "institut", "akademiya", "academy", "college", "kollej",
+  "maktab", "school", "litsey", "lyceum",
+  "markaz", "center", "centre", "agency", "agentlik", "ministry", "vazirlik",
+  "fund", "foundation", "jamgarma", "jamg‘arma", "jamg'arma",
+  "hospital", "shifoxona", "klinika", "zavod", "fabrika", "factory",
+  "laboratoriya", "laboratory",
+] as const;
+
+/** Shundan qisqa marker faqat AYNAN mos kelganda hisoblanadi. */
+const MARKER_PREFIX_MIN = 5;
+
+const MARKER_SET = new Set<string>(ORG_MARKERS);
+const MARKER_PREFIXES = ORG_MARKERS.filter((m) => m.length >= MARKER_PREFIX_MIN);
+
+function isOrgMarker(token: string): boolean {
+  if (MARKER_SET.has(token)) return true;
+  return MARKER_PREFIXES.some((m) => token.startsWith(m));
+}
+
+/**
  * Matndagi TASHKILOT NOMZODLARI.
  *
- * Ikki naqsh, ataylab tor: (a) ketma-ket 2+ bosh harfli so'z («Artel
- * Electronics», «Respublika ta'lim markazi»), (b) 3+ belgili to'liq
- * BOSH HARFLI qisqartma («TDPU», «ACCA»).
+ * Ikki naqsh, ataylab TOR:
+ *   (a) ketma-ket 2+ bosh harfli so'z, ICHIDA tashkilot markeri bilan
+ *       («Global Trade LLC», «Respublika ta'lim Markazi»);
+ *   (b) 3+ belgili to'liq BOSH HARFLI qisqartma («TDPU», «ACCA»).
  *
- * Nega bitta bosh harfli so'z hisoblanmaydi: nemis tilida HAR ot bosh
- * harf bilan yoziladi («Erfahrung in der Finanzanalyse») — bitta so'z
- * qoidasi nemischa qisqachani butunlay yo'q qilardi. Bu narx: yolg'iz
- * «Google» o'tib ketadi. Almashuv ataylab: qisqachada yolg'iz brend
- * nomi kamdan-kam, buzilgan qisqacha esa har safar ko'rinadi.
+ * Nega markersiz bosh harfli birikma yetarli EMAS (jonli sinov, uz→en):
+ * chiqish tili kirishdan farq qilganda model lavozim, mahsulot va
+ * texnologiya nomlarini tarjima qiladi — «Financial Analyst», «Power BI»,
+ * «Management Reporting». Faqat bosh harf qoidasi ularni nomzod deb
+ * olardi, `orgIsKnown` esa O'ZBEKCHA kirish faktlari bilan solishtirib
+ * mos topmasdi va HAR SAFAR yolg'on ijobiy berardi: qisqachaning eng
+ * kuchli jumlasi «uydirma tashkilot» deb tashlanardi va uzunlik
+ * va'dasi (220+) buzilardi.
+ *
+ * Himoya kuchsizlanmaydi: uydirma ISH BERUVCHI baribir hujjatga tusha
+ * olmaydi, chunki `company`/`institution`/`issuer` model javobidan
+ * UMUMAN olinmaydi (`mergeLlm` ularni faqat kirishdan oladi). Bu yerdagi
+ * tekshiruv esa erkin matnda («2019-yildan Global Trade LLC bilan
+ * ishlagan») paydo bo'lgan yangi nomni ushlash uchun.
+ *
+ * Bitta bosh harfli so'z ham nomzod emas: nemis tilida HAR ot bosh harf
+ * bilan yoziladi («Erfahrung in der Finanzanalyse»).
  *
  * Jumla BOSHIDAGI so'z ketma-ketlikni BOSHLAMAYDI: u grammatika bilan
  * bosh harfli («Ishladi Artel Electronics…»), nom emas. Uni qo'shish
@@ -180,7 +236,7 @@ export function orgCandidates(text: string): string[] {
   const words = String(text ?? "").split(/\s+/).filter(Boolean);
   let run: string[] = [];
   const flush = () => {
-    if (run.length >= 2) out.push(run.join(" "));
+    if (run.length >= 2 && run.some((w) => isOrgMarker(fold(w)))) out.push(run.join(" "));
     run = [];
   };
   let atStart = true;

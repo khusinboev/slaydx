@@ -208,17 +208,17 @@ test("uz kirish → en chiqish: lavozim va daraja TARJIMASI saqlanadi", async ()
       summary:
         "Finance professional with hands-on experience in budgeting and management reporting. Built the monthly reporting cycle for manufacturing and retail companies and prepared cost analyses that supported management decisions.",
       experience: [
-        { id: "e1", role: "Lead Financial Analyst", bullets: [{ text: "Built the annual budget model and monthly execution controls." }] },
+        { id: "e1", role: "Senior IFRS Reporting Analyst", bullets: [{ text: "Built the annual budget model and monthly execution controls." }] },
         { id: "e2", role: "Financial Analyst", bullets: [{ text: "Prepared weekly profitability reports." }] },
       ],
-      education: [{ id: "d1", degree: "Master of Business Administration" }],
+      education: [{ id: "d1", degree: "CIMA Advanced Diploma in Management Accounting" }],
       skills: [{ text: "Excel" }, { text: "SQL" }],
     }),
   );
   const m = (await b.run())!.resume!;
-  assert.equal(m.experience[0].role, "Lead Financial Analyst", "o'zbekcha lavozimga qaytmasligi kerak");
+  assert.equal(m.experience[0].role, "Senior IFRS Reporting Analyst", "o'zbekcha lavozimga qaytmasligi kerak");
   assert.equal(m.experience[1].role, "Financial Analyst");
-  assert.equal(m.education[0].degree, "Master of Business Administration");
+  assert.equal(m.education[0].degree, "CIMA Advanced Diploma in Management Accounting");
   // Kompaniya/muassasa esa VERBATIM kirishdan — tarjima qilinmaydi.
   assert.deepEqual(m.experience.map((e) => e.company), ["Artel Electronics", "Korzinka"]);
   assert.equal(m.education[0].institution, "TDIU");
@@ -233,6 +233,34 @@ test("buzuq JSON → qayta so'rov; ikkalasi ham yiqilsa null (chaqiruvchi zaxira
   const dead = build({}, () => null);
   assert.equal(await dead.run(), null);
   assert.equal(dead.calls.length, 2, "ikkinchi urinish ham bo'ladi");
+});
+
+/**
+ * Uzunlik darvozasi yiqilganda SABAB bog'lanadigan bo'lishi kerak.
+ *
+ * Jonli sinovda «summary 201 belgi» va «jumla 1» ikki alohida qatorda
+ * turar va ularni bog'lash faqat qo'lda bo'lardi. Tashlangan jumlalar
+ * QAYTA TIKLANMAYDI — uydirmani uzunlik uchun qaytarish qo'riqchining
+ * ma'nosini yo'q qilardi — lekin nima bo'lgani jurnalda turadi.
+ */
+test("qayta so'rovdan keyin ham qisqa qolsa jurnalda alohida qator bo'ladi", async () => {
+  const short = "Moliya sohasida ishlaydi.";
+  const lines: string[] = [];
+  const realWarn = console.warn;
+  console.warn = (...args: unknown[]) => void lines.push(args.map(String).join(" "));
+  try {
+    const b = build({}, () => answer({ summary: `${short} 2013-yilda ishga kirgan.` }));
+    const m = (await b.run())!.resume!;
+    assert.equal(b.calls.length, 2, "qat'iy qayta so'rov bo'lishi kerak");
+    assert.ok(!m.summary.includes("2013"), "uydirma jumla QAYTA TIKLANMAYDI");
+  } finally {
+    console.warn = realWarn;
+  }
+  assert.ok(
+    lines.some((l) => l.includes("[resume] summary qisqa qoldi") && l.includes("qayta so'rov yordam bermadi")),
+    `jurnal qatori yo'q:\n${lines.join("\n")}`,
+  );
+  assert.ok(lines.some((l) => l.includes("[resume] qisqachadan tashlandi (yil)")), "tashlangan jumla sababi ham yozilsin");
 });
 
 test("deadline yetmasa umuman chaqirilmaydi", async () => {
