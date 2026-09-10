@@ -522,7 +522,16 @@ export async function renderDocx(doc: AcademicDoc): Promise<Uint8Array> {
 
     for (const s of doc.sections) {
       if (s.blocks.length) {
-        children.push(K.sectionHeading(s.title));
+        /*
+         * Sarlavhasiz bo'lim — sarlavhasiz chiziladi.
+         *
+         * Tarjima (`translation` profili) manbadagi tuzilmani AYNAN
+         * qaytaradi: unda «KIRISH» kabi bo'lim nomlari yo'q, sarlavhalar
+         * matnning o'zida (`h1` bloki). Tekshiruvsiz bu yerda har bo'lim
+         * uchun BO'SH «Heading 1» paragrafi chiqib, hujjat boshida va
+         * har jadvaldan keyin sababsiz bo'sh qator qolardi.
+         */
+        if (s.title) children.push(K.sectionHeading(s.title));
         for (const b of s.blocks) children.push(...K.blockToParagraphs(b));
       }
       for (const tb of anchored.get(s.id) ?? []) drawTable(K, tb, children);

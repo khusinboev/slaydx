@@ -23,7 +23,15 @@ export const CM = 567;
 const A4_W = 11906;
 const A4_H = 16838;
 
-export type DocProfileId = "gost" | "article" | "essay" | "resume" | "landscape" | "lesson" | "reference";
+export type DocProfileId =
+  | "gost"
+  | "article"
+  | "essay"
+  | "resume"
+  | "landscape"
+  | "lesson"
+  | "reference"
+  | "translation";
 
 export type DocProfile = {
   id: DocProfileId;
@@ -216,6 +224,30 @@ const PROFILES: Record<DocProfileId, DocProfile> = {
    * boshlanadi — ko'z atamadan atamaga sakraydi. Justify o'chirilgan:
    * qisqa ta'riflarda u so'zlar orasida katta bo'shliq qoldiradi.
    */
+  /**
+   * Tarjima — NEYTRAL hujjat, akademik qolip EMAS.
+   *
+   * PDF dan tiklangan (yoki matn rejimidagi) tarjima uchun. Bu yerda
+   * biz hujjatning JANRINI bilmaymiz: manba shartnoma ham, ilmiy maqola
+   * ham, yo'riqnoma ham bo'lishi mumkin. Shuning uchun har qanday
+   * «bezak» — markazlashtirilgan BOSH HARFLI sarlavha, 1.25 sm abzats
+   * chekinishi, justify, titul sahifa — ATAYIN yo'q: ular manbada
+   * bo'lmagan tuzilmani QO'SHIB yuborardi va foydalanuvchi «men bunday
+   * hujjat bermagan edim» degan natijani olardi.
+   *
+   * Times New Roman 12 pt / 1.15 interval — rasmiy tarjima uchun eng
+   * keng tarqalgan neytral qolip; titul yo'q (`"none"`), jadval o'z
+   * joyida (`anchored`), chunki PDF da jadval matn OQIMI ichida turadi.
+   */
+  translation: {
+    id: "translation",
+    page: GOST_PAGE,
+    type: { font: "Times New Roman", size: 24, line: 276, justify: false, firstLine: 0, after: 120 },
+    heading: { align: "left", upper: false, rule: false, color: "000000" },
+    titlePage: "none",
+    tablePlacement: "anchored",
+    tableSize: 20,
+  },
   reference: {
     id: "reference",
     page: {
@@ -248,6 +280,8 @@ export function profileFor(meta: DocMeta): DocProfile {
       return PROFILES.lesson;
     case "glossary":
       return PROFILES.reference;
+    case "translation":
+      return PROFILES.translation;
     default:
       return PROFILES.gost;
   }
