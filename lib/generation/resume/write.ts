@@ -51,17 +51,56 @@ export const RESUME_JSON_SCHEMA =
   '"experience":[{"id":"","role":"","bullets":[{"text":"","ai":false}]}],"education":[{"id":"","degree":""}],"skills":[{"text":"","ai":false}]}';
 
 /**
- * QO'RIQCHIDAN KEYINGI qisqacha uzunligi shundan past bo'lsa javob
- * yaroqsiz — bir marta qat'iy qayta so'raladi.
+ * Qisqacha uzunligi — YOZUV TIZIMIGA bog'liq (jonli sinov, `--lang ja`).
+ *
+ * Belgi soni tillar bo'ylab bir xil ma'no bermaydi: 209 ta yapon belgisi
+ * inglizcha 400–500 belgiga teng ma'lumot tashiydi (kanji bir belgida
+ * butun so'z, bo'shliq yo'q). Yagona lotin chegarasi (200 / 250–700)
+ * yaponcha, xitoycha va koreyscha rezyumeda modeldan HADDAN TASHQARI
+ * uzun matn talab qilar, keyin uni «qisqa» deb rad etib qat'iy qayta
+ * so'rov yuborar va byudjetni behuda yeb qo'yardi — model esa aslida
+ * to'g'ri uzunlikda yozgan bo'lardi.
+ *
+ * Arab/fors yozuvi bu ro'yxatda YO'Q: u lotin bilan taqqoslanadigan
+ * zichlikda (harflar so'zga birikadi, lekin bitta belgi bitta tovush).
+ *
+ * `gate`      — qo'riqchidan KEYIN o'lchanadigan eng kam uzunlik;
+ * `promptMin` — promptda so'raladigan pastki chegara (`gate` dan
+ *               yuqoriroq: model pastki chegaraga yaqin yozadi, bitta
+ *               jumla tashlansa ham darvozadan o'tishi kerak);
+ * `promptMax` — yuqori chegara.
+ */
+export type SummaryLimit = { gate: number; promptMin: number; promptMax: number };
+
+export const SUMMARY_LIMITS: Record<"latin" | "dense", SummaryLimit> = {
+  /** Lotin/kirill/arab yozuvi. */
+  latin: { gate: 200, promptMin: 250, promptMax: 700 },
+  /** Zich yozuv — xitoy, yapon, koreys. */
+  dense: { gate: 90, promptMin: 100, promptMax: 300 },
+};
+
+/** Bitta belgi ko'p ma'no tashiydigan yozuv tizimlari. */
+const DENSE_SCRIPTS = new Set(["zh", "ja", "ko"]);
+
+export function summaryLimits(language: string): SummaryLimit {
+  return DENSE_SCRIPTS.has((language || "uz").toLowerCase()) ? SUMMARY_LIMITS.dense : SUMMARY_LIMITS.latin;
+}
+
+/**
+ * QO'RIQCHIDAN KEYINGI qisqacha shundan qisqa bo'lsa javob yaroqsiz —
+ * bir marta qat'iy qayta so'raladi.
  *
  * Darvoza ataylab qo'riqchidan KEYIN (jonli sinov, uz→en): model 240
  * belgi yozgan, qo'riqchi uydirma yilli bitta jumlani tashlagan va
  * natija 173 belgiga tushgan edi — eski darvoza (parse'dan keyin, 150)
- * buni umuman ko'rmasdi. Promptdagi pastki chegara ham shu sababdan
- * 250: model odatda pastki chegaraga yaqin yozadi, bitta jumla
- * tashlansa ham 220 dan yuqori qolishi kerak.
+ * buni umuman ko'rmasdi.
+ *
+ * `scripts/live-engine.mts` ham SHU funksiyani o'qiydi — aks holda
+ * jonli sinov yaponcha rezyumega yolg'on qizil qo'yardi.
  */
-export const MIN_SUMMARY_CHARS = 200;
+export function minSummaryChars(language: string): number {
+  return summaryLimits(language).gate;
+}
 
 /* ────────────────────────── promptlar ────────────────────────── */
 
@@ -69,6 +108,7 @@ export function resumeSystemPrompt(meta: DocMeta, input: ResumeInput): string {
   const headline = input.identity.headline || meta.topic || "the target role";
   const enrich = meta.enrich !== false;
   const wantLabels = !hasCodeLabels(meta.language);
+  const len = summaryLimits(meta.language);
   return [
     languageDirective(meta.language),
     `You are a senior résumé (CV) editor preparing a one-page, ATS-friendly résumé.`,
@@ -77,7 +117,7 @@ export function resumeSystemPrompt(meta: DocMeta, input: ResumeInput): string {
     `1. NEVER invent an employer, job title, date, degree, institution, certificate or language. Use ONLY the facts given below, keyed by "id", and keep them in the given id order.`,
     `2. VERBATIM — copy unchanged: the person's name, phone number, e-mail, URLs, every year and month, and organisation names written in the Latin script. Do not translate, expand or abbreviate them. Everything else — job titles, academic degrees, bullet text, skills, the summary — MUST be written in the output language, even when the facts below are given in another language.`,
     `3. Every bullet = action verb + scope + measurable result. Remove duplicates and merge overlapping bullets. At most ${RESUME_LIMITS.bullets} bullets per job, each at most ${RESUME_LIMITS.bulletChars} characters.`,
-    `4. "summary" — between 250 and 700 characters, written for the target role «${headline}»; no first-person pronouns, no clichés like "hard-working team player".`,
+    `4. "summary" — between ${len.promptMin} and ${len.promptMax} characters, written for the target role «${headline}»; no first-person pronouns, no clichés like "hard-working team player".`,
     enrich
       ? `5. ENRICHMENT IS ON: for each job you MAY ADD at most ${AI_BULLETS_PER_JOB} extra bullets describing duties or outcomes that are typical for that exact job title, and at most ${AI_SKILLS_MAX} extra profession-relevant skills. Mark every added item with "ai": true. An added item must contain NO number, NO client or company name and NO date — it describes a typical responsibility, never a measured achievement.`
       : `5. ENRICHMENT IS OFF: add NOTHING. You may only rewrite, merge, shorten and reorder what the user wrote. Never output "ai": true.`,
@@ -127,12 +167,21 @@ export function resumeUserPrompt(meta: DocMeta, input: ResumeInput): string {
   ].join("\n");
 }
 
-/** Qayta urinishdagi qat'iyroq ko'rsatma (tarjima dvigatelidagi naqsh). */
-export const RESUME_STRICT_SUFFIX =
-  `\nThe previous answer was rejected: it was not valid JSON, or "summary" was shorter than ${MIN_SUMMARY_CHARS} characters` +
-  ` once sentences with invented years or invented organisation names had been removed.` +
-  ` Answer again with ONLY the JSON object, no prose, no markdown fence. "summary" must be at least 250 characters and must not` +
-  ` mention any year or organisation that is absent from the facts.`;
+/**
+ * Qayta urinishdagi qat'iyroq ko'rsatma (tarjima dvigatelidagi naqsh).
+ *
+ * Uzunlik SONI tilga bog'liq: yaponcha javobga «at least 250 characters»
+ * deyish modelni ataylab suvli matn yozishga majburlardi.
+ */
+export function resumeStrictSuffix(language: string): string {
+  const len = summaryLimits(language);
+  return (
+    `\nThe previous answer was rejected: it was not valid JSON, or "summary" was shorter than ${len.gate} characters` +
+    ` once sentences with invented years or invented organisation names had been removed.` +
+    ` Answer again with ONLY the JSON object, no prose, no markdown fence. "summary" must be at least ${len.promptMin} characters and must not` +
+    ` mention any year or organisation that is absent from the facts.`
+  );
+}
 
 /* ────────────────────────── javobni o'qish ────────────────────────── */
 
@@ -278,6 +327,7 @@ export async function buildResumeDoc(
   const system = resumeSystemPrompt(meta, input);
   const user = resumeUserPrompt(meta, input);
 
+  const minChars = minSummaryChars(meta.language);
   const budget = () => remainingMs(opts.deadline);
   if (budget() < MIN_BUDGET_MS) {
     console.warn("[resume] deadline yetmadi — zaxira modelga o'tildi");
@@ -301,13 +351,13 @@ export async function buildResumeDoc(
    * parse'dan keyingi o'lchov haqiqiy natijani ko'rsatmaydi.
    */
   let best = check(await ask(user));
-  if ((!best || best.guarded.out.summary.length < MIN_SUMMARY_CHARS) && budget() >= MIN_BUDGET_MS) {
+  if ((!best || best.guarded.out.summary.length < minChars) && budget() >= MIN_BUDGET_MS) {
     const why = !best
       ? "JSON buzuq"
-      : `qisqacha ${best.guarded.out.summary.length} belgi (kerak ${MIN_SUMMARY_CHARS}); tashlangan jumlalar: ` +
+      : `qisqacha ${best.guarded.out.summary.length} belgi (kerak ${minChars}); tashlangan jumlalar: ` +
         (best.guarded.report.summaryDrops.map((d) => `${d.reason} — «${d.text}»`).join(" | ") || "yo'q");
     console.warn(`[resume] javob yaroqsiz (${why}) — qat'iy qayta so'rov`);
-    const retry = check(await ask(user + RESUME_STRICT_SUFFIX));
+    const retry = check(await ask(user + resumeStrictSuffix(meta.language)));
     if (retry && (!best || retry.guarded.out.summary.length > best.guarded.out.summary.length)) best = retry;
   }
   if (!best) return null;
@@ -321,9 +371,9 @@ export async function buildResumeDoc(
    * ilgari «summary 201 belgi» va «jumla 1» ikki alohida qatorda turar
    * va ularni bog'lash faqat qo'lda bo'lardi.
    */
-  if (guarded.out.summary.length < MIN_SUMMARY_CHARS) {
+  if (guarded.out.summary.length < minChars) {
     console.warn(
-      `[resume] summary qisqa qoldi: ${guarded.out.summary.length} belgi (kerak ${MIN_SUMMARY_CHARS}), ` +
+      `[resume] summary qisqa qoldi: ${guarded.out.summary.length} belgi (kerak ${minChars}, til «${meta.language}»), ` +
         `qayta so'rov ${attempts > 1 ? "yordam bermadi" : "o'tkazilmadi (byudjet yetmadi)"}; ` +
         `qo'riqchi ${guarded.report.droppedSentences} jumla tashlagan`,
     );
