@@ -154,6 +154,7 @@ export async function renderPptx(
     const plan = planSlide(deck.slides[i], theme, deck.visual, i, deck.slides.length, deck.audience, deck.templateId, {
       bodyType: deck.bodyType,
       logo: deck.logo,
+      custom: deck.custom,
     });
     await paintPlan(slide, plan, imageCache, opts?.resolveImage);
     // Notiq eslatmasi. Ilgari `notesSlide` yaratilardi-yu, ichi bo'sh qolardi:

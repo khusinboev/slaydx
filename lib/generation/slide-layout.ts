@@ -3,6 +3,8 @@ import { FONT_BY_ID, isSlideFontId } from "./slide-fonts";
 import { planAnswers, planQuiz, planReferences } from "./slide-layout-extra";
 import type { SlideAudience, SlideTemplateId, SlideVisual } from "./slide-templates";
 import { designOf } from "./visuals";
+import { planCustom } from "./slide-custom";
+import type { CustomTemplate } from "./pptx-template";
 import type { SlideModel, SlideSrc, SlideTheme } from "./slide-types";
 
 /** Widescreen 16:9 in inches — same coordinate space as PPTX and the on-site viewer. */
@@ -2430,8 +2432,17 @@ export function planSlide(
   total: number,
   audience: SlideAudience = "auto",
   templateId: SlideTemplateId = "lecture",
-  opts: { bodyType?: BodyRules; logo?: string } = {},
+  opts: { bodyType?: BodyRules; logo?: string; custom?: CustomTemplate } = {},
 ): SlidePlan {
+  /*
+   * «O'z shablonim»: fon va qutilar namunadan (`slide-custom.ts`), tasma/
+   * logotip YO'Q (namunaning o'z bezagi bor); shrift ustidan yozish qoladi.
+   */
+  if (opts.custom) {
+    const plan = planCustom(s, opts.custom, index, total);
+    applyFontOverrides(plan, s);
+    return plan;
+  }
   /*
    * `bodyType` deck darajasida hisoblanadi (`buildSlideDeck` →
    * `bodyRules(meta)`), chaqiruvchi bermasa auditoriyadan — eski chaqiruvlar

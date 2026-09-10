@@ -6,6 +6,8 @@ import { remainingMs, targetWords, wordCount } from "./quality";
 import { renderDocx } from "./render-docx";
 import { renderHtml } from "./render-html";
 import { renderPptx } from "./render-pptx";
+import { renderPptxWithTemplate } from "./render-pptx-template";
+import type { CustomTemplate } from "./pptx-template";
 import { buildImageArtifact } from "./image-studio";
 import type { SlideProgressSink } from "./slide-progress";
 import { buildSlideAcademicDoc } from "./slide-write";
@@ -85,6 +87,8 @@ export type BuildOptions = {
   deadline: number;
   /** Slayd logotipi — `data:` URL; worker `logo_uploads` dan o'qib beradi (WP-F). */
   logo?: string;
+  /** «O'z shablonim» — namuna bayti + yengil nusxa; worker `template_uploads` dan (Shablonlar 2, B). */
+  template?: { bytes: Uint8Array; template: CustomTemplate };
   /**
    * Jonli generatsiya hodisalari — F1b da IMZO qabul qilinadi va
    * `buildSlideAcademicDoc` ga uzatiladi, lekin dvigatel ichida hali
@@ -105,7 +109,12 @@ export async function buildArtifact(
   // rasm provayderida (`pickProvider`), oqimda emas.
   if (tool.id === "slide" || tool.id === "pro-slide") {
     const slideDoc = await buildSlideAcademicDoc(meta, deadline, { logo: opts.logo, onProgress: opts.onProgress });
-    const file = await renderPptx(slideDoc, `${meta.fileNameHint}.pptx`);
+    // «O'z shablonim»: deka namuna master/layout/temasi ichiga yoziladi;
+    // yengil nusxa hujjatga — ko'ruvchi ham shundan chizadi (planCustom).
+    if (opts.template) slideDoc.customTemplate = opts.template.template;
+    const file = opts.template
+      ? await renderPptxWithTemplate(slideDoc, `${meta.fileNameHint}.pptx`, opts.template.bytes, opts.template.template.profile)
+      : await renderPptx(slideDoc, `${meta.fileNameHint}.pptx`);
     file.html = renderHtml(slideDoc);
     file.doc = slideDoc;
     /*

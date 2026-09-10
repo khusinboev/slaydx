@@ -81,6 +81,7 @@ export function academicDocFromHtml(html: string, gen: Generation): AcademicDoc 
       // AUDIT-9 slayd parametrlari — eski HTML dan tiklangan hujjatda standart.
       position: "",
       logoAssetId: "",
+      templateAssetId: "",
       slidePurpose: "general",
       keyIdeas: [],
       localExamples: false,
@@ -141,6 +142,7 @@ function emptyDoc(gen: Generation): AcademicDoc {
       // AUDIT-9 slayd parametrlari — eski HTML dan tiklangan hujjatda standart.
       position: "",
       logoAssetId: "",
+      templateAssetId: "",
       slidePurpose: "general",
       keyIdeas: [],
       localExamples: false,

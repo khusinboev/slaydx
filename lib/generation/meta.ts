@@ -206,6 +206,8 @@ export function extractMeta(tool: ToolConfig, values: FormValues): DocMeta {
     slideAudience: normalizeAudienceId(s(values, "slideAudience", "auto")),
     position: s(values, "position").replace(/\s+/g, " ").slice(0, 80),
     logoAssetId: /^[0-9a-f]{8,64}$/i.test(s(values, "logoAssetId")) ? s(values, "logoAssetId").toLowerCase() : "",
+    // Faqat pro: oddiy slaydda maydon yo'q, kelsa ham e'tiborsiz.
+    templateAssetId: tool.id === "pro-slide" && /^[0-9a-f]{24}$/i.test(s(values, "templateAssetId")) ? s(values, "templateAssetId").toLowerCase() : "",
     slidePurpose,
     keyIdeas: splitCsv(values.keyIdeas, KEY_IDEAS_MAX, KEY_IDEA_CHARS),
     localExamples: values.localExamples === true,

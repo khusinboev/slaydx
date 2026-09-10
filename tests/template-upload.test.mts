@@ -148,3 +148,21 @@ test(
     assert.ok(previews.cover!.png.length < 400_000, `PNG hajmi oqilona: ${previews.cover!.png.length}`);
   },
 );
+
+test("extractAssets: customTemplate fon PNG lari aktivga chiqadi (bir xil rasm bir marta)", async () => {
+  const { extractAssets } = await import("../lib/server/assets.ts");
+  const png = `data:image/png;base64,${Buffer.alloc(96, 7).toString("base64")}`;
+  const doc = {
+    meta: {} as never,
+    titlePage: false,
+    toc: false,
+    sections: [],
+    customTemplate: { assetId: "a".repeat(24), name: "n.pptx", profile: {} as never, previews: { cover: { png, dark: true }, section: { png, dark: true } } },
+  } as never;
+  const out = extractAssets("11111111-1111-4111-8111-111111111111", doc, "");
+  assert.equal(out.assets.length, 1, "bitta aktiv");
+  const prev = (out.doc as { customTemplate: { previews: Record<string, { png: string; dark: boolean }> } }).customTemplate.previews;
+  assert.match(prev.cover.png, /^\/api\/generations\//);
+  assert.equal(prev.cover.png, prev.section.png);
+  assert.equal(prev.cover.dark, true);
+});

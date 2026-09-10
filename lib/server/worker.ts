@@ -19,6 +19,7 @@ import { deleteGenerationFile, putGenerationFile } from "./storage";
 import { deleteAssets, extractAssets, putAssets } from "./assets";
 import { buildPreview } from "./preview";
 import { logoDataUrl } from "./logo";
+import { templateForJob } from "./template-upload";
 import { LiveReporter } from "./live";
 import { purgeExpiredSessions } from "./session";
 import { purgeRateLimits } from "./ratelimit";
@@ -163,7 +164,9 @@ async function runJob(job: ClaimedJob): Promise<void> {
     // `data:` URL ga aylantiriladi. Topilmasa/bo'sh bo'lsa `undefined` —
     // xato emas, deka logosiz chiqadi (`lib/server/logo.ts` izohiga qarang).
     const logo = await logoDataUrl(job.userId, String(job.values.logoAssetId ?? ""));
-    const file = await buildArtifact(tool, job.values, { deadline, logo, onProgress: live?.sink });
+    // «O'z shablonim» (faqat pro): namuna topilmasa deka ichki shablon bilan chiqadi.
+    const template = tool.id === "pro-slide" ? await templateForJob(job.userId, String(job.values.templateAssetId ?? "")) : undefined;
+    const file = await buildArtifact(tool, job.values, { deadline, logo, template, onProgress: live?.sink });
 
     if (!file.bytes?.byteLength) {
       throw new Error("Fayl bo'sh chiqdi — qayta urinib ko'ring");

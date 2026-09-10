@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ClipboardEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import type { CustomTemplate } from "@/lib/generation/pptx-template";
 import { Check, ImagePlus, Minus, Plus, RotateCcw, XCircle } from "lucide-react";
 import type { SlideAudience, SlideTemplateId, SlideVisual } from "@/lib/generation/slide-templates";
 import type { BodyRules } from "@/lib/generation/slide-audience";
@@ -64,6 +65,7 @@ export type SlideEditorProps = {
   templateId: SlideTemplateId;
   bodyType: BodyRules;
   logo?: string;
+  custom?: CustomTemplate;
   index: number;
   total: number;
   /** Sahna masshtabi (`SlideStageOverlayCtx.scale`). */
@@ -199,6 +201,7 @@ export function SlideEditor({
   templateId,
   bodyType,
   logo,
+  custom,
   index,
   total,
   scale,
@@ -223,8 +226,8 @@ export function SlideEditor({
   const skipBlurRef = useRef(false);
 
   const plan = useMemo(
-    () => planSlide(slide, theme, visual, index, total, audience, templateId, { bodyType, logo }),
-    [slide, theme, visual, index, total, audience, templateId, bodyType, logo],
+    () => planSlide(slide, theme, visual, index, total, audience, templateId, { bodyType, logo, custom }),
+    [slide, theme, visual, index, total, audience, templateId, bodyType, logo, custom],
   );
 
   /** Kalit bo'yicha qatlam — har renderda qayta topiladi (shrift o'zgarsa yangi qatlam keladi). */

@@ -1,3 +1,4 @@
+import type { CustomTemplate } from "./pptx-template";
 import type { BodyRules } from "./slide-audience";
 import type { SlideFontId } from "./slide-fonts";
 import type { SlideAudience, SlideTemplateId, SlideVisual } from "./slide-templates";
@@ -93,6 +94,8 @@ export type SlideDeck = {
   bodyType: BodyRules;
   /** Logotip URL (data: yoki asset) — har slaydga `planSlide` qo'shadi. */
   logo?: string;
+  /** «O'z shablonim» — bo'lsa `planSlide` namuna layoutlarida chizadi. */
+  custom?: CustomTemplate;
   /** Ma'ruzachi izohlari yozilsinmi (PPTX notes + ko'ruvchi paneli standarti). */
   speakerNotes: boolean;
 };

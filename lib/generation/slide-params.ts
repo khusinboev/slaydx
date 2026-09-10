@@ -118,6 +118,8 @@ export const SLIDE_PARAMS: SlideParam[] = [
   { id: "slideImageStyle", tools: ["pro-slide"], encode: "string", probeA: "minimal", probeB: "chalk", impacts: ["images"] },
   { id: "slideTemplate", tools: ["slide", "pro-slide"], encode: "string", probeA: "lecture", probeB: "report", impacts: ["beats", "layout"] },
   { id: "slideTheme", tools: ["slide", "pro-slide"], encode: "string", probeA: "atlas", probeB: "graphite", impacts: ["layout"] },
+  // «O'z shablonim» (faqat pro): bo'lsa maket namuna layoutlaridan (`planCustom`) — ichki dizayn o'rniga.
+  { id: "templateAssetId", tools: ["pro-slide"], encode: "string", probeA: "", probeB: "0123456789abcdef01234567", impacts: ["layout"] },
 ];
 
 export function slideParamsFor(tool: SlideTool): SlideParam[] {

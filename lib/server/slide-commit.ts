@@ -17,6 +17,8 @@ import { applyDocOps, parseDocOps } from "../generation/slide-edit";
 import type { DocOp } from "../generation/slide-edit";
 import { renderHtml } from "../generation/render-html";
 import { renderPptx } from "../generation/render-pptx";
+import { renderPptxWithTemplate } from "../generation/render-pptx-template";
+import { getTemplate } from "./template-upload";
 import type { AcademicDoc } from "../generation/types";
 import type { JobStatus } from "../types";
 
@@ -216,11 +218,15 @@ export async function rebuildFile(
   const target = cur.docVersion;
 
   const render = deps.render ?? renderPptx;
-  const built = await render(cur.doc, cur.fileName, {
-    // Rasm faqat SHU generatsiyaning aktivlaridan olinadi (egalik SQL
-    // da, `getAsset`) — tashqi URL yuklanmaydi, ya'ni SSRF yo'q.
-    resolveImage: assetImageResolver(id, userId),
-  });
+  // Rasm faqat SHU generatsiyaning aktivlaridan olinadi (egalik SQL
+  // da, `getAsset`) — tashqi URL yuklanmaydi, ya'ni SSRF yo'q.
+  const resolveImage = assetImageResolver(id, userId);
+  // «O'z shablonim»: namuna bayti hali bazada bo'lsa — o'sha yo'l; o'chirilgan
+  // bo'lsa ichki renderer (deka yo'qolmaydi, faqat ko'rinishi o'zgaradi).
+  const custom = cur.doc.customTemplate ? await getTemplate(userId, cur.doc.customTemplate.assetId).catch(() => null) : null;
+  const built = custom
+    ? await renderPptxWithTemplate(cur.doc, cur.fileName, custom.bytes, custom.template.profile, { resolveImage })
+    : await render(cur.doc, cur.fileName, { resolveImage });
 
   const written = await transaction(async (client) => {
     await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [id]);

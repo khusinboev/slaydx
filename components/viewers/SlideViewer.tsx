@@ -172,8 +172,8 @@ export function SlideViewer({
   const chars = useMemo(() => {
     const s = slides[i];
     if (!lv || !s || skeleton) return 0;
-    return totalChars(planSlide(s, theme, deck.visual, i, slides.length, deck.audience, deck.templateId, { bodyType: deck.bodyType, logo: deck.logo }).layers);
-  }, [lv, slides, i, skeleton, theme, deck.visual, deck.audience, deck.templateId, deck.bodyType, deck.logo]);
+    return totalChars(planSlide(s, theme, deck.visual, i, slides.length, deck.audience, deck.templateId, { bodyType: deck.bodyType, logo: deck.logo, custom: deck.custom }).layers);
+  }, [lv, slides, i, skeleton, theme, deck.visual, deck.audience, deck.templateId, deck.bodyType, deck.logo, deck.custom]);
 
   const reveal = useReveal({ index: i, written, final: lv?.final ?? true, chars, enabled: Boolean(lv) });
 
@@ -512,7 +512,7 @@ export function SlideViewer({
             audience={deck.audience}
             templateId={deck.templateId}
             bodyType={deck.bodyType}
-            logo={deck.logo}
+            logo={deck.logo} custom={deck.custom}
             i={i}
             go={lv ? railGo : go}
             roles={lv?.roles}
@@ -530,7 +530,7 @@ export function SlideViewer({
             audience={deck.audience}
             templateId={deck.templateId}
             bodyType={deck.bodyType}
-            logo={deck.logo}
+            logo={deck.logo} custom={deck.custom}
             index={i}
             total={slides.length}
             present={present}
@@ -556,7 +556,7 @@ export function SlideViewer({
                       audience={deck.audience}
                       templateId={deck.templateId}
                       bodyType={deck.bodyType}
-                      logo={deck.logo}
+                      logo={deck.logo} custom={deck.custom}
                       index={ctx.index}
                       total={slides.length}
                       scale={ctx.scale}
@@ -598,7 +598,7 @@ export function SlideViewer({
               audience={deck.audience}
               templateId={deck.templateId}
               bodyType={deck.bodyType}
-              logo={deck.logo}
+              logo={deck.logo} custom={deck.custom}
               i={i}
               go={lv ? railGo : go}
               roles={lv?.roles}
@@ -691,7 +691,7 @@ export function SlideViewer({
                       theme={theme}
                       visual={deck.visual}
                       audience={deck.audience}
-                      templateId={deck.templateId} bodyType={deck.bodyType} logo={deck.logo}
+                      templateId={deck.templateId} bodyType={deck.bodyType} logo={deck.logo} custom={deck.custom}
                       index={i + 1}
                       total={slides.length}
                     />

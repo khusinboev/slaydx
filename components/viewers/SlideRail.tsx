@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import type { CustomTemplate } from "@/lib/generation/pptx-template";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { SlideAudience, SlideTemplateId, SlideVisual } from "@/lib/generation/slide-templates";
 import type { BodyRules } from "@/lib/generation/slide-audience";
@@ -28,6 +29,7 @@ export function SlideRail({
   templateId,
   bodyType,
   logo,
+  custom,
   i,
   go,
   roles,
@@ -45,6 +47,7 @@ export function SlideRail({
   /** Deck darajasida (`buildSlideDeck`) — PPTX bilan bir xil qiymat. */
   bodyType?: BodyRules;
   logo?: string;
+  custom?: CustomTemplate;
   i: number;
   go: (n: number) => void;
   /** Reja bergan slayd vazifalari — skelet eskizining yorlig'i. */
@@ -176,7 +179,7 @@ export function SlideRail({
                     {pending ? (
                       <SkeletonSlide theme={theme} role={roles?.[idx]} index={idx} compact />
                     ) : (
-                      <SlideCanvas slide={s} theme={theme} visual={visual} audience={audience} templateId={templateId} bodyType={bodyType} logo={logo} index={idx} total={slides.length} />
+                      <SlideCanvas slide={s} theme={theme} visual={visual} audience={audience} templateId={templateId} bodyType={bodyType} logo={logo} custom={custom} index={idx} total={slides.length} />
                     )}
                   </span>
                 </span>
@@ -306,7 +309,7 @@ export function SlideRail({
                 {pending ? (
                   <SkeletonSlide theme={theme} role={roles?.[idx]} index={idx} compact />
                 ) : (
-                  <SlideCanvas slide={s} theme={theme} visual={visual} audience={audience} templateId={templateId} bodyType={bodyType} logo={logo} index={idx} total={slides.length} />
+                  <SlideCanvas slide={s} theme={theme} visual={visual} audience={audience} templateId={templateId} bodyType={bodyType} logo={logo} custom={custom} index={idx} total={slides.length} />
                 )}
               </span>
             </span>

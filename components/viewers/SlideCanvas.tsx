@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import type { CustomTemplate } from "@/lib/generation/pptx-template";
 import type { SlideAudience, SlideTemplateId, SlideVisual } from "@/lib/generation/slide-templates";
 import type { BodyRules } from "@/lib/generation/slide-audience";
 import type { SlideModel, SlideTheme } from "@/lib/generation/slide-types";
@@ -73,6 +74,7 @@ export function SlideCanvas({
   templateId = "lecture",
   bodyType,
   logo,
+  custom,
   reveal,
   hideSrc,
 }: {
@@ -86,6 +88,8 @@ export function SlideCanvas({
   /** Deck darajasida (`buildSlideDeck`) — PPTX bilan bir xil qiymat. */
   bodyType?: BodyRules;
   logo?: string;
+  /** «O'z shablonim» — `deck.custom`. */
+  custom?: CustomTemplate;
   /**
    * Jonli «yozilmoqda»: ko'rsatiladigan matn ULUSHI, 0..1.
    *
@@ -105,7 +109,7 @@ export function SlideCanvas({
    */
   hideSrc?: string;
 }) {
-  const plan = planSlide(slide, theme, visual, index, total, audience, templateId, { bodyType, logo });
+  const plan = planSlide(slide, theme, visual, index, total, audience, templateId, { bodyType, logo, custom });
   const budgets =
     reveal === undefined ? null : revealBudgets(plan.layers, Math.max(0, Math.min(1, reveal)) * totalChars(plan.layers));
   return (

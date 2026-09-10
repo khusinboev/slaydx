@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import type { CustomTemplate } from "@/lib/generation/pptx-template";
 import type { SlideAudience, SlideTemplateId, SlideVisual } from "@/lib/generation/slide-templates";
 import type { BodyRules } from "@/lib/generation/slide-audience";
 import type { SlideModel, SlideTheme } from "@/lib/generation/slide-types";
@@ -28,6 +29,7 @@ export function SlideStage({
   templateId,
   bodyType,
   logo,
+  custom,
   index,
   total,
   present,
@@ -50,6 +52,7 @@ export function SlideStage({
   /** Deck darajasida (`buildSlideDeck`) — PPTX bilan bir xil qiymat. */
   bodyType?: BodyRules;
   logo?: string;
+  custom?: CustomTemplate;
   index: number;
   total: number;
   present: boolean;
@@ -110,7 +113,7 @@ export function SlideStage({
         >
           {slide && skeleton ? <SkeletonSlide theme={theme} role={role} index={index} /> : null}
           {slide && !skeleton ? (
-            <SlideCanvas slide={slide} theme={theme} visual={visual} audience={audience} templateId={templateId} bodyType={bodyType} logo={logo} index={index} total={total} reveal={reveal} hideSrc={hideSrc} />
+            <SlideCanvas slide={slide} theme={theme} visual={visual} audience={audience} templateId={templateId} bodyType={bodyType} logo={logo} custom={custom} index={index} total={total} reveal={reveal} hideSrc={hideSrc} />
           ) : null}
           {/*
             Jonli qatlam sahna ICHIDA, slayd bilan bir masshtabda —

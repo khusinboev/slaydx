@@ -227,6 +227,7 @@ import { planSlide } from "../lib/generation/slide-layout.ts";
 import { getSlideTheme } from "../lib/generation/slide-themes.ts";
 import { fallbackSlides, resolveDeckTemplate } from "../lib/generation/slide-write.ts";
 import type { SlideParamImpact } from "../lib/generation/slide-params.ts";
+import type { CustomTemplate } from "../lib/generation/pptx-template.ts";
 
 /**
  * Hali ulanmagan ta'sirlar — ish paketlari bo'yicha. Har paket tugagach
@@ -236,6 +237,25 @@ import type { SlideParamImpact } from "../lib/generation/slide-params.ts";
  *   test uni taqiqlaydi.
  */
 const PENDING: Record<string, SlideParamImpact[]> = {};
+
+/** «O'z shablonim» zondi — minimal profil (muqova + mazmun layoutlari). */
+const STUB_TEMPLATE: CustomTemplate = {
+  assetId: "0123456789abcdef01234567",
+  name: "namuna.pptx",
+  profile: {
+    size: { w: 13.333, h: 7.5 },
+    colors: { dk1: "#111111", lt1: "#FFFFFF", accent1: "#C9A227" },
+    fonts: { major: "Georgia", minor: "Verdana" },
+    masterPath: "ppt/slideMasters/slideMaster1.xml",
+    themePath: "ppt/theme/theme1.xml",
+    layouts: [
+      { path: "ppt/slideLayouts/slideLayout1.xml", name: "Muqova", kind: "cover", placeholders: [{ type: "ctrTitle", idx: null, name: "t", box: { x: 1, y: 2.5, w: 11.3, h: 1.5 } }, { type: "subTitle", idx: 1, name: "s", box: { x: 1, y: 4.2, w: 11.3, h: 1 } }] },
+      { path: "ppt/slideLayouts/slideLayout2.xml", name: "Mazmun", kind: "content", placeholders: [{ type: "title", idx: null, name: "t", box: { x: 0.7, y: 0.5, w: 11.9, h: 1 } }, { type: "body", idx: 1, name: "b", box: { x: 0.7, y: 1.7, w: 11.9, h: 4.9 } }] },
+    ],
+    roles: { cover: "ppt/slideLayouts/slideLayout1.xml", content: "ppt/slideLayouts/slideLayout2.xml" },
+  },
+  previews: {},
+};
 
 /** Har layout uchun boy namuna — qisqa matnda ba'zi ta'sirlar ko'rinmaydi. */
 function sample(layout: string, footer: string): SlideModel {
@@ -271,12 +291,14 @@ function probe(values: FormValues, tool = pro): Probe {
   const bodyType = bodyRules(m, tpl.id);
   // Haqiqiy oqimda worker `logoAssetId` ni data URL ga aylantiradi; zond uchun mavjudligi yetarli.
   const logo = m.logoAssetId ? "data:image/png;base64,iVBORw0KGgo=" : undefined;
+  // Xuddi shunday: worker `templateAssetId` ni `template_uploads` dan o'qiydi; zond uchun mavjudligi yetarli.
+  const custom = m.templateAssetId ? STUB_TEMPLATE : undefined;
   const footer = deckFooter(m);
   return {
     prompt: slideSystem(m, tpl),
     beats: JSON.stringify(fallbackSlides(m, tpl, beats).map((s) => s.layout)),
     layout: JSON.stringify(
-      SLIDE_LAYOUTS.map((l) => planSlide(sample(l, footer), theme, tpl.visual, 1, 10, m.slideAudience, tpl.id, { bodyType, logo })),
+      SLIDE_LAYOUTS.map((l) => planSlide(sample(l, footer), theme, tpl.visual, 1, 10, m.slideAudience, tpl.id, { bodyType, logo, custom })),
     ),
     price: String(priceFor(tool, { topic: "x", ...values })),
     // Rasm prompti — deterministik zaxira yo'li (`writeSlideImagePrompts` LLM siz shunga tushadi).

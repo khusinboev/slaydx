@@ -26,6 +26,7 @@ export function buildSlideDeck(doc: AcademicDoc): SlideDeck {
     audience: doc.meta.slideAudience ?? "auto",
     bodyType: bodyRules(doc.meta, tpl.id),
     logo: doc.slideLogo?.url || undefined,
+    custom: doc.customTemplate,
     speakerNotes: doc.meta.speakerNotes !== false,
   };
   if (doc.slides?.length) return { ...common, slides: doc.slides };

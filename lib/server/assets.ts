@@ -74,6 +74,15 @@ export function extractAssets(
       slideLogo: doc.slideLogo?.url
         ? { ...doc.slideLogo, url: swap(doc.slideLogo.url) ?? doc.slideLogo.url }
         : doc.slideLogo,
+      // «O'z shablonim» fonlari — har rol PNG si aktivga (bir xil rasm bir marta).
+      customTemplate: doc.customTemplate
+        ? {
+            ...doc.customTemplate,
+            previews: Object.fromEntries(
+              Object.entries(doc.customTemplate.previews).map(([role, p]) => [role, p ? { ...p, png: swap(p.png) ?? p.png } : p]),
+            ),
+          }
+        : doc.customTemplate,
     };
   }
 

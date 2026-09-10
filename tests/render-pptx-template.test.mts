@@ -120,7 +120,9 @@ test("xmlEscape va rol/mazmun xaritasi", () => {
   assert.equal(roleFor("stats", true, roles), "content");
   const two = contentOf({ id: "x", layout: "twoCol", title: "T", leftTitle: "L", left: ["a"], rightTitle: "R", right: ["b"] });
   assert.equal(two.bodies.length, 2);
-  assert.deepEqual(two.bodies[0][0], { text: "L", bold: true });
+  assert.equal(two.bodies[0][0].text, "L");
+  assert.equal(two.bodies[0][0].bold, true);
+  assert.deepEqual(two.bodies[0][1].src, { f: "left", i: 0 }, "ko'ruvchi tahriri uchun manba");
   const st = contentOf({ id: "x", layout: "stats", title: "T", stats: [{ value: "95%", label: "qoniqish" }] });
   assert.equal(st.bodies[0][0].text, "95% — qoniqish");
   const tb = contentOf({ id: "x", layout: "table", title: "T", table: { headers: ["a"], rows: [["1"]] } });

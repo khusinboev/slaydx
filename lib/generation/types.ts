@@ -1,3 +1,4 @@
+import type { CustomTemplate } from "./pptx-template";
 import type { FormValues, ToolConfig, ToolId } from "../types";
 import type { SlideAudience, SlideTemplateId } from "./slide-templates";
 import type { SlideModel, SlideThemeId } from "./slide-types";
@@ -116,6 +117,8 @@ export type DocMeta = {
   position: string;
   /** Yuklangan logotip (`logo_uploads.asset_id`); bo'sh — logo yo'q. */
   logoAssetId: string;
+  /** «O'z shablonim» — `template_uploads.asset_id` (faqat pro); bo'sh — ichki shablon. */
+  templateAssetId: string;
   /** Taqdimot turi — standart shablon va tuzilma bloklarini beradi. */
   slidePurpose: SlidePurpose;
   /** 3 tagacha asosiy g'oya — har biri kamida bir slaydda ochiladi. */
@@ -235,6 +238,12 @@ export type AcademicDoc = {
    * — ko'ruvchi `/api/generations/{id}/assets/{id}` ni o'qiydi.
    */
   slideLogo?: { url: string };
+  /**
+   * «O'z shablonim» — yengil nusxa (profil + rol fonlari); bayt
+   * `template_uploads` da. Bo'lsa PPTX `render-pptx-template`, ko'ruvchi
+   * `planCustom` bilan chiziladi; fon PNG lari `extractAssets` bilan aktivga chiqadi.
+   */
+  customTemplate?: CustomTemplate;
   images?: GenImage[];
   imagePrompt?: string;
   imageScene?: string;
