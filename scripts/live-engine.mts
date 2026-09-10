@@ -21,6 +21,8 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { buildArtifact } from "../lib/generation/index.ts";
+import { parsePptxTemplate } from "../lib/generation/pptx-template.ts";
+import { readFile } from "node:fs/promises";
 import { extractMeta } from "../lib/generation/meta.ts";
 import type { SlideProgressEvent } from "../lib/generation/slide-progress.ts";
 import { wordCount } from "../lib/generation/quality.ts";
@@ -328,7 +330,22 @@ async function runCase(c: Case) {
                       : "";
       process.stdout.write(`   ⟶ +${dt}s ${ev.type}${tail}\n`);
     };
-    const file = await buildArtifact(tool, c.values, { deadline: Date.now() + c.budgetMs, onProgress });
+    /*
+     * `--template <fayl.pptx>` — «O'z shablonim» jonli sinovi (Shablonlar 2):
+     * namuna tahlil qilinadi va deka uning master/layout/temasi ichiga
+     * yoziladi (`renderPptxWithTemplate`), worker yo'lining o'zi.
+     */
+    const tplPath = templateArg();
+    const template =
+      tplPath && (c.tool === "slide" || c.tool === "pro-slide")
+        ? await (async () => {
+            const bytes = new Uint8Array(await readFile(tplPath));
+            const profile = await parsePptxTemplate(bytes);
+            process.stdout.write(`   ⟶ namuna ${path.basename(tplPath)}: ${profile.layouts.length} layout, rollar ${Object.keys(profile.roles).join("/")}\n`);
+            return { bytes, template: { assetId: "live", name: path.basename(tplPath), profile, previews: {} } };
+          })()
+        : undefined;
+    const file = await buildArtifact(tool, c.values, { deadline: Date.now() + c.budgetMs, onProgress, template });
     const secs = ((Date.now() - started) / 1000).toFixed(1);
     const pages = await pageCount(file);
     await writeFile(path.join(OUT, file.fileName), file.bytes);
@@ -349,6 +366,11 @@ async function runCase(c: Case) {
   }
 }
 
+function templateArg(): string | null {
+  const i = process.argv.indexOf("--template");
+  return i > 0 && process.argv[i + 1] ? process.argv[i + 1] : null;
+}
+
 async function main() {
   if (!process.env.GEMINI_API_KEY && !process.env.XAI_API_KEY) {
     console.error("GEMINI_API_KEY yo'q — jonli tekshiruv o'tkazib yuborildi.");
@@ -356,7 +378,8 @@ async function main() {
   }
   await mkdir(OUT, { recursive: true });
 
-  const only = process.argv.slice(2).filter((a) => !a.startsWith("-"));
+  const tpl = templateArg();
+  const only = process.argv.slice(2).filter((a) => !a.startsWith("-") && a !== tpl);
   const cases = only.length ? CASES.filter((c) => only.includes(c.name)) : CASES;
   process.stdout.write(
     `Jonli tekshiruv — ${cases.length} keys · model ${process.env.GEMINI_MODEL || "gemini"} · PDF ${pdfAvailable() ? "bor" : "yo'q"}\n`,

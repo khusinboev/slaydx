@@ -140,12 +140,29 @@ Loyiha strukturasi: **poydevor** (umumiy qatlam) → **1-to'lqin** (jonli genera
 - **`components/forms/SlideComposer.tsx`** — ikkala slayd formasining kompozitori: 4 karta (Mavzu · Slaydlar soni · Muallif · Ko'rinish) + `<details>` «Sozlamalar» (yopiq holda `settingsSummary` chiplari); «Yaratish»dan keyin `profilePatchFrom` → `PATCH /api/users/me`
 - **`components/forms/compact.tsx`** — `Card`, `Row` (yorliq | boshqaruv, izoh tooltip), `Segmented`, `SelectField`, `Switch`, `MiniInput`, `SummaryChips`
 - **`components/forms/slide-fields.tsx`** — reyestr id → bitta qator (`renderSlideParam(id, values, set, {tool})`), `settingsSummary`
-- **`components/forms/slide-pickers.tsx`** — `TemplatePicker` (yig'iq), `ColorPicker` (faqat doiralar)
+- **`components/forms/slide-pickers.tsx`** — `ColorPicker` (faqat doiralar); shablon tanlagich endi `TemplateGallery.tsx` da (Shablonlar 2)
 - **`components/forms/SlideForm.tsx` / `ProSlideForm.tsx`** — yupqa o'ram; eksport ro'yxatlari reyestr bilan `tests/viewer/slide-form.test.mts` da solishtiriladi
 - **`lib/profile-sync.ts`** — `profilePatchFrom(values, profile)`: faqat o'zgargan muallif maydonlari (bo'sh ham)
 - **`lib/generation/slide-params.ts`** — `SLIDE_MIN/MAX/DEFAULT`, `slidePrice(n)` = 3 000 + max(0, n−20)·500; `slideCount` ikkala vositada, `quality` yo'q, `slideImageStyle` faqat pro
 - **`lib/generation/image-provider.ts`** `pickProvider`: `slide` → `stock` zanjiri (Pexels → Pixabay, fal YO'Q), `pro-slide` → gemini, meta'siz → eski zanjir
 - **`lib/server/migrations/015_profile_position.sql`** — `users.position`, `users.organization`
+
+### Shablonlar 2 (AUDIT-13, 2026-09-10) — 10 dizayn, galereya, «O'z shablonim»
+
+- **`lib/generation/visuals/`** — `spec.ts` (`VisualSpec`: `base`, `photo`, `fullBleed`, `plan[layout]`), `index.ts` (`VISUALS`, `designOf`), 10 dizayn `academic/circle/notebook/formal/story/split/bold/dashboard/rail/editorial.ts`, `README.md` (dizayner brifi). `slide-layout.ts` `dispatch`/`photoSlot` avval dizaynni, keyin `base` oilasini chaqiradi; `LAYOUT_KIT` — dizaynlar uchun umumiy asboblar (faqat funksiya ichida ishlatiladi)
+- **`lib/generation/slide-templates.ts`** — 10 shablon (`auto` + lecture/lesson/science/defense/story/compare/pitch/report/timeline/case), `LEGACY_TEMPLATE_ALIASES`, `defaultTheme`
+- **`lib/generation/slide-samples.ts`** — `sampleDeck(id)` 9 o'zbekcha slayd (`public/samples/tpl-*.jpg`), `GALLERY_SLIDES`; galereya va `npm run shots` bitta manbadan
+- **`components/forms/TemplateGallery.tsx`** — haqiqiy titul + 3 eskiz (`SlideCanvas`), rang swatchlari galereya ostida (shablon → `defaultTheme`); `Thumb.tsx` — 1280×720 → karta masshtabi
+- **`components/forms/CustomTemplateCard.tsx`** — «O'z shablonim» (faqat pro): PPTX yuklash, «Tahlil qilinmoqda…», namunada chizilgan preview, oldingi namunalar, `templateAssetId`
+- **`lib/generation/pptx-template.ts`** — `parsePptxTemplate` (o'lcham, tema ranglari/shriftlari, layout placeholder'lari, rollar), `CustomTemplate` (hujjatdagi yengil nusxa), `TemplateError`
+- **`lib/generation/template-content.ts`** — `roleFor`, `contentOf` — `SlideModel` → namuna roli va matn bloklari (PPTX yozuvchisi va ko'ruvchi planeri BITTA xaritadan)
+- **`lib/generation/render-pptx-template.ts`** — deka namuna PPTX ichiga: eski slaydlar o'chadi, master/layout/tema qoladi, `slideN.xml` faqat placeholder'lar (`normAutofit`), jadval `<a:tbl>`, notes, rasm faqat `pic` placeholder'da; `renderLayoutSheet` — bo'sh layout varag'i (rasterlash uchun)
+- **`lib/generation/slide-custom.ts`** — `planCustom`: ko'ruvchi uchun fon = layout PNG, matn placeholder qutilarida, namuna shrifti/rangi; `planSlide(..., {custom})` shu yo'lga o'tadi (tasma/logo yo'q)
+- **`lib/server/template-upload.ts`** — `uploadTemplate` (20 MB, zip sniff, 422 kodlari), `rasterizeTemplate` (LibreOffice → `pdftoppm` PNG + `-gray` qorong'ilik), `putTemplate/getTemplate/listTemplates/deleteTemplate/templateForJob`; jadval `template_uploads` (`016_template_uploads.sql`)
+- **`app/api/uploads/template/route.ts`** (`POST` yuklash, `GET` ro'yxat, `maxDuration 120`), **`[assetId]/route.ts`** (`DELETE`)
+- Oqim: worker `templateForJob` → `buildArtifact({template})` → `slideDoc.customTemplate` + `renderPptxWithTemplate`; `extractAssets` fon PNG larini aktivga chiqaradi; `rebuildFile` (tahrirdan keyin) namuna baytini bazadan olib shu yozuvchi bilan qayta yasaydi
+- Dockerfile runner: `poppler-utils` (`pdftoppm`); `scripts/live-engine.mts --template <fayl.pptx>`
+- Testlar: `tests/slide-visuals`, `pptx-template`, `render-pptx-template` (LibreOffice sahifa soni), `template-upload` (haqiqiy rasterlash), `slide-custom`, `ui/template-gallery` (custom karta), `slide-params` (`templateAssetId` zondi)
 
 ### API klienti
 
