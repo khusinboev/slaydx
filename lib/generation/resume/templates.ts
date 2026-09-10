@@ -95,7 +95,10 @@ export const RESUME_TEMPLATES: Record<ResumeTemplateId, ResumeTemplate> = {
   classic: {
     id: "classic",
     title: "Classic",
-    hint: "Bir ustun, ATS uchun qulay, suratsiz",
+    // Surat SLOTI bor (sarlavhada), lekin standart holatda YOQILMAGAN:
+    // ATS tizimlari suratli rezyumeni yomon o'qiydi. Foydalanuvchi o'zi
+    // qo'shsa chiziladi — galereya kartasi ham shuni ko'rsatadi.
+    hint: "Bir ustun, ATS uchun qulay",
     columns: "single",
     sidebarMm: 0,
     bannerMm: 0,
