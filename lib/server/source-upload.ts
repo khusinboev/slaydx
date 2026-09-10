@@ -2,7 +2,8 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { query, queryOne } from "./db";
 import { ApiError } from "./api";
-import { extractFromBuffer, extOf } from "../extract-text";
+import { extOf } from "../extract-text";
+import { extractSegments, stripTokens, type Extracted } from "../generation/translate/index";
 import { TRANSLATION_MAX_CHARS, TRANSLATION_MIN_CHARS } from "../tools";
 import {
   SOURCE_MIME,
@@ -147,18 +148,22 @@ async function pdfPages(bytes: Uint8Array): Promise<number> {
 }
 
 /**
- * WP1 ning vaqtinchalik hisoblagichi — `lib/extract-text.ts` ustida.
- *
- * ⚠️ WP3: shu funksiyani `extractSegments` ga asoslangan variant bilan
- * almashtiring; `uploadSource` ga tegish shart emas (u `deps.count` orqali
- * chaqiradi).
+ * Hisoblagich (WP3): `chars` — TARJIMA QILINADIGAN segmentlar yig'indisi
+ * (`extractSegments`), ya'ni narx aynan modelga yuboriladigan hajmga
+ * bog'lanadi: raqamli yacheykalar, URL, kod satrlari, sahifa raqami
+ * maydonlari sanalmaydi. `text` — ko'rish uchun oddiy matn (tokenlarsiz).
+ * `uploadSource` uni `deps.count` orqali chaqiradi (test seam).
  */
 export const DEFAULT_COUNTER: SourceCounter = async (kind, bytes) => {
-  const buf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
-  const { text, error } = await extractFromBuffer(`x.${kind}`, buf);
-  if (error && !text) throw new ApiError(error, 422, { code: "unreadable" });
-  const pages = kind === "pdf" ? await pdfPages(bytes) : undefined;
-  return { chars: text.length, text, pages };
+  let extracted: Extracted;
+  try {
+    extracted = await extractSegments(kind, bytes);
+  } catch (e) {
+    throw new ApiError(e instanceof Error && e.message ? `Fayl o'qilmadi: ${e.message}` : "Fayl o'qilmadi", 422, { code: "unreadable" });
+  }
+  const text = extracted.segments.map((s) => stripTokens(s.text)).join("\n");
+  const pages = kind === "pdf" ? (extracted.pdf?.pages ?? (await pdfPages(bytes))) : undefined;
+  return { chars: extracted.chars, text, pages, segments: extracted.segments.length };
 };
 
 export async function putSource(
