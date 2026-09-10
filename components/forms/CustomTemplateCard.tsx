@@ -94,7 +94,11 @@ export function CustomTemplateCard({
     await deleteTemplate(t.assetId).catch(() => {});
   }
 
-  const current = on ? tpl : null;
+  // Namuna bor-u tanlanmagan (ichki shablon bosilgan) — preview XIRA qoladi,
+  // karta bosilsa qayta tanlanadi. Yuklash zonasi faqat namuna YO'Q bo'lganda:
+  // aks holda kartaning o'rtasi fayl tanlash oynasini ochib yuborardi
+  // (Chromium smoke'da ushlandi — jsdom buni ko'rmaydi).
+  const current = tpl;
 
   return (
     <div
@@ -123,7 +127,9 @@ export function CustomTemplateCard({
       </div>
 
       {current ? (
-        <CustomPreview tpl={current} themeId={themeId} />
+        <div className={cn(!on && "opacity-60")}>
+          <CustomPreview tpl={current} themeId={themeId} />
+        </div>
       ) : (
         <label
           className={cn(
@@ -179,7 +185,14 @@ export function CustomTemplateCard({
               }}
             />
           </label>
-          <button type="button" className="text-destructive" onClick={onClear}>
+          <button
+            type="button"
+            className="text-destructive"
+            onClick={() => {
+              setTpl(null);
+              onClear();
+            }}
+          >
             Olib tashlash
           </button>
         </div>
