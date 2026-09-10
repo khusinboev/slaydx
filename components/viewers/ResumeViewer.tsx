@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState } from "react";
 import { sectionLabels } from "@/lib/generation/i18n";
 import type { AcademicDoc, Block } from "@/lib/generation/types";
+import { RESUME_TEMPLATES } from "@/lib/generation/resume/templates";
 import { A4, resumeMainHeightPx } from "@/lib/viewers/metrics";
 import { type TextSplitter } from "@/lib/viewers/split";
 import { useMeasuredPages } from "./measure";
@@ -58,7 +59,7 @@ export function ResumeViewer({ doc }: { doc: AcademicDoc }) {
   }, [byId, summary, L.summary, L.experience, L.education]);
 
   const { pages: measured, measureNode } = useMeasuredPages(mainItems, (it) => <MainBlock item={it} />, {
-    limit: resumeMainHeightPx(),
+    limit: resumeMainHeightPx(RESUME_TEMPLATES.modern),
     className: "w-[calc(210mm-72mm-4rem)]",
     key: mainItems.map((it) => `${it.k}:${it.text.length}`).join("|"),
     split: RESUME_SPLITTER,
