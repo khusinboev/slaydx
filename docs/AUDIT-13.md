@@ -49,6 +49,10 @@ Sana: 2026-09-10. `AUDIT-12` dan keyin. Reja: `~/.claude/plans/sen-senior-fullst
 - Chromium smoke (`scratchpad/pw/custom.mjs`, admin sessiyasi): namuna yuklash + rasterlash 2.2 s (lokal), karta tanlandi, preview fon PNG + `data-src` titul, «Namunaning o'z ranglari», ichki shablon → bekor, qayta bosish → tanlandi. **Ushlangan nuqson**: tanlanmagan holatda karta o'rtasi yuklash zonasi edi — bosish fayl oynasini ochib, qayta tanlanmasdi (jsdom ko'rmaydi) → preview xira qoladi, zona faqat namuna yo'q bo'lganda.
 - Jonli (`npm run live -- pro-slide --template <fayl>`): §4 ga qarang.
 
+### Qo'shimcha (foydalanuvchi so'rovi, deploydan keyin)
+
+Standart tanlov — «Avtomatik», lekin unda shablon preview'i ko'rsatilmaydi (bezakli plitka: palitra gradienti + kartalar yelpig'ichi, «mavzuga qarab dizayn va rang tanlanadi»). Formada faqat bitta plitka (joriy tanlov: auto bezak / tanlangan shablonning haqiqiy tituli / namunada chizilgan titul); bosilsa qalqib chiquvchi oyna (`useDialog`: Esc, fokus tsikli) — barcha shablonlar + pro'da «O'z shablonim»; karta bosilishi bilan tanlov qo'llanib oyna yopiladi. Rang swatchlari plitka ostida qoladi (oynasiz). Ikkala forma. Namuna holati (`customTpl`, ro'yxat) oyna tashqarisida — yopilganda yo'qolmaydi. UI 80/80, Chromium smoke (slide + pro: oyna 11/12 karta, tanlash → yopiladi, rang → plitka, namuna yuklash → plitka, Esc).
+
 ## 4. Bajarilish yozuvi
 
 - A1–A2 yadro `11d589f`, A3 galereya `8ba9ed0`, dizaynlar `5d4abf0` (academic/circle/notebook/formal/story) va `223d323` (split/bold/dashboard/rail/editorial), merge + juftlik testi + stats rangi `8d1d26c`.

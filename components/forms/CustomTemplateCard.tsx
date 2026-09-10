@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { deleteTemplate, listTemplates, uploadTemplate, type CustomTemplateLite } from "@/lib/api-client";
+import { useMemo, useState } from "react";
+import { deleteTemplate, uploadTemplate, type CustomTemplateLite } from "@/lib/api-client";
 import { bodyRules } from "@/lib/generation/slide-audience";
 import { GALLERY_SLIDES, sampleDeck } from "@/lib/generation/slide-samples";
 import { getSlideTheme } from "@/lib/generation/slide-themes";
@@ -29,38 +29,29 @@ export const TEMPLATE_WAIT_NOTE = "Namuna asosida yaratish ko‘proq vaqt oladi 
  * ishlatish» uchun chip bo'lib chiqadi.
  */
 export function CustomTemplateCard({
-  value,
   on,
   onPick,
   onClear,
   themeId,
+  tpl,
+  list,
+  onTpl,
+  onList,
 }: {
-  value: string;
   on: boolean;
   onPick: (tpl: CustomTemplateLite) => void;
   onClear: () => void;
   themeId: string;
+  /** Holat OTA komponentda (`TemplateGallery`) — oyna yopilganda yo'qolmasin. */
+  tpl: CustomTemplateLite | null;
+  list: CustomTemplateLite[];
+  onTpl: (t: CustomTemplateLite | null) => void;
+  onList: (l: CustomTemplateLite[]) => void;
 }) {
-  const [tpl, setTpl] = useState<CustomTemplateLite | null>(null);
-  const [list, setList] = useState<CustomTemplateLite[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // Oldingi namunalar (va sahifa qayta ochilganda tanlanganini tiklash).
-  useEffect(() => {
-    let alive = true;
-    listTemplates()
-      .then((items) => {
-        if (!alive) return;
-        setList(items);
-        if (value) setTpl((cur) => cur ?? items.find((t) => t.assetId === value) ?? null);
-      })
-      .catch(() => {});
-    return () => {
-      alive = false;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const setTpl = onTpl;
+  const setList = (f: (l: CustomTemplateLite[]) => CustomTemplateLite[]) => onList(f(list));
 
   async function onFile(f: File) {
     setError(null);
@@ -226,7 +217,7 @@ export function CustomTemplateCard({
 }
 
 /** Namunada chizilgan haqiqiy titul + 3 eskiz — oddiy kartalar bilan bir xil ko'rinish. */
-function CustomPreview({ tpl, themeId }: { tpl: CustomTemplateLite; themeId: string }) {
+export function CustomPreview({ tpl, themeId, mainOnly = false }: { tpl: CustomTemplateLite; themeId: string; mainOnly?: boolean }) {
   const deck = useMemo(() => sampleDeck("lecture"), []);
   const theme = useMemo(() => getSlideTheme(themeId as never), [themeId]);
   const bodyType = useMemo(() => bodyRules({ planItems: 5, textVolume: "standart" }, "lecture"), []);
@@ -236,6 +227,7 @@ function CustomPreview({ tpl, themeId }: { tpl: CustomTemplateLite; themeId: str
   return (
     <>
       <Thumb scaleHint={0.235}>{render(deck[0], 0)}</Thumb>
+      {mainOnly ? null : (
       <div className="mt-1.5 grid grid-cols-3 gap-1.5">
         {GALLERY_SLIDES.slice(1).map((i) => (
           <Thumb key={i} scaleHint={0.075} small>
@@ -243,6 +235,7 @@ function CustomPreview({ tpl, themeId }: { tpl: CustomTemplateLite; themeId: str
           </Thumb>
         ))}
       </div>
+      )}
     </>
   );
 }
