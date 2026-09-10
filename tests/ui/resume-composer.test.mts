@@ -6,6 +6,7 @@ import { render, fireEvent, screen, cleanup, act, waitFor } from "@testing-libra
 import { AppRouterContext } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import type { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { ResumeComposer } from "../../components/forms/ResumeComposer.tsx";
+import { ToolWorkspace } from "../../components/forms/ToolWorkspace.tsx";
 import { TOOL_BY_ID } from "../../lib/tools.ts";
 import type { UserProfile } from "../../lib/types.ts";
 
@@ -159,4 +160,28 @@ test("«Formani tozalash»: ikkinchi bosishda DELETE ketadi va forma bo'shaydi",
     assert.equal(calls.filter((c) => c.method === "DELETE").length, 1, "ikkinchi bosishda o'chiriladi");
   });
   assert.equal((screen.getByLabelText("Maqsadli lavozim") as HTMLInputElement).value, "");
+});
+
+test("vosita sahifasi rezyume uchun AYNAN yangi formani chizadi (dispatch)", async () => {
+  /*
+   * Nega alohida test: qolgan testlar `ResumeComposer` ni TO'G'RIDAN-TO'G'RI
+   * chaqiradi va `ToolWorkspace` dagi tarmoqni umuman ko'rmaydi. Bir marta
+   * shu tarmoq eski sehrgarga qarab turgan holda hamma test yashil bo'ldi —
+   * foydalanuvchi esa sahifada eski 5 qadamli formani ko'rardi. Endi
+   * dispatch ham qulflangan.
+   */
+  stubApi();
+  const { useAppStore } = await import("../../lib/store.ts");
+  useAppStore.setState({
+    loggedIn: true,
+    sessionChecked: true,
+    features: { llm: true, images: true, telegram: false, telegramBot: null, devLogin: true, pdf: true, payments: { click: false, payme: false } },
+  });
+  render(h(AppRouterContext.Provider, { value: router }, h(ToolWorkspace, { tool })));
+  await waitFor(() => {
+    assert.ok(document.querySelectorAll("[data-field]").length > 10, "yangi formaning maydonlari");
+  });
+  const text = document.body.textContent ?? "";
+  assert.ok(!text.includes("1/5"), "eski sehrgar bosqichlari bo'lmasligi kerak");
+  assert.ok(text.includes("Ish tajribasi"), "tuzilmali tajriba kartasi");
 });
