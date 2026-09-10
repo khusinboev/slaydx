@@ -34,6 +34,20 @@ export type TemplateProfile = {
   roles: Partial<Record<TemplateRole, string>>;
 };
 
+/** Layout foni rasteri (yuklashda LibreOffice + pdftoppm) — ko'ruvchi foni; `dark` — matn rangi tanlovi uchun. */
+export type TemplatePreview = { png: string; dark: boolean };
+/**
+ * Hujjatga (`AcademicDoc.customTemplate`) yoziladigan yengil nusxa: bayt
+ * YO'Q (u `template_uploads` da), faqat profil va rol → fon rasmi.
+ * Ko'ruvchi shundan chizadi (B3), PPTX esa baytdan (`renderPptxWithTemplate`).
+ */
+export type CustomTemplate = {
+  assetId: string;
+  name: string;
+  profile: TemplateProfile;
+  previews: Partial<Record<TemplateRole, TemplatePreview>>;
+};
+
 export type TemplateErrorCode = "not-pptx" | "no-layouts" | "no-content";
 export class TemplateError extends Error {
   code: TemplateErrorCode;

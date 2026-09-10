@@ -36,7 +36,9 @@ ENV HOSTNAME=0.0.0.0
 # Bu tasvirga ~400 MB qo'shadi. PDF kerak bo'lmasa shu qatorni olib
 # tashlash mumkin: `pdfAvailable()` `false` qaytaradi va UI da PDF
 # tugmasi umuman chiqmaydi.
-RUN apk add --no-cache       libreoffice-writer libreoffice-impress       ttf-liberation font-noto   && soffice --headless --version >/dev/null 2>&1 || true
+# `poppler-utils` (`pdftoppm`) — «O'z shablonim» uchun layout fonlarini
+# rasterlash (yuklash paytida, web konteynerida: `lib/server/template-upload.ts`).
+RUN apk add --no-cache       libreoffice-writer libreoffice-impress       ttf-liberation font-noto poppler-utils   && soffice --headless --version >/dev/null 2>&1 || true
 
 # Root ostida ishlatmaymiz.
 RUN addgroup -g 1001 -S nodejs && adduser -S nextjs -u 1001
