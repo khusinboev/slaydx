@@ -105,7 +105,7 @@ export function Combobox({ value, onChange, suggest, placeholder, multi, ariaLab
           <button
             key={`${c}-${i}`}
             type="button"
-            data-chip
+            data-combo-chip
             aria-pressed
             title="Olib tashlash"
             aria-label={`${c} — olib tashlash`}

@@ -206,3 +206,25 @@ test("surat shakli shablonga mos kelmasa ogohlantirish chiqadi", async () => {
   });
   assert.doesNotMatch(document.body.textContent ?? "", /surat kutadi/, "mos shaklda ogohlantirish bo'lmaydi");
 });
+
+test("ko'nikma tavsiyalari: maydon ochilganda ham, lavozimga qarab ham chiqadi", async () => {
+  stubApi();
+  await login();
+  mount();
+  const skills = screen.getByLabelText("Ko'nikmalar") as HTMLInputElement;
+  await act(async () => {
+    fireEvent.focus(skills);
+  });
+  const first = screen.getAllByRole("option").map((o) => o.textContent);
+  assert.ok(first.length > 0, "bo'sh so'rovda ham tavsiya bor");
+  // Lavozim tanlangach tavsiyalar SHU kasbnikiga almashadi.
+  await act(async () => {
+    fireEvent.change(screen.getByLabelText("Maqsadli lavozim"), { target: { value: "Ish haqi bo‘yicha buxgalter" } });
+  });
+  await act(async () => {
+    fireEvent.focus(skills);
+  });
+  const second = screen.getAllByRole("option").map((o) => o.textContent ?? "");
+  assert.ok(second.some((t) => /1C|Ish haqi|Mehnat kodeksi/i.test(t)), `kasbga xos tavsiya: ${second.join(", ")}`);
+  assert.notDeepEqual(second, first, "tavsiyalar lavozimga ergashadi");
+});

@@ -79,22 +79,22 @@ test("Combobox multi: Enter bilan o'z matnini qo'shadi, chipni bosib olib tashla
   fireEvent.change(input, { target: { value: "IFRS" } });
   fireEvent.keyDown(input, { key: "Escape" });
   fireEvent.keyDown(input, { key: "Enter" });
-  let chips = document.querySelectorAll("[data-chip]");
+  let chips = document.querySelectorAll("[data-combo-chip]");
   assert.equal(chips.length, 1);
   assert.match(chips[0].textContent ?? "", /IFRS/);
   // Ro'yxatda bo'lmagan matn ham qabul qilinadi — ro'yxat cheklov emas.
   fireEvent.change(input, { target: { value: "Sun'iy intellekt" } });
   fireEvent.keyDown(input, { key: "Escape" });
   fireEvent.keyDown(input, { key: "Enter" });
-  assert.equal(document.querySelectorAll("[data-chip]").length, 2);
+  assert.equal(document.querySelectorAll("[data-combo-chip]").length, 2);
   // Chipni bosish uni olib tashlaydi.
-  fireEvent.click(document.querySelectorAll("[data-chip]")[0]);
-  chips = document.querySelectorAll("[data-chip]");
+  fireEvent.click(document.querySelectorAll("[data-combo-chip]")[0]);
+  chips = document.querySelectorAll("[data-combo-chip]");
   assert.equal(chips.length, 1);
   assert.match(chips[0].textContent ?? "", /intellekt/);
   // Bo'sh maydonda Backspace oxirgi chipni oladi.
   fireEvent.keyDown(input, { key: "Backspace" });
-  assert.equal(document.querySelectorAll("[data-chip]").length, 0);
+  assert.equal(document.querySelectorAll("[data-combo-chip]").length, 0);
 });
 
 test("MonthPicker: oy+yil «YYYY-MM», faqat yil «YYYY», «hozir» — now", () => {
