@@ -1015,19 +1015,3 @@ export async function writeImradWithLlm(meta: DocMeta, deadline?: number): Promi
     referencesNote: references.length >= 3 ? unverifiedReferenceNote(meta.language) : undefined,
   };
 }
-
-export function chunkSource(text: string, max = 3200) {
-  const paras = text.split(/\n{2,}/).map((s) => s.trim()).filter(Boolean);
-  const chunks: string[] = [];
-  let cur = "";
-  for (const p of paras.length ? paras : [text]) {
-    if (cur && cur.length + p.length + 2 > max) {
-      chunks.push(cur);
-      cur = p;
-    } else {
-      cur = cur ? `${cur}\n\n${p}` : p;
-    }
-  }
-  if (cur) chunks.push(cur);
-  return chunks;
-}

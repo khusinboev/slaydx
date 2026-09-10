@@ -6,8 +6,7 @@ import { render, fireEvent, screen, cleanup, within, act, waitFor } from "@testi
 import { AppRouterContext } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import type { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { TranslationForm } from "../../components/forms/TranslationForm.tsx";
-import { TOOL_BY_ID, translationPrice, formatTanga } from "../../lib/tools.ts";
-import { TRANSLATION_LANGUAGES } from "../../lib/languages.ts";
+import { TOOL_BY_ID, translationPrice, formatTanga, TRANSLATION_LANGUAGES } from "../../lib/tools.ts";
 
 /**
  * Tarjimon formasi (Tarjimon 2, WP4): rejim, narx chip'i, ⇄, bir xil til,

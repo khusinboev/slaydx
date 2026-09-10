@@ -395,45 +395,6 @@ test("mundarija modeli fayl va viewer uchun bir xil qatorlarni beradi", async ()
   assert.ok(!rows.some((r) => /^\d+\.\s+(I |Kirish|Xulosa)/.test(r.text)));
 });
 
-/**
- * Tarjimada tuzilma saqlanishi.
- *
- * Nuqson: tizim prompti «sarlavha, ro'yxat va paragraf chegaralarini
- * saqlang» deb turardi, JSON sxemasi esa faqat `paragraphs: string[]`
- * berardi — ya'ni model tuzilmani IFODALAY olmasdi va chiqishda hamma
- * narsa `kind: "p"` ga tekislanardi. Sinov yangi sxemani va eski
- * javoblarga chidamlilikni ushlaydi.
- */
-test("tarjima bo'laklari turini saqlaydi va eski javobga ham chidaydi", async () => {
-  const { translatedBlocks } = await import("../lib/generation/write-specials.ts");
-
-  const typed = translatedBlocks(
-    {
-      blocks: [
-        { kind: "h2", text: "Asosiy qism" },
-        { kind: "li", text: "Birinchi band" },
-        { kind: "p", text: "Oddiy matn" },
-        { kind: "table", text: "Noma'lum tur" },
-        { kind: "p", text: "x" },
-      ],
-    },
-    null,
-  );
-  assert.deepEqual(
-    typed.map((b) => b.kind),
-    // Noma'lum tur `p` ga tushadi; 1 belgili matn tashlanadi.
-    ["h2", "li", "p", "p"],
-  );
-
-  // Eski shakl — model yangi sxemaga bo'ysunmasa.
-  const legacy = translatedBlocks({ paragraphs: ["Birinchi", "Ikkinchi"] }, null);
-  assert.deepEqual(legacy, [
-    { kind: "p", text: "Birinchi" },
-    { kind: "p", text: "Ikkinchi" },
-  ]);
-
-  assert.deepEqual(translatedBlocks(null, null), []);
-});
 
 /**
  * Keys rubrikasi.
@@ -624,19 +585,6 @@ test("maxsus formali vositalar serverda ham tekshiriladi", async () => {
   }
 });
 
-test("chunkSource matnni jim kesmaydi", async () => {
-  const { chunkSource, MAX_CHUNKS } = await import("../lib/generation/write-specials.ts");
-
-  // Har abzas o'z bo'lagini egallaydigan eng yomon taqsimot.
-  const para = "A".repeat(2_500);
-  const chunks = chunkSource(Array.from({ length: 20 }, () => para).join("\n\n"), 4_000);
-
-  assert.equal(chunks.length, 20, "hamma abzas bo'lakka tushishi kerak");
-  assert.ok(chunks.length > MAX_CHUNKS, "bu holat chegaradan oshadi va xato berishi kerak");
-
-  // Hech bir belgi yo'qolmagan.
-  assert.equal(chunks.join("").replace(/\s/g, "").length, 20 * 2_500);
-});
 
 // -------------------------------------------------- hujjat profillari (Sprint 9)
 

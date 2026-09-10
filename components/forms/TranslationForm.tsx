@@ -4,8 +4,8 @@ import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeftRight, FileText, Loader2 } from "lucide-react";
 import type { FormValues, ToolConfig } from "@/lib/types";
-import { TRANSLATION_LANGUAGES, TRANSLATION_STYLES } from "@/lib/languages";
-import { preflightError, translationPrice, TRANSLATION_MAX_CHARS, TRANSLATION_MIN_CHARS } from "@/lib/tools";
+
+import { preflightError, translationPrice, TRANSLATION_LANGUAGES, TRANSLATION_MAX_CHARS, TRANSLATION_MIN_CHARS, TRANSLATION_STYLES } from "@/lib/tools";
 import { deleteSource, uploadSource, type SourceUploadResult } from "@/lib/api-client";
 import { parseUserGlossary } from "@/lib/generation/translate/glossary";
 import { cn } from "@/lib/cn";
