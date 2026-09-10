@@ -1,84 +1,278 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
-import { sectionLabels } from "@/lib/generation/i18n";
-import type { AcademicDoc, Block } from "@/lib/generation/types";
-import { RESUME_TEMPLATES } from "@/lib/generation/resume/templates";
-import { A4, resumeMainHeightPx } from "@/lib/viewers/metrics";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ImagePlus, Redo2, Trash2, Undo2 } from "lucide-react";
+import type { AcademicDoc } from "@/lib/generation/types";
+import type { ResumeOp } from "@/lib/generation/resume/edit";
+import { planResume, type ResumeItem, type ResumeLayout } from "@/lib/generation/resume/layout";
+import { legacyResumeModel } from "@/lib/generation/resume/model";
+import {
+  RESUME_PALETTES,
+  RESUME_PALETTE_IDS,
+  RESUME_TEMPLATES,
+  RESUME_TEMPLATE_IDS,
+  isResumePaletteId,
+  isResumeTemplateId,
+} from "@/lib/generation/resume/templates";
+import { A4, resumeMainHeightPx, resumeMainPadMm } from "@/lib/viewers/metrics";
 import { type TextSplitter } from "@/lib/viewers/split";
+import { cn } from "@/lib/cn";
+import { useResumeEdit } from "../files/useResumeEdit";
+import type { EditActionsState } from "../files/EditActions";
 import { useMeasuredPages } from "./measure";
 import { ZoomFrame, Workspace } from "./sheet";
 import { ViewerToolbar } from "./toolbar";
 import { useVisiblePage } from "./useVisiblePage";
+import { ResumeItemView, ResumePage } from "./resume/ResumePage";
+import { ResumeEditor } from "./resume/ResumeEditor";
 
-/** O'ng ustun oqimidagi band — DOCX `resumeBody` bilan bir xil tuzilma. */
-type MainItem = { k: "h2" | "h3" | "li" | "p"; text: string };
+/**
+ * Rezyume ko'ruvchisi (Rezyume 2, AUDIT-15) — `SlideViewer` bilan bir
+ * xil imzo: `{ doc, gen, onGen, onEditState }`.
+ *
+ * VARAQNI o'zi chizmaydi: hamma narsa `planResume` → `ResumePage`.
+ * Shu tufayli ekrandagi rezyume DOCX bilan bir xil bo'ladi va shablon/
+ * palitra almashsa ikkalasi ham birdaniga o'zgaradi.
+ *
+ * Sahifalash `main` zonasi itemlari ustida (`useMeasuredPages`), `aside`
+ * va bosh qism esa faqat BIRINCHI varaqda — Word jadval qatorini
+ * bo'lganda panel foni davom etadi, matni takrorlanmaydi.
+ *
+ * Tahrir tugmasi bor (slayddan farqi): rezyumeda matn zich va ikki
+ * bosish tasodifan tez-tez tushadi, shuning uchun rejim ANIQ yoqiladi.
+ */
 
 /* Uzun blok ham Word kabi qator orasidan bo'linadi. */
-const RESUME_SPLITTER: TextSplitter<MainItem> = {
+const RESUME_SPLITTER: TextSplitter<ResumeItem> = {
   takeText: (it) => (it.k === "p" || it.k === "li" ? it.text : null),
   makePart: (it, part) => ({ ...it, text: part }),
 };
 
-/**
- * `main` ustuni py-8 (32px*2) chiqarilgach, HAQIQIY balandligi bo'yicha
- * o'lchanadi — sahifa raqami uchun ozgina joy qoldirilgan (`resumeMainHeightPx`).
- * Ilgari (AUDIT-6 B3) butun rezyume `overflow-hidden` bilan BITTA
- * varaqqa qat'iy qirqilardi: uzun tajriba pastdan jim yo'qolardi.
- * DOCX da esa `resumeBody` bitta jadval qatorini ATLEAST balandlikda
- * chizadi — Word uni kerak bo'lsa keyingi sahifaga o'tkazadi. Bu yerda
- * xuddi shunga o'xshab, yon panel HAR bir varaqda to'liq balandlikda
- * takrorlanadi, o'ng ustun esa kerakcha ko'p varaqqa bo'linadi.
- */
+function mainItemsOf(layout: ResumeLayout): ResumeItem[] {
+  return layout.zones.find((z) => z.id === "main")?.items ?? [];
+}
 
-export function ResumeViewer({ doc }: { doc: AcademicDoc }) {
-  const L = sectionLabels(doc.meta.language);
+export function ResumeViewer({
+  doc,
+  gen,
+  onGen,
+  onEditState,
+}: {
+  doc: AcademicDoc;
+  /** Tayyor generatsiya (`api.GenerationDetail`) — TAHRIR shu bilan yoqiladi. */
+  gen?: unknown;
+  /** Tahrirdan keyin yangilangan generatsiya — sahifa holatiga qaytariladi. */
+  onGen?: (g: unknown) => void;
+  /** Tahrir holati sahifa sarlavhasidagi `EditActions` ga; `null` — tahrir yo'q. */
+  onEditState?: (s: EditActionsState | null) => void;
+}) {
+  const ed = useResumeEdit({ gen, onGen });
+  const docNow = ed.doc ?? doc;
+  const model = useMemo(() => docNow.resume ?? legacyResumeModel(docNow), [docNow]);
+  const layout = useMemo(() => planResume(model), [model]);
+
   const [zoom, setZoom] = useState(100);
-  const name = doc.meta.author || "F.I.Sh";
-  const role = doc.meta.topic;
-  const byId = useMemo(() => Object.fromEntries(doc.sections.map((s) => [s.id, s])), [doc.sections]);
-  const blocks = (id: string): Block[] => byId[id]?.blocks ?? [];
-  const summaryBlocks = blocks("summary");
-  const contact = summaryBlocks[1]?.text || doc.meta.city;
-  const summary = summaryBlocks[0]?.text || "";
-  const skills = blocks("skills").map((b) => b.text).join("\n");
+  const [editOn, setEditOn] = useState(false);
+  const editable = ed.editable && !ed.legacy;
+  const editing = editOn && editable;
 
-  const mainItems = useMemo<MainItem[]>(() => {
-    const out: MainItem[] = [];
-    if (summary) {
-      out.push({ k: "h2", text: byId.summary?.title || L.summary });
-      out.push({ k: "p", text: summary });
-    }
-    for (const id of ["exp", "edu"] as const) {
-      const bs = (byId[id]?.blocks ?? []).filter((b) => b.text.trim());
-      if (!bs.length) continue;
-      out.push({ k: "h2", text: byId[id]?.title || (id === "exp" ? L.experience : L.education) });
-      for (const b of bs) out.push({ k: b.kind === "h3" ? "h3" : b.kind === "li" ? "li" : "p", text: b.text });
-    }
-    return out;
-  }, [byId, summary, L.summary, L.experience, L.education]);
+  const items = useMemo(() => mainItemsOf(layout), [layout]);
+  const pad = resumeMainPadMm(layout.template, 0);
+  const measureWidthMm = Math.max(60, layout.mainWidthMm - pad.x * 2);
 
-  const { pages: measured, measureNode } = useMeasuredPages(mainItems, (it) => <MainBlock item={it} />, {
-    limit: resumeMainHeightPx(RESUME_TEMPLATES.modern),
-    className: "w-[calc(210mm-72mm-4rem)]",
-    key: mainItems.map((it) => `${it.k}:${it.text.length}`).join("|"),
-    split: RESUME_SPLITTER,
-  });
-  const pages = measured?.length ? measured : [mainItems];
+  const { pages: measured, measureNode } = useMeasuredPages(
+    items,
+    (it) => (
+      <div
+        style={{
+          width: `${measureWidthMm}mm`,
+          fontFamily: layout.template.type.font,
+          fontSize: `${layout.template.type.body}pt`,
+          lineHeight: layout.template.type.line,
+        }}
+      >
+        <ResumeItemView layout={layout} item={it} />
+      </div>
+    ),
+    {
+      /*
+       * Chegara BIRINCHI varaqniki: bannerli maketda u eng qisqasi,
+       * ya'ni keyingi varaqlar ozgina bo'sh qoladi — matn kesilgandan
+       * ko'ra bu xavfsizroq.
+       */
+      limit: resumeMainHeightPx(layout.template, 0),
+      key: `${model.template}|${model.palette}|${items.map((it) => `${it.k}:${itemText(it).length}`).join("|")}`,
+      split: RESUME_SPLITTER,
+    },
+  );
+  const pages = measured?.length ? measured : [items];
   const total = pages.length;
+
   const refs = useRef<(HTMLDivElement | null)[]>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [page, setPage] = useVisiblePage(scrollRef, () => refs.current, [total, zoom]);
 
-  function go(n: number) {
-    const next = Math.max(1, Math.min(total, n));
-    setPage(next);
-    refs.current[next - 1]?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
+  const go = useCallback(
+    (n: number) => {
+      const next = Math.max(1, Math.min(total, n));
+      setPage(next);
+      refs.current[next - 1]?.scrollIntoView({ behavior: "smooth", block: "start" });
+    },
+    [total, setPage],
+  );
+
+  const { run, undo, redo, save, pending, discard, saving, justSaved } = ed;
+  const runOps = useCallback((ops: ResumeOp[]) => void run(ops), [run]);
+
+  /* ═══ surat ═══ */
+  const fileRef = useRef<HTMLInputElement>(null);
+  const pickPhoto = useCallback(() => fileRef.current?.click(), []);
+  const onPhotoFile = useCallback(
+    async (file: File) => {
+      await ed.uploadPhoto({ file, shape: layout.template.photo.shape });
+    },
+    [ed, layout.template.photo.shape],
+  );
+
+  /*
+   * Tahrir holati SAHIFAGA (`EditActions`). Ref orqali — har renderda
+   * yangi callback berilsa ham effekt qayta ishlamasin.
+   */
+  const onEditStateRef = useRef(onEditState);
+  onEditStateRef.current = onEditState;
+  useEffect(() => {
+    onEditStateRef.current?.(editable ? { pending, saving, justSaved, save, discard } : null);
+  }, [editable, pending, saving, justSaved, save, discard]);
+  useEffect(() => () => onEditStateRef.current?.(null), []);
+
+  /* Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y / Ctrl+S. */
+  useEffect(() => {
+    if (!editing) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      const k = e.key.toLowerCase();
+      if (k === "z" && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+      } else if ((k === "z" && e.shiftKey) || k === "y") {
+        e.preventDefault();
+        redo();
+      } else if (k === "s") {
+        e.preventDefault();
+        if (pending > 0) void save();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [editing, undo, redo, save, pending]);
+
+  const right = editable ? (
+    <>
+      <select
+        aria-label="Shablon"
+        title="Shablon"
+        className="rounded bg-white/10 px-1.5 py-1 text-[12px] text-white outline-none"
+        value={model.template}
+        onChange={(e) => {
+          const v = e.target.value;
+          if (isResumeTemplateId(v) && v !== model.template) runOps([{ op: "template", template: v }]);
+        }}
+      >
+        {RESUME_TEMPLATE_IDS.map((id) => (
+          <option key={id} value={id} className="text-black">
+            {RESUME_TEMPLATES[id].title}
+          </option>
+        ))}
+      </select>
+      <select
+        aria-label="Rang"
+        title="Rang"
+        className="rounded bg-white/10 px-1.5 py-1 text-[12px] text-white outline-none"
+        value={model.palette}
+        onChange={(e) => {
+          const v = e.target.value;
+          if (isResumePaletteId(v) && v !== model.palette) runOps([{ op: "palette", palette: v }]);
+        }}
+      >
+        {RESUME_PALETTE_IDS.map((id) => (
+          <option key={id} value={id} className="text-black">
+            {RESUME_PALETTES[id].title}
+          </option>
+        ))}
+      </select>
+      <button
+        type="button"
+        aria-label="Rasm yuklash"
+        title="Rasm yuklash"
+        className="hover:bg-white/10 rounded p-1.5 disabled:opacity-40"
+        disabled={saving}
+        onClick={pickPhoto}
+      >
+        <ImagePlus className="size-4" />
+      </button>
+      {model.photo ? (
+        <button
+          type="button"
+          aria-label="Rasmni olib tashlash"
+          title="Rasmni olib tashlash"
+          className="hover:bg-white/10 rounded p-1.5 disabled:opacity-40"
+          disabled={saving}
+          onClick={() => void ed.removePhoto()}
+        >
+          <Trash2 className="size-4" />
+        </button>
+      ) : null}
+      <span className="mx-1 h-4 w-px bg-white/20" />
+      <button
+        type="button"
+        aria-label="Bekor qilish"
+        title="Bekor qilish (Ctrl+Z)"
+        className="hover:bg-white/10 rounded p-1.5 disabled:opacity-30"
+        disabled={!ed.canUndo}
+        onClick={undo}
+      >
+        <Undo2 className="size-4" />
+      </button>
+      <button
+        type="button"
+        aria-label="Qaytarish"
+        title="Qaytarish (Ctrl+Shift+Z)"
+        className="hover:bg-white/10 rounded p-1.5 disabled:opacity-30"
+        disabled={!ed.canRedo}
+        onClick={redo}
+      >
+        <Redo2 className="size-4" />
+      </button>
+      <button
+        type="button"
+        aria-pressed={editing}
+        className={cn("rounded px-2 py-1 text-[12px]", editing ? "bg-sky-500 text-white" : "hover:bg-white/10")}
+        onClick={() => setEditOn((v) => !v)}
+      >
+        Tahrirlash
+      </button>
+    </>
+  ) : null;
 
   return (
     <div className="flex h-full min-h-[70vh] flex-col">
-      <ViewerToolbar zoom={zoom} onZoom={setZoom} page={page} pages={total} onPage={go} onFit={() => setZoom(100)} />
+      <ViewerToolbar
+        zoom={zoom}
+        onZoom={setZoom}
+        page={page}
+        pages={total}
+        onPage={go}
+        onFit={() => setZoom(100)}
+        right={right}
+      />
+      {ed.error ? (
+        <div className="no-print bg-rose-900/80 flex items-center gap-2 px-3 py-1.5 text-[12px] text-white">
+          <span className="flex-1">{ed.error}</span>
+          <button type="button" className="underline" onClick={ed.clearError}>
+            Yopish
+          </button>
+        </div>
+      ) : null}
       <Workspace ref={scrollRef}>
         <div className="flex flex-col items-center gap-8">
           {pages.map((chunk, i) => (
@@ -87,57 +281,60 @@ export function ResumeViewer({ doc }: { doc: AcademicDoc }) {
                 ref={(el) => {
                   refs.current[i] = el;
                 }}
-                className="word-sheet overflow-hidden"
               >
-                <div className="flex h-full">
-                  <aside className="flex w-[72mm] flex-col bg-[#1c1917] px-6 py-8 text-[#f5f5f4]">
-                    <div className="text-[11px] tracking-[0.22em] text-orange-300 uppercase">{L.viewerResume}</div>
-                    <h1 className="mt-3 text-[22px] leading-tight font-semibold">{name}</h1>
-                    <p className="mt-2 text-[13px] text-orange-200">{role}</p>
-                    <div className="mt-8 text-[11px] tracking-wider text-stone-400 uppercase">{L.fieldContact}</div>
-                    <p className="mt-2 text-[12px] leading-relaxed text-stone-200">{contact}</p>
-                    {skills ? (
-                      <>
-                        <div className="mt-8 text-[11px] tracking-wider text-stone-400 uppercase">{L.skills}</div>
-                        <p className="mt-2 text-[12px] leading-relaxed whitespace-pre-line text-stone-200">{skills}</p>
-                      </>
-                    ) : null}
-                  </aside>
-                  <main className="flex-1 bg-white px-8 py-8 text-[#1c1917]">
-                    {chunk.map((it, j) => (
-                      <MainBlock key={j} item={it} />
-                    ))}
-                  </main>
-                </div>
-                {total > 1 ? <div className="word-footer-num">{i + 1}</div> : null}
+                {editing ? (
+                  <ResumeEditor
+                    layout={layout}
+                    model={model}
+                    pageItems={chunk}
+                    pageIndex={i}
+                    total={total}
+                    onOps={runOps}
+                    onPhoto={pickPhoto}
+                  />
+                ) : (
+                  <ResumePage layout={layout} pageItems={chunk} pageIndex={i} total={total} />
+                )}
               </div>
             </ZoomFrame>
           ))}
         </div>
       </Workspace>
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/png,image/jpeg"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          // Bir xil faylni qayta tanlash ham hodisa bersin.
+          e.target.value = "";
+          if (f) void onPhotoFile(f);
+        }}
+      />
       {measureNode}
     </div>
   );
 }
 
-function MainBlock({ item }: { item: MainItem }) {
-  if (item.k === "h2") {
-    return (
-      <h2 className="mt-6 border-b-2 border-orange-500 pb-1 text-[13px] font-semibold tracking-wider uppercase first:mt-0">
-        {item.text}
-      </h2>
-    );
+/** Sahifalash kaliti uchun — item matnining uzunligi o'zgarsa qayta o'lchanadi. */
+function itemText(it: ResumeItem): string {
+  switch (it.k) {
+    case "p":
+    case "li":
+    case "h2":
+    case "name":
+    case "headline":
+      return it.text;
+    case "row":
+      return `${it.title}${it.sub}${it.period}`;
+    case "kv":
+      return `${it.key}${it.val}`;
+    case "chips":
+      return it.items.map((c) => c.text).join("");
+    case "contact":
+      return it.lines.map((l) => l.text).join("");
+    default:
+      return "";
   }
-  if (item.k === "h3") {
-    // Ish joyi: yil — lavozim — tashkilot.
-    return <p className="mt-3 text-[13px] leading-relaxed font-semibold text-stone-900 first:mt-0">{item.text}</p>;
-  }
-  if (item.k === "li") {
-    return (
-      <p className="mt-1 pl-4 -indent-3 text-[13px] leading-relaxed text-stone-800 before:mr-2 before:content-['•']">
-        {item.text}
-      </p>
-    );
-  }
-  return <p className="mt-2 text-[13px] leading-relaxed text-stone-800 first:mt-0">{item.text}</p>;
 }

@@ -138,3 +138,21 @@ test("ikkinchi varaqda panel FONI qoladi, matni takrorlanmaydi (Word bilan bir x
   assert.ok(page2.includes(`#${layout.palette.dark}`), "panel foni yo'qoldi");
   assert.ok(!htmlTexts(page2).includes(m.identity.fullName), "panel matni ikkinchi varaqda takrorlandi");
 });
+
+/**
+ * PANEL BALANDLIGI — Word ning jadval qatori bilan bir xil.
+ *
+ * DOCX da qator `ATLEAST contentHeight(P)` bilan chizilgani uchun panel
+ * FAQAT birinchi varaqda sahifani to'ldiradi; keyingi varaqlarga o'tgan
+ * qoldiq o'z mazmuni qadar cho'ziladi (LibreOffice bilan 5 varaqli
+ * namunada ko'rilgan). Ko'ruvchi har varaqda to'liq balandlik chizsa,
+ * ekran bilan fayl ajralib ketardi.
+ */
+test("panel 1-varaqda to'liq balandlikda, keyingilarida mazmun bo'yicha", () => {
+  const layout = planResume(modelFor("twocol", false));
+  const main = layout.zones.find((z) => z.id === "main")?.items ?? [];
+  const page1 = renderToStaticMarkup(h(ResumePage, { layout, pageItems: main, pageIndex: 0, total: 2 }));
+  const page2 = renderToStaticMarkup(h(ResumePage, { layout, pageItems: main.slice(0, 2), pageIndex: 1, total: 2 }));
+  assert.ok(/display:flex;height:100%/.test(page1), "1-varaqda panel to'liq balandlikda emas");
+  assert.ok(!/display:flex;height:100%/.test(page2), "2-varaqda panel to'liq balandlikda — faylda esa mazmun qadar");
+});
