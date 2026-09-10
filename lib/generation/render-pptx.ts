@@ -78,6 +78,8 @@ async function paintLayer(
       fill: fill ?? { type: "none" },
       line: layer.line ? { color: hx(layer.line.color), width: layer.line.width } : { type: "none" },
       ...(layer.radius ? { rectRadius: layer.radius } : {}),
+      // Ko'ruvchi bilan bir xil yumshoq soya (`SlideCanvas` `box-shadow`).
+      ...(layer.shadow ? { shadow: { type: "outer", blur: 6, offset: 2, angle: 90, color: "000000", opacity: 0.22 } } : {}),
     });
     return;
   }
@@ -94,6 +96,8 @@ async function paintLayer(
       h: box.h,
       // `fit` ko'ruvchi bilan BIR XIL o'qiladi (`SlideCanvas` `objectFit`) — logo `contain`.
       sizing: { type: layer.fit ?? "cover", w: box.w, h: box.h },
+      // Dumaloq rasm — ko'ruvchida `border-radius: 50%`.
+      ...(layer.shape === "circle" ? { rounding: true } : {}),
     });
     return;
   }

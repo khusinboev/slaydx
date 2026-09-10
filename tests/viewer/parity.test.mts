@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createElement as h } from "react";
-import { SlideCanvas } from "../../components/viewers/SlideCanvas.tsx";
+import { LayerView, SlideCanvas } from "../../components/viewers/SlideCanvas.tsx";
 import { fontCss } from "../../lib/generation/slide-fonts.ts";
 import { planSlide, ptToPx } from "../../lib/generation/slide-layout.ts";
 import { getSlideTheme } from "../../lib/generation/slide-themes.ts";
@@ -100,4 +100,21 @@ test("`hideSrc` — faqat o'sha qatlam visibility:hidden, HTML boshqa joyda o'zg
   assert.equal(html.replace("visibility:hidden;", "").replace(";visibility:hidden", ""), plain, "qolgan HTML aynan eskicha");
   const none = renderToStaticMarkup(h(SlideCanvas, { slide, theme, visual: "classic", index: 1, total: 10, hideSrc: '{"f":"quote"}' }));
   assert.equal(none, plain, "mos qatlam bo'lmasa hech narsa yashirinmaydi");
+});
+
+// ══════════════════════════════════ Shablonlar 2: dumaloq rasm va soya pariteti
+
+test("dumaloq rasm (`shape: circle`) → border-radius:50%, soya (`shadow`) → box-shadow; yo'q bo'lsa HTML eskicha", () => {
+  const box = { x: 1, y: 1, w: 2, h: 2 };
+  const plain = renderToStaticMarkup(h(LayerView, { layer: { t: "image", box, url: "https://example.test/a.png" } }));
+  const round = renderToStaticMarkup(h(LayerView, { layer: { t: "image", box, url: "https://example.test/a.png", shape: "circle" } }));
+  assert.ok(!plain.includes("border-radius"), "oddiy rasm — burchak yo'q");
+  assert.ok(round.includes("border-radius:50%"), "dumaloq rasm — PPTX `rounding: true` bilan bir xil");
+  assert.equal(round.replace(";border-radius:50%", ""), plain, "boshqa hech narsa o'zgarmaydi");
+
+  const flat = renderToStaticMarkup(h(LayerView, { layer: { t: "rect", box, fill: { color: "#ffffff" }, radius: 0.1 } }));
+  const shadow = renderToStaticMarkup(h(LayerView, { layer: { t: "rect", box, fill: { color: "#ffffff" }, radius: 0.1, shadow: true } }));
+  assert.ok(!flat.includes("box-shadow"), "soyasiz karta");
+  assert.ok(shadow.includes("box-shadow:0 2px 6px rgba(0,0,0,0.22)"), "soya PPTX `shadow` (blur 6, offset 2, 22%) bilan bir xil");
+  assert.equal(shadow.replace(";box-shadow:0 2px 6px rgba(0,0,0,0.22)", ""), flat);
 });

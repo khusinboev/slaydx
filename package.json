@@ -16,6 +16,7 @@
     "check": "npm run typecheck && npm run lint && npm run test && npm run test:viewer && npm run test:ui",
     "smoke": "node --env-file-if-exists=.env.local scripts/smoke.mjs",
     "live": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/live-engine.mts",
+    "shots": "tsx --conditions=react-server scripts/visual-shots.mts",
     "seed": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/seed-demo.mts",
     "seed-images": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/seed-images.mts",
     "image-lab": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/image-lab.mts",

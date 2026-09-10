@@ -130,7 +130,8 @@ export function SlideCanvas({
   );
 }
 
-function LayerView({ layer, budget, hidden = false }: { layer: SlideLayer; budget?: number; hidden?: boolean }) {
+/** Bitta qatlam — eksport paritet testlari uchun (`tests/viewer/parity.test.mts`: dumaloq rasm, soya). */
+export function LayerView({ layer, budget, hidden = false }: { layer: SlideLayer; budget?: number; hidden?: boolean }) {
   const box = boxStyle(layer.box);
   if (layer.t === "rect") {
     return (
@@ -141,6 +142,8 @@ function LayerView({ layer, budget, hidden = false }: { layer: SlideLayer; budge
           background: layer.fill ? cssColor(layer.fill.color, layer.fill.alpha) : "transparent",
           borderRadius: layer.radius ? layer.radius * 96 : 0,
           border: layer.line ? `${layer.line.width}px solid ${layer.line.color}` : undefined,
+          // PPTX `shadow` (render-pptx) bilan bir xil yumshoq soya; yo'q bo'lsa kalit ham yo'q (paritet).
+          ...(layer.shadow ? { boxShadow: "0 2px 6px rgba(0,0,0,0.22)" } : {}),
         }}
       />
     );
@@ -154,7 +157,11 @@ function LayerView({ layer, budget, hidden = false }: { layer: SlideLayer; budge
      */
     const fit = layer.fit ?? "cover";
     return (
-      <div className={cn("absolute overflow-hidden", fit === "cover" && "bg-neutral-900")} style={box}>
+      <div
+        className={cn("absolute overflow-hidden", fit === "cover" && "bg-neutral-900")}
+        // Dumaloq rasm — PPTX `rounding: true` bilan bir xil.
+        style={layer.shape === "circle" ? { ...box, borderRadius: "50%" } : box}
+      >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={layer.url}

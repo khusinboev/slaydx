@@ -145,17 +145,20 @@ test("har shablonning o'z to'ldirgichlari bor va ular boshqasiniki emas", () => 
  * eskizini oladi — ya'ni eskiz maketga YOLG'ON va'da beradi (AUDIT-7
  * aynan shu nuqsonni yopgan edi, `lab` bilan u qaytib kelgan edi).
  */
-test("har bir visual uchun formada eskiz tarmog'i bor", async () => {
-  const { readFile } = await import("node:fs/promises");
-  // Eskizlar `slide-pickers.tsx` da (Formalar 2: `SlideForm` yupqa o'ram).
-  const form = await readFile(new URL("../components/forms/slide-pickers.tsx", import.meta.url), "utf8");
-  const used = new Set(SLIDE_TEMPLATES.map((t) => t.visual));
-  for (const v of used) {
-    if (v === "classic") continue; // zaxira tarmoq
-    assert.ok(
-      form.includes(`visual === "${v}"`),
-      `«${v}» maketi uchun TemplateSketch da tarmoq yo'q — eskiz classic ni ko'rsatadi`,
+test("har shablon uchun galereya namunasi bor (sampleDeck) va u haqiqiy maketlarni qamraydi", async () => {
+  // Shablonlar 2: eskiz CSS emas — haqiqiy `SlideCanvas` renderi `sampleDeck` dan.
+  const { sampleDeck, GALLERY_SLIDES } = await import("../lib/generation/slide-samples.ts");
+  for (const t of SLIDE_TEMPLATES) {
+    const deck = sampleDeck(t.id);
+    assert.equal(deck.length, 9, `${t.id}: namuna 9 slayd`);
+    assert.deepEqual(
+      deck.map((s) => s.layout),
+      ["title", "agenda", "section", "bullets", "twoCol", "stats", "process", "quote", "closing"],
+      `${t.id}: maketlar tartibi`,
     );
+    for (const i of GALLERY_SLIDES) assert.ok(deck[i], `${t.id}: galereya eskizi ${i}`);
+    assert.ok(deck[0].image?.url.startsWith("/samples/"), `${t.id}: namuna rasmi`);
+    assert.ok(deck[0].title.length > 8 && deck[3].bullets!.length >= 3, `${t.id}: mazmunli matn`);
   }
 });
 
@@ -180,13 +183,19 @@ test("olib tashlangan shablon id si o'rnini bosgan shablonga yo'naltiriladi", ()
   assert.equal(normalizeTemplateId("workshop"), "lesson");
   assert.equal(normalizeTemplateId("debate"), "compare");
   assert.equal(normalizeTemplateId("briefing"), "report");
-  assert.equal(normalizeTemplateId("story"), "case");
-  assert.equal(normalizeTemplateId("gallery"), "magazine");
+  // Shablonlar 2: `story` endi HAQIQIY shablon (Foto-hikoya); birlashganlar unga yo'naltiriladi.
+  assert.equal(normalizeTemplateId("story"), "story");
+  assert.equal(normalizeTemplateId("gallery"), "story");
+  assert.equal(normalizeTemplateId("literature"), "story");
+  assert.equal(normalizeTemplateId("bio"), "story");
+  assert.equal(normalizeTemplateId("magazine"), "story");
+  assert.equal(normalizeTemplateId("problem"), "pitch");
+  assert.equal(normalizeTemplateId("process"), "timeline");
   // Amaldagi id o'zgarmaydi, butunlay noma'lumi «auto» ga tushadi.
   assert.equal(normalizeTemplateId("defense"), "defense");
   assert.equal(normalizeTemplateId("hech-qachon-bo'lmagan"), "auto");
   // Forma yo'li ham shu jadvaldan o'tadi.
-  assert.equal(slideMeta({ topic: "X", slideTemplate: "gallery" }).slideTemplate, "magazine");
+  assert.equal(slideMeta({ topic: "X", slideTemplate: "gallery" }).slideTemplate, "story");
 });
 
 test("inferSlideTemplate faqat mavjud shablonni qaytaradi", () => {
@@ -208,7 +217,10 @@ test("inferSlideTemplate faqat mavjud shablonni qaytaradi", () => {
   // Olib tashlanganlarning naqshi yo'qolmadi — o'rnini bosganiga ketdi.
   assert.equal(inferSlideTemplate("Munozara: sun'iy intellekt foydalimi"), "compare");
   assert.equal(inferSlideTemplate("Trening: samarali muloqot"), "lesson");
-  assert.equal(inferSlideTemplate("Foto-insho: Buxoro lavhalari"), "magazine");
+  assert.equal(inferSlideTemplate("Foto-insho: Buxoro lavhalari"), "story");
+  assert.equal(inferSlideTemplate("Alisher Navoiy hayoti va ijodi"), "story");
+  assert.equal(inferSlideTemplate("Muammo va yechim: suv tanqisligi"), "pitch");
+  assert.equal(inferSlideTemplate("Qanday qilish: bosqichma-bosqich rezyume"), "timeline");
 });
 
 /**
@@ -235,9 +247,13 @@ test("har bir visual qiymati renderda haqiqiy farq beradi", async () => {
       table: { headers: ["A", "B"], rows: [["1", "2"], ["3", "4"]] },
     }) as never;
 
+  const { designOf } = await import("../lib/generation/visuals/index.ts");
   const visuals = [...new Set(SLIDE_TEMPLATES.map((t) => t.visual))];
   for (const v of visuals) {
     if (v === "classic") continue;
+    // Hali chizilmagan dizayn (stub, `plan` bo'sh) `base` bilan bir xil — u `tests/slide-visuals.test.mts` da alohida sanaladi.
+    const d = designOf(v);
+    if (d && Object.keys(d.plan).length === 0) continue;
     const differs = SLIDE_LAYOUTS.some(
       (layout) =>
         JSON.stringify(planSlide(sample(layout), theme, v, 1, 10)) !==

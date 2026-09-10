@@ -1,4 +1,4 @@
-import type { SlideLayout } from "./slide-types";
+import type { SlideLayout, SlideThemeId } from "./slide-types";
 
 /**
  * Shablonlar ro'yxati.
@@ -31,18 +31,14 @@ export const SLIDE_TEMPLATE_IDS = [
   "science",
   // ilmiy
   "defense",
-  "literature",
-  "bio",
+  "story",
   // tahlil
   "compare",
-  "problem",
-  "report",
   "pitch",
+  "report",
   // bayon
-  "process",
   "timeline",
   "case",
-  "magazine",
 ] as const;
 
 export type SlideTemplateId = (typeof SLIDE_TEMPLATE_IDS)[number];
@@ -53,34 +49,61 @@ export type SlideTemplateId = (typeof SLIDE_TEMPLATE_IDS)[number];
  * Bu jadval faqat MOSLIK uchun: eski generatsiyalarning `doc_json` ida
  * saqlangan `slideTemplate` ko'ruvchida ham, qayta renderda ham
  * ma'noli qolsin. Formada bu id lar ko'rinmaydi.
+ *
+ * Shablonlar 2 (AUDIT-13): 14 → 10. Bir xil vizual oilani bo'lishgan
+ * shablonlar birlashdi — endi har shablonning O'Z dizayni bor.
  */
 export const LEGACY_TEMPLATE_ALIASES: Record<string, SlideTemplateId> = {
   faq: "lecture",       // savol-javob: agenda + bo'lim + band — ma'ruzaning o'zi
   workshop: "lesson",   // trening: maqsad → mashq → qoida — dars oqimi
   debate: "compare",    // munozara: ikki tomon + pozitsiya — qiyosning o'zi
   briefing: "report",   // brifing: hisobotning qisqartirilgan ko'rinishi
-  story: "case",        // hikoya: vaziyat → burilish → yakun — keysning o'zi
-  gallery: "magazine",  // foto-insho: katta rasm + kam matn — jurnal maketi
+  gallery: "story",     // foto-insho: katta rasm + kam matn — foto-hikoya
+  literature: "story",  // adabiyot: asar, obraz, iqtibos — foto-hikoya tili
+  bio: "story",         // hayotnoma: shaxs va davr — foto-hikoya
+  magazine: "story",    // esse / foto-insho — foto-hikoya
+  problem: "pitch",     // muammo–yechim: tashxis → chora — pitch oqimi
+  process: "timeline",  // yo'riqnoma: bosqichma-bosqich — vaqt chizig'i
 };
 
 /**
- * `visual` — sahna maketi. Har bir qiymatning `slide-layout.ts` da
- * HAQIQIY tarmog'i bor (`cards` ilgari yo'q edi, endi bor):
+ * `visual` — sahna maketi.
  *
- *   classic     bazaviy: sarlavha + band ro'yxati
- *   cards       bandlar alohida kartalarda (ro'yxat emas)
- *   lab         bandlar laboratoriya daftarining raqamlangan kuzatuv
- *               qatorlarida: chap chekkada o'lchov chizig'i (`planLabRows`)
- *   dense       stats to'q fonda, jadval zich
- *   timeline    process gorizontal chiziqda
- *   magazine    title VA section to'la ekran rasm + pastki matn tasmasi
- *   hero-split  title chap yarmi rasm
+ * ESKI oilalar (7 ta, `LEGACY_VISUALS`) `slide-layout.ts` tarmoqlarida
+ * qoladi — eski `doc_json` va testlar uchun. YANGI dizaynlar (10 ta,
+ * `lib/generation/visuals/`) har biri bitta shablonga tegishli va
+ * o'zining `plan` xaritasi bilan chiziladi; chizmagan maketlarda
+ * dizaynning `base` oilasi ishlaydi.
  *
- * Yangi qiymat qo'shsangiz — `slide-layout.ts` da unga HAQIQIY tarmoq
- * yozing. Yuqoridagi ro'yxat va'da, `tests/generation.test.mts` dagi
- * «har bir visual qiymati renderda haqiqiy farq beradi» esa uni tekshiradi.
+ *   academic   Ma'ruza — o'ngda yumshoq to'rtburchak rasm, tagchiziqli sarlavha
+ *   circle     Dars — to'la rang fon, DUMALOQ rasm, dumaloq raqamli kartalar
+ *   notebook   Tajriba — daftar katak, o'lchov chizig'i, foto ramka
+ *   formal     Himoya — to'q sarlavha tasmasi, serif, yupqa ramka
+ *   story      Foto-hikoya — to'la ekran rasm, pastki tasma, serif iqtibos
+ *   split      Qiyos — ekran ikkiga bo'lingan, «vs» ajratgich
+ *   bold       Pitch — chap yarmi rasm, katta raqamlar, aksent bloklar
+ *   dashboard  Hisobot — KPI plitkalar, ingichka tasma, karta ichida rasm
+ *   rail       Vaqt chizig'i — rels va nuqtalar, gorizontal chiziq motivi
+ *   editorial  Keys — baland o'ng rasm ustuni, katta kicker raqam
  */
-export type SlideVisual = "classic" | "hero-split" | "cards" | "lab" | "timeline" | "magazine" | "dense";
+export type SlideVisual =
+  | "classic"
+  | "hero-split"
+  | "cards"
+  | "lab"
+  | "timeline"
+  | "magazine"
+  | "dense"
+  | "academic"
+  | "circle"
+  | "notebook"
+  | "formal"
+  | "story"
+  | "split"
+  | "bold"
+  | "dashboard"
+  | "rail"
+  | "editorial";
 
 /** Formadagi yig'iluvchi guruhlar. */
 export const SLIDE_TEMPLATE_GROUPS = [
@@ -123,13 +146,13 @@ export type SlideTemplate = {
   blurb: string;
   group: SlideTemplateGroup;
   visual: SlideVisual;
+  /** Shablonning standart palitrasi (`slide-themes.ts` id) — galereyada shu rangda ko'rinadi, tanlanganda formaga tushadi. */
+  defaultTheme: SlideThemeId;
   beats: SlideBeat[];
   /**
    * Paket beats'dan uzun bo'lganda qo'shiladigan slaydlar — HAR SHABLON
-   * UCHUN O'ZINIKI. Ilgari bitta umumiy `FILLER_BEATS` ishlatilardi va
-   * 16 slaydli dekaning yarmidan ko'pi hamma shablonda bir xil chiqardi.
-   * `role` matni to'g'ridan-to'g'ri LLM promptiga tushadi, shuning uchun
-   * bu yerdagi so'zlar KONTENTNI ham farqlantiradi, faqat maketni emas.
+   * UCHUN O'ZINIKI. `role` matni to'g'ridan-to'g'ri LLM promptiga tushadi,
+   * shuning uchun bu yerdagi so'zlar KONTENTNI ham farqlantiradi.
    */
   fillers: SlideBeat[];
 };
@@ -149,9 +172,10 @@ export const SLIDE_TEMPLATES: SlideTemplate[] = [
   {
     id: "auto",
     nameUz: "Avtomatik",
-    blurb: "Mavzuga qarab tuzilmani o‘zi tanlaydi",
+    blurb: "Mavzuga qarab shablonni o‘zi tanlaydi",
     group: "dars",
-    visual: "classic",
+    visual: "academic",
+    defaultTheme: "atlas",
     beats: [],
     fillers: [],
   },
@@ -162,7 +186,8 @@ export const SLIDE_TEMPLATES: SlideTemplate[] = [
     nameUz: "Ma’ruza",
     blurb: "Reja → tushuncha → mexanizm → xulosa",
     group: "dars",
-    visual: "classic",
+    visual: "academic",
+    defaultTheme: "atlas",
     beats: [
       { layout: "title", role: "Mavzu va fan" },
       { layout: "agenda", role: "Ma’ruza reja" },
@@ -191,7 +216,8 @@ export const SLIDE_TEMPLATES: SlideTemplate[] = [
     nameUz: "Dars / trening",
     blurb: "Maqsad, mashq, mustahkamlash, vazifa",
     group: "dars",
-    visual: "cards",
+    visual: "circle",
+    defaultTheme: "lumen",
     beats: [
       { layout: "title", role: "Dars mavzusi" },
       { layout: "bullets", role: "Maqsad — o‘quvchi nimani bilib oladi" },
@@ -218,9 +244,8 @@ export const SLIDE_TEMPLATES: SlideTemplate[] = [
     nameUz: "Tajriba",
     blurb: "Gipoteza, usul, kuzatuv, xulosa",
     group: "dars",
-    // AUDIT-7 O-3: ilgari `classic` edi — ya'ni `lecture` bilan aynan bir
-    // xil chizilardi. `lab` tajriba daftari maketini beradi.
-    visual: "lab",
+    visual: "notebook",
+    defaultTheme: "graphite",
     beats: [
       { layout: "title", role: "Tajriba savoli" },
       { layout: "agenda", role: "Ish reja" },
@@ -250,7 +275,8 @@ export const SLIDE_TEMPLATES: SlideTemplate[] = [
     nameUz: "Himoya",
     blurb: "Savol → metod → natija → hissa",
     group: "ilmiy",
-    visual: "dense",
+    visual: "formal",
+    defaultTheme: "legal",
     beats: [
       { layout: "title", role: "Himoya mavzusi" },
       { layout: "agenda", role: "Himoya reja" },
@@ -275,56 +301,35 @@ export const SLIDE_TEMPLATES: SlideTemplate[] = [
     ],
   },
   {
-    id: "literature",
-    nameUz: "Adabiyot",
-    blurb: "Asar, obraz, g‘oya, uslub",
+    /*
+     * Foto-hikoya — Adabiyot, Hayotnoma va Esse/foto-insho birlashmasi
+     * (uchalasi ham `magazine` oilasini bo'lishardi). Beats: asar/shaxs →
+     * davr → obraz/g'oya → iqtibos → meros; to'ldirgichlar uchalasidan.
+     */
+    id: "story",
+    nameUz: "Foto-hikoya",
+    blurb: "Asar, shaxs yoki esse: katta rasm, iqtibos, lavhalar",
     group: "ilmiy",
-    visual: "magazine",
+    visual: "story",
+    defaultTheme: "ink",
     beats: [
-      { layout: "title", role: "Asar nomi va muallifi" },
-      { layout: "agenda", role: "Tahlil reja" },
+      { layout: "title", role: "Asar / shaxs nomi va davri" },
+      { layout: "quote", role: "Ochilish iqtibosi" },
       { layout: "section", role: "Yozilgan davr va muhit" },
       { layout: "twoCol", role: "Obraz / g‘oya" },
-      { layout: "quote", role: "Asardan parcha" },
-      { layout: "bullets", role: "Badiiy uslub" },
-      { layout: "section", role: "Ahamiyati" },
-      { layout: "closing", role: "Yakun" },
-    ],
-    fillers: [
-      { layout: "twoCol", role: "Bosh qahramon / unga qarshi kuch" },
-      { layout: "quote", role: "Yana bir kalit parcha" },
-      { layout: "bullets", role: "Asardagi ramzlar va ularning ma’nosi" },
-      { layout: "process", role: "Syujet chizig‘i" },
-      { layout: "section", role: "Syujet burilishi" },
-      { layout: "twoCol", role: "Muallif nuqtai nazari / o‘quvchi qabuli" },
-      { layout: "bullets", role: "Adabiyotshunoslar bahosi" },
-      { layout: "quote", role: "Asar haqidagi mashhur fikr" },
-    ],
-  },
-  {
-    id: "bio",
-    nameUz: "Hayotnoma",
-    blurb: "Shaxs: davr, asar, meros",
-    group: "ilmiy",
-    visual: "magazine",
-    beats: [
-      { layout: "title", role: "Shaxs va davr" },
-      { layout: "agenda", role: "Hayot chizig‘i" },
-      { layout: "section", role: "Yoshlik va muhit" },
-      { layout: "process", role: "Asosiy bosqichlar" },
-      { layout: "twoCol", role: "Asar / g‘oya" },
-      { layout: "quote", role: "O‘z so‘zi" },
-      { layout: "bullets", role: "Meros" },
+      { layout: "process", role: "Syujet yoki hayot chizig‘i" },
+      { layout: "bullets", role: "Badiiy uslub va meros" },
+      { layout: "quote", role: "O‘z so‘zi yoki kalit parcha" },
       { layout: "closing", role: "Yodda qolsin" },
     ],
     fillers: [
-      { layout: "twoCol", role: "Yutuq / to‘siq" },
-      { layout: "bullets", role: "Ustozlari va zamondoshlari" },
-      { layout: "section", role: "Hayotidagi burilish nuqtasi" },
-      { layout: "table", role: "Asarlari va ularning mavzusi" },
+      { layout: "section", role: "Yangi lavha" },
+      { layout: "twoCol", role: "Bosh qahramon / unga qarshi kuch" },
+      { layout: "bullets", role: "Asardagi ramzlar va ularning ma’nosi" },
       { layout: "quote", role: "Zamondoshining bahosi" },
-      { layout: "process", role: "Ijodiy kamolot bosqichlari" },
       { layout: "twoCol", role: "O‘z davrida / bugun" },
+      { layout: "table", role: "Asarlari va ularning mavzusi" },
+      { layout: "bullets", role: "Adabiyotshunoslar bahosi" },
       { layout: "stats", role: "Hayotidagi muhim sanalar" },
     ],
   },
@@ -335,7 +340,8 @@ export const SLIDE_TEMPLATES: SlideTemplate[] = [
     nameUz: "Qiyos / munozara",
     blurb: "Ikki yondashuv, mezon, pozitsiya",
     group: "tahlil",
-    visual: "cards",
+    visual: "split",
+    defaultTheme: "orbit",
     beats: [
       { layout: "title", role: "Nimani solishtiramiz" },
       { layout: "agenda", role: "Qiyos mezonlari" },
@@ -358,30 +364,32 @@ export const SLIDE_TEMPLATES: SlideTemplate[] = [
     ],
   },
   {
-    id: "problem",
-    nameUz: "Muammo–yechim",
-    blurb: "Tashxis, sabab, chora",
+    /* Pitch — Muammo–yechim bilan birlashdi (ikkalasi `hero-split` edi). */
+    id: "pitch",
+    nameUz: "Pitch / muammo–yechim",
+    blurb: "Muammo → yechim → raqam → so‘rov",
     group: "tahlil",
-    visual: "hero-split",
+    visual: "bold",
+    defaultTheme: "aurora",
     beats: [
-      { layout: "title", role: "Muammo nomi" },
-      { layout: "section", role: "Nima yomon ketyapti" },
-      { layout: "bullets", role: "Kimga ta’sir qiladi" },
-      { layout: "process", role: "Sabab zanjiri" },
-      { layout: "compare", role: "Hozirgi holat / kerakli holat" },
-      { layout: "twoCol", role: "Yechim / to‘siq" },
-      { layout: "stats", role: "Kutilgan siljish" },
-      { layout: "closing", role: "Birinchi qadam" },
+      { layout: "title", role: "Mahsulot / g‘oya yoki muammo nomi" },
+      { layout: "section", role: "Muammo" },
+      { layout: "bullets", role: "Kim og‘riyapti va qanday" },
+      { layout: "section", role: "Yechim" },
+      { layout: "twoCol", role: "Qanday ishlaydi / nima beradi" },
+      { layout: "stats", role: "Ishonch raqamlari" },
+      { layout: "compare", role: "Oldin / keyin" },
+      { layout: "closing", role: "Keyingi qadam va so‘rov" },
     ],
     fillers: [
-      { layout: "bullets", role: "Muammoning ko‘rinadigan belgilari" },
-      { layout: "twoCol", role: "Tez chora / uzoq muddatli yechim" },
-      { layout: "process", role: "Joriy etish rejasi" },
-      { layout: "table", role: "Mas’ullar va muddatlar" },
-      { layout: "bullets", role: "Yechim ishlamasligi mumkin bo‘lgan holat" },
-      { layout: "section", role: "Chuqurroq sabab" },
-      { layout: "stats", role: "Xarajat va tejamkorlik" },
-      { layout: "quote", role: "Muammoni bir jumlada ifodalash" },
+      { layout: "process", role: "Sabab zanjiri" },
+      { layout: "bullets", role: "Bozor va mijoz segmenti" },
+      { layout: "twoCol", role: "Biz / raqobatchi" },
+      { layout: "stats", role: "Biznes model va birlik iqtisodi" },
+      { layout: "process", role: "Joriy etish rejasi va yo‘l xaritasi" },
+      { layout: "table", role: "Xarajat, mas’ullar va muddatlar" },
+      { layout: "section", role: "Nega aynan hozir" },
+      { layout: "quote", role: "Mijoz fikri" },
     ],
   },
   {
@@ -389,7 +397,8 @@ export const SLIDE_TEMPLATES: SlideTemplate[] = [
     nameUz: "Hisobot",
     blurb: "Xulosa, raqam, tavsiya",
     group: "tahlil",
-    visual: "dense",
+    visual: "dashboard",
+    defaultTheme: "slate",
     beats: [
       { layout: "title", role: "Hisobot sarlavhasi va davri" },
       { layout: "stats", role: "Qisqa ko‘rsatkichlar" },
@@ -411,87 +420,35 @@ export const SLIDE_TEMPLATES: SlideTemplate[] = [
       { layout: "stats", role: "Resurs sarfi" },
     ],
   },
-  {
-    id: "pitch",
-    nameUz: "Pitch",
-    blurb: "Muammo → yechim → raqam → so‘rov",
-    group: "tahlil",
-    visual: "hero-split",
-    beats: [
-      { layout: "title", role: "Mahsulot / g‘oya nomi" },
-      { layout: "section", role: "Muammo" },
-      { layout: "bullets", role: "Kim og‘riyapti" },
-      { layout: "section", role: "Yechim" },
-      { layout: "twoCol", role: "Qanday ishlaydi / nima beradi" },
-      { layout: "stats", role: "Ishonch raqamlari" },
-      { layout: "compare", role: "Oldin / keyin" },
-      { layout: "closing", role: "Keyingi qadam va so‘rov" },
-    ],
-    fillers: [
-      { layout: "bullets", role: "Bozor va mijoz segmenti" },
-      { layout: "twoCol", role: "Biz / raqobatchi" },
-      { layout: "stats", role: "Biznes model va birlik iqtisodi" },
-      { layout: "process", role: "Yo‘l xaritasi" },
-      { layout: "bullets", role: "Jamoa va tajriba" },
-      { layout: "table", role: "Xarajat va daromad rejasi" },
-      { layout: "section", role: "Nega aynan hozir" },
-      { layout: "quote", role: "Mijoz fikri" },
-    ],
-  },
 
   // ──────────────────────────────────────────────────── bayon va jarayon
   {
-    id: "process",
-    nameUz: "Yo‘riqnoma",
-    blurb: "Bosqichma-bosqich qanday qilinadi",
+    /* Vaqt chizig'i — Yo'riqnoma va Tarix birlashmasi (ikkalasi `timeline` edi). */
+    id: "timeline",
+    nameUz: "Vaqt chizig‘i",
+    blurb: "Bosqichlar, davrlar, voqealar ketma-ketligi",
     group: "bayon",
-    visual: "timeline",
+    visual: "rail",
+    defaultTheme: "forge",
     beats: [
-      { layout: "title", role: "Nimani qilamiz" },
-      { layout: "bullets", role: "Nima uchun aynan shu tartib" },
-      { layout: "process", role: "Umumiy oqim" },
-      { layout: "section", role: "Har bir bosqich batafsil" },
-      { layout: "twoCol", role: "Vosita / natija" },
-      { layout: "process", role: "Tekshiruv qadamlari" },
-      { layout: "bullets", role: "Tipik xatolar" },
+      { layout: "title", role: "Mavzu va davr yoki jarayon nomi" },
+      { layout: "process", role: "Asosiy bosqichlar" },
+      { layout: "section", role: "Birinchi bosqich / erta davr" },
+      { layout: "bullets", role: "Voqealar, sabablari va tartib" },
+      { layout: "section", role: "Keyingi bosqich / davr" },
+      { layout: "twoCol", role: "Sabab / oqibat" },
+      { layout: "quote", role: "Manbadan iqtibos yoki amaliyotchi maslahati" },
       { layout: "closing", role: "Eslab qoling" },
     ],
     fillers: [
-      { layout: "table", role: "Bosqich, vaqt, mas’ul" },
-      { layout: "bullets", role: "Tayyorgarlik va kerakli narsalar" },
-      { layout: "process", role: "Muqobil yo‘l" },
+      { layout: "table", role: "Sana, bosqich, mas’ul yoki voqea jadvali" },
+      { layout: "bullets", role: "Tayyorgarlik, sharoit va kerakli narsalar" },
+      { layout: "process", role: "Tekshiruv qadamlari / o‘zgarishlar zanjiri" },
       { layout: "twoCol", role: "To‘g‘ri bajarish / xato bajarish" },
-      { layout: "section", role: "Murakkabroq holat" },
-      { layout: "bullets", role: "Xavfsizlik va ehtiyot choralari" },
-      { layout: "stats", role: "Har bosqichga ketadigan vaqt" },
-      { layout: "quote", role: "Amaliyotchi maslahati" },
-    ],
-  },
-  {
-    id: "timeline",
-    nameUz: "Tarix",
-    blurb: "Davrlar, voqealar, shaxslar",
-    group: "bayon",
-    visual: "timeline",
-    beats: [
-      { layout: "title", role: "Mavzu va davr" },
-      { layout: "process", role: "Asosiy bosqichlar" },
-      { layout: "section", role: "Erta davr" },
-      { layout: "bullets", role: "Voqealar va sabablari" },
-      { layout: "section", role: "Keyingi davr" },
-      { layout: "twoCol", role: "Shaxs / asar" },
-      { layout: "quote", role: "Manbadan iqtibos" },
-      { layout: "closing", role: "Meros" },
-    ],
-    fillers: [
-      { layout: "table", role: "Sana va voqea jadvali" },
-      { layout: "bullets", role: "Davrning ijtimoiy sharoiti" },
-      { layout: "twoCol", role: "Sabab / oqibat" },
-      { layout: "section", role: "Uchinchi davr" },
-      { layout: "process", role: "O‘zgarishlar zanjiri" },
-      { layout: "bullets", role: "Tarixiy manbalar" },
+      { layout: "section", role: "Uchinchi davr yoki murakkab holat" },
+      { layout: "bullets", role: "Tipik xatolar va tarixiy manbalar" },
+      { layout: "stats", role: "Har bosqichga ketadigan vaqt yoki davr raqamlari" },
       { layout: "quote", role: "Zamondosh guvohligi" },
-      { layout: "stats", role: "Davr raqamlarda: hajm, muddat, miqdor" },
     ],
   },
   {
@@ -499,7 +456,8 @@ export const SLIDE_TEMPLATES: SlideTemplate[] = [
     nameUz: "Keys / hikoya",
     blurb: "Vaziyat → burilish → natija → saboq",
     group: "bayon",
-    visual: "cards",
+    visual: "editorial",
+    defaultTheme: "sakura",
     beats: [
       { layout: "title", role: "Keys nomi" },
       { layout: "section", role: "Kontekst va qahramon" },
@@ -521,33 +479,6 @@ export const SLIDE_TEMPLATES: SlideTemplate[] = [
       { layout: "quote", role: "Ishtirokchi so‘zi" },
     ],
   },
-  {
-    id: "magazine",
-    nameUz: "Esse / foto-insho",
-    blurb: "Katta rasm, iqtibos, lavhalar",
-    group: "bayon",
-    visual: "magazine",
-    beats: [
-      { layout: "title", role: "Muqova sarlavha" },
-      { layout: "quote", role: "Ochilish iqtibosi" },
-      { layout: "section", role: "1-lavha" },
-      { layout: "twoCol", role: "Ikki nuqtai nazar" },
-      { layout: "section", role: "2-lavha" },
-      { layout: "bullets", role: "Qisqa mulohazalar" },
-      { layout: "quote", role: "Yakuniy ohang" },
-      { layout: "closing", role: "Oxirgi so‘z" },
-    ],
-    fillers: [
-      { layout: "section", role: "Yangi lavha" },
-      { layout: "bullets", role: "Kuzatilgan tafsilotlar" },
-      { layout: "quote", role: "Ochilgan fikr" },
-      { layout: "twoCol", role: "Tashqi ko‘rinish / ichki mazmun" },
-      { layout: "section", role: "Kontrast lavha" },
-      { layout: "bullets", role: "Muallif mulohazasi" },
-      { layout: "twoCol", role: "Ilgari / hozir" },
-      { layout: "quote", role: "Eslab qolinadigan jumla" },
-    ],
-  },
 ];
 
 export const SLIDE_TEMPLATE_BY_ID = Object.fromEntries(SLIDE_TEMPLATES.map((t) => [t.id, t])) as Record<
@@ -558,14 +489,10 @@ export const SLIDE_TEMPLATE_BY_ID = Object.fromEntries(SLIDE_TEMPLATES.map((t) =
 /**
  * Mavzudan shablon taxmin qiladi.
  *
- * Naqshlar ATAYLAB tor: ilgari `/jarayon/` «Fotosintez jarayoni» ni,
- * `/dars/` esa har qanday akademik mavzuni, `/muammo|yechim/` esa
- * «Fotosintez muammolari» ni noto'g'ri ushlab olardi. Shubha bo'lsa
- * `lecture` ga tushish xato shablondan yaxshiroq.
- *
- * Olib tashlangan shablonlarning naqshlari YO'QOLMADI — ular endi
- * o'rnini bosgan shablonga yo'naltiriladi (munozara → qiyos, trening →
- * dars, brifing → hisobot, foto-insho → esse, hikoya → keys).
+ * Naqshlar ATAYLAB tor: shubha bo'lsa `lecture` ga tushish xato
+ * shablondan yaxshiroq. Birlashgan shablonlarning naqshlari
+ * YO'QOLMADI — ular o'rnini bosgan shablonga yo'naltiriladi (adabiyot/
+ * hayotnoma/esse → foto-hikoya, muammo → pitch, yo'riqnoma → vaqt chizig'i).
  */
 export function inferSlideTemplate(topic: string, extra = ""): Exclude<SlideTemplateId, "auto"> {
   const t = `${topic} ${extra}`.toLowerCase();
@@ -574,19 +501,19 @@ export function inferSlideTemplate(topic: string, extra = ""): Exclude<SlideTemp
   if (/munozara|debat|bahs|tezisga qarshi/.test(t)) return "compare";
   if (/qiyos|solishtir|\bvs\b|farqi|ikkita yondashuv/.test(t)) return "compare";
   if (/keys|vaziyat|case study|holat tahlil/.test(t)) return "case";
-  if (/muammo va yechim|muammolar va yechim|krizis|oldini olish yo‘l/.test(t)) return "problem";
-  if (/hayoti va ijodi|tarjimai hol|biograf|shaxsiyat/.test(t)) return "bio";
-  if (/asar tahlil|adabiy|she’r|roman |doston|navoiy|bobur/.test(t)) return "literature";
+  if (/muammo va yechim|muammolar va yechim|krizis|oldini olish yo‘l/.test(t)) return "pitch";
+  if (/hayoti va ijodi|tarjimai hol|biograf|shaxsiyat/.test(t)) return "story";
+  if (/asar tahlil|adabiy|she’r|roman |doston|navoiy|bobur/.test(t)) return "story";
   if (/tarix|davri|xronolog|bosqichlari tarix/.test(t)) return "timeline";
   if (/tajriba|gipoteza|laborator|eksperiment|kuzatuv/.test(t)) return "science";
   if (/trening|seminar|workshop|amaliy mashg/.test(t)) return "lesson";
   if (/dars ishlanma|dars rejasi|ochiq dars|sinf soati/.test(t)) return "lesson";
   if (/brifing|qisqa hisobot|raqamlar/.test(t)) return "report";
   if (/hisobot|monitoring|ko‘rsatkich|kpi|natijalar tahlil/.test(t)) return "report";
-  if (/foto[- ]insho|lavha|galereya|vizual esse/.test(t)) return "magazine";
+  if (/foto[- ]insho|lavha|galereya|vizual esse/.test(t)) return "story";
   if (/hikoya qil|qissa|syujet|bosh qahramon/.test(t)) return "case";
-  if (/qanday qilish|bosqichma-bosqich|yo‘riqnoma|algoritm tartibi|jarayonning bosqichlari/.test(t)) return "process";
-  if (/jurnal|esse|qarash|falsafa/.test(t)) return "magazine";
+  if (/qanday qilish|bosqichma-bosqich|yo‘riqnoma|algoritm tartibi|jarayonning bosqichlari/.test(t)) return "timeline";
+  if (/jurnal|esse|qarash|falsafa/.test(t)) return "story";
   return "lecture";
 }
 

@@ -2,6 +2,7 @@ import { bodyRules, type BodyRules } from "./slide-audience";
 import { FONT_BY_ID, isSlideFontId } from "./slide-fonts";
 import { planAnswers, planQuiz, planReferences } from "./slide-layout-extra";
 import type { SlideAudience, SlideTemplateId, SlideVisual } from "./slide-templates";
+import { designOf } from "./visuals";
 import type { SlideModel, SlideSrc, SlideTheme } from "./slide-types";
 
 /** Widescreen 16:9 in inches — same coordinate space as PPTX and the on-site viewer. */
@@ -34,14 +35,33 @@ export type Box = { x: number; y: number; w: number; h: number };
 export type Fill = { color: string; alpha?: number };
 
 export type SlideLayer =
-  | { t: "rect"; box: Box; fill?: Fill; line?: { color: string; width: number }; radius?: number }
+  | {
+      t: "rect";
+      box: Box;
+      fill?: Fill;
+      line?: { color: string; width: number };
+      radius?: number;
+      /** Yumshoq tashqi soya (karta ko'tarilgan) — PPTX `shadow`, ko'ruvchi `box-shadow`. */
+      shadow?: boolean;
+    }
   /**
    * `fit` — `cover` (standart, kesadi) yoki `contain` (butun rasm sig'adi).
    * Logo uchun `contain` shart: `cover` uni kesib tashlardi. Ikkala
    * renderer (`render-pptx` `sizing`, `SlideCanvas` `objectFit`) shu
    * maydonni BIR XIL o'qiydi — «ko'rdim = oldim».
    */
-  | { t: "image"; box: Box; url: string; fit?: "cover" | "contain" }
+  | {
+      t: "image";
+      box: Box;
+      url: string;
+      fit?: "cover" | "contain";
+      /**
+       * `circle` — dumaloq rasm (Shablonlar 2). PPTX `rounding: true`,
+       * ko'ruvchi `border-radius: 50%` — ikkalasi bir xil o'qiydi. Quti
+       * KVADRAT bo'lishi kerak, aks holda ellips chiqadi.
+       */
+      shape?: "circle";
+    }
   | {
       t: "text";
       box: Box;
@@ -136,6 +156,19 @@ function usesPhoto(layout: string) {
 /** Inch box where a photo sits for this layout — used before the image exists. */
 export function photoSlot(layout: string, visual: SlideVisual = "classic"): Box | null {
   if (!usesPhoto(layout)) return null;
+  /*
+   * Shablonlar 2: dizayn (`visuals/`) o'z rasm joylarini beradi — dumaloq
+   * rasm, chap/o'ng ustun, to'la ekran. Bermagan maketlarda dizaynning
+   * `base` oilasi (eski 7 tadan biri) qoidasi ishlaydi.
+   */
+  const design = designOf(visual);
+  if (design) {
+    if (design.photo && layout in design.photo) {
+      const b = design.photo[layout as keyof typeof design.photo];
+      return b ? { ...b } : null;
+    }
+    visual = design.base;
+  }
   // Tasma `visual` ga bog'liq EMAS: uning butun ma'nosi kontent
   // zonasini bir xil miqdorda toraytirishda, olti tarmoq esa shu
   // zonaning ichini har xil chizadi.
@@ -2461,6 +2494,17 @@ function applyFontOverrides(plan: SlidePlan, s: SlideModel): void {
 }
 
 function dispatch(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index: number, total: number, ctx: PlanCtx): SlidePlan {
+  /*
+   * Shablonlar 2: har dizayn (`visuals/<id>.ts`) o'zi chizadigan
+   * maketlarni `plan` xaritasida beradi (titul, bo'lim, bandlar…);
+   * qolganlari dizaynning `base` oilasi bilan pastdagi eski tarmoqlardan.
+   */
+  const design = designOf(visual);
+  if (design) {
+    const custom = design.plan[s.layout];
+    if (custom) return custom(s, theme, index, total, ctx);
+    visual = design.base;
+  }
   switch (s.layout) {
     case "title":
       return planTitle(s, theme, visual, index, total);
@@ -2528,7 +2572,33 @@ function pushLogo(plan: SlidePlan, s: SlideModel, theme: SlideTheme, url: string
  * Bu fayl 2000 qatordan oshdi — yangi maket shu yerga emas, o'z fayliga
  * yoziladi va faqat shu to'plamdan foydalanadi.
  */
-export const LAYOUT_KIT = { planHeading, pushFooter, pushChrome, fitSize, fitLines, M, W, H };
+export const LAYOUT_KIT = {
+  planHeading,
+  pushFooter,
+  pushChrome,
+  fitSize,
+  fitLines,
+  listRows,
+  inkHeight,
+  bulletGap,
+  photo,
+  stripCut,
+  cssColor,
+  M,
+  W,
+  H,
+  FOOT_Y,
+  FOOT_H,
+  TEXT_GAP,
+  RIGHT_IMG_X,
+  LEFT_IMG_W,
+  STRIP_W,
+  SECTION_TOP,
+  SECTION_BOTTOM,
+  LOGO_BOX,
+  LOGO_RESERVE,
+  BULLET_GAP_MIN,
+};
 
 export function photoLayouts() {
   return ["title", "section", "bullets", "agenda", "quote", "closing", "twoCol", "compare", "stats", "process", "table"] as const;
@@ -2541,5 +2611,8 @@ export function sidePhotoBox(s: SlideModel, visual: SlideVisual): Box | null {
   // `magazine` da title va section rasmi to'la ekran: matn ustiga
   // ATAYLAB qo'yiladi (qoplama + tasma bilan), ya'ni «to'qnashuv» emas.
   if (visual === "magazine" && (s.layout === "title" || s.layout === "section")) return null;
+  // Dizaynlarda to'la ekranli rasm ham ataylab matn ostida.
+  const design = designOf(visual);
+  if (design?.fullBleed?.includes(s.layout)) return null;
   return photoSlot(s.layout, visual);
 }
