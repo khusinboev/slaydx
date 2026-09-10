@@ -163,13 +163,18 @@ function Pairs({ t }: { t: TranslationReport }) {
 function FilePane({ t, gen, pdf }: { t: TranslationReport; gen?: { id: string; format: string }; pdf: boolean }) {
   const kind = t.sourceKind;
   if ((kind === "docx" || kind === "pptx") && gen && pdf) {
+    // Brauzerning o'z PDF ko'ruvchisi; u yo'q bo'lsa (ba'zi mobil brauzerlar) — yangi oynada ochish havolasi.
     return (
-      <iframe
-        src={fileUrl(gen.id, "pdf")}
-        title="Tarjima qilingan fayl (PDF ko‘rinishi)"
-        className="bg-card h-[80vh] w-full rounded-xl border"
-        data-file-preview
-      />
+      <div className="flex min-h-0 flex-col gap-2">
+        <p className="text-muted-foreground text-[12px]">
+          Fayl PDF ko‘rinishida (LibreOffice). Ko‘rinmasa —{" "}
+          <a href={fileUrl(gen.id, "pdf")} target="_blank" rel="noreferrer" className="text-primary underline-offset-2 hover:underline">
+            PDF ni yangi oynada ochish
+          </a>
+          .
+        </p>
+        <iframe src={fileUrl(gen.id, "pdf")} title="Tarjima qilingan fayl (PDF ko‘rinishi)" className="bg-card h-[80vh] w-full rounded-xl border" data-file-preview />
+      </div>
     );
   }
   if (kind === "txt" || kind === "md" || kind === "csv") {
