@@ -6,8 +6,9 @@ import type { llmComplete } from "../lib/generation/llm.ts";
 import { extractMeta } from "../lib/generation/meta.ts";
 import { languageDirective } from "../lib/generation/i18n.ts";
 import {
-  MIN_SUMMARY_CHARS,
+  SUMMARY_LIMITS,
   buildResumeDoc,
+  minSummaryChars,
   mergeLlm,
   parseResumeLlm,
   resumeSystemPrompt,
@@ -173,9 +174,10 @@ test("qisqa qisqacha → BIR marta qat'iy qayta so'rov, ikkinchisi qabul qilinad
   assert.equal(b.calls.length, 2, "aynan bitta qayta urinish");
   assert.match(b.calls[1].user, /previous answer was rejected/i);
   assert.match(b.calls[1].user, /at least 250 characters/);
+  assert.match(b.calls[1].user, /shorter than 200 characters/);
   assert.equal(b.calls[0].user.length < b.calls[1].user.length, true, "qat'iy qo'shimcha ikkinchi so'rovda");
   assert.equal(doc?.resume?.summary, LONG_SUMMARY);
-  assert.ok(LONG_SUMMARY.length >= MIN_SUMMARY_CHARS);
+  assert.ok(LONG_SUMMARY.length >= minSummaryChars("uz"));
 });
 
 /**
@@ -192,8 +194,8 @@ test("qisqacha qo'riqchidan KEYIN o'lchanadi — jumla tashlansa qayta so'raladi
   const raw =
     `${trimmed} 2013-yildan boshlab moliya sohasida ishlab kelmoqda, ishlab chiqarish va chakana savdo kompaniyalarida ` +
     `boshqaruv hisobotini yo‘lga qo‘ygan va katta jamoalarni muvofiqlashtirgan.`;
-  assert.ok(raw.length > MIN_SUMMARY_CHARS, "zond xom holda darvozadan o'tishi kerak");
-  assert.ok(trimmed.length < MIN_SUMMARY_CHARS, "qo'riqchidan keyin darvozadan o'tmasligi kerak");
+  assert.ok(raw.length > minSummaryChars("uz"), "zond xom holda darvozadan o'tishi kerak");
+  assert.ok(trimmed.length < minSummaryChars("uz"), "qo'riqchidan keyin darvozadan o'tmasligi kerak");
 
   const b = build({}, (_c, n) => (n === 1 ? answer({ summary: raw }) : answer()));
   const doc = await b.run();
@@ -261,6 +263,45 @@ test("qayta so'rovdan keyin ham qisqa qolsa jurnalda alohida qator bo'ladi", asy
     `jurnal qatori yo'q:\n${lines.join("\n")}`,
   );
   assert.ok(lines.some((l) => l.includes("[resume] qisqachadan tashlandi (yil)")), "tashlangan jumla sababi ham yozilsin");
+});
+
+/**
+ * JONLI SINOV REGRESSIYASI (`--lang ja`) — uzunlik YOZUV TIZIMIGA bog'liq.
+ *
+ * 209 ta yapon belgisi inglizcha 400–500 belgiga teng ma'lumot tashiydi.
+ * Yagona lotin chegarasi (200) yaponcha javobni «qisqa» deb rad etar,
+ * behuda qat'iy qayta so'rov yuborar va byudjetni yer edi — model esa
+ * to'g'ri uzunlikda yozgan bo'lardi.
+ */
+test("uzunlik darvozasi yozuv tizimiga qarab: zh/ja/ko past, qolganlari lotin chegarasida", () => {
+  for (const code of ["ja", "zh", "ko", "JA"]) {
+    assert.equal(minSummaryChars(code), SUMMARY_LIMITS.dense.gate, `${code}: zich yozuv chegarasi`);
+  }
+  for (const code of ["uz", "ru", "en", "de", "tr", "ar", "fa"]) {
+    assert.equal(minSummaryChars(code), SUMMARY_LIMITS.latin.gate, `${code}: lotin chegarasi`);
+  }
+  assert.ok(SUMMARY_LIMITS.dense.gate < SUMMARY_LIMITS.latin.gate);
+  // Prompt HAM shu diapazonni aytadi — aks holda ko'rsatma va darvoza ajralib ketadi.
+  assert.match(prompt({ language: "ja" }), /between 100 and 300 characters/);
+  assert.match(prompt({ language: "en" }), /between 250 and 700 characters/);
+});
+
+test("ja: 120 belgilik qisqacha QABUL qilinadi (qayta so'rov yo'q), en da esa qayta so'raladi", async () => {
+  // 120 ta yapon belgisi — mazmunan to'liq qisqacha.
+  const jaSummary = "予算管理と経営報告の分野で五年以上の実務経験を持つ財務アナリスト。製造業と小売業の月次報告サイクルを構築し、原価分析にもとづく経営判断を支援した。表計算とデータベースを日常的に利用する。".slice(0, 120);
+  assert.ok(jaSummary.length >= minSummaryChars("ja") && jaSummary.length < minSummaryChars("en"), `zond uzunligi: ${jaSummary.length}`);
+
+  const ja = build({ language: "ja" }, () => answer({ summary: jaSummary, labels: { summary: "概要", experience: "職務経歴", education: "学歴" } }));
+  const doc = await ja.run();
+  assert.equal(ja.calls.length, 1, "yaponchada qayta so'rov ishga tushmasligi kerak");
+  assert.equal(doc?.resume?.summary, jaSummary);
+  assert.equal(doc?.resume?.labels.experience, "職務経歴", "yorliqlar modeldan");
+
+  // AYNAN shu uzunlik inglizchada qayta so'rovni chaqiradi.
+  const en = build({ language: "en" }, () => answer({ summary: "x".repeat(120) }));
+  await en.run();
+  assert.equal(en.calls.length, 2, "inglizchada 120 belgi qisqa — qayta so'ralishi kerak");
+  assert.match(en.calls[1].user, /at least 250 characters/);
 });
 
 test("deadline yetmasa umuman chaqirilmaydi", async () => {
