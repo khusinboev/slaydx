@@ -10,6 +10,7 @@ import { renderPptxWithTemplate } from "./render-pptx-template";
 import type { CustomTemplate } from "./pptx-template";
 import { buildImageArtifact } from "./image-studio";
 import { buildTranslationArtifact } from "./translate/engine";
+import { buildResumeDoc } from "./resume/write";
 import type { SlideProgressSink } from "./slide-progress";
 import type { TranslationSource } from "./source-types";
 import { buildSlideAcademicDoc } from "./slide-write";
@@ -173,6 +174,35 @@ export async function buildArtifact(
    */
   if (tool.id === "translation") {
     return buildTranslationArtifact(meta, values, opts);
+  }
+
+  /*
+   * Rezyume 2: SURAT dvigatelga faqat shu yo'ldan kiradi (worker
+   * `photo_uploads` dan `data:` URL beradi), shuning uchun rezyume
+   * `writeWithLlm` orqali emas, to'g'ridan-to'g'ri chaqiriladi.
+   * `null` — kalit yo'q yoki model javob bermadi: LLM'siz deterministik
+   * model (`content.ts` → `draftModel`) zaxira bo'lib qoladi, chunki
+   * rezyume MA'LUMOTI foydalanuvchidan keladi — matn yozilmasa ham
+   * hujjat mazmunli chiqadi (maqola/referatdan farqi shu).
+   */
+  if (tool.id === "resume") {
+    let resumeDoc = await buildResumeDoc(meta, values, { deadline, photo: opts.photo });
+    if (!resumeDoc) {
+      resumeDoc = buildAcademicDoc(meta, values);
+      // Zaxira yo'lda ham surat qoladi: u foydalanuvchi YUKLAGAN fayl,
+      // modelning ishlashiga bog'liq emas.
+      if (opts.photo && resumeDoc.resume) {
+        resumeDoc.resume.photo = {
+          url: opts.photo.url,
+          shape: opts.photo.shape,
+          assetId: opts.photo.assetId,
+          ...(opts.photo.originalAssetId ? { originalAssetId: opts.photo.originalAssetId } : {}),
+          ...(opts.photo.crop ? { crop: opts.photo.crop } : {}),
+        };
+      }
+    }
+    const fileName = `${meta.fileNameHint}.docx`;
+    return { html: renderHtml(resumeDoc), bytes: await renderDocx(resumeDoc), fileName, mime: DOCX, doc: resumeDoc };
   }
 
   const llmDoc = await writeWithLlm(meta, values, deadline);

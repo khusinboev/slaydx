@@ -56,7 +56,100 @@ const TRANSLATION_SAMPLE = [
   "Choralar: saksovul ekish (2018–2024 yillarda 1,7 million gektar), tomchilatib sug‘orish, «Orolni asrash» xalqaro jamg‘armasi loyihalari. Batafsil: https://aral.uz va info@aral.uz.",
 ].join("\n\n");
 
+
+/**
+ * Rezyume 2 jonli keysi uchun KIRISH — o'zbekcha faktlar.
+ *
+ * Chiqish tili `--lang` bilan boshqariladi (standart `en`): asosiy
+ * talab — foydalanuvchi ma'lumotni ISTALGAN tilda kiritadi, rezyume esa
+ * tanlangan tilda chiqadi.
+ */
+const RESUME_VALUES: FormValues = {
+  fullName: "Karimova Dilnoza",
+  targetRole: "Moliya tahlilchisi",
+  phone: "+998901234567",
+  email: "dilnoza.karimova@mail.uz",
+  location: "Toshkent",
+  experience: JSON.stringify([
+    {
+      id: "e1",
+      company: "Artel Electronics",
+      role: "Yetakchi moliya tahlilchisi",
+      start: "2022-03",
+      end: "now",
+      bullets: [
+        "byudjet tuzganman, 14 ta bolim uchun",
+        "xarajatlarni kamaytirdim, logistika 12 foiz",
+        "hisobot tayyorlash 3 kundan 1 kunga tushdi",
+      ],
+    },
+    {
+      id: "e2",
+      company: "Korzinka",
+      role: "Moliya tahlilchisi",
+      start: "2019-08",
+      end: "2022-02",
+      bullets: ["35 ta dokon boyicha rentabellik hisobladim", "1C da hisob bloklarini avtomatlashtirdim"],
+    },
+  ]),
+  education: JSON.stringify([
+    { id: "d1", institution: "Toshkent davlat iqtisodiyot universiteti", degree: "Bakalavr, moliya va kredit", start: "2015", end: "2019" },
+  ]),
+  languages: JSON.stringify([
+    { id: "l1", language: "O‘zbek", level: "ona tili" },
+    { id: "l2", language: "Ingliz", level: "B2" },
+  ]),
+  certificates: JSON.stringify([{ id: "c1", name: "ACCA F3", issuer: "ACCA", year: "2021" }]),
+  skills: "Excel,1C,Power BI,IFRS",
+  about: "5 yil moliya sohasida ishlaganman, byudjet va boshqaruv hisoboti bilan.",
+  tone: "professional",
+};
+
+/** Kirishda BOR yillar — model boshqa yil o'ylab topmasligi kerak. */
+const RESUME_YEARS = new Set(["2015", "2019", "2021", "2022"]);
+
 const CASES: Case[] = [
+  {
+    /*
+     * Rezyume 2 (AUDIT-15): tuzilmali kirish → LLM qayta yozadi va
+     * tartiblaydi. Eng muhim da'vo — MODEL FAKT O'YLAB TOPMASLIGI:
+     * kompaniya nomlari verbatim, kirishda yo'q yil yo'q.
+     * `--enrich off` bilan ikkinchi yugurish `ai` bandlarni butunlay
+     * yo'qotishi kerak.
+     */
+    name: "resume",
+    tool: "resume",
+    budgetMs: 150_000,
+    values: {
+      ...RESUME_VALUES,
+      language: langArg(),
+      enrich: !process.argv.includes("--enrich-off"),
+      resumeTemplate: "modern",
+      resumePalette: "ember",
+    },
+    checks: (f, pages) => {
+      const m = f.doc.resume;
+      const enrich = !process.argv.includes("--enrich-off");
+      const bullets = m?.experience.flatMap((e) => e.bullets) ?? [];
+      const aiCount = bullets.filter((b) => b.ai).length + (m?.skills.filter((s) => s.ai).length ?? 0);
+      const text = JSON.stringify(m ?? {});
+      const strayYear = (text.match(/\b(19|20)\d{2}\b/g) ?? []).find((y) => !RESUME_YEARS.has(y));
+      const perRow = m?.experience.map((e) => e.bullets.filter((b) => b.ai).length) ?? [];
+      return [
+        ok("model bor", Boolean(m), m ? `${m.experience.length} ish joyi, ${m.skills.length} ko'nikma` : "yo'q"),
+        ok("summary 220–700", (m?.summary.length ?? 0) >= 220 && (m?.summary.length ?? 0) <= 700, `${m?.summary.length ?? 0} belgi`),
+        ok("kompaniya verbatim", Boolean(m) && ["Artel Electronics", "Korzinka"].every((c) => m!.experience.some((e) => e.company === c)), m?.experience.map((e) => e.company).join(" | ") ?? ""),
+        ok("sana o'zgarmagan", m?.experience[0]?.end === "now" && m?.experience.some((e) => e.start === "2019-08"), m?.experience.map((e) => `${e.start}→${e.end}`).join(" ") ?? ""),
+        ok("uydirma yil yo'q", !strayYear, strayYear ? `topildi: ${strayYear}` : "toza"),
+        ok("xronologik tartib", (m?.experience[0]?.end ?? "") === "now", m?.experience.map((e) => e.end).join(",") ?? ""),
+        ok(enrich ? "AI bandlar bor" : "AI bandlar yo'q", enrich ? aiCount > 0 : aiCount === 0, `${aiCount} ta ai`),
+        ok("AI shifti (≤2/ish joyi)", perRow.every((n) => n <= 2), perRow.join(",")),
+        ok("yorliq tili", Boolean(m) && m!.labels.experience.length > 0, `${m?.labels.experience} · ${m?.labels.education}`),
+        ok("chiqish tili", m?.language === langArg(), String(m?.language)),
+        ok("DOCX 1–2 bet", pages === null || (pages >= 1 && pages <= 2), `${pages ?? "?"} bet`),
+      ];
+    },
+  },
   {
     /* Tarjimon 2: matn rejimi — aniqlangan til, glossariy, raqam/URL saqlanishi, `translation` profil. */
     name: "translation-text",
@@ -403,11 +496,26 @@ async function runCase(c: Case) {
             return { bytes, name: path.basename(srcPath), kind, mime: "application/octet-stream", chars: 0 };
           })()
         : undefined;
+    /* `--photo <fayl>` — rezyume surati (worker `photoDataUrl` yo'li). */
+    const photoPath = photoArg();
+    const photo =
+      photoPath && c.tool === "resume"
+        ? await (async () => {
+            const bytes = await readFile(photoPath);
+            const mime = photoPath.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
+            process.stdout.write(`   ⟶ surat ${path.basename(photoPath)}: ${(bytes.byteLength / 1024).toFixed(0)} KB\n`);
+            return {
+              url: `data:${mime};base64,${bytes.toString("base64")}`,
+              assetId: "live",
+              shape: (mime === "image/png" ? "circle" : "square") as "circle" | "square",
+            };
+          })()
+        : undefined;
     const onStage = (ev: { progress: number; step: string }) => {
       const dt = ((Date.now() - started) / 1000).toFixed(1);
       process.stdout.write(`   ⟶ +${dt}s ${ev.progress}% ${ev.step}\n`);
     };
-    const file = await buildArtifact(tool, c.values, { deadline: Date.now() + c.budgetMs, onProgress, template, source, onStage });
+    const file = await buildArtifact(tool, c.values, { deadline: Date.now() + c.budgetMs, onProgress, template, source, photo, onStage });
     const secs = ((Date.now() - started) / 1000).toFixed(1);
     const pages = await pageCount(file);
     await writeFile(path.join(OUT, file.fileName), file.bytes);
@@ -428,6 +536,12 @@ async function runCase(c: Case) {
   }
 }
 
+/** `--photo <fayl>` — «Rezyume» jonli sinovi uchun surat (PNG doira, JPEG kvadrat). */
+function photoArg(): string | null {
+  const i = process.argv.indexOf("--photo");
+  return i > 0 && process.argv[i + 1] ? process.argv[i + 1] : null;
+}
+
 /** `--source <fayl>` — «Tarjimon» jonli sinovi uchun kirish fayli (DOCX/PPTX/XLSX/PDF/TXT/MD/CSV). */
 function sourceArg(): string | null {
   const i = process.argv.indexOf("--source");
@@ -438,6 +552,12 @@ function sourceKindOf(file: string): (typeof SOURCE_KINDS)[number] {
   const ext = path.extname(file).slice(1).toLowerCase() as (typeof SOURCE_KINDS)[number];
   if (!SOURCE_KINDS.includes(ext)) throw new Error(`--source: noma'lum format .${ext}`);
   return ext;
+}
+
+/** `--lang <kod>` — rezyume chiqish tili (standart `en`: 18 tildan biri). */
+function langArg(): string {
+  const i = process.argv.indexOf("--lang");
+  return i > 0 && process.argv[i + 1] ? process.argv[i + 1] : "en";
 }
 
 function templateArg(): string | null {
@@ -454,7 +574,7 @@ async function main() {
 
   const tpl = templateArg();
   const src = sourceArg();
-  const only = process.argv.slice(2).filter((a) => !a.startsWith("-") && a !== tpl && a !== src);
+  const only = process.argv.slice(2).filter((a) => !a.startsWith("-") && a !== tpl && a !== src && a !== langArg());
   const cases = only.length ? CASES.filter((c) => only.includes(c.name)) : CASES;
   process.stdout.write(
     `Jonli tekshiruv — ${cases.length} keys · model ${process.env.GEMINI_MODEL || "gemini"} · PDF ${pdfAvailable() ? "bor" : "yo'q"}\n`,
