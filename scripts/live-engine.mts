@@ -83,7 +83,7 @@ const CASES: Case[] = [
     name: "translation-file",
     tool: "translation",
     budgetMs: 400_000,
-    values: { mode: "file", sourceAssetId: "live", language: "en", sourceLang: "avto", style: "formal" },
+    values: { mode: "file", sourceAssetId: "live", language: process.env.LIVE_TARGET || "en", sourceLang: "avto", style: "formal" },
     checks: (f, pages) => {
       const t = f.doc.translation;
       const src = sourceArg();

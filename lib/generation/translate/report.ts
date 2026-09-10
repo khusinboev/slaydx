@@ -26,7 +26,9 @@ export type TranslationWarningCode =
   /** O'ngdan chapga yoziladigan til — paragraf yo'nalishi o'zgartirilmadi. */
   | "rtl"
   /** Tanlangan manba tili aniqlangan tildan farq qiladi. */
-  | "detected";
+  | "detected"
+  /** Model uzun bandni o'zgarishsiz qoldirdi (asl matn qabul qilindi) — tekshirish tavsiya. */
+  | "unchanged";
 
 export type TranslationWarning = { code: TranslationWarningCode; detail: string; id?: string };
 

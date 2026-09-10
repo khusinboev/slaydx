@@ -65,6 +65,8 @@ export const PREV_TAIL_CHARS = 400;
 export const ITEM_RETRIES = 2;
 export const PARTIAL_MAX_SHARE = 0.03;
 export const PARTIAL_MAX_COUNT = 20;
+/** Shu uzunlikdan qisqa band o'zgarishsiz qolsa — jim (ism, sarlavha, manba qatori). */
+export const UNCHANGED_WARN_CHARS = 80;
 export const PAIRS_MAX = 3000;
 export const PAIRS_MAX_CHARS = 700_000;
 const MIN_WAVE_MS = 15_000;
@@ -318,6 +320,7 @@ export async function translateSegments(segs: Segment[], opts: TranslateOpts, de
   const map: SegmentMap = new Map();
   const failed = new Map<string, ItemFail>();
   const verbatimWarn = new Map<string, string>();
+  const unchangedWarn = new Map<string, string>();
   let done = 0;
   const waveOf = (i: number) => Math.floor(i / POOL);
   const wavesTotal = Math.max(1, Math.ceil(batches.length / POOL));
@@ -335,7 +338,10 @@ export async function translateSegments(segs: Segment[], opts: TranslateOpts, de
       thinking: 0,
     }).catch(() => null);
     const data = parseLlmObject(raw);
-    if (!data) return { ok: new Map(), fails: items.map((s) => ({ id: s.id, reason: "missing" as const })), parsed: false };
+    if (!data) {
+      console.warn(`[translate] partiya ${index + 1}/${batches.length}: JSON kelmadi (${raw === null ? "javob yo'q/xato" : `${raw.length} belgi`}), ${items.length} band`);
+      return { ok: new Map(), fails: items.map((s) => ({ id: s.id, reason: "missing" as const })), parsed: false };
+    }
     const v = validateItems(items, data, { sameLang });
     return { ...v, parsed: true };
   };
@@ -356,7 +362,22 @@ export async function translateSegments(segs: Segment[], opts: TranslateOpts, de
       res = { ok: new Map([...a.ok, ...b.ok]), fails: [...a.fails, ...b.fails], parsed: a.parsed || b.parsed };
     }
     for (const [id, t] of res.ok) map.set(id, t);
-    let pending = res.fails;
+    /*
+     * `same` — model matnni o'zgarishsiz qaytardi (kod qatori, ism, «Reja»,
+     * yaqin tillarda bir xil so'z). Qayta SO'RALMAYDI: qat'iy «tarjima
+     * qil» ko'rsatmasi kod/ismni buzishga undaydi. Asl matn qabul qilinadi,
+     * faqat uzun band ogohlantirish oladi (`UNCHANGED_WARN_CHARS`).
+     */
+    const acceptUnchanged = (f: ItemFail) => {
+      const src = batch.find((s) => s.id === f.id)?.text ?? "";
+      map.set(f.id, src);
+      if (stripTokens(src).length >= UNCHANGED_WARN_CHARS) unchangedWarn.set(f.id, stripTokens(src).slice(0, 60));
+    };
+    let pending = res.fails.filter((f) => {
+      if (f.reason !== "same") return true;
+      acceptUnchanged(f);
+      return false;
+    });
     // Band darajasi: faqat muvaffaqiyatsizlar, qat'iy ko'rsatma.
     for (let attempt = 0; attempt < ITEM_RETRIES && pending.length && remaining() > MIN_WAVE_MS; attempt++) {
       const ids = new Set(pending.map((f) => f.id));
@@ -365,10 +386,15 @@ export async function translateSegments(segs: Segment[], opts: TranslateOpts, de
       const r = await callBatch(items, index, prevTail, strictSuffix(reasons));
       for (const [id, t] of r.ok) map.set(id, t);
       if (!r.parsed) continue; // javob kelmadi — `pending` o'zgarmaydi, yana urinish
-      pending = r.fails;
+      pending = r.fails.filter((f) => {
+        if (f.reason !== "same") return true;
+        acceptUnchanged(f);
+        return false;
+      });
     }
     for (const f of pending) {
       if (f.reason === "verbatim") verbatimWarn.set(f.id, f.detail ?? "");
+      else if (f.reason === "same") acceptUnchanged(f);
       else failed.set(f.id, f);
     }
     done++;
@@ -380,6 +406,13 @@ export async function translateSegments(segs: Segment[], opts: TranslateOpts, de
   // 6) qisman qoida.
   for (const id of failed.keys()) map.delete(id);
   const failedCount = failed.size;
+  if (failedCount) {
+    // Sabablar jurnali — prodda «24 tasi tarjima qilinmadi» ning NEGA ekanini ko'rish uchun.
+    const bySabab: Record<string, number> = {};
+    for (const f of failed.values()) bySabab[f.reason] = (bySabab[f.reason] ?? 0) + 1;
+    const sample = [...failed.values()].slice(0, 5).map((f) => `${f.id}:${f.reason}${f.detail ? `(${f.detail})` : ""}`).join(", ");
+    console.warn(`[translate] ${failedCount}/${total} band muvaffaqiyatsiz ${JSON.stringify(bySabab)}; namuna: ${sample}`);
+  }
   const allowed = Math.min(PARTIAL_MAX_COUNT, Math.max(1, Math.ceil(total * PARTIAL_MAX_SHARE)));
   if (failedCount > allowed) {
     throw new Error(`Tarjima to‘liq chiqmadi: ${total} banddan ${failedCount} tasi tarjima qilinmadi. Kredit qaytariladi — qayta urinib ko‘ring.`);
@@ -392,6 +425,7 @@ export async function translateSegments(segs: Segment[], opts: TranslateOpts, de
     warnings.push({ code: "untranslated", id, detail: stripTokens(s.text).slice(0, 60) });
   }
   for (const [id, detail] of verbatimWarn) warnings.push({ code: "numbers", id, detail: detail || "raqam/URL mos kelmadi" });
+  for (const [id, detail] of unchangedWarn) warnings.push({ code: "unchanged", id, detail });
 
   // Bo'laklarni ota segmentga yig'ish, dublikatlarni to'ldirish.
   for (const [parent, ids] of children) {

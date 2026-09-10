@@ -258,3 +258,19 @@ test("translationSystem: uslub qatori, glossariysiz izchillik qoidasi, chiqish t
   assert.ok(s.includes("Domain: IT."));
   assert.ok(s.includes("keep every recurring term translated the same way"));
 });
+
+test("o'zgarishsiz qaytgan band (kod, ism) — xato EMAS: qayta so'ralmaydi, asl matn qabul, uzun bo'lsa `unchanged` ogohlantirish; pul qaytarilmaydi", async () => {
+  // Prod holati (AUDIT-14): o'zbek → turkman DOCX, jadvaldagi Python kod qatorlari o'zgarishsiz qaytdi → 24/89 «tarjima qilinmadi» → ish yiqilgan edi.
+  const code = "X_train, X_test, y_train, y_test = train_test_split(iris.data, iris.target, test_size=0.3, random_state=42) # o'quv va sinov to'plamlari";
+  const { calls, complete } = stub((items) => ({ items: items.map((i) => ({ id: i.id, text: /sklearn|train_test_split|Reja/.test(i.text) ? i.text : `[T]${i.text}` })) }));
+  const segs = [...many(30, 30), seg("c1", "from sklearn.datasets import load_iris", "cell"), seg("c2", code, "cell"), seg("h", "Reja", "h")];
+  const res = await translateSegments(segs, opts(), { complete });
+  assert.equal(res.delivered, undefined, "qisman qaytarish yo'q");
+  assert.equal(res.map.get("c1"), "from sklearn.datasets import load_iris");
+  assert.equal(res.map.get("c2"), code);
+  assert.equal(res.map.get("h"), "Reja");
+  assert.ok(!calls.some((c) => c.user.includes("Previous attempt failed")), "o'zgarishsiz band uchun qat'iy retry YO'Q");
+  const unchanged = res.report.warnings.filter((w) => w.code === "unchanged");
+  assert.deepEqual(unchanged.map((w) => w.id), ["c2"], "faqat uzun band ogohlantiriladi");
+  assert.equal(res.report.translated, segs.length);
+});

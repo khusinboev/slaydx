@@ -38,6 +38,8 @@ export function warningText(w: TranslationWarning): string {
       return w.detail;
     case "detected":
       return w.detail;
+    case "unchanged":
+      return `Band o‘zgarishsiz qoldi (asl matn qabul qilindi) — tekshiring: «${w.detail}»`;
     default:
       return w.detail;
   }
