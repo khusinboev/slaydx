@@ -18,26 +18,31 @@ export function PhotoField({
   originalAssetId,
   crop,
   shape,
+  savedShape,
   onChange,
 }: {
   assetId: string;
   originalAssetId: string;
   crop?: Crop;
+  /** Shablon talab qiladigan shakl. */
   shape: "circle" | "square";
-  onChange: (v: { assetId: string; originalAssetId: string; crop?: Crop }) => void;
+  /** Surat AYNAN qaysi shaklda kesilgan (yuklashda qaytadi). */
+  savedShape?: "circle" | "square";
+  onChange: (v: { assetId: string; originalAssetId: string; crop?: Crop; shape?: "circle" | "square" }) => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const [pending, setPending] = useState<File | null>(null);
   const [recrop, setRecrop] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const mismatch = Boolean(assetId && savedShape && savedShape !== shape);
 
   async function save(out: { blob: Blob; crop: Crop; shape: "circle" | "square" }) {
     setBusy(true);
     setError(null);
     try {
       const res = await uploadResumePhoto({ blob: out.blob, original: pending, crop: out.crop, shape: out.shape });
-      onChange({ assetId: res.assetId, originalAssetId: res.originalAssetId ?? originalAssetId, crop: out.crop });
+      onChange({ assetId: res.assetId, originalAssetId: res.originalAssetId ?? originalAssetId, crop: out.crop, shape: out.shape });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Surat yuklanmadi");
     } finally {
@@ -83,7 +88,7 @@ export function PhotoField({
           {assetId ? (
             <button
               type="button"
-              onClick={() => onChange({ assetId: "", originalAssetId: "", crop: undefined })}
+              onClick={() => onChange({ assetId: "", originalAssetId: "", crop: undefined, shape: undefined })}
               disabled={busy}
               className="text-muted-foreground hover:text-destructive disabled:opacity-40"
             >
@@ -91,7 +96,20 @@ export function PhotoField({
             </button>
           ) : null}
         </div>
-        <p className="text-muted-foreground mt-0.5 text-[11px]">{busy ? "Yuklanmoqda…" : "PNG yoki JPEG, 5 MB gacha"}</p>
+        {/*
+          * Shakl mos kelmasligi: surat DOIRA qilib kesilgan, keyin
+          * foydalanuvchi KVADRAT slotli shablonga o'tgan (yoki teskarisi).
+          * Doira PNG ning burchaklari shaffof, kvadrat ramkada esa bu oq
+          * burchak bo'lib ko'rinadi — shuning uchun qayta kesish taklif
+          * qilinadi. O'zi kesmasa ham hujjat yiqilmaydi.
+          */}
+        {mismatch ? (
+          <p className="mt-0.5 text-[11px] text-amber-600">
+            Shablon {shape === "circle" ? "doira" : "kvadrat"} surat kutadi — «Markazlash» bilan qayta kesing.
+          </p>
+        ) : (
+          <p className="text-muted-foreground mt-0.5 text-[11px]">{busy ? "Yuklanmoqda…" : "PNG yoki JPEG, 5 MB gacha"}</p>
+        )}
         {error ? <p className="text-destructive mt-0.5 text-[11px]">{error}</p> : null}
       </div>
 

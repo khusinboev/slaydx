@@ -185,3 +185,24 @@ test("vosita sahifasi rezyume uchun AYNAN yangi formani chizadi (dispatch)", asy
   assert.ok(!text.includes("1/5"), "eski sehrgar bosqichlari bo'lmasligi kerak");
   assert.ok(text.includes("Ish tajribasi"), "tuzilmali tajriba kartasi");
 });
+
+test("surat shakli shablonga mos kelmasa ogohlantirish chiqadi", async () => {
+  /*
+   * Doira shablonda kesilgan surat + kvadrat slotli shablon = shaffof
+   * burchaklar oq bo'lib ko'rinadi. Forma buni jim o'tkazmasligi kerak.
+   */
+  stubApi({ photoAssetId: "a".repeat(24), photoShape: "circle", resumeTemplate: "minimal" });
+  await login();
+  mount();
+  await waitFor(() => {
+    assert.match(document.body.textContent ?? "", /kvadrat surat kutadi/, "ogohlantirish ko'rinadi");
+  });
+  // Mos kelganda ogohlantirish YO'Q.
+  cleanup();
+  stubApi({ photoAssetId: "a".repeat(24), photoShape: "circle", resumeTemplate: "modern" });
+  mount();
+  await waitFor(() => {
+    assert.ok(document.querySelector("[data-photo-field]"), "surat maydoni chizildi");
+  });
+  assert.doesNotMatch(document.body.textContent ?? "", /surat kutadi/, "mos shaklda ogohlantirish bo'lmaydi");
+});

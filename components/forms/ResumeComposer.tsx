@@ -49,6 +49,8 @@ type Ui = ResumeInput & {
   enrich: boolean;
   photoAssetId: string;
   photoOriginalAssetId: string;
+  /** Surat qaysi shaklda kesilgan — shablon o'zgarganda mos kelmasligini ko'rsatish uchun. */
+  photoShape?: "circle" | "square";
   /** Ta'lim/sertifikat/til bloklari ochiqmi — yopiq blok `[]` yuboradi. */
   show: { education: boolean; certificates: boolean; languages: boolean; links: boolean };
 };
@@ -102,6 +104,7 @@ function uiFromValues(values: FormValues, base: Ui): Ui {
     enrich: values.enrich !== false,
     photoAssetId: typeof values.photoAssetId === "string" ? values.photoAssetId : "",
     photoOriginalAssetId: typeof values.photoOriginalAssetId === "string" ? values.photoOriginalAssetId : "",
+    photoShape: values.photoShape === "square" || values.photoShape === "circle" ? values.photoShape : undefined,
     show: {
       education: input.education.length > 0 || base.show.education,
       certificates: input.certificates.length > 0,
@@ -129,7 +132,13 @@ function toValues(ui: Ui): FormValues {
     resumePalette: ui.resumePalette,
     enrich: ui.enrich,
     photoAssetId: ui.photoAssetId,
+    /*
+     * Bu ikkisi dvigatelga KERAK EMAS (worker suratni `photoAssetId` dan
+     * oladi) — ular qoralamaga yoziladi, ya'ni forma qayta ochilganda
+     * «Markazlash» asl nusxani topadi va shakl mosligi tekshiriladi.
+     */
     photoOriginalAssetId: ui.photoOriginalAssetId,
+    ...(ui.photoShape ? { photoShape: ui.photoShape } : {}),
   };
 }
 
@@ -255,8 +264,9 @@ export function ResumeComposer({ tool, profile }: { tool: ToolConfig; profile: U
                 originalAssetId={ui.photoOriginalAssetId}
                 crop={ui.photoCrop}
                 shape={template.photo.shape}
+                savedShape={ui.photoShape}
                 onChange={(v) =>
-                  setUi((s) => ({ ...s, photoAssetId: v.assetId, photoOriginalAssetId: v.originalAssetId, photoCrop: v.crop }))
+                  setUi((s) => ({ ...s, photoAssetId: v.assetId, photoOriginalAssetId: v.originalAssetId, photoCrop: v.crop, photoShape: v.shape }))
                 }
               />
             </span>
