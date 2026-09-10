@@ -106,3 +106,13 @@ test("hali tugamagan (QUEUED) generatsiyada SlideCanvas chizilmaydi", () => {
   );
   assert.doesNotMatch(html, /data-layer="text"/);
 });
+
+test("DOCX natija (referat/tarjima): eskiz <img> `/thumb` + yuklanguncha matn qatorlari (AUDIT-14)", () => {
+  const html = renderToStaticMarkup(
+    h(FilePreview, { gen: gen({ type: "referat" as never, format: "docx", fileName: "referat.docx", preview: { lines: ["Kirish qismi matni bu yerda."] } }) }),
+  );
+  assert.match(html, /data-doc-thumb="loading"/);
+  assert.match(html, /src="\/api\/generations\/gen-1\/thumb"/, "eskiz havolasi");
+  assert.match(html, /Kirish qismi matni bu yerda\./, "yuklanguncha matn qatorlari");
+  assert.match(html, /loading="lazy"/);
+});

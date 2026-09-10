@@ -336,8 +336,9 @@ test("pro deka: 30 slaydda va'da slot soniga teng, 8/10 shift yo'q", async () =>
   const capped = plannedImageSlots(slides, "classic", false, false);
   const full = plannedImageSlots(slides, "classic", false, true);
 
-  assert.equal(capped.length, imageBudget(30, false), "oddiy yo'lda shift saqlanadi (regressiya qulfi)");
-  assert.equal(capped.length, 24);
+  // AUDIT-14: oddiy slaydda ham shift YO'Q — rasmlar bepul stock, bo'sh slot qolmasin.
+  assert.equal(capped.length, 30, "oddiy yo'lda ham har mos slayd rasm oladi (shift olib tashlandi)");
+  assert.ok(imageBudget(30, false) < 30, "eski shift funksiyasi endi rejada ishlatilmaydi");
   assert.equal(full.length, 30, "pro'da har mos slayd rasm oladi");
 
   const restore = geminiEnv();

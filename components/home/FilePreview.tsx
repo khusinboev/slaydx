@@ -6,6 +6,7 @@ import type { GenerationPreviewSlide, ServerGeneration } from "@/lib/api-client"
 import { getSlideTheme } from "@/lib/generation/slide-themes";
 import { SLIDE } from "@/lib/viewers/metrics";
 import { SlideCanvas } from "../viewers/SlideCanvas";
+import { thumbUrl } from "@/lib/api-client";
 
 /**
  * Ro'yxatdagi kartochka ko'rinishi.
@@ -57,21 +58,29 @@ export function FilePreview({ gen }: { gen: ServerGeneration }) {
   }
 
   const lines = gen.preview?.lines ?? [];
-  if (lines.length) {
-    return (
-      <div className="h-full overflow-hidden bg-[#f7f4ec] px-3 py-2.5 text-left">
-        <div className="mb-1.5 line-clamp-2 text-[11px] leading-tight font-bold text-[#1a2744]">
-          {gen.topic}
-        </div>
-        {lines.map((t, i) => (
-          <p key={i} className="mb-1 line-clamp-2 text-[9px] leading-snug text-[#334155]">
-            {t}
-          </p>
-        ))}
-      </div>
-    );
+  const linesView = lines.length ? (
+    <div className="h-full overflow-hidden bg-[#f7f4ec] px-3 py-2.5 text-left">
+      <div className="mb-1.5 line-clamp-2 text-[11px] leading-tight font-bold text-[#1a2744]">{gen.topic}</div>
+      {lines.map((t, i) => (
+        <p key={i} className="mb-1 line-clamp-2 text-[9px] leading-snug text-[#334155]">
+          {t}
+        </p>
+      ))}
+    </div>
+  ) : null;
+
+  /*
+   * DOCX/PPTX natija (referat, kurs ishi, tarjima…): asl faylning 1-sahifasi
+   * — server yasagan kichik JPEG (`/thumb`, ~20 KB). Yuklanguncha va
+   * eskiz bo'lmasa (LibreOffice yo'q, xato) matn qatorlari ko'rinadi.
+   */
+  if (gen.format === "docx" || gen.format === "pptx") {
+    return <DocThumb id={gen.id} fallback={linesView} />;
   }
 
+  if (linesView) {
+    return linesView;
+  }
   const Icon = gen.type === "slide" ? Presentation : gen.type === "image" ? ImageIcon : FileText;
   return (
     <div className="bg-[#eef1f4] flex h-full items-center justify-center">
@@ -130,3 +139,29 @@ function SlideThumb({ slide }: { slide: GenerationPreviewSlide }) {
     </div>
   );
 }
+
+/**
+ * Hujjat eskizi: `<img>` yuklanguncha `fallback` (matn qatorlari) turadi,
+ * xatoda (404 — eskiz yasalmadi) ham shu qoladi. `loading="lazy"` —
+ * ekrandan tashqaridagi kartalar serverga so'rov yubormaydi.
+ */
+function DocThumb({ id, fallback }: { id: string; fallback: React.ReactNode }) {
+  const [state, setState] = useState<"loading" | "ok" | "error">("loading");
+  return (
+    <div className="relative h-full w-full overflow-hidden bg-[#f7f4ec]" data-doc-thumb={state}>
+      {state !== "ok" ? fallback : null}
+      {state !== "error" ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={thumbUrl(id)}
+          alt=""
+          loading="lazy"
+          onLoad={() => setState("ok")}
+          onError={() => setState("error")}
+          className={state === "ok" ? "absolute inset-0 h-full w-full object-cover object-top" : "absolute h-0 w-0 opacity-0"}
+        />
+      ) : null}
+    </div>
+  );
+}
+

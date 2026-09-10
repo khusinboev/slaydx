@@ -315,6 +315,11 @@ export function deleteGeneration(id: string) {
   return request<{ ok: boolean; refunded: boolean }>(`/api/generations/${id}`, { method: "DELETE" });
 }
 
+/** Fayl kartasi eskizi (DOCX/PPTX 1-sahifa JPEG) — `lib/server/thumb.ts`. */
+export function thumbUrl(id: string) {
+  return `/api/generations/${id}/thumb`;
+}
+
 export function fileUrl(id: string, format?: "pdf") {
   return `/api/generations/${id}/file${format ? `?format=${format}` : ""}`;
 }

@@ -224,7 +224,17 @@ export function plannedImageSlots(
   pro = false,
 ): { s: SlideModel; size: FalSize }[] {
   const eligible = slides.filter((s) => IMAGE_LAYOUTS.has(s.layout));
-  return (pro ? eligible : eligible.slice(0, imageBudget(slides.length, premium)))
+  /*
+   * Shift YO'Q — na oddiy, na pro (AUDIT-14). Formalar 2 dan beri oddiy
+   * slayd rasmlari bepul stock (Pexels/Pixabay); `imageBudget` shifti
+   * (10 slaydda 8) esa dekaning OXIRIDAGI bo'lim/yakun slaydlarini rasmsiz
+   * qoldirardi — foydalanuvchi maketda bo'sh rasm joyini ko'rardi. Nechta
+   * rasm bo'lishini faqat MAKET (`photoSlot`) hal qiladi. `premium`/`pro`
+   * parametrlari imzo barqarorligi uchun qoladi.
+   */
+  void premium;
+  void pro;
+  return eligible
     .map((s) => {
       const slot = photoSlot(s.layout, visual);
       return slot ? { s, size: slotPixels(slot) } : null;

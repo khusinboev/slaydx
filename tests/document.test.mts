@@ -1753,7 +1753,8 @@ test("rasm va'dasi reja bilan bir xil songa asoslanadi", async () => {
   try {
     const slides = bulletDeck(16);
     const planned = plannedImageSlots(slides, "classic", true);
-    assert.equal(planned.length, imageBudget(16, true), "16 slaydli premium dekada byudjet bog'lovchi");
+    assert.equal(planned.length, 16, "har mos slayd rejada (shift yo'q, AUDIT-14)");
+    assert.ok(imageBudget(16, true) <= 16);
 
     const report = await attachSlideImages(slides, "Fotosintez", "classic", 60_000, { premium: true });
     assert.equal(report.want, planned.length, "hisobotdagi va'da reja bilan bir xil bo'lishi kerak");
