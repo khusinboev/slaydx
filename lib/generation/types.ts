@@ -8,6 +8,7 @@ import type { SlideImageStyle, SlideTextVolume } from "./slide-params";
 import type { SlidePurpose } from "./slide-purpose";
 import type { SlideResearch } from "./slide-research";
 import type { ResumeModel } from "./resume/model";
+import type { ResumePaletteId, ResumeTemplateId } from "./resume/templates";
 
 export type GenImage = {
   id: string;
@@ -143,6 +144,22 @@ export type DocMeta = {
   speakerNotes: boolean;
   /** AI rasm uslubi. */
   slideImageStyle: SlideImageStyle;
+  /*
+   * ── Rezyume parametrlari (Rezyume 2, AUDIT-15). Har biri
+   * `lib/generation/resume-params.ts` reyestrida e'lon qilingan va
+   * differensial zond bilan qulflangan. Qolgan rezyume maydonlari
+   * (tajriba, ta'lim, ko'nikma…) `DocMeta` ga TUSHMAYDI: ular
+   * `ResumeInput` (`resume/input.ts`) orqali o'tadi, chunki ularning
+   * shakli ro'yxat/JSON — meta esa yassi.
+   */
+  /** Rezyume maketi (`resume/templates.ts`); berilmasa `modern`. */
+  resumeTemplate?: ResumeTemplateId;
+  /** Rezyume palitrasi; berilmasa shablonning standarti. */
+  resumePalette?: ResumePaletteId;
+  /** Yuklangan surat (`photo_uploads.asset_id`); bo'sh — suratsiz. */
+  photoAssetId: string;
+  /** AI boyitish yoqilganmi (standart — yoqilgan). */
+  enrich: boolean;
   /**
    * Hujjat YARATILGAN yil — titul va «N–N+1 o'quv yili» shu yerdan.
    *

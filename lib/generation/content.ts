@@ -1,4 +1,7 @@
 import { referenceSearchPlan } from "./quality";
+import { draftModel, resumeInputFromValues } from "./resume/input";
+import { docFromResume } from "./resume/model";
+import type { FormValues } from "../types";
 import type { AcademicDoc, Block, DocMeta, DocSection } from "./types";
 
 function p(text: string): Block {
@@ -433,32 +436,20 @@ function lessonDoc(meta: DocMeta): AcademicDoc {
   };
 }
 
+/**
+ * Rezyume ZAXIRA yo'li — LLM'siz (kalitsiz muhit, timeout, model xatosi).
+ *
+ * Endi bu yerda o'z «shablon matni» YO'Q: `draftModel` foydalanuvchi
+ * kiritgan faktlardan to'liq `ResumeModel` yasaydi va `docFromResume`
+ * uni hujjatga o'raydi. Ya'ni zaxira yo'l ham AYNAN shu maketni
+ * («ko'rdim = oldim») beradi — ilgari u to'rtta uzuq bo'limli boshqa
+ * hujjat edi va LLM ishlagan/ishlamaganiga qarab natija tubdan
+ * o'zgarardi.
+ */
 function resumeDoc(meta: DocMeta, values: Record<string, unknown>): AcademicDoc {
-  const name = String(values.fullName || meta.author || "F.I.Sh");
-  const role = String(values.targetRole || "Mutaxassis");
-  return {
-    meta: { ...meta, topic: role, author: name },
-    titlePage: false,
-    toc: false,
-    sections: [
-      section("summary", "Qisqacha", [
-        p(String(values.summary || `${role} lavozimiga nomzod. Natijaga yo‘naltirilgan, jamoada ishlay oladi.`)),
-        p(
-          [values.location, values.email, values.phone].filter(Boolean).join(" · ") ||
-            `${meta.city}`,
-        ),
-      ]),
-      section("exp", "Ish tajribasi", [
-        p(String(values.experience || "Tajriba bandi to‘ldirilmagan — shu yerga lavozim, yil va natijalarni yozing.")),
-      ]),
-      section("edu", "Ta’lim", [
-        p(String(values.education || meta.university || "Ta’lim muassasasi, yo‘nalish, yil.")),
-      ]),
-      section("skills", "Ko‘nikmalar", [
-        p(String(values.skills || "Tahlil, muloqot, Microsoft Office, jamoaviy ish.")),
-      ]),
-    ],
-  };
+  // `buildAcademicDoc` xom `Record<string, unknown>` qabul qiladi; kesish
+  // va tur tekshiruvi `resumeInputFromValues` ichida (`str`/`text`/JSON).
+  return docFromResume(draftModel(meta, resumeInputFromValues(values as FormValues)), meta);
 }
 
 function translationDoc(meta: DocMeta, fileName: string, target: string): AcademicDoc {

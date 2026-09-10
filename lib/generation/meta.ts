@@ -20,6 +20,8 @@ import {
   isSlideTextVolume,
   splitCsv,
 } from "./slide-params";
+import { isResumeLanguage } from "./resume-params";
+import { isResumePaletteId, isResumeTemplateId } from "./resume/templates";
 import { isSlidePurpose, purposeDefaults } from "./slide-purpose";
 import { normalizeTemplateId } from "./slide-templates";
 import { isSlideThemeId } from "./slide-types";
@@ -147,11 +149,22 @@ export function extractMeta(tool: ToolConfig, values: FormValues): DocMeta {
   // Oddiy slayd rasmlari DOIM bepul stock (Pexels/Pixabay) — ular faqat `photo` ni biladi; uslub tanlovi pro'da.
   const imageStyleRaw = tool.id === "slide" ? "photo" : s(values, "slideImageStyle", "photo");
   const quizRaw = clampInt(values.quizCount, 0, 10, 0);
+  /*
+   * Rezyume chiqish tili — 18 ta (B-4). Akademik hujjatlarda skelet
+   * («Kirish», «Xulosa») faqat uz/ru/en da bor, shuning uchun u yerda
+   * ro'yxat uchta. Rezyumeda esa bo'lim yorliqlari MODEL javobidan
+   * ham kelishi mumkin (`write.ts` 7-qoida), ya'ni to'liq nemischa yoki
+   * arabcha rezyume chiqadi. Noma'lum kod — «uz» ga tushadi.
+   */
+  const langRaw = s(values, "language", "uz");
+  const language = tool.id === "resume" ? (isResumeLanguage(langRaw) ? langRaw : "uz") : langRaw;
+  const resumeTemplateRaw = s(values, "resumeTemplate");
+  const resumePaletteRaw = s(values, "resumePalette");
   return {
     toolId: tool.id,
     workLabel: tool.title,
     topic,
-    language: s(values, "language", "uz"),
+    language,
     extra: s(values, "extra"),
     sourceText: s(values, "sourceText").slice(0, SOURCE_TEXT_LIMIT),
     author: authorParts.name,
@@ -221,6 +234,15 @@ export function extractMeta(tool: ToolConfig, values: FormValues): DocMeta {
     internetSearch: values.internetSearch === true,
     speakerNotes: values.speakerNotes !== false,
     slideImageStyle: isSlideImageStyle(imageStyleRaw) ? imageStyleRaw : "photo",
+    // Rezyume: shablon/palitra noma'lum bo'lsa umuman berilmaydi —
+    // `draftModel` shablonning O'Z standart palitrasini qo'yadi.
+    ...(isResumeTemplateId(resumeTemplateRaw) ? { resumeTemplate: resumeTemplateRaw } : {}),
+    ...(isResumePaletteId(resumePaletteRaw) ? { resumePalette: resumePaletteRaw } : {}),
+    // Surat aktivi: 24 lik hex (`photo_uploads.asset_id`) — yo'l traversali o'tmasin.
+    photoAssetId: /^[0-9a-f]{24}$/i.test(s(values, "photoAssetId")) ? s(values, "photoAssetId").toLowerCase() : "",
+    // Boyitish standart YOQILGAN: forma belgisini olib tashlagan
+    // foydalanuvchi `false` yuboradi, yubormagan — eski xatti-harakat.
+    enrich: values.enrich !== false,
     design: s(values, "design", "iris"),
     // Yil SHU YERDA muzlaydi — `title-model.ts` uni `doc.meta` dan oladi,
     // `new Date()` dan emas. Aks holda ekran va fayl yil chegarasida ajralardi.
