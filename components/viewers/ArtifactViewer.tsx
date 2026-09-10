@@ -11,6 +11,7 @@ import { ResumeViewer } from "./ResumeViewer";
 import { SlideViewer } from "./SlideViewer";
 import { TableViewer } from "./TableViewer";
 import { WordViewer } from "./WordViewer";
+import { TranslationViewer } from "./TranslationViewer";
 import { ImageViewer } from "./ImageViewer";
 
 export function ArtifactViewer({
@@ -18,8 +19,11 @@ export function ArtifactViewer({
   detail,
   onDetail,
   onEditState,
+  pdf = false,
 }: {
   gen: Generation;
+  /** Serverda LibreOffice bor (`features.pdf`) — tarjima ko'ruvchisi PDF ko'rinishini shunda ko'rsatadi. */
+  pdf?: boolean;
   /**
    * Serverdagi TO'LIQ generatsiya (`api.GenerationDetail`) — tahrir
    * uchun (`docVersion`, `fileVersion`, `imageRedraws`). Ko'ruvchilar
@@ -58,9 +62,10 @@ export function ArtifactViewer({
           <ImageViewer doc={doc} />
         </div>
       );
+    case "translation":
+      return <TranslationViewer doc={doc} gen={{ id: gen.id, format: gen.format }} pdf={pdf} />;
     case "essay":
     case "article":
-    case "translation":
       return <WordViewer doc={doc} />;
     default:
       return <WordViewer doc={doc} />;

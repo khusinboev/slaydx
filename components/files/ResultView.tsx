@@ -295,6 +295,7 @@ export function ResultView({ id }: { id: string }) {
             detail={gen}
             onDetail={(g) => setGen((prev) => ({ ...(prev as api.GenerationDetail), ...(g as api.GenerationDetail) }))}
             onEditState={setEditState}
+            pdf={Boolean(features?.pdf)}
           />
         </div>
       ) : null}

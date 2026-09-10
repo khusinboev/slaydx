@@ -49,7 +49,54 @@ const ok = (label: string, cond: boolean, detail: string): Check => ({ label, ok
 const countH2 = (doc: AcademicDoc) =>
   doc.sections.reduce((n, s) => n + s.blocks.filter((b) => b.kind === "h2").length, 0);
 
+const TRANSLATION_SAMPLE = [
+  "Orol dengizi fojiasi va uni tiklash choralari",
+  "Orol dengizi 1960-yillarda dunyodagi to‘rtinchi eng katta ko‘l edi: maydoni 68 000 km², suv hajmi 1 090 km³. 2024-yilga kelib uning 10 foizdan kamrog‘i qoldi. Asosiy sabab — Amudaryo va Sirdaryo suvlarining paxta dalalariga haddan tashqari ko‘p olinishi.",
+  "Oqibatlar: 1 250 ta aholi punkti suv ta’minotidan ayrildi, qurigan tubdan yiliga 75 million tonnagacha tuz va chang ko‘tariladi. Tadqiqotlar (UNESCO, 2019) mintaqada nafas yo‘llari kasalliklari 30 % ga oshganini ko‘rsatadi.",
+  "Choralar: saksovul ekish (2018–2024 yillarda 1,7 million gektar), tomchilatib sug‘orish, «Orolni asrash» xalqaro jamg‘armasi loyihalari. Batafsil: https://aral.uz va info@aral.uz.",
+].join("\n\n");
+
 const CASES: Case[] = [
+  {
+    /* Tarjimon 2: matn rejimi — aniqlangan til, glossariy, raqam/URL saqlanishi, `translation` profil. */
+    name: "translation-text",
+    tool: "translation",
+    budgetMs: 200_000,
+    values: { mode: "text", sourceText: TRANSLATION_SAMPLE, language: "en", sourceLang: "avto", style: "formal" },
+    checks: (f, pages) => {
+      const t = f.doc.translation;
+      const pair = t?.pairs.find((p) => p.src.includes("1 250"));
+      return [
+        ok("hisobot bor", Boolean(t), t ? `${t.translated}/${t.segments} band` : "yo'q"),
+        ok("aniqlangan til uz", t?.detected === "uz", String(t?.detected)),
+        ok("glossariy", (t?.glossary.length ?? 0) >= 3, `${t?.glossary.length ?? 0} atama`),
+        ok("hamma band tarjima", Boolean(t) && t!.pairs.every((p) => p.dst.trim() && p.dst !== p.src), "asl bilan bir xil emas"),
+        ok("raqam saqlangan", Boolean(pair) && pair!.dst.replace(/\D/g, "").includes("1250"), pair?.dst.slice(0, 80) ?? "juft topilmadi"),
+        ok("URL saqlangan", Boolean(t?.pairs.some((p) => p.dst.includes("https://aral.uz"))), ""),
+        ok("ogohlantirish yo'q", (t?.warnings.length ?? 0) === 0, (t?.warnings ?? []).map((w) => w.code).join(",") || "toza"),
+        ok("DOCX 1+ bet", (pages ?? 1) >= 1, `${pages ?? "?"} bet`),
+      ];
+    },
+  },
+  {
+    /* Tarjimon 2: fayl rejimi — `--source <fayl>` shart; chiqish = kirish formati, sahifa soni teng. */
+    name: "translation-file",
+    tool: "translation",
+    budgetMs: 400_000,
+    values: { mode: "file", sourceAssetId: "live", language: "en", sourceLang: "avto", style: "formal" },
+    checks: (f, pages) => {
+      const t = f.doc.translation;
+      const src = sourceArg();
+      const wantExt = src ? (sourceKindOf(src) === "pdf" ? "docx" : sourceKindOf(src)) : "";
+      return [
+        ok("hisobot bor", Boolean(t), t ? `${t.translated}/${t.segments} band, ${t.chars} belgi` : "yo'q"),
+        ok("chiqish formati = kirish", f.fileName.toLowerCase().endsWith(`.${wantExt}`), f.fileName),
+        ok("hamma band tarjima", Boolean(t) && t!.pairs.every((p) => p.dst.trim()), ""),
+        ok("ogohlantirishlar", true, (t?.warnings ?? []).map((w) => `${w.code}`).join(",") || "yo'q"),
+        ok("PDF sahifa", pages !== null, `${pages ?? "o'girilmadi"} bet (asl bilan qo'lda solishtiring)`),
+      ];
+    },
+  },
   {
     /* P0-4: annotatsiya stubi olib tashlandi — endi HAQIQIY matn kelishi kerak. */
     name: "imrad",
@@ -345,7 +392,22 @@ async function runCase(c: Case) {
             return { bytes, template: { assetId: "live", name: path.basename(tplPath), profile, previews: {} } };
           })()
         : undefined;
-    const file = await buildArtifact(tool, c.values, { deadline: Date.now() + c.budgetMs, onProgress, template });
+    /* `--source <fayl>` — tarjima fayl rejimi: bayt `BuildOptions.source` orqali (worker `sourceForJob` yo'li). */
+    const srcPath = sourceArg();
+    const source =
+      srcPath && c.tool === "translation" && c.values.mode === "file"
+        ? await (async () => {
+            const bytes = new Uint8Array(await readFile(srcPath));
+            const kind = sourceKindOf(srcPath);
+            process.stdout.write(`   ⟶ manba ${path.basename(srcPath)}: ${kind}, ${(bytes.byteLength / 1024).toFixed(0)} KB\n`);
+            return { bytes, name: path.basename(srcPath), kind, mime: "application/octet-stream", chars: 0 };
+          })()
+        : undefined;
+    const onStage = (ev: { progress: number; step: string }) => {
+      const dt = ((Date.now() - started) / 1000).toFixed(1);
+      process.stdout.write(`   ⟶ +${dt}s ${ev.progress}% ${ev.step}\n`);
+    };
+    const file = await buildArtifact(tool, c.values, { deadline: Date.now() + c.budgetMs, onProgress, template, source, onStage });
     const secs = ((Date.now() - started) / 1000).toFixed(1);
     const pages = await pageCount(file);
     await writeFile(path.join(OUT, file.fileName), file.bytes);
@@ -366,6 +428,18 @@ async function runCase(c: Case) {
   }
 }
 
+/** `--source <fayl>` — «Tarjimon» jonli sinovi uchun kirish fayli (DOCX/PPTX/XLSX/PDF/TXT/MD/CSV). */
+function sourceArg(): string | null {
+  const i = process.argv.indexOf("--source");
+  return i > 0 && process.argv[i + 1] ? process.argv[i + 1] : null;
+}
+const SOURCE_KINDS = ["docx", "pptx", "xlsx", "pdf", "txt", "md", "csv"] as const;
+function sourceKindOf(file: string): (typeof SOURCE_KINDS)[number] {
+  const ext = path.extname(file).slice(1).toLowerCase() as (typeof SOURCE_KINDS)[number];
+  if (!SOURCE_KINDS.includes(ext)) throw new Error(`--source: noma'lum format .${ext}`);
+  return ext;
+}
+
 function templateArg(): string | null {
   const i = process.argv.indexOf("--template");
   return i > 0 && process.argv[i + 1] ? process.argv[i + 1] : null;
@@ -379,7 +453,8 @@ async function main() {
   await mkdir(OUT, { recursive: true });
 
   const tpl = templateArg();
-  const only = process.argv.slice(2).filter((a) => !a.startsWith("-") && a !== tpl);
+  const src = sourceArg();
+  const only = process.argv.slice(2).filter((a) => !a.startsWith("-") && a !== tpl && a !== src);
   const cases = only.length ? CASES.filter((c) => only.includes(c.name)) : CASES;
   process.stdout.write(
     `Jonli tekshiruv — ${cases.length} keys · model ${process.env.GEMINI_MODEL || "gemini"} · PDF ${pdfAvailable() ? "bor" : "yo'q"}\n`,

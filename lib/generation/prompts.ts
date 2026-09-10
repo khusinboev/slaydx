@@ -287,16 +287,3 @@ export function imradSystemPrompt(meta: DocMeta): string {
     .filter(Boolean)
     .join("\n");
 }
-
-export function translationSystemPrompt(target: string, sourceLang: string) {
-  const src = sourceLang === "avto" || !sourceLang ? "auto-detect it" : langInfo(sourceLang).name;
-  return [
-    languageDirective(target),
-    `Siz professional hujjat tarjimosisiz.`,
-    `Manba tili: ${src}. Maqsad tili: ${langInfo(target).name}.`,
-    `Ma’noni, ohangni va band tuzilishini saqlang. So‘zma-so‘z kalka qilmang.`,
-    `Sarlavha, ro‘yxat va paragraf chegaralarini saqlang.`,
-    `Izoh, qavs ichida original, «tarjimon izohi», kirish yoki xulosa QO‘SHMANG.`,
-    `Faqat tarjima. Hech narsani qisqartirmang.`,
-  ].join("\n");
-}

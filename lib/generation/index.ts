@@ -9,6 +9,7 @@ import { renderPptx } from "./render-pptx";
 import { renderPptxWithTemplate } from "./render-pptx-template";
 import type { CustomTemplate } from "./pptx-template";
 import { buildImageArtifact } from "./image-studio";
+import { buildTranslationArtifact } from "./translate/engine";
 import type { SlideProgressSink } from "./slide-progress";
 import { buildSlideAcademicDoc } from "./slide-write";
 import { pdfAvailable, toPdf } from "../server/pdf";
@@ -135,10 +136,17 @@ export async function buildArtifact(
     return buildImageArtifact(tool, values);
   }
 
-  const llmDoc = await writeWithLlm(meta, values, deadline);
-  if (tool.id === "translation" && !llmDoc) {
-    throw new Error("Tarjima qilinmadi. Matn yoki fayldan yetarli matn olinmadi.");
+  /*
+   * Tarjimon 2: o'z dvigateli — fayl (DOCX/PPTX/XLSX/…) TUZILMASI saqlanib
+   * matn tugunlari almashtiriladi, matn/PDF esa `translation` profilida
+   * DOCX bo'ladi. `AcademicDoc` yo'lidagi hajm/sahifa darvozalari unga
+   * tegishli emas.
+   */
+  if (tool.id === "translation") {
+    return buildTranslationArtifact(meta, values, opts);
   }
+
+  const llmDoc = await writeWithLlm(meta, values, deadline);
 
   /**
    * Kalit bor, lekin AI matn yozmadi — shablonga tushmaymiz.
@@ -238,14 +246,7 @@ export async function buildArtifact(
     }
   }
 
-  const suffix =
-    tool.id === "translation"
-      ? "-tarjima.docx"
-      : tool.id === "lesson-plan"
-        ? "-dars.docx"
-        : tool.id === "texnologik-xarita"
-          ? "-xarita.docx"
-          : ".docx";
+  const suffix = tool.id === "lesson-plan" ? "-dars.docx" : tool.id === "texnologik-xarita" ? "-xarita.docx" : ".docx";
   return {
     html: renderHtml(academic),
     bytes,
