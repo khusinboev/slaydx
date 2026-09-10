@@ -42,7 +42,7 @@ export type ResumeEditEvent =
   | { t: "rowMove"; section: ResumeRowSection; from: number; to: number }
   | { t: "chipAdd" }
   | { t: "chipRemove"; at: number }
-  | { t: "sectionMove"; section: ResumeSectionId; to: number }
+  | { t: "sectionMove"; section: ResumeSectionId; dir: -1 | 1 }
   | { t: "photo" };
 
 export type ResumePageProps = {
@@ -140,7 +140,24 @@ export function ResumePage({ layout, pageItems, pageIndex, total, editable = fal
       data-resume-page={pageIndex}
     >
       {side ? (
-        <div style={{ display: "flex", height: "100%", alignItems: "stretch" }}>
+        /*
+         * PANEL BALANDLIGI Word bilan bir xil.
+         *
+         * DOCX da panel — jadval qatorining katagi. Qator `ATLEAST
+         * contentHeight(P)` bilan chizilgani uchun BIRINCHI varaqda u
+         * sahifani to'ldiradi, keyingi varaqlarga o'tgan QOLDIQ esa
+         * faqat o'z mazmuni qadar cho'ziladi — LibreOffice ko'zdan
+         * kechiruvida (12 ish joyi, 5 varaq) oxirgi varaqda panel
+         * o'rtada tugaydi. Ko'ruvchi har varaqda to'liq balandlik
+         * chizsa, foydalanuvchi ekranda bir xil, faylda boshqa xil
+         * ko'rardi — «ko'rdim = oldim» ning aynan buzilishi.
+         *
+         * Shuning uchun 1-varaqda balandlik 100%, keyingilarida MAZMUN
+         * bo'yicha. (Panelni faylda ham har varaqda to'ldirish — kolontitul
+         * ichiga langarlangan suzuvchi shakl bilan — AUDIT-15 ning ochiq
+         * bandi: u ortiqcha bo'sh varaq xavfini olib keladi.)
+         */
+        <div style={{ display: "flex", height: first ? "100%" : undefined, alignItems: "stretch" }}>
           {order.map((z) => (z === "aside" ? asideNode : mainNode))}
         </div>
       ) : (
@@ -365,9 +382,13 @@ function Item({ it, ctx }: { it: ResumeItem; ctx: Ctx }) {
       return (
         <p style={{ margin: "0 0 2mm", fontSize: ptPx(t.type.small), color: hex(dark ? P.onDark : P.ink) }} data-resume-chips>
           {it.items.map((c, j) => (
-            <span key={j} data-chip={j}>
+            <span key={j}>
               {j ? <span style={{ color: hex(dark ? P.accentSoft : P.muted) }}>{CHIP_SEP}</span> : null}
-              {c.text}
+              {/* Har ko'nikma alohida tahrirlanadi, lekin op BUTUN ro'yxat
+                  (`list`) — `ResumeEditor` qolganini modeldan oladi. */}
+              <span {...(editable ? { "data-path": "skills", "data-chip": String(j) } : {})} style={{ cursor: cur }}>
+                {c.text}
+              </span>
               {c.ai ? <Sparkles className="size-3" aria-label="AI qo‘shgan" style={{ display: "inline", marginLeft: 2, opacity: 0.7 }} /> : null}
               {editable ? (
                 <IconBtn label="Ko‘nikmani olib tashlash" onClick={() => onEdit?.({ t: "chipRemove", at: j })}>
@@ -432,10 +453,13 @@ function SectionHeading({ it, ctx }: { it: Extract<ResumeItem, { k: "h2" }>; ctx
       {it.text}
       {editable ? (
         <>
-          <IconBtn label="Bo‘limni yuqoriga" onClick={() => onEdit?.({ t: "sectionMove", section: it.section, to: Math.max(0, sectionPos(layout, it.section) - 1) })}>
+          {/* Yo'nalish beriladi, INDEKS emas: bo'lim tartibi modeldagi
+              `order` da (7 band), maketda esa faqat bo'sh bo'lmaganlari
+              ko'rinadi — absolyut indeks ikkovida boshqacha bo'lardi. */}
+          <IconBtn label="Bo‘limni yuqoriga" onClick={() => onEdit?.({ t: "sectionMove", section: it.section, dir: -1 })}>
             <ChevronUp className="size-3" />
           </IconBtn>
-          <IconBtn label="Bo‘limni pastga" onClick={() => onEdit?.({ t: "sectionMove", section: it.section, to: sectionPos(layout, it.section) + 1 })}>
+          <IconBtn label="Bo‘limni pastga" onClick={() => onEdit?.({ t: "sectionMove", section: it.section, dir: 1 })}>
             <ChevronDown className="size-3" />
           </IconBtn>
           {ROW_SECTIONS.has(it.section) ? (
@@ -447,14 +471,6 @@ function SectionHeading({ it, ctx }: { it: Extract<ResumeItem, { k: "h2" }>; ctx
       ) : null}
     </h2>
   );
-}
-
-function sectionPos(layout: ResumeLayout, id: ResumeSectionId): number {
-  // `order` maketda emas, modelda — `h2` itemi faqat `section` ni biladi.
-  const zone = layout.zones.find((z) => z.id === "main");
-  const heads = (zone?.items ?? []).filter((x) => x.k === "h2") as Extract<ResumeItem, { k: "h2" }>[];
-  const at = heads.findIndex((x) => x.section === id);
-  return at < 0 ? 0 : at;
 }
 
 /* ────────────────────────── qator (tajriba/ta'lim/sertifikat) ────────────────────────── */
@@ -570,4 +586,14 @@ function ContactIconView({ icon, color }: { icon: "phone" | "mail" | "pin" | "li
   if (icon === "mail") return <Mail className="size-3" style={style} aria-hidden />;
   if (icon === "pin") return <MapPin className="size-3" style={style} aria-hidden />;
   return <Link2 className="size-3" style={style} aria-hidden />;
+}
+
+/**
+ * BITTA itemni asosiy ustun kontekstida chizadi — sahifalash o'lchovi
+ * (`useMeasuredPages`) uchun. O'lchov varaqdagi bilan AYNAN bir xil
+ * komponentdan bo'lishi shart, aks holda sahifa chegarasi ekrandagidan
+ * boshqa joyga tushadi.
+ */
+export function ResumeItemView({ layout, item }: { layout: ResumeLayout; item: ResumeItem }) {
+  return <Item it={item} ctx={{ layout, editable: false, dark: false }} />;
 }

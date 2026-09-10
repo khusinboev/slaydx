@@ -47,7 +47,10 @@ export function ArtifactViewer({
         </div>
       );
     case "resume":
-      return <ResumeViewer doc={doc} />;
+      // Tahrir proplari `SlideViewer` bilan AYNAN bir xil uzatiladi —
+      // ilgari rezyume ko'ruvchisiga hech narsa berilmasdi va tahrir
+      // umuman yoqilmasdi (Rezyume 2, AUDIT-15).
+      return <ResumeViewer doc={doc} gen={detail} onGen={onDetail} onEditState={onEditState} />;
     case "lesson":
       return <LessonViewer doc={doc} />;
     case "table":

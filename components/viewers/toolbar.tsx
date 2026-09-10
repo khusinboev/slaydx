@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { ChevronLeft, ChevronRight, Maximize2, Minus, Plus } from "lucide-react";
 import { ZOOM_STEPS } from "@/lib/viewers/metrics";
+import { cn } from "@/lib/cn";
 
 export function ViewerToolbar({
   zoom,
@@ -13,6 +14,7 @@ export function ViewerToolbar({
   onFit,
   onFullscreen,
   extra,
+  right,
 }: {
   zoom: number;
   onZoom: (n: number) => void;
@@ -22,6 +24,13 @@ export function ViewerToolbar({
   onFit?: () => void;
   onFullscreen?: () => void;
   extra?: ReactNode;
+  /**
+   * O'ng chekkadagi boshqaruvlar (rezyume: shablon, rang, rasm, undo/redo,
+   * «Tahrirlash»). `extra` dan ALOHIDA: `extra` maket chiplari uchun
+   * o'rtadan boshlanadi, `right` esa har doim eng o'ngda turadi.
+   * Berilmasa hech narsa chizilmaydi — mavjud chaqiruvchilar o'zgarmaydi.
+   */
+  right?: ReactNode;
 }) {
   const idx = ZOOM_STEPS.indexOf(zoom as (typeof ZOOM_STEPS)[number]);
   const dec = () => onZoom(idx > 0 ? ZOOM_STEPS[idx - 1] : ZOOM_STEPS[0]);
@@ -55,6 +64,9 @@ export function ViewerToolbar({
       ) : null}
       {/* Mobil ekranda maket chiplari + tugmalar sig'masa gorizontal aylantiriladi (kesilmaydi). */}
       {extra ? <div className="ml-auto flex max-w-full items-center gap-2 overflow-x-auto">{extra}</div> : null}
+      {right ? (
+        <div className={cn("flex max-w-full items-center gap-1.5 overflow-x-auto", extra ? "ml-2" : "ml-auto")}>{right}</div>
+      ) : null}
     </div>
   );
 }
