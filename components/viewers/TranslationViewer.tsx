@@ -84,7 +84,7 @@ function Header({ t }: { t: TranslationReport }) {
         <span className={chip}>{STYLE_LABEL[t.style] ?? t.style}</span>
         <span className={chip}>{KIND_LABEL[t.sourceKind] ?? t.sourceKind}</span>
         <span className={cn(chip, "text-muted-foreground")}>
-          {t.translated} / {t.segments} band · {t.chars.toLocaleString("ru-RU").replace(/,/g, " ")} belgi
+          {t.translated} / {t.segments} band · {t.chars.toLocaleString("ru-RU").replace(/[  ,]/g, " ")} belgi
         </span>
         {t.sourceLang === "avto" ? <span className={cn(chip, "text-muted-foreground")}>Aniqlangan til: {src}</span> : null}
         {t.domain ? <span className={cn(chip, "text-muted-foreground")}>{t.domain}</span> : null}

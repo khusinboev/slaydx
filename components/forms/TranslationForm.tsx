@@ -31,7 +31,8 @@ const ACCEPT = ".txt,.md,.csv,.docx,.pdf,.pptx,.xlsx";
 const MAX_BYTES = 20 * 1024 * 1024;
 const KIND_LABEL: Record<string, string> = { docx: "DOCX", pptx: "PPTX", xlsx: "XLSX", pdf: "PDF → DOCX", txt: "TXT", md: "MD", csv: "CSV" };
 
-const fmt = (n: number) => n.toLocaleString("ru-RU").replace(/,/g, " ");
+/** Ming ajratgichi ODDIY bo'sh joy — `ru-RU` NBSP (U+00A0) beradi, u matn qidiruvi va nusxalashda «ko'rinmas» belgi. */
+const fmt = (n: number) => n.toLocaleString("ru-RU").replace(/[  ,]/g, " ");
 
 export function TranslationForm({ tool }: { tool: ToolConfig }) {
   const router = useRouter();
