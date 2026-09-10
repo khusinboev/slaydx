@@ -20,9 +20,12 @@ export const LOGO_ACCEPT_TYPES = ["image/png", "image/jpeg"];
 export function LogoField({
   value,
   onChange,
+  compact = false,
 }: {
   value: string;
   onChange: (assetId: string) => void;
+  /** Ixcham forma (Formalar 2): bitta qator — tugma yoki «yuklangan» belgisi. */
+  compact?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -48,6 +51,33 @@ export function LogoField({
     } finally {
       setBusy(false);
     }
+  }
+
+  if (compact) {
+    return (
+      <div className="flex min-w-0 flex-wrap items-center gap-2 text-[13px]">
+        {value ? (
+          <>
+            {preview ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={preview} alt="Logotip" className="h-8 w-8 rounded-md border object-contain" />
+            ) : (
+              <span className="text-muted-foreground">Logotip yuklangan</span>
+            )}
+            <button type="button" className="text-destructive text-xs" onClick={() => { setPreview(null); setError(null); onChange(""); }}>
+              O‘chirish
+            </button>
+          </>
+        ) : (
+          <label className="border-input bg-card hover:bg-muted/40 inline-flex h-9 cursor-pointer items-center rounded-lg border border-dashed px-3 text-[13px]">
+            {busy ? "Yuklanmoqda..." : "Logotip yuklash (PNG/JPEG)"}
+            <input type="file" className="hidden" accept="image/png,image/jpeg" disabled={busy}
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) void onFile(f); e.target.value = ""; }} />
+          </label>
+        )}
+        {error ? <span className="text-destructive text-xs">{error}</span> : null}
+      </div>
+    );
   }
 
   return (

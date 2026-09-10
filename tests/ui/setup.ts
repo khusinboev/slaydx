@@ -9,6 +9,8 @@ import { JSDOM } from "jsdom";
 const dom = new JSDOM("<!doctype html><html><body></body></html>", { url: "http://localhost/" });
 const g = globalThis as unknown as Record<string, unknown>;
 g.window = dom.window;
+// `next/navigation` brauzer yo'lida `self` ni o'qiydi — jsdom uni bermaydi.
+g.self = dom.window;
 g.document = dom.window.document;
 Object.defineProperty(globalThis, "navigator", { value: dom.window.navigator, configurable: true });
 g.HTMLElement = dom.window.HTMLElement;

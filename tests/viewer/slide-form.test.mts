@@ -12,7 +12,7 @@ import {
   PRO_MAIN_FIELD_ORDER_1,
   PRO_MAIN_FIELD_ORDER_2,
 } from "../../components/forms/ProSlideForm.tsx";
-import { SLIDE_PARAMS, PRO_SLIDE_DEFAULT, PRO_SLIDE_MIN, PRO_SLIDE_MAX } from "../../lib/generation/slide-params.ts";
+import { SLIDE_PARAMS, PRO_SLIDE_DEFAULT, PRO_SLIDE_MIN, PRO_SLIDE_MAX, SLIDE_DEFAULT, SLIDE_MIN, SLIDE_MAX } from "../../lib/generation/slide-params.ts";
 import { AUDIENCE_RULES } from "../../lib/generation/slide-audience.ts";
 import { SLIDE_BLOCKS } from "../../lib/generation/slide-blocks.ts";
 import { TOOL_BY_ID, priceFor, formatTanga } from "../../lib/tools.ts";
@@ -139,17 +139,31 @@ test("ProSlideForm: narx standart slaydlar soniga mos (priceFor bilan bir xil)",
 
 // ────────────────────────────────── SlideForm SSR ───────────────────────────
 
-test("SlideForm: slaydlar soni slayderi YO'Q", () => {
+test("SlideForm: slaydlar soni slayderi (4–30) BOR, paketlar YO'Q, narx qoidasi yozilgan", () => {
   const html = renderWithRouter(h(SlideForm, { tool: slideTool, profile }));
-  assert.ok(!html.includes('type="range"'), "SlideForm da slayder chiqmasligi kerak edi");
+  assert.ok(html.includes('type="range"'), "oddiy slaydda ham slayder (Formalar 2)");
+  assert.ok(html.includes(`min="${SLIDE_MIN}"`) && html.includes(`max="${SLIDE_MAX}"`), "slayder chegarasi 4–30");
+  assert.ok(html.includes(`value="${SLIDE_DEFAULT}"`), "standart 10 slayd");
+  assert.ok(!html.includes("Sifat / hajm") && !html.includes("Premium"), "paketlar olib tashlangan");
+  assert.ok(html.includes(`20 tagacha ${formatTanga(3000)}`) && html.includes("+500"), "narx qoidasi ko'rinadi");
+  const expected = formatTanga(priceFor(slideTool, { slideCount: SLIDE_DEFAULT }));
+  assert.ok(html.includes(expected), `standart narx «${expected}» ko'rinmayapti`);
+  assert.ok(!html.includes("Rasm uslubi"), "oddiy slaydda rasm uslubi yo'q — bepul stock faqat foto");
 });
 
-test("SlideForm: sifat paketlari (10/14/12/16 slayd) chip'lari bor", () => {
-  const html = renderWithRouter(h(SlideForm, { tool: slideTool, profile }));
-  assert.ok(html.includes("Standart · 10 slayd · 3 000"), "standart paket yorlig'i yo'q");
-  assert.ok(html.includes("Uzun · 14 slayd · 5 000"), "uzun paket yorlig'i yo'q");
-  assert.ok(html.includes("Premium · 12 slayd · sifatliroq rasm · 6 000"), "premium paket yorlig'i yo'q");
-  assert.ok(html.includes("Premium uzun · 16 slayd · sifatliroq rasm · 8 000"), "premium uzun paket yorlig'i yo'q");
+test("ikkala forma: Sozlamalar yig'iq (details), muallif kartasi profildan, izohlar tooltip'da", () => {
+  for (const [Form, tool] of [[SlideForm, slideTool], [ProSlideForm, proTool]] as const) {
+    const html = renderWithRouter(h(Form, { tool, profile }));
+    assert.ok(html.includes("<details") && !html.includes("<details open"), `${tool.id}: Sozlamalar yopiq holda`);
+    assert.ok(html.includes("data-summary-chips"), `${tool.id}: yopiq sarlavhada joriy tanlovlar`);
+    assert.ok(html.includes('value="Aliyev Ali"'), `${tool.id}: muallif profildan to'ldiriladi`);
+    assert.ok(html.includes("profilga saqlanadi"), `${tool.id}: saqlanish belgisi`);
+    assert.ok(!html.includes("Qoʼshimcha (ixtiyoriy)"), `${tool.id}: eski «Qo'shimcha» tugmasi yo'q`);
+  }
+  const pro = renderWithRouter(h(ProSlideForm, { tool: proTool, profile }));
+  assert.ok(pro.includes("Lavozim"), "pro'da lavozim maydoni");
+  const slide = renderWithRouter(h(SlideForm, { tool: slideTool, profile }));
+  assert.ok(!slide.includes("Lavozim"), "oddiyda lavozim yo'q (reyestr)");
 });
 
 test("SlideForm: 14 auditoriya + «Avtomatik» ham ko'rinadi (SlideForm bilan bitta manba)", () => {

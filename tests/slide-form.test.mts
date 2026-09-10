@@ -147,10 +147,13 @@ test("resetBlocksForPurpose noma'lum turda «general» standartiga tushadi", () 
  * import qilish shart emas (`next/navigation` react-server ostida
  * ishlamaydi).
  */
-test('SlideForm va ProSlideForm LanguagePicker\'ni scope="source" bilan chizadi', async () => {
+test('SlideForm va ProSlideForm (SlideComposer orqali) LanguagePicker\'ni scope="source" bilan chizadi', async () => {
+  // Formalar 2: ikkala forma bitta `SlideComposer` ga delegatsiya qiladi — til tanlagichi o'sha yerda.
   const slideSrc = await readFile(new URL("../components/forms/SlideForm.tsx", import.meta.url), "utf8");
   const proSrc = await readFile(new URL("../components/forms/ProSlideForm.tsx", import.meta.url), "utf8");
-  assert.ok(/<LanguagePicker[\s\S]*?scope="source"/.test(slideSrc), 'SlideForm da LanguagePicker scope="source" emas');
-  assert.ok(/<LanguagePicker[\s\S]*?scope="source"/.test(proSrc), 'ProSlideForm da LanguagePicker scope="source" emas');
+  const composerSrc = await readFile(new URL("../components/forms/SlideComposer.tsx", import.meta.url), "utf8");
+  assert.ok(/<SlideComposer\b/.test(slideSrc), "SlideForm SlideComposer ni chizmaydi");
+  assert.ok(/<SlideComposer\b/.test(proSrc), "ProSlideForm SlideComposer ni chizmaydi");
+  assert.ok(/<LanguagePicker[\s\S]*?scope="source"/.test(composerSrc), 'SlideComposer da LanguagePicker scope="source" emas');
 });
 
