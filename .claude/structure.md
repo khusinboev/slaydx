@@ -174,6 +174,17 @@ Loyiha strukturasi: **poydevor** (umumiy qatlam) → **1-to'lqin** (jonli genera
 - Worker: `sourceForJob` → `buildArtifact({source, onStage})`, `onStage` → `setProgress` (soxta egri chiziq to'xtaydi)
 - Testlar: `tests/translate-{docx,pptx,xlsx,plain,pdf,engine}.test.mts`, `source-upload`, `pricing`, `ui/translation-form`, `viewer/translation-viewer`; `npm run live -- translation-text` / `translation-file --source <fayl>`
 
+### Rezyume 2 (AUDIT-15, 2026-09-10) — tuzilmali forma, 6 shablon, surat, pro tahrir
+
+- **`lib/generation/resume/`** — `templates.ts` (6 shablon × 6 palitra, hex `#`siz: DOCX `fill` va CSS uchun), `model.ts` (`ResumeModel` = `AcademicDoc.resume`, `normalizeResume`, `legacyResumeModel` eski hujjatlar uchun, `resumeSections` sintezi, `formatPeriod`, `sortDesc`), **`layout.ts` (`planResume` — YAGONA MANBA**: zonalar `header|aside|main`, `ResumeItem` lar `path` bilan, `RESUME_PATH_RE`), `input.ts` (`resumeInputFromValues` — id'li satrlar, kesilgan JSON ga chidamli; `encodeResumeValues` klient uchun; `draftModel` LLM'siz zaxira), `write.ts` (prompt + `mergeLlm`: faktlar FAQAT kirishdan), `guard.ts` (`guardResume` — id/yil/tashkilot/ai chegaralari), `samples.ts`, `render-docx.ts`, `edit.ts` (`ResumeOp`, apply/inverse/parse)
+- **`lib/generation/resume-params.ts`** — 20 parametrli reyestr (`impacts: prompt|layout|template|photo|language|model`) + `tests/resume-params.test.mts` differensial zondi; narx HAR probe'da 3 000 (tekis)
+- **`lib/server/photo.ts`** — `uploadPhoto` (5 MB, sniff, kesilgan ≤1200 px, asl nusxa `kind='original'`), `photoDataUrl` (worker), `purgeOldPhotos(90)`; **`lib/server/resume-draft.ts`** — `getDraft/putDraft/clearDraft`; jadvallar `019_resume.sql`
+- **`app/api/uploads/photo/route.ts`** (`POST`) + **`[assetId]/route.ts`** (`GET`), **`app/api/resume/draft/route.ts`** (`GET|PUT|DELETE`), **`app/api/generations/[id]/photo/route.ts`** (ko'ruvchidan surat almashtirish)
+- **`lib/professions.ts`** + **`data/professions.json`** (350 kasb, 24 sektor, 5–12 ko'nikma) — `searchProfessions` uz/ru/en va aliaslarda; **`scripts/gen-professions.mts`** ro'yxatni bir marta yasaydi
+- **`components/forms/`** — `ResumeComposer.tsx` (6 karta, `data-field` qamrovi), `PhoneInput`/`Combobox`/`MonthPicker`/`RowList`/`PhotoField`/`PhotoCropDialog`/`ResumeTemplateDialog`/`useResumeDraft`; `lib/phone.ts`, `lib/photo-crop.ts`
+- **`components/viewers/resume/`** — `ResumePage.tsx` (varaq: ko'ruvchi · galereya · tahrir), `ResumeEditor.tsx`; `ResumeViewer.tsx` qayta yozildi; **`lib/server/edit-adapters.ts`** — `slide-commit.ts` ni umumlashtiradi (slayd | rezyume)
+- Testlar: `tests/resume-{params,guard,model,layout,write,docx,edit,commit}.test.mts`, `phone`, `photo`, `photo-crop`, `professions`, `resume-draft`, `viewer/resume-{form,parity,legacy}`, `ui/resume-{primitives,composer,viewer-edit}`; `npm run live -- resume [--lang de] [--enrich-off] [--photo <fayl>]`
+
 ### API klienti
 
 - **`lib/api-edit.ts`** (yangi)

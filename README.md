@@ -220,12 +220,15 @@ berardi. Eval bitta tarifda sinagani uchun uchalasi ham sezilmay qoldi.
 | `POST /api/extract` | Hujjatdan matn (DOCX, PDF, PPTX, XLSX, TXT) — «fayl asosida» rejimlar uchun |
 | `POST /api/uploads/source` · `DELETE /api/uploads/source/{assetId}` | Tarjimon manba fayli (≤20 MB): bayt saqlanadi, `chars` (tarjima qilinadigan segmentlar) hisoblanadi — narx shundan; skanlangan PDF 422 |
 | `POST /api/uploads/template` · `GET` · `DELETE /{assetId}` | «O'z shablonim» (pro-slayd) PPTX namunasi |
+| `POST /api/uploads/photo` · `GET /api/uploads/photo/{assetId}` | Rezyume surati (≤5 MB): kesilgan nusxa + asl + kesish ramkasi |
+| `GET\|PUT\|DELETE /api/resume/draft` | Rezyume formasi qoralamasi (foydalanuvchiga bitta) |
 | `POST /api/payments/orders` | To'lov buyurtmasi + provayder URL |
 | `POST /api/payments/click` | Click Prepare/Complete webhook |
 | `POST /api/payments/payme` | Payme Merchant API (JSON-RPC) |
 | `PATCH /api/generations/{id}/doc` | Slaydlarni tahrirlash (operatsiyalar ro'yxati) |
 | `POST /api/generations/{id}/rebuild` | PPTX faylni qayta yasash |
 | `POST /api/generations/{id}/slides/{index}/image` | Slaydga rasm yuklab olish |
+| `POST /api/generations/{id}/photo` | Rezyume suratini almashtirish (ko'ruvchida) |
 
 Barcha `/api/generations*`, `/api/extract` va `/api/uploads/*` **kirishni talab qiladi**.
 Egalik SQL darajasida tekshiriladi — id ni bilgan begona foydalanuvchi hech narsa ola olmaydi.
