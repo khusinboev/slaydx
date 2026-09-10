@@ -109,7 +109,7 @@ export type FalFailure =
   /** Qolgan hammasi: 5xx, tarmoq, javobda rasm yo'q. */
   | "failed";
 
-export type ImageProviderId = "fal" | "gemini" | "pexels" | "pixabay";
+export type ImageProviderId = "fal" | "gemini" | "pexels" | "pixabay" | "stock";
 
 export interface ImageProvider {
   /**
@@ -193,11 +193,11 @@ export function photoOrientation(size: { width: number; height: number }): "land
  * boshqa foydalanuvchining generatsiyasi bilan aralashmaydi, xotira
  * to'planib qolmaydi.
  */
-export function chainProvider(providers: ImageProvider[]): ImageProvider {
+export function chainProvider(providers: ImageProvider[], id: ImageProviderId = "fal"): ImageProvider {
   const seen = new Set<string>();
   const blockedIds = new Set<ImageProviderId>();
   return {
-    id: "fal",
+    id,
     minMs: Math.min(...providers.map((p) => p.minMs)),
     hasKey: () => providers.some((p) => p.hasKey()),
     async fetchImage(ask: ImageAsk, deadline?: number): Promise<ImageResult> {
@@ -224,20 +224,20 @@ export function chainProvider(providers: ImageProvider[]): ImageProvider {
  * uchun u qimmatroq va matnni to'g'ri tushunadigan Gemini rasm modeliga
  * boradi.
  *
- * Oddiy `slide` esa endi ZANJIR (P3): avval BEPUL stock-foto manbalar
- * (Pexels → Pixabay), ular kalitsiz/yiqilsa yoki uslub foto bo'lmasa
- * (`searchQueryFor` `null` qaytaradi) — fal.ai. Kalitlar YO'Q bo'lgan
- * muhitda (hozirgi dev/test standarti) zanjir bir zumda fal'ga tushadi
- * — ya'ni ESKI xatti-harakat O'ZGARMAYDI, regressiya yo'q
- * (`tests/slide-images.test.mts`).
+ * Oddiy `slide` — FAQAT BEPUL stock-foto manbalar (Pexels → Pixabay),
+ * `id: "stock"` (Formalar 2, foydalanuvchi qarori: «rasmlar tekin
+ * manbalardan izlansin doim»). fal.ai bu zanjirda YO'Q: kalitsiz muhitda
+ * yoki manbalar topolmasa slayd rasmsiz qoladi — pullik provayderga
+ * tushmaydi. `extractMeta` oddiy slaydda uslubni `photo` ga majburlaydi,
+ * shuning uchun `searchQueryFor` doim so'rov beradi.
  *
- * `meta` berilmasa — fal (zanjir ichida, kalitsiz manbalar sakrab
- * o'tiladi). Shu tanlov `attachSlideImages` ning eski (meta'siz)
- * chaqiruvlarini, `scripts/image-lab.mts` ni va mavjud testlarni o'z
- * holida qoldiradi.
+ * `meta` berilmasa yoki boshqa vosita — eski zanjir (stock → fal):
+ * `attachSlideImages` ning meta'siz chaqiruvlari, `scripts/image-lab.mts`
+ * va mavjud testlar o'z holida qoladi.
  */
 export function pickProvider(meta?: Pick<DocMeta, "toolId"> | null): ImageProvider {
   const toolId: ToolId | undefined = meta?.toolId;
   if (toolId === "pro-slide") return geminiProvider;
+  if (toolId === "slide") return chainProvider([pexelsProvider, pixabayProvider], "stock");
   return chainProvider([pexelsProvider, pixabayProvider, falProvider]);
 }

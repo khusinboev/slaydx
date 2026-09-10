@@ -54,30 +54,28 @@ test("targetWords kamida bitta bet hisoblaydi", () => {
 
 // ------------------------------------------------------- sifat paketi
 
-test("sifat paketi haqiqiy slaydlar soniga aylanadi", () => {
-  const packs: [string, number][] = [
-    ["standard", 10],
-    ["premium", 12],
-    ["long", 14],
-    ["premium_long", 16],
-  ];
-  for (const [quality, expected] of packs) {
-    const meta = slideMeta({ topic: "Fotosintez", quality, slideTemplate: "lecture" });
+test("slayder qiymati haqiqiy slaydlar soniga aylanadi (oddiy slayd, paket yo'q)", () => {
+  // 4 slayd: `wantSlides` 4 beradi, lekin `expandBeats` shablon minimumini (10) saqlaydi — eski xatti-harakat.
+  assert.equal(wantSlides(slideMeta({ topic: "X", slideCount: 4 }), SLIDE_TEMPLATE_BY_ID.lecture), 4);
+  for (const expected of [10, 20, 30]) {
+    const meta = slideMeta({ topic: "Fotosintez", slideCount: expected, slideTemplate: "lecture" });
     const tpl = SLIDE_TEMPLATE_BY_ID.lecture;
-    assert.equal(wantSlides(meta, tpl), expected, quality);
-    assert.equal(expandBeats(tpl, wantSlides(meta, tpl)).length, expected, quality);
+    assert.equal(wantSlides(meta, tpl), expected, String(expected));
+    assert.equal(expandBeats(tpl, wantSlides(meta, tpl)).length, expected, String(expected));
   }
+  // Eski paket qiymati endi hech narsani o'zgartirmaydi — standart 10.
+  assert.equal(wantSlides(slideMeta({ topic: "X", quality: "premium_long" }), SLIDE_TEMPLATE_BY_ID.lecture), 10);
 });
 
-test("premium uzun standartdan ko'proq slayd beradi (har bir shablonda)", () => {
+test("30 slaydli slayder 10 tadan ko'proq slayd beradi (har bir shablonda)", () => {
   for (const tpl of SLIDE_TEMPLATES) {
     if (tpl.id === "auto") continue;
-    const std = slideMeta({ topic: "Mavzu", quality: "standard", slideTemplate: tpl.id });
-    const max = slideMeta({ topic: "Mavzu", quality: "premium_long", slideTemplate: tpl.id });
+    const std = slideMeta({ topic: "Mavzu", slideCount: 10, slideTemplate: tpl.id });
+    const max = slideMeta({ topic: "Mavzu", slideCount: 30, slideTemplate: tpl.id });
     const a = expandBeats(tpl, wantSlides(std, tpl)).length;
     const b = expandBeats(tpl, wantSlides(max, tpl)).length;
     assert.ok(b > a, `${tpl.id}: ${a} → ${b}`);
-    assert.equal(b, 16, tpl.id);
+    assert.equal(b, 30, tpl.id);
   }
 });
 
@@ -343,23 +341,11 @@ test("adabiyot izohi hujjat tiliga moslashadi", () => {
 
 // ------------------------------------------------------ premium tier
 
-test("premium paketlar vizual darajani yoqadi, oddiylari yo'q", () => {
-  for (const q of ["premium", "premium_long"]) {
-    assert.equal(slideMeta({ topic: "X", quality: q }).premiumVisuals, true, q);
-  }
-  for (const q of ["standard", "long", ""]) {
+test("premium paket yo'q: har qanday eski qiymatda ham premiumVisuals=false, hajm faqat slayderdan", () => {
+  for (const q of ["premium", "premium_long", "standard", "long", ""]) {
     assert.equal(slideMeta({ topic: "X", quality: q }).premiumVisuals, false, q || "(bo'sh)");
   }
-});
-
-test("paket ikki o'lchovni mustaqil boshqaradi: hajm va rasm sifati", () => {
-  const long = slideMeta({ topic: "X", quality: "long" });
-  const premium = slideMeta({ topic: "X", quality: "premium" });
-  // «Uzun» — ko'proq slayd, oddiy rasm.
-  assert.ok(long.targetPages > premium.targetPages);
-  assert.equal(long.premiumVisuals, false);
-  // «Premium» — kamroq slayd, sifatli rasm.
-  assert.equal(premium.premiumVisuals, true);
+  assert.ok(slideMeta({ topic: "X", slideCount: 25 }).targetPages > slideMeta({ topic: "X", slideCount: 12 }).targetPages);
 });
 
 // ------------------------------------------------------------ tillar
@@ -1124,9 +1110,9 @@ test("bet soniga bog'liq bo'lmagan xizmatlar qat'iy byudjet oladi", async () => 
    * 8 000 tanga) bir xil vaqt olardi. O'sish `slide-layout.test.mts` da
    * batafsil sinaladi; bu yerda faqat qat'iy EMASLIGI qayd etiladi.
    */
-  const slideSmall = budgetFor(TOOL_BY_ID.slide, { quality: "standard" } as FormValues, CAP);
-  const slideBig = budgetFor(TOOL_BY_ID.slide, { quality: "premium_long" } as FormValues, CAP);
-  assert.notEqual(slideSmall, slideBig, "slayd byudjeti paketga bog'liq bo'lishi kerak");
+  const slideSmall = budgetFor(TOOL_BY_ID.slide, { slideCount: 10 } as FormValues, CAP);
+  const slideBig = budgetFor(TOOL_BY_ID.slide, { slideCount: 30 } as FormValues, CAP);
+  assert.notEqual(slideSmall, slideBig, "slayd byudjeti slaydlar soniga bog'liq bo'lishi kerak");
 });
 
 test("mapPool yagona manba — buzuq limit bilan ham natija yo'qotmaydi", async () => {
@@ -1241,8 +1227,8 @@ test("standart shift ostida har bir narx tarifi alohida byudjet oladi", async ()
   );
 
   // Eng uzun slayd paketi ham shiftga sig'ishi kerak (N-2 bilan bir tugun).
-  const slide = budgetFor(TOOL_BY_ID.slide, { quality: "premium_long" } as FormValues, DEFAULT_JOB_TIMEOUT_MS);
-  assert.ok(slide < DEFAULT_JOB_TIMEOUT_MS, `premium_long deka byudjeti: ${slide}ms`);
+  const slide = budgetFor(TOOL_BY_ID.slide, { slideCount: 30 } as FormValues, DEFAULT_JOB_TIMEOUT_MS);
+  assert.ok(slide < DEFAULT_JOB_TIMEOUT_MS, `30 slaydli deka byudjeti: ${slide}ms`);
 });
 
 test("standart hajm narx, dvigatel va formada bir xil", async () => {

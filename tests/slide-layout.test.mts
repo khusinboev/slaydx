@@ -576,10 +576,10 @@ test("deka slaydlarining id lari noyob va tartibli", async () => {
   delete process.env.GEMINI_API_KEY;
   delete process.env.XAI_API_KEY;
   try {
-    for (const quality of ["standard", "premium_long"]) {
+    for (const quality of [10, 30]) {
       const meta = extractMeta(TOOL_BY_ID["slide"], {
         topic: "Fotosintez jarayoni",
-        quality,
+        slideCount: quality,
       } as never);
       const doc = await buildSlideAcademicDoc(meta, Date.now() + 20_000);
       const ids = doc.slides!.map((s) => s.id);
@@ -698,33 +698,33 @@ test("slayd byudjeti paketga qarab o'sadi", async () => {
   const { TOOL_BY_ID } = await import("../lib/tools.ts");
 
   const CAP = 900_000;
-  const forQuality = (quality: string) =>
-    budgetFor(TOOL_BY_ID.slide, { topic: "Fotosintez", quality } as never, CAP);
+  const forCount = (slideCount: number) =>
+    budgetFor(TOOL_BY_ID.slide, { topic: "Fotosintez", slideCount } as never, CAP);
 
   /*
-   * Ilgari slayd `FIXED` da qat'iy 180 000 edi: 10 slaydli standart paket
-   * ham, 16 slaydli `premium_long` ham (3 000 va 8 000 tanga) bir xil vaqt
-   * olardi — ya'ni qimmatroq paketda muvaffaqiyatsizlik ehtimoli yuqoriroq
-   * edi, xuddi kurs ishidagi N-3 kabi.
+   * Ilgari slayd `FIXED` da qat'iy 180 000 edi: 10 slaydli deka ham,
+   * 16 slaydli ham bir xil vaqt olardi — ya'ni uzunroq dekada
+   * muvaffaqiyatsizlik ehtimoli yuqoriroq edi, xuddi kurs ishidagi N-3 kabi.
+   * Endi hajm slayderdan (4–30), byudjet unga ergashadi.
    */
-  const standard = forQuality("standard");
-  const premium = forQuality("premium");
-  const long = forQuality("long");
-  const premiumLong = forQuality("premium_long");
+  const standard = forCount(10);
+  const premium = forCount(12);
+  const long = forCount(14);
+  const premiumLong = forCount(16);
 
   assert.ok(standard < premium, "12 slayd 10 slayddan ko'proq vaqt olishi kerak");
   assert.ok(premium < long, "14 slayd 12 slayddan ko'proq vaqt olishi kerak");
   assert.ok(long < premiumLong, "16 slayd 14 slayddan ko'proq vaqt olishi kerak");
 
   /*
-   * Eng uzun deka matn VA rasm bosqichlariga yetadigan vaqt olishi kerak.
+   * Uzun deka matn VA rasm bosqichlariga yetadigan vaqt olishi kerak.
    * 16 slayd ikki bo'lakda yoziladi (~40 s har biri, qayta urinish bilan),
    * so'ng 14 tagacha rasm chiziladi.
    */
-  assert.ok(premiumLong >= 280_000, `premium_long byudjeti: ${premiumLong}ms`);
+  assert.ok(premiumLong >= 280_000, `16 slayd byudjeti: ${premiumLong}ms`);
 
   // Operatorning shifti hamon oxirgi so'z.
-  assert.equal(budgetFor(TOOL_BY_ID.slide, { quality: "premium_long" } as never, 200_000), 200_000);
+  assert.equal(budgetFor(TOOL_BY_ID.slide, { slideCount: 30 } as never, 200_000), 200_000);
 });
 
 test("byudjet tugagan bo'lsa slayd yozuvchisi tarmoqqa chiqmaydi", async () => {
@@ -757,7 +757,7 @@ test("byudjet tugagan bo'lsa slayd yozuvchisi tarmoqqa chiqmaydi", async () => {
   try {
     const meta = extractMeta(TOOL_BY_ID.slide, {
       topic: "Fotosintez",
-      quality: "premium_long",
+      slideCount: 16,
     } as never);
     const tpl = resolveSlideTemplate(meta.slideTemplate, meta.topic, meta.extra);
     const beats = expandBeats(tpl, 16);

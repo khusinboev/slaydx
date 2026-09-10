@@ -107,9 +107,27 @@ test("localExamples rasm promptini o'zgartiradi — tanilmagan mavzuda ham", () 
 
 // ───────────────────────────────────────────── 2. Provayder tanlash
 
-test("pickProvider: pro-slide → gemini, slide → fal, meta yo'q → fal", () => {
+test("pickProvider: pro-slide → gemini, slide → stock (fal YO'Q), meta yo'q → fal", () => {
   assert.equal(pickProvider(meta({}, pro)).id, "gemini");
-  assert.equal(pickProvider(meta({}, slide)).id, "fal");
+  assert.equal(pickProvider(meta({}, slide)).id, "stock");
+  /*
+   * Oddiy slayd zanjirida fal BO'LMASLIGI kerak: faqat FAL_KEY bor,
+   * stock kalitlari yo'q muhitda zanjir «kalit yo'q» deyishi shart.
+   * MUTATSIYA: zanjirga `falProvider` qo'shilsa `hasKey()` true bo'ladi.
+   */
+  const saved = { FAL_KEY: process.env.FAL_KEY, PEXELS_API_KEY: process.env.PEXELS_API_KEY, PIXABAY_API_KEY: process.env.PIXABAY_API_KEY };
+  process.env.FAL_KEY = "test-fal-key";
+  delete process.env.PEXELS_API_KEY;
+  delete process.env.PIXABAY_API_KEY;
+  try {
+    assert.equal(pickProvider(meta({}, slide)).hasKey(), false, "oddiy slayd fal ga tushmasin");
+    assert.equal(pickProvider().hasKey(), true, "meta'siz eski zanjirda fal qoladi");
+  } finally {
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
   // Eski (meta'siz) chaqiruv yo'li o'zgarmaydi — regressiya qulfi.
   assert.equal(pickProvider().id, "fal");
   assert.equal(pickProvider(undefined).id, "fal");
@@ -369,8 +387,9 @@ test("attachSlideImages meta orqali provayderni almashtiradi", async () => {
     assert.deepEqual(hits, ["gemini", "gemini", "gemini", "gemini"], "pro yo'li gemini ga borishi kerak");
 
     hits.length = 0;
-    await attachSlideImages(bulletDeck(4), "Suv aylanishi", "classic", 60_000, { meta: meta({}, slide) });
-    assert.deepEqual(hits, ["fal", "fal", "fal", "fal"], "oddiy slayd fal da QOLISHI kerak — regressiya qulfi");
+    const stockless = await attachSlideImages(bulletDeck(4), "Suv aylanishi", "classic", 60_000, { meta: meta({}, slide) });
+    assert.deepEqual(hits, [], "oddiy slayd fal ga BORMAYDI (faqat bepul stock; kalit yo'q — so'rov yo'q)");
+    assert.equal(stockless.want, 0, "stock kalitsiz — rasm va'da qilinmaydi");
 
     // Gemini kaliti yo'q bo'lsa pro deka rasm VA'DA QILMAYDI (pul ushlanmaydi).
     delete process.env.GEMINI_API_KEY;

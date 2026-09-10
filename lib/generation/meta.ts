@@ -12,6 +12,9 @@ import {
   PRO_SLIDE_MAX,
   PRO_SLIDE_MIN,
   QUIZ_COUNTS,
+  SLIDE_DEFAULT,
+  SLIDE_MAX,
+  SLIDE_MIN,
   clampInt,
   isSlideImageStyle,
   isSlideTextVolume,
@@ -117,16 +120,15 @@ export function extractMeta(tool: ToolConfig, values: FormValues): DocMeta {
   const fallbackLabel = defaultPages(tool.id);
   const pagesLabel = s(values, "pages", fallbackLabel);
   const fallbackPages = parsePages(fallbackLabel, 12);
-  const quality = s(values, "quality", "standard");
   /*
-   * Slaydlar soni: oddiy `slide` — paketdan (10/12/14/16), `pro-slide` —
-   * slayderdan (4–30). Ikkalasi ham `targetPages` ga tushadi; narx
-   * (`priceFor`) va byudjet (`budgetFor`) shu songa qaraydi.
+   * Slaydlar soni: ikkala vositada ham SLAYDERDAN (4–30) — «Sifat / hajm»
+   * paketlari yo'q (Formalar 2). `targetPages` ga tushadi; narx
+   * (`priceFor` → `slidePrice`) va byudjet (`budgetFor`) shu songa qaraydi.
    */
   const slidePages =
     tool.id === "pro-slide"
       ? clampInt(values.slideCount, PRO_SLIDE_MIN, PRO_SLIDE_MAX, PRO_SLIDE_DEFAULT)
-      : quality === "premium_long" ? 16 : quality === "long" ? 14 : quality === "premium" ? 12 : 10;
+      : clampInt(values.slideCount, SLIDE_MIN, SLIDE_MAX, SLIDE_DEFAULT);
   const authorParts = parseAuthorLine(s(values, "author", s(values, "fullName")));
   const themeRaw = s(values, "slideTheme", "atlas");
   const templateRaw = s(values, "slideTemplate", "auto");
@@ -142,7 +144,8 @@ export function extractMeta(tool: ToolConfig, values: FormValues): DocMeta {
       ? purposeDefaults(slidePurpose).blocks
       : splitCsv(values.blocks, 12, 24).filter(isSlideBlockId);
   const textVolumeRaw = s(values, "textVolume", "standart");
-  const imageStyleRaw = s(values, "slideImageStyle", "photo");
+  // Oddiy slayd rasmlari DOIM bepul stock (Pexels/Pixabay) — ular faqat `photo` ni biladi; uslub tanlovi pro'da.
+  const imageStyleRaw = tool.id === "slide" ? "photo" : s(values, "slideImageStyle", "photo");
   const quizRaw = clampInt(values.quizCount, 0, 10, 0);
   return {
     toolId: tool.id,
@@ -197,7 +200,8 @@ export function extractMeta(tool: ToolConfig, values: FormValues): DocMeta {
     includeVisuals: s(values, "images", "yes") !== "no",
     // Formada belgilanmagan bo'lsa titul slaydi qoladi (eski xatti-harakat).
     titleSlide: values.titleSlide !== false,
-    premiumVisuals: quality === "premium" || quality === "premium_long",
+    // Premium paket olib tashlangan (Formalar 2); maydon eski hujjatlar uchun qoladi.
+    premiumVisuals: false,
     // Eski id lar (`school`, `defense`…) bazada qoladi — alias orqali yangi ro'yxatga.
     slideAudience: normalizeAudienceId(s(values, "slideAudience", "auto")),
     position: s(values, "position").replace(/\s+/g, " ").slice(0, 80),

@@ -40,13 +40,31 @@ export function isSlideImageStyle(v: string): v is SlideImageStyle {
   return (SLIDE_IMAGE_STYLES as readonly string[]).includes(v);
 }
 
-/** Pro-slayd: slaydlar soni chegarasi va narxi. Oddiy `slide` paketlari bunga tegmaydi. */
+/** Pro-slayd: slaydlar soni chegarasi va narxi (har slaydga). */
 export const PRO_SLIDE_MIN = 4;
 export const PRO_SLIDE_MAX = 30;
 export const PRO_SLIDE_DEFAULT = 12;
 export const PRO_SLIDE_PER_SLIDE = 2000;
 /** Dvigatel qabul qiladigan eng ko'p slayd (ilgari `wantSlides` 20 da qirqardi). */
 export const SLIDE_MAX = PRO_SLIDE_MAX;
+
+/**
+ * Oddiy slayd: pro bilan BIR XIL slayder (4–30), lekin narx paket emas,
+ * formula — `SLIDE_INCLUDED` (20) tagacha bitta narx, keyingi har slayd
+ * `SLIDE_EXTRA_PRICE`. «Sifat / hajm» paketlari (standard/long/premium)
+ * olib tashlangan (Formalar 2): 25 slayd = 5 500, 30 = 8 000.
+ */
+export const SLIDE_MIN = PRO_SLIDE_MIN;
+export const SLIDE_DEFAULT = 10;
+export const SLIDE_BASE_PRICE = 3000;
+export const SLIDE_INCLUDED = 20;
+export const SLIDE_EXTRA_PRICE = 500;
+
+/** Oddiy slayd narxi — `priceFor` (server) va forma bitta formuladan. */
+export function slidePrice(count: number): number {
+  const n = clampInt(count, SLIDE_MIN, SLIDE_MAX, SLIDE_DEFAULT);
+  return SLIDE_BASE_PRICE + Math.max(0, n - SLIDE_INCLUDED) * SLIDE_EXTRA_PRICE;
+}
 
 export const PLAN_ITEMS_MIN = 3;
 export const PLAN_ITEMS_MAX = 6;
@@ -87,7 +105,8 @@ export const SLIDE_PARAMS: SlideParam[] = [
   { id: "localExamples", tools: ["slide", "pro-slide"], encode: "boolean", probeA: false, probeB: true, impacts: ["prompt", "images"] },
   { id: "blocks", tools: ["pro-slide"], encode: "csv", probeA: "reja", probeB: "reja,test,adabiyotlar", impacts: ["beats"] },
   { id: "planItems", tools: ["slide", "pro-slide"], encode: "number", probeA: 3, probeB: 6, impacts: ["prompt", "layout"] },
-  { id: "slideCount", tools: ["pro-slide"], encode: "number", probeA: 4, probeB: 17, impacts: ["beats", "price"] },
+  // 4 → 25: oddiyda narx 3 000 → 5 500, proda 8 000 → 50 000 — ikkalasida ham «price» farq qiladi.
+  { id: "slideCount", tools: ["slide", "pro-slide"], encode: "number", probeA: 4, probeB: 25, impacts: ["beats", "price"] },
   { id: "titleSlide", tools: ["slide", "pro-slide"], encode: "boolean", probeA: true, probeB: false, impacts: ["beats"] },
   { id: "agendaSlide", tools: ["slide", "pro-slide"], encode: "boolean", probeA: true, probeB: false, impacts: ["beats"] },
   { id: "textVolume", tools: ["slide", "pro-slide"], encode: "string", probeA: "qisqa", probeB: "kop", impacts: ["prompt", "layout"] },
@@ -95,10 +114,10 @@ export const SLIDE_PARAMS: SlideParam[] = [
   { id: "internetSearch", tools: ["slide", "pro-slide"], encode: "boolean", probeA: false, probeB: true, impacts: ["research", "beats"] },
   { id: "speakerNotes", tools: ["slide", "pro-slide"], encode: "boolean", probeA: true, probeB: false, impacts: ["prompt"] },
   { id: "extra", tools: ["slide", "pro-slide"], encode: "string", probeA: "", probeB: "ko‘proq diagramma bo‘lsin", impacts: ["prompt"] },
-  { id: "slideImageStyle", tools: ["slide", "pro-slide"], encode: "string", probeA: "minimal", probeB: "chalk", impacts: ["images"] },
+  // Faqat pro: oddiy slayd rasmlari DOIM bepul stock (Pexels/Pixabay) — u faqat `photo` uslubini biladi.
+  { id: "slideImageStyle", tools: ["pro-slide"], encode: "string", probeA: "minimal", probeB: "chalk", impacts: ["images"] },
   { id: "slideTemplate", tools: ["slide", "pro-slide"], encode: "string", probeA: "lecture", probeB: "report", impacts: ["beats", "layout"] },
   { id: "slideTheme", tools: ["slide", "pro-slide"], encode: "string", probeA: "atlas", probeB: "graphite", impacts: ["layout"] },
-  { id: "quality", tools: ["slide"], encode: "string", probeA: "standard", probeB: "premium_long", impacts: ["beats", "price"] },
 ];
 
 export function slideParamsFor(tool: SlideTool): SlideParam[] {

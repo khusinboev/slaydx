@@ -8,8 +8,12 @@ import {
   PRO_SLIDE_MAX,
   PRO_SLIDE_MIN,
   PRO_SLIDE_PER_SLIDE,
+  SLIDE_DEFAULT,
+  SLIDE_MAX,
+  SLIDE_MIN,
   SLIDE_PARAMS,
   slideParamsFor,
+  slidePrice,
   splitCsv,
 } from "../lib/generation/slide-params.ts";
 import { AUDIENCE_RULES, audienceRules, bodyRules } from "../lib/generation/slide-audience.ts";
@@ -44,8 +48,11 @@ test("reyestr: id lar noyob, har parametrda ta'sir va ikki xil zond bor", () => 
     assert.ok(p.tools.length > 0, `${p.id}: vositasiz`);
   }
   assert.ok(slideParamsFor("pro-slide").length > slideParamsFor("slide").length, "pro brifi oddiydan boy");
-  assert.ok(slideParamsFor("slide").some((p) => p.id === "quality"), "oddiyda paket qoladi");
-  assert.ok(!slideParamsFor("pro-slide").some((p) => p.id === "quality"), "pro da paket yo'q — slayder");
+  // Formalar 2: paket YO'Q — ikkalasida ham slayder; rasm uslubi faqat pro'da (oddiy = bepul stock, `photo`).
+  assert.ok(!SLIDE_PARAMS.some((p) => p.id === "quality"), "«Sifat / hajm» paketi olib tashlangan");
+  assert.ok(slideParamsFor("slide").some((p) => p.id === "slideCount"), "oddiyda ham slayder");
+  assert.ok(!slideParamsFor("slide").some((p) => p.id === "slideImageStyle"), "oddiyda rasm uslubi yo'q — stock faqat foto");
+  assert.ok(slideParamsFor("pro-slide").some((p) => p.id === "slideImageStyle"), "pro'da rasm uslubi qoladi");
 });
 
 // ───────────────────────────────────────────── extractMeta klamplari
@@ -55,15 +62,41 @@ test("pro-slide: slaydlar soni slayderdan, 4–30 ga qisiladi, narx har slaydga"
   assert.equal(meta({ slideCount: 1 }).targetPages, PRO_SLIDE_MIN);
   assert.equal(meta({ slideCount: 99 }).targetPages, PRO_SLIDE_MAX);
   assert.equal(meta({ slideCount: "abc" }).targetPages, 12, "buzuq qiymat — standart");
-  // `quality` pro'da e'tiborsiz — paket emas, slayder.
+  // Eski `quality` qiymati endi hech narsani o'zgartirmaydi.
   assert.equal(meta({ slideCount: 8, quality: "premium_long" }).targetPages, 8);
   assert.equal(priceFor(pro, { slideCount: 17 }), 17 * PRO_SLIDE_PER_SLIDE);
   assert.equal(priceFor(pro, { slideCount: 4 }), 8000);
   assert.equal(priceFor(pro, { slideCount: 30 }), 60000);
   assert.equal(priceFor(pro, { slideCount: 99 }), 60000, "narx ham qisiladi — deka bilan ajralmasin");
-  // Oddiy vosita o'zgarmagan.
-  assert.equal(priceFor(slide, { quality: "premium_long" }), 8000);
-  assert.equal(meta({ quality: "long" }, slide).targetPages, 14);
+});
+
+test("oddiy slide: slayder 4–30 (standart 10), 20 tagacha 3 000, keyingi har slayd +500", () => {
+  assert.equal(meta({}, slide).targetPages, SLIDE_DEFAULT, "slayder yuborilmasa standart 10");
+  assert.equal(meta({ slideCount: 25 }, slide).targetPages, 25);
+  assert.equal(meta({ slideCount: 1 }, slide).targetPages, SLIDE_MIN);
+  assert.equal(meta({ slideCount: 99 }, slide).targetPages, SLIDE_MAX);
+  // Eski paket qiymati endi e'tiborsiz — narx faqat slayderdan.
+  assert.equal(meta({ quality: "premium_long" }, slide).targetPages, SLIDE_DEFAULT);
+  const table: [unknown, number][] = [
+    [undefined, 3000],
+    [4, 3000],
+    [10, 3000],
+    [20, 3000],
+    [21, 3500],
+    [25, 5500],
+    [30, 8000],
+    [99, 8000],
+    ["abc", 3000],
+  ];
+  for (const [n, want] of table) {
+    assert.equal(priceFor(slide, { slideCount: n as never }), want, `${String(n)} slayd`);
+    assert.equal(slidePrice(Number(n)), want);
+  }
+  assert.equal(priceFor(slide, { quality: "premium_long" }), 3000, "paket narxga ta'sir qilmaydi");
+  // Oddiy slaydda premium yo'q, uslub doim foto (bepul stock).
+  assert.equal(meta({ slideImageStyle: "chalk" }, slide).premiumVisuals, false);
+  assert.equal(meta({ slideImageStyle: "chalk" }, slide).slideImageStyle, "photo", "stock faqat foto — uslub majburlanadi");
+  assert.equal(meta({ slideImageStyle: "chalk" }, pro).slideImageStyle, "chalk", "pro'da uslub tanlovi qoladi");
 });
 
 test("yangi maydonlar oddiy formada ham standart qiymat bilan keladi", () => {

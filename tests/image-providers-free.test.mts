@@ -377,9 +377,9 @@ test("chainProvider: bitta dekada bir xil foto takrorlanmaydi (seen)", async () 
 
 // ───────────────────────────────────────────── 8. pickProvider — regressiya
 
-test("pickProvider: slide → zanjir, id hamon `fal` (regressiya qulfi)", () => {
-  const provider = pickProvider(meta());
-  assert.equal(provider.id, "fal");
+test("pickProvider: slide → FAQAT stock zanjiri (`stock`), meta'siz → eski zanjir (`fal`)", () => {
+  assert.equal(pickProvider(meta()).id, "stock");
+  assert.equal(pickProvider().id, "fal", "meta'siz chaqiruv yo'li o'zgarmaydi — regressiya qulfi");
 });
 
 // ───────────────────────────────────────────── 9. attachSlideImages — to'liq zanjir integratsiyasi
@@ -415,7 +415,7 @@ test("attachSlideImages: pexels ishlasa pixabay/fal umuman chaqirilmaydi", async
   }
 });
 
-test("attachSlideImages: pexels/pixabay kalitsiz bo'lsa to'g'ridan-to'g'ri fal (regressiya)", async () => {
+test("attachSlideImages: oddiy slayd stock kalitsiz bo'lsa RASMSIZ qoladi — fal chaqirilmaydi, va'da nol; meta'siz yo'l fal da qoladi", async () => {
   const restore = keysEnv()({ fal: "k" }); // faqat FAL_KEY
   const hits: string[] = [];
   globalThis.fetch = (async (url: string) => {
@@ -432,21 +432,27 @@ test("attachSlideImages: pexels/pixabay kalitsiz bo'lsa to'g'ridan-to'g'ri fal (
   }) as unknown as typeof fetch;
   try {
     const report = await attachSlideImages(deck(2), "Suv aylanishi", "classic", 60_000, { meta: meta() });
-    assert.equal(report.got, 2);
-    assert.deepEqual(hits, ["fal", "fal"], "kalitsiz bepul manba HECH chaqirilmasligi kerak — regressiya qulfi");
+    // MUTATSIYA: `pickProvider` oddiy slayd zanjiriga `falProvider` qo'shsa — got 2, hits ["fal","fal"].
+    assert.equal(report.got, 0, "oddiy slayd pullik fal ga tushmasin");
+    assert.equal(report.want, 0, "kalitsiz stock — rasm VA'DA qilinmaydi (pul ushlanmaydi)");
+    assert.deepEqual(hits, [], "na stock (kalit yo'q), na fal");
+    // Meta'siz chaqiruv (eski yo'l, image-lab) — fal hamon ishlaydi.
+    const legacy = await attachSlideImages(deck(2), "Suv aylanishi", "classic", 60_000, {});
+    assert.equal(legacy.got, 2);
+    assert.deepEqual(hits, ["fal", "fal"]);
   } finally {
     restore();
   }
 });
 
-test("attachSlideImages: uslub chalk bo'lsa bepul manbalar sinalmaydi, to'g'ridan-to'g'ri fal", async () => {
+test("attachSlideImages: oddiy slaydda `chalk` yuborilsa ham uslub foto — stock sinaladi, fal chaqirilmaydi", async () => {
   const restore = keysEnv()({ pexels: "k", pixabay: "k", fal: "k" });
   const hits: string[] = [];
   globalThis.fetch = (async (url: string) => {
     const u = String(url);
-    if (u.startsWith("https://api.pexels.com/") || u.startsWith("https://pixabay.com/api/")) {
+    if (u.startsWith("https://api.pexels.com/")) {
       hits.push("stock");
-      return jsonRes(200, {});
+      return jsonRes(200, { photos: [{ src: { large2x: "https://pexels.example/p.jpg" }, alt: "p" }] });
     }
     if (u.startsWith("https://fal.run/")) {
       hits.push("fal");
@@ -455,9 +461,12 @@ test("attachSlideImages: uslub chalk bo'lsa bepul manbalar sinalmaydi, to'g'rida
     return imgRes();
   }) as unknown as typeof fetch;
   try {
-    const report = await attachSlideImages(deck(2), "Suv aylanishi", "classic", 60_000, { meta: meta({ slideImageStyle: "chalk" }) });
+    // `extractMeta` oddiy slaydda uslubni `photo` ga majburlaydi — `searchQueryFor` so'rov beradi.
+    const m = meta({ slideImageStyle: "chalk" });
+    assert.equal(m.slideImageStyle, "photo");
+    const report = await attachSlideImages(deck(2), "Suv aylanishi", "classic", 60_000, { meta: m });
     assert.equal(report.got, 2);
-    assert.deepEqual(hits, ["fal", "fal"], "chalk uslubida stock manba UMUMAN sinalmasligi kerak");
+    assert.deepEqual(hits, ["stock", "stock"], "oddiy slayd faqat bepul manbadan");
   } finally {
     restore();
   }
@@ -500,7 +509,7 @@ test("attachSlideImages: pexels rate bersa (blok emas) pixabay har slaydda qayta
   }
 });
 
-test("attachSlideImages: pexels va pixabay ikkalasi ham yiqilsa fal yakuniy zaxira bo'lib qoladi", async () => {
+test("attachSlideImages: pexels va pixabay ikkalasi ham yiqilsa — oddiy slayd RASMSIZ (fal zaxira EMAS); meta'siz yo'lda fal zaxira", async () => {
   const restore = keysEnv()({ pexels: "k", pixabay: "k", fal: "k" });
   const hits: string[] = [];
   globalThis.fetch = (async (url: string) => {
@@ -521,7 +530,12 @@ test("attachSlideImages: pexels va pixabay ikkalasi ham yiqilsa fal yakuniy zaxi
   }) as unknown as typeof fetch;
   try {
     const report = await attachSlideImages(deck(3), "Suv aylanishi", "classic", 60_000, { meta: meta() });
-    assert.equal(report.got, 3, "ikkalasi ham yiqilsa fal baribir yetkazishi kerak");
+    assert.equal(report.got, 0, "oddiy slaydda fal zaxira emas — rasmsiz qoladi");
+    assert.equal(hits.filter((h) => h === "fal").length, 0, "fal umuman chaqirilmaydi");
+    assert.ok(hits.includes("pexels") && hits.includes("pixabay"), "ikkala bepul manba sinaladi");
+    hits.length = 0;
+    const legacy = await attachSlideImages(deck(3), "Suv aylanishi", "classic", 60_000, {});
+    assert.equal(legacy.got, 3, "meta'siz (eski) yo'lda fal yakuniy zaxira bo'lib qoladi");
     assert.equal(hits.filter((h) => h === "fal").length, 3);
   } finally {
     restore();

@@ -1,5 +1,5 @@
 import type { FormValues, ToolConfig, ToolField, ToolId, UserProfile } from "./types";
-import { PRO_SLIDE_DEFAULT, PRO_SLIDE_MAX, PRO_SLIDE_MIN, PRO_SLIDE_PER_SLIDE, clampInt } from "./generation/slide-params";
+import { PRO_SLIDE_DEFAULT, PRO_SLIDE_MAX, PRO_SLIDE_MIN, PRO_SLIDE_PER_SLIDE, clampInt, slidePrice } from "./generation/slide-params";
 
 const TOPIC_FILE_MODES = [
   {
@@ -1035,15 +1035,9 @@ export function priceFor(tool: ToolConfig, values: FormValues): number {
     return 2000;
   }
   if (tool.id === "slide") {
-    const q = String(values.quality ?? "standard");
-    return (
-      {
-        standard: 3000,
-        long: 5000,
-        premium: 6000,
-        premium_long: 8000,
-      }[q] ?? 3000
-    );
+    // Slayder (4–30): 20 tagacha 3 000, keyingi har slayd +500 — `extractMeta`
+    // bilan bir xil klamp (`slidePrice` ichida), narx va deka uzunligi ajralmasin.
+    return slidePrice(Number(values.slideCount));
   }
   if (tool.id === "pro-slide") {
     // Har slaydga narx; son `extractMeta` bilan bir xil klamp — narx va
