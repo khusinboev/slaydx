@@ -168,7 +168,11 @@ function pickRoles(layouts: TemplateLayout[]): TemplateProfile["roles"] {
   const withTitleBody = layouts.find((l) => l.placeholders.some((p) => p.type === "title") && l.placeholders.some((p) => p.type === "body" || p.type === "obj"))?.path;
   const roles: TemplateProfile["roles"] = {};
   roles.cover = first("cover") ?? first("titleOnly") ?? withTitleBody;
-  roles.content = first("content") ?? withTitleBody ?? first("two");
+  // Muqova `ctrTitle`siz namunada (pptxgenjs, ba'zi Google Slides eksportlari)
+  // birinchi title+body layoutga tushadi — mazmun uchun boshqa content layout
+  // bo'lsa, o'shani olamiz, toki muqova bilan mazmun bir xil ko'rinmasin.
+  const contents = layouts.filter((l) => l.kind === "content").map((l) => l.path);
+  roles.content = contents.find((p) => p !== roles.cover) ?? contents[0] ?? withTitleBody ?? first("two");
   roles.section = first("section") ?? roles.cover;
   const two = first("two");
   if (two) roles.two = two;
