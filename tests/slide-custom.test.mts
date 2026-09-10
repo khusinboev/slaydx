@@ -65,7 +65,7 @@ function sample(layout: SlideLayout): SlideModel {
     case "bullets": case "agenda": return { ...base, bullets };
     case "twoCol": case "compare": return { ...base, leftTitle: "Yorug‘lik", left: bullets.slice(0, 2), rightTitle: "Qorong‘i", right: bullets.slice(2) };
     case "stats": return { ...base, stats: [{ value: "6", label: "CO₂ molekulasi" }, { value: "30%", label: "kislorod" }] };
-    case "process": return { ...base, steps: [{ n: "1", title: "Nur yutilishi", text: "Xlorofill fotonni ushlaydi" }, { n: "2", title: "Suv parchalanishi" }] };
+    case "process": return { ...base, steps: [{ n: "1", title: "Nur yutilishi", text: "Xlorofill fotonni ushlaydi" }, { n: "2", title: "Suv parchalanishi", text: "" }] };
     case "quote": return { ...base, quote: "Har bir yashil barg — kichik zavod.", quoteBy: "Yan Ingenhauz" };
     case "table": return { ...base, table: { headers: ["Faza", "Joy", "Mahsulot"], rows: [["Yorug‘lik", "Tilakoid", "ATF"], ["Qorong‘i", "Stroma", "Glyukoza"]] } };
     case "quiz": return { ...base, quiz: [{ q: "Fotosintez qayerda?", options: ["Xloroplast", "Mitoxondriya", "Yadro", "Ribosoma"], answer: 0 }] };

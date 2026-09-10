@@ -1,16 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo } from "react";
 import { SLIDE_TEMPLATES, normalizeTemplateId, type SlideTemplate, type SlideTemplateId } from "@/lib/generation/slide-templates";
 import { getSlideTheme } from "@/lib/generation/slide-themes";
 import { bodyRules } from "@/lib/generation/slide-audience";
 import { GALLERY_SLIDES, sampleDeck } from "@/lib/generation/slide-samples";
 import type { SlideModel, SlideThemeId } from "@/lib/generation/slide-types";
-import { SLIDE } from "@/lib/viewers/metrics";
 import { cn } from "@/lib/cn";
 import { SlideCanvas } from "../viewers/SlideCanvas";
 import { ColorPicker } from "./slide-pickers";
 import { Row } from "./compact";
+import { Thumb } from "./Thumb";
+import { CustomTemplateCard } from "./CustomTemplateCard";
+import type { CustomTemplateLite } from "@/lib/api-client";
 
 /**
  * Shablon galereyasi (Shablonlar 2).
@@ -30,14 +32,22 @@ export function TemplateGallery({
   theme,
   onChange,
   onTheme,
+  custom,
 }: {
   value: string;
   theme: string;
   onChange: (templateId: SlideTemplateId) => void;
   onTheme: (themeId: SlideThemeId) => void;
+  /**
+   * «O'z shablonim» (faqat pro): `value` — `templateAssetId`. Berilmasa
+   * karta chiqmaydi (oddiy slayd). Tanlanganda ichki shablon/rang
+   * e'tiborsiz — deka namuna dizaynida chiqadi.
+   */
+  custom?: { value: string; onChange: (assetId: string) => void };
 }) {
   const current = normalizeTemplateId(value);
   const themeObj = getSlideTheme(theme as SlideThemeId);
+  const customOn = Boolean(custom?.value);
   return (
     <div>
       <div role="radiogroup" aria-label="Shablon" className="grid grid-cols-1 gap-3 sm:grid-cols-2" data-template-gallery>
@@ -45,20 +55,37 @@ export function TemplateGallery({
           <TemplateCard
             key={tpl.id}
             tpl={tpl}
-            on={current === tpl.id}
+            on={!customOn && current === tpl.id}
             themeId={themeObj.id}
             onPick={() => {
               onChange(tpl.id);
               // Shablonning o'z palitrasi — foydalanuvchi keyin swatch bilan o'zgartiradi.
               onTheme(tpl.defaultTheme);
+              // Ichki shablon tanlandi — namuna bekor.
+              custom?.onChange("");
             }}
           />
         ))}
+        {custom ? (
+          <CustomTemplateCard
+            value={custom.value}
+            on={customOn}
+            themeId={themeObj.id}
+            onPick={(t: CustomTemplateLite) => custom.onChange(t.assetId)}
+            onClear={() => custom.onChange("")}
+          />
+        ) : null}
       </div>
       <div className="mt-3">
-        <Row label="Rang" hint="Palitra — tanlangan shablonning barcha slaydlariga; preview'lar ham shu rangda.">
-          <ColorPicker value={themeObj.id} onChange={(v) => onTheme(v as SlideThemeId)} />
-        </Row>
+        {customOn ? (
+          <Row label="Rang" hint="O'z shablonda ranglar va shriftlar namunaning o'zidan olinadi.">
+            <span className="text-muted-foreground text-[12.5px]">Namunaning o‘z ranglari</span>
+          </Row>
+        ) : (
+          <Row label="Rang" hint="Palitra — tanlangan shablonning barcha slaydlariga; preview'lar ham shu rangda.">
+            <ColorPicker value={themeObj.id} onChange={(v) => onTheme(v as SlideThemeId)} />
+          </Row>
+        )}
       </div>
     </div>
   );
@@ -99,30 +126,5 @@ function TemplateCard({ tpl, on, themeId, onPick }: { tpl: SlideTemplate; on: bo
       </div>
       <p className="text-muted-foreground truncate px-1 pt-1.5 text-[11px]">{tpl.blurb}</p>
     </button>
-  );
-}
-
-/** 1280×720 canvas → karta kengligiga masshtab (o'lchanadi; SSR uchun taxminiy `scaleHint`). */
-function Thumb({ children, scaleHint, small = false }: { children: React.ReactNode; scaleHint: number; small?: boolean }) {
-  const ref = useRef<HTMLSpanElement>(null);
-  const [scale, setScale] = useState(scaleHint);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el || typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver(() => setScale(el.getBoundingClientRect().width / SLIDE.w));
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-  return (
-    <span
-      ref={ref}
-      data-thumb={small ? "small" : "main"}
-      className={cn("relative block w-full overflow-hidden bg-black", small ? "rounded-[3px]" : "rounded-md")}
-      style={{ aspectRatio: `${SLIDE.w} / ${SLIDE.h}` }}
-    >
-      <span className="absolute top-0 left-0" style={{ width: SLIDE.w, height: SLIDE.h, transform: `scale(${scale})`, transformOrigin: "top left" }}>
-        {children}
-      </span>
-    </span>
   );
 }

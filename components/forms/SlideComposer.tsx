@@ -100,6 +100,7 @@ export function SlideComposer({
     speakerNotes: true,
     keyIdeas: "",
     logoAssetId: "",
+    templateAssetId: "",
     slideTheme: "atlas",
     slideTemplate: "auto",
   }));
@@ -234,6 +235,8 @@ export function SlideComposer({
           theme={String(values.slideTheme || "atlas")}
           onChange={(id) => set("slideTemplate", id)}
           onTheme={(id) => set("slideTheme", id)}
+          // «O'z shablonim» — faqat pro (ustamasiz, PPTX ≤ 20 MB).
+          custom={pro ? { value: String(values.templateAssetId || ""), onChange: (id) => set("templateAssetId", id) } : undefined}
         />
       </Card>
 

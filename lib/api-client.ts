@@ -438,6 +438,40 @@ export async function extractText(file: File) {
   });
 }
 
+/* ─────────────────────────── O'z shablonim ─────────────────────────── */
+
+export type CustomTemplateLite = import("./generation/pptx-template").CustomTemplate;
+export type TemplateUploadResponse = { assetId: string; name: string; size: number; template: CustomTemplateLite };
+
+/**
+ * PPTX namunasini yuklaydi (`TemplateGallery` «O'z shablonim», Shablonlar 2).
+ * `POST /api/uploads/template`, `multipart/form-data`, maydon `file`.
+ * Server tahlil + rasterlash qiladi (20–40 s) — chaqiruvchi «kutish» holatini ko'rsatadi.
+ */
+export async function uploadTemplate(file: File): Promise<TemplateUploadResponse> {
+  const form = new FormData();
+  form.append("file", file);
+  try {
+    return await request<TemplateUploadResponse>("/api/uploads/template", { method: "POST", body: form });
+  } catch (e) {
+    if (e instanceof ApiError) {
+      if (e.status === 413) throw new ApiError("Fayl 20 MB dan katta", e.status, e.data);
+      if (e.status === 415) throw new ApiError("Faqat PPTX (PowerPoint) fayl", e.status, e.data);
+      if (e.status === 429) throw new ApiError("Juda ko‘p urinish — birozdan keyin", e.status, e.data);
+    }
+    throw e;
+  }
+}
+
+export async function listTemplates(): Promise<CustomTemplateLite[]> {
+  const r = await request<{ templates: CustomTemplateLite[] }>("/api/uploads/template");
+  return r.templates ?? [];
+}
+
+export async function deleteTemplate(assetId: string): Promise<void> {
+  await request<{ ok: true }>(`/api/uploads/template/${encodeURIComponent(assetId)}`, { method: "DELETE" });
+}
+
 /* ────────────────────────────── Logotip ────────────────────────────── */
 
 /**

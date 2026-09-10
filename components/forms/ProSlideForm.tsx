@@ -13,7 +13,8 @@ import { AUTHOR_FIELD_IDS, SlideComposer } from "./SlideComposer";
  * birlashmasi), shuning uchun ro'yxatlar va haqiqiy render ajralib keta
  * olmaydi — `tests/viewer/slide-form.test.mts` reyestr bilan solishtiradi.
  */
-export const PRO_INLINE_FIELD_IDS = ["topic", "language", "slideTemplate", "slideTheme"];
+// `templateAssetId` — galereyaning «O'z shablonim» kartasi (faqat pro).
+export const PRO_INLINE_FIELD_IDS = ["topic", "language", "slideTemplate", "slideTheme", "templateAssetId"];
 export const PRO_MAIN_FIELD_ORDER_1 = ["slideCount"];
 export const PRO_MAIN_FIELD_ORDER_2: string[] = [...AUTHOR_FIELD_IDS];
 export const PRO_EXTRA_FIELD_ORDER = slideParamsFor("pro-slide")

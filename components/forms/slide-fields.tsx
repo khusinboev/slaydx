@@ -139,7 +139,8 @@ function SlideCountField({ values, set, tool }: { values: FormValues; set: Slide
  * Reyestr id → render.
  *
  * `default: return null` — `topic`/`language`/`slideTemplate`/
- * `slideTheme` ataylab shu yerda ishlanmaydi (yuqoridagi izohga qarang).
+ * `slideTheme`/`templateAssetId` ataylab shu yerda ishlanmaydi (yuqoridagi
+ * izohga qarang; oxirgisi — galereyaning «O'z shablonim» kartasi).
  */
 export function renderSlideParam(
   id: string,
