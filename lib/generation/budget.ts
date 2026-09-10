@@ -31,7 +31,12 @@ const FIXED: Partial<Record<ToolId, number>> = {
   keys: 150_000,
   "lesson-plan": 120_000,
   "texnologik-xarita": 150_000,
-  resume: 90_000,
+  /*
+   * Rezyume 2: prompt kattalashdi (tuzilmali faktlar JSON, 18 til uchun
+   * yorliqlar, boyitish qoidalari) va qisqa summary da BIR marta STRICT
+   * retry bor — 90 s da katta tajribali rezyume retry'ga ulgurmasdi.
+   */
+  resume: 150_000,
 };
 
 const PER_PAGE_MS = 9_000;

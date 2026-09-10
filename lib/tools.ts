@@ -79,7 +79,7 @@ const WRITER_FIELDS: ToolConfig["fields"] = [
  * Maxsus formali vositalarning MAJBURIY maydonlari.
  *
  * `image`, `resume` va `translation` o'z formalarini chizadi
- * (`ImageStudio`, `ResumeWizard`, `TranslationForm`), shuning uchun
+ * (`ImageStudio`, `ResumeComposer`, `TranslationForm`), shuning uchun
  * `fields` bo'sh qolgan edi. `missingRequired` esa aynan `fields` ni
  * aylanadi — natijada serverda UCHALASI ham tekshirilmasdi:
  *

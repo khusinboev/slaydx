@@ -552,6 +552,54 @@ export async function uploadLogo(file: File): Promise<{ assetId: string; mime: s
 }
 
 /**
+ * Rezyume surati (Rezyume 2): kesilgan nusxa + ixtiyoriy asl + kesish
+ * ma'lumoti. Server shartnomasi — `POST /api/uploads/photo`.
+ *
+ * Xato matnlari status bo'yicha shu yerda belgilanadi (`uploadLogo`
+ * izohiga qarang): klient serverning aniq so'z tanlashiga qaram
+ * bo'lmasligi kerak.
+ */
+export async function uploadResumePhoto(input: {
+  blob: Blob;
+  original?: File | null;
+  crop?: { x: number; y: number; zoom: number };
+  shape: "circle" | "square";
+}): Promise<{ assetId: string; mime: string; size: number; shape: "circle" | "square"; originalAssetId?: string }> {
+  const form = new FormData();
+  form.append("file", input.blob, input.shape === "circle" ? "photo.png" : "photo.jpg");
+  if (input.original) form.append("original", input.original);
+  if (input.crop) form.append("crop", JSON.stringify(input.crop));
+  form.append("shape", input.shape);
+  try {
+    return await request("/api/uploads/photo", { method: "POST", body: form });
+  } catch (e) {
+    if (e instanceof ApiError) {
+      if (e.status === 413) throw new ApiError("Surat 5 MB dan katta", e.status, e.data);
+      if (e.status === 415) throw new ApiError("Faqat PNG yoki JPEG", e.status, e.data);
+      if (e.status === 422) throw new ApiError("Surat juda katta — kichikroq faylni tanlang", e.status, e.data);
+      if (e.status === 429) throw new ApiError("Juda ko‘p urinish", e.status, e.data);
+    }
+    throw e;
+  }
+}
+
+/** Yuklangan suratning manzili — forma qayta ochilganda ko'rsatish uchun. */
+export function photoUrl(assetId: string): string {
+  return `/api/uploads/photo/${assetId}`;
+}
+
+/** Rezyume formasi qoralamasi (Rezyume 2, 1-band). */
+export function fetchResumeDraft() {
+  return request<{ draft: { data: FormValues; updatedAt: string } | null }>("/api/resume/draft");
+}
+export function saveResumeDraft(data: FormValues) {
+  return request<{ updatedAt: string }>("/api/resume/draft", { method: "PUT", body: JSON.stringify({ data }) });
+}
+export function clearResumeDraft() {
+  return request<{ ok: true }>("/api/resume/draft", { method: "DELETE" });
+}
+
+/**
  * Ish rejasini oldindan olish. Bepul va kredit yechmaydi —
  * `app/api/outline/route.ts` izohiga qarang.
  */

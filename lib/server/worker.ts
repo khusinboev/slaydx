@@ -19,6 +19,7 @@ import { deleteGenerationFile, putGenerationFile } from "./storage";
 import { deleteAssets, extractAssets, putAssets } from "./assets";
 import { buildPreview } from "./preview";
 import { logoDataUrl } from "./logo";
+import { photoDataUrl, purgeOldPhotos } from "./photo";
 import { templateForJob } from "./template-upload";
 import { purgeOldSources, sourceForJob } from "./source-upload";
 import { LiveReporter } from "./live";
@@ -193,7 +194,14 @@ async function runJob(job: ClaimedJob): Promise<void> {
      */
     const source =
       tool.id === "translation" ? await sourceForJob(job.userId, String(job.values.sourceAssetId ?? "")) : undefined;
-    const file = await buildArtifact(tool, job.values, { deadline, logo, template, source, onStage, onProgress: live?.sink });
+    /*
+     * Rezyume surati (Rezyume 2): kesilgan nusxa `data:` URL ga aylanadi
+     * va `extractAssets` uni keyin generatsiya aktiviga chiqaradi.
+     * Topilmasa `undefined` — rezyume suratsiz chiqadi (`logo` naqshi).
+     */
+    const photo =
+      tool.id === "resume" ? await photoDataUrl(job.userId, String(job.values.photoAssetId ?? "")) : undefined;
+    const file = await buildArtifact(tool, job.values, { deadline, logo, template, source, photo, onStage, onProgress: live?.sink });
 
     if (!file.bytes?.byteLength) {
       throw new Error("Fayl bo'sh chiqdi — qayta urinib ko'ring");
@@ -302,6 +310,12 @@ async function housekeeping(): Promise<void> {
      * qoladi.
      */
     await purgeOldSources(30);
+    /*
+     * Rezyume surati — shaxsiy ma'lumot. Generatsiyaga tushgan nusxa
+     * allaqachon `generation_assets` da, bu jadval esa faqat FORMA
+     * uchun: 90 kundan keyin uni saqlash keraksiz yuk.
+     */
+    await purgeOldPhotos(90);
   } catch (e) {
     console.error("[worker] housekeeping:", e instanceof Error ? e.message : e);
   }

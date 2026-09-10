@@ -117,6 +117,14 @@ export type BuildOptions = {
    * chizig'ini to'xtatadi.
    */
   onStage?: (ev: { progress: number; step: string }) => void;
+  /**
+   * Rezyume surati (Rezyume 2) — `data:` URL + kesish ma'lumoti; worker
+   * `photo_uploads` dan o'qib beradi (`photoDataUrl`), `logo` naqshi.
+   *
+   * Berilmasa rezyume suratsiz chiqadi — bu xato emas: `classic` shabloni
+   * umuman suratsiz, qolganlarida ham surat ixtiyoriy.
+   */
+  photo?: { url: string; assetId: string; shape: "circle" | "square"; crop?: { x: number; y: number; zoom: number }; originalAssetId?: string };
 };
 
 export async function buildArtifact(
