@@ -20,6 +20,7 @@ import { deleteAssets, extractAssets, putAssets } from "./assets";
 import { buildPreview } from "./preview";
 import { logoDataUrl } from "./logo";
 import { templateForJob } from "./template-upload";
+import { purgeOldSources, sourceForJob } from "./source-upload";
 import { LiveReporter } from "./live";
 import { purgeExpiredSessions } from "./session";
 import { purgeRateLimits } from "./ratelimit";
@@ -71,8 +72,15 @@ function stepsFor(toolId: string): string[] {
  * o'tmasin deb butunlay to'xtaydi — faqat `heartbeat` (qulfni tirik
  * tutish) qoladi, haqiqiy `progress`/`step`ni endi `LiveReporter`
  * (`setLive` orqali) yozadi.
+ *
+ * `isLive` — xuddi shu qoidaning DEKASIZ varianti (Tarjimon 2, WP1):
+ * tarjima dvigateli `LiveReporter` ishlatmaydi, lekin `onStage` orqali
+ * haqiqiy bosqichlarni yozadi («Tarjima qilinmoqda · 12/57»). Birinchi
+ * haqiqiy bosqich kelgach predikat `true` bo'ladi va soxta egri chiziq
+ * shu yerda to'xtaydi — aks holda ikkalasi navbatma-navbat yozib,
+ * progress oldinga-orqaga sakrardi.
  */
-export function progressTicker(job: ClaimedJob, live: LiveReporter | null) {
+export function progressTicker(job: ClaimedJob, live: LiveReporter | null, isLive?: () => boolean) {
   const steps = stepsFor(job.toolId);
   /*
    * Kutilayotgan davomiylik ishning O'Z byudjetidan olinadi.
@@ -88,8 +96,9 @@ export function progressTicker(job: ClaimedJob, live: LiveReporter | null) {
   const expected = Math.max(20_000, jobBudget(job) * 0.7);
   const started = Date.now();
   const timer = setInterval(() => {
-    if (live?.started) {
-      // Qulf «heartbeat»i — `progress`/`step`ni endi `LiveReporter` yozadi.
+    if (live?.started || isLive?.()) {
+      // Qulf «heartbeat»i — `progress`/`step`ni endi `LiveReporter` yoki
+      // dvigatelning `onStage` i yozadi.
       void heartbeat(job.id, WORKER_ID).catch(() => {});
       return;
     }
@@ -157,7 +166,19 @@ async function runJob(job: ClaimedJob): Promise<void> {
   // shu ikkisi uchun `onProgress` chaqiradi) — boshqa vositalarga reporter kerak
   // emas.
   const live = tool.id === "slide" || tool.id === "pro-slide" ? new LiveReporter(job.id, WORKER_ID) : null;
-  const stop = progressTicker(job, live);
+
+  /*
+   * Tarjima dvigateli haqiqiy bosqich yuborganidan keyin soxta egri
+   * chiziq to'xtaydi (`progressTicker` ning `isLive` predikati).
+   */
+  let stageSeen = false;
+  const onStage = (ev: { progress: number; step: string }) => {
+    stageSeen = true;
+    // 95 — `completeJob` 100 ni o'zi qo'yadi; dvigatel 100 yuborsa
+    // «tayyor» ko'rinar, fayl esa hali yozilmagan bo'lardi.
+    void setProgress(job.id, WORKER_ID, Math.min(95, Math.max(0, Math.round(ev.progress))), ev.step).catch(() => {});
+  };
+  const stop = progressTicker(job, live, () => stageSeen);
   try {
     const deadline = Date.now() + jobDeadlineMs(job);
     // `logoAssetId` bo'lsa foydalanuvchining o'z logotipi (`logo_uploads`)
@@ -166,7 +187,13 @@ async function runJob(job: ClaimedJob): Promise<void> {
     const logo = await logoDataUrl(job.userId, String(job.values.logoAssetId ?? ""));
     // «O'z shablonim» (faqat pro): namuna topilmasa deka ichki shablon bilan chiqadi.
     const template = tool.id === "pro-slide" ? await templateForJob(job.userId, String(job.values.templateAssetId ?? "")) : undefined;
-    const file = await buildArtifact(tool, job.values, { deadline, logo, template, onProgress: live?.sink });
+    /*
+     * Tarjima manbasi (Tarjimon 2): asl fayl bayti. Topilmasa `undefined`
+     * — dvigatel matn rejimiga tushadi (`logo`/`template` naqshi).
+     */
+    const source =
+      tool.id === "translation" ? await sourceForJob(job.userId, String(job.values.sourceAssetId ?? "")) : undefined;
+    const file = await buildArtifact(tool, job.values, { deadline, logo, template, source, onStage, onProgress: live?.sink });
 
     if (!file.bytes?.byteLength) {
       throw new Error("Fayl bo'sh chiqdi — qayta urinib ko'ring");
@@ -268,6 +295,13 @@ async function housekeeping(): Promise<void> {
     // Webhook rejimida bot processi bo'lmaydi, shuning uchun chipta va
     // update tarixini ham shu yerda tozalaymiz.
     await purgeExpiredTickets();
+    /*
+     * Tarjima manbasi — bir martalik ish fayli (20 MB gacha har biri).
+     * Namunadan (`template_uploads`, muddatsiz) farqi shu: tarjima
+     * tayyor bo'lgach asl hujjat faqat joy va maxfiylik yuki bo'lib
+     * qoladi.
+     */
+    await purgeOldSources(30);
   } catch (e) {
     console.error("[worker] housekeeping:", e instanceof Error ? e.message : e);
   }

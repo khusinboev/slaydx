@@ -30,6 +30,18 @@ const MAX_KEYS = 80;
 
 const SOURCE_FIELDS = new Set(["sourceText"]);
 
+/**
+ * O'RTA hajmli maydonlar — oddiy maydondan katta, manba matnidan kichik.
+ *
+ * `userGlossary` («O'z lug'atim», Tarjimon 2): har qatorda `atama =
+ * tarjima`. 4 000 belgilik `MAX_FIELD` da bu ~100 atama — texnik hujjat
+ * uchun kam, shuning uchun 8 000. `MAX_SOURCE` (200 000) esa bu maydonga
+ * ortiqcha: lug'at HAR partiyaning promptiga tushadi, ya'ni uning
+ * uzunligi token hisobiga partiyalar soniga KO'PAYTIRILIB ta'sir qiladi.
+ */
+const MAX_MID = 8_000;
+const MID_FIELDS = new Set(["userGlossary"]);
+
 /** Faqat kutilgan turdagi qiymatlar o'tadi; kalitlar oq ro'yxat shaklida. */
 export function sanitizeValues(raw: unknown): FormValues | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
@@ -45,7 +57,7 @@ export function sanitizeValues(raw: unknown): FormValues | null {
     } else if (typeof value === "number") {
       out[key] = Number.isFinite(value) ? value : 0;
     } else if (typeof value === "string") {
-      const limit = SOURCE_FIELDS.has(key) ? MAX_SOURCE : MAX_FIELD;
+      const limit = SOURCE_FIELDS.has(key) ? MAX_SOURCE : MID_FIELDS.has(key) ? MAX_MID : MAX_FIELD;
       // Nol bayt Postgres `text` ga yozilmaydi — oldindan olib tashlaymiz.
       out[key] = value.replace(/\0/g, "").slice(0, limit);
     }
@@ -53,4 +65,4 @@ export function sanitizeValues(raw: unknown): FormValues | null {
   return out;
 }
 
-export { MAX_FIELD, MAX_SOURCE };
+export { MAX_FIELD, MAX_MID, MAX_SOURCE };

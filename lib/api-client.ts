@@ -472,6 +472,51 @@ export async function deleteTemplate(assetId: string): Promise<void> {
   await request<{ ok: true }>(`/api/uploads/template/${encodeURIComponent(assetId)}`, { method: "DELETE" });
 }
 
+/* ─────────────────────── Tarjima manbasi (Tarjimon 2) ─────────────────────── */
+
+/**
+ * Javob tipi SERVER bilan bitta manbadan (`lib/generation/source-types.ts`).
+ * U izomorf fayl — `import "server-only"` yo'q, shuning uchun klient uni
+ * xavfsiz o'qiy oladi.
+ */
+export type { SourceUploadResult } from "./generation/source-types";
+
+/**
+ * Tarjima manbasini yuklaydi (`TranslationForm`, WP4).
+ *
+ * Server shartnomasi: `POST /api/uploads/source`, `multipart/form-data`,
+ * maydon `file`. Javobdagi `chars` — narx hisoblanadigan ISHONCHLI son.
+ *
+ * 422 da server xabari SAQLANADI (`uploadTemplate` dan farqi): u yerda
+ * xato turlari ikkita edi, bu yerda esa uchta va ularning matni bir-biriga
+ * o'xshamaydi — «skaner nusxa», «matn topilmadi», «N belgi — chegara
+ * 200 000». Umumiy matn bilan almashtirilsa foydalanuvchi nima
+ * qilishini bilmay qolardi.
+ */
+export async function uploadSource(file: File): Promise<import("./generation/source-types").SourceUploadResult> {
+  const form = new FormData();
+  form.append("file", file);
+  try {
+    return await request<import("./generation/source-types").SourceUploadResult>("/api/uploads/source", {
+      method: "POST",
+      body: form,
+    });
+  } catch (e) {
+    if (e instanceof ApiError) {
+      if (e.status === 413) throw new ApiError("Fayl 20 MB dan katta", e.status, e.data);
+      if (e.status === 415) {
+        throw new ApiError("Format qo‘llanmaydi: DOCX, PPTX, XLSX, PDF, TXT, MD, CSV", e.status, e.data);
+      }
+      if (e.status === 429) throw new ApiError("Juda ko‘p urinish — birozdan keyin", e.status, e.data);
+    }
+    throw e;
+  }
+}
+
+export async function deleteSource(assetId: string): Promise<void> {
+  await request<{ ok: true }>(`/api/uploads/source/${encodeURIComponent(assetId)}`, { method: "DELETE" });
+}
+
 /* ────────────────────────────── Logotip ────────────────────────────── */
 
 /**

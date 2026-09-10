@@ -11,6 +11,7 @@ import type { CustomTemplate } from "./pptx-template";
 import { buildImageArtifact } from "./image-studio";
 import { buildTranslationArtifact } from "./translate/engine";
 import type { SlideProgressSink } from "./slide-progress";
+import type { TranslationSource } from "./source-types";
 import { buildSlideAcademicDoc } from "./slide-write";
 import { pdfAvailable, toPdf } from "../server/pdf";
 import { scaleDoc } from "./scale";
@@ -96,6 +97,26 @@ export type BuildOptions = {
    * chaqirilmaydi (L2 paketi to'ldiradi).
    */
   onProgress?: SlideProgressSink;
+  /**
+   * Tarjima manbasi — ASL fayl bayti (Tarjimon 2, WP1); worker
+   * `source_uploads` dan o'qib beradi (`sourceForJob`).
+   *
+   * Berilmasa dvigatel MATN rejimida ishlaydi (`values.sourceText`).
+   * Berilsa — tarjima aynan shu baytlar ustida bajariladi va chiqish
+   * formati kirishga teng bo'ladi (WP3 shu tarmoqni yozadi).
+   */
+  source?: TranslationSource;
+  /**
+   * Umumiy bosqich hisoboti — slaydning `onProgress` idan FARQLI.
+   *
+   * `SlideProgressSink` deka hodisalarini (slayd, rasm, maket) uzatadi
+   * va uni faqat slayd dvigateli chiqaradi. Tarjimada esa deka yo'q:
+   * kerak bo'lgan narsa — oddiy `{progress, step}` juftligi
+   * («Tarjima qilinmoqda · 12/57»). Worker uni to'g'ridan-to'g'ri
+   * `setProgress` ga uzatadi va shu paytdan soxta progress egri
+   * chizig'ini to'xtatadi.
+   */
+  onStage?: (ev: { progress: number; step: string }) => void;
 };
 
 export async function buildArtifact(

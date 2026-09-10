@@ -47,6 +47,20 @@ test("manba matni uchun kengroq chegara", () => {
   assert.ok(MAX_SOURCE > MAX_FIELD);
 });
 
+test("o'z lug'ati uchun o'rta chegara: MAX_FIELD dan katta, MAX_SOURCE dan kichik", async () => {
+  const { MAX_MID } = await import("../lib/server/validate.ts");
+  /*
+   * `userGlossary` (Tarjimon 2) HAR partiyaning promptiga tushadi, ya'ni
+   * uzunligi partiyalar soniga ko'paytiriladi — `MAX_SOURCE` unga
+   * ortiqcha. Lekin 4 000 belgi ~100 atama, texnik hujjatga kam.
+   */
+  assert.ok(MAX_MID > MAX_FIELD && MAX_MID < MAX_SOURCE, `MAX_MID: ${MAX_MID}`);
+  const out = sanitizeValues({ userGlossary: "g".repeat(MAX_MID + 1_000) });
+  assert.equal(String(out!.userGlossary).length, MAX_MID);
+  // Boshqa maydon bu chegarani MERSMAYDI — oddiy maydon oddiy qoladi.
+  assert.equal(String(sanitizeValues({ topic: "t".repeat(MAX_MID) })!.topic).length, MAX_FIELD);
+});
+
 test("nol bayt olib tashlanadi (Postgres text ga yozilmaydi)", () => {
   const out = sanitizeValues({ topic: "a\0b\0c" });
   assert.equal(out!.topic, "abc");
@@ -77,10 +91,16 @@ test("tarjima chegarasi: xato xabari kesilgan matnni tan oladi", async () => {
    * Xatodagi son foydalanuvchi ko'rgan songa hech qachon mos kelmasdi.
    */
 
-  // Chegaralar bir-biriga bog'langan bo'lishi kerak, aks holda mantiq buziladi.
+  /*
+   * Tarjimon 2 da ikkalasi 200 000 ga TENGLASHTIRILDI. Munosabat `<=`
+   * bo'lib qoladi va u hamon mantiqiy shart: xom shift tarjima
+   * chegarasidan KICHIK bo'lsa, chegara ichidagi matn ham jim kesilib,
+   * «juda uzun» xatosi hech qachon chiqmasdi — foydalanuvchi yarim
+   * hujjat tarjimasini to'liq deb olardi.
+   */
   assert.ok(
-    TRANSLATION_MAX_CHARS < MAX_SOURCE_CHARS,
-    "tarjima chegarasi xom shiftdan kichik bo'lishi kerak",
+    TRANSLATION_MAX_CHARS <= MAX_SOURCE_CHARS,
+    "tarjima chegarasi xom shiftdan katta bo'lmasligi kerak",
   );
 
   const tool = TOOL_BY_ID.translation;
@@ -94,23 +114,21 @@ test("tarjima chegarasi: xato xabari kesilgan matnni tan oladi", async () => {
   assert.ok(exact?.includes(slightly.toLocaleString("uz-UZ")), `aniq son kutilgan: ${exact}`);
   assert.ok(!exact?.includes("dan ortiq"), "kesilmagan matnda «dan ortiq» bo'lmasligi kerak");
 
-  /*
-   * 3) Serverga KELIB TUSHGAN yo'l: uzun matn avval `sanitizeValues` da
-   *    kesiladi, keyin tekshiriladi. Xabar aniq son o'rniga «dan ortiq»
-   *    deyishi kerak — bizdagi son foydalanuvchidagidan kichik.
-   */
-  const huge = sanitizeValues({ sourceText: "a".repeat(150_000) });
-  assert.ok(huge, "sanitizeValues obyekt qaytarishi kerak");
-  assert.equal(String(huge.sourceText).length, MAX_SOURCE_CHARS, "xom shiftda kesilishi kerak");
-
-  const clipped = preflightError(tool, huge);
-  assert.ok(clipped, "kesilgan uzun matn ham rad etilishi kerak");
   assert.ok(
-    clipped.includes("dan ortiq"),
-    `kesilgan matnda aniq son ko'rsatilmasligi kerak, chiqdi: ${clipped}`,
-  );
-  assert.ok(
-    clipped.includes(TRANSLATION_MAX_CHARS.toLocaleString("uz-UZ")),
+    exact?.includes(TRANSLATION_MAX_CHARS.toLocaleString("uz-UZ")),
     "xabar haqiqiy chegarani aytishi kerak",
   );
+
+  /*
+   * 3) Serverga KELIB TUSHGAN yo'l: 250 000 belgi avval `sanitizeValues`
+   *    da AYNAN chegaraga kesiladi. Ikkalasi teng bo'lgani uchun natija
+   *    o'tadi — va bu to'g'ri: narx ham SHU kesilgan uzunlikdan
+   *    hisoblanadi, ya'ni foydalanuvchi olmagan narsasi uchun to'lamaydi.
+   *    Ortiqcha matnni klient oldindan ushlaydi (formada to'liq uzunlik
+   *    bor, WP4).
+   */
+  const huge = sanitizeValues({ sourceText: "a".repeat(250_000) });
+  assert.ok(huge, "sanitizeValues obyekt qaytarishi kerak");
+  assert.equal(String(huge.sourceText).length, MAX_SOURCE_CHARS, "xom shiftda kesilishi kerak");
+  assert.equal(preflightError(tool, huge), null, "kesilgan matn aynan chegaraga teng — o'tishi kerak");
 });
