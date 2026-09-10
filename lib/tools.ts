@@ -1,5 +1,6 @@
 import type { FormValues, ToolConfig, ToolField, ToolId, UserProfile } from "./types";
 import { PRO_SLIDE_DEFAULT, PRO_SLIDE_MAX, PRO_SLIDE_MIN, PRO_SLIDE_PER_SLIDE, clampInt, slidePrice } from "./generation/slide-params";
+import { SOURCE_LANGUAGES } from "./languages";
 
 const TOPIC_FILE_MODES = [
   {
@@ -532,7 +533,7 @@ export const TOOLS: ToolConfig[] = [
     group: "umumiy",
     icon: "languages",
     tc: "16 185 129",
-    description: "Matn yoki DOCX, PDF, PPTX, TXT faylni tarjima qiling",
+    description: "Matn yoki DOCX, PPTX, XLSX, PDF, TXT faylni — tuzilmasini saqlab — tarjima qiling",
     submitLabel: "Tarjima qilish",
     creatingLabel: "Tarjima qilinmoqda...",
     createdLabel: "tarjima tayyor!",
@@ -817,6 +818,18 @@ export function missingRequired(tool: ToolConfig, values: FormValues): string[] 
   const out: string[] = [];
   const filled = (name: string) => String(values[name] ?? "").trim().length > 0;
 
+  /*
+   * Tarjimonning FAYL rejimi (Tarjimon 2): manba `sourceText` emas,
+   * yuklangan qator (`sourceAssetId`) bo'ladi va `sourceText` ataylab
+   * bo'sh yuboriladi — matn bazadan olinadi, so'rov tanasida takrorlanmaydi.
+   *
+   * `CUSTOM_REQUIRED.translation` o'zgarmaydi: MATN rejimida `sourceText`
+   * majburiy bo'lib qolishi kerak (aks holda bo'sh so'rov navbatga tushib
+   * puli yechilardi — P0-5). Shuning uchun bu yerda faqat ISTISNO
+   * qo'shiladi, ro'yxat emas.
+   */
+  if (tool.id === "translation" && filled("sourceAssetId")) return [];
+
   // «Fayl asosida» rejimida mavzu o'rniga manba matni bo'ladi.
   const fileMode = Boolean(tool.modes) && String(values.mode ?? "") === "file";
   if (tool.topicLegend && !fileMode && !filled("topic")) out.push(tool.topicLegend);
@@ -873,16 +886,102 @@ export function missingRequired(tool: ToolConfig, values: FormValues): string[] 
  * kesilgan matnning HAQIQIY uzunligini bila olmaydi: xato xabari shuni
  * tan olishi kerak.
  */
-export const MAX_SOURCE_CHARS = 60_000;
+export const MAX_SOURCE_CHARS = 200_000;
 
 /**
  * Bir marta tarjima qilinadigan eng katta matn.
  *
- * `writeTranslationWithLlm` matnni 4 000 belgilik bo'laklarga bo'ladi va
- * eng ko'pi 15 tasini ishlaydi. Chegara haqiqiy imkoniyatga teng va u
- * pul yechilishidan OLDIN tekshiriladi.
+ * Tarjimon 2 da chegara 48 000 dan 200 000 ga ko'tarildi: dvigatel endi
+ * SEGMENTLAR bilan ishlaydi (band = bir paragraf/yacheyka), partiyalar
+ * parallel ketadi va byudjet hajmdan hisoblanadi (`budget.ts`), ya'ni
+ * cheklovchi omil «15 ta bo'lak» emas, VAQT bo'lib qoldi.
+ *
+ * `MAX_SOURCE_CHARS` bilan TENG bo'lishi ataylab: xom shift ham, tarjima
+ * chegarasi ham bir xil bo'lsa, matn `sanitizeValues` da JIM kesilib,
+ * keyin «chegaradan oshdi» xatosi chiqmaydi. Xom shift kichik bo'lishi
+ * MUMKIN emas (kesilgan matn boshqa songa aylanardi), katta bo'lishi esa
+ * keraksiz. Shu sababli munosabat `<=`.
  */
-export const TRANSLATION_MAX_CHARS = 48_000;
+export const TRANSLATION_MAX_CHARS = 200_000;
+
+/**
+ * Tarjima narxi — HAJMGA bog'liq (Tarjimon 2).
+ *
+ * Ilgari 3 000 tanga hajmdan qat'i nazar olinardi: 500 belgilik xat ham,
+ * 48 000 belgilik hujjat ham. Ikkinchisi ~40 marta ko'p token yeydi,
+ * ya'ni katta hujjatlar zararga ishlanardi va kichiklari ortiqcha
+ * to'lardi.
+ *
+ * Model: 10 000 belgigacha tayanch narx, keyingi HAR 5 000 (yoki uning
+ * qismi) uchun +1 000. Yaxlitlash YUQORIGA (`ceil`) — 10 001 belgi ham
+ * to'liq qadamni oladi, chunki modelga baribir yangi partiya ketadi.
+ */
+export const TRANSLATION_BASE_PRICE = 3000;
+export const TRANSLATION_BASE_CHARS = 10_000;
+export const TRANSLATION_STEP_CHARS = 5_000;
+export const TRANSLATION_STEP_PRICE = 1000;
+
+/**
+ * Tarjima uslublari — forma chiplari va prompt qatori bitta ro'yxatdan.
+ *
+ * `value` model promptiga (`STYLE_LINE`, WP3) tushadi, `label` — formaga.
+ * Ikki joyda mustaqil yozilsa, formada tanlangan uslub prompt'da yo'q
+ * qiymatga aylanardi.
+ */
+export const TRANSLATION_STYLES = [
+  { value: "formal", label: "Rasmiy / ilmiy" },
+  { value: "business", label: "Biznes" },
+  { value: "plain", label: "Oddiy" },
+  { value: "literary", label: "Adabiy" },
+] as const;
+
+/**
+ * Tarjima tillari — MANBA ro'yxati (18 til), ikkala yo'nalish uchun.
+ *
+ * `TARGET_LANGUAGES` (3 til) O'ZGARMAYDI: u «hujjat skeleti shu tilda
+ * to'liq tarjima qilinganmi» degan boshqa savolga javob beradi va boshqa
+ * vositalar unga tayanadi. Tarjimonda esa skelet yozilmaydi — asl
+ * hujjatning o'z tuzilmasi saqlanadi, shuning uchun 18 tilning hammasi
+ * maqsad sifatida ham yaroqli.
+ */
+export const TRANSLATION_LANGUAGES = SOURCE_LANGUAGES;
+
+/** Formadagi «Avtomatik aniqlash» qiymati (manba tili uchun). */
+export const TRANSLATION_AUTO_LANG = "avto";
+
+function isTranslationStyle(v: string): boolean {
+  return TRANSLATION_STYLES.some((s) => s.value === v);
+}
+
+function isTranslationLang(v: string, withAuto: boolean): boolean {
+  if (withAuto && v === TRANSLATION_AUTO_LANG) return true;
+  return TRANSLATION_LANGUAGES.some((l) => l.value === v);
+}
+
+/**
+ * Tarjima hajmi — narx va byudjet UCHUN YAGONA manba.
+ *
+ * Fayl rejimida `sourceChars` SERVERDA to'ldiriladi
+ * (`sourceCharsForRequest`, `app/api/generations/route.ts`) va klientning
+ * qiymati ustidan yoziladi; matn rejimida esa `sourceText` ning o'z
+ * uzunligi olinadi va klient yuborgan `sourceChars` e'tiborsiz qoladi.
+ * Aks holda soxta `sourceChars` bilan 200 000 belgilik matnni 3 000
+ * tangaga tarjima qilish mumkin bo'lardi.
+ */
+export function translationChars(values: FormValues): number {
+  const asset = String(values.sourceAssetId ?? "").trim();
+  if (asset) {
+    const n = Number(values.sourceChars);
+    return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+  }
+  return String(values.sourceText ?? "").length;
+}
+
+export function translationPrice(chars: number): number {
+  const n = Number.isFinite(chars) ? Math.max(0, Math.floor(chars)) : 0;
+  const over = Math.max(0, n - TRANSLATION_BASE_CHARS);
+  return TRANSLATION_BASE_PRICE + Math.ceil(over / TRANSLATION_STEP_CHARS) * TRANSLATION_STEP_PRICE;
+}
 
 /**
  * Pul yechilishidan oldingi tekshiruv.
@@ -918,17 +1017,56 @@ export function preflightError(tool: ToolConfig, values: FormValues): string | n
       /*
        * Matn `MAX_SOURCE_CHARS` da kesilgan bo'lsa, bizdagi son
        * foydalanuvchidagidan KICHIK. Aniq son o'rniga «dan ortiq» deyish
-       * halolroq: aks holda 150 000 belgi yuborgan odam «60 000 belgi»
-       * degan xatoni o'qib, nimani qisqartirishini tushunmasdi.
+       * halolroq: aks holda 250 000 belgi yuborgan odam «200 000 belgi»
+       * degan xatoni o'qib, nimani qisqartirishini tushunmasdi. Hozir
+       * ikki chegara TENG, ya'ni bu holat faqat ular ajralib ketsa
+       * yuzaga keladi — tekshiruv o'sha kunga qoldirilgan himoya.
        */
-      const clipped = n >= MAX_SOURCE_CHARS;
+      /*
+       * Kesilgan matnning uzunligi AYNAN `MAX_SOURCE_CHARS` bo'ladi —
+       * `>=` emas, `===`. Ilgari `>=` yozilgan edi va ikki chegara
+       * tenglashtirilgach u har doim rost bo'lib qoldi: klientda
+       * (matn KESILMAGAN joyda) 250 000 belgilik matn «250 000 dan
+       * ortiq» deb ko'rsatilardi — soni aniq bo'lsa ham.
+       */
+      const clipped = n === MAX_SOURCE_CHARS;
       const size = `${n.toLocaleString("uz-UZ")}${clipped ? " dan ortiq" : ""}`;
       return (
         `Matn juda uzun: ${size} belgi. ` +
-        `Bir marta ${TRANSLATION_MAX_CHARS.toLocaleString("uz-UZ")} belgigacha tarjima qilinadi — ` +
-        `hujjatni bo'laklarga bo'lib yuboring.`
+        `Chegara ${TRANSLATION_MAX_CHARS.toLocaleString("uz-UZ")} — hujjatni bo'lib yuboring.`
       );
     }
+    /*
+     * Fayl rejimi ham SHU chegaraga bo'ysunadi: hajm bazadan keladi
+     * (`sourceChars`), ya'ni klient uni kichraytira olmaydi. Yuklashda
+     * ham tekshiriladi, lekin eski `sourceAssetId` bilan qayta
+     * yuborilgan so'rov yuklash yo'lidan o'tmaydi.
+     */
+    const total = translationChars(values);
+    if (total > TRANSLATION_MAX_CHARS) {
+      return (
+        `Fayl ${total.toLocaleString("uz-UZ")} belgi. ` +
+        `Chegara ${TRANSLATION_MAX_CHARS.toLocaleString("uz-UZ")} — hujjatni bo'lib yuboring.`
+      );
+    }
+    if (total > 0 && total < TRANSLATION_MIN_CHARS) return "Matn juda qisqa.";
+
+    /*
+     * Uslub va tillar — RO'YXATDAN. Ilgari ular faqat formada tanlanardi
+     * va serverda umuman tekshirilmasdi: to'g'ridan-to'g'ri yuborilgan
+     * `language: "klingon"` prompt'ga tushar, model esa nima chiqarishini
+     * o'zi hal qilardi — pul esa allaqachon yechilgan bo'lardi.
+     */
+    const style = String(values.style ?? "").trim();
+    if (style && !isTranslationStyle(style)) return "Noma'lum uslub";
+
+    const target = String(values.language ?? "").trim();
+    if (target && !isTranslationLang(target, false)) return "Noma'lum til";
+
+    const src = String(values.sourceLang ?? "").trim();
+    if (src && !isTranslationLang(src, true)) return "Noma'lum til";
+
+    if (src && target && src === target) return "Manba va maqsad tili bir xil";
   }
   return null;
 }
@@ -1094,6 +1232,11 @@ export function priceFor(tool: ToolConfig, values: FormValues): number {
         "20-25": 8000,
       }[pages] ?? 4000
     );
+  }
+  if (tool.id === "translation") {
+    // Hajm `translationChars` dan — fayl rejimida u SERVER to'ldirgan
+    // `sourceChars` ni, matn rejimida esa matnning o'z uzunligini oladi.
+    return translationPrice(translationChars(values));
   }
   if (tool.id === "glossary") {
     const n = String(values.termCount ?? "10");

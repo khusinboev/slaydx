@@ -1,4 +1,5 @@
 import { extractMeta } from "./meta";
+import { translationChars } from "../tools";
 import type { FormValues, ToolConfig, ToolId } from "../types";
 
 /**
@@ -26,7 +27,6 @@ export const MIN_BUDGET_MS = 90_000;
 /** Bet soniga bog'liq bo'lmagan xizmatlar uchun qat'iy byudjet. */
 const FIXED: Partial<Record<ToolId, number>> = {
   image: 90_000,
-  translation: 240_000,
   glossary: 150_000,
   keys: 150_000,
   "lesson-plan": 120_000,
@@ -61,6 +61,24 @@ const PRO_SLIDE_BASE_MS = 150_000;
 const PRO_SLIDE_PER_SLIDE_MS = 16_000;
 
 /**
+ * Tarjima byudjeti — BELGILAR soniga bog'liq (Tarjimon 2).
+ *
+ * Ilgari u `FIXED` da qat'iy 240 000 edi, chegara esa 48 000 belgi.
+ * Chegara 200 000 ga ko'tarilgach bu son yolg'onga aylandi: 200 000 belgi
+ * ≈ 60 partiya, 4 tadan parallel ⇒ 15 to'lqin × ~30 s ≈ 450 s, ustiga
+ * 1-o'tish glossariysi va hujjatni yig'ish. 240 s da ish yarmida uzilib,
+ * kredit qaytarilardi — ya'ni ENG KATTA hujjat ENG ko'p yiqilardi.
+ *
+ * Formula: 1 000 belgiga 2 500 ms (bir band ≈ 250 belgi, partiya ≈ 3 500
+ * belgi va ~30 s; 4 parallel ⇒ ~2.1 s/1000, zaxira bilan 2.5), ustiga
+ * 60 s tayanch (glossariy o'tishi, ekstraksiya, `applySegments`).
+ * 200 000 → 560 s; u `cap` (`WORKER_JOB_TIMEOUT_MS`, standart 660 s) ga
+ * sig'adi, undan oshsa `budgetFor` ning umumiy klampi kesadi.
+ */
+const TRANSLATION_BASE_MS = 60_000;
+const TRANSLATION_PER_KCHARS_MS = 2_500;
+
+/**
  * @param cap Yuqori chegara (`WORKER_JOB_TIMEOUT_MS`). Byudjet undan
  *   oshmaydi — operator bitta o'zgaruvchi bilan hamma narsani cheklay
  *   olishi kerak.
@@ -68,6 +86,11 @@ const PRO_SLIDE_PER_SLIDE_MS = 16_000;
 export function budgetFor(tool: ToolConfig, values: FormValues, cap: number): number {
   const fixed = FIXED[tool.id];
   let want = fixed;
+  if (want === undefined && tool.id === "translation") {
+    // Hajm `translationChars` dan — narx bilan BITTA manbadan, ya'ni
+    // «pul olindi, lekin vaqt yetmadi» holati kelib chiqmaydi.
+    want = TRANSLATION_BASE_MS + Math.ceil(translationChars(values) / 1000) * TRANSLATION_PER_KCHARS_MS;
+  }
   if (want === undefined) {
     // Slaydda `targetPages` — betlar emas, SLAYDLAR soni (`extractMeta`).
     const size = extractMeta(tool, values).targetPages;
