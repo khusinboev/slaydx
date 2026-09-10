@@ -57,7 +57,8 @@ Kalitlarsiz ham ishlaydi:
 | Kalit yo'q | Nima bo'ladi |
 |---|---|
 | `GEMINI_API_KEY` / `XAI_API_KEY` | Matn shablondan yoziladi (LLM chaqirilmaydi) |
-| `FAL_KEY` | Slaydlar rasmsiz, «Rasm» vositasi ishlamaydi |
+| `FAL_KEY` | «Rasm» vositasi ishlamaydi (oddiy slayd rasmlari fal'dan EMAS — Pexels/Pixabay dan) |
+| `PEXELS_API_KEY` / `PIXABAY_API_KEY` | Oddiy slaydlar rasmsiz (bepul stock manbalar yo'q, rasm va'da qilinmaydi) |
 | `TELEGRAM_BOT_TOKEN` | Telegram kirish o'chadi (OTP qoladi) |
 | `CLICK_*` / `PAYME_*` | To'lov usuli UI da «o'chiq» ko'rinadi |
 

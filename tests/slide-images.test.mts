@@ -368,6 +368,10 @@ test("attachSlideImages meta orqali provayderni almashtiradi", async () => {
   const restore = geminiEnv();
   const savedFal = process.env.FAL_KEY;
   process.env.FAL_KEY = "test-fal-key";
+  // Stock kalitlari (.env.local da bo'lishi mumkin) — bu test «kalitsiz» holatni sinaydi.
+  const savedStock = { PEXELS_API_KEY: process.env.PEXELS_API_KEY, PIXABAY_API_KEY: process.env.PIXABAY_API_KEY };
+  delete process.env.PEXELS_API_KEY;
+  delete process.env.PIXABAY_API_KEY;
   const hits: string[] = [];
   globalThis.fetch = (async (url: string) => {
     const u = String(url);
@@ -398,6 +402,10 @@ test("attachSlideImages meta orqali provayderni almashtiradi", async () => {
   } finally {
     if (savedFal === undefined) delete process.env.FAL_KEY;
     else process.env.FAL_KEY = savedFal;
+    for (const [k, v] of Object.entries(savedStock)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
     restore();
   }
 });

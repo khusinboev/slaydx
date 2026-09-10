@@ -1063,8 +1063,8 @@ test("va'da qilingan miqdor kam chiqsa farq qaytariladi", async () => {
    */
 
   // ── Slayd: 16 va'da, 14 yetkazildi
-  const slideMeta = extractMeta(TOOL_BY_ID.slide, { topic: "X", quality: "premium_long" } as FormValues);
-  assert.equal(slideMeta.targetPages, 16, "premium_long 16 slayd va'da qiladi");
+  const slideMeta = extractMeta(TOOL_BY_ID.slide, { topic: "X", slideCount: 16 } as FormValues);
+  assert.equal(slideMeta.targetPages, 16, "slayder 16 slayd va'da qiladi");
   const deck = (n: number) =>
     ({ meta: slideMeta, titlePage: true, toc: false, sections: [], slides: Array.from({ length: n }, (_, i) => ({ id: `s${i}`, layout: "bullets", title: `S${i}` })) }) as never;
 
@@ -1755,14 +1755,17 @@ test("rasm va'dasi reja bilan bir xil songa asoslanadi", async () => {
  * (5 000−3 000)/(14−10) = 500, ya'ni premium uzun 8 000 = 5 000 + 2×500
  * + 2 000, «sifatliroq rasm» ustamasi 2 000 tanga = 8 000 ning 1/4 i.
  */
-test("rasm nol kelganda premium dekadan ustama qaytariladi", async () => {
+test("premium paket yo'q (Formalar 2): 16 slaydli oddiy dekada rasm nol kelsa to'liq qaytadi, qisman kamomad ulushsiz qayd etiladi", async () => {
   const { deliveredCount } = await import("../lib/generation/delivered.ts");
   const { shortfallRatio } = await import("../lib/server/worker.ts");
 
+  // Ilgari `quality: "premium_long"` (8 000, rasm ustamasi 1/4). Endi paket
+  // yo'q — 16 slayd slayderdan, `premiumVisuals` doim false, rasm ustamasi 0.
   const premiumMeta = extractMeta(TOOL_BY_ID.slide, {
     topic: "Fotosintez",
-    quality: "premium_long",
+    slideCount: 16,
   } as FormValues);
+  assert.equal(premiumMeta.premiumVisuals, false);
   const deck = (slides: number, images?: { want: number; got: number }) =>
     ({
       meta: premiumMeta,
@@ -1783,12 +1786,13 @@ test("rasm nol kelganda premium dekadan ustama qaytariladi", async () => {
    * nol yetkazishda hisobga olinmaydi.
    */
   const zero = deliveredCount(premiumMeta, deck(16, { want: 13, got: 0 }));
-  assert.deepEqual(zero, { got: 0, want: 13, unit: "rasm", refundShare: 0.25 });
-  assert.equal(shortfallRatio(zero), 1, "rasm umuman chiqmasa 8 000 ning hammasi qaytadi");
+  assert.deepEqual(zero, { got: 0, want: 13, unit: "rasm", refundShare: 0 });
+  assert.equal(shortfallRatio(zero), 1, "rasm umuman chiqmasa narxning hammasi qaytadi");
 
-  // Yarmi kelgan bo'lsa qaytarish ham yarmi.
+  // Yarmi kelgan bo'lsa — qayd etiladi, lekin ustama yo'q, pul qaytmaydi.
   const half = deliveredCount(premiumMeta, deck(16, { want: 12, got: 6 }));
-  assert.equal(shortfallRatio(half), 0.125);
+  assert.deepEqual(half, { got: 6, want: 12, unit: "rasm", refundShare: 0 });
+  assert.equal(shortfallRatio(half), null, "ustama olinmagan miqdorning qismi uchun pul qaytmaydi");
 
   // To'liq yetkazilganda qaytarish yo'q.
   assert.equal(deliveredCount(premiumMeta, deck(16, { want: 13, got: 13 })), undefined);
@@ -1882,23 +1886,28 @@ test("bloklangan hisob deka yo'lida `delivered` ga aylanadi", async () => {
       json: async () => ({ detail: "User is locked. Reason: TOP_UP." }),
     }) as never) as typeof fetch;
 
+  // Oddiy slayd rasmlari endi faqat bepul stock (Formalar 2): bloklangan hisob — Pexels 403.
+  const savedPexels = process.env.PEXELS_API_KEY;
+  process.env.PEXELS_API_KEY = "test-pexels-key";
   try {
     const meta = extractMeta(TOOL_BY_ID.slide, {
       topic: "Fotosintez jarayoni",
-      quality: "premium_long",
+      slideCount: 16,
     } as FormValues);
     const doc = await buildSlideAcademicDoc(meta, Date.now() + 30_000);
 
     assert.ok(doc.slideImages, "rasm bosqichi hisoboti hujjatda saqlanishi kerak");
-    assert.ok(doc.slideImages.want > 0, "premium deka rasm va'da qiladi");
+    assert.ok(doc.slideImages.want > 0, "stock kaliti bor deka rasm va'da qiladi");
     assert.equal(doc.slideImages.got, 0);
 
     const d = deliveredCount(meta, doc);
-    assert.ok(d, "rasmsiz premium deka `delivered` bilan belgilanishi kerak");
+    assert.ok(d, "rasmsiz deka `delivered` bilan belgilanishi kerak");
     assert.equal(d.unit, "rasm");
     assert.equal(d.got, 0);
     assert.ok(shortfallRatio(d)! > 0, "worker qisman qaytarishi kerak");
   } finally {
+    if (savedPexels === undefined) delete process.env.PEXELS_API_KEY;
+    else process.env.PEXELS_API_KEY = savedPexels;
     restore();
   }
 });

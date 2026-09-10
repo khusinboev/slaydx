@@ -76,11 +76,16 @@ test("noma'lum hajm — standart narx, 0 emas", () => {
   assert.ok(priceFor(TOOL_BY_ID.referat, { pages: "999" }) > 0);
 });
 
-test("slayd sifat paketlari", () => {
+test("slayd narxi slayderdan: 20 tagacha 3 000, keyingi har slayd +500 (paket yo'q)", () => {
   const slide = TOOL_BY_ID.slide;
-  assert.equal(priceFor(slide, { quality: "standard" }), 3000);
-  assert.equal(priceFor(slide, { quality: "premium_long" }), 8000);
-  assert.equal(priceFor(slide, { quality: "aldash" }), 3000);
+  assert.equal(priceFor(slide, {}), 3000, "standart 10 slayd");
+  assert.equal(priceFor(slide, { slideCount: 20 }), 3000);
+  assert.equal(priceFor(slide, { slideCount: 25 }), 5500);
+  assert.equal(priceFor(slide, { slideCount: 30 }), 8000);
+  assert.equal(priceFor(slide, { slideCount: 999 }), 8000, "30 dan yuqori qisiladi");
+  // Eski paket qiymati bilan aldash — narxga ta'sir qilmaydi.
+  assert.equal(priceFor(slide, { quality: "premium_long" }), 3000);
+  assert.equal(priceFor(slide, { slideCount: -5 }), 3000);
 });
 
 test("rasm soni narxga ta'sir qiladi", () => {

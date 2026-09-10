@@ -147,7 +147,8 @@ test("har shablonning o'z to'ldirgichlari bor va ular boshqasiniki emas", () => 
  */
 test("har bir visual uchun formada eskiz tarmog'i bor", async () => {
   const { readFile } = await import("node:fs/promises");
-  const form = await readFile(new URL("../components/forms/SlideForm.tsx", import.meta.url), "utf8");
+  // Eskizlar `slide-pickers.tsx` da (Formalar 2: `SlideForm` yupqa o'ram).
+  const form = await readFile(new URL("../components/forms/slide-pickers.tsx", import.meta.url), "utf8");
   const used = new Set(SLIDE_TEMPLATES.map((t) => t.visual));
   for (const v of used) {
     if (v === "classic") continue; // zaxira tarmoq

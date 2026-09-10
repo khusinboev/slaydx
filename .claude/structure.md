@@ -135,6 +135,18 @@ Loyiha strukturasi: **poydevor** (umumiy qatlam) → **1-to'lqin** (jonli genera
 - **`components/viewers/useSlideKeys.ts`** (yangi)
   - Sarlavha navigatsiyasi (← / → / Esc)
 
+### Formalar — slayd (Formalar 2, 2026-09-10)
+
+- **`components/forms/SlideComposer.tsx`** — ikkala slayd formasining kompozitori: 4 karta (Mavzu · Slaydlar soni · Muallif · Ko'rinish) + `<details>` «Sozlamalar» (yopiq holda `settingsSummary` chiplari); «Yaratish»dan keyin `profilePatchFrom` → `PATCH /api/users/me`
+- **`components/forms/compact.tsx`** — `Card`, `Row` (yorliq | boshqaruv, izoh tooltip), `Segmented`, `SelectField`, `Switch`, `MiniInput`, `SummaryChips`
+- **`components/forms/slide-fields.tsx`** — reyestr id → bitta qator (`renderSlideParam(id, values, set, {tool})`), `settingsSummary`
+- **`components/forms/slide-pickers.tsx`** — `TemplatePicker` (yig'iq), `ColorPicker` (faqat doiralar)
+- **`components/forms/SlideForm.tsx` / `ProSlideForm.tsx`** — yupqa o'ram; eksport ro'yxatlari reyestr bilan `tests/viewer/slide-form.test.mts` da solishtiriladi
+- **`lib/profile-sync.ts`** — `profilePatchFrom(values, profile)`: faqat o'zgargan muallif maydonlari (bo'sh ham)
+- **`lib/generation/slide-params.ts`** — `SLIDE_MIN/MAX/DEFAULT`, `slidePrice(n)` = 3 000 + max(0, n−20)·500; `slideCount` ikkala vositada, `quality` yo'q, `slideImageStyle` faqat pro
+- **`lib/generation/image-provider.ts`** `pickProvider`: `slide` → `stock` zanjiri (Pexels → Pixabay, fal YO'Q), `pro-slide` → gemini, meta'siz → eski zanjir
+- **`lib/server/migrations/015_profile_position.sql`** — `users.position`, `users.organization`
+
 ### API klienti
 
 - **`lib/api-edit.ts`** (yangi)
