@@ -10,17 +10,18 @@ import {
   restoreGenerationDoc,
   updateGenerationDoc,
 } from "./jobs";
-import { assetImageResolver } from "./assets";
+import { assetImageResolver, deleteAssetById } from "./assets";
+import { adapterFor, preParseOps, type EditAdapter, type RebuildDeps } from "./edit-adapters";
 import { buildPreview } from "./preview";
 import { hasGenerationFile, putGenerationFile } from "./storage";
-import { applyDocOps, parseDocOps } from "../generation/slide-edit";
 import type { DocOp } from "../generation/slide-edit";
+import type { ResumeOp } from "../generation/resume/edit";
 import { renderHtml } from "../generation/render-html";
-import { renderPptx } from "../generation/render-pptx";
-import { renderPptxWithTemplate } from "../generation/render-pptx-template";
-import { getTemplate } from "./template-upload";
+import { THUMB_ASSET_ID } from "./thumb";
 import type { AcademicDoc } from "../generation/types";
 import type { JobStatus } from "../types";
+
+export type { RebuildDeps } from "./edit-adapters";
 
 /**
  * Tahrir serverining YADROSI (E4).
@@ -46,14 +47,19 @@ import type { JobStatus } from "../types";
  *      render yiqilsa bayt ham, `file_version` ham o'zgarmaydi.
  */
 
-/** Tahrir qilinadigan vositalar. Boshqa vosita hujjatida `doc.slides` yo'q. */
-const EDIT_TOOLS = new Set(["slide", "pro-slide"]);
+/**
+ * Tahrir qilinadigan vositalar reyestri `edit-adapters.ts` da
+ * (`adapterFor`) — bu modul endi qaysi hujjat turi ekanini BILMAYDI,
+ * faqat egalik, qulf va tranzaksiya qoidalarini yuritadi (B-6).
+ */
 
 /** `PATCH …/doc` tanasining chegarasi — 50 op × 4000 belgi + zaxira. */
 export const DOC_PATCH_MAX_BYTES = 300 * 1024;
 
 export type EditableGeneration = {
-  doc: AcademicDoc & { slides: NonNullable<AcademicDoc["slides"]> };
+  doc: AcademicDoc;
+  /** Shu hujjat turining tahrir adapteri (slayd yoki rezyume). */
+  adapter: EditAdapter;
   docVersion: number;
   fileVersion: number;
   imageRedraws: number;
@@ -78,12 +84,19 @@ export async function loadDocForEdit(id: string, userId: string): Promise<Editab
   if (row.status !== "COMPLETED") {
     throw new ApiError("Hujjat hali tayyor emas", 409, { code: "status", status: row.status });
   }
-  if (!EDIT_TOOLS.has(row.toolId) || !row.doc?.slides?.length) {
+  const adapter = adapterFor(row.toolId);
+  if (!adapter || !adapter.hasModel(row.doc)) {
     throw new ApiError("Bu hujjat eski formatda — tahrirlash uchun qaytadan yarating", 409, {
       code: "legacy",
     });
   }
-  return { ...row, doc: row.doc as EditableGeneration["doc"] };
+  /*
+   * Eski formatdagi hujjat SHU YERDA modelga ko'tariladi (rezyume —
+   * B-8, `legacyResumeModel`), ya'ni pastdagi butun mantiq bitta shakl
+   * bilan ishlaydi va birinchi tahrirdan keyin baza ham yangi shaklga
+   * o'tadi.
+   */
+  return { ...row, adapter, doc: adapter.prepare(row.doc as AcademicDoc) };
 }
 
 /** Javob shakli `GET /api/generations/{id}` bilan AYNAN bir xil (`GenerationDetail`). */
@@ -106,7 +119,12 @@ async function detail(id: string, userId: string) {
  * `html` va `preview` doc bilan BIR TRANZAKSIYADA yoziladi — aks holda
  * ko'ruvchi yangi dokni, ro'yxat kartochkasi esa eski matnni ko'rsatardi.
  */
-export async function commitDocOps(id: string, userId: string, baseVersion: number, ops: DocOp[]) {
+export async function commitDocOps(
+  id: string,
+  userId: string,
+  baseVersion: number,
+  ops: DocOp[] | ResumeOp[],
+) {
   const cur = await loadDocForEdit(id, userId);
   if (baseVersion !== cur.docVersion) {
     throw new ApiError("Hujjat boshqa joyda o'zgargan — yangilab qayta urinib ko'ring", 409, {
@@ -115,7 +133,8 @@ export async function commitDocOps(id: string, userId: string, baseVersion: numb
     });
   }
 
-  const applied = applyDocOps(cur.doc, ops, { genId: id });
+  // Qaysi hujjat turi ekanini ADAPTER biladi (slayd yoki rezyume).
+  const applied = cur.adapter.apply(cur.doc, ops as unknown[], { genId: id });
   if (!applied.ok) throw new ApiError(applied.error, 422, { at: applied.at });
   const doc = applied.doc;
 
@@ -178,17 +197,7 @@ export async function restoreDoc(id: string, userId: string) {
 export type RebuildResult = { fileVersion: number; docVersion: number; rebuilt: boolean };
 
 /**
- * Render seami — standarti `renderPptx`.
- *
- * Test uchun kerak: `renderPptx` PPTX ni haqiqatan yasaydi (sekin) va
- * uni ATAYLAB yiqitib bo'lmaydi, holbuki eng muhim kafolat aynan shu —
- * «render yiqilsa bazaga hech narsa yozilmaydi». Route'lar bu
- * parametrni HECH QACHON bermaydi, ya'ni ishlab turgan yo'l bitta.
- */
-export type RebuildDeps = { render?: typeof renderPptx };
-
-/**
- * PPTX ni joriy `doc` dan qayta yasaydi.
+ * Faylni joriy `doc` dan qayta yasaydi (PPTX yoki DOCX — adapter hal qiladi).
  *
  * Tartib QAT'IY:
  *
@@ -217,16 +226,14 @@ export async function rebuildFile(
   }
   const target = cur.docVersion;
 
-  const render = deps.render ?? renderPptx;
   // Rasm faqat SHU generatsiyaning aktivlaridan olinadi (egalik SQL
-  // da, `getAsset`) — tashqi URL yuklanmaydi, ya'ni SSRF yo'q.
+  // da, `getAsset`) — tashqi URL yuklanmaydi, ya'ni SSRF yo'q. Slayd ham,
+  // rezyume ham AYNAN shu hal qiluvchini oladi (`ImageBytes` shartnomasi).
   const resolveImage = assetImageResolver(id, userId);
-  // «O'z shablonim»: namuna bayti hali bazada bo'lsa — o'sha yo'l; o'chirilgan
-  // bo'lsa ichki renderer (deka yo'qolmaydi, faqat ko'rinishi o'zgaradi).
-  const custom = cur.doc.customTemplate ? await getTemplate(userId, cur.doc.customTemplate.assetId).catch(() => null) : null;
-  const built = custom
-    ? await renderPptxWithTemplate(cur.doc, cur.fileName, custom.bytes, custom.template.profile, { resolveImage })
-    : await render(cur.doc, cur.fileName, { resolveImage });
+  const built = await cur.adapter.render(
+    { id, userId, doc: cur.doc, fileName: cur.fileName, resolveImage },
+    deps,
+  );
 
   const written = await transaction(async (client) => {
     await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [id]);
@@ -237,6 +244,17 @@ export async function rebuildFile(
       { bytes: built.bytes, mime: built.mime, fileName: built.fileName },
       client,
     );
+    /*
+     * ESKIZ AKTIVI O'CHIRILADI (B-5).
+     *
+     * Fayl kartasidagi eskiz `generation_assets` da `THUMB_ASSET_ID`
+     * bilan keshlanadi (`lib/server/thumb.ts`) va u ESKI baytdan
+     * yasalgan. Tahrirdan keyin qayta yasalgan faylga u mos kelmaydi:
+     * foydalanuvchi ro'yxatda eski rezyumeni, ochganda esa yangisini
+     * ko'rardi. Fayl yozilgan tranzaksiyaning ICHIDA o'chiriladi —
+     * yozuv qaytsa (rollback) kesh ham joyida qoladi.
+     */
+    await deleteAssetById(id, THUMB_ASSET_ID, client);
     return v;
   });
 
@@ -254,7 +272,7 @@ export async function rebuildFile(
 /**
  * `GET …/file` uchun: eskirgan faylni bermaslik kafolati.
  *
- * Slayd bo'lmagan vositalarda `doc_version` ham, `file_version` ham 0 —
+ * Tahrirlanmaydigan vositalarda `doc_version` ham, `file_version` ham 0 —
  * shart hech qachon bajarilmaydi va eski yo'l o'zgarmaydi.
  */
 export async function ensureFreshFile(
@@ -265,7 +283,7 @@ export async function ensureFreshFile(
   const v = await getVersions(id, userId);
   if (!v) return; // Yo'q yoki begona — 404 ni fayl yo'lining o'zi beradi.
   if (v.status !== "COMPLETED") return;
-  if (!EDIT_TOOLS.has(v.toolId)) return;
+  if (!adapterFor(v.toolId)) return;
   if (v.fileVersion >= v.docVersion) return;
   await rebuildFile(id, userId, deps);
 }
@@ -273,8 +291,13 @@ export async function ensureFreshFile(
 /**
  * `PATCH …/doc` tanasi → `commitDocOps`.
  *
- * Shakl xatosi 400 (bu yerda), mazmun xatosi 422 (`applyDocOps`),
+ * Shakl xatosi 400 (bu yerda), mazmun xatosi 422 (adapterning `apply` i),
  * hajm 413 (`readJson`) — API jadvalidagi taqsimot aynan shunday.
+ *
+ * Tana qaysi op tilida yozilganini VOSITA hal qiladi, so'rov emas:
+ * `loadDocForEdit` adapterni topadi va `parse` o'sha adapterniki bo'ladi.
+ * Shu tufayli rezyume so'roviga slayd operatsiyasini (yoki teskarisini)
+ * yuborib bo'lmaydi.
  */
 export async function patchDocFromRequest(req: Request, id: string, userId: string) {
   const body = await readJson<Record<string, unknown>>(req, DOC_PATCH_MAX_BYTES);
@@ -285,7 +308,12 @@ export async function patchDocFromRequest(req: Request, id: string, userId: stri
   if (typeof baseVersion !== "number" || !Number.isInteger(baseVersion) || baseVersion < 0) {
     throw new ApiError("«baseVersion» yaroqsiz", 400);
   }
-  const parsed = parseDocOps(body.ops);
+  // Envelope (massiv, bo'sh emas, ≤50) — hujjat TURIDAN mustaqil va
+  // bazaga bormasdan tekshiriladi.
+  const pre = preParseOps(body.ops);
+  if (!pre.ok) throw new ApiError(pre.error, 400);
+  const cur = await loadDocForEdit(id, userId);
+  const parsed = cur.adapter.parse(body.ops);
   if (!parsed.ok) throw new ApiError(parsed.error, 400);
-  return commitDocOps(id, userId, baseVersion, parsed.ops);
+  return commitDocOps(id, userId, baseVersion, parsed.ops as DocOp[] | ResumeOp[]);
 }

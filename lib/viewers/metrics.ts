@@ -70,6 +70,15 @@ export const RESUME_PAD_MM = {
   banner: { x: 10, y: 8 },
 } as const;
 
+/**
+ * Ko'nikmalar oqimidagi ajratgich — ko'ruvchi ham, DOCX ham AYNAN shuni
+ * chizadi. DOCX da haqiqiy "chip" (fon bilan o'ralgan inline blok) yo'q:
+ * run shading qator uzilishida sinadi va ko'p so'zli ko'nikma ramkasidan
+ * chiqib ketadi (LibreOffice ko'zdan kechiruvida ko'rilgan). Shuning uchun
+ * ikkala tomon ham oddiy oqim chizadi va ajratgich HAQIQIY matn bo'ladi.
+ */
+export const CHIP_SEP = " · ";
+
 /** `resumeMainPadMm` / `resumeMainHeightPx` uchun kerakli shablon maydonlari. */
 export type ResumeMetricsTemplate = {
   columns: "single" | "sidebar-left" | "sidebar-right" | "banner";

@@ -3,7 +3,7 @@ import { Link2, Mail, MapPin, Phone, Plus, Sparkles, Trash2, ChevronUp, ChevronD
 import type { ResumeItem, ResumeLayout, ResumePath, ResumeZoneId } from "@/lib/generation/resume/layout";
 import type { ResumeSectionId } from "@/lib/generation/resume/model";
 import type { ResumeRowSection } from "@/lib/generation/resume/edit";
-import { RESUME_PAD_MM, mmPx, resumeMainPadMm } from "@/lib/viewers/metrics";
+import { CHIP_SEP, RESUME_PAD_MM, mmPx, resumeMainPadMm } from "@/lib/viewers/metrics";
 
 /**
  * Rezyume VARAG'I — sof taqdimot komponenti («ko'rdim = oldim»).
@@ -21,8 +21,10 @@ import { RESUME_PAD_MM, mmPx, resumeMainPadMm } from "@/lib/viewers/metrics";
  * MATN TUGUNLARI TARTIBI DOCX (`renderResumeDocx`) dagi `<w:t>` tartibi
  * bilan bir xil bo'lishi SHART — `tests/viewer/resume-parity.test.mts`
  * shuni qulflaydi. Shuning uchun bu yerda ko'rinadigan hech qanday
- * qo'shimcha matn (ajratgich, «•», yorliq) yozilmaydi: nuqta CSS
- * `::before` dan, kalit/qiymat oralig'i esa `justify-content` dan.
+ * qo'shimcha matn yozilmaydi: ro'yxat nuqtasi CSS `::before` dan,
+ * kalit/qiymat oralig'i `justify-content` dan keladi. Ko'rinadigan
+ * yagona ajratgich — ko'nikmalar oqimidagi `CHIP_SEP`, va u DOCX da ham
+ * AYNAN shunday chiziladi.
  *
  * Ikkinchi va undan keyingi varaqlar Word ning xatti-harakatini
  * takrorlaydi: jadval qatori bo'linganda panel FONI davom etadi, lekin
@@ -350,22 +352,21 @@ function Item({ it, ctx }: { it: ResumeItem; ctx: Ctx }) {
         </div>
       );
     case "chips":
+      /*
+       * Ko'nikmalar — ODDIY OQIM, «chip» EMAS.
+       *
+       * DOCX da haqiqiy chip yo'q: `w:shd` runga tegadi va ko'p so'zli
+       * ko'nikma qator uzilishida ramkasidan chiqib ketadi (jonli
+       * ko'zdan kechiruvda ko'rilgan). Ekranda chiroyli chip, faylda
+       * buzuq ramka bo'lishi «ko'rdim = oldim» ning aynan buzilishi
+       * bo'lardi, shuning uchun ikkalasi ham bir xil oqim chizadi va
+       * « · » ajratgichi ikkalasida ham HAQIQIY matn.
+       */
       return (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: "1.5mm", margin: "0 0 2mm" }} data-resume-chips>
+        <p style={{ margin: "0 0 2mm", fontSize: ptPx(t.type.small), color: hex(dark ? P.onDark : P.ink) }} data-resume-chips>
           {it.items.map((c, j) => (
-            <span
-              key={j}
-              data-chip={j}
-              style={{
-                fontSize: ptPx(t.type.small),
-                padding: "0.6mm 1.8mm",
-                borderRadius: "1mm",
-                // Fon DOCX bilan bir xil (`accentSoft`) — ochiq `panel` LibreOffice da
-                // deyarli oq chiqib, chip umuman ko'rinmasdi.
-                background: hex(dark ? P.accent : P.accentSoft),
-                color: hex(dark ? P.onDark : P.ink),
-              }}
-            >
+            <span key={j} data-chip={j}>
+              {j ? <span style={{ color: hex(dark ? P.accentSoft : P.muted) }}>{CHIP_SEP}</span> : null}
               {c.text}
               {c.ai ? <Sparkles className="size-3" aria-label="AI qo‘shgan" style={{ display: "inline", marginLeft: 2, opacity: 0.7 }} /> : null}
               {editable ? (
@@ -380,7 +381,7 @@ function Item({ it, ctx }: { it: ResumeItem; ctx: Ctx }) {
               <Plus className="size-3" />
             </IconBtn>
           ) : null}
-        </div>
+        </p>
       );
     case "contact":
       return (
