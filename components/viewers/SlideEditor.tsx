@@ -20,6 +20,15 @@ import {
   ptToPx,
 } from "@/lib/generation/slide-layout";
 import { textLayerStyle, type TextLayer } from "./SlideCanvas";
+import { focusAtEnd, insertAtCaret, readItems, readText } from "./editable";
+
+/*
+ * `readText`/`readItems`/`insertAtCaret` `editable.ts` ga ko'chdi
+ * (Rezyume 2, AUDIT-15) — rezyume muharriri ham AYNAN shu funksiyalarni
+ * ishlatadi, ya'ni Enter/Esc/blur ikkala muharrirda bir xil. Eski import
+ * yo'llari buzilmasin deb qayta eksport qilinadi.
+ */
+export { readItems, readText } from "./editable";
 
 /**
  * Tahrir QATLAMI — `SlideStage` ning `overlay` slotida (Muharrir 2).
@@ -122,76 +131,10 @@ function clampFont(n: number): number {
   return Math.max(FONT_MIN, Math.min(FONT_MAX, Math.round(n)));
 }
 
-/**
- * contentEditable dagi matnni o'qish — `innerText` jsdom da yo'q,
- * `textContent` esa `<br>`/`<div>` qator ajratgichlarini yutadi.
- * Brauzer Enter/Shift+Enter da har xil tugun yaratishi mumkin — hammasi
- * `\n` ga tushadi.
- */
-export function readText(el: Node): string {
-  let out = "";
-  const walk = (n: Node, first: boolean) => {
-    if (n.nodeType === 3) {
-      out += n.nodeValue ?? "";
-      return;
-    }
-    if (n.nodeType !== 1) return;
-    const tag = (n as Element).tagName;
-    if (tag === "BR") {
-      out += "\n";
-      return;
-    }
-    const block = tag === "DIV" || tag === "P" || tag === "LI";
-    if (block && !first && out && !out.endsWith("\n")) out += "\n";
-    let f = true;
-    for (const c of Array.from(n.childNodes)) {
-      walk(c, f);
-      f = false;
-    }
-  };
-  walk(el, true);
-  // Chrome bo'sh qatorga `<br>` qo'yadi — oxiridagi bitta ortiqcha ajratgich hisobga olinmaydi.
-  return out.replace(/\n$/, "");
-}
-
-/** Ro'yxat maydonidan bandlar: har `<li>` bitta band; ichidagi qo'lda yozilgan `\n` ham bandga ajratiladi. */
-export function readItems(ul: HTMLElement): string[] {
-  const lis = Array.from(ul.querySelectorAll("li"));
-  const raw = lis.length ? lis.map((li) => readText(li)) : [readText(ul)];
-  return raw
-    .flatMap((t) => t.split("\n"))
-    .map((t) => t.replace(/\s+/g, " ").trim())
-    .filter(Boolean);
-}
-
 function sameList(a: string[], b: string[]): boolean {
   return a.length === b.length && a.every((x, i) => x === b[i]);
 }
 
-/** Kursor turgan joyga matn qo'yish — undo stekiga tushadigan yo'l bo'lsa o'sha, bo'lmasa Range API. */
-function insertAtCaret(el: HTMLElement, text: string) {
-  const d = document as Document & { execCommand?: (c: string, ui: boolean, v: string) => boolean };
-  if (typeof d.execCommand === "function") {
-    try {
-      if (d.execCommand("insertText", false, text)) return;
-    } catch {
-      // eski brauzer — pastdagi yo'l
-    }
-  }
-  const sel = window.getSelection?.();
-  const node = document.createTextNode(text);
-  if (sel && sel.rangeCount > 0 && el.contains(sel.anchorNode)) {
-    const range = sel.getRangeAt(0);
-    range.deleteContents();
-    range.insertNode(node);
-    range.setStartAfter(node);
-    range.collapse(true);
-    sel.removeAllRanges();
-    sel.addRange(range);
-  } else {
-    el.appendChild(node);
-  }
-}
 
 export function SlideEditor({
   slide,
@@ -278,16 +221,7 @@ export function SlideEditor({
   useEffect(() => {
     const el = inputRef.current;
     if (!edit || !el) return;
-    el.focus();
-    try {
-      const sel = window.getSelection?.();
-      if (sel && typeof sel.selectAllChildren === "function") {
-        sel.selectAllChildren(el);
-        sel.collapseToEnd();
-      }
-    } catch {
-      // jsdom/eski brauzer — kursor joyi muhim emas
-    }
+    focusAtEnd(el);
   }, [edit]);
 
   const editLayer = edit ? layerByKey(edit.key) : null;
