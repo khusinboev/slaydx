@@ -310,8 +310,16 @@ export async function uploadSource(
   if (file.size === 0) throw new ApiError("Fayl bo'sh", 400);
 
   const bytes = Buffer.from(await file.arrayBuffer());
-  const rawName = String(file.name || "hujjat");
-  const kind = sniffSourceKind(rawName, bytes);
+  /*
+   * Nom TOZALANIB, keyin sniff qilinadi. Tartib muhim: `\r\n` bo'lsa
+   * `Content-Disposition` sarlavhasini buzardi, oxiridagi bo'sh joy esa
+   * kengaytmani «docx » ga aylantirib, haqiqiy DOCX ni 415 bilan rad
+   * ettirardi.
+   */
+  const clean = String(file.name || "hujjat").replace(/[\r\n\t]/g, " ").trim();
+  // Sniff TO'LIQ nom bo'yicha, saqlash esa kesilgani bilan: 200 belgilik
+  // nomni avval kesib qo'ysak, kengaytma yo'qolib, haqiqiy DOCX 415 olardi.
+  const kind = sniffSourceKind(clean, bytes);
   if (!kind) throw new ApiError("Format qo'llanmaydi: DOCX, PPTX, XLSX, PDF, TXT, MD, CSV", 415);
 
   const counted = await (deps.count ?? DEFAULT_COUNTER)(kind, bytes);
@@ -340,10 +348,8 @@ export async function uploadSource(
     );
   }
 
-  // Nomda `\r\n` bo'lsa `Content-Disposition` sarlavhasini buzardi.
-  const name = rawName.replace(/[\r\n\t]/g, " ").trim().slice(0, 120) || `hujjat.${kind}`;
   return (deps.put ?? putSource)(userId, bytes, {
-    name,
+    name: clean.slice(0, 120) || `hujjat.${kind}`,
     kind,
     mime: SOURCE_MIME[kind],
     chars,
