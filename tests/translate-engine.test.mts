@@ -156,7 +156,16 @@ test("yo'q id → faqat shu id bilan qat'iy qayta urinish; uzun segment bo'linib
   assert.ok(calls.some((c) => c.user.includes("Previous attempt failed")), "qat'iy retry bo'ldi");
   assert.equal(res.delivered, undefined);
   const long = res.map.get("long")!;
-  assert.ok(long.startsWith("[T]") && long.includes("[T]Bu 119-jumla"), "bo'laklar qayta yig'ildi");
+  /*
+   * `splitOversize` JUMLA chegarasida va `max` ga qadar bo'ladi, ya'ni
+   * oxirgi bo'lak qayerdan boshlanishi matn uzunligiga bog'liq (bu yerda
+   * 5 649 belgi / 3 500 → ikki bo'lak, ikkinchisi 74-jumladan). Shuning
+   * uchun aniq jumla raqamiga emas, QAYTA YIG'ILISH faktiga tayanamiz:
+   * bir nechta bo'lak tarjima qilingan va matnning OXIRI joyida.
+   */
+  assert.ok(long.startsWith("[T]"), "birinchi bo'lak tarjimasi boshda");
+  assert.ok((long.match(/\[T\]/g) ?? []).length >= 2, `uzun segment bo'lingan bo'lishi kerak: ${long.slice(0, 80)}`);
+  assert.ok(long.trimEnd().endsWith("Bu 119-jumla fotosintez haqida ma'lumot beradi."), "oxirgi jumla saqlandi");
   assert.ok(!res.map.has("long#0"), "bola idlar xaritada qolmaydi");
   assert.equal(res.report.pairs.find((p) => p.id === "long")?.dst, long);
 });

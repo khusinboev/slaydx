@@ -16,13 +16,8 @@ import { applyPptx, extractPptx } from "./pptx";
 import { applyXlsx, extractXlsx } from "./xlsx";
 import { applyCsv, applyMd, applyText, csvToSegments, mdToSegments, textToSegments as txtSegments } from "./plain";
 import { extractPdf, pdfBlocksToDoc, pdfBlocksToSegments, pdfToBlocks } from "./pdf";
-import {
-  isTranslatable,
-  markDuplicates,
-  type Extracted,
-  type SegmentMap,
-  type SourceKind,
-} from "./segments";
+import { isTranslatable, markDuplicates, type Extracted, type SegmentMap } from "./segments";
+import type { SourceKind } from "../source-types";
 
 export {
   isTranslatable,
@@ -36,14 +31,9 @@ export {
   MAX_RUN_MARKERS,
   MAX_SEGMENT_CHARS,
 } from "./segments";
-export type {
-  Extracted,
-  PdfBlock,
-  Segment,
-  SegmentKind,
-  SegmentMap,
-  SourceKind,
-} from "./segments";
+export type { Extracted, PdfBlock, Segment, SegmentKind, SegmentMap } from "./segments";
+/** Manba formatlari — WP1 shartnomasi (`source-types.ts`) bilan bitta ro'yxat. */
+export type { SourceKind } from "../source-types";
 export { pdfBlocksToDoc, pdfBlocksToSegments, pdfToBlocks };
 
 /**

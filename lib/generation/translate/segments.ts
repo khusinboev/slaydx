@@ -20,7 +20,12 @@
  *   ⟦lK⟧…⟦/lK⟧ giperhavola matni (havolaning o'zi tegilmaydi)
  */
 
-export type SourceKind = "docx" | "pptx" | "xlsx" | "pdf" | "txt" | "md" | "csv";
+/**
+ * Manba formatlari ro'yxati WP1 dagi `source-types.ts` da e'lon qilingan
+ * — yuklash sniffi, adapterlar va chiqish formati BITTA shartnomadan
+ * o'qiydi. Bu yerda faqat qulaylik uchun re-eksport.
+ */
+export type { SourceKind } from "../source-types";
 
 export type SegmentKind = "p" | "h" | "li" | "cell" | "note" | "title" | "other";
 
