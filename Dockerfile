@@ -90,6 +90,12 @@ RUN npm ci --include=dev && npm cache clean --force
 COPY lib ./lib
 COPY scripts ./scripts
 COPY tsconfig.json ./
+# `data/` — kasblar ro'yxati (Rezyume 2). Hozir uni faqat FORMA o'qiydi,
+# ya'ni worker'ga kerak emas; lekin `lib/` ichidagi biror modul kelajakda
+# uni import qilsa (masalan ko'nikma tavsiyasi promptga qo'shilsa), fayl
+# yo'qligi worker'ni ishga tushishida yiqitardi — 6 KB uchun bu xavf
+# arzimaydi.
+COPY data ./data
 
 RUN addgroup -g 1001 -S nodejs && adduser -S worker -u 1001 && chown -R worker:nodejs /app
 USER worker
