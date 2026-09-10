@@ -13,7 +13,7 @@ import { ToolChrome } from "./ToolChrome";
 import { runGeneration } from "./runGeneration";
 import { SlideForm } from "./SlideForm";
 import { ProSlideForm } from "./ProSlideForm";
-import { ResumeWizard } from "./ResumeWizard";
+import { ResumeComposer } from "./ResumeComposer";
 import { TranslationForm } from "./TranslationForm";
 import { ImageStudio } from "./ImageStudio";
 import { SourceFileField } from "./SourceFileField";
@@ -89,7 +89,7 @@ export function ToolWorkspace({ tool }: { tool: ToolConfig }) {
 
   if (tool.custom === "slide") return <SlideForm tool={tool} profile={profile} />;
   if (tool.custom === "pro-slide") return <ProSlideForm tool={tool} profile={profile} />;
-  if (tool.custom === "resume") return <ResumeWizard tool={tool} />;
+  if (tool.custom === "resume") return <ResumeComposer tool={tool} profile={profile} />;
   if (tool.custom === "translation") return <TranslationForm tool={tool} />;
   if (tool.custom === "image") return <ImageStudio tool={tool} />;
 
