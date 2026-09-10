@@ -1,5 +1,6 @@
 import "server-only";
 import { MAX_SOURCE_CHARS } from "../tools";
+import { RESUME_JSON_FIELDS } from "../generation/resume/input";
 import type { FormValues } from "../types";
 
 /**
@@ -42,6 +43,22 @@ const SOURCE_FIELDS = new Set(["sourceText"]);
 const MAX_MID = 8_000;
 const MID_FIELDS = new Set(["userGlossary"]);
 
+/**
+ * JSON kodlangan forma maydonlari (Rezyume 2, B-3).
+ *
+ * Rezyumening tajriba/ta'lim/sertifikat/til/havola ro'yxatlari
+ * `FormValues` ga JSON SATRI sifatida tushadi. 4 000 belgilik
+ * `MAX_FIELD` da 12 ta ish joyi va har biriga 10 tagacha band SIG'MAYDI:
+ * satr o'rtasidan kesilar, `JSON.parse` yiqilar va foydalanuvchi butun
+ * tajriba bo'limini YO'QOTARDI. Endi chegara 24 000 va kesilgan JSON ni
+ * `parseResumeJson` oxirgi to'liq elementgacha tiklaydi.
+ *
+ * Ro'yxat `resume/input.ts` dan IMPORT qilinadi — u yerda ham,
+ * bu yerda ham qo'lda yozilsa, yangi maydon qo'shilganda jim kesilardi.
+ */
+const MAX_JSON = 24_000;
+const JSON_FIELDS = new Set<string>(RESUME_JSON_FIELDS);
+
 /** Faqat kutilgan turdagi qiymatlar o'tadi; kalitlar oq ro'yxat shaklida. */
 export function sanitizeValues(raw: unknown): FormValues | null {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
@@ -57,7 +74,7 @@ export function sanitizeValues(raw: unknown): FormValues | null {
     } else if (typeof value === "number") {
       out[key] = Number.isFinite(value) ? value : 0;
     } else if (typeof value === "string") {
-      const limit = SOURCE_FIELDS.has(key) ? MAX_SOURCE : MID_FIELDS.has(key) ? MAX_MID : MAX_FIELD;
+      const limit = SOURCE_FIELDS.has(key) ? MAX_SOURCE : JSON_FIELDS.has(key) ? MAX_JSON : MID_FIELDS.has(key) ? MAX_MID : MAX_FIELD;
       // Nol bayt Postgres `text` ga yozilmaydi — oldindan olib tashlaymiz.
       out[key] = value.replace(/\0/g, "").slice(0, limit);
     }
@@ -65,4 +82,4 @@ export function sanitizeValues(raw: unknown): FormValues | null {
   return out;
 }
 
-export { MAX_FIELD, MAX_MID, MAX_SOURCE };
+export { MAX_FIELD, MAX_JSON, MAX_MID, MAX_SOURCE };

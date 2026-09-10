@@ -21,8 +21,9 @@ import {
   writeKeysWithLlm,
   writeLessonWithLlm,
   writeMapWithLlm,
-  writeResumeWithLlm,
 } from "./write-specials";
+import { buildResumeDoc } from "./resume/write";
+import type { FormValues } from "../types";
 import type { AcademicDoc, Block, DocMeta, DocSection } from "./types";
 
 /*
@@ -1036,6 +1037,13 @@ export async function writeWithLlm(
   if (meta.toolId === "glossary") return writeGlossaryWithLlm(meta, deadline);
   if (meta.toolId === "keys") return writeKeysWithLlm(meta, deadline);
   if (meta.toolId === "texnologik-xarita") return writeMapWithLlm(meta, deadline);
-  if (meta.toolId === "resume") return writeResumeWithLlm(meta, values, deadline);
+  /*
+   * Rezyume — `resume/write.ts` (Rezyume 2). `index.ts` uni SURAT bilan
+   * to'g'ridan-to'g'ri chaqiradi (`buildResumeDoc`); bu yerdagi yo'l
+   * suratsiz zaxira (eski chaqiruvchilar va `writeWithLlm` shartnomasi).
+   */
+  if (meta.toolId === "resume") {
+    return buildResumeDoc(meta, values as FormValues, { deadline: deadline ?? Date.now() + 90_000 });
+  }
   return null;
 }

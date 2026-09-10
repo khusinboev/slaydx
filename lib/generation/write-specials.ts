@@ -1,5 +1,5 @@
 import { sectionLabels } from "./i18n";
-import { parseLlmJson, parseLlmObject } from "./json";
+import { parseLlmJson } from "./json";
 import { llmComplete, llmEnabled } from "./llm";
 import {
   glossarySystemPrompt,
@@ -7,7 +7,6 @@ import {
   keysSystemPrompt,
   lessonSystemPrompt,
   mapSystemPrompt,
-  resumeSystemPrompt,
 } from "./prompts";
 import {
   blocksFromText,
@@ -20,6 +19,7 @@ import {
   unverifiedReferenceNote,
   wordCount,
 } from "./quality";
+import { orgIsKnown, stripUnknownYears } from "./resume/guard";
 import type { AcademicDoc, Block, DocMeta, DocSection, DocTable } from "./types";
 
 function asText(s: unknown): string {
@@ -221,60 +221,21 @@ export function normalizeMinutes(raw: unknown[], duration: number): number[] {
 }
 
 /**
- * Rezyume uchun fakt qo'riqchisi.
+ * Rezyume fakt qo'riqchisi — `resume/guard.ts` ga KO'CHIRILDI.
  *
- * Rezyume hujjat emas, DA'VO: yo'q ish joyi yozilgan CV bilan suhbatga
- * borish foydalanuvchi uchun jiddiy zarar. Promptda «yil/joy uydirmang»
- * deyilgan, lekin tekshirilmasdi.
- *
- * Ilgari bu mantiq `writeResumeWithLlm` ichidagi yopiq funksiyalar edi,
- * ya'ni uni sinash uchun jonli LLM chaqiruvi kerak bo'lardi. Endi
- * alohida — chunki u ikki xil qaror qabul qiladi va ikkalasi ham
- * noto'g'ri bo'lishi mumkin:
- *   • uydirma TASHKILOT — butun band tashlanadi;
- *   • uydirma YIL — faqat yil o'chiriladi.
- * Shu farq tufayli haqiqiy qayta ifodalash («15-maktab» → «15-sonli
- * umumiy o'rta ta'lim maktabi») saqlanadi.
+ * Bu yerda faqat YUPQA moslashtiruvchi qoldi: eski chaqiruvchilar va
+ * `tests/generation.test.mts` dagi P1-19 regressiya testi shu imzoni
+ * (`resumeFactGuard(inputFacts)` -> `{orgIsKnown, stripUnknownYears}`)
+ * bilishadi. Mantiq endi bitta joyda va u `ResumeInput` shakliga
+ * bog'lanmagan xom matn bilan ham ishlaydi.
  */
 export function resumeFactGuard(inputFacts: string) {
-  const facts = String(inputFacts ?? "").toLowerCase();
+  const facts = String(inputFacts ?? "").normalize("NFKC").toLowerCase();
   const years = new Set(facts.match(/\b(19|20)\d{2}\b/g) ?? []);
-
-  /** Tashkilot/joy nomi kiritilgan matndan olinganmi. */
-  function orgIsKnown(head: string): boolean {
-    if (!facts.trim()) return true;
-    const tokens = String(head ?? "")
-      .toLowerCase()
-      .replace(/\b(?:19|20)\d{2}\b/g, " ")
-      .split(/[^\p{L}\p{N}]+/u)
-      .filter((t) => t.length >= 4);
-    if (!tokens.length) return true;
-    return tokens.some((t) => facts.includes(t));
-  }
-
-  /**
-   * Kiritilmagan yilni olib tashlaydi.
-   *
-   * Model ko'pincha mantiqiy, lekin O'YLAB TOPILGAN sana qo'shadi:
-   * bakalavr 2021-yilda tugagan bo'lsa, u «2017–2021» deb yozadi.
-   * Oraliqda bitta yil notanish bo'lsa BUTUN oraliq olib tashlanadi —
-   * yarim oraliq («–2021») ma'nosiz.
-   */
-  function stripUnknownYears(text: string): string {
-    const t = String(text ?? "");
-    if (!years.size) return t;
-    return t
-      .replace(/\b(?:19|20)\d{2}\s*[–—-]\s*(?:19|20)\d{2}\b/g, (range) =>
-        (range.match(/\b(?:19|20)\d{2}\b/g) ?? []).every((y) => years.has(y)) ? range : "",
-      )
-      .replace(/\b(?:19|20)\d{2}\b/g, (y) => (years.has(y) ? y : ""))
-      .replace(/\s*·\s*(?=·|$)/g, "")
-      .replace(/\s{2,}/g, " ")
-      .replace(/^[\s·,;—–-]+|[\s·,;—–-]+$/g, "")
-      .trim();
-  }
-
-  return { orgIsKnown, stripUnknownYears };
+  return {
+    orgIsKnown: (head: string) => orgIsKnown(head, facts),
+    stripUnknownYears: (text: string) => stripUnknownYears(text, years),
+  };
 }
 
 function pickTerms(data: unknown, limit: number): { term: string; def: string }[] {
@@ -518,143 +479,6 @@ export async function writeKeysWithLlm(meta: DocMeta, deadline?: number): Promis
           ...rubricBlocks(c.rubric, L),
         ]),
       ),
-    ],
-  };
-}
-
-export async function writeResumeWithLlm(
-  meta: DocMeta,
-  values: Record<string, unknown>,
-  deadline?: number,
-): Promise<AcademicDoc | null> {
-  if (!llmEnabled()) return null;
-  const raw = await llmComplete(
-    resumeSystemPrompt(meta, String(values.tone || "professional")),
-    [
-      `JSON: {"summary":"","experience":[{"period":"","org":"","role":"","bullets":[""]}],"education":[{"place":"","degree":"","years":""}],"skills":[""]}.`,
-      `summary — 4–6 professional gap, natija bilan.`,
-      `experience — 1–3 joy, har birida 3–5 bullet (vazifa + natija). Faktni o‘zgartirmang, yil/joy uydirmang.`,
-      `Xom nusxa qilmang, lekin yangi ish joyi qo‘shmang.`,
-      `Ism: ${values.fullName || meta.author}`,
-      `Lavozim: ${values.targetRole || meta.topic}`,
-      `Joylashuv: ${values.location || meta.city}`,
-      `Email: ${values.email || ""}`,
-      `Tel: ${values.phone || ""}`,
-      `Berilgan qisqacha: ${values.summary || ""}`,
-      `Tajriba: ${values.experience || ""}`,
-      `Ta’lim: ${values.education || ""}`,
-      `Ko‘nikma: ${values.skills || ""}`,
-    ].join("\n"),
-    2000,
-    { json: true, timeoutMs: Math.min(50_000, remainingMs(deadline) || 50_000) },
-  );
-  const data = parseLlmObject<{
-    summary?: unknown;
-    experience?: unknown;
-    education?: unknown;
-    skills?: unknown;
-  }>(raw);
-  if (!data?.summary || asText(data.summary).length < 80) return null;
-
-  const expItems = Array.isArray(data.experience)
-    ? data.experience.map((item) =>
-        typeof item === "string" ? { period: "", org: "", role: "", bullets: [item] } : item,
-      )
-    : typeof data.experience === "string"
-      ? [{ period: "", org: "", role: "", bullets: [data.experience] }]
-      : [];
-  const eduItems = Array.isArray(data.education)
-    ? data.education
-    : [{ place: asText(data.education || values.education || meta.university), degree: "", years: "" }];
-  const skills = Array.isArray(data.skills)
-    ? data.skills.map((x) => asText(x)).filter(Boolean)
-    : asText(data.skills || values.skills)
-        .split(/[,;•\n]+/)
-        .map((s) => s.trim())
-        .filter(Boolean);
-
-  const L = sectionLabels(meta.language);
-  const name = String(values.fullName || meta.author || "F.I.Sh");
-  const contact = [values.location, values.email, values.phone].filter(Boolean).join(" · ") || meta.city;
-
-  /**
-   * Model kiritilmagan ish joyi yoki yilni qo'shmasligi kerak.
-   *
-   * Promptda «yil/joy uydirmang» deyilgan, lekin tekshirilmagan edi —
-   * rezyume esa hujjat emas, DA'VO: yo'q ish joyi yozilgan CV bilan
-   * suhbatga borish foydalanuvchi uchun jiddiy zarar.
-   *
-   * Tekshiruv ehtiyotkor: model qayta ifodalashi mumkin, shuning uchun
-   * yil ANIQ mos kelishi, tashkilot esa kamida bitta mazmunli bo'lakni
-   * kiritilgan matndan olishi talab qilinadi.
-   */
-  const inputFacts = [values.experience, values.education, values.summary, values.skills]
-    .map((x) => asText(x).toLowerCase())
-    .join(" ");
-  const { orgIsKnown, stripUnknownYears } = resumeFactGuard(inputFacts);
-
-  const expBlocks: Block[] = [];
-  let lastHead = "";
-  let dropped = 0;
-  for (const item of expItems.slice(0, 4)) {
-    if (!item || typeof item !== "object") continue;
-    const o = item as Record<string, unknown>;
-    const rawHead = [asText(o.period), asText(o.role), asText(o.org)].filter(Boolean).join(" — ");
-    // Uydirma ish joyi — butun band tashlanadi; uydirma yil — faqat yil.
-    if (rawHead && !orgIsKnown(rawHead)) {
-      console.warn("[resume] kiritilmagan ish joyi tashlandi:", rawHead.slice(0, 80));
-      dropped += 1;
-      continue;
-    }
-    const head = stripUnknownYears(rawHead);
-    if (head && head !== lastHead) {
-      expBlocks.push({ kind: "h3", text: clip(head, 120) });
-      lastHead = head;
-    }
-    const bullets = Array.isArray(o.bullets) ? o.bullets : [o.text, o.value];
-    for (const b of bullets) {
-      let t = clip(b, 220);
-      if (head && t.includes(head)) t = t.replace(head, "").replace(/^[—\-\s]+/, "");
-      const parts = t.split(/\s+[—–-]\s+/);
-      if (parts.length >= 2 && /^\d{4}/.test(parts[0])) t = parts[parts.length - 1];
-      t = clip(t, 220);
-      if (t && t !== head) expBlocks.push({ kind: "li", text: t });
-    }
-  }
-  if (!expBlocks.length) {
-    // Hammasi filtrdan o'tmagan bo'lsa foydalanuvchi yozganini o'zini beramiz —
-    // uydirma tajribadan ko'ra xom matn yaxshiroq.
-    if (dropped) console.warn("[resume] barcha tajriba bandlari tashlandi, xom matn ishlatiladi");
-    const rawExp = asText(values.experience);
-    if (rawExp) expBlocks.push({ kind: "p", text: clip(rawExp, 800) });
-  }
-
-  const eduBlocks: Block[] = [];
-  for (const item of eduItems.slice(0, 3)) {
-    if (!item || typeof item !== "object") {
-      const t = stripUnknownYears(asText(item));
-      if (t) eduBlocks.push({ kind: "p", text: t });
-      continue;
-    }
-    const o = item as Record<string, unknown>;
-    const line = stripUnknownYears([asText(o.place), asText(o.degree), asText(o.years)].filter(Boolean).join(" · "));
-    if (line) eduBlocks.push({ kind: "p", text: clip(line, 200) });
-  }
-
-  return {
-    meta: { ...meta, topic: String(values.targetRole || meta.topic), author: name },
-    titlePage: false,
-    toc: false,
-    sections: [
-      section("summary", L.summary, [
-        { kind: "p", text: clip(data.summary, 700) },
-        { kind: "p", text: contact },
-      ]),
-      section("exp", L.experience, expBlocks),
-      section("edu", L.education, eduBlocks.length ? eduBlocks : [{ kind: "p", text: asText(values.education || meta.university) }]),
-      section("skills", L.skills, [
-        { kind: "p", text: skills.slice(0, 16).join(" · ") || asText(values.skills) },
-      ]),
     ],
   };
 }
