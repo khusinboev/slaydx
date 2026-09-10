@@ -59,6 +59,14 @@ export function extractAssets(
     return assetUrl(generationId, found.assetId);
   };
 
+  /** Rezyume surati: URL bilan birga `assetId` ham yangilanadi. */
+  const swapPhoto = <T extends { url: string; assetId: string }>(photo: T): T => {
+    const found = assetFromDataUrl(photo.url);
+    if (!found) return photo;
+    if (!assets.has(found.assetId)) assets.set(found.assetId, found);
+    return { ...photo, url: assetUrl(generationId, found.assetId), assetId: found.assetId };
+  };
+
   let nextDoc = doc;
   if (doc) {
     nextDoc = {
@@ -74,6 +82,16 @@ export function extractAssets(
       slideLogo: doc.slideLogo?.url
         ? { ...doc.slideLogo, url: swap(doc.slideLogo.url) ?? doc.slideLogo.url }
         : doc.slideLogo,
+      /*
+       * Rezyume surati (B-2).
+       *
+       * U ham `data:` URL bo'lib keladi (`lib/server/photo.ts` kesilgan
+       * PNG/JPEG beradi). DOCX suratni ichiga olgan bo'ladi, lekin
+       * ko'ruvchi va tahrirdan keyingi QAYTA render (`resolveImage`)
+       * uchun aktiv SHART: usiz saqlangan `doc_json` da megabaytlik
+       * `data:` qolib ketardi va rebuild suratni yo'qotardi.
+       */
+      resume: doc.resume?.photo?.url ? { ...doc.resume, photo: swapPhoto(doc.resume.photo) } : doc.resume,
       // «O'z shablonim» fonlari — har rol PNG si aktivga (bir xil rasm bir marta).
       customTemplate: doc.customTemplate
         ? {
@@ -173,4 +191,22 @@ export async function getAsset(
 /** Bitta generatsiyaning barcha aktivlarini o'chiradi. */
 export async function deleteAssets(generationId: string): Promise<void> {
   await query("DELETE FROM generation_assets WHERE generation_id = $1", [generationId]);
+}
+
+/**
+ * BITTA aktivni o'chiradi (B-5 — tahrirdan keyin eskiz keshi).
+ *
+ * `client` beriladigan bo'lsa o'chirish CHAQIRUVCHINING tranzaksiyasida
+ * bajariladi: `rebuildFile` yangi faylni va eskiz keshining o'chishini
+ * bitta yozuvda ushlab turadi, aks holda render yiqilib rollback bo'lsa
+ * kesh behuda o'chgan bo'lardi.
+ */
+export async function deleteAssetById(
+  generationId: string,
+  assetId: string,
+  client?: { query: (text: string, values?: unknown[]) => Promise<unknown> },
+): Promise<void> {
+  const sql = "DELETE FROM generation_assets WHERE generation_id = $1 AND asset_id = $2";
+  if (client) await client.query(sql, [generationId, assetId]);
+  else await query(sql, [generationId, assetId]);
 }

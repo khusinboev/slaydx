@@ -1,7 +1,6 @@
 "use client";
 
 import { ApiError, request, type GenerationDetail } from "./api-client";
-import type { DocOp } from "./generation/slide-edit";
 
 /**
  * Ko'ruvchidagi tahrir API si — ALOHIDA fayl.
@@ -54,8 +53,16 @@ export function editErrorCode(e: unknown): string | null {
   return typeof e.data.code === "string" ? e.data.code : "version";
 }
 
-/** Operatsiyalar to'plamini yuboradi (atomar: hammasi yoki hech biri). */
-export function patchGenerationDoc(id: string, baseVersion: number, ops: DocOp[]) {
+/**
+ * Operatsiyalar to'plamini yuboradi (atomar: hammasi yoki hech biri).
+ *
+ * `ops` ATAYIN `unknown[]`: bitta marshrut (`PATCH …/doc`) endi ikki xil
+ * op tilini oladi — slayd (`DocOp`) va rezyume (`ResumeOp`). Qaysi til
+ * ekanini SERVER hujjat turidan aniqlaydi (`adapterFor` → `parse`),
+ * ya'ni tipni bu yerda toraytirish klientni ikkiga bo'lardi, xavfsizlik
+ * esa baribir server tomonda hal qilinadi.
+ */
+export function patchGenerationDoc(id: string, baseVersion: number, ops: unknown[]) {
   return request<DocPatchResult>(`/api/generations/${id}/doc`, {
     method: "PATCH",
     body: JSON.stringify({ baseVersion, ops }),
@@ -86,6 +93,29 @@ export function uploadSlideImage(id: string, index: number, file: File, baseVers
     method: "POST",
     body: fd,
   });
+}
+
+/** Rezyume surati (kesilgan + ixtiyoriy asl) — `POST …/photo`. */
+export function uploadResumePhoto(
+  id: string,
+  baseVersion: number,
+  photo: { file: File; original?: File | null; shape?: "circle" | "square"; crop?: { x: number; y: number; zoom: number } },
+) {
+  const fd = new FormData();
+  fd.append("file", photo.file);
+  if (photo.original) fd.append("original", photo.original);
+  if (photo.shape) fd.append("shape", photo.shape);
+  if (photo.crop) fd.append("crop", JSON.stringify(photo.crop));
+  fd.append("baseVersion", String(baseVersion));
+  return request<DocPatchResult>(`/api/generations/${id}/photo`, { method: "POST", body: fd });
+}
+
+/** Suratni olib tashlash — bayt yubormasdan (`remove=1`). */
+export function removeResumePhoto(id: string, baseVersion: number) {
+  const fd = new FormData();
+  fd.append("remove", "1");
+  fd.append("baseVersion", String(baseVersion));
+  return request<DocPatchResult>(`/api/generations/${id}/photo`, { method: "POST", body: fd });
 }
 
 /**

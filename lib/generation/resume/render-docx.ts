@@ -19,7 +19,7 @@ import {
 import { contentHeight, type DocProfile } from "../docx-profile";
 import { cleanText } from "../quality";
 import type { ImageBytes } from "../slide-images";
-import { RESUME_PAD_MM } from "../../viewers/metrics";
+import { CHIP_SEP, RESUME_PAD_MM } from "../../viewers/metrics";
 import { planResume, type ResumeItem, type ResumeLayout, type ResumeZoneId } from "./layout";
 import type { ResumeModel } from "./model";
 import type { ResumePalette, ResumeTemplate } from "./templates";
@@ -273,14 +273,21 @@ function drawItem(d: Draw, it: ResumeItem): Array<Paragraph | Table> {
     }
     case "chips": {
       if (!it.items.length) return [];
+      /*
+       * Ko'nikmalar — ODDIY OQIM, «chip» EMAS.
+       *
+       * DOCX da haqiqiy chip (fon bilan o'ralgan inline blok) yo'q:
+       * `w:shd` runga tegadi va qator uzilganda ikkiga sinadi — jonli
+       * ko'zdan kechiruvda «Budgeting & Forecasting» kabi ko'p so'zli
+       * ko'nikma ramka o'rtasidan bo'linib, matn ramkadan chiqib
+       * ketardi. Shuning uchun ikkala tomon ham bitta oqim paragrafi
+       * chizadi va « · » ajratgichi HAQIQIY matn tuguni bo'ladi —
+       * ekranda ham, faylda ham bir xil ko'rinadi.
+       */
       const children: TextRun[] = [];
       it.items.forEach((s, i) => {
-        // Ajratgich — FAQAT bo'sh joy: paritet testi bo'sh matn tugunlarini
-        // hisobga olmaydi, ko'ruvchi esa oraliqni `gap` bilan beradi.
-        if (i) children.push(new TextRun({ text: "  ", font: d.t.type.font, size: hp(d.t.type.small) }));
-        // Ochiq fonda `panel` deyarli oq — LibreOffice ko'zdan kechiruvida
-        // "chip" umuman ko'rinmasdi; `accentSoft` ikkala tomonda ham ajralib turadi.
-        children.push(run(d, s.text, { size: d.t.type.small, color: d.dark ? d.P.onDark : d.P.ink, fill: d.dark ? d.P.accent : d.P.accentSoft }));
+        if (i) children.push(run(d, CHIP_SEP, { size: d.t.type.small, color: c.muted }));
+        children.push(run(d, s.text, { size: d.t.type.small, color: d.dark ? d.P.onDark : d.P.ink }));
       });
       return [para(d, children, { spacing: { after: twip(2) } })];
     }
