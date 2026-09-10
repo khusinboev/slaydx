@@ -8,7 +8,6 @@ import { useAppStore } from "@/lib/store";
 import { profilePatchFrom } from "@/lib/profile-sync";
 import { searchProfessions, skillsForRole } from "@/lib/professions";
 import {
-  RESUME_TONES,
   encodeResumeValues,
   resumeInputFromValues,
   type ResumeInput,
@@ -528,7 +527,13 @@ function Toggle({
   children: React.ReactNode;
 }) {
   return (
-    <div className="border-b py-2 last:border-b-0" data-toggle={field}>
+    /*
+     * `data-field` tumbler YOPIQ bo'lganda ham turadi: qamrov testi
+     * (`tests/viewer/resume-form.test.mts`) parametr formada BOR-YO'Qligini
+     * shu bo'yicha o'lchaydi, blok esa foydalanuvchi tanloviga qarab
+     * ochiladi.
+     */
+    <div className="border-b py-2 last:border-b-0" data-toggle={field} data-field={field}>
       <div className="flex items-center justify-between gap-2">
         <span className="text-[13px] font-medium">{label}</span>
         <Switch checked={on} onChange={onToggle} ariaLabel={label} />

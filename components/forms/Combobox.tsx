@@ -37,10 +37,20 @@ export function Combobox({ value, onChange, suggest, placeholder, multi, ariaLab
   const chips = useMemo(() => (multi ? ((value as string[]) ?? []) : []), [multi, value]);
   const single = multi ? "" : String(value ?? "");
 
+  /*
+   * BITTA qiymat rejimida maydon TASHQI qiymat bilan boshqariladi
+   * (`value`), ichki `q` faqat chiplar rejimida ishlatiladi.
+   *
+   * Ilgari ikkalasi ham ichki `q` ni ko'rsatardi va tashqaridan kelgan
+   * o'zgarish — «Formani tozalash» yoki qoralamani tiklash — ekranda
+   * ko'rinmasdan qolardi: maydon eski matnni ushlab turaverardi.
+   */
+  const shown = multi ? q : single;
+
   const options = useMemo(() => {
-    const list = suggest(multi ? q : q || single);
+    const list = suggest(shown);
     return multi ? list.filter((o) => !chips.some((c) => c.toLowerCase() === o.label.toLowerCase())) : list;
-  }, [suggest, q, single, multi, chips]);
+  }, [suggest, shown, multi, chips]);
 
   const emit = (v: string | string[]) => (onChange as unknown as (x: string | string[]) => void)(v);
 
@@ -75,7 +85,7 @@ export function Combobox({ value, onChange, suggest, placeholder, multi, ariaLab
     } else if (e.key === "Enter") {
       e.preventDefault();
       // Ro'yxat ochiq bo'lsa — belgilangan variant; aks holda yozilgan matn.
-      const pick = open && options[cursor] ? options[cursor].label : (multi ? q : q || single);
+      const pick = open && options[cursor] ? options[cursor].label : shown;
       commit(pick);
     } else if (e.key === "Escape") {
       setOpen(false);
@@ -117,13 +127,13 @@ export function Combobox({ value, onChange, suggest, placeholder, multi, ariaLab
           aria-autocomplete="list"
           aria-label={ariaLabel}
           aria-activedescendant={open && options[cursor] ? `${listId}-${cursor}` : undefined}
-          value={multi ? q : q || single}
+          value={shown}
           placeholder={chips.length ? "" : placeholder}
           onChange={(e) => {
-            setQ(e.target.value);
+            if (multi) setQ(e.target.value);
+            else emit(e.target.value);
             setOpen(true);
             setCursor(0);
-            if (!multi) emit(e.target.value);
           }}
           onFocus={() => setOpen(true)}
           onBlur={() => setTimeout(() => setOpen(false), 120)}
@@ -135,7 +145,9 @@ export function Combobox({ value, onChange, suggest, placeholder, multi, ariaLab
         <ul
           id={listId}
           role="listbox"
-          aria-label={ariaLabel}
+          // Kiritish maydoni bilan BIR XIL yorliq bo'lsa, ekran o'quvchi
+          // (va test) ikkita bir xil nomli elementni ko'radi.
+          aria-label={`${ariaLabel} — tavsiyalar`}
           className="bg-card absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-lg border py-1 shadow-lg"
         >
           {options.map((o, i) => (
