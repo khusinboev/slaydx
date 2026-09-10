@@ -1106,12 +1106,11 @@ test("bet soniga bog'liq bo'lmagan xizmatlar qat'iy byudjet oladi", async () => 
   const { TOOL_BY_ID } = await import("../lib/tools.ts");
   const CAP = 900_000;
 
-  // Rasm — eng tez, tarjima — eng sekin (bo'laklar to'lqinlarda ketadi).
+  // Rasm — eng tez, glossariy — sekinroq.
   const image = budgetFor(TOOL_BY_ID.image, {} as FormValues, CAP);
-  const translation = budgetFor(TOOL_BY_ID.translation, {} as FormValues, CAP);
   const glossary = budgetFor(TOOL_BY_ID.glossary, {} as FormValues, CAP);
 
-  assert.ok(image < glossary && glossary < translation, `${image} < ${glossary} < ${translation}`);
+  assert.ok(image < glossary, `${image} < ${glossary}`);
 
   /*
    * Qat'iy byudjetli xizmat forma qiymatlariga umuman qaramaydi — mana shu
@@ -1119,6 +1118,16 @@ test("bet soniga bog'liq bo'lmagan xizmatlar qat'iy byudjet oladi", async () => 
    */
   assert.equal(budgetFor(TOOL_BY_ID.image, { imageCount: 4 } as FormValues, CAP), image);
   assert.equal(budgetFor(TOOL_BY_ID.glossary, { termCount: "40" } as FormValues, CAP), glossary);
+
+  /*
+   * TARJIMA ham endi bu ro'yxatda EMAS (Tarjimon 2): u qat'iy 240 000 ms
+   * edi, chegara esa 48 000 belgi. Chegara 200 000 ga ko'tarilgach 240 s
+   * ish yarmida uzilardi. Formula va cap `document.test.mts` da batafsil;
+   * bu yerda faqat qat'iy EMASLIGI qayd etiladi.
+   */
+  const trSmall = budgetFor(TOOL_BY_ID.translation, { sourceText: "x".repeat(20_000) } as FormValues, CAP);
+  const trBig = budgetFor(TOOL_BY_ID.translation, { sourceText: "x".repeat(200_000) } as FormValues, CAP);
+  assert.ok(trBig > trSmall, `tarjima byudjeti hajmga ergashishi kerak: ${trSmall} → ${trBig}`);
 
   /*
    * Slayd ENDI bu ro'yxatda EMAS (N-2): u qat'iy 180 000 edi, ya'ni

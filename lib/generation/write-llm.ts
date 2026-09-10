@@ -22,7 +22,6 @@ import {
   writeLessonWithLlm,
   writeMapWithLlm,
   writeResumeWithLlm,
-  writeTranslationWithLlm,
 } from "./write-specials";
 import type { AcademicDoc, Block, DocMeta, DocSection } from "./types";
 
@@ -1033,7 +1032,6 @@ export async function writeWithLlm(
     return writeImradWithLlm(meta, deadline);
   }
   if (WRITER.has(meta.toolId)) return writeWriterWithLlm(meta, deadline);
-  if (meta.toolId === "translation") return writeTranslationWithLlm(meta, values, deadline);
   if (meta.toolId === "lesson-plan") return writeLessonWithLlm(meta, deadline);
   if (meta.toolId === "glossary") return writeGlossaryWithLlm(meta, deadline);
   if (meta.toolId === "keys") return writeKeysWithLlm(meta, deadline);

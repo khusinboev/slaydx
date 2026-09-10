@@ -88,6 +88,48 @@ test("slayd narxi slayderdan: 20 tagacha 3 000, keyingi har slayd +500 (paket yo
   assert.equal(priceFor(slide, { slideCount: -5 }), 3000);
 });
 
+test("tarjima narxi hajmdan: 10 000 gacha 3 000, keyingi har 5 000 (yoki qismi) +1 000", async () => {
+  const { translationPrice } = await import("../lib/tools.ts");
+  /*
+   * Ilgari tarjima hajmdan qat'i nazar 3 000 turardi: 500 belgilik xat
+   * ham, 48 000 belgilik hujjat ham. Yaxlitlash YUQORIGA (`ceil`) —
+   * 10 001 belgi ham to'liq qadamni oladi, chunki modelga baribir yangi
+   * partiya ketadi.
+   */
+  const table: [number, number][] = [
+    [8, 3000],
+    [10_000, 3000],
+    [10_001, 4000],
+    [15_000, 4000],
+    [15_001, 5000],
+    [200_000, 41_000],
+  ];
+  for (const [chars, want] of table) {
+    assert.equal(translationPrice(chars), want, `${chars} belgi`);
+  }
+  // Manfiy/soxta son bilan bepul qilishga urinish.
+  assert.equal(translationPrice(-500), 3000);
+  assert.equal(translationPrice(Number.NaN), 3000);
+});
+
+test("tarjima narxi: fayl rejimida `sourceChars`, matn rejimida matnning O'ZI", () => {
+  const t = TOOL_BY_ID.translation;
+  const asset = "a".repeat(24);
+
+  // Fayl rejimi: `sourceChars` ni SERVER to'ldiradi (`sourceCharsForRequest`).
+  assert.equal(priceFor(t, { sourceAssetId: asset, sourceChars: 50_000 }), 11_000);
+
+  /*
+   * Matn rejimi: klientning `sourceChars` i E'TIBORSIZ. Aks holda
+   * 200 000 belgilik matnni `sourceChars: 1` bilan yuborib, 3 000
+   * tangaga tarjima qildirish mumkin bo'lardi.
+   */
+  const long = "x".repeat(50_000);
+  assert.equal(priceFor(t, { sourceText: long, sourceChars: 1 }), 11_000);
+  assert.equal(priceFor(t, { sourceText: "Salom dunyo" }), 3000);
+  assert.equal(priceFor(t, {}), 3000, "bo'sh forma — tayanch narx");
+});
+
 test("rasm soni narxga ta'sir qiladi", () => {
   const img = TOOL_BY_ID.image;
   assert.ok(priceFor(img, { imageCount: 4 }) > priceFor(img, { imageCount: 1 }));

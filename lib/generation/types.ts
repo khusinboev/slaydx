@@ -1,4 +1,5 @@
 import type { CustomTemplate } from "./pptx-template";
+import type { TranslationReport } from "./translate/report";
 import type { FormValues, ToolConfig, ToolId } from "../types";
 import type { SlideAudience, SlideTemplateId } from "./slide-templates";
 import type { SlideModel, SlideThemeId } from "./slide-types";
@@ -244,6 +245,8 @@ export type AcademicDoc = {
    * `planCustom` bilan chiziladi; fon PNG lari `extractAssets` bilan aktivga chiqadi.
    */
   customTemplate?: CustomTemplate;
+  /** Tarjima hisoboti (Tarjimon 2): aniqlangan til, glossariy, ogohlantirishlar, asl↔tarjima juftlari. */
+  translation?: TranslationReport;
   images?: GenImage[];
   imagePrompt?: string;
   imageScene?: string;

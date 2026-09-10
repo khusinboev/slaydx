@@ -70,7 +70,9 @@ export function ToolChrome({
         >
           <span>{loading ? "Yaratilmoqda..." : submitLabel}</span>
           {price === undefined ? null : (
-            <span className="rounded-full bg-white/15 px-2.5 py-0.5 text-sm">{formatTanga(price)}</span>
+            <span className="rounded-full bg-white/15 px-2.5 py-0.5 text-sm" data-price-total>
+              {formatTanga(price)}
+            </span>
           )}
         </button>
       </div>

@@ -102,8 +102,13 @@ export type Generation = {
    * Navbatga qo'yishda `tool.output` dan olinadi, yakunlashda esa
    * haqiqiy fayl nomiga moslanadi (bir nechta rasm — `zip`).
    * `pdf` — talab bo'yicha o'girish natijasi, saqlanadigan format emas.
+   *
+   * `xlsx | txt | md | csv` — Tarjimon 2: tarjimaning chiqish formati
+   * KIRISH formatiga teng, ya'ni XLSX yuklagan foydalanuvchi XLSX oladi.
+   * Ilgari ro'yxatda faqat `docx|pptx` bor edi va `formatOf` qaytargan
+   * haqiqiy kengaytma tipga sig'masdi.
    */
-  format: "docx" | "pptx" | "png" | "jpg" | "zip";
+  format: "docx" | "pptx" | "png" | "jpg" | "zip" | "xlsx" | "txt" | "md" | "csv";
   progress: number;
   step: string;
   doc?: AcademicDoc;

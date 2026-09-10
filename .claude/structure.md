@@ -164,6 +164,16 @@ Loyiha strukturasi: **poydevor** (umumiy qatlam) → **1-to'lqin** (jonli genera
 - Dockerfile runner: `poppler-utils` (`pdftoppm`); `scripts/live-engine.mts --template <fayl.pptx>`
 - Testlar: `tests/slide-visuals`, `pptx-template`, `render-pptx-template` (LibreOffice sahifa soni), `template-upload` (haqiqiy rasterlash), `slide-custom`, `ui/template-gallery` (custom karta), `slide-params` (`templateAssetId` zondi)
 
+### Tarjimon 2 (AUDIT-14, 2026-09-10) — tuzilmani saqlab tarjima
+
+- **`lib/generation/translate/`** — `segments.ts` (Segment/token modeli, `isTranslatable`, dublikat, `splitOversize`), `xml-scan.ts`, `docx.ts`/`pptx.ts`/`xlsx.ts`/`plain.ts`/`pdf.ts` (extract/apply adapterlari — matn tugunlari almashtiriladi, `rPr/pPr/tbl/drawing` tegilmaydi), `index.ts` (`extractSegments`, `applySegments`, `textToSegments`, `OUTPUT_MIME`, `outputFileName`, `pdfBlocksToDoc`), `engine.ts` (glossariy + til aniqlash 1-o'tish, partiyalar `mapPool(4)`, tekshiruv id/token/verbatim, retry, 3% qisman qoidasi → `delivered`, `buildTranslationArtifact`), `prompts.ts` (inglizcha ko'rsatma + `languageDirective`), `report.ts` (`TranslationReport` — `AcademicDoc.translation`), `glossary.ts` (`parseUserGlossary`, klient ham ishlatadi)
+- **`lib/generation/source-types.ts`** — `SourceKind`, `TranslationSource`, `SourceUploadResult`; **`lib/server/source-upload.ts`** — `uploadSource` (20 MB, sniff, `chars` = tarjima qilinadigan segmentlar, skanlangan PDF 422), `sourceForJob`, `sourceCharsForRequest`, `purgeOldSources(30)`; jadval `source_uploads` (`017_source_uploads.sql`)
+- **`app/api/uploads/source/route.ts`** (`POST`), **`[assetId]/route.ts`** (`DELETE`); `app/api/generations/route.ts` — `sourceAssetId` → bazadan ISHONCHLI `sourceChars`
+- **`lib/tools.ts`** — `TRANSLATION_MAX_CHARS 200 000`, `translationChars/translationPrice` (≤10k → 3 000, +1 000 / 5k), `TRANSLATION_STYLES`, `TRANSLATION_LANGUAGES` (18, ikkala yo'nalish); `lib/generation/budget.ts` — `60 s + 2.5 s / 1k belgi`
+- **`components/forms/TranslationForm.tsx`** — Manba (Matn/Fayl, sudrab tashlash, narx) · Tillar (⇄) · ▸ Sozlamalar (uslub, o'z lug'ati); **`components/viewers/TranslationViewer.tsx`** — chiplar, ogohlantirishlar, «Taqqoslash» (2 ustun) | «Fayl» (`?format=pdf` iframe)
+- Worker: `sourceForJob` → `buildArtifact({source, onStage})`, `onStage` → `setProgress` (soxta egri chiziq to'xtaydi)
+- Testlar: `tests/translate-{docx,pptx,xlsx,plain,pdf,engine}.test.mts`, `source-upload`, `pricing`, `ui/translation-form`, `viewer/translation-viewer`; `npm run live -- translation-text` / `translation-file --source <fayl>`
+
 ### API klienti
 
 - **`lib/api-edit.ts`** (yangi)

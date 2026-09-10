@@ -395,45 +395,6 @@ test("mundarija modeli fayl va viewer uchun bir xil qatorlarni beradi", async ()
   assert.ok(!rows.some((r) => /^\d+\.\s+(I |Kirish|Xulosa)/.test(r.text)));
 });
 
-/**
- * Tarjimada tuzilma saqlanishi.
- *
- * Nuqson: tizim prompti «sarlavha, ro'yxat va paragraf chegaralarini
- * saqlang» deb turardi, JSON sxemasi esa faqat `paragraphs: string[]`
- * berardi — ya'ni model tuzilmani IFODALAY olmasdi va chiqishda hamma
- * narsa `kind: "p"` ga tekislanardi. Sinov yangi sxemani va eski
- * javoblarga chidamlilikni ushlaydi.
- */
-test("tarjima bo'laklari turini saqlaydi va eski javobga ham chidaydi", async () => {
-  const { translatedBlocks } = await import("../lib/generation/write-specials.ts");
-
-  const typed = translatedBlocks(
-    {
-      blocks: [
-        { kind: "h2", text: "Asosiy qism" },
-        { kind: "li", text: "Birinchi band" },
-        { kind: "p", text: "Oddiy matn" },
-        { kind: "table", text: "Noma'lum tur" },
-        { kind: "p", text: "x" },
-      ],
-    },
-    null,
-  );
-  assert.deepEqual(
-    typed.map((b) => b.kind),
-    // Noma'lum tur `p` ga tushadi; 1 belgili matn tashlanadi.
-    ["h2", "li", "p", "p"],
-  );
-
-  // Eski shakl — model yangi sxemaga bo'ysunmasa.
-  const legacy = translatedBlocks({ paragraphs: ["Birinchi", "Ikkinchi"] }, null);
-  assert.deepEqual(legacy, [
-    { kind: "p", text: "Birinchi" },
-    { kind: "p", text: "Ikkinchi" },
-  ]);
-
-  assert.deepEqual(translatedBlocks(null, null), []);
-});
 
 /**
  * Keys rubrikasi.
@@ -485,6 +446,11 @@ test("matn uzunligi pul yechilishidan oldin tekshiriladi", async () => {
 
   const tooLong = preflightError(tool, { sourceText: "x".repeat(TRANSLATION_MAX_CHARS + 1) } as FormValues);
   assert.ok(tooLong && /juda uzun/i.test(tooLong), "uzun matn haqida aniq xabar bo'lishi kerak");
+  assert.equal(TRANSLATION_MAX_CHARS, 200_000, "Tarjimon 2 chegarasi");
+  assert.ok(
+    tooLong?.includes(`Chegara ${TRANSLATION_MAX_CHARS.toLocaleString("uz-UZ")}`) && /bo'lib yuboring/.test(tooLong),
+    `xabar chegarani va nima qilishni aytishi kerak: ${tooLong}`,
+  );
 
   /*
    * «To'ldirilgan, lekin juda qisqa» — `missingRequired` ushlamaydigan hol
@@ -502,7 +468,75 @@ test("matn uzunligi pul yechilishidan oldin tekshiriladi", async () => {
   assert.equal(preflightError(tool, { sourceText: "" } as FormValues), null);
 
   // Boshqa vositalarga bu chegara tegishli emas.
-  assert.equal(preflightError(TOOL_BY_ID["referat"], { sourceText: "x".repeat(100_000) } as FormValues), null);
+  assert.equal(preflightError(TOOL_BY_ID["referat"], { sourceText: "x".repeat(300_000) } as FormValues), null);
+});
+
+test("tarjima: fayl rejimi — hajm, uslub va tillar ham serverda tekshiriladi", async () => {
+  const { missingRequired, preflightError } = await import("../lib/tools.ts");
+  const tool = TOOL_BY_ID["translation"];
+  const asset = "a".repeat(24);
+
+  /*
+   * Fayl rejimida `sourceText` ATAYLAB bo'sh: matn bazada
+   * (`source_uploads`), so'rov tanasida takrorlanmaydi. `CUSTOM_REQUIRED`
+   * esa `sourceText` ni majburiy deb e'lon qiladi — MATN rejimi uchun
+   * to'g'ri qoida. Shuning uchun fayl rejimi ISTISNO bo'lishi kerak,
+   * aks holda haqiqiy yuklangan hujjat «To'ldirilmagan maydon» bilan
+   * rad etilardi.
+   */
+  assert.deepEqual(missingRequired(tool, { sourceAssetId: asset } as FormValues), []);
+  assert.ok(
+    missingRequired(tool, { sourceAssetId: "" } as FormValues).length > 0,
+    "assetsiz bo'sh so'rov hamon rad etilishi kerak",
+  );
+
+  // Fayl hajmi ham chegaraga bo'ysunadi (`sourceChars` serverdan keladi).
+  const big = preflightError(tool, { sourceAssetId: asset, sourceChars: 250_000 } as FormValues);
+  assert.ok(big?.includes(`Chegara ${(200_000).toLocaleString("uz-UZ")}`), `chegara xabari kutilgan edi: ${big}`);
+  assert.equal(preflightError(tool, { sourceAssetId: asset, sourceChars: 200_000 } as FormValues), null);
+
+  // Uslub va tillar RO'YXATDAN — to'g'ridan-to'g'ri yuborilgan so'rov ham.
+  const good = { sourceAssetId: asset, sourceChars: 1_000 } as FormValues;
+  assert.equal(preflightError(tool, { ...good, style: "formal" } as FormValues), null);
+  assert.equal(preflightError(tool, { ...good, style: "kulgili" } as FormValues), "Noma'lum uslub");
+  assert.equal(preflightError(tool, { ...good, language: "de" } as FormValues), null);
+  assert.equal(preflightError(tool, { ...good, language: "klingon" } as FormValues), "Noma'lum til");
+  assert.equal(preflightError(tool, { ...good, sourceLang: "avto" } as FormValues), null, "«avto» faqat manba uchun");
+  assert.equal(preflightError(tool, { ...good, language: "avto" } as FormValues), "Noma'lum til");
+  assert.equal(
+    preflightError(tool, { ...good, sourceLang: "uz", language: "uz" } as FormValues),
+    "Manba va maqsad tili bir xil",
+  );
+  assert.equal(preflightError(tool, { ...good, sourceLang: "ru", language: "uz" } as FormValues), null);
+});
+
+test("tarjima byudjeti hajmdan hisoblanadi va cap bilan cheklanadi", async () => {
+  const { budgetFor, MIN_BUDGET_MS } = await import("../lib/generation/budget.ts");
+  const tool = TOOL_BY_ID["translation"];
+  const CAP = 660_000;
+  const asset = "a".repeat(24);
+
+  /*
+   * Ilgari tarjima `FIXED` da qat'iy 240 000 ms edi, chegara esa 48 000
+   * belgi. Chegara 200 000 ga ko'tarilgach 240 s ish yarmida uzilardi —
+   * ya'ni ENG KATTA hujjat ENG ko'p yiqilardi. Formula:
+   * 60 000 + ceil(chars/1000) × 2 500.
+   */
+  const of = (chars: number) => budgetFor(tool, { sourceAssetId: asset, sourceChars: chars } as FormValues, CAP);
+  assert.equal(of(50_000), 60_000 + 50 * 2_500);
+  assert.equal(of(200_000), 560_000, "200 000 belgi → 560 s, cap ichida");
+  assert.ok(of(200_000) > of(50_000), "kattaroq hujjat ko'proq vaqt oladi");
+  // Yaxlitlash yuqoriga: 50 001 belgi 51-mingni to'liq oladi.
+  assert.equal(of(50_001), 60_000 + 51 * 2_500);
+
+  // Kichik matn `MIN_BUDGET_MS` ga tayanadi — 60 s dan kam ish yo'q.
+  assert.equal(of(1_000), MIN_BUDGET_MS);
+
+  // Matn rejimi ham shu formuladan — hajm `sourceText` uzunligidan.
+  assert.equal(budgetFor(tool, { sourceText: "x".repeat(50_000) } as FormValues, CAP), 60_000 + 50 * 2_500);
+
+  // `cap` — operatorning yagona tugmasi: undan oshmaydi.
+  assert.equal(budgetFor(tool, { sourceAssetId: asset, sourceChars: 200_000 } as FormValues, 300_000), 300_000);
 });
 
 test("maxsus formali vositalar serverda ham tekshiriladi", async () => {
@@ -551,19 +585,6 @@ test("maxsus formali vositalar serverda ham tekshiriladi", async () => {
   }
 });
 
-test("chunkSource matnni jim kesmaydi", async () => {
-  const { chunkSource, MAX_CHUNKS } = await import("../lib/generation/write-specials.ts");
-
-  // Har abzas o'z bo'lagini egallaydigan eng yomon taqsimot.
-  const para = "A".repeat(2_500);
-  const chunks = chunkSource(Array.from({ length: 20 }, () => para).join("\n\n"), 4_000);
-
-  assert.equal(chunks.length, 20, "hamma abzas bo'lakka tushishi kerak");
-  assert.ok(chunks.length > MAX_CHUNKS, "bu holat chegaradan oshadi va xato berishi kerak");
-
-  // Hech bir belgi yo'qolmagan.
-  assert.equal(chunks.join("").replace(/\s/g, "").length, 20 * 2_500);
-});
 
 // -------------------------------------------------- hujjat profillari (Sprint 9)
 
