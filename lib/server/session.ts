@@ -39,6 +39,9 @@ export type SessionUser = {
   subject: string;
   teacher: string;
   city: string;
+  /** Slayd muallifi lavozimi va tashkiloti (015) — forma standartlari. */
+  position: string;
+  organization: string;
   /**
    * Faqat adminlik tekshiruvi uchun. Telegram orqali kirgan oddiy
    * foydalanuvchida deyarli har doim `null` — Telegram login oqimi
@@ -70,6 +73,8 @@ type UserRow = {
   subject: string;
   teacher: string;
   city: string;
+  position: string;
+  organization: string;
   is_blocked: boolean;
   phone: string | null;
 };
@@ -99,6 +104,8 @@ export function rowToUser(r: UserRow): SessionUser {
     subject: r.subject,
     teacher: r.teacher,
     city: r.city,
+    position: r.position ?? "",
+    organization: r.organization ?? "",
     phone: r.phone,
     isAdmin: isAdminPhone(r.phone),
   };
@@ -126,6 +133,8 @@ const USER_FIELDS = [
   "subject",
   "teacher",
   "city",
+  "position",
+  "organization",
   "is_blocked",
   "phone",
 ];

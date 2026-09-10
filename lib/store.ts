@@ -240,5 +240,7 @@ export function writerProfile(user: ServerUser | null): UserProfile {
     subject: user?.subject ?? "",
     teacher: user?.teacher ?? "",
     city: user?.city || "Toshkent",
+    position: user?.position ?? "",
+    organization: user?.organization ?? "",
   };
 }

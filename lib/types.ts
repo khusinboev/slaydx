@@ -134,4 +134,7 @@ export type UserProfile = {
   subject: string;
   teacher: string;
   city: string;
+  /** Slayd formasi: lavozim va tashkilot — profilda saqlanadi (Formalar 2). */
+  position: string;
+  organization: string;
 };

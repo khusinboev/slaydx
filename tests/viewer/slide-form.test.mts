@@ -56,6 +56,8 @@ const profile: UserProfile = {
   subject: "",
   teacher: "",
   city: "Toshkent",
+  position: "",
+  organization: "",
 };
 
 function renderWithRouter(el: React.ReactElement): string {

@@ -8,6 +8,8 @@ import { useUi } from "@/lib/ui";
 
 const FIELDS = [
   ["author", "Muallif (F.I.Sh)"],
+  ["position", "Lavozim"],
+  ["organization", "Tashkilot (maktab, markaz)"],
   ["university", "Universitet"],
   ["faculty", "Fakultet"],
   ["department", "Kafedra"],

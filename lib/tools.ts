@@ -957,6 +957,9 @@ export function profileDefaults(profile: Partial<UserProfile>): FormValues {
     subject: profile.subject || "",
     teacher: profile.teacher || "",
     city: profile.city || "Toshkent",
+    // Slayd muallifi (Formalar 2): tashkilot alohida saqlanadi, bo'lmasa universitet.
+    position: profile.position || "",
+    organization: profile.organization || profile.university || "",
   };
 }
 

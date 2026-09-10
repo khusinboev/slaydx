@@ -108,6 +108,9 @@ export type ServerUser = {
   subject: string;
   teacher: string;
   city: string;
+  /** Slayd muallifi lavozimi va tashkiloti (015). */
+  position: string;
+  organization: string;
   phone: string | null;
   isAdmin: boolean;
 };

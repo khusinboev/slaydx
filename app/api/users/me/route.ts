@@ -32,6 +32,9 @@ const EDITABLE = [
   "subject",
   "teacher",
   "city",
+  // Slayd formasi (Formalar 2): «Yaratish» dan keyin avtomatik saqlanadi.
+  "position",
+  "organization",
 ] as const;
 
 export const PATCH = handler("users/update", async (req) => {
