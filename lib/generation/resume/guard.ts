@@ -17,8 +17,10 @@
  *   3. boyitish OFF — `ai` bandlar/ko'nikmalar butunlay o'chadi;
  *   4. boyitish ON — ish joyiga ≤2 `ai` band, jami ≤6 `ai` ko'nikma,
  *      raqamli `ai` band o'chadi (raqam = tekshirib bo'lmaydigan da'vo);
- *   5. tashkilot tekshiruvi NFKC + kichik harf; CJK/arab chiqishda
- *      O'TKAZIB YUBORILADI (B-7 — kompaniya baribir kirishdan olinadi);
+ *   5. tashkilot tekshiruvi NFKC + kichik harf, FAQAT band matni va
+ *      qisqacha uchun (lavozim/daraja TARJIMA qilinadi, ular ish
+ *      beruvchi emas); CJK/arab chiqishda umuman O'TKAZIB YUBORILADI
+ *      (B-7 — kompaniya baribir kirishdan olinadi);
  *   6. `summary` da uydirma yil yoki uydirma tashkilot bo'lgan JUMLA
  *      tashlanadi (butun `summary` emas — bitta jumla uchun to'liq
  *      qisqachani yo'qotish qimmat).
@@ -51,6 +53,8 @@ export type GuardReport = {
   strippedYears: number;
   /** Uydirma tashkilot sababli kirishdagi qiymatga qaytarilgan maydon. */
   revertedFields: number;
+  /** `summary` dan tashlangan jumlalar va SABABI — jonli sinov jurnali uchun. */
+  summaryDrops: { reason: "yil" | "tashkilot"; text: string }[];
   /** Chegara/raqam/OFF sababli o'chirilgan `ai` bandlar. */
   droppedBullets: number;
   /** Chegara/OFF sababli o'chirilgan `ai` ko'nikmalar. */
@@ -165,6 +169,11 @@ export function orgIsKnown(head: string, facts: string): boolean {
  * qoidasi nemischa qisqachani butunlay yo'q qilardi. Bu narx: yolg'iz
  * «Google» o'tib ketadi. Almashuv ataylab: qisqachada yolg'iz brend
  * nomi kamdan-kam, buzilgan qisqacha esa har safar ko'rinadi.
+ *
+ * Jumla BOSHIDAGI so'z ketma-ketlikni BOSHLAMAYDI: u grammatika bilan
+ * bosh harfli («Ishladi Artel Electronics…»), nom emas. Uni qo'shish
+ * `orgIsKnown` ni yumshatardi — fe'l kirishda uchrasa butun nomzod
+ * «tanish» bo'lib chiqardi.
  */
 export function orgCandidates(text: string): string[] {
   const out: string[] = [];
@@ -174,17 +183,20 @@ export function orgCandidates(text: string): string[] {
     if (run.length >= 2) out.push(run.join(" "));
     run = [];
   };
+  let atStart = true;
   for (const raw of words) {
     const w = raw.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
     const first = w.charAt(0);
     const capped = Boolean(w) && first !== first.toLowerCase() && first === first.toUpperCase();
     if (capped && w.length >= 2) {
-      run.push(w);
+      if (!(atStart && run.length === 0)) run.push(w);
+      // To'liq bosh harfli qisqartma («TDPU», «ACCA») jumla boshida ham nomzod.
       if (w.length >= 3 && w === w.toUpperCase() && /\p{L}/u.test(w)) out.push(w);
     } else {
       flush();
     }
-    if (/[.!?]$/.test(raw)) flush();
+    atStart = /[.!?…]$/.test(raw);
+    if (atStart) flush();
   }
   flush();
   return out;
@@ -220,6 +232,7 @@ export function guardResume(
     droppedBullets: 0,
     droppedSkills: 0,
     droppedSentences: 0,
+    summaryDrops: [],
     orgCheckSkipped,
   };
 
@@ -257,11 +270,23 @@ export function guardResume(
       report.restoredRows++;
       return { id: src.id, role: src.role, bullets: src.bullets.map((b) => ({ text: b.text })) };
     }
-    let role = clean(clip(row.role, RESUME_LIMITS.fieldChars)) || src.role;
-    if (hasUnknownOrg(role)) {
-      report.revertedFields++;
-      role = src.role;
-    }
+    /*
+     * LAVOZIMGA tashkilot tekshiruvi QO'LLANMAYDI (jonli sinov, uz→en).
+     *
+     * Model «Yetakchi moliya tahlilchisi» ni «Lead Financial Analyst»
+     * deb TARJIMA qiladi — bu talab qilingan xatti-harakat (18 tilli
+     * chiqish va'dasi). Tekshiruv esa tarjimani kirish tokenlari bilan
+     * kesishmagani uchun «uydirma tashkilot» sanab, o'zbekcha qiymatga
+     * qaytarardi: sarlavhalar inglizcha, lavozimlar o'zbekcha chiqardi.
+     *
+     * Xavf ham yo'q: lavozim — ish beruvchi EMAS. Ish beruvchi
+     * (`company`), muassasa (`institution`) va sertifikat beruvchi
+     * (`issuer`) model javobiga UMUMAN kirmaydi — ular `mergeLlm` da
+     * faqat kirishdan olinadi. Tashkilot tekshiruvi shuning uchun
+     * FAQAT band matni va `summary` uchun qoladi: aynan o'sha ikki
+     * joyda model erkin matn yozadi va yangi nom kiritishi mumkin.
+     */
+    const role = clean(clip(row.role, RESUME_LIMITS.fieldChars)) || src.role;
     const bullets: ResumeLlmBullet[] = [];
     let aiUsed = 0;
     const seen = new Set<string>();
@@ -302,11 +327,9 @@ export function guardResume(
       report.restoredRows++;
       return { id: src.id, degree: src.degree };
     }
-    let degree = clean(clip(row.degree, RESUME_LIMITS.fieldChars)) || src.degree;
-    if (hasUnknownOrg(degree)) {
-      report.revertedFields++;
-      degree = src.degree;
-    }
+    // Daraja ham lavozim bilan bir xil: «Bakalavr, moliya» → «BSc in
+    // Finance» tarjimasi TALAB qilinadi; muassasa nomi kirishdan keladi.
+    const degree = clean(clip(row.degree, RESUME_LIMITS.fieldChars)) || src.degree;
     return { id: src.id, degree };
   });
 
@@ -337,6 +360,7 @@ export function guardResume(
     const badYear = (raw.match(/\b(?:19|20)\d{2}\b/g) ?? []).some((y) => !years.has(y));
     if (badYear || hasUnknownOrg(raw)) {
       report.droppedSentences++;
+      report.summaryDrops.push({ reason: badYear ? "yil" : "tashkilot", text: raw.slice(0, 120) });
       continue;
     }
     kept.push(raw);
