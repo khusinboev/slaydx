@@ -1,7 +1,7 @@
 import type { CustomTemplate } from "./pptx-template";
 import type { TranslationReport } from "./translate/report";
 import type { FormValues, ToolConfig, ToolId } from "../types";
-import type { SlideAudience, SlideTemplateId } from "./slide-templates";
+import type { SlideAudience, SlideTemplateId, SlideVisual } from "./slide-templates";
 import type { SlideModel, SlideThemeId } from "./slide-types";
 import type { SlideBlockId } from "./slide-blocks";
 import type { SlideImageStyle, SlideTextVolume } from "./slide-params";
@@ -219,6 +219,17 @@ export type AcademicDoc = {
   abstracts?: { lang: string; label: string; text: string; keywords: string }[];
   slideTheme?: SlideThemeId;
   slideTemplate?: SlideTemplateId;
+  /**
+   * Deka RENDER QILINGAN vizual (dizayn) — «ko'rdim = oldim» ning vaqt
+   * bo'yicha kafolati. Ilgari vizual har safar joriy reyestrdan
+   * (`slideTemplate` → `visual`) olinardi: Shablonlar 2 da `defense`
+   * `dense` (rasmli titul) dan `formal` (rasmsiz) ga o'tgach, eski PPTX
+   * fayl bir xil, sayt ko'ruvchisi esa boshqacha chizardi; bosh sahifa
+   * kartasi (`preview.slide.visual`, yakunlash vaqtida saqlangan) uchinchi
+   * variant edi. Endi `buildSlideDeck` shu maydonga ustunlik beradi;
+   * eski qatorlar `018_slide_visual_pin.sql` bilan `preview` dan to'ldiriladi.
+   */
+  slideVisual?: SlideVisual;
   slides?: SlideModel[];
   /**
    * Rasm bosqichi nima qilgani — `deliveredCount` uchun YAGONA manba.

@@ -986,6 +986,8 @@ export async function buildSlideAcademicDoc(meta: DocMeta, deadline?: number, op
     sections,
     slideTheme: themeId,
     slideTemplate: tpl.id,
+    // Render vaqtidagi dizayn qadaladi — reyestr o'zgarsa ham deka o'zgarmaydi (`AcademicDoc.slideVisual`).
+    slideVisual: tpl.visual,
     slides,
     slideImages: images,
     slideResearch: research ?? undefined,

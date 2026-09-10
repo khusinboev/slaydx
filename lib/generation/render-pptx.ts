@@ -1,4 +1,4 @@
-import { fetchImageBytes, type ImageBytes } from "./slide-images";
+import { fetchImageBytes, type ImageBytes, imageDims } from "./slide-images";
 import { planSlide, PPTX_FONT, slideNotes, SLIDE_IN, type SlideLayer, type SlidePlan } from "./slide-layout";
 import { buildSlideDeck } from "./slides";
 import { getSlideTheme } from "./slide-themes";
@@ -33,6 +33,18 @@ type ImageCache = Map<string, ImageBytes | null>;
  * bo'lsa AVVAL shu chaqiriladi, `null` qaytsa (begona/nomos URL) odatdagi
  * yo'lga (`fetchImageBytes`) qaytiladi.
  */
+/** Rasm o'lchami: provayder bergan bo'lsa undan, bo'lmasa baytlardan (bir marta, keshda saqlanadi). */
+function imageDimsOf(img: ImageBytes): { w: number; h: number } | undefined {
+  if (img.w && img.h) return { w: img.w, h: img.h };
+  const comma = img.data.indexOf(",");
+  const dims = imageDims(Buffer.from(comma === -1 ? img.data : img.data.slice(comma + 1), "base64"));
+  if (dims) {
+    img.w = dims.w;
+    img.h = dims.h;
+  }
+  return dims;
+}
+
 async function loadImage(
   cache: ImageCache,
   url: string,
@@ -88,14 +100,44 @@ async function paintLayer(
     const img = await loadImage(cache, layer.url, resolveImage);
     if (!img) return;
     const box = layer.box;
+    const fit = layer.fit ?? "cover";
+    /*
+     * pptxgenjs `sizing.contain/cover` rasmning HAQIQIY o'lchamini bilmaydi
+     * (Node'da `image-size` ishlatilmaydi): u `w/h` ni rasm nisbati deb
+     * oladi — ya'ni quti bilan bir xil nisbat → hech qanday kesish/
+     * joylash bo'lmay, rasm qutiga CHO'ZILARDI. Ko'ruvchi esa `object-fit`
+     * bilan to'g'ri chizadi — logotip saytda asl nisbatda, faylda eniga
+     * cho'zilgan edi (AUDIT-14). Endi nisbat baytlardan (`imageDims`):
+     *   contain — rasm qutining ICHIDA markazda, nisbat saqlanadi (o'zimiz
+     *             hisoblab, `sizing`siz joylaymiz — manfiy `srcRect` ga
+     *             tayanmaymiz);
+     *   cover   — `sizing.cover` ga rasm nisbatidagi `w/h` beriladi,
+     *             pptxgenjs `srcRect` bilan qutiga mos kesadi (`object-fit: cover`).
+     */
+    const dims = imageDimsOf(img);
+    const ratio = dims && dims.w > 0 && dims.h > 0 ? dims.h / dims.w : box.h / box.w;
+    if (fit === "contain" && dims) {
+      const boxRatio = box.h / box.w;
+      const w = ratio > boxRatio ? box.h / ratio : box.w;
+      const h = ratio > boxRatio ? box.h : box.w * ratio;
+      slide.addImage({
+        data: img.data,
+        x: box.x + (box.w - w) / 2,
+        y: box.y + (box.h - h) / 2,
+        w,
+        h,
+        ...(layer.shape === "circle" ? { rounding: true } : {}),
+      });
+      return;
+    }
     slide.addImage({
       data: img.data,
       x: box.x,
       y: box.y,
+      // `w/h` — faqat NISBAT uchun (pptxgenjs shundan `srcRect` hisoblaydi); joylashuv `sizing` qutisi bilan.
       w: box.w,
-      h: box.h,
-      // `fit` ko'ruvchi bilan BIR XIL o'qiladi (`SlideCanvas` `objectFit`) — logo `contain`.
-      sizing: { type: layer.fit ?? "cover", w: box.w, h: box.h },
+      h: box.w * ratio,
+      sizing: { type: fit, w: box.w, h: box.h },
       // Dumaloq rasm — ko'ruvchida `border-radius: 50%`.
       ...(layer.shape === "circle" ? { rounding: true } : {}),
     });

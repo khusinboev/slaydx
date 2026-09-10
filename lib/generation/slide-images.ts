@@ -106,6 +106,13 @@ function jpegSize(buf: Buffer): { w: number; h: number } | undefined {
   return undefined;
 }
 
+/** PNG/JPEG baytlaridan haqiqiy o'lcham (piksel) — PPTX `contain/cover` nisbati uchun. */
+export function imageDims(buf: Buffer): { w: number; h: number } | undefined {
+  const type = sniffImageType(buf);
+  if (!type) return undefined;
+  return type === "png" ? pngSize(buf) : jpegSize(buf);
+}
+
 function pngSize(buf: Buffer): { w: number; h: number } | undefined {
   if (buf.length < 24 || buf.toString("ascii", 1, 4) !== "PNG") return undefined;
   return { w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) };

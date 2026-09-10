@@ -49,6 +49,8 @@ test("matn rejimi: ikki ustun juftlar, til chipi (aniqlangan → maqsad), uslub,
   assert.ok(html.includes("SLIDE 1") || html.includes("slide 1"), "ctx guruh yorlig'i");
   assert.ok(!html.includes('role="tablist"'), "matn rejimida tablar yo'q");
   assert.ok(html.includes("fotosintez → photosynthesis"), "glossariy");
+  // Ota konteyner `overflow-hidden` — ro'yxat o'z scroll qutisida (AUDIT-14: pastga scroll bo'lmasdi).
+  assert.match(html, /class="[^"]*overflow-y-auto[^"]*"[^>]*data-translation-scroll/, "scroll konteyneri");
 });
 
 test("ogohlantirishlar: soni va matni; warningText kodlari o'zbekcha", () => {

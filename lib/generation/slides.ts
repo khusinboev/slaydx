@@ -1,6 +1,7 @@
 import { bodyRules } from "./slide-audience";
 import { deckFooter } from "./slide-identity";
-import { resolveSlideTemplate } from "./slide-templates";
+import { resolveSlideTemplate, type SlideVisual } from "./slide-templates";
+import { DESIGN_VISUALS, LEGACY_VISUALS } from "./visuals/spec";
 import { getSlideTheme } from "./slide-themes";
 import type { SlideDeck, SlideModel, SlideThemeId } from "./slide-types";
 import type { AcademicDoc } from "./types";
@@ -22,7 +23,8 @@ export function buildSlideDeck(doc: AcademicDoc): SlideDeck {
     workLabel: doc.meta.workLabel,
     themeId,
     templateId: tpl.id,
-    visual: tpl.visual,
+    // Qadalgan vizual ustun (yuqoridagi `AcademicDoc.slideVisual` izohi); yo'q bo'lsa — joriy reyestr.
+    visual: isKnownVisual(doc.slideVisual) ? doc.slideVisual : tpl.visual,
     audience: doc.meta.slideAudience ?? "auto",
     bodyType: bodyRules(doc.meta, tpl.id),
     logo: doc.slideLogo?.url || undefined,
@@ -31,6 +33,11 @@ export function buildSlideDeck(doc: AcademicDoc): SlideDeck {
   };
   if (doc.slides?.length) return { ...common, slides: doc.slides };
   return { ...common, slides: legacyFromSections(doc) };
+}
+
+const KNOWN_VISUALS = new Set<string>([...LEGACY_VISUALS, ...DESIGN_VISUALS]);
+function isKnownVisual(v: unknown): v is SlideVisual {
+  return typeof v === "string" && KNOWN_VISUALS.has(v);
 }
 
 function clip(text: string, n: number) {

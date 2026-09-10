@@ -51,7 +51,7 @@ export function TranslationViewer({ doc, gen, pdf = false }: { doc: AcademicDoc;
   if (!t) return <WordViewer doc={doc} />;
   const isFile = t.sourceKind !== "text" && t.sourceKind !== "pdf";
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3">
+    <div className="flex h-full min-h-0 flex-1 flex-col gap-3">
       <Header t={t} />
       {isFile ? (
         <div role="tablist" aria-label="Ko‘rinish" className="flex gap-1">
@@ -69,7 +69,10 @@ export function TranslationViewer({ doc, gen, pdf = false }: { doc: AcademicDoc;
           ))}
         </div>
       ) : null}
-      {isFile && tab === "file" ? <FilePane t={t} gen={gen} pdf={pdf} /> : <Pairs t={t} />}
+      {/* Ota konteyner (`ResultView`) `overflow-hidden` — scroll SHU YERDA, aks holda ro'yxat kesilib qoladi. */}
+      <div className="min-h-0 flex-1 overflow-y-auto" data-translation-scroll>
+        {isFile && tab === "file" ? <FilePane t={t} gen={gen} pdf={pdf} /> : <Pairs t={t} />}
+      </div>
     </div>
   );
 }
