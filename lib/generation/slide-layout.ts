@@ -2121,8 +2121,10 @@ function planStats(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
       t: "text",
       box: valBox,
       text: st.value,
-      // Yorug' kartada aksent matn `accentInk` dan — WCAG AA.
-      color: dense ? theme.accent : theme.accentInk,
+      // Yorug' kartada aksent matn `accentInk` dan — WCAG AA. To'q (dense)
+      // sahifada `titleMuted` — u `titleBg` ustida O'LCHANGAN juft; `accent`
+      // ba'zi palitralarda (legal: zumrad ustida zumrad) ko'rinmas edi.
+      color: dense ? theme.titleMuted : theme.accentInk,
       size: fitSize(st.value, valBox, 30, 15),
       bold: true,
       align: "center",

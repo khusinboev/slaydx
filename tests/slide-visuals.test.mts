@@ -132,13 +132,17 @@ test("har shablon o'z dizaynini oladi — dizayn id lari noyob, reyestrda bor", 
   assert.equal(SLIDE_TEMPLATE_BY_ID.auto.visual, "academic");
 });
 
-/**
- * JUFTLIK farqi: titul, bo'lim, bandlar — har ikki dizaynda boshqacha.
- * Dizaynlar chizilgunicha (stub) `todo`; hammasi tayyor bo'lgach oddiy
- * testga aylanadi.
- */
-const allDrawn = DESIGN_VISUALS.every((v) => ["title", "section", "bullets", "agenda", "quote", "closing"].every((l) => VISUALS[v].plan[l as SlideLayout]));
-test("har dizayn juftligi titul/bo'lim/bandlar/reja/iqtibos/yakunda farq qiladi", { todo: !allDrawn }, () => {
+/** Har dizayn oltita majburiy maketni O'ZI chizadi (stub yo'q). */
+test("har dizayn titul/bo'lim/bandlar/reja/iqtibos/yakunni o'zi chizadi", () => {
+  for (const v of DESIGN_VISUALS) {
+    for (const l of ["title", "section", "bullets", "agenda", "quote", "closing"]) {
+      assert.ok(VISUALS[v].plan[l as SlideLayout], `${v}: «${l}» maketi base ga tushib qolgan`);
+    }
+  }
+});
+
+/** JUFTLIK farqi: titul, bo'lim, bandlar… — har ikki dizaynda boshqacha. */
+test("har dizayn juftligi titul/bo'lim/bandlar/reja/iqtibos/yakunda farq qiladi", () => {
   const theme = getSlideTheme("atlas");
   const keyOf = (v: SlideVisual, layout: SlideLayout) =>
     JSON.stringify(planSlide(sampleFor(layout), theme, v, 2, 9, "auto", "lecture", { bodyType }).layers.map((l) => ({ ...l, url: undefined })));

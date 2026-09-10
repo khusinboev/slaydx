@@ -251,9 +251,8 @@ test("har bir visual qiymati renderda haqiqiy farq beradi", async () => {
   const visuals = [...new Set(SLIDE_TEMPLATES.map((t) => t.visual))];
   for (const v of visuals) {
     if (v === "classic") continue;
-    // Hali chizilmagan dizayn (stub, `plan` bo'sh) `base` bilan bir xil — u `tests/slide-visuals.test.mts` da alohida sanaladi.
-    const d = designOf(v);
-    if (d && Object.keys(d.plan).length === 0) continue;
+    // Har dizayn o'z maketlarini chizadi (stub yo'q — `tests/slide-visuals.test.mts` tekshiradi).
+    assert.ok(Object.keys(designOf(v)?.plan ?? {}).length > 0, `«${v}» dizayni stub`);
     const differs = SLIDE_LAYOUTS.some(
       (layout) =>
         JSON.stringify(planSlide(sample(layout), theme, v, 1, 10)) !==
