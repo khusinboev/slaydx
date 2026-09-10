@@ -4,7 +4,8 @@ import type { ToolConfig, UserProfile } from "@/lib/types";
 import { slideParamsFor } from "@/lib/generation/slide-params";
 import { SlideComposer } from "./SlideComposer";
 
-export { TemplatePicker, ColorPicker } from "./slide-pickers";
+export { ColorPicker } from "./slide-pickers";
+export { TemplateGallery } from "./TemplateGallery";
 
 /**
  * Oddiy slayd formasi — `SlideComposer` ning yupqa o'rami (Formalar 2).

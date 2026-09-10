@@ -14,7 +14,7 @@ import { Card, Row, SummaryChips } from "./compact";
 import { ToolChrome } from "./ToolChrome";
 import { runGeneration } from "./runGeneration";
 import { SourceFileField } from "./SourceFileField";
-import { TemplatePicker, ColorPicker } from "./slide-pickers";
+import { TemplateGallery } from "./TemplateGallery";
 import { renderSlideParam, resetBlocksForPurpose, settingsSummary } from "./slide-fields";
 
 /**
@@ -228,13 +228,13 @@ export function SlideComposer({
         </Card>
       ) : null}
 
-      <Card title="Ko‘rinish">
-        <Row label="Shablon" hint="Slaydlar ketma-ketligi va sahna maketi. «Avtomatik» mavzudan tanlaydi.">
-          <TemplatePicker value={String(values.slideTemplate || "auto")} onChange={(v) => set("slideTemplate", v)} />
-        </Row>
-        <Row label="Rang" hint="Faqat palitra — tuzilma o‘zgarmaydi.">
-          <ColorPicker value={String(values.slideTheme || "atlas")} onChange={(v) => set("slideTheme", v)} />
-        </Row>
+      <Card title="Shablon va rang" aside={<span className="text-muted-foreground text-[11.5px]">preview — haqiqiy slaydlar</span>}>
+        <TemplateGallery
+          value={String(values.slideTemplate || "auto")}
+          theme={String(values.slideTheme || "atlas")}
+          onChange={(id) => set("slideTemplate", id)}
+          onTheme={(id) => set("slideTheme", id)}
+        />
       </Card>
 
       {settingIds.length ? (

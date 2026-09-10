@@ -47,6 +47,20 @@ function sampleFor(layout: SlideLayout, long = false): SlideModel {
 const templates = SLIDE_TEMPLATES.filter((t) => t.id !== "auto");
 const themes = ["atlas", "chalk", "ink"] as const;
 
+test("namuna dekalar (galereya) har shablonda xatosiz va chegara ichida — 15 temada", () => {
+  for (const t of templates) {
+    const deck = sampleDeck(t.id);
+    for (const themeId of SLIDE_THEME_IDS) {
+      const theme = getSlideTheme(themeId);
+      deck.forEach((s, i) => {
+        for (const l of planSlide(s, theme, t.visual, i, deck.length, "auto", t.id, { bodyType }).layers) {
+          assert.ok(l.box.x >= -0.01 && l.box.y >= -0.01 && l.box.x + l.box.w <= W + 0.01 && l.box.y + l.box.h <= H + 0.01, `${t.id}/${themeId}/#${i}: qatlam tashqarida`);
+        }
+      });
+    }
+  }
+});
+
 test("har shablon × har maket × 3 tema: xatosiz, qatlamlar slayd ichida (qisqa va uzun matn, rasmli/rasmsiz)", () => {
   for (const t of templates) {
     for (const themeId of themes) {
