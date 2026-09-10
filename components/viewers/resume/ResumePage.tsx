@@ -360,9 +360,10 @@ function Item({ it, ctx }: { it: ResumeItem; ctx: Ctx }) {
                 fontSize: ptPx(t.type.small),
                 padding: "0.6mm 1.8mm",
                 borderRadius: "1mm",
-                background: hex(dark ? P.accent : P.panel),
+                // Fon DOCX bilan bir xil (`accentSoft`) — ochiq `panel` LibreOffice da
+                // deyarli oq chiqib, chip umuman ko'rinmasdi.
+                background: hex(dark ? P.accent : P.accentSoft),
                 color: hex(dark ? P.onDark : P.ink),
-                border: dark ? "none" : `0.2mm solid ${hex(P.accentSoft)}`,
               }}
             >
               {c.text}

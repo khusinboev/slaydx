@@ -644,7 +644,13 @@ test("rezyume profili akademik qolipni tashlaydi", async () => {
   );
   const xml = await docxXml(doc);
 
-  assert.match(xml, /w:ascii="Calibri"/, "sans shrift");
+  /*
+   * Rezyume 2 (AUDIT-15): shrift endi SHABLONDAN keladi (`resumeProfile`),
+   * qat'iy Calibri emas — eski hujjat `legacyResumeModel` orqali `modern`
+   * shabloniga tushadi (Arial). Sinovning MA'NOSI o'zgarmadi: sans shrift,
+   * akademik qolip yo'q, to'q yon panel va rangli sarlavha chizig'i.
+   */
+  assert.match(xml, /w:ascii="Arial"/, "sans shrift");
   assert.doesNotMatch(xml, /w:ascii="Times New Roman"/, "akademik shrift qolmasligi kerak");
   assert.doesNotMatch(xml, /<w:jc w:val="both"\/>/, "CV da justify bo'lmaydi");
   assert.doesNotMatch(xml, /<w:jc w:val="center"\/>/, "CV da markazlashtirilgan sarlavha bo'lmaydi");
@@ -653,8 +659,9 @@ test("rezyume profili akademik qolipni tashlaydi", async () => {
 
   // Yon panel ko'ruvchidagi tuzilmani takrorlaydi.
   const text = await docxText(doc);
-  assert.match(text, /REZYUME/);
-  assert.match(text, /Node\.js · SQL/, "ko'nikmalar yon panelda");
+  assert.match(text, /Qisqacha/, "bo'lim yorliqlari saqlanadi");
+  assert.match(text, /Node\.js/, "ko'nikmalar yon panelda");
+  assert.match(text, /SQL/, "ko'nikmalar yon panelda");
   assert.match(text, /2020–2024 — Dev/, "ish joyi sarlavhasi saqlanadi");
 });
 
@@ -1572,9 +1579,15 @@ test("A4: rezyume DOCX yorliqlari ham hujjat tiliga ergashadi", async () => {
     },
   );
   const text = await docxText(ruDoc);
-  assert.match(text, /РЕЗЮМЕ/, "ruscha rezyumeda «РЕЗЮМЕ»");
-  assert.match(text, /КОНТАКТЫ/, "ruscha «КОНТАКТЫ»");
-  assert.ok(!/REZYUME|ALOQA/.test(text), "o'zbekcha yorliq qolmasligi kerak");
+  /*
+   * Rezyume 2 (AUDIT-15): panelda «РЕЗЮМЕ» yozuvi endi yo'q (u maketda
+   * hech narsa bildirmasdi), lekin YORLIQ TILI qoidasi o'sha —
+   * bo'lim va kontakt sarlavhalari hujjat tilida. BOSH HARF `allCaps`
+   * bilan beriladi, ya'ni matnning o'zi o'zgarmaydi.
+   */
+  assert.match(text, /Контакты/, "ruscha «Контакты»");
+  assert.match(text, /Опыт работы/, "ruscha «Опыт работы»");
+  assert.ok(!/REZYUME|Aloqa/.test(text), "o'zbekcha yorliq qolmasligi kerak");
 });
 
 test("A2: keys hujjatida mundarija yo'q (ko'ruvchi bilan bir xil)", async () => {

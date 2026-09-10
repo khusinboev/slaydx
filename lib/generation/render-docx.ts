@@ -4,7 +4,6 @@ import {
   Document,
   Footer,
   HeadingLevel,
-  HeightRule,
   PageOrientation,
   Packer,
   PageBorderDisplay,
@@ -19,14 +18,15 @@ import {
   TableRow,
   TabStopType,
   TextRun,
-  VerticalAlign,
   WidthType,
 } from "docx";
 import { ESSAY_DESIGNS } from "../languages";
-import { CM, contentHeight, contentWidth, profileFor, type DocProfile } from "./docx-profile";
-import { docLabels, sectionLabels } from "./i18n";
+import { CM, contentWidth, profileFor, resumeProfile, type DocProfile } from "./docx-profile";
+import { docLabels } from "./i18n";
 import { cleanText } from "./quality";
 import { columnPercents } from "./table-columns";
+import { legacyResumeModel } from "./resume/model";
+import { renderResumeDocx, type ResumeDocxOpts } from "./resume/render-docx";
 import { titleModel } from "./title-model";
 import { tocRows } from "./toc-model";
 import type { AcademicDoc, Block, DocTable } from "./types";
@@ -278,123 +278,24 @@ function drawTable(K: Kit, tb: DocTable, out: Array<Paragraph | Table>) {
 }
 
 /**
- * Rezyume tanasi — chegarasiz ikki ustunli jadval.
+ * `opts.resolveImage` — tahrirdan keyingi QAYTA render uchun (B-1).
  *
- * `docx` da haqiqiy ustun oqimi (`column`) butun bo'limga tegadi va
- * matnning qaysi ustunga tushishini boshqarib bo'lmaydi. Jadval esa
- * Word va LibreOffice ikkalasida ham bir xil chiziladi — sayt
- * ko'ruvchisidagi tuzilma (`ResumeViewer`) aynan takrorlanadi.
+ * Saqlangan `doc_json` dagi surat URL i `/api/generations/…/assets/…`
+ * bo'ladi; baytni faqat egalik tekshiruvidan o'tgan server hal qiluvchi
+ * bera oladi (`assetImageResolver`). Shartnoma `render-pptx.ts` dagi
+ * bilan AYNAN bir xil (`ImageBytes`), shuning uchun `edit-adapters.ts`
+ * ikkala rendererga bitta hal qiluvchini uzata oladi.
  */
-function resumeBody(doc: AcademicDoc, K: Kit, P: DocProfile): Array<Paragraph | Table> {
+export async function renderDocx(doc: AcademicDoc, opts: ResumeDocxOpts = {}): Promise<Uint8Array> {
   const { meta } = doc;
-  // Rezyume yorliqlari ham hujjat tiliga ergashadi — sayt ko'ruvchisi
-  // (`ResumeViewer`) bilan bir xil (AUDIT-6 A4).
-  const RL = sectionLabels(meta.language);
-  const byId = Object.fromEntries(doc.sections.map((s) => [s.id, s]));
-  const blocks = (id: string) => byId[id]?.blocks ?? [];
-  const title = (id: string, fallback: string) => byId[id]?.title || fallback;
-
-  const summaryBlocks = blocks("summary");
-  const summary = summaryBlocks[0]?.text ?? "";
-  const contact = summaryBlocks[1]?.text ?? meta.city;
-  const skills = blocks("skills").map((b) => b.text).join(" · ");
-
-  const ASIDE_W = Math.round(72 * 56.7); // 72 mm — ko'ruvchidagi yon panel kengligi
-  const MAIN_W = Math.max(K.CONTENT_W - ASIDE_W, Math.round(K.CONTENT_W / 2));
-
-  const asideLabel = (text: string) =>
-    new Paragraph({
-      spacing: { before: 240, after: 60, line: P.type.line },
-      children: [K.run(text.toUpperCase(), { size: 16, bold: true, color: "A8A29E" })],
-    });
-  const asideText = (text: string) =>
-    new Paragraph({
-      spacing: { after: 60, line: P.type.line },
-      children: [K.run(text, { size: 18, color: "E7E5E4" })],
-    });
-
-  const aside: Paragraph[] = [
-    new Paragraph({
-      spacing: { after: 120, line: P.type.line },
-      // Ko'ruvchida CSS `uppercase` — DOCX da qo'lda.
-      children: [K.run(RL.viewerResume.toUpperCase(), { size: 16, bold: true, color: "FDBA74" })],
-    }),
-    new Paragraph({
-      spacing: { after: 60, line: P.type.line },
-      children: [K.run(meta.author || "F.I.Sh", { size: 30, bold: true, color: "F5F5F4" })],
-    }),
-    new Paragraph({
-      spacing: { after: 60, line: P.type.line },
-      children: [K.run(meta.topic, { size: 20, color: "FED7AA" })],
-    }),
-    asideLabel(RL.fieldContact),
-    ...contact.split(" · ").filter(Boolean).map(asideText),
-  ];
-  if (skills) {
-    aside.push(asideLabel(RL.skills));
-    aside.push(asideText(skills));
-  }
-
-  const main: Array<Paragraph | Table> = [];
-  if (summary) {
-    main.push(K.sectionHeading(title("summary", RL.summary)));
-    main.push(K.bodyP(summary));
-  }
-  for (const id of ["exp", "edu"]) {
-    const bs = blocks(id);
-    if (!bs.length) continue;
-    main.push(K.sectionHeading(title(id, id === "exp" ? RL.experience : RL.education)));
-    for (const b of bs) main.push(...K.blockToParagraphs(b));
-  }
-
-  const noBorder = { style: BorderStyle.NONE, size: 0, color: "auto" } as const;
-  const borders = { top: noBorder, bottom: noBorder, left: noBorder, right: noBorder };
-  return [
-    new Table({
-      width: { size: K.CONTENT_W, type: WidthType.DXA },
-      columnWidths: [ASIDE_W, MAIN_W],
-      borders: {
-        ...borders,
-        insideHorizontal: noBorder,
-        insideVertical: noBorder,
-      },
-      rows: [
-        new TableRow({
-          /*
-           * Yon panel sahifa balandligini to'ldiradi.
-           *
-           * Jadval katagi odatda faqat mazmuni qadar cho'ziladi va to'q
-           * panel varaqning yarmida uzilib qolardi — ko'ruvchida esa u
-           * to'liq balandlikda. `ATLEAST` tanlandi: tajriba uzun bo'lsa
-           * katak yana ham cho'ziladi, qisqa bo'lsa sahifani to'ldiradi.
-           */
-          height: { value: contentHeight(P), rule: HeightRule.ATLEAST },
-          children: [
-            new TableCell({
-              borders,
-              width: { size: ASIDE_W, type: WidthType.DXA },
-              shading: { type: ShadingType.CLEAR, fill: "1C1917" },
-              margins: { top: 340, bottom: 340, left: 280, right: 280 },
-              verticalAlign: VerticalAlign.TOP,
-              children: aside,
-            }),
-            new TableCell({
-              borders,
-              width: { size: MAIN_W, type: WidthType.DXA },
-              margins: { top: 340, bottom: 200, left: 340, right: 120 },
-              verticalAlign: VerticalAlign.TOP,
-              children: main.length ? main : [K.bodyP("")],
-            }),
-          ],
-        }),
-      ],
-    }),
-  ];
-}
-
-export async function renderDocx(doc: AcademicDoc): Promise<Uint8Array> {
-  const { meta } = doc;
-  const P = profileFor(meta);
+  const base = profileFor(meta);
+  /*
+   * Rezyume modeli: yangi hujjatda `doc.resume`, eskisida
+   * `legacyResumeModel` (B-8). Profil SHABLONGA bog'liq bo'lgani uchun
+   * model profildan OLDIN aniqlanadi.
+   */
+  const resume = doc.resume ?? (base.id === "resume" ? legacyResumeModel(doc) : null);
+  const P = resume ? resumeProfile(resume.template) : base;
   const K = makeKit(P);
   const L = docLabels(meta.language);
   const children: Array<Paragraph | Table> = [];
@@ -456,8 +357,8 @@ export async function renderDocx(doc: AcademicDoc): Promise<Uint8Array> {
 
   const hasTitle = Boolean(doc.titlePage) && P.titlePage !== "none";
 
-  if (P.id === "resume") {
-    children.push(...resumeBody(doc, K, P));
+  if (resume) {
+    children.push(...(await renderResumeDocx(resume, K, P, opts)));
   } else {
     if (doc.toc) {
       children.push(K.heading(L.toc, HeadingLevel.HEADING_1));
