@@ -24,6 +24,7 @@ import { buildArtifact } from "../lib/generation/index.ts";
 import { parsePptxTemplate } from "../lib/generation/pptx-template.ts";
 import { readFile } from "node:fs/promises";
 import { extractMeta } from "../lib/generation/meta.ts";
+import { minSummaryChars, summaryLimits } from "../lib/generation/resume/write.ts";
 import type { SlideProgressEvent } from "../lib/generation/slide-progress.ts";
 import { wordCount } from "../lib/generation/quality.ts";
 import { slideNotes } from "../lib/generation/slide-layout.ts";
@@ -137,7 +138,17 @@ const CASES: Case[] = [
       const perRow = m?.experience.map((e) => e.bullets.filter((b) => b.ai).length) ?? [];
       return [
         ok("model bor", Boolean(m), m ? `${m.experience.length} ish joyi, ${m.skills.length} ko'nikma` : "yo'q"),
-        ok("summary 220–700", (m?.summary.length ?? 0) >= 220 && (m?.summary.length ?? 0) <= 700, `${m?.summary.length ?? 0} belgi`),
+        /*
+         * Uzunlik YOZUV TIZIMIGA bog'liq: 209 ta yapon belgisi inglizcha
+         * ~450 belgiga teng ma'lumot beradi. Chegara dvigatel bilan
+         * BITTA manbadan (`summaryLimits`) olinadi — aks holda jonli
+         * sinov modelni to'g'ri yozgani uchun yiqitardi.
+         */
+        ok(
+          `summary ≥ ${minSummaryChars(langArg())}`,
+          (m?.summary.length ?? 0) >= minSummaryChars(langArg()) && (m?.summary.length ?? 0) <= summaryLimits(langArg()).promptMax + 120,
+          `${m?.summary.length ?? 0} belgi (til ${langArg()})`,
+        ),
         ok("kompaniya verbatim", Boolean(m) && ["Artel Electronics", "Korzinka"].every((c) => m!.experience.some((e) => e.company === c)), m?.experience.map((e) => e.company).join(" | ") ?? ""),
         ok("sana o'zgarmagan", m?.experience[0]?.end === "now" && m?.experience.some((e) => e.start === "2019-08"), m?.experience.map((e) => `${e.start}→${e.end}`).join(" ") ?? ""),
         ok("uydirma yil yo'q", !strayYear, strayYear ? `topildi: ${strayYear}` : "toza"),
