@@ -36,7 +36,13 @@ Tahrir: ResumeOp[] → PATCH /api/generations/{id}/doc → edit-adapters (slide 
 
 ## 3. Sinov
 
-(sprint yakunida to'ldiriladi)
+> Bo'lim sprint davomida to'ldirilib boradi; ko'ruvchi/tahrir qismi WP2–WP4 tugagach yakunlanadi.
+
+- **Jonli** (`npm run live -- resume …`, haqiqiy Gemini): uz kirish → `en` chiqish 11/11 yashil (summary 360 belgi, kompaniyalar verbatim, kirishda yo'q yil yo'q, xronologik tartib, `ai` shifti 1–2/ish joyi, 1 bet, ~3 s); `--lang de --enrich-off` 11/11 (yorliqlar «Berufserfahrung · Ausbildung» — modeldan, 0 ta `ai`); `--lang ja` yorliqlar 職務経歴 · 学歴; `--photo <fayl>` bilan DOCX ichida rasm (11 KB → 101 KB).
+- **Jonli sinov topgan uchta nuqson** (unit testlar ko'rmagan, hammasi tuzatilgan): (1) tarjima qilingan lavozim/daraja qo'riqchi tomonidan o'zbekchaga QAYTARILARDI — endi tashkilot tekshiruvi `role`/`degree` ga umuman qo'llanmaydi; (2) qisqacha uzunlik darvozasi qo'riqchidan OLDIN o'lchardi — endi keyin, chegara 200; (3) qo'riqchi ikki bosh harfli har qanday birikmani tashkilot deb bilardi (`Financial Analyst`, nemischa `Management-Reporting`) va qisqachaning eng kuchli jumlasini tashlardi — endi tashkilot MARKERI (`GmbH, LLC, MChJ, Bank, Universitet…`) yoki akronim talab qilinadi.
+- **Brauzer (Chromium, admin sessiya)**: forma → telefon `+998 90 123 45 67` → kasb typeahead («бухг» → Buxgalter) → ish joyi + oy/yil → surat yuklash va kesish → shablon dialogi (6 karta, palitra) → qayta yuklashda qoralama tiklandi → «Yaratish» 3 000 tanga → natija sahifasi. Smoke ikki nuqsonni topdi: (a) `ToolWorkspace` hali ESKI sehrgarni chizardi (kommit orasida yo'qolgan o'zgarish — endi dispatch testi bor), (b) galereya namunasi `/samples/resume-photo*` ni so'rar, fayllar yo'q edi (404) — endi neytral avatar chizmasi qo'shildi.
+- **HTTP integratsiyasi**: 12 ta ish joyi × 6 band + 8 ta ta'lim (JSON maydon 9,2 KB) `POST /api/generations` orqali o'tdi va 2 betlik DOCX bo'lib qaytdi — B-3 (`MAX_JSON` 24 000) haqiqiy yo'lda tasdiqlandi.
+- **Ishlab chiqarish buildi**: `npm run build` toza (ogohlantirishsiz), `data/professions.json` bundle ichida; worker tasviriga ham `data/` ko'chiriladi.
 
 ## 4. Bajarilish yozuvi
 
