@@ -1,3 +1,4 @@
+import { RESUME_TEMPLATES, type ResumeTemplateId } from "./resume/templates";
 import type { DocMeta } from "./types";
 
 /**
@@ -261,6 +262,51 @@ const PROFILES: Record<DocProfileId, DocProfile> = {
     tableSize: 22,
   },
 };
+
+/**
+ * Rezyume profili — SHABLONGA bog'langan (Rezyume 2, AUDIT-15).
+ *
+ * Ilgari `PROFILES.resume` bitta qat'iy qolip edi: Calibri 10.5 pt va
+ * har tomondan 1.4–1.5 sm chegara. Olti shablonning har biri esa o'z
+ * tipografiyasi va chegarasi bilan e'lon qilingan (`RESUME_TEMPLATES`)
+ * — panelli maketda chegara UMUMAN bo'lmasligi kerak (panel varaq
+ * chetiga tegib turadi), bannerli maketda esa faqat pastda. Profil shu
+ * ma'lumotdan quriladi, ya'ni yangi shablon qo'shish rendererga
+ * tegmaydi.
+ *
+ * `id` «resume» bo'lib QOLADI — `renderDocx` dagi tarmoq va eski
+ * hujjatlar shu identifikatorga tayanadi.
+ */
+export function resumeProfile(templateId: ResumeTemplateId): DocProfile {
+  const t = RESUME_TEMPLATES[templateId] ?? RESUME_TEMPLATES.modern;
+  const mm = (v: number) => Math.round(v * 56.7);
+  const side = t.columns === "sidebar-left" || t.columns === "sidebar-right";
+  // Panel/banner varaq chetiga tegishi kerak — chegara 0, chekinishni
+  // katak (`margins`) yoki paragraf (`indent`) beradi.
+  const margin = side
+    ? { top: 0, bottom: 0, left: 0, right: 0 }
+    : t.columns === "banner"
+      ? { top: 0, bottom: mm(t.marginsMm.bottom), left: 0, right: 0 }
+      : { top: mm(t.marginsMm.top), bottom: mm(t.marginsMm.bottom), left: mm(t.marginsMm.left), right: mm(t.marginsMm.right) };
+  return {
+    ...PROFILES.resume,
+    page: { ...PROFILES.resume.page, margin },
+    type: {
+      font: t.type.font,
+      size: Math.round(t.type.body * 2),
+      line: Math.round(240 * t.type.line),
+      justify: false,
+      firstLine: 0,
+      after: 100,
+    },
+    heading: {
+      align: "left",
+      upper: t.heading !== "rule",
+      rule: t.heading === "rule" || t.heading === "hairline",
+    },
+    tableSize: Math.round(t.type.small * 2),
+  };
+}
 
 /**
  * Janr uchun profil. Yagona joy — renderer boshqa hech qayerda
