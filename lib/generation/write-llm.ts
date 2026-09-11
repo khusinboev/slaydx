@@ -23,8 +23,9 @@ import {
   writeMapWithLlm,
 } from "./write-specials";
 import { buildResumeDoc } from "./resume/write";
+import { buildArticleDoc, type ArticleBuildOpts } from "./article/engine";
 import type { FormValues } from "../types";
-import type { AcademicDoc, Block, DocMeta, DocSection } from "./types";
+import type { AcademicDoc, Block, BuiltFile, DocMeta, DocSection } from "./types";
 
 /*
  * `outlineShape` `structure.ts` ga ko'chirildi — uni PROMPT ham o'qishi
@@ -372,9 +373,6 @@ function introBrief(meta: DocMeta, topic: string): string {
   if (meta.toolId === "mustaqil-ish") {
     return `«${topic}» bo‘yicha: dolzarblik, maqsad, va talaba bu ishda ANIQ nimani mustaqil bajarishi (hisoblaydi/yechadi/tahlil qiladi).`;
   }
-  if (meta.toolId === "article") {
-    return `«${topic}» maqolasi uchun qisqa kirish: muammo, maqsad, ishning qiymati. «Vazifalar ro‘yxati», obyekt/predmet kabi akademik-metodik bo‘limlar YOZMANG.`;
-  }
   if (meta.toolId === "thesis") {
     return `«${topic}» tezisi uchun juda qisqa kirish: muammo va maqsad, 2–3 gapda.`;
   }
@@ -707,11 +705,12 @@ export async function writeWriterWithLlm(meta: DocMeta, deadline?: number): Prom
    *
    * Ilgari annotatsiya faqat `toolId === "article"` da bor edi — standart
    * tezis annotatsiyasiz chiqardi, garchi forma `annotationLangs`
-   * tanlovini bersa ham. Endi ikkalasi ham qamraladi, `writeAbstracts`
-   * esa `annotationLangs === "all"` bo'lsa uch tilda ham yozadi.
+   * tanlovini bersa ham. Endi tezis qamraladi va `writeAbstracts`
+   * `annotationLangs === "all"` bo'lsa uch tilda ham yozadi. Maqola bu
+   * yo'ldan o'tmaydi (Maqola 2 — `article/engine.ts`, annotatsiya doim 3 tilda).
    */
   let abstracts: AcademicDoc["abstracts"];
-  if ((meta.toolId === "article" || meta.toolId === "thesis") && remainingMs(deadline) > 12_000) {
+  if (meta.toolId === "thesis" && remainingMs(deadline) > 12_000) {
     abstracts = await writeAbstracts(sys, topic, meta, deadline);
   }
 
@@ -1021,15 +1020,40 @@ export async function writeEssayWithLlm(meta: DocMeta, deadline?: number): Promi
   };
 }
 
-const WRITER = new Set(["referat", "coursework", "mustaqil-ish", "article", "thesis"]);
+/*
+ * `article` bu ro'yxatda YO'Q (Maqola 2): u o'z dvigateliga
+ * (`article/engine.ts`) ketadi — tekshirilgan manbalar, tur skeleti,
+ * uch tilli annotatsiya. Eski umumiy yozuvchi yo'li unga qaytmaydi.
+ */
+const WRITER = new Set(["referat", "coursework", "mustaqil-ish", "thesis"]);
+
+/**
+ * Dvigatelga uzatiladigan qo'shimcha imkoniyatlar (Maqola 2): bosqich
+ * hisoboti, yuklangan fayl va LLM sarfi. `writeWithLlm` shartnomasi
+ * (`AcademicDoc | null`) o'zgarmaydi — sarf `onCost` orqali chiqadi,
+ * `index.ts` uni `BuiltFile.cost` ga yozadi.
+ */
+export type WriteExtras = Pick<ArticleBuildOpts, "onStage" | "source"> & { onCost?: (cost: NonNullable<BuiltFile["cost"]>) => void };
 
 export async function writeWithLlm(
   meta: DocMeta,
   values: Record<string, unknown> = {},
   deadline?: number,
+  extras: WriteExtras = {},
 ): Promise<AcademicDoc | null> {
   if (meta.toolId === "essay") return writeEssayWithLlm(meta, deadline);
-  if ((meta.toolId === "article" || meta.toolId === "thesis") && meta.kind === "imrad") {
+  /*
+   * Maqola 2 (AUDIT-17): maqola — o'z dvigateli. Eski formadagi
+   * `kind === "imrad"` `normalizeArticleType` orqali `imrad_classic` ga
+   * ko'chadi; IMRAD yo'li (`writeImradWithLlm`) endi FAQAT tezisda.
+   */
+  if (meta.toolId === "article") {
+    const built = await buildArticleDoc(meta, values as FormValues, { deadline: deadline ?? Date.now() + 240_000, onStage: extras.onStage, source: extras.source });
+    if (!built) return null;
+    extras.onCost?.(built.cost);
+    return built.doc;
+  }
+  if (meta.toolId === "thesis" && meta.kind === "imrad") {
     return writeImradWithLlm(meta, deadline);
   }
   if (WRITER.has(meta.toolId)) return writeWriterWithLlm(meta, deadline);

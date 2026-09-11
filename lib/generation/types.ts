@@ -356,6 +356,14 @@ export type BuiltFile = {
    * mexanizmdan o'tadi.
    */
   delivered?: Delivered;
+  /**
+   * LLM sarfi (Maqola 2, AUDIT-17) — `CostMeter.toJson()`:
+   * `{provider, model, inputTokens, outputTokens, calls, usd}`. Worker
+   * `generations.cost_json` ga yozadi (WP4); `scripts/cost-report.mts`
+   * vosita bo'yicha tannarx vs narx (marja) ni shundan hisoblaydi. Hozircha
+   * faqat maqola dvigateli to'ldiradi.
+   */
+  cost?: { provider: string; model: string; inputTokens: number; outputTokens: number; calls: number; usd: number };
 };
 
 export type BuildCtx = {

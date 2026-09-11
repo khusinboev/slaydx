@@ -1,6 +1,7 @@
 import "server-only";
 import { MAX_SOURCE_CHARS } from "../tools";
 import { RESUME_JSON_FIELDS } from "../generation/resume/input";
+import { ARTICLE_JSON_FIELDS } from "../generation/article-params";
 import type { FormValues } from "../types";
 
 /**
@@ -57,7 +58,12 @@ const MID_FIELDS = new Set(["userGlossary"]);
  * bu yerda ham qo'lda yozilsa, yangi maydon qo'shilganda jim kesilardi.
  */
 const MAX_JSON = 24_000;
-const JSON_FIELDS = new Set<string>(RESUME_JSON_FIELDS);
+/*
+ * Maqola 2: `authors`, `userRefs`, `keywords`, `userData` ham JSON —
+ * 40 ta manba qatori 4 000 belgiga sig'maydi; ro'yxat `article-params.ts`
+ * reyestridan (rezyume bilan bir xil naqsh).
+ */
+const JSON_FIELDS = new Set<string>([...RESUME_JSON_FIELDS, ...ARTICLE_JSON_FIELDS]);
 
 /** Faqat kutilgan turdagi qiymatlar o'tadi; kalitlar oq ro'yxat shaklida. */
 export function sanitizeValues(raw: unknown): FormValues | null {

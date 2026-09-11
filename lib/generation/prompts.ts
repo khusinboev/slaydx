@@ -132,26 +132,12 @@ export function mustaqilIshSystemPrompt(meta: DocMeta): string {
     .join("\n");
 }
 
-/**
- * Standart (bobli bo'lmagan) maqola — jurnal maqolasi ko'rinishida
- * chiqishi kerak, kurs ishi shaklidagi «I BOB / II BOB» EMAS.
+/*
+ * `articleSystemPrompt` bu yerdan OLIB TASHLANDI (Maqola 2, AUDIT-17):
+ * maqola endi umumiy yozuvchi yo'lidan o'tmaydi — o'z dvigateli va
+ * inglizcha promptlari `article/prompts.ts` da (tekshirilgan manbalar
+ * bilan `[W…]` iqtibos, tur skeleti, uch tilli annotatsiya).
  */
-export function articleSystemPrompt(meta: DocMeta): string {
-  return [
-    `Siz ilmiy jurnal uchun maqola muharririsiz.`,
-    `Mavzu: «${meta.topic}». Fan: ${meta.subject || "mavzudan aniqlang"}.`,
-    `Hajm yo‘nalishi: taxminan ${meta.targetPages} bet.`,
-    ...writerCommonLines(meta),
-    `BU JURNAL MAQOLASI — talaba kurs ishi EMAS:`,
-    `— «I BOB», «II BOB» kabi bob raqamlash ISHLATMANG; bo‘limlar oddiy nomlangan bo‘lsin (masalan «Muammoning qo‘yilishi», «Tahlil va muhokama»);`,
-    `— kirish qisqa: muammo, maqsad, ishning qiymati — bir necha paragraf, «vazifalar ro‘yxati» kabi byurokratik shakl kerak emas;`,
-    `— asosiy qism — tahlil va muhokama, «tadqiqot obyekti/predmeti» degan akademik-metodik bo‘limlar kerak emas;`,
-    `— xulosa — natijalarning qisqa, aniq umumlashmasi.`,
-    ...writerTail(meta),
-  ]
-    .filter(Boolean)
-    .join("\n");
-}
 
 /**
  * Standart (IMRAD bo'lmagan) tezis — O'zbekistonda odatda 2-5 betlik
@@ -185,8 +171,9 @@ export function writerSystemPrompt(meta: DocMeta): string {
   if (meta.toolId === "coursework") return courseworkSystemPrompt(meta);
   if (meta.toolId === "referat") return referatSystemPrompt(meta);
   if (meta.toolId === "mustaqil-ish") return mustaqilIshSystemPrompt(meta);
-  if (meta.toolId === "article") return articleSystemPrompt(meta);
-  if (meta.toolId === "thesis") return thesisSystemPrompt(meta);
+  // Maqola bu dispetcherdan o'tmaydi (`article/engine.ts`); `/api/outline`
+  // uni chaqirib qolsa — tezis prompti eng yaqin janr (bobsiz, qisqa).
+  if (meta.toolId === "article" || meta.toolId === "thesis") return thesisSystemPrompt(meta);
   return courseworkSystemPrompt(meta);
 }
 

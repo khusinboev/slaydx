@@ -18,7 +18,10 @@ import { pdfAvailable, toPdf } from "../server/pdf";
 import { scaleDoc } from "./scale";
 import { hardMissing, missingStructure, needLabel } from "./structure";
 import { writeWithLlm } from "./write-llm";
-import type { BuiltFile } from "./types";
+import { articleWordPlan } from "./article/engine";
+import { ARTICLE_TYPES } from "./article/types-registry";
+import { PUBLICATION_PROFILES } from "./article/profiles";
+import type { AcademicDoc, BuiltFile } from "./types";
 import type { FormValues, ToolConfig } from "../types";
 
 export type { BuiltFile } from "./types";
@@ -41,6 +44,9 @@ const NO_SCALE = new Set([
   "texnologik-xarita",
   "resume",
   "translation",
+  // Maqola 2: shablon zaxirasi (kalitsiz muhit) ham «kengaytirilmaydi» —
+  // maqola hajmi tur/profil bilan boshqariladi, `scaleDoc` bilan emas.
+  "article",
 ]);
 
 /**
@@ -128,6 +134,25 @@ export type BuildOptions = {
   photo?: { url: string; assetId: string; shape: "circle" | "square"; crop?: { x: number; y: number; zoom: number }; originalAssetId?: string };
 };
 
+/** Maqola turining so'z oralig'i (tezis) — bor bo'lsa hujjat bet bilan o'lchanmaydi. */
+function articleWordRange(doc: AcademicDoc): [number, number] | undefined {
+  const type = doc.article?.type ?? doc.meta.articleType;
+  return type ? ARTICLE_TYPES[type]?.wordRange : undefined;
+}
+
+/**
+ * Maqola hajm darvozasi uchun «kerak» so'z: `wordRange` li turda pastki
+ * chegara (tezis 200), qolganida profil bo'yicha butun hujjat so'zi
+ * (`articleWordPlan.total` — annotatsiya ×3 ham hisobda, `wordCount` kabi).
+ */
+function articleGateWords(doc: AcademicDoc): number {
+  const typeId = doc.article?.type ?? doc.meta.articleType ?? "imrad_oak";
+  const type = ARTICLE_TYPES[typeId];
+  if (type.wordRange) return type.wordRange[0];
+  const profileId = doc.article?.profile ?? doc.meta.pubProfile ?? type.defaultProfile;
+  return articleWordPlan(doc.meta, type, PUBLICATION_PROFILES[profileId]).total;
+}
+
 export async function buildArtifact(
   tool: ToolConfig,
   values: FormValues,
@@ -205,7 +230,12 @@ export async function buildArtifact(
     return { html: renderHtml(resumeDoc), bytes: await renderDocx(resumeDoc), fileName, mime: DOCX, doc: resumeDoc };
   }
 
-  const llmDoc = await writeWithLlm(meta, values, deadline);
+  /*
+   * Maqola 2: dvigatel bosqich hisobotini (`onStage`), yuklangan faylni
+   * (`source`) va LLM sarfini (`onCost` → `BuiltFile.cost`) shu yo'ldan oladi.
+   */
+  let cost: BuiltFile["cost"];
+  const llmDoc = await writeWithLlm(meta, values, deadline, { onStage: opts.onStage, source: opts.source, onCost: (c) => (cost = c) });
 
   /**
    * Kalit bor, lekin AI matn yozmadi — shablonga tushmaymiz.
@@ -232,7 +262,12 @@ export async function buildArtifact(
    * uchun to'lab, 9 betlik fayl olardi. Xato + kredit qaytishi halolroq.
    */
   if (llmDoc && LENGTH_GATED.has(tool.id)) {
-    const want = targetWords(meta.targetPages);
+    /*
+     * Maqola: so'z maqsadi PROFILGA (shrift/interval) va TURGA bog'liq
+     * (`articleWordPlan`): tezis 200–300 so'z bilan o'lchanadi, bet bilan
+     * emas; IEEE (TNR 12, yakka) bir betga OAK dan 1.7 marta ko'p so'z oladi.
+     */
+    const want = tool.id === "article" ? articleGateWords(academic) : targetWords(meta.targetPages);
     const got = wordCount(academic);
     if (got < want * MIN_LENGTH_RATIO) {
       const pages = Math.max(1, Math.round(got / 230));
@@ -283,7 +318,13 @@ export async function buildArtifact(
    * ikkilamchi tekshiruv, o'girish muvaffaqiyatsiz bo'lgani uchun
    * foydalanuvchi to'g'ri hujjatdan mahrum bo'lmasligi kerak.
    */
-  if (llmDoc && LENGTH_GATED.has(tool.id) && pdfAvailable() && remainingMs(deadline) > 20_000) {
+  /*
+   * So'z bilan o'lchanadigan maqola turlari (tezis 200–300 so'z) sahifa
+   * va'da qilmaydi — ular uchun renderlangan sahifa darvozasi yo'q
+   * (`max(2, …)` bir sahifalik tezisni yiqitardi).
+   */
+  const pageGated = LENGTH_GATED.has(tool.id) && !(tool.id === "article" && articleWordRange(academic));
+  if (llmDoc && pageGated && pdfAvailable() && remainingMs(deadline) > 20_000) {
     const pdf = await toPdf(bytes, `${meta.fileNameHint}.docx`).catch(() => null);
     if (pdf) {
       try {
@@ -312,6 +353,7 @@ export async function buildArtifact(
     fileName: `${meta.fileNameHint}${suffix}`,
     mime: DOCX,
     doc: academic,
+    ...(cost ? { cost } : {}),
     /*
      * Glossariy va texnologik xaritada ham son VA'DA qilingan:
      * «40 ta atama» tanlovi narxni belgilaydi (6/9/15 ming), haftalar

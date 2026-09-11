@@ -1,4 +1,6 @@
 import { parseManualOutline, type ManualChapter } from "./quality";
+import { ARTICLE_TYPES, hardSections } from "./article/types-registry";
+import { articleLabels } from "./article/labels";
 import type { AcademicDoc, DocMeta } from "./types";
 
 /**
@@ -17,7 +19,11 @@ import type { AcademicDoc, DocMeta } from "./types";
  * uni prompt (`mustaqilIshSystemPrompt`) so'raydi, bu modul esa
  * tekshiradi.
  */
-export type StructureNeed = "abstract" | "table" | "ownTask";
+/**
+ * `section:<id>` — maqola tur skeletidagi `hard` bo'lim (Maqola 2);
+ * `prismaFigure` — sistematik sharhda PRISMA sxemasi (`review_systematic`).
+ */
+export type StructureNeed = "abstract" | "table" | "ownTask" | "prismaFigure" | `section:${string}`;
 
 /**
  * Qat'iy talab: bajarilmasa ish xato bilan tugaydi va kredit qaytadi.
@@ -26,6 +32,11 @@ export type StructureNeed = "abstract" | "table" | "ownTask";
  * ikki marta uriniladi, ya'ni bu yerga yetib kelish kam uchraydi; jurnal
  * maqolasi yoki konferensiya tezisi esa annotatsiyasiz o'z janrida
  * umuman yaroqsiz — uni yuborib bo'lmaydi.
+ *
+ * Maqola 2: tur skeletidagi `hard` bo'limlar (`section:results` kabi) va
+ * PRISMA ham qat'iy — «Natijalar»siz IMRAD yoki PRISMA'siz sistematik
+ * sharh jurnalga yuborilmaydi. Manbalar ulushi esa ATAYIN qat'iy emas:
+ * OpenAlex tushsa maqola baribir chiqadi, hisobotda qizil bo'ladi.
  *
  * `table` ATAYIN yumshoq: u `meta.includeVisuals` — foydalanuvchining
  * O'Z tanloviga bog'liq va bezak xarakterida. To'liq yozilgan 24 000
@@ -37,17 +48,29 @@ export type StructureNeed = "abstract" | "table" | "ownTask";
  * Darvoza noto'g'ri ishga tushsa, u foydalanuvchidan pul emas, ishonch
  * oladi.
  */
-const HARD: ReadonlySet<StructureNeed> = new Set<StructureNeed>(["abstract"]);
+const HARD_FIXED: ReadonlySet<string> = new Set(["abstract", "prismaFigure"]);
+const isHard = (n: StructureNeed) => HARD_FIXED.has(n) || n.startsWith("section:");
 
-const LABEL: Record<StructureNeed, string> = {
+const LABEL: Record<"abstract" | "table" | "ownTask" | "prismaFigure", string> = {
   abstract: "annotatsiya",
   table: "jadval",
   ownTask: "mustaqil bajarilgan vazifa",
+  prismaFigure: "PRISMA sxemasi",
 };
 
 export function structureNeeds(meta: DocMeta): StructureNeed[] {
   switch (meta.toolId) {
-    case "article":
+    case "article": {
+      /*
+       * Maqola 2: annotatsiya + tur skeletidagi `hard` bo'limlar + PRISMA.
+       * Tur `meta.articleType` dan (dvigatel uni `doc.meta` ga yozadi);
+       * berilmasa `imrad_oak` — reyestr standarti.
+       */
+      const type = ARTICLE_TYPES[meta.articleType ?? "imrad_oak"];
+      const out: StructureNeed[] = ["abstract", ...hardSections(type.id).map((id): StructureNeed => `section:${id}`)];
+      if (type.requiresPrisma) out.push("prismaFigure");
+      return out;
+    }
     case "thesis":
       return ["abstract"];
     case "coursework":
@@ -86,23 +109,48 @@ function hasOwnTask(doc: AcademicDoc): boolean {
   return last.blocks.some((b) => (b.text.match(/\d/g) ?? []).length >= 2);
 }
 
+/**
+ * Maqola bo'limi bormi: id aynan yoki `body-1`, `body-2` (erkin bo'limlar
+ * skeletdagi `body` o'rnida) — va kamida bitta blok bilan. Bo'sh bo'lim
+ * «bor» hisoblanmaydi: dvigatel javobsiz qolgan bo'limni bo'sh qaytaradi,
+ * darvoza aynan shuni ushlashi kerak.
+ */
+function hasArticleSection(doc: AcademicDoc, id: string): boolean {
+  return doc.sections.some((s) => (s.id === id || s.id.startsWith(`${id}-`)) && s.blocks.length > 0);
+}
+
 export function missingStructure(meta: DocMeta, doc: AcademicDoc): StructureNeed[] {
   const out: StructureNeed[] = [];
-  for (const need of structureNeeds(meta)) {
+  /*
+   * Maqola turi HUJJATDAN: dvigatel eski `kind: "imrad"` ni
+   * `imrad_classic` ga ko'chirib `doc.meta`/`doc.article` ga yozadi —
+   * formadan kelgan `meta` da bu bo'lmasligi mumkin, darvoza esa
+   * yozilgan turga qarab tekshirishi kerak.
+   */
+  const effective: DocMeta = meta.toolId === "article" ? { ...meta, articleType: doc.article?.type ?? doc.meta.articleType ?? meta.articleType } : meta;
+  for (const need of structureNeeds(effective)) {
     if (need === "abstract" && !doc.abstracts?.length) out.push(need);
     if (need === "table" && !doc.tables?.length) out.push(need);
     if (need === "ownTask" && !hasOwnTask(doc)) out.push(need);
+    if (need === "prismaFigure" && !doc.article?.figures.some((f) => f.spec.kind === "prisma")) out.push(need);
+    if (need.startsWith("section:") && !hasArticleSection(doc, need.slice("section:".length))) out.push(need);
   }
   return out;
 }
 
 /** Qat'iy talablardan qaysilari bajarilmagan. Bo'sh bo'lmasa — xato. */
 export function hardMissing(meta: DocMeta, doc: AcademicDoc): StructureNeed[] {
-  return missingStructure(meta, doc).filter((n) => HARD.has(n));
+  return missingStructure(meta, doc).filter(isHard);
 }
 
 export function needLabel(need: StructureNeed): string {
-  return LABEL[need];
+  if (need.startsWith("section:")) {
+    // Xato xabari foydalanuvchiga ko'rinadi — id emas, o'zbekcha bo'lim nomi.
+    const id = need.slice("section:".length);
+    const sk = Object.values(ARTICLE_TYPES).flatMap((t) => t.skeleton).find((s) => s.id === id);
+    return `«${sk ? articleLabels("uz").section[sk.titleKey] : id}» bo'limi`;
+  }
+  return LABEL[need as keyof typeof LABEL];
 }
 
 /**
