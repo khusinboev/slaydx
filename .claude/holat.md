@@ -1,4 +1,4 @@
-# SlaydX — holat (pauza 2026-09-11, commit `594a206`, tekshiruv: main yashil — oxirgi to'liq unit 1 121, WP2–WP6 testlari birlashmada bittadan yashil)
+# SlaydX — holat (davom 2026-09-11, commit `c1a1768`, tekshiruv: main yashil — oxirgi to'liq unit 1 121, WP2–WP6 testlari birlashmada bittadan yashil)
 
 Sprint: **Maqola 2 (AUDIT-17)** — reja `~/.claude/plans/sen-senior-fullstack-dev-majestic-starfish.md`, jurnal `docs/AUDIT-17.md`.
 Umumiy: **~65% bajarildi, ~35% qoldi.**
@@ -11,8 +11,8 @@ Umumiy: **~65% bajarildi, ~35% qoldi.**
 | 3 | WP3 sxemalar SVG→PNG + dvigatelga ulash | 100 | `f780ed2`, `791b67c` |
 | 4 | WP4 server: form_drafts, cost_json, aktivlar, karta, cost-report | 100 | `f95a696` |
 | 5 | WP6 forma ArticleComposer + galereyalar | 100 | `4a09e77` |
-| 6 | WP5 iqtibos uslublari + translit + tayyorlik hisoboti + panel | 25 | TO'XTATILGAN — yarim ish worktree `agent-a1297408f45a01ba0` (`28a3d62` WIP): `cite/{gost,apa,ieee,numeric}` boshlangan, `review.ts`/translit/panel yo'q |
-| 7 | WP8 LLM rollari (adapterlar, zaxira zanjiri, usage, narx jadvali) | 0 | TO'XTATILGAN — hali fayl yozilmagan (worktree yo'q) |
+| 6 | WP5 iqtibos uslublari + translit + tayyorlik hisoboti + panel | 25 | DAVOM ETMOQDA (agent qayta ulandi) — yarim ish worktree `agent-a1297408f45a01ba0` (`28a3d62` WIP): `cite/{gost,apa,ieee,numeric}` boshlangan, `review.ts`/translit/panel yo'q |
+| 7 | WP8 LLM rollari (adapterlar, zaxira zanjiri, usage, narx jadvali) | 0 | DAVOM ETMOQDA (yangi agent) |
 | 8 | WP7 ko'ruvchida tahrir (article adapter, rewrite, editor) | 0 | boshlanmagan |
 | 9 | R5 lead: integratsiya, jonli 4 holat (hisobot bilan), Chromium smoke, LibreOffice ko'z, docs, deploy | 0 | boshlanmagan; `.env` kalitlari kerak (Anthropic, OpenRouter, OpenAlex) |
 
