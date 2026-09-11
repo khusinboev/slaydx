@@ -6,8 +6,9 @@ import type { ArticleReview, ReviewCheck, ReviewLevel } from "@/lib/generation/a
  * Ball halqasi (0–100: ≥80 yashil, 60–79 sariq, <60 qizil) + 5 blok —
  * Tuzilma · Manbalar · Vizuallar · Ilmiy mazmun · AI izi — har birida
  * `ReviewCheck` ro'yxati (✅/⚠️/❌, yorliq, izoh), baholovchi izohlari va
- * `fix` li bandlarda «Tuzatish» tugmasi (`onFix` — WP7 ulaydi; hozircha
- * `disabled`, «Tez orada»).
+ * `fix` li bandlarda «Tuzatish» tugmasi — `onFix(fix)` (WP7: `ResultView`
+ * → `POST …/rewrite`); `fixing` — hozir bajarilayotgan nishon (o'sha tugma
+ * «Tuzatilmoqda…», qolganlari o'chiq). `onFix` berilmasa tugma o'chiq.
  *
  * SSR-toza: hook yo'q, `review` dan tashqari hech narsaga bog'liq emas —
  * `renderToStaticMarkup` bilan sinaladi (`tests/viewer/article-review-panel`).
@@ -71,7 +72,11 @@ function ScoreRing({ score }: { score: number }) {
   );
 }
 
-function CheckRow({ c, onFix }: { c: ReviewCheck; onFix?: (fix: NonNullable<ReviewCheck["fix"]>) => void }) {
+type FixFn = (fix: NonNullable<ReviewCheck["fix"]>) => void;
+
+function CheckRow({ c, onFix, fixing }: { c: ReviewCheck; onFix?: FixFn; fixing?: string | null }) {
+  const busy = Boolean(fixing);
+  const mine = Boolean(c.fix && fixing === c.fix.target);
   return (
     <li className="flex items-start gap-2 py-1 text-sm" data-review-check={c.id} data-review-level={c.level}>
       <span className="shrink-0" role="img" aria-label={LEVEL_WORD[c.level]}>
@@ -85,19 +90,20 @@ function CheckRow({ c, onFix }: { c: ReviewCheck; onFix?: (fix: NonNullable<Revi
         <button
           type="button"
           className="bg-card shrink-0 rounded-md border px-2 py-0.5 text-xs disabled:opacity-50"
-          disabled={!onFix}
+          disabled={!onFix || busy}
           title={onFix ? c.fix.instruction : "Tez orada"}
-          onClick={onFix ? () => onFix(c.fix!) : undefined}
+          onClick={onFix && !busy ? () => onFix(c.fix!) : undefined}
           data-review-fix={c.fix.target}
+          aria-busy={mine || undefined}
         >
-          Tuzatish
+          {mine ? "Tuzatilmoqda…" : "Tuzatish"}
         </button>
       ) : null}
     </li>
   );
 }
 
-export function ArticleReviewPanel({ review, onFix }: { review: ArticleReview; onFix?: (fix: NonNullable<ReviewCheck["fix"]>) => void }) {
+export function ArticleReviewPanel({ review, onFix, fixing }: { review: ArticleReview; onFix?: FixFn; fixing?: string | null }) {
   const byGroup = new Map<ReviewGroupId, ReviewCheck[]>(REVIEW_GROUPS.map((g) => [g.id, []]));
   for (const c of review.checks) byGroup.get(reviewGroupOf(c.id))!.push(c);
   const red = review.checks.filter((c) => c.level === "red").length;
@@ -125,7 +131,7 @@ export function ArticleReviewPanel({ review, onFix }: { review: ArticleReview; o
               {items.length ? (
                 <ul className="divide-y">
                   {items.map((c) => (
-                    <CheckRow key={c.id} c={c} onFix={onFix} />
+                    <CheckRow key={c.id} c={c} onFix={onFix} fixing={fixing} />
                   ))}
                 </ul>
               ) : (

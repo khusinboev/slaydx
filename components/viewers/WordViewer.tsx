@@ -1,8 +1,11 @@
 "use client";
 
 import katex from "katex";
+import { Redo2, Undo2 } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { planArticle, type CiteSpan } from "@/lib/generation/article/layout";
+import type { ArticleOp } from "@/lib/generation/article/edit";
+import { cn } from "@/lib/cn";
 import { docLabels, sectionLabels } from "@/lib/generation/i18n";
 import { columnPercents, evenPercents } from "@/lib/generation/table-columns";
 import { ESSAY_DESIGNS } from "@/lib/languages";
@@ -11,7 +14,10 @@ import { docToFlow, titleModel, tocRows, type FlowItem, type TocRow } from "@/li
 import { A4, contentHeightPx, mmPx, ZOOM_STEPS } from "@/lib/viewers/metrics";
 import { continuationTableFor, packPages } from "@/lib/viewers/paginate";
 import { splitByHeight, type TextSplitter } from "@/lib/viewers/split";
+import { useArticleEdit } from "../files/useArticleEdit";
+import type { EditActionsState } from "../files/EditActions";
 import { ArticleHeadItem, CiteText } from "./ArticleHead";
+import { ArticleEditor, articleEditTargets, legacyEditTargets, targetAttr, type EditTarget } from "./ArticleEditor";
 import { ZoomFrame, Workspace } from "./sheet";
 import { TitlePage } from "./TitlePage";
 import { ViewerToolbar } from "./toolbar";
@@ -96,7 +102,28 @@ function articleSheet(doc: AcademicDoc) {
  * ilgari bu yerda `variant` propi ham bor edi — u faqat ekranga xos
  * lentalar uchun ishlatilardi, ular esa AUDIT-6 A3 da olib tashlandi.
  */
-export function WordViewer({ doc }: { doc: AcademicDoc }) {
+export function WordViewer({
+  doc: docProp,
+  gen,
+  onGen,
+  onEditState,
+}: {
+  doc: AcademicDoc;
+  /** Tayyor generatsiya (`api.GenerationDetail`) — MAQOLA tahriri shu bilan yoqiladi (WP7); boshqa hujjatlarda e'tiborsiz. */
+  gen?: unknown;
+  /** Tahrirdan keyin yangilangan generatsiya — sahifa holatiga qaytariladi. */
+  onGen?: (g: unknown) => void;
+  /** Tahrir holati sahifa sarlavhasidagi `EditActions` ga; `null` — tahrir yo'q. */
+  onEditState?: (s: EditActionsState | null) => void;
+}) {
+  /*
+   * Maqola 2 (WP7): tahrir yoqilgan bo'lsa ekranda OPTIMISTIK nusxa
+   * (`ed.doc`), aks holda prop. `useArticleEdit` faqat `type === "article"`
+   * generatsiyani qabul qiladi — referat/insho/tarjima uchun `ed.doc`
+   * `null` va hech narsa o'zgarmaydi.
+   */
+  const ed = useArticleEdit({ gen, onGen });
+  const doc = ed.doc ?? docProp;
   const items = useMemo(() => docToFlow(doc), [doc]);
   /*
    * Maqola 2: varaq o'lchovlari nashr profilidan (`articleSheet`), birinchi
@@ -107,8 +134,10 @@ export function WordViewer({ doc }: { doc: AcademicDoc }) {
   const limit = sheet?.limit ?? contentHeightPx({ footer: true });
   // Sahifadan uzun matnli bandlar bo'lib ko'rsatiladi (Word kabi) —
   // yuqoridagi `FLOW_SPLITTER` izohiga qarang.
-  const [flow, setFlow] = useState<FlowItem[] | null>(null);
-  const renderItems = flow ?? items;
+  // Bo'lingan ro'yxat O'Z `items` iga bog'lanadi: hujjat tahrirdan keyin
+  // o'zgarsa eski bo'laklar ishlatilmaydi (aks holda varaqda eski matn qolardi).
+  const [flow, setFlow] = useState<{ base: FlowItem[]; list: FlowItem[] } | null>(null);
+  const renderItems = flow && flow.base === items ? flow.list : items;
   const title = useMemo(() => titleModel(doc), [doc]);
   const toc = useMemo(() => tocRows(doc), [doc]);
   const labels = useMemo(() => docLabels(doc.meta.language), [doc.meta.language]);
@@ -155,7 +184,7 @@ export function WordViewer({ doc }: { doc: AcademicDoc }) {
     if (next.changed) {
       // Uzun band bo'lingan — bo'laklar o'lchanishi uchun qayta chizamiz.
       // Keyingi aylanishda `hs` yangi bo'laklarga mos keladi.
-      setFlow(next.list);
+      setFlow({ base: items, list: next.list });
       return;
     }
     setPages(packPages(renderItems, hs, limit, { abstractBreak: !sheet }));
@@ -174,6 +203,67 @@ export function WordViewer({ doc }: { doc: AcademicDoc }) {
     setPage(next);
     pageRefs.current[next - 1]?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
+
+  /* ═══ tahrir (Maqola 2, WP7) ═══ */
+  const [editOn, setEditOn] = useState(false);
+  const editable = ed.editable && !ed.legacy;
+  const editing = editOn && editable;
+  const { run, undo, redo, save, pending, discard, saving, justSaved } = ed;
+  const runOps = useCallback((ops: ArticleOp[]) => void run(ops), [run]);
+  // Oqim bandi → tahrir nishoni (faqat tahrir rejimida; eski maqola — umumiy oqim bo'yicha).
+  const targets = useMemo(
+    () => (editing ? (sheet ? articleEditTargets(sheet.plan, items) : legacyEditTargets(doc, items)) : null),
+    [editing, sheet, items, doc],
+  );
+
+  const onEditStateRef = useRef(onEditState);
+  onEditStateRef.current = onEditState;
+  useEffect(() => {
+    onEditStateRef.current?.(editable ? { pending, saving, justSaved, save, discard } : null);
+  }, [editable, pending, saving, justSaved, save, discard]);
+  useEffect(() => () => onEditStateRef.current?.(null), []);
+
+  /* Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y / Ctrl+S — ochiq contentEditable ichida brauzerniki. */
+  useEffect(() => {
+    if (!editing) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      if ((document.activeElement as HTMLElement | null)?.isContentEditable) return;
+      const k = e.key.toLowerCase();
+      if (k === "z" && !e.shiftKey) {
+        e.preventDefault();
+        undo();
+      } else if ((k === "z" && e.shiftKey) || k === "y") {
+        e.preventDefault();
+        redo();
+      } else if (k === "s") {
+        e.preventDefault();
+        if (pending > 0) void save();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [editing, undo, redo, save, pending]);
+
+  const right = editable ? (
+    <>
+      <button type="button" aria-label="Bekor qilish" title="Bekor qilish (Ctrl+Z)" className="hover:bg-white/10 rounded p-1.5 disabled:opacity-30" disabled={!ed.canUndo} onClick={undo}>
+        <Undo2 className="size-4" />
+      </button>
+      <button type="button" aria-label="Qaytarish" title="Qaytarish (Ctrl+Shift+Z)" className="hover:bg-white/10 rounded p-1.5 disabled:opacity-30" disabled={!ed.canRedo} onClick={redo}>
+        <Redo2 className="size-4" />
+      </button>
+      <button
+        type="button"
+        aria-pressed={editing}
+        title="Ikki bosib tahrirlang · Enter — saqlash · Esc — bekor · bo‘sh qoldirib Enter — blokni o‘chirish · iqtibos ustida ikki bosish — manbani olib tashlash"
+        className={cn("rounded px-2 py-1 text-[12px]", editing ? "bg-sky-500 text-white" : "hover:bg-white/10")}
+        onClick={() => setEditOn((v) => !v)}
+      >
+        Tahrirlash
+      </button>
+    </>
+  ) : null;
 
   /*
    * Lenta ATAYIN yo'q (AUDIT-6 A3).
@@ -196,9 +286,19 @@ export function WordViewer({ doc }: { doc: AcademicDoc }) {
         pages={pages?.length ?? 1}
         onPage={go}
         onFit={fit}
+        right={right}
       />
+      {ed.error ? (
+        <div className="no-print bg-rose-900/80 flex items-center gap-2 px-3 py-1.5 text-[12px] text-white">
+          <span className="flex-1">{ed.error}</span>
+          <button type="button" className="underline" onClick={ed.clearError}>
+            Yopish
+          </button>
+        </div>
+      ) : null}
       <div ref={hostRef} className="min-h-0 flex-1">
         <Workspace ref={scrollRef} className="h-full">
+          <MaybeEditor editing={editing} doc={doc} plan={sheet?.plan ?? null} onOps={runOps}>
           <div ref={stackRef} className="flex flex-col items-center gap-8">
             {!pages ? <p className="text-sm text-white/70">Sahifalar tayyorlanmoqda…</p> : null}
             {(pages ?? []).map((pg, i) => {
@@ -224,6 +324,7 @@ export function WordViewer({ doc }: { doc: AcademicDoc }) {
                           toc={toc}
                           labels={labels}
                           tableCaptionAlign={sheet?.plan.tableCaptionAlign}
+                          edit={targets}
                         />
                       </div>
                     )}
@@ -233,6 +334,7 @@ export function WordViewer({ doc }: { doc: AcademicDoc }) {
               );
             })}
           </div>
+          </MaybeEditor>
         </Workspace>
       </div>
 
@@ -273,6 +375,34 @@ export function WordViewer({ doc }: { doc: AcademicDoc }) {
 
 
 
+/** Tahrir rejimida varaqlar `ArticleEditor` qatlamiga o'raladi; aks holda o'zgarishsiz. */
+function MaybeEditor({
+  editing,
+  doc,
+  plan,
+  onOps,
+  children,
+}: {
+  editing: boolean;
+  doc: AcademicDoc;
+  plan: ReturnType<typeof planArticle> | null;
+  onOps: (ops: ArticleOp[]) => void;
+  children: React.ReactNode;
+}) {
+  if (!editing) return <>{children}</>;
+  return (
+    <ArticleEditor doc={doc} plan={plan} onOps={onOps}>
+      {children}
+    </ArticleEditor>
+  );
+}
+
+/** Oqim bandining tahrir nishoni (`~n` bo'lak qo'shimchasisiz). */
+function editAttr(edit: Map<string, EditTarget> | null | undefined, id: string): { "data-path"?: string } {
+  const t = edit?.get(id.split("~")[0]);
+  return t ? { "data-path": targetAttr(t) } : {};
+}
+
 /**
  * Bitta sahifaning bandlarini chizadi — `table-head`/`table-row`
  * ketma-ketligini BITTA `<table>` ga yig'ib (B1).
@@ -292,6 +422,7 @@ function PageBody({
   toc,
   labels,
   tableCaptionAlign,
+  edit,
 }: {
   items: FlowItem[];
   continuation: DocTable | null;
@@ -300,6 +431,8 @@ function PageBody({
   labels: ReturnType<typeof docLabels>;
   /** Maqola 2: «davomi» sarlavhasi uchun ham rejadagi tekislanish (bosh band boshqa varaqda qolgan). */
   tableCaptionAlign?: "left" | "right";
+  /** Tahrir nishonlari (band id → nishon) — faqat tahrir rejimida (WP7). */
+  edit?: Map<string, EditTarget> | null;
 }) {
   const nodes: React.ReactNode[] = [];
   let buf: Extract<FlowItem, { type: "table-head" | "table-row" }>[] = [];
@@ -319,6 +452,8 @@ function PageBody({
           continued={!head}
           continuedLabel={continuedLabel}
           captionAlign={head?.captionAlign ?? tableCaptionAlign}
+          edit={edit}
+          headId={head?.id}
         />,
       );
     }
@@ -331,7 +466,7 @@ function PageBody({
       continue;
     }
     flushTable();
-    nodes.push(<FlowBlock key={it.id} item={it} toc={toc} labels={labels} />);
+    nodes.push(<FlowBlock key={it.id} item={it} toc={toc} labels={labels} edit={edit} />);
   }
   flushTable();
 
@@ -348,16 +483,16 @@ function tableCols(table: DocTable) {
  * (`align` berilgan) — tana shriftida, o'ngda (GOST) yoki chapda
  * (APA/IEEE), kursivsiz (`drawArticle` bilan bir xil).
  */
-function TableCaption({ text, align }: { text: string; align?: "left" | "right" }) {
+function TableCaption({ text, align, attr }: { text: string; align?: "left" | "right"; attr?: { "data-path"?: string } }) {
   if (align) {
     return (
-      <div className="word-table-caption" style={{ textAlign: align, textIndent: 0 }}>
+      <div className="word-table-caption" style={{ textAlign: align, textIndent: 0 }} {...attr}>
         {text}
       </div>
     );
   }
   return (
-    <div className="mb-1 text-center text-[12pt] italic" style={{ textIndent: 0 }}>
+    <div className="mb-1 text-center text-[12pt] italic" style={{ textIndent: 0 }} {...attr}>
       {text}
     </div>
   );
@@ -392,17 +527,35 @@ function TableGroup({
   continued,
   continuedLabel,
   captionAlign,
+  edit,
+  headId,
 }: {
   table: DocTable;
   rows: Extract<FlowItem, { type: "table-row" }>[];
   continued: boolean;
   continuedLabel: string;
   captionAlign?: "left" | "right";
+  edit?: Map<string, EditTarget> | null;
+  /** `table-head` bandining id si — sarlavha/ustun nishonlari shundan. */
+  headId?: string;
 }) {
   const cols = tableCols(table);
+  // Tahrir nishonlari (WP7): sarlavha `caption:table:<id>`, kataklar `cell:<id>:<r>:<c>` (ustun sarlavhasi r = -1).
+  const headTarget = headId ? edit?.get(headId) : undefined;
+  const tableId = headTarget?.t === "table" ? headTarget.id : null;
+  const rowTarget = (id: string) => {
+    const t = edit?.get(id);
+    return t?.t === "row" ? t : null;
+  };
   return (
     <div>
-      {table.caption ? <TableCaption text={continued ? `${table.caption} ${continuedLabel}` : table.caption} align={captionAlign} /> : null}
+      {table.caption ? (
+        <TableCaption
+          text={continued ? `${table.caption} ${continuedLabel}` : table.caption}
+          align={captionAlign}
+          attr={tableId !== null && !continued ? { "data-path": `caption:table:${tableId}` } : undefined}
+        />
+      ) : null}
       <table className="word-table" style={{ tableLayout: "fixed" }}>
         <colgroup>
           {cols.map((w, i) => (
@@ -411,19 +564,26 @@ function TableGroup({
         </colgroup>
         <thead>
           <tr>
-            {table.headers.map((h) => (
-              <th key={h}>{h}</th>
+            {table.headers.map((h, c) => (
+              <th key={h} {...(tableId !== null ? { "data-path": `cell:${tableId}:-1:${c}` } : {})}>
+                {h}
+              </th>
             ))}
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => (
-            <tr key={r.id}>
-              {r.row.map((c, j) => (
-                <td key={j}>{c}</td>
-              ))}
-            </tr>
-          ))}
+          {rows.map((r) => {
+            const rt = rowTarget(r.id);
+            return (
+              <tr key={r.id}>
+                {r.row.map((c, j) => (
+                  <td key={j} {...(rt ? { "data-path": `cell:${rt.tableId}:${rt.r}:${j}` } : {})}>
+                    {c}
+                  </td>
+                ))}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -434,11 +594,16 @@ function FlowBlock({
   item,
   toc,
   labels,
+  edit,
 }: {
   item: FlowItem;
   toc: TocRow[];
   labels: ReturnType<typeof docLabels>;
+  /** Tahrir nishonlari — faqat tahrir rejimida; o'lchov daraxtida yo'q (WP7). */
+  edit?: Map<string, EditTarget> | null;
 }) {
+  // `data-path` FAQAT xarita bo'lsa qo'yiladi — oddiy ko'rinishda DOM o'zgarmaydi.
+  const attr = editAttr(edit, item.id);
   switch (item.type) {
     case "title":
       return <div className="h-[40mm]" />;
@@ -475,8 +640,8 @@ function FlowBlock({
         </div>
       );
     case "abstract":
-      // Maqola 2: yorliq matn bilan bitta paragrafda (`ArticleHead`).
-      if (item.inline) return <ArticleHeadItem item={item} />;
+      // Maqola 2: yorliq matn bilan bitta paragrafda (`ArticleHead`); tahrirda o'ram nishon oladi.
+      if (item.inline) return attr["data-path"] ? <div {...attr}><ArticleHeadItem item={item} /></div> : <ArticleHeadItem item={item} />;
       return (
         <div>
           <div className="word-h1">{item.label}</div>
@@ -487,20 +652,21 @@ function FlowBlock({
           </p>
         </div>
       );
+    case "highlights":
+      return attr["data-path"] ? <div {...attr}><ArticleHeadItem item={item} /></div> : <ArticleHeadItem item={item} />;
     case "udk":
     case "articleTitle":
     case "authors":
-    case "highlights":
       return <ArticleHeadItem item={item} />;
     case "h1":
-      return <div className="word-h1">{item.text}</div>;
+      return <div className="word-h1" {...attr}>{item.text}</div>;
     case "h2":
-      return <div className="word-h2">{item.text}</div>;
+      return <div className="word-h2" {...attr}>{item.text}</div>;
     case "h3":
-      return <div className="word-h3">{item.text}</div>;
+      return <div className="word-h3" {...attr}>{item.text}</div>;
     case "p":
       return (
-        <p className="word-p">
+        <p className="word-p" {...attr}>
           <CiteText text={item.text} spans={item.spans} />
         </p>
       );
@@ -508,14 +674,14 @@ function FlowBlock({
       return (
         <div className="word-li">
           <span>•</span>
-          <span>
+          <span {...attr}>
             <CiteText text={item.text} spans={item.spans} />
           </span>
         </div>
       );
     case "quote":
       return (
-        <p className="word-quote">
+        <p className="word-quote" {...attr}>
           <CiteText text={item.text} spans={item.spans} />
         </p>
       );
@@ -533,7 +699,7 @@ function FlowBlock({
           ) : (
             <div className="word-figure-placeholder">{item.placeholder}</div>
           )}
-          <div className="word-figure-caption">{item.caption}</div>
+          <div className="word-figure-caption" {...attr}>{item.caption}</div>
           {item.source ? <div className="word-figure-source">{item.source}</div> : null}
         </div>
       );
@@ -549,7 +715,7 @@ function FlowBlock({
             <div className="mb-1 text-center text-[11pt] italic">{item.caption}</div>
           ) : null}
           {/* DOCX: Consolas, size 20 yarim-punkt = 10 pt. */}
-          <pre className="overflow-x-auto rounded-sm border border-neutral-300 bg-[#f2f2f2] px-3 py-2 font-mono text-[10pt] leading-snug whitespace-pre-wrap">
+          <pre className="overflow-x-auto rounded-sm border border-neutral-300 bg-[#f2f2f2] px-3 py-2 font-mono text-[10pt] leading-snug whitespace-pre-wrap" {...attr}>
             {item.text}
           </pre>
         </div>

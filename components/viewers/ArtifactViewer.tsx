@@ -68,8 +68,11 @@ export function ArtifactViewer({
     case "translation":
       return <TranslationViewer doc={doc} gen={{ id: gen.id, format: gen.format }} pdf={pdf} />;
     case "essay":
-    case "article":
       return <WordViewer doc={doc} />;
+    case "article":
+      // Maqola 2 (WP7): tahrir proplari slayd/rezyume bilan bir xil — `WordViewer`
+      // ularni faqat `type === "article"` generatsiyada ishlatadi.
+      return <WordViewer doc={doc} gen={detail} onGen={onDetail} onEditState={onEditState} />;
     default:
       return <WordViewer doc={doc} />;
   }

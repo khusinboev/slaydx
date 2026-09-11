@@ -300,7 +300,11 @@ const TEXT_OPS = new Set<ArticleOp["op"]>(["text", "heading", "cell", "caption",
  * qo'llanmaydi (PATCH atomar) — xato `at` indeksi bilan qaytadi.
  * Kirish hujjati O'ZGARMAYDI (chuqur nusxa ustida ishlanadi).
  */
-export function applyArticleOps(doc: AcademicDoc, ops: ArticleOp[], _ctx: ArticleEditCtx): ArticleEditResult {
+export function applyArticleOps(doc: AcademicDoc, ops: ArticleOp[], ctx: ArticleEditCtx): ArticleEditResult {
+  // `ctx.genId` hozircha ishlatilmaydi: maqola op lari rasm URL i olib
+  // kelmaydi (sxemalar faqat serverda yaratiladi; `set` aktivlarni joriy
+  // hujjatdan oladi). Imzo adapter shartnomasi uchun saqlanadi.
+  void ctx;
   if (!doc.sections?.length) return fail("Bu hujjatda bo'limlar yo'q", 0);
   let d = cloneArticleDoc(doc);
   const legacy = !d.article;
