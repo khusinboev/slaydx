@@ -375,6 +375,12 @@ button {
   text-align: center;
   margin-top: 4pt;
 }
+.word-figure-source {
+  text-align: center;
+  font-style: italic;
+  font-size: var(--doc-small, 12pt);
+  margin-top: 2pt;
+}
 .word-table-caption {
   margin: 6pt 0 4pt;
 }

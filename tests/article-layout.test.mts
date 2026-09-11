@@ -129,6 +129,14 @@ test("rasm/jadval/formula bo'limlar tartibida raqamlanadi (flat)", () => {
     figs.map((f) => f.placeholder),
     ["[1-rasm — sxema]", "[2-rasm — sxema]"],
   );
+  assert.equal(figs[0].source, "Manba: Muallif tomonidan tuzilgan");
+  // Manbasiz rasm — satr yo'q; iqtibosli manba uslubga ko'ra.
+  doc.article!.figures[1].source = "[W4385] asosida";
+  const p2 = planArticle(doc);
+  const f2 = p2.body.filter((b): b is Extract<BodyItem, { k: "figure" }> => b.k === "figure");
+  assert.equal(f2[1].source, "Manba: [2] asosida");
+  doc.article!.figures[0].source = "";
+  assert.equal(planArticle(doc).body.filter((b): b is Extract<BodyItem, { k: "figure" }> => b.k === "figure")[0].source, undefined);
   const tabs = plan.body.filter((b): b is Extract<BodyItem, { k: "table" }> => b.k === "table");
   assert.deepEqual(
     tabs.map((t) => t.caption),

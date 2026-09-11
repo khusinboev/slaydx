@@ -442,8 +442,18 @@ async function drawArticle(plan: ArticlePlan, K: Kit, P: DocProfile, opts: Resum
             }),
           );
         }
-        // Sarlavha PASTDA, markazda.
-        out.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 200, line }, children: [K.run(b.caption)] }));
+        // Sarlavha PASTDA, markazda; ostida «Manba: …» (bo'lsa) kichik kursiv.
+        out.push(
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            ...(b.source ? { keepNext: true } : {}),
+            spacing: { after: b.source ? 40 : 200, line },
+            children: [K.run(b.caption)],
+          }),
+        );
+        if (b.source) {
+          out.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 200, line }, children: [K.run(b.source, { italics: true, size: small })] }));
+        }
         break;
       }
       case "table": {

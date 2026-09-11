@@ -534,6 +534,7 @@ function FlowBlock({
             <div className="word-figure-placeholder">{item.placeholder}</div>
           )}
           <div className="word-figure-caption">{item.caption}</div>
+          {item.source ? <div className="word-figure-source">{item.source}</div> : null}
         </div>
       );
     case "formula":

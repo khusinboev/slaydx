@@ -55,7 +55,7 @@ export type FlowItem =
   | { type: "authors"; id: string; authors: ArticleAuthorLine[] }
   | { type: "highlights"; id: string; label: string; items: string[] }
   /** Sxema (PNG `url` bo'lsa rasm, bo'lmasa o'rinbosar ramka) + sarlavha PASTDA — bitta atom band. */
-  | { type: "figure"; id: string; figureId: string; url?: string; w?: number; h?: number; number: string; caption: string; placeholder: string }
+  | { type: "figure"; id: string; figureId: string; url?: string; w?: number; h?: number; number: string; caption: string; placeholder: string; source?: string }
   /** Formula — KaTeX SSR; raqam o'ngda. Bitta atom band. */
   | { type: "formula"; id: string; latex: string; number: string; display: boolean }
   /** OAK «REFERENCES» ikkinchi ro'yxatining sarlavhasi (`h1` kabi chiziladi). */
@@ -183,6 +183,7 @@ export function articleFlow(plan: ArticlePlan): FlowItem[] {
           number: b.number,
           caption: b.caption,
           placeholder: b.placeholder,
+          source: b.source,
         });
         break;
       case "table":

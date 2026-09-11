@@ -72,7 +72,7 @@ export type BodyItem =
    * ramka) — sarlavha va raqam yo'qolmaydi. `caption` — TO'LIQ satr
    * («1-rasm. …»), `placeholder` — PNG bo'lmaganda ramka ichidagi matn.
    */
-  | { k: "figure"; figureId: string; figure?: Figure; number: string; caption: string; placeholder: string; path: string }
+  | { k: "figure"; figureId: string; figure?: Figure; number: string; caption: string; placeholder: string; /** «Manba: …» — OAK talabi; bo'lmasa chizilmaydi. */ source?: string; path: string }
   /** Jadval matnning SHU joyida; `caption` — «1-jadval. …» (TEPADA chiziladi). */
   | { k: "table"; tableId: string; table: DocTable; number: string; caption: string; path: string }
   /** Formula; `number` — «(1)». */
@@ -374,10 +374,10 @@ function appearanceOrder(doc: AcademicDoc, known: Set<string>): string[] {
   return out;
 }
 
-const SCHEME_WORD: Record<"uz" | "ru" | "en", { scheme: string; chart: string }> = {
-  uz: { scheme: "sxema", chart: "diagramma" },
-  ru: { scheme: "схема", chart: "диаграмма" },
-  en: { scheme: "scheme", chart: "chart" },
+const SCHEME_WORD: Record<"uz" | "ru" | "en", { scheme: string; chart: string; source: string }> = {
+  uz: { scheme: "sxema", chart: "diagramma", source: "Manba:" },
+  ru: { scheme: "схема", chart: "диаграмма", source: "Источник:" },
+  en: { scheme: "scheme", chart: "chart", source: "Source:" },
 };
 
 function langKey(lang: string): "uz" | "ru" | "en" {
@@ -509,8 +509,10 @@ export function planArticle(doc: AcademicDoc): ArticlePlan {
             break;
           }
           const n = numbers.figures[b.figureId];
-          const word = SCHEME_WORD[langKey(language)][f?.kind === "chart" ? "chart" : "scheme"];
+          const words = SCHEME_WORD[langKey(language)];
+          const word = words[f?.kind === "chart" ? "chart" : "scheme"];
           const cap = (b.text || f?.caption || "").trim();
+          const src = f?.source?.trim();
           body.push({
             k: "figure",
             figureId: b.figureId,
@@ -518,6 +520,8 @@ export function planArticle(doc: AcademicDoc): ArticlePlan {
             number: n,
             caption: `${L.figure(n)} ${cites(cap).text}`.trim(),
             placeholder: `[${L.figureRef(n)} — ${word}]`,
+            // «Manba: [5] asosida» — iqtibos ham uslubga ko'ra almashadi.
+            ...(src ? { source: `${words.source} ${cites(src).text}` } : {}),
             path: p,
           });
           break;
