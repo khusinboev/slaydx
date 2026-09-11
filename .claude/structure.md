@@ -255,3 +255,17 @@ Tunning:
 npm run live -- slide pro-slide   # `onProgress` chiqarish
 npm run image-lab                  # rasm uslublari solishtirish
 ```
+
+## Og'ir buyruqlar — `scripts/heavy.sh` (2026-09-11, majburiy)
+
+`npm test` / `test:ui` / `test:viewer` / `tsc` / `next build` / LibreOffice /
+Playwright / `npm run live` / `scripts/*.mts` — **faqat** `scripts/heavy.sh
+[-m 3G] [-t 900] <buyruq>` orqali. Skript buyruqni `slaydx-heavy.slice`
+(jami 5 GB — lead + agentlar) va o'z scope'iga (3 GB, 900 s) qo'yadi: chegara
+oshsa faqat shu buyruq o'ladi, VS Code emas. Sabab: node:test har faylni
+alohida jarayonda parallel yurgizadi (12 yadroda 11 jsdom) va ikki agentning
+chegarasiz `npm test` i bilan birga xotira 14 GB dan oshib OOM VS Code'ni
+o'ldirdi. `package.json` skriptlarida `--test-concurrency=2` turadi.
+Bir vaqtda ≤2 og'ir jarayon (agentlar ham hisobga kiradi); bitta test
+FAYLINI yurgizing, to'liq to'plam faqat kommit oldidan. jsdom testlarida DOM
+tugunini `assert.equal(el, null)` bilan solishtirmang (`assert.ok(!el)`).
