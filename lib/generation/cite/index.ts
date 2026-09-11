@@ -48,11 +48,26 @@ export function formatReference(ref: Reference, style: CiteStyle, lang = "uz"): 
   }
 }
 
-/** Matn kirill bo'lsa lotinga; aks holda o'zgarmaydi. */
-function latin(s: string | undefined): string | undefined {
+/** Matn kirill bo'lsa lotinga (`lang` jadvali bilan); aks holda o'zgarmaydi. */
+function latin(s: string | undefined, lang: "ru" | "uz"): string | undefined {
   if (!s) return s;
-  const sc = scriptOf(s);
-  return sc.cyrillic ? transliterate(s, sc.lang === "uz" ? "uz" : "ru") : s;
+  return scriptOf(s).cyrillic ? transliterate(s, lang) : s;
+}
+
+/**
+ * Manba TILI — bitta qaror butun yozuv uchun: sarlavha, muallif, venue,
+ * nashriyot bir jadval bilan o'giriladi. Aks holda «ТАТУ хабарномаси»
+ * (o'zbekcha, lekin ў/қ/ғ/ҳ siz) rus jadvali bilan «khabarnomasi»
+ * chiqardi; sarlavhada («рақамли») o'zbek harfi bor — shu yetadi.
+ */
+function referenceLang(ref: Reference): "ru" | "uz" | "en" {
+  const fields = [ref.title, ref.venue, ref.publisher, ref.place, ...ref.authors].filter(Boolean) as string[];
+  const scripts = fields.map(scriptOf);
+  if (scripts.some((s) => s.cyrillic && s.lang === "uz")) return "uz";
+  const title = scriptOf(ref.title);
+  if (title.cyrillic) return "ru";
+  if (scripts.some((s) => s.cyrillic)) return "ru";
+  return title.lang;
 }
 
 /**
@@ -65,9 +80,10 @@ export function formatReferenceEnglish(ref: Reference): string {
     const sc = scriptOf(raw);
     return sc.cyrillic ? `${transliterate(raw, sc.lang === "uz" ? "uz" : "ru")} ${languageTag(sc.lang)}` : raw;
   }
-  const sc = scriptOf(ref.title);
-  const tag = languageTag(sc.lang);
-  const title = `${latin(ref.title)!.trim().replace(/[.\s]+$/, "")}${tag ? ` ${tag}` : ""}`;
+  const lang = referenceLang(ref);
+  const table = lang === "uz" ? "uz" : "ru";
+  const tag = languageTag(lang);
+  const title = `${latin(ref.title, table)!.trim().replace(/[.\s]+$/, "")}${tag ? ` ${tag}` : ""}`;
   /*
    * Muallif AVVAL tahlil qilinadi, KEYIN qismlari o'giriladi: «Щукин Ё.Ё.»
    * ni butunlay o'girsak «Shchukin Yo.Yo.» chiqadi va «Yo.Yo.» endi
@@ -75,15 +91,15 @@ export function formatReferenceEnglish(ref: Reference): string {
    * (vergulli) shaklda qaytariladi — APA tahlili uni bir ma'noli o'qiydi.
    */
   const authors = authorsOf(ref).map((n) =>
-    familyCommaInitials({ family: latin(n.family) ?? n.family, initials: n.initials.map((i) => latin(i) ?? i) }),
+    familyCommaInitials({ family: latin(n.family, table) ?? n.family, initials: n.initials.map((i) => latin(i, table) ?? i) }),
   );
   const en: Reference = {
     ...ref,
     title,
     authors,
-    ...(ref.venue ? { venue: latin(ref.venue) } : {}),
-    ...(ref.place ? { place: latin(ref.place) } : {}),
-    ...(ref.publisher ? { publisher: latin(ref.publisher) } : {}),
+    ...(ref.venue ? { venue: latin(ref.venue, table) } : {}),
+    ...(ref.place ? { place: latin(ref.place, table) } : {}),
+    ...(ref.publisher ? { publisher: latin(ref.publisher, table) } : {}),
   };
   return formatApa(en, "en");
 }
