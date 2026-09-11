@@ -31,11 +31,12 @@
  *   ... --batch 14            # bitta LLM chaqiruvidagi nomzodlar soni
  *   ... --concurrency 3       # parallel LLM chaqiruvlari
  *   ... --refresh-sources     # ESCO/hh keshini majburan yangilash
+ *   ... --deepen huquq,hr     # yupqa sektorlarda ESCO ixtisosliklarini (2-qatlam) ham olish
  *   ... --dry                 # faylga yozmaydi, faqat hisobot
  */
 import { writeFile, readFile } from "node:fs/promises";
 import { llmComplete } from "../lib/generation/llm.ts";
-import { loadSources, type SourceRow } from "./fetch-professions.mts";
+import { deepenFlag, loadSources, type SourceRow } from "./fetch-professions.mts";
 
 const SECTORS: { id: string; uz: string; hint: string }[] = [
   { id: "it", uz: "Axborot texnologiyalari", hint: "dasturchi, tahlilchi, tester, DevOps, ma'lumotlar" },
@@ -186,7 +187,11 @@ for (const p of existing) {
  * 2. Manbalar → sektor bo'yicha nomzodlar
  * ------------------------------------------------------------------ */
 
-const sources = await loadSources({ force: process.argv.includes("--refresh-sources"), log: (m) => console.log(m) });
+const sources = await loadSources({
+  force: process.argv.includes("--refresh-sources"),
+  deepen: deepenFlag(process.argv),
+  log: (m) => console.log(m),
+});
 
 /**
  * Nomzodlar tartibi — QAMROV uchun muhim.
@@ -233,6 +238,9 @@ for (const sector of SECTORS) {
 
 type Filled = Profession & { ok: boolean };
 
+/** LLM `ok:false` bilan rad etganlari — hisobot uchun (nima tashlanganini ko'rish). */
+const rejected: string[] = [];
+
 /** Bitta partiya: nomzodlar → to'ldirilgan yozuvlar (yoki bo'sh massiv). */
 async function fillBatch(sector: { id: string; uz: string; hint: string }, batch: SourceRow[], known: string[]): Promise<Filled[]> {
   const list = batch
@@ -266,18 +274,20 @@ async function fillBatch(sector: { id: string; uz: string; hint: string }, batch
       .map((a) => s(a, 60))
       .filter((a) => a && a.length <= 40)
       .slice(0, 12);
-    const aliases = (Array.isArray(o.aliases) ? o.aliases : []).map((a) => s(a, 40)).filter(Boolean).slice(0, 5);
-    if (!ok || !id || !uz || skills.length < 5) continue;
-    out.push({
-      id,
-      uz,
-      ru: s(o.ru, 60) || s(src?.ru, 60),
-      en: s(o.en, 60) || s(src?.en, 60),
-      aliases,
-      sector: sector.id,
-      skills,
-      ok: true,
-    });
+    const ru = s(o.ru, 60) || s(src?.ru, 60);
+    const en = s(o.en, 60) || s(src?.en, 60);
+    // Nomning o'zini alias qilib takrorlash indeksni bo'rttiradi, xolos.
+    const own = new Set([uz, ru, en].map(nameKey));
+    const aliases = (Array.isArray(o.aliases) ? o.aliases : [])
+      .map((a) => s(a, 40))
+      .filter((a) => a && !own.has(nameKey(a)))
+      .slice(0, 5);
+    if (!ok) {
+      rejected.push(`${sector.id}: ${src?.en || src?.ru || `#${n}`}`);
+      continue;
+    }
+    if (!id || !uz || skills.length < 5) continue;
+    out.push({ id, uz, ru, en, aliases, sector: sector.id, skills, ok: true });
   }
   return out;
 }
@@ -313,7 +323,11 @@ for (const sector of SECTORS) {
       let k = 2;
       while (takenIds.has(id)) id = `${p.id}-${k++}`;
       takenIds.add(id);
-      for (const v of [p.uz, p.ru, p.en, ...p.aliases]) if (v) takenNames.add(nameKey(v));
+      // YANGI yozuvning aliaslari band qilinmaydi: LLM aliasga qo'shni
+      // kasb nomini ham yozib qo'yadi («Tarmoq administratori» tarmoq
+      // muhandisiga alias sifatida) va keyin o'sha kasbning o'zi kirmay
+      // qolardi. Faqat qo'lda ko'rilgan mavjud yozuvlar aliasi band.
+      for (const v of [p.uz, p.ru, p.en]) if (v) takenNames.add(nameKey(v));
       added.push({ id, uz: p.uz, ru: p.ru, en: p.en, aliases: p.aliases, sector: p.sector, skills: p.skills });
       kept++;
     }
@@ -326,14 +340,55 @@ for (const sector of SECTORS) {
  * 4. Yozish
  * ------------------------------------------------------------------ */
 
-const all = [...existing, ...added].filter((p) => p.uz && p.ru && p.en && p.skills.length >= 5);
+/*
+ * Yakuniy tozalash — MAVJUD yozuvlarga ham tegadi, lekin faqat
+ * takroriylik bo'yicha:
+ *
+ *   - bir xil nom (uz YOKI ru YOKI en) ikki yozuvda bo'lsa birinchisi
+ *     qoladi, ikkinchisining ko'nikma/aliaslari unga qo'shiladi. Eski
+ *     ro'yxatda uchta shunday juftlik bor edi («Motion dizayner» media va
+ *     dizaynda, «Komplayens» moliya va huquqda, «Avtoyuklagich haydovchisi»
+ *     transport va logistikada) — faqat uz bo'yicha tekshirilgani uchun
+ *     o'tib ketgan;
+ *   - ko'nikmalar registrdan qat'i nazar takrorlanmaydi
+ *     («Penetration testing» / «Penetration Testing»).
+ */
+const merged: Profession[] = [];
+const byAnyName = new Map<string, Profession>();
+let mergedAway = 0;
+for (const p of [...existing, ...added]) {
+  if (!p.uz || !p.ru || !p.en) continue;
+  const keys = [p.uz, p.ru, p.en].map(nameKey);
+  const cur = keys.map((k) => byAnyName.get(k)).find(Boolean);
+  if (cur) {
+    for (const sk of p.skills) if (!cur.skills.some((x) => x.toLowerCase() === sk.toLowerCase()) && cur.skills.length < 12) cur.skills.push(sk);
+    for (const a of p.aliases) if (!cur.aliases.some((x) => nameKey(x) === nameKey(a)) && cur.aliases.length < 5) cur.aliases.push(a);
+    mergedAway++;
+    continue;
+  }
+  const seenSkill = new Set<string>();
+  p.skills = p.skills.filter((sk) => {
+    const k = sk.toLowerCase();
+    if (seenSkill.has(k)) return false;
+    seenSkill.add(k);
+    return true;
+  });
+  for (const k of keys) byAnyName.set(k, p);
+  merged.push(p);
+}
+if (mergedAway) console.log(`nom bo'yicha birlashtirildi: ${mergedAway} ta yozuv`);
+
+const all = merged.filter((p) => p.skills.length >= 5);
 all.sort((a, b) => a.sector.localeCompare(b.sector) || a.uz.localeCompare(b.uz));
 
 console.log("\nsektor           bor   yuborildi  qo'shildi");
 for (const r of stats) console.log(`${r.sector.padEnd(17)}${String(r.have).padStart(3)}${String(r.sent).padStart(10)}${String(r.kept).padStart(10)}`);
+if (rejected.length) console.log(`\nLLM rad etdi (${rejected.length}): ${rejected.join("; ")}`);
 console.log(`\njami ${all.length} ta kasb (+${added.length})`);
 
 if (DRY) {
+  // Quruq yugurishda nima qo'shilgan bo'lardi — ko'z bilan tekshirish uchun.
+  for (const p of added) console.log(`  [${p.sector}] ${p.uz} | ${p.ru} | ${p.en} | ${p.aliases.join(", ")}\n      ${p.skills.join(" · ")}`);
   console.log("--dry: fayl yozilmadi");
 } else {
   await writeFile(OUT, `${JSON.stringify(all, null, 2)}\n`, "utf8");

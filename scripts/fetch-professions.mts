@@ -48,9 +48,22 @@ export type SourceRow = {
   code: string;
   /** ISCO unit group nomi yoki hh kategoriya nomi — LLM ga kontekst. */
   group: string;
+  /** ESCO kasb URI si — ikkinchi qatlamni (`deepen`) olish uchun. */
+  uri?: string;
+  /** ESCO da asosiy kasb OSTIDAGI ixtisoslik (ikkinchi qatlam). */
+  deep?: boolean;
 };
 
-export type SourceCache = { fetchedAt: string; rows: SourceRow[] };
+/** Qayta urinishlardan keyin ham olinmagan ESCO shoxi — keyingi yugurishda tuzatiladi. */
+export type MissedBranch = { code: string; depth: number };
+
+export type SourceCache = {
+  fetchedAt: string;
+  rows: SourceRow[];
+  missed: MissedBranch[];
+  /** Ikkinchi qatlami olingan sektorlar — qayta so'ralmaydi. */
+  deepened?: string[];
+};
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -246,12 +259,23 @@ function links(j: Record<string, unknown> | null, key: string): EscoLink[] {
   return Array.isArray(v) ? (v as EscoLink[]) : [];
 }
 
-/** ISCO daraxtining bir shoxi: 0-daraja katta guruh, 3-daraja «unit group». */
-async function escoBranch(code: string, depth: number, out: SourceRow[], log: (s: string) => void): Promise<void> {
+type EscoWalk = { rows: SourceRow[]; missed: MissedBranch[] };
+
+/**
+ * ISCO daraxtining bir shoxi: 0-daraja katta guruh, 3-daraja «unit group».
+ *
+ * Olinmagan shox `missed` ga yoziladi va keshda qoladi: ESCO ning
+ * ba'zi IP lari 5 urinishda ham javob bermagani jonli kuzatildi
+ * (C212 — statistiklar butun guruhi tushib qolgan edi). Keyingi
+ * `loadSources` faqat shu shoxlarni qayta so'raydi — 620 ta so'rovni
+ * emas.
+ */
+async function escoBranch(code: string, depth: number, out: EscoWalk, log: (s: string) => void): Promise<void> {
   const j = await getJson(`https://ec.europa.eu/esco/api/resource/concept?uri=${encodeURIComponent(`http://data.europa.eu/esco/isco/C${code}`)}&language=en`);
   await sleep(PAUSE_MS);
   if (!j) {
-    log(`  ESCO C${code} olinmadi`);
+    log(`  ESCO C${code} olinmadi (keyingi yugurishda qayta so'raladi)`);
+    out.missed.push({ code, depth });
     return;
   }
   if (depth === 3) {
@@ -261,7 +285,7 @@ async function escoBranch(code: string, depth: number, out: SourceRow[], log: (s
     for (const o of links(j, "narrowerOccupation")) {
       const en = (o.title ?? "").trim();
       if (!en) continue;
-      out.push({ source: "esco", en, ru: "", aliases: [], sector, code, group });
+      out.rows.push({ source: "esco", en, ru: "", aliases: [], sector, code, group, uri: o.uri });
     }
     return;
   }
@@ -274,13 +298,87 @@ async function escoBranch(code: string, depth: number, out: SourceRow[], log: (s
   }
 }
 
-export async function fetchEsco(log: (s: string) => void = () => {}): Promise<SourceRow[]> {
-  const out: SourceRow[] = [];
+export async function fetchEsco(log: (s: string) => void = () => {}): Promise<EscoWalk> {
+  const out: EscoWalk = { rows: [], missed: [] };
   for (let major = 0; major <= 9; major++) {
     await escoBranch(String(major), 0, out, log);
-    log(`  ESCO ${major}-guruh: jami ${out.length} kasb`);
+    log(`  ESCO ${major}-guruh: jami ${out.rows.length} kasb`);
   }
   return out;
+}
+
+/** Keshdagi olinmagan shoxlarni qayta so'raydi; muvaffaqiyatli bo'lganlari keshdan chiqadi. */
+async function repairMissed(cache: SourceCache, log: (s: string) => void): Promise<boolean> {
+  if (!cache.missed?.length) return false;
+  log(`ESCO: ${cache.missed.length} ta olinmagan shox qayta so'ralmoqda…`);
+  const out: EscoWalk = { rows: [], missed: [] };
+  for (const m of cache.missed) await escoBranch(m.code, m.depth, out, log);
+  // Bir shox ikki marta kirmasin: manba + guruh kodi + nom bo'yicha.
+  const have = new Set(cache.rows.map((r) => `${r.source}|${r.code}|${r.en}`));
+  let added = 0;
+  for (const r of out.rows) {
+    const k = `${r.source}|${r.code}|${r.en}`;
+    if (have.has(k)) continue;
+    have.add(k);
+    cache.rows.push(r);
+    added++;
+  }
+  cache.missed = out.missed;
+  log(`  tuzatildi: +${added} kasb, hali olinmagan: ${out.missed.length}`);
+  return true;
+}
+
+/**
+ * Ikkinchi qatlam — YUPQA sektorlar uchun.
+ *
+ * ISCO daraxti unit group ostidagi ASOSIY ESCO kasblarini beradi
+ * (~1 700 ta). Qolgan ~1 300 tasi shu asosiylarning ixtisosliklari
+ * («lawyer» → «corporate lawyer», «tax lawyer»…). Huquq, HR, sport,
+ * turizm kabi sektorlarda asosiy qatlam 15–30 tadan oshmaydi — 1 000+
+ * ro'yxat uchun yetmaydi. Shu sektorlarda har asosiy kasbning
+ * `narrowerOccupation` ro'yxati ham olinadi (bir kasb = bir so'rov).
+ *
+ * Eski kesh (URI siz) uchun avval unit group qayta so'rab URI olinadi.
+ * Idempotent: `cache.deepened` da bor sektor qayta so'ralmaydi.
+ */
+export async function deepenSectors(cache: SourceCache, sectors: string[], log: (s: string) => void): Promise<boolean> {
+  const done = new Set(cache.deepened ?? []);
+  const todo = sectors.filter((s) => !done.has(s));
+  if (!todo.length) return false;
+  const rows = cache.rows.filter((r) => r.source === "esco" && !r.deep && todo.includes(r.sector));
+  // URI siz yozuvlar — unit group dan qayta olinadi (eski kesh).
+  const noUri = rows.filter((r) => !r.uri);
+  if (noUri.length) {
+    const codes = [...new Set(noUri.map((r) => r.code))];
+    log(`ESCO: ${codes.length} ta unit group dan URI olinmoqda…`);
+    for (const code of codes) {
+      const j = await getJson(`https://ec.europa.eu/esco/api/resource/concept?uri=${encodeURIComponent(`http://data.europa.eu/esco/isco/C${code}`)}&language=en`);
+      await sleep(PAUSE_MS);
+      for (const o of links(j, "narrowerOccupation")) {
+        const r = noUri.find((x) => x.code === code && x.en === (o.title ?? "").trim());
+        if (r && o.uri) r.uri = o.uri;
+      }
+    }
+  }
+  const have = new Set(cache.rows.map((r) => `${r.source}|${r.sector}|${r.en.toLowerCase()}`));
+  let added = 0;
+  log(`ESCO: ${todo.join(",")} — ${rows.length} ta asosiy kasbning ixtisosliklari so'ralmoqda…`);
+  for (const r of rows) {
+    if (!r.uri) continue;
+    const j = await getJson(`https://ec.europa.eu/esco/api/resource/concept?uri=${encodeURIComponent(r.uri)}&language=en`);
+    await sleep(PAUSE_MS);
+    for (const o of links(j, "narrowerOccupation")) {
+      const en = (o.title ?? "").trim();
+      const k = `esco|${r.sector}|${en.toLowerCase()}`;
+      if (!en || have.has(k)) continue;
+      have.add(k);
+      cache.rows.push({ source: "esco", en, ru: "", aliases: [], sector: r.sector, code: r.code, group: r.en, uri: o.uri, deep: true });
+      added++;
+    }
+  }
+  cache.deepened = [...done, ...todo];
+  log(`  ikkinchi qatlam: +${added} kasb`);
+  return true;
 }
 
 /* ------------------------------------------------------------------ *
@@ -376,31 +474,48 @@ export async function fetchHh(log: (s: string) => void = () => {}): Promise<Sour
  * Kesh
  * ------------------------------------------------------------------ */
 
-export async function loadSources(opts: { force?: boolean; log?: (s: string) => void } = {}): Promise<SourceCache> {
+export async function loadSources(
+  opts: { force?: boolean; deepen?: string[]; log?: (s: string) => void } = {},
+): Promise<SourceCache> {
   const log = opts.log ?? (() => {});
+  let cache: SourceCache | null = null;
+  let dirty = false;
   if (!opts.force) {
-    const cached = await readFile(CACHE, "utf8")
+    cache = await readFile(CACHE, "utf8")
       .then((t) => JSON.parse(t) as SourceCache)
       .catch(() => null);
-    if (cached?.rows?.length) {
-      log(`Kesh: ${cached.rows.length} ta manba yozuvi (${cached.fetchedAt})`);
-      return cached;
-    }
+    if (cache?.rows?.length) {
+      log(`Kesh: ${cache.rows.length} ta manba yozuvi (${cache.fetchedAt})`);
+      dirty = await repairMissed(cache, log);
+    } else cache = null;
   }
-  log("Manbalar yuklanmoqda (ESCO ISCO daraxti ~620 so'rov + hh.ru)…");
-  // Ketma-ket: ikki manbani bir vaqtda urish ham, ESCO daraxtini parallel
-  // yurish ham «mehmon bo'lib bormaslik» qoidasini buzardi.
-  const esco = await fetchEsco(log);
-  const hh = await fetchHh(log);
-  const cache: SourceCache = { fetchedAt: new Date().toISOString(), rows: [...esco, ...hh] };
-  await mkdir(dirname(CACHE), { recursive: true });
-  await writeFile(CACHE, JSON.stringify(cache), "utf8");
-  log(`Kesh yozildi: ${CACHE} — ESCO ${esco.length}, hh.ru ${hh.length}`);
+  if (!cache) {
+    log("Manbalar yuklanmoqda (ESCO ISCO daraxti ~620 so'rov + hh.ru)…");
+    // Ketma-ket: ikki manbani bir vaqtda urish ham, ESCO daraxtini parallel
+    // yurish ham «mehmon bo'lib bormaslik» qoidasini buzardi.
+    const esco = await fetchEsco(log);
+    const hh = await fetchHh(log);
+    cache = { fetchedAt: new Date().toISOString(), rows: [...esco.rows, ...hh], missed: esco.missed };
+    dirty = true;
+    log(`Manbalar: ESCO ${esco.rows.length} (olinmagan shox: ${esco.missed.length}), hh.ru ${hh.length}`);
+  }
+  if (opts.deepen?.length && (await deepenSectors(cache, opts.deepen, log))) dirty = true;
+  if (dirty) {
+    await mkdir(dirname(CACHE), { recursive: true });
+    await writeFile(CACHE, JSON.stringify(cache), "utf8");
+    log(`Kesh yozildi: ${CACHE} — ${cache.rows.length} yozuv`);
+  }
   return cache;
 }
 
+/** `--deepen huquq,hr` → ["huquq","hr"]; bayroq bo'lmasa bo'sh. */
+export function deepenFlag(argv: string[]): string[] {
+  const i = argv.indexOf("--deepen");
+  return i > 0 && argv[i + 1] ? argv[i + 1].split(",").filter(Boolean) : [];
+}
+
 if (process.argv[1]?.endsWith("fetch-professions.mts")) {
-  const c = await loadSources({ force: process.argv.includes("--force"), log: (s) => console.log(s) });
+  const c = await loadSources({ force: process.argv.includes("--force"), deepen: deepenFlag(process.argv), log: (s) => console.log(s) });
   const bySector = new Map<string, number>();
   for (const r of c.rows) bySector.set(r.sector, (bySector.get(r.sector) ?? 0) + 1);
   console.log([...bySector].sort((a, b) => b[1] - a[1]).map(([s, n]) => `${s}:${n}`).join("  "));
