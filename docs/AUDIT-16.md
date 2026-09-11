@@ -94,3 +94,10 @@ Chromium smoke (`scratchpad/pw/resume16.mjs`, admin cookie, dev server 3111): 15
 - `letter` da «osilgan» yorliq DOCX'da chekinish bilan yasalgan (haqiqiy ikki ustunli yorliq jadval bilan bo'lardi, u holda bo'lim varaq chegarasida bo'linolmasdi) — Word'da sarlavha va matn bir xil satrda emas, ustma-ust; ko'ruvchi ham shunday.
 - `portrait` va `ats` ikkalasi markazlashgan sarlavhali; farqi surat (portrait) va serif/caps (ats). Surat yuklanmagan portrait ATS'ga yaqin ko'rinadi — galereyada namunaviy surat bilan ko'rsatiladi.
 - Eski hujjatlardagi `classic/minimal/creative` qiymatlari `doc_json` da qoladi va o'qishda ko'chiriladi; 019-o'xshash backfill kerak emas.
+
+## 6. Deploy yozuvi (2026-09-11)
+
+- Zaxira `/root/slaydx-backups/slaydx-20260911055023.sql` (322 MB), `ROLLBACK.txt` = `5902c7b`.
+- `bash /opt/slaydx/deploy.sh` → `e9aeba0`; `slaydx-web-1` healthy, `slaydx-worker-1` up, `/api/health` 200. Migratsiya yo'q (019 holati o'zgarmadi).
+- Prod smoke (`resume16-prod.mjs`, admin sessiya): 15/15 — galereya 4 + 6, ta'lim turi savollari, yil tanlagichlar, bandlarda probel/Enter, suratsiz shablon ogohlantirishi; brauzer xatolari 0.
+- Eski rezyumelar yangi ko'ruvchida: `e10811cd` (AUDIT-15 `twocol`, ta'lim satrida `kind` yo'q → `university`), `2a2561bb` (`creative` → `card` ko'chirildi), `7a0d2aa0` (modelsiz eski hujjat → `legacyResumeModel`) — uchalasi 1 sahifa, 2 zona, xatosiz.
