@@ -887,6 +887,27 @@
     ]
   },
   {
+    "id": "art-director",
+    "uz": "Art-direktor",
+    "ru": "Арт-директор",
+    "en": "Art Director",
+    "aliases": [
+      "kreativ direktor",
+      "creative director"
+    ],
+    "sector": "dizayn",
+    "skills": [
+      "Vizual konsepsiya",
+      "Dizayn nazorati",
+      "Brending",
+      "Adobe Photoshop",
+      "Adobe Illustrator",
+      "Kreativ strategiya",
+      "Loyiha boshqaruvi",
+      "Rassomlar bilan ishlash"
+    ]
+  },
+  {
     "id": "architectural-designer",
     "uz": "Arxitektor-dizayner",
     "ru": "Архитектор-дизайнер",
@@ -1118,6 +1139,132 @@
     ]
   },
   {
+    "id": "digital-artist",
+    "uz": "Raqamli rassom",
+    "ru": "Цифровой художник",
+    "en": "Digital artist",
+    "aliases": [
+      "raqamli illyustrator",
+      "диджитал художник"
+    ],
+    "sector": "dizayn",
+    "skills": [
+      "Adobe Photoshop",
+      "Procreate",
+      "Grafik planshet",
+      "Konsept-art",
+      "Matte painting",
+      "Rang nazariyasi",
+      "Raqamli chizish",
+      "2D render"
+    ]
+  },
+  {
+    "id": "desktop-publisher",
+    "uz": "Sahifalovchi dizayner",
+    "ru": "Верстальщик",
+    "en": "Desktop Publisher",
+    "aliases": [
+      "sahifalovchi",
+      "verstalschik",
+      "prepress mutaxassisi"
+    ],
+    "sector": "dizayn",
+    "skills": [
+      "Adobe InDesign",
+      "Adobe Illustrator",
+      "Matbaa tayyorgarligi",
+      "Prepress",
+      "Tipografika",
+      "Shriftlar bilan ishlash",
+      "Adobe Acrobat"
+    ]
+  },
+  {
+    "id": "set-designer",
+    "uz": "Sahna dekoratori va dizayneri",
+    "ru": "Художник-постановщик",
+    "en": "Set Designer",
+    "aliases": [
+      "dekorator",
+      "sahna rassomi",
+      "сценограф"
+    ],
+    "sector": "dizayn",
+    "skills": [
+      "Sahna bezagi",
+      "Maket yasash",
+      "AutoCAD",
+      "3D vizualizatsiya",
+      "Dekoratsiya chizmalari",
+      "Material tanlash",
+      "Yoritish loyihasi"
+    ]
+  },
+  {
+    "id": "industrial-designer",
+    "uz": "Sanoat dizayneri",
+    "ru": "Промышленный дизайнер",
+    "en": "Industrial Designer",
+    "aliases": [
+      "promishlenniy dizayner",
+      "sanoat mahsulotlari dizayneri"
+    ],
+    "sector": "dizayn",
+    "skills": [
+      "3D modellashtirish",
+      "SolidWorks",
+      "Autodesk Fusion 360",
+      "Prototip yaratish",
+      "Ergonomika",
+      "Chizmachilik",
+      "Rendring",
+      "Materialshunoslik"
+    ]
+  },
+  {
+    "id": "textile-colourist",
+    "uz": "To'qimachilik koloristi",
+    "ru": "Колорист по текстилю",
+    "en": "Textile Colourist",
+    "aliases": [
+      "tekstil koloristi",
+      "rang bo'yicha mutaxassis",
+      "колорист"
+    ],
+    "sector": "dizayn",
+    "skills": [
+      "Ranglar nazariyasi",
+      "Pantone tizimi",
+      "Gazlamalarni bo'yash",
+      "Rang retsepturasi",
+      "Spektrofotometriya",
+      "Bo'yoq laboratoriyasi",
+      "Sifat nazorati"
+    ]
+  },
+  {
+    "id": "textile-product-developer",
+    "uz": "To'qimachilik mahsulotlari dizayneri",
+    "ru": "Разработчик текстильных изделий",
+    "en": "Textile Product Developer",
+    "aliases": [
+      "tekstil dizayneri",
+      "дизайнер текстиля",
+      "tekstil muhandisi"
+    ],
+    "sector": "dizayn",
+    "skills": [
+      "Mato turlari",
+      "To'qimachilik texnologiyasi",
+      "Dizayn chizmalari",
+      "Naqsh yaratish",
+      "Adobe Photoshop",
+      "Texnik hujjatlar",
+      "Material tanlash"
+    ]
+  },
+  {
     "id": "ui-ux-designer-2",
     "uz": "UI/UX dizayner",
     "ru": "UI/UX дизайнер",
@@ -1168,6 +1315,134 @@
     ]
   },
   {
+    "id": "special-effects-artist",
+    "uz": "VFX rassomi",
+    "ru": "Художник спецэффектов (VFX)",
+    "en": "Special effects artist",
+    "aliases": [
+      "vfx artist",
+      "vfx mutaxassisi",
+      "спецэффекты"
+    ],
+    "sector": "dizayn",
+    "skills": [
+      "Houdini",
+      "Adobe After Effects",
+      "Nuke",
+      "Kompoziting",
+      "3D simulyatsiya",
+      "CGI effektlar",
+      "Rotoskopiya",
+      "Particle tizimlari"
+    ]
+  },
+  {
+    "id": "video-designer",
+    "uz": "Video dizayner",
+    "ru": "Видеодизайнер",
+    "en": "Video Designer",
+    "aliases": [
+      "videomontajchi",
+      "video editor"
+    ],
+    "sector": "dizayn",
+    "skills": [
+      "Adobe Premiere Pro",
+      "After Effects",
+      "Videomontaj",
+      "Rang korreksiyasi",
+      "Kadr kompozitsiyasi",
+      "Ovoz montaji",
+      "Vizual effektlar"
+    ]
+  },
+  {
+    "id": "visual-merchandiser",
+    "uz": "Vizual merchandayzer",
+    "ru": "Визуальный мерчандайзер",
+    "en": "Visual Merchandiser",
+    "aliases": [
+      "merchendayzer",
+      "витринист",
+      "merchandiser"
+    ],
+    "sector": "dizayn",
+    "skills": [
+      "Vitrina bezatish",
+      "Planogramma tuzish",
+      "Savdo maydonini rejalash",
+      "Brend standartlari",
+      "Zonallashtirish",
+      "Mavsumiy bezaklar",
+      "POS-materiallar"
+    ]
+  },
+  {
+    "id": "mineral-processing-operator",
+    "uz": "Boyitish fabrikasi apparatchisi",
+    "ru": "Аппаратчик обогатительной фабрики",
+    "en": "Mineral Processing Operator",
+    "aliases": [
+      "boyituvchi operator",
+      "flotator",
+      "оператор обогащения"
+    ],
+    "sector": "energetika",
+    "skills": [
+      "Flotatsiya jarayonini boshqarish",
+      "Tegirmon va maydalagichlar nazorati",
+      "Reagentlarni dozalash",
+      "Gidrosiklonlarni sozlash",
+      "Shlam va pulpa zichligini o'lchash",
+      "Konverer lentalarini nazorat qilish",
+      "Filtr-presslarni boshqarish",
+      "Namunalar olish"
+    ]
+  },
+  {
+    "id": "roustabout",
+    "uz": "Burg'ilash maydoni yordamchi ishchisi",
+    "ru": "Подсобный рабочий буровой",
+    "en": "Roustabout",
+    "aliases": [
+      "pomoshnik burovika",
+      "yordamchi burg'ilovchi",
+      "rig hand"
+    ],
+    "sector": "energetika",
+    "skills": [
+      "Yuk ortish-tushirish",
+      "Quvurlarni tozalash",
+      "Burg'ilash loyini tayyorlash",
+      "Chig'irlar bilan ishlash",
+      "Uskunalarni moylash",
+      "Sling bilan ishlash",
+      "Maydon tozaligi"
+    ]
+  },
+  {
+    "id": "derrickhand",
+    "uz": "Burg'ilash minorasi ishchisi",
+    "ru": "Помощник бурильщика",
+    "en": "Derrickhand",
+    "aliases": [
+      "pombyur",
+      "minorachi",
+      "помбур"
+    ],
+    "sector": "energetika",
+    "skills": [
+      "Burg'ilash minorasi xizmati",
+      "Nasos agregatlarini nazorat qilish",
+      "Eritma zichligini o'lchash",
+      "Burg'i trubalarini ulash",
+      "Manipulyatorlarni boshqarish",
+      "Sirkulyatsiya tizimini sozlash",
+      "Shneklarni tozalash",
+      "Mehnat muhofazasi qoidalari"
+    ]
+  },
+  {
     "id": "drilling-engineer",
     "uz": "Burg'ilash muhandisi",
     "ru": "Инженер по бурению",
@@ -1190,6 +1465,168 @@
     ]
   },
   {
+    "id": "drill-operator",
+    "uz": "Burg'ilash qurilmasi mashinisti",
+    "ru": "Машинист буровой установки",
+    "en": "Drill Operator",
+    "aliases": [
+      "бурильщик",
+      "burg'ilovchi",
+      "driller"
+    ],
+    "sector": "energetika",
+    "skills": [
+      "Burg'ilash stanogi",
+      "Nasos uskunalari",
+      "Skvajina ochish",
+      "Trubalarni ulash",
+      "Gidravlika tizimlari",
+      "Texnik xizmat ko'rsatish"
+    ]
+  },
+  {
+    "id": "oil-rig-motorhand",
+    "uz": "Burg'ilash qurilmasi motoristi",
+    "ru": "Моторист буровой установки",
+    "en": "Oil rig motorhand",
+    "aliases": [
+      "dizelchi motorist",
+      "моторист ДВС",
+      "drill rig motorhand"
+    ],
+    "sector": "energetika",
+    "skills": [
+      "Dizel generatorlari",
+      "Dvigatellarga texnik xizmat",
+      "Yoqilg'i-moylash materiallari",
+      "Gidravlik tizimlar nazorati",
+      "Uskunalar diagnostikasi",
+      "Xavfsizlik qoidalari"
+    ]
+  },
+  {
+    "id": "tool-pusher",
+    "uz": "Burg'ilash ustasi",
+    "ru": "Мастер по бурению",
+    "en": "Tool Pusher",
+    "aliases": [
+      "буровой мастер",
+      "drilling supervisor"
+    ],
+    "sector": "energetika",
+    "skills": [
+      "Burg'ilash jarayoni",
+      "Skvajina nazorati",
+      "Sanoat xavfsizligi",
+      "Brigada boshqaruvi",
+      "Avariyalarni bartaraf etish",
+      "Burg'ilash hisobotlari"
+    ]
+  },
+  {
+    "id": "driller",
+    "uz": "Burg'ilovchi usta",
+    "ru": "Бурильщик",
+    "en": "Driller",
+    "aliases": [
+      "burg'ilovchi",
+      "pomoshnik burilshika"
+    ],
+    "sector": "energetika",
+    "skills": [
+      "Burg'ilash uskunalarini boshqarish",
+      "Burg'ilash eritmasini tayyorlash",
+      "Kolonna tushirish va ko'tarish",
+      "Trubalarni montaj qilish",
+      "Geotexnik monitoring",
+      "Quduq devorini mustahkamlash",
+      "Sanoat xavfsizligi qoidalari",
+      "Favqulodda holatlarni bartaraf etish"
+    ]
+  },
+  {
+    "id": "roughneck",
+    "uz": "Burg'ilovchi yordamchisi",
+    "ru": "Помощник бурильщика (помбур)",
+    "en": "Roughneck",
+    "aliases": [
+      "pombur",
+      "driller assistant"
+    ],
+    "sector": "energetika",
+    "skills": [
+      "Quvurlarni burash-yechish",
+      "Elevator va kalitlar",
+      "Burg'ilash eritmasi nazorati",
+      "Preventor bilan ishlash",
+      "Nasoslarni yuvish",
+      "Asboblarni tayyorlash",
+      "Shtrixlash ishlari"
+    ]
+  },
+  {
+    "id": "power-tool-repair-technician",
+    "uz": "Elektr asboblarini ta'mirlash ustasi",
+    "ru": "Мастер по ремонту электроинструмента",
+    "en": "Power Tool Repair Technician",
+    "aliases": [
+      "remont elektroinstrumenta",
+      "asboblar ustasi",
+      "tool technician"
+    ],
+    "sector": "energetika",
+    "skills": [
+      "Dvigatel chulg'amlari",
+      "Rotor va stator ta'miri",
+      "Podshipnik almashtirish",
+      "Multimetr bilan ishlash",
+      "Mexanik qismlar diagnostikasi",
+      "Izolyatsiyani tekshirish",
+      "Elektr sxemalarini o'qish"
+    ]
+  },
+  {
+    "id": "electrical-engineer",
+    "uz": "Elektr muhandisi",
+    "ru": "Инженер-электрик",
+    "en": "Electrical Engineer",
+    "aliases": [
+      "elektromuhandis",
+      "инженер по электрике"
+    ],
+    "sector": "energetika",
+    "skills": [
+      "Elektr sxemalarini chizish",
+      "AutoCAD Electrical",
+      "Elektr taqsimlash tarmoqlari",
+      "Transformatorlar hisobi",
+      "PUE qoidalari",
+      "Yuklamalarni hisoblash",
+      "SCADA tizimlari"
+    ]
+  },
+  {
+    "id": "power-production-plant-operator",
+    "uz": "Elektr stansiyasi operatori",
+    "ru": "Оператор электростанции",
+    "en": "Power Plant Operator",
+    "aliases": [
+      "IES operatori",
+      "Gidroelektr stansiya operatori",
+      "машинист энергоблока"
+    ],
+    "sector": "energetika",
+    "skills": [
+      "Bug' turbinalari nazorati",
+      "Generatordan foydalanish",
+      "SCADA monitoring",
+      "Blok boshqaruv paneli",
+      "Favqulodda o'chirish",
+      "Qozonxona qurilmalari",
+      "Bosim va harorat nazorati"
+    ]
+  },
+  {
     "id": "electrician",
     "uz": "Elektrik",
     "ru": "Электрик",
@@ -1209,6 +1646,26 @@
       "O'lchov asboblari",
       "Qisqa tutashuvni aniqlash",
       "Shchit yig'ish"
+    ]
+  },
+  {
+    "id": "electrical-mechanic",
+    "uz": "Elektromexanik",
+    "ru": "Электромеханик",
+    "en": "Electrical Mechanic",
+    "aliases": [
+      "elektromexanik usta"
+    ],
+    "sector": "energetika",
+    "skills": [
+      "Elektr motorlarini ta'mirlash",
+      "Transformatorlarga xizmat ko'rsatish",
+      "Kabel liniyalarini montaj qilish",
+      "Elektr sxemalarini o'qish",
+      "O'lchov asboblaridan foydalanish",
+      "Releli himoya elementlari",
+      "Podshipniklarni almashtirish",
+      "PUE qoidalari"
     ]
   },
   {
@@ -1256,6 +1713,26 @@
     ]
   },
   {
+    "id": "mineral-processing-engineer",
+    "uz": "Foydali qazilmalarni boyitish muhandisi",
+    "ru": "Инженер по обогащению полезных ископаемых",
+    "en": "Mineral Processing Engineer",
+    "aliases": [
+      "обогатитель",
+      "boyitish muhandisi",
+      "metallurgist"
+    ],
+    "sector": "energetika",
+    "skills": [
+      "Flotatsiya jarayoni",
+      "Maydalash va yanchish",
+      "Gravitatsion boyitish",
+      "Ruda tahlili",
+      "Separatsiya texnikasi",
+      "Texnologik balans"
+    ]
+  },
+  {
     "id": "gas-pipeline-engineer",
     "uz": "Gaz quvurlari muhandisi",
     "ru": "Инженер газопроводов",
@@ -1300,6 +1777,46 @@
     ]
   },
   {
+    "id": "gas-processing-plant-operator",
+    "uz": "Gazni qayta ishlash zavodi operatori",
+    "ru": "Оператор газоперерабатывающего завода",
+    "en": "Gas Processing Plant Operator",
+    "aliases": [
+      "оператор ГПЗ",
+      "GQP operatori",
+      "gas plant operator"
+    ],
+    "sector": "energetika",
+    "skills": [
+      "Gaz fraksiyalash",
+      "Gaz separatorlari",
+      "Kompressor stansiyasi",
+      "Texnologik rejim nazorati",
+      "Bosim va harorat o'lchash",
+      "SCADA tizimlari"
+    ]
+  },
+  {
+    "id": "rolling-stock-electrician",
+    "uz": "Harakatlanuvchi tarkib elektromontyori",
+    "ru": "Электромонтер подвижного состава",
+    "en": "Rolling stock electrician",
+    "aliases": [
+      "poezd elektriki",
+      "электрик локомотива",
+      "train electrician"
+    ],
+    "sector": "energetika",
+    "skills": [
+      "Lokomotiv elektr tizimlari",
+      "Sxemalarni o'qish",
+      "Traktsion dvigatellar",
+      "Elektr xavfsizligi qoidalari",
+      "Diagnostika uskunalari",
+      "Yuqori voltli kontaktlar"
+    ]
+  },
+  {
     "id": "thermal-power-engineer",
     "uz": "Issiqlik energetigi muhandisi",
     "ru": "Инженер-теплоэнергетик",
@@ -1319,6 +1836,173 @@
       "Nasos stansiyalari boshqaruvi",
       "Issiqlik izolatsiyasi nazorati",
       "AutoCAD"
+    ]
+  },
+  {
+    "id": "quarry-manager",
+    "uz": "Karyer boshlig'i",
+    "ru": "Начальник карьера",
+    "en": "Quarry Manager",
+    "aliases": [
+      "karyer mudiri",
+      "quarry director"
+    ],
+    "sector": "energetika",
+    "skills": [
+      "Kon qazish rejalari",
+      "Karyer texnikasi",
+      "Sanoat xavfsizligi",
+      "Ishlab chiqarish nazorati",
+      "Ekologiya me'yorlari",
+      "Tog' jinslarini qazish"
+    ]
+  },
+  {
+    "id": "quarry-engineer",
+    "uz": "Karyer muhandisi",
+    "ru": "Инженер карьера",
+    "en": "Quarry Engineer",
+    "aliases": [
+      "kon muhandisi",
+      "gornyy injener",
+      "горный инженер"
+    ],
+    "sector": "energetika",
+    "skills": [
+      "Ochiq kon ishlarini rejalashtirish",
+      "Portlatish ishlarini loyihalash",
+      "Geomexanik monitoring",
+      "Autocad kon dasturlari",
+      "Karyer xavfsizligi nazorati",
+      "Foydali qazilmalar zaxirasi",
+      "Burg'ilash-portlatish pasporti",
+      "Texnika unumdorligini hisoblash"
+    ]
+  },
+  {
+    "id": "chemical-processing-plant-controller",
+    "uz": "Kimyoviy jarayonlar operatori",
+    "ru": "Оператор химического производства",
+    "en": "Chemical Plant Controller",
+    "aliases": [
+      "kimyo zavodi operatori",
+      "apparatchik",
+      "chemical operator"
+    ],
+    "sector": "energetika",
+    "skills": [
+      "Kimyoviy reaktorlar",
+      "Distillyatsiya jarayoni",
+      "ASUTP boshqaruvi",
+      "Kimyoviy xavfsizlik",
+      "Texnologik reglament",
+      "Nasos stansiyalari",
+      "Klapanlar nazorati"
+    ]
+  },
+  {
+    "id": "mine-manager",
+    "uz": "Kon boshlig'i",
+    "ru": "Начальник шахты / рудника",
+    "en": "Mine Manager",
+    "aliases": [
+      "nachalnik shaxti",
+      "shaxta boshlig'i",
+      "горный директор",
+      "mine director"
+    ],
+    "sector": "energetika",
+    "skills": [
+      "Kon ishlari rejasi",
+      "Xavfsizlik texnikasi",
+      "Ventilyatsiya nazorati",
+      "Burg'ilash-portlatish",
+      "Shaxta uskunalari",
+      "Resurslarni hisoblash",
+      "Geomexanika asoslari"
+    ]
+  },
+  {
+    "id": "mining-electrician",
+    "uz": "Kon elektromontyori",
+    "ru": "Подземный электрослесарь",
+    "en": "Mining Electrician",
+    "aliases": [
+      "gorny elektroslesar",
+      "kon elektrigi",
+      "mine electrician"
+    ],
+    "sector": "energetika",
+    "skills": [
+      "Portlashdan himoyalangan uskun",
+      "Kabel liniyalari ta'miri",
+      "Transformator podstansiyalari",
+      "Kon konveyerlari",
+      "Drenaj nasoslari montaji",
+      "Izolyatsiya nazorati",
+      "Yuqori kuchlanishli tarmoqlar"
+    ]
+  },
+  {
+    "id": "mine-development-engineer",
+    "uz": "Kon ishlari muhandisi",
+    "ru": "Инженер по горным работам",
+    "en": "Mine Development Engineer",
+    "aliases": [
+      "gorny injener",
+      "kon muhandisi",
+      "mining engineer"
+    ],
+    "sector": "energetika",
+    "skills": [
+      "Kon loyihalash",
+      "Burg'ilash-portlatish ishlari",
+      "AutoCAD",
+      "Micromine",
+      "Gorizontlarni ochish",
+      "Ventilyatsiya hisobi",
+      "Geomexanika tahlili"
+    ]
+  },
+  {
+    "id": "mine-planning-engineer",
+    "uz": "Kon rejalashtirish muhandisi",
+    "ru": "Инженер по планированию горных работ",
+    "en": "Mine planning engineer",
+    "aliases": [
+      "kon muhandisi",
+      "горный инженер",
+      "mine planner"
+    ],
+    "sector": "energetika",
+    "skills": [
+      "Micromine dasturi",
+      "Surpac",
+      "Kon ishlarini rejalashtirish",
+      "Burg'ilash-portlatish ishlari",
+      "Zaxiralarni hisoblash",
+      "Geotexnik monitoring"
+    ]
+  },
+  {
+    "id": "mine-health-and-safety-engineer",
+    "uz": "Konchilikda mehnat muhofazasi muhandisi",
+    "ru": "Инженер по охране труда в горной промышленности",
+    "en": "Mine Health and Safety Engineer",
+    "aliases": [
+      "injener TB na shahte",
+      "mehnat muhofazasi",
+      "safety officer mine"
+    ],
+    "sector": "energetika",
+    "skills": [
+      "Kon xavfsizligi qoidalari",
+      "Gaz monitoringi (metan)",
+      "Shaxhta ventilyatsiyasi",
+      "Evakuatsiya rejalari",
+      "TB bo'yicha yo'riqnoma",
+      "Xavflarni baholash",
+      "Shaxsiy himoya vositalari"
     ]
   },
   {
@@ -1344,6 +2028,69 @@
     ]
   },
   {
+    "id": "metal-furnace-operator",
+    "uz": "Metall eritish pechi operatori",
+    "ru": "Плавильщик металла",
+    "en": "Metal Furnace Operator",
+    "aliases": [
+      "metall erituvchi",
+      "plavilshik",
+      "furnace operator"
+    ],
+    "sector": "energetika",
+    "skills": [
+      "Domna pechi boshqaruvi",
+      "Induksion pechlar",
+      "Harorat rejimini nazorat",
+      "Shlak ajratish",
+      "Metallurgik tahlil",
+      "Metall quyish",
+      "Pech xavfsizligi"
+    ]
+  },
+  {
+    "id": "metallurgist",
+    "uz": "Metallurg muhandis",
+    "ru": "Инженер-металлург",
+    "en": "Metallurgist",
+    "aliases": [
+      "metallurg",
+      "металлург",
+      "metallurgical engineer"
+    ],
+    "sector": "energetika",
+    "skills": [
+      "Metall eritish texnologiyasi",
+      "Termik ishlov berish",
+      "Qotishmalar tahlili",
+      "Domna pechlari nazorati",
+      "Spektral tahlil",
+      "Metallografiya",
+      "Sifat nazorati (QC)"
+    ]
+  },
+  {
+    "id": "petroleum-pump-system-operator",
+    "uz": "Neft haydash nasos stansiyasi operatori",
+    "ru": "Оператор нефтеперекачивающей станции",
+    "en": "Petroleum Pump System Operator",
+    "aliases": [
+      "operator NPS",
+      "neft nasos operatori",
+      "pump station operator"
+    ],
+    "sector": "energetika",
+    "skills": [
+      "Magistral nasoslar",
+      "SCADA tizimlari",
+      "Bosimni nazorat qilish",
+      "Zulfinlarni boshqarish",
+      "Rezervuarlar hisobi",
+      "Vibratsiya diagnostikasi",
+      "Yong'in xavfsizligi"
+    ]
+  },
+  {
     "id": "petroleum-geologist",
     "uz": "Neft va gaz geologi",
     "ru": "Геолог нефти и газа",
@@ -1363,6 +2110,27 @@
       "Zaxiralarni hisoblash",
       "Geologik xaritalar tuzish",
       "GisCAD dasturlari"
+    ]
+  },
+  {
+    "id": "petroleum-engineer",
+    "uz": "Neft va gaz muhandisi",
+    "ru": "Инженер по добыче нефти и газа",
+    "en": "Petroleum Engineer",
+    "aliases": [
+      "neftchi muhandis",
+      "инженер-нефтяник",
+      "petroleum engineering"
+    ],
+    "sector": "energetika",
+    "skills": [
+      "Quduqlarni loyihalash",
+      "Gidrodinamik modellashtirish",
+      "Petrel dasturi",
+      "ECLIPSE",
+      "Qatlam bosimi tahlili",
+      "Gazlift tizimlari",
+      "Neft qazib olish texnologiyasi"
     ]
   },
   {
@@ -1388,6 +2156,110 @@
     ]
   },
   {
+    "id": "pipeline-pump-operator",
+    "uz": "Neft-gaz quvurlari nasos operatori",
+    "ru": "Машинист технологических насосов",
+    "en": "Pipeline pump operator",
+    "aliases": [
+      "nasoschi",
+      "машинист насосной станции",
+      "pump station operator"
+    ],
+    "sector": "energetika",
+    "skills": [
+      "Nasos stansiyalari nazorati",
+      "Bosim va oqim monitoringi",
+      "Kompressor uskunalari",
+      "Zulfindek armaturalar",
+      "GIDROtizimlarga xizmat",
+      "Neft mahsulotlari hisobi"
+    ]
+  },
+  {
+    "id": "oil-refinery-control-operator",
+    "uz": "Neftni qayta ishlash operatori",
+    "ru": "Оператор технологических установок НПЗ",
+    "en": "Oil Refinery Control Room Operator",
+    "aliases": [
+      "operator NPZ",
+      "neftni qayta ishlash texnologi",
+      "оператор НПЗ"
+    ],
+    "sector": "energetika",
+    "skills": [
+      "Texnologik rejimni boshqarish",
+      "SCADA tizimlari",
+      "DCS boshqaruvi",
+      "Rektifikatsiya jarayoni",
+      "Nasos stansiyalari nazorati",
+      "Xavfsizlik tizimlari nazorati",
+      "Neft mahsulotlari hisobi",
+      "Quvurlar bosimini monitoring qilish"
+    ]
+  },
+  {
+    "id": "refinery-shift-manager",
+    "uz": "Neftni qayta ishlash smena boshlig'i",
+    "ru": "Начальник смены НПЗ",
+    "en": "Refinery Shift Manager",
+    "aliases": [
+      "neftni qayta ishlash ustasi",
+      "nachalnik smeni NPZ",
+      "refinery supervisor"
+    ],
+    "sector": "energetika",
+    "skills": [
+      "Katalitik kreking",
+      "Neftni haydash (rektifikatsiya)",
+      "Texnologik rejim nazorati",
+      "Yong'in xavfsizligi",
+      "Smena hisoboti",
+      "Avtomatlashtirilgan nazorat",
+      "Sanoat xavfsizligi"
+    ]
+  },
+  {
+    "id": "surface-miner",
+    "uz": "Ochiq kon ishchisi",
+    "ru": "Горнорабочий открытых горных работ",
+    "en": "Surface Miner",
+    "aliases": [
+      "горнорабочий",
+      "konchi",
+      "miner"
+    ],
+    "sector": "energetika",
+    "skills": [
+      "Karyer ishlari",
+      "Burg'ilash uskunalari",
+      "Yuklash texnikasi",
+      "Tog' jinslari xavfsizligi",
+      "Drenaj tizimlari",
+      "Konchilik qoidalari"
+    ]
+  },
+  {
+    "id": "wastewater-treatment-operator",
+    "uz": "Oqova suvlarni tozalash operatori",
+    "ru": "Оператор очистных сооружений",
+    "en": "Wastewater Treatment Operator",
+    "aliases": [
+      "operator ochistnyx",
+      "suv tozalash operatori",
+      "vodoochistka operator"
+    ],
+    "sector": "energetika",
+    "skills": [
+      "Suv tindirish",
+      "Aerotenklar nazorati",
+      "Xlorlash tizimlari",
+      "Filtrlash uskunalari",
+      "Reagentlar dozasi",
+      "Nasos stansiyalari",
+      "PH darajasini o'lchash"
+    ]
+  },
+  {
     "id": "substation-operator",
     "uz": "Podstansiya navbatchi elektromontyori",
     "ru": "Дежурный электромонтер подстанции",
@@ -1407,6 +2279,66 @@
       "Avariya holatini bartaraf etish",
       "Teleboshqaruv tizimlari",
       "O'chirgichlar bilan ishlash"
+    ]
+  },
+  {
+    "id": "explosives-engineer",
+    "uz": "Portlatish ishlari muhandisi",
+    "ru": "Инженер по буровзрывным работам",
+    "en": "Explosives Engineer",
+    "aliases": [
+      "взрывник",
+      "portlatuvchi muhandis",
+      "blasting engineer"
+    ],
+    "sector": "energetika",
+    "skills": [
+      "Portlatish texnologiyasi",
+      "Portlovchi moddalar",
+      "Xavfsizlik zonalari",
+      "Seysmik nazorat",
+      "Shurf qazish sxemasi",
+      "Portlatish hisob-kitobi"
+    ]
+  },
+  {
+    "id": "assayer",
+    "uz": "Probirlash tahlilchisi",
+    "ru": "Пробирер",
+    "en": "Assayer",
+    "aliases": [
+      "probirchi",
+      "пробирер-лаборант",
+      "assayer technician"
+    ],
+    "sector": "energetika",
+    "skills": [
+      "Qimmatbaho metallar tahlili",
+      "Probir eritish usullari",
+      "Ximik analiz usullari",
+      "Namuna olish qoidalari",
+      "Spektrometriya",
+      "Tarozi va o'lchash asboblari"
+    ]
+  },
+  {
+    "id": "well-digger",
+    "uz": "Quduq qazuvchi",
+    "ru": "Копатель колодцев",
+    "en": "Well-digger",
+    "aliases": [
+      "quduqchi",
+      "землекоп колодцев",
+      "well digger"
+    ],
+    "sector": "energetika",
+    "skills": [
+      "Quduq qazish texnologiyasi",
+      "Tuproq qatlamlarini aniqlash",
+      "Nasoslarni o'rnatish",
+      "Xavfsizlik texnikasi",
+      "Beton halqalarni tushirish",
+      "Drenaj tizimlarini qurish"
     ]
   },
   {
@@ -1473,6 +2405,110 @@
       "Invertorlar diagnostikasi",
       "Moylash va moy almashtirish",
       "SCADA monitoringi"
+    ]
+  },
+  {
+    "id": "underground-miner",
+    "uz": "Shaxtyor",
+    "ru": "Шахтер",
+    "en": "Underground Miner",
+    "aliases": [
+      "shaxta ishchisi",
+      "gornorabochiy",
+      "шахтёр"
+    ],
+    "sector": "energetika",
+    "skills": [
+      "Kon lahimlarini ochish",
+      "Shaxta mustahkamlagichlarini o'rnatish",
+      "Pnevmatik bolg'a bilan ishlash",
+      "Shaxta shamollatishini tekshirish",
+      "Rudani ortish texnikasi",
+      "Konveyerlarni boshqarish",
+      "Shaxta xavfsizligi qoidalari",
+      "Gaz detektorlari bilan ishlash"
+    ]
+  },
+  {
+    "id": "water-plant-technician",
+    "uz": "Suv tozalash inshooti operatori",
+    "ru": "Оператор водоочистных сооружений",
+    "en": "Water Plant Technician",
+    "aliases": [
+      "оператор водоочистки",
+      "suv tozalash texnigi",
+      "water operator"
+    ],
+    "sector": "energetika",
+    "skills": [
+      "Suv filtrlash",
+      "Xlorlash jarayoni",
+      "Nasos stansiyalari",
+      "PH darajasini o'lchash",
+      "Reagentlar dozasi",
+      "Kimyoviy tahlil"
+    ]
+  },
+  {
+    "id": "mineral-crushing-operator",
+    "uz": "Tog' jinslarini maydalash mashinasi operatori",
+    "ru": "Дробильщик горных пород",
+    "en": "Mineral Crushing Operator",
+    "aliases": [
+      "maydalash qurilmasi operatori",
+      "drobilshik",
+      "crusher operator"
+    ],
+    "sector": "energetika",
+    "skills": [
+      "Konusli maydalagichlar",
+      "Jag'li maydalagichlar",
+      "Konveyer tasmalari",
+      "G'alvirlash jarayoni",
+      "Uskunalarni moylash",
+      "Fraksiya nazorati",
+      "Chiqindi changini tozalash"
+    ]
+  },
+  {
+    "id": "tunnel-boring-machine-operator",
+    "uz": "Tunnel qazish mashinasi operatori",
+    "ru": "Машинист тоннелепроходческого комплекса",
+    "en": "Tunnel Boring Machine Operator",
+    "aliases": [
+      "mashinist TPK",
+      "operator TBM",
+      "тоннелепроходчик"
+    ],
+    "sector": "energetika",
+    "skills": [
+      "TPK boshqaruvi",
+      "Gidravlika tizimlari",
+      "Lazerli yo'naltirish",
+      "Tuproq bosimini nazorat",
+      "Segmentlarni montaj qilish",
+      "Shnekli konveyer nazorati",
+      "Texnik xavfsizlik"
+    ]
+  },
+  {
+    "id": "underground-heavy-equipment-operator",
+    "uz": "Yerosti kon mashinalari haydovchisi",
+    "ru": "Машинист подземных самоходных машин",
+    "en": "Underground Heavy Equipment Operator",
+    "aliases": [
+      "машинист ПДМ",
+      "kon haydovchisi",
+      "underground operator"
+    ],
+    "sector": "energetika",
+    "skills": [
+      "Yerosti yuklagichlari",
+      "Shaxta texnikasi",
+      "Ventilyatsiya nazorati",
+      "Shaxtada xavfsizlik",
+      "Gidrotizimlar",
+      "Konteynerlarni tashish"
     ]
   },
   {
@@ -1844,6 +2880,87 @@
     ]
   },
   {
+    "id": "employment-agent",
+    "uz": "Bandlik agenti",
+    "ru": "Агент по трудоустройству",
+    "en": "Employment Agent",
+    "aliases": [
+      "ishga joylashtirish agenti",
+      "агент по занятости",
+      "job agent"
+    ],
+    "sector": "hr",
+    "skills": [
+      "Bo'sh ish o'rinlari tahlili",
+      "Nomzodlar bazasini yuritish",
+      "Mehnat yarmarkalari",
+      "Bandlik qonunchiligi",
+      "Vakansiyalar monitoringi",
+      "Mehnat shartnomalari"
+    ]
+  },
+  {
+    "id": "public-employment-service-manager",
+    "uz": "Bandlik markazi rahbari",
+    "ru": "Руководитель центра занятости",
+    "en": "Public Employment Service Manager",
+    "aliases": [
+      "bandlik boshlig'i",
+      "директор биржи труда",
+      "employment center manager"
+    ],
+    "sector": "hr",
+    "skills": [
+      "Davlat bandlik dasturlari",
+      "Kvotali ish o'rinlari",
+      "Mehnat bozori statistikasi",
+      "Fuqarolarni qabul qilish",
+      "Mehnat huquqi",
+      "Subsidiyalar ajratish"
+    ]
+  },
+  {
+    "id": "employment-and-vocational-integration-consultant",
+    "uz": "Bandlik va kasbiy moslashuv mutaxassisi",
+    "ru": "Консультант по трудоустройству и адаптации",
+    "en": "Employment and Vocational Integration Consultant",
+    "aliases": [
+      "ishga joylashtirish mutaxassisi",
+      "консультант по трудоустройству",
+      "employment consultant"
+    ],
+    "sector": "hr",
+    "skills": [
+      "Xodimlarni moslashtirish (onboarding)",
+      "Bandlik dasturlari",
+      "Karyera rejalashtirish",
+      "Kasbiy qayta tayyorlash",
+      "Mehnat yarmarkalari",
+      "Ish qidirish strategiyalari",
+      "Nogironligi borlarni integratsiyasi",
+      "Mentorlik tizimini yo'lga qo'yish"
+    ]
+  },
+  {
+    "id": "business-coach",
+    "uz": "Biznes-kouch",
+    "ru": "Бизнес-коуч",
+    "en": "Business Coach",
+    "aliases": [
+      "kouch",
+      "executive coach"
+    ],
+    "sector": "hr",
+    "skills": [
+      "Yakkama-yakka kouching",
+      "Liderlikni rivojlantirish",
+      "Maqsadlarni belgilash (OKR)",
+      "GROW modeli",
+      "Teskari aloqa berish",
+      "Strategik sessiyalar"
+    ]
+  },
+  {
     "id": "hr-administrator",
     "uz": "HR administrator",
     "ru": "HR-администратор",
@@ -2042,6 +3159,29 @@
     ]
   },
   {
+    "id": "career-guidance-advisor",
+    "uz": "Karyera bo'yicha maslahatchi",
+    "ru": "Консультант по профориентации",
+    "en": "Career Guidance Advisor",
+    "aliases": [
+      "karyera konsultanti",
+      "профориентолог",
+      "карьерный консультант",
+      "career advisor"
+    ],
+    "sector": "hr",
+    "skills": [
+      "Kasbga yo'naltirish testlari",
+      "Rezyume tahlili",
+      "Karyera xaritasi tuzish",
+      "Intervyuga tayyorlash",
+      "Mehnat bozori monitoringi",
+      "Soft skills diagnostikasi",
+      "Kasbiy profillash",
+      "Ta'lim dasturlari tanlovi"
+    ]
+  },
+  {
     "id": "compensation-and-benefits-manager",
     "uz": "Kompensatsiya va imtiyozlar bo'yicha mutaxassis",
     "ru": "Менеджер по компенсациям и льготам (C&B)",
@@ -2086,6 +3226,28 @@
     ]
   },
   {
+    "id": "labour-relations-officer",
+    "uz": "Mehnat munosabatlari bo'yicha mutaxassis",
+    "ru": "Специалист по трудовым отношениям",
+    "en": "Labour Relations Officer",
+    "aliases": [
+      "метод по трудовым отношениям",
+      "специалист по трудовым спорам",
+      "labour relations specialist"
+    ],
+    "sector": "hr",
+    "skills": [
+      "Mehnat kodeksi",
+      "Jamoaviy shartnomalar",
+      "Mehnat nizolarini hal qilish",
+      "Mehnat intizomi nazorati",
+      "Kasaba uyushmasi bilan ishlash",
+      "Mehnat muhofazasi talablari",
+      "Ichki mehnat tartib qoidalari",
+      "Shikoyatlarni ko'rib chiqish"
+    ]
+  },
+  {
     "id": "recruiter",
     "uz": "Rekruter",
     "ru": "Рекрутер",
@@ -2105,6 +3267,28 @@
       "HH.uz bilan ishlash",
       "Nomzodlarni baholash",
       "Job offer tayyorlash"
+    ]
+  },
+  {
+    "id": "recruitment-consultant",
+    "uz": "Rekruting bo'yicha konsultant",
+    "ru": "Консультант по подбору персонала",
+    "en": "Recruitment Consultant",
+    "aliases": [
+      "rekruter konsultant",
+      "рекрутер-консультант",
+      "recruiter",
+      "recruitment advisor"
+    ],
+    "sector": "hr",
+    "skills": [
+      "Xodimlarni qidirish",
+      "Suhbat o'tkazish",
+      "Headhunting",
+      "LinkedIn Recruiter",
+      "Mijozlar bilan ishlash",
+      "Rezyumelarni saralash",
+      "ATS tizimlari"
     ]
   },
   {
@@ -5701,6 +6885,50 @@
     ]
   },
   {
+    "id": "artistic-director",
+    "uz": "Badiiy rahbar",
+    "ru": "Художественный руководитель",
+    "en": "Artistic Director",
+    "aliases": [
+      "xudruk",
+      "badiiy direktor",
+      "art director theater"
+    ],
+    "sector": "mamuriy",
+    "skills": [
+      "Repertuar rejalashtirish",
+      "Sahnalashtirish",
+      "Ijodiy guruh boshqaruvi",
+      "Kasting o'tkazish",
+      "Madaniy dasturlar",
+      "Spektakl nazorati",
+      "Ssenariylar tahlili",
+      "Premeralar tashkili"
+    ]
+  },
+  {
+    "id": "business-intelligence-manager",
+    "uz": "BI bo'yicha menejer",
+    "ru": "Менеджер по бизнес-аналитике",
+    "en": "Business intelligence manager",
+    "aliases": [
+      "BI menejeri",
+      "BI manager",
+      "менеджер BI"
+    ],
+    "sector": "mamuriy",
+    "skills": [
+      "Power BI",
+      "Tableau",
+      "SQL so'rovlari",
+      "Dax funksiyalari",
+      "ETL jarayonlari",
+      "Ma'lumotlar tahlili",
+      "Dashboard yaratish",
+      "Biznes tahlil"
+    ]
+  },
+  {
     "id": "facilities-coordinator",
     "uz": "Bino xizmati koordinatori",
     "ru": "Координатор по эксплуатации здания",
@@ -5722,6 +6950,132 @@
     ]
   },
   {
+    "id": "business-consultant",
+    "uz": "Biznes maslahatchi",
+    "ru": "Бизнес-консультант",
+    "en": "Business Consultant",
+    "aliases": [
+      "biznes konsultant",
+      "business analyst"
+    ],
+    "sector": "mamuriy",
+    "skills": [
+      "Biznes tahlil",
+      "Bozor tadqiqoti",
+      "Moliyaviy modellashtirish",
+      "SWOT tahlil",
+      "Jarayonlarni optimallashtirish",
+      "Strategik rejalashtirish",
+      "Konsalting"
+    ]
+  },
+  {
+    "id": "business-manager",
+    "uz": "Biznes menejer",
+    "ru": "Бизнес-менеджер",
+    "en": "Business Manager",
+    "aliases": [
+      "tadbirkorlik boshqaruvchisi",
+      "boshqaruv menejeri",
+      "управляющий бизнесом"
+    ],
+    "sector": "mamuriy",
+    "skills": [
+      "Biznes strategiyasi",
+      "Budjetlashtirish",
+      "Sotuvlar nazorati",
+      "Operatsion boshqaruv",
+      "Sheriklar bilan muzokaralar",
+      "Moliyaviy tahlil",
+      "KPI monitoringi"
+    ]
+  },
+  {
+    "id": "department-manager",
+    "uz": "Bo'lim boshlig'i",
+    "ru": "Руководитель отдела",
+    "en": "Department Manager",
+    "aliases": [
+      "nachalnik otdela",
+      "bo'lim mudiri",
+      "head of department"
+    ],
+    "sector": "mamuriy",
+    "skills": [
+      "Operatsion boshqaruv",
+      "Xodimlar boshqaruvi",
+      "KPI belgilash",
+      "Hisobotlar tayyorlash",
+      "Resurslar taqsimoti",
+      "Byudjet nazorati",
+      "Vazifalar delegatsiyasi"
+    ]
+  },
+  {
+    "id": "chief-executive-officer",
+    "uz": "Bosh direktor (CEO)",
+    "ru": "Генеральный директор (CEO)",
+    "en": "Chief Executive Officer (CEO)",
+    "aliases": [
+      "generalny direktor",
+      "ijrochi direktor",
+      "CEO"
+    ],
+    "sector": "mamuriy",
+    "skills": [
+      "Strategik rejalashtirish",
+      "Biznes boshqaruvi",
+      "Byudjetlashtirish",
+      "KPI boshqaruvi",
+      "Risk menejment",
+      "Muzokaralar olib borish",
+      "P&L hisoboti",
+      "Kompaniya strukturasi"
+    ]
+  },
+  {
+    "id": "management-assistant",
+    "uz": "Boshqaruv assistenti",
+    "ru": "Ассистент руководителя",
+    "en": "Management Assistant",
+    "aliases": [
+      "assistant manager",
+      "rahbar yordamchisi",
+      "помощник руководителя"
+    ],
+    "sector": "mamuriy",
+    "skills": [
+      "Ish jadvalini boshqarish",
+      "Ish yuritish",
+      "Uchrashuvlar tashkillashtirish",
+      "Protokol yuritish",
+      "Biznes yozishmalar",
+      "Sayohatlarni rejalashtirish",
+      "MS Office"
+    ]
+  },
+  {
+    "id": "pickup-point-manager",
+    "uz": "Buyurtma berish punkti xodimi",
+    "ru": "Сотрудник пункта выдачи заказов",
+    "en": "Pick-up Point Operator",
+    "aliases": [
+      "PVZ xodimi",
+      "operator PVZ",
+      "buyurtmalar berish operatori"
+    ],
+    "sector": "mamuriy",
+    "skills": [
+      "1C dasturi",
+      "Kassa apparati",
+      "Shtrix-kod skaneri",
+      "Yuklarni qabul qilish",
+      "Mijozlarga xizmat ko'rsatish",
+      "Tovarlarni qaytarish",
+      "Inventarizatsiya"
+    ]
+  },
+  {
     "id": "call-center-operator",
     "uz": "Call-markaz operatori",
     "ru": "Оператор колл-центра",
@@ -5740,6 +7094,91 @@
       "Shikoyatlar bilan ishlash",
       "Tezkor axborot kiritish",
       "Xizmat ko'rsatish standartlari"
+    ]
+  },
+  {
+    "id": "call-centre-quality-auditor",
+    "uz": "Call-markaz sifat nazorati mutaxassisi",
+    "ru": "Специалист по контролю качества колл-центра",
+    "en": "Call Centre Quality Auditor",
+    "aliases": [
+      "sifat nazoratchisi",
+      "call centre auditor",
+      "контролер качества кц"
+    ],
+    "sector": "mamuriy",
+    "skills": [
+      "Qo'ng'iroqlarni baholash",
+      "Sifat monitoringi",
+      "Check-list tuzish",
+      "CRM tahlili",
+      "SLA monitoringi",
+      "KPI baholash",
+      "Audio yozuvlar tahlili",
+      "Xatolarni tuzatish"
+    ]
+  },
+  {
+    "id": "call-centre-supervisor",
+    "uz": "Call-markaz supervayzeri",
+    "ru": "Супервайзер колл-центра",
+    "en": "Call Centre Supervisor",
+    "aliases": [
+      "call center supervisor",
+      "operatorlar koordinatori",
+      "koll markaz boshlig'i"
+    ],
+    "sector": "mamuriy",
+    "skills": [
+      "Operatorlar monitoringi",
+      "Qo'ng'iroqlar tahlili",
+      "SLA nazorati",
+      "Kutish vaqtini optimallash",
+      "CRM tizimlari",
+      "IP-telefoniya",
+      "Xodimlarni o'qitish"
+    ]
+  },
+  {
+    "id": "call-centre-analyst",
+    "uz": "Call-markaz tahlilchisi",
+    "ru": "Аналитик колл-центра",
+    "en": "Call centre analyst",
+    "aliases": [
+      "koll markaz tahlilchisi",
+      "аналитик контакт центра",
+      "call center analyst"
+    ],
+    "sector": "mamuriy",
+    "skills": [
+      "KPI tahlili",
+      "Navbat statistikasi",
+      "FCR monitoringi",
+      "Ovoz yozuvlari tahlili",
+      "WFM dasturlari",
+      "MS Excel",
+      "Hisobot tayyorlash"
+    ]
+  },
+  {
+    "id": "programme-manager",
+    "uz": "Dasturlar menejeri",
+    "ru": "Менеджер программ",
+    "en": "Programme Manager",
+    "aliases": [
+      "program manager",
+      "menejer programm",
+      "loyiha dasturlari rahbari"
+    ],
+    "sector": "mamuriy",
+    "skills": [
+      "Loyiha portfelini boshqarish",
+      "Budjetlashtirish",
+      "Strategik rejalashtirish",
+      "KPI nazorati",
+      "Resurslarni taqsimlash",
+      "Hisobot tayyorlash",
+      "Risk menejment"
     ]
   },
   {
@@ -5806,6 +7245,45 @@
     ]
   },
   {
+    "id": "medical-practice-manager",
+    "uz": "Klinika ma'muri",
+    "ru": "Управляющий клиникой",
+    "en": "Medical Practice Manager",
+    "aliases": [
+      "klinika menejeri",
+      "tibbiyot markazi boshqaruvchisi",
+      "администратор клиники"
+    ],
+    "sector": "mamuriy",
+    "skills": [
+      "Klinika faoliyatini boshqarish",
+      "Tibbiy hujjatlar nazorati",
+      "Bemorlar qabuli nazorati",
+      "Klinika budjeti",
+      "Tibbiy dasturlar",
+      "Sanitariya me'yorlari nazorati"
+    ]
+  },
+  {
+    "id": "secretary",
+    "uz": "Kotib",
+    "ru": "Секретарь",
+    "en": "Secretary",
+    "aliases": [
+      "kotiba"
+    ],
+    "sector": "mamuriy",
+    "skills": [
+      "Hujjat aylanishi",
+      "Qo'ng'iroqlarni qabul qilish",
+      "Mehmonlarni kutib olish",
+      "Uchrashuvlarni rejalashtirish",
+      "Ish yozishmalari",
+      "MS Office",
+      "Tashkiliy ishlar"
+    ]
+  },
+  {
     "id": "secretary-clerk",
     "uz": "Kotib-ish yurituvchi",
     "ru": "Секретарь-делопроизводитель",
@@ -5827,6 +7305,26 @@
     ]
   },
   {
+    "id": "corporate-social-responsibility-manager",
+    "uz": "KSO bo'yicha menejer",
+    "ru": "Менеджер по корпоративной социальной ответственности",
+    "en": "Corporate social responsibility manager",
+    "aliases": [
+      "CSR manager",
+      "KSO menejeri",
+      "менеджер по КСО"
+    ],
+    "sector": "mamuriy",
+    "skills": [
+      "KSO loyihalari",
+      "Ijtimoiy dasturlar",
+      "ESG standartlari",
+      "Homiylik loyihalari",
+      "Grant arizalari",
+      "Ijtimoiy hisobotlar"
+    ]
+  },
+  {
     "id": "courier-coordinator",
     "uz": "Kuryerlar koordinatori",
     "ru": "Координатор курьеров",
@@ -5845,6 +7343,68 @@
       "Yetkazib berish arizalarini taqsimlash",
       "E-pochta xabarlari nazorati",
       "Mijozlar bilan aloqa"
+    ]
+  },
+  {
+    "id": "library-manager",
+    "uz": "Kutubxona mudiri",
+    "ru": "Заведующий библиотекой",
+    "en": "Library Manager",
+    "aliases": [
+      "kutubxona direktori",
+      "kutubxonachi mudir"
+    ],
+    "sector": "mamuriy",
+    "skills": [
+      "Kitob fondi hisobi",
+      "Kataloglashtirish",
+      "Elektron kutubxona",
+      "Abonement xizmati",
+      "Arxiv yuritish",
+      "Kitoblar restavratsiyasi",
+      "Bibliografiya",
+      "O'quv zallari boshqaruvi"
+    ]
+  },
+  {
+    "id": "library-assistant",
+    "uz": "Kutubxonachi yordamchisi",
+    "ru": "Помощник библиотекаря",
+    "en": "Library Assistant",
+    "aliases": [
+      "kutubxona xodimi",
+      "pomoshnik bibliotekarya"
+    ],
+    "sector": "mamuriy",
+    "skills": [
+      "Kitoblar fondini hisobga olish",
+      "Kataloglashtirish",
+      "Kitobxonlarga xizmat ko'rsatish",
+      "Kutubxona axborot tizimlari",
+      "Kitoblarni saqlash",
+      "Bibliografik yozuvlar"
+    ]
+  },
+  {
+    "id": "data-entry-supervisor",
+    "uz": "Ma'lumotlar kiritish bo'yicha supervayzer",
+    "ru": "Супервайзер по вводу данных",
+    "en": "Data Entry Supervisor",
+    "aliases": [
+      "data entry lead",
+      "ma'lumot kiritish nazoratchisi",
+      "супервайзер операторов"
+    ],
+    "sector": "mamuriy",
+    "skills": [
+      "MS Excel",
+      "Ma'lumotlar bazasi",
+      "KPI monitoringi",
+      "Sifat nazorati",
+      "Hujjat aylanishi",
+      "Guruh boshqaruvi",
+      "1C tizimi",
+      "Hisobot tayyorlash"
     ]
   },
   {
@@ -5890,6 +7450,151 @@
     ]
   },
   {
+    "id": "administrative-assistant",
+    "uz": "Ma'muriy yordamchi",
+    "ru": "Административный ассистент",
+    "en": "Administrative assistant",
+    "aliases": [
+      "administrator yordamchisi",
+      "admin assistant",
+      "помощник администратора"
+    ],
+    "sector": "mamuriy",
+    "skills": [
+      "MS Office",
+      "Xatlar bilan ishlash",
+      "Tadbirlarni tashkil etish",
+      "Ofis texnikasi",
+      "Hujjat aylanishi",
+      "Uchrashuvlar jadvali",
+      "Sayohatlarni rejalashtirish"
+    ]
+  },
+  {
+    "id": "hotel-concierge",
+    "uz": "Mehmonxona konsyeri",
+    "ru": "Консьерж в отеле",
+    "en": "Hotel Concierge",
+    "aliases": [
+      "konsyerj",
+      "concierge",
+      "mehmonxona xodimi"
+    ],
+    "sector": "mamuriy",
+    "skills": [
+      "Mehmonlarni kutib olish",
+      "Bron qilish tizimlari",
+      "Ekskursiyalar tashkil qilish",
+      "Transfer xizmatlari",
+      "Opera PMS",
+      "Xizmat ko'rsatish etikasi",
+      "Ingliz tili"
+    ]
+  },
+  {
+    "id": "customer-service-representative",
+    "uz": "Mijozlarga xizmat ko'rsatish mutaxassisi",
+    "ru": "Специалист по обслуживанию клиентов",
+    "en": "Customer Service Representative",
+    "aliases": [
+      "mijozlar bilan ishlash",
+      "клиентский менеджер",
+      "customer care"
+    ],
+    "sector": "mamuriy",
+    "skills": [
+      "CRM tizimlari",
+      "Mijozlar bilan ishlash",
+      "Shikoyatlarni ko'rib chiqish",
+      "Xizmat ko'rsatish standartlari",
+      "Telefon so'zlashuvlari",
+      "Elektron yozishmalar",
+      "Baza yuritish"
+    ]
+  },
+  {
+    "id": "proofreader",
+    "uz": "Musahhih",
+    "ru": "Корректор",
+    "en": "Proofreader",
+    "aliases": [
+      "korrektor",
+      "matn tuzatuvchi"
+    ],
+    "sector": "mamuriy",
+    "skills": [
+      "Matn tahriri",
+      "Imlo qoidalari",
+      "Punktuatsiya tekshiruvi",
+      "Tipografika qoidalari",
+      "Korrektura belgilari",
+      "MS Word",
+      "Grammatikani tekshirish"
+    ]
+  },
+  {
+    "id": "museum-director",
+    "uz": "Muzey direktori",
+    "ru": "Директор музея",
+    "en": "Museum Director",
+    "aliases": [
+      "muzey mudiri"
+    ],
+    "sector": "mamuriy",
+    "skills": [
+      "Eksponatlar hisobi",
+      "Ko'rgazmalar tashkili",
+      "Ilmiy faoliyat",
+      "Fond saqlash",
+      "Madaniy tadbirlar",
+      "Davlat hisobotlari",
+      "Restavratsiya nazorati",
+      "Arxiv ishlari"
+    ]
+  },
+  {
+    "id": "book-publisher",
+    "uz": "Nashriyotchi",
+    "ru": "Издатель",
+    "en": "Book Publisher",
+    "aliases": [
+      "nashriyot mudiri",
+      "kitob nashriyotchisi",
+      "издатель книг"
+    ],
+    "sector": "mamuriy",
+    "skills": [
+      "Nashr rejasi",
+      "Tahririyat jarayoni",
+      "Mualliflik huquqi",
+      "Tipografiya bilan ishlash",
+      "ISBN ro'yxati",
+      "Sahifalash nazorati",
+      "Shartnomalar tuzish",
+      "Prepress nazorati"
+    ]
+  },
+  {
+    "id": "publications-coordinator",
+    "uz": "Nashrlar koordinatori",
+    "ru": "Координатор публикаций",
+    "en": "Publications coordinator",
+    "aliases": [
+      "nashrlar bo'yicha mutaxassis",
+      "koordinator publikatsiy",
+      "publishing coordinator"
+    ],
+    "sector": "mamuriy",
+    "skills": [
+      "Chop etish nazorati",
+      "Tipografiya bilan ishlash",
+      "Nashr smetasi",
+      "Mualliflik huquqi",
+      "Tartiblashtirish",
+      "ISBN ro'yxatdan o'tkazish"
+    ]
+  },
+  {
     "id": "office-manager",
     "uz": "Ofis menejeri",
     "ru": "Офис-менеджер",
@@ -5908,6 +7613,47 @@
       "Mehmonlarni kutib olish",
       "Xizmat safarlarini tashkil etish",
       "Ichki kommunikatsiya"
+    ]
+  },
+  {
+    "id": "chief-operating-officer",
+    "uz": "Operatsion direktor (COO)",
+    "ru": "Операционный директор (COO)",
+    "en": "Chief Operating Officer (COO)",
+    "aliases": [
+      "operatsionny direktor",
+      "COO",
+      "operatsiyalar direktori"
+    ],
+    "sector": "mamuriy",
+    "skills": [
+      "Biznes jarayonlar optimallashtirish",
+      "Operatsion rejalashtirish",
+      "KPI nazorati",
+      "Resurslarni taqsimlash",
+      "Sifat menejmenti",
+      "Ichki audit",
+      "Boshqaruv hisoboti"
+    ]
+  },
+  {
+    "id": "advertising-assistant",
+    "uz": "Reklama assistenti",
+    "ru": "Ассистент отдела рекламы",
+    "en": "Advertising Assistant",
+    "aliases": [
+      "reklama yordamchisi",
+      "marketing assistenti",
+      "помощник маркетолога"
+    ],
+    "sector": "mamuriy",
+    "skills": [
+      "Reklama kampaniyalari monitoringi",
+      "Mediaplan yuritish",
+      "Hujjatlar aylanmasi",
+      "Prays-listlar bilan ishlash",
+      "Hisobot tayyorlash",
+      "Kopirayting asoslari"
     ]
   },
   {
@@ -5932,6 +7678,26 @@
     ]
   },
   {
+    "id": "service-manager",
+    "uz": "Servis menejeri",
+    "ru": "Сервис-менеджер",
+    "en": "Service manager",
+    "aliases": [
+      "xizmat ko'rsatish menejeri",
+      "menejer po servisu",
+      "customer service manager"
+    ],
+    "sector": "mamuriy",
+    "skills": [
+      "Mijozlarga xizmat ko'rsatish",
+      "Servis standartlari",
+      "CRM tizimlari",
+      "Shikoyatlar bilan ishlash",
+      "Xizmat sifatini nazorat qilish",
+      "KPI tahlili"
+    ]
+  },
+  {
     "id": "personal-assistant",
     "uz": "Shaxsiy yordamchi",
     "ru": "Личный помощник",
@@ -5950,6 +7716,107 @@
       "Xarajatlar hisobini yuritish",
       "Vaqtni boshqarish",
       "Ish uchrashuvlari jadvali"
+    ]
+  },
+  {
+    "id": "market-research-interviewer",
+    "uz": "Sotsiologik so'rov o'tkazuvchi",
+    "ru": "Интервьюер маркетинговых исследований",
+    "en": "Market Research Interviewer",
+    "aliases": [
+      "intervyuer",
+      "so'rovchi",
+      "anketyor"
+    ],
+    "sector": "mamuriy",
+    "skills": [
+      "So'rovnomalar o'tkazish",
+      "Anketa to'ldirish",
+      "Respondentlar bilan ishlash",
+      "Fokus-guruhlar",
+      "Ma'lumot yig'ish",
+      "Dala tadqiqotlari",
+      "Savol-javob o'tkazish"
+    ]
+  },
+  {
+    "id": "sport-administrator",
+    "uz": "Sport ma'muri",
+    "ru": "Спортивный администратор",
+    "en": "Sport Administrator",
+    "aliases": [
+      "sport menejeri",
+      "sport klubi administratori"
+    ],
+    "sector": "mamuriy",
+    "skills": [
+      "Musobaqalar jadvali",
+      "Sport zallari bandligi",
+      "Akkreditatsiya",
+      "Tadbirlar tashkili",
+      "Sportchilar hisobi",
+      "Inventar nazorati",
+      "Hujjatlar yuritish",
+      "Mehmonlarni qabul qilish"
+    ]
+  },
+  {
+    "id": "court-administrator",
+    "uz": "Sud administratori",
+    "ru": "Администратор суда",
+    "en": "Court administrator",
+    "aliases": [
+      "sud boshqaruvchisi",
+      "court manager"
+    ],
+    "sector": "mamuriy",
+    "skills": [
+      "Sud ish yuritishi",
+      "Ijro intizomi",
+      "Hujjatlar aylanmasi",
+      "E-sud tizimi",
+      "Protsessual hujjatlar",
+      "Sud apparati faoliyati"
+    ]
+  },
+  {
+    "id": "editorial-assistant",
+    "uz": "Tahririyat yordamchisi",
+    "ru": "Ассистент редакции",
+    "en": "Editorial assistant",
+    "aliases": [
+      "nashriyot assistenti",
+      "помощник редактора"
+    ],
+    "sector": "mamuriy",
+    "skills": [
+      "Matn tahriri",
+      "Korrektura qilish",
+      "Mualliflar bilan ishlash",
+      "Nashr rejasi",
+      "MS Word",
+      "Adobe InDesign",
+      "Faktchek"
+    ]
+  },
+  {
+    "id": "translation-agency-manager",
+    "uz": "Tarjima agentligi menejeri",
+    "ru": "Менеджер бюро переводов",
+    "en": "Translation Agency Manager",
+    "aliases": [
+      "tarjima byurosi boshlig'i",
+      "translation project manager"
+    ],
+    "sector": "mamuriy",
+    "skills": [
+      "Tarjima loyihalari boshqaruvi",
+      "Frilanserlar koordinatsiyasi",
+      "CAT-tools boshqaruvi",
+      "Redaktura nazorati",
+      "Mijozlar bilan ishlash",
+      "Smeta hisoblash",
+      "Sifat kafolati"
     ]
   },
   {
@@ -5974,6 +7841,46 @@
     ]
   },
   {
+    "id": "medical-administrative-assistant",
+    "uz": "Tibbiy ma'muriy yordamchi",
+    "ru": "Медицинский администратор",
+    "en": "Medical administrative assistant",
+    "aliases": [
+      "tibbiy registrator",
+      "tibbiyot koordinatori",
+      "медицинский регистратор"
+    ],
+    "sector": "mamuriy",
+    "skills": [
+      "Tibbiy karta yuritish",
+      "Qabulni rejalashtirish",
+      "MedData tizimi",
+      "1C: Tibbiyot",
+      "Bemorlar bazasi",
+      "Tibbiy hujjatlar nazorati"
+    ]
+  },
+  {
+    "id": "night-auditor",
+    "uz": "Tungi auditor",
+    "ru": "Ночной аудитор",
+    "en": "Night Auditor",
+    "aliases": [
+      "tungi administrator",
+      "night receptionist",
+      "ночной администратор"
+    ],
+    "sector": "mamuriy",
+    "skills": [
+      "Tungi hisobotlarni yopish",
+      "Opera PMS",
+      "Kassa hisob-kitoblari",
+      "Mehmonlarni ro'yxatga olish",
+      "Moliyaviy tekshiruv",
+      "Hisobot tayyorlash"
+    ]
+  },
+  {
     "id": "procurement-administrator",
     "uz": "Xaridlar bo'yicha administrator",
     "ru": "Администратор по закупкам",
@@ -5992,6 +7899,46 @@
       "Kanselyariya xaridlari",
       "Invoyslar va schet-fakturalar",
       "Logistika nazorati"
+    ]
+  },
+  {
+    "id": "quality-services-manager",
+    "uz": "Xizmatlar sifati menejeri",
+    "ru": "Менеджер по качеству услуг",
+    "en": "Quality Services Manager",
+    "aliases": [
+      "sifat menejeri",
+      "quality manager",
+      "контролер качества сервиса"
+    ],
+    "sector": "mamuriy",
+    "skills": [
+      "Xizmat sifatini nazorat qilish",
+      "Mijozlar shikoyatlarini tahlil qilish",
+      "Standartlarni joriy etish",
+      "Mystery Shopping nazorati",
+      "SOP ishlab chiqish",
+      "Audit o'tkazish"
+    ]
+  },
+  {
+    "id": "legal-administrative-assistant",
+    "uz": "Yuridik kotib",
+    "ru": "Юридический секретарь",
+    "en": "Legal Administrative Assistant",
+    "aliases": [
+      "yurist yordamchisi",
+      "yuridik assistent",
+      "legal secretary"
+    ],
+    "sector": "mamuriy",
+    "skills": [
+      "Yuridik hujjat aylanishi",
+      "Shartnomalarni ro'yxatga olish",
+      "Da'vo arizalarini rasmiylashtirish",
+      "Notarial hujjatlar",
+      "E-Hujjat tizimi",
+      "Sud yozishmalari"
     ]
   },
   {
@@ -6831,6 +8778,73 @@
     ]
   },
   {
+    "id": "audio-visual-technician",
+    "uz": "Audiovizual texnika mutaxassisi",
+    "ru": "Специалист по аудиовизуальному оборудованию",
+    "en": "Audio-visual technician",
+    "aliases": [
+      "AV texnik",
+      "audiovizual texnik",
+      "AV mutaxassis",
+      "аудиовизуальный техник"
+    ],
+    "sector": "media",
+    "skills": [
+      "Proyektorlar sozlash",
+      "LED ekranlar montaji",
+      "Mikrofon tizimlari",
+      "Ovoz kuchaytirgichlar",
+      "Kommutatsiya uskunalari",
+      "HDMI/SDI signallar",
+      "Konferens-tizimlar"
+    ]
+  },
+  {
+    "id": "paper-embossing-operator",
+    "uz": "Bo'rtma bosish operatori",
+    "ru": "Оператор тиснения",
+    "en": "Paper embossing press operator",
+    "aliases": [
+      "тиснильщик",
+      "embossing operator",
+      "bortma bosish ustasi"
+    ],
+    "sector": "media",
+    "skills": [
+      "Bo'rtma bosish uskunalari",
+      "Klizhe o'rnatish",
+      "Folyali bosish",
+      "Issiqlik rejimini sozlash",
+      "Qolip tayyorlash",
+      "Qog'oz turlarini bilish",
+      "Sifat nazorati",
+      "Uskunaga xizmat ko'rsatish"
+    ]
+  },
+  {
+    "id": "prepress-technician",
+    "uz": "Chop etishdan oldingi tayyorgarlik mutaxassisi",
+    "ru": "Специалист допечатной подготовки",
+    "en": "Prepress technician",
+    "aliases": [
+      "prepress mutaxassis",
+      "prepress",
+      "допечатник",
+      "дизайнер верстальщик"
+    ],
+    "sector": "media",
+    "skills": [
+      "Adobe InDesign",
+      "Adobe Illustrator",
+      "Adobe Photoshop",
+      "Rang ajratish (CMYK)",
+      "RIP dasturlari",
+      "Spusk polosi",
+      "Maket tekshiruvi",
+      "Poligrafiya talablari"
+    ]
+  },
+  {
     "id": "broadcast-engineer",
     "uz": "Efirlash muhandisi",
     "ru": "Инженер эфира",
@@ -6848,6 +8862,26 @@
       "Efir signallarini boshqarish",
       "Video miksherlar",
       "Studiya apparaturasi"
+    ]
+  },
+  {
+    "id": "flexographic-press-operator",
+    "uz": "Fleksografiya mashinasi operatori",
+    "ru": "Печатник флексографской печати",
+    "en": "Flexographic press operator",
+    "aliases": [
+      "fleksist",
+      "флексографист",
+      "flexo operator"
+    ],
+    "sector": "media",
+    "skills": [
+      "Fleksografik uskunalar",
+      "Polimer qoliplar",
+      "Bo'yoq yopishqoqligi",
+      "Etiketka chop etish",
+      "Rulonli materiallar",
+      "Uskunani sozlash"
     ]
   },
   {
@@ -6889,6 +8923,84 @@
       "Axborot yig'ish",
       "Jurnalistik surishtiruv",
       "CMS tizimlari"
+    ]
+  },
+  {
+    "id": "print-folding-operator",
+    "uz": "Katlama mashinasi operatori",
+    "ru": "Оператор фальцевальной машины",
+    "en": "Print folding operator",
+    "aliases": [
+      "falsifkator",
+      "фальцовщик",
+      "folding operator"
+    ],
+    "sector": "media",
+    "skills": [
+      "Faltsovka uskunalari",
+      "Qog'oz turlari",
+      "Bikovalash",
+      "Uskunani sozlash",
+      "Chopdan keyingi ishlov",
+      "Formatlarni o'lchash"
+    ]
+  },
+  {
+    "id": "book-editor",
+    "uz": "Kitob muharriri",
+    "ru": "Книжный редактор",
+    "en": "Book editor",
+    "aliases": [
+      "redaktor",
+      "kitob tahrirchisi"
+    ],
+    "sector": "media",
+    "skills": [
+      "Matn tahriri",
+      "Imlo qoidalari",
+      "Stilistika",
+      "Adobe InDesign",
+      "Nashriyot standartlari",
+      "Muallif bilan ishlash",
+      "Korrektura"
+    ]
+  },
+  {
+    "id": "book-restorer",
+    "uz": "Kitob restavratori",
+    "ru": "Реставратор книг",
+    "en": "Book restorer",
+    "aliases": [
+      "kitob ta'mirlovchi",
+      "book conservator"
+    ],
+    "sector": "media",
+    "skills": [
+      "Qog'oz restavratsiyasi",
+      "Muqovalash ishlari",
+      "Arxiv hujjatlari bilan ishlash",
+      "Teri va mato tiklash",
+      "Kimyoviy ishlov berish",
+      "Kitob gigiyenasi"
+    ]
+  },
+  {
+    "id": "lexicographer",
+    "uz": "Leksikograf",
+    "ru": "Лексикограф",
+    "en": "Lexicographer",
+    "aliases": [
+      "lug'atshunos",
+      "dictionary editor"
+    ],
+    "sector": "media",
+    "skills": [
+      "Lug'at tuzish",
+      "Semantik tahlil",
+      "Korpus lingvistikasi",
+      "Etimologiya",
+      "Terminologiya bazalari",
+      "Morfologik tahlil"
     ]
   },
   {
@@ -6953,6 +9065,50 @@
     ]
   },
   {
+    "id": "bindery-operator",
+    "uz": "Muqovalash uskunasi operatori",
+    "ru": "Оператор переплетно-брошюровочного оборудования",
+    "en": "Bindery operator",
+    "aliases": [
+      "muqovalovchi",
+      "pereplyotchik",
+      "переплетчик",
+      "брошюровщик"
+    ],
+    "sector": "media",
+    "skills": [
+      "Falshevka uskunasi",
+      "Kesish stanogi",
+      "Qatlash texnologiyasi",
+      "Termoyelim mashinasi",
+      "Bloklarni tikish",
+      "Muqova tayyorlash",
+      "Formatlash nazorati"
+    ]
+  },
+  {
+    "id": "offset-printer",
+    "uz": "Ofset bosuvchisi",
+    "ru": "Печатник плоской печати",
+    "en": "Offset printer",
+    "aliases": [
+      "печатник офсетной печати",
+      "offset press operator",
+      "ofsetchi"
+    ],
+    "sector": "media",
+    "skills": [
+      "Ofset bosma mashinasi",
+      "Ranglarni sozlash (CMYK)",
+      "Bosma qoliplarni o'rnatish",
+      "Bo'yoq taqsimoti",
+      "Qog'oz uzatish mexanizmi",
+      "Densitometriya",
+      "Bosma sifatini tekshirish",
+      "Mashinani tozalash"
+    ]
+  },
+  {
     "id": "sound-engineer",
     "uz": "Ovoz rejissyori",
     "ru": "Звукорежиссер",
@@ -6981,6 +9137,26 @@
     ]
   },
   {
+    "id": "digital-printer",
+    "uz": "Raqamli bosma operatori",
+    "ru": "Оператор цифровой печати",
+    "en": "Digital printer",
+    "aliases": [
+      "tsifrovoy pechatnik",
+      "raqamli pechat",
+      "digital print operator"
+    ],
+    "sector": "media",
+    "skills": [
+      "Raqamli printerlar",
+      "Prepress tayyorgarligi",
+      "CorelDraw",
+      "Adobe Photoshop",
+      "Rang kalibratsiyasi (RIP)",
+      "Plotterda kesish"
+    ]
+  },
+  {
     "id": "director",
     "uz": "Rejissyor",
     "ru": "Режиссер",
@@ -6998,6 +9174,45 @@
       "Syomka maydoni nazorati",
       "Montaj konsepsiyasi",
       "Ssenariyni tahlil qilish"
+    ]
+  },
+  {
+    "id": "screen-printer",
+    "uz": "Sholkografiya ustasi",
+    "ru": "Шелкограф",
+    "en": "Screen printer",
+    "aliases": [
+      "trafaret bosmachi",
+      "трафаретная печать"
+    ],
+    "sector": "media",
+    "skills": [
+      "Trafaret tayyorlash",
+      "Emulsiya qo'llash",
+      "Rastrli bosma",
+      "Bo'yoq qorishmalari",
+      "Quritish uskunalari",
+      "Sholkografiya dastgohi"
+    ]
+  },
+  {
+    "id": "interpreter",
+    "uz": "Sinxron tarjimon",
+    "ru": "Устный переводчик",
+    "en": "Interpreter",
+    "aliases": [
+      "og'zaki tarjimon",
+      "sinxronist",
+      "синхронный переводчик"
+    ],
+    "sector": "media",
+    "skills": [
+      "Sinxron tarjima",
+      "Ketma-ket tarjima",
+      "Protokol etiketi",
+      "Notiqlik san'ati",
+      "Terminologiya",
+      "Muloqot yuritish"
     ]
   },
   {
@@ -7042,6 +9257,68 @@
     ]
   },
   {
+    "id": "broadcast-technician",
+    "uz": "Teleradioeshittirish texnigi",
+    "ru": "Техник телерадиовещания",
+    "en": "Broadcast technician",
+    "aliases": [
+      "teleradio texnigi",
+      "efir texnigi",
+      "broadcast texnik",
+      "техник вещания"
+    ],
+    "sector": "media",
+    "skills": [
+      "Efir apparaturasi",
+      "Translyatsiya uskunalari",
+      "Signal sifatini nazorat",
+      "Kabel tarmoqlari",
+      "Audio/video kommutatsiya",
+      "Studiyani sozlash",
+      "PTS uskunalari"
+    ]
+  },
+  {
+    "id": "linguist",
+    "uz": "Tilshunos",
+    "ru": "Лингвист",
+    "en": "Linguist",
+    "aliases": [
+      "tilshunos olim",
+      "til mutaxassisi"
+    ],
+    "sector": "media",
+    "skills": [
+      "Morfologik tahlil",
+      "Sintaktik tahlil",
+      "Leksikografiya",
+      "Fonetik tahlil",
+      "Matn tahriri",
+      "Semantika",
+      "Qiyosiy tilshunoslik"
+    ]
+  },
+  {
+    "id": "textile-printer",
+    "uz": "To'qimachilik bosma ustasi",
+    "ru": "Печатник по текстилю",
+    "en": "Textile printer",
+    "aliases": [
+      "tekstil pechatnik",
+      "печать на ткани",
+      "textile printing"
+    ],
+    "sector": "media",
+    "skills": [
+      "Mato bosma mashinalari",
+      "Sublimatsiya",
+      "Ipakli bosma (sholkografiya)",
+      "Bo'yoqlarni aralashtirish",
+      "DTF bosma",
+      "Rang barqarorligi"
+    ]
+  },
+  {
     "id": "video-editor",
     "uz": "Video montajchi",
     "ru": "Видеомонтажер",
@@ -7080,6 +9357,44 @@
       "Sofitlar bilan ishlash",
       "Syomka maydoni xavfsizligi",
       "Rang haroratini sozlash"
+    ]
+  },
+  {
+    "id": "translator",
+    "uz": "Yozma tarjimon",
+    "ru": "Письменный переводчик",
+    "en": "Translator",
+    "aliases": [
+      "tarjimon"
+    ],
+    "sector": "media",
+    "skills": [
+      "Yozma tarjima",
+      "CAT dasturlari",
+      "SDL Trados",
+      "Matn lokalizatsiyasi",
+      "Lug'atlar bilan ishlash",
+      "Grammatika va uslubiyat"
+    ]
+  },
+  {
+    "id": "writer",
+    "uz": "Yozuvchi",
+    "ru": "Писатель",
+    "en": "Writer",
+    "aliases": [
+      "adib",
+      "avtor",
+      "author"
+    ],
+    "sector": "media",
+    "skills": [
+      "Badiiy matn yozish",
+      "Syujet yaratish",
+      "Dramaturgiya",
+      "Personajlar tahlili",
+      "Adabiy tahrir",
+      "Mualliflik huquqi"
     ]
   },
   {
@@ -8212,6 +10527,27 @@
     ]
   },
   {
+    "id": "garden-labourer",
+    "uz": "Bog' ishchisi",
+    "ru": "Рабочий сада",
+    "en": "Garden Labourer",
+    "aliases": [
+      "bog'bon yordamchisi",
+      "рабочий в сад",
+      "orchard worker"
+    ],
+    "sector": "qishloq",
+    "skills": [
+      "Ko'chat o'tqazish",
+      "Meva terish",
+      "Shox-shabbalarni tozalash",
+      "Sug'orish tizimida ishlash",
+      "Bog' asboblaridan foydalanish",
+      "Begona o'tlardan tozalash",
+      "Hosilni qadoqlash"
+    ]
+  },
+  {
     "id": "gardener-arborist",
     "uz": "Bog'bon-agronom",
     "ru": "Агроном-садовод",
@@ -8233,6 +10569,195 @@
     ]
   },
   {
+    "id": "horticulture-production-manager",
+    "uz": "Bog'dorchilik boshqaruvchisi",
+    "ru": "Управляющий садоводческим комплексом",
+    "en": "Horticulture Production Manager",
+    "aliases": [
+      "bog' mudiri",
+      "управляющий садом",
+      "orchard manager"
+    ],
+    "sector": "qishloq",
+    "skills": [
+      "Bog' rejasi tuzish",
+      "Tomchilatib sug'orish",
+      "Hosildorlikni rejalashtirish",
+      "Ekinlarni himoya qilish",
+      "Agrotexnika taqvimi",
+      "Mahsulot logistikasi",
+      "Mavsumiy ishlar boshqaruvi"
+    ]
+  },
+  {
+    "id": "horticulture-team-leader",
+    "uz": "Bog'dorchilik brigadiri",
+    "ru": "Бригадир в садоводстве",
+    "en": "Horticulture Production Team Leader",
+    "aliases": [
+      "bog' brigadiri",
+      "бригадир сада",
+      "horticulture supervisor"
+    ],
+    "sector": "qishloq",
+    "skills": [
+      "Ishchilarni taqsimlash",
+      "Hosil yig'ish nazorati",
+      "Daraxtlarni butash",
+      "Sug'orish grafigi",
+      "Kimyoviy ishlov berish",
+      "Hosildorlik hisobi",
+      "Agrotexnik nazorat"
+    ]
+  },
+  {
+    "id": "shepherd",
+    "uz": "Cho'pon",
+    "ru": "Чабан",
+    "en": "Shepherd",
+    "aliases": [
+      "пастух",
+      "qorako'lchi",
+      "suruvchi"
+    ],
+    "sector": "qishloq",
+    "skills": [
+      "Chorvani o'tlatish",
+      "Qo'zilarni parvarishlash",
+      "Suruvni boshqarish",
+      "Yem-xashak taqsimlash",
+      "Chorva gigiyenasi",
+      "Birlamchi veterinariya",
+      "Tuyoq parvarishi",
+      "Qirqim jarayoni"
+    ]
+  },
+  {
+    "id": "livestock-worker",
+    "uz": "Chorvachi (Molboqar)",
+    "ru": "Животновод",
+    "en": "Livestock Worker",
+    "aliases": [
+      "molboqar",
+      "podachi",
+      "farm worker"
+    ],
+    "sector": "qishloq",
+    "skills": [
+      "Mollarni boqish",
+      "Molxona tozaligi",
+      "Sog'ish apparati bilan ishlash",
+      "Yem tarqatish",
+      "Mollarni emlashda yordam",
+      "Vazn o'lchash va nazorat"
+    ]
+  },
+  {
+    "id": "field-crop-team-leader",
+    "uz": "Dala brigadiri",
+    "ru": "Бригадир полеводческой бригады",
+    "en": "Field Crop Production Team Leader",
+    "aliases": [
+      "brigadir",
+      "полевод",
+      "dala boshlig'i",
+      "agronomy team leader"
+    ],
+    "sector": "qishloq",
+    "skills": [
+      "Ekin maydonini nazorat qilish",
+      "Dala ishlarini taqsimlash",
+      "Hosil yig'ishni tashkil etish",
+      "Texnika ishini nazorat qilish",
+      "Ishchilarni boshqarish",
+      "Agrotexnik tadbirlar nazorati",
+      "O'g'itlash rejasini bajarish"
+    ]
+  },
+  {
+    "id": "field-worker",
+    "uz": "Dala ishchisi",
+    "ru": "Полевод (Разнорабочий в поле)",
+    "en": "Crop Production Worker",
+    "aliases": [
+      "полевод",
+      "ekin ishchisi",
+      "field worker"
+    ],
+    "sector": "qishloq",
+    "skills": [
+      "Ekin ekish",
+      "Begona o'tlarni yulish",
+      "Hosil terish",
+      "Chopiq qilish",
+      "Sug'orish ishlarida yordam",
+      "Qishloq xo'jaligi asboblari",
+      "Yuklash va tushirish"
+    ]
+  },
+  {
+    "id": "arborist",
+    "uz": "Daraxt parvarishlovchi mutaxassis (Arborist)",
+    "ru": "Арборист",
+    "en": "Arborist",
+    "aliases": [
+      "daraxt kesuvchi",
+      "tree surgeon"
+    ],
+    "sector": "qishloq",
+    "skills": [
+      "Daraxtlarni butash",
+      "Balandlikda ishlash xavfsizligi",
+      "Benzopilalar bilan ishlash",
+      "Shox-shabbalarni shakllantirish",
+      "Qurigan daraxtlarni kesish",
+      "Daraxtlarni davolash usullari",
+      "Alpinizm anjomlaridan foydalanish"
+    ]
+  },
+  {
+    "id": "environmental-expert",
+    "uz": "Ekologiya bo'yicha ekspert",
+    "ru": "Эксперт по экологии",
+    "en": "Environmental expert",
+    "aliases": [
+      "ekolog",
+      "эколог",
+      "environmental specialist"
+    ],
+    "sector": "qishloq",
+    "skills": [
+      "Atrof-muhit monitoringi",
+      "Ekologik audit",
+      "Chiqindilarni boshqarish",
+      "Suv va havo tahlillari",
+      "Ekologik qonunchilik",
+      "ISO 14001 standartlari",
+      "Ekologik xulosalar tuzish"
+    ]
+  },
+  {
+    "id": "environmental-engineer",
+    "uz": "Ekologiya muhandisi",
+    "ru": "Инженер-эколог",
+    "en": "Environmental Engineer",
+    "aliases": [
+      "ekolog",
+      "ekologiya mutaxassisi",
+      "environmental specialist"
+    ],
+    "sector": "qishloq",
+    "skills": [
+      "Ekologik audit",
+      "Chiqindilarni boshqarish",
+      "Atrof-muhit monitoringi",
+      "Ekologik ekspertiza",
+      "Tashlanmalar hisob-kitobi",
+      "Normativ hujjatlar",
+      "Suv va havoni tahlil qilish"
+    ]
+  },
+  {
     "id": "farm-manager",
     "uz": "Fermer xo'jaligi boshqaruvchisi",
     "ru": "Управляющий фермерским хозяйством",
@@ -8251,6 +10776,26 @@
       "Xomashyo xaridi",
       "Mahsulotni sotish",
       "Resurslarni taqsimlash"
+    ]
+  },
+  {
+    "id": "interior-landscaper",
+    "uz": "Fitodizayner",
+    "ru": "Фитодизайнер",
+    "en": "Interior Landscaper",
+    "aliases": [
+      "interyer ko'kalamzori",
+      "fitodizayn",
+      "indoor landscaper"
+    ],
+    "sector": "qishloq",
+    "skills": [
+      "Xona o'simliklarini tanlash",
+      "Vertikal ko'kalamzorlashtirish",
+      "Avtomatik sug'orish tizimi",
+      "Fitolampalar o'rnatish",
+      "O'simliklar parvarishi",
+      "Dizayn-loyiha ishlab chiqish"
     ]
   },
   {
@@ -8276,6 +10821,27 @@
     ]
   },
   {
+    "id": "fruit-and-vegetable-picker",
+    "uz": "Hosil teruvchi",
+    "ru": "Сборщик урожая",
+    "en": "Fruit and Vegetable Picker",
+    "aliases": [
+      "terimchi",
+      "сборщик фруктов",
+      "crop picker"
+    ],
+    "sector": "qishloq",
+    "skills": [
+      "Meva terish",
+      "Sabzavot yig'ish",
+      "Saralash va kalibrlash",
+      "Qadoqlash",
+      "Hosilni joylash",
+      "Daraxtga ehtiyotkorlik",
+      "Hosil sifatini tekshirish"
+    ]
+  },
+  {
     "id": "greenhouse-specialist",
     "uz": "Issiqxona agronomi",
     "ru": "Агроном тепличного хозяйства",
@@ -8294,6 +10860,71 @@
       "Tomchilatib sug'orish",
       "Ko'chat yetishtirish",
       "Vertikal dehqonchilik"
+    ]
+  },
+  {
+    "id": "horticulture-worker",
+    "uz": "Ko'chatchilik ishchisi",
+    "ru": "Работник питомника растений",
+    "en": "Horticulture Worker",
+    "aliases": [
+      "pitomnik ishchisi",
+      "ko'chatchi",
+      "работник питомника",
+      "nursery worker"
+    ],
+    "sector": "qishloq",
+    "skills": [
+      "Qalamcha tayyorlash",
+      "Payvandlash usullari",
+      "Ko'chat ekish va ko'chirish",
+      "Urug' qadash",
+      "Begona o'tlarni tozalash",
+      "Tomchilatib sug'orish"
+    ]
+  },
+  {
+    "id": "groundsman",
+    "uz": "Ko'kalamzorlashtirish ishchisi",
+    "ru": "Рабочий по озеленению",
+    "en": "Groundsman",
+    "aliases": [
+      "озеленитель",
+      "bog'bon yordamchisi",
+      "landshaft ishchisi"
+    ],
+    "sector": "qishloq",
+    "skills": [
+      "Maysazor o'rish",
+      "Sug'orish tizimlarini yoqish",
+      "Maysazor ekish",
+      "Chiqindilarni tozalash",
+      "Butalarni shakllantirish",
+      "O't o'rish mashinalari",
+      "Trimmer bilan ishlash",
+      "Ko'chat ekish"
+    ]
+  },
+  {
+    "id": "landscape-gardener",
+    "uz": "Landshaft bog'boni",
+    "ru": "Ландшафтный садовник",
+    "en": "Landscape Gardener",
+    "aliases": [
+      "ландшафтный дизайнер",
+      "dekorativ bog'bon",
+      "ko'kalamzorlashtiruvchi"
+    ],
+    "sector": "qishloq",
+    "skills": [
+      "Landshaft dizayni loyihasi",
+      "Manzarali o'simliklar",
+      "Gulzorlar tashkil qilish",
+      "Tuproq tayyorlash",
+      "Drenaj va sug'orish",
+      "Daraxtlarni shakllantirish",
+      "O'simliklar kompozitsiyasi",
+      "Alpinariylar yaratish"
     ]
   },
   {
@@ -8318,6 +10949,48 @@
     ]
   },
   {
+    "id": "forest-worker",
+    "uz": "O'rmon xo'jaligi ishchisi",
+    "ru": "Работник лесного хозяйства",
+    "en": "Forest Worker",
+    "aliases": [
+      "o'rmonchi",
+      "лесник",
+      "o'rmon ishchisi",
+      "forestry worker"
+    ],
+    "sector": "qishloq",
+    "skills": [
+      "Ko'chat ekish",
+      "Daraxtlarni parvarishlash",
+      "O'rmon yong'inidan himoya",
+      "Zararkunandalarga qarshi kurash",
+      "Sanitar kesish ishlari",
+      "Chorva o'tlatishni nazorat",
+      "O'rmon asboblaridan foydalanish"
+    ]
+  },
+  {
+    "id": "forester",
+    "uz": "O'rmon xo'jaligi mutaxassisi",
+    "ru": "Лесничий",
+    "en": "Forester",
+    "aliases": [
+      "o'rmonchi",
+      "ormonchi"
+    ],
+    "sector": "qishloq",
+    "skills": [
+      "Daraxt ekish texnologiyasi",
+      "Yong'in xavfsizligi choralari",
+      "O'rmon fondi hisobi",
+      "O'rmon patologiyasi",
+      "Yashil maydonlarni parvarishlash",
+      "Ekotizim monitoringi",
+      "Daraxt kasalliklarini aniqlash"
+    ]
+  },
+  {
     "id": "plant-protection-specialist",
     "uz": "O'simliklar himoyasi bo'yicha mutaxassis",
     "ru": "Специалист по защите растений",
@@ -8339,6 +11012,66 @@
     ]
   },
   {
+    "id": "animal-feed-nutritionist",
+    "uz": "Omixta yem texnologi",
+    "ru": "Технолог по кормам",
+    "en": "Animal Feed Nutritionist",
+    "aliases": [
+      "kormovik",
+      "yem mutaxassisi",
+      "технолог кормов",
+      "feed nutritionist"
+    ],
+    "sector": "qishloq",
+    "skills": [
+      "Rasion tuzish",
+      "Omixta yem retsepturasi",
+      "Yem sifatini nazorat qilish",
+      "Premikslar bilan ishlash",
+      "Laboratoriya tahlillari",
+      "Yem saqlash standartlari"
+    ]
+  },
+  {
+    "id": "groom",
+    "uz": "Otboqar (Sayis)",
+    "ru": "Конюх",
+    "en": "Groom",
+    "aliases": [
+      "sayis",
+      "otboqar",
+      "stable hand"
+    ],
+    "sector": "qishloq",
+    "skills": [
+      "Ot parvarishi",
+      "Ot minish anjomlari",
+      "Otxonani tozalash",
+      "Ot emlash tartibi",
+      "Ot yuvish va tarash",
+      "Yem-xashak taqsimlash"
+    ]
+  },
+  {
+    "id": "food-biotechnologist",
+    "uz": "Oziq-ovqat biotexnologi",
+    "ru": "Пищевой биотехнолог",
+    "en": "Food biotechnologist",
+    "aliases": [
+      "biotexnolog",
+      "биотехнолог"
+    ],
+    "sector": "qishloq",
+    "skills": [
+      "Fermentatsiya jarayonlari",
+      "Mikrobiologik tahlillar",
+      "Sifat nazorati (HACCP)",
+      "Ozuqaviy qo'shimchalar tahlili",
+      "Bioreaktorlar bilan ishlash",
+      "Laboratoriya uskunalari"
+    ]
+  },
+  {
     "id": "poultry-specialist",
     "uz": "Parrandachilik mutaxassisi",
     "ru": "Птицевод",
@@ -8357,6 +11090,49 @@
       "Broyler yetishtirish",
       "Bio-xavfsizlik qoidalari",
       "Kataklarda saqlash tizimi"
+    ]
+  },
+  {
+    "id": "agricultural-scientist",
+    "uz": "Qishloq xo'jaligi ilmiy xodimi",
+    "ru": "Ученый-агроном",
+    "en": "Agricultural Scientist",
+    "aliases": [
+      "agrar olim",
+      "ilmiy agronom",
+      "ученый агроном",
+      "agri researcher"
+    ],
+    "sector": "qishloq",
+    "skills": [
+      "Dala tajribalari o'tkazish",
+      "Urug'chilik seleksiyasi",
+      "Statistik tahlil",
+      "Tuproq unumdorligini oshirish",
+      "Ilmiy hisobotlar tayyorlash",
+      "Biologik usullarni sinash"
+    ]
+  },
+  {
+    "id": "agricultural-service-engineer",
+    "uz": "Qishloq xo'jaligi servis muhandisi",
+    "ru": "Сервисный инженер сельскохозяйственной техники",
+    "en": "Agricultural service engineer",
+    "aliases": [
+      "servis muhandisi",
+      "инженер-механик",
+      "service engineer",
+      "traktor mexanigi"
+    ],
+    "sector": "qishloq",
+    "skills": [
+      "Traktorlarni ta'mirlash",
+      "Gidravlika tizimlari",
+      "Dvigatellarni diagnostika qilish",
+      "Ehtiyot qismlar kataloglari",
+      "Elektron boshqaruv tizimlari",
+      "Kombaynlarga xizmat ko'rsatish",
+      "Texnik ko'rik o'tkazish"
     ]
   },
   {
@@ -8403,6 +11179,158 @@
     ]
   },
   {
+    "id": "sheep-breeder",
+    "uz": "Qo'ychilik mutaxassisi",
+    "ru": "Овцевод",
+    "en": "Sheep Breeder",
+    "aliases": [
+      "cho'pon",
+      "овцевод-селекционер",
+      "sheep farmer"
+    ],
+    "sector": "qishloq",
+    "skills": [
+      "Qo'ylarni boqish",
+      "Jun qirqish",
+      "Qo'zilarni parvarishlash",
+      "Yaylov nazorati",
+      "Qo'y emlash",
+      "Ozuqa me'yorlari",
+      "Nasl tanlash"
+    ]
+  },
+  {
+    "id": "cattle-breeder",
+    "uz": "Qoramolchilik mutaxassisi",
+    "ru": "Специалист по крупному рогатому скоту",
+    "en": "Cattle Breeder",
+    "aliases": [
+      "qoramol boquvchi",
+      "животновод КРС",
+      "cattle farmer"
+    ],
+    "sector": "qishloq",
+    "skills": [
+      "Qoramol parvarishi",
+      "Sut sog'ish texnologiyasi",
+      "Ratsion tuzish",
+      "Buzoq boqish",
+      "Molxona sanitariyasi",
+      "Go'ng chiqarish tizimlari",
+      "Veterinariya ko'rigi",
+      "Vazn nazorati"
+    ]
+  },
+  {
+    "id": "water-quality-analyst",
+    "uz": "Suv sifati tahlili laboranti",
+    "ru": "Лаборант по анализу качества воды",
+    "en": "Water Quality Analyst",
+    "aliases": [
+      "лаборант водоканала",
+      "suv laboranti",
+      "gidrokimyogar"
+    ],
+    "sector": "qishloq",
+    "skills": [
+      "Suv namunalarini olish",
+      "Kimyoviy tahlil usullari",
+      "Spektrofotometriya",
+      "pH-metriya",
+      "Suv qattiqligini o'lchash",
+      "Bakteriologik tahlil",
+      "Laboratoriya uskunalari",
+      "GOST va SanQvaN me'yorlari"
+    ]
+  },
+  {
+    "id": "nature-conservation-officer",
+    "uz": "Tabiatni muhofaza qilish inspektori",
+    "ru": "Инспектор по охране природы",
+    "en": "Nature Conservation Officer",
+    "aliases": [
+      "ekologiya inspektori",
+      "инспектор экологии",
+      "environmental inspector"
+    ],
+    "sector": "qishloq",
+    "skills": [
+      "Ekologik monitoring",
+      "Qonunchilik nazorati",
+      "Brakoonerlikka qarshi kurash",
+      "Qo'riqxona nazorati",
+      "Tabiiy resurslar hisobi",
+      "Ekologik ekspertiza",
+      "Dalolatnomalar tuzish"
+    ]
+  },
+  {
+    "id": "vineyard-worker",
+    "uz": "Tokzor ishchisi",
+    "ru": "Виноградарь (Рабочий виноградника)",
+    "en": "Vineyard Worker",
+    "aliases": [
+      "tokzorchi",
+      "виноградарь",
+      "uzumchilik ishchisi",
+      "vineyard labourer"
+    ],
+    "sector": "qishloq",
+    "skills": [
+      "Tok ko'mish va ochish",
+      "Tok xomtok qilish",
+      "Uzum terish",
+      "Shpaler o'rnatish va tortish",
+      "Tok payvandlash",
+      "Toklarni dori va o'g'itlash",
+      "Zararkunandalardan himoyalash"
+    ]
+  },
+  {
+    "id": "vineyard-manager",
+    "uz": "Uzumzor boshqaruvchisi",
+    "ru": "Управляющий виноградником",
+    "en": "Vineyard Manager",
+    "aliases": [
+      "uzumchilik mudiri",
+      "brigadir",
+      "agronom-uzumchi"
+    ],
+    "sector": "qishloq",
+    "skills": [
+      "Tok parvarishi",
+      "Uzum navlarini tanlash",
+      "Hosildorlikni rejalashtirish",
+      "Tomchilatib sug'orish",
+      "Zararkunandalarga ishlov",
+      "Kallaklash texnologiyasi",
+      "Ishchilarni boshqarish",
+      "Hosil yig'ish logistikasi"
+    ]
+  },
+  {
+    "id": "veterinary-technician",
+    "uz": "Veterinar feldsheri",
+    "ru": "Ветеринарный фельдшер",
+    "en": "Veterinary technician",
+    "aliases": [
+      "vetfeldsher",
+      "ветфельдшер",
+      "vet technician",
+      "veterinar yordamchisi"
+    ],
+    "sector": "qishloq",
+    "skills": [
+      "Hayvonlarni emlash",
+      "Dori vositalarini kiritish",
+      "Yaralarni bog'lash",
+      "Birlamchi veterinariya yordami",
+      "Sanitariya ishlov berish",
+      "Tahlillar uchun namuna olish",
+      "Hayvonlarni parvarishlash"
+    ]
+  },
+  {
     "id": "veterinarian",
     "uz": "Veterinar shifokor",
     "ru": "Ветеринарный врач",
@@ -8422,6 +11350,48 @@
       "Diagnostika usullari",
       "Epizootologik nazorat",
       "Tug'ruqqa yordam ko'rsatish"
+    ]
+  },
+  {
+    "id": "vineyard-cellar-master",
+    "uz": "Vino ishlab chiqarish ustasi",
+    "ru": "Мастер виноделия",
+    "en": "Vineyard Cellar Master",
+    "aliases": [
+      "винодел",
+      "vinodel",
+      "vino ustasi"
+    ],
+    "sector": "qishloq",
+    "skills": [
+      "Vino tayyorlash texnologiyasi",
+      "Fermentatsiya nazorati",
+      "Xomashyoni qabul qilish",
+      "Filtrlash uskunalari",
+      "Saqlash harorati nazorati",
+      "Texnologik jurnallar",
+      "Sanitariya qoidalari",
+      "Degustatsiya usullari"
+    ]
+  },
+  {
+    "id": "horse-breeder",
+    "uz": "Yilqichi",
+    "ru": "Коневод",
+    "en": "Horse breeder",
+    "aliases": [
+      "otboqar",
+      "yilqichilik mutaxassisi"
+    ],
+    "sector": "qishloq",
+    "skills": [
+      "Ot zotlarini parvarishlash",
+      "Ozuqa ratsionini tuzish",
+      "Ot minish texnikasi",
+      "Naslchilik hisobini yuritish",
+      "Tozalash va taqalash",
+      "Veterinariya ko'rigiga tayyorlash",
+      "Yilqixonani dezinfeksiya qilish"
     ]
   },
   {
