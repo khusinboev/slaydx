@@ -157,7 +157,7 @@ function figureSpecHelp(ctx: ArticleContext): string {
     ? `  • {"kind":"chart","chart":"bar"|"line","dataSource":"user","categories":[…],"series":[{"name":"…","values":[…]}]} — ONLY from USER DATA; categories/series will be filled from the user's data verbatim, so just choose "bar"/"line" and write the caption.`
     : `  • charts are NOT allowed (no user data provided).`;
   return [
-    `FIGURE spec kinds (choose one that explains a mechanism/process/classification of THIS section; max 14 nodes / 24 edges; labels short, in the output language):`,
+    `FIGURE spec kinds (choose one that explains a mechanism/process/classification of THIS section; max 14 nodes / 24 edges; every label ≤ 40 characters, in the output language; a "flow" must be ACYCLIC — no edge may lead back to an earlier node, express loops as a "decision" node with a labelled forward edge instead):`,
     `  • {"kind":"flow","direction":"TB"|"LR","nodes":[{"id":"n1","label":"…","kind":"start"|"step"|"decision"|"data"|"end"}],"edges":[{"from":"n1","to":"n2","label":"…"}]}`,
     `  • {"kind":"process","steps":["…","…"]}`,
     `  • {"kind":"tree","root":"…","children":[{"label":"…","children":[{"label":"…"}]}]}`,

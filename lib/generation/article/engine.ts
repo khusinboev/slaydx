@@ -20,6 +20,7 @@
  * kredit qaytadi — «yarim maqola» `COMPLETED` bo'lmaydi.
  */
 import type { FormValues } from "../../types";
+import { buildFigures } from "../figures";
 import type { AcademicDoc, Block, DocMeta, DocSection, DocTable } from "../types";
 import type { TranslationSource } from "../source-types";
 import { llmEnabled } from "../llm";
@@ -566,6 +567,21 @@ export async function buildArticleDoc(meta: DocMeta, values: FormValues, opts: A
     figures.push({ id, kind: "scheme", caption, spec: prismaSpec(research.stats, refs.length), w: FIGURE_W, h: FIGURE_H, source: sourceLabel(input.language, "author") });
     const target = verified.sections.find((s) => s.id === "results" || s.id.startsWith("results")) ?? verified.sections.find((s) => s.blocks.length);
     if (target) target.blocks.splice(Math.min(1, target.blocks.length), 0, { kind: "figure", text: caption, figureId: id });
+  }
+
+  /*
+   * Sxemalarni CHIZISH (WP3 `figures/`): spec → maket → SVG → PNG 300 dpi
+   * (`url = data:image/png…`, worker `extractAssets` bilan aktivga
+   * chiqaradi). Maket buzilsa (sikl, chegara, ma'lumotsiz grafik) —
+   * `fallbackBlocks` raqamlangan ro'yxat: rasm o'rniga matn, uydirma
+   * raqam yo'q. Renderer ikkala holatni biladi.
+   */
+  if (figures.length) {
+    stage(72, `Sxemalar: ${figures.length} ta`);
+    const built = await buildFigures(figures, { lang: input.language });
+    figures.splice(0, figures.length, ...built);
+    const drawn = built.filter((f) => f.url).length;
+    if (drawn < built.length) console.warn(`[article] ${built.length - drawn} ta sxema maketlanmadi — ro'yxat sifatida qoldi`);
   }
 
   const coverage = skeletonCoverage(type, verified.sections);

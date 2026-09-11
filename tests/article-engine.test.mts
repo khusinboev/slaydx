@@ -169,11 +169,13 @@ test("buildArticleDoc: to'liq oqim — manbalar tekshirilgan, iqtiboslar reyestr
   assert.equal(doc.tables![0].anchor, "results");
   const tref = doc.sections[2].blocks.find((b) => b.kind === "tableRef");
   assert.ok(tref && tref.kind === "tableRef" && tref.tableId === "t1");
-  // Sxema: spec (flow), noma'lum tugunga qirra tushgan, url YO'Q.
+  // Sxema: spec (flow), noma'lum tugunga qirra tushgan; PNG CHIZILGAN
+  // (WP3 `buildFigures` dvigatelga ulangan — `url` data: PNG, o'lchami 1890 px).
   assert.equal(doc.article.figures.length, 1);
   const f = doc.article.figures[0];
   assert.equal(f.spec.kind, "flow");
-  assert.equal(f.url, undefined);
+  assert.match(f.url ?? "", /^data:image\/png;base64,/, "sxema PNG chizilishi kerak");
+  assert.equal(f.w, 1890, "300 dpi da 160 mm = 1890 px");
   if (f.spec.kind === "flow") assert.equal(f.spec.edges.length, 2);
   assert.ok(doc.sections.some((s) => s.blocks.some((b) => b.kind === "figure" && b.figureId === "f1")));
 
