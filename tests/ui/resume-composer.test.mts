@@ -2,7 +2,7 @@ import "./setup.ts";
 import test, { afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { createElement as h } from "react";
-import { render, fireEvent, screen, cleanup, act, waitFor } from "@testing-library/react";
+import { render, fireEvent, screen, cleanup, act, waitFor, within } from "@testing-library/react";
 import { AppRouterContext } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import type { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { ResumeComposer } from "../../components/forms/ResumeComposer.tsx";
@@ -62,7 +62,7 @@ test("tumbler blokni ochadi va yopadi (sertifikat standart holatda yopiq)", asyn
   stubApi();
   await login();
   mount();
-  assert.equal(document.querySelector('[data-rowlist="certificates"]'), null, "boshida yopiq");
+  assert.ok(!document.querySelector('[data-rowlist="certificates"]'), "boshida yopiq");
   await act(async () => {
     fireEvent.click(screen.getByLabelText("Sertifikatlar"));
   });
@@ -70,7 +70,7 @@ test("tumbler blokni ochadi va yopadi (sertifikat standart holatda yopiq)", asyn
   await act(async () => {
     fireEvent.click(screen.getByLabelText("Sertifikatlar"));
   });
-  assert.equal(document.querySelector('[data-rowlist="certificates"]'), null, "qayta yopildi");
+  assert.ok(!document.querySelector('[data-rowlist="certificates"]'), "qayta yopildi");
 });
 
 test("qoralama: yozgandan keyin BIR marta PUT (debounce), tarkibida forma qiymatlari", async () => {
@@ -136,6 +136,150 @@ test("Yaratish: tuzilmali satrlar JSON bo'lib ketadi, topic — lavozim", async 
   // Yopiq bloklar bo'sh massiv bo'lib ketadi — model yo'q ma'lumot ustida ishlamaydi.
   assert.equal(JSON.parse(String(values.certificates)).length, 0);
   await waitFor(() => assert.ok(pushes.some((u) => u.includes("/uz/files/"))));
+});
+
+/* ───────────────────────── AUDIT-16: ta'lim turi va yil tanlagich ───────────────────────── */
+
+/** «Ta'lim» bloki standart holatda ochiq — bitta satr qo'shib beradi. */
+async function addEducationRow() {
+  await act(async () => {
+    fireEvent.click(screen.getByText("+ Ta'lim"));
+  });
+  return document.querySelector('[data-rowlist="education"] [data-row]') as HTMLElement;
+}
+
+const eduInput = (row: HTMLElement, name: "institution" | "field") =>
+  row.querySelector(`[data-edu="${name}"] input`) as HTMLInputElement | null;
+
+test("ta'lim turi savollarni o'zgartiradi: maktabda «Yo'nalish» ham, «Daraja» ham YO'Q", async () => {
+  stubApi();
+  await login();
+  mount();
+  const row = await addEducationRow();
+  // Standart — oliy ta'lim: muassasa + yo'nalish + daraja.
+  assert.ok(eduInput(row, "institution"), "muassasa maydoni");
+  assert.ok(eduInput(row, "field"), "oliy ta'limda yo'nalish so'raladi");
+  const degree = within(row).getByLabelText("Daraja") as HTMLSelectElement;
+  const uniDegrees = Array.from(degree.options).map((o) => o.value).filter(Boolean);
+  assert.deepEqual(uniDegrees, ["bakalavr", "magistr", "ordinatura", "tayanch-doktorantura", "doktorantura", "tugallanmagan"]);
+  assert.match(degree.options[1].textContent ?? "", /Bakalavr/, "daraja yorlig'i o'zbekcha");
+
+  // Kollej — yo'nalish (mutaxassislik) qoladi, daraja RO'YXATI boshqa.
+  await act(async () => {
+    fireEvent.click(within(row).getByText("Kollej/texnikum"));
+  });
+  const collegeRow = document.querySelector('[data-rowlist="education"] [data-row]') as HTMLElement;
+  assert.ok(eduInput(collegeRow, "field"), "kollejda mutaxassislik so'raladi");
+  assert.deepEqual(
+    Array.from((within(collegeRow).getByLabelText("Daraja") as HTMLSelectElement).options).map((o) => o.value).filter(Boolean),
+    ["kichik-mutaxassis", "malakali-ishchi", "tugallanmagan"],
+  );
+
+  // Maktab — na yo'nalish, na daraja.
+  await act(async () => {
+    fireEvent.click(within(collegeRow).getByText("Maktab"));
+  });
+  const schoolRow = document.querySelector('[data-rowlist="education"] [data-row]') as HTMLElement;
+  assert.ok(!eduInput(schoolRow, "field"), "maktabda «Yo'nalish» maydoni bo'lmasligi kerak");
+  assert.ok(!within(schoolRow).queryByLabelText("Daraja"), "maktabda «Daraja» bo'lmasligi kerak");
+  assert.match(eduInput(schoolRow, "institution")!.placeholder, /maktab/i, "savol matni ham turga ergashadi");
+
+  // Kurs — kurs nomi bor, daraja yo'q.
+  await act(async () => {
+    fireEvent.click(within(schoolRow).getByText("Kurs"));
+  });
+  const courseRow = document.querySelector('[data-rowlist="education"] [data-row]') as HTMLElement;
+  assert.ok(eduInput(courseRow, "field"), "kursda kurs nomi so'raladi");
+  assert.ok(!within(courseRow).queryByLabelText("Daraja"), "kursda daraja yo'q");
+});
+
+test("tur almashganda keraksiz qiymat TOZALANADI — yashirin fakt hujjatga tushmaydi", async () => {
+  const calls = stubApi();
+  await login();
+  mount();
+  await act(async () => {
+    fireEvent.change(screen.getByLabelText("Maqsadli lavozim"), { target: { value: "Moliya tahlilchisi" } });
+  });
+  let row = await addEducationRow();
+  await act(async () => {
+    fireEvent.change(eduInput(row, "institution")!, { target: { value: "TDIU" } });
+  });
+  row = document.querySelector('[data-rowlist="education"] [data-row]') as HTMLElement;
+  await act(async () => {
+    fireEvent.change(eduInput(row, "field")!, { target: { value: "Moliya" } });
+  });
+  row = document.querySelector('[data-rowlist="education"] [data-row]') as HTMLElement;
+  await act(async () => {
+    fireEvent.change(within(row).getByLabelText("Daraja"), { target: { value: "bakalavr" } });
+  });
+  // Maktabga o'tamiz — yo'nalish va daraja ekrandan ham, holatdan ham ketadi.
+  row = document.querySelector('[data-rowlist="education"] [data-row]') as HTMLElement;
+  await act(async () => {
+    fireEvent.click(within(row).getByText("Maktab"));
+  });
+  await act(async () => {
+    fireEvent.click(screen.getByText(tool.submitLabel));
+  });
+  await waitFor(() => {
+    assert.ok(calls.some((c) => c.url === "/api/generations" && c.method === "POST"), "generatsiya so'rovi ketdi");
+  });
+  const values = (calls.find((c) => c.url === "/api/generations" && c.method === "POST")!.body as { values: Record<string, unknown> }).values;
+  const rows = JSON.parse(String(values.education)) as { kind: string; institution: string; field: string; degree: string }[];
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].kind, "school", "tur JSON da yuboriladi");
+  assert.equal(rows[0].institution, "TDIU");
+  assert.equal(rows[0].field, "", "maktabga o'tilganda yo'nalish tozalandi");
+  assert.equal(rows[0].degree, "", "maktabga o'tilganda daraja tozalandi");
+});
+
+test("ta'lim va sertifikat sanasi: OY so'ralmaydi, yil TANLANADI va JSON ga «YYYY» bo'lib tushadi", async () => {
+  const calls = stubApi();
+  await login();
+  mount();
+  await act(async () => {
+    fireEvent.change(screen.getByLabelText("Maqsadli lavozim"), { target: { value: "Moliya tahlilchisi" } });
+  });
+  let row = await addEducationRow();
+  await act(async () => {
+    fireEvent.change(eduInput(row, "institution")!, { target: { value: "TDIU" } });
+  });
+  row = document.querySelector('[data-rowlist="education"] [data-row]') as HTMLElement;
+  // Oy tanlagichi umuman chizilmaydi (ish tajribasida esa qoladi).
+  assert.ok(!within(row).queryByLabelText("Boshlanish — oy"), "ta'limda oy so'ralmaydi");
+  await act(async () => {
+    fireEvent.change(within(row).getByLabelText("Boshlanish yili"), { target: { value: "2015" } });
+  });
+  row = document.querySelector('[data-rowlist="education"] [data-row]') as HTMLElement;
+  await act(async () => {
+    fireEvent.change(within(row).getByLabelText("Tugash yili"), { target: { value: "2019" } });
+  });
+  // Sertifikat yili ham tanlagichda.
+  await act(async () => {
+    fireEvent.click(screen.getByLabelText("Sertifikatlar"));
+  });
+  await act(async () => {
+    fireEvent.click(screen.getByText("+ Sertifikat"));
+  });
+  const cert = document.querySelector('[data-rowlist="certificates"] [data-row]') as HTMLElement;
+  await act(async () => {
+    fireEvent.change(within(cert).getAllByRole("textbox")[0], { target: { value: "ACCA F3" } });
+  });
+  const certYear = within(document.querySelector('[data-rowlist="certificates"] [data-row]') as HTMLElement).getByLabelText("Sertifikat yili");
+  assert.equal(certYear.tagName, "SELECT", "sertifikat yili — tanlash mexanizmi, matn maydoni emas");
+  await act(async () => {
+    fireEvent.change(certYear, { target: { value: "2021" } });
+  });
+  await act(async () => {
+    fireEvent.click(screen.getByText(tool.submitLabel));
+  });
+  await waitFor(() => {
+    assert.ok(calls.some((c) => c.url === "/api/generations" && c.method === "POST"));
+  });
+  const values = (calls.find((c) => c.url === "/api/generations" && c.method === "POST")!.body as { values: Record<string, unknown> }).values;
+  const edu = JSON.parse(String(values.education)) as { kind: string; start: string; end: string }[];
+  assert.deepEqual([edu[0].start, edu[0].end], ["2015", "2019"], "ta'lim sanasi — faqat yil");
+  assert.equal(edu[0].kind, "university", "standart tur — oliy ta'lim");
+  assert.equal((JSON.parse(String(values.certificates)) as { year: string }[])[0].year, "2021");
 });
 
 test("«Formani tozalash»: ikkinchi bosishda DELETE ketadi va forma bo'shaydi", async () => {
