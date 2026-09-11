@@ -1,6 +1,10 @@
 import type { FormValues, ToolConfig, ToolField, ToolId, UserProfile } from "./types";
 import { PRO_SLIDE_DEFAULT, PRO_SLIDE_MAX, PRO_SLIDE_MIN, PRO_SLIDE_PER_SLIDE, clampInt, slidePrice } from "./generation/slide-params";
 import { SOURCE_LANGUAGES } from "./languages";
+import { isArticleTypeId } from "./generation/article/types-registry";
+import { isPublicationProfileId } from "./generation/article/profiles";
+import { articleTypeOf, normalizeArticlePages } from "./generation/article/input";
+import type { PagesId } from "./generation/article/types";
 
 const TOPIC_FILE_MODES = [
   {
@@ -107,7 +111,23 @@ const CUSTOM_REQUIRED: Record<string, ToolField[]> = {
   translation: [
     { kind: "textarea", name: "sourceText", legend: "Tarjima qilinadigan matn", required: true },
   ],
+  /*
+   * Maqola 2: mavzu (`topicLegend`) + tur. Mualliflar/manbalar ixtiyoriy —
+   * ular JSON maydonlar (`article/input.ts`), noto'g'ri qiymat jimgina
+   * tashlanadi; turning o'zi esa `preflightError` da reyestr bilan
+   * tekshiriladi.
+   */
+  article: [{ kind: "text", name: "articleType", legend: "Maqola turi", required: true }],
 };
+
+/**
+ * Maqola narxi — HAJMGA qarab, hammasi ichida (mahsulot egasi qarori 4):
+ * tezis 1–2 bet 4 000, 3–5 bet 6 000, 5–10 bet 8 000, 10–15 bet 12 000.
+ * Tannarx modeli (docs/AUDIT-17.md): Gemini 907…2 871 so'm + baholovchi
+ * ≈1 150 → 10–15 bet ≈ 4 000 so'm, ya'ni 3× marja; 2027 da narx qayta
+ * ko'riladi (`scripts/cost-report.mts`). `tests/pricing.test.mts` qulflaydi.
+ */
+export const ARTICLE_PRICES: Record<PagesId, number> = { "1-2": 4000, "3-5": 6000, "5-10": 8000, "10-15": 12000 };
 
 /**
  * O'qituvchi vositalari uchun MUASSASA maydoni.
@@ -388,65 +408,16 @@ export const TOOLS: ToolConfig[] = [
     ],
     extraOptional: true,
     output: "docx",
+    /*
+     * Maqola 2 (AUDIT-17): o'z formasi (`ArticleComposer`, WP6) — 12 tur,
+     * 5 nashr profili, mualliflar ro'yxati, o'z manbalari, natijalar matni.
+     * `fields` bo'sh: maydonlar `lib/generation/article-params.ts`
+     * reyestrida; majburiylari `CUSTOM_REQUIRED.article` da. Narx —
+     * `ARTICLE_PRICES` (hajmga qarab, hammasi ichida).
+     */
+    custom: "article",
     basePrice: 4000,
-    fields: [
-      { kind: "language", name: "language", legend: "Maqola tilini tanlang" },
-      {
-        kind: "text",
-        name: "author",
-        legend: "To'liq ismingiz, kursingiz va guruhingizni yozing",
-        placeholder: "Aliyev Ali Valiyevich",
-        required: true,
-      },
-      {
-        kind: "text",
-        name: "degree",
-        legend: "Ilmiy daraja yoki lavozim",
-        placeholder: "Talaba / PhD / dotsent",
-      },
-      {
-        kind: "text",
-        name: "organization",
-        legend: "Tashkilot (to‘liq nomi)",
-        placeholder: "Toshkent davlat universiteti, Toshkent",
-        required: true,
-      },
-      {
-        kind: "email",
-        name: "email",
-        legend: "E-mail manzil",
-        placeholder: "name@example.com",
-        required: true,
-      },
-      {
-        kind: "chips",
-        name: "kind",
-        legend: "Maqola turini tanlang",
-        options: [
-          { value: "standard", label: "Standart maqola" },
-          { value: "imrad", label: "IMRAD (ilmiy format)" },
-        ],
-      },
-      {
-        kind: "chips",
-        name: "annotationLangs",
-        legend: "Annotatsiya tillarini tanlang",
-        options: [
-          { value: "same", label: "Faqat maqola tilida" },
-          { value: "all", label: "Barcha tillar (UZ + EN + RU)" },
-        ],
-      },
-      {
-        kind: "chips",
-        name: "pages",
-        legend: "Maqola hajmini tanlang (sahifalar soni)",
-        options: [
-          { value: "3-5", label: "3-5 bet" },
-          { value: "5-10", label: "5-10 bet" },
-          { value: "10-15", label: "10-15 bet" },
-        ],
-      },
-    ],
+    fields: [],
   },
   {
     id: "resume",
@@ -1007,6 +978,20 @@ export function preflightError(tool: ToolConfig, values: FormValues): string | n
     const n = String(values.prompt ?? "").trim().length;
     if (n > 0 && n < IMAGE_PROMPT_MIN) return "Rasm tavsifi juda qisqa — nima chizilishini yozing.";
   }
+  /*
+   * Maqola 2: tur va profil — REYESTRDAN. `missingRequired` faqat
+   * «to'ldirilgan»ni tekshiradi; `articleType: "zzz"` navbatga tushib
+   * `imrad_oak` ga jim tushar va foydalanuvchi ko'rmagan tur uchun pul
+   * yechilardi. Eski `kind` (`imrad`/`standard`) hali qabul qilinadi.
+   */
+  if (tool.id === "article") {
+    const t = String(values.articleType ?? "").trim();
+    if (t && !isArticleTypeId(t)) return "Noma'lum maqola turi";
+    const p = String(values.pubProfile ?? "").trim();
+    if (p && !isPublicationProfileId(p)) return "Noma'lum nashr profili";
+    const topicLen = String(values.topic ?? "").trim().length;
+    if (topicLen > 0 && topicLen < 4) return "Mavzu juda qisqa.";
+  }
   if (tool.id === "translation") {
     const n0 = String(values.sourceText ?? "").trim().length;
     if (n0 > 0 && n0 < TRANSLATION_MIN_CHARS) return "Matn juda qisqa.";
@@ -1218,8 +1203,13 @@ export function priceFor(tool: ToolConfig, values: FormValues): number {
     );
   }
   if (tool.id === "article") {
-    const pages = String(values.pages ?? defaultPages(tool.id));
-    return { "3-5": 4000, "5-10": 5000, "10-15": 8000 }[pages] ?? 4000;
+    /*
+     * Hajm TURGA moslanadi (`articleInputFromValues` bilan bir xil
+     * qoida): tezis «10–15» bo'lmaydi — nomuvofiq tanlov turning birinchi
+     * paketiga tushadi, narx ham shunga. Aks holda «1–2» narxiga 10 betlik
+     * sharh so'rab bo'lardi.
+     */
+    return ARTICLE_PRICES[normalizeArticlePages(articleTypeOf(values), values.pages ?? defaultPages(tool.id))];
   }
   if (tool.id === "thesis") {
     const pages = String(values.pages ?? defaultPages(tool.id));

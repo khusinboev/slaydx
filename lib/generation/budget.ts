@@ -84,6 +84,18 @@ const TRANSLATION_BASE_MS = 60_000;
 const TRANSLATION_PER_KCHARS_MS = 2_500;
 
 /**
+ * Maqola byudjeti (Maqola 2): `150 000 + 16 000 × bet` — 15 bet ≈ 390 s.
+ *
+ * Tayanch katta, chunki bet sonidan qat'i nazar: manba qidiruv (OpenAlex
+ * + tanlash, ≤30 s), reja, uch tilli annotatsiya (3 chaqiruv), highlights,
+ * iqtibos tekshiruvi. Bet boshiga 16 s — bo'limlar 3 parallel, har biri
+ * ≤90 s, ustiga «kengaytir» qayta so'rovi. `WORKER_JOB_TIMEOUT_MS` 660 s
+ * (compose) — 15 bet sig'adi.
+ */
+export const ARTICLE_BASE_MS = 150_000;
+export const ARTICLE_PER_PAGE_MS = 16_000;
+
+/**
  * @param cap Yuqori chegara (`WORKER_JOB_TIMEOUT_MS`). Byudjet undan
  *   oshmaydi — operator bitta o'zgaruvchi bilan hamma narsani cheklay
  *   olishi kerak.
@@ -104,7 +116,9 @@ export function budgetFor(tool: ToolConfig, values: FormValues, cap: number): nu
         ? PRO_SLIDE_BASE_MS + size * PRO_SLIDE_PER_SLIDE_MS
         : tool.id === "slide"
           ? SLIDE_BASE_MS + size * SLIDE_PER_SLIDE_MS
-          : MIN_BUDGET_MS + size * PER_PAGE_MS;
+          : tool.id === "article"
+            ? ARTICLE_BASE_MS + size * ARTICLE_PER_PAGE_MS
+            : MIN_BUDGET_MS + size * PER_PAGE_MS;
   }
   return Math.max(MIN_BUDGET_MS, Math.min(want, Math.max(MIN_BUDGET_MS, cap)));
 }

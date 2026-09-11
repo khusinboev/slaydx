@@ -328,3 +328,26 @@ test("manba ogohlantirishi ko'ruvchiga ham tushadi", async () => {
   const plain = docToFlow({ ...doc, referencesNote: undefined } as never);
   assert.equal(plain.filter((i) => i.type === "refNote").length, 0);
 });
+
+/**
+ * Maqola 2 (AUDIT-17): narx HAJMGA qarab, hammasi ichida — tezis 1–2 bet
+ * 4 000, 3–5 bet 6 000, 5–10 bet 8 000, 10–15 bet 12 000 (mahsulot egasi
+ * qarori 4). Tur hajmni cheklaydi: tezis «10–15» so'rasa ham 1–2 tarifi.
+ */
+test("maqola narxi ARTICLE_PRICES jadvalidan — 4 satr, tur hajmni cheklaydi", async () => {
+  const { ARTICLE_PRICES } = await import("../lib/tools.ts");
+  const article = TOOL_BY_ID.article;
+  assert.deepEqual(ARTICLE_PRICES, { "1-2": 4000, "3-5": 6000, "5-10": 8000, "10-15": 12000 });
+  assert.equal(priceFor(article, { articleType: "conference_thesis", pages: "1-2" }), 4000);
+  assert.equal(priceFor(article, { articleType: "imrad_oak", pages: "3-5" }), 6000);
+  assert.equal(priceFor(article, { articleType: "imrad_oak", pages: "5-10" }), 8000);
+  assert.equal(priceFor(article, { articleType: "imrad_oak", pages: "10-15" }), 12000);
+  // Standart hajm — `defaultPages("article")` = 3-5.
+  assert.equal(priceFor(article, {}), 6000);
+  assert.equal(defaultPages("article"), "3-5");
+  // Tezis 10-15 bet bo'lmaydi → 1-2 tarifi; sharh 1-2 bet bo'lmaydi → 5-10.
+  assert.equal(priceFor(article, { articleType: "conference_thesis", pages: "10-15" }), 4000);
+  assert.equal(priceFor(article, { articleType: "review_narrative", pages: "1-2" }), 8000);
+  // Soxta qiymat — standart tarif, bepul emas.
+  assert.equal(priceFor(article, { pages: "0-0", price: 1 }), 6000);
+});

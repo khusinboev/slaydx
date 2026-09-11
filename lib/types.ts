@@ -79,7 +79,7 @@ export type ToolConfig = {
   fields: ToolField[];
   extraOptional?: boolean;
   output: "docx" | "pptx" | "png";
-  custom?: "slide" | "pro-slide" | "resume" | "translation" | "image";
+  custom?: "slide" | "pro-slide" | "resume" | "translation" | "image" | "article";
   basePrice: number;
 };
 

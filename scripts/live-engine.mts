@@ -14,7 +14,8 @@
  *
  * Foydalanish:
  *   npm run live                 — barcha keyslar
- *   npm run live -- imrad essay  — faqat nomlanganlar
+ *   npm run live -- article-oak essay  — faqat nomlanganlar
+ *   npm run live -- article-oak --article-type analytical --profile university  — maqola turi/profili
  *
  * `GEMINI_API_KEY` shart. Chiqish `eval-out/live/` ga yoziladi.
  */
@@ -32,6 +33,11 @@ import { slideNotes } from "../lib/generation/slide-layout.ts";
 import { pdfAvailable, toPdf } from "../lib/server/pdf.ts";
 import { TOOL_BY_ID } from "../lib/tools.ts";
 import type { AcademicDoc, BuiltFile } from "../lib/generation/types.ts";
+import { verifyCitations } from "../lib/generation/research/verify.ts";
+import { factNumbers } from "../lib/generation/article/guard.ts";
+import { PUBLICATION_PROFILES, isPublicationProfileId } from "../lib/generation/article/profiles.ts";
+import { isArticleTypeId } from "../lib/generation/article/types-registry.ts";
+import type { ArticleTypeId, PublicationProfileId } from "../lib/generation/article/types.ts";
 import type { FormValues } from "../lib/types.ts";
 
 type Check = { label: string; ok: boolean; detail: string };
@@ -210,32 +216,110 @@ const CASES: Case[] = [
       ];
     },
   },
+  /*
+   * ── Maqola 2 (AUDIT-17) — 4 jonli holat. `--article-type <id>` va
+   * `--profile <id>` bayroqlari istalgan holatning turi/profilini bekor
+   * qiladi. Da'volar: `doc.article` bor; iqtiboslar 100% reyestrda
+   * (`verifyCitations` unresolved bo'sh); ro'yxatda faqat cited va
+   * tekshirilgan manbalar; annotatsiya 3 ta × profil chegarasida; kalit
+   * so'zlar chegarada; titul/mundarija YO'Q; sxema SPEC bor; `cost.calls>0`.
+   */
   {
-    /* P0-4: annotatsiya stubi olib tashlandi — endi HAQIQIY matn kelishi kerak. */
-    name: "imrad",
+    /* OAK: imrad_oak · uz · oak · 10–15 bet · natijalar + o'z manbalari (haqiqiy DOI). */
+    name: "article-oak",
     tool: "article",
-    budgetMs: 200_000,
+    budgetMs: 150_000 + 13 * 16_000,
     values: {
-      topic: "Quyosh energiyasidan foydalanishning iqtisodiy samaradorligi",
-      kind: "imrad",
-      pages: "3-5",
+      topic: "Sun’iy intellekt asosidagi adaptiv o‘qitish tizimlarining oliy ta’limdagi samaradorligi",
+      articleType: articleTypeArg("imrad_oak"),
+      pubProfile: profileArg("oak"),
       language: "uz",
-      author: "Aliyev Ali",
-      degree: "PhD",
-      organization: "Toshkent davlat texnika universiteti",
-      email: "ali@example.uz",
-      annotationLangs: "same",
+      pages: "10-15",
+      authors: JSON.stringify([
+        { name: "Karimova Dilnoza Baxtiyorovna", degree: "PhD, dotsent", org: "Toshkent davlat iqtisodiyot universiteti", email: "d.karimova@tsue.uz", orcid: "0000-0002-1825-0097" },
+        { name: "Aliyev Ali Valiyevich", degree: "magistrant", org: "Toshkent davlat iqtisodiyot universiteti" },
+      ]),
+      udk: "004.8:378",
+      keywords: JSON.stringify(["sun’iy intellekt", "adaptiv o‘qitish", "oliy ta’lim", "o‘zlashtirish", "baholash"]),
+      userFacts: "2024/2025 o‘quv yilida TDIU da 120 talaba ishtirokidagi tajriba o‘tkazildi: tajriba guruhi (n=60) adaptiv platformada, nazorat guruhi (n=60) an’anaviy usulda o‘qidi. Tajriba guruhida o‘rtacha ball 4,1 dan 4,6 ga oshdi, nazorat guruhida 4,1 dan 4,2 ga. Mashg‘ulotga sarflangan o‘rtacha vaqt haftasiga 6,5 soatdan 5,2 soatga kamaydi.",
+      userRefs: JSON.stringify([{ doi: "10.1186/s40561-023-00260-y" }, { raw: "Karimov A. Ta’limda raqamli texnologiyalar. — Toshkent: Fan, 2022. — 240 b." }]),
+      userData: JSON.stringify({ categories: ["Boshlang‘ich", "Oraliq", "Yakuniy"], series: [{ name: "Tajriba guruhi", values: [4.1, 4.4, 4.6] }, { name: "Nazorat guruhi", values: [4.1, 4.15, 4.2] }], unit: "ball" }),
+      figureCount: 2,
+      research: true,
     },
-    checks: (f) => {
-      const abs = f.doc.abstracts ?? [];
-      const stub = /IMRAD tuzilmasi asosida yoritiladi/.test(abs[0]?.text ?? "");
+    checks: (f, pages) => articleChecks(f, pages, { pagesMin: 10 }),
+  },
+  {
+    /* Sistematik sharh: review_systematic · en · apa · PRISMA majburiy · structured annotatsiya. */
+    name: "article-review",
+    tool: "article",
+    budgetMs: 150_000 + 8 * 16_000,
+    values: {
+      topic: "Large language models as tutoring agents in higher education: effects on learning outcomes",
+      articleType: articleTypeArg("review_systematic"),
+      pubProfile: profileArg("apa"),
+      language: "en",
+      pages: "5-10",
+      authors: JSON.stringify([{ name: "Dilnoza Karimova", org: "Tashkent State University of Economics", orcid: "0000-0002-1825-0097" }]),
+      keywords: JSON.stringify(["large language models", "intelligent tutoring", "higher education", "learning outcomes"]),
+      figureCount: 1,
+      research: true,
+    },
+    checks: (f, pages) => [
+      ...articleChecks(f, pages, { pagesMin: 5 }),
+      ok("PRISMA sxemasi", Boolean(f.doc.article?.figures.some((x) => x.spec.kind === "prisma")), f.doc.article?.figures.map((x) => x.spec.kind).join(",") ?? "—"),
+      ok("structured annotatsiya", (f.doc.abstracts ?? []).every((a) => /^Background: |^Maqsad: |^Цель: /m.test(a.text)), f.doc.abstracts?.[0]?.text.slice(0, 40) ?? "—"),
+    ],
+  },
+  {
+    /* Konferensiya tezisi: conference_thesis · uz · conference · 200–300 so'z, bitta blok. */
+    name: "article-thesis",
+    tool: "article",
+    budgetMs: 150_000 + 2 * 16_000,
+    values: {
+      topic: "Qishloq xo‘jaligida tomchilatib sug‘orishning suv tejamkorligi: Farg‘ona vodiysi misolida",
+      articleType: articleTypeArg("conference_thesis"),
+      pubProfile: profileArg("conference"),
+      language: "uz",
+      pages: "1-2",
+      authors: JSON.stringify([{ name: "Rahimov Bobur", org: "Farg‘ona politexnika instituti" }]),
+      keywords: JSON.stringify(["tomchilatib sug‘orish", "suv tejamkorligi", "Farg‘ona vodiysi"]),
+      userFacts: "2023-yilda 12 gektar paxta maydonida tomchilatib sug‘orish joriy etildi: suv sarfi gektariga 7 200 m³ dan 4 300 m³ ga kamaydi, hosildorlik 31,5 s/ga dan 36,8 s/ga ga oshdi.",
+      figureCount: 0,
+      research: true,
+    },
+    checks: (f, pages) => {
+      const body = f.doc.sections.reduce((n, s) => n + s.blocks.filter((b) => b.kind === "p" || b.kind === "li").reduce((m, b) => m + b.text.split(/\s+/).length, 0), 0);
       return [
-        ok("annotatsiya bor", abs.length > 0, `${abs.length} ta`),
-        ok("annotatsiya stub emas", !stub, stub ? "STUB!" : abs[0]?.text.slice(0, 60) ?? "—"),
-        ok("annotatsiya to'la", (abs[0]?.text.length ?? 0) > 200, `${abs[0]?.text.length ?? 0} belgi`),
-        ok("IMRAD 4 bo'lim", f.doc.sections.length === 4, `${f.doc.sections.length} bo'lim`),
+        ...articleChecks(f, pages, { pagesMin: 1, figures: false }),
+        ok("bitta blok", f.doc.sections.length === 1, `${f.doc.sections.length} bo'lim`),
+        ok("tezis 200–300 so'z", body >= 200 && body <= 300, `${body} so'z`),
+        ok("foydalanuvchi raqamlari", /7 ?200/.test(JSON.stringify(f.doc.sections)) && /36,8|36\.8/.test(JSON.stringify(f.doc.sections)), "7 200 va 36,8"),
       ];
     },
+  },
+  {
+    /* Xalqaro: elsevier_ieee_style · en · ieee · raqamlangan bo'limlar, highlights, structured abstract. */
+    name: "article-en-ieee",
+    tool: "article",
+    budgetMs: 150_000 + 8 * 16_000,
+    values: {
+      topic: "Energy-efficient scheduling for edge computing workloads using reinforcement learning",
+      articleType: articleTypeArg("elsevier_ieee_style"),
+      pubProfile: profileArg("ieee"),
+      language: "en",
+      pages: "5-10",
+      authors: JSON.stringify([{ name: "Bobur Rahimov", org: "Tashkent University of Information Technologies", email: "b.rahimov@tuit.uz" }, { name: "Dilnoza Karimova", org: "TSUE" }]),
+      keywords: JSON.stringify(["edge computing", "reinforcement learning", "task scheduling", "energy efficiency"]),
+      userFacts: "In a simulation with 200 edge nodes and 50 000 tasks, the proposed scheduler reduced energy consumption by 18.4% and mean latency by 11.2% compared with a round-robin baseline.",
+      figureCount: 2,
+      research: true,
+    },
+    checks: (f, pages) => [
+      ...articleChecks(f, pages, { pagesMin: 5 }),
+      ok("highlights 3–5 × ≤85", (f.doc.article?.highlights?.length ?? 0) >= 3 && (f.doc.article?.highlights ?? []).every((h) => h.length <= 85), `${f.doc.article?.highlights?.length ?? 0} ta`),
+      ok("foydalanuvchi raqamlari", /18\.4/.test(JSON.stringify(f.doc.sections)) && /11\.2/.test(JSON.stringify(f.doc.sections)), "18.4 va 11.2"),
+    ],
   },
   {
     /* P1-3: 5 varaq → 5 burchak (ilgari uchtasi ham 3 ta olardi). */
@@ -545,8 +629,20 @@ async function runCase(c: Case) {
       process.stdout.write(`   ${ch.ok ? "✔" : "✘"} ${ch.label.padEnd(26)} ${ch.detail}\n`);
     }
     process.stdout.write(
-      `   · ${secs}s · ${(file.bytes.byteLength / 1024).toFixed(0)} KB · ${wordCount(file.doc)} so'z · ${meta.targetPages} maqsad\n`,
+      `   · ${secs}s · ${(file.bytes.byteLength / 1024).toFixed(0)} KB · ${wordCount(file.doc)} so'z · ${meta.targetPages} maqsad` +
+        (file.cost ? ` · sarf ${file.cost.calls} chaqiruv (${file.cost.provider}/${file.cost.model}, ${file.cost.inputTokens}→${file.cost.outputTokens} token)` : "") +
+        `\n`,
     );
+    /* Maqola: hisobot uchun bo'limlar, manbalar va annotatsiya qisqacha. */
+    if (file.doc.article) {
+      const a = file.doc.article;
+      process.stdout.write(`   bo'limlar: ${file.doc.sections.map((s) => `${s.id}(${s.blocks.length})`).join(" ")}\n`);
+      for (const r of a.references) process.stdout.write(`   manba ${r.id} [${r.verified}${r.cited ? ",cited" : ""}] ${r.authors.slice(0, 2).join(", ")} (${r.year ?? "?"}) ${r.title.slice(0, 70)}${r.doi ? ` doi:${r.doi}` : ""}\n`);
+      for (const x of file.doc.abstracts ?? []) process.stdout.write(`   annotatsiya ${x.lang}: ${x.text.split(/\s+/).length} so'z · kalit: ${x.keywords}\n`);
+      for (const g of a.figures) process.stdout.write(`   sxema ${g.id}: ${g.spec.kind} — ${g.caption.slice(0, 70)}\n`);
+      if (a.highlights) process.stdout.write(`   highlights: ${a.highlights.map((h) => `«${h}»`).join(" ")}\n`);
+      await writeFile(path.join(OUT, `${c.name}.doc.json`), JSON.stringify(file.doc, null, 2));
+    }
     return { name: c.name, ok: checks.every((x) => x.ok), failed: checks.filter((x) => !x.ok) };
   } catch (e) {
     const secs = ((Date.now() - started) / 1000).toFixed(1);
@@ -585,6 +681,64 @@ function langArg(): string {
   return i > 0 && process.argv[i + 1] ? process.argv[i + 1] : "en";
 }
 
+/* ────────────────────────── Maqola 2 (AUDIT-17) jonli yordamchilari ────────────────────────── */
+
+/** `--article-type <id>` — maqola holatlarining turini bekor qiladi. */
+function articleTypeArg(fallback: ArticleTypeId): ArticleTypeId {
+  const i = process.argv.indexOf("--article-type");
+  const v = i > 0 ? process.argv[i + 1] : "";
+  return isArticleTypeId(v) ? v : fallback;
+}
+
+/** `--profile <id>` — nashr profilini bekor qiladi. */
+function profileArg(fallback: PublicationProfileId): PublicationProfileId {
+  const i = process.argv.indexOf("--profile");
+  const v = i > 0 ? process.argv[i + 1] : "";
+  return isPublicationProfileId(v) ? v : fallback;
+}
+
+/**
+ * Maqola holatlarining umumiy da'volari. Iqtibos tekshiruvi yakuniy hujjat
+ * ustida QAYTA yuritiladi (`verifyCitations`) — dvigatel o'z ichida nima
+ * qilganidan qat'i nazar, chiqishda reyestrda yo'q id qolmagan bo'lsin.
+ */
+function articleChecks(f: BuiltFile, pages: number | null, o: { pagesMin: number; figures?: boolean }): Check[] {
+  const a = f.doc.article;
+  const refs = a?.references ?? [];
+  const profile = a ? PUBLICATION_PROFILES[a.profile] : PUBLICATION_PROFILES.oak;
+  const v = a ? verifyCitations(f.doc.sections, refs) : null;
+  const cited = v ? v.kept : 0;
+  const abs = f.doc.abstracts ?? [];
+  const absWords = abs.map((x) => x.text.split(/\s+/).filter(Boolean).length);
+  const [minW, maxW] = profile.abstractWords;
+  const [minK, maxK] = profile.keywords;
+  const kw = a ? (["uz", "ru", "en"] as const).map((l) => a.keywords[l]?.length ?? 0) : [];
+  const wantFigures = o.figures !== false && (f.doc.meta.figureCount ?? 0) > 0;
+  // Foydalanuvchi faktidagi foiz (18.4%) manbasiz emas — `guard.ts` bilan bir xil qoida.
+  const facts = new Set(factNumbers(a?.userFacts));
+  const unsourced = f.doc.sections.flatMap((s) =>
+    s.blocks
+      .filter((b) => (b.kind === "p" || b.kind === "li") && !/\[(W\d+|u\d+)/.test(b.text))
+      .flatMap((b) => (b.text.match(/\d+[.,]?\d*\s*%/g) ?? []).map((p) => p.replace(/\s+/g, "").replace(",", ".")))
+      .filter((p) => !facts.has(p)),
+  );
+  return [
+    ok("doc.article bor", Boolean(a), a ? `${a.type}/${a.profile}/${a.cite}` : "yo'q"),
+    ok("titul/mundarija yo'q", f.doc.titlePage === false && f.doc.toc === false, `titlePage=${f.doc.titlePage} toc=${f.doc.toc}`),
+    ok("iqtiboslar 100% reyestrda", Boolean(v) && v!.unresolved.length === 0 && cited > 0, v ? `${cited} iqtibos, ${v.unresolved.length} noma'lum` : "—"),
+    ok("ro'yxat: faqat cited + tekshirilgan", refs.length > 0 && refs.every((r) => r.cited && r.verified !== "unverified"), `${refs.length} manba: ${refs.map((r) => `${r.id}:${r.verified}`).join(" ")}`),
+    ok(`manbalar ≥ ${Math.min(profile.refsMin, 5)}`, refs.length >= Math.min(profile.refsMin, 5), `${refs.length} (profil ${profile.refsMin}–${profile.refsMax})`),
+    ok("annotatsiya ×3", abs.length === 3 && ["uz", "ru", "en"].every((l) => abs.some((x) => x.lang === l)), abs.map((x) => x.lang).join(",")),
+    ok(`annotatsiya ${minW}–${maxW} so'z (±30%)`, absWords.length === 3 && absWords.every((n) => n >= minW * 0.7 && n <= maxW * 1.3), absWords.join("/")),
+    ok(`kalit so'zlar ${minK}–${maxK}`, kw.length === 3 && kw.every((n) => n >= minK && n <= maxK), kw.join("/")),
+    ok("annotatsiyada iqtibos yo'q", abs.every((x) => !/\[(W\d+|u\d+)/.test(x.text)), ""),
+    ok(wantFigures ? "sxema spec bor (url yo'q)" : "sxema yo'q", wantFigures ? (a?.figures.length ?? 0) > 0 && a!.figures.every((x) => x.spec && !x.url) : (a?.figures.filter((x) => x.spec.kind !== "prisma").length ?? 0) === 0, a?.figures.map((x) => `${x.id}:${x.spec.kind}`).join(",") || "—"),
+    ok("manbasiz foiz yo'q", unsourced.length === 0, unsourced.length ? `topildi: ${unsourced.join(", ")}` : "toza"),
+    ok("cost.calls > 0", (f.cost?.calls ?? 0) > 0, f.cost ? `${f.cost.calls} chaqiruv, ${f.cost.provider}/${f.cost.model}` : "cost yo'q"),
+    ok(`DOCX ≥ ${o.pagesMin} bet`, pages === null || pages >= o.pagesMin, `${pages ?? "?"} bet`),
+  ];
+}
+
 function templateArg(): string | null {
   const i = process.argv.indexOf("--template");
   return i > 0 && process.argv[i + 1] ? process.argv[i + 1] : null;
@@ -600,7 +754,9 @@ async function main() {
   const tpl = templateArg();
   const src = sourceArg();
   const rtpl = process.argv.includes("--resume-template") ? process.argv[process.argv.indexOf("--resume-template") + 1] : null;
-  const only = process.argv.slice(2).filter((a) => !a.startsWith("-") && a !== tpl && a !== src && a !== langArg() && a !== rtpl && a !== photoArg());
+  // `--article-type X` / `--profile Y` qiymatlari keys nomi emas.
+  const flagValues = new Set(["--article-type", "--profile"].filter((f) => process.argv.includes(f)).map((f) => process.argv[process.argv.indexOf(f) + 1]));
+  const only = process.argv.slice(2).filter((a) => !a.startsWith("-") && a !== tpl && a !== src && a !== langArg() && a !== rtpl && a !== photoArg() && !flagValues.has(a));
   const cases = only.length ? CASES.filter((c) => only.includes(c.name)) : CASES;
   process.stdout.write(
     `Jonli tekshiruv — ${cases.length} keys · model ${process.env.GEMINI_MODEL || "gemini"} · PDF ${pdfAvailable() ? "bor" : "yo'q"}\n`,

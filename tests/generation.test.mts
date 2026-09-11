@@ -781,14 +781,24 @@ test("mustaqil ish promptida o'z bajargan amaliy vazifa talabi bor, referatda yo
   assert.doesNotMatch(referat, /O‘Z BAJARGAN amaliy vazifasi/);
 });
 
-test("standart maqola va tezis prompti BOB raqamlashni taqiqlaydi", async () => {
+test("tezis prompti BOB raqamlashni taqiqlaydi; maqola umumiy yozuvchi yo'lidan o'tmaydi (Maqola 2)", async () => {
   const { writerSystemPrompt } = await import("../lib/generation/prompts.ts");
-  const article = writerSystemPrompt(writerMeta("article", {}));
+  const { articleSystemPrompt } = await import("../lib/generation/article/prompts.ts");
+  const { articleInputFromValues } = await import("../lib/generation/article/input.ts");
+  const { ARTICLE_TYPES } = await import("../lib/generation/article/types-registry.ts");
+  const { PUBLICATION_PROFILES } = await import("../lib/generation/article/profiles.ts");
+  const { articleLabels } = await import("../lib/generation/article/labels.ts");
   const thesis = writerSystemPrompt(writerMeta("thesis", {}));
   const coursework = writerSystemPrompt(writerMeta("coursework", {}));
-
-  assert.match(article, /ISHLATMANG/);
-  assert.match(article, /I BOB/); // taqiq matnida tilga olinadi
+  /*
+   * Maqola 2: `articleSystemPrompt` endi `article/prompts.ts` da — inglizcha,
+   * tekshirilgan manbalar bilan. Bob raqamlash taqiqi u yerda ham bor.
+   */
+  const input = articleInputFromValues({ topic: "Mavzu", articleType: "imrad_oak" });
+  const meta = { ...writerMeta("article", {}), language: input.language };
+  const article = articleSystemPrompt({ input, meta, type: ARTICLE_TYPES.imrad_oak, profile: PUBLICATION_PROFILES.oak, labels: articleLabels("uz"), wordTarget: 900, refs: [] });
+  assert.match(article, /do not write chapter numbers \(«I BOB»\)/);
+  assert.match(article, /NEVER invent a source/);
   assert.match(thesis, /ISHLATMANG/);
   /*
    * Kurs ishida esa aksincha — boblar TALAB qilinadi. Son endi qattiq
@@ -801,16 +811,16 @@ test("standart maqola va tezis prompti BOB raqamlashni taqiqlaydi", async () => 
 
 test("kirish ko'rsatmasi janrga qarab farqlanadi", async () => {
   const { writerSystemPrompt } = await import("../lib/generation/prompts.ts");
+  // Maqola bu dispetcherdan chiqib ketdi (Maqola 2 — `article/prompts.ts`).
   const prompts = {
     coursework: writerSystemPrompt(writerMeta("coursework", {})),
     referat: writerSystemPrompt(writerMeta("referat", {})),
     "mustaqil-ish": writerSystemPrompt(writerMeta("mustaqil-ish", {})),
-    article: writerSystemPrompt(writerMeta("article", {})),
     thesis: writerSystemPrompt(writerMeta("thesis", {})),
   };
-  // Har biri boshqalaridan farq qilishi kerak — beshtasi ham noyob.
+  // Har biri boshqalaridan farq qilishi kerak — to'rttasi ham noyob.
   const unique = new Set(Object.values(prompts));
-  assert.equal(unique.size, 5, "har janr o'ziga xos promptga ega bo'lishi kerak");
+  assert.equal(unique.size, 4, "har janr o'ziga xos promptga ega bo'lishi kerak");
 });
 
 /**
@@ -931,7 +941,12 @@ test("janr o'z tuzilma talabiga ega", async () => {
   const m = (id: keyof typeof TOOL_BY_ID, v: Record<string, unknown> = {}) =>
     extractMeta(TOOL_BY_ID[id], { topic: "Mavzu", ...v } as FormValues);
 
-  assert.deepEqual(structureNeeds(m("article")), ["abstract"]);
+  /*
+   * Maqola 2: annotatsiya + tur skeletidagi `hard` bo'limlar (+ PRISMA
+   * sistematik sharhda). Tur berilmasa — `imrad_oak` standarti.
+   */
+  assert.deepEqual(structureNeeds(m("article")), ["abstract", "section:intro", "section:results", "section:conclusion"]);
+  assert.deepEqual(structureNeeds(m("article", { articleType: "review_systematic" })), ["abstract", "section:intro", "section:results", "section:conclusion", "prismaFigure"]);
   assert.deepEqual(structureNeeds(m("thesis")), ["abstract"]);
   assert.deepEqual(structureNeeds(m("mustaqil-ish")), ["ownTask"]);
 
@@ -953,11 +968,13 @@ test("annotatsiyasiz maqola qat'iy darvozadan o'tmaydi", async () => {
   const { TOOL_BY_ID } = await import("../lib/tools.ts");
 
   const meta = extractMeta(TOOL_BY_ID.article, { topic: "Mavzu" } as FormValues);
+  // Maqola 2: skelet bo'limlari (imrad_oak: intro/results/conclusion) ham qat'iy.
+  const p = { kind: "p" as const, text: "Matn." };
   const base = {
     meta,
-    titlePage: true,
-    toc: true,
-    sections: [{ id: "kirish", title: "Kirish", blocks: [{ kind: "p" as const, text: "Matn." }] }],
+    titlePage: false,
+    toc: false,
+    sections: [{ id: "intro", title: "Kirish", blocks: [p] }, { id: "results", title: "Natijalar", blocks: [p] }, { id: "conclusion", title: "Xulosa", blocks: [p] }],
   };
 
   assert.deepEqual(hardMissing(meta, base), ["abstract"]);
@@ -965,6 +982,13 @@ test("annotatsiyasiz maqola qat'iy darvozadan o'tmaydi", async () => {
 
   const withAbstract = { ...base, abstracts: [{ lang: "uz", label: "Annotatsiya", text: "T", keywords: "k" }] };
   assert.deepEqual(hardMissing(meta, withAbstract), []);
+  // Bo'sh «Natijalar» — bo'lim bor deb hisoblanmaydi.
+  const emptyResults = { ...withAbstract, sections: [base.sections[0], { id: "results", title: "Natijalar", blocks: [] }, base.sections[2]] };
+  assert.deepEqual(hardMissing(meta, emptyResults), ["section:results"]);
+  // Erkin bo'limlar `body-1` skeletdagi `body` o'rnini bosadi (three_part_uz).
+  const threePart = extractMeta(TOOL_BY_ID.article, { topic: "Mavzu", articleType: "three_part_uz" } as FormValues);
+  const tp = { ...withAbstract, meta: threePart, sections: [base.sections[0], { id: "body-1", title: "Tarix", blocks: [p] }, base.sections[2]] };
+  assert.deepEqual(hardMissing(threePart, tp), []);
 });
 
 test("jadval talabi qat'iy emas — faqat kuzatiladi", async () => {
