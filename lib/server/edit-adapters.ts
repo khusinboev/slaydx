@@ -2,6 +2,7 @@ import "server-only";
 import { applyDocOps, parseDocOps, type DocOp } from "../generation/slide-edit";
 import { applyResumeOps, parseResumeOps, type ResumeOp } from "../generation/resume/edit";
 import { legacyResumeModel } from "../generation/resume/model";
+import { applyArticleOps, parseArticleOps, type ArticleOp } from "../generation/article/edit";
 import { renderDocx } from "../generation/render-docx";
 import { renderPptx } from "../generation/render-pptx";
 import { renderPptxWithTemplate } from "../generation/render-pptx-template";
@@ -52,7 +53,7 @@ export type ParseResult = { ok: true; ops: unknown[] } | { ok: false; error: str
 export type ApplyResult = { ok: true; doc: AcademicDoc } | { ok: false; error: string; at: number };
 
 export type EditAdapter = {
-  id: "slide" | "resume";
+  id: "slide" | "resume" | "article";
   /** Shu adapter xizmat qiladigan vositalar (`generations.tool_id`). */
   tools: ReadonlySet<string>;
   /** Hujjatda tahrir uchun kerakli model bormi (yo'q bo'lsa 409 `legacy`). */
@@ -105,7 +106,30 @@ export const resumeAdapter: EditAdapter = {
   },
 };
 
-/** Bitta so'rovdagi operatsiyalar soni — ikkala op tili uchun bir xil. */
+/**
+ * Maqola (Maqola 2, AUDIT-17 WP7). Eski maqola (`doc.article` yo'q) ham
+ * tahrirlanadi — `applyArticleOps` unda faqat matn op larini o'tkazadi,
+ * shu sababli `prepare` hech narsa qilmaydi (rezyumedan farqi: modelga
+ * «ko'tarish» yo'q, `legacyArticleModel` faqat o'qish uchun).
+ *
+ * Render — `renderDocx`: sxema PNG lari `resolveImage` (SHU
+ * generatsiyaning aktivlari) orqali qayta o'qiladi, ya'ni tahrirdan
+ * keyingi DOCX da `<w:drawing>` saqlanadi.
+ */
+export const articleAdapter: EditAdapter = {
+  id: "article",
+  tools: new Set(["article"]),
+  hasModel: (doc) => Boolean(doc?.sections?.length),
+  prepare: (doc) => doc,
+  parse: (raw) => parseArticleOps(raw),
+  apply: (doc, ops, ctx) => applyArticleOps(doc, ops as ArticleOp[], ctx),
+  async render(ctx) {
+    const bytes = await renderDocx(ctx.doc, { resolveImage: ctx.resolveImage });
+    return { bytes, mime: DOCX_MIME, fileName: ctx.fileName };
+  },
+};
+
+/** Bitta so'rovdagi operatsiyalar soni — uchala op tili uchun bir xil. */
 export const MAX_EDIT_OPS = 50;
 
 /**
@@ -126,7 +150,7 @@ export function preParseOps(raw: unknown): { ok: true } | { ok: false; error: st
   return { ok: true };
 }
 
-const ADAPTERS: EditAdapter[] = [slideAdapter, resumeAdapter];
+const ADAPTERS: EditAdapter[] = [slideAdapter, resumeAdapter, articleAdapter];
 
 /** Vosita uchun adapter; tahrirlanmaydigan vositada `null`. */
 export function adapterFor(toolId: string): EditAdapter | null {
