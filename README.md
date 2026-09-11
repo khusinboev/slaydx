@@ -221,7 +221,9 @@ berardi. Eval bitta tarifda sinagani uchun uchalasi ham sezilmay qoldi.
 | `POST /api/uploads/source` · `DELETE /api/uploads/source/{assetId}` | Tarjimon manba fayli (≤20 MB): bayt saqlanadi, `chars` (tarjima qilinadigan segmentlar) hisoblanadi — narx shundan; skanlangan PDF 422 |
 | `POST /api/uploads/template` · `GET` · `DELETE /{assetId}` | «O'z shablonim» (pro-slayd) PPTX namunasi |
 | `POST /api/uploads/photo` · `GET /api/uploads/photo/{assetId}` | Rezyume surati (≤5 MB): kesilgan nusxa + asl + kesish ramkasi |
-| `GET\|PUT\|DELETE /api/resume/draft` | Rezyume formasi qoralamasi (foydalanuvchiga bitta) |
+| `GET\|PUT\|DELETE /api/resume/draft` | Rezyume formasi qoralamasi (foydalanuvchiga bitta) — `/api/forms/resume/draft` o'rami |
+| `GET\|PUT\|DELETE /api/forms/{toolId}/draft` | Forma qoralamasi (`form_drafts`, vosita bo'yicha bittadan; hozircha `resume`, `article`) |
+| `POST /api/generations/{id}/rewrite` | Maqola «Tuzatish»: `{baseVersion, fix}` → bo'lim/annotatsiya/kalit so'z/highlights qayta yoziladi, hisobot qayta hisoblanadi (kredit yechilmaydi; 20 ta / 10 daq) |
 | `POST /api/payments/orders` | To'lov buyurtmasi + provayder URL |
 | `POST /api/payments/click` | Click Prepare/Complete webhook |
 | `POST /api/payments/payme` | Payme Merchant API (JSON-RPC) |
