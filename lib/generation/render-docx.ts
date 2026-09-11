@@ -70,7 +70,7 @@ function makeKit(P: DocProfile) {
   const bodyP = (text: string): Paragraph =>
     new Paragraph({
       alignment: P.type.justify ? AlignmentType.JUSTIFIED : AlignmentType.LEFT,
-      spacing: { after: P.type.after, line },
+      spacing: { after: P.type.after, line, lineRule: LineRuleType.AUTO },
       ...(P.type.firstLine ? { indent: { firstLine: P.type.firstLine } } : {}),
       children: [run(text)],
     });
@@ -78,14 +78,14 @@ function makeKit(P: DocProfile) {
   const centerP = (text: string, extra: RunExtra = {}): Paragraph =>
     new Paragraph({
       alignment: AlignmentType.CENTER,
-      spacing: { after: 160, line },
+      spacing: { after: 160, line, lineRule: LineRuleType.AUTO },
       children: [run(text, extra)],
     });
 
   const leftP = (text: string, extra: RunExtra = {}): Paragraph =>
     new Paragraph({
       alignment: AlignmentType.LEFT,
-      spacing: { after: 120, line },
+      spacing: { after: 120, line, lineRule: LineRuleType.AUTO },
       children: [run(text, extra)],
     });
 
@@ -98,7 +98,7 @@ function makeKit(P: DocProfile) {
   const signatureP = (label: string): Paragraph =>
     new Paragraph({
       alignment: AlignmentType.LEFT,
-      spacing: { after: 120, line },
+      spacing: { after: 120, line, lineRule: LineRuleType.AUTO },
       tabStops: [{ type: TabStopType.RIGHT, position: CONTENT_W }],
       children: [run(label), new TextRun({ text: "\t", font, size }), run("____________")],
     });
@@ -109,7 +109,7 @@ function makeKit(P: DocProfile) {
    */
   const tocLine = (text: string, level: 1 | 2): Paragraph =>
     new Paragraph({
-      spacing: { line, after: 0 },
+      spacing: { line, after: 0, lineRule: LineRuleType.AUTO },
       indent: { left: level === 2 ? Math.round(0.75 * CM) : 0 },
       children: [run(text, { bold: level === 1 })],
     });
@@ -118,7 +118,7 @@ function makeKit(P: DocProfile) {
     new Paragraph({
       heading: level,
       alignment: P.heading.align === "left" ? AlignmentType.LEFT : AlignmentType.CENTER,
-      spacing: { before: 280, after: 200, line },
+      spacing: { before: 280, after: 200, line, lineRule: LineRuleType.AUTO },
       ...(P.heading.rule
         ? { border: { bottom: { style: BorderStyle.SINGLE, size: 8, space: 2, color: "F97316" } } }
         : {}),
@@ -148,7 +148,7 @@ function makeKit(P: DocProfile) {
     new Paragraph({
       heading: HeadingLevel.HEADING_2,
       alignment: AlignmentType.LEFT,
-      spacing: { before: 240, after: 120, line },
+      spacing: { before: 240, after: 120, line, lineRule: LineRuleType.AUTO },
       ...(P.type.firstLine ? { indent: { firstLine: P.type.firstLine } } : {}),
       children: [run(text, { bold: true, ...(P.heading.color ? { color: P.heading.color } : {}) })],
     });
@@ -173,7 +173,7 @@ function makeKit(P: DocProfile) {
                 children: lines.map(
                   (l) =>
                     new Paragraph({
-                      spacing: { line: 276, after: 0 },
+                      spacing: { line: 276, after: 0, lineRule: LineRuleType.AUTO },
                       children: [
                         new TextRun({
                           text: l.length ? l : " ",
@@ -201,7 +201,7 @@ function makeKit(P: DocProfile) {
       case "h3":
         return [
           new Paragraph({
-            spacing: { before: 200, after: 120, line },
+            spacing: { before: 200, after: 120, line, lineRule: LineRuleType.AUTO },
             children: [run(b.text, { bold: true })],
           }),
         ];
@@ -209,7 +209,7 @@ function makeKit(P: DocProfile) {
         return [
           new Paragraph({
             bullet: { level: 0 },
-            spacing: { after: 80, line },
+            spacing: { after: 80, line, lineRule: LineRuleType.AUTO },
             children: [run(b.text)],
           }),
         ];
@@ -217,7 +217,7 @@ function makeKit(P: DocProfile) {
         return [
           new Paragraph({
             indent: { left: CM },
-            spacing: { after: 200, line },
+            spacing: { after: 200, line, lineRule: LineRuleType.AUTO },
             children: [run(b.text, { italics: true })],
           }),
         ];
@@ -243,7 +243,7 @@ function makeKit(P: DocProfile) {
         width: { size: pct(i), type: WidthType.PERCENTAGE },
         children: [
           new Paragraph({
-            spacing: { after: 40, line: 276 },
+            spacing: { after: 40, line: 276, lineRule: LineRuleType.AUTO },
             children: [run(text, { bold, size: P.tableSize })],
           }),
         ],
@@ -349,7 +349,7 @@ async function drawArticle(plan: ArticlePlan, K: Kit, P: DocProfile, opts: Resum
     new Paragraph({
       alignment: extra.align ?? AlignmentType.CENTER,
       keepNext: true,
-      spacing: { before: extra.before ?? 0, after: extra.after ?? 120, line },
+      spacing: { before: extra.before ?? 0, after: extra.after ?? 120, line, lineRule: LineRuleType.AUTO },
       children: [K.run(text, extra)],
     });
 
@@ -357,7 +357,7 @@ async function drawArticle(plan: ArticlePlan, K: Kit, P: DocProfile, opts: Resum
   for (const h of plan.head as HeadItem[]) {
     switch (h.k) {
       case "udk":
-        out.push(new Paragraph({ alignment: AlignmentType.LEFT, keepNext: true, spacing: { after: 160, line }, children: [K.run(h.text, { size: small })] }));
+        out.push(new Paragraph({ alignment: AlignmentType.LEFT, keepNext: true, spacing: { after: 160, line, lineRule: LineRuleType.AUTO }, children: [K.run(h.text, { size: small })] }));
         break;
       case "title":
         out.push(keepP(h.text, { bold: true, after: 200 }));
@@ -373,7 +373,7 @@ async function drawArticle(plan: ArticlePlan, K: Kit, P: DocProfile, opts: Resum
         out.push(
           new Paragraph({
             alignment: AlignmentType.JUSTIFIED,
-            spacing: { before: 120, after: 80, line: absLine },
+            spacing: { before: 120, after: 80, line: absLine, lineRule: LineRuleType.AUTO },
             ...(P.type.firstLine ? { indent: { firstLine: P.type.firstLine } } : {}),
             children: labeled(`${h.label}.`, h.text),
           }),
@@ -381,15 +381,15 @@ async function drawArticle(plan: ArticlePlan, K: Kit, P: DocProfile, opts: Resum
         out.push(
           new Paragraph({
             alignment: AlignmentType.JUSTIFIED,
-            spacing: { after: 160, line: absLine },
+            spacing: { after: 160, line: absLine, lineRule: LineRuleType.AUTO },
             ...(P.type.firstLine ? { indent: { firstLine: P.type.firstLine } } : {}),
             children: labeled(`${h.keywordsLabel}:`, h.keywords),
           }),
         );
         break;
       case "highlights":
-        out.push(new Paragraph({ keepNext: true, spacing: { before: 120, after: 80, line }, children: [K.run(h.label, { bold: true })] }));
-        for (const t of h.items) out.push(new Paragraph({ bullet: { level: 0 }, spacing: { after: 60, line }, children: [K.run(t, { size: small })] }));
+        out.push(new Paragraph({ keepNext: true, spacing: { before: 120, after: 80, line, lineRule: LineRuleType.AUTO }, children: [K.run(h.label, { bold: true })] }));
+        for (const t of h.items) out.push(new Paragraph({ bullet: { level: 0 }, spacing: { after: 60, line, lineRule: LineRuleType.AUTO }, children: [K.run(t, { size: small })] }));
         break;
     }
   }
@@ -449,12 +449,12 @@ async function drawArticle(plan: ArticlePlan, K: Kit, P: DocProfile, opts: Resum
           new Paragraph({
             alignment: AlignmentType.CENTER,
             ...(b.source ? { keepNext: true } : {}),
-            spacing: { after: b.source ? 40 : 200, line },
+            spacing: { after: b.source ? 40 : 200, line, lineRule: LineRuleType.AUTO },
             children: [K.run(b.caption)],
           }),
         );
         if (b.source) {
-          out.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 200, line }, children: [K.run(b.source, { italics: true, size: small })] }));
+          out.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 200, line, lineRule: LineRuleType.AUTO }, children: [K.run(b.source, { italics: true, size: small })] }));
         }
         break;
       }
@@ -464,13 +464,13 @@ async function drawArticle(plan: ArticlePlan, K: Kit, P: DocProfile, opts: Resum
           new Paragraph({
             alignment: plan.tableCaptionAlign === "right" ? AlignmentType.RIGHT : AlignmentType.LEFT,
             keepNext: true,
-            spacing: { before: 120, after: 80, line },
+            spacing: { before: 120, after: 80, line, lineRule: LineRuleType.AUTO },
             children: [K.run(b.caption)],
           }),
         );
         const t = b.table;
         out.push(K.tableOf(t.headers, t.rows, t.widths ?? columnPercents(t.headers) ?? undefined));
-        out.push(new Paragraph({ spacing: { after: 120, line: 240 }, children: [] }));
+        out.push(new Paragraph({ spacing: { after: 120, line: 240, lineRule: LineRuleType.AUTO }, children: [] }));
         break;
       }
       case "formula":
@@ -500,17 +500,17 @@ async function drawArticle(plan: ArticlePlan, K: Kit, P: DocProfile, opts: Resum
         out.push(
           new Paragraph({
             alignment: P.type.justify ? AlignmentType.JUSTIFIED : AlignmentType.LEFT,
-            spacing: { after: P.type.after, line },
+            spacing: { after: P.type.after, line, lineRule: LineRuleType.AUTO },
             ...(P.type.firstLine ? { indent: { firstLine: P.type.firstLine } } : {}),
             children: spanRuns(b.spans),
           }),
         );
         break;
       case "li":
-        out.push(new Paragraph({ bullet: { level: 0 }, spacing: { after: 80, line }, children: spanRuns(b.spans) }));
+        out.push(new Paragraph({ bullet: { level: 0 }, spacing: { after: 80, line, lineRule: LineRuleType.AUTO }, children: spanRuns(b.spans) }));
         break;
       case "quote":
-        out.push(new Paragraph({ indent: { left: CM }, spacing: { after: 200, line }, children: spanRuns(b.spans, { italics: true }) }));
+        out.push(new Paragraph({ indent: { left: CM }, spacing: { after: 200, line, lineRule: LineRuleType.AUTO }, children: spanRuns(b.spans, { italics: true }) }));
         break;
       case "h2":
       case "h3":
@@ -526,7 +526,7 @@ async function drawArticle(plan: ArticlePlan, K: Kit, P: DocProfile, opts: Resum
   const refP = (text: string) =>
     new Paragraph({
       alignment: AlignmentType.JUSTIFIED,
-      spacing: { after: 60, line: refLine },
+      spacing: { after: 60, line: refLine, lineRule: LineRuleType.AUTO },
       indent: plan.cite === "apa7" ? { left: Math.round(1.25 * CM), hanging: Math.round(1.25 * CM) } : { left: 0, firstLine: 0 },
       children: [K.run(text, { size: plan.profile.refsSizePt * 2 })],
     });
@@ -754,7 +754,7 @@ export async function renderDocx(doc: AcademicDoc, opts: ResumeDocxOpts = {}): P
       default: {
         document: {
           run: { font: P.type.font, size: P.type.size },
-          paragraph: { spacing: { line: P.type.line } },
+          paragraph: { spacing: { line: P.type.line, lineRule: LineRuleType.AUTO } },
         },
       },
     },

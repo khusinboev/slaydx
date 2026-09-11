@@ -116,11 +116,14 @@ export type { ArticleWordPlan };
  * qo'shimcha betlar; bo'lim matni paketning kamida 45 %.
  *
  * Koeffitsientlar jonli o'lchovdan (analytical, OAK, 3–5 bet, DOCX →
- * LibreOffice): sarlavha bloki 0,25 bet; har bo'lim sarlavhasi 0,06;
- * annotatsiya `size − 2` shriftda — zichlik = (size/12)·(line/abstractLine)
- * ·1,15 (OAK: 14/12 · 1,5/1,15 · 1,15 ≈ 1,8; 477 so'z 1,5 intervalda 1,6
- * bet olgan edi); adabiyot satri 0,05 bet × ro'yxat soni (TNR 12/1,15);
- * sxema 0,45 bet (160 mm eni, sarlavha bilan); jadval 0,25 (3+ betda).
+ * LibreOffice, `lineRule: auto` bilan — ya'ni Word'dagi haqiqiy 1,5
+ * qator): sarlavha bloki 0,3 bet; har bo'lim sarlavhasi 0,06; annotatsiya
+ * `size − 2` shriftda — zichlik = (size/12)·(line/abstractLine)·1,15 (OAK:
+ * 14/12 · 1,5/1,15 · 1,15 ≈ 1,8); adabiyot satri 0,065 bet × ro'yxat soni
+ * (TNR 12/1,15, ≈16 manba/bet); sxema 0,45 bet (160 mm eni, sarlavha
+ * bilan); jadval 0,25 (3+ betda). OAK'da apparatura (3 annotatsiya + 2
+ * ro'yxat × 10 manba + sxema + jadval) o'zi ≈ 4 bet — 3–5 betlik paket
+ * bo'lim matni 45 % poliga tushadi va hujjat ~6 bet chiqadi.
  * Kichik paketda annotatsiya pastki chegaraga yaqin mo'ljallanadi (150–250
  * → 170), katta paketda o'rtaga. Sxema soni `FIGURES_BY_PAGES` bilan
  * kesilgan bo'ladi (forma va `parseArticleInput`).
@@ -143,10 +146,10 @@ export function articleWordPlan(meta: DocMeta, type: ArticleType, profile: Publi
   const refs = Math.min(profile.refsMax, Math.max(profile.refsMin, Math.round(pages * 2.5)));
   const absDensity = (profile.sizePt / 12) * (profile.line / profile.abstractLine) * 1.15;
   const overhead =
-    0.25 +
+    0.3 +
     type.skeleton.length * 0.06 +
     abstracts / (perPage * absDensity) +
-    refs * 0.05 * (profile.secondEnglishList ? 2 : 1) +
+    refs * 0.065 * (profile.secondEnglishList ? 2 : 1) +
     figures * 0.45 +
     (pages >= 3 ? 0.25 : 0);
   const bodyPages = Math.max(pages * 0.45, pages - overhead);

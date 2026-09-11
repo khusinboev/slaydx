@@ -43,6 +43,30 @@ async function docxText(d: AcademicDoc): Promise<string> {
 
 // -------------------------------------------------- muallif satri
 
+/**
+ * Qator oralig'i (AUDIT-17 R5): `w:line="360"` ni Word 1,5 qator (TNR 14 da
+ * 24 pt) deb o'qiydi, LibreOffice esa `w:lineRule` bo'lmasa QAT'IY 18 pt deb —
+ * referat Word'da 21 bet, LibreOffice/PDF'da 16 (sahifa darvozasi va PDF
+ * eksport 25 % zichroq edi). Har `w:spacing` da `w:lineRule="auto"` aniq
+ * yoziladi — ikkala renderer ham 1,5 qator chizadi (rezyume/rasm saboqi
+ * endi butun hujjatga).
+ */
+test("har `w:spacing w:line` da `w:lineRule=\"auto\"` bor — LibreOffice ham 1,5 qator deb o'qisin", async () => {
+  const d = doc("referat", { topic: "Iqlim", pages: "15-20" });
+  d.toc = true;
+  d.sections.push({ id: "b", title: "I BOB. Asosiy qism", blocks: [{ kind: "h2", text: "1.1. Band" }, { kind: "p", text: "Matn." }, { kind: "li", text: "Band" }, { kind: "quote", text: "Iqtibos" }] });
+  d.references = ["Karimov A. Kitob. — Toshkent: Fan, 2020."];
+  const JSZip = (await import("jszip")).default;
+  const zip = await JSZip.loadAsync(await renderDocx(d));
+  const xml = await zip.file("word/document.xml")!.async("string");
+  const spacings = xml.match(/<w:spacing[^>]*w:line="[^"]*"[^>]*>/g) ?? [];
+  assert.ok(spacings.length >= 8, `kam spacing: ${spacings.length}`);
+  const bad = spacings.filter((s) => !/w:lineRule="auto"/.test(s));
+  assert.deepEqual(bad.slice(0, 3), [], `${bad.length} ta spacing lineRule'siz`);
+  const styles = await zip.file("word/styles.xml")!.async("string");
+  assert.match(styles, /<w:pPrDefault><w:pPr><w:spacing w:line="360" w:lineRule="auto"\/>/);
+});
+
 test("muallif satridan kurs va guruh ajratiladi", () => {
   assert.deepEqual(parseAuthorLine("Aliyev Ali — 3-kurs, 301-guruh"), {
     name: "Aliyev Ali",
