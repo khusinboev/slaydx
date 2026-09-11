@@ -1,3 +1,5 @@
+import { PUBLICATION_PROFILES } from "./article/profiles";
+import type { PublicationProfileId } from "./article/types";
 import { RESUME_TEMPLATES, type ResumeTemplateId } from "./resume/templates";
 import type { DocMeta } from "./types";
 
@@ -309,6 +311,50 @@ export function resumeProfile(templateId: ResumeTemplateId): DocProfile {
 }
 
 /**
+ * Maqola profili — NASHR PROFILIGA bog'langan (Maqola 2, AUDIT-17).
+ *
+ * `PROFILES.article` eski maqola (titul sahifali, jadval oxirida) uchun
+ * qoladi. Yangi maqolada shrift/o'lcham/interval/chegara/jadval shrifti
+ * `PUBLICATION_PROFILES` dan keladi — OAK (TNR 14, 1.5, 2/2/3/1.5 sm) va
+ * IEEE (TNR 12, yakka, 2.5/2 sm) bitta rendererdan chiqadi. Titul YO'Q
+ * (jurnal maqolasida bo'lmaydi), jadval matn ichida (`anchored`),
+ * sarlavha BOSH HARFSIZ. `headingAlign` — `planArticle` qarori (tur
+ * raqamlangan bo'lsa chapda), profil o'zi bilmaydi.
+ *
+ * `id` «article» bo'lib QOLADI — ko'ruvchi va eski tekshiruvlar shu
+ * identifikatorga tayanadi.
+ */
+export function articleProfile(id: PublicationProfileId, opts: { headingAlign?: "center" | "left" } = {}): DocProfile {
+  const p = PUBLICATION_PROFILES[id] ?? PUBLICATION_PROFILES.oak;
+  const cm = (v: number) => Math.round(v * CM);
+  return {
+    id: "article",
+    page: {
+      ...GOST_PAGE,
+      margin: { top: cm(p.marginsCm.top), bottom: cm(p.marginsCm.bottom), left: cm(p.marginsCm.left), right: cm(p.marginsCm.right) },
+    },
+    type: {
+      font: p.font,
+      size: Math.round(p.sizePt * 2),
+      line: Math.round(240 * p.line),
+      justify: true,
+      firstLine: Math.round(1.25 * CM),
+      // Yakka intervalda paragraf oralig'i 6 pt, 1.5 da 10 pt (GOST odati).
+      after: p.line >= 1.5 ? 200 : 120,
+    },
+    heading: {
+      align: opts.headingAlign ?? (p.numberedSections ? "left" : "center"),
+      upper: false,
+      rule: false,
+      color: "000000",
+    },
+    titlePage: "none",
+    tablePlacement: "anchored",
+    tableSize: Math.round(p.tableSizePt * 2),
+  };
+}
+
+/**
  * Janr uchun profil. Yagona joy — renderer boshqa hech qayerda
  * `toolId` ni so'ramaydi.
  */
@@ -319,7 +365,14 @@ export function profileFor(meta: DocMeta): DocProfile {
     case "essay":
       return PROFILES.essay;
     case "article":
-      return PROFILES.article;
+      /*
+       * `pubProfile` faqat Maqola 2 dan keyin yaratilgan hujjatlarda bor;
+       * eski `doc_json` (titul sahifali maqola) avvalgi profil bilan
+       * ochilishda davom etadi. `renderDocx` `doc.article` bo'lsa
+       * modeldagi profilni oladi — bu yer faqat meta bo'yicha qarorlar
+       * (`titleModel`, sahifa darvozasi) uchun.
+       */
+      return meta.pubProfile ? articleProfile(meta.pubProfile) : PROFILES.article;
     case "texnologik-xarita":
       return PROFILES.landscape;
     case "lesson-plan":

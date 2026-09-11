@@ -1,35 +1,93 @@
 "use client";
 
+import katex from "katex";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { planArticle, type CiteSpan } from "@/lib/generation/article/layout";
 import { docLabels, sectionLabels } from "@/lib/generation/i18n";
 import { columnPercents, evenPercents } from "@/lib/generation/table-columns";
 import { ESSAY_DESIGNS } from "@/lib/languages";
 import type { AcademicDoc, DocTable } from "@/lib/generation/types";
 import { docToFlow, titleModel, tocRows, type FlowItem, type TocRow } from "@/lib/viewers/flow";
-import { A4, contentHeightPx, ZOOM_STEPS } from "@/lib/viewers/metrics";
+import { A4, contentHeightPx, mmPx, ZOOM_STEPS } from "@/lib/viewers/metrics";
 import { continuationTableFor, packPages } from "@/lib/viewers/paginate";
 import { splitByHeight, type TextSplitter } from "@/lib/viewers/split";
+import { ArticleHeadItem, CiteText } from "./ArticleHead";
 import { ZoomFrame, Workspace } from "./sheet";
 import { TitlePage } from "./TitlePage";
 import { ViewerToolbar } from "./toolbar";
 import { useVisiblePage } from "./useVisiblePage";
 
 /**
+ * Bo'lingan paragraf bo'lagi uchun iqtibos bo'laklari (Maqola 2).
+ *
+ * `cutWords` so'zlar bo'yicha kesadi va bo'lak asl matnning uzluksiz
+ * qismi bo'ladi — shu qismga tushgan `spans` belgilar bo'yicha kesiladi.
+ * Bo'lak asl matnda topilmasa (bo'shliqlar normallashgan) belgi tushib
+ * qoladi — matn o'zi saqlanadi.
+ */
+function sliceSpans(text: string, spans: CiteSpan[] | undefined, part: string): CiteSpan[] | undefined {
+  if (!spans?.length) return undefined;
+  const from = text.indexOf(part);
+  if (from < 0) return undefined;
+  const to = from + part.length;
+  const out: CiteSpan[] = [];
+  let pos = 0;
+  for (const s of spans) {
+    const a = Math.max(pos, from);
+    const b = Math.min(pos + s.text.length, to);
+    if (b > a) out.push({ text: s.text.slice(a - pos, b - pos), ...(s.cite ? { cite: s.cite } : {}) });
+    pos += s.text.length;
+  }
+  return out;
+}
+
+/**
  * Sahifadan uzun matnli bandlarni bo'lish (Word kabi).
  *
  * Faqat oddiy matn bandlari bo'linadi: sarlavha, titul, mundarija,
  * annotatsiya va adabiyot qatori o'z yorlig'i/raqami bilan bog'langan,
- * ularni bo'lish noto'g'ri bo'lardi. `id` ga `~idx` qo'shiladi — bo'laklar
- * DOM kalitlarida noyob bo'lsin.
+ * ularni bo'lish noto'g'ri bo'lardi. Maqola 2 ning `figure`/`formula`
+ * bandlari ham ATOM — `takeText` ularga `null` qaytaradi. `id` ga `~idx`
+ * qo'shiladi — bo'laklar DOM kalitlarida noyob bo'lsin.
  */
-const FLOW_SPLITTER: TextSplitter<FlowItem> = {
+export const FLOW_SPLITTER: TextSplitter<FlowItem> = {
   takeText: (it) =>
     it.type === "p" || it.type === "li" || it.type === "quote" || it.type === "code" ? it.text : null,
   makePart: (it, part, index) =>
-    it.type === "p" || it.type === "li" || it.type === "quote" || it.type === "code"
-      ? { ...it, text: part, id: `${it.id}~${index}` }
-      : it,
+    it.type === "p" || it.type === "li" || it.type === "quote"
+      ? { ...it, text: part, spans: sliceSpans(it.text, it.spans, part), id: `${it.id}~${index}` }
+      : it.type === "code"
+        ? { ...it, text: part, id: `${it.id}~${index}` }
+        : it,
 };
+
+/**
+ * Maqola varag'i o'lchovlari — NASHR PROFILIDAN (`articleProfile` bilan
+ * bir juft): chegara, shrift, interval, jadval shrifti. Eski hujjatlar
+ * `.word-inner` ning qat'iy CSS qiymatlarida qoladi (`null`).
+ */
+function articleSheet(doc: AcademicDoc) {
+  if (!doc.article) return null;
+  const plan = planArticle(doc);
+  const m = plan.profile.marginsCm;
+  const p = plan.profile;
+  return {
+    plan,
+    style: {
+      padding: `${m.top}cm ${m.right}cm ${m.bottom}cm ${m.left}cm`,
+      fontSize: `${p.sizePt}pt`,
+      // Word «yakka» intervali ≈ 1.15 × shrift; 1.5 — ko'ruvchidagi eski qiymat.
+      lineHeight: p.line >= 1.5 ? "1.5" : "1.15",
+      "--doc-table-size": `${p.tableSizePt}pt`,
+      "--doc-small": `${Math.max(10, p.sizePt - 2)}pt`,
+      // DOCX `after`: 1.5 da 200 twip = 10 pt, yakkada 120 = 6 pt.
+      "--doc-p-after": p.line >= 1.5 ? "10pt" : "6pt",
+      "--doc-h1-align": plan.headingAlign,
+    } as React.CSSProperties,
+    measureWidth: `${210 - (m.left + m.right) * 10}mm`,
+    limit: Math.round(A4.hPx - mmPx((m.top + m.bottom) * 10) - A4.footerPx),
+  };
+}
 
 /**
  * Akademik / insho / maqola / tarjima hujjatining jonli ko'ruvchisi.
@@ -40,6 +98,13 @@ const FLOW_SPLITTER: TextSplitter<FlowItem> = {
  */
 export function WordViewer({ doc }: { doc: AcademicDoc }) {
   const items = useMemo(() => docToFlow(doc), [doc]);
+  /*
+   * Maqola 2: varaq o'lchovlari nashr profilidan (`articleSheet`), birinchi
+   * annotatsiya yangi varaqdan BOSHLANMAYDI, jadval sarlavhasi rejadagi
+   * tekislanish bilan. Eski hujjatlarda `null` — hech narsa o'zgarmaydi.
+   */
+  const sheet = useMemo(() => articleSheet(doc), [doc]);
+  const limit = sheet?.limit ?? contentHeightPx({ footer: true });
   // Sahifadan uzun matnli bandlar bo'lib ko'rsatiladi (Word kabi) —
   // yuqoridagi `FLOW_SPLITTER` izohiga qarang.
   const [flow, setFlow] = useState<FlowItem[] | null>(null);
@@ -86,16 +151,16 @@ export function WordViewer({ doc }: { doc: AcademicDoc }) {
     if (!root) return;
     const kids = Array.from(root.children) as HTMLElement[];
     const hs = kids.map((el) => el.getBoundingClientRect().height);
-    const next = splitByHeight(renderItems, hs, contentHeightPx({ footer: true }), FLOW_SPLITTER);
+    const next = splitByHeight(renderItems, hs, limit, FLOW_SPLITTER);
     if (next.changed) {
       // Uzun band bo'lingan — bo'laklar o'lchanishi uchun qayta chizamiz.
       // Keyingi aylanishda `hs` yangi bo'laklarga mos keladi.
       setFlow(next.list);
       return;
     }
-    setPages(packPages(renderItems, hs, contentHeightPx({ footer: true })));
+    setPages(packPages(renderItems, hs, limit, { abstractBreak: !sheet }));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- renderItems barqaror (flow ?? items), `flow` deps'da.
-  }, [items, flow]);
+  }, [items, flow, limit, sheet]);
 
   // Sof funksiya `paginate.ts` da (mutatsiya bilan tekshirilgan).
   const continuationTables = useMemo(() => (pages ? continuationTableFor(pages) : []), [pages]);
@@ -151,13 +216,14 @@ export function WordViewer({ doc }: { doc: AcademicDoc }) {
                     {isTitle ? (
                       <TitlePage title={title} />
                     ) : (
-                      <div className="word-inner">
+                      <div className={sheet ? "word-inner word-article" : "word-inner"} style={sheet?.style}>
                         <PageBody
                           items={pg}
                           continuation={continuationTables[i] ?? null}
                           continuedLabel={continuedLabel}
                           toc={toc}
                           labels={labels}
+                          tableCaptionAlign={sheet?.plan.tableCaptionAlign}
                         />
                       </div>
                     )}
@@ -179,7 +245,13 @@ export function WordViewer({ doc }: { doc: AcademicDoc }) {
       */}
       <div
         aria-hidden
-        className="invisible pointer-events-none fixed top-0 -left-[12000px] w-[165mm] font-[family-name:var(--font-doc)] text-[14pt] leading-[1.5]"
+        className={
+          sheet
+            ? "word-article invisible pointer-events-none fixed top-0 -left-[12000px] font-[family-name:var(--font-doc)]"
+            : "invisible pointer-events-none fixed top-0 -left-[12000px] w-[165mm] font-[family-name:var(--font-doc)] text-[14pt] leading-[1.5]"
+        }
+        // Maqola: o'lchov kengligi/shrifti/intervali ham profildan — varaq bilan bir xil.
+        style={sheet ? { ...sheet.style, padding: 0, width: sheet.measureWidth } : undefined}
         ref={measureRef}
       >
         {renderItems.map((it) => (
@@ -219,12 +291,15 @@ function PageBody({
   continuedLabel,
   toc,
   labels,
+  tableCaptionAlign,
 }: {
   items: FlowItem[];
   continuation: DocTable | null;
   continuedLabel: string;
   toc: TocRow[];
   labels: ReturnType<typeof docLabels>;
+  /** Maqola 2: «davomi» sarlavhasi uchun ham rejadagi tekislanish (bosh band boshqa varaqda qolgan). */
+  tableCaptionAlign?: "left" | "right";
 }) {
   const nodes: React.ReactNode[] = [];
   let buf: Extract<FlowItem, { type: "table-head" | "table-row" }>[] = [];
@@ -236,7 +311,16 @@ function PageBody({
     const table = head?.table ?? continuation;
     const rows = buf.filter((it): it is Extract<FlowItem, { type: "table-row" }> => it.type === "table-row");
     if (table) {
-      nodes.push(<TableGroup key={`tbl-${key++}`} table={table} rows={rows} continued={!head} continuedLabel={continuedLabel} />);
+      nodes.push(
+        <TableGroup
+          key={`tbl-${key++}`}
+          table={table}
+          rows={rows}
+          continued={!head}
+          continuedLabel={continuedLabel}
+          captionAlign={head?.captionAlign ?? tableCaptionAlign}
+        />,
+      );
     }
     buf = [];
   };
@@ -258,15 +342,32 @@ function tableCols(table: DocTable) {
   return table.widths ?? columnPercents(table.headers) ?? evenPercents(table.headers.length);
 }
 
-function TableHeadOnly({ table }: { table: DocTable }) {
+/**
+ * Jadval sarlavhasi. Eski hujjatlarda markazda kursiv 12 pt (DOCX
+ * `drawTable`: `centerP(caption, {italics, size: 24})`); Maqola 2 da
+ * (`align` berilgan) — tana shriftida, o'ngda (GOST) yoki chapda
+ * (APA/IEEE), kursivsiz (`drawArticle` bilan bir xil).
+ */
+function TableCaption({ text, align }: { text: string; align?: "left" | "right" }) {
+  if (align) {
+    return (
+      <div className="word-table-caption" style={{ textAlign: align, textIndent: 0 }}>
+        {text}
+      </div>
+    );
+  }
+  return (
+    <div className="mb-1 text-center text-[12pt] italic" style={{ textIndent: 0 }}>
+      {text}
+    </div>
+  );
+}
+
+function TableHeadOnly({ table, captionAlign }: { table: DocTable; captionAlign?: "left" | "right" }) {
   const cols = tableCols(table);
   return (
     <div>
-      {table.caption ? (
-        <div className="mb-1 text-center text-[12pt] italic" style={{ textIndent: 0 }}>
-          {table.caption}
-        </div>
-      ) : null}
+      {table.caption ? <TableCaption text={table.caption} align={captionAlign} /> : null}
       <table className="word-table" style={{ tableLayout: "fixed" }}>
         <colgroup>
           {cols.map((w, i) => (
@@ -290,21 +391,18 @@ function TableGroup({
   rows,
   continued,
   continuedLabel,
+  captionAlign,
 }: {
   table: DocTable;
   rows: Extract<FlowItem, { type: "table-row" }>[];
   continued: boolean;
   continuedLabel: string;
+  captionAlign?: "left" | "right";
 }) {
   const cols = tableCols(table);
   return (
     <div>
-      {table.caption ? (
-        <div className="mb-1 text-center text-[12pt] italic" style={{ textIndent: 0 }}>
-          {table.caption}
-          {continued ? ` ${continuedLabel}` : ""}
-        </div>
-      ) : null}
+      {table.caption ? <TableCaption text={continued ? `${table.caption} ${continuedLabel}` : table.caption} align={captionAlign} /> : null}
       <table className="word-table" style={{ tableLayout: "fixed" }}>
         <colgroup>
           {cols.map((w, i) => (
@@ -377,6 +475,8 @@ function FlowBlock({
         </div>
       );
     case "abstract":
+      // Maqola 2: yorliq matn bilan bitta paragrafda (`ArticleHead`).
+      if (item.inline) return <ArticleHeadItem item={item} />;
       return (
         <div>
           <div className="word-h1">{item.label}</div>
@@ -387,6 +487,11 @@ function FlowBlock({
           </p>
         </div>
       );
+    case "udk":
+    case "articleTitle":
+    case "authors":
+    case "highlights":
+      return <ArticleHeadItem item={item} />;
     case "h1":
       return <div className="word-h1">{item.text}</div>;
     case "h2":
@@ -394,16 +499,48 @@ function FlowBlock({
     case "h3":
       return <div className="word-h3">{item.text}</div>;
     case "p":
-      return <p className="word-p">{item.text}</p>;
+      return (
+        <p className="word-p">
+          <CiteText text={item.text} spans={item.spans} />
+        </p>
+      );
     case "li":
       return (
         <div className="word-li">
           <span>•</span>
-          <span>{item.text}</span>
+          <span>
+            <CiteText text={item.text} spans={item.spans} />
+          </span>
         </div>
       );
     case "quote":
-      return <p className="word-quote">{item.text}</p>;
+      return (
+        <p className="word-quote">
+          <CiteText text={item.text} spans={item.spans} />
+        </p>
+      );
+    case "figure":
+      /*
+       * Sxema + sarlavha PASTDA — bitta atom band (`paginate.ts` uni
+       * bo'lmaydi). PNG bo'lmasa (WP3 bergunga qadar) o'rinbosar ramka —
+       * DOCX dagi ramkali paragraf bilan bir xil matn.
+       */
+      return (
+        <div className="word-figure" data-figure={item.figureId}>
+          {item.url ? (
+            // eslint-disable-next-line @next/next/no-img-element -- aktiv/`data:` URL, optimizator o'chirilgan (next.config).
+            <img src={item.url} alt={item.caption} className="word-figure-img" />
+          ) : (
+            <div className="word-figure-placeholder">{item.placeholder}</div>
+          )}
+          <div className="word-figure-caption">{item.caption}</div>
+          {item.source ? <div className="word-figure-source">{item.source}</div> : null}
+        </div>
+      );
+    case "formula":
+      return <Formula item={item} />;
+    case "refs2":
+      return <div className="word-h1">{item.text}</div>;
     case "code":
       return (
         <div className="mb-3" style={{ textIndent: 0 }}>
@@ -425,7 +562,7 @@ function FlowBlock({
        * Haqiqiy sahifada bu band `PageBody`/`TableGroup` orqali,
        * BIRINCHI qatori bilan bitta jadvalga birlashtirib chiziladi.
        */
-      return <TableHeadOnly table={item.table} />;
+      return <TableHeadOnly table={item.table} captionAlign={item.captionAlign} />;
     case "table-row":
       // FAQAT o'lchov uchun — mustaqil `<tr>` HTML da noto'g'ri
       // o'lchanadi, shuning uchun o'z jadvaliga o'ralgan.
@@ -452,6 +589,10 @@ function FlowBlock({
       // kursivsiz. Ilgari bu yerda 12 pt kursiv edi va faylga mos kelmasdi.
       return <p className="word-p">{item.text}</p>;
     case "ref":
+      // Maqola 2: tayyor satr rejadan (`line`), APA da osilgan chekinish.
+      if (item.line !== undefined) {
+        return <p className={item.hanging ? "word-ref word-ref--hanging" : "word-ref"}>{item.line}</p>;
+      }
       return (
         <p className="word-p">
           {item.n}. {item.text}
@@ -460,4 +601,25 @@ function FlowBlock({
     default:
       return null;
   }
+}
+
+/**
+ * Formula — KaTeX `renderToString` (SSR ham, klientda ham bir xil HTML;
+ * tashqi skript yo'q, CSP `script-src 'self'` buzilmaydi). Xato LaTeX
+ * hujjatni yiqitmaydi (`throwOnError: false` — qizil xom matn). Raqam
+ * o'ngda, formula markazda — DOCX dagi tab-stop maketi bilan bir xil.
+ * `data-formula` — paritet testi bu tugunning matnini solishtirmaydi
+ * (KaTeX matn tugunlari OMML `<m:t>` bilan taqqoslanmaydi).
+ */
+function Formula({ item }: { item: Extract<FlowItem, { type: "formula" }> }) {
+  const html = useMemo(
+    () => katex.renderToString(item.latex, { throwOnError: false, displayMode: item.display, strict: "ignore" }),
+    [item.latex, item.display],
+  );
+  return (
+    <div className="word-formula">
+      <span className="word-formula-body" data-formula dangerouslySetInnerHTML={{ __html: html }} />
+      <span className="word-formula-num">{item.number}</span>
+    </div>
+  );
 }

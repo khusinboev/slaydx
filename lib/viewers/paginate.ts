@@ -16,8 +16,34 @@ import type { FlowItem } from "./flow";
  * ustun nomlari) birinchi qatordan ajralib qolmasin (B1).
  */
 function isHeading(item: FlowItem): boolean {
-  return item.type === "h1" || item.type === "h2" || item.type === "h3" || item.type === "table-head";
+  return (
+    item.type === "h1" ||
+    item.type === "h2" ||
+    item.type === "h3" ||
+    item.type === "table-head" ||
+    /*
+     * Maqola 2 bosh bloki: UDK, sarlavha va mualliflar bir-biridan
+     * ajralmasin (DOCX da `keepNext`), «REFERENCES» sarlavhasi ham
+     * ro'yxati bilan. `figure`/`formula` bu yerda YO'Q — ular atom band
+     * (rasm sarlavhasi bilan bitta band), lekin keyingi matn bilan
+     * bog'lanmagan.
+     */
+    item.type === "udk" ||
+    item.type === "articleTitle" ||
+    item.type === "authors" ||
+    item.type === "refs2"
+  );
 }
+
+export type PackOpts = {
+  /**
+   * Birinchi annotatsiya yangi varaqdan boshlanadimi. Kurs ishi/referatda —
+   * ha (titul va mundarijadan keyin), Maqola 2 da — YO'Q: annotatsiya
+   * mualliflar ostida oqadi (`render-docx.ts drawArticle` sahifa
+   * uzilishi qo'ymaydi). Standart `true` — eski hujjatlar o'zgarmaydi.
+   */
+  abstractBreak?: boolean;
+};
 
 /**
  * Eng yaqin oldingi `table-head`ning O'LCHANGAN balandligi.
@@ -69,13 +95,13 @@ function blockHeight(items: FlowItem[], heights: number[], from: number): number
   return total;
 }
 
-export function packPages(items: FlowItem[], rawHeights: number[], limit: number): FlowItem[][] {
+export function packPages(items: FlowItem[], rawHeights: number[], limit: number, opts: PackOpts = {}): FlowItem[][] {
   // O'lchanmagan band ham joy egallaydi — nol balandlik varaqni buzardi.
   const heights = items.map((_, i) => Math.max(8, rawHeights[i] ?? 20));
   const pages: FlowItem[][] = [];
   let cur: FlowItem[] = [];
   let used = 0;
-  let sawAbstract = false;
+  let sawAbstract = opts.abstractBreak === false;
 
   const flush = () => {
     if (cur.length) pages.push(cur);
