@@ -10,7 +10,8 @@ import {
   RESUME_PALETTES,
   RESUME_PALETTE_IDS,
   RESUME_TEMPLATES,
-  RESUME_TEMPLATE_IDS,
+  PHOTOLESS_TEMPLATE_IDS,
+  PHOTO_TEMPLATE_IDS,
   isResumePaletteId,
   isResumeTemplateId,
 } from "@/lib/generation/resume/templates";
@@ -181,11 +182,21 @@ export function ResumeViewer({
           if (isResumeTemplateId(v) && v !== model.template) runOps([{ op: "template", template: v }]);
         }}
       >
-        {RESUME_TEMPLATE_IDS.map((id) => (
-          <option key={id} value={id} className="text-black">
-            {RESUME_TEMPLATES[id].title}
-          </option>
-        ))}
+        {/* Galereya bilan bir xil ikki guruh (AUDIT-16). */}
+        <optgroup label="Suratsiz">
+          {PHOTOLESS_TEMPLATE_IDS.map((id) => (
+            <option key={id} value={id} className="text-black">
+              {RESUME_TEMPLATES[id].title}
+            </option>
+          ))}
+        </optgroup>
+        <optgroup label="Suratli">
+          {PHOTO_TEMPLATE_IDS.map((id) => (
+            <option key={id} value={id} className="text-black">
+              {RESUME_TEMPLATES[id].title}
+            </option>
+          ))}
+        </optgroup>
       </select>
       <select
         aria-label="Rang"
