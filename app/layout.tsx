@@ -63,8 +63,18 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="uz" suppressHydrationWarning>
-      <body className={`${geist.variable} ${geistMono.variable} ${tinos.variable} font-sans antialiased`}>
+    /*
+     * Shrift o'zgaruvchilari `<html>` da — `@theme` dagi `--font-doc:
+     * var(--font-tinos), …` va `--font-sans: var(--font-geist)` `:root` da
+     * hisoblanadi; `--font-tinos` faqat `<body>` da bo'lsa `:root` dagi
+     * `var()` topilmaydi va `--font-doc` BUTUNLAY yaroqsiz bo'ladi —
+     * `.word-inner { font-family: var(--font-doc) }` `unset` ga tushib,
+     * hujjat ko'ruvchisi Times o'rniga Geist (sans) bilan chizilardi
+     * (AUDIT-17 R5 da CDP `getPlatformFontsForNode` bilan topildi: DOCX 6
+     * bet, ko'ruvchi 7; 9 vs 11).
+     */
+    <html lang="uz" suppressHydrationWarning className={`${geist.variable} ${geistMono.variable} ${tinos.variable}`}>
+      <body className="font-sans antialiased">
         {/* Klaviatura foydalanuvchilari sidebar ni aylanib o'tishi uchun. */}
         <a
           href="#main"

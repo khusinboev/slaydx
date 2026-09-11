@@ -118,7 +118,8 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-page-bg: var(--page-bg);
   --font-sans: var(--font-geist);
-  --font-doc: var(--font-tinos), "Times New Roman", Times, "Liberation Serif", serif;
+  /* `var()` fallback bilan: o'zgaruvchi `:root` da bo'lmasa ham qiymat yaroqsiz bo'lmasin (layout.tsx izohi). */
+  --font-doc: var(--font-tinos, "Tinos"), "Times New Roman", Times, "Liberation Serif", serif;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
