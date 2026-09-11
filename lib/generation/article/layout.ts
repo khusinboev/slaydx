@@ -141,7 +141,8 @@ export function legacyArticleModel(doc: AcademicDoc): ArticleModel {
     v: 1,
     type,
     profile,
-    cite: meta.citeStyle ?? PUBLICATION_PROFILES[profile].cite,
+    // Eski maqola ro'yxati doim raqamli («1. …») edi — profil APA bo'lsa ham.
+    cite: meta.citeStyle ?? "numeric",
     udk: meta.udk || undefined,
     language: meta.language,
     authors,

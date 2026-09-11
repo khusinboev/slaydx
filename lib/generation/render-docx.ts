@@ -400,11 +400,11 @@ async function drawArticle(plan: ArticlePlan, K: Kit, P: DocProfile, opts: Resum
            * dan ham (300 dpi PNG 1890 px — sahifaga sig'maydi). Balandlik
            * nisbat bilan; juda baland sxema 180 mm bilan cheklanadi.
            */
-          const maxW = Math.min(Math.floor(W / 15), Math.round((160 / 25.4) * 96));
+          const maxW = Math.min(Math.floor(W / 15), Math.floor((160 / 25.4) * 96));
           const ratio = b.figure.h && b.figure.w ? b.figure.h / b.figure.w : 0.7;
           let width = maxW;
           let height = Math.round(width * ratio);
-          const maxH = Math.round((180 / 25.4) * 96);
+          const maxH = Math.floor((180 / 25.4) * 96);
           if (height > maxH) {
             height = maxH;
             width = Math.round(height / ratio);
