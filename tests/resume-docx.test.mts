@@ -288,3 +288,15 @@ test("LibreOffice namunani ≤2 varaqda chizadi", { skip: !hasSoffice() }, async
   const pages = Number(/Pages:\s+(\d+)/.exec(out)?.[1] ?? 0);
   assert.ok(pages >= 1 && pages <= 2, `namuna ${pages} varaqqa yoyildi`);
 });
+
+test("qator sarlavhasi va bo'lim sarlavhasi keyingi paragraf bilan birga qoladi (`keepNext`)", async () => {
+  /*
+   * Jonli sinov (ru, `split`): «Bakalavr, finansy i kredit» 1-betda,
+   * universitet nomi 2-betda chiqqan edi. Endi lavozim/daraja satri va
+   * bo'lim sarlavhasi `w:keepNext` bilan — Word ularni yolg'iz qoldirmaydi.
+   */
+  const { xml } = await xmlOf(docFor("ats"));
+  const keeps = (xml.match(/<w:keepNext\/>/g) ?? []).length;
+  // Namunada 7 ta bo'lim sarlavhasi + 4 ta qator (2 ish, 1 ta'lim, 1 sertifikat) = 11.
+  assert.ok(keeps >= 11, `keepNext soni: ${keeps}`);
+});

@@ -176,6 +176,8 @@ function headingParagraph(d: Draw, text: string): Paragraph {
   const base = {
     spacing: spacing(d, { before: twip(4), after: twip(1.5) }),
     ...(d.indent ? { indent: { left: d.indent, right: d.indent } } : {}),
+    // Bo'lim sarlavhasi varaq oxirida yolg'iz qolmasin.
+    keepNext: true,
   };
   const label = (caps: boolean) => run(d, text, { size: d.t.type.h2, bold: true, color: c.accent, caps });
 
@@ -266,6 +268,13 @@ function drawItem(d: Draw, it: ResumeItem): Array<Paragraph | Table> {
           para(d, head, {
             tabStops: [{ type: TabStopType.RIGHT, position: (d.indent || 0) + d.width - 20 }],
             spacing: { before: twip(1.5), after: 0 },
+            /*
+             * Qator sarlavhasi (lavozim + davr) o'zining «tashkilot» satri
+             * va birinchi bandidan ajralib varaq oxirida yolg'iz qolmasin —
+             * jonli sinovda (ru, `split`) «Bakalavr…» 1-betda, universitet
+             * nomi 2-betda chiqqan edi.
+             */
+            keepNext: true,
           }),
         );
       }

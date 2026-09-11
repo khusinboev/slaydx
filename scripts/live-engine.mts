@@ -19,6 +19,7 @@
  * `GEMINI_API_KEY` shart. Chiqish `eval-out/live/` ga yoziladi.
  */
 import { mkdir, writeFile } from "node:fs/promises";
+import { normalizeResumeTemplate, templateHasPhoto, type ResumeTemplateId } from "../lib/generation/resume/templates.ts";
 import path from "node:path";
 import { buildArtifact } from "../lib/generation/index.ts";
 import { parsePptxTemplate } from "../lib/generation/pptx-template.ts";
@@ -125,7 +126,9 @@ const CASES: Case[] = [
       ...RESUME_VALUES,
       language: langArg(),
       enrich: !process.argv.includes("--enrich-off"),
-      resumeTemplate: "modern",
+      // `--resume-template <id>` — AUDIT-16 da 10 shablon; suratsiz (`ats`,
+      // `timeline`, `compact`, `letter`) + `--photo` = surat tushMASligi kerak.
+      resumeTemplate: resumeTemplateArg(),
       resumePalette: "ember",
     },
     checks: (f, pages) => {
@@ -157,6 +160,12 @@ const CASES: Case[] = [
         ok("AI shifti (≤2/ish joyi)", perRow.every((n) => n <= 2), perRow.join(",")),
         ok("yorliq tili", Boolean(m) && m!.labels.experience.length > 0, `${m?.labels.experience} · ${m?.labels.education}`),
         ok("chiqish tili", m?.language === langArg(), String(m?.language)),
+        ok("shablon saqlandi", m?.template === resumeTemplateArg(), String(m?.template)),
+        ok(
+          templateHasPhoto(resumeTemplateArg()) ? "surat modelda (suratli shablon)" : "surat modelda YO'Q (suratsiz shablon)",
+          templateHasPhoto(resumeTemplateArg()) ? !photoArg() || Boolean(m?.photo?.url) : !m?.photo,
+          m?.photo ? `surat: ${m.photo.shape}` : "surat yo'q",
+        ),
         ok("DOCX 1–2 bet", pages === null || (pages >= 1 && pages <= 2), `${pages ?? "?"} bet`),
       ];
     },
@@ -548,6 +557,11 @@ async function runCase(c: Case) {
 }
 
 /** `--photo <fayl>` — «Rezyume» jonli sinovi uchun surat (PNG doira, JPEG kvadrat). */
+function resumeTemplateArg(): ResumeTemplateId {
+  const i = process.argv.indexOf("--resume-template");
+  return normalizeResumeTemplate(i > 0 ? process.argv[i + 1] : "modern");
+}
+
 function photoArg(): string | null {
   const i = process.argv.indexOf("--photo");
   return i > 0 && process.argv[i + 1] ? process.argv[i + 1] : null;
@@ -585,7 +599,8 @@ async function main() {
 
   const tpl = templateArg();
   const src = sourceArg();
-  const only = process.argv.slice(2).filter((a) => !a.startsWith("-") && a !== tpl && a !== src && a !== langArg());
+  const rtpl = process.argv.includes("--resume-template") ? process.argv[process.argv.indexOf("--resume-template") + 1] : null;
+  const only = process.argv.slice(2).filter((a) => !a.startsWith("-") && a !== tpl && a !== src && a !== langArg() && a !== rtpl && a !== photoArg());
   const cases = only.length ? CASES.filter((c) => only.includes(c.name)) : CASES;
   process.stdout.write(
     `Jonli tekshiruv — ${cases.length} keys · model ${process.env.GEMINI_MODEL || "gemini"} · PDF ${pdfAvailable() ? "bor" : "yo'q"}\n`,
