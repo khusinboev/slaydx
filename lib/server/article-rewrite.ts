@@ -315,7 +315,8 @@ export function judgeFromReview(prev: ArticleReview | undefined, applied?: Artic
 export async function recomputeReview(doc: AcademicDoc, prev: ArticleReview | undefined, applied?: ArticleFix, now = new Date()): Promise<ArticleReview> {
   const type = ARTICLE_TYPES[doc.article?.type ?? "imrad_oak"];
   const profile = PUBLICATION_PROFILES[doc.article?.profile ?? type.defaultProfile];
-  const wordTarget = articleWordPlan(doc.meta, type, profile).total;
+  // Dvigatel bilan bir xil: «Hajm» qoidasi BO'LIM matniga qaraydi (`plan.body`), annotatsiya qo'shilmaydi.
+  const wordTarget = articleWordPlan(doc.meta, type, profile).body;
   const fresh = await reviewArticle(doc, { judge: false, wordTarget, now });
   const rules = fresh.checks.filter((c) => !c.id.startsWith("judge:"));
   const judge = judgeFromReview(prev, applied) ?? neutralJudge();

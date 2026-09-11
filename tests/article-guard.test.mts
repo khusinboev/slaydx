@@ -118,9 +118,11 @@ test("bo'lim prompti: manbalar `[ID] Muallif (yil). Sarlavha. Venue.` ko'rinishi
    * bo'limga so'z ulushi bo'yicha — 300/1200 × 10 = 3, lekin ro'yxatda 2 ta
    * bor → 2. Jonli smoke: 20 topilgan manbadan 8 tasi iqtibos qilingan edi.
    */
-  assert.match(withRefs, /cite at least 10 DIFFERENT sources, so this section should draw on about 2 different ones:/);
+  assert.match(withRefs, /cite about 10 DIFFERENT sources \(not fewer than 10\), so this section should draw on about 2 different ones:/);
   const many = { ...ctx, refs: Array.from({ length: 12 }, (_, i) => ({ ...REFS[0], id: `W${i}` })) };
   assert.match(sectionPrompt(many, { plan, wantTable: false, wantFigure: false, wantChart: false }), /draw on about 3 different ones:/);
+  // `round`, `ceil` emas — 250/1200 × 10 = 2.08 → 2 (ceil 3 bo'lardi; yig'indi oshib 12 manba chiqqan edi).
+  assert.match(sectionPrompt(many, { plan: { ...plan, words: 250 }, wantTable: false, wantFigure: false, wantChart: false }), /draw on about 2 different ones:/);
   assert.match(sectionPrompt(many, { plan: { ...plan, id: "conclusion", skeletonId: "conclusion", words: 60 }, wantTable: false, wantFigure: false, wantChart: false }), /about 1 different ones \(a conclusion may cite fewer\)/);
   const noRefs = sectionPrompt({ ...ctx, refs: [] }, { plan, wantTable: true, wantFigure: true, wantChart: false });
   assert.match(noRefs, /SOURCES: none available — write WITHOUT any citations/);

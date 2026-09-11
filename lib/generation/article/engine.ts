@@ -130,7 +130,8 @@ export type { ArticleWordPlan };
  */
 export function articleWordPlan(meta: DocMeta, type: ArticleType, profile: PublicationProfile): ArticleWordPlan {
   const perPage = articleWordsPerPage(profile);
-  const pages = Math.max(1, meta.targetPages);
+  // `targetPages` yo'q (namunaviy/eski meta) — standart paket 3–5 (4), NaN maqsad chiqmasin.
+  const pages = Math.max(1, Number.isFinite(meta.targetPages) ? meta.targetPages : 4);
   const [minW, maxW] = profile.abstractWords;
   const abstractAim = pages <= 5 ? Math.round(minW + (maxW - minW) * 0.2) : Math.round((minW + maxW) / 2);
   const abstracts = 3 * abstractAim;

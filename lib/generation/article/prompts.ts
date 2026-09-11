@@ -215,9 +215,10 @@ export function sectionPrompt(ctx: ArticleContext, ask: SectionAsk): string {
      * aytiladi: jonli smoke'da 20 manba topilib, 4 betlik maqola 8 tasini
      * iqtibos qilgan edi (OAK kamida 10 talab qiladi → qizil band).
      */
-    const want = Math.min(refs.length, Math.max(1, Math.ceil((ctx.plan.refs * plan.words) / Math.max(1, ctx.wordTarget))));
+    // `round` (ceil emas): bo'limlar yig'indisi ≈ N — «at least» + ceil 12 manba × 2 ro'yxat = 1,4 bet berdi (3–5 bet smoke).
+    const want = Math.min(refs.length, Math.max(1, Math.round((ctx.plan.refs * plan.words) / Math.max(1, ctx.wordTarget))));
     lines.push(
-      `SOURCES (cite by ID; use those that genuinely support a sentence; do not force a citation into every paragraph; do not cite what you did not use). The whole article must cite at least ${ctx.plan.refs} DIFFERENT sources, so this section should draw on about ${want} different ones${plan.id === "conclusion" || plan.id === "conclusions" ? " (a conclusion may cite fewer)" : ""}:`,
+      `SOURCES (cite by ID; use those that genuinely support a sentence; do not force a citation into every paragraph; do not cite what you did not use). The whole article should cite about ${ctx.plan.refs} DIFFERENT sources (not fewer than ${ctx.profile.refsMin}), so this section should draw on about ${want} different ones${plan.id === "conclusion" || plan.id === "conclusions" ? " (a conclusion may cite fewer)" : ""}:`,
       ...refs.map((r) => formatRefLine(r)),
     );
   } else {

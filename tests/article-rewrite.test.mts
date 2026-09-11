@@ -244,6 +244,25 @@ test("recomputeReview: qoidalar yangi hujjatdan, baholovchi ballari eskisidan, i
   // Ballda baholovchi ulushi 40% × 18/18 — eskicha; qoidalar bo'yicha bitta sariq/qizil ko'proq.
   const base = await recomputeReview(d, prevReview(), undefined, NOW);
   assert.ok(r.score < base.score, `ball tushishi kerak edi: ${r.score} vs ${base.score}`);
+  /*
+   * «Hajm» — dvigatel bilan bir xil maqsad (`plan.body`, annotatsiyasiz).
+   * Jonli smoke: `plan.total` bilan 391 so'zli maqola tuzatishdan keyin
+   * «maqsad ≈924, 42 %» qizil bo'lib qolgan edi (yaratilganda yashil).
+   */
+  const { articleWordPlan } = await import("../lib/generation/article/engine.ts");
+  const { ARTICLE_TYPES } = await import("../lib/generation/article/types-registry.ts");
+  const { PUBLICATION_PROFILES } = await import("../lib/generation/article/profiles.ts");
+  const sized = JSON.parse(JSON.stringify(d)) as AcademicDoc;
+  sized.meta = { ...sized.meta, targetPages: 4, figureCount: 1 };
+  const plan = articleWordPlan(sized.meta, ARTICLE_TYPES[sized.article!.type], PUBLICATION_PROFILES[sized.article!.profile]);
+  const bodyWords = sized.sections.flatMap((s) => s.blocks).filter((b) => b.kind === "p" || b.kind === "li" || b.kind === "quote").reduce((n, b) => n + b.text.trim().split(/\s+/).filter(Boolean).length, 0);
+  // Bo'lim so'zi maqsadga tenglashtiriladi: `total` bilan hisoblansa 60 % dan past → qizil.
+  const ratio = plan.body / Math.max(1, bodyWords);
+  assert.ok(Number.isFinite(ratio) && ratio > 0, `reja: ${JSON.stringify(plan)}`);
+  for (const sec of sized.sections) for (const b of sec.blocks) if (b.kind === "p") b.text = Array.from({ length: Math.max(1, Math.round(ratio)) }, () => b.text).join(" ");
+  const len = (await recomputeReview(sized, prevReview(), undefined, NOW)).checks.find((c) => c.id === "length");
+  assert.ok(len, "hajm qoidasi yo'q");
+  assert.ok(len!.level !== "red", `hajm: ${len!.detail}`);
 });
 
 /* ══════════════════════════════ to'liq oqim (DB stub) ══════════════════════════════ */
