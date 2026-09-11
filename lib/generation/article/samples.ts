@@ -52,7 +52,7 @@ export const SAMPLE_ARTICLE_MODEL: ArticleModel = {
       },
       w: 1890,
       h: 1400,
-      source: "Muallif tomonidan tuzilgan",
+      source: "muallif tomonidan tuzilgan",
     },
   ],
   userFacts: "",

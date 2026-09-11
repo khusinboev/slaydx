@@ -789,11 +789,16 @@ function clipWords(s: string, max: number): string {
   return (i > max * 0.6 ? cut.slice(0, i) : cut).replace(/[,;:\s]+$/, "");
 }
 
+/**
+ * Rasm manbasi MATNI — «Manba:» prefiksisiz: prefiksni `planArticle`
+ * (`layout.ts` `FIG_WORDS.source`) qo'yadi. Jonli IEEE sinovida
+ * «Source: Source: compiled by the author» chiqqan edi — ikki joyda yozilgani.
+ */
 function sourceLabel(lang: string, who: "author" | "user"): string {
   const m: Record<string, [string, string]> = {
-    uz: ["Manba: muallif tomonidan tuzilgan", "Manba: muallif ma’lumotlari"],
-    ru: ["Источник: составлено автором", "Источник: данные автора"],
-    en: ["Source: compiled by the author", "Source: author's data"],
+    uz: ["muallif tomonidan tuzilgan", "muallif ma’lumotlari"],
+    ru: ["составлено автором", "данные автора"],
+    en: ["compiled by the author", "author's data"],
   };
   return (m[lang] ?? m.en)[who === "author" ? 0 : 1];
 }

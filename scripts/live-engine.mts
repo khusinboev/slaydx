@@ -732,7 +732,15 @@ function articleChecks(f: BuiltFile, pages: number | null, o: { pagesMin: number
     ok(`annotatsiya ${minW}–${maxW} so'z (±30%)`, absWords.length === 3 && absWords.every((n) => n >= minW * 0.7 && n <= maxW * 1.3), absWords.join("/")),
     ok(`kalit so'zlar ${minK}–${maxK}`, kw.length === 3 && kw.every((n) => n >= minK && n <= maxK), kw.join("/")),
     ok("annotatsiyada iqtibos yo'q", abs.every((x) => !/\[(W\d+|u\d+)/.test(x.text)), ""),
-    ok(wantFigures ? "sxema spec bor (url yo'q)" : "sxema yo'q", wantFigures ? (a?.figures.length ?? 0) > 0 && a!.figures.every((x) => x.spec && !x.url) : (a?.figures.filter((x) => x.spec.kind !== "prisma").length ?? 0) === 0, a?.figures.map((x) => `${x.id}:${x.spec.kind}`).join(",") || "—"),
+    // WP3: sxema PNG chiziladi (`url` data: PNG, 1890 px) yoki maketlanmasa `fallbackBlocks` — ikkalasi ham to'g'ri, lekin kamida bittasi PNG bo'lsin.
+    ok(
+      wantFigures ? "sxema PNG chizilgan (yoki fallback)" : "sxema yo'q",
+      wantFigures
+        ? (a?.figures.length ?? 0) > 0 && a!.figures.every((x) => x.spec && (x.url?.startsWith("data:image/png") || x.fallbackBlocks?.length)) && a!.figures.some((x) => x.url)
+        : (a?.figures.filter((x) => x.spec.kind !== "prisma").length ?? 0) === 0,
+      a?.figures.map((x) => `${x.id}:${x.spec.kind}${x.url ? ` ${x.w}px` : x.fallbackBlocks ? " fallback" : " url yo'q"}`).join(",") || "—",
+    ),
+    ok("hisobot bor va ≥ 60 ball", (a?.review?.score ?? 0) >= 60, a?.review ? `${a.review.score} ball, ${a.review.checks.filter((c) => c.level === "red").length} qizil` : "hisobot yo'q"),
     ok("manbasiz foiz yo'q", unsourced.length === 0, unsourced.length ? `topildi: ${unsourced.join(", ")}` : "toza"),
     ok("cost.calls > 0", (f.cost?.calls ?? 0) > 0, f.cost ? `${f.cost.calls} chaqiruv, ${f.cost.provider}/${f.cost.model}` : "cost yo'q"),
     ok(`DOCX ≥ ${o.pagesMin} bet`, pages === null || pages >= o.pagesMin, `${pages ?? "?"} bet`),
