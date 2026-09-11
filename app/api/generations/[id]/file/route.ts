@@ -19,9 +19,9 @@ const CONVERTIBLE = new Set([
 ]);
 
 /** Fayl nomidagi sarlavha injeksiyasini oldini oladi. */
-function contentDisposition(name: string): string {
+export function contentDisposition(name: string, kind: "attachment" | "inline" = "attachment"): string {
   const ascii = name.replace(/[^\x20-\x7e]/g, "_").replace(/["\\]/g, "_");
-  return `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(name)}`;
+  return `${kind}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(name)}`;
 }
 
 /**
@@ -58,7 +58,14 @@ export const GET = handler("generations/file", async (req, ctx: Ctx) => {
    * O'girish talab bo'yicha: PDF bazada saqlanmaydi, aks holda har
    * hujjatning ikkinchi nusxasi `BYTEA` ni ikki barobar og'irlashtirardi.
    */
-  const wantsPdf = new URL(req.url).searchParams.get("format") === "pdf";
+  const params = new URL(req.url).searchParams;
+  const wantsPdf = params.get("format") === "pdf";
+  /*
+   * `inline=1` — brauzer ichida ko'rsatish uchun (Tarjimon 2 «Fayl» tabi
+   * iframe'i, yangi oynada ochish). `attachment` bilan Chrome iframe'da
+   * ko'rsatmay, faylni yuklab olishga o'tardi. Standart — yuklab olish.
+   */
+  const inline = params.get("inline") === "1";
   if (wantsPdf) {
     if (!pdfAvailable()) throw new ApiError("PDF o'girish bu serverda yoqilmagan", 503);
     /*
@@ -79,7 +86,7 @@ export const GET = handler("generations/file", async (req, ctx: Ctx) => {
       headers: {
         "Content-Type": "application/pdf",
         "Content-Length": String(pdf.byteLength),
-        "Content-Disposition": contentDisposition(pdfFileName(file.fileName)),
+        "Content-Disposition": contentDisposition(pdfFileName(file.fileName), inline ? "inline" : "attachment"),
         "Cache-Control": "private, no-store",
         "X-Content-Type-Options": "nosniff",
       },

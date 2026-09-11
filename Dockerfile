@@ -38,7 +38,14 @@ ENV HOSTNAME=0.0.0.0
 # tugmasi umuman chiqmaydi.
 # `poppler-utils` (`pdftoppm`) — «O'z shablonim» uchun layout fonlarini
 # rasterlash (yuklash paytida, web konteynerida: `lib/server/template-upload.ts`).
-RUN apk add --no-cache       libreoffice-writer libreoffice-impress       ttf-liberation font-noto poppler-utils   && soffice --headless --version >/dev/null 2>&1 || true
+#
+# `font-noto-cjk` va `font-noto-arabic` (AUDIT-16): Tarjimon 2 hujjatni
+# 18 tilga o'giradi — xitoy, koreys, yapon va arab yozuvi ham bor. `font-noto`
+# faqat lotin/kirill/yunonni yopadi; yaponchaga tarjima qilingan PPTX ning
+# PDF ko'rinishi va eskizi (LibreOffice shu konteynerda o'giradi) butunlay
+# «□□□» bo'lib chiqardi. Faylning o'zi to'g'ri edi — foydalanuvchi
+# kompyuterida shrift bor — lekin saytdagi ko'rinish buzuq. ~+60 MB.
+RUN apk add --no-cache       libreoffice-writer libreoffice-impress       ttf-liberation font-noto font-noto-cjk font-noto-arabic poppler-utils   && fc-cache -f >/dev/null 2>&1 || true   && soffice --headless --version >/dev/null 2>&1 || true
 
 # Root ostida ishlatmaymiz.
 RUN addgroup -g 1001 -S nodejs && adduser -S nextjs -u 1001

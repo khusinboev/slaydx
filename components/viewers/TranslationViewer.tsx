@@ -173,12 +173,12 @@ function FilePane({ t, gen, pdf }: { t: TranslationReport; gen?: { id: string; f
       <div className="flex min-h-0 flex-col gap-2">
         <p className="text-muted-foreground text-[12px]">
           Fayl PDF ko‘rinishida (LibreOffice). Ko‘rinmasa —{" "}
-          <a href={fileUrl(gen.id, "pdf")} target="_blank" rel="noreferrer" className="text-primary underline-offset-2 hover:underline">
+          <a href={fileUrl(gen.id, "pdf", { inline: true })} target="_blank" rel="noreferrer" className="text-primary underline-offset-2 hover:underline">
             PDF ni yangi oynada ochish
           </a>
           .
         </p>
-        <iframe src={fileUrl(gen.id, "pdf")} title="Tarjima qilingan fayl (PDF ko‘rinishi)" className="bg-card h-[80vh] w-full rounded-xl border" data-file-preview />
+        <iframe src={fileUrl(gen.id, "pdf", { inline: true })} title="Tarjima qilingan fayl (PDF ko‘rinishi)" className="bg-card h-[80vh] w-full rounded-xl border" data-file-preview />
       </div>
     );
   }

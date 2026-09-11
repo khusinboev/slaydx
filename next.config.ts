@@ -51,7 +51,14 @@ const securityHeaders = [
       "connect-src 'self'",
       "media-src 'self' data: blob:",
       "worker-src 'self' blob:",
-      "frame-src https://telegram.org https://oauth.telegram.org",
+      /*
+       * `'self'` — sayt O'Z faylini iframe'da ko'rsatishi uchun (Tarjimon 2
+       * «Fayl» tabi: `/api/generations/{id}/file?format=pdf&inline=1`).
+       * Ilgari faqat Telegram domenlari bor edi va brauzer o'z PDF'imizni
+       * «content blocked» deb to'sardi — AUDIT-14 smoke buni ko'rmagan,
+       * chunki headless Chromium iframe ichida PDF chizmaydi.
+       */
+      "frame-src 'self' https://telegram.org https://oauth.telegram.org",
       "frame-ancestors 'self' https://web.telegram.org https://telegram.org https://k.telegram.org https://z.telegram.org https://a.telegram.org",
       "object-src 'none'",
       "base-uri 'self'",
@@ -98,6 +105,19 @@ const nextConfig: NextConfig = {
         // API javoblari shaxsiy — proxy yoki CDN keshlamasin.
         source: "/api/:path*",
         headers: [{ key: "Cache-Control", value: "private, no-store" }],
+      },
+      {
+        /*
+         * Fayl javobi (DOCX/PPTX bayt yoki PDF ko'rinishi) — hujjat, sahifa
+         * emas: sayt CSP'si (`default-src 'self'`, `object-src 'none'`) unga
+         * kerak emas va Chrome'ning PDF ko'ruvchisiga halaqit berishi mumkin.
+         * Konfiguratsiya sarlavhalari marshrut o'zi qo'ygan sarlavhani
+         * USTIDAN yozadi (prodda `thumb` ning o'z CSP'si yo'qolgani shundan),
+         * shuning uchun istisno ham shu yerda, marshrutda emas. Faqat
+         * `frame-ancestors 'self'` qoladi — faylni boshqa sayt iframe qila olmaydi.
+         */
+        source: "/api/generations/:id/file",
+        headers: [{ key: "Content-Security-Policy", value: "frame-ancestors 'self'" }],
       },
     ];
   },

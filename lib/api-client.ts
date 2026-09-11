@@ -320,8 +320,13 @@ export function thumbUrl(id: string) {
   return `/api/generations/${id}/thumb`;
 }
 
-export function fileUrl(id: string, format?: "pdf") {
-  return `/api/generations/${id}/file${format ? `?format=${format}` : ""}`;
+/**
+ * Fayl manzili. `inline` — brauzer ichida ko'rsatish (iframe, yangi oyna):
+ * server `Content-Disposition: inline` beradi; aks holda yuklab olish.
+ */
+export function fileUrl(id: string, format?: "pdf", opts: { inline?: boolean } = {}) {
+  const q = [format ? `format=${format}` : "", opts.inline ? "inline=1" : ""].filter(Boolean).join("&");
+  return `/api/generations/${id}/file${q ? `?${q}` : ""}`;
 }
 
 /**
