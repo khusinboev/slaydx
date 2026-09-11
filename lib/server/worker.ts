@@ -11,6 +11,7 @@ import {
   failJob,
   heartbeat,
   reclaimStaleJobs,
+  setCost,
   setProgress,
   type ClaimedJob,
 } from "./jobs";
@@ -205,6 +206,20 @@ async function runJob(job: ClaimedJob): Promise<void> {
 
     if (!file.bytes?.byteLength) {
       throw new Error("Fayl bo'sh chiqdi — qayta urinib ko'ring");
+    }
+
+    /*
+     * LLM sarf telemetriyasi (Maqola 2 / AUDIT-17, WP4) — hozircha faqat
+     * maqola dvigateli to'ldiradi (`file.cost`), boshqa vositalarda
+     * `undefined` va bu qadam sukut o'tkazib yuboriladi. `completeJob`DAN
+     * OLDIN: u qulfni bo'shatadi, shundan keyin yozish «qulf boshqada»
+     * deb jim o'tardi. Xato bo'lsa faqat jurnalga — ish YIQILMAYDI,
+     * kredit/fayl bilan bog'liq emas.
+     */
+    if (file.cost) {
+      await setCost(job.id, WORKER_ID, file.cost).catch((e) => {
+        console.warn(`[worker] job ${job.id}: cost_json yozilmadi:`, e instanceof Error ? e.message : e);
+      });
     }
 
     // Yuklab olinadigan fayl (DOCX/PPTX/PNG) rasmni allaqachon o'z ichiga

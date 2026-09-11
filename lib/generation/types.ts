@@ -356,7 +356,19 @@ export type BuiltFile = {
    * mexanizmdan o'tadi.
    */
   delivered?: Delivered;
+  /**
+   * LLM sarf telemetriyasi (Maqola 2 / AUDIT-17, WP4 «plumbing») —
+   * `lib/generation/llm-roles.ts CostMeter.toJson()` bilan BIR XIL
+   * shakl (dvigatel shu yerga import qilmasdan mos keladi, aylanma
+   * import bo'lmasin). Faqat maqola dvigateli (WP1) to'ldiradi; boshqa
+   * vositalarda `undefined` — worker `file.cost` bo'lgandagina
+   * `generations.cost_json`ga yozadi (`lib/server/worker.ts`,
+   * `lib/server/jobs.ts setCost`). Kredit/`price` ga TEGMAYDI.
+   */
+  cost?: CostJson;
 };
+
+export type CostJson = { provider: string; model: string; inputTokens: number; outputTokens: number; calls: number; usd: number };
 
 export type BuildCtx = {
   tool: ToolConfig;

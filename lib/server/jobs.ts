@@ -5,7 +5,7 @@ import { query, queryOne, transaction } from "./db";
 import { chargeInTx } from "./credits";
 import { env } from "./env";
 import type { FormValues, Generation, JobStatus, ToolId } from "../types";
-import type { AcademicDoc, Delivered } from "../generation/types";
+import type { AcademicDoc, CostJson, Delivered } from "../generation/types";
 import type { SlideModel, SlideThemeId } from "../generation/slide-types";
 import type { SlideAudience, SlideTemplateId, SlideVisual } from "../generation/slide-templates";
 import type { BodyRules } from "../generation/slide-audience";
@@ -433,6 +433,27 @@ export async function completeJob(
       formatOf(result.fileName),
       result.delivered ? JSON.stringify(result.delivered) : null,
     ],
+  );
+  return rows.length > 0;
+}
+
+/**
+ * LLM sarf telemetriyasini yozadi (Maqola 2 / AUDIT-17, WP4).
+ *
+ * `completeJob`DAN OLDIN chaqirilishi kerak — u qulfni bo'shatadi
+ * (`locked_by = NULL`), shundan keyin bu yozuv «qulf boshqada» deb
+ * jim o'tib ketardi. `price`/kredit ga UMUMAN tegmaydi — faqat
+ * kuzatuv (`scripts/cost-report.mts`). Qulf egasi tekshiriladi
+ * (`setProgress` naqshi): boshqa worker/ish ustidan yozib yubormaydi;
+ * `false` — chaqiruvchi (worker.ts) buni yutib, ishni yiqitmaydi.
+ */
+export async function setCost(id: string, workerId: string, cost: CostJson): Promise<boolean> {
+  const rows = await query<{ id: string }>(
+    `UPDATE generations
+        SET cost_json = $3
+      WHERE id = $1 AND locked_by = $2 AND status = 'IN_PROGRESS'
+      RETURNING id`,
+    [id, workerId, JSON.stringify(cost)],
   );
   return rows.length > 0;
 }
