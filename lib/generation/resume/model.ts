@@ -26,7 +26,58 @@ export type ResumeBullet = { text: string; ai?: true };
 export type ResumeSkill = { text: string; ai?: true };
 /** `start`/`end`: "YYYY-MM" | "YYYY" | "" ; `end` "now" = hozir. */
 export type ResumeExperience = { id: string; company: string; role: string; start: string; end: string; bullets: ResumeBullet[] };
-export type ResumeEducation = { id: string; institution: string; degree: string; start: string; end: string };
+/**
+ * Ta'lim MUASSASASI TURI (Rezyume 2, AUDIT-16).
+ *
+ * Nega tur kerak: «universitet», «kollej» va «maktab» uchun so'raladigan
+ * savollar boshqa-boshqa. Oliy ta'limda yo'nalish va daraja bor, kollejda
+ * mutaxassislik va kasbiy daraja, maktabda esa NA daraja, NA yo'nalish
+ * bo'ladi. Bitta erkin matn maydoni («Yo'nalish, daraja») hammasini bir
+ * xil so'raganda foydalanuvchi maktab satriga «Bakalavr» deb yozib
+ * qo'yardi yoki maydonni umuman bo'sh tashlab ketardi.
+ */
+export type ResumeEducationKind = "university" | "college" | "school" | "course";
+
+/**
+ * DARAJA — endi erkin matn emas, ID.
+ *
+ * Sabab: rezyume 18 tilda chiqadi, daraja esa FAKT — uni model tarjima
+ * qilmasligi kerak. Ilgari «Bakalavr, Moliya» butunligicha modelga
+ * borardi va u «BSc in Finance» deb qaytarardi, ya'ni daraja model
+ * javobiga bog'liq edi. Endi ID kirishdan keladi, yorliq koddan
+ * (`degreeLabel`), model esa faqat `field` (yo'nalish) ni qayta yozadi.
+ *
+ * `tugallanmagan` ikki turda ham bor, lekin MA'NOSI boshqa
+ * («tugallanmagan oliy» va «tugallanmagan o'rta maxsus») — shuning uchun
+ * yorliq turga ham bog'liq: `degreeLabel(kind, id, language)`.
+ */
+export type ResumeDegreeId =
+  | "bakalavr"
+  | "magistr"
+  | "ordinatura"
+  | "tayanch-doktorantura"
+  | "doktorantura"
+  | "kichik-mutaxassis"
+  | "malakali-ishchi"
+  | "tugallanmagan";
+
+/**
+ * Ta'lim satri. `start`/`end` — FAQAT "YYYY" (yoki `end` uchun "now"):
+ * o'quv yili sentabrda boshlanadi, oy so'rash foydalanuvchiga ortiqcha
+ * ish va xatolik manbai (`normalizeYear`).
+ */
+export type ResumeEducation = {
+  id: string;
+  kind: ResumeEducationKind;
+  /** OTM / kollej / maktab / kurs tashkiloti nomi. */
+  institution: string;
+  /** Yo'nalish yoki mutaxassislik (maktabda bo'sh). */
+  field: string;
+  /** `ResumeDegreeId` — yoki eski hujjatlardagi erkin matn. */
+  degree: string;
+  start: string;
+  end: string;
+};
 export type ResumeCertificate = { id: string; name: string; issuer: string; year: string };
 export type ResumeLanguage = { id: string; language: string; level: string };
 export type ResumeLinkKind = "linkedin" | "github" | "portfolio" | "other";
@@ -123,6 +174,78 @@ export function sanitizeLabels(raw: unknown, language: string): ResumeLabels {
   return out;
 }
 
+/* ────────────────────────── ta'lim darajalari ────────────────────────── */
+
+/** Formadagi tur tanlovi shu tartibda chiziladi. */
+export const RESUME_EDUCATION_KINDS: ResumeEducationKind[] = ["university", "college", "school", "course"];
+
+export function isResumeEducationKind(v: unknown): v is ResumeEducationKind {
+  return typeof v === "string" && (RESUME_EDUCATION_KINDS as string[]).includes(v);
+}
+
+/**
+ * DARAJA KATALOGI — tur → ID → yorliq.
+ *
+ * uz/ru/en koddan; qolgan 15 til uchun INGLIZCHA yorliq. Daraja fakt,
+ * uni model tarjima qilmaydi (shuning uchun `degree` ID); 18 tilning
+ * har biriga o'zbekcha-ruscha-inglizchadan tashqari qo'lda yorliq
+ * yozish esa ma'lumot emas, bezak bo'lardi — nemis rezyumesida
+ * «Bachelor's degree» xalqaro va tushunarli.
+ *
+ * Maktab va kursda daraja YO'Q: ularda «daraja» degan tushuncha yo'q,
+ * bo'sh `<select>` esa foydalanuvchini «nimadir tanlashim kerakmi?»
+ * degan savolga tortadi — forma bu maydonni umuman ko'rsatmaydi.
+ */
+const DEGREES: Record<ResumeEducationKind, Partial<Record<ResumeDegreeId, { uz: string; ru: string; en: string }>>> = {
+  university: {
+    bakalavr: { uz: "Bakalavr", ru: "Бакалавр", en: "Bachelor’s degree" },
+    magistr: { uz: "Magistr", ru: "Магистр", en: "Master’s degree" },
+    ordinatura: { uz: "Klinik ordinatura", ru: "Клиническая ординатура", en: "Clinical residency" },
+    "tayanch-doktorantura": { uz: "Tayanch doktorantura (PhD)", ru: "Базовая докторантура (PhD)", en: "PhD" },
+    doktorantura: { uz: "Doktorantura (DSc)", ru: "Докторантура (DSc)", en: "Doctor of Science (DSc)" },
+    tugallanmagan: { uz: "Tugallanmagan oliy", ru: "Неоконченное высшее", en: "Incomplete higher education" },
+  },
+  college: {
+    "kichik-mutaxassis": { uz: "Kichik mutaxassis", ru: "Младший специалист", en: "Associate degree" },
+    "malakali-ishchi": { uz: "Malakali ishchi", ru: "Квалифицированный рабочий", en: "Vocational qualification" },
+    tugallanmagan: { uz: "Tugallanmagan o‘rta maxsus", ru: "Неоконченное среднее специальное", en: "Incomplete vocational education" },
+  },
+  school: {},
+  course: {},
+};
+
+/** Tur uchun mavjud darajalar — forma `<select>` i va test shu ro'yxatdan. */
+export const RESUME_DEGREES: Record<ResumeEducationKind, ResumeDegreeId[]> = {
+  university: ["bakalavr", "magistr", "ordinatura", "tayanch-doktorantura", "doktorantura", "tugallanmagan"],
+  college: ["kichik-mutaxassis", "malakali-ishchi", "tugallanmagan"],
+  school: [],
+  course: [],
+};
+
+/**
+ * Daraja yorlig'i. Noma'lum ID yoki eski erkin matn — O'ZI qaytadi
+ * (B-8: Rezyume 2 dan oldingi hujjatlarda `degree` erkin matn edi,
+ * masalan «Bakalavr, Moliya va kredit» — uni yo'qotish mumkin emas).
+ */
+export function degreeLabel(kind: ResumeEducationKind, degree: string, language: string): string {
+  const id = (degree || "").trim();
+  if (!id) return "";
+  const entry = DEGREES[kind]?.[id as ResumeDegreeId];
+  if (!entry) return id;
+  const lang = (language || "uz").toLowerCase();
+  return lang === "uz" ? entry.uz : lang === "ru" ? entry.ru : entry.en;
+}
+
+/**
+ * Ta'lim satrining SARLAVHASI — maket ham (`layout.ts`), sintez
+ * bo'limlar ham (`resumeSections`) shu yerdan oladi.
+ *
+ * «Bakalavr, Moliya» / «Moliya» (daraja yo'q kurs) / «» (maktab).
+ */
+export function educationTitle(e: ResumeEducation, language: string): string {
+  return [degreeLabel(e.kind, e.degree, language), e.field].filter(Boolean).join(", ");
+}
+
 /* ────────────────────────── yordamchilar ────────────────────────── */
 
 const s = (v: unknown, max: number): string => (typeof v === "string" ? v.trim().slice(0, max) : typeof v === "number" ? String(v) : "");
@@ -145,6 +268,30 @@ export function normalizeDate(v: unknown): string {
   const mo = Number(m[2]);
   if (mo < 1 || mo > 12) return String(y);
   return `${y}-${String(mo).padStart(2, "0")}`;
+}
+
+/**
+ * FAQAT YIL: "2019-09" → "2019", "2019" → "2019", "now" → "now" (AUDIT-16).
+ *
+ * Nega ta'limda oy so'ralmaydi: O'zbekistonda barcha o'qishlar sentabrda
+ * boshlanadi va iyun-iyulda tugaydi — oy foydalanuvchi uchun ortiqcha
+ * ikkita tanlov va xatolik manbai («2015-yanvarda boshladim»), rezyumeda
+ * esa baribir «2015 – 2019» ko'rinishida chiqadi.
+ *
+ * `normalizeDate` O'ZGARMAYDI: ish tajribasida oy MA'NOLI (bir yilda
+ * ikki marta ish almashtirish odatiy), shuning uchun ikki funksiya.
+ *
+ * `allowNow` — sertifikat yili uchun `false`: sertifikat «hozir»
+ * olinmaydi, u aniq yilda beriladi.
+ */
+export function normalizeYear(v: unknown, allowNow = true): string {
+  const t = s(v, 12).toLowerCase();
+  if (t === "now" || t === "hozir" || t === "present") return allowNow ? "now" : "";
+  const m = /^(\d{4})(?:-\d{1,2})?$/.exec(t);
+  if (!m) return "";
+  const y = Number(m[1]);
+  if (y < 1950 || y > 2100) return "";
+  return String(y);
 }
 
 function normBullets(v: unknown, max = RESUME_LIMITS.bullets): ResumeBullet[] {
@@ -250,18 +397,31 @@ export function normalizeResume(raw: unknown): ResumeModel | null {
         const e = obj(x);
         return {
           id: s(e.id, 16) || newRowId("d", i),
+          /*
+           * ORQAGA MOSLIK (AUDIT-16): eski qatorda `kind` yo'q — «oliy
+           * ta'lim» deb hisoblanadi (rezyumelarning aksariyati shunday)
+           * va `field` bo'sh qoladi. Eski `degree` erkin matn edi
+           * («Bakalavr, Moliya va kredit») — uni yo'nalish va darajaga
+           * AJRATISHGA urinilmaydi: taxmin xato bo'lsa hujjatga
+           * noto'g'ri fakt tushardi. Matn `degree` da qoladi va
+           * `degreeLabel` uni o'zgarishsiz yorliq sifatida beradi.
+           */
+          kind: isResumeEducationKind(e.kind) ? e.kind : "university",
           institution: s(e.institution, RESUME_LIMITS.fieldChars),
+          field: s(e.field, RESUME_LIMITS.fieldChars),
           degree: s(e.degree, RESUME_LIMITS.fieldChars),
-          start: normalizeDate(e.start),
-          end: normalizeDate(e.end),
+          start: normalizeYear(e.start),
+          end: normalizeYear(e.end),
         };
       })
-      .filter((e) => e.institution || e.degree),
+      .filter((e) => e.institution || e.degree || e.field),
     certificates: arr(r.certificates)
       .slice(0, RESUME_LIMITS.certificates)
       .map((x, i) => {
         const e = obj(x);
-        return { id: s(e.id, 16) || newRowId("c", i), name: s(e.name, RESUME_LIMITS.fieldChars), issuer: s(e.issuer, RESUME_LIMITS.fieldChars), year: s(e.year, 12) };
+        // Sertifikat yili ham tanlagichdan keladi — «2021-yil» kabi erkin
+        // matn endi modelga tushmaydi (AUDIT-16).
+        return { id: s(e.id, 16) || newRowId("c", i), name: s(e.name, RESUME_LIMITS.fieldChars), issuer: s(e.issuer, RESUME_LIMITS.fieldChars), year: normalizeYear(e.year, false) };
       })
       .filter((e) => e.name),
     languages: arr(r.languages)
@@ -375,7 +535,7 @@ export function legacyResumeModel(doc: AcademicDoc): ResumeModel {
   }
   const education: ResumeEducation[] = blocks("edu")
     .filter((b) => b.text.trim())
-    .map((b, i) => ({ id: newRowId("d", i), institution: b.text.trim(), degree: "", start: "", end: "" }));
+    .map((b, i) => ({ id: newRowId("d", i), kind: "university" as const, institution: b.text.trim(), field: "", degree: "", start: "", end: "" }));
   const skills: ResumeSkill[] = blocks("skills")
     .flatMap((b) => (b.kind === "li" ? [b.text] : b.text.split(/[,·]/)))
     .map((t) => t.trim())
@@ -427,7 +587,10 @@ export function resumeSections(m: ResumeModel): DocSection[] {
       out.push({
         id: "edu",
         title: L.education,
-        blocks: m.education.map((e) => ({ kind: "p", text: [formatPeriod(e.start, e.end, L, m.language), e.degree, e.institution].filter(Boolean).join(" — ") })),
+        blocks: m.education.map((e) => ({
+          kind: "p",
+          text: [formatPeriod(e.start, e.end, L, m.language), educationTitle(e, m.language), e.institution].filter(Boolean).join(" — "),
+        })),
       });
     } else if (id === "certificates" && m.certificates.length) {
       out.push({ id: "certificates", title: L.certificates, blocks: m.certificates.map((c) => ({ kind: "li", text: [c.name, c.issuer, c.year].filter(Boolean).join(", ") })) });

@@ -30,7 +30,7 @@ const VALUES: FormValues = {
     { id: "e1", company: "Artel Electronics", role: "Moliya tahlilchisi", start: "2019-08", end: "now", bullets: ["2020-yilda byudjet modelini tuzdi."] },
     { id: "e2", company: "Korzinka", role: "Tahlilchi", start: "2017-01", end: "2019-07", bullets: ["Rentabellik tahlilini yuritdi."] },
   ]),
-  education: JSON.stringify([{ id: "d1", institution: "TDIU", degree: "Bakalavr, Moliya", start: "2015", end: "2019" }]),
+  education: JSON.stringify([{ id: "d1", kind: "university", institution: "TDIU", field: "Moliya", degree: "bakalavr", start: "2015", end: "2019" }]),
   skills: "Excel,SQL",
 };
 
@@ -44,7 +44,7 @@ function out(over: Partial<ResumeLlmOut> = {}): ResumeLlmOut {
       { id: "e1", role: "Yetakchi moliya tahlilchisi", bullets: [{ text: "Byudjet modelini tuzdi." }] },
       { id: "e2", role: "Moliya tahlilchisi", bullets: [{ text: "Rentabellik tahlilini yuritdi." }] },
     ],
-    education: [{ id: "d1", degree: "Bakalavr, Moliya va kredit" }],
+    education: [{ id: "d1", field: "Moliya va kredit" }],
     skills: [{ text: "Excel" }, { text: "SQL" }],
     ...over,
   };
@@ -72,9 +72,9 @@ test("1: noma'lum id tashlanadi, yo'qolgan id kirish bandlari bilan tiklanadi", 
   assert.equal(r.out.experience[1].role, "Tahlilchi");
   assert.equal(r.out.experience[1].bullets[0].text, "Rentabellik tahlilini yuritdi.");
   // Ta'limda ham xuddi shunday.
-  const e = run(out({ education: [{ id: "d5", degree: "Doktorlik" }] }));
+  const e = run(out({ education: [{ id: "d5", field: "Kimyo" }] }));
   assert.deepEqual(e.out.education.map((x) => x.id), ["d1"]);
-  assert.equal(e.out.education[0].degree, "Bakalavr, Moliya", "kirishdagi daraja tiklandi");
+  assert.equal(e.out.education[0].field, "Moliya", "kirishdagi yo‘nalish tiklandi");
 });
 
 // ───────────────────────────────────────────── 2: yillar
@@ -191,26 +191,26 @@ test("5: tashkilot tekshiruvi NFKC + kichik harf; qayta ifodalash saqlanadi", ()
 /**
  * JONLI SINOV REGRESSIYASI (uz kirish → `language: en`).
  *
- * Tashkilot tekshiruvi ilgari `role`/`degree` ga ham qo'llanardi va
+ * Tashkilot tekshiruvi ilgari `role`/`field` ga ham qo'llanardi va
  * modelning TARJIMASINI («Yetakchi moliya tahlilchisi» → «Lead
  * Financial Analyst») uydirma deb topib, o'zbekcha qiymatga qaytarardi:
  * inglizcha rezyumeda sarlavhalar inglizcha, lavozimlar o'zbekcha
  * chiqardi. Endi tekshiruv faqat band matni va qisqacha uchun.
  */
-test("5: lavozim va daraja TARJIMASI saqlanadi — ular ish beruvchi emas", () => {
+test("5: lavozim va yo‘nalish TARJIMASI saqlanadi — ular ish beruvchi emas", () => {
   const r = run(
     out({
       experience: [
         { id: "e1", role: "Senior IFRS Reporting Analyst", bullets: [{ text: "Built the annual budget model." }] },
         { id: "e2", role: "Financial Analyst", bullets: [{ text: "Prepared weekly profitability reports." }] },
       ],
-      education: [{ id: "d1", degree: "CIMA Advanced Diploma in Management Accounting" }],
+      education: [{ id: "d1", field: "Management Accounting and Finance" }],
     }),
     { language: "en" },
   );
   assert.equal(r.out.experience[0].role, "Senior IFRS Reporting Analyst", "lavozim tarjimasi qaytarilmasligi kerak");
   assert.equal(r.out.experience[1].role, "Financial Analyst");
-  assert.equal(r.out.education[0].degree, "CIMA Advanced Diploma in Management Accounting", "daraja tarjimasi qaytarilmasligi kerak");
+  assert.equal(r.out.education[0].field, "Management Accounting and Finance", "yo‘nalish tarjimasi qaytarilmasligi kerak");
   // «IFRS» va «MBA» kirish faktlarida YO'Q — tekshiruv qo'llansa ikkalasi ham qaytarilardi.
   assert.deepEqual(orgCandidates("Senior IFRS Reporting Analyst"), ["IFRS"]);
   assert.deepEqual(orgCandidates("CIMA Advanced Diploma in Management Accounting"), ["CIMA"]);
@@ -354,5 +354,5 @@ test("qo'riqchi hech qachon kirishdagi kompaniya/sanani o'zgartirmaydi", () => {
   const r = run(out());
   // Chiqishda kompaniya/sana UMUMAN yo'q — ular `mergeLlm` da kirishdan olinadi.
   assert.deepEqual(Object.keys(r.out.experience[0]).sort(), ["bullets", "id", "role"]);
-  assert.deepEqual(Object.keys(r.out.education[0]).sort(), ["degree", "id"]);
+  assert.deepEqual(Object.keys(r.out.education[0]).sort(), ["field", "id"]);
 });

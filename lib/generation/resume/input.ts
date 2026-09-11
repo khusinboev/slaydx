@@ -18,9 +18,11 @@ import { joinCsv, splitCsv } from "../slide-params";
 import {
   RESUME_LIMITS,
   emptyResume,
+  isResumeEducationKind,
   linkKindOf,
   newRowId,
   normalizeDate,
+  normalizeYear,
   resumeLabels,
   sortDesc,
   type ResumeCertificate,
@@ -170,12 +172,16 @@ export function resumeInputFromValues(values: FormValues): ResumeInput {
     .slice(0, RESUME_LIMITS.education)
     .map((e, i) => ({
       id: str(e.id, 16) || newRowId("d", i),
+      // Tur berilmagan qoralama/eski qiymat — «oliy ta'lim» (AUDIT-16).
+      kind: isResumeEducationKind(e.kind) ? e.kind : ("university" as const),
       institution: str(e.institution, RESUME_LIMITS.fieldChars),
+      field: str(e.field, RESUME_LIMITS.fieldChars),
       degree: str(e.degree, RESUME_LIMITS.fieldChars),
-      start: normalizeDate(e.start),
-      end: normalizeDate(e.end),
+      // Ta'limda oy so'ralmaydi — o'quv yili sentabrda boshlanadi.
+      start: normalizeYear(e.start),
+      end: normalizeYear(e.end),
     }))
-    .filter((e) => e.institution || e.degree);
+    .filter((e) => e.institution || e.degree || e.field);
 
   const certificates: ResumeCertificate[] = jsonRows(values, "certificates")
     .slice(0, RESUME_LIMITS.certificates)
@@ -183,7 +189,8 @@ export function resumeInputFromValues(values: FormValues): ResumeInput {
       id: str(c.id, 16) || newRowId("c", i),
       name: str(c.name, RESUME_LIMITS.fieldChars),
       issuer: str(c.issuer, RESUME_LIMITS.fieldChars),
-      year: str(c.year, 12),
+      // Yil tanlagichdan keladi — «hozir» sertifikatda ma'nosiz.
+      year: normalizeYear(c.year, false),
     }))
     .filter((c) => c.name);
 

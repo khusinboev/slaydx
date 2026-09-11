@@ -43,7 +43,7 @@ const VALUES: FormValues = {
     { id: "e2", company: "Korzinka", role: "Stajyor", start: "2017-01", end: "2019-07", bullets: ["Hisobot tayyorladi."] },
     { id: "e1", company: "Artel Electronics", role: "Tahlilchi", start: "2019-08", end: "now", bullets: ["Byudjet modelini tuzdi."] },
   ]),
-  education: JSON.stringify([{ id: "d1", institution: "TDIU", degree: "Bakalavr", start: "2015", end: "2019" }]),
+  education: JSON.stringify([{ id: "d1", kind: "university", institution: "TDIU", field: "Moliya", degree: "bakalavr", start: "2015", end: "2019" }]),
   certificates: JSON.stringify([{ id: "c1", name: "ACCA F3", issuer: "ACCA", year: "2021" }]),
   languages: JSON.stringify([{ id: "l1", language: "Ingliz", level: "B2" }]),
   links: JSON.stringify([{ id: "k1", kind: "linkedin", url: "https://linkedin.com/in/dk" }]),
@@ -64,7 +64,7 @@ function answer(over: Partial<Record<string, unknown>> = {}) {
       { id: "e1", role: "Moliya tahlilchisi", bullets: [{ text: "Yillik byudjet modelini tuzdi va ijro nazoratini yo‘lga qo‘ydi." }] },
       { id: "e2", role: "Kichik tahlilchi", bullets: [{ text: "Haftalik hisobotlarni tayyorladi." }] },
     ],
-    education: [{ id: "d1", degree: "Bakalavr, Moliya va kredit" }],
+    education: [{ id: "d1", field: "Moliya va kredit" }],
     skills: [{ text: "Excel" }, { text: "SQL" }],
     ...over,
   };
@@ -213,14 +213,15 @@ test("uz kirish → en chiqish: lavozim va daraja TARJIMASI saqlanadi", async ()
         { id: "e1", role: "Senior IFRS Reporting Analyst", bullets: [{ text: "Built the annual budget model and monthly execution controls." }] },
         { id: "e2", role: "Financial Analyst", bullets: [{ text: "Prepared weekly profitability reports." }] },
       ],
-      education: [{ id: "d1", degree: "CIMA Advanced Diploma in Management Accounting" }],
+      education: [{ id: "d1", field: "Management Accounting" }],
       skills: [{ text: "Excel" }, { text: "SQL" }],
     }),
   );
   const m = (await b.run())!.resume!;
   assert.equal(m.experience[0].role, "Senior IFRS Reporting Analyst", "o'zbekcha lavozimga qaytmasligi kerak");
   assert.equal(m.experience[1].role, "Financial Analyst");
-  assert.equal(m.education[0].degree, "CIMA Advanced Diploma in Management Accounting");
+  assert.equal(m.education[0].field, "Management Accounting");
+  assert.equal(m.education[0].degree, "bakalavr", "daraja ID si model javobidan MUSTAQIL");
   // Kompaniya/muassasa esa VERBATIM kirishdan — tarjima qilinmaydi.
   assert.deepEqual(m.experience.map((e) => e.company), ["Artel Electronics", "Korzinka"]);
   assert.equal(m.education[0].institution, "TDIU");

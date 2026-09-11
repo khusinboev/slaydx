@@ -9,7 +9,7 @@
  * Har tahrirlanuvchi itemda `path` — model ichidagi manzil
  * (`RESUME_PATH_RE`), tahrir oplari (`edit.ts`) shu bo'yicha ishlaydi.
  */
-import { formatPeriod, paletteOf, type ResumeModel, type ResumeSectionId } from "./model";
+import { educationTitle, formatPeriod, paletteOf, type ResumeModel, type ResumeSectionId } from "./model";
 import { RESUME_TEMPLATES, type ResumePalette, type ResumeTemplate } from "./templates";
 
 export type ResumePath = string;
@@ -105,16 +105,29 @@ function sectionItems(m: ResumeModel, id: ResumeSectionId): ResumeItem[] {
       break;
     case "education":
       m.education.forEach((e, i) => {
+        /*
+         * Sarlavha — DARAJA YORLIG'I + yo'nalish («Bakalavr, Moliya»),
+         * `educationTitle` orqali (model bilan bitta manba, AUDIT-16).
+         * Daraja modelda ID bo'lib turadi, hujjatga esa chiqish tilidagi
+         * yorliq tushadi.
+         *
+         * Maktab/kursda daraja ham, yo'nalish ham bo'lmasligi mumkin —
+         * u holda sarlavha BO'SH qolmaydi, muassasa nomi yuqoriga
+         * ko'tariladi: bo'sh sarlavha DOCX da ham, ko'ruvchida ham
+         * qalin satrni yo'qotib, maktab nomini mayda kulrang matnga
+         * tushirib yuborardi (va tahrir yo'li `degree` ga qarab qolardi).
+         */
+        const title = educationTitle(e, m.language);
         out.push({
           k: "row",
           section: "education",
           index: i,
-          title: e.degree,
-          sub: e.institution,
+          title: title || e.institution,
+          sub: title ? e.institution : "",
           period: formatPeriod(e.start, e.end, L, m.language),
           path: `education.${i}`,
-          titlePath: `education.${i}.degree`,
-          subPath: `education.${i}.institution`,
+          titlePath: title ? `education.${i}.degree` : `education.${i}.institution`,
+          subPath: title ? `education.${i}.institution` : `education.${i}.degree`,
         });
       });
       break;

@@ -40,7 +40,9 @@ export const SAMPLE_RESUME: ResumeModel = {
       ],
     },
   ],
-  education: [{ id: "d1", institution: "Toshkent davlat iqtisodiyot universiteti", degree: "Bakalavr, Moliya va kredit", start: "2015", end: "2019" }],
+  education: [
+    { id: "d1", kind: "university", institution: "Toshkent davlat iqtisodiyot universiteti", field: "Moliya va kredit", degree: "bakalavr", start: "2015", end: "2019" },
+  ],
   certificates: [{ id: "c1", name: "ACCA F3 — Financial Accounting", issuer: "ACCA", year: "2021" }],
   languages: [
     { id: "l1", language: "O‘zbek", level: "ona tili" },

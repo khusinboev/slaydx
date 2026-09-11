@@ -13,13 +13,22 @@ import {
   type ResumeInput,
   type ResumeTone,
 } from "@/lib/generation/resume/input";
-import { RESUME_LIMITS, newRowId } from "@/lib/generation/resume/model";
+import {
+  RESUME_DEGREES,
+  RESUME_EDUCATION_KINDS,
+  RESUME_LIMITS,
+  degreeLabel,
+  newRowId,
+  type ResumeEducation,
+  type ResumeEducationKind,
+} from "@/lib/generation/resume/model";
 import { RESUME_TEMPLATES, normalizeResumeTemplate, type ResumePaletteId, type ResumeTemplateId } from "@/lib/generation/resume/templates";
 import { SOURCE_LANGUAGES } from "@/lib/languages";
 import { Card, Row, SelectField, Segmented, SummaryChips, Switch } from "./compact";
 import { TextArea, TextInput } from "./fields";
 import { Combobox } from "./Combobox";
 import { MonthPicker } from "./MonthPicker";
+import { YearPicker } from "./YearPicker";
 import { PhoneInput } from "./PhoneInput";
 import { PhotoField } from "./PhotoField";
 import { ResumeTemplateTile } from "./ResumeTemplateDialog";
@@ -67,6 +76,44 @@ const LINK_KINDS = [
   { value: "portfolio", label: "Portfolio" },
   { value: "other", label: "Boshqa" },
 ];
+
+/**
+ * TA'LIM TURI → qaysi savollar so'raladi (AUDIT-16).
+ *
+ * Bitta joyda: tanlov yorlig'i, muassasa maydonining placeholder'i va
+ * yo'nalish maydoni KERAKMI. Daraja ro'yxati modeldan
+ * (`RESUME_DEGREES`) — forma va hujjat bitta katalogdan o'qisin.
+ */
+const EDU_KINDS: { value: ResumeEducationKind; label: string; institution: string; field: string | null }[] = [
+  { value: "university", label: "Oliy ta'lim", institution: "Universitet / institut nomi", field: "Yo‘nalish (masalan, Moliya)" },
+  { value: "college", label: "Kollej/texnikum", institution: "Kollej yoki texnikum nomi", field: "Mutaxassislik" },
+  { value: "school", label: "Maktab", institution: "Maktab nomi (masalan, 15-maktab)", field: null },
+  { value: "course", label: "Kurs", institution: "Tashkilot nomi", field: "Kurs nomi" },
+];
+const EDU_KIND_BY_ID = Object.fromEntries(EDU_KINDS.map((k) => [k.value, k])) as Record<ResumeEducationKind, (typeof EDU_KINDS)[number]>;
+// Tanlov tartibi model katalogi bilan bir xil bo'lishini qulflaydi.
+const EDU_KIND_OPTIONS = RESUME_EDUCATION_KINDS.map((k) => ({ value: k, label: EDU_KIND_BY_ID[k].label }));
+
+/** Daraja `<select>` variantlari — tanlangan turga tegishlilari. */
+function degreeOptions(kind: ResumeEducationKind) {
+  return [{ value: "", label: "Daraja —" }, ...RESUME_DEGREES[kind].map((id) => ({ value: id, label: degreeLabel(kind, id, "uz") }))];
+}
+
+/**
+ * Tur o'zgarganda KERAKSIZ maydonni tozalaydi.
+ *
+ * Aks holda «Oliy ta'lim → Maktab» ga o'tgan foydalanuvchi ekranda
+ * yo'nalish va darajani ko'rmay qolardi, ular esa holatda qolib
+ * hujjatga tushardi: maktab satrida «Bakalavr, Moliya» chiqardi.
+ */
+export function educationKindPatch(row: ResumeEducation, kind: ResumeEducationKind): Partial<ResumeEducation> {
+  const degrees = RESUME_DEGREES[kind] as string[];
+  return {
+    kind,
+    field: EDU_KIND_BY_ID[kind].field ? row.field : "",
+    degree: degrees.includes(row.degree) ? row.degree : "",
+  };
+}
 
 function emptyUi(profile: UserProfile, user: ServerUser | null): Ui {
   return {
@@ -374,18 +421,43 @@ export function ResumeComposer({ tool, profile }: { tool: ToolConfig; profile: U
             onChange={(rows) => set("education", rows)}
             max={RESUME_LIMITS.education}
             addLabel="Ta'lim"
-            add={() => ({ id: newRowId("d", ui.education.length), institution: "", degree: "", start: "", end: "" })}
-            render={(row, set2) => (
-              <div className="grid gap-2 sm:grid-cols-2">
-                <TextInput value={row.institution} onChange={(v) => set2({ institution: v })} placeholder="Muassasa" />
-                <TextInput value={row.degree} onChange={(v) => set2({ degree: v })} placeholder="Yo‘nalish, daraja" />
-                <div className="flex flex-wrap items-center gap-2 sm:col-span-2">
-                  <MonthPicker label="Boshlanish" value={row.start} onChange={(v) => set2({ start: v })} />
-                  <span className="text-muted-foreground text-[12px]">—</span>
-                  <MonthPicker label="Tugash" value={row.end} onChange={(v) => set2({ end: v })} allowNow />
+            add={() => ({ id: newRowId("d", ui.education.length), kind: "university" as const, institution: "", field: "", degree: "", start: "", end: "" })}
+            render={(row, set2) => {
+              const kind = EDU_KIND_BY_ID[row.kind] ?? EDU_KIND_BY_ID.university;
+              const degrees = RESUME_DEGREES[row.kind] ?? [];
+              return (
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {/* Birinchi boshqaruv — TUR: undan keyingi savollar shunga qarab o'zgaradi. */}
+                  <div className="sm:col-span-2">
+                    <Segmented
+                      ariaLabel="Ta'lim turi"
+                      options={EDU_KIND_OPTIONS}
+                      value={row.kind}
+                      onChange={(v) => set2(educationKindPatch(row, v as ResumeEducationKind))}
+                    />
+                  </div>
+                  <span data-edu="institution" className="block">
+                    <TextInput value={row.institution} onChange={(v) => set2({ institution: v })} placeholder={kind.institution} />
+                  </span>
+                  {kind.field ? (
+                    <span data-edu="field" className="block">
+                      <TextInput value={row.field} onChange={(v) => set2({ field: v })} placeholder={kind.field} />
+                    </span>
+                  ) : null}
+                  {degrees.length ? (
+                    <span data-edu="degree" className="block sm:col-span-2">
+                      <SelectField ariaLabel="Daraja" options={degreeOptions(row.kind)} value={row.degree} onChange={(v) => set2({ degree: v })} />
+                    </span>
+                  ) : null}
+                  {/* Oy SO'RALMAYDI — barcha o'qishlar sentabrda boshlanadi. */}
+                  <div className="flex flex-wrap items-center gap-2 sm:col-span-2">
+                    <YearPicker label="Boshlanish yili" value={row.start} onChange={(v) => set2({ start: v })} />
+                    <span className="text-muted-foreground text-[12px]">—</span>
+                    <YearPicker label="Tugash yili" value={row.end} onChange={(v) => set2({ end: v })} allowNow />
+                  </div>
                 </div>
-              </div>
-            )}
+              );
+            }}
           />
         </Toggle>
         <Toggle
@@ -402,10 +474,11 @@ export function ResumeComposer({ tool, profile }: { tool: ToolConfig; profile: U
             addLabel="Sertifikat"
             add={() => ({ id: newRowId("c", ui.certificates.length), name: "", issuer: "", year: "" })}
             render={(row, set2) => (
-              <div className="grid gap-2 sm:grid-cols-3">
+              <div className="grid items-center gap-2 sm:grid-cols-3">
                 <TextInput value={row.name} onChange={(v) => set2({ name: v })} placeholder="Nomi" />
                 <TextInput value={row.issuer} onChange={(v) => set2({ issuer: v })} placeholder="Kim bergan" />
-                <TextInput value={row.year} onChange={(v) => set2({ year: v })} placeholder="Yil" />
+                {/* Yil TANLANADI — erkin matnda «2021-yil», «avgust 2021» kelardi. */}
+                <YearPicker label="Sertifikat yili" value={row.year} onChange={(v) => set2({ year: v })} />
               </div>
             )}
           />

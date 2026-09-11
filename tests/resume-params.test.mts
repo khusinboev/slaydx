@@ -54,7 +54,7 @@ const BASE: FormValues = {
   experience: JSON.stringify([
     { id: "e1", company: "Artel Electronics", role: "Moliya tahlilchisi", start: "2019-08", end: "now", bullets: ["Yillik byudjet modelini tuzdi."] },
   ]),
-  education: JSON.stringify([{ id: "d1", institution: "TDIU", degree: "Bakalavr, Moliya", start: "2015", end: "2019" }]),
+  education: JSON.stringify([{ id: "d1", kind: "university", institution: "TDIU", field: "Moliya", degree: "bakalavr", start: "2015", end: "2019" }]),
   certificates: JSON.stringify([{ id: "c1", name: "ACCA F3", issuer: "ACCA", year: "2021" }]),
   languages: JSON.stringify([{ id: "l1", language: "Ingliz", level: "B2" }]),
   links: JSON.stringify([{ id: "k1", kind: "linkedin", url: "https://linkedin.com/in/dk" }]),
@@ -81,7 +81,7 @@ const STUB_OUT: ResumeLlmOut = {
       ],
     },
   ],
-  education: [{ id: "d1", degree: "Bakalavr, Moliya" }],
+  education: [{ id: "d1", field: "Moliya" }],
   skills: [{ text: "Excel" }, { text: "Power BI", ai: true }],
 };
 

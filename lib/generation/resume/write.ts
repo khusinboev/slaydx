@@ -23,6 +23,7 @@ import type { AcademicDoc, DocMeta } from "../types";
 import type { FormValues } from "../../types";
 import {
   RESUME_LIMITS,
+  degreeLabel,
   docFromResume,
   hasCodeLabels,
   resumeLabels,
@@ -48,7 +49,7 @@ export const RESUME_TONE: Record<ResumeTone, string> = {
 /** Model qaytaradigan JSON sxemasi — promptda ham, testda ham bitta manba. */
 export const RESUME_JSON_SCHEMA =
   '{"summary":"","headline":"","labels":{"summary":"","experience":"","education":"","certificates":"","languages":"","skills":"","links":"","contact":"","present":"","resume":""},' +
-  '"experience":[{"id":"","role":"","bullets":[{"text":"","ai":false}]}],"education":[{"id":"","degree":""}],"skills":[{"text":"","ai":false}]}';
+  '"experience":[{"id":"","role":"","bullets":[{"text":"","ai":false}]}],"education":[{"id":"","field":""}],"skills":[{"text":"","ai":false}]}';
 
 /**
  * Qisqacha uzunligi — YOZUV TIZIMIGA bog'liq (jonli sinov, `--lang ja`).
@@ -115,7 +116,7 @@ export function resumeSystemPrompt(meta: DocMeta, input: ResumeInput): string {
     `Target role: «${headline}».`,
     `Rules:`,
     `1. NEVER invent an employer, job title, date, degree, institution, certificate or language. Use ONLY the facts given below, keyed by "id", and keep them in the given id order.`,
-    `2. VERBATIM — copy unchanged: the person's name, phone number, e-mail, URLs, every year and month, and organisation names written in the Latin script. Do not translate, expand or abbreviate them. Everything else — job titles, academic degrees, bullet text, skills, the summary — MUST be written in the output language, even when the facts below are given in another language.`,
+    `2. VERBATIM — copy unchanged: the person's name, phone number, e-mail, URLs, every year and month, and organisation names written in the Latin script. Do not translate, expand or abbreviate them. Everything else — job titles, fields of study, bullet text, skills, the summary — MUST be written in the output language, even when the facts below are given in another language.`,
     `3. Every bullet = action verb + scope + measurable result. Remove duplicates and merge overlapping bullets. At most ${RESUME_LIMITS.bullets} bullets per job, each at most ${RESUME_LIMITS.bulletChars} characters.`,
     `4. "summary" — between ${len.promptMin} and ${len.promptMax} characters, written for the target role «${headline}»; no first-person pronouns, no clichés like "hard-working team player".`,
     enrich
@@ -133,8 +134,14 @@ export function resumeSystemPrompt(meta: DocMeta, input: ResumeInput): string {
     .join("\n");
 }
 
-/** Faktlar bloki — model ko'radigan YAGONA ma'lumot manbasi. */
-function factsJson(input: ResumeInput): string {
+/**
+ * Faktlar bloki — model ko'radigan YAGONA ma'lumot manbasi.
+ *
+ * Ta'limda daraja `degreeLabel` bilan CHIQISH TILIDA beriladi (ID emas):
+ * model uni qaytarmaydi, lekin yo'nalishni («Moliya va kredit») to'g'ri
+ * darajaga mos ohangda yozishi uchun kontekst kerak.
+ */
+function factsJson(input: ResumeInput, language: string): string {
   return JSON.stringify({
     identity: input.identity,
     contact: input.contact,
@@ -146,7 +153,14 @@ function factsJson(input: ResumeInput): string {
       period: [e.start, e.end].filter(Boolean).join(" → "),
       bullets: e.bullets.map((b) => b.text),
     })),
-    education: input.education.map((e) => ({ id: e.id, institution: e.institution, degree: e.degree, period: [e.start, e.end].filter(Boolean).join(" → ") })),
+    education: input.education.map((e) => ({
+      id: e.id,
+      kind: e.kind,
+      institution: e.institution,
+      field: e.field,
+      degree: degreeLabel(e.kind, e.degree, language),
+      period: [e.start, e.end].filter(Boolean).join(" → "),
+    })),
     certificates: input.certificates.map((c) => ({ id: c.id, name: c.name, issuer: c.issuer, year: c.year })),
     languages: input.languages.map((l) => ({ id: l.id, language: l.language, level: l.level })),
     skills: input.skills,
@@ -159,10 +173,12 @@ export function resumeUserPrompt(meta: DocMeta, input: ResumeInput): string {
   const eduIds = input.education.map((e) => e.id);
   return [
     `Facts (JSON) — the only source of truth:`,
-    factsJson(input),
+    factsJson(input, meta.language),
     expIds.length ? `Return one experience entry for EACH of these ids, in this order: ${expIds.join(", ")}.` : `There is no work experience — return "experience": [].`,
-    eduIds.length ? `Return one education entry for EACH of these ids, in this order: ${eduIds.join(", ")}.` : `There is no education — return "education": [].`,
-    `Rewrite "role" only for wording; the company, the period, the institution, the certificate and the language rows are NOT yours to change and are not part of your answer.`,
+    eduIds.length
+      ? `Return one education entry for EACH of these ids, in this order: ${eduIds.join(", ")}. For education return ONLY "field" — the field of study or speciality, written in the output language. Leave it as an empty string when the facts give no field (a secondary school has none).`
+      : `There is no education — return "education": [].`,
+    `Rewrite "role" and "field" only for wording; the company, the period, the institution, the academic degree, the certificate and the language rows are NOT yours to change and are not part of your answer.`,
     `Return ONLY JSON: ${RESUME_JSON_SCHEMA}`,
   ].join("\n");
 }
@@ -243,7 +259,7 @@ export function parseResumeLlm(raw: string | null | undefined, input: ResumeInpu
     })),
     education: arr(data.education).map((e, i) => ({
       id: s(e.id, 16) || input.education[i]?.id || "",
-      degree: s(e.degree, RESUME_LIMITS.fieldChars),
+      field: s(e.field, RESUME_LIMITS.fieldChars),
     })),
     skills,
   };
@@ -254,10 +270,11 @@ export function parseResumeLlm(raw: string | null | undefined, input: ResumeInpu
 /**
  * FAKT — kirishdan, MATN — modeldan.
  *
- * Kompaniya, sana, muassasa, sertifikat, til, havola, ism va kontakt
- * model javobiga UMUMAN qaramaydi: ular `draftModel` orqali kirishdan
- * keladi. Modeldan faqat `summary`, `headline` (kirish bo'sh bo'lsa),
- * id bo'yicha `role`, `bullets`, `skills` va yorliqlar olinadi.
+ * Kompaniya, sana, muassasa, DARAJA, sertifikat, til, havola, ism va
+ * kontakt model javobiga UMUMAN qaramaydi: ular `draftModel` orqali
+ * kirishdan keladi. Modeldan faqat `summary`, `headline` (kirish bo'sh
+ * bo'lsa), id bo'yicha `role`, `bullets`, ta'lim `field` i, `skills` va
+ * yorliqlar olinadi.
  *
  * Tartiblash SHU YERDA (`sortDesc`) — model tartiblamaydi (prompt
  * 6-qoida), aks holda «hozir» ishlayotgan joy o'rtada qolib ketardi.
@@ -266,7 +283,7 @@ export function mergeLlm(input: ResumeInput, out: ResumeLlmOut, meta: DocMeta, p
   const base = draftModel(meta, input, photo);
   const language = base.language;
   const roleById = new Map(out.experience.map((e) => [e.id, e]));
-  const degreeById = new Map(out.education.map((e) => [e.id, e]));
+  const fieldById = new Map(out.education.map((e) => [e.id, e]));
 
   /*
    * Tartiblash BU YERDA EMAS — `draftModel` da (`sortDesc`), bitta
@@ -283,7 +300,8 @@ export function mergeLlm(input: ResumeInput, out: ResumeLlmOut, meta: DocMeta, p
     if (bullets.some((b) => b.ai)) enriched = true;
     return { ...e, role: row.role || e.role, bullets: bullets.length ? bullets : e.bullets };
   });
-  base.education = base.education.map((e) => ({ ...e, degree: degreeById.get(e.id)?.degree || e.degree }));
+  // `kind`, `institution`, `degree` va yillar TEGILMAYDI — faqat yo'nalish.
+  base.education = base.education.map((e) => ({ ...e, field: fieldById.get(e.id)?.field || e.field }));
 
   if (out.summary) base.summary = out.summary;
   if (!input.identity.headline && out.headline) base.identity = { ...base.identity, headline: out.headline };
