@@ -308,17 +308,28 @@ test("orderReferences/surnameOf", () => {
   );
 });
 
-/* ══════════════════════════════ ro'yxat satri (VAQTINCHA, WP5 almashtiradi) ══════════════════════════════ */
+/* ══════════════════════════════ ro'yxat satri (`cite/` ga delegatsiya — WP5; batafsil `tests/cite-*.test.mts`) ══════════════════════════════ */
 
-test("formatReferenceLine: muallif, sarlavha, venue, yil, DOI; `raw` o'zgarishsiz; nuqta ikkilanmaydi", () => {
+test("formatReferenceLine: uslub bo'yicha `cite/` (GOST // – DOI, APA 7, IEEE); `raw` o'zgarishsiz; nuqta ikkilanmaydi", () => {
   const ref = REFS[0];
   const gost = formatReferenceLine({ ...ref, doi: "10.1/x" }, "gost");
-  assert.equal(gost, "Zorin Z., Ahmad B. Zeta paper. J. A, 2021. DOI: 10.1/x.");
+  assert.equal(gost, "Zorin Z., Ahmad B. Zeta paper // J. A. – 2021. – DOI: 10.1/x.");
   assert.ok(!gost.includes(".."), gost);
-  assert.equal(formatReferenceLine(REFS[2], "gost", "uz"), "Karimov A., Salimov B., Tosh T. Mahalliy kitob. Toshkent: Fan, 2020.");
-  assert.equal(formatReferenceLine({ ...ref, doi: "10.1/x" }, "apa7", "en"), "Zorin Z. & Ahmad B. (2021). Zeta paper. J. A. https://doi.org/10.1/x");
-  assert.equal(formatReferenceLine({ ...ref, doi: "10.1/x" }, "ieee"), "Zorin Z., Ahmad B., “Zeta paper,” J. A, 2021. doi: 10.1/x.");
+  assert.equal(formatReferenceLine(REFS[2], "gost", "uz"), "Karimov A., Salimov B., Tosh T. Mahalliy kitob. – Toshkent: Fan, 2020.");
+  assert.equal(formatReferenceLine({ ...ref, doi: "10.1/x" }, "apa7", "en"), "Zorin, Z., & Ahmad, B. (2021). Zeta paper. J. A. https://doi.org/10.1/x");
+  assert.equal(formatReferenceLine({ ...ref, doi: "10.1/x" }, "ieee"), "Z. Zorin and B. Ahmad, “Zeta paper,” J. A, 2021, doi: 10.1/x.");
   assert.equal(formatReferenceLine({ ...ref, raw: "  Xom satr. — T., 2020.  " }, "gost"), "Xom satr. — T., 2020.");
+  // OAK REFERENCES — kirill → lotin, `[in Russian]`, raqamsiz.
+  const oak = planArticle(sampleArticleDoc(META, { type: "imrad_oak", profile: "oak" }));
+  const cyr = { ...oak.model, references: [...oak.model.references, { id: "u9", title: "Цифровая педагогика", authors: ["Иванов И.И."], year: 2020, venue: "Вестник", verified: "user" as const, cited: true }] };
+  const doc = sampleArticleDoc(META, { type: "imrad_oak", profile: "oak" });
+  doc.article = cyr;
+  doc.sections[0].blocks.push({ kind: "p", text: "Rus manba [u9]." });
+  const plan = planArticle(doc);
+  const line = plan.refs2!.find((r) => r.ref.id === "u9")!;
+  assert.equal(line.text, "Ivanov, I. I. (2020). Tsifrovaya pedagogika [in Russian]. Vestnik.");
+  assert.equal(line.line, line.text, "REFERENCES raqamsiz");
+  assert.ok(plan.refs.find((r) => r.ref.id === "u9")!.text.startsWith("Иванов И.И. Цифровая педагогика // Вестник."), "asosiy ro'yxat kirillda qoladi");
 });
 
 /* ══════════════════════════════ eski maqola ══════════════════════════════ */

@@ -12,6 +12,7 @@ import { TOOL_BY_ID } from "@/lib/tools";
 import { useConfirmClick } from "../overlays/useConfirmClick";
 import { EditActions, type EditActionsState } from "./EditActions";
 import { ArtifactViewer } from "../viewers/ArtifactViewer";
+import { ArticleReviewPanel } from "../viewers/ArticleReviewPanel";
 import { SlideViewer, asLiveView } from "../viewers/SlideViewer";
 import { liveDocOf, type LiveDeck } from "@/lib/generation/slide-progress";
 import { viewerKind } from "@/lib/viewers/kind";
@@ -303,6 +304,22 @@ export function ResultView({ id }: { id: string }) {
                */}
               {(gen.delivered.refundShare ?? 1) > 0 ? " — farq balansingizga qaytarildi." : "."}
             </p>
+          ) : null}
+          {gen.type === "article" && gen.doc?.article?.review ? (
+            /*
+             * Tayyorlik hisoboti (Maqola 2, WP5) — ko'ruvchi TEPASIDA,
+             * yig'iladigan `<details open>`: ko'ruvchi o'z ichki scroll'i
+             * bilan qoladi, panel esa `shrink-0` va o'z balandligi chegarasi
+             * bilan. «Tuzatish» tugmalari WP7 gacha o'chiq (`onFix` yo'q).
+             */
+            <details open className="no-print max-h-[45vh] shrink-0 overflow-y-auto border-b px-3 py-2 sm:px-4" data-article-review-panel>
+              <summary className="cursor-pointer text-sm font-medium select-none">
+                Tayyorlik hisoboti · {gen.doc.article.review.score} ball
+              </summary>
+              <div className="mt-2">
+                <ArticleReviewPanel review={gen.doc.article.review} />
+              </div>
+            </details>
           ) : null}
           <ArtifactViewer
             gen={toLegacyShape(gen)}

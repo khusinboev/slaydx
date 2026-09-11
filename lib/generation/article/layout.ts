@@ -31,6 +31,7 @@ import type {
 import { ARTICLE_TYPES, normalizeArticleType } from "./types-registry";
 import { PUBLICATION_PROFILES, normalizePublicationProfile } from "./profiles";
 import { articleLabels, type ArticleDocLabels } from "./labels";
+import { formatReference, formatReferenceEnglish } from "../cite";
 
 /* ────────────────────────── tiplar ────────────────────────── */
 
@@ -100,7 +101,7 @@ export type ArticlePlan = {
   body: BodyItem[];
   refsLabel: string;
   refs: RefItem[];
-  /** OAK: «REFERENCES» — hozircha `formatReferenceLine(ref, "apa7", "en")`; WP5 `cite/translit` bilan almashtiradi. */
+  /** OAK: «REFERENCES» — `cite/translit` (kirill → lotin, `[in Uzbek]`, APA 7 en), raqamsiz. */
   refs2Label?: string;
   refs2?: RefItem[];
   numbers: { figures: Record<string, string>; tables: Record<string, string>; formulas: number };
@@ -292,44 +293,13 @@ export function renderCitations(
   return { text: spans.map((s) => s.text).join(""), spans };
 }
 
-function pagesUnit(lang: string): string {
-  const c = (lang || "uz").toLowerCase();
-  return c === "ru" ? "с." : c === "en" ? "p." : "b.";
-}
-
 /**
- * Adabiyotlar ro'yxati satri — VAQTINCHA oddiy shakl («Muallif. Sarlavha.
- * Venue, yil. DOI»). WP5 buni `cite/{gost,apa,ieee,numeric}` bilan
- * almashtiradi; imzo saqlanadi. Foydalanuvchi bergan erkin matn (`raw`)
- * o'zgarishsiz qaytadi.
+ * Adabiyotlar ro'yxati satri — uslub bo'yicha `cite/` (WP5): GOST 7.1 /
+ * raqamli / APA 7 / IEEE. Foydalanuvchi bergan erkin matn (`raw`)
+ * o'zgarishsiz qaytadi. Imzo saqlangan — eski chaqiruvchilar uchun.
  */
 export function formatReferenceLine(ref: Reference, style: CiteStyle, lang = "uz"): string {
-  if (ref.raw?.trim()) return ref.raw.trim();
-  const authors = ref.authors.map((a) => a.trim()).filter(Boolean);
-  // «Lin O.» + «.» → «Lin O..» bo'lmasin: oxirgi nuqta bitta.
-  const dot = (s: string) => `${s.replace(/[.\s]+$/, "")}.`;
-  const title = ref.title.trim().replace(/\.$/, "");
-  const where = ref.venue?.trim() || [ref.place, ref.publisher].filter(Boolean).join(": ");
-  const year = ref.year ? String(ref.year) : "";
-  const pages = ref.pages ? `${ref.pages} ${pagesUnit(lang)}` : "";
-  if (style === "apa7") {
-    const J = apaJoin(lang);
-    const who =
-      authors.length > 1 ? `${authors.slice(0, -1).join(", ")}${J.two.replace(/\s+$/, " ")}${authors[authors.length - 1]}` : authors[0] ?? "";
-    const link = ref.doi ? `https://doi.org/${ref.doi}` : ref.url ?? "";
-    return [who && `${who} (${year || J.nd}).`, dot(title), where && dot(where), pages && dot(pages), link]
-      .filter(Boolean)
-      .join(" ");
-  }
-  if (style === "ieee") {
-    return [authors.length && `${authors.join(", ")},`, `“${title},”`, where && `${where},`, year && `${year}.`, pages && dot(pages), ref.doi && `doi: ${ref.doi}.`]
-      .filter(Boolean)
-      .join(" ");
-  }
-  // gost / numeric
-  return [authors.length && dot(authors.join(", ")), dot(title), where && `${where},`, year && `${year}.`, pages && dot(pages), ref.doi && `DOI: ${ref.doi}.`]
-    .filter(Boolean)
-    .join(" ");
+  return formatReference(ref, style, lang);
 }
 
 /**
@@ -407,7 +377,16 @@ export function planArticle(doc: AcademicDoc): ArticlePlan {
     return { n: r.n!, text, line: style === "apa7" ? text : `${r.n}. ${text}`, ref: r };
   };
   const refs = numberedRefs.map((r) => refItem(r, cite, language));
-  const refs2 = profile.secondEnglishList ? numberedRefs.map((r) => refItem(r, "apa7", "en")) : undefined;
+  /*
+   * OAK «REFERENCES» — kirill → lotin (BGN/PCGN), sarlavhaga
+   * `[in Uzbek]`/`[in Russian]`, APA 7 inglizcha, raqamsiz (`cite/translit`).
+   */
+  const refs2 = profile.secondEnglishList
+    ? numberedRefs.map((r): RefItem => {
+        const text = formatReferenceEnglish(r);
+        return { n: r.n!, text, line: text, ref: r };
+      })
+    : undefined;
 
   /* ── raqamlash: rasm/jadval/formula — bo'limlar tartibida ── */
   const figures = new Map(model.figures.map((f) => [f.id, f]));
