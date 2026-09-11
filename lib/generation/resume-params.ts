@@ -67,10 +67,17 @@ const EXP_B = JSON.stringify([
   { id: "e1", company: "Korzinka", role: "Yetakchi tahlilchi", start: "2021-01", end: "now", bullets: ["Rentabellik tahlilini yo‘lga qo‘ydi."] },
   { id: "e2", company: "Artel Electronics", role: "Tahlilchi", start: "2018-02", end: "2020-12", bullets: ["Oylik hisobotni avtomatlashtirdi."] },
 ]);
-const EDU_A = JSON.stringify([{ id: "d1", institution: "TDIU", degree: "Bakalavr, Moliya", start: "2015", end: "2019" }]);
+/*
+ * Ta'lim zondi AUDIT-16 shaklida: `kind` + `field` + daraja ID si.
+ * B da tur ham boshqa (kollej) — tur maketga daraja YORLIG'I orqali
+ * ta'sir qiladi, ya'ni zond turni ham sinaydi.
+ */
+const EDU_A = JSON.stringify([
+  { id: "d1", kind: "university", institution: "TDIU", field: "Moliya", degree: "bakalavr", start: "2015", end: "2019" },
+]);
 const EDU_B = JSON.stringify([
-  { id: "d1", institution: "TDIU", degree: "Magistr, Moliya", start: "2019", end: "2021" },
-  { id: "d2", institution: "TATU", degree: "Bakalavr, Axborot tizimlari", start: "2015", end: "2019" },
+  { id: "d1", kind: "university", institution: "TDIU", field: "Moliya", degree: "magistr", start: "2019", end: "2021" },
+  { id: "d2", kind: "college", institution: "Toshkent moliya kolleji", field: "Buxgalteriya hisobi", degree: "kichik-mutaxassis", start: "2015", end: "2019" },
 ]);
 const CERT_A = JSON.stringify([{ id: "c1", name: "ACCA F3", issuer: "ACCA", year: "2021" }]);
 const CERT_B = JSON.stringify([

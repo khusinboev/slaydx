@@ -9,13 +9,13 @@
  * Har tahrirlanuvchi itemda `path` — model ichidagi manzil
  * (`RESUME_PATH_RE`), tahrir oplari (`edit.ts`) shu bo'yicha ishlaydi.
  */
-import { formatPeriod, paletteOf, type ResumeModel, type ResumeSectionId } from "./model";
+import { degreeLabel, formatPeriod, paletteOf, type ResumeModel, type ResumeSectionId } from "./model";
 import { RESUME_TEMPLATES, type ResumePalette, type ResumeTemplate } from "./templates";
 
 export type ResumePath = string;
 
 export const RESUME_PATH_RE =
-  /^(identity\.(fullName|headline)|contact\.(phone|email|location)|summary|experience\.\d{1,2}\.(company|role|start|end)|experience\.\d{1,2}\.bullets\.\d{1,2}\.text|education\.\d{1,2}\.(institution|degree|start|end)|certificates\.\d{1,2}\.(name|issuer|year)|languages\.\d{1,2}\.(language|level)|links\.\d{1,2}\.url|skills)$/;
+  /^(identity\.(fullName|headline)|contact\.(phone|email|location)|summary|experience\.\d{1,2}\.(company|role|start|end)|experience\.\d{1,2}\.bullets\.\d{1,2}\.text|education\.\d{1,2}\.(institution|field|degree|start|end)|certificates\.\d{1,2}\.(name|issuer|year)|languages\.\d{1,2}\.(language|level)|links\.\d{1,2}\.url|skills)$/;
 
 export type ContactIcon = "phone" | "mail" | "pin" | "link";
 export type ResumeContactLine = { icon: ContactIcon; text: string; href?: string; path: ResumePath };
@@ -31,6 +31,12 @@ export type ResumeItem =
       section: "experience" | "education" | "certificates";
       index: number;
       title: string;
+      /**
+       * Sarlavhaning TAHRIRLANMAYDIGAN old qismi (ta'limda daraja yorlig'i —
+       * katalogdan, chiqish tilida). Renderer `titlePrefix + title` chizadi,
+       * tahrir esa faqat `title` (`titlePath` = `education.i.field`) ga tegadi.
+       */
+      titlePrefix?: string;
       sub: string;
       period: string;
       /** `experience.2` — qator ildizi; maydonlar `${path}.role` va h.k. */
@@ -114,16 +120,34 @@ function sectionItems(m: ResumeModel, id: ResumeSectionId): ResumeItem[] {
       break;
     case "education":
       m.education.forEach((e, i) => {
+        /*
+         * Sarlavha — DARAJA YORLIG'I + yo'nalish («Bakalavr, Moliya»):
+         * yorliq `titlePrefix` (tahrirlanmaydi, katalog IDsidan chiqish
+         * tilida), yo'nalish `title` (tahrirlanadi, `education.i.field`).
+         * Matni `educationTitle` bilan bir xil (model bilan bitta manba).
+         *
+         * Maktab/kursda daraja ham, yo'nalish ham bo'lmasligi mumkin —
+         * u holda sarlavha BO'SH qolmaydi, muassasa nomi yuqoriga
+         * ko'tariladi: bo'sh sarlavha DOCX da ham, ko'ruvchida ham
+         * qalin satrni yo'qotib, maktab nomini mayda kulrang matnga
+         * tushirib yuborardi (va tahrir yo'li `degree` ga qarab qolardi).
+         */
+        const label = degreeLabel(e.kind, e.degree, m.language);
+        const hasTitle = Boolean(label || e.field);
+        // Yo'nalish bo'lsa «Bakalavr, Moliya»; bo'lmasa faqat yorliq.
+        const prefix = label ? (e.field ? `${label}, ` : label) : "";
         out.push({
           k: "row",
           section: "education",
           index: i,
-          title: e.degree,
-          sub: e.institution,
+          title: hasTitle ? e.field : e.institution,
+          ...(prefix ? { titlePrefix: prefix } : {}),
+          sub: hasTitle ? e.institution : "",
           period: formatPeriod(e.start, e.end, L, m.language),
           path: `education.${i}`,
-          titlePath: `education.${i}.degree`,
-          subPath: `education.${i}.institution`,
+          // Daraja yorlig'i tahrirlanmaydi (u katalog IDsidan); yo'nalish — tahrirlanadi.
+          titlePath: hasTitle ? `education.${i}.field` : `education.${i}.institution`,
+          subPath: hasTitle ? `education.${i}.institution` : `education.${i}.field`,
         });
       });
       break;

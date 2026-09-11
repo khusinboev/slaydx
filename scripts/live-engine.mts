@@ -95,7 +95,7 @@ const RESUME_VALUES: FormValues = {
     },
   ]),
   education: JSON.stringify([
-    { id: "d1", institution: "Toshkent davlat iqtisodiyot universiteti", degree: "Bakalavr, moliya va kredit", start: "2015", end: "2019" },
+    { id: "d1", kind: "university", institution: "Toshkent davlat iqtisodiyot universiteti", field: "Moliya va kredit", degree: "bakalavr", start: "2015", end: "2019" },
   ]),
   languages: JSON.stringify([
     { id: "l1", language: "O‘zbek", level: "ona tili" },

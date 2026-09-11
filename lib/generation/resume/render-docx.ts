@@ -257,6 +257,8 @@ function drawItem(d: Draw, it: ResumeItem): Array<Paragraph | Table> {
     case "row": {
       const out: Paragraph[] = [];
       const head: TextRun[] = [];
+      // Old qism (daraja yorlig'i) alohida run — ko'ruvchidagi ikki span bilan paritet.
+      if (it.titlePrefix) head.push(run(d, it.titlePrefix, { bold: true, color: c.ink }));
       if (it.title) head.push(run(d, it.title, { bold: true, color: c.ink }));
       if (it.period) {
         // Tabulatsiya `<w:tab/>` beradi — MATN TUGUNI hosil qilmaydi.
@@ -348,7 +350,10 @@ function railRow(d: Draw, row: Extract<ResumeItem, { k: "row" }>, rest: ResumeIt
   const railD: Draw = { ...d, indent: 0, width: railW - twip(2) };
   const bodyD: Draw = { ...d, indent: 0, width: bodyW - twip(4) };
   const head: Array<Paragraph | Table> = [];
-  if (row.title) head.push(para(bodyD, [run(bodyD, row.title, { bold: true, color: c.ink })], { spacing: { after: 0 } }));
+  const titleRuns: TextRun[] = [];
+  if (row.titlePrefix) titleRuns.push(run(bodyD, row.titlePrefix, { bold: true, color: c.ink }));
+  if (row.title) titleRuns.push(run(bodyD, row.title, { bold: true, color: c.ink }));
+  if (titleRuns.length) head.push(para(bodyD, titleRuns, { spacing: { after: 0 } }));
   if (row.sub) head.push(para(bodyD, [run(bodyD, row.sub, { size: d.t.type.small, color: c.muted })], { spacing: { after: twip(1) } }));
   for (const it of rest) head.push(...drawItem(bodyD, it));
 

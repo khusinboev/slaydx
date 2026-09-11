@@ -18,7 +18,7 @@ import {
   parseResumeJson,
   resumeInputFromValues,
 } from "../lib/generation/resume/input.ts";
-import { RESUME_LIMITS } from "../lib/generation/resume/model.ts";
+import { RESUME_DEGREES, RESUME_EDUCATION_KINDS, RESUME_LIMITS } from "../lib/generation/resume/model.ts";
 import { planResume } from "../lib/generation/resume/layout.ts";
 import { guardResume, type ResumeLlmOut } from "../lib/generation/resume/guard.ts";
 import { resumeSystemPrompt, resumeUserPrompt } from "../lib/generation/resume/write.ts";
@@ -54,7 +54,7 @@ const BASE: FormValues = {
   experience: JSON.stringify([
     { id: "e1", company: "Artel Electronics", role: "Moliya tahlilchisi", start: "2019-08", end: "now", bullets: ["Yillik byudjet modelini tuzdi."] },
   ]),
-  education: JSON.stringify([{ id: "d1", institution: "TDIU", degree: "Bakalavr, Moliya", start: "2015", end: "2019" }]),
+  education: JSON.stringify([{ id: "d1", kind: "university", institution: "TDIU", field: "Moliya", degree: "bakalavr", start: "2015", end: "2019" }]),
   certificates: JSON.stringify([{ id: "c1", name: "ACCA F3", issuer: "ACCA", year: "2021" }]),
   languages: JSON.stringify([{ id: "l1", language: "Ingliz", level: "B2" }]),
   links: JSON.stringify([{ id: "k1", kind: "linkedin", url: "https://linkedin.com/in/dk" }]),
@@ -81,7 +81,7 @@ const STUB_OUT: ResumeLlmOut = {
       ],
     },
   ],
-  education: [{ id: "d1", degree: "Bakalavr, Moliya" }],
+  education: [{ id: "d1", field: "Moliya" }],
   skills: [{ text: "Excel" }, { text: "Power BI", ai: true }],
 };
 
@@ -103,6 +103,31 @@ test("reyestr: 20 parametr, id lar noyob, har birida ta'sir va ikki xil zond bor
     RESUME_PARAMS.filter((p) => p.encode === "json").map((p) => p.id).sort(),
     [...RESUME_JSON_FIELDS].sort(),
   );
+});
+
+test("AUDIT-16: `education` zondi yangi shaklda — tur, yo'nalish va daraja IDsi", () => {
+  /*
+   * Zond eski shaklda qolsa, differensial test yashil bo'lardi (satr soni
+   * baribir farq qiladi), lekin YANGI maydonlarni umuman sinamas edi.
+   */
+  const param = RESUME_PARAMS.find((p) => p.id === "education")!;
+  const rows = [...JSON.parse(String(param.probeA)), ...JSON.parse(String(param.probeB))] as Record<string, string>[];
+  for (const r of rows) {
+    assert.ok(RESUME_EDUCATION_KINDS.includes(r.kind as (typeof RESUME_EDUCATION_KINDS)[number]), `zondda tur yo'q: ${JSON.stringify(r)}`);
+    assert.ok(typeof r.field === "string" && r.field, "zondda yo'nalish bo'lishi kerak");
+    assert.ok(
+      (RESUME_DEGREES[r.kind as (typeof RESUME_EDUCATION_KINDS)[number]] as string[]).includes(r.degree),
+      `daraja katalogda yo'q: ${r.degree}`,
+    );
+    assert.match(r.start, /^\d{4}$/, "ta'lim sanasi — faqat yil");
+    assert.match(r.end, /^(\d{4}|now)$/);
+  }
+  // A va B da turlar ham farq qiladi — tur maketga daraja yorlig'i orqali kiradi.
+  const kindsB = new Set((JSON.parse(String(param.probeB)) as { kind: string }[]).map((r) => r.kind));
+  assert.ok(kindsB.has("college"), "B zondida kollej satri bo'lishi kerak");
+  // Sertifikat zondi ham yil tanlagichi shaklida.
+  const certs = JSON.parse(String(RESUME_PARAMS.find((p) => p.id === "certificates")!.probeB)) as { year: string }[];
+  for (const c of certs) assert.match(c.year, /^\d{4}$/, "sertifikat yili — «YYYY»");
 });
 
 // ───────────────────────────────────────────── extractMeta klamplari
@@ -153,6 +178,36 @@ test("resumeInputFromValues: id lar beriladi, limitlar qo'llanadi, telefon norma
   assert.equal(input.links[0].id, "k1");
   // Berilgan id saqlanadi (tahrir oplari va `mergeLlm` shunga tayanadi).
   assert.equal(resumeInputFromValues({ experience: JSON.stringify([{ id: "e9", role: "R" }]) }).experience[0].id, "e9");
+});
+
+test("AUDIT-16 kirish: ta'lim turi, yo'nalish va FAQAT yil; sertifikat yili ham", () => {
+  const input = resumeInputFromValues({
+    ...BASE,
+    education: JSON.stringify([
+      // Eski qoralama: tur yo'q, sana oy bilan, daraja erkin matn.
+      { id: "d1", institution: "TDIU", degree: "Bakalavr, Moliya va kredit", start: "2015-09", end: "2019-06" },
+      // Maktab: yo'nalish va daraja YUBORILSA HAM kesiladi.
+      { id: "d2", kind: "school", institution: "15-maktab", field: "Fizika-matematika", degree: "bakalavr", start: "2004", end: "2015" },
+      { id: "d3", kind: "course", institution: "IT Park", field: "Python asoslari", degree: "magistr", start: "2023", end: "now" },
+    ]),
+    certificates: JSON.stringify([
+      { id: "c1", name: "ACCA F3", issuer: "ACCA", year: "2021-08" },
+      { id: "c2", name: "IELTS", issuer: "British Council", year: "2022-yil" },
+    ]),
+  });
+  assert.equal(input.education[0].kind, "university", "tur berilmagan qator — oliy ta'lim");
+  assert.equal(input.education[0].field, "", "eski erkin matn yo'nalishga ajratilmaydi");
+  assert.equal(input.education[0].degree, "Bakalavr, Moliya va kredit", "eski daraja matni saqlanadi");
+  assert.deepEqual([input.education[0].start, input.education[0].end], ["2015", "2019"], "ta'limda oy tashlanadi");
+  assert.equal(input.education[1].field, "", "maktabda yo'nalish so'ralmaydi — kesiladi");
+  assert.equal(input.education[1].degree, "", "maktabda daraja yo'q — kesiladi");
+  assert.equal(input.education[2].field, "Python asoslari", "kursda kurs nomi qoladi");
+  assert.equal(input.education[2].degree, "", "kursda daraja yo'q");
+  assert.equal(input.education[2].end, "now", "«hozir o‘qiyapman» saqlanadi");
+  assert.equal(input.certificates[0].year, "2021", "sertifikat yilidan oy tashlanadi");
+  assert.equal(input.certificates[1].year, "", "erkin matnli yil tushadi");
+  // Ish tajribasi TEGILMAGAN — u yerda oy ma'noli.
+  assert.equal(input.experience[0].start, "2019-08");
 });
 
 test("normalizePhone: bo'shliq/qavs/chiziq olib tashlanadi, «+» saqlanadi", () => {

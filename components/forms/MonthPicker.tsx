@@ -1,6 +1,7 @@
 "use client";
 
 import { Switch } from "./compact";
+import { PICKER_YEARS } from "./YearPicker";
 
 /**
  * Oy/yil tanlagich (Rezyume 2, 3-band).
@@ -12,8 +13,8 @@ import { Switch } from "./compact";
  */
 
 const MONTHS = ["yanvar", "fevral", "mart", "aprel", "may", "iyun", "iyul", "avgust", "sentabr", "oktabr", "noyabr", "dekabr"];
-const YEAR_MAX = new Date().getFullYear() + 6;
-const YEARS = Array.from({ length: YEAR_MAX - 1960 + 1 }, (_, i) => String(YEAR_MAX - i));
+/** Yillar ro'yxati `YearPicker` bilan BITTA — ikki tanlagich ajralib ketmasin. */
+const YEARS = PICKER_YEARS;
 
 function parse(v: string): { year: string; month: string } {
   const m = /^(\d{4})(?:-(\d{2}))?$/.exec(v || "");

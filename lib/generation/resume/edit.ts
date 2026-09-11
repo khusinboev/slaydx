@@ -125,7 +125,7 @@ function leafOf(m: ResumeModel, path: string): Leaf | null {
   if (sec === "education") {
     const row = m.education[i];
     if (!row) return null;
-    if (key !== "institution" && key !== "degree" && key !== "start" && key !== "end") return null;
+    if (key !== "institution" && key !== "field" && key !== "degree" && key !== "start" && key !== "end") return null;
     const date = key === "start" || key === "end";
     return {
       get: (mm) => mm.education[i][key],
@@ -223,7 +223,8 @@ function emptyRow(section: ResumeRowSection, id: string) {
     case "experience":
       return { id, company: "", role: "", start: "", end: "", bullets: [] as ResumeBullet[] };
     case "education":
-      return { id, institution: "", degree: "", start: "", end: "" };
+      // AUDIT-16: tur va yo'nalish — yangi satr ham to'liq shaklda.
+      return { id, kind: "university", institution: "", field: "", degree: "", start: "", end: "" };
     case "certificates":
       return { id, name: "", issuer: "", year: "" };
     case "languages":

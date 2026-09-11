@@ -184,7 +184,8 @@ test("path lar model manzillari: qator, band, kontakt, havola, chip", () => {
   assert.ok(paths.includes("contact.phone") && paths.includes("contact.email") && paths.includes("contact.location"));
   assert.ok(paths.includes("experience.0.role") && paths.includes("experience.0.company"));
   assert.ok(paths.includes("experience.0.bullets.0.text"));
-  assert.ok(paths.includes("education.0.degree") && paths.includes("education.0.institution"));
+  // Ta'limda tahrir yo'li — YO'NALISH (`field`); daraja yorlig'i katalogdan, tahrirlanmaydi.
+  assert.ok(paths.includes("education.0.field") && paths.includes("education.0.institution"));
   assert.ok(paths.includes("certificates.0.name"));
   assert.ok(paths.includes("languages.0.language"));
   assert.ok(paths.includes("links.0.url"));

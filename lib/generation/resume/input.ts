@@ -16,11 +16,14 @@ import type { FormValues } from "../../types";
 import type { DocMeta } from "../types";
 import { joinCsv, splitCsv } from "../slide-params";
 import {
+  RESUME_DEGREES,
   RESUME_LIMITS,
   emptyResume,
+  isResumeEducationKind,
   linkKindOf,
   newRowId,
   normalizeDate,
+  normalizeYear,
   resumeLabels,
   sortDesc,
   type ResumeCertificate,
@@ -168,14 +171,27 @@ export function resumeInputFromValues(values: FormValues): ResumeInput {
 
   const education: ResumeEducation[] = jsonRows(values, "education")
     .slice(0, RESUME_LIMITS.education)
-    .map((e, i) => ({
-      id: str(e.id, 16) || newRowId("d", i),
-      institution: str(e.institution, RESUME_LIMITS.fieldChars),
-      degree: str(e.degree, RESUME_LIMITS.fieldChars),
-      start: normalizeDate(e.start),
-      end: normalizeDate(e.end),
-    }))
-    .filter((e) => e.institution || e.degree);
+    .map((e, i) => {
+      // Tur berilmagan qoralama/eski qiymat — «oliy ta'lim» (AUDIT-16).
+      const kind = isResumeEducationKind(e.kind) ? e.kind : ("university" as const);
+      return {
+        id: str(e.id, 16) || newRowId("d", i),
+        kind,
+        institution: str(e.institution, RESUME_LIMITS.fieldChars),
+        /*
+         * TURGA TEGISHLI BO'LMAGAN maydon shu yerda ham kesiladi.
+         * Forma tur almashganda tozalaydi, lekin eski qoralama yoki
+         * qo'lda yasalgan so'rov «maktab + Bakalavr» yuborishi mumkin —
+         * u holda hujjatga foydalanuvchi EKRANDA ko'rmagan fakt tushardi.
+         */
+        field: kind === "school" ? "" : str(e.field, RESUME_LIMITS.fieldChars),
+        degree: RESUME_DEGREES[kind].length ? str(e.degree, RESUME_LIMITS.fieldChars) : "",
+        // Ta'limda oy so'ralmaydi — o'quv yili sentabrda boshlanadi.
+        start: normalizeYear(e.start),
+        end: normalizeYear(e.end),
+      };
+    })
+    .filter((e) => e.institution || e.degree || e.field);
 
   const certificates: ResumeCertificate[] = jsonRows(values, "certificates")
     .slice(0, RESUME_LIMITS.certificates)
@@ -183,7 +199,8 @@ export function resumeInputFromValues(values: FormValues): ResumeInput {
       id: str(c.id, 16) || newRowId("c", i),
       name: str(c.name, RESUME_LIMITS.fieldChars),
       issuer: str(c.issuer, RESUME_LIMITS.fieldChars),
-      year: str(c.year, 12),
+      // Yil tanlagichdan keladi — «hozir» sertifikatda ma'nosiz.
+      year: normalizeYear(c.year, false),
     }))
     .filter((c) => c.name);
 

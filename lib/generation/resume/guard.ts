@@ -32,7 +32,13 @@ import type { ResumeInput } from "./input";
 
 export type ResumeLlmBullet = { text: string; ai?: boolean };
 export type ResumeLlmExperience = { id: string; role: string; bullets: ResumeLlmBullet[] };
-export type ResumeLlmEducation = { id: string; degree: string };
+/**
+ * Ta'limda model FAQAT `field` (yo'nalish/mutaxassislik) ni qaytaradi
+ * (AUDIT-16). `degree` — ID, yorlig'i koddan (`degreeLabel`), ya'ni model
+ * javobiga umuman bog'liq emas; `institution` esa ilgari ham kirishdan
+ * olinardi.
+ */
+export type ResumeLlmEducation = { id: string; field: string };
 export type ResumeLlmSkill = { text: string; ai?: boolean };
 
 export type ResumeLlmOut = {
@@ -99,7 +105,7 @@ export function inputFacts(input: ResumeInput): string {
     ...input.skills,
   ];
   for (const e of input.experience) parts.push(e.company, e.role, e.start, e.end, ...e.bullets.map((b) => b.text));
-  for (const e of input.education) parts.push(e.institution, e.degree, e.start, e.end);
+  for (const e of input.education) parts.push(e.institution, e.field, e.degree, e.start, e.end);
   for (const c of input.certificates) parts.push(c.name, c.issuer, c.year);
   for (const l of input.languages) parts.push(l.language, l.level);
   for (const k of input.links) parts.push(k.url);
@@ -381,12 +387,24 @@ export function guardResume(
     const row = eduById.get(src.id);
     if (!row) {
       report.restoredRows++;
-      return { id: src.id, degree: src.degree };
+      return { id: src.id, field: src.field };
     }
-    // Daraja ham lavozim bilan bir xil: «Bakalavr, moliya» → «BSc in
-    // Finance» tarjimasi TALAB qilinadi; muassasa nomi kirishdan keladi.
-    const degree = clean(clip(row.degree, RESUME_LIMITS.fieldChars)) || src.degree;
-    return { id: src.id, degree };
+    /*
+     * YO'NALISH ham lavozim bilan bir xil: «Moliya va kredit» → «Finance
+     * and Credit» tarjimasi TALAB qilinadi (18 tilli chiqish va'dasi),
+     * shuning uchun tashkilot tekshiruvi bu yerda ham qo'llanmaydi.
+     * Muassasa nomi va daraja model javobiga umuman kirmaydi.
+     *
+     * Lekin QAYTA YOZISH ≠ YARATISH: kirishda yo'nalish bo'lmasa (maktab,
+     * yoki foydalanuvchi bo'sh qoldirgan), model «Umumiy o'rta ta'lim»
+     * deb to'ldirsa ham u tashlanadi — bu 1-qoida (uydirma fakt).
+     */
+    if (!src.field) {
+      if (clip(row.field, RESUME_LIMITS.fieldChars)) report.revertedFields++;
+      return { id: src.id, field: "" };
+    }
+    const field = clean(clip(row.field, RESUME_LIMITS.fieldChars)) || src.field;
+    return { id: src.id, field };
   });
 
   /* ── 3 + 4: ko'nikmalar ── */

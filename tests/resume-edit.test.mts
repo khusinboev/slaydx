@@ -8,7 +8,7 @@ import {
   type ResumeOp,
 } from "../lib/generation/resume/edit.ts";
 import { docFromResume, RESUME_LIMITS, type ResumeModel } from "../lib/generation/resume/model.ts";
-import { SAMPLE_RESUME } from "../lib/generation/resume/samples.ts";
+import { SAMPLE_RESUME, sampleResume } from "../lib/generation/resume/samples.ts";
 import type { AcademicDoc, DocMeta } from "../lib/generation/types.ts";
 
 /**
@@ -279,4 +279,21 @@ test("`RESUME_PATH_RE` bo'lmagan yo'l parse bosqichida to'xtaydi", () => {
 test("qator bo'limlari ro'yxati modeldagi maydonlar bilan mos", () => {
   const m = SAMPLE_RESUME as unknown as Record<string, unknown>;
   for (const s of RESUME_ROW_SECTIONS) assert.ok(Array.isArray(m[s]), `«${s}» modelda ro'yxat emas`);
+});
+
+test("ta'lim yo'nalishi (`field`) matn opi bilan tahrirlanadi, daraja IDsi o'zgarmaydi (AUDIT-16)", () => {
+  const base = sampleResume("modern", undefined, false);
+  const doc = docFromResume(base, META);
+  const r = applyResumeOps(doc, [{ op: "text", path: "education.0.field", value: "Buxgalteriya hisobi" }], { genId: GEN });
+  assert.ok(r.ok, r.ok ? "" : r.error);
+  const edu = r.ok ? r.doc.resume!.education[0] : null;
+  assert.equal(edu?.field, "Buxgalteriya hisobi");
+  assert.equal(edu?.degree, "bakalavr", "daraja IDsi tegilmasligi kerak");
+  assert.equal(edu?.kind, "university");
+  // Yangi ta'lim satri to'liq shaklda (kind, field) yaratiladi.
+  const r2 = applyResumeOps(doc, [{ op: "rowAdd", section: "education", at: 1 }], { genId: GEN });
+  assert.ok(r2.ok);
+  const added = r2.ok ? r2.doc.resume!.education[1] : null;
+  assert.equal(added?.kind, "university");
+  assert.equal(added?.field, "");
 });

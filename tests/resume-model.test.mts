@@ -3,17 +3,23 @@ import assert from "node:assert/strict";
 import type { AcademicDoc } from "../lib/generation/types.ts";
 import {
   DEFAULT_ORDER,
+  RESUME_DEGREES,
+  RESUME_EDUCATION_KINDS,
   RESUME_LIMITS,
   RESUME_SECTION_IDS,
+  degreeLabel,
   docFromResume,
+  educationTitle,
   emptyResume,
   formatPeriod,
   hasCodeLabels,
+  isResumeEducationKind,
   legacyResumeModel,
   linkKindOf,
   newRowId,
   normalizeDate,
   normalizeResume,
+  normalizeYear,
   resumeLabels,
   resumeSections,
   sanitizeLabels,
@@ -21,6 +27,7 @@ import {
   type ResumeModel,
 } from "../lib/generation/resume/model.ts";
 import { RESUME_TEMPLATES } from "../lib/generation/resume/templates.ts";
+import { planResume } from "../lib/generation/resume/layout.ts";
 import { SAMPLE_RESUME } from "../lib/generation/resume/samples.ts";
 
 /**
@@ -119,6 +126,153 @@ test("normalizeDate: faqat YYYY / YYYY-MM / now qabul qilinadi", () => {
   assert.equal(normalizeDate("2200"), "");
   assert.equal(normalizeDate("mart 2021"), "");
   assert.equal(normalizeDate(null), "");
+});
+
+// ───────────────────────────────────────────── AUDIT-16: ta'lim
+
+test("normalizeYear: OY TASHLANADI — ta'limda faqat yil so'raladi", () => {
+  /*
+   * Mahsulot qarori: barcha o'qishlar sentabrdan boshlanadi, shuning
+   * uchun ta'lim va sertifikat sanasida oy so'ralmaydi. Eski
+   * qoralamalarda va eski hujjatlarda «2019-09» turgan bo'lishi mumkin —
+   * u YILGA tushadi, tashlanmaydi.
+   */
+  assert.equal(normalizeYear("2019-09"), "2019", "oy tashlanadi");
+  assert.equal(normalizeYear("2019-9"), "2019");
+  assert.equal(normalizeYear("2019"), "2019");
+  assert.equal(normalizeYear("now"), "now");
+  assert.equal(normalizeYear("hozir"), "now");
+  assert.equal(normalizeYear("present"), "now");
+  assert.equal(normalizeYear("1900"), "", "diapazondan tashqari");
+  assert.equal(normalizeYear("2200"), "");
+  assert.equal(normalizeYear("2021-yil"), "", "erkin matn qabul qilinmaydi");
+  assert.equal(normalizeYear(null), "");
+  // Sertifikatda «hozir» ma'nosiz — u aniq yilda beriladi.
+  assert.equal(normalizeYear("now", false), "");
+  assert.equal(normalizeYear("2021", false), "2021");
+  // `normalizeDate` TEGILMAGAN: tajribada oy ma'noli.
+  assert.equal(normalizeDate("2019-09"), "2019-09", "tajriba sanasi oyni saqlaydi");
+});
+
+test("ta'lim: `kind` standarti, eski qator migratsiyasi va yil klampi", () => {
+  const m = normalizeResume({
+    identity: { fullName: "A" },
+    education: [
+      // ESKI qator: `kind` ham, `field` ham yo'q, sana oy bilan.
+      { id: "d1", institution: "TDIU", degree: "Bakalavr, Moliya va kredit", start: "2015-09", end: "2019-06" },
+      // YANGI qator.
+      { id: "d2", kind: "school", institution: "15-maktab", field: "", degree: "", start: "2004", end: "2015" },
+      // Noma'lum tur — «university» ga tushadi.
+      { id: "d3", kind: "akademiya", institution: "X", field: "Y", degree: "magistr", start: "2019", end: "now" },
+    ],
+  })!;
+  assert.equal(m.education[0].kind, "university", "eski qatorda tur yo'q — oliy ta'lim");
+  assert.equal(m.education[0].field, "", "eski `degree` matni yo'nalishga AJRATILMAYDI");
+  assert.equal(m.education[0].degree, "Bakalavr, Moliya va kredit", "eski erkin matn yo'qolmaydi");
+  assert.deepEqual([m.education[0].start, m.education[0].end], ["2015", "2019"], "oy tashlanadi");
+  const school = m.education.find((e) => e.id === "d2")!;
+  assert.equal(school.kind, "school");
+  assert.equal(school.degree, "");
+  assert.equal(m.education.find((e) => e.id === "d3")!.kind, "university", "noma'lum tur — oliy ta'lim");
+  // Faqat yo'nalish yozilgan qator ham saqlanadi (ilgari `institution || degree` edi).
+  const onlyField = normalizeResume({ identity: { fullName: "A" }, education: [{ kind: "course", field: "Python" }] })!;
+  assert.equal(onlyField.education.length, 1);
+  assert.equal(onlyField.education[0].field, "Python");
+});
+
+test("degreeLabel: TILGA ergashadi, tur bilan ma'nosi o'zgaradi, noma'lum ID o'zi qaytadi", () => {
+  assert.equal(degreeLabel("university", "magistr", "uz"), "Magistr");
+  assert.equal(degreeLabel("university", "magistr", "ru"), "Магистр");
+  assert.equal(degreeLabel("university", "magistr", "en"), "Master’s degree");
+  // Qolgan 15 til — inglizcha yorliq (daraja fakt, uni model tarjima qilmaydi).
+  assert.equal(degreeLabel("university", "magistr", "de"), "Master’s degree");
+  assert.equal(degreeLabel("university", "magistr", "ja"), "Master’s degree");
+  // Bitta ID, ikki xil tur — ikki xil ma'no.
+  assert.equal(degreeLabel("university", "tugallanmagan", "uz"), "Tugallanmagan oliy");
+  assert.equal(degreeLabel("college", "tugallanmagan", "uz"), "Tugallanmagan o‘rta maxsus");
+  assert.notEqual(degreeLabel("university", "tugallanmagan", "ru"), degreeLabel("college", "tugallanmagan", "ru"));
+  // Maktab va kursda daraja YO'Q.
+  assert.deepEqual(RESUME_DEGREES.school, []);
+  assert.deepEqual(RESUME_DEGREES.course, []);
+  assert.equal(degreeLabel("school", "bakalavr", "uz"), "bakalavr", "turga tegishli bo'lmagan ID — matn sifatida");
+  // B-8: eski erkin matn o'zgarishsiz qaytadi.
+  assert.equal(degreeLabel("university", "Bakalavr, Moliya va kredit", "en"), "Bakalavr, Moliya va kredit");
+  assert.equal(degreeLabel("university", "", "uz"), "");
+  // Katalog va tanlov ro'yxati bir xil to'plam.
+  for (const kind of RESUME_EDUCATION_KINDS) {
+    for (const id of RESUME_DEGREES[kind]) {
+      assert.notEqual(degreeLabel(kind, id, "uz"), id, `${kind}/${id}: yorliq yo'q`);
+      assert.notEqual(degreeLabel(kind, id, "ru"), id, `${kind}/${id}: ruscha yorliq yo'q`);
+    }
+  }
+  assert.ok(isResumeEducationKind("college"));
+  assert.ok(!isResumeEducationKind("akademiya"));
+});
+
+test("educationTitle: «daraja, yo'nalish» — maktabda bo'sh", () => {
+  const row = { id: "d1", kind: "university" as const, institution: "TDIU", field: "Moliya", degree: "bakalavr", start: "2015", end: "2019" };
+  assert.equal(educationTitle(row, "uz"), "Bakalavr, Moliya");
+  assert.equal(educationTitle(row, "en"), "Bachelor’s degree, Moliya", "daraja tilga ergashadi, yo'nalish kirishdan");
+  assert.equal(educationTitle({ ...row, field: "" }, "uz"), "Bakalavr", "yo'nalish bo'lmasa faqat daraja");
+  assert.equal(educationTitle({ ...row, kind: "course", degree: "", field: "Python asoslari" }, "uz"), "Python asoslari");
+  assert.equal(educationTitle({ ...row, kind: "school", degree: "", field: "" }, "uz"), "", "maktabda sarlavha bo'sh");
+});
+
+test("maket: ta'lim qatori — «Daraja, yo'nalish» / muassasa; maktabda muassasa sarlavhaga ko'tariladi", () => {
+  /*
+   * `sectionItems` education bloki (`layout.ts`) — DOCX ham, ko'ruvchi
+   * ham shu itemni chizadi. Maktab satrida sarlavha bo'sh qolsa ikkalasi
+   * ham qalin satrni tashlab, maktab nomini mayda kulrang matnga tushirib
+   * yuborardi; tahrir yo'li esa `degree` ga qarab qolardi.
+   */
+  const m: ResumeModel = {
+    ...emptyResume("en"),
+    identity: { fullName: "A", headline: "B" },
+    education: [
+      { id: "d1", kind: "university", institution: "TDIU", field: "Finance", degree: "bakalavr", start: "2015", end: "2019" },
+      { id: "d2", kind: "school", institution: "School No. 15", field: "", degree: "", start: "2004", end: "2015" },
+      { id: "d3", kind: "course", institution: "IT Park", field: "Python", degree: "", start: "2023", end: "now" },
+    ],
+  };
+  const rows = planResume(m)
+    .zones.flatMap((z) => z.items)
+    .filter((it): it is Extract<typeof it, { k: "row" }> => it.k === "row" && it.section === "education");
+  assert.equal(rows.length, 3);
+  // Maket model tartibini saqlaydi (tartiblash `draftModel` da, `sortDesc`).
+  /*
+   * Sarlavha ikki qismdan: `titlePrefix` — daraja yorlig'i (katalogdan,
+   * tahrirlanMAYDI), `title` — yo'nalish (tahrirlanadi, `…field`).
+   * Ko'rinadigan matn ikkalasining birikmasi (`educationTitle` bilan bir xil).
+   */
+  assert.deepEqual(
+    rows.map((r) => `${r.titlePrefix ?? ""}${r.title}`),
+    ["Bachelor’s degree, Finance", "School No. 15", "Python"],
+  );
+  assert.deepEqual(rows.map((r) => r.titlePrefix ?? ""), ["Bachelor’s degree, ", "", ""]);
+  assert.deepEqual(rows.map((r) => r.sub), ["TDIU", "", "IT Park"]);
+  assert.equal(rows[0].titlePath, "education.0.field", "yo'nalish tahrirlanadi, daraja yorlig'i emas");
+  assert.equal(rows[0].subPath, "education.0.institution");
+  assert.equal(rows[1].titlePath, "education.1.institution", "maktabda sarlavha — muassasa, tahrir yo'li ham shunga");
+  assert.equal(rows[1].period, "2004 – 2015", "faqat yil");
+  assert.equal(rows[2].period, "2023 – present");
+  // Sintez bo'lim ham shu sarlavhani ishlatadi (bosh sahifa kartasi / eski ko'ruvchi).
+  const edu = resumeSections(m).find((s) => s.id === "edu")!;
+  assert.match(edu.blocks[0].text, /Bachelor’s degree, Finance — TDIU/);
+  assert.match(edu.blocks[1].text, /2004 – 2015 — School No\. 15/);
+});
+
+test("sertifikat yili ham tanlagichdan: erkin matn tozalanadi", () => {
+  const m = normalizeResume({
+    identity: { fullName: "A" },
+    certificates: [
+      { id: "c1", name: "ACCA F3", issuer: "ACCA", year: "2021-08" },
+      { id: "c2", name: "IELTS", issuer: "British Council", year: "2021-yil avgust" },
+      { id: "c3", name: "PMP", issuer: "PMI", year: "now" },
+    ],
+  })!;
+  assert.equal(m.certificates[0].year, "2021", "oy tashlanadi");
+  assert.equal(m.certificates[1].year, "", "erkin matn tushadi");
+  assert.equal(m.certificates[2].year, "", "sertifikat «hozir» olinmaydi");
 });
 
 // ───────────────────────────────────────────── sortDesc

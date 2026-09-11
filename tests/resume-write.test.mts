@@ -43,7 +43,7 @@ const VALUES: FormValues = {
     { id: "e2", company: "Korzinka", role: "Stajyor", start: "2017-01", end: "2019-07", bullets: ["Hisobot tayyorladi."] },
     { id: "e1", company: "Artel Electronics", role: "Tahlilchi", start: "2019-08", end: "now", bullets: ["Byudjet modelini tuzdi."] },
   ]),
-  education: JSON.stringify([{ id: "d1", institution: "TDIU", degree: "Bakalavr", start: "2015", end: "2019" }]),
+  education: JSON.stringify([{ id: "d1", kind: "university", institution: "TDIU", field: "Moliya", degree: "bakalavr", start: "2015", end: "2019" }]),
   certificates: JSON.stringify([{ id: "c1", name: "ACCA F3", issuer: "ACCA", year: "2021" }]),
   languages: JSON.stringify([{ id: "l1", language: "Ingliz", level: "B2" }]),
   links: JSON.stringify([{ id: "k1", kind: "linkedin", url: "https://linkedin.com/in/dk" }]),
@@ -64,7 +64,7 @@ function answer(over: Partial<Record<string, unknown>> = {}) {
       { id: "e1", role: "Moliya tahlilchisi", bullets: [{ text: "Yillik byudjet modelini tuzdi va ijro nazoratini yo‘lga qo‘ydi." }] },
       { id: "e2", role: "Kichik tahlilchi", bullets: [{ text: "Haftalik hisobotlarni tayyorladi." }] },
     ],
-    education: [{ id: "d1", degree: "Bakalavr, Moliya va kredit" }],
+    education: [{ id: "d1", field: "Moliya va kredit" }],
     skills: [{ text: "Excel" }, { text: "SQL" }],
     ...over,
   };
@@ -110,6 +110,21 @@ test("prompt VERBATIM va «uydirmang» qoidalarini o'z ichiga oladi", () => {
   assert.match(p, /between 250 and 700 characters/);
   assert.match(p, /MUST be written in the output language/, "lavozim/daraja tarjima qilinishi shart");
   assert.match(p, /do not reorder the experience or education arrays by date/i, "tartiblash — ilovaning ishi");
+});
+
+test("AUDIT-16 prompt: ta'lim sxemasida faqat «field», faktlarda daraja YORLIG'I chiqish tilida", () => {
+  const p = prompt();
+  assert.match(p, /"education":\[\{"id":"","field":""\}\]/, "javob sxemasi — faqat id va yo'nalish");
+  assert.doesNotMatch(p, /"education":\[\{"id":"","degree":""\}\]/, "eski sxema (daraja model javobida) qolmasligi kerak");
+  assert.match(p, /For education return ONLY "field"/);
+  assert.match(p, /the academic degree, the certificate and the language rows are NOT yours to change/);
+  // Faktlar blokida daraja ID EMAS, chiqish tilidagi yorliq: model kontekstni tushunadi, lekin qaytarmaydi.
+  assert.match(p, /"degree":"Bakalavr"/, "o'zbekcha chiqishda o'zbekcha yorliq");
+  assert.doesNotMatch(p, /"degree":"bakalavr"/, "ID promptga tushmasligi kerak");
+  const en = prompt({ language: "en" });
+  assert.match(en, /"degree":"Bachelor’s degree"/, "inglizcha chiqishda inglizcha yorliq");
+  assert.match(en, /"kind":"university"/, "tur ham faktlarda");
+  assert.match(en, /"field":"Moliya"/, "yo'nalish kirishdan — model tarjima qiladi");
 });
 
 test("id lar promptda: model qaysi qatorga javob berishini biladi", () => {
@@ -213,14 +228,15 @@ test("uz kirish → en chiqish: lavozim va daraja TARJIMASI saqlanadi", async ()
         { id: "e1", role: "Senior IFRS Reporting Analyst", bullets: [{ text: "Built the annual budget model and monthly execution controls." }] },
         { id: "e2", role: "Financial Analyst", bullets: [{ text: "Prepared weekly profitability reports." }] },
       ],
-      education: [{ id: "d1", degree: "CIMA Advanced Diploma in Management Accounting" }],
+      education: [{ id: "d1", field: "Management Accounting" }],
       skills: [{ text: "Excel" }, { text: "SQL" }],
     }),
   );
   const m = (await b.run())!.resume!;
   assert.equal(m.experience[0].role, "Senior IFRS Reporting Analyst", "o'zbekcha lavozimga qaytmasligi kerak");
   assert.equal(m.experience[1].role, "Financial Analyst");
-  assert.equal(m.education[0].degree, "CIMA Advanced Diploma in Management Accounting");
+  assert.equal(m.education[0].field, "Management Accounting");
+  assert.equal(m.education[0].degree, "bakalavr", "daraja ID si model javobidan MUSTAQIL");
   // Kompaniya/muassasa esa VERBATIM kirishdan — tarjima qilinmaydi.
   assert.deepEqual(m.experience.map((e) => e.company), ["Artel Electronics", "Korzinka"]);
   assert.equal(m.education[0].institution, "TDIU");
@@ -430,6 +446,10 @@ test("parseResumeLlm: satr bandlar, yetishmagan id va bo'sh javob", () => {
   assert.deepEqual(out.experience[0].bullets, [{ text: "a" }, { text: "b", ai: true }]);
   assert.deepEqual(out.skills, [{ text: "Excel" }, { text: "SQL", ai: true }]);
   assert.equal(out.headline, "Moliya tahlilchisi", "headline bo'sh bo'lsa kirishdan");
+  // AUDIT-16: model eski sxemada `degree`/`institution` qaytarsa ham ular O'QILMAYDI —
+  // ta'limdan faqat `id` va `field` olinadi (daraja IDsi kirishdan, yorlig'i koddan).
+  const edu = parseResumeLlm(JSON.stringify({ summary: "S", education: [{ id: "d1", degree: "PhD", institution: "MIT", field: "Finance" }] }), i, m)!;
+  assert.deepEqual(edu.education, [{ id: "d1", field: "Finance" }], "faqat id + field");
   assert.equal(parseResumeLlm("shunchaki matn", i, m), null);
   assert.equal(parseResumeLlm(null, i, m), null);
   assert.equal(parseResumeLlm("[]", i, m), null, "massiv — obyekt emas");

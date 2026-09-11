@@ -559,9 +559,14 @@ function RailRow({
           paddingBottom: "1mm",
         }}
       >
-        {row.title ? (
-          <div {...edit(row.titlePath)} style={{ fontWeight: 700, color: hex(P.ink), cursor: ctx.editable ? "text" : undefined }}>
-            {row.title}
+        {row.title || row.titlePrefix ? (
+          <div style={{ fontWeight: 700, color: hex(P.ink) }}>
+            {row.titlePrefix ? <span data-resume-title-prefix>{row.titlePrefix}</span> : null}
+            {row.title ? (
+              <span {...edit(row.titlePath)} style={{ cursor: ctx.editable ? "text" : undefined }}>
+                {row.title}
+              </span>
+            ) : null}
           </div>
         ) : null}
         {row.sub ? (
@@ -646,9 +651,19 @@ function Row({ it, ctx }: { it: Extract<ResumeItem, { k: "row" }>; ctx: Ctx }) {
   return (
     <div className="group" style={{ margin: "0 0 1.5mm" }} data-resume-row={it.path}>
       <div style={{ display: "flex", justifyContent: "space-between", gap: "2mm", alignItems: "baseline" }}>
-        {it.title ? (
-          <span {...ed(it.titlePath)} style={{ fontWeight: 700, fontSize: ptPx(t.type.body), color: ink, cursor: cur }}>
-            {it.title}
+        {it.title || it.titlePrefix ? (
+          <span style={{ fontWeight: 700, fontSize: ptPx(t.type.body), color: ink }}>
+            {/* Daraja yorlig'i tahrirlanmaydi (katalog); yo'nalish — tahrirlanadi. */}
+            {it.titlePrefix ? <span data-resume-title-prefix>{it.titlePrefix}</span> : null}
+            {it.title ? (
+              <span {...ed(it.titlePath)} style={{ cursor: cur }}>
+                {it.title}
+              </span>
+            ) : editable ? (
+              <span {...ed(it.titlePath)} data-resume-empty-field style={{ cursor: cur, color: muted, fontWeight: 400 }}>
+                {" "}+ yo‘nalish
+              </span>
+            ) : null}
           </span>
         ) : null}
         {it.period ? (

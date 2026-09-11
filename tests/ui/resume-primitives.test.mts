@@ -6,6 +6,7 @@ import { render, fireEvent, screen, cleanup, within } from "@testing-library/rea
 import { PhoneInput } from "../../components/forms/PhoneInput.tsx";
 import { Combobox } from "../../components/forms/Combobox.tsx";
 import { MonthPicker } from "../../components/forms/MonthPicker.tsx";
+import { YearPicker } from "../../components/forms/YearPicker.tsx";
 import { RowList, reorder } from "../../components/forms/RowList.tsx";
 import { searchProfessions } from "../../lib/professions.ts";
 
@@ -122,6 +123,51 @@ test("MonthPicker: oy+yil «YYYY-MM», faqat yil «YYYY», «hozir» — now", (
   assert.equal(seen.at(-1), "now");
   // «Hozir» yoqilganda sana tanlagichlari o'chadi.
   assert.equal((screen.getByLabelText("Boshlanish — yil") as HTMLSelectElement).disabled, true);
+});
+
+test("YearPicker: OY YO'Q — qiymat «YYYY», «hozir» tumbleri tugash yilini o'chiradi", () => {
+  /*
+   * AUDIT-16: ta'lim va sertifikat sanasida oy so'ralmaydi. Test aynan
+   * shuni qulflaydi: tanlagichda oy `<select>` i BO'LMASLIGI kerak.
+   */
+  const seen: string[] = [];
+  render(
+    h(Harness<string>, {
+      initial: "",
+      render: (v, set) =>
+        h(YearPicker, {
+          label: "Tugash yili",
+          value: v,
+          allowNow: true,
+          onChange: (x: string) => {
+            seen.push(x);
+            set(x);
+          },
+        }),
+    }),
+  );
+  assert.ok(!screen.queryByLabelText("Tugash yili — oy"), "oy tanlagichi bo'lmasligi kerak");
+  assert.equal(document.querySelectorAll("select").length, 1, "bitta tanlagich — faqat yil");
+  const year = screen.getByLabelText("Tugash yili") as HTMLSelectElement;
+  fireEvent.change(year, { target: { value: "2019" } });
+  assert.equal(seen.at(-1), "2019", "qiymat «YYYY»");
+  // Ro'yxat 1960 dan joriy+6 gacha.
+  const values = Array.from(year.options).map((o) => o.value).filter(Boolean);
+  assert.equal(values[0], String(new Date().getFullYear() + 6), "eng yangi yil boshida");
+  assert.equal(values.at(-1), "1960");
+  fireEvent.click(screen.getByLabelText("Hozir o‘qiyapman"));
+  assert.equal(seen.at(-1), "now");
+  assert.equal((screen.getByLabelText("Tugash yili") as HTMLSelectElement).disabled, true, "«hozir» da yil tanlanmaydi");
+  // Bo'sh variant qiymatni tozalaydi.
+  fireEvent.click(screen.getByLabelText("Hozir o‘qiyapman"));
+  fireEvent.change(screen.getByLabelText("Tugash yili"), { target: { value: "" } });
+  assert.equal(seen.at(-1), "");
+});
+
+test("YearPicker: «hozir» siz (sertifikat) tumbler umuman chizilmaydi", () => {
+  render(h(YearPicker, { label: "Sertifikat yili", value: "2021", onChange: () => {} }));
+  assert.equal((screen.getByLabelText("Sertifikat yili") as HTMLSelectElement).value, "2021");
+  assert.equal(document.querySelectorAll('[role="switch"]').length, 0, "sertifikat «hozir» olinmaydi");
 });
 
 test("RowList: qo'shish, tartib almashtirish va o'chirish satr ma'lumotini saqlaydi", () => {
