@@ -39,7 +39,8 @@ const META = { topic: "Sun’iy intellektning oliy ta’limdagi o‘rni", author
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
 
 function articleDoc(): AcademicDoc {
-  const d = sampleArticleDoc(META);
+  // Chuqur nusxa — namunaviy model (`figures`) ulashilgan, testlar bir-birini buzmasin.
+  const d = JSON.parse(JSON.stringify(sampleArticleDoc(META))) as AcademicDoc;
   // Sxema PNG allaqachon aktivga chiqarilgan (worker `extractAssets`).
   d.article!.figures[0].url = ASSET_URL;
   d.article!.figures[0].assetId = ASSET;
@@ -48,7 +49,7 @@ function articleDoc(): AcademicDoc {
 
 /** Eski maqola: `doc.article` yo'q, titul/mundarija bilan. */
 function legacyDoc(): AcademicDoc {
-  const d = sampleArticleDoc(META);
+  const d = JSON.parse(JSON.stringify(sampleArticleDoc(META))) as AcademicDoc;
   delete d.article;
   d.titlePage = true;
   return d;

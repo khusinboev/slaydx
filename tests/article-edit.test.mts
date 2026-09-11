@@ -28,8 +28,9 @@ import type { AcademicDoc, DocMeta } from "../lib/generation/types.ts";
 const GEN = "11111111-2222-3333-4444-555555555555";
 const META = { topic: "Sun’iy intellektning oliy ta’limdagi o‘rni", author: "K", workLabel: "Maqola", language: "uz", toolId: "article" } as unknown as DocMeta;
 
+/** Chuqur nusxa: `sampleArticleDoc` modeli (`keywords`, `figures`) namunaviy obyekt bilan ULASHILGAN — testlar bir-birini buzmasin. */
 function base(): AcademicDoc {
-  return sampleArticleDoc(META);
+  return JSON.parse(JSON.stringify(sampleArticleDoc(META))) as AcademicDoc;
 }
 
 /** Eski `doc.references` satrlari bilan (dvigatel yozadigan shakl). */
@@ -100,7 +101,7 @@ test("har bir op turi uchun apply → inverse aylanmasi asl hujjatni qaytaradi",
 });
 
 test("highlights aylanmasi (Elsevier turi)", () => {
-  const doc = sampleArticleDoc({ ...META, language: "en" }, { type: "elsevier_ieee_style" });
+  const doc = JSON.parse(JSON.stringify(sampleArticleDoc({ ...META, language: "en" }, { type: "elsevier_ieee_style" }))) as AcademicDoc;
   doc.article!.highlights = ["First result", "Second result", "Third result"];
   roundTrip("highlights", [{ op: "highlights", items: ["A", "B", "C", "D"] }], doc);
 });

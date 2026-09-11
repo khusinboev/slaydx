@@ -110,6 +110,20 @@ export function uploadResumePhoto(
   return request<DocPatchResult>(`/api/generations/${id}/photo`, { method: "POST", body: fd });
 }
 
+/**
+ * Maqola tayyorlik hisobotidagi «Tuzatish» (Maqola 2, WP7) — server
+ * `writer` roli bilan bo'lim/annotatsiya/kalit so'z/highlights ni qayta
+ * yozadi, hisobotni qayta hisoblaydi; javob `PATCH …/doc` bilan bir xil
+ * `generation` (+ qo'llangan `ops`). 409 `version` — boshqa 409 lar kabi
+ * `editErrorCode` orqali qayta yuklashga olib keladi. Kredit yechilmaydi.
+ */
+export function rewriteArticle(id: string, baseVersion: number, fix: { op: "rewrite"; target: string; instruction: string }) {
+  return request<DocPatchResult & { ops: unknown[] }>(`/api/generations/${id}/rewrite`, {
+    method: "POST",
+    body: JSON.stringify({ baseVersion, fix }),
+  });
+}
+
 /** Suratni olib tashlash — bayt yubormasdan (`remove=1`). */
 export function removeResumePhoto(id: string, baseVersion: number) {
   const fd = new FormData();
