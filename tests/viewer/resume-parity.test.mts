@@ -72,7 +72,7 @@ function modelFor(id: (typeof RESUME_TEMPLATE_IDS)[number], withPhoto: boolean):
   const m = sampleResume(id, undefined, false);
   // Namunadagi surat `/samples/...` — DOCX uni yuklay olmaydi; paritet
   // sinovi uchun ikkala tomon ham o'qiy oladigan `data:` URL kerak.
-  if (withPhoto) m.photo = { url: PNG_URL, shape: RESUME_TEMPLATES[id].photo.shape, assetId: "" };
+  if (withPhoto && RESUME_TEMPLATES[id].photo) m.photo = { url: PNG_URL, shape: RESUME_TEMPLATES[id].photo!.shape, assetId: "" };
   return m;
 }
 
@@ -106,7 +106,13 @@ test("har shablonda `<img>` bor ⇔ `<w:drawing>` bor", async () => {
       const inDocx = xml.includes("<w:drawing>");
       const inView = /<img\b/.test(html);
       assert.equal(inView, inDocx, `${id} (surat: ${withPhoto}): ko'ruvchi ${inView}, DOCX ${inDocx}`);
-      assert.equal(inDocx, withPhoto, `${id}: surat kutilgani bilan mos emas`);
+      /*
+       * Surat SHABLONGA ham bog'liq (AUDIT-16): to'rt shablon ataylab
+       * suratsiz — ularda model surat bilan kelsa ham hech qayerda
+       * chizilmaydi.
+       */
+      const expected = withPhoto && Boolean(RESUME_TEMPLATES[id].photo);
+      assert.equal(inDocx, expected, `${id}: surat kutilgani bilan mos emas`);
     }
   }
 });
@@ -124,7 +130,7 @@ test("palitra almashsa ikkala tomonda ham matn o'zgarmaydi (faqat rang)", async 
 
 test("shablon almashsa ko'ruvchi ham, DOCX ham yangi maketga o'tadi", async () => {
   const side = viewerHtml(modelFor("modern", false));
-  const single = viewerHtml(modelFor("classic", false));
+  const single = viewerHtml(modelFor("ats", false));
   assert.ok(side.includes('data-resume-zone="aside"'), "modern da panel yo'q");
   assert.ok(!single.includes('data-resume-zone="aside"'), "classic da panel bor");
   assert.ok(single.includes('data-resume-zone="header"'), "classic da bosh qism yo'q");

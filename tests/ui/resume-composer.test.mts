@@ -191,11 +191,19 @@ test("surat shakli shablonga mos kelmasa ogohlantirish chiqadi", async () => {
    * Doira shablonda kesilgan surat + kvadrat slotli shablon = shaffof
    * burchaklar oq bo'lib ko'rinadi. Forma buni jim o'tkazmasligi kerak.
    */
-  stubApi({ photoAssetId: "a".repeat(24), photoShape: "circle", resumeTemplate: "minimal" });
+  // `card` — kvadrat slotli SURATLI shablon (AUDIT-16 dan keyin `minimal` yo'q).
+  stubApi({ photoAssetId: "a".repeat(24), photoShape: "circle", resumeTemplate: "card" });
   await login();
   mount();
   await waitFor(() => {
     assert.match(document.body.textContent ?? "", /kvadrat surat kutadi/, "ogohlantirish ko'rinadi");
+  });
+  // SURATSIZ shablon tanlansa — boshqa, aniqroq ogohlantirish: surat chizilmaydi.
+  cleanup();
+  stubApi({ photoAssetId: "a".repeat(24), photoShape: "circle", resumeTemplate: "ats" });
+  mount();
+  await waitFor(() => {
+    assert.match(document.body.textContent ?? "", /SURATSIZ shablon/, "suratsiz shablon ogohlantirishi");
   });
   // Mos kelganda ogohlantirish YO'Q.
   cleanup();
@@ -227,4 +235,42 @@ test("ko'nikma tavsiyalari: maydon ochilganda ham, lavozimga qarab ham chiqadi",
   const second = screen.getAllByRole("option").map((o) => o.textContent ?? "");
   assert.ok(second.some((t) => /1C|Ish haqi|Mehnat kodeksi/i.test(t)), `kasbga xos tavsiya: ${second.join(", ")}`);
   assert.notDeepEqual(second, first, "tavsiyalar lavozimga ergashadi");
+});
+
+test("band matnida probel va yangi qator yo'qolmaydi (yozish paytida tozalanmaydi)", async () => {
+  /*
+   * Nuqson: `onChange` da `trim()` + bo'sh qatorlarni tashlash turardi,
+   * ya'ni probel bosilishi bilan o'chib ketardi — ikki so'zni ajratib
+   * bo'lmasdi — va Enter bilan yangi band ochilmasdi.
+   */
+  const calls = stubApi();
+  await login();
+  mount();
+  await act(async () => {
+    fireEvent.click(screen.getByText("+ Ish joyi"));
+  });
+  const ta = document.querySelector('[data-rowlist="experience"] textarea') as HTMLTextAreaElement;
+  // Foydalanuvchi so'zma-so'z yozadi: har bosishdan keyin qiymat saqlanishi kerak.
+  for (const v of ["Oylik", "Oylik ", "Oylik hisobot", "Oylik hisobot\n", "Oylik hisobot\nByudjet"]) {
+    await act(async () => {
+      fireEvent.change(ta, { target: { value: v } });
+    });
+    assert.equal(ta.value, v, `matn saqlanmadi: «${v}»`);
+  }
+  // Yuborishda esa bo'sh qator va chekka probellar tozalanadi.
+  await act(async () => {
+    fireEvent.change(ta, { target: { value: "Oylik hisobot \n\nByudjet nazorati" } });
+  });
+  await act(async () => {
+    fireEvent.change(screen.getByLabelText("Maqsadli lavozim"), { target: { value: "Buxgalter" } });
+  });
+  await act(async () => {
+    fireEvent.click(screen.getByText(tool.submitLabel));
+  });
+  await waitFor(() => {
+    assert.ok(calls.some((c) => c.url === "/api/generations" && c.method === "POST"));
+  });
+  const post = calls.find((c) => c.url === "/api/generations" && c.method === "POST")!;
+  const rows = JSON.parse(String((post.body as { values: Record<string, unknown> }).values.experience)) as { bullets: string[] }[];
+  assert.deepEqual(rows[0].bullets, ["Oylik hisobot", "Byudjet nazorati"]);
 });

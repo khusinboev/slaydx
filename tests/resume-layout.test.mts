@@ -8,7 +8,7 @@ import {
   type ResumeItem,
   type ResumeLayout,
 } from "../lib/generation/resume/layout.ts";
-import { RESUME_TEMPLATES, RESUME_TEMPLATE_IDS, type ResumeTemplateId } from "../lib/generation/resume/templates.ts";
+import { RESUME_TEMPLATES, RESUME_TEMPLATE_IDS, type ResumeTemplateId, PHOTOLESS_TEMPLATE_IDS, PHOTO_TEMPLATE_IDS } from "../lib/generation/resume/templates.ts";
 import { emptyResume, resumeLabels, type ResumeModel } from "../lib/generation/resume/model.ts";
 import { sampleResume } from "../lib/generation/resume/samples.ts";
 
@@ -35,7 +35,9 @@ function variants(): { name: string; m: ResumeModel }[] {
     for (const withPhoto of [true, false]) {
       out.push({ name: `${id}/uzun/${withPhoto ? "surat" : "suratsiz"}`, m: sampleResume(id, undefined, withPhoto) });
       const short: ResumeModel = { ...SHORT, template: id, palette: RESUME_TEMPLATES[id].defaultPalette };
-      if (withPhoto) short.photo = { url: "data:image/png;base64,AA", shape: RESUME_TEMPLATES[id].photo.shape, assetId: "" };
+      if (withPhoto && RESUME_TEMPLATES[id].photo) {
+        short.photo = { url: "data:image/png;base64,AA", shape: RESUME_TEMPLATES[id].photo!.shape, assetId: "" };
+      }
       out.push({ name: `${id}/qisqa/${withPhoto ? "surat" : "suratsiz"}`, m: short });
     }
   }
@@ -68,8 +70,8 @@ test("6 shablon × surat × hajm: zonalar, kenglik va path shartnomasi", () => {
     assert.equal(photos.length, m.photo ? 1 : 0, `${name}: surat itemi soni`);
     if (m.photo) {
       const p = photos[0] as { shape: string; sizeMm: number };
-      assert.equal(p.shape, L.template.photo.shape, `${name}: surat shakli shablondan olinmadi`);
-      assert.equal(p.sizeMm, L.template.photo.sizeMm);
+      assert.equal(p.shape, L.template.photo!.shape, `${name}: surat shakli shablondan olinmadi`);
+      assert.equal(p.sizeMm, L.template.photo!.sizeMm);
       assert.equal(L.photo, true);
     } else {
       assert.equal(L.photo, false);
@@ -77,41 +79,76 @@ test("6 shablon × surat × hajm: zonalar, kenglik va path shartnomasi", () => {
   }
 });
 
-test("aside bo'limlari SHABLON bo'yicha, classic da aside umuman yo'q", () => {
+test("ikkinchi ustun SHABLON bo'yicha: panel, oddiy ustun yoki umuman yo'q", () => {
   for (const { name, m } of variants()) {
     const L = planResume(m);
     const t = L.template;
     const aside = zoneOf(L, "aside");
     const main = zoneOf(L, "main");
+    const header = zoneOf(L, "header");
     if (t.columns === "sidebar-left" || t.columns === "sidebar-right") {
-      assert.ok(aside.length > 0, `${name}: panelli shablonda aside bo'sh`);
+      assert.equal(L.asideKind, "panel", `${name}: rangli panel kutilgan`);
+      /*
+       * Panel `header: "aside"` bo'lganda HAR DOIM to'la (ism/aloqa u
+       * yerda); `split` da esa panelda faqat bo'limlar bo'lgani uchun
+       * qisqa rezyumeda u bo'sh qolishi mumkin.
+       */
+      if (t.header === "aside" || m.skills.length || m.languages.length) {
+        assert.ok(aside.length > 0, `${name}: panelli shablonda aside bo'sh`);
+      }
       assert.equal(L.asideWidthMm, t.sidebarMm);
-      // Panelga tushgan bo'lim asosiy ustunda TAKRORLANMAYDI.
       for (const id of t.asideSections) {
         assert.ok(!headings(main).includes(id), `${name}: «${id}» ikkala zonada`);
       }
-      // Ism/lavozim panelda, sarlavha zonasi yo'q.
-      assert.ok(kinds(aside).includes("name"), `${name}: ism panelda bo'lishi kerak`);
-      assert.equal(zoneOf(L, "header").length, 0, `${name}: panelli shablonda alohida header yo'q`);
+      /*
+       * Ism qayerda — `header` uslubiga bog'liq (AUDIT-16): `modern`/
+       * `twocol` da panelda (`header: "aside"`), `split` da esa asosiy
+       * ustun tepasida — shuning uchun alohida `header` zonasi bo'ladi.
+       */
+      if (t.header === "aside") {
+        assert.ok(kinds(aside).includes("name"), `${name}: ism panelda bo'lishi kerak`);
+        assert.equal(header.length, 0, `${name}: «aside» sarlavhada alohida header bo'lmaydi`);
+      } else {
+        assert.ok(kinds(header).includes("name"), `${name}: ism sarlavha zonasida bo'lishi kerak`);
+      }
+    } else if (t.columns === "split-main") {
+      // Rangsiz ikkinchi ustun: bo'limlar taqsimlanadi, fon chizilmaydi.
+      assert.equal(L.asideKind, "column", `${name}: rangsiz ustun kutilgan`);
+      // Qisqa rezyumeda ko'nikma/til bo'lmasligi mumkin — u holda ikkinchi
+      // ustun bo'sh qolishi TO'G'RI; talab faqat taqsimotga tegishli.
+      if (m.skills.length || m.languages.length) {
+        assert.ok(aside.length > 0, `${name}: ikkinchi ustun bo'sh`);
+      }
+      assert.ok(kinds(header).includes("name"), `${name}: ism sarlavhada bo'lishi kerak`);
+      for (const id of t.asideSections) {
+        assert.ok(!headings(main).includes(id), `${name}: «${id}» ikkala ustunda`);
+      }
     } else {
+      assert.equal(L.asideKind, "none", `${name}: bir ustunli shablon`);
       assert.equal(aside.length, 0, `${name}: bir ustunli shablonda aside bo'lmasligi kerak`);
       assert.equal(L.asideWidthMm, 0);
-      assert.ok(kinds(zoneOf(L, "header")).includes("name"), `${name}: ism sarlavhada bo'lishi kerak`);
+      assert.ok(kinds(header).includes("name"), `${name}: ism sarlavhada bo'lishi kerak`);
     }
   }
-  // Classic — ATS uchun: bir ustun, panelsiz.
-  const classic = planResume(sampleResume("classic"));
-  assert.equal(classic.template.columns, "single");
-  assert.equal(zoneOf(classic, "aside").length, 0);
-  assert.equal(classic.asideWidthMm, 0);
-  assert.equal(classic.mainWidthMm, classic.contentWidthMm);
-  // Modern/twocol — panelli, lekin turli tomonda va turli bo'limlar bilan.
-  assert.deepEqual(headings(zoneOf(planResume(sampleResume("modern")), "aside")), ["summary", "skills", "languages", "links"]);
-  assert.deepEqual(headings(zoneOf(planResume(sampleResume("twocol")), "aside")), ["summary", "skills", "languages", "certificates", "links"]);
 });
 
+test("suratsiz shablonda surat maketga UMUMAN tushmaydi", () => {
+  // Mahsulot qarori: 4 shablon (`ats`, `timeline`, `compact`, `letter`)
+  // suratsiz; yuklangan surat ularda chizilmaydi.
+  for (const id of PHOTOLESS_TEMPLATE_IDS) {
+    const m = { ...sampleResume(id, undefined, false), photo: { url: "data:image/png;base64,AA", shape: "circle" as const, assetId: "" } };
+    const L = planResume(m);
+    assert.equal(L.photo, false, `${id}: suratsiz shablonda surat yoqildi`);
+    const all = L.zones.flatMap((z) => z.items);
+    assert.ok(!all.some((it) => it.k === "photo"), `${id}: surat itemi chiqdi`);
+  }
+  assert.equal(PHOTOLESS_TEMPLATE_IDS.length, 4);
+  assert.equal(PHOTO_TEMPLATE_IDS.length, 6);
+});
+
+
 test("`order` hurmat qilinadi — asosiy ustun tartibi modeldan", () => {
-  const base = sampleResume("classic");
+  const base = sampleResume("ats");
   const a = headings(zoneOf(planResume(base), "main"));
   const flipped: ResumeModel = { ...base, order: ["skills", "education", "experience", "summary", "certificates", "languages", "links"] };
   const b = headings(zoneOf(planResume(flipped), "main"));
@@ -160,7 +197,7 @@ test("path lar model manzillari: qator, band, kontakt, havola, chip", () => {
 
 test("qator itemi: davr yorliqdan, ai band bayrog'i uzatiladi", () => {
   const m: ResumeModel = {
-    ...sampleResume("classic"),
+    ...sampleResume("ats"),
     labels: { ...resumeLabels("uz"), present: "hozirgacha" },
     experience: [
       {

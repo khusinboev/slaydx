@@ -316,8 +316,9 @@ export function draftModel(meta: DocMeta, input: ResumeInput, photo?: ResumePhot
     labels: resumeLabels(language),
     enriched: false,
   };
-  if (photo?.url) {
-    const shape = RESUME_TEMPLATES[template].photo.shape;
+  // Suratsiz shablonda (`photo: null`) surat modelga yozilmaydi.
+  if (photo?.url && RESUME_TEMPLATES[template].photo) {
+    const shape = RESUME_TEMPLATES[template].photo!.shape;
     const p: ResumePhoto = { url: photo.url, shape, assetId: photo.assetId ?? "" };
     if (photo.originalAssetId) p.originalAssetId = photo.originalAssetId;
     const crop = photo.crop ?? input.photoCrop;

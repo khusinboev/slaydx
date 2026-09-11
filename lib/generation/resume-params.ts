@@ -106,7 +106,9 @@ export const RESUME_PARAMS: ResumeParam[] = [
   },
   { id: "targetRole", encode: "string", probeA: "Moliya tahlilchisi", probeB: "Backend dasturchi", impacts: ["prompt", "layout"] },
   { id: "language", encode: "string", probeA: "uz", probeB: "de", impacts: ["language", "prompt", "layout"] },
-  { id: "resumeTemplate", encode: "string", probeA: "modern", probeB: "classic", impacts: ["template", "layout"] },
+  // Zond ikki UChIDAN tanlanadi: `modern` — rangli panelli, suratli;
+  // `letter` — bir ustunli, suratsiz, «osilgan» sarlavhali (AUDIT-16).
+  { id: "resumeTemplate", encode: "string", probeA: "modern", probeB: "letter", impacts: ["template", "layout"] },
   { id: "resumePalette", encode: "string", probeA: "ember", probeB: "ocean", impacts: ["template", "layout"] },
   { id: "enrich", encode: "boolean", probeA: true, probeB: false, impacts: ["prompt", "model"] },
   { id: "about", encode: "string", probeA: "", probeB: "Byudjetlashtirish bo‘yicha besh yillik tajriba.", impacts: ["prompt", "layout"] },

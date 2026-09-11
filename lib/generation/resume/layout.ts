@@ -44,6 +44,7 @@ export type ResumeItem =
   | { k: "contact"; lines: ResumeContactLine[] };
 
 export type ResumeZoneId = "header" | "aside" | "main";
+export type ResumeAsideKind = "panel" | "column" | "none";
 export type ResumeZone = { id: ResumeZoneId; items: ResumeItem[] };
 
 export type ResumeLayout = {
@@ -57,6 +58,14 @@ export type ResumeLayout = {
   mainWidthMm: number;
   /** Panel kengligi (mm), 0 — panel yo'q. */
   asideWidthMm: number;
+  /**
+   * Ikkinchi ustunning TABIATI:
+   *  - `panel`  — rangli yon panel (`sidebar-left/right`);
+   *  - `column` — oddiy ikkinchi ustun, fonsiz (`split-main`);
+   *  - `none`   — ikkinchi ustun yo'q.
+   * Renderer fon chizadimi-yo'qmi shundan biladi.
+   */
+  asideKind: ResumeAsideKind;
   /** Surat ko'rsatiladimi (modelda bor va shablon ruxsat beradi). */
   photo: boolean;
 };
@@ -154,22 +163,35 @@ function withHeading(m: ResumeModel, id: ResumeSectionId): ResumeItem[] {
 }
 
 /**
- * Maket rejasi. Tartib:
- *  - header: (surat) ism, lavozim, kontakt — bir ustunli va banner shablonlarda;
- *  - aside: surat, ism, lavozim, kontakt (+ `asideSections`) — sidebar shablonlarda;
- *  - main: `order` bo'yicha qolgan bo'limlar.
+ * Maket rejasi.
+ *
+ * Joylashtirish uch mustaqil qarordan iborat (AUDIT-16):
+ *  - SURAT — `template.photo` (null bo'lsa umuman chizilmaydi), `where`
+ *    bo'yicha yon panelga, bannerga yoki sarlavha blokiga tushadi;
+ *  - ISM/LAVOZIM/ALOQA — `template.header`: `aside` bo'lsa yon panelga,
+ *    aks holda alohida `header` zonasiga (uni renderer `plain/centered/
+ *    banner/card` ko'rinishida chizadi);
+ *  - BO'LIMLAR — `asideSections` yon panelga (yoki `split-main` da
+ *    ikkinchi ustunga), qolgani `order` bo'yicha asosiy ustunga.
  */
 export function planResume(m: ResumeModel): ResumeLayout {
   const template = RESUME_TEMPLATES[m.template] ?? RESUME_TEMPLATES.modern;
   const palette = paletteOf(m);
-  const photo = Boolean(m.photo?.url);
+  // Suratsiz shablonda (`photo: null`) yuklangan surat ham chizilmaydi —
+  // bu shablonning ATAYLAB tanlangan xususiyati, xato emas.
+  const photo = Boolean(m.photo?.url) && Boolean(template.photo);
   const contentWidthMm = PAGE_W - template.marginsMm.left - template.marginsMm.right;
-  const asideWidthMm = template.columns === "sidebar-left" || template.columns === "sidebar-right" ? template.sidebarMm : 0;
+  const side = template.columns === "sidebar-left" || template.columns === "sidebar-right";
+  const split = template.columns === "split-main";
+  const asideWidthMm = side || split ? template.sidebarMm : 0;
   const mainWidthMm = contentWidthMm - asideWidthMm;
+  const asideKind: ResumeAsideKind = side ? "panel" : split ? "column" : "none";
 
-  const identity: ResumeItem[] = [];
-  if (photo && m.photo) identity.push({ k: "photo", url: m.photo.url, shape: template.photo.shape, sizeMm: template.photo.sizeMm });
-  identity.push({ k: "name", text: m.identity.fullName, path: "identity.fullName" });
+  const photoItem: ResumeItem | null =
+    photo && m.photo && template.photo
+      ? { k: "photo", url: m.photo.url, shape: template.photo.shape, sizeMm: template.photo.sizeMm }
+      : null;
+  const identity: ResumeItem[] = [{ k: "name", text: m.identity.fullName, path: "identity.fullName" }];
   if (m.identity.headline) identity.push({ k: "headline", text: m.identity.headline, path: "identity.headline" });
   const contact = contactLines(m);
 
@@ -178,13 +200,24 @@ export function planResume(m: ResumeModel): ResumeLayout {
   const main: ResumeItem[] = [];
   const asideSet = new Set<ResumeSectionId>(asideWidthMm ? template.asideSections : []);
 
-  if (asideWidthMm) {
+  // Surat o'z slotiga: yon panel, banner yoki sarlavha bloki.
+  const photoWhere = template.photo?.where ?? "header";
+  if (photoItem && photoWhere === "aside" && asideKind === "panel") aside.push(photoItem);
+  else if (photoItem) header.push(photoItem);
+
+  // Ism/lavozim/aloqa.
+  if (template.header === "aside" && asideKind === "panel") {
     aside.push(...identity);
     if (contact.length) aside.push({ k: "h2", text: m.labels.contact, section: "summary" }, { k: "contact", lines: contact });
-    for (const id of template.asideSections) aside.push(...withHeading(m, id));
   } else {
     header.push(...identity);
     if (contact.length) header.push({ k: "contact", lines: contact });
+  }
+
+  // Bo'limlar.
+  for (const id of template.asideSections) {
+    if (!asideWidthMm) break;
+    aside.push(...withHeading(m, id));
   }
   for (const id of m.order) {
     if (asideSet.has(id)) continue;
@@ -196,7 +229,17 @@ export function planResume(m: ResumeModel): ResumeLayout {
   if (aside.length) zones.push({ id: "aside", items: aside });
   zones.push({ id: "main", items: main });
 
-  return { template, palette, zones, pageMm: { w: 210, h: 297 }, contentWidthMm, mainWidthMm, asideWidthMm, photo };
+  return {
+    template,
+    palette,
+    zones,
+    pageMm: { w: 210, h: 297 },
+    contentWidthMm,
+    mainWidthMm,
+    asideWidthMm,
+    asideKind,
+    photo,
+  };
 }
 
 /** Tahrirlanuvchi itemlarning path ro'yxati (test va editor uchun). */

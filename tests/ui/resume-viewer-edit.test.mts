@@ -230,18 +230,20 @@ test("shablon almashsa `template` opi ketadi va maket o'zgaradi", async () => {
 
   const select = screen.getByLabelText("Shablon") as HTMLSelectElement;
   await act(async () => {
-    fireEvent.change(select, { target: { value: "classic" } });
+    fireEvent.change(select, { target: { value: "ats" } });
   });
 
-  assert.equal(document.querySelector('[data-resume-zone="aside"]'), null, "classic da panel qolib ketdi");
-  assert.ok(document.querySelector('[data-resume-zone="header"]'), "classic da bosh qism yo'q");
+  // DOM tugunini `assert.equal(..., null)` bilan solishtirmang: muvaffaqiyatsizlikda
+  // `assert` diff uchun butun jsdom daraxtini serializatsiya qilib xotirani portlatadi.
+  assert.ok(!document.querySelector('[data-resume-zone="aside"]'), "ats da panel qolib ketdi");
+  assert.ok(document.querySelector('[data-resume-zone="header"]'), "ats da bosh qism yo‘q");
 
   const btn = saveBtn();
   assert.ok(btn);
   fireEvent.click(btn!);
   await pause(10);
-  assert.deepEqual(ops(s.patches[0])[0], { op: "template", template: "classic" });
-  assert.equal(s.doc.resume!.template, "classic");
+  assert.deepEqual(ops(s.patches[0])[0], { op: "template", template: "ats" });
+  assert.equal(s.doc.resume!.template, "ats");
 });
 
 test("palitra almashsa `palette` opi ketadi", async () => {
@@ -306,8 +308,8 @@ test("tahrir rejimi o'chirilganda `data-path` nishonlari yo'qoladi", async () =>
   await act(async () => {
     fireEvent.click(btn);
   });
-  assert.equal(document.querySelector("[data-resume-editor]"), null, "tahrir qatlami qoldi");
-  assert.equal(document.querySelector("[data-path]"), null, "tahrir nishonlari qoldi");
+  assert.ok(!document.querySelector("[data-resume-editor]"), "tahrir qatlami qoldi");
+  assert.ok(!document.querySelector("[data-path]"), "tahrir nishonlari qoldi");
 });
 
 test("ko'nikma qo'shish/olib tashlash BUTUN ro'yxatni yuboradi", async () => {

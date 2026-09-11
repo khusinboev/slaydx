@@ -81,7 +81,9 @@ export const CHIP_SEP = " · ";
 
 /** `resumeMainPadMm` / `resumeMainHeightPx` uchun kerakli shablon maydonlari. */
 export type ResumeMetricsTemplate = {
-  columns: "single" | "sidebar-left" | "sidebar-right" | "banner";
+  columns: "single" | "sidebar-left" | "sidebar-right" | "split-main";
+  /** AUDIT-16: banner endi ustun tuzilmasi emas, SARLAVHA uslubi. */
+  header: "plain" | "centered" | "banner" | "card" | "aside";
   bannerMm: number;
   marginsMm: { top: number; bottom: number; left: number; right: number };
 };
@@ -91,7 +93,7 @@ export function resumeMainPadMm(t: ResumeMetricsTemplate, pageIndex = 0): { x: n
   if (t.columns === "sidebar-left" || t.columns === "sidebar-right") {
     return { x: RESUME_PAD_MM.mainSide.x, top: RESUME_PAD_MM.mainSide.y, bottom: RESUME_PAD_MM.mainSide.y };
   }
-  if (t.columns === "banner") {
+  if (t.header === "banner") {
     const banner = pageIndex === 0 ? t.bannerMm + RESUME_PAD_MM.bannerGap : RESUME_PAD_MM.bannerGap;
     return { x: t.marginsMm.left, top: banner, bottom: t.marginsMm.bottom };
   }

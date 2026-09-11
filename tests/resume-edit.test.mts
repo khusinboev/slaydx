@@ -71,7 +71,7 @@ test("har bir op turi uchun apply → inverse aylanmasi asl hujjatni qaytaradi",
   roundTrip("bulletRemove", [{ op: "bulletRemove", row: 0, index: 2 }]);
   roundTrip("bulletMove", [{ op: "bulletMove", row: 0, from: 0, to: 2 }]);
   roundTrip("sectionMove", [{ op: "sectionMove", section: "skills", to: 1 }]);
-  roundTrip("template", [{ op: "template", template: "creative" }]);
+  roundTrip("template", [{ op: "template", template: "card" }]);
   roundTrip("palette", [{ op: "palette", palette: "plum" }]);
   roundTrip("photo", [{ op: "photo", url: asset("abc123"), shape: "circle" }]);
   roundTrip("set", [{ op: "set", model: { ...SAMPLE_RESUME, summary: "Butunlay boshqa" } }]);

@@ -285,7 +285,7 @@ export function resumeProfile(templateId: ResumeTemplateId): DocProfile {
   // katak (`margins`) yoki paragraf (`indent`) beradi.
   const margin = side
     ? { top: 0, bottom: 0, left: 0, right: 0 }
-    : t.columns === "banner"
+    : t.header === "banner"
       ? { top: 0, bottom: mm(t.marginsMm.bottom), left: 0, right: 0 }
       : { top: mm(t.marginsMm.top), bottom: mm(t.marginsMm.bottom), left: mm(t.marginsMm.left), right: mm(t.marginsMm.right) };
   return {

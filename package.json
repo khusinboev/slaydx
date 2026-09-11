@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --env-file-if-exists=.env.local --conditions=react-server --test tests/*.test.mts",
+    "test": "tsx --env-file-if-exists=.env.local --conditions=react-server --test --test-concurrency=2 tests/*.test.mts",
     "db:migrate": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/migrate.ts",
     "worker": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/worker.ts",
     "topup": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/topup.mts",
@@ -20,8 +20,8 @@
     "seed": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/seed-demo.mts",
     "seed-images": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/seed-images.mts",
     "image-lab": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/image-lab.mts",
-    "test:viewer": "tsx --tsconfig tsconfig.viewer.json --test tests/viewer/*.test.mts",
-    "test:ui": "tsx --tsconfig tsconfig.viewer.json --test tests/ui/*.test.mts"
+    "test:viewer": "tsx --tsconfig tsconfig.viewer.json --test --test-concurrency=2 tests/viewer/*.test.mts",
+    "test:ui": "tsx --tsconfig tsconfig.viewer.json --test --test-concurrency=2 tests/ui/*.test.mts"
   },
   "dependencies": {
     "docx": "^9.7.1",

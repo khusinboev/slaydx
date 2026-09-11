@@ -110,6 +110,8 @@ type Draw = {
   dark: boolean;
   /** Zona ichidagi foydali kenglik (twip) — tabulatsiya to'xtashi uchun. */
   width: number;
+  /** Butun zona markazga tekislanadimi (`header: "centered"`). */
+  align?: (typeof AlignmentType)[keyof typeof AlignmentType];
   /** Bir ustunli oqimda chap/o'ng chekinish (banner: 18 mm). */
   indent: number;
   photo: ImageRun | null;
@@ -156,6 +158,8 @@ function tab(d: Draw): TextRun {
 
 /** Har paragrafga zonaning chekinishi va qator oralig'i beriladi. */
 function para(d: Draw, children: (TextRun | ImageRun)[], extra: Record<string, unknown> = {}): Paragraph {
+  // `d.align` — butun zonaga tegishli (markazlashgan sarlavha bloki).
+  if (d.align && extra.alignment === undefined) extra = { ...extra, alignment: d.align };
   const { spacing: over, ...rest } = extra as { spacing?: Record<string, unknown> };
   return new Paragraph({
     ...(d.indent ? { indent: { left: d.indent, right: d.indent } } : {}),
@@ -192,6 +196,26 @@ function headingParagraph(d: Draw, text: string): Paragraph {
         shading: { type: ShadingType.CLEAR, color: "auto", fill: d.P.panel },
         border: { left: { style: BorderStyle.SINGLE, size: 18, space: 6, color: c.accent } },
         indent: { left: (d.indent || 0) + twip(2), right: d.indent || 0 },
+        children: [label(true)],
+      });
+    case "tab":
+      // Chapda qalin aksent tasma — matn tasmadan keyin boshlanadi.
+      return new Paragraph({
+        ...base,
+        border: { left: { style: BorderStyle.SINGLE, size: 24, space: 6, color: c.accent } },
+        indent: { left: (d.indent || 0) + twip(2), right: d.indent || 0 },
+        children: [label(true)],
+      });
+    case "hanging":
+      /*
+       * «Xat» uslubi: sarlavha CHAP maydonda qoladi, bo'lim matni esa
+       * `railMm` ga chekinadi (`drawItems` keyingi itemlarga shu
+       * chekinishni beradi). DOCX da haqiqiy ikki ustunli «osilgan»
+       * yorliq faqat jadval bilan bo'lardi — u holda bo'lim varaq
+       * chegarasida bo'lina olmasdi, shuning uchun chekinish tanlandi.
+       */
+      return new Paragraph({
+        ...base,
         children: [label(true)],
       });
     default:
@@ -300,9 +324,74 @@ function drawItem(d: Draw, it: ResumeItem): Array<Paragraph | Table> {
   }
 }
 
+/**
+ * Taymlayn qatori: chapda davr, o'ngda mazmun; ular orasida aksent
+ * chizig'i (o'ng katakning chap chegarasi).
+ *
+ * Bandlar (`li`) qatorga TEGISHLI, shuning uchun ular ham shu jadvalning
+ * o'ng katagiga tushadi — aks holda sana ustuni bilan matn bir-biridan
+ * ajralib ketardi.
+ */
+function railRow(d: Draw, row: Extract<ResumeItem, { k: "row" }>, rest: ResumeItem[]): Table {
+  const c = colors(d);
+  const railW = twip(d.t.railMm);
+  const bodyW = d.width - railW;
+  const railD: Draw = { ...d, indent: 0, width: railW - twip(2) };
+  const bodyD: Draw = { ...d, indent: 0, width: bodyW - twip(4) };
+  const head: Array<Paragraph | Table> = [];
+  if (row.title) head.push(para(bodyD, [run(bodyD, row.title, { bold: true, color: c.ink })], { spacing: { after: 0 } }));
+  if (row.sub) head.push(para(bodyD, [run(bodyD, row.sub, { size: d.t.type.small, color: c.muted })], { spacing: { after: twip(1) } }));
+  for (const it of rest) head.push(...drawItem(bodyD, it));
+
+  return new Table({
+    width: { size: d.width, type: WidthType.DXA },
+    columnWidths: [railW, bodyW],
+    layout: TableLayoutType.FIXED,
+    borders: { ...NO_BORDERS, insideHorizontal: NONE, insideVertical: NONE },
+    rows: [
+      new TableRow({
+        children: [
+          new TableCell({
+            borders: NO_BORDERS,
+            width: { size: railW, type: WidthType.DXA },
+            margins: { top: twip(1.5), bottom: twip(1), left: 0, right: twip(3) },
+            verticalAlign: VerticalAlign.TOP,
+            children: [para(railD, [run(railD, row.period || "—", { size: d.t.type.small, color: c.accent, bold: true })], { spacing: { after: 0 } })],
+          }),
+          new TableCell({
+            borders: { ...NO_BORDERS, left: { style: BorderStyle.SINGLE, size: 6, space: 6, color: c.accent } },
+            width: { size: bodyW, type: WidthType.DXA },
+            margins: { top: twip(1.5), bottom: twip(2), left: twip(3), right: 0 },
+            verticalAlign: VerticalAlign.TOP,
+            children: head.length ? head : [new Paragraph({ children: [] })],
+          }),
+        ],
+      }),
+    ],
+  });
+}
+
 function drawItems(d: Draw, items: ResumeItem[]): Array<Paragraph | Table> {
   const out: Array<Paragraph | Table> = [];
-  for (const it of items) out.push(...drawItem(d, it));
+  // `hanging` sarlavhada bo'lim MATNI chekinadi, sarlavhaning o'zi emas.
+  const hanging = d.t.heading === "hanging" ? twip(d.t.railMm) : 0;
+  let cur: Draw = d;
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i];
+    if (it.k === "h2") {
+      out.push(...drawItem({ ...d, indent: d.indent }, it));
+      cur = hanging ? { ...d, indent: (d.indent || 0) + hanging, width: d.width - hanging } : d;
+      continue;
+    }
+    if (it.k === "row" && d.t.rowStyle === "rail") {
+      // Qator + unga tegishli bandlarni bitta jadvalga yig'amiz.
+      const rest: ResumeItem[] = [];
+      while (i + 1 < items.length && items[i + 1].k === "li") rest.push(items[++i]);
+      out.push(railRow(cur, it, rest));
+      continue;
+    }
+    out.push(...drawItem(cur, it));
+  }
   return out;
 }
 
@@ -332,13 +421,25 @@ function cell(widthTwip: number, children: Array<Paragraph | Table>, o: { fill?:
  * Qator balandligi `ATLEAST` + `contentHeight(P)`: panel qisqa mazmunda
  * ham varaqni to'ldiradi, uzunida esa keyingi varaqqa cho'ziladi.
  */
-function twoColumn(cells: TableCell[], widths: number[], total: number, P: DocProfile): Table {
+function twoColumn(cells: TableCell[], widths: number[], total: number, P: DocProfile, fullHeight = true): Table {
   return new Table({
     width: { size: total, type: WidthType.DXA },
     columnWidths: widths,
     layout: TableLayoutType.FIXED,
     borders: { ...NO_BORDERS, insideHorizontal: NONE, insideVertical: NONE },
-    rows: [new TableRow({ height: { value: contentHeight(P), rule: HeightRule.ATLEAST }, children: cells })],
+    rows: [
+      new TableRow({
+        /*
+         * `fullHeight: false` — RANGSIZ ikki ustun (`split-main`).
+         * To'liq balandlik faqat RANGLI panel uchun kerak; rangsiz
+         * ustunda u zararli: sarlavha bloki tepada turganda jadval
+         * varaqqa sig'may butunlay KEYINGI betga o'tib ketardi va
+         * birinchi bet bo'sh qolardi (LibreOffice'da ko'rildi).
+         */
+        ...(fullHeight ? { height: { value: contentHeight(P), rule: HeightRule.ATLEAST } } : {}),
+        children: cells,
+      }),
+    ],
   });
 }
 
@@ -366,6 +467,31 @@ export async function renderResumeDocx(
   const base: Omit<Draw, "width" | "dark" | "indent"> = { t, P: layout.palette, photo };
   const CONTENT_W = K.CONTENT_W;
 
+  if (t.columns === "split-main") {
+    /*
+     * Ikki TENG huquqli ustun, rangli panel YO'Q (`compact`).
+     * Sarlavha bloki ustunlardan YUQORIDA — u varaq kengligini oladi.
+     */
+    const asideW = twip(layout.asideWidthMm);
+    const mainW = CONTENT_W - asideW;
+    const headD: Draw = { ...base, dark: false, indent: 0, width: CONTENT_W };
+    const leftD: Draw = { ...base, dark: false, indent: 0, width: mainW - twip(3) };
+    const rightD: Draw = { ...base, dark: false, indent: 0, width: asideW - twip(3) };
+    return [
+      ...drawItems(headD, zoneItems(layout, "header")),
+      twoColumn(
+        [
+          cell(mainW, drawItems(leftD, zoneItems(layout, "main")), { padXmm: 0, padYmm: 1 }),
+          cell(asideW, drawItems(rightD, zoneItems(layout, "aside")), { padXmm: 3, padYmm: 1 }),
+        ],
+        [mainW, asideW],
+        CONTENT_W,
+        P,
+        false,
+      ),
+    ];
+  }
+
   if (t.columns === "sidebar-left" || t.columns === "sidebar-right") {
     const asideW = twip(layout.asideWidthMm);
     const mainW = CONTENT_W - asideW;
@@ -376,10 +502,15 @@ export async function renderResumeDocx(
       padXmm: RESUME_PAD_MM.aside.x,
       padYmm: RESUME_PAD_MM.aside.y,
     });
-    const mainCell = cell(mainW, drawItems(mainD, zoneItems(layout, "main")), {
-      padXmm: RESUME_PAD_MM.mainSide.x,
-      padYmm: RESUME_PAD_MM.mainSide.y,
-    });
+    /*
+     * Sarlavha bloki yon panelda EMAS bo'lsa (`split`), u asosiy
+     * ustunning boshiga tushadi — aks holda ism umuman chizilmasdi.
+     */
+    const mainCell = cell(
+      mainW,
+      [...drawItems(mainD, zoneItems(layout, "header")), ...drawItems(mainD, zoneItems(layout, "main"))],
+      { padXmm: RESUME_PAD_MM.mainSide.x, padYmm: RESUME_PAD_MM.mainSide.y },
+    );
     const left = t.columns === "sidebar-left";
     return [
       twoColumn(
@@ -391,7 +522,7 @@ export async function renderResumeDocx(
     ];
   }
 
-  if (t.columns === "banner") {
+  if (t.header === "banner" || t.header === "card") {
     /*
      * Banner varaq CHETIGA tegib turadi (ko'ruvchida ham — manfiy
      * chekinish bilan), shuning uchun `resumeProfile` bannerli shablonda
@@ -407,7 +538,7 @@ export async function renderResumeDocx(
     let inner: Array<Paragraph | Table>;
     if (photo && photoItems.length) {
       // Surat va matn yonma-yon — ichki ikki ustunli jadval.
-      const pw = twip(t.photo.sizeMm + 6);
+      const pw = twip(t.photo!.sizeMm + 6);
       const tw = CONTENT_W - twip(RESUME_PAD_MM.banner.x * 2) - pw;
       const innerD: Draw = { ...bannerD, width: tw };
       inner = [
@@ -440,7 +571,8 @@ export async function renderResumeDocx(
           height: { value: twip(t.bannerMm), rule: HeightRule.ATLEAST },
           children: [
             cell(CONTENT_W, inner, {
-              fill: t.darkAside ? layout.palette.dark : layout.palette.panel,
+              // `card` — ochiq fonli blok; `banner` — to'q tasma.
+              fill: t.header === "card" ? layout.palette.panel : t.darkAside ? layout.palette.dark : layout.palette.panel,
               padXmm: RESUME_PAD_MM.banner.x,
               padYmm: RESUME_PAD_MM.banner.y,
             }),
@@ -453,7 +585,22 @@ export async function renderResumeDocx(
     return [bannerTable, new Paragraph({ spacing: { after: twip(RESUME_PAD_MM.bannerGap) }, children: [] }), ...drawItems(mainD, zoneItems(layout, "main"))];
   }
 
-  // `single` — oddiy paragraf oqimi (classic, minimal, creative).
+  // `single` — oddiy paragraf oqimi; sarlavha bloki uslubi `header`.
   const d: Draw = { ...base, dark: false, indent: 0, width: CONTENT_W };
-  return [...drawItems(d, zoneItems(layout, "header")), ...drawItems(d, zoneItems(layout, "main"))];
+  const headItems = zoneItems(layout, "header");
+  const centered = t.header === "centered";
+  // Markazlashgan sarlavhada ism, lavozim, aloqa va surat — hammasi o'rtada.
+  const headD: Draw = centered ? { ...d, align: AlignmentType.CENTER } : d;
+  const head: Array<Paragraph | Table> = drawItems(headD, headItems);
+  if (head.length) {
+    // Sarlavha va mazmun orasidagi ajratuvchi chiziq (ikkala uslubda ham).
+    head.push(
+      new Paragraph({
+        border: { bottom: { style: BorderStyle.SINGLE, size: centered ? 6 : 10, space: 4, color: colors(d).accent } },
+        spacing: { before: twip(1), after: twip(3) },
+        children: [],
+      }),
+    );
+  }
+  return [...head, ...drawItems(d, zoneItems(layout, "main"))];
 }

@@ -129,6 +129,9 @@ export function ResumePage({ layout, pageItems, pageIndex, total, editable = fal
       }}
       data-resume-zone="main"
     >
+      {/* Sarlavha bloki yon panelda EMAS bo'lsa (`split`) — asosiy
+          ustunning boshida, DOCX dagi bilan bir xil. */}
+      {first && t.header !== "aside" && side ? <Header layout={layout} ctx={ctx} /> : null}
       <Items items={pageItems} ctx={ctx} />
     </main>
   );
@@ -139,7 +142,34 @@ export function ResumePage({ layout, pageItems, pageIndex, total, editable = fal
       style={{ background: "#fff", display: "flex", flexDirection: "column" }}
       data-resume-page={pageIndex}
     >
-      {side ? (
+      {t.columns === "split-main" ? (
+        /*
+         * Ikki TENG huquqli ustun, rangli panel YO'Q (`compact`).
+         * DOCX da bu — rangsiz ikki ustunli jadval; sarlavha bloki esa
+         * jadvaldan yuqorida, varaq kengligida.
+         */
+        <div
+          style={{
+            height: "100%",
+            boxSizing: "border-box",
+            padding: `${t.marginsMm.top}mm ${t.marginsMm.left}mm ${t.marginsMm.bottom}mm ${t.marginsMm.right}mm`,
+            fontFamily: t.type.font,
+            fontSize: ptPx(t.type.body),
+            lineHeight: t.type.line,
+            color: hex(P.ink),
+          }}
+        >
+          {first ? <Header layout={layout} ctx={ctx} /> : null}
+          <div style={{ display: "flex", alignItems: "flex-start", gap: "6mm" }}>
+            <main style={{ flex: "1 1 auto", minWidth: 0 }} data-resume-zone="main">
+              <Items items={pageItems} ctx={ctx} />
+            </main>
+            <aside style={{ width: `${layout.asideWidthMm}mm`, flex: "0 0 auto" }} data-resume-zone="aside">
+              {first ? <Items items={itemsOf(layout, "aside")} ctx={ctx} /> : null}
+            </aside>
+          </div>
+        </div>
+      ) : side ? (
         /*
          * PANEL BALANDLIGI Word bilan bir xil.
          *
@@ -165,7 +195,7 @@ export function ResumePage({ layout, pageItems, pageIndex, total, editable = fal
           style={{
             height: "100%",
             boxSizing: "border-box",
-            paddingTop: t.columns === "banner" ? 0 : `${t.marginsMm.top}mm`,
+            paddingTop: t.header === "banner" ? 0 : `${t.marginsMm.top}mm`,
             paddingLeft: `${t.marginsMm.left}mm`,
             paddingRight: `${t.marginsMm.right}mm`,
             paddingBottom: `${t.marginsMm.bottom}mm`,
@@ -191,10 +221,49 @@ function Header({ layout, ctx }: { layout: ResumeLayout; ctx: Ctx }) {
   const items = itemsOf(layout, "header");
   if (!items.length) return null;
 
-  if (t.columns !== "banner") {
+  if (t.header === "plain" || t.header === "centered") {
+    const centered = t.header === "centered";
     return (
-      <header style={{ marginBottom: "6mm" }} data-resume-zone="header">
-        <Items items={items} ctx={ctx} />
+      <header
+        style={{
+          marginBottom: "5mm",
+          paddingBottom: "2mm",
+          textAlign: centered ? "center" : undefined,
+          // DOCX da sarlavha ostidagi ajratuvchi chiziq — bu yerda ham.
+          borderBottom: `${centered ? 0.3 : 0.5}mm solid ${hex(P.accent)}`,
+        }}
+        data-resume-zone="header"
+        data-resume-header={t.header}
+      >
+        <Items items={items} ctx={ctx} centered={centered} />
+      </header>
+    );
+  }
+
+  if (t.header === "card") {
+    /* Ochiq rangli karta: chapda kvadrat surat, o'ngda ism va aloqa. */
+    const photo = items.find((it) => it.k === "photo");
+    const rest = items.filter((it) => it.k !== "photo");
+    return (
+      <header
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: "5mm",
+          minHeight: `${t.bannerMm}mm`,
+          boxSizing: "border-box",
+          padding: "4mm 5mm",
+          marginBottom: "4mm",
+          background: hex(P.panel),
+          color: hex(P.ink),
+        }}
+        data-resume-zone="header"
+        data-resume-header="card"
+      >
+        {photo ? <Item it={photo} ctx={ctx} /> : null}
+        <div style={{ minWidth: 0 }}>
+          <Items items={rest} ctx={ctx} />
+        </div>
       </header>
     );
   }
@@ -235,7 +304,7 @@ type Ctx = {
   dark: boolean;
 };
 
-function Items({ items, ctx, banner = false }: { items: ResumeItem[]; ctx: Ctx; banner?: boolean }) {
+function Items({ items, ctx, banner = false, centered = false }: { items: ResumeItem[]; ctx: Ctx; banner?: boolean; centered?: boolean }) {
   /*
    * Bannerda surat matn blokining YONIDA turadi (DOCX da ichki ikki
    * ustunli jadval) — shuning uchun surat itemi ajratib olinadi.
@@ -254,13 +323,41 @@ function Items({ items, ctx, banner = false }: { items: ResumeItem[]; ctx: Ctx; 
       </>
     );
   }
-  return (
-    <>
-      {items.map((it, i) => (
+  const t = ctx.layout.template;
+  /*
+   * Ikki maxsus qoida — DOCX `drawItems` bilan AYNAN bir xil:
+   *  1. `heading: "hanging"` — bo'lim MATNI `railMm` ga chekinadi,
+   *     sarlavhaning o'zi chap maydonda qoladi («Xat» uslubi);
+   *  2. `rowStyle: "rail"` — qator va unga tegishli bandlar bitta
+   *     ikki ustunli blokka yig'iladi: chapda davr, o'ngda mazmun.
+   */
+  const hanging = t.heading === "hanging" ? t.railMm : 0;
+  const out: React.ReactNode[] = [];
+  let indent = 0;
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i];
+    if (it.k === "h2") {
+      out.push(<Item key={i} it={it} ctx={ctx} />);
+      indent = hanging;
+      continue;
+    }
+    if (it.k === "row" && t.rowStyle === "rail") {
+      const rest: ResumeItem[] = [];
+      while (i + 1 < items.length && items[i + 1].k === "li") rest.push(items[++i]);
+      out.push(<RailRow key={i} row={it} rest={rest} ctx={ctx} />);
+      continue;
+    }
+    out.push(
+      indent ? (
+        <div key={i} style={{ marginLeft: `${indent}mm` }}>
+          <Item it={it} ctx={ctx} />
+        </div>
+      ) : (
         <Item key={i} it={it} ctx={ctx} />
-      ))}
-    </>
-  );
+      ),
+    );
+  }
+  return <div style={centered ? { textAlign: "center" } : undefined}>{out}</div>;
 }
 
 function Item({ it, ctx }: { it: ResumeItem; ctx: Ctx }) {
@@ -422,6 +519,64 @@ function Item({ it, ctx }: { it: ResumeItem; ctx: Ctx }) {
   }
 }
 
+/**
+ * Taymlayn qatori (DOCX `railRow` ning ekrandagi egizagi): chapda davr,
+ * o'ngda sarlavha/tashkilot va bandlar, orada aksent chizig'i.
+ */
+function RailRow({
+  row,
+  rest,
+  ctx,
+}: {
+  row: Extract<ResumeItem, { k: "row" }>;
+  rest: ResumeItem[];
+  ctx: Ctx;
+}) {
+  const { template: t, palette: P } = ctx.layout;
+  const edit = (path: ResumePath) => (ctx.editable ? { "data-path": path } : {});
+  return (
+    <div style={{ display: "flex", alignItems: "stretch", margin: "0 0 3mm" }} data-resume-rail={row.path}>
+      <div
+        style={{
+          width: `${t.railMm}mm`,
+          flex: "0 0 auto",
+          paddingTop: "0.5mm",
+          paddingRight: "3mm",
+          boxSizing: "border-box",
+          fontSize: ptPx(t.type.small),
+          fontWeight: 700,
+          color: hex(P.accent),
+        }}
+      >
+        {row.period || "—"}
+      </div>
+      <div
+        style={{
+          flex: "1 1 auto",
+          minWidth: 0,
+          borderLeft: `0.3mm solid ${hex(P.accent)}`,
+          paddingLeft: "3mm",
+          paddingBottom: "1mm",
+        }}
+      >
+        {row.title ? (
+          <div {...edit(row.titlePath)} style={{ fontWeight: 700, color: hex(P.ink), cursor: ctx.editable ? "text" : undefined }}>
+            {row.title}
+          </div>
+        ) : null}
+        {row.sub ? (
+          <div {...edit(row.subPath)} style={{ fontSize: ptPx(t.type.small), color: hex(P.muted), cursor: ctx.editable ? "text" : undefined }}>
+            {row.sub}
+          </div>
+        ) : null}
+        {rest.map((it, i) => (
+          <Item key={i} it={it} ctx={ctx} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /* ────────────────────────── bo'lim sarlavhasi ────────────────────────── */
 
 function SectionHeading({ it, ctx }: { it: Extract<ResumeItem, { k: "h2" }>; ctx: Ctx }) {
@@ -447,6 +602,11 @@ function SectionHeading({ it, ctx }: { it: Extract<ResumeItem, { k: "h2" }>; ctx
       textTransform: "uppercase",
       letterSpacing: "0.08em",
     },
+    // Chapda qalin aksent tasma, fon YO'Q (DOCX: `border.left` 24).
+    tab: { ...base, borderLeft: `1.6mm solid ${color}`, paddingLeft: "2mm", textTransform: "uppercase", letterSpacing: "0.08em" },
+    // «Xat» uslubi: sarlavha chap maydonda, bo'lim matni chekinadi
+    // (chekinishni `Items` beradi — DOCX dagi bilan bir xil qoida).
+    hanging: { ...base, textTransform: "uppercase", letterSpacing: "0.1em", margin: "4mm 0 1mm" },
   };
   return (
     <h2 className="group" style={styles[t.heading] ?? base} data-resume-h2={it.section}>

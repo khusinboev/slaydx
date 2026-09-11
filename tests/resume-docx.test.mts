@@ -9,7 +9,13 @@ import { renderDocx } from "../lib/generation/render-docx.ts";
 import { resumeProfile } from "../lib/generation/docx-profile.ts";
 import { docFromResume, resumeLabels } from "../lib/generation/resume/model.ts";
 import { sampleResume } from "../lib/generation/resume/samples.ts";
-import { RESUME_PALETTES, RESUME_TEMPLATE_IDS, RESUME_TEMPLATES } from "../lib/generation/resume/templates.ts";
+import {
+  PHOTOLESS_TEMPLATE_IDS,
+  PHOTO_TEMPLATE_IDS,
+  RESUME_PALETTES,
+  RESUME_TEMPLATE_IDS,
+  RESUME_TEMPLATES,
+} from "../lib/generation/resume/templates.ts";
 import type { ImageBytes } from "../lib/generation/slide-images.ts";
 import type { AcademicDoc, DocMeta } from "../lib/generation/types.ts";
 
@@ -39,7 +45,9 @@ const JPG_1X1 =
 
 function docFor(templateId: (typeof RESUME_TEMPLATE_IDS)[number], opts: { photo?: string | null } = {}): AcademicDoc {
   const m = sampleResume(templateId, undefined, false);
-  if (opts.photo) m.photo = { url: opts.photo, shape: RESUME_TEMPLATES[templateId].photo.shape, assetId: "" };
+  if (opts.photo && RESUME_TEMPLATES[templateId].photo) {
+    m.photo = { url: opts.photo, shape: RESUME_TEMPLATES[templateId].photo!.shape, assetId: "" };
+  }
   return docFromResume(m, META);
 }
 
@@ -63,12 +71,27 @@ const drawings = (xml: string) => (xml.match(/<w:drawing>/g) ?? []).length;
 
 /* ══════════════════════════════ surat ══════════════════════════════ */
 
-test("suratli shablon AYNAN bitta `<w:drawing>` va bitta media fayl beradi", async () => {
-  for (const id of RESUME_TEMPLATE_IDS) {
+test("SURATLI shablon aynan bitta `<w:drawing>` va bitta media fayl beradi", async () => {
+  for (const id of PHOTO_TEMPLATE_IDS) {
     const { xml, media } = await xmlOf(docFor(id, { photo: PNG_URL }));
     assert.equal(drawings(xml), 1, `${id}: drawing soni`);
     assert.equal(media.length, 1, `${id}: media fayl soni`);
   }
+  assert.equal(PHOTO_TEMPLATE_IDS.length, 6, "suratli shablonlar soni");
+});
+
+test("SURATSIZ shablon yuklangan suratni ham chizmaydi", async () => {
+  /*
+   * Mahsulot qarori (AUDIT-16): 4 shablon ataylab suratsiz (ATS va
+   * rasmiy hujjat uchun). Foydalanuvchi surat yuklab, keyin shunday
+   * shablonni tanlasa — surat CHIZILMAYDI, forma buni ogohlantiradi.
+   */
+  for (const id of PHOTOLESS_TEMPLATE_IDS) {
+    const { xml, media } = await xmlOf(docFor(id, { photo: PNG_URL }));
+    assert.equal(drawings(xml), 0, `${id}: suratsiz shablonda drawing chiqdi`);
+    assert.equal(media.length, 0, `${id}: suratsiz shablonda media chiqdi`);
+  }
+  assert.equal(PHOTOLESS_TEMPLATE_IDS.length, 4, "suratsiz shablonlar soni");
 });
 
 test("suratsiz rezyumeda drawing ham, media ham yo'q", async () => {
@@ -85,7 +108,7 @@ test("doira surat PNG bo'lib qoladi (niqob klientda qo'llangan)", async () => {
 });
 
 test("JPEG surat `.jpg` bo'lib tushadi", async () => {
-  const { media } = await xmlOf(docFor("classic", { photo: `data:image/jpeg;base64,${JPG_1X1}` }));
+  const { media } = await xmlOf(docFor("card", { photo: `data:image/jpeg;base64,${JPG_1X1}` }));
   assert.ok(/\.jpe?g$/.test(media[0]), `JPEG kutilgan edi: ${media[0]}`);
 });
 
@@ -94,7 +117,7 @@ test("surat o'lchami EMU da mm × 36 000 (±1%)", async () => {
   const { xml } = await xmlOf(docFor(id, { photo: PNG_URL }));
   const m = /<wp:extent cx="(\d+)" cy="(\d+)"/.exec(xml);
   assert.ok(m, "`wp:extent` topilmadi");
-  const want = RESUME_TEMPLATES[id].photo.sizeMm * 36000;
+  const want = RESUME_TEMPLATES[id].photo!.sizeMm * 36000;
   for (const v of [Number(m![1]), Number(m![2])]) {
     assert.ok(Math.abs(v - want) / want < 0.01, `EMU ${v}, kutilgan ~${want}`);
   }
@@ -146,28 +169,39 @@ test("banner shabloni bo'yalgan bosh blok chizadi", async () => {
   assert.ok(xml.includes("<w:tbl>"), "banner jadvali yo'q");
 });
 
-test("bir ustunli shablonlarda jadval umuman yo'q", async () => {
-  for (const id of ["classic", "minimal", "creative"] as const) {
+test("oddiy oqimli shablonlarda jadval yo'q; taymlayn har qator uchun jadval yasaydi", async () => {
+  // `ats`/`letter`/`portrait` — sof paragraf oqimi.
+  for (const id of ["ats", "letter", "portrait"] as const) {
     const { xml } = await xmlOf(docFor(id));
     assert.ok(!xml.includes("<w:tbl>"), `${id}: kutilmagan jadval`);
   }
+  /*
+   * `timeline` da sana CHAP ustunda — DOCX da buni faqat jadval beradi
+   * (paragraf ichida ikkinchi ustun yo'q). Har ish joyi/ta'lim/sertifikat
+   * qatori bitta jadval: namunada 2 ish + 1 ta'lim + 1 sertifikat = 4.
+   */
+  const { xml: rail } = await xmlOf(docFor("timeline"));
+  assert.equal((rail.match(/<w:tbl>/g) ?? []).length, 4, "taymlayn jadvallari soni");
+  // `card`/`banner` — sarlavha bloki bitta jadval, mazmun oqimda.
+  const { xml: card } = await xmlOf(docFor("card"));
+  assert.equal((card.match(/<w:tbl>/g) ?? []).length, 1, "karta sarlavhasi bitta jadval");
 });
 
-test("`creative` sarlavhasi bo'yalgan blok + chap aksent chizig'i", async () => {
-  const { xml } = await xmlOf(docFromResume(sampleResume("creative", "plum", false), META));
+test("`card` sarlavhasi bo'yalgan blok + chap aksent chizig'i", async () => {
+  const { xml } = await xmlOf(docFromResume(sampleResume("card", "plum", false), META));
   assert.ok(xml.includes(`w:fill="${RESUME_PALETTES.plum.panel}"`), "sarlavha foni yo'q");
   assert.ok(/<w:left w:val="single" w:color="[0-9A-Fa-f]{6}"/.test(xml), "chap chegara yo'q");
 });
 
-test("`minimal` sarlavhasi ingichka pastki chiziq bilan", async () => {
-  const { xml } = await xmlOf(docFor("minimal"));
+test("`timeline` sarlavhasi ingichka pastki chiziq bilan", async () => {
+  const { xml } = await xmlOf(docFor("timeline"));
   assert.ok(/<w:bottom w:val="single" w:color="[0-9A-Fa-f]{6}" w:sz="2"/.test(xml), "hairline chizig'i topilmadi");
 });
 
 test("BOSH HARF `allCaps` bilan beriladi — `<w:t>` matni o'zgarmaydi", async () => {
-  const { xml } = await xmlOf(docFor("classic"));
+  const { xml } = await xmlOf(docFor("ats"));
   assert.ok(xml.includes("<w:caps/>"), "`allCaps` yo'q");
-  const labels = docFor("classic").resume!.labels;
+  const labels = docFor("ats").resume!.labels;
   assert.ok(textNodes(xml).includes(labels.experience), "sarlavha matni o'zgargan (toUpperCase ishlatilgan?)");
 });
 
@@ -178,8 +212,9 @@ test("shablon profili chegara va shriftni `RESUME_TEMPLATES` dan oladi", () => {
     assert.equal(P.id, "resume", `${id}: profil id o'zgarib ketdi`);
     assert.equal(P.type.font, t.type.font, `${id}: shrift`);
     assert.equal(P.type.size, Math.round(t.type.body * 2), `${id}: o'lcham`);
-    if (t.columns === "sidebar-left" || t.columns === "sidebar-right") {
-      assert.equal(P.page.margin.left, 0, `${id}: panel varaq chetiga tegishi kerak`);
+    if (t.columns === "sidebar-left" || t.columns === "sidebar-right" || t.header === "banner") {
+      // Panel ham, banner ham varaq CHETIGA tegadi — chegara 0, chekinish ichkarida.
+      assert.equal(P.page.margin.left, 0, `${id}: varaq chetiga tegishi kerak`);
     } else if (t.columns === "single") {
       assert.equal(P.page.margin.left, Math.round(t.marginsMm.left * 56.7), `${id}: chap chegara`);
     }
@@ -190,7 +225,7 @@ test("shablon profili chegara va shriftni `RESUME_TEMPLATES` dan oladi", () => {
 
 test("yorliqlar HUJJAT tilida chiqadi (interfeys tilida emas)", async () => {
   for (const [lang, word] of [["ru", "Опыт работы"], ["en", "Work experience"]] as const) {
-    const m = { ...sampleResume("classic", undefined, false), language: lang, labels: resumeLabels(lang) };
+    const m = { ...sampleResume("ats", undefined, false), language: lang, labels: resumeLabels(lang) };
     const doc = docFromResume(m, { ...META, language: lang });
     const { xml } = await xmlOf(doc);
     assert.ok(textNodes(xml).includes(word), `${lang}: «${word}» topilmadi`);
@@ -200,7 +235,7 @@ test("yorliqlar HUJJAT tilida chiqadi (interfeys tilida emas)", async () => {
 /* ══════════════════════════════ ai bandi ══════════════════════════════ */
 
 test("`ai` band oddiy banddek chiziladi (nishon faqat ko'ruvchida)", async () => {
-  const m = sampleResume("classic", undefined, false);
+  const m = sampleResume("ats", undefined, false);
   m.experience = m.experience.map((e, i) =>
     i === 0 ? { ...e, bullets: e.bullets.map((b, j) => (j === 0 ? { ...b, ai: true as const } : b)) } : e,
   );

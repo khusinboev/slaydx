@@ -65,7 +65,9 @@ export const SAMPLE_RESUME: ResumeModel = {
 export function sampleResume(template: ResumeTemplateId, palette?: ResumePaletteId, withPhoto = true): ResumeModel {
   const t = RESUME_TEMPLATES[template];
   const m: ResumeModel = { ...SAMPLE_RESUME, template, palette: palette ?? t.defaultPalette };
-  if (withPhoto) {
+  // Suratsiz shablonda (`photo: null`) galereya kartasi ham suratsiz —
+  // «suratli» tumbleri unga ta'sir qilmaydi.
+  if (withPhoto && t.photo) {
     m.photo = { url: t.photo.shape === "circle" ? SAMPLE_PHOTO_CIRCLE : SAMPLE_PHOTO_SQUARE, shape: t.photo.shape, assetId: "" };
   } else {
     delete m.photo;

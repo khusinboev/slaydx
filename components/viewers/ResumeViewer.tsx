@@ -127,11 +127,14 @@ export function ResumeViewer({
   /* ═══ surat ═══ */
   const fileRef = useRef<HTMLInputElement>(null);
   const pickPhoto = useCallback(() => fileRef.current?.click(), []);
+  // Suratsiz shablonda (`photo: null`) yuklash tugmasi umuman chiqmaydi;
+  // shakl faqat suratli shablon uchun kerak — standart doira.
+  const photoShape = layout.template.photo?.shape ?? "circle";
   const onPhotoFile = useCallback(
     async (file: File) => {
-      await ed.uploadPhoto({ file, shape: layout.template.photo.shape });
+      await ed.uploadPhoto({ file, shape: photoShape });
     },
-    [ed, layout.template.photo.shape],
+    [ed, photoShape],
   );
 
   /*

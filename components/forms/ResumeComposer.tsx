@@ -114,11 +114,20 @@ function uiFromValues(values: FormValues, base: Ui): Ui {
   };
 }
 
+/** Yuborishdan oldin: bo'sh bandlar tushadi, chekka probellar kesiladi. */
+function cleanBullets(rows: ResumeInput["experience"]): ResumeInput["experience"] {
+  return rows.map((e) => ({
+    ...e,
+    bullets: e.bullets.map((b) => ({ ...b, text: b.text.trim() })).filter((b) => b.text),
+  }));
+}
+
 function toValues(ui: Ui): FormValues {
   // Yopiq blok ma'lumoti holatda qoladi, lekin YUBORILMAYDI — foydalanuvchi
   // tumblerni qaytarsa yozganlari yo'qolmasin.
   const input: ResumeInput = {
     ...ui,
+    experience: cleanBullets(ui.experience),
     education: ui.show.education ? ui.education : [],
     certificates: ui.show.certificates ? ui.certificates : [],
     languages: ui.show.languages ? ui.languages : [],
@@ -263,16 +272,16 @@ export function ResumeComposer({ tool, profile }: { tool: ToolConfig; profile: U
                 assetId={ui.photoAssetId}
                 originalAssetId={ui.photoOriginalAssetId}
                 crop={ui.photoCrop}
-                shape={template.photo.shape}
+                shape={template.photo?.shape ?? "circle"}
                 savedShape={ui.photoShape}
                 onChange={(v) =>
                   setUi((s) => ({ ...s, photoAssetId: v.assetId, photoOriginalAssetId: v.originalAssetId, photoCrop: v.crop, photoShape: v.shape }))
                 }
               />
             </span>
-            {ui.photoAssetId && !template.photoDefault ? (
-              <p className="text-muted-foreground mt-1 text-[11px]">
-                «{template.title}» shabloni suratsiz maket — surat faqat siz qo‘shsangiz chiziladi.
+            {ui.photoAssetId && !template.photo ? (
+              <p className="mt-1 text-[11px] text-amber-600">
+                «{template.title}» — SURATSIZ shablon: yuklangan surat chizilmaydi. Suratli shablonni tanlang yoki shu holicha qoldiring.
               </p>
             ) : null}
           </Row>
@@ -342,12 +351,20 @@ export function ResumeComposer({ tool, profile }: { tool: ToolConfig; profile: U
                 <div className="sm:col-span-2">
                   <TextArea
                     value={row.bullets.map((b) => b.text).join("\n")}
+                    /*
+                     * Yozish paytida matn O'ZGARTIRILMAYDI — qatorlar xom
+                     * holda saqlanadi. Ilgari bu yerda har bosishda
+                     * `trim()` va bo'sh qatorlarni tashlash bor edi:
+                     * natijada probel bosilishi bilan yo'qolar (ikki
+                     * so'zni ajratib bo'lmasdi) va Enter bilan yangi band
+                     * ham ochilmasdi. Tozalash endi FAQAT yuborishda
+                     * (`cleanBullets`) — o'sha yerda bo'sh qatorlar
+                     * tushib qoladi.
+                     */
                     onChange={(v) =>
                       set2({
                         bullets: v
                           .split("\n")
-                          .map((t) => t.trim())
-                          .filter(Boolean)
                           .slice(0, RESUME_LIMITS.bullets)
                           .map((text) => ({ text })),
                       })
