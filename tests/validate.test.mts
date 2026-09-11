@@ -132,3 +132,24 @@ test("tarjima chegarasi: xato xabari kesilgan matnni tan oladi", async () => {
   assert.equal(String(huge.sourceText).length, MAX_SOURCE_CHARS, "xom shiftda kesilishi kerak");
   assert.equal(preflightError(tool, huge), null, "kesilgan matn aynan chegaraga teng — o'tishi kerak");
 });
+
+test("Maqola 2: ARTICLE_JSON_FIELDS (authors/userRefs/keywords/userData) MAX_JSON (24 000) chegarasida", async () => {
+  const { MAX_JSON } = await import("../lib/server/validate.ts");
+  const { ARTICLE_JSON_FIELDS } = await import("../lib/generation/article-params.ts");
+
+  /*
+   * Rezyume bilan bir naqsh (B-3): mualliflar/manbalar/kalit so'zlar/jadval
+   * ro'yxatlari JSON SATRI bo'lib keladi — 40 ta manba qatori 4 000
+   * belgilik `MAX_FIELD` ga sig'maydi. Ro'yxat `article-params.ts` dan
+   * import qilinadi — shu yerda qo'lda qaytarilmaydi, aks holda yangi
+   * JSON maydon qo'shilganda jim kesilib qolardi.
+   */
+  assert.deepEqual([...ARTICLE_JSON_FIELDS].sort(), ["authors", "keywords", "userData", "userRefs"]);
+
+  for (const field of ARTICLE_JSON_FIELDS) {
+    const out = sanitizeValues({ [field]: "a".repeat(MAX_JSON + 5_000) });
+    assert.equal(String(out![field]).length, MAX_JSON, `${field}: MAX_JSON chegarasida kesilishi kerak`);
+  }
+  // Oddiy maydon (masalan `udk`) bu kengaytirilgan chegaraga TUSHMAYDI.
+  assert.equal(String(sanitizeValues({ udk: "u".repeat(MAX_JSON) })!.udk).length, MAX_FIELD);
+});
