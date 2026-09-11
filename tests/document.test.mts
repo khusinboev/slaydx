@@ -990,7 +990,7 @@ test("shablon glossariysida atama nomi takrorlanmaydi", async () => {
   assert.equal(new Set(headings).size, headings.length, "atama sarlavhalari noyob bo'lishi kerak");
 });
 
-test("IMRAD annotatsiyasiz maqola qat'iy darvozadan o'tmaydi", async () => {
+test("IMRAD annotatsiyasiz tezis qat'iy darvozadan o'tmaydi", async () => {
   const { writeImradWithLlm } = await import("../lib/generation/write-specials.ts");
   const { hardMissing } = await import("../lib/generation/structure.ts");
   const { extractMeta } = await import("../lib/generation/meta.ts");
@@ -1035,7 +1035,12 @@ test("IMRAD annotatsiyasiz maqola qat'iy darvozadan o'tmaydi", async () => {
   }) as typeof fetch;
 
   try {
-    const meta = extractMeta(TOOL_BY_ID.article, {
+    /*
+     * Maqola 2 dan keyin IMRAD yo'li (`writeImradWithLlm`) FAQAT tezisda
+     * qoldi — maqola o'z dvigateliga (`article/engine.ts`) ketadi va u
+     * yerda annotatsiya darvozasi `tests/article-engine.test.mts` da.
+     */
+    const meta = extractMeta(TOOL_BY_ID.thesis, {
       topic: "Quyosh energiyasi",
       kind: "imrad",
       pages: "3-5",

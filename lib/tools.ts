@@ -990,7 +990,7 @@ export function preflightError(tool: ToolConfig, values: FormValues): string | n
     const p = String(values.pubProfile ?? "").trim();
     if (p && !isPublicationProfileId(p)) return "Noma'lum nashr profili";
     const topicLen = String(values.topic ?? "").trim().length;
-    if (topicLen > 0 && topicLen < 6) return "Mavzu juda qisqa.";
+    if (topicLen > 0 && topicLen < 4) return "Mavzu juda qisqa.";
   }
   if (tool.id === "translation") {
     const n0 = String(values.sourceText ?? "").trim().length;
