@@ -243,7 +243,8 @@ test("OAK: «Foydalanilgan adabiyotlar» + ikkinchi «REFERENCES» ro'yxati; apa
   assert.ok(t.includes("REFERENCES"), "OAK ikkinchi ro'yxati yo'q");
   assert.ok(posOf(oak.xml, "Foydalanilgan adabiyotlar") < posOf(oak.xml, "REFERENCES"));
   assert.ok(t.some((s) => s.startsWith("1. Lin C.")), "raqamli satr yo'q");
-  assert.equal(t.filter((s) => /^Lin C\./.test(s)).length, 1, "REFERENCES satri raqamsiz, bitta");
+  // REFERENCES — APA 7 inglizcha («Lin, C., Huang, A., & Lu, O. (2023)…»), raqamsiz (WP5 `cite/translit`).
+  assert.equal(t.filter((s) => /^Lin, C\., Huang, A\., & Lu, O\. \(2023\)/.test(s)).length, 1, "REFERENCES satri raqamsiz, bitta");
   const apa = await xmlOf(docFor("imrad_classic", "apa"));
   const ta = textNodes(apa.xml);
   assert.ok(!ta.includes("REFERENCES"), "APA da REFERENCES chiqdi");
