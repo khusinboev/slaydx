@@ -144,7 +144,7 @@ test("rasm sarlavhasi rasmdan KEYIN («1-rasm. …» PASTDA): o'rinbosar ham, PN
   assert.ok(boxP.includes("<w:keepNext/>"), "o'rinbosar sarlavha bilan birga emas");
   assert.equal(ph.media.length, 0);
   // «Manba: …» sarlavhadan KEYIN (OAK: rasm ostida manba).
-  assert.ok(cap < posOf(ph.xml, "Manba: Muallif tomonidan tuzilgan"), "manba satri sarlavhadan oldin/yo'q");
+  assert.ok(cap < posOf(ph.xml, "Manba: muallif tomonidan tuzilgan"), "manba satri sarlavhadan oldin/yo'q");
   // PNG (`data:` fikstura).
   const png = await xmlOf(docFor("imrad_oak", "oak", { png: PNG_URL }));
   assert.equal((png.xml.match(/<w:drawing>/g) ?? []).length, 1);
