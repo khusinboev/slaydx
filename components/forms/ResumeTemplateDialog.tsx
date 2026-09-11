@@ -9,7 +9,8 @@ import {
   RESUME_PALETTES,
   RESUME_PALETTE_IDS,
   RESUME_TEMPLATES,
-  RESUME_TEMPLATE_IDS,
+  PHOTOLESS_TEMPLATE_IDS,
+  PHOTO_TEMPLATE_IDS,
   type ResumePaletteId,
   type ResumeTemplateId,
 } from "@/lib/generation/resume/templates";
@@ -99,6 +100,11 @@ export function ResumeTemplateTile({
   );
 }
 
+const GROUPS = [
+  { id: "photoless", title: "Suratsiz", hint: "ATS va rasmiy hujjat uchun — surat chizilmaydi", ids: PHOTOLESS_TEMPLATE_IDS },
+  { id: "photo", title: "Suratli", hint: "Surat yuklasangiz shu yerda ko‘rinadi", ids: PHOTO_TEMPLATE_IDS },
+] as const;
+
 export function ResumeTemplateDialog({
   template,
   palette,
@@ -113,7 +119,9 @@ export function ResumeTemplateDialog({
   onPick: (t: ResumeTemplateId, p: ResumePaletteId) => void;
 }) {
   const panelRef = useDialog(true, onClose);
-  const [photo, setPhoto] = useState(withPhoto);
+  // `withPhoto` endi galereyaga ta'sir qilmaydi: suratli guruh doim namunaviy
+  // surat bilan ko'rsatiladi (shablon qanday ko'rinishini bilish uchun).
+  void withPhoto;
   const [pal, setPal] = useState<ResumePaletteId>(palette);
 
   return (
@@ -128,44 +136,51 @@ export function ResumeTemplateDialog({
       >
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-[15px] font-semibold">Shablon tanlang</h2>
-          <div className="flex flex-wrap items-center gap-3">
-            <label className="flex items-center gap-1.5 text-[12px]">
-              <input type="checkbox" checked={photo} onChange={(e) => setPhoto(e.target.checked)} />
-              Suratli
-            </label>
-            <span className="flex items-center gap-1" data-palettes>
-              {RESUME_PALETTE_IDS.map((p) => (
+          <span className="flex items-center gap-1" data-palettes>
+            {RESUME_PALETTE_IDS.map((p) => (
+              <button
+                key={p}
+                type="button"
+                aria-label={RESUME_PALETTES[p].title}
+                aria-pressed={p === pal}
+                onClick={() => setPal(p)}
+                className={cn("size-5 rounded-full border-2", p === pal ? "border-foreground" : "border-transparent")}
+                style={{ background: `#${RESUME_PALETTES[p].accent}` }}
+              />
+            ))}
+          </span>
+        </div>
+        {/*
+         * Ikki guruh (AUDIT-16): SURATSIZ (ATS va rasmiy hujjat uchun) va
+         * SURATLI. Guruh — shablonning o'zgarmas xususiyati: suratsiz
+         * shablon yuklangan suratni ham chizmaydi, shuning uchun eski
+         * «Suratli» tumbleri olib tashlandi — u faqat chalg'itardi.
+         */}
+        {GROUPS.map((g) => (
+          <section key={g.id} className="mb-4" data-template-group={g.id}>
+            <h3 className="mb-2 text-[12.5px] font-semibold">
+              {g.title} <span className="text-muted-foreground font-normal">· {g.ids.length} ta · {g.hint}</span>
+            </h3>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {g.ids.map((id) => (
                 <button
-                  key={p}
+                  key={id}
                   type="button"
-                  aria-label={RESUME_PALETTES[p].title}
-                  aria-pressed={p === pal}
-                  onClick={() => setPal(p)}
-                  className={cn("size-5 rounded-full border-2", p === pal ? "border-foreground" : "border-transparent")}
-                  style={{ background: `#${RESUME_PALETTES[p].accent}` }}
-                />
+                  data-template-card={id}
+                  onClick={() => onPick(id, pal)}
+                  className={cn(
+                    "flex flex-col items-center gap-1.5 rounded-xl border p-2 transition-colors",
+                    id === template ? "border-primary bg-primary/5" : "hover:bg-muted",
+                  )}
+                >
+                  <ResumeThumb template={id} palette={pal} withPhoto />
+                  <span className="text-[12px] font-medium">{RESUME_TEMPLATES[id].title}</span>
+                  <span className="text-muted-foreground text-[10.5px]">{RESUME_TEMPLATES[id].hint}</span>
+                </button>
               ))}
-            </span>
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          {RESUME_TEMPLATE_IDS.map((id) => (
-            <button
-              key={id}
-              type="button"
-              data-template-card={id}
-              onClick={() => onPick(id, pal)}
-              className={cn(
-                "flex flex-col items-center gap-1.5 rounded-xl border p-2 transition-colors",
-                id === template ? "border-primary bg-primary/5" : "hover:bg-muted",
-              )}
-            >
-              <ResumeThumb template={id} palette={pal} withPhoto={photo} />
-              <span className="text-[12px] font-medium">{RESUME_TEMPLATES[id].title}</span>
-              <span className="text-muted-foreground text-[10.5px]">{RESUME_TEMPLATES[id].hint}</span>
-            </button>
-          ))}
-        </div>
+            </div>
+          </section>
+        ))}
       </div>
     </div>
   );
