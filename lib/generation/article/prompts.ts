@@ -111,7 +111,8 @@ export function articleSystemPrompt(ctx: ArticleContext): string {
     `RULES (strict):`,
     `1. CITATIONS: cite ONLY the sources listed under SOURCES, by their ID in square brackets: [W2741809807], several: [W2741809807; W4385], with a page locator: ${locatorExample(lang)}. Never cite by number, author name or year alone. NEVER invent a source, DOI, author, journal or year. A claim with no matching source is written WITHOUT a citation. A citation ID not in SOURCES will be deleted automatically.`,
     `2. NUMBERS: every statistic, percentage, sample size (n=), p-value or year of an event must come either from a cited SOURCE (cite it in the same sentence) or from USER FACTS. Do not invent survey results, experiment outcomes or figures. If you have no number, describe qualitatively.`,
-    `3. USER FACTS are the author's own results — reproduce every number, unit, name and date VERBATIM; never alter, round or contradict them; do not add results the author did not report.`,
+    // Jonli sinov: fakt jumlasi 4 bo‘limda so‘zma-so‘z takrorlangan — to‘liq bayon bir joyda, qolganida qisqa havola.
+    `3. USER FACTS are the author's own results — reproduce every number, unit, name and date VERBATIM; never alter, round or contradict them; do not add results the author did not report. Report them in full once (Results/main section); in other sections refer to them briefly instead of re-quoting the whole passage.`,
     `4. NO FILLER: do not use empty openers such as ${FILLER_PHRASES.slice(0, 4).map((p) => `«${p}»`).join(", ")}, «${FILLER_PHRASES[8]}», «${FILLER_PHRASES[12]}», «${FILLER_PHRASES[16]}». Every paragraph must carry a specific claim, mechanism, comparison or result.`,
     `5. Style: formal academic register, third person, precise terminology of the field; no motivational or generic sentences; do not repeat the section title inside the text; do not write chapter numbers («I BOB»).`,
     `6. Output: return ONLY the JSON requested — no markdown fences, no commentary.`,
@@ -181,7 +182,8 @@ export function sectionPrompt(ctx: ArticleContext, ask: SectionAsk): string {
   const lines = [
     `Write the section «${plan.title}» (id ${plan.id}) of the article. Do not repeat the title in the text.`,
     `Plan for this section: ${plan.brief}`,
-    `Length: about ${plan.words} words (${Math.max(2, Math.round(plan.words / 110))} or more full paragraphs of 80–130 words). Stay strictly within this section's scope; other sections are written separately.`,
+    // Jonli sinov: JSON rejimida model ~45% hajm beradi — paragraf soni va pastki chegara aniq aytiladi.
+    `Length: about ${plan.words} words — write ${Math.max(2, Math.ceil(plan.words / 100))} full paragraphs of 90–130 words each (count words as whitespace-separated tokens; fewer than ${Math.round(plan.words * 0.8)} words is unacceptable). Stay strictly within this section's scope; other sections are written separately.`,
   ];
   if (ctx.type.wordRange && ctx.type.skeleton.length === 1) {
     const [lo, hi] = ctx.type.wordRange;
@@ -211,11 +213,16 @@ export function sectionPrompt(ctx: ArticleContext, ask: SectionAsk): string {
   return lines.join("\n");
 }
 
-/** «Kengaytir» — hajm yetmasa bir marta. */
-export function expandPrompt(ctx: ArticleContext, plan: SectionPlan, have: number, need: number): string {
+/**
+ * «Kengaytir» — hajm yetmasa bir marta. MAVJUD matn promptga kiradi:
+ * jonli sinovda usiz model «Mazkur tadqiqotning maqsadi…» kabi
+ * paragraflarni qayta yozib, bo'lim ikki marta takrorlangan edi.
+ */
+export function expandPrompt(ctx: ArticleContext, plan: SectionPlan, have: number, need: number, existing: string): string {
   return [
-    `The section «${plan.title}» currently has ${have} words; it needs about ${need} more. Write ADDITIONAL paragraphs for the same section: new specific points (a mechanism, a comparison, a limitation, a counter-example) — do not repeat or summarise what is already written.`,
+    `The section «${plan.title}» currently has ${have} words; it needs about ${need} more (${Math.max(2, Math.ceil(need / 100))} paragraphs of 90–130 words). Write ADDITIONAL paragraphs for the same section: NEW specific points only (a mechanism, a comparison, a limitation, a counter-example, an implication) — do not repeat, rephrase or summarise anything from ALREADY WRITTEN.`,
     `Section plan: ${plan.brief}`,
+    `ALREADY WRITTEN (for reference — do not repeat):\n${existing.slice(0, 6000)}`,
     ctx.refs.length ? `SOURCES (same rules — cite by ID only):\n${ctx.refs.map((r) => formatRefLine(r)).join("\n")}` : `SOURCES: none — no citations.`,
     `Return JSON: {"blocks":[{"kind":"p","text":"…"}]}`,
   ].join("\n");
@@ -253,7 +260,8 @@ export function abstractPrompt(ctx: ArticleContext, lang: string, sectionSummari
   const L = articleLabels(lang);
   const structured = Boolean(ctx.type.structuredAbstract);
   const lines = [
-    `Write the abstract in ${langInfo(lang).name}: ${minW}–${maxW} words in total; aim, method, main result (with the author's numbers if any), conclusion/significance.`,
+    // Jonli sinov: «150–250» so‘ralganda 132–147 chiqdi — o‘rtaga mo‘ljal, pastki chegara qat’iy.
+    `Write the abstract in ${langInfo(lang).name}: aim for about ${Math.round((minW + maxW) / 2)} words, never fewer than ${minW} and never more than ${maxW} (whitespace-separated words); aim, method, main result (with the author's numbers if any), conclusion/significance.`,
     `Then ${minK}–${maxK} keywords in ${langInfo(lang).name} (lowercase unless proper nouns; no duplicates; 1–3 words each).`,
     `Section summaries of the written article (the abstract must reflect THIS content):`,
     sectionSummaries,

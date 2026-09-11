@@ -127,11 +127,11 @@ test("annotatsiya prompti: o'z tili birinchi qatorda, MUSTAQIL (tarjima emas), s
   assert.match(sysRu.split("\n")[0], /Russian/);
   assert.match(sysRu, /INDEPENDENTLY/);
   const p = abstractPrompt(ctx, "en", "• Kirish: …");
-  assert.match(p, /150–250 words/);
+  assert.match(p, /about 200 words, never fewer than 150 and never more than 250/);
   assert.match(p, /5–12 keywords/);
   assert.match(p, /\{"text":"…","keywords":\["…"\]\}/);
   const structured = abstractPrompt(ctxOf({ articleType: "review_systematic", pubProfile: "apa" }), "en", "…");
   assert.match(structured, /"background":"…","methods":"…","results":"…","conclusions":"…"/);
-  assert.match(structured, /150–250 words/);
+  assert.match(structured, /never fewer than 150 and never more than 250/);
   assert.match(structured, /4–6 keywords/);
 });

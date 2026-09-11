@@ -667,7 +667,8 @@ async function writeSection(ctx: ArticleContext, plan: SectionPlan, ask: Section
   // Hajm yetmasa — bir marta «kengaytir» (faqat bet bilan o'lchanadigan turlar).
   if (!wordRange && guarded.report.words < plan.words * EXPAND_BELOW && remainingMs(deadline) > 25_000) {
     const need = plan.words - guarded.report.words;
-    const raw = await call("writer", system, expandPrompt(ctx, plan, guarded.report.words, need), { maxTokens: Math.min(6000, Math.round(need * 2.4) + 500), timeoutMs: sectionTimeout(need, deadline) });
+    const existing = out.blocks.map((b) => b.text).join("\n\n");
+    const raw = await call("writer", system, expandPrompt(ctx, plan, guarded.report.words, need, existing), { maxTokens: Math.min(6000, Math.round(need * 2.4) + 500), timeoutMs: sectionTimeout(need, deadline) });
     const extra = raw ? blocksFromLlm(parseLlmObject<SectionJson>(raw)?.blocks, raw) : [];
     if (extra.length) {
       const g2 = guardSection(extra, gopts);

@@ -168,18 +168,21 @@ export function parseSelection(text: string | undefined, candidates: Map<string,
 }
 
 /**
- * Model tanlamasa/kam tanlasa — deterministik to'ldirish: iqtibos soni
- * bo'yicha (OpenAlex `cited_by_count`), oxirgi yillar ustun. Model
- * tanlovi HAM shu ro'yxatdan — ya'ni «tanlash» hech qachon reyestrdan
- * tashqariga chiqmaydi.
+ * Nomzodlar tartibi — RELEVANTLIK bo'yicha: har so'rovning natijalari
+ * OpenAlex relevance tartibida keladi, ular aylanma (round-robin)
+ * aralashtiriladi — har so'rovning eng mos ishlari ro'yxat boshida.
+ *
+ * Ilgari to'ldirish `cited_by_count` bo'yicha edi: jonli sinovda
+ * «adaptiv o'qitish» maqolasiga eng ko'p iqtibos qilingan UMUMIY
+ * chuqur o'rganish sharhlari (CNN, uncertainty quantification) kirib
+ * qolgan — ular mavzuga mos emas, shunchaki mashhur. Model tanlovi ham
+ * to'ldirish ham shu ro'yxatdan — reyestrdan tashqariga chiqilmaydi.
  */
-export function rankCandidates(cands: OpenAlexWork[], recentFrom: number): OpenAlexWork[] {
-  return [...cands].sort((a, b) => {
-    const ra = (a.year ?? 0) >= recentFrom ? 1 : 0;
-    const rb = (b.year ?? 0) >= recentFrom ? 1 : 0;
-    if (ra !== rb) return rb - ra;
-    return (b.citedBy ?? 0) - (a.citedBy ?? 0);
-  });
+export function interleaveByRelevance<T>(perQuery: T[][]): T[] {
+  const out: T[] = [];
+  const max = Math.max(0, ...perQuery.map((l) => l.length));
+  for (let i = 0; i < max; i++) for (const list of perQuery) if (i < list.length) out.push(list[i]);
+  return out;
 }
 
 export async function collectReferences(input: ArticleInput, meta: DocMeta, opts: CollectOpts): Promise<CollectResult> {
@@ -215,7 +218,7 @@ export async function collectReferences(input: ArticleInput, meta: DocMeta, opts
     if (!works.length) stats.failedQueries++;
     return works;
   });
-  const flat = results.flat();
+  const flat = interleaveByRelevance(results);
   stats.found = flat.length;
 
   // Dedup: foydalanuvchi manbalari bilan ham (bir DOI ikki marta chiqmasin — `u1` ustun).
@@ -236,8 +239,7 @@ export async function collectReferences(input: ArticleInput, meta: DocMeta, opts
   const want = tiny
     ? { min: Math.min(2, candidates.length), max: Math.min(4, candidates.length) }
     : { min: Math.max(3, Math.min(profile.refsMin, candidates.length)), max: Math.min(profile.refsMax, candidates.length) };
-  const ranked = rankCandidates(candidates, year - profile.recentYearsMin);
-  const shortlist = ranked.slice(0, CANDIDATE_CAP);
+  const shortlist = candidates.slice(0, CANDIDATE_CAP);
   const byId = new Map<string, Reference>(shortlist.map((c) => [c.id.toUpperCase(), c]));
   let chosen: string[] = [];
   if (remainingMs(stageDeadline) > 5_000) {

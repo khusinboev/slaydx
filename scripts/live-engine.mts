@@ -34,6 +34,7 @@ import { pdfAvailable, toPdf } from "../lib/server/pdf.ts";
 import { TOOL_BY_ID } from "../lib/tools.ts";
 import type { AcademicDoc, BuiltFile } from "../lib/generation/types.ts";
 import { verifyCitations } from "../lib/generation/research/verify.ts";
+import { factNumbers } from "../lib/generation/article/guard.ts";
 import { PUBLICATION_PROFILES, isPublicationProfileId } from "../lib/generation/article/profiles.ts";
 import { isArticleTypeId } from "../lib/generation/article/types-registry.ts";
 import type { ArticleTypeId, PublicationProfileId } from "../lib/generation/article/types.ts";
@@ -713,7 +714,14 @@ function articleChecks(f: BuiltFile, pages: number | null, o: { pagesMin: number
   const [minK, maxK] = profile.keywords;
   const kw = a ? (["uz", "ru", "en"] as const).map((l) => a.keywords[l]?.length ?? 0) : [];
   const wantFigures = o.figures !== false && (f.doc.meta.figureCount ?? 0) > 0;
-  const unsourced = f.doc.sections.flatMap((s) => s.blocks.filter((b) => (b.kind === "p" || b.kind === "li") && /\d+[.,]?\d*\s*%/.test(b.text) && !/\[(W\d+|u\d+)/.test(b.text)).map((b) => b.text.match(/\d+[.,]?\d*\s*%/)?.[0] ?? ""));
+  // Foydalanuvchi faktidagi foiz (18.4%) manbasiz emas — `guard.ts` bilan bir xil qoida.
+  const facts = new Set(factNumbers(a?.userFacts));
+  const unsourced = f.doc.sections.flatMap((s) =>
+    s.blocks
+      .filter((b) => (b.kind === "p" || b.kind === "li") && !/\[(W\d+|u\d+)/.test(b.text))
+      .flatMap((b) => (b.text.match(/\d+[.,]?\d*\s*%/g) ?? []).map((p) => p.replace(/\s+/g, "").replace(",", ".")))
+      .filter((p) => !facts.has(p)),
+  );
   return [
     ok("doc.article bor", Boolean(a), a ? `${a.type}/${a.profile}/${a.cite}` : "yo'q"),
     ok("titul/mundarija yo'q", f.doc.titlePage === false && f.doc.toc === false, `titlePage=${f.doc.titlePage} toc=${f.doc.toc}`),
