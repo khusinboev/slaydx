@@ -357,14 +357,18 @@ export type BuiltFile = {
    */
   delivered?: Delivered;
   /**
-   * LLM sarfi (Maqola 2, AUDIT-17) — `CostMeter.toJson()`:
-   * `{provider, model, inputTokens, outputTokens, calls, usd}`. Worker
-   * `generations.cost_json` ga yozadi (WP4); `scripts/cost-report.mts`
-   * vosita bo'yicha tannarx vs narx (marja) ni shundan hisoblaydi. Hozircha
-   * faqat maqola dvigateli to'ldiradi.
+   * LLM sarf telemetriyasi (Maqola 2 / AUDIT-17, WP4 «plumbing») —
+   * `lib/generation/llm-roles.ts CostMeter.toJson()` bilan BIR XIL
+   * shakl (dvigatel shu yerga import qilmasdan mos keladi, aylanma
+   * import bo'lmasin). Faqat maqola dvigateli (WP1) to'ldiradi; boshqa
+   * vositalarda `undefined` — worker `file.cost` bo'lgandagina
+   * `generations.cost_json`ga yozadi (`lib/server/worker.ts`,
+   * `lib/server/jobs.ts setCost`). Kredit/`price` ga TEGMAYDI.
    */
-  cost?: { provider: string; model: string; inputTokens: number; outputTokens: number; calls: number; usd: number };
+  cost?: CostJson;
 };
+
+export type CostJson = { provider: string; model: string; inputTokens: number; outputTokens: number; calls: number; usd: number };
 
 export type BuildCtx = {
   tool: ToolConfig;

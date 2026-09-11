@@ -593,15 +593,37 @@ export function photoUrl(assetId: string): string {
   return `/api/uploads/photo/${assetId}`;
 }
 
-/** Rezyume formasi qoralamasi (Rezyume 2, 1-band). */
+/**
+ * Umumiy forma qoralamasi (Maqola 2 / AUDIT-17, WP4) — `useFormDraft(toolId)`.
+ *
+ * Ilgari faqat rezyume uchun bor edi (`/api/resume/draft`); endi har
+ * vosita `/api/forms/{toolId}/draft` orqali xuddi shu jadvaldan
+ * (`form_drafts`) o'qiydi/yozadi — server tomoni `lib/server/form-draft.ts`.
+ */
+export function getDraft(toolId: string) {
+  return request<{ draft: { data: FormValues; updatedAt: string } | null }>(`/api/forms/${toolId}/draft`);
+}
+export function putDraft(toolId: string, data: FormValues) {
+  return request<{ updatedAt: string }>(`/api/forms/${toolId}/draft`, { method: "PUT", body: JSON.stringify({ data }) });
+}
+export function clearDraft(toolId: string) {
+  return request<{ ok: true }>(`/api/forms/${toolId}/draft`, { method: "DELETE" });
+}
+
+/**
+ * Eski rezyumega xos nomlar — orqaga moslik uchun qoladi (ichkarida
+ * generik funksiyalarni chaqiradi, ikkinchi fetch o'ramini takrorlamaydi).
+ * Hech kim import qilmasa ham, tashqi/eski kod ular bilan ishlashda
+ * davom etadi.
+ */
 export function fetchResumeDraft() {
-  return request<{ draft: { data: FormValues; updatedAt: string } | null }>("/api/resume/draft");
+  return getDraft("resume");
 }
 export function saveResumeDraft(data: FormValues) {
-  return request<{ updatedAt: string }>("/api/resume/draft", { method: "PUT", body: JSON.stringify({ data }) });
+  return putDraft("resume", data);
 }
 export function clearResumeDraft() {
-  return request<{ ok: true }>("/api/resume/draft", { method: "DELETE" });
+  return clearDraft("resume");
 }
 
 /**

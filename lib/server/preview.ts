@@ -41,6 +41,28 @@ export function buildPreview(doc: AcademicDoc | null): GenerationPreview | null 
     }
   }
 
+  /*
+   * Maqola kartochkasi (Maqola 2 / AUDIT-17, WP4): generik matn
+   * ajratgichi (pastda) `sections` ichidagi `figure`/`tableRef`/`formula`
+   * bloklarini (matn emas, `text` — sarlavha) va `[W…]` iqtibos
+   * markerlarini noto'g'ri chiqarardi. Shuning uchun maqola uchun
+   * ALOHIDA: sarlavha (mavzu) + birinchi annotatsiyaning 160 belgisi,
+   * rasm — birinchi topilgan sxema (aktiv URL, `extractAssets` dan
+   * keyin). `thumb` yo'li (LibreOffice birinchi sahifa) buni sinamaydi.
+   */
+  if (doc.article) {
+    const topic = doc.meta?.topic?.trim();
+    const lang = doc.article.language;
+    const abstract = doc.abstracts?.find((a) => a.lang === lang) ?? doc.abstracts?.[0];
+    const annotation = abstract?.text?.trim().slice(0, 160);
+    const lines = [topic, annotation].filter((s): s is string => Boolean(s));
+    const image = doc.article.figures.find((f) => f.url)?.url;
+    if (image || lines.length) {
+      return { ...(image ? { url: image } : {}), ...(lines.length ? { lines } : {}) };
+    }
+    return null;
+  }
+
   const url =
     doc.images?.find((im) => im.url)?.url || doc.slides?.find((s) => s.image?.url)?.image?.url;
   const lines = (doc.sections ?? [])
