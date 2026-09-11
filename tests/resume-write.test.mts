@@ -112,6 +112,21 @@ test("prompt VERBATIM va «uydirmang» qoidalarini o'z ichiga oladi", () => {
   assert.match(p, /do not reorder the experience or education arrays by date/i, "tartiblash — ilovaning ishi");
 });
 
+test("AUDIT-16 prompt: ta'lim sxemasida faqat «field», faktlarda daraja YORLIG'I chiqish tilida", () => {
+  const p = prompt();
+  assert.match(p, /"education":\[\{"id":"","field":""\}\]/, "javob sxemasi — faqat id va yo'nalish");
+  assert.doesNotMatch(p, /"education":\[\{"id":"","degree":""\}\]/, "eski sxema (daraja model javobida) qolmasligi kerak");
+  assert.match(p, /For education return ONLY "field"/);
+  assert.match(p, /the academic degree, the certificate and the language rows are NOT yours to change/);
+  // Faktlar blokida daraja ID EMAS, chiqish tilidagi yorliq: model kontekstni tushunadi, lekin qaytarmaydi.
+  assert.match(p, /"degree":"Bakalavr"/, "o'zbekcha chiqishda o'zbekcha yorliq");
+  assert.doesNotMatch(p, /"degree":"bakalavr"/, "ID promptga tushmasligi kerak");
+  const en = prompt({ language: "en" });
+  assert.match(en, /"degree":"Bachelor’s degree"/, "inglizcha chiqishda inglizcha yorliq");
+  assert.match(en, /"kind":"university"/, "tur ham faktlarda");
+  assert.match(en, /"field":"Moliya"/, "yo'nalish kirishdan — model tarjima qiladi");
+});
+
 test("id lar promptda: model qaysi qatorga javob berishini biladi", () => {
   const p = prompt();
   assert.match(p, /"id":"e1"/);
@@ -431,6 +446,10 @@ test("parseResumeLlm: satr bandlar, yetishmagan id va bo'sh javob", () => {
   assert.deepEqual(out.experience[0].bullets, [{ text: "a" }, { text: "b", ai: true }]);
   assert.deepEqual(out.skills, [{ text: "Excel" }, { text: "SQL", ai: true }]);
   assert.equal(out.headline, "Moliya tahlilchisi", "headline bo'sh bo'lsa kirishdan");
+  // AUDIT-16: model eski sxemada `degree`/`institution` qaytarsa ham ular O'QILMAYDI —
+  // ta'limdan faqat `id` va `field` olinadi (daraja IDsi kirishdan, yorlig'i koddan).
+  const edu = parseResumeLlm(JSON.stringify({ summary: "S", education: [{ id: "d1", degree: "PhD", institution: "MIT", field: "Finance" }] }), i, m)!;
+  assert.deepEqual(edu.education, [{ id: "d1", field: "Finance" }], "faqat id + field");
   assert.equal(parseResumeLlm("shunchaki matn", i, m), null);
   assert.equal(parseResumeLlm(null, i, m), null);
   assert.equal(parseResumeLlm("[]", i, m), null, "massiv — obyekt emas");

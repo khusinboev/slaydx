@@ -27,6 +27,7 @@ import {
   type ResumeModel,
 } from "../lib/generation/resume/model.ts";
 import { RESUME_TEMPLATES } from "../lib/generation/resume/templates.ts";
+import { planResume } from "../lib/generation/resume/layout.ts";
 import { SAMPLE_RESUME } from "../lib/generation/resume/samples.ts";
 
 /**
@@ -215,6 +216,40 @@ test("educationTitle: «daraja, yo'nalish» — maktabda bo'sh", () => {
   assert.equal(educationTitle({ ...row, field: "" }, "uz"), "Bakalavr", "yo'nalish bo'lmasa faqat daraja");
   assert.equal(educationTitle({ ...row, kind: "course", degree: "", field: "Python asoslari" }, "uz"), "Python asoslari");
   assert.equal(educationTitle({ ...row, kind: "school", degree: "", field: "" }, "uz"), "", "maktabda sarlavha bo'sh");
+});
+
+test("maket: ta'lim qatori — «Daraja, yo'nalish» / muassasa; maktabda muassasa sarlavhaga ko'tariladi", () => {
+  /*
+   * `sectionItems` education bloki (`layout.ts`) — DOCX ham, ko'ruvchi
+   * ham shu itemni chizadi. Maktab satrida sarlavha bo'sh qolsa ikkalasi
+   * ham qalin satrni tashlab, maktab nomini mayda kulrang matnga tushirib
+   * yuborardi; tahrir yo'li esa `degree` ga qarab qolardi.
+   */
+  const m: ResumeModel = {
+    ...emptyResume("en"),
+    identity: { fullName: "A", headline: "B" },
+    education: [
+      { id: "d1", kind: "university", institution: "TDIU", field: "Finance", degree: "bakalavr", start: "2015", end: "2019" },
+      { id: "d2", kind: "school", institution: "School No. 15", field: "", degree: "", start: "2004", end: "2015" },
+      { id: "d3", kind: "course", institution: "IT Park", field: "Python", degree: "", start: "2023", end: "now" },
+    ],
+  };
+  const rows = planResume(m)
+    .zones.flatMap((z) => z.items)
+    .filter((it): it is Extract<typeof it, { k: "row" }> => it.k === "row" && it.section === "education");
+  assert.equal(rows.length, 3);
+  // Maket model tartibini saqlaydi (tartiblash `draftModel` da, `sortDesc`).
+  assert.deepEqual(rows.map((r) => r.title), ["Bachelor’s degree, Finance", "School No. 15", "Python"]);
+  assert.deepEqual(rows.map((r) => r.sub), ["TDIU", "", "IT Park"]);
+  assert.equal(rows[0].titlePath, "education.0.degree");
+  assert.equal(rows[0].subPath, "education.0.institution");
+  assert.equal(rows[1].titlePath, "education.1.institution", "maktabda sarlavha — muassasa, tahrir yo'li ham shunga");
+  assert.equal(rows[1].period, "2004 – 2015", "faqat yil");
+  assert.equal(rows[2].period, "2023 – present");
+  // Sintez bo'lim ham shu sarlavhani ishlatadi (bosh sahifa kartasi / eski ko'ruvchi).
+  const edu = resumeSections(m).find((s) => s.id === "edu")!;
+  assert.match(edu.blocks[0].text, /Bachelor’s degree, Finance — TDIU/);
+  assert.match(edu.blocks[1].text, /2004 – 2015 — School No\. 15/);
 });
 
 test("sertifikat yili ham tanlagichdan: erkin matn tozalanadi", () => {

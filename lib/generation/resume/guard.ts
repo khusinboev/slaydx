@@ -394,7 +394,15 @@ export function guardResume(
      * and Credit» tarjimasi TALAB qilinadi (18 tilli chiqish va'dasi),
      * shuning uchun tashkilot tekshiruvi bu yerda ham qo'llanmaydi.
      * Muassasa nomi va daraja model javobiga umuman kirmaydi.
+     *
+     * Lekin QAYTA YOZISH ≠ YARATISH: kirishda yo'nalish bo'lmasa (maktab,
+     * yoki foydalanuvchi bo'sh qoldirgan), model «Umumiy o'rta ta'lim»
+     * deb to'ldirsa ham u tashlanadi — bu 1-qoida (uydirma fakt).
      */
+    if (!src.field) {
+      if (clip(row.field, RESUME_LIMITS.fieldChars)) report.revertedFields++;
+      return { id: src.id, field: "" };
+    }
     const field = clean(clip(row.field, RESUME_LIMITS.fieldChars)) || src.field;
     return { id: src.id, field };
   });

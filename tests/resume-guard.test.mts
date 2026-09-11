@@ -77,6 +77,34 @@ test("1: noma'lum id tashlanadi, yo'qolgan id kirish bandlari bilan tiklanadi", 
   assert.equal(e.out.education[0].field, "Moliya", "kirishdagi yo‘nalish tiklandi");
 });
 
+test("AUDIT-16: ta'limda model FAQAT yo'nalishni qayta yozadi — yaratmaydi, darajaga tegmaydi", () => {
+  // Maktab satri: kirishda yo'nalish YO'Q — model to'ldirsa ham tashlanadi.
+  const schoolInput = resumeInputFromValues({
+    ...VALUES,
+    education: JSON.stringify([
+      { id: "d1", kind: "university", institution: "TDIU", field: "Moliya", degree: "bakalavr", start: "2015", end: "2019" },
+      { id: "d2", kind: "school", institution: "15-maktab", start: "2004", end: "2015" },
+    ]),
+  });
+  const r = guardResume(
+    schoolInput,
+    out({
+      education: [
+        { id: "d1", field: "Finance" },
+        { id: "d2", field: "General secondary education" },
+      ],
+    }),
+    { enrich: true, language: "en" },
+  );
+  assert.equal(r.out.education[0].field, "Finance", "bor yo'nalish qayta yoziladi (tarjima)");
+  assert.equal(r.out.education[1].field, "", "yo'q yo'nalish YARATILMAYDI");
+  assert.equal(r.report.revertedFields, 1, "uydirma yo'nalish hisobotda ko'rinadi");
+  // Model eski shaklda `degree` qaytarsa — u umuman o'qilmaydi.
+  const legacy = run(out({ education: [{ id: "d1", field: "", degree: "PhD" } as unknown as ResumeLlmOut["education"][number]] }));
+  assert.equal(legacy.out.education[0].field, "Moliya", "bo'sh yo'nalish — kirishdagi qoladi");
+  assert.ok(!("degree" in legacy.out.education[0]), "daraja model javobidan olinmaydi");
+});
+
 // ───────────────────────────────────────────── 2: yillar
 
 test("2: kirishda yo'q YIL har matndan olib tashlanadi, kirishdagi yil qoladi", () => {
