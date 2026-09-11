@@ -428,6 +428,17 @@ test("«Tuzatish» avval saqlanmagan navbatni yuboradi (PATCH), keyin rewrite ya
   assert.equal(s.rewrites[0].body?.baseVersion, 2, "rewrite eski versiya bilan ketdi");
   assert.equal(s.doc.sections[2].title, "NATIJALAR");
   assert.match(s.doc.sections[0].blocks[0].text, /^Qayta yozilgan/);
+  /*
+   * Server tahriridan keyin UNDO STEKI tozalangan bo'lishi shart: aks holda
+   * Ctrl+Z saqlangan sarlavha tahririni «qaytarib», yangi hujjat ustiga
+   * eski matn bilan op qo'yardi (navbat 1 ga oshardi).
+   */
+  await act(async () => {
+    fireEvent.keyDown(window, { key: "z", ctrlKey: true });
+  });
+  await pause(10);
+  assert.ok(!saveBtn(), "tuzatishdan keyin undo steki tozalanmadi — Ctrl+Z op yaratdi");
+  assert.ok(pageHas(/NATIJALAR/), "Ctrl+Z saqlangan tahrirni qaytarib yubordi");
 });
 
 test("«Tuzatish» 409 — xato ko'rsatiladi va hujjat serverdan qayta yuklanadi", async () => {

@@ -260,6 +260,9 @@ function mockDb(t: TestContext, rows: { forEdit?: Record<string, unknown> | null
     if (/live_json_out/.test(q)) out = rows.detail ? [rows.detail] : [];
     else if (/^SELECT doc_json, doc_version/.test(q)) out = rows.forEdit ? [rows.forEdit] : [];
     else if (/UPDATE generations SET doc_json/.test(q)) out = rows.updateDoc ? [rows.updateDoc] : [];
+    // Hamyon so'rovi (kredit yechish MUTATSIYASI uchun): to'ldirilgan hamyon —
+    // yechish "yo'l topilmadi" bilan emas, pastdagi «kredit SQL yo'q» assertion bilan qizarsin.
+    else if (/FROM users/.test(q)) out = [{ points: "100000", quota: "0", balance: "0" }];
     return { rows: out, rowCount: out.length };
   };
   const p = pool();
