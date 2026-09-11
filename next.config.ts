@@ -69,7 +69,9 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["unpdf", "pg"],
+  // `sharp` — Maqola 2 sxemalari (SVG → PNG 300 dpi) worker/server tomonda;
+  // Next uni bundlega tortmasin (nativ modul).
+  serverExternalPackages: ["unpdf", "pg", "sharp"],
   poweredByHeader: false,
   /*
    * Next rasm optimizatorini o'chiramiz.

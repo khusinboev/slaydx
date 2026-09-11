@@ -8,6 +8,7 @@ import type { SlideImageStyle, SlideTextVolume } from "./slide-params";
 import type { SlidePurpose } from "./slide-purpose";
 import type { SlideResearch } from "./slide-research";
 import type { ResumeModel } from "./resume/model";
+import type { ArticleModel, ArticleTypeId, CiteStyle, PublicationProfileId } from "./article/types";
 import type { ResumePaletteId, ResumeTemplateId } from "./resume/templates";
 
 export type GenImage = {
@@ -33,7 +34,25 @@ export type Block =
   | { kind: "h3"; text: string }
   | { kind: "li"; text: string }
   | { kind: "quote"; text: string }
-  | { kind: "code"; text: string; caption?: string; lang?: string };
+  | { kind: "code"; text: string; caption?: string; lang?: string }
+  /*
+   * ── Maqola 2 (AUDIT-17) bloklari. Rasm/formula/jadval matnning O'Z
+   * joyida turadi — jurnal maqolasida vizual «havola qilingan joydan
+   * keyin» keladi, hujjat oxirida emas. Raqamlash (1-rasm, (1)) bu yerda
+   * YO'Q: uni `article/layout.ts planArticle` beradi — DOCX va ko'ruvchi
+   * ikkalasi undan o'qiydi («ko'rdim = oldim»).
+   */
+  /*
+   * Uchalasida ham `text` BOR — «har blokda matn» invarianti saqlanadi:
+   * mavjud kod (`b.text` — qidiruv, karta, hajm, ko'ruvchilar) o'zgarmaydi.
+   * Rasm/jadvalda `text` = sarlavha (caption), formulada = LaTeX manbasi.
+   */
+  /** Sxema/diagramma — `doc.article.figures` reyestridagi rasm; `text` — sarlavhasi. */
+  | { kind: "figure"; text: string; figureId: string }
+  /** Formula — `text` = LaTeX (cheklangan to'plam); DOCX da OMML, ko'ruvchida KaTeX SSR. */
+  | { kind: "formula"; text: string; display?: boolean }
+  /** Jadval matnning SHU joyida (`doc.tables[].id`); `text` — sarlavhasi. */
+  | { kind: "tableRef"; text: string; tableId: string };
 
 export type DocSection = {
   id: string;
@@ -42,6 +61,8 @@ export type DocSection = {
 };
 
 export type DocTable = {
+  /** Maqola 2: `tableRef` bloki va tahrir oplari uchun barqaror id (eski hujjatlarda yo'q). */
+  id?: string;
   caption?: string;
   headers: string[];
   rows: string[][];
@@ -160,6 +181,23 @@ export type DocMeta = {
   photoAssetId: string;
   /** AI boyitish yoqilganmi (standart — yoqilgan). */
   enrich: boolean;
+  /*
+   * ── Maqola parametrlari (Maqola 2, AUDIT-17) — `lib/generation/article-params.ts`
+   * reyestri. Mualliflar/manbalar/kalit so'zlar `DocMeta` ga TUSHMAYDI
+   * (`ArticleInput`, `article/input.ts`).
+   */
+  /** Maqola turi (12 ta skelet, `article/types-registry.ts`); berilmasa `imrad_oak`. */
+  articleType?: ArticleTypeId;
+  /** Nashr profili (5 ta); berilmasa turning standarti. */
+  pubProfile?: PublicationProfileId;
+  /** Iqtibos uslubi — profil standartini bekor qiladi. */
+  citeStyle?: CiteStyle;
+  /** UDK (ixtiyoriy, ≤40 belgi). */
+  udk: string;
+  /** Sxema/diagramma soni (0–4). */
+  figureCount: number;
+  /** Internetdan (OpenAlex/Crossref) manba qidirish. */
+  research: boolean;
   /**
    * Hujjat YARATILGAN yil — titul va «N–N+1 o'quv yili» shu yerdan.
    *
@@ -284,6 +322,14 @@ export type AcademicDoc = {
    * `legacyResumeModel(doc)` bilan o'qiladi.
    */
   resume?: ResumeModel;
+  /**
+   * Maqola 2 (AUDIT-17): tur/profil, mualliflar, TEKSHIRILGAN manbalar,
+   * sxemalar, tayyorlik hisoboti. Matn `sections` da qoladi (oqadigan
+   * hujjat — `paginate.ts` va `render-docx` bloklari qayta ishlatiladi);
+   * `planArticle` tartib va raqamlashni beradi. Eski maqolalarda yo'q —
+   * `legacyArticleModel(doc)` bilan o'qiladi.
+   */
+  article?: ArticleModel;
   images?: GenImage[];
   imagePrompt?: string;
   imageScene?: string;

@@ -1,4 +1,7 @@
 import { defaultPages } from "../tools";
+import { ARTICLE_LIMITS, CITE_STYLES, type ArticleTypeId, type CiteStyle, type PublicationProfileId } from "./article/types";
+import { isArticleTypeId } from "./article/types-registry";
+import { isPublicationProfileId } from "./article/profiles";
 import type { FormValues, ToolConfig } from "../types";
 import { normalizeAudienceId } from "./slide-audience";
 import { isSlideBlockId, type SlideBlockId } from "./slide-blocks";
@@ -110,6 +113,10 @@ export function parseAuthorLine(raw: string): { name: string; course: string; gr
     .replace(/^[\s,;—–-]+/g, "")
     .trim();
   return { name: name || line, course, group };
+}
+
+function isCiteStyle(v: unknown): v is CiteStyle {
+  return typeof v === "string" && (CITE_STYLES as readonly string[]).includes(v);
 }
 
 export function extractMeta(tool: ToolConfig, values: FormValues): DocMeta {
@@ -243,6 +250,13 @@ export function extractMeta(tool: ToolConfig, values: FormValues): DocMeta {
     // Boyitish standart YOQILGAN: forma belgisini olib tashlagan
     // foydalanuvchi `false` yuboradi, yubormagan — eski xatti-harakat.
     enrich: values.enrich !== false,
+    // ── Maqola 2 (AUDIT-17). Reyestr: `article-params.ts`.
+    ...(isArticleTypeId(s(values, "articleType")) ? { articleType: s(values, "articleType") as ArticleTypeId } : {}),
+    ...(isPublicationProfileId(s(values, "pubProfile")) ? { pubProfile: s(values, "pubProfile") as PublicationProfileId } : {}),
+    ...(isCiteStyle(s(values, "citeStyle")) ? { citeStyle: s(values, "citeStyle") as CiteStyle } : {}),
+    udk: s(values, "udk").slice(0, ARTICLE_LIMITS.udkChars),
+    figureCount: Math.max(0, Math.min(ARTICLE_LIMITS.figures, Math.round(Number(values.figureCount ?? 2)) || 0)),
+    research: values.research !== false,
     design: s(values, "design", "iris"),
     // Yil SHU YERDA muzlaydi — `title-model.ts` uni `doc.meta` dan oladi,
     // `new Date()` dan emas. Aks holda ekran va fayl yil chegarasida ajralardi.
