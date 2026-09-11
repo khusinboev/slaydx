@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { cn } from "@/lib/cn";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Download, Trash2 } from "lucide-react";
 import * as api from "@/lib/api-client";
-import { ensureGenerationFresh } from "@/lib/api-edit";
+import { editErrorCode, editErrorText, ensureGenerationFresh, rewriteArticle } from "@/lib/api-edit";
+import type { ReviewCheck } from "@/lib/generation/article/types";
 import { useAppStore } from "@/lib/store";
 import { TOOL_BY_ID } from "@/lib/tools";
 import { useConfirmClick } from "../overlays/useConfirmClick";
@@ -45,6 +46,14 @@ export function ResultView({ id }: { id: string }) {
    * yerda ko'radi («ko'rdim = oldim»). Holatning o'zi `SlideViewer` da.
    */
   const [editState, setEditState] = useState<EditActionsState | null>(null);
+  /**
+   * «Tuzatish» (Maqola 2, WP7): hozir bajarilayotgan `fix.target`; panel
+   * tugmalarini o'chiradi. `genRef` — `onFix` ichida `await` dan keyin
+   * eng yangi versiyani o'qish uchun (holat yopilmasi eskirgan bo'ladi).
+   */
+  const [fixing, setFixing] = useState<string | null>(null);
+  const genRef = useRef<api.GenerationDetail | null>(null);
+  genRef.current = gen;
 
   useEffect(() => {
     if (!sessionChecked || !loggedIn) return;
@@ -117,6 +126,51 @@ export function ResultView({ id }: { id: string }) {
 
   // Ikki bosqichli tasdiq — tasodifiy bosishda hujjat yo'qolmasin.
   const del = useConfirmClick(() => void onDelete());
+
+  /** Ko'ruvchidan (tahrir) yoki serverdan kelgan yangi generatsiyani o'zlashtiradi. */
+  const adoptDetail = useCallback((g: unknown) => {
+    const merged = { ...(genRef.current as api.GenerationDetail), ...(g as api.GenerationDetail) };
+    genRef.current = merged;
+    setGen(merged);
+  }, []);
+
+  /*
+   * Tayyorlik hisobotidagi «Tuzatish» — `POST …/rewrite`.
+   *
+   * Avval ko'ruvchining SAQLANMAGAN navbati yuboriladi (`editState.save`):
+   * server tahriri versiyani oshiradi, keyin yuborilgan eski navbat 409
+   * olardi. Javobdagi generatsiya o'zlashtiriladi — `WordViewer`
+   * (`useArticleEdit`) yangi versiyani ko'rib hujjatni almashtiradi va
+   * steklarni tozalaydi. 409/`legacy` — hujjat serverdan qayta yuklanadi
+   * (`useDocEdit` naqshi). Kredit yechilmaydi.
+   */
+  const onFix = useCallback(
+    async (fix: NonNullable<ReviewCheck["fix"]>) => {
+      const cur = genRef.current;
+      if (!cur || fixing) return;
+      setFixing(fix.target);
+      setError(null);
+      try {
+        if (editState?.pending) await editState.save();
+        const base = genRef.current?.docVersion ?? cur.docVersion ?? 0;
+        const { generation } = await rewriteArticle(cur.id, base, fix);
+        adoptDetail(generation);
+      } catch (e) {
+        setError(editErrorText(e));
+        if (editErrorCode(e)) {
+          try {
+            const { generation } = await api.getGeneration(cur.id);
+            adoptDetail(generation);
+          } catch {
+            // Qayta yuklash ham yiqilsa — xato matni allaqachon ko'rsatilgan.
+          }
+        }
+      } finally {
+        setFixing(null);
+      }
+    },
+    [fixing, editState, adoptDetail],
+  );
 
   if (sessionChecked && !loggedIn) {
     return (
@@ -310,21 +364,21 @@ export function ResultView({ id }: { id: string }) {
              * Tayyorlik hisoboti (Maqola 2, WP5) — ko'ruvchi TEPASIDA,
              * yig'iladigan `<details open>`: ko'ruvchi o'z ichki scroll'i
              * bilan qoladi, panel esa `shrink-0` va o'z balandligi chegarasi
-             * bilan. «Tuzatish» tugmalari WP7 gacha o'chiq (`onFix` yo'q).
+             * bilan. «Tuzatish» — `onFix` → `POST …/rewrite` (WP7).
              */
             <details open className="no-print max-h-[45vh] shrink-0 overflow-y-auto border-b px-3 py-2 sm:px-4" data-article-review-panel>
               <summary className="cursor-pointer text-sm font-medium select-none">
                 Tayyorlik hisoboti · {gen.doc.article.review.score} ball
               </summary>
               <div className="mt-2">
-                <ArticleReviewPanel review={gen.doc.article.review} />
+                <ArticleReviewPanel review={gen.doc.article.review} onFix={(fix) => void onFix(fix)} fixing={fixing} />
               </div>
             </details>
           ) : null}
           <ArtifactViewer
             gen={toLegacyShape(gen)}
             detail={gen}
-            onDetail={(g) => setGen((prev) => ({ ...(prev as api.GenerationDetail), ...(g as api.GenerationDetail) }))}
+            onDetail={adoptDetail}
             onEditState={setEditState}
             pdf={Boolean(features?.pdf)}
           />

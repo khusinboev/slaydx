@@ -117,6 +117,8 @@ test("ResultView: article natijasida `doc.article.review` bo'lsa ko'ruvchi tepas
   const src = readFileSync(new URL("../../components/files/ResultView.tsx", import.meta.url), "utf8");
   assert.match(src, /gen\.type === "article" && gen\.doc\?\.article\?\.review \? \(/, "faqat maqola + hisobot bor");
   assert.match(src, /<details open[^>]*data-article-review-panel/, "yig'iladigan panel");
-  assert.match(src, /<ArticleReviewPanel review=\{gen\.doc\.article\.review\} \/>/, "panel ulanishi (onFix yo'q — WP7)");
+  // WP7: `onFix` → `rewriteArticle` (POST …/rewrite), `fixing` — yuklanish holati.
+  assert.match(src, /<ArticleReviewPanel review=\{gen\.doc\.article\.review\} onFix=\{[^}]+\} fixing=\{fixing\} \/>/, "panel ulanishi (onFix + fixing — WP7)");
+  assert.match(src, /rewriteArticle\(cur\.id, base, fix\)/, "«Tuzatish» rewrite marshrutiga bormaydi");
   assert.ok(src.indexOf("data-article-review-panel") < src.indexOf("<ArtifactViewer"), "panel ko'ruvchidan OLDIN");
 });
