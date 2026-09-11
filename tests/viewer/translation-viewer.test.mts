@@ -49,8 +49,14 @@ test("matn rejimi: ikki ustun juftlar, til chipi (aniqlangan → maqsad), uslub,
   assert.ok(html.includes("SLIDE 1") || html.includes("slide 1"), "ctx guruh yorlig'i");
   assert.ok(!html.includes('role="tablist"'), "matn rejimida tablar yo'q");
   assert.ok(html.includes("fotosintez → photosynthesis"), "glossariy");
-  // Ota konteyner `overflow-hidden` — ro'yxat o'z scroll qutisida (AUDIT-14: pastga scroll bo'lmasdi).
-  assert.match(html, /class="[^"]*overflow-y-auto[^"]*"[^>]*data-translation-scroll/, "scroll konteyneri");
+  /*
+   * AUDIT-16 §7: scroll endi SAHIFADA (`ResultView` oqim rejimi,
+   * `data-result-flow`) — ko'ruvchi ichida alohida scroll qutisi YO'Q,
+   * aks holda ikki qavatli scroll bo'lib, peshtoq qotib qolardi.
+   * (AUDIT-14 da ichki quti qo'shilgan edi — u endi ResultView'ga ko'chdi.)
+   */
+  assert.doesNotMatch(html, /class="[^"]*overflow-y-auto[^"]*"[^>]*data-translation-scroll/, "ichki scroll qutisi bo'lmasligi kerak");
+  assert.doesNotMatch(html, /class="[^"]*\bh-full\b[^"]*"[^>]*>\s*<div[^>]*data-translation-header/, "ko'ruvchi qat'iy balandlikka bog'lanmasin");
 });
 
 test("ogohlantirishlar: soni va matni; warningText kodlari o'zbekcha", () => {

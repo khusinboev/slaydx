@@ -50,8 +50,14 @@ export function TranslationViewer({ doc, gen, pdf = false }: { doc: AcademicDoc;
   const t = doc.translation;
   if (!t) return <WordViewer doc={doc} />;
   const isFile = t.sourceKind !== "text" && t.sourceKind !== "pdf";
+  /*
+   * Fayl rejimida sahifa OQIMDA (`ResultView` `data-result-flow`): ichki
+   * scroll qutisi yo'q, butun sahifa scroll bo'ladi — peshtoq ham yuqoriga
+   * chiqib ketadi, iframe esa ekran balandligini oladi. Matn rejimida (juftlar
+   * ro'yxati) ham xuddi shunday: ro'yxat sahifa bilan birga scroll bo'ladi.
+   */
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col gap-3">
+    <div className="flex flex-col gap-3">
       <Header t={t} />
       {isFile ? (
         <div role="tablist" aria-label="Ko‘rinish" className="flex gap-1">
@@ -69,8 +75,8 @@ export function TranslationViewer({ doc, gen, pdf = false }: { doc: AcademicDoc;
           ))}
         </div>
       ) : null}
-      {/* Ota konteyner (`ResultView`) `overflow-hidden` — scroll SHU YERDA, aks holda ro'yxat kesilib qoladi. */}
-      <div className="min-h-0 flex-1 overflow-y-auto" data-translation-scroll>
+      {/* Scroll — sahifada (`ResultView` oqim rejimi); bu quti faqat mazmunni o'raydi. */}
+      <div data-translation-scroll>
         {isFile && tab === "file" ? <FilePane t={t} gen={gen} pdf={pdf} /> : <Pairs t={t} />}
       </div>
     </div>
@@ -178,7 +184,7 @@ function FilePane({ t, gen, pdf }: { t: TranslationReport; gen?: { id: string; f
           </a>
           .
         </p>
-        <iframe src={fileUrl(gen.id, "pdf", { inline: true })} title="Tarjima qilingan fayl (PDF ko‘rinishi)" className="bg-card h-[80vh] w-full rounded-xl border" data-file-preview />
+        <iframe src={fileUrl(gen.id, "pdf", { inline: true })} title="Tarjima qilingan fayl (PDF ko‘rinishi)" className="bg-card h-[calc(100vh-4.5rem)] w-full rounded-xl border" data-file-preview />
       </div>
     );
   }

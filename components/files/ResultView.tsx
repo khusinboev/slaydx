@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { cn } from "@/lib/cn";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Download, Trash2 } from "lucide-react";
@@ -144,10 +145,23 @@ export function ResultView({ id }: { id: string }) {
   const expired = completed && !gen.hasFile;
   /** Ko'ruvchida tahrir bo'lgan, PPTX hali qayta yasalmagan. */
   const fileStale = (gen.fileVersion ?? 0) < (gen.docVersion ?? 0);
+  /*
+   * OQIM rejimi (AUDIT-16 §7): tarjima natijasida butun sahifa scroll
+   * bo'ladi — peshtoq (sarlavha, yuklab olish), chiplar va tablar mazmun
+   * bilan birga yuqoriga suriladi, PDF ko'rinishi esa ekranni to'liq oladi.
+   * Boshqa ko'ruvchilar (slayd, hujjat) o'z ichki scroll'i bilan qat'iy
+   * balandlikda qoladi — ular sahifalash/klaviatura uchun shunga tayanadi.
+   */
+  const flow = completed && gen.type === "translation";
 
   return (
-    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
-      <nav className="no-print bg-background/95 sticky top-0 z-10 flex items-center gap-2 border-b px-3 py-2 sm:px-4">
+    <div className={cn("flex h-full min-h-0 flex-1 flex-col", flow ? "overflow-y-auto" : "overflow-hidden")} data-result-flow={flow ? "1" : undefined}>
+      <nav
+        className={cn(
+          "no-print bg-background/95 z-10 flex items-center gap-2 border-b px-3 py-2 sm:px-4",
+          flow ? "shrink-0" : "sticky top-0",
+        )}
+      >
         <Link
           href="/uz"
           aria-label="Orqaga"
@@ -263,7 +277,7 @@ export function ResultView({ id }: { id: string }) {
           </div>
         </div>
       ) : completed ? (
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className={cn("flex flex-col", flow ? "shrink-0" : "min-h-0 flex-1 overflow-hidden")}>
           {gen.delivered ? (
             /*
              * Va'da qilinganidan kam yetkazilgan (AUDIT-6 C7).
