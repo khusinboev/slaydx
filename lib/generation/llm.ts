@@ -560,3 +560,170 @@ async function completeXai(
     clearTimeout(timer);
   }
 }
+
+/* ------------------------------------------------------------------ *
+ * WP8 SEAM — `runLlmRaw` (token telemetriyasi uchun, AUDIT-17)
+ * ------------------------------------------------------------------ *
+ * `llm/gemini.ts` va `llm/xai.ts` adapterlari (va `llm-roles.ts`ning
+ * `LLM_<ROL>` env BERILMAGAN standart yo'li) shu orqali `usageMetadata`/
+ * `usage` token sonlarini oladi. `llmComplete`/`llmGrounded`/`llmStream`
+ * VA ularning yo'lidagi `completeGemini`/`completeXai`ga BUTUNLAY
+ * TEGILMAYDI — boshqa vositalar (slayd, kurs ishi, tarjimon) shulardan
+ * foydalanadi va xatti-harakati o'zgarmasligi shart.
+ *
+ * Bitta urinish (qayta urinish YO'Q) — zaxira zanjiri endi `llm/chain.ts`
+ * da, adapter darajasida boshqariladi; eski `withRetry` bilan aralashib
+ * ketmasin deb ataylab alohida.
+ */
+
+export type RawUsage = { inputTokens: number; outputTokens: number };
+
+export type RawAttempt =
+  | { ok: true; text: string; usage: RawUsage }
+  | { ok: false; error: string; retryable: boolean; status?: number; retryAfterMs?: number };
+
+/** `Retry-After` sarlavhasi — soniya (son) yoki HTTP-sana bo'lishi mumkin. */
+function retryAfterMs(headers: Headers): number | undefined {
+  const raw = headers.get("retry-after");
+  if (!raw) return undefined;
+  const secs = Number(raw);
+  if (Number.isFinite(secs)) return Math.max(0, secs * 1000);
+  const at = Date.parse(raw);
+  return Number.isFinite(at) ? Math.max(0, at - Date.now()) : undefined;
+}
+
+async function rawGemini(
+  model: string,
+  system: string,
+  user: string,
+  maxTokens: number,
+  opts: LlmOpts & { fetchImpl?: typeof fetch },
+): Promise<RawAttempt> {
+  const key = process.env.GEMINI_API_KEY;
+  if (!key) return { ok: false, error: "GEMINI_API_KEY yo'q", retryable: false };
+  const fetchImpl = opts.fetchImpl ?? fetch;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? 40_000);
+  try {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+    const res = await fetchImpl(url, {
+      method: "POST",
+      signal: ctrl.signal,
+      headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+      // `model` shu yerda spec'dan keladi — `geminiBody` o'zi model bilmaydi (URLda).
+      body: geminiBody(system, user, maxTokens, opts),
+    });
+    const data = (await res.json()) as {
+      error?: { message?: string };
+      candidates?: GeminiCandidate[];
+      usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
+    };
+    if (!res.ok) {
+      return {
+        ok: false,
+        error: data.error?.message ?? `HTTP ${res.status}`,
+        retryable: res.status === 429 || res.status >= 500,
+        status: res.status,
+        retryAfterMs: retryAfterMs(res.headers),
+      };
+    }
+    const text = (data.candidates?.[0]?.content?.parts ?? [])
+      .filter((p) => p.thought !== true)
+      .map((p) => p.text ?? "")
+      .join("")
+      .trim();
+    if (!text) return { ok: false, error: "bo'sh javob", retryable: false };
+    return {
+      ok: true,
+      text,
+      usage: {
+        inputTokens: data.usageMetadata?.promptTokenCount ?? 0,
+        outputTokens: data.usageMetadata?.candidatesTokenCount ?? 0,
+      },
+    };
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "network error";
+    // `aborted` — bizning timeout'imiz; qolgani tarmoq uzilishi.
+    return { ok: false, error: message, retryable: !/abort/i.test(message) };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function rawXai(
+  model: string,
+  system: string,
+  user: string,
+  maxTokens: number,
+  opts: LlmOpts & { fetchImpl?: typeof fetch },
+): Promise<RawAttempt> {
+  const key = process.env.XAI_API_KEY;
+  if (!key) return { ok: false, error: "XAI_API_KEY yo'q", retryable: false };
+  const fetchImpl = opts.fetchImpl ?? fetch;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? 25_000);
+  try {
+    const res = await fetchImpl("https://api.x.ai/v1/chat/completions", {
+      method: "POST",
+      signal: ctrl.signal,
+      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model,
+        temperature: 0.4,
+        max_tokens: maxTokens,
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user },
+        ],
+        ...(opts.json ? { response_format: { type: "json_object" } } : {}),
+      }),
+    });
+    const data = (await res.json()) as {
+      choices?: { message?: { content?: string } }[];
+      usage?: { prompt_tokens?: number; completion_tokens?: number };
+      error?: { message?: string };
+    };
+    if (!res.ok) {
+      return {
+        ok: false,
+        error: data.error?.message ?? `HTTP ${res.status}`,
+        retryable: res.status === 429 || res.status >= 500,
+        status: res.status,
+        retryAfterMs: retryAfterMs(res.headers),
+      };
+    }
+    const text = data.choices?.[0]?.message?.content?.trim();
+    if (!text) return { ok: false, error: "bo'sh javob", retryable: false };
+    return {
+      ok: true,
+      text,
+      usage: {
+        inputTokens: data.usage?.prompt_tokens ?? 0,
+        outputTokens: data.usage?.completion_tokens ?? 0,
+      },
+    };
+  } catch (e) {
+    const message = e instanceof Error ? e.message : "network error";
+    return { ok: false, error: message, retryable: !/abort/i.test(message) };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Provayder + ANIQ model (spec'dan, `llmModel()` env'idan emas) bilan
+ * BITTA urinish, `usage` bilan. `llm/gemini.ts`/`llm/xai.ts` adapterlari
+ * va `llm-roles.ts`ning standart (env'siz) yo'li shundan foydalanadi.
+ */
+export async function runLlmRaw(
+  provider: "gemini" | "xai",
+  model: string,
+  system: string,
+  user: string,
+  maxTokens: number,
+  opts: LlmOpts & { fetchImpl?: typeof fetch } = {},
+): Promise<RawAttempt> {
+  return provider === "gemini"
+    ? rawGemini(model, system, user, maxTokens, opts)
+    : rawXai(model, system, user, maxTokens, opts);
+}

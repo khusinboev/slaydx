@@ -7,13 +7,29 @@
  * Sabab: bitta provayderga bog'lanib qolmaslik va rolga qarab arzon/kuchli
  * modelni tanlash (yozuvchi Gemini 3.7 Flash, baholovchi Claude Sonnet 5).
  *
- * WP8 bu faylning ICHINI almashtiradi: `.env` `LLM_<ROL>=provider:model,…`
- * zanjiri, adapterlar (`llm/{gemini,anthropic,openrouter,xai}.ts`),
- * zaxiraga o'tish va `usage` telemetriyasi. Hozircha hammasi mavjud
- * `llmComplete` ga boradi — dvigatel (WP1) shu API ga qarshi yoziladi va
- * WP8 dan keyin o'zgarmaydi.
+ * WP8: `.env` dagi `LLM_<ROL>=provider:model,provider:model,…` ro'yxati
+ * `llm/chain.ts` orqali ZAXIRA ZANJIRIGA aylanadi (birinchisi 429/5xx dan
+ * keyin ham yiqilsa — keyingisi). Har provayder `llm/{gemini,anthropic,
+ * openrouter,xai,openai}.ts` adapteri orqali chaqiriladi.
+ *
+ * ENV BERILMAGAN holat — bu BOSHQA VOSITALARGA (slayd, kurs ishi,
+ * tarjimon) TA'SIR QILMASLIGI kerak bo'lgan chegara: ular `llm.ts`
+ * `llmComplete`/`llmGrounded`ni TO'G'RIDAN-TO'G'RI chaqiradi va WP8 ULARGA
+ * UMUMAN TEGMAGAN. `complete(role, …)` o'zi ham env yo'q bo'lsa xuddi
+ * o'sha standart provayderga (`llmProvider()` — Gemini bo'lsa Gemini,
+ * bo'lmasa xAI) BITTA spec bilan tushadi — natijada xatti-harakat
+ * "hozirgidek" (Gemini standart), faqat endi `usage` HAM qaytadi (buni
+ * eski `llmComplete` bermas edi — token sonini bilmasdi).
  */
-import { llmComplete, llmModel, llmProvider, type LlmOpts } from "./llm";
+import { llmModel, llmProvider, type LlmOpts } from "./llm";
+import { completeWithChain } from "./llm/chain";
+import { anthropicAdapter } from "./llm/anthropic";
+import { geminiAdapter } from "./llm/gemini";
+import { openaiAdapter } from "./llm/openai";
+import { openrouterAdapter } from "./llm/openrouter";
+import { parseRoleSpec, type ProviderAdapter, type ProviderId, type RoleSpec } from "./llm/types";
+import { xaiAdapter } from "./llm/xai";
+import { costUsd } from "./llm-pricing";
 
 export type LlmRole = "writer" | "researcher" | "judge" | "fast";
 
@@ -23,31 +39,92 @@ export type RoleResult = { text: string; usage?: LlmUsage };
 
 export type RoleOpts = Pick<LlmOpts, "json" | "timeoutMs" | "thinking"> & { maxTokens?: number };
 
+const ADAPTERS: Partial<Record<ProviderId, ProviderAdapter>> = {
+  gemini: geminiAdapter,
+  anthropic: anthropicAdapter,
+  openrouter: openrouterAdapter,
+  xai: xaiAdapter,
+  openai: openaiAdapter,
+};
+
+const ROLE_ENV: Record<LlmRole, string> = {
+  writer: "LLM_WRITER",
+  researcher: "LLM_RESEARCHER",
+  judge: "LLM_JUDGE",
+  fast: "LLM_FAST",
+};
+
 /**
- * Bitta chaqiruv. `null` — model javob bermadi (timeout/xato/bo'sh) —
- * chaqiruvchi o'zi qaror qiladi (retry, fallback matn, xato).
+ * `.env`da `LLM_<ROL>` bo'lmasa (yoki buzuq) — hozirgi standart provayder
+ * (`llm.ts llmProvider()`, Gemini bo'lsa Gemini) bitta spec sifatida.
+ * Kalit umuman yo'q bo'lsa `[]` — `complete()` `null` qaytaradi, aynan
+ * eski `llmComplete` ham kalitsiz `null` qaytargani kabi.
  */
-export async function complete(role: LlmRole, system: string, user: string, opts: RoleOpts = {}): Promise<RoleResult | null> {
-  const { maxTokens = 2048, ...rest } = opts;
-  const text = await llmComplete(system, user, maxTokens, rest);
-  if (!text) return null;
-  return { text, usage: { provider: llmProvider() ?? "none", model: llmModel(), inputTokens: 0, outputTokens: 0 } };
+function defaultSpec(): RoleSpec[] {
+  const provider = llmProvider();
+  return provider ? [{ provider, model: llmModel() }] : [];
+}
+
+/**
+ * Bitta chaqiruv. `null` — model javob bermadi (timeout/xato/bo'sh/
+ * zanjir tugadi) — chaqiruvchi o'zi qaror qiladi (retry, fallback matn,
+ * xato).
+ */
+export async function complete(
+  role: LlmRole,
+  system: string,
+  user: string,
+  opts: RoleOpts = {},
+): Promise<RoleResult | null> {
+  const { maxTokens = 2048, timeoutMs = 40_000, ...rest } = opts;
+  const envSpecs = parseRoleSpec(process.env[ROLE_ENV[role]]);
+  const specs = envSpecs.length > 0 ? envSpecs : defaultSpec();
+  if (specs.length === 0) return null;
+
+  const res = await completeWithChain(
+    role,
+    specs,
+    system,
+    user,
+    { ...rest, maxTokens, timeoutMs },
+    { adapters: ADAPTERS, log: (line) => console.log(line) },
+  );
+  if (!res) return null;
+  return { text: res.text, usage: res.usage };
 }
 
 /**
  * Sarf hisoblagichi — generatsiya davomida `usage` lar yig'iladi,
- * yakunda `generations.cost_json` ga tushadi (`worker.ts`). Narx jadvali
- * (`llm-pricing.ts`) WP8 da; hozir `usd` 0 qoladi.
+ * yakunda `generations.cost_json` ga tushadi (`worker.ts`).
+ *
+ * `provider`/`model` — ENG KO'P CHIQISH TOKENI bergan juftlik (odatda
+ * eng "og'ir" chaqiruv — uzun bo'lim yozuvi — shu haqda). `usd` —
+ * `llm-pricing.ts costUsd` bo'yicha har chaqiruv YIG'INDISI (sana —
+ * chaqiruv payti, `Date.now()`; narx jadvali kelajakda o'zgarsa ham
+ * o'sha kunlik hisob-kitobga mos qoladi).
  */
 export class CostMeter {
   private items: LlmUsage[] = [];
+
   add(u?: LlmUsage) {
     if (u) this.items.push(u);
   }
+
   toJson() {
     const inputTokens = this.items.reduce((a, u) => a + u.inputTokens, 0);
     const outputTokens = this.items.reduce((a, u) => a + u.outputTokens, 0);
-    const first = this.items[0];
-    return { provider: first?.provider ?? "none", model: first?.model ?? "", inputTokens, outputTokens, calls: this.items.length, usd: 0 };
+    const usd = this.items.reduce((a, u) => a + costUsd(u, new Date()), 0);
+    const top = this.items.reduce<LlmUsage | undefined>(
+      (best, u) => (!best || u.outputTokens > best.outputTokens ? u : best),
+      undefined,
+    );
+    return {
+      provider: top?.provider ?? "none",
+      model: top?.model ?? "",
+      inputTokens,
+      outputTokens,
+      calls: this.items.length,
+      usd,
+    };
   }
 }
