@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createElement as h } from "react";
 import { ArticleHead, CiteText } from "../../components/viewers/ArticleHead.tsx";
-import { WordViewer } from "../../components/viewers/WordViewer.tsx";
+import { FLOW_SPLITTER, WordViewer } from "../../components/viewers/WordViewer.tsx";
+import { splitByHeight } from "../../lib/viewers/split.ts";
 import { planArticle } from "../../lib/generation/article/layout.ts";
 import { sampleArticleDoc } from "../../lib/generation/article/samples.ts";
 import { articleFlow, docToFlow, type FlowItem } from "../../lib/viewers/flow.ts";
@@ -154,6 +155,28 @@ test("`figure`/`formula` atom: bo'linmaydi va o'zidan keyingi matnga bog'lanmayd
     p2[0].map((it) => it.type),
     ["udk", "articleTitle", "authors", "abstract"],
   );
+});
+
+test("sahifadan uzun iqtibosli paragraf bo'linganda belgilar (spans) bo'laklarda saqlanadi; rasm/formula bo'linmaydi", () => {
+  const items = docToFlow(sampleArticleDoc(META));
+  const pIdx = items.findIndex((it) => it.type === "p" && it.spans?.some((s) => s.cite));
+  const figIdx = items.findIndex((it) => it.type === "figure");
+  const eqIdx = items.findIndex((it) => it.type === "formula");
+  // Shu uch band «sig'maydi» (balandlik 2000 > chegara 900), qolganlari sig'adi.
+  const heights = items.map((_, i) => (i === pIdx || i === figIdx || i === eqIdx ? 2000 : 50));
+  const { list, changed } = splitByHeight(items, heights, 900, FLOW_SPLITTER);
+  assert.ok(changed);
+  // Rasm va formula o'z holida (atom).
+  assert.equal(list.filter((it) => it.type === "figure").length, 1);
+  assert.equal(list.filter((it) => it.type === "formula").length, 1);
+  // Paragraf ikkiga bo'lingan; bo'laklar matni asl matnga teng, iqtibos bo'lagi yo'qolmagan.
+  const orig = items[pIdx] as Extract<FlowItem, { type: "p" }>;
+  const parts = list.filter((it): it is Extract<FlowItem, { type: "p" }> => it.type === "p" && it.id.startsWith(`${orig.id}~`));
+  assert.equal(parts.length, 2);
+  assert.equal(parts.map((p) => p.text).join(" "), orig.text);
+  for (const p of parts) assert.equal(p.spans!.map((s) => s.text).join(""), p.text, "bo'lak spans matni bo'lak matniga teng emas");
+  const cites = parts.flatMap((p) => p.spans!.filter((s) => s.cite).map((s) => s.text));
+  assert.deepEqual(cites, orig.spans!.filter((s) => s.cite).map((s) => s.text), "iqtibos belgilari bo'linishda yo'qoldi");
 });
 
 test("annotatsiya yangi varaqdan BOSHLANMAYDI (`abstractBreak: false`); eski hujjatlarda boshlanadi", () => {

@@ -50,7 +50,7 @@ function sliceSpans(text: string, spans: CiteSpan[] | undefined, part: string): 
  * bandlari ham ATOM — `takeText` ularga `null` qaytaradi. `id` ga `~idx`
  * qo'shiladi — bo'laklar DOM kalitlarida noyob bo'lsin.
  */
-const FLOW_SPLITTER: TextSplitter<FlowItem> = {
+export const FLOW_SPLITTER: TextSplitter<FlowItem> = {
   takeText: (it) =>
     it.type === "p" || it.type === "li" || it.type === "quote" || it.type === "code" ? it.text : null,
   makePart: (it, part, index) =>
