@@ -52,7 +52,8 @@ function ctxOf(values: FormValues): ArticleContext {
   const meta = { ...extractMeta(article, values), language: input.language };
   const type = ARTICLE_TYPES[input.articleType];
   const profile = PUBLICATION_PROFILES[input.pubProfile];
-  return { input, meta, type, profile, labels: articleLabels(input.language), wordTarget: articleWordPlan(meta, type, profile).body, refs: [] };
+  const plan = articleWordPlan(meta, type, profile);
+  return { input, meta, type, profile, labels: articleLabels(input.language), wordTarget: plan.body, plan, refs: [] };
 }
 
 /**
@@ -171,12 +172,16 @@ test("missingRequired: mavzu + tur; preflightError: noma'lum tur/profil rad, esk
 });
 
 test("extractMeta: maqola maydonlari klamplanadi", () => {
-  const m = extractMeta(article, { ...BASE, articleType: "review_systematic", pubProfile: "apa", citeStyle: "ieee", udk: "0".repeat(60), figureCount: 9, research: false });
+  const m = extractMeta(article, { ...BASE, articleType: "review_systematic", pubProfile: "apa", citeStyle: "ieee", udk: "0".repeat(60), figureCount: 9, research: false, pages: "10-15" });
   assert.equal(m.articleType, "review_systematic");
   assert.equal(m.pubProfile, "apa");
   assert.equal(m.citeStyle, "ieee");
   assert.equal(m.udk.length, 40);
   assert.equal(m.figureCount, 4);
+  // Sxema soni PAKETGA bog'liq — `parseArticleInput` bilan bir xil chegara (`FIGURES_BY_PAGES`).
+  assert.equal(extractMeta(article, { ...BASE, figureCount: 9, pages: "3-5" }).figureCount, 1);
+  assert.equal(extractMeta(article, { ...BASE, figureCount: 2, pages: "1-2" }).figureCount, 0);
+  assert.equal(extractMeta(article, { ...BASE, figureCount: 4, pages: "5-10" }).figureCount, 3);
   assert.equal(m.research, false);
   const bad = extractMeta(article, { ...BASE, articleType: "zzz", pubProfile: "zzz", citeStyle: "zzz" });
   assert.equal(bad.articleType, undefined);

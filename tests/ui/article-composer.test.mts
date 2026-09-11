@@ -121,6 +121,38 @@ test("narx hajm bilan o'zgaradi: 3-5 bet 6 000 → 10-15 bet 12 000", async () =
   });
 });
 
+test("vizuallar soni PAKETGA bog'liq: 3–5 bet → 0–1 (standart 1), 10–15 → 0–4; kichik paketga qaytganda kesiladi; tezisda yo'q", async () => {
+  stubApi();
+  await login();
+  mount();
+  const opts = () => [...document.querySelectorAll('[data-field="figureCount"] button')].map((b) => b.textContent?.trim());
+  const pressed = () => document.querySelector('[data-field="figureCount"] button[aria-checked="true"]')?.textContent?.trim();
+  assert.deepEqual(opts(), ["0", "1"]);
+  assert.equal(pressed(), "1");
+  await act(async () => {
+    fireEvent.click(screen.getByText(/10–15 bet/));
+  });
+  assert.deepEqual(opts(), ["0", "1", "2", "3", "4"]);
+  await act(async () => {
+    fireEvent.click(document.querySelector('[data-field="figureCount"] button:nth-child(4)')!);
+  });
+  assert.equal(pressed(), "3");
+  await act(async () => {
+    fireEvent.click(screen.getByText(/3–5 bet/));
+  });
+  assert.deepEqual(opts(), ["0", "1"]);
+  assert.equal(pressed(), "1", "3 → paketga kesildi");
+  // Tezis (1–2 bet) — sxema yo'q, tanlov chizilmaydi.
+  await act(async () => {
+    fireEvent.click(screen.getByText("OAK jurnali (IMRAD + Xulosa)"));
+  });
+  await act(async () => {
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Maqola turi" })).getByText("Konferensiya tezisi"));
+  });
+  assert.deepEqual(opts(), []);
+  assert.match(document.querySelector('[data-field="figureCount"]')?.textContent ?? "", /^0$/);
+});
+
 test("mualliflar: qo'shish/o'chirish, ≤6 chegara", async () => {
   stubApi();
   await login();

@@ -87,6 +87,7 @@ function articleSheet(doc: AcademicDoc) {
       "--doc-table-size": `${p.tableSizePt}pt`,
       "--doc-refs-size": `${p.refsSizePt}pt`,
       "--doc-refs-line": p.refsLine >= 1.5 ? "1.5" : "1.15",
+      "--doc-abs-line": p.abstractLine >= 1.5 ? "1.5" : "1.15",
       "--doc-small": `${Math.max(10, p.sizePt - 2)}pt`,
       // DOCX `after`: 1.5 da 200 twip = 10 pt, yakkada 120 = 6 pt.
       "--doc-p-after": p.line >= 1.5 ? "10pt" : "6pt",

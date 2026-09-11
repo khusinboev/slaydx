@@ -299,7 +299,8 @@ function ctx(values: FormValues = {}): ArticleContext {
   const type = ARTICLE_TYPES[input.articleType];
   const profile = PUBLICATION_PROFILES[input.pubProfile];
   const meta = { ...extractMeta(tool, { ...BASE, ...values }), language: input.language };
-  return { input, meta, type, profile, labels: articleLabels(input.language), wordTarget: articleWordPlan(meta, type, profile).body, refs: [] };
+  const plan = articleWordPlan(meta, type, profile);
+  return { input, meta, type, profile, labels: articleLabels(input.language), wordTarget: plan.body, plan, refs: [] };
 }
 
 test("outlineFromLlm: erkin bo'limlar body-1..N (min..max), sarlavha modeldan; skelet bo'limlari sarlavhasi koddan; so'zlar ulushga qarab", () => {
@@ -319,7 +320,8 @@ test("outlineFromLlm: erkin bo'limlar body-1..N (min..max), sarlavha modeldan; s
 });
 
 test("planVisuals: figureCount ta sxema o'rta bo'limlarga, jadval natija bo'limiga; userData → chart; tezisda vizual yo'q; CARE → timeline jadvali", () => {
-  const c = ctx({ figureCount: 2 });
+  // 3–5 betlik paketga 1 ta sxema sig'adi (`FIGURES_BY_PAGES`) — 2 ta uchun 5–10.
+  const c = ctx({ figureCount: 2, pages: "5-10" });
   const v = planVisuals(c, fallbackOutline(c));
   assert.equal([...v.values()].filter((x) => x.figure).length, 2);
   assert.equal(v.get("results")!.table, true);
@@ -404,7 +406,27 @@ test("so'z rejasi profilga bog'liq; byudjet 150 000 + 16 000 × bet; prismaSpec 
    * ayirilgandan keyin qoladi, lekin paketning kamida yarmi.
    */
   assert.equal(oak.total, oak.body + oak.abstracts);
-  assert.ok(oak.body < 13 * 230 && oak.body >= 0.5 * 13 * 230, `oak body ${oak.body}`);
+  assert.ok(oak.body < 13 * 230 && oak.body >= 0.45 * 13 * 230, `oak body ${oak.body}`);
+  assert.equal(oak.abstractAim, 200, "katta paketda annotatsiya o'rtaga (150–250)");
+  assert.equal(oak.refs, 30, "13 bet × 2.5 = 33 → refsMax 30");
+  /*
+   * Kichik paket (3–5): annotatsiya pastki chegaraga yaqin (170), sxema 1
+   * (input kesadi), bo'lim ≥ 45 % — jonli smoke: 2 sxema + 1.5 interval
+   * annotatsiya bilan 6 bet chiqqan edi.
+   */
+  const small = extractMeta(tool, { ...BASE, pages: "3-5", figureCount: 4 });
+  const sm = articleWordPlan(small, ARTICLE_TYPES.analytical, PUBLICATION_PROFILES.oak);
+  assert.equal(small.targetPages, 4);
+  assert.equal(sm.abstractAim, 170);
+  assert.equal(sm.abstracts, 510);
+  assert.equal(sm.refs, 10);
+  assert.equal(sm.figures, 1, "meta.figureCount paketga kesilgan");
+  assert.equal(sm.body, Math.round(0.45 * 4 * 230), "qo'shimcha betlar paketdan katta — bo'lim 45 % ga qisqaradi");
+  // Sxema/annotatsiya ko'p bo'lsa bo'lim kamayadi; sxemasiz bo'lim kattaroq.
+  const noFig = articleWordPlan({ ...small, figureCount: 0 }, ARTICLE_TYPES.analytical, PUBLICATION_PROFILES.oak);
+  assert.ok(noFig.body >= sm.body, `${noFig.body} >= ${sm.body}`);
+  const uni = articleWordPlan(small, ARTICLE_TYPES.three_part_uz, PUBLICATION_PROFILES.university);
+  assert.ok(uni.body > sm.body * 1.3, `university (yakka interval) ${uni.body} vs oak ${sm.body}`);
   assert.equal(budgetFor(tool, { ...BASE, pages: "10-15" }, 660_000), 150_000 + 13 * 16_000);
   assert.equal(budgetFor(tool, { ...BASE, articleType: "conference_thesis", pages: "1-2" }, 660_000), 150_000 + 2 * 16_000);
   assert.equal(budgetFor(tool, { ...BASE, pages: "10-15" }, 300_000), 300_000, "cap");

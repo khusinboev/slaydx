@@ -23,6 +23,7 @@ import {
   ARTICLE_LIMITS,
   CITE_STYLES,
   PAGES_IDS,
+  maxFiguresFor,
   type ArticleAuthor,
   type ArticleType,
   type ArticleTypeId,
@@ -315,7 +316,8 @@ export function articleInputFromValues(values: FormValues): ArticleInput {
     keywords,
     userFacts: text(values.userFacts, ARTICLE_LIMITS.userFactsChars),
     userRefs,
-    figureCount: Math.max(0, Math.min(ARTICLE_LIMITS.figures, Number.isFinite(figRaw) ? Math.round(figRaw) : 2)),
+    // Paketga sig'adigan sxema soni (`FIGURES_BY_PAGES`) — forma ham shu chegarani ko'rsatadi.
+    figureCount: Math.max(0, Math.min(maxFiguresFor(pages), Number.isFinite(figRaw) ? Math.round(figRaw) : 2)),
     research: values.research !== false,
     extra: text(values.extra, ARTICLE_INPUT_LIMITS.extraChars),
     sourceText: text(values.sourceText, 24_000),

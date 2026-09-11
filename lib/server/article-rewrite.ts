@@ -113,7 +113,7 @@ function contextOf(doc: AcademicDoc): ArticleContext {
     sourceText: doc.meta.sourceText ?? "",
   };
   const plan = articleWordPlan(doc.meta, type, profile);
-  return { input, meta: doc.meta, type, profile, labels: articleLabels(language), wordTarget: plan.body, refs: model.references };
+  return { input, meta: doc.meta, type, profile, labels: articleLabels(language), wordTarget: plan.body, plan, refs: model.references };
 }
 
 /** Bo'lim qisqacha — annotatsiya/highlights uchun (dvigatel `summaryOf` bilan bir xil shakl). */

@@ -359,11 +359,18 @@ export function ArticleEditor({ doc, plan, onOps, children }: ArticleEditorProps
   const close = useCallback(() => {
     const cur = openRef.current;
     if (!cur) return;
+    /*
+     * AVVAL ref tozalanadi, keyin DOM: Chromium `contenteditable` olib
+     * tashlanganda `focusout` ni SINXRON yuboradi — `onFocusOut` shu
+     * paytda `commit` ni qayta chaqirsa, bitta tahrir uchun ikkita bir xil
+     * op navbatga tushardi («Saqlash · 2», Ctrl+Z bir bosishda qaytmasdi).
+     * jsdom buni qilmaydi — brauzer smoke'da topildi.
+     */
+    openRef.current = null;
     cur.el.removeAttribute("contenteditable");
     cur.el.removeAttribute("data-article-editing");
     // React tugunlari qaytadi — undan keyingi render ularni yangilaydi.
     cur.el.replaceChildren(...cur.keep);
-    openRef.current = null;
   }, []);
 
   const commit = useCallback(() => {

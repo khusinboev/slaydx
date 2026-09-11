@@ -237,6 +237,39 @@ test("dblclick → Enter: bitta saqlanmagan o'zgarish, ekranda yangi matn, tarmo
   assert.ok(pageHas(/Yangi kirish jumlasi\./), "ekranda yangi matn yo'q");
 });
 
+test("Chromium: `contenteditable` olib tashlanganda SINXRON focusout — Enter baribir BITTA op (ikkilanmaydi)", async () => {
+  /*
+   * jsdom `contenteditable` yo'qolganda focusout bermaydi, Chromium esa
+   * SINXRON beradi — `close()` ichida `onFocusOut` → `commit` qayta kirib,
+   * bitta tahrir uchun ikkita bir xil op navbatga tushardi («Saqlash · 2»,
+   * Ctrl+Z bir bosishda qaytmasdi; brauzer smoke'da topildi). Bu yerda
+   * `removeAttribute` patchi Chromium xatti-harakatini taqlid qiladi.
+   */
+  const s = stubServer();
+  await openEditor(s);
+  const el = byPath(P0);
+  const orig = Element.prototype.removeAttribute;
+  Element.prototype.removeAttribute = function (name: string) {
+    orig.call(this, name);
+    if (name === "contenteditable" && this === el) fireEvent.focusOut(el);
+  };
+  try {
+    typeInto(el, "Sinxron focusout jumlasi.");
+  } finally {
+    Element.prototype.removeAttribute = orig;
+  }
+  await pause(20);
+  const btn = saveBtn();
+  assert.ok(btn, "«Saqlash» tugmasi chiqmadi");
+  assert.match(btn!.textContent ?? "", /Saqlash · 1$/, "bitta tahrir uchun bittadan ko'p op navbatga tushdi");
+  // Bir Ctrl+Z — matn qaytadi (ikkita op bo'lsa birinchi Ctrl+Z hech narsa qilmasdi).
+  await act(async () => {
+    fireEvent.keyDown(window, { key: "z", ctrlKey: true });
+  });
+  await pause(20);
+  assert.ok(!pageHas(/Sinxron focusout jumlasi\./), "Ctrl+Z birinchi bosishda qaytarmadi — op ikkilangan");
+});
+
 test("iqtibosli paragraf: ochilganda `[1]` ko'rinadi, saqlanganda `[W…]` id saqlanadi", async () => {
   const s = stubServer();
   await openEditor(s);

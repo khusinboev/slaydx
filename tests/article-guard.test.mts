@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { factNumbers, guardSection, missingFactNumbers, numbersOf, skeletonCoverage, wordsOf } from "../lib/generation/article/guard.ts";
 import { FILLER_PHRASES, articleSystemPrompt, sectionPrompt, abstractPrompt, abstractSystemPrompt, type ArticleContext } from "../lib/generation/article/prompts.ts";
+import { articleWordPlan } from "../lib/generation/article/engine.ts";
 import { ARTICLE_TYPES } from "../lib/generation/article/types-registry.ts";
 import { PUBLICATION_PROFILES } from "../lib/generation/article/profiles.ts";
 import { articleLabels } from "../lib/generation/article/labels.ts";
@@ -86,7 +87,8 @@ function ctxOf(values: Record<string, string | number | boolean> = {}): ArticleC
   const input = articleInputFromValues({ topic: "Sun'iy intellekt ta'limda", articleType: "imrad_oak", language: "uz", ...values });
   const type = ARTICLE_TYPES[input.articleType];
   const profile = PUBLICATION_PROFILES[input.pubProfile];
-  return { input, meta: { ...meta, language: input.language }, type, profile, labels: articleLabels(input.language), wordTarget: 1200, refs: REFS };
+  const plan = articleWordPlan({ ...meta, language: input.language }, type, profile);
+  return { input, meta: { ...meta, language: input.language }, type, profile, labels: articleLabels(input.language), wordTarget: 1200, plan, refs: REFS };
 }
 
 test("tizim prompti: birinchi qator til ko'rsatmasi; uch taqiq qulflangan; foydalanuvchi fakti VERBATIM", () => {
@@ -111,6 +113,15 @@ test("bo'lim prompti: manbalar `[ID] Muallif (yil). Sarlavha. Venue.` ko'rinishi
   const withRefs = sectionPrompt(ctx, { plan, wantTable: false, wantFigure: false, wantChart: false });
   assert.match(withRefs, /\[W2741809807\] — \(n\.d\.\)\. A\./);
   assert.ok(!/"table"/.test(withRefs) && !/"figure"/.test(withRefs));
+  /*
+   * Manba ulushi: butun maqola ≥ profil minimumi (OAK 10) turli manba,
+   * bo'limga so'z ulushi bo'yicha — 300/1200 × 10 = 3, lekin ro'yxatda 2 ta
+   * bor → 2. Jonli smoke: 20 topilgan manbadan 8 tasi iqtibos qilingan edi.
+   */
+  assert.match(withRefs, /cite at least 10 DIFFERENT sources, so this section should draw on about 2 different ones:/);
+  const many = { ...ctx, refs: Array.from({ length: 12 }, (_, i) => ({ ...REFS[0], id: `W${i}` })) };
+  assert.match(sectionPrompt(many, { plan, wantTable: false, wantFigure: false, wantChart: false }), /draw on about 3 different ones:/);
+  assert.match(sectionPrompt(many, { plan: { ...plan, id: "conclusion", skeletonId: "conclusion", words: 60 }, wantTable: false, wantFigure: false, wantChart: false }), /about 1 different ones \(a conclusion may cite fewer\)/);
   const noRefs = sectionPrompt({ ...ctx, refs: [] }, { plan, wantTable: true, wantFigure: true, wantChart: false });
   assert.match(noRefs, /SOURCES: none available — write WITHOUT any citations/);
   assert.match(noRefs, /"table":\{"caption"/);
@@ -126,8 +137,10 @@ test("annotatsiya prompti: o'z tili birinchi qatorda, MUSTAQIL (tarjima emas), s
   const sysRu = abstractSystemPrompt(ctx, "ru");
   assert.match(sysRu.split("\n")[0], /Russian/);
   assert.match(sysRu, /INDEPENDENTLY/);
+  // Standart paket 3–5 bet: mo'ljal pastki chegaraga yaqin (170); 10–15 betda o'rtaga (200).
   const p = abstractPrompt(ctx, "en", "• Kirish: …");
-  assert.match(p, /about 200 words, never fewer than 150 and never more than 250/);
+  assert.match(p, /about 170 words, never fewer than 150 and never more than 250/);
+  assert.match(abstractPrompt(ctxOf({ pages: "10-15" }), "en", "…"), /about 200 words, never fewer than 150/);
   assert.match(p, /5–12 keywords/);
   assert.match(p, /\{"text":"…","keywords":\["…"\]\}/);
   const structured = abstractPrompt(ctxOf({ articleType: "review_systematic", pubProfile: "apa" }), "en", "…");

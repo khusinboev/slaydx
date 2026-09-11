@@ -28,7 +28,7 @@ import { llmEnabled } from "../llm";
 import { CostMeter, complete as completeRole } from "../llm-roles";
 import { parseLlmObject } from "../json";
 import { blocksFromText, cleanText, mapPool, remainingMs, targetWords, unverifiedReferenceNote } from "../quality";
-import { ARTICLE_LIMITS, type ArticleModel, type ArticleType, type Figure, type FigureSpec, type PublicationProfile, type TreeNode } from "./types";
+import { ARTICLE_LIMITS, type ArticleModel, type ArticleType, type ArticleWordPlan, type Figure, type FigureSpec, type PublicationProfile, type TreeNode } from "./types";
 import { ARTICLE_TYPES } from "./types-registry";
 import { PUBLICATION_PROFILES } from "./profiles";
 import { articleLabels } from "./labels";
@@ -107,41 +107,50 @@ export function articleWordsPerPage(profile: PublicationProfile): number {
   return Math.round(targetWords(1) * (14 / profile.sizePt) * (1.5 / profile.line));
 }
 
-export type ArticleWordPlan = { perPage: number; total: number; body: number; abstracts: number };
+export type { ArticleWordPlan };
 
 /**
- * So'z rejasi: `total` — butun hujjat (hajm darvozasi shunga qaraydi),
- * `body` — bo'limlar (annotatsiya ×3 va adabiyotlar ayirilgan).
- * `wordRange` li turlar (tezis) bet bilan emas, so'z bilan o'lchanadi.
- */
-/**
  * So'z rejasi. Paket («3–5 bet») — hujjatning UMUMIY beti: sarlavha bloki,
- * uch tilli annotatsiya, adabiyotlar (OAK'da ikki ro'yxat) va sxemalar ham
- * shu betlarga kiradi. Shuning uchun bo'lim matni byudjeti = paket beti −
- * qo'shimcha betlar (taxmin): sarlavha/mualliflar/kalit so'zlar 0.6 bet,
- * annotatsiyalar kichik shriftda (~1.8× zichroq), adabiyot satri ≈0.04 bet
- * (TNR 12 / 1.15), sxema ≈0.3 bet. Bo'lim matni paketning kamida yarmi.
+ * uch tilli annotatsiya, adabiyotlar (OAK'da ikki ro'yxat), sxemalar va
+ * jadval ham shu betlarga kiradi. Bo'lim matni byudjeti = paket beti −
+ * qo'shimcha betlar; bo'lim matni paketning kamida 45 %.
  *
- * Jonli smoke (analytical, 3–5 bet): eski formula 450 so'z bersa ham
- * bo'limlar 924 so'z yozgan, DOCX 9 bet chiqqan edi.
+ * Koeffitsientlar jonli o'lchovdan (analytical, OAK, 3–5 bet, DOCX →
+ * LibreOffice): sarlavha bloki 0,25 bet; har bo'lim sarlavhasi 0,06;
+ * annotatsiya `size − 2` shriftda — zichlik = (size/12)·(line/abstractLine)
+ * ·1,15 (OAK: 14/12 · 1,5/1,15 · 1,15 ≈ 1,8; 477 so'z 1,5 intervalda 1,6
+ * bet olgan edi); adabiyot satri 0,05 bet × ro'yxat soni (TNR 12/1,15);
+ * sxema 0,45 bet (160 mm eni, sarlavha bilan); jadval 0,25 (3+ betda).
+ * Kichik paketda annotatsiya pastki chegaraga yaqin mo'ljallanadi (150–250
+ * → 170), katta paketda o'rtaga. Sxema soni `FIGURES_BY_PAGES` bilan
+ * kesilgan bo'ladi (forma va `parseArticleInput`).
+ *
+ * Jonli smoke tarixi (3–5 bet): eski formula 924 so'z/9 bet; birinchi
+ * tuzatish 421 so'z/6 bet (annotatsiya 1,5 intervalda, 2 sxema).
  */
 export function articleWordPlan(meta: DocMeta, type: ArticleType, profile: PublicationProfile): ArticleWordPlan {
   const perPage = articleWordsPerPage(profile);
-  const abstracts = 3 * Math.round((profile.abstractWords[0] + profile.abstractWords[1]) / 2);
+  const pages = Math.max(1, meta.targetPages);
+  const [minW, maxW] = profile.abstractWords;
+  const abstractAim = pages <= 5 ? Math.round(minW + (maxW - minW) * 0.2) : Math.round((minW + maxW) / 2);
+  const abstracts = 3 * abstractAim;
+  const figures = Math.max(0, meta.figureCount);
   if (type.wordRange) {
     const body = Math.round((type.wordRange[0] + type.wordRange[1]) / 2);
-    return { perPage, total: body + abstracts, body, abstracts };
+    return { perPage, total: body + abstracts, body, abstracts, abstractAim, refs: profile.refsMin, figures };
   }
-  const pages = Math.max(1, meta.targetPages);
   const refs = Math.min(profile.refsMax, Math.max(profile.refsMin, Math.round(pages * 2.5)));
+  const absDensity = (profile.sizePt / 12) * (profile.line / profile.abstractLine) * 1.15;
   const overhead =
-    0.6 +
-    abstracts / (perPage * 1.8) +
-    refs * 0.04 * (profile.secondEnglishList ? 2 : 1) +
-    Math.max(0, meta.figureCount) * 0.3;
-  const bodyPages = Math.max(pages * 0.5, pages - overhead);
+    0.25 +
+    type.skeleton.length * 0.06 +
+    abstracts / (perPage * absDensity) +
+    refs * 0.05 * (profile.secondEnglishList ? 2 : 1) +
+    figures * 0.45 +
+    (pages >= 3 ? 0.25 : 0);
+  const bodyPages = Math.max(pages * 0.45, pages - overhead);
   const body = Math.max(300, Math.round(bodyPages * perPage));
-  return { perPage, total: body + abstracts, body, abstracts };
+  return { perPage, total: body + abstracts, body, abstracts, abstractAim, refs, figures };
 }
 
 /* ────────────────────────── yordamchilar ────────────────────────── */
@@ -442,7 +451,7 @@ export async function buildArticleDoc(meta: DocMeta, values: FormValues, opts: A
   const labels = articleLabels(input.language);
   const docMeta: DocMeta = { ...meta, language: input.language, topic: input.topic || meta.topic, articleType: type.id, pubProfile: profile.id, citeStyle: input.citeStyle ?? profile.cite, udk: input.udk, figureCount: input.figureCount, research: input.research };
   const plan = articleWordPlan(docMeta, type, profile);
-  const ctx: ArticleContext = { input, meta: docMeta, type, profile, labels, wordTarget: plan.body, refs: [] };
+  const ctx: ArticleContext = { input, meta: docMeta, type, profile, labels, wordTarget: plan.body, plan, refs: [] };
   const stage = (progress: number, step: string) => opts.onStage?.({ progress, step });
   const ask = async (role: Parameters<CompleteFn>[0], system: string, user: string, o: { maxTokens: number; timeoutMs: number }) => {
     if (o.timeoutMs < MIN_CALL_MS) return null;
@@ -787,12 +796,13 @@ export function abstractFromLlm(raw: string | null, ctx: ArticleContext, lang: s
 async function writeAbstract(ctx: ArticleContext, lang: string, summaries: string, call: Ask, deadline: number) {
   const system = abstractSystemPrompt(ctx, lang);
   const [minW, maxW] = ctx.profile.abstractWords;
+  const aim = ctx.plan.abstractAim;
   const run = () => call("writer", system, abstractPrompt(ctx, lang, summaries), { maxTokens: 1400, timeoutMs: Math.min(ABSTRACT_TIMEOUT_MS, remainingMs(deadline)) });
   let best = abstractFromLlm(await run(), ctx, lang);
   const bad = (r: typeof best) => !r || r.words < minW * 0.7 || r.words > maxW * 1.4 || r.keywords.length < ctx.profile.keywords[0];
   if (bad(best) && remainingMs(deadline) > 15_000) {
     const retry = abstractFromLlm(await run(), ctx, lang);
-    if (retry && (!best || !bad(retry) || Math.abs(retry.words - (minW + maxW) / 2) < Math.abs(best.words - (minW + maxW) / 2))) best = retry;
+    if (retry && (!best || !bad(retry) || Math.abs(retry.words - aim) < Math.abs(best.words - aim))) best = retry;
   }
   if (!best) console.warn(`[article] annotatsiya (${lang}) chiqmadi`);
   return best;

@@ -1,5 +1,5 @@
 import { defaultPages } from "../tools";
-import { ARTICLE_LIMITS, CITE_STYLES, type ArticleTypeId, type CiteStyle, type PublicationProfileId } from "./article/types";
+import { ARTICLE_LIMITS, CITE_STYLES, FIGURES_BY_PAGES, type ArticleTypeId, type CiteStyle, type PagesId, type PublicationProfileId } from "./article/types";
 import { isArticleTypeId } from "./article/types-registry";
 import { isPublicationProfileId } from "./article/profiles";
 import type { FormValues, ToolConfig } from "../types";
@@ -34,6 +34,11 @@ function s(v: FormValues, key: string, fallback = "") {
   const x = v[key];
   if (x === null || x === undefined || x === "") return fallback;
   return String(x).trim();
+}
+
+/** Maqola paketiga sig'adigan sxema soni; noma'lum paket → umumiy chegara. */
+function articleFigureCap(pages: string): number {
+  return pages in FIGURES_BY_PAGES ? FIGURES_BY_PAGES[pages as PagesId] : ARTICLE_LIMITS.figures;
 }
 
 function parsePages(raw: string, fallback: number) {
@@ -255,7 +260,8 @@ export function extractMeta(tool: ToolConfig, values: FormValues): DocMeta {
     ...(isPublicationProfileId(s(values, "pubProfile")) ? { pubProfile: s(values, "pubProfile") as PublicationProfileId } : {}),
     ...(isCiteStyle(s(values, "citeStyle")) ? { citeStyle: s(values, "citeStyle") as CiteStyle } : {}),
     udk: s(values, "udk").slice(0, ARTICLE_LIMITS.udkChars),
-    figureCount: Math.max(0, Math.min(ARTICLE_LIMITS.figures, Math.round(Number(values.figureCount ?? 2)) || 0)),
+    // Sxema soni PAKETGA bog'liq (`FIGURES_BY_PAGES`; `parseArticleInput` bilan bir xil chegara).
+    figureCount: Math.max(0, Math.min(articleFigureCap(s(values, "pages")), Math.round(Number(values.figureCount ?? 2)) || 0)),
     research: values.research !== false,
     design: s(values, "design", "iris"),
     // Yil SHU YERDA muzlaydi — `title-model.ts` uni `doc.meta` dan oladi,

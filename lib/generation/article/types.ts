@@ -141,6 +141,12 @@ export type PublicationProfile = {
    */
   refsSizePt: number;
   refsLine: number;
+  /**
+   * Annotatsiya (×3) intervali — OAK/universitet jurnallari annotatsiyani
+   * 12 pt yakka/1.15 teradi; 1.5 da uch tilli annotatsiya 1,6 bet oladi
+   * (3–5 betlik smoke: 6 bet chiqdi). Shrift `size − 2` (rendererda).
+   */
+  abstractLine: number;
   maxPages?: number;
   /** Annotatsiya so'z chegarasi. */
   abstractWords: [number, number];
@@ -152,6 +158,23 @@ export type PublicationProfile = {
 
 export const PAGES_IDS = ["1-2", "3-5", "5-10", "10-15"] as const;
 export type PagesId = (typeof PAGES_IDS)[number];
+
+/**
+ * Paketga sig'adigan sxema soni. Paket — hujjatning UMUMIY beti: 3–5 betlik
+ * OAK maqolada uch annotatsiya + ikki adabiyot ro'yxati ≈ 2,5 bet, har sxema
+ * ≈ 0,5 bet — ikkita sxema bilan 6 bet chiqdi (jonli smoke). Tezisda (1–2)
+ * dvigatel baribir sxema chizmaydi. Forma ham, server (`parseArticleInput`)
+ * ham shu jadvaldan kesadi.
+ */
+/**
+ * So'z rejasi (`articleWordPlan`): `total` — butun hujjat, `body` — bo'limlar,
+ * `abstracts` — uch annotatsiya jami, `abstractAim` — bitta annotatsiya
+ * mo'ljali, `refs` — kutilayotgan manba soni, `figures` — sxema soni.
+ */
+export type ArticleWordPlan = { perPage: number; total: number; body: number; abstracts: number; abstractAim: number; refs: number; figures: number };
+
+export const FIGURES_BY_PAGES: Record<PagesId, number> = { "1-2": 0, "3-5": 1, "5-10": 3, "10-15": 4 };
+export const maxFiguresFor = (pages: PagesId): number => FIGURES_BY_PAGES[pages];
 
 /* ────────────────────────── manbalar ────────────────────────── */
 

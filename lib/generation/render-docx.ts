@@ -339,6 +339,7 @@ async function drawArticle(plan: ArticlePlan, K: Kit, P: DocProfile, opts: Resum
           }),
       );
   /** Yorliq + matn bitta paragrafda («**Annotatsiya.** Matn…») — orasidagi bo'shliq saqlanadi. */
+  const absLine = Math.round(240 * plan.profile.abstractLine);
   const labeled = (label: string, text: string) => [
     ...spanRuns([{ text: label }], { bold: true, size: small }),
     ...spanRuns([{ text: ` ${text}` }], { size: small }),
@@ -368,10 +369,11 @@ async function drawArticle(plan: ArticlePlan, K: Kit, P: DocProfile, opts: Resum
         }
         break;
       case "abstract":
+        // Profil intervali (OAK 1.15) — ko'ruvchida `--doc-abs-line` (`.word-abstract-p`).
         out.push(
           new Paragraph({
             alignment: AlignmentType.JUSTIFIED,
-            spacing: { before: 120, after: 80, line },
+            spacing: { before: 120, after: 80, line: absLine },
             ...(P.type.firstLine ? { indent: { firstLine: P.type.firstLine } } : {}),
             children: labeled(`${h.label}.`, h.text),
           }),
@@ -379,7 +381,7 @@ async function drawArticle(plan: ArticlePlan, K: Kit, P: DocProfile, opts: Resum
         out.push(
           new Paragraph({
             alignment: AlignmentType.JUSTIFIED,
-            spacing: { after: 160, line },
+            spacing: { after: 160, line: absLine },
             ...(P.type.firstLine ? { indent: { firstLine: P.type.firstLine } } : {}),
             children: labeled(`${h.keywordsLabel}:`, h.keywords),
           }),

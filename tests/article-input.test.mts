@@ -90,9 +90,15 @@ test("kalit so'zlar JSON yoki CSV, ≤12; userData faqat to'liq jadval; figureCo
   assert.equal(parseUserData('{"categories":["a","b"],"series":[{"name":"S","values":[1]}]}'), undefined, "qiymat soni mos emas");
   assert.equal(parseUserData('{"categories":["a"],"series":[{"name":"S","values":[1]}]}'), undefined, "bitta kategoriya — grafik emas");
   assert.equal(parseUserData(""), undefined);
-  assert.equal(articleInputFromValues({ figureCount: 9 }).figureCount, ARTICLE_LIMITS.figures);
+  // Sxema soni PAKETGA bog'liq (`FIGURES_BY_PAGES`): 3–5 bet → 1 tagacha, 10–15 → 4, tezis → 0.
+  assert.equal(articleInputFromValues({ figureCount: 9, pages: "10-15" }).figureCount, ARTICLE_LIMITS.figures);
+  assert.equal(articleInputFromValues({ figureCount: 9 }).figureCount, 1, "standart paket 3–5 — 1 ta sxema");
+  assert.equal(articleInputFromValues({ figureCount: 2, pages: "5-10" }).figureCount, 2);
+  assert.equal(articleInputFromValues({ figureCount: 4, pages: "5-10" }).figureCount, 3);
+  assert.equal(articleInputFromValues({ figureCount: 2, articleType: "conference_thesis", pages: "1-2" }).figureCount, 0);
   assert.equal(articleInputFromValues({ figureCount: -1 }).figureCount, 0);
-  assert.equal(articleInputFromValues({}).figureCount, 2);
+  assert.equal(articleInputFromValues({}).figureCount, 1);
+  assert.equal(articleInputFromValues({ pages: "10-15" }).figureCount, 2);
   assert.equal(articleInputFromValues({}).research, true);
   assert.equal(articleInputFromValues({ research: false }).research, false);
   assert.equal(articleInputFromValues({ udk: "0".repeat(100) }).udk.length, ARTICLE_LIMITS.udkChars);

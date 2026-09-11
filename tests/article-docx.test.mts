@@ -201,6 +201,11 @@ test("chegaralar (`w:pgMar`) va shrift (`w:sz`) nashr profiliga mos: oak 2/2/3/1
     assert.ok(tbl.includes(`<w:sz w:val="${p.tableSizePt * 2}"/>`), `${id}: jadval shrifti ${p.tableSizePt} pt emas`);
     // Interval.
     assert.ok(xml.includes(`w:line="${Math.round(240 * p.line)}"`), `${id}: interval`);
+    // Annotatsiya intervali profilniki (OAK 1.15 — uch tilli annotatsiya 1,6 bet olmasin).
+    const absAt = posOf(xml, "Annotatsiya.");
+    const absPara = xml.slice(xml.lastIndexOf("<w:p>", absAt), absAt);
+    assert.ok(absPara.includes(`w:line="${Math.round(240 * p.abstractLine)}"`), `${id}: annotatsiya intervali ${p.abstractLine}`);
+    if (p.abstractLine !== p.line) assert.ok(!absPara.includes(`w:line="${Math.round(240 * p.line)}"`), `${id}: annotatsiya tana intervalida`);
     // Shrift oilasi.
     assert.ok(xml.includes(`w:ascii="${p.font}"`), `${id}: shrift oilasi`);
   }

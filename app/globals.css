@@ -338,6 +338,7 @@ button {
 }
 .word-abstract-p {
   font-size: var(--doc-small, 12pt);
+  line-height: var(--doc-abs-line, inherit);
   margin-bottom: 4pt;
 }
 .word-abstract-p + .word-abstract-p {

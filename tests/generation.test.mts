@@ -796,7 +796,9 @@ test("tezis prompti BOB raqamlashni taqiqlaydi; maqola umumiy yozuvchi yo'lidan 
    */
   const input = articleInputFromValues({ topic: "Mavzu", articleType: "imrad_oak" });
   const meta = { ...writerMeta("article", {}), language: input.language };
-  const article = articleSystemPrompt({ input, meta, type: ARTICLE_TYPES.imrad_oak, profile: PUBLICATION_PROFILES.oak, labels: articleLabels("uz"), wordTarget: 900, refs: [] });
+  const { articleWordPlan } = await import("../lib/generation/article/engine.ts");
+  const plan = articleWordPlan(meta, ARTICLE_TYPES.imrad_oak, PUBLICATION_PROFILES.oak);
+  const article = articleSystemPrompt({ input, meta, type: ARTICLE_TYPES.imrad_oak, profile: PUBLICATION_PROFILES.oak, labels: articleLabels("uz"), wordTarget: 900, plan, refs: [] });
   assert.match(article, /do not write chapter numbers \(«I BOB»\)/);
   assert.match(article, /NEVER invent a source/);
   assert.match(thesis, /ISHLATMANG/);

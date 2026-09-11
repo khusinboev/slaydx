@@ -19,7 +19,7 @@
  */
 import { languageDirective, langInfo } from "../i18n";
 import type { DocMeta } from "../types";
-import type { ArticleType, PublicationProfile, Reference } from "./types";
+import type { ArticleType, ArticleWordPlan, PublicationProfile, Reference } from "./types";
 import { articleLabels, type ArticleDocLabels } from "./labels";
 import type { ArticleInput } from "./input";
 import type { OpenAlexWork } from "../research/openalex";
@@ -31,8 +31,10 @@ export type ArticleContext = {
   type: ArticleType;
   profile: PublicationProfile;
   labels: ArticleDocLabels;
-  /** Butun maqola tanasi uchun so'z maqsadi (annotatsiyasiz). */
+  /** Butun maqola tanasi uchun so'z maqsadi (annotatsiyasiz) — `plan.body`. */
   wordTarget: number;
+  /** So'z rejasi — annotatsiya mo'ljali, kutilayotgan manba/sxema soni. */
+  plan: ArticleWordPlan;
   refs: Reference[];
 };
 
@@ -207,7 +209,17 @@ export function sectionPrompt(ctx: ArticleContext, ask: SectionAsk): string {
     lines.push(`This is the WHOLE ${ctx.type.label.en}: aim for about ${Math.round((lo + hi) / 2)} words, never fewer than ${lo} and never more than ${hi} (count words as whitespace-separated tokens); no headings, 3–6 paragraphs.`);
   }
   if (refs.length) {
-    lines.push(`SOURCES (cite by ID; use those that genuinely support a sentence; do not force a citation into every paragraph; do not cite what you did not use):`, ...refs.map((r) => formatRefLine(r)));
+    /*
+     * Bo'limlar parallel yoziladi — manbalarni o'zaro bo'lisha olmaydi.
+     * Har bo'limga o'z ulushi (so'z ulushi × kutilayotgan manba soni)
+     * aytiladi: jonli smoke'da 20 manba topilib, 4 betlik maqola 8 tasini
+     * iqtibos qilgan edi (OAK kamida 10 talab qiladi → qizil band).
+     */
+    const want = Math.min(refs.length, Math.max(1, Math.ceil((ctx.plan.refs * plan.words) / Math.max(1, ctx.wordTarget))));
+    lines.push(
+      `SOURCES (cite by ID; use those that genuinely support a sentence; do not force a citation into every paragraph; do not cite what you did not use). The whole article must cite at least ${ctx.plan.refs} DIFFERENT sources, so this section should draw on about ${want} different ones${plan.id === "conclusion" || plan.id === "conclusions" ? " (a conclusion may cite fewer)" : ""}:`,
+      ...refs.map((r) => formatRefLine(r)),
+    );
   } else {
     lines.push(`SOURCES: none available — write WITHOUT any citations and without any bracketed IDs or numbers.`);
   }
@@ -277,7 +289,7 @@ export function abstractPrompt(ctx: ArticleContext, lang: string, sectionSummari
   const structured = Boolean(ctx.type.structuredAbstract);
   const lines = [
     // Jonli sinov: «150–250» so‘ralganda 132–147 chiqdi — o‘rtaga mo‘ljal, pastki chegara qat’iy.
-    `Write the abstract in ${langInfo(lang).name}: aim for about ${Math.round((minW + maxW) / 2)} words, never fewer than ${minW} and never more than ${maxW} (whitespace-separated words); aim, method, main result (with the author's numbers if any), conclusion/significance.`,
+    `Write the abstract in ${langInfo(lang).name}: aim for about ${ctx.plan.abstractAim} words, never fewer than ${minW} and never more than ${maxW} (whitespace-separated words); aim, method, main result (with the author's numbers if any), conclusion/significance.`,
     `Then ${minK}–${maxK} keywords in ${langInfo(lang).name} (lowercase unless proper nouns; no duplicates; 1–3 words each).`,
     `Section summaries of the written article (the abstract must reflect THIS content):`,
     sectionSummaries,

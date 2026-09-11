@@ -192,6 +192,7 @@ test("ko'ruvchi varag'i `.word-article` sinfi va profil o'zgaruvchilari bilan; e
   const out = html(sampleArticleDoc(META));
   assert.ok(out.includes("word-article"));
   assert.ok(out.includes("--doc-table-size:10pt"), "oak jadval shrifti 10 pt");
+  assert.ok(out.includes("--doc-abs-line:1.15"), "oak annotatsiya intervali 1.15 (DOCX bilan bir xil)");
   // SSR da varaqlar hali yo'q (sahifalash `useLayoutEffect` da) — o'lchov daraxti kengligi chegaradan.
   assert.ok(out.includes("width:165mm"), "oak chegaralari (210 − 3 − 1.5)");
   const legacy: AcademicDoc = { ...sampleArticleDoc(META), article: undefined };

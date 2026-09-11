@@ -11,6 +11,7 @@ import { priceFor, formatTanga, ARTICLE_PRICES } from "@/lib/tools";
 import {
   ARTICLE_LIMITS,
   CITE_STYLES,
+  maxFiguresFor,
   type ArticleAuthor,
   type ArticleTypeId,
   type CiteStyle,
@@ -96,7 +97,9 @@ const CITE_STYLE_LABEL: Record<CiteStyle, string> = {
   ieee: "IEEE — [1]",
 };
 
-const FIGURE_COUNT_OPTIONS = [0, 1, 2, 3, 4].map((n) => ({ value: String(n), label: String(n) }));
+/** Paketga sig'adigan sxema soni — `FIGURES_BY_PAGES` (server ham shu chegara bilan kesadi). */
+const figureOptions = (pages: PagesId) => Array.from({ length: maxFiguresFor(pages) + 1 }, (_, n) => ({ value: String(n), label: String(n) }));
+const clampFigures = (n: number, pages: PagesId) => Math.max(0, Math.min(maxFiguresFor(pages), n));
 
 function emptyUi(profile: UserProfile, user: ServerUser | null): Ui {
   const type = ARTICLE_TYPES.imrad_oak;
@@ -116,7 +119,7 @@ function emptyUi(profile: UserProfile, user: ServerUser | null): Ui {
     userFacts: "",
     userRefs: [],
     userDataCsv: "",
-    figureCount: 2,
+    figureCount: clampFigures(2, normalizeArticlePages(type, "3-5")),
     research: true,
     extra: "",
     fileName: "",
@@ -284,7 +287,11 @@ export function ArticleComposer({
       articleType: id,
       pubProfile: s.pubProfileTouched ? s.pubProfile : nextType.defaultProfile,
       pages: normalizeArticlePages(nextType, s.pages),
+      figureCount: clampFigures(s.figureCount, normalizeArticlePages(nextType, s.pages)),
     }));
+  }
+  function onPagesChange(pages: PagesId) {
+    setUi((s) => ({ ...s, pages, figureCount: clampFigures(s.figureCount, pages) }));
   }
   function onProfileChange(id: PublicationProfileId) {
     setUi((s) => ({ ...s, pubProfile: id, pubProfileTouched: true }));
@@ -475,7 +482,7 @@ export function ArticleComposer({
               ariaLabel="Hajm"
               options={type.pages.map((id) => ({ value: id, label: `${PAGE_LABEL[id]} · ${formatTanga(ARTICLE_PRICES[id])}` }))}
               value={ui.pages}
-              onChange={(v) => set("pages", v as PagesId)}
+              onChange={(v) => onPagesChange(v as PagesId)}
             />
           </span>
         </Row>
@@ -528,14 +535,18 @@ export function ArticleComposer({
               {ui.keywords.length}/{ARTICLE_LIMITS.keywords}
             </p>
           </Row>
-          <Row label="Vizuallar soni" hint="Sxema/jadval/grafik soni">
+          <Row label="Vizuallar soni" hint={maxFiguresFor(ui.pages) ? `Sxema/grafik soni — ${PAGE_LABEL[ui.pages]} betga ${maxFiguresFor(ui.pages)} tagacha sig‘adi` : "Tezisda sxema chizilmaydi"}>
             <span data-field="figureCount" className="block">
-              <Segmented
-                ariaLabel="Vizuallar soni"
-                options={FIGURE_COUNT_OPTIONS}
-                value={String(ui.figureCount)}
-                onChange={(v) => set("figureCount", Number(v))}
-              />
+              {maxFiguresFor(ui.pages) ? (
+                <Segmented
+                  ariaLabel="Vizuallar soni"
+                  options={figureOptions(ui.pages)}
+                  value={String(ui.figureCount)}
+                  onChange={(v) => set("figureCount", Number(v))}
+                />
+              ) : (
+                <span className="text-muted-foreground text-sm">0</span>
+              )}
             </span>
           </Row>
           <Row label="Manba qidiruvi" hint="OpenAlex/Crossref orqali tekshirilgan manba topadi">

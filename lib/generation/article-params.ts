@@ -54,7 +54,8 @@ export const ARTICLE_PARAMS: ArticleParam[] = [
   { id: "userFacts", encode: "string", probeA: "", probeB: "Tajribada 120 talaba ishtirok etdi, o'rtacha ball 4,1 dan 4,6 ga oshdi.", impacts: ["prompt", "review"] },
   { id: "userRefs", encode: "json", probeA: "[]", probeB: '[{"doi":"10.1186/s40561-023-00260-y"},{"raw":"Karimov A. Ta\'limda AI. — Toshkent: Fan, 2022."}]', impacts: ["research", "layout"] },
   { id: "userData", encode: "json", probeA: "", probeB: '{"categories":["2022","2023","2024"],"series":[{"name":"Talabalar","values":[80,110,120]}]}', impacts: ["figures"] },
-  { id: "figureCount", encode: "number", probeA: 0, probeB: 2, impacts: ["figures", "prompt"] },
+  // Sxema soni paketga bog'liq (`FIGURES_BY_PAGES`: 3–5 bet → 1) — zond katta paketda 0 va 2 ni solishtiradi.
+  { id: "figureCount", encode: "number", probeA: 0, probeB: 2, probeWith: { pages: "10-15" }, impacts: ["figures", "prompt"] },
   { id: "research", encode: "boolean", probeA: false, probeB: true, impacts: ["research"] },
   { id: "extra", encode: "string", probeA: "", probeB: "Rasmiy uslub, «biz» olmoshisiz.", impacts: ["prompt"] },
 ];
