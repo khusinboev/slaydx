@@ -16,6 +16,7 @@ import { ProSlideForm } from "./ProSlideForm";
 import { ResumeComposer } from "./ResumeComposer";
 import { TranslationForm } from "./TranslationForm";
 import { ImageStudio } from "./ImageStudio";
+import { ArticleComposer } from "./ArticleComposer";
 import { SourceFileField } from "./SourceFileField";
 
 function defaultsFor(tool: ToolConfig, profile: UserProfile): FormValues {
@@ -92,6 +93,7 @@ export function ToolWorkspace({ tool }: { tool: ToolConfig }) {
   if (tool.custom === "resume") return <ResumeComposer tool={tool} profile={profile} />;
   if (tool.custom === "translation") return <TranslationForm tool={tool} />;
   if (tool.custom === "image") return <ImageStudio tool={tool} />;
+  if (tool.custom === "article") return <ArticleComposer tool={tool} profile={profile} user={user} />;
 
   return <StandardForm tool={tool} profile={profile} />;
 }
