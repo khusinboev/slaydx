@@ -152,6 +152,22 @@ export function outlinePrompt(ctx: ArticleContext): string {
   return lines.join("\n");
 }
 
+/**
+ * Bo'lim hajmi ko'rsatmasi — paragraf soni va uzunligi BYUDJETGA moslashadi.
+ *
+ * Ilgari «kamida 2 paragraf × 90–130 so'z» qattiq yozilgan edi: 6 bo'limli
+ * 3–5 betlik maqolada bu 450 so'zlik byudjetni ikki baravar oshirib
+ * yuborardi (jonli smoke: 924 so'z, hisobotda «153%»). Endi qisqa
+ * byudjetda paragraf kamroq va qisqaroq; yuqori chegara ham aytiladi.
+ */
+export function lengthLine(words: number): string {
+  const paras = Math.max(1, Math.round(words / 100));
+  const per = Math.max(50, Math.min(130, Math.round(words / paras)));
+  const lo = Math.round(words * 0.8);
+  const hi = Math.round(words * 1.25);
+  return `Length: about ${words} words — write ${paras} paragraph${paras > 1 ? "s" : ""} of roughly ${Math.round(per * 0.85)}–${per} words each (count words as whitespace-separated tokens; fewer than ${lo} or more than ${hi} words is unacceptable). Stay strictly within this section's scope; other sections are written separately.`;
+}
+
 function figureSpecHelp(ctx: ArticleContext): string {
   const chart = ctx.input.userData
     ? `  • {"kind":"chart","chart":"bar"|"line","dataSource":"user","categories":[…],"series":[{"name":"…","values":[…]}]} — ONLY from USER DATA; categories/series will be filled from the user's data verbatim, so just choose "bar"/"line" and write the caption.`
@@ -183,7 +199,7 @@ export function sectionPrompt(ctx: ArticleContext, ask: SectionAsk): string {
     `Write the section «${plan.title}» (id ${plan.id}) of the article. Do not repeat the title in the text.`,
     `Plan for this section: ${plan.brief}`,
     // Jonli sinov: JSON rejimida model ~45% hajm beradi — paragraf soni va pastki chegara aniq aytiladi.
-    `Length: about ${plan.words} words — write ${Math.max(2, Math.ceil(plan.words / 100))} full paragraphs of 90–130 words each (count words as whitespace-separated tokens; fewer than ${Math.round(plan.words * 0.8)} words is unacceptable). Stay strictly within this section's scope; other sections are written separately.`,
+    lengthLine(plan.words),
   ];
   if (ctx.type.wordRange && ctx.type.skeleton.length === 1) {
     const [lo, hi] = ctx.type.wordRange;

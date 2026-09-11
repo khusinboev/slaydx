@@ -114,6 +114,17 @@ export type ArticleWordPlan = { perPage: number; total: number; body: number; ab
  * `body` — bo'limlar (annotatsiya ×3 va adabiyotlar ayirilgan).
  * `wordRange` li turlar (tezis) bet bilan emas, so'z bilan o'lchanadi.
  */
+/**
+ * So'z rejasi. Paket («3–5 bet») — hujjatning UMUMIY beti: sarlavha bloki,
+ * uch tilli annotatsiya, adabiyotlar (OAK'da ikki ro'yxat) va sxemalar ham
+ * shu betlarga kiradi. Shuning uchun bo'lim matni byudjeti = paket beti −
+ * qo'shimcha betlar (taxmin): sarlavha/mualliflar/kalit so'zlar 0.6 bet,
+ * annotatsiyalar kichik shriftda (~1.8× zichroq), adabiyot satri ≈0.04 bet
+ * (TNR 12 / 1.15), sxema ≈0.3 bet. Bo'lim matni paketning kamida yarmi.
+ *
+ * Jonli smoke (analytical, 3–5 bet): eski formula 450 so'z bersa ham
+ * bo'limlar 924 so'z yozgan, DOCX 9 bet chiqqan edi.
+ */
 export function articleWordPlan(meta: DocMeta, type: ArticleType, profile: PublicationProfile): ArticleWordPlan {
   const perPage = articleWordsPerPage(profile);
   const abstracts = 3 * Math.round((profile.abstractWords[0] + profile.abstractWords[1]) / 2);
@@ -121,10 +132,16 @@ export function articleWordPlan(meta: DocMeta, type: ArticleType, profile: Publi
     const body = Math.round((type.wordRange[0] + type.wordRange[1]) / 2);
     return { perPage, total: body + abstracts, body, abstracts };
   }
-  const total = Math.max(1, meta.targetPages) * perPage;
-  // Adabiyotlar + mualliflar bloki + sarlavhalar uchun ~200 so'z.
-  const body = Math.max(450, total - abstracts - 200);
-  return { perPage, total, body, abstracts };
+  const pages = Math.max(1, meta.targetPages);
+  const refs = Math.min(profile.refsMax, Math.max(profile.refsMin, Math.round(pages * 2.5)));
+  const overhead =
+    0.6 +
+    abstracts / (perPage * 1.8) +
+    refs * 0.04 * (profile.secondEnglishList ? 2 : 1) +
+    Math.max(0, meta.figureCount) * 0.3;
+  const bodyPages = Math.max(pages * 0.5, pages - overhead);
+  const body = Math.max(300, Math.round(bodyPages * perPage));
+  return { perPage, total: body + abstracts, body, abstracts };
 }
 
 /* ────────────────────────── yordamchilar ────────────────────────── */
@@ -634,7 +651,7 @@ export async function buildArticleDoc(meta: DocMeta, values: FormValues, opts: A
       guard: { unresolved: guard.unresolved, emptySections: guard.emptySections },
       complete,
       deadline,
-      wordTarget: plan.total,
+      wordTarget: plan.body,
       onUsage: (u) => meter.add(u),
     });
     article.review = review;

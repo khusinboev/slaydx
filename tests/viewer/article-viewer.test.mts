@@ -93,7 +93,7 @@ test("rasm: PNG bo'lsa `<img>`, bo'lmasa o'rinbosar ramka; sarlavha PASTDA", () 
   const plain = html(sampleArticleDoc(META));
   assert.ok(plain.includes('<div class="word-figure-placeholder">[1-rasm — sxema]</div>'));
   assert.ok(plain.indexOf("word-figure-placeholder") < plain.indexOf('<div class="word-figure-caption">1-rasm.'), "sarlavha rasmdan oldin");
-  assert.ok(plain.includes('<div class="word-figure-source">Manba: Muallif tomonidan tuzilgan</div>'), "manba satri yo'q");
+  assert.ok(plain.includes('<div class="word-figure-source">Manba: muallif tomonidan tuzilgan</div>'), "manba satri yo'q");
   const doc = sampleArticleDoc(META);
   doc.article!.figures[0].url = PNG_URL;
   const withPng = html(doc);

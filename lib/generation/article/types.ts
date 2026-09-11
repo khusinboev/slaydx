@@ -134,6 +134,13 @@ export type PublicationProfile = {
   /** «1-rasm» (flat) yoki «1.1-rasm» (bob bo'yicha). */
   figureNumbering: "flat" | "chapter";
   tableSizePt: number;
+  /**
+   * Adabiyotlar ro'yxati shrifti (pt) va intervali — OAK/universitet
+   * jurnallari ro'yxatni tana matnidan kichik teradi (oriens.uz: TNR 12,
+   * 1.15). Aks holda 12 manba × 2 ro'yxat 2,5 betni egallaydi (jonli smoke).
+   */
+  refsSizePt: number;
+  refsLine: number;
   maxPages?: number;
   /** Annotatsiya so'z chegarasi. */
   abstractWords: [number, number];

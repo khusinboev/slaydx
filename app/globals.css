@@ -402,9 +402,11 @@ button {
   margin: 0;
 }
 .word-ref {
-  margin: 0 0 4pt;
+  margin: 0 0 3pt;
   text-align: justify;
   text-indent: 0;
+  font-size: var(--doc-refs-size, inherit);
+  line-height: var(--doc-refs-line, inherit);
 }
 .word-ref--hanging {
   padding-left: 1.25cm;

@@ -399,7 +399,12 @@ test("so'z rejasi profilga bog'liq; byudjet 150 000 + 16 000 × bet; prismaSpec 
   const oak = articleWordPlan(meta, ARTICLE_TYPES.imrad_oak, PUBLICATION_PROFILES.oak);
   const ieee = articleWordPlan(meta, ARTICLE_TYPES.elsevier_ieee_style, PUBLICATION_PROFILES.ieee);
   assert.ok(ieee.body > oak.body * 1.5, `${ieee.body} vs ${oak.body}`);
-  assert.equal(oak.total, 13 * 230);
+  /*
+   * Paket — UMUMIY bet: bo'lim byudjeti annotatsiya/adabiyot/sxema betlari
+   * ayirilgandan keyin qoladi, lekin paketning kamida yarmi.
+   */
+  assert.equal(oak.total, oak.body + oak.abstracts);
+  assert.ok(oak.body < 13 * 230 && oak.body >= 0.5 * 13 * 230, `oak body ${oak.body}`);
   assert.equal(budgetFor(tool, { ...BASE, pages: "10-15" }, 660_000), 150_000 + 13 * 16_000);
   assert.equal(budgetFor(tool, { ...BASE, articleType: "conference_thesis", pages: "1-2" }, 660_000), 150_000 + 2 * 16_000);
   assert.equal(budgetFor(tool, { ...BASE, pages: "10-15" }, 300_000), 300_000, "cap");

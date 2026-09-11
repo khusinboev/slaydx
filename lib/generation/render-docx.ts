@@ -519,12 +519,14 @@ async function drawArticle(plan: ArticlePlan, K: Kit, P: DocProfile, opts: Resum
   }
 
   /* ── adabiyotlar ── */
+  // Ro'yxat profil o'lchamida (OAK: TNR 12 / 1.15) — ko'ruvchi `--doc-refs-size` bilan juft.
+  const refLine = Math.round(240 * plan.profile.refsLine);
   const refP = (text: string) =>
     new Paragraph({
       alignment: AlignmentType.JUSTIFIED,
-      spacing: { after: 80, line },
+      spacing: { after: 60, line: refLine },
       indent: plan.cite === "apa7" ? { left: Math.round(1.25 * CM), hanging: Math.round(1.25 * CM) } : { left: 0, firstLine: 0 },
-      children: [K.run(text)],
+      children: [K.run(text, { size: plan.profile.refsSizePt * 2 })],
     });
   if (plan.refs.length) {
     out.push(K.sectionHeading(plan.refsLabel));

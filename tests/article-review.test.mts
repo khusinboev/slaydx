@@ -69,7 +69,8 @@ function goodDoc(type: ArticleTypeId = "imrad_oak", profile: PublicationProfileI
 }
 
 /** `goodDoc` ≈ 958 so'z (bo'limlar + annotatsiya ×3) — ±20% ichida. */
-const WORD_TARGET = 950;
+// `goodDoc` bo'lim matni ≈405 so'z (`long(...)` qo'shimchalari bilan) — maqsad FAQAT bo'lim matni (annotatsiya alohida qoida).
+const WORD_TARGET = 400;
 const rules = (doc: AcademicDoc, o: Partial<Parameters<typeof ruleChecks>[1]> = {}) => ruleChecks(doc, { wordTarget: WORD_TARGET, now: NOW, ...o });
 const level = (checks: ReviewCheck[], id: string) => checks.find((c) => c.id === id)?.level;
 const detail = (checks: ReviewCheck[], id: string) => checks.find((c) => c.id === id)?.detail ?? "";
@@ -297,7 +298,8 @@ test("repetition: 3-gram Jaccard > 0.15 → sariq; trigrams/jaccard yordamchilar
 
 test("length: maqsad ±20% yashil, ±40% sariq, undan tashqari qizil; wordRange turida oraliq", () => {
   const doc = goodDoc();
-  const total = doc.sections.reduce((n, s) => n + s.blocks.reduce((m, b) => m + (b.kind === "p" ? b.text.split(/\s+/).length : 0), 0), 0) + doc.abstracts!.reduce((n, a) => n + a.text.split(/\s+/).length, 0);
+  // Faqat BO'LIM matni (annotatsiyalar `abstracts` qoidasida alohida o'lchanadi).
+  const total = doc.sections.reduce((n, s) => n + s.blocks.reduce((m, b) => m + (b.kind === "p" ? b.text.split(/\s+/).length : 0), 0), 0);
   assert.equal(level(rules(doc, { wordTarget: total }).checks, "length"), "green");
   assert.equal(level(rules(doc, { wordTarget: Math.round(total / 1.3) }).checks, "length"), "yellow");
   assert.equal(level(rules(doc, { wordTarget: total * 3 }).checks, "length"), "red");

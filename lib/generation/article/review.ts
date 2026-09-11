@@ -198,8 +198,8 @@ function langKey(lang: string): "uz" | "ru" | "en" {
 }
 
 /**
- * Deterministik qoidalar. `wordTarget` — butun hujjat so'z maqsadi
- * (annotatsiya ×3 bilan); `wordRange` li turlarda (tezis) e'tiborsiz.
+ * Deterministik qoidalar. `wordTarget` — BO'LIM matni so'z maqsadi (`articleWordPlan.body`)
+ * (annotatsiyalar alohida qoidada); `wordRange` li turlarda (tezis) e'tiborsiz.
  */
 export function ruleChecks(doc: AcademicDoc, o: { guard?: ReviewGuardInput; research?: ResearchStats; wordTarget: number; now?: Date }): RuleResult {
   const plan = planArticle(doc);
@@ -428,10 +428,15 @@ export function ruleChecks(doc: AcademicDoc, o: { guard?: ReviewGuardInput; rese
       else if (body >= lo * (1 - LENGTH_TOLERANCE) && body <= hi * (1 + LENGTH_TOLERANCE)) out.push(check("length", "yellow", "Hajm", d, rewrite(target, `Adjust the text to ${lo}–${hi} words.`)));
       else out.push(check("length", "red", "Hajm", d, rewrite(target, `Rewrite the text to ${lo}–${hi} words.`)));
     } else {
-      const total = body + (doc.abstracts ?? []).reduce((n, a) => n + words(a.text), 0);
+      /*
+       * Faqat BO'LIM matni: annotatsiyalar alohida qoida (`abstracts`) bilan
+       * o'lchanadi, dvigatel rejasi (`articleWordPlan.body`) ham bo'lim
+       * matniga tegishli. Ilgari annotatsiya qo'shib sanalgani uchun mos
+       * hajmli maqola «153%» deb qizil chiqardi.
+       */
       const t = Math.max(1, o.wordTarget);
-      const ratio = total / t;
-      const d = `${total} so‘z (maqsad ≈${t}, ${pct(ratio)})`;
+      const ratio = body / t;
+      const d = `${body} so‘z (maqsad ≈${t}, ${pct(ratio)})`;
       if (Math.abs(ratio - 1) <= LENGTH_TOLERANCE) out.push(check("length", "green", "Hajm", d));
       else if (Math.abs(ratio - 1) <= LENGTH_TOLERANCE * 2) out.push(check("length", "yellow", "Hajm", d));
       else out.push(check("length", "red", "Hajm", d));
@@ -597,7 +602,7 @@ export async function reviewArticle(doc: AcademicDoc, opts: ReviewOpts = {}): Pr
     const { articleWordPlan } = await import("./engine");
     const type = ARTICLE_TYPES[doc.article?.type ?? "imrad_oak"];
     const profile = PUBLICATION_PROFILES[doc.article?.profile ?? type.defaultProfile];
-    wordTarget = articleWordPlan(doc.meta, type, profile).total;
+    wordTarget = articleWordPlan(doc.meta, type, profile).body;
   }
   const rules = ruleChecks(doc, { guard: opts.guard, research: opts.research, wordTarget, now });
 
