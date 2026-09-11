@@ -192,11 +192,20 @@ test("buildArticleDoc: to'liq oqim — manbalar tekshirilgan, iqtiboslar reyestr
   assert.ok(cost.calls >= 8, `calls=${cost.calls}`);
   assert.equal(cost.inputTokens, cost.calls * 100);
   assert.equal(stages[0].progress, 0);
-  assert.equal(stages[stages.length - 1].progress, 86);
+  // WP5: 86% adabiyotlar → 88% hisobot → 94% «Hisobot: N ball».
+  assert.ok(stages.some((s) => s.progress === 86));
+  assert.equal(stages[stages.length - 1].progress, 94);
+  assert.match(stages[stages.length - 1].step, /^Hisobot: \d+ ball$/);
   assert.ok(stages.some((s) => /Bo‘limlar yozilmoqda/.test(s.step)));
-  // Rollar: fast (so'rovlar), researcher (tanlash), writer (qolgani).
+  // Rollar: fast (so'rovlar), researcher (tanlash), writer (qolgani), judge (hisobot — bitta chaqiruv).
   assert.ok(calls.some((c) => c.role === "fast") && calls.some((c) => c.role === "researcher"));
   assert.ok(calls.filter((c) => c.role === "writer").length >= 5);
+  assert.equal(calls.filter((c) => c.role === "judge").length, 1);
+  // Hisobot hujjatda: ball 0–100, qoidalar + baholovchi mezonlari; stub «{}» → neytral 2/3.
+  const review = doc.article.review!;
+  assert.ok(review && review.score >= 0 && review.score <= 100, "review yo'q");
+  assert.ok(review.checks.some((c) => c.id === "structure") && review.checks.some((c) => c.id === "judge:novelty"));
+  assert.equal(review.checks.find((c) => c.id === "judge:novelty")?.detail, "2/3");
 });
 
 test("research o'chiq: OpenAlex chaqirilmaydi, faqat foydalanuvchi manbalari; sxema soni 0 → figure so'ralmaydi", async () => {

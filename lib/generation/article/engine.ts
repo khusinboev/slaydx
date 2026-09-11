@@ -8,7 +8,8 @@
  *   4 visuals    62→74   jadval (langar) + sxema SPEC (PNG ni WP3 chizadi)
  *   5 abstracts  74→82   uz + ru + en MUSTAQIL, kalit so'zlar; highlights (Elsevier)
  *   6 references 82→86   `verifyCitations` → cited-only; PRISMA (sistematik sharh)
- *   (7 review, 8 render — keyingi WP lar.)
+ *   7 review     88→94   `review.ts` qoidalar + `judge` → `doc.article.review` (xatoda hisobotsiz)
+ *   (8 render — `index.ts`/`render-docx`.)
  *
  * Yagona manba qarori (D-1): matn `sections` da, metama'lumot `doc.article`
  * da; tartib/raqamlash `layout.ts planArticle` (WP2). Bu fayl raqam
@@ -47,6 +48,7 @@ import {
   type SectionPlan,
 } from "./prompts";
 import { guardSection, missingFactNumbers, skeletonCoverage, type SectionGuardReport } from "./guard";
+import { reviewArticle } from "./review";
 import { collectReferences, type CompleteFn, type ResearchStats } from "../research/pipeline";
 import { citedOnly, referenceIndex, verifyCitations, verifyCitationsInText, type Unresolved } from "../research/verify";
 
@@ -618,6 +620,29 @@ export async function buildArticleDoc(meta: DocMeta, values: FormValues, opts: A
     ...(anyUnverified ? { referencesNote: unverifiedReferenceNote(input.language) } : {}),
     article,
   };
+
+  /*
+   * ── 7. review (WP5) — qoidalar + `judge` roli → `doc.article.review`.
+   * Hisobot XATO EMAS: baholovchi/qoida yiqilsa maqola hisobotsiz chiqadi
+   * (jurnalga yoziladi), kredit yechilgan ish yo'qolmaydi. Baholovchi
+   * `usage` i sarfga qo'shiladi (`cost_json`).
+   */
+  stage(88, "Tayyorlik hisoboti");
+  try {
+    const review = await reviewArticle(doc, {
+      research: research.stats,
+      guard: { unresolved: guard.unresolved, emptySections: guard.emptySections },
+      complete,
+      deadline,
+      wordTarget: plan.total,
+      onUsage: (u) => meter.add(u),
+    });
+    article.review = review;
+    stage(94, `Hisobot: ${review.score} ball`);
+  } catch (e) {
+    console.warn("[article] tayyorlik hisoboti tuzilmadi:", e instanceof Error ? e.message : e);
+    stage(94, "Hisobotsiz davom etildi");
+  }
   return { doc, cost: meter.toJson(), research: research.stats, guard };
 }
 
