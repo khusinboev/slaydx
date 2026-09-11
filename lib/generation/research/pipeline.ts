@@ -21,6 +21,7 @@ import type { DocMeta } from "../types";
 import type { Reference } from "../article/types";
 import type { ArticleInput, ArticleUserRef } from "../article/input";
 import { PUBLICATION_PROFILES } from "../article/profiles";
+import { ARTICLE_TYPES } from "../article/types-registry";
 import { mapPool, remainingMs } from "../quality";
 import { parseLlmObject } from "../json";
 import type { complete as completeRole } from "../llm-roles";
@@ -227,7 +228,14 @@ export async function collectReferences(input: ArticleInput, meta: DocMeta, opts
   }
 
   // (b3) Tanlash — `researcher` rol, FAQAT nomzodlar ro'yxatidan.
-  const want = { min: Math.max(3, Math.min(profile.refsMin, candidates.length)), max: Math.min(profile.refsMax, candidates.length) };
+  /*
+   * Tezis (200–300 so'z) uchun profil chegarasi (≤20) ko'p: jonli sinovda
+   * 7 manba 250 so'zga tiqilib ketdi. Konferensiya tezisi amaliyoti — ≤3–4.
+   */
+  const tiny = (ARTICLE_TYPES[input.articleType].wordRange?.[1] ?? Infinity) <= 300;
+  const want = tiny
+    ? { min: Math.min(2, candidates.length), max: Math.min(4, candidates.length) }
+    : { min: Math.max(3, Math.min(profile.refsMin, candidates.length)), max: Math.min(profile.refsMax, candidates.length) };
   const ranked = rankCandidates(candidates, year - profile.recentYearsMin);
   const shortlist = ranked.slice(0, CANDIDATE_CAP);
   const byId = new Map<string, Reference>(shortlist.map((c) => [c.id.toUpperCase(), c]));

@@ -642,13 +642,18 @@ async function writeSection(ctx: ArticleContext, plan: SectionPlan, ask: Section
   let guarded = guardSection(first.blocks, gopts);
   const out: SectionOut = { plan, blocks: guarded.blocks, table: first.table, figure: first.figure, report: guarded.report, expanded: false, rewritten: false };
 
-  // Tezis/qisqa xabar: so'z oralig'idan tashqarida — bir marta qayta.
-  if (wordRange && !guarded.report.wordRangeOk && remainingMs(deadline) > 20_000) {
-    const raw = await call("writer", system, wordRangePrompt(ctx, plan, guarded.report.words, wordRange), { maxTokens, timeoutMs: sectionTimeout(plan.words, deadline) });
-    const again = raw ? blocksFromLlm(parseLlmObject<SectionJson>(raw)?.blocks, raw) : [];
-    if (again.length) {
+  /*
+   * Tezis/qisqa xabar: so'z oralig'idan tashqarida — qayta yoziladi (ko'pi
+   * bilan 2 urinish; jonli sinovda birinchi urinish 157 → hali ham qisqa
+   * chiqqan holat bo'ldi). Yaqinroq natija olinadi, yomonroq tashlanadi.
+   */
+  if (wordRange) {
+    const dist = (w: number) => (w < wordRange[0] ? wordRange[0] - w : w > wordRange[1] ? w - wordRange[1] : 0);
+    for (let attempt = 0; attempt < 2 && !guarded.report.wordRangeOk && remainingMs(deadline) > 20_000; attempt++) {
+      const raw = await call("writer", system, wordRangePrompt(ctx, plan, guarded.report.words, wordRange), { maxTokens, timeoutMs: sectionTimeout(plan.words, deadline) });
+      const again = raw ? blocksFromLlm(parseLlmObject<SectionJson>(raw)?.blocks, raw) : [];
+      if (!again.length) break;
       const g2 = guardSection(again, gopts);
-      const dist = (w: number) => (w < wordRange[0] ? wordRange[0] - w : w > wordRange[1] ? w - wordRange[1] : 0);
       if (dist(g2.report.words) < dist(guarded.report.words)) {
         guarded = g2;
         out.blocks = g2.blocks;

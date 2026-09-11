@@ -184,7 +184,9 @@ export function sectionPrompt(ctx: ArticleContext, ask: SectionAsk): string {
     `Length: about ${plan.words} words (${Math.max(2, Math.round(plan.words / 110))} or more full paragraphs of 80–130 words). Stay strictly within this section's scope; other sections are written separately.`,
   ];
   if (ctx.type.wordRange && ctx.type.skeleton.length === 1) {
-    lines.push(`This is the WHOLE ${ctx.type.label.en}: ${ctx.type.wordRange[0]}–${ctx.type.wordRange[1]} words in total, no headings, 3–6 paragraphs or one dense block.`);
+    const [lo, hi] = ctx.type.wordRange;
+    // Model o‘zbek/rus matnida so‘zni kam sanaydi (jonli: 157 so‘z «200–300» so‘ralganda) — o‘rtaga mo‘ljal, pastki chegara qat’iy.
+    lines.push(`This is the WHOLE ${ctx.type.label.en}: aim for about ${Math.round((lo + hi) / 2)} words, never fewer than ${lo} and never more than ${hi} (count words as whitespace-separated tokens); no headings, 3–6 paragraphs.`);
   }
   if (refs.length) {
     lines.push(`SOURCES (cite by ID; use those that genuinely support a sentence; do not force a citation into every paragraph; do not cite what you did not use):`, ...refs.map((r) => formatRefLine(r)));
@@ -223,7 +225,7 @@ export function expandPrompt(ctx: ArticleContext, plan: SectionPlan, have: numbe
 export function wordRangePrompt(ctx: ArticleContext, plan: SectionPlan, have: number, range: [number, number]): string {
   const dir = have < range[0] ? "too short" : "too long";
   return [
-    `The previous text was ${dir} (${have} words); the required range is ${range[0]}–${range[1]} words. Rewrite the whole section «${plan.title}» to fit the range exactly, keeping every USER FACT verbatim and every citation ID unchanged.`,
+    `The previous text was ${dir} (${have} whitespace-separated words); the required range is ${range[0]}–${range[1]} words. Rewrite the whole section «${plan.title}» to about ${Math.round((range[0] + range[1]) / 2)} words — ${have < range[0] ? "add substantive detail (method, result, significance), do not pad" : "cut redundancy, keep every fact"} — keeping every USER FACT verbatim and every citation ID unchanged.`,
     `Section plan: ${plan.brief}`,
     ctx.refs.length ? `SOURCES (cite by ID only):\n${ctx.refs.map((r) => formatRefLine(r)).join("\n")}` : `SOURCES: none — no citations.`,
     `Return JSON: {"blocks":[{"kind":"p","text":"…"}]}`,
