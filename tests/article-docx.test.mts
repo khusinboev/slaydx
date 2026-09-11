@@ -74,6 +74,13 @@ test("UDK, sarlavha, mualliflar (unvon, tashkilot, email, ORCID), annotatsiya ×
   for (const label of ["Annotatsiya.", "Аннотация.", "Abstract.", "Kalit so‘zlar:", "Ключевые слова:", "Keywords:"]) {
     assert.ok(t.includes(label), `«${label}» yo'q`);
   }
+  /*
+   * Yorliq bilan matn orasidagi BO'SHLIQ saqlanadi: `cleanText` chetdagi
+   * bo'shliqni kesadi va LibreOffice ko'zdan kechiruvida «Annotatsiya.Maqolada»
+   * yopishib chiqqan edi.
+   */
+  assert.ok(xml.includes('<w:t xml:space="preserve"> Maqolada sun’iy intellekt'), "annotatsiya matni oldida bo'shliq yo'q");
+  assert.ok(xml.includes('<w:t xml:space="preserve"> sun’iy intellekt, adaptiv o‘qitish, oliy ta’lim</w:t>'), "kalit so'zlar oldida bo'shliq yo'q");
   // Tartib: UDK < sarlavha < muallif < annotatsiya < Kirish.
   const order = ["UDK 004.8:37.02", META.topic, "Karimova Dilnoza Baxtiyorovna, PhD, dotsent", "Annotatsiya.", "Kirish"].map((s) => posOf(xml, s));
   assert.deepEqual([...order].sort((a, b) => a - b), order, "bosh blok tartibi buzilgan");

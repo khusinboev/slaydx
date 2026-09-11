@@ -5,6 +5,7 @@ import {
   Footer,
   HeadingLevel,
   ImageRun,
+  LineRuleType,
   Math as DocxMath,
   PageOrientation,
   Packer,
@@ -332,11 +333,16 @@ async function drawArticle(plan: ArticlePlan, K: Kit, P: DocProfile, opts: Resum
           new TextRun({
             text: `${/^\s/.test(s.text) ? " " : ""}${cleanText(s.text)}${/\s$/.test(s.text) ? " " : ""}`,
             font,
-            size,
+            size: extra.size ?? size,
             bold: extra.bold,
             italics: extra.italics,
           }),
       );
+  /** Yorliq + matn bitta paragrafda («**Annotatsiya.** Matn…») — orasidagi bo'shliq saqlanadi. */
+  const labeled = (label: string, text: string) => [
+    ...spanRuns([{ text: label }], { bold: true, size: small }),
+    ...spanRuns([{ text: ` ${text}` }], { size: small }),
+  ];
   /** Sarlavha (keyingisi bilan birga) — reja bandlari uchun umumiy. */
   const keepP = (text: string, extra: RunExtra & { align?: (typeof AlignmentType)[keyof typeof AlignmentType]; before?: number; after?: number } = {}) =>
     new Paragraph({
@@ -367,7 +373,7 @@ async function drawArticle(plan: ArticlePlan, K: Kit, P: DocProfile, opts: Resum
             alignment: AlignmentType.JUSTIFIED,
             spacing: { before: 120, after: 80, line },
             ...(P.type.firstLine ? { indent: { firstLine: P.type.firstLine } } : {}),
-            children: [K.run(`${h.label}.`, { bold: true, size: small }), K.run(` ${h.text}`, { size: small })],
+            children: labeled(`${h.label}.`, h.text),
           }),
         );
         out.push(
@@ -375,7 +381,7 @@ async function drawArticle(plan: ArticlePlan, K: Kit, P: DocProfile, opts: Resum
             alignment: AlignmentType.JUSTIFIED,
             spacing: { after: 160, line },
             ...(P.type.firstLine ? { indent: { firstLine: P.type.firstLine } } : {}),
-            children: [K.run(`${h.keywordsLabel}:`, { bold: true, size: small }), K.run(` ${h.keywords}`, { size: small })],
+            children: labeled(`${h.keywordsLabel}:`, h.keywords),
           }),
         );
         break;
@@ -413,7 +419,13 @@ async function drawArticle(plan: ArticlePlan, K: Kit, P: DocProfile, opts: Resum
             new Paragraph({
               alignment: AlignmentType.CENTER,
               keepNext: true,
-              spacing: { before: 120, after: 80, line: 240 },
+              /*
+               * `lineRule: auto` SHART: usiz LibreOffice `w:line` ni QAT'IY
+               * balandlik deb o'qiydi va rasmni bitta matn qatoriga siqib
+               * qo'yadi (ko'zdan kechiruvda 118 mm li sxema ko'rinmay
+               * qolgan edi; rezyume suratida ham xuddi shu saboq).
+               */
+              spacing: { before: 120, after: 80, line: 240, lineRule: LineRuleType.AUTO },
               children: [new ImageRun({ type: img.type, data: img.data, transformation: { width, height } })],
             }),
           );
@@ -425,7 +437,7 @@ async function drawArticle(plan: ArticlePlan, K: Kit, P: DocProfile, opts: Resum
               alignment: AlignmentType.CENTER,
               keepNext: true,
               border: { top: border, bottom: border, left: border, right: border },
-              spacing: { before: 120, after: 80, line },
+              spacing: { before: 120, after: 80, line, lineRule: LineRuleType.AUTO },
               children: [K.run(b.placeholder, { italics: true, color: "666666" })],
             }),
           );
@@ -461,7 +473,8 @@ async function drawArticle(plan: ArticlePlan, K: Kit, P: DocProfile, opts: Resum
               { type: TabStopType.CENTER, position: Math.round(W / 2) },
               { type: TabStopType.RIGHT, position: W },
             ],
-            spacing: { before: 120, after: 160, line },
+            // Kasr/ildiz qator balandligidan oshadi — `auto` bo'lmasa siqiladi.
+            spacing: { before: 120, after: 160, line, lineRule: LineRuleType.AUTO },
             children: [
               new TextRun({ text: "\t", font, size }),
               new DocxMath({ children: omml(b.latex) }),
