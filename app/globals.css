@@ -1,4 +1,12 @@
 @import "tailwindcss";
+/*
+ * KaTeX — Maqola 2 formulalari (`WordViewer` `Formula`, SSR `renderToString`).
+ * Faqat CSS + shriftlar: klient skripti yo'q, CSP `script-src 'self'`
+ * buzilmaydi. Shrift `url(fonts/…)` yo'llarini Tailwind/Next `node_modules`
+ * dan o'zi ko'chiradi (`_next/static/media/`) — `tests/viewer/article-viewer`
+ * va `next build` bilan tekshirilgan.
+ */
+@import "katex/dist/katex.min.css";
 
 /*
  * Tailwind v4 da `dark:` sukut bo'yicha `prefers-color-scheme` ga bog'langan.
@@ -276,6 +284,146 @@ button {
 
 .word-table th {
   font-weight: 700;
+}
+
+/*
+ * ── Maqola 2 (AUDIT-17) — `.word-article` varag'i.
+ *
+ * O'lchovlar `WordViewer` `articleSheet` dan CSS o'zgaruvchi sifatida
+ * keladi (nashr profili: `--doc-table-size`, `--doc-small`, `--doc-p-after`,
+ * `--doc-h1-align`); shrift o'lchami/interval/chegara inline `style` da.
+ * Sarlavha BOSH HARFSIZ (DOCX `articleProfile` `upper: false`), bo'lim
+ * sarlavhasi raqamlangan uslubda chapda. Rasm sarlavhasi PASTDA, jadval
+ * sarlavhasi TEPADA, formula markazda va raqami o'ngda — `render-docx.ts
+ * drawArticle` bilan bir juft.
+ */
+.word-article .word-h1 {
+  text-transform: none;
+  text-align: var(--doc-h1-align, center);
+  font-size: inherit;
+}
+.word-article .word-h2,
+.word-article .word-h3 {
+  font-size: inherit;
+}
+.word-article .word-p {
+  margin-bottom: var(--doc-p-after, 10pt);
+}
+.word-article .word-table {
+  font-size: var(--doc-table-size, 11pt);
+}
+.word-udk {
+  font-size: var(--doc-small, 12pt);
+  margin: 0 0 8pt;
+  text-indent: 0;
+}
+.word-article-title {
+  text-align: center;
+  font-weight: 700;
+  margin: 0 0 10pt;
+  text-indent: 0;
+}
+.word-author-line {
+  text-align: center;
+  font-weight: 700;
+  margin: 0 0 2pt;
+  text-indent: 0;
+}
+.word-author-aff {
+  text-align: center;
+  font-style: italic;
+  font-size: var(--doc-small, 12pt);
+  margin: 0 0 6pt;
+  text-indent: 0;
+}
+.word-abstract-p {
+  font-size: var(--doc-small, 12pt);
+  margin-bottom: 4pt;
+}
+.word-abstract-p + .word-abstract-p {
+  margin-bottom: 8pt;
+}
+.word-highlights-label {
+  font-weight: 700;
+  margin: 6pt 0 4pt;
+  text-indent: 0;
+}
+.word-highlight {
+  font-size: var(--doc-small, 12pt);
+}
+.word-figure {
+  margin: 6pt 0 10pt;
+  text-align: center;
+  text-indent: 0;
+}
+.word-figure-img {
+  display: inline-block;
+  width: 100%;
+  max-width: 160mm;
+  max-height: 180mm;
+  object-fit: contain;
+}
+.word-figure-placeholder {
+  box-sizing: border-box;
+  width: 100%;
+  border: 0.75pt solid #999;
+  color: #666;
+  font-style: italic;
+  padding: 6pt;
+}
+.word-figure-caption {
+  text-align: center;
+  margin-top: 4pt;
+}
+.word-table-caption {
+  margin: 6pt 0 4pt;
+}
+.word-formula {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  margin: 6pt 0 8pt;
+  text-indent: 0;
+}
+.word-formula-body {
+  grid-column: 2;
+}
+.word-formula-num {
+  grid-column: 3;
+  text-align: right;
+}
+.word-formula .katex-display {
+  margin: 0;
+}
+.word-ref {
+  margin: 0 0 4pt;
+  text-align: justify;
+  text-indent: 0;
+}
+.word-ref--hanging {
+  padding-left: 1.25cm;
+  text-indent: -1.25cm;
+}
+/*
+ * Iqtibos belgisi — FAQAT ekranda (`::after`, matn tuguniga kirmaydi,
+ * DOCX bilan paritet buzilmaydi): tekshirilgan manba ✅, tekshirilmagan ⚠️.
+ * `title` da sabab.
+ */
+.word-cite {
+  white-space: nowrap;
+}
+.word-cite::after {
+  font-size: 0.65em;
+  vertical-align: super;
+  margin-left: 1px;
+}
+.word-cite[data-ref-verified="openalex"]::after,
+.word-cite[data-ref-verified="crossref"]::after,
+.word-cite[data-ref-verified="user"]::after {
+  content: "✅";
+}
+.word-cite[data-ref-verified="unverified"]::after {
+  content: "⚠️";
 }
 
 /*

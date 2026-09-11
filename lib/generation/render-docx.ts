@@ -4,6 +4,8 @@ import {
   Document,
   Footer,
   HeadingLevel,
+  ImageRun,
+  Math as DocxMath,
   PageOrientation,
   Packer,
   PageBorderDisplay,
@@ -21,12 +23,15 @@ import {
   WidthType,
 } from "docx";
 import { ESSAY_DESIGNS } from "../languages";
-import { CM, contentWidth, profileFor, resumeProfile, type DocProfile } from "./docx-profile";
+import { planArticle, type ArticlePlan, type HeadItem, type BodyItem } from "./article/layout";
+import { articleProfile, CM, contentWidth, profileFor, resumeProfile, type DocProfile } from "./docx-profile";
 import { docLabels } from "./i18n";
+import { omml } from "./omml";
 import { cleanText } from "./quality";
 import { columnPercents } from "./table-columns";
 import { legacyResumeModel } from "./resume/model";
 import { renderResumeDocx, type ResumeDocxOpts } from "./resume/render-docx";
+import type { ImageBytes } from "./slide-images";
 import { titleModel } from "./title-model";
 import { tocRows } from "./toc-model";
 import type { AcademicDoc, Block, DocTable } from "./types";
@@ -277,6 +282,238 @@ function drawTable(K: Kit, tb: DocTable, out: Array<Paragraph | Table>) {
   out.push(K.tableOf(tb.headers, tb.rows, tb.widths ?? columnPercents(tb.headers) ?? undefined));
 }
 
+/* ────────────────────────── Maqola 2 ────────────────────────── */
+
+const DATA_IMG = /^data:image\/(png|jpe?g);base64,/i;
+
+/**
+ * Sxema PNG bayti: AVVAL `resolveImage` (saqlangan aktiv — tahrirdan
+ * keyingi qayta render), keyin `data:` (yaratish vaqti). Tashqi `https:`
+ * ATAYIN yuklanmaydi (`resume/render-docx.ts` bilan bir xil shartnoma).
+ * Bayt bo'lmasa `null` — rasm o'rniga o'rinbosar ramka chiziladi, xato
+ * tashlanmaydi.
+ */
+async function figureBytes(url: string | undefined, opts: ResumeDocxOpts): Promise<{ data: Buffer; type: "png" | "jpg" } | null> {
+  if (!url) return null;
+  const img: ImageBytes | null =
+    (opts.resolveImage ? await opts.resolveImage(url).catch(() => null) : null) ??
+    (DATA_IMG.test(url) ? { data: url, type: /png/i.test(DATA_IMG.exec(url)![1]) ? "png" : "jpg" } : null);
+  if (!img) return null;
+  const i = img.data.indexOf("base64,");
+  const data = Buffer.from(i >= 0 ? img.data.slice(i + 7) : img.data, "base64");
+  return data.byteLength ? { data, type: img.type === "png" ? "png" : "jpg" } : null;
+}
+
+/**
+ * Maqola tanasi — FAQAT `planArticle` rejasini chizadi («ko'rdim = oldim»).
+ *
+ * Tartib va raqamlar rejadan: bu yerda «qaysi band qayerda» degan qaror
+ * YO'Q. Joylashuv qoidalari (mahsulot egasi, OAK/GOST): rasm sarlavhasi
+ * PASTDA markazda, jadval sarlavhasi TEPADA (GOST oilasida o'ngda, APA/
+ * IEEE da chapda), formula markazda va raqami o'ng chekkada, annotatsiya
+ * yorlig'i qalin va matn bilan bitta paragrafda, titul/mundarija YO'Q.
+ */
+async function drawArticle(plan: ArticlePlan, K: Kit, P: DocProfile, opts: ResumeDocxOpts): Promise<Array<Paragraph | Table>> {
+  const out: Array<Paragraph | Table> = [];
+  const { line, font, size } = P.type;
+  const small = Math.max(20, size - 4);
+  const W = K.CONTENT_W;
+  /**
+   * Iqtibosli matn — HAR bo'lak alohida `<w:t>` (ko'ruvchidagi `<span>`
+   * lar bilan bir xil tugunlar; paritet testi shuni solishtiradi).
+   * `cleanText` chetdagi bo'shliqni kesadi — bo'laklar orasidagi bitta
+   * bo'shliq saqlanadi, aks holda «…aylantirdi[1]» yopishib qolardi.
+   */
+  const spanRuns = (spans: { text: string }[], extra: RunExtra = {}): TextRun[] =>
+    spans
+      .filter((s) => s.text.length)
+      .map(
+        (s) =>
+          new TextRun({
+            text: `${/^\s/.test(s.text) ? " " : ""}${cleanText(s.text)}${/\s$/.test(s.text) ? " " : ""}`,
+            font,
+            size,
+            bold: extra.bold,
+            italics: extra.italics,
+          }),
+      );
+  /** Sarlavha (keyingisi bilan birga) — reja bandlari uchun umumiy. */
+  const keepP = (text: string, extra: RunExtra & { align?: (typeof AlignmentType)[keyof typeof AlignmentType]; before?: number; after?: number } = {}) =>
+    new Paragraph({
+      alignment: extra.align ?? AlignmentType.CENTER,
+      keepNext: true,
+      spacing: { before: extra.before ?? 0, after: extra.after ?? 120, line },
+      children: [K.run(text, extra)],
+    });
+
+  /* ── bosh blok ── */
+  for (const h of plan.head as HeadItem[]) {
+    switch (h.k) {
+      case "udk":
+        out.push(new Paragraph({ alignment: AlignmentType.LEFT, keepNext: true, spacing: { after: 160, line }, children: [K.run(h.text, { size: small })] }));
+        break;
+      case "title":
+        out.push(keepP(h.text, { bold: true, after: 200 }));
+        break;
+      case "authors":
+        for (const a of h.authors) {
+          out.push(keepP(a.line, { bold: true, after: 40 }));
+          if (a.affiliation) out.push(keepP(a.affiliation, { italics: true, size: small, after: 120 }));
+        }
+        break;
+      case "abstract":
+        out.push(
+          new Paragraph({
+            alignment: AlignmentType.JUSTIFIED,
+            spacing: { before: 120, after: 80, line },
+            ...(P.type.firstLine ? { indent: { firstLine: P.type.firstLine } } : {}),
+            children: [K.run(`${h.label}.`, { bold: true, size: small }), K.run(` ${h.text}`, { size: small })],
+          }),
+        );
+        out.push(
+          new Paragraph({
+            alignment: AlignmentType.JUSTIFIED,
+            spacing: { after: 160, line },
+            ...(P.type.firstLine ? { indent: { firstLine: P.type.firstLine } } : {}),
+            children: [K.run(`${h.keywordsLabel}:`, { bold: true, size: small }), K.run(` ${h.keywords}`, { size: small })],
+          }),
+        );
+        break;
+      case "highlights":
+        out.push(new Paragraph({ keepNext: true, spacing: { before: 120, after: 80, line }, children: [K.run(h.label, { bold: true })] }));
+        for (const t of h.items) out.push(new Paragraph({ bullet: { level: 0 }, spacing: { after: 60, line }, children: [K.run(t, { size: small })] }));
+        break;
+    }
+  }
+
+  /* ── tana ── */
+  for (const b of plan.body as BodyItem[]) {
+    switch (b.k) {
+      case "h1":
+        out.push(K.sectionHeading(b.text));
+        break;
+      case "figure": {
+        const img = await figureBytes(b.figure?.url, opts);
+        if (img && b.figure) {
+          /*
+           * Kenglik: foydali kenglikdan oshmasin (twip → px: /15), 160 mm
+           * dan ham (300 dpi PNG 1890 px — sahifaga sig'maydi). Balandlik
+           * nisbat bilan; juda baland sxema 180 mm bilan cheklanadi.
+           */
+          const maxW = Math.min(Math.floor(W / 15), Math.round((160 / 25.4) * 96));
+          const ratio = b.figure.h && b.figure.w ? b.figure.h / b.figure.w : 0.7;
+          let width = maxW;
+          let height = Math.round(width * ratio);
+          const maxH = Math.round((180 / 25.4) * 96);
+          if (height > maxH) {
+            height = maxH;
+            width = Math.round(height / ratio);
+          }
+          out.push(
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              keepNext: true,
+              spacing: { before: 120, after: 80, line: 240 },
+              children: [new ImageRun({ type: img.type, data: img.data, transformation: { width, height } })],
+            }),
+          );
+        } else {
+          // PNG hali yo'q (WP3 beradi) — ramkali o'rinbosar, sarlavha va raqam saqlanadi.
+          const border = { style: BorderStyle.SINGLE, size: 6, color: "999999", space: 8 };
+          out.push(
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              keepNext: true,
+              border: { top: border, bottom: border, left: border, right: border },
+              spacing: { before: 120, after: 80, line },
+              children: [K.run(b.placeholder, { italics: true, color: "666666" })],
+            }),
+          );
+        }
+        // Sarlavha PASTDA, markazda.
+        out.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 200, line }, children: [K.run(b.caption)] }));
+        break;
+      }
+      case "table": {
+        // Sarlavha TEPADA; jadval bilan birga (keepNext).
+        out.push(
+          new Paragraph({
+            alignment: plan.tableCaptionAlign === "right" ? AlignmentType.RIGHT : AlignmentType.LEFT,
+            keepNext: true,
+            spacing: { before: 120, after: 80, line },
+            children: [K.run(b.caption)],
+          }),
+        );
+        const t = b.table;
+        out.push(K.tableOf(t.headers, t.rows, t.widths ?? columnPercents(t.headers) ?? undefined));
+        out.push(new Paragraph({ spacing: { after: 120, line: 240 }, children: [] }));
+        break;
+      }
+      case "formula":
+        /*
+         * `\t` formula `\t` (1): birinchi tab markaz to'xtashiga, ikkinchisi
+         * o'ng chekkaga — formula markazda, raqam o'ngda (GOST 7.32 §6.8).
+         */
+        out.push(
+          new Paragraph({
+            alignment: AlignmentType.LEFT,
+            tabStops: [
+              { type: TabStopType.CENTER, position: Math.round(W / 2) },
+              { type: TabStopType.RIGHT, position: W },
+            ],
+            spacing: { before: 120, after: 160, line },
+            children: [
+              new TextRun({ text: "\t", font, size }),
+              new DocxMath({ children: omml(b.latex) }),
+              new TextRun({ text: "\t", font, size }),
+              K.run(b.number),
+            ],
+          }),
+        );
+        break;
+      case "p":
+        out.push(
+          new Paragraph({
+            alignment: P.type.justify ? AlignmentType.JUSTIFIED : AlignmentType.LEFT,
+            spacing: { after: P.type.after, line },
+            ...(P.type.firstLine ? { indent: { firstLine: P.type.firstLine } } : {}),
+            children: spanRuns(b.spans),
+          }),
+        );
+        break;
+      case "li":
+        out.push(new Paragraph({ bullet: { level: 0 }, spacing: { after: 80, line }, children: spanRuns(b.spans) }));
+        break;
+      case "quote":
+        out.push(new Paragraph({ indent: { left: CM }, spacing: { after: 200, line }, children: spanRuns(b.spans, { italics: true }) }));
+        break;
+      case "h2":
+      case "h3":
+      case "code":
+        out.push(...K.blockToParagraphs(b.k === "code" ? { kind: "code", text: b.text, caption: b.caption } : { kind: b.k, text: b.text }));
+        break;
+    }
+  }
+
+  /* ── adabiyotlar ── */
+  const refP = (text: string) =>
+    new Paragraph({
+      alignment: AlignmentType.JUSTIFIED,
+      spacing: { after: 80, line },
+      indent: plan.cite === "apa7" ? { left: Math.round(1.25 * CM), hanging: Math.round(1.25 * CM) } : { left: 0, firstLine: 0 },
+      children: [K.run(text)],
+    });
+  if (plan.refs.length) {
+    out.push(K.sectionHeading(plan.refsLabel));
+    for (const r of plan.refs) out.push(refP(r.line));
+  }
+  if (plan.refs2?.length && plan.refs2Label) {
+    out.push(K.sectionHeading(plan.refs2Label));
+    for (const r of plan.refs2) out.push(refP(r.line));
+  }
+  return out;
+}
+
 /**
  * `opts.resolveImage` — tahrirdan keyingi QAYTA render uchun (B-1).
  *
@@ -295,7 +532,13 @@ export async function renderDocx(doc: AcademicDoc, opts: ResumeDocxOpts = {}): P
    * model profildan OLDIN aniqlanadi.
    */
   const resume = doc.resume ?? (base.id === "resume" ? legacyResumeModel(doc) : null);
-  const P = resume ? resumeProfile(resume.template) : base;
+  /*
+   * Maqola 2: `doc.article` bo'lsa reja (`planArticle`) va nashr profili
+   * modeldan. Eski maqola (`doc.article` yo'q) — quyidagi umumiy yo'l
+   * (titul, mundarija, jadval oxirida) o'zgarishsiz.
+   */
+  const article = doc.article ? planArticle(doc) : null;
+  const P = resume ? resumeProfile(resume.template) : article ? articleProfile(article.profile.id, { headingAlign: article.headingAlign }) : base;
   const K = makeKit(P);
   const L = docLabels(meta.language);
   const children: Array<Paragraph | Table> = [];
@@ -359,6 +602,9 @@ export async function renderDocx(doc: AcademicDoc, opts: ResumeDocxOpts = {}): P
 
   if (resume) {
     children.push(...(await renderResumeDocx(resume, K, P, opts)));
+  } else if (article) {
+    // Titul ham, mundarija ham YO'Q (`doc.toc` e'tiborsiz) — jurnal maqolasi.
+    children.push(...(await drawArticle(article, K, P, opts)));
   } else {
     if (doc.toc) {
       children.push(K.heading(L.toc, HeadingLevel.HEADING_1));
