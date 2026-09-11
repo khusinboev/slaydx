@@ -1,0 +1,137 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { factNumbers, guardSection, missingFactNumbers, numbersOf, skeletonCoverage, wordsOf } from "../lib/generation/article/guard.ts";
+import { FILLER_PHRASES, articleSystemPrompt, sectionPrompt, abstractPrompt, abstractSystemPrompt, type ArticleContext } from "../lib/generation/article/prompts.ts";
+import { ARTICLE_TYPES } from "../lib/generation/article/types-registry.ts";
+import { PUBLICATION_PROFILES } from "../lib/generation/article/profiles.ts";
+import { articleLabels } from "../lib/generation/article/labels.ts";
+import { articleInputFromValues } from "../lib/generation/article/input.ts";
+import { extractMeta } from "../lib/generation/meta.ts";
+import { TOOL_BY_ID } from "../lib/tools.ts";
+import type { Reference } from "../lib/generation/article/types.ts";
+import type { Block } from "../lib/generation/types.ts";
+
+/** Qo'riqchi + prompt taqiqlari (Maqola 2, WP1). */
+
+const REFS: Reference[] = [
+  { id: "W2741809807", title: "A", authors: [], verified: "openalex", cited: false },
+  { id: "u1", title: "C", authors: [], verified: "user", cited: false },
+];
+const P = (text: string): Block => ({ kind: "p", text });
+
+test("guardSection: reyestrda yo'q iqtibos o'chadi va hisoblanadi; bor iqtibos qoladi", () => {
+  const { blocks, report } = guardSection([P("Da'vo [W2741809807]. Boshqa da'vo [W1234; 12-b.]. Uchinchi [u1]."), P("Formula")], { refs: REFS });
+  assert.equal(blocks[0].text, "Da'vo [W2741809807]. Boshqa da'vo. Uchinchi [u1].");
+  assert.deepEqual(report.removedCitations, ["W1234"]);
+  assert.equal(report.citations, 2);
+  assert.equal(blocks[1].text, "Formula", "tegilmagan blok o'sha obyekt");
+});
+
+test("guardSection: manbasiz foizlar hisobga olinadi, O'CHIRILMAYDI; manbali yoki foydalanuvchi faktidagi foiz hisobga olinmaydi", () => {
+  const facts = "Tajribada 120 talaba; o'zlashtirish 62 % dan 78,5% ga oshdi.";
+  const { blocks, report } = guardSection(
+    [P("So'rovnomada 45% ishtirokchi rozi bo'ldi."), P("Adabiyotda 30 % o'sish qayd etilgan [W2741809807]."), P("Bizning tajribada 78,5% ga yetdi va 120 talaba qatnashdi.")],
+    { refs: REFS, userFacts: facts },
+  );
+  assert.equal(blocks[0].text, "So'rovnomada 45% ishtirokchi rozi bo'ldi.", "matn o'chirilmaydi");
+  assert.deepEqual(report.unsourcedNumbers, ["45%"], "faqat manbasiz va faktda yo'q foiz");
+  assert.deepEqual(report.factNumbersFound.sort(), ["120", "78.5%"]);
+});
+
+test("factNumbers / numbersOf / missingFactNumbers: vergul→nuqta, foiz belgisi; hujjat bo'yicha yo'qolgan raqamlar", () => {
+  assert.deepEqual(numbersOf("4,1 dan 4.6 ga, 12 % va 120"), ["4.1", "4.6", "12%", "120"]);
+  assert.deepEqual(factNumbers("120 talaba, 4,1 → 4,6, 4,1 yana"), ["120", "4.1", "4.6"]);
+  const sections = [{ id: "a", title: "A", blocks: [P("Ballar 4,1 dan 4,6 ga oshdi.")] }];
+  assert.deepEqual(missingFactNumbers(sections, "120 talaba, 4,1 → 4,6"), ["120"]);
+  assert.deepEqual(missingFactNumbers(sections, ""), []);
+});
+
+test("guardSection: wordRange — tashqarida bo'lsa wordRangeOk=false; so'z hisobi figure/tableRef/formula ni sanamaydi", () => {
+  const many = P(Array.from({ length: 120 }, (_, i) => `so'z${i}`).join(" "));
+  const inRange = guardSection([many, many], { refs: [], wordRange: [200, 300] });
+  assert.equal(inRange.report.words, 240);
+  assert.equal(inRange.report.wordRangeOk, true);
+  const short = guardSection([many], { refs: [], wordRange: [200, 300] });
+  assert.equal(short.report.wordRangeOk, false);
+  const noRange = guardSection([many], { refs: [] });
+  assert.equal(noRange.report.wordRangeOk, true, "oraliq berilmasa doim ok");
+  assert.equal(wordsOf([P("bir ikki"), { kind: "figure", text: "uzun sarlavha matni", figureId: "f1" }, { kind: "formula", text: "a+b" }]), 2);
+});
+
+test("guardSection: «suv» iboralar hisoblanadi (o'chirilmaydi)", () => {
+  const { report, blocks } = guardSection([P("Bugungi kunda AI muhim. Ma’lumki, u rivojlanmoqda.")], { refs: [] });
+  assert.deepEqual(report.filler, ["bugungi kunda", "ma’lumki"]);
+  assert.match(blocks[0].text, /Bugungi kunda/);
+});
+
+test("skeletonCoverage: required/hard bo'limlar, erkin `body-N` skeletdagi `body` ni qoplaydi, bo'sh bo'lim sanalmaydi", () => {
+  const t = ARTICLE_TYPES.three_part_uz;
+  const ok = skeletonCoverage(t, [
+    { id: "intro", blocks: [P("x")] },
+    { id: "body-1", blocks: [P("y")] },
+    { id: "conclusion", blocks: [P("z")] },
+  ]);
+  assert.deepEqual(ok, { missing: [], hardMissing: [] });
+  const bad = skeletonCoverage(t, [{ id: "intro", blocks: [P("x")] }, { id: "body-1", blocks: [] }]);
+  assert.deepEqual(bad.hardMissing, ["body", "conclusion"]);
+  // Ixtiyoriy bo'lim (`review_narrative.methods`) yo'qligi missing ga tushmaydi.
+  const r = skeletonCoverage(ARTICLE_TYPES.review_narrative, ["intro", "body-1", "synthesis", "future", "conclusion"].map((id) => ({ id, blocks: [P("x")] })));
+  assert.deepEqual(r.missing, []);
+});
+
+/* ────────────────────────── prompt taqiqlari ────────────────────────── */
+
+function ctxOf(values: Record<string, string | number | boolean> = {}): ArticleContext {
+  const meta = extractMeta(TOOL_BY_ID.article, { topic: "Sun'iy intellekt ta'limda", articleType: "imrad_oak", language: "uz", ...values });
+  const input = articleInputFromValues({ topic: "Sun'iy intellekt ta'limda", articleType: "imrad_oak", language: "uz", ...values });
+  const type = ARTICLE_TYPES[input.articleType];
+  const profile = PUBLICATION_PROFILES[input.pubProfile];
+  return { input, meta: { ...meta, language: input.language }, type, profile, labels: articleLabels(input.language), wordTarget: 1200, refs: REFS };
+}
+
+test("tizim prompti: birinchi qator til ko'rsatmasi; uch taqiq qulflangan; foydalanuvchi fakti VERBATIM", () => {
+  const sys = articleSystemPrompt(ctxOf({ userFacts: "120 talaba, 4,1 → 4,6" }));
+  assert.match(sys.split("\n")[0], /^OUTPUT LANGUAGE: Uzbek/);
+  assert.match(sys, /NEVER invent a source, DOI, author, journal or year/);
+  assert.match(sys, /cite ONLY the sources listed under SOURCES/);
+  assert.match(sys, /\[W2741809807\]/, "iqtibos shakli `[W…]` ko'rsatilgan");
+  assert.match(sys, /every statistic, percentage, sample size \(n=\), p-value/);
+  assert.match(sys, /USER FACTS[\s\S]*VERBATIM/);
+  assert.match(sys, /120 talaba, 4,1 → 4,6/);
+  assert.match(sys, /NO FILLER/);
+  for (const f of ["bugungi kunda", "в настоящее время", "in today's world"]) assert.match(sys, new RegExp(f.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `taqiq ro'yxatida «${f}» bo'lishi kerak`);
+  assert.ok(FILLER_PHRASES.length >= 12);
+  // Rus tilida birinchi qator o'zgaradi.
+  assert.match(articleSystemPrompt(ctxOf({ language: "ru" })).split("\n")[0], /Russian/);
+});
+
+test("bo'lim prompti: manbalar `[ID] Muallif (yil). Sarlavha. Venue.` ko'rinishida; manbasiz — iqtibos taqiqi; jadval/sxema faqat so'ralganda; chart faqat userData bilan", () => {
+  const ctx = ctxOf();
+  const plan = { id: "results", skeletonId: "results", title: "Natijalar", brief: "x", words: 300, hard: true };
+  const withRefs = sectionPrompt(ctx, { plan, wantTable: false, wantFigure: false, wantChart: false });
+  assert.match(withRefs, /\[W2741809807\] — \(n\.d\.\)\. A\./);
+  assert.ok(!/"table"/.test(withRefs) && !/"figure"/.test(withRefs));
+  const noRefs = sectionPrompt({ ...ctx, refs: [] }, { plan, wantTable: true, wantFigure: true, wantChart: false });
+  assert.match(noRefs, /SOURCES: none available — write WITHOUT any citations/);
+  assert.match(noRefs, /"table":\{"caption"/);
+  assert.match(noRefs, /"figure":\{"caption"/);
+  assert.match(noRefs, /charts are NOT allowed/);
+  const chart = sectionPrompt(ctxOf({ userData: '{"categories":["2022","2023"],"series":[{"name":"Talabalar","values":[80,120]}]}' }), { plan, wantTable: false, wantFigure: false, wantChart: true });
+  assert.match(chart, /"kind":"chart"/);
+  assert.match(chart, /categories: 2022, 2023/);
+});
+
+test("annotatsiya prompti: o'z tili birinchi qatorda, MUSTAQIL (tarjima emas), so'z va kalit so'z chegarasi profildan; structured — 4 qism", () => {
+  const ctx = ctxOf();
+  const sysRu = abstractSystemPrompt(ctx, "ru");
+  assert.match(sysRu.split("\n")[0], /Russian/);
+  assert.match(sysRu, /INDEPENDENTLY/);
+  const p = abstractPrompt(ctx, "en", "• Kirish: …");
+  assert.match(p, /150–250 words/);
+  assert.match(p, /5–12 keywords/);
+  assert.match(p, /\{"text":"…","keywords":\["…"\]\}/);
+  const structured = abstractPrompt(ctxOf({ articleType: "review_systematic", pubProfile: "apa" }), "en", "…");
+  assert.match(structured, /"background":"…","methods":"…","results":"…","conclusions":"…"/);
+  assert.match(structured, /150–250 words/);
+  assert.match(structured, /4–6 keywords/);
+});

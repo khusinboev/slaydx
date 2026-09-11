@@ -296,9 +296,10 @@ export function articleInputFromValues(values: FormValues): ArticleInput {
   ).slice(0, ARTICLE_LIMITS.keywords);
 
   const userRefs = jsonRows(values, "userRefs")
-    .slice(0, ARTICLE_LIMITS.userRefs)
     .map(userRefOf)
     .filter((r): r is ArticleUserRef => Boolean(r))
+    // Bo'sh qatorlar tushgandan KEYIN kesiladi — 40 ta haqiqiy manba sig'sin.
+    .slice(0, ARTICLE_LIMITS.userRefs)
     // id lar bo'shliqsiz qayta beriladi — `[u3]` iqtibosi doim mavjud manbaga ishora qilsin.
     .map((r, i) => ({ ...r, id: `u${i + 1}` }));
 
