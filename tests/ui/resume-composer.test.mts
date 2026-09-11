@@ -39,8 +39,10 @@ function stubApi(draft: Record<string, unknown> | null = null) {
     const method = opts?.method ?? "GET";
     const body = typeof opts?.body === "string" ? JSON.parse(opts.body) : opts?.body;
     calls.push({ url, method, body });
-    if (url === "/api/resume/draft" && method === "GET") return json(200, { draft: draft ? { data: draft, updatedAt: "now" } : null });
-    if (url === "/api/resume/draft") return json(200, { ok: true, updatedAt: "now" });
+    // Maqola 2 / AUDIT-17 WP4: qoralama endi umumiy `/api/forms/{toolId}/draft`
+    // orqali (`useResumeDraft` → `useFormDraft("resume")`).
+    if (url === "/api/forms/resume/draft" && method === "GET") return json(200, { draft: draft ? { data: draft, updatedAt: "now" } : null });
+    if (url === "/api/forms/resume/draft") return json(200, { ok: true, updatedAt: "now" });
     if (url === "/api/generations" && method === "POST") return json(200, { id: "33333333-3333-4333-8333-333333333333", price: 3000 });
     if (url === "/api/users/me") return json(200, { ok: true });
     return json(404, { error: "yo'q" });
