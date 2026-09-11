@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { query, queryOne } from "./db";
 import type { AcademicDoc } from "../generation/types";
 import type { ImageBytes } from "../generation/slide-images";
+import type { Figure } from "../generation/article/types";
 
 /**
  * `data:` URL larni saqlanadigan aktivga aylantiradi.
@@ -67,6 +68,21 @@ export function extractAssets(
     return { ...photo, url: assetUrl(generationId, found.assetId), assetId: found.assetId };
   };
 
+  /**
+   * Maqola sxemasi/diagrammasi (Maqola 2 / AUDIT-17, WP4): `Figure.url`
+   * generatsiyada `data:image/png;base64,…` (`figures/png.ts`) — rezyume
+   * surati kabi URL BILAN BIRGA `assetId` ham to'ldiriladi, chunki
+   * `assetImageResolver` (DOCX qayta render) faqat shu maydondan o'qiydi.
+   * `url` bo'lmagan (fallback ro'yxatga tushgan) sxema o'zgarishsiz qoladi.
+   */
+  const swapFigure = (fig: Figure): Figure => {
+    if (!fig.url) return fig;
+    const found = assetFromDataUrl(fig.url);
+    if (!found) return fig;
+    if (!assets.has(found.assetId)) assets.set(found.assetId, found);
+    return { ...fig, url: assetUrl(generationId, found.assetId), assetId: found.assetId };
+  };
+
   let nextDoc = doc;
   if (doc) {
     nextDoc = {
@@ -92,6 +108,8 @@ export function extractAssets(
        * `data:` qolib ketardi va rebuild suratni yo'qotardi.
        */
       resume: doc.resume?.photo?.url ? { ...doc.resume, photo: swapPhoto(doc.resume.photo) } : doc.resume,
+      // Maqola sxemalari — har `figure.url` mustaqil ravishda aktivga chiqadi.
+      article: doc.article ? { ...doc.article, figures: doc.article.figures.map(swapFigure) } : doc.article,
       // «O'z shablonim» fonlari — har rol PNG si aktivga (bir xil rasm bir marta).
       customTemplate: doc.customTemplate
         ? {
