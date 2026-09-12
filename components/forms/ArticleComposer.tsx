@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { FormValues, ToolConfig, UserProfile } from "@/lib/types";
-import { updateProfile, type ServerUser } from "@/lib/api-client";
+import { suggestUdk, updateProfile, type ServerUser } from "@/lib/api-client";
 import { useAppStore } from "@/lib/store";
 import { useConfirmClick } from "@/components/overlays/useConfirmClick";
 import { profilePatchFrom } from "@/lib/profile-sync";
@@ -254,6 +254,9 @@ export function ArticleComposer({
   const [fileBusy, setFileBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  /** UDK «Taklif» (AUDIT-18 Q-4): serverdan taklif — maydonga tushadi, ostida «tekshiring» izohi. */
+  const [udkBusy, setUdkBusy] = useState(false);
+  const [udkNote, setUdkNote] = useState<string | null>(null);
   const { draft, ready, save, clear, flush } = useFormDraft("article", { enabled: loggedIn });
 
   // Qoralama kelgach BIR marta qo'llanadi — foydalanuvchi yozayotgan
@@ -271,6 +274,21 @@ export function ArticleComposer({
   }, [ui, restored, save]);
 
   const set = <K extends keyof Ui>(key: K, v: Ui[K]) => setUi((s) => ({ ...s, [key]: v }));
+  const onSuggestUdk = async () => {
+    if (udkBusy || ui.topic.trim().length < 3) return;
+    setUdkBusy(true);
+    setUdkNote(null);
+    try {
+      const r = await suggestUdk(ui.topic, ui.language);
+      set("udk", r.udk.slice(0, ARTICLE_LIMITS.udkChars));
+      setUdkNote(`${r.note}${r.label ? `: ${r.label}` : ""}`);
+      setSettingsOpen(true);
+    } catch (e) {
+      setUdkNote(e instanceof Error ? e.message : "UDK taklif qilinmadi");
+    } finally {
+      setUdkBusy(false);
+    }
+  };
   const type = ARTICLE_TYPES[ui.articleType];
   const pubProfile = PUBLICATION_PROFILES[ui.pubProfile];
   /*
@@ -392,7 +410,7 @@ export function ArticleComposer({
       </Card>
 
       <Card title="Mualliflar" aside={<span className="text-muted-foreground text-[11px]">{ui.authors.length}/{ARTICLE_LIMITS.authors}</span>}>
-        <span data-field="authors" className="block">
+        <span data-field="authors" id="authors" className="block">
           <RowList
             name="authors"
             rows={ui.authors}
@@ -425,7 +443,7 @@ export function ArticleComposer({
           />
         </div>
         <Row label="Natijalarim" hint="AI faqat shu faktlarga tayanadi — raqamlar, namuna hajmi, davr" wide>
-          <span data-field="userFacts" className="block">
+          <span data-field="userFacts" id="userFacts" className="block">
             <TextArea
               value={ui.userFacts}
               onChange={(v) => set("userFacts", v.slice(0, ARTICLE_LIMITS.userFactsChars))}
@@ -533,10 +551,28 @@ export function ArticleComposer({
           ) : null}
         </summary>
         <div className="mt-3">
-          <Row label="UDK" hint="Bo‘sh qoldirsangiz AI taklif qiladi">
-            <span data-field="udk" className="block">
-              <TextInput value={ui.udk} onChange={(v) => set("udk", v.slice(0, ARTICLE_LIMITS.udkChars))} placeholder="004.8" />
+          <Row label="UDK" hint="Jurnal talab qilsa; «Taklif» — AI mavzudan UDK sinfini taklif qiladi, tekshirib tasdiqlang">
+            <span data-field="udk" id="udk" className="flex items-start gap-2">
+              <span className="min-w-0 flex-1">
+                <TextInput value={ui.udk} onChange={(v) => set("udk", v.slice(0, ARTICLE_LIMITS.udkChars))} placeholder="004.8" />
+              </span>
+              <button
+                type="button"
+                className="bg-card shrink-0 rounded-md border px-2.5 py-1.5 text-xs disabled:opacity-50"
+                disabled={udkBusy || ui.topic.trim().length < 3}
+                title={ui.topic.trim().length < 3 ? "Avval mavzuni kiriting" : "AI mavzudan UDK taklif qiladi"}
+                onClick={() => void onSuggestUdk()}
+                data-udk-suggest
+                aria-busy={udkBusy || undefined}
+              >
+                {udkBusy ? "Taklif…" : "Taklif"}
+              </button>
             </span>
+            {udkNote ? (
+              <p className="text-muted-foreground mt-1 text-[11px]" data-udk-note>
+                {udkNote}
+              </p>
+            ) : null}
           </Row>
           <Row label="Kalit so‘zlar" hint="5–12 ta, mavzudan tavsiya qilinadi" wide>
             <span data-field="keywords" className="block">
