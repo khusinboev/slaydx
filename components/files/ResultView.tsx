@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Download, Trash2 } from "lucide-react";
 import * as api from "@/lib/api-client";
-import { editErrorCode, editErrorText, ensureGenerationFresh, rewriteArticle } from "@/lib/api-edit";
+import { editErrorCode, editErrorText, ensureGenerationFresh, polishArticle, rewriteArticle } from "@/lib/api-edit";
 import type { ReviewCheck } from "@/lib/generation/article/types";
 import { useAppStore } from "@/lib/store";
 import { TOOL_BY_ID } from "@/lib/tools";
@@ -52,6 +52,8 @@ export function ResultView({ id }: { id: string }) {
    * eng yangi versiyani o'qish uchun (holat yopilmasi eskirgan bo'ladi).
    */
   const [fixing, setFixing] = useState<string | null>(null);
+  /** «Hammasini tuzatish» (AUDIT-18) — sayqal davomida panel tugmalari o'chiq. */
+  const [polishing, setPolishing] = useState(false);
   const genRef = useRef<api.GenerationDetail | null>(null);
   genRef.current = gen;
 
@@ -171,6 +173,37 @@ export function ResultView({ id }: { id: string }) {
     },
     [fixing, editState, adoptDetail],
   );
+
+  /*
+   * «Hammasini tuzatish» — `POST …/polish` (AUDIT-18): `onFix` bilan bir
+   * naqsh — avval saqlanmagan navbat, keyin sayqal; javobdagi generatsiya
+   * (yangi hujjat + jurnalli hisobot, yoki eski hujjat + jurnal) o'zlashtiriladi;
+   * 409 → qayta yuklash. Kredit yechilmaydi (3 marta/maqola/kun).
+   */
+  const onPolish = useCallback(async () => {
+    const cur = genRef.current;
+    if (!cur || fixing || polishing) return;
+    setPolishing(true);
+    setError(null);
+    try {
+      if (editState?.pending) await editState.save();
+      const base = genRef.current?.docVersion ?? cur.docVersion ?? 0;
+      const { generation } = await polishArticle(cur.id, base);
+      adoptDetail(generation);
+    } catch (e) {
+      setError(editErrorText(e));
+      if (editErrorCode(e)) {
+        try {
+          const { generation } = await api.getGeneration(cur.id);
+          adoptDetail(generation);
+        } catch {
+          // Qayta yuklash ham yiqilsa — xato matni allaqachon ko'rsatilgan.
+        }
+      }
+    } finally {
+      setPolishing(false);
+    }
+  }, [fixing, polishing, editState, adoptDetail]);
 
   if (sessionChecked && !loggedIn) {
     return (
@@ -371,7 +404,7 @@ export function ResultView({ id }: { id: string }) {
                 Tayyorlik hisoboti · {gen.doc.article.review.score} ball
               </summary>
               <div className="mt-2">
-                <ArticleReviewPanel review={gen.doc.article.review} onFix={(fix) => void onFix(fix)} fixing={fixing} />
+                <ArticleReviewPanel review={gen.doc.article.review} onFix={(fix) => void onFix(fix)} fixing={fixing} onPolish={() => void onPolish()} polishing={polishing} />
               </div>
             </details>
           ) : null}

@@ -124,6 +124,20 @@ export function rewriteArticle(id: string, baseVersion: number, fix: { op: "rewr
   });
 }
 
+/**
+ * «Hammasini tuzatish» — avto-sayqal (Maqola 3, AUDIT-18): server hisobotdagi
+ * tuzatiladigan bandlarni o'zi tuzatadi va baholovchi bilan qayta baholaydi;
+ * ball oshsa yangi hujjat, aks holda eski hujjat + jurnal (`review.polish`).
+ * Javob `rewriteArticle` bilan bir xil `generation` (+ `ops`, `polish`).
+ * 409 `version` — qayta yuklash; 429 — kunlik chegara (3/maqola, 20/foydalanuvchi).
+ */
+export function polishArticle(id: string, baseVersion: number) {
+  return request<DocPatchResult & { ops: unknown[]; polish: import("./generation/article/types").PolishLog }>(`/api/generations/${id}/polish`, {
+    method: "POST",
+    body: JSON.stringify({ baseVersion }),
+  });
+}
+
 /** Suratni olib tashlash — bayt yubormasdan (`remove=1`). */
 export function removeResumePhoto(id: string, baseVersion: number) {
   const fd = new FormData();

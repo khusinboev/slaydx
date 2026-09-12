@@ -482,6 +482,19 @@ export async function deleteTemplate(assetId: string): Promise<void> {
   await request<{ ok: true }>(`/api/uploads/template/${encodeURIComponent(assetId)}`, { method: "DELETE" });
 }
 
+/* ─────────────────────── Maqola: UDK taklifi (AUDIT-18) ─────────────────────── */
+
+export type UdkSuggestion = { udk: string; label: string; note: string };
+
+/**
+ * UDK taklifi (`ArticleComposer` «Taklif» tugmasi): `POST /api/article/udk`
+ * `{topic, language}` → `{udk, label, note}`. Bu TAKLIF — `note` doim
+ * «tekshiring» deydi; forma uni maydonga qo'yadi, foydalanuvchi tasdiqlaydi.
+ */
+export function suggestUdk(topic: string, language: string) {
+  return request<UdkSuggestion>("/api/article/udk", { method: "POST", body: JSON.stringify({ topic, language }) });
+}
+
 /* ─────────────────────── Tarjima manbasi (Tarjimon 2) ─────────────────────── */
 
 /**

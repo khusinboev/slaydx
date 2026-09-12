@@ -8,8 +8,9 @@
  *   4 visuals    62→74   jadval (langar) + sxema SPEC (PNG ni WP3 chizadi)
  *   5 abstracts  74→82   uz + ru + en MUSTAQIL, kalit so'zlar; highlights (Elsevier)
  *   6 references 82→86   `verifyCitations` → cited-only; PRISMA (sistematik sharh)
- *   7 review     88→94   `review.ts` qoidalar + `judge` → `doc.article.review` (xatoda hisobotsiz)
- *   (8 render — `index.ts`/`render-docx`.)
+ *   7 review     88→92   `review.ts` qoidalar + `judge` → `doc.article.review` (xatoda hisobotsiz)
+ *   8 polish     92→96   `polish.ts runPolish` — ball < 90 va byudjet ≥ 90 s bo'lsa (AUDIT-18 Q-1…Q-3)
+ *   (9 render 96→100 — `index.ts`/`render-docx`.)
  *
  * Yagona manba qarori (D-1): matn `sections` da, metama'lumot `doc.article`
  * da; tartib/raqamlash `layout.ts planArticle` (WP2). Bu fayl raqam
@@ -27,7 +28,8 @@ import type { TranslationSource } from "../source-types";
 import { llmEnabled } from "../llm";
 import { CostMeter, complete as completeRole } from "../llm-roles";
 import { parseLlmObject } from "../json";
-import { blocksFromText, cleanText, mapPool, remainingMs, unverifiedReferenceNote } from "../quality";
+import { mapPool, remainingMs, unverifiedReferenceNote } from "../quality";
+import { abstractFromLlm, blocksFromLlm, clipWords, str } from "./parse";
 import { articleWordPlan } from "./plan";
 import { ARTICLE_LIMITS, type ArticleModel, type ArticleWordPlan, type Figure, type FigureSpec, type TreeNode } from "./types";
 import { ARTICLE_TYPES } from "./types-registry";
@@ -50,6 +52,7 @@ import {
 } from "./prompts";
 import { guardSection, missingFactNumbers, skeletonCoverage, type SectionGuardReport } from "./guard";
 import { reviewArticle } from "./review";
+import { runPolish, userNeeds } from "./polish";
 import { collectReferences, type CompleteFn, type ResearchStats } from "../research/pipeline";
 import { citedOnly, referenceIndex, verifyCitations, verifyCitationsInText, type Unresolved } from "../research/verify";
 
@@ -65,6 +68,11 @@ export type ArticleBuildOpts = {
   /** Test seam — OpenAlex/Crossref. */
   fetchImpl?: typeof fetch;
   retryBaseMs?: number;
+  /**
+   * Avto-sayqal (8-bosqich). Standart `true`; jonli sinov/testlar `false`
+   * bilan o'chiradi; berilmasa `ARTICLE_POLISH=0` muhiti ham o'chiradi.
+   */
+  polish?: boolean;
 };
 
 export type ArticleCost = ReturnType<CostMeter["toJson"]>;
@@ -96,31 +104,18 @@ const EXPAND_BELOW = 0.7;
 /** Rasm uchun taxminiy piksel o'lchami (160 mm × 300 dpi); WP3 haqiqiy o'lchamni qo'yadi. */
 const FIGURE_W = 1890;
 const FIGURE_H = 1100;
+/** Avto-sayqal: ball shundan past bo'lsa (Q-1 «≥ 90 → to'xtaydi»). */
+export const POLISH_BELOW = 90;
+/** Avto-sayqal uchun byudjetdan kamida shuncha qolishi kerak (2 to'lqin × 30 s + baholovchi). */
+export const POLISH_MIN_MS = 90_000;
 
 export { articleWordPlan, articleWordsPerPage } from "./plan";
 export type { ArticleWordPlan };
 
 /* ────────────────────────── yordamchilar ────────────────────────── */
 
-const str = (v: unknown, max: number) => cleanText(String(v ?? "")).slice(0, max);
-
-type RawBlock = { kind?: unknown; text?: unknown };
-
-/** Model bloklari → `Block[]` (faqat p/li/quote; qisqa/bo'sh tashlanadi). */
-export function blocksFromLlm(raw: unknown, fallbackText: string): Block[] {
-  const list = Array.isArray(raw) ? (raw as RawBlock[]) : [];
-  const out: Block[] = [];
-  for (const b of list) {
-    const text = typeof b === "string" ? cleanText(b) : str(b?.text, 4000);
-    if (text.length < 20) continue;
-    const kind = b && typeof b === "object" && (b.kind === "li" || b.kind === "quote") ? b.kind : "p";
-    out.push({ kind, text });
-  }
-  if (out.length) return out;
-  // JSON kelmadi/bo'sh — model oddiy matn yozgan bo'lishi mumkin.
-  const plain = fallbackText.replace(/^\s*\{[\s\S]*?"blocks"\s*:/, "").replace(/[{}[\]"]/g, " ");
-  return /\p{L}{3}/u.test(plain) ? blocksFromText(plain) : [];
-}
+// Model javobi parserlari — `parse.ts` (izomorf); eski importlar shu yerdan ishlaydi.
+export { abstractFromLlm, blocksFromLlm } from "./parse";
 
 type RawTable = { caption?: unknown; headers?: unknown; rows?: unknown; anchorAfterBlock?: unknown };
 
@@ -581,7 +576,7 @@ export async function buildArticleDoc(meta: DocMeta, values: FormValues, opts: A
     language: input.language,
   };
   const anyUnverified = refs.some((r) => r.verified === "unverified");
-  const doc: AcademicDoc = {
+  const draft: AcademicDoc = {
     meta: docMeta,
     titlePage: false,
     toc: false,
@@ -601,6 +596,7 @@ export async function buildArticleDoc(meta: DocMeta, values: FormValues, opts: A
    * `usage` i sarfga qo'shiladi (`cost_json`).
    */
   stage(88, "Tayyorlik hisoboti");
+  let doc: AcademicDoc = draft;
   try {
     const review = await reviewArticle(doc, {
       research: research.stats,
@@ -610,11 +606,56 @@ export async function buildArticleDoc(meta: DocMeta, values: FormValues, opts: A
       wordTarget: plan.body,
       onUsage: (u) => meter.add(u),
     });
+    review.userNeeds = userNeeds(review, doc);
     article.review = review;
-    stage(94, `Hisobot: ${review.score} ball`);
+    stage(92, `Hisobot: ${review.score} ball`);
   } catch (e) {
     console.warn("[article] tayyorlik hisoboti tuzilmadi:", e instanceof Error ? e.message : e);
-    stage(94, "Hisobotsiz davom etildi");
+    stage(92, "Hisobotsiz davom etildi");
+  }
+
+  /*
+   * ── 8. polish (Maqola 3, AUDIT-18 Q-1…Q-3) — hisobotdagi tuzatiladigan
+   * bandlarni dvigatel O'ZI tuzatadi va baholovchi bilan qayta baholaydi;
+   * faqat ball OSHSA qabul (`runPolish`). Shartlar: hisobot bor, ball
+   * < `POLISH_BELOW`, byudjetdan ≥ `POLISH_MIN_MS` qolgan (tuzatishlar
+   * 2 to'lqin × 30 s + baholovchi); aks holda o'tkazib yuboriladi va
+   * hisobotda `polish.skipped: budget` izohi qoladi — natija sahifasida
+   * «Hammasini tuzatish» bilan qo'lda ishga tushiriladi. `polish: false`
+   * (jonli sinov, testlar) yoki `ARTICLE_POLISH=0` — bosqich yo'q.
+   * Sayqal XATO EMAS — yiqilsa hisobotli maqola o'zgarmay qoladi.
+   */
+  const wantPolish = opts.polish ?? process.env.ARTICLE_POLISH !== "0";
+  if (wantPolish && article.review) {
+    const review = article.review;
+    const left = remainingMs(deadline);
+    if (review.score >= POLISH_BELOW) {
+      // Yetarli — sayqal kerak emas (jurnal yo'q, hisobot o'z holicha).
+    } else if (left < POLISH_MIN_MS) {
+      review.polish = { before: review.score, after: review.score, applied: [], skipped: [{ id: "budget", reason: "budget" }], accepted: false, at: new Date().toISOString() };
+      console.warn(`[article] avto-sayqal o'tkazib yuborildi: byudjetdan ${Math.round(left / 1000)} s qoldi (kerak ≥ ${POLISH_MIN_MS / 1000} s)`);
+    } else {
+      stage(92, "Avto-sayqal");
+      try {
+        const r = await runPolish(doc, review, {
+          complete,
+          deadline,
+          judge: true,
+          research: research.stats,
+          guard: { unresolved: guard.unresolved, emptySections: guard.emptySections },
+          onUsage: (u) => meter.add(u),
+        });
+        doc = r.doc;
+        doc.article!.review = r.review;
+        if (r.accepted) {
+          guard.unresolved = guard.unresolved.filter((u) => !r.applied.some((f) => f.target === u.sectionId));
+          stage(96, `Sayqal: ${r.log.before} → ${r.log.after} ball`);
+        } else stage(96, r.log.applied.length ? `Sayqal ballni oshirmadi (${r.log.before})` : `Hisobot: ${r.log.before} ball`);
+      } catch (e) {
+        console.warn("[article] avto-sayqal yiqildi:", e instanceof Error ? e.message : e);
+        stage(96, "Sayqalsiz davom etildi");
+      }
+    }
   }
   return { doc, cost: meter.toJson(), research: research.stats, guard };
 }
@@ -703,43 +744,6 @@ async function writeSection(ctx: ArticleContext, plan: SectionPlan, ask: Section
 
 /* ────────────────────────── annotatsiya ────────────────────────── */
 
-type AbstractJson = { text?: unknown; background?: unknown; methods?: unknown; results?: unknown; conclusions?: unknown; keywords?: unknown };
-
-function keywordsFrom(raw: unknown, max: number): string[] {
-  const list = Array.isArray(raw) ? raw : typeof raw === "string" ? raw.split(/[,;]/) : [];
-  const out: string[] = [];
-  for (const k of list) {
-    const t = str(k, 60).replace(/[.;]+$/, "");
-    if (t && !out.some((x) => x.toLowerCase() === t.toLowerCase())) out.push(t);
-    if (out.length >= max) break;
-  }
-  return out;
-}
-
-/** Annotatsiya JSON → matn + kalit so'zlar; structured bo'lsa 4 qism yorliq bilan. */
-export function abstractFromLlm(raw: string | null, ctx: ArticleContext, lang: string): { text: string; keywords: string[]; words: number } | null {
-  if (!raw) return null;
-  const j = parseLlmObject<AbstractJson>(raw);
-  if (!j) return null;
-  const L = articleLabels(lang);
-  let text = "";
-  if (ctx.type.structuredAbstract) {
-    const parts: [string, unknown][] = [
-      [L.structured.background, j.background],
-      [L.structured.methods, j.methods],
-      [L.structured.results, j.results],
-      [L.structured.conclusions, j.conclusions],
-    ];
-    const filled = parts.map(([label, v]) => [label, str(v, 1500)] as const).filter(([, v]) => v);
-    text = filled.length >= 3 ? filled.map(([label, v]) => `${label}: ${v}`).join("\n") : str(j.text, 3000);
-  } else {
-    text = str(j.text, 3000) || [j.background, j.methods, j.results, j.conclusions].map((v) => str(v, 800)).filter(Boolean).join(" ");
-  }
-  if (text.length < 80) return null;
-  const words = (text.match(/\S+/g) ?? []).length;
-  return { text, keywords: keywordsFrom(j.keywords, ctx.profile.keywords[1]), words };
-}
-
 async function writeAbstract(ctx: ArticleContext, lang: string, summaries: string, call: Ask, deadline: number) {
   const system = abstractSystemPrompt(ctx, lang);
   const [minW, maxW] = ctx.profile.abstractWords;
@@ -756,12 +760,6 @@ async function writeAbstract(ctx: ArticleContext, lang: string, summaries: strin
 }
 
 /* ────────────────────────── kichik yordamchilar ────────────────────────── */
-
-function clipWords(s: string, max: number): string {
-  const cut = s.slice(0, max);
-  const i = cut.lastIndexOf(" ");
-  return (i > max * 0.6 ? cut.slice(0, i) : cut).replace(/[,;:\s]+$/, "");
-}
 
 /**
  * Rasm manbasi MATNI — «Manba:» prefiksisiz: prefiksni `planArticle`

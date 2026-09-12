@@ -45,6 +45,12 @@ function stubApi(draft: Record<string, unknown> | null = null) {
     if (url === "/api/forms/article/draft") return json(200, { ok: true, updatedAt: "now" });
     if (url === "/api/generations" && method === "POST") return json(200, { id: "44444444-4444-4444-8444-444444444444", price: 6000 });
     if (url === "/api/users/me") return json(200, { ok: true });
+    // AUDIT-18: UDK taklifi — mavzu bo'yicha; «xato» mavzusi 503.
+    if (url === "/api/article/udk" && method === "POST") {
+      const topic = String((body as { topic?: unknown })?.topic ?? "");
+      if (/xato/i.test(topic)) return json(503, { error: "UDK taklif qilinmadi — qayta urinib ko'ring" });
+      return json(200, { udk: "004.8:37.02", label: "Sun’iy intellekt — ta’lim", note: "AI taklifi — jurnal talabiga qarab tekshiring" });
+    }
     return json(404, { error: "yo'q" });
   };
   return calls;
@@ -255,6 +261,46 @@ test("kalit so'zlar ≤12 ta bilan cheklanadi", async () => {
     });
   }
   assert.equal(document.querySelectorAll("[data-combo-chip]").length, 12, "13-chisi qabul qilinmaydi");
+});
+
+test("UDK «Taklif» (AUDIT-18 Q-4): mavzusiz o'chiq; mavzu bilan POST /api/article/udk {topic, language} → maydonga tushadi, ostida «tekshiring» izohi; xato → izohda xato matni", async () => {
+  const calls = stubApi();
+  await login();
+  mount();
+  const btn = () => document.querySelector("[data-udk-suggest]") as HTMLButtonElement | null;
+  assert.ok(btn(), "«Taklif» tugmasi yo'q");
+  assert.ok(btn()!.disabled, "mavzu bo'sh — tugma o'chiq bo'lishi kerak");
+  await act(async () => {
+    fireEvent.change(screen.getByPlaceholderText(tool.topicPlaceholder!), { target: { value: "Sun'iy intellekt ta'limda" } });
+  });
+  await act(async () => {
+    fireEvent.click(within(screen.getByRole("radiogroup", { name: "Til" })).getByRole("radio", { name: "Русский" }));
+  });
+  assert.ok(!btn()!.disabled, "mavzu bilan tugma faol bo'lishi kerak");
+  await act(async () => {
+    fireEvent.click(btn()!);
+  });
+  await waitFor(() => {
+    assert.equal((document.querySelector('[data-field="udk"] input') as HTMLInputElement).value, "004.8:37.02", "taklif maydonga tushmadi");
+  });
+  const req = calls.find((c) => c.url === "/api/article/udk");
+  assert.ok(req && req.method === "POST");
+  assert.deepEqual(req!.body, { topic: "Sun'iy intellekt ta'limda", language: "ru" }, "tana: mavzu + tanlangan til");
+  const note = document.querySelector("[data-udk-note]");
+  assert.ok(note, "«tekshiring» izohi yo'q");
+  assert.match(note!.textContent ?? "", /AI taklifi — jurnal talabiga qarab tekshiring: Sun’iy intellekt — ta’lim/);
+  assert.equal(btn()!.textContent, "Taklif");
+  // Xato: maydon o'zgarmaydi, izohda xato matni.
+  await act(async () => {
+    fireEvent.change(screen.getByPlaceholderText(tool.topicPlaceholder!), { target: { value: "xato mavzu" } });
+  });
+  await act(async () => {
+    fireEvent.click(btn()!);
+  });
+  await waitFor(() => {
+    assert.match(document.querySelector("[data-udk-note]")?.textContent ?? "", /UDK taklif qilinmadi/);
+  });
+  assert.equal((document.querySelector('[data-field="udk"] input') as HTMLInputElement).value, "004.8:37.02", "xatoda eski qiymat qolishi kerak");
 });
 
 test("qoralama: yozgandan keyin BIR marta PUT (debounce)", async () => {

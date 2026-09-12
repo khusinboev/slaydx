@@ -33,11 +33,14 @@ const para = (i: number, extra = "") =>
 type Call = { role: LlmRole; system: string; user: string };
 
 /** Ssenariyli LLM stub: so'rov turini prompt matnidan aniqlaydi. */
-function makeComplete(calls: Call[], opts: { emptySection?: string; noAbstract?: string; badOutline?: boolean } = {}) {
+function makeComplete(calls: Call[], opts: { emptySection?: string; noAbstract?: string; badOutline?: boolean; judge?: (n: number) => string } = {}) {
+  let judgeCalls = 0;
   return async (role: LlmRole, system: string, user: string) => {
     calls.push({ role, system, user });
     const usage = { provider: "stub", model: "stub-1", inputTokens: 100, outputTokens: 50 };
     const reply = (text: string) => ({ text, usage });
+    // Baholovchi: `opts.judge(n)` — n-chi chaqiruv (1 = hisobot, 2 = sayqaldan keyin); bo'lmasa «{}» → neytral 2/3.
+    if (role === "judge") return reply(opts.judge ? opts.judge(++judgeCalls) : "{}");
     if (role === "fast") return reply(JSON.stringify({ queries: ["adaptive learning AI", "intelligent tutoring systems", "sun'iy intellekt ta'lim"] }));
     if (role === "researcher") return reply(JSON.stringify({ ids: ["W2741809807", "W4385000001", "W0000000000"] }));
     if (user.startsWith("Plan the sections") || user.startsWith("Plan a single-block")) {
@@ -101,16 +104,18 @@ const FETCH_PLAN = {
   "query.bibliographic=": { message: { items: [] } },
 };
 
-async function build(values: FormValues = {}, o: Parameters<typeof makeComplete>[1] = {}) {
+/** Sayqal (8-bosqich) standart O'CHIQ — eski testlar 7 bosqichni sinaydi; sayqal testlari `polish: true` beradi. */
+async function build(values: FormValues = {}, o: Parameters<typeof makeComplete>[1] = {}, b: { polish?: boolean; budgetMs?: number } = {}) {
   const meta = extractMeta(tool, { ...BASE, ...values });
   const calls: Call[] = [];
   const stages: { progress: number; step: string }[] = [];
   const res = await buildArticleDoc(meta, { ...BASE, ...values }, {
-    deadline: Date.now() + 120_000,
+    deadline: Date.now() + (b.budgetMs ?? 120_000),
     complete: makeComplete(calls, o) as never,
     fetchImpl: stubFetch(FETCH_PLAN),
     retryBaseMs: 0,
     onStage: (ev) => stages.push(ev),
+    polish: b.polish ?? false,
   });
   return { res, calls, stages, meta };
 }
@@ -193,9 +198,9 @@ test("buildArticleDoc: to'liq oqim — manbalar tekshirilgan, iqtiboslar reyestr
   assert.ok(cost.calls >= 8, `calls=${cost.calls}`);
   assert.equal(cost.inputTokens, cost.calls * 100);
   assert.equal(stages[0].progress, 0);
-  // WP5: 86% adabiyotlar → 88% hisobot → 94% «Hisobot: N ball».
+  // WP5: 86% adabiyotlar → 88% hisobot → 92% «Hisobot: N ball» (AUDIT-18: 92→96 sayqal, bu yerda o'chiq).
   assert.ok(stages.some((s) => s.progress === 86));
-  assert.equal(stages[stages.length - 1].progress, 94);
+  assert.equal(stages[stages.length - 1].progress, 92);
   assert.match(stages[stages.length - 1].step, /^Hisobot: \d+ ball$/);
   assert.ok(stages.some((s) => /Bo‘limlar yozilmoqda/.test(s.step)));
   // Rollar: fast (so'rovlar), researcher (tanlash), writer (qolgani), judge (hisobot — bitta chaqiruv).
@@ -207,6 +212,61 @@ test("buildArticleDoc: to'liq oqim — manbalar tekshirilgan, iqtiboslar reyestr
   assert.ok(review && review.score >= 0 && review.score <= 100, "review yo'q");
   assert.ok(review.checks.some((c) => c.id === "structure") && review.checks.some((c) => c.id === "judge:novelty"));
   assert.equal(review.checks.find((c) => c.id === "judge:novelty")?.detail, "2/3");
+  assert.equal(review.polish, undefined, "polish:false — sayqal jurnali bo'lmasligi kerak");
+  assert.ok(Array.isArray(review.userNeeds), "«Sizdan kutiladi» ro'yxati hisobotda bo'lishi kerak");
+});
+
+/* ══════════════════════════════ 8-bosqich: avto-sayqal (AUDIT-18) ══════════════════════════════ */
+
+/** Baholovchi: 1-chaqiruv past (1/3 + kirishga xavfsiz tavsiya), 2-chaqiruv (sayqaldan keyin) yuqori (3/3). */
+const judgeLowThenHigh = (n: number) =>
+  n === 1
+    ? JSON.stringify({ novelty: 1, chain: 1, methods: 1, comparison: 1, overclaim: 1, style: 1, notes: ["Maqsad aniq emas"], fixes: [{ target: "intro", instruction: "Kirishda maqsadni aniq yozing" }] })
+    : JSON.stringify({ novelty: 3, chain: 3, methods: 3, comparison: 3, overclaim: 3, style: 3, notes: ["Yaxshi"], fixes: [] });
+
+test("8-bosqich: ball < 90 va byudjet bor → sayqal, baholovchi ikkinchi marta yuqori → QABUL (yangi hisobot, jurnal, bosqich 92→96, sarf meterda)", async () => {
+  const { res, calls, stages } = await build({}, { judge: judgeLowThenHigh }, { polish: true });
+  assert.ok(res);
+  const review = res.doc.article!.review!;
+  assert.equal(calls.filter((c) => c.role === "judge").length, 2, "baholovchi hisobot + sayqal uchun ikki marta");
+  assert.ok(review.polish, "sayqal jurnali yo'q");
+  assert.equal(review.polish!.accepted, true, `qabul qilinishi kerak edi: ${JSON.stringify(review.polish)}`);
+  assert.ok(review.polish!.after > review.polish!.before);
+  assert.equal(review.score, review.polish!.after, "hisobot bali jurnaldagi `after` bilan teng");
+  assert.ok(review.polish!.applied.some((a) => a.target === "intro"), "baholovchi tavsiyasi (intro) bajarilmadi");
+  assert.equal(review.checks.find((c) => c.id === "judge:novelty")?.detail, "3/3", "hisobot yangi baholovchidan");
+  assert.ok(stages.some((s) => s.progress === 92 && s.step === "Avto-sayqal"));
+  assert.equal(stages[stages.length - 1].progress, 96);
+  assert.match(stages[stages.length - 1].step, /^Sayqal: \d+ → \d+ ball$/);
+  // Sarf: sayqal chaqiruvlari (writer + judge) meterga kirgan — chaqiruvlar soni stub chaqiruvlari bilan teng.
+  assert.equal(res.cost.calls, calls.length, "sayqal sarfi cost_json ga kirmadi");
+  // Qayta yozilgan bo'limda uydirma iqtibos yo'q (verifyCitations sayqalda ham).
+  const intro = res.doc.sections.find((s) => s.id === "intro")!;
+  assert.ok(!intro.blocks.some((b) => /W9999999999/.test(b.text)));
+  assert.ok(Array.isArray(review.userNeeds));
+});
+
+test("8-bosqich: `polish: false` → bosqich yo'q (baholovchi bir marta, jurnal yo'q); byudjet < 90 s → o'tkazib yuboriladi, jurnalda `budget`", async () => {
+  const off = await build({}, { judge: judgeLowThenHigh }, { polish: false });
+  assert.equal(off.calls.filter((c) => c.role === "judge").length, 1);
+  assert.equal(off.res!.doc.article!.review!.polish, undefined);
+  assert.ok(!off.stages.some((s) => s.step === "Avto-sayqal"));
+
+  const tight = await build({}, { judge: judgeLowThenHigh }, { polish: true, budgetMs: 80_000 });
+  assert.equal(tight.calls.filter((c) => c.role === "judge").length, 1, "byudjet yetmasa sayqal (va ikkinchi baholovchi) bo'lmasligi kerak");
+  const p = tight.res!.doc.article!.review!.polish;
+  assert.ok(p && !p.accepted, "byudjet jurnali yo'q");
+  assert.deepEqual(p!.skipped, [{ id: "budget", reason: "budget" }]);
+  assert.deepEqual(p!.applied, []);
+  assert.ok(!tight.stages.some((s) => s.step === "Avto-sayqal"));
+
+  // Ball ≥ 90 — sayqal kerak emas: jurnal yo'q, baholovchi bir marta.
+  const high = await build({}, { judge: () => JSON.stringify({ novelty: 3, chain: 3, methods: 3, comparison: 3, overclaim: 3, style: 3, notes: [], fixes: [] }) }, { polish: true });
+  const hr = high.res!.doc.article!.review!;
+  if (hr.score >= 90) {
+    assert.equal(high.calls.filter((c) => c.role === "judge").length, 1);
+    assert.equal(hr.polish, undefined);
+  } else assert.ok(hr.polish, "ball < 90 bo'lsa sayqal urinilishi kerak");
 });
 
 test("research o'chiq: OpenAlex chaqirilmaydi, faqat foydalanuvchi manbalari; sxema soni 0 → figure so'ralmaydi", async () => {
@@ -441,8 +501,8 @@ test("so'z rejasi profilga bog'liq; byudjet 150 000 + 16 000 × bet; prismaSpec 
   // Apparatura formulasi rejaniki: overhead + bo'lim = taxmin (ikkinchi nusxa yo'q).
   const ov = articleOverheadPages(sm, ARTICLE_TYPES.analytical, PUBLICATION_PROFILES.oak, 4);
   assert.equal(Math.round(sm.body / sm.perPage + ov), 6);
-  assert.equal(budgetFor(tool, { ...BASE, pages: "10-15" }, 660_000), 150_000 + 13 * 16_000);
-  assert.equal(budgetFor(tool, { ...BASE, articleType: "conference_thesis", pages: "1-2" }, 660_000), 150_000 + 2 * 16_000);
+  assert.equal(budgetFor(tool, { ...BASE, pages: "10-15" }, 660_000), 150_000 + 90_000 + 13 * 16_000, "AUDIT-18: +90 s avto-sayqal");
+  assert.equal(budgetFor(tool, { ...BASE, articleType: "conference_thesis", pages: "1-2" }, 660_000), 150_000 + 90_000 + 2 * 16_000);
   assert.equal(budgetFor(tool, { ...BASE, pages: "10-15" }, 300_000), 300_000, "cap");
   const p = prismaSpec({ user: 2, userVerified: 1, queries: ["a"], found: 40, candidates: 25, selected: 12, failedQueries: 0 }, 9);
   if (p.kind === "prisma") {

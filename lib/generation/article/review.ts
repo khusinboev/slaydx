@@ -82,6 +82,8 @@ export type JudgeResult = Record<JudgeCriterion, number> & {
 
 /** Baholovchi javob bermaganda — neytral. */
 export const JUDGE_NEUTRAL = 2;
+/** Baholovchi javob bermaganda hisobot izohi (rewrite/polish shu satrni taniydi). */
+export const JUDGE_NO_ANSWER = "Baholovchi javob bermadi";
 export const JUDGE_TIMEOUT_MS = 35_000;
 /** Chaqiruvga shundan kam vaqt qolsa umuman urinilmaydi. */
 const JUDGE_MIN_MS = 8_000;
@@ -199,6 +201,49 @@ const VISUAL_WORDS: Record<"uz" | "ru" | "en", { fig: RegExp; tab: RegExp }> = {
 function langKey(lang: string): "uz" | "ru" | "en" {
   const c = (lang || "uz").toLowerCase();
   return c === "ru" ? "ru" : c === "en" ? "en" : "uz";
+}
+
+export type UnreferencedVisual = { sectionId: string; kind: "figure" | "table"; id: string; label: string };
+
+/**
+ * Rasm/jadval bloklari matnda havola qilinganmi — `visuals` qoidasi VA
+ * avto-sayqal (`polish.ts`, «havola qo'sh» tuzatishi) BITTA hisobdan
+ * o'qiydi. Havola: `[fig:id]`/`[tab:id]` tokeni (istalgan bo'limda),
+ * «1-rasm»/«1-jadval» yorlig'i yoki shu bo'limda «rasm»/«jadval» so'zi.
+ * Chizilmagan sxema (`fallbackBlocks`) havola talab qilmaydi.
+ */
+export function visualCoverage(doc: AcademicDoc): { unreferenced: UnreferencedVisual[]; fallback: number; count: number } {
+  const plan = planArticle(doc);
+  const L = articleLabels(plan.language);
+  const VW = VISUAL_WORDS[langKey(plan.language)];
+  const sections = doc.sections.filter((s) => s.blocks.length);
+  const allText = sections.map(sectionText).join("\n");
+  const low = allText.toLowerCase();
+  const figs = new Map(plan.model.figures.map((f) => [f.id, f]));
+  const unreferenced: UnreferencedVisual[] = [];
+  let fallback = 0;
+  let count = 0;
+  for (const s of sections) {
+    const st = sectionText(s);
+    for (const b of s.blocks) {
+      if (b.kind === "figure") {
+        if (figs.get(b.figureId)?.fallbackBlocks?.length) {
+          fallback++;
+          continue;
+        }
+        count++;
+        const n = plan.numbers.figures[b.figureId];
+        const explicit = allText.includes(`[fig:${b.figureId}]`) || (n && low.includes(L.figureRef(n).toLowerCase()));
+        if (!explicit && !VW.fig.test(st)) unreferenced.push({ sectionId: s.id, kind: "figure", id: b.figureId, label: n ? L.figureRef(n) : b.figureId });
+      } else if (b.kind === "tableRef") {
+        count++;
+        const n = plan.numbers.tables[b.tableId];
+        const explicit = allText.includes(`[tab:${b.tableId}]`) || (n && low.includes(L.tableRef(n).toLowerCase()));
+        if (!explicit && !VW.tab.test(st)) unreferenced.push({ sectionId: s.id, kind: "table", id: b.tableId, label: n ? L.tableRef(n) : b.tableId });
+      }
+    }
+  }
+  return { unreferenced, fallback, count };
 }
 
 /**
@@ -344,33 +389,9 @@ export function ruleChecks(doc: AcademicDoc, o: { guard?: ReviewGuardInput; rese
 
   /* ── visuals: har rasm/jadval matnda havola qilinganmi; fallback ── */
   {
-    const VW = VISUAL_WORDS[langKey(lang)];
-    const allText = sections.map(sectionText).join("\n");
-    const problems: string[] = [];
-    let fallback = 0;
-    let count = 0;
-    const figs = new Map(model.figures.map((f) => [f.id, f]));
-    for (const s of sections) {
-      const st = sectionText(s);
-      for (const b of s.blocks) {
-        if (b.kind === "figure") {
-          const f = figs.get(b.figureId);
-          if (f?.fallbackBlocks?.length) {
-            fallback++;
-            continue;
-          }
-          count++;
-          const n = plan.numbers.figures[b.figureId];
-          const explicit = allText.includes(`[fig:${b.figureId}]`) || (n && allText.toLowerCase().includes(L.figureRef(n).toLowerCase()));
-          if (!explicit && !VW.fig.test(st)) problems.push(n ? L.figureRef(n) : b.figureId);
-        } else if (b.kind === "tableRef") {
-          count++;
-          const n = plan.numbers.tables[b.tableId];
-          const explicit = allText.includes(`[tab:${b.tableId}]`) || (n && allText.toLowerCase().includes(L.tableRef(n).toLowerCase()));
-          if (!explicit && !VW.tab.test(st)) problems.push(n ? L.tableRef(n) : b.tableId);
-        }
-      }
-    }
+    const v = visualCoverage(doc);
+    const problems = v.unreferenced.map((x) => x.label);
+    const { fallback, count } = v;
     if (problems.length) out.push(check("visuals", "yellow", "Vizuallar", `Matnda havola yo‘q: ${list(problems)}`));
     else if (fallback) out.push(check("visuals", "yellow", "Vizuallar", `${fallback} ta sxema chizilmadi — ro‘yxat sifatida qoldi`));
     else if (!count && doc.meta.figureCount > 0) out.push(check("visuals", "yellow", "Vizuallar", `${doc.meta.figureCount} ta sxema so‘ralgan, bittasi ham yo‘q`));
@@ -669,7 +690,7 @@ export async function reviewArticle(doc: AcademicDoc, opts: ReviewOpts = {}): Pr
         console.warn("[article] baholovchi xatosi:", e instanceof Error ? e.message : e);
       }
     }
-    if (!judge) judgeNotes.push("Baholovchi javob bermadi");
+    if (!judge) judgeNotes.push(JUDGE_NO_ANSWER);
   }
   const j = judge ?? neutralJudge();
   judgeNotes.push(...j.notes);
