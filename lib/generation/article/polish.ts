@@ -531,7 +531,8 @@ export type ApplyPolishResult = {
  */
 export async function applyPolish(doc: AcademicDoc, fixes: ArticleFix[], deps: ApplyPolishDeps): Promise<ApplyPolishResult> {
   const out: ApplyPolishResult = { ops: [], applied: [], failed: [], unresolved: [], rewrittenSections: [] };
-  const results = await mapPool(fixes, deps.concurrency ?? 3, async (fix) => {
+  type One = { fix: ArticleFix; r: RewriteOut } | { fix: ArticleFix; error: string };
+  const results = await mapPool(fixes, deps.concurrency ?? 3, async (fix): Promise<One> => {
     try {
       return { fix, r: await rewriteFix(doc, fix, deps) };
     } catch (e) {
