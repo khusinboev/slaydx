@@ -1,7 +1,7 @@
-# SlaydX — holat (2026-09-12, main `be0f737`+docs, tekshiruv: unit 1424/1426 (2 tasi `.env.local` fal.ai holati), ko'ruvchi 140, UI 158, lint/tsc toza)
+# SlaydX — holat (2026-09-12, main `90e192a`+, prod deploy qilingan; tekshiruv: unit 1424/1426 (2 tasi `.env.local` fal.ai holati), ko'ruvchi 140, UI 158, lint/tsc toza)
 
 Sprint: **Maqola 2 (AUDIT-17)** — reja `~/.claude/plans/sen-senior-fullstack-dev-majestic-starfish.md`, jurnal `docs/AUDIT-17.md`.
-Umumiy: **~95% bajarildi — kod tugadi, deploy qoldi (foydalanuvchi kalitlari kerak).**
+Umumiy: **100% — Maqola 2 prod'da (2026-09-12).**
 
 | # | Bosqich | % | Izoh |
 |---|---|---|---|
@@ -15,14 +15,15 @@ Umumiy: **~95% bajarildi — kod tugadi, deploy qoldi (foydalanuvchi kalitlari k
 | 7 | WP8 LLM rollari (adapterlar, zaxira zanjiri, usage, narx jadvali) | 100 | `7ddfdc1` |
 | 8 | WP7 ko'ruvchida tahrir (article adapter, rewrite, editor) | 100 | `8d7e871` + `4ba96b4` (tahrir ikkilanishi) |
 | 9 | R5 lead: integratsiya, jonli, Chromium smoke (tahrir + «Tuzatish»), hajm kalibrovkasi, ko'ruvchi shrifti, DOCX lineRule, docs | 100 | `b06c86d`…`be0f737`; jurnal §6–§7, structure.md, CLAUDE.md, README, xotira |
-| 10 | Deploy (zaxira → 020 → `.env` kalitlari → nohup deploy.sh → prod smoke) | 0 | **Foydalanuvchidan:** `ANTHROPIC_API_KEY`, `OPENROUTER_API_KEY`, `OPENALEX_API_KEY`+mailto; deploy tasdig'i |
+| 10 | Deploy (zaxira → 020 → `.env` kalitlari → nohup deploy.sh → compose env → prod smoke) | 100 | `3663b63` + `90e192a`; eski maqolalar ochiladi, yangi maqola Claude baholovchi bilan, tahrir/«Tuzatish» prod'da yashil |
 
-## Ochiq savol (mahsulot egasi)
-- 3–5 betlik paket OAK profilida ~6 bet chiqadi (apparatura ≈3,7 bet; bo'lim 45 % poli) — yorliqni profilga qarab ko'rsatish yoki kichik paketda apparaturani qisqartirish? (`docs/AUDIT-17.md` §7)
+## Ochiq bandlar
+- `docs/AUDIT-17.md` §7: manbalar soni 8–12 (OAK ≥10), Claude baholovchi qattiqroq, apparaturani qisqartirish varianti.
+- OpenRouter/OpenAlex hisoblarida pul yo'q (zaxira zanjiri faqat Anthropic → Gemini ishlaydi); Anthropic $3 — baholovchi ~$0.02–0.03/maqola.
 
 ## Muhit
 - Dev server 3111 (heavy.sh ostida) ishlab turibdi — sinovdan keyin to'xtatish mumkin; scratch fayllar `scratch-tmp/` (gitignored) va scratchpad `pw/`.
 
 ## Davom etish qadamlari
-1. Foydalanuvchi kalitlarni bersa: prod `.env` (`LLM_WRITER=gemini:gemini-3.7-flash`, `LLM_JUDGE=anthropic:claude-sonnet-5,gemini:gemini-3.7-flash`, `LLM_RESEARCHER`/`LLM_FAST` gemini, `OPENALEX_*`, `CROSSREF_MAILTO`, `WORKER_JOB_TIMEOUT_MS=660000`), pg_dump zaxira, `nohup bash /opt/slaydx/deploy.sh`, prod smoke (`pw/article17.mjs` BASE=prod, eski maqolalar ochilishi).
-2. Ochiq savol bo'yicha qaror → kichik tuzatish (yorliq yoki apparatura).
+1. Keyingi sprint — foydalanuvchi bilan kelishiladi (`docs/AUDIT-17.md` §7 dan boshlash mumkin).
+2. `scripts/cost-report.mts` ni prod'da (worker konteynerida) bir haftadan keyin yurgizib marjani tekshirish.

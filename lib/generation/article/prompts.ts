@@ -296,7 +296,8 @@ export function abstractPrompt(ctx: ArticleContext, lang: string, sectionSummari
   const structured = Boolean(ctx.type.structuredAbstract);
   const lines = [
     // Jonli sinov: «150–250» so‘ralganda 132–147 chiqdi — o‘rtaga mo‘ljal, pastki chegara qat’iy.
-    `Write the abstract in ${langInfo(lang).name}: aim for about ${ctx.plan.abstractAim} words, never fewer than ${minW} and never more than ${maxW} (whitespace-separated words); aim, method, main result (with the author's numbers if any), conclusion/significance.`,
+    // Pastki chegara 10 % yuqori aytiladi: model o'zbek/rus so'zini kam sanaydi — jonli/prod: 141, 146, 148, 149 (chegara 150).
+    `Write the abstract in ${langInfo(lang).name}: aim for about ${Math.max(ctx.plan.abstractAim, Math.round(minW * 1.1))} words, never fewer than ${Math.round(minW * 1.1)} and never more than ${maxW} (whitespace-separated words; when unsure, write more); aim, method, main result (with the author's numbers if any), conclusion/significance.`,
     `Then ${minK}–${maxK} keywords in ${langInfo(lang).name} (lowercase unless proper nouns; no duplicates; 1–3 words each).`,
     `Section summaries of the written article (the abstract must reflect THIS content):`,
     sectionSummaries,

@@ -157,12 +157,13 @@ test("annotatsiya prompti: o'z tili birinchi qatorda, MUSTAQIL (tarjima emas), s
   assert.match(sysRu, /INDEPENDENTLY/);
   // Standart paket 3–5 bet: mo'ljal pastki chegaraga yaqin (170); 10–15 betda o'rtaga (200).
   const p = abstractPrompt(ctx, "en", "• Kirish: …");
-  assert.match(p, /about 170 words, never fewer than 150 and never more than 250/);
-  assert.match(abstractPrompt(ctxOf({ pages: "10-15" }), "en", "…"), /about 200 words, never fewer than 150/);
+  // Pastki chegara promptda 10 % yuqori (165): model chegaraning o'zida 146–149 yozardi.
+  assert.match(p, /about 170 words, never fewer than 165 and never more than 250/);
+  assert.match(abstractPrompt(ctxOf({ pages: "10-15" }), "en", "…"), /about 200 words, never fewer than 165/);
   assert.match(p, /5–12 keywords/);
   assert.match(p, /\{"text":"…","keywords":\["…"\]\}/);
   const structured = abstractPrompt(ctxOf({ articleType: "review_systematic", pubProfile: "apa" }), "en", "…");
   assert.match(structured, /"background":"…","methods":"…","results":"…","conclusions":"…"/);
-  assert.match(structured, /never fewer than 150 and never more than 250/);
+  assert.match(structured, /never fewer than 165 and never more than 250/);
   assert.match(structured, /4–6 keywords/);
 });
