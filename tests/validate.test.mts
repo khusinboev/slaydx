@@ -133,7 +133,7 @@ test("tarjima chegarasi: xato xabari kesilgan matnni tan oladi", async () => {
   assert.equal(preflightError(tool, huge), null, "kesilgan matn aynan chegaraga teng — o'tishi kerak");
 });
 
-test("Maqola 2: ARTICLE_JSON_FIELDS (authors/userRefs/keywords/userData) MAX_JSON (24 000) chegarasida", async () => {
+test("Maqola 2/3: ARTICLE_JSON_FIELDS (authors/userRefs/keywords/userData/figureKinds) MAX_JSON (24 000) chegarasida", async () => {
   const { MAX_JSON } = await import("../lib/server/validate.ts");
   const { ARTICLE_JSON_FIELDS } = await import("../lib/generation/article-params.ts");
 
@@ -144,7 +144,8 @@ test("Maqola 2: ARTICLE_JSON_FIELDS (authors/userRefs/keywords/userData) MAX_JSO
    * import qilinadi — shu yerda qo'lda qaytarilmaydi, aks holda yangi
    * JSON maydon qo'shilganda jim kesilib qolardi.
    */
-  assert.deepEqual([...ARTICLE_JSON_FIELDS].sort(), ["authors", "keywords", "userData", "userRefs"]);
+  // AUDIT-18: `figureKinds` (sxema turlari ro'yxati) ham JSON maydon.
+  assert.deepEqual([...ARTICLE_JSON_FIELDS].sort(), ["authors", "figureKinds", "keywords", "userData", "userRefs"]);
 
   for (const field of ARTICLE_JSON_FIELDS) {
     const out = sanitizeValues({ [field]: "a".repeat(MAX_JSON + 5_000) });

@@ -274,6 +274,33 @@ const CASES: Case[] = [
     ],
   },
   {
+    /* Sxema turlari (AUDIT-18 Q-5/Q-6): analytical · uz · oak · 5–10 bet · foydalanuvchi FAQAT cycle/matrix/compare ni ruxsat etdi. */
+    name: "article-kinds",
+    tool: "article",
+    budgetMs: 150_000 + 8 * 16_000 + 90_000,
+    values: {
+      topic: "Mexanika mashinasozlikda raqamli egizak texnologiyasini joriy etish: afzalliklar va to‘siqlar",
+      articleType: articleTypeArg("analytical"),
+      pubProfile: profileArg("oak"),
+      language: "uz",
+      pages: "5-10",
+      authors: JSON.stringify([{ name: "Karimov Aziz", org: "Toshkent davlat texnika universiteti" }]),
+      keywords: JSON.stringify(["raqamli egizak", "mashinasozlik", "bashoratli xizmat"]),
+      figureCount: 3,
+      figureKinds: JSON.stringify(["cycle", "matrix", "compare"]),
+      research: true,
+    },
+    checks: (f, pages) => {
+      const kinds = f.doc.article?.figures.map((x) => x.spec.kind) ?? [];
+      return [
+        ...articleChecks(f, pages, { pagesMin: 5 }),
+        ok("sxemalar faqat ruxsat etilgan turlardan", kinds.length > 0 && kinds.every((k) => ["cycle", "matrix", "compare", "chart"].includes(k)), kinds.join(",") || "—"),
+        ok("kamida 2 xil yangi tur", new Set(kinds.filter((k) => k !== "chart")).size >= 2, kinds.join(",")),
+        ok("hammasi PNG (fallback emas)", (f.doc.article?.figures ?? []).every((x) => Boolean(x.url)), (f.doc.article?.figures ?? []).map((x) => (x.url ? "png" : "fallback")).join(",")),
+      ];
+    },
+  },
+  {
     /* Konferensiya tezisi: conference_thesis · uz · conference · 200–300 so'z, bitta blok. */
     name: "article-thesis",
     tool: "article",
