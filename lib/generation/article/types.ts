@@ -246,6 +246,25 @@ export type ReviewCheck = {
   fix?: { op: "rewrite"; target: string; instruction: string };
 };
 
+/**
+ * Avto-sayqal jurnali (Maqola 3, AUDIT-18 Q-1…Q-3) — `article/polish.ts`
+ * `runPolish` yozadi. `accepted` — yangi ball eskisidan OSHGANDA (Q-3);
+ * aks holda eski hujjat qoladi, `after` — rad etilgan urinish bali.
+ * `skipped[].reason` — `POLISH_SKIP` kalitlari: `user` (foydalanuvchi
+ * ma'lumoti kerak, Q-2), `manual`, `limit`, `budget`, `error`.
+ */
+export type PolishLog = {
+  before: number;
+  after: number;
+  applied: { target: string; instruction: string }[];
+  skipped: { id: string; reason: string }[];
+  accepted: boolean;
+  at: string;
+};
+
+/** «Sizdan kutiladi» bandi (Q-2): AI o'ylab topmaydigan ma'lumot. */
+export type UserNeed = { id: "udk" | "authors" | "results"; label: string; hint: string };
+
 export type ArticleReview = {
   /** 0–100. */
   score: number;
@@ -254,6 +273,10 @@ export type ArticleReview = {
   verifiedShare: number;
   recentShare: number;
   builtAt: string;
+  /** Avto-sayqal jurnali (dvigatel 8-bosqich yoki `POST …/polish`). */
+  polish?: PolishLog;
+  /** «Sizdan kutiladi» — `polish.ts userNeeds` (panel o'qiydi, hisoblamaydi). */
+  userNeeds?: UserNeed[];
 };
 
 /* ────────────────────────── model ────────────────────────── */
