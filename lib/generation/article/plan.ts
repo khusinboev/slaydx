@@ -5,7 +5,7 @@
  * o'qiydi. Bu faylga server/og'ir modullar (sharp, LLM) import qilinmaydi.
  */
 import { targetWords } from "../quality";
-import type { DocMeta } from "../types";
+import type { AcademicDoc, DocMeta } from "../types";
 import type { ArticleType, ArticleWordPlan, PagesId, PublicationProfile } from "./types";
 
 /**
@@ -103,4 +103,21 @@ export function estimateArticlePages(pages: PagesId, type: ArticleType, profile:
 export function pagesUpper(pages: PagesId): number {
   const m = /-(\d+)$/.exec(pages);
   return m ? Number(m[1]) : 0;
+}
+
+/**
+ * TAYYOR hujjatning taxminiy beti (hisobot `pageLimit` bandi uchun):
+ * bo'lim so'zi / perPage + apparatura (haqiqiy annotatsiya so'zi, iqtibos
+ * qilingan manba soni, sxema soni). Formula `articleOverheadPages` niki.
+ */
+export function estimateDocPages(doc: AcademicDoc, type: ArticleType, profile: PublicationProfile): number {
+  const wc = (t: string) => t.trim().split(/\s+/).filter(Boolean).length;
+  const perPage = articleWordsPerPage(profile);
+  let body = 0;
+  for (const s of doc.sections) for (const b of s.blocks) if (b.kind === "p" || b.kind === "li" || b.kind === "quote") body += wc(b.text);
+  const abstracts = (doc.abstracts ?? []).reduce((n, a) => n + wc(a.text), 0);
+  const refs = doc.article ? doc.article.references.filter((r) => r.cited).length : (doc.references?.length ?? 0);
+  const figures = doc.article?.figures.length ?? 0;
+  const targetPages = Number.isFinite(doc.meta.targetPages) ? doc.meta.targetPages : 4;
+  return body / perPage + articleOverheadPages({ perPage, abstracts, refs, figures }, type, profile, targetPages);
 }

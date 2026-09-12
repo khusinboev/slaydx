@@ -36,12 +36,14 @@ import { ARTICLE_TYPES } from "./types-registry";
 import { PUBLICATION_PROFILES } from "./profiles";
 import { articleLabels } from "./labels";
 import { planArticle } from "./layout";
+import { estimateDocPages } from "./plan";
 import { guardSection, missingFactNumbers, skeletonCoverage, wordsOf } from "./guard";
 import { formatReference } from "../cite";
 import { languageDirective } from "../i18n";
 import { parseLlmObject } from "../json";
 import { remainingMs } from "../quality";
 import type { LlmUsage, complete as completeRole } from "../llm-roles";
+import { JUDGE_CRITERIA, type ArticleJudgeConfig, type JudgeCriterion } from "./types";
 import type { ResearchStats } from "../research/pipeline";
 
 /* ────────────────────────── tiplar ────────────────────────── */
@@ -68,12 +70,14 @@ export type ReviewOpts = {
   onUsage?: (u: LlmUsage) => void;
 };
 
-export const JUDGE_CRITERIA = ["novelty", "chain", "methods", "comparison", "overclaim", "style"] as const;
-export type JudgeCriterion = (typeof JUDGE_CRITERIA)[number];
+export { JUDGE_CRITERIA } from "./types";
+export type { JudgeCriterion } from "./types";
 
 export type JudgeResult = Record<JudgeCriterion, number> & {
   notes: string[];
   fixes: { target: string; instruction: string }[];
+  /** Tur uchun o'tkazib yuborilgan mezonlar (`ArticleType.judge.skip`) — ballga va bandlarga kirmaydi. */
+  skipped?: JudgeCriterion[];
 };
 
 /** Baholovchi javob bermaganda — neytral. */
@@ -460,6 +464,24 @@ export function ruleChecks(doc: AcademicDoc, o: { guard?: ReviewGuardInput; rese
     else out.push(check("highlights", "green", "Highlights", `${h.length} ta, har biri ≤${maxChars} belgi`));
   }
 
+  /* ── pageLimit: profil bet chegarasi (universitet ≤ 15, konferensiya ≤ 5) — AUDIT-18 Q-8 ── */
+  if (profile.maxPages) {
+    const est = estimateDocPages(doc, type, profile);
+    const longest = [...sections].sort((a, b) => wordsOf(b.blocks) - wordsOf(a.blocks))[0];
+    const over = est > profile.maxPages;
+    out.push(
+      over
+        ? check(
+            "pageLimit",
+            est > profile.maxPages * 1.2 ? "red" : "yellow",
+            "Bet chegarasi",
+            `Taxminan ${Math.round(est)} bet — profil ko‘pi bilan ${profile.maxPages} talab qiladi`,
+            longest ? rewrite(longest.id, `Shorten this section by about ${Math.min(50, Math.round(((est - profile.maxPages) / est) * 100) + 10)}% — remove redundancy, keep every fact and citation.`) : undefined,
+          )
+        : check("pageLimit", "green", "Bet chegarasi", `Taxminan ${Math.round(est)} bet (≤ ${profile.maxPages})`),
+    );
+  }
+
   /* ── limitations ── */
   {
     const tail = sections.filter((s) => /^(discussion|conclusion|synthesis|future|outcome|evaluation)/.test(s.id));
@@ -477,19 +499,38 @@ export function ruleChecks(doc: AcademicDoc, o: { guard?: ReviewGuardInput; rese
 
 /* ────────────────────────── baholovchi ────────────────────────── */
 
-export function judgeSystemPrompt(sectionIds: string[]): string {
+/** Standart mezon ta'riflari — tur `judge.describe` bilan ustidan yozadi. */
+export const JUDGE_DESCRIBE: Record<JudgeCriterion, string> = {
+  novelty: "the contribution is stated explicitly and is specific (not generic).",
+  chain: "aim ↔ results ↔ conclusion are consistent — the conclusion answers the stated aim and the results support it.",
+  methods: "the methods are described so the study could be reproduced (sample, procedure, tools, analysis).",
+  comparison: "the discussion compares the findings with at least 3 cited sources.",
+  overclaim: "conclusions do NOT exceed what the results show (3 = no overclaiming).",
+  style: "academic style — precise, no filler phrases, varied sentence rhythm, consistent terminology.",
+};
+
+/** Tur uchun baholanadigan mezonlar (`skip` chiqarilgan). */
+export function judgeCriteriaFor(judge?: ArticleJudgeConfig): JudgeCriterion[] {
+  const skip = new Set(judge?.skip ?? []);
+  return JUDGE_CRITERIA.filter((c) => !skip.has(c));
+}
+
+/**
+ * Baholovchi tizim prompti — TURGA bog'liq (AUDIT-18 Q-7): sharh maqolasi
+ * «metodlar» bo'yicha IMRAD kabi baholanib adolatsiz qizil olardi; tur
+ * `describe` bilan mezonni o'z ma'nosida beradi, `skip` bilan chiqaradi.
+ */
+export function judgeSystemPrompt(sectionIds: string[], judge?: ArticleJudgeConfig, typeLabel?: string): string {
+  const criteria = judgeCriteriaFor(judge);
+  const describe = { ...JUDGE_DESCRIBE, ...(judge?.describe ?? {}) };
+  const schema = criteria.map((c) => `"${c}":0-3`).join(",");
   return [
-    "You are a strict peer reviewer for an academic journal. Evaluate the manuscript and return ONLY a JSON object, no prose.",
+    `You are a strict peer reviewer for an academic journal. Evaluate the manuscript${typeLabel ? ` (article type: ${typeLabel})` : ""} and return ONLY a JSON object, no prose.`,
     "Score each criterion with an INTEGER 0–3 (3 = fully meets, 2 = mostly, 1 = weak, 0 = absent):",
-    "- novelty: the contribution is stated explicitly and is specific (not generic).",
-    "- chain: aim ↔ results ↔ conclusion are consistent — the conclusion answers the stated aim and the results support it.",
-    "- methods: the methods are described so the study could be reproduced (sample, procedure, tools, analysis).",
-    "- comparison: the discussion compares the findings with at least 3 cited sources.",
-    "- overclaim: conclusions do NOT exceed what the results show (3 = no overclaiming).",
-    "- style: academic style — precise, no filler phrases, varied sentence rhythm, consistent terminology.",
+    ...criteria.map((c) => `- ${c}: ${describe[c]}`),
     "Then give up to 5 short, concrete notes (what exactly to improve, naming the section) and up to 5 fixes as {\"target\": <section id>, \"instruction\": <one-sentence rewrite instruction>}.",
     `Allowed target ids: ${sectionIds.join(", ")}.`,
-    'JSON schema: {"novelty":0-3,"chain":0-3,"methods":0-3,"comparison":0-3,"overclaim":0-3,"style":0-3,"notes":["…"],"fixes":[{"target":"…","instruction":"…"}]}',
+    `JSON schema: {${schema},"notes":["…"],"fixes":[{"target":"…","instruction":"…"}]}`,
     "JSON keys and target ids stay exactly as given (English); the VALUES of notes and instruction follow the language rule below.",
     languageDirective("uz"),
   ].join("\n");
@@ -549,9 +590,10 @@ const clampScore = (v: unknown): number => {
 };
 
 /** Model javobi → `JudgeResult`; JSON emas → null. Noma'lum `target` tashlanadi. */
-export function parseJudge(raw: string | null | undefined, sectionIds: string[]): JudgeResult | null {
+export function parseJudge(raw: string | null | undefined, sectionIds: string[], judgeCfg?: ArticleJudgeConfig): JudgeResult | null {
   const j = parseLlmObject<Record<string, unknown>>(raw ?? "");
   if (!j) return null;
+  const skipped = judgeCfg?.skip?.length ? [...judgeCfg.skip] : undefined;
   const allowed = new Set([...sectionIds, "keywords", "highlights", "abstract:uz", "abstract:ru", "abstract:en"]);
   const notes = (Array.isArray(j.notes) ? j.notes : [])
     .map((n) => String(n ?? "").replace(/\s+/g, " ").trim().slice(0, 300))
@@ -567,7 +609,7 @@ export function parseJudge(raw: string | null | undefined, sectionIds: string[])
     .filter((f): f is { target: string; instruction: string } => Boolean(f))
     .slice(0, 5);
   const scores = Object.fromEntries(JUDGE_CRITERIA.map((c) => [c, clampScore(j[c])])) as Record<JudgeCriterion, number>;
-  return { ...scores, notes, fixes };
+  return { ...scores, notes, fixes, ...(skipped ? { skipped } : {}) };
 }
 
 export function neutralJudge(): JudgeResult {
@@ -576,7 +618,10 @@ export function neutralJudge(): JudgeResult {
 
 /** Baholovchi mezonlari → `ReviewCheck` (3 yashil, 2 sariq, ≤1 qizil) + tavsiyalar. */
 export function judgeChecks(j: JudgeResult): ReviewCheck[] {
-  const out: ReviewCheck[] = JUDGE_CRITERIA.map((c) => check(`judge:${c}`, j[c] >= 3 ? "green" : j[c] === 2 ? "yellow" : "red", JUDGE_LABELS[c], `${j[c]}/3`));
+  const skip = new Set(j.skipped ?? []);
+  const out: ReviewCheck[] = JUDGE_CRITERIA.filter((c) => !skip.has(c)).map((c) =>
+    check(`judge:${c}`, j[c] >= 3 ? "green" : j[c] === 2 ? "yellow" : "red", JUDGE_LABELS[c], `${j[c]}/3`),
+  );
   j.fixes.forEach((f, i) => out.push(check(`judge:fix:${i + 1}`, "yellow", "Baholovchi tavsiyasi", `${f.target}: ${f.instruction}`, rewrite(f.target, f.instruction))));
   return out;
 }
@@ -588,7 +633,10 @@ const LEVEL_SCORE: Record<ReviewLevel, number> = { green: 1, yellow: 0.5, red: 0
 /** 60% qoidalar (yashil 1 / sariq 0.5 / qizil 0) + 40% baholovchi (6 × 3). */
 export function scoreReview(rules: ReviewCheck[], judge: JudgeResult): number {
   const r = rules.length ? rules.reduce((n, c) => n + LEVEL_SCORE[c.level], 0) / rules.length : 1;
-  const j = JUDGE_CRITERIA.reduce((n, c) => n + judge[c], 0) / (JUDGE_CRITERIA.length * 3);
+  // Tur uchun o'tkazib yuborilgan mezonlar (tezis: taqqoslash) maxrajga kirmaydi.
+  const skip = new Set(judge.skipped ?? []);
+  const counted = JUDGE_CRITERIA.filter((c) => !skip.has(c));
+  const j = counted.length ? counted.reduce((n, c) => n + judge[c], 0) / (counted.length * 3) : 1;
   return Math.max(0, Math.min(100, Math.round(100 * (RULE_WEIGHT * r + JUDGE_WEIGHT * j))));
 }
 
@@ -612,10 +660,11 @@ export async function reviewArticle(doc: AcademicDoc, opts: ReviewOpts = {}): Pr
     const timeoutMs = Math.min(JUDGE_TIMEOUT_MS, remainingMs(opts.deadline));
     if (timeoutMs >= JUDGE_MIN_MS) {
       const ids = doc.sections.filter((s) => s.blocks.length).map((s) => s.id);
+      const type = ARTICLE_TYPES[doc.article?.type ?? "imrad_oak"];
       try {
-        const r = await opts.complete("judge", judgeSystemPrompt(ids), judgeUserPrompt(doc), { json: true, maxTokens: 1500, timeoutMs });
+        const r = await opts.complete("judge", judgeSystemPrompt(ids, type.judge, type.label.en), judgeUserPrompt(doc), { json: true, maxTokens: 1500, timeoutMs });
         if (r?.usage) opts.onUsage?.(r.usage);
-        judge = parseJudge(r?.text, ids);
+        judge = parseJudge(r?.text, ids, type.judge);
       } catch (e) {
         console.warn("[article] baholovchi xatosi:", e instanceof Error ? e.message : e);
       }

@@ -101,6 +101,11 @@ test("tizim prompti: birinchi qator til ko'rsatmasi; uch taqiq qulflangan; foyda
   assert.match(sys, /USER FACTS[\s\S]*VERBATIM/);
   assert.match(sys, /120 talaba, 4,1 → 4,6/);
   assert.match(sys, /NO FILLER/);
+  // AUDIT-18 Q-7: turga xos yozish qoidalari — imrad_oak da OAK ovozi, sharhda «NO own experiment».
+  assert.match(sys, /TYPE RULES \(OAK journal \(IMRAD \+ Conclusion\)\):\n1\. Uzbek HAC \(OAK\) journal voice/);
+  const review = articleSystemPrompt(ctxOf({ articleType: "review_narrative", pubProfile: "apa" }));
+  assert.match(review, /TYPE RULES \(Narrative review\):\n1\. Narrative \(literature\) review: there is NO own experiment/);
+  assert.ok(!review.includes("Uzbek HAC (OAK) journal voice"), "boshqa turning qoidasi kirmasin");
   for (const f of ["bugungi kunda", "в настоящее время", "in today's world"]) assert.match(sys, new RegExp(f.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")), `taqiq ro'yxatida «${f}» bo'lishi kerak`);
   assert.ok(FILLER_PHRASES.length >= 12);
   // Rus tilida birinchi qator o'zgaradi.

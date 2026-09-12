@@ -77,11 +77,34 @@ export type SkeletonSection = {
   hard?: boolean;
 };
 
+/** Baholovchi mezonlari — `review.ts` shu ro'yxatdan o'qiydi (tur moslamasi uchun shu yerda). */
+export const JUDGE_CRITERIA = ["novelty", "chain", "methods", "comparison", "overclaim", "style"] as const;
+export type JudgeCriterion = (typeof JUDGE_CRITERIA)[number];
+
+/**
+ * Turga bog'liq baholovchi moslamasi (AUDIT-18 Q-7): `skip` — bu turga
+ * mos kelmaydigan mezonlar (tezisda «taqqoslash», sharhda «metodlar»
+ * IMRAD ma'nosida) balldan chiqariladi; `describe` — mezonning shu tur
+ * uchun ta'rifi (sharhda «methods» = qidiruv/tanlov shaffofligi).
+ */
+export type ArticleJudgeConfig = {
+  skip?: JudgeCriterion[];
+  describe?: Partial<Record<JudgeCriterion, string>>;
+};
+
 export type ArticleType = {
   id: ArticleTypeId;
   label: { uz: string; ru: string; en: string };
   /** Galereya kartasi uchun bir qatorli izoh (uz). */
   hint: string;
+  /**
+   * Turga xos YOZISH qoidalari (en, 2–4 qator) — tizim promptiga «TYPE
+   * RULES» sifatida kiradi (AUDIT-18 Q-7: ilgari faqat «Article type: …»
+   * deyilardi, sharh/metodik/tahliliy bir xil ovozda chiqardi).
+   */
+  guidance: string[];
+  /** Turga bog'liq baholovchi mezonlari; berilmasa — standart 6 mezon. */
+  judge?: ArticleJudgeConfig;
   skeleton: SkeletonSection[];
   /** `three_part_uz`: asosiy qism — mavzu bo'yicha nomlangan 3–5 bo'lim. */
   freeSections?: { min: number; max: number };

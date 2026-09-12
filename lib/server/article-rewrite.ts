@@ -300,6 +300,9 @@ export function judgeFromReview(prev: ArticleReview | undefined, applied?: Artic
     any = true;
   }
   if (!any) return null;
+  // Hisobotda bo'lmagan mezonlar — tur uchun o'tkazib yuborilgan (`ArticleType.judge.skip`); ballga kirmaydi.
+  const skipped = JUDGE_CRITERIA.filter((c) => !prev.checks.some((x) => x.id === `judge:${c}`));
+  if (skipped.length) j.skipped = skipped;
   j.notes = prev.judgeNotes.filter((n) => n !== REWRITE_REVIEW_NOTE && n !== "Baholovchi javob bermadi");
   j.fixes = prev.checks
     .filter((c): c is ReviewCheck & { fix: NonNullable<ReviewCheck["fix"]> } => c.id.startsWith("judge:fix:") && Boolean(c.fix))

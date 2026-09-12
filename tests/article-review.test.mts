@@ -339,6 +339,26 @@ test("limitations: muhokama/xulosada «cheklov/limitation/ограничен» y
   assert.equal(level(rules(doc).checks, "limitations"), "green");
 });
 
+test("pageLimit: profil maxPages (universitet 15, konferensiya 5) — taxminiy bet oshsa sariq (>20 % qizil) + qisqartirish fix; oak/apa/ieee da band yo'q", () => {
+  // AUDIT-18 Q-8: `maxPages` ilgari hech qayerda ishlatilmasdi (bezak maydon).
+  const oak = rules(goodDoc()).checks;
+  assert.ok(!oak.some((c) => c.id === "pageLimit"), "oak profilida bet chegarasi yo'q");
+  const conf = goodDoc("conference_extended", "conference");
+  conf.meta = { ...conf.meta, targetPages: 3 };
+  const ok = rules(conf).checks;
+  assert.equal(level(ok, "pageLimit"), "green", detail(ok, "pageLimit"));
+  assert.match(detail(ok, "pageLimit"), /\(≤ 5\)/);
+  // Matn 5 betdan oshadi — ~2 600 so'z (konferensiya 403 so'z/bet).
+  for (const s of conf.sections) s.blocks.push({ kind: "p", text: long("qo‘shimcha", 500) });
+  const over = rules(conf).checks;
+  assert.ok(level(over, "pageLimit") === "yellow" || level(over, "pageLimit") === "red", detail(over, "pageLimit"));
+  assert.match(detail(over, "pageLimit"), /profil ko‘pi bilan 5 talab qiladi/);
+  const fix = over.find((c) => c.id === "pageLimit")?.fix;
+  assert.ok(fix && /Shorten this section by about \d+%/.test(fix.instruction), "qisqartirish ko'rsatmasi yo'q");
+  for (const s of conf.sections) for (let i = 0; i < 4; i++) s.blocks.push({ kind: "p", text: long("yana", 500) });
+  assert.equal(level(rules(conf).checks, "pageLimit"), "red", "20 % dan ortiq oshsa qizil");
+});
+
 /* ══════════════════════════════ baholovchi ══════════════════════════════ */
 
 test("judge promptlari: tizim — 6 mezon + JSON sxema + uz til ko'rsatmasi; foydalanuvchi — bo'limlar «[1]» bilan, ro'yxat, ≤25k belgi", () => {
@@ -383,6 +403,35 @@ test("ball: 60% qoidalar (yashil 1 / sariq 0.5 / qizil 0) + 40% baholovchi (6 ×
   assert.equal(scoreReview(mk(["yellow", "yellow"]), full), scoreReview(mk(["green", "red"]), full));
   assert.equal(scoreReview(mk(["green", "yellow", "red"]), { ...full, novelty: 0, chain: 0, methods: 0 }), Math.round(60 * 0.5 + 40 * 0.5));
   assert.equal(scoreReview([], neutralJudge()), Math.round(60 + 40 * (2 / 3)));
+  /*
+   * AUDIT-18 Q-7: tur uchun o'tkazib yuborilgan mezon (tezis — taqqoslash,
+   * metodlar) maxrajga ham, bandlarga ham kirmaydi — ilgari sharh/tezis
+   * IMRAD mezoni bilan adolatsiz qizil olardi.
+   */
+  const thesis: JudgeResult = { ...full, comparison: 0, methods: 0, skipped: ["comparison", "methods"] };
+  assert.equal(scoreReview(mk(["green"]), thesis), 100, "MUTATSIYA: skipped maxrajdan chiqarilmasa 73 chiqadi");
+  const ids = judgeChecks(thesis).map((c) => c.id);
+  assert.ok(!ids.includes("judge:comparison") && !ids.includes("judge:methods") && ids.includes("judge:novelty"), ids.join(","));
+});
+
+test("judge prompti TURGA bog'liq: skip mezonlari sxemada yo'q, describe o'z ta'rifi bilan; parseJudge skipped ni saqlaydi", async () => {
+  const { ARTICLE_TYPES } = await import("../lib/generation/article/types-registry.ts");
+  const thesisSys = judgeSystemPrompt(["body"], ARTICLE_TYPES.conference_thesis.judge, "Conference abstract");
+  assert.ok(!thesisSys.includes("- comparison:") && !thesisSys.includes("- methods:"), "tezisda taqqoslash/metodlar so'ralmasin");
+  assert.ok(thesisSys.includes("- chain: aim → method → result → significance"));
+  assert.match(thesisSys, /JSON schema: \{"novelty":0-3,"chain":0-3,"overclaim":0-3,"style":0-3,"notes"/);
+  assert.ok(thesisSys.includes("(article type: Conference abstract)"));
+  const reviewSys = judgeSystemPrompt(["intro"], ARTICLE_TYPES.review_narrative.judge);
+  assert.match(reviewSys, /- methods: the source-selection procedure/);
+  assert.match(reviewSys, /- comparison: the synthesis explicitly contrasts/);
+  assert.match(reviewSys, /- overclaim: conclusions do NOT exceed/, "describe bermagan mezon standart ta'rifda");
+  const j = parseJudge(JSON.stringify({ novelty: 2, chain: 3, overclaim: 3, style: 2, notes: [], fixes: [] }), ["body"], ARTICLE_TYPES.conference_thesis.judge)!;
+  assert.deepEqual(j.skipped, ["comparison", "methods"]);
+  assert.equal(scoreReview([], j), Math.round(40 * (10 / 12) + 60));
+  // Standart (judge konfiguratsiyasiz) — 6 mezon, skipped yo'q.
+  const plain = parseJudge(JSON.stringify({ novelty: 1 }), ["body"])!;
+  assert.equal(plain.skipped, undefined);
+  assert.equal(judgeChecks(plain).filter((c) => c.id.startsWith("judge:") && !c.id.startsWith("judge:fix")).length, 6);
 });
 
 /* ══════════════════════════════ reviewArticle ══════════════════════════════ */

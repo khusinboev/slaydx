@@ -118,6 +118,9 @@ export function articleSystemPrompt(ctx: ArticleContext): string {
     `4. NO FILLER: do not use empty openers such as ${FILLER_PHRASES.slice(0, 4).map((p) => `«${p}»`).join(", ")}, «${FILLER_PHRASES[8]}», «${FILLER_PHRASES[12]}», «${FILLER_PHRASES[16]}». Every paragraph must carry a specific claim, mechanism, comparison or result.`,
     `5. Style: formal academic register, third person, precise terminology of the field; no motivational or generic sentences; do not repeat the section title inside the text; do not write chapter numbers («I BOB»).`,
     `6. Output: return ONLY the JSON requested — no markdown fences, no commentary.`,
+    // AUDIT-18 Q-7: turga xos yozish qoidalari — ilgari faqat «Article type: …» edi, sharh/metodik/tahliliy bir xil ovozda chiqardi.
+    `TYPE RULES (${type.label.en}):`,
+    ...type.guidance.map((g, i) => `${i + 1}. ${g}`),
   ];
   if (input.extra) lines.push(`Additional author requirements: ${input.extra}`);
   if (input.userFacts) lines.push(`USER FACTS (verbatim, the author's own results/experiment):\n--- FACTS ---\n${input.userFacts}\n--- END FACTS ---`);
