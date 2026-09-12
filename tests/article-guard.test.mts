@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { factNumbers, guardSection, missingFactNumbers, numbersOf, skeletonCoverage, wordsOf } from "../lib/generation/article/guard.ts";
-import { wordRangeAim, wordRangePrompt, FILLER_PHRASES, articleSystemPrompt, sectionPrompt, abstractPrompt, abstractSystemPrompt, type ArticleContext } from "../lib/generation/article/prompts.ts";
+import { lengthLine, wordRangeAim, wordRangePrompt, FILLER_PHRASES, articleSystemPrompt, sectionPrompt, abstractPrompt, abstractSystemPrompt, type ArticleContext } from "../lib/generation/article/prompts.ts";
 import { articleWordPlan } from "../lib/generation/article/engine.ts";
 import { ARTICLE_TYPES } from "../lib/generation/article/types-registry.ts";
 import { PUBLICATION_PROFILES } from "../lib/generation/article/profiles.ts";
@@ -121,6 +121,14 @@ test("tezis so'z mo'ljali — oraliqning yuqori yarmi (200–300 → 260), qisqa
   assert.match(short, /you were 15 words short, so add at least 23 words/);
   const long = wordRangePrompt(ctx, plan, 340, [200, 300]);
   assert.match(long, /too long .* to about 250 words — cut redundancy/);
+});
+
+test("bo'lim hajmi qatori: mo'ljal +10 %, paragraf oralig'i per…per×1.2, pastki chegara 80 % (prod: 0.85·per–per so'ralganda 80 % chiqdi)", () => {
+  const line = lengthLine(300);
+  assert.match(line, /about 330 words — write 3 paragraphs of roughly 100–120 words each/);
+  assert.match(line, /fewer than 240 or more than 375 words is unacceptable/);
+  assert.match(line, /when unsure, write more/);
+  assert.match(lengthLine(60), /about 66 words — write 1 paragraph of roughly 60–72 words/);
 });
 
 test("bo'lim prompti: manbalar `[ID] Muallif (yil). Sarlavha. Venue.` ko'rinishida; manbasiz — iqtibos taqiqi; jadval/sxema faqat so'ralganda; chart faqat userData bilan", () => {

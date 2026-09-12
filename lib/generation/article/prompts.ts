@@ -167,7 +167,14 @@ export function lengthLine(words: number): string {
   const per = Math.max(50, Math.min(130, Math.round(words / paras)));
   const lo = Math.round(words * 0.8);
   const hi = Math.round(words * 1.25);
-  return `Length: about ${words} words — write ${paras} paragraph${paras > 1 ? "s" : ""} of roughly ${Math.round(per * 0.85)}–${per} words each (count words as whitespace-separated tokens; fewer than ${lo} or more than ${hi} words is unacceptable). Stay strictly within this section's scope; other sections are written separately.`;
+  /*
+   * Mo'ljal 10 % yuqori, paragraf oralig'i `per`…`per×1.2`: model o'zbek/rus
+   * so'zini kam sanaydi va aytilgan oraliqning PASTKI chetiga yozadi —
+   * «0.85·per–per» so'ralganda prod maqolada 6 bo'lim ham ~80 % chiqdi
+   * («Hajm» sariq). Pastki chegara (80 %) o'zgarmaydi.
+   */
+  const aim = Math.round(words * 1.1);
+  return `Length: about ${aim} words — write ${paras} paragraph${paras > 1 ? "s" : ""} of roughly ${per}–${Math.round(per * 1.2)} words each (count words as whitespace-separated tokens; when unsure, write more — fewer than ${lo} or more than ${hi} words is unacceptable). Stay strictly within this section's scope; other sections are written separately.`;
 }
 
 function figureSpecHelp(ctx: ArticleContext): string {
