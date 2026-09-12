@@ -11,7 +11,7 @@
  */
 import type { FigureSpec } from "../article/types";
 import { FIGURE_LIMITS } from "../article/types";
-import { FONT_PX, LINE_K, PAD_X, PAD_Y, charsFor, cleanLabel, ellipsePt, emptyLayout, fitToCanvas, linesBox, wrapLabel, type FigureLayout, type Pt } from "./model";
+import { FONT_PX, LINE_K, PAD_X, PAD_Y, cleanLabel, ellipsePt, emptyLayout, fitToCanvas, linesBox, wrapLabel, type FigureLayout, type Pt } from "./model";
 
 export type CycleSpec = Extract<FigureSpec, { kind: "cycle" }>;
 
