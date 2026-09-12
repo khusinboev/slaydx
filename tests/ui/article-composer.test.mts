@@ -247,6 +247,46 @@ test("hajm ko'rsatmasi: OAK 3–5 → «taxminan 6 bet» (apparatura paketdan ka
   assert.ok(!est(), "10–15 betda apparatura sig'adi");
 });
 
+test("profil bet chegarasi (Q-8): konferensiya profili 5–10 betda «ko‘pi bilan 5 bet» ko'rsatmasi; 3–5 da yo'q", async () => {
+  stubApi();
+  await login();
+  mount();
+  // Kengaytirilgan tezis → conference profili (≤ 5 bet), paketlar 1–2 / 3–5.
+  await act(async () => {
+    fireEvent.click(screen.getByText("OAK jurnali (IMRAD + Xulosa)"));
+  });
+  await act(async () => {
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Maqola turi" })).getByText("Kengaytirilgan tezis / konferensiya maqolasi"));
+  });
+  const limit = () => document.querySelector("[data-pages-limit]");
+  assert.ok(!limit(), "3–5 paket sig'adi — chegara ogohlantirishi bo'lmasin");
+  // Profilni qo'lda universitetga (≤ 15) o'zgartirib, katta paketni tanlaymiz — tahliliy turda 10–15.
+  await act(async () => {
+    fireEvent.click(screen.getByText("Konferensiya to‘plami"));
+  });
+  await act(async () => {
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Nashr profili" })).getByText("OAK jurnali"));
+  });
+  await act(async () => {
+    fireEvent.click(screen.getByText("Kengaytirilgan tezis / konferensiya maqolasi"));
+  });
+  await act(async () => {
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Maqola turi" })).getByText("Tahliliy maqola"));
+  });
+  await act(async () => {
+    fireEvent.click(screen.getByText("OAK jurnali"));
+  });
+  await act(async () => {
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Nashr profili" })).getByText("Konferensiya to‘plami"));
+  });
+  await act(async () => {
+    fireEvent.click(screen.getByText(/10–15 bet/));
+  });
+  assert.ok(limit(), "10–15 bet konferensiya profilida chegara ogohlantirishi bo'lishi kerak");
+  assert.equal(limit()!.getAttribute("data-pages-limit"), "5");
+  assert.match(limit()!.textContent ?? "", /Konferensiya to‘plami profili ko‘pi bilan 5 bet qabul qiladi/);
+});
+
 test("mualliflar: qo'shish/o'chirish, ≤6 chegara", async () => {
   stubApi();
   await login();

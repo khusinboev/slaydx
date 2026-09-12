@@ -20,6 +20,7 @@
  *
  * `GEMINI_API_KEY` shart. Chiqish `eval-out/live/` ga yoziladi.
  */
+import { planArticle } from "../lib/generation/article/layout";
 import { mkdir, writeFile } from "node:fs/promises";
 import { normalizeResumeTemplate, templateHasPhoto, type ResumeTemplateId } from "../lib/generation/resume/templates.ts";
 import path from "node:path";
@@ -728,7 +729,12 @@ function articleChecks(f: BuiltFile, pages: number | null, o: { pagesMin: number
     ok("doc.article bor", Boolean(a), a ? `${a.type}/${a.profile}/${a.cite}` : "yo'q"),
     ok("titul/mundarija yo'q", f.doc.titlePage === false && f.doc.toc === false, `titlePage=${f.doc.titlePage} toc=${f.doc.toc}`),
     ok("iqtiboslar 100% reyestrda", Boolean(v) && v!.unresolved.length === 0 && cited > 0, v ? `${cited} iqtibos, ${v.unresolved.length} noma'lum` : "—"),
-    ok("ro'yxat: faqat cited + tekshirilgan", refs.length > 0 && refs.every((r) => r.cited && r.verified !== "unverified"), `${refs.length} manba: ${refs.map((r) => `${r.id}:${r.verified}`).join(" ")}`),
+    /*
+     * Ro'yxatga FAQAT `cited` chiqadi (`orderReferences`), tekshirilmagani
+     * yo'q. Avto-sayqal bo'limni qayta yozganda iqtibos tushib qolsa
+     * `cited:false` bo'lib modelda qoladi (renderga chiqmaydi) — bu xato emas.
+     */
+    ok("ro'yxat: cited manbalar tekshirilgan, iqtibossizi renderga chiqmaydi", refs.length > 0 && refs.filter((r) => r.cited).every((r) => r.verified !== "unverified") && planArticle(f.doc).refs.length === refs.filter((r) => r.cited).length, `${refs.length} manba (${refs.filter((r) => r.cited).length} cited): ${refs.map((r) => `${r.id}:${r.verified}${r.cited ? "" : ":uncited"}`).join(" ")}`),
     ok(`manbalar ≥ ${Math.min(profile.refsMin, 5)}`, refs.length >= Math.min(profile.refsMin, 5), `${refs.length} (profil ${profile.refsMin}–${profile.refsMax})`),
     ok("annotatsiya ×3", abs.length === 3 && ["uz", "ru", "en"].every((l) => abs.some((x) => x.lang === l)), abs.map((x) => x.lang).join(",")),
     ok(`annotatsiya ${minW}–${maxW} so'z (±30%)`, absWords.length === 3 && absWords.every((n) => n >= minW * 0.7 && n <= maxW * 1.3), absWords.join("/")),

@@ -353,7 +353,9 @@ export function ArticleComposer({
    */
   const pagesEstimate = estimateArticlePages(ui.pages, type, pubProfile, ui.figureCount);
   const pagesOver = pagesEstimate > pagesUpper(ui.pages);
-  const pagesHint = pagesOver ? undefined : "Hujjatning umumiy beti — annotatsiya va adabiyotlar bilan";
+  // AUDIT-18 Q-8: profil bet chegarasi (universitet ≤ 15, konferensiya ≤ 5) — hisobotdagi «Bet chegarasi» bandi bilan bir xil manba.
+  const overLimit = pubProfile.maxPages !== undefined && pagesEstimate > pubProfile.maxPages;
+  const pagesHint = pagesOver || overLimit ? undefined : "Hujjatning umumiy beti — annotatsiya va adabiyotlar bilan";
 
   /*
    * Tur o'zgarganda: profil TURNING standartiga o'tadi — lekin FAQAT
@@ -568,6 +570,11 @@ export function ArticleComposer({
               value={ui.pages}
               onChange={(v) => onPagesChange(v as PagesId)}
             />
+            {overLimit ? (
+              <p data-pages-limit={pubProfile.maxPages} className="mt-1 text-[11px] text-amber-700">
+                {pubProfile.label.uz} profili ko‘pi bilan <b>{pubProfile.maxPages} bet</b> qabul qiladi (taxmin {pagesEstimate}) — kichikroq paket tanlang; hisobotda «Bet chegarasi» bandi va qisqartirish tuzatishi bo‘ladi.
+              </p>
+            ) : null}
             {pagesOver ? (
               <p data-pages-estimate={pagesEstimate} className="text-muted-foreground mt-1 text-[11px]">
                 {pubProfile.label.uz} profilida uch tilli annotatsiya, adabiyotlar ro‘yxati{pubProfile.secondEnglishList ? " (ikki ro‘yxat)" : ""} va sxema qo‘shimcha joy oladi — hujjat taxminan{" "}
