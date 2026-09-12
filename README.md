@@ -224,6 +224,8 @@ berardi. Eval bitta tarifda sinagani uchun uchalasi ham sezilmay qoldi.
 | `GET\|PUT\|DELETE /api/resume/draft` | Rezyume formasi qoralamasi (foydalanuvchiga bitta) — `/api/forms/resume/draft` o'rami |
 | `GET\|PUT\|DELETE /api/forms/{toolId}/draft` | Forma qoralamasi (`form_drafts`, vosita bo'yicha bittadan; hozircha `resume`, `article`) |
 | `POST /api/generations/{id}/rewrite` | Maqola «Tuzatish»: `{baseVersion, fix}` → bo'lim/annotatsiya/kalit so'z/highlights qayta yoziladi, hisobot qayta hisoblanadi (kredit yechilmaydi; 20 ta / 10 daq) |
+| `POST /api/generations/{id}/polish` | Maqola «Hammasini tuzatish» (avto-sayqal, AUDIT-18): `{baseVersion}` → tuzatiladigan bandlar AI bilan qayta yoziladi, baholovchi qayta baholaydi, faqat ball OSHSA yoziladi; javob `{generation, ops, polish}` (kredit yechilmaydi; 3 ta / maqola / kun, 20 ta / foydalanuvchi / kun) |
+| `POST /api/article/udk` | UDK taklifi: `{topic, language}` → `{udk, label, note}` (LLM `fast`; «taklif — tekshiring»; 30 ta / soat) |
 | `POST /api/payments/orders` | To'lov buyurtmasi + provayder URL |
 | `POST /api/payments/click` | Click Prepare/Complete webhook |
 | `POST /api/payments/payme` | Payme Merchant API (JSON-RPC) |

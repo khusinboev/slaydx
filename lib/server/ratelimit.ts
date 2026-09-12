@@ -49,10 +49,17 @@ export async function rateLimit(
   }
 }
 
-/** Eski oynalarni tozalaydi (cron). */
+/**
+ * Eski oynalarni tozalaydi (cron). Chegara ENG UZUN oynadan katta bo'lishi
+ * shart: kunlik oynalar (`polish:*`, 86 400 s — AUDIT-18) `window_start`
+ * ni kun boshiga qo'yadi; ilgari «2 soat» edi — kunlik hisob har purge'da
+ * yo'qolib, 3 marta/kun chegarasi aslida 3 marta/2 soat bo'lib qolardi.
+ */
+export const RATE_LIMIT_PURGE_INTERVAL = "25 hours";
+
 export async function purgeRateLimits(): Promise<void> {
   const { query } = await import("./db");
-  await query("DELETE FROM rate_limits WHERE window_start < now() - interval '2 hours'");
+  await query(`DELETE FROM rate_limits WHERE window_start < now() - interval '${RATE_LIMIT_PURGE_INTERVAL}'`);
 }
 
 /**
