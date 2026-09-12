@@ -19,7 +19,7 @@
  */
 import { languageDirective, langInfo } from "../i18n";
 import type { DocMeta } from "../types";
-import type { ArticleType, ArticleWordPlan, PublicationProfile, Reference } from "./types";
+import { SELECTABLE_FIGURE_KINDS, type ArticleType, type ArticleTypeId, type ArticleWordPlan, type PublicationProfile, type Reference, type SelectableFigureKind } from "./types";
 import { articleLabels, type ArticleDocLabels } from "./labels";
 import type { ArticleInput } from "./input";
 import type { OpenAlexWork } from "../research/openalex";
@@ -177,17 +177,51 @@ export function lengthLine(words: number): string {
   return `Length: about ${aim} words — write ${paras} paragraph${paras > 1 ? "s" : ""} of roughly ${per}–${Math.round(per * 1.2)} words each (count words as whitespace-separated tokens; when unsure, write more — fewer than ${lo} or more than ${hi} words is unacceptable). Stay strictly within this section's scope; other sections are written separately.`;
 }
 
+/**
+ * Sxema turlarining JSON shakli + QACHON ishlatish (AUDIT-18 WP-B). Har tur
+ * bir qatorda: shakl, keyin «use for …» qoidasi — model turni mazmunga
+ * qarab tanlaydi. Chegaralar `FIGURE_LIMITS`/`ARTICLE_LIMITS` bilan bir xil.
+ */
+export const FIGURE_KIND_HELP: Record<SelectableFigureKind, string> = {
+  flow: `{"kind":"flow","direction":"TB"|"LR","nodes":[{"id":"n1","label":"…","kind":"start"|"step"|"decision"|"data"|"end"}],"edges":[{"from":"n1","to":"n2","label":"…"}]} — use for an algorithm or decision logic with branches (max 14 nodes / 24 edges; ACYCLIC — no edge may lead back to an earlier node, express loops as a "decision" node with a labelled forward edge instead)`,
+  process: `{"kind":"process","steps":["…","…"]} — use for a linear sequence of 3–8 stages (research procedure, pipeline)`,
+  tree: `{"kind":"tree","root":"…","children":[{"label":"…","children":[{"label":"…"}]}]} — use for a classification / taxonomy / hierarchy (≤4 levels, ≤14 nodes)`,
+  layers: `{"kind":"layers","layers":[{"label":"…","items":["…"]}]} — use for a system or platform ARCHITECTURE: 2–7 stacked layers from the TOP (application/user) to the BOTTOM (physical/infrastructure), each with ≤4 component items`,
+  cycle: `{"kind":"cycle","steps":[{"label":"…"}],"center":"…"} — use for a REPEATING process or life cycle (PDCA, iteration, feedback loop): 3–8 stages around a circle, optional centre label`,
+  timeline: `{"kind":"timeline","events":[{"when":"2019","label":"…"}]} — use for HISTORICAL stages, evolution of a technology, or an experiment/treatment schedule: 3–10 events in chronological order, "when" is a year/date/period (≤ 20 characters)`,
+  matrix: `{"kind":"matrix","xAxis":{"low":"…","high":"…","label":"…"},"yAxis":{"low":"…","high":"…","label":"…"},"quadrants":[{"title":"…","items":["…"]}]} — use for a TWO-CRITERIA classification or SWOT: EXACTLY 4 quadrants in the order top-left, top-right, bottom-left, bottom-right, ≤4 items each; axes optional (omit for SWOT)`,
+  compare: `{"kind":"compare","left":{"title":"…","items":["…"]},"right":{"title":"…","items":["…"]},"rows":["…"]} — use for "traditional vs proposed" / two approaches side by side: ≤6 items per side; optional "rows" = criteria names, then left/right items are the values per criterion (same count as rows)`,
+};
+
+/** Tur → tavsiya etiladigan sxema turlari (AUDIT-18 §4 WP-B): faqat tavsiya, taqiq emas. */
+export const FIGURE_KIND_HINTS: Partial<Record<ArticleTypeId, SelectableFigureKind[]>> = {
+  analytical: ["matrix", "compare", "flow"],
+  review_narrative: ["timeline", "layers", "tree"],
+  review_systematic: ["timeline", "layers", "tree"],
+  methodical: ["process", "cycle"],
+  imrad_oak: ["flow", "layers"],
+  imrad_classic: ["flow", "layers"],
+  case_study_care: ["timeline"],
+};
+
 function figureSpecHelp(ctx: ArticleContext): string {
   const chart = ctx.input.userData
     ? `  • {"kind":"chart","chart":"bar"|"line","dataSource":"user","categories":[…],"series":[{"name":"…","values":[…]}]} — ONLY from USER DATA; categories/series will be filled from the user's data verbatim, so just choose "bar"/"line" and write the caption.`
     : `  • charts are NOT allowed (no user data provided).`;
-  return [
-    `FIGURE spec kinds (choose one that explains a mechanism/process/classification of THIS section; max 14 nodes / 24 edges; every label ≤ 40 characters, in the output language; a "flow" must be ACYCLIC — no edge may lead back to an earlier node, express loops as a "decision" node with a labelled forward edge instead):`,
-    `  • {"kind":"flow","direction":"TB"|"LR","nodes":[{"id":"n1","label":"…","kind":"start"|"step"|"decision"|"data"|"end"}],"edges":[{"from":"n1","to":"n2","label":"…"}]}`,
-    `  • {"kind":"process","steps":["…","…"]}`,
-    `  • {"kind":"tree","root":"…","children":[{"label":"…","children":[{"label":"…"}]}]}`,
+  const chosen = ctx.input.figureKinds ?? [];
+  const kinds: readonly SelectableFigureKind[] = chosen.length ? chosen : SELECTABLE_FIGURE_KINDS;
+  const lines = [
+    `FIGURE spec kinds (choose the kind whose "use for" rule matches THIS section's content — a mechanism, process, architecture, chronology, classification or comparison; every label ≤ 40 characters, in the output language):`,
+    ...kinds.map((k) => `  • ${FIGURE_KIND_HELP[k]}`),
     chart,
-  ].join("\n");
+  ];
+  if (chosen.length) {
+    lines.push(`Allowed kinds (chosen by the author): ${chosen.join(", ")} — any other kind will be rejected.`);
+  } else {
+    const hint = FIGURE_KIND_HINTS[ctx.type.id];
+    if (hint) lines.push(`For a ${ctx.type.label.en} the most suitable kinds are usually: ${hint.join(", ")} (use another kind only when the content clearly calls for it).`);
+  }
+  return lines.join("\n");
 }
 
 export type SectionAsk = {

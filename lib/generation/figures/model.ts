@@ -13,6 +13,8 @@
  * maqola tanasi (TNR 12–14) bilan uyg'un.
  */
 
+import type { FigureKind } from "../article/types";
+
 /* ────────────────────────── konstantalar ────────────────────────── */
 
 export const FIGURE_WIDTH_MM = 160;
@@ -35,7 +37,8 @@ export const FONT_FAMILY = "Times New Roman, Liberation Serif, Noto Serif, serif
 
 export type Pt = { x: number; y: number };
 
-export type NodeShape = "rect" | "rounded" | "diamond" | "parallelogram" | "ellipse";
+/** `none` — shaklsiz matn bloki (timeline yorlig'i, matritsa bandi): faqat o'ralgan qatorlar chiziladi. */
+export type NodeShape = "rect" | "rounded" | "diamond" | "parallelogram" | "ellipse" | "none";
 
 export type LayoutNode = {
   id: string;
@@ -56,6 +59,10 @@ export type LayoutNode = {
   badge?: string;
   /** Matnni pastga surish (badge uchun joy). */
   dy?: number;
+  /** Matn tekislash (`none` shaklda; standart markaz). `start` — matn `x + PAD_X` dan boshlanadi. */
+  align?: "start" | "middle";
+  /** `align: "start"` da davom qatorlari chekinishi (px, masshtabgacha) — «•» ostiga tushmasin. */
+  indent?: number;
 };
 
 export type LayoutEdge = {
@@ -67,6 +74,8 @@ export type LayoutEdge = {
   /** Yorliq markazi. */
   labelAt?: Pt;
   arrow: boolean;
+  /** Ikki tomonlama o'q — boshida ham uch (layers). */
+  arrowStart?: boolean;
 };
 
 export type LayoutText = {
@@ -87,17 +96,26 @@ export type LayoutText = {
 /** Grafik primitivlari (chart, PRISMA bandlari). */
 export type Prim =
   | { k: "rect"; x: number; y: number; w: number; h: number; fill?: string; pattern?: string; stroke?: string; rx?: number }
-  | { k: "line"; x1: number; y1: number; x2: number; y2: number; stroke?: string; width?: number; dash?: string }
+  | { k: "line"; x1: number; y1: number; x2: number; y2: number; stroke?: string; width?: number; dash?: string; arrow?: boolean }
   | { k: "polyline"; points: Pt[]; stroke?: string; width?: number; dash?: string }
   | { k: "path"; d: string; fill?: string; pattern?: string; stroke?: string }
-  | { k: "marker"; x: number; y: number; shape: "circle" | "square" | "triangle" | "diamond"; fill?: string; r?: number };
+  | { k: "marker"; x: number; y: number; shape: "circle" | "square" | "triangle" | "diamond"; fill?: string; r?: number }
+  /**
+   * Yoy o'q (cycle): ellips (`cx`,`cy`,`rx`,`ry`) bo'ylab `a0` → `a1` gradus
+   * (soat yo'nalishi — ekran koordinatasida burchak o'sishi). `sweep` —
+   * SVG `A` bayrog'i: 1 — burchak o'sadi (soat yo'nalishi), 0 — kamayadi.
+   * Yoy 180° dan kichik (qo'shni bosqichlar orasi). `arrow` — oxirida uch.
+   */
+  | { k: "arc"; cx: number; cy: number; rx: number; ry: number; a0: number; a1: number; sweep: 0 | 1; arrow?: boolean }
+  /** To'la aylana belgisi (timeline tuguni): qora chegara, `fill` (standart oq). */
+  | { k: "dot"; x: number; y: number; r: number; fill?: string };
 
 /** Oq-qora chop uchun shtrix naqshlari — `svg.ts` `<pattern>` chiqaradi. */
 export type PatternKind = "solid" | "diag" | "dots" | "cross" | "horiz" | "vert";
 export type PatternDef = { id: string; base: string; kind: PatternKind };
 
 export type FigureLayout = {
-  kind: "flow" | "process" | "tree" | "prisma" | "chart";
+  kind: FigureKind;
   w: number;
   h: number;
   /** Asosiy shrift px (masshtabdan keyin). */
@@ -187,6 +205,60 @@ export function wrapLabel(label: string, maxChars = 22, maxLines = 2): string[] 
   return lines;
 }
 
+/**
+ * KENGLIK bo'yicha o'rash (AUDIT-18 WP-B): `wrapLabel` belgi soni bilan
+ * ishlaydi (o'rtacha 0.55 em — tor harfli so'zlarda 20–30 % erta o'raydi);
+ * katakli maketlarda (matritsa, taqqoslash, qatlam bandlari) o'lchangan
+ * kenglik (`textWidth`) aniqroq. Qoidalar `wrapLabel` bilan bir xil:
+ * ≤`maxLines` qator, sig'masa oxirgi qator «…» bilan; uzun so'z «-» bilan.
+ */
+export function wrapToWidth(label: string, maxPx: number, fontPx = FONT_PX, maxLines = 2): string[] {
+  const text = String(label ?? "").replace(/[ \t\r\n]+/g, " ").trim();
+  if (!text) return [""];
+  const fits = (s: string) => textWidth(s, fontPx) <= maxPx;
+  const lines: string[] = [];
+  let cur = "";
+  for (let word of text.split(" ")) {
+    // Bitta so'z qatorga sig'masa — «-» bilan qattiq bo'linadi.
+    while (!fits(word) && word.length > 2) {
+      let k = word.length - 1;
+      while (k > 1 && !fits(word.slice(0, k) + "-")) k--;
+      if (cur) {
+        lines.push(cur);
+        cur = "";
+      }
+      lines.push(word.slice(0, k) + "-");
+      word = word.slice(k);
+    }
+    if (!cur) cur = word;
+    else if (fits(`${cur} ${word}`)) cur += ` ${word}`;
+    else {
+      lines.push(cur);
+      cur = word;
+    }
+  }
+  if (cur) lines.push(cur);
+  if (lines.length <= maxLines) return lines;
+  const out = lines.slice(0, maxLines);
+  let last = out[maxLines - 1];
+  while (last.length > 1 && !fits(`${last}…`)) last = last.slice(0, -1).trimEnd();
+  out[maxLines - 1] = `${last}…`;
+  return out;
+}
+
+/** Berilgan kenglikka sig'adigan taxminiy belgi soni (o'rtacha belgi 0.55 em). */
+export function charsFor(widthPx: number, fontPx = FONT_PX, min = 6): number {
+  return Math.max(min, Math.floor(widthPx / (0.55 * fontPx)));
+}
+
+/** Matnni tozalaydi: bo'shliqlar bitta, chetlari kesilgan, `max` belgigacha. */
+export function cleanLabel(v: unknown, max = 120): string {
+  return String(v ?? "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, max);
+}
+
 /* ────────────────────────── tugun o'lchami ────────────────────────── */
 
 export function linesBox(lines: string[], fontPx = FONT_PX): { tw: number; th: number } {
@@ -254,10 +326,18 @@ export function bounds(l: Pick<FigureLayout, "nodes" | "edges" | "texts" | "prim
   for (const t of l.texts) {
     const size = t.size ?? fontPx;
     const w = textWidth(t.text, size);
-    const half = t.rotate ? size : w / 2;
-    const hv = t.rotate ? w / 2 : size * 0.7;
-    grow(b, t.x - half, t.y - hv);
-    grow(b, t.x + half, t.y + hv);
+    if (t.rotate) {
+      // −90°: `start` matn yuqoriga o'sadi, `end` yuqorida tugaydi (pastga o'sadi); +90° — teskari.
+      const first = t.anchor === "start" ? w : t.anchor === "end" ? 0 : w / 2;
+      const up = t.rotate < 0 ? first : w - first;
+      grow(b, t.x - size * 0.7, t.y - up);
+      grow(b, t.x + size * 0.7, t.y + (w - up));
+      continue;
+    }
+    // Anchor: middle — ikki tomonga yarmi; start — o'ngga; end — chapga.
+    const left = t.anchor === "start" ? 0 : t.anchor === "end" ? w : w / 2;
+    grow(b, t.x - left, t.y - size * 0.7);
+    grow(b, t.x - left + w, t.y + size * 0.7);
   }
   for (const p of l.prims) {
     if (p.k === "rect") {
@@ -271,11 +351,38 @@ export function bounds(l: Pick<FigureLayout, "nodes" | "edges" | "texts" | "prim
     } else if (p.k === "marker") {
       grow(b, p.x - 5, p.y - 5);
       grow(b, p.x + 5, p.y + 5);
+    } else if (p.k === "dot") {
+      grow(b, p.x - p.r - 1, p.y - p.r - 1);
+      grow(b, p.x + p.r + 1, p.y + p.r + 1);
+    } else if (p.k === "arc") {
+      for (const q of arcPoints(p, 12)) grow(b, q.x, q.y);
     }
     // `path` (pie) — chaqiruvchi o'zi kanvasni belgilaydi
   }
   if (!Number.isFinite(b.x0)) return { x0: 0, y0: 0, x1: 0, y1: 0 };
   return b;
+}
+
+/** Ellips nuqtasi (gradus, ekran koordinatasi: 0° — o'ng, 90° — past). */
+export function ellipsePt(cx: number, cy: number, rx: number, ry: number, deg: number): Pt {
+  const t = (deg * Math.PI) / 180;
+  return { x: cx + rx * Math.cos(t), y: cy + ry * Math.sin(t) };
+}
+
+/** Yoy bo'ylab `n` nuqta (chegara hisobi/testlar uchun). */
+export function arcPoints(a: { cx: number; cy: number; rx: number; ry: number; a0: number; a1: number; sweep: 0 | 1 }, n = 8): Pt[] {
+  const out: Pt[] = [];
+  const d = arcSpan(a);
+  for (let i = 0; i <= n; i++) out.push(ellipsePt(a.cx, a.cy, a.rx, a.ry, a.a0 + (d * i) / n));
+  return out;
+}
+
+/** Yoy burchak farqi (belgili): sweep 1 → musbat, 0 → manfiy; |span| < 360. */
+export function arcSpan(a: { a0: number; a1: number; sweep: 0 | 1 }): number {
+  let d = ((a.a1 - a.a0) % 360) + 360;
+  d %= 360;
+  if (a.sweep === 1) return d;
+  return d - 360; // manfiy
 }
 
 /**
@@ -302,6 +409,7 @@ export function fitToCanvas(l: FigureLayout, opts: { minScale?: number } = {}): 
     n.size = (n.size ?? l.fontSize) * s;
     if (n.dy) n.dy *= s;
     if (n.rx) n.rx *= s;
+    if (n.indent) n.indent *= s;
   }
   for (const e of l.edges) {
     e.points = e.points.map((p) => ({ x: X(p.x), y: Y(p.y) }));
@@ -325,9 +433,15 @@ export function fitToCanvas(l: FigureLayout, opts: { minScale?: number } = {}): 
       p.y2 = Y(p.y2);
     } else if (p.k === "polyline") {
       p.points = p.points.map((q) => ({ x: X(q.x), y: Y(q.y) }));
-    } else if (p.k === "marker") {
+    } else if (p.k === "marker" || p.k === "dot") {
       p.x = X(p.x);
       p.y = Y(p.y);
+      if (p.k === "dot") p.r *= s;
+    } else if (p.k === "arc") {
+      p.cx = X(p.cx);
+      p.cy = Y(p.cy);
+      p.rx *= s;
+      p.ry *= s;
     }
   }
   l.fontSize *= s;

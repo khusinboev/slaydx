@@ -41,13 +41,22 @@ import {
 } from "./model";
 import { layoutPrisma } from "./prisma";
 import { layoutChart } from "./chart";
+import { layoutLayers } from "./layout-layers";
+import { layoutCycle } from "./layout-cycle";
+import { layoutTimeline } from "./layout-timeline";
+import { layoutMatrix } from "./layout-matrix";
+import { layoutCompare } from "./layout-compare";
 
 export type { FigureLayout, LayoutEdge, LayoutNode, LayoutText, NodeShape, Prim, PatternDef, Pt } from "./model";
 export { CANVAS_W, FONT_PX, FIGURE_WIDTH_MM, FONT_FAMILY, textWidth, wrapLabel } from "./model";
 
 export type LayoutOpts = { lang?: string };
 
-/** Asosiy kirish: spec → maket yoki `null` (fallback). */
+/**
+ * Asosiy kirish: spec → maket yoki `null` (fallback).
+ * AUDIT-18 WP-B turlari (`layers`/`cycle`/`timeline`/`matrix`/`compare`) —
+ * `layout-*.ts` fayllarida, har biri o'z tekshiruvi bilan.
+ */
 export function layoutFigure(spec: FigureSpec, opts: LayoutOpts = {}): FigureLayout | null {
   if (!spec || typeof spec !== "object") return null;
   try {
@@ -62,6 +71,16 @@ export function layoutFigure(spec: FigureSpec, opts: LayoutOpts = {}): FigureLay
         return layoutPrisma(spec, opts.lang ?? "uz");
       case "chart":
         return layoutChart(spec, opts.lang ?? "uz");
+      case "layers":
+        return layoutLayers(spec);
+      case "cycle":
+        return layoutCycle(spec);
+      case "timeline":
+        return layoutTimeline(spec);
+      case "matrix":
+        return layoutMatrix(spec);
+      case "compare":
+        return layoutCompare(spec);
       default:
         return null;
     }

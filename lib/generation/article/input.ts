@@ -22,7 +22,9 @@ import { splitCsv, joinCsv } from "../slide-params";
 import {
   ARTICLE_LIMITS,
   CITE_STYLES,
+  FIGURE_LIMITS,
   PAGES_IDS,
+  isSelectableFigureKind,
   maxFiguresFor,
   type ArticleAuthor,
   type ArticleType,
@@ -30,6 +32,7 @@ import {
   type CiteStyle,
   type PagesId,
   type PublicationProfileId,
+  type SelectableFigureKind,
 } from "./types";
 import { ARTICLE_TYPES, normalizeArticleType } from "./types-registry";
 import { normalizePublicationProfile } from "./profiles";
@@ -72,6 +75,12 @@ export type ArticleInput = {
   userRefs: ArticleUserRef[];
   userData?: ArticleUserData;
   figureCount: number;
+  /**
+   * «Sxema turlari» (AUDIT-18 Q-6) — oq ro'yxat: bo'sh = avtomatik (model
+   * mazmunga qarab tanlaydi); bo'lmasa FAQAT shu turlar (`figureSpecFromLlm`
+   * boshqasini rad etadi). `prisma`/`chart` ro'yxatga kirmaydi.
+   */
+  figureKinds: SelectableFigureKind[];
   research: boolean;
   extra: string;
   /** Yuklangan fayl matni (`meta.sourceText`) — kontekst. */
@@ -270,6 +279,26 @@ export function parseUserData(raw: unknown): ArticleUserData | undefined {
   return out;
 }
 
+/**
+ * «Sxema turlari» — JSON massiv (`["cycle","matrix"]`) yoki CSV; faqat
+ * `SELECTABLE_FIGURE_KINDS` dagilar, takrorsiz, ≤9. Noma'lum/bo'sh → `[]`
+ * (avtomatik).
+ */
+export function parseFigureKinds(raw: unknown): SelectableFigureKind[] {
+  let list: string[] = [];
+  if (Array.isArray(raw)) list = raw.map((x) => str(x, 20));
+  else if (typeof raw === "string" && raw.trim()) {
+    const t = raw.trim();
+    if (t.startsWith("[")) {
+      const v = parseArticleJson(t, "figureKinds");
+      list = Array.isArray(v) ? v.map((x) => str(x, 20)) : [];
+    } else list = splitCsv(t, FIGURE_LIMITS.figureKinds, 20);
+  }
+  const out: SelectableFigureKind[] = [];
+  for (const k of list) if (isSelectableFigureKind(k) && !out.includes(k)) out.push(k);
+  return out.slice(0, FIGURE_LIMITS.figureKinds);
+}
+
 /* ────────────────────────── forma → kirish ────────────────────────── */
 
 export function articleInputFromValues(values: FormValues): ArticleInput {
@@ -318,6 +347,7 @@ export function articleInputFromValues(values: FormValues): ArticleInput {
     userRefs,
     // Paketga sig'adigan sxema soni (`FIGURES_BY_PAGES`) — forma ham shu chegarani ko'rsatadi.
     figureCount: Math.max(0, Math.min(maxFiguresFor(pages), Number.isFinite(figRaw) ? Math.round(figRaw) : 2)),
+    figureKinds: parseFigureKinds(values.figureKinds),
     research: values.research !== false,
     extra: text(values.extra, ARTICLE_INPUT_LIMITS.extraChars),
     sourceText: text(values.sourceText, 24_000),
@@ -342,6 +372,7 @@ export function encodeArticleValues(input: ArticleInput): FormValues {
     userFacts: input.userFacts,
     userRefs: JSON.stringify(input.userRefs.map((r) => { const { id, ...rest } = r; void id; return rest; })),
     figureCount: input.figureCount,
+    figureKinds: JSON.stringify(input.figureKinds),
     research: input.research,
     extra: input.extra,
   };

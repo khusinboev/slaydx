@@ -207,14 +207,54 @@ export type Reference = {
 export type FigureNode = { id: string; label: string; kind?: "start" | "end" | "step" | "decision" | "data" };
 export type FigureEdge = { from: string; to: string; label?: string };
 
+/**
+ * Sxema turlari. Dastlabki 5 tasi — AUDIT-17 WP3; `layers`/`cycle`/
+ * `timeline`/`matrix`/`compare` — AUDIT-18 WP-B (Q-5). `prisma` (dvigatel
+ * statistikadan quradi) va `chart` (faqat foydalanuvchi ma'lumoti) formada
+ * tanlanmaydi — `SELECTABLE_FIGURE_KINDS`.
+ */
+export type FigureKind = "flow" | "process" | "tree" | "prisma" | "chart" | "layers" | "cycle" | "timeline" | "matrix" | "compare";
+export const FIGURE_KINDS: readonly FigureKind[] = ["flow", "process", "tree", "prisma", "chart", "layers", "cycle", "timeline", "matrix", "compare"];
+/** Formadagi «Sxema turlari» tanlovi (`figureKinds`) — faqat model o'zi tuzadigan turlar. */
+export const SELECTABLE_FIGURE_KINDS = ["flow", "process", "tree", "layers", "cycle", "timeline", "matrix", "compare"] as const;
+export type SelectableFigureKind = (typeof SELECTABLE_FIGURE_KINDS)[number];
+export const isSelectableFigureKind = (v: unknown): v is SelectableFigureKind => (SELECTABLE_FIGURE_KINDS as readonly string[]).includes(String(v));
+
 export type FigureSpec =
   | { kind: "flow"; direction: "TB" | "LR"; nodes: FigureNode[]; edges: FigureEdge[] }
   | { kind: "process"; steps: string[] }
   | { kind: "tree"; root: string; children: TreeNode[] }
   | { kind: "prisma"; identified: number; screened: number; excludedScreen: number; eligible: number; excludedElig: number; included: number; sources?: string }
-  | { kind: "chart"; chart: "bar" | "line" | "pie"; dataSource: "user"; series: { name: string; values: number[] }[]; categories: string[]; unit?: string };
+  | { kind: "chart"; chart: "bar" | "line" | "pie"; dataSource: "user"; series: { name: string; values: number[] }[]; categories: string[]; unit?: string }
+  /** Qatlamli arxitektura: `layers[0]` — eng yuqori (ilova), oxirgisi — eng pastki (fizik); har qatlamda ≤4 band; `arrows` — qatlamlar orasida ikki tomonlama o'q (standart yoqiq). */
+  | { kind: "layers"; layers: { label: string; items?: string[] }[]; direction?: "TB"; arrows?: boolean }
+  /** Sikl: 3–8 bosqich aylana bo'ylab, yoy o'qlar; `center` — markazdagi yorliq; `clockwise` standart `true`. */
+  | { kind: "cycle"; steps: { label: string }[]; center?: string; clockwise?: boolean }
+  /** Vaqt chizig'i: 3–10 voqea, `when` chiziq ostida, `label` navbatma-navbat tepada/pastda. */
+  | { kind: "timeline"; events: { when: string; label: string }[]; direction?: "LR" }
+  /** 2×2 matritsa: AYNAN 4 kvadrant (yuqori-chap, yuqori-o'ng, pastki-chap, pastki-o'ng); o'qlar ixtiyoriy (SWOT — o'qsiz). */
+  | { kind: "matrix"; xAxis?: FigureAxis; yAxis?: FigureAxis; quadrants: { title: string; items?: string[] }[] }
+  /** Taqqoslash: ikki ustun (≤6 band); `rows` berilsa — mezon bo'yicha qatorlar (chapda mezon, ikki ustunda qiymat). */
+  | { kind: "compare"; left: { title: string; items: string[] }; right: { title: string; items: string[] }; rows?: string[] };
 
+export type FigureAxis = { low: string; high: string; label?: string };
 export type TreeNode = { label: string; children?: TreeNode[] };
+
+/** Yangi turlarning son chegaralari (`figureSpecFromLlm` kesadi, maket `null` beradi). */
+export const FIGURE_LIMITS = {
+  layersMin: 2,
+  layersMax: 7,
+  layerItems: 4,
+  cycleMin: 3,
+  cycleMax: 8,
+  timelineMin: 3,
+  timelineMax: 10,
+  quadrants: 4,
+  quadrantItems: 4,
+  compareItems: 6,
+  /** Formadagi «Sxema turlari» tanlovi — oq ro'yxat hajmi. */
+  figureKinds: 9,
+} as const;
 
 export type Figure = {
   id: string;

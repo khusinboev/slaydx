@@ -108,6 +108,7 @@ function contextOf(doc: AcademicDoc): ArticleContext {
     userFacts: model.userFacts ?? "",
     userRefs: [],
     figureCount: doc.meta.figureCount ?? 0,
+    figureKinds: doc.meta.figureKinds ?? [],
     research: Boolean(doc.meta.research),
     extra: doc.meta.extra ?? "",
     sourceText: doc.meta.sourceText ?? "",
