@@ -1,4 +1,4 @@
-# SlaydX — holat (2026-09-12, main `90e192a`+, prod deploy qilingan; tekshiruv: unit 1424/1426 (2 tasi `.env.local` fal.ai holati), ko'ruvchi 140, UI 158, lint/tsc toza)
+# SlaydX — holat (2026-09-12, main `a42d5c1`+docs, prod deploy qilingan (worker shriftlari bilan); tekshiruv: unit 1424/1426 (2 tasi `.env.local` fal.ai holati), ko'ruvchi 140, UI 158, lint/tsc toza)
 
 Sprint: **Maqola 2 (AUDIT-17)** — reja `~/.claude/plans/sen-senior-fullstack-dev-majestic-starfish.md`, jurnal `docs/AUDIT-17.md`.
 Umumiy: **100% — Maqola 2 prod'da (2026-09-12).**
@@ -15,7 +15,7 @@ Umumiy: **100% — Maqola 2 prod'da (2026-09-12).**
 | 7 | WP8 LLM rollari (adapterlar, zaxira zanjiri, usage, narx jadvali) | 100 | `7ddfdc1` |
 | 8 | WP7 ko'ruvchida tahrir (article adapter, rewrite, editor) | 100 | `8d7e871` + `4ba96b4` (tahrir ikkilanishi) |
 | 9 | R5 lead: integratsiya, jonli, Chromium smoke (tahrir + «Tuzatish»), hajm kalibrovkasi, ko'ruvchi shrifti, DOCX lineRule, docs | 100 | `b06c86d`…`be0f737`; jurnal §6–§7, structure.md, CLAUDE.md, README, xotira |
-| 10 | Deploy (zaxira → 020 → `.env` kalitlari → nohup deploy.sh → compose env → prod smoke) | 100 | `3663b63` + `90e192a`; eski maqolalar ochiladi, yangi maqola Claude baholovchi bilan, tahrir/«Tuzatish» prod'da yashil |
+| 10 | Deploy (zaxira → 020 → `.env` kalitlari → nohup deploy.sh → compose env → worker shriftlari → prod smoke) | 100 | `3663b63`, `90e192a`, `1a618a0`, `a42d5c1`; eski maqolalar ochiladi, foydalanuvchi mavzusida maqola (72 ball, sxema to'g'ri), tahrir/«Tuzatish» prod'da yashil |
 
 ## Ochiq bandlar
 - `docs/AUDIT-17.md` §7: manbalar soni 8–12 (OAK ≥10), Claude baholovchi qattiqroq, apparaturani qisqartirish varianti.
