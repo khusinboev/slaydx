@@ -7,7 +7,9 @@
  * kasr zichlikni qabul qiladi — kenglik AYNAN 1890 chiqadi (sinaldi).
  *
  * Shriftlar: SVG `font-family` ro'yxati (TNR → Liberation Serif → Noto
- * Serif) — Alpine konteynerida `ttf-liberation` + `font-noto` bor.
+ * Serif) — WORKER konteynerida `ttf-liberation` + `font-noto` bo'lishi
+ * SHART (Dockerfile `worker` bosqichi; faqat `runner` da bo'lganida prod'da
+ * sxema matni «□□□» chiqdi — `tests/dockerfile-fonts` qulflaydi).
  *
  * `sharp` yuklanmasa/xato bersa → `null` (chaqiruvchi fallback ro'yxat).
  * Server-only: dinamik import — modul viewer/klient bundle'iga tortilmaydi.

@@ -73,6 +73,12 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
+# Sxema (SVG → PNG, `sharp`/librsvg — Maqola 2) SHU konteynerda chiziladi:
+# shriftsiz matn «□□□» bo'lib chiqadi (2026-09-12 prod: birinchi maqolada
+# sxema yorliqlari tofu). `runner` dagi to'plam bilan bir xil oila:
+# lotin/kirill (Liberation = TNR metrikasi, Noto), fontconfig keshi.
+RUN apk add --no-cache fontconfig ttf-liberation font-noto && fc-cache -f >/dev/null 2>&1 || true
+
 COPY package.json package-lock.json ./
 # `--include=dev` MAJBURIY va u `--omit=dev` ishlatmaslikdan KUCHLIROQ.
 # 
