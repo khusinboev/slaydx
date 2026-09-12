@@ -64,7 +64,7 @@ export const ARTICLE_TYPES: Record<ArticleTypeId, ArticleType> = {
   three_part_uz: {
     id: "three_part_uz",
     label: { uz: "Nazariy / gumanitar (Kirish–Asosiy qism–Xulosa)", ru: "Теоретическая / гуманитарная", en: "Theoretical / humanities" },
-    hint: "Kirish → mavzu bo‘yicha 3–5 nomlangan bo‘lim → Xulosa — universitet xabarnomalari, TATU tipidagi jurnallar",
+    hint: "Kirish → mavzu bo‘yicha 3–5 nomlangan bo‘lim → Xulosa — universitet xabarnomalari, konferensiya to‘plamlari, TATU tipidagi jurnallar",
     guidance: [
       "Uzbek 'introduction – main part – conclusion' bulletin article: the main part is 3–5 thematic sections with their own titles, each developing one argument with sources; no IMRAD vocabulary (no 'Methods'/'Results' headings).",
       "The introduction gives relevance and aim in 1–2 paragraphs; the conclusion lists concrete findings and recommendations as short statements.",

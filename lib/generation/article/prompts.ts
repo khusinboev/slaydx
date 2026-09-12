@@ -73,6 +73,21 @@ export const FILLER_PHRASES: readonly string[] = [
   "it is well known",
   "plays a crucial role",
   "in the modern era",
+  /*
+   * Mahalliy konferensiya to'plami (2025-04-19, 797 bet, ~110 maqola —
+   * `docs/research/konf-2025-uzb.md` §4) chastotasi bo'yicha: «bugungi
+   * kunda» 17, «muhim ahamiyat kasb etadi» 11, «dolzarb masalalardan biri»
+   * 8+, «shunday qilib» (jumla boshida) 10, «keng qamrovli» — model ham
+   * shularni «tabiiy» deb takrorlaydi. Ro'yxat oxiriga — promptdagi indekslar
+   * (`FILLER_PHRASES[8]`, `[12]`, `[16]`) o'zgarmaydi.
+   */
+  "muhim ahamiyat kasb etadi",
+  "dolzarb masalalardan biri",
+  "keng qamrovli",
+  "o‘z navbatida",
+  "o'z navbatida",
+  "имеет важное значение",
+  "одной из актуальных проблем",
 ];
 
 /** `[ID] Muallif va b. (yil). Sarlavha. Venue.` — promptdagi manba qatori. */

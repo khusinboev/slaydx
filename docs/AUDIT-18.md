@@ -25,6 +25,10 @@ Foydalanuvchi savollari (2026-09-12): «77 % ni AI o'zi 100 % ga yaqinlashtira o
 - Qolgan 13 parametr — reyestr zondi bilan tasdiqlangan.
 - 77 % maqola (`5ce1774e`): qoidalar 15 yashil/4 sariq (UDK, email/ORCID, jadval havolasi, hajm 78 %); baholovchi 11/18. Avto-tuzatish bilan ≈ 88–92; 95–100 faqat foydalanuvchi ma'lumoti bilan.
 
+### 2a. Mahalliy amaliyot — konferensiya to'plami tahlili (`docs/research/konf-2025-uzb.md`, 797 bet, ~110 maqola, 2025-04-19)
+
+Agent (sonnet) o'qidi; asosiy topilmalar: per-maqola UDK **yo'q** (UDK taklifi LLM bilimiga tayanadi — «tekshiring» belgisi to'g'ri); annotatsiya real uzunligi 20–101 so'z (bizning 150–250 ataylab yuqori standart); `[1; 25-b.]` sahifali iqtibos amaliyotda 0 marta (rasmiy OAK qoidasi — profilda qoladi, `university`/`conference` da oddiy `[N]`); adabiyotlar median 4–5 (bizning ≥10/15 — sifat maqsadi, `conference` 0–20 mos); email 4/110, ORCID 0 — hisobotda sariq (qizil emas) to'g'ri; jadval sarlavhasi tepada, formula (1) o'ngda — bizning dizayn tasdiqlandi; tipik klişelar chastota bilan («bugungi kunda» 17, «muhim ahamiyat kasb etadi» 11, «dolzarb masalalardan biri» 8+) → `FILLER_PHRASES` ga qo'shildi (prompt taqiqi + hisobot detektori). Qo'llanmadi: run-in sarlavha (bizniki yaxshiroq), profil chegaralarini pasaytirish.
+
 ## 3. Arxitektura
 
 ```
