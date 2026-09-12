@@ -171,6 +171,41 @@ const rewrite = (target: string, instruction: string): ArticleFix => ({ op: "rew
  * Baholovchi tavsiyalari (`judge:fix:N`) — Q-2 filtr bilan. `udk`/`authors`
  * doim `user`. Bitta nishonga ko'rsatmalar birlashtiriladi; ≤6 nishon.
  */
+/** Skelet roli bo'yicha bo'lim topish (id yoki `skeletonId` prefiksi). */
+function sectionByRole(doc: AcademicDoc, roles: string[]): string | null {
+  const sections = doc.sections.filter((s) => s.blocks.length);
+  for (const role of roles) {
+    const hit = sections.find((s) => s.id === role || s.id.startsWith(`${role}-`) || s.id.includes(role));
+    if (hit) return hit.id;
+  }
+  return null;
+}
+
+/**
+ * Past baholangan mezon → halol ko'rsatma (mavjud matn va manbalar bilan
+ * bajariladigan; tajriba tafsiloti so'ralmaydi). `methods` faqat faktlar
+ * bo'lsa — «faqat USER FACTS bilan, yo'g'ini keltirilmagan deb ayt».
+ */
+export function criterionFixes(review: ArticleReview, doc: AcademicDoc, hasFacts: boolean): ArticleFix[] {
+  const level = (id: string) => review.checks.find((c) => c.id === `judge:${id}`)?.level;
+  const low = (id: string) => level(id) === "red" || level(id) === "yellow";
+  const first = doc.sections.find((s) => s.blocks.length)?.id ?? null;
+  const last = [...doc.sections].reverse().find((s) => s.blocks.length)?.id ?? null;
+  const intro = sectionByRole(doc, ["intro", "introduction"]) ?? first;
+  const conclusion = sectionByRole(doc, ["conclusion", "conclusions", "future"]) ?? last;
+  const discussion = sectionByRole(doc, ["discussion", "synthesis", "analysis", "solutions", "evaluation", "perspective"]) ?? conclusion;
+  const methods = sectionByRole(doc, ["litreview_methods", "methods", "results_methods", "procedure", "protocol", "object", "search"]);
+  const out: ArticleFix[] = [];
+  const push = (target: string | null, instruction: string) => {
+    if (target && !out.some((f) => f.target === target)) out.push({ op: "rewrite", target, instruction });
+  };
+  if (low("novelty")) push(intro, "State the specific contribution of this article explicitly (what it adds beyond the cited studies) using ONLY what the manuscript already does; end the introduction with a clear aim. Do not add new results.");
+  if (low("overclaim") || low("chain")) push(conclusion, "Make the conclusion answer the stated aim point by point and keep every claim within what the results/USER FACTS show — remove generalisations that the results do not support.");
+  if (low("comparison")) push(discussion, "Compare the findings explicitly with at least three cited SOURCES (agreement, contrast, gap) — use only sources already in the list; no new claims.");
+  if (low("methods") && hasFacts) push(methods, "Describe the procedure using ONLY the details in USER FACTS and the current text; where a detail (tool, statistical test, parameter) was not reported by the author, say so explicitly instead of inventing it.");
+  return out;
+}
+
 export function planPolish(review: ArticleReview, doc: AcademicDoc): PolishPlan {
   const skipped: PolishSkip[] = [];
   const candidates: ArticleFix[] = [];
@@ -259,6 +294,19 @@ export function planPolish(review: ArticleReview, doc: AcademicDoc): PolishPlan 
       continue;
     }
     candidates.push({ op: "rewrite", target: c.fix.target, instruction: c.fix.instruction });
+  }
+
+  /*
+   * Baholovchi MEZONLARIDAN halol tuzatishlar (baholovchi `fixes` bermasa
+   * yoki hammasi Q-2 bilan tushib qolsa): jonli sinovda tavsiya chegarasi
+   * qo'yilgach Claude 0 fix qaytardi — sayqal faqat jadval havolasini
+   * tuzatib, yangilik/xulosa/taqqoslash qizil qoldi. Har mezon o'z
+   * bo'limiga, faqat mavjud mazmun/manbalar bilan bajariladigan ko'rsatma.
+   */
+  const judgeTargets = new Set(candidates.map((f) => f.target));
+  for (const f of criterionFixes(review, doc, hasFacts)) {
+    if (judgeTargets.has(f.target)) continue;
+    candidates.push(f);
   }
 
   // Nishon mavjudligi: bo'lim id | abstract:xx | keywords | highlights.

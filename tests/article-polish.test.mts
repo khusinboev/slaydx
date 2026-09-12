@@ -50,10 +50,11 @@ const judgeCheck = (c: string, n: number): ReviewCheck => ({ id: `judge:${c}`, l
 const fixCheck = (i: number, target: string, instruction: string): ReviewCheck => ({ id: `judge:fix:${i}`, level: "yellow", label: "Baholovchi tavsiyasi", detail: `${target}: ${instruction}`, fix: { op: "rewrite", target, instruction } });
 
 /** Sun'iy hisobot: qoidalar + baholovchi (hamma mezon `j`), tavsiyalar. */
-function review(rules: ReviewCheck[], j = 1, fixes: ReviewCheck[] = []): ArticleReview {
+function review(rules: ReviewCheck[], j = 1, fixes: ReviewCheck[] = [], levels: Partial<Record<string, "red" | "yellow" | "green">> = {}): ArticleReview {
+  const score = (c: string) => (levels[c] === "red" ? 1 : levels[c] === "yellow" ? 2 : levels[c] === "green" ? 3 : j);
   return {
     score: 60,
-    checks: [...rules, ...JUDGE_CRITERIA.map((c) => judgeCheck(c, j)), ...fixes],
+    checks: [...rules, ...JUDGE_CRITERIA.map((c) => judgeCheck(c, score(c))), ...fixes],
     judgeNotes: [],
     verifiedShare: 1,
     recentShare: 1,
@@ -128,7 +129,7 @@ test("planPolish: qoidalar fix ga, udk/authors → user, fixsiz band → manual,
       { id: "abstracts", level: "yellow", label: "Annotatsiya", fix: rw("abstract:uz", "Rewrite to 150–250 words.") },
       { id: "structure", level: "green", label: "Tuzilma" },
     ],
-    1,
+    3, // baholovchi mezonlari yashil — mezon tuzatishlari (criterionFixes) bu testga aralashmasin
     [fixCheck(1, "intro", "Kirishda maqsadni aniq yozing"), fixCheck(2, "results", "Add the sample size and accuracy of the method"), fixCheck(3, "nonexistent", "x")],
   );
   const p = planPolish(r, doc());
@@ -156,6 +157,30 @@ test("planPolish: qoidalar fix ga, udk/authors → user, fixsiz band → manual,
   const p2 = planPolish(r, doc("Tajribada 120 talaba, aniqlik 92%"));
   assert.ok(!p2.fixes.some((f) => f.target === "results"), "MUTATSIYA: faktlar bo'lsa filtr chetlab o'tilsa — natija tavsiyasi bajariladi");
   assert.equal(p2.skipped.find((s) => s.id === "judge:fix:2")?.reason, "unreported");
+});
+
+test("criterionFixes: baholovchi fix bermasa ham past mezonlar halol ko'rsatmaga aylanadi (novelty→intro, overclaim/chain→conclusion, comparison→discussion, methods→faqat faktlar bilan); judge fix bor nishon takrorlanmaydi", () => {
+  const r = review(
+    [{ id: "structure", level: "green", label: "Tuzilma" }],
+    1,
+    [],
+    { novelty: "red", chain: "yellow", methods: "red", comparison: "yellow", overclaim: "red", style: "green" },
+  );
+  const p = planPolish(r, doc());
+  const t = new Map(p.fixes.map((f) => [f.target, f.instruction]));
+  assert.match(t.get("intro") ?? "", /specific contribution .* ONLY what the manuscript already does/);
+  assert.match(t.get("conclusion") ?? "", /answer the stated aim .* within what the results\/USER FACTS show/);
+  assert.match(t.get("discussion") ?? "", /at least three cited SOURCES/);
+  assert.ok(!t.has("litreview_methods"), "MUTATSIYA: faktsiz «methods» tuzatishi — o'ylab topishga yo'l");
+  const withFacts = planPolish(r, doc("120 talaba"));
+  assert.match(withFacts.fixes.find((f) => f.target === "litreview_methods")?.instruction ?? "", /ONLY the details in USER FACTS .* say so explicitly instead of inventing/);
+  // Baholovchi o'zi intro uchun fix bergan bo'lsa — mezon ko'rsatmasi shu nishonga qo'shilmaydi (bitta nishon = bitta fix, baholovchiniki ustun).
+  const r2 = review([{ id: "structure", level: "green", label: "Tuzilma" }], 1, [fixCheck(1, "intro", "Kirishda maqsadni aniq yozing")], { novelty: "red", chain: "green", methods: "green", comparison: "green", overclaim: "green", style: "green" });
+  const p2 = planPolish(r2, doc());
+  assert.equal(p2.fixes.filter((f) => f.target === "intro").length, 1);
+  assert.equal(p2.fixes.find((f) => f.target === "intro")?.instruction, "Kirishda maqsadni aniq yozing");
+  // Hammasi yashil → mezon tuzatishlari yo'q.
+  assert.equal(planPolish(review([], 3, []), doc()).fixes.length, 0);
 });
 
 test("needsUserData: jonli sinovdagi «statistik test / p-qiymat / platforma nomi / randomizatsiya» tavsiyalari (uz/en/ru) → true", () => {
@@ -363,7 +388,7 @@ test("runPolish: tuzatiladigan band yo'q → LLM chaqirilmaydi, jurnal accepted:
 
 test("runPolish: hammasi yiqilsa (model javobsiz) — rad, skipped `error`, hujjat o'zgarmaydi", async () => {
   const d = doc();
-  const b = review([{ id: "filler", level: "yellow", label: "F", fix: rw("intro", "Remove filler.") }], 1);
+  const b = review([{ id: "filler", level: "yellow", label: "F", fix: rw("intro", "Remove filler.") }], 3);
   const s = stub({ fail: "intro" });
   const r = await runPolish(d, b, { complete: s.complete, deadline: Date.now() + 120_000, now: NOW });
   assert.equal(r.accepted, false);
