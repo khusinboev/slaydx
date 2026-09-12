@@ -11,12 +11,14 @@ import { priceFor, formatTanga, ARTICLE_PRICES } from "@/lib/tools";
 import {
   ARTICLE_LIMITS,
   CITE_STYLES,
+  SELECTABLE_FIGURE_KINDS,
   maxFiguresFor,
   type ArticleAuthor,
   type ArticleTypeId,
   type CiteStyle,
   type PagesId,
   type PublicationProfileId,
+  type SelectableFigureKind,
 } from "@/lib/generation/article/types";
 import { ARTICLE_TYPES } from "@/lib/generation/article/types-registry";
 import { PUBLICATION_PROFILES } from "@/lib/generation/article/profiles";
@@ -73,11 +75,59 @@ type Ui = {
   /** Xom CSV matni — `parseCsvUserData` yuborishdan oldin obyektga aylantiradi. */
   userDataCsv: string;
   figureCount: number;
+  /** «Sxema turlari» — bo'sh = avtomatik (AUDIT-18 Q-6). */
+  figureKinds: SelectableFigureKind[];
   research: boolean;
   extra: string;
   fileName: string;
   sourceText: string;
 };
+
+/** Sxema turi yorliqlari (forma chips) — tartib `SELECTABLE_FIGURE_KINDS` bilan bir xil. */
+export const FIGURE_KIND_LABEL: Record<SelectableFigureKind, string> = {
+  flow: "Blok-sxema",
+  process: "Jarayon",
+  tree: "Daraxt",
+  layers: "Qatlamlar",
+  cycle: "Sikl",
+  timeline: "Vaqt chizig‘i",
+  matrix: "Matritsa",
+  compare: "Taqqoslash",
+};
+
+/**
+ * «Sxema turlari» chips: «Avto» (bo'sh ro'yxat — model mazmunga qarab
+ * tanlaydi) + 8 tur, ko'p tanlov. Sxema so'ralmagan (`figureCount === 0`)
+ * bo'lsa o'chiq — tanlov hech narsaga ta'sir qilmaydi (UI testi: `disabled`
+ * bog'lanishi olib tashlansa qizaradi).
+ */
+function FigureKindChips({ value, onChange, disabled }: { value: SelectableFigureKind[]; onChange: (v: SelectableFigureKind[]) => void; disabled: boolean }) {
+  const chip = (on: boolean) =>
+    `rounded-full border px-3 py-1 text-[12.5px] transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${on ? "border-primary bg-primary text-primary-foreground" : "border-input bg-card hover:bg-muted"}`;
+  return (
+    <div className="flex flex-wrap gap-1.5" role="group" aria-label="Sxema turlari">
+      <button type="button" aria-pressed={value.length === 0} disabled={disabled} onClick={() => onChange([])} className={chip(value.length === 0)}>
+        Avto
+      </button>
+      {SELECTABLE_FIGURE_KINDS.map((k) => {
+        const on = value.includes(k);
+        return (
+          <button
+            key={k}
+            type="button"
+            aria-pressed={on}
+            disabled={disabled}
+            data-kind={k}
+            onClick={() => onChange(on ? value.filter((v) => v !== k) : [...value, k])}
+            className={chip(on)}
+          >
+            {FIGURE_KIND_LABEL[k]}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 const LANGUAGE_OPTIONS = [
   { value: "uz", label: "O‘zbek" },
@@ -122,6 +172,7 @@ function emptyUi(profile: UserProfile, user: ServerUser | null): Ui {
     userRefs: [],
     userDataCsv: "",
     figureCount: clampFigures(2, normalizeArticlePages(type, "3-5")),
+    figureKinds: [],
     research: true,
     extra: "",
     fileName: "",
@@ -192,6 +243,7 @@ function uiFromValues(values: FormValues, base: Ui): Ui {
     userRefs: input.userRefs.map(userRefRowOf),
     userDataCsv: csvFromUserData(input.userData) || base.userDataCsv,
     figureCount: input.figureCount,
+    figureKinds: input.figureKinds,
     research: input.research,
     extra: input.extra,
     fileName: typeof values.fileName === "string" ? values.fileName : "",
@@ -226,6 +278,7 @@ function toValues(ui: Ui): FormValues {
     userFacts: ui.userFacts,
     userRefs,
     figureCount: ui.figureCount,
+    figureKinds: ui.figureKinds,
     research: ui.research,
     extra: ui.extra,
     sourceText: ui.sourceText,
@@ -526,6 +579,7 @@ export function ArticleComposer({
                 ui.udk ? `UDK ${ui.udk}` : "",
                 ui.keywords.length ? `${ui.keywords.length} kalit so‘z` : "",
                 `${ui.figureCount} vizual`,
+                ui.figureCount && ui.figureKinds.length ? `sxema: ${ui.figureKinds.map((k) => FIGURE_KIND_LABEL[k].toLowerCase()).join(", ")}` : "",
                 ui.research ? "internet qidiruvi yoqilgan" : "internet qidiruvi o‘chirilgan",
                 ui.citeStyle ? CITE_STYLE_LABEL[ui.citeStyle] : "",
               ].filter(Boolean)}
@@ -566,6 +620,11 @@ export function ArticleComposer({
               ) : (
                 <span className="text-muted-foreground text-sm">0</span>
               )}
+            </span>
+          </Row>
+          <Row label="Sxema turlari" hint={ui.figureCount ? "Avto — mazmunga qarab; tanlasangiz faqat shu turlar chiziladi" : "Sxema so‘ralmagan"} wide>
+            <span data-field="figureKinds" className="block">
+              <FigureKindChips value={ui.figureKinds} onChange={(v) => set("figureKinds", v)} disabled={ui.figureCount === 0} />
             </span>
           </Row>
           <Row label="Manba qidiruvi" hint="OpenAlex/Crossref orqali tekshirilgan manba topadi">

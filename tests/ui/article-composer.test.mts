@@ -153,6 +153,66 @@ test("vizuallar soni PAKETGA bog'liq: 3–5 bet → 0–1 (standart 1), 10–15 
   assert.match(document.querySelector('[data-field="figureCount"]')?.textContent ?? "", /^0$/);
 });
 
+test("sxema turlari (AUDIT-18): Avto standart; ko'p tanlov; submit tanasida figureKinds JSON; Avto — tozalaydi; sxema 0 bo'lsa o'chiq", async () => {
+  const calls = stubApi();
+  await login();
+  mount();
+  await act(async () => {
+    fireEvent.click(screen.getByText("Sozlamalar"));
+  });
+  const chips = () => [...document.querySelectorAll('[data-field="figureKinds"] button')] as HTMLButtonElement[];
+  const pressed = () => chips().filter((b) => b.getAttribute("aria-pressed") === "true").map((b) => b.textContent?.trim());
+  assert.deepEqual(
+    chips().map((b) => b.textContent?.trim()),
+    ["Avto", "Blok-sxema", "Jarayon", "Daraxt", "Qatlamlar", "Sikl", "Vaqt chizig‘i", "Matritsa", "Taqqoslash"],
+  );
+  assert.deepEqual(pressed(), ["Avto"]);
+  assert.ok(chips().every((b) => !b.disabled), "3–5 betda 1 sxema — chips faol");
+  await act(async () => {
+    fireEvent.click(screen.getByText("Sikl"));
+  });
+  assert.deepEqual(pressed(), ["Sikl"], "Avto o'chdi, Sikl yondi");
+  await act(async () => {
+    fireEvent.click(screen.getByText("Matritsa"));
+  });
+  assert.deepEqual(pressed(), ["Sikl", "Matritsa"]);
+  await act(async () => {
+    fireEvent.change(screen.getByPlaceholderText(tool.topicPlaceholder!), { target: { value: "Sxema turi sinovi" } });
+  });
+  await act(async () => {
+    fireEvent.click(screen.getByText(tool.submitLabel));
+  });
+  await waitFor(() => assert.ok(calls.some((c) => c.url === "/api/generations" && c.method === "POST")));
+  const post = calls.find((c) => c.url === "/api/generations" && c.method === "POST")!;
+  const values = (post.body as { values: Record<string, unknown> }).values;
+  assert.equal(values.figureKinds, '["cycle","matrix"]', "tanlov JSON massiv bo'lib ketadi (tartib bosish tartibida)");
+  // Avto — ro'yxat tozalanadi.
+  await act(async () => {
+    fireEvent.click(screen.getByText("Avto"));
+  });
+  assert.deepEqual(pressed(), ["Avto"]);
+  // Sxema soni 0 → chips o'chiq (mutatsiya: `disabled` bog'lanishi olib tashlansa qizaradi).
+  await act(async () => {
+    fireEvent.click(document.querySelector('[data-field="figureCount"] button:nth-child(1)')!);
+  });
+  assert.ok(chips().every((b) => b.disabled), "sxema so'ralmagan — chips o'chiq");
+  assert.ok(document.querySelector('[title="Sxema so‘ralmagan"]'), "ko'rsatma: sxema so'ralmagan");
+});
+
+test("sxema turlari: qoralamadan tiklanadi (figureKinds JSON → chips)", async () => {
+  stubApi({ topic: "Tiklangan", articleType: "analytical", pubProfile: "oak", language: "uz", pages: "5-10", figureCount: 2, figureKinds: '["timeline","compare"]', authors: "[]", keywords: "[]", userRefs: "[]" });
+  await login();
+  mount();
+  await waitFor(() => {
+    assert.equal((screen.getByPlaceholderText(tool.topicPlaceholder!) as HTMLInputElement).value, "Tiklangan");
+  });
+  await act(async () => {
+    fireEvent.click(screen.getByText("Sozlamalar"));
+  });
+  const pressed = [...document.querySelectorAll('[data-field="figureKinds"] button[aria-pressed="true"]')].map((b) => b.textContent?.trim());
+  assert.deepEqual(pressed, ["Vaqt chizig‘i", "Taqqoslash"]);
+});
+
 test("hajm ko'rsatmasi: OAK 3–5 → «taxminan 6 bet» (apparatura paketdan katta); university → ko'rsatma yo'q; 10–15 → yo'q", async () => {
   stubApi();
   await login();
