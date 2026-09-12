@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { factNumbers, guardSection, missingFactNumbers, numbersOf, skeletonCoverage, wordsOf } from "../lib/generation/article/guard.ts";
-import { FILLER_PHRASES, articleSystemPrompt, sectionPrompt, abstractPrompt, abstractSystemPrompt, type ArticleContext } from "../lib/generation/article/prompts.ts";
+import { wordRangeAim, wordRangePrompt, FILLER_PHRASES, articleSystemPrompt, sectionPrompt, abstractPrompt, abstractSystemPrompt, type ArticleContext } from "../lib/generation/article/prompts.ts";
 import { articleWordPlan } from "../lib/generation/article/engine.ts";
 import { ARTICLE_TYPES } from "../lib/generation/article/types-registry.ts";
 import { PUBLICATION_PROFILES } from "../lib/generation/article/profiles.ts";
@@ -105,6 +105,22 @@ test("tizim prompti: birinchi qator til ko'rsatmasi; uch taqiq qulflangan; foyda
   assert.ok(FILLER_PHRASES.length >= 12);
   // Rus tilida birinchi qator o'zgaradi.
   assert.match(articleSystemPrompt(ctxOf({ language: "ru" })).split("\n")[0], /Russian/);
+});
+
+test("tezis so'z mo'ljali — oraliqning yuqori yarmi (200–300 → 260), qisqa chiqsa qayta yozish «kamida N so'z qo'sh» deydi", () => {
+  const ctx = ctxOf({ articleType: "conference_thesis", pubProfile: "conference", pages: "1-2" });
+  const plan = { id: "body", skeletonId: "body", title: "Tezis", brief: "x", words: 250, hard: true };
+  const whole = sectionPrompt(ctx, { plan, wantTable: false, wantFigure: false, wantChart: false });
+  // Jonli: «about 250» so'ralganda 157/185/207 chiqdi — o'rtaga mo'ljal yetarli emas.
+  assert.match(whole, /aim for about 260 words, never fewer than 200 and never more than 300/);
+  assert.match(whole, /write MORE, up to the maximum/);
+  assert.equal(wordRangeAim(200, 300), 260);
+  const short = wordRangePrompt(ctx, plan, 185, [200, 300]);
+  assert.match(short, /too short \(185 whitespace-separated words\)/);
+  assert.match(short, /to about 260 words/);
+  assert.match(short, /you were 15 words short, so add at least 23 words/);
+  const long = wordRangePrompt(ctx, plan, 340, [200, 300]);
+  assert.match(long, /too long .* to about 250 words — cut redundancy/);
 });
 
 test("bo'lim prompti: manbalar `[ID] Muallif (yil). Sarlavha. Venue.` ko'rinishida; manbasiz — iqtibos taqiqi; jadval/sxema faqat so'ralganda; chart faqat userData bilan", () => {

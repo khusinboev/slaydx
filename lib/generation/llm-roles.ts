@@ -97,8 +97,10 @@ export async function complete(
  * Sarf hisoblagichi — generatsiya davomida `usage` lar yig'iladi,
  * yakunda `generations.cost_json` ga tushadi (`worker.ts`).
  *
- * `provider`/`model` — ENG KO'P CHIQISH TOKENI bergan juftlik (odatda
- * eng "og'ir" chaqiruv — uzun bo'lim yozuvi — shu haqda). `usd` —
+ * `provider`/`model` — chiqish tokenlari YIG'INDISI eng katta juftlik
+ * (jonli tezis: 9 Gemini chaqiruvi 3 000 token, bitta Claude baholovchi
+ * 1 500 token — bitta chaqiruv bo'yicha tanlansa hisobot «anthropic» deb
+ * ko'rsatardi, `cost-report` esa vositani noto'g'ri guruhlardi). `usd` —
  * `llm-pricing.ts costUsd` bo'yicha har chaqiruv YIG'INDISI (sana —
  * chaqiruv payti, `Date.now()`; narx jadvali kelajakda o'zgarsa ham
  * o'sha kunlik hisob-kitobga mos qoladi).
@@ -114,10 +116,22 @@ export class CostMeter {
     const inputTokens = this.items.reduce((a, u) => a + u.inputTokens, 0);
     const outputTokens = this.items.reduce((a, u) => a + u.outputTokens, 0);
     const usd = this.items.reduce((a, u) => a + costUsd(u, new Date()), 0);
-    const top = this.items.reduce<LlmUsage | undefined>(
-      (best, u) => (!best || u.outputTokens > best.outputTokens ? u : best),
-      undefined,
-    );
+    const sums = new Map<string, { u: LlmUsage; out: number }>();
+    for (const u of this.items) {
+      const key = `${u.provider}:${u.model}`;
+      const cur = sums.get(key);
+      if (cur) cur.out += u.outputTokens;
+      else sums.set(key, { u, out: u.outputTokens });
+    }
+    // Teng bo'lsa BIRINCHI uchragan juftlik qoladi (Map tartibi — qo'shilish tartibi).
+    let top: LlmUsage | undefined;
+    let topOut = -1;
+    for (const { u, out } of sums.values()) {
+      if (out > topOut) {
+        top = u;
+        topOut = out;
+      }
+    }
     return {
       provider: top?.provider ?? "none",
       model: top?.model ?? "",

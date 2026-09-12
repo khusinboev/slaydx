@@ -206,7 +206,8 @@ export function sectionPrompt(ctx: ArticleContext, ask: SectionAsk): string {
   if (ctx.type.wordRange && ctx.type.skeleton.length === 1) {
     const [lo, hi] = ctx.type.wordRange;
     // Model o‘zbek/rus matnida so‘zni kam sanaydi (jonli: 157 so‘z «200–300» so‘ralganda) — o‘rtaga mo‘ljal, pastki chegara qat’iy.
-    lines.push(`This is the WHOLE ${ctx.type.label.en}: aim for about ${Math.round((lo + hi) / 2)} words, never fewer than ${lo} and never more than ${hi} (count words as whitespace-separated tokens); no headings, 3–6 paragraphs.`);
+    // Jonli: «about 250» so'ralganda 157/185/207 chiqdi (model o'zbek/rus so'zini kam sanaydi) — mo'ljal yuqori yarmiga, «shubha bo'lsa ko'proq».
+    lines.push(`This is the WHOLE ${ctx.type.label.en}: aim for about ${wordRangeAim(lo, hi)} words, never fewer than ${lo} and never more than ${hi} (count words as whitespace-separated tokens; when unsure, write MORE, up to the maximum — models undercount Uzbek and Russian words); no headings, 3–6 paragraphs.`);
   }
   if (refs.length) {
     /*
@@ -258,10 +259,15 @@ export function expandPrompt(ctx: ArticleContext, plan: SectionPlan, have: numbe
 }
 
 /** Tezis/qisqa xabar — so'z chegarasidan tashqarida bo'lsa qayta so'rov. */
+/** So'z oralig'i mo'ljali — yuqori yarmi (200–300 → 260): model qisqa yozadi. */
+export function wordRangeAim(lo: number, hi: number): number {
+  return Math.round(lo + (hi - lo) * 0.6);
+}
+
 export function wordRangePrompt(ctx: ArticleContext, plan: SectionPlan, have: number, range: [number, number]): string {
   const dir = have < range[0] ? "too short" : "too long";
   return [
-    `The previous text was ${dir} (${have} whitespace-separated words); the required range is ${range[0]}–${range[1]} words. Rewrite the whole section «${plan.title}» to about ${Math.round((range[0] + range[1]) / 2)} words — ${have < range[0] ? "add substantive detail (method, result, significance), do not pad" : "cut redundancy, keep every fact"} — keeping every USER FACT verbatim and every citation ID unchanged.`,
+    `The previous text was ${dir} (${have} whitespace-separated words); the required range is ${range[0]}–${range[1]} words. Rewrite the whole section «${plan.title}» to about ${have < range[0] ? wordRangeAim(range[0], range[1]) : Math.round((range[0] + range[1]) / 2)} words — ${have < range[0] ? `add substantive detail (method, result, significance), do not pad; you were ${range[0] - have} words short, so add at least ${Math.round((range[0] - have) * 1.5)} words` : "cut redundancy, keep every fact"} — keeping every USER FACT verbatim and every citation ID unchanged.`,
     `Section plan: ${plan.brief}`,
     ctx.refs.length ? `SOURCES (cite by ID only):\n${ctx.refs.map((r) => formatRefLine(r)).join("\n")}` : `SOURCES: none — no citations.`,
     `Return JSON: {"blocks":[{"kind":"p","text":"…"}]}`,

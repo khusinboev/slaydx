@@ -56,7 +56,7 @@ test("usd — bir nechta har xil provayder/model yig'indisi", () => {
   assert.ok(Math.abs(json.usd - (4.5 + 5)) < 1e-6, `kutilgan $9.5, oldi: ${json.usd}`);
 });
 
-test("provider/model — eng ko'p CHIQISH tokeni bergan juftlik", () => {
+test("provider/model — chiqish tokenlari YIG'INDISI eng katta juftlik (bitta chaqiruv emas)", () => {
   const meter = new CostMeter();
   meter.add({ provider: "gemini", model: "gemini-3.7-flash", inputTokens: 5000, outputTokens: 100 });
   meter.add({ provider: "anthropic", model: "claude-sonnet-5", inputTokens: 25_000, outputTokens: 2_000 });
@@ -64,6 +64,12 @@ test("provider/model — eng ko'p CHIQISH tokeni bergan juftlik", () => {
   const json = meter.toJson();
   assert.equal(json.provider, "anthropic", "MUTATSIYA: kirish tokeniga qarab tanlansa bu qizaradi");
   assert.equal(json.model, "claude-sonnet-5");
+  // Jonli tezis: 9 × Gemini (jami 3 000) va 1 × Claude baholovchi (1 500) — yozuvchi Gemini.
+  const thesis = new CostMeter();
+  for (let i = 0; i < 9; i++) thesis.add({ provider: "gemini", model: "gemini-3.7-flash", inputTokens: 2000, outputTokens: 333 });
+  thesis.add({ provider: "anthropic", model: "claude-sonnet-5", inputTokens: 12_000, outputTokens: 1_500 });
+  assert.equal(thesis.toJson().provider, "gemini", "MUTATSIYA: bitta eng katta chaqiruv bo'yicha tanlansa anthropic chiqadi");
+  assert.equal(thesis.toJson().calls, 10);
 });
 
 test("provider/model — teng chiqishda BIRINCHI chaqiruv saqlanadi (barqaror)", () => {
