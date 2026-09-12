@@ -39,7 +39,7 @@ export type ArticleParam = {
 };
 
 /** JSON bo'lib yuboriladigan maydonlar — `validate.ts` `JSON_FIELDS` (24 000 belgi). */
-export const ARTICLE_JSON_FIELDS = ["authors", "userRefs", "keywords", "userData"] as const;
+export const ARTICLE_JSON_FIELDS = ["authors", "userRefs", "keywords", "userData", "figureKinds"] as const;
 
 export const ARTICLE_PARAMS: ArticleParam[] = [
   { id: "topic", encode: "string", probeA: "Sun'iy intellekt ta'limda", probeB: "Qayta tiklanuvchi energiya", impacts: ["prompt", "research", "layout"] },
@@ -56,6 +56,13 @@ export const ARTICLE_PARAMS: ArticleParam[] = [
   { id: "userData", encode: "json", probeA: "", probeB: '{"categories":["2022","2023","2024"],"series":[{"name":"Talabalar","values":[80,110,120]}]}', impacts: ["figures"] },
   // Sxema soni paketga bog'liq (`FIGURES_BY_PAGES`: 3–5 bet → 1) — zond katta paketda 0 va 2 ni solishtiradi.
   { id: "figureCount", encode: "number", probeA: 0, probeB: 2, probeWith: { pages: "10-15" }, impacts: ["figures", "prompt"] },
+  /*
+   * Sxema turlari (AUDIT-18 Q-6): bo'sh — avtomatik; `["cycle"]` — faqat sikl.
+   * Zond: bo'lim promptida «allowed kinds» qatori va `figureSpecFromLlm`
+   * ruxsatsiz turni (process) rad etishi — ikkalasi katta paketda (sxema
+   * so'raladigan bo'limda) o'lchanadi.
+   */
+  { id: "figureKinds", encode: "json", probeA: "[]", probeB: '["cycle"]', probeWith: { pages: "10-15", figureCount: 2 }, impacts: ["figures", "prompt"] },
   { id: "research", encode: "boolean", probeA: false, probeB: true, impacts: ["research"] },
   { id: "extra", encode: "string", probeA: "", probeB: "Rasmiy uslub, «biz» olmoshisiz.", impacts: ["prompt"] },
 ];

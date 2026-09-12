@@ -13,7 +13,7 @@
  * Oq-qora chop: `<pattern>` shtrixlar (chart) — `PatternDef` dan.
  */
 import { xmlEscape } from "../xml";
-import { FONT_FAMILY, FONT_PX, LINE_K, skewOf, textWidth, type FigureLayout, type LayoutNode, type LayoutText, type PatternDef, type Prim } from "./model";
+import { FONT_FAMILY, FONT_PX, LINE_K, PAD_X, arcSpan, ellipsePt, skewOf, textWidth, type FigureLayout, type LayoutNode, type LayoutText, type PatternDef, type Prim } from "./model";
 
 export type SvgOpts = {
   /** Shrift ro'yxati (standart: TNR → Liberation Serif → Noto Serif → serif). */
@@ -64,6 +64,9 @@ function shapeSvg(nd: LayoutNode): string {
   const fill = xmlEscape(nd.fill ?? "#fff");
   const common = `fill="${fill}" stroke="${STROKE}" stroke-width="${STROKE_W}"`;
   switch (nd.shape) {
+    case "none":
+      // Shaklsiz matn bloki — `fill` berilsa fon to'rtburchagi (chegarasiz), aks holda hech narsa.
+      return nd.fill ? `<rect x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}" fill="${fill}"/>` : "";
     case "rounded":
       return `<rect x="${n(x)}" y="${n(y)}" width="${n(w)}" height="${n(h)}" rx="${n(nd.rx ?? h / 2)}" ${common}/>`;
     case "diamond":
@@ -79,13 +82,17 @@ function shapeSvg(nd: LayoutNode): string {
   }
 }
 
-/** Ko'p qatorli markazlangan matn (`tspan`). */
-function linesSvg(cx: number, cy: number, lines: string[], size: number, bold?: boolean): string {
+/**
+ * Ko'p qatorli markazlangan matn (`tspan`); `anchor: "start"` — chapdan
+ * (`cx` = matn boshi), `indent` — davom qatorlari chekinishi (NBSP bilan
+ * chekinish ishlamaydi: librsvg qator boshidagi bo'shliqni yutadi).
+ */
+function linesSvg(cx: number, cy: number, lines: string[], size: number, bold?: boolean, anchor: "middle" | "start" = "middle", indent = 0): string {
   const lineH = size * LINE_K;
   const first = baseline(cy - ((lines.length - 1) * lineH) / 2, size);
   const weight = bold ? ` font-weight="bold"` : "";
-  const spans = lines.map((l, i) => (i === 0 ? `<tspan x="${n(cx)}" y="${n(first)}">${xmlEscape(l)}</tspan>` : `<tspan x="${n(cx)}" dy="${n(lineH)}">${xmlEscape(l)}</tspan>`)).join("");
-  return `<text text-anchor="middle" font-size="${n(size)}"${weight}>${spans}</text>`;
+  const spans = lines.map((l, i) => (i === 0 ? `<tspan x="${n(cx)}" y="${n(first)}">${xmlEscape(l)}</tspan>` : `<tspan x="${n(cx + indent)}" dy="${n(lineH)}">${xmlEscape(l)}</tspan>`)).join("");
+  return `<text text-anchor="${anchor}" font-size="${n(size)}"${weight}>${spans}</text>`;
 }
 
 function textSvg(t: LayoutText, size: number): string {
@@ -109,11 +116,20 @@ function primSvg(p: Prim): string {
     case "rect":
       return `<rect x="${n(p.x)}" y="${n(p.y)}" width="${n(p.w)}" height="${n(p.h)}"${p.rx ? ` rx="${n(p.rx)}"` : ""} ${fillAttr(p)}${p.stroke ? ` stroke="${xmlEscape(p.stroke)}" stroke-width="1"` : ""}/>`;
     case "line":
-      return `<line x1="${n(p.x1)}" y1="${n(p.y1)}" x2="${n(p.x2)}" y2="${n(p.y2)}" stroke="${xmlEscape(p.stroke ?? STROKE)}" stroke-width="${n(p.width ?? STROKE_W)}"${p.dash ? ` stroke-dasharray="${xmlEscape(p.dash)}"` : ""}/>`;
+      return `<line x1="${n(p.x1)}" y1="${n(p.y1)}" x2="${n(p.x2)}" y2="${n(p.y2)}" stroke="${xmlEscape(p.stroke ?? STROKE)}" stroke-width="${n(p.width ?? STROKE_W)}"${p.dash ? ` stroke-dasharray="${xmlEscape(p.dash)}"` : ""}${p.arrow ? ` marker-end="url(#arrow)"` : ""}/>`;
     case "polyline":
       return `<polyline points="${p.points.map((q) => `${n(q.x)},${n(q.y)}`).join(" ")}" fill="none" stroke="${xmlEscape(p.stroke ?? STROKE)}" stroke-width="${n(p.width ?? STROKE_W)}" stroke-linejoin="round"${p.dash ? ` stroke-dasharray="${xmlEscape(p.dash)}"` : ""}/>`;
     case "path":
       return `<path d="${xmlEscape(p.d)}" ${fillAttr(p)}${p.stroke ? ` stroke="${xmlEscape(p.stroke)}" stroke-width="1"` : ""}/>`;
+    case "dot":
+      return `<circle cx="${n(p.x)}" cy="${n(p.y)}" r="${n(p.r)}" fill="${xmlEscape(p.fill ?? "#fff")}" stroke="${STROKE}" stroke-width="${STROKE_W}"/>`;
+    case "arc": {
+      // Yoy: boshlang'ich/oxirgi nuqta ellipsdan; large-arc 0 (yoy < 180°), sweep — bayroq.
+      const a = ellipsePt(p.cx, p.cy, p.rx, p.ry, p.a0);
+      const b = ellipsePt(p.cx, p.cy, p.rx, p.ry, p.a1);
+      const large = Math.abs(arcSpan(p)) > 180 ? 1 : 0;
+      return `<path d="M${n(a.x)},${n(a.y)} A${n(p.rx)},${n(p.ry)} 0 ${large} ${p.sweep} ${n(b.x)},${n(b.y)}" fill="none" stroke="${STROKE}" stroke-width="${STROKE_W}"${p.arrow ? ` marker-end="url(#arrow)"` : ""}/>`;
+    }
     case "marker": {
       const r = p.r ?? 3.6;
       const fill = xmlEscape(p.fill ?? STROKE);
@@ -141,13 +157,19 @@ export function figureSvg(layout: FigureLayout, opts: SvgOpts = {}): string {
   const H = Math.max(1, Math.round(layout.h));
   const parts: string[] = [];
   parts.push(`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" font-family="${font}" font-size="${n(base)}" fill="#000">`);
-  parts.push(`<defs><marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="${STROKE}"/></marker>${layout.patterns.map(patternDef).join("")}</defs>`);
+  // `arrow-rev` — ikki tomonlama o'q boshi (`marker-start`): `orient="auto-start-reverse"`
+  // librsvg eski versiyalarida yo'q, shuning uchun teskari uch alohida marker.
+  parts.push(
+    `<defs><marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="${STROKE}"/></marker>` +
+      `<marker id="arrow-rev" viewBox="0 0 10 10" refX="0" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto"><path d="M10,0 L0,5 L10,10 z" fill="${STROKE}"/></marker>` +
+      `${layout.patterns.map(patternDef).join("")}</defs>`,
+  );
   parts.push(`<rect width="${W}" height="${H}" fill="#fff"/>`);
   if (layout.prims.length) parts.push(`<g>${layout.prims.map(primSvg).join("")}</g>`);
   if (layout.edges.length) {
     const es = layout.edges.map((e) => {
       const pts = e.points.map((p) => `${n(p.x)},${n(p.y)}`).join(" ");
-      let s = `<polyline points="${pts}" fill="none" stroke="${STROKE}" stroke-width="${STROKE_W}" stroke-linejoin="round"${e.arrow ? ` marker-end="url(#arrow)"` : ""}/>`;
+      let s = `<polyline points="${pts}" fill="none" stroke="${STROKE}" stroke-width="${STROKE_W}" stroke-linejoin="round"${e.arrow ? ` marker-end="url(#arrow)"` : ""}${e.arrowStart ? ` marker-start="url(#arrow-rev)"` : ""}/>`;
       if (e.label && e.labelAt) s += textSvg({ x: e.labelAt.x, y: e.labelAt.y, text: e.label, anchor: "middle", halo: true }, base * 0.9);
       return s;
     });
@@ -157,7 +179,8 @@ export function figureSvg(layout: FigureLayout, opts: SvgOpts = {}): string {
     const ns = layout.nodes.map((nd) => {
       const size = (nd.size ?? layout.fontSize) * k;
       let s = shapeSvg(nd);
-      s += linesSvg(nd.x + nd.w / 2, nd.y + nd.h / 2 + (nd.dy ?? 0), nd.lines, size, nd.bold);
+      const pad = PAD_X * (size / FONT_PX);
+      s += nd.align === "start" ? linesSvg(nd.x + pad, nd.y + nd.h / 2 + (nd.dy ?? 0), nd.lines, size, nd.bold, "start", nd.indent ?? 0) : linesSvg(nd.x + nd.w / 2, nd.y + nd.h / 2 + (nd.dy ?? 0), nd.lines, size, nd.bold);
       if (nd.badge) {
         const r = 12 * (size / FONT_PX);
         s += `<circle cx="${n(nd.x + nd.w / 2)}" cy="${n(nd.y)}" r="${n(r)}" fill="#fff" stroke="${STROKE}" stroke-width="${STROKE_W}"/>`;

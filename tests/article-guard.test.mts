@@ -163,6 +163,37 @@ test("bo'lim prompti: manbalar `[ID] Muallif (yil). Sarlavha. Venue.` ko'rinishi
   assert.match(chart, /categories: 2022, 2023/);
 });
 
+test("sxema prompti (AUDIT-18): 8 tur shakli + «use for» qoidasi; tur tavsiyasi (analytical → matrix/compare/flow); figureKinds → faqat tanlangan turlar + «Allowed kinds»", () => {
+  const plan = { id: "results", skeletonId: "results", title: "Natijalar", brief: "x", words: 300, hard: true };
+  const ask = { plan, wantTable: false, wantFigure: true, wantChart: false };
+  const auto = sectionPrompt(ctxOf(), ask);
+  for (const k of ["flow", "process", "tree", "layers", "cycle", "timeline", "matrix", "compare"]) assert.match(auto, new RegExp(`\\{"kind":"${k}"`), `«${k}» shakli promptda`);
+  assert.match(auto, /"kind":"layers".*use for a system or platform ARCHITECTURE.*TOP .*BOTTOM/);
+  assert.match(auto, /"kind":"cycle".*REPEATING process or life cycle/);
+  assert.match(auto, /"kind":"timeline".*HISTORICAL stages.*chronological order/);
+  assert.match(auto, /"kind":"matrix".*EXACTLY 4 quadrants in the order top-left, top-right, bottom-left, bottom-right/);
+  assert.match(auto, /"kind":"compare".*"traditional vs proposed"/);
+  assert.match(auto, /every label ≤ 40 characters/);
+  assert.match(auto, /flow.*ACYCLIC/);
+  // Tur tavsiyasi: imrad_oak → flow, layers; analytical → matrix, compare, flow; review → timeline, layers, tree; methodical → process, cycle.
+  assert.match(auto, /most suitable kinds are usually: flow, layers/);
+  assert.match(sectionPrompt(ctxOf({ articleType: "analytical" }), ask), /most suitable kinds are usually: matrix, compare, flow/);
+  assert.match(sectionPrompt(ctxOf({ articleType: "review_narrative" }), ask), /usually: timeline, layers, tree/);
+  assert.match(sectionPrompt(ctxOf({ articleType: "methodical" }), ask), /usually: process, cycle/);
+  assert.match(sectionPrompt(ctxOf({ articleType: "case_study_care" }), ask), /usually: timeline/);
+  assert.ok(!/Allowed kinds/.test(auto), "avtomatik rejimda cheklov qatori yo'q");
+  // Foydalanuvchi tanlovi: faqat tanlangan turlar shakli + cheklov qatori; tavsiya yo'q.
+  const chosen = sectionPrompt(ctxOf({ figureKinds: '["cycle","matrix"]' }), ask);
+  assert.match(chosen, /Allowed kinds \(chosen by the author\): cycle, matrix — any other kind will be rejected/);
+  assert.match(chosen, /"kind":"cycle"/);
+  assert.match(chosen, /"kind":"matrix"/);
+  for (const k of ["flow", "process", "tree", "layers", "timeline", "compare"]) assert.ok(!new RegExp(`\\{"kind":"${k}"`).test(chosen), `«${k}» shakli tanlovda yo'q`);
+  assert.ok(!/most suitable kinds/.test(chosen));
+  // Noma'lum/`prisma`/`chart` tanlov sifatida qabul qilinmaydi.
+  assert.deepEqual(articleInputFromValues({ topic: "T", articleType: "imrad_oak", figureKinds: '["prisma","chart","zzz","tree","tree"]' }).figureKinds, ["tree"]);
+  assert.deepEqual(articleInputFromValues({ topic: "T", articleType: "imrad_oak", figureKinds: "cycle, matrix" }).figureKinds, ["cycle", "matrix"], "CSV ham qabul");
+});
+
 test("annotatsiya prompti: o'z tili birinchi qatorda, MUSTAQIL (tarjima emas), so'z va kalit so'z chegarasi profildan; structured — 4 qism", () => {
   const ctx = ctxOf();
   const sysRu = abstractSystemPrompt(ctx, "ru");

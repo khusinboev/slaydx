@@ -8,7 +8,7 @@ import type { SlideImageStyle, SlideTextVolume } from "./slide-params";
 import type { SlidePurpose } from "./slide-purpose";
 import type { SlideResearch } from "./slide-research";
 import type { ResumeModel } from "./resume/model";
-import type { ArticleModel, ArticleTypeId, CiteStyle, PublicationProfileId } from "./article/types";
+import type { ArticleModel, ArticleTypeId, CiteStyle, PublicationProfileId, SelectableFigureKind } from "./article/types";
 import type { ResumePaletteId, ResumeTemplateId } from "./resume/templates";
 
 export type GenImage = {
@@ -196,6 +196,8 @@ export type DocMeta = {
   udk: string;
   /** Sxema/diagramma soni (0–4). */
   figureCount: number;
+  /** «Sxema turlari» oq ro'yxati (AUDIT-18 Q-6); yo'q/bo'sh — avtomatik. */
+  figureKinds?: SelectableFigureKind[];
   /** Internetdan (OpenAlex/Crossref) manba qidirish. */
   research: boolean;
   /**

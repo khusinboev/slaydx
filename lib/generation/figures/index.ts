@@ -19,6 +19,11 @@ import { figureSvg } from "./svg";
 import { figurePng } from "./png";
 import { prismaLabels, prismaNumbers } from "./prisma";
 import { chartData, fmtNum } from "./chart";
+import { layersData } from "./layout-layers";
+import { cycleSteps } from "./layout-cycle";
+import { timelineEvents } from "./layout-timeline";
+import { matrixData } from "./layout-matrix";
+import { compareData } from "./layout-compare";
 
 export { layoutFigure } from "./layout";
 export { figureSvg } from "./svg";
@@ -113,6 +118,37 @@ export function figureFallbackBlocks(figure: Figure, lang: string): Block[] {
       const unit = d.unit ? ` ${d.unit}` : "";
       const items = d.categories.map((c, i) => `${c}: ${d.series.map((s) => (d.series.length > 1 ? `${s.name} — ${fmtNum(s.values[i], lang)}${unit}` : `${fmtNum(s.values[i], lang)}${unit}`)).join("; ")}`);
       return [...head, ...li(items)];
+    }
+    /* ── AUDIT-18 WP-B turlari: tartib saqlanadi (yuqoridan pastga / sikl / vaqt / kvadrant / ustun). ── */
+    case "layers": {
+      const rows = layersData(spec) ?? (Array.isArray(spec.layers) ? spec.layers.filter((l) => l && l.label).map((l) => ({ label: String(l.label), items: Array.isArray(l.items) ? l.items.map(String) : [] })) : []);
+      return [...head, ...li(rows.map((r) => (r.items.length ? `${r.label}: ${r.items.join(", ")}` : r.label)))];
+    }
+    case "cycle": {
+      const steps = cycleSteps(spec) ?? (Array.isArray(spec.steps) ? spec.steps.map((s) => String(s?.label ?? "").trim()).filter(Boolean) : []);
+      // Sikl — oxirgi bosqichdan birinchisiga qaytish belgisi.
+      return [...head, ...li(steps.map((s, i) => (i === steps.length - 1 && steps.length > 1 ? `${s} → ${steps[0]}` : s)))];
+    }
+    case "timeline": {
+      const events = timelineEvents(spec) ?? (Array.isArray(spec.events) ? spec.events.filter((e) => e && e.label).map((e) => ({ when: String(e.when ?? "").trim(), label: String(e.label) })) : []);
+      return [...head, ...li(events.map((e) => (e.when ? `${e.when} — ${e.label}` : e.label)))];
+    }
+    case "matrix": {
+      const d = matrixData(spec);
+      const quads = d ? d.quadrants : Array.isArray(spec.quadrants) ? spec.quadrants.filter((q) => q && q.title).map((q) => ({ title: String(q.title), items: Array.isArray(q.items) ? q.items.map(String) : [] })) : [];
+      const axes: Block[] = [];
+      const ax = d?.xAxis ?? spec.xAxis;
+      const ay = d?.yAxis ?? spec.yAxis;
+      if (ax?.low && ax?.high) axes.push({ kind: "p", text: `${ax.label ? `${ax.label}: ` : ""}${ax.low} → ${ax.high}` });
+      if (ay?.low && ay?.high) axes.push({ kind: "p", text: `${ay.label ? `${ay.label}: ` : ""}${ay.low} → ${ay.high}` });
+      return [...head, ...axes, ...li(quads.map((q) => (q.items.length ? `${q.title}: ${q.items.join(", ")}` : q.title)))];
+    }
+    case "compare": {
+      const d = compareData(spec);
+      const left = d?.left ?? { title: String(spec.left?.title ?? ""), items: Array.isArray(spec.left?.items) ? spec.left.items.map(String) : [] };
+      const right = d?.right ?? { title: String(spec.right?.title ?? ""), items: Array.isArray(spec.right?.items) ? spec.right.items.map(String) : [] };
+      if (d?.rows) return [...head, ...li(d.rows.map((r, i) => `${r}: ${left.title} — ${left.items[i] ?? "—"}; ${right.title} — ${right.items[i] ?? "—"}`))];
+      return [...head, ...li([`${left.title}: ${left.items.join(", ")}`, `${right.title}: ${right.items.join(", ")}`])];
     }
     default:
       return head;

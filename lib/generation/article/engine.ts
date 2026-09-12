@@ -31,7 +31,7 @@ import { parseLlmObject } from "../json";
 import { mapPool, remainingMs, unverifiedReferenceNote } from "../quality";
 import { abstractFromLlm, blocksFromLlm, clipWords, str } from "./parse";
 import { articleWordPlan } from "./plan";
-import { ARTICLE_LIMITS, type ArticleModel, type ArticleWordPlan, type Figure, type FigureSpec, type TreeNode } from "./types";
+import { ARTICLE_LIMITS, FIGURE_LIMITS, type ArticleModel, type ArticleWordPlan, type Figure, type FigureAxis, type FigureKind, type FigureSpec, type TreeNode } from "./types";
 import { ARTICLE_TYPES } from "./types-registry";
 import { PUBLICATION_PROFILES } from "./profiles";
 import { articleLabels } from "./labels";
@@ -152,15 +152,96 @@ function treeOf(raw: unknown, depth: number, budget: { n: number }): TreeNode | 
 
 /**
  * Sxema spetsifikatsiyasini tekshiradi/tozalaydi. Chegaralar
- * `ARTICLE_LIMITS` (14 tugun / 24 qirra). `chart` faqat foydalanuvchi
- * ma'lumoti bilan — ma'lumot VERBATIM foydalanuvchidan ko'chiriladi,
- * model raqami e'tiborsiz. `prisma` bu yerda qabul qilinmaydi (dvigatel
- * uni statistikadan o'zi quradi).
+ * `ARTICLE_LIMITS` (14 tugun / 24 qirra), yangi turlar — `FIGURE_LIMITS`
+ * (AUDIT-18 WP-B: layers 2–7 × ≤4, cycle 3–8, timeline 3–10, matrix aynan
+ * 4 kvadrant, compare ≤6 band; ortig'i KESILADI, kami → `null`). `chart`
+ * faqat foydalanuvchi ma'lumoti bilan — ma'lumot VERBATIM foydalanuvchidan
+ * ko'chiriladi, model raqami e'tiborsiz. `prisma` bu yerda qabul
+ * qilinmaydi (dvigatel uni statistikadan o'zi quradi).
+ *
+ * `figureKinds` (forma «Sxema turlari») bo'sh bo'lmasa — FAQAT shu turlar
+ * (oq ro'yxat); `chart` ro'yxatga bog'liq emas (ma'lumot darvozasi o'zi).
  */
-export function figureSpecFromLlm(raw: unknown, input: Pick<ArticleInput, "userData">): FigureSpec | null {
+export function figureSpecFromLlm(raw: unknown, input: Pick<ArticleInput, "userData"> & { figureKinds?: readonly FigureKind[] }): FigureSpec | null {
   const s = raw as Record<string, unknown> | null;
   if (!s || typeof s !== "object") return null;
   const kind = String(s.kind ?? "");
+  const allowed = input.figureKinds ?? [];
+  if (allowed.length && kind !== "chart" && !allowed.includes(kind as FigureKind)) return null;
+  const list = (v: unknown, max: number, chars: number): string[] => (Array.isArray(v) ? v : []).map((x) => str(x, chars)).filter(Boolean).slice(0, max);
+  if (kind === "layers") {
+    const layers = (Array.isArray(s.layers) ? s.layers : [])
+      .map((l) => {
+        const o = l as Record<string, unknown> | null;
+        const label = str(o?.label, 80);
+        if (!label) return null;
+        const items = list(o?.items, FIGURE_LIMITS.layerItems, 80);
+        return items.length ? { label, items } : { label };
+      })
+      .filter((l): l is NonNullable<typeof l> => Boolean(l))
+      .slice(0, FIGURE_LIMITS.layersMax);
+    if (layers.length < FIGURE_LIMITS.layersMin) return null;
+    return { kind: "layers", layers, ...(s.arrows === false ? { arrows: false } : {}) };
+  }
+  if (kind === "cycle") {
+    const steps = (Array.isArray(s.steps) ? s.steps : [])
+      .map((x) => str(x && typeof x === "object" ? (x as { label?: unknown }).label : x, 80))
+      .filter(Boolean)
+      .slice(0, FIGURE_LIMITS.cycleMax)
+      .map((label) => ({ label }));
+    if (steps.length < FIGURE_LIMITS.cycleMin) return null;
+    const center = str(s.center, 60);
+    return { kind: "cycle", steps, ...(center ? { center } : {}), ...(s.clockwise === false ? { clockwise: false } : {}) };
+  }
+  if (kind === "timeline") {
+    const events = (Array.isArray(s.events) ? s.events : [])
+      .map((e) => {
+        const o = e as Record<string, unknown> | null;
+        const when = str(o?.when, 40);
+        const label = str(o?.label, 90);
+        return when && label ? { when, label } : null;
+      })
+      .filter((e): e is NonNullable<typeof e> => Boolean(e))
+      .slice(0, FIGURE_LIMITS.timelineMax);
+    if (events.length < FIGURE_LIMITS.timelineMin) return null;
+    return { kind: "timeline", events };
+  }
+  if (kind === "matrix") {
+    const quadrants = (Array.isArray(s.quadrants) ? s.quadrants : [])
+      .map((q) => {
+        const o = q as Record<string, unknown> | null;
+        const title = str(o?.title, 60);
+        if (!title) return null;
+        const items = list(o?.items, FIGURE_LIMITS.quadrantItems, 90);
+        return items.length ? { title, items } : { title };
+      })
+      .filter((q): q is NonNullable<typeof q> => Boolean(q));
+    if (quadrants.length !== FIGURE_LIMITS.quadrants) return null;
+    const axis = (v: unknown): FigureAxis | undefined => {
+      const o = v as Record<string, unknown> | null;
+      const low = str(o?.low, 30);
+      const high = str(o?.high, 30);
+      if (!o || typeof o !== "object" || !low || !high) return undefined;
+      const label = str(o.label, 40);
+      return label ? { low, high, label } : { low, high };
+    };
+    const xAxis = axis(s.xAxis);
+    const yAxis = axis(s.yAxis);
+    return { kind: "matrix", quadrants, ...(xAxis ? { xAxis } : {}), ...(yAxis ? { yAxis } : {}) };
+  }
+  if (kind === "compare") {
+    const rows = list(s.rows, FIGURE_LIMITS.compareItems, 60);
+    const max = rows.length || FIGURE_LIMITS.compareItems;
+    const side = (v: unknown) => {
+      const o = v as Record<string, unknown> | null;
+      const title = str(o?.title, 60);
+      return title ? { title, items: list(o?.items, max, 100) } : null;
+    };
+    const left = side(s.left);
+    const right = side(s.right);
+    if (!left || !right || (!left.items.length && !right.items.length)) return null;
+    return { kind: "compare", left, right, ...(rows.length ? { rows } : {}) };
+  }
   if (kind === "flow") {
     const nodes = (Array.isArray(s.nodes) ? s.nodes : [])
       .map((n) => {
@@ -391,7 +472,7 @@ export async function buildArticleDoc(meta: DocMeta, values: FormValues, opts: A
   const type = ARTICLE_TYPES[input.articleType];
   const profile = PUBLICATION_PROFILES[input.pubProfile];
   const labels = articleLabels(input.language);
-  const docMeta: DocMeta = { ...meta, language: input.language, topic: input.topic || meta.topic, articleType: type.id, pubProfile: profile.id, citeStyle: input.citeStyle ?? profile.cite, udk: input.udk, figureCount: input.figureCount, research: input.research };
+  const docMeta: DocMeta = { ...meta, language: input.language, topic: input.topic || meta.topic, articleType: type.id, pubProfile: profile.id, citeStyle: input.citeStyle ?? profile.cite, udk: input.udk, figureCount: input.figureCount, ...(input.figureKinds.length ? { figureKinds: input.figureKinds } : {}), research: input.research };
   const plan = articleWordPlan(docMeta, type, profile);
   const ctx: ArticleContext = { input, meta: docMeta, type, profile, labels, wordTarget: plan.body, plan, refs: [] };
   const stage = (progress: number, step: string) => opts.onStage?.({ progress, step });

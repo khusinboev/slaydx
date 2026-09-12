@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import sharp from "sharp";
 import type { Figure, FigureSpec } from "../lib/generation/article/types.ts";
 import { layoutFigure } from "../lib/generation/figures/layout.ts";
+import { arcPoints } from "../lib/generation/figures/model.ts";
 import { figureSvg } from "../lib/generation/figures/svg.ts";
 import { figurePng, svgWidthPx, targetWidthPx } from "../lib/generation/figures/png.ts";
 import { buildFigure, figureFallbackBlocks, noDataLabel } from "../lib/generation/figures/index.ts";
@@ -65,6 +66,32 @@ test("png: matn va chiziqlar haqiqatan chiziladi — oq bo'lmagan piksel ulushi 
   // Bo'sh maket (matnsiz) — deyarli oq.
   const blank = (await figurePng(figureSvg({ kind: "flow", w: 605, h: 100, fontSize: 14, nodes: [], edges: [], texts: [], prims: [], patterns: [], mm: { w: 160, h: 26 } })))!;
   assert.ok((await darkShare(blank.png)) < 0.001);
+});
+
+test("png (AUDIT-18): cycle — yoy o'qlar va matn haqiqatan chiziladi (sharp), 1890 px, taxminan kvadrat; buildFigure url beradi", async () => {
+  const cycle: FigureSpec = { kind: "cycle", center: "Sikl", steps: [{ label: "Reja" }, { label: "Bajarish" }, { label: "Tekshirish" }, { label: "Tuzatish" }] };
+  const l = layoutFigure(cycle)!;
+  const out = (await figurePng(figureSvg(l)))!;
+  assert.equal(out.w, 1890);
+  assert.ok(out.h > 500 && out.h <= 1890, `balandlik ${out.h}`);
+  const share = await darkShare(out.png);
+  assert.ok(share > 0.005 && share < 0.3, `qora ulush ${(share * 100).toFixed(2)}%`);
+  // Yoy o'qi haqiqatan chizilgan: har yoyning o'rta nuqtasi atrofida (±4 px @300 dpi) qora piksel bor.
+  const { data, info } = await sharp(out.png).raw().toBuffer({ resolveWithObject: true });
+  const k = 1890 / l.w;
+  const arcs = l.prims.filter((p): p is Extract<typeof p, { k: "arc" }> => p.k === "arc");
+  assert.equal(arcs.length, 4);
+  for (const a of arcs) {
+    const mid = arcPoints(a, 2)[1];
+    const cx = Math.round(mid.x * k);
+    const cy = Math.round(mid.y * k);
+    let dark = 0;
+    for (let y = cy - 4; y <= cy + 4; y++) for (let x = cx - 4; x <= cx + 4; x++) if (data[(y * info.width + x) * info.channels] < 128) dark++;
+    assert.ok(dark >= 3, `yoy o'rtasida (${cx},${cy}) qora piksel: ${dark}`);
+  }
+  const built = await buildFigure({ id: "f9", kind: "scheme", caption: "Sikl", spec: cycle, w: 0, h: 0 }, { lang: "uz" });
+  assert.ok(built.url?.startsWith("data:image/png;base64,"));
+  assert.equal(built.fallbackBlocks, undefined);
 });
 
 test("png: dpi/kenglik opsiyalari; buzuq SVG → null", async () => {

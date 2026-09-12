@@ -105,7 +105,12 @@ async function probe(values: FormValues): Promise<Probe> {
       abstracts: d.abstracts?.map((a) => a.lang),
     }),
     research: JSON.stringify({ queries: research.stats.queries, refs: research.refs.map((r) => [r.id, r.verified]) }),
-    figures: JSON.stringify({ plan: [...visuals.entries()], chart: figureSpecFromLlm({ kind: "chart", chart: "bar", categories: ["x"], series: [{ name: "s", values: [1] }] }, ctx.input) }),
+    // `figures`: vizual reja + modeldan kelgan spec'ning qabul/rad etilishi (chart — userData, process — figureKinds oq ro'yxati).
+    figures: JSON.stringify({
+      plan: [...visuals.entries()],
+      chart: figureSpecFromLlm({ kind: "chart", chart: "bar", categories: ["x"], series: [{ name: "s", values: [1] }] }, ctx.input),
+      process: figureSpecFromLlm({ kind: "process", steps: ["Birinchi", "Ikkinchi", "Uchinchi"] }, ctx.input),
+    }),
     review: JSON.stringify({ refsMin: ctx.profile.refsMin, refsMax: ctx.profile.refsMax, recent: [ctx.profile.recentYearsMin, ctx.profile.recentShare], abstractWords: ctx.profile.abstractWords, keywords: ctx.profile.keywords, facts: factNumbers(ctx.input.userFacts) }),
     price: String(priceFor(article, v)),
     language: `${ctx.input.language}/${d.meta.language}`,
@@ -114,8 +119,8 @@ async function probe(values: FormValues): Promise<Probe> {
 
 // ───────────────────────────────────────────── reyestr tuzilishi
 
-test("reyestr: 15 parametr, JSON maydonlar reyestr bilan mos, forma qamrovi ro'yxati", () => {
-  assert.equal(ARTICLE_PARAMS.length, 15);
+test("reyestr: 16 parametr, JSON maydonlar reyestr bilan mos, forma qamrovi ro'yxati", () => {
+  assert.equal(ARTICLE_PARAMS.length, 16);
   assert.deepEqual(ARTICLE_FORM_FIELDS, ARTICLE_PARAMS.map((p) => p.id));
   assert.deepEqual(
     ARTICLE_PARAMS.filter((p) => p.encode === "json").map((p) => p.id).sort(),

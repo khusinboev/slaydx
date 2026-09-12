@@ -2,6 +2,7 @@ import { defaultPages } from "../tools";
 import { ARTICLE_LIMITS, CITE_STYLES, FIGURES_BY_PAGES, type ArticleTypeId, type CiteStyle, type PagesId, type PublicationProfileId } from "./article/types";
 import { isArticleTypeId } from "./article/types-registry";
 import { isPublicationProfileId } from "./article/profiles";
+import { parseFigureKinds } from "./article/input";
 import type { FormValues, ToolConfig } from "../types";
 import { normalizeAudienceId } from "./slide-audience";
 import { isSlideBlockId, type SlideBlockId } from "./slide-blocks";
@@ -262,6 +263,8 @@ export function extractMeta(tool: ToolConfig, values: FormValues): DocMeta {
     udk: s(values, "udk").slice(0, ARTICLE_LIMITS.udkChars),
     // Sxema soni PAKETGA bog'liq (`FIGURES_BY_PAGES`; `parseArticleInput` bilan bir xil chegara).
     figureCount: Math.max(0, Math.min(articleFigureCap(s(values, "pages")), Math.round(Number(values.figureCount ?? 2)) || 0)),
+    // «Sxema turlari» oq ro'yxati (AUDIT-18) — bo'sh bo'lsa maydon umuman yozilmaydi (avtomatik).
+    ...(parseFigureKinds(values.figureKinds).length ? { figureKinds: parseFigureKinds(values.figureKinds) } : {}),
     research: values.research !== false,
     design: s(values, "design", "iris"),
     // Yil SHU YERDA muzlaydi — `title-model.ts` uni `doc.meta` dan oladi,

@@ -5,7 +5,12 @@
  *
  * 10 namuna (flow 8 tugun + decision, flow 14 tugun (chegara), flow LR,
  * process 6 qadam, tree 3 daraja, keng daraxt (osilgan barglar), PRISMA,
- * chart bar/line/pie) → SVG + PNG 300 dpi. Standart papka `/tmp/figs`.
+ * chart bar/line/pie) + AUDIT-18 WP-B: layers 7 qatlam (chegara) va 3
+ * qatlam bandsiz, cycle 8 bosqich (chegara) va 4 bosqich teskari, timeline
+ * 10 voqea (ikki qator) va 4 voqea, matrix o'qli va SWOT, compare ustunli va
+ * `rows` bilan → SVG + PNG 300 dpi. Standart papka `/tmp/figs`.
+ *
+ *   scripts/heavy.sh -m 2G -t 300 npx tsx scripts/figures-lab.mts [papka] [id-filtr]
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -220,10 +225,166 @@ export const SAMPLES: Figure[] = [
       ],
     },
   },
+  /* ── AUDIT-18 WP-B: 5 yangi tur, chegaraviy holatlar ── */
+  {
+    id: "layers7",
+    kind: "scheme",
+    caption: "Raqamli egizak platformasining qatlamli arxitekturasi (7 qatlam — chegara)",
+    w: 0,
+    h: 0,
+    spec: {
+      kind: "layers",
+      layers: [
+        { label: "Foydalanuvchi ilovalari", items: ["Veb-panel", "Mobil ilova", "Hisobot generatori", "Bildirishnomalar"] },
+        { label: "Xizmatlar (API)", items: ["Autentifikatsiya", "Buyurtmalar xizmati", "Tahlil xizmati"] },
+        { label: "Raqamli egizak modeli", items: ["Fizik model", "Ma’lumotlarga asoslangan model (ML)"] },
+        { label: "Ma’lumotlarni qayta ishlash", items: ["Oqim (Kafka)", "Paket (Spark)", "Saqlash (TSDB)"] },
+        { label: "Aloqa qatlami", items: ["MQTT", "OPC UA", "5G / LTE"] },
+        { label: "Chekka hisoblash", items: ["Shlyuz", "Oldindan filtrlash"] },
+        { label: "Fizik obyektlar va datchiklar", items: ["Dastgohlar", "Datchiklar", "Ijro mexanizmlari", "Kameralar"] },
+      ],
+    },
+  },
+  {
+    id: "layers3",
+    kind: "scheme",
+    caption: "Uch qatlamli ilova (bandsiz, o‘qsiz)",
+    w: 0,
+    h: 0,
+    spec: { kind: "layers", arrows: false, layers: [{ label: "Taqdimot qatlami" }, { label: "Biznes mantiq qatlami" }, { label: "Ma’lumotlar qatlami" }] },
+  },
+  {
+    id: "cycle8",
+    kind: "scheme",
+    caption: "Sifatni uzluksiz yaxshilash sikli (8 bosqich — chegara)",
+    w: 0,
+    h: 0,
+    spec: {
+      kind: "cycle",
+      center: "Uzluksiz yaxshilash",
+      steps: [
+        { label: "Muammoni aniqlash" },
+        { label: "Ma’lumot yig‘ish" },
+        { label: "Sabablarni tahlil qilish" },
+        { label: "Yechimni rejalashtirish" },
+        { label: "Sinov joriy etish" },
+        { label: "Natijani o‘lchash" },
+        { label: "Standartlashtirish" },
+        { label: "Keyingi maqsad" },
+      ],
+    },
+  },
+  {
+    id: "cycle4-ccw",
+    kind: "scheme",
+    caption: "PDCA sikli (4 bosqich, soat yo‘nalishiga teskari)",
+    w: 0,
+    h: 0,
+    spec: { kind: "cycle", clockwise: false, steps: [{ label: "Rejalashtirish (Plan)" }, { label: "Bajarish (Do)" }, { label: "Tekshirish (Check)" }, { label: "Tuzatish (Act)" }] },
+  },
+  {
+    id: "timeline10",
+    kind: "scheme",
+    caption: "Raqamli egizak texnologiyasi evolyutsiyasi (10 voqea — ikki qator)",
+    w: 0,
+    h: 0,
+    spec: {
+      kind: "timeline",
+      events: [
+        { when: "2002", label: "Grieves: mahsulot hayot sikli konsepsiyasi" },
+        { when: "2010", label: "NASA texnologik yo‘l xaritasi" },
+        { when: "2012", label: "Aerokosmik sohada birinchi tatbiq" },
+        { when: "2015", label: "Sanoat 4.0 dasturlari" },
+        { when: "2017", label: "Gartner: top-10 texnologiya" },
+        { when: "2018", label: "ISO 23247 ustida ish boshlandi" },
+        { when: "2019", label: "Shahar miqyosidagi egizaklar" },
+        { when: "2020", label: "Pandemiya: masofaviy monitoring" },
+        { when: "2022", label: "Standartlashtirish (ISO 23247)" },
+        { when: "2024", label: "Generativ AI bilan integratsiya" },
+      ],
+    },
+  },
+  {
+    id: "timeline4",
+    kind: "scheme",
+    caption: "Tajriba jadvali (4 bosqich)",
+    w: 0,
+    h: 0,
+    spec: {
+      kind: "timeline",
+      events: [
+        { when: "1-hafta", label: "Dastlabki so‘rovnoma va kirish testi" },
+        { when: "2–6-hafta", label: "Adaptiv platformada mashg‘ulotlar" },
+        { when: "7-hafta", label: "Oraliq nazorat" },
+        { when: "12-hafta", label: "Yakuniy test va natijalar tahlili" },
+      ],
+    },
+  },
+  {
+    id: "matrix-axes",
+    kind: "scheme",
+    caption: "Texnologiyalarni joriy etish ustuvorligi (ta’sir × murakkablik)",
+    w: 0,
+    h: 0,
+    spec: {
+      kind: "matrix",
+      xAxis: { low: "Past murakkablik", high: "Yuqori murakkablik", label: "Joriy etish murakkabligi" },
+      yAxis: { low: "Past ta’sir", high: "Yuqori ta’sir", label: "Iqtisodiy ta’sir" },
+      quadrants: [
+        { title: "Tezkor g‘alaba", items: ["Datchiklar monitoringi", "Energiya hisobi"] },
+        { title: "Strategik loyihalar", items: ["To‘liq raqamli egizak", "Bashoratli ta’mirlash tizimi", "Avtonom logistika"] },
+        { title: "Ikkinchi darajali", items: ["Hisobot avtomatlashtirish"] },
+        { title: "Qayta ko‘rib chiqish", items: ["Blokcheyn kuzatuvi", "AR yordamchisi"] },
+      ],
+    },
+  },
+  {
+    id: "matrix-swot",
+    kind: "scheme",
+    caption: "SWOT tahlili (o‘qsiz)",
+    w: 0,
+    h: 0,
+    spec: {
+      kind: "matrix",
+      quadrants: [
+        { title: "Kuchli tomonlar", items: ["Malakali muhandislar", "Zamonaviy dastgohlar parki", "Eksport tajribasi"] },
+        { title: "Zaif tomonlar", items: ["Raqamli infratuzilma yetishmasligi", "Ma’lumotlar sifatining pastligi"] },
+        { title: "Imkoniyatlar", items: ["Davlat dasturlari va grantlar", "Mahalliy bozorning o‘sishi", "Xalqaro hamkorlik", "Yosh kadrlar"] },
+        { title: "Tahdidlar", items: ["Import qaramligi", "Kiberxavfsizlik xatarlari"] },
+      ],
+    },
+  },
+  {
+    id: "compare-cols",
+    kind: "scheme",
+    caption: "An’anaviy va raqamli egizakka asoslangan ta’mirlash",
+    w: 0,
+    h: 0,
+    spec: {
+      kind: "compare",
+      left: { title: "An’anaviy ta’mirlash", items: ["Rejali-ogohlantiruvchi jadval", "Nosozlikdan keyin aralashuv", "Qo‘lda hisobot", "Ehtiyot qismlar zaxirasi katta", "Kutilmagan to‘xtashlar", "Tajribaga tayanish"] },
+      right: { title: "Raqamli egizak asosida", items: ["Holatga qarab (condition-based)", "Bashoratli aralashuv", "Avtomatik hisobot va ogohlantirish", "Zaxira talab bo‘yicha", "To‘xtashlar rejalashtiriladi", "Ma’lumotga tayanish"] },
+    },
+  },
+  {
+    id: "compare-rows",
+    kind: "scheme",
+    caption: "Mezonlar bo‘yicha taqqoslash (rows bilan)",
+    w: 0,
+    h: 0,
+    spec: {
+      kind: "compare",
+      rows: ["Qaror asosi", "Aralashuv vaqti", "To‘xtash xarajati", "Boshlang‘ich sarmoya", "Kadr talabi"],
+      left: { title: "An’anaviy yondashuv", items: ["Jadval va tajriba", "Nosozlikdan keyin yoki muddat bo‘yicha", "Yuqori (kutilmagan)", "Past", "Mexanik, texnolog"] },
+      right: { title: "Taklif etilayotgan yondashuv", items: ["Datchik ma’lumotlari va model bashorati", "Nosozlikdan oldin, rejalashtirilgan", "Past (rejalashtirilgan)", "O‘rta–yuqori (datchik, dasturiy ta’minot)", "Mexanik + ma’lumot tahlilchisi"] },
+    },
+  },
 ];
 
 async function main() {
+  const filter = process.argv[3];
   for (const f of SAMPLES) {
+    if (filter && !f.id.includes(filter)) continue;
     const t0 = Date.now();
     const layout = layoutFigure(f.spec, { lang: "uz" });
     if (!layout) {
