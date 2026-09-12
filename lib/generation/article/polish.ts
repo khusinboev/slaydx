@@ -624,7 +624,8 @@ export async function runPolish(doc: AcademicDoc, review: ArticleReview, deps: P
     unresolved: [...(deps.guard?.unresolved ?? []).filter((u) => !rewritten.has(u.sectionId)), ...ap.unresolved],
     emptySections: (deps.guard?.emptySections ?? []).filter((id) => !rewritten.has(id)),
   };
-  let fresh = await reviewArticle(res.doc, { complete, deadline: deps.deadline, wordTarget, judge, now, research: deps.research, guard, onUsage: deps.onUsage });
+  // `onUsage` bu yerda EMAS — `complete` o'rami har chaqiruvni allaqachon hisoblaydi (baholovchi ikki marta sanalmasin).
+  let fresh = await reviewArticle(res.doc, { complete, deadline: deps.deadline, wordTarget, judge, now, research: deps.research, guard });
   if (judge && fresh.judgeNotes.includes(JUDGE_NO_ANSWER)) {
     const j = judgeFromReview(review);
     if (j) {

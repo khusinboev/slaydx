@@ -8,8 +8,9 @@
  *   4 visuals    62→74   jadval (langar) + sxema SPEC (PNG ni WP3 chizadi)
  *   5 abstracts  74→82   uz + ru + en MUSTAQIL, kalit so'zlar; highlights (Elsevier)
  *   6 references 82→86   `verifyCitations` → cited-only; PRISMA (sistematik sharh)
- *   7 review     88→94   `review.ts` qoidalar + `judge` → `doc.article.review` (xatoda hisobotsiz)
- *   (8 render — `index.ts`/`render-docx`.)
+ *   7 review     88→92   `review.ts` qoidalar + `judge` → `doc.article.review` (xatoda hisobotsiz)
+ *   8 polish     92→96   `polish.ts runPolish` — ball < 90 va byudjet ≥ 90 s bo'lsa (AUDIT-18 Q-1…Q-3)
+ *   (9 render 96→100 — `index.ts`/`render-docx`.)
  *
  * Yagona manba qarori (D-1): matn `sections` da, metama'lumot `doc.article`
  * da; tartib/raqamlash `layout.ts planArticle` (WP2). Bu fayl raqam
@@ -51,6 +52,7 @@ import {
 } from "./prompts";
 import { guardSection, missingFactNumbers, skeletonCoverage, type SectionGuardReport } from "./guard";
 import { reviewArticle } from "./review";
+import { runPolish, userNeeds } from "./polish";
 import { collectReferences, type CompleteFn, type ResearchStats } from "../research/pipeline";
 import { citedOnly, referenceIndex, verifyCitations, verifyCitationsInText, type Unresolved } from "../research/verify";
 
@@ -66,6 +68,11 @@ export type ArticleBuildOpts = {
   /** Test seam — OpenAlex/Crossref. */
   fetchImpl?: typeof fetch;
   retryBaseMs?: number;
+  /**
+   * Avto-sayqal (8-bosqich). Standart `true`; jonli sinov/testlar `false`
+   * bilan o'chiradi; berilmasa `ARTICLE_POLISH=0` muhiti ham o'chiradi.
+   */
+  polish?: boolean;
 };
 
 export type ArticleCost = ReturnType<CostMeter["toJson"]>;
@@ -97,6 +104,10 @@ const EXPAND_BELOW = 0.7;
 /** Rasm uchun taxminiy piksel o'lchami (160 mm × 300 dpi); WP3 haqiqiy o'lchamni qo'yadi. */
 const FIGURE_W = 1890;
 const FIGURE_H = 1100;
+/** Avto-sayqal: ball shundan past bo'lsa (Q-1 «≥ 90 → to'xtaydi»). */
+export const POLISH_BELOW = 90;
+/** Avto-sayqal uchun byudjetdan kamida shuncha qolishi kerak (2 to'lqin × 30 s + baholovchi). */
+export const POLISH_MIN_MS = 90_000;
 
 export { articleWordPlan, articleWordsPerPage } from "./plan";
 export type { ArticleWordPlan };
@@ -565,7 +576,7 @@ export async function buildArticleDoc(meta: DocMeta, values: FormValues, opts: A
     language: input.language,
   };
   const anyUnverified = refs.some((r) => r.verified === "unverified");
-  const doc: AcademicDoc = {
+  const draft: AcademicDoc = {
     meta: docMeta,
     titlePage: false,
     toc: false,
@@ -585,6 +596,7 @@ export async function buildArticleDoc(meta: DocMeta, values: FormValues, opts: A
    * `usage` i sarfga qo'shiladi (`cost_json`).
    */
   stage(88, "Tayyorlik hisoboti");
+  let doc: AcademicDoc = draft;
   try {
     const review = await reviewArticle(doc, {
       research: research.stats,
@@ -594,11 +606,56 @@ export async function buildArticleDoc(meta: DocMeta, values: FormValues, opts: A
       wordTarget: plan.body,
       onUsage: (u) => meter.add(u),
     });
+    review.userNeeds = userNeeds(review, doc);
     article.review = review;
-    stage(94, `Hisobot: ${review.score} ball`);
+    stage(92, `Hisobot: ${review.score} ball`);
   } catch (e) {
     console.warn("[article] tayyorlik hisoboti tuzilmadi:", e instanceof Error ? e.message : e);
-    stage(94, "Hisobotsiz davom etildi");
+    stage(92, "Hisobotsiz davom etildi");
+  }
+
+  /*
+   * ── 8. polish (Maqola 3, AUDIT-18 Q-1…Q-3) — hisobotdagi tuzatiladigan
+   * bandlarni dvigatel O'ZI tuzatadi va baholovchi bilan qayta baholaydi;
+   * faqat ball OSHSA qabul (`runPolish`). Shartlar: hisobot bor, ball
+   * < `POLISH_BELOW`, byudjetdan ≥ `POLISH_MIN_MS` qolgan (tuzatishlar
+   * 2 to'lqin × 30 s + baholovchi); aks holda o'tkazib yuboriladi va
+   * hisobotda `polish.skipped: budget` izohi qoladi — natija sahifasida
+   * «Hammasini tuzatish» bilan qo'lda ishga tushiriladi. `polish: false`
+   * (jonli sinov, testlar) yoki `ARTICLE_POLISH=0` — bosqich yo'q.
+   * Sayqal XATO EMAS — yiqilsa hisobotli maqola o'zgarmay qoladi.
+   */
+  const wantPolish = opts.polish ?? process.env.ARTICLE_POLISH !== "0";
+  if (wantPolish && article.review) {
+    const review = article.review;
+    const left = remainingMs(deadline);
+    if (review.score >= POLISH_BELOW) {
+      // Yetarli — sayqal kerak emas (jurnal yo'q, hisobot o'z holicha).
+    } else if (left < POLISH_MIN_MS) {
+      review.polish = { before: review.score, after: review.score, applied: [], skipped: [{ id: "budget", reason: "budget" }], accepted: false, at: new Date().toISOString() };
+      console.warn(`[article] avto-sayqal o'tkazib yuborildi: byudjetdan ${Math.round(left / 1000)} s qoldi (kerak ≥ ${POLISH_MIN_MS / 1000} s)`);
+    } else {
+      stage(92, "Avto-sayqal");
+      try {
+        const r = await runPolish(doc, review, {
+          complete,
+          deadline,
+          judge: true,
+          research: research.stats,
+          guard: { unresolved: guard.unresolved, emptySections: guard.emptySections },
+          onUsage: (u) => meter.add(u),
+        });
+        doc = r.doc;
+        doc.article!.review = r.review;
+        if (r.accepted) {
+          guard.unresolved = guard.unresolved.filter((u) => !r.applied.some((f) => f.target === u.sectionId));
+          stage(96, `Sayqal: ${r.log.before} → ${r.log.after} ball`);
+        } else stage(96, r.log.applied.length ? `Sayqal ballni oshirmadi (${r.log.before})` : `Hisobot: ${r.log.before} ball`);
+      } catch (e) {
+        console.warn("[article] avto-sayqal yiqildi:", e instanceof Error ? e.message : e);
+        stage(96, "Sayqalsiz davom etildi");
+      }
+    }
   }
   return { doc, cost: meter.toJson(), research: research.stats, guard };
 }

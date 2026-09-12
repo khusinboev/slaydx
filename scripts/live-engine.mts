@@ -16,6 +16,7 @@
  *   npm run live                 — barcha keyslar
  *   npm run live -- article-oak essay  — faqat nomlanganlar
  *   npm run live -- article-oak --article-type analytical --profile university  — maqola turi/profili
+ *   npm run live -- article-oak --no-polish  — avto-sayqalsiz (AUDIT-18)
  *
  * `GEMINI_API_KEY` shart. Chiqish `eval-out/live/` ga yoziladi.
  */
@@ -759,6 +760,8 @@ async function main() {
     process.exit(2);
   }
   await mkdir(OUT, { recursive: true });
+  // `--no-polish` — maqola avto-sayqali (AUDIT-18 8-bosqich) o'chiq: dvigatel `ARTICLE_POLISH=0` ni o'qiydi.
+  if (process.argv.includes("--no-polish")) process.env.ARTICLE_POLISH = "0";
 
   const tpl = templateArg();
   const src = sourceArg();
