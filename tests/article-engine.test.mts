@@ -357,6 +357,19 @@ test("figureSpecFromLlm: chegaralar (14 tugun/24 qirra), noma'lum qirra tushadi,
   assert.deepEqual(tree, { kind: "tree", root: "R", children: [{ label: "A", children: [{ label: "A1" }] }, { label: "B" }] });
 });
 
+test("figureSpecFromLlm (AUDIT-18): figureKinds oq ro'yxati — ruxsat etilmagan tur rad etiladi, bo'sh ro'yxat = hammasi, chart ro'yxatga bog'liq emas", () => {
+  const process = { kind: "process", steps: ["a", "b", "c"] };
+  const cycle = { kind: "cycle", steps: [{ label: "a" }, { label: "b" }, { label: "c" }] };
+  assert.equal(figureSpecFromLlm(process, { figureKinds: ["cycle"] }), null, "process — ruxsat yo'q");
+  assert.ok(figureSpecFromLlm(cycle, { figureKinds: ["cycle"] }), "cycle — ruxsat bor");
+  assert.ok(figureSpecFromLlm(process, { figureKinds: ["cycle", "process"] }));
+  assert.ok(figureSpecFromLlm(process, { figureKinds: [] }), "bo'sh ro'yxat — avtomatik, hammasi ruxsat");
+  assert.ok(figureSpecFromLlm(process, {}));
+  assert.equal(figureSpecFromLlm({ kind: "matrix", quadrants: [{ title: "A" }, { title: "B" }, { title: "C" }, { title: "D" }] }, { figureKinds: ["flow", "tree"] }), null);
+  const userData = { categories: ["2022", "2023"], series: [{ name: "T", values: [1, 2] }] };
+  assert.ok(figureSpecFromLlm({ kind: "chart", chart: "bar" }, { userData, figureKinds: ["cycle"] }), "chart — ma'lumot darvozasi, oq ro'yxatdan mustaqil");
+});
+
 test("tableFromLlm / blocksFromLlm chekkalari", () => {
   assert.equal(tableFromLlm({ headers: ["a"], rows: [["1"]] }), null, "bitta ustun — jadval emas");
   const t = tableFromLlm({ caption: "C", headers: ["a", "b", "c"], rows: [["1", "2"], [], ["x", "y", "z", "extra"]], anchorAfterBlock: "2" })!;
