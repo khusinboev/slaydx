@@ -44,6 +44,21 @@ services:
       PEXELS_API_KEY: ${PEXELS_API_KEY:-}
       PIXABAY_API_KEY: ${PIXABAY_API_KEY:-}
       FAL_MODEL: ${FAL_MODEL:-fal-ai/flux/schnell}
+      # Maqola 2 (AUDIT-17): LLM rollari zaxira zanjiri va manba qidiruv —
+      # compose faqat SANAB O'TILGAN o'zgaruvchilarni uzatadi; `.env` ga
+      # qo'shish yetarli emas (2026-09-12 deployda baholovchi Gemini'da qoldi).
+      # `tests/compose-env.test.mts` qulflaydi.
+      LLM_WRITER: ${LLM_WRITER:-}
+      LLM_JUDGE: ${LLM_JUDGE:-}
+      LLM_RESEARCHER: ${LLM_RESEARCHER:-}
+      LLM_FAST: ${LLM_FAST:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      XAI_API_KEY: ${XAI_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENALEX_API_KEY: ${OPENALEX_API_KEY:-}
+      OPENALEX_MAILTO: ${OPENALEX_MAILTO:-}
+      CROSSREF_MAILTO: ${CROSSREF_MAILTO:-}
       CLICK_SERVICE_ID: ${CLICK_SERVICE_ID:-}
       CLICK_MERCHANT_ID: ${CLICK_MERCHANT_ID:-}
       CLICK_SECRET_KEY: ${CLICK_SECRET_KEY:-}
@@ -92,6 +107,21 @@ services:
       # standalone «Rasm» vositasi endi shu (premium) yo'ldan ishlaydi.
       FAL_STEPS_PREMIUM: ${FAL_STEPS_PREMIUM:-}
       GEMINI_THINKING_BUDGET: ${GEMINI_THINKING_BUDGET:-}
+      # Maqola 2 (AUDIT-17): LLM rollari zaxira zanjiri va manba qidiruv —
+      # compose faqat SANAB O'TILGAN o'zgaruvchilarni uzatadi; `.env` ga
+      # qo'shish yetarli emas (2026-09-12 deployda baholovchi Gemini'da qoldi).
+      # `tests/compose-env.test.mts` qulflaydi.
+      LLM_WRITER: ${LLM_WRITER:-}
+      LLM_JUDGE: ${LLM_JUDGE:-}
+      LLM_RESEARCHER: ${LLM_RESEARCHER:-}
+      LLM_FAST: ${LLM_FAST:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      XAI_API_KEY: ${XAI_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENALEX_API_KEY: ${OPENALEX_API_KEY:-}
+      OPENALEX_MAILTO: ${OPENALEX_MAILTO:-}
+      CROSSREF_MAILTO: ${CROSSREF_MAILTO:-}
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
       WORKER_JOB_TIMEOUT_MS: ${WORKER_JOB_TIMEOUT_MS:-660000}
 
