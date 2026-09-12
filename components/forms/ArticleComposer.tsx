@@ -19,6 +19,8 @@ import {
   type PublicationProfileId,
 } from "@/lib/generation/article/types";
 import { ARTICLE_TYPES } from "@/lib/generation/article/types-registry";
+import { PUBLICATION_PROFILES } from "@/lib/generation/article/profiles";
+import { estimateArticlePages, pagesUpper } from "@/lib/generation/article/plan";
 import {
   ARTICLE_INPUT_LIMITS,
   articleInputFromValues,
@@ -270,6 +272,17 @@ export function ArticleComposer({
 
   const set = <K extends keyof Ui>(key: K, v: Ui[K]) => setUi((s) => ({ ...s, [key]: v }));
   const type = ARTICLE_TYPES[ui.articleType];
+  const pubProfile = PUBLICATION_PROFILES[ui.pubProfile];
+  /*
+   * Paket — hujjatning UMUMIY beti, lekin apparatura (annotatsiya ×3, ikki
+   * adabiyotlar ro'yxati, sxema) OAK'da 3–5 betlik paketdan katta: hujjat
+   * ~6 bet chiqadi. Formula dvigatelniki (`article/plan.ts`) — foydalanuvchi
+   * yaratishdan OLDIN ko'radi (mahsulot egasi qarori: yorliq halol, sifat
+   * tushmaydi).
+   */
+  const pagesEstimate = estimateArticlePages(ui.pages, type, pubProfile, ui.figureCount);
+  const pagesOver = pagesEstimate > pagesUpper(ui.pages);
+  const pagesHint = pagesOver ? undefined : "Hujjatning umumiy beti — annotatsiya va adabiyotlar bilan";
 
   /*
    * Tur o'zgarganda: profil TURNING standartiga o'tadi — lekin FAQAT
@@ -476,7 +489,7 @@ export function ArticleComposer({
       </Card>
 
       <Card title="Hajm va til">
-        <Row label="Hajm">
+        <Row label="Hajm" hint={pagesHint}>
           <span data-field="pages" className="block">
             <Segmented
               ariaLabel="Hajm"
@@ -484,6 +497,12 @@ export function ArticleComposer({
               value={ui.pages}
               onChange={(v) => onPagesChange(v as PagesId)}
             />
+            {pagesOver ? (
+              <p data-pages-estimate={pagesEstimate} className="text-muted-foreground mt-1 text-[11px]">
+                {pubProfile.label.uz} profilida uch tilli annotatsiya, adabiyotlar ro‘yxati{pubProfile.secondEnglishList ? " (ikki ro‘yxat)" : ""} va sxema qo‘shimcha joy oladi — hujjat taxminan{" "}
+                <b>{pagesEstimate} bet</b> chiqadi; matn hajmi paketga mos.
+              </p>
+            ) : null}
           </span>
         </Row>
         <Row label="Til">

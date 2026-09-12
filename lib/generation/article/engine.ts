@@ -27,8 +27,9 @@ import type { TranslationSource } from "../source-types";
 import { llmEnabled } from "../llm";
 import { CostMeter, complete as completeRole } from "../llm-roles";
 import { parseLlmObject } from "../json";
-import { blocksFromText, cleanText, mapPool, remainingMs, targetWords, unverifiedReferenceNote } from "../quality";
-import { ARTICLE_LIMITS, type ArticleModel, type ArticleType, type ArticleWordPlan, type Figure, type FigureSpec, type PublicationProfile, type TreeNode } from "./types";
+import { blocksFromText, cleanText, mapPool, remainingMs, unverifiedReferenceNote } from "../quality";
+import { articleWordPlan } from "./plan";
+import { ARTICLE_LIMITS, type ArticleModel, type ArticleWordPlan, type Figure, type FigureSpec, type TreeNode } from "./types";
 import { ARTICLE_TYPES } from "./types-registry";
 import { PUBLICATION_PROFILES } from "./profiles";
 import { articleLabels } from "./labels";
@@ -96,66 +97,8 @@ const EXPAND_BELOW = 0.7;
 const FIGURE_W = 1890;
 const FIGURE_H = 1100;
 
-/**
- * Bir betga so'z — PROFILGA qarab. `WORDS_PER_PAGE` (230) TNR 14 / 1.5
- * uchun o'lchangan; TNR 12 yakka intervalda bir betga ~1.7 marta ko'p
- * so'z sig'adi. Sahifa darvozasi RENDERLANGAN sahifani sanaydi — so'z
- * maqsadi profilga ergashmasa IEEE maqolasi «10–15 bet» uchun 7 bet
- * chiqib, darvozadan yiqilardi.
- */
-export function articleWordsPerPage(profile: PublicationProfile): number {
-  return Math.round(targetWords(1) * (14 / profile.sizePt) * (1.5 / profile.line));
-}
-
+export { articleWordPlan, articleWordsPerPage } from "./plan";
 export type { ArticleWordPlan };
-
-/**
- * So'z rejasi. Paket («3–5 bet») — hujjatning UMUMIY beti: sarlavha bloki,
- * uch tilli annotatsiya, adabiyotlar (OAK'da ikki ro'yxat), sxemalar va
- * jadval ham shu betlarga kiradi. Bo'lim matni byudjeti = paket beti −
- * qo'shimcha betlar; bo'lim matni paketning kamida 45 %.
- *
- * Koeffitsientlar jonli o'lchovdan (analytical, OAK, 3–5 bet, DOCX →
- * LibreOffice, `lineRule: auto` bilan — ya'ni Word'dagi haqiqiy 1,5
- * qator): sarlavha bloki 0,3 bet; har bo'lim sarlavhasi 0,06; annotatsiya
- * `size − 2` shriftda — zichlik = (size/12)·(line/abstractLine)·1,15 (OAK:
- * 14/12 · 1,5/1,15 · 1,15 ≈ 1,8); adabiyot satri 0,065 bet × ro'yxat soni
- * (TNR 12/1,15, ≈16 manba/bet); sxema 0,45 bet (160 mm eni, sarlavha
- * bilan); jadval 0,25 (3+ betda). OAK'da apparatura (3 annotatsiya + 2
- * ro'yxat × 10 manba + sxema + jadval) o'zi ≈ 4 bet — 3–5 betlik paket
- * bo'lim matni 45 % poliga tushadi va hujjat ~6 bet chiqadi.
- * Kichik paketda annotatsiya pastki chegaraga yaqin mo'ljallanadi (150–250
- * → 170), katta paketda o'rtaga. Sxema soni `FIGURES_BY_PAGES` bilan
- * kesilgan bo'ladi (forma va `parseArticleInput`).
- *
- * Jonli smoke tarixi (3–5 bet): eski formula 924 so'z/9 bet; birinchi
- * tuzatish 421 so'z/6 bet (annotatsiya 1,5 intervalda, 2 sxema).
- */
-export function articleWordPlan(meta: DocMeta, type: ArticleType, profile: PublicationProfile): ArticleWordPlan {
-  const perPage = articleWordsPerPage(profile);
-  // `targetPages` yo'q (namunaviy/eski meta) — standart paket 3–5 (4), NaN maqsad chiqmasin.
-  const pages = Math.max(1, Number.isFinite(meta.targetPages) ? meta.targetPages : 4);
-  const [minW, maxW] = profile.abstractWords;
-  const abstractAim = pages <= 5 ? Math.round(minW + (maxW - minW) * 0.2) : Math.round((minW + maxW) / 2);
-  const abstracts = 3 * abstractAim;
-  const figures = Math.max(0, meta.figureCount);
-  if (type.wordRange) {
-    const body = Math.round((type.wordRange[0] + type.wordRange[1]) / 2);
-    return { perPage, total: body + abstracts, body, abstracts, abstractAim, refs: profile.refsMin, figures };
-  }
-  const refs = Math.min(profile.refsMax, Math.max(profile.refsMin, Math.round(pages * 2.5)));
-  const absDensity = (profile.sizePt / 12) * (profile.line / profile.abstractLine) * 1.15;
-  const overhead =
-    0.3 +
-    type.skeleton.length * 0.06 +
-    abstracts / (perPage * absDensity) +
-    refs * 0.065 * (profile.secondEnglishList ? 2 : 1) +
-    figures * 0.45 +
-    (pages >= 3 ? 0.25 : 0);
-  const bodyPages = Math.max(pages * 0.45, pages - overhead);
-  const body = Math.max(300, Math.round(bodyPages * perPage));
-  return { perPage, total: body + abstracts, body, abstracts, abstractAim, refs, figures };
-}
 
 /* ────────────────────────── yordamchilar ────────────────────────── */
 

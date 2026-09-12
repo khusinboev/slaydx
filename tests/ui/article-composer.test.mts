@@ -153,6 +153,34 @@ test("vizuallar soni PAKETGA bog'liq: 3–5 bet → 0–1 (standart 1), 10–15 
   assert.match(document.querySelector('[data-field="figureCount"]')?.textContent ?? "", /^0$/);
 });
 
+test("hajm ko'rsatmasi: OAK 3–5 → «taxminan 6 bet» (apparatura paketdan katta); university → ko'rsatma yo'q; 10–15 → yo'q", async () => {
+  stubApi();
+  await login();
+  mount();
+  const est = () => document.querySelector("[data-pages-estimate]");
+  assert.ok(est(), "OAK 3–5 da taxmin ko'rsatilmadi");
+  assert.equal(est()!.getAttribute("data-pages-estimate"), "6");
+  assert.match(est()!.textContent ?? "", /OAK jurnali profilida .*ikki ro‘yxat.*6 bet/);
+  await act(async () => {
+    fireEvent.click(screen.getByText("OAK jurnali"));
+  });
+  await act(async () => {
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Nashr profili" })).getByText("Universitet xabarnomasi"));
+  });
+  assert.ok(!est(), "university profilida 3–5 sig'adi — ko'rsatma bo'lmasligi kerak");
+  await act(async () => {
+    fireEvent.click(screen.getByText("Universitet xabarnomasi"));
+  });
+  await act(async () => {
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Nashr profili" })).getByText("OAK jurnali"));
+  });
+  assert.ok(est(), "OAK ga qaytganda ko'rsatma qaytadi");
+  await act(async () => {
+    fireEvent.click(screen.getByText(/10–15 bet/));
+  });
+  assert.ok(!est(), "10–15 betda apparatura sig'adi");
+});
+
 test("mualliflar: qo'shish/o'chirish, ≤6 chegara", async () => {
   stubApi();
   await login();

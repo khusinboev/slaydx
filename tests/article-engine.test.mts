@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { articleOverheadPages, estimateArticlePages, pagesUpper } from "../lib/generation/article/plan.ts";
 import { buildArticleDoc, articleWordPlan, articleWordsPerPage, figureSpecFromLlm, tableFromLlm, blocksFromLlm, outlineFromLlm, fallbackOutline, planVisuals, prismaSpec } from "../lib/generation/article/engine.ts";
 import type { ArticleContext } from "../lib/generation/article/prompts.ts";
 import { collectReferences, dedupeReferences, parseSelection } from "../lib/generation/research/pipeline.ts";
@@ -427,6 +428,19 @@ test("so'z rejasi profilga bog'liq; byudjet 150 000 + 16 000 × bet; prismaSpec 
   assert.ok(noFig.body >= sm.body, `${noFig.body} >= ${sm.body}`);
   const uni = articleWordPlan(small, ARTICLE_TYPES.three_part_uz, PUBLICATION_PROFILES.university);
   assert.ok(uni.body > sm.body * 1.3, `university (yakka interval) ${uni.body} vs oak ${sm.body}`);
+  /*
+   * Forma taxmini (`estimateArticlePages`) — bitta formula: OAK 3–5 → 6
+   * (apparatura ≈ 3,9 bet + bo'lim 45 %), university 3–5 → 5 (sig'adi),
+   * OAK 10–15 → 13, tezis conference → 2. Jonli: 3–5 OAK 6 bet chiqdi.
+   */
+  assert.equal(estimateArticlePages("3-5", ARTICLE_TYPES.analytical, PUBLICATION_PROFILES.oak, 1), 6);
+  assert.equal(estimateArticlePages("3-5", ARTICLE_TYPES.analytical, PUBLICATION_PROFILES.university, 1), 5);
+  assert.equal(estimateArticlePages("10-15", ARTICLE_TYPES.imrad_oak, PUBLICATION_PROFILES.oak, 3), 13);
+  assert.equal(estimateArticlePages("1-2", ARTICLE_TYPES.conference_thesis, PUBLICATION_PROFILES.conference, 0), 2);
+  assert.equal(pagesUpper("3-5"), 5);
+  // Apparatura formulasi rejaniki: overhead + bo'lim = taxmin (ikkinchi nusxa yo'q).
+  const ov = articleOverheadPages(sm, ARTICLE_TYPES.analytical, PUBLICATION_PROFILES.oak, 4);
+  assert.equal(Math.round(sm.body / sm.perPage + ov), 6);
   assert.equal(budgetFor(tool, { ...BASE, pages: "10-15" }, 660_000), 150_000 + 13 * 16_000);
   assert.equal(budgetFor(tool, { ...BASE, articleType: "conference_thesis", pages: "1-2" }, 660_000), 150_000 + 2 * 16_000);
   assert.equal(budgetFor(tool, { ...BASE, pages: "10-15" }, 300_000), 300_000, "cap");
