@@ -119,7 +119,10 @@ export function hasFixable(review: ArticleReview): boolean {
 /** Sayqal jurnali → bitta jumla (panel va testlar uchun bitta manba). */
 export function polishText(p: PolishLog): string {
   const waiting = p.skipped.filter((s) => s.reason === "user").length;
-  const tail = waiting ? `; ${waiting} band sizning ma’lumotingizni kutmoqda` : "";
+  const unreported = p.skipped.filter((s) => s.reason === "unreported").length;
+  const tail =
+    (waiting ? `; ${waiting} band sizning ma’lumotingizni kutmoqda` : "") +
+    (unreported ? `; ${unreported} tavsiya keltirilmagan tajriba tafsilotini so‘ragani uchun bajarilmadi (AI o‘ylab topmaydi)` : "");
   if (p.skipped.some((s) => s.id === "budget")) return `Avto-sayqal vaqt byudjeti tufayli o‘tkazib yuborildi — «Hammasini tuzatish» bilan ishga tushiring${tail}`;
   if (!p.applied.length) return `Avto-sayqal: tuzatiladigan band topilmadi${tail}`;
   if (!p.accepted) return `Avto-sayqal ballni oshirmadi (${p.before} → ${p.after}) — eski matn qoldirildi${tail}`;

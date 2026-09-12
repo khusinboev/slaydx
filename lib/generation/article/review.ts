@@ -550,6 +550,7 @@ export function judgeSystemPrompt(sectionIds: string[], judge?: ArticleJudgeConf
     "Score each criterion with an INTEGER 0–3 (3 = fully meets, 2 = mostly, 1 = weak, 0 = absent):",
     ...criteria.map((c) => `- ${c}: ${describe[c]}`),
     "Then give up to 5 short, concrete notes (what exactly to improve, naming the section) and up to 5 fixes as {\"target\": <section id>, \"instruction\": <one-sentence rewrite instruction>}.",
+    "Fixes must be achievable from the manuscript's own content and its cited sources: NEVER ask to add unreported experimental details (platform or tool names, statistical tests, p-values, sample parameters, measurements) — the rewriter cannot invent them; instead ask for structure, argument, comparison with cited sources, precision of claims, or an explicit statement of what was not reported.",
     `Allowed target ids: ${sectionIds.join(", ")}.`,
     `JSON schema: {${schema},"notes":["…"],"fixes":[{"target":"…","instruction":"…"}]}`,
     "JSON keys and target ids stay exactly as given (English); the VALUES of notes and instruction follow the language rule below.",

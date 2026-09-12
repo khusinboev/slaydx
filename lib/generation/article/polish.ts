@@ -121,9 +121,17 @@ export type RewriteOut = { ops: ArticleOp[]; unresolved: Unresolved[]; unsourced
  * boshi (`\b` JS da faqat ASCII).
  */
 const STRONG_RE =
-  /(?<![\p{L}])(experiment\w*|sample(?:\s+size)?|participants?|respondents?|data\s?sets?|measur\w*|instrument\w*|sensor\w*|equipment|apparatus|machine\s+tools?|accuracy|precision|diagnostic\w*|p-?values?|statistic\w*|confidence\s+interval|effect\s+size|quantitative|parameters?|specifications?|reproduc\w*|tajriba\w*|datchik\w*|dastgoh\w*|aniqlik\w*|tanlanma\w*|o[‘’'`]?lchov\w*|ishtirokchi\w*|statistik\w*|parametr\w*|uskuna\w*|qurilma\w*|эксперимент\w*|датчик\w*|станк\w*|станок|точност\w*|выборк\w*|измерен\w*|участник\w*|статистич\w*|параметр\w*|оборудован\w*)/iu;
+  /(?<![\p{L}])(experiment\w*|sample(?:\s+size)?|participants?|respondents?|data\s?sets?|measur\w*|instrument\w*|sensor\w*|equipment|apparatus|machine\s+tools?|accuracy|precision|diagnostic\w*|p-?values?|statistic\w*|confidence\s+interval|effect\s+size|quantitative|parameters?|specifications?|reproduc\w*|tajriba\w*|datchik\w*|dastgoh\w*|aniqlik\w*|tanlanma\w*|o[‘’'`]?lchov\w*|ishtirokchi\w*|statistik\w*|parametr\w*|uskuna\w*|qurilma\w*|platform\w*|software|tool\s+names?|randomi[sz]\w*|protocol\w*|hyperparameter\w*|t-?tests?|anova|platforma\w*|dasturiy\s+vosita\w*|protsedura\w*|giperparametr\w*|эксперимент\w*|датчик\w*|станк\w*|станок|точност\w*|выборк\w*|измерен\w*|участник\w*|статистич\w*|параметр\w*|оборудован\w*|платформ\w*|программ\w*|рандомиз\w*|гиперпараметр\w*)/iu;
 const WEAK_RE = /(?<![\p{L}])(methods?|methodolog\w*|results?|findings|natija\w*|metod\w*|usul\w*|результат\w*|метод\w*|ko[‘’'`]?rsatkich\w*|показател\w*|numbers?|figures|raqam\w*|цифр\w*|числ\w*)/iu;
 const ADD_RE = /(?<![\p{L}])(add|provide|include|report|present|describe|specify|detail|state|give|quantify|qo[‘’'`]?sh\w*|keltir\w*|ko[‘’'`]?rsat\w*|tavsifla\w*|yoz\w*|bayon\w*|добав\w*|привед\w*|укаж\w*|опиш\w*|предостав\w*|включ\w*)/iu;
+
+/**
+ * Q-2 ning prompt qatlami — ko'rsatma nima so'ramasin, model faqat FAKT /
+ * JORIY MATN / MANBADA bor tafsilotni yozadi; yo'g'ini «keltirilmagan» deb
+ * aytadi. Kalit so'z filtri o'tkazib yuborgan tavsiyalar uchun oxirgi to'siq.
+ */
+export const HONESTY_LIMIT =
+  "HONESTY LIMIT (overrides the instruction above): every tool, platform or software name, statistical test, procedure detail, parameter, sample detail or number you write must ALREADY appear in USER FACTS, the CURRENT TEXT or a SOURCE. If the instruction asks for details the author did not report, do NOT invent them — state explicitly that they are not reported (e.g. «qo‘llanilgan aniq statistik test va platforma tadqiqotda keltirilmagan») or keep the sentence qualitative. Inventing unreported specifics is a critical error.";
 
 /** Q-2: tavsiya natija/tajriba ma'lumotini TALAB qiladimi (foydalanuvchi faktisiz bajarilmaydi). */
 export function needsUserData(instruction: string): boolean {
@@ -236,11 +244,18 @@ export function planPolish(review: ArticleReview, doc: AcademicDoc): PolishPlan 
     candidates.push({ op: "rewrite", target: c.fix.target, instruction: c.fix.instruction });
   }
 
-  // Baholovchi tavsiyalari — Q-2 filtr.
+  /*
+   * Baholovchi tavsiyalari — Q-2 filtr, FAKTLAR BOR BO'LSA HAM: jonli
+   * sinovda (article-oak, faktlar bilan) «statistik testlar, p-qiymatlar,
+   * platforma nomini ko'rsating» tavsiyasi bajarilib, model Moodle, t-test,
+   * ANOVA, stratified randomization ni O'YLAB TOPDI (faktlarda yo'q) va
+   * baholovchi buni 78 → 92 deb mukofotladi. Fakt bo'lsa ham u allaqachon
+   * matnda — qo'shimcha tajriba tafsiloti so'rash = yo'q ma'lumotni so'rash.
+   */
   for (const c of review.checks) {
     if (!c.id.startsWith("judge:fix:") || !c.fix) continue;
-    if (!hasFacts && needsUserData(c.fix.instruction)) {
-      skipped.push({ id: c.id, reason: "user" });
+    if (needsUserData(c.fix.instruction)) {
+      skipped.push({ id: c.id, reason: hasFacts ? "unreported" : "user" });
       continue;
     }
     candidates.push({ op: "rewrite", target: c.fix.target, instruction: c.fix.instruction });
@@ -391,6 +406,7 @@ async function rewriteSection(doc: AcademicDoc, section: DocSection, fix: Articl
     `CURRENT TEXT of the section — rewrite it: keep its scope and every USER FACT verbatim, keep the citation IDs that still support a sentence, do not add new claims without a SOURCE:`,
     existing || "(empty)",
     `EDITOR INSTRUCTION (highest priority): ${fix.instruction}`,
+    HONESTY_LIMIT,
   ].join("\n");
   const maxTokens = Math.min(8000, Math.max(1200, Math.round(words * 2.4) + 700));
   const raw = await ask(deps, "writer", articleSystemPrompt(ctx), user, maxTokens);
@@ -424,6 +440,7 @@ async function rewriteAbstract(doc: AcademicDoc, lang: ArticleLang, fix: Article
     abstractPrompt(ctx, lang, summaries(doc)),
     cur ? `CURRENT ABSTRACT (rewrite it according to the instruction):\n${cur.text.slice(0, 4000)}` : "",
     `EDITOR INSTRUCTION (highest priority): ${fix.instruction}`,
+    HONESTY_LIMIT,
   ]
     .filter(Boolean)
     .join("\n");

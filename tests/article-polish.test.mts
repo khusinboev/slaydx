@@ -147,10 +147,37 @@ test("planPolish: qoidalar fix ga, udk/authors → user, fixsiz band → manual,
   assert.ok(!skipped.has("structure"));
   assert.ok(!skipped.has("filler"));
 
-  // userFacts bo'lsa Q-2 filtr ishlamaydi — results ham tuzatiladi.
+  /*
+   * userFacts BOR bo'lsa ham Q-2 filtr ishlaydi (sabab `unreported`): jonli
+   * sinovda faktli maqolada «statistik testlar, p-qiymatlar, platforma
+   * nomini ko'rsating» tavsiyasi bajarilib, model Moodle/t-test/ANOVA/
+   * stratified randomization ni o'ylab topgan va 78 → 92 «mukofot» olgan.
+   */
   const p2 = planPolish(r, doc("Tajribada 120 talaba, aniqlik 92%"));
-  assert.ok(p2.fixes.some((f) => f.target === "results"), "userFacts bilan natija tavsiyasi bajarilishi kerak");
-  assert.ok(!p2.skipped.some((s) => s.id === "judge:fix:2"));
+  assert.ok(!p2.fixes.some((f) => f.target === "results"), "MUTATSIYA: faktlar bo'lsa filtr chetlab o'tilsa — natija tavsiyasi bajariladi");
+  assert.equal(p2.skipped.find((s) => s.id === "judge:fix:2")?.reason, "unreported");
+});
+
+test("needsUserData: jonli sinovdagi «statistik test / p-qiymat / platforma nomi / randomizatsiya» tavsiyalari (uz/en/ru) → true", () => {
+  for (const s of [
+    "Qo‘llanilgan aniq statistik testlarni (masalan, t-test yoki ANOVA), ularning p-qiymatlarini, tasodifiy taqsimlash protsedurasini va foydalanilgan adaptiv platforma nomini aniq ko‘rsating.",
+    "Name the software platform and the randomisation protocol used",
+    "Specify the hyperparameters of the model",
+    "Укажите платформу и процедуру рандомизации",
+  ]) assert.ok(needsUserData(s), `natija talab qiladi: ${s}`);
+});
+
+test("qayta yozish prompti HONESTY LIMIT bilan tugaydi — ko'rsatma nima so'ramasin, yo'q tafsilot o'ylab topilmaydi", async () => {
+  const d = doc("120 talaba");
+  const calls: { system: string; user: string }[] = [];
+  const complete = async (_role: string, system: string, user: string) => {
+    calls.push({ system, user });
+    return { text: JSON.stringify({ blocks: [{ kind: "p", text: "Qo‘llanilgan aniq statistik test tadqiqotda keltirilmagan; natijalar sifat jihatidan tahlil qilindi." }] }), usage: undefined };
+  };
+  await applyPolish(d, [{ op: "rewrite", target: "results", instruction: "Report the statistical tests used" }], { complete: complete as never, deadline: Date.now() + 60_000 });
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].user, /EDITOR INSTRUCTION \(highest priority\): Report the statistical tests used\nHONESTY LIMIT \(overrides the instruction above\)/);
+  assert.match(calls[0].user, /do NOT invent them/);
 });
 
 test("planPolish: `visuals` → havolasiz rasm/jadval bo'limiga [fig:]/[tab:] tokeni bilan fix; `length` → eng qisqa 2 bo'limni kengaytirish", () => {
