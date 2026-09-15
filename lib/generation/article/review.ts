@@ -30,8 +30,8 @@
  * Izomorf: DOM/server importi yo'q — panel (`ArticleReviewPanel`) guruh
  * jadvalini shu yerdan oladi.
  */
-import type { AcademicDoc, Block, DocSection } from "../types";
-import type { ArticleReview, ArticleType, PublicationProfile, ReviewCheck, ReviewLevel } from "./types";
+import type { AcademicDoc, DocSection } from "../types";
+import type { ArticleReview, ArticleType, PublicationProfile, ReviewCheck } from "./types";
 import { ARTICLE_TYPES } from "./types-registry";
 import { PUBLICATION_PROFILES } from "./profiles";
 import { articleLabels } from "./labels";
@@ -39,9 +39,19 @@ import { planArticle } from "./layout";
 import { estimateDocPages } from "./plan";
 import { guardSection, missingFactNumbers, skeletonCoverage, wordsOf } from "./guard";
 import { formatReference } from "../cite";
-import { languageDirective } from "../i18n";
-import { parseLlmObject } from "../json";
 import { remainingMs } from "../quality";
+/*
+ * NEYTRAL QATLAM (AUDIT-19 R0-A) — ball formulasi, baholovchi prompti/
+ * tahlili, matn namunasi va 3-gram takror `lib/generation/report/` da:
+ * kurs ishi (`work/`) va insho (`essay/`) dvigatellari ham shulardan
+ * foydalanadi. Bu fayl MAQOLAGA XOS qismni (qoidalar, `planArticle` ga
+ * bog'liq vizual hisob, mezon ta'riflari) va o'zgarmagan IMZOLARNI
+ * saqlaydi — X-7: `article/*` xulqi zarracha o'zgarmaydi.
+ */
+import { JUDGE_WEIGHT, RULE_WEIGHT, check, jaccard, langKey, rewrite, scoreReviewFor, sectionText, trigrams, visualCoverageOf, type UnreferencedVisual } from "../report/score";
+import { JUDGE_MIN_MS, JUDGE_NEUTRAL, JUDGE_NO_ANSWER, JUDGE_TIMEOUT_MS, judgeChecksFor, judgeSystemPromptFor, neutralJudgeFor, parseJudgeFor } from "../report/judge";
+import { sampleForJudge } from "../report/text";
+import type { JudgeResult as ReportJudgeResult, JudgeSpec } from "../report/types";
 import type { LlmUsage, complete as completeRole } from "../llm-roles";
 import { JUDGE_CRITERIA, type ArticleJudgeConfig, type JudgeCriterion } from "./types";
 import type { ResearchStats } from "../research/pipeline";
@@ -73,29 +83,18 @@ export type ReviewOpts = {
 export { JUDGE_CRITERIA } from "./types";
 export type { JudgeCriterion } from "./types";
 
-export type JudgeResult = Record<JudgeCriterion, number> & {
-  notes: string[];
-  fixes: { target: string; instruction: string }[];
-  /** Tur uchun o'tkazib yuborilgan mezonlar (`ArticleType.judge.skip`) — ballga va bandlarga kirmaydi. */
-  skipped?: JudgeCriterion[];
-};
+/** Maqola baholovchisi — 6 mezon (`JUDGE_CRITERIA`) ustidagi neytral shakl. */
+export type JudgeResult = ReportJudgeResult<JudgeCriterion>;
 
-/** Baholovchi javob bermaganda — neytral. */
-export const JUDGE_NEUTRAL = 2;
-/** Baholovchi javob bermaganda hisobot izohi (rewrite/polish shu satrni taniydi). */
-export const JUDGE_NO_ANSWER = "Baholovchi javob bermadi";
-export const JUDGE_TIMEOUT_MS = 35_000;
-/** Chaqiruvga shundan kam vaqt qolsa umuman urinilmaydi. */
-const JUDGE_MIN_MS = 8_000;
+export { JUDGE_NEUTRAL, JUDGE_NO_ANSWER, JUDGE_TIMEOUT_MS };
+export { RULE_WEIGHT, JUDGE_WEIGHT, trigrams, jaccard };
+
 /** Bo'limlar matni baholovchiga shu belgidan oshmaydi (bo'limlar orasida mutanosib). */
 export const JUDGE_TEXT_CHARS = 25_000;
 /** Bo'limlar o'zaro takror deb hisoblanadigan 3-gram Jaccard chegarasi. */
 export const REPETITION_JACCARD = 0.15;
 /** Hajm chegarasi: maqsaddan ±20% — yashil. */
 export const LENGTH_TOLERANCE = 0.2;
-
-export const RULE_WEIGHT = 0.6;
-export const JUDGE_WEIGHT = 0.4;
 
 /*
  * Panel guruhlari (Tuzilma · Manbalar · Vizuallar · Ilmiy mazmun · AI izi)
@@ -139,111 +138,32 @@ export const JUDGE_LABELS: Record<JudgeCriterion, string> = {
 const WORD_RE = /\S+/g;
 const words = (s: string) => (s.match(WORD_RE) ?? []).length;
 
-function textBlocks(s: DocSection): Extract<Block, { kind: "p" | "li" | "quote" }>[] {
-  return s.blocks.filter((b): b is Extract<Block, { kind: "p" | "li" | "quote" }> => b.kind === "p" || b.kind === "li" || b.kind === "quote");
-}
-
-function sectionText(s: DocSection): string {
-  return textBlocks(s)
-    .map((b) => b.text)
-    .join("\n");
-}
-
 /** Skelet id → bo'lim (erkin `body-N` ham `body` ga mos). */
 function skeletonIdOf(sectionId: string): string {
   return sectionId.replace(/-\d+$/, "");
 }
 
-const check = (id: string, level: ReviewLevel, label: string, detail?: string, fix?: ReviewCheck["fix"]): ReviewCheck => ({
-  id,
-  level,
-  label,
-  ...(detail ? { detail } : {}),
-  ...(fix ? { fix } : {}),
-});
-
-const rewrite = (target: string, instruction: string): ReviewCheck["fix"] => ({ op: "rewrite", target, instruction });
-
 const list = (xs: string[], max = 6) => (xs.length > max ? `${xs.slice(0, max).join(", ")} … (+${xs.length - max})` : xs.join(", "));
 
 const pct = (x: number) => `${Math.round(x * 100)}%`;
-
-/** So'zlar → 3-gramlar to'plami (kichik harf, faqat harf/raqam). */
-export function trigrams(text: string): Set<string> {
-  const w = text
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}\s]+/gu, " ")
-    .split(/\s+/)
-    .filter(Boolean);
-  const out = new Set<string>();
-  for (let i = 0; i + 2 < w.length; i++) out.add(`${w[i]} ${w[i + 1]} ${w[i + 2]}`);
-  return out;
-}
-
-export function jaccard(a: Set<string>, b: Set<string>): number {
-  if (!a.size || !b.size) return 0;
-  let inter = 0;
-  for (const x of a) if (b.has(x)) inter++;
-  return inter / (a.size + b.size - inter);
-}
 
 /* ────────────────────────── qoidalar ────────────────────────── */
 
 export type RuleResult = { checks: ReviewCheck[]; verifiedShare: number; recentShare: number };
 
 const LIMITATION_RE = /cheklov|chegaralan|limitation|limited|ограничен|недостат/iu;
-const VISUAL_WORDS: Record<"uz" | "ru" | "en", { fig: RegExp; tab: RegExp }> = {
-  uz: { fig: /\b(rasm|sxema|diagramma|chizma|grafik)/iu, tab: /\bjadval/iu },
-  ru: { fig: /\b(рис|схем|диаграмм|график)/iu, tab: /\bтабл/iu },
-  en: { fig: /\b(figure|fig\.|scheme|diagram|chart)/iu, tab: /\btable/iu },
-};
 
-function langKey(lang: string): "uz" | "ru" | "en" {
-  const c = (lang || "uz").toLowerCase();
-  return c === "ru" ? "ru" : c === "en" ? "en" : "uz";
-}
-
-export type UnreferencedVisual = { sectionId: string; kind: "figure" | "table"; id: string; label: string };
+export type { UnreferencedVisual };
 
 /**
  * Rasm/jadval bloklari matnda havola qilinganmi — `visuals` qoidasi VA
  * avto-sayqal (`polish.ts`, «havola qo'sh» tuzatishi) BITTA hisobdan
- * o'qiydi. Havola: `[fig:id]`/`[tab:id]` tokeni (istalgan bo'limda),
- * «1-rasm»/«1-jadval» yorlig'i yoki shu bo'limda «rasm»/«jadval» so'zi.
- * Chizilmagan sxema (`fallbackBlocks`) havola talab qilmaydi.
+ * o'qiydi. Sof hisob `report/score.ts visualCoverageOf` da; bu o'ram
+ * `planArticle` dan raqam/yorliq/til beradi (maqolaga bog'liq qism).
  */
 export function visualCoverage(doc: AcademicDoc): { unreferenced: UnreferencedVisual[]; fallback: number; count: number } {
   const plan = planArticle(doc);
-  const L = articleLabels(plan.language);
-  const VW = VISUAL_WORDS[langKey(plan.language)];
-  const sections = doc.sections.filter((s) => s.blocks.length);
-  const allText = sections.map(sectionText).join("\n");
-  const low = allText.toLowerCase();
-  const figs = new Map(plan.model.figures.map((f) => [f.id, f]));
-  const unreferenced: UnreferencedVisual[] = [];
-  let fallback = 0;
-  let count = 0;
-  for (const s of sections) {
-    const st = sectionText(s);
-    for (const b of s.blocks) {
-      if (b.kind === "figure") {
-        if (figs.get(b.figureId)?.fallbackBlocks?.length) {
-          fallback++;
-          continue;
-        }
-        count++;
-        const n = plan.numbers.figures[b.figureId];
-        const explicit = allText.includes(`[fig:${b.figureId}]`) || (n && low.includes(L.figureRef(n).toLowerCase()));
-        if (!explicit && !VW.fig.test(st)) unreferenced.push({ sectionId: s.id, kind: "figure", id: b.figureId, label: n ? L.figureRef(n) : b.figureId });
-      } else if (b.kind === "tableRef") {
-        count++;
-        const n = plan.numbers.tables[b.tableId];
-        const explicit = allText.includes(`[tab:${b.tableId}]`) || (n && low.includes(L.tableRef(n).toLowerCase()));
-        if (!explicit && !VW.tab.test(st)) unreferenced.push({ sectionId: s.id, kind: "table", id: b.tableId, label: n ? L.tableRef(n) : b.tableId });
-      }
-    }
-  }
-  return { unreferenced, fallback, count };
+  return visualCoverageOf(doc.sections, plan.model.figures, plan.numbers, articleLabels(plan.language), plan.language);
 }
 
 /**
@@ -536,26 +456,24 @@ export function judgeCriteriaFor(judge?: ArticleJudgeConfig): JudgeCriterion[] {
   return JUDGE_CRITERIA.filter((c) => !skip.has(c));
 }
 
+/** Maqola turining baholovchi spetsifikatsiyasi (neytral qatlam shakli). */
+export function articleJudgeSpec(judge?: ArticleJudgeConfig, typeLabel?: string): JudgeSpec<JudgeCriterion> {
+  return {
+    criteria: JUDGE_CRITERIA,
+    describe: { ...JUDGE_DESCRIBE, ...(judge?.describe ?? {}) },
+    labels: JUDGE_LABELS,
+    ...(judge?.skip?.length ? { skip: judge.skip } : {}),
+    ...(typeLabel ? { typeLabel } : {}),
+  };
+}
+
 /**
  * Baholovchi tizim prompti — TURGA bog'liq (AUDIT-18 Q-7): sharh maqolasi
  * «metodlar» bo'yicha IMRAD kabi baholanib adolatsiz qizil olardi; tur
  * `describe` bilan mezonni o'z ma'nosida beradi, `skip` bilan chiqaradi.
  */
 export function judgeSystemPrompt(sectionIds: string[], judge?: ArticleJudgeConfig, typeLabel?: string): string {
-  const criteria = judgeCriteriaFor(judge);
-  const describe = { ...JUDGE_DESCRIBE, ...(judge?.describe ?? {}) };
-  const schema = criteria.map((c) => `"${c}":0-3`).join(",");
-  return [
-    `You are a strict peer reviewer for an academic journal. Evaluate the manuscript${typeLabel ? ` (article type: ${typeLabel})` : ""} and return ONLY a JSON object, no prose.`,
-    "Score each criterion with an INTEGER 0–3 (3 = fully meets, 2 = mostly, 1 = weak, 0 = absent):",
-    ...criteria.map((c) => `- ${c}: ${describe[c]}`),
-    "Then give up to 5 short, concrete notes (what exactly to improve, naming the section) and up to 5 fixes as {\"target\": <section id>, \"instruction\": <one-sentence rewrite instruction>}.",
-    "Fixes must be achievable from the manuscript's own content and its cited sources: NEVER ask to add unreported experimental details (platform or tool names, statistical tests, p-values, sample parameters, measurements) — the rewriter cannot invent them; instead ask for structure, argument, comparison with cited sources, precision of claims, or an explicit statement of what was not reported.",
-    `Allowed target ids: ${sectionIds.join(", ")}.`,
-    `JSON schema: {${schema},"notes":["…"],"fixes":[{"target":"…","instruction":"…"}]}`,
-    "JSON keys and target ids stay exactly as given (English); the VALUES of notes and instruction follow the language rule below.",
-    languageDirective("uz"),
-  ].join("\n");
+  return judgeSystemPromptFor(articleJudgeSpec(judge, typeLabel), sectionIds);
 }
 
 /**
@@ -582,15 +500,8 @@ export function judgeUserPrompt(doc: AcademicDoc, maxChars = JUDGE_TEXT_CHARS): 
       else if (it.k === "figure" || it.k === "table") g.lines.push(`[${it.caption}]`);
     }
   }
-  const texts = groups.map((g) => g.lines.join("\n"));
-  const total = texts.reduce((n, t) => n + t.length, 0);
-  const scale = total > maxChars ? maxChars / total : 1;
-  const body = groups
-    .map((g, i) => {
-      const t = texts[i];
-      const cut = scale < 1 ? t.slice(0, Math.max(200, Math.floor(t.length * scale))) : t;
-      return `## ${g.id} — ${g.title}\n${cut}${cut.length < t.length ? "\n[…truncated]" : ""}`;
-    })
+  const body = sampleForJudge(groups, maxChars)
+    .map((g) => `## ${g.id} — ${g.title}\n${g.text}${g.truncated ? "\n[…truncated]" : ""}`)
     .join("\n\n");
   const refs = plan.refs.map((r) => `${r.n}. ${formatReference(r.ref, plan.cite, lang)}`).join("\n");
   return [
@@ -606,60 +517,28 @@ export function judgeUserPrompt(doc: AcademicDoc, maxChars = JUDGE_TEXT_CHARS): 
   ].join("\n");
 }
 
-const clampScore = (v: unknown): number => {
-  const n = Number(v);
-  return Number.isFinite(n) ? Math.max(0, Math.min(3, Math.round(n))) : JUDGE_NEUTRAL;
-};
+/** Bo'lim id laridan tashqari ruxsat etilgan `fix` nishonlari. */
+const EXTRA_TARGETS = ["keywords", "highlights", "abstract:uz", "abstract:ru", "abstract:en"];
 
 /** Model javobi → `JudgeResult`; JSON emas → null. Noma'lum `target` tashlanadi. */
 export function parseJudge(raw: string | null | undefined, sectionIds: string[], judgeCfg?: ArticleJudgeConfig): JudgeResult | null {
-  const j = parseLlmObject<Record<string, unknown>>(raw ?? "");
-  if (!j) return null;
-  const skipped = judgeCfg?.skip?.length ? [...judgeCfg.skip] : undefined;
-  const allowed = new Set([...sectionIds, "keywords", "highlights", "abstract:uz", "abstract:ru", "abstract:en"]);
-  const notes = (Array.isArray(j.notes) ? j.notes : [])
-    .map((n) => String(n ?? "").replace(/\s+/g, " ").trim().slice(0, 300))
-    .filter(Boolean)
-    .slice(0, 5);
-  const fixes = (Array.isArray(j.fixes) ? j.fixes : [])
-    .map((f) => {
-      const o = f as { target?: unknown; instruction?: unknown } | null;
-      const target = String(o?.target ?? "").trim();
-      const instruction = String(o?.instruction ?? "").replace(/\s+/g, " ").trim().slice(0, 400);
-      return allowed.has(target) && instruction ? { target, instruction } : null;
-    })
-    .filter((f): f is { target: string; instruction: string } => Boolean(f))
-    .slice(0, 5);
-  const scores = Object.fromEntries(JUDGE_CRITERIA.map((c) => [c, clampScore(j[c])])) as Record<JudgeCriterion, number>;
-  return { ...scores, notes, fixes, ...(skipped ? { skipped } : {}) };
+  return parseJudgeFor(articleJudgeSpec(judgeCfg), raw, sectionIds, EXTRA_TARGETS);
 }
 
 export function neutralJudge(): JudgeResult {
-  return { ...(Object.fromEntries(JUDGE_CRITERIA.map((c) => [c, JUDGE_NEUTRAL])) as Record<JudgeCriterion, number>), notes: [], fixes: [] };
+  return neutralJudgeFor(articleJudgeSpec());
 }
 
 /** Baholovchi mezonlari → `ReviewCheck` (3 yashil, 2 sariq, ≤1 qizil) + tavsiyalar. */
 export function judgeChecks(j: JudgeResult): ReviewCheck[] {
-  const skip = new Set(j.skipped ?? []);
-  const out: ReviewCheck[] = JUDGE_CRITERIA.filter((c) => !skip.has(c)).map((c) =>
-    check(`judge:${c}`, j[c] >= 3 ? "green" : j[c] === 2 ? "yellow" : "red", JUDGE_LABELS[c], `${j[c]}/3`),
-  );
-  j.fixes.forEach((f, i) => out.push(check(`judge:fix:${i + 1}`, "yellow", "Baholovchi tavsiyasi", `${f.target}: ${f.instruction}`, rewrite(f.target, f.instruction))));
-  return out;
+  return judgeChecksFor(articleJudgeSpec(), j);
 }
 
 /* ────────────────────────── ball ────────────────────────── */
 
-const LEVEL_SCORE: Record<ReviewLevel, number> = { green: 1, yellow: 0.5, red: 0 };
-
 /** 60% qoidalar (yashil 1 / sariq 0.5 / qizil 0) + 40% baholovchi (6 × 3). */
 export function scoreReview(rules: ReviewCheck[], judge: JudgeResult): number {
-  const r = rules.length ? rules.reduce((n, c) => n + LEVEL_SCORE[c.level], 0) / rules.length : 1;
-  // Tur uchun o'tkazib yuborilgan mezonlar (tezis: taqqoslash) maxrajga kirmaydi.
-  const skip = new Set(judge.skipped ?? []);
-  const counted = JUDGE_CRITERIA.filter((c) => !skip.has(c));
-  const j = counted.length ? counted.reduce((n, c) => n + judge[c], 0) / (counted.length * 3) : 1;
-  return Math.max(0, Math.min(100, Math.round(100 * (RULE_WEIGHT * r + JUDGE_WEIGHT * j))));
+  return scoreReviewFor(rules, judge, JUDGE_CRITERIA);
 }
 
 /* ────────────────────────── asosiy ────────────────────────── */
