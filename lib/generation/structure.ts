@@ -71,8 +71,11 @@ export function structureNeeds(meta: DocMeta): StructureNeed[] {
       if (type.requiresPrisma) out.push("prismaFigure");
       return out;
     }
-    case "thesis":
-      return ["abstract"];
+    case "thesis": {
+      // AUDIT-19: tezis maqola dvigatelida — tur konferensiya tezisi (standart) yoki kengaytirilgan.
+      const type = ARTICLE_TYPES[meta.articleType && meta.articleType.startsWith("conference_") ? meta.articleType : "conference_thesis"];
+      return ["abstract", ...hardSections(type.id).map((id): StructureNeed => `section:${id}`)];
+    }
     case "coursework":
       // Jadval faqat foydalanuvchi vizual so'ragan bo'lsa kutiladi.
       return meta.includeVisuals ? ["table"] : [];

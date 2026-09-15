@@ -1014,91 +1014,10 @@ test("shablon glossariysida atama nomi takrorlanmaydi", async () => {
   assert.equal(new Set(headings).size, headings.length, "atama sarlavhalari noyob bo'lishi kerak");
 });
 
-test("IMRAD annotatsiyasiz tezis qat'iy darvozadan o'tmaydi", async () => {
-  const { writeImradWithLlm } = await import("../lib/generation/write-specials.ts");
-  const { hardMissing } = await import("../lib/generation/structure.ts");
-  const { extractMeta } = await import("../lib/generation/meta.ts");
-  const { TOOL_BY_ID } = await import("../lib/tools.ts");
-
-  /*
-   * AYNAN P0-4 (AUDIT-5). `structure.ts` da annotatsiya QAT'IY darvoza
-   * deb e'lon qilingan (`HARD = {"abstract"}`), lekin IMRAD yo'li bo'sh
-   * annotatsiya o'rniga bir jumlalik stub qo'yardi:
-   *
-   *   «Maqolada «X» IMRAD tuzilmasi asosida yoritiladi»
-   *
-   * Natijada darvoza IMRAD da HECH QACHON ishga tushmasdi — qat'iy deb
-   * yozilgan tekshiruv amalda bezak edi. Jurnalga yuborib bo'lmaydigan
-   * «maqola» to'liq narxda COMPLETED bo'lardi.
-   *
-   * Sinov jonli LLM siz: `fetch` stub qilinadi. Annotatsiya so'roviga
-   * BO'SH javob, bo'lim so'rovlariga matn qaytariladi — ya'ni maqola
-   * yozildi, faqat annotatsiya chiqmadi.
-   */
-  const realFetch = globalThis.fetch;
-  const savedGemini = process.env.GEMINI_API_KEY;
-  const savedXai = process.env.XAI_API_KEY;
-  process.env.GEMINI_API_KEY = "test-key";
-  delete process.env.XAI_API_KEY;
-
-  const para = (n: number) =>
-    Array.from({ length: n }, (_, i) => `Bu ${i + 1}-paragraf. `.repeat(14)).join("\n\n");
-  let abstractCalls = 0;
-
-  globalThis.fetch = (async (_url: string, init?: { body?: string }) => {
-    const body = String(init?.body ?? "");
-    const isAbstract = body.includes("Annotatsiya.");
-    if (isAbstract) abstractCalls += 1;
-    // Annotatsiya — bo'sh JSON; bo'limlar — to'la matn.
-    const text = isAbstract ? "{}" : para(4);
-    return {
-      ok: true,
-      status: 200,
-      json: async () => ({ candidates: [{ content: { parts: [{ text }] } }] }),
-    } as never;
-  }) as typeof fetch;
-
-  try {
-    /*
-     * Maqola 2 dan keyin IMRAD yo'li (`writeImradWithLlm`) FAQAT tezisda
-     * qoldi — maqola o'z dvigateliga (`article/engine.ts`) ketadi va u
-     * yerda annotatsiya darvozasi `tests/article-engine.test.mts` da.
-     */
-    const meta = extractMeta(TOOL_BY_ID.thesis, {
-      topic: "Quyosh energiyasi",
-      kind: "imrad",
-      pages: "3-5",
-    } as never);
-
-    const doc = await writeImradWithLlm(meta, Date.now() + 120_000);
-
-    assert.ok(doc, "bo'limlar yozilgani uchun hujjat qurilishi kerak");
-    assert.ok(doc.sections.length >= 4, "IMRAD to'rt bo'limi bo'lishi kerak");
-
-    // 1) Stub QO'YILMAYDI.
-    assert.ok(
-      !doc.abstracts?.length,
-      `annotatsiya bo'sh qolishi kerak, chiqdi: ${JSON.stringify(doc.abstracts)}`,
-    );
-
-    // 2) Qat'iy darvoza ENDI ishga tushadi — `buildArtifact` shuni tashlaydi.
-    assert.deepEqual(
-      hardMissing(meta, doc),
-      ["abstract"],
-      "annotatsiyasiz IMRAD maqolasi qat'iy darvozadan yiqilishi kerak",
-    );
-
-    // 3) Bitta o'tkinchi yiqilish butun maqolani yo'q qilmasligi uchun
-    //    qayta urinish bor.
-    assert.equal(abstractCalls, 2, "annotatsiyaga ikkinchi urinish berilishi kerak");
-  } finally {
-    globalThis.fetch = realFetch;
-    if (savedGemini === undefined) delete process.env.GEMINI_API_KEY;
-    else process.env.GEMINI_API_KEY = savedGemini;
-    if (savedXai !== undefined) process.env.XAI_API_KEY = savedXai;
-  }
-});
-
+/*
+ * «IMRAD annotatsiyasiz tezis…» testi olib tashlandi (AUDIT-19): tezis endi
+ * maqola dvigatelida — annotatsiya darvozasi `tests/article-engine.test.mts` da.
+ */
 test("va'da qilingan miqdor kam chiqsa farq qaytariladi", async () => {
   const { deliveredCount } = await import("../lib/generation/delivered.ts");
   const { shortfallRatio } = await import("../lib/server/worker.ts");

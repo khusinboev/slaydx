@@ -949,7 +949,10 @@ test("janr o'z tuzilma talabiga ega", async () => {
    */
   assert.deepEqual(structureNeeds(m("article")), ["abstract", "section:intro", "section:results", "section:conclusion"]);
   assert.deepEqual(structureNeeds(m("article", { articleType: "review_systematic" })), ["abstract", "section:intro", "section:results", "section:conclusion", "prismaFigure"]);
-  assert.deepEqual(structureNeeds(m("thesis")), ["abstract"]);
+  // Tezis (AUDIT-19) — maqola dvigateli: annotatsiya + konferensiya tezisining majburiy bloki.
+  assert.deepEqual(structureNeeds(m("thesis")), ["abstract", "section:body"]);
+  assert.deepEqual(structureNeeds(m("thesis", { articleType: "conference_extended" })), ["abstract", "section:intro", "section:results", "section:conclusion"]);
+  assert.deepEqual(structureNeeds(m("thesis", { articleType: "imrad_oak" })), ["abstract", "section:body"], "ruxsatsiz tur → konferensiya tezisi");
   assert.deepEqual(structureNeeds(m("mustaqil-ish")), ["ownTask"]);
 
   // Referat — sof adabiyot sharhi, qo'shimcha talab yo'q.
@@ -1294,7 +1297,8 @@ test("standart hajm narx, dvigatel va formada bir xil", async () => {
    * yuborilgan so'rov 4 000 tangaga 13 betlik ish so'rardi.
    */
   const withPages = TOOLS.filter((t) => t.fields.some((f) => f.name === "pages"));
-  assert.ok(withPages.length >= 5, "bet tanlovi bo'lgan vositalar topilishi kerak");
+  // Kurs ishi, referat, insho, mustaqil ish (maqola va tezis — custom forma, `ARTICLE_PRICES`/`THESIS_PRICES`).
+  assert.ok(withPages.length >= 4, "bet tanlovi bo'lgan vositalar topilishi kerak");
 
   for (const tool of withPages) {
     const fallback = defaultPages(tool.id);
@@ -1323,7 +1327,8 @@ test("standart hajm narx, dvigatel va formada bir xil", async () => {
 
   // Aniq holat: maqola «3–5» tarifida qoladi, «10–15» ga sirg'alib ketmaydi.
   assert.equal(extractMeta(TOOL_BY_ID.article, { topic: "X" } as FormValues).targetPages, 4);
-  assert.equal(extractMeta(TOOL_BY_ID.thesis, { topic: "X" } as FormValues).targetPages, 4);
+  // Tezis (AUDIT-19): standart paket «1–2» (konferensiya tezisi) → 2 bet; `THESIS_PRICES["1-2"]` bilan bir xil manba (`defaultPages`).
+  assert.equal(extractMeta(TOOL_BY_ID.thesis, { topic: "X" } as FormValues).targetPages, 2);
 });
 
 test("kurs ishi prompti dvigatel so'ragan bob soniga mos keladi", async () => {

@@ -118,7 +118,7 @@ export const resumeAdapter: EditAdapter = {
  */
 export const articleAdapter: EditAdapter = {
   id: "article",
-  tools: new Set(["article"]),
+  tools: new Set(["article", "thesis"]),
   hasModel: (doc) => Boolean(doc?.sections?.length),
   prepare: (doc) => doc,
   parse: (raw) => parseArticleOps(raw),

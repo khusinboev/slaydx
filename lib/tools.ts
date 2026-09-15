@@ -4,6 +4,7 @@ import { SOURCE_LANGUAGES } from "./languages";
 import { isArticleTypeId } from "./generation/article/types-registry";
 import { isPublicationProfileId } from "./generation/article/profiles";
 import { articleTypeOf, normalizeArticlePages } from "./generation/article/input";
+import { ARTICLE_TYPES } from "./generation/article/types-registry";
 import type { PagesId } from "./generation/article/types";
 
 const TOPIC_FILE_MODES = [
@@ -128,6 +129,22 @@ const CUSTOM_REQUIRED: Record<string, ToolField[]> = {
  * ko'riladi (`scripts/cost-report.mts`). `tests/pricing.test.mts` qulflaydi.
  */
 export const ARTICLE_PRICES: Record<PagesId, number> = { "1-2": 4000, "3-5": 6000, "5-10": 8000, "10-15": 12000 };
+
+/**
+ * Tezis (AUDIT-19): maqola dvigatelidagi konferensiya turlari — 1–2 bet
+ * (tezis, 200–300 so'z) 4 000, 3–5 bet (kengaytirilgan tezis) 5 000.
+ * Eski 5–10…20–25 betlik «tezis» paketlari (5–8 ming) tezis emas edi —
+ * shu hajm kerak bo'lsa «Maqola» vositasi.
+ */
+export const THESIS_TYPE_IDS = ["conference_thesis", "conference_extended"] as const;
+export type ThesisTypeId = (typeof THESIS_TYPE_IDS)[number];
+export const THESIS_PRICES: Record<"1-2" | "3-5", number> = { "1-2": 4000, "3-5": 5000 };
+export const isThesisType = (v: unknown): v is ThesisTypeId => (THESIS_TYPE_IDS as readonly string[]).includes(String(v));
+/** Tezis vositasidagi maqola turi: ruxsatsiz/bo'sh → `conference_thesis` (narx ham, dvigatel ham shu qoida bilan). */
+export function thesisTypeId(values: FormValues): ThesisTypeId {
+  const t = String(values.articleType ?? "").trim();
+  return isThesisType(t) ? t : "conference_thesis";
+}
 
 /**
  * O'qituvchi vositalari uchun MUASSASA maydoni.
@@ -441,11 +458,11 @@ export const TOOLS: ToolConfig[] = [
     id: "thesis",
     slug: "thesis",
     title: "Tezis",
-    pageTitle: "Tezis sozlamalari",
+    pageTitle: "Tezis",
     group: "talaba",
     icon: "graduation-cap",
     tc: "6 182 212",
-    description: "Ilmiy tezislar yarating",
+    description: "Konferensiya tezisi — tekshirilgan manbalar, annotatsiya, tayyorlik hisoboti",
     submitLabel: "Tezisni yaratish",
     creatingLabel: "Tezis yaratilmoqda...",
     createdLabel: "tezis tayyor!",
@@ -454,47 +471,16 @@ export const TOOLS: ToolConfig[] = [
     extraOptional: true,
     output: "docx",
     basePrice: 4000,
-    fields: [
-      { kind: "language", name: "language", legend: "Tezis tilini tanlang" },
-      {
-        kind: "text",
-        name: "author",
-        legend: "To'liq ismingiz, kursingiz va guruhingizni yozing",
-        placeholder: "Aliyev Ali — 4-kurs, 401-guruh",
-        required: true,
-      },
-      ...writerFields({ universityRequired: true }).filter((f) => f.name !== "author"),
-      {
-        kind: "chips",
-        name: "kind",
-        legend: "Tezis turini tanlang",
-        options: [
-          { value: "standard", label: "Standart" },
-          { value: "imrad", label: "Ilmiy (IMRAD)" },
-        ],
-      },
-      {
-        kind: "chips",
-        name: "pages",
-        legend: "Tezis hajmini tanlang (sahifalar soni)",
-        options: [
-          { value: "3-5", label: "3-5 bet" },
-          { value: "5-10", label: "5-10 bet" },
-          { value: "10-15", label: "10-15 bet" },
-          { value: "15-20", label: "15-20 bet" },
-          { value: "20-25", label: "20-25 bet" },
-        ],
-      },
-      {
-        kind: "chips",
-        name: "annotationLangs",
-        legend: "Annotatsiya va kalit so‘zlar qaysi tillarda bo‘lsin?",
-        options: [
-          { value: "same", label: "Faqat tezis tilida" },
-          { value: "all", label: "Barcha tillar (UZ + EN + RU)" },
-        ],
-      },
-    ],
+    /*
+     * Talaba ishlari 2 (AUDIT-19, qaror 2): tezis MAQOLA dvigatelida —
+     * `ArticleComposer` faqat `conference_thesis`/`conference_extended`
+     * turlarini ko'rsatadi (`THESIS_TYPE_IDS`), manbalar OpenAlex/Crossref
+     * bilan tekshiriladi, hisobot + sayqal + ko'ruvchida tahrir. Eski
+     * `kind: standard|imrad` yo'li (`writeImradWithLlm`) o'chirildi; narx
+     * `THESIS_PRICES` (konferensiya hajmi bo'yicha).
+     */
+    fields: [],
+    custom: "article",
   },
   {
     id: "translation",
@@ -984,9 +970,10 @@ export function preflightError(tool: ToolConfig, values: FormValues): string | n
    * `imrad_oak` ga jim tushar va foydalanuvchi ko'rmagan tur uchun pul
    * yechilardi. Eski `kind` (`imrad`/`standard`) hali qabul qilinadi.
    */
-  if (tool.id === "article") {
+  if (tool.id === "article" || tool.id === "thesis") {
     const t = String(values.articleType ?? "").trim();
     if (t && !isArticleTypeId(t)) return "Noma'lum maqola turi";
+    if (tool.id === "thesis" && t && !isThesisType(t)) return "Tezis uchun faqat konferensiya turlari";
     const p = String(values.pubProfile ?? "").trim();
     if (p && !isPublicationProfileId(p)) return "Noma'lum nashr profili";
     const topicLen = String(values.topic ?? "").trim().length;
@@ -1148,7 +1135,8 @@ export function toolBlockedReason(tool: ToolConfig, features?: ToolFeatures | nu
  */
 export function defaultPages(toolId: ToolId): string {
   if (toolId === "essay") return "2";
-  if (toolId === "article" || toolId === "thesis") return "3-5";
+  if (toolId === "article") return "3-5";
+  if (toolId === "thesis") return "1-2";
   if (toolId === "coursework") return "20-25";
   return "10-15";
 }
@@ -1212,16 +1200,9 @@ export function priceFor(tool: ToolConfig, values: FormValues): number {
     return ARTICLE_PRICES[normalizeArticlePages(articleTypeOf(values), values.pages ?? defaultPages(tool.id))];
   }
   if (tool.id === "thesis") {
-    const pages = String(values.pages ?? defaultPages(tool.id));
-    return (
-      {
-        "3-5": 4000,
-        "5-10": 5000,
-        "10-15": 6000,
-        "15-20": 7000,
-        "20-25": 8000,
-      }[pages] ?? 4000
-    );
+    // Konferensiya hajmi: tur ruxsat bergan paket (`normalizeArticlePages`), narx `THESIS_PRICES`.
+    const pages = normalizeArticlePages(ARTICLE_TYPES[thesisTypeId(values)], values.pages ?? defaultPages(tool.id));
+    return THESIS_PRICES[pages === "3-5" ? "3-5" : "1-2"];
   }
   if (tool.id === "translation") {
     // Hajm `translationChars` dan — fayl rejimida u SERVER to'ldirgan

@@ -7,7 +7,7 @@ import { suggestUdk, updateProfile, type ServerUser } from "@/lib/api-client";
 import { useAppStore } from "@/lib/store";
 import { useConfirmClick } from "@/components/overlays/useConfirmClick";
 import { profilePatchFrom } from "@/lib/profile-sync";
-import { priceFor, formatTanga, ARTICLE_PRICES } from "@/lib/tools";
+import { priceFor, formatTanga, ARTICLE_PRICES, THESIS_PRICES, THESIS_TYPE_IDS, thesisTypeId } from "@/lib/tools";
 import {
   ARTICLE_LIMITS,
   CITE_STYLES,
@@ -153,8 +153,13 @@ const CITE_STYLE_LABEL: Record<CiteStyle, string> = {
 const figureOptions = (pages: PagesId) => Array.from({ length: maxFiguresFor(pages) + 1 }, (_, n) => ({ value: String(n), label: String(n) }));
 const clampFigures = (n: number, pages: PagesId) => Math.max(0, Math.min(maxFiguresFor(pages), n));
 
-function emptyUi(profile: UserProfile, user: ServerUser | null): Ui {
-  const type = ARTICLE_TYPES.imrad_oak;
+/** Tezis vositasi (AUDIT-19): maqola dvigatelining konferensiya turlari, o'z narx jadvali. */
+const isThesisTool = (tool: ToolConfig) => tool.id === "thesis";
+const priceLabelFor = (tool: ToolConfig, pages: PagesId) => (isThesisTool(tool) ? THESIS_PRICES[pages === "3-5" ? "3-5" : "1-2"] : ARTICLE_PRICES[pages]);
+
+function emptyUi(profile: UserProfile, user: ServerUser | null, tool?: ToolConfig): Ui {
+  const type = tool && isThesisTool(tool) ? ARTICLE_TYPES.conference_thesis : ARTICLE_TYPES.imrad_oak;
+  const pagesDefault = tool && isThesisTool(tool) ? "1-2" : "3-5";
   return {
     topic: "",
     articleType: type.id,
@@ -162,7 +167,7 @@ function emptyUi(profile: UserProfile, user: ServerUser | null): Ui {
     pubProfileTouched: false,
     citeStyle: "",
     language: "uz",
-    pages: normalizeArticlePages(type, "3-5"),
+    pages: normalizeArticlePages(type, pagesDefault),
     // Birinchi qator profildan prefill (`ResumeComposer` prefill naqshi) —
     // ism bo'lmasa foydalanuvchi nomi (`user.name`) zaxira.
     authors: [{ name: profile.author || user?.name || "", org: profile.organization || "" }],
@@ -171,7 +176,7 @@ function emptyUi(profile: UserProfile, user: ServerUser | null): Ui {
     userFacts: "",
     userRefs: [],
     userDataCsv: "",
-    figureCount: clampFigures(2, normalizeArticlePages(type, "3-5")),
+    figureCount: clampFigures(2, normalizeArticlePages(type, pagesDefault)),
     figureKinds: [],
     research: true,
     extra: "",
@@ -224,8 +229,9 @@ function userRefRowOf(r: ArticleUserRef): UserRefRow {
 }
 
 /** Qoralamadagi `FormValues` → forma holati — bitta manba (`articleInputFromValues`). */
-function uiFromValues(values: FormValues, base: Ui): Ui {
-  const input = articleInputFromValues(values);
+function uiFromValues(values: FormValues, base: Ui, tool?: ToolConfig): Ui {
+  // Tezis: qoralamadagi ruxsatsiz tur konferensiya tezisiga tushadi (server `thesisTypeId` bilan bir xil).
+  const input = articleInputFromValues(tool && isThesisTool(tool) ? { ...values, articleType: thesisTypeId(values) } : values);
   const type = ARTICLE_TYPES[input.articleType];
   return {
     ...base,
@@ -302,7 +308,7 @@ export function ArticleComposer({
 }) {
   const router = useRouter();
   const loggedIn = useAppStore((s) => s.loggedIn);
-  const [ui, setUi] = useState<Ui>(() => emptyUi(profile, user));
+  const [ui, setUi] = useState<Ui>(() => emptyUi(profile, user, tool));
   const [loading, setLoading] = useState(false);
   const [fileBusy, setFileBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -310,7 +316,8 @@ export function ArticleComposer({
   /** UDK «Taklif» (AUDIT-18 Q-4): serverdan taklif — maydonga tushadi, ostida «tekshiring» izohi. */
   const [udkBusy, setUdkBusy] = useState(false);
   const [udkNote, setUdkNote] = useState<string | null>(null);
-  const { draft, ready, save, clear, flush } = useFormDraft("article", { enabled: loggedIn });
+  // Qoralama vosita bo'yicha (`thesis` alohida — turlari va hajmi boshqa).
+  const { draft, ready, save, clear, flush } = useFormDraft(tool.id, { enabled: loggedIn });
 
   // Qoralama kelgach BIR marta qo'llanadi — foydalanuvchi yozayotgan
   // matnni keyinchalik ustiga yozib yuborish mumkin emas.
@@ -318,8 +325,8 @@ export function ArticleComposer({
   useEffect(() => {
     if (!ready || restored) return;
     setRestored(true);
-    if (draft && Object.keys(draft).length) setUi((s) => uiFromValues(draft, s));
-  }, [ready, draft, restored]);
+    if (draft && Object.keys(draft).length) setUi((s) => uiFromValues(draft, s, tool));
+  }, [ready, draft, restored, tool]);
 
   useEffect(() => {
     if (!restored) return;
@@ -400,7 +407,7 @@ export function ArticleComposer({
 
   const clearConfirm = useConfirmClick(() => {
     void clear();
-    setUi(emptyUi(profile, user));
+    setUi(emptyUi(profile, user, tool));
   });
 
   async function submit() {
@@ -451,7 +458,13 @@ export function ArticleComposer({
         ) : null}
         <Row label="Tur" wide>
           <span data-field="articleType" className="block">
-            <ArticleTypeTile value={ui.articleType} language={ui.language} onChange={onTypeChange} />
+            <ArticleTypeTile
+              value={ui.articleType}
+              language={ui.language}
+              onChange={onTypeChange}
+              allowed={isThesisTool(tool) ? THESIS_TYPE_IDS : undefined}
+              title={isThesisTool(tool) ? "Tezis turini tanlang" : undefined}
+            />
           </span>
         </Row>
       </Card>
@@ -566,7 +579,7 @@ export function ArticleComposer({
           <span data-field="pages" className="block">
             <Segmented
               ariaLabel="Hajm"
-              options={type.pages.map((id) => ({ value: id, label: `${PAGE_LABEL[id]} · ${formatTanga(ARTICLE_PRICES[id])}` }))}
+              options={type.pages.map((id) => ({ value: id, label: `${PAGE_LABEL[id]} · ${formatTanga(priceLabelFor(tool, id))}` }))}
               value={ui.pages}
               onChange={(v) => onPagesChange(v as PagesId)}
             />

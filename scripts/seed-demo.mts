@@ -60,13 +60,15 @@ const SAMPLES: Record<string, FormValues> = {
     skills: "React, TypeScript, Next.js, Tailwind CSS",
   },
   thesis: {
+    // AUDIT-19: tezis maqola dvigatelida — konferensiya tezisi, 1–2 bet.
     topic: "Raqamli ta'limda sun'iy intellekt vositalarining o'rni",
     language: "uz",
-    author: "Abdujabbor Husinboyev — 4-kurs, 401-guruh",
-    university: "Toshkent davlat universiteti",
-    kind: "standard",
-    pages: "5-10",
-    annotationLangs: "same",
+    articleType: "conference_thesis",
+    pubProfile: "conference",
+    pages: "1-2",
+    authors: JSON.stringify([{ name: "Abdujabbor Husinboyev", org: "Toshkent davlat universiteti" }]),
+    figureCount: 0,
+    research: true,
   },
   translation: {
     mode: "text",

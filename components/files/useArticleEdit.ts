@@ -24,7 +24,7 @@ import { asEditGen, useDocEdit, SAVED_FLASH_MS, type DocEdit } from "./useDocEdi
 
 export type ArticleEdit = DocEdit<ArticleOp>;
 
-const ARTICLE_TOOLS = ["article"] as const;
+const ARTICLE_TOOLS = ["article", "thesis"] as const;
 
 /** Bo'limli maqola — tahrirlanadi (yangi ham, eski ham). */
 const hasArticle = (doc: AcademicDoc) => Boolean(doc.sections?.length);

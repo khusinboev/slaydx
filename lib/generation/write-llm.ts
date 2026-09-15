@@ -17,13 +17,13 @@ import {
 import { manualOutlineOf, outlineShape } from "./structure";
 import {
   writeGlossaryWithLlm,
-  writeImradWithLlm,
   writeKeysWithLlm,
   writeLessonWithLlm,
   writeMapWithLlm,
 } from "./write-specials";
 import { buildResumeDoc } from "./resume/write";
 import { buildArticleDoc, type ArticleBuildOpts } from "./article/engine";
+import { thesisTypeId } from "../tools";
 import type { FormValues } from "../types";
 import type { AcademicDoc, Block, BuiltFile, DocMeta, DocSection } from "./types";
 
@@ -1045,16 +1045,20 @@ export async function writeWithLlm(
   /*
    * Maqola 2 (AUDIT-17): maqola — o'z dvigateli. Eski formadagi
    * `kind === "imrad"` `normalizeArticleType` orqali `imrad_classic` ga
-   * ko'chadi; IMRAD yo'li (`writeImradWithLlm`) endi FAQAT tezisda.
+   * ko'chadi; tezis ham shu dvigatelda (AUDIT-19), IMRAD yo'li o'chirildi.
    */
-  if (meta.toolId === "article") {
-    const built = await buildArticleDoc(meta, values as FormValues, { deadline: deadline ?? Date.now() + 240_000, onStage: extras.onStage, source: extras.source });
+  if (meta.toolId === "article" || meta.toolId === "thesis") {
+    /*
+     * Talaba ishlari 2 (AUDIT-19): tezis ham maqola dvigatelida —
+     * tur `conference_thesis`/`conference_extended` ga majburlanadi
+     * (`thesisTypeId`), boshqa tur so'ralsa ham (narx `priceFor` da
+     * shu qoida bilan). Eski IMRAD yo'li o'chirildi.
+     */
+    const v = meta.toolId === "thesis" ? { ...values, articleType: thesisTypeId(values as FormValues) } : values;
+    const built = await buildArticleDoc({ ...meta, articleType: meta.toolId === "thesis" ? thesisTypeId(values as FormValues) : meta.articleType }, v as FormValues, { deadline: deadline ?? Date.now() + 240_000, onStage: extras.onStage, source: extras.source });
     if (!built) return null;
     extras.onCost?.(built.cost);
     return built.doc;
-  }
-  if (meta.toolId === "thesis" && meta.kind === "imrad") {
-    return writeImradWithLlm(meta, deadline);
   }
   if (WRITER.has(meta.toolId)) return writeWriterWithLlm(meta, deadline);
   if (meta.toolId === "lesson-plan") return writeLessonWithLlm(meta, deadline);

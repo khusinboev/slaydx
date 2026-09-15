@@ -134,6 +134,9 @@ export type BuildOptions = {
   photo?: { url: string; assetId: string; shape: "circle" | "square"; crop?: { x: number; y: number; zoom: number }; originalAssetId?: string };
 };
 
+/** Maqola dvigatelidagi vositalar: maqola va (AUDIT-19 dan) tezis. */
+const isArticleTool = (id: string) => id === "article" || id === "thesis";
+
 /** Maqola turining so'z oralig'i (tezis) — bor bo'lsa hujjat bet bilan o'lchanmaydi. */
 function articleWordRange(doc: AcademicDoc): [number, number] | undefined {
   const type = doc.article?.type ?? doc.meta.articleType;
@@ -146,7 +149,7 @@ function articleWordRange(doc: AcademicDoc): [number, number] | undefined {
  * (`articleWordPlan.total` — annotatsiya ×3 ham hisobda, `wordCount` kabi).
  */
 function articleGateWords(doc: AcademicDoc): number {
-  const typeId = doc.article?.type ?? doc.meta.articleType ?? "imrad_oak";
+  const typeId = doc.article?.type ?? doc.meta.articleType ?? (doc.meta.toolId === "thesis" ? "conference_thesis" : "imrad_oak");
   const type = ARTICLE_TYPES[typeId];
   if (type.wordRange) return type.wordRange[0];
   const profileId = doc.article?.profile ?? doc.meta.pubProfile ?? type.defaultProfile;
@@ -267,7 +270,7 @@ export async function buildArtifact(
      * (`articleWordPlan`): tezis 200–300 so'z bilan o'lchanadi, bet bilan
      * emas; IEEE (TNR 12, yakka) bir betga OAK dan 1.7 marta ko'p so'z oladi.
      */
-    const want = tool.id === "article" ? articleGateWords(academic) : targetWords(meta.targetPages);
+    const want = isArticleTool(tool.id) ? articleGateWords(academic) : targetWords(meta.targetPages);
     const got = wordCount(academic);
     if (got < want * MIN_LENGTH_RATIO) {
       const pages = Math.max(1, Math.round(got / 230));
@@ -323,7 +326,7 @@ export async function buildArtifact(
    * va'da qilmaydi — ular uchun renderlangan sahifa darvozasi yo'q
    * (`max(2, …)` bir sahifalik tezisni yiqitardi).
    */
-  const pageGated = LENGTH_GATED.has(tool.id) && !(tool.id === "article" && articleWordRange(academic));
+  const pageGated = LENGTH_GATED.has(tool.id) && !(isArticleTool(tool.id) && articleWordRange(academic));
   if (llmDoc && pageGated && pdfAvailable() && remainingMs(deadline) > 20_000) {
     const pdf = await toPdf(bytes, `${meta.fileNameHint}.docx`).catch(() => null);
     if (pdf) {

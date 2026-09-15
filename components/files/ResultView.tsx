@@ -392,7 +392,7 @@ export function ResultView({ id }: { id: string }) {
               {(gen.delivered.refundShare ?? 1) > 0 ? " — farq balansingizga qaytarildi." : "."}
             </p>
           ) : null}
-          {gen.type === "article" && gen.doc?.article?.review ? (
+          {(gen.type === "article" || gen.type === "thesis") && gen.doc?.article?.review ? (
             /*
              * Tayyorlik hisoboti (Maqola 2, WP5) — ko'ruvchi TEPASIDA,
              * yig'iladigan `<details open>`: ko'ruvchi o'z ichki scroll'i
