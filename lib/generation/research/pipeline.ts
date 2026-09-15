@@ -116,20 +116,32 @@ export async function resolveUserRefs(userRefs: ArticleUserRef[], http: HttpOpts
   });
 }
 
-/** Dedup: DOI (kichik harf) → sarlavha (normallashtirilgan). Birinchi uchragani qoladi. */
+/**
+ * Dedup: id → DOI (kichik harf) → ISBN → sarlavha (normallashtirilgan).
+ * Birinchi uchragani qoladi (foydalanuvchi manbalari ro'yxat boshida —
+ * `u1` ustun bo'lsin).
+ *
+ * ISBN AUDIT-19 da qo'shildi: bir darslikning ikki nashri Google Books da
+ * ikki `volumeId` bilan, biroz boshqacha sarlavha bilan keladi
+ * («… (2-nashr)») — sarlavha dedupidan o'tib ketardi.
+ */
 export function dedupeReferences<T extends Reference>(refs: T[]): T[] {
   const seenDoi = new Set<string>();
+  const seenIsbn = new Set<string>();
   const seenTitle = new Set<string>();
   const seenId = new Set<string>();
   const out: T[] = [];
   for (const r of refs) {
     const doi = r.doi?.toLowerCase();
+    const isbn = r.isbn?.toUpperCase();
     const title = normalizeTitle(r.title);
     if (seenId.has(r.id)) continue;
     if (doi && seenDoi.has(doi)) continue;
+    if (isbn && seenIsbn.has(isbn)) continue;
     if (title.length > 12 && seenTitle.has(title)) continue;
     seenId.add(r.id);
     if (doi) seenDoi.add(doi);
+    if (isbn) seenIsbn.add(isbn);
     if (title) seenTitle.add(title);
     out.push(r);
   }
