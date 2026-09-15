@@ -23,9 +23,16 @@
  * yerda: `lib/server/article-rewrite.ts` uni import qiladi (ikkita nusxa
  * yo'q). Xatolar `RewriteError` (status/code) — server `ApiError` ga
  * o'giradi.
+ *
+ * AUDIT-19 R0-A: turga BOG'LIQ BO'LMAGAN qism (`needsUserData`,
+ * `HONESTY_LIMIT`, `keepVisuals`, `applyPolishWith`, `runPolishWith`,
+ * konstantalar) `lib/generation/report/polish-core.ts` ga ko'chdi —
+ * kurs ishi va insho dvigatellari aynan shu yadroni ishlatadi. Bu
+ * faylda MAQOLAGA XOS qism (reja, promptlar, `judgeFromReview`) va
+ * o'zgarmagan imzolar/eksportlar qoldi.
  */
-import type { AcademicDoc, Block, DocSection } from "../types";
-import type { ArticleReview, PolishLog, ReviewCheck, UserNeed } from "./types";
+import type { AcademicDoc, DocSection } from "../types";
+import type { ArticleReview, ReviewCheck, UserNeed } from "./types";
 import { ARTICLE_TYPES } from "./types-registry";
 import { PUBLICATION_PROFILES } from "./profiles";
 import { articleLabels } from "./labels";
@@ -51,56 +58,48 @@ import {
 import type { ResearchStats } from "../research/pipeline";
 import type { LlmUsage } from "../llm-roles";
 import { parseLlmObject } from "../json";
-import { cleanText, mapPool, remainingMs } from "../quality";
+import { cleanText, remainingMs } from "../quality";
+/*
+ * SAYQAL YADROSI NEYTRAL (AUDIT-19 R0-A) — `lib/generation/report/
+ * polish-core.ts`: Q-2 (`needsUserData`, `HONESTY_LIMIT`), Q-3 qabul
+ * chegarasi, parallel qo'llash va jurnal kurs ishi/insho bilan umumiy.
+ * Bu fayl MAQOLAGA XOS qismni saqlaydi — reja (`planPolish`), qayta
+ * yozish promptlari (`rewriteFix`) va o'zgarmagan imzolar (X-7).
+ */
+import {
+  HONESTY_LIMIT,
+  POLISH_JUDGE_NOTE,
+  POLISH_JUDGE_RESERVE_MS,
+  POLISH_MAX_FIXES,
+  POLISH_SKIP,
+  REWRITE_REVIEW_NOTE,
+  REWRITE_TIMEOUT_MS,
+  RewriteError,
+  applyPolishWith,
+  isVisualBlock,
+  keepVisuals,
+  needsUserData,
+  runPolishWith,
+  type ApplyPolishResultOf,
+  type Fix,
+  type PolishPlan,
+  type PolishSkip,
+  type RunPolishResult,
+} from "../report/polish-core";
 
 /* ────────────────────────── tiplar va konstantalar ────────────────────────── */
 
-export type ArticleFix = { op: "rewrite"; target: string; instruction: string };
+export type ArticleFix = Fix;
 
-export type PolishSkip = { id: string; reason: string };
-export type PolishPlan = { fixes: ArticleFix[]; skipped: PolishSkip[] };
+export { HONESTY_LIMIT, POLISH_JUDGE_NOTE, POLISH_JUDGE_RESERVE_MS, POLISH_MAX_FIXES, POLISH_SKIP, REWRITE_REVIEW_NOTE, REWRITE_TIMEOUT_MS, RewriteError, keepVisuals, needsUserData };
+export type { PolishPlan, PolishSkip };
 
-/** Bir sayqalda ko'pi bilan shuncha fix (vaqt/narx byudjeti: 2 to'lqin × 3 parallel). */
-export const POLISH_MAX_FIXES = 6;
-/** Bitta `writer` chaqiruvi — «Tuzatish» bilan bir xil. */
-export const REWRITE_TIMEOUT_MS = 30_000;
-/** Baholovchi uchun ajratib qo'yiladigan vaqt — tuzatishlar shundan oldin tugashi kerak. */
-export const POLISH_JUDGE_RESERVE_MS = 40_000;
-/** Tuzatishlarga shundan kam vaqt qolsa sayqal umuman boshlanmaydi. */
-const POLISH_MIN_FIX_MS = 10_000;
 /** Bo'lim so'zi rejadagi ulushidan shu nisbatdan kam bo'lsa «kengaytir». */
 const SHORT_BELOW = 0.75;
 /** Butun tana maqsaddan shu nisbatdan ko'p bo'lsa eng uzun bo'lim «qisqartir». */
 const LONG_ABOVE = 1.2;
 
-/** `PolishLog.skipped[].reason` kalitlari → panel matni. */
-export const POLISH_SKIP: Record<string, string> = {
-  user: "sizning ma’lumotingiz kerak",
-  manual: "avtomatik tuzatilmaydi",
-  limit: `bir sayqalda ko‘pi bilan ${POLISH_MAX_FIXES} band`,
-  budget: "vaqt byudjeti yetmadi",
-  error: "model javob bermadi",
-};
-
-/** Hisobot izohi — baholovchi qayta chaqirilmaganini aytadi («Tuzatish»). */
-export const REWRITE_REVIEW_NOTE =
-  "Tuzatishdan keyin qoidalar qayta tekshirildi; baholovchi ballari avvalgi baholashdan — to‘liq qayta baholash uchun maqolani qaytadan yarating.";
-/** Sayqalda baholovchi javob bermasa — ballari eski hisobotdan, izoh bilan. */
-export const POLISH_JUDGE_NOTE = "Sayqaldan keyin baholovchi javob bermadi — ballari avvalgi baholashdan.";
-
 const RETRY_MSG = "Model javob bermadi — qayta urinib ko‘ring";
-
-/** Sof qism xatosi — server `ApiError(message, status, {code})` ga o'giradi. */
-export class RewriteError extends Error {
-  constructor(
-    message: string,
-    public readonly status: 409 | 422,
-    public readonly code: "llm" | "legacy" | "target",
-  ) {
-    super(message);
-    this.name = "RewriteError";
-  }
-}
 
 export type RewriteDeps = {
   complete: CompleteFn;
@@ -109,36 +108,6 @@ export type RewriteDeps = {
 };
 
 export type RewriteOut = { ops: ArticleOp[]; unresolved: Unresolved[]; unsourcedNumbers: string[] };
-
-/* ────────────────────────── Q-2: foydalanuvchi ma'lumoti kerakmi ────────────────────────── */
-
-/*
- * KUCHLI belgilar — tajriba/o'lchov/uskuna/statistika: uchrasa tavsiya
- * foydalanuvchi natijasisiz bajarilmaydi. KUCHSIZ (`methods`/`results`/
- * «natija»/«metod») — faqat «qo'sh/keltir/ko'rsat/tavsifla» kabi fe'l
- * bilan birga (aks holda «natijalarni manbalar bilan taqqosla» kabi
- * xavfsiz tavsiya ham tushib qolardi). Lookbehind — kirill/lotin so'z
- * boshi (`\b` JS da faqat ASCII).
- */
-const STRONG_RE =
-  /(?<![\p{L}])(experiment\w*|sample(?:\s+size)?|participants?|respondents?|data\s?sets?|measur\w*|instrument\w*|sensor\w*|equipment|apparatus|machine\s+tools?|accuracy|precision|diagnostic\w*|p-?values?|statistic\w*|confidence\s+interval|effect\s+size|quantitative|parameters?|specifications?|reproduc\w*|tajriba\w*|datchik\w*|dastgoh\w*|aniqlik\w*|tanlanma\w*|o[‘’'`]?lchov\w*|ishtirokchi\w*|statistik\w*|parametr\w*|uskuna\w*|qurilma\w*|platform\w*|software|tool\s+names?|randomi[sz]\w*|protocol\w*|hyperparameter\w*|t-?tests?|anova|platforma\w*|dasturiy\s+vosita\w*|protsedura\w*|giperparametr\w*|эксперимент\w*|датчик\w*|станк\w*|станок|точност\w*|выборк\w*|измерен\w*|участник\w*|статистич\w*|параметр\w*|оборудован\w*|платформ\w*|программ\w*|рандомиз\w*|гиперпараметр\w*)/iu;
-const WEAK_RE = /(?<![\p{L}])(methods?|methodolog\w*|results?|findings|natija\w*|metod\w*|usul\w*|результат\w*|метод\w*|ko[‘’'`]?rsatkich\w*|показател\w*|numbers?|figures|raqam\w*|цифр\w*|числ\w*)/iu;
-const ADD_RE = /(?<![\p{L}])(add|provide|include|report|present|describe|specify|detail|state|give|quantify|qo[‘’'`]?sh\w*|keltir\w*|ko[‘’'`]?rsat\w*|tavsifla\w*|yoz\w*|bayon\w*|добав\w*|привед\w*|укаж\w*|опиш\w*|предостав\w*|включ\w*)/iu;
-
-/**
- * Q-2 ning prompt qatlami — ko'rsatma nima so'ramasin, model faqat FAKT /
- * JORIY MATN / MANBADA bor tafsilotni yozadi; yo'g'ini «keltirilmagan» deb
- * aytadi. Kalit so'z filtri o'tkazib yuborgan tavsiyalar uchun oxirgi to'siq.
- */
-export const HONESTY_LIMIT =
-  "HONESTY LIMIT (overrides the instruction above): every tool, platform or software name, statistical test, procedure detail, parameter, sample detail or number you write must ALREADY appear in USER FACTS, the CURRENT TEXT or a SOURCE. If the instruction asks for details the author did not report, do NOT invent them — state explicitly that they are not reported (e.g. «qo‘llanilgan aniq statistik test va platforma tadqiqotda keltirilmagan») or keep the sentence qualitative. Inventing unreported specifics is a critical error.";
-
-/** Q-2: tavsiya natija/tajriba ma'lumotini TALAB qiladimi (foydalanuvchi faktisiz bajarilmaydi). */
-export function needsUserData(instruction: string): boolean {
-  const s = instruction.replace(/\s+/g, " ");
-  if (STRONG_RE.test(s)) return true;
-  return WEAK_RE.test(s) && ADD_RE.test(s);
-}
 
 /* ────────────────────────── reja ────────────────────────── */
 
@@ -421,17 +390,6 @@ async function ask(deps: RewriteDeps, role: "writer", system: string, user: stri
 
 /* ────────────────────────── nishonlar ────────────────────────── */
 
-const VISUAL = new Set<Block["kind"]>(["figure", "tableRef", "formula"]);
-
-/** Eski vizual bloklarni yangi matn ichiga (eski indeks bo'yicha) qaytaradi. */
-export function keepVisuals(oldBlocks: Block[], text: Block[]): Block[] {
-  const out = text.slice();
-  oldBlocks.forEach((b, i) => {
-    if (VISUAL.has(b.kind)) out.splice(Math.min(i, out.length), 0, { ...b });
-  });
-  return out;
-}
-
 async function rewriteSection(doc: AcademicDoc, section: DocSection, fix: ArticleFix, deps: RewriteDeps): Promise<RewriteOut> {
   const ctx = contextOf(doc);
   const model = doc.article!;
@@ -446,7 +404,7 @@ async function rewriteSection(doc: AcademicDoc, section: DocSection, fix: Articl
     hard: Boolean(skel?.hard),
   };
   const existing = section.blocks
-    .filter((b) => !VISUAL.has(b.kind))
+    .filter((b) => !isVisualBlock(b.kind))
     .map((b) => b.text)
     .join("\n\n")
     .slice(0, 12_000);
@@ -584,13 +542,13 @@ export function judgeFromReview(prev: ArticleReview | undefined, applied?: Artic
 /* ────────────────────────── apply ────────────────────────── */
 
 export type ApplyPolishDeps = RewriteDeps & { concurrency?: number };
-export type ApplyPolishResult = {
-  ops: ArticleOp[];
-  applied: ArticleFix[];
-  failed: { fix: ArticleFix; reason: string }[];
-  /** Qayta yozilgan bo'limlarning qo'riqchi hisobi (hisobot `guard` uchun). */
-  unresolved: Unresolved[];
-  rewrittenSections: string[];
+/** `unresolved` — qayta yozilgan bo'limlarning qo'riqchi hisobi (hisobot `guard` uchun). */
+export type ApplyPolishResult = ApplyPolishResultOf<ArticleOp>;
+
+/** `rewriteFix` → neytral yadro kutadigan shakl (op lar + qo'riqchi + qayta yozilgan bo'limlar). */
+const rewriteForCore = async (doc: AcademicDoc, fix: ArticleFix, deps: RewriteDeps) => {
+  const r = await rewriteFix(doc, fix, deps);
+  return { ops: r.ops, unresolved: r.unresolved, rewrittenSections: r.ops.flatMap((op) => (op.op === "setSection" ? [op.sectionId] : [])) };
 };
 
 /**
@@ -599,26 +557,7 @@ export type ApplyPolishResult = {
  * boshqalarini to'xtatmaydi — `failed` ga tushadi.
  */
 export async function applyPolish(doc: AcademicDoc, fixes: ArticleFix[], deps: ApplyPolishDeps): Promise<ApplyPolishResult> {
-  const out: ApplyPolishResult = { ops: [], applied: [], failed: [], unresolved: [], rewrittenSections: [] };
-  type One = { fix: ArticleFix; r: RewriteOut } | { fix: ArticleFix; error: string };
-  const results = await mapPool(fixes, deps.concurrency ?? 3, async (fix): Promise<One> => {
-    try {
-      return { fix, r: await rewriteFix(doc, fix, deps) };
-    } catch (e) {
-      return { fix, error: e instanceof Error ? e.message : String(e) };
-    }
-  });
-  for (const x of results) {
-    if ("error" in x) {
-      out.failed.push({ fix: x.fix, reason: x.error });
-      continue;
-    }
-    out.ops.push(...x.r.ops);
-    out.applied.push(x.fix);
-    out.unresolved.push(...x.r.unresolved);
-    for (const op of x.r.ops) if (op.op === "setSection") out.rewrittenSections.push(op.sectionId);
-  }
-  return out;
+  return applyPolishWith<ArticleOp>(doc, fixes, { concurrency: deps.concurrency, rewrite: (d, fix) => rewriteForCore(d, fix, deps) });
 }
 
 /* ────────────────────────── run ────────────────────────── */
@@ -637,83 +576,45 @@ export type PolishDeps = {
   genId?: string;
 };
 
-export type PolishResult = {
-  doc: AcademicDoc;
-  review: ArticleReview;
-  plan: PolishPlan;
-  /** Qabul qilingan op lar (rad etilsa bo'sh). */
-  ops: ArticleOp[];
-  applied: ArticleFix[];
-  failed: { fix: ArticleFix; reason: string }[];
-  accepted: boolean;
-  log: PolishLog;
-};
+export type PolishResult = RunPolishResult<ArticleOp>;
 
 /**
  * Plan → apply → `applyArticleOps` → `reviewArticle` (judge) → Q-3.
- * Baholovchi javob bermasa ballari ESKI hisobotdan ko'chiriladi (izoh
- * bilan) — neytral 2/3 bilan taqqoslash adolatsiz bo'lardi (eski qattiq
- * baho neytralga «o'sib» soxta qabulga olib kelardi).
+ * Mantiq NEYTRAL yadroda (`report/polish-core.ts runPolishWith`); bu yerda
+ * faqat maqolaga xos dependensiyalar. Baholovchi javob bermasa ballari
+ * ESKI hisobotdan ko'chiriladi (izoh bilan) — neytral 2/3 bilan taqqoslash
+ * adolatsiz bo'lardi (eski qattiq baho neytralga «o'sib» soxta qabulga
+ * olib kelardi).
  */
 export async function runPolish(doc: AcademicDoc, review: ArticleReview, deps: PolishDeps): Promise<PolishResult> {
-  const now = deps.now ?? new Date();
-  const plan = planPolish(review, doc);
-  const before = review.score;
-  const needs = userNeeds(review, doc);
-  const reject = (skipped: PolishSkip[], applied: ArticleFix[] = [], failed: PolishResult["failed"] = [], after = before): PolishResult => {
-    const log: PolishLog = { before, after, applied: applied.map(({ target, instruction }) => ({ target, instruction })), skipped, accepted: false, at: now.toISOString() };
-    return { doc, review: { ...review, polish: log, userNeeds: needs }, plan, ops: [], applied, failed, accepted: false, log };
-  };
-  if (!plan.fixes.length) return reject(plan.skipped);
-
   const judge = deps.judge !== false;
-  const fixDeadline = deps.deadline - (judge ? POLISH_JUDGE_RESERVE_MS : 0);
-  if (remainingMs(fixDeadline) < POLISH_MIN_FIX_MS) return reject([...plan.skipped, { id: "budget", reason: "budget" }]);
-
+  const now = deps.now ?? new Date();
   const complete: CompleteFn = async (role, system, user, o) => {
     const r = await deps.complete(role, system, user, o);
     if (r?.usage) deps.onUsage?.(r.usage);
     return r;
   };
-  const ap = await applyPolish(doc, plan.fixes, { complete, deadline: fixDeadline, concurrency: deps.concurrency });
-  const failedSkips: PolishSkip[] = ap.failed.map((f) => ({ id: f.fix.target, reason: "error" }));
-  if (!ap.applied.length) return reject([...plan.skipped, ...failedSkips], [], ap.failed);
-
-  const res = applyArticleOps(doc, ap.ops, { genId: deps.genId ?? "polish" });
-  if (!res.ok) {
-    console.warn("[article] sayqal op lari qo'llanmadi:", res.error);
-    return reject([...plan.skipped, ...failedSkips, { id: "ops", reason: "error" }], [], ap.failed);
-  }
-
-  const type = ARTICLE_TYPES[doc.article?.type ?? "imrad_oak"];
-  const profile = PUBLICATION_PROFILES[doc.article?.profile ?? type.defaultProfile];
-  const wordTarget = articleWordPlan(doc.meta, type, profile).body;
-  // Qo'riqchi: qayta yozilgan bo'limlarning eski `unresolved`/`empty` yozuvi eskirgan — yangisi bilan almashadi.
-  const rewritten = new Set(ap.rewrittenSections);
-  const guard: ReviewGuardInput = {
-    unresolved: [...(deps.guard?.unresolved ?? []).filter((u) => !rewritten.has(u.sectionId)), ...ap.unresolved],
-    emptySections: (deps.guard?.emptySections ?? []).filter((id) => !rewritten.has(id)),
-  };
-  // `onUsage` bu yerda EMAS — `complete` o'rami har chaqiruvni allaqachon hisoblaydi (baholovchi ikki marta sanalmasin).
-  let fresh = await reviewArticle(res.doc, { complete, deadline: deps.deadline, wordTarget, judge, now, research: deps.research, guard });
-  if (judge && fresh.judgeNotes.includes(JUDGE_NO_ANSWER)) {
-    const j = judgeFromReview(review);
-    if (j) {
+  return runPolishWith<ArticleOp, JudgeResult>(doc, review, {
+    deadline: deps.deadline,
+    judge,
+    now,
+    guard: deps.guard,
+    concurrency: deps.concurrency,
+    plan: planPolish,
+    userNeeds,
+    rewrite: (d, fix, deadline) => rewriteForCore(d, fix, { complete, deadline }),
+    apply: (d, ops) => applyArticleOps(d, ops, { genId: deps.genId ?? "polish" }),
+    // `onUsage` bu yerda EMAS — `complete` o'rami har chaqiruvni allaqachon hisoblaydi (baholovchi ikki marta sanalmasin).
+    review: (d, guard) => {
+      const type = ARTICLE_TYPES[doc.article?.type ?? "imrad_oak"];
+      const profile = PUBLICATION_PROFILES[doc.article?.profile ?? type.defaultProfile];
+      const wordTarget = articleWordPlan(doc.meta, type, profile).body;
+      return reviewArticle(d, { complete, deadline: deps.deadline, wordTarget, judge, now, research: deps.research, guard });
+    },
+    judgeFromReview: (prev) => judgeFromReview(prev),
+    rescore: (fresh, j) => {
       const rules = fresh.checks.filter((c) => !c.id.startsWith("judge:"));
-      fresh = { ...fresh, score: scoreReview(rules, j), checks: [...rules, ...judgeChecks(j)], judgeNotes: [...j.notes, POLISH_JUDGE_NOTE] };
-    }
-  }
-  const after = fresh.score;
-  const accepted = after > before;
-  const log: PolishLog = {
-    before,
-    after,
-    applied: ap.applied.map(({ target, instruction }) => ({ target, instruction })),
-    skipped: [...plan.skipped, ...failedSkips],
-    accepted,
-    at: now.toISOString(),
-  };
-  if (!accepted) return { doc, review: { ...review, polish: log, userNeeds: needs }, plan, ops: [], applied: ap.applied, failed: ap.failed, accepted, log };
-  const newReview: ArticleReview = { ...fresh, polish: log, userNeeds: userNeeds(fresh, res.doc) };
-  return { doc: res.doc, review: newReview, plan, ops: ap.ops, applied: ap.applied, failed: ap.failed, accepted, log };
+      return { ...fresh, score: scoreReview(rules, j), checks: [...rules, ...judgeChecks(j)], judgeNotes: [...j.notes, POLISH_JUDGE_NOTE] };
+    },
+  });
 }

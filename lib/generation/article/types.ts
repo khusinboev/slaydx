@@ -298,49 +298,17 @@ export type Figure = {
 
 /* ────────────────────────── hisobot ────────────────────────── */
 
-export type ReviewLevel = "green" | "yellow" | "red";
-
-export type ReviewCheck = {
-  id: string;
-  level: ReviewLevel;
-  label: string;
-  detail?: string;
-  /** «Tuzatish» tugmasi — server qayta yozadi (`ArticleOp rewrite`). */
-  fix?: { op: "rewrite"; target: string; instruction: string };
-};
-
-/**
- * Avto-sayqal jurnali (Maqola 3, AUDIT-18 Q-1…Q-3) — `article/polish.ts`
- * `runPolish` yozadi. `accepted` — yangi ball eskisidan OSHGANDA (Q-3);
- * aks holda eski hujjat qoladi, `after` — rad etilgan urinish bali.
- * `skipped[].reason` — `POLISH_SKIP` kalitlari: `user` (foydalanuvchi
- * ma'lumoti kerak, Q-2), `manual`, `limit`, `budget`, `error`.
+/*
+ * Hisobot tiplari NEYTRAL qatlamda (`lib/generation/report/types.ts`,
+ * AUDIT-19 R0-A) — kurs ishi/insho dvigatellari ham shu shakldan
+ * foydalanadi. Bu yerda faqat RE-EXPORT: mavjud importlar
+ * (`from "./types"`) o'z joyida qoladi.
  */
-export type PolishLog = {
-  before: number;
-  after: number;
-  applied: { target: string; instruction: string }[];
-  skipped: { id: string; reason: string }[];
-  accepted: boolean;
-  at: string;
-};
+import type { DocReview } from "../report/types";
 
-/** «Sizdan kutiladi» bandi (Q-2): AI o'ylab topmaydigan ma'lumot. */
-export type UserNeed = { id: "udk" | "authors" | "results"; label: string; hint: string };
-
-export type ArticleReview = {
-  /** 0–100. */
-  score: number;
-  checks: ReviewCheck[];
-  judgeNotes: string[];
-  verifiedShare: number;
-  recentShare: number;
-  builtAt: string;
-  /** Avto-sayqal jurnali (dvigatel 8-bosqich yoki `POST …/polish`). */
-  polish?: PolishLog;
-  /** «Sizdan kutiladi» — `polish.ts userNeeds` (panel o'qiydi, hisoblamaydi). */
-  userNeeds?: UserNeed[];
-};
+export type { PolishLog, ReviewCheck, ReviewLevel, UserNeed } from "../report/types";
+/** Maqola tayyorligi hisoboti — neytral `DocReview` ning o'zi. */
+export type ArticleReview = DocReview;
 
 /* ────────────────────────── model ────────────────────────── */
 
