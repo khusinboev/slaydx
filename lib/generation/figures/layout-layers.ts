@@ -11,8 +11,8 @@
  * Chegara: 2–7 qatlam (`FIGURE_LIMITS`); aks holda `null` → fallback ro'yxat.
  * Kenglik doim 160 mm (tasma butun kanvas), balandlik qatlam soniga qarab.
  */
-import type { FigureSpec } from "../article/types";
-import { FIGURE_LIMITS } from "../article/types";
+import type { FigureSpec } from "../types";
+import { FIGURE_LIMITS } from "../types";
 import { CANVAS_W, FONT_PX, LINE_K, MARGIN, PAD_X, PAD_Y, cleanLabel, emptyLayout, fitToCanvas, wrapToWidth, type FigureLayout } from "./model";
 
 export type LayersSpec = Extract<FigureSpec, { kind: "layers" }>;

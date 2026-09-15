@@ -19,7 +19,8 @@
  * Matn ichidagi iqtibos ko'rinishi («[1; 25-b.]», «(Lin va b., 2023)»)
  * bu yerda EMAS — `article/layout.ts renderCitations`.
  */
-import type { CiteStyle, Reference } from "../article/types";
+import type { CiteStyle } from "../article/types";
+import type { Reference } from "../types";
 import { formatGost } from "./gost";
 import { formatApa } from "./apa";
 import { formatIeee } from "./ieee";

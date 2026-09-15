@@ -20,7 +20,7 @@
  * tushmaydi. Ro'yxatga esa faqat MATNDA iqtibos qilingan manba kiradi
  * (`citedOnly`, OAK qoidasi).
  */
-import type { Reference } from "../article/types";
+import type { Reference } from "../types";
 import type { Block, DocSection } from "../types";
 
 /** `[…]` guruhi — ichida `[`/`]` yo'q, ≤160 belgi. */

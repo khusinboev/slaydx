@@ -9,7 +9,7 @@
  * naqshi (`PatternDef`, `svg.ts` `<pattern>`); chiziqli grafikda — chiziq
  * uslubi (dash) + marker shakli. O'qlar, to'r, legenda, qiymat yorliqlari.
  */
-import type { FigureSpec } from "../article/types";
+import type { FigureSpec } from "../types";
 import { CANVAS_W, FONT_PX, LINE_K, MARGIN, emptyLayout, textWidth, wrapLabel, type FigureLayout, type LayoutText, type PatternDef, type Pt } from "./model";
 
 export type ChartSpec = Extract<FigureSpec, { kind: "chart" }>;

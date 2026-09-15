@@ -22,7 +22,7 @@
  * `I. O. Familiya` (IEEE). Ism o'zi o'zgartirilmaydi — faqat tartib va
  * inisial qisqartirish.
  */
-import type { Reference } from "../article/types";
+import type { Reference } from "../types";
 
 export type PersonName = {
   family: string;

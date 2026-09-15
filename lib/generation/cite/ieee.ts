@@ -15,7 +15,7 @@
  * Til: IEEE inglizcha uslub — «and»/«pp.» tilga qarab o'zgarmaydi
  * (rus/o'zbek jurnallari IEEE talab qilsa ham aynan shu shaklni kutadi).
  */
-import type { Reference } from "../article/types";
+import type { Reference } from "../types";
 import { authorsOf, initialsFamily } from "./names";
 import { isPageRange, normalizePages } from "./gost";
 

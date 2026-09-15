@@ -17,7 +17,7 @@
  * `raw` (foydalanuvchi erkin matni) bu yerga KELMAYDI — `index.ts` uni
  * o'zgarishsiz qaytaradi.
  */
-import type { Reference } from "../article/types";
+import type { Reference } from "../types";
 import { authorsOf, familyInitials } from "./names";
 
 export type GostOpts = {

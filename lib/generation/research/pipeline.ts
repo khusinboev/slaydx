@@ -18,7 +18,7 @@
  * darvoza emas.
  */
 import type { DocMeta } from "../types";
-import type { Reference } from "../article/types";
+import type { Reference } from "../types";
 import type { ArticleInput, ArticleUserRef } from "../article/input";
 import { PUBLICATION_PROFILES } from "../article/profiles";
 import { ARTICLE_TYPES } from "../article/types-registry";
