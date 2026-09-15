@@ -29,6 +29,13 @@
  *
  * Izomorf: DOM/server importi yo'q — panel (`ArticleReviewPanel`) guruh
  * jadvalini shu yerdan oladi.
+ *
+ * AUDIT-19 R0-A: ball formulasi, baholovchi prompti/tahlili, matn
+ * namunasi (`sampleForJudge`), 3-gram takror va vizual havola hisobi
+ * `lib/generation/report/` ga ko'chdi — kurs ishi (`work/review.ts`) va
+ * insho (`essay/`) shu qatlamdan foydalanadi. Bu faylda MAQOLAGA XOS
+ * qoidalar (`ruleChecks`), mezon ta'riflari va o'zgarmagan imzolar
+ * (`judgeSystemPrompt`, `parseJudge`, `scoreReview`, …) qoldi.
  */
 import type { AcademicDoc, DocSection } from "../types";
 import type { ArticleReview, ArticleType, PublicationProfile, ReviewCheck } from "./types";

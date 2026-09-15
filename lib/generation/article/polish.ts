@@ -23,6 +23,13 @@
  * yerda: `lib/server/article-rewrite.ts` uni import qiladi (ikkita nusxa
  * yo'q). Xatolar `RewriteError` (status/code) — server `ApiError` ga
  * o'giradi.
+ *
+ * AUDIT-19 R0-A: turga BOG'LIQ BO'LMAGAN qism (`needsUserData`,
+ * `HONESTY_LIMIT`, `keepVisuals`, `applyPolishWith`, `runPolishWith`,
+ * konstantalar) `lib/generation/report/polish-core.ts` ga ko'chdi —
+ * kurs ishi va insho dvigatellari aynan shu yadroni ishlatadi. Bu
+ * faylda MAQOLAGA XOS qism (reja, promptlar, `judgeFromReview`) va
+ * o'zgarmagan imzolar/eksportlar qoldi.
  */
 import type { AcademicDoc, DocSection } from "../types";
 import type { ArticleReview, ReviewCheck, UserNeed } from "./types";
