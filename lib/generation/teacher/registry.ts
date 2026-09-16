@@ -846,6 +846,13 @@ export const TEACHER_RULE_IDS: Record<TeacherKind, readonly string[]> = {
     "languagePurity",
     "negativeStem",
     "answerPresent",
+    /*
+     * WP-B qo'shdi (R3 §4.1 ro'yxatining 20-bandi): har savolga bir
+     * gaplik izoh. Reyestrda, chunki forma va hisobot paneli bandlar
+     * ro'yxatini oldindan biladi (`tests/teacher-test-review.test.mts`
+     * ikkala ro'yxat AYNAN mos ekanini tekshiradi).
+     */
+    "explanationPresent",
   ],
 };
 

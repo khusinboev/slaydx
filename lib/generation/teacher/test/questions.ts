@@ -106,7 +106,13 @@ export function isBlanketOption(text: string): boolean {
 }
 
 /** Inkor so'zi BOSH HARFDA ajratilganmi (S-18: «erimAYDI», «EMAS»). */
-const NEGATIVE_WORDS = /\b(emas|noto'?g'?ri|bo'?lmagan|not|except|неверн|кроме)\b/i;
+/*
+ * O'zbekchada inkor ko'pincha QO'SHIMCHA bilan yasaladi («erimaydi»,
+ * «bo'lmaydigan»), alohida so'z bilan emas — shuning uchun `…maydi`
+ * shakli ham inkor deb sanaladi, aks holda `negativeStem` qoidasi eng
+ * ko'p uchraydigan holatni umuman ko'rmasdi.
+ */
+const NEGATIVE_WORDS = /(\b(emas|noto'?g'?ri|bo'?lmagan|not|except|неверн|кроме)\b|\p{L}+maydi(gan)?\b)/iu;
 /*
  * «eriMAYDI» — inkor SO'Z ICHIDA bosh harfda: shuning uchun qo'shimcha
  * (`MAYDI`) oldidan katta harf talab qilinmaydi, aks holda o'zbekchadagi

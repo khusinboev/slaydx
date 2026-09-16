@@ -18,7 +18,7 @@
  * Reyestr (tur → skelet/chegara/guidance/JudgeSpec) — `registry.ts`.
  */
 import type { DocReview, PolishLog, UserNeed } from "../report/types";
-import type { FigureSpec } from "../types";
+import type { Figure, FigureSpec } from "../types";
 
 /* ────────────────────────── kind va vosita ────────────────────────── */
 
@@ -297,6 +297,17 @@ export type TeacherModel = {
   glossary?: GlossaryModel;
   keys?: KeysModel;
   test?: TestModel;
+  /**
+   * Chizilgan rasmlar reyestri (hozircha faqat OMR javoblar varag'i).
+   *
+   * `Block kind:"figure"` `figureId` orqali SHU ro'yxatga ishora qiladi —
+   * `article`/`work` bilan bir xil naqsh. Nega modelda, blok ichida
+   * emas: PNG `data:` URL i kilobaytlar bilan o'lchanadi va uni matn
+   * bloki ichida saqlash `sections` ni ham tahrirda, ham qidiruvda
+   * og'irlashtirardi; `assets.ts` (WP-D) esa aynan shu ro'yxatdan
+   * baytni aktivga chiqaradi.
+   */
+  figures?: Figure[];
   review?: DocReview;
   polish?: PolishLog;
   /** «Sizdan kutiladi» — AI o'ylab topmaydigan ma'lumot (hisobot paneli). */
