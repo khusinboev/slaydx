@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect } from "react";
-import { TOOLS, toolBlockedReason } from "@/lib/tools";
+import { TOOLS, toolBlockedReason, visibleToolGroups } from "@/lib/tools";
 import { TOOL_ICONS } from "../shell/icons";
 import { useAppStore } from "@/lib/store";
 import { useUi } from "@/lib/ui";
@@ -19,11 +19,10 @@ export function CreateGrid() {
 
   if (!hydrated) return <div className="text-muted-foreground p-8 text-sm">Yuklanmoqda...</div>;
 
-  const groups = [
-    { id: "umumiy", label: "Umumiy vositalar" },
-    { id: "talaba", label: "Talaba ishlari" },
-    { id: "oqituvchi", label: "O'qituvchi vositalari" },
-  ] as const;
+  // Bo'lim yorliqlari `lib/tools.ts` dan (AUDIT-21 R0): `Sidebar` bilan
+  // qo'lda sinxronlanadigan ikkinchi ro'yxat yo'q; bo'sh bo'lim (hozir
+  // `media`) chizilmaydi.
+  const groups = visibleToolGroups();
 
   return (
     <div className="mx-auto w-full max-w-5xl px-4 py-8">

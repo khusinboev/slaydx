@@ -17,16 +17,27 @@ export type ToolId =
   | "mustaqil-ish"
   | "lesson-plan"
   /** Test yaratuvchi (AUDIT-20) — `teacher/` dvigateli, `custom: "teacher"`. */
-  | "test";
+  | "test"
+  /*
+   * 2-dastur (AUDIT-21): bosma o'yinlar va infografika.
+   *
+   * `crossword`/`flashcards` — `games/` dvigateli, `ToolGroup "oyinlar"`,
+   * chiqish DOCX; `infographic` — `infographic/` dvigateli, o'qituvchi
+   * bo'limida, chiqish PNG (plakat). Uchalasi ham STANDART formada
+   * (`custom` yo'q) — maydonlar orasida bog'liqlik yo'q, `StandardForm`
+   * yetarli (AUDIT-20 §3 rejasi).
+   */
+  | "crossword"
+  | "flashcards"
+  | "infographic";
 
 /**
  * Bo'lim (landing, nav, `CreateGrid`).
  *
- * `oyinlar` va `media` — AUDIT-21/22 bo'limlari (krossvord, flesh karta,
- * saralash, tinglash; podkast, tabriknoma). AUDIT-20 da ular HALI
- * ishlatilmaydi: guruh e'lon qilinadi, vosita esa yo'q. Tip oldindan
- * kelgani — `ToolGroup` ga bog'liq `switch`/`Record` lar (guruh
- * yorliqlari) yangi qiymat qo'shilganda TS bilan ushlansin.
+ * `oyinlar` — AUDIT-21 bo'limi: krossvord va flesh kartalar (saralash,
+ * tinglash — 3-dastur). `media` (podkast, tabriknoma) HALI bo'sh:
+ * guruh e'lon qilingan, vosita esa yo'q — `TOOL_GROUPS` dan chizilganda
+ * bo'sh bo'lim KO'RINMAYDI (`visibleToolGroups`).
  */
 export type ToolGroup = "umumiy" | "talaba" | "oqituvchi" | "oyinlar" | "media";
 

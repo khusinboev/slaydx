@@ -21,6 +21,10 @@ import { EssayComposer } from "./EssayComposer";
 import { WorkComposer } from "./WorkComposer";
 import { TeacherComposer } from "./TeacherComposer";
 import { SourceFileField } from "./SourceFileField";
+import { gameDefaultTypeId } from "@/lib/generation/games/registry";
+import { GAME_LIMITS } from "@/lib/generation/games/types";
+import { infographicDefaultTypeId } from "@/lib/generation/infographic/registry";
+import { INFOGRAPHIC_LIMITS, PALETTES } from "@/lib/generation/infographic/types";
 
 function defaultsFor(tool: ToolConfig, profile: UserProfile): FormValues {
   const v: FormValues = {
@@ -45,6 +49,23 @@ function defaultsFor(tool: ToolConfig, profile: UserProfile): FormValues {
     titleSlide: true,
     weeklyHours: 4,
     totalHours: 136,
+    /*
+     * O'yinlar va infografika (AUDIT-21 R0) — chip standartlari REYESTRDAN.
+     *
+     * Ularsiz forma HECH BIR chipni tanlanmagan holda ko'rsatar, dvigatel
+     * esa o'z standartini (10 so'z, `klassik`, `list`…) jimgina qo'llardi:
+     * foydalanuvchi «10 so'z» ni hech qayerda ko'rmay, shuni olardi.
+     * Qiymatlar SATR — `ChipGroup` `String(values[name])` bilan solishtiradi.
+     */
+    wordCount: String(GAME_LIMITS.countDefault),
+    crosswordType: gameDefaultTypeId("crossword"),
+    cardCount: String(GAME_LIMITS.countDefault),
+    cardType: gameDefaultTypeId("flashcards"),
+    includeExample: "yoq",
+    infographicType: infographicDefaultTypeId(),
+    blockCount: String(INFOGRAPHIC_LIMITS.blocksDefault),
+    palette: PALETTES[0].id,
+    size: "A4",
   };
   return v;
 }

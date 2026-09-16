@@ -94,7 +94,7 @@ export const GAME_PARAMS: GameParam[] = [
    * `encode: "boolean"` esa QIYMATNING ma'nosi haqida: dvigatel uni
    * `FlashcardsModel.includeExample` bayrog'iga aylantiradi.
    */
-  { id: "includeExample", kinds: ["flashcards"], encode: "boolean", probeA: false, probeB: true, impacts: ["prompt", "structure", "review"] },
+  { id: "includeExample", kinds: ["flashcards"], encode: "boolean", probeA: "yoq", probeB: "ha", impacts: ["prompt", "structure", "review"] },
 ];
 
 /** Formadan yuboriladigan maydon nomlari (`lib/tools.ts` shu ro'yxatni to'ldiradi). */

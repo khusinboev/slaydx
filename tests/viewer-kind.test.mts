@@ -42,11 +42,19 @@ test("maxsus (custom) vositalar umumiy Word ko'ruvchisiga tushmaydi", () => {
  * Ilgari ularning har biri o'z ko'ruvchisida edi va brend-muqova
  * chizardi, ya'ni sayt hech qachon fayl bilan bir xil emasdi.
  */
-test("o'qituvchi guruhidagi HAR vosita `teacher` ko'ruvchisiga tushadi", () => {
-  const teacherTools = TOOLS.filter((t) => t.group === "oqituvchi");
+test("`teacher` dvigatelidagi HAR vosita `teacher` ko'ruvchisiga tushadi", () => {
+  /*
+   * Mezon — `custom: "teacher"`, guruh EMAS: AUDIT-21 dan boshlab
+   * «O'qituvchi vositalari» bo'limida boshqa dvigateldagi vosita ham bor
+   * (infografika — PNG plakat, `ImageViewer`). Guruh bo'yicha tekshirish
+   * yangi vositani noto'g'ri ko'ruvchiga majburlardi.
+   */
+  const teacherTools = TOOLS.filter((t) => t.custom === "teacher");
   assert.equal(teacherTools.length, 5, `o'qituvchi vositalari: ${teacherTools.map((t) => t.id).join(", ")}`);
   for (const t of teacherTools) assert.equal(viewerKind(t.id), "teacher", `${t.id}: ko'ruvchi ${viewerKind(t.id)}`);
   assert.equal(viewerKind("test"), "teacher", "yangi test vositasi unutildi");
+  // Infografika o'qituvchi BO'LIMIDA, lekin ko'ruvchisi — rasm (chiqish PNG).
+  assert.equal(viewerKind("infographic"), "image", "infografika Word ko'ruvchisiga tushdi");
   // MUTATSIYA: eski qiymat (`lesson`/`table`/`glossary`/`keys`) qaytsa shu yerda ko'rinadi.
   for (const old of ["lesson", "table", "glossary", "keys"]) {
     assert.ok(!TOOLS.some((t) => viewerKind(t.id) === old), `eski ko'ruvchi «${old}» hali ham ishlatilyapti`);
@@ -62,4 +70,43 @@ test("`teacher` ko'ruvchisi `ArtifactViewer` da tahrir proplari bilan ulangan", 
   const src = readFileSync(new URL("../components/viewers/ArtifactViewer.tsx", import.meta.url), "utf8");
   assert.match(src, /case "teacher":/);
   assert.match(src, /case "teacher":[\s\S]{0,1200}?<WordViewer doc=\{doc\} gen=\{detail\} onGen=\{onDetail\} onEditState=\{onEditState\} \/>/);
+});
+
+/* ────────────────── Bosma o'yinlar + infografika (AUDIT-21 R0) ────────────────── */
+
+/**
+ * Mutatsiyalar (har biri qizardi):
+ *   1. `viewerKind` dagi `crossword`/`flashcards` shoxi olib tashlandi —
+ *      ikkalasi `academic` ga tushdi (umumiy Word oqimi to'r rasmini
+ *      oddiy paragraf deb sahifalab yuborardi);
+ *   2. `infographic` shoxi `image` dan olib tashlandi — PNG vositasi
+ *      Word ko'ruvchisida ochildi (birinchi testda ham ushlanadi);
+ *   3. `ArtifactViewer` dagi `case "game"` proplarsiz yozildi — tahrir
+ *      jimgina o'chiq qolardi (talaba ishlaridagi xatoning aynan o'zi).
+ */
+test("o'yin vositalari `game` ko'ruvchisiga tushadi, boshqa hech kim tushmaydi", () => {
+  const gameTools = TOOLS.filter((t) => t.group === "oyinlar");
+  assert.equal(gameTools.length, 2, `o'yin vositalari: ${gameTools.map((t) => t.id).join(", ")}`);
+  assert.deepEqual(gameTools.map((t) => t.id).sort(), ["crossword", "flashcards"]);
+  for (const t of gameTools) assert.equal(viewerKind(t.id), "game", `${t.id}: ko'ruvchi ${viewerKind(t.id)}`);
+  // Boshqa hech bir vosita `game` ga tushmasin (shox kengayib ketmasin).
+  for (const t of TOOLS) {
+    if (t.group !== "oyinlar") assert.notEqual(viewerKind(t.id), "game", `${t.id}: o'yin bo'lmagan vosita game ko'ruvchisida`);
+  }
+});
+
+test("`game` ko'ruvchisi `ArtifactViewer` da tahrir proplari bilan ulangan", () => {
+  const src = readFileSync(new URL("../components/viewers/ArtifactViewer.tsx", import.meta.url), "utf8");
+  assert.match(src, /case "game":/);
+  assert.match(src, /case "game":[\s\S]{0,1200}?<WordViewer doc=\{doc\} gen=\{detail\} onGen=\{onDetail\} onEditState=\{onEditState\} \/>/);
+});
+
+test("har `ViewerKind` da `ArtifactViewer` shoxi bor (yangi tur unutilmasin)", () => {
+  const src = readFileSync(new URL("../components/viewers/ArtifactViewer.tsx", import.meta.url), "utf8");
+  const kinds = new Set(TOOLS.map((t) => viewerKind(t.id)));
+  for (const k of kinds) {
+    // `academic` — `default` shoxi (umumiy Word ko'ruvchisi).
+    if (k === "academic") continue;
+    assert.ok(src.includes(`case "${k}":`), `MUTATSIYA: «${k}» ko'ruvchisi ArtifactViewer da ulanmagan`);
+  }
 });

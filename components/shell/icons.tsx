@@ -9,9 +9,13 @@ import {
   Image,
   KeyRound,
   Languages,
+  Layers,
+  ListChecks,
   Newspaper,
   PenTool,
+  PieChart,
   Presentation,
+  Puzzle,
 } from "lucide-react";
 
 export const TOOL_ICONS: Record<string, LucideIcon> = {
@@ -27,4 +31,15 @@ export const TOOL_ICONS: Record<string, LucideIcon> = {
   "file-spreadsheet": FileSpreadsheet,
   "key-round": KeyRound,
   files: Files,
+  /*
+   * `list-checks` AUDIT-20 da `test` vositasiga berilgan, lekin bu
+   * jadvalga QO'SHILMAGAN edi: `CreateGrid`/`Sidebar` `TOOL_ICONS[t.icon]`
+   * ni o'qiydi va topilmasa ikonkani jimgina tushirib qoldiradi — test
+   * kartochkasi bo'sh doira bilan chiqardi.
+   */
+  "list-checks": ListChecks,
+  /* AUDIT-21: krossvord, flesh kartalar, infografika. */
+  puzzle: Puzzle,
+  layers: Layers,
+  "pie-chart": PieChart,
 };

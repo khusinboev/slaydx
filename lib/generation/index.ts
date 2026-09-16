@@ -9,6 +9,7 @@ import { renderPptx } from "./render-pptx";
 import { renderPptxWithTemplate } from "./render-pptx-template";
 import type { CustomTemplate } from "./pptx-template";
 import { buildImageArtifact } from "./image-studio";
+import { buildInfographicArtifact } from "./infographic/engine";
 import { buildTranslationArtifact } from "./translate/engine";
 import { buildResumeDoc } from "./resume/write";
 import type { SlideProgressSink } from "./slide-progress";
@@ -380,6 +381,13 @@ export function fileSuffix(toolId: string): string {
       return "-keys";
     case "test":
       return "-test";
+    /* AUDIT-21: o'qituvchi bitta mavzu bo'yicha bir nechta material oladi. */
+    case "crossword":
+      return "-krossvord";
+    case "flashcards":
+      return "-kartalar";
+    case "infographic":
+      return "-infografika";
     default:
       return "";
   }
@@ -429,6 +437,22 @@ export async function buildArtifact(
 
   if (tool.id === "image") {
     return buildImageArtifact(tool, values);
+  }
+
+  /*
+   * Infografika (AUDIT-21): `rasm` bilan AYNI naqsh — chiqish bitta PNG,
+   * shuning uchun umumiy `AcademicDoc` yo'lidagi hajm/sahifa darvozalari
+   * unga tegishli emas va dvigatel `BuiltFile` ni O'ZI qaytaradi
+   * (`packImages` bilan qadoqlab).
+   *
+   * `null` — dvigatel ishlamadi (WP-C gacha DOIM shunday). Xato matni
+   * `rasm` vositasinikidan ko'chirilgan: foydalanuvchi uchun bu «AI
+   * javob bermadi, pul qaytadi» degani, «modul hali yozilmagan» emas.
+   */
+  if (tool.id === "infographic") {
+    const built = await buildInfographicArtifact(tool, values, { deadline, ...(opts.onStage ? { onStage: opts.onStage } : {}) });
+    if (!built) throw new Error("Infografika yaratilmadi. Qayta urinib ko‘ring.");
+    return built;
   }
 
   /*

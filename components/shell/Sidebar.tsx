@@ -3,18 +3,16 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronRight, Coins, House, LogIn, Plus, Shield, User } from "lucide-react";
-import { TOOLS } from "@/lib/tools";
+import { TOOLS, visibleToolGroups } from "@/lib/tools";
 import { cn } from "@/lib/cn";
 import { creditTotal, useAppStore } from "@/lib/store";
 import { useUi } from "@/lib/ui";
 import { TOOL_ICONS } from "./icons";
 import { BRAND_LOGO, BRAND_NAME } from "@/lib/brand";
 
-const GROUPS = [
-  { id: "umumiy", label: "Umumiy vositalar" },
-  { id: "talaba", label: "Talaba ishlari" },
-  { id: "oqituvchi", label: "O'qituvchi vositalari" },
-] as const;
+// Bo'lim yorliqlari `lib/tools.ts` dan (AUDIT-21 R0) — `CreateGrid`
+// bilan bitta manbadan; vositasi yo'q bo'lim (hozir `media`) chizilmaydi.
+const GROUPS = visibleToolGroups();
 
 function itemClass(active: boolean) {
   return cn(

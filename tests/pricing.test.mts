@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import type { FormValues, ToolConfig } from "../lib/types.ts";
 import {
   defaultPages,
@@ -9,7 +10,9 @@ import {
   TOOLS,
   TOOL_BY_ID,
   TOOL_BY_SLUG,
+  TOOL_GROUPS,
   topicOf,
+  visibleToolGroups,
 } from "../lib/tools.ts";
 
 /**
@@ -476,4 +479,103 @@ test("custom teacher: muassasa + tuzuvchi + mavzu majburiy, TEACHER_FIELDS takro
   const t = TOOL_BY_ID.test;
   assert.deepEqual(missingRequired(t, { mode: "file", university: "15-son maktab", author: "Karimova D." }), ["Manba fayl matni"]);
   assert.deepEqual(missingRequired(t, { mode: "file", sourceText: "matn", university: "15-son maktab", author: "K." }), []);
+});
+
+/* ────────────────── 2-dastur: o'yinlar + infografika (AUDIT-21 R0) ────────────────── */
+
+/**
+ * Uchala vosita ham TEKIS 2 000 (mahsulot egasi qarori 6 — raqobatchi
+ * darajasi). Bu testning asosiy ishi — tarifning jimgina paydo bo'lishini
+ * to'sish: «20 so'z 2 500, 8 blok 3 000» degan narx formada ko'rinmasdi,
+ * chunki `ToolChrome` `priceFor` natijasini bitta raqam qilib chizadi.
+ *
+ * Mutatsiya: `priceFor` ga `if (tool.id === "crossword") return 2000 +
+ * words * 50` qo'shildi — zond ro'yxatidagi har qatorda qizardi.
+ */
+test("krossvord / flesh kartalar / infografika: tekis 2 000, parametrlar narxni o'zgartirmaydi", () => {
+  const probes: FormValues[] = [
+    { wordCount: 20, crosswordType: "tarifli", language: "ru" },
+    { wordCount: 5, crosswordType: "klassik" },
+    { cardCount: 20, cardType: "qa", includeExample: "ha" },
+    { cardCount: 5, includeExample: "yoq" },
+    { infographicType: "timeline", blockCount: 8, palette: "berry", size: "A3" },
+    { infographicType: "list", blockCount: 3, size: "A4" },
+    { mode: "file", sourceText: "x".repeat(5000) },
+    { pages: "25-30", termCount: 40, imageCount: 4 },
+    { price: 1, basePrice: 1 },
+  ];
+  for (const id of ["crossword", "flashcards", "infographic"] as const) {
+    const tool = TOOL_BY_ID[id];
+    assert.equal(tool.basePrice, 2000, `${id}: tayanch narx`);
+    assert.equal(priceFor(tool, {}), 2000, `${id}: bo'sh forma`);
+    for (const values of probes) {
+      assert.equal(priceFor(tool, values), 2000, `MUTATSIYA: ${id} da parametr narxni o'zgartirdi — ${JSON.stringify(values)}`);
+    }
+  }
+  // Mavjud narxlarga TEGILMADI: yangi vositalar eski tariflarni buzmasin.
+  assert.equal(priceFor(TOOL_BY_ID.test, {}), 3000);
+  assert.equal(priceFor(TOOL_BY_ID.image, { imageCount: 4 }), 6000);
+  assert.equal(priceFor(TOOL_BY_ID.glossary, { termCount: 40 }), 15000);
+  assert.equal(defaultPages("crossword"), "10-15", "yangi vosita `defaultPages` ni o'zgartirmasin");
+});
+
+test("o'yin/plakat vositalarining shartnomasi: guruh, chiqish, forma, majburiy maydonlar", () => {
+  const crossword = TOOL_BY_ID.crossword;
+  const cards = TOOL_BY_ID.flashcards;
+  const poster = TOOL_BY_ID.infographic;
+
+  assert.equal(crossword.group, "oyinlar");
+  assert.equal(cards.group, "oyinlar");
+  assert.equal(poster.group, "oqituvchi");
+  assert.equal(crossword.output, "docx");
+  assert.equal(cards.output, "docx");
+  assert.equal(poster.output, "png");
+
+  // STANDART forma — `custom` YO'Q (maydonlar orasida bog'liqlik yo'q).
+  for (const t of [crossword, cards, poster]) {
+    assert.equal(t.custom, undefined, `${t.id}: custom forma kerak emas edi`);
+    assert.ok(t.extraOptional, `${t.id}: «Qo'shimcha talablar» maydoni yoqilmagan`);
+    assert.ok(t.topicLegend, `${t.id}: mavzu so'ralmaydi`);
+    // Slug lar takrorlanmasin va yo'naltirish ishlasin.
+    assert.ok(isToolSlug(t.slug), `${t.id}: slug ro'yxatda yo'q`);
+    assert.equal(TOOL_BY_SLUG[t.slug].id, t.id);
+    // Har chip maydonida variantlar bor (bo'sh `chips` formada ko'rinmasdi).
+    for (const f of t.fields) {
+      if (f.kind === "chips") assert.ok(f.options && f.options.length >= 2, `${t.id}/${f.name}: chip variantlari yo'q`);
+    }
+  }
+
+  // Fayl rejimi FAQAT krossvordda (hisobot §2).
+  assert.ok(crossword.modes, "krossvordda fayl rejimi bo'lishi kerak");
+  assert.equal(cards.modes, undefined, "kartalar mavzudan tuziladi — fayl rejimi yo'q");
+  assert.equal(poster.modes, undefined);
+
+  // Mavzu majburiy; fayl rejimida uning o'rniga manba matni.
+  assert.deepEqual(missingRequired(crossword, {}), [crossword.topicLegend]);
+  assert.deepEqual(missingRequired(crossword, { mode: "file" }), ["Manba fayl matni"]);
+  assert.deepEqual(missingRequired(crossword, { mode: "file", sourceText: "matn" }), []);
+  assert.deepEqual(missingRequired(cards, { topic: "Hujayra" }), []);
+  assert.deepEqual(missingRequired(poster, { topic: "Suv aylanishi" }), []);
+  // Mavzusiz plakat navbatga tushmasin (pul yechilib, bo'sh ish ketmasin).
+  assert.deepEqual(missingRequired(poster, {}), [poster.topicLegend]);
+});
+
+test("bo'lim yorliqlari bitta manbadan; bo'sh bo'lim ko'rinmaydi", () => {
+  const groups = visibleToolGroups();
+  const ids = groups.map((g) => g.id);
+  assert.deepEqual(ids, ["umumiy", "talaba", "oqituvchi", "oyinlar"], `bo'limlar: ${ids.join(", ")}`);
+  assert.equal(groups.find((g) => g.id === "oyinlar")?.label, "O'yinlar");
+  // `media` e'lon qilingan, lekin vositasi yo'q — CHIZILMAYDI.
+  assert.ok(TOOL_GROUPS.some((g) => g.id === "media"), "media bo'limi reyestrdan yo'qoldi");
+  assert.ok(!ids.includes("media"), "MUTATSIYA: bo'sh «Media» bo'limi ko'rindi");
+  // HAR vosita chiziladigan bo'limga tegishli — aks holda u sotib olinmaydi.
+  for (const t of TOOLS) assert.ok(ids.includes(t.group), `${t.id}: «${t.group}» bo'limi hech qayerda chizilmaydi`);
+  // Ikki komponent ham SHU manbadan o'qiydi (qo'lda yozilgan nusxa qolmasin).
+  for (const f of ["../components/home/CreateGrid.tsx", "../components/shell/Sidebar.tsx"]) {
+    const src = readFileSync(new URL(f, import.meta.url), "utf8");
+    assert.match(src, /visibleToolGroups\(\)/, `${f}: guruhlar ro'yxati qo'lda yozilgan`);
+  }
+  // Har vosita ikonkasi HAQIQATAN mavjud (topilmasa kartochka bo'sh chiqardi).
+  const icons = readFileSync(new URL("../components/shell/icons.tsx", import.meta.url), "utf8");
+  for (const t of TOOLS) assert.ok(icons.includes(`"${t.icon}"`) || new RegExp(`^\\s*${t.icon}:`, "m").test(icons), `${t.id}: «${t.icon}» ikonkasi TOOL_ICONS da yo'q`);
 });
