@@ -3,6 +3,7 @@ import { applyDocOps, parseDocOps, type DocOp } from "../generation/slide-edit";
 import { applyResumeOps, parseResumeOps, type ResumeOp } from "../generation/resume/edit";
 import { legacyResumeModel } from "../generation/resume/model";
 import { applyArticleOps, parseArticleOps, type ArticleOp } from "../generation/article/edit";
+import { applyWorkOps, parseWorkOps, type WorkOp } from "../generation/work/edit";
 import { renderDocx } from "../generation/render-docx";
 import { renderPptx } from "../generation/render-pptx";
 import { renderPptxWithTemplate } from "../generation/render-pptx-template";
@@ -53,7 +54,7 @@ export type ParseResult = { ok: true; ops: unknown[] } | { ok: false; error: str
 export type ApplyResult = { ok: true; doc: AcademicDoc } | { ok: false; error: string; at: number };
 
 export type EditAdapter = {
-  id: "slide" | "resume" | "article";
+  id: "slide" | "resume" | "article" | "work";
   /** Shu adapter xizmat qiladigan vositalar (`generations.tool_id`). */
   tools: ReadonlySet<string>;
   /** Hujjatda tahrir uchun kerakli model bormi (yo'q bo'lsa 409 `legacy`). */
@@ -129,7 +130,34 @@ export const articleAdapter: EditAdapter = {
   },
 };
 
-/** Bitta so'rovdagi operatsiyalar soni — uchala op tili uchun bir xil. */
+/**
+ * TALABA ISHI (AUDIT-19 WP-C): kurs ishi, referat, mustaqil ish.
+ *
+ * Maqola adapteridan farqi ikkita: op tili (`work/edit.ts` — annotatsiya/
+ * kalit so'z yo'q, bob daraxti bor) va MODEL TALABI. Eski talaba ishi
+ * (`doc.work` yo'q) tahrirlanmaydi: uning matni bob/paragraf id lariga
+ * ega emas, ya'ni op yo'llari («sections.3.blocks.1») boshqa hujjatga
+ * tegib ketishi mumkin edi. Bunday hujjat 409 `legacy` bilan qaytadi va
+ * ko'ruvchi tahrirsiz, avvalgidek ishlaydi (`prepare` hech narsa qilmaydi
+ * — «modelga ko'tarish» yo'q).
+ *
+ * Render — `renderDocx`: sxema PNG lari `resolveImage` (SHU
+ * generatsiyaning aktivlari) orqali qayta o'qiladi.
+ */
+export const workAdapter: EditAdapter = {
+  id: "work",
+  tools: new Set(["coursework", "referat", "mustaqil-ish"]),
+  hasModel: (doc) => Boolean(doc?.work && doc.sections?.length),
+  prepare: (doc) => doc,
+  parse: (raw) => parseWorkOps(raw),
+  apply: (doc, ops, ctx) => applyWorkOps(doc, ops as WorkOp[], ctx),
+  async render(ctx) {
+    const bytes = await renderDocx(ctx.doc, { resolveImage: ctx.resolveImage });
+    return { bytes, mime: DOCX_MIME, fileName: ctx.fileName };
+  },
+};
+
+/** Bitta so'rovdagi operatsiyalar soni — barcha op tillari uchun bir xil. */
 export const MAX_EDIT_OPS = 50;
 
 /**
@@ -150,7 +178,7 @@ export function preParseOps(raw: unknown): { ok: true } | { ok: false; error: st
   return { ok: true };
 }
 
-const ADAPTERS: EditAdapter[] = [slideAdapter, resumeAdapter, articleAdapter];
+const ADAPTERS: EditAdapter[] = [slideAdapter, resumeAdapter, articleAdapter, workAdapter];
 
 /** Vosita uchun adapter; tahrirlanmaydigan vositada `null`. */
 export function adapterFor(toolId: string): EditAdapter | null {
