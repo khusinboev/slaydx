@@ -822,6 +822,14 @@ async function runCase(c: Case) {
       if (a.highlights) process.stdout.write(`   highlights: ${a.highlights.map((h) => `«${h}»`).join(" ")}\n`);
       await writeFile(path.join(OUT, `${c.name}.doc.json`), JSON.stringify(file.doc, null, 2));
     }
+    /* Talaba ishi: boblar, manbalar (tur/tasdiq), vizuallar; doc.json — smoke urug'i uchun. */
+    if (file.doc.work) {
+      const w = file.doc.work;
+      process.stdout.write(`   boblar: ${w.chapters.map((ch) => `${ch.id}«${ch.title.slice(0, 40)}»(${ch.paragraphs.length})`).join(" ")}\n`);
+      for (const r of w.references) process.stdout.write(`   manba ${r.id} [${kindOf(r)},${r.verified}${r.cited ? ",cited" : ""}] ${r.authors.slice(0, 2).join(", ")} (${r.year ?? "?"}) ${r.title.slice(0, 70)}\n`);
+      for (const g of w.figures) process.stdout.write(`   sxema ${g.id}: ${g.spec.kind} — ${g.caption.slice(0, 70)}\n`);
+      await writeFile(path.join(OUT, `${c.name}.doc.json`), JSON.stringify(file.doc, null, 2));
+    }
     return { name: c.name, ok: checks.every((x) => x.ok), failed: checks.filter((x) => !x.ok) };
   } catch (e) {
     const secs = ((Date.now() - started) / 1000).toFixed(1);
