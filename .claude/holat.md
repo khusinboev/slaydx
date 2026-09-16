@@ -3,25 +3,26 @@
 Sprint: **O'qituvchi vositalari 2 + 9 yangi xizmat (AUDIT-20…23)** — reja `docs/AUDIT-20.md` §1, tadqiqot `docs/research/` (15 hisobot). Oldingi: Talaba ishlari 2 (AUDIT-19) — prod'da.
 
 Eski sprint jadvali (AUDIT-19) — reja `~/.claude/plans/sen-senior-fullstack-dev-majestic-starfish.md` (§1 `docs/AUDIT-19.md`), jurnal `docs/AUDIT-19.md` §5.
-AUDIT-20 holati: **~35 %** — R tadqiqot 100, R0 substrat 100, WP-A dvigatel 100 (main), WP-B ~40 (worktree), WP-C ~60 (worktree), WP-E ~5, WP-D/WP-F/R3 0.
+AUDIT-20 holati: **~95 %** — barcha WP main da, jonli 7/7, smoke 2/2, ko'z o'tdi; deploy qoldi.
 
 | # | AUDIT-20 bosqich | % | Izoh |
 |---|---|---|---|
 | R | Tadqiqot 15 hisobot | 100 | `docs/research/` |
 | R0 | Substrat (teacher tiplari/reyestr, test vositasi, curriculum API) | 100 | `8fabe09` |
 | A | 4 vosita dvigateli (lesson/map/glossary/keys) | 100 | `6b7d627`, 74 test |
-| B | Test dvigateli + o'quv bazasi ≥6 fan | 40 | worktree `agent-a5106a1b84f359a35` |
-| C | planTeacher yagona manba, drawTeacher, paritet, legacy, eski ko'ruvchilar o'chishi | 60 | worktree `agent-a7dae8c6277a8125d` |
-| E | TeacherComposer forma + zond | 5 | worktree `agent-af37ea237a44603ea` |
-| D | Tahrir/server (teacherAdapter, doc-polish, useTeacherEdit, worker source, delivered) | 0 | WP-C dan keyin |
-| F | Ulash (index.ts darvozalari, delivered, i18n, live 6 holat, seed) | 0 | |
-| R3 | Jonli, smoke, ko'z, docs, deploy | 0 | deploy WP-E siz TAQIQ (4 vosita formasi bo'sh) |
+| B | Test dvigateli + o'quv bazasi (8 fan, 2 424 mavzu) | 100 | `1c50961` |
+| C | planTeacher yagona manba, drawTeacher, paritet, legacy, eski ko'ruvchilar o'chishi | 100 | `db692f7` |
+| E | TeacherComposer forma + zond | 100 | `26e374d`, `f22e6b6` |
+| D | Tahrir/server (teacherAdapter, doc-polish, useTeacherEdit, glossariy sayqal, maket nuqsonlari) | 100 | `df5d83c` |
+| F | Ulash (index.ts darvozalari, delivered, i18n, live 8 holat, seed) | 100 | `bde8082` |
+| R3 | Jonli 7/7, smoke (lesson-plan, test), ko'z 5 kind, docs | 90 | deploy qoldi |
 
 ## To'xtatilgan jarayonlar
-`.claude/actions/2026-09-16-01-pause.md` — 3 agent worktree'da (WP-B WIP `a22a233`, WP-C 4 kommit, WP-E boshlanmagan).
+Yo'q (pauza yakunlandi, hamma worktree birlashtirildi).
 
 ## Davom etish qadamlari (AUDIT-20)
-1. «davom et» — uchala worktree agentini davom ettirish (`git merge main` → qolgan ish), keyin WP-D/WP-F, jonli 6 holat, smoke, LibreOffice ko'z, docs, deploy.
+1. Deploy AUDIT-20 (`.claude/deploy.md`): zaxira → push → `nohup deploy.sh` → prod smoke (eski dars rejasi/xarita/glossariy/keys ochilishi + yangi dars rejasi/test).
+2. Keyingi: AUDIT-21 (krossvord/flesh karta/infografika) — reja `docs/AUDIT-20.md` §3.
 2. Egasidan (AUDIT-22 uchun, shoshilinch emas): Azure Speech kaliti + region, Aisha AI kaliti.
 
 Oldingi sprint (AUDIT-19) yakuni: **100% — prod'da (2026-09-16, `552a46c`).**
