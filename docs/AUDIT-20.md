@@ -270,7 +270,7 @@ QOLADI (ta'rif yuqoridagi ro'yxatda, jadvalda takrorlanmaydi — AUDIT-6
 B5); keys rubrikasi alohida `rubric` bo'limi bo'lib qoladi va alohida
 bet TALAB QILMAYDI. Reyestr skeleti matnini WP-F tuzatsin.
 
-**Testlar:** `teacher-layout` 25, `teacher-docx` 17 (LibreOffice: 5 kind
+**Testlar:** `teacher-layout` 24, `teacher-docx` 17 (LibreOffice: 5 kind
 → PDF, bet soni va yo'nalish), `viewer/teacher-parity` 13 (5 kind ×
 TO'LIQ matn pariteti + ru/en), `viewer/teacher-legacy` 14. Mutatsiya 8
 tasi ham ushlandi (shapka, albom, kalit sahifa uzilishi, legacy model,
