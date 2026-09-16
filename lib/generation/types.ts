@@ -9,6 +9,7 @@ import type { SlidePurpose } from "./slide-purpose";
 import type { SlideResearch } from "./slide-research";
 import type { ResumeModel } from "./resume/model";
 import type { ArticleModel, ArticleTypeId, CiteStyle, PublicationProfileId } from "./article/types";
+import type { EssayModel } from "./essay/types";
 import type { ResumePaletteId, ResumeTemplateId } from "./resume/templates";
 
 export type GenImage = {
@@ -484,6 +485,8 @@ export type AcademicDoc = {
    * `legacyArticleModel(doc)` bilan o'qiladi.
    */
   article?: ArticleModel;
+  /** Insho (Talaba ishlari 2, AUDIT-19): kontekst/tur, hajm, thesis statement, hisobot; matn `sections` da. */
+  essay?: EssayModel;
   images?: GenImage[];
   imagePrompt?: string;
   imageScene?: string;
