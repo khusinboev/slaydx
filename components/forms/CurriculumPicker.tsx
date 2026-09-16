@@ -111,44 +111,52 @@ export function CurriculumPicker({
           />
         </span>
       </div>
-      {value.subjectId && value.grade ? (
-        <div data-field="topicIds">
-          {loading ? <p className="text-muted-foreground text-[12px]">Mavzular yuklanmoqda…</p> : null}
-          {error ? <p className="text-destructive text-[12px]">{error}</p> : null}
-          {topics ? (
-            <>
-              <div className="flex flex-wrap gap-1.5" role="group" aria-label="Mavzular">
-                {flat.map((t) => {
-                  const on = value.topicIds.includes(t.id);
-                  const disabled = !on && value.topicIds.length >= TEACHER_LIMITS.curriculumTopicsMax;
-                  return (
-                    <button
-                      key={t.id}
-                      type="button"
-                      aria-pressed={on}
-                      disabled={disabled}
-                      data-topic={t.id}
-                      onClick={() => toggleTopic(t.id)}
-                      title={t.unit}
-                      className={cn(
-                        "rounded-full border px-2.5 py-1 text-[12px] transition-colors disabled:cursor-not-allowed disabled:opacity-50",
-                        on ? "border-primary bg-primary text-primary-foreground" : "border-input bg-card hover:bg-muted",
-                      )}
-                    >
-                      {t.title}
-                    </button>
-                  );
-                })}
-              </div>
-              <p className="text-muted-foreground mt-1 text-[11px]">
-                {value.topicIds.length}/{TEACHER_LIMITS.curriculumTopicsMax} mavzu tanlandi — manba: {topics.source.title}
-              </p>
-            </>
-          ) : null}
-        </div>
-      ) : (
-        <p className="text-muted-foreground text-[12px]">Avval fan va sinfni tanlang.</p>
-      )}
+      {/*
+       * `data-field="topicIds"` HAR DOIM DOM da bo'lishi kerak (fan/sinf
+       * tanlanmagan bo'lsa ham) — aks holda `teacherParamsOf("test")`
+       * qamrov testi (`topicIds` reyestrda) mavzu tanlanmagan holatda
+       * qizil chiqardi (`tests/viewer/teacher-form.test.mts`).
+       */}
+      <div data-field="topicIds">
+        {value.subjectId && value.grade ? (
+          <>
+            {loading ? <p className="text-muted-foreground text-[12px]">Mavzular yuklanmoqda…</p> : null}
+            {error ? <p className="text-destructive text-[12px]">{error}</p> : null}
+            {topics ? (
+              <>
+                <div className="flex flex-wrap gap-1.5" role="group" aria-label="Mavzular">
+                  {flat.map((t) => {
+                    const on = value.topicIds.includes(t.id);
+                    const disabled = !on && value.topicIds.length >= TEACHER_LIMITS.curriculumTopicsMax;
+                    return (
+                      <button
+                        key={t.id}
+                        type="button"
+                        aria-pressed={on}
+                        disabled={disabled}
+                        data-topic={t.id}
+                        onClick={() => toggleTopic(t.id)}
+                        title={t.unit}
+                        className={cn(
+                          "rounded-full border px-2.5 py-1 text-[12px] transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+                          on ? "border-primary bg-primary text-primary-foreground" : "border-input bg-card hover:bg-muted",
+                        )}
+                      >
+                        {t.title}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-muted-foreground mt-1 text-[11px]">
+                  {value.topicIds.length}/{TEACHER_LIMITS.curriculumTopicsMax} mavzu tanlandi — manba: {topics.source.title}
+                </p>
+              </>
+            ) : null}
+          </>
+        ) : (
+          <p className="text-muted-foreground text-[12px]">Avval fan va sinfni tanlang.</p>
+        )}
+      </div>
     </div>
   );
 }
