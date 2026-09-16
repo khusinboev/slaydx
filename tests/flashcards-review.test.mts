@@ -24,7 +24,7 @@ import { sampleGameDoc } from "../lib/generation/games/samples.ts";
 import { CARDS_JUDGE_CRITERIA, GAME_RULE_IDS } from "../lib/generation/games/registry.ts";
 import { GAME_LIMITS, type Flashcard } from "../lib/generation/games/types.ts";
 import type { AcademicDoc } from "../lib/generation/types.ts";
-import type { DocReview } from "../lib/generation/report/types.ts";
+import type { DocReview, ReviewCheck } from "../lib/generation/report/types.ts";
 import type { LlmRole } from "../lib/generation/llm-roles.ts";
 
 /**
@@ -65,7 +65,7 @@ function docOf(cards: Flashcard[], o: { type?: "term-def" | "qa"; includeExample
 
 const ten = () => Array.from({ length: 10 }, (_, i) => card(i + 1));
 
-const checkOf = (checks: { id: string }[], id: string) => checks.find((c) => c.id === id)!;
+const checkOf = (checks: readonly ReviewCheck[], id: string) => checks.find((c) => c.id === id)!;
 
 const USAGE = { provider: "gemini", model: "gemini-2.5-flash", inputTokens: 300, outputTokens: 400 };
 
@@ -277,7 +277,7 @@ test("`runFlashcardsPolish`: ball oshsa QABUL, oshmasa eski hujjat qoladi (Q-3)"
   // Misol so'ralgan, lekin yo'q — hisobot qizil, sayqal uni to'ldiradi.
   const doc = docOf(ten(), { includeExample: true });
   const before = await reviewFlashcards(doc, { judge: false });
-  const good = async (role: LlmRole, _s: string, _u: string) =>
+  const good = async (role: LlmRole) =>
     role === "judge"
       ? { text: JSON.stringify({ termClarity: 3, definitionCompleteness: 3, languageLevel: 3, exampleRelevance: 3, memorability: 3, notes: [], fixes: [] }), usage: USAGE }
       : { text: JSON.stringify({ cards: ten().map((c) => ({ front: c.front, back: c.back, example: `${c.front} jumlada shunday ishlatiladi.` })) }), usage: USAGE };

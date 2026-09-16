@@ -269,15 +269,21 @@ test("krossvord tartibi: ko'rsatma + to'r → savollar (2 ustun) → javoblar YA
    * (ko'rsatma paragraflari + bo'sh to'r rasmi) → `across`/`down`
    * (bitta ikki ustunli band) → `answers` (javob to'ri + raqam→so'z).
    */
-  assert.deepEqual(plan.body.map((b) => b.k), ["h1", "p", "p", "figure", "clues", "h1", "figure", "p", "p"]);
+  assert.deepEqual(plan.body.map((b) => b.k), ["p", "p", "figure", "clues", "h1", "figure", "p", "p"]);
+  /*
+   * To'r bo'limining sarlavhasi YO'Q: WP-A yorlig'i «Krossvord» va u
+   * hujjat nomining («KROSSVORD») aynan takrori — bosma varaqda ikki
+   * qator ketma-ket bir xil so'z turardi (LibreOffice ko'zi).
+   */
+  assert.ok(!plan.body.some((b) => b.k === "h1" && b.text.toLowerCase() === "krossvord"), "hujjat nomi takrorlandi");
 
-  const answersH1 = plan.body[5];
+  const answersH1 = plan.body[4];
   assert.ok(answersH1.k === "h1" && answersH1.pageBreak, "javoblar varag'i yangi betdan boshlanmadi");
   assert.ok(plan.pageBreaks.includes("answers"));
-  const gridH1 = plan.body[0];
-  assert.ok(gridH1.k === "h1" && !gridH1.pageBreak, "to'r birinchi betda qolishi kerak");
+  // To'r BIRINCHI betda: undan oldin uzilish YO'Q.
+  assert.deepEqual(plan.pageBreaks, ["answers"], "to'r birinchi betda qolishi kerak");
   // Javoblar ro'yxati — HUJJAT matnidan, maket uni qayta yozmaydi.
-  const answerLine = plan.body[7];
+  const answerLine = plan.body[6];
   assert.ok(answerLine.k === "p" && /FOTOSINTEZ/.test(answerLine.text), `javoblar ro'yxati: ${answerLine.k === "p" ? answerLine.text : answerLine.k}`);
 });
 

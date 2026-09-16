@@ -238,3 +238,118 @@ egaligida emas — hozircha `review.ts` ro'yxatni reyestr + qo'shimchalar
 sifatida quradi); (2) `games/layout.ts planGame` javoblar bo'limini YANGI
 BETDAN boshlashi kerak (`answerSeparate` reyestrda `true`); (3) jonli
 sinov (`npm run live`) va LibreOffice ko'zi — R bosqichida.
+
+### WP-B — flesh kartalar + `planGame` (yagona maket) ✅ (2026-09-17)
+
+`planGame(doc)` — IKKALA kind uchun YAGONA MANBA (`planTeacher` naqshi):
+DOCX (`render-docx.ts drawGame`) ham, ko'ruvchi (`lib/viewers/flow.ts
+gameFlow` → `WordViewer gameSheet`) ham faqat shu rejani chizadi.
+
+```ts
+planGame(doc: AcademicDoc): GamePlan
+GamePlan = { model, kind, type, language, labels,
+             head: GameHeadItem[],        // krossvord: title/subtitle/field
+             body: GameBodyItem[],        // h1 · h3 · p · li · note · clues · cards · figure
+             tables: [], pageBreaks: string[], landscape: false,
+             page: { marginsCm, sizePt, line, tableSizePt, smallPt,
+                     card: { wMm, hMm, cols, rows, padMm, headMm, backPt, examplePt } },
+             headingAlign: "left" }
+```
+
+**Ikki kind — ikki manba, ATAYLAB:** krossvord BO'LIM BLOKLARIDAN
+(`crosswordSections` — ko'rsatma, savol, javoblar hujjatning O'ZIDA
+yozilgan matn; `path` = `sections.<i>.blocks.<j>`, teacher shartnomasi),
+kartalar esa MODELDAN (`game.cards`; `path` = `game.cards.<k>.front|back`)
+— nasrda old yuz bilan orqa yuz ajralmaydi (`h3` + `p`) va panjarani
+bloklardan qayta yig'ish «qaysi paragraf qaysi kartaniki» degan taxminga
+tayanardi. Nasr baribir quriladi (`cardSections`): hisobot, baholovchi va
+qidiruv shuni o'qiydi.
+
+**Kartalarda HUJJAT SHAPKASI YO'Q** — bu maketning markaziy qarori.
+Kartalar duplex bosiladi va old bet bilan orqa bet KATAKMA-KATAK ustma-ust
+tushishi kerak; birinchi betning tepasidagi sarlavha old betni pastga
+surib, kesilgan kartaning orqasida QO'SHNISINING ta'rifini qoldirardi.
+O'rniga har betda BIR XIL BALANDLIKDAGI ikki qatorli varaq shapkasi
+(««Mavzu» · 1/2-varaq · old yuzlar» + duplex ko'rsatmasi).
+
+**Oynali orqa tartib** (`mirrorRow`): «flip on long edge» da portret
+varaqning uzun chekkasi chap/o'ngda, ya'ni QATOR ICHIDA ustunlar almashadi
+(`[A B] → [B A]`), qatorlar tartibi esa O'ZGARMAYDI. Bo'sh kataklar ham
+oynalanadi (to'lmagan oxirgi varaq).
+
+**A7 geometriyasi — halol yozuv (chekinish).** R5 §1 dagi «A7 74×105 mm,
+A4 da 2×4» PORTRET A4 da mumkin emas: 4 × 105 = 420 mm > 297 mm. A4 ni
+sakkizga bo'lish A7 ni YOTIQ qo'yishni talab qiladi (2 × 105 = 210,
+4 × 74 = 296 mm) — chegara uchun joy qolmaydi. Shuning uchun katak A7
+NISBATINI (105:74) saqlab bosiladigan maydonga sig'diriladi (`cardCellMm`,
+sof funksiya): 10 mm chegara + varaq shapkasi bilan **92,0 × 64,9 mm**.
+`GAME_LIMITS.cardWidthMm/cardHeightMm` NOMINAL o'lcham (nisbat manbasi)
+bo'lib qoladi, `CARDS_PER_SHEET = 8` esa shartnoma.
+
+**Dvigatel** (`games/flashcards/{input,prompts,engine,review,polish}.ts`):
+
+- `buildFlashcardsDoc(meta, values, opts)` — `games/engine.ts buildGameDoc`
+  dinamik import bilan chaqiradi; `complete("writer")` + `CostMeter`,
+  normalizatsiya (`clipWords` SO'Z chegarasida kesadi — matn katakdan
+  chiqmasin), dublikat (`frontKey`), yetishmasa BIR qo'shimcha so'rov,
+  70 % darvozasi, `delivered {got, want, unit: "karta"}`;
+- `review.ts` — 6 qoida (`cardCount`, `frontLength`, `backLength`,
+  `noDuplicate`, `examplePresence`, `cardTypeMatch`) + 5 mezonli
+  baholovchi (`CARDS_JUDGE_CRITERIA`). `cardCount` VA'DANI hujjatdan
+  tiklaydi: son reyestr chipi (5/10/15/20) bo'lmasa — kamomad;
+  `examplePresence` «so'ralmagan» bilan «berilmagan» ni ajratadi;
+- `polish.ts` — karta MODEL shaklida qayta yoziladi (AUDIT-20 glossariy
+  saboqi: nasr yo'li `h3` larni yeb qo'ygan edi), karta SONI saqlanadi
+  (kam qaytgan javob rad etiladi), `applyCardsOps` model VA nasrni
+  BIRGA almashtiradi.
+
+**Quvur:** `gameProfile(kind)` (kartalar 10 mm chegara, TNR 14/1,0;
+krossvord portret TNR 12/1,15; ikkalasida `titlePage: "none"`) ·
+`drawGame` (katak kengligi va qator BALANDLIGI millimetrda,
+`HeightRule.EXACT`; kesish chizig'i — nuqtali katak chegarasi; savollar
+chegarasiz 2 ustunli jadval; jadval chegarasi JADVAL darajasida ham aniq
+yoziladi, chunki `docx` standart `single` ni yozadi va LibreOffice katakni,
+Word jadvalni tinglaydi) · `gameFlow` → `WordViewer` (tahrirsiz —
+panjara maketning O'ZI) · `packPages` karta varag'iga majburiy uzilish ·
+`sampleGameDoc` (kartalar 10 ta; krossvord WP-A ning O'Z quvuridan:
+`placeWords` → `crosswordSections` → `crosswordFigure`) · to'r rasmining
+CHOP ETILADIGAN kengligi `FigureSpec kind:"svg" widthMm` dan (DOCX ham,
+ko'ruvchi ham).
+
+**Testlar:** `game-layout` 20, `game-docx` 11, `flashcards-engine` 18,
+`flashcards-review` 17, `viewer/game-parity` 10. `npm test` 2 201 yashil,
+`test:viewer` 211, `test:ui` 234 — hammasi yashil; `tsc`/eslint toza.
+
+**Mutatsiyalar (har biri qizardi):** oynali tartibni olib tashlash
+(`mirrorRow` chaqiruvi) · varaqni 8 emas 4 kartaga bo'lish · karta
+varag'idan `pageBreak` ni olib tashlash (DOCX va `packPages` ikkalasi
+ham qizardi) · `cardCount` bandini doim yashil qilish · `frontLength`
+chegarasini reyestr o'rniga qattiq songa bog'lash · qo'shimcha so'rov
+aylanishini o'chirish · qator balandligini `EXACT` dan `ATLEAST` ga
+almashtirish (**LibreOffice ko'zi ham qizardi** — orqa betdagi uzunroq
+ta'rif qatorni cho'zib, kesish chiziqlarini siljitdi).
+
+**LibreOffice ko'zi (avtomatlashtirilgan):** 10 karta → AYNAN 4 bet
+(2 old + 2 orqa), krossvord 2 bet, ikkalasi ham portret. Old va orqa
+betlar PNG ga o'girilib, QORA PIKSEL PROFILI solishtiriladi: nuqtali
+kesish chizig'i bet enining 0,67 ini qoplaydi (eng zich matn qatori —
+0,55), ikkala betda ham chiziqlar AYNAN bir xil piksel qatorida
+(51/230/408/587/766 @70 dpi). Ko'z bilan ham ko'rildi: old bet
+[Fotosintez | Xlorofill], orqa bet [Xlorofill ta'rifi | Fotosintez
+ta'rifi] — oyna to'g'ri.
+
+**Ochiq savollar (lead uchun):**
+
+1. **Karta o'lchami 92 × 64,9 mm** — A7 (74 × 105) EMAS. Egasi
+   tasdiqlasinmi? Muqobil: A4 ni ALBOM qilib 4 × 2 joylashuv (o'shanda
+   katak A7 ga yaqinroq, lekin `landscape` va varaq shapkasi qaytadan
+   o'ylanadi).
+2. Varaq shapkasi (mavzu + varaq raqami + duplex ko'rsatmasi) HAR betda
+   takrorlanadi — bu ataylab (balandlik o'zgarmasin), lekin bosmada
+   «shovqin» deb qaralishi mumkin. Ko'rsatmani faqat BIRINCHI betda
+   qoldirish maketni buzadi.
+3. `FlashcardsModel` da VA'DA (`want`) maydoni yo'q; `cardCount` bandi
+   uni reyestr chipidan tiklaydi. Maydon qo'shilsinmi (`types.ts` —
+   R0 egaligida)?
+4. Flesh kartalarda FAYL rejimi yo'q (AUDIT-21 §6 savol 5 hali ochiq) —
+   `modes` qo'shilsa `prompts.ts` ga `sourceBlock` kerak bo'ladi.

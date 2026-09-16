@@ -44,10 +44,20 @@
  *
  * TUZILMA — `doc.game` modelida (`GameModel`), NASR esa odatdagidek
  * `doc.sections` da: hisobot (`review.ts`), baholovchi, sayqal va
- * qidiruv shu matnni o'qiydi. Maket NASRNI CHIZMAYDI — kartalar ham,
- * to'r ham, savollar ham MODELDAN chiziladi; bo'limlardan faqat
- * SARLAVHA olinadi. Ikki manbani bir betga qo'shib chizish har kartani
- * ikki marta ko'rsatardi.
+ * qidiruv shu matnni o'qiydi.
+ *
+ * Ikki kind ikki xil manbadan chiziladi va bu ATAYLAB:
+ *
+ *   krossvord  BO'LIM BLOKLARIDAN (`crossword/engine.ts
+ *              crosswordSections`) — ko'rsatma qatorlari, savol matni
+ *              va javoblar ro'yxati hujjatning O'ZIDA yozilgan matn,
+ *              maket faqat joylashtiradi (`path` =
+ *              `sections.<i>.blocks.<j>`, teacher shartnomasi);
+ *   kartalar   MODELDAN (`game.cards`) — nasrda old yuz bilan orqa yuz
+ *              ajralmaydi (`h3` + `p`), ya'ni panjarani bloklardan
+ *              qayta yig'ish qaysi paragraf qaysi kartaniki degan
+ *              taxminga tayanardi. Nasr esa baribir kerak: hisobot,
+ *              baholovchi va qidiruv shuni o'qiydi.
  */
 import { docLabels, type DocLabels } from "../i18n";
 import type { AcademicDoc, Figure } from "../types";
@@ -57,7 +67,6 @@ import {
   GAME_LIMITS,
   type Flashcard,
   type FlashcardsModel,
-  type CrosswordClue,
   type CrosswordModel,
   type GameKind,
   type GameModel,
@@ -470,7 +479,22 @@ function planCrossword(
   };
 
   /* ── to'r: ko'rsatma qatorlari + bo'sh to'r rasmi ── */
-  body.push({ k: "h1", text: titleOf("grid"), sectionId: "grid", path: "sections.grid.title", pageBreak: false });
+  /*
+   * To'r bo'limining sarlavhasi HUJJAT NOMINING takrori bo'lsa
+   * chizilmaydi.
+   *
+   * WP-A dvigatelida bu bo'limning yorlig'i «Krossvord»
+   * (`crosswordLabels.grid`), ya'ni bosma varaqda «KROSSVORD» ostida
+   * yana «Krossvord» turardi — LibreOffice ko'z tekshiruvida darhol
+   * ko'rindi. Shart AYNIQSA tor (faqat aynan takror): dvigatel
+   * yorlig'ini «To'r» ga o'zgartirsa yoki boshqa tilda boshqacha
+   * bo'lsa, sarlavha avvalgidek qoladi (`planTeacher` dagi «Mavzu =
+   * Fan» takrori bilan bir xil qaror).
+   */
+  const gridTitle = titleOf("grid");
+  if (gridTitle.toLowerCase() !== L.docTitle.crossword.toLowerCase()) {
+    body.push({ k: "h1", text: gridTitle, sectionId: "grid", path: "sections.grid.title", pageBreak: false });
+  }
   pushBlocks("grid");
 
   /* ── savollar: IKKI USTUN yonma-yon (`across` + `down` bitta bandda) ── */

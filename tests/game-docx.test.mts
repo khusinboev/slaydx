@@ -162,9 +162,10 @@ test("savollar CHEGARASIZ ikki ustunli jadvalda; javoblar YANGI BETDAN", async (
    */
   const plan = planGame(sampleGameDoc("crossword"));
   const h1 = plan.body.filter((b): b is Extract<(typeof plan.body)[number], { k: "h1" }> => b.k === "h1");
-  assert.equal(h1.length, 2, "to'r va javoblar sarlavhalari");
-  assert.ok(paraOf(xml, h1[1].text).includes("<w:pageBreakBefore/>"), "javoblar varag'i yangi betdan boshlanmadi");
-  assert.ok(!paraOf(xml, h1[0].text).includes("<w:pageBreakBefore/>"), "to'r birinchi betda qolishi kerak");
+  assert.equal(h1.length, 1, "faqat javoblar sarlavhasi (to'r sarlavhasi hujjat nomining takrori edi)");
+  assert.ok(paraOf(xml, h1[0].text).includes("<w:pageBreakBefore/>"), "javoblar varag'i yangi betdan boshlanmadi");
+  // Hujjatda AYNAN BITTA uzilish — to'r birinchi betda qoladi.
+  assert.equal([...xml.matchAll(/<w:pageBreakBefore\s*\/>/g)].length, 1, "ortiqcha sahifa uzilishi");
 });
 
 test("sahifa chegarasi va shrifti PROFILDAN — reja bilan BITTA manbadan", async () => {
