@@ -324,6 +324,26 @@ test("`onCost` teacher yo'lidan `BuiltFile.cost` ga yetib boradi", () => {
   assert.match(idx, /onCost: \(c\) => \(cost = c\)/);
 });
 
+/* ───────────────────────── jonli holatlar (quruq tekshiruv) ───────────────────────── */
+
+/**
+ * `test-curriculum` jonli holati rasmiy dastur mavzu ID larini yozadi.
+ * Ular bazada bo'lmasa, holat JIMGINA «mavzu rejimi» ga tushardi va
+ * `curriculumCoverage` bandi hech nimani tekshirmasdi — buni faqat
+ * 420 soniyalik (va pullik) jonli yugurishdan keyin bilardik.
+ */
+test("jonli holat: `test-curriculum` mavzu id lari o'quv bazasida bor", async () => {
+  const src = readFileSync(new URL("../scripts/live-engine.mts", import.meta.url), "utf8");
+  const block = src.slice(src.indexOf('name: "test-curriculum"'));
+  const ids = JSON.parse(/topicIds: JSON\.stringify\((\[[^\]]*\])\)/.exec(block)![1].replace(/"/g, '"')) as string[];
+  assert.equal(ids.length, 5, "reja bo'yicha 5 mavzu");
+  const { curriculumTopics, pickTopics } = await import("../lib/curriculum.ts");
+  const entry = await curriculumTopics("fizika", 8);
+  assert.ok(entry, "fizika 8-sinf bazada bo'lishi kerak");
+  const found = pickTopics(entry!, ids).map((t) => t.id);
+  assert.deepEqual([...found].sort(), [...ids].sort(), "jonli holatdagi mavzu id lari bazada topilmadi");
+});
+
 test("worker: `tool.modes` bo'lgan HAR vosita manba faylini oladi (test fayl rejimi)", () => {
   const src = readFileSync(new URL("../lib/server/worker.ts", import.meta.url), "utf8");
   assert.match(src, /const source = tool\.modes \? await sourceForJob\(/);

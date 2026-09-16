@@ -18,8 +18,12 @@
  *   npm run live -- article-oak --article-type analytical --profile university  — maqola turi/profili
  *   npm run live -- essay-dtm essay-academic essay-ielts  — insho (AUDIT-19)
  *   npm run live -- article-oak --no-polish  — avto-sayqalsiz (AUDIT-18/19)
+ *   npm run live -- --list       — holatlar ro'yxati, LLM chaqiruvisiz
+ *   npm run live -- lesson map map-quarters glossary keys  — o'qituvchi (AUDIT-20)
+ *   npm run live -- test-topic test-curriculum             — test dvigateli
+ *   npm run live -- test-file --source ./namuna.docx       — test, fayl rejimi
  *
- * `GEMINI_API_KEY` shart. Chiqish `eval-out/live/` ga yoziladi.
+ * `GEMINI_API_KEY` shart (`--list` dan tashqari). Chiqish `eval-out/live/` ga.
  */
 import { planArticle } from "../lib/generation/article/layout";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -115,6 +119,250 @@ const RESUME_VALUES: FormValues = {
 
 /** Kirishda BOR yillar — model boshqa yil o'ylab topmasligi kerak. */
 const RESUME_YEARS = new Set(["2015", "2019", "2021", "2022"]);
+
+/* ═════════════ O'qituvchi vositalari (AUDIT-20 WP-F) ═════════════ */
+
+/**
+ * DOCX bet chegarasi — kind bo'yicha [min, max].
+ *
+ * WP-C (`teacher/layout.ts planTeacher`) maketi kelgunga qadar DOCX
+ * UMUMIY shox bilan chiziladi: rasmiy shapka, albom yo'nalish va bet
+ * uzilishlari hali yo'q, ya'ni bet soni maketdan keyin O'ZGARADI.
+ * Chegara shuning uchun keng — u «hujjat umuman bir betlik bo'lib
+ * qolmadimi yoki 40 betga cho'zilmadimi» degan savolga javob beradi.
+ * Aniq paritet — R3 raundida, LibreOffice ko'zi bilan.
+ */
+const TEACHER_PAGES: Record<string, [number, number]> = {
+  lesson: [1, 6],
+  map: [1, 14],
+  glossary: [1, 12],
+  keys: [1, 14],
+  test: [1, 16],
+};
+
+/** Beshala vositada bir xil da'volar: model, hisobot, sarf, delivered, bet. */
+function teacherChecks(f: BuiltFile, pages: number | null, kind: keyof typeof TEACHER_PAGES): Check[] {
+  const t = f.doc.teacher;
+  const review = t?.review;
+  const red = review?.checks.filter((x) => x.level === "red").map((x) => x.id) ?? [];
+  const [pMin, pMax] = TEACHER_PAGES[kind];
+  const d = f.delivered;
+  return [
+    ok("doc.teacher bor", Boolean(t) && t?.kind === kind, t ? `${t.kind}/${t.type}` : "YO'Q — eski yo'lga tushdi"),
+    ok("hisobot bor (ball > 0)", (review?.score ?? 0) > 0, review ? `${review.score} ball, qizil: ${red.join(",") || "yo'q"}` : "yo'q"),
+    ok("cost.calls > 0", (f.cost?.calls ?? 0) > 0, f.cost ? `${f.cost.calls} chaqiruv, ${f.cost.provider}/${f.cost.model}` : "yo'q"),
+    ok("delivered va'daga mos", !d || d.got < d.want, d ? `${d.got}/${d.want} ${d.unit} → farq qaytadi` : "to'liq yetkazildi"),
+    ok(`DOCX ${pMin}–${pMax} bet`, pages === null || (pages >= pMin && pages <= pMax), `${pages ?? "o'girilmadi"} bet (WP-C maketisiz — umumiy shox)`),
+  ];
+}
+
+/** Fayl nomi vositani aytadimi (`fileSuffix`). */
+const suffixCheck = (f: BuiltFile, want: string): Check =>
+  ok("fayl nomi qo'shimchasi", f.fileName.includes(`${want}.docx`), f.fileName);
+
+const reviewRule = (f: BuiltFile, id: string): Check => {
+  const c = f.doc.teacher?.review?.checks.find((x) => x.id === id);
+  return ok(`hisobot: ${id}`, Boolean(c) && c!.level !== "red", c ? `${c.level} — ${c.detail ?? ""}`.slice(0, 90) : "band yo'q");
+};
+
+const SCHOOL = { university: "15-son umumiy o'rta ta'lim maktabi", author: "Karimova Dilnoza", language: "uz" };
+
+function teacherCases(): Case[] {
+  return [
+    {
+      /* Dars rejasi: bosqich/daqiqa darvozasi + `doc.teacher.lesson` modeli. */
+      name: "lesson",
+      tool: "lesson-plan",
+      budgetMs: 200_000,
+      values: { ...SCHOOL, topic: "Kasrlarni qo'shish va ayirish", subject: "Matematika", grade: 5, gradeLetter: "A", duration: 45, lessonType: "yangi-mavzu", stageCount: 6, assessmentStyle: "bsb" },
+      checks: (f, pages) => {
+        const m = f.doc.teacher?.lesson;
+        const sum = (m?.stages ?? []).reduce((n, s) => n + s.minutes, 0);
+        const goals = m ? [m.goal.talim, m.goal.tarbiya, m.goal.rivoj].filter(Boolean).length : 0;
+        const topicHit = f.doc.sections.some((s) => s.blocks.some((b) => /kasr/i.test(b.text)));
+        return [
+          ...teacherChecks(f, pages, "lesson"),
+          ok("bosqichlar ≥ 5", (m?.stages.length ?? 0) >= 5, `${m?.stages.length ?? 0} bosqich`),
+          ok("daqiqalar yig'indisi = 45", sum === (m?.durationMin ?? 45), `${sum} / ${m?.durationMin ?? "?"} daq`),
+          ok("maqsad uchligi", goals === 3, `${goals}/3`),
+          ok("bosqichda o'qituvchi+o'quvchi ustuni", (m?.stages ?? []).every((s) => s.teacher && s.student), (m?.stages ?? []).filter((s) => !s.teacher || !s.student).length + " bo'sh"),
+          ok("mavzuga bog'langan", topicHit, topicHit ? "«kasr» matnda" : "MAVZU YO'Q"),
+          ok("delivered YO'Q (miqdor va'dasi yo'q)", f.delivered === undefined, f.delivered ? `${f.delivered.got}/${f.delivered.want}` : "to'g'ri"),
+          suffixCheck(f, "-dars"),
+        ];
+      },
+    },
+    {
+      /* Texnologik xarita — yillik: 136/4 = 34 hafta, soat yig'indisi QAT'IY. */
+      name: "map",
+      tool: "texnologik-xarita",
+      budgetMs: 320_000,
+      values: { ...SCHOOL, subject: "Biologiya", topic: "Biologiya", grade: 8, weeklyHours: 4, totalHours: 136, mapType: "yillik", controlLink: "bsb-chsb" },
+      checks: (f, pages) => {
+        const m = f.doc.teacher?.map;
+        const weeks = (m?.quarters ?? []).flatMap((q) => q.weeks);
+        const hours = weeks.reduce((n, w) => n + w.hours, 0);
+        const uniq = new Set(weeks.map((w) => w.topic.toLowerCase().trim())).size;
+        return [
+          ...teacherChecks(f, pages, "map"),
+          ok("hafta soni 34", weeks.length === 34, `${weeks.length} hafta`),
+          ok("yillik — bitta blok", (m?.quarters.length ?? 0) === 1, `${m?.quarters.length ?? 0} blok`),
+          ok("soat yig'indisi = 136", hours === 136, `${hours} soat`),
+          ok("mavzular noyob", uniq === weeks.length, `${uniq}/${weeks.length}`),
+          ok("natija va nazorat ustunlari to'la", weeks.every((w) => w.result && w.control), `${weeks.filter((w) => !w.result || !w.control).length} bo'sh`),
+          suffixCheck(f, "-xarita"),
+        ];
+      },
+    },
+    {
+      /* Choraklik variant: AYNI soatlar, lekin TO'RTTA jadval (`map.quarters`). */
+      name: "map-quarters",
+      tool: "texnologik-xarita",
+      budgetMs: 360_000,
+      values: { ...SCHOOL, subject: "Biologiya", topic: "Biologiya", grade: 8, weeklyHours: 4, totalHours: 136, mapType: "choraklik" },
+      checks: (f, pages) => {
+        const m = f.doc.teacher?.map;
+        const weeks = (m?.quarters ?? []).flatMap((q) => q.weeks);
+        const tables = (f.doc.tables ?? []).length;
+        return [
+          ...teacherChecks(f, pages, "map"),
+          ok("4 chorak", (m?.quarters.length ?? 0) === 4, (m?.quarters ?? []).map((q) => `${q.n}:${q.weeks.length}`).join(" ")),
+          ok("4 jadval (anchor q1..q4)", tables === 4, `${tables} jadval: ${(f.doc.tables ?? []).map((t) => t.anchor).join(",")}`),
+          ok("hafta soni 34", weeks.length === 34, `${weeks.length} hafta`),
+          ok("delivered BARCHA choraklardan", !f.delivered, f.delivered ? `${f.delivered.got}/${f.delivered.want} — 1-jadval sanaldimi?` : "to'liq"),
+        ];
+      },
+    },
+    {
+      /* Glossariy — uch tilli: 20 atama, `ru`/`en` ustunlari, alifbo tartibi. */
+      name: "glossary",
+      tool: "glossary",
+      budgetMs: 200_000,
+      values: { ...SCHOOL, topic: "Fotosintez va o'simlik fiziologiyasi", subject: "Biologiya", grade: 8, termCount: "20", glossaryType: "uch-tilli", includeExample: true },
+      checks: (f, pages) => {
+        const m = f.doc.teacher?.glossary;
+        const terms = m?.terms ?? [];
+        const tri = terms.filter((t) => t.ru && t.en).length;
+        const withExample = terms.filter((t) => t.example).length;
+        return [
+          ...teacherChecks(f, pages, "glossary"),
+          ok("atamalar 20", terms.length === 20, `${terms.length} ta`),
+          ok("uch tilli (ru + en)", tri === terms.length, `${tri}/${terms.length}`),
+          ok("misol qatori", withExample >= Math.ceil(terms.length * 0.8), `${withExample}/${terms.length}`),
+          ok("alifbo tartibi", isSorted(f.doc), "h3 sarlavhalari"),
+          ok("jadval bor (uch tilli)", (f.doc.tables ?? []).length === 1, `${(f.doc.tables ?? []).length} jadval`),
+          suffixCheck(f, "-glossariy"),
+        ];
+      },
+    },
+    {
+      /* Keys — 5 vaziyat, har birida rubrika 10 ball (alohida `rubric` bo'limi). */
+      name: "keys",
+      tool: "keys",
+      budgetMs: 260_000,
+      values: { ...SCHOOL, university: "Toshkent davlat pedagogika universiteti", topic: "Boshlang'ich sinfda sinf boshqaruvi", subject: "Pedagogika", keysType: "muammoli", caseCount: 5, audience: "otm" },
+      checks: (f, pages) => {
+        const m = f.doc.teacher?.keys;
+        const cases = m?.cases ?? [];
+        const rubricSums = cases.map((c) => c.rubric.reduce((n, r) => n + r.points, 0));
+        return [
+          ...teacherChecks(f, pages, "keys"),
+          ok("keyslar 5", cases.length === 5, `${cases.length} ta`),
+          ok("har keysda 2+ topshiriq", cases.every((c) => c.questions.length >= 2), cases.map((c) => c.questions.length).join(",")),
+          ok("namunaviy kalit bo'sh emas", cases.every((c) => c.solution.trim().length > 40), `${cases.filter((c) => c.solution.trim().length <= 40).length} qisqa`),
+          ok("rubrika 10 ball", rubricSums.every((s) => s === 10), rubricSums.join(",")),
+          ok("`rubric` bo'limi bor", f.doc.sections.some((s) => s.id === "rubric"), f.doc.sections.map((s) => s.id).join(",")),
+          suffixCheck(f, "-keys"),
+        ];
+      },
+    },
+    {
+      /* Test (mavzu rejimi) — 20 savol, 2 variant, kalit, OMR PNG, hisobot ≥ 55. */
+      name: "test-topic",
+      tool: "test",
+      budgetMs: 400_000,
+      values: { ...SCHOOL, topic: "Hosila va uning tatbiqlari", subject: "Matematika", grade: 10, mode: "topic", testType: "nazorat", count: 20, variants: 2, difficulty: "aralash", omr: true, answerKey: "alohida-bet", timeMin: 45 },
+      checks: (f, pages) => {
+        const m = f.doc.teacher?.test;
+        const qs = m?.questions ?? [];
+        const omr = (f.doc.teacher?.figures ?? []).find((g) => g.spec.kind === "omr");
+        const review = f.doc.teacher?.review;
+        const keyLens = (m?.variants ?? []).map((v) => m!.key[v.id]?.length ?? 0);
+        return [
+          ...teacherChecks(f, pages, "test"),
+          ok("savollar 20", qs.length === 20, `${qs.length} ta`),
+          ok("2 variant", (m?.variants.length ?? 0) === 2, (m?.variants ?? []).map((v) => v.id).join(",")),
+          ok("kalit har variantda to'liq", keyLens.every((n) => n === qs.length), keyLens.join("/")),
+          ok("OMR PNG chizildi", Boolean(omr?.url?.startsWith("data:image/png")) || Boolean(omr?.assetId), omr ? `${omr.w}×${omr.h}` : "yo'q"),
+          ok("hisobot ≥ 55 ball", (review?.score ?? 0) >= 55, `${review?.score ?? 0} ball`),
+          reviewRule(f, "keyMatchesVariants"),
+          reviewRule(f, "oneCorrect"),
+          ok("har savolda izoh", qs.every((q) => q.explanation.trim()), `${qs.filter((q) => !q.explanation.trim()).length} izohsiz`),
+          suffixCheck(f, "-test"),
+        ];
+      },
+    },
+    {
+      /*
+       * Test (fayl rejimi) — `--source <fayl.docx>` SHART. Da'vo: savollar
+       * MANBADAN chiqadi (`sourceGrounded` bandi iqtibosni manba matnidan
+       * qidiradi), ya'ni «AI o'ylab topmaydi» va'dasi tekshiriladi.
+       */
+      name: "test-file",
+      tool: "test",
+      budgetMs: 420_000,
+      values: { ...SCHOOL, topic: "Yuklangan matn bo'yicha", subject: "Biologiya", grade: 9, mode: "file", sourceAssetId: "live", testType: "nazorat", count: 15, variants: 2, omr: true },
+      checks: (f, pages) => {
+        const qs = f.doc.teacher?.test?.questions ?? [];
+        const quoted = qs.filter((q) => q.source?.quote).length;
+        return [
+          ...teacherChecks(f, pages, "test"),
+          ok("manba berildi", Boolean(sourceArg()), sourceArg() ?? "--source YO'Q — holat ma'nosiz"),
+          ok("savollar 12+", qs.length >= 12, `${qs.length} ta`),
+          ok("iqtibos bilan", quoted >= Math.ceil(qs.length * 0.8), `${quoted}/${qs.length} savolda manba iqtibosi`),
+          reviewRule(f, "sourceGrounded"),
+        ];
+      },
+    },
+    {
+      /*
+       * Test (darslik rejimi) — rasmiy dastur mavzulari (fizika, 8-sinf).
+       * Da'vo: har savol `topicId` bilan belgilanadi va `curriculumCoverage`
+       * bandi tanlangan mavzularning HAMMASI qamralganini ko'radi.
+       */
+      name: "test-curriculum",
+      tool: "test",
+      budgetMs: 420_000,
+      values: {
+        ...SCHOOL,
+        topic: "Elektr zaryad va elektr toki",
+        subject: "Fizika",
+        grade: 8,
+        mode: "curriculum",
+        subjectId: "fizika",
+        topicIds: JSON.stringify(["elektr-zaryad-elektr-maydon-1", "elektr-zaryad-elektr-maydon-3", "elektr-zaryad-elektr-maydon-5", "elektr-toki-1", "elektr-toki-4"]),
+        testType: "nazorat",
+        count: 20,
+        variants: 2,
+        omr: true,
+      },
+      checks: (f, pages) => {
+        const m = f.doc.teacher?.test;
+        const qs = m?.questions ?? [];
+        const tagged = qs.filter((q) => q.topicId).length;
+        const covered = new Set(qs.map((q) => q.topicId).filter(Boolean)).size;
+        return [
+          ...teacherChecks(f, pages, "test"),
+          ok("savollar 20", qs.length === 20, `${qs.length} ta`),
+          ok("mavzu id belgilangan", tagged >= Math.ceil(qs.length * 0.8), `${tagged}/${qs.length}`),
+          ok("5 mavzuning hammasi qamralgan", covered === 5, `${covered}/5 mavzu`),
+          ok("topicIds modelda", (m?.topicIds.length ?? 0) === 5, (m?.topicIds ?? []).join(",")),
+          reviewRule(f, "curriculumCoverage"),
+        ];
+      },
+    },
+  ];
+}
 
 const CASES: Case[] = [
   {
@@ -550,54 +798,15 @@ const CASES: Case[] = [
       },
     };
   }),
-  {
-    /* P1-2: 20 atama va'da — kam chiqsa `delivered` to'lishi kerak. */
-    name: "glossary",
-    tool: "glossary",
-    budgetMs: 160_000,
-    values: { topic: "Fotosintez va o'simlik fiziologiyasi", termCount: "20", language: "uz" },
-    checks: (f) => {
-      const terms = f.doc.sections.reduce(
-        (n, s) => n + s.blocks.filter((b) => b.kind === "h3").length,
-        0,
-      );
-      const short = f.delivered;
-      return [
-        ok("atamalar sanaldi", terms > 0, `${terms} ta`),
-        ok(
-          "delivered va'daga mos",
-          terms >= 20 ? short === undefined : short?.got === terms && short?.want === 20,
-          short ? `${short.got}/${short.want} → farq qaytadi` : "to'liq",
-        ),
-        ok("alifbo tartibi", isSorted(f.doc), "h3 sarlavhalari"),
-      ];
-    },
-  },
-  {
-    /* P0-3: portret profil + daqiqalar yig'indisi. */
-    name: "lesson",
-    tool: "lesson-plan",
-    budgetMs: 140_000,
-    values: {
-      topic: "Kasrlarni qo'shish va ayirish",
-      subject: "Matematika",
-      grade: 5,
-      duration: "45",
-      language: "uz",
-    },
-    checks: (f) => {
-      const rows = f.doc.tables?.[0]?.rows ?? [];
-      const sum = rows.reduce((n, r) => n + (Number(r[1]) || 0), 0);
-      const topicHit = f.doc.sections.some((s) =>
-        s.blocks.some((b) => /kasr/i.test(b.text)),
-      );
-      return [
-        ok("daqiqalar yig'indisi = 45", sum === 45, `${sum} daq`),
-        ok("bosqichlar bor", rows.length >= 5, `${rows.length} bosqich`),
-        ok("mavzuga bog'langan", topicHit, topicHit ? "«kasr» matnda" : "MAVZU YO'Q"),
-      ];
-    },
-  },
+  /*
+   * ── O'qituvchi vositalari 2 (AUDIT-20 WP-F) — 7 jonli holat ──
+   *
+   * Eski `glossary` va `lesson` holatlari shu ro'yxatga KO'CHDI: ular
+   * `h3` sarlavhalarni va birinchi jadval qatorlarini sanardi, ya'ni
+   * MATNNI tekshirardi. Yangi dvigatelda da'vo MODEL ustida
+   * (`doc.teacher`) — hisobot, sarf va `delivered` ham shundan.
+   */
+  ...teacherCases(),
   {
     /*
      * Pro-slayd: har parametr ta'sir qilishi shart (AUDIT-9). Bu keys
@@ -768,10 +977,15 @@ async function runCase(c: Case) {
             return { bytes, template: { assetId: "live", name: path.basename(tplPath), profile, previews: {} } };
           })()
         : undefined;
-    /* `--source <fayl>` — tarjima fayl rejimi: bayt `BuildOptions.source` orqali (worker `sourceForJob` yo'li). */
+    /*
+     * `--source <fayl>` — FAYL rejimi: bayt `BuildOptions.source` orqali
+     * (worker `sourceForJob` yo'li). Tarjimondan tashqari test vositasi
+     * ham shu yo'ldan yuradi (AUDIT-20): worker endi `tool.modes` e'lon
+     * qilgan har vositaga manbani uzatadi.
+     */
     const srcPath = sourceArg();
     const source =
-      srcPath && c.tool === "translation" && c.values.mode === "file"
+      srcPath && c.values.mode === "file"
         ? await (async () => {
             const bytes = new Uint8Array(await readFile(srcPath));
             const kind = sourceKindOf(srcPath);
@@ -820,6 +1034,29 @@ async function runCase(c: Case) {
       for (const x of file.doc.abstracts ?? []) process.stdout.write(`   annotatsiya ${x.lang}: ${x.text.split(/\s+/).length} so'z · kalit: ${x.keywords}\n`);
       for (const g of a.figures) process.stdout.write(`   sxema ${g.id}: ${g.spec.kind} — ${g.caption.slice(0, 70)}\n`);
       if (a.highlights) process.stdout.write(`   highlights: ${a.highlights.map((h) => `«${h}»`).join(" ")}\n`);
+      await writeFile(path.join(OUT, `${c.name}.doc.json`), JSON.stringify(file.doc, null, 2));
+    }
+    /*
+     * O'qituvchi hujjati: model xulosasi + hisobot bandlari; `doc.json` —
+     * WP-C maketi va ko'ruvchi paritetini o'lchash uchun URUG': jonli
+     * chaqiruvsiz (LLM sarfisiz) qayta-qayta ochib ko'rish mumkin.
+     */
+    if (file.doc.teacher) {
+      const t = file.doc.teacher;
+      const counts = [
+        t.lesson && `${t.lesson.stages.length} bosqich / ${t.lesson.stages.reduce((n, s) => n + s.minutes, 0)} daq`,
+        t.map && `${t.map.quarters.length} blok / ${t.map.quarters.flatMap((q) => q.weeks).length} hafta`,
+        t.glossary && `${t.glossary.terms.length} atama`,
+        t.keys && `${t.keys.cases.length} keys`,
+        t.test && `${t.test.questions.length} savol / ${t.test.variants.length} variant`,
+      ].filter(Boolean);
+      process.stdout.write(`   model: ${t.kind}/${t.type} — ${counts.join(", ")}\n`);
+      process.stdout.write(`   bo'limlar: ${file.doc.sections.map((s) => `${s.id}(${s.blocks.length})`).join(" ")}\n`);
+      for (const ch of t.review?.checks ?? []) {
+        if (ch.level !== "green") process.stdout.write(`   hisobot ${ch.level}: ${ch.id} — ${(ch.detail ?? "").slice(0, 90)}\n`);
+      }
+      for (const n of t.userNeeds ?? []) process.stdout.write(`   sizdan kutiladi: ${n.label}\n`);
+      for (const g of t.figures ?? []) process.stdout.write(`   rasm ${g.id}: ${g.spec.kind} ${g.w}×${g.h}\n`);
       await writeFile(path.join(OUT, `${c.name}.doc.json`), JSON.stringify(file.doc, null, 2));
     }
     /* Talaba ishi: boblar, manbalar (tur/tasdiq), vizuallar; doc.json — smoke urug'i uchun. */
@@ -987,6 +1224,20 @@ function templateArg(): string | null {
 }
 
 async function main() {
+  /*
+   * `--list` — holatlar ro'yxati, LLM CHAQIRUVISIZ (AUDIT-20).
+   *
+   * Jonli yugurish pul turadi va uni lead qachon o'tkazishini o'zi hal
+   * qiladi; ro'yxat esa «yangi holat ulandimi, nomi to'g'rimi, byudjeti
+   * qancha» degan savolga bepul javob beradi.
+   */
+  if (process.argv.includes("--list")) {
+    for (const c of CASES) {
+      process.stdout.write(`${c.name.padEnd(18)} ${String(c.tool).padEnd(20)} ${String(c.budgetMs / 1000).padStart(5)}s\n`);
+    }
+    process.stdout.write(`\nJami: ${CASES.length} holat\n`);
+    process.exit(0);
+  }
   if (!process.env.GEMINI_API_KEY && !process.env.XAI_API_KEY) {
     console.error("GEMINI_API_KEY yo'q — jonli tekshiruv o'tkazib yuborildi.");
     process.exit(2);
