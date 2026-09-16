@@ -455,34 +455,105 @@ const CASES: Case[] = [
       ok("band → ball o'girmasi (IELTS rubrikasi)", f.doc.essay?.rubric === "ielts_band", f.doc.essay?.rubric ?? "—"),
     ]),
   },
-  {
-    /* P1-10: prompt endi «4 ta bob» deydi — reja ham shuncha bo'lishi kerak. */
-    name: "coursework",
-    tool: "coursework",
-    budgetMs: 420_000,
-    values: {
-      topic: "Boshlang'ich sinf o'quvchilarida o'qish ko'nikmalarini rivojlantirish",
-      pages: "20-25",
+  /* ── Talaba ishlari 2 (AUDIT-19): `work/` dvigateli — kurs ishi / referat / mustaqil ish ── */
+  ...(["coursework-theory", "coursework-applied", "referat", "independent"] as const).map((name): Case => {
+    const common = {
       language: "uz",
-      author: "Aliyev Ali — 3-kurs, 301-guruh",
       university: "Toshkent davlat pedagogika universiteti",
-      faculty: "Boshlang'ich ta'lim",
-      subject: "Pedagogika",
+      faculty: "Boshlang‘ich ta’lim fakulteti",
+      department: "Boshlang‘ich ta’lim metodikasi kafedrasi",
+      author: "Aliyev Ali",
+      group: "301-guruh",
+      course: "3",
       teacher: "Karimova D.",
-      images: "yes",
+      teacherDegree: "p.f.n., dotsent",
+      city: "Toshkent",
+      ministry: "oliy",
       tocMethod: "ai",
-    },
-    checks: (f, pages) => {
-      const bobs = f.doc.sections.filter((s) => /^bob\d/.test(s.id));
-      return [
-        ok("4 bob (prompt bilan mos)", bobs.length === 4, `${bobs.length} bob`),
-        ok("ostmavzular bor", countH2(f.doc) >= 8, `${countH2(f.doc)} ostmavzu`),
-        ok("hajm darvozasi", wordCount(f.doc) >= 0.8 * 23 * 230, `${wordCount(f.doc)} so'z`),
-        ok("renderlangan sahifa", pages === null || pages >= 17, `${pages ?? "—"} bet (kerak 20-25)`),
-        ok("manba ogohlantirishi", Boolean(f.doc.referencesNote), f.doc.referencesNote ? "bor" : "YO'Q"),
-      ];
-    },
-  },
+      research: true,
+    };
+    const byName: Record<typeof name, { tool: "coursework" | "referat" | "mustaqil-ish"; values: FormValues; pagesMin: number; refsMin: number; visuals: boolean }> = {
+      "coursework-theory": {
+        tool: "coursework",
+        pagesMin: 15,
+        refsMin: 15,
+        visuals: true,
+        values: { ...common, topic: "Boshlang‘ich sinf o‘quvchilarida o‘qish ko‘nikmalarini rivojlantirish metodikasi", workKind: "theory", subjectProfile: "humanities", subjectName: "Pedagogika", pages: "15-20", includeVisuals: true, figureCount: 1, tableCount: 1, refsMin: 15 },
+      },
+      "coursework-applied": {
+        tool: "coursework",
+        pagesMin: 20,
+        refsMin: 15,
+        visuals: true,
+        values: {
+          ...common,
+          topic: "Kichik ishlab chiqarish korxonasida elektr energiyasi sarfini kamaytirish: hisob-kitob va tavsiyalar",
+          workKind: "applied",
+          subjectProfile: "technical",
+          subjectName: "Elektr ta’minoti",
+          university: "Toshkent davlat texnika universiteti",
+          faculty: "Energetika fakulteti",
+          department: "Elektr ta’minoti kafedrasi",
+          pages: "20-25",
+          includeVisuals: true,
+          figureCount: 2,
+          tableCount: 2,
+          figureKinds: JSON.stringify(["flow", "compare"]),
+          userFacts: "Korxonada 2024-yilda oylik o‘rtacha sarf 18 400 kVt·soat; 12 ta 250 Vt li lampani LED (45 Vt) ga almashtirish hisobi: yillik tejam 7 380 kVt·soat; reaktiv quvvat kompensatsiyasidan keyin cos φ 0,78 dan 0,93 ga oshdi.",
+          refsMin: 15,
+        },
+      },
+      referat: {
+        tool: "referat",
+        pagesMin: 10,
+        refsMin: 5,
+        visuals: false,
+        values: { ...common, topic: "O‘zbekistonda inklyuziv ta’limning rivojlanish bosqichlari", workKind: "informative", subjectProfile: "humanities", subjectName: "Pedagogika tarixi", pages: "10-15", includeVisuals: false, figureCount: 0, tableCount: 0, refsMin: 5 },
+      },
+      independent: {
+        tool: "mustaqil-ish",
+        pagesMin: 10,
+        refsMin: 8,
+        visuals: true,
+        values: { ...common, topic: "Kichik biznesda soliq imtiyozlarining samaradorligi: O‘zbekiston misolida", workKind: "written", subjectProfile: "economic", subjectName: "Soliqlar va soliqqa tortish", university: "Toshkent davlat iqtisodiyot universiteti", faculty: "Moliya fakulteti", department: "Soliqlar kafedrasi", pages: "10-15", includeVisuals: true, figureCount: 1, tableCount: 1, refsMin: 8 },
+      },
+    };
+    const c = byName[name];
+    return {
+      name,
+      tool: c.tool,
+      budgetMs: 150_000 + 90_000 + 9_000 * (c.pagesMin + 3),
+      values: c.values,
+      checks: (f, pages) => {
+        const w = f.doc.work;
+        const refs = w?.references ?? [];
+        const cited = refs.filter((r) => r.cited);
+        const intro = w ? Object.entries(w.intro.parts).filter(([, v]) => v).map(([k]) => k) : [];
+        const chapters = w?.chapters ?? [];
+        const secs = f.doc.sections;
+        const body = secs.reduce((n, s) => n + s.blocks.filter((b) => b.kind === "p" || b.kind === "li").reduce((m, b) => m + b.text.split(/\s+/).length, 0), 0);
+        const tables = (f.doc.tables ?? []).length;
+        const figures = w?.figures.filter((x) => x.url).length ?? 0;
+        const review = w?.review;
+        const red = review?.checks.filter((x) => x.level === "red").map((x) => x.id) ?? [];
+        return [
+          ok("doc.work bor", Boolean(w), w ? `${w.genre}/${w.kind}/${w.subject}` : "yo'q"),
+          ok("kirish 7 element", w?.genre !== "coursework" || intro.length >= 7, intro.join(",")),
+          ok("boblar/paragraflar skeletda", chapters.length >= 2 && chapters.every((ch) => ch.paragraphs.length >= 2), chapters.map((ch) => `${ch.id}:${ch.paragraphs.length}`).join(" ")),
+          ok("intro/xulosa bo'limlari", secs.some((x) => x.id === "intro") && secs.some((x) => x.id === "conclusion"), secs.map((x) => x.id).join(",")),
+          ok("manbalar 100 % tekshirilgan (uydirma yo'q)", cited.length > 0 && cited.every((r) => r.verified !== "unverified"), `${cited.length} cited: ${[...new Set(cited.map((r) => r.verified))].join(",")}`),
+          ok(`manbalar ≥ ${Math.min(c.refsMin, 8)} (mo'ljal ${c.refsMin}; Books kalitsiz 429)`, cited.length >= Math.min(c.refsMin, 8), `${cited.length} (turlar: ${[...new Set(cited.map((r) => r.kind ?? "?"))].join(",")})`),
+          ok("iqtiboslar reyestrda", (f.doc.work?.review?.checks.find((x) => x.id === "refsCited")?.level ?? "green") !== "red", review?.checks.find((x) => x.id === "refsCited")?.detail ?? "—"),
+          ok("hajm darvozasi (so'z)", body >= 0.8 * 230 * c.pagesMin, `${body} so'z (kerak ≥ ${Math.round(0.8 * 230 * c.pagesMin)})`),
+          ok("renderlangan sahifa", pages === null || pages >= Math.round(0.85 * c.pagesMin), `${pages ?? "—"} bet (kerak ≥ ${Math.round(0.85 * c.pagesMin)})`),
+          ok("vizuallar", !c.visuals || tables + figures >= 1, `jadval ${tables}, sxema ${figures}`),
+          ok("hisobot bor va ≥ 55 ball", Boolean(review) && (review?.score ?? 0) >= 55, review ? `${review.score} ball, qizil: ${red.join(",") || "yo'q"}` : "yo'q"),
+          ok("manbasiz raqam yo'q", (review?.checks.find((x) => x.id === "unsourcedNumbers")?.level ?? "green") !== "red", review?.checks.find((x) => x.id === "unsourcedNumbers")?.detail ?? "—"),
+          ok("cost.calls > 0", (f.cost?.calls ?? 0) > 0, f.cost ? `${f.cost.calls} chaqiruv, ${f.cost.provider}/${f.cost.model}` : "yo'q"),
+        ];
+      },
+    };
+  }),
   {
     /* P1-2: 20 atama va'da — kam chiqsa `delivered` to'lishi kerak. */
     name: "glossary",
