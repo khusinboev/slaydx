@@ -28,6 +28,8 @@ import { teacherInputFromValues } from "./teacher/input";
 import { testInputFromValues } from "./teacher/test/input";
 import { weeksFor } from "./teacher/guard";
 import { TEACHER_LIMITS } from "./teacher/types";
+import { crosswordInputFromValues } from "./games/crossword/input";
+import { normalizeGameCount } from "./games/types";
 import type { AcademicDoc, BuiltFile, DocMeta } from "./types";
 import type { FormValues, ToolConfig } from "../types";
 
@@ -362,6 +364,47 @@ export function teacherGateFail(meta: DocMeta, values: FormValues, doc: Academic
 }
 
 /**
+ * Bosma o'yinlar (AUDIT-21): krossvord/kartalar ELEMENT darvozasi —
+ * `teacherGateFail` bilan AYNI naqsh (glossariy/keys 0.7 ulushi).
+ *
+ * `doc.game` yo'q bo'lsa darvoza ham yo'q (WP-B hali ulanmagan holatda
+ * dvigatel `null` qaytaradi va bu qadamga umuman yetib kelmaydi —
+ * `writeWithLlm` MAVJUD «AI javob bermadi» xulqini beradi). Model BOR-u
+ * elementi FLOOR dan kam bo'lsa (masalan to'rga so'zning yarmidan kami
+ * sig'gan) — bu ham xato: `deliveredCount` faqat pul qaytaradi, lekin
+ * juda kam so'zli/kartali hujjatni «tayyor» deb yubormaslik kerak.
+ *
+ * VA'DA — `deliveredCount`dagi bilan BITTA manbadan (`gameDelivered`
+ * naqshi): krossvordda `crosswordInputFromValues`, kartalarda
+ * `normalizeGameCount` (WP-B ning `games/flashcards/input.ts` i hali
+ * yo'q, R0 ning umumiy normalizatori mustaqil ishlaydi).
+ */
+export const GAME_COUNT_RATIO = 0.7;
+
+export function gameGateFail(meta: DocMeta, values: FormValues, doc: AcademicDoc): TeacherGateFail | null {
+  const g = doc.game;
+  if (!g) return null;
+
+  if (g.kind === "crossword") {
+    const m = g.crossword;
+    if (!m) return { rule: "crossword.model", message: short("Krossvord so'zlari", 0, 1, "so'z") };
+    const want = crosswordInputFromValues(meta, values).wordCount;
+    const need = Math.ceil(want * GAME_COUNT_RATIO);
+    if (m.words.length < need) return { rule: "crossword.words", message: short("Krossvord so'zlari", m.words.length, need, "so'z") };
+    return null;
+  }
+  if (g.kind === "flashcards") {
+    const m = g.cards;
+    if (!m) return { rule: "flashcards.model", message: short("Kartalar", 0, 1, "karta") };
+    const want = normalizeGameCount(values.cardCount ?? values.count);
+    const need = Math.ceil(want * GAME_COUNT_RATIO);
+    if (m.cards.length < need) return { rule: "flashcards.cards", message: short("Kartalar", m.cards.length, need, "karta") };
+    return null;
+  }
+  return null;
+}
+
+/**
  * Fayl nomi qo'shimchasi — vosita bo'yicha.
  *
  * Nega kerak: o'qituvchi bitta jildga bir necha hujjat yuklaydi va
@@ -574,6 +617,19 @@ export async function buildArtifact(
     const fail = teacherGateFail(meta, values, academic);
     if (fail) {
       console.warn(`[gen] teacher gate: ${tool.id} — ${fail.rule}`);
+      throw new Error(fail.message);
+    }
+  }
+
+  /*
+   * O'yin darvozasi (AUDIT-21) — ELEMENT soni bilan, o'qituvchi
+   * darvozasi bilan bir xil o'rinda: `doc.game` yo'q bo'lsa (boshqa
+   * vosita, yoki WP-B hali ulanmagan) `null` qaytadi.
+   */
+  if (llmDoc) {
+    const fail = gameGateFail(meta, values, academic);
+    if (fail) {
+      console.warn(`[gen] game gate: ${tool.id} — ${fail.rule}`);
       throw new Error(fail.message);
     }
   }

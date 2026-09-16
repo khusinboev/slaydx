@@ -3,6 +3,9 @@ import { teacherExtraLabels } from "./i18n";
 import { teacherInputFromValues } from "./teacher/input";
 import { weeksFor } from "./teacher/guard";
 import { testInputFromValues } from "./teacher/test/input";
+import { crosswordInputFromValues } from "./games/crossword/input";
+import { normalizeGameCount } from "./games/types";
+import { normalizeBlockCountFor } from "./infographic/registry";
 import type { FormValues } from "../types";
 import type { AcademicDoc, Delivered, DocMeta } from "./types";
 
@@ -203,6 +206,54 @@ function teacherDelivered(meta: DocMeta, doc: AcademicDoc, values: FormValues): 
 }
 
 /**
+ * Bosma o'yinlar (AUDIT-21) — miqdor MODELDAN, `teacherDelivered` naqshi.
+ *
+ * VA'DA `values` dan: krossvordda `crosswordInputFromValues` (WP-A,
+ * reyestr chegaralari — forma «12» yuborsa ham 10 ga tushadi, ya'ni
+ * dvigatel bilan AYNI son), kartalarda `normalizeGameCount` to'g'ridan-
+ * to'g'ri (`games/flashcards/input.ts` WP-B hali yo'q — R0 ning umumiy
+ * normalizatori mustaqil, WP-B ulanganda ham AYNI qiymatni beradi,
+ * chunki ikkalasi bitta chegara ro'yxatidan o'qiydi).
+ *
+ * Unit — krossvordda «so'z» (to'rga JOYLASHGAN so'z, `dropped` hisobga
+ * olinmaydi), kartalarda «karta».
+ */
+function gameDelivered(meta: DocMeta, doc: AcademicDoc, values: FormValues): Delivered | undefined {
+  const g = doc.game;
+  if (!g) return undefined;
+  if (g.kind === "crossword") {
+    const cw = g.crossword;
+    if (!cw) return undefined;
+    const want = crosswordInputFromValues(meta, values).wordCount;
+    return { got: cw.words.length, want, unit: "so'z" };
+  }
+  if (g.kind === "flashcards") {
+    const cards = g.cards;
+    if (!cards) return undefined;
+    const want = normalizeGameCount(values.cardCount ?? values.count);
+    return { got: cards.cards.length, want, unit: "karta" };
+  }
+  return undefined;
+}
+
+/**
+ * Infografika (AUDIT-21) — blok soni.
+ *
+ * `doc.infographic` `AcademicDoc` yo'lidan O'TMAYDI: `buildInfographicArtifact`
+ * `BuiltFile`ni to'g'ridan-to'g'ri qaytaradi (`rasm` vositasi naqshida,
+ * `index.ts buildArtifact`), shuning uchun bu funksiya `deliveredCount`
+ * ICHIDAN chaqirilmaydi — WP-C dvigateli `packImages` naqshida O'ZI
+ * chaqiradi (`{got: spec.blocks.length}` bilan, PNG chizilgandan keyin).
+ * Chegara reyestrdan (`normalizeBlockCountFor`), tur bo'yicha kesilgan
+ * bo'lsa ham dvigatel bilan AYNI songa tushadi.
+ */
+export function infographicDelivered(values: FormValues, got: number): Delivered | undefined {
+  const want = normalizeBlockCountFor(values.infographicType, values.blockCount);
+  if (!(want > 0) || got >= want) return undefined;
+  return { got, want, unit: "blok" };
+}
+
+/**
  * `values` — o'qituvchi vositalarining VA'DASI shundan o'qiladi
  * (`teacher/input.ts`). Qolgan vositalarda `meta` yetarli, shuning uchun
  * parametr ixtiyoriy va eski chaqiruvchilar o'zgarmaydi.
@@ -216,6 +267,12 @@ export function deliveredCount(meta: DocMeta, doc: AcademicDoc, values: FormValu
    */
   if (doc.teacher) {
     const byModel = teacherDelivered(meta, doc, values);
+    return !byModel || !(byModel.want > 0) || byModel.got >= byModel.want ? undefined : byModel;
+  }
+
+  /* Krossvord / flesh kartalar — `doc.game` (AUDIT-21). */
+  if (doc.game) {
+    const byModel = gameDelivered(meta, doc, values);
     return !byModel || !(byModel.want > 0) || byModel.got >= byModel.want ? undefined : byModel;
   }
 
