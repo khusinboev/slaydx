@@ -1396,3 +1396,27 @@ test("kurs ishi prompti dvigatel so'ragan bob soniga mos keladi", async () => {
     assert.ok(!/uch bob/i.test(prompt), `${pages}: promptda qattiq «uch bob» qolmasligi kerak`);
   }
 });
+
+/*
+ * AUDIT-19 ko'z tekshiruvi (kurs ishi tituli): forma qiymati allaqachon
+ * «Energetika fakulteti» / «301-guruh» bo'lsa yorliq qo'shimchani
+ * TAKRORLAMASIN («fakulteti fakulteti», «301-guruh-guruh»). Uch tilda.
+ */
+test("titul yorliqlari idempotent: fakultet/kurs/guruh qo'shimchasi takrorlanmaydi", async () => {
+  const { docLabels } = await import("../lib/generation/i18n.ts");
+  const uz = docLabels("uz");
+  assert.equal(uz.faculty("Energetika fakulteti"), "Energetika fakulteti");
+  assert.equal(uz.faculty("Energetika"), "Energetika fakulteti");
+  assert.equal(uz.group("301-guruh"), "301-guruh");
+  assert.equal(uz.group("301"), "301-guruh");
+  assert.equal(uz.course("3-kurs"), "3-kurs");
+  assert.equal(uz.course("3"), "3-kurs");
+  const ru = docLabels("ru");
+  assert.equal(ru.faculty("Факультет энергетики"), "Факультет энергетики");
+  assert.equal(ru.group("группа 301"), "группа 301");
+  assert.equal(ru.course("3 курс"), "3 курс");
+  const en = docLabels("en");
+  assert.equal(en.faculty("Faculty of Energy"), "Faculty of Energy");
+  assert.equal(en.group("Group 301"), "Group 301");
+  assert.equal(en.course("Year 3"), "Year 3");
+});
