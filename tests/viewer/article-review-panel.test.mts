@@ -173,7 +173,8 @@ test("sayqal jurnali: qabul → «74 → 86 ball, N band tuzatildi; M band sizni
 
 test("ResultView: article natijasida `doc.article.review` bo'lsa ko'ruvchi tepasida <details open> panel", () => {
   const src = readFileSync(new URL("../../components/files/ResultView.tsx", import.meta.url), "utf8");
-  assert.match(src, /gen\.type === "article" && gen\.doc\?\.article\?\.review \? \(/, "faqat maqola + hisobot bor");
+  // AUDIT-19 WP-F: tezis ham maqola dvigatelida — hisobot paneli ikkalasida ham ko'rinadi.
+  assert.match(src, /\(gen\.type === "article" \|\| gen\.type === "thesis"\) && gen\.doc\?\.article\?\.review \? \(/, "maqola YOKI tezis + hisobot bor");
   assert.match(src, /<details open[^>]*data-article-review-panel/, "yig'iladigan panel");
   // WP7: `onFix` → `rewriteArticle` (POST …/rewrite), `fixing` — yuklanish holati.
   assert.match(src, /<ArticleReviewPanel review=\{gen\.doc\.article\.review\} onFix=\{[^}]+\} fixing=\{fixing\} onPolish=\{[^}]+\} polishing=\{polishing\} \/>/, "panel ulanishi (onFix + fixing — WP7; onPolish + polishing — AUDIT-18)");
