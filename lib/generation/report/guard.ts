@@ -18,7 +18,7 @@
  * skelet tipiga bog'liq (`article/guard.ts`, keyin `work/guard.ts`).
  */
 import type { Block, DocSection } from "../types";
-import type { Reference } from "../article/types";
+import type { Reference } from "../types";
 import { referenceIndex, verifyCitationsInText } from "../research/verify";
 import { FILLER_PHRASES } from "./filler";
 

@@ -12,7 +12,7 @@
  * Kalit (`OPENALEX_API_KEY`) bo'lmasa ham ishlaydi (2026-02 dan kunlik
  * bepul limit kalit bilan beriladi; kalitsiz — umumiy hovuz).
  */
-import type { Reference } from "../article/types";
+import type { Reference } from "../types";
 import { cached, queryKey } from "./cache";
 import { getJson, withParams, type HttpOpts } from "./http";
 

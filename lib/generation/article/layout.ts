@@ -161,7 +161,7 @@ export function legacyArticleModel(doc: AcademicDoc): ArticleModel {
   };
 }
 
-const VERIFIED_RANK: Record<ReferenceVerified, number> = { unverified: 0, user: 1, crossref: 2, openalex: 3 };
+const VERIFIED_RANK: Record<ReferenceVerified, number> = { unverified: 0, user: 1, lexuz: 2, googlebooks: 2, crossref: 2, openalex: 3 };
 
 /** Guruhdagi eng ZAIF holat — bitta iqtibosda ikkita manba bo'lsa, belgi eng yomoniga qarab qo'yiladi. */
 function weakest(list: ReferenceVerified[]): ReferenceVerified {

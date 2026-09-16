@@ -16,7 +16,12 @@
  * (WP-C) beradi: DOCX va ko'ruvchi ikkalasi undan o'qiydi.
  */
 import type { DocReview } from "../report/types";
-import type { Figure, Reference } from "../article/types";
+/*
+ * `Reference`/`Figure` — NEYTRAL qatlamda (AUDIT-19 R0-B `types.ts`):
+ * maqola, kurs ishi, referat va insho bitta shakldan foydalanadi.
+ * Faqat TIP importi — ishga tushirish paytida aylanma bog'liqlik yo'q.
+ */
+import type { Figure, Reference, ReferenceKind } from "../types";
 
 /* ────────────────────────── janr va tur ────────────────────────── */
 
@@ -39,8 +44,12 @@ export type WorkKindId = (typeof WORK_KIND_IDS)[number];
 export const SUBJECT_PROFILE_IDS = ["technical", "natural", "economic", "humanities", "legal"] as const;
 export type SubjectProfileId = (typeof SUBJECT_PROFILE_IDS)[number];
 
-/** Manba turi — `research` kvotasi va O'zbekiston ro'yxat tartibi uchun. */
-export type WorkRefKind = "article" | "book" | "law" | "web" | "user";
+/**
+ * Manba turi — `research` kvotasi va O'zbekiston ro'yxat tartibi uchun.
+ * Neytral `ReferenceKind` ning o'zi (WP-B `cite/order.ts` shu tur bo'yicha
+ * guruhlaydi); `WORK_REF_KINDS` — O'zbekiston ro'yxat TARTIBI.
+ */
+export type WorkRefKind = ReferenceKind;
 export const WORK_REF_KINDS: readonly WorkRefKind[] = ["law", "book", "article", "web", "user"];
 
 /* ────────────────────────── kirish elementlari ────────────────────────── */

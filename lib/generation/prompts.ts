@@ -238,17 +238,3 @@ export function mapSystemPrompt(meta: DocMeta): string {
   ].join("\n");
 }
 
-export function imradSystemPrompt(meta: DocMeta): string {
-  return [
-    languageDirective(meta.language),
-    `Siz IMRAD ilmiy maqola/tezis muharririsiz.`,
-    `Mavzu: «${meta.topic}». Muallif: ${meta.author}. Tashkilot: ${meta.organization || meta.university}.`,
-    `Tuzilma: Annotatsiya + Introduction, Methods, Results, Discussion.`,
-    `Metod: adabiyot va qiyosiy tahlil; uydirma so‘rovnoma foizi, n=, p-value YO‘Q.`,
-    `Natija: tahliliy topilma, uydirma raqam emas.`,
-    meta.extra ? `Qo‘shimcha: ${meta.extra}` : "",
-    sourceBlock(meta),
-  ]
-    .filter(Boolean)
-    .join("\n");
-}

@@ -35,6 +35,8 @@ export function viewerKind(id: ToolId): ViewerKind {
     case "essay":
       return "essay";
     case "article":
+    case "thesis":
+      // AUDIT-19: tezis maqola dvigatelida — ko'ruvchi, hisobot paneli va tahrir maqolaniki.
       return "article";
     default:
       return "academic";

@@ -171,8 +171,8 @@ test("introShare: 10–15 % yashil; chetda sariq; juda katta — qizil", () => {
   assert.equal(levelOf(makeDoc(), "introShare"), "green");
   // Kirish juda qisqa (≈1 %).
   assert.equal(levelOf(makeDoc({ intro: [p(words(20))] }), "introShare"), "red");
-  // Kirish biroz qisqa (≈8 %).
-  const smallish = makeDoc({ intro: [p(`${words(200)} ${INTRO_PARTS.join(" ")}`)] });
+  // Kirish biroz qisqa (≈8 %) — sariq, chunki chegara 10 % dan uncha uzoq emas.
+  const smallish = makeDoc({ intro: [p(`${words(340)} ${INTRO_PARTS.join(" ")}`)] });
   assert.equal(levelOf(smallish, "introShare"), "yellow");
 });
 
@@ -204,7 +204,7 @@ test("length: maqsad ±20 % yashil, ±40 % sariq, undan tashqarisi qizil", () =>
   assert.equal(levelOf(makeDoc(), "length"), "green");
   const short = makeDoc({ chapters: [1, 2].map((c) => ({ id: `ch${c}`, title: "B", paragraphs: [1, 2].map((q) => ({ id: `ch${c}.${q}`, title: "p", blocks: [p(words(100, `s${c}${q}`))] })) })) });
   assert.equal(levelOf(short, "length"), "red");
-  const nearly = makeDoc({ chapters: [1, 2].map((c) => ({ id: `ch${c}`, title: "B", paragraphs: [1, 2].map((q) => ({ id: `ch${c}.${q}`, title: "p", blocks: [p(words(480, `n${c}${q}`))] })) })) });
+  const nearly = makeDoc({ chapters: [1, 2].map((c) => ({ id: `ch${c}`, title: "B", paragraphs: [1, 2].map((q) => ({ id: `ch${c}.${q}`, title: "p", blocks: [p(words(660, `n${c}${q}`))] })) })) });
   assert.equal(levelOf(nearly, "length"), "yellow");
 });
 
@@ -248,10 +248,17 @@ test("refsCited: 1:1 yashil; ro'yxatda bor matnda yo'q — sariq; iqtibossiz —
   assert.equal(levelOf(makeDoc(), "refsCited", { guard: { unresolved: [{ id: "W999", sectionId: "ch1.1" }] } }), "red");
 });
 
-test("refsOrder: `orderUzReferences` (WP-B) hali yo'q — yashil, izoh bilan", () => {
-  const c = checkOf(makeDoc(), "refsOrder");
-  assert.equal(c?.level, "green");
-  assert.match(c?.detail ?? "", /hali ulanmagan|tartibida/);
+test("refsOrder: O'zbekiston tartibi (qonun → kitob → maqola) — mos yashil, buzilgan sariq", () => {
+  assert.equal(levelOf(makeDoc(), "refsOrder"), "green");
+  const law: Reference = { id: "lex:1", kind: "law", title: "Ta'lim to'g'risidagi qonun", authors: [], docNo: "O'RQ-637", verified: "lexuz", cited: true };
+  const book: Reference = { id: "gb:1", kind: "book", title: "Pedagogika", authors: ["Karimov A."], year: 2020, verified: "googlebooks", cited: true };
+  const article: Reference = { id: "W1", kind: "article", title: "Reading", authors: ["Smith J."], year: 2021, verified: "openalex", cited: true };
+  // To'g'ri tartib — qonun boshda.
+  assert.equal(levelOf(makeDoc({ references: [law, book, article], refsMin: 3 }), "refsOrder"), "green");
+  // Teskari tartib — hisobot ko'radi.
+  const wrong = checkOf(makeDoc({ references: [article, book, law], refsMin: 3 }), "refsOrder");
+  assert.equal(wrong?.level, "yellow");
+  assert.match(wrong?.detail ?? "", /qonun/);
 });
 
 /* ───────────────────────────── vizuallar ───────────────────────────── */
@@ -276,9 +283,12 @@ test("visualRef: havola bor — yashil; yo'q — sariq (fix bilan); majburiy tur
   assert.equal(levelOf(noRef, "visualRef"), "yellow");
   assert.match(checkOf(noRef, "visualRef")?.fix?.instruction ?? "", /\[fig:f1\]/);
   // Kurs ishida jadval va sxema MAJBURIY — bittasi ham yo'q → qizil.
-  assert.equal(levelOf(makeDoc(), "visualRef"), "red");
+  const noVisuals = makeDoc({ chapters: [1, 2].map((c) => ({ id: `ch${c}`, title: "B", paragraphs: [1, 2].map((q) => ({ id: `ch${c}.${q}`, title: "p", blocks: [p(words(600, `v${c}${q}`))] })) })) });
+  assert.equal(levelOf(noVisuals, "visualRef"), "red");
   // Referatda ixtiyoriy → yashil.
-  assert.equal(levelOf(makeDoc({ model: { genre: "referat", kind: "informative" } }), "visualRef"), "green");
+  noVisuals.work!.genre = "referat";
+  noVisuals.work!.kind = "informative";
+  assert.equal(levelOf(noVisuals, "visualRef"), "green");
   // Raqamlash bob bo'yicha: `1.1-rasm`.
   assert.equal(workVisualCoverage(noRef).unreferenced[0].label, "1.1-rasm");
 });
@@ -334,7 +344,7 @@ test("pageLimit: paket ichida yashil; ancha qisqa/uzun — sariq yoki qizil", ()
   assert.equal(levelOf(makeDoc(), "pageLimit"), "green");
   const tiny = makeDoc({ chapters: [1, 2].map((c) => ({ id: `ch${c}`, title: "B", paragraphs: [1, 2].map((q) => ({ id: `ch${c}.${q}`, title: "p", blocks: [p(words(50, `t${c}${q}`))] })) })) });
   assert.equal(levelOf(tiny, "pageLimit"), "red");
-  const big = makeDoc({ chapters: [1, 2].map((c) => ({ id: `ch${c}`, title: "B", paragraphs: [1, 2].map((q) => ({ id: `ch${c}.${q}`, title: "p", blocks: [p(words(1100, `g${c}${q}`))] })) })) });
+  const big = makeDoc({ chapters: [1, 2].map((c) => ({ id: `ch${c}`, title: "B", paragraphs: [1, 2].map((q) => ({ id: `ch${c}.${q}`, title: "p", blocks: [p(words(2500, `g${c}${q}`))] })) })) });
   assert.ok(levelOf(big, "pageLimit") !== "green");
   assert.ok(checkOf(big, "pageLimit")?.fix, "uzun hujjatda qisqartirish fix i bo'ladi");
 });
@@ -364,7 +374,8 @@ test("baholovchi: 5 mezon, turning prompti, JSON tahlili, noma'lum nishon tashla
 
 test("baholovchi matni: kirish va xulosa TO'LIQ, boblar mutanosib kesiladi", () => {
   const doc = makeDoc();
-  const text = workJudgeUserPrompt(doc, 1500);
+  // Byudjet butun hujjatga yetmaydi, lekin KIRISH + XULOSA to'liq sig'adi (X-4).
+  const text = workJudgeUserPrompt(doc, 12_000);
   assert.match(text, /GENRE: coursework/);
   assert.match(text, /## intro/);
   assert.match(text, /## conclusion/);

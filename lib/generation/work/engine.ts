@@ -29,12 +29,11 @@ import { CostMeter, complete as completeRole, type LlmUsage } from "../llm-roles
 import { parseLlmObject } from "../json";
 import { mapPool, remainingMs, unverifiedReferenceNote } from "../quality";
 import { blocksFromLlm, str } from "../article/parse";
-import type { Figure, FigureSpec, Reference } from "../article/types";
-import type { ArticleUserRef } from "../article/input";
-import type { ResearchStats } from "../research/pipeline";
+import type { Figure, FigureSpec } from "../types";
+import { collectReferencesFor, type CollectResult, type CompleteFn, type ResearchAsk, type ResearchStats } from "../research/pipeline";
+import { orderUzReferences } from "../cite/order";
 import { citedOnly, referenceIndex, verifyCitations, verifyCitationsInText, type Unresolved } from "../research/verify";
 import { formatRefLine } from "../article/prompts";
-import type { CompleteFn } from "../research/pipeline";
 import { WORK_LIMITS, isChapterHeadId, workGenreOfTool, type WorkChapter, type WorkGenreId, type WorkIntroPartId, type WorkModel } from "./types";
 import { pagesMid, workKindOf, type WorkKind } from "./registry";
 import { SUBJECT_PROFILES } from "./subjects";
@@ -57,30 +56,16 @@ import {
 import { reviewWork } from "./review";
 import { runWorkPolish, workUserNeeds } from "./polish";
 
-/* ────────────────────────── WP-B shartnomasi ────────────────────────── */
+/* ────────────────────────── manba shartnomasi ────────────────────────── */
 
 /**
  * Manba so'rovi — `research/pipeline.ts collectReferencesFor(ask, opts)`
- * ning kirishi (WP-B umumlashtiryapti). Dvigatel MAQOLA o'ramini
+ * (AUDIT-19 R0-B/WP-B, hujjat turidan MUSTAQIL). Dvigatel MAQOLA o'ramini
  * (`collectReferences(input, meta)`) chaqirmaydi: u `ArticleInput` ni
  * talab qiladi va talaba ishining janr/fan kvotasini bilmaydi.
  */
-export type WorkResearchAsk = {
-  topic: string;
-  keywords: string[];
-  language: "uz" | "ru" | "en";
-  userRefs: ArticleUserRef[];
-  research: boolean;
-  want: { min: number; max: number };
-  kinds: ("article" | "book" | "law" | "web" | "user")[];
-  quota?: Partial<Record<"article" | "book" | "law" | "web" | "user", number>>;
-  fromYear?: number;
-  tiny?: boolean;
-  userFacts?: string;
-  typeLabel?: string;
-};
-
-export type WorkCollectResult = { refs: Reference[]; stats: ResearchStats };
+export type WorkResearchAsk = ResearchAsk;
+export type WorkCollectResult = CollectResult;
 
 export const EMPTY_RESEARCH_STATS: ResearchStats = { user: 0, userVerified: 0, queries: [], found: 0, candidates: 0, selected: 0, failedQueries: 0 };
 
@@ -99,12 +84,10 @@ export type WorkBuildOpts = {
   /** Test seam — tarmoq (WP-B quvurига uzatiladi). */
   fetchImpl?: typeof fetch;
   retryBaseMs?: number;
-  /**
-   * Manba yig'ish DEPENDENSIYASI. Berilmasa dvigatel
-   * `collectReferencesFor` ni DINAMIK import bilan qidiradi (WP-B hali
-   * birlashmagan bo'lsa — manbasiz davom etadi, hisobotda qizil).
-   */
+  /** Test seam — manba yig'ish (standart: `collectReferencesFor`, tarmoq bilan). */
   research?: (ask: WorkResearchAsk) => Promise<WorkCollectResult>;
+  /** `fromYear` uchun joriy yil (testda barqaror qiymat). */
+  year?: number;
   /** Test seam — sxema chizish (standart: `../figures` dinamik import). */
   buildFigures?: (figures: Figure[], o: { lang: string }) => Promise<Figure[]>;
   /** Avto-sayqal; standart `true` (`WORK_POLISH=0` bilan o'chadi). */
@@ -443,8 +426,12 @@ export async function buildWorkDoc(meta: DocMeta, values: FormValues, opts: Work
     const f = figures.find((x) => x.id === b.figureId);
     if (f) f.caption = b.text;
   }
-  const cited = citedOnly(verified.refs.map((r) => ({ ...r, cited: r.cited || citedIds.has(r.id) })));
-  const refs = await orderReferences(cited);
+  /*
+   * Ro'yxat tartibi — O'zbekiston qoidasi (`cite/order.ts`): qonun/farmon
+   * → VM/vazirlik → kitob → maqola → statistika → internet; `n` shu
+   * yerda beriladi va matndagi `[N]` raqamlari shunga ergashadi (WP-C).
+   */
+  const refs = orderUzReferences(citedOnly(verified.refs.map((r) => ({ ...r, cited: r.cited || citedIds.has(r.id) }))));
   guard.missingFactNumbers = missingFactNumbers(verified.sections, input.userFacts);
 
   /* Sxemalarni CHIZISH — maket buzilsa `fallbackBlocks` (raqamlangan ro'yxat). */
@@ -568,8 +555,15 @@ export async function buildWorkDoc(meta: DocMeta, values: FormValues, opts: Work
 
 /* ────────────────────────── manbalar ────────────────────────── */
 
+/**
+ * Manba yig'ish: fan profili QAYSI TARMOQLAR ishga tushishini belgilaydi
+ * (huquqiy — lex.uz + kitob + maqola, texnik — kitob + maqola), kvota esa
+ * tanlash promptiga maslahat beradi. Uydirma manba chiqmaydi: tasdiqsiz
+ * yozuv quvurning o'zida rad etiladi.
+ */
 async function collectWorkReferences(ctx: WorkContext, opts: WorkBuildOpts, meter: CostMeter): Promise<WorkCollectResult> {
   const { input, kind, subject } = ctx;
+  const year = opts.year ?? ctx.meta.year ?? new Date().getFullYear();
   const ask: WorkResearchAsk = {
     topic: input.topic,
     keywords: workResearchKeywords(ctx),
@@ -579,53 +573,23 @@ async function collectWorkReferences(ctx: WorkContext, opts: WorkBuildOpts, mete
     want: { min: input.refsMin, max: Math.min(WORK_LIMITS.refs, Math.max(input.refsMin, input.refsMin * 2)) },
     kinds: subject.research.kinds,
     ...(subject.research.quota ? { quota: subject.research.quota } : {}),
+    // Talaba ishida klassik darslik ham kerak — maqoladagi 8 yillik oyna tor.
+    fromYear: year - 12,
     ...(input.userFacts ? { userFacts: input.userFacts } : {}),
     typeLabel: kind.label.en,
   };
   if (opts.research) return opts.research(ask);
-  /*
-   * WP-B (`collectReferencesFor`) — DINAMIK import: u hali birlashmagan
-   * bo'lsa dvigatel manbasiz davom etadi (hisobotda `refsCount` qizil va
-   * «Sizdan kutiladi» bandi), ya'ni ish yiqilmaydi va uydirma manba ham
-   * chiqmaydi.
-   */
-  try {
-    const mod = (await import("../research/pipeline")) as unknown as {
-      collectReferencesFor?: (a: WorkResearchAsk, o: Record<string, unknown>) => Promise<WorkCollectResult>;
-    };
-    if (typeof mod.collectReferencesFor === "function") {
-      return await mod.collectReferencesFor(ask, {
-        deadline: opts.deadline,
-        complete: opts.complete ?? completeRole,
-        fetchImpl: opts.fetchImpl,
-        retryBaseMs: opts.retryBaseMs,
-        onUsage: (u: LlmUsage | undefined) => {
-          meter.add(u);
-          if (u) opts.onUsage?.(u);
-        },
-      });
-    }
-    console.warn("[work] research/pipeline.collectReferencesFor hali yo'q (WP-B) — manbasiz davom etildi");
-  } catch (e) {
-    console.warn("[work] manba quvuri yuklanmadi:", e instanceof Error ? e.message : e);
-  }
-  return { refs: [], stats: { ...EMPTY_RESEARCH_STATS, user: ctx.input.userRefs.length } };
-}
-
-/**
- * Ro'yxat tartibi — O'zbekiston qoidasi (`cite/order.ts orderUzReferences`,
- * WP-B): qonun → VM/vazirlik → kitob → maqola → statistika → internet.
- * Funksiya hali yo'q bo'lsa MAVJUD tartib qoladi (hisobot `refsOrder`
- * bandida sariq bo'lmaydi — u ham shu funksiyaga qaraydi).
- */
-async function orderReferences(refs: Reference[]): Promise<Reference[]> {
-  try {
-    const mod = (await import("../cite/index")) as unknown as { orderUzReferences?: (r: Reference[]) => Reference[] };
-    if (typeof mod.orderUzReferences === "function") return mod.orderUzReferences(refs);
-  } catch {
-    /* WP-B hali birlashmagan — mavjud tartib */
-  }
-  return refs;
+  return collectReferencesFor(ask, {
+    deadline: opts.deadline,
+    complete: opts.complete ?? completeRole,
+    fetchImpl: opts.fetchImpl,
+    retryBaseMs: opts.retryBaseMs,
+    year,
+    onUsage: (u) => {
+      meter.add(u);
+      if (u) opts.onUsage?.(u);
+    },
+  });
 }
 
 /* ────────────────────────── kirish ────────────────────────── */

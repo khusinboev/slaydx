@@ -329,6 +329,35 @@ const CASES: Case[] = [
     },
   },
   {
+    /* «Tezis» VOSITASI (AUDIT-19): maqola dvigateli, ruxsatsiz tur (imrad_oak) → conference_thesis; hisobot + sayqal; 1–2 bet. */
+    name: "thesis",
+    tool: "thesis",
+    budgetMs: 150_000 + 2 * 16_000 + 90_000,
+    values: {
+      topic: "Oliy ta’limda raqamli baholash tizimlarining talabalar o‘zlashtirishiga ta’siri",
+      articleType: "imrad_oak",
+      language: "uz",
+      pages: "3-5",
+      authors: JSON.stringify([{ name: "Karimova Dilnoza", org: "Toshkent davlat iqtisodiyot universiteti" }]),
+      keywords: JSON.stringify(["raqamli baholash", "oliy ta’lim", "o‘zlashtirish"]),
+      userFacts: "2025-yilda 2 ta guruhda (n=48 va n=46) raqamli baholash tizimi joriy etildi: o‘rtacha ball 3,9 dan 4,4 ga oshdi, topshiriqlarni o‘z vaqtida topshirish 71 % dan 89 % ga.",
+      figureCount: 2,
+      research: true,
+    },
+    checks: (f, pages) => {
+      const body = f.doc.sections.reduce((n, s) => n + s.blocks.filter((b) => b.kind === "p" || b.kind === "li").reduce((m, b) => m + b.text.split(/\s+/).length, 0), 0);
+      return [
+        ...articleChecks(f, pages, { pagesMin: 1, figures: false }),
+        ok("vosita thesis, tur conference_thesis (imrad_oak rad etildi)", f.doc.meta.toolId === "thesis" && f.doc.article?.type === "conference_thesis", `${f.doc.meta.toolId}/${f.doc.article?.type}`),
+        ok("1–2 bet paketi (3-5 so'ralgan edi)", f.doc.meta.targetPages <= 2, `${f.doc.meta.targetPages}`),
+        ok("bitta blok, 200–300 so'z (±5 %)", f.doc.sections.length === 1 && body >= 190 && body <= 315, `${f.doc.sections.length} bo'lim, ${body} so'z`),
+        ok("sxema yo'q (1–2 betda 0)", (f.doc.article?.figures.length ?? 0) === 0, `${f.doc.article?.figures.length}`),
+        ok("foydalanuvchi raqamlari", /n=48/.test(JSON.stringify(f.doc.sections)) && /89 ?%/.test(JSON.stringify(f.doc.sections)), "n=48 va 89 %"),
+        ok("hisobot paneli ma'lumoti (tezis 4 mezon)", (f.doc.article?.review?.checks ?? []).filter((c) => /^judge:(?!fix)/.test(c.id)).length === 4, String((f.doc.article?.review?.checks ?? []).filter((c) => /^judge:(?!fix)/.test(c.id)).length)),
+      ];
+    },
+  },
+  {
     /* Xalqaro: elsevier_ieee_style · en · ieee · raqamlangan bo'limlar, highlights, structured abstract. */
     name: "article-en-ieee",
     tool: "article",

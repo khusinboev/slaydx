@@ -17,7 +17,7 @@
 import type { FormValues } from "../../types";
 import { splitCsv } from "../slide-params";
 import { parseAuthorLine } from "../meta";
-import { isSelectableFigureKind, type SelectableFigureKind } from "../article/types";
+import { isSelectableFigureKind, type SelectableFigureKind } from "../types";
 import { type ArticleUserRef } from "../article/input";
 import { WORK_LIMITS, isWorkMinistryId, type SubjectProfileId, type WorkGenreId, type WorkKindId, type WorkMinistryId } from "./types";
 import { normalizeWorkKind, normalizeWorkPages, pagesMid, workKindOf, type WorkKind } from "./registry";

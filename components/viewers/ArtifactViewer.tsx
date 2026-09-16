@@ -71,7 +71,7 @@ export function ArtifactViewer({
       return <WordViewer doc={doc} />;
     case "article":
       // Maqola 2 (WP7): tahrir proplari slayd/rezyume bilan bir xil — `WordViewer`
-      // ularni faqat `type === "article"` generatsiyada ishlatadi.
+      // ularni faqat maqola dvigateli generatsiyasida ishlatadi (tezis ham — `viewerKind`, AUDIT-19).
       return <WordViewer doc={doc} gen={detail} onGen={onDetail} onEditState={onEditState} />;
     default:
       return <WordViewer doc={doc} />;

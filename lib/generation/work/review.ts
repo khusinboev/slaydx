@@ -28,6 +28,7 @@ import type { JudgeResult as ReportJudgeResult } from "../report/types";
 import { remainingMs } from "../quality";
 import type { LlmUsage } from "../llm-roles";
 import type { CompleteFn, ResearchStats } from "../research/pipeline";
+import { orderUzReferences, uzGroupOf, type UzGroup } from "../cite/order";
 import { WORK_JUDGE_CRITERIA, workKindOf, type WorkJudgeCriterion, type WorkKind } from "./registry";
 import { SUBJECT_PROFILES } from "./subjects";
 import { workLabels } from "./labels";
@@ -80,6 +81,18 @@ export type WorkRuleId = (typeof WORK_RULE_IDS)[number];
 /* ────────────────────────── yordamchilar ────────────────────────── */
 
 const list = (xs: string[], max = 6) => (xs.length > max ? `${xs.slice(0, max).join(", ")} … (+${xs.length - max})` : xs.join(", "));
+
+/** O'zbekiston ro'yxat guruhlarining o'zbekcha nomi (hisobot izohi). */
+const UZ_GROUP_LABEL: Record<UzGroup, string> = {
+  law: "qonun",
+  president: "Prezident hujjati",
+  cabinet: "VM qarori",
+  ministry: "vazirlik hujjati",
+  book: "kitob",
+  article: "maqola",
+  statistics: "statistika",
+  web: "internet",
+};
 const pct = (x: number) => `${Math.round(x * 100)}%`;
 
 /** Bob sarlavhasi bo'limlari (`ch1`) MATN emas — hajm/takror hisobidan chiqariladi. */
@@ -207,17 +220,17 @@ export function workRuleChecks(doc: AcademicDoc, o: { guard?: ReviewGuardInput; 
     else out.push(check("refsCount", "green", "Manbalar soni", `${n} ta (kamida ${need})${src}`));
   }
 
-  /* ── 7. refsOrder: O'zbekiston tartibi (`orderUzReferences`) ── */
+  /* ── 7. refsOrder: O'zbekiston tartibi (`cite/order.ts orderUzReferences`) ── */
   {
-    const ordered = orderedIdsOf(refs);
     if (!refs.length) out.push(check("refsOrder", "green", "Ro‘yxat tartibi", "Manba yo‘q"));
-    else if (!ordered) out.push(check("refsOrder", "green", "Ro‘yxat tartibi", "Tartib qoidasi hali ulanmagan (mavjud tartib)"));
     else {
+      const ordered = orderUzReferences(refs).map((r) => r.id).join("|");
       const actual = refs.map((r) => r.id).join("|");
+      const groups = [...new Set(refs.map((r) => UZ_GROUP_LABEL[uzGroupOf(r)]))].join(" → ");
       out.push(
-        actual === ordered.join("|")
-          ? check("refsOrder", "green", "Ro‘yxat tartibi", "Qonun → kitob → maqola → internet tartibida")
-          : check("refsOrder", "yellow", "Ro‘yxat tartibi", "Ro‘yxat O‘zbekiston qoidasi bo‘yicha tartiblanmagan (qonun → kitob → maqola → internet)"),
+        actual === ordered
+          ? check("refsOrder", "green", "Ro‘yxat tartibi", `O‘zbekiston qoidasi bo‘yicha: ${groups}`)
+          : check("refsOrder", "yellow", "Ro‘yxat tartibi", "Ro‘yxat O‘zbekiston qoidasi bo‘yicha tartiblanmagan (qonun → VM/vazirlik → kitob → maqola → statistika → internet)"),
       );
     }
   }
@@ -370,39 +383,6 @@ export function workRuleChecks(doc: AcademicDoc, o: { guard?: ReviewGuardInput; 
   }
 
   return { checks: out, verifiedShare, recentShare };
-}
-
-/**
- * Ro'yxat tartibini `cite/order.ts orderUzReferences` bilan solishtirish.
- * Funksiya hali yo'q (WP-B) — `null`, band yashil qoladi. SINXRON:
- * hisobot izomorf va `await` siz chaqiriladigan joylarda ham ishlaydi;
- * modul dvigatelning `orderReferences` chaqirig'idan keyin keshda bo'ladi.
- */
-let orderFn: ((refs: { id: string }[]) => { id: string }[]) | null | undefined;
-
-export function setUzOrderFn(fn: typeof orderFn): void {
-  orderFn = fn;
-}
-
-function orderedIdsOf(refs: { id: string }[]): string[] | null {
-  if (orderFn === undefined) {
-    orderFn = null;
-    // Dinamik yuklash — birinchi chaqiruvdan keyingi hisobotlarda ishlaydi.
-    import("../cite/index")
-      .then((mod) => {
-        const fn = (mod as unknown as { orderUzReferences?: typeof orderFn }).orderUzReferences;
-        if (typeof fn === "function") orderFn = fn;
-      })
-      .catch(() => {
-        /* WP-B hali birlashmagan */
-      });
-  }
-  if (!orderFn) return null;
-  try {
-    return orderFn(refs).map((r) => r.id);
-  } catch {
-    return null;
-  }
 }
 
 /* ────────────────────────── baholovchi ────────────────────────── */

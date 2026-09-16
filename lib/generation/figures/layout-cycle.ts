@@ -9,8 +9,8 @@
  * (≥14 px), markaz yorlig'iga tegmasin (≥10 px), har yoy kamida 12° ko'rinsin.
  * Ellips (ry = 0.85·rx) — kanvas balandligi kvadratdan biroz kam.
  */
-import type { FigureSpec } from "../article/types";
-import { FIGURE_LIMITS } from "../article/types";
+import type { FigureSpec } from "../types";
+import { FIGURE_LIMITS } from "../types";
 import { FONT_PX, LINE_K, PAD_X, PAD_Y, cleanLabel, ellipsePt, emptyLayout, fitToCanvas, linesBox, wrapLabel, type FigureLayout, type Pt } from "./model";
 
 export type CycleSpec = Extract<FigureSpec, { kind: "cycle" }>;

@@ -50,7 +50,7 @@ export type { ChapterBalance, ChapterStat, GuardOpts, IntakeReport, SectionGuard
 export { HONESTY_LIMIT, introPartsLine, workConclusionPrompt, workFigureHelp, workIntroPrompt, workOutlinePrompt, workParagraphPrompt, workResearchKeywords, workRewritePrompt, workSystemPrompt } from "./prompts";
 export type { WorkContext, WorkOutlinePlan, WorkSectionAsk, WorkSectionPlan } from "./prompts";
 
-export { JUDGE_TEXT_CHARS, LENGTH_TOLERANCE, REPETITION_JACCARD, WORK_RULE_IDS, neutralWorkJudge, parseWorkJudge, reviewWork, scoreWorkReview, setUzOrderFn, textSections, workJudgeChecks, workJudgeSpec, workJudgeSystemPrompt, workJudgeUserPrompt, workRuleChecks, workVisualCoverage } from "./review";
+export { JUDGE_TEXT_CHARS, LENGTH_TOLERANCE, REPETITION_JACCARD, WORK_RULE_IDS, neutralWorkJudge, parseWorkJudge, reviewWork, scoreWorkReview, textSections, workJudgeChecks, workJudgeSpec, workJudgeSystemPrompt, workJudgeUserPrompt, workRuleChecks, workVisualCoverage } from "./review";
 export type { WorkJudgeResult, WorkReviewOpts, WorkRuleId, WorkRuleResult } from "./review";
 
 export { applyWorkPolish, applyWorkSectionOps, planWorkPolish, rewriteWorkFix, runWorkPolish, workContextOf, workCriterionFixes, workJudgeFromReview, workUserNeeds } from "./polish";

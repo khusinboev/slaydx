@@ -175,7 +175,8 @@ test("topicOf hech qachon bo'sh qaytarmaydi", () => {
 
 test("OTME ishlari universitetsiz qabul qilinmaydi", () => {
   const base = { topic: "Mavzu", author: "Aliyev A." };
-  for (const id of ["coursework", "referat", "thesis", "mustaqil-ish"] as const) {
+  // Tezis endi maqola formasida (AUDIT-19) — muassasa muallif qatorida (`authors[].org`), alohida maydon yo'q.
+  for (const id of ["coursework", "referat", "mustaqil-ish"] as const) {
     const missing = missingRequired(TOOL_BY_ID[id], base);
     assert.ok(
       missing.some((m) => /muassasa/i.test(m)),
@@ -350,4 +351,21 @@ test("maqola narxi ARTICLE_PRICES jadvalidan — 4 satr, tur hajmni cheklaydi", 
   assert.equal(priceFor(article, { articleType: "review_narrative", pages: "1-2" }), 8000);
   // Soxta qiymat — standart tarif, bepul emas.
   assert.equal(priceFor(article, { pages: "0-0", price: 1 }), 6000);
+  /*
+   * Tezis vositasi (AUDIT-19): maqola dvigateli, o'z jadvali — 1–2 bet
+   * 4 000, 3–5 bet (kengaytirilgan) 5 000; ruxsatsiz tur → konferensiya
+   * tezisi (1–2 tarifi); eski 5–10…20–25 paketlari yo'q.
+   */
+  const { THESIS_PRICES, thesisTypeId } = await import("../lib/tools.ts");
+  const thesis = TOOL_BY_ID.thesis;
+  assert.deepEqual(THESIS_PRICES, { "1-2": 4000, "3-5": 5000 });
+  assert.equal(thesis.custom, "article");
+  assert.equal(defaultPages("thesis"), "1-2");
+  assert.equal(priceFor(thesis, {}), 4000);
+  assert.equal(priceFor(thesis, { articleType: "conference_thesis", pages: "3-5" }), 4000, "tezis turi 3-5 ni bilmaydi → 1-2 tarifi");
+  assert.equal(priceFor(thesis, { articleType: "conference_extended", pages: "3-5" }), 5000);
+  assert.equal(priceFor(thesis, { articleType: "conference_extended", pages: "10-15" }), 5000, "ruxsatsiz paket → `normalizeArticlePages` standarti (3-5 bo'lsa shu)");
+  assert.equal(priceFor(thesis, { articleType: "imrad_oak", pages: "10-15" }), 4000, "MUTATSIYA: ruxsatsiz tur maqola narxiga o'tsa 12 000 chiqadi");
+  assert.equal(thesisTypeId({ articleType: "review_narrative" }), "conference_thesis");
+  assert.equal(thesisTypeId({ articleType: "conference_extended" }), "conference_extended");
 });

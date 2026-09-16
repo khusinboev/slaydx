@@ -24,10 +24,15 @@ export function ArticleTypeTile({
   value,
   language,
   onChange,
+  allowed,
+  title,
 }: {
   value: ArticleTypeId;
   language: string;
   onChange: (id: ArticleTypeId) => void;
+  /** Tezis vositasi (AUDIT-19): faqat konferensiya turlari; berilmasa — 12 tur. */
+  allowed?: readonly ArticleTypeId[];
+  title?: string;
 }) {
   const [open, setOpen] = useState(false);
   const t = ARTICLE_TYPES[value];
@@ -49,6 +54,8 @@ export function ArticleTypeTile({
         <ArticleTypeDialog
           value={value}
           language={language}
+          allowed={allowed}
+          title={title}
           onClose={() => setOpen(false)}
           onPick={(id) => {
             onChange(id);
@@ -65,11 +72,15 @@ export function ArticleTypeDialog({
   language,
   onClose,
   onPick,
+  allowed,
+  title,
 }: {
   value: ArticleTypeId;
   language: string;
   onClose: () => void;
   onPick: (id: ArticleTypeId) => void;
+  allowed?: readonly ArticleTypeId[];
+  title?: string;
 }) {
   const panelRef = useDialog(true, onClose);
   const labels = articleLabels(language);
@@ -84,9 +95,9 @@ export function ArticleTypeDialog({
         onClick={(e) => e.stopPropagation()}
         className="bg-card my-8 w-full max-w-3xl rounded-2xl border p-4 shadow-xl"
       >
-        <h2 className="mb-3 text-[15px] font-semibold">Maqola turini tanlang</h2>
+        <h2 className="mb-3 text-[15px] font-semibold">{title ?? "Maqola turini tanlang"}</h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          {ARTICLE_TYPE_IDS.map((id) => {
+          {(allowed ?? ARTICLE_TYPE_IDS).map((id) => {
             const t = ARTICLE_TYPES[id];
             return (
               <button

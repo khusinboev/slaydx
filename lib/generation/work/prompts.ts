@@ -21,7 +21,7 @@ import { languageDirective } from "../i18n";
 import { FILLER_PHRASES } from "../report/filler";
 import { HONESTY_LIMIT } from "../report/polish-core";
 import { FIGURE_KIND_HELP, formatRefLine, lengthLine } from "../article/prompts";
-import { SELECTABLE_FIGURE_KINDS, type Reference, type SelectableFigureKind } from "../article/types";
+import { SELECTABLE_FIGURE_KINDS, type Reference, type SelectableFigureKind } from "../types";
 import type { DocMeta } from "../types";
 import type { WorkKind } from "./registry";
 import type { SubjectProfile } from "./subjects";

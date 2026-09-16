@@ -41,8 +41,8 @@ function stubApi(draft: Record<string, unknown> | null = null) {
     const method = opts?.method ?? "GET";
     const body = typeof opts?.body === "string" ? JSON.parse(opts.body) : opts?.body;
     calls.push({ url, method, body });
-    if (url === "/api/forms/article/draft" && method === "GET") return json(200, { draft: draft ? { data: draft, updatedAt: "now" } : null });
-    if (url === "/api/forms/article/draft") return json(200, { ok: true, updatedAt: "now" });
+    if (/^\/api\/forms\/(article|thesis)\/draft$/.test(url) && method === "GET") return json(200, { draft: draft ? { data: draft, updatedAt: "now" } : null });
+    if (/^\/api\/forms\/(article|thesis)\/draft$/.test(url)) return json(200, { ok: true, updatedAt: "now" });
     if (url === "/api/generations" && method === "POST") return json(200, { id: "44444444-4444-4444-8444-444444444444", price: 6000 });
     if (url === "/api/users/me") return json(200, { ok: true });
     // AUDIT-18: UDK taklifi — mavzu bo'yicha; «xato» mavzusi 503.
@@ -507,4 +507,51 @@ test("vosita sahifasi maqola uchun AYNAN yangi formani chizadi (dispatch)", asyn
     assert.ok(document.querySelectorAll("[data-field]").length > 10, "yangi formaning maydonlari");
   });
   assert.ok(document.body.textContent?.includes("Nashr profili"), "maqolaga xos karta ko'rinadi");
+});
+
+/* ══════════════════════════════ tezis rejimi (AUDIT-19) ══════════════════════════════ */
+
+test("tezis vositasi: faqat 2 konferensiya turi, standart «Konferensiya tezisi» 1–2 bet · 4 000, qoralama /api/forms/thesis/draft, submitda articleType", async () => {
+  const calls = stubApi();
+  await login();
+  const { TOOL_BY_ID } = await import("../../lib/tools.ts");
+  render(h(AppRouterContext.Provider, { value: router }, h(ArticleComposer, { tool: TOOL_BY_ID.thesis, profile, user: null })));
+  await waitFor(() => assert.ok(calls.some((c) => c.url === "/api/forms/thesis/draft" && c.method === "GET"), "qoralama tezis kaliti bilan o'qilishi kerak"));
+  assert.ok(screen.getByText("Konferensiya tezisi"), "standart tur — konferensiya tezisi");
+  assert.match(document.querySelector("[data-price-total]")?.textContent ?? "", /4[\s ]?000/);
+  // Faqat 1–2 bet paketi (tur shuni biladi).
+  const pages = [...document.querySelectorAll('[data-field="pages"] button')].map((b) => b.textContent ?? "");
+  assert.equal(pages.length, 1, pages.join("|"));
+  assert.match(pages[0], /1–2 bet.*4[\s ]?000/);
+  await act(async () => {
+    fireEvent.click(screen.getByText("Konferensiya tezisi"));
+  });
+  const dialog = screen.getByRole("dialog", { name: "Maqola turi" });
+  const cards = dialog.querySelectorAll("[data-type-card]");
+  assert.equal(cards.length, 2, "MUTATSIYA: allowed berilmasa 12 karta chiqadi");
+  assert.ok(within(dialog).getByText("Tezis turini tanlang"));
+  await act(async () => {
+    fireEvent.click(within(dialog).getByText("Kengaytirilgan tezis / konferensiya maqolasi"));
+  });
+  // Kengaytirilgan tezis: 1–2 (4 000) va 3–5 (5 000) — tezis narx jadvali, maqolaniki (6 000) emas.
+  await waitFor(() => {
+    const p2 = [...document.querySelectorAll('[data-field="pages"] button')].map((b) => b.textContent ?? "");
+    assert.equal(p2.length, 2, p2.join("|"));
+    assert.match(p2[1], /3–5 bet.*5[\s ]?000/);
+  });
+  await act(async () => {
+    fireEvent.click(screen.getByText(/3–5 bet/));
+  });
+  assert.match(document.querySelector("[data-price-total]")?.textContent ?? "", /5[\s ]?000/);
+  await act(async () => {
+    fireEvent.change(document.querySelector('[data-field="topic"] input')!, { target: { value: "Tomchilatib sug‘orish samaradorligi" } });
+  });
+  await act(async () => {
+    fireEvent.click(screen.getByRole("button", { name: /Tezisni yaratish/ }));
+  });
+  await waitFor(() => assert.ok(calls.some((c) => c.url === "/api/generations" && c.method === "POST")));
+  const post = calls.find((c) => c.url === "/api/generations" && c.method === "POST")!.body as { slug?: string; values?: Record<string, unknown> };
+  assert.equal(post.slug, "thesis");
+  assert.equal(post.values?.articleType, "conference_extended");
+  assert.equal(post.values?.pages, "3-5");
 });

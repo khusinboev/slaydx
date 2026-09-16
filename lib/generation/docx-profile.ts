@@ -373,6 +373,9 @@ export function profileFor(meta: DocMeta): DocProfile {
        * (`titleModel`, sahifa darvozasi) uchun.
        */
       return meta.pubProfile ? articleProfile(meta.pubProfile) : PROFILES.article;
+    case "thesis":
+      // AUDIT-19: yangi tezis (maqola dvigateli, `pubProfile` bor) — nashr profili; eski tezis — avvalgidek GOST titul.
+      return meta.pubProfile ? articleProfile(meta.pubProfile) : PROFILES.gost;
     case "texnologik-xarita":
       return PROFILES.landscape;
     case "lesson-plan":

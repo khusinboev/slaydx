@@ -23,7 +23,7 @@ import type { DocMeta } from "../types";
 import { SELECTABLE_FIGURE_KINDS, type ArticleType, type ArticleTypeId, type ArticleWordPlan, type PublicationProfile, type Reference, type SelectableFigureKind } from "./types";
 import { articleLabels, type ArticleDocLabels } from "./labels";
 import type { ArticleInput } from "./input";
-import type { OpenAlexWork } from "../research/openalex";
+import { kindOf } from "../types";
 
 /** Dvigatel bosqichlari o'rtasida uzatiladigan kontekst. */
 export type ArticleContext = {
@@ -60,7 +60,22 @@ export { FILLER_PHRASES };
 /** `[ID] Muallif va b. (yil). Sarlavha. Venue.` — promptdagi manba qatori. */
 export function formatRefLine(r: Reference & { abstract?: string }, withAbstract = false): string {
   const authors = r.authors.length ? (r.authors.length > 3 ? `${r.authors.slice(0, 3).join(", ")} et al.` : r.authors.join(", ")) : "—";
-  const head = `[${r.id}] ${authors} (${r.year ?? "n.d."}). ${r.title}.${r.venue ? ` ${r.venue}.` : ""}${r.doi ? ` doi:${r.doi}` : ""}`;
+  /*
+   * AUDIT-19: nomzodlar ro'yxatiga kitob va normativ hujjat ham kiradi —
+   * ularning ajratuvchi belgilari (nashriyot/ISBN, hujjat raqami/sanasi)
+   * MAQOLA shaklida ko'rinmaydi, model esa shu qatorga qarab tanlaydi.
+   * Maqola/foydalanuvchi manbasi qatori O'ZGARMAYDI (mavjud promptlar).
+   */
+  const kind = kindOf(r);
+  let head: string;
+  if (kind === "book") {
+    head = `[${r.id}] ${authors} (${r.year ?? "n.d."}). ${r.title}.${r.publisher ? ` ${r.publisher}.` : ""}${r.isbn ? ` ISBN ${r.isbn}` : ""}${r.pageCount ? ` ${r.pageCount} p.` : ""}`;
+  } else if (kind === "law") {
+    const when = r.docDate ? r.docDate.split("-").reverse().join(".") : r.year ? String(r.year) : "n.d.";
+    head = `[${r.id}] ${r.issuer ?? "O‘zR"} «${r.title}»${r.docNo ? ` № ${r.docNo}` : ""} (${when})`;
+  } else {
+    head = `[${r.id}] ${authors} (${r.year ?? "n.d."}). ${r.title}.${r.venue ? ` ${r.venue}.` : ""}${r.doi ? ` doi:${r.doi}` : ""}`;
+  }
   return withAbstract && r.abstract ? `${head}\n    Abstract: ${r.abstract}` : head;
 }
 
@@ -358,12 +373,32 @@ export function researchSystemPrompt(): string {
   ].join("\n");
 }
 
+/**
+ * Tadqiqot promptlari `ArticleInput` ga BOG'LANMAGAN (AUDIT-19): kurs
+ * ishi, referat va mustaqil ish dvigatellari ham shu quvurdan o'tadi.
+ * `ArticleInput` bu shaklga tabiiy mos keladi — maqola chaqiruvlari
+ * o'zgarmaydi.
+ */
+export type ResearchPromptAsk = {
+  topic: string;
+  keywords: string[];
+  language: string;
+  userFacts?: string;
+  /** «Article type: …» / «Document type: …» qatori uchun yorliq. */
+  typeLabel?: string;
+};
+
+function askHead(ask: ResearchPromptAsk): string {
+  const type = ask.typeLabel ? ` Article type: ${ask.typeLabel}.` : "";
+  return `Topic: «${ask.topic}».${type} Keywords: ${ask.keywords.join(", ") || "—"}.`;
+}
+
 /** `fast` rol: 4–6 qidiruv so'rovi (inglizcha + hujjat tilida). */
-export function queriesPrompt(input: ArticleInput): string {
-  const lang = langInfo(input.language).name;
+export function queriesPrompt(ask: ResearchPromptAsk): string {
+  const lang = langInfo(ask.language).name;
   return [
-    `Topic: «${input.topic}». Article type: ${input.articleType}. Keywords: ${input.keywords.join(", ") || "—"}.`,
-    input.userFacts ? `Author's own results (for context): ${input.userFacts.slice(0, 600)}` : "",
+    askHead(ask),
+    ask.userFacts ? `Author's own results (for context): ${ask.userFacts.slice(0, 600)}` : "",
     `Write 4–6 search queries for a scholarly database (OpenAlex full-text search): 3–4 in English (the database is mostly English), 1–2 in ${lang} if the language is not English. Each query 3–8 words, specific to the topic and its sub-questions (methods, effects, context), no quotes, no boolean operators.`,
     `Return JSON: {"queries":["…"]}`,
   ]
@@ -371,13 +406,34 @@ export function queriesPrompt(input: ArticleInput): string {
     .join("\n");
 }
 
-/** `researcher` rol: FAQAT ro'yxatdan `min..max` ta id. */
-export function selectRefsPrompt(input: ArticleInput, candidates: OpenAlexWork[], want: { min: number; max: number }): string {
+/**
+ * `researcher` rol: FAQAT ro'yxatdan `min..max` ta id.
+ *
+ * `quota` — MO'LJAL, talab emas (kurs ishida «3 qonun, 5 kitob»): mavjud
+ * nomzodlar orasida shuncha bo'lmasligi mumkin, model esa mavzuga
+ * MOSLIGINI birinchi o'ringa qo'yishi kerak — kvota uchun nomaqbul
+ * manba tanlash ro'yxat sifatini buzadi.
+ */
+export function selectRefsPrompt(
+  ask: ResearchPromptAsk,
+  candidates: (Reference & { abstract?: string; citedBy?: number })[],
+  want: { min: number; max: number },
+  quota?: Partial<Record<string, number>>,
+): string {
+  const quotaLine = quota
+    ? Object.entries(quota)
+        .filter(([, n]) => typeof n === "number" && n > 0)
+        .map(([k, n]) => `${n} ${k}`)
+        .join(", ")
+    : "";
   return [
-    `Topic: «${input.topic}». Article type: ${input.articleType}. Keywords: ${input.keywords.join(", ") || "—"}.`,
+    askHead(ask),
     `From the CANDIDATES below choose ${want.min}–${want.max} records that are genuinely relevant to the topic and useful for citing in this article (prefer: directly on-topic, recent, peer-reviewed venues, higher citation counts; avoid duplicates of the same study and off-topic records).`,
+    quotaLine ? `Aim for a mix of about ${quotaLine} where the candidates allow it — this is a TARGET, not a requirement: never choose an off-topic record just to reach it.` : "",
     `Return ONLY ids that appear in the list — any other id is discarded. Return JSON: {"ids":["W…"]}`,
     `CANDIDATES:`,
     ...candidates.map((c) => `${formatRefLine(c, true)}${c.citedBy !== undefined ? ` [cited by ${c.citedBy}]` : ""}`),
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
