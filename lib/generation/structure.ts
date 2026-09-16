@@ -1,6 +1,8 @@
 import { parseManualOutline, type ManualChapter } from "./quality";
 import { ARTICLE_TYPES, hardSections } from "./article/types-registry";
 import { articleLabels } from "./article/labels";
+import { teacherSectionLabel } from "./i18n";
+import { teacherKindOf } from "./teacher/registry";
 import type { AcademicDoc, DocMeta } from "./types";
 
 /**
@@ -23,7 +25,16 @@ import type { AcademicDoc, DocMeta } from "./types";
  * `section:<id>` — maqola tur skeletidagi `hard` bo'lim (Maqola 2);
  * `prismaFigure` — sistematik sharhda PRISMA sxemasi (`review_systematic`).
  */
-export type StructureNeed = "abstract" | "table" | "ownTask" | "prismaFigure" | `section:${string}`;
+/**
+ * `teacher:<id>` — o'qituvchi hujjatining bo'lim id si (AUDIT-20 WP-F).
+ *
+ * Nega `section:` dan ajratildi: `needLabel` `section:` ni MAQOLA tur
+ * skeletidan qidiradi (`ARTICLE_TYPES`) va u yerda `stages` yoki `q3`
+ * degan bo'lim yo'q — xato xabari o'zbekcha nom o'rniga xom id ni
+ * ko'rsatardi. Prefiks ikkita bo'lgani uchun har oila o'z yorliq
+ * jadvalidan o'qiydi (`i18n.ts teacherSectionLabel`).
+ */
+export type StructureNeed = "abstract" | "table" | "ownTask" | "prismaFigure" | `section:${string}` | `teacher:${string}`;
 
 /**
  * Qat'iy talab: bajarilmasa ish xato bilan tugaydi va kredit qaytadi.
@@ -49,7 +60,7 @@ export type StructureNeed = "abstract" | "table" | "ownTask" | "prismaFigure" | 
  * oladi.
  */
 const HARD_FIXED: ReadonlySet<string> = new Set(["abstract", "prismaFigure"]);
-const isHard = (n: StructureNeed) => HARD_FIXED.has(n) || n.startsWith("section:");
+const isHard = (n: StructureNeed) => HARD_FIXED.has(n) || n.startsWith("section:") || n.startsWith("teacher:");
 
 const LABEL: Record<"abstract" | "table" | "ownTask" | "prismaFigure", string> = {
   abstract: "annotatsiya",
@@ -58,7 +69,58 @@ const LABEL: Record<"abstract" | "table" | "ownTask" | "prismaFigure", string> =
   prismaFigure: "PRISMA sxemasi",
 };
 
-export function structureNeeds(meta: DocMeta): StructureNeed[] {
+/**
+ * O'qituvchi hujjatining MAJBURIY bo'limlari — kind bo'yicha id
+ * SHARTNOMASI (`teacher/engine.ts` izohi, AUDIT-20 §5 jadvali).
+ *
+ * Ro'yxat DOC DAN chiqadi, `meta` dan emas: xaritada bo'limlar tur
+ * bo'yicha o'zgaradi (`yillik` — bitta `year`, `choraklik` — `q1..q4`),
+ * keysda keys soni foydalanuvchinikidan kam chiqishi mumkin (u
+ * `delivered` bilan o'lchanadi, darvoza esa BIRINCHI keys borligini
+ * talab qiladi), testda esa variantlar soni tanlanadi.
+ *
+ * ATAYIN QAT'IY EMAS:
+ *   • `assessment` — turga va `assessmentStyle` ga bog'liq, ya'ni
+ *     foydalanuvchi tanlovi (`table` bilan bir xil mulohaza);
+ *   • testning `key`/`criteria` beti — `answerKey: "yoq"` tanlovi bor,
+ *     kalitning O'ZI esa modelda `teacherGateFail` bilan tekshiriladi;
+ *   • glossariyning `intro` si — mazmun emas, muqaddima.
+ */
+function teacherNeeds(doc: AcademicDoc | undefined): StructureNeed[] {
+  const t = doc?.teacher;
+  if (!t) return [];
+  const need = (...ids: string[]): StructureNeed[] => ids.map((id): StructureNeed => `teacher:${id}`);
+  switch (t.kind) {
+    case "lesson":
+      return need("passport", "goal", "stages", "homework");
+    case "map":
+      return t.map?.type === "choraklik" ? need("passport", "q1", "q2", "q3", "q4") : need("passport", "year");
+    case "glossary":
+      return need("terms");
+    case "keys":
+      /*
+       * `rubric` ham QAT'IY: reyestr skeleti «Baholash rubrikasi (jami
+       * 10 ball)» ni va'da qiladi va keysni rubrikasiz tarqatib
+       * bo'lmaydi — seminarda baho qo'yish mumkin emas. Bo'lim faqat
+       * ballar butunlay chiqmaganda tushib qoladi (`keys.ts`), ya'ni bu
+       * foydalanuvchi tanlovi emas, model nuqsoni.
+       */
+      return need("intro", "case1", "rubric");
+    case "test":
+      return need("instructions", ...(t.test?.variants ?? []).map((v) => `variant-${v.id}`));
+    default:
+      return [];
+  }
+}
+
+export function structureNeeds(meta: DocMeta, doc?: AcademicDoc): StructureNeed[] {
+  /*
+   * O'qituvchi oilasi (AUDIT-20): talab `doc.teacher` bor bo'lgandagina
+   * qo'yiladi. Eski yo'l (`TEACHER_ENGINE=0`, `write-specials.ts`,
+   * bazadagi eski `doc_json`) boshqa bo'lim id lari bilan yozadi va uni
+   * yangi shartnoma bilan o'lchash to'rtta xizmatni ham o'chirardi.
+   */
+  if (teacherKindOf(meta.toolId)) return teacherNeeds(doc);
   switch (meta.toolId) {
     case "article": {
       /*
@@ -131,12 +193,22 @@ export function missingStructure(meta: DocMeta, doc: AcademicDoc): StructureNeed
    * yozilgan turga qarab tekshirishi kerak.
    */
   const effective: DocMeta = meta.toolId === "article" ? { ...meta, articleType: doc.article?.type ?? doc.meta.articleType ?? meta.articleType } : meta;
-  for (const need of structureNeeds(effective)) {
+  for (const need of structureNeeds(effective, doc)) {
     if (need === "abstract" && !doc.abstracts?.length) out.push(need);
     if (need === "table" && !doc.tables?.length) out.push(need);
     if (need === "ownTask" && !hasOwnTask(doc)) out.push(need);
     if (need === "prismaFigure" && !doc.article?.figures.some((f) => f.spec.kind === "prisma")) out.push(need);
     if (need.startsWith("section:") && !hasArticleSection(doc, need.slice("section:".length))) out.push(need);
+    /*
+     * O'qituvchi bo'limi: id AYNAN mos bo'lishi kerak (`section:` dagi
+     * `body-1` kabi prefiks qoidasi yo'q) va bo'sh bo'lim «bor»
+     * hisoblanmaydi — `stages` bo'limi bloksiz qolsa, DOCX da sarlavha
+     * chiqib, ostida hech nima bo'lmasdi.
+     */
+    if (need.startsWith("teacher:")) {
+      const id = need.slice("teacher:".length);
+      if (!doc.sections.some((s) => s.id === id && s.blocks.length > 0)) out.push(need);
+    }
   }
   return out;
 }
@@ -147,6 +219,7 @@ export function hardMissing(meta: DocMeta, doc: AcademicDoc): StructureNeed[] {
 }
 
 export function needLabel(need: StructureNeed): string {
+  if (need.startsWith("teacher:")) return `«${teacherSectionLabel(need.slice("teacher:".length))}» bo'limi`;
   if (need.startsWith("section:")) {
     // Xato xabari foydalanuvchiga ko'rinadi — id emas, o'zbekcha bo'lim nomi.
     const id = need.slice("section:".length);

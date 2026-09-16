@@ -190,11 +190,18 @@ async function runJob(job: ClaimedJob): Promise<void> {
     // «O'z shablonim» (faqat pro): namuna topilmasa deka ichki shablon bilan chiqadi.
     const template = tool.id === "pro-slide" ? await templateForJob(job.userId, String(job.values.templateAssetId ?? "")) : undefined;
     /*
-     * Tarjima manbasi (Tarjimon 2): asl fayl bayti. Topilmasa `undefined`
-     * — dvigatel matn rejimiga tushadi (`logo`/`template` naqshi).
+     * Yuklangan MANBA fayl (Tarjimon 2 dan boshlangan yo'l). Topilmasa
+     * `undefined` — dvigatel matn rejimiga tushadi (`logo`/`template` naqshi).
+     *
+     * Shart ENDI REYESTRDAN: `tool.modes` e'lon qilgan HAR vosita fayl
+     * rejimini ko'rsatadi (`StandardForm` «Fayl asosida» chipi), ya'ni
+     * `tool.id === "translation"` bilan cheklash forma va'da qilgan
+     * rejimni JIMGINA o'chirardi — AUDIT-20 test vositasi aynan shunga
+     * urilgan bo'lardi: «faylingizdan test tuzaman» deb yuklatib, testni
+     * mavzu nomidan yozardi. Reyestrda `modes` yo'q vositalar
+     * (glossariy, keys, xarita, rezyume) uchun so'rov ham qilinmaydi.
      */
-    const source =
-      tool.id === "translation" ? await sourceForJob(job.userId, String(job.values.sourceAssetId ?? "")) : undefined;
+    const source = tool.modes ? await sourceForJob(job.userId, String(job.values.sourceAssetId ?? "")) : undefined;
     /*
      * Rezyume surati (Rezyume 2): kesilgan nusxa `data:` URL ga aylanadi
      * va `extractAssets` uni keyin generatsiya aktiviga chiqaradi.

@@ -22,7 +22,12 @@ import { articleWordPlan } from "./article/engine";
 import { SUBJECT_PROFILES, SUBJECT_PROFILE_LIST, workKindOf, workWordPlan } from "./work";
 import { ARTICLE_TYPES } from "./article/types-registry";
 import { PUBLICATION_PROFILES } from "./article/profiles";
-import type { AcademicDoc, BuiltFile } from "./types";
+import { teacherKindOf, teacherTypeOf, type LessonTypeSpec } from "./teacher/registry";
+import { teacherInputFromValues } from "./teacher/input";
+import { testInputFromValues } from "./teacher/test/input";
+import { weeksFor } from "./teacher/guard";
+import { TEACHER_LIMITS } from "./teacher/types";
+import type { AcademicDoc, BuiltFile, DocMeta } from "./types";
 import type { FormValues, ToolConfig } from "../types";
 
 export type { BuiltFile } from "./types";
@@ -63,6 +68,18 @@ const NO_SCALE = new Set([
  * istisnoning sababi qolmadi.
  */
 const LENGTH_GATED = new Set(["referat", "coursework", "mustaqil-ish", "article", "thesis", "essay"]);
+
+/*
+ * O'QITUVCHI VOSITALARI (AUDIT-20 WP-F) — `LENGTH_GATED` da ATAYIN YO'Q.
+ *
+ * Dars rejasi, texnologik xarita, glossariy, keys va test HAJM emas,
+ * ELEMENT va'da qiladi: «6 bosqich, 45 daqiqa», «34 hafta», «20 atama»,
+ * «5 keys», «20 savol». So'z bilan o'lchash bu yerda ikki tomonga ham
+ * yolg'on javob beradi — 40 haftalik xarita jadvalda «kam so'z» bo'ladi,
+ * uzun kirish matni esa savolsiz testni «yetarli» deb o'tkazardi.
+ * Darvoza `teacherGateFail` da (element soni), tuzilma esa
+ * `structure.ts` dagi kind shartnomasida.
+ */
 
 /** Va'da qilingan hajmning shu ulushi majburiy. */
 const MIN_LENGTH_RATIO = 0.8;
@@ -106,6 +123,15 @@ export function essayGateWords(toolId: string, doc: AcademicDoc): number | null 
  *   • insho `doc.essay.words` bilan (IELTS Task 2 — 250 so'z, 1 betdan kam).
  */
 export function pageGateApplies(toolId: string, doc: AcademicDoc): boolean {
+  /*
+   * O'qituvchi vositalari BET VA'DA QILMAYDI (AUDIT-20): dars ishlanmasi
+   * 2 bet ham, 4 bet ham bo'lishi mumkin — bu bosqichlar mazmuniga bog'liq,
+   * narxga emas. Shart `LENGTH_GATED` tekshiruvidan OLDIN va alohida
+   * turibdi: reyestrga yangi o'qituvchi vositasi qo'shilib, kimdir uni
+   * o'ylamay `LENGTH_GATED` ga ham yozib qo'ysa, bet darvozasi baribir
+   * ishga tushmaydi.
+   */
+  if (teacherKindOf(toolId)) return false;
   if (!LENGTH_GATED.has(toolId)) return false;
   if (isArticleTool(toolId) && articleWordRange(doc)) return false;
   return essayGateWords(toolId, doc) === null;
@@ -204,6 +230,159 @@ export function workGateWords(doc: AcademicDoc): number | null {
   const kind = workKindOf(w.genre, w.kind);
   const subject = SUBJECT_PROFILES[w.subject] ?? SUBJECT_PROFILE_LIST[0];
   return workWordPlan(doc.meta, kind, subject, { refs: w.refsMin, figures: w.figures.length, tables: (doc.tables ?? []).length }).body;
+}
+
+/* ─────────────── O'qituvchi darvozalari (AUDIT-20 WP-F) ─────────────── */
+
+/**
+ * Bosqich daqiqalari yig'indisi va'da qilingan davomiylikdan shuncha
+ * og'ishi mumkin (daqiqa).
+ *
+ * Nega 0 emas: `guard.ts normalizeMinutes` yig'indini AYNAN `duration`
+ * ga tenglashtiradi, ya'ni 0 tolerans dvigatel ishlaganda hech qachon
+ * ishlamasdi va darvoza bezak bo'lib qolardi. U esa DVIGATELDAN KEYINGI
+ * qadamlarni — avto-sayqal va foydalanuvchi tahririni — qo'riqlaydi:
+ * sayqal bosqichni qayta yozib daqiqani o'zgartirsa, 45 daqiqalik dars
+ * 60 daqiqaga aylanib ketardi va o'qituvchi buni faqat sinfda bilardi.
+ * 5 daqiqa — bitta bosqichning yaxlitlash xatosi, sinfda sezilmaydi.
+ */
+export const TEACHER_MINUTES_TOLERANCE = 5;
+
+/**
+ * Glossariy va keys: va'da qilingan elementlarning shu ulushi MAJBURIY.
+ *
+ * 0.70 — `delivered` bilan bir xil floor (AUDIT-5 P1-2 qarori): pastda
+ * xato + to'liq qaytarish, 0.70 bilan va'da orasida esa yetkaziladi va
+ * FARQ qaytariladi (`deliveredCount`).
+ */
+export const TEACHER_COUNT_RATIO = 0.7;
+
+/**
+ * Test: savollarning 0.80 i. Glossariydan qattiqroq, chunki test
+ * BAHOLASH quroli — 20 savolga mo'ljallangan ball shkalasi va vaqt
+ * me'yori 12 savolda umuman boshqa ish bo'lib qoladi.
+ */
+export const TEST_COUNT_RATIO = 0.8;
+
+/**
+ * Xarita: haftalarning 0.90 i. Eng qattiq nisbat, chunki xarita YILNI
+ * qoplaydi: 34 haftalik yilda 24 hafta — bu «biroz kam», emas, chorak
+ * dasturi umuman yo'q degani (jonli sinovda model aynan shu qadar
+ * qaytarardi, `map.ts` izohi).
+ */
+export const MAP_WEEK_RATIO = 0.9;
+
+/** Darvoza yiqilgani: `rule` — testlar uchun nom, `message` — foydalanuvchiga. */
+export type TeacherGateFail = { rule: string; message: string };
+
+const short = (what: string, got: number, need: number, unit: string): string =>
+  `${what} yetarli chiqmadi (${got} ${unit}, kerak: kamida ${need}). Kredit qaytariladi — qayta urinib ko‘ring.`;
+
+/**
+ * O'qituvchi hujjatining ELEMENT darvozasi — `null` bo'lsa o'tdi.
+ *
+ * `doc.teacher` yo'q bo'lsa darvoza ham yo'q: eski yo'l
+ * (`TEACHER_ENGINE=0`, `write-specials.ts`) modelsiz hujjat qaytaradi va
+ * uni yangi qoidalar bilan o'lchash butun 4 xizmatni o'chirardi.
+ *
+ * VA'DA `values` dan, `teacher/input.ts` orqali olinadi — dvigatel
+ * ishlatgan AYNAN o'sha reyestr chegaralari bilan; hujjatdan qayta
+ * hisoblansa, model kam bergan sonning o'zi «va'da» bo'lib qolardi.
+ */
+export function teacherGateFail(meta: DocMeta, values: FormValues, doc: AcademicDoc): TeacherGateFail | null {
+  const t = doc.teacher;
+  if (!t) return null;
+
+  if (t.kind === "test") {
+    const m = t.test;
+    if (!m) return { rule: "test.model", message: short("Test", 0, 1, "savol") };
+    const want = testInputFromValues(meta, values).count;
+    const need = Math.ceil(want * TEST_COUNT_RATIO);
+    if (m.questions.length < need) return { rule: "test.count", message: short("Savollar soni", m.questions.length, need, "savol") };
+    /*
+     * Kalit — testning YAGONA tekshirib bo'lmaydigan qismi: uni
+     * o'qituvchi savollarga qarab qayta tiklay olmaydi. Uzunligi savol
+     * soniga teng bo'lmasa, kalit sayqal/tahrirdan keyin ESKI ro'yxatga
+     * tegishli (WP-B mutatsiyasi aynan shu edi) va butun varaq yaroqsiz.
+     */
+    const badKey = m.variants.filter((v) => (m.key[v.id]?.length ?? 0) !== m.questions.length).map((v) => v.id);
+    if (!m.variants.length || badKey.length) {
+      return { rule: "test.key", message: `Javoblar kaliti to‘liq chiqmadi${badKey.length ? ` (${badKey.join(", ")} varianti)` : ""}. Kredit qaytariladi — qayta urinib ko‘ring.` };
+    }
+    return null;
+  }
+
+  const input = teacherInputFromValues(meta, values, t.kind);
+  switch (t.kind) {
+    case "lesson": {
+      const m = t.lesson;
+      if (!m) return { rule: "lesson.model", message: short("Dars bosqichlari", 0, 1, "bosqich") };
+      // Bosqich MINIMUMI turdan (`nazorat` darsida 4, `yangi-mavzu` da 5).
+      const min = (teacherTypeOf("lesson", m.type) as LessonTypeSpec).limits.stages[0];
+      if (m.stages.length < min) return { rule: "lesson.stages", message: short("Dars bosqichlari", m.stages.length, min, "bosqich") };
+      const sum = m.stages.reduce((n, s) => n + (Number(s.minutes) || 0), 0);
+      if (Math.abs(sum - m.durationMin) > TEACHER_MINUTES_TOLERANCE) {
+        return {
+          rule: "lesson.minutes",
+          message: `Bosqich daqiqalari dars davomiyligiga mos kelmadi (${sum} daqiqa, kerak: ${m.durationMin} ± ${TEACHER_MINUTES_TOLERANCE}). Kredit qaytariladi — qayta urinib ko‘ring.`,
+        };
+      }
+      return null;
+    }
+    case "map": {
+      const m = t.map;
+      if (!m) return { rule: "map.model", message: short("Xarita haftalari", 0, 1, "hafta") };
+      // Choraklik xarita — TO'RTTA blok; uchtasi «yil rejasi» emas.
+      if (m.type === "choraklik" && m.quarters.length !== TEACHER_LIMITS.quarters) {
+        return { rule: "map.quarters", message: `Choraklik xaritada ${m.quarters.length} chorak chiqdi (kerak: ${TEACHER_LIMITS.quarters}). Kredit qaytariladi — qayta urinib ko‘ring.` };
+      }
+      const got = m.quarters.reduce((n, q) => n + q.weeks.length, 0);
+      const need = Math.ceil(weeksFor(m.weeklyHours || input.weeklyHours, m.totalHours || input.totalHours) * MAP_WEEK_RATIO);
+      if (got < need) return { rule: "map.weeks", message: short("Xarita haftalari", got, need, "hafta") };
+      return null;
+    }
+    case "glossary": {
+      const m = t.glossary;
+      if (!m) return { rule: "glossary.model", message: short("Atamalar", 0, 1, "atama") };
+      const need = Math.ceil(input.termCount * TEACHER_COUNT_RATIO);
+      if (m.terms.length < need) return { rule: "glossary.terms", message: short("Atamalar", m.terms.length, need, "atama") };
+      return null;
+    }
+    case "keys": {
+      const m = t.keys;
+      if (!m) return { rule: "keys.model", message: short("Vaziyatli topshiriqlar", 0, 1, "keys") };
+      const need = Math.ceil(input.caseCount * TEACHER_COUNT_RATIO);
+      if (m.cases.length < need) return { rule: "keys.cases", message: short("Vaziyatli topshiriqlar", m.cases.length, need, "keys") };
+      return null;
+    }
+    default:
+      return null;
+  }
+}
+
+/**
+ * Fayl nomi qo'shimchasi — vosita bo'yicha.
+ *
+ * Nega kerak: o'qituvchi bitta jildga bir necha hujjat yuklaydi va
+ * ularning hammasi «Fotosintez.docx» bo'lib chiqsa, brauzer ularni
+ * `(1)`, `(2)` bilan raqamlaydi — qaysi biri test, qaysi biri glossariy
+ * ekani nomdan ko'rinmaydi. Ilgari faqat ikkita vositada bor edi.
+ */
+export function fileSuffix(toolId: string): string {
+  switch (toolId) {
+    case "lesson-plan":
+      return "-dars";
+    case "texnologik-xarita":
+      return "-xarita";
+    case "glossary":
+      return "-glossariy";
+    case "keys":
+      return "-keys";
+    case "test":
+      return "-test";
+    default:
+      return "";
+  }
 }
 
 function articleGateWords(doc: AcademicDoc): number {
@@ -360,6 +539,21 @@ export async function buildArtifact(
    * ular bezak yoki evristik aniqlanadi, to'liq yozilgan ishni ular
    * uchun yiqitish foydalanuvchiga olganidan ko'proq zarar berardi.
    */
+  /*
+   * O'qituvchi darvozasi (AUDIT-20 WP-F) — ELEMENT soni bilan.
+   *
+   * Tuzilma darvozasidan OLDIN: «bosqichlar bo'limi bor, lekin ichida 2
+   * bosqich» holatini bo'lim darvozasi ko'rmaydi, bu esa aynan shu.
+   * `doc.teacher` yo'q bo'lsa (eski yo'l) `null` qaytadi.
+   */
+  if (llmDoc) {
+    const fail = teacherGateFail(meta, values, academic);
+    if (fail) {
+      console.warn(`[gen] teacher gate: ${tool.id} — ${fail.rule}`);
+      throw new Error(fail.message);
+    }
+  }
+
   if (llmDoc) {
     const missing = missingStructure(meta, academic);
     if (missing.length) {
@@ -419,11 +613,10 @@ export async function buildArtifact(
     }
   }
 
-  const suffix = tool.id === "lesson-plan" ? "-dars.docx" : tool.id === "texnologik-xarita" ? "-xarita.docx" : ".docx";
   return {
     html: renderHtml(academic),
     bytes,
-    fileName: `${meta.fileNameHint}${suffix}`,
+    fileName: `${meta.fileNameHint}${fileSuffix(tool.id)}.docx`,
     mime: DOCX,
     doc: academic,
     ...(cost ? { cost } : {}),
@@ -433,7 +626,11 @@ export async function buildArtifact(
      * esa foydalanuvchi kiritgan soatlardan chiqadi. Ikkalasining ham
      * darvozasi 70% — ya'ni 40 atama uchun 15 000 to'lab 28 ta olish
      * mumkin edi (AUDIT-5 P1-2).
+     *
+     * AUDIT-20: keys va test ham shu ro'yxatda, va o'qituvchi
+     * dvigatelining hujjatlarida miqdor MODELDAN sanaladi — `values`
+     * esa VA'DANI beradi (`teacher/input.ts`, reyestr chegaralari).
      */
-    delivered: deliveredCount(meta, academic),
+    delivered: deliveredCount(meta, academic, values),
   };
 }
