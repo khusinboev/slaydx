@@ -197,13 +197,24 @@ export function isStubDefinition(term: string, def: string): boolean {
   if (d.length < TEACHER_LIMITS.defCharsMin) return true;
   if (!t) return false;
   const stem = t.replace(/[^\p{L}\p{N}\s]/gu, " ").trim();
-  if (!stem) return false;
+  if (stem.length < 3) return false;
+  const re = new RegExp(stem.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "giu");
+  /*
+   * Ikki BELGI, ikkalasi ham oddiy va tushuntirib beriladigan:
+   *   1. atama ta'rif ichida IKKI marta uchraydi — «Fotosintez — bu
+   *      fotosintez jarayoni»: izoh atamaning o'zi bilan berilgan;
+   *   2. atamani olib tashlaganda ma'noli so'z deyarli qolmaydi.
+   * Bitta uchrash NORMAL: «Fotosintez barg hujayralarida kechadi» —
+   * ta'rif atamani nomlashi mumkin va kerak ham.
+   */
+  const hits = (d.match(re) ?? []).length;
+  if (hits >= 2) return true;
   const rest = d
-    .replace(new RegExp(stem.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "giu"), " ")
-    .replace(/(—|-|–)?\s*(bu|это|is)\s+/gi, " ")
+    .replace(re, " ")
+    .replace(/(\u2014|-|\u2013)?\s*(bu|это|is)\s+/gi, " ")
     .replace(/\s+/g, " ")
     .trim();
-  return rest.length < Math.max(24, Math.round(d.length * 0.35));
+  return rest.split(/\s+/).filter((w) => w.length > 2).length < 5;
 }
 
 export type RawTerm = { term?: unknown; def?: unknown; example?: unknown; ru?: unknown; en?: unknown };

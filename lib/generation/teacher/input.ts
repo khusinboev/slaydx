@@ -23,6 +23,13 @@
  * `TEACHER_LIMITS` chegaralariga siqiladi — mijoz tomonida
  * tekshirilgan qiymat server uchun DALIL emas.
  *
+ * SON maydonlari `meta` DAN O'QILMAYDI, faqat `values` dan: `extractMeta`
+ * ularga O'Z standartini qo'yadi (`duration: 45`, `grade: 8`,
+ * `termCount: 10`, `weeklyHours: 4`) va u hech qachon `undefined`
+ * bo'lmaydi — natijada REYESTR standarti («amaliy dars 90 daqiqa»,
+ * «imtihon atamalari 20 ta») hech qachon ishlamasdi va tur tanlash
+ * qisman bezakka aylanardi.
+ *
  * Server importi YO'Q (izomorf: formadan ham chaqiriladi).
  */
 import type { FormValues } from "../../types";
@@ -191,21 +198,21 @@ export function teacherInputFromValues(meta: DocMeta, values: FormValues, kind: 
   /* ── dars rejasi: tur chegaralari reyestrdan ── */
   const lessonSpec = kind === "lesson" ? (teacherTypeOf("lesson", type) as LessonTypeSpec) : null;
   const duration = lessonSpec
-    ? Math.max(TEACHER_LIMITS.durationMin, Math.min(TEACHER_LIMITS.durationMax, nearest(lessonSpec.limits.durations, values.duration ?? meta.duration, lessonSpec.limits.durationDefault)))
-    : num(values.duration ?? meta.duration, 45, TEACHER_LIMITS.durationMin, TEACHER_LIMITS.durationMax);
+    ? Math.max(TEACHER_LIMITS.durationMin, Math.min(TEACHER_LIMITS.durationMax, nearest(lessonSpec.limits.durations, values.duration, lessonSpec.limits.durationDefault)))
+    : num(values.duration, 45, TEACHER_LIMITS.durationMin, TEACHER_LIMITS.durationMax);
   const stageCount = lessonSpec
     ? num(values.stageCount, lessonSpec.limits.stagesDefault, lessonSpec.limits.stages[0], lessonSpec.limits.stages[1])
     : num(values.stageCount, 6, TEACHER_LIMITS.stagesMin, TEACHER_LIMITS.stagesMax);
 
   /* ── xarita: soatlar. `totalHours` haftalikdan kam bo'lolmaydi ── */
-  const weeklyHours = num(values.weeklyHours ?? meta.weeklyHours, 4, 1, TEACHER_LIMITS.weeklyHoursMax);
-  const totalHours = num(values.totalHours ?? meta.totalHours, 136, weeklyHours, TEACHER_LIMITS.totalHoursMax);
+  const weeklyHours = num(values.weeklyHours, 4, 1, TEACHER_LIMITS.weeklyHoursMax);
+  const totalHours = num(values.totalHours, 136, weeklyHours, TEACHER_LIMITS.totalHoursMax);
 
   /* ── glossariy: atama soni va tarjima ustunlari turdan ── */
   const glossarySpec = kind === "glossary" ? (teacherTypeOf("glossary", type) as GlossaryTypeSpec) : null;
   const termCount = glossarySpec
-    ? num(values.termCount ?? meta.termCount, glossarySpec.limits.termsDefault, glossarySpec.limits.termsMin, TEACHER_LIMITS.termsMax)
-    : num(values.termCount ?? meta.termCount, 10, TEACHER_LIMITS.termsMin, TEACHER_LIMITS.termsMax);
+    ? num(values.termCount, glossarySpec.limits.termsDefault, glossarySpec.limits.termsMin, TEACHER_LIMITS.termsMax)
+    : num(values.termCount, 10, TEACHER_LIMITS.termsMin, TEACHER_LIMITS.termsMax);
   /*
    * Tarjima ustunlari FAQAT turning ruxsat etganlari: `fan-lugati` da
    * `translationLangs: ["ru","en"]` yuborilsa ham jadval kengaymaydi —
@@ -232,7 +239,7 @@ export function teacherInputFromValues(meta: DocMeta, values: FormValues, kind: 
     institution: str(values.university ?? meta.university, 200),
     author: str(values.author ?? meta.author, 160),
     approver: str(values.approver, 160),
-    grade: num(values.grade ?? meta.grade, 0, 0, 11),
+    grade: num(values.grade, 0, 0, 11),
     gradeLetter: gradeLetterOf(values.gradeLetter),
     date: isoDate(values.date),
     extra: text(values.extra ?? meta.extra, TEACHER_LIMITS.extraChars),
