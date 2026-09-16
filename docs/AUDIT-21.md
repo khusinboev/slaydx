@@ -143,3 +143,98 @@ proplarsiz yozish · bo'sh «Media» bo'limini ko'rsatish.
    kabi `modes` kerakmi?
 6. `FieldKind` dagi `toggle` va `file` HECH QAYERDA chizilmaydi (o'lik
    qiymatlar) — o'chirilsinmi yoki `FieldBlock` ga qo'shilsinmi?
+
+### WP-A — krossvord dvigateli ✅ (2026-09-16…17)
+
+Ikki bosqichda: avval R0 dan MUSTAQIL qatlamlar (grid/svg/input/prompts/
+qoidalar — 4 kommit), keyin R0 substrati kelgach shartnomaga moslash va
+dvigatelning o'zi (3 kommit). Jami **85 test, 31 mutatsiya o'ldirilgan**,
+`tsc`/eslint toza.
+
+**`buildCrosswordDoc(meta, values, opts: CrosswordBuildOpts) → Promise<GameBuilt | null>`**
+(`GameBuilder` shartnomasi + `buildFigures`/`sourceTextOf`/`seed` seam lari).
+Bo'lim id lari SHARTNOMA: **`grid · across · down · answers`**.
+
+| Fayl | Nima | Testlar | Mutatsiya |
+|---|---|---|---|
+| `games/crossword/grid.ts` | `placeWords` — sof greedy + backtracking, harf→katak, raqamlash, ramka kesish, `autoGridSize`, determinizm | `crossword-grid` 22 | 7/7 |
+| `games/crossword/svg.ts` | to'r SVG i mm o'lchovda (bo'sh + javob), `figurePng` uchun | `crossword-svg` 10 | 5/5 |
+| `games/crossword/input.ts` · `prompts.ts` | forma → `CrosswordInput` (reyestr chegaralari, avtomat to'r); LLM faqat so'z+ta'rif, tur qoidalari reyestrdan | `crossword-engine` | 6/6 |
+| `games/crossword/engine.ts` | `buildCrosswordDoc`, bo'limlar, figure o'rami, qo'shimcha so'rov, `delivered` | `crossword-engine` 35 | 12/12 |
+| `games/crossword/polish.ts` | ta'rifni qayta yozish (so'z daxlsiz), `userNeeds` | (yuqoridagi) | (yuqoridagi) |
+| `games/crossword/review.ts` | 10 qoida + baholovchi + `rescore` | `crossword-review` 18 | 7/7 |
+| `games/engine.ts` | dispatch: krossvord → shu dvigatel, flesh kartalar → dinamik import | (yuqoridagi) | (yuqoridagi) |
+
+**Qarorlar va sabablari**
+
+- **Harf → katak** (§6 4-savolga javob, egasining qarori): `oʻ`/`gʻ` —
+  BITTA katak (`o'`, `o‘`, `o’`, `ʼ` → `oʻ` normalizatsiya), `sh`/`ch`/
+  `ng` — ikki katak; tutuq belgisi (`sanʼat`) alifbo harfi emas, katak
+  olmaydi. So'z uzunligi KATAKDA o'lchanadi (`OʻSIMLIK` = 7).
+- **Backtracking uch qatlam**: navbatga qaytarish (sweep) → qurbon so'zni
+  olib tashlab qayta joylash (chuqurlik 1, natija `validatePlacement`
+  bilan tekshiriladi) → seeded restart (16 tartib). To'liq DFS ataylab
+  olinmadi (20 so'zda eksponensial); namuna lug'atda 20/20 so'z joylashdi,
+  18×19 to'r, 21 kesishma, 2 ms.
+- **To'r RAMKA bo'yicha kesiladi** — «13–21 toq» qoidasi yumshatildi:
+  5 so'zli krossvord 10×11 bo'lib chiqadi va shu holda bosiladi; buyurtma
+  o'lchami (`gridSize`) endi YUQORI chegara. `gridSize` hisobot bandi ham
+  shu mantiqda (kichik — yashil, katta — nuqson).
+- **«Qora katak»**: standart ko'rinishda so'zga tegishli bo'lmagan katak
+  CHIZILMAYDI (bizniki siyrak criss-cross, 30–40 % to'la; 21×21 ramkaning
+  60 % ini qora bo'yash betni qoraytiradi). Zich ko'rinish — `blackCells`
+  opsiyasi (ikkala yo'l ham testda).
+- **Model geometriya bermaydi**: promptda koordinata so'ralmaydi
+  («YOU DO NOT BUILD THE GRID») — modeldan kelgan to'r ko'pincha o'zi
+  bilan zid bo'ladi, baribir qayta tekshiriladi.
+- **Ta'rif javobni oshkor qilishi** — qoida bilan tutiladi (o'zak
+  solishtiruvi, agglutinativ shakllar ham), baholovchiga qoldirilmadi.
+
+**Testda ushlangan nuqson**: katak o'lchami yuqoriga yaxlitlanganda 19
+ustunli to'r 170,05 mm bo'lib bosma chegaradan chiqardi → pastga
+yaxlitlash.
+
+**Ko'z bilan ko'rish**: 12 so'zli krossvord → 15×17 to'r → `figurePng`
+1854×1641 px @300 dpi (bo'sh va javob varianti) ko'rildi — raqamlar,
+harflar, `Oʻ` bitta katakda to'g'ri chiqdi.
+
+**R0 shartnomasiga moslash** (2026-09-17): `grid.ts` endi R0 tiplarining
+O'ZINI qaytaradi (`CrosswordWord`/`CrosswordGrid`/`CrosswordDropped`,
+`clues` → `CrosswordClue`), adapter qatlami ATAYLAB yozilmadi — ikkinchi
+shakl bo'lsa maket, hisobot va ko'ruvchi ertami-kechmi boshqa-boshqa
+kataklarni ko'rardi. `answer` — KATAK harflari ro'yxati; satr kerak
+bo'lganda bitta joyda (`wordText`) aylantiriladi. Chegaralar
+`GAME_LIMITS` dan, tur qoidalari va baholovchi mezonlari reyestrdan.
+
+**Egasining qarorlari bajarildi**: qora katak YO'Q (`blackCells: false`
+standart, zich ko'rinish opsiya bo'lib qoldi); tutuq belgisi tashlanadi
+(`sanʼat` → `SANAT`); `gridSize` AVTOMAT (`autoGridSize(wordCount)` →
+`normalizeGridSize`), formada maydon yo'q.
+
+**Dvigatel qarorlari**:
+- qayta urinish TIL darajasida: sig'magan so'z o'rniga qisqaroq so'z
+  so'raladi (BIR marta), to'r esa boshidan, to'liq ro'yxat bilan qayta
+  quriladi — eski to'rga yamoq qo'yilsa ixchamlik yo'qolardi;
+- `trimTo` — va'dadan ortiq so'z kesiladi (10 so'z so'ragan o'qituvchi
+  13 so'zli to'r olmasin);
+- javoblar bo'limida rasm BILAN BIRGA raqam→so'z ro'yxati: `sharp`
+  yiqilsa ham javoblar yo'qolmaydi;
+- sayqal TA'RIFNI qayta yozadi, SO'ZNI EMAS — aks holda to'r, raqamlar
+  va javob varag'i qaytadan quriladi va bu «sayqal» emas, yangi
+  krossvord bo'lardi; to'r bandlari hisobotda `manual` deb belgilanadi;
+- hisobot qoidalari `GAME_RULE_IDS.crossword` (8) + WP-A ning 2 ta
+  qo'shimchasi: `clueNotContainsAnswer` (eng qimmat nuqson, o'zak
+  solishtiruvi bilan deterministik tutiladi) va `gridConnected`
+  (baholovchining `gridConnectedness` mezonini faktga aylantiradi).
+
+**Jonli tekshiruv** (mock LLM, haqiqiy `figurePng`): «Fotosintez» mavzusi,
+10 so'z → 14×16 to'r, 9 kesishma, 0 tashlangan, **ball 97**, 10/10 qoida
+yashil; bo'sh va javob to'rlari 1748×1535 px @300 dpi — ko'z bilan ko'rildi
+(raqamlar, harflar, `Oʻ` bitta katakda).
+
+**Lead uchun ochiq bandlar**: (1) `GAME_RULE_IDS.crossword` ga
+`clueNotContainsAnswer` va `gridConnected` qo'shilsin (`registry.ts` WP-A
+egaligida emas — hozircha `review.ts` ro'yxatni reyestr + qo'shimchalar
+sifatida quradi); (2) `games/layout.ts planGame` javoblar bo'limini YANGI
+BETDAN boshlashi kerak (`answerSeparate` reyestrda `true`); (3) jonli
+sinov (`npm run live`) va LibreOffice ko'zi — R bosqichida.
