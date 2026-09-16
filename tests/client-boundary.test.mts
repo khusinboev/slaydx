@@ -31,10 +31,15 @@ function walk(entry: string): { chain: string[]; server: string | null } {
     seen.set(file, chain);
     const src = readFileSync(file, "utf8");
     if (/^import\s+["']server-only["']/m.test(src) || file.includes(`${path.sep}lib${path.sep}server${path.sep}`)) return { chain, server: file };
+    const specs: string[] = [];
     for (const m of src.matchAll(/^import\s+(?:type\s+)?[^;]*?from\s+["']([^"']+)["']|^import\s+["']([^"']+)["']/gm)) {
-      const spec = m[1] ?? m[2]!;
       // `import type` faqat tiplar — bandlga kirmaydi.
       if (/^import\s+type\s/.test(m[0])) continue;
+      specs.push(m[1] ?? m[2]!);
+    }
+    // Dinamik import ham bandlga kiradi (Next chegara zanjiri `cache.ts` → `db.ts` ni aynan shu orqali ko'rdi).
+    for (const m of src.matchAll(/\bimport\(\s*["']([^"']+)["']\s*\)/g)) specs.push(m[1]!);
+    for (const spec of specs) {
       const next = resolveImport(file, spec);
       if (next) stack.push([next, [...chain, next]]);
     }
