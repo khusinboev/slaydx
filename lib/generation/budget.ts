@@ -100,6 +100,31 @@ export const ARTICLE_PER_PAGE_MS = 16_000;
 export const ARTICLE_POLISH_MS = 90_000;
 
 /**
+ * Talaba ishi byudjeti (Talaba ishlari 2, AUDIT-19): `150 000 + 9 000 ×
+ * bet + 90 000` (sayqal) — 45 bet ≈ 645 s, `WORKER_JOB_TIMEOUT_MS`
+ * (660 s, compose) ichida.
+ *
+ * Tayanch katta, chunki bet sonidan qat'i nazar: manba qidiruv (lex.uz +
+ * Books + OpenAlex), reja, kirish (7 element, yo'qolgani qayta so'raladi),
+ * xulosa, iqtibos tekshiruvi va tayyorlik hisoboti. Bet boshiga 9 s —
+ * paragraflar 3 parallel yoziladi (`mapPool(3)`), har biri ≤90 s.
+ *
+ * X-3: 40–45 betlik paketda avto-sayqalga vaqt qolmaydi — dvigatel uni
+ * O'ZI o'tkazib yuboradi (`WORK_POLISH_MAX_PAGES`) va hisobotda
+ * `polish.skipped: budget` izohi qoladi; foydalanuvchi natija sahifasida
+ * «Hammasini tuzatish» bilan qo'lda ishga tushiradi.
+ */
+export const WORK_BASE_MS = 150_000;
+export const WORK_PER_PAGE_MS = 9_000;
+export const WORK_POLISH_MS = 90_000;
+
+/** @param pages Paketning o'rtacha beti (`pagesMid("25-30")` → 28). */
+export function workBudgetMs(pages: number): number {
+  const p = Math.max(1, Number.isFinite(pages) ? pages : 12);
+  return WORK_BASE_MS + WORK_POLISH_MS + Math.round(p) * WORK_PER_PAGE_MS;
+}
+
+/**
  * @param cap Yuqori chegara (`WORKER_JOB_TIMEOUT_MS`). Byudjet undan
  *   oshmaydi — operator bitta o'zgaruvchi bilan hamma narsani cheklay
  *   olishi kerak.

@@ -9,6 +9,7 @@ import type { SlidePurpose } from "./slide-purpose";
 import type { SlideResearch } from "./slide-research";
 import type { ResumeModel } from "./resume/model";
 import type { ArticleModel, ArticleTypeId, CiteStyle, PublicationProfileId, SelectableFigureKind } from "./article/types";
+import type { WorkModel } from "./work/types";
 import type { ResumePaletteId, ResumeTemplateId } from "./resume/templates";
 
 export type GenImage = {
@@ -332,6 +333,14 @@ export type AcademicDoc = {
    * `legacyArticleModel(doc)` bilan o'qiladi.
    */
   article?: ArticleModel;
+  /**
+   * Talaba ishlari 2 (AUDIT-19): kurs ishi / referat / mustaqil ish
+   * modeli — janr/tur/fan profili, titul maydonlari, bob→paragraf
+   * daraxti, kirish elementlari, tekshirilgan manbalar, hisobot. Matn
+   * `sections` da TEKIS qoladi (bob = `ch1` sarlavha bo'limi, paragraf
+   * = `ch1.1`); tartib/raqamlash `work/layout.ts planWork` da.
+   */
+  work?: WorkModel;
   images?: GenImage[];
   imagePrompt?: string;
   imageScene?: string;
