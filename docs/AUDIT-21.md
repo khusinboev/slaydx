@@ -692,3 +692,12 @@ shoxini olib tashlash.
    chizmaydi, lekin hisobotdagi `fix` maydonlari saqlanadi (sayqal
    ularni o'qiydi). Kelajakda «bitta bandni tuzat» kerak bo'lsa u
    baribir butun `spec` ni qayta yozadi — qaror hujjatlashtirildi.
+- **R (lead) — jonli, smoke, ko'z, yakun**: WP-B (`49a8f9b`), WP-D (`0453031`) main da. Jonli 3/3: krossvord (10/10 so'z, 15×14, 3 bet), flesh kartalar (10 karta, 4 bet — 2 old + 2 orqa), infografika (PNG 2480×3507). LibreOffice ko'z: krossvord — to'r + raqamlar + «1-rasm» to'g'ri, savollar jadvali bitta ulkan qator bo'lib keyingi betga o'tardi → har savol o'z qatorida (`9c5e8fa`), ko'ruvchi shu tuzilmaga (`5016c03`, paritet); kartalar — 2×4, kesish chiziqlari, old/orqa oynali; infografika — jarayon turi, ikonli kartalar. **Chromium smoke** (dev inline worker): uchala vosita forma → natija → hisobot (100/100/97, 16/11/16 band) → DOCX/PNG; topilgan nuqsonlar: (1) `games/engine.ts` flashcards o'zgaruvchi yo'lli `import()` Next bundlida jimgina null → statik import (`2ce03d8`); (2) flashcards byudjeti 90 s < dvigatel zaxiralari 95 s → yozishga vaqt qolmay «0 karta» → 150 s + 2 s/karta, jim break ogohlantiradi (`1614a1f`); (3) `/uz/infographic` 404 — slug `infografika` (skript); (4) test hisobi 402 — lokal topup. «Hammasini tuzatish» 100 ballda o'chiq/`nothing` — kutilgan. To'plamlar: unit 2 355/2 357 (2 fal.ai), ko'ruvchi 212, UI 234, lint/tsc toza. Eslatma: `WORKER_INLINE=true` — dev server ishlarni o'zi bajaradi, kod o'zgarganda dev server qayta ishga tushirilishi kerak (alohida worker ortiqcha).
+
+## 6. Ochiq bandlar
+- Karta o'lchami 92×65 mm (A7 EMAS — portret A4 da 2×4 geometrik chegara); A4 albom 4×2 variant keyin.
+- Flesh kartalarda fayl rejimi yo'q (`modes`); rasm–so'z karta turi keyin.
+- Infografika: A3 = A4 masshtabi; PDF o'rami yo'q (faqat PNG); `textWordsMax` 160; til uz/ru/en; bandma-band «Tuzatish» 422 (faqat avto-sayqal/«Hammasini tuzatish»).
+- Krossvord: rasmli krossvord keyin; interaktiv o'yinchi tomoni — AUDIT-22.
+- `FieldKind` `toggle`/`file` chizilmaydi (o'lik qiymatlar) — tozalash.
+- Anthropic hisobi tugagan — baholovchi Gemini (100 ball moyilligi).
