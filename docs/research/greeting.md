@@ -118,9 +118,8 @@ tafsilot ("sizning o'sha mashhur kulgingizni eslayman" kabi) taqiqlanadi.
 
 1. `occasion` erkin matn (raqobatchidagidek) yoki oldindan belgilangan
    ro'yxat (tug'ilgan kun/8-mart/Navro'z/Ustozlar kuni/bitiruv/boshqa)
-   bo'lsinmi — ro'yxat bo'lsa janr-xos iboralar promptga aniqroq
-   ulanadi, lekin foydalanuvchi tanlamagan bayramlar uchun moslashuvchanlik
-   kamayadi.
+   bo'lsinmi — ro'yxat bo'lsa janr-xos iboralar promptga aniqroq ulanadi,
+   lekin tanlanmagan bayramlar uchun moslashuvchanlik kamayadi.
 2. Standart ton "siz" (hurmat) — agar `relationship`="do'st"/"opa-uka"
    bo'lsa "sen" ga o'tish kerakmi, yoki xavfsizroq variant sifatida
    doim "siz" saqlansinmi (madaniy odob nuqtai nazaridan xato qilmaslik
