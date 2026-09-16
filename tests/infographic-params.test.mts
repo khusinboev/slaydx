@@ -1,92 +1,145 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { INFOGRAPHIC_FORM_FIELDS, INFOGRAPHIC_PARAMS, type InfographicParamImpact } from "../lib/generation/infographic-params.ts";
+import { TOOL_BY_ID, priceFor } from "../lib/tools.ts";
 import type { FormValues } from "../lib/types.ts";
-import type { DocMeta } from "../lib/generation/types.ts";
+import type { LlmRole } from "../lib/generation/llm-roles.ts";
+import { extractMeta } from "../lib/generation/meta.ts";
+import { budgetFor } from "../lib/generation/budget.ts";
+import { INFOGRAPHIC_FORM_FIELDS, INFOGRAPHIC_PARAMS, type InfographicParamImpact } from "../lib/generation/infographic-params.ts";
+import { buildInfographicArtifact } from "../lib/generation/infographic/engine.ts";
+import { infographicInputFromValues } from "../lib/generation/infographic/input.ts";
+import { infographicCtx, infographicPrompt, infographicSystemPrompt } from "../lib/generation/infographic/prompts.ts";
+import { infographicTypeOf } from "../lib/generation/infographic/registry.ts";
+import { layoutInfographic } from "../lib/generation/infographic/layout.ts";
+import { renderInfographic } from "../lib/generation/infographic/svg.ts";
+import { paletteOf } from "../lib/generation/infographic/types.ts";
 
 /**
- * «BEZAK MAYDON YO'Q» reyestri — infografika (AUDIT-21 R0).
+ * INFOGRAFIKA PARAMETR SHARTNOMASI — «bezak maydon yo'q» kafolati
+ * (mahsulot egasi qarori 14). `tests/essay-params.test.mts` naqshi:
+ * reyestrdagi har parametr uchun `probeA`/`probeB` bilan differensial
+ * zond va e'lon qilingan HAR ta'sirda A ≠ B.
  *
- * `tests/game-params.test.mts` naqshi. Infografikaning kirish ko'prigi
- * (`infographic/input.ts infographicInputFromValues`) WP-C da yoziladi —
- * hozircha yo'q, shuning uchun DIFFERENSIAL zond hali dinamik import
- * bilan sinab ko'riladi va topilmasa HAMMA parametr o'tkazib yuboriladi
- * (`ENGINE_NOT_WIRED`). Reyestrning O'ZI (id, impacts, probe juftligi)
- * baribir TO'LIQ sinaladi — bu WP-C dan mustaqil.
+ * `layout` ta'siri CHIZILGAN plakat (SVG satri) bilan o'lchanadi,
+ * geometriya bilan emas: maket ataylab RANGSIZ (`layout.ts` izohi), ya'ni
+ * palitra unga tegmaydi — lekin foydalanuvchi ko'radigan PLAKAT
+ * o'zgaradi. Zond foydalanuvchi ko'rgan narsani o'lchashi kerak.
+ *
+ * Mutatsiya: reyestrga hech narsaga ta'sir qilmaydigan maydon qo'shilsa
+ * yoki mavjud maydon promptdan/maketdan olib tashlansa — zond qizaradi.
  */
 
-test("har parametr unikal id ga ega va shakli to'g'ri", () => {
-  const ids = INFOGRAPHIC_PARAMS.map((p) => p.id);
-  assert.equal(new Set(ids).size, ids.length, `takroriy id: ${ids.filter((v, i) => ids.indexOf(v) !== i).join(", ")}`);
-  assert.deepEqual(INFOGRAPHIC_FORM_FIELDS, ids);
-  for (const p of INFOGRAPHIC_PARAMS) {
-    assert.ok(/^[a-zA-Z][a-zA-Z0-9]*$/.test(p.id), `${p.id}: forma maydon nomi shakli`);
-    assert.notEqual(p.probeA, p.probeB, `${p.id}: zond juftligi bir xil — farqni o'lchab bo'lmaydi`);
-  }
-  // Forma reyestrdagi HAMMA maydonni chizadi: mavzu, tur, blok soni, palitra, o'lcham, til, qo'shimcha.
-  assert.ok(ids.length >= 6, `${ids.length} parametr — juda kam`);
-  for (const id of ["topic", "infographicType", "blockCount", "palette", "size", "language"]) assert.ok(ids.includes(id), `«${id}» reyestrda yo'q`);
-});
+const tool = TOOL_BY_ID.infographic;
 
-test("har parametrning TA'SIRI bor; narx HECH BIR parametrga bog'liq emas", () => {
-  for (const p of INFOGRAPHIC_PARAMS) {
-    assert.ok(p.impacts.length > 0, `${p.id}: «bezak maydon» — impacts bo'sh`);
-    assert.equal(new Set(p.impacts).size, p.impacts.length, `${p.id}: takroriy impact`);
-  }
-  const impacts = new Set<string>(INFOGRAPHIC_PARAMS.flatMap((p) => p.impacts as readonly string[]));
-  assert.ok(!impacts.has("price"), "MUTATSIYA: biror parametr narxga ta'sir qilsa, tekis 2 000 va'dasi buziladi");
-  const KNOWN: readonly InfographicParamImpact[] = ["prompt", "structure", "layout", "palette", "review", "language", "budget"];
-  for (const p of INFOGRAPHIC_PARAMS) for (const im of p.impacts) assert.ok((KNOWN as readonly string[]).includes(im), `${p.id}: noma'lum impact ${im}`);
-});
+const BASE: FormValues = {
+  topic: "Suv aylanishi",
+  infographicType: "list",
+  blockCount: 3,
+  palette: "indigo",
+  size: "A4",
+  language: "uz",
+  extra: "",
+};
 
-test("`extra` — MA'LUMOT kanali (halollik qoidasi), shunchaki uslub emas", () => {
-  const extra = INFOGRAPHIC_PARAMS.find((p) => p.id === "extra");
-  assert.ok(extra, "«extra» reyestrda yo'q");
-  assert.ok(extra!.impacts.includes("review"), "MUTATSIYA: `review` ta'siri olib tashlansa, foydalanuvchi raqami halollik qoidasiga bog'lanmay qolardi");
-});
-
-test("`blockCount` probeA/probeB IKKALA turda ham ruxsat etilgan (tur chegarasidan qat'i nazar farq o'lchanadi)", () => {
-  const bc = INFOGRAPHIC_PARAMS.find((p) => p.id === "blockCount")!;
-  // 3 va 6 — barcha 7 turning [min,max] oralig'iga tushadi (registry.ts).
-  assert.equal(bc.probeA, 3);
-  assert.equal(bc.probeB, 6);
-});
+/* ────────────────────────── stub ────────────────────────── */
 
 /*
- * `infographicInputFromValues` hali WP-C da yoziladi — yo'l O'ZGARUVCHIDA
- * (`games/engine.ts`/`game-params.test.mts` naqshi), STATIK `import()`
- * emas: aks holda `tsc` fayl yo'qligida butun to'plamni yiqitardi.
+ * Javob ATAYLAB `source` bilan: manba qatori plakatning YAGONA
+ * tarjima qilinadigan joyi (`Manba:` / `Источник:`), ya'ni `language`
+ * ning maketga ta'siri aynan shu qatorda ko'rinadi. `stat` esa
+ * `extra` zondining hisobotga ta'sirini ochadi: raqam foydalanuvchi
+ * ma'lumotida bo'lsa `sourceGrounded` yashil, bo'lmasa qizil.
  */
-async function infographicInputFromValues(): Promise<((meta: DocMeta, values: FormValues) => unknown) | null> {
-  try {
-    const path = "../lib/generation/infographic/input.ts";
-    const mod = (await import(path)) as { infographicInputFromValues?: (meta: DocMeta, values: FormValues) => unknown };
-    return mod.infographicInputFromValues ?? null;
-  } catch {
-    return null;
-  }
+const stubComplete = (async (role: LlmRole, _system: string, user: string) => {
+  if (role === "judge") return null;
+  const m = /^BLOCKS: (\d+)$/m.exec(user);
+  const n = m ? Number(m[1]) : 3;
+  return {
+    text: JSON.stringify({
+      title: `${/^TOPIC: (.+)$/m.exec(user)?.[1] ?? "Plakat"} — asosiy jihatlari`,
+      subtitle: "Chap tomon — O'ng tomon",
+      source: "6-sinf darsligi",
+      blocks: Array.from({ length: n }, (_, i) => ({
+        icon: "bulb",
+        heading: `Bosqich ${i + 1}`,
+        text: "Bu blokda mavzuga oid aniq bir fakt qisqa bayon qilinadi.",
+        order: i + 1,
+        when: String(1991 + i),
+        side: i % 2 === 0 ? "left" : "right",
+        role: i % 2 === 0 ? "cause" : "effect",
+        stat: { value: "71%", label: "ulush" },
+      })),
+    }),
+  };
+}) as never;
+
+/* ────────────────────────── zond ────────────────────────── */
+
+type Probe = Record<InfographicParamImpact, string>;
+
+async function probe(values: FormValues): Promise<Probe> {
+  const v = { ...BASE, ...values };
+  const meta = extractMeta(tool, v);
+  const input = infographicInputFromValues(meta, v);
+  const ctx = infographicCtx(infographicTypeOf(input.type), input);
+  const built = await buildInfographicArtifact(tool, v, { deadline: Date.now() + 180_000, complete: stubComplete, judge: false, polish: false });
+  assert.ok(built, "zond: plakat qurilishi kerak");
+  const spec = built!.doc.infographic!.spec;
+  const layout = layoutInfographic(spec);
+  return {
+    prompt: [infographicSystemPrompt(ctx), infographicPrompt(ctx)].join("\n"),
+    structure: JSON.stringify({ type: spec.type, n: spec.blocks.length, fields: spec.blocks.map((b) => [b.order, b.side, b.role, b.when, b.stat?.value]) }),
+    layout: renderInfographic(layout, paletteOf(spec.palette)),
+    palette: spec.palette,
+    review: JSON.stringify((built!.doc.infographic!.review?.checks ?? []).filter((c) => !c.id.startsWith("judge:")).map((c) => [c.id, c.level, c.detail])),
+    language: `${input.language}/${built!.doc.meta.language}/${spec.language}`,
+    budget: String(budgetFor(tool, v, 600_000)),
+  };
 }
 
-const FAKE_META = {} as unknown as DocMeta;
-const ENGINE_NOT_WIRED: string[] = [];
+/* ────────────────────────── testlar ────────────────────────── */
 
-test("differensial zond: probeA/probeB natijasi FARQ qiladi — WP-C ulangan bo'lsa sinaladi, bo'lmasa ANIQ o'tkazib yuboriladi", async () => {
-  const input = await infographicInputFromValues();
-  for (const p of INFOGRAPHIC_PARAMS) {
-    if (!input) {
-      ENGINE_NOT_WIRED.push(p.id);
-      continue;
-    }
-    const base: FormValues = { ...(p.probeWith as FormValues | undefined) };
-    const valuesA: FormValues = { ...base, [p.id]: p.probeA };
-    const valuesB: FormValues = { ...base, [p.id]: p.probeB };
-    assert.notDeepEqual(input(FAKE_META, valuesA), input(FAKE_META, valuesB), `${p.id}: probeA/probeB bir xil kiritma berdi`);
+test("reyestr: 7 parametr, forma qamrovi ro'yxati bilan mos", () => {
+  assert.equal(INFOGRAPHIC_PARAMS.length, 7);
+  assert.deepEqual(INFOGRAPHIC_FORM_FIELDS, INFOGRAPHIC_PARAMS.map((p) => p.id));
+  assert.equal(new Set(INFOGRAPHIC_FORM_FIELDS).size, INFOGRAPHIC_PARAMS.length, "id lar takrorlanmasin");
+});
+
+test("reyestr: formadagi HAR maydon reyestrda e'lon qilingan (va aksincha)", () => {
+  const formFields = tool.fields.map((f) => f.name);
+  const declared = new Set(INFOGRAPHIC_FORM_FIELDS);
+  for (const name of formFields) {
+    assert.ok(declared.has(name), `«${name}» formada bor, lekin reyestrda yo'q — zond uni tekshirmaydi`);
   }
-  if (!input) {
-    // WP-C hali yo'q — HAMMA parametr o'tkazib yuborilgan bo'lishi kerak (yashirin muvaffaqiyat emas).
-    assert.equal(ENGINE_NOT_WIRED.length, INFOGRAPHIC_PARAMS.length, "o'tkazib yuborilganlar soni reyestr soniga teng bo'lishi kerak");
-    console.log(`   [infographic-params] WP-C hali ulanmagan — o'tkazib yuborildi: ${ENGINE_NOT_WIRED.join(", ")}`);
-  } else {
-    assert.equal(ENGINE_NOT_WIRED.length, 0, "WP-C ulangan — hech narsa o'tkazib yuborilmasligi kerak");
+  // `topic` va `extra` `StandardForm` ning umumiy maydonlari — `fields` da emas.
+  for (const id of INFOGRAPHIC_FORM_FIELDS) {
+    assert.ok(formFields.includes(id) || id === "topic" || id === "extra", `«${id}» reyestrda bor, lekin formada chizilmaydi`);
+  }
+});
+
+test("differensial zond: reyestrdagi HAR parametr e'lon qilingan ta'sirini beradi", async () => {
+  const failures: string[] = [];
+  for (const p of INFOGRAPHIC_PARAMS) {
+    const base = p.probeWith ?? {};
+    const a = await probe({ ...base, [p.id]: p.probeA });
+    const b = await probe({ ...base, [p.id]: p.probeB });
+    for (const impact of p.impacts) {
+      if (a[impact] === b[impact]) failures.push(`${p.id} → ${impact}`);
+    }
+  }
+  assert.deepEqual(failures, [], `bezak parametrlar (A va B bir xil chiqdi):\n  ${failures.join("\n  ")}`);
+});
+
+test("zond maydonlari o'lik emas: har ta'sir kamida bitta parametrda e'lon qilingan", () => {
+  const declared = new Set(INFOGRAPHIC_PARAMS.flatMap((p) => p.impacts));
+  for (const impact of ["prompt", "structure", "layout", "palette", "review", "language", "budget"] as InfographicParamImpact[]) {
+    assert.ok(declared.has(impact), `${impact}: hech bir parametr bu ta'sirni e'lon qilmagan — zond o'lik`);
+  }
+});
+
+test("narx: parametrlar narxga TA'SIR QILMAYDI (tekis 2 000)", () => {
+  assert.equal(priceFor(tool, BASE), 2000);
+  for (const p of INFOGRAPHIC_PARAMS) {
+    assert.equal(priceFor(tool, { ...BASE, [p.id]: p.probeB }), 2000, `${p.id} narxni o'zgartirdi`);
   }
 });

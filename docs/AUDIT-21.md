@@ -361,3 +361,106 @@ yangi test fayli).
    ichida, PNG chizilgandan keyin) — bu fayl faqat FUNKSIYANI tayyorlab
    qo'ydi va `tests/game-wiring.test.mts` unga TO'G'RIDAN-TO'G'RI
    (WP-C mavjud bo'lmagan holatda) test yozdi.
+
+### WP-C — Infografika (opus, 2026-09-17) ✅
+
+R0 ning STUB dvigateli (`null`) to'liq quvurga aylandi: forma →
+`InfographicSpec` (LLM) → maket → rangli SVG → PNG 300 dpi → hisobot →
+avto-sayqal → `packImages`. R0 shartnomasi (`buildInfographicArtifact`
+imzosi va `null` xulqi) O'ZGARMADI, `index.ts` shoxi tegilmadi.
+
+**Ikonlar** (`scripts/gen-icons.mts` → `infographic/icons.ts`,
+`data/ICONS-LICENSE.md`): `@tabler/icons@3.46.0` DEV bog'liqlik, build
+vaqtida 41 ikonning 24×24 `d` satrlari ko'chiriladi — runtime bog'liqlik
+YO'Q (paket 50 MB va u JS moduli emas, SVG FAYLLAR to'plami; undan
+runtime da o'qish `fs` demakdir va `infographic/svg.ts` izomorf bo'lmay
+qolardi). **R0 ochiq savoli 3 yopildi:** `ICONS` dagi 41 nomdan 40 tasi
+Tabler da AYNI nom bilan bor, yagona farq — `sigma` (Tabler da `sum`).
+`types.ts` o'zgartirilmadi: `ICONS` PROMPTGA tushadi va model uchun
+«sigma» yig'indi belgisi, «sum» esa pul summasi bilan adashtiradi;
+moslik generatorning `ALIASES` jadvalida.
+
+**Maket** (`infographic/layout.ts`) — SOF, IZOMORF va RANGSIZ. Birlik
+MILLIMETR (`viewBox="0 0 210 297"`): hisobot §3 jadvali mm da yozilgan
+va `figurePng({widthMm})` ham mm kutadi. A3 — A4 ning MASSHTABI
+(k = 297/210): plakat devorga osiladi, kattaroq varaqda shrift ham
+kattalashishi kerak. Yetti tur: ro'yxat, jarayon (raqamli zanjir),
+taqqoslash (2 ustun, juft qatorlar), statistika (katta raqam),
+xronologiya (vertikal chiziq + sana), sabab-natija (2 guruh + markaziy
+o'q), tuzilma (ildiz + shox + ikki daraja). `overflow[]` — `noOverflow`
+qoidasining manbasi. TIL maketga TA'SIR QILADI: manba prefiksi va
+sabab/natija ustun nomlari uz/ru/en (noma'lum til — INGLIZCHA), RTL
+tillarda butun maket ko'zguda aks etadi.
+
+**SVG** (`infographic/svg.ts`) — **tadqiqot §6 ochiq savoli 4 shu tarafga
+hal qilindi:** `figures/svg.ts` (monoxrom, `STROKE = "#000"` qattiq
+yozilgan) TEGILMADI, rangli chizuvchi ALOHIDA fayl. Rol → palitra
+JUFTLIGI jadvali (`fillOf`/`inkOf`) — `types.ts` da WCAG bo'yicha
+qulflangan juftliklarning yagona ijrochisi. `<svg width>` BIRLIKSIZ:
+`210mm` yozilsa librsvg zichlikni ikki marta qo'llab A4 @300 dpi ni
+2480 o'rniga 7027 px qilardi.
+
+**Dvigatel** (`engine.ts`): bir martalik qayta so'rov (faqat maket/miqdor
+bandlari uchun va faqat javob YAXSHILANSA qabul), IKKI RENDER bitta SVG
+dan — fayl 300 dpi (2480×3508), eskiz 110 dpi (≈910 px) `doc.images` ga
+`data:` URL bo'lib tushadi (300 dpi li base64 `doc_json` ga ≈1.5 MB
+qo'shardi); sayqal QABUL qilinsa plakat QAYTA CHIZILADI; `delivered`
+blok soni bo'yicha.
+
+**Hisobot** (`review.ts`) — §4 ning o'nta bandi. Halollik bandi RAQAMNI
+ajratib oladi va foydalanuvchi matnidagi raqamlar bilan solishtiradi,
+ya'ni «to'g'ri, lekin berilmagan» foiz ham rad etiladi (§5 dagi «71%
+Yer yuzasi suv» misoli). `contrast` runtime emas — band foydalanuvchiga
+«tekshirildi» deb aytadi. **Sayqal** (`polish.ts`) `runPolishWith`
+yadrosida, lekin NISHON BITTA (`spec`): plakat bloklari o'zaro bog'liq.
+
+**KO'Z SINOVI** (7 tur × A4 PNG, uch aylanish) — topilgan va tuzatilgan
+oltita nuqson:
+
+1. kartalar panjarani to'ldirib, ichida 50 mm bo'sh joy qoldirardi →
+   `cardNeed` (tabiiy balandlik) + `fitRows` (qolgan joy ORALIQQA,
+   `growMax` 1.15, guruh markazda, mazmun karta ichida vertikal markazda);
+2. 5 blokli plakatda oxirgi karta chap ustunda yolg'iz qolardi → toq
+   qator BUTUN kenglikni oladi;
+3. `compare`/`cause-effect` ustun tasmasi mazmun tepasiga qotib turar,
+   kartalar markazga tushardi (orada 40 mm bo'shliq) → tasma kartalardan
+   KEYIN, birinchi qator `y` idan chiziladi;
+4. tuzilmada shoxdan kartagacha uzun bo'sh chiziq → butun daraxt birga
+   markazlashtiriladi, katakchalar 1.6 gacha cho'ziladi;
+5. `statLabel`/`source` siyohi 28 % edi — deyarli ko'rinmasdi → 62 %;
+6. ustun tasmasining ikkinchisi yengil tint ustiga OQ matn qo'yardi
+   (1.1:1) → `accent`+`onAccent` qulflangan juftligiga.
+
+**Testlar:** `infographic-layout` 27, `infographic-svg` 13 (ikon qamrovi
++ PNG o'lchami), `infographic-engine` 19, `infographic-review` 17,
+`infographic-params` 5 (differensial zond). `npm test` 2 144 yashil,
+`tsc`/eslint toza.
+
+**Mutatsiyalar (21 ta, har biri qizardi):** `fitRows growMax` ·
+`fit().clipped` doim `false` · toq qator shoxi · A3 masshtabi `k=1` ·
+`mirror()` chaqiruvi · `order` bo'yicha saralash · `icons.ts` dan
+`sigma` · `iconPaths` fallback · `<svg width>` ga `mm` · `columnHeadAlt`
+siyohi · `textSvg` dagi `xmlEscape` · `normalizeSpec` turni modeldan
+olishi · qayta so'rov shoxi · `delivered` hisobi · eskiz 300 dpi da ·
+sayqaldan keyin qayta chizmaslik · `groundedIn` doim `true` ·
+`noOverflow` maketni qayta hisoblamasligi · `compare` ustun muvozanati ·
+`statPresent` turni tekshirmasligi · `userNeeds` manba shoxi.
+
+**Qo'shimcha:** `infographic-params.ts` ga `budget` ta'siri qo'shildi
+(`blockCount` → `infographicBudgetMs`) — R0 uni e'lon qilmagan edi va
+zondning «o'lik ta'sir yo'q» bandi qizarardi.
+
+**Ochiq savollar (WP-C dan):**
+
+1. `textWordsMax` 160 hali ham egasi tasdig'ini kutadi (R0 savoli 1).
+   WP-C da amalda sinaldi: 8 blokli A4 plakat 160 so'z bilan
+   `noOverflow` dan o'tadi, 200 so'zda esa kesiladi — ya'ni 160
+   maketning O'Z chegarasiga yaqin.
+2. Sabab-natija ustun nomlari (`Sabablar`/`Natijalar`) va manba
+   prefiksi faqat uz/ru/en da; qolgan 15 tilda INGLIZCHA chiqadi.
+   Forma hozir shu uch tilni beradi (`TARGET_LANGUAGES`), lekin
+   hisobot 18 til deb yozgan — qaysi biri to'g'ri?
+3. A3 hozir A4 ning masshtabi (matn hajmi bir xil). Egasi «A3 da
+   ko'proq blok» ni xohlaydimi (masalan 8 → 12)?
+4. PDF o'rami (bir betlik DOCX) hali yo'q — reja bo'yicha «tadqiqotdan
+   keyin»; hozir chiqish faqat PNG.
