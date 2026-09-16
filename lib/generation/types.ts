@@ -11,6 +11,7 @@ import type { ResumeModel } from "./resume/model";
 import type { ArticleModel, ArticleTypeId, CiteStyle, PublicationProfileId } from "./article/types";
 import type { EssayModel } from "./essay/types";
 import type { WorkModel } from "./work/types";
+import type { TeacherModel } from "./teacher/types";
 import type { ResumePaletteId, ResumeTemplateId } from "./resume/templates";
 
 export type GenImage = {
@@ -176,7 +177,20 @@ export type FigureSpec =
   /** 2×2 matritsa: AYNAN 4 kvadrant (yuqori-chap, yuqori-o'ng, pastki-chap, pastki-o'ng); o'qlar ixtiyoriy (SWOT — o'qsiz). */
   | { kind: "matrix"; xAxis?: FigureAxis; yAxis?: FigureAxis; quadrants: { title: string; items?: string[] }[] }
   /** Taqqoslash: ikki ustun (≤6 band); `rows` berilsa — mezon bo'yicha qatorlar (chapda mezon, ikki ustunda qiymat). */
-  | { kind: "compare"; left: { title: string; items: string[] }; right: { title: string; items: string[] }; rows?: string[] };
+  | { kind: "compare"; left: { title: string; items: string[] }; right: { title: string; items: string[] }; rows?: string[] }
+  /**
+   * OMR javoblar varag'i (AUDIT-20 R0, test vositasi) — STRUKTURAVIY
+   * spec: nechta savol, nechta doira, nechta ustun, qaysi variantlar,
+   * test kodi kataklari, ko'p javobli savol bormi. Chizuvchi WP-B da
+   * (`teacher/test/omr.ts`), shuning uchun `layoutFigure` uni HOZIRCHA
+   * bilmaydi va `buildFigure` uni O'TKAZIB YUBORADI (fallback ham,
+   * xato ham emas — `tests/teacher-registry.test.mts`).
+   *
+   * MODEL o'zi tanlay olmaydi: `FIGURE_KINDS` va `SELECTABLE_FIGURE_KINDS`
+   * ga ATAYLAB kirmaydi — OMR ni dvigatel savol soniga qarab quradi,
+   * LLM emas (`prisma` bilan bir xil qaror).
+   */
+  | { kind: "omr"; count: number; optionCount: number; columns: number; variantIds: string[]; idBoxes: number; hasMulti: boolean };
 
 export type FigureAxis = { low: string; high: string; label?: string };
 export type TreeNode = { label: string; children?: TreeNode[] };
@@ -503,6 +517,14 @@ export type AcademicDoc = {
    * = `ch1.1`); tartib/raqamlash `work/layout.ts planWork` da.
    */
   work?: WorkModel;
+  /**
+   * O'qituvchi vositalari 2 (AUDIT-20): dars rejasi / texnologik xarita
+   * / glossariy / keys / test — maktab shapkasi, tur, kind modeli va
+   * hisobot. Matn boshqa oiladagidek `sections` da qoladi; tartib va
+   * rasmiy shakl `teacher/layout.ts planTeacher` (WP-C) da. Eski
+   * hujjatlarda yo'q — `legacyTeacherModel(doc)` bilan o'qiladi.
+   */
+  teacher?: TeacherModel;
   images?: GenImage[];
   imagePrompt?: string;
   imageScene?: string;

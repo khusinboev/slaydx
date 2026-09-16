@@ -51,7 +51,21 @@ export function ArtifactViewer({
       // ilgari rezyume ko'ruvchisiga hech narsa berilmasdi va tahrir
       // umuman yoqilmasdi (Rezyume 2, AUDIT-15).
       return <ResumeViewer doc={doc} gen={detail} onGen={onDetail} onEditState={onEditState} />;
+    case "teacher":
+      /*
+       * O'qituvchi hujjatlari 2 (AUDIT-20 R0): beshala vosita umumiy
+       * Word ko'ruvchisida — rasmiy DOCX shakli «ko'rdim = oldim»
+       * bo'yicha aynan shu yerda chiziladi. R0 da `WordViewer` hali
+       * `doc.teacher` ni bilmaydi (shapka, bosqich/hafta jadvallari,
+       * OMR — WP-C `teacherFlow`), lekin tahrir proplari DARROV
+       * beriladi: WP-D `useTeacherEdit` ni yoqqanda ko'ruvchini qayta
+       * ulash kerak bo'lmasin (talaba ishlaridagi xato — proplar
+       * berilmagani uchun tahrir jimgina o'chiq qolgandi).
+       */
+      return <WordViewer doc={doc} gen={detail} onGen={onDetail} onEditState={onEditState} />;
     case "lesson":
+      // AUDIT-20 R0: bu yo'lga endi hech qaysi vosita tushmaydi
+      // (`viewerKind`); 4 eski ko'ruvchi WP-C da o'chiriladi.
       return <LessonViewer doc={doc} />;
     case "table":
       return <TableViewer doc={doc} />;

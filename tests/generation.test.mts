@@ -1146,7 +1146,22 @@ test("bet soniga bog'liq bo'lmagan xizmatlar qat'iy byudjet oladi", async () => 
    * ularni slayd va yozuvchi vositalardan ajratib turadi.
    */
   assert.equal(budgetFor(TOOL_BY_ID.image, { imageCount: 4 } as FormValues, CAP), image);
-  assert.equal(budgetFor(TOOL_BY_ID.glossary, { termCount: "40" } as FormValues, CAP), glossary);
+
+  /*
+   * O'QITUVCHI OILASI endi bu ro'yxatda EMAS (AUDIT-20 R0): glossariy,
+   * dars rejasi, keys va xarita qat'iy 120–150 s olardi, ya'ni 10 atamali
+   * lug'at ham, 40 atamali (15 000 tanga!) lug'at ham bir xil vaqt bilan
+   * ishlardi — va 34 haftalik xarita shu 150 s ga sig'masdi. Endi byudjet
+   * ELEMENT soniga ergashadi (`teacherBudgetMs`).
+   */
+  const gl40 = budgetFor(TOOL_BY_ID.glossary, { termCount: "40" } as FormValues, CAP);
+  assert.ok(gl40 > glossary, `glossariy byudjeti atama soniga ergashsin: ${glossary} → ${gl40}`);
+  const mapSmall = budgetFor(TOOL_BY_ID["texnologik-xarita"], { weeklyHours: 4, totalHours: 68 } as FormValues, CAP);
+  const mapBig = budgetFor(TOOL_BY_ID["texnologik-xarita"], { weeklyHours: 2, totalHours: 68 } as FormValues, CAP);
+  assert.ok(mapBig > mapSmall, `xarita byudjeti hafta soniga ergashsin: ${mapSmall} → ${mapBig}`);
+  // Yangi test vositasi ham byudjetsiz qolmasin (`MIN_BUDGET_MS` emas).
+  const testBudget = budgetFor(TOOL_BY_ID.test, { count: 30 } as FormValues, CAP);
+  assert.ok(testBudget > budgetFor(TOOL_BY_ID.test, { count: 5 } as FormValues, CAP), "test byudjeti savol soniga ergashsin");
 
   /*
    * TARJIMA ham endi bu ro'yxatda EMAS (Tarjimon 2): u qat'iy 240 000 ms

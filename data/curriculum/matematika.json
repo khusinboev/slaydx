@@ -1,0 +1,44 @@
+{
+  "version": "2026-09-16",
+  "subject": {
+    "id": "matematika",
+    "uz": "Matematika",
+    "ru": "Математика",
+    "en": "Mathematics"
+  },
+  "entries": [
+    {
+      "grade": 11,
+      "source": {
+        "title": "Aniq fanlar blok moduli bo'yicha umumiy o'rta ta'limning o'quv dasturi (XI sinf) — Matematika",
+        "url": "https://uzbmb.uz/upload/file/pdf/qabul2025/dasturlar/5.Matematika/11-sinf-Matematika%20fanidan%20o'quv%20dastur.pdf",
+        "year": 2018,
+        "publisher": "Respublika ta'lim markazi (Xalq ta'limi vazirligi)"
+      },
+      "units": [
+        {
+          "title": "HOSILA VA UNING TATBIQLARI",
+          "hours": 40,
+          "topics": [
+            { "id": "hosila-va-uning-tatbiqlari-1", "title": "X- sinfda o'tilganlarni takrorlash." },
+            { "id": "hosila-va-uning-tatbiqlari-2", "title": "O'zgaruvchi miqdorlar orttirmalarining nisbati va uning ma'nosi." },
+            { "id": "hosila-va-uning-tatbiqlari-5", "title": "Limit haqida tushuncha." },
+            { "id": "hosila-va-uning-tatbiqlari-10", "title": "Hosila, uning geometrik va fizik ma'nosi." },
+            { "id": "hosila-va-uning-tatbiqlari-14", "title": "Hosilani hisoblash qoidalari." }
+          ]
+        },
+        {
+          "title": "INTEGRAL VA UNING TATBIQLARI",
+          "hours": 21,
+          "topics": [
+            { "id": "integral-va-uning-tatbiqlari-1", "title": "Boshlang'ich funksiya va aniqmas integral tushunchalari." },
+            { "id": "integral-va-uning-tatbiqlari-4", "title": "Integrallar jadvali." },
+            { "id": "integral-va-uning-tatbiqlari-8", "title": "Bo'laklab integrallash." },
+            { "id": "integral-va-uning-tatbiqlari-9", "title": "Aniq integral." },
+            { "id": "integral-va-uning-tatbiqlari-10", "title": "Nyuton-Leybnits formulasi." }
+          ]
+        }
+      ]
+    }
+  ]
+}

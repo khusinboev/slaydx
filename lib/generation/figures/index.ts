@@ -169,6 +169,18 @@ export async function buildFigure(figure: Figure, opts: BuildFigureOpts): Promis
   };
   const spec = figure.spec;
   if (!spec || typeof spec !== "object") return fallback();
+  /*
+   * OMR javoblar varag'i (AUDIT-20 R0) — bu YERDA chizilmaydi.
+   *
+   * Uning maketi `teacher/test/omr.ts` (WP-B) da: A4 to'liq bet,
+   * millimetrda o'lchangan doiralar, registratsiya belgilari — umumiy
+   * `layoutFigure` ning tugun/qirra modeliga umuman tushmaydi.
+   * Shuning uchun bu yerda ATAYLAB ANIQ SHOX bor: rasm o'zgarishsiz
+   * qaytadi. Shoxsiz qolsa `layoutFigure` `null` berardi va OMR jimgina
+   * MATN ro'yxatiga (`fallbackBlocks`) aylanardi — ya'ni javob varag'i
+   * o'rniga bo'sh sarlavha chiqardi.
+   */
+  if (spec.kind === "omr") return { ...figure };
   if (spec.kind === "chart" && spec.dataSource !== "user") return fallback({ source: noDataLabel(lang) });
   const layout = layoutFigure(spec, { lang });
   if (!layout) return fallback();

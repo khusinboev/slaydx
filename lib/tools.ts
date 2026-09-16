@@ -80,6 +80,21 @@ const CUSTOM_REQUIRED: Record<string, ToolField[]> = {
     { kind: "text", name: "university", legend: "Oliy ta'lim muassasasi", required: true },
     { kind: "text", name: "author", legend: "Muallif (F.I.Sh.)", required: true },
   ],
+  /*
+   * O'qituvchi vositalari 2 (AUDIT-20): dars rejasi, texnologik xarita,
+   * glossariy, keys va test bitta `TeacherComposer` ga o'tadi (WP-E,
+   * `teacher-params.ts` reyestri) — qolgan maydonlar `teacher/registry.ts`
+   * dan chiziladi, shuning uchun `fields` bo'sh.
+   *
+   * Majburiy IKKITASI shu yerda qoladi, chunki ularsiz rasmiy SHAPKA
+   * chizib bo'lmaydi: hujjat «__ maktabi» va «tuzuvchi: __» bilan
+   * chiqsa, o'qituvchi uni ishlata olmaydi. Ilgari ular shunchaki
+   * `TEACHER_FIELDS` da ixtiyoriy edi va amalda bo'sh kelardi.
+   */
+  teacher: [
+    { kind: "text", name: "university", legend: "Ta'lim muassasasi nomi", required: true },
+    { kind: "text", name: "author", legend: "Tuzuvchi (F.I.Sh)", required: true },
+  ],
 };
 
 /**
@@ -406,44 +421,17 @@ export const TOOLS: ToolConfig[] = [
     description: "Fan bo'yicha o'quv yili uchun texnologik xarita tuzing",
     submitLabel: "Xaritani yaratish",
     creatingLabel: "Texnologik xarita yaratilmoqda...",
+    topicLegend: "Qaysi fan bo'yicha xarita kerak?",
+    topicPlaceholder: "Informatika",
     createdLabel: "texnologik xarita tayyor!",
     extraOptional: true,
     output: "docx",
+    custom: "teacher",
     basePrice: 6000,
-    fields: [
-      {
-        kind: "text",
-        name: "subject",
-        legend: "Fan nomi",
-        placeholder: "Informatika",
-        required: true,
-      },
-      {
-        kind: "number",
-        name: "weeklyHours",
-        legend: "Haftalik soatlar",
-        placeholder: "4",
-        min: 1,
-        max: 20,
-        required: true,
-      },
-      {
-        kind: "number",
-        name: "totalHours",
-        legend: "Jami soatlar (o'quv yili bo'yicha)",
-        placeholder: "136",
-        min: 1,
-        max: 400,
-        required: true,
-      },
-      {
-        kind: "textarea",
-        name: "extra",
-        legend: "Mavzu, yo'nalish va boshqa qo'shimchalar",
-        placeholder: "Qo'shimcha talablar...",
-        extra: true,
-      },
-    ],
+    // O'qituvchi vositalari 2 (AUDIT-20 R0): forma `TeacherComposer` ga
+    // o'tdi (WP-E) — maydonlar `teacher/registry.ts` va `teacher-params.ts`
+    // reyestrlaridan chiziladi, shartnoma esa `CUSTOM_REQUIRED.teacher` da.
+    fields: [],
   },
   {
     id: "glossary",
@@ -457,35 +445,19 @@ export const TOOLS: ToolConfig[] = [
     submitLabel: "Glossariyni yaratish",
     creatingLabel: "Glossariy yaratilmoqda...",
     createdLabel: "glossariy tayyor!",
+    topicLegend: "Mavzu yoki fan nomi",
+    topicPlaceholder: "Biologiya atamalari",
     extraOptional: true,
     output: "docx",
+    custom: "teacher",
     basePrice: 6000,
-    fields: [
-      {
-        kind: "text",
-        name: "topic",
-        legend: "Mavzu yoki fan nomi",
-        placeholder: "Biologiya atamalari",
-        required: true,
-      },
-      { kind: "language", name: "language", legend: "Qaysi tilda?" },
-      {
-        kind: "chips",
-        name: "termCount",
-        legend: "Nechta atama kerak?",
-        options: [
-          { value: "10", label: "10 ta" },
-          { value: "20", label: "20 ta" },
-          { value: "40", label: "40 ta" },
-        ],
-      },
-      {
-        kind: "textarea",
-        name: "extra",
-        legend: "Modul, mavzu chegarasi va boshqa qo'shimchalar",
-        extra: true,
-      },
-    ],
+    /*
+     * Atama soni (`termCount`) formadan YO'QOLMADI — u endi
+     * `teacher-params.ts` reyestrida va `TeacherComposer` da (WP-E).
+     * NARX qoidasi esa `priceFor` da O'ZGARMAY qoladi (6 000/9 000/
+     * 15 000), ya'ni maydon yo'qolgani narxni jimgina tushirmaydi.
+     */
+    fields: [],
   },
   {
     id: "keys",
@@ -499,25 +471,14 @@ export const TOOLS: ToolConfig[] = [
     submitLabel: "Kalitlarni yaratish",
     creatingLabel: "Kalitlar yaratilmoqda...",
     createdLabel: "kalitlar tayyor!",
+    topicLegend: "Mavzu yoki fan nomi",
+    topicPlaceholder: "Pedagogika keys-stadilari",
     extraOptional: true,
     output: "docx",
+    custom: "teacher",
     basePrice: 6000,
-    fields: [
-      {
-        kind: "text",
-        name: "topic",
-        legend: "Mavzu yoki fan nomi",
-        placeholder: "Pedagogika keys-stadilari",
-        required: true,
-      },
-      { kind: "language", name: "language", legend: "Qaysi tilda?" },
-      {
-        kind: "textarea",
-        name: "extra",
-        legend: "Seminar, kurs ishi, imtihon va boshqa vaziyatlar",
-        extra: true,
-      },
-    ],
+    // O'qituvchi vositalari 2 (AUDIT-20 R0) — texnologik xarita bilan bir izoh.
+    fields: [],
   },
   {
     id: "mustaqil-ish",
@@ -553,43 +514,46 @@ export const TOOLS: ToolConfig[] = [
     submitLabel: "Darsni yaratish",
     creatingLabel: "Dars rejasi yaratilmoqda...",
     createdLabel: "dars rejasi tayyor!",
+    topicLegend: "Dars mavzusi nima?",
+    topicPlaceholder: "Fotosintez jarayoni",
     extraOptional: true,
     output: "docx",
+    custom: "teacher",
     basePrice: 4000,
-    fields: [
-      {
-        kind: "text",
-        name: "topic",
-        legend: "Dars mavzusi nima?",
-        placeholder: "Fotosintez jarayoni",
-        required: true,
-      },
-      {
-        kind: "text",
-        name: "subject",
-        legend: "Qaysi fan?",
-        placeholder: "Biologiya",
-        required: true,
-      },
-      {
-        kind: "range",
-        name: "grade",
-        legend: "Nechinchi sinf?",
-        min: 1,
-        max: 11,
-      },
-      {
-        kind: "chips",
-        name: "duration",
-        legend: "Dars necha daqiqa?",
-        options: [
-          { value: "30", label: "30" },
-          { value: "45", label: "45" },
-          { value: "90", label: "90" },
-        ],
-      },
-      { kind: "language", name: "language", legend: "Qaysi tilda?" },
-    ],
+    // O'qituvchi vositalari 2 (AUDIT-20 R0) — texnologik xarita bilan bir izoh.
+    // `extra` maydoni ham shu yerda tiklanadi (AUDIT-20 R1: `extraOptional`
+    // bayrog'i bor edi, maydon esa e'lon qilinmagan — o'lik bayroq).
+    fields: [],
+  },
+  {
+    id: "test",
+    slug: "test",
+    title: "Test yaratuvchi",
+    pageTitle: "Test yaratuvchi",
+    group: "oqituvchi",
+    icon: "list-checks",
+    tc: "239 68 68",
+    description: "Mavzu yoki fayl asosida variantli test, javoblar kaliti va OMR varag'i",
+    submitLabel: "Testni yaratish",
+    creatingLabel: "Test yaratilmoqda...",
+    createdLabel: "test tayyor!",
+    topicLegend: "Test qaysi mavzu bo'yicha?",
+    topicPlaceholder: "Hosila va uning tatbiqlari",
+    /*
+     * Uchinchi rejim — `curriculum` (darslik mavzulari, `/api/curriculum`)
+     * — `ToolMode` da EMAS: `ToolMode.id` faqat `topic|file` bo'lishi
+     * mumkin va uni kengaytirish worker'ning fayl yo'lini (`sourceForJob`)
+     * ham o'zgartiradi. Darslik rejimi `TeacherComposer` ichida, mavzu
+     * rejimining ustida ishlaydi (`teacher-params.ts mode`).
+     */
+    modes: TOPIC_FILE_MODES,
+    extraOptional: true,
+    output: "docx",
+    custom: "teacher",
+    // Raqobatchi darajasi (mahsulot egasi qarori 6): parametrlar — savol
+    // soni, variant, qiyinlik, OMR — narxga TA'SIR QILMAYDI, tekis 3 000.
+    basePrice: 3000,
+    fields: [],
   },
 ];
 
@@ -605,8 +569,15 @@ for (const tool of TOOLS) {
    * tuzuvchini so'ramasdi — qiymat profildan jim kelar, forma esa uni
    * ko'rsatmasdi. Maydonlar `extra: true` bo'lgan `extra` textarea dan
    * OLDIN qo'shiladi, shunda ular asosiy qismda turadi.
+   *
+   * AUDIT-20 R0: `custom` formali vositalarga bu QO'SHILMAYDI — ular
+   * o'z shartnomasini `CUSTOM_REQUIRED` da e'lon qiladi (`teacher` da
+   * ikkalasi MAJBURIY). Aks holda bir xil ikkita `university` maydoni
+   * qo'shilib, `missingRequired` ro'yxatida yorliq ikki marta chiqardi.
+   * Shox `oyinlar`/`media` va kelgusi oddiy formali o'qituvchi
+   * vositalari (infografika, atestatsiya) uchun saqlanadi.
    */
-  if (tool.group === "oqituvchi") {
+  if (tool.group === "oqituvchi" && !tool.custom) {
     const rest = tool.fields.filter((f) => f.extra);
     const main = tool.fields.filter((f) => !f.extra);
     tool.fields = [...main, ...TEACHER_FIELDS, ...rest];
