@@ -496,7 +496,8 @@ test("kalta paragraf bir marta kengaytiriladi: mavjud matn promptda, yangi blokl
     const id = c.user.match(/\(id ([\w.]+)\)/)?.[1] ?? "";
     perId.set(id, (perId.get(id) ?? 0) + 1);
   }
-  assert.ok([...perId.values()].every((n) => n === 1), "paragraf boshiga bitta kengaytirish");
+  // Birinchi raund paragraf boshiga bitta; hujjat darajasidagi to'ldirish (quyidagi test) yana bittasini qo'shishi mumkin.
+  assert.ok([...perId.values()].every((n) => n >= 1 && n <= 2), "paragraf boshiga 1–2 kengaytirish");
 });
 
 test("kengaytirish javobi bo'sh bo'lsa asl paragraf o'zgarmaydi", async () => {
@@ -534,4 +535,25 @@ test("assignPrimaryRefs: aylanma, har manba aynan bir paragrafda", () => {
   assert.deepEqual([...m.values()].map((xs) => xs.map((r: { id: string }) => r.id)), [["a", "d"], ["b", "e"], ["c"]]);
   assert.equal(assignPrimaryRefs(refs, []).size, 0);
   assert.deepEqual([...assignPrimaryRefs([], ["p1"]).values()], [[]]);
+});
+
+/*
+ * Referat smoke (worker): har paragraf 85 % chegarasidan o'tdi, lekin
+ * kirish/xulosa kalta chiqib umumiy matn 1 840/2 473 bo'ldi → hajm
+ * darvozasi yiqitdi. Endi hujjat darajasida to'ldirish: matn
+ * `plan.body × 0,9` dan kam bo'lsa eng katta kamomadli paragraflar yana
+ * bir marta kengaytiriladi. Mock paragraflari ≈240 so'z (reja ≫),
+ * kengaytirish +≈80 so'z — birinchi kengaytirishdan keyin ham kam, demak
+ * kamida bitta paragraf IKKI marta so'raladi. Mutatsiya:
+ * `WORK_TOPUP_TARGET = 0` → hech bir paragraf ikki marta so'ralmaydi.
+ */
+test("hujjat darajasida to'ldirish: umumiy matn kam bo'lsa paragraf ikkinchi marta kengaytiriladi", async () => {
+  const { calls } = await build({ pages: "25-30" }, { expand: true });
+  const perId = new Map<string, number>();
+  for (const c of calls.filter((x) => x.user.startsWith("The paragraph «"))) {
+    const id = c.user.match(/\(id ([\w.]+)\)/)?.[1] ?? "";
+    perId.set(id, (perId.get(id) ?? 0) + 1);
+  }
+  assert.ok([...perId.values()].some((n) => n >= 2), `to'ldirish raundi bo'lishi kerak: ${JSON.stringify([...perId])}`);
+  assert.ok([...perId.values()].every((n) => n <= 2), "paragraf boshiga ko'pi bilan ikki kengaytirish");
 });

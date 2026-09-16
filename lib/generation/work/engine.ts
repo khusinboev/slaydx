@@ -371,6 +371,14 @@ export async function buildWorkDoc(meta: DocMeta, values: FormValues, opts: Work
     return out;
   });
 
+  /* ── 4b. hujjat darajasida to'ldirish — xulosa hali yozilmagan: kirish nisbatida taxmin ── */
+  {
+    const introWords = intro.blocks.reduce((n, b) => n + (b.text.match(/\S+/g) ?? []).length, 0);
+    const ratio = ctx.plan.intro > 0 ? Math.min(1, introWords / ctx.plan.intro) : 1;
+    const added = await topUpBody(ctx, written, introWords, Math.round(ctx.plan.conclusion * ratio), system, ask, deadline);
+    if (added) stage(60, `To‘ldirish: +${added} so‘z`);
+  }
+
   /* ── 5. visuals (60→70) — id lar, langarlar, bloklar ── */
   stage(60, "Jadval va sxemalar");
   const sections: DocSection[] = [];
@@ -738,34 +746,69 @@ async function writeParagraph(ctx: WorkContext, ask: WorkSectionAsk, system: str
   const guarded = guardSection(first.blocks, gopts);
   const out: ParagraphOut = { plan: ask.plan, blocks: guarded.blocks, table: first.table, figure: first.figure, report: guarded.report };
 
-  /*
-   * Hajm yetmasa — bir marta «kengaytir» (maqola dvigateli naqshi).
-   * Jadval/sxema langari (`anchorAfterBlock`) mavjud bloklarga ishora
-   * qiladi — yangi bloklar OXIRIGA qo'shiladi, langar buzilmaydi.
-   */
-  if (guarded.report.words < ask.plan.words * WORK_EXPAND_BELOW && remainingMs(deadline) > 25_000) {
-    const need = ask.plan.words - guarded.report.words;
-    const existing = out.blocks.map((b) => b.text).join("\n\n");
-    const raw = await call("writer", system, workExpandPrompt(ctx, ask.plan, guarded.report.words, need, existing), {
-      maxTokens: Math.min(6000, Math.round(need * 2.4) + 500),
-      timeoutMs: paragraphTimeout(need, deadline),
-    });
-    const extra = raw ? blocksFromLlm(parseLlmObject<SectionJson>(raw)?.blocks, raw) : [];
-    if (extra.length) {
-      const g2 = guardSection(extra, gopts);
-      out.blocks = [...out.blocks, ...g2.blocks];
-      out.report = {
-        ...guarded.report,
-        removedCitations: [...guarded.report.removedCitations, ...g2.report.removedCitations],
-        citations: guarded.report.citations + g2.report.citations,
-        unsourcedNumbers: [...guarded.report.unsourcedNumbers, ...g2.report.unsourcedNumbers],
-        factNumbersFound: [...guarded.report.factNumbersFound, ...g2.report.factNumbersFound],
-        filler: [...guarded.report.filler, ...g2.report.filler],
-        words: guarded.report.words + g2.report.words,
-      };
-    }
-  }
+  // Hajm yetmasa — bir marta «kengaytir» (maqola dvigateli naqshi).
+  if (guarded.report.words < ask.plan.words * WORK_EXPAND_BELOW) await expandParagraph(ctx, out, ask.plan.words - guarded.report.words, system, call, deadline);
   return out;
+}
+
+/**
+ * Paragrafga QO'SHIMCHA matn: mavjud matn promptga kiradi (takror
+ * bo'lmasin), yangi bloklar OXIRIGA qo'shiladi — jadval/sxema langari
+ * (`anchorAfterBlock`) mavjud bloklarga ishora qiladi, buzilmaydi.
+ * Hisobot maydonlari qo'shiladi. `true` — matn qo'shildi.
+ */
+async function expandParagraph(ctx: WorkContext, out: ParagraphOut, need: number, system: string, call: Ask, deadline: number): Promise<boolean> {
+  if (need < 40 || remainingMs(deadline) <= 25_000) return false;
+  const gopts = { refs: ctx.refs, userFacts: ctx.input.userFacts };
+  const existing = out.blocks.map((b) => b.text).join("\n\n");
+  const raw = await call("writer", system, workExpandPrompt(ctx, out.plan, out.report.words, need, existing), {
+    maxTokens: Math.min(6000, Math.round(need * 2.4) + 500),
+    timeoutMs: paragraphTimeout(need, deadline),
+  });
+  const extra = raw ? blocksFromLlm(parseLlmObject<SectionJson>(raw)?.blocks, raw) : [];
+  if (!extra.length) return false;
+  const g2 = guardSection(extra, gopts);
+  const r = out.report;
+  out.blocks = [...out.blocks, ...g2.blocks];
+  out.report = {
+    ...r,
+    removedCitations: [...r.removedCitations, ...g2.report.removedCitations],
+    citations: r.citations + g2.report.citations,
+    unsourcedNumbers: [...r.unsourcedNumbers, ...g2.report.unsourcedNumbers],
+    factNumbersFound: [...r.factNumbersFound, ...g2.report.factNumbersFound],
+    filler: [...r.filler, ...g2.report.filler],
+    words: r.words + g2.report.words,
+  };
+  return true;
+}
+
+/**
+ * HUJJAT darajasida to'ldirish (referat smoke: har paragraf 85 % dan
+ * o'tdi, lekin kirish/xulosa ham kalta chiqib umumiy matn 1 840/2 473
+ * bo'ldi — `index.ts` darvozasi 80 % da yiqitdi). Matn `plan.body ×
+ * WORK_TOPUP_TARGET` dan kam bo'lsa eng katta kamomadli paragraflar
+ * yana bir marta kengaytiriladi (paragraf boshiga ko'pi bilan ikki
+ * kengaytirish, `mapPool(3)`). Bitta raund — byudjet.
+ */
+export const WORK_TOPUP_TARGET = 0.9;
+export const TOPUP_ADD_ESTIMATE = 150;
+
+export async function topUpBody(ctx: WorkContext, written: ParagraphOut[], introWords: number, conclusionWords: number, system: string, call: Ask, deadline: number): Promise<number> {
+  const body = introWords + conclusionWords + written.reduce((n, w) => n + w.report.words, 0);
+  const target = Math.round(ctx.plan.body * WORK_TOPUP_TARGET);
+  const deficit = target - body;
+  if (deficit <= 0 || remainingMs(deadline) <= 30_000) return 0;
+  const gap = (w: ParagraphOut) => w.plan.words - w.report.words;
+  const candidates = written.filter((w) => w.blocks.length && gap(w) > 40).sort((a, b) => gap(b) - gap(a));
+  const k = Math.min(candidates.length, Math.max(1, Math.ceil(deficit / TOPUP_ADD_ESTIMATE)));
+  const chosen = candidates.slice(0, k);
+  const share = Math.ceil(deficit / Math.max(1, chosen.length));
+  let added = 0;
+  await mapPool(chosen, 3, async (w) => {
+    const before = w.report.words;
+    if (await expandParagraph(ctx, w, Math.max(gap(w), share), system, call, deadline)) added += w.report.words - before;
+  });
+  return added;
 }
 
 type RawTable = { caption?: unknown; headers?: unknown; rows?: unknown; anchorAfterBlock?: unknown; source?: unknown };
