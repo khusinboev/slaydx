@@ -1,6 +1,7 @@
 import { planArticle, type ArticleAuthorLine, type ArticlePlan, type CiteSpan } from "@/lib/generation/article/layout";
 import { planWork, type WorkBodyItem, type WorkPlan } from "@/lib/generation/work/layout";
 import { isTeacherDoc, planTeacher, type TeacherPlan } from "@/lib/generation/teacher/layout";
+import { isGameDoc, planGame, type GameCardFace, type GameCluesItem, type GamePlan } from "@/lib/generation/games/layout";
 import { docLabels } from "@/lib/generation/i18n";
 import type { AcademicDoc, Block, DocTable } from "@/lib/generation/types";
 
@@ -68,7 +69,13 @@ export type FlowItem =
   | { type: "authors"; id: string; authors: ArticleAuthorLine[] }
   | { type: "highlights"; id: string; label: string; items: string[] }
   /** Sxema (PNG `url` bo'lsa rasm, bo'lmasa o'rinbosar ramka) + sarlavha PASTDA — bitta atom band. */
-  | { type: "figure"; id: string; figureId: string; url?: string; w?: number; h?: number; number: string; caption: string; placeholder: string; source?: string }
+  /**
+   * `widthMm` — CHOP ETILADIGAN kenglik (`FigureSpec kind:"svg"`).
+   * Krossvord to'ri uni katak o'lchamidan hisoblaydi va DOCX ham aynan
+   * shu kenglikda chizadi; berilmasa eski xulq (varaq eniga moslash)
+   * qoladi, ya'ni maqola/talaba ishi sxemalari o'zgarmaydi.
+   */
+  | { type: "figure"; id: string; figureId: string; url?: string; w?: number; h?: number; widthMm?: number; number: string; caption: string; placeholder: string; source?: string }
   /** Formula — KaTeX SSR; raqam o'ngda. Bitta atom band. */
   | { type: "formula"; id: string; latex: string; number: string; display: boolean }
   /** OAK «REFERENCES» ikkinchi ro'yxatining sarlavhasi (`h1` kabi chiziladi). */
@@ -100,7 +107,44 @@ export type FlowItem =
   /** Ogohlantirish («O‘QITUVCHI UCHUN …») — markazda, qalin. */
   | { type: "note"; id: string; text: string }
   /** Ochiq savol javobi uchun bo'sh chiziqlar (matn tuguni YO'Q). */
-  | { type: "lines"; id: string; count: number };
+  | { type: "lines"; id: string; count: number }
+  /*
+   * ── Bosma o'yinlar (AUDIT-21) — `planGame` dan.
+   *
+   * Krossvord shapkasi o'qituvchi hujjatinikidan boshqacha (markazda,
+   * «Tasdiqlayman» bloki yo'q), shuning uchun o'z bandlari bor:
+   * `teacher-*` bandlarini qayta ishlatish ikki oilani bir-biriga
+   * bog'lab qo'yardi va bittasining o'zgarishi ikkinchisiga sizib
+   * kirardi.
+   */
+  /** Hujjat nomi («KROSSVORD») — markazda, qalin, kattaroq. */
+  | { type: "game-title"; id: string; text: string }
+  /** Tur nomi («Klassik») — markazda, kursiv. */
+  | { type: "game-subtitle"; id: string; text: string }
+  /** «Mavzu: Fotosintez» — markazda, yorliq qalin. */
+  | { type: "game-field"; id: string; label: string; text: string }
+  /** Gorizontal/Vertikal savollar — CHEGARASIZ ikki ustunli jadval. */
+  | { type: "game-clues"; id: string; columns: GameCluesItem["columns"] }
+  /**
+   * Bitta BOSMA VARAQ (2×4 karta) — ATOM band, o'z betida.
+   *
+   * `cell` o'lchovlari REJADAN keladi (`plan.page.card`), ko'ruvchi
+   * ularni qayta hisoblamaydi: DOCX katagi bilan bitta manba
+   * (`games/layout.ts cardCellMm`), ya'ni ekrandagi panjara bosilgan
+   * varaqdagi bilan aynan bir xil o'lchamda bo'ladi.
+   */
+  | {
+      type: "game-cards";
+      id: string;
+      sheet: number;
+      sheets: number;
+      side: "front" | "back";
+      title: string;
+      hint: string;
+      rows: GameCardFace[][];
+      pageBreak: boolean;
+      cell: { wMm: number; hMm: number; padMm: number; backPt: number; examplePt: number };
+    };
 
 export { titleModel, type TitleModel } from "@/lib/generation/title-model";
 
@@ -124,6 +168,11 @@ export function docToFlow(doc: AcademicDoc): FlowItem[] {
    * boshqa yo'l yo'q. `renderDocx` dagi shox bilan AYNI shart.
    */
   if (isTeacherDoc(doc)) return teacherFlow(planTeacher(doc));
+  /*
+   * Bosma o'yinlar (AUDIT-21): krossvord va flesh kartalar — `planGame`
+   * dan. `renderDocx` dagi shox bilan AYNI shart (`doc.game`).
+   */
+  if (isGameDoc(doc)) return gameFlow(planGame(doc));
 
   const items: FlowItem[] = [];
   let n = 0;
@@ -417,6 +466,96 @@ export function teacherFlow(plan: TeacherPlan): FlowItem[] {
           url: b.figure?.url,
           w: b.figure?.w,
           h: b.figure?.h,
+          number: b.number,
+          caption: b.caption,
+          placeholder: b.placeholder,
+        });
+        break;
+    }
+  }
+  return items;
+}
+
+/**
+ * O'yin rejasi → oqim bandlari (AUDIT-21 WP-A/WP-B).
+ *
+ * Tartib `render-docx.ts drawGame` bilan AYNAN bir xil: shapka →
+ * to'r/savollar yoki karta varaqlari. Titul beti YO'Q (`type: "title"`
+ * bandi ham yo'q), kartalarda esa shapka ham yo'q — birinchi bet
+ * kartalarning O'ZI bo'lishi kerak (`planGame` izohi).
+ *
+ * Karta varag'i BITTA band bo'lib qoladi (jadval qatorlariga
+ * bo'linmaydi, `table-row` naqshidan farqli): panjara bo'linsa varaq
+ * ikki betga tarqalib, old/orqa juftlik siljib ketardi.
+ */
+export function gameFlow(plan: GamePlan): FlowItem[] {
+  const items: FlowItem[] = [];
+  let n = 0;
+  const id = (p: string) => `${p}-${++n}`;
+
+  for (const h of plan.head) {
+    switch (h.k) {
+      case "title":
+        items.push({ type: "game-title", id: id("gtitle"), text: h.text });
+        break;
+      case "subtitle":
+        items.push({ type: "game-subtitle", id: id("gsub"), text: h.text });
+        break;
+      case "field":
+        items.push({ type: "game-field", id: id("gfield"), label: h.label, text: h.text });
+        break;
+    }
+  }
+
+  const cell = {
+    wMm: plan.page.card.wMm,
+    hMm: plan.page.card.hMm,
+    padMm: plan.page.card.padMm,
+    backPt: plan.page.card.backPt,
+    examplePt: plan.page.card.examplePt,
+  };
+
+  for (const b of plan.body) {
+    switch (b.k) {
+      case "h1":
+        items.push({ type: "h1", id: id("h1"), sectionId: b.sectionId, text: b.text, pageBreak: b.pageBreak });
+        break;
+      case "h3":
+        items.push({ type: "h3", id: id("h3"), text: b.text });
+        break;
+      case "p":
+      case "li":
+        items.push({ type: b.k, id: id(b.k), text: b.text });
+        break;
+      case "note":
+        items.push({ type: "note", id: id("note"), text: b.text });
+        break;
+      case "clues":
+        items.push({ type: "game-clues", id: id("gclues"), columns: b.columns });
+        break;
+      case "cards":
+        items.push({
+          type: "game-cards",
+          id: id("gcards"),
+          sheet: b.sheet,
+          sheets: b.sheets,
+          side: b.side,
+          title: b.title,
+          hint: b.hint,
+          rows: b.rows,
+          pageBreak: b.pageBreak,
+          cell,
+        });
+        break;
+      case "figure":
+        items.push({
+          type: "figure",
+          id: id("fig"),
+          figureId: b.figureId,
+          url: b.figure?.url,
+          w: b.figure?.w,
+          h: b.figure?.h,
+          ...(b.figure?.spec.kind === "svg" && Number(b.figure.spec.widthMm) > 0 ? { widthMm: Number(b.figure.spec.widthMm) } : {}),
           number: b.number,
           caption: b.caption,
           placeholder: b.placeholder,

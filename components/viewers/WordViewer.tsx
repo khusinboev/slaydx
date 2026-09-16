@@ -6,6 +6,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { planArticle, type CiteSpan } from "@/lib/generation/article/layout";
 import { planWork } from "@/lib/generation/work/layout";
 import { isTeacherDoc, planTeacher } from "@/lib/generation/teacher/layout";
+import { isGameDoc, planGame } from "@/lib/generation/games/layout";
 import type { ArticleOp } from "@/lib/generation/article/edit";
 import type { WorkOp } from "@/lib/generation/work/edit";
 import type { TeacherOp } from "@/lib/generation/teacher/edit";
@@ -157,6 +158,41 @@ function teacherSheet(doc: AcademicDoc) {
   };
 }
 
+/**
+ * BOSMA O'YIN varag'i (AUDIT-21 WP-B) — `teacherSheet` bilan bir juft.
+ *
+ * O'lchovlar `games/layout.ts` dan, `docx-profile.ts gameProfile` ham
+ * AYNAN shu raqamlarni o'qiydi. Kartalarda bu oddiy «ekran = fayl»
+ * emas, MAJBURIYAT: panjara millimetrda chiziladi va foydalanuvchi
+ * ekranda ko'rgan kartaning o'lchami bosilganidan farq qilsa, u
+ * kesib bo'lgandan keyin bilib qolardi.
+ *
+ * Titul beti YO'Q: `gameFlow` `type: "title"` bandini chiqarmaydi.
+ */
+function gameSheet(doc: AcademicDoc) {
+  if (!isGameDoc(doc)) return null;
+  const plan = planGame(doc);
+  const m = plan.page.marginsCm;
+  const s = sheetMetrics(false, m);
+  return {
+    plan,
+    style: {
+      padding: `${m.top}cm ${m.right}cm ${m.bottom}cm ${m.left}cm`,
+      fontSize: `${plan.page.sizePt}pt`,
+      lineHeight: String(plan.page.line),
+      "--doc-table-size": `${plan.page.tableSizePt}pt`,
+      "--doc-refs-size": `${plan.page.sizePt}pt`,
+      "--doc-refs-line": String(plan.page.line),
+      "--doc-small": `${plan.page.smallPt}pt`,
+      // DOCX `gameProfile.type.after` = 120 twip = 6 pt.
+      "--doc-p-after": "6pt",
+      "--doc-h1-align": plan.headingAlign,
+    } as React.CSSProperties,
+    measureWidth: s.measureWidth,
+    limit: s.limit,
+  };
+}
+
 function workSheet(doc: AcademicDoc) {
   if (!doc.work) return null;
   const plan = planWork(doc);
@@ -237,7 +273,15 @@ export function WordViewer({
    * `useTeacherEdit` qo'shadi), lekin varaq DOIM to'g'ri chiziladi.
    */
   const teacher = useMemo(() => teacherSheet(doc), [doc]);
-  const profiled = sheet ?? work ?? teacher;
+  /*
+   * Bosma o'yinlar (AUDIT-21 WP-B): krossvord va flesh kartalar —
+   * o'lchov `planGame` dan. Tahrir bu oilada ATAYLAB yo'q (karta
+   * panjarasi maketning O'ZI; matnni tahrirlash uni kesilgan
+   * o'lchamdan chiqarib yuborardi), shuning uchun `useGameEdit` ham
+   * yo'q va `editable` false qoladi.
+   */
+  const game = useMemo(() => gameSheet(doc), [doc]);
+  const profiled = sheet ?? work ?? teacher ?? game;
   const limit = profiled?.limit ?? contentHeightPx({ footer: true });
   const sheetW = teacher?.wPx ?? A4.wPx;
   const sheetH = teacher?.hPx ?? A4.hPx;
@@ -873,6 +917,100 @@ function FlowBlock({
           ))}
         </p>
       );
+    /*
+     * ── Bosma o'yin (AUDIT-21 WP-A/WP-B) — `render-docx.ts drawGame`
+     * bilan bir juft: krossvord shapkasi markazda, savollar chegarasiz
+     * ikki ustunda, kartalar esa millimetrda o'lchangan panjarada.
+     */
+    case "game-title":
+      return (
+        <div style={{ textAlign: "center", fontWeight: 700, fontSize: "1.17em", textIndent: 0, margin: "4pt 0 2pt" }} {...attr}>
+          {item.text}
+        </div>
+      );
+    case "game-subtitle":
+      return (
+        <div style={{ textAlign: "center", fontStyle: "italic", textIndent: 0, marginBottom: "6pt" }} {...attr}>
+          {item.text}
+        </div>
+      );
+    case "game-field":
+      return (
+        <p className="word-p" style={{ textAlign: "center", textIndent: 0, marginBottom: "8pt" }} {...attr}>
+          <strong>{item.label}:</strong> {item.text}
+        </p>
+      );
+    case "game-clues":
+      /*
+       * CHEGARASIZ ikki ustun — DOCX da ham aynan shunday jadval
+       * (`w:cols` emas: u butun bo'limga tegishli bo'lib, to'r rasmini
+       * ham ikkiga bo'lib yuborardi).
+       */
+      return (
+        <table style={{ width: "100%", tableLayout: "fixed", borderCollapse: "collapse", textIndent: 0, marginBottom: "6pt" }}>
+          <tbody>
+            <tr>
+              {item.columns.map((col, i) => (
+                <td key={i} style={{ verticalAlign: "top", padding: "2pt 6pt 2pt 0", border: "none" }}>
+                  <div style={{ fontWeight: 700, marginBottom: "4pt" }}>{col.title}</div>
+                  {col.items.map((it, j) => (
+                    <div key={j} style={{ fontSize: "var(--doc-table-size, 11pt)", marginBottom: "3pt" }}>
+                      {it.text}
+                    </div>
+                  ))}
+                </td>
+              ))}
+            </tr>
+          </tbody>
+        </table>
+      );
+    case "game-cards": {
+      /*
+       * Karta panjarasi — MILLIMETRDA (rejadagi `cardCellMm`), foizda
+       * emas: bosilgan varaqda karta aynan shu o'lchamda kesiladi va
+       * ekrandagi nusxa undan farq qilsa, foydalanuvchi buni qaychidan
+       * keyin bilib qolardi. Kesish chizig'i — katakning nuqtali
+       * chegarasi (DOCX da ham shunday).
+       */
+      const c = item.cell;
+      return (
+        <div style={{ textIndent: 0 }}>
+          <div style={{ fontSize: "var(--doc-small, 9pt)", lineHeight: 1.2 }}>{item.title}</div>
+          <div style={{ fontSize: "var(--doc-small, 9pt)", lineHeight: 1.2, fontStyle: "italic", color: "#666666", marginBottom: "3pt" }}>{item.hint}</div>
+          <table style={{ borderCollapse: "collapse", tableLayout: "fixed", width: `${c.wMm * (item.rows[0]?.length ?? 2)}mm` }}>
+            <tbody>
+              {item.rows.map((row, r) => (
+                <tr key={r} style={{ height: `${c.hMm}mm` }}>
+                  {row.map((face, j) => (
+                    <td
+                      key={j}
+                      style={{
+                        width: `${c.wMm}mm`,
+                        height: `${c.hMm}mm`,
+                        border: "1px dashed #bbbbbb",
+                        padding: `${c.padMm}mm`,
+                        verticalAlign: "middle",
+                        textAlign: "center",
+                        overflow: "hidden",
+                      }}
+                    >
+                      {face.k === "card" ? (
+                        <>
+                          <div style={face.side === "front" ? { fontWeight: 700 } : { fontSize: `${c.backPt}pt`, lineHeight: 1.2 }}>{face.text}</div>
+                          {face.example ? (
+                            <div style={{ fontSize: `${c.examplePt}pt`, fontStyle: "italic", lineHeight: 1.2, marginTop: "3pt" }}>{face.example}</div>
+                          ) : null}
+                        </>
+                      ) : null}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
     case "kv":
       return (
         <p className="word-p" style={{ textAlign: "left", textIndent: 0, marginLeft: "0.5cm", marginBottom: "3pt" }} {...attr}>
@@ -938,7 +1076,17 @@ function FlowBlock({
         <div className="word-figure" data-figure={item.figureId}>
           {item.url ? (
             // eslint-disable-next-line @next/next/no-img-element -- aktiv/`data:` URL, optimizator o'chirilgan (next.config).
-            <img src={item.url} alt={item.caption} className="word-figure-img" />
+            <img
+              src={item.url}
+              alt={item.caption}
+              className="word-figure-img"
+              /*
+               * `widthMm` — chop etiladigan kenglik (krossvord to'ri):
+               * DOCX ham aynan shuncha chizadi. Berilmasa `.word-figure-img`
+               * ning eski qoidasi (varaq eniga moslash) qoladi.
+               */
+              style={item.widthMm ? { width: `${item.widthMm}mm`, maxWidth: "100%" } : undefined}
+            />
           ) : (
             <div className="word-figure-placeholder">{item.placeholder}</div>
           )}

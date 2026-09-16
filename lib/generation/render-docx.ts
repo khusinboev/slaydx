@@ -4,6 +4,7 @@ import {
   Document,
   Footer,
   HeadingLevel,
+  HeightRule,
   ImageRun,
   LineRuleType,
   Math as DocxMath,
@@ -21,13 +22,15 @@ import {
   TableRow,
   TabStopType,
   TextRun,
+  VerticalAlign,
   WidthType,
 } from "docx";
 import { ESSAY_DESIGNS } from "../languages";
 import { planArticle, type ArticlePlan, type HeadItem, type BodyItem } from "./article/layout";
 import { planWork, type WorkBodyItem, type WorkPlan } from "./work/layout";
 import { isTeacherDoc, planTeacher, type TeacherPlan } from "./teacher/layout";
-import { articleProfile, CM, contentWidth, profileFor, resumeProfile, teacherProfile, workProfile, type DocProfile } from "./docx-profile";
+import { isGameDoc, planGame, type GamePlan } from "./games/layout";
+import { articleProfile, CM, contentWidth, gameProfile, profileFor, resumeProfile, teacherProfile, workProfile, type DocProfile } from "./docx-profile";
 import { docLabels } from "./i18n";
 import { omml } from "./omml";
 import { cleanText } from "./quality";
@@ -1134,6 +1137,323 @@ async function drawTeacher(plan: TeacherPlan, K: Kit, P: DocProfile, opts: Resum
   return out;
 }
 
+/* ────────────────────────── Bosma o'yinlar (AUDIT-21) ────────────────────────── */
+
+/** Millimetr → twip (DXA). `CM = 567` bilan bir juft. */
+const MM = 56.7;
+const mmDxa = (v: number) => Math.round(v * MM);
+
+/**
+ * Krossvord / flesh kartalar tanasi — FAQAT `planGame` rejasini chizadi
+ * («ko'rdim = oldim»).
+ *
+ * Joylashuv qoidalari (`docs/research/{crossword,flashcards}.md` §3):
+ *   • TITUL BETI YO'Q (`gameProfile.titlePage === "none"`);
+ *   • krossvord: sarlavha markazda → to'r rasmi markazda → Gorizontal/
+ *     Vertikal savollar CHEGARASIZ ikki ustunli jadvalda → javoblar
+ *     varag'i YANGI BETDAN;
+ *   • kartalar: har bet — ikki qatorli varaq shapkasi + 2×4 panjara;
+ *     katak kengligi va qator BALANDLIGI millimetrda QAT'IY belgilanadi
+ *     (`HeightRule.EXACT`), aks holda uzunroq ta'rif qatorni cho'zib,
+ *     old bet bilan orqa betni siljitib yuborardi va kesilgan kartaning
+ *     orqasida qo'shnisining matni qolardi.
+ *
+ * Kesish chizig'i — katakning O'Z chegarasi (nuqtali, och kulrang):
+ * alohida «kesish belgilari» chizish uchun DOCX da shakl kerak bo'lardi,
+ * u esa LibreOffice va Word da har xil joyga tushadi.
+ */
+async function drawGame(plan: GamePlan, K: Kit, P: DocProfile, opts: ResumeDocxOpts): Promise<Array<Paragraph | Table>> {
+  const out: Array<Paragraph | Table> = [];
+  const { line, font, size } = P.type;
+  const small = plan.page.smallPt * 2;
+  const W = K.CONTENT_W;
+  const card = plan.page.card;
+
+  /* ── shapka (krossvord; kartalarda BO'SH — `planGame` izohi) ── */
+  for (const h of plan.head) {
+    switch (h.k) {
+      case "title":
+        out.push(
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            keepNext: true,
+            spacing: { before: 80, after: 40, line, lineRule: LineRuleType.AUTO },
+            children: [K.run(h.text, { bold: true, size: size + 4 })],
+          }),
+        );
+        break;
+      case "subtitle":
+        out.push(
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            keepNext: true,
+            spacing: { after: 120, line, lineRule: LineRuleType.AUTO },
+            children: [K.run(h.text, { italics: true })],
+          }),
+        );
+        break;
+      case "field":
+        out.push(
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            keepNext: true,
+            spacing: { after: 160, line, lineRule: LineRuleType.AUTO },
+            children: [K.run(`${h.label}:`, { bold: true }), new TextRun({ text: " ", font, size }), K.run(h.text)],
+          }),
+        );
+        break;
+    }
+  }
+
+  /*
+   * `drawn` — birinchi chizilgan banddan keyingina sahifa uzilishi
+   * qo'yiladi (`drawTeacher`/`drawWork` bilan bir xil qoida): birinchi
+   * varaq bo'sh qolmasin.
+   */
+  let drawn = out.length > 0;
+
+  for (const b of plan.body) {
+    switch (b.k) {
+      case "h1": {
+        const pageBreakBefore = b.pageBreak && drawn;
+        drawn = true;
+        out.push(
+          new Paragraph({
+            heading: HeadingLevel.HEADING_1,
+            alignment: P.heading.align === "center" ? AlignmentType.CENTER : AlignmentType.LEFT,
+            keepNext: true,
+            ...(pageBreakBefore ? { pageBreakBefore: true } : {}),
+            spacing: { before: 240, after: 120, line, lineRule: LineRuleType.AUTO },
+            children: [K.run(b.text, { bold: true, ...(P.heading.color ? { color: P.heading.color } : {}) })],
+          }),
+        );
+        break;
+      }
+      case "h3":
+        drawn = true;
+        out.push(
+          new Paragraph({
+            alignment: AlignmentType.LEFT,
+            keepNext: true,
+            spacing: { before: 120, after: 60, line, lineRule: LineRuleType.AUTO },
+            children: [K.run(b.text, { bold: true })],
+          }),
+        );
+        break;
+      case "p":
+        drawn = true;
+        out.push(
+          new Paragraph({
+            alignment: AlignmentType.LEFT,
+            spacing: { after: P.type.after, line, lineRule: LineRuleType.AUTO },
+            children: [K.run(b.text)],
+          }),
+        );
+        break;
+      case "li":
+        drawn = true;
+        out.push(new Paragraph({ bullet: { level: 0 }, spacing: { after: 60, line, lineRule: LineRuleType.AUTO }, children: [K.run(b.text)] }));
+        break;
+      case "note":
+        drawn = true;
+        out.push(
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            keepNext: true,
+            spacing: { before: 80, after: 120, line, lineRule: LineRuleType.AUTO },
+            children: [K.run(b.text, { bold: true })],
+          }),
+        );
+        break;
+      case "clues": {
+        drawn = true;
+        /*
+         * Ikki ustun — CHEGARASIZ jadval: bosma krossvordda savollar
+         * ikki ustunda yoziladi va har ustun o'z sarlavhasi bilan
+         * boshlanadi. `w:cols` (haqiqiy gazeta ustunlari) yaramaydi:
+         * u BUTUN bo'limga tegishli bo'lar va to'r rasmini ham ikkiga
+         * bo'lib yuborardi.
+         */
+        const none = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" };
+        const colW = Math.floor(W / Math.max(1, b.columns.length));
+        out.push(
+          new Table({
+            width: { size: W, type: WidthType.DXA },
+            columnWidths: b.columns.map(() => colW),
+            layout: TableLayoutType.FIXED,
+            /*
+             * Chegara JADVAL darajasida ham o'chiriladi: `docx` standart
+             * bo'yicha `w:tblBorders` ni `single` bilan yozadi va u
+             * katak sozlamasi bilan raqobatlashadi (LibreOffice katakni
+             * tinglaydi, Word esa jadvalni — ya'ni faylning ko'rinishi
+             * dasturga bog'liq bo'lib qolardi).
+             */
+            borders: { top: none, bottom: none, left: none, right: none, insideHorizontal: none, insideVertical: none },
+            rows: [
+              new TableRow({
+                children: b.columns.map(
+                  (col) =>
+                    new TableCell({
+                      width: { size: colW, type: WidthType.DXA },
+                      borders: { top: none, bottom: none, left: none, right: none },
+                      margins: { top: 40, bottom: 40, left: 0, right: 120 },
+                      children: [
+                        new Paragraph({
+                          alignment: AlignmentType.LEFT,
+                          keepNext: true,
+                          spacing: { after: 80, line, lineRule: LineRuleType.AUTO },
+                          children: [K.run(col.title, { bold: true })],
+                        }),
+                        ...col.items.map(
+                          (it) =>
+                            new Paragraph({
+                              alignment: AlignmentType.LEFT,
+                              spacing: { after: 60, line, lineRule: LineRuleType.AUTO },
+                              children: [K.run(it.text, { size: plan.page.tableSizePt * 2 })],
+                            }),
+                        ),
+                      ],
+                    }),
+                ),
+              }),
+            ],
+          }),
+        );
+        out.push(new Paragraph({ spacing: { after: 120, line: 240, lineRule: LineRuleType.AUTO }, children: [] }));
+        break;
+      }
+      case "cards": {
+        drawn = true;
+        const pad = mmDxa(card.padMm);
+        const cellW = mmDxa(card.wMm);
+        const rowH = mmDxa(card.hMm);
+        /*
+         * Varaq shapkasi — HAR betda ikki qator, BIR XIL balandlikda
+         * (`planGame` izohi: old bet bilan orqa bet siljimasin).
+         */
+        out.push(
+          new Paragraph({
+            alignment: AlignmentType.LEFT,
+            keepNext: true,
+            ...(b.pageBreak ? { pageBreakBefore: true } : {}),
+            spacing: { after: 0, line: 240, lineRule: LineRuleType.AUTO },
+            children: [K.run(b.title, { size: small })],
+          }),
+        );
+        out.push(
+          new Paragraph({
+            alignment: AlignmentType.LEFT,
+            keepNext: true,
+            spacing: { after: 60, line: 240, lineRule: LineRuleType.AUTO },
+            children: [K.run(b.hint, { size: small, italics: true, color: "666666" })],
+          }),
+        );
+        const cut = { style: BorderStyle.DASHED, size: 4, color: "BBBBBB" };
+        out.push(
+          new Table({
+            width: { size: cellW * card.cols, type: WidthType.DXA },
+            columnWidths: Array.from({ length: card.cols }, () => cellW),
+            layout: TableLayoutType.FIXED,
+            // Kesish chizig'i JADVAL darajasida ham — `docx` ning standart
+            // `single` chegarasi Word da qattiq ramka chizib qo'ymasin.
+            borders: { top: cut, bottom: cut, left: cut, right: cut, insideHorizontal: cut, insideVertical: cut },
+            rows: b.rows.map(
+              (row) =>
+                new TableRow({
+                  // QAT'IY balandlik — panjara har betda bir xil joyda tursin.
+                  height: { value: rowH, rule: HeightRule.EXACT },
+                  children: row.map(
+                    (face) =>
+                      new TableCell({
+                        width: { size: cellW, type: WidthType.DXA },
+                        borders: { top: cut, bottom: cut, left: cut, right: cut },
+                        margins: { top: pad, bottom: pad, left: pad, right: pad },
+                        verticalAlign: VerticalAlign.CENTER,
+                        children:
+                          face.k === "blank"
+                            ? [new Paragraph({ spacing: { after: 0, line: 240, lineRule: LineRuleType.AUTO }, children: [] })]
+                            : [
+                                new Paragraph({
+                                  alignment: AlignmentType.CENTER,
+                                  spacing: { after: 0, line: 240, lineRule: LineRuleType.AUTO },
+                                  children: [K.run(face.text, face.side === "front" ? { bold: true } : { size: card.backPt * 2 })],
+                                }),
+                                ...(face.example
+                                  ? [
+                                      new Paragraph({
+                                        alignment: AlignmentType.CENTER,
+                                        spacing: { before: 60, after: 0, line: 240, lineRule: LineRuleType.AUTO },
+                                        children: [K.run(face.example, { size: card.examplePt * 2, italics: true })],
+                                      }),
+                                    ]
+                                  : []),
+                              ],
+                      }),
+                  ),
+                }),
+            ),
+          }),
+        );
+        break;
+      }
+      case "figure": {
+        drawn = true;
+        const img = await figureBytes(b.figure?.url, opts);
+        if (img && b.figure) {
+          const maxW = Math.min(Math.floor(W / 15), Math.floor((170 / 25.4) * 96));
+          const ratio = b.figure.h && b.figure.w ? b.figure.h / b.figure.w : 1;
+          /*
+           * To'rning CHOP ETILADIGAN kengligi SPECDAN (`FigureSpec
+           * kind:"svg"` `widthMm`): kichik to'r (13×13) betning butun
+           * enига cho'zilsa kataklar bemaza katta chiqardi, katta to'r
+           * (21×21) esa 170 mm ga siqilib, harflar o'qilmasdi. WP-A
+           * uni katak o'lchamidan hisoblaydi — maket faqat hurmat
+           * qiladi.
+           */
+          const specMm = b.figure.spec.kind === "svg" ? Number(b.figure.spec.widthMm) : 0;
+          const wantW = specMm > 0 ? Math.floor((specMm / 25.4) * 96) : maxW;
+          let width = Math.min(maxW, wantW);
+          let height = Math.round(width * ratio);
+          const maxH = Math.floor((200 / 25.4) * 96);
+          if (height > maxH) {
+            height = maxH;
+            width = Math.round(height / ratio);
+          }
+          out.push(
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              keepNext: true,
+              // `lineRule: auto` SHART — usiz LibreOffice rasmni bitta matn qatoriga siqadi.
+              spacing: { before: 120, after: 80, line: 240, lineRule: LineRuleType.AUTO },
+              children: [new ImageRun({ type: img.type, data: img.data, transformation: { width, height } })],
+            }),
+          );
+        } else {
+          const border = { style: BorderStyle.SINGLE, size: 6, color: "999999", space: 8 };
+          out.push(
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              keepNext: true,
+              border: { top: border, bottom: border, left: border, right: border },
+              spacing: { before: 120, after: 80, line, lineRule: LineRuleType.AUTO },
+              children: [K.run(b.placeholder, { italics: true, color: "666666" })],
+            }),
+          );
+        }
+        out.push(
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 200, line, lineRule: LineRuleType.AUTO },
+            children: [K.run(b.caption, { size: small })],
+          }),
+        );
+        break;
+      }
+    }
+  }
+  return out;
+}
+
 /**
  * `opts.resolveImage` — tahrirdan keyingi QAYTA render uchun (B-1).
  *
@@ -1174,6 +1494,13 @@ export async function renderDocx(doc: AcademicDoc, opts: ResumeDocxOpts = {}): P
    * hujjatning MAZMUNI o'zgarmaydi.
    */
   const teacher = !article && !work && isTeacherDoc(doc) ? planTeacher(doc) : null;
+  /*
+   * Bosma o'yinlar (AUDIT-21 WP-A/WP-B): krossvord va flesh kartalar —
+   * `planGame` dan. Shart `doc.game` ning O'ZI: o'yin vositasining eski
+   * hujjati YO'Q (ikkalasi ham yangi xizmat), shuning uchun `toolId`
+   * bo'yicha zaxira yo'l ham kerak emas.
+   */
+  const game = !article && !work && !teacher && isGameDoc(doc) ? planGame(doc) : null;
   const P = resume
     ? resumeProfile(resume.template)
     : article
@@ -1182,7 +1509,9 @@ export async function renderDocx(doc: AcademicDoc, opts: ResumeDocxOpts = {}): P
         ? workProfile(work.model.subject)
         : teacher
           ? teacherProfile(teacher.kind)
-          : base;
+          : game
+            ? gameProfile(game.kind)
+            : base;
   const K = makeKit(P);
   const L = docLabels(meta.language);
   const children: Array<Paragraph | Table> = [];
@@ -1257,6 +1586,9 @@ export async function renderDocx(doc: AcademicDoc, opts: ResumeDocxOpts = {}): P
   } else if (teacher) {
     // Titul beti YO'Q (`teacherProfile.titlePage === "none"`) — shapka rejaning o'zida.
     children.push(...(await drawTeacher(teacher, K, P, opts)));
+  } else if (game) {
+    // Titul beti YO'Q; kartalarda umuman shapka ham yo'q (`planGame`).
+    children.push(...(await drawGame(game, K, P, opts)));
   } else {
     if (doc.toc) {
       children.push(K.heading(L.toc, HeadingLevel.HEADING_1));

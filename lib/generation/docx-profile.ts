@@ -1,4 +1,7 @@
 import { PUBLICATION_PROFILES } from "./article/profiles";
+import { GAME_LANDSCAPE, GAME_MARGINS_CM, GAME_TYPE } from "./games/layout";
+import { gameKindOf } from "./games/registry";
+import type { GameKind } from "./games/types";
 import { TEACHER_LANDSCAPE, TEACHER_MARGINS_CM, TEACHER_TYPE } from "./teacher/layout";
 import { teacherKindOf } from "./teacher/registry";
 import type { TeacherKind } from "./teacher/types";
@@ -438,10 +441,60 @@ export function teacherProfile(kind: TeacherKind): DocProfile {
 }
 
 /**
+ * BOSMA O'YIN profili — KIND ga bog'langan (AUDIT-21 WP-B).
+ *
+ * `teacherProfile` bilan bir juft: chegara va tipografiya
+ * `games/layout.ts` dan, ya'ni ko'ruvchi varag'i (`WordViewer
+ * gameSheet`) AYNAN shu raqamlarni o'qiydi.
+ *
+ * Uchta qaror:
+ *   1. `titlePage: "none"` — ikkala vositada ham titul beti YO'Q.
+ *      Kartalarda bu ayniqsa qat'iy: birinchi bet KARTALARNING O'ZI
+ *      bo'lishi kerak, chunki har bet ikki tomonlama bosiladi va
+ *      qo'shimcha bet old/orqa juftlikni siljitardi.
+ *   2. Kartalarda chegara 1 sm — panjara qanchalik keng bo'lsa, karta
+ *      shunchalik A7 ga yaqin; 1 sm dan kichigini uy printerlari
+ *      bosmaydi (`cardCellMm` shu chegaradan hisoblaydi).
+ *   3. Sarlavha CHAPDA, BOSH HARFSIZ, CHIZIQSIZ — o'qituvchi
+ *      hujjatlaridagi kabi (`reference` dagi to'q sariq ajratgich
+ *      bosma o'yin varag'ida havaskorlik belgisi).
+ *
+ * `id` asos profilniki bo'lib QOLADI (`lesson`): eski tekshiruvlar va
+ * `profileById` shu identifikatorlarga tayanadi.
+ */
+export function gameProfile(kind: GameKind): DocProfile {
+  const m = GAME_MARGINS_CM[kind];
+  const t = GAME_TYPE[kind];
+  const cm = (v: number) => Math.round(v * CM);
+  return {
+    ...PROFILES.lesson,
+    page: {
+      ...GOST_PAGE,
+      landscape: GAME_LANDSCAPE[kind],
+      margin: { top: cm(m.top), bottom: cm(m.bottom), left: cm(m.left), right: cm(m.right) },
+    },
+    type: { ...GOST_TYPE, font: "Times New Roman", size: t.sizePt * 2, line: Math.round(240 * t.line), justify: false, firstLine: 0, after: 120 },
+    heading: { align: "left", upper: false, rule: false, color: "000000" },
+    titlePage: "none",
+    // Bu oilada hujjat jadvali yo'q — bayroq umumiy yo'lga tushib qolmasin.
+    tablePlacement: "anchored",
+    tableSize: t.tableSizePt * 2,
+  };
+}
+
+/**
  * Janr uchun profil. Yagona joy — renderer boshqa hech qayerda
  * `toolId` ni so'ramaydi.
  */
 export function profileFor(meta: DocMeta): DocProfile {
+  /*
+   * Bosma o'yinlar (AUDIT-21) — o'qituvchi oilasidan KEYIN, lekin
+   * `switch` dan OLDIN: vosita id lari (`crossword`/`flashcards`)
+   * `GAME_TOOL_IDS` xaritasida, shuning uchun bu yerda ham ikkinchi
+   * `if` zanjiri yozilmaydi.
+   */
+  const gameKind = gameKindOf(meta.toolId);
+  if (gameKind) return gameProfile(gameKind);
   /*
    * O'qituvchi oilasi (5 vosita) — BIRINCHI shox: `lesson-plan`,
    * `texnologik-xarita`, `glossary` uchun eski `case` lar quyida
