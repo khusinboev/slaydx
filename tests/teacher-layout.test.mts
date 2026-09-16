@@ -211,9 +211,16 @@ test("keys: vaziyatlar + ALOHIDA rubrika bo'limi (WP-A shartnomasi)", () => {
 
 test("test: variant betlari, KALIT va OMR yangi betdan", () => {
   const plan = planTeacher(sampleTeacherDoc("test"));
-  assert.deepEqual(plan.pageBreaks, ["variantA", "variantB", "key", "omr"]);
+  /*
+   * AUDIT-20 WP-D: OMR KALITDAN OLDIN — o'quvchi qismi (ko'rsatma,
+   * variantlar, javob varag'i) birga turadi, kalit va mezon esa
+   * o'qituvchi qismida. `test/engine.ts testSections` DOIM shu
+   * tartibda yozadi; namuna endi shunga mos (ilgari `omr` oxirida
+   * turib, hech qachon yaratilmaydigan tartibni qulflab qo'ygandi).
+   */
+  assert.deepEqual(plan.pageBreaks, ["variantA", "variantB", "omr", "key"]);
   const breaks = plan.body.filter((b) => b.k === "h1" && b.pageBreak).map((b) => (b.k === "h1" ? b.sectionId : ""));
-  assert.deepEqual(breaks, ["variantA", "variantB", "key", "omr"], "sahifa uzilishi aynan shu bo'limlarda");
+  assert.deepEqual(breaks, ["variantA", "variantB", "omr", "key"], "sahifa uzilishi aynan shu bo'limlarda");
   const key = plan.body.find((b) => b.k === "h1" && b.sectionId === "key");
   assert.ok(key?.k === "h1" && key.pageBreak, "javoblar kaliti YANGI BETDAN boshlanishi kerak");
 });

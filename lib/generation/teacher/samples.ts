@@ -132,7 +132,7 @@ function lessonDocSample(meta: DocMeta, o: SampleTeacherOpts): AcademicDoc {
     stageBlocks.push({ kind: "h3", text: `${i + 1}. ${st.title} (${st.minutes} ${L.minutesShort})` });
     stageBlocks.push(p(st.teacher));
     stageBlocks.push(p(st.student));
-    stageBlocks.push(p(`${L.stage}: ${st.method}`));
+    stageBlocks.push(p(`${L.method}: ${st.method}`));
   });
 
   const table: DocTable = {
@@ -492,11 +492,18 @@ function testDocSample(meta: DocMeta, o: SampleTeacherOpts): AcademicDoc {
     toc: false,
     teacher: model,
     sections: [
+      /*
+       * Tartib `test/engine.ts testSections` bilan AYNI: o'quvchi
+       * qismi (ko'rsatma → variantlar → javob varag'i) birga, keyin
+       * o'qituvchi qismi (kalit → mezon). Namunada `omr` oxirida
+       * turardi va shu sababli maket testlari HECH QACHON
+       * yaratilmaydigan tartibni qulflab qo'ygan edi (WP-C ochiq bandi).
+       */
       section("instructions", ""),
       ...variants.map((v) => section(`variant${v.id}`, "")),
+      section("omr", ""),
       section("key", ""),
       ...(test.criteria ? [section("criteria", "")] : []),
-      section("omr", ""),
     ],
   };
 }

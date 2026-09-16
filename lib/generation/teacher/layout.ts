@@ -140,7 +140,6 @@ type TeacherLayoutWords = {
   date: string;
   variant: string;
   docTitle: Record<TeacherKind, string>;
-  method: string;
   teacherActs: string;
   studentActs: string;
   instructions: string;
@@ -182,7 +181,6 @@ const WORDS: Record<"uz" | "ru" | "en", TeacherLayoutWords> = {
       keys: "KEYS TOPSHIRIQLARI",
       test: "TEST TOPSHIRIG‘I",
     },
-    method: "Metod:",
     teacherActs: "O‘qituvchi:",
     studentActs: "O‘quvchi:",
     instructions: "Ko‘rsatma",
@@ -214,7 +212,6 @@ const WORDS: Record<"uz" | "ru" | "en", TeacherLayoutWords> = {
       keys: "КЕЙС-ЗАДАНИЯ",
       test: "ТЕСТОВОЕ ЗАДАНИЕ",
     },
-    method: "Метод:",
     teacherActs: "Учитель:",
     studentActs: "Ученик:",
     instructions: "Инструкция",
@@ -246,7 +243,6 @@ const WORDS: Record<"uz" | "ru" | "en", TeacherLayoutWords> = {
       keys: "CASE-STUDY TASKS",
       test: "TEST PAPER",
     },
-    method: "Method:",
     teacherActs: "Teacher:",
     studentActs: "Pupil:",
     instructions: "Instructions",
@@ -289,7 +285,15 @@ export const TEACHER_SECTION_IDS: Record<TeacherKind, readonly string[]> = {
   map: ["passport", "year", "q1", "q2", "q3", "q4"],
   glossary: ["intro", "terms"],
   keys: ["intro", "rubric"],
-  test: ["instructions", "key", "criteria", "omr"],
+  /*
+   * Test: O'QUVCHI qismi birga turadi — ko'rsatma, variantlar, javob
+   * varag'i; FAQAT SHUNDAN KEYIN o'qituvchi qismi (kalit, mezon).
+   * `variantA`… dinamik va `instructions` bilan `omr` orasida keladi.
+   * `test/engine.ts testSections` AYNAN shu tartibda yozadi — ilgari
+   * bu ro'yxat `omr` ni oxirida ko'rsatib, shartnomani yolg'on
+   * e'lon qilardi (WP-C ochiq bandi).
+   */
+  test: ["instructions", "omr", "key", "criteria", "honesty"],
 };
 
 /** `case1` → 1; boshqa id da `null`. */
@@ -558,7 +562,7 @@ export function planTeacher(doc: AcademicDoc): TeacherPlan {
            * bandga qo'shiladi va ikkala chizuvchi ham darhol rasm
            * chizadi (shartnoma o'zgarmaydi).
            */
-          pushFigure(b.figureId, b.text || "", p);
+          pushFigure(b.figureId, b.text || "", p, (model.figures ?? []).find((f) => f.id === b.figureId));
           break;
         case "tableRef": {
           const t = docTables.find((x) => x.id === b.tableId);
@@ -728,7 +732,7 @@ export function planTeacher(doc: AcademicDoc): TeacherPlan {
           l.stages?.forEach((st, i) => {
             const p = `teacher.lesson.stages.${i}`;
             body.push({ k: "h3", text: `${i + 1}. ${clean(st.title)} (${st.minutes} ${L.minutesShort})`, path: `${p}.title` });
-            if (clean(st.method)) body.push({ k: "kv", label: L.method, text: clean(st.method), path: `${p}.method` });
+            if (clean(st.method)) body.push({ k: "kv", label: `${L.method}:`, text: clean(st.method), path: `${p}.method` });
             if (clean(st.teacher)) body.push({ k: "kv", label: L.teacherActs, text: clean(st.teacher), path: `${p}.teacher` });
             if (clean(st.student)) body.push({ k: "kv", label: L.studentActs, text: clean(st.student), path: `${p}.student` });
             if (clean(st.result)) body.push({ k: "kv", label: `${L.timeCols[2]}:`, text: clean(st.result), path: `${p}.result` });
@@ -823,7 +827,7 @@ export function planTeacher(doc: AcademicDoc): TeacherPlan {
          * o'rinbosar ramka qo'shilmaydi.
          */
         const count = t.questions.filter((q) => isOmrQuestionKind(q.kind)).length || t.omr.count;
-        pushFigure("omr", L.omrCaption(count), "teacher.test.omr");
+        pushFigure("omr", L.omrCaption(count), "teacher.test.omr", (model.figures ?? []).find((f) => f.id === "omr"));
       }
     }
   };

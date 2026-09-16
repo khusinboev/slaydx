@@ -41,6 +41,17 @@ export type TeacherExtraLabels = {
   equipment: string;
   assessment: string;
   stages: string;
+  /**
+   * Interaktiv USUL yorlig'i («Metod: Suhbat»).
+   *
+   * Ilgari dvigatel (`lesson.ts`, `samples.ts`) buning o'rniga
+   * `SectionLabels.stage` («Bosqich») ni yozardi — bosqichning O'ZI
+   * allaqachon `h3` sarlavhada turgani uchun paragraf «Bosqich:
+   * Suhbat» bo'lib chiqardi, ya'ni yorliq maydonni YOLG'ON atardi
+   * (WP-C ochiq bandi). Maket ham shu yorliqni o'qiydi
+   * (`layout.ts` `kv` bandi), shuning uchun u YAGONA manba.
+   */
+  method: string;
   situation: string;
   example: string;
   /** «I chorak» / «I четверть» / «Quarter I». */
@@ -61,6 +72,7 @@ const EXTRA: Record<TeacherLang, TeacherExtraLabels> = {
     equipment: "Jihozlar",
     assessment: "Baholash mezoni",
     stages: "Dars bosqichlari",
+    method: "Metod",
     situation: "Vaziyat",
     example: "Misol",
     quarter: (n) => `${["I", "II", "III", "IV"][n - 1] ?? n} chorak`,
@@ -77,6 +89,7 @@ const EXTRA: Record<TeacherLang, TeacherExtraLabels> = {
     equipment: "Оборудование",
     assessment: "Критерии оценивания",
     stages: "Этапы урока",
+    method: "Метод",
     situation: "Ситуация",
     example: "Пример",
     quarter: (n) => `${["I", "II", "III", "IV"][n - 1] ?? n} четверть`,
@@ -93,6 +106,7 @@ const EXTRA: Record<TeacherLang, TeacherExtraLabels> = {
     equipment: "Equipment",
     assessment: "Assessment criteria",
     stages: "Lesson stages",
+    method: "Method",
     situation: "Situation",
     example: "Example",
     quarter: (n) => `Quarter ${["I", "II", "III", "IV"][n - 1] ?? n}`,
