@@ -22,13 +22,12 @@ import type { AcademicDoc, Block, DocMeta, DocSection, DocTable, Figure } from "
 import type { TranslationSource } from "../../source-types";
 import type { DocReview, UserNeed } from "../../report/types";
 import { llmEnabled } from "../../llm";
-import { CostMeter, complete as completeRole, type LlmUsage } from "../../llm-roles";
+import { CostMeter, complete as completeRole } from "../../llm-roles";
 import { parseLlmObject } from "../../json";
 import { mapPool, remainingMs } from "../../quality";
 import { POLISH_MAX_FIXES, runPolishWith, type Fix } from "../../report/polish-core";
 import { neutralJudgeFor } from "../../report/judge";
 import { scoreReviewFor } from "../../report/score";
-import type { CompleteFn } from "../../research/pipeline";
 import {
   TEACHER_LIMITS,
   type GradeBand,
@@ -58,23 +57,22 @@ import { testLabels } from "./labels";
 
 /* ────────────────────────── shartnoma ────────────────────────── */
 
+/**
+ * WP-A shartnomasining KENGAYTMASI: `TeacherBuildOpts` (deadline,
+ * source, onStage, onCost, onUsage, complete, judge, polish, now)
+ * o'zgarmaydi — `teacher/engine.ts` shu tip bilan chaqiradi. Bu yerda
+ * faqat TEST ga xos seam lar qo'shiladi, hammasi IXTIYORIY: shuning
+ * uchun `buildTestDoc` `TeacherBuilder` sifatida ham ishlaydi.
+ */
 export type TestBuildOpts = TeacherBuildOpts & {
-  /** Test seam — rol bo'yicha LLM. */
-  complete?: CompleteFn;
   /** Test seam — OMR PNG (standart: `../../figures` dinamik import). */
   buildFigures?: (figures: Figure[], o: { lang: string }) => Promise<Figure[]>;
   /** Test seam — o'quv dasturi mavzulari (standart: `lib/curriculum.ts`). */
   topics?: (subjectId: string, grade: number, ids: readonly string[]) => Promise<PromptTopic[]>;
   /** Test seam — yuklangan fayl matni. */
   sourceTextOf?: (source: TranslationSource) => Promise<string>;
-  /** `false` — baholovchi chaqirilmaydi. */
-  judge?: boolean;
-  /** Avto-sayqal; standart `true` (`TEACHER_POLISH=0` bilan o'chadi). */
-  polish?: boolean;
   /** Aralashtirish urug'i — testda barqaror qiymat. */
   seed?: string;
-  onUsage?: (u: LlmUsage) => void;
-  now?: Date;
 };
 
 /** Bitta LLM chaqiruvida nechta savol — R3 §3.2 (10 talik bo'lak). */
@@ -389,7 +387,15 @@ export async function buildTestDoc(meta: DocMeta, values: FormValues, opts: Test
   }
 
   stage({ progress: STAGE.done, step: "Tayyor" });
-  return { doc, cost: meter.toJson() };
+  const cost = meter.toJson();
+  opts.onCost?.(cost);
+  /*
+   * `delivered` — SAVOL soni (AUDIT-20 §2). Dvigatel uni O'ZI qaytaradi,
+   * chunki qancha savol manbada tasdiqlanmagani uchun o'chirilganini
+   * faqat shu yer biladi; `delivered.ts` (WP-F) ikkinchi marta
+   * hisoblamaydi.
+   */
+  return { doc, cost, delivered: { got: model.questions.length, want: input.count } };
 }
 
 /* ────────────────────────── yig'ish ────────────────────────── */
