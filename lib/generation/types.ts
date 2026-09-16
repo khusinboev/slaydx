@@ -10,6 +10,7 @@ import type { SlideResearch } from "./slide-research";
 import type { ResumeModel } from "./resume/model";
 import type { ArticleModel, ArticleTypeId, CiteStyle, PublicationProfileId } from "./article/types";
 import type { EssayModel } from "./essay/types";
+import type { WorkModel } from "./work/types";
 import type { ResumePaletteId, ResumeTemplateId } from "./resume/templates";
 
 export type GenImage = {
@@ -487,6 +488,14 @@ export type AcademicDoc = {
   article?: ArticleModel;
   /** Insho (Talaba ishlari 2, AUDIT-19): kontekst/tur, hajm, thesis statement, hisobot; matn `sections` da. */
   essay?: EssayModel;
+  /**
+   * Talaba ishlari 2 (AUDIT-19): kurs ishi / referat / mustaqil ish
+   * modeli — janr/tur/fan profili, titul maydonlari, bob→paragraf
+   * daraxti, kirish elementlari, tekshirilgan manbalar, hisobot. Matn
+   * `sections` da TEKIS qoladi (bob = `ch1` sarlavha bo'limi, paragraf
+   * = `ch1.1`); tartib/raqamlash `work/layout.ts planWork` da.
+   */
+  work?: WorkModel;
   images?: GenImage[];
   imagePrompt?: string;
   imageScene?: string;
