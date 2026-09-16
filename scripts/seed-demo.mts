@@ -238,6 +238,38 @@ const SAMPLES: Record<string, FormValues> = {
    * slaydi), test + javoblar kaliti (izoh o'chiq), rasm uslubi.
    * 12 slayd × 2 000 = 24 000 tanga.
    */
+  /*
+   * ── 2-dastur (AUDIT-21): bosma o'yinlar + infografika ──
+   *
+   * `scripts/live-engine.mts` dagi `crossword`/`flashcards`/`infographic`
+   * keyslari bilan BIR XIL qiymatlar — demo aynan jonli sinovda
+   * tekshirilgan holatni ko'rsatsin (10 so'zli klassik krossvord,
+   * misolli term-def kartalar, 5 blokli jarayon plakati).
+   */
+  crossword: {
+    topic: "Fotosintez",
+    subject: "Biologiya",
+    grade: 7,
+    language: "uz",
+    mode: "topic",
+    crosswordType: "klassik",
+    wordCount: 10,
+  },
+  flashcards: {
+    topic: "Biologiya atamalari: hujayra",
+    language: "uz",
+    cardType: "term-def",
+    cardCount: 10,
+    includeExample: "ha",
+  },
+  infographic: {
+    topic: "Suv aylanishi",
+    infographicType: "process",
+    blockCount: 5,
+    palette: "indigo",
+    size: "A4",
+    language: "uz",
+  },
   "pro-slide": {
     topic: "Orol dengizi fojiasi va uni tiklash choralari",
     slideCount: 12,

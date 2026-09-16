@@ -22,6 +22,8 @@
  *   npm run live -- lesson map map-quarters glossary keys  — o'qituvchi (AUDIT-20)
  *   npm run live -- test-topic test-curriculum             — test dvigateli
  *   npm run live -- test-file --source ./namuna.docx       — test, fayl rejimi
+ *   npm run live -- crossword flashcards infographic       — o'yinlar + plakat (AUDIT-21)
+ *   npm run live -- crossword-file --source ./namuna.docx  — krossvord, fayl rejimi
  *
  * `GEMINI_API_KEY` shart (`--list` dan tashqari). Chiqish `eval-out/live/` ga.
  */
@@ -47,6 +49,10 @@ import { isArticleTypeId } from "../lib/generation/article/types-registry.ts";
 import { ESSAY_FILLER } from "../lib/generation/essay/prompts.ts";
 import type { ArticleTypeId, PublicationProfileId } from "../lib/generation/article/types.ts";
 import type { FormValues } from "../lib/types.ts";
+import { countGridCrossings } from "../lib/generation/games/crossword/review.ts";
+import { CROSSWORD_SECTION_IDS } from "../lib/generation/games/crossword/engine.ts";
+import { GAME_LIMITS } from "../lib/generation/games/types.ts";
+import sharp from "sharp";
 
 type Check = { label: string; ok: boolean; detail: string };
 type Case = {
@@ -54,8 +60,14 @@ type Case = {
   tool: keyof typeof TOOL_BY_ID;
   values: FormValues;
   budgetMs: number;
-  /** Faylni ko'rgandan keyin nimani da'vo qilamiz. */
-  checks: (file: BuiltFile, pages: number | null) => Check[];
+  /**
+   * Faylni ko'rgandan keyin nimani da'vo qilamiz.
+   *
+   * `Promise<Check[]>` ham mumkin — infografika holati PNG o'lchamini
+   * `sharp` bilan ASINXRON o'qiydi (AUDIT-21). Sinxron holatlar
+   * o'zgarmaydi: `await syncValue` uni o'zgarishsiz qaytaradi.
+   */
+  checks: (file: BuiltFile, pages: number | null) => Check[] | Promise<Check[]>;
 };
 
 const OUT = path.resolve(process.cwd(), "eval-out", "live");
@@ -362,6 +374,144 @@ function teacherCases(): Case[] {
       },
     },
   ];
+}
+
+/* ═════════════ 2-dastur — bosma o'yinlar + infografika (AUDIT-21) ═════════════ */
+
+/**
+ * Krossvord — ikkala holat (mavzu/fayl) bir xil da'volarni tekshiradi,
+ * faqat manba tasdig'i (`fileMode`) qo'shiladi. `WP-B`/`WP-C` hali
+ * ulanmagan bo'lsa (`buildGameDoc`/`buildInfographicArtifact` `null`
+ * qaytaradi) `buildArtifact` xato tashlaydi va `runCase` buni «✘ XATO»
+ * deb ANIQ ko'rsatadi — checks funksiyasi hech qachon soxta yashil
+ * bermaydi, chunki u yiqilgan holatda umuman chaqirilmaydi.
+ */
+function crosswordChecks(f: BuiltFile, pages: number | null, o: { wordCount: number; fileMode?: boolean }): Check[] {
+  const g = f.doc.game;
+  const cw = g?.crossword;
+  const words = cw?.words ?? [];
+  const dropped = cw?.dropped ?? [];
+  const grid = cw?.grid;
+  const crossings = words.length ? countGridCrossings(words) : 0;
+  const sectionIds = f.doc.sections.map((s) => s.id);
+  const figures = g?.figures ?? [];
+  const review = g?.review;
+  const d = f.delivered;
+  return [
+    ok("doc.game.crossword bor", g?.kind === "crossword" && Boolean(cw), cw ? `${words.length} so'z, ${dropped.length} tashlangan` : "YO'Q — dvigatel ishlamadi"),
+    ok(`so'z ${o.wordCount} (dropped ≤1)`, words.length >= o.wordCount - 1 && dropped.length <= 1, `${words.length} joylashdi, ${dropped.length} tashlandi`),
+    ok("to'r ≤21×21", Boolean(grid) && grid!.rows <= 21 && grid!.cols <= 21, grid ? `${grid.rows}×${grid.cols}` : "yo'q"),
+    ok("kesishma ≥ so'z/2", crossings >= Math.ceil(words.length / 2), `${crossings} kesishma / ${words.length} so'z`),
+    ok("bo'limlar grid·across·down·answers", JSON.stringify(sectionIds) === JSON.stringify(CROSSWORD_SECTION_IDS), sectionIds.join(" · ")),
+    ok("figure 2 ta (bo'sh + javob)", figures.length === 2, figures.map((x) => x.id).join(",") || "yo'q"),
+    ok("hisobot ≥ 55 ball", (review?.score ?? 0) >= 55, review ? `${review.score} ball` : "yo'q"),
+    ok("cost.calls > 0", (f.cost?.calls ?? 0) > 0, f.cost ? `${f.cost.calls} chaqiruv, ${f.cost.provider}/${f.cost.model}` : "yo'q"),
+    ok("delivered joylashgan/so'ralgan mos", !d || d.got < d.want, d ? `${d.got}/${d.want} ${d.unit ?? ""} → farq qaytadi` : "to'liq yetkazildi (10/10)"),
+    ok("DOCX 2–4 bet", pages === null || (pages >= 2 && pages <= 4), `${pages ?? "o'girilmadi"} bet`),
+    suffixCheck(f, "-krossvord"),
+    ...(o.fileMode ? [ok("manba berildi (so'zlar fayldan)", Boolean(sourceArg()), sourceArg() ?? "--source YO'Q — holat ma'nosiz")] : []),
+  ];
+}
+
+function gameCases(): Case[] {
+  return [
+    {
+      /* Krossvord — mavzu rejimi: «Fotosintez», 10 so'z, klassik. */
+      name: "crossword",
+      tool: "crossword",
+      budgetMs: 180_000,
+      values: { topic: "Fotosintez", subject: "Biologiya", grade: 7, language: "uz", mode: "topic", crosswordType: "klassik", wordCount: 10 },
+      checks: (f, pages) => crosswordChecks(f, pages, { wordCount: 10 }),
+    },
+    {
+      /* Krossvord — fayl rejimi: `--source <fayl.docx>` SHART; so'zlar manbadan olinishi kerak. */
+      name: "crossword-file",
+      tool: "crossword",
+      budgetMs: 220_000,
+      values: { topic: "Yuklangan matn bo'yicha", subject: "Biologiya", grade: 7, language: "uz", mode: "file", sourceAssetId: "live", crosswordType: "klassik", wordCount: 10 },
+      checks: (f, pages) => crosswordChecks(f, pages, { wordCount: 10, fileMode: true }),
+    },
+    {
+      /*
+       * Flesh kartalar — WP-B (`games/flashcards/**`) hali yo'q:
+       * `buildGameDoc` flashcards shoxi dinamik importda modulni
+       * topolmay `null` qaytaradi, `buildArtifact` esa «AI javob
+       * bermadi» xatosini tashlaydi. Holat shu bilan ANIQ yiqiladi —
+       * WP-B ulangach checks o'zi ishga tushadi.
+       */
+      name: "flashcards",
+      tool: "flashcards",
+      budgetMs: 150_000,
+      values: { topic: "Biologiya atamalari: hujayra", language: "uz", cardType: "term-def", cardCount: 10, includeExample: "ha" },
+      checks: (f, pages) => {
+        const g = f.doc.game;
+        const cards = g?.cards?.cards ?? [];
+        const bounds = cards.every(
+          (c) =>
+            c.front.length >= GAME_LIMITS.cardFrontCharsMin &&
+            c.front.length <= GAME_LIMITS.cardFrontCharsMax &&
+            c.back.length >= GAME_LIMITS.cardBackCharsMin &&
+            c.back.length <= GAME_LIMITS.cardBackCharsMax,
+        );
+        const review = g?.review;
+        const d = f.delivered;
+        return [
+          ok("doc.game.cards bor", g?.kind === "flashcards" && Boolean(g?.cards), cards.length ? `${cards.length} karta` : "YO'Q — dvigatel yo'q (WP-B)"),
+          ok("kartalar 10", cards.length === 10, `${cards.length} ta`),
+          ok("old/orqa yuz chegaralari", cards.length > 0 && bounds, cards.length ? "ichida" : "tekshirilmadi"),
+          ok("misol qatori (includeExample=ha)", cards.length === 0 || cards.some((c) => c.example), cards.filter((c) => c.example).length + "/" + cards.length),
+          ok("hisobot ≥ 55 ball", (review?.score ?? 0) >= 55, review ? `${review.score} ball` : "yo'q"),
+          ok("cost.calls > 0", (f.cost?.calls ?? 0) > 0, f.cost ? `${f.cost.calls} chaqiruv` : "yo'q"),
+          ok("delivered mos", !d || d.got < d.want, d ? `${d.got}/${d.want} ${d.unit ?? ""}` : "to'liq yetkazildi"),
+          /*
+           * BET SONI YUMSHOQ (egasi ko'rsatmasi): 2×4 karta = 4 bet (2 old
+           * + 2 orqa, duplex) WP-B ning `drawCards`/`gameFlow` maketi
+           * kelgach qat'iylashadi — hozircha faqat «bir nechta bet chiqdi».
+           */
+          ok("DOCX bet (yumshoq — WP-B maketi kelmaguncha)", pages === null || pages >= 1, `${pages ?? "o'girilmadi"} bet (mo'ljal 4 — 2 old + 2 orqa)`),
+          suffixCheck(f, "-kartalar"),
+        ];
+      },
+    },
+  ];
+}
+
+/**
+ * Infografika — WP-C (`infographic/engine.ts`) hali STUB (`null`):
+ * `buildArtifact` «Infografika yaratilmadi» xatosini tashlaydi va holat
+ * shu bilan yiqiladi. Ulangach PNG o'lchamini `sharp` bilan HAQIQIY
+ * o'qiydi (A4 @300 dpi ≈ 2480×3508 px, ±2 % — DOCX/PDF o'girmasidan
+ * FARQLI, bu yerda `pageCount` ishlamaydi: chiqish rasm, PDF emas).
+ */
+function infographicCase(): Case {
+  return {
+    name: "infographic",
+    tool: "infographic",
+    budgetMs: 150_000,
+    values: { topic: "Suv aylanishi", infographicType: "process", blockCount: 5, palette: "indigo", size: "A4", language: "uz" },
+    checks: async (f) => {
+      const spec = f.doc.infographic?.spec;
+      const review = f.doc.infographic?.review;
+      let dims = "o'qilmadi";
+      let dimsOk = false;
+      try {
+        const meta = await sharp(f.bytes).metadata();
+        const wantW = 2480;
+        const wantH = 3508;
+        dimsOk = Boolean(meta.width && meta.height) && Math.abs(meta.width! - wantW) / wantW <= 0.02 && Math.abs(meta.height! - wantH) / wantH <= 0.02;
+        dims = `${meta.width}×${meta.height} (mo'ljal ${wantW}×${wantH})`;
+      } catch (e) {
+        dims = e instanceof Error ? e.message : String(e);
+      }
+      return [
+        ok("PNG fayl bor", f.bytes.byteLength > 0 && f.mime === "image/png", `${Math.round(f.bytes.byteLength / 1024)} KB, ${f.mime}`),
+        ok("A4 @300dpi ≈2480×3508 px (±2%)", dimsOk, dims),
+        ok("doc.infographic.spec.blocks 5", (spec?.blocks.length ?? 0) === 5, `${spec?.blocks.length ?? 0} blok`),
+        ok("hisobot ≥ 55 ball", (review?.score ?? 0) >= 55, review ? `${review.score} ball` : "yo'q"),
+        ok("cost.calls > 0", (f.cost?.calls ?? 0) > 0, f.cost ? `${f.cost.calls} chaqiruv` : "yo'q"),
+      ];
+    },
+  };
 }
 
 const CASES: Case[] = [
@@ -807,6 +957,9 @@ const CASES: Case[] = [
    * (`doc.teacher`) — hisobot, sarf va `delivered` ham shundan.
    */
   ...teacherCases(),
+  /* ── 2-dastur (AUDIT-21) — bosma o'yinlar + infografika ── */
+  ...gameCases(),
+  infographicCase(),
   {
     /*
      * Pro-slayd: har parametr ta'sir qilishi shart (AUDIT-9). Bu keys
@@ -1017,7 +1170,7 @@ async function runCase(c: Case) {
     const pages = await pageCount(file);
     await writeFile(path.join(OUT, file.fileName), file.bytes);
 
-    const checks = c.checks(file, pages);
+    const checks = await c.checks(file, pages);
     for (const ch of checks) {
       process.stdout.write(`   ${ch.ok ? "✔" : "✘"} ${ch.label.padEnd(26)} ${ch.detail}\n`);
     }
@@ -1065,6 +1218,34 @@ async function runCase(c: Case) {
       process.stdout.write(`   boblar: ${w.chapters.map((ch) => `${ch.id}«${ch.title.slice(0, 40)}»(${ch.paragraphs.length})`).join(" ")}\n`);
       for (const r of w.references) process.stdout.write(`   manba ${r.id} [${kindOf(r)},${r.verified}${r.cited ? ",cited" : ""}] ${r.authors.slice(0, 2).join(", ")} (${r.year ?? "?"}) ${r.title.slice(0, 70)}\n`);
       for (const g of w.figures) process.stdout.write(`   sxema ${g.id}: ${g.spec.kind} — ${g.caption.slice(0, 70)}\n`);
+      await writeFile(path.join(OUT, `${c.name}.doc.json`), JSON.stringify(file.doc, null, 2));
+    }
+    /*
+     * O'yin (krossvord/kartalar): model xulosasi + hisobot; `doc.json` —
+     * WP-B maketi (`games/layout.ts planGame`) va ko'ruvchi paritetini
+     * o'lchash uchun urug', jonli chaqiruvsiz qayta ochib ko'rish mumkin.
+     */
+    if (file.doc.game) {
+      const g = file.doc.game;
+      const counts = [
+        g.crossword && `${g.crossword.words.length} so'z / ${g.crossword.dropped.length} tashlangan / ${g.crossword.grid.rows}×${g.crossword.grid.cols} to'r`,
+        g.cards && `${g.cards.cards.length} karta`,
+      ].filter(Boolean);
+      process.stdout.write(`   model: ${g.kind}/${g.type} — ${counts.join(", ")}\n`);
+      process.stdout.write(`   bo'limlar: ${file.doc.sections.map((s) => `${s.id}(${s.blocks.length})`).join(" ")}\n`);
+      for (const ch of g.review?.checks ?? []) {
+        if (ch.level !== "green") process.stdout.write(`   hisobot ${ch.level}: ${ch.id} — ${(ch.detail ?? "").slice(0, 90)}\n`);
+      }
+      for (const n of g.userNeeds ?? []) process.stdout.write(`   sizdan kutiladi: ${n.label}\n`);
+      await writeFile(path.join(OUT, `${c.name}.doc.json`), JSON.stringify(file.doc, null, 2));
+    }
+    /* Infografika: `doc.infographic` — PNG chiqishi yonida spetsifikatsiya urug'i. */
+    if (file.doc.infographic) {
+      const ig = file.doc.infographic;
+      process.stdout.write(`   plakat: ${ig.spec.type} — ${ig.spec.blocks.length} blok, palitra ${ig.spec.palette}\n`);
+      for (const ch of ig.review?.checks ?? []) {
+        if (ch.level !== "green") process.stdout.write(`   hisobot ${ch.level}: ${ch.id} — ${(ch.detail ?? "").slice(0, 90)}\n`);
+      }
       await writeFile(path.join(OUT, `${c.name}.doc.json`), JSON.stringify(file.doc, null, 2));
     }
     return { name: c.name, ok: checks.every((x) => x.ok), failed: checks.filter((x) => !x.ok) };
