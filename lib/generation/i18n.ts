@@ -506,6 +506,198 @@ export function sectionLabels(code: string): SectionLabels {
   return SECTIONS[(code || "uz").toLowerCase()] ?? SECTIONS.uz;
 }
 
+/* ══════════════════════ o'qituvchi vositalari (AUDIT-20) ══════════════════════ */
+
+/**
+ * O'qituvchi hujjatlarining YANGI qatorlari — AUDIT-20 bilan kelgan
+ * yorliqlar (maqsad uchligi, kompetensiyalar, chorak sarlavhasi, tarjima
+ * ustunlari, rasmiy shapka qatorlari, `delivered` birliklari).
+ *
+ * NEGA SHU FAYLDA: WP-A ularni vaqtincha `teacher/prompts.ts` ichida
+ * (`EXTRA`) saqlagan edi, chunki `i18n.ts` WP-F egaligida turardi. Endi
+ * manba BITTA: `teacherLabels` (prompt va dvigatel), `planTeacher`
+ * (WP-C maketi) va `delivered.ts` (birlik yorliqlari) shu jadvaldan
+ * o'qiydi. Ikkinchi nusxa bo'lsa «ekranda bitta xil, faylda boshqa xil»
+ * nuqsoni qaytadi — bu loyihada bir necha marta bo'lgan naqsh.
+ *
+ * `SectionLabels` ICHIGA qo'shilmadi: u 60+ maydonli umumiy jadval va
+ * uni beshta vositaga tegishli qatorlar bilan kengaytirish maqola/
+ * rezyume/tarjima yo'llarini ham og'irlashtirardi. Chaqiruvchi
+ * ikkalasini birlashtiradi (`teacherLabels = sectionLabels + extra`).
+ */
+export type TeacherExtraLabels = {
+  goal: string;
+  goalTalim: string;
+  goalTarbiya: string;
+  goalRivoj: string;
+  competencies: string;
+  equipment: string;
+  assessment: string;
+  stages: string;
+  situation: string;
+  example: string;
+  /** «I chorak» / «I четверть» / «Quarter I». */
+  quarter: (n: number) => string;
+  /** Uch tilli glossariy jadvali ustunlari. */
+  triCols: [string, string, string];
+  hoursWord: string;
+  weekWord: string;
+  /*
+   * ── Rasmiy shapka (WP-C `planTeacher` chizadi) ──
+   *
+   * «Sinf» va «Baholash mezonlari» bu yerda YO'Q: ular allaqachon
+   * `SectionLabels` da (`fieldGrade`, `rubric`) — ikkinchi nusxa
+   * yozilmaydi.
+   */
+  /** «Tasdiqlayman» — direktor o'rinbosari/metodik kengash qatori. */
+  approveWord: string;
+  /** «Tuzuvchi» — hujjat muallifi qatori. */
+  compiledBy: string;
+  /** «Sana». */
+  fieldDate: string;
+  /** «Variant» — test varianti sarlavhasi. */
+  variantWord: string;
+  /** «Javoblar kaliti» — o'qituvchi uchun alohida bet. */
+  answerKeySheet: string;
+  /** «Ko'rsatma» — test boshidagi qoidalar ro'yxati. */
+  instructions: string;
+  /*
+   * ── `delivered` birliklari (WP-F) ──
+   *
+   * Natija sahifasidagi jumla shu so'z bilan yoziladi («34 dan 24
+   * hafta»), shuning uchun u HUJJAT tiliga ergashadi.
+   */
+  unitWeek: string;
+  unitTerm: string;
+  unitCase: string;
+  unitQuestion: string;
+};
+
+const TEACHER_EXTRA: Record<"uz" | "ru" | "en", TeacherExtraLabels> = {
+  uz: {
+    goal: "Dars maqsadi",
+    goalTalim: "Ta’limiy",
+    goalTarbiya: "Tarbiyaviy",
+    goalRivoj: "Rivojlantiruvchi",
+    competencies: "Kompetensiyalar",
+    equipment: "Jihozlar",
+    assessment: "Baholash mezoni",
+    stages: "Dars bosqichlari",
+    situation: "Vaziyat",
+    example: "Misol",
+    quarter: (n) => `${["I", "II", "III", "IV"][n - 1] ?? n} chorak`,
+    triCols: ["Atama", "Ruscha", "Inglizcha"],
+    hoursWord: "soat",
+    weekWord: "hafta",
+    approveWord: "Tasdiqlayman",
+    compiledBy: "Tuzuvchi",
+    fieldDate: "Sana",
+    variantWord: "Variant",
+    answerKeySheet: "Javoblar kaliti",
+    instructions: "Ko‘rsatma",
+    unitWeek: "hafta",
+    unitTerm: "atama",
+    unitCase: "keys",
+    unitQuestion: "savol",
+  },
+  ru: {
+    goal: "Цель урока",
+    goalTalim: "Обучающая",
+    goalTarbiya: "Воспитательная",
+    goalRivoj: "Развивающая",
+    competencies: "Компетенции",
+    equipment: "Оборудование",
+    assessment: "Критерии оценивания",
+    stages: "Этапы урока",
+    situation: "Ситуация",
+    example: "Пример",
+    quarter: (n) => `${["I", "II", "III", "IV"][n - 1] ?? n} четверть`,
+    triCols: ["Термин", "Русский", "Английский"],
+    hoursWord: "час",
+    weekWord: "неделя",
+    approveWord: "Утверждаю",
+    compiledBy: "Составитель",
+    fieldDate: "Дата",
+    variantWord: "Вариант",
+    answerKeySheet: "Ключ ответов",
+    instructions: "Инструкция",
+    unitWeek: "неделя",
+    unitTerm: "термин",
+    unitCase: "кейс",
+    unitQuestion: "вопрос",
+  },
+  en: {
+    goal: "Lesson objective",
+    goalTalim: "Educational",
+    goalTarbiya: "Upbringing",
+    goalRivoj: "Developmental",
+    competencies: "Competencies",
+    equipment: "Equipment",
+    assessment: "Assessment criteria",
+    stages: "Lesson stages",
+    situation: "Situation",
+    example: "Example",
+    quarter: (n) => `Quarter ${["I", "II", "III", "IV"][n - 1] ?? n}`,
+    triCols: ["Term", "Russian", "English"],
+    hoursWord: "hours",
+    weekWord: "week",
+    approveWord: "Approved by",
+    compiledBy: "Prepared by",
+    fieldDate: "Date",
+    variantWord: "Variant",
+    answerKeySheet: "Answer key",
+    instructions: "Instructions",
+    unitWeek: "week",
+    unitTerm: "term",
+    unitCase: "case",
+    unitQuestion: "question",
+  },
+};
+
+/**
+ * Hujjat tili → o'qituvchi yorliqlari. 18 tilning uchtasi (uz/ru/en)
+ * qo'lda yozilgan, qolgani o'zbekchaga tushadi: bular bor-yo'g'i
+ * o'ttizta satr va ularni LLM bilan tarjima qilish har generatsiyada
+ * boshqacha nom berardi (`teacher/test/labels.ts` bilan bir xil qaror).
+ */
+export function teacherExtraLabels(code: string): TeacherExtraLabels {
+  const c = (code || "uz").toLowerCase();
+  return c === "ru" ? TEACHER_EXTRA.ru : c === "en" ? TEACHER_EXTRA.en : TEACHER_EXTRA.uz;
+}
+
+/**
+ * Bo'lim id (SHARTNOMA — `teacher/engine.ts` izohi) → o'zbekcha nom.
+ *
+ * `structure.ts needLabel` shu yerdan o'qiydi: tuzilma darvozasi
+ * yiqilganda foydalanuvchi «`stages` yo'q» emas, «„Dars bosqichlari“
+ * bo'limi yo'q» degan xabarni ko'radi. Xato xabarlari butun loyihada
+ * o'zbekcha, shuning uchun jadval bitta tilda.
+ */
+export function teacherSectionLabel(id: string): string {
+  const L = SECTIONS.uz;
+  const X = TEACHER_EXTRA.uz;
+  const q = /^q([1-4])$/.exec(id);
+  if (q) return X.quarter(Number(q[1]));
+  const c = /^case(\d+)$/.exec(id);
+  if (c) return `${c[1]}-${L.caseWord.toLowerCase()}`;
+  const v = /^variant-(.+)$/.exec(id);
+  if (v) return `${v[1]}-${X.variantWord.toLowerCase()}`;
+  const map: Record<string, string> = {
+    passport: L.lessonPassport,
+    goal: X.goal,
+    stages: X.stages,
+    homework: L.homework,
+    assessment: X.assessment,
+    year: L.yearPlan,
+    intro: L.intro,
+    terms: L.terms,
+    rubric: L.rubric,
+    instructions: X.instructions,
+    key: X.answerKeySheet,
+  };
+  return map[id] ?? id;
+}
+
 /**
  * Slayd shabloni sarlavhalari (LLM ishlamay qolganda va titul/yakun slaydda).
  *
