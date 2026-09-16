@@ -146,6 +146,17 @@ export function packPages(items: FlowItem[], rawHeights: number[], limit: number
      */
     if (item.type === "h1" && item.pageBreak) flush();
     /*
+     * BOSMA O'YIN (AUDIT-21): har karta varag'i O'Z BETIDA — DOCX da
+     * `pageBreakBefore`, bu yerda majburiy flush.
+     *
+     * Balandlik tekshiruvining O'ZI yetarli emas edi: panjara betning
+     * deyarli hammasini egallaydi, lekin varaq shapkasi bilan birga u
+     * chegaraga juda yaqin turadi va o'lchov 1–2 px xato qilsa ikki
+     * varaq bitta betga «sig'ib» qolardi — o'shanda old yuzlar bilan
+     * orqa yuzlar bir betga tushib, duplex bosma butunlay buzilardi.
+     */
+    if (item.type === "game-cards" && item.pageBreak) flush();
+    /*
      * Annotatsiya bloki yangi varaqdan boshlanadi — lekin FAQAT BIRINCHISI.
      * `annotationLangs: "all"` da uch tilli annotatsiya bo'ladi;
      * `render-docx.ts` ularni orasida sahifa uzilishisiz ketma-ket
