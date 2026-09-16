@@ -5,6 +5,7 @@ import { Redo2, Undo2 } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { planArticle, type CiteSpan } from "@/lib/generation/article/layout";
 import { planWork } from "@/lib/generation/work/layout";
+import { isTeacherDoc, planTeacher } from "@/lib/generation/teacher/layout";
 import type { ArticleOp } from "@/lib/generation/article/edit";
 import type { WorkOp } from "@/lib/generation/work/edit";
 import { cn } from "@/lib/cn";
@@ -13,7 +14,7 @@ import { columnPercents, evenPercents } from "@/lib/generation/table-columns";
 import { ESSAY_DESIGNS } from "@/lib/languages";
 import type { AcademicDoc, DocTable } from "@/lib/generation/types";
 import { docToFlow, titleModel, tocRows, type FlowItem, type TocRow } from "@/lib/viewers/flow";
-import { A4, contentHeightPx, mmPx, ZOOM_STEPS } from "@/lib/viewers/metrics";
+import { A4, contentHeightPx, mmPx, sheetMetrics, ZOOM_STEPS } from "@/lib/viewers/metrics";
 import { continuationTableFor, packPages } from "@/lib/viewers/paginate";
 import { splitByHeight, type TextSplitter } from "@/lib/viewers/split";
 import { useArticleEdit } from "../files/useArticleEdit";
@@ -114,6 +115,46 @@ function articleSheet(doc: AcademicDoc) {
  * shuning uchun `text-transform: none` to'g'ri — DOCX ham aynan shu
  * matnni yozadi (paritet).
  */
+/**
+ * O'QITUVCHI HUJJATI varag'i (AUDIT-20 WP-C).
+ *
+ * `articleSheet`/`workSheet` bilan bir juft, lekin YO'NALISHNI ham
+ * beradi: texnologik xarita ALBOM varaqda chiziladi (`planTeacher`
+ * `landscape`), qolgan to'rt vosita portretda. O'lchovlar
+ * `teacher/layout.ts` dan — `docx-profile.ts teacherProfile` ham AYNAN
+ * shu raqamlarni o'qiydi, ya'ni ekran bilan fayl ajralib ketmaydi.
+ *
+ * Titul beti YO'Q: `teacherFlow` `type: "title"` bandini umuman
+ * chiqarmaydi, shapka esa oddiy oqim bandlari bo'lib birinchi varaqqa
+ * tushadi.
+ */
+function teacherSheet(doc: AcademicDoc) {
+  if (!isTeacherDoc(doc)) return null;
+  const plan = planTeacher(doc);
+  const m = plan.page.marginsCm;
+  const s = sheetMetrics(plan.landscape, m);
+  return {
+    plan,
+    landscape: plan.landscape,
+    wPx: s.wPx,
+    hPx: s.hPx,
+    style: {
+      padding: `${m.top}cm ${m.right}cm ${m.bottom}cm ${m.left}cm`,
+      fontSize: `${plan.page.sizePt}pt`,
+      lineHeight: String(plan.page.line),
+      "--doc-table-size": `${plan.page.tableSizePt}pt`,
+      "--doc-refs-size": `${plan.page.sizePt}pt`,
+      "--doc-refs-line": String(plan.page.line),
+      "--doc-small": `${plan.page.smallPt}pt`,
+      // DOCX `teacherProfile.type.after` = 120 twip = 6 pt.
+      "--doc-p-after": "6pt",
+      "--doc-h1-align": plan.headingAlign,
+    } as React.CSSProperties,
+    measureWidth: s.measureWidth,
+    limit: s.limit,
+  };
+}
+
 function workSheet(doc: AcademicDoc) {
   if (!doc.work) return null;
   const plan = planWork(doc);
@@ -181,8 +222,16 @@ export function WordViewer({
    */
   const sheet = useMemo(() => articleSheet(doc), [doc]);
   const work = useMemo(() => workSheet(doc), [doc]);
-  const profiled = sheet ?? work;
+  /*
+   * O'qituvchi hujjati (AUDIT-20 WP-C): varaq YO'NALISHI ham rejadan —
+   * texnologik xarita ALBOM. Tahrir hali yoqilmagan (WP-D
+   * `useTeacherEdit` qo'shadi), lekin varaq DOIM to'g'ri chiziladi.
+   */
+  const teacher = useMemo(() => teacherSheet(doc), [doc]);
+  const profiled = sheet ?? work ?? teacher;
   const limit = profiled?.limit ?? contentHeightPx({ footer: true });
+  const sheetW = teacher?.wPx ?? A4.wPx;
+  const sheetH = teacher?.hPx ?? A4.hPx;
   // Sahifadan uzun matnli bandlar bo'lib ko'rsatiladi (Word kabi) —
   // yuqoridagi `FLOW_SPLITTER` izohiga qarang.
   // Bo'lingan ro'yxat O'Z `items` iga bog'lanadi: hujjat tahrirdan keyin
@@ -214,10 +263,11 @@ export function WordViewer({
     const el = hostRef.current;
     if (!el) return;
     const w = el.clientWidth - 32;
-    const next = Math.max(50, Math.min(150, Math.round((w / A4.wPx) * 100)));
+    // Albom varaq kengroq — «sig'dirish» uning O'Z enidan hisoblanadi.
+    const next = Math.max(50, Math.min(150, Math.round((w / sheetW) * 100)));
     const snap = ZOOM_STEPS.reduce((a, b) => (Math.abs(b - next) < Math.abs(a - next) ? b : a));
     setZoom(snap);
-  }, []);
+  }, [sheetW]);
 
   useEffect(() => {
     fit();
@@ -370,19 +420,25 @@ export function WordViewer({
       ) : null}
       <div ref={hostRef} className="min-h-0 flex-1">
         <Workspace ref={scrollRef} className="h-full">
-          <MaybeEditor editing={editing} doc={doc} plan={profiled?.plan ?? null} onOps={runOps}>
+          {/*
+            Tahrir qatlami iqtibos rejasini (`refs`/`cite`) so'raydi —
+            o'qituvchi hujjatida manba ro'yxati YO'Q, shuning uchun u
+            `null` bilan o'raladi. Tahrirning o'zi ham hali yoqilmagan
+            (WP-D `useTeacherEdit`), ya'ni `editing` false qoladi.
+          */}
+          <MaybeEditor editing={editing} doc={doc} plan={sheet?.plan ?? work?.plan ?? null} onOps={runOps}>
           <div ref={stackRef} className="flex flex-col items-center gap-8">
             {!pages ? <p className="text-sm text-white/70">Sahifalar tayyorlanmoqda…</p> : null}
             {(pages ?? []).map((pg, i) => {
               const isTitle = pg.length === 1 && pg[0]?.type === "title";
               return (
-                <ZoomFrame key={i} zoom={zoom / 100} width={A4.wPx} height={A4.hPx}>
+                <ZoomFrame key={i} zoom={zoom / 100} width={sheetW} height={sheetH}>
                   <div
                     ref={(el) => {
                       pageRefs.current[i] = el;
                     }}
                     data-page={i + 1}
-                    className={frame ? "word-sheet word-sheet--framed" : "word-sheet"}
+                    className={cn("word-sheet", teacher?.landscape && "word-sheet-ls", frame && "word-sheet--framed")}
                     style={frame ? ({ "--sheet-frame": frame } as React.CSSProperties) : undefined}
                   >
                     {isTitle ? (
@@ -395,7 +451,7 @@ export function WordViewer({
                           continuedLabel={continuedLabel}
                           toc={toc}
                           labels={labels}
-                          tableCaptionAlign={sheet ? sheet.plan.tableCaptionAlign : work ? "center" : undefined}
+                          tableCaptionAlign={sheet ? sheet.plan.tableCaptionAlign : work || teacher ? "center" : undefined}
                           edit={targets}
                         />
                       </div>
@@ -731,6 +787,91 @@ function FlowBlock({
     case "articleTitle":
     case "authors":
       return <ArticleHeadItem item={item} />;
+    /*
+     * ── O'qituvchi hujjatining rasmiy SHAPKASI (AUDIT-20 WP-C).
+     *
+     * `render-docx.ts drawTeacher` bilan bir juft: «Tasdiqlayman» o'ngda,
+     * muassasa va hujjat nomi markazda, «Fan: …» qatorlari chapda
+     * (yorliq qalin). Bular titul betining o'rnini bosadi — shuning
+     * uchun oddiy oqim bandlari, alohida komponent emas.
+     */
+    case "teacher-approve":
+      return (
+        <div style={{ textAlign: "right", textIndent: 0, marginBottom: "6pt" }} {...attr}>
+          {item.lines.map((l, i) => (
+            <div key={i}>{l}</div>
+          ))}
+        </div>
+      );
+    case "teacher-org":
+      return (
+        <div style={{ textAlign: "center", fontWeight: 700, textIndent: 0, marginBottom: "4pt" }} {...attr}>
+          {item.text}
+        </div>
+      );
+    case "teacher-title":
+      return (
+        <div style={{ textAlign: "center", fontWeight: 700, fontSize: "1.17em", textIndent: 0, margin: "4pt 0 2pt" }} {...attr}>
+          {item.text}
+        </div>
+      );
+    case "teacher-subtitle":
+      return (
+        <div style={{ textAlign: "center", fontStyle: "italic", textIndent: 0, marginBottom: "8pt" }} {...attr}>
+          {item.text}
+        </div>
+      );
+    case "teacher-field":
+      return (
+        <p className="word-p" style={{ textAlign: "left", textIndent: 0, marginBottom: "3pt" }} {...attr}>
+          <strong>{item.label}:</strong> {item.text}
+        </p>
+      );
+    case "teacher-line":
+      /*
+       * Bo'laklar ALOHIDA `<span>` — DOCX da ham alohida run (`cleanText`
+       * ikki tagchiziq guruhini markdown `__qalin__` deb o'qib qisqartirib
+       * yubormasin). Oradagi bo'shliq ikkala tomonda ham matn tuguni
+       * sifatida sanalmaydi (`trim` bilan tushib qoladi).
+       */
+      return (
+        <p className="word-p" style={{ textAlign: "left", textIndent: 0, margin: "6pt 0 8pt" }} {...attr}>
+          {item.parts.map((part, i) => (
+            <span key={i}>
+              {i ? "  " : ""}
+              <span>{part}</span>
+            </span>
+          ))}
+        </p>
+      );
+    case "kv":
+      return (
+        <p className="word-p" style={{ textAlign: "left", textIndent: 0, marginLeft: "0.5cm", marginBottom: "3pt" }} {...attr}>
+          <strong>{item.label}</strong> {item.text}
+        </p>
+      );
+    case "opt":
+      // Ro'yxat belgisi YO'Q — harf matnning o'zida (DOCX bilan bir xil).
+      return (
+        <p className="word-p" style={{ textAlign: "left", textIndent: 0, marginLeft: "0.8cm", marginBottom: "1pt" }} {...attr}>
+          {item.letter}) {item.text}
+        </p>
+      );
+    case "note":
+      return (
+        <p className="word-p" style={{ textAlign: "center", textIndent: 0, fontWeight: 700, margin: "4pt 0 6pt" }} {...attr}>
+          {item.text}
+        </p>
+      );
+    case "lines":
+      // Javob chiziqlari — MATNSIZ (DOCX da ham pastki chegarali bo'sh paragraf).
+      return (
+        <div style={{ textIndent: 0 }} aria-hidden {...attr}>
+          {Array.from({ length: item.count }, (_, i) => (
+            <div key={i} style={{ height: "1.6em", borderBottom: "1px solid #999", marginBottom: "4pt" }} />
+          ))}
+        </div>
+      );
     case "h1":
       return <div className="word-h1" {...attr}>{item.text}</div>;
     case "h2":

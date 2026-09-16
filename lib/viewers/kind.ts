@@ -9,21 +9,14 @@ export type ViewerKind =
   /**
    * O'qituvchi hujjatlari (AUDIT-20): dars rejasi, texnologik xarita,
    * glossariy, keys va test — BESHALASI bitta ko'ruvchida (`WordViewer`,
-   * `teacherFlow` — WP-C). «Ko'rdim = oldim»: ular rasmiy DOCX shakli,
-   * ya'ni bitta maketdan (`teacher/layout.ts planTeacher`) chiziladi.
+   * `teacherFlow`). «Ko'rdim = oldim»: ular rasmiy DOCX shakli, ya'ni
+   * bitta maketdan (`teacher/layout.ts planTeacher`) chiziladi.
+   *
+   * Eski `lesson`/`table`/`glossary`/`keys` qiymatlari WP-C da OLIB
+   * TASHLANDI — ularga tegishli to'rt ko'ruvchi brend-muqova chizardi
+   * (saytda faylda yo'q birinchi bet), egasi qarori 12 buni yopdi.
    */
   | "teacher"
-  /**
-   * Eski qiymatlar — hozir HECH QAYSI vosita ularga tushmaydi
-   * (`viewerKind` beshalasini `teacher` ga beradi). Tipda qoldirilgan,
-   * chunki 4 eski ko'ruvchi (`LessonViewer`/`TableViewer`/
-   * `GlossaryViewer`/`KeysViewer`) hali o'chirilmagan — ularni WP-C
-   * `legacy.ts` bilan birga olib tashlaydi.
-   */
-  | "lesson"
-  | "table"
-  | "glossary"
-  | "keys"
   | "translation"
   | "image";
 

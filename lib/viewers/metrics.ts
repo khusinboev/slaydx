@@ -44,6 +44,33 @@ export function landscapeContentHeightPx(opts?: { footer?: boolean }) {
   return LANDSCAPE.hPx - padTop - padBottom - footer;
 }
 
+/**
+ * PROFILDAN keladigan varaq o'lchovlari — portret ham, ALBOM ham
+ * (AUDIT-20 WP-C).
+ *
+ * Ilgari albom faqat `TableViewer` da bor edi va u o'z sonlarini
+ * (`!w-[269mm]`, `landscapeContentHeightPx() - 72`) qo'lda yozardi —
+ * DOCX chegarasi bilan hech qanday bog'liqligi yo'q edi. Endi ikkala
+ * yo'nalish uchun ham kenglik/balandlik CHEGARADAN hisoblanadi, ya'ni
+ * `teacherProfile` chegarasi o'zgarsa ko'ruvchi ham ergashadi.
+ *
+ * `footer` — sahifa raqami uchun ajratilgan pastki bo'shliq.
+ */
+export function sheetMetrics(landscape: boolean, marginsCm: { top: number; right: number; bottom: number; left: number }) {
+  const wMm = landscape ? LANDSCAPE.wMm : A4.wMm;
+  const hMm = landscape ? LANDSCAPE.hMm : A4.hMm;
+  return {
+    landscape,
+    wPx: landscape ? LANDSCAPE.wPx : A4.wPx,
+    hPx: landscape ? LANDSCAPE.hPx : A4.hPx,
+    /** O'lchov daraxti kengligi — varaq eni minus chap/o'ng chegara. */
+    measureWidth: `${wMm - (marginsCm.left + marginsCm.right) * 10}mm`,
+    /** Bir varaqqa sig'adigan balandlik (px). */
+    limit: Math.round((landscape ? LANDSCAPE.hPx : A4.hPx) - mmPx((marginsCm.top + marginsCm.bottom) * 10) - A4.footerPx),
+    heightMm: hMm,
+  };
+}
+
 /** Millimetr → CSS piksel (96 dpi) — DOCX `mm × 56.7` twip bilan bir juft. */
 export function mmPx(mm: number): number {
   return (mm / 25.4) * 96;
