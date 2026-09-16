@@ -76,6 +76,13 @@ export function ArtifactViewer({
       // ularni faqat maqola dvigateli generatsiyasida ishlatadi (tezis ham — `viewerKind`, AUDIT-19).
       return <WordViewer doc={doc} gen={detail} onGen={onDetail} onEditState={onEditState} />;
     default:
-      return <WordViewer doc={doc} />;
+      /*
+       * AUDIT-19: kurs ishi/referat/mustaqil ish `academic` turida qoladi
+       * (eski hujjatlar ham shu yo'ldan), tahrir proplari DOIM beriladi —
+       * `WordViewer` `doc.work` bo'lsa `useWorkEdit` ni yoqadi, aks holda
+       * `editable` false (dars rejasi va h.k. avvalgidek). Smoke: propsiz
+       * `[data-path]` chiqmas, «Tahrirlash» ko'rinmas edi.
+       */
+      return <WordViewer doc={doc} gen={detail} onGen={onDetail} onEditState={onEditState} />;
   }
 }

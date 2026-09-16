@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { createElement as h } from "react";
 import JSZip from "jszip";
@@ -114,4 +115,16 @@ test("ko'ruvchi eski hujjatni yiqilmasdan chizadi va `word-article` varag'ini QO
   assert.ok(html.includes("Mavzuning dolzarbligi"), "matn chizilmadi");
   assert.ok(!html.includes("--doc-table-size"), "eski hujjatga profil o'zgaruvchilari qo'llandi");
   assert.ok(!html.includes("word-inner word-article"), "eski hujjat profilli varaqqa tushdi");
+});
+
+/*
+ * Smoke (AUDIT-19): natija sahifasida talaba ishi `[data-path]` siz
+ * chiqdi — `ArtifactViewer` `academic` shoxi `WordViewer` ga `gen`/`onGen`/
+ * `onEditState` bermas edi (insho/maqola shoxlari beradi). Mutatsiya:
+ * proplar olib tashlansa test yiqiladi.
+ */
+test("ArtifactViewer: academic (talaba ishi) shoxi ham tahrir proplarini beradi", () => {
+  const src = readFileSync(new URL("../../components/viewers/ArtifactViewer.tsx", import.meta.url), "utf8");
+  const tail = src.slice(src.lastIndexOf("default:"));
+  assert.match(tail, /<WordViewer doc=\{doc\} gen=\{detail\} onGen=\{onDetail\} onEditState=\{onEditState\} \/>/);
 });
