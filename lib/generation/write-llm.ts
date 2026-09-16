@@ -927,22 +927,25 @@ export async function writeWithLlm(
    * O'qituvchi vositalari 2 (AUDIT-20): beshala vosita bitta `teacher/`
    * dvigatelida (rasmiy shakl, hisobot, avto-sayqal, tahrir).
    *
-   * R0 da dvigatel STUB va `null` qaytaradi — shunda oqim PASTDAGI eski
-   * `write-specials.ts` shoxlariga tushadi va 4 mavjud xizmat
-   * o'zgarishsiz ishlayveradi. `TEACHER_ENGINE=0` esa dvigatel
-   * yozilgandan keyin ham eski yo'lni majburan tanlash uchun (X-6:
+   * Dvigatel `null` qaytarsa (LLM kalitsiz muhit, model javob bermadi,
+   * sifat darvozasidan o'tmadi) oqim PASTDAGI eski `write-specials.ts`
+   * shoxlariga tushadi va 4 mavjud xizmat o'zgarishsiz ishlayveradi.
+   * `TEACHER_ENGINE=0` esa eski yo'lni MAJBURAN tanlaydi (X-6:
    * `write-specials.ts` bir sprint qoladi).
+   *
+   * `test` vositasida eski yo'l YO'Q (yangi xizmat): u dvigatel ichida
+   * `teacher/test/engine.ts` (WP-B) ga dinamik import bilan o'tadi va
+   * modul hali ulanmagan bo'lsa `null` qaytaradi — ish «hujjat
+   * yaratilmadi» bilan tugaydi, boshqa vositalarga ta'sir qilmaydi.
    */
   if (TEACHER_TOOLS.has(meta.toolId) && process.env.TEACHER_ENGINE !== "0") {
     const built = await buildTeacherDoc(meta, values as FormValues, {
       deadline: deadline ?? Date.now() + 300_000,
       ...(extras.onStage ? { onStage: extras.onStage } : {}),
       ...(extras.source ? { source: extras.source } : {}),
+      ...(extras.onCost ? { onCost: extras.onCost } : {}),
     });
-    if (built) {
-      extras.onCost?.(built.cost);
-      return built.doc;
-    }
+    if (built) return built.doc;
   }
   if (WRITER.has(meta.toolId)) return writeWriterWithLlm(meta, deadline);
   if (meta.toolId === "lesson-plan") return writeLessonWithLlm(meta, deadline);
