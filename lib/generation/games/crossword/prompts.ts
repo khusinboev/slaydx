@@ -18,6 +18,7 @@
 import { languageDirective } from "../../i18n";
 import { sourceBlock } from "../../prompts";
 import type { DocMeta } from "../../types";
+import type { CrosswordTypeSpec } from "../registry";
 import { CROSSWORD_LIMITS, type CrosswordInput } from "./input";
 
 /**
@@ -40,24 +41,32 @@ const EXAMPLES = [
  * Tizim prompti — bir marta quriladi va qo'shimcha so'rovda ham QAYTA
  * ishlatiladi (prompt keshi va barqarorlik uchun).
  */
-export function crosswordSystemPrompt(input: CrosswordInput): string {
+export function crosswordSystemPrompt(input: CrosswordInput, spec: CrosswordTypeSpec): string {
   const gradeLine = input.grade >= 1 ? `grade ${input.grade} (Uzbek general secondary school)` : "general secondary school";
+  // Tur chegaralari REYESTRDAN: «ta'rifli» krossvordda ta'rif pastki
+  // chegarasi 40 belgi (sinonim emas, to'liq ta'rif) — promptda ikkinchi
+  // nusxa yozilmaydi, aks holda reyestr bilan ajralib ketardi.
+  const [letMin, letMax] = spec.limits.letters;
+  const [clueMin, clueMax] = spec.limits.clueChars;
   return [
     languageDirective(input.language),
     "You are a teacher compiling the WORD LIST for a printed classroom crossword.",
-    `SUBJECT: ${input.subject || "from the topic"} · LEVEL: ${gradeLine}.`,
+    `CROSSWORD TYPE: ${spec.label.en} · SUBJECT: ${input.subject || "from the topic"} · LEVEL: ${gradeLine}.`,
     "",
     "YOU DO NOT BUILD THE GRID. Return only words and their clues — the placement, numbering and intersections are computed by the program.",
     "",
+    "TYPE RULES:",
+    ...spec.guidance.map((g) => `— ${g}`),
+    "",
     "ANSWER RULES:",
-    `— every answer is ONE word of ${CROSSWORD_LIMITS.answerMin}–${CROSSWORD_LIMITS.answerMax} letters: no spaces, no hyphens, no digits, no abbreviations with dots;`,
+    `— every answer is ONE word of ${letMin}–${letMax} letters: no spaces, no hyphens, no digits, no abbreviations with dots;`,
     "— nouns in the dictionary (base) form; no proper names unless the topic is history or geography;",
     "— in Uzbek Latin write the letters oʻ and gʻ with the proper apostrophe (oʻsimlik, gʻalla), never as ou/gh;",
     "— never repeat the same answer, and never use two words with the same root (kitob / kitobxon);",
     "— every answer belongs to the stated topic and is a term the pupils of this grade have met.",
     "",
     "CLUE RULES:",
-    `— every clue is ${CROSSWORD_LIMITS.clueMin}–${CROSSWORD_LIMITS.clueMax} characters: a direct definition or a synonym, never cryptic or associative;`,
+    `— every clue is ${clueMin}–${clueMax} characters: a direct definition or a synonym, never cryptic or associative;`,
     "— the clue must NOT contain the answer, its root, or a translation of it;",
     "— never describe the spelling: no «to'rt harfli…», no «… bilan boshlanadi»;",
     "— one clue fits exactly ONE answer: if another word of the same length also fits, make the clue more precise;",
@@ -105,7 +114,7 @@ export function crosswordUserPrompt(input: CrosswordInput, ask: WordsAsk, blocks
     input.mode === "topic" ? `TOPIC: «${input.topic}»` : `TOPIC (for the heading only): «${input.topic}»`,
     `Write ${ask.n} answer+clue pairs for this crossword.`,
     // Turli uzunlik — to'r uchun hayotiy: bir xil uzunlikdagi so'zlar kam kesishadi.
-    `Vary the answer length across the list (some short 3–5 letters, some long 8–${CROSSWORD_LIMITS.answerMax}) — a grid needs both.`,
+    `Vary the answer length across the list (some short ${CROSSWORD_LIMITS.answerMin}–5 letters, some long 8–${CROSSWORD_LIMITS.answerMax}) — a grid needs both.`,
     avoid.length ? `ALREADY USED — do not repeat these answers or their roots:\n${avoid.map((a) => `— ${a}`).join("\n")}` : "",
     ask.retry
       ? "These replace words that could not be placed in the grid: prefer SHORTER answers (3–6 letters) with common letters, they intersect more easily."

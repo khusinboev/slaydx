@@ -1,17 +1,24 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  CROSSWORD_EXTRA_RULE_IDS,
   CROSSWORD_RULE_IDS,
   MIN_CROSSING_RATIO,
   clueContainsAnswer,
   countGridCrossings,
+  crosswordJudgeFromReview,
   crosswordRuleChecks,
   gridConnected,
+  rescoreCrossword,
+  reviewCrossword,
   wordFitsGrid,
   type CrosswordReviewAsk,
 } from "../lib/generation/games/crossword/review.ts";
-import { placeWords, wordText, type CrosswordGridData, type PlacedWord } from "../lib/generation/games/crossword/grid.ts";
+import { cluesOf, placeWords, wordText, type CrosswordGridData, type PlacedWord } from "../lib/generation/games/crossword/grid.ts";
 import { CROSSWORD_LIMITS } from "../lib/generation/games/crossword/input.ts";
+import { CROSSWORD_JUDGE_CRITERIA, GAME_RULE_IDS } from "../lib/generation/games/registry.ts";
+import type { CrosswordModel } from "../lib/generation/games/types.ts";
+import type { AcademicDoc } from "../lib/generation/types.ts";
 import type { ReviewCheck } from "../lib/generation/report/types.ts";
 
 /**
@@ -214,4 +221,108 @@ test("determinizm: bir xil kirishda hisobot bayt-bayt bir xil (tasodif/sana yo'q
   // MUTATSIYA-6: `Date.now`/`Math.random` kirsa bu tenglik buzilardi.
   assert.deepEqual(run(), run());
   assert.equal(JSON.stringify(run()), JSON.stringify(run()));
+});
+
+/* ══════════════════════════ hujjat darajasi + baholovchi ══════════════════════════ */
+
+/**
+ * Mutatsiyalar (qizardi):
+ *   8. qoidalar ro'yxati reyestrdan (`GAME_RULE_IDS`) ajralib ketdi —
+ *      «reyestr bandlari qoplanadi» testi;
+ *   9. `reviewCrossword` javoblar bo'limini hujjatdan tekshirmadi —
+ *      «javoblarsiz hujjat» testi;
+ *  10. `crosswordJudgeFromReview` eski ballarni o'qimadi — «sayqalda
+ *      eski ballar tiklanadi» testi.
+ */
+
+const USAGE = { provider: "gemini", model: "gemini-2.5-flash", inputTokens: 500, outputTokens: 400 };
+
+/** Hujjat — `reviewCrossword` uchun eng kichik shakl. */
+function docOf(over: Partial<CrosswordModel> = {}, sections = [{ id: "answers", title: "Javoblar", blocks: [{ kind: "p" as const, text: "1. ATOM" }] }]): AcademicDoc {
+  return {
+    meta: { toolId: "crossword", topic: "Hujayra tuzilishi", language: "uz" } as AcademicDoc["meta"],
+    titlePage: true,
+    toc: false,
+    sections,
+    tables: [],
+    game: {
+      v: 1,
+      kind: "crossword",
+      type: "klassik",
+      language: "uz",
+      topic: "Hujayra tuzilishi",
+      crossword: { words: res.placed, grid: res.grid, clues: cluesOf(res.placed), dropped: res.dropped, ...over },
+    },
+  } as AcademicDoc;
+}
+
+test("qoidalar REYESTRNI to'liq qoplaydi (`GAME_RULE_IDS.crossword` + 2 qo'shimcha)", () => {
+  const ids = run().map((c) => c.id);
+  // MUTATSIYA-8: reyestrdagi band unutilsa hisobot uni ko'rsatmasdi.
+  for (const id of GAME_RULE_IDS.crossword) assert.ok(ids.includes(id), `reyestr bandi yo'q: ${id}`);
+  assert.deepEqual(ids.slice(0, GAME_RULE_IDS.crossword.length), [...GAME_RULE_IDS.crossword], "reyestr tartibi buzildi");
+  assert.deepEqual(ids.slice(GAME_RULE_IDS.crossword.length), [...CROSSWORD_EXTRA_RULE_IDS]);
+});
+
+test("`reviewCrossword`: model hujjatdan o'qiladi, javoblar bo'limi HUJJATDAN tekshiriladi", async () => {
+  const ok = await reviewCrossword(docOf(), { judge: false, now: new Date("2026-09-17T10:00:00Z") });
+  assert.ok(ok.score > 0);
+  assert.equal(ok.checks.find((c) => c.id === "answerSheet")?.level, "green");
+  assert.equal(ok.builtAt, "2026-09-17T10:00:00.000Z");
+  // MUTATSIYA-9: bo'lim tekshirilmasa javobsiz hujjat ham yashil bo'lardi.
+  const noAnswers = await reviewCrossword(docOf({}, [{ id: "grid", title: "To'r", blocks: [] }]), { judge: false });
+  assert.equal(noAnswers.checks.find((c) => c.id === "answerSheet")?.level, "red");
+  // Modelsiz hujjat — bo'sh hisobot (yiqilmaydi).
+  const empty = await reviewCrossword({ ...docOf(), game: undefined } as AcademicDoc, { judge: false });
+  assert.equal(empty.score, 0);
+  assert.deepEqual(empty.judgeNotes, ["Krossvord modeli yo'q"]);
+});
+
+test("baholovchi: 5 mezon reyestrdan, javob promptga JAVOBLAR bilan boradi", async () => {
+  const calls: { system: string; user: string }[] = [];
+  const complete = (async (_role: "judge", system: string, user: string) => {
+    calls.push({ system, user });
+    return { text: JSON.stringify({ clueClarity: 3, wordGrade: 2, gridConnectedness: 3, answerAccuracy: 3, originality: 1, notes: ["izoh"], fixes: [] }), usage: USAGE };
+  }) as unknown as NonNullable<Parameters<typeof reviewCrossword>[1]>["complete"];
+
+  const review = await reviewCrossword(docOf(), { complete, judge: true, deadline: Date.now() + 120_000 });
+  assert.equal(calls.length, 1);
+  for (const c of CROSSWORD_JUDGE_CRITERIA) assert.ok(calls[0].system.includes(c), `mezon promptda yo'q: ${c}`);
+  // Javob ko'rsatiladi — `answerAccuracy` busiz baholanmasdi.
+  assert.ok(calls[0].user.includes(wordText(res.placed[0].answer)), "javob promptda yo'q");
+  assert.match(calls[0].user, /CLUES AND ANSWERS/);
+  assert.equal(review.checks.find((c) => c.id === "judge:originality")?.level, "red");
+  assert.equal(review.checks.find((c) => c.id === "judge:wordGrade")?.detail, "2/3");
+  assert.ok(review.judgeNotes.includes("izoh"));
+});
+
+test("baholovchi javob bermasa — neytral ballar va izoh, hisobot yiqilmaydi", async () => {
+  const broken = (async () => {
+    throw new Error("tarmoq");
+  }) as unknown as NonNullable<Parameters<typeof reviewCrossword>[1]>["complete"];
+  const review = await reviewCrossword(docOf(), { complete: broken, judge: true, deadline: Date.now() + 120_000 });
+  assert.ok(review.judgeNotes.some((n) => n.includes("javob bermadi")));
+  assert.ok(review.checks.some((c) => c.id.startsWith("judge:")), "neytral bandlar yo'q");
+  assert.ok(review.score > 0);
+});
+
+test("sayqal: eski hisobotdan baholovchi ballari tiklanadi va qayta ball hisoblanadi", async () => {
+  // Eski baholash NEYTRALDAN PAST (hammasi 1/3) — sayqal uni tiklashi kerak.
+  const complete = (async () =>
+    ({ text: JSON.stringify({ clueClarity: 1, wordGrade: 1, gridConnectedness: 1, answerAccuracy: 1, originality: 1, notes: [], fixes: [] }), usage: USAGE })) as unknown as NonNullable<
+    Parameters<typeof reviewCrossword>[1]
+  >["complete"];
+  const prev = await reviewCrossword(docOf(), { complete, judge: true, deadline: Date.now() + 120_000 });
+  // MUTATSIYA-10: eski ballar o'qilmasa sayqal neytral 2/3 bilan taqqoslanardi
+  // va past baho «o'sib» soxta qabulga olib kelardi.
+  const j = crosswordJudgeFromReview(prev)!;
+  assert.ok(j, "eski ballar topilmadi");
+  for (const c of CROSSWORD_JUDGE_CRITERIA) assert.equal(j[c], 1, `${c} tiklanmadi`);
+  // Qayta ball: yangi qoidalar + eski baholovchi.
+  const fresh = await reviewCrossword(docOf(), { judge: false });
+  const rescored = rescoreCrossword(fresh, j);
+  assert.ok(rescored.score < fresh.score, "past baholovchi bali ballni tushirishi kerak");
+  assert.deepEqual(rescored.checks, fresh.checks, "bandlar o'zgarmasin");
+  // Baholovchi bandlari bo'lmasa — `null` (sayqal neytralga tushadi).
+  assert.equal(crosswordJudgeFromReview({ ...fresh, checks: fresh.checks.filter((c) => !c.id.startsWith("judge:")) }), null);
 });

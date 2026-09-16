@@ -9,10 +9,10 @@
  *      so'ralgan, qanday to'r o'lchami buyurtma qilingan, javob varag'i
  *      hujjatga qo'shilganmi).
  *   2. BAHOLOVCHI — `judge` roli, 5 mezon (clueClarity, wordGrade,
- *      gridConnectedness, answerAccuracy, originality). Mezonlar
- *      SPETSIFIKATSIYASI R0 ning `games/registry.ts` ida, shuning uchun
- *      baholovchi o'ramı (`reviewCrossword(doc)`) R0 substrati kelganda
- *      shu faylga qo'shiladi — ikkinchi nusxa yozilmaydi.
+ *      gridConnectedness, answerAccuracy, originality). Mezonlarning
+ *      SPETSIFIKATSIYASI reyestrda (`games/registry.ts` —
+ *      `CROSSWORD_JUDGE_CRITERIA`, tur bo'yicha `guidance`), bu yerda
+ *      faqat CHAQIRUV: ikkinchi nusxa yozilmaydi.
  *
  * Eng qimmat nuqson — TA'RIF JAVOBNI O'Z ICHIGA OLISHI («Biologiya —
  * bu qanday fan?» = BIOLOGIYA): krossvord bir zumda yechiladi. Uni
@@ -22,8 +22,23 @@
  * Qoidalar SOF funksiya: kirish — joylashgan so'zlar + to'r + `ask`,
  * chiqish — `ReviewCheck[]`. Tasodif/sana YO'Q (determinizm).
  */
-import { check, rewrite } from "../../report/score";
-import type { ReviewCheck } from "../../report/types";
+import { check, rewrite, scoreReviewFor } from "../../report/score";
+import {
+  JUDGE_MIN_MS,
+  JUDGE_NEUTRAL,
+  JUDGE_NO_ANSWER,
+  JUDGE_TIMEOUT_MS,
+  judgeChecksFor,
+  judgeSystemPromptFor,
+  neutralJudgeFor,
+  parseJudgeFor,
+} from "../../report/judge";
+import type { DocReview, JudgeResult, ReviewCheck } from "../../report/types";
+import type { AcademicDoc } from "../../types";
+import type { LlmUsage } from "../../llm-roles";
+import { remainingMs } from "../../quality";
+import { CROSSWORD_JUDGE_CRITERIA, GAME_RULE_IDS, gameTypeOf, type CrosswordJudgeCriterion } from "../registry";
+import type { CrosswordModel } from "../types";
 import {
   isConnected,
   normalizeAnswer,
@@ -36,23 +51,23 @@ import {
 import { CROSSWORD_LIMITS } from "./input";
 
 /**
- * Qoida id lari (§4.1 jadvali + to'r butunligi).
+ * Qoida id lari — R0 `GAME_RULE_IDS.crossword` NING HAMMASI, ustiga
+ * WP-A ning IKKI qo'shimchasi:
  *
- * R0 ning `GAME_RULE_IDS.crossword` i kelganda SHU RO'YXAT undan
- * olinadi (bitta manba); hozircha tartib — hisobot panelidagi tartib.
+ *   `clueNotContainsAnswer` — eng qimmat nuqsonni (ta'rif javobni
+ *      oshkor qiladi) deterministik tutadi; baholovchining
+ *      `clueClarity` mezoni uni sezmasligi mumkin, chunki bunday ta'rif
+ *      «aniq» ko'rinadi;
+ *   `gridConnected` — baholovchining `gridConnectedness` mezonini
+ *      TEKSHIRILADIGAN qiladi (flood fill), ya'ni ball emas, fakt.
+ *
+ * Reyestrga qo'shish lead ning ishi (`registry.ts` WP-A egaligida emas)
+ * — shu sababli ro'yxat R0 tartibini SAQLAB, qo'shimchalarni oxiriga
+ * qo'yadi va `GAME_RULE_IDS` bilan mosligi testda qulflanadi.
  */
-export const CROSSWORD_RULE_IDS = [
-  "wordCount",
-  "gridSize",
-  "minCrossings",
-  "wordLength",
-  "clueLength",
-  "uniqueWords",
-  "clueNotContainsAnswer",
-  "gridMatchesWords",
-  "gridConnected",
-  "answerSheet",
-] as const;
+export const CROSSWORD_EXTRA_RULE_IDS = ["clueNotContainsAnswer", "gridConnected"] as const;
+
+export const CROSSWORD_RULE_IDS = [...GAME_RULE_IDS.crossword, ...CROSSWORD_EXTRA_RULE_IDS] as const;
 export type CrosswordRuleId = (typeof CROSSWORD_RULE_IDS)[number];
 
 /** Kesishmalar soni shundan kam bo'lmasin: so'z soni × shu ulush (§4.1). */
@@ -250,7 +265,10 @@ export function crosswordRuleChecks(words: readonly PlacedWord[], grid: Crosswor
     ),
   );
 
-  return out;
+  // Tartib — REYESTRDAN (`GAME_RULE_IDS` + qo'shimchalar): panel va
+  // testlar shu tartibga tayanadi, bu yerdagi `push` ketma-ketligiga emas.
+  const order = new Map(CROSSWORD_RULE_IDS.map((id, i) => [id as string, i]));
+  return out.sort((a, b) => (order.get(a.id) ?? 99) - (order.get(b.id) ?? 99));
 }
 
 /* ────────────────────────── yordamchilar ────────────────────────── */
@@ -303,4 +321,141 @@ export function gridConnected(grid: CrosswordGridData): boolean {
     }
   }
   return isConnected(board);
+}
+
+/* ────────────────────────── baholovchi ────────────────────────── */
+
+export type CrosswordJudgeResult = JudgeResult<CrosswordJudgeCriterion>;
+
+/**
+ * Baholovchiga beriladigan matn: raqam, JAVOB va ta'rif.
+ *
+ * Javob ATAYLAB ko'rsatiladi — `answerAccuracy` va `clueClarity`
+ * mezonlari ta'rif javobga mos kelishini baholaydi, javobsiz ular
+ * ma'nosiz bo'lardi.
+ */
+export function crosswordJudgeUserPrompt(model: CrosswordModel, topic: string): string {
+  const byId = new Map(model.words.map((w) => [w.id, w]));
+  const line = (c: { number: number; text: string; wordId: string; length: number }, dir: string) => {
+    const w = byId.get(c.wordId);
+    return `${c.number}. [${dir} · ${c.length} katak] ${c.text} → ${w ? wordText(w.answer) : "?"}`;
+  };
+  return [
+    `TOPIC: ${topic}`,
+    `GRID: ${model.grid.rows}×${model.grid.cols} · WORDS: ${model.words.length} · DROPPED: ${model.dropped.length}`,
+    "",
+    "CLUES AND ANSWERS:",
+    ...model.clues.across.map((c) => line(c, "across")),
+    ...model.clues.down.map((c) => line(c, "down")),
+  ].join("\n");
+}
+
+/** Hisobotdagi qoidalar + baholovchi → 0–100 ball. */
+export function scoreCrosswordReview(rules: ReviewCheck[], judge: CrosswordJudgeResult): number {
+  return scoreReviewFor(rules, judge, CROSSWORD_JUDGE_CRITERIA);
+}
+
+const RULE_SET = new Set<string>(CROSSWORD_RULE_IDS);
+
+/**
+ * Sayqaldan keyin: yangi hisobotning QOIDALARI + ESKI baholovchi
+ * ballari (model qayta javob bermaganda). Neytral 2/3 bilan taqqoslash
+ * adolatsiz bo'lardi — eski qattiq baho neytralga «o'sib» soxta qabulga
+ * olib kelardi (`report/polish-core.ts` izohi).
+ */
+export function rescoreCrossword(fresh: DocReview, judge: CrosswordJudgeResult): DocReview {
+  return { ...fresh, score: scoreCrosswordReview(fresh.checks.filter((c) => RULE_SET.has(c.id)), judge) };
+}
+
+/**
+ * Eski hisobotdan baholovchi ballari (sayqalda model javob bermasa).
+ * `judge:<mezon>` bandlarining `detail` i — «3/3» shaklida.
+ */
+export function crosswordJudgeFromReview(prev: DocReview): CrosswordJudgeResult | null {
+  const scores: Partial<Record<CrosswordJudgeCriterion, number>> = {};
+  let found = 0;
+  for (const c of prev.checks) {
+    if (!c.id.startsWith("judge:") || c.id.startsWith("judge:fix:")) continue;
+    const key = c.id.slice(6) as CrosswordJudgeCriterion;
+    if (!(CROSSWORD_JUDGE_CRITERIA as readonly string[]).includes(key)) continue;
+    const n = Number(/^(\d)\s*\/\s*3$/.exec(c.detail ?? "")?.[1]);
+    scores[key] = Number.isFinite(n) ? n : JUDGE_NEUTRAL;
+    found++;
+  }
+  if (!found) return null;
+  return {
+    ...(Object.fromEntries(CROSSWORD_JUDGE_CRITERIA.map((k) => [k, scores[k] ?? JUDGE_NEUTRAL])) as Record<CrosswordJudgeCriterion, number>),
+    notes: [],
+    fixes: [],
+  };
+}
+
+export type CrosswordReviewOpts = {
+  ask?: CrosswordReviewAsk;
+  complete?: (
+    role: "judge",
+    system: string,
+    user: string,
+    o: { json?: boolean; maxTokens?: number; timeoutMs?: number },
+  ) => Promise<{ text: string; usage?: LlmUsage } | null>;
+  deadline?: number;
+  /** `false` — baholovchi chaqirilmaydi (testlar). */
+  judge?: boolean;
+  now?: Date;
+  onUsage?: (u: LlmUsage) => void;
+};
+
+/** Hisobotning nishonlari: baholovchi faqat shu bo'limlarni ko'rsata oladi. */
+const JUDGE_TARGETS = ["clues", "grid", "answers"];
+
+/**
+ * HUJJAT DARAJASIDAGI HISOBOT — qoidalar + baholovchi.
+ *
+ * Model hujjatdan o'qiladi (`doc.game.crossword`), chunki hisobot
+ * tahrirdan keyin ham chaqiriladi va o'shanda dvigatel yo'q.
+ */
+export async function reviewCrossword(doc: AcademicDoc, opts: CrosswordReviewOpts = {}): Promise<DocReview> {
+  const now = opts.now ?? new Date();
+  const model = doc.game?.crossword;
+  if (!model) {
+    return { score: 0, checks: [], judgeNotes: ["Krossvord modeli yo'q"], verifiedShare: 0, recentShare: 0, builtAt: now.toISOString() };
+  }
+  const spec = gameTypeOf("crossword", doc.game?.type);
+  const rules = crosswordRuleChecks(model.words, model.grid, {
+    ...opts.ask,
+    dropped: opts.ask?.dropped ?? model.dropped,
+    // Javoblar bo'limi HUJJATDAN tekshiriladi (tahrirdan keyin ham to'g'ri).
+    hasAnswers: opts.ask?.hasAnswers ?? doc.sections.some((s) => s.id === "answers" && s.blocks.length > 0),
+  });
+
+  let judge: CrosswordJudgeResult | null = null;
+  const judgeNotes: string[] = [];
+  if (opts.judge !== false && opts.complete) {
+    const timeoutMs = Math.min(JUDGE_TIMEOUT_MS, remainingMs(opts.deadline));
+    if (timeoutMs >= JUDGE_MIN_MS) {
+      try {
+        const r = await opts.complete("judge", judgeSystemPromptFor(spec.judge, JUDGE_TARGETS), crosswordJudgeUserPrompt(model, doc.meta.topic), {
+          json: true,
+          maxTokens: 1200,
+          timeoutMs,
+        });
+        if (r?.usage) opts.onUsage?.(r.usage);
+        judge = parseJudgeFor(spec.judge, r?.text, JUDGE_TARGETS);
+      } catch (e) {
+        console.warn("[crossword] baholovchi xatosi:", e instanceof Error ? e.message : e);
+      }
+    }
+    if (!judge) judgeNotes.push(JUDGE_NO_ANSWER);
+  }
+  const j = judge ?? neutralJudgeFor(spec.judge);
+  judgeNotes.push(...j.notes);
+
+  return {
+    score: scoreCrosswordReview(rules, j),
+    checks: [...rules, ...judgeChecksFor(spec.judge, j)],
+    judgeNotes,
+    verifiedShare: 0,
+    recentShare: 0,
+    builtAt: now.toISOString(),
+  };
 }
