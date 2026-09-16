@@ -145,3 +145,89 @@ R bosqichi: 9 tadqiqot agenti 3 tadan parallel (R1/R3/R4 → R2/R6/R7 → R5/R8/
 
 ## 5. Bajarilish yozuvi
 
+### WP-A — 4 vosita dvigateli (dars rejasi / xarita / glossariy / keys), 2026-09-16
+
+**Holat:** bajarildi (jonli sinov va ko'z — R3 raundida, lead).
+
+**Fayllar** (`lib/generation/teacher/`): `input.ts`, `prompts.ts`,
+`guard.ts`, `lesson.ts`, `map.ts`, `glossary.ts`, `keys.ts`,
+`engine.ts` (stub → to'liq), `review.ts`, `polish.ts`;
+`lib/generation/write-llm.ts` (dispatch). `types.ts` ga ikki maydon
+(izoh bilan). Testlar: `tests/teacher-{input,engine,review,polish}.test.mts`.
+
+**Bo'lim id SHARTNOMASI** — WP-C `planTeacher` shunga tayanadi, WP-D
+tahrir oplari ham shu id larni ko'radi:
+
+| kind | bo'limlar | jadvallar |
+|---|---|---|
+| lesson | `passport` · `goal` · `stages` · `homework` · `assessment`? | 1 ta, `anchor: "stages"` (`timeCols`) |
+| map (yillik) | `passport` · `year` | 1 ta, `anchor: "year"` (`yearCols`) |
+| map (choraklik) | `passport` · `q1` · `q2` · `q3` · `q4` | 4 ta, `anchor: "q1".."q4"` |
+| glossary | `intro` · `terms` | `uch-tilli` da 1 ta (`Atama \| Ruscha \| Inglizcha`), `anchor: "terms"` |
+| keys | `intro` · `case1`..`caseN` · `rubric` | yo'q |
+
+`assessment` bo'limi turning skeleti talab qilsa (`nazorat`, `amaliy`)
+yoki `assessmentStyle=bsb` tanlansa chiqadi. Sayqal/tahrir nishoni
+sifatida JADVAL ham qo'llab-quvvatlanadi: `table:<n>` (`review.ts
+tableTarget`/`parseTableTarget`) — xaritada hujjatning butun mazmuni
+jadvalda va bo'lim matnini qayta yozish u yerda hech nimani tuzatmaydi.
+
+**Testlar:** `teacher-input` 12, `teacher-engine` 26, `teacher-review` 23,
+`teacher-polish` 13 — jami 74. `generation` (62) va `document` (62)
+yashil, eski `write-specials` testlari saqlangan (X-6: eski yo'l bir
+sprint qoladi, `TEACHER_ENGINE=0`).
+
+**Mutatsiya 7/7:** daqiqa yig'indisi tsikli, hafta ↔ soat klampi,
+`noStubDefinition` birinchi belgisi, rubrika ball normalizatsiyasi,
+`acceptDelta` standarti, jadval qator soni tekshiruvi, alifbo tartibi.
+Ikkitasi birinchi urinishda OMON QOLGAN va testlar shu sababli
+tuzatilgan: hafta soni `weeksFor` ning o'zi bilan solishtirilardi
+(tavtologiya), stub ta'rif esa qoidaning ikkinchi shoxi bilan ushlanib,
+birinchisi sinovsiz qolardi.
+
+**Reja bo'yicha bajarilgan qarorlar:** `choraklik` xarita (4 jadval,
+`mapPool(2)` bilan chorak bo'yicha so'rov), `control` ustuni LLM
+javobidan (`fallbackControl` faqat bo'sh ustunda), `lesson-plan` ga
+`extra`/sinf harfi/sana, maqsad uchligi, o'qituvchi va o'quvchi
+ustunlari, `uch-tilli` glossariy, `includeExample`, `noStubDefinition`,
+keys turlari + `caseCount` + `audience`, rubrika 10 ball, halollik
+chegarasi (darslik sahifasi/dastur bandi/real tashkilot uydirilmaydi)
+beshala promptda va `teacherUserNeeds` bandida.
+
+**Ikki model maydoni qo'shildi** (R0 `types.ts`, izoh bilan):
+`MapWeek.result` — `sectionLabels.yearCols` allaqachon «Kutilgan
+natija» ustunini e'lon qiladi va eski `mapDoc` ham uni chizardi, R0
+modelida tushib qolgan edi; `GlossaryModel.includeExample` — hisobot
+hujjatdan QAYTA hisoblanadi (tahrirdan keyin ham) va `exampleCoverage`
+bandi bu bayroqsiz «misol so'ralmagan» bilan «model bermagan» ni
+ajrata olmaydi.
+
+**Jim nuqson topildi va tuzatildi:** `teacherInputFromValues` son
+maydonlarini `DocMeta` dan o'qiganda REYESTR standartlari HECH QACHON
+ishlamas edi — `extractMeta` ularga o'z standartini qo'yadi
+(`duration: 45`, `grade: 8`, `termCount: 10`, `weeklyHours: 4`) va u
+hech qachon `undefined` bo'lmaydi. Ya'ni «amaliy dars 90 daqiqa» va
+«imtihon atamalari 20 ta» kabi tur qarorlari qisman bezak edi. Endi
+son maydonlari faqat `values` dan o'qiladi.
+
+**WP-A dan qolgan ochiq bandlar:**
+
+1. `delivered` — dvigatel `built.delivered` ni QAYTARADI, lekin
+   `lib/generation/delivered.ts` hali `deliveredCount` (eski, `h3`
+   sanog'i va `mapWeeks`) bilan ishlaydi — ULASH WP-F da. Shu paytgacha
+   `uch-tilli` glossariy uchun eski hisob to'g'ri ishlaydi, chunki
+   atamalar matnda `h3` bo'lib qolgan (jadval QO'SHIMCHA, nusxa emas).
+2. Uch tilli jadval ustunlari reyestr skeletida «Atama \| Ta'rif \| Ru
+   \| En» deb yozilgan, amalda esa «Atama \| Ruscha \| Inglizcha» —
+   ta'rif yuqorida to'liq turibdi va uni jadvalda kesib takrorlash
+   aynan AUDIT-6 B5 da olib tashlangan naqsh. WP-C maketi bilan
+   kelishilishi kerak (skeletni tuzatamizmi yoki ustun qaytariladimi).
+3. Keys rubrikasi ALOHIDA `rubric` bo'limida (tadqiqot skeletida har
+   keys ichida edi) — reja §1 dagi id shartnomasiga mos, lekin WP-C
+   maketi buni alohida bet qilib chizadimi yoki keys yoniga
+   qaytaradimi — lead qarori.
+4. `curriculumBlock` dars rejasi va xarita uchun ULANGAN, lekin forma
+   (WP-E) hozircha `subjectId`/`topicIds` yubormaydi — darslik rejimi
+   shu ikki vositada faqat WP-E dan keyin ko'rinadi.
+5. Jonli sinov (`npm run live -- lesson|map|glossary|keys`) va
+   LibreOffice ko'z — WP-C maketi kelgandan keyin, R3 raundida.
