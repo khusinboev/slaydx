@@ -165,3 +165,25 @@ test("workBudgetMs: 45 bet worker timeoutiga (660 s) sig'adi, 10 bet ancha kichi
   assert.ok(workBudgetMs(13) < workBudgetMs(28));
   assert.ok(workBudgetMs(NaN) >= 150_000);
 });
+
+/*
+ * WP-C ochiq bandi: referatda maket tekis («1-jadval») berar, hisobot esa
+ * bob shaklini («1.1») o'qirdi. Endi `workVisualNumbers` turning shaklini
+ * O'ZI biladi — DOCX/ko'ruvchi/hisobot bitta hisob. Mutatsiya: `flat`
+ * shartini olib tashlasangiz referat «1.2» qaytaradi → test yiqiladi.
+ */
+test("workVisualNumbers: referat (bo'limlar) — tekis, kurs ishi — bob bo'yicha", async () => {
+  const { workVisualNumbers } = await import("../lib/generation/work/plan.ts");
+  const sections = [
+    { id: "intro", title: "Kirish", blocks: [] },
+    { id: "ch1", title: "1", blocks: [] },
+    { id: "ch1.1", title: "1.1", blocks: [{ kind: "p", text: "x" }] },
+    { id: "ch1.2", title: "1.2", blocks: [{ kind: "figure", text: "s", figureId: "f1" }, { kind: "tableRef", text: "t", tableId: "t1" }] },
+    { id: "ch2", title: "2", blocks: [] },
+    { id: "ch2.1", title: "2.1", blocks: [{ kind: "figure", text: "s", figureId: "f2" }] },
+  ];
+  const referat = { sections, work: { genre: "referat", kind: "informative" } } as never;
+  const coursework = { sections, work: { genre: "coursework", kind: "theory" } } as never;
+  assert.deepEqual(workVisualNumbers(referat), { figures: { f1: "1", f2: "2" }, tables: { t1: "1" } });
+  assert.deepEqual(workVisualNumbers(coursework), { figures: { f1: "1.1", f2: "2.1" }, tables: { t1: "1.1" } });
+});

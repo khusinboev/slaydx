@@ -17,7 +17,7 @@
 import type { DocMeta } from "../types";
 import type { AcademicDoc } from "../types";
 import { WORDS_PER_PAGE } from "../quality";
-import { pagesMid, type WorkKind } from "./registry";
+import { pagesMid, workKindOf, type WorkKind } from "./registry";
 import type { SubjectProfile } from "./subjects";
 import { isChapterHeadId } from "./types";
 
@@ -199,6 +199,13 @@ export function workVisualNumbers(doc: AcademicDoc): { figures: Record<string, s
   const figures: Record<string, string> = {};
   const tables: Record<string, string> = {};
   const perChapter = new Map<number, { f: number; t: number }>();
+  /*
+   * Referat («bo'lim» shakli, `shape: "sections"`) — bob raqami yo'q,
+   * vizual TEKIS raqamlanadi («1-jadval»). Bu YAGONA manba: `planWork`
+   * (DOCX/ko'ruvchi) ham, hisobot `visualRef` bandi ham shundan o'qiydi —
+   * WP-C da maket tekis, hisobot bob shaklini o'qib yolg'on qizil berardi.
+   */
+  const flat = doc.work ? workKindOf(doc.work.genre, doc.work.kind).shape === "sections" : false;
   let flatF = 0;
   let flatT = 0;
   for (const s of doc.sections) {
@@ -207,7 +214,7 @@ export function workVisualNumbers(doc: AcademicDoc): { figures: Record<string, s
     const chapter = m ? Number(m[1]) : 0;
     for (const b of s.blocks) {
       if (b.kind !== "figure" && b.kind !== "tableRef") continue;
-      if (!chapter) {
+      if (!chapter || flat) {
         // Kirish/xulosa/ilovadagi vizual — tekis raqam (bob yo'q).
         if (b.kind === "figure") figures[b.figureId] = String(++flatF);
         else tables[b.tableId] = String(++flatT);

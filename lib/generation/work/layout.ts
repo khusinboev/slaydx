@@ -166,28 +166,6 @@ function structuralText(s: DocSection, L: WorkDocLabels, appendixN: number): str
 
 /* ────────────────────────── raqamlash ────────────────────────── */
 
-/**
- * Vizual raqamlari. MANBA — `work/plan.ts workVisualNumbers` (hisobot
- * `visualCoverage` ayni shu funksiyadan o'qiydi, ya'ni ikkalasi bitta
- * hisobdan chiqadi). Referatda («bo'lim» shakli) bob raqami yo'q, shuning
- * uchun bob shakli («1.2») hujjat tartibida TEKIS raqamga («2») siqiladi.
- */
-function visualNumbers(doc: AcademicDoc, flat: boolean): { figures: Record<string, string>; tables: Record<string, string> } {
-  const base = workVisualNumbers(doc);
-  if (!flat) return base;
-  const figures: Record<string, string> = {};
-  const tables: Record<string, string> = {};
-  let f = 0;
-  let t = 0;
-  for (const s of doc.sections) {
-    for (const b of s.blocks) {
-      if (b.kind === "figure" && base.figures[b.figureId] && !figures[b.figureId]) figures[b.figureId] = String(++f);
-      else if (b.kind === "tableRef" && base.tables[b.tableId] && !tables[b.tableId]) tables[b.tableId] = String(++t);
-    }
-  }
-  return { figures, tables };
-}
-
 /* ────────────────────────── reja ────────────────────────── */
 
 export function planWork(doc: AcademicDoc): WorkPlan {
@@ -208,7 +186,8 @@ export function planWork(doc: AcademicDoc): WorkPlan {
     return { n: r.n!, text, line: `${r.n}. ${text}`, ref: r };
   });
 
-  const numbers = visualNumbers(doc, flat);
+  // Vizual raqamlari — YAGONA manba `work/plan.ts workVisualNumbers` (referatda tekis, hisobot ham shundan).
+  const numbers = workVisualNumbers(doc);
   const formulas: Record<string, string> = {};
   /*
    * Iqtibos uslubi — `numeric`: «[3, 45-b.]» va «[1, 2]» (talaba ishi
