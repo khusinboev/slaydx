@@ -21,66 +21,6 @@ const TOPIC_FILE_MODES = [
 ];
 
 /**
- * Akademik ish uchun umumiy maydonlar.
- *
- * `universityRequired` — OTME ishlari (kurs ishi, referat, tezis,
- * mustaqil ish) muassasa nomisiz qabul qilinmaydi, shuning uchun ular
- * uchun maydon majburiy. Insho ko'pincha maktab ishi bo'lgani sababli
- * undan talab qilinmaydi.
- */
-function writerFields(opts: { universityRequired?: boolean } = {}): ToolConfig["fields"] {
-  return WRITER_FIELDS.map((f) =>
-    f.name === "university" && opts.universityRequired ? { ...f, required: true } : f,
-  );
-}
-
-const WRITER_FIELDS: ToolConfig["fields"] = [
-  {
-    kind: "text",
-    name: "author",
-    legend: "To'liq ismingiz, kursingiz va guruhingizni yozing",
-    placeholder: "Aliyev Ali — 3-kurs, 301-guruh",
-    required: true,
-  },
-  {
-    kind: "text",
-    name: "university",
-    legend: "Oliy ta'lim muassasasi",
-    placeholder: "Toshkent davlat universiteti",
-  },
-  {
-    kind: "text",
-    name: "faculty",
-    legend: "Fakultet nomini kiriting",
-    placeholder: "Fakultet",
-  },
-  {
-    kind: "text",
-    name: "department",
-    legend: "Kafedra",
-    placeholder: "Kafedra nomi",
-  },
-  {
-    kind: "text",
-    name: "subject",
-    legend: "Fan nomini kiriting",
-    placeholder: "Misol: Ona tili",
-  },
-  {
-    kind: "text",
-    name: "teacher",
-    legend: "O'qituvchi / rahbar",
-    placeholder: "F.I.Sh",
-  },
-  {
-    kind: "text",
-    name: "city",
-    legend: "Shahar",
-    placeholder: "Toshkent",
-  },
-];
-
-/**
  * Maxsus formali vositalarning MAJBURIY maydonlari.
  *
  * `image`, `resume` va `translation` o'z formalarini chizadi
@@ -181,7 +121,7 @@ export function thesisTypeId(values: FormValues): ThesisTypeId {
  * bo'lishi ham mumkin. Lekin so'ralishi shart — aks holda foydalanuvchi
  * uni to'ldira olmaydi.
  *
- * `writerFields` dagi `university` dan alohida: yorliq va namuna
+ * eski `writerFields` (AUDIT-19 da o'chirildi) dagi `university` dan alohida: yorliq va namuna
  * maktabga mo'ljallangan, `author` esa «Bajardi» emas, «Tuzuvchi».
  */
 const TEACHER_FIELDS: ToolField[] = [
