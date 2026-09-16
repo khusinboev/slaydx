@@ -205,7 +205,7 @@ function emptyUi(profile: UserProfile, kind: TeacherKind): Ui {
     questionKinds: [],
     difficulty: "standart",
     variants: TEST_VARIANT_DEFAULT,
-    omr: false,
+    omr: true,
     answerKey: "alohida-bet",
     criteriaTable: false,
     timeMin: 45,
