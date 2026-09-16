@@ -579,3 +579,116 @@ ta'rifi] — oyna to'g'ri.
    R0 egaligida)?
 4. Flesh kartalarda FAYL rejimi yo'q (AUDIT-21 §6 savol 5 hali ochiq) —
    `modes` qo'shilsa `prompts.ts` ga `sourceBlock` kerak bo'ladi.
+
+### WP-D — Hisobot + avto-sayqal + «Hammasini tuzatish» (2026-09-17) ✅
+
+AUDIT-20 qaror 4 ning («hisobot + avto-sayqal + «Hammasini tuzatish»
+HAMMASIDA») oxirgi uch vositasi. Dvigatel sayqali WP-A/WP-B/WP-C da
+allaqachon bor edi; yetishmagani — NATIJA SAHIFASI: hisobot paneli
+o'yin/plakat hisobotini umuman o'qimasdi va «Hammasini tuzatish»
+serverga yetib bormasdi.
+
+**Ildiz sabab:** butun sayqal serveri (`doc-polish.ts`) `loadDocForEdit`
+ga tayanardi, u esa TAHRIR ADAPTERINI talab qiladi. Krossvord, flesh
+kartalar va infografikada adapter ATAYLAB yo'q (so'z/karta/spec qo'lda
+o'zgarsa to'r, A7 panjarasi yoki plakat hujjatdan ajralib ketardi) —
+ya'ni hisoboti to'liq hujjat 409 `legacy` olardi. Sayqal endi tahrirdan
+AJRATILDI:
+
+- `loadDocForPolish` — adapter SHART EMAS; adapterli hujjatlarda darvoza
+  aynan eskisi (`adapter.hasModel`), shuning uchun eski maqolaning
+  «Tuzatish» i o'zgarmadi.
+- `Polisher` shartnomasiga uch maydon: `docOf` (op lar o'rniga
+  HUJJATNING O'ZI — sayqal yadrosi uni `apply` bilan allaqachon
+  yasagan), `htmlOf` va `rebuild`.
+- `commitPolishedDoc` — `commitDocOps` ning adaptersiz egizagi: egalik
+  va `doc_version` SQL predikatida, bitta tranzaksiya, `doc_prev`.
+
+**Fayl versiyasi — eng nozik joy.** Bu oilalarda `POST …/rebuild`
+ishlamaydi (u adapter renderini so'raydi), shuning uchun `file_version`
+HAR yozuvda `doc_version` ga tenglashtiriladi. Tenglashtirilmasa natija
+sahifasi abadiy «Fayl yangilanmoqda…» deb turar va «Yuklab olish» har
+bosishda 409 `legacy` olardi — ya'ni sayqal hujjatni YUKLAB BO'LMAYDIGAN
+holatga keltirardi. Sayqal QABUL qilinganda esa fayl shu tranzaksiyada
+qayta yasaladi: `renderGameFile` (DOCX) / `renderPosterFile` (PNG +
+`posterHtml` + yangi eskiz `doc.images[0]`). Yasab bo'lmasa hujjat ham
+YOZILMAYDI (422 `render`) — aks holda ekranda yangi matn, faylda eski
+plakat qolardi.
+
+**Krossvord konteksti.** `runCrosswordPolish`/`crosswordContextOf` —
+dvigateldagi `runPolishWith` chaqiruvining server varianti: dvigatel
+`input`/`spec`/`place` ni formadan biladi, server esa faqat saqlangan
+hujjatni ko'radi. VA'DA qilingan so'z soni HISOBOTDAN o'qiladi
+(`wordCount` bandi «7 / 10 so'z to'rga tushdi» deb yozib qo'ygan):
+`words.length` dan hisoblansa qayta hisobotda o'sha band O'ZI yashil
+bo'lib qolar, ball soxta oshar va Q-3 darvozasi hech narsani ushlamasdi.
+`CROSSWORD_ACCEPT_DELTA` `polish.ts` ga ko'chdi (dvigatel va server
+bitta qiymatdan o'qisin), `engine.ts` uni re-eksport qiladi.
+
+**Bandma-band «Tuzatish»** (`article-rewrite.ts`): krossvordda `clues`
+nishoni (to'r bandlari 422 `target` — ularni faqat qaytadan yaratish
+tuzatadi), kartalarda `cards`; plakatda YO'Q — 422 `infographic`,
+chunki nishon bitta (`spec`) va har tuzatish butun plakatni qayta
+chizdiradi, ya'ni bu «Hammasini tuzatish» ning baholovchisiz nusxasi
+bo'lardi (insho bilan bir xil qaror, boshqa ildizdan). O'yin
+«Tuzatish» i ham DOCX ni shu yerda qayta yasaydi.
+
+**Panel** (`ResultView`): hisobot manbasi endi OLTI model —
+`article ?? essay ?? work ?? teacher ?? game ?? infographic`.
+«Manbalar» va «Vizuallar» guruhlari o'yin va plakatda ham yashiriladi
+(`hideGroups`, insho ro'yxati bilan aynan bir xil): bu oilalar manba
+keltirmaydi va sxema chizmaydi, bo'sh guruh esa «manbalar
+tekshirilmadi» deb o'qilardi. «Tahrirlash» ko'rinmaydi va bu panelda
+emas, `edit-adapters.ts` da hal qilingan (adapter yo'q → `editableTools()`
+da yo'q → `WordViewer` `editable` false).
+
+**`assets.ts` — R0/WP-A da ulanmagan joy:** `doc.game.figures`
+(krossvord to'ri va javob varag'i PNG i) aktivga chiqmasdan, `doc_json`
+ichida `data:` bo'lib qolardi. Ikki oqibati bor edi: har ochilishda
+yuzlab kilobayt ortiqcha JSON, va sayqaldan keyingi DOCX
+(`assetImageResolver` faqat `assetId` dan o'qiydi) TO'RSIZ chiqardi.
+
+**Qo'llab-quvvatlash jadvali** (AUDIT-20 qaror 4 bo'yicha):
+
+| Vosita | Hisobot | Avto-sayqal (dvigatel) | «Hammasini tuzatish» | Bandma-band «Tuzatish» | Tahrir |
+|---|---|---|---|---|---|
+| krossvord | ✅ | ✅ | ✅ (DOCX qayta) | ✅ `clues` | ❌ (ataylab) |
+| flesh kartalar | ✅ | ✅ | ✅ (DOCX qayta) | ✅ `cards` | ❌ (ataylab) |
+| infografika | ✅ | ✅ | ✅ (PNG qayta) | ❌ 422 | ❌ (ataylab) |
+
+**Testlar:** `doc-polish-route` 7 → 14 (+7: reyestr va
+`polisherIdFor`, krossvord qabul, krossvord 422 `nothing`/409 `legacy`,
+kartalar qabul, plakat qabul, plakat 422 `render`, bandma-band
+«Tuzatish» + 422 `infographic`), `viewer/article-review-panel` 8 → 9
+(review manbasi OLTI model, `hideGroups` chizmaydi),
+`assets-article` 6 → 7 (o'yin rasmlari aktivga). `test:viewer` 212
+(210 yashil — 2 qizil PARITET, pastdagi ochiq band), `tsc`/eslint toza.
+
+**Mutatsiyalar (har biri qizardi):** (1) review manbasidan `game`/
+`infographic` shoxini olib tashlash; (2) `hideGroups` ni faqat inshoga
+qoldirish; (3) `applyClueOps` bo'lim bloklarini yangilamay qo'yish
+(model sayqallanar, `across` eski matnda qolardi — ikkita test); (4)
+`markFileVersion` ni olib tashlash (fayl abadiy eskirgan holatda
+qolardi); (5) `rebuild` qaytargan yangi eskizni e'tiborsiz qoldirish
+(ekranda eski plakat, faylda yangisi); (6) `assets.ts` dagi `game`
+shoxini olib tashlash.
+
+**Ochiq bandlar:**
+
+1. **`tests/viewer/game-parity` 2 ta qizil — WP-D DAN OLDIN ham qizil.**
+   Sabab `9c5e8fa` («krossvord savollari jadvali har savol o'z
+   qatorida»): u `render-docx.ts` da savollar jadvalini ustunlar bo'yicha
+   emas, QATORLAR bo'yicha chiqaradigan qildi, ya'ni DOCX matn tartibi
+   `Gorizontal → 4,6 → Vertikal → 1,2,3,5` bo'ldi, ko'ruvchi
+   (`gameFlow`) esa eski tartibda qoldi. Paritet testi ham
+   yangilanmagan. Egasi: krossvord WP — `games/layout.ts`/`flow.ts` ni
+   DOCX ga moslash yoki teskarisi (WP-D `render-docx`/`layout` ga
+   tegmaydi).
+2. **Jonli sinov qilinmadi** (LLM kaliti/kredit): server yo'li stub
+   bilan qulflangan, lekin haqiqiy krossvord/plakat ustida «Hammasini
+   tuzatish» hali bosilmagan. Chromium smoke ham (AUDIT-20 §5 naqshi)
+   lead navbatida.
+3. **Plakat bandma-band «Tuzatish» 422** — panel tugmani umuman
+   chizmaydi, lekin hisobotdagi `fix` maydonlari saqlanadi (sayqal
+   ularni o'qiydi). Kelajakda «bitta bandni tuzat» kerak bo'lsa u
+   baribir butun `spec` ni qayta yozadi — qaror hujjatlashtirildi.

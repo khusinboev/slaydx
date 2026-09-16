@@ -40,7 +40,7 @@ import { cluesOf, placeWords, wordText, type CrosswordWord, type PlaceResult } f
 import { crosswordSvg, crosswordWidthMm } from "./svg";
 import { crosswordInputFromValues, crosswordSeed, type CrosswordInput } from "./input";
 import { crosswordLabels, crosswordSourceBlock, crosswordSystemPrompt, crosswordUserPrompt, instructionLines } from "./prompts";
-import { crosswordUserNeeds, planCrosswordPolish, rewriteClues, applyClueOps, type CrosswordPolishOp } from "./polish";
+import { CROSSWORD_ACCEPT_DELTA, crosswordUserNeeds, planCrosswordPolish, rewriteClues, applyClueOps, type CrosswordPolishOp } from "./polish";
 import { crosswordJudgeFromReview, rescoreCrossword, reviewCrossword, type CrosswordJudgeResult } from "./review";
 
 /* ────────────────────────── shartnoma ────────────────────────── */
@@ -60,8 +60,12 @@ const STAGE = { plan: 10, words: 55, grid: 75, review: 90, polish: 96, done: 100
 export const CROSSWORD_POLISH_MIN_MS = 45_000;
 /** Qo'shimcha so'rov uchun eng kam vaqt. */
 export const CROSSWORD_RETRY_MIN_MS = 25_000;
-/** Q-3 qabul chegarasi (oila bilan bir xil). */
-export const CROSSWORD_ACCEPT_DELTA = 1;
+/*
+ * Q-3 qabul chegarasi — endi `polish.ts` da (server sayqali ham AYNAN
+ * shu qiymatni olishi kerak, ikki nusxa ajralib ketardi); eski import
+ * yo'li saqlanadi.
+ */
+export { CROSSWORD_ACCEPT_DELTA } from "./polish";
 
 /** Bo'lim id lari — SHARTNOMA (maket, tahrir va hisobot shunga tayanadi). */
 export const CROSSWORD_SECTION_IDS = ["grid", "across", "down", "answers"] as const;

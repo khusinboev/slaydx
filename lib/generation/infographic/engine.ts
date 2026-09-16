@@ -128,7 +128,15 @@ function specSection(spec: InfographicSpec) {
   };
 }
 
-async function renderPoster(spec: InfographicSpec): Promise<{ file: ImageFile; preview: GenImage } | null> {
+/**
+ * Maket → SVG → PNG (fayl 300 dpi + eskiz).
+ *
+ * EKSPORT qilingan, chunki natija sahifasidagi «Hammasini tuzatish»
+ * (`lib/server/doc-polish.ts`) spetsifikatsiya o'zgarganda plakatni
+ * AYNAN shu yo'l bilan qayta chizishi kerak — ikkinchi chizish kodi
+ * «ekranda bitta xil, faylda boshqa xil» nuqsonini qaytarardi.
+ */
+export async function renderPoster(spec: InfographicSpec): Promise<{ file: ImageFile; preview: GenImage } | null> {
   const layout = layoutInfographic(spec);
   const svg = renderInfographic(layout, paletteOf(spec.palette));
   const full = await figurePng(svg, { widthMm: layout.mm.w, dpi: INFOGRAPHIC_LIMITS.dpi });
@@ -288,7 +296,7 @@ export const buildInfographicArtifact: InfographicBuilder = async (tool, values,
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-function posterHtml(spec: InfographicSpec, preview: GenImage): string {
+export function posterHtml(spec: InfographicSpec, preview: GenImage): string {
   const type = infographicTypeOf(spec.type);
   return `<article><h1>${esc(spec.title)}</h1><p>${esc(type.label.uz)} · ${spec.blocks.length} blok · ${spec.size} · 300 dpi</p><img src="${preview.url}" alt="${esc(preview.alt ?? spec.title)}" width="${preview.w}" height="${preview.h}"/></article>`;
 }

@@ -128,6 +128,19 @@ export function extractAssets(
       teacher: doc.teacher?.figures?.length
         ? { ...doc.teacher, figures: doc.teacher.figures.map(swapFigure) }
         : doc.teacher,
+      /*
+       * BOSMA O'YIN rasmlari (AUDIT-21 WP-D): krossvord to'ri va javob
+       * varag'i PNG i (`games/crossword/svg.ts` → `figurePng`).
+       *
+       * O'qituvchi hujjatidagi bilan ayni sabab, lekin bu yerda ikkita:
+       * (1) aktivsiz ikkita 300 dpi PNG ning base64 i `doc_json` da
+       * qolib ketardi — har ochilishda yuzlab kilobayt JSON tarmoqdan
+       * o'tardi; (2) sayqal/«Tuzatish» dan keyingi QAYTA render
+       * (`doc-polish.ts renderGameFile` → `assetImageResolver`) faqat
+       * `assetId` dan o'qiydi, ya'ni usiz tuzatilgan krossvordning DOCX i
+       * to'rsiz chiqardi (`figures` IXTIYORIY — kartalarda umuman yo'q).
+       */
+      game: doc.game?.figures?.length ? { ...doc.game, figures: doc.game.figures.map(swapFigure) } : doc.game,
       // «O'z shablonim» fonlari — har rol PNG si aktivga (bir xil rasm bir marta).
       customTemplate: doc.customTemplate
         ? {
