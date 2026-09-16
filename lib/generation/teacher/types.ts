@@ -117,6 +117,16 @@ export type MapWeek = {
   hours: number;
   method: string;
   resources: string;
+  /**
+   * AUDIT-20 WP-A da QO'SHILDI: «Kutilgan natija» ustuni.
+   *
+   * `sectionLabels.yearCols` allaqachon OLTI ustunni e'lon qiladi
+   * (`Hafta | Soat | Mavzu | Metod | Kutilgan natija | Nazorat`) va eski
+   * `mapDoc` ham shu ustunni chizardi — R0 modelida u tushib qolgan edi.
+   * Maydonsiz `resultVariety` hisobot bandi (R1 §4) va WP-C maketi
+   * jadvalni MATNDAN qayta ajratishga majbur bo'lardi.
+   */
+  result: string;
   control: string;
 };
 
@@ -149,6 +159,17 @@ export type GlossaryModel = {
   type: string;
   terms: GlossaryTerm[];
   order: GlossaryOrder;
+  /**
+   * AUDIT-20 WP-A da QO'SHILDI: misol qatori SO'RALGANMI (`includeExample`).
+   *
+   * Hisobotning `exampleCoverage` bandi bu bayroqsiz javob bera olmaydi:
+   * misolsiz ro'yxat «foydalanuvchi misol so'ramagan» ham,«model misol
+   * bermagan» ham bo'lishi mumkin, birinchisi yashil, ikkinchisi sariq.
+   * Hisobot esa hujjatdan QAYTA hisoblanadi (tahrirdan keyin ham) va
+   * o'shanda forma qiymatlari yo'q. Eski hujjatlarda maydon yo'q —
+   * `undefined` «so'ralmagan» deb o'qiladi.
+   */
+  includeExample?: boolean;
 };
 
 /* ────────────────────────── keys ────────────────────────── */
