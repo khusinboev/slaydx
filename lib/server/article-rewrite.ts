@@ -17,6 +17,10 @@ import {
 import { ARTICLE_TYPES } from "../generation/article/types-registry";
 import { PUBLICATION_PROFILES } from "../generation/article/profiles";
 import type { ArticleReview } from "../generation/article/types";
+import { rewriteTeacherFix, teacherJudgeFromReview, teacherUserNeeds } from "../generation/teacher/polish";
+import { neutralTeacherJudge, reviewTeacher, scoreTeacherReview, teacherJudgeChecks } from "../generation/teacher/review";
+import { applyTeacherOps, teacherOpsFromPolish, type TeacherOp } from "../generation/teacher/edit";
+import type { DocReview } from "../generation/report/types";
 import { complete as completeRole } from "../generation/llm-roles";
 import type { AcademicDoc } from "../generation/types";
 import type { DocOp } from "../generation/slide-edit";
@@ -116,6 +120,68 @@ export async function recomputeReview(doc: AcademicDoc, prev: ArticleReview | un
   return out;
 }
 
+/* ────────────────────────── o'qituvchi hujjati ────────────────────────── */
+
+/**
+ * BANDMA-BAND «TUZATISH» — o'qituvchi hujjati (AUDIT-20 WP-D).
+ *
+ * Maqoladan ikki farqi bor, ikkalasi ham SHAKLDA, qoidalarda emas:
+ *
+ *   1. NISHON. Maqolada bo'lim id / `abstract:<lang>` / `keywords`;
+ *      bu yerda bo'lim id yoki `table:<n>` — chunki texnologik
+ *      xaritaning butun mazmuni JADVALDA turadi va uni bo'lim
+ *      bloklari bilan qayta yozib bo'lmaydi (`rewriteTeacherFix`).
+ *   2. OP TILI. Sayqal `setSection`/`setTable` beradi, adapter esa
+ *      `TeacherOp` ni tushunadi — `teacherOpsFromPolish` o'giradi
+ *      (`doc-polish.ts` dagi bilan AYNI o'girma).
+ *
+ * Qolgani maqoladagidek: kredit yechilmaydi, hisobot QOIDALAR bilan
+ * qayta hisoblanadi, baholovchi ballari avvalgi hisobotdan ko'chadi
+ * (narx va vaqt sababli — to'liq qayta baholash «Hammasini tuzatish»
+ * da), yozish `commitDocOps` orqali.
+ */
+async function rewriteTeacher(
+  id: string,
+  userId: string,
+  baseVersion: number,
+  fix: ArticleFix,
+  doc: AcademicDoc,
+  deps: RewriteDeps & { deadline: number },
+): Promise<RewriteResult> {
+  let sectionOps;
+  try {
+    const r = await rewriteTeacherFix(doc, fix, { complete: deps.complete ?? completeRole, deadline: deps.deadline });
+    sectionOps = r.ops;
+  } catch (e) {
+    throw toApiError(e);
+  }
+
+  const ops = teacherOpsFromPolish(sectionOps);
+  if (!ops.length) throw new ApiError("Model javob bermadi — qayta urinib ko‘ring", 422, { code: "llm" });
+
+  // Hisobot YANGI hujjat ustida — avval op lar mahalliy qo'llanadi (yozilmaydi).
+  const applied = applyTeacherOps(doc, ops, { genId: id });
+  if (!applied.ok) throw new ApiError(applied.error, 422, { at: applied.at });
+
+  const model = applied.doc.teacher;
+  if (!model) throw new ApiError("Eski hujjatda «Tuzatish» yo'q — qaytadan yarating", 409, { code: "legacy" });
+  const fresh = await reviewTeacher(applied.doc, { judge: false, now: deps.now });
+  const rules = fresh.checks.filter((c) => !c.id.startsWith("judge:"));
+  const judge = teacherJudgeFromReview(doc.teacher?.review, model) ?? neutralTeacherJudge(model);
+  const review: DocReview = {
+    ...fresh,
+    score: scoreTeacherReview(rules, model, judge),
+    checks: [...rules, ...teacherJudgeChecks(model, judge)],
+    judgeNotes: [...judge.notes, REWRITE_REVIEW_NOTE],
+    ...(doc.teacher?.review?.polish ? { polish: doc.teacher.review.polish } : {}),
+  };
+  review.userNeeds = teacherUserNeeds(review, applied.doc);
+
+  const all: TeacherOp[] = [...ops, { op: "review", review }];
+  const generation = await commitDocOps(id, userId, baseVersion, all as unknown as DocOp[]);
+  return { generation, ops: all as unknown as ArticleOp[] };
+}
+
 /* ────────────────────────── yozish ────────────────────────── */
 
 export type RewriteResult = { generation: Awaited<ReturnType<typeof commitDocOps>>; ops: ArticleOp[] };
@@ -144,11 +210,14 @@ export async function rewriteArticle(id: string, userId: string, baseVersion: nu
   if (cur.adapter.id === "essay") {
     throw new ApiError("Insho uchun bandma-band tuzatish yo'q — «Hammasini tuzatish» tugmasidan foydalaning", 422, { code: "essay" });
   }
-  if (cur.adapter.id !== "article") throw new ApiError("Bu hujjat maqola emas", 409, { code: "legacy" });
+  if (cur.adapter.id !== "article" && cur.adapter.id !== "teacher") {
+    throw new ApiError("Bu hujjat maqola emas", 409, { code: "legacy" });
+  }
   if (baseVersion !== cur.docVersion) {
     throw new ApiError("Hujjat boshqa joyda o'zgargan — yangilab qayta urinib ko'ring", 409, { code: "version", docVersion: cur.docVersion });
   }
   const deadline = deps.deadline ?? Date.now() + REWRITE_TIMEOUT_MS;
+  if (cur.adapter.id === "teacher") return rewriteTeacher(id, userId, baseVersion, fix, cur.doc, { ...deps, deadline });
   const ops = await rewriteArticleSection(cur.doc, fix, { ...deps, deadline });
 
   // Hisobot YANGI hujjat ustida — avval op lar mahalliy qo'llanadi (yozilmaydi).

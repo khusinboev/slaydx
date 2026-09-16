@@ -5,6 +5,8 @@ import type { ArticleOp } from "../generation/article/edit";
 import { planPolish, runPolish } from "../generation/article/polish";
 import { planEssayPolish, runEssayPolish } from "../generation/essay/polish";
 import { planWorkPolish, runWorkPolish } from "../generation/work/polish";
+import { planTeacherPolish, runTeacherPolish } from "../generation/teacher/polish";
+import { teacherOpsFromPolish } from "../generation/teacher/edit";
 import { essaySection } from "../generation/essay/review";
 import { complete as completeRole } from "../generation/llm-roles";
 import type { DocReview, PolishLog } from "../generation/report/types";
@@ -120,6 +122,34 @@ POLISHERS.work = {
   run: (doc, review, deps) => runWorkPolish(doc, review, { complete: deps.complete ?? completeRole, deadline: deps.deadline ?? Date.now() + POLISH_TIMEOUT_MS, now: deps.now, judge: true }),
   // Talaba ishi sayqali `setSection` beradi — adapter tili bilan bir xil (`work/edit.ts`, WP-C).
   toOps: (r) => r.ops as ArticleOp[],
+};
+
+/**
+ * O'QITUVCHI HUJJATLARI (AUDIT-20 WP-D).
+ *
+ * Sayqal tili (`TeacherSectionOp` — `setSection` va `setTable`) tahrir
+ * tilidan FARQ QILADI: xaritada hujjatning butun mazmuni JADVALDA
+ * turadi va uni bo'lim bloklari bilan qayta yozib bo'lmaydi.
+ * `teacherOpsFromPolish` o'girmani qiladi (`setTable` → o'zgargan
+ * kataklar uchun `cell` op lari) — insho `toOps` i bilan bir xil
+ * sabab: `commitDocOps` op larni ADAPTER orqali qayta qo'llaydi,
+ * ya'ni ular adapter tushunadigan tilda bo'lishi SHART.
+ *
+ * Op soni cheklanmaydi: `commitDocOps` op larni saqlamaydi, hujjatning
+ * O'ZINI yozadi.
+ */
+POLISHERS.teacher = {
+  review: (doc) => doc.teacher?.review,
+  hasModel: (doc) => Boolean(doc.teacher),
+  planned: (review, doc) => planTeacherPolish(review, doc).fixes.length,
+  run: (doc, review, deps) =>
+    runTeacherPolish(doc, review, {
+      complete: deps.complete ?? completeRole,
+      deadline: deps.deadline ?? Date.now() + POLISH_TIMEOUT_MS,
+      now: deps.now,
+      judge: true,
+    }),
+  toOps: (r) => teacherOpsFromPolish(r.ops as Parameters<typeof teacherOpsFromPolish>[0]) as unknown as ArticleOp[],
 };
 
 export function polishableAdapters(): string[] {

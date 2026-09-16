@@ -901,21 +901,23 @@ export type TeacherPolishOp =
   | { op: "setSection"; sectionId: string; blocks: Block[] }
   | { op: "setTable"; index: number; rows: string[][] };
 
-export function teacherOpsFromPolish(doc: AcademicDoc, ops: readonly TeacherPolishOp[]): TeacherOp[] {
+export function teacherOpsFromPolish(ops: readonly TeacherPolishOp[]): TeacherOp[] {
   const out: TeacherOp[] = [];
   for (const op of ops) {
     if (op.op === "setSection") {
       out.push({ op: "setSection", sectionId: op.sectionId, blocks: op.blocks });
       continue;
     }
-    const t = (doc.tables ?? [])[op.index];
-    if (!t) continue;
+    /*
+     * HAR katak yoziladi, o'zgarganlari ajratilmaydi: chaqiruvchida
+     * ASL hujjat bo'lmasligi mumkin (`doc-polish.ts toOps` ga sayqal
+     * NATIJASI keladi) va farqni o'sha nusxadan hisoblash «hech narsa
+     * o'zgarmagan» degan bo'sh ro'yxat berardi. Bir xil qiymatli
+     * `cell` opi baribir zararsiz.
+     */
     const tableId = `table:${op.index}`;
     op.rows.forEach((row, r) => {
-      row.forEach((value, c) => {
-        if (t.rows[r]?.[c] === value) return;
-        out.push({ op: "cell", tableId, r, c, value });
-      });
+      row.forEach((value, c) => out.push({ op: "cell", tableId, r, c, value }));
     });
   }
   return out;

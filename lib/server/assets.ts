@@ -112,6 +112,22 @@ export function extractAssets(
       article: doc.article ? { ...doc.article, figures: doc.article.figures.map(swapFigure) } : doc.article,
       // Talaba ishi sxemalari (AUDIT-19) — maqola bilan bir xil yo'l.
       work: doc.work ? { ...doc.work, figures: doc.work.figures.map(swapFigure) } : doc.work,
+      /*
+       * O'qituvchi hujjati rasmlari (AUDIT-20 WP-D) — hozircha OMR
+       * javoblar varag'i PNG i (`teacher/test/omr.ts`).
+       *
+       * `figures` IXTIYORIY (`TestModel` siz vositalarda umuman yo'q),
+       * shuning uchun maqola/talaba ishidan farqli ravishda mavjudligi
+       * tekshiriladi. Aktivsiz saqlash mumkin emas edi: DOCX PNG ni
+       * ichiga olgan bo'lsa ham, ko'ruvchi (`teacherFlow` →
+       * `b.figure?.url`) va TAHRIRDAN KEYINGI qayta render
+       * (`assetImageResolver`) aynan shu URL dan o'qiydi — usiz
+       * saqlangan `doc_json` da o'nlab kilobaytlik `data:` qolib
+       * ketardi va rebuild blankani yo'qotardi.
+       */
+      teacher: doc.teacher?.figures?.length
+        ? { ...doc.teacher, figures: doc.teacher.figures.map(swapFigure) }
+        : doc.teacher,
       // «O'z shablonim» fonlari — har rol PNG si aktivga (bir xil rasm bir marta).
       customTemplate: doc.customTemplate
         ? {

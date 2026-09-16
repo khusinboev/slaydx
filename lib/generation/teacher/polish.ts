@@ -53,6 +53,7 @@ import { teacherTypeOf } from "./registry";
 import { teacherLabels, teacherRewritePrompt, teacherSystemPrompt, teacherTableRewritePrompt, type TeacherContext } from "./prompts";
 import type { TeacherInput, TeacherLang } from "./input";
 import { clip } from "./guard";
+import { applyTeacherOps, teacherOpsFromPolish } from "./edit";
 import { neutralTeacherJudge, parseTableTarget, reviewTeacher, scoreTeacherReview, teacherJudgeChecks, type TeacherJudgeResult } from "./review";
 
 export { HONESTY_LIMIT, POLISH_SKIP, RewriteError };
@@ -349,9 +350,27 @@ export async function rewriteTeacherFix(doc: AcademicDoc, fix: TeacherFix, deps:
 /* ────────────────────────── op larni qo'llash ────────────────────────── */
 
 /**
- * VAQTINCHA `apply` — `setSection` va `setTable`. WP-D
- * `teacher/edit.ts applyTeacherOps` ni berganda `deps.apply` almashadi.
- * Hujjat CHUQUR nusxada o'zgaradi.
+ * Sayqal op larini QO'LLASH — WP-D dan beri `teacher/edit.ts
+ * applyTeacherOps` orqali (standart `deps.apply`).
+ *
+ * Nega to'g'ridan-to'g'ri emas: sayqal tili (`setSection`/`setTable`)
+ * tahrir tilidan tor, va MUHIMI — `applyTeacherOps` jadval katagini
+ * MODELGA ham ko'chiradi. Ilgari (`applyTeacherSectionOps`) sayqal
+ * xarita jadvalini qayta yozganda `map.quarters[].weeks[]` eski
+ * mavzular bilan qolardi: hisobot qayta hisoblanganda (`runPolishWith`
+ * → `reviewTeacher`) qoidalar YANGI jadvalni, baholovchi esa ESKI
+ * modelni ko'rardi va ball ikki manbadan chiqardi.
+ */
+export function applyTeacherPolishOps(doc: AcademicDoc, ops: TeacherSectionOp[]): ApplyOpsResult {
+  const r = applyTeacherOps(doc, teacherOpsFromPolish(ops), { genId: "" });
+  return r.ok ? { ok: true, doc: r.doc } : { ok: false, error: r.error };
+}
+
+/**
+ * ZAXIRA `apply` — `setSection` va `setTable` ni modelga tegmasdan
+ * qo'llaydi. Eski hujjat (`doc.teacher` yo'q) uchun qoladi:
+ * `applyTeacherOps` unda ataylab 409 beradi, sayqal esa matnni
+ * baribir tuzata oladi.
  */
 export function applyTeacherSectionOps(doc: AcademicDoc, ops: TeacherSectionOp[]): ApplyOpsResult {
   const next: AcademicDoc = {
@@ -455,7 +474,9 @@ export async function runTeacherPolish(doc: AcademicDoc, review: DocReview, deps
     plan: planTeacherPolish,
     userNeeds: teacherUserNeeds,
     rewrite: (d, fix, deadline) => rewriteForCore(d, fix, { complete, deadline }),
-    apply: (d, ops) => (deps.apply ? deps.apply(d, ops) : applyTeacherSectionOps(d, ops)),
+    // Modelli hujjat — `applyTeacherOps` (model ⇄ jadval izchil);
+    // eski hujjatda u 409 beradi, shuning uchun matn-only zaxira.
+    apply: (d, ops) => (deps.apply ? deps.apply(d, ops) : d.teacher ? applyTeacherPolishOps(d, ops) : applyTeacherSectionOps(d, ops)),
     review: (d, guard) => reviewTeacher(d, { complete, deadline: deps.deadline, judge, now, guard }),
     judgeFromReview: (prev) => (model ? teacherJudgeFromReview(prev, model) : null),
     rescore: (fresh, j) => {
