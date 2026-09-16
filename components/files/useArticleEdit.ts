@@ -24,9 +24,15 @@ import { asEditGen, useDocEdit, SAVED_FLASH_MS, type DocEdit } from "./useDocEdi
 
 export type ArticleEdit = DocEdit<ArticleOp>;
 
-const ARTICLE_TOOLS = ["article", "thesis"] as const;
+/*
+ * AUDIT-19: insho ham shu op tilida tahrirlanadi — server tomonda
+ * `essayAdapter` ham `applyArticleOps` ni chaqiradi (`ESSAY_OPS` bilan
+ * cheklangan holda). Alohida `useEssayEdit` yozilmadi: klient qiladigan
+ * ish AYNAN bir xil — bo'lim bloklarini tahrirlash, undo/redo, saqlash.
+ */
+const ARTICLE_TOOLS = ["article", "thesis", "essay"] as const;
 
-/** Bo'limli maqola — tahrirlanadi (yangi ham, eski ham). */
+/** Bo'limli maqola/insho — tahrirlanadi (yangi ham, eski ham). */
 const hasArticle = (doc: AcademicDoc) => Boolean(doc.sections?.length);
 
 export function useArticleEdit({

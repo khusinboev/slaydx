@@ -14,9 +14,10 @@
  *
  * Foydalanish:
  *   npm run live                 — barcha keyslar
- *   npm run live -- article-oak essay  — faqat nomlanganlar
+ *   npm run live -- article-oak essay-dtm  — faqat nomlanganlar
  *   npm run live -- article-oak --article-type analytical --profile university  — maqola turi/profili
- *   npm run live -- article-oak --no-polish  — avto-sayqalsiz (AUDIT-18)
+ *   npm run live -- essay-dtm essay-academic essay-ielts  — insho (AUDIT-19)
+ *   npm run live -- article-oak --no-polish  — avto-sayqalsiz (AUDIT-18/19)
  *
  * `GEMINI_API_KEY` shart. Chiqish `eval-out/live/` ga yoziladi.
  */
@@ -39,6 +40,7 @@ import { verifyCitations } from "../lib/generation/research/verify.ts";
 import { factNumbers } from "../lib/generation/article/guard.ts";
 import { PUBLICATION_PROFILES, isPublicationProfileId } from "../lib/generation/article/profiles.ts";
 import { isArticleTypeId } from "../lib/generation/article/types-registry.ts";
+import { ESSAY_FILLER } from "../lib/generation/essay/prompts.ts";
 import type { ArticleTypeId, PublicationProfileId } from "../lib/generation/article/types.ts";
 import type { FormValues } from "../lib/types.ts";
 
@@ -381,26 +383,77 @@ const CASES: Case[] = [
     ],
   },
   {
-    /* P1-3: 5 varaq → 5 burchak (ilgari uchtasi ham 3 ta olardi). */
-    name: "essay",
+    /*
+     * Maktab/DTM adabiy inshosi (AUDIT-19 WP-E1): epigraf + asar iqtibosi,
+     * 3 varaq, DTM 24 ballik rubrikasi (5 mezon).
+     */
+    name: "essay-dtm",
     tool: "essay",
-    budgetMs: 160_000,
+    budgetMs: 200_000,
     values: {
-      topic: "Ona tilim — g'ururim va iftixorim",
-      pages: "5",
+      topic: "«O'tkan kunlar» romanida sevgi va burch kurashi",
+      essayContext: "school_dtm",
+      essayKind: "literary",
+      pages: "3",
       language: "uz",
-      author: "Valiyeva Nodira",
-      design: "iris",
+      workTitle: "O'tkan kunlar",
+      epigraph: "Sevgi — qalbning eng sof tuyg'usi",
+      epigraphAuthor: "Abdulla Qodiriy",
+      userFacts: "Romanni 11-sinfda o'qiganman; Otabek bilan Kumushning Toshkentdagi uchrashuvi eng ta'sirli sahna bo'lgan.",
+      design: "vintage",
     },
-    checks: (f, pages) => {
-      const body = f.doc.sections.filter((s) => s.id.startsWith("asosiy"));
-      return [
-        ok("5 ta asosiy burchak", body.length === 5, `${body.length} ta`),
-        ok("kirish va xulosa bor", f.doc.sections.length === 7, `${f.doc.sections.length} bo'lim`),
-        ok("hajm 5 varaqqa yetadi", wordCount(f.doc) >= 920, `${wordCount(f.doc)} so'z (darvoza 920)`),
-        ok("renderlangan sahifa", pages === null || pages >= 4, `${pages ?? "—"} bet`),
-      ];
+    checks: (f, pages) => essayChecks(f, pages, { criteria: 5, context: "school_dtm" }).concat([
+      ok("epigraf birinchi blok (quote)", f.doc.sections[0]?.blocks[0]?.kind === "quote" && /Abdulla Qodiriy/.test(f.doc.sections[0].blocks[0].text), f.doc.sections[0]?.blocks[0]?.kind ?? "—"),
+      ok("asar nomi modelda", f.doc.essay?.workTitle === "O'tkan kunlar", f.doc.essay?.workTitle ?? "yo'q"),
+      ok("ramka faylga tushadi (`design`)", f.doc.meta.design === "vintage" && f.doc.essay?.design === "vintage", `${f.doc.meta.design}/${f.doc.essay?.design}`),
+      ok("renderlangan sahifa ≥ 2", pages === null || pages >= 2, `${pages ?? "—"} bet`),
+    ]),
+  },
+  {
+    /* OTM akademik esse: 800 so'z, thesis statement + har bandda topic sentence, ingliz tili. */
+    name: "essay-academic",
+    tool: "essay",
+    budgetMs: 200_000,
+    values: {
+      topic: "Should universities replace final exams with continuous assessment?",
+      essayContext: "academic",
+      essayKind: "argumentative",
+      wordTarget: "800",
+      language: "en",
+      person: "third",
+      userFacts: "In my faculty, 62 of 90 students said weekly quizzes helped them retain material better than a single final exam.",
     },
+    checks: (f, pages) => essayChecks(f, pages, { criteria: 5, context: "academic" }).concat([
+      ok("thesis statement bor", Boolean(f.doc.essay?.thesisStatement?.trim()), f.doc.essay?.thesisStatement?.slice(0, 80) ?? "yo'q"),
+      ok("topic sentence rejasi", (f.doc.essay?.paragraphs ?? []).filter((p) => p.role === "body" && p.topicSentence).length >= 2, `${(f.doc.essay?.paragraphs ?? []).filter((p) => p.topicSentence).length} ta`),
+      ok("3-shaxs (xolis): «I think» yo'q", !/\bI (think|believe)\b/i.test(essayText(f)), "—"),
+      ok("hajm ~800 so'z (paket 4 varaq, narx o'zgarmaydi)", f.doc.meta.targetPages <= 5, `${f.doc.meta.targetPages} varaq`),
+    ]),
+  },
+  {
+    /*
+     * IELTS Task 2 — eng qattiq holat: 250–330 so'z, 4 band mezoni va
+     * SAHIFA DARVOZASI o'tkazib yuborilishi (1 betlik ish yiqilmasin).
+     */
+    name: "essay-ielts",
+    tool: "essay",
+    budgetMs: 180_000,
+    values: {
+      topic: "Some people think that governments should invest in public transport rather than new roads. To what extent do you agree or disagree?",
+      essayContext: "ielts_task2",
+      essayKind: "opinion",
+      language: "uz",
+    },
+    checks: (f, pages) => essayChecks(f, pages, { criteria: 4, context: "ielts_task2" }).concat([
+      ok("til majburan ingliz (formada «uz» yuborilgan edi)", f.doc.essay?.language === "en" && f.doc.meta.language === "en", `${f.doc.essay?.language}/${f.doc.meta.language}`),
+      ok("hajm 250–330 so'z", wordCount(f.doc) >= 250 && wordCount(f.doc) <= 360, `${wordCount(f.doc)} so'z`),
+      /*
+       * Bu keysning BOSH sababi: IELTS inshosi 1 betga sig'adi va eski
+       * sahifa darvozasi (`max(2, …)`) uni har safar yiqitardi.
+       */
+      ok("1 bet ham qabul (sahifa darvozasi yo'q)", pages === null || pages >= 1, `${pages ?? "—"} bet`),
+      ok("band → ball o'girmasi (IELTS rubrikasi)", f.doc.essay?.rubric === "ielts_band", f.doc.essay?.rubric ?? "—"),
+    ]),
   },
   {
     /* P1-10: prompt endi «4 ta bob» deydi — reja ham shuncha bo'lishi kerak. */
@@ -756,6 +809,48 @@ function profileArg(fallback: PublicationProfileId): PublicationProfileId {
   return isPublicationProfileId(v) ? v : fallback;
 }
 
+/** Inshoning butun matni (epigraf bilan) — klişe/shaxs tekshiruvlari uchun. */
+function essayText(f: BuiltFile): string {
+  return f.doc.sections.flatMap((s) => s.blocks.map((b) => b.text)).join("\n");
+}
+
+/**
+ * Insho holatlarining umumiy da'volari (AUDIT-19 WP-E1).
+ *
+ * Maqoladan farqi: manba, sxema va annotatsiya YO'Q — o'lchanadigan
+ * narsa hajm (SO'Z bilan, `doc.essay.words`), tuzilma (bitta bo'lim),
+ * kontekst mezonlari (DTM 5 / akademik 5 / IELTS 4) va klişe taqiqi.
+ */
+function essayChecks(f: BuiltFile, pages: number | null, o: { criteria: number; context: string }): Check[] {
+  const e = f.doc.essay;
+  const text = essayText(f);
+  const words = wordCount(f.doc);
+  const review = e?.review;
+  const judge = (review?.checks ?? []).filter((c) => /^judge:(?!fix)/.test(c.id));
+  /*
+   * Klişe — `guardSection` + hisobot `filler` qoidasi bilan bir xil
+   * ro'yxatdan (`ESSAY_FILLER`): jonli matnda ular QOLMASLIGI kerak,
+   * chunki DTM va IELTS baholovchilari aynan shularni jazolaydi.
+   */
+  const lower = text.toLowerCase();
+  const fillerHits = ESSAY_FILLER.filter((p) => lower.includes(p.toLowerCase()));
+  return [
+    ok("doc.essay bor", Boolean(e), e ? `${e.context}/${e.kind}/${e.rubric}` : "yo'q"),
+    ok("kontekst so'ralganicha", e?.context === o.context, `${e?.context ?? "—"} (kutilgan ${o.context})`),
+    ok("bitta bo'lim (mundarija/titul qoidasi kontekstdan)", f.doc.sections.length === 1 && f.doc.toc === false, `${f.doc.sections.length} bo'lim, toc=${f.doc.toc}`),
+    ok(
+      "hajm dvigatel oralig'ida",
+      Boolean(e) && words >= Math.round(e!.words.min * 0.9) && words <= Math.round(e!.words.max * 1.15),
+      e ? `${words} so'z (${e.words.min}–${e.words.max}, mo'ljal ${e.words.aim})` : `${words} so'z`,
+    ),
+    ok("hisobot bor va > 0 ball", (review?.score ?? 0) > 0, review ? `${review.score} ball, ${review.checks.filter((c) => c.level === "red").length} qizil` : "hisobot yo'q"),
+    ok(`kontekst mezonlari ${o.criteria} ta`, judge.length === o.criteria, `${judge.length} ta: ${judge.map((c) => c.id.replace("judge:", "")).join(",")}`),
+    ok("klişe iboralar yo'q", fillerHits.length === 0, fillerHits.length ? `topildi: ${fillerHits.join(", ")}` : "toza"),
+    ok("cost.calls > 0", (f.cost?.calls ?? 0) > 0, f.cost ? `${f.cost.calls} chaqiruv, ${f.cost.provider}/${f.cost.model}` : "cost yo'q"),
+    ok("DOCX chiqdi", f.bytes.byteLength > 0, `${Math.round(f.bytes.byteLength / 1024)} KB, ${pages ?? "?"} bet`),
+  ];
+}
+
 /**
  * Maqola holatlarining umumiy da'volari. Iqtibos tekshiruvi yakuniy hujjat
  * ustida QAYTA yuritiladi (`verifyCitations`) — dvigatel o'z ichida nima
@@ -822,8 +917,11 @@ async function main() {
     process.exit(2);
   }
   await mkdir(OUT, { recursive: true });
-  // `--no-polish` — maqola avto-sayqali (AUDIT-18 8-bosqich) o'chiq: dvigatel `ARTICLE_POLISH=0` ni o'qiydi.
-  if (process.argv.includes("--no-polish")) process.env.ARTICLE_POLISH = "0";
+  // `--no-polish` — avto-sayqal o'chiq (maqola AUDIT-18 8-bosqichi, insho AUDIT-19 5-bosqichi).
+  if (process.argv.includes("--no-polish")) {
+    process.env.ARTICLE_POLISH = "0";
+    process.env.ESSAY_POLISH = "0";
+  }
 
   const tpl = templateArg();
   const src = sourceArg();

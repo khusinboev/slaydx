@@ -163,11 +163,11 @@ test("adapterFor: vosita → adapter; tahrirlanmaydigan vosita — null", () => 
   assert.equal(adapterFor("slide"), slideAdapter);
   assert.equal(adapterFor("pro-slide"), slideAdapter);
   assert.equal(adapterFor("resume"), resumeAdapter);
-  for (const t of ["referat", "essay", "translation", "glossary", ""]) {
+  for (const t of ["referat", "translation", "glossary", ""]) {
     assert.equal(adapterFor(t), null, `«${t}» tahrirlanadigan bo'lib qoldi`);
   }
-  // Maqola 2 (WP7): `article` ham reyestrda — `tests/article-commit` sinaydi; tezis (AUDIT-19) maqola adapterida.
-  assert.deepEqual(new Set(editableTools()), new Set(["slide", "pro-slide", "resume", "article", "thesis"]));
+  // Maqola 2 (WP7): `article` ham reyestrda — `tests/article-commit` sinaydi; tezis (AUDIT-19) maqola adapterida, insho — `essayAdapter` (`essay-wiring`).
+  assert.deepEqual(new Set(editableTools()), new Set(["slide", "pro-slide", "resume", "article", "thesis", "essay"]));
 });
 
 test("adapter `hasModel`: slayd — `doc.slides`, rezyume — model yoki eski bo'limlar", () => {

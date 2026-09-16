@@ -173,10 +173,26 @@ test("sayqal jurnali: qabul → «74 → 86 ball, N band tuzatildi; M band sizni
 
 test("ResultView: article natijasida `doc.article.review` bo'lsa ko'ruvchi tepasida <details open> panel", () => {
   const src = readFileSync(new URL("../../components/files/ResultView.tsx", import.meta.url), "utf8");
-  assert.match(src, /gen\.type === "article" && gen\.doc\?\.article\?\.review \? \(/, "faqat maqola + hisobot bor");
+  /*
+   * AUDIT-19: hisobot YAGONA nuqtadan o'qiladi — maqola/tezisda
+   * `doc.article.review`, inshoda `doc.essay.review`; panel sharti
+   * hujjat turini emas, hisobotning O'ZI borligini tekshiradi.
+   */
+  assert.match(src, /const review = gen\.doc\?\.article\?\.review \?\? gen\.doc\?\.essay\?\.review;/, "hisobot ikkala modeldan");
+  assert.match(src, /\{review \? \(/, "panel sharti — hisobot bor");
   assert.match(src, /<details open[^>]*data-article-review-panel/, "yig'iladigan panel");
   // WP7: `onFix` → `rewriteArticle` (POST …/rewrite), `fixing` — yuklanish holati.
-  assert.match(src, /<ArticleReviewPanel review=\{gen\.doc\.article\.review\} onFix=\{[^}]+\} fixing=\{fixing\} onPolish=\{[^}]+\} polishing=\{polishing\} \/>/, "panel ulanishi (onFix + fixing — WP7; onPolish + polishing — AUDIT-18)");
+  assert.match(src, /<ArticleReviewPanel\s+review=\{review\}/, "panel hisobotni oladi");
+  assert.match(src, /fixing=\{fixing\}/, "«Tuzatish» yuklanish holati (WP7)");
+  assert.match(src, /onPolish=\{[^}]+\}\s+polishing=\{polishing\}/, "«Hammasini tuzatish» (AUDIT-18)");
+  /*
+   * Inshoda BANDMA-BAND «Tuzatish» yo'q (AUDIT-19): `onFix` faqat
+   * maqola/tezisga beriladi, «Manbalar»/«Vizuallar» guruhlari esa
+   * yashiriladi — insho manbasiz va sxemasiz janr. Mutatsiya: `isEssay`
+   * bog'lanishi olib tashlansa insho uchun 422 beradigan tugma chizilardi.
+   */
+  assert.match(src, /isEssay \? \{\} : \{ onFix:/, "«Tuzatish» inshoda chizilmaydi");
+  assert.match(src, /isEssay \? \{ hideGroups: ESSAY_HIDDEN_GROUPS \}/, "insho uchun bo'sh guruhlar yashiriladi");
   assert.match(src, /rewriteArticle\(cur\.id, base, fix\)/, "«Tuzatish» rewrite marshrutiga bormaydi");
   assert.match(src, /polishArticle\(cur\.id, base\)/, "«Hammasini tuzatish» polish marshrutiga bormaydi");
   assert.ok(src.indexOf("data-article-review-panel") < src.indexOf("<ArtifactViewer"), "panel ko'ruvchidan OLDIN");

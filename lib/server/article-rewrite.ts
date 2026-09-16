@@ -128,6 +128,22 @@ export type RewriteResult = { generation: Awaited<ReturnType<typeof commitDocOps
  */
 export async function rewriteArticle(id: string, userId: string, baseVersion: number, fix: ArticleFix, deps: RewriteDeps = {}): Promise<RewriteResult> {
   const cur = await loadDocForEdit(id, userId);
+  /*
+   * Insho (AUDIT-19): BANDMA-BAND tuzatish YO'Q — 422 «Hammasini
+   * tuzatish» ga yo'naltiradi.
+   *
+   * Sabab mahsulotda: insho `sections` da BITTA bo'lim, uning hisobot
+   * bandlari ham (hajm, thesis statement, klişe, takror) butun matnga
+   * tegishli — har «Tuzatish» baribir butun inshoni qayta yozardi.
+   * Ya'ni bandma-band yo'l «Hammasini tuzatish» ning ikkinchi, deyarli
+   * aynan nusxasi bo'lib, ballni qayta baholamas (`rewrite` baholovchini
+   * chaqirmaydi) va Q-3 himoyasisiz qolardi. Panel ham inshoda
+   * «Tuzatish» tugmalarini chizmaydi (`ResultView` `onFix` bermaydi) —
+   * bu tekshiruv to'g'ridan-to'g'ri yuborilgan so'rov uchun.
+   */
+  if (cur.adapter.id === "essay") {
+    throw new ApiError("Insho uchun bandma-band tuzatish yo'q — «Hammasini tuzatish» tugmasidan foydalaning", 422, { code: "essay" });
+  }
   if (cur.adapter.id !== "article") throw new ApiError("Bu hujjat maqola emas", 409, { code: "legacy" });
   if (baseVersion !== cur.docVersion) {
     throw new ApiError("Hujjat boshqa joyda o'zgargan — yangilab qayta urinib ko'ring", 409, { code: "version", docVersion: cur.docVersion });

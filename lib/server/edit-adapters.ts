@@ -53,7 +53,7 @@ export type ParseResult = { ok: true; ops: unknown[] } | { ok: false; error: str
 export type ApplyResult = { ok: true; doc: AcademicDoc } | { ok: false; error: string; at: number };
 
 export type EditAdapter = {
-  id: "slide" | "resume" | "article";
+  id: "slide" | "resume" | "article" | "essay";
   /** Shu adapter xizmat qiladigan vositalar (`generations.tool_id`). */
   tools: ReadonlySet<string>;
   /** Hujjatda tahrir uchun kerakli model bormi (yo'q bo'lsa 409 `legacy`). */
@@ -129,7 +129,33 @@ export const articleAdapter: EditAdapter = {
   },
 };
 
-/** Bitta so'rovdagi operatsiyalar soni — uchala op tili uchun bir xil. */
+/**
+ * Insho (Talaba ishlari 2, AUDIT-19 WP-E1).
+ *
+ * Op tili — maqolaniki (`article/edit.ts`), lekin uning QISMI: insho
+ * `doc.essay` bilan keladi, `doc.article` siz, shuning uchun
+ * `applyArticleOps` unda faqat matn op larini + `setSection` + server
+ * yozadigan `review` ni o'tkazadi (`ESSAY_OPS`). Alohida op tili
+ * yozilmadi — tahrir qilinadigan narsa AYNAN bir xil: bo'lim bloklari.
+ *
+ * `hasModel` — `sections.length`: eski insho (`writeEssayWithLlm`
+ * yozgan, `doc.essay` siz) ham tahrirlanadi, `applyArticleOps` uni
+ * `LEGACY_OPS` bilan qabul qiladi.
+ */
+export const essayAdapter: EditAdapter = {
+  id: "essay",
+  tools: new Set(["essay"]),
+  hasModel: (doc) => Boolean(doc?.sections?.length),
+  prepare: (doc) => doc,
+  parse: (raw) => parseArticleOps(raw),
+  apply: (doc, ops, ctx) => applyArticleOps(doc, ops as ArticleOp[], ctx),
+  async render(ctx) {
+    const bytes = await renderDocx(ctx.doc, { resolveImage: ctx.resolveImage });
+    return { bytes, mime: DOCX_MIME, fileName: ctx.fileName };
+  },
+};
+
+/** Bitta so'rovdagi operatsiyalar soni — barcha op tillari uchun bir xil. */
 export const MAX_EDIT_OPS = 50;
 
 /**
@@ -150,7 +176,7 @@ export function preParseOps(raw: unknown): { ok: true } | { ok: false; error: st
   return { ok: true };
 }
 
-const ADAPTERS: EditAdapter[] = [slideAdapter, resumeAdapter, articleAdapter];
+const ADAPTERS: EditAdapter[] = [slideAdapter, resumeAdapter, articleAdapter, essayAdapter];
 
 /** Vosita uchun adapter; tahrirlanmaydigan vositada `null`. */
 export function adapterFor(toolId: string): EditAdapter | null {
