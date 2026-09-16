@@ -48,12 +48,13 @@ import { remainingMs } from "../quality";
 import { blocksFromLlm } from "../article/parse";
 import type { LlmUsage } from "../llm-roles";
 import type { CompleteFn } from "../research/pipeline";
-import type { TeacherModel } from "./types";
+import { TEACHER_LIMITS, type TeacherModel } from "./types";
 import { teacherTypeOf } from "./registry";
-import { teacherLabels, teacherRewritePrompt, teacherSystemPrompt, teacherTableRewritePrompt, type TeacherContext } from "./prompts";
+import { glossaryRewritePrompt, teacherLabels, teacherRewritePrompt, teacherSystemPrompt, teacherTableRewritePrompt, type TeacherContext } from "./prompts";
 import type { TeacherInput, TeacherLang } from "./input";
-import { clip } from "./guard";
+import { clip, glossaryTermBlocks, listOf, pickTerms, sortTerms } from "./guard";
 import { applyTeacherOps, teacherOpsFromPolish } from "./edit";
+
 import { neutralTeacherJudge, parseTableTarget, reviewTeacher, scoreTeacherReview, teacherJudgeChecks, type TeacherJudgeResult } from "./review";
 
 export { HONESTY_LIMIT, POLISH_SKIP, RewriteError };
@@ -339,6 +340,31 @@ export async function rewriteTeacherFix(doc: AcademicDoc, fix: TeacherFix, deps:
 
   const section = doc.sections.find((s) => s.id === fix.target);
   if (!section) throw new RewriteError(`Bo'lim topilmadi: ${fix.target}`, 422, "target");
+
+  /*
+   * MODELDAN quriladigan bo'lim — nasr sifatida qayta yozilmaydi.
+   *
+   * Glossariyning `terms` bo'limi tekis, takrorlanuvchi tuzilma
+   * (`h3` atama + ta'rif + ixtiyoriy misol) va hisobotning BEShTA
+   * qoidasi aynan shu nishonga «Tuzatish» beradi. Umumiy nasr yo'li
+   * (`blocksFromLlm`) esa `h3` larni yeb qo'yardi — jonli sinovda
+   * 20 atamadan 18 tasining nomi yo'qolgan edi. Shuning uchun model
+   * SHAKLI so'raladi va bloklar dvigatelning o'z quruvchisi bilan
+   * yig'iladi: matn, model va uch tilli jadval bitta ro'yxatdan
+   * chiqadi (`applyTeacherOps` uni bloklardan qayta o'qiydi).
+   */
+  if (ctx.kind === "glossary" && section.id === "terms" && doc.teacher.glossary) {
+    const g = doc.teacher.glossary;
+    const tri = g.type === "uch-tilli";
+    const raw = await ask(deps, system, glossaryRewritePrompt(ctx, g.terms, fix.instruction, tri), Math.min(8000, 900 + g.terms.length * 90));
+    const picked = pickTerms(listOf(parseLlmObject<{ terms?: unknown }>(raw) as Record<string, unknown> | null, "terms", "items"), new Set<string>(), {
+      defMax: TEACHER_LIMITS.defCharsMax,
+    });
+    if (picked.length !== g.terms.length) throw new RewriteError(RETRY_MSG, 422, "llm");
+    const terms = sortTerms(picked, ctx.input.language);
+    return { ops: [{ op: "setSection", sectionId: section.id, blocks: glossaryTermBlocks(terms, ctx.labels.example, g.includeExample !== false) }] };
+  }
+
   const current = section.blocks.map((b) => b.text).join("\n\n").slice(0, 12_000);
   const raw = await ask(deps, system, teacherRewritePrompt(ctx, section.title, current, fix.instruction), Math.min(8000, Math.max(1500, current.length)));
   const parsed = parseLlmObject<{ blocks?: unknown }>(raw);
@@ -362,8 +388,32 @@ export async function rewriteTeacherFix(doc: AcademicDoc, fix: TeacherFix, deps:
  * modelni ko'rardi va ball ikki manbadan chiqardi.
  */
 export function applyTeacherPolishOps(doc: AcademicDoc, ops: TeacherSectionOp[]): ApplyOpsResult {
-  const r = applyTeacherOps(doc, teacherOpsFromPolish(ops), { genId: "" });
-  return r.ok ? { ok: true, doc: r.doc } : { ok: false, error: r.error };
+  /*
+   * Sayqal op lari BITTALAB qo'llanadi, tahrir PATCH idan farqli
+   * ravishda (u atomar: foydalanuvchi bir bosishda nima kutganini
+   * to'liq oladi yoki umuman olmaydi).
+   *
+   * Sabab: bu yerda op lar mustaqil TUZATISHLAR — har biri boshqa
+   * bo'lim. `applyTeacherOps` MODELLI bo'limda tuzilma buzilgan
+   * qayta yozishni RAD etadi (atamalar sarlavhasi yo'qolgan holat),
+   * va agar butun to'plam shu sababli yiqilsa, to'g'ri bajarilgan
+   * qolgan tuzatishlar ham yo'qolardi. Rad etilgan bo'lim shunchaki
+   * O'ZGARMAY qoladi — model bilan matn baribir ajralmaydi, chunki
+   * ikkalasi ham eski holatida.
+   */
+  let cur = doc;
+  let applied = 0;
+  let lastError = "";
+  for (const op of ops) {
+    const r = applyTeacherOps(cur, teacherOpsFromPolish([op]), { genId: "" });
+    if (!r.ok) {
+      lastError = r.error;
+      continue;
+    }
+    cur = r.doc;
+    applied++;
+  }
+  return applied ? { ok: true, doc: cur } : { ok: false, error: lastError || "sayqal op lari qo'llanmadi" };
 }
 
 /**

@@ -463,7 +463,18 @@ export function planTeacher(doc: AcademicDoc): TeacherPlan {
     field(L.fieldWeeklyHours, String(model.map.weeklyHours), "teacher.map.weeklyHours");
     field(L.fieldTotalHours, String(model.map.totalHours), "teacher.map.totalHours");
   }
-  field(L.fieldTopic, doc.meta.topic, "meta.topic");
+  /*
+   * «Mavzu» qatori FANNING TAKRORI bo'lsa chizilmaydi.
+   *
+   * Texnologik xaritada mavzu maydoni odatda fan nomining o'zi bo'ladi
+   * («Fan: Biologiya» + «Mavzu: Biologiya») — LibreOffice ko'z
+   * tekshiruvida shapkada ikki bir xil qator turgan edi. Dars
+   * ishlanmasida mavzu fandan farq qiladi, ya'ni u yerda qator
+   * avvalgidek qoladi.
+   */
+  if (clean(doc.meta.topic).toLowerCase() !== clean(S.subject).toLowerCase()) {
+    field(L.fieldTopic, doc.meta.topic, "meta.topic");
+  }
   field(L.doc.compiledBy, S.author, "teacher.school.author");
   field(L.date, teacherDateText(S.date), "teacher.school.date");
   if (kind === "test") head.push({ k: "line", parts: L.studentFields, path: "teacher.test" });
@@ -532,10 +543,31 @@ export function planTeacher(doc: AcademicDoc): TeacherPlan {
     return parts.length > 0 && parts.every((x) => headPairs.has(x));
   };
 
-  const pushBlocks = (blocks: Block[], path: string, opts: { dropHeadRecap?: boolean } = {}) => {
+  /**
+   * O'QUVCHI MAYDONI qatori («F.I.Sh. ______ Sinf ____ …»).
+   *
+   * Uni shapka chizadi; dvigatel esa ESKI hujjatlarda uni ko'rsatma
+   * bo'limining birinchi paragrafi sifatida ham yozgan (WP-D da
+   * `test/engine.ts` dan olib tashlandi) — o'sha hujjatlarda qator
+   * ikki marta chiqmasligi uchun shu yerda ham tashlanadi.
+   *
+   * Tanish ALOMAT bo'yicha: tagchiziq guruhlari olib tashlangach
+   * matnda shapkadagi yorliqlarning kamida uchtasi qolsa. Aynan
+   * satr solishtirish yaramaydi — dvigatelning qatori (`test/labels.ts`)
+   * va shapkaniki (`studentFields`) boshqa ro'yxatdan quriladi.
+   */
+  const studentLabels = L.studentFields.filter((x) => !/^_+$/.test(x)).map((x) => x.toLowerCase());
+  const isStudentFieldLine = (text: string): boolean => {
+    const bare = clean(text).replace(/_+/g, " ");
+    if (!/_/.test(text)) return false;
+    return studentLabels.filter((lab) => bare.toLowerCase().includes(lab)).length >= 3;
+  };
+
+  const pushBlocks = (blocks: Block[], path: string, opts: { dropHeadRecap?: boolean; dropStudentLine?: boolean } = {}) => {
     blocks.forEach((b, i) => {
       const p = `${path}.blocks.${i}`;
       if (opts.dropHeadRecap && b.kind === "p" && isHeadRecap(b.text)) return;
+      if (opts.dropStudentLine && b.kind === "p" && isStudentFieldLine(b.text)) return;
       switch (b.kind) {
         case "h1":
         case "h2":
@@ -882,8 +914,17 @@ export function planTeacher(doc: AcademicDoc): TeacherPlan {
    * Boshqa vositalarda majburiy uzilish YO'Q — dars ishlanmasi 1–2 bet,
    * har bo'limni betga chiqarish qog'ozni behuda sarflardi (keys
    * rubrikasi ham alohida bet TALAB QILMAYDI — WP-A shartnomasi).
+   *
+   * BIRINCHI variant — ISTISNO: u ko'rsatmadan keyin O'SHA betda
+   * boshlanadi. Uzilish qo'yilganda 1-bet shapka + 4 qatorlik
+   * ko'rsatma bilan deyarli bo'sh qolardi (LibreOffice ko'z
+   * tekshiruvi), holbuki ko'rsatma aynan variant boshida o'qiladi.
+   * Uzilish faqat variantlar ORASIDA kerak: har o'quvchi o'z
+   * variantini alohida varaqda oladi.
    */
-  const breaksAt = (id: string): boolean => kind === "test" && (Boolean(variantIdOf(id)) || id === "key" || id === "omr");
+  const firstVariantId = doc.sections.find((s) => variantIdOf(s.id))?.id ?? "";
+  const breaksAt = (id: string): boolean =>
+    kind === "test" && ((Boolean(variantIdOf(id)) && id !== firstVariantId) || id === "key" || id === "omr");
 
   const drawn = new Set<DocTable>();
   const anchored = new Map<string, DocTable[]>();
@@ -899,7 +940,7 @@ export function planTeacher(doc: AcademicDoc): TeacherPlan {
       body.push({ k: "h1", text: heading, sectionId: s.id, path: `${path}.title`, pageBreak: breaksAt(s.id) });
     }
     // Pasport bo'limi shapkani TAKRORLAMAYDI (yuqoridagi `isHeadRecap`).
-    pushBlocks(s.blocks, path, { dropHeadRecap: s.id === "passport" });
+    pushBlocks(s.blocks, path, { dropHeadRecap: s.id === "passport", dropStudentLine: kind === "test" && s.id === "instructions" });
     const own = anchored.get(s.id) ?? [];
     for (const t of own) {
       if (drawn.has(t)) continue;

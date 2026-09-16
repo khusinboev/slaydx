@@ -201,10 +201,19 @@ export function testSections(model: TestModel, input: TestInput, figureId: strin
   const sections: DocSection[] = [];
   const tables: DocTable[] = [];
 
+  /*
+   * O'QUVCHI MAYDONI («F.I.Sh. ___ Sinf ___ …») bu yerda CHIZILMAYDI.
+   *
+   * Uni rasmiy SHAPKA beradi (`planTeacher` `k:"line"` bandi) — eski
+   * shaklda shapka yo'q edi va bu yagona joy edi, WP-C dan keyin esa
+   * ikkalasi ham chizilib, 1-betda bir xil qator IKKI marta turardi
+   * (LibreOffice ko'z tekshiruvi). Shapka — yagona manba: DOCX ham,
+   * ko'ruvchi ham undan o'qiydi.
+   */
   sections.push({
     id: "instructions",
     title: L.instructions,
-    blocks: [{ kind: "p", text: L.student }, ...model.instructions.map(li)],
+    blocks: model.instructions.map(li),
   });
   for (const v of model.variants) sections.push(variantSection(model, v, input.language));
   if (figureId) sections.push({ id: "omr", title: L.answerSheet, blocks: [{ kind: "figure", text: L.answerSheet, figureId }] });

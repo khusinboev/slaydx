@@ -71,7 +71,7 @@ import type { AcademicDoc, Block, DocSection, DocTable, Figure } from "../types"
 import type { DocReview } from "../report/types";
 import { planTeacher, quarterIndexOf, variantIdOf, type TeacherPlan } from "./layout";
 import { teacherLabels } from "./prompts";
-import type { TeacherKind, TeacherModel } from "./types";
+import type { GlossaryTerm, TeacherKind, TeacherModel } from "./types";
 
 /* ══════════════════════════ shakl ══════════════════════════ */
 
@@ -387,9 +387,16 @@ function sectionMirror(model: TeacherModel, kind: TeacherKind, s: DocSection, la
   if (kind === "test" && model.test) {
     const t = model.test;
     if (s.id === "instructions") {
-      /* `testSections`: o'quvchi maydoni qatori, keyin ko'rsatmalar. */
-      if (kindAt(0) !== "p") return null;
-      out.push(null);
+      /*
+       * `testSections`: ko'rsatma qatorlari. ESKI hujjatlarda ulardan
+       * oldin o'quvchi maydoni paragrafi ham bor edi (WP-D da olib
+       * tashlandi — uni shapka chizadi), shuning uchun qo'shimcha
+       * birinchi blok BOR bo'lsa o'tkazib yuboriladi.
+       */
+      if (b.length === t.instructions.length + 1) {
+        if (kindAt(0) !== "p") return null;
+        out.push(null);
+      }
       for (let k = 0; k < t.instructions.length; k++) {
         if (kindAt(out.length) !== "li") return null;
         out.push({ path: `teacher.test.instructions.${k}` });
@@ -463,6 +470,86 @@ export function teacherMirrors(doc: AcademicDoc): Map<string, Mirror> {
     });
   });
   return map;
+}
+
+/* ══════════════════════════ butun bo'lim → model ══════════════════════════ */
+
+/**
+ * GLOSSARIY atamalarini BLOKLARDAN qayta o'qiydi.
+ *
+ * Boshqa modelli bo'limlardan farqi: `terms` — TAKRORLANUVCHI, tekis
+ * guruh (`h3` + ta'rif + ixtiyoriy misol), ya'ni atamalar SONI ham
+ * bloklardan chiqadi. Shu sababli sayqal ro'yxatni qisqartirsa yoki
+ * uzaytirsa ham model unga ERGASHA oladi (qolgan bo'limlarda esa
+ * tuzilma qat'iy va mos kelmagan qayta yozish RAD etiladi).
+ *
+ * `ru`/`en` nasrда YO'Q (ular faqat uch tilli JADVALDA) — eski
+ * modeldan atama nomi bo'yicha ko'chiriladi, nomi o'zgargan atamada
+ * o'rin bo'yicha. Aks holda uch tilli glossariyda tarjimalar bitta
+ * sayqaldan keyin jimgina yo'qolardi.
+ */
+function glossaryTermsFromBlocks(blocks: readonly Block[], old: readonly GlossaryTerm[], exampleLabel: string): GlossaryTerm[] | null {
+  const cut = afterLabel(exampleLabel);
+  const out: GlossaryTerm[] = [];
+  for (let i = 0; i < blocks.length; i++) {
+    const b = blocks[i];
+    if (b.kind !== "h3") return null; // atama sarlavhasiz boshlandi — tuzilma buzilgan
+    const term = b.text.trim();
+    const def = blocks[i + 1];
+    if (!term || !def || def.kind !== "p" || !def.text.trim()) return null;
+    i += 1;
+    const next = blocks[i + 1];
+    let example: string | undefined;
+    if (next && next.kind === "p" && cut.test(next.text)) {
+      example = unwrap(next.text, cut);
+      i += 1;
+    }
+    const prev = old.find((t) => t.term.trim().toLowerCase() === term.toLowerCase()) ?? old[out.length];
+    out.push({
+      term,
+      def: def.text.trim(),
+      ...(example ? { example } : {}),
+      ...(prev?.ru ? { ru: prev.ru } : {}),
+      ...(prev?.en ? { en: prev.en } : {}),
+    });
+  }
+  return out.length ? out : null;
+}
+
+/**
+ * Bo'lim bloklarini MODELGA ko'chiradi (`setSection` dan keyin).
+ * `false` — yangi bloklar model tuzilmasiga mos emas (chaqiruvchi
+ * o'zgarishni bekor qiladi va 422 beradi).
+ */
+function syncSectionToModel(doc: AcademicDoc, si: number, writeModel: (path: string, value: string) => boolean): boolean {
+  const model = doc.teacher;
+  const s = doc.sections[si];
+  if (!model || !s) return false;
+  const lang = model.school.language || doc.meta.language || "uz";
+  const L = teacherLabels(lang);
+
+  if (model.kind === "glossary" && s.id === "terms" && model.glossary) {
+    const terms = glossaryTermsFromBlocks(s.blocks, model.glossary.terms, L.example);
+    if (!terms) return false;
+    model.glossary.terms = terms;
+    /*
+     * Uch tilli JADVAL ham shu ro'yxatdan qayta quriladi — matn va
+     * jadval bitta manbadan chiqishi glossariy dvigatelining asl
+     * qarori (`glossary.ts`), sayqal uni buzmasligi kerak.
+     */
+    const tri = (doc.tables ?? []).find((t) => t.anchor === "terms" || t.id === "terms");
+    if (tri) tri.rows = terms.map((t) => [t.term, t.ru ?? "", t.en ?? ""]);
+    return true;
+  }
+
+  // Qolgan modelli bo'limlar: tuzilma QAT'IY — xarita mos kelsagina yoziladi.
+  const mirror = sectionMirror(model, model.kind, s, lang);
+  if (!mirror) return false;
+  mirror.forEach((m, bi) => {
+    const b = s.blocks[bi];
+    if (m && b) writeModel(m.path, unwrap(b.text, m.cut));
+  });
+  return true;
 }
 
 /* ══════════════════════════ jadval katagi ⇄ model ══════════════════════════ */
@@ -767,10 +854,29 @@ export function applyTeacherOps(doc: AcademicDoc, ops: TeacherOp[], ctx: Teacher
       }
 
       case "setSection": {
-        const s = d.sections.find((x) => x.id === op.sectionId);
+        const si = d.sections.findIndex((x) => x.id === op.sectionId);
+        const s = d.sections[si];
         if (!s) return fail(`Bo'lim topilmadi: ${op.sectionId}`, at);
         if (op.blocks.length > TEACHER_EDIT_LIMITS.blocks) return fail(`Bo'limdagi bloklar chegarasi: ${TEACHER_EDIT_LIMITS.blocks}`, at);
+        /*
+         * MODELLI bo'limmi — ya'ni bloklari modeldan chiqadimi
+         * (`teacherMirrors` uni taniganmi). Shunday bo'lsa butun
+         * matnni «nasr» sifatida almashtirish MODELNI eskirtirardi:
+         * jonli sinovda avto-sayqal `terms` bo'limini qayta yozganda
+         * `blocksFromLlm` `h3` sarlavhalarni `p` ga aylantirib,
+         * 20 atamadan 18 tasining nomi yo'qolgan, model esa hamon
+         * 20 atamani ko'rsatib turgan edi (hisobot yolg'on yashil).
+         */
+        const wasModelled = mirrors.has(`sections.${si}.blocks.0`);
+        const before = s.blocks;
         s.blocks = op.blocks.map((b) => ({ ...b }));
+        if (wasModelled) {
+          const synced = syncSectionToModel(d, si, writeModel);
+          if (!synced) {
+            s.blocks = before;
+            return fail(`Bu bo'lim tuzilmasi model bilan mos emas: ${op.sectionId}`, at);
+          }
+        }
         reindex();
         break;
       }

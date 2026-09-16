@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   RewriteError,
   TEACHER_ACCEPT_DELTA,
+  applyTeacherPolishOps,
   applyTeacherSectionOps,
   planTeacherPolish,
   rewriteTeacherFix,
@@ -13,6 +14,7 @@ import {
   type TeacherSectionOp,
 } from "../lib/generation/teacher/polish.ts";
 import { reviewTeacher } from "../lib/generation/teacher/review.ts";
+import { sampleTeacherDoc } from "../lib/generation/teacher/samples.ts";
 import { POLISH_MAX_FIXES } from "../lib/generation/report/polish-core.ts";
 import type { LessonStage, MapWeek, TeacherModel } from "../lib/generation/teacher/types.ts";
 import { extractMeta } from "../lib/generation/meta.ts";
@@ -97,6 +99,11 @@ function mapDoc(): AcademicDoc {
     tables: [{ caption: "Taqsimot", anchor: "year", headers: ["Hafta", "Soat", "Mavzu", "Metod", "Kutilgan natija", "Nazorat"], rows: weeks.map((w) => [String(w.n), String(w.hours), w.topic, w.method, w.result, w.control]) }],
     teacher: model,
   };
+}
+
+/** Glossariy hujjati — namunadan (dvigatel yozgan nasr + model). */
+function glossaryDoc(): AcademicDoc {
+  return JSON.parse(JSON.stringify(sampleTeacherDoc("glossary"))) as AcademicDoc;
 }
 
 /** Qayta yozish stubi — bo'lim matniga kompetensiyani qo'shadi. */
@@ -187,6 +194,73 @@ test("eski hujjat: reja bo'sh, qayta yozish 409", async () => {
   await assert.rejects(
     () => rewriteTeacherFix(legacy, { op: "rewrite", target: "stages", instruction: "x" }, { complete: makeComplete([]) as never }),
     (e: unknown) => e instanceof RewriteError && e.status === 409,
+  );
+});
+
+/* ══════════════════════════ glossariy: TUZILMALI qayta yozish ══════════════════════════ */
+
+/**
+ * JONLI NUQSON (AUDIT-20 WP-D): `terms` bo'limi umumiy nasr sifatida
+ * qayta yozilganda `blocksFromLlm` qisqa qatorlarni tashlab, atama
+ * sarlavhalarini (`h3`) paragrafga aylantirib yuborardi — 20 atamadan
+ * 18 tasining NOMI yo'qolgan, model esa o'zgarmagani uchun hisobot
+ * hamon 20 atamani ko'rsatib turardi.
+ */
+test("glossariy `terms`: MODEL shakli so'raladi, bloklarni dvigatel quruvchisi yig'adi", async () => {
+  const doc = glossaryDoc();
+  const n = doc.teacher!.glossary!.terms.length;
+  const calls: { role: LlmRole; user: string }[] = [];
+  const complete = (async (role: LlmRole, _s: string, user: string) => {
+    calls.push({ role, user });
+    const usage = { provider: "stub", model: "s", inputTokens: 10, outputTokens: 5 };
+    if (user.startsWith("Rewrite the glossary entries")) {
+      const terms = doc.teacher!.glossary!.terms.map((t, i) => ({
+        term: t.term,
+        def: `Qayta yozilgan ${i}-ta'rif: bu tushuncha o'simlik hujayrasidagi energiya almashinuvini izohlaydi va boshqa jarayonlardan farqlanadi.`,
+        example: t.example ?? "Darsdagi tajriba shu bilan izohlanadi.",
+      }));
+      return { text: JSON.stringify({ terms }), usage };
+    }
+    return { text: "{}", usage };
+  }) as never;
+
+  const r = await rewriteTeacherFix(doc, { op: "rewrite", target: "terms", instruction: "Ta'riflarni aniqlashtiring." }, { complete, deadline: Date.now() + 60_000 });
+  // Umumiy nasr prompti (`Rewrite the section`) UMUMAN chaqirilmaydi.
+  assert.ok(!calls.some((c) => c.user.startsWith("Rewrite the section")), "MUTATSIYA: glossariy nasr yo'liga tushdi");
+  assert.ok(calls.some((c) => c.user.startsWith("Rewrite the glossary entries")), "tuzilmali prompt chaqirilmadi");
+
+  const op = r.ops[0];
+  assert.equal(op.op, "setSection");
+  assert.ok(op.op === "setSection" && op.sectionId === "terms");
+  const h3 = op.op === "setSection" ? op.blocks.filter((b) => b.kind === "h3") : [];
+  assert.equal(h3.length, n, "MUTATSIYA: atama sarlavhalari yo'qoldi (jonli nuqson)");
+
+  // Qo'llangach model ham, sections ham izchil.
+  const applied = applyTeacherPolishOps(doc, r.ops);
+  assert.ok(applied.ok, applied.ok ? "" : applied.error);
+  const after = applied.doc;
+  assert.equal(after.teacher!.glossary!.terms.length, n);
+  assert.deepEqual(
+    after.sections.find((s) => s.id === "terms")!.blocks.filter((b) => b.kind === "h3").map((b) => b.text),
+    after.teacher!.glossary!.terms.map((t) => t.term),
+    "model tartibi sections tartibidan farq qiladi",
+  );
+  assert.match(after.teacher!.glossary!.terms[0].def, /Qayta yozilgan/, "model eski ta'rifda qoldi");
+});
+
+test("glossariy: atama soni o'zgarib ketgan javob RAD etiladi (422)", async () => {
+  const doc = glossaryDoc();
+  const complete = (async (_r: LlmRole, _s: string, user: string) => {
+    const usage = { provider: "stub", model: "s", inputTokens: 10, outputTokens: 5 };
+    if (user.startsWith("Rewrite the glossary entries")) {
+      // Model ro'yxatni qisqartirib yubordi — atamalar jimgina yo'qolardi.
+      return { text: JSON.stringify({ terms: [{ term: "Yolg'iz", def: "Bitta atama qoldi va bu ro'yxatni buzadi, chunki qolganlari yo'qoladi." }] }), usage };
+    }
+    return { text: "{}", usage };
+  }) as never;
+  await assert.rejects(
+    () => rewriteTeacherFix(doc, { op: "rewrite", target: "terms", instruction: "x" }, { complete, deadline: Date.now() + 60_000 }),
+    (e: unknown) => e instanceof RewriteError && e.status === 422,
   );
 });
 

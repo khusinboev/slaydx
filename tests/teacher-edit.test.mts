@@ -164,7 +164,8 @@ test("MODEL BANDI: modeldan qurilgan band tahrirlansa model yangilanadi", () => 
   const d = ok(applyTeacherOps(doc, [{ op: "text", path, value: "Yangi ko‘rsatma." }], CTX));
   const k = Number(path.split(".").at(-1));
   assert.equal(d.teacher!.test!.instructions[k], "Yangi ko‘rsatma.");
-  assert.equal(planTeacher(d).body.find((b) => b.path === path)?.text, "Yangi ko‘rsatma.", "ekranda eski matn qoldi");
+  const shown = planTeacher(d).body.find((b) => b.path === path);
+  assert.equal(shown && "text" in shown ? shown.text : "", "Yangi ko‘rsatma.", "ekranda eski matn qoldi");
 });
 
 test("REJA DARVOZASI: ekranda ko'rinmagan model bandi tahrirlanmaydi", () => {
@@ -330,4 +331,56 @@ test("sayqal op lari qo'llanganda xarita jadvali MODEL bilan izchil qoladi", () 
     "Sayqaldan keyingi mavzu",
     "MUTATSIYA: sayqal jadvalni yangiladi, model eski mavzuda qoldi — hisobot ikki manbadan chiqardi",
   );
+});
+
+/* ══════════════════════════ setSection — modelli bo'lim ══════════════════════════ */
+
+test("setSection: glossariy `terms` qayta yozilsa MODEL ham, uch tilli JADVAL ham ergashadi", () => {
+  const doc = sampleTeacherDoc("glossary", undefined, { type: "uch-tilli" });
+  const g = doc.teacher!.glossary!;
+  const n = g.terms.length;
+  const ruBefore = g.terms[0].ru;
+  assert.ok(ruBefore, "namunada uch tilli atama bo'lishi kerak");
+  // Sayqal ro'yxatni to'g'ri TUZILMA bilan qayta yozdi (birinchi ta'rif o'zgardi).
+  const blocks = doc.sections[1].blocks.map((b, i) => (i === 1 ? { ...b, text: "Qayta yozilgan ta’rif." } : b));
+  const d = ok(applyTeacherOps(doc, [{ op: "setSection", sectionId: "terms", blocks }], CTX));
+  assert.equal(d.teacher!.glossary!.terms.length, n, "atama soni o'zgarib ketdi");
+  assert.equal(d.teacher!.glossary!.terms[0].def, "Qayta yozilgan ta’rif.", "MUTATSIYA: sayqal matnni yangiladi, model eski ta'rifda qoldi");
+  assert.equal(d.teacher!.glossary!.terms[0].ru, ruBefore, "tarjima ustuni sayqaldan keyin yo'qoldi");
+  const tri = d.tables!.find((t) => t.anchor === "terms");
+  assert.equal(tri?.rows.length, n, "uch tilli jadval model bilan ajralib qoldi");
+});
+
+test("setSection: sarlavhalari yo'qolgan qayta yozish RAD etiladi, hujjat O'ZGARMAYDI", () => {
+  const doc = sampleTeacherDoc("glossary");
+  const n = doc.teacher!.glossary!.terms.length;
+  /*
+   * Jonli nuqsonning AYNAN o'zi: `blocksFromLlm` qisqa qatorlarni
+   * tashlab, atama sarlavhalarini (`h3`) oddiy paragrafga aylantirgan;
+   * model esa o'zgarmagani uchun hisobot hamon 20 atamani ko'rsatardi.
+   */
+  const flattened = doc.sections[1].blocks.map((b) => ({ kind: "p" as const, text: b.text }));
+  const r = applyTeacherOps(doc, [{ op: "setSection", sectionId: "terms", blocks: flattened }], CTX);
+  assert.equal(r.ok, false, "MUTATSIYA: sarlavhasiz qayta yozish o'tdi — atamalar nomi yo'qolardi");
+  assert.match(r.ok ? "" : r.error, /tuzilmasi model bilan mos emas/);
+  assert.equal(doc.teacher!.glossary!.terms.length, n, "yiqilgan op modelga tegdi");
+});
+
+test("setSection: sayqaldan keyin sarlavhalar soni = atama soni, model tartibi = sections tartibi", () => {
+  const doc = sampleTeacherDoc("glossary");
+  const blocks = doc.sections[1].blocks.map((b) => ({ ...b }));
+  const d = ok(applyTeacherOps(doc, [{ op: "setSection", sectionId: "terms", blocks }], CTX));
+  const h3 = d.sections[1].blocks.filter((b) => b.kind === "h3");
+  assert.equal(h3.length, d.teacher!.glossary!.terms.length, "sarlavhalar soni model bilan mos emas");
+  assert.deepEqual(
+    h3.map((b) => b.text),
+    d.teacher!.glossary!.terms.map((t) => t.term),
+    "model tartibi sections tartibidan farq qiladi",
+  );
+});
+
+test("setSection: NASR bo'limi (kirish) erkin qayta yoziladi — u modelli emas", () => {
+  const doc = sampleTeacherDoc("glossary");
+  const d = ok(applyTeacherOps(doc, [{ op: "setSection", sectionId: "intro", blocks: [{ kind: "p", text: "Yangi kirish." }] }], CTX));
+  assert.equal(d.sections[0].blocks[0].text, "Yangi kirish.");
 });

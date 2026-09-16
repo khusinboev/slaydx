@@ -350,6 +350,31 @@ export function teacherRewritePrompt(ctx: TeacherContext, title: string, current
   ].join("\n");
 }
 
+/**
+ * GLOSSARIY atamalarini qayta yozish — TUZILMALI (AUDIT-20 WP-D).
+ *
+ * `terms` bo'limi umumiy nasr promptidan (`teacherRewritePrompt`)
+ * o'tkazilmaydi: u `{"blocks":[…]}` so'raydi va `blocksFromLlm`
+ * qisqa qatorlarni tashlab, atama SARLAVHALARINI (`h3`) oddiy
+ * paragrafga aylantirib yuborardi — jonli sinovda 20 atamadan 18
+ * tasining nomi yo'qolgan, model esa o'zgarmagani uchun hisobot
+ * hamon 20 ta atamani ko'rsatib turardi. Bu yerda MODEL shakli
+ * so'raladi, bloklarni esa `glossaryTermBlocks` (dvigatelning o'z
+ * quruvchisi) yig'adi.
+ */
+export function glossaryRewritePrompt(ctx: TeacherContext, terms: readonly { term: string; def: string; example?: string }[], instruction: string, tri: boolean): string {
+  return [
+    "Rewrite the glossary entries.",
+    `INSTRUCTION: ${instruction}`,
+    `Return EXACTLY ${terms.length} entries. Keep every term name unless the instruction asks to replace it; never drop an entry.`,
+    `Return ONLY this JSON: {"terms":[{"term":"","def":""${tri ? ',"ru":"","en":""' : ""},"example":""}]}`,
+    "«def» says what the thing IS and what distinguishes it — never repeat the term as its own explanation.",
+    "--- CURRENT ENTRIES ---",
+    terms.map((t) => `${t.term} — ${t.def}${t.example ? ` (example: ${t.example})` : ""}`).join("\n"),
+    "--- END ---",
+  ].join("\n");
+}
+
 /** Jadval qayta yozish — qatorlar soni va ustun soni O'ZGARMAYDI. */
 export function teacherTableRewritePrompt(ctx: TeacherContext, headers: readonly string[], rows: readonly string[][], instruction: string): string {
   return [
