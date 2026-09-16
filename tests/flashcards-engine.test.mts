@@ -333,8 +333,16 @@ test("`buildGameDoc` flesh kartalarni SHU dvigatelga uzatadi (dispatch shartnoma
 });
 
 test("LLM kalitisiz muhitda `complete` berilmasa — `null` (shablon hujjat chiqmaydi)", async () => {
-  const opts = buildOpts();
-  delete (opts as { complete?: unknown }).complete;
-  const built = await buildFlashcardsDoc(meta(), values({ cardCount: 10 }), opts);
-  assert.equal(built, null);
+  // `npm test` `.env.local` bilan yuradi — kalit bo'lsa haqiqiy LLM ga borib pul sarflaydi; vaqtincha olib qo'yamiz.
+  const keys = ["GEMINI_API_KEY", "XAI_API_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY", "OPENROUTER_API_KEY"] as const;
+  const saved = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
+  for (const k of keys) delete process.env[k];
+  try {
+    const opts = buildOpts();
+    delete (opts as { complete?: unknown }).complete;
+    const built = await buildFlashcardsDoc(meta(), values({ cardCount: 10 }), opts);
+    assert.equal(built, null);
+  } finally {
+    for (const k of keys) if (saved[k] !== undefined) process.env[k] = saved[k];
+  }
 });
