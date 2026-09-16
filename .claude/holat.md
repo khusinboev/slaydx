@@ -1,7 +1,30 @@
-# SlaydX — holat (2026-09-16, main `b15c560`, prod: AUDIT-19 `552a46c` (2026-09-16); tekshiruv: unit 1768/1770 (2 tasi `.env.local` fal.ai holati), ko'ruvchi 168, UI 209, lint/tsc toza)
+# SlaydX — holat (2026-09-16 PAUZA, main `6b7d627`; prod: AUDIT-19 `552a46c`; tekshiruv: tsc toza, teacher testlari 87+74 yashil, to'liq to'plam R0 da 1767/169/209)
 
-Sprint: **Talaba ishlari 2 (AUDIT-19)** — reja `~/.claude/plans/sen-senior-fullstack-dev-majestic-starfish.md` (§1 `docs/AUDIT-19.md`), jurnal `docs/AUDIT-19.md` §5.
-Umumiy: **100% — Talaba ishlari 2 prod'da (2026-09-16, `552a46c`).**
+Sprint: **O'qituvchi vositalari 2 + 9 yangi xizmat (AUDIT-20…23)** — reja `docs/AUDIT-20.md` §1, tadqiqot `docs/research/` (15 hisobot). Oldingi: Talaba ishlari 2 (AUDIT-19) — prod'da.
+
+Eski sprint jadvali (AUDIT-19) — reja `~/.claude/plans/sen-senior-fullstack-dev-majestic-starfish.md` (§1 `docs/AUDIT-19.md`), jurnal `docs/AUDIT-19.md` §5.
+AUDIT-20 holati: **~35 %** — R tadqiqot 100, R0 substrat 100, WP-A dvigatel 100 (main), WP-B ~40 (worktree), WP-C ~60 (worktree), WP-E ~5, WP-D/WP-F/R3 0.
+
+| # | AUDIT-20 bosqich | % | Izoh |
+|---|---|---|---|
+| R | Tadqiqot 15 hisobot | 100 | `docs/research/` |
+| R0 | Substrat (teacher tiplari/reyestr, test vositasi, curriculum API) | 100 | `8fabe09` |
+| A | 4 vosita dvigateli (lesson/map/glossary/keys) | 100 | `6b7d627`, 74 test |
+| B | Test dvigateli + o'quv bazasi ≥6 fan | 40 | worktree `agent-a5106a1b84f359a35` |
+| C | planTeacher yagona manba, drawTeacher, paritet, legacy, eski ko'ruvchilar o'chishi | 60 | worktree `agent-a7dae8c6277a8125d` |
+| E | TeacherComposer forma + zond | 5 | worktree `agent-af37ea237a44603ea` |
+| D | Tahrir/server (teacherAdapter, doc-polish, useTeacherEdit, worker source, delivered) | 0 | WP-C dan keyin |
+| F | Ulash (index.ts darvozalari, delivered, i18n, live 6 holat, seed) | 0 | |
+| R3 | Jonli, smoke, ko'z, docs, deploy | 0 | deploy WP-E siz TAQIQ (4 vosita formasi bo'sh) |
+
+## To'xtatilgan jarayonlar
+`.claude/actions/2026-09-16-01-pause.md` — 3 agent worktree'da (WP-B WIP `a22a233`, WP-C 4 kommit, WP-E boshlanmagan).
+
+## Davom etish qadamlari (AUDIT-20)
+1. «davom et» — uchala worktree agentini davom ettirish (`git merge main` → qolgan ish), keyin WP-D/WP-F, jonli 6 holat, smoke, LibreOffice ko'z, docs, deploy.
+2. Egasidan (AUDIT-22 uchun, shoshilinch emas): Azure Speech kaliti + region, Aisha AI kaliti.
+
+Oldingi sprint (AUDIT-19) yakuni: **100% — prod'da (2026-09-16, `552a46c`).**
 
 | # | Bosqich | % | Izoh |
 |---|---|---|---|
