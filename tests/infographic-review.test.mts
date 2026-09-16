@@ -5,7 +5,6 @@ import type { DocReview } from "../lib/generation/report/types.ts";
 import {
   groundedIn,
   infographicChecks,
-  infographicUserNeeds,
   judgeText,
   numbersIn,
   reviewInfographic,
@@ -66,7 +65,7 @@ const docOf = (s: InfographicSpec, extra = ""): AcademicDoc =>
     infographic: { v: 1, spec: s },
   }) as AcademicDoc;
 
-const byId = (checks: { id: string }[], id: string) => checks.find((c) => c.id === id);
+const byId = <T extends { id: string }>(checks: T[], id: string): T | undefined => checks.find((c) => c.id === id);
 const levelOf = (s: InfographicSpec, id: string, facts = "", want?: number) => byId(infographicChecks(s, facts, want), id)?.level;
 
 /* ══════════════════════════ 1. qoidalar to'plami ══════════════════════════ */

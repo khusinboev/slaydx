@@ -7,7 +7,7 @@ import { buildInfographicArtifact, retryProblems, PREVIEW_DPI } from "../lib/gen
 import { normalizeSpec, infographicInputFromValues, infographicUserFacts, encodeInfographicValues } from "../lib/generation/infographic/input.ts";
 import { infographicCtx, infographicPrompt, infographicRetryPrompt, infographicSystemPrompt } from "../lib/generation/infographic/prompts.ts";
 import { infographicTypeOf } from "../lib/generation/infographic/registry.ts";
-import { ICONS, INFOGRAPHIC_LIMITS, type InfographicSpec } from "../lib/generation/infographic/types.ts";
+import { ICONS, INFOGRAPHIC_LIMITS } from "../lib/generation/infographic/types.ts";
 import { extractMeta } from "../lib/generation/meta.ts";
 
 /**

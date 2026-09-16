@@ -54,7 +54,14 @@ export const INFOGRAPHIC_PARAMS: InfographicParam[] = [
    * qiymat 6 ga kesilib, zond «farqni o'lchay olmadi» deb qizarardi —
    * aynan shu tuzoq AUDIT-20 `translationLangs` da topilgan.
    */
-  { id: "blockCount", encode: "number", probeA: 3, probeB: 6, impacts: ["prompt", "structure", "layout", "review"] },
+  /*
+   * `budget` ta'siri WP-C da QO'SHILDI: `budgetFor` (`budget.ts:271`)
+   * ish vaqtini `infographicBudgetMs(normalizeBlockCountFor(...))` dan
+   * oladi, ya'ni blok soni ISH MUDDATIGA ham ta'sir qiladi. R0 buni
+   * e'lon qilmagan edi va `budget` ta'siri hech bir parametrda
+   * ko'rsatilmay, zondning «o'lik ta'sir yo'q» bandi qizarardi.
+   */
+  { id: "blockCount", encode: "number", probeA: 3, probeB: 6, impacts: ["prompt", "structure", "layout", "review", "budget"] },
   { id: "palette", encode: "string", probeA: "indigo", probeB: "forest", impacts: ["palette", "layout"] },
   { id: "size", encode: "string", probeA: "A4", probeB: "A3", impacts: ["layout"] },
   { id: "language", encode: "string", probeA: "uz", probeB: "ru", impacts: ["language", "prompt", "layout"] },
