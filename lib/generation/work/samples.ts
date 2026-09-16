@@ -37,7 +37,7 @@ export const SAMPLE_WORK_REFS: Reference[] = [
   { id: "u5", kind: "book", title: "Ta’lim sifatini baholash", authors: ["Ergasheva N. X."], year: 2023, publisher: "Fan va texnologiya", place: "Toshkent", pageCount: 196, verified: "user", cited: true },
   { id: "W7731", kind: "article", doi: "10.1111/bjet.13334", title: "Learning analytics dashboards in higher education", authors: ["Ivanova E.", "Petrov S."], year: 2023, venue: "British Journal of Educational Technology", pages: "77–95", verified: "user", cited: true },
   { id: "u6", kind: "book", title: "Zamonaviy o‘qitish texnologiyalari", authors: ["Qodirov Sh. B."], year: 2018, publisher: "Navro‘z", place: "Toshkent", pageCount: 208, verified: "user", cited: true },
-  { id: "st1", kind: "web", title: "Ta’lim sohasi ko‘rsatkichlari: statistik to‘plam", authors: [], year: 2025, publisher: "O‘zbekiston Respublikasi Statistika qo‘mitasi", url: "https://stat.uz/uz/rasmiy-statistika/education", accessed: "2026-09-16", verified: "user", cited: true },
+  { id: "u7", kind: "web", title: "Ta’lim sohasi ko‘rsatkichlari: statistik to‘plam", authors: [], year: 2025, publisher: "O‘zbekiston Respublikasi Statistika qo‘mitasi", url: "https://stat.uz/uz/rasmiy-statistika/education", accessed: "2026-09-16", verified: "user", cited: true },
   { id: "w1", kind: "web", title: "Oliy ta’lim muassasalari reytingi", authors: [], year: 2025, publisher: "Ta’lim sifatini nazorat qilish davlat inspeksiyasi", url: "https://tsni.uz/reyting", accessed: "2026-09-16", verified: "user", cited: true },
 ];
 
@@ -168,7 +168,7 @@ export function sampleWorkDoc(meta: DocMeta, over: SampleWorkOpts = {}): Academi
         blocks: [
           { kind: "p", text: "Meta-tahlil natijalariga ko‘ra adaptiv tizimlar o‘zlashtirishni o‘rtacha darajada oshiradi [W5512]. Interaktiv o‘qitishda esa samara mazmun sifatiga kuchli bog‘liq [W4385]." },
           { kind: "tableRef", text: "Adaptiv o‘qitish tizimlarining qiyosiy tavsifi", tableId: "t1" },
-          { kind: "p", text: "Mahalliy amaliyotda tizimlar asosan pilot rejimida sinovdan o‘tkazilgan [u4]; ta’lim ko‘rsatkichlarining rasmiy statistikasi bu jarayonni bilvosita tasdiqlaydi [st1]." },
+          { kind: "p", text: "Mahalliy amaliyotda tizimlar asosan pilot rejimida sinovdan o‘tkazilgan [u4]; ta’lim ko‘rsatkichlarining rasmiy statistikasi bu jarayonni bilvosita tasdiqlaydi [u7]." },
         ],
       },
       { id: "ch2", title: "Tizimni joriy etish va samaradorlikni baholash", blocks: [] },

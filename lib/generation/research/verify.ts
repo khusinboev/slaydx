@@ -25,8 +25,17 @@ import type { Block, DocSection } from "../types";
 
 /** `[…]` guruhi — ichida `[`/`]` yo'q, ≤160 belgi. */
 const GROUP_RE = /\s?\[([^\[\]\n]{1,160})\]/g;
-/** Bitta id: OpenAlex `W…`, foydalanuvchi `u…`, DOI `doi:…`, yoki sof raqam. */
-const ID_RE = /^(?:W\d+|u\d{1,3}|doi:10\.\S+|\d{1,3})$/i;
+/**
+ * Bitta id: OpenAlex `W…`, foydalanuvchi `u…`, DOI `doi:…`, sof raqam,
+ * **lex.uz `lex:…`** va **Google Books `gb:…`**.
+ *
+ * Oxirgi ikkitasi AUDIT-19 WP-B da paydo bo'ldi (`Reference.id` izohiga
+ * qarang), lekin bu filtr ularni bilmasdi: normativ hujjat va darslik
+ * iqtiboslari reyestrda BOR bo'lsa ham «noma'lum id» sifatida matndan
+ * O'CHIRILARDI va manba ro'yxatdan tushib qolardi (huquqiy/iqtisodiy
+ * kurs ishida — manbalarning yarmi).
+ */
+const ID_RE = /^(?:W\d+|u\d{1,3}|lex:[\w-]{1,32}|gb:[\w-]{1,32}|doi:10\.\S+|\d{1,3})$/i;
 /** Sahifa lokatori — `25-b.`, `25–31-b.`, `p. 12`, `pp. 3-5`, `с. 25`, `b. 25`. */
 const LOCATOR_RE = /^(?:\d{1,4}(?:\s*[–-]\s*\d{1,4})?\s*-?\s*(?:b|bet|с|стр|p|pp|page|pages)\.?|(?:b|bet|с|стр|p|pp|page|pages)\.?\s*\d{1,4}(?:\s*[–-]\s*\d{1,4})?)$/i;
 
