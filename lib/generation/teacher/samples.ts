@@ -2,21 +2,26 @@
  * NAMUNAVIY O'QITUVCHI HUJJATLARI (AUDIT-20 WP-C) — render/paritet
  * testlari, LibreOffice ko'z tekshiruvi va galereya uchun.
  *
- * Shakli dvigatel (WP-A/WP-B) chiqaradigan hujjat bilan AYNAN bir xil:
- * nasr `sections` da TEKIS id lar bilan (`passport`, `stages`, `q1`,
- * `terms`, `case1`, `variantA`…), metama'lumot va tuzilma `doc.teacher`
- * da. `work/samples.ts` naqshi.
+ * Shakli dvigatel (`teacher/{lesson,map,glossary,keys}.ts` WP-A, test —
+ * WP-B) chiqaradigan hujjat bilan AYNAN bir xil: nasr `sections` da
+ * TEKIS id lar bilan (`passport`, `goal`, `stages`, `q1`, `terms`,
+ * `case1`, `rubric`…), jadvallar `doc.tables` da `anchor` bilan,
+ * metama'lumot `doc.teacher` da. Bloklarning SHAKLI ham yozuvchilarniki
+ * (`stageBlocks`, `goalBlocks`, `termBlocks`, `rubricBlocks`) — aks
+ * holda namuna maketni HAQIQIY hujjatdan boshqacha sinardi.
  *
- * Mazmun HAQIQIY o'quv materiali emas — maketni sinash uchun yetarli
- * uzunlikdagi realistik matn (sahifa uzilishi, jadval o'ralishi va
- * alifbo tartibi shu bilan tekshiriladi).
+ * `work/samples.ts` naqshi. Mazmun haqiqiy o'quv materiali emas, lekin
+ * uzunligi realistik: sahifa uzilishi, jadval o'ralishi va alifbo
+ * tartibi shu bilan tekshiriladi.
  */
-import type { AcademicDoc, Block, DocMeta, DocSection } from "../types";
+import type { AcademicDoc, Block, DocMeta, DocSection, DocTable } from "../types";
+import { teacherLayoutLabels } from "./layout";
 import type {
   GlossaryTerm,
   KeysCase,
   LessonStage,
   MapQuarter,
+  MapWeek,
   TeacherKind,
   TeacherModel,
   TestModel,
@@ -88,42 +93,69 @@ const STAGES: LessonStage[] = [
   },
 ];
 
+const COMPETENCIES = ["Tabiiy-ilmiy savodxonlik", "Axborot bilan ishlash kompetensiyasi", "Guruhda hamkorlik qilish"];
+const EQUIPMENT = ["Fotosintez sxemasi (plakat)", "Kartochkalar to‘plami", "Proyektor", "Darslik, 7-sinf"];
+
 function lessonDocSample(meta: DocMeta, o: SampleTeacherOpts): AcademicDoc {
+  const L = teacherLayoutLabels(meta.language);
+  const type = o.type ?? "yangi-mavzu";
+  const goal = {
+    talim: "O‘quvchilarda fotosintez jarayoni, uning bosqichlari va ahamiyati haqida tizimli tasavvur hosil qilish.",
+    tarbiya: "Tabiatga ongli munosabatni va o‘simliklarni asrash mas’uliyatini shakllantirish.",
+    rivoj: "Sxema asosida tahlil qilish va xulosa chiqarish ko‘nikmasini rivojlantirish.",
+  };
+  const homework = "Darslikning 24-mavzusini o‘qish; fotosintez bosqichlarini taqqoslovchi jadval tuzish (kamida 5 ta belgi bo‘yicha).";
+  const assessment = "Guruh ishi 3 ta mezon bo‘yicha (to‘g‘rilik, izchillik, himoya) 5 ballik shkalada baholanadi.";
   const model: TeacherModel = {
     v: 1,
     kind: "lesson",
-    type: o.type ?? "yangi-mavzu",
-    school: { ...SCHOOL, language: meta.language, ...(o.approver === undefined ? { approver: "Direktorning o‘quv ishlari bo‘yicha o‘rinbosari" } : o.approver ? { approver: o.approver } : {}) },
-    lesson: {
-      type: o.type ?? "yangi-mavzu",
-      goal: {
-        talim: "O‘quvchilarda fotosintez jarayoni, uning bosqichlari va ahamiyati haqida tizimli tasavvur hosil qilish.",
-        tarbiya: "Tabiatga ongli munosabatni va o‘simliklarni asrash mas’uliyatini shakllantirish.",
-        rivoj: "Sxema asosida tahlil qilish va xulosa chiqarish ko‘nikmasini rivojlantirish.",
-      },
-      competencies: ["Tabiiy-ilmiy savodxonlik", "Axborot bilan ishlash kompetensiyasi", "Guruhda hamkorlik qilish"],
-      equipment: ["Fotosintez sxemasi (plakat)", "Kartochkalar to‘plami", "Proyektor", "Darslik, 7-sinf"],
-      stages: STAGES,
-      homework: "Darslikning 24-mavzusini o‘qish; fotosintez bosqichlarini taqqoslovchi jadval tuzish (kamida 5 ta belgi bo‘yicha).",
-      assessment: "Guruh ishi 3 ta mezon bo‘yicha (to‘g‘rilik, izchillik, himoya) 5 ballik shkalada baholanadi.",
-      durationMin: 45,
+    type,
+    school: {
+      ...SCHOOL,
+      language: meta.language,
+      ...(o.approver === undefined ? { approver: "Direktorning o‘quv ishlari bo‘yicha o‘rinbosari" } : o.approver ? { approver: o.approver } : {}),
     },
+    lesson: { type, goal, competencies: COMPETENCIES, equipment: EQUIPMENT, stages: STAGES, homework, assessment, durationMin: 45 },
   };
+
+  // `teacher/lesson.ts` dagi `passport` / `goalBlocks` / `stageBlocks` shakli.
+  const passport: Block[] = [
+    p(`${L.fieldSubject}: ${SCHOOL.subject}. ${L.fieldGrade}: ${SCHOOL.grade}-${SCHOOL.gradeLetter}. ${L.fieldDuration}: 45 ${L.minutesShort}.`),
+    p(`${L.fieldTopic}: ${meta.topic}`),
+    { kind: "h3", text: L.competencies },
+    ...COMPETENCIES.map((c): Block => ({ kind: "li", text: c })),
+    { kind: "h3", text: L.equipment },
+    ...EQUIPMENT.map((e): Block => ({ kind: "li", text: e })),
+  ];
+  const stageBlocks: Block[] = [];
+  STAGES.forEach((st, i) => {
+    stageBlocks.push({ kind: "h3", text: `${i + 1}. ${st.title} (${st.minutes} ${L.minutesShort})` });
+    stageBlocks.push(p(st.teacher));
+    stageBlocks.push(p(st.student));
+    stageBlocks.push(p(`${L.stage}: ${st.method}`));
+  });
+
+  const table: DocTable = {
+    caption: L.timeTable,
+    anchor: "stages",
+    widths: [42, 13, 45],
+    headers: [...L.timeCols],
+    rows: STAGES.map((st) => [st.title, String(st.minutes), st.result]),
+  };
+
   return {
     meta,
     titlePage: false,
     toc: false,
     teacher: model,
     sections: [
-      section("passport", "", [
-        p("Dars mavzusi o‘quv dasturining «O‘simliklar fiziologiyasi» bo‘limiga kiradi va oldingi «Hujayra tuzilishi» mavzusiga tayanadi."),
-        p("Dars aralash turda tashkil etiladi: takrorlash, yangi bilim berish va amaliy mustahkamlash bosqichlari birlashtiriladi."),
-      ]),
-      section("goal", ""),
-      section("stages", "", [p("Bosqichlar davomiyligi 45 daqiqaga moslangan; har bosqichda o‘qituvchi va o‘quvchi faoliyati alohida ko‘rsatilgan.")]),
-      section("homework", ""),
-      section("assessment", ""),
+      section("passport", L.lessonPassport, passport),
+      section("goal", L.goal, [p(`${L.goalTalim}: ${goal.talim}`), p(`${L.goalTarbiya}: ${goal.tarbiya}`), p(`${L.goalRivoj}: ${goal.rivoj}`)]),
+      section("stages", L.stages, stageBlocks),
+      section("homework", L.homework, [p(homework)]),
+      section("assessment", L.assessment, [p(assessment)]),
     ],
+    tables: [table],
   };
 }
 
@@ -158,6 +190,7 @@ function quarters(count: number): MapQuarter[] {
       hours: 2,
       method: METHODS[(n + i) % METHODS.length],
       resources: "Darslik, plakat, mikroskop",
+      result: `${topic.split(" ")[0]} bo‘yicha tushuntira oladi`,
       control: CONTROLS[n % CONTROLS.length],
     }));
     if (weeks.length) out.push({ n: count === 1 ? 0 : q, weeks });
@@ -166,29 +199,41 @@ function quarters(count: number): MapQuarter[] {
 }
 
 function mapDocSample(meta: DocMeta, o: SampleTeacherOpts): AcademicDoc {
+  const L = teacherLayoutLabels(meta.language);
   const type = (o.type ?? "choraklik") === "yillik" ? "yillik" : "choraklik";
   const qs = quarters(type === "yillik" ? 1 : 4);
+  const weeklyHours = 2;
+  const totalHours = qs.reduce((a, q) => a + q.weeks.length * weeklyHours, 0);
+  const weekCount = qs.reduce((a, q) => a + q.weeks.length, 0);
   const model: TeacherModel = {
     v: 1,
     kind: "map",
     type,
-    school: { ...SCHOOL, language: meta.language, ...(o.approver ? { approver: o.approver } : { approver: "Metodik kengash raisi" }) },
-    map: { type, weeklyHours: 2, totalHours: qs.reduce((a, q) => a + q.weeks.length * 2, 0), quarters: qs },
+    school: { ...SCHOOL, language: meta.language, ...(o.approver !== undefined ? (o.approver ? { approver: o.approver } : {}) : { approver: "Metodik kengash raisi" }) },
+    map: { type, weeklyHours, totalHours, quarters: qs },
   };
-  const ids = type === "yillik" ? ["year"] : qs.map((q) => `q${q.n}`);
-  return {
-    meta,
-    titlePage: false,
-    toc: false,
-    teacher: model,
-    sections: [
-      section("passport", "", [
-        p("Taqvim-mavzu reja 7-sinf biologiya fani bo‘yicha amaldagi o‘quv dasturi asosida tuzilgan."),
-        p("Haftada 2 soat; nazorat ishlari chorak yakunida o‘tkaziladi."),
-      ]),
-      ...ids.map((id) => section(id, "")),
-    ],
-  };
+
+  const rowOf = (w: MapWeek) => [String(w.n), String(w.hours), w.topic, w.method, w.result, w.control];
+  const passport: Block[] = [
+    p(`${L.fieldSubject}: ${SCHOOL.subject}. ${L.fieldWeeklyHours}: ${weeklyHours}. ${L.fieldTotalHours}: ${totalHours}. ${L.fieldWeeks}: ${weekCount}.`),
+    p("Taqvim-mavzu reja 7-sinf biologiya fani bo‘yicha amaldagi o‘quv dasturi asosida tuzilgan."),
+  ];
+
+  const sections: DocSection[] = [section("passport", L.subjectPassport, passport)];
+  const tables: DocTable[] = [];
+  if (type === "choraklik") {
+    for (const q of qs) {
+      const id = `q${q.n}`;
+      const title = L.quarter(q.n);
+      sections.push(section(id, title, [p(`${q.weeks.length} ${L.weekWord}, ${q.weeks.length * weeklyHours} ${L.hoursWord}.`)]));
+      tables.push({ caption: `${title} — ${L.yearPlan}`, anchor: id, headers: [...L.yearCols], rows: q.weeks.map(rowOf) });
+    }
+  } else {
+    sections.push(section("year", L.yearPlan, [p(`${weekCount} ${L.weekWord}, ${totalHours} ${L.hoursWord}.`)]));
+    tables.push({ caption: L.yearPlan, anchor: "year", headers: [...L.yearCols], rows: qs[0].weeks.map(rowOf) });
+  }
+
+  return { meta, titlePage: false, toc: false, teacher: model, sections, tables };
 }
 
 /* ────────────────────────── glossariy ────────────────────────── */
@@ -205,8 +250,10 @@ const TERMS: GlossaryTerm[] = [
 ];
 
 function glossaryDocSample(meta: DocMeta, o: SampleTeacherOpts): AcademicDoc {
+  const L = teacherLayoutLabels(meta.language);
   const type = o.type ?? "fan-lugati";
-  /** Alifbo tartibi — `Intl.Collator` (dvigateldagi qoida bilan bir xil). */
+  const tri = type === "uch-tilli";
+  /** Alifbo tartibi — `Intl.Collator` (dvigateldagi `sortTerms` qoidasi). */
   const collator = new Intl.Collator(meta.language || "uz", { sensitivity: "base", numeric: true });
   const terms = [...TERMS].sort((a, b) => collator.compare(a.term, b.term));
   const model: TeacherModel = {
@@ -214,17 +261,28 @@ function glossaryDocSample(meta: DocMeta, o: SampleTeacherOpts): AcademicDoc {
     kind: "glossary",
     type,
     school: { ...SCHOOL, language: meta.language, ...(o.approver ? { approver: o.approver } : {}) },
-    glossary: { type, terms, order: "alpha" },
+    glossary: { type, terms, order: "alpha", includeExample: true },
   };
+
+  const termBlocks: Block[] = [];
+  for (const t of terms) {
+    termBlocks.push({ kind: "h3", text: t.term });
+    termBlocks.push(p(t.def));
+    if (t.example) termBlocks.push(p(`${L.example}: ${t.example}`));
+  }
+
   return {
     meta,
     titlePage: false,
     toc: false,
     teacher: model,
     sections: [
-      section("intro", "", [p("Glossariy 7-sinf biologiya kursining «O‘simliklar fiziologiyasi» bo‘limidagi asosiy atamalarni qamrab oladi.")]),
-      section("terms", ""),
+      section("intro", L.intro, [p("Glossariy 7-sinf biologiya kursining «O‘simliklar fiziologiyasi» bo‘limidagi asosiy atamalarni qamrab oladi.")]),
+      section("terms", L.terms, termBlocks),
     ],
+    tables: tri
+      ? [{ caption: L.terms, anchor: "terms", widths: [40, 30, 30], headers: [...L.triCols], rows: terms.map((t) => [t.term, t.ru ?? "", t.en ?? ""]) }]
+      : [],
   };
 }
 
@@ -273,6 +331,7 @@ const CASES: KeysCase[] = [
 ];
 
 function keysDocSample(meta: DocMeta, o: SampleTeacherOpts): AcademicDoc {
+  const L = teacherLayoutLabels(meta.language);
   const type = o.type ?? "muammoli";
   const model: TeacherModel = {
     v: 1,
@@ -281,16 +340,31 @@ function keysDocSample(meta: DocMeta, o: SampleTeacherOpts): AcademicDoc {
     school: { ...SCHOOL, language: meta.language, ...(o.approver ? { approver: o.approver } : {}) },
     keys: { type, audience: "maktab", cases: CASES },
   };
-  return {
-    meta,
-    titlePage: false,
-    toc: false,
-    teacher: model,
-    sections: [
-      section("intro", "", [p("Keys topshiriqlari 7-sinf biologiya kursining fotosintez va mineral oziqlanish mavzulariga mo‘ljallangan; har biri guruhda 15–20 daqiqada ishlanadi.")]),
-      ...CASES.map((c, i) => section(`case${i + 1}`, `Keys ${i + 1}. ${c.title}`)),
-    ],
-  };
+
+  const sections: DocSection[] = [
+    section("intro", L.intro, [p("Keys topshiriqlari 7-sinf biologiya kursining fotosintez va mineral oziqlanish mavzulariga mo‘ljallangan; har biri guruhda 15–20 daqiqada ishlanadi.")]),
+  ];
+  CASES.forEach((c, i) => {
+    sections.push(
+      section(`case${i + 1}`, `${L.caseWord} ${i + 1}. ${c.title}`, [
+        p(c.situation),
+        { kind: "h3", text: L.tasks },
+        ...c.questions.map((q): Block => ({ kind: "li", text: q })),
+        { kind: "h3", text: L.answerKey },
+        p(c.solution),
+      ]),
+    );
+  });
+  // Rubrika ALOHIDA bo'lim — keyslardan keyin (WP-A shartnomasi).
+  const rubricBlocks: Block[] = [];
+  CASES.forEach((c, i) => {
+    rubricBlocks.push({ kind: "h3", text: `${L.caseWord} ${i + 1}` });
+    for (const r of c.rubric) rubricBlocks.push({ kind: "li", text: `${r.criterion} — ${r.points} ${L.points}` });
+    rubricBlocks.push(p(`${L.totalPoints}: ${c.rubric.reduce((a, r) => a + r.points, 0)} ${L.points}`));
+  });
+  sections.push(section("rubric", L.rubric, rubricBlocks));
+
+  return { meta, titlePage: false, toc: false, teacher: model, sections, tables: [] };
 }
 
 /* ────────────────────────── test ────────────────────────── */
@@ -353,6 +427,12 @@ const QUESTIONS: TestQuestion[] = [
   },
 ];
 
+/**
+ * Test hujjati — WP-B dvigateli hali birlashtirilmagan, shuning uchun
+ * bo'limlar BO'SH va butun maket MODELDAN quriladi (`planTeacher`
+ * zaxira yo'li). WP-B kelganda bo'limlar bloklar bilan to'ladi va
+ * zaxira o'z-o'zidan o'chadi — maket o'zgarmaydi.
+ */
 function testDocSample(meta: DocMeta, o: SampleTeacherOpts): AcademicDoc {
   const type = o.type ?? "nazorat";
   const variants = [
@@ -416,7 +496,7 @@ function testDocSample(meta: DocMeta, o: SampleTeacherOpts): AcademicDoc {
       ...variants.map((v) => section(`variant${v.id}`, "")),
       section("key", ""),
       ...(test.criteria ? [section("criteria", "")] : []),
-      section("omr", "", [{ kind: "figure", figureId: "omr", text: "" }]),
+      section("omr", ""),
     ],
   };
 }

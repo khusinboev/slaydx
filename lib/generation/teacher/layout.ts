@@ -26,35 +26,38 @@
  * `docs/research/lesson-plan.md` §1, `test.md` §3.7). Shuning uchun
  * `teacherProfile(kind).titlePage === "none"` va bu yerda `head` bor.
  *
- * ── Matn qayerdan keladi
+ * ── Matn qayerdan keladi (WP-A dvigateli bilan shartnoma)
  *
- * NASR — `doc.sections` da (boshqa oilalardagidek: `paginate.ts`,
- * `guardSection`, tahrir oplari o'zgarmaydi), TUZILMA — `doc.teacher`
- * modelida (bosqich/hafta/atama/keys/savol). `planTeacher` har bo'lim
- * uchun UCHTASINI ketma-ket chizadi:
+ * NASR va JADVAL — `doc.sections` / `doc.tables` da (boshqa oilalardagidek:
+ * `paginate.ts`, `guardSection`, hisobot nishonlari `sections.<id>` va
+ * `table:<n>` o'zgarmaydi), METAMA'LUMOT — `doc.teacher` modelida.
+ * `planTeacher` har bo'lim uchun ketma-ket chizadi:
  *
  *   1. sarlavha (`section.title`, bo'sh bo'lsa yorliqlar jadvalidan),
- *   2. bo'limning O'Z bloklari (dvigatel yozgan nasr),
- *   3. shu bo'lim id siga biriktirilgan TUZILMA (vaqt jadvali, chorak
- *      jadvali, atamalar, rubrika, savollar, kalit, OMR).
+ *   2. bo'limning O'Z bloklari,
+ *   3. shu bo'limga LANGARLANGAN jadvallar (`DocTable.anchor`),
+ *   4. faqat 2–3 BO'SH bo'lsa — modeldan qurilgan zaxira (vaqt jadvali,
+ *      chorak jadvali, atamalar, rubrika, test savollari).
  *
- * Bo'lim MODEL bilan qoplangan bo'lsa (`stages`, `q1`…, `terms`…) shu
- * bo'limga langarlangan `doc.tables` jadvali CHIZILMAYDI — aks holda
- * dvigatel ham jadval yozsa, u ikki marta chiqardi.
+ * 4-qadam ATAYIN oxirgi: dvigatel (`teacher/lesson.ts` va h.k.) matnni
+ * allaqachon yozadi, uni modeldan QAYTA qurish hujjatni ikki marta
+ * chizardi. Zaxira esa qo'lda yig'ilgan hujjat (namuna, test — WP-B
+ * gacha) va kelajakdagi kind lar uchun kerak.
  *
  * ── Eski hujjatlar
  *
  * `doc.teacher` yo'q hujjat (bazadagi minglab dars rejasi/xarita/
  * glossariy/keys) `legacy.ts legacyTeacherModel(doc)` bilan SHU YERGA
- * keladi: model bo'sh tuzilma bilan quriladi, ya'ni yuqoridagi 3-qadam
- * hech narsa qo'shmaydi va hujjat avvalgidek «sarlavha + bloklar +
- * langarlangan jadval» bo'lib chiqadi — faqat titul beti o'rniga rasmiy
- * shapka bilan. 4 eski ko'ruvchi o'chirilgani uchun boshqa yo'l yo'q:
- * eski hujjat ham YANGI ko'ruvchida ochilishi kerak.
+ * keladi: model bo'sh tuzilma bilan quriladi, ya'ni 4-qadam hech narsa
+ * qo'shmaydi va hujjat avvalgidek «sarlavha + bloklar + langarlangan
+ * jadval» bo'lib chiqadi — faqat titul beti o'rniga rasmiy shapka bilan.
+ * 4 eski ko'ruvchi o'chirilgani uchun boshqa yo'l yo'q: eski hujjat ham
+ * YANGI ko'ruvchida ochilishi kerak.
  */
-import { docLabels, sectionLabels, type DocLabels, type SectionLabels } from "../i18n";
+import { docLabels, type DocLabels } from "../i18n";
 import type { AcademicDoc, Block, DocSection, DocTable, Figure } from "../types";
 import { legacyTeacherModel } from "./legacy";
+import { teacherLabels as teacherTextLabels, type TeacherLabels } from "./prompts";
 import { teacherKindOf, teacherTypeOf } from "./registry";
 import {
   isOmrQuestionKind,
@@ -66,7 +69,6 @@ import {
   type TeacherModel,
   type TeacherSchool,
   type TestModel,
-  type TestQuestion,
   type TestVariant,
 } from "./types";
 
@@ -124,37 +126,23 @@ export const TEACHER_LANDSCAPE: Record<TeacherKind, boolean> = {
 
 /* ══════════════════════════ yorliqlar ══════════════════════════ */
 
-export type TeacherLang = "uz" | "ru" | "en";
-
-export function teacherLangKey(lang: string): TeacherLang {
-  const c = (lang || "uz").toLowerCase();
-  return c === "ru" ? "ru" : c === "en" ? "en" : "uz";
-}
-
 /**
- * O'QITUVCHI hujjatiga XOS so'zlar — `i18n.ts` da YO'Q va ataylab shu
- * yerda: ular faqat rasmiy shapkaga va test maketiga tegishli, uchala
- * chizuvchi (DOCX, ko'ruvchi, hisobot) esa ularni BITTA manbadan
- * o'qishi kerak (`title-model.ts WORK_TITLE_WORDS` naqshi).
+ * FAQAT MAKETGA tegishli so'zlar.
+ *
+ * Hujjat matnining yorliqlari (maqsad uchligi, kompetensiyalar, chorak
+ * sarlavhasi, tarjima ustunlari, `sectionLabels`) `teacher/prompts.ts
+ * teacherLabels` da — dvigatel ham, maket ham SHU BIRINCHI manbadan
+ * o'qiydi. Bu yerda faqat dvigatel bilmaydigan, chizuvchiga xos
+ * qatorlar: shapka, test varag'i maketi, jadval/rasm raqami.
  */
-type TeacherWords = {
+type TeacherLayoutWords = {
   approve: string;
   date: string;
   variant: string;
   docTitle: Record<TeacherKind, string>;
-  goal: { talim: string; tarbiya: string; rivoj: string };
-  goalTitle: string;
-  competencies: string;
-  equipment: string;
-  assessment: string;
-  lessonType: string;
-  duration: string;
-  example: string;
   method: string;
   teacherActs: string;
   studentActs: string;
-  quarter: (n: number) => string;
-  resources: string;
   instructions: string;
   answersKey: string;
   criteria: string;
@@ -175,15 +163,14 @@ type TeacherWords = {
    * mumkin emas (`drawWork spanRuns` bilan bir xil sabab).
    */
   studentFields: string[];
-  totalPoints: (n: number) => string;
+  totalPointsLine: (n: number) => string;
   timeLimit: (n: number) => string;
-  termCols: [string, string, string, string];
   tableRef: (n: string) => string;
   figureRef: (n: string) => string;
   omrCaption: (n: number) => string;
 };
 
-const WORDS: Record<TeacherLang, TeacherWords> = {
+const WORDS: Record<"uz" | "ru" | "en", TeacherLayoutWords> = {
   uz: {
     approve: "Tasdiqlayman",
     date: "Sana",
@@ -195,19 +182,9 @@ const WORDS: Record<TeacherLang, TeacherWords> = {
       keys: "KEYS TOPSHIRIQLARI",
       test: "TEST TOPSHIRIG‘I",
     },
-    goal: { talim: "Ta’limiy maqsad:", tarbiya: "Tarbiyaviy maqsad:", rivoj: "Rivojlantiruvchi maqsad:" },
-    goalTitle: "Dars maqsadi",
-    competencies: "Kompetensiyalar",
-    equipment: "Jihozlar va resurslar",
-    assessment: "Baholash",
-    lessonType: "Dars turi",
-    duration: "Davomiyligi",
-    example: "Misol:",
     method: "Metod:",
     teacherActs: "O‘qituvchi:",
     studentActs: "O‘quvchi:",
-    quarter: (n) => `${["I", "II", "III", "IV"][n - 1] ?? n} chorak`,
-    resources: "Ta’minot",
     instructions: "Ko‘rsatma",
     answersKey: "Javoblar kaliti",
     criteria: "Baholash mezonlari",
@@ -220,9 +197,8 @@ const WORDS: Record<TeacherLang, TeacherWords> = {
     criteriaCols: ["Mezon", "Ko‘nikma", "Topshiriq", "Ball"],
     matchCols: ["Chap ustun", "O‘ng ustun"],
     studentFields: ["F.I.Sh.", "______________________", "Sinf", "________", "Sana", "__________", "Ball", "______", "Baho", "______"],
-    totalPoints: (n) => `Jami ball: ${n}`,
+    totalPointsLine: (n) => `Jami ball: ${n}`,
     timeLimit: (n) => `Ajratilgan vaqt: ${n} daqiqa`,
-    termCols: ["Atama", "Ta’rif", "Ruscha", "Inglizcha"],
     tableRef: (n) => `${n}-jadval`,
     figureRef: (n) => `${n}-rasm`,
     omrCaption: (n) => `Javoblar varag‘i (${n} ta savol)`,
@@ -238,19 +214,9 @@ const WORDS: Record<TeacherLang, TeacherWords> = {
       keys: "КЕЙС-ЗАДАНИЯ",
       test: "ТЕСТОВОЕ ЗАДАНИЕ",
     },
-    goal: { talim: "Образовательная цель:", tarbiya: "Воспитательная цель:", rivoj: "Развивающая цель:" },
-    goalTitle: "Цель урока",
-    competencies: "Компетенции",
-    equipment: "Оборудование и ресурсы",
-    assessment: "Оценивание",
-    lessonType: "Тип урока",
-    duration: "Продолжительность",
-    example: "Пример:",
     method: "Метод:",
     teacherActs: "Учитель:",
     studentActs: "Ученик:",
-    quarter: (n) => `${["I", "II", "III", "IV"][n - 1] ?? n} четверть`,
-    resources: "Обеспечение",
     instructions: "Инструкция",
     answersKey: "Ключи ответов",
     criteria: "Критерии оценивания",
@@ -263,9 +229,8 @@ const WORDS: Record<TeacherLang, TeacherWords> = {
     criteriaCols: ["Критерий", "Навык", "Задание", "Балл"],
     matchCols: ["Левый столбец", "Правый столбец"],
     studentFields: ["Ф.И.О.", "______________________", "Класс", "________", "Дата", "__________", "Балл", "______", "Оценка", "______"],
-    totalPoints: (n) => `Всего баллов: ${n}`,
+    totalPointsLine: (n) => `Всего баллов: ${n}`,
     timeLimit: (n) => `Отведённое время: ${n} минут`,
-    termCols: ["Термин", "Определение", "Русский", "Английский"],
     tableRef: (n) => `Таблица ${n}`,
     figureRef: (n) => `Рисунок ${n}`,
     omrCaption: (n) => `Лист ответов (${n} вопросов)`,
@@ -281,19 +246,9 @@ const WORDS: Record<TeacherLang, TeacherWords> = {
       keys: "CASE-STUDY TASKS",
       test: "TEST PAPER",
     },
-    goal: { talim: "Educational aim:", tarbiya: "Upbringing aim:", rivoj: "Developmental aim:" },
-    goalTitle: "Lesson aims",
-    competencies: "Competencies",
-    equipment: "Equipment and resources",
-    assessment: "Assessment",
-    lessonType: "Lesson type",
-    duration: "Duration",
-    example: "Example:",
     method: "Method:",
     teacherActs: "Teacher:",
     studentActs: "Pupil:",
-    quarter: (n) => `Quarter ${["I", "II", "III", "IV"][n - 1] ?? n}`,
-    resources: "Resources",
     instructions: "Instructions",
     answersKey: "Answer key",
     criteria: "Assessment criteria",
@@ -306,32 +261,28 @@ const WORDS: Record<TeacherLang, TeacherWords> = {
     criteriaCols: ["Criterion", "Skill", "Task", "Points"],
     matchCols: ["Left column", "Right column"],
     studentFields: ["Name", "______________________", "Class", "________", "Date", "__________", "Score", "______", "Grade", "______"],
-    totalPoints: (n) => `Total points: ${n}`,
+    totalPointsLine: (n) => `Total points: ${n}`,
     timeLimit: (n) => `Time allowed: ${n} minutes`,
-    termCols: ["Term", "Definition", "Russian", "English"],
     tableRef: (n) => `Table ${n}`,
     figureRef: (n) => `Figure ${n}`,
     omrCaption: (n) => `Answer sheet (${n} questions)`,
   },
 };
 
-export type TeacherDocLabels = TeacherWords & {
-  lang: TeacherLang;
-  /** Umumiy bo'lim/maydon yorliqlari (Fan, Sinf, Mavzu, jadval ustunlari). */
-  section: SectionLabels;
-  doc: DocLabels;
-};
+/** Maket yorliqlari = dvigatel yorliqlari + chizuvchiga xos qatorlar. */
+export type TeacherDocLabels = TeacherLabels & TeacherLayoutWords & { doc: DocLabels };
 
-export function teacherLabels(language: string): TeacherDocLabels {
-  const lang = teacherLangKey(language);
-  return { lang, ...WORDS[lang], section: sectionLabels(language), doc: docLabels(language) };
+export function teacherLayoutLabels(language: string): TeacherDocLabels {
+  const base = teacherTextLabels(language);
+  return { ...base, ...WORDS[base.lang], doc: docLabels(language) };
 }
 
 /* ══════════════════════════ bo'lim id lari ══════════════════════════ */
 
 /**
- * Dvigatel yozadigan TEKIS bo'lim id lari (WP-A/WP-B shartnomasi).
- * `caseN` va `variantA` — dinamik, quyidagi `parse*` lar bilan.
+ * Dvigatel yozadigan TEKIS bo'lim id lari (WP-A/WP-B shartnomasi;
+ * `teacher/engine.ts` bosh izohida ham qulflangan). `caseN` va
+ * `variantA` — dinamik, quyidagi `parse*` lar bilan.
  */
 export const TEACHER_SECTION_IDS: Record<TeacherKind, readonly string[]> = {
   lesson: ["passport", "goal", "stages", "homework", "assessment"],
@@ -371,7 +322,7 @@ export function quarterIndexOf(id: string): number | null {
  *   `title`    — hujjat nomi («DARS ISHLANMASI»), markazda qalin.
  *   `subtitle` — tur nomi («Yangi mavzu darsi»), markazda kursiv.
  *   `field`    — «Fan: Biologiya» kabi chap qator.
- *   `line`     — erkin qator (test: o'quvchi maydoni).
+ *   `line`     — yorliq/chiziq bo'laklari (test: o'quvchi maydoni).
  */
 export type TeacherHeadItem =
   | { k: "approve"; lines: string[]; path: string }
@@ -383,7 +334,8 @@ export type TeacherHeadItem =
 
 /**
  * Tana bandi. `path` — TAHRIR yo'li (WP-D `teacher/edit.ts`):
- * nasr uchun `sections.<i>.blocks.<j>`, modeldan kelgan band uchun
+ * nasr uchun `sections.<i>.blocks.<j>`, hujjat jadvali uchun hisobot
+ * bilan bir xil `table:<n>` nishoni, modeldan qurilgan band uchun
  * `teacher.<kind>.<...>` (masalan `teacher.lesson.stages.2.teacher`).
  */
 export type TeacherBodyItem =
@@ -423,6 +375,12 @@ export type TeacherPlan = {
   pageBreaks: string[];
   landscape: boolean;
   numbers: { tables: Record<string, string>; figures: Record<string, string> };
+  /**
+   * Jadval id → TAHRIR yo'li. Hujjat jadvali uchun `table:<n>` — hisobot
+   * (`review.ts tableTarget`) va sayqal (`polish.ts`) aynan shu nishondan
+   * foydalanadi, ya'ni WP-D tahriri uchinchi sintaksis o'ylab topmaydi.
+   */
+  tablePaths: Record<string, string>;
   page: { marginsCm: { top: number; right: number; bottom: number; left: number }; sizePt: number; line: number; tableSizePt: number; smallPt: number };
   /** Sarlavha tekislanishi — o'qituvchi hujjatida DOIM chapda. */
   headingAlign: "left";
@@ -461,14 +419,16 @@ export function planTeacher(doc: AcademicDoc): TeacherPlan {
   if (!model) throw new Error("planTeacher: hujjat o'qituvchi oilasiga tegishli emas (`doc.teacher` ham, o'qituvchi `toolId` ham yo'q)");
   const kind = model.kind;
   const language = model.school.language || doc.meta.language || "uz";
-  const L = teacherLabels(language);
+  const L = teacherLayoutLabels(language);
   const spec = teacherTypeOf(kind, model.type);
+  const docTables = doc.tables ?? [];
 
   const head: TeacherHeadItem[] = [];
   const body: TeacherBodyItem[] = [];
   const tables: DocTable[] = [];
   const pageBreaks: string[] = [];
   const numbers: { tables: Record<string, string>; figures: Record<string, string> } = { tables: {}, figures: {} };
+  const tablePaths: Record<string, string> = {};
   let tableN = 0;
   let figureN = 0;
 
@@ -490,27 +450,33 @@ export function planTeacher(doc: AcademicDoc): TeacherPlan {
   const field = (label: string, text: string, path: string) => {
     if (clean(text)) head.push({ k: "field", label, text: clean(text), path });
   };
-  field(L.section.fieldSubject, S.subject, "teacher.school.subject");
-  field(L.section.fieldGrade, gradeText(S), "teacher.school.grade");
+  field(L.fieldSubject, S.subject, "teacher.school.subject");
+  field(L.fieldGrade, gradeText(S), "teacher.school.grade");
   if (kind === "lesson" && model.lesson) {
-    field(L.duration, `${model.lesson.durationMin} ${L.section.minutesShort}`, "teacher.lesson.durationMin");
+    field(L.fieldDuration, `${model.lesson.durationMin} ${L.minutesShort}`, "teacher.lesson.durationMin");
   }
   if (kind === "map" && model.map) {
-    field(L.section.fieldWeeklyHours, String(model.map.weeklyHours), "teacher.map.weeklyHours");
-    field(L.section.fieldTotalHours, String(model.map.totalHours), "teacher.map.totalHours");
+    field(L.fieldWeeklyHours, String(model.map.weeklyHours), "teacher.map.weeklyHours");
+    field(L.fieldTotalHours, String(model.map.totalHours), "teacher.map.totalHours");
   }
-  field(L.section.fieldTopic, doc.meta.topic, "meta.topic");
+  field(L.fieldTopic, doc.meta.topic, "meta.topic");
   field(L.doc.compiledBy, S.author, "teacher.school.author");
   field(L.date, teacherDateText(S.date), "teacher.school.date");
   if (kind === "test") head.push({ k: "line", parts: L.studentFields, path: "teacher.test" });
 
   /* ────────────── tana ────────────── */
 
+  /**
+   * `t` — HUJJAT jadvali bo'lsa `path` `table:<n>` bo'ladi (hisobot va
+   * sayqal nishoni bilan AYNI), modeldan qurilgan zaxira jadval esa o'z
+   * model yo'lini oladi.
+   */
   const pushTable = (t: DocTable, path: string, caption?: string) => {
     tableN++;
     const id = t.id ?? `t${tableN}`;
     const n = String(tableN);
     numbers.tables[id] = n;
+    tablePaths[id] = path;
     tables.push(t);
     body.push({
       k: "table",
@@ -522,6 +488,9 @@ export function planTeacher(doc: AcademicDoc): TeacherPlan {
       path,
     });
   };
+
+  /** Hujjat jadvali — nishoni `table:<n>` (`review.ts tableTarget`). */
+  const pushDocTable = (t: DocTable) => pushTable(t, `table:${docTables.indexOf(t)}`);
 
   const pushFigure = (figureId: string, caption: string, path: string, figure?: Figure) => {
     figureN++;
@@ -570,8 +539,8 @@ export function planTeacher(doc: AcademicDoc): TeacherPlan {
           pushFigure(b.figureId, b.text || "", p);
           break;
         case "tableRef": {
-          const t = (doc.tables ?? []).find((x) => x.id === b.tableId);
-          if (t) pushTable(t, p);
+          const t = docTables.find((x) => x.id === b.tableId);
+          if (t) pushDocTable(t);
           break;
         }
         default:
@@ -580,51 +549,30 @@ export function planTeacher(doc: AcademicDoc): TeacherPlan {
     });
   };
 
-  /* ── kind bo'yicha TUZILMA biriktirmalari ── */
+  /* ── ZAXIRA: modeldan qurilgan bo'lak (bo'lim bo'sh bo'lsa) ── */
 
   const stageTable = (stages: LessonStage[]): DocTable => ({
     id: "stages",
-    caption: L.section.timeTable,
-    headers: [...L.section.timeCols],
+    caption: L.timeTable,
+    headers: [...L.timeCols],
     widths: [42, 13, 45],
     rows: stages.map((st) => [clean(st.title), String(st.minutes ?? ""), clean(st.result)]),
   });
 
-  const weekTable = (weeks: MapWeek[], caption: string, id: string): DocTable => ({
+  /** Ustunlar `yearCols` bo'yicha — `teacher/map.ts rowOf` bilan AYNI. */
+  const weekTable = (weeks: MapWeek[], id: string): DocTable => ({
     id,
-    caption,
-    /*
-     * 5-ustun: `MapWeek.resources` (moddiy-texnik ta'minot). `i18n.ts`
-     * dagi `yearCols` beshinchi ustunni «Kutilgan natija» deb ataydi,
-     * lekin R0 modelida bunday maydon YO'Q — yorliq MA'LUMOTGA
-     * ergashadi, aksincha emas (ochiq savol: AUDIT-20 §5).
-     */
-    headers: [L.section.yearCols[0], L.section.yearCols[1], L.section.yearCols[2], L.section.yearCols[3], L.resources, L.section.yearCols[5]],
+    headers: [...L.yearCols],
     widths: [8, 8, 34, 16, 20, 14],
-    rows: weeks.map((w) => [String(w.n), String(w.hours ?? ""), clean(w.topic), clean(w.method), clean(w.resources), clean(w.control)]),
+    rows: weeks.map((w) => [String(w.n), String(w.hours ?? ""), clean(w.topic), clean(w.method), clean(w.result), clean(w.control)]),
   });
 
-  const pushTerms = (terms: GlossaryTerm[], tri: boolean) => {
-    if (!terms.length) return;
-    if (tri) {
-      pushTable(
-        {
-          id: "terms",
-          // Sarlavha («Atamalar ro‘yxati») bo‘lim h1 ida — jadvalda takrorlanmaydi.
-          caption: "",
-          headers: [...L.termCols],
-          widths: [20, 40, 20, 20],
-          rows: terms.map((t) => [clean(t.term), clean(t.def), clean(t.ru), clean(t.en)]),
-        },
-        "teacher.glossary.terms",
-      );
-      return;
-    }
+  const pushTerms = (terms: GlossaryTerm[], withExample: boolean) => {
     terms.forEach((t, i) => {
       const p = `teacher.glossary.terms.${i}`;
       body.push({ k: "h3", text: clean(t.term), path: `${p}.term` });
       body.push({ k: "p", text: clean(t.def), path: `${p}.def` });
-      if (clean(t.example)) body.push({ k: "kv", label: L.example, text: clean(t.example), path: `${p}.example` });
+      if (withExample && clean(t.example)) body.push({ k: "kv", label: `${L.example}:`, text: clean(t.example), path: `${p}.example` });
     });
   };
 
@@ -632,24 +580,31 @@ export function planTeacher(doc: AcademicDoc): TeacherPlan {
     const p = `teacher.keys.cases.${i}`;
     if (clean(c.situation)) body.push({ k: "p", text: clean(c.situation), path: `${p}.situation` });
     if (c.questions?.length) {
-      body.push({ k: "h3", text: L.section.tasks, path: `${p}.questions` });
+      body.push({ k: "h3", text: L.tasks, path: `${p}.questions` });
       c.questions.forEach((q, j) => body.push({ k: "li", text: clean(q), path: `${p}.questions.${j}` }));
     }
     if (clean(c.solution)) {
-      body.push({ k: "h3", text: L.section.answerKey, path: `${p}.solution` });
+      body.push({ k: "h3", text: L.answerKey, path: `${p}.solution` });
       body.push({ k: "p", text: clean(c.solution), path: `${p}.solution` });
-    }
-    if (c.rubric?.length) {
-      body.push({ k: "h3", text: L.section.rubric, path: `${p}.rubric` });
-      c.rubric.forEach((r, j) => body.push({ k: "li", text: `${clean(r.criterion)} — ${r.points} ${L.section.points}`, path: `${p}.rubric.${j}` }));
-      const total = c.rubric.reduce((a, r) => a + (Number(r.points) || 0), 0);
-      body.push({ k: "kv", label: L.section.totalPoints, text: `${total} ${L.section.points}`, path: `${p}.rubric` });
     }
   };
 
-  /** Test savoli — VARIANTdagi tartib bilan (savol bazasi bitta). */
+  /** Rubrika ALOHIDA bo'lim (WP-A shartnomasi) — keyslardan keyin. */
+  const pushRubric = (cases: KeysCase[]) => {
+    cases.forEach((c, i) => {
+      if (!c.rubric?.length) return;
+      const p = `teacher.keys.cases.${i}.rubric`;
+      body.push({ k: "h3", text: `${L.caseWord} ${i + 1}`, path: p });
+      c.rubric.forEach((r, j) => body.push({ k: "li", text: `${clean(r.criterion)} — ${r.points} ${L.points}`, path: `${p}.${j}` }));
+      const total = c.rubric.reduce((a, r) => a + (Number(r.points) || 0), 0);
+      body.push({ k: "kv", label: `${L.totalPoints}:`, text: `${total} ${L.points}`, path: p });
+    });
+  };
+
+  /* ── test (WP-B gacha butunlay modeldan) ── */
+
   const pushQuestion = (t: TestModel, qi: number, optionOrder: number[], n: number, vId: string) => {
-    const q: TestQuestion | undefined = t.questions[qi];
+    const q = t.questions[qi];
     if (!q) return;
     const p = `teacher.test.questions.${qi}`;
     body.push({ k: "p", text: `${n}. ${clean(q.stem)}`, path: `${p}.stem` });
@@ -694,8 +649,6 @@ export function planTeacher(doc: AcademicDoc): TeacherPlan {
     pushTable(
       {
         id: "key",
-        // «Javoblar kaliti» bo‘lim sarlavhasi — jadvalda takrorlanmaydi.
-        caption: "",
         headers: [L.keyCols.n, ...ids.map((id) => `${L.variant} ${id}`), L.keyCols.points, L.keyCols.bloom, L.keyCols.difficulty],
         rows: t.questions.map((q, i) => [String(i + 1), ...ids.map((id) => t.key[id]?.[i] ?? "—"), String(q.points ?? 1), q.bloom, q.difficulty]),
       },
@@ -717,16 +670,19 @@ export function planTeacher(doc: AcademicDoc): TeacherPlan {
   };
 
   /**
-   * Bo'lim id siga biriktirilgan TUZILMA. `true` qaytsa shu bo'limga
-   * langarlangan `doc.tables` jadvali chizilmaydi (model ustun).
+   * Bo'limning MODELDAN qurilgan zaxirasi.
+   *
+   * `hasBlocks`/`hasTable` — dvigatel shu bo'limni allaqachon yozganmi.
+   * Yozgan bo'lsa zaxira UMUMAN ishlamaydi: aks holda dars bosqichlari
+   * ham nasrda, ham modeldan chiqib, hujjat ikki marta chizilardi.
    */
-  const attach = (id: string): boolean => {
+  const attach = (id: string, hasBlocks: boolean, hasTable: boolean) => {
     if (kind === "lesson" && model.lesson) {
       const l = model.lesson;
-      if (id === "goal") {
-        body.push({ k: "kv", label: L.goal.talim, text: clean(l.goal?.talim), path: "teacher.lesson.goal.talim" });
-        body.push({ k: "kv", label: L.goal.tarbiya, text: clean(l.goal?.tarbiya), path: "teacher.lesson.goal.tarbiya" });
-        body.push({ k: "kv", label: L.goal.rivoj, text: clean(l.goal?.rivoj), path: "teacher.lesson.goal.rivoj" });
+      if (id === "goal" && !hasBlocks) {
+        body.push({ k: "kv", label: `${L.goalTalim}:`, text: clean(l.goal?.talim), path: "teacher.lesson.goal.talim" });
+        body.push({ k: "kv", label: `${L.goalTarbiya}:`, text: clean(l.goal?.tarbiya), path: "teacher.lesson.goal.tarbiya" });
+        body.push({ k: "kv", label: `${L.goalRivoj}:`, text: clean(l.goal?.rivoj), path: "teacher.lesson.goal.rivoj" });
         if (l.competencies?.length) {
           body.push({ k: "h3", text: L.competencies, path: "teacher.lesson.competencies" });
           l.competencies.forEach((c, i) => body.push({ k: "li", text: clean(c), path: `teacher.lesson.competencies.${i}` }));
@@ -735,109 +691,111 @@ export function planTeacher(doc: AcademicDoc): TeacherPlan {
           body.push({ k: "h3", text: L.equipment, path: "teacher.lesson.equipment" });
           l.equipment.forEach((c, i) => body.push({ k: "li", text: clean(c), path: `teacher.lesson.equipment.${i}` }));
         }
-        return false;
+        return;
       }
       if (id === "stages") {
-        if (!l.stages?.length) return false;
-        l.stages.forEach((st, i) => {
-          const p = `teacher.lesson.stages.${i}`;
-          body.push({ k: "h3", text: `${i + 1}. ${clean(st.title)} (${st.minutes} ${L.section.minutesShort})`, path: `${p}.title` });
-          if (clean(st.method)) body.push({ k: "kv", label: L.method, text: clean(st.method), path: `${p}.method` });
-          if (clean(st.teacher)) body.push({ k: "kv", label: L.teacherActs, text: clean(st.teacher), path: `${p}.teacher` });
-          if (clean(st.student)) body.push({ k: "kv", label: L.studentActs, text: clean(st.student), path: `${p}.student` });
-          if (clean(st.result)) body.push({ k: "kv", label: `${L.section.timeCols[2]}:`, text: clean(st.result), path: `${p}.result` });
-        });
-        pushTable(stageTable(l.stages), "teacher.lesson.stages");
-        return true;
+        if (!hasBlocks) {
+          l.stages?.forEach((st, i) => {
+            const p = `teacher.lesson.stages.${i}`;
+            body.push({ k: "h3", text: `${i + 1}. ${clean(st.title)} (${st.minutes} ${L.minutesShort})`, path: `${p}.title` });
+            if (clean(st.method)) body.push({ k: "kv", label: L.method, text: clean(st.method), path: `${p}.method` });
+            if (clean(st.teacher)) body.push({ k: "kv", label: L.teacherActs, text: clean(st.teacher), path: `${p}.teacher` });
+            if (clean(st.student)) body.push({ k: "kv", label: L.studentActs, text: clean(st.student), path: `${p}.student` });
+            if (clean(st.result)) body.push({ k: "kv", label: `${L.timeCols[2]}:`, text: clean(st.result), path: `${p}.result` });
+          });
+        }
+        if (!hasTable && l.stages?.length) pushTable(stageTable(l.stages), "teacher.lesson.stages");
+        return;
       }
-      if (id === "homework" && clean(l.homework)) {
-        body.push({ k: "p", text: clean(l.homework), path: "teacher.lesson.homework" });
-        return false;
-      }
-      if (id === "assessment" && clean(l.assessment)) {
-        body.push({ k: "p", text: clean(l.assessment), path: "teacher.lesson.assessment" });
-        return false;
-      }
-      return false;
+      if (id === "homework" && !hasBlocks && clean(l.homework)) body.push({ k: "p", text: clean(l.homework), path: "teacher.lesson.homework" });
+      if (id === "assessment" && !hasBlocks && clean(l.assessment)) body.push({ k: "p", text: clean(l.assessment), path: "teacher.lesson.assessment" });
+      return;
     }
     if (kind === "map" && model.map) {
+      if (hasTable) return;
       const m = model.map;
       const q = quarterIndexOf(id);
       if (q !== null) {
         const quarter = m.quarters.find((x) => x.n === q);
-        if (!quarter?.weeks.length) return false;
-        pushTable(weekTable(quarter.weeks, "", `q${q}`), `teacher.map.quarters.${m.quarters.indexOf(quarter)}`);
-        return true;
+        if (quarter?.weeks.length) pushTable(weekTable(quarter.weeks, `q${q}`), `teacher.map.quarters.${m.quarters.indexOf(quarter)}`);
+        return;
       }
       if (id === "year") {
         const weeks = m.quarters.flatMap((x) => x.weeks);
-        if (!weeks.length) return false;
-        pushTable(weekTable(weeks, "", "year"), "teacher.map.quarters");
-        return true;
+        if (weeks.length) pushTable(weekTable(weeks, "year"), "teacher.map.quarters");
       }
-      return false;
+      return;
     }
     if (kind === "glossary" && model.glossary) {
-      if (id === "terms") {
-        pushTerms(model.glossary.terms ?? [], model.glossary.type === "uch-tilli");
-        return true;
+      if (id !== "terms") return;
+      const g = model.glossary;
+      if (!hasBlocks) pushTerms(g.terms ?? [], g.includeExample !== false);
+      if (!hasTable && g.type === "uch-tilli" && g.terms?.length) {
+        // Ustunlar «Atama | Ruscha | Inglizcha» — ta'rif YUQORIDAGI ro'yxatda,
+        // jadvalda takrorlanmaydi (AUDIT-6 B5 qarori, WP-A bilan bir xil).
+        pushTable(
+          {
+            id: "terms",
+            headers: [...L.triCols],
+            widths: [40, 30, 30],
+            rows: g.terms.map((t) => [clean(t.term), clean(t.ru), clean(t.en)]),
+          },
+          "teacher.glossary.terms",
+        );
       }
-      return false;
+      return;
     }
     if (kind === "keys" && model.keys) {
+      if (hasBlocks) return;
       const n = caseIndexOf(id);
       if (n !== null && model.keys.cases[n - 1]) {
         pushCase(model.keys.cases[n - 1], n - 1);
-        return true;
+        return;
       }
-      return false;
+      if (id === "rubric") pushRubric(model.keys.cases ?? []);
+      return;
     }
     if (kind === "test" && model.test) {
+      if (hasBlocks && id !== "omr") return;
       const t = model.test;
       if (id === "instructions") {
         t.instructions?.forEach((line, i) => body.push({ k: "li", text: clean(line), path: `teacher.test.instructions.${i}` }));
         if (t.timeMin) body.push({ k: "p", text: L.timeLimit(t.timeMin), path: "teacher.test.timeMin" });
-        if (t.scoring?.total) body.push({ k: "p", text: L.totalPoints(t.scoring.total), path: "teacher.test.scoring.total" });
-        return false;
+        if (t.scoring?.total) body.push({ k: "p", text: L.totalPointsLine(t.scoring.total), path: "teacher.test.scoring.total" });
+        return;
       }
       const v = variantIdOf(id);
       if (v) {
         const variant = t.variants.find((x) => x.id === v);
         if (variant) pushVariant(t, variant);
-        return true;
+        return;
       }
       if (id === "key") {
         pushKeyTables(t);
-        return true;
+        return;
       }
-      if (id === "criteria") {
-        if (!t.criteria?.length) return false;
+      if (id === "criteria" && t.criteria?.length && !hasTable) {
         pushTable(
           {
             id: "criteria",
-            caption: "",
             headers: [...L.criteriaCols],
             widths: [40, 25, 15, 20],
             rows: t.criteria.map((c) => [clean(c.criterion), clean(c.skill), clean(c.taskRef), String(c.points)]),
           },
           "teacher.test.criteria",
         );
-        return true;
+        return;
       }
-      if (id === "omr") {
+      if (id === "omr" && t.omr && !numbers.figures.omr) {
         /*
          * Bo'lim bloklarida `figure` bloki bo'lsa (dvigatel OMR PNG ini
          * shunday joylashtiradi) u ALLAQACHON chizilgan — takroriy
          * o'rinbosar ramka qo'shilmaydi.
          */
-        if (!t.omr || numbers.figures.omr) return true;
         const count = t.questions.filter((q) => isOmrQuestionKind(q.kind)).length || t.omr.count;
         pushFigure("omr", L.omrCaption(count), "teacher.test.omr");
-        return true;
       }
-      return false;
     }
-    return false;
   };
 
   /* ── bo'limlar (hujjat tartibida) ── */
@@ -846,23 +804,22 @@ export function planTeacher(doc: AcademicDoc): TeacherPlan {
   const headingOf = (s: DocSection): string => {
     const own = clean(s.title);
     if (own) return own;
-    const L2 = L.section;
     const q = quarterIndexOf(s.id);
     if (kind === "map" && q !== null) return L.quarter(q);
     const c = caseIndexOf(s.id);
-    if (kind === "keys" && c !== null) return `${L2.caseWord} ${c}`;
+    if (kind === "keys" && c !== null) return `${L.caseWord} ${c}`;
     const v = variantIdOf(s.id);
     if (kind === "test" && v) return `${L.variant} ${v}`;
     const byId: Record<string, string> = {
-      passport: kind === "map" ? L2.subjectPassport : L2.lessonPassport,
-      goal: L.goalTitle,
-      stages: L2.lessonMap,
-      homework: L2.homework,
+      passport: kind === "map" ? L.subjectPassport : L.lessonPassport,
+      goal: L.goal,
+      stages: L.stages,
+      homework: L.homework,
       assessment: L.assessment,
-      intro: L2.intro,
-      terms: L2.terms,
-      rubric: L2.rubric,
-      year: L2.yearPlan,
+      intro: L.intro,
+      terms: L.terms,
+      rubric: L.rubric,
+      year: L.yearPlan,
       instructions: L.instructions,
       key: L.answersKey,
       criteria: L.criteria,
@@ -881,19 +838,14 @@ export function planTeacher(doc: AcademicDoc): TeacherPlan {
   /**
    * YANGI BETDAN: test variantlari, javoblar kaliti va OMR varag'i.
    * Boshqa vositalarda majburiy uzilish YO'Q — dars ishlanmasi 1–2 bet,
-   * har bo'limni betga chiqarish qog'ozni behuda sarflardi.
+   * har bo'limni betga chiqarish qog'ozni behuda sarflardi (keys
+   * rubrikasi ham alohida bet TALAB QILMAYDI — WP-A shartnomasi).
    */
   const breaksAt = (id: string): boolean => kind === "test" && (Boolean(variantIdOf(id)) || id === "key" || id === "omr");
 
-  /*
-   * `drawn` — HUJJAT jadvallari (`doc.tables`) bo'yicha; modeldan
-   * qurilganlari bu yerga kirmaydi. `Set<DocTable>` ATAYIN: eski
-   * hujjatlarda `id` yo'q va indeks bo'yicha kalit yasash kirish
-   * hujjatini o'zgartirishni talab qilardi (`planTeacher` sof funksiya).
-   */
   const drawn = new Set<DocTable>();
   const anchored = new Map<string, DocTable[]>();
-  for (const t of doc.tables ?? []) {
+  for (const t of docTables) {
     if (t.anchor) anchored.set(t.anchor, [...(anchored.get(t.anchor) ?? []), t]);
   }
 
@@ -905,24 +857,25 @@ export function planTeacher(doc: AcademicDoc): TeacherPlan {
       body.push({ k: "h1", text: heading, sectionId: s.id, path: `${path}.title`, pageBreak: breaksAt(s.id) });
     }
     pushBlocks(s.blocks, path);
-    const covered = attach(s.id);
-    // Model shu bo'limni qoplagan bo'lsa langarlangan jadval TAKRORLANMAYDI.
-    for (const t of anchored.get(s.id) ?? []) {
-      if (covered) continue;
-      pushTable(t, `tables.${(doc.tables ?? []).indexOf(t)}`);
+    const own = anchored.get(s.id) ?? [];
+    for (const t of own) {
+      if (drawn.has(t)) continue;
+      pushDocTable(t);
       drawn.add(t);
     }
+    attach(s.id, s.blocks.length > 0, own.length > 0);
   });
 
   /*
    * Bo'limga bog'lanmagan (yoki mavjud bo'lmagan bo'limga langarlangan)
    * jadval YO'QOLMASIN — eski hujjatlardagi xatti-harakat.
    */
-  (doc.tables ?? []).forEach((t, i) => {
-    if (drawn.has(t) || tables.includes(t)) return;
-    if (t.anchor && doc.sections.some((s) => s.id === t.anchor)) return;
-    pushTable(t, `tables.${i}`);
-  });
+  for (const t of docTables) {
+    if (drawn.has(t)) continue;
+    if (t.anchor && doc.sections.some((s) => s.id === t.anchor)) continue;
+    pushDocTable(t);
+    drawn.add(t);
+  }
 
   return {
     model,
@@ -936,6 +889,7 @@ export function planTeacher(doc: AcademicDoc): TeacherPlan {
     pageBreaks,
     landscape: TEACHER_LANDSCAPE[kind],
     numbers,
+    tablePaths,
     page: { marginsCm: TEACHER_MARGINS_CM[kind], ...TEACHER_TYPE[kind] },
     headingAlign: "left",
     legacy,

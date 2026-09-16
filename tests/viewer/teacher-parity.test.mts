@@ -120,9 +120,10 @@ test("jadval ustunlari va tartibi: raqam → sarlavha → ustun nomlari → qato
   const t = htmlTexts(viewerHtml(sampleTeacherDoc("map")));
   const i = t.indexOf("1-jadval");
   assert.ok(i >= 0, "jadval raqami ko'ruvchida yo'q");
-  assert.deepEqual(t.slice(i + 1, i + 7), ["Hafta", "Soat", "Mavzu", "Metod", "Ta’minot", "Nazorat"], `ustun nomlari: ${t.slice(i, i + 8).join(" | ")}`);
-  // Birinchi qator ustun nomlaridan keyin.
-  assert.equal(t[i + 7], "1", "birinchi hafta raqami");
+  // Raqamdan keyin — jadval NOMI, keyin ustun nomlari, keyin qatorlar.
+  assert.equal(t[i + 1], "I chorak — O‘quv yili bo‘yicha taqsimot", `jadval nomi: ${t.slice(i, i + 3).join(" | ")}`);
+  assert.deepEqual(t.slice(i + 2, i + 8), ["Hafta", "Soat", "Mavzu", "Metod", "Kutilgan natija", "Nazorat"], `ustun nomlari: ${t.slice(i, i + 9).join(" | ")}`);
+  assert.equal(t[i + 8], "1", "birinchi hafta raqami");
 });
 
 test("kalit jadvali ustunlari: har variant o'z ustuni, ball/Bloom/qiyinlik", () => {

@@ -73,20 +73,45 @@ test("`teacherDateText` ISO sanani o'giradi, boshqa shaklni tegmaydi", () => {
 
 /* ══════════════════════════ dars ishlanmasi ══════════════════════════ */
 
-test("dars ishlanmasi: maqsad uch qismli, bosqichlar nasri va VAQT JADVALI", () => {
+test("dars ishlanmasi: dvigatel nasri + VAQT JADVALI (maket takrorlamaydi)", () => {
   const doc = sampleTeacherDoc("lesson");
   const plan = planTeacher(doc);
-  const kvLabels = plan.body.filter((b) => b.k === "kv").map((b) => (b.k === "kv" ? b.label : ""));
-  for (const l of ["Ta’limiy maqsad:", "Tarbiyaviy maqsad:", "Rivojlantiruvchi maqsad:"]) {
-    assert.ok(kvLabels.includes(l), `«${l}» bo'lishi kerak`);
+  const ps = texts(plan.body, "p");
+  for (const l of ["Ta’limiy", "Tarbiyaviy", "Rivojlantiruvchi"]) {
+    assert.ok(ps.some((t) => t.startsWith(l)), `«${l}» maqsad qatori bo'lishi kerak`);
   }
   const t = tablesOf(plan);
   assert.equal(t.length, 1, "dars ishlanmasida bitta jadval — vaqt taqsimoti");
   assert.deepEqual(t[0].table.headers, ["Bosqich", "Daqiqa", "Kutilgan natija"]);
   const sum = t[0].table.rows.reduce((a, r) => a + Number(r[1]), 0);
   assert.equal(sum, doc.teacher!.lesson!.durationMin, "daqiqalar yig'indisi dars davomiyligiga teng");
-  // Har bosqich nasri: o'qituvchi va o'quvchi faoliyati alohida.
-  assert.ok(kvLabels.includes("O‘qituvchi:") && kvLabels.includes("O‘quvchi:"), "bosqichda ikki ustunli faoliyat");
+  /*
+   * Bosqich nasri BIR MARTA chiziladi: dvigatel uni `stages` bloklariga
+   * yozgan, shuning uchun maket uni modeldan QAYTA qurmaydi (aks holda
+   * har bosqich hujjatda ikki marta chiqardi).
+   */
+  assert.equal(plan.body.filter((b) => b.k === "kv").length, 0, "modeldan takroriy bandlar qo'shildi");
+  assert.equal(ps.filter((x) => x === doc.teacher!.lesson!.stages[0].teacher).length, 1, "bosqich matni ikki marta chizildi");
+  // Hujjat jadvali — hisobot/sayqal nishoni bilan bog'langan (WP-D).
+  assert.equal(t[0].path, "table:0");
+  assert.equal(plan.tablePaths[t[0].tableId], "table:0");
+});
+
+test("bo'limi BO'SH hujjatda maket MODELDAN quradi (zaxira yo'l)", () => {
+  /*
+   * Dvigatel matn yozmagan holat (yoki vosita hali yo'q — test WP-B
+   * gacha): `planTeacher` maqsad/bosqich/jadvalni O'ZI quradi. Aks
+   * holda bo'lim sarlavhalari ostida bo'sh joy qolardi.
+   */
+  const doc = sampleTeacherDoc("lesson");
+  doc.sections = doc.sections.map((s) => ({ ...s, blocks: [] }));
+  doc.tables = [];
+  const plan = planTeacher(doc);
+  const kv = plan.body.filter((b) => b.k === "kv").map((b) => (b.k === "kv" ? b.label : ""));
+  assert.ok(kv.includes("Ta’limiy:"), `maqsad zaxiradan chizilmadi: ${kv.join(" | ")}`);
+  assert.ok(kv.includes("O‘qituvchi:") && kv.includes("O‘quvchi:"), "bosqich faoliyati zaxiradan chizilmadi");
+  assert.equal(tablesOf(plan).length, 1, "vaqt jadvali zaxiradan qurilishi kerak");
+  assert.equal(tablesOf(plan)[0].path, "teacher.lesson.stages", "zaxira jadval MODEL yo'lini oladi");
 });
 
 test("dars ishlanmasi PORTRET (albom faqat xaritada)", () => {
@@ -128,25 +153,38 @@ test("glossariy: atamalar ALIFBO tartibida, har biri sarlavha + ta'rif", () => {
   assert.equal(tablesOf(plan).length, 0, "oddiy glossariyda jadval yo'q (takror nusxa bo'lardi)");
 });
 
-test("glossariy `uch-tilli` turda ro'yxat o'rniga 4 ustunli JADVAL", () => {
+test("glossariy `uch-tilli`: atamalar RO'YXATI + «Atama | Ruscha | Inglizcha» jadvali", () => {
   const plan = planTeacher(sampleTeacherDoc("glossary", undefined, { type: "uch-tilli" }));
   const t = tablesOf(plan);
   assert.equal(t.length, 1);
-  assert.deepEqual(t[0].table.headers, ["Atama", "Ta’rif", "Ruscha", "Inglizcha"]);
-  assert.equal(texts(plan.body, "h3").length, 0, "jadval turida atama sarlavhalari takrorlanmaydi");
+  // Ta'rif jadvalda TAKRORLANMAYDI — u yuqoridagi ro'yxatda (AUDIT-6 B5).
+  assert.deepEqual(t[0].table.headers, ["Atama", "Ruscha", "Inglizcha"]);
+  assert.ok(texts(plan.body, "h3").length >= 8, "atamalar ro'yxati jadval bilan almashtirildi");
+  assert.ok(texts(plan.body, "p").some((x) => x.startsWith("Yashil plastidalarda")), "ta'rif yo'qoldi");
+});
+
+test("glossariy `includeExample: false` — misol qatori chizilmaydi (zaxira yo'l)", () => {
+  const doc = sampleTeacherDoc("glossary");
+  doc.sections = doc.sections.map((s) => (s.id === "terms" ? { ...s, blocks: [] } : s));
+  doc.teacher!.glossary!.includeExample = false;
+  assert.equal(planTeacher(doc).body.filter((b) => b.k === "kv").length, 0, "misol so'ralmagan bo'lsa chizilmaydi");
+  doc.teacher!.glossary!.includeExample = true;
+  assert.ok(planTeacher(doc).body.some((b) => b.k === "kv"), "misol so'ralganda chiziladi");
 });
 
 /* ══════════════════════════ keys ══════════════════════════ */
 
-test("keys: har vaziyat — bayon, topshiriqlar, kalit, rubrika va JAMI ball", () => {
+test("keys: vaziyatlar + ALOHIDA rubrika bo'limi (WP-A shartnomasi)", () => {
   const plan = planTeacher(sampleTeacherDoc("keys"));
+  const ids = plan.body.filter((b) => b.k === "h1").map((b) => (b.k === "h1" ? b.sectionId : ""));
+  assert.deepEqual(ids, ["intro", "case1", "case2", "case3", "rubric"], `bo'limlar tartibi: ${ids.join(" | ")}`);
   const h3 = texts(plan.body, "h3");
   assert.equal(h3.filter((t) => t === "Topshiriqlar").length, 3);
   assert.equal(h3.filter((t) => t === "Namunaviy kalit").length, 3);
-  assert.equal(h3.filter((t) => t === "Baholash mezonlari").length, 3);
-  const totals = plan.body.filter((b) => b.k === "kv" && b.label === "Jami");
-  assert.equal(totals.length, 3, "har keys oxirida jami ball qatori");
-  assert.ok(totals.every((b) => b.k === "kv" && b.text.startsWith("10")), "rubrika yig'indisi 10 ball");
+  // Rubrika alohida BETNI talab qilmaydi (qisqa ro'yxat).
+  assert.deepEqual(plan.pageBreaks, [], "keysda majburiy sahifa uzilishi bo'lmasligi kerak");
+  assert.ok(texts(plan.body, "li").some((x) => x.includes("Sababni to‘g‘ri aniqlash — 4 ball")), "rubrika mezoni yo'qoldi");
+  assert.equal(texts(plan.body, "p").filter((x) => /^Jami:\s*10\b/.test(x)).length, 3, "har keys rubrikasi 10 ball bilan yakunlanadi");
 });
 
 /* ══════════════════════════ test ══════════════════════════ */
@@ -193,12 +231,19 @@ test("test `bsb` turida «Tasdiqlayman» va MEZON jadvali qo'shiladi", () => {
 
 /* ══════════════════════════ raqamlash ══════════════════════════ */
 
-test("jadval raqamlari ketma-ket va `numbers` da qayd etiladi", () => {
+test("jadval raqamlari ketma-ket; `numbers` va `tablePaths` WP-D uchun to'ldiriladi", () => {
   const plan = planTeacher(sampleTeacherDoc("map"));
   const t = tablesOf(plan);
   assert.deepEqual(t.map((x) => x.number), ["1", "2", "3", "4"]);
   assert.deepEqual(t.map((x) => x.numberLine), ["1-jadval", "2-jadval", "3-jadval", "4-jadval"]);
-  assert.deepEqual(plan.numbers.tables, { q1: "1", q2: "2", q3: "3", q4: "4" });
+  /*
+   * Hujjat jadvalining yo'li — hisobot (`review.ts tableTarget`) va
+   * sayqal (`polish.ts`) ishlatadigan `table:<n>` nishoni. Tahrir
+   * uchinchi sintaksis o'ylab topmasligi kerak.
+   */
+  assert.deepEqual(t.map((x) => x.path), ["table:0", "table:1", "table:2", "table:3"]);
+  assert.deepEqual(Object.values(plan.numbers.tables).sort(), ["1", "2", "3", "4"]);
+  assert.equal(Object.keys(plan.tablePaths).length, 4);
 });
 
 /* ══════════════════════════ eski hujjatlar ══════════════════════════ */

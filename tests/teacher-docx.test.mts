@@ -193,7 +193,7 @@ test("jadval: raqam TEPA O'NGDA `keepNext` bilan, `tblGrid` haqiqiy kenglikda, k
 
 test("dars ishlanmasi: vaqt jadvali bosqichlar NASRIDAN KEYIN, uyga vazifadan oldin", async () => {
   const { xml } = await xmlOf(sampleTeacherDoc("lesson"));
-  const stages = posOf(xml, "Darsning texnologik xaritasi");
+  const stages = posOf(xml, "Dars bosqichlari");
   const tableCap = posOf(xml, "Vaqt taqsimoti");
   const homework = posOf(xml, "Uyga vazifa");
   assert.ok(stages < tableCap, "vaqt jadvali bosqichlardan oldin chizilgan");
