@@ -407,3 +407,165 @@ avvalgidek «sarlavha + bloklar + langarlangan jadval» bo'lib chiqadi.
 5. **`teacher/lesson.ts` da metod yorlig'i** — bosqich metodikasi
    «Bosqich: Suhbat» bo'lib chiqadi (`L.stage` = «Bosqich»). Ko'z
    tekshiruvida noto'g'ri o'qiladi; yorliq WP-A egaligida.
+
+### WP-D — tahrir + server (op tili, adapter, sayqal, aktivlar, ko'ruvchi), 2026-09-16
+
+**Yetkazildi:** `lib/generation/teacher/edit.ts` (yangi), `polish.ts`
+(`apply` → `applyTeacherOps`, glossariy uchun tuzilmali qayta yozish),
+`prompts.ts` (`method` yorlig'i, `glossaryRewritePrompt`), `guard.ts`
+(`glossaryTermBlocks`/`glossaryTriTable`), `glossary.ts`, `lesson.ts`,
+`samples.ts`, `layout.ts` (kichik bandlar), `test/engine.ts`;
+`lib/server/{edit-adapters,doc-polish,article-rewrite,assets,preview}.ts`;
+`components/files/{useTeacherEdit.ts,ResultView.tsx}`,
+`components/viewers/{ArticleEditor,WordViewer,ArtifactViewer}.tsx`.
+
+#### `TeacherOp` shartnomasi
+
+`ArticleOp` ning QISMI (`refRemove`/`abstract`/`highlights` yo'q):
+`text` · `heading` · `cell` · `caption` · `blockRemove` · `blockInsert`
+· `setSection` · `set` · `review` (oxirgisini FAQAT server yozadi —
+`parseTeacherOps` uni rad etadi).
+
+Yo'llar `planTeacher` bilan bitta manbadan:
+
+| nishon | yo'l | qayerga yoziladi |
+|---|---|---|
+| nasr bloki | `sections.<i>.blocks.<j>` | blok + (xarita bo'lsa) model |
+| hujjat jadvali | `table:<n>` (`review.ts tableTarget`) | katak + model |
+| model bandi | `teacher.<kind>.<...>` | model |
+| shapkadagi mavzu | `meta.topic` | `doc.meta` + pasport takrori |
+
+**Reja DARVOZASI:** har op yo'li `planTeacher` bergan yo'llar to'plami
+bilan solishtiriladi — ekranda ko'rinmagan bandni tahrirlab bo'lmaydi.
+Bu «`teacherFlow` band id lari `plan.body` bilan bir-bir» kafolatining
+ikkinchi yarmi (birinchisi — `teacherEditTargets`, u ham AYNI rejani
+yuradi).
+
+**`text` opi FAQAT satrli maydonni o'zgartiradi.** Rejada ko'rinadigan,
+lekin son/sanov bo'lgan maydonlar (`school.grade`, `lesson.durationMin`,
+`map.weeklyHours`, `test.scoring.total`, `bloom`, `difficulty`) rad
+etiladi — ular formada (WP-E). Sabab: hisobot arifmetikasi (`minutesSum`,
+`scoreSum`, `variantParity`) shu sonlarga tayanadi.
+
+#### model ⇄ sections izchilligi (WP-D ning asosiy ishi)
+
+Dvigatel nasrni ham, modelni ham yozadi; hisobot/prompt/«Tuzatish» esa
+MODELDAN o'qiydi. Uch joyda sinxron ushlanadi:
+
+1. **nasr → model** (`teacherMirrors`): blok indeksidan model yo'liga
+   xarita, dvigatel yozgan TARTIB bo'yicha qurilgan (matn tahlil
+   qilinmaydi). Qamrov: lesson (`passport`/`goal`/`stages`/`homework`/
+   `assessment`), glossary (`terms`), keys (`caseN`/`rubric`), test
+   (`instructions`/`variant-X`/`key`). Shakl mos kelmasa o'sha bo'lim
+   xaritasi BUTUNLAY tashlanadi — sinxronni yo'qotish noto'g'ri
+   maydonga yozishdan xavfsizroq.
+2. **jadval katagi → model**: faqat TAHRIRLANGAN katak. Butun jadvalni
+   qayta hisoblash mumkin emas edi — dars jadvali modelni `clip(…, 44)`
+   bilan kesib saqlaydi.
+3. **shapka → pasport takrori**: `isHeadRecap` paragrafni faqat aynan
+   mos kelganda tashlaydi, ya'ni shapka maydoni o'zgargach eski takror
+   ekranda DUBLIKAT bo'lib chiqardi.
+
+`setSection` (sayqal yo'li) modelli bo'limda ham izchil: glossariyda
+atamalar bloklardan QAYTA o'qiladi (uch tilli jadval ham shu
+ro'yxatdan, `ru`/`en` eski modeldan atama nomi bo'yicha ko'chadi),
+boshqa modelli bo'limlarda tuzilma buzilgan qayta yozish 422 bilan rad
+etiladi va hujjat O'ZGARMAY qoladi.
+
+#### Server
+
+- `teacherAdapter` — BESHALA vosita bitta adapterda (`TEACHER_TOOL_LIST`
+  reyestridan). Eski hujjat (`doc.teacher` yo'q) 409 `legacy`:
+  `legacyTeacherModel` modelni TAXMIN qiladi, ya'ni model yo'llari
+  kafolatlanmaydi.
+- `POLISHERS.teacher` — «Hammasini tuzatish». Sayqal tili
+  (`setSection`/`setTable`) adapter tiliga `teacherOpsFromPolish` bilan
+  o'giriladi (insho `toOps` i naqshi).
+- `rewriteTeacher` (`article-rewrite.ts`) — bandma-band «Tuzatish»:
+  nishon bo'lim id yoki `table:<n>`, hisobot qoidalar bilan qayta
+  hisoblanadi, baholovchi ballari avvalgisidan ko'chadi, kredit
+  yechilmaydi.
+- `assets.ts` — `doc.teacher.figures` (OMR PNG) aktivga; usiz
+  `doc_json` da `data:` qolib, tahrirdan keyingi rebuild blankani
+  yo'qotardi.
+- `preview.ts` — o'qituvchi eskizi (hujjat nomi + mavzu + fan + birinchi
+  band). Generik ajratgich pasport TAKRORINI olardi va beshta karta bir
+  xil ko'rinardi.
+
+#### Ko'ruvchi
+
+`useTeacherEdit` (`useWorkEdit` naqshi) + `WordViewer` uchinchi hook +
+`teacherEditTargets(plan, items)`. Nishon REJADAN olinadi; model yo'li
+nishon bo'ladi FAQAT satrli maydonda, yorliq `h3` si va matni bir xil
+yo'lga ega bo'lsa («Javob kaliti» sarlavhasi va yechim matni) OXIRGISI
+qoladi. `ResultView` hisobotni `doc.teacher.review` dan ham o'qiydi;
+`hrefBase` `/uz/${gen.type}` allaqachon o'qituvchi vosita id sini beradi.
+
+#### WP-C ochiq bandlari — yopildi
+
+1. **OMR PNG** — `planTeacher` figure bandiga `figure` payload'i
+   (`model.figures`); `drawTeacher` va `teacherFlow` uni allaqachon
+   o'qiydi, ya'ni blanka endi chiziladi.
+2. **Test bo'lim tartibi** — OMR KALITDAN OLDIN (o'quvchi qismi birga):
+   `instructions · variantX · omr · key · criteria`. `test/engine.ts`
+   ALLAQACHON shunday yozardi; `TEACHER_SECTION_IDS` va `samples.ts`
+   esa `omr` ni oxirida ko'rsatib, hech qachon yaratilmaydigan tartibni
+   qulflab qo'ygan edi (shuning uchun `teacher-layout`/`teacher-docx`
+   dagi uzilish kutilmalari ham yangilandi).
+3. **`match` savoli** — `options` chap+o'ng ro'yxat sifatida o'qilishi
+   `layout.ts` da aniq yozilgan (ikki ustunli jadval); shartnoma
+   o'zgarmadi.
+5. **«Bosqich: Suhbat» → «Metod:»** — yorliq `teacherLabels.method`
+   (`prompts.ts`, yagona manba: maket ham shuni o'qiydi), `L.stage`
+   emas. `lesson.ts` va `samples.ts` tuzatildi.
+
+(4-band — `work-wiring` testi — WP-D egaligida emas, tegilmadi.)
+
+#### Jonli/ko'z tekshiruvidan kelgan tuzatishlar
+
+- **Glossariy sayqal korruptsiyasi (jonli):** `terms` bo'limi nasr
+  sifatida qayta yozilganda `blocksFromLlm` `h3` sarlavhalarni `p` ga
+  aylantirib, 20 atamadan 18 tasining NOMI yo'qolgan; model esa
+  o'zgarmagani uchun hisobot yolg'on yashil ko'rsatardi. Ikki tomondan
+  yopildi: sayqal endi MODEL shaklini so'raydi
+  (`glossaryRewritePrompt`, bloklarni `glossaryTermBlocks` yig'adi,
+  atama soni o'zgarsa 422), `setSection` esa modelga izchil yozadi yoki
+  rad etadi. Sayqal op lari BITTALAB qo'llanadi — rad etilgan bo'lim
+  o'zgarmay qoladi va qolgan tuzatishlar yo'qolmaydi (tahrir PATCH i
+  avvalgidek ATOMAR).
+- **TEST 1-bet:** «F.I.Sh. ___ Sinf ___ …» qatori IKKI marta chizilardi
+  (shapka + ko'rsatma bo'limi) — dvigatel endi yozmaydi, shapka yagona
+  manba; eski hujjatlar uchun `planTeacher` ham tashlaydi.
+- **TEST sahifa uzilishi:** birinchi variant ko'rsatma bilan BIR betda
+  (aks holda 1-bet deyarli bo'sh qolardi); uzilish faqat variantlar
+  ORASIDA, OMR va kalit oldida.
+- **XARITA shapkasi:** mavzu fanning aynan o'zi bo'lsa «Mavzu» qatori
+  chizilmaydi («Fan: Biologiya» + «Mavzu: Biologiya» takrori).
+
+#### Testlar va mutatsiyalar
+
+`teacher-edit` 29 · `teacher-commit` 11 · `doc-polish-route` 7 ·
+`ui/teacher-viewer-edit` 9 · `teacher-polish` +2 · `teacher-layout` +4
+(reja: 12 / 6 / 4 / 8).
+
+Mutatsiya — 10 ta, har biri qizardi: nasr→model sinxroni (4 test);
+ikkala `legacy` darvozasi (bittasini olib tashlash YETMAYDI — ikkinchisi
+to'sadi); jadval katagi→model (3 test); `parse` op chegarasi; reja
+darvozasi (`planPaths`); shapka→pasport takrori; `setSection` model
+sinxroni (2 test); glossariy blok tekshiruvi; glossariy tuzilmali yo'li;
+`teacherAdapter.tools` beshtadan bittaga.
+
+**Ochiq savollar (WP-E/WP-F ga):**
+
+1. `teacher.school.grade` / `durationMin` / `weeklyHours` / `timeMin`
+   tahrirda RAD etiladi (son). Forma ularni qayta tahrirlash imkonini
+   berishi kerakmi, yoki ko'ruvchida raqamli maydon ochilsinmi —
+   mahsulot qarori.
+2. Test `variant-X` bo'limida savol matni ASL indeksga yoziladi, ya'ni
+   B variantidagi tahrir A variantida ham ko'rinadi (bitta savol
+   bazasi — R3 §3.4 qarori). Bu kutilgan xatti-harakat, lekin
+   ko'ruvchida ogohlantirish kerak bo'lishi mumkin.
+3. `keys` va `test` prose bo'limlarida `blockRemove` model ro'yxatini
+   QISQARTIRMAYDI (faqat xaritani buzadi va keyingi sinxronni
+   o'chiradi). Model elementini o'chirish opi kerakmi — hozircha
+   forma orqali.
