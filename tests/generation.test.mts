@@ -1435,3 +1435,102 @@ test("titul yorliqlari idempotent: fakultet/kurs/guruh qo'shimchasi takrorlanmay
   assert.equal(en.group("Group 301"), "Group 301");
   assert.equal(en.course("Year 3"), "Year 3");
 });
+
+/* ────────────────── 2-dastur: o'yinlar + infografika (AUDIT-21 R0) ────────────────── */
+
+/**
+ * R0 da UCHALA vosita quvurga ulangan, dvigatellar esa hali STUB
+ * (`games/engine.ts`, `infographic/engine.ts` — `null`). Bu testlar
+ * ULANISHNI qulflaydi: byudjet hajmdan hisoblanadi, dispatch eski
+ * yozuvchilarga TUSHMAYDI, `null` esa mavjud «AI javob bermadi» xulqini
+ * beradi (yangi, keyin o'chiriladigan xato matni yo'q).
+ *
+ * Mutatsiyalar (har biri qizardi):
+ *   1. `write-llm.ts` dagi `GAME_TOOLS` shoxi olib tashlandi — krossvord
+ *      `WRITER`/`lesson-plan` yo'liga tushib, REFERAT matni qaytardi;
+ *   2. `budgetFor` dagi o'yin shoxi olib tashlandi — 20 so'zli krossvord
+ *      ham, 5 so'zli ham `MIN_BUDGET_MS` oldi;
+ *   3. `buildArtifact` dagi infografika shoxi olib tashlandi — PNG
+ *      vositasi umumiy DOCX yo'liga tushib, hajm darvozasiga urildi.
+ */
+
+test("o'yin byudjeti element soniga ergashadi; infografika blok soniga", async () => {
+  const { budgetFor } = await import("../lib/generation/budget.ts");
+  const { gameBudgetMs, infographicBudgetMs, MIN_BUDGET_MS } = await import("../lib/generation/budget.ts");
+  const cap = 660_000;
+
+  // 20 so'z ≈ 120 s (bitta LLM chaqiruvi + to'r algoritmi + hisobot).
+  const words20 = gameBudgetMs("crossword", 20);
+  assert.ok(words20 >= 110_000 && words20 <= 130_000, `20 so'z: ${words20} ms`);
+  assert.ok(gameBudgetMs("crossword", 20) > gameBudgetMs("crossword", 5), "MUTATSIYA: so'z soni byudjetga ta'sir qilmadi");
+  assert.ok(gameBudgetMs("flashcards", 20) > gameBudgetMs("flashcards", 5));
+  // Buzuq kirish byudjetni nolga tushirmaydi.
+  assert.ok(gameBudgetMs("crossword", Number.NaN) > 0);
+  assert.ok(gameBudgetMs("flashcards", -5) > 0);
+
+  // 8 blokli plakat ≈ 150 s (SVG → sharp 2480×3508 px).
+  const big = infographicBudgetMs(8);
+  assert.ok(big >= 140_000 && big <= 160_000, `8 blok: ${big} ms`);
+  assert.ok(infographicBudgetMs(8) > infographicBudgetMs(3));
+  assert.ok(infographicBudgetMs(Number.NaN) > 0);
+
+  // Formadan: `wordCount`/`cardCount`/`blockCount` byudjetga BORADI.
+  const cw = TOOL_BY_ID.crossword;
+  assert.ok(budgetFor(cw, { wordCount: 20 }, cap) > budgetFor(cw, { wordCount: 5 }, cap), "MUTATSIYA: forma qiymati byudjetga bormadi");
+  const fc = TOOL_BY_ID.flashcards;
+  assert.ok(budgetFor(fc, { cardCount: 20 }, cap) > budgetFor(fc, { cardCount: 5 }, cap));
+  const ig = TOOL_BY_ID.infographic;
+  assert.ok(budgetFor(ig, { blockCount: 8 }, cap) > budgetFor(ig, { blockCount: 3 }, cap));
+  // Tur chegarasi byudjetda ham qo'llanadi: `process` da 8 blok yo'q.
+  assert.equal(budgetFor(ig, { infographicType: "process", blockCount: 8 }, cap), budgetFor(ig, { infographicType: "process", blockCount: 6 }, cap));
+  // Hech bir byudjet umumiy pastki chegaradan past emas.
+  for (const t of [cw, fc, ig]) assert.ok(budgetFor(t, {}, cap) >= MIN_BUDGET_MS, `${t.id}: byudjet MIN dan past`);
+});
+
+test("dispatch: o'yin vositalari eski yozuvchilarga TUSHMAYDI; stub `null` qaytaradi", async () => {
+  const { writeWithLlm } = await import("../lib/generation/write-llm.ts");
+  const { buildGameDoc } = await import("../lib/generation/games/engine.ts");
+
+  // R0 stubi — shartnoma `null` (WP-A/WP-B tanani to'ldiradi).
+  assert.equal(await buildGameDoc(extractMeta(TOOL_BY_ID.crossword, { topic: "Fotosintez" }), {}, { deadline: Date.now() + 1000 }), null);
+
+  for (const id of ["crossword", "flashcards"] as const) {
+    const meta = extractMeta(TOOL_BY_ID[id], { topic: "Fotosintez", language: "uz" });
+    const doc = await writeWithLlm(meta, { topic: "Fotosintez" }, Date.now() + 1000, {});
+    /*
+     * MUTATSIYA: shox bo'lmasa `WRITER`/`lesson-plan` yo'li ishga tushib
+     * BOSHQA hujjat (referat/dars rejasi) qaytarardi — foydalanuvchi
+     * krossvord o'rniga matn olardi.
+     */
+    assert.equal(doc, null, `${id}: dvigatel yo'q bo'lsa null qaytishi kerak`);
+  }
+});
+
+test("infografika `buildArtifact` da RASM yo'lidan o'tadi; stub xato bilan tugaydi", async () => {
+  const { buildArtifact, fileSuffix } = await import("../lib/generation/index.ts");
+  const { buildInfographicArtifact } = await import("../lib/generation/infographic/engine.ts");
+
+  assert.equal(await buildInfographicArtifact(TOOL_BY_ID.infographic, {}, { deadline: Date.now() + 1000 }), null);
+
+  /*
+   * Xato matni `rasm` vositasinikiga o'xshash: foydalanuvchi uchun bu
+   * «AI javob bermadi, kredit qaytadi» degani. «Dvigatel hali yo'q»
+   * kabi ichki xabar ATAYLAB yozilmagan.
+   */
+  await assert.rejects(
+    () => buildArtifact(TOOL_BY_ID.infographic, { topic: "Suv aylanishi" }, { deadline: Date.now() + 1000 }),
+    (e: Error) => {
+      assert.match(e.message, /Infografika yaratilmadi/);
+      assert.ok(!/dvigatel|stub|WP-C/i.test(e.message), `ichki xabar foydalanuvchiga chiqdi: ${e.message}`);
+      return true;
+    },
+  );
+
+  // Fayl nomi qo'shimchasi: o'qituvchi bitta mavzuda bir nechta material oladi.
+  assert.equal(fileSuffix("crossword"), "-krossvord");
+  assert.equal(fileSuffix("flashcards"), "-kartalar");
+  assert.equal(fileSuffix("infographic"), "-infografika");
+  const suffixes = ["lesson-plan", "texnologik-xarita", "glossary", "keys", "test", "crossword", "flashcards", "infographic"].map(fileSuffix);
+  assert.equal(new Set(suffixes).size, suffixes.length, "fayl nomi qo'shimchalari takrorlandi");
+  assert.equal(fileSuffix("essay"), "", "boshqa vositalarga qo'shimcha qo'shilmadi");
+});

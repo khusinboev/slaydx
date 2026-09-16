@@ -17,6 +17,19 @@ export type ViewerKind =
    * (saytda faylda yo'q birinchi bet), egasi qarori 12 buni yopdi.
    */
   | "teacher"
+  /**
+   * Bosma o'yinlar (AUDIT-21): krossvord va flesh kartalar — IKKALASI
+   * bitta ko'ruvchida (`WordViewer`, `gameFlow` — WP-A/WP-B). «Ko'rdim =
+   * oldim»: ular DOCX shakli (to'r rasmi + savol ro'yxatlari; A7 karta
+   * jadvali), ya'ni bitta maketdan (`games/layout.ts planGame`)
+   * chiziladi.
+   *
+   * Nega `academic` emas: o'yin hujjatida OQADIGAN matn yo'q — to'r
+   * rasmi sahifa uzilishlari bilan, kartalar esa qat'iy 2×4 panjara
+   * bilan chiziladi. Umumiy Word oqimi ularni oddiy paragraf deb
+   * sahifalab yuborardi.
+   */
+  | "game"
   | "translation"
   | "image";
 
@@ -34,9 +47,16 @@ export function viewerKind(id: ToolId): ViewerKind {
     case "test":
       // AUDIT-20: beshala o'qituvchi vositasi bitta ko'ruvchida.
       return "teacher";
+    case "crossword":
+    case "flashcards":
+      // AUDIT-21: ikkala bosma o'yin bitta ko'ruvchida (`planGame`).
+      return "game";
     case "translation":
       return "translation";
     case "image":
+    case "infographic":
+      // AUDIT-21: infografika — bir betlik PNG plakat, `rasm` bilan bir
+      // xil ko'ruvchi (`ImageViewer`, `packImages` qadoqlash naqshi).
       return "image";
     case "essay":
       return "essay";

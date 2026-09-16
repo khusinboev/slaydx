@@ -2,6 +2,10 @@ import { extractMeta } from "./meta";
 import { translationChars } from "../tools";
 import { teacherKindOf } from "./teacher/registry";
 import { TEACHER_LIMITS, type TeacherKind } from "./teacher/types";
+import { gameKindOf } from "./games/registry";
+import { GAME_LIMITS, normalizeGameCount, type GameKind } from "./games/types";
+import { normalizeBlockCountFor } from "./infographic/registry";
+import { INFOGRAPHIC_LIMITS } from "./infographic/types";
 import type { FormValues, ToolConfig, ToolId } from "../types";
 
 /**
@@ -178,6 +182,61 @@ function teacherSize(kind: TeacherKind, values: FormValues): number {
   return Math.min(TEACHER_LIMITS.questionsMax, num(values.count, 20));
 }
 
+/**
+ * O'YIN byudjeti (AUDIT-21 R0) — krossvord va flesh kartalar.
+ *
+ * Bu oilada BET ham, ko'p bosqichli yozish ham yo'q: LLM BITTA
+ * chaqiruvda so'z+savol yoki karta juftliklarini beradi, qolgani —
+ * DETERMINISTIK ish (to'r algoritmi, DOCX panjarasi), ya'ni modelga
+ * emas, protsessorga bog'liq. Shuning uchun o'qituvchi oilasidagi
+ * element boshiga 3 000 ms bu yerda ortiqcha.
+ *
+ * Hisob: bitta chaqiruv 20 so'z uchun ≈35 s (+ qayta urinish), to'r
+ * greedy+backtrack ≤20 s (`crossword/grid.ts`, R5 §3), hisobot +
+ * baholovchi ≈30 s, DOCX ≈5 s ⇒ 20 so'zda ~120 s. `base` turdan qat'i
+ * nazar bo'ladigan ish, `per` — element boshiga.
+ */
+const GAME_MS: Record<GameKind, { base: number; per: number }> = {
+  crossword: { base: 90_000, per: 1_500 },
+  flashcards: { base: 90_000, per: 1_500 },
+};
+
+/**
+ * @param kind O'yin oilasi (`gameKindOf`).
+ * @param n    Element soni: so'z yoki karta (5/10/15/20).
+ */
+export function gameBudgetMs(kind: GameKind, n: number): number {
+  const { base, per } = GAME_MS[kind];
+  const count = Math.max(1, Math.round(Number.isFinite(n) ? n : GAME_LIMITS.countDefault));
+  return base + Math.min(GAME_LIMITS.countMax, count) * per;
+}
+
+/**
+ * INFOGRAFIKA byudjeti (AUDIT-21 R0).
+ *
+ * O'yinlardan uzunroq: spetsifikatsiyadan keyin SVG maketi va `sharp`
+ * bilan A4/A3 @300 dpi PNG (2480×3508 px) chiziladi — bu o'nlab
+ * soniyalik CPU ishi, ustiga matn sig'ishini tekshirish (`noOverflow`)
+ * qayta yozdirishga olib kelishi mumkin. 8 blokda ~150 s.
+ */
+const INFOGRAPHIC_BASE_MS = 120_000;
+const INFOGRAPHIC_PER_BLOCK_MS = 4_000;
+
+/** @param blocks Blok soni (3–8) — `normalizeBlockCountFor` bilan bir qoidadan. */
+export function infographicBudgetMs(blocks: number): number {
+  const n = Number.isFinite(blocks) ? Math.round(blocks) : INFOGRAPHIC_LIMITS.blocksDefault;
+  const clamped = Math.min(INFOGRAPHIC_LIMITS.blocksMax, Math.max(INFOGRAPHIC_LIMITS.blocksMin, n));
+  return INFOGRAPHIC_BASE_MS + clamped * INFOGRAPHIC_PER_BLOCK_MS;
+}
+
+/**
+ * Formadan element sonini o'qiydi — byudjet va dvigatel BITTA qoidadan
+ * (`teacherSize` naqshi). Noto'g'ri/bo'sh qiymat standartga tushadi.
+ */
+function gameSize(kind: GameKind, values: FormValues): number {
+  return normalizeGameCount(kind === "crossword" ? values.wordCount : values.cardCount);
+}
+
 /** @param pages Paketning o'rtacha beti (`pagesMid("25-30")` → 28). */
 export function workBudgetMs(pages: number): number {
   const p = Math.max(1, Number.isFinite(pages) ? pages : 12);
@@ -197,6 +256,19 @@ export function budgetFor(tool: ToolConfig, values: FormValues, cap: number): nu
   const teacherKind = teacherKindOf(tool.id);
   if (want === undefined && teacherKind) {
     want = teacherBudgetMs(teacherKind, teacherSize(teacherKind, values));
+  }
+  /*
+   * O'yinlar (AUDIT-21): hajm — SO'Z yoki KARTA soni. Ular ham
+   * `extractMeta().targetPages` ga tushmaydi: krossvordda «bet»
+   * tushunchasi yo'q, to'r bitta betda turadi.
+   */
+  const gameKind = gameKindOf(tool.id);
+  if (want === undefined && gameKind) {
+    want = gameBudgetMs(gameKind, gameSize(gameKind, values));
+  }
+  // Infografika: hajm — BLOK soni (tur chegarasi bilan, forma qoidasi bilan bir xil).
+  if (want === undefined && tool.id === "infographic") {
+    want = infographicBudgetMs(normalizeBlockCountFor(values.infographicType, values.blockCount));
   }
   if (want === undefined && tool.id === "translation") {
     // Hajm `translationChars` dan — narx bilan BITTA manbadan, ya'ni

@@ -58,8 +58,15 @@ test("5 kind, har biri o'z vositasiga bog'langan; xarita ikki tomonlama", () => 
   assert.equal(teacherKindOf("coursework"), null);
   assert.equal(teacherKindOf("article"), null);
   assert.equal(teacherKindOf(""), null);
-  // Guruhdagi HAR vosita reyestrda bo'lsin (yangi vosita unutilmasin).
-  for (const t of TOOLS) if (t.group === "oqituvchi") assert.ok(teacherKindOf(t.id), `${t.id}: o'qituvchi vositasi reyestrda yo'q`);
+  /*
+   * `teacher/` DVIGATELIDAGI har vosita reyestrda bo'lsin (yangi vosita
+   * unutilmasin). Mezon — `custom: "teacher"`, guruh EMAS: AUDIT-21 dan
+   * boshlab «O'qituvchi vositalari» bo'limida boshqa dvigateldagi vosita
+   * ham bor (infografika — `infographic/engine.ts`, PNG plakat).
+   */
+  for (const t of TOOLS) if (t.custom === "teacher") assert.ok(teacherKindOf(t.id), `${t.id}: o'qituvchi vositasi reyestrda yo'q`);
+  // Infografika o'qituvchi bo'limida, lekin `teacher` oilasida EMAS.
+  assert.equal(teacherKindOf("infographic"), null, "infografika teacher dvigateliga tushib ketdi");
 });
 
 test("turlar ro'yxati hisobotlardan; standart — birinchi element", () => {

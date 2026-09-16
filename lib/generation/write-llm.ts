@@ -26,6 +26,8 @@ import { buildEssayDoc } from "./essay/engine";
 import { buildWorkDoc } from "./work/engine";
 import { buildTeacherDoc } from "./teacher/engine";
 import { TEACHER_TOOL_LIST } from "./teacher/types";
+import { buildGameDoc } from "./games/engine";
+import { GAME_TOOL_LIST } from "./games/types";
 import { thesisTypeId } from "../tools";
 import type { FormValues } from "../types";
 import type { AcademicDoc, Block, BuiltFile, DocMeta, DocSection } from "./types";
@@ -854,6 +856,8 @@ const WRITER = new Set(["referat", "coursework", "mustaqil-ish"]);
 const WORK_TOOLS = new Set(["referat", "coursework", "mustaqil-ish"]);
 /** O'qituvchi oilasi (AUDIT-20): dars rejasi, xarita, glossariy, keys, test. */
 const TEACHER_TOOLS = new Set<string>(TEACHER_TOOL_LIST);
+/** Bosma o'yinlar (AUDIT-21): krossvord, flesh kartalar — `games/` dvigateli. */
+const GAME_TOOLS = new Set<string>(GAME_TOOL_LIST);
 
 /**
  * Dvigatelga uzatiladigan qo'shimcha imkoniyatlar (Maqola 2): bosqich
@@ -946,6 +950,28 @@ export async function writeWithLlm(
       ...(extras.onCost ? { onCost: extras.onCost } : {}),
     });
     if (built) return built.doc;
+  }
+  /*
+   * Bosma o'yinlar (AUDIT-21): krossvord / flesh kartalar — `games/`
+   * dvigateli (LLM so'z+savol yoki karta juftliklarini beradi, to'r va
+   * varaqlarni dvigatelning O'ZI quradi).
+   *
+   * ESKI YO'L YO'Q (ikkalasi ham yangi xizmat): dvigatel `null`
+   * qaytarsa shu yerda ham `null` qaytadi va `buildArtifact` MAVJUD
+   * xulqni beradi — kalit bor bo'lsa «Matn yozilmadi — AI javob
+   * bermadi» (kredit qaytadi), kalitsiz dev muhitda shablon hujjat.
+   * Pastdagi `WRITER`/`lesson-plan` shoxlariga TUSHMASLIGI kerak: ular
+   * butunlay boshqa hujjat yozardi va foydalanuvchi krossvord o'rniga
+   * referat olardi.
+   */
+  if (GAME_TOOLS.has(meta.toolId)) {
+    const built = await buildGameDoc(meta, values as FormValues, {
+      deadline: deadline ?? Date.now() + 120_000,
+      ...(extras.onStage ? { onStage: extras.onStage } : {}),
+      ...(extras.source ? { source: extras.source } : {}),
+      ...(extras.onCost ? { onCost: extras.onCost } : {}),
+    });
+    return built ? built.doc : null;
   }
   if (WRITER.has(meta.toolId)) return writeWriterWithLlm(meta, deadline);
   if (meta.toolId === "lesson-plan") return writeLessonWithLlm(meta, deadline);

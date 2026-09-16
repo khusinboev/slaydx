@@ -1,4 +1,8 @@
-import type { FormValues, ToolConfig, ToolField, ToolId, UserProfile } from "./types";
+import type { FieldOption, FormValues, ToolConfig, ToolField, ToolGroup, ToolId, UserProfile } from "./types";
+import { gameTypesOf } from "./generation/games/registry";
+import { GAME_LIMITS } from "./generation/games/types";
+import { infographicTypes } from "./generation/infographic/registry";
+import { INFOGRAPHIC_LIMITS, INFOGRAPHIC_SIZES, PALETTES } from "./generation/infographic/types";
 import { PRO_SLIDE_DEFAULT, PRO_SLIDE_MAX, PRO_SLIDE_MIN, PRO_SLIDE_PER_SLIDE, clampInt, slidePrice } from "./generation/slide-params";
 import { SOURCE_LANGUAGES } from "./languages";
 import { isArticleTypeId } from "./generation/article/types-registry";
@@ -152,6 +156,83 @@ const TEACHER_FIELDS: ToolField[] = [
     legend: "Tuzuvchi (F.I.Sh)",
     placeholder: "Karimova Dilnoza",
   },
+];
+
+/* ────────────── O'yinlar va infografika maydonlari (AUDIT-21 R0) ────────────── */
+
+/**
+ * Chiplar REYESTRDAN quriladi — forma va dvigatel bitta manbadan.
+ *
+ * Ilgari har forma o'z ro'yxatini qo'lda yozardi va reyestr o'zgarganda
+ * ular jimgina ajralib ketardi (`teacherTypesOf` naqshi shu sababdan
+ * kiritilgan). Bu yerda ham: yangi krossvord turi qo'shilsa, chip
+ * O'ZIDAN paydo bo'ladi.
+ */
+const numberChips = (values: readonly number[], suffix: string): FieldOption[] =>
+  values.map((n) => ({ value: String(n), label: `${n} ${suffix}` }));
+
+const LANGUAGE_FIELD: ToolField = { kind: "language", name: "language", legend: "Til" };
+
+/**
+ * `FieldKind` da `toggle` bor, lekin `FieldBlock` (`components/forms/
+ * fields.tsx`) uni CHIZMAYDI — toggle deb e'lon qilingan maydon formada
+ * KO'RINMAY qolardi, ya'ni aynan «bezak maydon» bo'lardi (egasi
+ * qarori 14). Shuning uchun ha/yo'q tanlovi `chips` bilan beriladi;
+ * dvigatel (`games/input.ts`, WP-B) `ha|true|1|yes` ni rost deb o'qiydi,
+ * shunda zond `true`/`false` yuborganda ham xulq bir xil bo'ladi.
+ */
+const YES_NO: FieldOption[] = [
+  { value: "yoq", label: "Yo'q" },
+  { value: "ha", label: "Ha" },
+];
+
+const GAME_FIELDS: Record<"crossword" | "flashcards", ToolField[]> = {
+  crossword: [
+    {
+      kind: "chips",
+      name: "wordCount",
+      legend: "Nechta so'z?",
+      options: numberChips(GAME_LIMITS.counts, "so'z"),
+      hint: "To'rga sig'magan so'z tashlanadi va hisobotda ko'rsatiladi.",
+    },
+    {
+      kind: "chips",
+      name: "crosswordType",
+      legend: "Savol turi",
+      options: gameTypesOf("crossword").map((t) => ({ value: t.id, label: t.label.uz, hint: t.hint })),
+    },
+    LANGUAGE_FIELD,
+  ],
+  flashcards: [
+    { kind: "chips", name: "cardCount", legend: "Nechta karta?", options: numberChips(GAME_LIMITS.counts, "karta") },
+    {
+      kind: "chips",
+      name: "cardType",
+      legend: "Karta turi",
+      options: gameTypesOf("flashcards").map((t) => ({ value: t.id, label: t.label.uz, hint: t.hint })),
+    },
+    { kind: "chips", name: "includeExample", legend: "Misol qo'shilsinmi?", options: YES_NO, hint: "Orqa yuzga atamani ishlatgan bitta jumla qo'shiladi." },
+    LANGUAGE_FIELD,
+  ],
+};
+
+const INFOGRAPHIC_FIELDS: ToolField[] = [
+  {
+    kind: "chips",
+    name: "infographicType",
+    legend: "Plakat turi",
+    options: infographicTypes().map((t) => ({ value: t.id, label: t.label.uz, hint: t.hint })),
+  },
+  {
+    kind: "chips",
+    name: "blockCount",
+    legend: "Nechta blok?",
+    options: numberChips(INFOGRAPHIC_LIMITS.blockCounts, "blok"),
+    hint: "Tanlangan tur chegarasidan oshsa avtomatik kamaytiriladi.",
+  },
+  { kind: "chips", name: "palette", legend: "Rang palitrasi", options: PALETTES.map((p) => ({ value: p.id, label: p.label.uz })) },
+  { kind: "chips", name: "size", legend: "O'lcham", options: INFOGRAPHIC_SIZES.map((s) => ({ value: s, label: `${s} (portret)` })) },
+  LANGUAGE_FIELD,
 ];
 
 export const TOOLS: ToolConfig[] = [
@@ -555,6 +636,73 @@ export const TOOLS: ToolConfig[] = [
     basePrice: 3000,
     fields: [],
   },
+  /* ────────────── 2-dastur (AUDIT-21): bosma o'yinlar + infografika ────────────── */
+  {
+    id: "crossword",
+    slug: "crossword",
+    title: "Krossvord",
+    pageTitle: "Krossvord",
+    group: "oyinlar",
+    icon: "puzzle",
+    tc: "217 70 239",
+    description: "Mavzu yoki fayl asosida bosma krossvord — to'r, savollar va javoblar varag'i",
+    submitLabel: "Krossvord yaratish",
+    creatingLabel: "Krossvord tuzilmoqda...",
+    createdLabel: "krossvord tayyor!",
+    topicLegend: "Krossvord qaysi mavzu bo'yicha?",
+    topicPlaceholder: "Fotosintez jarayoni",
+    /*
+     * Fayl rejimi — raqobatchida ham bor (`crossword.md` §2): o'qituvchi
+     * darslik bobini yuklaydi va so'zlar SHU matndan olinadi. Worker
+     * `sourceForJob` `tool.modes` bo'lgan har vosita uchun manbani
+     * uzatadi, ya'ni qo'shimcha ulanish kerak emas.
+     */
+    modes: TOPIC_FILE_MODES,
+    extraOptional: true,
+    output: "docx",
+    // Tekis 2 000 (mahsulot egasi qarori 6): so'z soni narxga ta'sir qilmaydi.
+    basePrice: 2000,
+    fields: GAME_FIELDS.crossword,
+  },
+  {
+    id: "flashcards",
+    slug: "flashcards",
+    title: "Flesh kartalar",
+    pageTitle: "Flesh kartalar",
+    group: "oyinlar",
+    icon: "layers",
+    tc: "245 158 11",
+    description: "A7 o'lchamdagi bosma kartalar — old yuzda atama yoki savol, orqa yuzda javob",
+    submitLabel: "Kartalarni yaratish",
+    creatingLabel: "Kartalar tayyorlanmoqda...",
+    createdLabel: "kartalar tayyor!",
+    topicLegend: "Kartalar qaysi mavzu bo'yicha?",
+    topicPlaceholder: "Biologiya atamalari: hujayra",
+    extraOptional: true,
+    output: "docx",
+    basePrice: 2000,
+    fields: GAME_FIELDS.flashcards,
+  },
+  {
+    id: "infographic",
+    slug: "infografika",
+    title: "Infografika",
+    pageTitle: "Infografika",
+    group: "oqituvchi",
+    icon: "pie-chart",
+    tc: "6 182 212",
+    description: "Bir betlik ta'lim plakati — 7 tur, 6 palitra, A4/A3 PNG (300 dpi)",
+    submitLabel: "Infografika yaratish",
+    creatingLabel: "Plakat chizilmoqda...",
+    createdLabel: "infografika tayyor!",
+    topicLegend: "Plakat qaysi mavzu bo'yicha?",
+    topicPlaceholder: "Suv aylanishi",
+    extraOptional: true,
+    // Chiqish — RASM, hujjat emas: `viewerKind` → `image`, qadoqlash `packImages`.
+    output: "png",
+    basePrice: 2000,
+    fields: INFOGRAPHIC_FIELDS,
+  },
 ];
 
 /*
@@ -574,14 +722,47 @@ for (const tool of TOOLS) {
    * o'z shartnomasini `CUSTOM_REQUIRED` da e'lon qiladi (`teacher` da
    * ikkalasi MAJBURIY). Aks holda bir xil ikkita `university` maydoni
    * qo'shilib, `missingRequired` ro'yxatida yorliq ikki marta chiqardi.
-   * Shox `oyinlar`/`media` va kelgusi oddiy formali o'qituvchi
-   * vositalari (infografika, atestatsiya) uchun saqlanadi.
+   *
+   * AUDIT-21 R0: shart `output === "docx"` bilan ham cheklandi.
+   * Infografika — o'qituvchi bo'limida, lekin u HUJJAT emas, PLAKAT:
+   * titul sahifasi ham, «Tuzuvchi:» qatori ham yo'q, ya'ni muassasa va
+   * tuzuvchi maydonlari hech qayerga chiqmasdi — aynan «bezak maydon»
+   * bo'lardi (egasi qarori 14). Shox kelgusi DOCX li o'qituvchi
+   * vositalari (atestatsiya) uchun saqlanadi.
    */
-  if (tool.group === "oqituvchi" && !tool.custom) {
+  if (tool.group === "oqituvchi" && !tool.custom && tool.output === "docx") {
     const rest = tool.fields.filter((f) => f.extra);
     const main = tool.fields.filter((f) => !f.extra);
     tool.fields = [...main, ...TEACHER_FIELDS, ...rest];
   }
+}
+
+/**
+ * Bo'lim yorliqlari — YAGONA manba (AUDIT-21 R0).
+ *
+ * Ilgari ro'yxat `CreateGrid` va `Sidebar` da IKKI marta qo'lda
+ * yozilgan edi (`as const` massiv). Yangi bo'lim qo'shilganda ular
+ * ajralib ketishi muqarrar edi: bittasida «O'yinlar» paydo bo'lar,
+ * ikkinchisida vositalar hech qaysi ro'yxatga tushmay YO'QOLIB qolardi
+ * — foydalanuvchi uchun bu «vosita sotib olib bo'lmaydi» degani.
+ */
+export const TOOL_GROUPS: readonly { id: ToolGroup; label: string }[] = [
+  { id: "umumiy", label: "Umumiy vositalar" },
+  { id: "talaba", label: "Talaba ishlari" },
+  { id: "oqituvchi", label: "O'qituvchi vositalari" },
+  { id: "oyinlar", label: "O'yinlar" },
+  { id: "media", label: "Media" },
+];
+
+/**
+ * Chiziladigan bo'limlar — VOSITASI BOR lari.
+ *
+ * `media` (podkast, tabriknoma) AUDIT-22 da to'ladi; hozir u bo'sh va
+ * ko'rinmasligi kerak — bo'sh sarlavha foydalanuvchiga mavjud bo'lmagan
+ * xizmatni va'da qilardi.
+ */
+export function visibleToolGroups(): readonly { id: ToolGroup; label: string }[] {
+  return TOOL_GROUPS.filter((g) => TOOLS.some((t) => t.group === g.id));
 }
 
 export const TOOL_BY_SLUG = Object.fromEntries(TOOLS.map((t) => [t.slug, t])) as Record<

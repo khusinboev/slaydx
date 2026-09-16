@@ -12,6 +12,8 @@ import type { ArticleModel, ArticleTypeId, CiteStyle, PublicationProfileId } fro
 import type { EssayModel } from "./essay/types";
 import type { WorkModel } from "./work/types";
 import type { TeacherModel } from "./teacher/types";
+import type { GameModel } from "./games/types";
+import type { InfographicModel } from "./infographic/types";
 import type { ResumePaletteId, ResumeTemplateId } from "./resume/templates";
 
 export type GenImage = {
@@ -190,7 +192,30 @@ export type FigureSpec =
    * ga ATAYLAB kirmaydi — OMR ni dvigatel savol soniga qarab quradi,
    * LLM emas (`prisma` bilan bir xil qaror).
    */
-  | { kind: "omr"; count: number; optionCount: number; columns: number; variantIds: string[]; idBoxes: number; hasMulti: boolean };
+  | { kind: "omr"; count: number; optionCount: number; columns: number; variantIds: string[]; idBoxes: number; hasMulti: boolean }
+  /**
+   * TAYYOR SVG (AUDIT-21 R0) — `buildFigure` uni CHIZMAYDI, faqat
+   * `figurePng` bilan PNG ga o'giradi.
+   *
+   * Nega kerak: krossvord to'ri (`games/crossword/svg.ts`) va
+   * infografika plakati (`figures/infographic-svg.ts`) `layoutFigure`
+   * ning tugun/qirra modeliga umuman tushmaydi — birinchisi millimetrli
+   * katak panjarasi va raqamlar, ikkinchisi rangli ko'p zonali maket.
+   * `omr` uchun aynan shu sabab bilan alohida shox yozilgan edi; uchinchi
+   * marta takrorlash o'rniga umumiy «tayyor SVG» shoxi ochiladi va
+   * kelgusi chizuvchilar (saralash o'yini jadvali, sertifikat) uni qayta
+   * ishlatadi.
+   *
+   * `widthMm` — CHOP ETILADIGAN kenglik: 160 mm standarti bu yerda
+   * yaramaydi (A4 plakat 210 mm, krossvord to'ri 180 mm).
+   *
+   * MODEL o'zi tanlay olmaydi: `FIGURE_KINDS` va `SELECTABLE_FIGURE_KINDS`
+   * ga ATAYLAB kirmaydi (`prisma`/`omr` bilan bir xil qaror) — SVG ni
+   * dvigatel quradi, LLM emas. Fallback MATN ro'yxati ham YO'Q: chizilgan
+   * to'rni yoki plakatni matn bilan ifodalab bo'lmaydi, `sharp` yiqilsa
+   * rasm `url` siz qaytadi va maket uni o'tkazib yuboradi.
+   */
+  | { kind: "svg"; svg: string; widthMm: number };
 
 export type FigureAxis = { low: string; high: string; label?: string };
 export type TreeNode = { label: string; children?: TreeNode[] };
@@ -525,6 +550,22 @@ export type AcademicDoc = {
    * hujjatlarda yo'q — `legacyTeacherModel(doc)` bilan o'qiladi.
    */
   teacher?: TeacherModel;
+  /**
+   * O'yinlar (AUDIT-21): krossvord / flesh kartalar — so'zlar, to'r,
+   * savollar, kartalar va hisobot. Matn boshqa oiladagidek `sections`
+   * da qoladi (sarlavha, ko'rsatma, savol ro'yxatlari); to'r va javob
+   * varag'i `game.figures` dagi PNG lar orqali chiziladi, tartib esa
+   * `games/layout.ts planGame` (WP-A/WP-B) da.
+   */
+  game?: GameModel;
+  /**
+   * Infografika (AUDIT-21): bir betlik plakatning TO'LIQ
+   * spetsifikatsiyasi. Bu oilada `sections` MATNI yo'q — chiqish bitta
+   * PNG (`figures/infographic-svg.ts` → `figurePng` → `packImages`),
+   * ya'ni hujjatning butun mazmuni shu modelda turadi. Ko'ruvchi
+   * (`ImageViewer`) rasmni ko'rsatadi, hisobot paneli esa `review` ni.
+   */
+  infographic?: InfographicModel;
   images?: GenImage[];
   imagePrompt?: string;
   imageScene?: string;

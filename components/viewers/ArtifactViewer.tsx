@@ -63,6 +63,19 @@ export function ArtifactViewer({
        * (proplar berilmagani uchun tahrir jimgina o'chiq qolgandi).
        */
       return <WordViewer doc={doc} gen={detail} onGen={onDetail} onEditState={onEditState} />;
+    case "game":
+      /*
+       * Bosma o'yinlar (AUDIT-21 R0): krossvord va flesh kartalar umumiy
+       * Word ko'ruvchisida — `planGame` → `gameFlow` (WP-A/WP-B)
+       * DOCX ko'rinishini chizadi (raqamlangan to'r, ikki ustunli savol
+       * ro'yxati, javob varag'i; A7 karta panjarasi).
+       *
+       * Proplar HOZIRDAN beriladi: talaba ishlaridagi xato aynan shu edi
+       * — ko'ruvchi proplarsiz ulangani uchun tahrir jimgina o'chiq
+       * qolgandi va buni faqat smoke topgan edi. `WordViewer` R0 da
+       * `doc.game` ni bilmaydi va `editable` false bo'lib qoladi.
+       */
+      return <WordViewer doc={doc} gen={detail} onGen={onDetail} onEditState={onEditState} />;
     case "image":
       return (
         <div className="flex min-h-0 flex-1 flex-col">

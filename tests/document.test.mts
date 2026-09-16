@@ -1205,9 +1205,23 @@ test("o'qituvchi hujjatlarida muassasa so'raladi va «Tuzuvchi» yoziladi", asyn
    * 3. Sayt ko'ruvchilari titulni umuman chizmasdi (bu qism
    *    komponentlarda, bu yerda model darajasi sinaladi).
    */
-  const teacher = TOOLS.filter((t) => t.group === "oqituvchi");
-  // AUDIT-20 R0: guruhga TEST yaratuvchi qo'shildi (beshinchi vosita).
-  assert.equal(teacher.length, 5, "o'qituvchi guruhida besh vosita");
+  /*
+   * AUDIT-20 R0: guruhga TEST yaratuvchi qo'shildi (beshinchi vosita).
+   *
+   * AUDIT-21 R0: mezon GURUH emas, `teacher` DVIGATELI bo'ldi. Bo'limda
+   * endi infografika ham bor, lekin u HUJJAT emas, PLAKAT (PNG): titul
+   * sahifasi ham, «Tuzuvchi:» qatori ham yo'q, ya'ni muassasa/tuzuvchi
+   * maydonlari unda hech qayerga chiqmasdi — «bezak maydon» bo'lardi
+   * (`lib/tools.ts` dagi `output === "docx"` sharti).
+   */
+  const teacher = TOOLS.filter((t) => t.custom === "teacher");
+  assert.equal(teacher.length, 5, "o'qituvchi dvigatelida besh vosita");
+  const poster = TOOL_BY_ID.infographic;
+  assert.equal(poster.group, "oqituvchi");
+  assert.equal(poster.output, "png");
+  for (const name of ["university", "author"]) {
+    assert.ok(!poster.fields.some((f) => f.name === name), `MUTATSIYA: plakatga «${name}» maydoni qo'shildi — u hech qayerga chiqmaydi`);
+  }
 
   for (const tool of teacher) {
     const names = tool.fields.map((f) => f.name);
