@@ -8,7 +8,7 @@ import type { SlideImageStyle, SlideTextVolume } from "./slide-params";
 import type { SlidePurpose } from "./slide-purpose";
 import type { SlideResearch } from "./slide-research";
 import type { ResumeModel } from "./resume/model";
-import type { ArticleModel, ArticleTypeId, CiteStyle, PublicationProfileId, SelectableFigureKind } from "./article/types";
+import type { ArticleModel, ArticleTypeId, CiteStyle, PublicationProfileId } from "./article/types";
 import type { ResumePaletteId, ResumeTemplateId } from "./resume/templates";
 
 export type GenImage = {
@@ -58,6 +58,158 @@ export type DocSection = {
   id: string;
   title: string;
   blocks: Block[];
+};
+
+/* ────────────────────── manbalar (AUDIT-19 R0-B) ────────────────────── */
+
+/*
+ * `Reference`/`Figure` ilgari `article/types.ts` da edi. Kurs ishi,
+ * referat, mustaqil ish va insho dvigatellari ham SHU shakldan
+ * foydalanadi (manba qidiruv `research/`, iqtibos `cite/`, sxema
+ * `figures/` — hammasi maqoladan mustaqil qatlam), shuning uchun tiplar
+ * neytral joyga ko'chirildi. `article/types.ts` ularni RE-EXPORT qiladi —
+ * mavjud importerlar tegilmaydi.
+ */
+
+/**
+ * Manba TURI — ro'yxat tartibi (`cite/order.ts`) va bibliografik tavsif
+ * shakli (`cite/gost.ts`) shunga qarab tanlanadi. Eski hujjatlarda maydon
+ * YO'Q — `kindOf()` uni mavjud maydonlardan chiqaradi.
+ */
+export const REFERENCE_KINDS = ["article", "book", "law", "web", "user"] as const;
+export type ReferenceKind = (typeof REFERENCE_KINDS)[number];
+
+/**
+ * Manba QAYERDAN tasdiqlangani. Tasdiqlanmagan manba hujjatga TUSHMAYDI
+ * (mahsulot egasi qarori): lex.uz sahifasi model bergan raqam/sana/
+ * sarlavhani tasdiqlamasa — yozuv rad etiladi.
+ */
+export type ReferenceVerified = "openalex" | "crossref" | "googlebooks" | "lexuz" | "user" | "unverified";
+
+export type Reference = {
+  /** `W2741809807` (OpenAlex) | `gb:<volumeId>` | `lex:<N>` | `doi:10.…` | `u1` (foydalanuvchi). */
+  id: string;
+  /** Berilmasa `kindOf()` xulosa qiladi (eski `doc_json` da bu maydon yo'q). */
+  kind?: ReferenceKind;
+  doi?: string;
+  /** Kitob — ISBN_13 ustun (`research/googlebooks.ts`), dedup kaliti. */
+  isbn?: string;
+  title: string;
+  authors: string[];
+  year?: number;
+  venue?: string;
+  url?: string;
+  publisher?: string;
+  place?: string;
+  /** Sahifalar «25–31» — GOST ro'yxati uchun. */
+  pages?: string;
+  /** Kitob hajmi (bet) — «… – 240 b.». */
+  pageCount?: number;
+  /** Normativ hujjat raqami — «O'RQ-563», «PQ-4947», «207-son». */
+  docNo?: string;
+  /** Normativ hujjat qabul qilingan sana — ISO «2019-09-20». */
+  docDate?: string;
+  /** Hujjatni qabul qilgan organ — «O'zbekiston Respublikasi Prezidenti», «Vazirlar Mahkamasi». */
+  issuer?: string;
+  /** «Murojaat sanasi» — ISO «2026-09-16» (internet va lex.uz manbalari). */
+  accessed?: string;
+  verified: ReferenceVerified;
+  /** Matnda kamida bir marta iqtibos qilinganmi — faqat shular ro'yxatga kiradi. */
+  cited: boolean;
+  /** Yakuniy tartib raqami (`planArticle` / `orderUzReferences` beradi). */
+  n?: number;
+  /** Foydalanuvchi bergan erkin matn (parse qilinmagan manba). */
+  raw?: string;
+};
+
+/**
+ * Manba turi — `kind` bo'lsa o'zi, aks holda mavjud maydonlardan.
+ *
+ * Tartib MUHIM: DOI ilmiy maqolani bir ma'noli belgilaydi, ISBN —
+ * kitobni, `lex.uz` havolasi — normativ hujjatni. OpenAlex/Crossref dan
+ * kelgan yozuv DOI siz bo'lsa ham MAQOLA bo'lib qoladi — havolasi bor
+ * deb «internet manbasi» ga tushib ketmasin (ro'yxat tartibi buzilardi).
+ */
+export function kindOf(ref: Pick<Reference, "kind" | "doi" | "isbn" | "url" | "verified" | "raw">): ReferenceKind {
+  if (ref.kind) return ref.kind;
+  if (ref.doi) return "article";
+  if (ref.isbn) return "book";
+  if (ref.url && /(?:^|\/\/|\.)lex\.uz\//i.test(ref.url)) return "law";
+  if (ref.verified === "user" && ref.raw) return "user";
+  if (ref.verified === "openalex" || ref.verified === "crossref") return "article";
+  if (ref.url) return "web";
+  return "article";
+}
+
+/* ────────────────────── sxemalar (AUDIT-19 R0-B) ────────────────────── */
+
+export type FigureNode = { id: string; label: string; kind?: "start" | "end" | "step" | "decision" | "data" };
+export type FigureEdge = { from: string; to: string; label?: string };
+
+/**
+ * Sxema turlari. Dastlabki 5 tasi — AUDIT-17 WP3; `layers`/`cycle`/
+ * `timeline`/`matrix`/`compare` — AUDIT-18 WP-B (Q-5). `prisma` (dvigatel
+ * statistikadan quradi) va `chart` (faqat foydalanuvchi ma'lumoti) formada
+ * tanlanmaydi — `SELECTABLE_FIGURE_KINDS`.
+ */
+export type FigureKind = "flow" | "process" | "tree" | "prisma" | "chart" | "layers" | "cycle" | "timeline" | "matrix" | "compare";
+export const FIGURE_KINDS: readonly FigureKind[] = ["flow", "process", "tree", "prisma", "chart", "layers", "cycle", "timeline", "matrix", "compare"];
+/** Formadagi «Sxema turlari» tanlovi (`figureKinds`) — faqat model o'zi tuzadigan turlar. */
+export const SELECTABLE_FIGURE_KINDS = ["flow", "process", "tree", "layers", "cycle", "timeline", "matrix", "compare"] as const;
+export type SelectableFigureKind = (typeof SELECTABLE_FIGURE_KINDS)[number];
+export const isSelectableFigureKind = (v: unknown): v is SelectableFigureKind => (SELECTABLE_FIGURE_KINDS as readonly string[]).includes(String(v));
+
+export type FigureSpec =
+  | { kind: "flow"; direction: "TB" | "LR"; nodes: FigureNode[]; edges: FigureEdge[] }
+  | { kind: "process"; steps: string[] }
+  | { kind: "tree"; root: string; children: TreeNode[] }
+  | { kind: "prisma"; identified: number; screened: number; excludedScreen: number; eligible: number; excludedElig: number; included: number; sources?: string }
+  | { kind: "chart"; chart: "bar" | "line" | "pie"; dataSource: "user"; series: { name: string; values: number[] }[]; categories: string[]; unit?: string }
+  /** Qatlamli arxitektura: `layers[0]` — eng yuqori (ilova), oxirgisi — eng pastki (fizik); har qatlamda ≤4 band; `arrows` — qatlamlar orasida ikki tomonlama o'q (standart yoqiq). */
+  | { kind: "layers"; layers: { label: string; items?: string[] }[]; direction?: "TB"; arrows?: boolean }
+  /** Sikl: 3–8 bosqich aylana bo'ylab, yoy o'qlar; `center` — markazdagi yorliq; `clockwise` standart `true`. */
+  | { kind: "cycle"; steps: { label: string }[]; center?: string; clockwise?: boolean }
+  /** Vaqt chizig'i: 3–10 voqea, `when` chiziq ostida, `label` navbatma-navbat tepada/pastda. */
+  | { kind: "timeline"; events: { when: string; label: string }[]; direction?: "LR" }
+  /** 2×2 matritsa: AYNAN 4 kvadrant (yuqori-chap, yuqori-o'ng, pastki-chap, pastki-o'ng); o'qlar ixtiyoriy (SWOT — o'qsiz). */
+  | { kind: "matrix"; xAxis?: FigureAxis; yAxis?: FigureAxis; quadrants: { title: string; items?: string[] }[] }
+  /** Taqqoslash: ikki ustun (≤6 band); `rows` berilsa — mezon bo'yicha qatorlar (chapda mezon, ikki ustunda qiymat). */
+  | { kind: "compare"; left: { title: string; items: string[] }; right: { title: string; items: string[] }; rows?: string[] };
+
+export type FigureAxis = { low: string; high: string; label?: string };
+export type TreeNode = { label: string; children?: TreeNode[] };
+
+/** Yangi turlarning son chegaralari (`figureSpecFromLlm` kesadi, maket `null` beradi). */
+export const FIGURE_LIMITS = {
+  layersMin: 2,
+  layersMax: 7,
+  layerItems: 4,
+  cycleMin: 3,
+  cycleMax: 8,
+  timelineMin: 3,
+  timelineMax: 10,
+  quadrants: 4,
+  quadrantItems: 4,
+  compareItems: 6,
+  /** Formadagi «Sxema turlari» tanlovi — oq ro'yxat hajmi. */
+  figureKinds: 9,
+} as const;
+
+export type Figure = {
+  id: string;
+  kind: "scheme" | "chart";
+  caption: string;
+  spec: FigureSpec;
+  /** PNG: `data:` (yaratishda) → aktiv URL (`extractAssets`). */
+  url?: string;
+  assetId?: string;
+  /** Piksel o'lchami (300 dpi). */
+  w: number;
+  h: number;
+  /** «Manba: muallif tomonidan tuzilgan» / «[5] asosida». */
+  source?: string;
+  /** Maket buzilsa (sikl, juda katta) — rasm o'rniga raqamlangan ro'yxat. */
+  fallbackBlocks?: Block[];
 };
 
 export type DocTable = {

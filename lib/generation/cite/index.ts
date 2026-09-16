@@ -19,15 +19,17 @@
  * Matn ichidagi iqtibos ko'rinishi («[1; 25-b.]», «(Lin va b., 2023)»)
  * bu yerda EMAS — `article/layout.ts renderCitations`.
  */
-import type { CiteStyle, Reference } from "../article/types";
-import { formatGost } from "./gost";
+import type { CiteStyle } from "../article/types";
+import { kindOf, type Reference } from "../types";
+import { formatGost, formatGostBook, formatGostLaw, formatGostWeb } from "./gost";
 import { formatApa } from "./apa";
 import { formatIeee } from "./ieee";
 import { formatNumeric } from "./numeric";
 import { languageTag, scriptOf, transliterate } from "./translit";
 import { authorsOf, familyCommaInitials } from "./names";
 
-export { formatGost } from "./gost";
+export { formatGost, formatGostBook, formatGostLaw, formatGostWeb, lawKindOf } from "./gost";
+export { orderUzReferences, uzGroupOf, sortKeyOf, UZ_GROUPS, type UzGroup } from "./order";
 export { formatApa } from "./apa";
 export { formatIeee } from "./ieee";
 export { formatNumeric } from "./numeric";
@@ -36,6 +38,17 @@ export { parseAuthor, authorsOf, familyInitials, familyCommaInitials, initialsFa
 
 export function formatReference(ref: Reference, style: CiteStyle, lang = "uz"): string {
   if (ref.raw?.trim()) return ref.raw.trim();
+  /*
+   * AUDIT-19: normativ hujjat va internet manbasi uslubdan QAT'I NAZAR
+   * o'z shaklida yoziladi — «Qonun» ni APA muallif-yil shaklida berib
+   * bo'lmaydi (muallifi yo'q, «yil» o'rniga qabul sanasi). Kitob esa
+   * faqat GOST oilasida alohida (APA/IEEE o'z kitob shakliga ega).
+   * Maqola (`kind:"article"`, eski hujjatlarning HAMMASI) — o'zgarishsiz.
+   */
+  const kind = kindOf(ref);
+  if (kind === "law") return formatGostLaw(ref, lang);
+  if (kind === "web") return formatGostWeb(ref, lang);
+  if (kind === "book" && (style === "gost" || style === "numeric")) return formatGostBook(ref, lang);
   switch (style) {
     case "apa7":
       return formatApa(ref, lang);

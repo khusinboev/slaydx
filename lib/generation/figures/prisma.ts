@@ -9,7 +9,7 @@
  * fallback). Aniq ayirma talab qilinmaydi — dublikatlar olib tashlanishi /
  * topilmagan hisobotlar shablonda alohida qator emas.
  */
-import type { FigureSpec } from "../article/types";
+import type { FigureSpec } from "../types";
 import { CANVAS_W, FIGURE_WIDTH_MM, FONT_PX, LINE_K, PAD_X, PAD_Y, emptyLayout, fitToCanvas, textWidth, wrapLabel, type FigureLayout } from "./model";
 
 export type PrismaSpec = Extract<FigureSpec, { kind: "prisma" }>;

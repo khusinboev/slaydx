@@ -12,7 +12,7 @@
  *
  * `mailto` — Crossref «polite pool» (tezroq, barqarorroq).
  */
-import type { Reference } from "../article/types";
+import type { Reference } from "../types";
 import { cached, queryKey } from "./cache";
 import { getJson, withParams, type HttpOpts } from "./http";
 

@@ -13,7 +13,7 @@
  * maqola tanasi (TNR 12–14) bilan uyg'un.
  */
 
-import type { FigureKind } from "../article/types";
+import type { FigureKind } from "../types";
 
 /* ────────────────────────── konstantalar ────────────────────────── */
 

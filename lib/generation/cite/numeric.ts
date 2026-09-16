@@ -12,7 +12,7 @@
  * DOI ixtiyoriy (bo'lsa yoziladi), URL yozilmaydi (to'plamlarda
  * elektron manzil talab qilinmaydi va satrni cho'zadi).
  */
-import type { Reference } from "../article/types";
+import type { Reference } from "../types";
 import { formatGost } from "./gost";
 
 export function formatNumeric(ref: Reference, lang = "uz"): string {

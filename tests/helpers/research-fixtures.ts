@@ -128,6 +128,10 @@ export function stubFetch(plan: Record<string, unknown | unknown[]>, calls: Stub
         queues.set(needle, q);
       }
       const status = body && typeof body === "object" && "__status" in (body as object) ? Number((body as { __status: number }).__status) : 200;
+      // `__html` — HTML sahifasi (lex.uz): matn sifatida, `text/html` bilan.
+      if (status === 200 && body && typeof body === "object" && "__html" in (body as object)) {
+        return new Response(String((body as { __html: string }).__html), { status, headers: { "content-type": "text/html; charset=utf-8" } });
+      }
       return new Response(status === 200 ? JSON.stringify(body) : "", { status, headers: { "content-type": "application/json" } });
     }
     return new Response("", { status: 404 });
@@ -135,3 +139,70 @@ export function stubFetch(plan: Record<string, unknown | unknown[]>, calls: Stub
   fn.calls = calls;
   return fn;
 }
+
+/* ─────────── Google Books / lex.uz (Talaba ishlari 2, AUDIT-19) ─────────── */
+
+/**
+ * Google Books `volumes` javobi (2026-09 shakli): `items[].volumeInfo` —
+ * `industryIdentifiers` da ISBN_10 va ISBN_13 birga, `publishedDate` to'liq
+ * sana bo'lishi mumkin.
+ */
+export const BOOKS_VOLUMES = {
+  totalItems: 3,
+  items: [
+    {
+      id: "vol_ta_lim",
+      volumeInfo: {
+        title: "Ta’limda raqamli texnologiyalar",
+        subtitle: "darslik",
+        authors: ["Karimov A.", "Yusupova D."],
+        publisher: "Fan va texnologiya",
+        publishedDate: "2022-04-11",
+        pageCount: 240,
+        industryIdentifiers: [
+          { type: "ISBN_10", identifier: "9943570125" },
+          { type: "ISBN_13", identifier: "978-9943-57-012-3" },
+        ],
+        canonicalVolumeLink: "https://books.google.com/books/about/?id=vol_ta_lim",
+        infoLink: "https://books.google.com/books?id=vol_ta_lim&info",
+      },
+    },
+    {
+      id: "vol_pedagogika",
+      volumeInfo: {
+        title: "Pedagogika nazariyasi",
+        authors: ["Tursunov I."],
+        publisher: "O‘qituvchi",
+        publishedDate: "2019",
+        industryIdentifiers: [{ type: "ISBN_10", identifier: "994322111X" }],
+        infoLink: "https://books.google.com/books?id=vol_pedagogika",
+      },
+    },
+    // Sarlavhasiz — `referenceFromVolume` `null` qaytaradi (ro'yxatga tushmaydi).
+    { id: "vol_bad", volumeInfo: { authors: ["Nomsiz"], publishedDate: "2020" } },
+  ],
+};
+
+/** `isbn:…` so'roviga bitta kitob. */
+export const BOOKS_BY_ISBN = { totalItems: 1, items: [BOOKS_VOLUMES.items[0]] };
+
+/**
+ * lex.uz hujjat sahifasi (soddalashtirilgan HTML): `<title>`, `og:title`,
+ * `<h1>`, sana va hujjat raqami — tasdiq shu belgilarga tayanadi.
+ */
+export const LEX_PAGE_563 = `<!DOCTYPE html><html><head>
+<title>O‘zbekiston Respublikasining Qonuni, 20.09.2019-yildagi O‘RQ-563-son</title>
+<meta property="og:title" content="Ta’lim to‘g‘risida" />
+</head><body>
+<h1>O‘zbekiston Respublikasining «Ta’lim to‘g‘risida»gi Qonuni</h1>
+<div class="doc-meta">Qabul qilingan sana: 20.09.2019 &nbsp; Hujjat raqami: O‘RQ-563</div>
+<p>Ushbu Qonun ta’lim sohasidagi munosabatlarni tartibga soladi.</p>
+</body></html>`;
+
+/** Sahifa BOSHQA hujjat haqida — model bergan raqam/sana/sarlavha tasdiqlanmaydi. */
+export const LEX_PAGE_OTHER = `<!DOCTYPE html><html><head>
+<title>Suv xo‘jaligi to‘g‘risidagi nizom, 03.02.2011</title>
+</head><body>
+<h1>Suv xo‘jaligi obyektlaridan foydalanish nizomi</h1>
+<div>Qabul qilingan sana: 03.02.2011 Hujjat raqami: 27-son</div>
+</body></html>`;

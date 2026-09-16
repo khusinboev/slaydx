@@ -17,7 +17,7 @@
  *     `Reference` da yo'q — tushiriladi.
  * Ro'yxat tartibi (alifbo) — `layout.ts orderReferences`.
  */
-import type { Reference } from "../article/types";
+import type { Reference } from "../types";
 import { authorsOf, familyCommaInitials } from "./names";
 import { dot, isPageRange, langKey, normalizePages } from "./gost";
 

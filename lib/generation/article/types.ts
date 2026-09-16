@@ -199,102 +199,29 @@ export type ArticleWordPlan = { perPage: number; total: number; body: number; ab
 export const FIGURES_BY_PAGES: Record<PagesId, number> = { "1-2": 0, "3-5": 1, "5-10": 3, "10-15": 4 };
 export const maxFiguresFor = (pages: PagesId): number => FIGURES_BY_PAGES[pages];
 
-/* ────────────────────────── manbalar ────────────────────────── */
+/* ──────────────── manbalar va sxemalar — NEYTRAL qatlamda ──────────────── */
 
-export type ReferenceVerified = "openalex" | "crossref" | "user" | "unverified";
-
-export type Reference = {
-  /** `W2741809807` (OpenAlex) | `doi:10.…` | `u1` (foydalanuvchi). */
-  id: string;
-  doi?: string;
-  title: string;
-  authors: string[];
-  year?: number;
-  venue?: string;
-  url?: string;
-  publisher?: string;
-  place?: string;
-  /** Sahifalar «25–31» — GOST ro'yxati uchun. */
-  pages?: string;
-  verified: ReferenceVerified;
-  /** Matnda kamida bir marta iqtibos qilinganmi — faqat shular ro'yxatga kiradi. */
-  cited: boolean;
-  /** Yakuniy tartib raqami (planArticle beradi). */
-  n?: number;
-  /** Foydalanuvchi bergan erkin matn (parse qilinmagan manba). */
-  raw?: string;
-};
-
-/* ────────────────────────── sxemalar ────────────────────────── */
-
-export type FigureNode = { id: string; label: string; kind?: "start" | "end" | "step" | "decision" | "data" };
-export type FigureEdge = { from: string; to: string; label?: string };
-
-/**
- * Sxema turlari. Dastlabki 5 tasi — AUDIT-17 WP3; `layers`/`cycle`/
- * `timeline`/`matrix`/`compare` — AUDIT-18 WP-B (Q-5). `prisma` (dvigatel
- * statistikadan quradi) va `chart` (faqat foydalanuvchi ma'lumoti) formada
- * tanlanmaydi — `SELECTABLE_FIGURE_KINDS`.
+/*
+ * `Reference`, `Figure` va ularning yo'ldoshlari `lib/generation/types.ts`
+ * ga ko'chdi (AUDIT-19 R0-B): kurs ishi/referat/insho dvigatellari ham
+ * shu shakldan foydalanadi, `research/`+`cite/`+`figures/` esa maqoladan
+ * mustaqil qatlam. Bu yerda faqat RE-EXPORT — mavjud importerlar
+ * (`from "./types"`, `from "../article/types"`) o'z joyida qoladi.
  */
-export type FigureKind = "flow" | "process" | "tree" | "prisma" | "chart" | "layers" | "cycle" | "timeline" | "matrix" | "compare";
-export const FIGURE_KINDS: readonly FigureKind[] = ["flow", "process", "tree", "prisma", "chart", "layers", "cycle", "timeline", "matrix", "compare"];
-/** Formadagi «Sxema turlari» tanlovi (`figureKinds`) — faqat model o'zi tuzadigan turlar. */
-export const SELECTABLE_FIGURE_KINDS = ["flow", "process", "tree", "layers", "cycle", "timeline", "matrix", "compare"] as const;
-export type SelectableFigureKind = (typeof SELECTABLE_FIGURE_KINDS)[number];
-export const isSelectableFigureKind = (v: unknown): v is SelectableFigureKind => (SELECTABLE_FIGURE_KINDS as readonly string[]).includes(String(v));
-
-export type FigureSpec =
-  | { kind: "flow"; direction: "TB" | "LR"; nodes: FigureNode[]; edges: FigureEdge[] }
-  | { kind: "process"; steps: string[] }
-  | { kind: "tree"; root: string; children: TreeNode[] }
-  | { kind: "prisma"; identified: number; screened: number; excludedScreen: number; eligible: number; excludedElig: number; included: number; sources?: string }
-  | { kind: "chart"; chart: "bar" | "line" | "pie"; dataSource: "user"; series: { name: string; values: number[] }[]; categories: string[]; unit?: string }
-  /** Qatlamli arxitektura: `layers[0]` — eng yuqori (ilova), oxirgisi — eng pastki (fizik); har qatlamda ≤4 band; `arrows` — qatlamlar orasida ikki tomonlama o'q (standart yoqiq). */
-  | { kind: "layers"; layers: { label: string; items?: string[] }[]; direction?: "TB"; arrows?: boolean }
-  /** Sikl: 3–8 bosqich aylana bo'ylab, yoy o'qlar; `center` — markazdagi yorliq; `clockwise` standart `true`. */
-  | { kind: "cycle"; steps: { label: string }[]; center?: string; clockwise?: boolean }
-  /** Vaqt chizig'i: 3–10 voqea, `when` chiziq ostida, `label` navbatma-navbat tepada/pastda. */
-  | { kind: "timeline"; events: { when: string; label: string }[]; direction?: "LR" }
-  /** 2×2 matritsa: AYNAN 4 kvadrant (yuqori-chap, yuqori-o'ng, pastki-chap, pastki-o'ng); o'qlar ixtiyoriy (SWOT — o'qsiz). */
-  | { kind: "matrix"; xAxis?: FigureAxis; yAxis?: FigureAxis; quadrants: { title: string; items?: string[] }[] }
-  /** Taqqoslash: ikki ustun (≤6 band); `rows` berilsa — mezon bo'yicha qatorlar (chapda mezon, ikki ustunda qiymat). */
-  | { kind: "compare"; left: { title: string; items: string[] }; right: { title: string; items: string[] }; rows?: string[] };
-
-export type FigureAxis = { low: string; high: string; label?: string };
-export type TreeNode = { label: string; children?: TreeNode[] };
-
-/** Yangi turlarning son chegaralari (`figureSpecFromLlm` kesadi, maket `null` beradi). */
-export const FIGURE_LIMITS = {
-  layersMin: 2,
-  layersMax: 7,
-  layerItems: 4,
-  cycleMin: 3,
-  cycleMax: 8,
-  timelineMin: 3,
-  timelineMax: 10,
-  quadrants: 4,
-  quadrantItems: 4,
-  compareItems: 6,
-  /** Formadagi «Sxema turlari» tanlovi — oq ro'yxat hajmi. */
-  figureKinds: 9,
-} as const;
-
-export type Figure = {
-  id: string;
-  kind: "scheme" | "chart";
-  caption: string;
-  spec: FigureSpec;
-  /** PNG: `data:` (yaratishda) → aktiv URL (`extractAssets`). */
-  url?: string;
-  assetId?: string;
-  /** Piksel o'lchami (300 dpi). */
-  w: number;
-  h: number;
-  /** «Manba: muallif tomonidan tuzilgan» / «[5] asosida». */
-  source?: string;
-  /** Maket buzilsa (sikl, juda katta) — rasm o'rniga raqamlangan ro'yxat. */
-  fallbackBlocks?: import("../types").Block[];
-};
+export type {
+  Figure,
+  FigureAxis,
+  FigureEdge,
+  FigureKind,
+  FigureNode,
+  FigureSpec,
+  Reference,
+  ReferenceKind,
+  ReferenceVerified,
+  SelectableFigureKind,
+  TreeNode,
+} from "../types";
+export { FIGURE_KINDS, FIGURE_LIMITS, REFERENCE_KINDS, SELECTABLE_FIGURE_KINDS, isSelectableFigureKind, kindOf } from "../types";
 
 /* ────────────────────────── hisobot ────────────────────────── */
 
@@ -304,6 +231,7 @@ export type Figure = {
  * foydalanadi. Bu yerda faqat RE-EXPORT: mavjud importlar
  * (`from "./types"`) o'z joyida qoladi.
  */
+import type { Figure, Reference } from "../types";
 import type { DocReview } from "../report/types";
 
 export type { PolishLog, ReviewCheck, ReviewLevel, UserNeed } from "../report/types";

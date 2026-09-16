@@ -8,8 +8,8 @@
  * Jadvaldan farqi: bu RASM (PNG) — ramka, ustun sarlavhalari qalin va
  * bo'yalgan, matn qatorlarga o'raladi (`wrapToWidth`); hujjat jadvali emas.
  */
-import type { FigureSpec } from "../article/types";
-import { FIGURE_LIMITS } from "../article/types";
+import type { FigureSpec } from "../types";
+import { FIGURE_LIMITS } from "../types";
 import { CANVAS_W, FONT_PX, LINE_K, MARGIN, PAD_X, PAD_Y, cleanLabel, emptyLayout, fitToCanvas, wrapToWidth, type FigureLayout } from "./model";
 import { bulletIndent, bulletLines } from "./layout-matrix";
 

@@ -8,8 +8,8 @@
  * Yorliq kengligi: navbatlash tufayli bir tomondagi qo'shnilar ikki qadam
  * uzoqda — yorliq ≤ 2·qadam − 12 px (≤ 190 px), ≤3 qator.
  */
-import type { FigureSpec } from "../article/types";
-import { FIGURE_LIMITS } from "../article/types";
+import type { FigureSpec } from "../types";
+import { FIGURE_LIMITS } from "../types";
 import { CANVAS_W, FONT_PX, LINE_K, MARGIN, cleanLabel, emptyLayout, fitToCanvas, linesBox, wrapToWidth, type FigureLayout } from "./model";
 
 export type TimelineSpec = Extract<FigureSpec, { kind: "timeline" }>;

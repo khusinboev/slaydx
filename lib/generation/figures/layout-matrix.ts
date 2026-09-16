@@ -8,8 +8,8 @@
  *
  * Kataklar bir xil o'lchamda (eng katta mazmunga qarab) — panjara tekis.
  */
-import type { FigureAxis, FigureSpec } from "../article/types";
-import { FIGURE_LIMITS } from "../article/types";
+import type { FigureAxis, FigureSpec } from "../types";
+import { FIGURE_LIMITS } from "../types";
 import { CANVAS_W, FONT_PX, LINE_K, MARGIN, PAD_X, PAD_Y, cleanLabel, emptyLayout, fitToCanvas, textWidth, wrapToWidth, type FigureLayout } from "./model";
 
 export type MatrixSpec = Extract<FigureSpec, { kind: "matrix" }>;

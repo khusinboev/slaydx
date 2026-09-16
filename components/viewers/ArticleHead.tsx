@@ -86,6 +86,8 @@ export function ArticleHead({ items }: { items: ArticleHeadFlowItem[] }) {
 const VERIFIED_TITLE: Record<NonNullable<CiteSpan["cite"]>["verified"], string> = {
   openalex: "Manba OpenAlex da tasdiqlangan",
   crossref: "Manba Crossref (DOI) orqali tasdiqlangan",
+  googlebooks: "Kitob Google Books da tasdiqlangan (ISBN)",
+  lexuz: "Normativ hujjat lex.uz sahifasida tasdiqlangan",
   user: "Foydalanuvchi bergan manba",
   unverified: "Manba TEKSHIRILMAGAN — hisobotga qarang",
 };

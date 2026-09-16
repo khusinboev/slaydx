@@ -13,7 +13,7 @@
  * Server-only (`sharp`); `layoutFigure`/`figureSvg` izomorf.
  */
 import type { Block } from "../types";
-import type { Figure, FigureSpec } from "../article/types";
+import type { Figure, FigureSpec } from "../types";
 import { flowGraph, layoutFigure, processSteps, treeNodes } from "./layout";
 import { figureSvg } from "./svg";
 import { figurePng } from "./png";
@@ -86,7 +86,7 @@ export function figureFallbackBlocks(figure: Figure, lang: string): Block[] {
     case "tree": {
       const t = treeNodes(spec);
       const items: string[] = [];
-      const walk = (label: string, children: import("../article/types").TreeNode[] | undefined, depth: number) => {
+      const walk = (label: string, children: import("../types").TreeNode[] | undefined, depth: number) => {
         items.push(`${"– ".repeat(depth)}${label}`);
         for (const c of children ?? []) walk(c.label, c.children, depth + 1);
       };

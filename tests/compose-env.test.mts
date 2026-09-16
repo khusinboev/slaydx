@@ -22,6 +22,9 @@ const KEYS = [
   "OPENALEX_API_KEY",
   "OPENALEX_MAILTO",
   "CROSSREF_MAILTO",
+  // AUDIT-19: Google Books (kitob manbalari) — kalit ixtiyoriy, lekin
+  // berilsa konteynerga YETIB BORISHI kerak (aks holda kunlik kvota anonim).
+  "GOOGLE_BOOKS_API_KEY",
 ];
 
 function envBlock(yaml: string, service: string): string {

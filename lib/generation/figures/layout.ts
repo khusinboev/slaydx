@@ -17,7 +17,7 @@
  * Chegaralar (`ARTICLE_LIMITS`): >14 tugun / >24 qirra / sikl / chuqurlik >4
  * → `null` → chaqiruvchi (`index.ts`) raqamlangan ro'yxat fallback beradi.
  */
-import type { FigureNode, FigureSpec, TreeNode } from "../article/types";
+import type { FigureNode, FigureSpec, TreeNode } from "../types";
 import { ARTICLE_LIMITS } from "../article/types";
 import {
   CANVAS_W,

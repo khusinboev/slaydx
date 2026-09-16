@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { formatGost, gostAuthors, normalizePages } from "../lib/generation/cite/gost.ts";
+import { formatGost, formatGostBook, formatGostLaw, formatGostWeb, gostAuthors, normalizePages } from "../lib/generation/cite/gost.ts";
+import { formatApa } from "../lib/generation/cite/apa.ts";
 import { formatReference } from "../lib/generation/cite/index.ts";
 import { parseAuthor } from "../lib/generation/cite/names.ts";
 import type { Reference } from "../lib/generation/article/types.ts";
@@ -104,4 +105,100 @@ test("normalizePages: defis → en dash, «pp.»/«с.» prefikslari tushadi", (
   assert.equal(normalizePages("pp. 45 — 67"), "45–67");
   assert.equal(normalizePages("120"), "120");
   assert.equal(normalizePages(undefined), "");
+});
+
+/* ────────── kitob / normativ hujjat / internet (AUDIT-19 WP-B) ────────── */
+
+const GB: Reference = {
+  id: "gb:1",
+  kind: "book",
+  title: "Ta’limda raqamli texnologiyalar",
+  authors: ["Karimov A."],
+  year: 2022,
+  publisher: "Fan va texnologiya",
+  place: "Toshkent",
+  pageCount: 240,
+  isbn: "9789943570123",
+  verified: "googlebooks",
+  cited: true,
+};
+
+const LAW: Reference = {
+  id: "lex:5013009",
+  kind: "law",
+  title: "Ta’lim to‘g‘risida",
+  authors: [],
+  issuer: "O‘zbekiston Respublikasi",
+  docNo: "O‘RQ-563",
+  docDate: "2019-09-20",
+  url: "https://lex.uz/docs/5013009",
+  accessed: "2026-09-16",
+  verified: "lexuz",
+  cited: true,
+};
+
+const WEB: Reference = {
+  id: "w1",
+  kind: "web",
+  title: "Raqamli ta’lim portali",
+  authors: [],
+  url: "https://edu.uz/raqamli",
+  accessed: "2026-03-12",
+  verified: "unverified",
+  cited: true,
+};
+
+test("formatGostBook: «Muallif. Nomi. – Shahar: Nashriyot, yil. – N b.»; shahar yo'q — element tushadi", () => {
+  assert.equal(formatGostBook(GB, "uz"), "Karimov A. Ta’limda raqamli texnologiyalar. – Toshkent: Fan va texnologiya, 2022. – 240 b.");
+  assert.equal(formatGostBook(GB, "ru"), "Karimov A. Ta’limda raqamli texnologiyalar. – Toshkent: Fan va texnologiya, 2022. – 240 с.");
+  assert.equal(formatGostBook({ ...GB, place: undefined }, "uz"), "Karimov A. Ta’limda raqamli texnologiyalar. – Fan va texnologiya, 2022. – 240 b.");
+  assert.equal(formatGostBook({ ...GB, place: undefined, publisher: undefined, pageCount: undefined }, "uz"), "Karimov A. Ta’limda raqamli texnologiyalar. – 2022.");
+  assert.ok(!formatGostBook(GB, "uz").includes(": ,"), "bo'sh element yozilmaydi");
+});
+
+test("formatGostLaw: qonun / farmon / Prezident qarori / VM qarori; sana, № va lex.uz havolasi", () => {
+  assert.equal(
+    formatGostLaw({ ...LAW, title: "Ta’lim to‘g‘risidagi Qonun" }, "uz"),
+    "Ta’lim to‘g‘risidagi Qonun, 20.09.2019 y., № O‘RQ-563. — https://lex.uz/docs/5013009",
+  );
+  // Rasmiy nom bo'lmasa — organ va hujjat so'zi qo'shiladi.
+  assert.equal(
+    formatGostLaw(LAW, "uz"),
+    "O‘zbekiston Respublikasining «Ta’lim to‘g‘risida» Qonuni, 20.09.2019 y., № O‘RQ-563. — https://lex.uz/docs/5013009",
+  );
+  const decree: Reference = { ...LAW, title: "Raqamli O‘zbekiston strategiyasi", issuer: "O‘zbekiston Respublikasi Prezidenti", docNo: "PF-6079", docDate: "2020-10-05" };
+  assert.match(formatGostLaw(decree, "uz"), /^O‘zbekiston Respublikasi Prezidentining «Raqamli O‘zbekiston strategiyasi» Farmoni, 05\.10\.2020 y\., № PF-6079\./);
+  assert.match(formatGostLaw({ ...decree, docNo: "PQ-4947" }, "uz"), /» Qarori, /);
+  const cabinet: Reference = { ...LAW, title: "Oliy ta’lim me’yorlari", issuer: "O‘zbekiston Respublikasi Vazirlar Mahkamasi", docNo: "207-son" };
+  assert.match(formatGostLaw(cabinet, "uz"), /^O‘zbekiston Respublikasi Vazirlar Mahkamasining «Oliy ta’lim me’yorlari» Qarori, /);
+  // Ruscha: hujjat so'zi boshda.
+  assert.match(formatGostLaw({ ...LAW, title: "Об образовании" }, "ru"), /^Закон O‘zbekiston Respublikasi «Об образовании», 20\.09\.2019 г\., № O‘RQ-563\./);
+  // Sanasiz/raqamsiz hujjat — bo'sh element yozilmaydi.
+  assert.equal(
+    formatGostLaw({ ...LAW, docDate: undefined, docNo: undefined, year: undefined }, "uz"),
+    "O‘zbekiston Respublikasining «Ta’lim to‘g‘risida» Qonuni. — https://lex.uz/docs/5013009",
+  );
+});
+
+test("formatGostWeb: «Nomi // URL (Murojaat sanasi: …)»; sana yo'q — qavs ham yo'q", () => {
+  assert.equal(formatGostWeb(WEB, "uz"), "Raqamli ta’lim portali // https://edu.uz/raqamli (Murojaat sanasi: 12.03.2026)");
+  assert.equal(formatGostWeb(WEB, "ru"), "Raqamli ta’lim portali // https://edu.uz/raqamli (дата обращения: 12.03.2026)");
+  assert.equal(formatGostWeb(WEB, "en"), "Raqamli ta’lim portali // https://edu.uz/raqamli (accessed: 12.03.2026)");
+  assert.equal(formatGostWeb({ ...WEB, accessed: undefined }, "uz"), "Raqamli ta’lim portali // https://edu.uz/raqamli");
+  assert.equal(formatGostWeb({ ...WEB, authors: ["Karimov A."] }, "uz"), "Karimov A. Raqamli ta’lim portali // https://edu.uz/raqamli (Murojaat sanasi: 12.03.2026)");
+});
+
+test("formatReference: kind bo'yicha tarmoqlanadi — maqola ro'yxati O'ZGARMAYDI", () => {
+  // Maqola: har uslub o'z shaklida (AUDIT-17 xatti-harakati).
+  assert.equal(formatReference(ART, "gost", "uz"), formatGost(ART, "uz"));
+  assert.equal(formatReference(ART, "apa7", "uz"), formatApa(ART, "uz"));
+  // Kitob GOST oilasida alohida shaklda; APA da esa APA kitob shakli.
+  assert.equal(formatReference(GB, "gost", "uz"), formatGostBook(GB, "uz"));
+  assert.equal(formatReference(GB, "numeric", "uz"), formatGostBook(GB, "uz"));
+  assert.equal(formatReference(GB, "apa7", "uz"), formatApa(GB, "uz"));
+  // Qonun va internet — uslubdan qat'i nazar o'z shaklida.
+  for (const s of ["gost", "numeric", "apa7", "ieee"] as const) {
+    assert.equal(formatReference(LAW, s, "uz"), formatGostLaw(LAW, "uz"));
+    assert.equal(formatReference(WEB, s, "uz"), formatGostWeb(WEB, "uz"));
+  }
 });
