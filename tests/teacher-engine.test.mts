@@ -412,6 +412,11 @@ test("`test` vositasi — WP-B dvigateli ulanmaguncha `null` (eski yo'l yo'q)", 
 
 test("TEACHER_ENGINE=0 — dvigatel chetlab o'tiladi (eski `write-specials` yo'li)", async () => {
   const prev = process.env.TEACHER_ENGINE;
+  // `npm test` `.env.local` bilan yuradi — kalit bo'lsa eski yo'l HAQIQIY LLM ga
+  // borib hujjat qaytaradi (va pul sarflaydi); kalitlarni vaqtincha olib qo'yamiz.
+  const keys = ["GEMINI_API_KEY", "XAI_API_KEY", "OPENAI_API_KEY"] as const;
+  const saved = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
+  for (const k of keys) delete process.env[k];
   process.env.TEACHER_ENGINE = "0";
   try {
     // LLM kaliti yo'q muhitda eski yo'l ham `null` qaytaradi — muhimi,
@@ -422,6 +427,7 @@ test("TEACHER_ENGINE=0 — dvigatel chetlab o'tiladi (eski `write-specials` yo'l
   } finally {
     if (prev === undefined) delete process.env.TEACHER_ENGINE;
     else process.env.TEACHER_ENGINE = prev;
+    for (const k of keys) if (saved[k] !== undefined) process.env[k] = saved[k];
   }
 });
 
