@@ -47,7 +47,13 @@ const VERSION = new Date().toISOString().slice(0, 10);
 
 export type Topic = { id: string; title: string; hours?: number };
 export type Unit = { title: string; hours?: number; topics: Topic[] };
-export type Entry = { grade: number; source: { title: string; url: string; year: number; publisher: string }; units: Unit[] };
+export type Entry = {
+  grade: number;
+  /** Hujjatda E'LON QILINGAN yillik soat («(68 soat)») — tekshiruv tayanchi. */
+  hours?: number;
+  source: { title: string; url: string; year: number; publisher: string };
+  units: Unit[];
+};
 
 const PUBLISHER = "Respublika ta'lim markazi (Xalq ta'limi vazirligi)";
 /** Hujjatlar 2018-yil nashri (matn ichida «Toshkent-2018»). */
@@ -62,9 +68,16 @@ export function slug(s: string): string {
   return norm(s)
     .toLowerCase()
     .replace(/[‘’ʻʼ'`´]/g, "")
-    .replace(/[^a-z0-9Ѐ-ӿ]+/g, "-")
+    /*
+     * FAQAT ASCII: id shakli `^[a-z0-9-]+$` — `tests/curriculum.test.mts`
+     * (R0) shuni qulflagan va `/api/curriculum` javobi ham shu id larni
+     * beradi. Kirill harflar dasturlarda faqat SHOVQIN sifatida uchraydi
+     * («А2» darajasi, ruscha fan nomi), mavzu nomlarida emas.
+     */
+    .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
-    .slice(0, 48);
+    .slice(0, 48)
+    .replace(/-+$/, "");
 }
 
 /** Bo'sh joysiz yopishib qolgan so'zlar (`Hayotninghujayrasizshakllari`) — PDF nuqsoni. */
@@ -124,6 +137,19 @@ const NOT_A_TOPIC = [
   /назорат иши/i,
   /хатолар устида/i,
   /^масала ва тест/i,
+  /*
+   * Uslubiy NASR: ba'zi hujjatlarda (biologiya 10, geografiya 10)
+   * tushuntirish xati bob sarlavhasisiz boshlanadi va heuristika uning
+   * gaplarini mavzu deb oladi. Bunday gaplar DOIM o'quvchi haqida
+   * 3-shaxsda gapiradi («o'quvchilar … erishadilar») yoki maqsad
+   * bildiradi («e'tibor qaratiladi») — mavzu nomi hech qachon shunday
+   * yozilmaydi.
+   */
+  /o.?quvchilar/i,
+  /e.?tibor qaratiladi/i,
+  /ko.?zda tutiladi/i,
+  /elektron darslik/i,
+  /masofaviy ta.?lim/i,
 ];
 
 /**
@@ -189,13 +215,16 @@ export function firstSentence(text: string): string {
   const t = norm(text);
   // Qisqartmalar («XIX asr.», «1865-y.») gapni tugatmaydi: nuqtadan keyin
   // PROBEL va BOSH HARF kelishi shart, oldida esa ≥3 belgili so'z.
-  const m = /^(.{3,200}?[\p{L}\p{N}]{3,}[.!?])(\s+\p{Lu}|$)/su.exec(t);
+  const m = /^([\s\S]{3,200}?[\p{L}\p{N}]{3,}[.!?])(\s+\p{Lu}|$)/u.exec(t);
   return norm(m ? m[1] : t).replace(/[.;:,]+$/, "");
 }
 
 /* ────────────────────────── parser ────────────────────────── */
 
 export type ParseStats = { format: "A" | "B" | "mixed"; units: number; topics: number; dropped: number };
+
+/** `parseDoc` natijasi: boblar + hujjatda e'lon qilingan yillik soat. */
+export type ParsedDoc = { units: Unit[]; yearHours?: number; stats: ParseStats };
 
 /**
  * Bitta hujjat matni → boblar va mavzular.
@@ -204,7 +233,7 @@ export type ParseStats = { format: "A" | "B" | "mixed"; units: number; topics: n
  * uchrasa ANIQ mavzu, uchramasa bob tanasi qator uzilishlari bo'yicha
  * bo'laklanadi (yuqoridagi B izohi).
  */
-export function parseDoc(text: string): { units: Unit[]; stats: ParseStats } {
+export function parseDoc(text: string): ParsedDoc {
   const raw = text.split(/\r?\n/).map(norm);
   const lines = raw.filter((l) => l && !isNoiseLine(l));
 
@@ -224,7 +253,10 @@ export function parseDoc(text: string): { units: Unit[]; stats: ParseStats } {
 
   /** Bob yaratadi. `flushBuffer` ni O'ZI chaqirmaydi — chaqiruvchi qiladi. */
   const newUnit = (title: string, hours?: number) => {
-    unit = { title: norm(title).replace(/[.:]+$/, ""), ...(hours ? { hours } : {}), topics: [] };
+    // Qavs ichidagi soat/daraja bloki sarlavhaga KIRMAYDI: u `hours` da,
+    // va id prefiksiga tushsa «…-24-soat-а2-6-soat-1» kabi id yasardi.
+    const clean = norm(title).replace(/\([^)]*\)/g, " ").replace(/[.:]+$/, "");
+    unit = { title: norm(clean) || norm(title), ...(hours ? { hours } : {}), topics: [] };
     units.push(unit);
     return unit;
   };
@@ -333,7 +365,7 @@ export function parseDoc(text: string): { units: Unit[]; stats: ParseStats } {
         j++;
       }
       i = j - 1;
-      pendingTopic = { title: norm(title.replace(/\(.*$/s, "")), ...(hours ? { hours } : {}) };
+      pendingTopic = { title: norm(title.replace(/\([\s\S]*$/, "")), ...(hours ? { hours } : {}) };
       pushTopic(pendingTopic.title, pendingTopic.hours);
       explicit++;
       pendingTopic = null;
@@ -374,24 +406,41 @@ export function parseDoc(text: string): { units: Unit[]; stats: ParseStats } {
     }));
   const topics = out.reduce((a, u) => a + u.topics.length, 0);
   const format: ParseStats["format"] = explicit && implicit ? "mixed" : explicit ? "A" : "B";
-  return { units: out, stats: { format, units: out.length, topics, dropped } };
+  const yearHours = yearHoursOf(lines, start);
+  return { units: out, ...(yearHours ? { yearHours } : {}), stats: { format, units: out.length, topics, dropped } };
 }
 
 /* ────────────────────────── dublikat va tozalash ────────────────────────── */
 
-/** Fan+sinf ICHIDA bir xil nomli mavzu bir marta qoladi (id unikal bo'ladi). */
+/**
+ * Fan+sinf ICHIDA bir xil nomli mavzu bir marta qoladi va id lar
+ * QAYTA raqamlanadi.
+ *
+ * Id prefiksi bob sarlavhasining slug i, LEKIN u ham takrorlanishi
+ * mumkin: sarlavha 48 belgida kesiladi va ba'zi dasturda ikki bob
+ * bir xil boshlanadi («ORGANIZMLARNING XILMA-XILLIGI» ikki marta,
+ * biologiya 9). Shunda id lar to'qnashardi va `pickTopics` noto'g'ri
+ * mavzuni tanlardi — shuning uchun takrorlangan prefiksga bob tartibi
+ * qo'shiladi.
+ */
 export function dedupe(units: Unit[]): Unit[] {
-  const seen = new Set<string>();
+  const seenTopic = new Set<string>();
+  const usedPrefix = new Map<string, number>();
   const out: Unit[] = [];
-  for (const u of units) {
+  for (const [at, u] of units.entries()) {
     const topics: Topic[] = [];
     for (const t of u.topics) {
       const key = slug(t.title);
-      if (!key || seen.has(key)) continue;
-      seen.add(key);
+      if (!key || seenTopic.has(key)) continue;
+      seenTopic.add(key);
       topics.push(t);
     }
-    if (topics.length) out.push({ ...u, topics: topics.map((t, i) => ({ ...t, id: `${slug(u.title) || "bob"}-${i + 1}` })) });
+    if (!topics.length) continue;
+    const base = slug(u.title) || "bob";
+    const n = (usedPrefix.get(base) ?? 0) + 1;
+    usedPrefix.set(base, n);
+    const prefix = n === 1 ? base : `${base}-b${at + 1}`;
+    out.push({ ...u, topics: topics.map((t, i) => ({ ...t, id: `${prefix}-${i + 1}` })) });
   }
   return out;
 }
@@ -418,7 +467,7 @@ export async function normalizeWithLlm(unit: Unit, subject: string, grade: numbe
   ].join("\n");
   const user = `SUBJECT: ${subject} · GRADE: ${grade} · CHAPTER: ${unit.title}\n\nLINES:\n${numbered}`;
   try {
-    const raw = await llmComplete(system, user, { json: true, maxTokens: 4000, timeoutMs: 60_000 });
+    const raw = await llmComplete(system, user, 4000, { json: true, timeoutMs: 60_000 });
     const parsed = raw ? (JSON.parse(raw.replace(/^```json\s*|```$/g, "")) as { keep?: { i?: unknown; title?: unknown }[] }) : null;
     const keep = Array.isArray(parsed?.keep) ? parsed.keep : [];
     if (!keep.length) return unit;
@@ -439,10 +488,11 @@ export async function normalizeWithLlm(unit: Unit, subject: string, grade: numbe
 
 /* ────────────────────────── fan fayli ────────────────────────── */
 
-export function entryOf(doc: CachedDoc, grade: number, spec: SubjectSpec, units: Unit[]): Entry {
+export function entryOf(doc: CachedDoc, grade: number, spec: SubjectSpec, units: Unit[], yearHours?: number): Entry {
   const gradeLabel = doc.grades.length > 1 ? `${doc.grades.join("–")}-sinf` : `${grade}-sinf`;
   return {
     grade,
+    ...(yearHours ? { hours: yearHours } : {}),
     source: {
       title: `Umumiy o'rta ta'limning o'quv dasturi (${gradeLabel}) — ${spec.uz}${doc.note ? ` (${doc.note})` : ""}`,
       url: doc.url,
@@ -496,7 +546,7 @@ async function main() {
       const topics = units.reduce((a, u) => a + u.topics.length, 0);
       console.log(`  ${spec.id} ${doc.grades.join("/")}-sinf · ${parsed.stats.format} · ${units.length} bob · ${topics} mavzu (tashlandi ${parsed.stats.dropped})`);
       // Qo'shma fayl («6-7-sinf») ikkala sinfga ham AYNI mundarija beradi.
-      for (const g of doc.grades) entries.push(entryOf(doc, g, spec, units));
+      for (const g of doc.grades) entries.push(entryOf(doc, g, spec, units, parsed.yearHours));
     }
     entries.sort((a, b) => a.grade - b.grade);
     const grades = entries.map((e) => e.grade);

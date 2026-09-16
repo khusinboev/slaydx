@@ -1,0 +1,1418 @@
+{
+  "version": "2026-09-16",
+  "subject": {
+    "id": "jahon-tarixi",
+    "uz": "Jahon tarixi",
+    "ru": "Всемирная история",
+    "en": "World history"
+  },
+  "entries": [
+    {
+      "grade": 7,
+      "hours": 51,
+      "source": {
+        "title": "Umumiy o'rta ta'limning o'quv dasturi (7-sinf) — Jahon tarixi",
+        "url": "https://uzbmb.uz/upload/file/pdf/qabul2025/dasturlar/9.Tarix/7-sinf-Jahon%20tarixi%20fanidan%20o'quv%20dastur.pdf",
+        "year": 2018,
+        "publisher": "Respublika ta'lim markazi (Xalq ta'limi vazirligi)"
+      },
+      "units": [
+        {
+          "title": "Dastur mavzulari",
+          "topics": [
+            {
+              "title": "Kirish",
+              "id": "dastur-mavzulari-1",
+              "hours": 1
+            }
+          ]
+        },
+        {
+          "title": "O‘RTA ASRLARNING ILK DAVRI",
+          "hours": 11,
+          "topics": [
+            {
+              "title": "German qabilalari va Rim imperiyasi",
+              "id": "orta-asrlarning-ilk-davri-1",
+              "hours": 1
+            },
+            {
+              "title": "Franklar. Franklar davlatining tashkil topishi",
+              "id": "orta-asrlarning-ilk-davri-2",
+              "hours": 1
+            },
+            {
+              "title": "Britaniyadan – Angliyaga",
+              "id": "orta-asrlarning-ilk-davri-3",
+              "hours": 1
+            },
+            {
+              "title": "Franklar imperiyasi",
+              "id": "orta-asrlarning-ilk-davri-4",
+              "hours": 1
+            },
+            {
+              "title": "Muqaddas Rim imperiyasi",
+              "id": "orta-asrlarning-ilk-davri-5",
+              "hours": 1
+            },
+            {
+              "title": "Vizantiya: G‘arb va Sharq orasida",
+              "id": "orta-asrlarning-ilk-davri-6",
+              "hours": 1
+            },
+            {
+              "title": "Slavyanlar va ularda davlatlarning tashkil topishi",
+              "id": "orta-asrlarning-ilk-davri-7"
+            },
+            {
+              "title": "Sharqiy slavyanlar. Kiev Rusi davlati",
+              "id": "orta-asrlarning-ilk-davri-8",
+              "hours": 1
+            },
+            {
+              "title": "Yevropa xalqlarining madaniyati",
+              "id": "orta-asrlarning-ilk-davri-9",
+              "hours": 1
+            }
+          ]
+        },
+        {
+          "title": "ILK O‘RTA ASRLARDA OSIYO",
+          "hours": 6,
+          "topics": [
+            {
+              "title": "Arabiston ilk o‘rta asrlar boshida",
+              "id": "ilk-orta-asrlarda-osiyo-1",
+              "hours": 1
+            },
+            {
+              "title": "Arab xalifaligi",
+              "id": "ilk-orta-asrlarda-osiyo-2",
+              "hours": 1
+            },
+            {
+              "title": "Hindiston",
+              "id": "ilk-orta-asrlarda-osiyo-3",
+              "hours": 1
+            },
+            {
+              "title": "Xitoy",
+              "id": "ilk-orta-asrlarda-osiyo-4",
+              "hours": 1
+            },
+            {
+              "title": "Osiyo mamlakatlari madaniyati",
+              "id": "ilk-orta-asrlarda-osiyo-5",
+              "hours": 1
+            }
+          ]
+        },
+        {
+          "title": "JAHON XALQLARI O‘RTA ASRLARNING RIVOJLANGAN DAVRIDA",
+          "hours": 9,
+          "topics": [
+            {
+              "title": "Yevropada o‘rta asr shaharlari",
+              "id": "jahon-xalqlari-orta-asrlarning-rivojlangan-davri-1",
+              "hours": 1
+            },
+            {
+              "title": "O‘rta asrlarda tovar ishlab chiqarishning rivojlanishi. Bozor va yarmarkalar",
+              "id": "jahon-xalqlari-orta-asrlarning-rivojlangan-davri-2",
+              "hours": 1
+            },
+            {
+              "title": "Osiyo mamlakatlarining o‘rta asr shaharlari",
+              "id": "jahon-xalqlari-orta-asrlarning-rivojlangan-davri-3",
+              "hours": 1
+            },
+            {
+              "title": "O‘rta asrlarda xristianlik",
+              "id": "jahon-xalqlari-orta-asrlarning-rivojlangan-davri-4",
+              "hours": 1
+            },
+            {
+              "title": "Salib yurishlari",
+              "id": "jahon-xalqlari-orta-asrlarning-rivojlangan-davri-5",
+              "hours": 1
+            },
+            {
+              "title": "Dastlabki salib yurishlari",
+              "id": "jahon-xalqlari-orta-asrlarning-rivojlangan-davri-6",
+              "hours": 1
+            },
+            {
+              "title": "Keyingi salib yurishlari",
+              "id": "jahon-xalqlari-orta-asrlarning-rivojlangan-davri-7",
+              "hours": 1
+            }
+          ]
+        },
+        {
+          "title": "YEVROPADA MARKAZLASHGAN DAVLATLARNING TASHKIL TOPISHI",
+          "hours": 13,
+          "topics": [
+            {
+              "title": "Fransiyada markazlashgan davlatning tashkil topishi",
+              "id": "yevropada-markazlashgan-davlatlarning-tashkil-to-1"
+            },
+            {
+              "title": "General shtatlar",
+              "id": "yevropada-markazlashgan-davlatlarning-tashkil-to-2",
+              "hours": 1
+            },
+            {
+              "title": "Yuz-yillik urushning boshlanishi va uning dastlabki davri",
+              "id": "yevropada-markazlashgan-davlatlarning-tashkil-to-3"
+            },
+            {
+              "title": "Fransiyada mutlaq monarxiya",
+              "id": "yevropada-markazlashgan-davlatlarning-tashkil-to-4",
+              "hours": 2
+            },
+            {
+              "title": "Angliyada markazlashgan davlatning tashkil topishi",
+              "id": "yevropada-markazlashgan-davlatlarning-tashkil-to-5"
+            },
+            {
+              "title": "Angliya",
+              "id": "yevropada-markazlashgan-davlatlarning-tashkil-to-6",
+              "hours": 1
+            },
+            {
+              "title": "Germaniya",
+              "id": "yevropada-markazlashgan-davlatlarning-tashkil-to-7",
+              "hours": 1
+            },
+            {
+              "title": "Rus knyazliklari",
+              "id": "yevropada-markazlashgan-davlatlarning-tashkil-to-8",
+              "hours": 1
+            },
+            {
+              "title": "Ruslarning bosqinchilarga qarshi kurashi",
+              "id": "yevropada-markazlashgan-davlatlarning-tashkil-to-9",
+              "hours": 1
+            },
+            {
+              "title": "Rus knyazliklarida markazlashish jarayonlari",
+              "id": "yevropada-markazlashgan-davlatlarning-tashkil-to-10",
+              "hours": 1
+            },
+            {
+              "title": "Yevropa madaniyati",
+              "id": "yevropada-markazlashgan-davlatlarning-tashkil-to-11",
+              "hours": 1
+            }
+          ]
+        },
+        {
+          "title": "OSIYO, AMERIKA VA AFRIKA XALQLARI",
+          "hours": 13,
+          "topics": [
+            {
+              "title": "Saljuqiylar davlati",
+              "id": "osiyo-amerika-va-afrika-xalqlari-1",
+              "hours": 1
+            },
+            {
+              "title": "Usmonli turklar davlati",
+              "id": "osiyo-amerika-va-afrika-xalqlari-2",
+              "hours": 1
+            },
+            {
+              "title": "Mo‘g‘ullar davlati",
+              "id": "osiyo-amerika-va-afrika-xalqlari-3",
+              "hours": 1
+            },
+            {
+              "title": "Oltin O‘rda xonligi",
+              "id": "osiyo-amerika-va-afrika-xalqlari-4",
+              "hours": 1
+            },
+            {
+              "title": "Yaponiya",
+              "id": "osiyo-amerika-va-afrika-xalqlari-5",
+              "hours": 1
+            },
+            {
+              "title": "O‘rta asrlarda Koreya",
+              "id": "osiyo-amerika-va-afrika-xalqlari-6",
+              "hours": 1
+            },
+            {
+              "title": "Amerika o‘rta asrlarda",
+              "id": "osiyo-amerika-va-afrika-xalqlari-7",
+              "hours": 1
+            },
+            {
+              "title": "Afrika xalqlari o‘rta asrlarda",
+              "id": "osiyo-amerika-va-afrika-xalqlari-8",
+              "hours": 1
+            },
+            {
+              "title": "Osiyo, Amerika va Afrika xalqlari madaniyati",
+              "id": "osiyo-amerika-va-afrika-xalqlari-9",
+              "hours": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "grade": 8,
+      "source": {
+        "title": "Umumiy o'rta ta'limning o'quv dasturi (8-sinf) — Jahon tarixi",
+        "url": "https://uzbmb.uz/upload/file/pdf/qabul2025/dasturlar/9.Tarix/8-sinf-Jahon%20tarixi%20fanidan%20o'quv%20dastur.pdf",
+        "year": 2018,
+        "publisher": "Respublika ta'lim markazi (Xalq ta'limi vazirligi)"
+      },
+      "units": [
+        {
+          "title": "YEVROPADA YANGI DAVRNING BOSHLANISHI",
+          "hours": 7,
+          "topics": [
+            {
+              "title": "Buyuk geografik kashfiyotlar va ularning tarixiy ahamiyati",
+              "id": "yevropada-yangi-davrning-boshlanishi-1"
+            },
+            {
+              "title": "Hindistonga dengiz yo‘lining ochilishi",
+              "id": "yevropada-yangi-davrning-boshlanishi-2"
+            },
+            {
+              "title": "Yangi davr boshlarida G‘arbiy Yevropa mamlakatlarida industrial jamiyatning shakllanishi",
+              "id": "yevropada-yangi-davrning-boshlanishi-3"
+            },
+            {
+              "title": "Savdo-sotiq munosabatlarining rivojlanishi. «Narx-navo inqilobi» va banklarning paydo bo‘lishi",
+              "id": "yevropada-yangi-davrning-boshlanishi-4"
+            },
+            {
+              "title": "Yevropada reformatsiya",
+              "id": "yevropada-yangi-davrning-boshlanishi-5"
+            },
+            {
+              "title": "Reformatsiyaning Yevropaga yoyilishi",
+              "id": "yevropada-yangi-davrning-boshlanishi-6"
+            },
+            {
+              "title": "G‘arbiy Yevropada yangi davr madaniyatining shakllanishi",
+              "id": "yevropada-yangi-davrning-boshlanishi-7"
+            }
+          ]
+        },
+        {
+          "title": "XVI-XVIII ASRLARDA YEVROPA VA AMERIKA MAMLAKATLARI",
+          "hours": 12,
+          "topics": [
+            {
+              "title": "Angliyada qirol hokimiyatining kuchayishi",
+              "id": "xvi-xviii-asrlarda-yevropa-va-amerika-mamlakatla-1"
+            },
+            {
+              "title": "Armiyada parlamentning mo‘tadil burjua islohotlari",
+              "id": "xvi-xviii-asrlarda-yevropa-va-amerika-mamlakatla-2"
+            },
+            {
+              "title": "XVI–XVIII asrlarda xalqaro munosabatlar",
+              "id": "xvi-xviii-asrlarda-yevropa-va-amerika-mamlakatla-3"
+            },
+            {
+              "title": "Yevropaning yangi siyosiy xaritasi",
+              "id": "xvi-xviii-asrlarda-yevropa-va-amerika-mamlakatla-4"
+            },
+            {
+              "title": "Fransiyada mutlaq monarxiya",
+              "id": "xvi-xviii-asrlarda-yevropa-va-amerika-mamlakatla-5"
+            },
+            {
+              "title": "Manufaktura va savdoning rivojlanishi",
+              "id": "xvi-xviii-asrlarda-yevropa-va-amerika-mamlakatla-6"
+            },
+            {
+              "title": "Rishelening mamlakatni idora qilishi",
+              "id": "xvi-xviii-asrlarda-yevropa-va-amerika-mamlakatla-7"
+            },
+            {
+              "title": "Buyuk fransuz burjua inqilobining yakunlanishi va tarixiy ahamiyati",
+              "id": "xvi-xviii-asrlarda-yevropa-va-amerika-mamlakatla-8"
+            },
+            {
+              "title": "«Fuqaro va inson huquqlari deklaratsiyasi»ning qabul qilinishi va uning tarixiy ahamiyati",
+              "id": "xvi-xviii-asrlarda-yevropa-va-amerika-mamlakatla-9"
+            },
+            {
+              "title": "Yakobinchilarning ag‘darilishi",
+              "id": "xvi-xviii-asrlarda-yevropa-va-amerika-mamlakatla-10"
+            },
+            {
+              "title": "XVI-XVIII asrlarda Germaniya imperiyasi",
+              "id": "xvi-xviii-asrlarda-yevropa-va-amerika-mamlakatla-11"
+            },
+            {
+              "title": "Dehqonlar urushining Germaniyadagi siyosiy tarqoqlikka ta’siri",
+              "id": "xvi-xviii-asrlarda-yevropa-va-amerika-mamlakatla-12"
+            },
+            {
+              "title": "Prussiya qirolligining tashkil topishi",
+              "id": "xvi-xviii-asrlarda-yevropa-va-amerika-mamlakatla-13"
+            },
+            {
+              "title": "XVI-XVIII asrlarda Rossiya imperiyasi",
+              "id": "xvi-xviii-asrlarda-yevropa-va-amerika-mamlakatla-14"
+            },
+            {
+              "title": "XVIII asrlarda Shimoliy Amerika",
+              "id": "xvi-xviii-asrlarda-yevropa-va-amerika-mamlakatla-15"
+            },
+            {
+              "title": "«Mustaqillik deklaratsiyasi». AQSHning tashkil topishi",
+              "id": "xvi-xviii-asrlarda-yevropa-va-amerika-mamlakatla-16"
+            },
+            {
+              "title": "Madaniyat va san’at",
+              "id": "xvi-xviii-asrlarda-yevropa-va-amerika-mamlakatla-17"
+            },
+            {
+              "title": "Ma’rifat asri",
+              "id": "xvi-xviii-asrlarda-yevropa-va-amerika-mamlakatla-18"
+            }
+          ]
+        },
+        {
+          "title": "XVI-XVIII ASRLARDA OSIYO VA AFRIKA MAMLAKATLARI",
+          "hours": 9,
+          "topics": [
+            {
+              "title": "XVIII asrlarda Osiyo mamlakatlari rivojlanishining asosiy xususiyatlari",
+              "id": "xvi-xviii-asrlarda-osiyo-va-afrika-mamlakatlari-1"
+            },
+            {
+              "title": "XVI-XVIII asrlarda Osiyo mamlakatlarida ijtimoiy taraqqiyotning asosiy yo‘nalishlari",
+              "id": "xvi-xviii-asrlarda-osiyo-va-afrika-mamlakatlari-2"
+            },
+            {
+              "title": "Turmush madaniyati",
+              "id": "xvi-xviii-asrlarda-osiyo-va-afrika-mamlakatlari-3"
+            },
+            {
+              "title": "XVI-XVIII asrlarda Xitoy",
+              "id": "xvi-xviii-asrlarda-osiyo-va-afrika-mamlakatlari-4"
+            },
+            {
+              "title": "Dehqonlar qo‘zg‘olonlari",
+              "id": "xvi-xviii-asrlarda-osiyo-va-afrika-mamlakatlari-5"
+            },
+            {
+              "title": "XVI-XVIII asrlarda Hindiston",
+              "id": "xvi-xviii-asrlarda-osiyo-va-afrika-mamlakatlari-6"
+            },
+            {
+              "title": "Akbarshoh va uning islohotlari",
+              "id": "xvi-xviii-asrlarda-osiyo-va-afrika-mamlakatlari-7"
+            },
+            {
+              "title": "Xalq harakatlari va Boburiylar imperiyasining parchalanishi",
+              "id": "xvi-xviii-asrlarda-osiyo-va-afrika-mamlakatlari-8"
+            },
+            {
+              "title": "XVI-XVIII asrlarda Yaponiya va Koreya",
+              "id": "xvi-xviii-asrlarda-osiyo-va-afrika-mamlakatlari-9"
+            },
+            {
+              "title": "Koreyaning ijtimoiy tuzumi",
+              "id": "xvi-xviii-asrlarda-osiyo-va-afrika-mamlakatlari-10"
+            },
+            {
+              "title": "XVI-XVIII asrlarda Usmoniylar imperiyasi",
+              "id": "xvi-xviii-asrlarda-osiyo-va-afrika-mamlakatlari-11"
+            },
+            {
+              "title": "Imperiyaning iqtisodiy ahvoli",
+              "id": "xvi-xviii-asrlarda-osiyo-va-afrika-mamlakatlari-12"
+            },
+            {
+              "title": "Salim III islohotlari",
+              "id": "xvi-xviii-asrlarda-osiyo-va-afrika-mamlakatlari-13"
+            },
+            {
+              "title": "XVI-XVIII asrlarda Eron",
+              "id": "xvi-xviii-asrlarda-osiyo-va-afrika-mamlakatlari-14"
+            },
+            {
+              "title": "XVI-XVIII asrlarda Afrika mamlakatlari",
+              "id": "xvi-xviii-asrlarda-osiyo-va-afrika-mamlakatlari-15"
+            },
+            {
+              "title": "Manbalar bilan ishlash",
+              "id": "xvi-xviii-asrlarda-osiyo-va-afrika-mamlakatlari-16"
+            }
+          ]
+        },
+        {
+          "title": "1800-1870-YILLARDA YEVROPA VA AMERIKA MAMLAKATLARI",
+          "hours": 11,
+          "topics": [
+            {
+              "title": "1800-1870-yillarda Buyuk Britaniya",
+              "id": "1800-1870-yillarda-yevropa-va-amerika-mamlakatla-1"
+            },
+            {
+              "title": "Iqtisodiy taraqqiyot",
+              "id": "1800-1870-yillarda-yevropa-va-amerika-mamlakatla-2"
+            },
+            {
+              "title": "Samaderjaviya va krepostnoylikka qarshi kurash",
+              "id": "1800-1870-yillarda-yevropa-va-amerika-mamlakatla-3"
+            },
+            {
+              "title": "Tashqi siyosat . Adabiyot, san’at, arxitektura va fanning rivojlanishi. 1800-1870-yillarda Amerika Qo‘shma Shtatlari",
+              "id": "1800-1870-yillarda-yevropa-va-amerika-mamlakatla-4"
+            },
+            {
+              "title": "Quldorlar isyoni",
+              "id": "1800-1870-yillarda-yevropa-va-amerika-mamlakatla-5"
+            },
+            {
+              "title": "Adabiyot, san’at, arxitektura, ta’lim va fanning rivojlanishi",
+              "id": "1800-1870-yillarda-yevropa-va-amerika-mamlakatla-6"
+            },
+            {
+              "title": "Lotin Amerikasi xalqlarining milliy-ozodlik kurashi",
+              "id": "1800-1870-yillarda-yevropa-va-amerika-mamlakatla-7"
+            }
+          ]
+        },
+        {
+          "title": "1800-1870-YILLARDA OSIYO VA AFRIKA MAMLAKATLARI",
+          "hours": 11,
+          "topics": [
+            {
+              "title": "1800-1870-yillarda Hindiston",
+              "id": "1800-1870-yillarda-osiyo-va-afrika-mamlakatlari-1"
+            },
+            {
+              "title": "Hindistonda kapitalistik munosabatlarning shakllanishi",
+              "id": "1800-1870-yillarda-osiyo-va-afrika-mamlakatlari-2"
+            },
+            {
+              "title": "Tokugava hokimiyatiga qarshi muxolifatning kuchayishi va hokimiyat inqirozi",
+              "id": "1800-1870-yillarda-osiyo-va-afrika-mamlakatlari-3"
+            },
+            {
+              "title": "Yaponiyaning kuch bilan “ochilishi” va uning oqibatlari",
+              "id": "1800-1870-yillarda-osiyo-va-afrika-mamlakatlari-4"
+            },
+            {
+              "title": "Koreyaning G‘arb mamlakatlariga qaramligining boshlanishi",
+              "id": "1800-1870-yillarda-osiyo-va-afrika-mamlakatlari-5"
+            },
+            {
+              "title": "Tanzimatning boshlanishi",
+              "id": "1800-1870-yillarda-osiyo-va-afrika-mamlakatlari-6"
+            },
+            {
+              "title": "Rus-Eron urushlari",
+              "id": "1800-1870-yillarda-osiyo-va-afrika-mamlakatlari-7"
+            },
+            {
+              "title": "Bobiylar qo‘zg‘oloni",
+              "id": "1800-1870-yillarda-osiyo-va-afrika-mamlakatlari-8"
+            },
+            {
+              "title": "Do‘st Muhammadning hokimiyat tepasiga kelishi",
+              "id": "1800-1870-yillarda-osiyo-va-afrika-mamlakatlari-9"
+            },
+            {
+              "title": "Ingliz-Afg‘on urushlari",
+              "id": "1800-1870-yillarda-osiyo-va-afrika-mamlakatlari-10"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "grade": 9,
+      "hours": 34,
+      "source": {
+        "title": "Umumiy o'rta ta'limning o'quv dasturi (9-sinf) — Jahon tarixi",
+        "url": "https://uzbmb.uz/upload/file/pdf/qabul2025/dasturlar/9.Tarix/9-sinf-Jahon%20tarixi%20fanidan%20o'quv%20dastur.pdf",
+        "year": 2018,
+        "publisher": "Respublika ta'lim markazi (Xalq ta'limi vazirligi)"
+      },
+      "units": [
+        {
+          "title": "DUNYONING IJTIMOIY-IQTISODIY VA SIYOSIY MANZARASI",
+          "hours": 2,
+          "topics": [
+            {
+              "title": "XIX asrning oxiri - XX asr boshlarida kapitalizm taraqqiyotida yuz bergan tub o‘zgarishlar",
+              "id": "dunyoning-ijtimoiy-iqtisodiy-va-siyosiy-manzaras-1"
+            },
+            {
+              "title": "Industrial sivilizatsiya",
+              "id": "dunyoning-ijtimoiy-iqtisodiy-va-siyosiy-manzaras-2"
+            }
+          ]
+        },
+        {
+          "title": "G‘ARBIY YEVROPA DAVLATLARI XIX ASR OXIRI VA XX ASR BOSHLARIDA",
+          "hours": 11,
+          "topics": [
+            {
+              "title": "Fransiya-Prussiya urushi va uning yakunlari",
+              "id": "garbiy-yevropa-davlatlari-xix-asr-oxiri-va-xx-as-1"
+            },
+            {
+              "title": "Parijning taslim bo‘lishi",
+              "id": "garbiy-yevropa-davlatlari-xix-asr-oxiri-va-xx-as-2"
+            },
+            {
+              "title": "Fransiyada Uchinchi Respublika va 1871-yil 18-mart davlat to‘ntarishi",
+              "id": "garbiy-yevropa-davlatlari-xix-asr-oxiri-va-xx-as-3"
+            },
+            {
+              "title": "Fransiyada ijtimoiy-siyosiy ahvol",
+              "id": "garbiy-yevropa-davlatlari-xix-asr-oxiri-va-xx-as-4"
+            },
+            {
+              "title": "Kommunada siyosiy guruhlar kurashi",
+              "id": "garbiy-yevropa-davlatlari-xix-asr-oxiri-va-xx-as-5"
+            },
+            {
+              "title": "XIX asrning oxiri - XX asr boshlarida Fransiyada iqtisodiy va siyosiy hayot",
+              "id": "garbiy-yevropa-davlatlari-xix-asr-oxiri-va-xx-as-6"
+            },
+            {
+              "title": "Fransiyaning ichki siyosati. 1875-yil Konstitutsiyasi",
+              "id": "garbiy-yevropa-davlatlari-xix-asr-oxiri-va-xx-as-7"
+            },
+            {
+              "title": "Fransiyaning tashqi siyosati",
+              "id": "garbiy-yevropa-davlatlari-xix-asr-oxiri-va-xx-as-8"
+            },
+            {
+              "title": "XIX asr oxiri - XX asr boshlarida Germaniya",
+              "id": "garbiy-yevropa-davlatlari-xix-asr-oxiri-va-xx-as-9"
+            },
+            {
+              "title": "Imperiyaning ichki siyosati",
+              "id": "garbiy-yevropa-davlatlari-xix-asr-oxiri-va-xx-as-10"
+            },
+            {
+              "title": "Germaniyaning mustamlakachilik siyosati",
+              "id": "garbiy-yevropa-davlatlari-xix-asr-oxiri-va-xx-as-11"
+            },
+            {
+              "title": "Imperiyaning tashqi siyosati",
+              "id": "garbiy-yevropa-davlatlari-xix-asr-oxiri-va-xx-as-12"
+            },
+            {
+              "title": "XIX asrning oxiri - XX asr boshlarida Buyuk Britaniyaning siyosiy va iqtisodiy ahvoli",
+              "id": "garbiy-yevropa-davlatlari-xix-asr-oxiri-va-xx-as-13"
+            },
+            {
+              "title": "Mamlakat aholisining turmushtarzi",
+              "id": "garbiy-yevropa-davlatlari-xix-asr-oxiri-va-xx-as-14"
+            },
+            {
+              "title": "Buyuk Britaniyaning ichki siyosati",
+              "id": "garbiy-yevropa-davlatlari-xix-asr-oxiri-va-xx-as-15"
+            },
+            {
+              "title": "Siyosiy inqiroz",
+              "id": "garbiy-yevropa-davlatlari-xix-asr-oxiri-va-xx-as-16"
+            },
+            {
+              "title": "Buyuk Britaniyaning tashqi siyosati",
+              "id": "garbiy-yevropa-davlatlari-xix-asr-oxiri-va-xx-as-17"
+            },
+            {
+              "title": "Buyuk Britaniya – Rossiya munosabatlari",
+              "id": "garbiy-yevropa-davlatlari-xix-asr-oxiri-va-xx-as-18"
+            }
+          ]
+        },
+        {
+          "title": "XIX ASR OXIRI – XX ASR BOSHLARIDA AMERIKA DAVLATLARI",
+          "hours": 5,
+          "topics": [
+            {
+              "title": "Amerika Qo‘shma Shtatlari",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-amerika-davlatla-1"
+            },
+            {
+              "title": "Janubdagi o‘zgarishlar",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-amerika-davlatla-2"
+            },
+            {
+              "title": "Qishloq xo‘jaligida kapitalizm taraqqiyotining «amerikacha yo‘li»",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-amerika-davlatla-3"
+            },
+            {
+              "title": "AQSHning ichki siyosati",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-amerika-davlatla-4"
+            },
+            {
+              "title": "AQSHning tashqi siyosati",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-amerika-davlatla-5"
+            },
+            {
+              "title": "XIX asrning oxiri va XX asr boshlarida Lotin Amerikasi davlatlari",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-amerika-davlatla-6"
+            },
+            {
+              "title": "Lotin Amerikasining boshqa davlatlari.Braziliyada qulchilikning bekor qilinishi",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-amerika-davlatla-7"
+            }
+          ]
+        },
+        {
+          "title": "XIX ASR OXIRI - XX ASR BOSHLARIDA ROSSIYASI IMPERIYASI, MARKAZIY VA JANUBIY-SHARQIY YEVROPA DAVLATLARI",
+          "hours": 7,
+          "topics": [
+            {
+              "title": "XIX asrning oxiri - XX asr boshlarida Rossiya imperiyasining ijtimoiy- siyosiy va iqtisodiy ahvoli",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-rossiyasi-imperi-1"
+            },
+            {
+              "title": "Rossiyaimperiyasining tashqi siyosati",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-rossiyasi-imperi-2"
+            },
+            {
+              "title": "Uzoq Sharq inqirozi va Rossiyaning tutgan siyosati",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-rossiyasi-imperi-3"
+            },
+            {
+              "title": "Rossiyada Davlat dumasining tashkil etilishi",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-rossiyasi-imperi-4"
+            },
+            {
+              "title": "XIX asr oxiri - XX asr boshlarida Avstriya-Vengriya imperiyasi",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-rossiyasi-imperi-5"
+            },
+            {
+              "title": "Trializim",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-rossiyasi-imperi-6"
+            },
+            {
+              "title": "Avstriya-Vengriya imperiyasining tashqi siyosati",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-rossiyasi-imperi-7"
+            },
+            {
+              "title": "XIX asr oxiri - XX asr boshlarida Italiya",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-rossiyasi-imperi-8"
+            },
+            {
+              "title": "Italiyaning boshqa davlatlar bilan munosabati. 1911-1912-yillardagi ItaliyaTurkiya urushi",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-rossiyasi-imperi-9"
+            },
+            {
+              "title": "XIX asr oxiri - XX asr boshlarida Bolqon davlatlari",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-rossiyasi-imperi-10"
+            },
+            {
+              "title": "Yevropa davlatlarining Bolqondagi siyosati",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-rossiyasi-imperi-11"
+            }
+          ]
+        },
+        {
+          "title": "XIX ASR OXIRI – XX ASR BOSHLARIDA OSIYO DAVLATLARI",
+          "hours": 7,
+          "topics": [
+            {
+              "title": "XIX asrning oxiri va XX asr boshlarida Yaponiya",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-osiyo-davlatlari-1"
+            },
+            {
+              "title": "XIX asrning oxirida Xitoy",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-osiyo-davlatlari-2"
+            },
+            {
+              "title": "Xitoyning ta’sir doiralarga bo‘linishi",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-osiyo-davlatlari-3"
+            },
+            {
+              "title": "XX asr boshlarida Xitoyning ijtimoiy-iqtisodiy va siyosiy ahvoli",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-osiyo-davlatlari-4"
+            },
+            {
+              "title": "XIX asrning oxiri - XX asr boshlarida Hindiston",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-osiyo-davlatlari-5"
+            },
+            {
+              "title": "XIX asrning oxiri - XX asr boshlarida Eron",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-osiyo-davlatlari-6"
+            },
+            {
+              "title": "XIX asrning oxiri - XX asr boshlarida Afg‘oniston",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-osiyo-davlatlari-7"
+            },
+            {
+              "title": "XIX asrning oxiri - XX asr boshlarida Usmonli davlati",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-osiyo-davlatlari-8"
+            }
+          ]
+        },
+        {
+          "title": "XIX ASRNING OXIRI - XX ASR BOSHLARIDA AFRIKA MAMLAKATLARI",
+          "hours": 2,
+          "topics": [
+            {
+              "title": "Shimoliy Afrika mamlakatlari.Bu davrda arab mamlakatlarining ijtimoiy- iqtisodiy va siyosiy ahvoli",
+              "id": "xix-asrning-oxiri-xx-asr-boshlarida-afrika-mamla-1"
+            },
+            {
+              "title": "Arabistonda Angliya ta’sirining kuchayishi",
+              "id": "xix-asrning-oxiri-xx-asr-boshlarida-afrika-mamla-2"
+            },
+            {
+              "title": "Liviyaning Italiya tomonidan bosib olinishi",
+              "id": "xix-asrning-oxiri-xx-asr-boshlarida-afrika-mamla-3"
+            },
+            {
+              "title": "Jazoyir-Fransiya hukmronligi ostida",
+              "id": "xix-asrning-oxiri-xx-asr-boshlarida-afrika-mamla-4"
+            },
+            {
+              "title": "Tropik va Janubiy Afrika mamlakatlari",
+              "id": "xix-asrning-oxiri-xx-asr-boshlarida-afrika-mamla-5"
+            },
+            {
+              "title": "Markaziy Afrikada Belgiyaning mustamlakachiligi",
+              "id": "xix-asrning-oxiri-xx-asr-boshlarida-afrika-mamla-6"
+            },
+            {
+              "title": "Zuluslarning Ketchvayo boshchiligidagi ozodlik urushi",
+              "id": "xix-asrning-oxiri-xx-asr-boshlarida-afrika-mamla-7"
+            },
+            {
+              "title": "Xendrik Vitboy",
+              "id": "xix-asrning-oxiri-xx-asr-boshlarida-afrika-mamla-8"
+            }
+          ]
+        },
+        {
+          "title": "1914-1918-YILLARDAGI BIRINCHI JAHON URUSHI",
+          "hours": 3,
+          "topics": [
+            {
+              "title": "Birinchi jahon urushining boshlanishi va borishi",
+              "id": "1914-1918-yillardagi-birinchi-jahon-urushi-1"
+            },
+            {
+              "title": "Birinchi jahon urushining yakunlari va oqibatlari",
+              "id": "1914-1918-yillardagi-birinchi-jahon-urushi-2"
+            },
+            {
+              "title": "Rossiyaning urushdan chiqishi",
+              "id": "1914-1918-yillardagi-birinchi-jahon-urushi-3"
+            }
+          ]
+        },
+        {
+          "title": "XIX ASRNING OXIRI - XX ASR BOSHLARIDA FAN VA MADANIYATNING RIVOJLANISHI",
+          "hours": 4,
+          "topics": [
+            {
+              "title": "Moddiy ishlab chiqarishda texnika va fan taraqqiyoti",
+              "id": "xix-asrning-oxiri-xx-asr-boshlarida-fan-va-madan-1"
+            },
+            {
+              "title": "Aniq va tabiiy fanlar rivoji",
+              "id": "xix-asrning-oxiri-xx-asr-boshlarida-fan-va-madan-2"
+            },
+            {
+              "title": "Xalq ta’limi",
+              "id": "xix-asrning-oxiri-xx-asr-boshlarida-fan-va-madan-3"
+            },
+            {
+              "title": "Adabiyot.Tanqidiy realizm",
+              "id": "xix-asrning-oxiri-xx-asr-boshlarida-fan-va-madan-4"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "grade": 10,
+      "source": {
+        "title": "Umumiy o'rta ta'limning o'quv dasturi (10-sinf) — Jahon tarixi (MO'D)",
+        "url": "https://uzbmb.uz/upload/file/pdf/qabul2025/dasturlar/9.Tarix/10-sinf-Jahon%20tarixi%20fanidan%20o'quv%20dastur%20(MO%E2%80%98D).pdf",
+        "year": 2018,
+        "publisher": "Respublika ta'lim markazi (Xalq ta'limi vazirligi)"
+      },
+      "units": [
+        {
+          "title": "XIX ASR OXIRI – XX ASR BOSHLARIDA JAHON MAMLAKATLARI: INDUSTRIAL SIVILIZATSIYANING QAROR TOPISHI",
+          "hours": 4,
+          "topics": [
+            {
+              "title": "Industrial sivilizatsiyaning qaror topishi",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-jahon-mamlakatla-1"
+            },
+            {
+              "title": "XIX asrning 70-yilarida Yevropa va Shimoliy Amerikada texnik taraqqiyot va industrial sivilizatsiyaning yangi bosqichi",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-jahon-mamlakatla-2"
+            },
+            {
+              "title": "Kishilarning moddiy va madaniy olamida yuz bergan o‘zgarishlar. “Yanada Buyuk Britaniya” uchun: yangi iqtisodiy va mafkuraviy tizimning paydo bo‘lishi. “Pax Britanica” davrining yakunlanishi",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-jahon-mamlakatla-3"
+            },
+            {
+              "title": "Ishchilar harakati",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-jahon-mamlakatla-4"
+            },
+            {
+              "title": "Fransiya va Germaniya: Yevropada yetakchilik uchun kurash",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-jahon-mamlakatla-5"
+            },
+            {
+              "title": "Fransiya-Prussiya urushi",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-jahon-mamlakatla-6"
+            },
+            {
+              "title": "Germaniya imeriyasi: “Quyosh ostidan joy” uchun kurash",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-jahon-mamlakatla-7"
+            },
+            {
+              "title": "Sharqiy Yevropa va Rossiya: jamiyatni isloh qilish muammolari",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-jahon-mamlakatla-8"
+            },
+            {
+              "title": "Sharqiy Yevropa mamlakatlarida siyosiy tizim va iqtisodiy rivojlanish muammolari",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-jahon-mamlakatla-9"
+            },
+            {
+              "title": "Rossiyada amalga oshirilgan islohotlar va ularning natijalari",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-jahon-mamlakatla-10"
+            },
+            {
+              "title": "Ikki xil Amerika: Shimoliy va Janubiy Amerikada taraqqiyot yo‘nalishlari",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-jahon-mamlakatla-11"
+            },
+            {
+              "title": "AQShning iqtisodiy rivojlanishi, dunyoning yetakchi sanoat mamlakatiga aylanishi. “Progress erasi” yillarida Amerika",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-jahon-mamlakatla-12"
+            },
+            {
+              "title": "Lotin Amerikasi mamlakatlarida ijtimoiy-iqtisodiy va siyosiy rivojlanishning asosiy yo‘nalishlari",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-jahon-mamlakatla-13"
+            },
+            {
+              "title": "Yaponiya, Xitoy va Hindiston: islohotlarning osiyocha yo‘li",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-jahon-mamlakatla-14"
+            },
+            {
+              "title": "Yaponiyada Meydzining burjuacha islohotlari",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-jahon-mamlakatla-15"
+            },
+            {
+              "title": "Siyosiy partiyalar va 1889-yilgi konstitutsiya",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-jahon-mamlakatla-16"
+            },
+            {
+              "title": "Xitoyda “o‘z o‘zini kuchaytirish” siyosati",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-jahon-mamlakatla-17"
+            },
+            {
+              "title": "Xitoy madaniyati",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-jahon-mamlakatla-18"
+            },
+            {
+              "title": "Hindistonda milliy yangilanish mafkurasining shakllanishi",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-jahon-mamlakatla-19"
+            },
+            {
+              "title": "Islom sivilizatsiyasi mamlakatlarida an’anaviylik va islohotchilik o‘rtasidagi kurash",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-jahon-mamlakatla-20"
+            },
+            {
+              "title": "Islom sivilizatsiyasining holati",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-jahon-mamlakatla-21"
+            },
+            {
+              "title": "Eronning yarim mustamlakaga aylantirilishi. 1905–1911-yillardagi konstitutsion inqilob",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-jahon-mamlakatla-22"
+            },
+            {
+              "title": "Islom sivilizatsiyasi mamlakatlarida iqtisodiy va madaniy rivojlanish",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-jahon-mamlakatla-23"
+            },
+            {
+              "title": "Afrika mamlakatlarida mustamlakachilik va taraqqiyot muammolari",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-jahon-mamlakatla-24"
+            },
+            {
+              "title": "Qullik, qul savdosi va uning oqibatlari",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-jahon-mamlakatla-25"
+            },
+            {
+              "title": "Milliy-ozodlik mafkurasining shakllanishi",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-jahon-mamlakatla-26"
+            }
+          ]
+        },
+        {
+          "title": "JAHON URUSHLARI ORALIG‘IDA SIVILIZATSIYA RIVOJINING IKKI YO‘NALISHI: LIBERAL-DEMOKRATIYA VA TOTALITAR-AVTORITAR DIKTATURA",
+          "hours": 4,
+          "topics": [
+            {
+              "title": "Birinchi jahon urushining kelib chiqish sabablari va oqibatlari",
+              "id": "jahon-urushlari-oraligida-sivilizatsiya-rivojini-1"
+            },
+            {
+              "title": "XX asr boshlarida jahon taraqqiyotidagi ziddiyatlarning keskinlashuvi",
+              "id": "jahon-urushlari-oraligida-sivilizatsiya-rivojini-2"
+            },
+            {
+              "title": "Birinchi jahon urushining boshlanishi, xarakteri va ishtirokchi davlatlarning maqsadlari",
+              "id": "jahon-urushlari-oraligida-sivilizatsiya-rivojini-3"
+            },
+            {
+              "title": "Liberal-demokratiya mamlakatlarida taraqqiyotning yangi muammolari",
+              "id": "jahon-urushlari-oraligida-sivilizatsiya-rivojini-4"
+            },
+            {
+              "title": "Liberal-demokratiya evolyusiyasi",
+              "id": "jahon-urushlari-oraligida-sivilizatsiya-rivojini-5"
+            },
+            {
+              "title": "F.Ruzveltning “Yangi siyosat”i va uning natijalari",
+              "id": "jahon-urushlari-oraligida-sivilizatsiya-rivojini-6"
+            },
+            {
+              "title": "Totalitar va avtoritar diktatura mamlakatlari: yangi urush o‘chog‘ining paydo bo‘lishi",
+              "id": "jahon-urushlari-oraligida-sivilizatsiya-rivojini-7"
+            },
+            {
+              "title": "Totalitarizm – XX asr fenomeni",
+              "id": "jahon-urushlari-oraligida-sivilizatsiya-rivojini-8"
+            },
+            {
+              "title": "Yaponiya militarizmi",
+              "id": "jahon-urushlari-oraligida-sivilizatsiya-rivojini-9"
+            },
+            {
+              "title": "Osiyo mamlakatlarida mustaqillik va taraqqiyot muammolari",
+              "id": "jahon-urushlari-oraligida-sivilizatsiya-rivojini-10"
+            },
+            {
+              "title": "Birinchi jahon urushidan keyin Osiyo mamlakatlaridagi siyosiy holat",
+              "id": "jahon-urushlari-oraligida-sivilizatsiya-rivojini-11"
+            },
+            {
+              "title": "Usmoniyaylar imperiyasida urushdagi mag‘lubiyat oqibatlari",
+              "id": "jahon-urushlari-oraligida-sivilizatsiya-rivojini-12"
+            },
+            {
+              "title": "Turkiya respublikasining tashkil topishi va islohotlar",
+              "id": "jahon-urushlari-oraligida-sivilizatsiya-rivojini-13"
+            },
+            {
+              "title": "Xitoyda ichki siyosiy vaziyatning keskinlashuvi, fuqarolar urushi",
+              "id": "jahon-urushlari-oraligida-sivilizatsiya-rivojini-14"
+            },
+            {
+              "title": "Mamlakatni birlashtirishning yakunlanishi",
+              "id": "jahon-urushlari-oraligida-sivilizatsiya-rivojini-15"
+            },
+            {
+              "title": "Hindiston Milliy kongressi. 1935-yilgi konstitutsiya",
+              "id": "jahon-urushlari-oraligida-sivilizatsiya-rivojini-16"
+            },
+            {
+              "title": "Afrikada milliy uyg‘onish va mustaqillik g‘oyalarining paydo bo‘lishi",
+              "id": "jahon-urushlari-oraligida-sivilizatsiya-rivojini-17"
+            },
+            {
+              "title": "Birinchi jahon urushidan keyin Afrikada mustamlakachilik",
+              "id": "jahon-urushlari-oraligida-sivilizatsiya-rivojini-18"
+            },
+            {
+              "title": "Milliy-ozodlik harakatlari",
+              "id": "jahon-urushlari-oraligida-sivilizatsiya-rivojini-19"
+            },
+            {
+              "title": "Ikkinchi jahon urushining kelib chiqish sabablari va oqibatlari",
+              "id": "jahon-urushlari-oraligida-sivilizatsiya-rivojini-20"
+            },
+            {
+              "title": "Ikkinchi jahon urushidan oldin xalqaro munosabatlar",
+              "id": "jahon-urushlari-oraligida-sivilizatsiya-rivojini-21"
+            }
+          ]
+        },
+        {
+          "title": "1945–1991-YILLARDA YEVROPA VA SHIMOLIY AMERIKA MAMLAKATLARI",
+          "hours": 5,
+          "topics": [
+            {
+              "title": "G‘arbiy Yevropa va Shimoliy Amerika mamlakatlari rivojlanishining asosiy yo‘nalishlari",
+              "id": "1945-1991-yillarda-yevropa-va-shimoliy-amerika-m-1"
+            },
+            {
+              "title": "Demokratik islohotlar",
+              "id": "1945-1991-yillarda-yevropa-va-shimoliy-amerika-m-2"
+            },
+            {
+              "title": "Ilmiy-texnik inqilob",
+              "id": "1945-1991-yillarda-yevropa-va-shimoliy-amerika-m-3"
+            },
+            {
+              "title": "SSSR va Sharqiy Yevropa mamlakatlari rivojlanishining asosiy yo‘nalishlari",
+              "id": "1945-1991-yillarda-yevropa-va-shimoliy-amerika-m-4"
+            },
+            {
+              "title": "Urushdan keyingi tiklanish va rivojlanish. “Sovuq urush” va ikki qutbli tizimning shakllanishi",
+              "id": "1945-1991-yillarda-yevropa-va-shimoliy-amerika-m-5"
+            },
+            {
+              "title": "AQSh: yangi liderning paydo bo‘lishi",
+              "id": "1945-1991-yillarda-yevropa-va-shimoliy-amerika-m-6"
+            },
+            {
+              "title": "Urushdan keyingi Amerika jamiyati",
+              "id": "1945-1991-yillarda-yevropa-va-shimoliy-amerika-m-7"
+            },
+            {
+              "title": "Buyuk Britaniya va Fransiya: Yangi Yevropani qurish",
+              "id": "1945-1991-yillarda-yevropa-va-shimoliy-amerika-m-8"
+            },
+            {
+              "title": "Buyuk Britaniyada leyboristlar boshqaruvi. 1950-yillarda barqaror iqtisodiy rivojlanish. 1960–1970-yillarda “yanada yaxshiroq kelajak” kurash",
+              "id": "1945-1991-yillarda-yevropa-va-shimoliy-amerika-m-9"
+            },
+            {
+              "title": "M.Tetcher davri “tetcherizm”",
+              "id": "1945-1991-yillarda-yevropa-va-shimoliy-amerika-m-10"
+            },
+            {
+              "title": "Fransiyada muvaqqat rejim",
+              "id": "1945-1991-yillarda-yevropa-va-shimoliy-amerika-m-11"
+            },
+            {
+              "title": "Germaniya va Italiya: mag‘lubiyatdan keyingi taraqqiyot",
+              "id": "1945-1991-yillarda-yevropa-va-shimoliy-amerika-m-12"
+            },
+            {
+              "title": "Germaniyada urushdan keyingi tiklanish",
+              "id": "1945-1991-yillarda-yevropa-va-shimoliy-amerika-m-13"
+            },
+            {
+              "title": "Italiya: urushdan keyingi tiklanish",
+              "id": "1945-1991-yillarda-yevropa-va-shimoliy-amerika-m-14"
+            },
+            {
+              "title": "G‘arbiy Yevropada iqtisodiy va siyosiy integratsiya jarayonlari",
+              "id": "1945-1991-yillarda-yevropa-va-shimoliy-amerika-m-15"
+            },
+            {
+              "title": "G‘arbiy Yevropada integratsiya jarayonining bosqichlari: Ta’riflar va savdo bo‘yicha bosh kelishuvdan – Yevropa iqtisodiy ittifoqigacha",
+              "id": "1945-1991-yillarda-yevropa-va-shimoliy-amerika-m-16"
+            },
+            {
+              "title": "Janubiy va Shimoliy Yevropa mamlakatlari: diktatura va demokratiya",
+              "id": "1945-1991-yillarda-yevropa-va-shimoliy-amerika-m-17"
+            },
+            {
+              "title": "Janubiy Yevropa mamlakatlarida siyosiy rivojlanish muammolari",
+              "id": "1945-1991-yillarda-yevropa-va-shimoliy-amerika-m-18"
+            },
+            {
+              "title": "Ispaniyada – Franko, Portugaliyada – Salazar, Gretsiyada – “qora polkovniklar” rejimlari",
+              "id": "1945-1991-yillarda-yevropa-va-shimoliy-amerika-m-19"
+            },
+            {
+              "title": "Sovet Ittifoqida islohotlar va inqiroz: imperiyaning tugatilishi",
+              "id": "1945-1991-yillarda-yevropa-va-shimoliy-amerika-m-20"
+            },
+            {
+              "title": "Urushdan keyingi tiklanish va totalitar rejimning kuchayishi. «Iliqlik» davri va uning asosiy natijalari",
+              "id": "1945-1991-yillarda-yevropa-va-shimoliy-amerika-m-21"
+            },
+            {
+              "title": "Markaziy va Sharqiy Yevropa mamlakatlari: totalitarizm va demokratiya oralig‘ida",
+              "id": "1945-1991-yillarda-yevropa-va-shimoliy-amerika-m-22"
+            },
+            {
+              "title": "Urushdan keyin Markaziy va Sharqiy Yevropa davlatlarining sotsializmga jalb qilinishi",
+              "id": "1945-1991-yillarda-yevropa-va-shimoliy-amerika-m-23"
+            }
+          ]
+        },
+        {
+          "title": "UYG‘ONAYOTGAN DUNYO: 1945–1991-YILLARDA OSIYO, AFRIKA VA LOTIN AMERIKASI MAMLAKATLARI",
+          "hours": 4,
+          "topics": [
+            {
+              "title": "Osiyo, Afrika va Lotin Amerikasi mamlakatlari rivojlanishining asosiy yo‘nalishlari",
+              "id": "uygonayotgan-dunyo-1945-1991-yillarda-osiyo-afri-1"
+            },
+            {
+              "title": "Ozodlik va taraqqiyot muammolari: mojaro va inqirozlar",
+              "id": "uygonayotgan-dunyo-1945-1991-yillarda-osiyo-afri-2"
+            },
+            {
+              "title": "Modernizatsiyaning murakkab o‘yli",
+              "id": "uygonayotgan-dunyo-1945-1991-yillarda-osiyo-afri-3"
+            },
+            {
+              "title": "Avtoritar rejimlar: modernizatsiya tajribasi",
+              "id": "uygonayotgan-dunyo-1945-1991-yillarda-osiyo-afri-4"
+            },
+            {
+              "title": "Yaponiya Xitoy va Janubiy Koreya: Osiyo sivilizatsiyasi qadriyatlari va G‘arb ishlab chiqarish usuli uyg‘unligi",
+              "id": "uygonayotgan-dunyo-1945-1991-yillarda-osiyo-afri-5"
+            },
+            {
+              "title": "Yaponiyaning bozor iqtisodiyotiga o‘tishi. 1950–1960-yillardagi rivojlanish: yapon “iqtisodiy mo‘jizasi”. Postindustrial iqtisodiy modelning shakllanishi",
+              "id": "uygonayotgan-dunyo-1945-1991-yillarda-osiyo-afri-6"
+            },
+            {
+              "title": "Xitoyda fuqarolar urushi",
+              "id": "uygonayotgan-dunyo-1945-1991-yillarda-osiyo-afri-7"
+            },
+            {
+              "title": "Koreyaning bo‘linishi",
+              "id": "uygonayotgan-dunyo-1945-1991-yillarda-osiyo-afri-8"
+            },
+            {
+              "title": "Hindiston va Pokistonda mustaqillikning murakkab yo‘li",
+              "id": "uygonayotgan-dunyo-1945-1991-yillarda-osiyo-afri-9"
+            },
+            {
+              "title": "Hindiston mustaqilligining e’lon qilinishi va mamlakatning ikkiga bo‘linib ketishi. “J. Neru davri”: zamonaviy siyosiy tizimning shakllanishi. “I. Gandi davri”da Hindistonning rivojlanishi",
+              "id": "uygonayotgan-dunyo-1945-1991-yillarda-osiyo-afri-10"
+            },
+            {
+              "title": "Pokiston davlatining tashkil topishi, Bangladeshning ajralib chiqishi",
+              "id": "uygonayotgan-dunyo-1945-1991-yillarda-osiyo-afri-11"
+            },
+            {
+              "title": "Siyosiy rejimning shakllanishi va harbiy to‘natarishlar",
+              "id": "uygonayotgan-dunyo-1945-1991-yillarda-osiyo-afri-12"
+            },
+            {
+              "title": "Turkiya, Eron va Afg‘oniston: diniy qadriyatlar va zamonaviy sivilizatsiya muammolari",
+              "id": "uygonayotgan-dunyo-1945-1991-yillarda-osiyo-afri-13"
+            },
+            {
+              "title": "Turkiyaning urushdan keyingi rivojlanishi",
+              "id": "uygonayotgan-dunyo-1945-1991-yillarda-osiyo-afri-14"
+            },
+            {
+              "title": "Eronda shoh hokimiyatining kuchayishi",
+              "id": "uygonayotgan-dunyo-1945-1991-yillarda-osiyo-afri-15"
+            },
+            {
+              "title": "Afg‘onistonda siyosiy rivojlanish muammolari",
+              "id": "uygonayotgan-dunyo-1945-1991-yillarda-osiyo-afri-16"
+            },
+            {
+              "title": "Suriya, Iroq va Janubi-g‘arbiy Osiyo mamlakatlari",
+              "id": "uygonayotgan-dunyo-1945-1991-yillarda-osiyo-afri-17"
+            },
+            {
+              "title": "Suriyada mustaqillikning e’lon qilinishi",
+              "id": "uygonayotgan-dunyo-1945-1991-yillarda-osiyo-afri-18"
+            },
+            {
+              "title": "Suriya arab Respublikasining tashkil qilinishi",
+              "id": "uygonayotgan-dunyo-1945-1991-yillarda-osiyo-afri-19"
+            },
+            {
+              "title": "Iroqda siyosiy rivojlanish muammolari. 1958-yilgi davlat to‘ntarishi",
+              "id": "uygonayotgan-dunyo-1945-1991-yillarda-osiyo-afri-20"
+            },
+            {
+              "title": "Siyosiy mojarolar, S.Husaynning hokimiyatga kelishi",
+              "id": "uygonayotgan-dunyo-1945-1991-yillarda-osiyo-afri-21"
+            },
+            {
+              "title": "Tashqi siyosat",
+              "id": "uygonayotgan-dunyo-1945-1991-yillarda-osiyo-afri-22"
+            },
+            {
+              "title": "Janubi-g‘arbiy Osiyo mamlakatlarida siyosiy va iqtisodiy rivojlanishi muammolari. 1960–1970-yillardagi jadal rivojlanish",
+              "id": "uygonayotgan-dunyo-1945-1991-yillarda-osiyo-afri-23"
+            },
+            {
+              "title": "Lotin Amerikasida milliy islohotchilik va taraqqiyotning boshqa yo‘llari",
+              "id": "uygonayotgan-dunyo-1945-1991-yillarda-osiyo-afri-24"
+            },
+            {
+              "title": "Urushdan keyingi yillarda Lotin Amerikasi mamlakatlari rivojiga AQShning ta’siri",
+              "id": "uygonayotgan-dunyo-1945-1991-yillarda-osiyo-afri-25"
+            },
+            {
+              "title": "Afrikada mustaqillik, qashshoqlik va taraqqiyot muammolari",
+              "id": "uygonayotgan-dunyo-1945-1991-yillarda-osiyo-afri-26"
+            },
+            {
+              "title": "Shimoliy Afrikadagi arab mamlakatlarida modernizatsiya va an’anaviylik muammolari",
+              "id": "uygonayotgan-dunyo-1945-1991-yillarda-osiyo-afri-27"
+            },
+            {
+              "title": "XX asrning ikkinchi yarmida ilm-fan va madaniyatning rivojlanishi",
+              "id": "uygonayotgan-dunyo-1945-1991-yillarda-osiyo-afri-28"
+            },
+            {
+              "title": "Ilmiy-texnik inqilob va uning natijalari",
+              "id": "uygonayotgan-dunyo-1945-1991-yillarda-osiyo-afri-29"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "grade": 11,
+      "hours": 34,
+      "source": {
+        "title": "Umumiy o'rta ta'limning o'quv dasturi (11-sinf) — Jahon tarixi",
+        "url": "https://uzbmb.uz/upload/file/pdf/qabul2025/dasturlar/9.Tarix/11-sinf-Jahon%20tarixi%20fanidan%20o'quv%20dastur.pdf",
+        "year": 2018,
+        "publisher": "Respublika ta'lim markazi (Xalq ta'limi vazirligi)"
+      },
+      "units": [
+        {
+          "title": "XIX ASR OXIRI XX ASR BOSHLARIDA DUNYO MAMLAKATLARI",
+          "hours": 3,
+          "topics": [
+            {
+              "title": "Sharqiy Yevropa mamlakatlarida demokratik inqiloblar va sotsialistik lagerning parchalanishi",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-dunyo-mamlakatla-1"
+            },
+            {
+              "title": "Sovet davlatining parchalanishi va sobiq sovet respublikalarida mustaqillikning e’lon qilinishi",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-dunyo-mamlakatla-2"
+            },
+            {
+              "title": "Demokratik kuchlarning faollashuvi",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-dunyo-mamlakatla-3"
+            },
+            {
+              "title": "Sobiq sovet respublikalarida mustaqillikning e’lon qilinishi",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-dunyo-mamlakatla-4"
+            }
+          ]
+        },
+        {
+          "title": "1991 – 2017-YILLARDA DUNYO MAMLAKATLARI",
+          "hours": 26,
+          "topics": [
+            {
+              "title": "1991 – 2017-yillarda Rossiya Federatsiyasi",
+              "id": "1991-2017-yillarda-dunyo-mamlakatlari-1"
+            },
+            {
+              "title": "Ukrainada davlat qurilishi va siyosiy jarayonlar",
+              "id": "1991-2017-yillarda-dunyo-mamlakatlari-2"
+            },
+            {
+              "title": "Moldova Respublikasi mustaqilligining e’lon qilinishi",
+              "id": "1991-2017-yillarda-dunyo-mamlakatlari-3"
+            },
+            {
+              "title": "Ijtimoiy-iqtisodiy va siyosiy rivojlanish",
+              "id": "1991-2017-yillarda-dunyo-mamlakatlari-4"
+            },
+            {
+              "title": "E.Shevardnadzening hokimiyatga kelishi",
+              "id": "1991-2017-yillarda-dunyo-mamlakatlari-5"
+            },
+            {
+              "title": "Diasporadagi vatandoshlar bilan munosabat",
+              "id": "1991-2017-yillarda-dunyo-mamlakatlari-6"
+            },
+            {
+              "title": "Qozog‘istondagi siyosiy va iqtisodiy islohotlar",
+              "id": "1991-2017-yillarda-dunyo-mamlakatlari-7"
+            },
+            {
+              "title": "G‘arb mamlakatlarida integrasiyalashuv jarayonlarining jadallashuvi",
+              "id": "1991-2017-yillarda-dunyo-mamlakatlari-8"
+            },
+            {
+              "title": "Yevropa Ittifoqi va AQSH munosabatlari",
+              "id": "1991-2017-yillarda-dunyo-mamlakatlari-9"
+            },
+            {
+              "title": "Yevroatlantika mamlakatlarida yagona iqtisodiy siyosat modelining shakllanib borishi",
+              "id": "1991-2017-yillarda-dunyo-mamlakatlari-10"
+            },
+            {
+              "title": "AQShning tashqi siyosati. 1991 – 2017-yillarda Germaniya Federativ Respublikasi",
+              "id": "1991-2017-yillarda-dunyo-mamlakatlari-11"
+            },
+            {
+              "title": "J.Meyjorning siyosiy kursi. 1990-yilar birinchi yarmidagi repressiya davri",
+              "id": "1991-2017-yillarda-dunyo-mamlakatlari-12"
+            },
+            {
+              "title": "E.Blerning konstitutsion islohotlari",
+              "id": "1991-2017-yillarda-dunyo-mamlakatlari-13"
+            },
+            {
+              "title": "Osiyo, Afrika va Lotin Amerikasi mamlakatlari siyosiy, ijtimoiy-iqtisodiy rivojlanishining asosiy yo‘nalishlari",
+              "id": "1991-2017-yillarda-dunyo-mamlakatlari-14"
+            },
+            {
+              "title": "Modernizatsiyalashning murakkab yo‘li. Janubiy Osiyo mamlakatlarining o‘ziga xosligi",
+              "id": "1991-2017-yillarda-dunyo-mamlakatlari-15"
+            },
+            {
+              "title": "Lotin Amerikasi: avtoritarizm va demokratiya orasida",
+              "id": "1991-2017-yillarda-dunyo-mamlakatlari-16"
+            },
+            {
+              "title": "Mahatxirva Malayziyadagi islohotlar",
+              "id": "1991-2017-yillarda-dunyo-mamlakatlari-17"
+            },
+            {
+              "title": "Narasimxa Rao hukumatining islohotlari. 1990-yillardagi iqtisodiy rivojlanish yutuqlari",
+              "id": "1991-2017-yillarda-dunyo-mamlakatlari-18"
+            },
+            {
+              "title": "Turkiyaning tashqi siyosati",
+              "id": "1991-2017-yillarda-dunyo-mamlakatlari-19"
+            },
+            {
+              "title": "Eronning zamonaviy muammolari: ishsizlik va inflyatsiya",
+              "id": "1991-2017-yillarda-dunyo-mamlakatlari-20"
+            },
+            {
+              "title": "Afg‘onistonda mujohidlarning hokimiyatga kelishi",
+              "id": "1991-2017-yillarda-dunyo-mamlakatlari-21"
+            },
+            {
+              "title": "H.Asadning hokimiyatga kelishi. “Arab bahori”ning Suriyaga ta’siri. “Juma inqilobi”. Urush harakatlarining boshlanishi",
+              "id": "1991-2017-yillarda-dunyo-mamlakatlari-22"
+            }
+          ]
+        },
+        {
+          "title": "YANGI MING YILLIK JAHON SIVILIZATSIYASI MUAMMOLARI",
+          "hours": 5,
+          "topics": [
+            {
+              "title": "XX asr oxiri – XXI asr boshlarida globallashuv muammolari, harbiy, ekstremistik va ekologik xavf-xatarlar",
+              "id": "yangi-ming-yillik-jahon-sivilizatsiyasi-muammola-1"
+            },
+            {
+              "title": "XX asr oxiri – XXI asr boshlarida barqaror rivojlanish va etno-ijtimoiy muammolar",
+              "id": "yangi-ming-yillik-jahon-sivilizatsiyasi-muammola-2"
+            },
+            {
+              "title": "XX asrning oxiri – XXI asr boshlarida ilmiy-texnik taraqqiyot",
+              "id": "yangi-ming-yillik-jahon-sivilizatsiyasi-muammola-3"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

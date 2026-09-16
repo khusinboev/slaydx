@@ -97,33 +97,122 @@ R4 hisobotidan (`docs/research/curriculum.md` §3) olingan qarorlar:
 - **Har sinf alohida yozuv.** «6–7-sinf» qo'shma fayllari yig'ish
   bosqichida sinflarga ajratiladi.
 
-## Hozirgi holat (AUDIT-20 R0)
 
-Bazada **bitta yozuv**: matematika, 11-sinf, 2 bob / 10 mavzu — R4
-mini-sinovi chiqargan, HAQIQIY hujjatdan olingan qatorlar
-(`docs/research/curriculum.md` §3 dagi JSON namunasi, qo'lda
-o'zgartirilmagan). Mavzu id laridagi tartib raqamlari uzluksiz emas
-(`…-1`, `…-2`, `…-5`, `…-10`, `…-14`) — bu ataylab: raqam BOBDAGI xom
-qator o'rnini bildiradi, oraliq qatorlar hali normallashtirilmagan.
+## Hozirgi qamrov (AUDIT-20 WP-B, 2026-09-16)
 
-To'liq yig'ish (≈10 fan × 7 sinf ≈ 5 000–6 500 mavzu, 1–1,5 MB) —
-**WP-B**. Shu vaqtgacha `hasCurriculum()` faqat matematika 11-sinf
-uchun `true` qaytaradi va test yaratuvchining darslik rejimi boshqa
-fan/sinfda ko'rinmaydi (X-2: «`curriculum` rejimi faqat bazada mavjud
-fan/sinfda»).
+**8 fan · 42 fan×sinf yozuvi · 311 bob · 2 424 mavzu** (≈480 KB) —
+hammasi yuqoridagi uzbmb.uz to'plamidan avtomatik yig'ilgan, qo'lda
+kiritilgan qator YO'Q.
+
+| Fan (`id`) | Sinflar | Yozuv | Bob | Mavzu |
+|---|---|---|---|---|
+| `matematika` | 5, 6, 7, 8, 10, 11 | 6 | 80 | 425 |
+| `fizika` | 6, 7, 8, 9, 10, 11 | 6 | 43 | 318 |
+| `kimyo` | 7, 8, 9, 10, 11 | 5 | 29 | 210 |
+| `biologiya` | 5, 6, 7, 8, 9, 10, 11 | 7 | 49 | 333 |
+| `geografiya` | 5, 6, 7, 8, 9, 10 | 6 | 40 | 419 |
+| `tarix` | 5, 6 | 2 | 15 | 128 |
+| `jahon-tarixi` | 7, 8, 9, 10, 11 | 5 | 26 | 289 |
+| `ozbekiston-tarixi` | 7, 8, 9, 10, 11 | 5 | 29 | 302 |
+
+Har yozuvning `source.url` i — AYNAN o'sha sinfning PDF havolasi
+(`entries[].source`), ya'ni o'qituvchi hamisha asliga qaytishi mumkin.
+
+**Qamrovdagi bo'shliqlar (manbada shunday, biz to'ldirmaymiz):**
+
+- **Matematika 9-sinf fayli sahifada YO'Q** (R4 X-2 da ham qayd
+  etilgan). Qidirib topilmadi — bazada 9-sinf matematikasi yo'q, forma
+  uni ko'rsatmaydi (`hasCurriculum`).
+- **Geografiya 11-sinf fayli sahifada yo'q** (5–10 bor).
+- **Matematika 6–7-sinf BITTA hujjatda**: shuning uchun 6 va 7-sinf
+  yozuvlari AYNI mundarijaga ega va ikkalasi ham shu bitta faylga
+  ishora qiladi. Bu manbaning tuzilishi, bizning taxminimiz emas.
+- **Tarix UCHGA bo'lingan** (`tarix` 5–6, `jahon-tarixi` 7–11,
+  `ozbekiston-tarixi` 7–11) — manba shunday: 7-sinfdan boshlab ikki
+  alohida dastur, har birining o'z bobi, soati va havolasi.
+- **1–4-sinf, informatika, ona tili/adabiyot, chet tillari** — bu
+  sprintda yig'ilmadi (R4 X-3). Sahifalar bor, format boshqacha.
+- `10-sinf` tarix va biologiya hujjatlari **(MO'D)** — Milliy o'quv
+  dasturi belgisi bilan; u `source.title` ga qavs ichida yoziladi.
+
+## Yillik soat: 121-son buyruq OCHILMADI
+
+R4 rejasida bob soatlari **tayanch o'quv reja** (MMTV 2025-yil
+10-apreldagi 121-son buyrug'i, 1-ILOVA) jadvaliga solishtirilishi
+ko'zda tutilgandi. 2026-09-16 da o'sha PDF havolasi
+(`uzedu.itsm.uz/uploads/downloads/D3DbQ0d7svuszu0A7IQ7l6xK_G3yOwBl.pdf`)
+**HTTP 502** qaytardi, boshqa barqaror ko'zgu topilmadi.
+
+Taxmin yozilmadi. Buning o'rniga yillik soat **shu dasturning o'zidan**
+olinadi — u ham ayni rasmiy hujjat: sarlavha qatorida «(68 soat)»,
+«(34-soat, haftasiga 1 soatdan)», «(A2: 51 soat, A2+: 68 soat)»
+ko'rinishida turadi va `entries[].hours` ga yoziladi (42 yozuvdan 25
+tasida bor, qolganida hujjatda umuman e'lon qilinmagan).
+
+**Nega bob soatlari yig'indisi yillik soatdan katta bo'lishi mumkin:**
+ba'zi hujjat IKKI moduldan iborat — «Fizika va astronomiya» (11-sinf:
+68 + 34 soat), matematika 8/10/11 (algebra + geometriya), matematika
+6–7 (ikki o'quv yili). Yillik soat esa faqat BIRINCHI modulniki.
+Shuning uchun `tests/curriculum-data.test.mts` qat'iy tenglikni emas,
+oqilona ustki chegarani tekshiradi (har bob ≤ yillik soat, yig'indi
+≤ 2,5 × yillik soat).
+
+## Yig'ish quvuri
+
+```
+scripts/heavy.sh npx tsx scripts/fetch-curriculum.mts   # sahifa → PDF → matn kesh
+scripts/heavy.sh npx tsx scripts/gen-curriculum.mts     # kesh → data/curriculum/*.json
+```
+
+1. **`fetch-curriculum.mts`** — `/page/<fan>_dastur` sahifasidan
+   `dasturlar/…pdf` havolalarini O'QIYDI (qo'lda yozilmaydi: fayl
+   nomlari barqaror emas), PDF ni yuklab `lib/extract-text.ts
+   extractFromBuffer` bilan matnga o'giradi va
+   `node_modules/.cache/curriculum/<fan>-<sinf>.json` ga keshlaydi.
+   Bayroqlar: `--subject`, `--grade`, `--force`, `--dry`.
+2. **`gen-curriculum.mts`** — keshdan o'qib mundarijani ajratadi va
+   JSON yozadi. Bayroqlar: `--only`, `--stats`, `--dry`, `--llm`.
+
+**Ikki hujjat formati** (R4 da bittasi ko'rilgan edi):
+
+- **A** — «`12-mavzu: Sarlavha. (2 soat, A2+: 3 soat)`»: mavzular aniq
+  belgilangan (geografiya 6–7, tarix 6–7, biologiya 6–7, fizika 6–7,
+  kimyo 7, matematika 6–7);
+- **B** — «`I BOB. SARLAVHA` / `(19 soat)` / `<mavzu nomi>. <tavsif>.`»:
+  mavzu nomi PDF da QALIN shriftda edi, matn olinganda qalinlik
+  yo'qoladi. Chegara QATOR UZILISHI bilan topiladi (oldingi qator nuqta
+  bilan tugab, yangisi bosh harf bilan boshlansa — yangi mavzu), nomi
+  esa bo'lakning BIRINCHI GAPI.
+
+**Bazaga KIRMAYDIGAN qismlar** (X-5 mualliflik chegarasi + pedagogik
+qaror): «Tushuntirish xati», kompetensiya ro'yxatlari, «o'quvchilar …
+biladi/tushunadi» talablari, jihozlar ro'yxati, nazorat ishi va
+«xatolar ustida ishlash» qatorlari. Bazada faqat BOB sarlavhasi, soat
+va MAVZU NOMLARI — ya'ni faktik ma'lumot.
+
+**LLM (`--llm`) ixtiyoriy va faqat TOZALAYDI**: bo'linib ketgan mavzuni
+birlashtiradi, mavzu bo'lmagan qatorni olib tashlaydi. Javobdagi har
+element kirishdagi INDEKSGA ishora qiladi, ya'ni «ro'yxatni LLM
+tuzmaydi» qoidasi kod bilan majburlanadi; kalit bo'lmasa baza
+o'zgarishsiz to'liq yig'iladi. Joriy `data/curriculum/` **LLM siz**
+(faqat heuristika bilan) yig'ilgan.
 
 ## Tekshirish
 
-`tests/curriculum.test.mts`:
+`tests/curriculum.test.mts` (R0) — indeks/fayl mosligi, id unikalligi,
+`hasCurriculum`, route shakli.
 
-1. `index.json` yuklanadi, fan id lari unikal, `grades` bo'sh emas;
-2. har fayl indeks bilan MOS (indeksdagi har sinf faylda bor va aksincha);
-3. `topics[].id` fan+sinf ichida unikal;
-4. bo'sh `topics` bo'lgan bob yo'q, bo'sh sarlavha yo'q (3–200 belgi);
-5. `hasCurriculum` faqat mavjud juftlikda `true`;
-6. route shakli: `requireUser` (401), chegara 60/daq, mavjud bo'lmagan
-   fan/sinf → 404, `?subject=`siz → 400.
+`tests/curriculum-data.test.mts` (WP-B) — BAZANING O'ZI:
 
-Soat yig'indisini rasmiy yillik soat bilan solishtirish (R4 §4.5b,
-± 10 %) — WP-B da, to'liq baza kelgandan keyin: bitta bob namunasida
-yillik soatni tekshirib bo'lmaydi.
+1. kamida 6 fan va 30 fan×sinf yozuvi (X-2: rejim faqat bazada bor
+   fan/sinfda ko'rinadi);
+2. `topics[].id` fan+sinf ichida unikal va `slug` shaklida;
+3. bo'sh bob yo'q, sarlavha 3–200 belgi, yopishib qolgan so'z yo'q;
+4. bob soatlari: har bob ≤ yillik soat, yig'indi ≤ 2,5 × yillik
+   (yuqoridagi ikki modulli hujjatlar sababi);
+5. har fanda ≥1 sinf, har yozuvda `source.url` — `uzbmb.uz` havolasi;
+6. mavzu nomlarida uslubiy nasr/kompetensiya/nazorat ishi qatorlari
+   YO'Q (parser filtri qulflanadi);
+7. `hasCurriculum`/`curriculumTopics`/`pickTopics` haqiqiy ma'lumot
+   ustida ishlaydi;
+8. `index.json` va fayllar bir xil versiyada.

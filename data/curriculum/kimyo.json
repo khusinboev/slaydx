@@ -1,0 +1,1128 @@
+{
+  "version": "2026-09-16",
+  "subject": {
+    "id": "kimyo",
+    "uz": "Kimyo",
+    "ru": "Химия",
+    "en": "Chemistry"
+  },
+  "entries": [
+    {
+      "grade": 7,
+      "hours": 68,
+      "source": {
+        "title": "Umumiy o'rta ta'limning o'quv dasturi (7-sinf) — Kimyo",
+        "url": "https://uzbmb.uz/upload/file/pdf/qabul2025/dasturlar/7.Kimyo/7-sinf-Kimyo%20fanidan%20o'quv%20dastur.pdf",
+        "year": 2018,
+        "publisher": "Respublika ta'lim markazi (Xalq ta'limi vazirligi)"
+      },
+      "units": [
+        {
+          "title": "KIMYONING ASOSIY TUSHUNChA VA QONUNLARI",
+          "hours": 23,
+          "topics": [
+            {
+              "title": "Kimyo fanining maqsad va vazifalari. O‘zbekistonda kimyo",
+              "id": "kimyoning-asosiy-tushuncha-va-qonunlari-1"
+            },
+            {
+              "title": "Modda va uning xossalari",
+              "id": "kimyoning-asosiy-tushuncha-va-qonunlari-2",
+              "hours": 1
+            },
+            {
+              "title": "Atom-molekular ta’limot. Atom va molekulalarning mavjudligi. Kimyoviy element, kimyoviy belgi",
+              "id": "kimyoning-asosiy-tushuncha-va-qonunlari-3",
+              "hours": 1
+            },
+            {
+              "title": "Atomlarning o‘lchami, nisbiy va absolyut massa",
+              "id": "kimyoning-asosiy-tushuncha-va-qonunlari-4",
+              "hours": 1
+            },
+            {
+              "title": "Kimyoviy modda-atom va molekulalar uyushmasi. Molekular va nomolekular tuzilishdagi moddalar",
+              "id": "kimyoning-asosiy-tushuncha-va-qonunlari-5",
+              "hours": 1
+            },
+            {
+              "title": "Sof modda va aralashmalar",
+              "id": "kimyoning-asosiy-tushuncha-va-qonunlari-6",
+              "hours": 1
+            },
+            {
+              "title": "Oddiy va murakkab moddalar",
+              "id": "kimyoning-asosiy-tushuncha-va-qonunlari-7",
+              "hours": 1
+            },
+            {
+              "title": "Moddalarning agregat holatlari",
+              "id": "kimyoning-asosiy-tushuncha-va-qonunlari-8",
+              "hours": 1
+            },
+            {
+              "title": "Kimyoviy formula, valentlik, indekslar",
+              "id": "kimyoning-asosiy-tushuncha-va-qonunlari-9",
+              "hours": 1
+            },
+            {
+              "title": "Molekulalarning o‘lchami, nisbiy va absolyut massasi. Mol va molyar massa, modda miqdori. Avogadro doimiysi",
+              "id": "kimyoning-asosiy-tushuncha-va-qonunlari-10",
+              "hours": 1
+            },
+            {
+              "title": "Moddalarning xossalari: fizik va kimyoviy o‘zgarishlar",
+              "id": "kimyoning-asosiy-tushuncha-va-qonunlari-11",
+              "hours": 1
+            },
+            {
+              "title": "Kimyoviy reaksiya tenglamalari. Koeffitsientlar",
+              "id": "kimyoning-asosiy-tushuncha-va-qonunlari-12",
+              "hours": 1
+            },
+            {
+              "title": "Tarkibning doimiylik qonuni",
+              "id": "kimyoning-asosiy-tushuncha-va-qonunlari-13",
+              "hours": 1
+            },
+            {
+              "title": "Massaning saqlanish qonuni",
+              "id": "kimyoning-asosiy-tushuncha-va-qonunlari-14",
+              "hours": 1
+            },
+            {
+              "title": "Avogadro qonuni. Molyar hajm",
+              "id": "kimyoning-asosiy-tushuncha-va-qonunlari-15",
+              "hours": 1
+            },
+            {
+              "title": "Kimyoviy reaksiya turlari",
+              "id": "kimyoning-asosiy-tushuncha-va-qonunlari-16",
+              "hours": 1
+            }
+          ]
+        },
+        {
+          "title": "KISLOROD",
+          "hours": 7,
+          "topics": [
+            {
+              "title": "Kislorod",
+              "id": "kislorod-1",
+              "hours": 1
+            },
+            {
+              "title": "Kislorod - oddiy modda",
+              "id": "kislorod-2",
+              "hours": 1
+            },
+            {
+              "title": "Kislorodning kimyoviy xossalari, uning biologik ahamiyati, ishlatilishi",
+              "id": "kislorod-3",
+              "hours": 1
+            },
+            {
+              "title": "Kislorodning tabiatda aylanishi. Havo va uning tarkibi, havo tarkibining ifloslanishi va uni saqlash usullari",
+              "id": "kislorod-4",
+              "hours": 1
+            },
+            {
+              "title": "Yonish. Yonilg‘ilarning turlari",
+              "id": "kislorod-5",
+              "hours": 1
+            }
+          ]
+        },
+        {
+          "title": "VODOROD",
+          "hours": 5,
+          "topics": [
+            {
+              "title": "Vodorod",
+              "id": "vodorod-1",
+              "hours": 1
+            },
+            {
+              "title": "Kislotalar haqida dastlabki tushunchalar",
+              "id": "vodorod-2",
+              "hours": 1
+            },
+            {
+              "title": "Vodorodning olinishi",
+              "id": "vodorod-3",
+              "hours": 1
+            },
+            {
+              "title": "Vodorod - oddiy modda. Uning formulasi va molyar massasi. Vodorodning fizik va kimyoviy xossalari",
+              "id": "vodorod-4",
+              "hours": 1
+            },
+            {
+              "title": "Vodorod sof ekologik yonilg‘i va uning ishlatilishi",
+              "id": "vodorod-5",
+              "hours": 1
+            }
+          ]
+        },
+        {
+          "title": "SUV VA ERITMALAR",
+          "hours": 8,
+          "topics": [
+            {
+              "title": "Suv - murakkab modda. Suvning fizik va kimyoviy xossalari",
+              "id": "suv-va-eritmalar-1"
+            },
+            {
+              "title": "Suvning tabiatda tarqalishi. Uning tirik organizmlar hayotidagi ahamiyati, ishlatilishi",
+              "id": "suv-va-eritmalar-2",
+              "hours": 1
+            },
+            {
+              "title": "Suv havzalarini ifloslanishdan saqlash choralari. Suv tarkibining ifloslanishi va uni tozalash usullari",
+              "id": "suv-va-eritmalar-3",
+              "hours": 1
+            },
+            {
+              "title": "Suv - eng yaxshi erituvchi. Eruvchanlik",
+              "id": "suv-va-eritmalar-4",
+              "hours": 1
+            },
+            {
+              "title": "Eritmalar va ularning konsentratsiyasi haqida tushuncha",
+              "id": "suv-va-eritmalar-5",
+              "hours": 1
+            },
+            {
+              "title": "Eritmada erigan modda massa ulushi, foiz konsentratsiya, molyar konsentratsiya. Eritmalarning inson hayotidagi ahamiyati",
+              "id": "suv-va-eritmalar-6",
+              "hours": 1
+            }
+          ]
+        },
+        {
+          "title": "ANORGANIK MODDALARNING ENG MUHIM SINFLARI",
+          "hours": 21,
+          "topics": [
+            {
+              "title": "Moddalarni toifalanishi. Murakkab moddalarning toifalanishi",
+              "id": "anorganik-moddalarning-eng-muhim-sinflari-1"
+            },
+            {
+              "title": "Oksidlar. Oksidlarning tarkibi, tuzilishi va nomlanishi",
+              "id": "anorganik-moddalarning-eng-muhim-sinflari-2"
+            },
+            {
+              "title": "Oksidlarning toifalanishi",
+              "id": "anorganik-moddalarning-eng-muhim-sinflari-3",
+              "hours": 1
+            },
+            {
+              "title": "Oksidlarning olinishi va xossalari",
+              "id": "anorganik-moddalarning-eng-muhim-sinflari-4",
+              "hours": 1
+            },
+            {
+              "title": "Eng muhim oksidlarning ishlatilishi",
+              "id": "anorganik-moddalarning-eng-muhim-sinflari-5",
+              "hours": 1
+            },
+            {
+              "title": "Asoslar. Asoslarning tarkibi, tuzilishi, nomlanishi",
+              "id": "anorganik-moddalarning-eng-muhim-sinflari-6",
+              "hours": 1
+            },
+            {
+              "title": "Asoslarning toifalanishi",
+              "id": "anorganik-moddalarning-eng-muhim-sinflari-7",
+              "hours": 1
+            },
+            {
+              "title": "Asoslarning olinishi va xossalari",
+              "id": "anorganik-moddalarning-eng-muhim-sinflari-8",
+              "hours": 1
+            },
+            {
+              "title": "Eng muhim asoslarning ishlatilishi",
+              "id": "anorganik-moddalarning-eng-muhim-sinflari-9",
+              "hours": 1
+            },
+            {
+              "title": "Kislotalar. Kislotalar tarkibi, tuzilishi, nomlanishi, toifalanishi",
+              "id": "anorganik-moddalarning-eng-muhim-sinflari-10"
+            },
+            {
+              "title": "Kislotalar toifalanishi",
+              "id": "anorganik-moddalarning-eng-muhim-sinflari-11",
+              "hours": 1
+            },
+            {
+              "title": "Kislotalarning olinishi va xossalari",
+              "id": "anorganik-moddalarning-eng-muhim-sinflari-12",
+              "hours": 1
+            },
+            {
+              "title": "Eng muhim kislotalarning ishlatilishi",
+              "id": "anorganik-moddalarning-eng-muhim-sinflari-13",
+              "hours": 1
+            },
+            {
+              "title": "Tuzlar. Tuzlar tarkibi, tuzilishi va nomlanishi",
+              "id": "anorganik-moddalarning-eng-muhim-sinflari-14",
+              "hours": 1
+            },
+            {
+              "title": "Tuzlar formulalarining ifodalanishi va ularning toifalanishi",
+              "id": "anorganik-moddalarning-eng-muhim-sinflari-15",
+              "hours": 1
+            },
+            {
+              "title": "Tuzlarning olinishi va xossalari",
+              "id": "anorganik-moddalarning-eng-muhim-sinflari-16",
+              "hours": 1
+            },
+            {
+              "title": "Eng muhim tuzlarning ishlatilishi",
+              "id": "anorganik-moddalarning-eng-muhim-sinflari-17",
+              "hours": 1
+            },
+            {
+              "title": "Ekvivalentlik qonuni",
+              "id": "anorganik-moddalarning-eng-muhim-sinflari-18",
+              "hours": 1
+            }
+          ]
+        },
+        {
+          "title": "OKSIDLAR, ASOSLAR, KISLOTALAR VA TUZLARNING O‘ZARO GENETIK BOG‘LANISHI",
+          "hours": 4,
+          "topics": [
+            {
+              "title": "Oksidlar, asos, kislota va tuzlar orasidagi genetik bog‘lanish",
+              "id": "oksidlar-asoslar-kislotalar-va-tuzlarning-ozaro-1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "grade": 8,
+      "source": {
+        "title": "Umumiy o'rta ta'limning o'quv dasturi (8-sinf) — Kimyo",
+        "url": "https://uzbmb.uz/upload/file/pdf/qabul2025/dasturlar/7.Kimyo/8-sinf-Kimyo%20fanidan%20o'quv%20dastur.pdf",
+        "year": 2018,
+        "publisher": "Respublika ta'lim markazi (Xalq ta'limi vazirligi)"
+      },
+      "units": [
+        {
+          "title": "7-SINF KIMYO KURSINING ASOSIY TUSHUNCHA VA QONUNLARINI TAKRORLASH",
+          "hours": 4,
+          "topics": [
+            {
+              "title": "Dastlabki kimyoviy tushunchalar va qonunlar",
+              "id": "7-sinf-kimyo-kursining-asosiy-tushuncha-va-qonun-1"
+            },
+            {
+              "title": "Noorganik birikmalarning asosiy sinflari",
+              "id": "7-sinf-kimyo-kursining-asosiy-tushuncha-va-qonun-2"
+            },
+            {
+              "title": "Valentlik, molyar hajm, gazlarning zichligi, eritmalar, oksid, asos, kislota, tuzlar xossalari, ekvivalentlik qonunlariga doir masala, mashqlar bajarish",
+              "id": "7-sinf-kimyo-kursining-asosiy-tushuncha-va-qonun-3"
+            }
+          ]
+        },
+        {
+          "title": "DAVRIY QONUN VA ELEMENTLAR DAVRIY SISTEMASI. ATOM TUZILISHI",
+          "hours": 15,
+          "topics": [
+            {
+              "title": "Kimyoviy elementlarning dastlabki toifalanishi",
+              "id": "davriy-qonun-va-elementlar-davriy-sistemasi-atom-1"
+            },
+            {
+              "title": "Oksidlar va gidrooksidlar",
+              "id": "davriy-qonun-va-elementlar-davriy-sistemasi-atom-2"
+            },
+            {
+              "title": "Kimyoviy elementlarning tabiiy oilalari",
+              "id": "davriy-qonun-va-elementlar-davriy-sistemasi-atom-3"
+            }
+          ]
+        },
+        {
+          "title": "KIMYOVIY BOG‘LANISHLAR",
+          "hours": 10,
+          "topics": [
+            {
+              "title": "Kimyoviy elementlarning nisbiy elektromanfiyligi",
+              "id": "kimyoviy-boglanishlar-1"
+            },
+            {
+              "title": "Elementlarning nisbiy elektromanfiyligi va ularning xossalari o‘rtasidagi bog‘lanish",
+              "id": "kimyoviy-boglanishlar-2"
+            },
+            {
+              "title": "Kimyoviy bog‘lanishlarning turlari",
+              "id": "kimyoviy-boglanishlar-3"
+            },
+            {
+              "title": "Kimyoviy bog‘lanish turlari va uni hosil bo‘lishi, oddiy moddalar orasidagi bog‘lanish, qutbli, qutbsiz bog‘lanishlar",
+              "id": "kimyoviy-boglanishlar-4"
+            },
+            {
+              "title": "Donor-akseptor bog‘lanish",
+              "id": "kimyoviy-boglanishlar-5"
+            },
+            {
+              "title": "Donor atom",
+              "id": "kimyoviy-boglanishlar-6"
+            },
+            {
+              "title": "Ionli bog‘lanish",
+              "id": "kimyoviy-boglanishlar-7"
+            },
+            {
+              "title": "Ionlar",
+              "id": "kimyoviy-boglanishlar-8"
+            },
+            {
+              "title": "Kristall panjaralar",
+              "id": "kimyoviy-boglanishlar-9"
+            },
+            {
+              "title": "Qattiq moddalarning tuzilishi",
+              "id": "kimyoviy-boglanishlar-10"
+            }
+          ]
+        },
+        {
+          "title": "METALLMASLAR. Metallmaslarning umumiy xossalari. GALOGENLAR",
+          "hours": 10,
+          "topics": [
+            {
+              "title": "Galogenlarning kimyoviy elementlar davriy sistemasida joylashgan o‘rni",
+              "id": "metallmaslar-metallmaslarning-umumiy-xossalari-g-1"
+            },
+            {
+              "title": "Atom tuzilishi",
+              "id": "metallmaslar-metallmaslarning-umumiy-xossalari-g-2"
+            },
+            {
+              "title": "Galogenlarning atom tuzilishiga umumiy tavsif, tabiatda uchrashi, galogenlarni umumiy fizik, kimyoviy xossalari",
+              "id": "metallmaslar-metallmaslarning-umumiy-xossalari-g-3"
+            },
+            {
+              "title": "Xlor. Xlorning tabiatda uchrashi, fizik va kimyoviy xossalari, olinishi va ishlatilishi",
+              "id": "metallmaslar-metallmaslarning-umumiy-xossalari-g-4"
+            },
+            {
+              "title": "Vodorod xlorid",
+              "id": "metallmaslar-metallmaslarning-umumiy-xossalari-g-5"
+            },
+            {
+              "title": "Avogadro qonuni",
+              "id": "metallmaslar-metallmaslarning-umumiy-xossalari-g-6"
+            },
+            {
+              "title": "Gazlarni zichligi va nisbiy zichligi",
+              "id": "metallmaslar-metallmaslarning-umumiy-xossalari-g-7"
+            },
+            {
+              "title": "Ekvivalentlik qonuni",
+              "id": "metallmaslar-metallmaslarning-umumiy-xossalari-g-8"
+            },
+            {
+              "title": "Oddiy va murakkab moddalar ekvivalentini aniqlash",
+              "id": "metallmaslar-metallmaslarning-umumiy-xossalari-g-9"
+            },
+            {
+              "title": "Xlorid kislota",
+              "id": "metallmaslar-metallmaslarning-umumiy-xossalari-g-10"
+            },
+            {
+              "title": "Ftor, brom, yod",
+              "id": "metallmaslar-metallmaslarning-umumiy-xossalari-g-11"
+            },
+            {
+              "title": "Galogenidlarning biologik ahamiyati va ishlatilishi",
+              "id": "metallmaslar-metallmaslarning-umumiy-xossalari-g-12"
+            },
+            {
+              "title": "Ftor, brom, yodning xossalari, ularning birikmalari",
+              "id": "metallmaslar-metallmaslarning-umumiy-xossalari-g-13"
+            }
+          ]
+        },
+        {
+          "title": "OLTINCHI GURUH BOSH GURUHCHASI ELEMENTLARIGA UMUMIY TAVSIF",
+          "hours": 10,
+          "topics": [
+            {
+              "title": "Kislorod gruppachasi elementlari",
+              "id": "oltinchi-guruh-bosh-guruhchasi-elementlariga-umu-1"
+            },
+            {
+              "title": "Oltingugurt",
+              "id": "oltinchi-guruh-bosh-guruhchasi-elementlariga-umu-2"
+            },
+            {
+              "title": "Kislorod gruppachasi elementlarining kimyoviy elementlar davriy sistemasida joylashgan o‘rni, atom tuzilishi",
+              "id": "oltinchi-guruh-bosh-guruhchasi-elementlariga-umu-3"
+            }
+          ]
+        },
+        {
+          "title": "AZOT GURUHCHASI.",
+          "hours": 19,
+          "topics": [
+            {
+              "title": "Azot (7 soat) Azot",
+              "id": "azot-guruhchasi-1"
+            },
+            {
+              "title": "Uning fizik va kimyoviy xossalari",
+              "id": "azot-guruhchasi-2"
+            },
+            {
+              "title": "Azotning vodorodli birikmalari",
+              "id": "azot-guruhchasi-3"
+            },
+            {
+              "title": "Ammoniy tuzlari va ularning amaliy ahamiyati",
+              "id": "azot-guruhchasi-4"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "grade": 9,
+      "hours": 68,
+      "source": {
+        "title": "Umumiy o'rta ta'limning o'quv dasturi (9-sinf) — Kimyo",
+        "url": "https://uzbmb.uz/upload/file/pdf/qabul2025/dasturlar/7.Kimyo/9-sinf-Kimyo%20fanidan%20o'quv%20dastur.pdf",
+        "year": 2018,
+        "publisher": "Respublika ta'lim markazi (Xalq ta'limi vazirligi)"
+      },
+      "units": [
+        {
+          "title": "8-SINF KIMYO KURSINING ENG MUHIM MAVZULARINI TAKRORLASH",
+          "hours": 2,
+          "topics": [
+            {
+              "title": "O‘rganilgan mavzularni to‘ldirish orqali takrorlash",
+              "id": "8-sinf-kimyo-kursining-eng-muhim-mavzularini-tak-1"
+            },
+            {
+              "title": "Kimyoviy elementlar davriy sistemasi, davriy qonun",
+              "id": "8-sinf-kimyo-kursining-eng-muhim-mavzularini-tak-2"
+            },
+            {
+              "title": "Atom tuzilish nuqtai nazaridan kimyoviy elementlar davriy sistemasi va davriy qonuni.davr va guruhlarda element xossalarini o‘zgarishi",
+              "id": "8-sinf-kimyo-kursining-eng-muhim-mavzularini-tak-3"
+            },
+            {
+              "title": "Kimyoviy bog‘lanishlarning turlari",
+              "id": "8-sinf-kimyo-kursining-eng-muhim-mavzularini-tak-4"
+            }
+          ]
+        },
+        {
+          "title": "ELEKTROLITIK DISSOTSIYALANISH NAZARIYASI",
+          "hours": 13,
+          "topics": [
+            {
+              "title": "Elektrolitlar va noelektrolitlar",
+              "id": "elektrolitik-dissotsiyalanish-nazariyasi-1"
+            },
+            {
+              "title": "Elektrolitik dissotsiatsiyalanish nazariyasi",
+              "id": "elektrolitik-dissotsiyalanish-nazariyasi-2"
+            },
+            {
+              "title": "Kislota, ishqor va tuzlarning dissotsiatsiyalanishi",
+              "id": "elektrolitik-dissotsiyalanish-nazariyasi-3"
+            },
+            {
+              "title": "Kation va anionlar",
+              "id": "elektrolitik-dissotsiyalanish-nazariyasi-4"
+            },
+            {
+              "title": "Kuchli va kuchsiz elektrolitlar",
+              "id": "elektrolitik-dissotsiyalanish-nazariyasi-5"
+            },
+            {
+              "title": "Suvning dissotsiatsiyalanishi",
+              "id": "elektrolitik-dissotsiyalanish-nazariyasi-6"
+            },
+            {
+              "title": "Ion almashinish reaksiyalari",
+              "id": "elektrolitik-dissotsiyalanish-nazariyasi-7"
+            }
+          ]
+        },
+        {
+          "title": "METALLMASLAR. UGLEROD GURUHI",
+          "hours": 16,
+          "topics": [
+            {
+              "title": "Uglerod guruhi elementlarning umumiy tavsifi",
+              "id": "metallmaslar-uglerod-guruhi-1"
+            },
+            {
+              "title": "Uglerodning davriy sistemasida joylashgan o‘rni, atom tuzilishi",
+              "id": "metallmaslar-uglerod-guruhi-2"
+            },
+            {
+              "title": "Uglerodning kimyoviy elementlar davriy sistemasidagi o‘rni, atom tuzilishi, allotropiyasi, tabiatda tarqalishi va biologik ahamiyati",
+              "id": "metallmaslar-uglerod-guruhi-3"
+            },
+            {
+              "title": "Uglerodning fizik va kimyoviy xossalari",
+              "id": "metallmaslar-uglerod-guruhi-4"
+            }
+          ]
+        },
+        {
+          "title": "METALLAR",
+          "hours": 34,
+          "topics": [
+            {
+              "title": "Metallarning tabiatda tarqalishi, olinishi va ishlatilishi",
+              "id": "metallar-1"
+            },
+            {
+              "title": "Qotishmalar",
+              "id": "metallar-2"
+            },
+            {
+              "title": "Qotishmalar. (Gomogen va geterogen qotishmalar). Ishlatilishi",
+              "id": "metallar-3"
+            },
+            {
+              "title": "Metallarning fizik va kimyoviy xossalari",
+              "id": "metallar-4"
+            }
+          ]
+        },
+        {
+          "title": "Noorganik kimyodan olingan bilimlarni umumlashtirish",
+          "hours": 3,
+          "topics": [
+            {
+              "title": "Kimyoviy ishlab chiqarish istiqbollari",
+              "id": "noorganik-kimyodan-olingan-bilimlarni-umumlashti-1"
+            },
+            {
+              "title": "Kimyoviy reaksiyalarning kimyoviy ishlab chiqarishdagi ahamiyati",
+              "id": "noorganik-kimyodan-olingan-bilimlarni-umumlashti-2"
+            },
+            {
+              "title": "O‘zbekistonda kimyo fani va kimyo sanoatining rivojlanish istiqbollari",
+              "id": "noorganik-kimyodan-olingan-bilimlarni-umumlashti-3"
+            },
+            {
+              "title": "Atmosfera va gidrosferani muhofaza qilish",
+              "id": "noorganik-kimyodan-olingan-bilimlarni-umumlashti-4"
+            },
+            {
+              "title": "Davriy qonun va elementlar davriy sistemasining ahamiyati",
+              "id": "noorganik-kimyodan-olingan-bilimlarni-umumlashti-5"
+            },
+            {
+              "title": "Kimyoviy elementlarning davriy sistemadagi o‘rniga qarab xossalarini o‘rganish",
+              "id": "noorganik-kimyodan-olingan-bilimlarni-umumlashti-6"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "grade": 10,
+      "source": {
+        "title": "Umumiy o'rta ta'limning o'quv dasturi (10-sinf) — Kimyo",
+        "url": "https://uzbmb.uz/upload/file/pdf/qabul2025/dasturlar/7.Kimyo/10-sinf%20Kimyo%20fanidan%20o'quv%20dastur.pdf",
+        "year": 2018,
+        "publisher": "Respublika ta'lim markazi (Xalq ta'limi vazirligi)"
+      },
+      "units": [
+        {
+          "title": "ORGANIK KIMYONING TUZILISH NAZARIYASI HAQIDA DASTLABKI TUSHUNCHALAR",
+          "hours": 10,
+          "topics": [
+            {
+              "title": "Organik kimyo tarixi",
+              "id": "organik-kimyoning-tuzilish-nazariyasi-haqida-das-1"
+            },
+            {
+              "title": "Organik kimyo uglerod birikmalari kimyosidir",
+              "id": "organik-kimyoning-tuzilish-nazariyasi-haqida-das-2"
+            },
+            {
+              "title": "Organik va anorganik moddalar, ularning farqlari, insonga dastlab ma’lum bo‘lgan organik moddalar",
+              "id": "organik-kimyoning-tuzilish-nazariyasi-haqida-das-3"
+            },
+            {
+              "title": "Organik birikmalar tuzilish nazariyasi",
+              "id": "organik-kimyoning-tuzilish-nazariyasi-haqida-das-4"
+            },
+            {
+              "title": "Izomeriya va uning turlari",
+              "id": "organik-kimyoning-tuzilish-nazariyasi-haqida-das-5"
+            },
+            {
+              "title": "Izomerlarga ta’rif",
+              "id": "organik-kimyoning-tuzilish-nazariyasi-haqida-das-6"
+            },
+            {
+              "title": "Organik birikmalar sinflanishi",
+              "id": "organik-kimyoning-tuzilish-nazariyasi-haqida-das-7"
+            },
+            {
+              "title": "To‘yingan, to‘yinmagan, ochiq, yopiq zanjirli uglevodorodlar, kislorodli, azotli organik birikmalar haqida umumiy tushuncha",
+              "id": "organik-kimyoning-tuzilish-nazariyasi-haqida-das-8"
+            }
+          ]
+        },
+        {
+          "title": "UGLEVODORODLAR",
+          "hours": 27,
+          "topics": [
+            {
+              "title": "Alkanlarlarning umumiy formulasi",
+              "id": "uglevodorodlar-1"
+            },
+            {
+              "title": "Alkanlarlarning umumiy formulasi, gomologik qatori, radikallar nomlanishi",
+              "id": "uglevodorodlar-2"
+            },
+            {
+              "title": "Sistematik nomenklatura. ratsional nomenklatura",
+              "id": "uglevodorodlar-3"
+            },
+            {
+              "title": "Alkanlarning olinishi va fizik xossalari",
+              "id": "uglevodorodlar-4"
+            },
+            {
+              "title": "To‘yingan uglevodorodlarning (A.Vyurts reaksiyasi bo‘yicha) olinishi",
+              "id": "uglevodorodlar-5"
+            },
+            {
+              "title": "Alkanlarning kimyoviy xossalari va ishlatilishi",
+              "id": "uglevodorodlar-6"
+            },
+            {
+              "title": "Alkanlarning yonishi",
+              "id": "uglevodorodlar-7"
+            },
+            {
+              "title": "Alkanlarning galogenli hosilalarini nomlash",
+              "id": "uglevodorodlar-8"
+            },
+            {
+              "title": "Sikloalkanlar",
+              "id": "uglevodorodlar-9"
+            },
+            {
+              "title": "Sistematik nomenklatura",
+              "id": "uglevodorodlar-10"
+            },
+            {
+              "title": "Alkenlar va ularning nomenklaturasi",
+              "id": "uglevodorodlar-11"
+            },
+            {
+              "title": "Alkenlarning umumiy formulasi",
+              "id": "uglevodorodlar-12"
+            },
+            {
+              "title": "Alkenlar izomeriyasi",
+              "id": "uglevodorodlar-13"
+            },
+            {
+              "title": "Alkenlarning nomlanishi",
+              "id": "uglevodorodlar-14"
+            },
+            {
+              "title": "Alkenlarning fizik va kimyoviy xossalari",
+              "id": "uglevodorodlar-15"
+            },
+            {
+              "title": "Alkenlarning fizik xossasi, gidrogenlash, galogenlash reaksiyalari",
+              "id": "uglevodorodlar-16"
+            },
+            {
+              "title": "Alkadienlar",
+              "id": "uglevodorodlar-17"
+            },
+            {
+              "title": "Alkadienlarning umumiy formulasi",
+              "id": "uglevodorodlar-18"
+            },
+            {
+              "title": "Olinishi",
+              "id": "uglevodorodlar-19"
+            },
+            {
+              "title": "Alkinlar",
+              "id": "uglevodorodlar-20"
+            },
+            {
+              "title": "Alkinlarning umumiy formulasi",
+              "id": "uglevodorodlar-21"
+            },
+            {
+              "title": "Aromatik uglevodorodlar",
+              "id": "uglevodorodlar-22"
+            },
+            {
+              "title": "Arenlarning umumiy formulasi",
+              "id": "uglevodorodlar-23"
+            },
+            {
+              "title": "Benzolning eng muhim hosilasi",
+              "id": "uglevodorodlar-24"
+            },
+            {
+              "title": "Uglevodorodlar sinflari orasida genetik bog’lanish",
+              "id": "uglevodorodlar-25"
+            },
+            {
+              "title": "Neft va neftni qayta ishlash mahsulotlari",
+              "id": "uglevodorodlar-26"
+            },
+            {
+              "title": "Toshko‘mir",
+              "id": "uglevodorodlar-27"
+            },
+            {
+              "title": "Uglevodorodlarning asosiy sinflari orasidagi genetik bog’lanish",
+              "id": "uglevodorodlar-28"
+            }
+          ]
+        },
+        {
+          "title": "KISLORODLI ORGANIK BIRIKMALAR",
+          "hours": 27,
+          "topics": [
+            {
+              "title": "Spirtlar",
+              "id": "kislorodli-organik-birikmalar-1"
+            },
+            {
+              "title": "Bir atomli to‘yingan spirtlarning umumiy formulasi",
+              "id": "kislorodli-organik-birikmalar-2"
+            },
+            {
+              "title": "Vodorod bog’lanish",
+              "id": "kislorodli-organik-birikmalar-3"
+            },
+            {
+              "title": "Ko‘p atomli spirtlar",
+              "id": "kislorodli-organik-birikmalar-4"
+            },
+            {
+              "title": "Ko‘p atomli spirtlarning izomeriyasi va nomenklaturasi",
+              "id": "kislorodli-organik-birikmalar-5"
+            },
+            {
+              "title": "Vakillari",
+              "id": "kislorodli-organik-birikmalar-6"
+            },
+            {
+              "title": "Etilenglikol",
+              "id": "kislorodli-organik-birikmalar-7"
+            },
+            {
+              "title": "Fenollar va aromatik spirtlar",
+              "id": "kislorodli-organik-birikmalar-8"
+            },
+            {
+              "title": "Fenol va krezol",
+              "id": "kislorodli-organik-birikmalar-9"
+            },
+            {
+              "title": "Oddiy efirlar",
+              "id": "kislorodli-organik-birikmalar-10"
+            },
+            {
+              "title": "Oddiy efirlar umumiy formulasi",
+              "id": "kislorodli-organik-birikmalar-11"
+            },
+            {
+              "title": "Oksobirikmalar",
+              "id": "kislorodli-organik-birikmalar-12"
+            },
+            {
+              "title": "Aldegidlar umumiy formulasi",
+              "id": "kislorodli-organik-birikmalar-13"
+            },
+            {
+              "title": "Izomeriyasi",
+              "id": "kislorodli-organik-birikmalar-14"
+            },
+            {
+              "title": "Ketonlar",
+              "id": "kislorodli-organik-birikmalar-15"
+            },
+            {
+              "title": "Ketonlar umumiy formulasi",
+              "id": "kislorodli-organik-birikmalar-16"
+            },
+            {
+              "title": "Ishlatilishi",
+              "id": "kislorodli-organik-birikmalar-17"
+            },
+            {
+              "title": "Karbon kislotalar",
+              "id": "kislorodli-organik-birikmalar-18"
+            },
+            {
+              "title": "Bir atomli to’yingan karbon kislotalar umumiy formulasi",
+              "id": "kislorodli-organik-birikmalar-19"
+            },
+            {
+              "title": "Oksikislotalar",
+              "id": "kislorodli-organik-birikmalar-20"
+            },
+            {
+              "title": "Murakkab efirlar",
+              "id": "kislorodli-organik-birikmalar-21"
+            },
+            {
+              "title": "Murakkab efirlar umumiy formulasi",
+              "id": "kislorodli-organik-birikmalar-22"
+            },
+            {
+              "title": "Yog‘lar",
+              "id": "kislorodli-organik-birikmalar-23"
+            },
+            {
+              "title": "Yog‘lar umumiy formulasi",
+              "id": "kislorodli-organik-birikmalar-24"
+            },
+            {
+              "title": "Qattiq va suyuq yog‘lar",
+              "id": "kislorodli-organik-birikmalar-25"
+            },
+            {
+              "title": "Uglevodlar",
+              "id": "kislorodli-organik-birikmalar-26"
+            },
+            {
+              "title": "Monosaxaridlar umumiy formulasi",
+              "id": "kislorodli-organik-birikmalar-27"
+            },
+            {
+              "title": "Disaxaridlar: maltoza va saxaroza",
+              "id": "kislorodli-organik-birikmalar-28"
+            },
+            {
+              "title": "Polisaharidlar",
+              "id": "kislorodli-organik-birikmalar-29"
+            }
+          ]
+        },
+        {
+          "title": "ATROF MUHITNI MUHOFAZA QILISH",
+          "hours": 4,
+          "topics": [
+            {
+              "title": "Organik moddalar ishlab chiqarish sanoati",
+              "id": "atrof-muhitni-muhofaza-qilish-1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "grade": 11,
+      "hours": 68,
+      "source": {
+        "title": "Umumiy o'rta ta'limning o'quv dasturi (11-sinf) — Kimyo",
+        "url": "https://uzbmb.uz/upload/file/pdf/qabul2025/dasturlar/7.Kimyo/11-sinf-Kimyo%20fanidan%20o'quv%20dastur.pdf",
+        "year": 2018,
+        "publisher": "Respublika ta'lim markazi (Xalq ta'limi vazirligi)"
+      },
+      "units": [
+        {
+          "title": "ATOM TUZILISHI. DAVRIY QONUN",
+          "hours": 8,
+          "topics": [
+            {
+              "title": "Atom tuzilishi",
+              "id": "atom-tuzilishi-davriy-qonun-1"
+            },
+            {
+              "title": "Pauli prinsipi",
+              "id": "atom-tuzilishi-davriy-qonun-2"
+            },
+            {
+              "title": "Davriy qonun va D.I. Mendeleyevni davriy sistemasi",
+              "id": "atom-tuzilishi-davriy-qonun-3"
+            },
+            {
+              "title": "Atom radiusi, ionlanish energiyasi, elektronga moyillik, elektromanfiylik, metallik va metallmaslik xossalari",
+              "id": "atom-tuzilishi-davriy-qonun-4"
+            },
+            {
+              "title": "Atom tarkibi",
+              "id": "atom-tuzilishi-davriy-qonun-5"
+            }
+          ]
+        },
+        {
+          "title": "MODDA MIQDORI",
+          "hours": 8,
+          "topics": [
+            {
+              "title": "Modda miqdori",
+              "id": "modda-miqdori-1"
+            },
+            {
+              "title": "Avogadro qonuni",
+              "id": "modda-miqdori-2"
+            },
+            {
+              "title": "Ekvivalent",
+              "id": "modda-miqdori-3"
+            },
+            {
+              "title": "Mavzuga oid masalalar yechish",
+              "id": "modda-miqdori-4"
+            },
+            {
+              "title": "Mendeleyev-Klapeyron tenglamasi",
+              "id": "modda-miqdori-5"
+            }
+          ]
+        },
+        {
+          "title": "KUCHLI VA KUCHSIZ ELEKTROLITLAR. DISSOTSIATSIYALANISH. GIDROLIZ",
+          "hours": 8,
+          "topics": [
+            {
+              "title": "Kuchli va kuchsiz elektrolitlar haqida tushuncha",
+              "id": "kuchli-va-kuchsiz-elektrolitlar-dissotsiatsiyala-1"
+            },
+            {
+              "title": "S.Arreniusning elektrolitik dissisasiyalanish nazariyasi",
+              "id": "kuchli-va-kuchsiz-elektrolitlar-dissotsiatsiyala-2"
+            },
+            {
+              "title": "Elektrolitik dissotsiatsiyalanish va dissotsiatsiyalanish darajasi",
+              "id": "kuchli-va-kuchsiz-elektrolitlar-dissotsiatsiyala-3"
+            },
+            {
+              "title": "Dissotsiatsiyalanish darajasi",
+              "id": "kuchli-va-kuchsiz-elektrolitlar-dissotsiatsiyala-4"
+            },
+            {
+              "title": "Ionlarning almashinish reaksiyasi",
+              "id": "kuchli-va-kuchsiz-elektrolitlar-dissotsiatsiyala-5"
+            },
+            {
+              "title": "Tuzlar gidrolizi va undagi eritma muhiti",
+              "id": "kuchli-va-kuchsiz-elektrolitlar-dissotsiatsiyala-6"
+            },
+            {
+              "title": "Kation bo‘yicha sodir bo‘ladigan gidroliz, anion bo‘yicha sodir bo‘ladigan gidroliz",
+              "id": "kuchli-va-kuchsiz-elektrolitlar-dissotsiatsiyala-7"
+            },
+            {
+              "title": "Vodorod ko ‘rsatkich",
+              "id": "kuchli-va-kuchsiz-elektrolitlar-dissotsiatsiyala-8"
+            }
+          ]
+        },
+        {
+          "title": "ERITMA",
+          "hours": 12,
+          "topics": [
+            {
+              "title": "Eritma haqida tushunch",
+              "id": "eritma-1"
+            },
+            {
+              "title": "Eritma, erituvhci, gamogen sistena,eritmalarning xossalari",
+              "id": "eritma-2"
+            },
+            {
+              "title": "Eruvchanlik",
+              "id": "eritma-3"
+            }
+          ]
+        },
+        {
+          "title": "REAKSIYA TEZLIGI",
+          "hours": 6,
+          "topics": [
+            {
+              "title": "Kimyoviy reaksiya tezligi haqida tushuncha",
+              "id": "reaksiya-tezligi-1"
+            },
+            {
+              "title": "Reaksiyaning o ‘rtacha tezligi",
+              "id": "reaksiya-tezligi-2"
+            },
+            {
+              "title": "Reaksiya tezligiga bosim, hajm va haroratning ta’siri",
+              "id": "reaksiya-tezligi-3"
+            },
+            {
+              "title": "Bosim o ‘zgarishi",
+              "id": "reaksiya-tezligi-4"
+            }
+          ]
+        },
+        {
+          "title": "KIMYOVIY MUVOZANAT",
+          "hours": 8,
+          "topics": [
+            {
+              "title": "Qaytar va qaytmas reaksiyalar",
+              "id": "kimyoviy-muvozanat-1"
+            },
+            {
+              "title": "Qaytmas reaksiyalar",
+              "id": "kimyoviy-muvozanat-2"
+            },
+            {
+              "title": "Kimyoviy muvozanat va unga tasir etuvchi omillar Kimyoviy muvozanatning siljishi yoki surilishi",
+              "id": "kimyoviy-muvozanat-3"
+            },
+            {
+              "title": "Mavzuga oid testlar yechish",
+              "id": "kimyoviy-muvozanat-4"
+            }
+          ]
+        },
+        {
+          "title": "OKSIDLANISH-QAYTARILISH REAKSIYALARI",
+          "hours": 8,
+          "topics": [
+            {
+              "title": "Oksidlanish-qaytarilish reaksiyalarini yarim reaksiya usulu bilan tenglashtirish",
+              "id": "oksidlanish-qaytarilish-reaksiyalari-1"
+            },
+            {
+              "title": "Oksidlanish-qaytarilish reaksiyasini eritma muhitiga bog’liqligi",
+              "id": "oksidlanish-qaytarilish-reaksiyalari-2"
+            }
+          ]
+        },
+        {
+          "title": "ELEKTROLIZ",
+          "hours": 8,
+          "topics": [
+            {
+              "title": "Elektroliz tushunchasi",
+              "id": "elektroliz-1"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

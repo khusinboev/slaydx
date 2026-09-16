@@ -46,6 +46,16 @@ export type CurriculumUnit = {
 /** Bitta fan × sinf — rasmiy hujjat bilan birga. */
 export type CurriculumEntry = {
   grade: number;
+  /**
+   * Dasturda E'LON QILINGAN yillik soat («(68 soat)» sarlavha qatori).
+   *
+   * Nega tayanch o'quv rejadan (121-son buyruq) emas: uning PDF havolasi
+   * 2026-09-16 holatiga 502 qaytardi (`data/CURRICULUM-SOURCES.md`),
+   * shuning uchun soat AYNI hujjatning o'zidan olinadi — taxmin emas,
+   * shu manbaning rasmiy raqami. `tests/curriculum-data.test.mts` bob
+   * soatlari yig'indisini shunga solishtiradi.
+   */
+  hours?: number;
   source: CurriculumSource;
   units: CurriculumUnit[];
 };
@@ -78,6 +88,21 @@ const INDEX = indexRaw as CurriculumIndex;
  */
 const FILES: Record<string, () => Promise<{ default: unknown }>> = {
   matematika: () => import("../data/curriculum/matematika.json"),
+  fizika: () => import("../data/curriculum/fizika.json"),
+  kimyo: () => import("../data/curriculum/kimyo.json"),
+  biologiya: () => import("../data/curriculum/biologiya.json"),
+  geografiya: () => import("../data/curriculum/geografiya.json"),
+  /*
+   * Tarix UCH fanga bo'lingan, chunki manba shunday: 5–6-sinfda yagona
+   * «Tarix» dasturi, 7-sinfdan boshlab «Jahon tarixi» va «O'zbekiston
+   * tarixi» ALOHIDA hujjatlar (har birining o'z bobi, soati va
+   * havolasi). Ularni bitta faylga tiqish 7-sinfda ikki xil dasturni
+   * aralashtirib yuborardi va `entries[].source` bitta hujjatga ishora
+   * qila olmasdi (R4 X-6).
+   */
+  tarix: () => import("../data/curriculum/tarix.json"),
+  "jahon-tarixi": () => import("../data/curriculum/jahon-tarixi.json"),
+  "ozbekiston-tarixi": () => import("../data/curriculum/ozbekiston-tarixi.json"),
 };
 
 /** Yuklangan fayllar keshi — bir marta o'qiladi (`import()` ning o'zi ham keshlaydi). */

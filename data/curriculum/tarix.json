@@ -1,0 +1,679 @@
+{
+  "version": "2026-09-16",
+  "subject": {
+    "id": "tarix",
+    "uz": "Tarix",
+    "ru": "История",
+    "en": "History"
+  },
+  "entries": [
+    {
+      "grade": 5,
+      "hours": 68,
+      "source": {
+        "title": "Umumiy o'rta ta'limning o'quv dasturi (5-sinf) — Tarix",
+        "url": "https://uzbmb.uz/upload/file/pdf/qabul2025/dasturlar/9.Tarix/5-sinf-Tarix%20fanidan%20o'quv%20dastur.pdf",
+        "year": 2018,
+        "publisher": "Respublika ta'lim markazi (Xalq ta'limi vazirligi)"
+      },
+      "units": [
+        {
+          "title": "TARIX FANI NIMANI O‘RGANADI?",
+          "hours": 3,
+          "topics": [
+            {
+              "title": "Kirish",
+              "id": "tarix-fani-nimani-organadi-1"
+            },
+            {
+              "title": "Tarix nima?",
+              "id": "tarix-fani-nimani-organadi-2"
+            },
+            {
+              "title": "Tarixda yillarni hisoblash",
+              "id": "tarix-fani-nimani-organadi-3"
+            },
+            {
+              "title": "Tarixiy sanalarni matematik usullarda hisoblash",
+              "id": "tarix-fani-nimani-organadi-4"
+            },
+            {
+              "title": "Dunyo xaritasi haqida tushuncha",
+              "id": "tarix-fani-nimani-organadi-5"
+            },
+            {
+              "title": "Dastlabki xaritalar",
+              "id": "tarix-fani-nimani-organadi-6"
+            }
+          ]
+        },
+        {
+          "title": "ENG QADIMGI DAVRLARDA DUNYO XALQLARI",
+          "hours": 3,
+          "topics": [
+            {
+              "title": "Eng qadimgi odamlar va ularning manzilgohlari Janubiy Afrika, Xitoy, O‘rta Osiyodagi qadimgi manzilgohlar",
+              "id": "eng-qadimgi-davrlarda-dunyo-xalqlari-1"
+            },
+            {
+              "title": "Qadimgi odamlarning turmush tarzi",
+              "id": "eng-qadimgi-davrlarda-dunyo-xalqlari-2"
+            },
+            {
+              "title": "Qadimgi odamlarning uy joylari, ro‘zg‘or buyumlari",
+              "id": "eng-qadimgi-davrlarda-dunyo-xalqlari-3"
+            },
+            {
+              "title": "Tarixni o‘rganishda arxeologiyaning o‘rni",
+              "id": "eng-qadimgi-davrlarda-dunyo-xalqlari-4"
+            },
+            {
+              "title": "Arxeologlar qanday ishlaydilar?",
+              "id": "eng-qadimgi-davrlarda-dunyo-xalqlari-5"
+            }
+          ]
+        },
+        {
+          "title": "KISHILIK MADANIYATINING SHAKLLANISHI",
+          "hours": 9,
+          "topics": [
+            {
+              "title": "Qoyatosh sur’atlari",
+              "id": "kishilik-madaniyatining-shakllanishi-1"
+            },
+            {
+              "title": "Insonlar tomonidan qoyatoshlarga chizilgan sur’atlar.Yevropa va Osiyodagi qoyatosh yodgorliklar",
+              "id": "kishilik-madaniyatining-shakllanishi-2"
+            },
+            {
+              "title": "Yozuv – insoniyatning buyuk kashfiyoti",
+              "id": "kishilik-madaniyatining-shakllanishi-3"
+            },
+            {
+              "title": "Ilk yozuv belgilari",
+              "id": "kishilik-madaniyatining-shakllanishi-4"
+            },
+            {
+              "title": "Dunyo muzeylari",
+              "id": "kishilik-madaniyatining-shakllanishi-5"
+            },
+            {
+              "title": "Jahonning mashhur muzeylari",
+              "id": "kishilik-madaniyatining-shakllanishi-6"
+            },
+            {
+              "title": "O‘zbekiston muzeylari",
+              "id": "kishilik-madaniyatining-shakllanishi-7"
+            },
+            {
+              "title": "O‘zbekiston tarixi davlat muzeyi, Temuriylar tarixi davlat muzeyi, O‘zbekiston Respublikasi Qurolli kuchlari markaziy muzeyi",
+              "id": "kishilik-madaniyatining-shakllanishi-8"
+            },
+            {
+              "title": "Muzeylar tarixdan saboq beradi. (amaliy mashg‘ulot)",
+              "id": "kishilik-madaniyatining-shakllanishi-9"
+            }
+          ]
+        },
+        {
+          "title": "ILK SIVILIZATSIYALAR, SHAHARLAR VA DAVLATLAR",
+          "hours": 4,
+          "topics": [
+            {
+              "title": "Qadimgi shaharlarning paydo bo‘lishi",
+              "id": "ilk-sivilizatsiyalar-shaharlar-va-davlatlar-1"
+            },
+            {
+              "title": "Shaharlarning paydo bo‘lishida ijtimoiy hayotning ahamiyati",
+              "id": "ilk-sivilizatsiyalar-shaharlar-va-davlatlar-2"
+            },
+            {
+              "title": "Dunyoning qadimgi davlatlari",
+              "id": "ilk-sivilizatsiyalar-shaharlar-va-davlatlar-3"
+            },
+            {
+              "title": "Qadimgi Misr, Bobil, Qadimgi Xitoy va Qadimgi Hindiston davlatlari",
+              "id": "ilk-sivilizatsiyalar-shaharlar-va-davlatlar-4"
+            },
+            {
+              "title": "O‘zbekiston hududidagi qadimgi davlatlar",
+              "id": "ilk-sivilizatsiyalar-shaharlar-va-davlatlar-5"
+            },
+            {
+              "title": "Qadimgi Xorazm, Baqtriya va Sug‘d davlati",
+              "id": "ilk-sivilizatsiyalar-shaharlar-va-davlatlar-6"
+            },
+            {
+              "title": "Qadimgi dunyoning yetti mo‘jizasi (hikoya tarzida)",
+              "id": "ilk-sivilizatsiyalar-shaharlar-va-davlatlar-7"
+            },
+            {
+              "title": "Misr ehromlari, Semiramida osma bog‘lari, Olimp xudosi Zevs haykali, Ma’buda Artemida ibodatxonasi, Quyosh xudosi Gelios haykali, Aleksandriya mayog‘i, Galikarnas maqbarasi",
+              "id": "ilk-sivilizatsiyalar-shaharlar-va-davlatlar-8"
+            },
+            {
+              "title": "Jahonning mumtoz tarixiy obidalari",
+              "id": "ilk-sivilizatsiyalar-shaharlar-va-davlatlar-9"
+            },
+            {
+              "title": "Jahon madaniyatining mumtoz namunalari: Piza minorasi",
+              "id": "ilk-sivilizatsiyalar-shaharlar-va-davlatlar-10"
+            }
+          ]
+        },
+        {
+          "title": "O‘ZBEKISTONNING QADIMGI SHAHARLARI, TARIXIY YODGORLIKLARI",
+          "hours": 7,
+          "topics": [
+            {
+              "title": "O‘zbekistonning tarixiy shaharlari",
+              "id": "ozbekistonning-qadimgi-shaharlari-tarixiy-yodgor-1"
+            },
+            {
+              "title": "Toshkent, Samarqand, Buxoro, Xiva, Shahrisabz, Qarshi, Termiz",
+              "id": "ozbekistonning-qadimgi-shaharlari-tarixiy-yodgor-2"
+            },
+            {
+              "title": "Joy nomlari tarixi (amaliy mashg‘ulot)",
+              "id": "ozbekistonning-qadimgi-shaharlari-tarixiy-yodgor-3"
+            },
+            {
+              "title": "Mahalla tarixi",
+              "id": "ozbekistonning-qadimgi-shaharlari-tarixiy-yodgor-4"
+            },
+            {
+              "title": "O‘zbekistonning tarixiy-me’moriy obidalari",
+              "id": "ozbekistonning-qadimgi-shaharlari-tarixiy-yodgor-5"
+            },
+            {
+              "title": "Qo‘yqirilganqal’a. Tuproqqal’a, Afrosiyob",
+              "id": "ozbekistonning-qadimgi-shaharlari-tarixiy-yodgor-6"
+            },
+            {
+              "title": "Ismoil Somoniy maqbarasi",
+              "id": "ozbekistonning-qadimgi-shaharlari-tarixiy-yodgor-7"
+            }
+          ]
+        },
+        {
+          "title": "SAVDO VA ALOQA",
+          "hours": 10,
+          "topics": [
+            {
+              "title": "Tangalar – tarix guvohi",
+              "id": "savdo-va-aloqa-1"
+            },
+            {
+              "title": "Dastlabki tangalar",
+              "id": "savdo-va-aloqa-2"
+            },
+            {
+              "title": "Savdo yo‘llari. (Buyuk ipak yo‘li misolida)",
+              "id": "savdo-va-aloqa-3"
+            },
+            {
+              "title": "Qadimgi savdo yo‘llari",
+              "id": "savdo-va-aloqa-4"
+            },
+            {
+              "title": "Yangi dengiz savdo yo‘llarining kashf etilishi",
+              "id": "savdo-va-aloqa-5"
+            },
+            {
+              "title": "Dengiz yo‘llariga ehtiyoj",
+              "id": "savdo-va-aloqa-6"
+            },
+            {
+              "title": "Ishlab chiqarish texnikasining paydo bo‘lishi",
+              "id": "savdo-va-aloqa-7"
+            },
+            {
+              "title": "Ishlab chiqarish texnikasi nima?",
+              "id": "savdo-va-aloqa-8"
+            },
+            {
+              "title": "Transport vositalarining ixtiro qilinishi",
+              "id": "savdo-va-aloqa-9"
+            },
+            {
+              "title": "Transport vositalarining kashf etilishi",
+              "id": "savdo-va-aloqa-10"
+            },
+            {
+              "title": "Aloqa vositalarining ixtiro qilinishi",
+              "id": "savdo-va-aloqa-11"
+            },
+            {
+              "title": "Telegraf, telefon radioning kashf etilishi",
+              "id": "savdo-va-aloqa-12"
+            }
+          ]
+        },
+        {
+          "title": "YURTIMIZ VA YEVROPA ILM – FAN TARAQQIYOTI",
+          "hours": 8,
+          "topics": [
+            {
+              "title": "Yurtimizning buyuk allomalari",
+              "id": "yurtimiz-va-yevropa-ilm-fan-taraqqiyoti-1"
+            },
+            {
+              "title": "Muso al-Xorazmiy, Abu Rayhon Beruniy",
+              "id": "yurtimiz-va-yevropa-ilm-fan-taraqqiyoti-2"
+            },
+            {
+              "title": "Yurtimiz allomalarining ilmiy merosi. (amaliy mashg‘ulot) Mirzo Ulug‘bek va uning akademiyasi",
+              "id": "yurtimiz-va-yevropa-ilm-fan-taraqqiyoti-3"
+            },
+            {
+              "title": "Mirzo Ulug‘bekning ilm-fan rivojiga qo‘shgan hissasi",
+              "id": "yurtimiz-va-yevropa-ilm-fan-taraqqiyoti-4"
+            },
+            {
+              "title": "Yurt obodonchiligi",
+              "id": "yurtimiz-va-yevropa-ilm-fan-taraqqiyoti-5"
+            },
+            {
+              "title": "Alisher Navoiy, Husayn Boyqaro, Zahiriddin Muhammad Bobur",
+              "id": "yurtimiz-va-yevropa-ilm-fan-taraqqiyoti-6"
+            },
+            {
+              "title": "Yevropada ilm-fan kashfiyotlari",
+              "id": "yurtimiz-va-yevropa-ilm-fan-taraqqiyoti-7"
+            },
+            {
+              "title": "Nikolay Kopernik kashfiyotining jahonshumul ahamiyati",
+              "id": "yurtimiz-va-yevropa-ilm-fan-taraqqiyoti-8"
+            },
+            {
+              "title": "Turkiston ma’rifatparvarlari",
+              "id": "yurtimiz-va-yevropa-ilm-fan-taraqqiyoti-9"
+            },
+            {
+              "title": "Jadidchilik g‘oyalalarini paydo bo‘lishi",
+              "id": "yurtimiz-va-yevropa-ilm-fan-taraqqiyoti-10"
+            }
+          ]
+        },
+        {
+          "title": "YURT OZODLIGI VA OBODLIGI UCHUN KURASHGAN QAHRAMONLAR",
+          "hours": 9,
+          "topics": [
+            {
+              "title": "To‘maris va Shiroq jasorati",
+              "id": "yurt-ozodligi-va-obodligi-uchun-kurashgan-qahram-1"
+            },
+            {
+              "title": "Ahamoniylarning O‘rta Osiyoga kirib kelishi",
+              "id": "yurt-ozodligi-va-obodligi-uchun-kurashgan-qahram-2"
+            },
+            {
+              "title": "Spitamenning qahramonligi",
+              "id": "yurt-ozodligi-va-obodligi-uchun-kurashgan-qahram-3"
+            },
+            {
+              "title": "O‘rta Osiyo xalqlarining Aleksandr Makedonskiyning bosqinchiligiga qarshi kurashi",
+              "id": "yurt-ozodligi-va-obodligi-uchun-kurashgan-qahram-4"
+            },
+            {
+              "title": "Arablarga qarshi xalq ozodlik kurashi",
+              "id": "yurt-ozodligi-va-obodligi-uchun-kurashgan-qahram-5"
+            },
+            {
+              "title": "Muqanna qo‘zg‘oloni",
+              "id": "yurt-ozodligi-va-obodligi-uchun-kurashgan-qahram-6"
+            },
+            {
+              "title": "Jaloliddin Manguberdi xalqimizning milliy qahramoni",
+              "id": "yurt-ozodligi-va-obodligi-uchun-kurashgan-qahram-7"
+            },
+            {
+              "title": "Mo‘g‘ullarga qarshi mardonavor kurash",
+              "id": "yurt-ozodligi-va-obodligi-uchun-kurashgan-qahram-8"
+            },
+            {
+              "title": "Sohibqiron Amir Temur jasorati va uning davlati",
+              "id": "yurt-ozodligi-va-obodligi-uchun-kurashgan-qahram-9"
+            },
+            {
+              "title": "Amir Temur hayoti va faoliyati",
+              "id": "yurt-ozodligi-va-obodligi-uchun-kurashgan-qahram-10"
+            }
+          ]
+        },
+        {
+          "title": "INSONIYAT TARIXIDAGI JAHON URUSHLARI",
+          "hours": 4,
+          "topics": [
+            {
+              "title": "Ikkinchi jahon urushi davrida o‘zbek jangchilarining qahramonliklari",
+              "id": "insoniyat-tarixidagi-jahon-urushlari-1"
+            },
+            {
+              "title": "O‘zbek xalqining frontga yordami",
+              "id": "insoniyat-tarixidagi-jahon-urushlari-2"
+            },
+            {
+              "title": "Bir yodgorlik tarixi (Sh. Shomahmudovlar oilasi misolida)",
+              "id": "insoniyat-tarixidagi-jahon-urushlari-3"
+            },
+            {
+              "title": "O‘zbek xalqining bag‘rikengligi",
+              "id": "insoniyat-tarixidagi-jahon-urushlari-4"
+            }
+          ]
+        },
+        {
+          "title": "O‘ZBEKISTON MUSTAQIL TARAQQIYOT YO‘LIDA",
+          "hours": 11,
+          "topics": [
+            {
+              "title": "O‘zbekiston Respublikasi mustaqilligining qo‘lga kiritilishi",
+              "id": "ozbekiston-mustaqil-taraqqiyot-yolida-1"
+            },
+            {
+              "title": "O‘zbekistonning birinchi Prezidenti",
+              "id": "ozbekiston-mustaqil-taraqqiyot-yolida-2"
+            },
+            {
+              "title": "O‘zbekiston va jahon",
+              "id": "ozbekiston-mustaqil-taraqqiyot-yolida-3"
+            },
+            {
+              "title": "Dunyo mamlakatlari tomonidan O‘zbekiston mustaqilligining tan olinishi",
+              "id": "ozbekiston-mustaqil-taraqqiyot-yolida-4"
+            },
+            {
+              "title": "O‘zbekiston xalqaro tashkilotlar a’zosi",
+              "id": "ozbekiston-mustaqil-taraqqiyot-yolida-5"
+            },
+            {
+              "title": "O‘zbekiston iqtisodiyotidagi yutuqlar",
+              "id": "ozbekiston-mustaqil-taraqqiyot-yolida-6"
+            },
+            {
+              "title": "Biznesning rivojlanishi",
+              "id": "ozbekiston-mustaqil-taraqqiyot-yolida-7"
+            },
+            {
+              "title": "Milliy tiklanishdan – milliy yuksalish sari",
+              "id": "ozbekiston-mustaqil-taraqqiyot-yolida-8"
+            },
+            {
+              "title": "Milliy va ma’naviy qadriyatlarning tiklanishi",
+              "id": "ozbekiston-mustaqil-taraqqiyot-yolida-9"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "grade": 6,
+      "source": {
+        "title": "Umumiy o'rta ta'limning o'quv dasturi (6-sinf) — Tarix",
+        "url": "https://uzbmb.uz/upload/file/pdf/qabul2025/dasturlar/9.Tarix/6-sinf-Tarix%20fanidan%20o'quv%20dastur.pdf",
+        "year": 2018,
+        "publisher": "Respublika ta'lim markazi (Xalq ta'limi vazirligi)"
+      },
+      "units": [
+        {
+          "title": "ENG QADIMGI TUZUM",
+          "hours": 9,
+          "topics": [
+            {
+              "title": "Kirish",
+              "id": "eng-qadimgi-tuzum-1",
+              "hours": 1
+            },
+            {
+              "title": "Qadimgi tarix taraqqiyotining boshlanishi",
+              "id": "eng-qadimgi-tuzum-2"
+            },
+            {
+              "title": "Eng qadimgi odamlarning rivojlanish bosqichlari",
+              "id": "eng-qadimgi-tuzum-3"
+            },
+            {
+              "title": "Urug‘chilik jamiyati",
+              "id": "eng-qadimgi-tuzum-4",
+              "hours": 1
+            },
+            {
+              "title": "Eneolit va bronza davri",
+              "id": "eng-qadimgi-tuzum-5",
+              "hours": 1
+            },
+            {
+              "title": "Temir davriga o‘tishda O‘rta Osiyoning rivojlanishi",
+              "id": "eng-qadimgi-tuzum-6",
+              "hours": 1
+            }
+          ]
+        },
+        {
+          "title": "QADIMGI SHARQ VA O‘RTA OSIYO",
+          "hours": 21,
+          "topics": [
+            {
+              "title": "Nil vodiysi va uning aholisi",
+              "id": "qadimgi-sharq-va-orta-osiyo-1",
+              "hours": 1
+            },
+            {
+              "title": "Qadimgi Misr",
+              "id": "qadimgi-sharq-va-orta-osiyo-2",
+              "hours": 1
+            },
+            {
+              "title": "Qadimgi Misrda din",
+              "id": "qadimgi-sharq-va-orta-osiyo-3",
+              "hours": 2
+            },
+            {
+              "title": "Piramidalar va dahmalar",
+              "id": "qadimgi-sharq-va-orta-osiyo-4",
+              "hours": 1
+            },
+            {
+              "title": "Qadimgi Misr madaniyati",
+              "id": "qadimgi-sharq-va-orta-osiyo-5",
+              "hours": 1
+            },
+            {
+              "title": "Mesopotamiya sivilizatsiyalari",
+              "id": "qadimgi-sharq-va-orta-osiyo-6",
+              "hours": 2
+            },
+            {
+              "title": "Bobil podsholigi",
+              "id": "qadimgi-sharq-va-orta-osiyo-7",
+              "hours": 1
+            },
+            {
+              "title": "Yangi Bobil podsholigi",
+              "id": "qadimgi-sharq-va-orta-osiyo-8",
+              "hours": 1
+            },
+            {
+              "title": "Old Osiyo davlatlari",
+              "id": "qadimgi-sharq-va-orta-osiyo-9",
+              "hours": 1
+            },
+            {
+              "title": "Ahamoniylar davlati",
+              "id": "qadimgi-sharq-va-orta-osiyo-10",
+              "hours": 1
+            },
+            {
+              "title": "Hindiston sivilizatsiyasi",
+              "id": "qadimgi-sharq-va-orta-osiyo-11",
+              "hours": 1
+            },
+            {
+              "title": "Miloddan avvalgi I mingyillikda Hindiston",
+              "id": "qadimgi-sharq-va-orta-osiyo-12",
+              "hours": 1
+            },
+            {
+              "title": "Xitoy sivilizatsiyasi",
+              "id": "qadimgi-sharq-va-orta-osiyo-13",
+              "hours": 1
+            },
+            {
+              "title": "Miloddan avvalgi III - mil. II asrlarda Xitoy",
+              "id": "qadimgi-sharq-va-orta-osiyo-14",
+              "hours": 1
+            },
+            {
+              "title": "O‘zbekiston hududidagi ilk davlatlar",
+              "id": "qadimgi-sharq-va-orta-osiyo-15",
+              "hours": 2
+            },
+            {
+              "title": "Zardushtiylik",
+              "id": "qadimgi-sharq-va-orta-osiyo-16",
+              "hours": 2
+            }
+          ]
+        },
+        {
+          "title": "QADIMGI YUNONISTON",
+          "hours": 12,
+          "topics": [
+            {
+              "title": "Antik tarixning boshlanishi",
+              "id": "qadimgi-yunoniston-1",
+              "hours": 1
+            },
+            {
+              "title": "Qadimgi Yunonistonning yuksalishi",
+              "id": "qadimgi-yunoniston-2",
+              "hours": 1
+            },
+            {
+              "title": "Buyuk yunon koloniyalashtirishi",
+              "id": "qadimgi-yunoniston-3",
+              "hours": 1
+            },
+            {
+              "title": "Afinada demokratiyasi",
+              "id": "qadimgi-yunoniston-4",
+              "hours": 1
+            },
+            {
+              "title": "Yunon-fors urushlari",
+              "id": "qadimgi-yunoniston-5",
+              "hours": 1
+            },
+            {
+              "title": "Yunonistonning Makedoniya tomonidan bosib olinishi",
+              "id": "qadimgi-yunoniston-6"
+            },
+            {
+              "title": "Fuqaro tarbiyasi",
+              "id": "qadimgi-yunoniston-7",
+              "hours": 1
+            },
+            {
+              "title": "Qadimgi Yunoniston madaniyati",
+              "id": "qadimgi-yunoniston-8",
+              "hours": 1
+            },
+            {
+              "title": "Qadimgi Yunoniston olimlari va mutafakkirlari",
+              "id": "qadimgi-yunoniston-9",
+              "hours": 1
+            },
+            {
+              "title": "Qadimgi Yunoniston afsonalari",
+              "id": "qadimgi-yunoniston-10",
+              "hours": 1
+            }
+          ]
+        },
+        {
+          "title": "O‘RTA OSIYO",
+          "hours": 9,
+          "topics": [
+            {
+              "title": "O‘rta Osiyoda Ahamoniylar hukmronligi",
+              "id": "orta-osiyo-1",
+              "hours": 1
+            },
+            {
+              "title": "O‘rta Osiyo xalqlarining yunon-makedon istilochilariga qarshi kurashi",
+              "id": "orta-osiyo-2",
+              "hours": 1
+            },
+            {
+              "title": "Salavkiylar davlati va Yunon Baqtriya podsholigi",
+              "id": "orta-osiyo-3",
+              "hours": 1
+            },
+            {
+              "title": "Qadimgi Xorazm. Qadimgi Dovon. Qadimgi Qang‘",
+              "id": "orta-osiyo-4",
+              "hours": 2
+            },
+            {
+              "title": "Qadimgi Kushon podsholigi",
+              "id": "orta-osiyo-5",
+              "hours": 2
+            },
+            {
+              "title": "Buyuk ipak yo‘li",
+              "id": "orta-osiyo-6",
+              "hours": 1
+            }
+          ]
+        },
+        {
+          "title": "QADIMGI RIM",
+          "hours": 10,
+          "topics": [
+            {
+              "title": "Italiya va uning aholisi",
+              "id": "qadimgi-rim-1",
+              "hours": 1
+            },
+            {
+              "title": "Rim Respublikasi",
+              "id": "qadimgi-rim-2",
+              "hours": 1
+            },
+            {
+              "title": "Rim Respublikasi hayoti",
+              "id": "qadimgi-rim-3",
+              "hours": 1
+            },
+            {
+              "title": "O‘rta yer dengizida hukmronlik uchun kurash",
+              "id": "qadimgi-rim-4",
+              "hours": 1
+            },
+            {
+              "title": "Qullar va gladiatorlar",
+              "id": "qadimgi-rim-5",
+              "hours": 1
+            },
+            {
+              "title": "Rimda Respublikaning qulashi",
+              "id": "qadimgi-rim-6",
+              "hours": 1
+            },
+            {
+              "title": "Rim imperiyasining qulashi va zavolga yuz tutishi",
+              "id": "qadimgi-rim-7",
+              "hours": 1
+            },
+            {
+              "title": "Qadimgi Rim madaniyati",
+              "id": "qadimgi-rim-8",
+              "hours": 2
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

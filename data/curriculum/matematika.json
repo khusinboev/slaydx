@@ -8,10 +8,2118 @@
   },
   "entries": [
     {
-      "grade": 11,
+      "grade": 5,
       "source": {
-        "title": "Aniq fanlar blok moduli bo'yicha umumiy o'rta ta'limning o'quv dasturi (XI sinf) — Matematika",
-        "url": "https://uzbmb.uz/upload/file/pdf/qabul2025/dasturlar/5.Matematika/11-sinf-Matematika%20fanidan%20o'quv%20dastur.pdf",
+        "title": "Umumiy o'rta ta'limning o'quv dasturi (5-sinf) — Matematika",
+        "url": "https://uzbmb.uz/upload/file/pdf/qabul2025/dasturlar/5.Matematika/5-sinf-Matematika%20fanidan%20o%CA%BBquv%20dastur.pdf",
+        "year": 2018,
+        "publisher": "Respublika ta'lim markazi (Xalq ta'limi vazirligi)"
+      },
+      "units": [
+        {
+          "title": "NATURAL SONLARNI QO‘SHISH VA AYIRISH",
+          "hours": 19,
+          "topics": [
+            {
+              "title": "Natural son va nol",
+              "id": "natural-sonlarni-qoshish-va-ayirish-1"
+            },
+            {
+              "title": "Sodda geometrik shakllar",
+              "id": "natural-sonlarni-qoshish-va-ayirish-2"
+            },
+            {
+              "title": "Kesmaning uzunligi",
+              "id": "natural-sonlarni-qoshish-va-ayirish-3"
+            },
+            {
+              "title": "Shkalalar va sonlar nuri",
+              "id": "natural-sonlarni-qoshish-va-ayirish-4"
+            },
+            {
+              "title": "Natural sonlarni taqqoslash",
+              "id": "natural-sonlarni-qoshish-va-ayirish-5"
+            },
+            {
+              "title": "Natural sonlarni yaxlitlash",
+              "id": "natural-sonlarni-qoshish-va-ayirish-6"
+            },
+            {
+              "title": "Natural sonlarni qo‘shish",
+              "id": "natural-sonlarni-qoshish-va-ayirish-7"
+            },
+            {
+              "title": "Qoʻshishning oʻrin almashtirish va guruhlash qonunlari",
+              "id": "natural-sonlarni-qoshish-va-ayirish-8"
+            },
+            {
+              "title": "Natural sonlarni ayirish",
+              "id": "natural-sonlarni-qoshish-va-ayirish-9"
+            },
+            {
+              "title": "Sonli va harfli ifodalar",
+              "id": "natural-sonlarni-qoshish-va-ayirish-10"
+            },
+            {
+              "title": "Nolning xossalari",
+              "id": "natural-sonlarni-qoshish-va-ayirish-11"
+            },
+            {
+              "title": "Matematik masala va tenglamalar",
+              "id": "natural-sonlarni-qoshish-va-ayirish-12"
+            },
+            {
+              "title": "Noma’lum kamayuvchini topish",
+              "id": "natural-sonlarni-qoshish-va-ayirish-13"
+            }
+          ]
+        },
+        {
+          "title": "NATURAL SONLARNI KO‘PAYTIRISH VA BO‘LISH",
+          "hours": 27,
+          "topics": [
+            {
+              "title": "Natural sonlarni ko‘paytirish",
+              "id": "natural-sonlarni-kopaytirish-va-bolish-1"
+            },
+            {
+              "title": "Ko‘paytirishning o‘rin almashtirish va guruhlash xossasi",
+              "id": "natural-sonlarni-kopaytirish-va-bolish-2"
+            },
+            {
+              "title": "Natural sonlarni bo‘lish",
+              "id": "natural-sonlarni-kopaytirish-va-bolish-3"
+            },
+            {
+              "title": "Qoldiqli bo‘lish",
+              "id": "natural-sonlarni-kopaytirish-va-bolish-4"
+            },
+            {
+              "title": "Qulay va tezkor hisoblash usullari",
+              "id": "natural-sonlarni-kopaytirish-va-bolish-5"
+            },
+            {
+              "title": "Ifodalarni soddalashtirish",
+              "id": "natural-sonlarni-kopaytirish-va-bolish-6"
+            },
+            {
+              "title": "Murakkabroq masalalarni yechish",
+              "id": "natural-sonlarni-kopaytirish-va-bolish-7"
+            },
+            {
+              "title": "Tenglama tuzib yechish usuli",
+              "id": "natural-sonlarni-kopaytirish-va-bolish-8"
+            },
+            {
+              "title": "To‘rt amalga doir hisoblash algoritmlari",
+              "id": "natural-sonlarni-kopaytirish-va-bolish-9"
+            },
+            {
+              "title": "Ma’lumotlar bilan ishlash",
+              "id": "natural-sonlarni-kopaytirish-va-bolish-10"
+            },
+            {
+              "title": "Chiziqli va ustunli diagrammalar",
+              "id": "natural-sonlarni-kopaytirish-va-bolish-11"
+            },
+            {
+              "title": "Loyiha ishi namunasi",
+              "id": "natural-sonlarni-kopaytirish-va-bolish-12"
+            }
+          ]
+        },
+        {
+          "title": "MATNLI MASALALARNI YECHISH",
+          "hours": 13,
+          "topics": [
+            {
+              "title": "Matnli masalalar",
+              "id": "matnli-masalalarni-yechish-1"
+            },
+            {
+              "title": "Qismlarga doir masalalar",
+              "id": "matnli-masalalarni-yechish-2"
+            },
+            {
+              "title": "Geometrik mazmundagi masalalar",
+              "id": "matnli-masalalarni-yechish-3"
+            },
+            {
+              "title": "Harakatga doir masalalarni yechish",
+              "id": "matnli-masalalarni-yechish-4"
+            },
+            {
+              "title": "Ikki jism harakatiga doir masalalar yechish",
+              "id": "matnli-masalalarni-yechish-5"
+            },
+            {
+              "title": "Iqtisodiy mazmundagi masalalarni yechish",
+              "id": "matnli-masalalarni-yechish-6"
+            },
+            {
+              "title": "Bajarilgan ishga doir masalalar yechish",
+              "id": "matnli-masalalarni-yechish-7"
+            }
+          ]
+        },
+        {
+          "title": "GEOMETRIK SHAKLLAR",
+          "hours": 21,
+          "topics": [
+            {
+              "title": "Burchaklar",
+              "id": "geometrik-shakllar-1"
+            },
+            {
+              "title": "Transportir",
+              "id": "geometrik-shakllar-2"
+            },
+            {
+              "title": "Perpendikular to‘g‘ri chiziqlar va ularni qurish",
+              "id": "geometrik-shakllar-3"
+            },
+            {
+              "title": "Ko‘pburchak",
+              "id": "geometrik-shakllar-4"
+            },
+            {
+              "title": "Ko‘pburchakning perimetri",
+              "id": "geometrik-shakllar-5"
+            },
+            {
+              "title": "To‘g‘ri to‘rtburchak va kvadrtaning yuzi formulalari va ularga doir masalalar yechish",
+              "id": "geometrik-shakllar-6"
+            },
+            {
+              "title": "Murakkab shakllarning yuzi",
+              "id": "geometrik-shakllar-7"
+            },
+            {
+              "title": "Shakllarning yuzi xossalari",
+              "id": "geometrik-shakllar-8"
+            },
+            {
+              "title": "Yuz o‘lchov birliklari",
+              "id": "geometrik-shakllar-9"
+            },
+            {
+              "title": "II QISM",
+              "id": "geometrik-shakllar-10"
+            }
+          ]
+        },
+        {
+          "title": "ODDIY KASRLAR",
+          "hours": 29,
+          "topics": [
+            {
+              "title": "Ulushlar va oddiy kasrlar",
+              "id": "oddiy-kasrlar-1"
+            },
+            {
+              "title": "Kasrlarni taqqoslash",
+              "id": "oddiy-kasrlar-2"
+            },
+            {
+              "title": "To‘g‘ri va noto‘g‘ri kasrlar",
+              "id": "oddiy-kasrlar-3"
+            },
+            {
+              "title": "Bir xil maxrajli kasrlarni qo‘shish va ayirish",
+              "id": "oddiy-kasrlar-4"
+            },
+            {
+              "title": "Bo‘lish amali va kasr",
+              "id": "oddiy-kasrlar-5"
+            },
+            {
+              "title": "Aralash sonlar",
+              "id": "oddiy-kasrlar-6"
+            },
+            {
+              "title": "Aralash sonlarni qo‘shish va ayirish",
+              "id": "oddiy-kasrlar-7"
+            },
+            {
+              "title": "Kasrga doir masalalar",
+              "id": "oddiy-kasrlar-8"
+            }
+          ]
+        },
+        {
+          "title": "FAZOVIY GEOMETRIK SHAKLLAR",
+          "hours": 11,
+          "topics": [
+            {
+              "title": "Fazoviy geometrik shakllar",
+              "id": "fazoviy-geometrik-shakllar-1"
+            },
+            {
+              "title": "To‘g‘ri burchakli parallelepiped va kub",
+              "id": "fazoviy-geometrik-shakllar-2"
+            },
+            {
+              "title": "To‘g‘ri burchakli parallelepiped va kubni ularning yoyilmasiga ko‘ra yasash",
+              "id": "fazoviy-geometrik-shakllar-3"
+            },
+            {
+              "title": "To‘g‘ri burchakli parallelepiped va kub hajmi",
+              "id": "fazoviy-geometrik-shakllar-4"
+            }
+          ]
+        },
+        {
+          "title": "O‘NLI KASRLAR",
+          "hours": 33,
+          "topics": [
+            {
+              "title": "O‘nli kasr",
+              "id": "onli-kasrlar-1"
+            },
+            {
+              "title": "Koordinatalar o‘qida o‘nli kasrlarni tasvirlash",
+              "id": "onli-kasrlar-2"
+            },
+            {
+              "title": "O‘nli kasrlarni qo‘shish va ayirish",
+              "id": "onli-kasrlar-3"
+            },
+            {
+              "title": "Sonni taqribiy qiymati",
+              "id": "onli-kasrlar-4"
+            },
+            {
+              "title": "Uy xo‘jaligida tejamkorlik va matematika",
+              "id": "onli-kasrlar-5"
+            },
+            {
+              "title": "O‘nli kasrlarni natural songa ko‘paytirish",
+              "id": "onli-kasrlar-6"
+            },
+            {
+              "title": "O‘nli kasrlarni natural songa bo‘lish",
+              "id": "onli-kasrlar-7"
+            },
+            {
+              "title": "O‘nli kasrlarni 10, 100, 1000, … sonlarga bo‘lish",
+              "id": "onli-kasrlar-8"
+            },
+            {
+              "title": "O‘nli kasrlarni ko‘paytirish",
+              "id": "onli-kasrlar-9"
+            },
+            {
+              "title": "O‘nli kasrlarni bo‘lish",
+              "id": "onli-kasrlar-10"
+            },
+            {
+              "title": "Foizlar",
+              "id": "onli-kasrlar-11"
+            }
+          ]
+        },
+        {
+          "title": "MA’LUMOTLAR TAHLILI",
+          "hours": 17,
+          "topics": [
+            {
+              "title": "Ma’lumotlar qatori va uning tahlili",
+              "id": "malumotlar-tahlili-1"
+            },
+            {
+              "title": "Kichik biznes reja",
+              "id": "malumotlar-tahlili-2"
+            },
+            {
+              "title": "Loyiha ishi bo‘yicha mashg‘ulot",
+              "id": "malumotlar-tahlili-3"
+            },
+            {
+              "title": "Bilimingizni sinab ko‘ring",
+              "id": "malumotlar-tahlili-4"
+            },
+            {
+              "title": "MAVZUVIY REJALASHTIRISH № BOBLAR NOMI Mashg‘ulotlarlarga ajratilgan soatlar taqsimoti Jami Nazariy Amaliy 5 sinf. matematika 1 I BOB",
+              "id": "malumotlar-tahlili-5"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "grade": 6,
+      "hours": 170,
+      "source": {
+        "title": "Umumiy o'rta ta'limning o'quv dasturi (6–7-sinf) — Matematika",
+        "url": "https://uzbmb.uz/upload/file/pdf/qabul2025/dasturlar/5.Matematika/6-7-sinf-Matematika%20fanidan%20o%CA%BBquv%20dastur.pdf",
+        "year": 2018,
+        "publisher": "Respublika ta'lim markazi (Xalq ta'limi vazirligi)"
+      },
+      "units": [
+        {
+          "title": "SONLARNING BO‘LINISH BELGILARI",
+          "hours": 19,
+          "topics": [
+            {
+              "title": "Sonning bo‘luvchilari va karralilari",
+              "id": "sonlarning-bolinish-belgilari-1",
+              "hours": 2
+            },
+            {
+              "title": "Sonlarning 10 ga, 5 ga va 2 ga bo‘linish belgilari",
+              "id": "sonlarning-bolinish-belgilari-2",
+              "hours": 3
+            },
+            {
+              "title": "Sonlarning 9 ga va 3 ga bo‘linish belgilari",
+              "id": "sonlarning-bolinish-belgilari-3",
+              "hours": 2
+            },
+            {
+              "title": "Tub va murakkab sonlar",
+              "id": "sonlarning-bolinish-belgilari-4",
+              "hours": 1
+            },
+            {
+              "title": "Natural sonlarni tub ko‘paytuvchilarga ajratish",
+              "id": "sonlarning-bolinish-belgilari-5",
+              "hours": 3
+            },
+            {
+              "title": "Eng katta umumiy bo‘luvchi. O‘zaro tub sonlar",
+              "id": "sonlarning-bolinish-belgilari-6",
+              "hours": 2
+            },
+            {
+              "title": "Eng kichik umumiy karrali",
+              "id": "sonlarning-bolinish-belgilari-7",
+              "hours": 2
+            }
+          ]
+        },
+        {
+          "title": "HAR XIL MAXRAJLI KASRLARNI QO‘SHISH VA AYIRISH",
+          "hours": 21,
+          "topics": [
+            {
+              "title": "Kasrning asosiy xossasi",
+              "id": "har-xil-maxrajli-kasrlarni-qoshish-va-ayirish-1",
+              "hours": 2
+            },
+            {
+              "title": "Kasrlarni qisqartirish",
+              "id": "har-xil-maxrajli-kasrlarni-qoshish-va-ayirish-2",
+              "hours": 3
+            },
+            {
+              "title": "Kasrlarni umumiy maxrajga keltirish",
+              "id": "har-xil-maxrajli-kasrlarni-qoshish-va-ayirish-3",
+              "hours": 3
+            },
+            {
+              "title": "Har xil maxrajli kasrlarni taqqoslash",
+              "id": "har-xil-maxrajli-kasrlarni-qoshish-va-ayirish-4",
+              "hours": 2
+            },
+            {
+              "title": "Har xil maxrajli kasrlarni qo‘shish va ayirish",
+              "id": "har-xil-maxrajli-kasrlarni-qoshish-va-ayirish-5",
+              "hours": 3
+            },
+            {
+              "title": "Aralash sonlarni qo‘shish va ayirish",
+              "id": "har-xil-maxrajli-kasrlarni-qoshish-va-ayirish-6",
+              "hours": 4
+            }
+          ]
+        },
+        {
+          "title": "ODDIY KASRLARNI KO‘PAYTIRISH VA BO‘LISH",
+          "hours": 17,
+          "topics": [
+            {
+              "title": "Oddiy kasrlarni va aralash sonlarni ko‘paytirish",
+              "id": "oddiy-kasrlarni-kopaytirish-va-bolish-1",
+              "hours": 3
+            },
+            {
+              "title": "Sonning qismini topish",
+              "id": "oddiy-kasrlarni-kopaytirish-va-bolish-2",
+              "hours": 3
+            },
+            {
+              "title": "Ko‘paytirishning taqsimot qonuni va uning tatbiqlari",
+              "id": "oddiy-kasrlarni-kopaytirish-va-bolish-3",
+              "hours": 2
+            },
+            {
+              "title": "O‘zaro teskari sonlar",
+              "id": "oddiy-kasrlarni-kopaytirish-va-bolish-4",
+              "hours": 2
+            },
+            {
+              "title": "Oddiy kasrlarni bo‘lish",
+              "id": "oddiy-kasrlarni-kopaytirish-va-bolish-5",
+              "hours": 2
+            },
+            {
+              "title": "Qismiga ko‘ra sonning o‘zini topish",
+              "id": "oddiy-kasrlarni-kopaytirish-va-bolish-6",
+              "hours": 3
+            }
+          ]
+        },
+        {
+          "title": "NISBAT VA PROPORSIYA",
+          "hours": 24,
+          "topics": [
+            {
+              "title": "Nisbat tushunchasi. Proporsiyalar",
+              "id": "nisbat-va-proporsiya-1",
+              "hours": 2
+            },
+            {
+              "title": "Proporsiyaning asosiy xossasi",
+              "id": "nisbat-va-proporsiya-2",
+              "hours": 3
+            },
+            {
+              "title": "Proporsiyaning asosiy xossasi tatbiqlari",
+              "id": "nisbat-va-proporsiya-3",
+              "hours": 3
+            },
+            {
+              "title": "To‘g‘ri va teskari proporsional miqdorlar",
+              "id": "nisbat-va-proporsiya-4",
+              "hours": 2
+            },
+            {
+              "title": "To‘g‘ri va teskari proporsional miqdorlarning tatbiqlari",
+              "id": "nisbat-va-proporsiya-5"
+            },
+            {
+              "title": "Masshtab. Amaliy-tajriba va sinov mashqlari",
+              "id": "nisbat-va-proporsiya-6",
+              "hours": 4
+            }
+          ]
+        },
+        {
+          "title": "MUSBAT VA MANFIY SONLAR. BUTUN SONLAR",
+          "hours": 12,
+          "topics": [
+            {
+              "title": "Musbat va manfiy sonlar. Butun sonlar haqida tushuncha",
+              "id": "musbat-va-manfiy-sonlar-butun-sonlar-1"
+            },
+            {
+              "title": "Koordinata to‘g‘ri chizig‘i. Musbat va manfiy sonlarni son o‘qida tasvirlash",
+              "id": "musbat-va-manfiy-sonlar-butun-sonlar-2",
+              "hours": 2
+            },
+            {
+              "title": "Qarama-qarshi sonlar. Sonning moduli",
+              "id": "musbat-va-manfiy-sonlar-butun-sonlar-3",
+              "hours": 3
+            },
+            {
+              "title": "Sonlarni taqqoslash. Miqdorlarning o‘zgarishi",
+              "id": "musbat-va-manfiy-sonlar-butun-sonlar-4",
+              "hours": 2
+            }
+          ]
+        },
+        {
+          "title": "MUSBAT VA MANFIY SONLARNI QO‘SHISH VA AYIRISH",
+          "hours": 12,
+          "topics": [
+            {
+              "title": "Koordinata o‘qi yordamida sonlarni qo‘shish va ayirish",
+              "id": "musbat-va-manfiy-sonlarni-qoshish-va-ayirish-1"
+            },
+            {
+              "title": "Manfiy ishorali sonlarni qo‘shish",
+              "id": "musbat-va-manfiy-sonlarni-qoshish-va-ayirish-2",
+              "hours": 3
+            },
+            {
+              "title": "Har xil ishorali sonlarni qo‘shish",
+              "id": "musbat-va-manfiy-sonlarni-qoshish-va-ayirish-3",
+              "hours": 3
+            },
+            {
+              "title": "Sonlarni ayirish",
+              "id": "musbat-va-manfiy-sonlarni-qoshish-va-ayirish-4",
+              "hours": 2
+            }
+          ]
+        },
+        {
+          "title": "MUSBAT VA MANFIY SONLARNI KO‘PAYTIRISH VA",
+          "topics": [
+            {
+              "title": "Sonlarni ko‘paytirish",
+              "id": "musbat-va-manfiy-sonlarni-kopaytirish-va-1",
+              "hours": 2
+            },
+            {
+              "title": "Sonlarni bo‘lish",
+              "id": "musbat-va-manfiy-sonlarni-kopaytirish-va-2",
+              "hours": 3
+            },
+            {
+              "title": "Ratsional sonlar haqida tushuncha. Ratsional sonlar ustida bajariladigan amallar xossalari",
+              "id": "musbat-va-manfiy-sonlarni-kopaytirish-va-3",
+              "hours": 3
+            },
+            {
+              "title": "Sodda hollarda natural sonlar darajalarini, qiymati ratsional son bo‘lgan kvadrat ildizlarini hisoblash. Davriy kasr haqida tushuncha",
+              "id": "musbat-va-manfiy-sonlarni-kopaytirish-va-4",
+              "hours": 1
+            }
+          ]
+        },
+        {
+          "title": "TENGLAMALARNI YECHISH",
+          "hours": 8,
+          "topics": [
+            {
+              "title": "Qavslarni ochish qoidasi.Koeffitsient",
+              "id": "tenglamalarni-yechish-1",
+              "hours": 2
+            },
+            {
+              "title": "Bir noma’lumli butun koeffitsientli chiziqli tenglamalarni yechish",
+              "id": "tenglamalarni-yechish-2",
+              "hours": 2
+            },
+            {
+              "title": "Sodda hollarda bir noma’lumli kasr koeffitsientli chiziqli tenglamalarni yechish",
+              "id": "tenglamalarni-yechish-3",
+              "hours": 2
+            }
+          ]
+        },
+        {
+          "title": "MA’LUMOTLAR",
+          "hours": 12,
+          "topics": [
+            {
+              "title": "Jadvallar",
+              "id": "malumotlar-1",
+              "hours": 2
+            },
+            {
+              "title": "Diagrammalar",
+              "id": "malumotlar-2",
+              "hours": 2
+            },
+            {
+              "title": "Ma’lumotlar tahlili. Amaliy-tajriba va sinov mashqlari",
+              "id": "malumotlar-3"
+            },
+            {
+              "title": "Kombinatorika elementlari",
+              "id": "malumotlar-4",
+              "hours": 2
+            },
+            {
+              "title": "Sodda kombinator qoidalar",
+              "id": "malumotlar-5",
+              "hours": 2
+            }
+          ]
+        },
+        {
+          "title": "GEOMETRIK MATERIAL",
+          "hours": 19,
+          "topics": [
+            {
+              "title": "Uchburchak, uning perimetri va turlari",
+              "id": "geometrik-material-1",
+              "hours": 3
+            },
+            {
+              "title": "Uchburchakning yuzi",
+              "id": "geometrik-material-2",
+              "hours": 4
+            },
+            {
+              "title": "Katakli qog‘ozda yuzlarni hisoblash",
+              "id": "geometrik-material-3",
+              "hours": 2
+            },
+            {
+              "title": "Katakli qog‘ozda yuzlarni hisoblashga oid sodda masalalar. Amaliy-tajriba va sinov mashqlari",
+              "id": "geometrik-material-4",
+              "hours": 3
+            },
+            {
+              "title": "Aylana uzunligi va doira yuzi",
+              "id": "geometrik-material-5",
+              "hours": 3
+            }
+          ]
+        },
+        {
+          "title": "ALGEBRAIK IFODALAR",
+          "hours": 10,
+          "topics": [
+            {
+              "title": "Sonli ifodalar. Algebraik ifodalar",
+              "id": "algebraik-ifodalar-1",
+              "hours": 2
+            },
+            {
+              "title": "Algebraik tengliklar. Formulalar. Amaliy-tajriba va sinov mashqlari",
+              "id": "algebraik-ifodalar-2",
+              "hours": 2
+            },
+            {
+              "title": "Arifmetik amallarning xossalari",
+              "id": "algebraik-ifodalar-3",
+              "hours": 2
+            },
+            {
+              "title": "Qavslarni ochish qoidalari",
+              "id": "algebraik-ifodalar-4",
+              "hours": 2
+            }
+          ]
+        },
+        {
+          "title": "BIR NOMA’LUMLI BIRINCHI DARAJALI TENGLAMALAR",
+          "hours": 10,
+          "topics": [
+            {
+              "title": "Tenglama va uning yechimlari",
+              "id": "bir-nomalumli-birinchi-darajali-tenglamalar-1",
+              "hours": 2
+            },
+            {
+              "title": "Bir noma’lumli birinchi darajali tenglamalarni yechish",
+              "id": "bir-nomalumli-birinchi-darajali-tenglamalar-2"
+            },
+            {
+              "title": "Masalalarni tenglamalar yordamida yechish",
+              "id": "bir-nomalumli-birinchi-darajali-tenglamalar-3",
+              "hours": 2
+            },
+            {
+              "title": "Amaliy-tajriba va sinov mashqlari",
+              "id": "bir-nomalumli-birinchi-darajali-tenglamalar-4",
+              "hours": 2
+            }
+          ]
+        },
+        {
+          "title": "BIRHADLAR VA KO‘PHADLAR",
+          "hours": 23,
+          "topics": [
+            {
+              "title": "Natural ko‘rsatkichli daraja. Natural ko‘rsatkichli darajaning xossalari",
+              "id": "birhadlar-va-kophadlar-1",
+              "hours": 3
+            },
+            {
+              "title": "Birhad va uning standart shakli. Sonning standart shakli",
+              "id": "birhadlar-va-kophadlar-2"
+            },
+            {
+              "title": "Birhadlarni ko‘paytirish",
+              "id": "birhadlar-va-kophadlar-3",
+              "hours": 2
+            },
+            {
+              "title": "Ko‘phadlar. O‘xshash hadlarni ixchamlash",
+              "id": "birhadlar-va-kophadlar-4",
+              "hours": 3
+            },
+            {
+              "title": "Ko‘phadlarni qo‘shish va ayirish",
+              "id": "birhadlar-va-kophadlar-5",
+              "hours": 3
+            },
+            {
+              "title": "Ko‘phadni birhadga ko‘paytirish",
+              "id": "birhadlar-va-kophadlar-6",
+              "hours": 2
+            },
+            {
+              "title": "Ko‘phadni ko‘phadga ko‘paytirish",
+              "id": "birhadlar-va-kophadlar-7",
+              "hours": 2
+            },
+            {
+              "title": "Birhad va ko‘phadni birhadga bo‘lish",
+              "id": "birhadlar-va-kophadlar-8",
+              "hours": 2
+            }
+          ]
+        },
+        {
+          "title": "KO‘PHADNI KO‘PAYTUVCHILARGA AJRATISH",
+          "hours": 18,
+          "topics": [
+            {
+              "title": "Umumiy ko‘paytuvchini qavsdan tashqariga chiqarish",
+              "id": "kophadni-kopaytuvchilarga-ajratish-1",
+              "hours": 3
+            },
+            {
+              "title": "Guruhlash usuli",
+              "id": "kophadni-kopaytuvchilarga-ajratish-2",
+              "hours": 2
+            },
+            {
+              "title": "Yig‘indining kvadrati",
+              "id": "kophadni-kopaytuvchilarga-ajratish-3",
+              "hours": 2
+            },
+            {
+              "title": "Ayirmaning kvadrati",
+              "id": "kophadni-kopaytuvchilarga-ajratish-4",
+              "hours": 2
+            },
+            {
+              "title": "Kvadratlar ayirmasi formulasi",
+              "id": "kophadni-kopaytuvchilarga-ajratish-5",
+              "hours": 3
+            },
+            {
+              "title": "Ko‘phadni ko‘paytuvchilarga ajratishning bir necha usullarini qo‘llash",
+              "id": "kophadni-kopaytuvchilarga-ajratish-6",
+              "hours": 2
+            }
+          ]
+        },
+        {
+          "title": "ALGEBRAIK KASRLAR",
+          "hours": 25,
+          "topics": [
+            {
+              "title": "Algebraik kasr. Kasrlarni qisqartirish",
+              "id": "algebraik-kasrlar-1",
+              "hours": 3
+            },
+            {
+              "title": "Algebraik kasrlarni qo‘shish va ayirish",
+              "id": "algebraik-kasrlar-2",
+              "hours": 5
+            },
+            {
+              "title": "Algebraik kasrlarni ko‘paytirish va bo‘lish",
+              "id": "algebraik-kasrlar-3",
+              "hours": 5
+            },
+            {
+              "title": "Algebraik kasrlar ustida birgalikda bajariladigan amallar",
+              "id": "algebraik-kasrlar-4",
+              "hours": 5
+            }
+          ]
+        },
+        {
+          "title": "KOMBINATORIKA ELEMENTLARI",
+          "hours": 6,
+          "topics": [
+            {
+              "title": "Kombinatorikaning asosiy qoidalari",
+              "id": "kombinatorika-elementlari-1",
+              "hours": 2
+            },
+            {
+              "title": "O‘rin almashtirish. Guruhlash. Amaliy-tajriba va sinov mashqlari",
+              "id": "kombinatorika-elementlari-2",
+              "hours": 2
+            }
+          ]
+        },
+        {
+          "title": "GEOMETRIYANING BOSHLANG‘ICH TUSHUNCHALARI",
+          "hours": 16,
+          "topics": [
+            {
+              "title": "Eng sodda geometrik shakllar",
+              "id": "geometriyaning-boshlangich-tushunchalari-1",
+              "hours": 2
+            },
+            {
+              "title": "Kesma. Kesmalarni taqqoslash va o‘lchash",
+              "id": "geometriyaning-boshlangich-tushunchalari-2",
+              "hours": 1
+            },
+            {
+              "title": "Uzunlik o‘lchov birlikdari",
+              "id": "geometriyaning-boshlangich-tushunchalari-3",
+              "hours": 1
+            },
+            {
+              "title": "Burchak. Burchaklarni taqqoslash va o‘lchash. Transportir",
+              "id": "geometriyaning-boshlangich-tushunchalari-4"
+            },
+            {
+              "title": "Burchaklarning turlari",
+              "id": "geometriyaning-boshlangich-tushunchalari-5",
+              "hours": 2
+            },
+            {
+              "title": "Perpendikulyar to‘g‘ri chiziqlar",
+              "id": "geometriyaning-boshlangich-tushunchalari-6",
+              "hours": 2
+            }
+          ]
+        },
+        {
+          "title": "UCHBURCHAKLAR",
+          "hours": 12,
+          "topics": [
+            {
+              "title": "Uchburchaklar. Uchburchaklarning turlari va elementlari",
+              "id": "uchburchaklar-1"
+            },
+            {
+              "title": "Uchburchaklar tengligining birinchi alomati",
+              "id": "uchburchaklar-2",
+              "hours": 2
+            },
+            {
+              "title": "Teng yongli uchburchakning xossalari",
+              "id": "uchburchaklar-3",
+              "hours": 2
+            },
+            {
+              "title": "Uchburchaklar tengligining ikkinchi va uchinchi alomatlari",
+              "id": "uchburchaklar-4"
+            }
+          ]
+        },
+        {
+          "title": "PARALLEL TO‘G‘RI CHIZIQLAR",
+          "hours": 10,
+          "topics": [
+            {
+              "title": "Parallel to‘g‘ri chiziqlar. Ikki to‘g‘ri chiziqning parallellik alomatlari",
+              "id": "parallel-togri-chiziqlar-1",
+              "hours": 4
+            },
+            {
+              "title": "Ikki parallel to‘g‘ri chiziq va kesuvchi hosil qilgan burchaklar",
+              "id": "parallel-togri-chiziqlar-2",
+              "hours": 2
+            }
+          ]
+        },
+        {
+          "title": "UCHBURCHAKNING TOMONLARI VA BURCHAKLARI ORASIDAGI MUNOSABATLAR",
+          "topics": [
+            {
+              "title": "Uchburchak ichki burchaklarining yig‘indisi. Uchburchak tashqi burchagining xossasi",
+              "id": "uchburchakning-tomonlari-va-burchaklari-orasidag-1",
+              "hours": 3
+            },
+            {
+              "title": "To‘g‘ri burchakli uchburchakning xossalari",
+              "id": "uchburchakning-tomonlari-va-burchaklari-orasidag-2",
+              "hours": 2
+            },
+            {
+              "title": "Burchak bissektrisasining xossasi",
+              "id": "uchburchakning-tomonlari-va-burchaklari-orasidag-3",
+              "hours": 2
+            },
+            {
+              "title": "Uchburchakning tomonlari va burchaklari orasidagi munosabatlar. Uchburchak tengsizligi",
+              "id": "uchburchakning-tomonlari-va-burchaklari-orasidag-4",
+              "hours": 3
+            }
+          ]
+        },
+        {
+          "title": "YASASHGA DOIR MASALALAR",
+          "hours": 7,
+          "topics": [
+            {
+              "title": "Sirkul va chizg‘ich yordamida yasashga doir masalalar",
+              "id": "yasashga-doir-masalalar-1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "grade": 7,
+      "hours": 170,
+      "source": {
+        "title": "Umumiy o'rta ta'limning o'quv dasturi (6–7-sinf) — Matematika",
+        "url": "https://uzbmb.uz/upload/file/pdf/qabul2025/dasturlar/5.Matematika/6-7-sinf-Matematika%20fanidan%20o%CA%BBquv%20dastur.pdf",
+        "year": 2018,
+        "publisher": "Respublika ta'lim markazi (Xalq ta'limi vazirligi)"
+      },
+      "units": [
+        {
+          "title": "SONLARNING BO‘LINISH BELGILARI",
+          "hours": 19,
+          "topics": [
+            {
+              "title": "Sonning bo‘luvchilari va karralilari",
+              "id": "sonlarning-bolinish-belgilari-1",
+              "hours": 2
+            },
+            {
+              "title": "Sonlarning 10 ga, 5 ga va 2 ga bo‘linish belgilari",
+              "id": "sonlarning-bolinish-belgilari-2",
+              "hours": 3
+            },
+            {
+              "title": "Sonlarning 9 ga va 3 ga bo‘linish belgilari",
+              "id": "sonlarning-bolinish-belgilari-3",
+              "hours": 2
+            },
+            {
+              "title": "Tub va murakkab sonlar",
+              "id": "sonlarning-bolinish-belgilari-4",
+              "hours": 1
+            },
+            {
+              "title": "Natural sonlarni tub ko‘paytuvchilarga ajratish",
+              "id": "sonlarning-bolinish-belgilari-5",
+              "hours": 3
+            },
+            {
+              "title": "Eng katta umumiy bo‘luvchi. O‘zaro tub sonlar",
+              "id": "sonlarning-bolinish-belgilari-6",
+              "hours": 2
+            },
+            {
+              "title": "Eng kichik umumiy karrali",
+              "id": "sonlarning-bolinish-belgilari-7",
+              "hours": 2
+            }
+          ]
+        },
+        {
+          "title": "HAR XIL MAXRAJLI KASRLARNI QO‘SHISH VA AYIRISH",
+          "hours": 21,
+          "topics": [
+            {
+              "title": "Kasrning asosiy xossasi",
+              "id": "har-xil-maxrajli-kasrlarni-qoshish-va-ayirish-1",
+              "hours": 2
+            },
+            {
+              "title": "Kasrlarni qisqartirish",
+              "id": "har-xil-maxrajli-kasrlarni-qoshish-va-ayirish-2",
+              "hours": 3
+            },
+            {
+              "title": "Kasrlarni umumiy maxrajga keltirish",
+              "id": "har-xil-maxrajli-kasrlarni-qoshish-va-ayirish-3",
+              "hours": 3
+            },
+            {
+              "title": "Har xil maxrajli kasrlarni taqqoslash",
+              "id": "har-xil-maxrajli-kasrlarni-qoshish-va-ayirish-4",
+              "hours": 2
+            },
+            {
+              "title": "Har xil maxrajli kasrlarni qo‘shish va ayirish",
+              "id": "har-xil-maxrajli-kasrlarni-qoshish-va-ayirish-5",
+              "hours": 3
+            },
+            {
+              "title": "Aralash sonlarni qo‘shish va ayirish",
+              "id": "har-xil-maxrajli-kasrlarni-qoshish-va-ayirish-6",
+              "hours": 4
+            }
+          ]
+        },
+        {
+          "title": "ODDIY KASRLARNI KO‘PAYTIRISH VA BO‘LISH",
+          "hours": 17,
+          "topics": [
+            {
+              "title": "Oddiy kasrlarni va aralash sonlarni ko‘paytirish",
+              "id": "oddiy-kasrlarni-kopaytirish-va-bolish-1",
+              "hours": 3
+            },
+            {
+              "title": "Sonning qismini topish",
+              "id": "oddiy-kasrlarni-kopaytirish-va-bolish-2",
+              "hours": 3
+            },
+            {
+              "title": "Ko‘paytirishning taqsimot qonuni va uning tatbiqlari",
+              "id": "oddiy-kasrlarni-kopaytirish-va-bolish-3",
+              "hours": 2
+            },
+            {
+              "title": "O‘zaro teskari sonlar",
+              "id": "oddiy-kasrlarni-kopaytirish-va-bolish-4",
+              "hours": 2
+            },
+            {
+              "title": "Oddiy kasrlarni bo‘lish",
+              "id": "oddiy-kasrlarni-kopaytirish-va-bolish-5",
+              "hours": 2
+            },
+            {
+              "title": "Qismiga ko‘ra sonning o‘zini topish",
+              "id": "oddiy-kasrlarni-kopaytirish-va-bolish-6",
+              "hours": 3
+            }
+          ]
+        },
+        {
+          "title": "NISBAT VA PROPORSIYA",
+          "hours": 24,
+          "topics": [
+            {
+              "title": "Nisbat tushunchasi. Proporsiyalar",
+              "id": "nisbat-va-proporsiya-1",
+              "hours": 2
+            },
+            {
+              "title": "Proporsiyaning asosiy xossasi",
+              "id": "nisbat-va-proporsiya-2",
+              "hours": 3
+            },
+            {
+              "title": "Proporsiyaning asosiy xossasi tatbiqlari",
+              "id": "nisbat-va-proporsiya-3",
+              "hours": 3
+            },
+            {
+              "title": "To‘g‘ri va teskari proporsional miqdorlar",
+              "id": "nisbat-va-proporsiya-4",
+              "hours": 2
+            },
+            {
+              "title": "To‘g‘ri va teskari proporsional miqdorlarning tatbiqlari",
+              "id": "nisbat-va-proporsiya-5"
+            },
+            {
+              "title": "Masshtab. Amaliy-tajriba va sinov mashqlari",
+              "id": "nisbat-va-proporsiya-6",
+              "hours": 4
+            }
+          ]
+        },
+        {
+          "title": "MUSBAT VA MANFIY SONLAR. BUTUN SONLAR",
+          "hours": 12,
+          "topics": [
+            {
+              "title": "Musbat va manfiy sonlar. Butun sonlar haqida tushuncha",
+              "id": "musbat-va-manfiy-sonlar-butun-sonlar-1"
+            },
+            {
+              "title": "Koordinata to‘g‘ri chizig‘i. Musbat va manfiy sonlarni son o‘qida tasvirlash",
+              "id": "musbat-va-manfiy-sonlar-butun-sonlar-2",
+              "hours": 2
+            },
+            {
+              "title": "Qarama-qarshi sonlar. Sonning moduli",
+              "id": "musbat-va-manfiy-sonlar-butun-sonlar-3",
+              "hours": 3
+            },
+            {
+              "title": "Sonlarni taqqoslash. Miqdorlarning o‘zgarishi",
+              "id": "musbat-va-manfiy-sonlar-butun-sonlar-4",
+              "hours": 2
+            }
+          ]
+        },
+        {
+          "title": "MUSBAT VA MANFIY SONLARNI QO‘SHISH VA AYIRISH",
+          "hours": 12,
+          "topics": [
+            {
+              "title": "Koordinata o‘qi yordamida sonlarni qo‘shish va ayirish",
+              "id": "musbat-va-manfiy-sonlarni-qoshish-va-ayirish-1"
+            },
+            {
+              "title": "Manfiy ishorali sonlarni qo‘shish",
+              "id": "musbat-va-manfiy-sonlarni-qoshish-va-ayirish-2",
+              "hours": 3
+            },
+            {
+              "title": "Har xil ishorali sonlarni qo‘shish",
+              "id": "musbat-va-manfiy-sonlarni-qoshish-va-ayirish-3",
+              "hours": 3
+            },
+            {
+              "title": "Sonlarni ayirish",
+              "id": "musbat-va-manfiy-sonlarni-qoshish-va-ayirish-4",
+              "hours": 2
+            }
+          ]
+        },
+        {
+          "title": "MUSBAT VA MANFIY SONLARNI KO‘PAYTIRISH VA",
+          "topics": [
+            {
+              "title": "Sonlarni ko‘paytirish",
+              "id": "musbat-va-manfiy-sonlarni-kopaytirish-va-1",
+              "hours": 2
+            },
+            {
+              "title": "Sonlarni bo‘lish",
+              "id": "musbat-va-manfiy-sonlarni-kopaytirish-va-2",
+              "hours": 3
+            },
+            {
+              "title": "Ratsional sonlar haqida tushuncha. Ratsional sonlar ustida bajariladigan amallar xossalari",
+              "id": "musbat-va-manfiy-sonlarni-kopaytirish-va-3",
+              "hours": 3
+            },
+            {
+              "title": "Sodda hollarda natural sonlar darajalarini, qiymati ratsional son bo‘lgan kvadrat ildizlarini hisoblash. Davriy kasr haqida tushuncha",
+              "id": "musbat-va-manfiy-sonlarni-kopaytirish-va-4",
+              "hours": 1
+            }
+          ]
+        },
+        {
+          "title": "TENGLAMALARNI YECHISH",
+          "hours": 8,
+          "topics": [
+            {
+              "title": "Qavslarni ochish qoidasi.Koeffitsient",
+              "id": "tenglamalarni-yechish-1",
+              "hours": 2
+            },
+            {
+              "title": "Bir noma’lumli butun koeffitsientli chiziqli tenglamalarni yechish",
+              "id": "tenglamalarni-yechish-2",
+              "hours": 2
+            },
+            {
+              "title": "Sodda hollarda bir noma’lumli kasr koeffitsientli chiziqli tenglamalarni yechish",
+              "id": "tenglamalarni-yechish-3",
+              "hours": 2
+            }
+          ]
+        },
+        {
+          "title": "MA’LUMOTLAR",
+          "hours": 12,
+          "topics": [
+            {
+              "title": "Jadvallar",
+              "id": "malumotlar-1",
+              "hours": 2
+            },
+            {
+              "title": "Diagrammalar",
+              "id": "malumotlar-2",
+              "hours": 2
+            },
+            {
+              "title": "Ma’lumotlar tahlili. Amaliy-tajriba va sinov mashqlari",
+              "id": "malumotlar-3"
+            },
+            {
+              "title": "Kombinatorika elementlari",
+              "id": "malumotlar-4",
+              "hours": 2
+            },
+            {
+              "title": "Sodda kombinator qoidalar",
+              "id": "malumotlar-5",
+              "hours": 2
+            }
+          ]
+        },
+        {
+          "title": "GEOMETRIK MATERIAL",
+          "hours": 19,
+          "topics": [
+            {
+              "title": "Uchburchak, uning perimetri va turlari",
+              "id": "geometrik-material-1",
+              "hours": 3
+            },
+            {
+              "title": "Uchburchakning yuzi",
+              "id": "geometrik-material-2",
+              "hours": 4
+            },
+            {
+              "title": "Katakli qog‘ozda yuzlarni hisoblash",
+              "id": "geometrik-material-3",
+              "hours": 2
+            },
+            {
+              "title": "Katakli qog‘ozda yuzlarni hisoblashga oid sodda masalalar. Amaliy-tajriba va sinov mashqlari",
+              "id": "geometrik-material-4",
+              "hours": 3
+            },
+            {
+              "title": "Aylana uzunligi va doira yuzi",
+              "id": "geometrik-material-5",
+              "hours": 3
+            }
+          ]
+        },
+        {
+          "title": "ALGEBRAIK IFODALAR",
+          "hours": 10,
+          "topics": [
+            {
+              "title": "Sonli ifodalar. Algebraik ifodalar",
+              "id": "algebraik-ifodalar-1",
+              "hours": 2
+            },
+            {
+              "title": "Algebraik tengliklar. Formulalar. Amaliy-tajriba va sinov mashqlari",
+              "id": "algebraik-ifodalar-2",
+              "hours": 2
+            },
+            {
+              "title": "Arifmetik amallarning xossalari",
+              "id": "algebraik-ifodalar-3",
+              "hours": 2
+            },
+            {
+              "title": "Qavslarni ochish qoidalari",
+              "id": "algebraik-ifodalar-4",
+              "hours": 2
+            }
+          ]
+        },
+        {
+          "title": "BIR NOMA’LUMLI BIRINCHI DARAJALI TENGLAMALAR",
+          "hours": 10,
+          "topics": [
+            {
+              "title": "Tenglama va uning yechimlari",
+              "id": "bir-nomalumli-birinchi-darajali-tenglamalar-1",
+              "hours": 2
+            },
+            {
+              "title": "Bir noma’lumli birinchi darajali tenglamalarni yechish",
+              "id": "bir-nomalumli-birinchi-darajali-tenglamalar-2"
+            },
+            {
+              "title": "Masalalarni tenglamalar yordamida yechish",
+              "id": "bir-nomalumli-birinchi-darajali-tenglamalar-3",
+              "hours": 2
+            },
+            {
+              "title": "Amaliy-tajriba va sinov mashqlari",
+              "id": "bir-nomalumli-birinchi-darajali-tenglamalar-4",
+              "hours": 2
+            }
+          ]
+        },
+        {
+          "title": "BIRHADLAR VA KO‘PHADLAR",
+          "hours": 23,
+          "topics": [
+            {
+              "title": "Natural ko‘rsatkichli daraja. Natural ko‘rsatkichli darajaning xossalari",
+              "id": "birhadlar-va-kophadlar-1",
+              "hours": 3
+            },
+            {
+              "title": "Birhad va uning standart shakli. Sonning standart shakli",
+              "id": "birhadlar-va-kophadlar-2"
+            },
+            {
+              "title": "Birhadlarni ko‘paytirish",
+              "id": "birhadlar-va-kophadlar-3",
+              "hours": 2
+            },
+            {
+              "title": "Ko‘phadlar. O‘xshash hadlarni ixchamlash",
+              "id": "birhadlar-va-kophadlar-4",
+              "hours": 3
+            },
+            {
+              "title": "Ko‘phadlarni qo‘shish va ayirish",
+              "id": "birhadlar-va-kophadlar-5",
+              "hours": 3
+            },
+            {
+              "title": "Ko‘phadni birhadga ko‘paytirish",
+              "id": "birhadlar-va-kophadlar-6",
+              "hours": 2
+            },
+            {
+              "title": "Ko‘phadni ko‘phadga ko‘paytirish",
+              "id": "birhadlar-va-kophadlar-7",
+              "hours": 2
+            },
+            {
+              "title": "Birhad va ko‘phadni birhadga bo‘lish",
+              "id": "birhadlar-va-kophadlar-8",
+              "hours": 2
+            }
+          ]
+        },
+        {
+          "title": "KO‘PHADNI KO‘PAYTUVCHILARGA AJRATISH",
+          "hours": 18,
+          "topics": [
+            {
+              "title": "Umumiy ko‘paytuvchini qavsdan tashqariga chiqarish",
+              "id": "kophadni-kopaytuvchilarga-ajratish-1",
+              "hours": 3
+            },
+            {
+              "title": "Guruhlash usuli",
+              "id": "kophadni-kopaytuvchilarga-ajratish-2",
+              "hours": 2
+            },
+            {
+              "title": "Yig‘indining kvadrati",
+              "id": "kophadni-kopaytuvchilarga-ajratish-3",
+              "hours": 2
+            },
+            {
+              "title": "Ayirmaning kvadrati",
+              "id": "kophadni-kopaytuvchilarga-ajratish-4",
+              "hours": 2
+            },
+            {
+              "title": "Kvadratlar ayirmasi formulasi",
+              "id": "kophadni-kopaytuvchilarga-ajratish-5",
+              "hours": 3
+            },
+            {
+              "title": "Ko‘phadni ko‘paytuvchilarga ajratishning bir necha usullarini qo‘llash",
+              "id": "kophadni-kopaytuvchilarga-ajratish-6",
+              "hours": 2
+            }
+          ]
+        },
+        {
+          "title": "ALGEBRAIK KASRLAR",
+          "hours": 25,
+          "topics": [
+            {
+              "title": "Algebraik kasr. Kasrlarni qisqartirish",
+              "id": "algebraik-kasrlar-1",
+              "hours": 3
+            },
+            {
+              "title": "Algebraik kasrlarni qo‘shish va ayirish",
+              "id": "algebraik-kasrlar-2",
+              "hours": 5
+            },
+            {
+              "title": "Algebraik kasrlarni ko‘paytirish va bo‘lish",
+              "id": "algebraik-kasrlar-3",
+              "hours": 5
+            },
+            {
+              "title": "Algebraik kasrlar ustida birgalikda bajariladigan amallar",
+              "id": "algebraik-kasrlar-4",
+              "hours": 5
+            }
+          ]
+        },
+        {
+          "title": "KOMBINATORIKA ELEMENTLARI",
+          "hours": 6,
+          "topics": [
+            {
+              "title": "Kombinatorikaning asosiy qoidalari",
+              "id": "kombinatorika-elementlari-1",
+              "hours": 2
+            },
+            {
+              "title": "O‘rin almashtirish. Guruhlash. Amaliy-tajriba va sinov mashqlari",
+              "id": "kombinatorika-elementlari-2",
+              "hours": 2
+            }
+          ]
+        },
+        {
+          "title": "GEOMETRIYANING BOSHLANG‘ICH TUSHUNCHALARI",
+          "hours": 16,
+          "topics": [
+            {
+              "title": "Eng sodda geometrik shakllar",
+              "id": "geometriyaning-boshlangich-tushunchalari-1",
+              "hours": 2
+            },
+            {
+              "title": "Kesma. Kesmalarni taqqoslash va o‘lchash",
+              "id": "geometriyaning-boshlangich-tushunchalari-2",
+              "hours": 1
+            },
+            {
+              "title": "Uzunlik o‘lchov birlikdari",
+              "id": "geometriyaning-boshlangich-tushunchalari-3",
+              "hours": 1
+            },
+            {
+              "title": "Burchak. Burchaklarni taqqoslash va o‘lchash. Transportir",
+              "id": "geometriyaning-boshlangich-tushunchalari-4"
+            },
+            {
+              "title": "Burchaklarning turlari",
+              "id": "geometriyaning-boshlangich-tushunchalari-5",
+              "hours": 2
+            },
+            {
+              "title": "Perpendikulyar to‘g‘ri chiziqlar",
+              "id": "geometriyaning-boshlangich-tushunchalari-6",
+              "hours": 2
+            }
+          ]
+        },
+        {
+          "title": "UCHBURCHAKLAR",
+          "hours": 12,
+          "topics": [
+            {
+              "title": "Uchburchaklar. Uchburchaklarning turlari va elementlari",
+              "id": "uchburchaklar-1"
+            },
+            {
+              "title": "Uchburchaklar tengligining birinchi alomati",
+              "id": "uchburchaklar-2",
+              "hours": 2
+            },
+            {
+              "title": "Teng yongli uchburchakning xossalari",
+              "id": "uchburchaklar-3",
+              "hours": 2
+            },
+            {
+              "title": "Uchburchaklar tengligining ikkinchi va uchinchi alomatlari",
+              "id": "uchburchaklar-4"
+            }
+          ]
+        },
+        {
+          "title": "PARALLEL TO‘G‘RI CHIZIQLAR",
+          "hours": 10,
+          "topics": [
+            {
+              "title": "Parallel to‘g‘ri chiziqlar. Ikki to‘g‘ri chiziqning parallellik alomatlari",
+              "id": "parallel-togri-chiziqlar-1",
+              "hours": 4
+            },
+            {
+              "title": "Ikki parallel to‘g‘ri chiziq va kesuvchi hosil qilgan burchaklar",
+              "id": "parallel-togri-chiziqlar-2",
+              "hours": 2
+            }
+          ]
+        },
+        {
+          "title": "UCHBURCHAKNING TOMONLARI VA BURCHAKLARI ORASIDAGI MUNOSABATLAR",
+          "topics": [
+            {
+              "title": "Uchburchak ichki burchaklarining yig‘indisi. Uchburchak tashqi burchagining xossasi",
+              "id": "uchburchakning-tomonlari-va-burchaklari-orasidag-1",
+              "hours": 3
+            },
+            {
+              "title": "To‘g‘ri burchakli uchburchakning xossalari",
+              "id": "uchburchakning-tomonlari-va-burchaklari-orasidag-2",
+              "hours": 2
+            },
+            {
+              "title": "Burchak bissektrisasining xossasi",
+              "id": "uchburchakning-tomonlari-va-burchaklari-orasidag-3",
+              "hours": 2
+            },
+            {
+              "title": "Uchburchakning tomonlari va burchaklari orasidagi munosabatlar. Uchburchak tengsizligi",
+              "id": "uchburchakning-tomonlari-va-burchaklari-orasidag-4",
+              "hours": 3
+            }
+          ]
+        },
+        {
+          "title": "YASASHGA DOIR MASALALAR",
+          "hours": 7,
+          "topics": [
+            {
+              "title": "Sirkul va chizg‘ich yordamida yasashga doir masalalar",
+              "id": "yasashga-doir-masalalar-1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "grade": 8,
+      "hours": 102,
+      "source": {
+        "title": "Umumiy o'rta ta'limning o'quv dasturi (8-sinf) — Matematika",
+        "url": "https://uzbmb.uz/upload/file/pdf/qabul2025/dasturlar/5.Matematika/8-sinf-Matematika%20fanidan%20o%CA%BBquv%20dastur.pdf",
+        "year": 2018,
+        "publisher": "Respublika ta'lim markazi (Xalq ta'limi vazirligi)"
+      },
+      "units": [
+        {
+          "title": "ALGEBRAIK KASRLAR VA ULAR USTIDA AMALLAR",
+          "hours": 35,
+          "topics": [
+            {
+              "title": "7-sinf kursini takrorlash",
+              "id": "algebraik-kasrlar-va-ular-ustida-amallar-1"
+            },
+            {
+              "title": "Algebraik kasrlar va ular ustida amallar",
+              "id": "algebraik-kasrlar-va-ular-ustida-amallar-2"
+            },
+            {
+              "title": "Algebraik kasr",
+              "id": "algebraik-kasrlar-va-ular-ustida-amallar-3"
+            },
+            {
+              "title": "Algebraik kasrlarni qo‘shish va ayirish",
+              "id": "algebraik-kasrlar-va-ular-ustida-amallar-4"
+            },
+            {
+              "title": "Kasr-ratsional ifodalarni ayniy almashtirish., 0 k y k x =  Funksiya, uning xossalari va grafigi",
+              "id": "algebraik-kasrlar-va-ular-ustida-amallar-5"
+            },
+            {
+              "title": "Natural ko‘rsatkichli darajaning arifmetik ildizi va uning xossalari",
+              "id": "algebraik-kasrlar-va-ular-ustida-amallar-6"
+            },
+            {
+              "title": "Ratsional va irratsional sonlar (1 soat)*",
+              "id": "algebraik-kasrlar-va-ular-ustida-amallar-7"
+            },
+            {
+              "title": "Radikallarning irratsionalligi. (1 soat)*",
+              "id": "algebraik-kasrlar-va-ular-ustida-amallar-8"
+            },
+            {
+              "title": "Ko‘phadning ratsional ildizlari haqidagi teoremalar. (1 soat)*",
+              "id": "algebraik-kasrlar-va-ular-ustida-amallar-9"
+            },
+            {
+              "title": "Trigonometrik funksiyalar qiymatlarining irratsionalligi. (1 soat)*",
+              "id": "algebraik-kasrlar-va-ular-ustida-amallar-10"
+            },
+            {
+              "title": "Qo‘shma sonlar. (1 soat)*",
+              "id": "algebraik-kasrlar-va-ular-ustida-amallar-11"
+            },
+            {
+              "title": "Maxrajni irratsionallikdan qutqarish. (1soat)*",
+              "id": "algebraik-kasrlar-va-ular-ustida-amallar-12"
+            },
+            {
+              "title": "Amaliy-tadbiqiy masalalarni yechish",
+              "id": "algebraik-kasrlar-va-ular-ustida-amallar-13"
+            }
+          ]
+        },
+        {
+          "title": "TENGSIZLIKLAR",
+          "hours": 21,
+          "topics": [
+            {
+              "title": "Tengsizliklar",
+              "id": "tengsizliklar-1"
+            },
+            {
+              "title": "Tengsizliklarni qo‘shish va ko‘paytirish",
+              "id": "tengsizliklar-2"
+            },
+            {
+              "title": "Bir noma‘lumli tengsizliklar",
+              "id": "tengsizliklar-3"
+            },
+            {
+              "title": "Sonli oraliqlar",
+              "id": "tengsizliklar-4"
+            },
+            {
+              "title": "Taqribiy hisoblashlar",
+              "id": "tengsizliklar-5"
+            },
+            {
+              "title": "Xatolikni baholash",
+              "id": "tengsizliklar-6"
+            },
+            {
+              "title": "Sonning moduli*",
+              "id": "tengsizliklar-7"
+            },
+            {
+              "title": "Modul qatnashgan ifodalarni ayniy almashtirish (2 soat)*",
+              "id": "tengsizliklar-8"
+            },
+            {
+              "title": "Modul qatnashgan tenglamalar (2 soat)*",
+              "id": "tengsizliklar-9"
+            },
+            {
+              "title": "Loyiha ishi bo‘yicha mashg‘ulot",
+              "id": "tengsizliklar-10"
+            }
+          ]
+        },
+        {
+          "title": "KVADRAT TENGLAMALAR",
+          "hours": 24,
+          "topics": [
+            {
+              "title": "Kvadrat tenglamalar",
+              "id": "kvadrat-tenglamalar-1"
+            },
+            {
+              "title": "Kvadrat tenglamalarga doir misollar (4 soat)*",
+              "id": "kvadrat-tenglamalar-2"
+            }
+          ]
+        },
+        {
+          "title": "MA’LUMOTLAR TAHLILI",
+          "hours": 14,
+          "topics": [
+            {
+              "title": "Ma’lumotlar tahlili",
+              "id": "malumotlar-tahlili-1"
+            },
+            {
+              "title": "Kombinatorika elementlari",
+              "id": "malumotlar-tahlili-2"
+            },
+            {
+              "title": "Sonlar nazariyasi (1 soat)*",
+              "id": "malumotlar-tahlili-3"
+            },
+            {
+              "title": "Arifmetikaning asosiy teoremasi (1 soat)*",
+              "id": "malumotlar-tahlili-4"
+            },
+            {
+              "title": "Tub ko‘paytuvchilarga yoyish (1 soat)*",
+              "id": "malumotlar-tahlili-5"
+            },
+            {
+              "title": "EKUB uchun yevklid algoritmi (1 soat)*",
+              "id": "malumotlar-tahlili-6"
+            },
+            {
+              "title": "Bir nechta sonlarning EKUBi va EKUK, EKUB va EKUK ko‘paytmasi haqida teorema (1 soat)*",
+              "id": "malumotlar-tahlili-7"
+            }
+          ]
+        },
+        {
+          "title": "TAKRORLASH",
+          "hours": 8,
+          "topics": [
+            {
+              "title": "Amaliy-tadbiqiy masalalarni yechish. 8-SINF GEOMETRIYA (68 soat, haftasiga 2 soat)",
+              "id": "takrorlash-1"
+            }
+          ]
+        },
+        {
+          "title": "TO‘RTBURCHAKLAR",
+          "hours": 14,
+          "topics": [
+            {
+              "title": "Asosiy to‘rtburchaklar va ularning xossalari",
+              "id": "tortburchaklar-1"
+            },
+            {
+              "title": "Romb va uning xossalari",
+              "id": "tortburchaklar-2"
+            },
+            {
+              "title": "Fales teoremasi va uning tatbiqlari",
+              "id": "tortburchaklar-3"
+            }
+          ]
+        },
+        {
+          "title": "TO‘G‘RI BURCHAKLI UCHBURCHAKNING TOMONLARI VA BURCHAKLARI ORASIDAGI MUNOSABATLAR",
+          "hours": 16,
+          "topics": [
+            {
+              "title": "O‘tkir burchak trigonometrik funksiyalari",
+              "id": "togri-burchakli-uchburchakning-tomonlari-va-burc-1"
+            },
+            {
+              "title": "Pifagor teoremasi va uning tatbiqlari",
+              "id": "togri-burchakli-uchburchakning-tomonlari-va-burc-2"
+            },
+            {
+              "title": "Trigonometrik ayniyatlar",
+              "id": "togri-burchakli-uchburchakning-tomonlari-va-burc-3"
+            },
+            {
+              "title": "To‘ldiruvchi burchakning trigonometrik funksiyalari uchun formulalar. 30o, 45o, 60o li burchaklarning sinusi, kosinusi, tangensi va kotangensini hisoblash",
+              "id": "togri-burchakli-uchburchakning-tomonlari-va-burc-4"
+            },
+            {
+              "title": "To‘g‘ri burchakli uchburchaklarni yechish",
+              "id": "togri-burchakli-uchburchakning-tomonlari-va-burc-5"
+            },
+            {
+              "title": "Trigonometrik funksiyalarning qiymatlari jadvali . To‘g‘ri burchakli uchburchaklarni yechish . To‘g‘ri burchakli uchburchaklarni yasash",
+              "id": "togri-burchakli-uchburchakning-tomonlari-va-burc-6"
+            }
+          ]
+        },
+        {
+          "title": "KOORDINATALAR USULI VA VEKTORLAR",
+          "hours": 14,
+          "topics": [
+            {
+              "title": "Tekislikda koordinatalar sistemasi",
+              "id": "koordinatalar-usuli-va-vektorlar-1"
+            },
+            {
+              "title": "Kesma o‘rtasining koordinatalari",
+              "id": "koordinatalar-usuli-va-vektorlar-2"
+            },
+            {
+              "title": "To‘g‘ri chiziq tenglamasi",
+              "id": "koordinatalar-usuli-va-vektorlar-3"
+            },
+            {
+              "title": "Tekislikda vektorlar",
+              "id": "koordinatalar-usuli-va-vektorlar-4"
+            },
+            {
+              "title": "Vektorlarni qo‘shish va ayirish",
+              "id": "koordinatalar-usuli-va-vektorlar-5"
+            }
+          ]
+        },
+        {
+          "title": "YUZ",
+          "hours": 10,
+          "topics": [
+            {
+              "title": "Ko‘pburchakning yuzi",
+              "id": "yuz-1"
+            },
+            {
+              "title": "Parallelogrammning yuzi",
+              "id": "yuz-2"
+            }
+          ]
+        },
+        {
+          "title": "AYLANA",
+          "hours": 6,
+          "topics": [
+            {
+              "title": "Aylanadagi burchaklar",
+              "id": "aylana-1"
+            },
+            {
+              "title": "Aylanaga urinma va uning xossalari",
+              "id": "aylana-2"
+            },
+            {
+              "title": "Uchburchakning ajoyib nuqtalari",
+              "id": "aylana-3"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "grade": 10,
+      "hours": 102,
+      "source": {
+        "title": "Umumiy o'rta ta'limning o'quv dasturi (10-sinf) — Matematika",
+        "url": "https://uzbmb.uz/upload/file/pdf/qabul2025/dasturlar/5.Matematika/10-sinf-Matematika%20fanidan%20o%CA%BBquv%20dastur.pdf",
+        "year": 2018,
+        "publisher": "Respublika ta'lim markazi (Xalq ta'limi vazirligi)"
+      },
+      "units": [
+        {
+          "title": "ELEMENTAR FUNKSIYALAR",
+          "hours": 17,
+          "topics": [
+            {
+              "title": "Funksiya",
+              "id": "elementar-funksiyalar-1"
+            },
+            {
+              "title": "Funksiyaning berilish usullari",
+              "id": "elementar-funksiyalar-2"
+            },
+            {
+              "title": "Funksiya xossalari",
+              "id": "elementar-funksiyalar-3"
+            },
+            {
+              "title": "Funksiya grafiklarini sodda almashtirishlar",
+              "id": "elementar-funksiyalar-4"
+            },
+            {
+              "title": "Chiziqli va kvadratik modellashtirish",
+              "id": "elementar-funksiyalar-5"
+            },
+            {
+              "title": "STEM topshiriq (loyiha ishi)",
+              "id": "elementar-funksiyalar-6"
+            }
+          ]
+        },
+        {
+          "title": "RATSIONAL TENGLAMALAR VA TENGSIZLIKLAR. IRRATSIONAL TENGLAMALAR",
+          "hours": 21,
+          "topics": [
+            {
+              "title": "Sodda ratsional tenglamalar va ularning sistemalari",
+              "id": "ratsional-tenglamalar-va-tengsizliklar-irratsion-1"
+            },
+            {
+              "title": "Sodda ratsional tengsizliklar va ularning sistemalari",
+              "id": "ratsional-tenglamalar-va-tengsizliklar-irratsion-2"
+            },
+            {
+              "title": "Sodda irratsional tenglamalar va ularning sistemalari",
+              "id": "ratsional-tenglamalar-va-tengsizliklar-irratsion-3"
+            }
+          ]
+        },
+        {
+          "title": "KOʻRSATKICHLI VA LOGARIFMIK FUNKSIYALAR",
+          "hours": 20,
+          "topics": [
+            {
+              "title": "Koʻrsatkichli funksiya",
+              "id": "korsatkichli-va-logarifmik-funksiyalar-1"
+            },
+            {
+              "title": "Logarifmik funksiya",
+              "id": "korsatkichli-va-logarifmik-funksiyalar-2"
+            },
+            {
+              "title": "Koʻrsatkichli va logarifmik ifodalarni soddalashtirish",
+              "id": "korsatkichli-va-logarifmik-funksiyalar-3"
+            },
+            {
+              "title": "Sodda koʻrsatkichli tenglamalar",
+              "id": "korsatkichli-va-logarifmik-funksiyalar-4"
+            },
+            {
+              "title": "Sodda logarifmik tenglamalar",
+              "id": "korsatkichli-va-logarifmik-funksiyalar-5"
+            },
+            {
+              "title": "Sodda koʻrsatkichli va logarifmik tenglamalar sistemasi",
+              "id": "korsatkichli-va-logarifmik-funksiyalar-6"
+            },
+            {
+              "title": "Koʻrsatkichli va logarifmik tenglamalar sistemasi va ularni yechish",
+              "id": "korsatkichli-va-logarifmik-funksiyalar-7"
+            },
+            {
+              "title": "Sodda koʻrsatkichli tengsizliklar",
+              "id": "korsatkichli-va-logarifmik-funksiyalar-8"
+            },
+            {
+              "title": "Sodda logarifmik tengsizliklar",
+              "id": "korsatkichli-va-logarifmik-funksiyalar-9"
+            },
+            {
+              "title": "Koʻrsatkichli modellashtirish",
+              "id": "korsatkichli-va-logarifmik-funksiyalar-10"
+            }
+          ]
+        },
+        {
+          "title": "TRIGONOMETRIK FUNKSIYALAR",
+          "hours": 10,
+          "topics": [
+            {
+              "title": "Trigonometrik funksiyalar. y=sinx, y=cosx, y=tgx, y= ctgx funksiyalar va ularning xossalari, grafigi",
+              "id": "trigonometrik-funksiyalar-1"
+            },
+            {
+              "title": "Teskari trigonometrik funksiyalar. arcsina, arccosa, arctga, arcctga ning qiymatlari. y=arcsinx, y=arccosx, y=arctgx, y= arcctgx funksiyalar va ularning xossalari, grafigi",
+              "id": "trigonometrik-funksiyalar-2"
+            }
+          ]
+        },
+        {
+          "title": "TRIGONOMETRIK TENGLAMALAR VA TENGSIZLIKLAR",
+          "hours": 12,
+          "topics": [
+            {
+              "title": "Eng sodda trigonometrik tenglamalar. sinx=a, cosx=a, tgx=a, ctgx=a koʻrinishdagi tenglamalar",
+              "id": "trigonometrik-tenglamalar-va-tengsizliklar-1"
+            },
+            {
+              "title": "Trigonometrik tenglamalarni yechish",
+              "id": "trigonometrik-tenglamalar-va-tengsizliklar-2"
+            },
+            {
+              "title": "Eng sodda trigonometrik tengsizliklar",
+              "id": "trigonometrik-tenglamalar-va-tengsizliklar-3"
+            }
+          ]
+        },
+        {
+          "title": "EHTIMOLLIK NAZARIYASI",
+          "hours": 8,
+          "topics": [
+            {
+              "title": "Tasodifiy hodisalar",
+              "id": "ehtimollik-nazariyasi-1"
+            },
+            {
+              "title": "Ehtimollikni hisoblashda kombinatorika formulalaridan foydalanish",
+              "id": "ehtimollik-nazariyasi-2"
+            },
+            {
+              "title": "Teng ehtimolli hodisalar",
+              "id": "ehtimollik-nazariyasi-3"
+            }
+          ]
+        },
+        {
+          "title": "PLANIMETRIYANI TIZIMLI TAKRORLASH",
+          "hours": 6,
+          "topics": [
+            {
+              "title": "Planimetriyaning mantiqiy tuzilishi",
+              "id": "planimetriyani-tizimli-takrorlash-1"
+            },
+            {
+              "title": "Geometrik masalalar va ularni yechish usullari",
+              "id": "planimetriyani-tizimli-takrorlash-2"
+            }
+          ]
+        },
+        {
+          "title": "STEREOMETRIYAGA KIRISH",
+          "hours": 16,
+          "topics": [
+            {
+              "title": "Stereometriyaning asosiy tushunchalari",
+              "id": "stereometriyaga-kirish-1"
+            },
+            {
+              "title": "Fazoda toʻgʻri chiziqlar va tekisliklar",
+              "id": "stereometriyaga-kirish-2"
+            },
+            {
+              "title": "Fazoviy geometrik shakllar",
+              "id": "stereometriyaga-kirish-3"
+            },
+            {
+              "title": "Koʻpyoqlar va ularning elementlari",
+              "id": "stereometriyaga-kirish-4"
+            },
+            {
+              "title": "Muntazam piramida yon sirtini hisoblash formulasi",
+              "id": "stereometriyaga-kirish-5"
+            },
+            {
+              "title": "Koʻpyoqlarni tasvirlash va modelini yasash",
+              "id": "stereometriyaga-kirish-6"
+            },
+            {
+              "title": "Koʻpyoqlarning sodda kesimlarini yasash",
+              "id": "stereometriyaga-kirish-7"
+            },
+            {
+              "title": "Loyiha ishi boʻyicha mashgʻulot",
+              "id": "stereometriyaga-kirish-8"
+            }
+          ]
+        },
+        {
+          "title": "FAZODA TOʻGʻRI CHIZIQLAR VA TEKISLIKLARNING PARALLELLIGI",
+          "hours": 18,
+          "topics": [
+            {
+              "title": "Fazoda toʻgʻri chiziqlarning oʻzaro joylashuvi",
+              "id": "fazoda-togri-chiziqlar-va-tekisliklarning-parall-1"
+            },
+            {
+              "title": "Ayqash toʻgʻri chiziqlar",
+              "id": "fazoda-togri-chiziqlar-va-tekisliklarning-parall-2"
+            },
+            {
+              "title": "Ayqash toʻgʻri chiziqlar orasidagi burchak",
+              "id": "fazoda-togri-chiziqlar-va-tekisliklarning-parall-3"
+            },
+            {
+              "title": "Fazoda toʻgʻri chiziqlar va tekisliklarning oʻzaro joylashuvi",
+              "id": "fazoda-togri-chiziqlar-va-tekisliklarning-parall-4"
+            },
+            {
+              "title": "Tekislik bilan parallel toʻgʻri chiziqlar va ularning xossalari",
+              "id": "fazoda-togri-chiziqlar-va-tekisliklarning-parall-5"
+            },
+            {
+              "title": "Fazoda tekisliklarning oʻzaro joylashuvi",
+              "id": "fazoda-togri-chiziqlar-va-tekisliklarning-parall-6"
+            },
+            {
+              "title": "Fazoda parallel proyeksiyalash",
+              "id": "fazoda-togri-chiziqlar-va-tekisliklarning-parall-7"
+            }
+          ]
+        },
+        {
+          "title": "FAZODA TOʻGʻRI CHIZIQ VA TEKISLIKNING PERPENDIKULYARLIGI",
+          "hours": 20,
+          "topics": [
+            {
+              "title": "Fazoda perpendikulyar toʻgʻri chiziqlar va tekisliklar",
+              "id": "fazoda-togri-chiziq-va-tekislikning-perpendikuly-1"
+            },
+            {
+              "title": "Fazoda perpendikulyar, ogʻma va masofa",
+              "id": "fazoda-togri-chiziq-va-tekislikning-perpendikuly-2"
+            },
+            {
+              "title": "Toʻgʻri chiziqdan unga parallel boʻlgan tekislikkacha boʻlgan masofa",
+              "id": "fazoda-togri-chiziq-va-tekislikning-perpendikuly-3"
+            },
+            {
+              "title": "Parallel tekisliklar orasidagi masofa",
+              "id": "fazoda-togri-chiziq-va-tekislikning-perpendikuly-4"
+            },
+            {
+              "title": "Uch perpendikulyar haqidagi teorema",
+              "id": "fazoda-togri-chiziq-va-tekislikning-perpendikuly-5"
+            },
+            {
+              "title": "Fazoda ortogonal proyeksiya va undan texnikada foydalanish",
+              "id": "fazoda-togri-chiziq-va-tekislikning-perpendikuly-6"
+            },
+            {
+              "title": "Koʻpburchakning ortogonal proyeksiyasining yuzi",
+              "id": "fazoda-togri-chiziq-va-tekislikning-perpendikuly-7"
+            }
+          ]
+        },
+        {
+          "title": "TAKRORLASH",
+          "hours": 8,
+          "topics": [
+            {
+              "title": "Amaliy mashq va tatbiq Loyiha ishi boʻyicha mashgʻulot",
+              "id": "takrorlash-1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "grade": 11,
+      "hours": 102,
+      "source": {
+        "title": "Umumiy o'rta ta'limning o'quv dasturi (11-sinf) — Matematika",
+        "url": "https://uzbmb.uz/upload/file/pdf/qabul2025/dasturlar/5.Matematika/11-sinf-Matematika%20fanidan%20o%CA%BBquv%20dastur.pdf",
         "year": 2018,
         "publisher": "Respublika ta'lim markazi (Xalq ta'limi vazirligi)"
       },
@@ -20,22 +2128,297 @@
           "title": "HOSILA VA UNING TATBIQLARI",
           "hours": 40,
           "topics": [
-            { "id": "hosila-va-uning-tatbiqlari-1", "title": "X- sinfda o'tilganlarni takrorlash." },
-            { "id": "hosila-va-uning-tatbiqlari-2", "title": "O'zgaruvchi miqdorlar orttirmalarining nisbati va uning ma'nosi." },
-            { "id": "hosila-va-uning-tatbiqlari-5", "title": "Limit haqida tushuncha." },
-            { "id": "hosila-va-uning-tatbiqlari-10", "title": "Hosila, uning geometrik va fizik ma'nosi." },
-            { "id": "hosila-va-uning-tatbiqlari-14", "title": "Hosilani hisoblash qoidalari." }
+            {
+              "title": "X- sinfda o‘tilganlarni takrorlash",
+              "id": "hosila-va-uning-tatbiqlari-1"
+            },
+            {
+              "title": "O‘zgaruvchi miqdorlar orttirmalarining nisbati va uning ma’nosi",
+              "id": "hosila-va-uning-tatbiqlari-2"
+            },
+            {
+              "title": "Urinma ta’rifi",
+              "id": "hosila-va-uning-tatbiqlari-3"
+            },
+            {
+              "title": "Ayirmali nisbat",
+              "id": "hosila-va-uning-tatbiqlari-4"
+            },
+            {
+              "title": "Limit haqida tushuncha",
+              "id": "hosila-va-uning-tatbiqlari-5"
+            },
+            {
+              "title": "Hosila, uning geometrik va fizik ma’nosi",
+              "id": "hosila-va-uning-tatbiqlari-6"
+            },
+            {
+              "title": "Hosilani hisoblash qoidalari",
+              "id": "hosila-va-uning-tatbiqlari-7"
+            },
+            {
+              "title": "Bo‘linmaning hosilasi",
+              "id": "hosila-va-uning-tatbiqlari-8"
+            },
+            {
+              "title": "Loyiha ishi bo‘yicha mashg‘ulot",
+              "id": "hosila-va-uning-tatbiqlari-9"
+            },
+            {
+              "title": "Amaliy-tadbiqiy",
+              "id": "hosila-va-uning-tatbiqlari-10"
+            },
+            {
+              "title": "Murakkab funksiyalarning hosilasi",
+              "id": "hosila-va-uning-tatbiqlari-11"
+            },
+            {
+              "title": "Funksiya grafigiga o‘tkazilgan urinma va normal tenglamalari",
+              "id": "hosila-va-uning-tatbiqlari-12"
+            },
+            {
+              "title": "Hosila yordamida funksiyani tekshirish va grafiklarni yasash",
+              "id": "hosila-va-uning-tatbiqlari-13"
+            },
+            {
+              "title": "Funksiyaning statsionar nuqtalar",
+              "id": "hosila-va-uning-tatbiqlari-14"
+            },
+            {
+              "title": "Ekstremumlari",
+              "id": "hosila-va-uning-tatbiqlari-15"
+            },
+            {
+              "title": "Geometrik, fizik, iqtisodiy va boshqa tatbiqiy masalalarni, jumladan, ekstremal masalalarni yechishda differensial hisob usullari",
+              "id": "hosila-va-uning-tatbiqlari-16"
+            },
+            {
+              "title": "Taqribiy hisoblashlar",
+              "id": "hosila-va-uning-tatbiqlari-17"
+            },
+            {
+              "title": "Hosila yordamida modellashtirish",
+              "id": "hosila-va-uning-tatbiqlari-18"
+            }
           ]
         },
         {
           "title": "INTEGRAL VA UNING TATBIQLARI",
           "hours": 21,
           "topics": [
-            { "id": "integral-va-uning-tatbiqlari-1", "title": "Boshlang'ich funksiya va aniqmas integral tushunchalari." },
-            { "id": "integral-va-uning-tatbiqlari-4", "title": "Integrallar jadvali." },
-            { "id": "integral-va-uning-tatbiqlari-8", "title": "Bo'laklab integrallash." },
-            { "id": "integral-va-uning-tatbiqlari-9", "title": "Aniq integral." },
-            { "id": "integral-va-uning-tatbiqlari-10", "title": "Nyuton-Leybnits formulasi." }
+            {
+              "title": "Boshlang‘ich funksiya va aniqmas integral tushunchalari",
+              "id": "integral-va-uning-tatbiqlari-1"
+            },
+            {
+              "title": "Integrallar jadvali",
+              "id": "integral-va-uning-tatbiqlari-2"
+            },
+            {
+              "title": "Aniq integral",
+              "id": "integral-va-uning-tatbiqlari-3"
+            },
+            {
+              "title": "Aniq integralning tatbiqlari",
+              "id": "integral-va-uning-tatbiqlari-4"
+            },
+            {
+              "title": "Taqribiy integrallash",
+              "id": "integral-va-uning-tatbiqlari-5"
+            }
+          ]
+        },
+        {
+          "title": "MA’LUMOTLAR TAHLILI. EHTIMOLLIK",
+          "hours": 29,
+          "topics": [
+            {
+              "title": "Kombinatorika masalalari",
+              "id": "malumotlar-tahlili-ehtimollik-1"
+            },
+            {
+              "title": "Statistik ma’lumotlar. statistik ma’lumotlarning turli ko‘rinishlari",
+              "id": "malumotlar-tahlili-ehtimollik-2"
+            },
+            {
+              "title": "Statistik ma’lumotlarning turli ko‘rinishlari",
+              "id": "malumotlar-tahlili-ehtimollik-3"
+            },
+            {
+              "title": "O‘rta qiymat, moda va mediana",
+              "id": "malumotlar-tahlili-ehtimollik-4"
+            },
+            {
+              "title": "O‘rta qiymat, moda va mediana, chetlashish, standart chetlashish va ularning ahamiyati",
+              "id": "malumotlar-tahlili-ehtimollik-5"
+            },
+            {
+              "title": "Ikkita tur ma’lumotlar o‘rtasida bog‘liqlikni tadqiq qilish",
+              "id": "malumotlar-tahlili-ehtimollik-6"
+            },
+            {
+              "title": "Tasodifiy hodisalar va ularning ehtimolligi haqida tushuncha",
+              "id": "malumotlar-tahlili-ehtimollik-7"
+            },
+            {
+              "title": "Tasodifiy hodisa va uning ehtimolligi haqida tushuncha",
+              "id": "malumotlar-tahlili-ehtimollik-8"
+            },
+            {
+              "title": "Qarama-qarshi hodisa",
+              "id": "malumotlar-tahlili-ehtimollik-9"
+            },
+            {
+              "title": "Ehtimolliklarni qo‘shish va ko‘paytirish; sodda hodisalarning ehtimolliklarni hisoblash usullari",
+              "id": "malumotlar-tahlili-ehtimollik-10"
+            },
+            {
+              "title": "Binomial va normal taqsimot haqida tushuncha",
+              "id": "malumotlar-tahlili-ehtimollik-11"
+            }
+          ]
+        },
+        {
+          "title": "ALGEBRA VA ANALIZ ASOSLARI KURSINI",
+          "topics": [
+            {
+              "title": "Algebra va analiz asoslari kursini takrorlash",
+              "id": "algebra-va-analiz-asoslari-kursini-1"
+            },
+            {
+              "title": "GEOMETRIYA (68 soat, B1+: 34 soat)",
+              "id": "algebra-va-analiz-asoslari-kursini-2"
+            }
+          ]
+        },
+        {
+          "title": "FAZODA DEKART KOORDINATALARI VA VEKTORLAR",
+          "hours": 14,
+          "topics": [
+            {
+              "title": "Fazoda dekart koordinatalari sistemasi",
+              "id": "fazoda-dekart-koordinatalari-va-vektorlar-1"
+            },
+            {
+              "title": "Sfera va shar tenglamasi",
+              "id": "fazoda-dekart-koordinatalari-va-vektorlar-2"
+            },
+            {
+              "title": "Fazoda vektorlar va ular ustida amallar",
+              "id": "fazoda-dekart-koordinatalari-va-vektorlar-3"
+            },
+            {
+              "title": "Fazoda geometrik almashtirishlar va o‘xshashlik: Harakat va parallel ko‘chish",
+              "id": "fazoda-dekart-koordinatalari-va-vektorlar-4"
+            },
+            {
+              "title": "Burish va o‘qqa nisbatan simmetriya",
+              "id": "fazoda-dekart-koordinatalari-va-vektorlar-5"
+            },
+            {
+              "title": "Loyiha ishi bo‘yicha mashg‘ulot Amaliy-tadbiqiy",
+              "id": "fazoda-dekart-koordinatalari-va-vektorlar-6"
+            }
+          ]
+        },
+        {
+          "title": "PRIZMA VA SILINDR",
+          "hours": 15,
+          "topics": [
+            {
+              "title": "Ko‘pyoqli burchaklar va ko‘pyoqlar",
+              "id": "prizma-va-silindr-1"
+            },
+            {
+              "title": "Prizma va uning sirti",
+              "id": "prizma-va-silindr-2"
+            },
+            {
+              "title": "Prizmaning balandligi",
+              "id": "prizma-va-silindr-3"
+            },
+            {
+              "title": "Prizmaning hajmi",
+              "id": "prizma-va-silindr-4"
+            },
+            {
+              "title": "Silindrning sirti va hajmi",
+              "id": "prizma-va-silindr-5"
+            }
+          ]
+        },
+        {
+          "title": "PIRAMIDA VA KONUS",
+          "hours": 15,
+          "topics": [
+            {
+              "title": "Piramida va uning elementlari",
+              "id": "piramida-va-konus-1"
+            },
+            {
+              "title": "Piramidaning hajmini hisoblash formulalari",
+              "id": "piramida-va-konus-2"
+            },
+            {
+              "title": "Konus. Konusning o‘qi, yasovchisi, asosi",
+              "id": "piramida-va-konus-3"
+            },
+            {
+              "title": "To‘g‘ri va og‘ma konus",
+              "id": "piramida-va-konus-4"
+            },
+            {
+              "title": "Konusga ichki va tashqi chizilgan ko‘pyoqlar",
+              "id": "piramida-va-konus-5"
+            },
+            {
+              "title": "Kesik konus va uning elementlari",
+              "id": "piramida-va-konus-6"
+            },
+            {
+              "title": "Kesik konusning hajmi",
+              "id": "piramida-va-konus-7"
+            }
+          ]
+        },
+        {
+          "title": "SFERA VA SHAR",
+          "hours": 13,
+          "topics": [
+            {
+              "title": "Shar va sfera",
+              "id": "sfera-va-shar-1"
+            },
+            {
+              "title": "Sharning diametr tekisligi",
+              "id": "sfera-va-shar-2"
+            },
+            {
+              "title": "Tashqi va ichki chizilgan sharlar",
+              "id": "sfera-va-shar-3"
+            },
+            {
+              "title": "Kavalyeri prinsipi",
+              "id": "sfera-va-shar-4"
+            },
+            {
+              "title": "Sfera sirtining yuzi formulasi va undan kelib chiqadigan natijalar",
+              "id": "sfera-va-shar-5"
+            }
+          ]
+        },
+        {
+          "title": "TAKRORLASH",
+          "hours": 11,
+          "topics": [
+            {
+              "title": "Stereometriya kursini takrorlash",
+              "id": "takrorlash-1"
+            },
+            {
+              "title": "Mavzuiy rejalashtirish № Boblar nomi Soatlar taqsimoti 1 Hosila va uning tatbiqlari 34 4 Integral va uning tatbiqlari 17 7 Ma’lumotlar tahlili",
+              "id": "takrorlash-2"
+            }
           ]
         }
       ]

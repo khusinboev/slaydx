@@ -1,0 +1,2090 @@
+{
+  "version": "2026-09-16",
+  "subject": {
+    "id": "geografiya",
+    "uz": "Geografiya",
+    "ru": "География",
+    "en": "Geography"
+  },
+  "entries": [
+    {
+      "grade": 5,
+      "source": {
+        "title": "Umumiy o'rta ta'limning o'quv dasturi (5-sinf) — Geografiya",
+        "url": "https://uzbmb.uz/upload/file/pdf/qabul2025/dasturlar/11.Geografiya/5-sinf-Geografiya%20fanidan%20o'quv%20dastur.pdf",
+        "year": 2018,
+        "publisher": "Respublika ta'lim markazi (Xalq ta'limi vazirligi)"
+      },
+      "units": [
+        {
+          "title": "Yer qanday o‘rganilgan?",
+          "hours": 2,
+          "topics": [
+            {
+              "title": "Qadim zamonda odamlar Yerni qanday tasavvur qilishgan?",
+              "id": "yer-qanday-organilgan-1"
+            },
+            {
+              "title": "Yer yuzining kashf etilishi va o‘rganilish",
+              "id": "yer-qanday-organilgan-2"
+            },
+            {
+              "title": "Bellinsgauzen va M.Lazarevlarning sayohat hamda geografik kashfiyotlari",
+              "id": "yer-qanday-organilgan-3"
+            },
+            {
+              "title": "Hozirgi zamon geografiyasi nimani o‘rganadi?",
+              "id": "yer-qanday-organilgan-4"
+            }
+          ]
+        },
+        {
+          "title": "YER - QUYOSH SISTEMASIDAGI SAYYORA",
+          "hours": 3,
+          "topics": [
+            {
+              "title": "Quyosh, Oy va yulduzlar",
+              "id": "yer-quyosh-sistemasidagi-sayyora-1"
+            },
+            {
+              "title": "Yulduzlar",
+              "id": "yer-quyosh-sistemasidagi-sayyora-2"
+            },
+            {
+              "title": "Yerning o‘z o‘qi atrofida aylanishi va kattaligi",
+              "id": "yer-quyosh-sistemasidagi-sayyora-3"
+            },
+            {
+              "title": "Qadim zamonlarda kishilar Yer shaklini qanday faraz qilganlar?",
+              "id": "yer-quyosh-sistemasidagi-sayyora-4"
+            },
+            {
+              "title": "Yerning Quyosh atrofida aylanishi",
+              "id": "yer-quyosh-sistemasidagi-sayyora-5"
+            },
+            {
+              "title": "Yerning o‘z o‘qi atrofida va Quyosh atrofida aylanishi",
+              "id": "yer-quyosh-sistemasidagi-sayyora-6"
+            }
+          ]
+        },
+        {
+          "title": "JOY PLANI VA GEOGRAFIK XARITALAR",
+          "hours": 6,
+          "topics": [
+            {
+              "title": "Yo‘nalish azimuti va masofani o‘lchash",
+              "id": "joy-plani-va-geografik-xaritalar-1"
+            },
+            {
+              "title": "Ufq tomonlari va ularni joyda aniqlash",
+              "id": "joy-plani-va-geografik-xaritalar-2"
+            },
+            {
+              "title": "Masshtab",
+              "id": "joy-plani-va-geografik-xaritalar-3"
+            },
+            {
+              "title": "Masshtab va uning turlari",
+              "id": "joy-plani-va-geografik-xaritalar-4"
+            },
+            {
+              "title": "Joy planini tuzish",
+              "id": "joy-plani-va-geografik-xaritalar-5"
+            },
+            {
+              "title": "Nisbiy va mutlaq balandliklar",
+              "id": "joy-plani-va-geografik-xaritalar-6"
+            },
+            {
+              "title": "Joy planidan foydalanish",
+              "id": "joy-plani-va-geografik-xaritalar-7"
+            },
+            {
+              "title": "Geografik xarita",
+              "id": "joy-plani-va-geografik-xaritalar-8"
+            },
+            {
+              "title": "Globus va geografik xaritalarda Yerning tasvirlanishi",
+              "id": "joy-plani-va-geografik-xaritalar-9"
+            }
+          ]
+        },
+        {
+          "title": "YERNING TOSH QOBIG‘I - LITOSFERA",
+          "hours": 5,
+          "topics": [
+            {
+              "title": "Yerning qobiqli tuzilganligi",
+              "id": "yerning-tosh-qobigi-litosfera-1"
+            },
+            {
+              "title": "Yerning tashqi va ichki qobiqlari",
+              "id": "yerning-tosh-qobigi-litosfera-2"
+            },
+            {
+              "title": "Mantiya",
+              "id": "yerning-tosh-qobigi-litosfera-3"
+            },
+            {
+              "title": "Litosfera",
+              "id": "yerning-tosh-qobigi-litosfera-4"
+            },
+            {
+              "title": "Magmatik, cho‘kindi tog‘ jinslari, tog‘ jinslarining o‘zgarishi, metamorfik tog‘ jinslari",
+              "id": "yerning-tosh-qobigi-litosfera-5"
+            },
+            {
+              "title": "Yer po‘stining harakatlari",
+              "id": "yerning-tosh-qobigi-litosfera-6"
+            },
+            {
+              "title": "Litosfera plitalari haqida tushuncha",
+              "id": "yerning-tosh-qobigi-litosfera-7"
+            },
+            {
+              "title": "Vulqonlar va ularning tuzilishi",
+              "id": "yerning-tosh-qobigi-litosfera-8"
+            },
+            {
+              "title": "Yer yuzasi relyefining asosiy shakllari",
+              "id": "yerning-tosh-qobigi-litosfera-9"
+            },
+            {
+              "title": "Yer yuzasi relyefi",
+              "id": "yerning-tosh-qobigi-litosfera-10"
+            },
+            {
+              "title": "Quruqlikdagi tog‘lar, tog‘larning balandlik jihatidan farqlanishi, tog‘larning asta-sekin o‘zgarishi",
+              "id": "yerning-tosh-qobigi-litosfera-11"
+            },
+            {
+              "title": "Yer toshqobig‘ining boyliklari",
+              "id": "yerning-tosh-qobigi-litosfera-12"
+            },
+            {
+              "title": "Ko‘mir.Rudali mineral boyliklar",
+              "id": "yerning-tosh-qobigi-litosfera-13"
+            }
+          ]
+        },
+        {
+          "title": "YERNING SUV QOBIG‘I - GIDROSFERA",
+          "hours": 6,
+          "topics": [
+            {
+              "title": "Gidrosferaning tarkibiy qismlari",
+              "id": "yerning-suv-qobigi-gidrosfera-1"
+            },
+            {
+              "title": "Yerning suv qobig‘i, uning tarkibiy qismlari",
+              "id": "yerning-suv-qobigi-gidrosfera-2"
+            },
+            {
+              "title": "Dunyo okeani",
+              "id": "yerning-suv-qobigi-gidrosfera-3"
+            },
+            {
+              "title": "Okean suvining xususiyatlari. suv harorati",
+              "id": "yerning-suv-qobigi-gidrosfera-4"
+            },
+            {
+              "title": "Yer osti suvlari",
+              "id": "yerning-suv-qobigi-gidrosfera-5"
+            },
+            {
+              "title": "Daryolar",
+              "id": "yerning-suv-qobigi-gidrosfera-6"
+            },
+            {
+              "title": "Daryo ta’rifi, daryolar manbai, mansabi, bosh daryo va irmoqlar, daryo havzasi, suvayirg‘ich",
+              "id": "yerning-suv-qobigi-gidrosfera-7"
+            },
+            {
+              "title": "Daryolar suvidan foydalanish va muhofaza qilish",
+              "id": "yerning-suv-qobigi-gidrosfera-8"
+            },
+            {
+              "title": "Ko‘llar va muzliklar",
+              "id": "yerning-suv-qobigi-gidrosfera-9"
+            },
+            {
+              "title": "Ko‘l nima?",
+              "id": "yerning-suv-qobigi-gidrosfera-10"
+            }
+          ]
+        },
+        {
+          "title": "YERNING HAVO QOBIG‘I – ATMOSFERA",
+          "hours": 6,
+          "topics": [
+            {
+              "title": "Atmosferaning tuzilishi",
+              "id": "yerning-havo-qobigi-atmosfera-1"
+            },
+            {
+              "title": "Yerning havo qobig‘i, havoning tarkibi, atmosferaning qatlamli tuzilganligi",
+              "id": "yerning-havo-qobigi-atmosfera-2"
+            },
+            {
+              "title": "Havo harorati va bosimi",
+              "id": "yerning-havo-qobigi-atmosfera-3"
+            },
+            {
+              "title": "Havo harorati, termometr",
+              "id": "yerning-havo-qobigi-atmosfera-4"
+            },
+            {
+              "title": "O‘rtacha sutkalik, oylik, yillik haroratlar",
+              "id": "yerning-havo-qobigi-atmosfera-5"
+            },
+            {
+              "title": "Shamollar va havo massalari Shamol, shamolning hosil bo‘lishi",
+              "id": "yerning-havo-qobigi-atmosfera-6"
+            },
+            {
+              "title": "Anemometr",
+              "id": "yerning-havo-qobigi-atmosfera-7"
+            },
+            {
+              "title": "Havo namligi va yog‘inlar",
+              "id": "yerning-havo-qobigi-atmosfera-8"
+            },
+            {
+              "title": "Havodagi suv bug‘i, mutlaq va nisbiy namlik",
+              "id": "yerning-havo-qobigi-atmosfera-9"
+            },
+            {
+              "title": "Ob-havo va iqlim",
+              "id": "yerning-havo-qobigi-atmosfera-10"
+            },
+            {
+              "title": "Ob-havo nima?",
+              "id": "yerning-havo-qobigi-atmosfera-11"
+            },
+            {
+              "title": "Yer yuzida sayyoramiz sharsimonligi tufayli Quyosh yorug‘ligi va issiqligining notekis taqsimlanishi, iqlimning geografik kenglikka bog‘liqligi",
+              "id": "yerning-havo-qobigi-atmosfera-12"
+            }
+          ]
+        },
+        {
+          "title": "BIOSFERA– hayot qobig‘i",
+          "hours": 2,
+          "topics": [
+            {
+              "title": "Yer qobiqlarining o‘zaro ta’siri Tirik organizmlarning tabiatdagi o‘rni, Yerning biosfera qobig‘i, uning mohiyati va chegaralari",
+              "id": "biosfera-hayot-qobigi-1"
+            },
+            {
+              "title": "Organizmlarning Yer qobiqlariga ta’siri",
+              "id": "biosfera-hayot-qobigi-2"
+            }
+          ]
+        },
+        {
+          "title": "Tabiat komplekslari",
+          "hours": 3,
+          "topics": [
+            {
+              "title": "Geografik qobiq va tabiat kompleksi",
+              "id": "tabiat-komplekslari-1"
+            },
+            {
+              "title": "Komponentlar",
+              "id": "tabiat-komplekslari-2"
+            },
+            {
+              "title": "Geografik mintaqalar va tabiat zonalari",
+              "id": "tabiat-komplekslari-3"
+            },
+            {
+              "title": "Tabiat zonalari – yirik tabiat komplekslari",
+              "id": "tabiat-komplekslari-4"
+            },
+            {
+              "title": "O‘zimiz yashaydigan joy",
+              "id": "tabiat-komplekslari-5"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "grade": 6,
+      "source": {
+        "title": "Umumiy o'rta ta'limning o'quv dasturi (6-sinf) — Geografiya",
+        "url": "https://uzbmb.uz/upload/file/pdf/qabul2025/dasturlar/11.Geografiya/6-sinf-Geografiya%20fanidan%20o'quv%20dastur.pdf",
+        "year": 2018,
+        "publisher": "Respublika ta'lim markazi (Xalq ta'limi vazirligi)"
+      },
+      "units": [
+        {
+          "title": "Dastur mavzulari",
+          "topics": [
+            {
+              "title": "Geografik xaritalar va ularning turlari. Atlaslar va globuslar",
+              "id": "dastur-mavzulari-1",
+              "hours": 1
+            }
+          ]
+        },
+        {
+          "title": "GEOGRAFIK QOBIQ",
+          "hours": 10,
+          "topics": [
+            {
+              "title": "Geografik qobiqning chegaralari, xususiyatlari",
+              "id": "geografik-qobiq-1",
+              "hours": 1
+            },
+            {
+              "title": "Geografik qobiqning rivojlanish bosqichlari va umumiy qonuniyatlari",
+              "id": "geografik-qobiq-2",
+              "hours": 2
+            },
+            {
+              "title": "Litosfera va Yer relyefi",
+              "id": "geografik-qobiq-3",
+              "hours": 1
+            },
+            {
+              "title": "Materik va okeanlarning paydo bo‘lishi va rivojlanishi",
+              "id": "geografik-qobiq-4",
+              "hours": 1
+            },
+            {
+              "title": "Atmosfera. Yerning iqlim mintaqalari",
+              "id": "geografik-qobiq-5",
+              "hours": 2
+            },
+            {
+              "title": "Tabiat komplekslari , ularning almashinishi va zonalligi",
+              "id": "geografik-qobiq-6"
+            },
+            {
+              "title": "Yer yuzi aholisi, irqlar",
+              "id": "geografik-qobiq-7",
+              "hours": 1
+            }
+          ]
+        },
+        {
+          "title": "DUNYO OKEANI",
+          "hours": 5,
+          "topics": [
+            {
+              "title": "Dunyo okeani va uning qismlari",
+              "id": "dunyo-okeani-1",
+              "hours": 1
+            },
+            {
+              "title": "Dunyo okeani tubining geologik tuzilishi va relyefi",
+              "id": "dunyo-okeani-2",
+              "hours": 1
+            },
+            {
+              "title": "Okean suvining xususiyatlari",
+              "id": "dunyo-okeani-3",
+              "hours": 1
+            },
+            {
+              "title": "Dunyo okeanining atmosfera va quruqlikka ta’siri",
+              "id": "dunyo-okeani-4",
+              "hours": 1
+            }
+          ]
+        },
+        {
+          "title": "MATERIKLAR VA OKEANLAR TABIATI",
+          "hours": 51,
+          "topics": [
+            {
+              "title": "Afrika materigi",
+              "id": "materiklar-va-okeanlar-tabiati-1"
+            },
+            {
+              "title": "Afrika materigining geografik o‘rni, o‘rganilish tarixi",
+              "id": "materiklar-va-okeanlar-tabiati-2"
+            },
+            {
+              "title": "Geologik tuzilishi, relyefi va foydali qazilmalari",
+              "id": "materiklar-va-okeanlar-tabiati-3",
+              "hours": 1
+            },
+            {
+              "title": "Materik iqlimining xususiyatlari",
+              "id": "materiklar-va-okeanlar-tabiati-4",
+              "hours": 1
+            },
+            {
+              "title": "Afrikaning iqlim mintaqalari",
+              "id": "materiklar-va-okeanlar-tabiati-5",
+              "hours": 1
+            },
+            {
+              "title": "Ekvatorial o‘rmonlar va savannalar",
+              "id": "materiklar-va-okeanlar-tabiati-6",
+              "hours": 1
+            },
+            {
+              "title": "Tropik cho‘llar va subtropiklar",
+              "id": "materiklar-va-okeanlar-tabiati-7",
+              "hours": 1
+            },
+            {
+              "title": "Tabiiy geografik o‘lkalari",
+              "id": "materiklar-va-okeanlar-tabiati-8",
+              "hours": 1
+            },
+            {
+              "title": "Materik aholisi va uning tabiatga ta’siri",
+              "id": "materiklar-va-okeanlar-tabiati-9",
+              "hours": 1
+            },
+            {
+              "title": "Atlantika okeani",
+              "id": "materiklar-va-okeanlar-tabiati-10",
+              "hours": 1
+            },
+            {
+              "title": "Hind okeani",
+              "id": "materiklar-va-okeanlar-tabiati-11",
+              "hours": 1
+            },
+            {
+              "title": "Avstraliyaning geografik o‘rni, o‘rganilish tarixi, geologik tuzilishi, foydali qazilmalari va relyefi",
+              "id": "materiklar-va-okeanlar-tabiati-12",
+              "hours": 1
+            },
+            {
+              "title": "Iqlimi, ichki suvlari va tabiat zonalari",
+              "id": "materiklar-va-okeanlar-tabiati-13",
+              "hours": 1
+            },
+            {
+              "title": "Tinch okean",
+              "id": "materiklar-va-okeanlar-tabiati-14",
+              "hours": 1
+            },
+            {
+              "title": "Okeaniya",
+              "id": "materiklar-va-okeanlar-tabiati-15",
+              "hours": 1
+            },
+            {
+              "title": "Okeaniya iqlimi, tabiat zonalari va aholisi",
+              "id": "materiklar-va-okeanlar-tabiati-16",
+              "hours": 1
+            },
+            {
+              "title": "Geografik o‘rni, o‘rganilish tarixi, geologik tuzilishi, foydali qazilmalari va relyefi",
+              "id": "materiklar-va-okeanlar-tabiati-17",
+              "hours": 1
+            },
+            {
+              "title": "Iqlimi va tabiat komplekslari",
+              "id": "materiklar-va-okeanlar-tabiati-18",
+              "hours": 1
+            },
+            {
+              "title": "Iqlimi va ichki suvlari",
+              "id": "materiklar-va-okeanlar-tabiati-19",
+              "hours": 1
+            },
+            {
+              "title": "Janubiy Amerika tabiat zonalari va balandlik mintaqalari",
+              "id": "materiklar-va-okeanlar-tabiati-20",
+              "hours": 1
+            },
+            {
+              "title": "Janubiy Amerika aholisi",
+              "id": "materiklar-va-okeanlar-tabiati-21",
+              "hours": 1
+            },
+            {
+              "title": "Shimoliy Amerika iqlimi va ichki suvlari",
+              "id": "materiklar-va-okeanlar-tabiati-22",
+              "hours": 1
+            },
+            {
+              "title": "Shimoliy Amerika tabiat zonalari va balandlik mintaqalari",
+              "id": "materiklar-va-okeanlar-tabiati-23",
+              "hours": 1
+            },
+            {
+              "title": "Shimoliy Amerika tabiiy geografik o‘lkalari",
+              "id": "materiklar-va-okeanlar-tabiati-24",
+              "hours": 1
+            },
+            {
+              "title": "Shimoliy Amerika aholisi",
+              "id": "materiklar-va-okeanlar-tabiati-25",
+              "hours": 1
+            },
+            {
+              "title": "Yevrosiyoning geografik o‘rni, o‘rganilish tarixi",
+              "id": "materiklar-va-okeanlar-tabiati-26",
+              "hours": 1
+            },
+            {
+              "title": "Geologik tuzilishi, foydali qazilmalari. Relyefi",
+              "id": "materiklar-va-okeanlar-tabiati-27",
+              "hours": 1
+            },
+            {
+              "title": "Yevrosiyo iqlimi",
+              "id": "materiklar-va-okeanlar-tabiati-28",
+              "hours": 1
+            },
+            {
+              "title": "Sovuq va mo‘tadil iqlim mintaqalari",
+              "id": "materiklar-va-okeanlar-tabiati-29",
+              "hours": 1
+            },
+            {
+              "title": "Issiq iqlim mintaqalari",
+              "id": "materiklar-va-okeanlar-tabiati-30",
+              "hours": 1
+            },
+            {
+              "title": "Ichki suvlari",
+              "id": "materiklar-va-okeanlar-tabiati-31",
+              "hours": 1
+            },
+            {
+              "title": "Sovuq va mo‘tadil mintaqalaridagi tabiat zonalari",
+              "id": "materiklar-va-okeanlar-tabiati-32",
+              "hours": 1
+            },
+            {
+              "title": "Issiq iqlim mintaqalaridagi tabiat zonalari",
+              "id": "materiklar-va-okeanlar-tabiati-33",
+              "hours": 1
+            },
+            {
+              "title": "Yevrosiyo aholisi va siyosiy xaritasi",
+              "id": "materiklar-va-okeanlar-tabiati-34",
+              "hours": 1
+            },
+            {
+              "title": "Antropogen tabiat komplekslari",
+              "id": "materiklar-va-okeanlar-tabiati-35",
+              "hours": 1
+            },
+            {
+              "title": "Materik hududining tabiiy geografik o‘lkalarga bo‘linishi",
+              "id": "materiklar-va-okeanlar-tabiati-36",
+              "hours": 1
+            },
+            {
+              "title": "O‘rta Yevropa",
+              "id": "materiklar-va-okeanlar-tabiati-37",
+              "hours": 1
+            },
+            {
+              "title": "Sharqiy Yevropa",
+              "id": "materiklar-va-okeanlar-tabiati-38",
+              "hours": 1
+            },
+            {
+              "title": "G‘arbiy va Sharqiy Sibir",
+              "id": "materiklar-va-okeanlar-tabiati-39",
+              "hours": 1
+            },
+            {
+              "title": "Markaziy Osiyo",
+              "id": "materiklar-va-okeanlar-tabiati-40",
+              "hours": 1
+            },
+            {
+              "title": "Sharqiy Osiyo",
+              "id": "materiklar-va-okeanlar-tabiati-41",
+              "hours": 1
+            },
+            {
+              "title": "Janubiy Osiyo",
+              "id": "materiklar-va-okeanlar-tabiati-42",
+              "hours": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "grade": 7,
+      "source": {
+        "title": "Umumiy o'rta ta'limning o'quv dasturi (7-sinf) — Geografiya",
+        "url": "https://uzbmb.uz/upload/file/pdf/qabul2025/dasturlar/11.Geografiya/7-sinf-Geografiya%20fanidan%20o'quv%20dastur.pdf",
+        "year": 2018,
+        "publisher": "Respublika ta'lim markazi (Xalq ta'limi vazirligi)"
+      },
+      "units": [
+        {
+          "title": "O‘RTA OSIYONING GEOGRAFIK O‘RNI, CHEGARALARI VA TABIIY GEOGRAFIK O‘LKA SIFATIDA O‘ZIGA XOS XUSUSIYATLARI",
+          "hours": 4,
+          "topics": [
+            {
+              "title": "O‘rta Osiyo tabiiy geografik o‘lkasi haqida tushuncha",
+              "id": "orta-osiyoning-geografik-orni-chegaralari-va-tab-1",
+              "hours": 1
+            },
+            {
+              "title": "Tabiiy geografik o‘lka sifatida o‘ziga xos xususiyatlari",
+              "id": "orta-osiyoning-geografik-orni-chegaralari-va-tab-2",
+              "hours": 1
+            },
+            {
+              "title": "O‘rta Osiyoning geografik o‘rganilish tarixi",
+              "id": "orta-osiyoning-geografik-orni-chegaralari-va-tab-3",
+              "hours": 1
+            },
+            {
+              "title": "O‘rta Osiyo aholisi va siyosiy xaritasi",
+              "id": "orta-osiyoning-geografik-orni-chegaralari-va-tab-4",
+              "hours": 1
+            }
+          ]
+        },
+        {
+          "title": "GEOGRAFIK XARITALAR. VAQT HISOBI",
+          "hours": 6,
+          "topics": [
+            {
+              "title": "Geografik xaritalar. Xarita andozalari",
+              "id": "geografik-xaritalar-vaqt-hisobi-1",
+              "hours": 1
+            },
+            {
+              "title": "Geografik xaritalar va ularning shartli belgilari",
+              "id": "geografik-xaritalar-vaqt-hisobi-2",
+              "hours": 1
+            },
+            {
+              "title": "Xaritalarning turlari, ulardan foydalanish",
+              "id": "geografik-xaritalar-vaqt-hisobi-3",
+              "hours": 1
+            },
+            {
+              "title": "Topografik xaritalar",
+              "id": "geografik-xaritalar-vaqt-hisobi-4",
+              "hours": 1
+            },
+            {
+              "title": "Vaqt o‘lchovi, soat mintaqalari, taqvimlar",
+              "id": "geografik-xaritalar-vaqt-hisobi-5",
+              "hours": 1
+            }
+          ]
+        },
+        {
+          "title": "O‘RTA OSIYONING GEOLOGIK TUZILISHI, FOYDALI QAZILMALARI VA RELYEFI",
+          "hours": 3,
+          "topics": [
+            {
+              "title": "Geologik vaqt hisobi",
+              "id": "orta-osiyoning-geologik-tuzilishi-foydali-qazilm-1",
+              "hours": 1
+            },
+            {
+              "title": "O‘rta Osiyo hududining rivojlanish tarixi va geologik tuzilishi. Foydali qazilmalari",
+              "id": "orta-osiyoning-geologik-tuzilishi-foydali-qazilm-2",
+              "hours": 1
+            },
+            {
+              "title": "Yer yuzasi tuzilishining asosiy xususiyatlari",
+              "id": "orta-osiyoning-geologik-tuzilishi-foydali-qazilm-3",
+              "hours": 1
+            }
+          ]
+        },
+        {
+          "title": "O‘RTA OSIYO IQLIMI",
+          "hours": 5,
+          "topics": [
+            {
+              "title": "O‘rta Osiyo iqlimi. Iqlimga ta’sir ko‘rsatuvchi omillar",
+              "id": "orta-osiyo-iqlimi-1",
+              "hours": 1
+            },
+            {
+              "title": "Havo massalari, siklon va antisiklonlar",
+              "id": "orta-osiyo-iqlimi-2",
+              "hours": 1
+            },
+            {
+              "title": "O‘rta Osiyodagi tog‘larining iqlimi",
+              "id": "orta-osiyo-iqlimi-3",
+              "hours": 1
+            },
+            {
+              "title": "O‘rta Osiyodagi iqlimiy tafovutlar",
+              "id": "orta-osiyo-iqlimi-4",
+              "hours": 1
+            }
+          ]
+        },
+        {
+          "title": "O‘RTA OSIYONING SUVLARI",
+          "hours": 4,
+          "topics": [
+            {
+              "title": "O‘rta Osiyo suvlari haqida umumiy tushuncha",
+              "id": "orta-osiyoning-suvlari-1",
+              "hours": 1
+            },
+            {
+              "title": "O‘rta Osiyo daryolari",
+              "id": "orta-osiyoning-suvlari-2",
+              "hours": 1
+            },
+            {
+              "title": "Ko‘llari va suv omborlari",
+              "id": "orta-osiyoning-suvlari-3",
+              "hours": 1
+            }
+          ]
+        },
+        {
+          "title": "O‘RTA OSIYO TUPROQLARI, O‘SIMLIKLARI, HAYVONOT DUNYOSI, TABIAT ZONALARI",
+          "hours": 7,
+          "topics": [
+            {
+              "title": "Tuproqlar haqida tushuncha",
+              "id": "orta-osiyo-tuproqlari-osimliklari-hayvonot-dunyo-1",
+              "hours": 1
+            },
+            {
+              "title": "O‘rta Osiyo tuproqlari",
+              "id": "orta-osiyo-tuproqlari-osimliklari-hayvonot-dunyo-2",
+              "hours": 1
+            },
+            {
+              "title": "O‘rta Osiyo o‘simliklari",
+              "id": "orta-osiyo-tuproqlari-osimliklari-hayvonot-dunyo-3",
+              "hours": 1
+            },
+            {
+              "title": "Cho‘l o‘simliklari",
+              "id": "orta-osiyo-tuproqlari-osimliklari-hayvonot-dunyo-4",
+              "hours": 1
+            },
+            {
+              "title": "Adir, tog‘ va yaylov o‘simliklari",
+              "id": "orta-osiyo-tuproqlari-osimliklari-hayvonot-dunyo-5",
+              "hours": 1
+            },
+            {
+              "title": "Hayvonot dunyosi",
+              "id": "orta-osiyo-tuproqlari-osimliklari-hayvonot-dunyo-6",
+              "hours": 1
+            },
+            {
+              "title": "O‘rta Osiyo tabiat zonalari",
+              "id": "orta-osiyo-tuproqlari-osimliklari-hayvonot-dunyo-7",
+              "hours": 1
+            }
+          ]
+        },
+        {
+          "title": "O‘RTA OSIYONING HUDUDIY TAVSIFI",
+          "hours": 3,
+          "topics": [
+            {
+              "title": "O‘rta Osiyo kichik o‘lkalari va tabiiy rayonlari",
+              "id": "orta-osiyoning-hududiy-tavsifi-1",
+              "hours": 1
+            },
+            {
+              "title": "O‘rta Osiyoning ekologik muammolari va tabiatini muhofaza qilish",
+              "id": "orta-osiyoning-hududiy-tavsifi-2",
+              "hours": 1
+            }
+          ]
+        },
+        {
+          "title": "O‘ZBEKISTON TABIATINING UMUMIY TAVSIFI",
+          "hours": 10,
+          "topics": [
+            {
+              "title": "O‘zbekiston Respublikasining geografik o‘rni va chegaralari",
+              "id": "ozbekiston-tabiatining-umumiy-tavsifi-1"
+            },
+            {
+              "title": "O‘zbekiston yer yuzasi tuzilishi",
+              "id": "ozbekiston-tabiatining-umumiy-tavsifi-2",
+              "hours": 1
+            },
+            {
+              "title": "O‘zbekiston geologik tuzilishi. Foydali qazilmalari",
+              "id": "ozbekiston-tabiatining-umumiy-tavsifi-3",
+              "hours": 1
+            },
+            {
+              "title": "O‘zbekiston iqlimi",
+              "id": "ozbekiston-tabiatining-umumiy-tavsifi-4",
+              "hours": 1
+            },
+            {
+              "title": "O‘zbekistonning ichki suvlari va suv resurslari",
+              "id": "ozbekiston-tabiatining-umumiy-tavsifi-5",
+              "hours": 1
+            },
+            {
+              "title": "O‘zbekistonning ko‘llari va yer osti suvlari",
+              "id": "ozbekiston-tabiatining-umumiy-tavsifi-6",
+              "hours": 1
+            },
+            {
+              "title": "O‘zbekistonning suv boyliklaridan foydalanish va muhofaza qilish",
+              "id": "ozbekiston-tabiatining-umumiy-tavsifi-7",
+              "hours": 1
+            },
+            {
+              "title": "O‘zbekiston tuproqlari, o‘simlik va hayvonot olami",
+              "id": "ozbekiston-tabiatining-umumiy-tavsifi-8",
+              "hours": 1
+            }
+          ]
+        },
+        {
+          "title": "O‘ZBEKISTONNING TABIIY GEOGRAFIK OKRUGLARI TAVSIFI",
+          "hours": 24,
+          "topics": [
+            {
+              "title": "O‘zbekistonning tabiiy geografik rayonlashtirilishi",
+              "id": "ozbekistonning-tabiiy-geografik-okruglari-tavsif-1",
+              "hours": 1
+            },
+            {
+              "title": "Chirchiq-Ohangaron tabiiy geografik okrugi",
+              "id": "ozbekistonning-tabiiy-geografik-okruglari-tavsif-2",
+              "hours": 1
+            },
+            {
+              "title": "Iqlimi va suvlari. Tuproqlari, o‘simliklari va hayvonot dunyosi",
+              "id": "ozbekistonning-tabiiy-geografik-okruglari-tavsif-3",
+              "hours": 1
+            },
+            {
+              "title": "Farg‘ona tabiiy geografik okrugi",
+              "id": "ozbekistonning-tabiiy-geografik-okruglari-tavsif-4",
+              "hours": 1
+            },
+            {
+              "title": "Mirzacho‘l tabiiy geografik okrugi",
+              "id": "ozbekistonning-tabiiy-geografik-okruglari-tavsif-5",
+              "hours": 1
+            },
+            {
+              "title": "O‘rta Zarafshon tabiiy geografik okrugi",
+              "id": "ozbekistonning-tabiiy-geografik-okruglari-tavsif-6",
+              "hours": 1
+            },
+            {
+              "title": "Qashqadaryo tabiiy geografik okrugi",
+              "id": "ozbekistonning-tabiiy-geografik-okruglari-tavsif-7",
+              "hours": 1
+            },
+            {
+              "title": "Surxondaryo tabiiy geografik okrugi",
+              "id": "ozbekistonning-tabiiy-geografik-okruglari-tavsif-8",
+              "hours": 1
+            },
+            {
+              "title": "Quyi Zarafshon tabiiy geografik okrugi",
+              "id": "ozbekistonning-tabiiy-geografik-okruglari-tavsif-9",
+              "hours": 1
+            },
+            {
+              "title": "Suvlari. Tuproqlari, o‘simliklari va hayvonot dunyosi",
+              "id": "ozbekistonning-tabiiy-geografik-okruglari-tavsif-10",
+              "hours": 1
+            },
+            {
+              "title": "Qizilqum tabiiy geografik okrugi",
+              "id": "ozbekistonning-tabiiy-geografik-okruglari-tavsif-11",
+              "hours": 1
+            },
+            {
+              "title": "Quyi Amudaryo tabiiy geografik okrugi",
+              "id": "ozbekistonning-tabiiy-geografik-okruglari-tavsif-12",
+              "hours": 1
+            },
+            {
+              "title": "Orol tabiiy geografik okrugi",
+              "id": "ozbekistonning-tabiiy-geografik-okruglari-tavsif-13",
+              "hours": 1
+            },
+            {
+              "title": "Ustyurt tabiiy geografik okrugi",
+              "id": "ozbekistonning-tabiiy-geografik-okruglari-tavsif-14",
+              "hours": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "grade": 8,
+      "source": {
+        "title": "Umumiy o'rta ta'limning o'quv dasturi (8-sinf) — Geografiya",
+        "url": "https://uzbmb.uz/upload/file/pdf/qabul2025/dasturlar/11.Geografiya/8-sinf-Geografiya%20fanidan%20o'quv%20dastur.pdf",
+        "year": 2018,
+        "publisher": "Respublika ta'lim markazi (Xalq ta'limi vazirligi)"
+      },
+      "units": [
+        {
+          "title": "O‘ZBEKISTONNING TABIIY BOYLIKLARI, AHOLISI VA MEHNAT RESURSLARI",
+          "hours": 6,
+          "topics": [
+            {
+              "title": "O‘zbekistonning tabiiy sharoiti va tabiiy boyliklari",
+              "id": "ozbekistonning-tabiiy-boyliklari-aholisi-va-mehn-1"
+            },
+            {
+              "title": "Tabiiy sharoit va tabiiy resurslar ta’rifi, ularning aholi turmushi va xo‘jalikka ta’siri",
+              "id": "ozbekistonning-tabiiy-boyliklari-aholisi-va-mehn-2"
+            },
+            {
+              "title": "O‘zbekiston tabiiy sharoiti va tabiiy boyliklarining milliy iqtisodiyotdagi ahamiyati",
+              "id": "ozbekistonning-tabiiy-boyliklari-aholisi-va-mehn-3"
+            },
+            {
+              "title": "O‘zbekiston tabiiy sharoiti va resurslarini xo‘jalik jihatdan baholash (balandlik mintaqalari bo‘yicha). Tabiiy resurlardan oqilona foydalanish va ekologik muammolar",
+              "id": "ozbekistonning-tabiiy-boyliklari-aholisi-va-mehn-4"
+            },
+            {
+              "title": "O‘zbekiston aholisi",
+              "id": "ozbekistonning-tabiiy-boyliklari-aholisi-va-mehn-5"
+            },
+            {
+              "title": "O‘zbekiston aholisi, tabiiy va mexanik harakati",
+              "id": "ozbekistonning-tabiiy-boyliklari-aholisi-va-mehn-6"
+            },
+            {
+              "title": "O‘zbekiston aholisining tarkibi",
+              "id": "ozbekistonning-tabiiy-boyliklari-aholisi-va-mehn-7"
+            },
+            {
+              "title": "Mamlakat aholisining jinsiy, yosh bo‘yicha tarkibi",
+              "id": "ozbekistonning-tabiiy-boyliklari-aholisi-va-mehn-8"
+            },
+            {
+              "title": "Iqtisodiy faol va nofaol aholi",
+              "id": "ozbekistonning-tabiiy-boyliklari-aholisi-va-mehn-9"
+            },
+            {
+              "title": "Aholi punktlari",
+              "id": "ozbekistonning-tabiiy-boyliklari-aholisi-va-mehn-10"
+            },
+            {
+              "title": "Shahar va shaharchaning ta’riflari",
+              "id": "ozbekistonning-tabiiy-boyliklari-aholisi-va-mehn-11"
+            }
+          ]
+        },
+        {
+          "title": "MILLIY IQTISODIYOTNING TARKIBIY TUZILISHI",
+          "hours": 32,
+          "topics": [
+            {
+              "title": "O‘zbekiston milliy iqtisodiyotining tuzilishi",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-1"
+            },
+            {
+              "title": "Milliy iqtisodiyot tushunchasi",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-2"
+            },
+            {
+              "title": "Sanoat – milliy iqtisodiyotning tayanch tarmog‘i",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-3"
+            },
+            {
+              "title": "Sanoatning tarmoq tarkibi, korxonalarini joylashtirish omillari",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-4"
+            },
+            {
+              "title": "Yoqilg‘i-energetika majmuasi",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-5"
+            },
+            {
+              "title": "Neft va gaz sanoati",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-6"
+            },
+            {
+              "title": "O‘zbekistonda neft va gazning qazib olinishi miqdori va dinamikasi",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-7"
+            },
+            {
+              "title": "Neft va gaz sanoatining asosiy korxonalari, ular joylashgan manzilgoh va hududlar",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-8"
+            },
+            {
+              "title": "Ko‘mir sanoati",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-9"
+            },
+            {
+              "title": "Toshko‘mir va qo‘ng‘ir ko‘mir",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-10"
+            },
+            {
+              "title": "Ko‘mirdan foydalanish",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-11"
+            },
+            {
+              "title": "Elektroenergetika",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-12"
+            },
+            {
+              "title": "Elektroenergetika sanoati: issiqlik elektr stansiyalari va markazlari; gidroelektrostansiyalar; atom elektrostansiyalar, noan’anaviy energiya manbalari: shamol, va quyosh elektr stansiyalari",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-13"
+            },
+            {
+              "title": "Kimyo sanoati",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-14"
+            },
+            {
+              "title": "Kimyo sanoati haqida tushuncha",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-15"
+            },
+            {
+              "title": "Qora metallurgiya",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-16"
+            },
+            {
+              "title": "Metallurgiya tushunchasi, uning tarmoqlari",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-17"
+            },
+            {
+              "title": "Rangli metallurgiya",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-18"
+            },
+            {
+              "title": "Rangli metallurgiya, uning milliy iqtisodiyotdagi ahamiyati, rangli metallar guruhlari",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-19"
+            },
+            {
+              "title": "Mashinasozlik va uning tarmoqlari",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-20"
+            },
+            {
+              "title": "Mashinasozlik mohiyati, vazifasi, tarmoqlar tarkibi",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-21"
+            },
+            {
+              "title": "Mashinasozlikning ilm-fan bilan chambarchas bog‘liqligi",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-22"
+            },
+            {
+              "title": "Avtomobilsozlik",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-23"
+            },
+            {
+              "title": "O‘zbekiston avtomobilsozligi",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-24"
+            },
+            {
+              "title": "Asaka, Samarqand va Xorazm avtomobil zavodlari",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-25"
+            },
+            {
+              "title": "Yog‘ochni qayta ishlash sanoati",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-26"
+            },
+            {
+              "title": "Yog‘ochni qayta ishlash va sellyuloza-qog‘oz sanoati haqida umumiy tushuncha",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-27"
+            },
+            {
+              "title": "Qurilish materiallari sanoati",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-28"
+            },
+            {
+              "title": "Asosiy mahsulotlari va ularning xom ashyosi",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-29"
+            },
+            {
+              "title": "Sanoat va ekologik muammolar",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-30"
+            },
+            {
+              "title": "Sanoat tarmoqlari bilan bog‘liq bo‘lgan ekologik muammolar",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-31"
+            },
+            {
+              "title": "Agrosanoat majmuasi",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-32"
+            },
+            {
+              "title": "Agrosanoat majmuasi, uning tarkibiy tuzilishi, undagi iqtisodiy islohotlar",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-33"
+            },
+            {
+              "title": "Qishloq xo‘jaligi",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-34"
+            },
+            {
+              "title": "Dehqonchilik",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-35"
+            },
+            {
+              "title": "Dehqonchilik tarmoqlari",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-36"
+            },
+            {
+              "title": "Paxtachilik",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-37"
+            },
+            {
+              "title": "Chorvachilik",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-38"
+            },
+            {
+              "title": "Chorvachilik tarkibi va geografiyasi",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-39"
+            },
+            {
+              "title": "O‘zbekistonda qishloq xo‘jaligining geografik tiplari",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-40"
+            },
+            {
+              "title": "Qishloq xo‘jaligining geografik tiplari – vodiy-voha, shahar atrofi, lalmikor, cho‘l-yaylov, tog‘",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-41"
+            },
+            {
+              "title": "Yengil sanoat",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-42"
+            },
+            {
+              "title": "Yengil sanoat, uning 2 ta tarmoqlar guruhiga bo‘linishi (qishloq xo‘jalik xom ashyosini birlamchi qayta ishlash tarmoqlari va tayyor mahsulot ishlab chiqarish tarmoqlari), joylanish omillari",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-43"
+            },
+            {
+              "title": "Oziq-ovqat sanoati",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-44"
+            },
+            {
+              "title": "Oziq-ovqat sanoati va uning joylanishidagi asosiy omillar",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-45"
+            },
+            {
+              "title": "Sanoatnihududiy tashkil etish hamda joylashtirish shakllari",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-46"
+            },
+            {
+              "title": "Sanoat punkti, sanoat tuguni, sanoat markazi va sanoat rayoni tushunchalari",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-47"
+            },
+            {
+              "title": "Transport",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-48"
+            },
+            {
+              "title": "Transport, uning turlari",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-49"
+            },
+            {
+              "title": "Yo‘llar uzunligi va zichligi ko‘rsatkichlari, ularning geografik sharoit bilan bog‘liqligi",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-50"
+            },
+            {
+              "title": "O‘zbekiston transportining zamonaviy rivojlanishi",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-51"
+            },
+            {
+              "title": "O‘zbekiston transport tizimi, uning tarmoq va hududiy jihatlari",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-52"
+            },
+            {
+              "title": "O‘zbekistonning mustaqillik davridagi dunyo okeaniga chiqish imkoniyatlarini oshirish va mamlakat transport tizimining bir butunligini ta’minlash borasidagi xatti-harakatlari",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-53"
+            },
+            {
+              "title": "Aholiga xizmat ko‘rsatish sohalari",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-54"
+            },
+            {
+              "title": "Xizmat ko‘rsatish sohasining tarkibiy qismlari",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-55"
+            },
+            {
+              "title": "O‘zbekistonda rekreatsiya va turizm",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-56"
+            },
+            {
+              "title": "Rekreatsiya va turizm tushunchalari",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-57"
+            },
+            {
+              "title": "O‘zbekistondagi dam olish maskanlari",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-58"
+            },
+            {
+              "title": "O‘zbekistonning tashqi iqtisodiy aloqalari",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-59"
+            },
+            {
+              "title": "Xalqaro iqtisodiy aloqalar va ularning turlari: xalqaro savdo, qo‘shma korxonalar, xalqaro turizm, moliya-kredit munosabatlari.Tashqi savdo.Tashqi savdo aylanmasi va balansi",
+              "id": "milliy-iqtisodiyotning-tarkibiy-tuzilishi-60"
+            }
+          ]
+        },
+        {
+          "title": "O‘ZBEKISTONNING REGIONAL TAVSIFI",
+          "hours": 26,
+          "topics": [
+            {
+              "title": "O‘zbekiston iqtisodiyotini hududiy tashkil etish",
+              "id": "ozbekistonning-regional-tavsifi-1"
+            },
+            {
+              "title": "Hududiy ixtisoslashuv va uning koeffisienti",
+              "id": "ozbekistonning-regional-tavsifi-2"
+            },
+            {
+              "title": "Toshkent iqtisodiy rayoni",
+              "id": "ozbekistonning-regional-tavsifi-3"
+            },
+            {
+              "title": "Rayonning iqtisodiy geografik o‘rni va hududiy tarkibiy qismlari",
+              "id": "ozbekistonning-regional-tavsifi-4"
+            },
+            {
+              "title": "Toshkent viloyati",
+              "id": "ozbekistonning-regional-tavsifi-5"
+            },
+            {
+              "title": "Ixtisoslashgan tarmoqlari va sanoat shaharlari, ulardagi yirik korxonalar",
+              "id": "ozbekistonning-regional-tavsifi-6"
+            },
+            {
+              "title": "Toshkent shahri",
+              "id": "ozbekistonning-regional-tavsifi-7"
+            },
+            {
+              "title": "Toshkent shahrining milliy iqtisodiyotdagi o‘rni va ahamiyati",
+              "id": "ozbekistonning-regional-tavsifi-8"
+            },
+            {
+              "title": "Diqqatga sazovor obyektlari",
+              "id": "ozbekistonning-regional-tavsifi-9"
+            },
+            {
+              "title": "Mirzacho‘l iqtisodiy rayoni",
+              "id": "ozbekistonning-regional-tavsifi-10"
+            },
+            {
+              "title": "Rayonning iqtisodiy geografik o‘rni",
+              "id": "ozbekistonning-regional-tavsifi-11"
+            },
+            {
+              "title": "Ixtisoslashgan tarmoqlari",
+              "id": "ozbekistonning-regional-tavsifi-12"
+            },
+            {
+              "title": "Sirdaryo viloyati",
+              "id": "ozbekistonning-regional-tavsifi-13"
+            },
+            {
+              "title": "Hududi, chegaralari, ma’muriy-hududiy tuzilishi",
+              "id": "ozbekistonning-regional-tavsifi-14"
+            },
+            {
+              "title": "Sanoati",
+              "id": "ozbekistonning-regional-tavsifi-15"
+            },
+            {
+              "title": "Jizzax viloyati",
+              "id": "ozbekistonning-regional-tavsifi-16"
+            },
+            {
+              "title": "Mirzacho‘l, Turkiston-Nurota tog‘lari va Qizilqum qismlari",
+              "id": "ozbekistonning-regional-tavsifi-17"
+            },
+            {
+              "title": "Qishloq xo‘jaligi tarkibi va geografiyasi",
+              "id": "ozbekistonning-regional-tavsifi-18"
+            },
+            {
+              "title": "Farg‘ona iqtisodiy rayoni",
+              "id": "ozbekistonning-regional-tavsifi-19"
+            },
+            {
+              "title": "Tarkibi, geografik o‘rni, maydoni, chegaralari, O‘zbekiston maydoni va aholisidagi hissasi",
+              "id": "ozbekistonning-regional-tavsifi-20"
+            },
+            {
+              "title": "Aholisi, uning joylanishi va tarkibi xususiyatlari",
+              "id": "ozbekistonning-regional-tavsifi-21"
+            },
+            {
+              "title": "Andijon viloyati",
+              "id": "ozbekistonning-regional-tavsifi-22"
+            },
+            {
+              "title": "Farg‘ona viloyati",
+              "id": "ozbekistonning-regional-tavsifi-23"
+            },
+            {
+              "title": "Namangan viloyati",
+              "id": "ozbekistonning-regional-tavsifi-24"
+            },
+            {
+              "title": "Zarafshon iqtisodiy rayoni",
+              "id": "ozbekistonning-regional-tavsifi-25"
+            },
+            {
+              "title": "Suv resurslari",
+              "id": "ozbekistonning-regional-tavsifi-26"
+            },
+            {
+              "title": "Samarqand viloyati",
+              "id": "ozbekistonning-regional-tavsifi-27"
+            },
+            {
+              "title": "Navoiy viloyati",
+              "id": "ozbekistonning-regional-tavsifi-28"
+            },
+            {
+              "title": "Buxoro viloyati",
+              "id": "ozbekistonning-regional-tavsifi-29"
+            },
+            {
+              "title": "Janubiy iqtisodiy rayon",
+              "id": "ozbekistonning-regional-tavsifi-30"
+            },
+            {
+              "title": "Qashqadaryo viloyati",
+              "id": "ozbekistonning-regional-tavsifi-31"
+            },
+            {
+              "title": "Surxondaryo viloyati",
+              "id": "ozbekistonning-regional-tavsifi-32"
+            },
+            {
+              "title": "Quyi Amudaryo iqtisodiy rayoni",
+              "id": "ozbekistonning-regional-tavsifi-33"
+            },
+            {
+              "title": "Xorazm viloyati",
+              "id": "ozbekistonning-regional-tavsifi-34"
+            },
+            {
+              "title": "Xo‘jalik ixtisoslashuvi",
+              "id": "ozbekistonning-regional-tavsifi-35"
+            },
+            {
+              "title": "Viloyat shaharlari",
+              "id": "ozbekistonning-regional-tavsifi-36"
+            },
+            {
+              "title": "Qoraqalpog‘iston Respublikasi",
+              "id": "ozbekistonning-regional-tavsifi-37"
+            },
+            {
+              "title": "Shaharlari, ulardagi madaniy va turistik obyektlar",
+              "id": "ozbekistonning-regional-tavsifi-38"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "grade": 9,
+      "source": {
+        "title": "Umumiy o'rta ta'limning o'quv dasturi (9-sinf) — Geografiya",
+        "url": "https://uzbmb.uz/upload/file/pdf/qabul2025/dasturlar/11.Geografiya/9-sinf-Geografiya%20fanidan%20o'quv%20dastur.pdf",
+        "year": 2018,
+        "publisher": "Respublika ta'lim markazi (Xalq ta'limi vazirligi)"
+      },
+      "units": [
+        {
+          "title": "JAHONNING SIYOSIY XARITASI",
+          "hours": 3,
+          "topics": [
+            {
+              "title": "Jahonning siyosiy xaritasi",
+              "id": "jahonning-siyosiy-xaritasi-1"
+            },
+            {
+              "title": "Jahon siyosiy xaritasi tushunchasi",
+              "id": "jahonning-siyosiy-xaritasi-2"
+            },
+            {
+              "title": "Jahon mamlakatlarning ijtimoiy-iqtisodiy rivojlanganligi bo‘yicha tasnifi",
+              "id": "jahonning-siyosiy-xaritasi-3"
+            },
+            {
+              "title": "Mamlakatlarning ijtimoiy-iqtisodiy rivojlanishi jihatidan tasniflash mezonlari",
+              "id": "jahonning-siyosiy-xaritasi-4"
+            },
+            {
+              "title": "O‘tish iqtisodiyotidagi davlatlar",
+              "id": "jahonning-siyosiy-xaritasi-5"
+            },
+            {
+              "title": "Mamlakatlarning boshqaruv shakli va davlat tuzilishi",
+              "id": "jahonning-siyosiy-xaritasi-6"
+            },
+            {
+              "title": "Respublika va monarxiya davlatlari, ularning tiplari",
+              "id": "jahonning-siyosiy-xaritasi-7"
+            }
+          ]
+        },
+        {
+          "title": "JAHON TABIIY RESURSLARI",
+          "hours": 5,
+          "topics": [
+            {
+              "title": "Dunyoning tabiiy resurslari",
+              "id": "jahon-tabiiy-resurslari-1"
+            },
+            {
+              "title": "Tabiiy resurslar tushunchasi va ularning tasniflanishi",
+              "id": "jahon-tabiiy-resurslari-2"
+            },
+            {
+              "title": "Mineral resurslar geografiyasi",
+              "id": "jahon-tabiiy-resurslari-3"
+            },
+            {
+              "title": "Dunyoning yirik yoqilg‘i havzalari",
+              "id": "jahon-tabiiy-resurslari-4"
+            },
+            {
+              "title": "Asosiy foydali qazilmalar (neft, tabiiy gaz, ko‘mir, temir ruda)ning eng katta zaxiralariga ega bo‘lgan davlatlar",
+              "id": "jahon-tabiiy-resurslari-5"
+            },
+            {
+              "title": "Tugamaydigan va tiklanadigan tabiiy resurslar geografiyasi",
+              "id": "jahon-tabiiy-resurslari-6"
+            },
+            {
+              "title": "Agroiqlim, yer, suv, o‘rmon, biologik, geotermal resurslarning geografiyasi",
+              "id": "jahon-tabiiy-resurslari-7"
+            },
+            {
+              "title": "Zamonaviy ekologik muammolar",
+              "id": "jahon-tabiiy-resurslari-8"
+            },
+            {
+              "title": "Ekologik muammo tushunchasi",
+              "id": "jahon-tabiiy-resurslari-9"
+            }
+          ]
+        },
+        {
+          "title": "JAHON AHOLISI",
+          "hours": 5,
+          "topics": [
+            {
+              "title": "Jahon aholisining soni, o‘sishi va joylashuvi",
+              "id": "jahon-aholisi-1"
+            },
+            {
+              "title": "Jahon aholisining soni va o‘sishi",
+              "id": "jahon-aholisi-2"
+            },
+            {
+              "title": "Aholi ko‘payishining turlari",
+              "id": "jahon-aholisi-3"
+            },
+            {
+              "title": "Aholisi eng ko‘p davlatlar",
+              "id": "jahon-aholisi-4"
+            },
+            {
+              "title": "Jahon aholisining jinsiy, yosh, irqiy tarkibi",
+              "id": "jahon-aholisi-5"
+            },
+            {
+              "title": "Jahon aholisining jinsiy tarkibi",
+              "id": "jahon-aholisi-6"
+            },
+            {
+              "title": "Yosh-jins piramidalari",
+              "id": "jahon-aholisi-7"
+            },
+            {
+              "title": "Dunyo aholisining etnik va diniytarkibi",
+              "id": "jahon-aholisi-8"
+            },
+            {
+              "title": "Til oilalari va guruhlari, ularning geografiyasi",
+              "id": "jahon-aholisi-9"
+            },
+            {
+              "title": "Jahon mamlakatlarining urbanizatsiyasi",
+              "id": "jahon-aholisi-10"
+            },
+            {
+              "title": "Dunyoda shahar aholisining o‘sishi",
+              "id": "jahon-aholisi-11"
+            }
+          ]
+        },
+        {
+          "title": "JAHON XO‘JALIGI",
+          "hours": 12,
+          "topics": [
+            {
+              "title": "Jahon xo‘jaligi va xalqaro mehnat taqsimoti",
+              "id": "jahon-xojaligi-1"
+            },
+            {
+              "title": "Jahon xo‘jaligi tushunchasi",
+              "id": "jahon-xojaligi-2"
+            },
+            {
+              "title": "Xalqaro ixtisoslashuv va uning omillari",
+              "id": "jahon-xojaligi-3"
+            },
+            {
+              "title": "Jahon iqtisodiyoti markazlari va xalqaro integratsiya jarayonlari",
+              "id": "jahon-xojaligi-4"
+            },
+            {
+              "title": "Jahon xo‘jaligining geografik “modeli”ning ko‘p markazlilik xususiyati",
+              "id": "jahon-xojaligi-5"
+            },
+            {
+              "title": "Hozirgi zamonda tez o‘sib borayotgan mintaqalar va iqtisodiy markazlar",
+              "id": "jahon-xojaligi-6"
+            },
+            {
+              "title": "Xalqaro va regional iqtisodiy integratsiya jarayonlari",
+              "id": "jahon-xojaligi-7"
+            },
+            {
+              "title": "Fan-texnika inqilobi va ishlab chiqarishning rivojlanishiga innovatsion texnologiyalarning ta’siri",
+              "id": "jahon-xojaligi-8"
+            },
+            {
+              "title": "Fan-texnika inqilobi haqida tushuncha, uning asosiy xususiyatlari",
+              "id": "jahon-xojaligi-9"
+            },
+            {
+              "title": "Jahon energetikasi geografiyasi",
+              "id": "jahon-xojaligi-10"
+            },
+            {
+              "title": "Jahon yoqilg‘i-energetika balansi",
+              "id": "jahon-xojaligi-11"
+            },
+            {
+              "title": "Neft ishlab chiqaruvchi mamlakatlar ittifoqi – OPEK.Jahonko‘mir sanoati",
+              "id": "jahon-xojaligi-12"
+            },
+            {
+              "title": "Ko‘mir qazib oladigan yirik davlatlar",
+              "id": "jahon-xojaligi-13"
+            },
+            {
+              "title": "Jahon metallurgiya va kimyo sanoati geografiyasi",
+              "id": "jahon-xojaligi-14"
+            },
+            {
+              "title": "Metallurgiya sanoati: qora metallurgiya",
+              "id": "jahon-xojaligi-15"
+            },
+            {
+              "title": "Rangli metallurgiya",
+              "id": "jahon-xojaligi-16"
+            },
+            {
+              "title": "Jahon mashinasozlik va yengil sanoati geografiyasi",
+              "id": "jahon-xojaligi-17"
+            },
+            {
+              "title": "Mashinasozlik",
+              "id": "jahon-xojaligi-18"
+            },
+            {
+              "title": "Jahon dehqonchiligi geografiyasi",
+              "id": "jahon-xojaligi-19"
+            },
+            {
+              "title": "Iqtisodiy jihatdan turlicha rivojlangan davlatlarda qishloq xo‘jaligining o‘ziga xos rivojlanishi",
+              "id": "jahon-xojaligi-20"
+            },
+            {
+              "title": "Jahon chorvachiligi va baliqchiligi geografiyasi",
+              "id": "jahon-xojaligi-21"
+            },
+            {
+              "title": "Chorvachilik, uning asosiy tarmoqlari: qoramolchilik, cho‘chqachilik, qo‘ychilik",
+              "id": "jahon-xojaligi-22"
+            },
+            {
+              "title": "Jahon transporti geografiyasi",
+              "id": "jahon-xojaligi-23"
+            },
+            {
+              "title": "Jahon transport tizimidagi geografik tafovutlar",
+              "id": "jahon-xojaligi-24"
+            },
+            {
+              "title": "Havo transporti",
+              "id": "jahon-xojaligi-25"
+            },
+            {
+              "title": "Xalqaro iqtisodiy aloqalar geografiyasi",
+              "id": "jahon-xojaligi-26"
+            },
+            {
+              "title": "Xalqaro savdo",
+              "id": "jahon-xojaligi-27"
+            }
+          ]
+        },
+        {
+          "title": "YEVROPA MAMLAKATLARI",
+          "hours": 10,
+          "topics": [
+            {
+              "title": "Yevropaning geografik o‘rni, chegaralari va siyosiy xaritasi",
+              "id": "yevropa-mamlakatlari-1"
+            },
+            {
+              "title": "Hududi, chegaralari, geografik o‘rni",
+              "id": "yevropa-mamlakatlari-2"
+            },
+            {
+              "title": "Yevropaning tabiiy sharoiti va resurslari, aholisi",
+              "id": "yevropa-mamlakatlari-3"
+            },
+            {
+              "title": "Yevropa tabiiy sharoiti",
+              "id": "yevropa-mamlakatlari-4"
+            },
+            {
+              "title": "Aholisi va uning asosiy ko‘rsatkichlari",
+              "id": "yevropa-mamlakatlari-5"
+            },
+            {
+              "title": "Yevropa mamlakatlarining iqtisodiyoti",
+              "id": "yevropa-mamlakatlari-6"
+            },
+            {
+              "title": "Xo‘jaligining umumiy ta’rifi, integratsion jarayonlar",
+              "id": "yevropa-mamlakatlari-7"
+            },
+            {
+              "title": "Sanoatning asosiy tarmoqlari: yoqilg‘i-energetika, metallurgiya, mashinasozlik, kimyo, o‘rmon, yengil sanoat",
+              "id": "yevropa-mamlakatlari-8"
+            },
+            {
+              "title": "Germaniya Federativ Respublikasi",
+              "id": "yevropa-mamlakatlari-9"
+            },
+            {
+              "title": "Hududi, chegaralari, geografik o‘rni, tabiiy sharoiti va resurslari, aholisi",
+              "id": "yevropa-mamlakatlari-10"
+            },
+            {
+              "title": "Xo‘jaligi",
+              "id": "yevropa-mamlakatlari-11"
+            },
+            {
+              "title": "Buyuk Britaniya va Shimoliy Irlandiya Birlashgan Qirolligi",
+              "id": "yevropa-mamlakatlari-12"
+            },
+            {
+              "title": "Fransiya Respublikasi Hududi, chegaralari, geografik o‘rni, tabiiy sharoiti va resurslari, aholisi",
+              "id": "yevropa-mamlakatlari-13"
+            },
+            {
+              "title": "Italiya Respublikasi Hududi, chegaralari, geografik o‘rni, tabiiy sharoiti va resurslari, aholisi",
+              "id": "yevropa-mamlakatlari-14"
+            },
+            {
+              "title": "Rossiya Federatsiyasi",
+              "id": "yevropa-mamlakatlari-15"
+            },
+            {
+              "title": "Rossiya Federatsiyasi xo‘jaligi",
+              "id": "yevropa-mamlakatlari-16"
+            },
+            {
+              "title": "Xo‘jaligi, sanoati, qishloq xo‘jaligi, transporti, tashqi iqtisodiy aloqalari, ichki tafovutlar",
+              "id": "yevropa-mamlakatlari-17"
+            }
+          ]
+        },
+        {
+          "title": "OSIYO MAMLAKATLARI",
+          "hours": 18,
+          "topics": [
+            {
+              "title": "Osiyo qit’asining geografik o‘rni, chegaralari va siyosiy xaritasi",
+              "id": "osiyo-mamlakatlari-1"
+            },
+            {
+              "title": "Geografik o‘rni, hududi, chegaralari",
+              "id": "osiyo-mamlakatlari-2"
+            },
+            {
+              "title": "Osiyo mamlakatlari tabiiy resurslari va aholisi",
+              "id": "osiyo-mamlakatlari-3"
+            },
+            {
+              "title": "Osiyo yoqilg‘i, mineral, agroiqlim, suv, o‘rmon resurslari",
+              "id": "osiyo-mamlakatlari-4"
+            },
+            {
+              "title": "Osiyo mamlakatlarining iqtisodiy rivojlanganligi",
+              "id": "osiyo-mamlakatlari-5"
+            },
+            {
+              "title": "Osiyo mamlakatlarining ijtimoiy-iqtisodiy rivojlanishi va jahon iqtisodiyotidagi o‘rni jihatidan guruhlashtirish",
+              "id": "osiyo-mamlakatlari-6"
+            },
+            {
+              "title": "Qozog‘iston Respublikasi",
+              "id": "osiyo-mamlakatlari-7"
+            },
+            {
+              "title": "Qozog‘istonning hududi, chegaralari, tabiiy sharoiti va resurslari, aholisi",
+              "id": "osiyo-mamlakatlari-8"
+            },
+            {
+              "title": "Milliy iqtisodiyoti va uning tayanch tarmoqlariga umumiy tavsif",
+              "id": "osiyo-mamlakatlari-9"
+            },
+            {
+              "title": "Qirg‘iziston Respublikasi",
+              "id": "osiyo-mamlakatlari-10"
+            },
+            {
+              "title": "Qirg‘izistonning hududi, chegaralari, tabiiy sharoiti va resurslari, aholisi",
+              "id": "osiyo-mamlakatlari-11"
+            },
+            {
+              "title": "Turkmaniston Respublikasi",
+              "id": "osiyo-mamlakatlari-12"
+            },
+            {
+              "title": "Turkmanistonning hududi, chegaralari, tabiiy sharoiti va resurslari, aholisi",
+              "id": "osiyo-mamlakatlari-13"
+            },
+            {
+              "title": "Tojikiston Respublikasi",
+              "id": "osiyo-mamlakatlari-14"
+            },
+            {
+              "title": "Tojikistonning hududi, chegaralari, tabiiy sharoiti va resurslari, aholisi",
+              "id": "osiyo-mamlakatlari-15"
+            }
+          ]
+        },
+        {
+          "title": "AFRIKA, AVSTRALIYA VA OKEANIYA, AMERIKA MAMLAKATLARI",
+          "hours": 13,
+          "topics": [
+            {
+              "title": "Afrika qit’asining geografik o‘rni va siyosiy xaritasi",
+              "id": "afrika-avstraliya-va-okeaniya-amerika-mamlakatla-1"
+            },
+            {
+              "title": "Afrika mamlakatlari aholisi va iqtisodiyoti",
+              "id": "afrika-avstraliya-va-okeaniya-amerika-mamlakatla-2"
+            },
+            {
+              "title": "Afrika aholisining soni, o‘sishi, joylanishi, tarkibi",
+              "id": "afrika-avstraliya-va-okeaniya-amerika-mamlakatla-3"
+            },
+            {
+              "title": "Janubiy Afrika Respublikasi",
+              "id": "afrika-avstraliya-va-okeaniya-amerika-mamlakatla-4"
+            },
+            {
+              "title": "Geografik o‘rni",
+              "id": "afrika-avstraliya-va-okeaniya-amerika-mamlakatla-5"
+            },
+            {
+              "title": "Xo‘jaligining xalqaro ixtisoslashgan sohalari",
+              "id": "afrika-avstraliya-va-okeaniya-amerika-mamlakatla-6"
+            },
+            {
+              "title": "Nigeriya Federativ Respublikasi",
+              "id": "afrika-avstraliya-va-okeaniya-amerika-mamlakatla-7"
+            },
+            {
+              "title": "Xo‘jaligining xalqaro ixtisoslashgan sohalari.Ichkitafovutlar",
+              "id": "afrika-avstraliya-va-okeaniya-amerika-mamlakatla-8"
+            },
+            {
+              "title": "Misr Arab Respublikasi",
+              "id": "afrika-avstraliya-va-okeaniya-amerika-mamlakatla-9"
+            },
+            {
+              "title": "Avstraliya Ittifoqi",
+              "id": "afrika-avstraliya-va-okeaniya-amerika-mamlakatla-10"
+            },
+            {
+              "title": "Tabiiy sharoiti va tabiiy boyliklari",
+              "id": "afrika-avstraliya-va-okeaniya-amerika-mamlakatla-11"
+            },
+            {
+              "title": "Qishloq xo‘jaligi",
+              "id": "afrika-avstraliya-va-okeaniya-amerika-mamlakatla-12"
+            },
+            {
+              "title": "Amerikaning siyosiy xaritasi",
+              "id": "afrika-avstraliya-va-okeaniya-amerika-mamlakatla-13"
+            },
+            {
+              "title": "Amerika qit’asining geografik o‘rni va hududi",
+              "id": "afrika-avstraliya-va-okeaniya-amerika-mamlakatla-14"
+            },
+            {
+              "title": "Amerika Qo‘shma Shtatlari",
+              "id": "afrika-avstraliya-va-okeaniya-amerika-mamlakatla-15"
+            },
+            {
+              "title": "Maydoni, chegaralari, geografik joylanishining o‘ziga xos xususiyatlari",
+              "id": "afrika-avstraliya-va-okeaniya-amerika-mamlakatla-16"
+            },
+            {
+              "title": "Tabiiy sharoiti va resurslari",
+              "id": "afrika-avstraliya-va-okeaniya-amerika-mamlakatla-17"
+            },
+            {
+              "title": "Amerika Qo‘shma Shtatlari xo‘jaligi va iqtisodiy rayonlari",
+              "id": "afrika-avstraliya-va-okeaniya-amerika-mamlakatla-18"
+            },
+            {
+              "title": "Sanoatining asosiy tarmoqlari",
+              "id": "afrika-avstraliya-va-okeaniya-amerika-mamlakatla-19"
+            },
+            {
+              "title": "Kanada",
+              "id": "afrika-avstraliya-va-okeaniya-amerika-mamlakatla-20"
+            },
+            {
+              "title": "Maydoni, chegaralari, geografik joylanishi",
+              "id": "afrika-avstraliya-va-okeaniya-amerika-mamlakatla-21"
+            },
+            {
+              "title": "Aholisi joylanishidagi tafovutlar",
+              "id": "afrika-avstraliya-va-okeaniya-amerika-mamlakatla-22"
+            },
+            {
+              "title": "Umumlashtiruvchi takrorlash",
+              "id": "afrika-avstraliya-va-okeaniya-amerika-mamlakatla-23"
+            },
+            {
+              "title": "Mavzularni o‘rganish uchun - 49 soat",
+              "id": "afrika-avstraliya-va-okeaniya-amerika-mamlakatla-24"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "grade": 10,
+      "source": {
+        "title": "Umumiy o'rta ta'limning o'quv dasturi (10-sinf) — Geografiya",
+        "url": "https://uzbmb.uz/upload/file/pdf/qabul2025/dasturlar/11.Geografiya/10-sinf-Geografiya%20fanidan%20o'quv%20dastur.pdf",
+        "year": 2018,
+        "publisher": "Respublika ta'lim markazi (Xalq ta'limi vazirligi)"
+      },
+      "units": [
+        {
+          "title": "UMUMIY QOIDALAR",
+          "topics": [
+            {
+              "title": "Konsepsiya xalq ta’limi tizimida geografiya fanini o‘qitishni rivojlantirishning asosiy tendensiyalarini belgilab beradi",
+              "id": "umumiy-qoidalar-1"
+            }
+          ]
+        },
+        {
+          "title": "GEOGRAFIYA FANI KONSEPSIYASINING ASOSIY MAQSADI VA RIVOJLANISHINING USTUVOR YO‘NALISHLARI",
+          "topics": [
+            {
+              "title": "Umumiy o‘rta ta’lim tizimida geografiya ta’limining maqsadi",
+              "id": "geografiya-fani-konsepsiyasining-asosiy-maqsadi-1"
+            }
+          ]
+        },
+        {
+          "title": "JAHON SIYOSIY XARITASI",
+          "hours": 4,
+          "topics": [
+            {
+              "title": "Jahonning siyosiy xaritasi",
+              "id": "jahon-siyosiy-xaritasi-1"
+            },
+            {
+              "title": "Mamlakatlarning ijtimoiy-iqtisodiy rivojlanganligi bo‘yicha tasnifi",
+              "id": "jahon-siyosiy-xaritasi-2"
+            },
+            {
+              "title": "Mamlakatlarni ijtimoiy-iqtisodiy rivojlanishi jihatidan tasniflash mezonlari",
+              "id": "jahon-siyosiy-xaritasi-3"
+            },
+            {
+              "title": "Rivojlangan va rivojlanayotgan davlatlar, ularning asosiy guruhlari",
+              "id": "jahon-siyosiy-xaritasi-4"
+            },
+            {
+              "title": "Mamlakatlarning boshqaruv shakli va davlat tuzilishi",
+              "id": "jahon-siyosiy-xaritasi-5"
+            },
+            {
+              "title": "Respublika va monarxiya davlatlari, ularning tiplari",
+              "id": "jahon-siyosiy-xaritasi-6"
+            }
+          ]
+        },
+        {
+          "title": "JAHON TABIIY RESURSLARI",
+          "hours": 4,
+          "topics": [
+            {
+              "title": "Mineral resurslar geografiyasi",
+              "id": "jahon-tabiiy-resurslari-1"
+            },
+            {
+              "title": "Qora va rangli (ayniqsa, qimmatbaho) metallar eng ko‘p tarqalgan hududlar",
+              "id": "jahon-tabiiy-resurslari-2"
+            },
+            {
+              "title": "Asosiy foydali qazilmalar (neft, tabiiy gaz, ko‘mir, temir ruda)ning eng katta zaxiralariga ega bo‘lgan davlatlar",
+              "id": "jahon-tabiiy-resurslari-3"
+            },
+            {
+              "title": "Tugamaydigan va tiklanadigan tabiiy resurslar geografiyasi",
+              "id": "jahon-tabiiy-resurslari-4"
+            },
+            {
+              "title": "Agroiqlim, yer, suv, o‘rmon, biologik, geotermal resurslarning geografiyasi",
+              "id": "jahon-tabiiy-resurslari-5"
+            },
+            {
+              "title": "Loyiha darsi",
+              "id": "jahon-tabiiy-resurslari-6"
+            }
+          ]
+        },
+        {
+          "title": "JAHON AHOLISI",
+          "hours": 5,
+          "topics": [
+            {
+              "title": "Dunyo aholisining soni, o‘sishi va joylashishi",
+              "id": "jahon-aholisi-1"
+            },
+            {
+              "title": "Materiklar va qit’alar aholisining soni",
+              "id": "jahon-aholisi-2"
+            },
+            {
+              "title": "Jahon aholisining yosh-jins va irqiy tarkibi",
+              "id": "jahon-aholisi-3"
+            },
+            {
+              "title": "Dunyo aholisining etnik va diniy tarkibi",
+              "id": "jahon-aholisi-4"
+            },
+            {
+              "title": "Jahon mamlakatlarining urbanizatsiyasi",
+              "id": "jahon-aholisi-5"
+            },
+            {
+              "title": "Aglomeratsiya va megalopolislar",
+              "id": "jahon-aholisi-6"
+            }
+          ]
+        },
+        {
+          "title": "JAHON XO‘JALIGI GEOGRAFIYASI",
+          "hours": 11,
+          "topics": [
+            {
+              "title": "Jahon xo‘jaligi va xalqaro mehnat taqsimoti",
+              "id": "jahon-xojaligi-geografiyasi-1"
+            },
+            {
+              "title": "Jahon iqtisodiyoti markazlari va xalqaro integratsiya jarayonlari",
+              "id": "jahon-xojaligi-geografiyasi-2"
+            },
+            {
+              "title": "Jahon xo‘jaligining geografik “modeli”ning ko‘p markazlilik xususiyati",
+              "id": "jahon-xojaligi-geografiyasi-3"
+            }
+          ]
+        },
+        {
+          "title": "YEVROPA MAMLAKATLARI",
+          "hours": 10,
+          "topics": [
+            {
+              "title": "Yevropaning geografik o‘rni, chegaralari va siyosiy xaritasi",
+              "id": "yevropa-mamlakatlari-1"
+            },
+            {
+              "title": "Hududi, chegaralari, geografik o‘rni",
+              "id": "yevropa-mamlakatlari-2"
+            }
+          ]
+        },
+        {
+          "title": "OSIYO MAMLAKATLARI",
+          "hours": 19,
+          "topics": [
+            {
+              "title": "Osiyo geografik o‘rni, chegaralari va siyosiy xaritasi",
+              "id": "osiyo-mamlakatlari-1"
+            }
+          ]
+        },
+        {
+          "title": "AFRIKA, AVSTRALIYA VA OKEANIYA, AMERIKA MAMLAKATLARI",
+          "hours": 15,
+          "topics": [
+            {
+              "title": "Afrika geografik o‘rni, siyosiy xaritasi, tabiiy resurslari",
+              "id": "afrika-avstraliya-va-okeaniya-amerika-mamlakatla-1"
+            },
+            {
+              "title": "Afrika subregionlari",
+              "id": "afrika-avstraliya-va-okeaniya-amerika-mamlakatla-2"
+            },
+            {
+              "title": "Afrika mamlakatlari aholisi va xo‘jaligi",
+              "id": "afrika-avstraliya-va-okeaniya-amerika-mamlakatla-3"
+            },
+            {
+              "title": "JAR, O‘rta dengizbo‘yi mamlakatlar va Tropik Afrika",
+              "id": "afrika-avstraliya-va-okeaniya-amerika-mamlakatla-4"
+            },
+            {
+              "title": "Janubiy Afrika Respublikasi",
+              "id": "afrika-avstraliya-va-okeaniya-amerika-mamlakatla-5"
+            },
+            {
+              "title": "Davlat tuzumi",
+              "id": "afrika-avstraliya-va-okeaniya-amerika-mamlakatla-6"
+            },
+            {
+              "title": "Nigeriya Federativ Respublikasi",
+              "id": "afrika-avstraliya-va-okeaniya-amerika-mamlakatla-7"
+            },
+            {
+              "title": "Tabiiy sharoiti va resurslari",
+              "id": "afrika-avstraliya-va-okeaniya-amerika-mamlakatla-8"
+            },
+            {
+              "title": "Misr Arab Respublikasi",
+              "id": "afrika-avstraliya-va-okeaniya-amerika-mamlakatla-9"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

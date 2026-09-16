@@ -1,0 +1,1701 @@
+{
+  "version": "2026-09-16",
+  "subject": {
+    "id": "fizika",
+    "uz": "Fizika",
+    "ru": "Физика",
+    "en": "Physics"
+  },
+  "entries": [
+    {
+      "grade": 6,
+      "hours": 68,
+      "source": {
+        "title": "Umumiy o'rta ta'limning o'quv dasturi (6-sinf) — Fizika",
+        "url": "https://uzbmb.uz/upload/file/pdf/qabul2025/dasturlar/6.Fizika/6-sinf-Fizika%20fanidan%20o'quv%20dastur.pdf",
+        "year": 2018,
+        "publisher": "Respublika ta'lim markazi (Xalq ta'limi vazirligi)"
+      },
+      "units": [
+        {
+          "title": "Dastur mavzulari",
+          "topics": [
+            {
+              "title": "Fizika nimani o‘rganadi? Fizik hodisalar",
+              "id": "dastur-mavzulari-1",
+              "hours": 1
+            },
+            {
+              "title": "Fizika taraqqiyoti tarixidan ma’lumotlar. Jamiyat rivojlanishida fizikaning ahamiyati. O‘zbekistonda fizika taraqqiyoti",
+              "id": "dastur-mavzulari-2",
+              "hours": 1
+            },
+            {
+              "title": "Fizikada ishlatiladigan ayrim atamalar. Kuzatishlar va tajribalar",
+              "id": "dastur-mavzulari-3",
+              "hours": 1
+            },
+            {
+              "title": "Fizik kattaliklar va ularni o‘lchash. O‘lchashlar va o‘lchash aniqligi",
+              "id": "dastur-mavzulari-4",
+              "hours": 1
+            }
+          ]
+        },
+        {
+          "title": "MODDA TUZILISHI HAQIDA DASTLABKI MA’LUMOTLAR",
+          "hours": 11,
+          "topics": [
+            {
+              "title": "Modda tuzilishi haqida Demokrit, Ar-Roziy, Beruniy va Ibn Sino ta’limotlari",
+              "id": "modda-tuzilishi-haqida-dastlabki-malumotlar-1",
+              "hours": 1
+            },
+            {
+              "title": "Molekulalar va ularning o‘lchamlari",
+              "id": "modda-tuzilishi-haqida-dastlabki-malumotlar-2",
+              "hours": 1
+            },
+            {
+              "title": "Molekulalarning o‘zaro ta’siri va harakati. Broun harakati",
+              "id": "modda-tuzilishi-haqida-dastlabki-malumotlar-3",
+              "hours": 1
+            },
+            {
+              "title": "Turli muhitlarda diffuziya hodisasi",
+              "id": "modda-tuzilishi-haqida-dastlabki-malumotlar-4",
+              "hours": 1
+            },
+            {
+              "title": "Qattiq jism, suyuqlik va gazlarning molekular tuzilishi",
+              "id": "modda-tuzilishi-haqida-dastlabki-malumotlar-5",
+              "hours": 1
+            },
+            {
+              "title": "Suyuqliklarda diffuziya hodisasini o‘rganish",
+              "id": "modda-tuzilishi-haqida-dastlabki-malumotlar-6",
+              "hours": 1
+            },
+            {
+              "title": "Massa va uning birliklari",
+              "id": "modda-tuzilishi-haqida-dastlabki-malumotlar-7",
+              "hours": 1
+            },
+            {
+              "title": "Zichlik va uning birliklari. Beruniy va Xozinning zichlikni aniqlash usullari",
+              "id": "modda-tuzilishi-haqida-dastlabki-malumotlar-8",
+              "hours": 1
+            }
+          ]
+        },
+        {
+          "title": "MEXANIK HODISALAR HAQIDA DASTLABKI MA’LUMOTLAR",
+          "hours": 14,
+          "topics": [
+            {
+              "title": "Jismlarning mexanik harakati. Trayektoriya",
+              "id": "mexanik-hodisalar-haqida-dastlabki-malumotlar-1",
+              "hours": 1
+            },
+            {
+              "title": "Jismlarning bosib o‘tgan yo‘li va unga ketgan vaqt. Bosib o‘tilgan yo‘l va vaqt birliklari",
+              "id": "mexanik-hodisalar-haqida-dastlabki-malumotlar-2",
+              "hours": 1
+            },
+            {
+              "title": "Tekis va notekis harakat haqida tushuncha. Tezlik va uning birliklari",
+              "id": "mexanik-hodisalar-haqida-dastlabki-malumotlar-3",
+              "hours": 1
+            },
+            {
+              "title": "Jismlarning o‘zaro ta’siri haqida ma’lumotlar. Kuch",
+              "id": "mexanik-hodisalar-haqida-dastlabki-malumotlar-4",
+              "hours": 1
+            },
+            {
+              "title": "Bosim va uning birliklari",
+              "id": "mexanik-hodisalar-haqida-dastlabki-malumotlar-5",
+              "hours": 1
+            },
+            {
+              "title": "Paskal qonuni va uning qo‘llanilishi",
+              "id": "mexanik-hodisalar-haqida-dastlabki-malumotlar-6",
+              "hours": 1
+            },
+            {
+              "title": "Tinch holatdagi gaz va suyuqlikda bosim",
+              "id": "mexanik-hodisalar-haqida-dastlabki-malumotlar-7",
+              "hours": 1
+            },
+            {
+              "title": "Atmosfera bosimi. Torrichelli tajribasi",
+              "id": "mexanik-hodisalar-haqida-dastlabki-malumotlar-8",
+              "hours": 1
+            },
+            {
+              "title": "Arximed qonuni va uning qo‘llanilishi. Jismlarning suzishi",
+              "id": "mexanik-hodisalar-haqida-dastlabki-malumotlar-9"
+            },
+            {
+              "title": "Ish va energiya haqida tushuncha",
+              "id": "mexanik-hodisalar-haqida-dastlabki-malumotlar-10",
+              "hours": 1
+            },
+            {
+              "title": "Energiya turlari. Quvvat",
+              "id": "mexanik-hodisalar-haqida-dastlabki-malumotlar-11",
+              "hours": 1
+            }
+          ]
+        },
+        {
+          "title": "JISMLARNING MUVOZANATI. ODDIY MEXANIZMLAR",
+          "hours": 7,
+          "topics": [
+            {
+              "title": "Jismlarning massa markazi va uni aniqlash. Muvozanat turlari",
+              "id": "jismlarning-muvozanati-oddiy-mexanizmlar-1",
+              "hours": 1
+            },
+            {
+              "title": "Kuch momenti. Richag va uning muvozanat sharti",
+              "id": "jismlarning-muvozanati-oddiy-mexanizmlar-2",
+              "hours": 1
+            },
+            {
+              "title": "Oddiy mexanizmlar: blok, qiya tekislik, vint, pona chig‘iriqning qo‘llanilishi",
+              "id": "jismlarning-muvozanati-oddiy-mexanizmlar-3",
+              "hours": 1
+            },
+            {
+              "title": "Mexanizmlardan foydalanishda ishlarning tengligi",
+              "id": "jismlarning-muvozanati-oddiy-mexanizmlar-4",
+              "hours": 1
+            },
+            {
+              "title": "Mexanikaning oltin qoidasi. Mexanizmning foydali ish koeffitsiyenti",
+              "id": "jismlarning-muvozanati-oddiy-mexanizmlar-5",
+              "hours": 1
+            }
+          ]
+        },
+        {
+          "title": "ISSIQLIK HODISALARI HAQIDA BOSHLANG‘ICH MA’LUMOTLAR",
+          "hours": 8,
+          "topics": [
+            {
+              "title": "Issiqlikni hosil qiluvchi manbalar. Issiqlik qabul qilish",
+              "id": "issiqlik-hodisalari-haqida-boshlangich-malumotla-1",
+              "hours": 1
+            },
+            {
+              "title": "Jismlarning issiqlikdan kengayishi",
+              "id": "issiqlik-hodisalari-haqida-boshlangich-malumotla-2",
+              "hours": 1
+            },
+            {
+              "title": "Qattiq jism, suyuqlik va gazlarda issiqlik uzatilishi. Issiqlik o‘tkazuvchanlik. Konveksiya",
+              "id": "issiqlik-hodisalari-haqida-boshlangich-malumotla-3",
+              "hours": 1
+            },
+            {
+              "title": "Nurlanish. Turmushda va texnikada issiqlik uzatilishidan foydalanish",
+              "id": "issiqlik-hodisalari-haqida-boshlangich-malumotla-4",
+              "hours": 1
+            },
+            {
+              "title": "Issiqlik hodisalari haqida Forobiy, Beruniy va Ibn Sino fikrlari",
+              "id": "issiqlik-hodisalari-haqida-boshlangich-malumotla-5",
+              "hours": 1
+            },
+            {
+              "title": "Temperatura. Termometrlar. Jismning temperaturasini o‘lchash",
+              "id": "issiqlik-hodisalari-haqida-boshlangich-malumotla-6",
+              "hours": 1
+            }
+          ]
+        },
+        {
+          "title": "ELEKTR HAQIDA DASTLABKI MA’LUMOTLAR",
+          "hours": 4,
+          "topics": [
+            {
+              "title": "Jismlarning elektrlanishi",
+              "id": "elektr-haqida-dastlabki-malumotlar-1",
+              "hours": 1
+            },
+            {
+              "title": "Elektr toki haqida tushuncha. Tok manbalari",
+              "id": "elektr-haqida-dastlabki-malumotlar-2",
+              "hours": 1
+            },
+            {
+              "title": "Turmushda elektr tokining ahamiyati. Oddiy elektr zanjiri",
+              "id": "elektr-haqida-dastlabki-malumotlar-3",
+              "hours": 1
+            },
+            {
+              "title": "Xonadondagi elektr asboblar. Elektr energiyasini tejash",
+              "id": "elektr-haqida-dastlabki-malumotlar-4",
+              "hours": 1
+            }
+          ]
+        },
+        {
+          "title": "YORUG‘LIK HODISALARI HAQIDA DASTLABKI MA’LUMOTLAR",
+          "hours": 12,
+          "topics": [
+            {
+              "title": "Yorug‘likning tabiiy va sun’iy manbalari",
+              "id": "yoruglik-hodisalari-haqida-dastlabki-malumotlar-1",
+              "hours": 1
+            },
+            {
+              "title": "Yorug‘likning to‘g‘ri chiziq bo‘ylab tarqalishi. Soya va yarim soya",
+              "id": "yoruglik-hodisalari-haqida-dastlabki-malumotlar-2",
+              "hours": 1
+            },
+            {
+              "title": "Quyosh va Oy tutilishi",
+              "id": "yoruglik-hodisalari-haqida-dastlabki-malumotlar-3",
+              "hours": 1
+            },
+            {
+              "title": "Yorug‘likning tezligi. Yorug‘likning qaytishi va sinishi",
+              "id": "yoruglik-hodisalari-haqida-dastlabki-malumotlar-4",
+              "hours": 1
+            },
+            {
+              "title": "Yorug‘lik hodisalari haqida Beruniy va ibn Sinoning fikrlari",
+              "id": "yoruglik-hodisalari-haqida-dastlabki-malumotlar-5"
+            },
+            {
+              "title": "Yassi ko‘zgu",
+              "id": "yoruglik-hodisalari-haqida-dastlabki-malumotlar-6",
+              "hours": 1
+            },
+            {
+              "title": "Linzalar haqida tushuncha",
+              "id": "yoruglik-hodisalari-haqida-dastlabki-malumotlar-7",
+              "hours": 1
+            },
+            {
+              "title": "Shisha prizmada yorug‘likning tarkibiy qismlarga ajralishi. Kamalak",
+              "id": "yoruglik-hodisalari-haqida-dastlabki-malumotlar-8",
+              "hours": 1
+            }
+          ]
+        },
+        {
+          "title": "TOVUSH HODISALARI HAQIDA DASTLABKI MA’LUMOTLAR",
+          "hours": 8,
+          "topics": [
+            {
+              "title": "Tovush manbalari va uni qabul qilgichlar",
+              "id": "tovush-hodisalari-haqida-dastlabki-malumotlar-1",
+              "hours": 1
+            },
+            {
+              "title": "Tovushning turli muhitlarda tarqalishi",
+              "id": "tovush-hodisalari-haqida-dastlabki-malumotlar-2",
+              "hours": 1
+            },
+            {
+              "title": "Tovush kattaliklari",
+              "id": "tovush-hodisalari-haqida-dastlabki-malumotlar-3",
+              "hours": 1
+            },
+            {
+              "title": "Tovushning qaytishi. Aks sado",
+              "id": "tovush-hodisalari-haqida-dastlabki-malumotlar-4",
+              "hours": 1
+            },
+            {
+              "title": "Musiqiy tovushlar va shovqinlar. Tovush va salomatlik. Me’morchilikda tovush",
+              "id": "tovush-hodisalari-haqida-dastlabki-malumotlar-5",
+              "hours": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "grade": 7,
+      "hours": 68,
+      "source": {
+        "title": "Umumiy o'rta ta'limning o'quv dasturi (7-sinf) — Fizika",
+        "url": "https://uzbmb.uz/upload/file/pdf/qabul2025/dasturlar/6.Fizika/7-sinf-Fizika%20fanidan%20o'quv%20dastur.pdf",
+        "year": 2018,
+        "publisher": "Respublika ta'lim markazi (Xalq ta'limi vazirligi)"
+      },
+      "units": [
+        {
+          "title": "MEXANIK HARAKAT HAQIDA UMUMIY MA’LUMOTLAR",
+          "hours": 5,
+          "topics": [
+            {
+              "title": "Jismlarning harakati. Mexanik harakat. Harakatning nisbiyligi. Sanoq jism. Sanoq sistemasi",
+              "id": "mexanik-harakat-haqida-umumiy-malumotlar-1",
+              "hours": 1
+            },
+            {
+              "title": "Fazo va vaqt",
+              "id": "mexanik-harakat-haqida-umumiy-malumotlar-2",
+              "hours": 1
+            },
+            {
+              "title": "Kinematikaning asosiy tushunchalari. Moddiy nuqta. Trayektoriya. Yo‘l va ko‘chish. Mexanik harakat. Ilgarilanma harakat",
+              "id": "mexanik-harakat-haqida-umumiy-malumotlar-3",
+              "hours": 1
+            },
+            {
+              "title": "Skalyar va vektor kattaliklar hamda ular ustida amallar",
+              "id": "mexanik-harakat-haqida-umumiy-malumotlar-4",
+              "hours": 1
+            }
+          ]
+        },
+        {
+          "title": "TO‘G‘RI CHIZIQLI HARAKAT",
+          "hours": 14,
+          "topics": [
+            {
+              "title": "To‘g‘ri chiziqli tekis harakat haqida tushuncha",
+              "id": "togri-chiziqli-harakat-1",
+              "hours": 1
+            },
+            {
+              "title": "To‘g‘ri chiziqli tekis harakat tezligi",
+              "id": "togri-chiziqli-harakat-2",
+              "hours": 1
+            },
+            {
+              "title": "To‘g‘ri chiziqli tekis harakatning grafik tasviri",
+              "id": "togri-chiziqli-harakat-3",
+              "hours": 1
+            },
+            {
+              "title": "Notekis harakatda tezlik. Oniy tezlik",
+              "id": "togri-chiziqli-harakat-4",
+              "hours": 1
+            },
+            {
+              "title": "Tekis o‘zgaruvchan harakatda tezlanish. Tezlanish va uning birligi",
+              "id": "togri-chiziqli-harakat-5",
+              "hours": 1
+            },
+            {
+              "title": "Tekis o‘zgaruvchan harakat tezligi",
+              "id": "togri-chiziqli-harakat-6",
+              "hours": 1
+            },
+            {
+              "title": "Tekis o‘zgaruvchan harakatda bosib o‘tilgan yo‘l",
+              "id": "togri-chiziqli-harakat-7",
+              "hours": 1
+            },
+            {
+              "title": "Tekis tezlanuvchan harakatlanayotgan jism tezlanishini aniqlash",
+              "id": "togri-chiziqli-harakat-8",
+              "hours": 1
+            },
+            {
+              "title": "Jismlarning erkin tushishi",
+              "id": "togri-chiziqli-harakat-9",
+              "hours": 1
+            },
+            {
+              "title": "Yuqoriga tik otilgan jismning harakati",
+              "id": "togri-chiziqli-harakat-10",
+              "hours": 1
+            }
+          ]
+        },
+        {
+          "title": "TEKIS AYLANMA HARAKAT",
+          "hours": 6,
+          "topics": [
+            {
+              "title": "Jismning tekis aylanma harakati. Chiziqli tezlik va burchak tezlik",
+              "id": "tekis-aylanma-harakat-1",
+              "hours": 1
+            },
+            {
+              "title": "Aylanma harakatni tavsiflaydigan kattaliklar orasidagi munosabatlar. Aylanish davri va chastotasi. Aylanish davri, chastotasi, chiziqli tezlik va burchak tezlik orasidagi munosabatlar",
+              "id": "tekis-aylanma-harakat-2",
+              "hours": 1
+            },
+            {
+              "title": "Markazga intilma tezlanish",
+              "id": "tekis-aylanma-harakat-3",
+              "hours": 1
+            }
+          ]
+        },
+        {
+          "title": "HARAKAT QONUNLARI",
+          "hours": 12,
+          "topics": [
+            {
+              "title": "Jismlarning o‘zaro ta’siri. Kuch. Kuchlarni qo‘shish",
+              "id": "harakat-qonunlari-1",
+              "hours": 1
+            },
+            {
+              "title": "Nyutonning birinchi qonuni - inersiya qonuni",
+              "id": "harakat-qonunlari-2",
+              "hours": 1
+            },
+            {
+              "title": "Jism massasi. Jismlarning inertligi",
+              "id": "harakat-qonunlari-3",
+              "hours": 1
+            },
+            {
+              "title": "Nyutonning ikkinchi qonuni",
+              "id": "harakat-qonunlari-4",
+              "hours": 1
+            },
+            {
+              "title": "Nyutonning uchinchi qonuni",
+              "id": "harakat-qonunlari-5",
+              "hours": 1
+            },
+            {
+              "title": "Harakat qonunlarining aylanma harakatga tatbiqi. Markazga intilma kuch. Markazdan qochma kuch",
+              "id": "harakat-qonunlari-6",
+              "hours": 1
+            },
+            {
+              "title": "Elastiklik kuchi. Elastiklik kuchining namoyon bo‘lishi. Guk qonuni",
+              "id": "harakat-qonunlari-7",
+              "hours": 1
+            },
+            {
+              "title": "Prujina bikrligini aniqlash",
+              "id": "harakat-qonunlari-8",
+              "hours": 1
+            }
+          ]
+        },
+        {
+          "title": "TASHQI KUCHLAR TA’SIRIDA JISMLARNING HARAKATI",
+          "hours": 14,
+          "topics": [
+            {
+              "title": "Butun olam tortishish qonuni",
+              "id": "tashqi-kuchlar-tasirida-jismlarning-harakati-1",
+              "hours": 1
+            },
+            {
+              "title": "Og‘irlik kuchi",
+              "id": "tashqi-kuchlar-tasirida-jismlarning-harakati-2",
+              "hours": 1
+            },
+            {
+              "title": "Jismning og‘irligi",
+              "id": "tashqi-kuchlar-tasirida-jismlarning-harakati-3",
+              "hours": 1
+            },
+            {
+              "title": "Yuklama va vaznsizlik",
+              "id": "tashqi-kuchlar-tasirida-jismlarning-harakati-4",
+              "hours": 1
+            },
+            {
+              "title": "Yerning tortishish kuchi ta’sirida jismlarning harakati. Birinchi kosmik tezlik",
+              "id": "tashqi-kuchlar-tasirida-jismlarning-harakati-5",
+              "hours": 1
+            },
+            {
+              "title": "Yerning sun’iy yo‘ldoshlari. Kosmosning zabt etilishi",
+              "id": "tashqi-kuchlar-tasirida-jismlarning-harakati-6",
+              "hours": 1
+            },
+            {
+              "title": "Ishqalanish kuchi. Tinchlikdagi ishqalanish",
+              "id": "tashqi-kuchlar-tasirida-jismlarning-harakati-7",
+              "hours": 1
+            },
+            {
+              "title": "Sirpanish ishqalanish. Dumalanish ishqalanish",
+              "id": "tashqi-kuchlar-tasirida-jismlarning-harakati-8",
+              "hours": 1
+            },
+            {
+              "title": "Sirpanish ishqalanish koeffitsiyentini aniqlash",
+              "id": "tashqi-kuchlar-tasirida-jismlarning-harakati-9",
+              "hours": 1
+            },
+            {
+              "title": "Tabiatda va texnikada ishqalanish",
+              "id": "tashqi-kuchlar-tasirida-jismlarning-harakati-10",
+              "hours": 1
+            }
+          ]
+        },
+        {
+          "title": "IMPULSNING SAQLANISH QONUNI",
+          "hours": 4,
+          "topics": [
+            {
+              "title": "Impuls. Kuch impulsi. Jism impulsi",
+              "id": "impulsning-saqlanish-qonuni-1",
+              "hours": 1
+            },
+            {
+              "title": "Impulsning saqlanish qonuni",
+              "id": "impulsning-saqlanish-qonuni-2",
+              "hours": 1
+            },
+            {
+              "title": "Reaktiv harakat. Reaktiv harakat haqida tushuncha. Raketaning tuzilishi va harakati",
+              "id": "impulsning-saqlanish-qonuni-3",
+              "hours": 1
+            }
+          ]
+        },
+        {
+          "title": "ISH VA ENERGIYA. ENERGIYANING SAQLANISH QONUNI",
+          "hours": 12,
+          "topics": [
+            {
+              "title": "Mexanik ish. Mexanik ish va uning birliklari",
+              "id": "ish-va-energiya-energiyaning-saqlanish-qonuni-1",
+              "hours": 1
+            },
+            {
+              "title": "Jismni ko‘tarishda va uni shu masofaga gorizontal ko‘chirishda bajarilgan ishni hisoblash",
+              "id": "ish-va-energiya-energiyaning-saqlanish-qonuni-2",
+              "hours": 1
+            },
+            {
+              "title": "Potensial energiya",
+              "id": "ish-va-energiya-energiyaning-saqlanish-qonuni-3",
+              "hours": 1
+            },
+            {
+              "title": "Kinetik energiya",
+              "id": "ish-va-energiya-energiyaning-saqlanish-qonuni-4",
+              "hours": 1
+            },
+            {
+              "title": "Mexanik energiyaning saqlanish qonuni",
+              "id": "ish-va-energiya-energiyaning-saqlanish-qonuni-5",
+              "hours": 1
+            },
+            {
+              "title": "Jism kinetik energiyasining uning tezligi va massasiga bog‘liqligini aniqlash",
+              "id": "ish-va-energiya-energiyaning-saqlanish-qonuni-6",
+              "hours": 1
+            },
+            {
+              "title": "Quvvat. Quvvat, kuch va tezlik orasidagi munosabat",
+              "id": "ish-va-energiya-energiyaning-saqlanish-qonuni-7",
+              "hours": 1
+            },
+            {
+              "title": "Tabiatda energiyaning saqlanishi. Foydali ish koeffitsiyenti",
+              "id": "ish-va-energiya-energiyaning-saqlanish-qonuni-8",
+              "hours": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "grade": 8,
+      "hours": 68,
+      "source": {
+        "title": "Umumiy o'rta ta'limning o'quv dasturi (8-sinf) — Fizika",
+        "url": "https://uzbmb.uz/upload/file/pdf/qabul2025/dasturlar/6.Fizika/8-sinf-Fizika%20fanidan%20o'quv%20dastur.pdf",
+        "year": 2018,
+        "publisher": "Respublika ta'lim markazi (Xalq ta'limi vazirligi)"
+      },
+      "units": [
+        {
+          "title": "ELEKTR ZARYAD. ELEKTR MAYDON",
+          "hours": 9,
+          "topics": [
+            {
+              "title": "Jismlarning zaryadlanishi",
+              "id": "elektr-zaryad-elektr-maydon-1"
+            },
+            {
+              "title": "Elektrlanishning ikki turi",
+              "id": "elektr-zaryad-elektr-maydon-2"
+            },
+            {
+              "title": "Elektr zaryad",
+              "id": "elektr-zaryad-elektr-maydon-3"
+            },
+            {
+              "title": "Zaryadlarning o‘zaro ta’siri",
+              "id": "elektr-zaryad-elektr-maydon-4"
+            },
+            {
+              "title": "Elektr maydon",
+              "id": "elektr-zaryad-elektr-maydon-5"
+            },
+            {
+              "title": "O‘tkazgichlarda elektr zaryadlarning taqsimlanishi",
+              "id": "elektr-zaryad-elektr-maydon-6"
+            },
+            {
+              "title": "Tabiatdagi elektr hodisalar",
+              "id": "elektr-zaryad-elektr-maydon-7"
+            },
+            {
+              "title": "I bobni takrorlash uchun test topshiriqlari",
+              "id": "elektr-zaryad-elektr-maydon-8"
+            }
+          ]
+        },
+        {
+          "title": "ELEKTR TOKI",
+          "hours": 22,
+          "topics": [
+            {
+              "title": "Elektr toki haqida tushuncha",
+              "id": "elektr-toki-1"
+            },
+            {
+              "title": "Tok manbalari",
+              "id": "elektr-toki-2"
+            },
+            {
+              "title": "Akkumlyatorlar",
+              "id": "elektr-toki-3"
+            },
+            {
+              "title": "Elektr kuchlanish va uni o‘lchash",
+              "id": "elektr-toki-4"
+            },
+            {
+              "title": "Kuchlanishni o‘lchash",
+              "id": "elektr-toki-5"
+            },
+            {
+              "title": "Tok kuchi va uni o‘lchash",
+              "id": "elektr-toki-6"
+            }
+          ]
+        },
+        {
+          "title": "ELEKTR TOKINING ISHI VA QUVVATI",
+          "hours": 12,
+          "topics": [
+            {
+              "title": "Elektr tokining ishi",
+              "id": "elektr-tokining-ishi-va-quvvati-1"
+            },
+            {
+              "title": "Elektr tokining quvvati",
+              "id": "elektr-tokining-ishi-va-quvvati-2"
+            }
+          ]
+        },
+        {
+          "title": "TURLI MUHITLARDA ELEKTR TOKI",
+          "hours": 11,
+          "topics": [
+            {
+              "title": "Metallarda elektr toki",
+              "id": "turli-muhitlarda-elektr-toki-1"
+            },
+            {
+              "title": "Suyuqliklarda elektr toki",
+              "id": "turli-muhitlarda-elektr-toki-2"
+            },
+            {
+              "title": "Elektrolitlar",
+              "id": "turli-muhitlarda-elektr-toki-3"
+            },
+            {
+              "title": "Elektroliz",
+              "id": "turli-muhitlarda-elektr-toki-4"
+            },
+            {
+              "title": "Faradeyning ikkinchi qonuni",
+              "id": "turli-muhitlarda-elektr-toki-5"
+            },
+            {
+              "title": "Elektrolizdan turmushda va texnikada foydalanish",
+              "id": "turli-muhitlarda-elektr-toki-6"
+            },
+            {
+              "title": "Galvanostegiya",
+              "id": "turli-muhitlarda-elektr-toki-7"
+            },
+            {
+              "title": "Vakuumda elektr toki",
+              "id": "turli-muhitlarda-elektr-toki-8"
+            },
+            {
+              "title": "Gazlarda elektr toki",
+              "id": "turli-muhitlarda-elektr-toki-9"
+            },
+            {
+              "title": "Elektr razryadning turlari va ulardan foydalanish",
+              "id": "turli-muhitlarda-elektr-toki-10"
+            },
+            {
+              "title": "IV bobni takrorlash uchun test topshiriqlari",
+              "id": "turli-muhitlarda-elektr-toki-11"
+            }
+          ]
+        },
+        {
+          "title": "yuzasidan muhim xulosalar",
+          "topics": [
+            {
+              "title": "Namoyish tajribalari: 1. Suyuqliklarda elektr tokining o‘tishini kuzatish. 2. Suv va tuzli eritmaning elektr o‘tkazuvchanligini taqqoslash. 3. Mustaqil razryad",
+              "id": "yuzasidan-muhim-xulosalar-1"
+            }
+          ]
+        },
+        {
+          "title": "MAGNIT MAYDON",
+          "hours": 14,
+          "topics": [
+            {
+              "title": "Magnit maydon",
+              "id": "magnit-maydon-1"
+            },
+            {
+              "title": "Magnit maydonni xarakterlovchi parametrlar",
+              "id": "magnit-maydon-2"
+            },
+            {
+              "title": "Yerning magnit maydoni",
+              "id": "magnit-maydon-3"
+            },
+            {
+              "title": "Tokning magnit maydoni",
+              "id": "magnit-maydon-4"
+            },
+            {
+              "title": "Magnit maydonning tokli o‘tkazgichga ta’siri",
+              "id": "magnit-maydon-5"
+            },
+            {
+              "title": "Bir jinsli magnit maydonida tokli ramkaning aylanma harakati",
+              "id": "magnit-maydon-6"
+            },
+            {
+              "title": "Magnit maydonida zaryadli zarraning harakati",
+              "id": "magnit-maydon-7"
+            },
+            {
+              "title": "Elektromagnitlar",
+              "id": "magnit-maydon-8"
+            },
+            {
+              "title": "Elektromagnit relening tuzilishi va ishlash prinsipi",
+              "id": "magnit-maydon-9"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "grade": 9,
+      "hours": 68,
+      "source": {
+        "title": "Umumiy o'rta ta'limning o'quv dasturi (9-sinf) — Fizika",
+        "url": "https://uzbmb.uz/upload/file/pdf/qabul2025/dasturlar/6.Fizika/9-sinf-Fizika%20fanidan%20o'quv%20dastur.pdf",
+        "year": 2018,
+        "publisher": "Respublika ta'lim markazi (Xalq ta'limi vazirligi)"
+      },
+      "units": [
+        {
+          "title": "MODDA TUZILISHINING MOLEKULYAR-KINETIK NAZARIYASI ASOSLARI",
+          "hours": 16,
+          "topics": [
+            {
+              "title": "Modda tuzilishining molekulyar-kinetik nazariyasi",
+              "id": "modda-tuzilishining-molekulyar-kinetik-nazariyas-1"
+            },
+            {
+              "title": "Molekulalarning massasi va o‘lchami",
+              "id": "modda-tuzilishining-molekulyar-kinetik-nazariyas-2"
+            },
+            {
+              "title": "Molekulalarning massasi",
+              "id": "modda-tuzilishining-molekulyar-kinetik-nazariyas-3"
+            },
+            {
+              "title": "Modda miqdori",
+              "id": "modda-tuzilishining-molekulyar-kinetik-nazariyas-4"
+            },
+            {
+              "title": "Molekulalar soni va konsentratsiyasi. yo‘naltirilgan va fanlararo bog‘liqlikka doir (mantiqiy) masalalar yechish",
+              "id": "modda-tuzilishining-molekulyar-kinetik-nazariyas-5"
+            },
+            {
+              "title": "Ideal gaz",
+              "id": "modda-tuzilishining-molekulyar-kinetik-nazariyas-6"
+            },
+            {
+              "title": "Temperatura",
+              "id": "modda-tuzilishining-molekulyar-kinetik-nazariyas-7"
+            },
+            {
+              "title": "Gaz molekulalarining harakat tezligi",
+              "id": "modda-tuzilishining-molekulyar-kinetik-nazariyas-8"
+            },
+            {
+              "title": "O.Shtern tajribasi. yo‘naltirilgan va fanlararo bog‘liqlikka doir (mantiqiy) masalalar yechish",
+              "id": "modda-tuzilishining-molekulyar-kinetik-nazariyas-9"
+            },
+            {
+              "title": "Ideal gaz holatining tenglamalari",
+              "id": "modda-tuzilishining-molekulyar-kinetik-nazariyas-10"
+            },
+            {
+              "title": "Izotermik jarayon",
+              "id": "modda-tuzilishining-molekulyar-kinetik-nazariyas-11"
+            },
+            {
+              "title": "Izobarik jarayon",
+              "id": "modda-tuzilishining-molekulyar-kinetik-nazariyas-12"
+            },
+            {
+              "title": "Izoxorik jarayon",
+              "id": "modda-tuzilishining-molekulyar-kinetik-nazariyas-13"
+            }
+          ]
+        },
+        {
+          "title": "yuzasidan muhim xulosalar",
+          "topics": [
+            {
+              "title": "Namoyish tajribalari: 1. Molekulalar xaotik harakati modeli. 2. Gazlarning siqiluvchanligini kuzatish. 3. Izojarayonlar",
+              "id": "yuzasidan-muhim-xulosalar-1"
+            }
+          ]
+        },
+        {
+          "title": "ICHKI ENERGIYA VA TERMODINAMIKA ELEMENTLARI",
+          "topics": [
+            {
+              "title": "Ichki energiya",
+              "id": "ichki-energiya-va-termodinamika-elementlari-1"
+            },
+            {
+              "title": "Termodinamik ish",
+              "id": "ichki-energiya-va-termodinamika-elementlari-2"
+            },
+            {
+              "title": "Ishning geometrik talqini",
+              "id": "ichki-energiya-va-termodinamika-elementlari-3"
+            },
+            {
+              "title": "Issiqlik miqdori",
+              "id": "ichki-energiya-va-termodinamika-elementlari-4"
+            }
+          ]
+        },
+        {
+          "title": "ISSIQLIK DVIGATELLARI",
+          "hours": 6,
+          "topics": [
+            {
+              "title": "Ichki yonuv dvigatellari",
+              "id": "issiqlik-dvigatellari-1"
+            },
+            {
+              "title": "Issiqlik dvigatellarining ishlash prinsipi",
+              "id": "issiqlik-dvigatellari-2"
+            },
+            {
+              "title": "Issiqlik mashinalari va tabiatni muhofaza qilish",
+              "id": "issiqlik-dvigatellari-3"
+            },
+            {
+              "title": "Issiqlik dvigatellari va ekologiya",
+              "id": "issiqlik-dvigatellari-4"
+            },
+            {
+              "title": "III bobni takrorlash uchun test topshiriqlari",
+              "id": "issiqlik-dvigatellari-5"
+            }
+          ]
+        },
+        {
+          "title": "yuzasidan muhim xulosalar",
+          "topics": [
+            {
+              "title": "Namoyish tajribalari: 1. Ichki yonuv dvigatelining tuzilishi va ishlashi (modelda). 2. Raketaning tuzilishi va ishlashi o‘quv film. 3. Bug‘ turbinasining tuzilishi va ishlashi (plakatda)",
+              "id": "yuzasidan-muhim-xulosalar-b5-1"
+            }
+          ]
+        },
+        {
+          "title": "SUYUQLIK VA QATTIQ JISMLARNING XOSSALARI",
+          "hours": 14,
+          "topics": [
+            {
+              "title": "Suyuqlikning xossalari",
+              "id": "suyuqlik-va-qattiq-jismlarning-xossalari-1"
+            },
+            {
+              "title": "Sirt taranglik kuchi",
+              "id": "suyuqlik-va-qattiq-jismlarning-xossalari-2"
+            },
+            {
+              "title": "Ho‘llash",
+              "id": "suyuqlik-va-qattiq-jismlarning-xossalari-3"
+            }
+          ]
+        },
+        {
+          "title": "OPTIKA",
+          "hours": 16,
+          "topics": [
+            {
+              "title": "Yorug‘lik tezligini aniqlash",
+              "id": "optika-1"
+            },
+            {
+              "title": "Yorug‘likning muhitdagi tezligi",
+              "id": "optika-2"
+            },
+            {
+              "title": "Yorug‘likning qaytish va sinish qonunlari",
+              "id": "optika-3"
+            },
+            {
+              "title": "To‘la ichki qaytish",
+              "id": "optika-4"
+            }
+          ]
+        },
+        {
+          "title": "OLAMNING FIZIK MANZARASI. FIZIKA-TEXNIKA TARAQQIYOTI",
+          "hours": 3,
+          "topics": [
+            {
+              "title": "Olamning yagona fizik manzarasi",
+              "id": "olamning-fizik-manzarasi-fizika-texnika-taraqqiy-1"
+            },
+            {
+              "title": "Olamning elektromagnit manzarasi",
+              "id": "olamning-fizik-manzarasi-fizika-texnika-taraqqiy-2"
+            },
+            {
+              "title": "Fizika va texnika taraqqiyoti",
+              "id": "olamning-fizik-manzarasi-fizika-texnika-taraqqiy-3"
+            },
+            {
+              "title": "O‘quv sayohati",
+              "id": "olamning-fizik-manzarasi-fizika-texnika-taraqqiy-4"
+            },
+            {
+              "title": "Fizika fanini o‘qitishni mavzuiy rejalashtirish № Bo‘lim va boblar nomi Soatlar taqsimoti Jami Nazariy Amaliy va",
+              "id": "olamning-fizik-manzarasi-fizika-texnika-taraqqiy-5"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "grade": 10,
+      "source": {
+        "title": "Umumiy o'rta ta'limning o'quv dasturi (10-sinf) — Fizika",
+        "url": "https://uzbmb.uz/upload/file/pdf/qabul2025/dasturlar/6.Fizika/10-sinf-Fizika%20fanidan%20o'quv%20dastur.pdf",
+        "year": 2018,
+        "publisher": "Respublika ta'lim markazi (Xalq ta'limi vazirligi)"
+      },
+      "units": [
+        {
+          "title": "Dastur mavzulari",
+          "topics": [
+            {
+              "title": "Muvozanatlashmagan kuchlar",
+              "id": "dastur-mavzulari-1"
+            },
+            {
+              "title": "Markazga intilma kuch",
+              "id": "dastur-mavzulari-2"
+            },
+            {
+              "title": "Gravitatsiya maydonida harakat",
+              "id": "dastur-mavzulari-3"
+            },
+            {
+              "title": "Jism og‘irligining harakat turiga bog‘liqligi",
+              "id": "dastur-mavzulari-4"
+            },
+            {
+              "title": "Vaznsizlik",
+              "id": "dastur-mavzulari-5"
+            },
+            {
+              "title": "Jismning bir necha kuch ta’siridagi harakati",
+              "id": "dastur-mavzulari-6"
+            },
+            {
+              "title": "Jismning qiya tekislikdagi harakati",
+              "id": "dastur-mavzulari-7"
+            },
+            {
+              "title": "Jismning qiya tekislik bo‘ylab ko‘chirishda bajarilgan ish",
+              "id": "dastur-mavzulari-8"
+            },
+            {
+              "title": "Qiya tekislikning foydali ish koeffitsiyenti. bog‘liqlikka doir masalalar yechish",
+              "id": "dastur-mavzulari-9"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "grade": 11,
+      "hours": 68,
+      "source": {
+        "title": "Umumiy o'rta ta'limning o'quv dasturi (11-sinf) — Fizika",
+        "url": "https://uzbmb.uz/upload/file/pdf/qabul2025/dasturlar/6.Fizika/11-sinf-Fizika%20va%20astronomiya%20fanidan%20o'quv%20dastur.pdf",
+        "year": 2018,
+        "publisher": "Respublika ta'lim markazi (Xalq ta'limi vazirligi)"
+      },
+      "units": [
+        {
+          "title": "MAGNIT MAYDONI",
+          "hours": 9,
+          "topics": [
+            {
+              "title": "Magnit maydoni",
+              "id": "magnit-maydoni-1"
+            },
+            {
+              "title": "Bir jinsli magnit maydonning tokli ramkani aylantiruvchi momenti",
+              "id": "magnit-maydoni-2"
+            },
+            {
+              "title": "Magnit maydonga kiritilgan tokli ramkaning harakati",
+              "id": "magnit-maydoni-3"
+            },
+            {
+              "title": "Tokli to‘g‘ri o‘tkazgichning halqa va g‘ltakning magnit maydoni",
+              "id": "magnit-maydoni-4"
+            },
+            {
+              "title": "Magnit maydonning supurpozisiya prinsipi",
+              "id": "magnit-maydoni-5"
+            },
+            {
+              "title": "Tokli o‘tkazgichni magnit maydonda ko‘chirishda bajarilgan ish",
+              "id": "magnit-maydoni-6"
+            },
+            {
+              "title": "Tokli o‘tkazgichlarning o‘zaro ta’sir kuchi",
+              "id": "magnit-maydoni-7"
+            },
+            {
+              "title": "Bir jinsli magnit maydonda zaryadli zarraning harakati",
+              "id": "magnit-maydoni-8"
+            },
+            {
+              "title": "Bir jinsli magnit maydonida zaryadli zarraning harakati",
+              "id": "magnit-maydoni-9"
+            }
+          ]
+        },
+        {
+          "title": "ELEKTROMAGNIT INDUKSIYA",
+          "hours": 7,
+          "topics": [
+            {
+              "title": "Elektromagnit induksiya hodisasi",
+              "id": "elektromagnit-induksiya-1"
+            },
+            {
+              "title": "Faradey qonuni",
+              "id": "elektromagnit-induksiya-2"
+            },
+            {
+              "title": "O‘zinduksiya hodisasi",
+              "id": "elektromagnit-induksiya-3"
+            },
+            {
+              "title": "Moddalarning magnit xossalari",
+              "id": "elektromagnit-induksiya-4"
+            },
+            {
+              "title": "Magnit maydon energiyasi",
+              "id": "elektromagnit-induksiya-5"
+            },
+            {
+              "title": "Namoyish tajribalari: 1. O‘zinduksiya hodisasi. 2. O‘zinduksiya EYuK",
+              "id": "elektromagnit-induksiya-6"
+            }
+          ]
+        },
+        {
+          "title": "ELEKTROMAGNIT TEBRANISHLAR",
+          "hours": 16,
+          "topics": [
+            {
+              "title": "Erkin elektromagnit tebranishlar (tebranish konturi). Tebranish konturida energiyaning o‘zgarishi",
+              "id": "elektromagnit-tebranishlar-1"
+            },
+            {
+              "title": "Tebranishlarni grafik ravishda tasvirlash",
+              "id": "elektromagnit-tebranishlar-2"
+            },
+            {
+              "title": "Garmonik va so‘nuvchi elektromagnit tebranishlarni tasvirlash",
+              "id": "elektromagnit-tebranishlar-3"
+            },
+            {
+              "title": "Tranzistorli elektromagnit tebranishlar generatori",
+              "id": "elektromagnit-tebranishlar-4"
+            },
+            {
+              "title": "O‘zgaruvchan tok zanjirida aktiv qarshilik",
+              "id": "elektromagnit-tebranishlar-5"
+            },
+            {
+              "title": "O‘zgaruvchan tok zanjirida kondensator",
+              "id": "elektromagnit-tebranishlar-6"
+            },
+            {
+              "title": "O‘zgaruvchan tok zanjiridagi induktiv g‘altak",
+              "id": "elektromagnit-tebranishlar-7"
+            },
+            {
+              "title": "Aktiv qarshilik, induktiv g‘altak va kondensator ketma–ket ulangan o‘zgaruvchan tok zanjiri uchun Om qonuni",
+              "id": "elektromagnit-tebranishlar-8"
+            },
+            {
+              "title": "Zanjirning to‘la qarshiligi",
+              "id": "elektromagnit-tebranishlar-9"
+            },
+            {
+              "title": "O‘zgaruvchan tok zanjirida rezonans hodisasi",
+              "id": "elektromagnit-tebranishlar-10"
+            }
+          ]
+        },
+        {
+          "title": "ELEKTROMAGNIT TO‘LQINLAR VA TO‘LQIN OPTIKASI",
+          "hours": 15,
+          "topics": [
+            {
+              "title": "Elektromagnit tebranishlarning tarqalishi",
+              "id": "elektromagnit-tolqinlar-va-tolqin-optikasi-1"
+            },
+            {
+              "title": "Elektromagnit to‘lqinlarning umumiy xossalari (ikki muhit chegarasida qaytishi va sinishi). To‘lqinni xarakterlovchi asosiy tushuncha va kattaliklar",
+              "id": "elektromagnit-tolqinlar-va-tolqin-optikasi-2"
+            },
+            {
+              "title": "Radioaloqaning fizik asoslari",
+              "id": "elektromagnit-tolqinlar-va-tolqin-optikasi-3"
+            },
+            {
+              "title": "Teleko‘rsatuvlarning fizik asoslari",
+              "id": "elektromagnit-tolqinlar-va-tolqin-optikasi-4"
+            },
+            {
+              "title": "Yorug‘lik interferensiyasi va difraksiyasi",
+              "id": "elektromagnit-tolqinlar-va-tolqin-optikasi-5"
+            }
+          ]
+        },
+        {
+          "title": "NISBIYLIK NAZARIYASI",
+          "hours": 5,
+          "topics": [
+            {
+              "title": "Maxsus nisbiylik nazariyasining asoslari",
+              "id": "nisbiylik-nazariyasi-1"
+            },
+            {
+              "title": "Maxsus nisbiylik nazariyasi yaratilishi",
+              "id": "nisbiylik-nazariyasi-2"
+            },
+            {
+              "title": "Massaning tezlikka bog‘liqligi",
+              "id": "nisbiylik-nazariyasi-3"
+            },
+            {
+              "title": "Nisbiylik nazariyasi postulatlardan kelib chiqadigan asosiy natijalar",
+              "id": "nisbiylik-nazariyasi-4"
+            },
+            {
+              "title": "Adabiyotlar: 2.13; 2.14; 2.21; 2.22; 2.31; 3.6; 3.16",
+              "id": "nisbiylik-nazariyasi-5"
+            }
+          ]
+        },
+        {
+          "title": "KVANT FIZIKASI",
+          "hours": 4,
+          "topics": [
+            {
+              "title": "Kvant fizikasining paydo bo‘lishi tarixi",
+              "id": "kvant-fizikasi-1"
+            },
+            {
+              "title": "Kvant fizikasi",
+              "id": "kvant-fizikasi-2"
+            },
+            {
+              "title": "Fotoelektrik effekt",
+              "id": "kvant-fizikasi-3"
+            },
+            {
+              "title": "Fotoeffekt hodisasi",
+              "id": "kvant-fizikasi-4"
+            },
+            {
+              "title": "Fotonning impulsi",
+              "id": "kvant-fizikasi-5"
+            },
+            {
+              "title": "Adabiyotlar: 2.13; 2.15; 2.21; 2.22; 2.31; 3.6; 3.16",
+              "id": "kvant-fizikasi-6"
+            }
+          ]
+        },
+        {
+          "title": "ATOM VA YADRO FIZIKASI. ATOM ENERGETIKASINING FIZIK ASOSLARI",
+          "hours": 12,
+          "topics": [
+            {
+              "title": "Atomning Bor modeli",
+              "id": "atom-va-yadro-fizikasi-atom-energetikasining-fiz-1"
+            },
+            {
+              "title": "Atom tuzilishi haqida ma’lumotlar",
+              "id": "atom-va-yadro-fizikasi-atom-energetikasining-fiz-2"
+            },
+            {
+              "title": "Lazerlar va ularning turlari",
+              "id": "atom-va-yadro-fizikasi-atom-energetikasining-fiz-3"
+            },
+            {
+              "title": "Yoqut lazeri",
+              "id": "atom-va-yadro-fizikasi-atom-energetikasining-fiz-4"
+            },
+            {
+              "title": "Atom yadrosining tarkibi",
+              "id": "atom-va-yadro-fizikasi-atom-energetikasining-fiz-5"
+            },
+            {
+              "title": "Radioaktivlik nurlanishni va zarralarni qayd qilish usullari",
+              "id": "atom-va-yadro-fizikasi-atom-energetikasining-fiz-6"
+            },
+            {
+              "title": "Radioaktiv yemirilish qonuni",
+              "id": "atom-va-yadro-fizikasi-atom-energetikasining-fiz-7"
+            },
+            {
+              "title": "Yarim yemirilish doimiysi",
+              "id": "atom-va-yadro-fizikasi-atom-energetikasining-fiz-8"
+            },
+            {
+              "title": "Yadro reaksiyalari",
+              "id": "atom-va-yadro-fizikasi-atom-energetikasining-fiz-9"
+            },
+            {
+              "title": "Radioaktiv aylanishlar",
+              "id": "atom-va-yadro-fizikasi-atom-energetikasining-fiz-10"
+            },
+            {
+              "title": "Elementar zarralar.Elementar zarralar",
+              "id": "atom-va-yadro-fizikasi-atom-energetikasining-fiz-11"
+            },
+            {
+              "title": "Atom energetikasining fizik asoslari",
+              "id": "atom-va-yadro-fizikasi-atom-energetikasining-fiz-12"
+            },
+            {
+              "title": "O‘zbekistonda yadro fizikasi sohasidagi tadqiqotlar va ularning natijalaridan xalq xo‘jaligida foydalanish",
+              "id": "atom-va-yadro-fizikasi-atom-energetikasining-fiz-13"
+            },
+            {
+              "title": "O‘quv sayohati",
+              "id": "atom-va-yadro-fizikasi-atom-energetikasining-fiz-14"
+            }
+          ]
+        },
+        {
+          "title": "AMALIY ASTRONOMIYA ASOSLARI",
+          "hours": 5,
+          "topics": [
+            {
+              "title": "Yoritgichlarning sutkalik ko‘rinma harakatlari",
+              "id": "amaliy-astronomiya-asoslari-1"
+            },
+            {
+              "title": "Quyosh, Oy va planetalarning ko‘rinma harakatlari",
+              "id": "amaliy-astronomiya-asoslari-2"
+            },
+            {
+              "title": "Fuko mayatnigi.Yerning o‘z o‘qi atrofida aylanishini kuzatishlar yordamida isbotlash",
+              "id": "amaliy-astronomiya-asoslari-3"
+            },
+            {
+              "title": "Dunyo tomonlari, osmon meridian va osmon ekvatori",
+              "id": "amaliy-astronomiya-asoslari-4"
+            },
+            {
+              "title": "Quyoshning yillik ko‘rinma harakati",
+              "id": "amaliy-astronomiya-asoslari-5"
+            },
+            {
+              "title": "Bahorgi va kuzgi tengkunliklar, yozgi va qishki quyosh turishi nuqtalari",
+              "id": "amaliy-astronomiya-asoslari-6"
+            },
+            {
+              "title": "Zodiak yulduz turkumlari",
+              "id": "amaliy-astronomiya-asoslari-7"
+            },
+            {
+              "title": "Osmon koordinatalari",
+              "id": "amaliy-astronomiya-asoslari-8"
+            },
+            {
+              "title": "Yulduzlarning xaritalari",
+              "id": "amaliy-astronomiya-asoslari-9"
+            },
+            {
+              "title": "Yulduzlarning ko‘rinma yulduz kattaliklari",
+              "id": "amaliy-astronomiya-asoslari-10"
+            },
+            {
+              "title": "Yulduzlarning osmondagi o‘rnini xaritalarda tasvirlash",
+              "id": "amaliy-astronomiya-asoslari-11"
+            },
+            {
+              "title": "Olam Qutbining balandligi va joyining geografik kenglamasi orasidagi bog‘lanish",
+              "id": "amaliy-astronomiya-asoslari-12"
+            },
+            {
+              "title": "Yoritgichlarning kulminatsiyalari va kulminatsiya balandliklari",
+              "id": "amaliy-astronomiya-asoslari-13"
+            },
+            {
+              "title": "Kuzatuvchi Yer ekvatori, qutblari va o‘rta kengliklarda bo‘lganda osmon sferasining sutkalik ko‘rinma aylanishi",
+              "id": "amaliy-astronomiya-asoslari-14"
+            },
+            {
+              "title": "Joyning geografik kenglamasini kuzatishlardan aniqlashning ikki usuli: qutb yulduzining gorizontdan balndligini o‘lchash; Quyoshning tush paytidagi balandligi va og‘ishi orqali topish",
+              "id": "amaliy-astronomiya-asoslari-15"
+            },
+            {
+              "title": "Vaqtni o‘lchashning asoslari",
+              "id": "amaliy-astronomiya-asoslari-16"
+            },
+            {
+              "title": "Ikki punkt orasidagi vaqtlar farqi",
+              "id": "amaliy-astronomiya-asoslari-17"
+            },
+            {
+              "title": "Kalendarlar",
+              "id": "amaliy-astronomiya-asoslari-18"
+            },
+            {
+              "title": "Oyning harakati, fazalari va davrlari",
+              "id": "amaliy-astronomiya-asoslari-19"
+            }
+          ]
+        },
+        {
+          "title": "QUYOSH SISTEMASINING TUZILISHI VA OSMON JISMLARINING HARAKATI",
+          "hours": 5,
+          "topics": [
+            {
+              "title": "Quyosh sistemasining tuzilishi",
+              "id": "quyosh-sistemasining-tuzilishi-va-osmon-jismlari-1"
+            },
+            {
+              "title": "Quyosh sistemasining masshtabi va a’zolari",
+              "id": "quyosh-sistemasining-tuzilishi-va-osmon-jismlari-2"
+            },
+            {
+              "title": "Quyosh va uning a’zolari: planetalar va ularning yo‘ldoshlari, asteroidlar, kometalar, meteor jismlar",
+              "id": "quyosh-sistemasining-tuzilishi-va-osmon-jismlari-3"
+            },
+            {
+              "title": "Sutkalik va sutkalik-gorizontal parallaks",
+              "id": "quyosh-sistemasining-tuzilishi-va-osmon-jismlari-4"
+            },
+            {
+              "title": "Quyosh sistemasidagi jismlargacha bo‘lgan masofalarni aniqlashning trigonometrik va radiolokatsion usullari",
+              "id": "quyosh-sistemasining-tuzilishi-va-osmon-jismlari-5"
+            },
+            {
+              "title": "Astronomiyada uzunlik o‘lchovi birliklari",
+              "id": "quyosh-sistemasining-tuzilishi-va-osmon-jismlari-6"
+            },
+            {
+              "title": "Astronomik birlik, yorug‘lik yili va parsek, kilo va megapersek",
+              "id": "quyosh-sistemasining-tuzilishi-va-osmon-jismlari-7"
+            },
+            {
+              "title": "Kepler qonunlari",
+              "id": "quyosh-sistemasining-tuzilishi-va-osmon-jismlari-8"
+            },
+            {
+              "title": "Keplerning birinchi va ikkinchi qonunlari",
+              "id": "quyosh-sistemasining-tuzilishi-va-osmon-jismlari-9"
+            },
+            {
+              "title": "Ikki jism masalasi",
+              "id": "quyosh-sistemasining-tuzilishi-va-osmon-jismlari-10"
+            }
+          ]
+        },
+        {
+          "title": "ASTROFIZIK TADQIQOT METODLARI",
+          "hours": 3,
+          "topics": [
+            {
+              "title": "Osmonni elektromagnit to‘lqinli nurlarda o‘rganish-keng to‘lqinli astronomiyaning asosi",
+              "id": "astrofizik-tadqiqot-metodlari-1"
+            },
+            {
+              "title": "Astrofizik tekshirish usullari: optik va radioastronomiya, kosmik observetoriyalar, radio va rentgen diapazonlarni kuzatish",
+              "id": "astrofizik-tadqiqot-metodlari-2"
+            },
+            {
+              "title": "Optik teleskoplar",
+              "id": "astrofizik-tadqiqot-metodlari-3"
+            },
+            {
+              "title": "Radioteleskoplar haqida tushuncha",
+              "id": "astrofizik-tadqiqot-metodlari-4"
+            },
+            {
+              "title": "Teleskoplarning turlari: refraktor va reflektor",
+              "id": "astrofizik-tadqiqot-metodlari-5"
+            },
+            {
+              "title": "Nurlanish qonunlari va osmon jismlarining fizik tabiatlarini spektral metodlar yordamida o‘rganish",
+              "id": "astrofizik-tadqiqot-metodlari-6"
+            },
+            {
+              "title": "Kerakli formulalar",
+              "id": "astrofizik-tadqiqot-metodlari-7"
+            }
+          ]
+        },
+        {
+          "title": "QUYOSH SISTEMASI JISMLARINING FIZIK TABIATI",
+          "hours": 7,
+          "topics": [
+            {
+              "title": "Quyosh eng yaqin yulduz",
+              "id": "quyosh-sistemasi-jismlarining-fizik-tabiati-1"
+            },
+            {
+              "title": "Quyosh fotosferasi va uning tuzilmalari",
+              "id": "quyosh-sistemasi-jismlarining-fizik-tabiati-2"
+            },
+            {
+              "title": "Quyosh xromosferasi va toji",
+              "id": "quyosh-sistemasi-jismlarining-fizik-tabiati-3"
+            },
+            {
+              "title": "Quyosh toji va “quyosh shamoli”. Termoyadro reaktsiyalari: proton-proton skill, uglerod-azot skill",
+              "id": "quyosh-sistemasi-jismlarining-fizik-tabiati-4"
+            },
+            {
+              "title": "Yer rusumidagi planetalar",
+              "id": "quyosh-sistemasi-jismlarining-fizik-tabiati-5"
+            },
+            {
+              "title": "Yer va uning tabiiy yo‘ldoshi- Oy. Mars",
+              "id": "quyosh-sistemasi-jismlarining-fizik-tabiati-6"
+            },
+            {
+              "title": "Mars relefi",
+              "id": "quyosh-sistemasi-jismlarining-fizik-tabiati-7"
+            },
+            {
+              "title": "Gigant planetalar, ularning yo‘ldoshlari va halqalari",
+              "id": "quyosh-sistemasi-jismlarining-fizik-tabiati-8"
+            },
+            {
+              "title": "Saturn halqasi",
+              "id": "quyosh-sistemasi-jismlarining-fizik-tabiati-9"
+            },
+            {
+              "title": "Asteroidlar va mitti planetalar",
+              "id": "quyosh-sistemasi-jismlarining-fizik-tabiati-10"
+            },
+            {
+              "title": "Kometalar (dumli yulduzlar). Kometalarning kimyoviy tarkibi",
+              "id": "quyosh-sistemasi-jismlarining-fizik-tabiati-11"
+            },
+            {
+              "title": "Gaz-chang bulutlar",
+              "id": "quyosh-sistemasi-jismlarining-fizik-tabiati-12"
+            }
+          ]
+        },
+        {
+          "title": "YULDUZLAR",
+          "hours": 5,
+          "topics": [
+            {
+              "title": "Yillik parallaks, yulduzlargacha masofalarni aniqlash",
+              "id": "yulduzlar-1"
+            },
+            {
+              "title": "Yulduzlarning parallaktik siljishi",
+              "id": "yulduzlar-2"
+            },
+            {
+              "title": "Yulduzlarning absolyut kattaligi va uning yorqinligi bilan bog‘liqligi",
+              "id": "yulduzlar-3"
+            },
+            {
+              "title": "Absolyut yulduz kattaligi, uning ko‘rinma yulduz kattaligi bilan bog‘liqligi",
+              "id": "yulduzlar-4"
+            },
+            {
+              "title": "Yulduzlarning yorqinligi",
+              "id": "yulduzlar-5"
+            },
+            {
+              "title": "Fizik qo‘shaloq yulduzlar va ularning turlari",
+              "id": "yulduzlar-6"
+            },
+            {
+              "title": "Fizik o‘zgaruvchi yulduzlar: sefeidlar, yangi va o‘ta yangilar",
+              "id": "yulduzlar-7"
+            },
+            {
+              "title": "Sefeidlarning davrlari va yorqinliklari orasidagi bog‘lanish",
+              "id": "yulduzlar-8"
+            },
+            {
+              "title": "Yulduzlarning evolyutsiyasi",
+              "id": "yulduzlar-9"
+            }
+          ]
+        },
+        {
+          "title": "KOINOTNING TUZILISHI VA EVOLYUTSIYASI",
+          "hours": 8,
+          "topics": [
+            {
+              "title": "Galaktikamizning tuzilishi, tarkibi va aylanishi",
+              "id": "koinotning-tuzilishi-va-evolyutsiyasi-1"
+            },
+            {
+              "title": "Sharsimon yulduz to‘dalari",
+              "id": "koinotning-tuzilishi-va-evolyutsiyasi-2"
+            },
+            {
+              "title": "Diffuz va chang tumanliklar",
+              "id": "koinotning-tuzilishi-va-evolyutsiyasi-3"
+            },
+            {
+              "title": "Tashqi galaktikalar",
+              "id": "koinotning-tuzilishi-va-evolyutsiyasi-4"
+            },
+            {
+              "title": "Galaktikalarning Habbl sinflashtirishlari",
+              "id": "koinotning-tuzilishi-va-evolyutsiyasi-5"
+            },
+            {
+              "title": "Galaktikalargacha masofalarni aniqlash",
+              "id": "koinotning-tuzilishi-va-evolyutsiyasi-6"
+            },
+            {
+              "title": "Radionurlanish manbalari",
+              "id": "koinotning-tuzilishi-va-evolyutsiyasi-7"
+            },
+            {
+              "title": "Koinotning kengayishi",
+              "id": "koinotning-tuzilishi-va-evolyutsiyasi-8"
+            },
+            {
+              "title": "Galaktikalarning Koinotda taqsimlanishi",
+              "id": "koinotning-tuzilishi-va-evolyutsiyasi-9"
+            },
+            {
+              "title": "O‘ta galaktika va metagalaktika",
+              "id": "koinotning-tuzilishi-va-evolyutsiyasi-10"
+            },
+            {
+              "title": "KOSMONAVTIKA ELEMENTLARI (chuqurlashtirilgan 34 soat) Kosmonavtika predmeti va uning boshqa fanlar bilan aloqasi",
+              "id": "koinotning-tuzilishi-va-evolyutsiyasi-11"
+            },
+            {
+              "title": "Siolkovskiy – kosmonavtikaning ilmiy asoschisi",
+              "id": "koinotning-tuzilishi-va-evolyutsiyasi-12"
+            },
+            {
+              "title": "Kosmonavtika inson xizmatida",
+              "id": "koinotning-tuzilishi-va-evolyutsiyasi-13"
+            },
+            {
+              "title": "Raketa harakati qonunlari",
+              "id": "koinotning-tuzilishi-va-evolyutsiyasi-14"
+            },
+            {
+              "title": "Raketaning strukturasi va konstruktiv xarakteristikasi",
+              "id": "koinotning-tuzilishi-va-evolyutsiyasi-15"
+            },
+            {
+              "title": "Raketaning kostruktiv xarakteristikasi",
+              "id": "koinotning-tuzilishi-va-evolyutsiyasi-16"
+            },
+            {
+              "title": "Tortishishning markaziy maydonida harakatlanayotgan jismning orbitalari",
+              "id": "koinotning-tuzilishi-va-evolyutsiyasi-17"
+            },
+            {
+              "title": "Ta’sir sferasi va KA trayektoriyalarini taxminiy hisoblash",
+              "id": "koinotning-tuzilishi-va-evolyutsiyasi-18"
+            },
+            {
+              "title": "Geosentrik va geliosentrik trayektoriyalar",
+              "id": "koinotning-tuzilishi-va-evolyutsiyasi-19"
+            },
+            {
+              "title": "Yer sun’iy yo‘ldoshlarining orbita elementlari",
+              "id": "koinotning-tuzilishi-va-evolyutsiyasi-20"
+            },
+            {
+              "title": "Orbital manyovrlar",
+              "id": "koinotning-tuzilishi-va-evolyutsiyasi-21"
+            },
+            {
+              "title": "Kosmik apparatlarni Oyga uchirish",
+              "id": "koinotning-tuzilishi-va-evolyutsiyasi-22"
+            },
+            {
+              "title": "Oyga borish va qaytish trayektoriyalari",
+              "id": "koinotning-tuzilishi-va-evolyutsiyasi-23"
+            },
+            {
+              "title": "Yerning ta’sir sferasi ichida KA harakatlari",
+              "id": "koinotning-tuzilishi-va-evolyutsiyasi-24"
+            },
+            {
+              "title": "Gomon orbitalari bo‘ylab uchishlar",
+              "id": "koinotning-tuzilishi-va-evolyutsiyasi-25"
+            },
+            {
+              "title": "Kosmik apparatning mo‘ljallangan planeta ta’sir sferasi ichidagi harakati",
+              "id": "koinotning-tuzilishi-va-evolyutsiyasi-26"
+            },
+            {
+              "title": "Teleskop yordamida kuzatishlar: 1. Quyosh sirti obyektlarini (dog‘lar, mash’allar) va Quyoshning aylanishini kuzatish",
+              "id": "koinotning-tuzilishi-va-evolyutsiyasi-27"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

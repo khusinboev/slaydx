@@ -2,7 +2,7 @@
   "version": "2026-09-16",
   "sources": [
     {
-      "title": "Umumiy o'rta ta'limning o'quv dasturlari (qabul-2025 to'plami)",
+      "title": "Umumiy o'rta ta'limning fan o'quv dasturlari (qabul-2025 to'plami)",
       "url": "https://uzbmb.uz/upload/file/pdf/qabul2025/dasturlar/",
       "publisher": "Respublika ta'lim markazi (Xalq ta'limi vazirligi)",
       "year": 2018
@@ -14,7 +14,106 @@
       "uz": "Matematika",
       "ru": "Математика",
       "en": "Mathematics",
-      "grades": [11]
+      "grades": [
+        5,
+        6,
+        7,
+        8,
+        10,
+        11
+      ]
+    },
+    {
+      "id": "fizika",
+      "uz": "Fizika",
+      "ru": "Физика",
+      "en": "Physics",
+      "grades": [
+        6,
+        7,
+        8,
+        9,
+        10,
+        11
+      ]
+    },
+    {
+      "id": "kimyo",
+      "uz": "Kimyo",
+      "ru": "Химия",
+      "en": "Chemistry",
+      "grades": [
+        7,
+        8,
+        9,
+        10,
+        11
+      ]
+    },
+    {
+      "id": "biologiya",
+      "uz": "Biologiya",
+      "ru": "Биология",
+      "en": "Biology",
+      "grades": [
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11
+      ]
+    },
+    {
+      "id": "geografiya",
+      "uz": "Geografiya",
+      "ru": "География",
+      "en": "Geography",
+      "grades": [
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ]
+    },
+    {
+      "id": "tarix",
+      "uz": "Tarix",
+      "ru": "История",
+      "en": "History",
+      "grades": [
+        5,
+        6
+      ]
+    },
+    {
+      "id": "jahon-tarixi",
+      "uz": "Jahon tarixi",
+      "ru": "Всемирная история",
+      "en": "World history",
+      "grades": [
+        7,
+        8,
+        9,
+        10,
+        11
+      ]
+    },
+    {
+      "id": "ozbekiston-tarixi",
+      "uz": "O'zbekiston tarixi",
+      "ru": "История Узбекистана",
+      "en": "History of Uzbekistan",
+      "grades": [
+        7,
+        8,
+        9,
+        10,
+        11
+      ]
     }
   ]
 }

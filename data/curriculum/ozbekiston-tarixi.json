@@ -1,0 +1,1482 @@
+{
+  "version": "2026-09-16",
+  "subject": {
+    "id": "ozbekiston-tarixi",
+    "uz": "O'zbekiston tarixi",
+    "ru": "История Узбекистана",
+    "en": "History of Uzbekistan"
+  },
+  "entries": [
+    {
+      "grade": 7,
+      "hours": 51,
+      "source": {
+        "title": "Umumiy o'rta ta'limning o'quv dasturi (7-sinf) — O'zbekiston tarixi",
+        "url": "https://uzbmb.uz/upload/file/pdf/qabul2025/dasturlar/9.Tarix/7-sinf-O'zbekiston%20tarixi%20fanidan%20o'quv%20dastur.pdf",
+        "year": 2018,
+        "publisher": "Respublika ta'lim markazi (Xalq ta'limi vazirligi)"
+      },
+      "units": [
+        {
+          "title": "O‘RTA ASRLARDA YERGA EGALIK QILISH MUNOSABATLARINING SHAKLLANISHI VA RIVOJLANISHI",
+          "hours": 8,
+          "topics": [
+            {
+              "title": "Ijtimoiy iqtisodiy o‘zgarishlar",
+              "id": "orta-asrlarda-yerga-egalik-qilish-munosabatlarin-1",
+              "hours": 1
+            },
+            {
+              "title": "Ilk o‘rta asrlarda. Xorazm. Xioniylar. Kidariy davlatlari",
+              "id": "orta-asrlarda-yerga-egalik-qilish-munosabatlarin-2"
+            },
+            {
+              "title": "Eftallar davlati. Eftallar davrida ijtimoiy-iqtisodiy va madaniy hayot",
+              "id": "orta-asrlarda-yerga-egalik-qilish-munosabatlarin-3",
+              "hours": 1
+            },
+            {
+              "title": "O‘rta Osiyo xalqlari Turk xoqonligi davrida",
+              "id": "orta-asrlarda-yerga-egalik-qilish-munosabatlarin-4",
+              "hours": 1
+            },
+            {
+              "title": "G‘arbiy Turk xoqonligi",
+              "id": "orta-asrlarda-yerga-egalik-qilish-munosabatlarin-5",
+              "hours": 1
+            },
+            {
+              "title": "Mahalliy hokimliklarning tashkil topishi",
+              "id": "orta-asrlarda-yerga-egalik-qilish-munosabatlarin-6",
+              "hours": 1
+            },
+            {
+              "title": "VI-VII asrlarda madaniy hayot",
+              "id": "orta-asrlarda-yerga-egalik-qilish-munosabatlarin-7",
+              "hours": 1
+            }
+          ]
+        },
+        {
+          "title": "ARAB XALIFALIGI DAVRIDA MOVAROUNNAHR",
+          "hours": 5,
+          "topics": [
+            {
+              "title": "Movarounnahrda arab xalifaligining o‘rnatilishi",
+              "id": "arab-xalifaligi-davrida-movarounnahr-1"
+            },
+            {
+              "title": "Movarounnahrda islom dinining yoyilishi",
+              "id": "arab-xalifaligi-davrida-movarounnahr-2",
+              "hours": 1
+            },
+            {
+              "title": "Halifalikka qarshi xalq noroziligi",
+              "id": "arab-xalifaligi-davrida-movarounnahr-3",
+              "hours": 1
+            },
+            {
+              "title": "Abbosiylar davrida Xuroson va Movarounnahr",
+              "id": "arab-xalifaligi-davrida-movarounnahr-4",
+              "hours": 1
+            }
+          ]
+        },
+        {
+          "title": "MOVAROUNNAHRDA MUSTAQIL DAVLATLARNING TASHKIL TOPISHI",
+          "hours": 16,
+          "topics": [
+            {
+              "title": "Mustaqil davlatlarning shakllana boshlashi",
+              "id": "movarounnahrda-mustaqil-davlatlarning-tashkil-to-1",
+              "hours": 1
+            },
+            {
+              "title": "Qorluqlar, O‘g‘uzlar, Toxiriylar",
+              "id": "movarounnahrda-mustaqil-davlatlarning-tashkil-to-2",
+              "hours": 1
+            },
+            {
+              "title": "Somoniylar",
+              "id": "movarounnahrda-mustaqil-davlatlarning-tashkil-to-3",
+              "hours": 1
+            },
+            {
+              "title": "Somoniylar davrida ijtimoiy-iqtisodiy hayot",
+              "id": "movarounnahrda-mustaqil-davlatlarning-tashkil-to-4",
+              "hours": 1
+            },
+            {
+              "title": "G‘aznaviylar",
+              "id": "movarounnahrda-mustaqil-davlatlarning-tashkil-to-5",
+              "hours": 1
+            },
+            {
+              "title": "Qoraxoniylar",
+              "id": "movarounnahrda-mustaqil-davlatlarning-tashkil-to-6",
+              "hours": 1
+            },
+            {
+              "title": "Xorazm davlati va uning yuksalishi",
+              "id": "movarounnahrda-mustaqil-davlatlarning-tashkil-to-7",
+              "hours": 1
+            },
+            {
+              "title": "Xorazmshoh va Chingizxon munosabatlari",
+              "id": "movarounnahrda-mustaqil-davlatlarning-tashkil-to-8"
+            },
+            {
+              "title": "Muhammad Xorazmshohning mamlakat mudofasiga oid tadbirlari va uning oqibati",
+              "id": "movarounnahrda-mustaqil-davlatlarning-tashkil-to-9",
+              "hours": 1
+            },
+            {
+              "title": "Jaloliddin Manguberdining Xorazm taxtiga o‘tirishi",
+              "id": "movarounnahrda-mustaqil-davlatlarning-tashkil-to-10"
+            },
+            {
+              "title": "Jaloliddin Manguberdi mohir sarkarda",
+              "id": "movarounnahrda-mustaqil-davlatlarning-tashkil-to-11",
+              "hours": 1
+            },
+            {
+              "title": "Jaloliddin Manguberdi – Vatan qahramoni",
+              "id": "movarounnahrda-mustaqil-davlatlarning-tashkil-to-12",
+              "hours": 1
+            },
+            {
+              "title": "Chig‘atoy ulusining tashkil topishi",
+              "id": "movarounnahrda-mustaqil-davlatlarning-tashkil-to-13",
+              "hours": 1
+            },
+            {
+              "title": "Ijtimoiy-iqtisodiy va madaniy hayot",
+              "id": "movarounnahrda-mustaqil-davlatlarning-tashkil-to-14",
+              "hours": 1
+            },
+            {
+              "title": "Etnik jarayonlar va o‘zbek xalqining shakllanishi",
+              "id": "movarounnahrda-mustaqil-davlatlarning-tashkil-to-15",
+              "hours": 1
+            }
+          ]
+        },
+        {
+          "title": "AJDODLARIMIZNING ILMIY MEROSI ABADIYATGA DAXLDOR MA’NAVIY XAZINA",
+          "hours": 5,
+          "topics": [
+            {
+              "title": "Movarounnahr va Xorazmning madaniy hayoti",
+              "id": "ajdodlarimizning-ilmiy-merosi-abadiyatga-daxldor-1",
+              "hours": 1
+            },
+            {
+              "title": "Adabiyot",
+              "id": "ajdodlarimizning-ilmiy-merosi-abadiyatga-daxldor-2",
+              "hours": 1
+            },
+            {
+              "title": "Diniy bilimlarning rivojlanishi",
+              "id": "ajdodlarimizning-ilmiy-merosi-abadiyatga-daxldor-3",
+              "hours": 1
+            },
+            {
+              "title": "Me’morchilik, san’at va musiqa",
+              "id": "ajdodlarimizning-ilmiy-merosi-abadiyatga-daxldor-4",
+              "hours": 1
+            }
+          ]
+        },
+        {
+          "title": "AMIR TEMUR VA TEMURIYLAR DAVRI TARIXI",
+          "hours": 9,
+          "topics": [
+            {
+              "title": "XIV asrning o‘rtalarida Movarounnahrda ijtimoiy-siyosiy vaziyat",
+              "id": "amir-temur-va-temuriylar-davri-tarixi-1",
+              "hours": 1
+            },
+            {
+              "title": "Amir Temur – markazlashgan davlat asoschisi",
+              "id": "amir-temur-va-temuriylar-davri-tarixi-2"
+            },
+            {
+              "title": "Amir Temur saltanatining tashkil topishi",
+              "id": "amir-temur-va-temuriylar-davri-tarixi-3",
+              "hours": 1
+            },
+            {
+              "title": "Amir Temurning tashqi siyosati",
+              "id": "amir-temur-va-temuriylar-davri-tarixi-4",
+              "hours": 1
+            },
+            {
+              "title": "Amir Temurning jahon tarixida tutgan o‘rni",
+              "id": "amir-temur-va-temuriylar-davri-tarixi-5",
+              "hours": 1
+            },
+            {
+              "title": "Temuriylar davridagi siyosiy jarayonlar",
+              "id": "amir-temur-va-temuriylar-davri-tarixi-6",
+              "hours": 1
+            },
+            {
+              "title": "Mirzo Ulug‘bekning hukmronligi davrida Movarounnahr",
+              "id": "amir-temur-va-temuriylar-davri-tarixi-7"
+            },
+            {
+              "title": "Temuriylar saltanatining inqirozga yuz tutishi",
+              "id": "amir-temur-va-temuriylar-davri-tarixi-8"
+            },
+            {
+              "title": "Ijtimoiy-iqtisodiy taraqqiyot va bunyodkorlik",
+              "id": "amir-temur-va-temuriylar-davri-tarixi-9"
+            }
+          ]
+        },
+        {
+          "title": "XIV-XV ASRDA FAN VA MADANIYATNING ZAMONAVIY SIVILIZATSIYA RIVOJIDAGI ROLI VA AHAMIYATI",
+          "hours": 7,
+          "topics": [
+            {
+              "title": "Ta’lim tizimi",
+              "id": "xiv-xv-asrda-fan-va-madaniyatning-zamonaviy-sivi-1",
+              "hours": 1
+            },
+            {
+              "title": "Aniq fanlarning rivojlanishi",
+              "id": "xiv-xv-asrda-fan-va-madaniyatning-zamonaviy-sivi-2",
+              "hours": 1
+            },
+            {
+              "title": "Tasviriy san’at",
+              "id": "xiv-xv-asrda-fan-va-madaniyatning-zamonaviy-sivi-3",
+              "hours": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "grade": 8,
+      "source": {
+        "title": "Umumiy o'rta ta'limning o'quv dasturi (8-sinf) — O'zbekiston tarixi",
+        "url": "https://uzbmb.uz/upload/file/pdf/qabul2025/dasturlar/9.Tarix/8-sinf-O'zbekiston%20tarixi%20fanidan%20o'quv%20dastur.pdf",
+        "year": 2018,
+        "publisher": "Respublika ta'lim markazi (Xalq ta'limi vazirligi)"
+      },
+      "units": [
+        {
+          "title": "XV ASRNING OXIRI – XVI ASRNING BOSHLARIDA MOVAROUNNAHR VA XUROSONDAGI SIYOSIY VAZIYAT",
+          "hours": 5,
+          "topics": [
+            {
+              "title": "Dashti Qipchoqdagi siyosiy vaziyat",
+              "id": "xv-asrning-oxiri-xvi-asrning-boshlarida-movaroun-1"
+            },
+            {
+              "title": "Movarounnahr va Xurosondagi siyosiy vaziyat",
+              "id": "xv-asrning-oxiri-xvi-asrning-boshlarida-movaroun-2"
+            },
+            {
+              "title": "Zahiriddin Muhammad Bobur va Muhammad Shayboniyxon munosabatlari",
+              "id": "xv-asrning-oxiri-xvi-asrning-boshlarida-movaroun-3"
+            },
+            {
+              "title": "Movarounnahr va Xurosonda shayboniylar hukmronligining o‘rnatilishi",
+              "id": "xv-asrning-oxiri-xvi-asrning-boshlarida-movaroun-4"
+            },
+            {
+              "title": "Shayboniyxonning Movarounnahrni egallashi",
+              "id": "xv-asrning-oxiri-xvi-asrning-boshlarida-movaroun-5"
+            },
+            {
+              "title": "Ismoil Safaviy va Shayboniyxon o‘rtasidagi kurash",
+              "id": "xv-asrning-oxiri-xvi-asrning-boshlarida-movaroun-6"
+            }
+          ]
+        },
+        {
+          "title": "BUXORO XONLIGI VA BUXORO AMIRLIGI",
+          "hours": 20,
+          "topics": [
+            {
+              "title": "Buxoro xonligining tashkil topishi",
+              "id": "buxoro-xonligi-va-buxoro-amirligi-1"
+            },
+            {
+              "title": "Navro‘z Ahmadxon",
+              "id": "buxoro-xonligi-va-buxoro-amirligi-2"
+            },
+            {
+              "title": "Abdullaxon II davrida Buxoro xonligining yuksalishi",
+              "id": "buxoro-xonligi-va-buxoro-amirligi-3"
+            },
+            {
+              "title": "Shayboniylar sulolasining inqirozi",
+              "id": "buxoro-xonligi-va-buxoro-amirligi-4"
+            },
+            {
+              "title": "Buxoroda xonligida ashtarxoniylar sulolasi hukmronligining o‘rnatilishi",
+              "id": "buxoro-xonligi-va-buxoro-amirligi-5"
+            },
+            {
+              "title": "Ashtarxoniylar sulolasi va ularning Buxoroga kelishi sabablari",
+              "id": "buxoro-xonligi-va-buxoro-amirligi-6"
+            },
+            {
+              "title": "Buxoro xonligida markaziy hokimiyatning zaiflashuvi",
+              "id": "buxoro-xonligi-va-buxoro-amirligi-7"
+            },
+            {
+              "title": "Abulfayzxon davrida markaziy hokimiyatning zaiflashuvi",
+              "id": "buxoro-xonligi-va-buxoro-amirligi-8"
+            },
+            {
+              "title": "Ko‘chmanchi qozoqlarni mamlakatni talon-taroj etishi",
+              "id": "buxoro-xonligi-va-buxoro-amirligi-9"
+            },
+            {
+              "title": "Buxoro xonligida davlat boshqaruvi",
+              "id": "buxoro-xonligi-va-buxoro-amirligi-10"
+            },
+            {
+              "title": "Buxoro xonligida harbiy ish",
+              "id": "buxoro-xonligi-va-buxoro-amirligi-11"
+            },
+            {
+              "title": "Harbiy mansab va unvonlar",
+              "id": "buxoro-xonligi-va-buxoro-amirligi-12"
+            },
+            {
+              "title": "Zamonaviy qurollardan foydalanish",
+              "id": "buxoro-xonligi-va-buxoro-amirligi-13"
+            },
+            {
+              "title": "Buxoro xonligida ijtimoiy-iqtisodiy hayot",
+              "id": "buxoro-xonligi-va-buxoro-amirligi-14"
+            },
+            {
+              "title": "Shayboniylar o‘tkazgan islohotlar",
+              "id": "buxoro-xonligi-va-buxoro-amirligi-15"
+            },
+            {
+              "title": "Buxoro xonligining tashqi siyosati",
+              "id": "buxoro-xonligi-va-buxoro-amirligi-16"
+            },
+            {
+              "title": "Buxoro - Hindiston munosabatlari",
+              "id": "buxoro-xonligi-va-buxoro-amirligi-17"
+            },
+            {
+              "title": "Buxoro xonligida madaniy hayot",
+              "id": "buxoro-xonligi-va-buxoro-amirligi-18"
+            },
+            {
+              "title": "Tarixnavislik, adabiyot va san’at, me’morchilik",
+              "id": "buxoro-xonligi-va-buxoro-amirligi-19"
+            },
+            {
+              "title": "Madrasalar ta’minoti",
+              "id": "buxoro-xonligi-va-buxoro-amirligi-20"
+            },
+            {
+              "title": "Buxoro amirligining tashkil topishi",
+              "id": "buxoro-xonligi-va-buxoro-amirligi-21"
+            },
+            {
+              "title": "Shohmurodning hokimiyat tepasiga kelishi",
+              "id": "buxoro-xonligi-va-buxoro-amirligi-22"
+            },
+            {
+              "title": "Amirlikda markaziy hokimiyatning mustahkamlanishi",
+              "id": "buxoro-xonligi-va-buxoro-amirligi-23"
+            },
+            {
+              "title": "Buxoro amirligida davlat boshqaruvi",
+              "id": "buxoro-xonligi-va-buxoro-amirligi-24"
+            },
+            {
+              "title": "Buxoro amirligida harbiy ish",
+              "id": "buxoro-xonligi-va-buxoro-amirligi-25"
+            },
+            {
+              "title": "Buxoro amirligida ijtimoiy-iqtisodiy hayot",
+              "id": "buxoro-xonligi-va-buxoro-amirligi-26"
+            },
+            {
+              "title": "Aholining etnik tarkibi",
+              "id": "buxoro-xonligi-va-buxoro-amirligi-27"
+            },
+            {
+              "title": "Buxoro amirligida yer egaligi",
+              "id": "buxoro-xonligi-va-buxoro-amirligi-28"
+            },
+            {
+              "title": "Amirlik shaharlari",
+              "id": "buxoro-xonligi-va-buxoro-amirligi-29"
+            },
+            {
+              "title": "Hunarmandchilik",
+              "id": "buxoro-xonligi-va-buxoro-amirligi-30"
+            },
+            {
+              "title": "Buxoro amirligining tashqi siyosati",
+              "id": "buxoro-xonligi-va-buxoro-amirligi-31"
+            },
+            {
+              "title": "Rossiya, Eron, Hindiston, Usmonli davlatlari va O‘rta Osiyo xonliklari bilan aloqalari",
+              "id": "buxoro-xonligi-va-buxoro-amirligi-32"
+            },
+            {
+              "title": "Ingliz ekspeditsiyalari",
+              "id": "buxoro-xonligi-va-buxoro-amirligi-33"
+            },
+            {
+              "title": "Buxoro amirligida madaniy hayot",
+              "id": "buxoro-xonligi-va-buxoro-amirligi-34"
+            }
+          ]
+        },
+        {
+          "title": "XIVA XONLIGI",
+          "hours": 13,
+          "topics": [
+            {
+              "title": "Xiva xonligining tashkil topishi",
+              "id": "xiva-xonligi-1"
+            },
+            {
+              "title": "XVII-XVIII asrning birinchi yarmida xonlikdagi siyosiy ahvol",
+              "id": "xiva-xonligi-2"
+            },
+            {
+              "title": "Xiva xonligida qo‘ng‘irotlar sulolasi hukmronligining o‘rnatilishi",
+              "id": "xiva-xonligi-3"
+            },
+            {
+              "title": "Xiva xonligida davlat boshqaruvi",
+              "id": "xiva-xonligi-4"
+            },
+            {
+              "title": "Mamlakatning ma’muriy boshqaruv tizimi",
+              "id": "xiva-xonligi-5"
+            },
+            {
+              "title": "Xiva xonligida ijtimoiy-iqtisodiy hayot",
+              "id": "xiva-xonligi-6"
+            },
+            {
+              "title": "Xiva xonligining tashqi siyosati",
+              "id": "xiva-xonligi-7"
+            },
+            {
+              "title": "Xiva xonligida madaniy hayot",
+              "id": "xiva-xonligi-8"
+            },
+            {
+              "title": "Xiva xonligi tarixi bo‘yicha manbalar",
+              "id": "xiva-xonligi-9"
+            },
+            {
+              "title": "O‘zbek olimlarining xonlik tarixi bo‘yicha yozgan asarlari",
+              "id": "xiva-xonligi-10"
+            },
+            {
+              "title": "XVI-XIX asrning birinchi yarmida qoraqalpoqlar",
+              "id": "xiva-xonligi-11"
+            },
+            {
+              "title": "Qoraqalpoqlarning xo‘jalik hayoti",
+              "id": "xiva-xonligi-12"
+            },
+            {
+              "title": "Chorvachilik va dehqonchilikning kuchayishi",
+              "id": "xiva-xonligi-13"
+            },
+            {
+              "title": "Qoraqalpoqlarda madaniy va ma’naviy hayot",
+              "id": "xiva-xonligi-14"
+            },
+            {
+              "title": "Shaharsozlik",
+              "id": "xiva-xonligi-15"
+            }
+          ]
+        },
+        {
+          "title": "XVIII-XIX ASRNING BIRINCHI YARMIDA QO‘QON XONLIGI",
+          "hours": 12,
+          "topics": [
+            {
+              "title": "Qo‘qon xonligining tashkil topishi",
+              "id": "xviii-xix-asrning-birinchi-yarmida-qoqon-xonligi-1"
+            },
+            {
+              "title": "XVIII asrning ikkinchi yarmi – XIX asrning birinchi yarmida Qo‘qon xonligida siyosiy ahvol",
+              "id": "xviii-xix-asrning-birinchi-yarmida-qoqon-xonligi-2"
+            },
+            {
+              "title": "Xonlik hududining kengayishi",
+              "id": "xviii-xix-asrning-birinchi-yarmida-qoqon-xonligi-3"
+            },
+            {
+              "title": "Qo‘qon xonligida davlat boshqaruvi",
+              "id": "xviii-xix-asrning-birinchi-yarmida-qoqon-xonligi-4"
+            },
+            {
+              "title": "Qo‘qon xonligida harbiy ish",
+              "id": "xviii-xix-asrning-birinchi-yarmida-qoqon-xonligi-5"
+            },
+            {
+              "title": "Qo‘qon xonligida ijtimoiy-iqtisodiy hayot",
+              "id": "xviii-xix-asrning-birinchi-yarmida-qoqon-xonligi-6"
+            },
+            {
+              "title": "Qo‘qon xonligining tashqi siyosati",
+              "id": "xviii-xix-asrning-birinchi-yarmida-qoqon-xonligi-7"
+            },
+            {
+              "title": "Qo‘qon xonligida madaniy hayot",
+              "id": "xviii-xix-asrning-birinchi-yarmida-qoqon-xonligi-8"
+            },
+            {
+              "title": "Qo‘qon xonligida ta’lim",
+              "id": "xviii-xix-asrning-birinchi-yarmida-qoqon-xonligi-9"
+            },
+            {
+              "title": "O‘zbek davlatlarining taraqqiyotda orqada qolish sabablari va oqibatlari",
+              "id": "xviii-xix-asrning-birinchi-yarmida-qoqon-xonligi-10"
+            },
+            {
+              "title": "Xonliklarni taraqqiyotdan orqada qolishi, ishlab chiqarishni kamayishi",
+              "id": "xviii-xix-asrning-birinchi-yarmida-qoqon-xonligi-11"
+            },
+            {
+              "title": "Qoloqlikning sabablari va oqibatlari",
+              "id": "xviii-xix-asrning-birinchi-yarmida-qoqon-xonligi-12"
+            },
+            {
+              "title": "Yakuniy dars",
+              "id": "xviii-xix-asrning-birinchi-yarmida-qoqon-xonligi-13"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "grade": 9,
+      "source": {
+        "title": "Umumiy o'rta ta'limning o'quv dasturi (9-sinf) — O'zbekiston tarixi",
+        "url": "https://uzbmb.uz/upload/file/pdf/qabul2025/dasturlar/9.Tarix/9-sinf-O'zbekiston%20tarixi%20fanidan%20o'quv%20dastur.pdf",
+        "year": 2018,
+        "publisher": "Respublika ta'lim markazi (Xalq ta'limi vazirligi)"
+      },
+      "units": [
+        {
+          "title": "XIX ASR O‘RTALARIDA O‘ZBEK XONLIKLARINING SIYOSIY, IQTISODIY VA MADANIY HAYOTI",
+          "hours": 6,
+          "topics": [
+            {
+              "title": "XIX asr o‘rtalarida O‘rta Osiyo davlatlarining hududi va aholisi",
+              "id": "xix-asr-ortalarida-ozbek-xonliklarining-siyosiy-1"
+            },
+            {
+              "title": "XIX asr o‘rtalarida o‘zbek xonliklarining ma’muriy boshqaruv tizimi",
+              "id": "xix-asr-ortalarida-ozbek-xonliklarining-siyosiy-2"
+            },
+            {
+              "title": "Buxoro amirligining davlat boshqaruvi",
+              "id": "xix-asr-ortalarida-ozbek-xonliklarining-siyosiy-3"
+            },
+            {
+              "title": "Xiva xonligining qo‘ng‘irotlar sulolasi tomonidan boshqarilishi",
+              "id": "xix-asr-ortalarida-ozbek-xonliklarining-siyosiy-4"
+            },
+            {
+              "title": "Qo‘qon xonligining minglar sulolasi tomonidan boshqarilishi",
+              "id": "xix-asr-ortalarida-ozbek-xonliklarining-siyosiy-5"
+            },
+            {
+              "title": "Mehtar, qozikalon, qozilar, muftiy, rais, mirshab",
+              "id": "xix-asr-ortalarida-ozbek-xonliklarining-siyosiy-6"
+            },
+            {
+              "title": "XIX asr o‘rtalarida o‘zbek xonliklarining ijtimoiy-iqtisodiy hayoti",
+              "id": "xix-asr-ortalarida-ozbek-xonliklarining-siyosiy-7"
+            },
+            {
+              "title": "Amudaryo, Sirdaryo suvlari kanallar qazib, to‘g‘onlar qurilib ekin maydonlariga yеtkazilgan",
+              "id": "xix-asr-ortalarida-ozbek-xonliklarining-siyosiy-8"
+            },
+            {
+              "title": "XIX asr o‘rtalarida O‘rta Osiyo aholisining madaniy hayoti",
+              "id": "xix-asr-ortalarida-ozbek-xonliklarining-siyosiy-9"
+            }
+          ]
+        },
+        {
+          "title": "ROSSIYA IMPERIYASINING O‘RTA OSIYONI BOSIB OLISHI",
+          "hours": 8,
+          "topics": [
+            {
+              "title": "Rossiya imperiyasi tomonidan O‘rta Osiyoni bosib olish uchun istilochilik harakatlarining boshlanishi.Bosib olish uchun tayyorgarlik",
+              "id": "rossiya-imperiyasining-orta-osiyoni-bosib-olishi-1"
+            },
+            {
+              "title": "Toshkentning bosib olinishi",
+              "id": "rossiya-imperiyasining-orta-osiyoni-bosib-olishi-2"
+            },
+            {
+              "title": "Turkiston general-gubernatorligining tashkil etilishi",
+              "id": "rossiya-imperiyasining-orta-osiyoni-bosib-olishi-3"
+            },
+            {
+              "title": "Yangi ma’muriy hududlarning tashkil qilinishi. 1867-yilgi «Nizom» loyihasi",
+              "id": "rossiya-imperiyasining-orta-osiyoni-bosib-olishi-4"
+            },
+            {
+              "title": "Buxoro amirligiga qarshi harbiy harakatlarning boshlanishi",
+              "id": "rossiya-imperiyasining-orta-osiyoni-bosib-olishi-5"
+            },
+            {
+              "title": "Buxoro amirligi ustidan Rossiya imperiyasi protektoratining o‘rnatilishi",
+              "id": "rossiya-imperiyasining-orta-osiyoni-bosib-olishi-6"
+            },
+            {
+              "title": "Samarqand uchun jang",
+              "id": "rossiya-imperiyasining-orta-osiyoni-bosib-olishi-7"
+            },
+            {
+              "title": "Buxoro amirligining Rossiya vassaliga aylantirilishi",
+              "id": "rossiya-imperiyasining-orta-osiyoni-bosib-olishi-8"
+            },
+            {
+              "title": "Xiva xonligi ustidan Rossiya imperiyasi protektoratining o‘rnatilishi",
+              "id": "rossiya-imperiyasining-orta-osiyoni-bosib-olishi-9"
+            },
+            {
+              "title": "Mang‘ishloq, Orenburg, Turkiston va Krasnovodsk okruglarining yurishda ishtirok etishi. 1873-yil 12-avgustda imzolangan Gandimiyon shartnomasi",
+              "id": "rossiya-imperiyasining-orta-osiyoni-bosib-olishi-10"
+            },
+            {
+              "title": "Qo‘qon xonligining bosib olinishi",
+              "id": "rossiya-imperiyasining-orta-osiyoni-bosib-olishi-11"
+            },
+            {
+              "title": "Turkmanlarning bo‘ysundirilishi",
+              "id": "rossiya-imperiyasining-orta-osiyoni-bosib-olishi-12"
+            }
+          ]
+        },
+        {
+          "title": "ROSSIYA IMPERIYASINING TURKISTONDAGI MUSTAMLAKACHILIK SIYOSATI",
+          "hours": 5,
+          "topics": [
+            {
+              "title": "Turkiston general-gubernatorligining siyosiy-ma’muriy boshqaruv tizimi",
+              "id": "rossiya-imperiyasining-turkistondagi-mustamlakac-1"
+            },
+            {
+              "title": "Boshqaruvning mustamlakachilik tartiblari. 1865-yil 6-avgustdagi Aleksandr II «Turkiston viloyatini idora qilish to‘g‘risidagi Muvaqqat Nizom»",
+              "id": "rossiya-imperiyasining-turkistondagi-mustamlakac-2"
+            },
+            {
+              "title": "Viloyatlar uyezdlarga, uyezdlar uchastkalarga bo‘linishi",
+              "id": "rossiya-imperiyasining-turkistondagi-mustamlakac-3"
+            },
+            {
+              "title": "Turkiston o‘lkasida Rossiya imperiyasining yеr-suv siyosati",
+              "id": "rossiya-imperiyasining-turkistondagi-mustamlakac-4"
+            },
+            {
+              "title": "Turkistonda sud tizimi va harbiy politsiya tartibotining o‘rnatilishi",
+              "id": "rossiya-imperiyasining-turkistondagi-mustamlakac-5"
+            },
+            {
+              "title": "Sudlov tizimining mustamlaka manfaatlariga moslashtirilishi",
+              "id": "rossiya-imperiyasining-turkistondagi-mustamlakac-6"
+            },
+            {
+              "title": "XIX asrning ikkinchi yarmi - XX asrning boshlarida Turkistonda ijtimoiy- iqtisodiy ahvol",
+              "id": "rossiya-imperiyasining-turkistondagi-mustamlakac-7"
+            }
+          ]
+        },
+        {
+          "title": "XIX ASR OXIRIDA TURKISTONDAGI MILLIY-OZODLIK HARAKATLARI",
+          "hours": 5,
+          "topics": [
+            {
+              "title": "Turkistonda milliy-ozodlik harakatlarining boshlanishi va uning sabablari",
+              "id": "xix-asr-oxirida-turkistondagi-milliy-ozodlik-har-1"
+            },
+            {
+              "title": "Toshkentda “Vabo isyoni”. Qo‘zg‘olonning boshlanish sabablari",
+              "id": "xix-asr-oxirida-turkistondagi-milliy-ozodlik-har-2"
+            },
+            {
+              "title": "Andijon qo‘zg‘oloni",
+              "id": "xix-asr-oxirida-turkistondagi-milliy-ozodlik-har-3"
+            },
+            {
+              "title": "Milliy-ozodlik harakatlarining ahamiyati",
+              "id": "xix-asr-oxirida-turkistondagi-milliy-ozodlik-har-4"
+            }
+          ]
+        },
+        {
+          "title": "XIX ASR IKKINCHI YARMI – XX ASR BOSHLARIDA QORAQALPOQLAR",
+          "hours": 5,
+          "topics": [
+            {
+              "title": "XIX asrning ikkinchi yarmi - XX asr boshlarida qoraqalpoqlarning hududiy joylashuvi va ijtimoiy hayoti",
+              "id": "xix-asr-ikkinchi-yarmi-xx-asr-boshlarida-qoraqal-1"
+            },
+            {
+              "title": "Qoraqalpoqlarning ijtimoiy hayoti",
+              "id": "xix-asr-ikkinchi-yarmi-xx-asr-boshlarida-qoraqal-2"
+            },
+            {
+              "title": "Soliq va majburiyatlar",
+              "id": "xix-asr-ikkinchi-yarmi-xx-asr-boshlarida-qoraqal-3"
+            },
+            {
+              "title": "Xalq qo‘zg‘olonlarini kelib chiqishi",
+              "id": "xix-asr-ikkinchi-yarmi-xx-asr-boshlarida-qoraqal-4"
+            },
+            {
+              "title": "Qoraqalpoqlar Turkiston general-gubernatorligi tarkibida",
+              "id": "xix-asr-ikkinchi-yarmi-xx-asr-boshlarida-qoraqal-5"
+            },
+            {
+              "title": "XIX asr ikkinchi yarmi - XX asr boshlarida qoraqalpoqlar madaniyati",
+              "id": "xix-asr-ikkinchi-yarmi-xx-asr-boshlarida-qoraqal-6"
+            },
+            {
+              "title": "Xalq og‘zaki ijodiyoti. «Qirq qiz» dostoni",
+              "id": "xix-asr-ikkinchi-yarmi-xx-asr-boshlarida-qoraqal-7"
+            }
+          ]
+        },
+        {
+          "title": "JADIDLAR HARAKATI VA UNING TURKISTON IJTIMOIY- IQTISODIY VA MADANIY HAYOTIDAGI AHAMIYATI",
+          "hours": 6,
+          "topics": [
+            {
+              "title": "Jadidchilik harakatining vujudga kelishi",
+              "id": "jadidlar-harakati-va-uning-turkiston-ijtimoiy-iq-1"
+            },
+            {
+              "title": "Jadidlarning dasturiy maqsad va vazifalari",
+              "id": "jadidlar-harakati-va-uning-turkiston-ijtimoiy-iq-2"
+            },
+            {
+              "title": "Jadidchilik harakati namoyandalari va ularning faoliyati",
+              "id": "jadidlar-harakati-va-uning-turkiston-ijtimoiy-iq-3"
+            },
+            {
+              "title": "Jadidlar yoshlarni chet elda o‘qitish tarafdorlari",
+              "id": "jadidlar-harakati-va-uning-turkiston-ijtimoiy-iq-4"
+            },
+            {
+              "title": "Jadidchilik harakatining Turkiston ijtimoiy-iqtisodiy va madaniy hayotiga ta’siri",
+              "id": "jadidlar-harakati-va-uning-turkiston-ijtimoiy-iq-5"
+            },
+            {
+              "title": "Xorazmda jadidlar siyosiy partiyasining tashkil topishi",
+              "id": "jadidlar-harakati-va-uning-turkiston-ijtimoiy-iq-6"
+            },
+            {
+              "title": "Buxoroda Yosh buxoroliklar partiyasining tuzulishi. 1917-yil mart Toshkentda jadidlarning yangi partiyasi «Milliy markaz»",
+              "id": "jadidlar-harakati-va-uning-turkiston-ijtimoiy-iq-7"
+            }
+          ]
+        },
+        {
+          "title": "TURKISTON VA BIRINCHI JAHON URUSHI",
+          "hours": 5,
+          "topics": [
+            {
+              "title": "Birinchi jahon urushining boshlanishi va uning Turkistonga ta’siri",
+              "id": "turkiston-va-birinchi-jahon-urushi-1"
+            },
+            {
+              "title": "Turkistonda 1916-yilgi qo‘zg‘olonlarning boshlanishi",
+              "id": "turkiston-va-birinchi-jahon-urushi-2"
+            },
+            {
+              "title": "Jizzax qo‘zg‘oloni",
+              "id": "turkiston-va-birinchi-jahon-urushi-3"
+            },
+            {
+              "title": "Turkistonda 1916-yilgi voqealarning oqibatlari va ahamiyati",
+              "id": "turkiston-va-birinchi-jahon-urushi-4"
+            },
+            {
+              "title": "Qo‘zg‘olonning yеngilish sabablari va oqibatlari",
+              "id": "turkiston-va-birinchi-jahon-urushi-5"
+            }
+          ]
+        },
+        {
+          "title": "XIX ASR OXIRI–XX ASR BOSHLARIDA BUXORO AMIRLIGI VA XIVA XONLIGI",
+          "topics": [
+            {
+              "title": "Buxoro amirligining davlat tuzumi va ijtimoiy-iqtisodiy hayoti",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-buxoro-amirligi-1"
+            },
+            {
+              "title": "Yosh buxoroliklar faoliyati va Buxoro amirligining tugatilishi. «Yosh buxoroliklar». Amir Olimxon islohotlari. 1917-yildagi namoyishlar. 1920-yil 29-avgustda Chorjo‘yda qo‘zg‘olon uyushtirilishi",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-buxoro-amirligi-2"
+            },
+            {
+              "title": "XIX asr oxiri - XX asr boshlarida Xiva xonligining davlat tuzumi va ijtimoiy-iqtisodiy ahvoli",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-buxoro-amirligi-3"
+            },
+            {
+              "title": "Kasanachilikning rivojlanishi",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-buxoro-amirligi-4"
+            },
+            {
+              "title": "Xiva xonligining tugatilishi",
+              "id": "xix-asr-oxiri-xx-asr-boshlarida-buxoro-amirligi-5"
+            }
+          ]
+        },
+        {
+          "title": "MUSTAMLAKA SHAROITIDA TURKISTONDA MADANIY HAYOT",
+          "hours": 5,
+          "topics": [
+            {
+              "title": "Ta’lim tizimi",
+              "id": "mustamlaka-sharoitida-turkistonda-madaniy-hayot-1"
+            },
+            {
+              "title": "Turkistonda ilm-fan taraqqiyoti",
+              "id": "mustamlaka-sharoitida-turkistonda-madaniy-hayot-2"
+            },
+            {
+              "title": "Teatr va musiqa san’ati",
+              "id": "mustamlaka-sharoitida-turkistonda-madaniy-hayot-3"
+            },
+            {
+              "title": "Me’morchilik va tasviriy san’at. Me’morchilik maktablari",
+              "id": "mustamlaka-sharoitida-turkistonda-madaniy-hayot-4"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "grade": 10,
+      "source": {
+        "title": "Umumiy o'rta ta'limning o'quv dasturi (10-sinf) — O'zbekiston tarixi (MO'D)",
+        "url": "https://uzbmb.uz/upload/file/pdf/qabul2025/dasturlar/9.Tarix/10-sinf-O'zbekiston%20tarixi%20fanidan%20o'quv%20dastur%20(MO%E2%80%98D).pdf",
+        "year": 2018,
+        "publisher": "Respublika ta'lim markazi (Xalq ta'limi vazirligi)"
+      },
+      "units": [
+        {
+          "title": "Dastur mavzulari",
+          "topics": [
+            {
+              "title": "Mustamlaka va sovet davri tarixining murakkabligi va uni o‘rganishning o‘ziga xos xususiyatlari",
+              "id": "dastur-mavzulari-1"
+            },
+            {
+              "title": "Rossiya imperiyasi bosqini arafasida Buxoro amirligi, Qo‘qon va Xiva xonliklaridagi ijtimoiy-siyosiy va iqtisodiy ahvol",
+              "id": "dastur-mavzulari-2"
+            },
+            {
+              "title": "XIX asrning o‘rtalarida xonliklardagi siyosiy ahvol: o‘zaro nizolar, urushlar, tarqoqlik",
+              "id": "dastur-mavzulari-3"
+            },
+            {
+              "title": "Xonliklarning harbiy qo‘shinlari",
+              "id": "dastur-mavzulari-4"
+            },
+            {
+              "title": "Rossiya imperiyasining O‘rta Osiyoga yurishi va Turkiston general- gubernatorligining tashkil topishi",
+              "id": "dastur-mavzulari-5"
+            },
+            {
+              "title": "Rossiya imperiyasining O‘rta Osiyoga qiziqish bildirishining siyosiy va iqtisodiy sabablari",
+              "id": "dastur-mavzulari-6"
+            },
+            {
+              "title": "Erjar jangi",
+              "id": "dastur-mavzulari-7"
+            },
+            {
+              "title": "Buxoro amirligi va Xiva xonligining Rossiya imperiyasi vassaliga aylanishi",
+              "id": "dastur-mavzulari-8"
+            },
+            {
+              "title": "Kaufmanning Samarqandga yurishi: Cho‘ponota va Zirabuloq tepaliklaridagi janglar",
+              "id": "dastur-mavzulari-9"
+            },
+            {
+              "title": "Xiva xonligiga qarshi Kaufman boshchiligida harbiy yurishlarning boshlanishi. 1873-yil 12-avgustda imzolangan Gandimiyon shartnomasi. 1875-yilgi qo‘zg‘olon",
+              "id": "dastur-mavzulari-10"
+            },
+            {
+              "title": "Mag‘lubiyat sabablari va oqibatlari",
+              "id": "dastur-mavzulari-11"
+            },
+            {
+              "title": "Turkiston o‘lkasida siyosiy-ma’muriy boshqaruvi tizimi (1867 – 1917 yy.)",
+              "id": "dastur-mavzulari-12"
+            },
+            {
+              "title": "Boshqaruvning mustamlakachilik tartiblari va xususiyatlari. 1886-yil 12-iyulda imperator Aleksandr III tomonidan yangi “Turkiston o‘lkasini idora qilish to‘g‘risi”dagi Nizomning tasdiqlanishi",
+              "id": "dastur-mavzulari-13"
+            },
+            {
+              "title": "Turkistonda Rossiya imperiyasiga qarshi milliy-ozodlik harakatlari",
+              "id": "dastur-mavzulari-14"
+            },
+            {
+              "title": "Mustamlakachilik jabr-zulmining kuchayishi",
+              "id": "dastur-mavzulari-15"
+            },
+            {
+              "title": "Andijon qo‘zg‘olonning boshlanish sabablari",
+              "id": "dastur-mavzulari-16"
+            },
+            {
+              "title": "Qo‘zg‘olonning bostirilishi",
+              "id": "dastur-mavzulari-17"
+            },
+            {
+              "title": "Birinchi jahon urushining boshlanishi va uning Turkistonga ta’siri",
+              "id": "dastur-mavzulari-18"
+            },
+            {
+              "title": "Turkistonda 1916-yilgi qo‘zg‘olonning boshlanishi",
+              "id": "dastur-mavzulari-19"
+            },
+            {
+              "title": "Turkistonda 1916-yilgi voqealarning oqibatlari va ahamiyati",
+              "id": "dastur-mavzulari-20"
+            },
+            {
+              "title": "XIX asrning ikkinchi yarmi – XX asrning boshlarida Buxoro amirligi",
+              "id": "dastur-mavzulari-21"
+            },
+            {
+              "title": "Chor Rossiyasi bosqinidan keyin Buxoro amirligi davlat boshqaruvi va ma’muriy-hududiy bo‘linishidagi o‘zgarishlar",
+              "id": "dastur-mavzulari-22"
+            },
+            {
+              "title": "Baljuvonda, Ko‘lob bekligida, Kalifda dehqonlar qo‘zg‘oloni",
+              "id": "dastur-mavzulari-23"
+            },
+            {
+              "title": "Rossiya, Afg‘oniston, Hindiston, Eron bilan savdo-sotiq",
+              "id": "dastur-mavzulari-24"
+            },
+            {
+              "title": "Xiva xonligida Rossiya imperiyasi protektorati o‘rnatilganidan so‘ng davlat boshqaruvi va ma’muriy-hududiy bo‘linishidagi o‘zgarishlar",
+              "id": "dastur-mavzulari-25"
+            },
+            {
+              "title": "Xonlikning Rossiya imperiyasi bilan savdo aloqalari",
+              "id": "dastur-mavzulari-26"
+            },
+            {
+              "title": "XIX asr ikkinchi yarmi – XX asr boshlarida qoraqalpoqlar turmush tarzi",
+              "id": "dastur-mavzulari-27"
+            },
+            {
+              "title": "Ilm-fan namoyandalari",
+              "id": "dastur-mavzulari-28"
+            },
+            {
+              "title": "«Qirq qiz» dostoni",
+              "id": "dastur-mavzulari-29"
+            },
+            {
+              "title": "Turkistonda jadidchilik harakati",
+              "id": "dastur-mavzulari-30"
+            },
+            {
+              "title": "Turkistonda jadidchilik oqimi paydo bo‘lishining shart-sharoitlari",
+              "id": "dastur-mavzulari-31"
+            },
+            {
+              "title": "Jadidchilik harakati namoyandalari va ularning faoliyati",
+              "id": "dastur-mavzulari-32"
+            },
+            {
+              "title": "Turkiston jadidlar harakatining milliy xususiyatlari",
+              "id": "dastur-mavzulari-33"
+            },
+            {
+              "title": "Jadidlar faoliyatining Turkiston aholisi hayotiga ta’siri",
+              "id": "dastur-mavzulari-34"
+            },
+            {
+              "title": "Turkistonda ilm-fan va madaniyat. 1886-yilgi «Nizom»da «Turkiston o‘lkasining yer tuzilishi». Nizomga asosan o‘lkada yirik yer egaligining tugatilishi",
+              "id": "dastur-mavzulari-35"
+            },
+            {
+              "title": "Ichki savdo",
+              "id": "dastur-mavzulari-36"
+            },
+            {
+              "title": "Turkistonda mahalliy ilm-fan va adabiyotning rivojlanishi",
+              "id": "dastur-mavzulari-37"
+            },
+            {
+              "title": "Me’morchilik",
+              "id": "dastur-mavzulari-38"
+            },
+            {
+              "title": "Turkiston o‘lkasi 1917-yil fevral-oktyabr oralig‘ida",
+              "id": "dastur-mavzulari-39"
+            },
+            {
+              "title": "Rossiyadagi Fevral inqilobi va uning Turkiston o‘lkasiga ta’siri",
+              "id": "dastur-mavzulari-40"
+            },
+            {
+              "title": "Rossiyadagi oktabr to‘ntarishining Turkiston o‘lkasiga ta’siri",
+              "id": "dastur-mavzulari-41"
+            },
+            {
+              "title": "Yosh buxoroliklar faoliyati va Buxoro amirligining tugatilishi",
+              "id": "dastur-mavzulari-42"
+            },
+            {
+              "title": "Buxoro amirligidagi ahvol va Yosh buxoroliklar faoliyati",
+              "id": "dastur-mavzulari-43"
+            },
+            {
+              "title": "BXSRdagi siyosiy, iqtisodiy va madaniy o‘zgarishlar",
+              "id": "dastur-mavzulari-44"
+            },
+            {
+              "title": "Xiva xonligining tugatilishi",
+              "id": "dastur-mavzulari-45"
+            },
+            {
+              "title": "Xiva xonligidagi siyosiy vaziyat va Yosh xivaliklar faoliyati",
+              "id": "dastur-mavzulari-46"
+            },
+            {
+              "title": "Turkiston Muxtoriyati",
+              "id": "dastur-mavzulari-47"
+            },
+            {
+              "title": "Jadidlarning muxtoriyat uchun kurashi hamda Turkiston Muxtoriyati hukumatining tashkil topishi va faoliyati",
+              "id": "dastur-mavzulari-48"
+            },
+            {
+              "title": "Turkiston o‘lkasida sovet hokimiyati boshqaruv tizimining o‘rnatilishi",
+              "id": "dastur-mavzulari-49"
+            },
+            {
+              "title": "Bolsheviklarning o‘lkada yuritgan siyosati hamda Turkiston ASSR va Turkiston Kompartiyasining tashkil topishi",
+              "id": "dastur-mavzulari-50"
+            },
+            {
+              "title": "Turkiston ASSR, BXSR va XXSRda sovet hokimiyatiga qarshi qurolli harakatlar",
+              "id": "dastur-mavzulari-51"
+            },
+            {
+              "title": "Turkistonda sovet rejimiga qarshi qurolli harakatning boshlanishi va sabablari",
+              "id": "dastur-mavzulari-52"
+            },
+            {
+              "title": "Harakatning mohiyati, maqsadi va ijtimoiy tarkibi",
+              "id": "dastur-mavzulari-53"
+            },
+            {
+              "title": "BXSR hududida qizil armiyaga qarshi kurash va xalq qo‘zg‘olonlarining boshlanishi",
+              "id": "dastur-mavzulari-54"
+            },
+            {
+              "title": "O‘rta Osiyoda hududiy chegaralanish",
+              "id": "dastur-mavzulari-55"
+            },
+            {
+              "title": "O‘zbekiston SSRning tashkil topishi",
+              "id": "dastur-mavzulari-56"
+            },
+            {
+              "title": "O‘zbekiston SSRning tuzilishi, uning hududi va aholisi",
+              "id": "dastur-mavzulari-57"
+            },
+            {
+              "title": "Sovet hokimiyati amalga oshirgan islohotlarning mohiyati",
+              "id": "dastur-mavzulari-58"
+            },
+            {
+              "title": "Industirlashtirish siyosati va uning natijalari",
+              "id": "dastur-mavzulari-59"
+            },
+            {
+              "title": "O‘zbekistonda sovet hokimiyati amalga oshirgan modernizatsiyaning taqlidchilik modeli va uning mohiyati",
+              "id": "dastur-mavzulari-60"
+            },
+            {
+              "title": "O‘zbekiston qishloq xo‘jaligining ahvoli va uni isloh qilish yo‘llari",
+              "id": "dastur-mavzulari-61"
+            },
+            {
+              "title": "O‘zbekistonda sovet hokimiyati yuritgan madaniy siyosat",
+              "id": "dastur-mavzulari-62"
+            },
+            {
+              "title": "Sovet hokimiyatining ta’lim va fan sohasidagi islohotlari",
+              "id": "dastur-mavzulari-63"
+            },
+            {
+              "title": "Sovet hokimiyatining O‘zbekistondagi qatag‘onlik siyosati: uning mohiyati va oqibatlari",
+              "id": "dastur-mavzulari-64"
+            },
+            {
+              "title": "SSSRda yagona mafkuraning hukmronligiga asoslangan totalitar tuzumning qaror topishi va uning mohiyati",
+              "id": "dastur-mavzulari-65"
+            },
+            {
+              "title": "O‘zbekiston ikkinchi jahon urushi yillarida",
+              "id": "dastur-mavzulari-66"
+            },
+            {
+              "title": "Ikkinchi jahon urushida o‘zbekistonliklarning ishtiroki",
+              "id": "dastur-mavzulari-67"
+            },
+            {
+              "title": "Qishloq xo‘jaligidagi ahvol",
+              "id": "dastur-mavzulari-68"
+            },
+            {
+              "title": "O‘zbekiston iqtisodiyotini urush sharoitida ishlash uchun qayta qurish",
+              "id": "dastur-mavzulari-69"
+            },
+            {
+              "title": "O‘zbekistonga evakuatsiya qilingan sanoat korxonalarini ishga tushirish",
+              "id": "dastur-mavzulari-70"
+            },
+            {
+              "title": "O‘zbekistonliklarning frontdagi jasorati va qahramonliklari",
+              "id": "dastur-mavzulari-71"
+            },
+            {
+              "title": "O‘zbek diviziyalarining tashkil qilinishi",
+              "id": "dastur-mavzulari-72"
+            },
+            {
+              "title": "O‘zbekistonlik jangchilarning frontda ko‘rsatgan jasoratlari",
+              "id": "dastur-mavzulari-73"
+            },
+            {
+              "title": "Ikkinchi jahon urushi tarixiga munosabat muammolari",
+              "id": "dastur-mavzulari-74"
+            },
+            {
+              "title": "O‘zbekiston fani va madaniyati – g‘alaba uchun xizmatda",
+              "id": "dastur-mavzulari-75"
+            },
+            {
+              "title": "O‘zbekiston fani, adabiyoti va san’ati namoyandalari fashizmga qarshi kurashda",
+              "id": "dastur-mavzulari-76"
+            },
+            {
+              "title": "O‘zbek san’ati vakillarining frontdagi jangchilarga xizmat ko‘rsatishi",
+              "id": "dastur-mavzulari-77"
+            },
+            {
+              "title": "O‘zbekiston xalq xo‘jaligining urushdan keyingi yillardagi rivojlanishi",
+              "id": "dastur-mavzulari-78"
+            },
+            {
+              "title": "Respublikada paxta monokulturasining kuchayishi",
+              "id": "dastur-mavzulari-79"
+            },
+            {
+              "title": "Paxta yakkahokimligi va ijtimoiy muammolarning kuchayib borishi. “Paxta ishi” va uning respublikadagi ijtimoiy holatga ta’siri",
+              "id": "dastur-mavzulari-80"
+            },
+            {
+              "title": "SSSR va O‘zbekiston SSR siyosiy-qtisodiy rivojlanishdagi muammolar",
+              "id": "dastur-mavzulari-81"
+            },
+            {
+              "title": "Sanoat ishlab chiqarishining zamondan ortda qolishi. “Qayta qurish” siyosatining inqirozi",
+              "id": "dastur-mavzulari-82"
+            },
+            {
+              "title": "O‘zbekiston ijtimoiy-siyosiy faollik va mustaqillik sari intilishning kuchayishi",
+              "id": "dastur-mavzulari-83"
+            },
+            {
+              "title": "O‘zbekistonda ijtimoiy-siyosiy inqirozning keskinlashuvi",
+              "id": "dastur-mavzulari-84"
+            },
+            {
+              "title": "O‘zbekiston SSRda prezidentlik intitutining tashkil etilishi",
+              "id": "dastur-mavzulari-85"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "grade": 11,
+      "hours": 34,
+      "source": {
+        "title": "Umumiy o'rta ta'limning o'quv dasturi (11-sinf) — O'zbekiston tarixi",
+        "url": "https://uzbmb.uz/upload/file/pdf/qabul2025/dasturlar/9.Tarix/11-sinf-O'zbekiston%20tarixi%20fanidan%20o'quv%20dastur.pdf",
+        "year": 2018,
+        "publisher": "Respublika ta'lim markazi (Xalq ta'limi vazirligi)"
+      },
+      "units": [
+        {
+          "title": "MUSTAQILLIKNING E’LON QILINISHI VA O‘ZBEKISTONDA IJTIMOIY-SIYOSIY ISLOHOTLARNING BOSHLANISHI",
+          "hours": 3,
+          "topics": [
+            {
+              "title": "O‘zbekiston Respublikasi mustaqilligining qo‘lga kiritilishi",
+              "id": "mustaqillikning-elon-qilinishi-va-ozbekistonda-i-1"
+            },
+            {
+              "title": "O‘zbekiston Respublikasi Oliy Kengashi «O‘zbekistonning davlat mustaqilligi to‘g‘risida»gi qonun loyihasini tayyorlash",
+              "id": "mustaqillikning-elon-qilinishi-va-ozbekistonda-i-2"
+            },
+            {
+              "title": "O‘zbekiston Respublikasi Konstitutsiyasining qabul qilinishi",
+              "id": "mustaqillikning-elon-qilinishi-va-ozbekistonda-i-3"
+            },
+            {
+              "title": "O‘zbekiston Respublikasi milliy davlatchiligining shakllanishi va rivojlanishi",
+              "id": "mustaqillikning-elon-qilinishi-va-ozbekistonda-i-4"
+            },
+            {
+              "title": "O‘zbekiston davlat hokimiyati tizimi qonun chiqaruvchi, ijro etuvchi va sud hokimiyatlariga bo‘linishi",
+              "id": "mustaqillikning-elon-qilinishi-va-ozbekistonda-i-5"
+            }
+          ]
+        },
+        {
+          "title": "O‘ZBEKISTONDA FUQAROLIK JAMIYATINING SHAKLLANISHI VA RIVOJLANISHI",
+          "hours": 3,
+          "topics": [
+            {
+              "title": "Fuqarolik jamiyati g‘oyasining rivojlanish tarixi",
+              "id": "ozbekistonda-fuqarolik-jamiyatining-shakllanishi-1"
+            },
+            {
+              "title": "Mahalliy davlat hokimiyati organlari. «O‘zbekiston Respublikasining mahalliy hokimiyat idoralarini qayta tashkil etish to‘g‘risida»gi Qonun",
+              "id": "ozbekistonda-fuqarolik-jamiyatining-shakllanishi-2"
+            },
+            {
+              "title": "Saylov tizimi. «O‘zbekiston Respublikasining referendumi to‘g‘risida» va «O‘zbekiston Respublikasi Prezidenti saylovi to‘g‘risida»gi Qonuni",
+              "id": "ozbekistonda-fuqarolik-jamiyatining-shakllanishi-3"
+            },
+            {
+              "title": "O‘zbekiston Xalq demokratik partiyasi. «Adolat» sotsial-demokratik",
+              "id": "ozbekistonda-fuqarolik-jamiyatining-shakllanishi-4"
+            },
+            {
+              "title": "O‘zbekiston Ekologik harakati",
+              "id": "ozbekistonda-fuqarolik-jamiyatining-shakllanishi-5"
+            },
+            {
+              "title": "O‘zbekistonda fuqarolik jamiyati rivojlanishining asosiy bosqichlari va istiqbollari",
+              "id": "ozbekistonda-fuqarolik-jamiyatining-shakllanishi-6"
+            },
+            {
+              "title": "Mamlakatimizda demokratik islohotlarni yanada chuqurlashtirish va fuqarolik jamiyatini rivojlantirish konsepsiyasi",
+              "id": "ozbekistonda-fuqarolik-jamiyatining-shakllanishi-7"
+            },
+            {
+              "title": "Davlat hokimiyati va boshqaruvi organlari faoliyatining ochiqligi",
+              "id": "ozbekistonda-fuqarolik-jamiyatining-shakllanishi-8"
+            },
+            {
+              "title": "Mamlakatimizda mustaqillik yillarida",
+              "id": "ozbekistonda-fuqarolik-jamiyatining-shakllanishi-9"
+            }
+          ]
+        },
+        {
+          "title": "O‘ZBEKISTONDA IQTISODIY ISLOHOTLAR VA IJTIMOIY SIYOSAT",
+          "hours": 4,
+          "topics": [
+            {
+              "title": "O‘zbek modelining ishlab chiqilishi",
+              "id": "ozbekistonda-iqtisodiy-islohotlar-va-ijtimoiy-si-1"
+            },
+            {
+              "title": "Milliy avtomobilsozlik sanoatiga asos solinishi",
+              "id": "ozbekistonda-iqtisodiy-islohotlar-va-ijtimoiy-si-2"
+            },
+            {
+              "title": "Mamlakat ishlab chiqarish salohiyatining oshirilishi va jahon iqtisodiy tizimiga integratsiyalashuvi",
+              "id": "ozbekistonda-iqtisodiy-islohotlar-va-ijtimoiy-si-3"
+            },
+            {
+              "title": "Iqtisodiyotni modernizatsiyalashtirish",
+              "id": "ozbekistonda-iqtisodiy-islohotlar-va-ijtimoiy-si-4"
+            },
+            {
+              "title": "Ijtimoiy siyosat va uning amalga oshirilish bosqichlari",
+              "id": "ozbekistonda-iqtisodiy-islohotlar-va-ijtimoiy-si-5"
+            }
+          ]
+        },
+        {
+          "title": "O‘ZBEKISTONDA ETNIK VA KONFESSIYALARARO MUNOSABATLAR",
+          "hours": 3,
+          "topics": [
+            {
+              "title": "O‘zbekistonda millatlararo munosabatlar va bag‘rikenglik",
+              "id": "ozbekistonda-etnik-va-konfessiyalararo-munosabat-1"
+            },
+            {
+              "title": "Baynalmilal markaz",
+              "id": "ozbekistonda-etnik-va-konfessiyalararo-munosabat-2"
+            },
+            {
+              "title": "O‘zbekistonda konfessiyalararo munosabatlar",
+              "id": "ozbekistonda-etnik-va-konfessiyalararo-munosabat-3"
+            },
+            {
+              "title": "O‘zbekistonda islomdan tashqari xristianlik, yahudiylik, buddaviylik va boshqa konfessiyalarga e’tiqod qiluvchi kishilar",
+              "id": "ozbekistonda-etnik-va-konfessiyalararo-munosabat-4"
+            }
+          ]
+        },
+        {
+          "title": "TA’LIM TIZIMI ISLOHOTLARI VA KADRLAR TAYYORLASH",
+          "hours": 2,
+          "topics": [
+            {
+              "title": "Umumiy va o‘rta maxsus ta’lim tizimi",
+              "id": "talim-tizimi-islohotlari-va-kadrlar-tayyorlash-1"
+            },
+            {
+              "title": "Oliy ta’lim va undan keyingi ta’limning takomillashtirilishi",
+              "id": "talim-tizimi-islohotlari-va-kadrlar-tayyorlash-2"
+            },
+            {
+              "title": "Talaba va aspirantlar uchun maxsus stipendiyalar",
+              "id": "talim-tizimi-islohotlari-va-kadrlar-tayyorlash-3"
+            }
+          ]
+        },
+        {
+          "title": "MUSTAQILLIK YILLARIDA ILM-FAN VA SPORTNING RIVOJLANISHI",
+          "hours": 4,
+          "topics": [
+            {
+              "title": "O‘zbekistonda ilm-fan",
+              "id": "mustaqillik-yillarida-ilm-fan-va-sportning-rivoj-1"
+            },
+            {
+              "title": "O‘zbekiston Respublikasida jismoniy tarbiya va sportning rivojlanishi",
+              "id": "mustaqillik-yillarida-ilm-fan-va-sportning-rivoj-2"
+            },
+            {
+              "title": "Jismoniy tarbiya va sportni qo‘llab-quvvatlovchi tizimning yaratilishi. «Jismoniy tarbiya va sport to‘g‘risida» Qonun",
+              "id": "mustaqillik-yillarida-ilm-fan-va-sportning-rivoj-3"
+            },
+            {
+              "title": "Olimpiada",
+              "id": "mustaqillik-yillarida-ilm-fan-va-sportning-rivoj-4"
+            },
+            {
+              "title": "O‘zbekistonda yoshlar siyosati",
+              "id": "mustaqillik-yillarida-ilm-fan-va-sportning-rivoj-5"
+            },
+            {
+              "title": "O‘qishga kirishda test sinovlarida to‘planadigan eng ko‘p ballning 25 foizi miqdorida qo‘shimcha ball shaklidagi imtiyoz berish",
+              "id": "mustaqillik-yillarida-ilm-fan-va-sportning-rivoj-6"
+            },
+            {
+              "title": "«Mard o‘g‘lon» mukofoti",
+              "id": "mustaqillik-yillarida-ilm-fan-va-sportning-rivoj-7"
+            }
+          ]
+        },
+        {
+          "title": "MUSTAQILLIK YILLARIDA O‘ZBEKISTONDA MA’NAVIY VA MADANIY TARAQQIYOT",
+          "hours": 2,
+          "topics": [
+            {
+              "title": "O‘zbekistonda ma’naviy va tarixiy merosning tiklanishi",
+              "id": "mustaqillik-yillarida-ozbekistonda-manaviy-va-ma-1"
+            },
+            {
+              "title": "O‘zbekistonda madaniyat va san’at. Ma’naviyat maskanlari",
+              "id": "mustaqillik-yillarida-ozbekistonda-manaviy-va-ma-2"
+            },
+            {
+              "title": "Simpoziumlar saroyi va Alisher Navoiy nomidagi O‘zbekiston Milliy kutubxonasi",
+              "id": "mustaqillik-yillarida-ozbekistonda-manaviy-va-ma-3"
+            },
+            {
+              "title": "«O‘zbekiston teatr san’atini rivojlantirish to‘g‘risida»gi Farmon",
+              "id": "mustaqillik-yillarida-ozbekistonda-manaviy-va-ma-4"
+            },
+            {
+              "title": "Muzey. Qatag‘on qurbonlari xotirasi, Surxondaryo viloyatining markazi–Termiz shahrida Arxeologiya muzeyi",
+              "id": "mustaqillik-yillarida-ozbekistonda-manaviy-va-ma-5"
+            }
+          ]
+        },
+        {
+          "title": "O‘ZBEKISTON RESPUBLIKASINING TASHQI SIYOSATI VA IKKI TOMONLAMA MUNOSABATLARI",
+          "hours": 5,
+          "topics": [
+            {
+              "title": "O‘zbekiston Respublikasi Tashqi siyosiy faoliyatining shakllanish va uning ustivor yo‘nalishlari",
+              "id": "ozbekiston-respublikasining-tashqi-siyosati-va-i-1"
+            },
+            {
+              "title": "O‘zbekistonning Markaziy Osiyo mamlakatlari bilan o‘zaro hamkorligi",
+              "id": "ozbekiston-respublikasining-tashqi-siyosati-va-i-2"
+            },
+            {
+              "title": "Markaziy Osiyo mamlakatlari bilan hamkorlikning yo‘lga qo‘yilishi",
+              "id": "ozbekiston-respublikasining-tashqi-siyosati-va-i-3"
+            },
+            {
+              "title": "O‘zbekiston Respublikasining Rossiya, Xitoy va AQSH bilan o‘zaro munosabatlari",
+              "id": "ozbekiston-respublikasining-tashqi-siyosati-va-i-4"
+            },
+            {
+              "title": "O‘zbekiston–AQSH",
+              "id": "ozbekiston-respublikasining-tashqi-siyosati-va-i-5"
+            },
+            {
+              "title": "O‘zbekistonning Yaponiya, Hindiston va Koreya Respublikasi bilan ikkitomonlama aloqalarining rivojlanishi",
+              "id": "ozbekiston-respublikasining-tashqi-siyosati-va-i-6"
+            }
+          ]
+        },
+        {
+          "title": "O‘ZBEKISTON RESPUBLIKASINING KO‘P TOMONLAMA HAMKORLIK ALOQALARINING RIVOJLANISHI",
+          "hours": 3,
+          "topics": [
+            {
+              "title": "O‘zbekistonning Birlashgan Millatlar Tashkiloti doirasidagi faoliyati va tinchlikparvar tashqi siyosati",
+              "id": "ozbekiston-respublikasining-kop-tomonlama-hamkor-1"
+            },
+            {
+              "title": "Markaziy Osiyoni yadrosiz zona deb e’lon qilish, Orol muammosi bo‘yicha BMTning maxsus komissiyasini tuzish",
+              "id": "ozbekiston-respublikasining-kop-tomonlama-hamkor-2"
+            },
+            {
+              "title": "O‘zbekistonning mintaqaviy tashkilotlar doirasida ko‘ptomonlama hamkorligi",
+              "id": "ozbekiston-respublikasining-kop-tomonlama-hamkor-3"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

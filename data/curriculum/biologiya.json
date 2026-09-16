@@ -1,0 +1,1819 @@
+{
+  "version": "2026-09-16",
+  "subject": {
+    "id": "biologiya",
+    "uz": "Biologiya",
+    "ru": "Биология",
+    "en": "Biology"
+  },
+  "entries": [
+    {
+      "grade": 5,
+      "hours": 34,
+      "source": {
+        "title": "Umumiy o'rta ta'limning o'quv dasturi (5-sinf) — Biologiya",
+        "url": "https://uzbmb.uz/upload/file/pdf/qabul2025/dasturlar/8.Biologiya/5-sinf%20Biologiya%20dastur.pdf",
+        "year": 2018,
+        "publisher": "Respublika ta'lim markazi (Xalq ta'limi vazirligi)"
+      },
+      "units": [
+        {
+          "title": "Dastur mavzulari",
+          "topics": [
+            {
+              "title": "Gulli o‘simliklar bilan tanishish",
+              "id": "dastur-mavzulari-1",
+              "hours": 3
+            },
+            {
+              "title": "Hujayra",
+              "id": "dastur-mavzulari-2",
+              "hours": 7
+            },
+            {
+              "title": "Ildiz",
+              "id": "dastur-mavzulari-3",
+              "hours": 6
+            },
+            {
+              "title": "Poya",
+              "id": "dastur-mavzulari-4",
+              "hours": 7
+            },
+            {
+              "title": "Barg",
+              "id": "dastur-mavzulari-5",
+              "hours": 7
+            },
+            {
+              "title": "O‘simliklarning vegetativ ko‘payishi",
+              "id": "dastur-mavzulari-6",
+              "hours": 2
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "grade": 6,
+      "hours": 68,
+      "source": {
+        "title": "Umumiy o'rta ta'limning o'quv dasturi (6-sinf) — Biologiya",
+        "url": "https://uzbmb.uz/upload/file/pdf/qabul2025/dasturlar/8.Biologiya/6-sinf-Biologiya%20dastur.pdf",
+        "year": 2018,
+        "publisher": "Respublika ta'lim markazi (Xalq ta'limi vazirligi)"
+      },
+      "units": [
+        {
+          "title": "O‘SIMLIKLAR BILAN UMUMIY TANISHUV",
+          "hours": 3,
+          "topics": [
+            {
+              "title": "Kirish. Botanika - o‘simliklar haqidagi fan",
+              "id": "osimliklar-bilan-umumiy-tanishuv-1",
+              "hours": 1
+            },
+            {
+              "title": "Gulli o‘simliklar bilan umumiy tanishuv",
+              "id": "osimliklar-bilan-umumiy-tanishuv-2",
+              "hours": 1
+            },
+            {
+              "title": "O‘simliklarning hayotiy shakllari",
+              "id": "osimliklar-bilan-umumiy-tanishuv-3",
+              "hours": 1
+            }
+          ]
+        },
+        {
+          "title": "HUJAYRA – HAYOTNING ASOSI",
+          "hours": 3,
+          "topics": [
+            {
+              "title": "O‘simlikning hujayraviy tuzilishi",
+              "id": "hujayra-hayotning-asosi-1",
+              "hours": 1
+            },
+            {
+              "title": "Hujayraning hayotiy faoliyati",
+              "id": "hujayra-hayotning-asosi-2",
+              "hours": 1
+            },
+            {
+              "title": "O‘simlik to‘qimalari",
+              "id": "hujayra-hayotning-asosi-3",
+              "hours": 1
+            }
+          ]
+        },
+        {
+          "title": "GULLI O‘SIMLIKLARNING VEGETATIV VA GENERATIV ORGANLARI",
+          "hours": 24,
+          "topics": [
+            {
+              "title": "Ildiz turlari va tizimlari",
+              "id": "gulli-osimliklarning-vegetativ-va-generativ-orga-1",
+              "hours": 1
+            },
+            {
+              "title": "Ildizning ichki tuzilishi",
+              "id": "gulli-osimliklarning-vegetativ-va-generativ-orga-2",
+              "hours": 1
+            },
+            {
+              "title": "Shakli o‘zgargan ildizlar",
+              "id": "gulli-osimliklarning-vegetativ-va-generativ-orga-3",
+              "hours": 1
+            },
+            {
+              "title": "Novda. Novdalarning xilma -xilligi",
+              "id": "gulli-osimliklarning-vegetativ-va-generativ-orga-4",
+              "hours": 1
+            },
+            {
+              "title": "Kurtak",
+              "id": "gulli-osimliklarning-vegetativ-va-generativ-orga-5",
+              "hours": 1
+            },
+            {
+              "title": "Poya. Poyaning ichki tuzilishi",
+              "id": "gulli-osimliklarning-vegetativ-va-generativ-orga-6",
+              "hours": 1
+            },
+            {
+              "title": "Novda tizimining shakllanishi",
+              "id": "gulli-osimliklarning-vegetativ-va-generativ-orga-7",
+              "hours": 1
+            },
+            {
+              "title": "Bargning tashqi tuzilishi",
+              "id": "gulli-osimliklarning-vegetativ-va-generativ-orga-8",
+              "hours": 1
+            },
+            {
+              "title": "Oddiy va murakkab barglar. Novdada barglarning joylashuvi",
+              "id": "gulli-osimliklarning-vegetativ-va-generativ-orga-9",
+              "hours": 1
+            },
+            {
+              "title": "Bargning ichki tuzilishi. Barg og‘izchalari",
+              "id": "gulli-osimliklarning-vegetativ-va-generativ-orga-10",
+              "hours": 1
+            },
+            {
+              "title": "Shakli o‘zgargan novdalar",
+              "id": "gulli-osimliklarning-vegetativ-va-generativ-orga-11",
+              "hours": 1
+            },
+            {
+              "title": "Gul – o‘simliklarning generativ ko‘payish organi",
+              "id": "gulli-osimliklarning-vegetativ-va-generativ-orga-12",
+              "hours": 1
+            },
+            {
+              "title": "Gullarning xilma-xilligi",
+              "id": "gulli-osimliklarning-vegetativ-va-generativ-orga-13",
+              "hours": 4
+            },
+            {
+              "title": "To‘pgullar",
+              "id": "gulli-osimliklarning-vegetativ-va-generativ-orga-14",
+              "hours": 1
+            },
+            {
+              "title": "Mevalar",
+              "id": "gulli-osimliklarning-vegetativ-va-generativ-orga-15",
+              "hours": 1
+            },
+            {
+              "title": "Urug‘",
+              "id": "gulli-osimliklarning-vegetativ-va-generativ-orga-16",
+              "hours": 1
+            }
+          ]
+        },
+        {
+          "title": "GULLI O‘SIMLIKLARNING HAYOTIY FAOLIYATI",
+          "hours": 13,
+          "topics": [
+            {
+              "title": "O‘simlikning mineral oziqlanishi. Ildiz bosimi. O‘g‘itlar",
+              "id": "gulli-osimliklarning-hayotiy-faoliyati-1",
+              "hours": 1
+            },
+            {
+              "title": "Poyada oziq moddalarning harakatlanishi",
+              "id": "gulli-osimliklarning-hayotiy-faoliyati-2",
+              "hours": 1
+            },
+            {
+              "title": "Bargda organik moddalarning hosil bo‘lishi",
+              "id": "gulli-osimliklarning-hayotiy-faoliyati-3",
+              "hours": 1
+            },
+            {
+              "title": "O‘simliklarning nafas olishi, oziqlanishi. O‘simliklarda moddalar almashinuvi",
+              "id": "gulli-osimliklarning-hayotiy-faoliyati-4",
+              "hours": 1
+            },
+            {
+              "title": "O‘simlikning suv bug‘latishi. Kuz faslida o‘simliklar hayotida ro‘y beradigan o‘zgarishlar",
+              "id": "gulli-osimliklarning-hayotiy-faoliyati-5",
+              "hours": 1
+            },
+            {
+              "title": "O‘simliklarning ko‘payishi",
+              "id": "gulli-osimliklarning-hayotiy-faoliyati-6",
+              "hours": 2
+            },
+            {
+              "title": "Gullarning changlanishi",
+              "id": "gulli-osimliklarning-hayotiy-faoliyati-7",
+              "hours": 1
+            },
+            {
+              "title": "Gulli o‘simliklarning jinsiy ko‘payishi. Urug‘lanish",
+              "id": "gulli-osimliklarning-hayotiy-faoliyati-8",
+              "hours": 1
+            },
+            {
+              "title": "Meva va urug‘larning tarqalishi. Urug‘larning unib chiqishi",
+              "id": "gulli-osimliklarning-hayotiy-faoliyati-9",
+              "hours": 1
+            },
+            {
+              "title": "O‘simlik organlarining o‘zaro bog‘liqligi",
+              "id": "gulli-osimliklarning-hayotiy-faoliyati-10",
+              "hours": 1
+            },
+            {
+              "title": "O‘simliklarga ekologik omillarning ta’siri",
+              "id": "gulli-osimliklarning-hayotiy-faoliyati-11",
+              "hours": 1
+            }
+          ]
+        },
+        {
+          "title": "O‘SIMLIKLAR SISTEMATIKASI. O‘SIMLIKLARNING ASOSIY BO‘LIMLARI",
+          "hours": 25,
+          "topics": [
+            {
+              "title": "O‘simliklar klassifikatsiyasi haqida tushuncha",
+              "id": "osimliklar-sistematikasi-osimliklarning-asosiy-b-1",
+              "hours": 1
+            },
+            {
+              "title": "Suvo‘tlar. Bir hujayrali yashil suvo‘tlar",
+              "id": "osimliklar-sistematikasi-osimliklarning-asosiy-b-2",
+              "hours": 1
+            },
+            {
+              "title": "Ko‘p hujayrali yashil suvo‘tlar",
+              "id": "osimliklar-sistematikasi-osimliklarning-asosiy-b-3",
+              "hours": 1
+            },
+            {
+              "title": "Qo‘ng‘ir va qizil suvo‘tlar bo‘limlari",
+              "id": "osimliklar-sistematikasi-osimliklarning-asosiy-b-4",
+              "hours": 1
+            },
+            {
+              "title": "Yo‘sinlar bo‘limi",
+              "id": "osimliklar-sistematikasi-osimliklarning-asosiy-b-5",
+              "hours": 1
+            },
+            {
+              "title": "Qirqbo‘g‘imlar bo‘limi",
+              "id": "osimliklar-sistematikasi-osimliklarning-asosiy-b-6",
+              "hours": 1
+            },
+            {
+              "title": "Qirqquloqlar bo‘limi",
+              "id": "osimliklar-sistematikasi-osimliklarning-asosiy-b-7",
+              "hours": 1
+            },
+            {
+              "title": "Ochiq urug‘lilar bo‘limi",
+              "id": "osimliklar-sistematikasi-osimliklarning-asosiy-b-8",
+              "hours": 1
+            },
+            {
+              "title": "Yopiq urug‘lilar",
+              "id": "osimliklar-sistematikasi-osimliklarning-asosiy-b-9",
+              "hours": 1
+            },
+            {
+              "title": "Ikki urug‘ pallali o‘simliklar sinfi. Ra’nodoshlar oilasi",
+              "id": "osimliklar-sistematikasi-osimliklarning-asosiy-b-10",
+              "hours": 1
+            },
+            {
+              "title": "Karamdoshlar oilasi",
+              "id": "osimliklar-sistematikasi-osimliklarning-asosiy-b-11",
+              "hours": 1
+            },
+            {
+              "title": "Sho‘radoshlar oilasi",
+              "id": "osimliklar-sistematikasi-osimliklarning-asosiy-b-12",
+              "hours": 1
+            },
+            {
+              "title": "Gulxayridoshlar oilasi",
+              "id": "osimliklar-sistematikasi-osimliklarning-asosiy-b-13",
+              "hours": 1
+            },
+            {
+              "title": "Burchoqdoshlar oilasi",
+              "id": "osimliklar-sistematikasi-osimliklarning-asosiy-b-14",
+              "hours": 1
+            },
+            {
+              "title": "Ituzumdoshlar oilasi",
+              "id": "osimliklar-sistematikasi-osimliklarning-asosiy-b-15",
+              "hours": 1
+            },
+            {
+              "title": "Tokdoshlar oilasi",
+              "id": "osimliklar-sistematikasi-osimliklarning-asosiy-b-16",
+              "hours": 1
+            },
+            {
+              "title": "Qovoqdoshlar oilasi",
+              "id": "osimliklar-sistematikasi-osimliklarning-asosiy-b-17",
+              "hours": 1
+            },
+            {
+              "title": "Qoqio‘tdoshlar oilasi",
+              "id": "osimliklar-sistematikasi-osimliklarning-asosiy-b-18",
+              "hours": 1
+            },
+            {
+              "title": "Bir urug‘pallali o‘simliklar sinfi. Loladoshlar oilasi",
+              "id": "osimliklar-sistematikasi-osimliklarning-asosiy-b-19",
+              "hours": 1
+            },
+            {
+              "title": "Piyozdoshlar oilasi",
+              "id": "osimliklar-sistematikasi-osimliklarning-asosiy-b-20",
+              "hours": 1
+            },
+            {
+              "title": "Bug‘doydoshlar oilasi",
+              "id": "osimliklar-sistematikasi-osimliklarning-asosiy-b-21",
+              "hours": 1
+            },
+            {
+              "title": "Yerda o‘simliklar dunyosining rivojlanishi",
+              "id": "osimliklar-sistematikasi-osimliklarning-asosiy-b-22",
+              "hours": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "grade": 7,
+      "hours": 68,
+      "source": {
+        "title": "Umumiy o'rta ta'limning o'quv dasturi (7-sinf) — Biologiya",
+        "url": "https://uzbmb.uz/upload/file/pdf/qabul2025/dasturlar/8.Biologiya/7-sinf-Biologiya%20dastur.pdf",
+        "year": 2018,
+        "publisher": "Respublika ta'lim markazi (Xalq ta'limi vazirligi)"
+      },
+      "units": [
+        {
+          "title": "HAYVONLAR TO‘G‘RISIDA UMUMIY MA’LUMOT",
+          "hours": 2,
+          "topics": [
+            {
+              "title": "Zoologiya fani va uning vazifalari",
+              "id": "hayvonlar-togrisida-umumiy-malumot-1",
+              "hours": 1
+            },
+            {
+              "title": "Hayvon organizmining tuzilishi, hayvonlarni klassifikatsiya qilish",
+              "id": "hayvonlar-togrisida-umumiy-malumot-2"
+            }
+          ]
+        },
+        {
+          "title": "BIR HUJAYRALILAR, YA’NI SODDA HAYVONLAR",
+          "hours": 4,
+          "topics": [
+            {
+              "title": "Soxta oyoqlilar sinfi",
+              "id": "bir-hujayralilar-yani-sodda-hayvonlar-1",
+              "hours": 1
+            },
+            {
+              "title": "Xivchinlilar sinfi",
+              "id": "bir-hujayralilar-yani-sodda-hayvonlar-2",
+              "hours": 1
+            },
+            {
+              "title": "Infuzoriyalar va sporalilar sinflari",
+              "id": "bir-hujayralilar-yani-sodda-hayvonlar-3",
+              "hours": 2
+            }
+          ]
+        },
+        {
+          "title": "KO‘P HUJAYRALI HAYVONLAR: BO‘SHLIQICHLILAR TIPI",
+          "hours": 2,
+          "topics": [
+            {
+              "title": "Gidroid poliplar sinfi, dengiz bo‘shliqichlilari",
+              "id": "kop-hujayrali-hayvonlar-boshliqichlilar-tipi-1",
+              "hours": 2
+            }
+          ]
+        },
+        {
+          "title": "YASSI VA TO‘GARAK CHUVALCHANGLAR TIPLARI",
+          "hours": 5,
+          "topics": [
+            {
+              "title": "Yassi chuvalchanglar tipi. Kiprikli chuvalchanglar sinfi",
+              "id": "yassi-va-togarak-chuvalchanglar-tiplari-1",
+              "hours": 1
+            },
+            {
+              "title": "Yassi chuvalchanglar tipi. So‘rg‘ichlilar va tasmasimon chuvalchanglar sinflari",
+              "id": "yassi-va-togarak-chuvalchanglar-tiplari-2",
+              "hours": 1
+            },
+            {
+              "title": "To‘garak chuvalchanglar tipi",
+              "id": "yassi-va-togarak-chuvalchanglar-tiplari-3",
+              "hours": 1
+            },
+            {
+              "title": "Parazit chuvalchanglarning xilma-xilligi",
+              "id": "yassi-va-togarak-chuvalchanglar-tiplari-4",
+              "hours": 1
+            }
+          ]
+        },
+        {
+          "title": "HALQALI CHUVALCHANGLAR TIPI",
+          "hours": 3,
+          "topics": [
+            {
+              "title": "Yomg‘ir chuvalchangining tashqi tuzilishi, nerv sistemasi va rivojlanishi",
+              "id": "halqali-chuvalchanglar-tipi-1",
+              "hours": 2
+            },
+            {
+              "title": "Yomg‘ir chuvalchangining ichki tuzilishi, halqali chuvalchanglarning xilma-xilligi",
+              "id": "halqali-chuvalchanglar-tipi-2",
+              "hours": 1
+            }
+          ]
+        },
+        {
+          "title": "MOLYUSKALAR TIPI",
+          "hours": 2,
+          "topics": [
+            {
+              "title": "Qorinoyoqli molyuskalar sinfi. Ikki pallali va boshoyoqli molyuskalar sinflari",
+              "id": "molyuskalar-tipi-1",
+              "hours": 1
+            }
+          ]
+        },
+        {
+          "title": "BO‘G‘IMOYOQLILAR TIPI",
+          "hours": 4,
+          "topics": [
+            {
+              "title": "7.1. Qisqichbaqasimonlar sinfi",
+              "id": "bogimoyoqlilar-tipi-1"
+            },
+            {
+              "title": "Qisqichbaqasimonlar sinfi",
+              "id": "bogimoyoqlilar-tipi-2",
+              "hours": 2
+            },
+            {
+              "title": "O‘rgimchaksimonlar sinfi",
+              "id": "bogimoyoqlilar-tipi-3",
+              "hours": 2
+            },
+            {
+              "title": "Yashil bronza qo‘ng‘izining tuzilishi",
+              "id": "bogimoyoqlilar-tipi-4",
+              "hours": 1
+            },
+            {
+              "title": "Hasharotlarning ko‘payishi va rivojlanishi",
+              "id": "bogimoyoqlilar-tipi-5",
+              "hours": 1
+            },
+            {
+              "title": "Chala o‘zgarish bilan rivojlanadigan hasharotlar turkumlari",
+              "id": "bogimoyoqlilar-tipi-6"
+            },
+            {
+              "title": "To‘liq o‘zgarish orqali rivojlanadigan hasharotlar",
+              "id": "bogimoyoqlilar-tipi-7",
+              "hours": 1
+            },
+            {
+              "title": "Pardaqanotlilar turkumi: asalarilar",
+              "id": "bogimoyoqlilar-tipi-8",
+              "hours": 1
+            },
+            {
+              "title": "Ikki qanotlilar turkumi",
+              "id": "bogimoyoqlilar-tipi-9",
+              "hours": 1
+            },
+            {
+              "title": "Hasharotlarning kelib chiqishi va ahamiyati",
+              "id": "bogimoyoqlilar-tipi-10",
+              "hours": 1
+            }
+          ]
+        },
+        {
+          "title": "XORDALILAR TIPI",
+          "hours": 36,
+          "topics": [
+            {
+              "title": "Xordalilar to‘g‘risida umumiy ma’lumot",
+              "id": "xordalilar-tipi-1",
+              "hours": 1
+            },
+            {
+              "title": "Baliqlarning tashqi tuzilishi, skeleti, suzgich pufagi",
+              "id": "xordalilar-tipi-2",
+              "hours": 1
+            },
+            {
+              "title": "Baliqlarning ichki tuzilishi va sezgi organlari",
+              "id": "xordalilar-tipi-3",
+              "hours": 2
+            },
+            {
+              "title": "Baliqlarning ko‘payishi va rivojlanishi",
+              "id": "xordalilar-tipi-4",
+              "hours": 1
+            },
+            {
+              "title": "Baliqlarning xilma-xilligi: Tog‘ayli baliqlar sinfi",
+              "id": "xordalilar-tipi-5",
+              "hours": 1
+            },
+            {
+              "title": "Suyakli baliqlar sinfi, asosiy sistematik guruhlari va ahamiyati",
+              "id": "xordalilar-tipi-6"
+            },
+            {
+              "title": "Ko‘l baqasining tashqi tuzilishi, skeleti va muskullari",
+              "id": "xordalilar-tipi-7",
+              "hours": 2
+            },
+            {
+              "title": "Ko‘payishi va rivojlanishi",
+              "id": "xordalilar-tipi-8",
+              "hours": 1
+            },
+            {
+              "title": "Ildam kaltakesakning tuzilishi, ko‘payishi va rivojlanishi",
+              "id": "xordalilar-tipi-9",
+              "hours": 1
+            },
+            {
+              "title": "Sudralib yuruvchilarning xilma-xilligi",
+              "id": "xordalilar-tipi-10",
+              "hours": 2
+            },
+            {
+              "title": "Qushlarning tashqi tuzilishi, skeleti va muskullari",
+              "id": "xordalilar-tipi-11",
+              "hours": 2
+            },
+            {
+              "title": "Qushlarning ichki tuzilishi va sezgi organlari",
+              "id": "xordalilar-tipi-12",
+              "hours": 1
+            },
+            {
+              "title": "Qushlarning ko‘payishi, rivojlanishi va kelib chiqishi",
+              "id": "xordalilar-tipi-13",
+              "hours": 1
+            },
+            {
+              "title": "Qushlarning mavsumiy hodisalarga moslanishi",
+              "id": "xordalilar-tipi-14",
+              "hours": 1
+            },
+            {
+              "title": "Qushlarning xilma-xilligi",
+              "id": "xordalilar-tipi-15",
+              "hours": 1
+            },
+            {
+              "title": "Yirtqich qushlar",
+              "id": "xordalilar-tipi-16",
+              "hours": 1
+            },
+            {
+              "title": "Parrandachilik",
+              "id": "xordalilar-tipi-17",
+              "hours": 1
+            },
+            {
+              "title": "Itning tashqi tuzilishi, skeleti va muskullari",
+              "id": "xordalilar-tipi-18",
+              "hours": 1
+            },
+            {
+              "title": "Itning ichki tuzilishi",
+              "id": "xordalilar-tipi-19",
+              "hours": 1
+            },
+            {
+              "title": "Sut emizuvchilar ko‘payishi, rivojlanishi va kelib chiqishi",
+              "id": "xordalilar-tipi-20",
+              "hours": 1
+            },
+            {
+              "title": "Qo‘lqanotlilar va kemiruvchilar turkumlari",
+              "id": "xordalilar-tipi-21",
+              "hours": 1
+            },
+            {
+              "title": "Yirtqich sut emizuvchilar turkumi",
+              "id": "xordalilar-tipi-22",
+              "hours": 1
+            },
+            {
+              "title": "Dengiz sut emizuvchilari: kurakoyoqlilar va kitsimonlar turkumlari",
+              "id": "xordalilar-tipi-23",
+              "hours": 1
+            },
+            {
+              "title": "Tuyoqli sut emizuvchilar",
+              "id": "xordalilar-tipi-24",
+              "hours": 1
+            },
+            {
+              "title": "Primatlar turkumi, sut emizuvchilarning ahamiyati",
+              "id": "xordalilar-tipi-25",
+              "hours": 1
+            },
+            {
+              "title": "Sut emizuvchilar sinfiga mansub chorva mollari",
+              "id": "xordalilar-tipi-26",
+              "hours": 1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "grade": 8,
+      "hours": 68,
+      "source": {
+        "title": "Umumiy o'rta ta'limning o'quv dasturi (8-sinf) — Biologiya",
+        "url": "https://uzbmb.uz/upload/file/pdf/qabul2025/dasturlar/8.Biologiya/8-sinf-Biologiya%20dastur.pdf",
+        "year": 2018,
+        "publisher": "Respublika ta'lim markazi (Xalq ta'limi vazirligi)"
+      },
+      "units": [
+        {
+          "title": "ODAMORGANIZMI TO‘G‘RISIDA UMUMIY MA’LUMOT",
+          "hours": 3,
+          "topics": [
+            {
+              "title": "Hujayrava organizmning hayotiy xossalari",
+              "id": "odamorganizmi-togrisida-umumiy-malumot-1"
+            },
+            {
+              "title": "To‘qimalar, organlar va organizm",
+              "id": "odamorganizmi-togrisida-umumiy-malumot-2"
+            },
+            {
+              "title": "Animatsion va videofilmlar. fanlararo bog‘liqlikka doir (mantiqiy) masalalar yechish",
+              "id": "odamorganizmi-togrisida-umumiy-malumot-3"
+            }
+          ]
+        },
+        {
+          "title": "ORGANIZM FUNKSIYASINING BOSHQARILISHI, SEKRETSIYA BEZLARI",
+          "hours": 4,
+          "topics": [
+            {
+              "title": "Organizm funksiyasining gumoral vanerv boshqarilishi",
+              "id": "organizm-funksiyasining-boshqarilishi-sekretsiya-1"
+            },
+            {
+              "title": "Sekretsiya bezlari;qalqonsimon bez Qalqonoldi,gipofiz,ayrisimon bez,buyrakusti bezlari, ularning tuzilishi va funksiyasi",
+              "id": "organizm-funksiyasining-boshqarilishi-sekretsiya-2"
+            },
+            {
+              "title": "Oshqozonosti va jinsiy bezlar, sekretsiya bezlari ishining boshqarilishi",
+              "id": "organizm-funksiyasining-boshqarilishi-sekretsiya-3"
+            }
+          ]
+        },
+        {
+          "title": "TAYANCH - HARAKATLANISH SISTEMASI",
+          "hours": 6,
+          "topics": [
+            {
+              "title": "Tayanch - harakatlanish sistemasining tuzilishi,funksiyasiva ahamiyati",
+              "id": "tayanch-harakatlanish-sistemasi-1"
+            },
+            {
+              "title": "Odam skeletining tuzilishi",
+              "id": "tayanch-harakatlanish-sistemasi-2"
+            },
+            {
+              "title": "Suyaklarning tuzilishi vao‘sishi.Suyak toqimasi tarkibi",
+              "id": "tayanch-harakatlanish-sistemasi-3"
+            },
+            {
+              "title": "Suyaklarshikastlanganidabirinchi yordam ko‘rsatish",
+              "id": "tayanch-harakatlanish-sistemasi-4"
+            },
+            {
+              "title": "Muskullar.Muskul to‘qimasi: ko‘ndalang – targ‘il, yurak va silliq muskullar",
+              "id": "tayanch-harakatlanish-sistemasi-5"
+            },
+            {
+              "title": "Odam tanasi muskullarining asosiy guruhlari: bosh, bo‘yin, ko‘krak, qorin, qo‘l va oyoq muskullari, ularning funksiyasi",
+              "id": "tayanch-harakatlanish-sistemasi-6"
+            },
+            {
+              "title": "Tayanch-harakat sistemasining rivojlanishi",
+              "id": "tayanch-harakatlanish-sistemasi-7"
+            },
+            {
+              "title": "Muskullarning rivojlanishi, odam qaddi - qomatiningshakllanishi.Qad- qomatlarning asosiy tiplari.Yassioyoqlik, uning sabablari va uning oldini olish",
+              "id": "tayanch-harakatlanish-sistemasi-8"
+            }
+          ]
+        },
+        {
+          "title": "QON",
+          "hours": 4,
+          "topics": [
+            {
+              "title": "Qon va uning vazifalari",
+              "id": "qon-1"
+            },
+            {
+              "title": "Qonning kimyoviy tarkibi, qon plazmasi, trombotsit, qonning ivishi, qon zardobi va shaklli elementlari Eritrotsitlar.Eritrotsitlarning tuzilishi,qon quyish,qon guruhlari,rezus omil",
+              "id": "qon-2"
+            }
+          ]
+        },
+        {
+          "title": "QON AYLANISH SISTEMASI",
+          "hours": 6,
+          "topics": [
+            {
+              "title": "Qon aylanishning ahamiyati, yurakning tuzilishi",
+              "id": "qon-aylanish-sistemasi-1"
+            },
+            {
+              "title": "Qon tomirlari, qon aylanish doirasi",
+              "id": "qon-aylanish-sistemasi-2"
+            },
+            {
+              "title": "Katta va kichik qon aylanish doiralari",
+              "id": "qon-aylanish-sistemasi-3"
+            },
+            {
+              "title": "Qonning qon tomirlar bo‘ylab oqishi",
+              "id": "qon-aylanish-sistemasi-4"
+            },
+            {
+              "title": "Qon aylanish organlari ishining boshqarilishi",
+              "id": "qon-aylanish-sistemasi-5"
+            },
+            {
+              "title": "Tomirlardan qon ketganida birinchi yordam ko‘rsatish.Qon ketishning organizmga ta’siri.Arteriya, kapillyarlardan, venalardan va arteriyalardan qon ketishi",
+              "id": "qon-aylanish-sistemasi-6"
+            }
+          ]
+        },
+        {
+          "title": "NAFAS OLISH SISTEMASI",
+          "hours": 4,
+          "topics": [
+            {
+              "title": "Nafas olish organlarining tuzilishi.Nafas olishning mohiyati",
+              "id": "nafas-olish-sistemasi-1"
+            },
+            {
+              "title": "O‘pkalar va to‘qimalarda gazlar almashinuvi.Nafas olish harakatlari",
+              "id": "nafas-olish-sistemasi-2"
+            },
+            {
+              "title": "O‘pkaning tiriklik sigimi",
+              "id": "nafas-olish-sistemasi-3"
+            },
+            {
+              "title": "Nafas olishning boshqarilishi, nafas olish organlari kasalliklari",
+              "id": "nafas-olish-sistemasi-4"
+            }
+          ]
+        },
+        {
+          "title": "OVQAT HAZM QILISH SISTEMASI",
+          "hours": 5,
+          "topics": [
+            {
+              "title": "Ovqat hazm qilish sistemasi organlari",
+              "id": "ovqat-hazm-qilish-sistemasi-1"
+            },
+            {
+              "title": "Ovqat hazm qilish sistemasi organlarining tuzilishi va funksiyasi",
+              "id": "ovqat-hazm-qilish-sistemasi-2"
+            },
+            {
+              "title": "Oshqozon, Jigar, oshqozon osti bezining tuzilishi va funksiyasi, ingichka va yo‘g‘on ichakning tuzilishi funksiyasi",
+              "id": "ovqat-hazm-qilish-sistemasi-3"
+            },
+            {
+              "title": "Ovqat hazm qilishning boshqarilishi",
+              "id": "ovqat-hazm-qilish-sistemasi-4"
+            },
+            {
+              "title": "Hazm qilishni gumoral boshqarilishi.Hazm qilish organlarining gigiyenasi.Oshqozon-ichak kasalliklari va ularning oldini olish.Oshqozon- ichak yallig‘lanishi",
+              "id": "ovqat-hazm-qilish-sistemasi-5"
+            }
+          ]
+        },
+        {
+          "title": "MODDALAR VA ENERGIYA ALMASHINUVI",
+          "hours": 5,
+          "topics": [
+            {
+              "title": "Moddalar va energiya almashinuvining ahamiyati",
+              "id": "moddalar-va-energiya-almashinuvi-1"
+            },
+            {
+              "title": "Oqsillar, karbonsuvlar vayog‘lar almashinuvi",
+              "id": "moddalar-va-energiya-almashinuvi-2"
+            },
+            {
+              "title": "Vitaminlar va ularning ahamiyati",
+              "id": "moddalar-va-energiya-almashinuvi-3"
+            },
+            {
+              "title": "Vitaminlar.C vitamini, A vitamini, B guruh vitaminlari, D vitamini",
+              "id": "moddalar-va-energiya-almashinuvi-4"
+            },
+            {
+              "title": "Vitaminlarning organizmdagi moddalar almashinuvidagi ahamiyati",
+              "id": "moddalar-va-energiya-almashinuvi-5"
+            },
+            {
+              "title": "Organizmda energiya sarfi.Ovqatlanish meyori, ovqatlanish rejimi, ratsional ovqatlanish, ovqatlanish gigiyenasi",
+              "id": "moddalar-va-energiya-almashinuvi-6"
+            }
+          ]
+        },
+        {
+          "title": "TERI VA SIYDIK AYIRISH SISTEMASl",
+          "hours": 5,
+          "topics": [
+            {
+              "title": "Terining tuzilishi va funksiyasi",
+              "id": "teri-va-siydik-ayirish-sistemasl-1"
+            },
+            {
+              "title": "Ter bezlari va teri hosilalari",
+              "id": "teri-va-siydik-ayirish-sistemasl-2"
+            },
+            {
+              "title": "Teri gigiyenasi, teri shikastlanganda birinchi yordam ko‘rsatish",
+              "id": "teri-va-siydik-ayirish-sistemasl-3"
+            },
+            {
+              "title": "Siydik ajratish organlarining tuzilishi.Ayirish organlari.Buyraklaming tuzilishi.Siydik ayirish organlarining kasalliklari Siydik ajratish organlarining funksiyasi",
+              "id": "teri-va-siydik-ayirish-sistemasl-4"
+            }
+          ]
+        },
+        {
+          "title": "NERV SISTEMASI",
+          "hours": 7,
+          "topics": [
+            {
+              "title": "Nerv sistemasining tuzilishi.Nerv sistemasining funksiyasi.Nerv sistemasining ahamiyati",
+              "id": "nerv-sistemasi-1"
+            },
+            {
+              "title": "Nerv sistemasining funksiyasi",
+              "id": "nerv-sistemasi-2"
+            },
+            {
+              "title": "Orqa miyaning tuzilishi va funksiyasi",
+              "id": "nerv-sistemasi-3"
+            },
+            {
+              "title": "Bosh miyaning tuzilishi va funksiyasi",
+              "id": "nerv-sistemasi-4"
+            },
+            {
+              "title": "Bosh miya katta yarimsharlarining tuzilishi",
+              "id": "nerv-sistemasi-5"
+            }
+          ]
+        },
+        {
+          "title": "OLIV NERV FAOLIYATI",
+          "hours": 7,
+          "topics": [
+            {
+              "title": "Oliy nerv faoliyati, shartsiz reflekslar",
+              "id": "oliv-nerv-faoliyati-1"
+            },
+            {
+              "title": "Shartli reflekslaming hosil bo‘lishi va tormozlanishi",
+              "id": "oliv-nerv-faoliyati-2"
+            },
+            {
+              "title": "Aql-idrok, tafakkur,so‘z va nutq.Aql-idrok",
+              "id": "oliv-nerv-faoliyati-3"
+            },
+            {
+              "title": "Hissiyotva uning boshqarilishi.Hissiyot.Hissiyot tili",
+              "id": "oliv-nerv-faoliyati-4"
+            },
+            {
+              "title": "Xotira.Xotiraning ahamiyati.Xotira shakllari.Xotiraning fiziologik ahamiyati",
+              "id": "oliv-nerv-faoliyati-5"
+            },
+            {
+              "title": "Uyquva uning ahamiyati.Uyquning tavsifi",
+              "id": "oliv-nerv-faoliyati-6"
+            },
+            {
+              "title": "Uyquning buzilishi",
+              "id": "oliv-nerv-faoliyati-7"
+            },
+            {
+              "title": "Nerv faoliyati tiplari, nerv sistemasi gigiyenasi",
+              "id": "oliv-nerv-faoliyati-8"
+            }
+          ]
+        },
+        {
+          "title": "SEZGI ORGANLARI",
+          "hours": 7,
+          "topics": [
+            {
+              "title": "Sezgi organlarining ahamiyati, analizatorlar",
+              "id": "sezgi-organlari-1"
+            },
+            {
+              "title": "Ko‘rish analizatorlari",
+              "id": "sezgi-organlari-2"
+            },
+            {
+              "title": "Ko‘rish organlarining funksiyasi",
+              "id": "sezgi-organlari-3"
+            },
+            {
+              "title": "Eshitish organlarining tuzilishi,eshitish gigienasi",
+              "id": "sezgi-organlari-4"
+            },
+            {
+              "title": "Muvozanat saqlash, muskul sezish va tuyg‘u organlari",
+              "id": "sezgi-organlari-5"
+            },
+            {
+              "title": "Hid bilish va ta’m bilish organlari",
+              "id": "sezgi-organlari-6"
+            }
+          ]
+        },
+        {
+          "title": "KO‘PAYISH VA RIVOJLANISH, ODAMNING BIOLOGIK VA IJTIMOIY TABIATI",
+          "hours": 4,
+          "topics": [
+            {
+              "title": "Ko‘payish organlari",
+              "id": "kopayish-va-rivojlanish-odamning-biologik-va-ijt-1"
+            },
+            {
+              "title": "Ovulyatsiya.Urug‘lanish vahomilaning rivojlanishi",
+              "id": "kopayish-va-rivojlanish-odamning-biologik-va-ijt-2"
+            },
+            {
+              "title": "Homilaning rivojlanishi",
+              "id": "kopayish-va-rivojlanish-odamning-biologik-va-ijt-3"
+            },
+            {
+              "title": "Bolaning o‘sishi va rivojlanishi",
+              "id": "kopayish-va-rivojlanish-odamning-biologik-va-ijt-4"
+            },
+            {
+              "title": "Odamning biologik o‘zgarishiva ijtimoiy tabiati",
+              "id": "kopayish-va-rivojlanish-odamning-biologik-va-ijt-5"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "grade": 9,
+      "hours": 68,
+      "source": {
+        "title": "Umumiy o'rta ta'limning o'quv dasturi (9-sinf) — Biologiya",
+        "url": "https://uzbmb.uz/upload/file/pdf/qabul2025/dasturlar/8.Biologiya/9-sinf-Biologiya%20dastur.pdf",
+        "year": 2018,
+        "publisher": "Respublika ta'lim markazi (Xalq ta'limi vazirligi)"
+      },
+      "units": [
+        {
+          "title": "HAYOTNING UMUMIY QONUNIYATLARI",
+          "hours": 2,
+          "topics": [
+            {
+              "title": "Tirik oranizmlarning o‘ziga xos xususiyatlar: kimyoviy tarkibi, hujayraviy tuzilishi, moddalar almashinuvi, irsiyat, o‘zgaruvchanlik, ko‘payish, o‘sish, rivojlanish, ta’sirlanish",
+              "id": "hayotning-umumiy-qonuniyatlari-1"
+            },
+            {
+              "title": "Tiriklikning tuzilish darajalari",
+              "id": "hayotning-umumiy-qonuniyatlari-2"
+            }
+          ]
+        },
+        {
+          "title": "ОRGANIZMLARNING XILMA-XILLIGI",
+          "topics": [
+            {
+              "title": "Hayotning hujayraviy shakllari",
+              "id": "rganizmlarning-xilma-xilligi-1"
+            },
+            {
+              "title": "Eukariotlar – o‘simliklarning xilma-xilligi.Tuban va yuksak o‘simliklar, ularning tabiatdagi va inson hayotidagi ahamiyati",
+              "id": "rganizmlarning-xilma-xilligi-2"
+            },
+            {
+              "title": "Zamburug‘lar dunyosi",
+              "id": "rganizmlarning-xilma-xilligi-3"
+            },
+            {
+              "title": "Mavzularkesimidaamaliyotga",
+              "id": "rganizmlarning-xilma-xilligi-4"
+            }
+          ]
+        },
+        {
+          "title": "SITOLOGIYA ASOSLARI",
+          "topics": [
+            {
+              "title": "Hujayra nazariyasi.Hujayra nazariyasi, uning hozirgi zamon asosiy qoidalari va ahamiyati",
+              "id": "sitologiya-asoslari-1"
+            },
+            {
+              "title": "Hujayrani o‘rganish usullari",
+              "id": "sitologiya-asoslari-2"
+            },
+            {
+              "title": "Eukariot hujayralar",
+              "id": "sitologiya-asoslari-3"
+            },
+            {
+              "title": "Plazmatik membrana",
+              "id": "sitologiya-asoslari-4"
+            },
+            {
+              "title": "Sitoplazma",
+              "id": "sitologiya-asoslari-5"
+            },
+            {
+              "title": "Yadro va uning uning tuzilishi",
+              "id": "sitologiya-asoslari-6"
+            },
+            {
+              "title": "Xromosomalar, ularningtuzilishi",
+              "id": "sitologiya-asoslari-7"
+            },
+            {
+              "title": "Kariotip",
+              "id": "sitologiya-asoslari-8"
+            },
+            {
+              "title": "Prokariotvaeukariothujayralar",
+              "id": "sitologiya-asoslari-9"
+            },
+            {
+              "title": "Prokariotvaeukariothujayralarningtuzilishidagio‘xshashlikvafarqlar",
+              "id": "sitologiya-asoslari-10"
+            },
+            {
+              "title": "Hujayralarevolyutsiyasi.Eukariot hujayraning kelib O‘simlikvahayvonhujayralariningtuzilishinimikroskopyordamidao‘rganish",
+              "id": "sitologiya-asoslari-11"
+            },
+            {
+              "title": "O‘simlik hujayrasidaplazmolizvadiplazmoliznikuzatish",
+              "id": "sitologiya-asoslari-12"
+            }
+          ]
+        },
+        {
+          "title": "HAYOTIY JARAYONLARNING KIMYOVIY ASOSLARI",
+          "topics": [
+            {
+              "title": "Hujayra tarkibiga kiruvchi suvva anorganik moddalar",
+              "id": "hayotiy-jarayonlarning-kimyoviy-asoslari-1"
+            },
+            {
+              "title": "Biomolekulalar.Organik moddalar",
+              "id": "hayotiy-jarayonlarning-kimyoviy-asoslari-2"
+            },
+            {
+              "title": "Uglevodlar.Uglevodlar vaularning xilma-xilligi: oddiy va murakkab uglevodlar",
+              "id": "hayotiy-jarayonlarning-kimyoviy-asoslari-3"
+            },
+            {
+              "title": "Lipidlar",
+              "id": "hayotiy-jarayonlarning-kimyoviy-asoslari-4"
+            },
+            {
+              "title": "Lipidlarning hujayra hayotiy faoliyatidagi ahamiyati",
+              "id": "hayotiy-jarayonlarning-kimyoviy-asoslari-5"
+            },
+            {
+              "title": "Oqsillar",
+              "id": "hayotiy-jarayonlarning-kimyoviy-asoslari-6"
+            },
+            {
+              "title": "Oqsil tarkibi.Oqsil tuzilishi",
+              "id": "hayotiy-jarayonlarning-kimyoviy-asoslari-7"
+            },
+            {
+              "title": "Oqsillarning xossalari",
+              "id": "hayotiy-jarayonlarning-kimyoviy-asoslari-8"
+            },
+            {
+              "title": "Oqsillarning funksiyasi",
+              "id": "hayotiy-jarayonlarning-kimyoviy-asoslari-9"
+            },
+            {
+              "title": "Nuklein kislotalar",
+              "id": "hayotiy-jarayonlarning-kimyoviy-asoslari-10"
+            }
+          ]
+        },
+        {
+          "title": "HUJAYRALARDA MODDALAR VA ENERGIYA ALMASHINUVI",
+          "hours": 8,
+          "topics": [
+            {
+              "title": "Moddalaralmashinuvi.Hujayradamoddalaralmashinuvi.Metabolizm.Plastikv aenergetikalmashinuv",
+              "id": "hujayralarda-moddalar-va-energiya-almashinuvi-1"
+            },
+            {
+              "title": "Energiyaalmashinuvi.Hujayradaenergetikalmashinuv",
+              "id": "hujayralarda-moddalar-va-energiya-almashinuvi-2"
+            },
+            {
+              "title": "Energiyaalmashinuvibosqichlari.ATF sintezi",
+              "id": "hujayralarda-moddalar-va-energiya-almashinuvi-3"
+            },
+            {
+              "title": "Hujayraningoziqlanishi.Avtotrof (fototrofvaxemotrof), geterotrofoziqlanishi",
+              "id": "hujayralarda-moddalar-va-energiya-almashinuvi-4"
+            },
+            {
+              "title": "Xemosintez",
+              "id": "hujayralarda-moddalar-va-energiya-almashinuvi-5"
+            },
+            {
+              "title": "Hujayradaplastikalmashinuv",
+              "id": "hujayralarda-moddalar-va-energiya-almashinuvi-6"
+            },
+            {
+              "title": "Hujayrada modda va energiyalar almashinuviga doir masalalar yechish. bo‘lishini o‘rganish",
+              "id": "hujayralarda-moddalar-va-energiya-almashinuvi-7"
+            }
+          ]
+        },
+        {
+          "title": "ORGANIZMLARNING KO‘PAYISHI VA INDIVIDUAL RIVOJLANISHI",
+          "hours": 9,
+          "topics": [
+            {
+              "title": "Hujayra sikli",
+              "id": "organizmlarning-kopayishi-va-individual-rivojlan-1"
+            },
+            {
+              "title": "Mitoz.Mitozningbiologikahamiyati.Amitoz",
+              "id": "organizmlarning-kopayishi-va-individual-rivojlan-2"
+            },
+            {
+              "title": "Meyoz.Meyoz.Meyozningbiologikahamiyati",
+              "id": "organizmlarning-kopayishi-va-individual-rivojlan-3"
+            },
+            {
+              "title": "Tirik organizmlarning ko‘payishxillari",
+              "id": "organizmlarning-kopayishi-va-individual-rivojlan-4"
+            },
+            {
+              "title": "Jinsiy ko‘payish",
+              "id": "organizmlarning-kopayishi-va-individual-rivojlan-5"
+            },
+            {
+              "title": "Hayvonlar jinsiy hujayralarining tuzilishi va rivojlanishi",
+              "id": "organizmlarning-kopayishi-va-individual-rivojlan-6"
+            },
+            {
+              "title": "Gametogenez jarayoni bosqichlari",
+              "id": "organizmlarning-kopayishi-va-individual-rivojlan-7"
+            },
+            {
+              "title": "Urug‘lanish.Partenogenez",
+              "id": "organizmlarning-kopayishi-va-individual-rivojlan-8"
+            },
+            {
+              "title": "Embrionalrivojlanishdavri.Ontogenez–organizmlarning individual rivojlanishi.Embrionaldavr.Embrionaldavrbosqichlari.Embrionningrivojlanishigata shqimuhitningta’siri",
+              "id": "organizmlarning-kopayishi-va-individual-rivojlan-9"
+            },
+            {
+              "title": "Po‘stembrionalrivojlanish.Po‘stembrionaldavrbosqichlari.To‘g‘rivanoto‘g‘r irivojlanish",
+              "id": "organizmlarning-kopayishi-va-individual-rivojlan-10"
+            },
+            {
+              "title": "Embrionrivojlanishigatashqimuhitningta’siri.Gomeostaz.Rivojlanishning umumiy qonuniyatlari",
+              "id": "organizmlarning-kopayishi-va-individual-rivojlan-11"
+            }
+          ]
+        },
+        {
+          "title": "GENETIKA ASOSLARI",
+          "hours": 17,
+          "topics": [
+            {
+              "title": "Genetikaning rivojlanish tarixi",
+              "id": "genetika-asoslari-1"
+            },
+            {
+              "title": "G.Mendelning qonunlari.Monoduragay chatishtirish",
+              "id": "genetika-asoslari-2"
+            },
+            {
+              "title": "Di- poliduragay chatishtirish.Mendelninguchinchiqonuni",
+              "id": "genetika-asoslari-3"
+            },
+            {
+              "title": "Belgilarning mustaqil irsiylanish qonuni",
+              "id": "genetika-asoslari-4"
+            },
+            {
+              "title": "Noallel genlarning o‘zaro ta’siri",
+              "id": "genetika-asoslari-5"
+            },
+            {
+              "title": "Epistaz",
+              "id": "genetika-asoslari-6"
+            },
+            {
+              "title": "Genlarning polimerva ko‘p tomonlama ta’siri: pleyotropiya. 2-Amaliymashg‘uloti: Noallel genlarning o‘zaro ta’siriga doir masalalar yechish",
+              "id": "genetika-asoslari-7"
+            },
+            {
+              "title": "Belgilarningbirikkan holda irsiylanishi",
+              "id": "genetika-asoslari-8"
+            },
+            {
+              "title": "Genetik xaritahaqidatushuncha",
+              "id": "genetika-asoslari-9"
+            },
+            {
+              "title": "Jins genetikasi",
+              "id": "genetika-asoslari-10"
+            },
+            {
+              "title": "O‘zgaruvchanlik",
+              "id": "genetika-asoslari-11"
+            },
+            {
+              "title": "Fenotipik va genotipik o‘zgaruvchanlik",
+              "id": "genetika-asoslari-12"
+            },
+            {
+              "title": "Mutatsion(genotipik) o‘zgaruvchanlik",
+              "id": "genetika-asoslari-13"
+            },
+            {
+              "title": "Odam genetikasinio‘rganishusullari.Odam genetikasi",
+              "id": "genetika-asoslari-14"
+            },
+            {
+              "title": "Odamlardagi irsiy kasalliklar",
+              "id": "genetika-asoslari-15"
+            }
+          ]
+        },
+        {
+          "title": "SELEKSIYA VA BIOTEXNOLOGIYA ASOSLARI",
+          "hours": 4,
+          "topics": [
+            {
+              "title": "Madaniy o‘simliklarning kelib chiqish va xilma-xillikmarkazlari O‘simlik va hayvonlar seleksiyasi",
+              "id": "seleksiya-va-biotexnologiya-asoslari-1"
+            },
+            {
+              "title": "Seleksiya va biotexnologiya",
+              "id": "seleksiya-va-biotexnologiya-asoslari-2"
+            },
+            {
+              "title": "O‘zbekiston olimlarining biologiya va seleksiya sohasidagi yutuqlari",
+              "id": "seleksiya-va-biotexnologiya-asoslari-3"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "grade": 10,
+      "source": {
+        "title": "Umumiy o'rta ta'limning o'quv dasturi (10-sinf) — Biologiya",
+        "url": "https://uzbmb.uz/upload/file/pdf/qabul2025/dasturlar/8.Biologiya/10-sinf%20Biologiya%20fani%20%20MOD.pdf",
+        "year": 2018,
+        "publisher": "Respublika ta'lim markazi (Xalq ta'limi vazirligi)"
+      },
+      "units": [
+        {
+          "title": "BIOLOGIYA FANINING AMALDAGI HOLATI VA MAVJUD MUAMMOLAR",
+          "topics": [
+            {
+              "title": "Bugungi kunda axborot-kommunikatsiya texnologiyalari jamiyat rivojlanishiga shiddatli ta’sir ko‘rsatmoqda",
+              "id": "biologiya-fanining-amaldagi-holati-va-mavjud-mua-1"
+            }
+          ]
+        },
+        {
+          "title": "BIOLOGIYA FANINING MODDIY-TEXNIK TA’MINOTINI MUSTAHKAMLASH",
+          "topics": [
+            {
+              "title": "Biologiya fani moddiy-texnik bazasini mustahkamlash bo‘yicha quyidagi tadbirlar amalga oshiriladi",
+              "id": "biologiya-fanining-moddiy-texnik-taminotini-must-1"
+            }
+          ]
+        },
+        {
+          "title": "BIOLOGIYA TA’LIMI JARAYONIGA RAQAMLI TEXNOLOGIYALAR JORIY ETISHNING ZAMONAVIY USULLARINI SHAKLLANTIRISH",
+          "topics": [
+            {
+              "title": "Har bir pedagog o‘z kasbiy faoliyatida kompyuter imkoniyatlaridan erkin va faol foydalanishni, dars jarayonida tatbiq qilishini nazarda tutadi",
+              "id": "biologiya-talimi-jarayoniga-raqamli-texnologiyal-1"
+            }
+          ]
+        },
+        {
+          "title": "MOLEKULYAR BIOLOGIYA",
+          "hours": 12,
+          "topics": [
+            {
+              "title": "Biologiya fan sifatida",
+              "id": "molekulyar-biologiya-1"
+            }
+          ]
+        },
+        {
+          "title": "HUJAYRA BIOLOGIYASI",
+          "hours": 17,
+          "topics": [
+            {
+              "title": "Eukariot hujayra",
+              "id": "hujayra-biologiyasi-1"
+            },
+            {
+              "title": "Eukariot hujayralarning xilmaxilligi",
+              "id": "hujayra-biologiyasi-2"
+            },
+            {
+              "title": "Eukariot hujayraning asosiy komponentlari",
+              "id": "hujayra-biologiyasi-3"
+            },
+            {
+              "title": "Sitoplazma",
+              "id": "hujayra-biologiyasi-4"
+            },
+            {
+              "title": "Hujayraning membranali organoidlari",
+              "id": "hujayra-biologiyasi-5"
+            },
+            {
+              "title": "Endoplazmatik to‘r, Golji majmuasi, lizosomalar, vakuolalar, funksiyalari",
+              "id": "hujayra-biologiyasi-6"
+            }
+          ]
+        },
+        {
+          "title": "HAYOTIY JARAYONLAR",
+          "hours": 6,
+          "topics": [
+            {
+              "title": "Organizmlarning jinssiz ko‘payishi",
+              "id": "hayotiy-jarayonlar-1"
+            },
+            {
+              "title": "Gametogenez",
+              "id": "hayotiy-jarayonlar-2"
+            },
+            {
+              "title": "Organizmlarning jinsiy ko‘payishi",
+              "id": "hayotiy-jarayonlar-3"
+            },
+            {
+              "title": "Bakteriyalarda sodir bo‘ladigan jinsiy jarayonlar",
+              "id": "hayotiy-jarayonlar-4"
+            },
+            {
+              "title": "O‘simlik va hayvonlar hayot siklida jinssiz va jinsiy nasl gallanishi",
+              "id": "hayotiy-jarayonlar-5"
+            }
+          ]
+        },
+        {
+          "title": "IRSIYAT VA O‘ZGARUVCHANLIK",
+          "hours": 12,
+          "topics": [
+            {
+              "title": "Irsiyat qonuniyatlari",
+              "id": "irsiyat-va-ozgaruvchanlik-1"
+            }
+          ]
+        },
+        {
+          "title": "GENETIK MUHANDISLIK VA BIOTEXNOLOGIYA",
+          "hours": 5,
+          "topics": [
+            {
+              "title": "Genetik muhandislik",
+              "id": "genetik-muhandislik-va-biotexnologiya-1"
+            },
+            {
+              "title": "Hujayra irsiyatini o‘zgartirish",
+              "id": "genetik-muhandislik-va-biotexnologiya-2"
+            },
+            {
+              "title": "Gen injeneriyasiga asoslanib o‘simlik va hayvonlarning irsiyatini o‘zgartirish",
+              "id": "genetik-muhandislik-va-biotexnologiya-3"
+            },
+            {
+              "title": "Biotexnologiya",
+              "id": "genetik-muhandislik-va-biotexnologiya-4"
+            }
+          ]
+        },
+        {
+          "title": "EKOSISTEMA",
+          "hours": 8,
+          "topics": [
+            {
+              "title": "Ekosistemaning tarkibiy tuzilmasi",
+              "id": "ekosistema-1"
+            },
+            {
+              "title": "Moddalarning davriy aylanishida bajaradigan vazifasiga ko‘ra, funksional guruhlari: produtsentlar, konsumentlar yoki redutsentlar",
+              "id": "ekosistema-2"
+            }
+          ]
+        },
+        {
+          "title": "EVOLYUTSIYA",
+          "hours": 8,
+          "topics": [
+            {
+              "title": "Evolyutsiyani harakatlantiruvchi omillari",
+              "id": "evolyutsiya-1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "grade": 11,
+      "hours": 68,
+      "source": {
+        "title": "Umumiy o'rta ta'limning o'quv dasturi (11-sinf) — Biologiya",
+        "url": "https://uzbmb.uz/upload/file/pdf/qabul2025/dasturlar/8.Biologiya/11-sinf-Biologiya%20dastur.pdf",
+        "year": 2018,
+        "publisher": "Respublika ta'lim markazi (Xalq ta'limi vazirligi)"
+      },
+      "units": [
+        {
+          "title": "EKOLOGIYA VA HAYOT",
+          "hours": 2,
+          "topics": [
+            {
+              "title": "Kirish",
+              "id": "ekologiya-va-hayot-1"
+            },
+            {
+              "title": "Insoniyat oldida turgan ekologik muammolar",
+              "id": "ekologiya-va-hayot-2"
+            },
+            {
+              "title": "Ekologiyaning rivojlanishi, bo‘limlari va metodlari",
+              "id": "ekologiya-va-hayot-3"
+            }
+          ]
+        },
+        {
+          "title": "HAYOTNING EKOTIZIM DARAJASIDAGI UMUMBIOLOGIK QONUNIYATLAR",
+          "hours": 34,
+          "topics": [
+            {
+              "title": "Hayotning biogeotsenoz (ekotizim) darajasining o‘ziga xos jihatlari",
+              "id": "hayotning-ekotizim-darajasidagi-umumbiologik-qon-1"
+            },
+            {
+              "title": "Biogeotsenoz biologik tizim sifatida",
+              "id": "hayotning-ekotizim-darajasidagi-umumbiologik-qon-2"
+            },
+            {
+              "title": "Biogeotsenoz haqidagi ta'limot",
+              "id": "hayotning-ekotizim-darajasidagi-umumbiologik-qon-3"
+            },
+            {
+              "title": "Ekologik tizimlarning tarkibiy qismlari",
+              "id": "hayotning-ekotizim-darajasidagi-umumbiologik-qon-4"
+            },
+            {
+              "title": "Produtsentlar, konsumentlar va redutsentlar",
+              "id": "hayotning-ekotizim-darajasidagi-umumbiologik-qon-5"
+            },
+            {
+              "title": "Tirik organizmlarning yashash muhitlari",
+              "id": "hayotning-ekotizim-darajasidagi-umumbiologik-qon-6"
+            },
+            {
+              "title": "Muhit - tirik organizmlarni o‘rab turuvchi va ularga bevosita yoki bilvosita ta’sir etuvchi omillar yig‘indisi",
+              "id": "hayotning-ekotizim-darajasidagi-umumbiologik-qon-7"
+            },
+            {
+              "title": "O‘simliklarning suv muhitiga moslashishlari",
+              "id": "hayotning-ekotizim-darajasidagi-umumbiologik-qon-8"
+            },
+            {
+              "title": "Quruqlik, havo, tuproq, tirik organizmlar - yashash muhiti sifatida",
+              "id": "hayotning-ekotizim-darajasidagi-umumbiologik-qon-9"
+            },
+            {
+              "title": "Quruqlik muhitining o‘ziga xos jihatlari",
+              "id": "hayotning-ekotizim-darajasidagi-umumbiologik-qon-10"
+            },
+            {
+              "title": "Muhit omillari va ularning tasnifi",
+              "id": "hayotning-ekotizim-darajasidagi-umumbiologik-qon-11"
+            },
+            {
+              "title": "Ekologik omillar klassifikatsiyasi",
+              "id": "hayotning-ekotizim-darajasidagi-umumbiologik-qon-12"
+            },
+            {
+              "title": "Ekologik nisha haqida tushuncha",
+              "id": "hayotning-ekotizim-darajasidagi-umumbiologik-qon-13"
+            },
+            {
+              "title": "Yorug‘lik - muhitning ekologik omili",
+              "id": "hayotning-ekotizim-darajasidagi-umumbiologik-qon-14"
+            },
+            {
+              "title": "Bioritmlar",
+              "id": "hayotning-ekotizim-darajasidagi-umumbiologik-qon-15"
+            },
+            {
+              "title": "Harorat – muhitning abiotik omili",
+              "id": "hayotning-ekotizim-darajasidagi-umumbiologik-qon-16"
+            },
+            {
+              "title": "O‘simliklarda haroratning o‘zgarishiga moslanishlar",
+              "id": "hayotning-ekotizim-darajasidagi-umumbiologik-qon-17"
+            },
+            {
+              "title": "O‘simliklarning namlikka nisbatan ekologik guruhlari va ularning moslashuvi",
+              "id": "hayotning-ekotizim-darajasidagi-umumbiologik-qon-18"
+            },
+            {
+              "title": "Hayvonlarning namlikka nisbatan ekologik guruhlanishi va moslashuvi",
+              "id": "hayotning-ekotizim-darajasidagi-umumbiologik-qon-19"
+            },
+            {
+              "title": "Tuproq va topografik omillar",
+              "id": "hayotning-ekotizim-darajasidagi-umumbiologik-qon-20"
+            },
+            {
+              "title": "Muhitning abiotik omillarini o‘rganish",
+              "id": "hayotning-ekotizim-darajasidagi-umumbiologik-qon-21"
+            },
+            {
+              "title": "Muhitning biotik omillari",
+              "id": "hayotning-ekotizim-darajasidagi-umumbiologik-qon-22"
+            },
+            {
+              "title": "Neytralizm",
+              "id": "hayotning-ekotizim-darajasidagi-umumbiologik-qon-23"
+            },
+            {
+              "title": "Antropogen omil",
+              "id": "hayotning-ekotizim-darajasidagi-umumbiologik-qon-24"
+            },
+            {
+              "title": "Insonning bevosita va bilvosita ta`siri",
+              "id": "hayotning-ekotizim-darajasidagi-umumbiologik-qon-25"
+            },
+            {
+              "title": "Turning population tuzilmasi",
+              "id": "hayotning-ekotizim-darajasidagi-umumbiologik-qon-26"
+            },
+            {
+              "title": "Ekosistemaning trofik strukturasi",
+              "id": "hayotning-ekotizim-darajasidagi-umumbiologik-qon-27"
+            },
+            {
+              "title": "Moddalarning davriy aylanishida bajaradigan vazifasiga ko‘ra, funksional guruhlari: produtsentlar, konsumentlar yoki redutsentlar",
+              "id": "hayotning-ekotizim-darajasidagi-umumbiologik-qon-28"
+            },
+            {
+              "title": "Ekotizmlarning mahsuldorligi",
+              "id": "hayotning-ekotizim-darajasidagi-umumbiologik-qon-29"
+            },
+            {
+              "title": "Ekologik piramida qoidasi",
+              "id": "hayotning-ekotizim-darajasidagi-umumbiologik-qon-30"
+            },
+            {
+              "title": "Ekologik piramidalar",
+              "id": "hayotning-ekotizim-darajasidagi-umumbiologik-qon-31"
+            },
+            {
+              "title": "Biomassa piramidasi",
+              "id": "hayotning-ekotizim-darajasidagi-umumbiologik-qon-32"
+            },
+            {
+              "title": "Tabiiy ekotizmlar",
+              "id": "hayotning-ekotizim-darajasidagi-umumbiologik-qon-33"
+            },
+            {
+              "title": "Markaziy Osiyo va O‘zbekistonning tabiiy ekotizimlari",
+              "id": "hayotning-ekotizim-darajasidagi-umumbiologik-qon-34"
+            },
+            {
+              "title": "O‘zbekistonning tabiiy ekotizimlari",
+              "id": "hayotning-ekotizim-darajasidagi-umumbiologik-qon-35"
+            },
+            {
+              "title": "Tabiiy ekotizimlardan oqilona foydalanish",
+              "id": "hayotning-ekotizim-darajasidagi-umumbiologik-qon-36"
+            },
+            {
+              "title": "Sun’iy ekotizmlar",
+              "id": "hayotning-ekotizim-darajasidagi-umumbiologik-qon-37"
+            },
+            {
+              "title": "Biogeotsenozlarning barqarorligi",
+              "id": "hayotning-ekotizim-darajasidagi-umumbiologik-qon-38"
+            },
+            {
+              "title": "Biogeotsenozlarning barqarorligini ta’minlovchi omillar",
+              "id": "hayotning-ekotizim-darajasidagi-umumbiologik-qon-39"
+            }
+          ]
+        },
+        {
+          "title": "HAYOTNING BIOSFERA DARAJASIDAGI UMUMBIOLOGIK QONUNIYATLAR",
+          "hours": 18,
+          "topics": [
+            {
+              "title": "Hayotning biosfera darajasining o‘ziga xos jihatlari",
+              "id": "hayotning-biosfera-darajasidagi-umumbiologik-qon-1"
+            },
+            {
+              "title": "Biosfera darajasining ahamiyati",
+              "id": "hayotning-biosfera-darajasidagi-umumbiologik-qon-2"
+            },
+            {
+              "title": "Biosfera",
+              "id": "hayotning-biosfera-darajasidagi-umumbiologik-qon-3"
+            },
+            {
+              "title": "Biosferaning tarkibi",
+              "id": "hayotning-biosfera-darajasidagi-umumbiologik-qon-4"
+            },
+            {
+              "title": "Biosferaning tarkibi: biosferaning tirik moddasi, qattiq moddalar, biogenmoddalar, biogen va abiogen hosil bo‘luvchi moddalar, radioaktiv moddalar, tarqoq atomlar, kosmik moddalar",
+              "id": "hayotning-biosfera-darajasidagi-umumbiologik-qon-5"
+            },
+            {
+              "title": "Biosferada tirik moddalarning funksiyalari",
+              "id": "hayotning-biosfera-darajasidagi-umumbiologik-qon-6"
+            },
+            {
+              "title": "Biosfera biomassasi",
+              "id": "hayotning-biosfera-darajasidagi-umumbiologik-qon-7"
+            },
+            {
+              "title": "Biosferada moddalar va energiyaning davriy aylanishi",
+              "id": "hayotning-biosfera-darajasidagi-umumbiologik-qon-8"
+            },
+            {
+              "title": "Moddalarning geologik va biologik davriy aylanishi",
+              "id": "hayotning-biosfera-darajasidagi-umumbiologik-qon-9"
+            },
+            {
+              "title": "Biogeokimyoviy sikllar",
+              "id": "hayotning-biosfera-darajasidagi-umumbiologik-qon-10"
+            },
+            {
+              "title": "Biogen elementlar davriy aylanishining ahamiyati",
+              "id": "hayotning-biosfera-darajasidagi-umumbiologik-qon-11"
+            },
+            {
+              "title": "Biosfera evolyutsiyasining biogenez bosqichi",
+              "id": "hayotning-biosfera-darajasidagi-umumbiologik-qon-12"
+            },
+            {
+              "title": "Biosfera evolyutsiyasining noogenez bosqichi",
+              "id": "hayotning-biosfera-darajasidagi-umumbiologik-qon-13"
+            },
+            {
+              "title": "Organik olam sistematikasida odamning tutgan o‘rni",
+              "id": "hayotning-biosfera-darajasidagi-umumbiologik-qon-14"
+            },
+            {
+              "title": "Inson biosferaning tarkibiy qismi",
+              "id": "hayotning-biosfera-darajasidagi-umumbiologik-qon-15"
+            },
+            {
+              "title": "Biosferadagi inson faoliyati bilan bog‘liq global ekologik muammolar",
+              "id": "hayotning-biosfera-darajasidagi-umumbiologik-qon-16"
+            },
+            {
+              "title": "Tabiatni muhofaza qilish",
+              "id": "hayotning-biosfera-darajasidagi-umumbiologik-qon-17"
+            }
+          ]
+        },
+        {
+          "title": "ORGANIK OLAM FILOGENEZI",
+          "hours": 14,
+          "topics": [
+            {
+              "title": "Organik olam filogeneziga umumiy ta’rif",
+              "id": "organik-olam-filogenezi-1"
+            },
+            {
+              "title": "O‘simliklar dunyosida evolyutsion ozgarishlar",
+              "id": "organik-olam-filogenezi-2"
+            },
+            {
+              "title": "O‘simliklarning generativ organlari evolyutsiyasi",
+              "id": "organik-olam-filogenezi-3"
+            },
+            {
+              "title": "Hayvonot dunyosida evolyutsion ozgarishlar",
+              "id": "organik-olam-filogenezi-4"
+            },
+            {
+              "title": "Hayvonot dunyosining turli sistematik guruhlari o‘rtasidagi filogenetik munosabatlar",
+              "id": "organik-olam-filogenezi-5"
+            },
+            {
+              "title": "Xordalilarda yuz bergan evolyusion o‘zgarishlar",
+              "id": "organik-olam-filogenezi-6"
+            },
+            {
+              "title": "Tirik organizmlarda o‘z – o‘zini idora etish organlari: gumoral va nerv sistemalari evolyutsiasi",
+              "id": "organik-olam-filogenezi-7"
+            },
+            {
+              "title": "Hayvonlarning tana qoplami va harakat organlari organlari evolyutsiasi",
+              "id": "organik-olam-filogenezi-8"
+            },
+            {
+              "title": "Bir va ko‘p hujayrali hayvonlarning tana qoplami va harakat sistemalaridagi evolyutsion o‘zgarishlar",
+              "id": "organik-olam-filogenezi-9"
+            },
+            {
+              "title": "Hayvonlarning nafas olish organlari evolyutsiasi",
+              "id": "organik-olam-filogenezi-10"
+            },
+            {
+              "title": "Hayvonlarning qon aylanish organlari evolyutsiasi",
+              "id": "organik-olam-filogenezi-11"
+            },
+            {
+              "title": "Hayvonlarning ayirish va jinsiy organlari evolyutsiasi",
+              "id": "organik-olam-filogenezi-12"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

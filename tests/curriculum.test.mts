@@ -93,13 +93,15 @@ test("bo'sh bob va bo'sh/buzuq mavzu sarlavhasi yo'q", async () => {
 test("hasCurriculum faqat mavjud juftlikda; noma'lum fan/sinf → null", async () => {
   assert.equal(hasCurriculum("matematika", 11), true);
   assert.equal(hasCurriculum("matematika", 9), false, "bazada yo'q sinf `true` bermasin (X-2)");
-  assert.equal(hasCurriculum("kimyo", 11), false, "bazada yo'q fan");
+  // WP-B dan keyin kimyo/fizika/biologiya bazada BOR — bazada yo'q fan
+  // sifatida informatika qoladi (R4 X-3: manba formati boshqacha).
+  assert.equal(hasCurriculum("informatika", 11), false, "bazada yo'q fan");
   assert.equal(hasCurriculum("", 11), false);
   assert.equal(hasCurriculum("matematika", Number.NaN), false);
   // `null` — «bazada yo'q»; bo'sh ro'yxat EMAS (route 404 ni shundan chiqaradi).
-  assert.equal(await curriculumTopics("kimyo", 11), null);
+  assert.equal(await curriculumTopics("informatika", 11), null);
   assert.equal(await curriculumTopics("matematika", 9), null);
-  assert.equal(await curriculumFile("kimyo"), null);
+  assert.equal(await curriculumFile("informatika"), null);
   assert.ok(curriculumSubject("matematika"));
   assert.equal(curriculumSubject("yo'q-bunday"), null);
 });
