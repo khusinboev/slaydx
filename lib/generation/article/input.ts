@@ -19,7 +19,7 @@
  */
 import type { FormValues } from "../../types";
 import { splitCsv, joinCsv } from "../slide-params";
-import { normalizeIsbn } from "../research/googlebooks";
+import { normalizeIsbn } from "../research/isbn";
 import {
   ARTICLE_LIMITS,
   CITE_STYLES,

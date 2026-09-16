@@ -20,6 +20,11 @@
 import type { Reference } from "../types";
 import { cached, queryKey } from "./cache";
 import { getJson, withParams, type HttpOpts } from "./http";
+import { normalizeIsbn } from "./isbn";
+
+// Sof yordamchi `isbn.ts` da — forma/klient kodi (`article/input.ts` → `tools.ts`)
+// bu faylni tortmasin: `cache.ts` → `lib/server/db.ts` server-only.
+export { normalizeIsbn } from "./isbn";
 
 const BASE = "https://www.googleapis.com/books/v1/volumes";
 const CACHE_DAYS = 30;
@@ -54,21 +59,6 @@ type RawVolume = {
 
 function apiKey(): string {
   return (process.env.GOOGLE_BOOKS_API_KEY || "").trim();
-}
-
-/**
- * ISBN ni bitta shaklga: defis/bo'shliq tushadi, harflar bosh harfga.
- * Qabul qilinadi — 13 raqam (978/979 bilan boshlanadi) yoki 10 belgi
- * (9 raqam + raqam/X). Aks holda "" (noto'g'ri ISBN bilan qidirmaymiz).
- */
-export function normalizeIsbn(raw: unknown): string {
-  const t = String(raw ?? "")
-    .toUpperCase()
-    .replace(/[\s‐-―-]/g, "")
-    .replace(/^ISBN:?/, "");
-  if (/^97[89]\d{10}$/.test(t)) return t;
-  if (/^\d{9}[\dX]$/.test(t)) return t;
-  return "";
 }
 
 /** ISBN_13 ustun; bo'lmasa ISBN_10; bo'lmasa "". */
