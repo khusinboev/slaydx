@@ -2,7 +2,7 @@ import { buildAcademicDoc } from "./content";
 import { deliveredCount } from "./delivered";
 import { llmEnabled as llmKeyPresent } from "./llm";
 import { extractMeta, minPages } from "./meta";
-import { remainingMs, targetWords, wordCount } from "./quality";
+import { bodyWordCount, remainingMs, targetWords, wordCount } from "./quality";
 import { renderDocx } from "./render-docx";
 import { renderHtml } from "./render-html";
 import { renderPptx } from "./render-pptx";
@@ -332,7 +332,8 @@ export async function buildArtifact(
     // Insho: so'z byudjeti hujjatning O'ZIDA (`doc.essay.words`) — varaq emas.
     const essayNeed = essayGateWords(tool.id, academic);
     const need = essayNeed ?? Math.round(want * MIN_LENGTH_RATIO);
-    const got = wordCount(academic);
+    // Talaba ishi: reja tanasi apparaturasiz — o'lchov ham matn so'zlari bilan.
+    const got = academic.work ? bodyWordCount(academic) : wordCount(academic);
     if (got < need) {
       const pages = Math.max(1, Math.round(got / 230));
       console.warn(`[gen] length gate: ${tool.id} ${got}/${need} so'z`);

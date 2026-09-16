@@ -51,6 +51,20 @@ export function wordCount(doc: AcademicDoc): number {
   return n;
 }
 
+/**
+ * FAQAT matn so'zlari — bo'limlardagi `p`/`li`/`quote` bloklari. Sarlavha,
+ * adabiyotlar, annotatsiya, jadval katakchalari YO'Q. Talaba ishi hajm
+ * darvozasi shu bilan o'lchanadi: `workWordPlan.body` ham apparaturasiz —
+ * `wordCount` bilan solishtirilsa 24 manba (~600 so'z) va jadval
+ * matnni «to'ldirib», 15–20 betlik kurs ishi 2 400 so'z bilan o'tardi
+ * (jonli sinov).
+ */
+export function bodyWordCount(doc: AcademicDoc): number {
+  let n = 0;
+  for (const s of doc.sections) for (const b of s.blocks) if (b.kind === "p" || b.kind === "li" || b.kind === "quote") n += countWords(b.text);
+  return n;
+}
+
 export function targetWords(pages: number): number {
   return Math.max(220, Math.round(Math.max(1, pages) * WORDS_PER_PAGE));
 }

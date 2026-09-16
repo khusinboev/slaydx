@@ -119,8 +119,13 @@ export type WorkBuildResult = { doc: AcademicDoc; cost: WorkCost; research: Rese
 const OUTLINE_TIMEOUT_MS = 30_000;
 const INTRO_TIMEOUT_MS = 45_000;
 const CONCLUSION_TIMEOUT_MS = 45_000;
-/** Paragraf rejadagi so'zning shu ulushidan kalta bo'lsa — bir marta «kengaytir». */
-export const WORK_EXPAND_BELOW = 0.7;
+/**
+ * Paragraf rejadagi so'zning shu ulushidan kalta bo'lsa — bir marta
+ * «kengaytir». 0,85: Gemini flash rejaning ≈75 % ini yozadi (kurs ishi
+ * jonli sinovi: 4 paragraf ≈450/600 so'z → matn 2 400/3 200), 0,7 da
+ * kengaytirilmay qolardi; hajm darvozasi 0,8.
+ */
+export const WORK_EXPAND_BELOW = 0.85;
 const MIN_CALL_MS = 8_000;
 const paragraphTimeout = (words: number, deadline: number) => Math.min(Math.max(35_000, 20_000 + words * 40), 90_000, remainingMs(deadline));
 

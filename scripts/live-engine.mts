@@ -25,7 +25,7 @@ import { planArticle } from "../lib/generation/article/layout";
 import { mkdir, writeFile } from "node:fs/promises";
 import { normalizeResumeTemplate, templateHasPhoto, type ResumeTemplateId } from "../lib/generation/resume/templates.ts";
 import path from "node:path";
-import { buildArtifact } from "../lib/generation/index.ts";
+import { buildArtifact, workGateWords } from "../lib/generation/index.ts";
 import { parsePptxTemplate } from "../lib/generation/pptx-template.ts";
 import { readFile } from "node:fs/promises";
 import { extractMeta } from "../lib/generation/meta.ts";
@@ -540,7 +540,7 @@ const CASES: Case[] = [
           ok("manbalar 100 % tekshirilgan (uydirma yo'q)", cited.length > 0 && cited.every((r) => r.verified !== "unverified"), `${cited.length} cited: ${[...new Set(cited.map((r) => r.verified))].join(",")}`),
           ok(`manbalar ≥ ${Math.min(c.refsMin, 8)} (mo'ljal ${c.refsMin}; Books kalitsiz 429)`, cited.length >= Math.min(c.refsMin, 8), `${cited.length} (turlar: ${[...new Set(cited.map((r) => kindOf(r)))].join(",")})`),
           ok("iqtiboslar reyestrda", (f.doc.work?.review?.checks.find((x) => x.id === "refsCited")?.level ?? "green") !== "red", review?.checks.find((x) => x.id === "refsCited")?.detail ?? "—"),
-          ok("hajm darvozasi (so'z)", body >= 0.8 * 230 * c.pagesMin, `${body} so'z (kerak ≥ ${Math.round(0.8 * 230 * c.pagesMin)})`),
+          ok("hajm darvozasi (so'z)", body >= 0.8 * (workGateWords(f.doc) ?? 230 * c.pagesMin), `${body} so'z (kerak ≥ ${Math.round(0.8 * (workGateWords(f.doc) ?? 230 * c.pagesMin))} — reja tanasi ${workGateWords(f.doc) ?? "?"})`),
           ok("renderlangan sahifa", pages === null || pages >= Math.round(0.85 * c.pagesMin), `${pages ?? "—"} bet (kerak ≥ ${Math.round(0.85 * c.pagesMin)})`),
           ok("vizuallar", !c.visuals || tables + figures >= 1, `jadval ${tables}, sxema ${figures}`),
           ok("hisobot bor va ≥ 55 ball", Boolean(review) && (review?.score ?? 0) >= 55, review ? `${review.score} ball, qizil: ${red.join(",") || "yo'q"}` : "yo'q"),
