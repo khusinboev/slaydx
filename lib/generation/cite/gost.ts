@@ -97,3 +97,109 @@ export function formatGost(ref: Reference, lang = "uz", opts: GostOpts = {}): st
   else if (opts.url !== false && ref.url) parts.push(`URL: ${ref.url.trim()}`);
   return parts.join(" – ");
 }
+
+/* ──────────── kitob / normativ hujjat / internet (AUDIT-19) ──────────── */
+
+/**
+ * KITOB (darslik, monografiya) — o'zbek GOST 7.1 shakli:
+ *
+ *   Karimov A. Ta'limda raqamli texnologiyalar. – Toshkent: Fan, 2022. – 240 b.
+ *
+ * `formatGost` dan farqi: hajm `pageCount` dan olinadi (Google Books
+ * `pageCount` beradi, `pages` esa maqola sahifalari uchun), shahar
+ * berilmasa element butunlay tushadi (GOST'da bo'sh element yozilmaydi —
+ * «– : Fan, 2022» bo'lmaydi).
+ */
+export function formatGostBook(ref: Reference, lang = "uz"): string {
+  const L = langKey(lang);
+  const who = gostAuthors(ref, lang);
+  const title = ref.title.trim().replace(/[.\s]+$/, "");
+  const place = ref.place?.trim();
+  const publisher = ref.publisher?.trim();
+  const year = ref.year ? String(ref.year) : "";
+  const parts: string[] = [dot(who ? `${dot(who)} ${title}` : title)];
+  const imprint = [place && publisher ? `${place}: ${publisher}` : place || publisher || "", year].filter(Boolean).join(", ");
+  if (imprint) parts.push(`${imprint}.`);
+  const total = ref.pageCount && ref.pageCount > 0 ? String(ref.pageCount) : normalizePages(ref.pages);
+  if (total) parts.push(isPageRange(total) ? `${PAGE[L].range} ${total}.` : `${total} ${PAGE[L].total}`);
+  return parts.join(" – ");
+}
+
+/** Hujjat TURI — raqam prefiksidan, bo'lmasa organ nomidan. */
+export function lawKindOf(ref: Pick<Reference, "docNo" | "issuer">): "law" | "decree" | "resolution" | "cabinet" {
+  const no = (ref.docNo ?? "").toUpperCase().replace(/[‘’ʻ`´ʼ]/g, "");
+  if (/^(PF|УП|UP)\s*[-–]?\s*\d/.test(no)) return "decree";
+  if (/^(PQ|ПП|PP)\s*[-–]?\s*\d/.test(no)) return "resolution";
+  if (/^(ORQ|ЗРУ|LRU)\s*[-–]?\s*\d/.test(no)) return "law";
+  const who = ref.issuer ?? "";
+  if (/Prezident|Президент/i.test(who)) return "resolution";
+  if (/Vazirlar Mahkama|Кабинет Министров/i.test(who)) return "cabinet";
+  return "law";
+}
+
+const LAW_WORD: Record<LangKey, Record<"law" | "decree" | "resolution" | "cabinet", string>> = {
+  uz: { law: "Qonuni", decree: "Farmoni", resolution: "Qarori", cabinet: "Qarori" },
+  ru: { law: "Закон", decree: "Указ", resolution: "Постановление", cabinet: "Постановление" },
+  en: { law: "Law", decree: "Decree", resolution: "Resolution", cabinet: "Resolution" },
+};
+
+/** Sarlavhaning o'zi rasmiy nom (ichida «Qonuni»/«Farmoni»/… bor)mi. */
+function isOfficialTitle(title: string): boolean {
+  return /(qonun|farmon|qaror|закон|указ|постановлен|\blaw\b|decree|resolution)/i.test(title);
+}
+
+/** ISO «2019-09-20» → «20.09.2019»; bo'lmasa yil; ikkalasi ham yo'q — "". */
+function lawDate(ref: Pick<Reference, "docDate" | "year">): string {
+  const m = String(ref.docDate ?? "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m) return `${m[3]}.${m[2]}.${m[1]}`;
+  return ref.year ? String(ref.year) : "";
+}
+
+/**
+ * NORMATIV HUJJAT (lex.uz) — O'zbekiston amaliyotidagi shakl:
+ *
+ *   O‘zbekiston Respublikasining «Ta’lim to‘g‘risida»gi Qonuni,
+ *   20.09.2019 y., № O‘RQ-563. — https://lex.uz/docs/5013009
+ *
+ * Model bergan sarlavha ko'pincha ALLAQACHON rasmiy to'liq nom («…
+ * Qonuni») — u holda organ va hujjat so'zi qayta qo'shilmaydi, aks holda
+ * «O‘zR Prezidentining «O‘zR Prezidentining …» Farmoni» chiqardi.
+ */
+export function formatGostLaw(ref: Reference, lang = "uz"): string {
+  const L = langKey(lang);
+  const title = ref.title.trim().replace(/[.\s]+$/, "");
+  const kind = lawKindOf(ref);
+  const word = LAW_WORD[L][kind];
+  const issuer = ref.issuer?.trim() ?? "";
+  let head: string;
+  if (isOfficialTitle(title)) head = title;
+  else if (L === "uz") head = issuer ? `${issuer}ning «${title}» ${word}` : `«${title}» ${word}`;
+  else if (L === "ru") head = issuer ? `${word} ${issuer} «${title}»` : `${word} «${title}»`;
+  else head = issuer ? `${word} of ${issuer} «${title}»` : `${word} «${title}»`;
+
+  const date = lawDate(ref);
+  const tail: string[] = [];
+  if (date) tail.push(L === "uz" ? `${date} y.` : L === "ru" ? `${date} г.` : date);
+  if (ref.docNo) tail.push(L === "en" ? `No. ${ref.docNo.trim()}` : `№ ${ref.docNo.trim()}`);
+  const body = tail.length ? `${head}, ${tail.join(", ")}.` : dot(head);
+  return ref.url ? `${body} — ${ref.url.trim()}` : body;
+}
+
+const ACCESSED: Record<LangKey, string> = { uz: "Murojaat sanasi", ru: "дата обращения", en: "accessed" };
+
+/**
+ * INTERNET manbasi: «Nomi // URL (Murojaat sanasi: 12.03.2026)».
+ * «Murojaat sanasi» O'zbekiston uslubiy ko'rsatmalarida MAJBURIY —
+ * sana bo'lmasa qavs yozilmaydi (yolg'on sana qo'yilmaydi).
+ */
+export function formatGostWeb(ref: Reference, lang = "uz"): string {
+  const L = langKey(lang);
+  const who = gostAuthors(ref, lang);
+  const title = ref.title.trim().replace(/[.\s]+$/, "");
+  const head = who ? `${dot(who)} ${title}` : title;
+  const url = ref.url?.trim() ?? "";
+  const m = String(ref.accessed ?? "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  const when = m ? `${m[3]}.${m[2]}.${m[1]}` : "";
+  if (!url) return dot(head);
+  return `${head} // ${url}${when ? ` (${ACCESSED[L]}: ${when})` : ""}`;
+}
