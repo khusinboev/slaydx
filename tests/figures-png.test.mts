@@ -7,6 +7,7 @@ import { arcPoints } from "../lib/generation/figures/model.ts";
 import { figureSvg } from "../lib/generation/figures/svg.ts";
 import { figurePng, svgWidthPx, targetWidthPx } from "../lib/generation/figures/png.ts";
 import { buildFigure, figureFallbackBlocks, noDataLabel } from "../lib/generation/figures/index.ts";
+import { FIGURE_KINDS, SELECTABLE_FIGURE_KINDS } from "../lib/generation/types.ts";
 
 /**
  * Maqola 2 (AUDIT-17) WP3 — HAQIQIY `sharp`: PNG imzosi, 1890 px @ 160 mm /
@@ -174,4 +175,64 @@ test("buildFigure: chart user → PNG; fallback matni process/tree/prisma/chart 
   assert.deepEqual(li({ id: "c", kind: "chart", caption: "", spec: chart, w: 0, h: 0 }), ["A: 3", "B: 1"]);
   // Sarlavha bo'lsa — birinchi blok «Sarlavha:».
   assert.deepEqual(figureFallbackBlocks({ id: "p", kind: "scheme", caption: "Bosqichlar", spec: { kind: "process", steps: ["X"] }, w: 0, h: 0 }, "uz")[0], { kind: "p", text: "Bosqichlar:" });
+});
+
+/**
+ * TAYYOR SVG (AUDIT-21 R0) — `FigureSpec kind:"svg"`.
+ *
+ * Krossvord to'ri va infografika plakati `layoutFigure` ning tugun/qirra
+ * modeliga tushmaydi: ularning SVG sini dvigatelning o'zi chizadi
+ * (`games/crossword/svg.ts`, `figures/infographic-svg.ts`), `buildFigure`
+ * esa faqat 300 dpi PNG ga o'giradi. Shuning uchun bu shoxda maket ham,
+ * MATN fallback i ham bo'lmasligi kerak.
+ *
+ * Mutatsiya: `buildFigure` dagi `svg` shoxi olib tashlandi — spec
+ * `layoutFigure` ga tushib `null` qaytardi va rasm o'rniga bo'sh matn
+ * fallback i yasaldi (test qizardi).
+ */
+test("buildFigure: tayyor SVG → PNG, kenglik SPECDAN (160 mm standarti emas), fallback yo'q", async () => {
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 560" width="400" height="560">` +
+    `<rect x="0" y="0" width="400" height="560" fill="#F5F5F7"/>` +
+    `<rect x="20" y="20" width="360" height="60" fill="#3730A3"/>` +
+    `<text x="40" y="60" font-family="Liberation Serif, serif" font-size="28" fill="#FFFFFF">Plakat</text>` +
+    `</svg>`;
+  // A4 plakat: 210 mm @ 300 dpi = 2480 px.
+  const fig: Figure = { id: "ig1", kind: "scheme", caption: "Infografika", spec: { kind: "svg", svg, widthMm: 210 }, w: 0, h: 0, fallbackBlocks: [{ kind: "p", text: "eski" }] };
+  const snapshot = JSON.stringify(fig);
+  const out = await buildFigure(fig, { lang: "uz" });
+  assert.equal(JSON.stringify(fig), snapshot, "kirish mutatsiya qilinmadi");
+  assert.ok(out.url?.startsWith("data:image/png;base64,"), "MUTATSIYA: svg shoxi yo'q — rasm chiqmadi");
+  assert.equal(out.w, 2480, "kenglik specdagi widthMm dan hisoblanmadi");
+  // Nisbat saqlanadi: 560/400 × 2480 ≈ 3472.
+  assert.ok(Math.abs(out.h - Math.round((560 / 400) * 2480)) <= 2, `balandlik ${out.h}`);
+  assert.equal(out.fallbackBlocks, undefined, "tayyor SVG uchun matn fallback i yasalmaydi");
+  assert.equal(out.spec.kind, "svg");
+  const bytes = Buffer.from(out.url!.slice("data:image/png;base64,".length), "base64");
+  assert.equal((await sharp(bytes).metadata()).width, 2480);
+
+  // Boshqa kenglik — boshqa piksel (krossvord to'ri 180 mm).
+  const grid = await buildFigure({ id: "cw1", kind: "scheme", caption: "To'r", spec: { kind: "svg", svg, widthMm: 180 }, w: 0, h: 0 }, { lang: "uz" });
+  assert.equal(grid.w, Math.round((180 / 25.4) * 300));
+});
+
+test("buildFigure: buzuq tayyor SVG — xato ham, matn fallback i ham emas (w/h = 0)", async () => {
+  const specs: FigureSpec[] = [
+    { kind: "svg", svg: "", widthMm: 210 },
+    { kind: "svg", svg: "<svg xmlns='http://www.w3.org/2000/svg'><rect", widthMm: 210 },
+    { kind: "svg", svg: "<svg viewBox='0 0 10 10'></svg>", widthMm: 0 },
+  ];
+  for (const spec of specs) {
+    const out = await buildFigure({ id: "x", kind: "scheme", caption: "X", spec, w: 5, h: 5, url: "data:old", assetId: "a" }, { lang: "uz" });
+    assert.equal(out.url, undefined, `${JSON.stringify(spec).slice(0, 40)}: eski url qoldi`);
+    assert.equal(out.assetId, undefined, "eski aktiv id si qoldi");
+    assert.equal(out.w, 0);
+    assert.equal(out.h, 0);
+    assert.equal(out.fallbackBlocks, undefined, "chizilgan to'rni matn ro'yxati bilan almashtirib bo'lmaydi");
+  }
+});
+
+test("«svg» — TANLANMAYDIGAN sxema turi: model uni o'zi so'ray olmaydi", () => {
+  assert.ok(!(FIGURE_KINDS as readonly string[]).includes("svg"), "MUTATSIYA: svg FIGURE_KINDS ga qo'shildi");
+  assert.ok(!(SELECTABLE_FIGURE_KINDS as readonly string[]).includes("svg"), "MUTATSIYA: svg formada tanlanadigan bo'lib qoldi");
 });

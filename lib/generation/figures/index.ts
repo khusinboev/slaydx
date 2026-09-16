@@ -196,6 +196,42 @@ export async function buildFigure(figure: Figure, opts: BuildFigureOpts): Promis
     delete out.fallbackBlocks;
     return out;
   }
+  /*
+   * TAYYOR SVG (AUDIT-21 R0): krossvord to'ri, infografika plakati.
+   *
+   * `layoutFigure` CHAQIRILMAYDI — SVG ni dvigatelning o'z chizuvchisi
+   * (`games/crossword/svg.ts`, `figures/infographic-svg.ts`) allaqachon
+   * qurgan; bu yerdagi yagona ish — `sharp` bilan 300 dpi PNG. Kenglik
+   * specdan keladi (160 mm standarti plakatga yaramaydi).
+   *
+   * Fallback MATN ro'yxati yo'q (`omr` bilan bir xil sabab): chizilgan
+   * to'rni yoki rangli plakatni raqamlangan ro'yxat bilan almashtirib
+   * bo'lmaydi. `sharp` yiqilsa rasm `url` siz qaytadi va maket uni
+   * o'tkazib yuboradi.
+   */
+  if (spec.kind === "svg") {
+    /*
+     * Yiqilganda ESKI `url`/`assetId` ham olib tashlanadi: aks holda
+     * qayta chizishda (tahrirdan keyin) rasm eski PNG bilan qolib,
+     * `w`/`h` = 0 bo'lardi — maket uni «yo'q» deb o'tkazib yuborar,
+     * aktivlar jadvalida esa hech kim ishlatmaydigan bayt qolardi.
+     */
+    const drop = (): Figure => {
+      const out: Figure = { ...figure, w: 0, h: 0 };
+      delete out.url;
+      delete out.assetId;
+      delete out.fallbackBlocks;
+      return out;
+    };
+    const svg = String(spec.svg ?? "");
+    const widthMm = Number(spec.widthMm);
+    if (!svg.trim() || !Number.isFinite(widthMm) || widthMm <= 0) return drop();
+    const png = await figurePng(svg, { widthMm });
+    if (!png) return drop();
+    const out: Figure = { ...figure, url: `data:image/png;base64,${png.png.toString("base64")}`, w: png.w, h: png.h };
+    delete out.fallbackBlocks;
+    return out;
+  }
   if (spec.kind === "chart" && spec.dataSource !== "user") return fallback({ source: noDataLabel(lang) });
   const layout = layoutFigure(spec, { lang });
   if (!layout) return fallback();
