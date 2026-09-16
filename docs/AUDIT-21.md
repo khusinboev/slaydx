@@ -238,3 +238,126 @@ egaligida emas — hozircha `review.ts` ro'yxatni reyestr + qo'shimchalar
 sifatida quradi); (2) `games/layout.ts planGame` javoblar bo'limini YANGI
 BETDAN boshlashi kerak (`answerSeparate` reyestrda `true`); (3) jonli
 sinov (`npm run live`) va LibreOffice ko'zi — R bosqichida.
+
+### R — jonli holatlar, delivered/darvoza, zondlar (2026-09-17)
+
+WP-A/WP-B/WP-C dan MUSTAQIL, `main`ga 479f353 gacha qo'shilib bo'lgan
+qatlamlar ustiga: jonli tekshiruv urug'lari, pul/element darvozalari va
+«bezak maydon yo'q» zondlari. WP-B (`games/flashcards/**`) va WP-C
+(`infographic/engine.ts` tanasi, `infographic/input.ts`) hali STUB —
+shu sababli bu ish ularga TEGMASDAN, ular ulanganda O'ZI ishga
+tushadigan shartnoma yozadi (AUDIT-20 naqshi).
+
+**`scripts/live-engine.mts`** — 4 yangi holat (`--list` bilan
+tekshirildi, LLM chaqirilmadi):
+
+- `crossword` («Fotosintez», 10 so'z, klassik) va `crossword-file`
+  (`--source <docx>` — fayl rejimi) BIR XIL `crosswordChecks()` dan:
+  `doc.game.crossword` bor, so'z ≥ wordCount−1 (dropped ≤1), to'r
+  ≤21×21, kesishma ≥ so'z/2 (`countGridCrossings`, WP-A dan import),
+  bo'limlar `grid·across·down·answers` (`CROSSWORD_SECTION_IDS` bilan
+  solishtiriladi — QO'LDA qayta yozilmadi), figure 2 ta, hisobot ≥55,
+  `cost.calls>0`, `delivered` mos, DOCX 2–4 bet, fayl nomi
+  `-krossvord`; fayl rejimida qo'shimcha `--source` mavjudligi.
+- `flashcards` (10 ta term-def, misol bilan): `doc.game.cards` 10,
+  old/orqa yuz `GAME_LIMITS` chegarasida, misol qatori, hisobot,
+  `delivered`; **DOCX bet soni YUMSHOQ** (`pages >= 1`) — WP-B ning
+  `drawCards`/`gameFlow` maketi kelmaguncha 2×4 duplex bet sonini
+  qat'iy talab qilib bo'lmaydi (mahsulot egasi ko'rsatmasi).
+- `infographic` (`process` turi, 5 blok): PNG mavjudligi, o'lcham
+  `sharp` bilan HAQIQIY o'qiladi va A4 @300dpi ≈2480×3508 px ga ±2%
+  solishtiriladi, `doc.infographic.spec.blocks` 5, hisobot ≥55,
+  `cost.calls>0`. Buning uchun `Case.checks` imzosi
+  `Check[] | Promise<Check[]>` ga kengaytirildi (`runCase` da
+  `await`) — qolgan 29 holat sinxron qolib, xatti-harakati o'zgarmadi.
+- WP-B/WP-C hali ulanmagan holatda maxsus «yiqilish» kodi YOZILMADI:
+  `buildGameDoc`/`buildInfographicArtifact` `null` qaytaradi →
+  `buildArtifact` mavjud xato matnini tashlaydi → `runCase`ning
+  `try/catch` i buni «✘ XATO» deb ANIQ ko'rsatadi. `checks()` funksiyasi
+  bu holda umuman chaqirilmaydi, ya'ni soxta yashil FIZIK jihatdan
+  bo'lishi mumkin emas.
+- `doc.json` yozuvi ikki yangi shoxga qo'shildi (`file.doc.game` /
+  `file.doc.infographic`) — WP-B/WP-C maketi va ko'ruvchi paritetini
+  o'lchash uchun urug', teacher/work naqshi bilan bir xil.
+
+**`scripts/seed-demo.mts`** — `crossword`/`flashcards`/`infographic`
+uchta namuna, `live-engine.mts` dagi keyslar bilan AYNI qiymatlar
+(demo — jonli sinovda tekshirilgan aniq holatni ko'rsatsin). Ishga
+TUSHIRILMADI (LLM/kredit sarfi — egasi hisobiga bo'lsa ham lead qaror
+qiladi).
+
+**`lib/generation/delivered.ts`** — `doc.game`/infografika shoxi:
+
+- `gameDelivered(meta, doc, values)` — krossvordda VA'DA
+  `crosswordInputFromValues(meta, values).wordCount` (WP-A ning O'ZI,
+  ikkinchi hisob-kitob YO'Q), GOT `crossword.words.length` (to'rga
+  JOYLASHGAN so'z, `dropped` hisobga olinmaydi), unit **«so'z»**;
+  kartalarda VA'DA `normalizeGameCount(values.cardCount ?? values.count)`
+  — R0 ning umumiy normalizatori, `games/flashcards/input.ts` (WP-B)
+  ULANMASA HAM ishlaydi va WP-B ulangach AYNI sonni beradi (ikkalasi
+  bitta chegara ro'yxatidan o'qiydi), unit **«karta»**. `deliveredCount`
+  ichida `doc.teacher` shoxidan keyin, eski `switch(meta.toolId)` dan
+  OLDIN tekshiriladi — krossvord/kartalar avvalgi `default: undefined`
+  ga tushardi.
+- `infographicDelivered(values, got)` — EXPORT qilingan, lekin
+  `deliveredCount` ICHIDAN chaqirilmaydi: infografika `AcademicDoc`
+  yo'lidan o'tmaydi (`buildInfographicArtifact` `BuiltFile`ni
+  to'g'ridan-to'g'ri qaytaradi, `rasm` vositasi naqshida). VA'DA
+  `normalizeBlockCountFor(values.infographicType, values.blockCount)`
+  (WP-C ning R0 substrati, tur chegarasiga kesilgan), unit **«blok»**.
+  WP-C dvigateli buni `packImages` naqshida O'ZI chaqiradi (PNG
+  chizilgandan keyin, blok sonini bilgach) — chaqiruv joyi shu WP da.
+
+**`lib/generation/index.ts`** — `gameGateFail(meta, values, doc)`,
+`teacherGateFail` bilan AYNI o'rinda (`buildArtifact` ichida, ketma-
+ket) chaqiriladi: krossvord/kartalar ELEMENT darvozasi, `GAME_COUNT_RATIO
+= 0.7` (glossariy/keys bilan bir xil ulush). Model YO'Q → xato; model
+BOR-u element floor dan kam → xato (`crossword.words`/`flashcards.cards`
+qoidasi). `doc.game` yo'q bo'lsa (boshqa vosita, yoki WP-B hali
+ulanmagan — bu holatga darvoza UMUMAN yetib kelmaydi, chunki
+`writeWithLlm` oldinroq `null` bilan to'xtaydi) — `null`, jim o'tadi.
+
+**`tests/game-wiring.test.mts`** (11 test, 4 mutatsiya o'ldirilgan —
+qo'lda tekshirildi, avtomatlashtirilmadi): darvoza chegarasi
+(krossvord/kartalar, 6/10 yiqiladi, 7/10 o'tadi), `doc.game` yo'q →
+`null`, model yo'q → xato, `index.ts`da chaqiruv borligi (manba
+matnidan `assert.match`), `deliveredCount` unit va son (krossvord/
+kartalar/glossariy — oxirgisi `doc.game` shoxi glossariy yo'liga
+«sizib» qolmasligini qulflaydi), `infographicDelivered` (ikki tur —
+`process` max 6, `list` max 8), fayl nomi qo'shimchasi (uch vosita
+noyob), `buildGameDoc` dispatch (kartalar hali `null` — WP-B ulanguncha
+ANIQ tekshiriladi).
+
+**`tests/game-params.test.mts`** (6 test) va **`tests/infographic-
+params.test.mts`** (5 test) — reyestr butunligi (id noyob, impacts
+bo'sh emas, narx ta'siri YO'Q) HAR DOIM to'liq sinaladi; differensial
+zond esa dvigatel bor joyda (krossvord — `crosswordInputFromValues`,
+WP-A) HAQIQIY probeA/probeB farqini o'lchaydi, yo'q joyda
+(`games/flashcards/input.ts`, `infographic/input.ts`) yo'l
+O'ZGARUVCHIDA dinamik import bilan sinaladi va topilmasa
+`ENGINE_NOT_WIRED` ro'yxatiga yozilib o'tkazib yuboriladi — bu holatda
+ham «hamma kutilgan parametr o'tkazib yuborildimi» tekshiriladi (soni
+mos kelmasa test qizaradi), ya'ni WP ulanib ketsa-yu zond jim
+o'tkazilib qolsa buni HAM ushlaydi.
+
+**`tsc --noEmit` va `eslint`** — toza (`lib/generation/index.ts`,
+`delivered.ts`, `scripts/live-engine.mts`, `scripts/seed-demo.mts`, uch
+yangi test fayli).
+
+**Ochiq bandlar (keyingi WP/R uchun)**:
+
+1. WP-B (`games/flashcards/**`) va WP-C (`infographic/engine.ts` tanasi,
+   `infographic/input.ts`) ulangach: `game-params.test.mts`/
+   `infographic-params.test.mts` dagi `ENGINE_NOT_WIRED` shoxi o'zi
+   nol bo'lib qoladi (assertlar buni allaqachon tekshiradi — qo'shimcha
+   o'zgarish shart emas), `live-engine.mts` dagi 3 holat
+   (`flashcards`/`infographic`/`crossword-file` fayl qismi) birinchi
+   marta HAQIQIY natija beradi.
+2. `npm run live -- crossword flashcards infographic` va
+   `npm run seed -- adkhambek_4 crossword flashcards infographic` —
+   ISHGA TUSHIRILMADI (LLM/kredit sarfi), lead qachon o'tkazishini
+   o'zi hal qiladi.
+3. `infographicDelivered` chaqiruvi WP-C ning O'ZIGA qoladi (`engine.ts`
+   ichida, PNG chizilgandan keyin) — bu fayl faqat FUNKSIYANI tayyorlab
+   qo'ydi va `tests/game-wiring.test.mts` unga TO'G'RIDAN-TO'G'RI
+   (WP-C mavjud bo'lmagan holatda) test yozdi.
