@@ -19,6 +19,7 @@ import { ImageStudio } from "./ImageStudio";
 import { ArticleComposer } from "./ArticleComposer";
 import { EssayComposer } from "./EssayComposer";
 import { WorkComposer } from "./WorkComposer";
+import { TeacherComposer } from "./TeacherComposer";
 import { SourceFileField } from "./SourceFileField";
 
 function defaultsFor(tool: ToolConfig, profile: UserProfile): FormValues {
@@ -100,6 +101,9 @@ export function ToolWorkspace({ tool }: { tool: ToolConfig }) {
   // orasidagi bog'liqlikni (IELTS → faqat ingliz tili) chiza olmasdi.
   if (tool.custom === "essay") return <EssayComposer tool={tool} />;
   if (tool.custom === "work") return <WorkComposer tool={tool} profile={profile} user={user} />;
+  // O'qituvchi vositalari 2 (AUDIT-20 WP-E): dars rejasi / texnologik
+  // xarita / glossariy / keys / test bitta `TeacherComposer` ga o'tadi.
+  if (tool.custom === "teacher") return <TeacherComposer tool={tool} profile={profile} user={user} />;
 
   return <StandardForm tool={tool} profile={profile} />;
 }

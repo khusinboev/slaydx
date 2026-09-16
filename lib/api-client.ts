@@ -624,6 +624,25 @@ export function clearDraft(toolId: string) {
 }
 
 /**
+ * O'quv dasturi bazasi (AUDIT-20 WP-E) — `CurriculumPicker` (test
+ * darslik rejimi, dars rejasi/xarita ixtiyoriy mavzu tanlovi).
+ *
+ * Indeks (fan × sinf) `lib/curriculum.ts curriculumIndex()` dan KLIENT
+ * o'zi o'qiydi (statik `index.json`, ~5 KB) — tarmoqsiz. Mavzular esa
+ * fan faylining o'zi (≈1–1,5 MB) klient bandliga kirmasligi uchun shu
+ * yerdan, `/api/curriculum?subject=&grade=`.
+ */
+export type CurriculumTopicsResponse = {
+  subject: string;
+  grade: number;
+  source: { title: string; url: string; year?: number; publisher?: string };
+  units: { title: string; hours?: number; quarter?: number; topics: { id: string; title: string }[] }[];
+};
+export function fetchCurriculumTopics(subjectId: string, grade: number) {
+  return request<CurriculumTopicsResponse>(`/api/curriculum?subject=${encodeURIComponent(subjectId)}&grade=${grade}`);
+}
+
+/**
  * Eski rezyumega xos nomlar — orqaga moslik uchun qoladi (ichkarida
  * generik funksiyalarni chaqiradi, ikkinchi fetch o'ramini takrorlamaydi).
  * Hech kim import qilmasa ham, tashqi/eski kod ular bilan ishlashda
