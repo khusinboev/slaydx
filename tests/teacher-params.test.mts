@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { TEACHER_FORM_FIELDS, TEACHER_JSON_FIELDS, TEACHER_PARAMS, teacherParamsOf } from "../lib/generation/teacher-params.ts";
 import { TEACHER_KINDS } from "../lib/generation/teacher/types.ts";
+import { testInputFromValues } from "../lib/generation/teacher/test/input.ts";
 import { teacherInputFromValues } from "../lib/generation/teacher/input.ts";
 import type { FormValues } from "../lib/types.ts";
 import type { DocMeta } from "../lib/generation/types.ts";
@@ -72,43 +73,22 @@ test("narx faqat glossariy `termCount` da; JSON maydonlar reyestrdan", () => {
 const FAKE_META = {} as unknown as DocMeta;
 
 /**
- * WP-B TEST DVIGATELI hali `lib/generation/teacher/test/**` da yozilmagan
- * (`docs/AUDIT-20.md` §5, R0 «Bajarilish yozuvi»: «test vositasi
- * dvigatelsiz ko'rinadi»), shuning uchun `TeacherInput` (`teacher/
- * input.ts`) bu maydonlarni HALI bilmaydi — `teacherInputFromValues`
- * ularni o'qimaydi/qaytarmaydi. Reyestrdan O'CHIRILMAGAN (forma ularni
- * WP-E da to'liq chizadi, `tests/ui/teacher-composer.test.mts`), lekin
- * bu yerdagi differensial zond ularni HOZIRCHA dvigatel darajasida
- * tekshira olmaydi — WP-B ulanganda shu ro'yxat bo'shashi kerak
- * (AUDIT-20.md §5 ochiq topilma).
+ * WP-B TEST DVIGATELI hali `lib/generation/teacher/test/*
+ * Test vositasining maydonlari (`mode`, `count`, `variants`, `omr`…) test
+ * dvigatelining O'Z kiritmasida (`teacher/test/input.ts testInputFromValues`)
+ * o'qiladi — zond `kind === "test"` da shu funksiya bilan, qolganlarida
+ * `teacherInputFromValues` bilan solishtiradi. Ikkala yo'lda ham probeA/probeB
+ * FARQ qilishi shart — «bezak maydon yo'q».
  */
-const ENGINE_NOT_WIRED = new Set(["mode", "count", "openCount", "questionKinds", "difficulty", "variants", "omr", "answerKey", "criteriaTable", "timeMin"]);
-
-test("differensial zond: teacherInputFromValues(meta, probeA/probeB) natijasi FARQ qiladi — lesson/map/glossary/keys va umumiy maydonlar", () => {
-  const skipped: string[] = [];
+test("differensial zond: probeA/probeB natijasi FARQ qiladi — barcha kindlar (test dvigateli kiritmasi bilan)", () => {
   for (const p of TEACHER_PARAMS) {
-    if (ENGINE_NOT_WIRED.has(p.id)) {
-      skipped.push(p.id);
-      continue;
-    }
     for (const kind of p.kinds) {
       const base: FormValues = { ...(p.probeWith as FormValues | undefined) };
       const valuesA: FormValues = { ...base, [p.id]: p.probeA };
       const valuesB: FormValues = { ...base, [p.id]: p.probeB };
-      const inputA = teacherInputFromValues(FAKE_META, valuesA, kind);
-      const inputB = teacherInputFromValues(FAKE_META, valuesB, kind);
-      assert.notDeepEqual(inputA, inputB, `${p.id} (${kind}): probeA/probeB bir xil TeacherInput berdi — bezak maydon bo'lishi mumkin (teacher/input.ts yoki probeA/probeB tekshirilsin)`);
+      const inputA = kind === "test" ? testInputFromValues(FAKE_META, valuesA) : teacherInputFromValues(FAKE_META, valuesA, kind);
+      const inputB = kind === "test" ? testInputFromValues(FAKE_META, valuesB) : teacherInputFromValues(FAKE_META, valuesB, kind);
+      assert.notDeepEqual(inputA, inputB, `${p.id} (${kind}): probeA/probeB bir xil kiritma berdi — bezak maydon bo'lishi mumkin (input.ts yoki probeA/probeB tekshirilsin)`);
     }
   }
-  // WP-B ulanmagan maydonlar (topilma, §5 ga yozilgan) — reyestrda qoladi, o'chirilmaydi.
-  assert.deepEqual(
-    skipped.sort(),
-    [...ENGINE_NOT_WIRED].sort(),
-    "ENGINE_NOT_WIRED ro'yxati teacher-params.ts bilan mos kelishi kerak",
-  );
-});
-
-test("ochiq topilma: test dvigateli (WP-B) hali ulanmagan maydonlar reyestrdan o'chirilmagan", () => {
-  const testIds = new Set(teacherParamsOf("test").map((p) => p.id));
-  for (const id of ENGINE_NOT_WIRED) assert.ok(testIds.has(id), `${id}: WP-B ulanmagan bo'lsa ham reyestrdan o'chirilmasligi kerak edi`);
 });

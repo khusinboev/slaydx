@@ -60,6 +60,8 @@ export type TestInput = {
   gradeLetter: string;
   date: string;
   approver: string;
+  /** Fayl rejimida formadan kelgan manba matni (dvigatel `meta.sourceText`/aktivni ham o'qiydi). */
+  sourceText: string;
 };
 
 const s = (v: unknown, max = 300): string => String(v ?? "").replace(/\s+/g, " ").trim().slice(0, max);
@@ -152,5 +154,6 @@ export function testInputFromValues(meta: DocMeta, values: FormValues): TestInpu
     date: s(values.date, 20),
     // «Tasdiqlayman» qatori faqat bsb/chsb da (R3 §3.7).
     approver: L.approver ? s(values.approver, 160) : "",
+    sourceText: mode === "file" ? s(values.sourceText, TEACHER_LIMITS.sourceTextChars) : "",
   };
 }

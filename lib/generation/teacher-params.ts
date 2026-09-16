@@ -70,7 +70,7 @@ export const TEACHER_PARAMS: TeacherParam[] = [
   { id: "language", kinds: ALL, encode: "string", probeA: "uz", probeB: "ru", impacts: ["language", "prompt", "layout"] },
   { id: "university", kinds: ALL, encode: "string", probeA: "15-son umumiy o'rta ta'lim maktabi", probeB: "42-son ixtisoslashtirilgan maktab", impacts: ["layout"] },
   { id: "author", kinds: ALL, encode: "string", probeA: "Karimova Dilnoza", probeB: "Rahimov Bekzod", impacts: ["layout"] },
-  { id: "approver", kinds: ["lesson", "map", "test"], encode: "string", probeA: "", probeB: "Direktorning o'quv ishlari bo'yicha o'rinbosari", impacts: ["layout"] },
+  { id: "approver", kinds: ["lesson", "map", "test"], encode: "string", probeA: "", probeB: "Direktorning o'quv ishlari bo'yicha o'rinbosari", probeWith: { testType: "bsb" }, impacts: ["layout"] },
   { id: "extra", kinds: ALL, encode: "string", probeA: "", probeB: "Interaktiv usullarga urg'u bering.", impacts: ["prompt"] },
 
   /* ── dars rejasi (R1 §3) ── */
@@ -110,7 +110,7 @@ export const TEACHER_PARAMS: TeacherParam[] = [
   { id: "mode", kinds: ["test"], encode: "string", probeA: "topic", probeB: "curriculum", impacts: ["source", "prompt", "review"] },
   { id: "testType", kinds: ["test"], encode: "string", probeA: "nazorat", probeB: "bsb", impacts: ["structure", "prompt", "review", "layout"] },
   { id: "count", kinds: ["test"], encode: "number", probeA: 10, probeB: 30, impacts: ["structure", "prompt", "review", "omr", "budget"] },
-  { id: "openCount", kinds: ["test"], encode: "number", probeA: 0, probeB: 3, impacts: ["structure", "prompt", "review", "omr"] },
+  { id: "openCount", kinds: ["test"], encode: "number", probeA: 0, probeB: 3, probeWith: { testType: "bsb", questionKinds: '["single","open"]', count: 20 }, impacts: ["structure", "prompt", "review", "omr"] },
   { id: "questionKinds", kinds: ["test"], encode: "json", probeA: '["single"]', probeB: '["single","truefalse","match"]', impacts: ["prompt", "structure", "omr", "review"] },
   { id: "difficulty", kinds: ["test"], encode: "string", probeA: "oson", probeB: "qiyin", impacts: ["prompt", "review"] },
   { id: "variants", kinds: ["test"], encode: "number", probeA: 1, probeB: 4, impacts: ["structure", "layout", "omr", "review"] },
