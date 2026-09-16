@@ -90,21 +90,10 @@ export const buildGameDoc: GameBuilder = async (meta, values, opts) => {
     return buildCrosswordDoc(meta, values, opts);
   }
   if (kind === "flashcards") {
-    try {
-      /*
-       * Yo'l O'ZGARUVCHIDA: WP-B ning fayli hali yo'q va uni STATIK
-       * `import()` bilan yozsak `tsc` «modul topilmadi» deb butun
-       * paketni yiqitardi (krossvord bilan birga). O'zgaruvchi bilan
-       * modul bog'lanish vaqtida emas, ISHLASH vaqtida qidiriladi —
-       * fayl paydo bo'lishi bilan shox o'zi ishlab ketadi.
-       */
-      const path = "./flashcards/engine";
-      const mod = (await import(path)) as { buildFlashcardsDoc?: GameBuilder };
-      return mod.buildFlashcardsDoc ? mod.buildFlashcardsDoc(meta, values, opts) : null;
-    } catch {
-      // WP-B hali ulanmagan — `write-llm.ts` mavjud xulqqa tushadi.
-      return null;
-    }
+    // WP-B fayli main da — statik import (o'zgaruvchi yo'lli `import()` worker'da
+    // jimgina yiqilib «AI javob bermadi» berardi, AUDIT-21 smoke).
+    const { buildFlashcardsDoc } = await import("./flashcards/engine");
+    return buildFlashcardsDoc(meta, values, opts);
   }
   return null;
 };
