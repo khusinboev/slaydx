@@ -258,11 +258,12 @@ test("OMR — TANLANMAYDIGAN sxema turi; `buildFigure` uni o'tkazib yuboradi", a
     h: 0,
   };
   const out = await buildFigure(omr, { lang: "uz" });
-  // Chizuvchi WP-B da: rasm O'ZGARISHSIZ qaytadi — xato ham, matn fallback ham emas.
+  // Chizuvchi WP-B da (`figures/omr.ts`): spec va sarlavha o'zgarmaydi, matn
+  // fallback esa HECH QACHON yasalmaydi — bo'yaladigan doiralarni `li`
+  // ro'yxat bilan ifodalab bo'lmaydi (PNG ning o'zi `teacher-omr` da).
   assert.deepEqual(out.spec, omr.spec);
   assert.equal(out.caption, omr.caption);
   assert.ok(!out.fallbackBlocks, "MUTATSIYA: omr shoxi olib tashlansa fallback matn ro'yxatiga aylanadi");
-  assert.ok(!out.url, "R0 da OMR PNG chizilmaydi");
 });
 
 test("teacherBudgetMs: element soniga qarab (test 30 ≈ 200 s, xarita 34 hafta ≈ 240 s, sayqal +60 s)", () => {

@@ -17,6 +17,7 @@ import type { Figure, FigureSpec } from "../types";
 import { flowGraph, layoutFigure, processSteps, treeNodes } from "./layout";
 import { figureSvg } from "./svg";
 import { figurePng } from "./png";
+import { OMR_MM, omrSvg } from "./omr";
 import { prismaLabels, prismaNumbers } from "./prisma";
 import { chartData, fmtNum } from "./chart";
 import { layersData } from "./layout-layers";
@@ -28,9 +29,13 @@ import { compareData } from "./layout-compare";
 export { layoutFigure } from "./layout";
 export { figureSvg } from "./svg";
 export { figurePng } from "./png";
+export { omrSvg, omrLabels, omrHeightMm, OMR_MM } from "./omr";
 export type { FigureLayout } from "./model";
 
 export type BuildFigureOpts = { lang: string };
+
+/** OMR blankasi chop etiladigan kenglik (mm) — standart 160 emas (R3 §6.1). */
+export const OMR_WIDTH_MM = OMR_MM.width;
 
 const NO_DATA: Record<"uz" | "ru" | "en", string> = {
   uz: "Ma’lumot berilmagan",
@@ -170,17 +175,27 @@ export async function buildFigure(figure: Figure, opts: BuildFigureOpts): Promis
   const spec = figure.spec;
   if (!spec || typeof spec !== "object") return fallback();
   /*
-   * OMR javoblar varag'i (AUDIT-20 R0) — bu YERDA chizilmaydi.
+   * OMR javoblar varag'i (AUDIT-20 R0 da shox, WP-B da chizuvchi).
    *
-   * Uning maketi `teacher/test/omr.ts` (WP-B) da: A4 to'liq bet,
-   * millimetrda o'lchangan doiralar, registratsiya belgilari — umumiy
-   * `layoutFigure` ning tugun/qirra modeliga umuman tushmaydi.
-   * Shuning uchun bu yerda ATAYLAB ANIQ SHOX bor: rasm o'zgarishsiz
-   * qaytadi. Shoxsiz qolsa `layoutFigure` `null` berardi va OMR jimgina
-   * MATN ro'yxatiga (`fallbackBlocks`) aylanardi — ya'ni javob varag'i
-   * o'rniga bo'sh sarlavha chiqardi.
+   * Uning maketi `figures/omr.ts` da: A4 to'liq bet, MILLIMETRDA
+   * o'lchangan doiralar, registratsiya belgilari — umumiy `layoutFigure`
+   * ning tugun/qirra modeliga umuman tushmaydi, shuning uchun alohida
+   * shox. Kenglik ham boshqacha: 180 mm (standart 160 mm o'rniga) —
+   * javob to'ri 4 ustunda ham qisilmasin (R3 §6.1 tuzatishi).
+   *
+   * Fallback MATN ro'yxati EMAS: bo'yaladigan doiralarni matn bilan
+   * ifodalab bo'lmaydi. `sharp` yiqilsa rasm `url` siz qaytadi va
+   * maket (WP-C) OMR betini o'tkazib yuboradi — `omrFits` bandi
+   * hisobotda buni aytadi.
    */
-  if (spec.kind === "omr") return { ...figure };
+  if (spec.kind === "omr") {
+    const svg = omrSvg(spec, { lang });
+    const png = await figurePng(svg, { widthMm: OMR_WIDTH_MM });
+    if (!png) return { ...figure, w: 0, h: 0 };
+    const out: Figure = { ...figure, url: `data:image/png;base64,${png.png.toString("base64")}`, w: png.w, h: png.h };
+    delete out.fallbackBlocks;
+    return out;
+  }
   if (spec.kind === "chart" && spec.dataSource !== "user") return fallback({ source: noDataLabel(lang) });
   const layout = layoutFigure(spec, { lang });
   if (!layout) return fallback();
