@@ -1,7 +1,7 @@
 # SlaydX — holat (2026-09-16, main `b15c560`, prod: AUDIT-18 `cfa5b84` (tasdiqlangan); tekshiruv: unit 1768/1770 (2 tasi `.env.local` fal.ai holati), ko'ruvchi 168, UI 209, lint/tsc toza)
 
 Sprint: **Talaba ishlari 2 (AUDIT-19)** — reja `~/.claude/plans/sen-senior-fullstack-dev-majestic-starfish.md` (§1 `docs/AUDIT-19.md`), jurnal `docs/AUDIT-19.md` §5.
-Umumiy: **~92% — kod tayyor, smoke/ko'z o'tdi; deploy qolgan.**
+Umumiy: **~95% — kod, jonli, smoke (referat/insho/tezis) va ko'z tekshiruvi tayyor; faqat deploy qoldi.**
 
 | # | Bosqich | % | Izoh |
 |---|---|---|---|
@@ -13,8 +13,8 @@ Umumiy: **~92% — kod tayyor, smoke/ko'z o'tdi; deploy qolgan.**
 | 5 | WP-E2 WorkComposer formasi (28 maydon, reyestr) | 100 | `4a32217` |
 | 6 | WP-C planWork yagona manba, drawWork, workProfile, tahrir (work/edit, workAdapter), paritet/legacy | 100 | `e98df41`, `02571bc` |
 | 7 | R jonli: referat/kurs ishi nazariy/amaliy/mustaqil ish 4/4 (82–90 ball, manbalar 100 % tekshirilgan) | 100 | 7+ tuzatish: max_tokens poli, workGateWords/bodyWordCount, kengaytirish+to'ldirish, manba taqsimoti, judge timeout, bo'sh paragraf qayta yozish |
-| 8 | R Chromium smoke (forma → natija → hisobot → sayqal → tahrir → DOCX) + LibreOffice ko'z | 95 | referat oqimi yashil; topilgan va tuzatilgan: klient chegarasi 500, ArtifactViewer tahrir proplari, {parts} JSON matnga tushishi, titul «fakulteti fakulteti»; insho/tezis smoke yurmoqda |
-| 9 | Docs (AUDIT-19 §5, CLAUDE.md, structure.md, README, xotira) | 90 | §6/§7 yakuniy yozuv deploydan keyin |
+| 8 | R Chromium smoke (forma → natija → hisobot → sayqal → tahrir → DOCX) + LibreOffice ko'z | 100 | referat/insho/tezis yashil; 4 nuqson topilib tuzatildi (klient chegarasi 500, ArtifactViewer proplari, kesilgan JSON kirish, titul yorliqlari) |
+| 9 | Docs (AUDIT-19 §5–§6, CLAUDE.md, structure.md, README, xotira) | 100 | §7 (keyingi sprint) deploydan keyin |
 | 10 | Deploy (zaxira → prod .env GOOGLE_BOOKS_API_KEY → compose → nohup deploy.sh → prod smoke) | 0 | kalit foydalanuvchidan kutilmoqda; kalitsiz ham deploy mumkin (Books 429 → boshqa manbalar) |
 
 ## Ochiq bandlar
@@ -24,7 +24,7 @@ Umumiy: **~92% — kod tayyor, smoke/ko'z o'tdi; deploy qolgan.**
 - Mundarijada bet raqami LibreOffice'da bo'sh (Word to'ldiradi) — avvalgi qaror.
 
 ## Muhit
-- Dev server 3111 + worker (heavy.sh ostida) smoke uchun ishlab turibdi — sinovdan keyin to'xtatish; Playwright scratchpad'da (`work19.mjs`, `mksession.mts`).
+- Dev server 3111 va worker to'xtatildi; Playwright scratchpad'da (`work19.mjs`, `mksession.mts`).
 
 ## Davom etish qadamlari
 1. Smoke natijasi (insho/tezis) → jurnal §5; `docs/AUDIT-19.md` §6 ochiq bandlar.
