@@ -57,10 +57,6 @@ type Case = {
 const OUT = path.resolve(process.cwd(), "eval-out", "live");
 const ok = (label: string, cond: boolean, detail: string): Check => ({ label, ok: cond, detail });
 
-/** Bo'limlar ichidagi `h2` — ostmavzu/bob sarlavhalari. */
-const countH2 = (doc: AcademicDoc) =>
-  doc.sections.reduce((n, s) => n + s.blocks.filter((b) => b.kind === "h2").length, 0);
-
 const TRANSLATION_SAMPLE = [
   "Orol dengizi fojiasi va uni tiklash choralari",
   "Orol dengizi 1960-yillarda dunyodagi to‘rtinchi eng katta ko‘l edi: maydoni 68 000 km², suv hajmi 1 090 km³. 2024-yilga kelib uning 10 foizdan kamrog‘i qoldi. Asosiy sabab — Amudaryo va Sirdaryo suvlarining paxta dalalariga haddan tashqari ko‘p olinishi.",
