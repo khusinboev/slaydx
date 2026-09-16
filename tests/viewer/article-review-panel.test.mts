@@ -178,11 +178,14 @@ test("ResultView: article natijasida `doc.article.review` bo'lsa ko'ruvchi tepas
    * `doc.article.review`, inshoda `doc.essay.review`; panel sharti
    * hujjat turini emas, hisobotning O'ZI borligini tekshiradi.
    * AUDIT-20 WP-D: o'qituvchi hujjatlari ham (`doc.teacher.review`).
+   * AUDIT-21 WP-D: bosma o'yinlar (`doc.game.review`) va infografika
+   * (`doc.infographic.review`) — jami OLTI model. Mutatsiya: oxirgi
+   * ikki shox olib tashlansa krossvord/plakat hisobotsiz chiqardi.
    */
   assert.match(
     src,
-    /const review = gen\.doc\?\.article\?\.review \?\? gen\.doc\?\.essay\?\.review \?\? gen\.doc\?\.work\?\.review \?\? gen\.doc\?\.teacher\?\.review;/,
-    "hisobot to'rttala modeldan (maqola/tezis, insho, talaba ishi, o'qituvchi)",
+    /gen\.doc\?\.article\?\.review \?\? gen\.doc\?\.essay\?\.review \?\? gen\.doc\?\.work\?\.review \?\? gen\.doc\?\.teacher\?\.review \?\? gen\.doc\?\.game\?\.review \?\? gen\.doc\?\.infographic\?\.review;/,
+    "hisobot OLTI modeldan (maqola/tezis, insho, talaba ishi, o'qituvchi, o'yin, plakat)",
   );
   assert.match(src, /\{review \? \(/, "panel sharti — hisobot bor");
   assert.match(src, /<details open[^>]*data-article-review-panel/, "yig'iladigan panel");
@@ -196,9 +199,23 @@ test("ResultView: article natijasida `doc.article.review` bo'lsa ko'ruvchi tepas
    * yashiriladi — insho manbasiz va sxemasiz janr. Mutatsiya: `isEssay`
    * bog'lanishi olib tashlansa insho uchun 422 beradigan tugma chizilardi.
    */
-  assert.match(src, /isEssay \? \{\} : \{ onFix:/, "«Tuzatish» inshoda chizilmaydi");
-  assert.match(src, /isEssay \? \{ hideGroups: ESSAY_HIDDEN_GROUPS \}/, "insho uchun bo'sh guruhlar yashiriladi");
+  assert.match(src, /noFix \? \{\} : \{ onFix:/, "«Tuzatish» inshoda/plakatda chizilmaydi");
+  assert.match(src, /const noFix = isEssay \|\| isPoster;/, "«Tuzatish» yo'q oilalar: insho va plakat");
+  assert.match(src, /hideGroups \? \{ hideGroups \}/, "bo'sh guruhlar yashiriladi");
+  assert.match(src, /const hideGroups = isEssay \|\| isGame \|\| isPoster \? ESSAY_HIDDEN_GROUPS : undefined;/, "insho, o'yin va plakatda «Manbalar»/«Vizuallar» yo'q");
+  assert.match(src, /const isGame = Boolean\(gen\.doc\?\.game\);/, "o'yin — hujjat MODELIDAN, vosita id sidan emas");
+  assert.match(src, /const isPoster = Boolean\(gen\.doc\?\.infographic\);/, "plakat — hujjat modelidan");
   assert.match(src, /rewriteArticle\(cur\.id, base, fix\)/, "«Tuzatish» rewrite marshrutiga bormaydi");
   assert.match(src, /polishArticle\(cur\.id, base\)/, "«Hammasini tuzatish» polish marshrutiga bormaydi");
   assert.ok(src.indexOf("data-article-review-panel") < src.indexOf("<ArtifactViewer"), "panel ko'ruvchidan OLDIN");
+});
+
+test("ArticleReviewPanel: `hideGroups` guruhni CHIZMAYDI (o'yin/plakat/insho — manbasiz, sxemasiz janr)", () => {
+  const out = renderToStaticMarkup(h(ArticleReviewPanel, { review: REVIEW, onPolish: () => {}, hideGroups: ["sources", "visuals"] as const }));
+  const groups = [...out.matchAll(/data-review-group="([a-z]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(groups, ["structure", "science", "ai"], "MUTATSIYA: `hideGroups` e'tiborsiz qoldi — bo'sh «Manbalar» bloki «tekshirilmadi» deb o'qilardi");
+  // Yashirilgan guruhning bandlari ham chizilmaydi.
+  assert.ok(!out.includes('data-review-check="refsCount"'));
+  // «Hammasini tuzatish» esa joyida — o'yin/plakatda avto-sayqal ASOSIY yo'l.
+  assert.ok(out.includes("data-polish-button"));
 });

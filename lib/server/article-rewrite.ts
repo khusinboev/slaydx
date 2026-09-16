@@ -231,6 +231,16 @@ async function rewriteGame(
     if (model.kind === "crossword") {
       const ctx = crosswordContextOf(doc, prev);
       if (!ctx) throw new ApiError("Eski hujjatda «Tuzatish» yo'q — qaytadan yarating", 409, { code: "legacy" });
+      /*
+       * NISHON darvozasi SHU YERDA: `rewriteClues` ning o'zi nishonni
+       * tekshirmaydi (sayqalda uni `planCrosswordPolish` allaqachon
+       * filtrlagan bo'ladi). To'g'ridan-to'g'ri yuborilgan `grid`
+       * so'rovi esa ta'riflarni bekordan-bekor qayta yozdirardi —
+       * to'r bandini u baribir tuzata olmaydi.
+       */
+      if (fix.target !== "clues") {
+        throw new ApiError("Bu band avtomatik tuzatilmaydi — krossvordni qaytadan yarating", 422, { code: "target" });
+      }
       const out = await rewriteClues(doc, fix, { complete, input: ctx.input, spec: ctx.spec, deadline: deps.deadline });
       const applied = applyClueOps(doc, out.ops);
       if (!applied.ok) throw new ApiError(applied.error, 422, { code: "llm" });

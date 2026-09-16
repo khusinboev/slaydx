@@ -72,6 +72,31 @@ test("extractAssets: bir xil rasm ikki sxemada — bitta aktiv (SHA-256)", () =>
   assert.equal(next?.article?.figures[0].assetId, next?.article?.figures[1].assetId);
 });
 
+test("extractAssets: O'YIN rasmlari ham aktivga (krossvord to'ri va javob varag'i — AUDIT-21 WP-D)", () => {
+  const doc = {
+    meta: {},
+    sections: [],
+    game: { v: 1, kind: "crossword", type: "klassik", language: "uz", topic: "t", figures: [figure("crossword-grid", pngDataUrl(3)), figure("crossword-answers", pngDataUrl(4))] },
+  } as unknown as AcademicDoc;
+  const { doc: next, assets } = extractAssets("gen1", doc, "");
+  /*
+   * MUTATSIYA: `game` shoxi olib tashlansa ikkita 300 dpi PNG ning
+   * base64 i `doc_json` da qolardi (har ochilishda yuzlab kilobayt
+   * JSON), sayqal/«Tuzatish» dan keyingi DOCX esa `assetImageResolver`
+   * `assetId` topa olmagani uchun TO'RSIZ chiqardi.
+   */
+  assert.equal(assets.length, 2, "o'yin rasmlari aktivga chiqmadi");
+  const figs = (next as unknown as { game: { figures: Figure[] } }).game.figures;
+  assert.equal(figs[0].url, assetUrl("gen1", assets[0].assetId));
+  assert.ok(figs[0].assetId && figs[1].assetId, "assetId to'lmadi — qayta render to'rni yo'qotardi");
+
+  // Rasmsiz o'yin (flesh kartalar) — model o'zgarishsiz.
+  const cards = { meta: {}, sections: [], game: { v: 1, kind: "flashcards", type: "term-def", language: "uz", topic: "t" } } as unknown as AcademicDoc;
+  const out = extractAssets("gen1", cards, "");
+  assert.equal(out.assets.length, 0);
+  assert.deepEqual((out.doc as unknown as { game: unknown }).game, (cards as unknown as { game: unknown }).game);
+});
+
 test("extractAssets: ikki xil rasm — ikkita aktiv, har figure O'Z assetId sini oladi", () => {
   const doc = docWith([figure("f1", pngDataUrl(1)), figure("f2", pngDataUrl(2))]);
   const { doc: next, assets } = extractAssets("gen1", doc, "");
