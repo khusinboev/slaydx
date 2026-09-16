@@ -1,5 +1,5 @@
 import { ApiError, handler, json, limit, readJson, requireUser } from "@/lib/server/api";
-import { polishArticle } from "@/lib/server/article-polish";
+import { polishGeneration } from "@/lib/server/doc-polish";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,8 +18,9 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
  * ball OSHSA yozadi (Q-3). Javob `{generation, ops, polish}` — `rewrite`
  * bilan bir xil `generation` (klient `adopt` qiladi) + sayqal jurnali.
  *
- * BEPUL, lekin chegarali: maqola bo'yicha 3 marta/kun, foydalanuvchi
- * bo'yicha 20/kun (Q-1). Route yupqa: mantiq `lib/server/article-polish.ts`.
+ * BEPUL, lekin chegarali: hujjat bo'yicha 3 marta/kun, foydalanuvchi
+ * bo'yicha 20/kun (Q-1). Route yupqa: mantiq `lib/server/doc-polish.ts`
+ * — u adapterga qarab maqola yoki INSHO sayqalini yuritadi (AUDIT-19).
  */
 export const POST = handler("generations/polish", async (req, ctx: Ctx) => {
   const { user } = await requireUser(req);
@@ -34,5 +35,5 @@ export const POST = handler("generations/polish", async (req, ctx: Ctx) => {
   const baseVersion = body.baseVersion;
   if (typeof baseVersion !== "number" || !Number.isInteger(baseVersion) || baseVersion < 0) throw new ApiError("«baseVersion» yaroqsiz", 400);
 
-  return json(await polishArticle(id, user.id, baseVersion));
+  return json(await polishGeneration(id, user.id, baseVersion));
 });

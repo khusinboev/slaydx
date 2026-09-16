@@ -292,6 +292,17 @@ function tableOf(doc: AcademicDoc, id: string): DocTable | null {
 /** Eski maqolada (`doc.article` yo'q) ruxsat etilgan op lar. */
 const LEGACY_OPS = new Set<ArticleOp["op"]>(["text", "heading", "cell", "blockRemove", "blockInsert", "set"]);
 
+/**
+ * Insho (AUDIT-19 WP-E1) — shu op tilining QISMI bilan tahrirlanadi.
+ *
+ * Insho `doc.essay` modeli bilan keladi, lekin `doc.article` siz: unda
+ * annotatsiya, kalit so'z, highlights, sxema va adabiyotlar YO'Q, ya'ni
+ * ularning op lari ma'nosiz (va `d.article!` ga tegib yiqilardi).
+ * Qolgani — matn op lari + `setSection` (sayqal butun bo'limni
+ * almashtiradi) + server-only `review`.
+ */
+const ESSAY_OPS = new Set<ArticleOp["op"]>([...LEGACY_OPS, "setSection", "review"]);
+
 /** Matnga (iqtiboslarga) tegadigan op lar — `settle` shulardan keyin. */
 const TEXT_OPS = new Set<ArticleOp["op"]>(["text", "heading", "cell", "caption", "refRemove", "blockRemove", "blockInsert", "setSection", "set"]);
 
@@ -307,12 +318,18 @@ export function applyArticleOps(doc: AcademicDoc, ops: ArticleOp[], ctx: Article
   void ctx;
   if (!doc.sections?.length) return fail("Bu hujjatda bo'limlar yo'q", 0);
   let d = cloneArticleDoc(doc);
-  const legacy = !d.article;
+  /*
+   * Ruxsat etilgan op lar hujjat MODELIGA qarab: maqola — hammasi,
+   * insho (AUDIT-19) — `ESSAY_OPS`, eski hujjat — faqat matn (`LEGACY_OPS`).
+   */
+  const allowed = d.article ? null : d.essay ? ESSAY_OPS : LEGACY_OPS;
   let touched = false;
 
   for (let at = 0; at < ops.length; at++) {
     const op = ops[at];
-    if (legacy && !LEGACY_OPS.has(op.op)) return fail("Eski maqolada bu amal mavjud emas — qaytadan yarating", at);
+    if (allowed && !allowed.has(op.op)) {
+      return fail(d.essay ? "Inshoda bu amal mavjud emas" : "Eski maqolada bu amal mavjud emas — qaytadan yarating", at);
+    }
     if (TEXT_OPS.has(op.op)) touched = true;
     switch (op.op) {
       case "text": {
@@ -504,8 +521,11 @@ export function applyArticleOps(doc: AcademicDoc, ops: ArticleOp[], ctx: Article
         break;
       }
       case "review": {
-        if (op.review) d.article!.review = op.review;
-        else delete d.article!.review;
+        // Hisobot maqolada `doc.article`, inshoda `doc.essay` da (AUDIT-19).
+        const holder = d.article ?? d.essay;
+        if (!holder) return fail("Hisobot yoziladigan model yo'q", at);
+        if (op.review) holder.review = op.review;
+        else delete holder.review;
         break;
       }
       default:
@@ -601,8 +621,11 @@ function inverseOne(doc: AcademicDoc, op: ArticleOp): ArticleOp | null {
     }
     case "set":
       return snapshot(doc);
-    case "review":
-      return { op: "review", review: doc.article?.review ? cloneArticleDoc(doc).article!.review! : null };
+    case "review": {
+      // Insho hisoboti `doc.essay.review` da (AUDIT-19) — teskarisi ham shundan.
+      const prev = doc.article?.review ?? doc.essay?.review;
+      return { op: "review", review: prev ? (JSON.parse(JSON.stringify(prev)) as typeof prev) : null };
+    }
     default:
       return null;
   }
