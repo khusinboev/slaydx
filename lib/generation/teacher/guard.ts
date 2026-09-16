@@ -304,7 +304,7 @@ export function caseKey(title: string, situation: string): string {
  * keldi» kabi bo'sh shablonni deterministik rad etadi.
  */
 const REALISM_RE =
-  /(?<![\p{L}])([\p{Lu}][\p{Ll}‘’'`]{2,}\s+(opa|aka|ota|ona|o[‘’'`]?qituvchi|domla|xonim|janob))|(\d+[-\s]?(sinf|kurs|yosh|nafar|ta\b|foiz|%|soat|kun|oy|yil))|(direktor|mudir|rahbar|menejer|shifokor|muhandis|tadbirkor|ota-ona|buxgalter|sotuvchi|dehqon|fermer)/u;
+  /(?<![\p{L}])([\p{Lu}][\p{Ll}‘’'`]{2,}\s+(opa|aka|ota|ona|o[‘’'`]?qituvchi|domla|xonim|janob))|((o[‘’'`]?qituvchi|o[‘’'`]?quvchi|talaba|direktor|mudir|rahbar|shifokor|muhandis|tadbirkor|buxgalter|sotuvchi|dehqon|fermer|menejer)\s+[\p{Lu}][\p{Ll}‘’'`]{2,})|(\d+\s*-?\s*[«"“]?[\p{Lu}]?[»"”]?\s*(sinf|kurs|yosh|nafar|ta\b|foiz|%|soat|daqiqa|kun|oy|yil|so[‘’'`]?m))|(direktor|mudir|rahbar|menejer|shifokor|muhandis|tadbirkor|ota-ona|buxgalter|sotuvchi|dehqon|fermer|sinf rahbari)/u;
 
 export function hasRealisticDetail(situation: string): boolean {
   return REALISM_RE.test(clean(situation));
