@@ -68,7 +68,9 @@ export function ArtifactViewer({
     case "translation":
       return <TranslationViewer doc={doc} gen={{ id: gen.id, format: gen.format }} pdf={pdf} />;
     case "essay":
-      return <WordViewer doc={doc} />;
+      // AUDIT-19: inshoda ham tahrir — `design` ramkasi va bitta bo'lim
+      // o'zgarmaydi, proplar maqola bilan AYNAN bir xil (`useArticleEdit`).
+      return <WordViewer doc={doc} gen={detail} onGen={onDetail} onEditState={onEditState} />;
     case "article":
       // Maqola 2 (WP7): tahrir proplari slayd/rezyume bilan bir xil — `WordViewer`
       // ularni faqat maqola dvigateli generatsiyasida ishlatadi (tezis ham — `viewerKind`, AUDIT-19).

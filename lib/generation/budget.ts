@@ -145,9 +145,11 @@ export function budgetFor(tool: ToolConfig, values: FormValues, cap: number): nu
         ? PRO_SLIDE_BASE_MS + size * PRO_SLIDE_PER_SLIDE_MS
         : tool.id === "slide"
           ? SLIDE_BASE_MS + size * SLIDE_PER_SLIDE_MS
-          : tool.id === "article"
+          : tool.id === "article" || tool.id === "thesis"
             ? ARTICLE_BASE_MS + ARTICLE_POLISH_MS + size * ARTICLE_PER_PAGE_MS
-            : MIN_BUDGET_MS + size * PER_PAGE_MS;
+            : tool.id === "coursework" || tool.id === "referat" || tool.id === "mustaqil-ish"
+              ? workBudgetMs(size)
+              : MIN_BUDGET_MS + size * PER_PAGE_MS;
   }
   return Math.max(MIN_BUDGET_MS, Math.min(want, Math.max(MIN_BUDGET_MS, cap)));
 }

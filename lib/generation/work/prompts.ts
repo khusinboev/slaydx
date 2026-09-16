@@ -204,6 +204,14 @@ export type WorkSectionAsk = {
   plan: WorkSectionPlan;
   wantTable: boolean;
   wantFigure: boolean;
+  /**
+   * Shu paragrafga BIRIKTIRILGAN manbalar (dvigatel manbalarni
+   * paragraflar orasida aylanma taqsimlaydi). Jonli sinov: 7 manba
+   * hammasi har paragrafga berilganda model 2 tasini ishlatdi — referat
+   * `refsMin 5` qizil. Biriktirilgani «har birini kamida bir marta»
+   * so'raladi, qolganlari ixtiyoriy.
+   */
+  primary?: Reference[];
 };
 
 /**
@@ -228,12 +236,19 @@ export function workParagraphPrompt(ctx: WorkContext, ask: WorkSectionAsk): stri
     `Plan for this paragraph: ${plan.brief}`,
     lengthLine(plan.words),
   ];
+  const primary = ask.primary?.length ? ask.primary : [];
+  const primaryIds = new Set(primary.map((r) => r.id));
+  const other = refs.filter((r) => !primaryIds.has(r.id));
   if (refs.length) {
-    const want = Math.min(refs.length, Math.max(1, Math.round((ctx.plan.refs * plan.words) / Math.max(1, ctx.plan.chapters))));
     lines.push(
-      `SOURCES (cite by ID; use those that genuinely support a sentence; do not force a citation into every sentence; do not cite what you did not use). The whole work should cite about ${ctx.plan.refs} DIFFERENT sources (not fewer than ${ctx.input.refsMin}), so this paragraph should draw on about ${want} of them:`,
-      ...refs.map((r) => formatRefLine(r)),
+      `SOURCES (cite by ID only; a citation supports a specific sentence; do not force a citation into every sentence; do not cite what you did not use). The whole work must cite about ${ctx.plan.refs} DIFFERENT sources (not fewer than ${ctx.input.refsMin}); the list is shared out between paragraphs, so:`,
     );
+    if (primary.length) {
+      lines.push(`PRIMARY SOURCES for this paragraph — use EACH of them at least once where it genuinely supports a sentence (a claim, a definition, a comparison, a figure):`, ...primary.map((r) => formatRefLine(r)));
+      if (other.length) lines.push(`OTHER SOURCES (optional — only if they fit better):`, ...other.map((r) => formatRefLine(r)));
+    } else {
+      lines.push(...refs.map((r) => formatRefLine(r)));
+    }
   } else {
     lines.push(`SOURCES: none available — write WITHOUT any citations and without any bracketed IDs or numbers.`);
   }
@@ -251,6 +266,24 @@ export function workParagraphPrompt(ctx: WorkContext, ask: WorkSectionAsk): stri
   }
   lines.push(`Return JSON: ${schema.join(",")}}`);
   return lines.join("\n");
+}
+
+/**
+ * «Kengaytir» — paragraf rejadagi so'zning 70 % idan kalta chiqsa bir
+ * marta (maqola dvigatelidagi `expandPrompt` naqshi). MAVJUD matn
+ * promptga kiradi — usiz model paragrafni qayta yozib takrorlaydi.
+ * Referat jonli sinovi: 6 paragraf ≈150–200 so'z (reja 305) → hujjat
+ * 8 bet chiqib, hajm darvozasida yiqildi.
+ */
+export function workExpandPrompt(ctx: WorkContext, plan: WorkSectionPlan, have: number, need: number, existing: string): string {
+  const refs = ctx.refs;
+  return [
+    `The paragraph «${plan.title}» (id ${plan.id}) currently has ${have} words; it needs about ${need} more (${Math.max(1, Math.ceil(need / 100))} paragraphs of 90–130 words). Write ADDITIONAL text for the same paragraph: NEW specific points only (a mechanism, a comparison, an example, a limitation, an implication) — do not repeat, rephrase or summarise anything from ALREADY WRITTEN.`,
+    `Plan for this paragraph: ${plan.brief}`,
+    `ALREADY WRITTEN (for reference — do not repeat):\n${existing.slice(0, 6000)}`,
+    refs.length ? `SOURCES (same rules — cite by ID only, do not cite what you did not use):\n${refs.map((r) => formatRefLine(r)).join("\n")}` : `SOURCES: none — no citations, no bracketed IDs or numbers.`,
+    `Return JSON: {"blocks":[{"kind":"p","text":"…"}]}`,
+  ].join("\n");
 }
 
 /* ────────────────────────── xulosa ────────────────────────── */

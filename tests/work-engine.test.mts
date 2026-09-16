@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildWorkDoc, fallbackWorkOutline, introPartsFromLlm, planWorkVisuals, tableFromLlm, taskList, workOutlineFromLlm, EMPTY_RESEARCH_STATS } from "../lib/generation/work/engine.ts";
+import { assignPrimaryRefs, buildWorkDoc, fallbackWorkOutline, introPartsFromLlm, planWorkVisuals, tableFromLlm, taskList, workOutlineFromLlm, EMPTY_RESEARCH_STATS } from "../lib/generation/work/engine.ts";
 import { workKindOf } from "../lib/generation/work/registry.ts";
 import { SUBJECT_PROFILES } from "../lib/generation/work/subjects.ts";
 import { workLabels } from "../lib/generation/work/labels.ts";
@@ -63,6 +63,8 @@ type Opts = {
   judge?: (n: number) => string;
   emptyParagraph?: string;
   badOutline?: boolean;
+  /** «Kengaytir» so'roviga qo'shimcha bloklar beradi (aks holda `{}`). */
+  expand?: boolean;
 };
 
 type Call = { role: LlmRole; system: string; user: string };
@@ -129,6 +131,9 @@ function makeComplete(calls: Call[], o: Opts = {}) {
           spec: { kind: "process", steps: ["Tanish", "Mashq", "Mustahkamlash"] },
         };
       return reply(JSON.stringify(body));
+    }
+    if (user.startsWith("The paragraph «")) {
+      return reply(o.expand ? JSON.stringify({ blocks: [{ kind: "p", text: `Kengaytirilgan matn: ${para(5)} [W1000000001].` }] }) : "{}");
     }
     if (user.startsWith("Write the CONCLUSION")) {
       return reply(
@@ -464,4 +469,69 @@ test("hujjat `AcademicDoc` shartnomasiga mos: `work` modeli va tekis `sections`"
   assert.ok(d.work);
   assert.ok(d.sections.every((s) => typeof s.id === "string" && Array.isArray(s.blocks)));
   assert.ok(d.work!.chapters.every((c) => c.paragraphs.every((p) => d.sections.some((s) => s.id === p.sectionId))));
+});
+
+/*
+ * Referat jonli sinovi: paragraflar rejadagi 305 so'z o'rniga ≈150–200
+ * chiqib, hujjat 8 bet bo'ldi. Endi 70 % dan kalta paragraf bir marta
+ * «kengaytir»iladi — mavjud matn promptga kiradi (takror bo'lmasin),
+ * yangi bloklar OXIRIGA qo'shiladi. Mutatsiya: `WORK_EXPAND_BELOW = 0`
+ * → kengaytirish so'rovi yo'q → test yiqiladi.
+ */
+test("kalta paragraf bir marta kengaytiriladi: mavjud matn promptda, yangi bloklar oxirida", async () => {
+  const { doc, calls } = await build({ pages: "25-30" }, { expand: true });
+  const expand = calls.filter((c) => c.user.startsWith("The paragraph «"));
+  assert.ok(expand.length >= 1, "kengaytirish so'rovi bo'lishi kerak (mock paragraflari ≈240 so'z, reja undan katta)");
+  const first = expand[0]!.user;
+  assert.match(first, /currently has \d+ words; it needs about \d+ more/);
+  assert.ok(first.includes("ALREADY WRITTEN") && first.includes("Bu 1-paragraf"), "mavjud matn promptga kiradi");
+  assert.ok(first.includes("SOURCES") && first.includes("W1000000001"), "manbalar ro'yxati kengaytirishda ham beriladi");
+  const p = doc.sections.find((s) => s.id === "ch1.1")!;
+  const last = p.blocks.filter((b) => b.kind === "p").at(-1)!;
+  assert.match(last.text, /^Kengaytirilgan matn/, "qo'shimcha bloklar oxiriga qo'shiladi");
+  assert.ok(p.blocks[0]!.text.startsWith("Bu 1-paragraf"), "asl bloklar joyida");
+  // Har paragraf uchun ko'pi bilan BIR kengaytirish.
+  const perId = new Map<string, number>();
+  for (const c of expand) {
+    const id = c.user.match(/\(id ([\w.]+)\)/)?.[1] ?? "";
+    perId.set(id, (perId.get(id) ?? 0) + 1);
+  }
+  assert.ok([...perId.values()].every((n) => n === 1), "paragraf boshiga bitta kengaytirish");
+});
+
+test("kengaytirish javobi bo'sh bo'lsa asl paragraf o'zgarmaydi", async () => {
+  const { doc } = await build({ pages: "25-30" }, { expand: false });
+  const p = doc.sections.find((s) => s.id === "ch1.1")!;
+  assert.ok(!p.blocks.some((b) => b.text.startsWith("Kengaytirilgan")));
+  assert.ok(p.blocks.some((b) => b.text.startsWith("Bu 1-paragraf")));
+});
+
+/*
+ * Referat jonli sinovi: 7 tekshirilgan manba HAR paragrafga to'liq
+ * ro'yxat bilan berilganda model 2 tasini ishlatdi (`refsMin 5` qizil).
+ * Endi manbalar paragraflar orasida aylanma taqsimlanadi va har paragraf
+ * o'z ulushini «kamida bir marta» ishlatishi so'raladi. Mutatsiya:
+ * `assignPrimaryRefs` bo'sh qaytarsa PRIMARY blok yo'q → test yiqiladi.
+ */
+test("manbalar paragraflar orasida aylanma taqsimlanadi: birlashmasi = barcha manbalar, promptda PRIMARY/OTHER", async () => {
+  const { calls } = await build();
+  const paras = calls.filter((c) => c.user.startsWith("Write the paragraph"));
+  assert.ok(paras.length >= 4);
+  const union = new Set<string>();
+  for (const c of paras) {
+    const m = c.user.match(/PRIMARY SOURCES[^\n]*\n([\s\S]*?)(?:\nOTHER SOURCES|\nReturn JSON|\nInclude ONE)/);
+    if (!m) continue;
+    for (const id of m[1]!.match(/\[([\w:.-]+)\]/g) ?? []) union.add(id);
+  }
+  assert.ok(union.size >= 2, `PRIMARY bloklarida manba id lari bo'lishi kerak (${[...union].join(",")})`);
+  assert.ok(paras.some((c) => c.user.includes("use EACH of them at least once")), "biriktirilgan manba «kamida bir marta» so'raladi");
+  assert.ok(paras.every((c) => !/should draw on about \d+ of them/.test(c.user)), "eski «taxminan N tasi» yo'riqnomasi yo'q");
+});
+
+test("assignPrimaryRefs: aylanma, har manba aynan bir paragrafda", () => {
+  const refs = ["a", "b", "c", "d", "e"].map((id) => ({ id, title: id, authors: [], year: 2020 }) as never);
+  const m = assignPrimaryRefs(refs, ["p1", "p2", "p3"]);
+  assert.deepEqual([...m.values()].map((xs) => xs.map((r: { id: string }) => r.id)), [["a", "d"], ["b", "e"], ["c"]]);
+  assert.equal(assignPrimaryRefs(refs, []).size, 0);
+  assert.deepEqual([...assignPrimaryRefs([], ["p1"]).values()], [[]]);
 });

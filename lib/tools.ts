@@ -21,66 +21,6 @@ const TOPIC_FILE_MODES = [
 ];
 
 /**
- * Akademik ish uchun umumiy maydonlar.
- *
- * `universityRequired` — OTME ishlari (kurs ishi, referat, tezis,
- * mustaqil ish) muassasa nomisiz qabul qilinmaydi, shuning uchun ular
- * uchun maydon majburiy. Insho ko'pincha maktab ishi bo'lgani sababli
- * undan talab qilinmaydi.
- */
-function writerFields(opts: { universityRequired?: boolean } = {}): ToolConfig["fields"] {
-  return WRITER_FIELDS.map((f) =>
-    f.name === "university" && opts.universityRequired ? { ...f, required: true } : f,
-  );
-}
-
-const WRITER_FIELDS: ToolConfig["fields"] = [
-  {
-    kind: "text",
-    name: "author",
-    legend: "To'liq ismingiz, kursingiz va guruhingizni yozing",
-    placeholder: "Aliyev Ali — 3-kurs, 301-guruh",
-    required: true,
-  },
-  {
-    kind: "text",
-    name: "university",
-    legend: "Oliy ta'lim muassasasi",
-    placeholder: "Toshkent davlat universiteti",
-  },
-  {
-    kind: "text",
-    name: "faculty",
-    legend: "Fakultet nomini kiriting",
-    placeholder: "Fakultet",
-  },
-  {
-    kind: "text",
-    name: "department",
-    legend: "Kafedra",
-    placeholder: "Kafedra nomi",
-  },
-  {
-    kind: "text",
-    name: "subject",
-    legend: "Fan nomini kiriting",
-    placeholder: "Misol: Ona tili",
-  },
-  {
-    kind: "text",
-    name: "teacher",
-    legend: "O'qituvchi / rahbar",
-    placeholder: "F.I.Sh",
-  },
-  {
-    kind: "text",
-    name: "city",
-    legend: "Shahar",
-    placeholder: "Toshkent",
-  },
-];
-
-/**
  * Maxsus formali vositalarning MAJBURIY maydonlari.
  *
  * `image`, `resume` va `translation` o'z formalarini chizadi
@@ -119,6 +59,27 @@ const CUSTOM_REQUIRED: Record<string, ToolField[]> = {
    * tekshiriladi.
    */
   article: [{ kind: "text", name: "articleType", legend: "Maqola turi", required: true }],
+  /*
+   * Insho 2 (AUDIT-19): mavzu (`topicLegend`) + KONTEKST. Tur/til/hajm
+   * kontekstdan normallashadi (`essayInputFromValues`) — nomuvofiq qiymat
+   * xato bermaydi, kontekstning birinchi turiga/tiliga tushadi, shuning
+   * uchun ular majburiy emas. Kontekstning o'zi esa bo'sh kelsa so'rov
+   * umuman navbatga tushmasligi kerak: IELTS deb to'lagan foydalanuvchi
+   * maktab inshosini olmasin (janrlar butunlay boshqa).
+   */
+  essay: [{ kind: "text", name: "essayContext", legend: "Insho konteksti", required: true }],
+  /*
+   * Talaba ishlari 2 (AUDIT-19 WP-E2): kurs ishi / referat / mustaqil ish
+   * `WorkComposer` o'z formasini chizadi (`work-params.ts` reyestri, 28
+   * maydon). Mavzu `tool.topicLegend` orqali allaqachon tekshiriladi
+   * (pastdagi umumiy qoida); bu yerda faqat OTM/muallif — ular titul
+   * sahifasiz hujjat chiqarib bo'lmaydigan ikkita maydon (`tests/pricing.test.mts`
+   * «OTME ishlari universitetsiz qabul qilinmaydi»).
+   */
+  work: [
+    { kind: "text", name: "university", legend: "Oliy ta'lim muassasasi", required: true },
+    { kind: "text", name: "author", legend: "Muallif (F.I.Sh.)", required: true },
+  ],
 };
 
 /**
@@ -160,7 +121,7 @@ export function thesisTypeId(values: FormValues): ThesisTypeId {
  * bo'lishi ham mumkin. Lekin so'ralishi shart — aks holda foydalanuvchi
  * uni to'ldira olmaydi.
  *
- * `writerFields` dagi `university` dan alohida: yorliq va namuna
+ * eski `writerFields` (AUDIT-19 da o'chirildi) dagi `university` dan alohida: yorliq va namuna
  * maktabga mo'ljallangan, `author` esa «Bajardi» emas, «Tuzuvchi».
  */
 const TEACHER_FIELDS: ToolField[] = [
@@ -264,65 +225,16 @@ export const TOOLS: ToolConfig[] = [
     topicPlaceholder: "Boshlang'ich sinf o'quvchilarida o'qish ko'nikmalarini rivojlantirish",
     extraOptional: true,
     output: "docx",
+    custom: "work",
     basePrice: 12000,
-    fields: [
-      { kind: "language", name: "language", legend: "Kurs ishi tilini tanlang" },
-      ...writerFields({ universityRequired: true }),
-      {
-        kind: "chips",
-        name: "ministry",
-        legend: "Vazirlik",
-        options: [
-          {
-            value: "oliy",
-            label: "Oliy ta'lim, fan va innovatsiyalar",
-          },
-          { value: "maktab", label: "Maktabgacha va maktab ta'limi" },
-        ],
-      },
-      {
-        kind: "chips",
-        name: "tocMethod",
-        legend: "Mundarijani o'zingiz yozasizmi yoki AI avtomatik yaratishini xohlaysizmi?",
-        options: [
-          { value: "ai", label: "Avtomatik AI yaratishi" },
-          { value: "manual", label: "O'zim yozaman" },
-        ],
-      },
-      {
-        kind: "textarea",
-        name: "tocText",
-        legend: "Mundarija matni",
-        placeholder: "Kirish\nI bob. ...\nII bob. ...\nXulosa",
-        extra: true,
-      },
-      {
-        kind: "chips",
-        name: "pages",
-        legend: "Sahifalar soni",
-        options: [
-          { value: "10-15", label: "10-15 bet" },
-          { value: "15-20", label: "15-20 bet" },
-          { value: "20-25", label: "20-25 bet" },
-          { value: "25-30", label: "25-30 bet" },
-          { value: "30-35", label: "30-35 bet" },
-          { value: "35-40", label: "35-40 bet" },
-          { value: "40-45", label: "40-45 bet" },
-        ],
-      },
-      {
-        kind: "chips",
-        name: "images",
-        // Ilgari «Jadval va rasmlar» deb yozilgan, lekin dvigatel DOCX ga
-        // hech qachon rasm qo'ymagan — faqat jadval. Yorliq shu sababli
-        // aniqlashtirildi.
-        legend: "Tasnif jadvali qo'shilsinmi?",
-        options: [
-          { value: "yes", label: "Ha" },
-          { value: "no", label: "Yo'q" },
-        ],
-      },
-    ],
+    /*
+     * Talaba ishlari 2 (AUDIT-19 WP-E2): eski chip maydonlari
+     * `WorkComposer` (`components/forms/WorkComposer.tsx`) bilan
+     * almashtirildi — 27 parametr, janr×tur reyestri (`work/registry.ts`),
+     * 5 fan profili (`work/subjects.ts`). Majburiylari `CUSTOM_REQUIRED.work`
+     * da. Narx JADVALI o'zgarmadi (`priceFor` pastda, `pages` chipi bilan).
+     */
+    fields: [],
   },
   {
     id: "referat",
@@ -348,22 +260,10 @@ export const TOOLS: ToolConfig[] = [
     modes: TOPIC_FILE_MODES,
     extraOptional: true,
     output: "docx",
+    custom: "work",
     basePrice: 3000,
-    fields: [
-      { kind: "language", name: "language", legend: "Referat tilini tanlang" },
-      ...writerFields({ universityRequired: true }),
-      {
-        kind: "chips",
-        name: "pages",
-        legend: "Referat hajmini tanlang (sahifalar soni)",
-        options: [
-          { value: "10-15", label: "10-15 bet" },
-          { value: "15-20", label: "15-20 bet" },
-          { value: "20-25", label: "20-25 bet" },
-          { value: "25-30", label: "25-30 bet" },
-        ],
-      },
-    ],
+    // Talaba ishlari 2 (AUDIT-19 WP-E2) — `WorkComposer`, kurs ishi bilan bir izoh.
+    fields: [],
   },
   {
     id: "essay",
@@ -382,27 +282,22 @@ export const TOOLS: ToolConfig[] = [
     extraOptional: true,
     output: "docx",
     basePrice: 2000,
-    fields: [
-      { kind: "language", name: "language", legend: "Insho tilini tanlang" },
-      ...writerFields({ universityRequired: false }),
-      {
-        kind: "design",
-        name: "design",
-        legend: "Hujjat dizaynini tanlang",
-      },
-      {
-        kind: "chips",
-        name: "pages",
-        legend: "Insho necha varaq (A4) bo'lsin?",
-        options: [
-          { value: "1", label: "1 varaq" },
-          { value: "2", label: "2 varaq" },
-          { value: "3", label: "3 varaq" },
-          { value: "4", label: "4 varaq" },
-          { value: "5", label: "5 varaq" },
-        ],
-      },
-    ],
+    /*
+     * Insho 2 (AUDIT-19 WP-E1): o'z formasi — `EssayComposer`. Uch
+     * KONTEKST (maktab/DTM · OTM akademik esse · IELTS Task 2) bir-biriga
+     * o'xshamagan janrlar: turlar ro'yxati, hajm o'lchovi (varaq/so'z),
+     * ruxsat etilgan til va epigraf siyosati — hammasi kontekstdan
+     * chiqadi (`essay/registry.ts`). Standart forma buni chiza olmasdi:
+     * u maydonlar orasidagi BOG'LIQLIKNI bilmaydi (IELTS uchun «o'zbek
+     * tili» yoki akademik esse uchun «adabiy tahlil» tanlab bo'lardi).
+     *
+     * `fields: []` — eski `language`/`design`/`pages`/muallif maydonlari
+     * composerga ko'chdi; majburiylari `CUSTOM_REQUIRED.essay` da.
+     * NARX O'ZGARMAYDI: `priceFor` baribir `pages` chipidan (1–5 varaq,
+     * 2 000–4 000 tanga), `defaultPages("essay") = "2"`.
+     */
+    custom: "essay",
+    fields: [],
   },
   {
     id: "article",
@@ -641,37 +536,10 @@ export const TOOLS: ToolConfig[] = [
     modes: TOPIC_FILE_MODES,
     extraOptional: true,
     output: "docx",
+    custom: "work",
     basePrice: 3000,
-    fields: [
-      { kind: "language", name: "language", legend: "Mustaqil ish tilini tanlang" },
-      ...writerFields({ universityRequired: true }),
-      {
-        kind: "chips",
-        name: "pages",
-        legend: "Hajm (sahifalar soni)",
-        options: [
-          { value: "10-15", label: "10-15 bet" },
-          { value: "15-20", label: "15-20 bet" },
-          { value: "20-25", label: "20-25 bet" },
-          { value: "25-30", label: "25-30 bet" },
-        ],
-      },
-      {
-        kind: "chips",
-        name: "tocMethod",
-        legend: "Rejani o'zingiz yozasizmi yoki AI avtomatik yaratishini xohlaysizmi?",
-        options: [
-          { value: "ai", label: "Avtomatik AI yaratishi" },
-          { value: "manual", label: "O'zim yozaman" },
-        ],
-      },
-      {
-        kind: "textarea",
-        name: "tocText",
-        legend: "Reja matni",
-        extra: true,
-      },
-    ],
+    // Talaba ishlari 2 (AUDIT-19 WP-E2) — `WorkComposer`, kurs ishi bilan bir izoh.
+    fields: [],
   },
   {
     id: "lesson-plan",

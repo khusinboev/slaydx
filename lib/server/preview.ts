@@ -50,6 +50,15 @@ export function buildPreview(doc: AcademicDoc | null): GenerationPreview | null 
    * rasm — birinchi topilgan sxema (aktiv URL, `extractAssets` dan
    * keyin). `thumb` yo'li (LibreOffice birinchi sahifa) buni sinamaydi.
    */
+  if (doc.work) {
+    // Talaba ishi (AUDIT-19): mavzu + kirishning birinchi jumlalari, rasm — birinchi sxema.
+    const topic = doc.meta?.topic?.trim();
+    const intro = doc.sections?.find((s) => s.id === "intro")?.blocks.find((b) => b.kind === "p")?.text.trim().slice(0, 160);
+    const lines = [topic, intro].filter((s): s is string => Boolean(s));
+    const image = doc.work.figures.find((f) => f.url)?.url;
+    if (image || lines.length) return { ...(image ? { url: image } : {}), ...(lines.length ? { lines } : {}) };
+    return null;
+  }
   if (doc.article) {
     const topic = doc.meta?.topic?.trim();
     const lang = doc.article.language;

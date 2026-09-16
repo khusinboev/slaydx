@@ -20,7 +20,12 @@ import type { JudgeResult, JudgeSpec, ReviewCheck } from "./types";
 export const JUDGE_NEUTRAL = 2;
 /** Baholovchi javob bermaganda hisobot izohi (sayqal shu satrni taniydi). */
 export const JUDGE_NO_ANSWER = "Baholovchi javob bermadi";
-export const JUDGE_TIMEOUT_MS = 35_000;
+/*
+ * 60 s: Claude Sonnet 5 adaptiv fikrlash bilan 25 k belgilik namunani
+ * 31–40 s da baholaydi (AUDIT-19 referat jonli sinovi: 35 s da SDK uch
+ * marta urinib 106 s yo'qotdi va baholovchi neytral qoldi).
+ */
+export const JUDGE_TIMEOUT_MS = 60_000;
 /** Chaqiruvga shundan kam vaqt qolsa umuman urinilmaydi. */
 export const JUDGE_MIN_MS = 8_000;
 

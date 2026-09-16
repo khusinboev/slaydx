@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import Anthropic from "@anthropic-ai/sdk";
 import { makeAnthropicAdapter } from "../lib/generation/llm/anthropic.ts";
 
@@ -61,7 +62,8 @@ test("so'rov shakli: thinking:{type:'adaptive'}, budget_tokens YO'Q, max_tokens/
     assert.deepEqual(res.usage, { inputTokens: 100, outputTokens: 40 });
   }
   assert.equal(captured?.model, "claude-sonnet-5");
-  assert.equal(captured?.max_tokens, 1000);
+  // Adaptiv fikrlash tokenlari max_tokens ga kiradi — pol 4 096 (referat baholovchisi 1 500 da bo'sh qaytgan edi).
+  assert.equal(captured?.max_tokens, 4096, "MUTATSIYA: pol olib tashlansa 1000");
   assert.equal(captured?.system, "SYS");
   assert.deepEqual(captured?.messages, [{ role: "user", content: "USER" }]);
   assert.deepEqual(captured?.thinking, { type: "adaptive" }, "MUTATSIYA: budget_tokens qo'shilsa bu qizarishi kerak");
@@ -231,4 +233,9 @@ test("kalitsiz — `new Anthropic()` chaqirilmaydi (deps.client stub ishlatiladi
   const adapter = makeAnthropicAdapter({ client });
   await adapter.complete("claude-sonnet-5", "S", "U", OPTS);
   assert.equal(called, 1);
+});
+
+test("SDK mijozi `maxRetries: 1` bilan quriladi — timeout uch barobar bo'lmasin", () => {
+  const src = readFileSync(new URL("../lib/generation/llm/anthropic.ts", import.meta.url), "utf8");
+  assert.match(src, /new Anthropic\(\{[^}]*timeout: opts\.timeoutMs,\s*maxRetries: 1\s*\}\)/);
 });

@@ -20,6 +20,16 @@ test("har PPTX vositasi slayd ko'ruvchisiga, har PNG vositasi rasm ko'ruvchisiga
 
 test("maxsus (custom) vositalar umumiy Word ko'ruvchisiga tushmaydi", () => {
   for (const t of TOOLS) {
-    if (t.custom) assert.notEqual(viewerKind(t.id), "academic", `${t.id}: custom vosita academic ko'ruvchida`);
+    /*
+     * AUDIT-19 WP-E2: kurs ishi/referat/mustaqil ish `custom: "work"`
+     * ga o'tdi (`WorkComposer` — faqat KIRISH formasi almashdi), lekin
+     * chiqish hali ham oddiy AcademicDoc/DOCX — «ko'rdim = oldim»
+     * bo'yicha UMUMIY Word ko'ruvchisida ochiladi (CLAUDE.md: `doc.work`
+     * shu bitta yagona ko'ruvchining USTIGA qo'shiladi, alohida ko'ruvchi
+     * emas). Shuning uchun `custom` mavjudligi bu yerda YETARLI belgi
+     * emas — faqat haqiqatan BOSHQA shaklga chiqadigan vositalar (slayd,
+     * rezyume, rasm, tarjima, maqola) tekshiriladi.
+     */
+    if (t.custom && t.custom !== "work") assert.notEqual(viewerKind(t.id), "academic", `${t.id}: custom vosita academic ko'ruvchida`);
   }
 });
