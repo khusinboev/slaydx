@@ -1289,6 +1289,12 @@ async function drawGame(plan: GamePlan, K: Kit, P: DocProfile, opts: ResumeDocxO
              * dasturga bog'liq bo'lib qolardi).
              */
             borders: { top: none, bottom: none, left: none, right: none, insideHorizontal: none, insideVertical: none },
+            /*
+             * HAR SAVOL O'Z QATORIDA (sarlavha qatori + N qator): bitta
+             * ulkan qator LibreOffice'da betga sig'masa BUTUNLAY keyingi
+             * betga o'tib, to'r ostida yarim bet bo'sh qolardi (AUDIT-21
+             * ko'z tekshiruvi). Qatorlar betlar orasida erkin bo'linadi.
+             */
             rows: [
               new TableRow({
                 children: b.columns.map(
@@ -1297,25 +1303,29 @@ async function drawGame(plan: GamePlan, K: Kit, P: DocProfile, opts: ResumeDocxO
                       width: { size: colW, type: WidthType.DXA },
                       borders: { top: none, bottom: none, left: none, right: none },
                       margins: { top: 40, bottom: 40, left: 0, right: 120 },
-                      children: [
-                        new Paragraph({
-                          alignment: AlignmentType.LEFT,
-                          keepNext: true,
-                          spacing: { after: 80, line, lineRule: LineRuleType.AUTO },
-                          children: [K.run(col.title, { bold: true })],
-                        }),
-                        ...col.items.map(
-                          (it) =>
-                            new Paragraph({
-                              alignment: AlignmentType.LEFT,
-                              spacing: { after: 60, line, lineRule: LineRuleType.AUTO },
-                              children: [K.run(it.text, { size: plan.page.tableSizePt * 2 })],
-                            }),
-                        ),
-                      ],
+                      children: [new Paragraph({ alignment: AlignmentType.LEFT, keepNext: true, spacing: { after: 80, line, lineRule: LineRuleType.AUTO }, children: [K.run(col.title, { bold: true })] })],
                     }),
                 ),
               }),
+              ...Array.from({ length: Math.max(...b.columns.map((c) => c.items.length)) }, (_, i) =>
+                new TableRow({
+                  children: b.columns.map(
+                    (col) =>
+                      new TableCell({
+                        width: { size: colW, type: WidthType.DXA },
+                        borders: { top: none, bottom: none, left: none, right: none },
+                        margins: { top: 0, bottom: 0, left: 0, right: 120 },
+                        children: [
+                          new Paragraph({
+                            alignment: AlignmentType.LEFT,
+                            spacing: { after: 60, line, lineRule: LineRuleType.AUTO },
+                            children: col.items[i] ? [K.run(col.items[i]!.text, { size: plan.page.tableSizePt * 2 })] : [],
+                          }),
+                        ],
+                      }),
+                  ),
+                }),
+              ),
             ],
           }),
         );
