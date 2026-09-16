@@ -4,7 +4,6 @@ import { llmComplete, llmEnabled } from "./llm";
 import { writerSystemPrompt } from "./prompts";
 import {
   blocksFromText,
-  isGenericFiller,
   mapPool,
   referenceSearchPlan,
   sanitizeCitations,

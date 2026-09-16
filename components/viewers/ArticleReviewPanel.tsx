@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { ArticleReview, PolishLog, ReviewCheck, ReviewLevel, UserNeed } from "@/lib/generation/article/types";
+import type { ArticleReview, PolishLog, ReviewCheck, ReviewLevel } from "@/lib/generation/article/types";
 
 /**
  * Tayyorlik hisoboti paneli (Maqola 2, AUDIT-17 WP5; Maqola 3, AUDIT-18 WP-A).
