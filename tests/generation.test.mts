@@ -1288,6 +1288,8 @@ test("standart shift ostida har bir narx tarifi alohida byudjet oladi", async ()
 test("standart hajm narx, dvigatel va formada bir xil", async () => {
   const { TOOLS, TOOL_BY_ID, defaultPages, priceFor } = await import("../lib/tools.ts");
   const { extractMeta } = await import("../lib/generation/meta.ts");
+  const { workGenreOfTool } = await import("../lib/generation/work/types.ts");
+  const { workKindOf } = await import("../lib/generation/work/registry.ts");
 
   /*
    * AYNAN P1-7 (AUDIT-5). Standart hajm UCH joyda mustaqil yozilgan edi:
@@ -1297,8 +1299,10 @@ test("standart hajm narx, dvigatel va formada bir xil", async () => {
    * yuborilgan so'rov 4 000 tangaga 13 betlik ish so'rardi.
    */
   const withPages = TOOLS.filter((t) => t.fields.some((f) => f.name === "pages"));
-  // Kurs ishi, referat, insho, mustaqil ish (maqola va tezis — custom forma, `ARTICLE_PRICES`/`THESIS_PRICES`).
-  assert.ok(withPages.length >= 4, "bet tanlovi bo'lgan vositalar topilishi kerak");
+  // Insho — hajm hali eski chip maydonida (kurs ishi/referat/mustaqil ish AUDIT-19
+  // WP-E2 dan beri `WorkComposer` custom formasida, quyida ALOHIDA tekshiriladi;
+  // maqola va tezis ham custom forma, `ARTICLE_PRICES`/`THESIS_PRICES` bilan).
+  assert.ok(withPages.length >= 1, "bet tanlovi bo'lgan vositalar topilishi kerak");
 
   for (const tool of withPages) {
     const fallback = defaultPages(tool.id);
@@ -1322,6 +1326,26 @@ test("standart hajm narx, dvigatel va formada bir xil", async () => {
       extractMeta(tool, { topic: "X" } as FormValues).targetPages,
       extractMeta(tool, { topic: "X", pages: fallback } as FormValues).targetPages,
       `${tool.id}: standart hajm tarif hajmiga teng bo'lishi kerak`,
+    );
+  }
+
+  // Kurs ishi / referat / mustaqil ish (WP-E2 — `WorkComposer`): standart
+  // paket endi `work/registry.ts` reyestrida, `tool.fields` da emas.
+  for (const id of ["coursework", "referat", "mustaqil-ish"] as const) {
+    const tool = TOOL_BY_ID[id];
+    const fallback = defaultPages(id);
+    const genre = workGenreOfTool(id)!;
+    const kind = workKindOf(genre, undefined);
+    assert.ok(kind.pages.includes(fallback), `${id}: standart «${fallback}» reyestr paketlari orasida yo'q`);
+    assert.equal(
+      priceFor(tool, {} as FormValues),
+      priceFor(tool, { pages: fallback } as FormValues),
+      `${id}: standart narx tarif narxiga teng bo'lishi kerak`,
+    );
+    assert.equal(
+      extractMeta(tool, { topic: "X" } as FormValues).targetPages,
+      extractMeta(tool, { topic: "X", pages: fallback } as FormValues).targetPages,
+      `${id}: standart hajm tarif hajmiga teng bo'lishi kerak`,
     );
   }
 

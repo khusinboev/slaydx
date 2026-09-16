@@ -15,7 +15,7 @@ import {
 } from "../lib/generation/work/registry.ts";
 import { SUBJECT_PROFILES, SUBJECT_PROFILE_LIST, normalizeSubjectProfile } from "../lib/generation/work/subjects.ts";
 import { WORK_GENRE_IDS, WORK_INTRO_PART_IDS, workGenreOfTool } from "../lib/generation/work/types.ts";
-import { TOOL_BY_ID } from "../lib/tools.ts";
+import { TOOL_BY_ID, priceFor } from "../lib/tools.ts";
 
 /**
  * JANR × TUR REYESTRI (AUDIT-19 WP-A). Reyestr — dvigatelning
@@ -63,15 +63,22 @@ test("hajm/ulush standartlari: kirish 10–15 %, xulosa kurs 2–4 bet / referat
   assert.equal(workKindOf("independent", "written").refsMin, 8);
 });
 
-test("hajm paketlari `lib/tools.ts` chiplari bilan AYNAN bir xil (narx va dvigatel bir manbadan)", () => {
-  const chipsOf = (toolId: "coursework" | "referat" | "mustaqil-ish") => {
-    const field = TOOL_BY_ID[toolId].fields.find((f) => f.name === "pages");
-    assert.ok(field && "options" in field && field.options, `${toolId}: pages chiplari yo'q`);
-    return (field as { options: { value: string }[] }).options.map((o) => o.value);
-  };
-  assert.deepEqual([...workKindOf("coursework", "theory").pages], chipsOf("coursework"));
-  assert.deepEqual([...workKindOf("referat", "informative").pages], chipsOf("referat"));
-  assert.deepEqual([...workKindOf("independent", "written").pages], chipsOf("mustaqil-ish"));
+/*
+ * AUDIT-19 WP-E2: eski chip maydonlari `lib/tools.ts` dan `WorkComposer`
+ * ga ko'chdi (`tool.fields === []`, forma `kind.pages` ni to'g'ridan-to'g'ri
+ * reyestrdan o'qiydi — `components/forms/WorkComposer.tsx`). Shu sabab
+ * bu test endi `tool.fields` bilan emas, `priceFor` (narx jadvali,
+ * dvigatel bilan bir manba bo'lib QOLGAN yagona joy) bilan taqqoslaydi:
+ * reyestrdagi HAR bir hajm paketi narx jadvalida BOR va qiymatlar
+ * ketma-ket farqli (aks holda noma'lum paket asosiy narxga JIM tushib
+ * qolardi — `priceFor` dagi `?? tool.basePrice`).
+ */
+test("hajm paketlari `lib/tools.ts priceFor` narx jadvali bilan AYNAN bir xil (narx va dvigatel bir manbadan)", () => {
+  const pricesOf = (toolId: "coursework" | "referat" | "mustaqil-ish", pages: readonly string[]) =>
+    pages.map((p) => priceFor(TOOL_BY_ID[toolId], { pages: p }));
+  assert.deepEqual(pricesOf("coursework", workKindOf("coursework", "theory").pages), [12000, 14000, 16000, 18000, 20000, 22000, 24000]);
+  assert.deepEqual(pricesOf("referat", workKindOf("referat", "informative").pages), [3000, 4000, 5000, 6000]);
+  assert.deepEqual(pricesOf("mustaqil-ish", workKindOf("independent", "written").pages), [3000, 4000, 5000, 6000]);
 });
 
 test("bob shakli janrga mos: referat BO'LIMLAR (bob emas), kurs ishi 2 bob × 2 paragraf, mustaqil uch qismli", () => {

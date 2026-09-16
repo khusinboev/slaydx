@@ -98,7 +98,7 @@ const LANGUAGE_OPTIONS = [
 const MINISTRY_OPTIONS = [
   { value: "oliy", label: "Oliy ta'lim" },
   { value: "maktab", label: "Maktab ta'limi" },
-  { value: "custom", label: "O'zim yozaman" },
+  { value: "custom", label: "Boshqa (o'zim yozaman)" },
 ];
 
 /** «Fan nomi» tavsiyalari — erkin matn, ro'yxat faqat yordam. */
