@@ -78,6 +78,9 @@ function mapError(e: unknown): Attempt & { ok: false } {
   return { ok: false, error: message, retryable: false, status };
 }
 
+/** `max_tokens` poli — adaptiv fikrlash bilan matnga joy qolsin. */
+export const ANTHROPIC_MIN_MAX_TOKENS = 4096;
+
 export function makeAnthropicAdapter(deps: AnthropicDeps = {}): ProviderAdapter {
   return {
     id: "anthropic",
@@ -87,7 +90,13 @@ export function makeAnthropicAdapter(deps: AnthropicDeps = {}): ProviderAdapter 
       try {
         const res = await client.messages.create({
           model,
-          max_tokens: opts.maxTokens,
+          /*
+           * Adaptiv fikrlash tokenlari `max_tokens` ga KIRADI: baholovchi
+           * uchun 1 500 so'ralganda Claude butun byudjetni fikrlashga sarflab
+           * matn bloksiz qaytdi («bo'sh javob», AUDIT-19 referat jonli
+           * sinovi). Kichik so'rovlar uchun pol — 4 096.
+           */
+          max_tokens: Math.max(opts.maxTokens, ANTHROPIC_MIN_MAX_TOKENS),
           system: opts.json ? `${system}${JSON_INSTRUCTION}` : system,
           messages: [{ role: "user", content: user }],
           // DIQQAT: `budget_tokens` YO'Q — Claude 5 avlodida 400 qaytaradi.
@@ -101,7 +110,7 @@ export function makeAnthropicAdapter(deps: AnthropicDeps = {}): ProviderAdapter 
           .map((b) => b.text)
           .join("")
           .trim();
-        if (!text) return { ok: false, error: "bo'sh javob", retryable: false };
+        if (!text) return { ok: false, error: res.stop_reason === "max_tokens" ? "bo'sh javob (max_tokens — fikrlash byudjetni yedi)" : "bo'sh javob", retryable: false };
         return {
           ok: true,
           text,

@@ -19,6 +19,7 @@ import { scaleDoc } from "./scale";
 import { hardMissing, missingStructure, needLabel } from "./structure";
 import { writeWithLlm } from "./write-llm";
 import { articleWordPlan } from "./article/engine";
+import { SUBJECT_PROFILES, SUBJECT_PROFILE_LIST, workKindOf, workWordPlan } from "./work";
 import { ARTICLE_TYPES } from "./article/types-registry";
 import { PUBLICATION_PROFILES } from "./article/profiles";
 import type { AcademicDoc, BuiltFile } from "./types";
@@ -191,6 +192,20 @@ function articleWordRange(doc: AcademicDoc): [number, number] | undefined {
  * chegara (tezis 200), qolganida profil bo'yicha butun hujjat so'zi
  * (`articleWordPlan.total` — annotatsiya ×3 ham hisobda, `wordCount` kabi).
  */
+/**
+ * Talaba ishi (AUDIT-19): so'z maqsadi `workWordPlan.body` — titul,
+ * mundarija, adabiyotlar, vizual va ilova BETLARI ayirilgan matn. Eski
+ * `targetWords(targetPages)` (230 × bet) referatni 9 bet deb yiqitardi:
+ * 12,5 betlik paketda matn byudjeti ≈ 2 000 so'z, 230 × 12,5 = 2 875.
+ */
+export function workGateWords(doc: AcademicDoc): number | null {
+  const w = doc.work;
+  if (!w) return null;
+  const kind = workKindOf(w.genre, w.kind);
+  const subject = SUBJECT_PROFILES[w.subject] ?? SUBJECT_PROFILE_LIST[0];
+  return workWordPlan(doc.meta, kind, subject, { refs: w.refsMin, figures: w.figures.length, tables: (doc.tables ?? []).length }).body;
+}
+
 function articleGateWords(doc: AcademicDoc): number {
   const typeId = doc.article?.type ?? doc.meta.articleType ?? (doc.meta.toolId === "thesis" ? "conference_thesis" : "imrad_oak");
   const type = ARTICLE_TYPES[typeId];
@@ -313,7 +328,7 @@ export async function buildArtifact(
      * (`articleWordPlan`): tezis 200–300 so'z bilan o'lchanadi, bet bilan
      * emas; IEEE (TNR 12, yakka) bir betga OAK dan 1.7 marta ko'p so'z oladi.
      */
-    const want = isArticleTool(tool.id) ? articleGateWords(academic) : targetWords(meta.targetPages);
+    const want = isArticleTool(tool.id) ? articleGateWords(academic) : (workGateWords(academic) ?? targetWords(meta.targetPages));
     // Insho: so'z byudjeti hujjatning O'ZIDA (`doc.essay.words`) — varaq emas.
     const essayNeed = essayGateWords(tool.id, academic);
     const need = essayNeed ?? Math.round(want * MIN_LENGTH_RATIO);
