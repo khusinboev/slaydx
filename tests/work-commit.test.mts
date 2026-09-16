@@ -163,7 +163,9 @@ test("adapterFor: uchala talaba ishi vositasi `workAdapter` ga; maqola/slayd/rez
   assert.equal(adapterFor("article"), articleAdapter);
   assert.equal(adapterFor("slide"), slideAdapter);
   assert.equal(adapterFor("resume"), resumeAdapter);
-  assert.equal(adapterFor("essay"), null, "insho hali tahrirlanmaydi (WP-D/WP-E1)");
+  // Insho — o'z adapteri (WP-E1), talaba ishiniki EMAS.
+  assert.equal(adapterFor("essay")?.id, "essay");
+  assert.ok(!workAdapter.tools.has("essay"), "insho work adapteriga tushdi");
   assert.equal(workAdapter.id, "work");
   // Maqola adapteri talaba ishini OLMAYDI va aksincha.
   assert.ok(!articleAdapter.tools.has("coursework"));

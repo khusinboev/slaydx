@@ -163,11 +163,19 @@ test("adapterFor: vosita → adapter; tahrirlanmaydigan vosita — null", () => 
   assert.equal(adapterFor("slide"), slideAdapter);
   assert.equal(adapterFor("pro-slide"), slideAdapter);
   assert.equal(adapterFor("resume"), resumeAdapter);
-  for (const t of ["referat", "translation", "glossary", ""]) {
+  for (const t of ["translation", "glossary", "lesson-plan", ""]) {
     assert.equal(adapterFor(t), null, `«${t}» tahrirlanadigan bo'lib qoldi`);
   }
-  // Maqola 2 (WP7): `article` ham reyestrda — `tests/article-commit` sinaydi; tezis (AUDIT-19) maqola adapterida, insho — `essayAdapter` (`essay-wiring`).
-  assert.deepEqual(new Set(editableTools()), new Set(["slide", "pro-slide", "resume", "article", "thesis", "essay"]));
+  /*
+   * Maqola 2 (WP7): `article` reyestrda — `tests/article-commit` sinaydi;
+   * tezis (AUDIT-19) maqola adapterida, insho — `essayAdapter`
+   * (`essay-wiring`), kurs ishi/referat/mustaqil ish — `workAdapter`
+   * (`tests/work-commit`, WP-C).
+   */
+  assert.deepEqual(
+    new Set(editableTools()),
+    new Set(["slide", "pro-slide", "resume", "article", "thesis", "essay", "coursework", "referat", "mustaqil-ish"]),
+  );
 });
 
 test("adapter `hasModel`: slayd — `doc.slides`, rezyume — model yoki eski bo'limlar", () => {
@@ -400,7 +408,8 @@ test("ensureFreshFile: rezyume ham eskirgan faylni qayta yasaydi", async (t) => 
 
 test("ensureFreshFile: tahrirlanmaydigan vosita — qayta yasash YO'Q", async (t) => {
   const seen = mockDb(t, {
-    versions: { doc_version: 4, file_version: 3, tool_id: "referat", file_name: "r.docx", status: "COMPLETED" },
+    // «Glossariy» — tahrirlanmaydigan vosita (referat AUDIT-19 WP-C dan beri tahrirlanadi).
+    versions: { doc_version: 4, file_version: 3, tool_id: "glossary", file_name: "g.docx", status: "COMPLETED" },
   });
   await ensureFreshFile(GEN, USER);
   assert.equal(found(seen, /INSERT INTO generation_files/).length, 0);

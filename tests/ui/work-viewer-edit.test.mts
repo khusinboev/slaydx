@@ -6,6 +6,7 @@ import { render, fireEvent, screen, cleanup } from "@testing-library/react";
 import { WordViewer } from "../../components/viewers/WordViewer.tsx";
 import { EditActions, type EditActionsState } from "../../components/files/EditActions.tsx";
 import { applyWorkOps, type WorkOp } from "../../lib/generation/work/edit.ts";
+import { WORK_TOOLS } from "../../components/files/useWorkEdit.ts";
 import { sampleWorkDoc } from "../../lib/generation/work/samples.ts";
 import type { AcademicDoc, DocMeta } from "../../lib/generation/types.ts";
 
@@ -325,12 +326,13 @@ test("REFERAT ham tahrirlanadi (bir xil op tili), INSHO — yo'q", async () => {
   // Referat bo'limi «1. » bilan chiziladi, «1-BOB.» bilan emas.
   assert.ok(pageHas(/1\. YANGI BO‘LIM NOMI/), "referat bo'limi raqami noto'g'ri");
 
-  cleanup();
-  // Insho — `useWorkEdit` uni qabul qilmaydi, tahrir tugmasi chiqmaydi.
-  const essay = stubServer(makeDoc(), "essay");
-  render(h(Page, { initial: generation(essay, "essay") }));
-  await pause(30);
-  assert.ok(!screen.queryByText("Tahrirlash"), "insho tahrirga ochildi");
+  /*
+   * Insho WP-E1 dan beri O'Z adapteri bilan tahrirlanadi (maqola op
+   * tili) — `useWorkEdit` uni QABUL QILMAYDI, ya'ni talaba ishining op
+   * tili inshoga tushmaydi.
+   */
+  assert.ok(!WORK_TOOLS.includes("essay" as never), "insho work op tiliga tushdi");
+  assert.deepEqual([...WORK_TOOLS], ["coursework", "referat", "mustaqil-ish"]);
 });
 
 test("ESKI hujjat (`doc.work` yo'q) — tahrir tugmasi UMUMAN chiqmaydi", async () => {
