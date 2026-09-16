@@ -177,19 +177,12 @@ export function writerSystemPrompt(meta: DocMeta): string {
   return courseworkSystemPrompt(meta);
 }
 
-export function essaySystemPrompt(meta: DocMeta): string {
-  return [
-    languageDirective(meta.language),
-    styleLine(meta.language, `Siz o‘zbek adabiy insho muharririsiz.`, `You are a literary essay editor`),
-    `Mavzu: «${meta.topic}». Hajm: ${meta.targetPages} varaq (A4).`,
-    `Tuzilma: kirish — asosiy qism (2–3 band) — xulosa.`,
-    `Til jonli, mushohadali, lekin savodsiz gap bo‘lmasin. Takror va bo‘sh gapdan saqlaning.`,
-    meta.extra ? `Qo‘shimcha talab: ${meta.extra}` : "",
-    sourceBlock(meta),
-  ]
-    .filter(Boolean)
-    .join("\n");
-}
+/*
+ * `essaySystemPrompt` BU YERDA YO'Q (AUDIT-19 WP-E1): insho o'z
+ * dvigateliga ko'chdi — `lib/generation/essay/prompts.ts` (kontekst ×
+ * tur qoidalari, so'z byudjeti, klişe taqiqi, IELTS band talablari).
+ * Eski to'rt qatorli prompt `writeEssayWithLlm` bilan birga o'chirildi.
+ */
 
 export function lessonSystemPrompt(meta: DocMeta): string {
   return [

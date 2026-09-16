@@ -1,7 +1,7 @@
 import { sectionLabels } from "./i18n";
 import { parseLlmObject } from "./json";
 import { llmComplete, llmEnabled } from "./llm";
-import { writerSystemPrompt, essaySystemPrompt } from "./prompts";
+import { writerSystemPrompt } from "./prompts";
 import {
   blocksFromText,
   isGenericFiller,
@@ -23,6 +23,7 @@ import {
 } from "./write-specials";
 import { buildResumeDoc } from "./resume/write";
 import { buildArticleDoc, type ArticleBuildOpts } from "./article/engine";
+import { buildEssayDoc } from "./essay/engine";
 import { thesisTypeId } from "../tools";
 import type { FormValues } from "../types";
 import type { AcademicDoc, Block, BuiltFile, DocMeta, DocSection } from "./types";
@@ -841,185 +842,6 @@ export async function writeWriterWithLlm(meta: DocMeta, deadline?: number): Prom
   return doc;
 }
 
-/**
- * 3+ varaqlik insho — bo'lim-bo'lim so'raladi.
- *
- * Sabab akademik yozuvchidagi bilan bir xil (`perSub` izohi): bitta
- * chaqiruvda 15 paragraf so'ralganda model ~60% ini beradi, 2–3
- * paragraf so'ralganda esa deyarli to'liq bajaradi. Insho narxi endi
- * varaqqa bog'liq (N-6) — 5 varaqlik insho 4 000 tanga, shuning uchun
- * uni bitta katta, ishonchsiz chaqiruvga qoldirib bo'lmaydi.
- *
- * Mavjud `writeSection` (akademik yozuvchi uchun yozilgan) qayta
- * ishlatiladi — yangi generatsiya mantiqi emas.
- */
-async function writeEssayInChunks(
-  meta: DocMeta,
-  sys: string,
-  L: ReturnType<typeof sectionLabels>,
-  n: number,
-  deadline?: number,
-): Promise<AcademicDoc | null> {
-  const topic = meta.topic;
-  /**
-   * Chuqurlik `n` ga BOG'LIQ — richag paragraf emas, BURCHAK soni.
-   *
-   * Ilgari `n` parametr sifatida qabul qilinar, lekin tanada UMUMAN
-   * ishlatilmasdi (AUDIT-5 P1-3): 3, 4 va 5 varaqlik insho bir xil uchta
-   * burchakni olardi. Ya'ni 5 varaq uchun 4 000 tanga to'lagan
-   * foydalanuvchi 3 varaqlik (3 000 tanga) ish bilan bir xil chuqurlik
-   * olardi; farq faqat 80% hajm darvozasidan o'tishga tayanardi.
-   *
-   * Nega burchak, paragraf emas: `perSub` izohidagi o'lchov bu yerda ham
-   * amal qiladi — modeldan bitta bo'limda ko'p paragraf so'ralganda u
-   * ulushini beradi, kam so'ralganda deyarli to'liq bajaradi. Ya'ni
-   * «har bo'limda 4 paragraf» deyish hajmni ishonchli oshirmaydi.
-   * Yangi BURCHAK esa modelga yangi savol beradi — matn ham uzayadi,
-   * ham takrorga aylanmaydi. Insho uchun bu ayniqsa muhim: uzun insho
-   * «ko'proq gap» emas, «ko'proq qirra» bo'lishi kerak.
-   */
-  const ANGLES = [
-    `«${topic}» mavzusini ochuvchi ANIQ shaxsiy tajriba yoki kuzatuv bilan yozing.`,
-    `«${topic}» ning jamiyat, millat yoki inson hayoti uchun ahamiyatini yoriting.`,
-    `«${topic}» bo‘yicha chuqurroq mulohaza, qarama-qarshi nuqtai nazar yoki kelajakka oid fikr bildiring.`,
-    `«${topic}» bo‘yicha adabiyot, tarix yoki xalq donishmandligidan misol keltirib, uni bugungi hayotga bog‘lang.`,
-    `«${topic}» ni bugungi yoshlar hayoti bilan bog‘lang: qanday o‘zgargan, nimasi saqlanib qolgan.`,
-  ];
-  const ROMAN = ["I", "II", "III", "IV", "V"];
-  // 3 varaq → 3 burchak, 4 → 4, 5 → 5. Chegaradan chiqmaydi.
-  const angles = ANGLES.slice(0, Math.max(3, Math.min(ANGLES.length, n)));
-
-  /*
-   * Paragraf ~105 so'z (promptda shu so'raladi). Kirish va xulosa
-   * hajmning ~15% ini oladi, qolgani burchaklarga bo'linadi.
-   */
-  const want = targetWords(n);
-  const perEdge = Math.max(2, Math.min(4, Math.round((want * 0.15) / 105)));
-  const perBody = Math.max(2, Math.min(5, Math.round((want * 0.7) / angles.length / 105)));
-
-  const jobs = [
-    { id: "kirish", title: L.intro, brief: `«${topic}» mavzusiga jonli kirish, o‘quvchini qiziqtiradigan boshlanish.`, min: perEdge },
-    ...angles.map((brief, i) => ({ id: `bolim${i + 1}`, title: ROMAN[i], brief, min: perBody })),
-    { id: "xulosa", title: L.conclusion, brief: `«${topic}» bo‘yicha shaxsiy xulosa va umumlashma. Boblarni takrorlamang.`, min: perEdge },
-  ];
-  const written = await mapPool(jobs, 3, async (item) => {
-    const left = remainingMs(deadline);
-    if (left < 5_000) return { item, blocks: [] as Block[] };
-    return { item, blocks: await writeSection(sys, item.title, item.brief, meta, item.min, Math.min(35_000, left)) };
-  });
-  const byId = new Map<string, Block[]>();
-  for (const { item, blocks } of written) if (blocks.length) byId.set(item.id, blocks);
-
-  const intro = byId.get("kirish");
-  const bodySecs = angles.map((_, i) => byId.get(`bolim${i + 1}`)).filter((b): b is Block[] => Boolean(b?.length));
-  const conclusion = byId.get("xulosa");
-  if (!intro || !conclusion || bodySecs.length < 2) {
-    console.warn("[write-essay] bo‘lim yetishmadi", { intro: !!intro, body: bodySecs.length, conclusion: !!conclusion });
-    return null;
-  }
-  return {
-    meta,
-    titlePage: true,
-    toc: false,
-    sections: [
-      section("kirish", L.intro, intro),
-      ...bodySecs.map((blocks, i) => section(`asosiy${i + 1}`, `${L.main} ${i + 1}`, blocks)),
-      section("xulosa", L.conclusion, conclusion),
-    ],
-  };
-}
-
-export async function writeEssayWithLlm(meta: DocMeta, deadline?: number): Promise<AcademicDoc | null> {
-  if (!llmEnabled()) return null;
-  const sys = essaySystemPrompt(meta);
-  const L = sectionLabels(meta.language);
-  const n = Math.min(5, Math.max(1, meta.targetPages));
-  if (n >= 3) {
-    const chunked = await writeEssayInChunks(meta, sys, L, n, deadline);
-    if (chunked) return chunked;
-    console.warn("[write-essay] bo‘lib yozish yiqildi, bitta chaqiruvga qaytildi");
-  }
-  const minParas = n <= 1 ? 4 : n <= 2 ? 7 : n * 3;
-  const raw = await llmComplete(
-    sys,
-    [
-      `Mavzu: «${meta.topic}». ${n} varaqli insho.`,
-      `JSON: {"intro":["paragraf"],"sections":[{"title":"I. ...","paras":["",""]}],"conclusion":["",""]}`,
-      `intro 2 paragraf. sections ${n <= 2 ? 2 : 3} ta, har birida 2–3 to‘la paragraf.`,
-      `Jami kamida ${minParas} paragraf. Har paragraf 70–110 so‘z.`,
-      `Jonli mushohada, aniq misol. Shior va takror yo‘q.`,
-    ].join("\n"),
-    3600,
-    { json: true, timeoutMs: Math.min(70_000, remainingMs(deadline) || 70_000) },
-  );
-  const data = parseLlmObject<{
-    intro?: unknown;
-    sections?: { title?: string; paras?: unknown }[];
-    conclusion?: unknown;
-  }>(raw);
-
-  const asParas = (v: unknown): string[] => {
-    if (Array.isArray(v)) return v.map((x) => String(x ?? "").replace(/\s+/g, " ").trim()).filter((s) => s.length > 40);
-    if (typeof v === "string") return blocksFromText(v).map((b) => b.text);
-    return [];
-  };
-
-  const intro = asParas(data?.intro);
-  const bodySecs = (data?.sections ?? [])
-    .map((s, i) => ({
-      title: String(s?.title || `${L.main} ${i + 1}`).slice(0, 80),
-      paras: asParas(s?.paras),
-    }))
-    .filter((s) => s.paras.length);
-  const conclusion = asParas(data?.conclusion);
-
-  /**
-   * Uchala qism ham TO'LIQ bo'lishi shart.
-   *
-   * Ilgari shart faqat JAMI paragraf soniga qo'yilgan edi (`>= 4`).
-   * Model `intro` ni bo'sh qaytarib, `sections` ni to'ldirsa — shart
-   * baribir bajarilar va hujjatga MATNSIZ «KIRISH» sarlavhasi tushardi
-   * (render har bo'limga sarlavha yozadi, ichi bo'sh bo'lsa ham).
-   * Kirishsiz yoki xulosasiz insho — tuzilmaviy jihatdan yaroqsiz,
-   * shuning uchun bunda pastdagi matnli zaxira yo'liga o'tamiz: u
-   * paragraflarni o'zi uchga bo'ladi va bo'sh bo'lim qoldirmaydi.
-   */
-  const bodyParas = bodySecs.reduce((n, s) => n + s.paras.length, 0);
-  if (intro.length && bodyParas && conclusion.length && intro.length + bodyParas + conclusion.length >= 4) {
-    return {
-      meta,
-      titlePage: true,
-      toc: false,
-      sections: [
-        section("kirish", L.intro, intro.map((t) => ({ kind: "p", text: t }))),
-        ...bodySecs.map((s, i) => section(`asosiy${i + 1}`, s.title, s.paras.map((t) => ({ kind: "p", text: t })))),
-        section("xulosa", L.conclusion, conclusion.map((t) => ({ kind: "p", text: t }))),
-      ],
-    };
-  }
-
-  const text = await llmComplete(
-    sys,
-    `Mavzu: «${meta.topic}». ${n} varaqli insho: kirish, 2–3 asosiy band, xulosa. Har band 2–3 to‘la paragraf. Ajratish: KIRISH *** ASOSIY *** XULOSA`,
-    3200,
-    { timeoutMs: Math.min(50_000, remainingMs(deadline) || 50_000) },
-  );
-  if (!text) return null;
-  const paras = blocksFromText(text).map((b) => b.text).filter((t) => !isGenericFiller(t));
-  if (paras.length < 4) return null;
-  const third = Math.max(1, Math.floor(paras.length / 3));
-  return {
-    meta,
-    titlePage: true,
-    toc: false,
-    sections: [
-      section("kirish", L.intro, paras.slice(0, third).map((t) => ({ kind: "p", text: t }))),
-      section("asosiy", L.main, paras.slice(third, -Math.max(1, third - 1)).map((t) => ({ kind: "p", text: t }))),
-      section("xulosa", L.conclusion, paras.slice(-Math.max(1, third - 1)).map((t) => ({ kind: "p", text: t }))),
-    ],
-  };
-}
-
 /*
  * `article` bu ro'yxatda YO'Q (Maqola 2): u o'z dvigateliga
  * (`article/engine.ts`) ketadi — tekshirilgan manbalar, tur skeleti,
@@ -1041,7 +863,26 @@ export async function writeWithLlm(
   deadline?: number,
   extras: WriteExtras = {},
 ): Promise<AcademicDoc | null> {
-  if (meta.toolId === "essay") return writeEssayWithLlm(meta, deadline);
+  /*
+   * Insho 2 (AUDIT-19 WP-D/E1): o'z dvigateli (`essay/engine.ts`) —
+   * kontekst × tur reyestri, so'z byudjeti, qo'riqchi (klişe/manbasiz
+   * raqam), tayyorlik hisoboti va avto-sayqal. Eski yo'l
+   * (`writeEssayWithLlm` + `writeEssayInChunks` + `prompts.ts`
+   * `essaySystemPrompt`) O'CHIRILDI: u «burchak» sarlavhali bir necha
+   * bo'lim yozardi, hisobotsiz va tahrirsiz edi.
+   *
+   * Byudjet 180 s: insho ≤2 chaqiruvda yoziladi, qolgani hisobot +
+   * sayqal (`ESSAY_POLISH_MIN_MS` 70 s).
+   */
+  if (meta.toolId === "essay") {
+    const built = await buildEssayDoc(meta, values as FormValues, {
+      deadline: deadline ?? Date.now() + 180_000,
+      ...(extras.onStage ? { onStage: extras.onStage } : {}),
+    });
+    if (!built) return null;
+    extras.onCost?.(built.cost);
+    return built.doc;
+  }
   /*
    * Maqola 2 (AUDIT-17): maqola — o'z dvigateli. Eski formadagi
    * `kind === "imrad"` `normalizeArticleType` orqali `imrad_classic` ga

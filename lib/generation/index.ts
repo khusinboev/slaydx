@@ -27,7 +27,6 @@ import type { FormValues, ToolConfig } from "../types";
 export type { BuiltFile } from "./types";
 export {
   writerSystemPrompt,
-  essaySystemPrompt,
   lessonSystemPrompt,
   glossarySystemPrompt,
   keysSystemPrompt,
@@ -66,6 +65,33 @@ const LENGTH_GATED = new Set(["referat", "coursework", "mustaqil-ish", "article"
 
 /** Va'da qilingan hajmning shu ulushi majburiy. */
 const MIN_LENGTH_RATIO = 0.8;
+
+/**
+ * Insho (AUDIT-19) — darvoza SO'Z bilan, `doc.essay.words.min` ning shu
+ * ulushi.
+ *
+ * Nega varaq emas: insho hajmi kontekstga qarab o'lchanadi
+ * (`essay/registry.ts essayWords`) — IELTS Task 2 rasmiy minimumi 250
+ * so'z, ya'ni bir betdan kam; akademik esse 500–1 000 so'z. Varaqqa
+ * bog'langan `targetWords(meta.targetPages)` bunda ma'nosiz: IELTS
+ * inshosi «2 varaq» paketida ham 280 so'z bo'lishi KERAK.
+ *
+ * Nega 0.9 va 0.8 emas: `words.min` ning o'zi allaqachon mo'ljaldan
+ * past chegara (maktab inshosida `aim × 0.8`, akademikda `aim × 0.85`).
+ * Uning ustidan yana 0.8 qo'llansa 250 so'zlik IELTS inshosi 180 so'zda
+ * ham o'tib ketardi — bunday ish imtihonda baholanmaydi.
+ */
+const ESSAY_LENGTH_RATIO = 0.9;
+
+/**
+ * Insho so'z darvozasi (`null` — insho emas yoki eski hujjat: u holda
+ * odatdagi varaq hisobi ishlaydi).
+ */
+function essayGateWords(toolId: string, doc: AcademicDoc): number | null {
+  if (toolId !== "essay") return null;
+  const words = doc.essay?.words;
+  return words ? Math.round(words.min * ESSAY_LENGTH_RATIO) : null;
+}
 
 /**
  * Renderlangan sahifa soni — ikkinchi, YUMSHOQROQ darvoza.
@@ -271,13 +297,19 @@ export async function buildArtifact(
      * emas; IEEE (TNR 12, yakka) bir betga OAK dan 1.7 marta ko'p so'z oladi.
      */
     const want = isArticleTool(tool.id) ? articleGateWords(academic) : targetWords(meta.targetPages);
+    // Insho: so'z byudjeti hujjatning O'ZIDA (`doc.essay.words`) — varaq emas.
+    const essayNeed = essayGateWords(tool.id, academic);
+    const need = essayNeed ?? Math.round(want * MIN_LENGTH_RATIO);
     const got = wordCount(academic);
-    if (got < want * MIN_LENGTH_RATIO) {
+    if (got < need) {
       const pages = Math.max(1, Math.round(got / 230));
-      console.warn(`[gen] length gate: ${tool.id} ${got}/${want} so'z`);
+      console.warn(`[gen] length gate: ${tool.id} ${got}/${need} so'z`);
       throw new Error(
-        `Matn hajmi yetarli chiqmadi (~${pages} bet, kerak: ${meta.pagesLabel} bet). ` +
-          `Kredit qaytariladi — qayta urinib ko‘ring yoki kichikroq hajm tanlang.`,
+        essayNeed
+          ? `Insho hajmi yetarli chiqmadi (${got} so'z, kerak: kamida ${need}). ` +
+            `Kredit qaytariladi — qayta urinib ko‘ring.`
+          : `Matn hajmi yetarli chiqmadi (~${pages} bet, kerak: ${meta.pagesLabel} bet). ` +
+            `Kredit qaytariladi — qayta urinib ko‘ring yoki kichikroq hajm tanlang.`,
       );
     }
   }
@@ -325,8 +357,16 @@ export async function buildArtifact(
    * So'z bilan o'lchanadigan maqola turlari (tezis 200–300 so'z) sahifa
    * va'da qilmaydi — ular uchun renderlangan sahifa darvozasi yo'q
    * (`max(2, …)` bir sahifalik tezisni yiqitardi).
+   *
+   * AUDIT-19: insho ham shu qatorda — hajmi `doc.essay.words` bilan
+   * o'lchangan bo'lsa sahifa darvozasi O'TKAZIB YUBORILADI. IELTS Task 2
+   * (250 so'z) bir betdan kam chiqadi va `max(2, …)` uni HAR SAFAR
+   * yiqitardi — foydalanuvchi to'g'ri yozilgan inshoni ololmasdi.
    */
-  const pageGated = LENGTH_GATED.has(tool.id) && !(isArticleTool(tool.id) && articleWordRange(academic));
+  const pageGated =
+    LENGTH_GATED.has(tool.id) &&
+    !(isArticleTool(tool.id) && articleWordRange(academic)) &&
+    essayGateWords(tool.id, academic) === null;
   if (llmDoc && pageGated && pdfAvailable() && remainingMs(deadline) > 20_000) {
     const pdf = await toPdf(bytes, `${meta.fileNameHint}.docx`).catch(() => null);
     if (pdf) {

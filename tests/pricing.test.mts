@@ -183,8 +183,16 @@ test("OTME ishlari universitetsiz qabul qilinmaydi", () => {
       `${id}: universitet talab qilinishi kerak — ${JSON.stringify(missing)}`,
     );
   }
-  // Insho ko'pincha maktab ishi — undan talab qilinmaydi.
-  assert.equal(missingRequired(TOOL_BY_ID.essay, base).length, 0);
+  // Insho ko'pincha maktab ishi — muassasa undan talab qilinmaydi.
+  assert.ok(!missingRequired(TOOL_BY_ID.essay, base).some((m) => /muassasa/i.test(m)));
+  /*
+   * AUDIT-19: insho o'z formasida (`EssayComposer`) — majburiysi
+   * KONTEKST (`CUSTOM_REQUIRED.essay`). Maktab inshosi, akademik esse va
+   * IELTS Task 2 butunlay boshqa janr: kontekstsiz so'rov navbatga
+   * tushib, puli yechilib, boshqa janr chiqishi mumkin edi.
+   */
+  assert.ok(missingRequired(TOOL_BY_ID.essay, base).some((m) => /kontekst/i.test(m)));
+  assert.equal(missingRequired(TOOL_BY_ID.essay, { ...base, essayContext: "ielts_task2" }).length, 0);
 });
 
 test("mavzu talab qilinadi, «fayl asosida» rejimida esa manba matni", () => {

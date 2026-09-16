@@ -119,6 +119,15 @@ const CUSTOM_REQUIRED: Record<string, ToolField[]> = {
    * tekshiriladi.
    */
   article: [{ kind: "text", name: "articleType", legend: "Maqola turi", required: true }],
+  /*
+   * Insho 2 (AUDIT-19): mavzu (`topicLegend`) + KONTEKST. Tur/til/hajm
+   * kontekstdan normallashadi (`essayInputFromValues`) — nomuvofiq qiymat
+   * xato bermaydi, kontekstning birinchi turiga/tiliga tushadi, shuning
+   * uchun ular majburiy emas. Kontekstning o'zi esa bo'sh kelsa so'rov
+   * umuman navbatga tushmasligi kerak: IELTS deb to'lagan foydalanuvchi
+   * maktab inshosini olmasin (janrlar butunlay boshqa).
+   */
+  essay: [{ kind: "text", name: "essayContext", legend: "Insho konteksti", required: true }],
 };
 
 /**
@@ -382,27 +391,22 @@ export const TOOLS: ToolConfig[] = [
     extraOptional: true,
     output: "docx",
     basePrice: 2000,
-    fields: [
-      { kind: "language", name: "language", legend: "Insho tilini tanlang" },
-      ...writerFields({ universityRequired: false }),
-      {
-        kind: "design",
-        name: "design",
-        legend: "Hujjat dizaynini tanlang",
-      },
-      {
-        kind: "chips",
-        name: "pages",
-        legend: "Insho necha varaq (A4) bo'lsin?",
-        options: [
-          { value: "1", label: "1 varaq" },
-          { value: "2", label: "2 varaq" },
-          { value: "3", label: "3 varaq" },
-          { value: "4", label: "4 varaq" },
-          { value: "5", label: "5 varaq" },
-        ],
-      },
-    ],
+    /*
+     * Insho 2 (AUDIT-19 WP-E1): o'z formasi — `EssayComposer`. Uch
+     * KONTEKST (maktab/DTM · OTM akademik esse · IELTS Task 2) bir-biriga
+     * o'xshamagan janrlar: turlar ro'yxati, hajm o'lchovi (varaq/so'z),
+     * ruxsat etilgan til va epigraf siyosati — hammasi kontekstdan
+     * chiqadi (`essay/registry.ts`). Standart forma buni chiza olmasdi:
+     * u maydonlar orasidagi BOG'LIQLIKNI bilmaydi (IELTS uchun «o'zbek
+     * tili» yoki akademik esse uchun «adabiy tahlil» tanlab bo'lardi).
+     *
+     * `fields: []` — eski `language`/`design`/`pages`/muallif maydonlari
+     * composerga ko'chdi; majburiylari `CUSTOM_REQUIRED.essay` da.
+     * NARX O'ZGARMAYDI: `priceFor` baribir `pages` chipidan (1–5 varaq,
+     * 2 000–4 000 tanga), `defaultPages("essay") = "2"`.
+     */
+    custom: "essay",
+    fields: [],
   },
   {
     id: "article",
