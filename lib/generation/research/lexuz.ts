@@ -292,6 +292,13 @@ export async function fetchLaw(cand: LawCandidate, opts: HttpOpts & { today?: st
     const res = await getText(cand.url, { retries: 1, ...opts, timeoutMs: opts.timeoutMs ?? LEX_TIMEOUT_MS });
     if (!res.ok) {
       console.warn(`[lexuz] ${cand.url}: ${res.error}`);
+      /*
+       * 404/410 — bunday hujjat YO'Q (jonli sinov 2026-09: model
+       * `https://lex.uz/docs/9999999` ni o'ylab topganda aynan shu keladi).
+       * Bu «bloklangan» emas, RAD: havolaning o'zi uydirma, shuning uchun
+       * hukm KESHLANADI ham — qayta urinilmaydi.
+       */
+      if (res.status === 404 || res.status === 410) return { ok: false, reason: "rejected" } as LawVerdict;
       return null;
     }
     return verifyLawPage(cand, res.text, stamp, opts.language);

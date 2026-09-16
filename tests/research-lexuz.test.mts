@@ -173,6 +173,23 @@ test("fetchLaw: 403/timeout → blocked (hech narsa qo'shilmaydi) va KESHLANMAYD
   setSourceCacheStore(null);
 });
 
+test("404 — hujjat YO'Q: bu «blocked» emas, RAD (uydirma havola) va keshlanadi", async () => {
+  // Jonli sinov (2026-09): model o'ylab topgan `lex.uz/docs/9999999` 404 qaytardi.
+  const store = memorySourceCache();
+  setSourceCacheStore(store);
+  const f = stubFetch({ "lex.uz/docs/9999999": { __status: 404 } });
+  const fake: LawCandidate = { ...EDU, url: "https://lex.uz/docs/9999999" };
+  const v = await fetchLaw(fake, { fetchImpl: f, retries: 0, retryBaseMs: 0, today: TODAY });
+  assert.equal(v.ok, false);
+  assert.equal(v.ok === false && v.reason, "rejected");
+  await fetchLaw(fake, { fetchImpl: f, retries: 0, retryBaseMs: 0, today: TODAY });
+  assert.equal(f.calls.length, 1, "yo'q hujjatga qayta urinilmaydi");
+  // 403 esa o'tkinchi — «blocked» va keshlanmaydi.
+  const blocked = await fetchLaw(EDU, { fetchImpl: stubFetch({ "lex.uz": { __status: 403 } }), retries: 0, retryBaseMs: 0, today: TODAY });
+  assert.equal(blocked.ok === false && blocked.reason, "blocked");
+  setSourceCacheStore(null);
+});
+
 test("kesh `lex:` — RAD ETILGAN hukm ham keshlanadi (qayta urinilmaydi)", async () => {
   const store = memorySourceCache();
   setSourceCacheStore(store);
