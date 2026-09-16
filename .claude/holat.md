@@ -3,7 +3,7 @@
 Sprint: **O'qituvchi vositalari 2 + 9 yangi xizmat (AUDIT-20…23)** — reja `docs/AUDIT-20.md` §1, tadqiqot `docs/research/` (15 hisobot). Oldingi: Talaba ishlari 2 (AUDIT-19) — prod'da.
 
 Eski sprint jadvali (AUDIT-19) — reja `~/.claude/plans/sen-senior-fullstack-dev-majestic-starfish.md` (§1 `docs/AUDIT-19.md`), jurnal `docs/AUDIT-19.md` §5.
-AUDIT-20 holati: **~95 %** — barcha WP main da, jonli 7/7, smoke 2/2, ko'z o'tdi; deploy qoldi.
+AUDIT-20 holati: **100 % — prod'da (2026-09-17, `5852285`).** Keyingi: AUDIT-21.
 
 | # | AUDIT-20 bosqich | % | Izoh |
 |---|---|---|---|
@@ -15,14 +15,14 @@ AUDIT-20 holati: **~95 %** — barcha WP main da, jonli 7/7, smoke 2/2, ko'z o't
 | E | TeacherComposer forma + zond | 100 | `26e374d`, `f22e6b6` |
 | D | Tahrir/server (teacherAdapter, doc-polish, useTeacherEdit, glossariy sayqal, maket nuqsonlari) | 100 | `df5d83c` |
 | F | Ulash (index.ts darvozalari, delivered, i18n, live 8 holat, seed) | 100 | `bde8082` |
-| R3 | Jonli 7/7, smoke (lesson-plan, test), ko'z 5 kind, docs | 90 | deploy qoldi |
+| R3 | Jonli 7/7, smoke (lesson-plan, test), ko'z 5 kind, docs, deploy + prod smoke | 100 | prod `5852285`, rollback `552a46c` |
 
 ## To'xtatilgan jarayonlar
 Yo'q (pauza yakunlandi, hamma worktree birlashtirildi).
 
 ## Davom etish qadamlari (AUDIT-20)
-1. Deploy AUDIT-20 (`.claude/deploy.md`): zaxira → push → `nohup deploy.sh` → prod smoke (eski dars rejasi/xarita/glossariy/keys ochilishi + yangi dars rejasi/test).
-2. Keyingi: AUDIT-21 (krossvord/flesh karta/infografika) — reja `docs/AUDIT-20.md` §3.
+1. Anthropic hisobini to'ldirish (prod baholovchi Gemini ga tushgan).
+2. Keyingi: AUDIT-21 (krossvord/flesh karta/infografika) — reja `docs/AUDIT-20.md` §3; AUDIT-22 uchun Azure Speech / Aisha AI kalitlari.
 2. Egasidan (AUDIT-22 uchun, shoshilinch emas): Azure Speech kaliti + region, Aisha AI kaliti.
 
 Oldingi sprint (AUDIT-19) yakuni: **100% — prod'da (2026-09-16, `552a46c`).**
