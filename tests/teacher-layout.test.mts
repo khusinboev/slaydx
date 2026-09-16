@@ -211,9 +211,22 @@ test("keys: vaziyatlar + ALOHIDA rubrika bo'limi (WP-A shartnomasi)", () => {
 
 test("test: variant betlari, KALIT va OMR yangi betdan", () => {
   const plan = planTeacher(sampleTeacherDoc("test"));
-  assert.deepEqual(plan.pageBreaks, ["variantA", "variantB", "key", "omr"]);
+  /*
+   * AUDIT-20 WP-D: OMR KALITDAN OLDIN — o'quvchi qismi (ko'rsatma,
+   * variantlar, javob varag'i) birga turadi, kalit va mezon esa
+   * o'qituvchi qismida. `test/engine.ts testSections` DOIM shu
+   * tartibda yozadi; namuna endi shunga mos (ilgari `omr` oxirida
+   * turib, hech qachon yaratilmaydigan tartibni qulflab qo'ygandi).
+   */
+  /*
+   * BIRINCHI variant uzilishsiz — ko'rsatmadan keyin o'sha betda
+   * boshlanadi (LibreOffice tekshiruvi: aks holda 1-bet deyarli
+   * bo'sh qolardi). Qolganlari alohida varaqda: har o'quvchi o'z
+   * variantini oladi.
+   */
+  assert.deepEqual(plan.pageBreaks, ["variantB", "omr", "key"]);
   const breaks = plan.body.filter((b) => b.k === "h1" && b.pageBreak).map((b) => (b.k === "h1" ? b.sectionId : ""));
-  assert.deepEqual(breaks, ["variantA", "variantB", "key", "omr"], "sahifa uzilishi aynan shu bo'limlarda");
+  assert.deepEqual(breaks, ["variantB", "omr", "key"], "sahifa uzilishi aynan shu bo'limlarda");
   const key = plan.body.find((b) => b.k === "h1" && b.sectionId === "key");
   assert.ok(key?.k === "h1" && key.pageBreak, "javoblar kaliti YANGI BETDAN boshlanishi kerak");
 });
@@ -330,4 +343,55 @@ test("o'qituvchi oilasiga tegishli bo'lmagan hujjat — aniq XATO", () => {
   doc.meta = { ...doc.meta, toolId: "coursework" } as DocMeta;
   assert.equal(legacyTeacherModel(doc), null);
   assert.throws(() => planTeacher(doc), /o'qituvchi oilasiga tegishli emas/);
+});
+
+/* ══════════════════════════ ko'z tekshiruvi tuzatishlari (WP-D) ══════════════════════════ */
+
+test("TEST: o'quvchi maydoni BIR MARTA — shapkada; ko'rsatma bo'limida takrorlanmaydi", () => {
+  const doc = sampleTeacherDoc("test");
+  /*
+   * Eski hujjat: dvigatel «F.I.Sh. ___ Sinf ___ …» qatorini
+   * ko'rsatma bo'limiga ham yozgan (WP-D da olib tashlandi). Shapka
+   * ham chizadi ⇒ 1-betda ikki bir xil qator turardi.
+   */
+  doc.sections = doc.sections.map((s) =>
+    s.id === "instructions"
+      ? { ...s, blocks: [{ kind: "p", text: "F.I.Sh. ______________________  Sinf ______  Sana ______  Ball ____  Baho ____" }, { kind: "li", text: "Testda 5 ta savol bor." }] }
+      : s,
+  );
+  const plan = planTeacher(doc);
+  const inHead = plan.head.filter((h) => h.k === "line").length;
+  assert.equal(inHead, 1, "shapkada o'quvchi maydoni bo'lishi kerak");
+  const inBody = plan.body.filter((b) => "text" in b && /F\.I\.Sh\./.test(b.text)).length;
+  assert.equal(inBody, 0, "MUTATSIYA: o'quvchi maydoni tanada TAKROR chizildi");
+  // Ko'rsatmaning O'ZI qoladi.
+  assert.ok(plan.body.some((b) => "text" in b && /Testda 5 ta savol/.test(b.text)), "ko'rsatma qatori yo'qoldi");
+});
+
+test("TEST: BIRINCHI variant ko'rsatma bilan bir betda — uzilish faqat variantlar orasida", () => {
+  const plan = planTeacher(sampleTeacherDoc("test"));
+  assert.deepEqual(plan.pageBreaks, ["variantB", "omr", "key"], "1-bet ko'rsatma bilan deyarli bo'sh qolardi");
+  const a = plan.body.find((b) => b.k === "h1" && b.sectionId === "variantA");
+  assert.ok(a?.k === "h1" && !a.pageBreak, "MUTATSIYA: Variant A yangi betdan boshlandi");
+  const b2 = plan.body.find((b) => b.k === "h1" && b.sectionId === "variantB");
+  assert.ok(b2?.k === "h1" && b2.pageBreak, "ikkinchi variant YANGI varaqdan bo'lishi kerak");
+});
+
+test("XARITA shapkasi: mavzu fan TAKRORI bo'lsa «Mavzu» qatori chizilmaydi", () => {
+  const doc = sampleTeacherDoc("map");
+  doc.meta = { ...doc.meta, topic: doc.teacher!.school.subject } as DocMeta;
+  const f = fields(planTeacher(doc));
+  assert.ok(f["Fan"], "fan qatori qolishi kerak");
+  assert.ok(!f["Mavzu"], "MUTATSIYA: «Fan: Biologiya» va «Mavzu: Biologiya» takror chizildi");
+  // Mavzu fandan FARQ qilsa — avvalgidek qoladi.
+  const other = sampleTeacherDoc("map");
+  other.meta = { ...other.meta, topic: "Biologiya, 7-sinf" } as DocMeta;
+  assert.equal(fields(planTeacher(other))["Mavzu"], "Biologiya, 7-sinf");
+});
+
+test("dars ishlanmasi: bosqich metodi «Metod:» yorlig'i bilan (Bosqich EMAS)", () => {
+  const plan = planTeacher(sampleTeacherDoc("lesson"));
+  const stageText = plan.body.filter((b) => "text" in b).map((b) => ("text" in b ? b.text : ""));
+  assert.ok(!stageText.some((t) => /^Bosqich:\s/.test(t)), "MUTATSIYA: «Bosqich: …» yorlig'i qaytdi");
+  assert.ok(stageText.some((t) => /^Metod:\s/.test(t)) || plan.body.some((b) => b.k === "kv" && /^Metod/.test(b.label)), "«Metod» yorlig'i yo'q");
 });

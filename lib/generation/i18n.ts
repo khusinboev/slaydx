@@ -534,6 +534,8 @@ export type TeacherExtraLabels = {
   equipment: string;
   assessment: string;
   stages: string;
+  /** Interaktiv USUL yorlig'i («Metod: Suhbat») — bosqich nomi `h3` da, paragraf yorlig'i «Bosqich» emas (WP-C ochiq bandi). */
+  method: string;
   situation: string;
   example: string;
   /** «I chorak» / «I четверть» / «Quarter I». */
@@ -583,6 +585,7 @@ const TEACHER_EXTRA: Record<"uz" | "ru" | "en", TeacherExtraLabels> = {
     equipment: "Jihozlar",
     assessment: "Baholash mezoni",
     stages: "Dars bosqichlari",
+    method: "Metod",
     situation: "Vaziyat",
     example: "Misol",
     quarter: (n) => `${["I", "II", "III", "IV"][n - 1] ?? n} chorak`,
@@ -609,6 +612,7 @@ const TEACHER_EXTRA: Record<"uz" | "ru" | "en", TeacherExtraLabels> = {
     equipment: "Оборудование",
     assessment: "Критерии оценивания",
     stages: "Этапы урока",
+    method: "Метод",
     situation: "Ситуация",
     example: "Пример",
     quarter: (n) => `${["I", "II", "III", "IV"][n - 1] ?? n} четверть`,
@@ -635,6 +639,7 @@ const TEACHER_EXTRA: Record<"uz" | "ru" | "en", TeacherExtraLabels> = {
     equipment: "Equipment",
     assessment: "Assessment criteria",
     stages: "Lesson stages",
+    method: "Method",
     situation: "Situation",
     example: "Example",
     quarter: (n) => `Quarter ${["I", "II", "III", "IV"][n - 1] ?? n}`,

@@ -18,12 +18,12 @@
  * kesib takrorlash aynan AUDIT-6 B5 da olib tashlangan naqsh edi.
  * Jadval shu bilan qidiruv vositasi bo'lib qoladi, nusxa emas.
  */
-import type { Block, DocSection, DocTable } from "../types";
+import type { DocSection, DocTable } from "../types";
 import { remainingMs } from "../quality";
 import { TEACHER_LIMITS, type GlossaryModel, type GlossaryTerm } from "./types";
 import type { GlossaryTypeSpec } from "./registry";
 import { glossaryUserPrompt } from "./prompts";
-import { clean, clip, listOf, pickTerms, sortTerms } from "./guard";
+import { clean, clip, glossaryTermBlocks, glossaryTriTable, listOf, pickTerms, sortTerms } from "./guard";
 import { teacherJson, type TeacherWriter, type TeacherWritten } from "./engine";
 
 /** Bitta so'rovda so'raladigan eng ko'p atama (eski qaror — o'zgarmaydi). */
@@ -76,29 +76,14 @@ export const writeGlossary: TeacherWriter = async (ctx, ask, o) => {
   const model: GlossaryModel = { type: i.type, terms, order: "alpha", includeExample: i.includeExample };
 
   const L = ctx.labels;
-  const termBlocks: Block[] = [];
-  for (const t of terms) {
-    termBlocks.push({ kind: "h3", text: t.term });
-    termBlocks.push({ kind: "p", text: t.def });
-    if (i.includeExample && t.example) termBlocks.push({ kind: "p", text: `${L.example}: ${t.example}` });
-  }
+  const termBlocks = glossaryTermBlocks(terms, L.example, i.includeExample);
 
   const sections: DocSection[] = [
     { id: "intro", title: L.intro, blocks: [{ kind: "p", text: clean(intro) || L.glossaryIntroFallback(i.topic) }] },
     { id: "terms", title: L.terms, blocks: termBlocks },
   ];
 
-  const tables: DocTable[] = tri
-    ? [
-        {
-          caption: L.terms,
-          anchor: "terms",
-          widths: [40, 30, 30],
-          headers: [...L.triCols],
-          rows: terms.map((t) => [t.term, t.ru ?? "", t.en ?? ""]),
-        },
-      ]
-    : [];
+  const tables: DocTable[] = tri ? [glossaryTriTable(terms, L.terms, L.triCols)] : [];
 
   const out: TeacherWritten = {
     sections,

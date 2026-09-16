@@ -204,11 +204,17 @@ test("dars ishlanmasi: vaqt jadvali bosqichlar NASRIDAN KEYIN, uyga vazifadan ol
 
 test("test: variantlar, KALIT va OMR varag'i YANGI BETDAN", async () => {
   const { xml } = await xmlOf(sampleTeacherDoc("test"));
-  for (const head of ["Variant A", "Variant B", "Javoblar kaliti", "Javoblar varag‘i"]) {
+  for (const head of ["Variant B", "Javoblar kaliti", "Javoblar varag‘i"]) {
     assert.ok(paraOf(xml, head).includes("<w:pageBreakBefore/>"), `«${head}» yangi betdan boshlanmadi`);
   }
   // Ko'rsatma birinchi bo'lim — u uzilish OLMAYDI (bo'sh bet qolmasin).
   assert.ok(!paraOf(xml, "Ko‘rsatma").includes("<w:pageBreakBefore/>"), "ko'rsatma sababsiz yangi betga ko'chdi");
+  /*
+   * BIRINCHI variant ham uzilish OLMAYDI (WP-D, LibreOffice ko'z
+   * tekshiruvi): u ko'rsatmadan keyin o'sha betda boshlanadi, aks
+   * holda 1-bet shapka + to'rt qatorlik ko'rsatma bilan bo'sh qolardi.
+   */
+  assert.ok(!paraOf(xml, "Variant A").includes("<w:pageBreakBefore/>"), "Variant A sababsiz yangi betga ko'chdi");
 });
 
 test("test: javob varianti RO'YXAT BELGISIZ, harf matnning o'zida; kalit ustidagi ogohlantirish qalin", async () => {

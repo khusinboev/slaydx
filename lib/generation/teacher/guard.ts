@@ -17,6 +17,7 @@
  */
 import { isGenericGlossaryTerm } from "../quality";
 import { TEACHER_LIMITS, type GlossaryTerm, type KeysRubricRow } from "./types";
+import type { Block, DocTable } from "../types";
 
 /* ────────────────────────── matn ────────────────────────── */
 
@@ -341,4 +342,37 @@ export function mentionsTopic(text: string, topic: string): boolean {
   if (hay.includes(t.slice(0, 12))) return true;
   const words = t.split(/\s+/).filter((w) => w.length >= 5);
   return words.some((w) => hay.includes(w.slice(0, Math.min(w.length, 8))));
+}
+
+/**
+ * ATAMA BLOKLARI — YAGONA quruvchi (AUDIT-20 WP-D).
+ *
+ * Dvigatel ham, avto-sayqal ham (`teacher/polish.ts`) SHU funksiyadan
+ * foydalanadi. Ilgari sayqal `terms` bo'limini umumiy nasr sifatida
+ * qayta yozardi: `blocksFromLlm` qisqa qatorlarni tashlab, `h3`
+ * sarlavhalarni `p` ga aylantirib yuborardi — jonli sinovda 20
+ * atamadan 18 tasining SARLAVHASI yo'qolgan (ta'rif qolgan, atama
+ * yo'q), model esa o'zgarmagani uchun hisobot hamon 20 ta atamani
+ * ko'rsatardi. Tuzilma shu yerda QURILADI, modeldan chiqadi va
+ * `applyTeacherOps` uni bloklardan qayta o'qiy oladi.
+ */
+export function glossaryTermBlocks(terms: readonly GlossaryTerm[], exampleLabel: string, includeExample = true): Block[] {
+  const out: Block[] = [];
+  for (const t of terms) {
+    out.push({ kind: "h3", text: t.term });
+    out.push({ kind: "p", text: t.def });
+    if (includeExample && t.example) out.push({ kind: "p", text: `${exampleLabel}: ${t.example}` });
+  }
+  return out;
+}
+
+/** Uch tilli jadval — ATAMA + RU + EN (ta'rif ustuni ATAYIN yo'q, AUDIT-6 B5). */
+export function glossaryTriTable(terms: readonly GlossaryTerm[], caption: string, cols: readonly [string, string, string]): DocTable {
+  return {
+    caption,
+    anchor: "terms",
+    widths: [40, 30, 30],
+    headers: [...cols],
+    rows: terms.map((t) => [t.term, t.ru ?? "", t.en ?? ""]),
+  };
 }

@@ -4,6 +4,8 @@ import { applyResumeOps, parseResumeOps, type ResumeOp } from "../generation/res
 import { legacyResumeModel } from "../generation/resume/model";
 import { applyArticleOps, parseArticleOps, type ArticleOp } from "../generation/article/edit";
 import { applyWorkOps, parseWorkOps, type WorkOp } from "../generation/work/edit";
+import { applyTeacherOps, parseTeacherOps, type TeacherOp } from "../generation/teacher/edit";
+import { TEACHER_TOOL_LIST } from "../generation/teacher/types";
 import { renderDocx } from "../generation/render-docx";
 import { renderPptx } from "../generation/render-pptx";
 import { renderPptxWithTemplate } from "../generation/render-pptx-template";
@@ -54,7 +56,7 @@ export type ParseResult = { ok: true; ops: unknown[] } | { ok: false; error: str
 export type ApplyResult = { ok: true; doc: AcademicDoc } | { ok: false; error: string; at: number };
 
 export type EditAdapter = {
-  id: "slide" | "resume" | "article" | "work" | "essay";
+  id: "slide" | "resume" | "article" | "work" | "essay" | "teacher";
   /** Shu adapter xizmat qiladigan vositalar (`generations.tool_id`). */
   tools: ReadonlySet<string>;
   /** Hujjatda tahrir uchun kerakli model bormi (yo'q bo'lsa 409 `legacy`). */
@@ -183,6 +185,42 @@ export const essayAdapter: EditAdapter = {
   },
 };
 
+/**
+ * O'QITUVCHI HUJJATLARI (AUDIT-20 WP-D): dars rejasi, texnologik
+ * xarita, glossariy, keys, test — BESHALASI bitta adapterda.
+ *
+ * Beshta vosita bitta op tilini baham ko'radi, chunki tahrir
+ * qilinadigan narsa ularda BIR XIL shaklda: `planTeacher` bergan
+ * bandlar (nasr bloki, jadval katagi, model maydoni). Farq — kind
+ * modeli, u esa op tilida emas, YO'LDA (`teacher.lesson.…` va
+ * `teacher.test.…`), ya'ni alohida adapter beshta deyarli aynan
+ * nusxani keltirardi.
+ *
+ * Vositalar ro'yxati `TEACHER_TOOL_IDS` dan (`types.ts`) — reyestr
+ * YAGONA manba: yangi o'qituvchi vositasi qo'shilganda bu yer
+ * o'z-o'zidan to'g'ri qoladi.
+ *
+ * ESKI hujjat (`doc.teacher` yo'q) tahrirlanmaydi: `legacyTeacherModel`
+ * modelni meta'dan TAXMIN qiladi va `teacher.lesson.stages.2.teacher`
+ * yo'li boshqa maydonga tegib ketishi mumkin edi — 409 `legacy`
+ * (`work/edit.ts` dagi bilan bir xil qaror).
+ *
+ * Render — `renderDocx`: OMR PNG i `resolveImage` (SHU generatsiyaning
+ * aktivlari) orqali qayta o'qiladi.
+ */
+export const teacherAdapter: EditAdapter = {
+  id: "teacher",
+  tools: new Set<string>(TEACHER_TOOL_LIST),
+  hasModel: (doc) => Boolean(doc?.teacher && doc.sections?.length),
+  prepare: (doc) => doc,
+  parse: (raw) => parseTeacherOps(raw),
+  apply: (doc, ops, ctx) => applyTeacherOps(doc, ops as TeacherOp[], ctx),
+  async render(ctx) {
+    const bytes = await renderDocx(ctx.doc, { resolveImage: ctx.resolveImage });
+    return { bytes, mime: DOCX_MIME, fileName: ctx.fileName };
+  },
+};
+
 /** Bitta so'rovdagi operatsiyalar soni — barcha op tillari uchun bir xil. */
 export const MAX_EDIT_OPS = 50;
 
@@ -204,7 +242,7 @@ export function preParseOps(raw: unknown): { ok: true } | { ok: false; error: st
   return { ok: true };
 }
 
-const ADAPTERS: EditAdapter[] = [slideAdapter, resumeAdapter, articleAdapter, workAdapter, essayAdapter];
+const ADAPTERS: EditAdapter[] = [slideAdapter, resumeAdapter, articleAdapter, workAdapter, essayAdapter, teacherAdapter];
 
 /** Vosita uchun adapter; tahrirlanmaydigan vositada `null`. */
 export function adapterFor(toolId: string): EditAdapter | null {

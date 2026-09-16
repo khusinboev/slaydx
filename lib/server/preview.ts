@@ -3,6 +3,7 @@ import type { GenerationPreview } from "./jobs";
 import type { AcademicDoc } from "../generation/types";
 import type { SlideModel } from "../generation/slide-types";
 import { buildSlideDeck } from "../generation/slides";
+import { planTeacher } from "../generation/teacher/layout";
 
 /**
  * Ro'yxat kartochkasi uchun kichik ko'rinish.
@@ -56,6 +57,37 @@ export function buildPreview(doc: AcademicDoc | null): GenerationPreview | null 
     const intro = doc.sections?.find((s) => s.id === "intro")?.blocks.find((b) => b.kind === "p")?.text.trim().slice(0, 160);
     const lines = [topic, intro].filter((s): s is string => Boolean(s));
     const image = doc.work.figures.find((f) => f.url)?.url;
+    if (image || lines.length) return { ...(image ? { url: image } : {}), ...(lines.length ? { lines } : {}) };
+    return null;
+  }
+  /*
+   * O'QITUVCHI HUJJATI (AUDIT-20 WP-D) — kartochkada RASMIY SHAPKA
+   * boshlanishi: hujjat nomi, fan/sinf, keyin birinchi bo'limning
+   * birinchi paragrafi.
+   *
+   * Generik matn ajratgichi (pastda) bu yerda yaramaydi: u `sections`
+   * dagi BIRINCHI beshta paragrafni oladi va o'qituvchi hujjatida
+   * ular pasport TAKRORI bo'ladi («Fan: Biologiya. Sinf: 7.
+   * Davomiyligi: 45 daq.») — ya'ni kartochkada beshta karta ham bir
+   * xil ko'rinardi, chunki mavzu farqi faqat oltinchi qatorda edi.
+   * `planTeacher` esa aynan shu takrorni chizishdan bosh tortadi
+   * (`isHeadRecap`), ya'ni kartochka faylda YO'Q matnni ko'rsatardi.
+   *
+   * Rasm — OMR javoblar varag'i (mavjud bo'lsa, aktivga chiqarilgan).
+   */
+  if (doc.teacher) {
+    const plan = planTeacher(doc);
+    const topic = doc.meta?.topic?.trim();
+    const head = plan.head.find((h) => h.k === "title");
+    const subject = plan.head.find((h) => h.k === "field" && h.label === plan.labels.fieldSubject);
+    const first = plan.body.find((b) => b.k === "p" || b.k === "li" || b.k === "kv");
+    const lines = [
+      head?.k === "title" ? head.text : "",
+      topic,
+      subject?.k === "field" ? `${subject.label}: ${subject.text}` : "",
+      first && "text" in first ? first.text.trim().slice(0, 160) : "",
+    ].filter((s): s is string => Boolean(s));
+    const image = doc.teacher.figures?.find((f) => f.url)?.url;
     if (image || lines.length) return { ...(image ? { url: image } : {}), ...(lines.length ? { lines } : {}) };
     return null;
   }

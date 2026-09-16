@@ -248,7 +248,13 @@ export function ResultView({ id }: { id: string }) {
    * Panel ikkalasida ham bir xil `DocReview` shaklini o'qiydi.
    */
   const isEssay = gen.type === "essay";
-  const review = gen.doc?.article?.review ?? gen.doc?.essay?.review ?? gen.doc?.work?.review;
+  /*
+   * O'qituvchi hujjatlari (AUDIT-20 WP-D) — `doc.teacher.review`.
+   * Panel shakli bir xil (`DocReview`), «Tuzatish» esa bandma-band
+   * ishlaydi (`rewriteTeacher`), shuning uchun inshodagi kabi
+   * yashirilmaydi.
+   */
+  const review = gen.doc?.article?.review ?? gen.doc?.essay?.review ?? gen.doc?.work?.review ?? gen.doc?.teacher?.review;
 
   return (
     <div className={cn("flex h-full min-h-0 flex-1 flex-col", flow ? "overflow-y-auto" : "overflow-hidden")} data-result-flow={flow ? "1" : undefined}>

@@ -163,18 +163,23 @@ test("adapterFor: vosita → adapter; tahrirlanmaydigan vosita — null", () => 
   assert.equal(adapterFor("slide"), slideAdapter);
   assert.equal(adapterFor("pro-slide"), slideAdapter);
   assert.equal(adapterFor("resume"), resumeAdapter);
-  for (const t of ["translation", "glossary", "lesson-plan", ""]) {
+  for (const t of ["translation", "image", ""]) {
     assert.equal(adapterFor(t), null, `«${t}» tahrirlanadigan bo'lib qoldi`);
   }
   /*
    * Maqola 2 (WP7): `article` reyestrda — `tests/article-commit` sinaydi;
    * tezis (AUDIT-19) maqola adapterida, insho — `essayAdapter`
    * (`essay-wiring`), kurs ishi/referat/mustaqil ish — `workAdapter`
-   * (`tests/work-commit`, WP-C).
+   * (`tests/work-commit`, WP-C), beshala o'qituvchi vositasi —
+   * `teacherAdapter` (`tests/teacher-commit`, AUDIT-20 WP-D).
    */
   assert.deepEqual(
     new Set(editableTools()),
-    new Set(["slide", "pro-slide", "resume", "article", "thesis", "essay", "coursework", "referat", "mustaqil-ish"]),
+    new Set([
+      "slide", "pro-slide", "resume", "article", "thesis", "essay",
+      "coursework", "referat", "mustaqil-ish",
+      "lesson-plan", "texnologik-xarita", "glossary", "keys", "test",
+    ]),
   );
 });
 
@@ -408,8 +413,13 @@ test("ensureFreshFile: rezyume ham eskirgan faylni qayta yasaydi", async (t) => 
 
 test("ensureFreshFile: tahrirlanmaydigan vosita — qayta yasash YO'Q", async (t) => {
   const seen = mockDb(t, {
-    // «Glossariy» — tahrirlanmaydigan vosita (referat AUDIT-19 WP-C dan beri tahrirlanadi).
-    versions: { doc_version: 4, file_version: 3, tool_id: "glossary", file_name: "g.docx", status: "COMPLETED" },
+    /*
+     * «Tarjima» — tahrirlanmaydigan vosita. Ilgari bu yerda «glossariy»
+     * turardi; AUDIT-20 WP-D dan beri beshala o'qituvchi vositasi ham
+     * tahrirlanadi (`teacherAdapter`), ya'ni u endi bu rolni bajara
+     * olmaydi.
+     */
+    versions: { doc_version: 4, file_version: 3, tool_id: "translation", file_name: "t.docx", status: "COMPLETED" },
   });
   await ensureFreshFile(GEN, USER);
   assert.equal(found(seen, /INSERT INTO generation_files/).length, 0);

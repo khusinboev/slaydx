@@ -75,7 +75,9 @@ function stageBlocks(ctx: TeacherContext, stages: readonly LessonStage[]): Block
     out.push({ kind: "h3", text: `${i + 1}. ${st.title} (${st.minutes} ${L.minutesShort})` });
     if (st.teacher) out.push({ kind: "p", text: st.teacher });
     if (st.student) out.push({ kind: "p", text: st.student });
-    if (st.method) out.push({ kind: "p", text: `${L.stage}: ${st.method}` });
+    // Yorliq `L.method` («Metod»), `L.stage` EMAS: bosqichning o'zi
+    // yuqoridagi `h3` sarlavhada turibdi (WP-C ochiq bandi).
+    if (st.method) out.push({ kind: "p", text: `${L.method}: ${st.method}` });
   });
   return out;
 }

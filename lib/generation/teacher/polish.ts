@@ -48,11 +48,13 @@ import { remainingMs } from "../quality";
 import { blocksFromLlm } from "../article/parse";
 import type { LlmUsage } from "../llm-roles";
 import type { CompleteFn } from "../research/pipeline";
-import type { TeacherModel } from "./types";
+import { TEACHER_LIMITS, type TeacherModel } from "./types";
 import { teacherTypeOf } from "./registry";
-import { teacherLabels, teacherRewritePrompt, teacherSystemPrompt, teacherTableRewritePrompt, type TeacherContext } from "./prompts";
+import { glossaryRewritePrompt, teacherLabels, teacherRewritePrompt, teacherSystemPrompt, teacherTableRewritePrompt, type TeacherContext } from "./prompts";
 import type { TeacherInput, TeacherLang } from "./input";
-import { clip } from "./guard";
+import { clip, glossaryTermBlocks, listOf, pickTerms, sortTerms } from "./guard";
+import { applyTeacherOps, teacherOpsFromPolish } from "./edit";
+
 import { neutralTeacherJudge, parseTableTarget, reviewTeacher, scoreTeacherReview, teacherJudgeChecks, type TeacherJudgeResult } from "./review";
 
 export { HONESTY_LIMIT, POLISH_SKIP, RewriteError };
@@ -338,6 +340,31 @@ export async function rewriteTeacherFix(doc: AcademicDoc, fix: TeacherFix, deps:
 
   const section = doc.sections.find((s) => s.id === fix.target);
   if (!section) throw new RewriteError(`Bo'lim topilmadi: ${fix.target}`, 422, "target");
+
+  /*
+   * MODELDAN quriladigan bo'lim — nasr sifatida qayta yozilmaydi.
+   *
+   * Glossariyning `terms` bo'limi tekis, takrorlanuvchi tuzilma
+   * (`h3` atama + ta'rif + ixtiyoriy misol) va hisobotning BEShTA
+   * qoidasi aynan shu nishonga «Tuzatish» beradi. Umumiy nasr yo'li
+   * (`blocksFromLlm`) esa `h3` larni yeb qo'yardi — jonli sinovda
+   * 20 atamadan 18 tasining nomi yo'qolgan edi. Shuning uchun model
+   * SHAKLI so'raladi va bloklar dvigatelning o'z quruvchisi bilan
+   * yig'iladi: matn, model va uch tilli jadval bitta ro'yxatdan
+   * chiqadi (`applyTeacherOps` uni bloklardan qayta o'qiydi).
+   */
+  if (ctx.kind === "glossary" && section.id === "terms" && doc.teacher.glossary) {
+    const g = doc.teacher.glossary;
+    const tri = g.type === "uch-tilli";
+    const raw = await ask(deps, system, glossaryRewritePrompt(ctx, g.terms, fix.instruction, tri), Math.min(8000, 900 + g.terms.length * 90));
+    const picked = pickTerms(listOf(parseLlmObject<{ terms?: unknown }>(raw) as Record<string, unknown> | null, "terms", "items"), new Set<string>(), {
+      defMax: TEACHER_LIMITS.defCharsMax,
+    });
+    if (picked.length !== g.terms.length) throw new RewriteError(RETRY_MSG, 422, "llm");
+    const terms = sortTerms(picked, ctx.input.language);
+    return { ops: [{ op: "setSection", sectionId: section.id, blocks: glossaryTermBlocks(terms, ctx.labels.example, g.includeExample !== false) }] };
+  }
+
   const current = section.blocks.map((b) => b.text).join("\n\n").slice(0, 12_000);
   const raw = await ask(deps, system, teacherRewritePrompt(ctx, section.title, current, fix.instruction), Math.min(8000, Math.max(1500, current.length)));
   const parsed = parseLlmObject<{ blocks?: unknown }>(raw);
@@ -349,9 +376,51 @@ export async function rewriteTeacherFix(doc: AcademicDoc, fix: TeacherFix, deps:
 /* ────────────────────────── op larni qo'llash ────────────────────────── */
 
 /**
- * VAQTINCHA `apply` — `setSection` va `setTable`. WP-D
- * `teacher/edit.ts applyTeacherOps` ni berganda `deps.apply` almashadi.
- * Hujjat CHUQUR nusxada o'zgaradi.
+ * Sayqal op larini QO'LLASH — WP-D dan beri `teacher/edit.ts
+ * applyTeacherOps` orqali (standart `deps.apply`).
+ *
+ * Nega to'g'ridan-to'g'ri emas: sayqal tili (`setSection`/`setTable`)
+ * tahrir tilidan tor, va MUHIMI — `applyTeacherOps` jadval katagini
+ * MODELGA ham ko'chiradi. Ilgari (`applyTeacherSectionOps`) sayqal
+ * xarita jadvalini qayta yozganda `map.quarters[].weeks[]` eski
+ * mavzular bilan qolardi: hisobot qayta hisoblanganda (`runPolishWith`
+ * → `reviewTeacher`) qoidalar YANGI jadvalni, baholovchi esa ESKI
+ * modelni ko'rardi va ball ikki manbadan chiqardi.
+ */
+export function applyTeacherPolishOps(doc: AcademicDoc, ops: TeacherSectionOp[]): ApplyOpsResult {
+  /*
+   * Sayqal op lari BITTALAB qo'llanadi, tahrir PATCH idan farqli
+   * ravishda (u atomar: foydalanuvchi bir bosishda nima kutganini
+   * to'liq oladi yoki umuman olmaydi).
+   *
+   * Sabab: bu yerda op lar mustaqil TUZATISHLAR — har biri boshqa
+   * bo'lim. `applyTeacherOps` MODELLI bo'limda tuzilma buzilgan
+   * qayta yozishni RAD etadi (atamalar sarlavhasi yo'qolgan holat),
+   * va agar butun to'plam shu sababli yiqilsa, to'g'ri bajarilgan
+   * qolgan tuzatishlar ham yo'qolardi. Rad etilgan bo'lim shunchaki
+   * O'ZGARMAY qoladi — model bilan matn baribir ajralmaydi, chunki
+   * ikkalasi ham eski holatida.
+   */
+  let cur = doc;
+  let applied = 0;
+  let lastError = "";
+  for (const op of ops) {
+    const r = applyTeacherOps(cur, teacherOpsFromPolish([op]), { genId: "" });
+    if (!r.ok) {
+      lastError = r.error;
+      continue;
+    }
+    cur = r.doc;
+    applied++;
+  }
+  return applied ? { ok: true, doc: cur } : { ok: false, error: lastError || "sayqal op lari qo'llanmadi" };
+}
+
+/**
+ * ZAXIRA `apply` — `setSection` va `setTable` ni modelga tegmasdan
+ * qo'llaydi. Eski hujjat (`doc.teacher` yo'q) uchun qoladi:
+ * `applyTeacherOps` unda ataylab 409 beradi, sayqal esa matnni
+ * baribir tuzata oladi.
  */
 export function applyTeacherSectionOps(doc: AcademicDoc, ops: TeacherSectionOp[]): ApplyOpsResult {
   const next: AcademicDoc = {
@@ -455,7 +524,9 @@ export async function runTeacherPolish(doc: AcademicDoc, review: DocReview, deps
     plan: planTeacherPolish,
     userNeeds: teacherUserNeeds,
     rewrite: (d, fix, deadline) => rewriteForCore(d, fix, { complete, deadline }),
-    apply: (d, ops) => (deps.apply ? deps.apply(d, ops) : applyTeacherSectionOps(d, ops)),
+    // Modelli hujjat — `applyTeacherOps` (model ⇄ jadval izchil);
+    // eski hujjatda u 409 beradi, shuning uchun matn-only zaxira.
+    apply: (d, ops) => (deps.apply ? deps.apply(d, ops) : d.teacher ? applyTeacherPolishOps(d, ops) : applyTeacherSectionOps(d, ops)),
     review: (d, guard) => reviewTeacher(d, { complete, deadline: deps.deadline, judge, now, guard }),
     judgeFromReview: (prev) => (model ? teacherJudgeFromReview(prev, model) : null),
     rescore: (fresh, j) => {
