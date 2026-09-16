@@ -360,7 +360,8 @@ test("Yaratish: to'liq test formasi — testType/count/questionKinds/variants/om
     fireEvent.click(within(screen.getByRole("group", { name: "Savol turlari" })).getByText("To'g'ri/Noto'g'ri"));
   });
   await act(async () => {
-    fireEvent.click(screen.getByLabelText("OMR varag'i"));
+    // OMR standart YOQIQ (dvigatel standarti bilan mos, smoke topilmasi) — bosilmaydi, `true` submit tanasida.
+    assert.ok((screen.getByLabelText("OMR varag'i") as HTMLInputElement).checked, "OMR standart yoqiq");
   });
   await act(async () => {
     fireEvent.click(screen.getByText(TOOL_BY_ID.test.submitLabel));
