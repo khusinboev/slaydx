@@ -5,9 +5,11 @@ import {
   crosswordInputFromValues,
   crosswordSeed,
   isCrosswordMode,
-  nearestChoice,
   type CrosswordInput,
 } from "../lib/generation/games/crossword/input.ts";
+import { autoGridSize } from "../lib/generation/games/crossword/grid.ts";
+import { GAME_LIMITS } from "../lib/generation/games/types.ts";
+import { gameDefaultTypeId, gameTypesOf } from "../lib/generation/games/registry.ts";
 import {
   crosswordLabels,
   crosswordSourceBlock,
@@ -63,10 +65,11 @@ const input = (over: Partial<CrosswordInput> = {}): CrosswordInput => ({
 
 /* ────────────────────────── kirish ────────────────────────── */
 
-test("standart qiymatlar: 10 so'z, 15×15 to'r, mavzu rejimi, meta dan fan/sinf/til", () => {
+test("standart qiymatlar: 10 so'z, avtomat to'r, klassik tur, meta dan fan/sinf/til", () => {
   const got = crosswordInputFromValues(meta(), values());
   assert.equal(got.wordCount, CROSSWORD_LIMITS.wordCountDefault);
-  assert.equal(got.gridSize, CROSSWORD_LIMITS.gridSizeDefault);
+  assert.equal(got.gridSize, autoGridSize(CROSSWORD_LIMITS.wordCountDefault));
+  assert.equal(got.type, gameDefaultTypeId("crossword"), "standart tur reyestrdan");
   assert.equal(got.mode, "topic");
   assert.equal(got.subject, "Biologiya");
   assert.equal(got.grade, 7);
@@ -76,24 +79,35 @@ test("standart qiymatlar: 10 so'z, 15×15 to'r, mavzu rejimi, meta dan fan/sinf/
   assert.equal(got.institution, "12-maktab");
 });
 
-test("reyestrdan tashqari son eng yaqin chipga tushadi (bezak qiymat yo'q)", () => {
+test("reyestrdan tashqari son standart chipga tushadi (bezak qiymat yo'q)", () => {
   // MUTATSIYA-1: chegaralanmasa dvigatel 12 so'z bilan ishlab ketardi.
-  assert.equal(crosswordInputFromValues(meta(), values({ wordCount: 12 })).wordCount, 10);
-  assert.equal(crosswordInputFromValues(meta(), values({ wordCount: 13 })).wordCount, 15);
-  assert.equal(crosswordInputFromValues(meta(), values({ wordCount: 999 })).wordCount, 20);
-  assert.equal(crosswordInputFromValues(meta(), values({ wordCount: 1 })).wordCount, 5);
-  assert.equal(crosswordInputFromValues(meta(), values({ gridSize: 14 })).gridSize, 13);
-  assert.equal(crosswordInputFromValues(meta(), values({ gridSize: 40 })).gridSize, 21);
-  // To'r o'lchamlari — TOQ va 13…21 (§3).
-  for (const g of CROSSWORD_LIMITS.gridSizes) {
-    assert.equal(g % 2, 1, `${g} toq emas`);
-    assert.ok(g >= 13 && g <= 21);
+  for (const bad of [12, 13, 999, 1, "ko'p", null]) {
+    assert.equal(crosswordInputFromValues(meta(), values({ wordCount: bad as never })).wordCount, CROSSWORD_LIMITS.wordCountDefault, `«${bad}» chipga tushmadi`);
   }
-  assert.equal(nearestChoice(null, CROSSWORD_LIMITS.wordCounts, 10), 10);
+  // Noma'lum tur ham standartga tushadi.
+  assert.equal(crosswordInputFromValues(meta(), values({ crosswordType: "kriptik" })).type, gameDefaultTypeId("crossword"));
+  for (const spec of gameTypesOf("crossword")) {
+    assert.equal(crosswordInputFromValues(meta(), values({ crosswordType: spec.id })).type, spec.id);
+  }
+});
+
+test("to'r o'lchami AVTOMAT: formada maydon yo'q, so'z soniga qarab (toq, 13–21)", () => {
+  // Egasining qarori: `gridSize` forma maydoni emas — qiymat e'tiborsiz qoladi.
+  const forced = crosswordInputFromValues(meta(), values({ wordCount: 10, gridSize: 13 }));
+  assert.equal(forced.gridSize, autoGridSize(10), "forma qiymati to'r o'lchamini o'zgartirmasin");
+  for (const n of CROSSWORD_LIMITS.wordCounts) {
+    const size = autoGridSize(n);
+    assert.equal(size % 2, 1, `${n} so'z → ${size} toq emas`);
+    assert.ok(size >= GAME_LIMITS.gridMin && size <= GAME_LIMITS.gridMax, `${n} so'z → ${size}`);
+  }
+  // Ko'proq so'z — kengroq ish taxtasi.
+  assert.ok(autoGridSize(5) <= autoGridSize(10));
+  assert.ok(autoGridSize(10) <= autoGridSize(20));
 });
 
 test("so'z soni chiplari 5/10/15/20 va har biri o'tadi", () => {
   assert.deepEqual([...CROSSWORD_LIMITS.wordCounts], [5, 10, 15, 20]);
+  assert.deepEqual([...CROSSWORD_LIMITS.wordCounts], [...GAME_LIMITS.counts], "chiplar R0 GAME_LIMITS dan");
   for (const n of CROSSWORD_LIMITS.wordCounts) {
     assert.equal(crosswordInputFromValues(meta(), values({ wordCount: n })).wordCount, n);
   }
@@ -127,6 +141,7 @@ test("urug' buyurtmadan quriladi — tasodif/sana aralashmaydi", () => {
   // MUTATSIYA-4: mavzu hisobga olinmasa ikki xil krossvord bir xil to'r olardi.
   assert.notEqual(a, crosswordSeed(meta({ topic: "Boshqa mavzu" }), input({ topic: "Boshqa mavzu" })));
   assert.notEqual(a, crosswordSeed(meta(), input({ wordCount: 20 })));
+  assert.notEqual(a, crosswordSeed(meta(), input({ type: "tarifli" })), "tur ham urug'ga kiradi");
 });
 
 /* ────────────────────────── promptlar ────────────────────────── */

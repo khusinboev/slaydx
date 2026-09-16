@@ -25,10 +25,10 @@
 import { check, rewrite } from "../../report/score";
 import type { ReviewCheck } from "../../report/types";
 import {
-  cellLength,
   isConnected,
-  letters,
   normalizeAnswer,
+  wordLength,
+  wordText,
   type CrosswordGridData,
   type DroppedWord,
   type PlacedWord,
@@ -156,7 +156,7 @@ export function crosswordRuleChecks(words: readonly PlacedWord[], grid: Crosswor
 
   /* 4. wordLength — har javob 3–15 katak. */
   const badLen = words.filter((w) => {
-    const n = cellLength(w.answer);
+    const n = wordLength(w);
     return n < CROSSWORD_LIMITS.answerMin || n > CROSSWORD_LIMITS.answerMax;
   });
   out.push(
@@ -164,7 +164,7 @@ export function crosswordRuleChecks(words: readonly PlacedWord[], grid: Crosswor
       "wordLength",
       badLen.length === 0 ? "green" : badLen.length <= 1 ? "yellow" : "red",
       "So'z uzunligi",
-      badLen.length ? `chegaradan tashqari: ${list(badLen.map((w) => `${w.answer} (${cellLength(w.answer)})`))}` : `hammasi ${CROSSWORD_LIMITS.answerMin}–${CROSSWORD_LIMITS.answerMax} katak`,
+      badLen.length ? `chegaradan tashqari: ${list(badLen.map((w) => `${wordText(w.answer)} (${wordLength(w)})`))}` : `hammasi ${CROSSWORD_LIMITS.answerMin}–${CROSSWORD_LIMITS.answerMax} katak`,
       badLen.length ? rewrite("grid", `Har javob ${CROSSWORD_LIMITS.answerMin}–${CROSSWORD_LIMITS.answerMax} harfli bitta so'z bo'lsin.`) : undefined,
     ),
   );
@@ -176,7 +176,7 @@ export function crosswordRuleChecks(words: readonly PlacedWord[], grid: Crosswor
       "clueLength",
       badClue.length === 0 ? "green" : badClue.length / Math.max(1, words.length) <= 0.2 ? "yellow" : "red",
       "Ta'rif uzunligi",
-      badClue.length ? `${badClue.length} ta'rif ${CROSSWORD_LIMITS.clueMin}–${CROSSWORD_LIMITS.clueMax} belgi oralig'ida emas: ${list(badClue.map((w) => w.answer))}` : "hammasi o'lchamda",
+      badClue.length ? `${badClue.length} ta'rif ${CROSSWORD_LIMITS.clueMin}–${CROSSWORD_LIMITS.clueMax} belgi oralig'ida emas: ${list(badClue.map((w) => wordText(w.answer)))}` : "hammasi o'lchamda",
       badClue.length
         ? rewrite("clues", `Juda qisqa yoki juda uzun ta'riflarni qayta yozing (${CROSSWORD_LIMITS.clueMin}–${CROSSWORD_LIMITS.clueMax} belgi).`)
         : undefined,
@@ -186,7 +186,7 @@ export function crosswordRuleChecks(words: readonly PlacedWord[], grid: Crosswor
   /* 6. uniqueWords — dublikat javob yo'q. */
   const seen = new Map<string, number>();
   for (const w of words) {
-    const k = normalizeAnswer(w.answer);
+    const k = normalizeAnswer(wordText(w.answer));
     seen.set(k, (seen.get(k) ?? 0) + 1);
   }
   const dupes = [...seen.entries()].filter(([, n]) => n > 1).map(([k]) => k);
@@ -201,13 +201,13 @@ export function crosswordRuleChecks(words: readonly PlacedWord[], grid: Crosswor
   );
 
   /* 7. clueNotContainsAnswer — ta'rifda javobning o'zi/o'zagi yo'q. */
-  const leaky = words.filter((w) => clueContainsAnswer(w.clue, w.answer));
+  const leaky = words.filter((w) => clueContainsAnswer(w.clue, wordText(w.answer)));
   out.push(
     check(
       "clueNotContainsAnswer",
       leaky.length === 0 ? "green" : "red",
       "Ta'rif javobni oshkor qilmaydi",
-      leaky.length ? `javob ta'rifda ko'rinib turibdi: ${list(leaky.map((w) => w.answer))}` : "hech bir ta'rifda javob yo'q",
+      leaky.length ? `javob ta'rifda ko'rinib turibdi: ${list(leaky.map((w) => wordText(w.answer)))}` : "hech bir ta'rifda javob yo'q",
       leaky.length
         ? rewrite("clues", "Ta'rifda javobning o'zini yoki o'zagini ishlatmang — tushunchani boshqa so'zlar bilan tavsiflang.")
         : undefined,
@@ -221,7 +221,7 @@ export function crosswordRuleChecks(words: readonly PlacedWord[], grid: Crosswor
       "gridMatchesWords",
       mismatched.length === 0 ? "green" : "red",
       "To'r so'zlarga mos",
-      mismatched.length ? `to'rda mos kelmagan: ${list(mismatched.map((w) => w.answer))}` : `${words.length} so'zning harflari to'rda o'z joyida`,
+      mismatched.length ? `to'rda mos kelmagan: ${list(mismatched.map((w) => wordText(w.answer)))}` : `${words.length} so'zning harflari to'rda o'z joyida`,
       mismatched.length ? rewrite("grid", "To'rni qayta quring — so'z harflari kataklarga mos tushmagan.") : undefined,
     ),
   );
@@ -257,7 +257,7 @@ export function crosswordRuleChecks(words: readonly PlacedWord[], grid: Crosswor
 
 /** So'zning harflari to'rda o'z joyidami. */
 export function wordFitsGrid(w: PlacedWord, grid: CrosswordGridData): boolean {
-  const cells = letters(w.answer);
+  const cells = w.answer;
   for (let i = 0; i < cells.length; i++) {
     const r = w.dir === "across" ? w.row : w.row + i;
     const c = w.dir === "across" ? w.col + i : w.col;
@@ -271,7 +271,7 @@ export function wordFitsGrid(w: PlacedWord, grid: CrosswordGridData): boolean {
 export function countGridCrossings(words: readonly PlacedWord[]): number {
   const owners = new Map<string, Set<string>>();
   for (const w of words) {
-    const n = cellLength(w.answer);
+    const n = wordLength(w);
     for (let i = 0; i < n; i++) {
       const r = w.dir === "across" ? w.row : w.row + i;
       const c = w.dir === "across" ? w.col + i : w.col;

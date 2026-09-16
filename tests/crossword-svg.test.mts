@@ -104,7 +104,7 @@ test("javob to'ri: har katakda o'z harfi (apostrofli harf ham)", () => {
   // MUTATSIYA-2: harflar chizilmasa bu ro'yxat bo'sh qolardi.
   assert.equal(lettersDrawn.length, filled.length, "harflar soni katak soniga teng emas");
   assert.deepEqual([...lettersDrawn].sort(), [...filled].sort(), "chizilgan harflar to'rga mos emas");
-  const oz = res.placed.find((w) => w.answer.startsWith(`O${OKINA}`));
+  const oz = res.placed.find((w) => w.answer[0] === `O${OKINA}`);
   if (oz) assert.ok(svg.includes(`>O${OKINA}</text>`), "apostrofli harf bitta katakda chizilmadi");
   // Bo'sh to'r bilan bir xil ramka (o'quvchi va o'qituvchi beti ustma-ust tushadi).
   assert.equal(viewBox(svg).w, viewBox(crosswordSvg(res.grid, res.placed)).w);
@@ -138,7 +138,7 @@ test("XML xavfsizligi: katak va shrift nomi qochiriladi", () => {
     ["<", "&", null],
     [null, '"', null],
   ]);
-  const words: PlacedWord[] = [{ id: "w1", answer: "<&", clue: "x", dir: "across", row: 0, col: 0, number: 1 }];
+  const words: PlacedWord[] = [{ id: "w1", answer: ["<", "&"], clue: "x", dir: "across", row: 0, col: 0, number: 1 }];
   const svg = crosswordSvg(grid, words, { answers: true });
   assert.ok(svg.includes("&lt;"), "`<` qochirilmadi");
   assert.ok(svg.includes("&amp;"), "`&` qochirilmadi");

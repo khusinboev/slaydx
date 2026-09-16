@@ -12,6 +12,7 @@ import {
   normalizeApostrophes,
   placeWords,
   validatePlacement,
+  wordText,
   type CrosswordGridData,
   type PlaceResult,
   type PlacedWord,
@@ -97,7 +98,7 @@ function runsOf(grid: CrosswordGridData): { across: string[]; down: string[] } {
 
 /** So'zning to'rdagi kataklari (chizilgan harflar). */
 function cellsOfWord(grid: CrosswordGridData, w: PlacedWord): (string | null)[] {
-  const n = cellLength(w.answer);
+  const n = w.answer.length;
   return Array.from({ length: n }, (_, i) => (w.dir === "across" ? grid.cells[w.row][w.col + i] : grid.cells[w.row + i][w.col]));
 }
 
@@ -105,11 +106,11 @@ function cellsOfWord(grid: CrosswordGridData, w: PlacedWord): (string | null)[] 
 function crossingsOfWord(res: PlaceResult, w: PlacedWord): number {
   const others = res.placed.filter((o) => o !== w && o.dir !== w.dir);
   let n = 0;
-  for (let i = 0; i < cellLength(w.answer); i++) {
+  for (let i = 0; i < w.answer.length; i++) {
     const r = w.dir === "across" ? w.row : w.row + i;
     const c = w.dir === "across" ? w.col + i : w.col;
     for (const o of others) {
-      const len = cellLength(o.answer);
+      const len = o.answer.length;
       const hit = o.dir === "across" ? o.row === r && c >= o.col && c < o.col + len : o.col === c && r >= o.row && r < o.row + len;
       if (hit) {
         n++;
@@ -205,8 +206,8 @@ test("to'r chegarasi: har qanday so'z to'plamida tomon ≤ 21 (va `maxSize` dan 
   assert.ok(big.grid.rows <= GRID_DEFAULTS.maxSize && big.grid.cols <= GRID_DEFAULTS.maxSize, `${big.grid.rows}×${big.grid.cols}`);
   const small = placeWords(SAMPLE, { seed: "kichik", maxSize: 11 });
   assert.ok(small.grid.rows <= 11 && small.grid.cols <= 11, `${small.grid.rows}×${small.grid.cols}`);
-  // Kichik to'rga hamma so'z sig'masligi tabiiy — sig'maganlari `nofit`.
-  assert.ok(small.dropped.every((d) => d.reason === "nofit" || d.reason === "long"));
+  // Kichik to'rga hamma so'z sig'masligi tabiiy — sig'maganlari `no-fit`.
+  assert.ok(small.dropped.every((d) => d.reason === "no-fit" || d.reason === "too-long"));
 });
 
 test("to'r IXCHAM: 5 so'z ≤ 13, 10 so'z ≤ 18 tomon (har urug'da)", () => {
@@ -245,15 +246,15 @@ test("har so'z kamida bitta harfda kesishadi (yolg'iz so'z qolmaydi)", () => {
 test("to'rdagi harflar so'zlarga AYNAN mos tushadi", () => {
   const res = placeWords(SAMPLE, { seed: "harflar" });
   for (const w of res.placed) {
-    assert.deepEqual(cellsOfWord(res.grid, w), letters(w.answer), `«${w.answer}» kataklari mos emas`);
+    assert.deepEqual(cellsOfWord(res.grid, w), w.answer, `«${wordText(w.answer)}» kataklari mos emas`);
   }
 });
 
 test("TAQIQLI QO'SHNILIK: to'rdagi har bir ikki harfli yugurish — haqiqiy so'z", () => {
   const res = placeWords(SAMPLE, { seed: "qoshni" });
   const runs = runsOf(res.grid);
-  const acrossWords = new Set(res.placed.filter((w) => w.dir === "across").map((w) => letters(w.answer).join("")));
-  const downWords = new Set(res.placed.filter((w) => w.dir === "down").map((w) => letters(w.answer).join("")));
+  const acrossWords = new Set(res.placed.filter((w) => w.dir === "across").map((w) => wordText(w.answer)));
+  const downWords = new Set(res.placed.filter((w) => w.dir === "down").map((w) => wordText(w.answer)));
   // MUTATSIYA-1 va 2: parallel yoki yopishgan so'zlar «RAOT» kabi
   // lug'atda yo'q yugurishlar hosil qilardi.
   for (const r of runs.across) assert.ok(acrossWords.has(r), `gorizontal «${r}» so'z emas`);
@@ -264,7 +265,7 @@ test("TAQIQLI QO'SHNILIK: to'rdagi har bir ikki harfli yugurish — haqiqiy so'z
 
 test("joylashuv butunligi: `validatePlacement` qayta yig'ilgan to'rni tasdiqlaydi", () => {
   const res = placeWords(SAMPLE, { seed: "butunlik" });
-  const words = res.placed.map((w) => ({ cells: letters(w.answer), answer: w.answer }));
+  const words = res.placed.map((w) => ({ cells: w.answer, answer: wordText(w.answer) }));
   const entries = res.placed.map((w, i) => ({ wi: i, row: w.row, col: w.col, dir: w.dir }));
   const size = Math.max(res.grid.rows, res.grid.cols);
   assert.ok(validatePlacement(size, words, entries), "chiqarilgan to'r o'z qoidalaridan o'tmadi");
@@ -275,9 +276,9 @@ test("joylashuv butunligi: `validatePlacement` qayta yig'ilgan to'rni tasdiqlayd
 
 test("apostrofli so'z to'rda bitta katak egallaydi va kesishishi mumkin", () => {
   const res = placeWords(SAMPLE, { seed: "apostrof" });
-  const oz = res.placed.find((w) => w.answer.startsWith(`O${OKINA}`));
+  const oz = res.placed.find((w) => w.answer[0] === `O${OKINA}`);
   if (oz) {
-    assert.equal(cellLength(oz.answer), 7, "OʻSIMLIK 7 katak");
+    assert.equal(oz.answer.length, 7, "OʻSIMLIK 7 katak");
     assert.deepEqual(cellsOfWord(res.grid, oz), [`O${OKINA}`, "S", "I", "M", "L", "I", "K"]);
   }
   // Kesishma ham apostrofli katak orqali bo'lishi mumkin.
@@ -345,9 +346,17 @@ test("cluesOf: gorizontal/vertikal ro'yxatlar raqam bo'yicha saralangan", () => 
   for (const list of [across, down]) {
     for (let i = 1; i < list.length; i++) assert.ok(list[i].number > list[i - 1].number, "raqamlar tartibi buzildi");
   }
-  assert.ok(across.every((w) => w.dir === "across"));
-  assert.ok(down.every((w) => w.dir === "down"));
-  assert.ok(across.every((w) => w.clue.length > 0), "ta'rifsiz band qoldi");
+  // R0 `CrosswordClue`: raqam, matn, so'z id si va KATAK soni.
+  const byId = new Map(res.placed.map((w) => [w.id, w]));
+  for (const c of [...across, ...down]) {
+    const w = byId.get(c.wordId);
+    assert.ok(w, `«${c.wordId}» so'zi topilmadi`);
+    assert.equal(c.text, w!.clue, "ta'rif matni mos emas");
+    assert.equal(c.length, w!.answer.length, "katak soni mos emas");
+    assert.ok(c.text.length > 0, "ta'rifsiz band qoldi");
+  }
+  assert.deepEqual(across.map((c) => byId.get(c.wordId)!.dir), across.map(() => "across"));
+  assert.deepEqual(down.map((c) => byId.get(c.wordId)!.dir), down.map(() => "down"));
 });
 
 /* ────────────────────────── 6. tashlangan so'zlar ────────────────────────── */
@@ -364,16 +373,18 @@ test("qisqa, uzun, dublikat va yaroqsiz belgili so'zlar sababi bilan tashlanadi"
     ],
     { seed: "drop" },
   );
-  const why = (a: string) => res.dropped.find((d) => d.answer === a)?.reason;
-  assert.equal(why("UY"), "short");
-  assert.equal(why("ELEKTROGENERATORLASHTIRISH"), "long");
+  const why = (a: string) => res.dropped.find((d) => wordText(d.answer) === a)?.reason;
+  assert.equal(why("UY"), "too-short");
+  assert.equal(why("ELEKTROGENERATORLASHTIRISH"), "too-long");
   assert.equal(why("ATOM"), "duplicate");
-  assert.equal(why("ONA TILI"), "chars");
-  assert.ok(res.placed.some((w) => w.answer === "ATOM"));
-  assert.ok(res.placed.some((w) => w.answer === "MOLEKULA"));
+  // Yaroqsiz javobning kataklari XOM holda saqlanadi (hisobotda o'qituvchi
+  // nima yuborilganini ko'rishi kerak) — shu sababli bo'shliq ham qoladi.
+  assert.equal(why("ONA TILI"), "bad-letter", "bo'shliqli javob — harf emas");
+  assert.ok(res.placed.some((w) => wordText(w.answer) === "ATOM"));
+  assert.ok(res.placed.some((w) => wordText(w.answer) === "MOLEKULA"));
 });
 
-test("kesishmaydigan so'z to'rga KIRMAYDI (`nofit`), lekin yo'qolmaydi", () => {
+test("kesishmaydigan so'z to'rga KIRMAYDI (`no-fit`), lekin yo'qolmaydi", () => {
   const res = placeWords(
     [
       { answer: "atom", clue: "Zarra" },
@@ -382,11 +393,11 @@ test("kesishmaydigan so'z to'rga KIRMAYDI (`nofit`), lekin yo'qolmaydi", () => {
     ],
     { seed: "nofit" },
   );
-  const bad = res.dropped.find((d) => d.answer === "QWXZ");
+  const bad = res.dropped.find((d) => wordText(d.answer) === "QWXZ");
   assert.ok(bad, "kesishmaydigan so'z dropped da yo'q");
-  assert.equal(bad!.reason, "nofit");
+  assert.equal(bad!.reason, "no-fit");
   assert.ok(bad!.clue.length > 0, "ta'rif saqlanmadi");
-  assert.ok(!res.placed.some((w) => w.answer === "QWXZ"));
+  assert.ok(!res.placed.some((w) => wordText(w.answer) === "QWXZ"));
 });
 
 test("bo'sh kirish va bitta so'z — yiqilmaydi", () => {

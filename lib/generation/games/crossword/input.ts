@@ -14,6 +14,9 @@
  */
 import type { FormValues } from "../../../types";
 import type { DocMeta } from "../../types";
+import { GAME_LIMITS, normalizeGameCount } from "../types";
+import { normalizeGameType } from "../registry";
+import { autoGridSize } from "./grid";
 
 /** Rejimlar (§3): mavzu asosida yoki yuklangan fayl asosida. */
 export const CROSSWORD_MODES = ["topic", "file"] as const;
@@ -22,35 +25,32 @@ export type CrosswordMode = (typeof CROSSWORD_MODES)[number];
 export const isCrosswordMode = (v: unknown): v is CrosswordMode => (CROSSWORD_MODES as readonly string[]).includes(String(v));
 
 /**
- * Reyestr chegaralari (§3 jadvali).
+ * Reyestr chegaralari — HAMMASI R0 `GAME_LIMITS` dan.
  *
- * R0 ning `games/types.ts GAME_LIMITS` i kelganda so'z uzunligi va to'r
- * o'lchami SHU YERDAN emas, undan olinadi (bitta manba); qolgan bandlar
- * (so'z soni chiplari, ta'rif uzunligi) krossvordga xos bo'lgani uchun
- * shu faylda qoladi.
+ * Bu yerda faqat QISQA nomlar beriladi (`answerMin` ↔ `wordLettersMin`):
+ * ikkinchi manba emas, o'sha qiymatlarning krossvordcha o'qilishi.
  */
 export const CROSSWORD_LIMITS = {
   /** So'z soni chiplari. */
-  wordCounts: [5, 10, 15, 20] as const,
-  wordCountDefault: 10,
-  /** To'r o'lchami chiplari (toq, 13–21). */
-  gridSizes: [13, 15, 17, 19, 21] as const,
-  gridSizeDefault: 15,
+  wordCounts: GAME_LIMITS.counts,
+  wordCountDefault: GAME_LIMITS.countDefault,
   /** So'z uzunligi — KATAKDA (`grid.ts letters`). */
-  answerMin: 3,
-  answerMax: 15,
+  answerMin: GAME_LIMITS.wordLettersMin,
+  answerMax: GAME_LIMITS.wordLettersMax,
   /** Ta'rif uzunligi (belgi). */
-  clueMin: 10,
-  clueMax: 150,
+  clueMin: GAME_LIMITS.clueCharsMin,
+  clueMax: GAME_LIMITS.clueCharsMax,
   /** Mavzu va qo'shimcha talab uzunligi. */
-  topicChars: 300,
-  extraChars: 1000,
+  topicChars: GAME_LIMITS.topicChars,
+  extraChars: GAME_LIMITS.extraChars,
   /** Fayl rejimida promptga tushadigan manba matni. */
-  sourceTextChars: 24_000,
+  sourceTextChars: GAME_LIMITS.sourceTextChars,
 } as const;
 
 export type CrosswordInput = {
   mode: CrosswordMode;
+  /** Reyestr TUR id (`klassik` | `tarifli`) — `GameModel.type`. */
+  type: string;
   topic: string;
   subject: string;
   /** 0 — sinf ko'rsatilmagan. */
@@ -58,7 +58,12 @@ export type CrosswordInput = {
   language: string;
   /** Va'da qilingan so'z soni (5/10/15/20). */
   wordCount: number;
-  /** To'rning eng katta tomoni. */
+  /**
+   * To'rning eng katta tomoni — AVTOMAT (`autoGridSize`), formada maydon
+   * YO'Q (egasining qarori): to'r baribir ramka bo'yicha kesiladi, ya'ni
+   * foydalanuvchi tanlagan «15×15» chop etiladigan o'lchamni belgilamas,
+   * faqat algoritmga chegara qo'yardi.
+   */
   gridSize: number;
   extra: string;
   institution: string;
@@ -78,23 +83,19 @@ const num = (v: unknown): number | null => {
   return Number.isFinite(n) ? n : null;
 };
 
-/** Ro'yxatdagi eng yaqin ruxsat etilgan qiymat (chip). */
-export function nearestChoice(want: number | null, choices: readonly number[], fallback: number): number {
-  if (want === null || !choices.length) return fallback;
-  return choices.reduce((best, c) => (Math.abs(c - want) < Math.abs(best - want) ? c : best), choices[0]);
-}
-
 export function crosswordInputFromValues(meta: DocMeta, values: FormValues): CrosswordInput {
   const modeRaw = s(values.mode, 20);
   const mode: CrosswordMode = isCrosswordMode(modeRaw) ? modeRaw : "topic";
+  const wordCount = normalizeGameCount(values.wordCount ?? values.words ?? values.count);
   return {
     mode,
+    type: normalizeGameType("crossword", values.crosswordType ?? values.type),
     topic: s(values.topic ?? meta.topic, CROSSWORD_LIMITS.topicChars),
     subject: s(values.subject ?? meta.subject, 120),
     grade: Math.max(0, Math.min(11, Math.round(num(values.grade) ?? num(meta.grade) ?? 0))),
     language: s(values.language ?? meta.language, 12) || "uz",
-    wordCount: nearestChoice(num(values.wordCount ?? values.words ?? values.count), CROSSWORD_LIMITS.wordCounts, CROSSWORD_LIMITS.wordCountDefault),
-    gridSize: nearestChoice(num(values.gridSize), CROSSWORD_LIMITS.gridSizes, CROSSWORD_LIMITS.gridSizeDefault),
+    wordCount,
+    gridSize: autoGridSize(wordCount),
     extra: s(values.extra ?? meta.extra, CROSSWORD_LIMITS.extraChars),
     institution: s(values.university ?? meta.university, 200),
     author: s(values.author ?? meta.author, 120),
@@ -106,4 +107,5 @@ export function crosswordInputFromValues(meta: DocMeta, values: FormValues): Cro
  * Determinizm urug'i — bitta buyurtma har doim bitta to'r beradi.
  * Mavzu va so'z sonidan quriladi (tasodif/sana ARALASHMAYDI).
  */
-export const crosswordSeed = (meta: DocMeta, input: CrosswordInput): string => `${meta.toolId ?? "crossword"}:${input.topic}:${input.wordCount}:${input.gridSize}`;
+export const crosswordSeed = (meta: DocMeta, input: CrosswordInput): string =>
+  `${meta.toolId ?? "crossword"}:${input.type}:${input.topic}:${input.wordCount}:${input.gridSize}`;

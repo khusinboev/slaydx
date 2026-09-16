@@ -10,7 +10,7 @@ import {
   wordFitsGrid,
   type CrosswordReviewAsk,
 } from "../lib/generation/games/crossword/review.ts";
-import { placeWords, type CrosswordGridData, type PlacedWord } from "../lib/generation/games/crossword/grid.ts";
+import { placeWords, wordText, type CrosswordGridData, type PlacedWord } from "../lib/generation/games/crossword/grid.ts";
 import { CROSSWORD_LIMITS } from "../lib/generation/games/crossword/input.ts";
 import type { ReviewCheck } from "../lib/generation/report/types.ts";
 
@@ -82,7 +82,7 @@ test("wordCount: sig'magan so'z sariq/qizil qiladi va tuzatish taklif etadi", ()
   const green = byId(run(), "wordCount");
   assert.equal(green.level, "green");
   // 8 dan 7 tasi (87 %) — sariq; 8 dan 4 tasi (50 %) — qizil.
-  const yellow = byId(run(res.placed.slice(0, 7), res.grid, { ...ask, dropped: [{ answer: "QUYOSH", clue: "x", reason: "nofit" }] }), "wordCount");
+  const yellow = byId(run(res.placed.slice(0, 7), res.grid, { ...ask, dropped: [{ answer: ["Q", "U", "Y", "O", "SH"], clue: "x", reason: "no-fit" }] }), "wordCount");
   assert.equal(yellow.level, "yellow");
   assert.match(yellow.detail ?? "", /7 \/ 8/);
   assert.match(yellow.detail ?? "", /1 so'z tashlandi/);
@@ -108,7 +108,7 @@ test("minCrossings: kesishmalar so'z sonining yarmidan kam bo'lsa qizil", () => 
   // MUTATSIYA-2: bir-biriga tegmaydigan so'zlarda kesishma 0.
   const loose: PlacedWord[] = SAMPLE.slice(0, 4).map((w, i) => ({
     id: `w${i}`,
-    answer: w.answer.toUpperCase(),
+    answer: [...w.answer.toUpperCase()],
     clue: w.clue,
     dir: "across",
     row: i * 3,
@@ -125,8 +125,8 @@ test("wordLength: 3 harfdan qisqa yoki 15 dan uzun javob tutiladi", () => {
   const green = byId(run(), "wordLength");
   assert.equal(green.level, "green");
   const bad: PlacedWord[] = [
-    { ...res.placed[0], answer: "UY", clue: "Qisqa javob" },
-    { ...res.placed[1], answer: "ELEKTROGENERATORLAR", clue: "Juda uzun javob" },
+    { ...res.placed[0], answer: ["U", "Y"], clue: "Qisqa javob" },
+    { ...res.placed[1], answer: [..."ELEKTROGENERATORLAR"], clue: "Juda uzun javob" },
   ];
   const check = byId(crosswordRuleChecks([...res.placed, ...bad], res.grid, ask), "wordLength");
   assert.equal(check.level, "red");
@@ -150,9 +150,9 @@ test("uniqueWords: bir xil javob ikki marta — QIZIL", () => {
   const dupe = [...res.placed, { ...res.placed[0], id: "dup" }];
   const check = byId(crosswordRuleChecks(dupe, res.grid, ask), "uniqueWords");
   assert.equal(check.level, "red");
-  assert.match(check.detail ?? "", new RegExp(res.placed[0].answer));
+  assert.match(check.detail ?? "", new RegExp(wordText(res.placed[0].answer)));
   // Registr va apostrof farqi ham dublikat hisoblanadi.
-  const same = [...res.placed, { ...res.placed[0], id: "d2", answer: res.placed[0].answer.toLowerCase() }];
+  const same = [...res.placed, { ...res.placed[0], id: "d2", answer: res.placed[0].answer.map((c) => c.toLowerCase()) }];
   assert.equal(byId(crosswordRuleChecks(same, res.grid, ask), "uniqueWords").level, "red");
 });
 
@@ -167,7 +167,7 @@ test("clueNotContainsAnswer: ta'rif javobni yoki O'ZAGINI oshkor qilsa — QIZIL
   assert.ok(!clueContainsAnswer("Tirik organizmlarni o'rganadigan fan", "biologiya"));
   assert.ok(!clueContainsAnswer("Modda tuzilishining eng kichik zarrasi", "atom"));
   assert.ok(!clueContainsAnswer("Sistemamiz markazidagi yulduz", "quyosh"));
-  const leaky = res.placed.map((w, i) => (i === 0 ? { ...w, clue: `${w.answer} nimani o'rganadi` } : w));
+  const leaky = res.placed.map((w, i) => (i === 0 ? { ...w, clue: `${wordText(w.answer)} nimani o'rganadi` } : w));
   const check = byId(crosswordRuleChecks(leaky, res.grid, ask), "clueNotContainsAnswer");
   assert.equal(check.level, "red");
   assert.ok(check.fix, "tuzatish taklifi yo'q");

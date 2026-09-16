@@ -49,30 +49,35 @@
 
 /* ────────────────────────── shartnoma ────────────────────────── */
 
-export type CrosswordDir = "across" | "down";
+import {
+  GAME_LIMITS,
+  normalizeGridSize,
+  type CrosswordClue,
+  type CrosswordDir,
+  type CrosswordDropped,
+  type CrosswordGrid,
+  type CrosswordWord,
+} from "../types";
 
-/** Modeldan keladigan xom band. */
+export type { CrosswordClue, CrosswordDir, CrosswordDropped, CrosswordGrid, CrosswordWord };
+
+/** Modeldan keladigan xom band (javob — SATR, katakka bo'lish shu yerda). */
 export type WordInput = { answer: string; clue: string; id?: string };
 
-/** To'rga tushgan so'z — `CrosswordModel.words[]` bandi. */
-export type PlacedWord = {
-  id: string;
-  /** Normalizatsiya qilingan javob (katta harf, `oʻ`/`gʻ` tiklangan). */
-  answer: string;
-  clue: string;
-  dir: CrosswordDir;
-  /** 0 dan boshlanadigan, KESILGAN to'rdagi koordinata. */
-  row: number;
-  col: number;
-  /** Krossvord raqami (chapdan-o'ngga, yuqoridan-pastga). */
-  number: number;
-};
+/**
+ * To'rga tushgan so'z — R0 shartnomasidagi `CrosswordWord` NING O'ZI
+ * (`games/types.ts`): `answer` KATAK harflari ro'yxati, ya'ni `OʻSIMLIK`
+ * → `["Oʻ","S","I","M","L","I","K"]`. Adapter qatlami ATAYLAB yo'q —
+ * ikkinchi shakl bo'lsa maket, hisobot va ko'ruvchi ertami-kechmi
+ * boshqa-boshqa kataklarni ko'rardi.
+ */
+export type PlacedWord = CrosswordWord;
 
-export type DropReason = "short" | "long" | "duplicate" | "chars" | "nofit";
-export type DroppedWord = { answer: string; clue: string; reason: DropReason };
+export type DropReason = CrosswordDropped["reason"];
+export type DroppedWord = CrosswordDropped;
 
-/** Kesilgan to'r: `cells[row][col]` — harf yoki `null` (qora katak). */
-export type CrosswordGridData = { rows: number; cols: number; cells: (string | null)[][] };
+/** Kesilgan to'r (R0 `CrosswordGrid`): `cells[row][col]` — harf yoki `null`. */
+export type CrosswordGridData = CrosswordGrid;
 
 export type PlaceResult = {
   grid: CrosswordGridData;
@@ -95,11 +100,11 @@ export type PlaceOpts = {
   attempts?: number;
 };
 
-/** Chegaralar — `games/types.ts GAME_LIMITS` bilan bir xil qiymatlar. */
+/** Chegaralar — R0 `GAME_LIMITS` dan (ikkinchi nusxa yozilmaydi). */
 export const GRID_DEFAULTS = {
-  maxSize: 21,
-  minLength: 3,
-  maxLength: 15,
+  maxSize: GAME_LIMITS.gridMax,
+  minLength: GAME_LIMITS.wordLettersMin,
+  maxLength: GAME_LIMITS.wordLettersMax,
   attempts: 16,
   /** Bitta so'z uchun ko'rib chiqiladigan eng ko'p nomzod. */
   candidateCap: 400,
@@ -169,6 +174,18 @@ export function letters(answer: string): string[] {
 
 /** So'zning KATAKDAGI uzunligi (`OʻZBEK` = 5, `SHAKAR` = 6). */
 export const cellLength = (answer: string): number => letters(answer).length;
+
+/**
+ * Kataklar ro'yxati → o'qiladigan satr (`["Oʻ","S"]` → `OʻS`).
+ *
+ * Model kataklarni saqlaydi (R0 qarori), lekin prompt («takrorlanmasin»
+ * ro'yxati), hisobot (ta'rif javobni oshkor qilyaptimi) va javob varag'i
+ * SATR bilan ishlaydi — shu yagona joyda aylantiriladi.
+ */
+export const wordText = (cells: readonly string[]): string => cells.join("");
+
+/** So'zning katak soni (R0 `CrosswordWord`). */
+export const wordLength = (w: { answer: readonly string[] }): number => w.answer.length;
 
 /* ────────────────────────── tasodif ────────────────────────── */
 
@@ -556,7 +573,8 @@ export function finalize(size: number, words: readonly WordCells[], inputs: read
     const src = inputs[e.wi];
     return {
       id: src.id ?? `w${e.wi + 1}`,
-      answer: words[e.wi].answer,
+      // R0 shartnomasi: javob — KATAK harflari ro'yxati.
+      answer: [...words[e.wi].cells],
       clue: src.clue,
       dir: e.dir,
       row,
@@ -609,21 +627,21 @@ export function placeWords(words: readonly WordInput[], opts: PlaceOpts = {}): P
   for (const w of words) {
     const answer = normalizeAnswer(w.answer);
     const clue = String(w.clue ?? "").trim();
+    const cells = letters(answer);
     if (!answer || !isPlaceable(answer)) {
-      dropped.push({ answer, clue, reason: "chars" });
+      dropped.push({ answer: cells, clue, reason: "bad-letter" });
       continue;
     }
     if (seen.has(answer)) {
-      dropped.push({ answer, clue, reason: "duplicate" });
+      dropped.push({ answer: cells, clue, reason: "duplicate" });
       continue;
     }
-    const cells = letters(answer);
     if (cells.length < minLength) {
-      dropped.push({ answer, clue, reason: "short" });
+      dropped.push({ answer: cells, clue, reason: "too-short" });
       continue;
     }
     if (cells.length > maxLength) {
-      dropped.push({ answer, clue, reason: "long" });
+      dropped.push({ answer: cells, clue, reason: "too-long" });
       continue;
     }
     seen.add(answer);
@@ -654,7 +672,7 @@ export function placeWords(words: readonly WordInput[], opts: PlaceOpts = {}): P
 
   /* ── 3. sig'maganlar ── */
   for (let i = 0; i < kept.length; i++) {
-    if (!attempt.placed.has(i)) dropped.push({ answer: kept[i].answer, clue: kept[i].clue ?? "", reason: "nofit" });
+    if (!attempt.placed.has(i)) dropped.push({ answer: [...cellsOf[i].cells], clue: kept[i].clue ?? "", reason: "no-fit" });
   }
 
   // Joylashuv tartibi kirish tartibiga qaytariladi (determinizm + o'qilishi oson).
@@ -662,8 +680,30 @@ export function placeWords(words: readonly WordInput[], opts: PlaceOpts = {}): P
   return { ...finalize(size, cellsOf, kept, entries), dropped };
 }
 
-/** Yo'nalish bo'yicha guruhlangan, raqam bilan saralangan so'zlar. */
-export function cluesOf(placed: readonly PlacedWord[]): { across: PlacedWord[]; down: PlacedWord[] } {
-  const by = (dir: CrosswordDir) => placed.filter((w) => w.dir === dir).sort((a, b) => a.number - b.number);
+/**
+ * Savollar ro'yxati — R0 `CrosswordModel.clues` shakli.
+ *
+ * `length` (katak soni) SAQLANADI: bosma ro'yxatda «(7)» qavsi shundan
+ * chiqadi va `wordLength` qoidasi javob varag'isiz ham tekshira oladi.
+ */
+export function cluesOf(placed: readonly PlacedWord[]): { across: CrosswordClue[]; down: CrosswordClue[] } {
+  const by = (dir: CrosswordDir): CrosswordClue[] =>
+    placed
+      .filter((w) => w.dir === dir)
+      .sort((a, b) => a.number - b.number)
+      .map((w) => ({ number: w.number, text: w.clue, wordId: w.id, length: w.answer.length }));
   return { across: by("across"), down: by("down") };
+}
+
+/**
+ * To'r o'lchami — AVTOMAT (egasining qarori: formada maydon yo'q).
+ *
+ * So'z soniga qarab ish taxtasi tanlanadi, natija esa baribir RAMKA
+ * bo'yicha kesiladi — ya'ni bu yuqori chegara, chop etiladigan to'r
+ * odatda kichikroq (10 so'z → ≈13×13). O'lchov `normalizeGridSize`
+ * dan o'tadi (toq, 13–21).
+ */
+export function autoGridSize(wordCount: number): number {
+  const n = Math.max(1, Math.round(wordCount));
+  return normalizeGridSize(n <= 5 ? 13 : n <= 10 ? 17 : GAME_LIMITS.gridMax);
 }
