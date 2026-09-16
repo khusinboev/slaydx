@@ -253,6 +253,24 @@ export function workParagraphPrompt(ctx: WorkContext, ask: WorkSectionAsk): stri
   return lines.join("\n");
 }
 
+/**
+ * «Kengaytir» — paragraf rejadagi so'zning 70 % idan kalta chiqsa bir
+ * marta (maqola dvigatelidagi `expandPrompt` naqshi). MAVJUD matn
+ * promptga kiradi — usiz model paragrafni qayta yozib takrorlaydi.
+ * Referat jonli sinovi: 6 paragraf ≈150–200 so'z (reja 305) → hujjat
+ * 8 bet chiqib, hajm darvozasida yiqildi.
+ */
+export function workExpandPrompt(ctx: WorkContext, plan: WorkSectionPlan, have: number, need: number, existing: string): string {
+  const refs = ctx.refs;
+  return [
+    `The paragraph «${plan.title}» (id ${plan.id}) currently has ${have} words; it needs about ${need} more (${Math.max(1, Math.ceil(need / 100))} paragraphs of 90–130 words). Write ADDITIONAL text for the same paragraph: NEW specific points only (a mechanism, a comparison, an example, a limitation, an implication) — do not repeat, rephrase or summarise anything from ALREADY WRITTEN.`,
+    `Plan for this paragraph: ${plan.brief}`,
+    `ALREADY WRITTEN (for reference — do not repeat):\n${existing.slice(0, 6000)}`,
+    refs.length ? `SOURCES (same rules — cite by ID only, do not cite what you did not use):\n${refs.map((r) => formatRefLine(r)).join("\n")}` : `SOURCES: none — no citations, no bracketed IDs or numbers.`,
+    `Return JSON: {"blocks":[{"kind":"p","text":"…"}]}`,
+  ].join("\n");
+}
+
 /* ────────────────────────── xulosa ────────────────────────── */
 
 /**

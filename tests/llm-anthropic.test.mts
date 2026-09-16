@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import Anthropic from "@anthropic-ai/sdk";
 import { makeAnthropicAdapter } from "../lib/generation/llm/anthropic.ts";
 
@@ -232,4 +233,9 @@ test("kalitsiz — `new Anthropic()` chaqirilmaydi (deps.client stub ishlatiladi
   const adapter = makeAnthropicAdapter({ client });
   await adapter.complete("claude-sonnet-5", "S", "U", OPTS);
   assert.equal(called, 1);
+});
+
+test("SDK mijozi `maxRetries: 1` bilan quriladi — timeout uch barobar bo'lmasin", () => {
+  const src = readFileSync(new URL("../lib/generation/llm/anthropic.ts", import.meta.url), "utf8");
+  assert.match(src, /new Anthropic\(\{[^}]*timeout: opts\.timeoutMs,\s*maxRetries: 1\s*\}\)/);
 });

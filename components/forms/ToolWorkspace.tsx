@@ -18,6 +18,7 @@ import { TranslationForm } from "./TranslationForm";
 import { ImageStudio } from "./ImageStudio";
 import { ArticleComposer } from "./ArticleComposer";
 import { EssayComposer } from "./EssayComposer";
+import { WorkComposer } from "./WorkComposer";
 import { SourceFileField } from "./SourceFileField";
 
 function defaultsFor(tool: ToolConfig, profile: UserProfile): FormValues {
@@ -98,6 +99,7 @@ export function ToolWorkspace({ tool }: { tool: ToolConfig }) {
   // Insho 2 (AUDIT-19): kontekst × tur formasi — standart forma maydonlar
   // orasidagi bog'liqlikni (IELTS → faqat ingliz tili) chiza olmasdi.
   if (tool.custom === "essay") return <EssayComposer tool={tool} />;
+  if (tool.custom === "work") return <WorkComposer tool={tool} profile={profile} user={user} />;
 
   return <StandardForm tool={tool} profile={profile} />;
 }

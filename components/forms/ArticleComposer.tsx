@@ -101,7 +101,7 @@ export const FIGURE_KIND_LABEL: Record<SelectableFigureKind, string> = {
  * bo'lsa o'chiq — tanlov hech narsaga ta'sir qilmaydi (UI testi: `disabled`
  * bog'lanishi olib tashlansa qizaradi).
  */
-function FigureKindChips({ value, onChange, disabled }: { value: SelectableFigureKind[]; onChange: (v: SelectableFigureKind[]) => void; disabled: boolean }) {
+export function FigureKindChips({ value, onChange, disabled }: { value: SelectableFigureKind[]; onChange: (v: SelectableFigureKind[]) => void; disabled: boolean }) {
   const chip = (on: boolean) =>
     `rounded-full border px-3 py-1 text-[12.5px] transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${on ? "border-primary bg-primary text-primary-foreground" : "border-input bg-card hover:bg-muted"}`;
   return (

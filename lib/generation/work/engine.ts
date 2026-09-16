@@ -43,6 +43,7 @@ import { chapterWords, paragraphWords, workWordPlan } from "./plan";
 import { guardSection, intakeCheck, missingFactNumbers, type SectionGuardReport } from "./guard";
 import {
   workConclusionPrompt,
+  workExpandPrompt,
   workIntroPrompt,
   workOutlinePrompt,
   workParagraphPrompt,
@@ -118,6 +119,8 @@ export type WorkBuildResult = { doc: AcademicDoc; cost: WorkCost; research: Rese
 const OUTLINE_TIMEOUT_MS = 30_000;
 const INTRO_TIMEOUT_MS = 45_000;
 const CONCLUSION_TIMEOUT_MS = 45_000;
+/** Paragraf rejadagi so'zning shu ulushidan kalta bo'lsa — bir marta «kengaytir». */
+export const WORK_EXPAND_BELOW = 0.7;
 const MIN_CALL_MS = 8_000;
 const paragraphTimeout = (words: number, deadline: number) => Math.min(Math.max(35_000, 20_000 + words * 40), 90_000, remainingMs(deadline));
 
@@ -707,7 +710,36 @@ async function writeParagraph(ctx: WorkContext, ask: WorkSectionAsk, system: str
   }
   if (!first) return empty;
   const guarded = guardSection(first.blocks, gopts);
-  return { plan: ask.plan, blocks: guarded.blocks, table: first.table, figure: first.figure, report: guarded.report };
+  const out: ParagraphOut = { plan: ask.plan, blocks: guarded.blocks, table: first.table, figure: first.figure, report: guarded.report };
+
+  /*
+   * Hajm yetmasa — bir marta «kengaytir» (maqola dvigateli naqshi).
+   * Jadval/sxema langari (`anchorAfterBlock`) mavjud bloklarga ishora
+   * qiladi — yangi bloklar OXIRIGA qo'shiladi, langar buzilmaydi.
+   */
+  if (guarded.report.words < ask.plan.words * WORK_EXPAND_BELOW && remainingMs(deadline) > 25_000) {
+    const need = ask.plan.words - guarded.report.words;
+    const existing = out.blocks.map((b) => b.text).join("\n\n");
+    const raw = await call("writer", system, workExpandPrompt(ctx, ask.plan, guarded.report.words, need, existing), {
+      maxTokens: Math.min(6000, Math.round(need * 2.4) + 500),
+      timeoutMs: paragraphTimeout(need, deadline),
+    });
+    const extra = raw ? blocksFromLlm(parseLlmObject<SectionJson>(raw)?.blocks, raw) : [];
+    if (extra.length) {
+      const g2 = guardSection(extra, gopts);
+      out.blocks = [...out.blocks, ...g2.blocks];
+      out.report = {
+        ...guarded.report,
+        removedCitations: [...guarded.report.removedCitations, ...g2.report.removedCitations],
+        citations: guarded.report.citations + g2.report.citations,
+        unsourcedNumbers: [...guarded.report.unsourcedNumbers, ...g2.report.unsourcedNumbers],
+        factNumbersFound: [...guarded.report.factNumbersFound, ...g2.report.factNumbersFound],
+        filler: [...guarded.report.filler, ...g2.report.filler],
+        words: guarded.report.words + g2.report.words,
+      };
+    }
+  }
+  return out;
 }
 
 type RawTable = { caption?: unknown; headers?: unknown; rows?: unknown; anchorAfterBlock?: unknown; source?: unknown };

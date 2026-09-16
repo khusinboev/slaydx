@@ -86,7 +86,12 @@ export function makeAnthropicAdapter(deps: AnthropicDeps = {}): ProviderAdapter 
     id: "anthropic",
     async complete(model, system, user, opts: AdapterOpts): Promise<Attempt> {
       const client: Pick<Anthropic, "messages"> =
-        deps.client ?? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: opts.timeoutMs });
+        /*
+         * `maxRetries: 1` — SDK standarti 2: timeout'da uch urinish
+         * `timeoutMs` ni uch barobar qiladi (35 s → 106 s, AUDIT-19
+         * referat jonli sinovi). Zaxira zanjiri (`chain.ts`) o'zi bor.
+         */
+        deps.client ?? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: opts.timeoutMs, maxRetries: 1 });
       try {
         const res = await client.messages.create({
           model,
