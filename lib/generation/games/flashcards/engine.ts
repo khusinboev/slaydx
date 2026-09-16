@@ -150,7 +150,10 @@ export function cardSections(model: FlashcardsModel, L: GameDocLabels): DocSecti
  */
 export async function buildFlashcardsDoc(meta: DocMeta, values: FormValues, opts: GameBuildOpts): Promise<GameBuilt | null> {
   const complete: CompleteFn = opts.complete ?? completeRole;
-  if (!opts.complete && !llmEnabled()) return null;
+  if (!opts.complete && !llmEnabled()) {
+    console.warn("[flashcards] LLM o'chiq — null");
+    return null;
+  }
 
   const { deadline } = opts;
   const now = opts.now ?? new Date();
@@ -166,7 +169,10 @@ export async function buildFlashcardsDoc(meta: DocMeta, values: FormValues, opts
 
   const ask = async (user: string, maxTokens: number): Promise<string | null> => {
     const timeoutMs = Math.min(CALL_MS, remainingMs(deadline));
-    if (timeoutMs < MIN_CALL_MS) return null;
+    if (timeoutMs < MIN_CALL_MS) {
+      console.warn(`[flashcards] byudjet tugadi: ${timeoutMs} ms qoldi`);
+      return null;
+    }
     const r = await complete("writer", system, user, { json: true, maxTokens, timeoutMs });
     if (r?.usage) {
       meter.add(r.usage);
@@ -183,7 +189,10 @@ export async function buildFlashcardsDoc(meta: DocMeta, values: FormValues, opts
   const writeDeadline = deadline - (opts.polish === false ? CARDS_REVIEW_RESERVE_MS : CARDS_REVIEW_RESERVE_MS + CARDS_POLISH_RESERVE_MS);
 
   for (let round = 0; round < CARDS_MAX_ROUNDS && cards.length < want; round++) {
-    if (remainingMs(writeDeadline) < MIN_CALL_MS) break;
+    if (remainingMs(writeDeadline) < MIN_CALL_MS) {
+      console.warn(`[flashcards] yozish byudjeti tugadi: ${remainingMs(writeDeadline)} ms (zaxiralar ${CARDS_REVIEW_RESERVE_MS + CARDS_POLISH_RESERVE_MS} ms)`);
+      break;
+    }
     const need = want - cards.length;
     /*
      * IKKINCHI so'rovda biroz ORTIQCHA so'raladi: birinchi aylanishda

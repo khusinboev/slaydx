@@ -157,3 +157,14 @@ test("dispatch — kartalar dvigateli hali ulanmagan (WP-B) bo'lsa ANIQ `null`, 
    */
   assert.equal(built, null);
 });
+
+/*
+ * Smoke: flashcards byudjeti (90 s) dvigatel zaxiralaridan (hisobot 40 s +
+ * sayqal 55 s) kichik bo'lib, yozishga vaqt qolmay «0 karta» chiqardi.
+ * Byudjet zaxiralar + kamida bitta to'liq yozish chaqiruvi (55 s) dan katta bo'lsin.
+ */
+test("flashcards byudjeti dvigatel zaxiralari + bitta yozish chaqiruvidan katta", async () => {
+  const { gameBudgetMs } = await import("../lib/generation/budget.ts");
+  const { CARDS_REVIEW_RESERVE_MS, CARDS_POLISH_RESERVE_MS } = await import("../lib/generation/games/flashcards/engine.ts");
+  assert.ok(gameBudgetMs("flashcards", 5) >= CARDS_REVIEW_RESERVE_MS + CARDS_POLISH_RESERVE_MS + 55_000, `byudjet ${gameBudgetMs("flashcards", 5)} ms`);
+});

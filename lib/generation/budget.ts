@@ -198,7 +198,8 @@ function teacherSize(kind: TeacherKind, values: FormValues): number {
  */
 const GAME_MS: Record<GameKind, { base: number; per: number }> = {
   crossword: { base: 90_000, per: 1_500 },
-  flashcards: { base: 90_000, per: 1_500 },
+  // Kartalar: 2 aylanish (≤55 s) + hisobot 40 s + sayqal 55 s zaxiralari — 90 s da yozishga 0 s qolib «0 karta» chiqardi (AUDIT-21 smoke).
+  flashcards: { base: 150_000, per: 2_000 },
 };
 
 /**
