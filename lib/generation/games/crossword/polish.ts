@@ -17,14 +17,15 @@
  */
 import type { AcademicDoc } from "../../types";
 import type { DocReview, UserNeed } from "../../report/types";
-import { POLISH_MAX_FIXES, RewriteError, type ApplyOpsResult, type Fix, type PolishPlan, type RewriteOutOf } from "../../report/polish-core";
+import { POLISH_MAX_FIXES, RewriteError, runPolishWith, type ApplyOpsResult, type Fix, type PolishPlan, type RewriteOutOf, type RunPolishResult } from "../../report/polish-core";
 import { remainingMs } from "../../quality";
 import { parseLlmObject } from "../../json";
 import type { CompleteFn } from "../../research/pipeline";
 import type { CostMeter, LlmUsage } from "../../llm-roles";
-import type { CrosswordTypeSpec } from "../registry";
+import { gameTypeOf, type CrosswordTypeSpec } from "../registry";
 import { wordText, type CrosswordWord } from "./grid";
-import type { CrosswordInput } from "./input";
+import { crosswordInputFromValues, type CrosswordInput } from "./input";
+import { crosswordJudgeFromReview, rescoreCrossword, reviewCrossword, type CrosswordJudgeResult, type CrosswordReviewAsk, type CrosswordReviewOpts } from "./review";
 
 /** Bitta tuzatish: shu `wordId` ning ta'rifi yangisiga almashadi. */
 export type CrosswordPolishOp = { op: "clue"; wordId: string; clue: string };
@@ -189,4 +190,103 @@ export function applyClueOps(doc: AcademicDoc, ops: CrosswordPolishOp[]): ApplyO
   });
 
   return { ok: true, doc: { ...doc, sections, game: { ...doc.game!, crossword: { ...model, words, clues } } } };
+}
+
+/* ────────────────────────── server sayqali (AUDIT-21 WP-D) ────────────────────────── */
+
+/** Q-3 qabul chegarasi (oila bilan bir xil) — dvigatel ham shu konstantani oladi. */
+export const CROSSWORD_ACCEPT_DELTA = 1;
+
+/**
+ * HUJJATDAN kontekst (`infographic/polish.ts infographicContextOf` naqshi).
+ *
+ * Dvigatelda `input`/`spec`/`ask` forma qiymatlaridan keladi; natija
+ * sahifasida forma YO'Q — «Hammasini tuzatish» va bandma-band
+ * «Tuzatish» faqat saqlangan hujjatni ko'radi. Shuning uchun uchalasi
+ * shu yerda hujjatdan qayta tiklanadi.
+ *
+ * VA'DA QILINGAN so'z soni HISOBOTDAN o'qiladi (`wordCount` bandi
+ * «7 / 10 so'z to'rga tushdi» deb yozib qo'ygan): uni `words.length`
+ * dan hisoblasa, qayta hisobotda o'sha band O'ZI yashil bo'lib qolar,
+ * ball soxta oshar va Q-3 darvozasi hech narsani ushlamasdi.
+ */
+export function crosswordContextOf(
+  doc: AcademicDoc,
+  review?: DocReview,
+): { input: CrosswordInput; spec: CrosswordTypeSpec; ask: CrosswordReviewAsk } | null {
+  const model = doc.game?.crossword;
+  if (!model || doc.game?.kind !== "crossword") return null;
+  const wordCount = askedWordCount(review, model.words.length + model.dropped.length);
+  const input = crosswordInputFromValues(doc.meta, {
+    topic: doc.meta.topic,
+    crosswordType: doc.game.type,
+    language: doc.game.language || doc.meta.language,
+    wordCount,
+    extra: doc.meta.extra ?? "",
+  });
+  return {
+    input,
+    spec: gameTypeOf("crossword", doc.game.type),
+    ask: {
+      wordCount,
+      gridSize: input.gridSize,
+      hasAnswers: doc.sections.some((s) => s.id === "answers" && s.blocks.length > 0),
+      dropped: model.dropped,
+    },
+  };
+}
+
+/** `wordCount` bandi detalidagi «N / M so'z» — M (va'da qilingan son). */
+function askedWordCount(review: DocReview | undefined, fallback: number): number {
+  const detail = review?.checks.find((c) => c.id === "wordCount")?.detail ?? "";
+  const m = /(\d+)\s*\/\s*(\d+)/.exec(detail);
+  const want = m ? Number(m[2]) : NaN;
+  return Number.isFinite(want) && want > 0 ? want : Math.max(1, fallback);
+}
+
+export type CrosswordPolishDeps = {
+  complete: CompleteFn;
+  deadline: number;
+  now?: Date;
+  judge?: boolean;
+  onUsage?: (u: LlmUsage) => void;
+  meter?: CostMeter;
+  acceptDelta?: number;
+  concurrency?: number;
+};
+
+export type CrosswordPolishResult = RunPolishResult<CrosswordPolishOp>;
+
+/**
+ * Butun sayqal — dvigateldagi chaqiruv bilan AYNAN bir xil sozlamada,
+ * farqi faqat kontekst manbasida. Dvigatel o'z `place`/`input` ini
+ * biladi va `runPolishWith` ni bevosita chaqiradi; server esa
+ * hujjatdan boshqa hech narsa ko'rmaydi (`crosswordContextOf`).
+ */
+export async function runCrosswordPolish(doc: AcademicDoc, review: DocReview, deps: CrosswordPolishDeps): Promise<CrosswordPolishResult> {
+  const ctx = crosswordContextOf(doc, review);
+  if (!ctx) throw new RewriteError("Krossvord modeli yo'q", 409, "legacy");
+  const judge = deps.judge !== false;
+  const now = deps.now ?? new Date();
+  const complete: CompleteFn = async (role, system, user, o) => {
+    const r = await deps.complete(role, system, user, o);
+    if (r?.usage) deps.onUsage?.(r.usage);
+    return r;
+  };
+  const reviewOpts: CrosswordReviewOpts = { ask: ctx.ask, complete: complete as CrosswordReviewOpts["complete"], deadline: deps.deadline, judge, now };
+  return runPolishWith<CrosswordPolishOp, CrosswordJudgeResult>(doc, review, {
+    deadline: deps.deadline,
+    judge,
+    now,
+    ...(deps.concurrency ? { concurrency: deps.concurrency } : {}),
+    acceptDelta: deps.acceptDelta ?? CROSSWORD_ACCEPT_DELTA,
+    plan: (r) => planCrosswordPolish(r),
+    userNeeds: () => crosswordUserNeeds({ dropped: doc.game?.crossword?.dropped ?? [] }, { wordCount: ctx.ask.wordCount ?? 0 }),
+    rewrite: (d, fix, fixDeadline) =>
+      rewriteClues(d, fix, { complete, input: ctx.input, spec: ctx.spec, deadline: fixDeadline, ...(deps.meter ? { meter: deps.meter } : {}) }),
+    apply: (d, ops) => applyClueOps(d, ops),
+    review: (d) => reviewCrossword(d, reviewOpts),
+    judgeFromReview: (prev) => crosswordJudgeFromReview(prev),
+    rescore: (fresh, j) => rescoreCrossword(fresh, j),
+  });
 }

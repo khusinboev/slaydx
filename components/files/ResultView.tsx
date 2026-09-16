@@ -253,8 +253,36 @@ export function ResultView({ id }: { id: string }) {
    * Panel shakli bir xil (`DocReview`), «Tuzatish» esa bandma-band
    * ishlaydi (`rewriteTeacher`), shuning uchun inshodagi kabi
    * yashirilmaydi.
+   *
+   * AUDIT-21 WP-D: bosma o'yinlar (`doc.game.review`) va infografika
+   * (`doc.infographic.review`) ham SHU yagona nuqtadan o'qiladi —
+   * oltinchi va yettinchi model. Panel ularda ham bir xil `DocReview`
+   * shaklini ko'radi; farq faqat qaysi guruhlar chizilishida va
+   * bandma-band «Tuzatish» borligida (pastda).
    */
-  const review = gen.doc?.article?.review ?? gen.doc?.essay?.review ?? gen.doc?.work?.review ?? gen.doc?.teacher?.review;
+  const review =
+    gen.doc?.article?.review ?? gen.doc?.essay?.review ?? gen.doc?.work?.review ?? gen.doc?.teacher?.review ?? gen.doc?.game?.review ?? gen.doc?.infographic?.review;
+  /*
+   * O'YIN va PLAKAT (AUDIT-21 WP-D).
+   *
+   * `hideGroups` — «Manbalar» va «Vizuallar» guruhlari bu oilalarda
+   * BO'SH: krossvord/karta/plakat manba keltirmaydi va sxema chizmaydi,
+   * ya'ni ularning bandlari umuman hisoblanmaydi (insho bilan ayni
+   * qaror — bo'sh guruh «manbalar tekshirilmadi» deb o'qilardi).
+   *
+   * `isPoster` — plakatda bandma-band «Tuzatish» YO'Q: nishon bitta
+   * (`spec`) va har tuzatish butun plakatni qayta chizdiradi, shuning
+   * uchun server ham 422 qaytaradi (`article-rewrite.ts`). O'yinda esa
+   * BOR — ta'rif/karta matni to'rga tegmasdan almashadi.
+   *
+   * «Tahrirlash» ikkalasida ham ko'rinmaydi va bu SHU YERDA emas,
+   * `edit-adapters.ts` da hal qilingan: adapter yo'q → `editableTools()`
+   * da yo'q → `WordViewer` `editable` false → `EditActions` bo'sh.
+   */
+  const isGame = Boolean(gen.doc?.game);
+  const isPoster = Boolean(gen.doc?.infographic);
+  const noFix = isEssay || isPoster;
+  const hideGroups = isEssay || isGame || isPoster ? ESSAY_HIDDEN_GROUPS : undefined;
 
   return (
     <div className={cn("flex h-full min-h-0 flex-1 flex-col", flow ? "overflow-y-auto" : "overflow-hidden")} data-result-flow={flow ? "1" : undefined}>
@@ -413,10 +441,13 @@ export function ResultView({ id }: { id: string }) {
              * ko'ruvchi o'z ichki scroll'i bilan qoladi, panel esa
              * `shrink-0` va o'z balandligi chegarasi bilan.
              *
-             * «Tuzatish» (`onFix` → `POST …/rewrite`) FAQAT maqola/tezisda:
-             * insho bitta bo'lim, uning har bandi butun matnga tegishli,
-             * shuning uchun bandma-band tuzatish «Hammasini tuzatish» ning
+             * «Tuzatish» (`onFix` → `POST …/rewrite`) inshoda va
+             * PLAKATDA chizilmaydi (`noFix`): ikkalasida ham nishon
+             * bitta va har bandi butun matnga tegishli, shuning uchun
+             * bandma-band tuzatish «Hammasini tuzatish» ning
              * baholovchisiz nusxasi bo'lardi (server ham 422 qaytaradi).
+             * O'yinlarda esa bor — ta'rif/karta matni to'rga tegmasdan
+             * almashadi.
              */
             <details open className="no-print max-h-[45vh] shrink-0 overflow-y-auto border-b px-3 py-2 sm:px-4" data-article-review-panel>
               <summary className="cursor-pointer text-sm font-medium select-none">
@@ -426,11 +457,11 @@ export function ResultView({ id }: { id: string }) {
                 <ArticleReviewPanel
                   review={review}
                   hrefBase={`/uz/${gen.type}`}
-                  {...(isEssay ? {} : { onFix: (fix: NonNullable<ReviewCheck["fix"]>) => void onFix(fix) })}
+                  {...(noFix ? {} : { onFix: (fix: NonNullable<ReviewCheck["fix"]>) => void onFix(fix) })}
                   fixing={fixing}
                   onPolish={() => void onPolish()}
                   polishing={polishing}
-                  {...(isEssay ? { hideGroups: ESSAY_HIDDEN_GROUPS } : {})}
+                  {...(hideGroups ? { hideGroups } : {})}
                 />
               </div>
             </details>
