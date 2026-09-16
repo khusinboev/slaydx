@@ -239,3 +239,12 @@ test("SDK mijozi `maxRetries: 1` bilan quriladi — timeout uch barobar bo'lmasi
   const src = readFileSync(new URL("../lib/generation/llm/anthropic.ts", import.meta.url), "utf8");
   assert.match(src, /new Anthropic\(\{[^}]*timeout: opts\.timeoutMs,\s*maxRetries: 1\s*\}\)/);
 });
+
+test("describeNetError: undici `fetch failed` sababi (`cause.code`) matnga qo'shiladi", async () => {
+  const { describeNetError } = await import("../lib/generation/llm.ts");
+  const e = new TypeError("fetch failed");
+  (e as Error & { cause?: unknown }).cause = Object.assign(new Error("getaddrinfo EAI_AGAIN generativelanguage.googleapis.com"), { code: "EAI_AGAIN" });
+  assert.equal(describeNetError(e), "fetch failed (EAI_AGAIN)");
+  assert.equal(describeNetError(new Error("boom")), "boom");
+  assert.equal(describeNetError("x"), "network error");
+});

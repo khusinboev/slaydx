@@ -94,6 +94,14 @@ function assertGroundingMode(opts: LlmOpts): void {
   }
 }
 
+/** Tarmoq xatosi matni: undici `fetch failed` ning haqiqiy sababi (`cause.code`) bilan. */
+export function describeNetError(e: unknown): string {
+  if (!(e instanceof Error)) return "network error";
+  const cause = (e as Error & { cause?: { code?: string; message?: string } }).cause;
+  const why = cause?.code ?? cause?.message;
+  return why && !e.message.includes(why) ? `${e.message} (${why})` : e.message;
+}
+
 /**
  * O'tkinchi xatoda qayta urinish sikli — YAGONA nusxa.
  *
@@ -286,7 +294,8 @@ async function completeGemini(
       retryable: false,
     };
   } catch (e) {
-    const message = e instanceof Error ? e.message : "network error";
+    // `fetch failed` sababi (`ENOTFOUND`/`EAI_AGAIN`/`ECONNRESET`) `cause` da — logda ko'rinsin.
+    const message = describeNetError(e);
     console.warn("[gemini]", message);
     // `aborted` — bizning timeout'imiz; qolgani tarmoq uzilishi.
     return { value: null, retryable: !/abort/i.test(message) };
@@ -465,7 +474,7 @@ async function streamGemini(
     if (!full) return { value: null, retryable: false };
     return { value: full, retryable: false };
   } catch (e) {
-    const message = e instanceof Error ? e.message : "network error";
+    const message = describeNetError(e);
     console.warn("[gemini:stream]", message);
     // `aborted` — bizning timeout'imiz; qolgani tarmoq uzilishi.
     return { value: null, retryable: !/abort/i.test(message) };
@@ -553,7 +562,7 @@ async function completeXai(
     // xAI da qidiruv vositasi yo'q — manba ham, so'rov ham bo'sh.
     return { value: { text, queries: [], sources: [] }, retryable: false };
   } catch (e) {
-    const message = e instanceof Error ? e.message : "network error";
+    const message = describeNetError(e);
     console.warn("[xai]", message);
     return { value: null, retryable: !/abort/i.test(message) };
   } finally {
@@ -642,7 +651,7 @@ async function rawGemini(
       },
     };
   } catch (e) {
-    const message = e instanceof Error ? e.message : "network error";
+    const message = describeNetError(e);
     // `aborted` — bizning timeout'imiz; qolgani tarmoq uzilishi.
     return { ok: false, error: message, retryable: !/abort/i.test(message) };
   } finally {
@@ -703,7 +712,7 @@ async function rawXai(
       },
     };
   } catch (e) {
-    const message = e instanceof Error ? e.message : "network error";
+    const message = describeNetError(e);
     return { ok: false, error: message, retryable: !/abort/i.test(message) };
   } finally {
     clearTimeout(timer);
