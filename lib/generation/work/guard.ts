@@ -40,7 +40,13 @@ const INTRO_PART_RE: Record<WorkIntroPartId, RegExp> = {
   tasks: new RegExp(`${B}(vazifa\\w*|задач\\w*|tasks of the|following tasks|objectives of the)`, "iu"),
   object: new RegExp(`${B}(ob[‘’'\`]?yekt\\w*|obyekti|объект\\w*|object of (the )?(study|research))`, "iu"),
   subject: new RegExp(`${B}(predmet\\w*|предмет\\w*|subject of (the )?(study|research))`, "iu"),
-  methods: new RegExp(`${B}(metod\\w*|usullar\\w*|метод\\w*|research methods|methods of (the )?(study|research))`, "iu"),
+  /*
+   * «usul» ATAYLAB yo'q: «predmet — … shakllantirish USULLARI» jumlasi
+   * metodlar elementini SOXTA topilgan qilardi (kirishda ikki element
+   * yonma-yon turadi). Prompt esa aynan «Tadqiqot metodlari» so'zini
+   * so'raydi, ya'ni `metod`/`метод` ishonchli belgi.
+   */
+  methods: new RegExp(`${B}(metod\\w*|метод\\w*|research methods|methods of (the )?(study|research))`, "iu"),
   structure: new RegExp(`${B}(tuzilma\\w*|tarkib\\w*|tuzilishi|структур\\w*|состои[тл]|structure of the (work|paper)|consists of)`, "iu"),
   novelty: new RegExp(`${B}(yangilik\\w*|новизн\\w*|novelty)`, "iu"),
   significance: new RegExp(`${B}(amaliy ahamiyat\\w*|ahamiyat\\w*|значимост\\w*|practical (significance|value))`, "iu"),
