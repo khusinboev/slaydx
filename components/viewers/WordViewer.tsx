@@ -8,6 +8,7 @@ import { planWork } from "@/lib/generation/work/layout";
 import { isTeacherDoc, planTeacher } from "@/lib/generation/teacher/layout";
 import type { ArticleOp } from "@/lib/generation/article/edit";
 import type { WorkOp } from "@/lib/generation/work/edit";
+import type { TeacherOp } from "@/lib/generation/teacher/edit";
 import { cn } from "@/lib/cn";
 import { docLabels, sectionLabels } from "@/lib/generation/i18n";
 import { columnPercents, evenPercents } from "@/lib/generation/table-columns";
@@ -19,9 +20,10 @@ import { continuationTableFor, packPages } from "@/lib/viewers/paginate";
 import { splitByHeight, type TextSplitter } from "@/lib/viewers/split";
 import { useArticleEdit } from "../files/useArticleEdit";
 import { useWorkEdit } from "../files/useWorkEdit";
+import { useTeacherEdit } from "../files/useTeacherEdit";
 import type { EditActionsState } from "../files/EditActions";
 import { ArticleHeadItem, CiteText } from "./ArticleHead";
-import { ArticleEditor, articleEditTargets, isWorkOp, legacyEditTargets, targetAttr, workEditTargets, type EditCitePlan, type EditTarget } from "./ArticleEditor";
+import { ArticleEditor, articleEditTargets, isTeacherEditorOp, isWorkOp, legacyEditTargets, targetAttr, teacherEditTargets, workEditTargets, type EditCitePlan, type EditTarget } from "./ArticleEditor";
 import { ZoomFrame, Workspace } from "./sheet";
 import { TitlePage } from "./TitlePage";
 import { ViewerToolbar } from "./toolbar";
@@ -212,7 +214,14 @@ export function WordViewer({
    * boshqasida `doc: null` qaytaradi, ya'ni faqat bittasi «yoqiladi».
    */
   const wed = useWorkEdit({ gen, onGen });
-  const doc = ed.doc ?? wed.doc ?? docProp;
+  /*
+   * O'qituvchi hujjati (AUDIT-20 WP-D) — UCHINCHI oqim. Uchala hook
+   * ham SHARTSIZ chaqiriladi (React qoidasi); har biri o'z
+   * vositasidan boshqasida `doc: null` qaytaradi, ya'ni ayni paytda
+   * faqat bittasi «yoqiladi».
+   */
+  const ted = useTeacherEdit({ gen, onGen });
+  const doc = ed.doc ?? wed.doc ?? ted.doc ?? docProp;
   const items = useMemo(() => docToFlow(doc), [doc]);
   /*
    * Maqola 2: varaq o'lchovlari nashr profilidan (`articleSheet`), birinchi
@@ -308,13 +317,15 @@ export function WordViewer({
   /* ═══ tahrir (Maqola 2 WP7; talaba ishi — AUDIT-19 WP-C) ═══ */
   const [editOn, setEditOn] = useState(false);
   /** Faol tahrir oqimi: maqola yoki talaba ishi (ikkalasi birga bo'lmaydi). */
-  const active = ed.editable ? ed : wed.editable ? wed : null;
+  const active = ed.editable ? ed : wed.editable ? wed : ted.editable ? ted : null;
   const editable = Boolean(active) && !(active === ed && ed.legacy);
   const editing = editOn && editable;
   const { undo, redo, save, pending, discard, saving, justSaved } = active ?? ed;
   const runArticle = ed.run;
   const runWork = wed.run;
+  const runTeacher = ted.run;
   const useWork = active === wed;
+  const useTeacher = active === ted;
   const runOps = useCallback(
     (ops: ArticleOp[]) => {
       /*
@@ -328,14 +339,32 @@ export function WordViewer({
         if (work.length === ops.length) void runWork(work);
         return;
       }
+      /*
+       * O'qituvchi op tili ham `ArticleOp` ning QISMI (manba/annotatsiya
+       * oplari yo'q) — filtr bilan tekshiriladi, cast bilan emas.
+       */
+      if (useTeacher) {
+        const teacher: TeacherOp[] = ops.filter(isTeacherEditorOp);
+        if (teacher.length === ops.length) void runTeacher(teacher);
+        return;
+      }
       void runArticle(ops);
     },
-    [useWork, runWork, runArticle],
+    [useWork, runWork, useTeacher, runTeacher, runArticle],
   );
   // Oqim bandi → tahrir nishoni (faqat tahrir rejimida; eski maqola — umumiy oqim bo'yicha).
   const targets = useMemo(
-    () => (editing ? (sheet ? articleEditTargets(sheet.plan, items) : work ? workEditTargets(work.plan, items) : legacyEditTargets(doc, items)) : null),
-    [editing, sheet, work, items, doc],
+    () =>
+      editing
+        ? sheet
+          ? articleEditTargets(sheet.plan, items)
+          : work
+            ? workEditTargets(work.plan, items)
+            : teacher
+              ? teacherEditTargets(teacher.plan, items)
+              : legacyEditTargets(doc, items)
+        : null,
+    [editing, sheet, work, teacher, items, doc],
   );
 
   const onEditStateRef = useRef(onEditState);

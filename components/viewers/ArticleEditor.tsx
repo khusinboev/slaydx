@@ -5,6 +5,8 @@ import { renderCitations, type ArticlePlan, type RefItem } from "@/lib/generatio
 import type { CiteStyle } from "@/lib/generation/article/types";
 import { langKeyOf, parseBlockPath, type ArticleLang, type ArticleOp } from "@/lib/generation/article/edit";
 import type { WorkOp } from "@/lib/generation/work/edit";
+import { isTeacherPath, readTeacherModelText, readTeacherPath, type TeacherOp } from "@/lib/generation/teacher/edit";
+import type { TeacherPlan } from "@/lib/generation/teacher/layout";
 import type { WorkPlan } from "@/lib/generation/work/layout";
 import type { AcademicDoc } from "@/lib/generation/types";
 import type { FlowItem } from "@/lib/viewers/flow";
@@ -29,6 +31,18 @@ const WORK_OP_NAMES = new Set(["text", "heading", "cell", "caption", "refRemove"
 
 export function isWorkOp(op: ArticleOp): op is Extract<ArticleOp, { op: "text" | "heading" | "cell" | "caption" | "refRemove" | "blockRemove" }> & WorkOp {
   return WORK_OP_NAMES.has(op.op);
+}
+
+/**
+ * O'qituvchi hujjatining op tili — `WorkOp` dan `refRemove` bilan
+ * farq qiladi (manba reyestri yo'q). `teacherEditTargets` bunday
+ * nishon umuman bermaydi, bu tekshiruv esa ishga tushirish vaqtida
+ * ham qulflaydi (cast o'rniga filtr — `isWorkOp` naqshi).
+ */
+const TEACHER_OP_NAMES = new Set(["text", "heading", "cell", "caption", "blockRemove", "blockInsert", "setSection", "set"]);
+
+export function isTeacherEditorOp(op: ArticleOp): op is Extract<ArticleOp, { op: "text" | "heading" | "cell" | "caption" | "blockRemove" }> & TeacherOp {
+  return TEACHER_OP_NAMES.has(op.op);
 }
 
 /**
@@ -104,15 +118,29 @@ type Parsed =
 
 export function parseTarget(s: string): Parsed | null {
   if (parseBlockPath(s)) return { t: "text", path: s };
+  /*
+   * O'qituvchi hujjatining MODEL yo'li (`teacher.lesson.stages.2.method`)
+   * va shapkadagi mavzu — ular ham matn nishoni: `applyTeacherOps`
+   * ularni modelga yozadi. Maqola/talaba ishida bunday yo'l umuman
+   * chiqmaydi (`parseBlockPath` shaklidan boshqasi yo'q).
+   */
+  if (isTeacherPath(s) && !s.startsWith("sections.")) return { t: "text", path: s };
   if (s === "highlights") return { t: "highlights" };
   const parts = s.split(":");
   if (parts[0] === "heading" && parts[1]) return { t: "heading", sectionId: parts.slice(1).join(":") };
   if (parts[0] === "abstract" && parts[1]) return { t: "abstract", lang: langKeyOf(parts[1]) };
   if (parts[0] === "caption" && (parts[1] === "figure" || parts[1] === "table") && parts[2]) return { t: "caption", target: parts[1], id: parts.slice(2).join(":") };
-  if (parts[0] === "cell" && parts.length === 4) {
-    const r = Number(parts[2]);
-    const c = Number(parts[3]);
-    if (Number.isInteger(r) && Number.isInteger(c) && r >= -1 && c >= 0) return { t: "cell", tableId: parts[1], r, c };
+  /*
+   * Katak: `cell:<tableId>:<r>:<c>`. Id ning O'ZIDA ikki nuqta
+   * bo'lishi mumkin (o'qituvchi hujjatida `table:<n>` nishoni), shuning
+   * uchun OXIRGI ikki bo'lak indeks, oradagisi — id. Maqola/talaba
+   * ishida id da ikki nuqta yo'q, ya'ni xatti-harakat o'zgarmaydi.
+   */
+  if (parts[0] === "cell" && parts.length >= 4) {
+    const r = Number(parts[parts.length - 2]);
+    const c = Number(parts[parts.length - 1]);
+    const tableId = parts.slice(1, parts.length - 2).join(":");
+    if (tableId && Number.isInteger(r) && Number.isInteger(c) && r >= -1 && c >= 0) return { t: "cell", tableId, r, c };
   }
   return null;
 }
@@ -237,6 +265,111 @@ export function workEditTargets(plan: WorkPlan, items: FlowItem[]): Map<string, 
 }
 
 /**
+ * O'QITUVCHI HUJJATI nishonlari (AUDIT-20 WP-D).
+ *
+ * `teacherFlow` rejani BIR-BIR bandga o'giradi (shapka, keyin tana),
+ * shuning uchun bu yerda o'sha tartib qaytadan yuriladi va har band
+ * REJADAGI `path` ga bog'lanadi — ya'ni nishon shartnomasi
+ * `planTeacher` bilan bitta manbadan chiqadi (`applyTeacherOps` ham
+ * o'sha rejaga qarab tekshiradi).
+ *
+ * Tahrirlanmaydigan bandlar ATAYIN nishonsiz:
+ *   • shapkadagi «Tasdiqlayman» bloki, hujjat nomi va tur nomi —
+ *     reyestrdan/lavozimdan chiqadi, matn emas;
+ *   • jadval RAQAMI («1-jadval») — rejadan;
+ *   • `lines` (ochiq savol chiziqlari) va `note` (ogohlantirish) —
+ *     hujjatda bunday matn yo'q, tahrir qilinsa keyingi renderda
+ *     yo'qolardi;
+ *   • SON va RO'YXAT maydonlari (`durationMin`, `scoring.total`,
+ *     rubrika «Jami» qatori) — ular formada (WP-E). Tekshiruv
+ *     MODELNING O'ZIDAN: yo'l satrli maydonga tushmasa nishon
+ *     berilmaydi, ya'ni ro'yxat bu yerda qo'lda yuritilmaydi.
+ *
+ * YORLIQ ustuvorligi: modeldan qurilgan bo'lakda yorliq `h3` si va
+ * uning matni BIR XIL yo'lga ega bo'lishi mumkin («Javob kaliti»
+ * sarlavhasi va yechim matni — ikkalasi `…cases.0.solution`).
+ * Bunday holatda OXIRGISI (haqiqiy matn) qoladi, aks holda tahrir
+ * yorliqni yechimning o'rniga yozib qo'yardi.
+ */
+export function teacherEditTargets(plan: TeacherPlan, items: FlowItem[]): Map<string, EditTarget> {
+  const map = new Map<string, EditTarget>();
+  /** Model yo'li → shu yo'lni allaqachon olgan band (takror uchun). */
+  const byPath = new Map<string, string>();
+  let k = 0;
+  const next = (type: FlowItem["type"]): FlowItem | null => {
+    const it = items[k++];
+    return it && it.type === type ? it : null;
+  };
+
+  /**
+   * Matn nishoni. Model yo'li bo'lsa — FAQAT satrli maydon uchun;
+   * takrorlangan yo'lda oldingi band nishondan chiqariladi.
+   */
+  const setText = (id: string, path: string) => {
+    if (!path.startsWith("sections.")) {
+      if (path !== "meta.topic" && readTeacherModelText(plan.model, path) === null) return;
+      const prev = byPath.get(path);
+      if (prev) map.delete(prev);
+      byPath.set(path, id);
+    }
+    map.set(id, { t: "text", path });
+  };
+
+  const HEAD: Record<string, FlowItem["type"]> = {
+    approve: "teacher-approve",
+    org: "teacher-org",
+    title: "teacher-title",
+    subtitle: "teacher-subtitle",
+    field: "teacher-field",
+    line: "teacher-line",
+  };
+  for (const h of plan.head) {
+    const it = next(HEAD[h.k]);
+    if (!it) return new Map();
+    // Faqat «Yorliq: qiymat» qatorlari tahrirlanadi (muassasa, fan, mavzu…).
+    if (h.k === "field" || h.k === "org") setText(it.id, h.path);
+  }
+
+  for (const b of plan.body) {
+    if (b.k === "table") {
+      if (!next("table-number")) return new Map();
+      const head = next("table-head");
+      if (!head) return new Map();
+      /*
+       * Jadval nishoni REJA YO'LI bilan (`table:<n>` — hisobot va
+       * sayqal bilan AYNI sintaksis; modeldan qurilgan jadvalda esa
+       * model yo'li). Sarlavha, ustun nomlari va kataklar bitta
+       * nishondan foydalanadi.
+       */
+      map.set(head.id, { t: "table", id: b.path });
+      for (let r = 0; r < b.table.rows.length; r++) {
+        const row = next("table-row");
+        if (!row) return new Map();
+        map.set(row.id, { t: "row", tableId: b.path, r });
+      }
+      continue;
+    }
+    const it = next(b.k);
+    if (!it) return new Map();
+    switch (b.k) {
+      case "h1":
+        map.set(it.id, { t: "heading", sectionId: b.sectionId });
+        break;
+      case "figure":
+        map.set(it.id, { t: "figure", id: b.figureId });
+        break;
+      case "lines":
+      case "note":
+        // Chizilgan bo'shliq / ogohlantirish — hujjatda matn emas.
+        break;
+      default:
+        setText(it.id, b.path);
+    }
+  }
+  return map;
+}
+
+/**
  * Eski maqola (`doc.article` yo'q) — umumiy `docToFlow` tartibi: titul,
  * mundarija, annotatsiyalar, bo'limlar (h1 + bloklar), jadvallar,
  * adabiyotlar. Faqat matn nishonlari (bo'lim sarlavhasi, bloklar,
@@ -294,10 +427,28 @@ function blockOf(doc: AcademicDoc, path: string) {
   return i ? doc.sections[i.si]?.blocks[i.bi] : undefined;
 }
 
+/**
+ * Nishondagi jadval id si → hujjat jadvali.
+ *
+ * Maqola/talaba ishida jadvalning BARQAROR `id` si bor. O'qituvchi
+ * hujjatida esa dvigatel jadvalni `id` siz yozadi (faqat `anchor`) va
+ * hisobot/sayqal uni INDEKS bilan nishonlaydi (`table:<n>` —
+ * `review.ts tableTarget`). Ikkala shakl ham shu yerda yechiladi,
+ * aks holda o'qituvchi jadvalining katagi tahrirga umuman
+ * ochilmasdi (`rawTextOf` `null` qaytarardi).
+ */
+function tableOfTarget(doc: AcademicDoc, id: string) {
+  const byIndex = /^table:(\d{1,3})$/.exec(id);
+  if (byIndex) return (doc.tables ?? [])[Number(byIndex[1])];
+  return (doc.tables ?? []).find((t) => t.id === id);
+}
+
 /** Nishonning HUJJATDAGI xom matni (`null` — topilmadi). */
 export function rawTextOf(doc: AcademicDoc, p: Parsed): string | null {
   switch (p.t) {
     case "text":
+      // O'qituvchi model yo'li (`teacher.…`, `meta.topic`) — modeldan.
+      if (!p.path.startsWith("sections.")) return readTeacherPath(doc, p.path);
       return blockOf(doc, p.path)?.text ?? null;
     case "heading":
       return doc.sections.find((s) => s.id === p.sectionId)?.title ?? null;
@@ -307,10 +458,11 @@ export function rawTextOf(doc: AcademicDoc, p: Parsed): string | null {
       return (doc.article?.highlights ?? []).join("\n");
     case "caption":
       // Sxema reyestri maqolada `doc.article`, talaba ishida `doc.work` da.
-      if (p.target === "figure") return (doc.article?.figures ?? doc.work?.figures ?? []).find((f) => f.id === p.id)?.caption ?? null;
-      return (doc.tables ?? []).find((t) => t.id === p.id)?.caption ?? "";
+      // Sxema reyestri: maqolada `doc.article`, talaba ishida `doc.work`, o'qituvchida `doc.teacher`.
+      if (p.target === "figure") return (doc.article?.figures ?? doc.work?.figures ?? doc.teacher?.figures ?? []).find((f) => f.id === p.id)?.caption ?? null;
+      return tableOfTarget(doc, p.id)?.caption ?? "";
     case "cell": {
-      const t = (doc.tables ?? []).find((x) => x.id === p.tableId);
+      const t = tableOfTarget(doc, p.tableId);
       if (!t) return null;
       return p.r === -1 ? (t.headers[p.c] ?? null) : (t.rows[p.r]?.[p.c] ?? null);
     }
@@ -393,6 +545,12 @@ export function opsFor(doc: AcademicDoc, p: Parsed, before: string, value: strin
   if (value === before) return [];
   switch (p.t) {
     case "text": {
+      /*
+       * Model maydoni (`teacher.…`) — blok emas: bo'sh qoldirilsa
+       * O'CHIRILMAYDI (modelda «bosqichsiz bosqich» bo'lmaydi), op
+       * umuman yuborilmaydi va maydon eski qiymatida qoladi.
+       */
+      if (!p.path.startsWith("sections.")) return value.trim() ? [{ op: "text", path: p.path, value }] : [];
       const b = blockOf(doc, p.path);
       if (!b) return [];
       const empty = !value.trim();

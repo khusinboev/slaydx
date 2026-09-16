@@ -57,11 +57,10 @@ export function ArtifactViewer({
        * O'CHIRILDI: ular saytda faylda yo'q birinchi bet chizardi
        * (egasi qarori 12 — «sayt = fayl»).
        *
-       * Tahrir proplari DARROV beriladi: `WordViewer` hozircha o'qituvchi
-       * hujjati uchun tahrirni yoqmaydi (hook WP-D da qo'shiladi), lekin
-       * o'shanda ko'ruvchini qayta ulash kerak bo'lmasin — talaba
-       * ishlaridagi xato aynan shu edi (proplar berilmagani uchun tahrir
-       * jimgina o'chiq qolgandi).
+       * Tahrir (WP-D) shu proplar orqali ishlaydi: `WordViewer`
+       * `useTeacherEdit` bilan uchinchi oqimni yoqadi. Proplar WP-C da
+       * OLDINDAN berilgan edi — talaba ishlaridagi xato aynan shu edi
+       * (proplar berilmagani uchun tahrir jimgina o'chiq qolgandi).
        */
       return <WordViewer doc={doc} gen={detail} onGen={onDetail} onEditState={onEditState} />;
     case "image":

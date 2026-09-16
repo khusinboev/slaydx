@@ -18,7 +18,7 @@
  * kesib takrorlash aynan AUDIT-6 B5 da olib tashlangan naqsh edi.
  * Jadval shu bilan qidiruv vositasi bo'lib qoladi, nusxa emas.
  */
-import type { Block, DocSection, DocTable } from "../types";
+import type { DocSection, DocTable } from "../types";
 import { remainingMs } from "../quality";
 import { TEACHER_LIMITS, type GlossaryModel, type GlossaryTerm } from "./types";
 import type { GlossaryTypeSpec } from "./registry";
