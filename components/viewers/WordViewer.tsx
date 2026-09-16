@@ -940,30 +940,38 @@ function FlowBlock({
           <strong>{item.label}:</strong> {item.text}
         </p>
       );
-    case "game-clues":
+    case "game-clues": {
       /*
-       * CHEGARASIZ ikki ustun — DOCX da ham aynan shunday jadval
-       * (`w:cols` emas: u butun bo'limga tegishli bo'lib, to'r rasmini
-       * ham ikkiga bo'lib yuborardi).
+       * CHEGARASIZ ikki ustun — DOCX bilan bir xil TUZILMA: sarlavha
+       * qatori + HAR SAVOL O'Z QATORIDA (DOCX da bitta ulkan qator
+       * LibreOffice'da betga sig'masa butunlay keyingi betga o'tardi —
+       * AUDIT-21 ko'z). Qator-qator tuzilma matn tartibini ham DOCX bilan
+       * tenglashtiradi (paritet testi).
        */
+      const rows = Math.max(...item.columns.map((c) => c.items.length), 0);
       return (
         <table style={{ width: "100%", tableLayout: "fixed", borderCollapse: "collapse", textIndent: 0, marginBottom: "6pt" }}>
           <tbody>
             <tr>
               {item.columns.map((col, i) => (
-                <td key={i} style={{ verticalAlign: "top", padding: "2pt 6pt 2pt 0", border: "none" }}>
-                  <div style={{ fontWeight: 700, marginBottom: "4pt" }}>{col.title}</div>
-                  {col.items.map((it, j) => (
-                    <div key={j} style={{ fontSize: "var(--doc-table-size, 11pt)", marginBottom: "3pt" }}>
-                      {it.text}
-                    </div>
-                  ))}
+                <td key={i} style={{ verticalAlign: "top", padding: "2pt 6pt 2pt 0", border: "none", fontWeight: 700 }}>
+                  {col.title}
                 </td>
               ))}
             </tr>
+            {Array.from({ length: rows }, (_, r) => (
+              <tr key={r}>
+                {item.columns.map((col, i) => (
+                  <td key={i} style={{ verticalAlign: "top", padding: "0 6pt 3pt 0", border: "none", fontSize: "var(--doc-table-size, 11pt)" }}>
+                    {col.items[r]?.text ?? ""}
+                  </td>
+                ))}
+              </tr>
+            ))}
           </tbody>
         </table>
       );
+    }
     case "game-cards": {
       /*
        * Karta panjarasi — MILLIMETRDA (rejadagi `cardCellMm`), foizda
