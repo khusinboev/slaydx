@@ -62,6 +62,8 @@ type Opts = {
   neverGive?: boolean;
   judge?: (n: number) => string;
   emptyParagraph?: string;
+  /** Shu paragraf uchun BIRINCHI N chaqiruv bo'sh (tarmoq uzilishi taqlidi), keyin oddiy. */
+  emptyFirst?: { id: string; n: number };
   badOutline?: boolean;
   /** «Kengaytir» so'roviga qo'shimcha bloklar beradi (aks holda `{}`). */
   expand?: boolean;
@@ -84,6 +86,7 @@ const INTRO_TEXT: Record<string, string> = {
 function makeComplete(calls: Call[], o: Opts = {}) {
   let judgeCalls = 0;
   let introCalls = 0;
+  let emptyCalls = 0;
   return async (role: LlmRole, system: string, user: string) => {
     calls.push({ role, system, user });
     const usage = { provider: "stub", model: "stub-1", inputTokens: 100, outputTokens: 50 };
@@ -113,6 +116,7 @@ function makeComplete(calls: Call[], o: Opts = {}) {
     if (user.startsWith("Write the paragraph")) {
       const id = user.match(/\(id ([\w.]+)\)/)?.[1] ?? "";
       if (o.emptyParagraph === id) return reply("");
+      if (o.emptyFirst && o.emptyFirst.id === id && emptyCalls++ < o.emptyFirst.n) return reply("");
       const wantTable = user.includes('"table":');
       const wantFigure = user.includes('"figure":');
       const body: Record<string, unknown> = {
@@ -556,4 +560,18 @@ test("hujjat darajasida to'ldirish: umumiy matn kam bo'lsa paragraf ikkinchi mar
   }
   assert.ok([...perId.values()].some((n) => n >= 2), `to'ldirish raundi bo'lishi kerak: ${JSON.stringify([...perId])}`);
   assert.ok([...perId.values()].every((n) => n <= 2), "paragraf boshiga ko'pi bilan ikki kengaytirish");
+});
+
+/*
+ * Smoke (worker, Wi-Fi uzilishi ETIMEDOUT ×6): ikki paragraf ikkala
+ * urinishda ham bo'sh qoldi → hujjat 1 479/1 850 so'z, darvoza yiqitdi.
+ * Endi paragraflar yozilgach bo'sh qolganlari (tarmoq tiklangach) yana
+ * bir marta yoziladi. Mutatsiya: 4a bosqichi olib tashlansa `ch2.2` bo'sh.
+ */
+test("bo'sh paragraf uzilishdan keyin qayta yoziladi (ikkala birinchi urinish bo'sh → uchinchisi to'ldiradi)", async () => {
+  const { doc, guard, calls } = await build({}, { emptyFirst: { id: "ch2.2", n: 2 } });
+  const sec = doc.sections.find((s) => s.id === "ch2.2")!;
+  assert.ok(sec.blocks.length > 0, "ch2.2 qayta yozilishi kerak");
+  assert.ok(!guard.emptySections.includes("ch2.2"));
+  assert.ok(calls.filter((c) => c.user.startsWith("Write the paragraph") && c.user.includes("(id ch2.2)")).length >= 3);
 });

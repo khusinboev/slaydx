@@ -82,7 +82,10 @@ async function runSpec(
     if (isTimeoutSignal(res.error)) return "timeout";
     if (!res.retryable) return null;
     if (attempt < MAX_ATTEMPTS - 1) {
-      await sleep(res.retryAfterMs ?? 500 * 2 ** attempt);
+      // Tarmoq xatosi (status yo'q: ETIMEDOUT/ECONNRESET) — uzilish odatda bir
+      // necha soniya; 500 ms/1 s kutish uch urinishni 2 s ichida yeb qo'yardi
+      // (AUDIT-19 smoke: ikki paragraf bo'sh qoldi). 2 s → 4 s.
+      await sleep(res.retryAfterMs ?? (res.status === undefined ? 2_000 : 500) * 2 ** attempt);
     }
   }
   return null;

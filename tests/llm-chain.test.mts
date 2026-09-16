@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { completeWithChain } from "../lib/generation/llm/chain.ts";
 import type { Attempt, ProviderAdapter, RoleSpec } from "../lib/generation/llm/types.ts";
 
@@ -173,4 +174,9 @@ test("adapter ro'yxatda yo'q — o'tkazib yuboriladi (kalit bor bo'lsa ham)", as
     const res = await completeWithChain("fast", specs, "S", "U", OPTS, { adapters: { gemini: g.adapter } });
     assert.equal(res?.text, "gemini javobi");
   });
+});
+
+test("tarmoq xatosida (status yo'q) qayta urinish kutishi 2 s dan boshlanadi, HTTP xatosida 500 ms", () => {
+  const src = readFileSync(new URL("../lib/generation/llm/chain.ts", import.meta.url), "utf8");
+  assert.match(src, /res\.status === undefined \? 2_000 : 500\) \* 2 \*\* attempt/);
 });

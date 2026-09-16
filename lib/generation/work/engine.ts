@@ -371,6 +371,19 @@ export async function buildWorkDoc(meta: DocMeta, values: FormValues, opts: Work
     return out;
   });
 
+  /* ── 4a. bo'sh qolgan paragraflar — tarmoq uzilishi o'tgach yana bir urinish ── */
+  {
+    const missing = written.map((w, i) => [w, i] as const).filter(([w]) => !w.blocks.length);
+    if (missing.length && remainingMs(deadline) > 40_000) {
+      console.warn(`[work] bo'sh paragraflar qayta yoziladi: ${missing.map(([w]) => w.plan.id).join(", ")}`);
+      await mapPool(missing, 3, async ([w, i]) => {
+        const v = visuals.get(w.plan.id) ?? { table: false, figure: false };
+        const again = await writeParagraph(ctx, { plan: w.plan, wantTable: v.table, wantFigure: v.figure, primary: primaryOf.get(w.plan.id) }, system, ask, deadline, figureSpecOf);
+        if (again.blocks.length) written[i] = again;
+      });
+    }
+  }
+
   /* ── 4b. hujjat darajasida to'ldirish — xulosa hali yozilmagan: kirish nisbatida taxmin ── */
   {
     const introWords = intro.blocks.reduce((n, b) => n + (b.text.match(/\S+/g) ?? []).length, 0);
