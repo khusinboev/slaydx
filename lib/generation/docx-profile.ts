@@ -1,4 +1,7 @@
 import { PUBLICATION_PROFILES } from "./article/profiles";
+import { TEACHER_LANDSCAPE, TEACHER_MARGINS_CM, TEACHER_TYPE } from "./teacher/layout";
+import { teacherKindOf } from "./teacher/registry";
+import type { TeacherKind } from "./teacher/types";
 import type { PublicationProfileId } from "./article/types";
 import { RESUME_TEMPLATES, type ResumeTemplateId } from "./resume/templates";
 import { WORK_MARGINS_CM, WORK_TYPE } from "./work/layout";
@@ -389,10 +392,63 @@ export function workProfile(subject: SubjectProfileId): DocProfile {
 }
 
 /**
+ * O'QITUVCHI HUJJATI profili — KIND ga bog'langan (AUDIT-20 WP-C).
+ *
+ * Uchta eski profil (`lesson`, `landscape`, `reference`) SAQLANADI va
+ * asos bo'lib xizmat qiladi — ularning asoslanishi (albom faqat 6
+ * ustunli xarita uchun; dars ishlanmasi portret, chunki asosiysi nasr;
+ * ma'lumotnoma chapga tekislangan, chekinishsiz) hali ham to'g'ri.
+ * Farqi UCHTA va uchalasi ham egasi qarori 12 dan («sayt = fayl»):
+ *
+ *   1. `titlePage: "none"` — titul beti YO'Q. Rasmiy dars ishlanmasi,
+ *      xarita va keys titul beti bilan kelmaydi; birinchi betning
+ *      o'zida SHAPKA turadi (`planTeacher` `head`). Ilgari DOCX GOST
+ *      titulini chizar, sayt ko'ruvchisi esa brend-muqovani — ya'ni
+ *      birinchi bet ikkala chiqishda ham boshqa edi (AUDIT-6 A1).
+ *   2. Sarlavha CHAPDA, BOSH HARFSIZ va CHIZIQSIZ — o'qituvchi hujjati
+ *      bo'limlari («Dars maqsadi», «Uyga vazifa») markazlashtirilgan
+ *      BOSH HARFLI akademik sarlavha emas; `reference` dagi to'q sariq
+ *      ajratgich chiziq ham rasmiy hujjatda havaskorlik belgisi.
+ *   3. Tipografiya va chegara `teacher/layout.ts` dan — ko'ruvchi
+ *      varag'i (`WordViewer teacherSheet`) AYNAN shu raqamlarni o'qiydi.
+ *
+ * `id` asos profilniki bo'lib QOLADI (`lesson`/`landscape`/`reference`):
+ * eski tekshiruvlar va `profileById` shu identifikatorlarga tayanadi.
+ */
+export function teacherProfile(kind: TeacherKind): DocProfile {
+  const base = kind === "map" ? PROFILES.landscape : kind === "glossary" || kind === "keys" ? PROFILES.reference : PROFILES.lesson;
+  const m = TEACHER_MARGINS_CM[kind];
+  const t = TEACHER_TYPE[kind];
+  const cm = (v: number) => Math.round(v * CM);
+  return {
+    ...base,
+    page: {
+      ...base.page,
+      landscape: TEACHER_LANDSCAPE[kind],
+      margin: { top: cm(m.top), bottom: cm(m.bottom), left: cm(m.left), right: cm(m.right) },
+    },
+    type: { ...base.type, font: "Times New Roman", size: t.sizePt * 2, line: Math.round(240 * t.line), justify: false, firstLine: 0, after: 120 },
+    heading: { align: "left", upper: false, rule: false, color: "000000" },
+    titlePage: "none",
+    // Jadval o'z bo'limida (`drawTeacher` uni o'zi chizadi) — bayroq
+    // umumiy yo'lga tushib qolmasin uchun aniq yoziladi.
+    tablePlacement: "anchored",
+    tableSize: t.tableSizePt * 2,
+  };
+}
+
+/**
  * Janr uchun profil. Yagona joy — renderer boshqa hech qayerda
  * `toolId` ni so'ramaydi.
  */
 export function profileFor(meta: DocMeta): DocProfile {
+  /*
+   * O'qituvchi oilasi (5 vosita) — BIRINCHI shox: `lesson-plan`,
+   * `texnologik-xarita`, `glossary` uchun eski `case` lar quyida
+   * QOLMAYDI, aks holda ikkita javob bo'lardi.
+   */
+  const teacherKind = teacherKindOf(meta.toolId);
+  if (teacherKind) return teacherProfile(teacherKind);
   switch (meta.toolId) {
     case "resume":
       return PROFILES.resume;
@@ -422,12 +478,6 @@ export function profileFor(meta: DocMeta): DocProfile {
        * «bu vositalar qaysi profilga tegishli» degan savol kodda ko'rinsin.
        */
       return PROFILES.gost;
-    case "texnologik-xarita":
-      return PROFILES.landscape;
-    case "lesson-plan":
-      return PROFILES.lesson;
-    case "glossary":
-      return PROFILES.reference;
     case "translation":
       return PROFILES.translation;
     default:

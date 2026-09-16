@@ -26,7 +26,8 @@ import {
 import { ESSAY_DESIGNS } from "../languages";
 import { planArticle, type ArticlePlan, type HeadItem, type BodyItem } from "./article/layout";
 import { planWork, type WorkBodyItem, type WorkPlan } from "./work/layout";
-import { articleProfile, CM, contentWidth, profileFor, resumeProfile, workProfile, type DocProfile } from "./docx-profile";
+import { isTeacherDoc, planTeacher, type TeacherPlan } from "./teacher/layout";
+import { articleProfile, CM, contentWidth, profileFor, resumeProfile, teacherProfile, workProfile, type DocProfile } from "./docx-profile";
 import { docLabels } from "./i18n";
 import { omml } from "./omml";
 import { cleanText } from "./quality";
@@ -815,6 +816,301 @@ async function drawWork(plan: WorkPlan, doc: AcademicDoc, K: Kit, P: DocProfile,
   return out;
 }
 
+/* ────────────────────────── O'qituvchi vositalari 2 (AUDIT-20) ────────────────────────── */
+
+/**
+ * Dars ishlanmasi / texnologik xarita / glossariy / keys / test tanasi —
+ * FAQAT `planTeacher` rejasini chizadi («ko'rdim = oldim»).
+ *
+ * Joylashuv qoidalari (`docs/research/*.md` §1/§3):
+ *   • TITUL BETI YO'Q — birinchi betning o'zida rasmiy SHAPKA:
+ *     «Tasdiqlayman» bloki O'NG YUQORIDA, ostida muassasa va hujjat
+ *     nomi markazda, keyin «Fan: …», «Sinf: …», «Tuzuvchi: …» qatorlari;
+ *   • bo'lim sarlavhasi CHAPDA, qalin, BOSH HARFSIZ (`teacherProfile`);
+ *   • JADVAL: raqami («1-jadval») tepa o'ngda, nomi ostida markazda;
+ *   • test: har variant, javoblar kaliti va OMR varag'i YANGI BETDAN;
+ *   • kalit ustida qizil emas, QALIN ogohlantirish («O'QITUVCHI UCHUN»)
+ *     — DOCX da rang bosma nusxada yo'qoladi, qalinlik esa qoladi.
+ */
+async function drawTeacher(plan: TeacherPlan, K: Kit, P: DocProfile, opts: ResumeDocxOpts): Promise<Array<Paragraph | Table>> {
+  const out: Array<Paragraph | Table> = [];
+  const { line, font, size } = P.type;
+  const small = plan.page.smallPt * 2;
+  const W = K.CONTENT_W;
+
+  /** «Yorliq: qiymat» — yorliq QALIN, qiymat oddiy (bitta paragrafda). */
+  const kvP = (label: string, text: string, extra: { indent?: boolean } = {}): Paragraph =>
+    new Paragraph({
+      alignment: AlignmentType.LEFT,
+      spacing: { after: 60, line, lineRule: LineRuleType.AUTO },
+      ...(extra.indent ? { indent: { left: Math.round(0.5 * CM) } } : {}),
+      children: [K.run(label, { bold: true }), new TextRun({ text: " ", font, size }), K.run(text)],
+    });
+
+  /* ── shapka ── */
+  for (const h of plan.head) {
+    switch (h.k) {
+      case "approve":
+        /*
+         * O'NG YUQORIDA: har qator o'ng chekkaga tekislanadi. Jadval
+         * ichiga solinmaydi — LibreOffice ramkasiz jadvalni ham PDF da
+         * chegara chizig'i bilan ko'rsatib yuborardi (AUDIT-13 ko'zi).
+         */
+        for (const l of h.lines) {
+          out.push(
+            new Paragraph({
+              alignment: AlignmentType.RIGHT,
+              keepNext: true,
+              spacing: { after: 0, line, lineRule: LineRuleType.AUTO },
+              children: [K.run(l)],
+            }),
+          );
+        }
+        out.push(new Paragraph({ spacing: { after: 120, line: 240, lineRule: LineRuleType.AUTO }, children: [] }));
+        break;
+      case "org":
+        out.push(
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            keepNext: true,
+            spacing: { after: 80, line, lineRule: LineRuleType.AUTO },
+            children: [K.run(h.text, { bold: true })],
+          }),
+        );
+        break;
+      case "title":
+        out.push(
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            keepNext: true,
+            spacing: { before: 80, after: 40, line, lineRule: LineRuleType.AUTO },
+            children: [K.run(h.text, { bold: true, size: size + 4 })],
+          }),
+        );
+        break;
+      case "subtitle":
+        out.push(
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            keepNext: true,
+            spacing: { after: 160, line, lineRule: LineRuleType.AUTO },
+            children: [K.run(h.text, { italics: true })],
+          }),
+        );
+        break;
+      case "field":
+        out.push(kvP(`${h.label}:`, h.text));
+        break;
+      case "line":
+        /*
+         * Har bo'lak ALOHIDA run: `cleanText` bitta matndagi ikkita
+         * tagchiziq guruhini markdown `__qalin__` deb o'qib, ikkalasidan
+         * ham ikkitadan belgini yeb qo'yardi (bosma varaqda chiziqlar
+         * qisqarardi). Bo'laklar orasidagi bo'shliq ham alohida run —
+         * `cleanText` uni `trim` qilib tashlamasin.
+         */
+        out.push(
+          new Paragraph({
+            alignment: AlignmentType.LEFT,
+            spacing: { before: 120, after: 160, line, lineRule: LineRuleType.AUTO },
+            children: h.parts.flatMap((part, i) => (i ? [new TextRun({ text: "  ", font, size }), K.run(part)] : [K.run(part)])),
+          }),
+        );
+        break;
+    }
+  }
+
+  /*
+   * `drawn` — birinchi chizilgan banddan keyingina sahifa uzilishi
+   * qo'yiladi: shapka tugagan joyda uzilish bo'lsa birinchi bet BO'SH
+   * qolardi (`drawWork` dagi bilan bir xil qoida).
+   */
+  let drawn = out.length > 0;
+
+  for (const b of plan.body) {
+    switch (b.k) {
+      case "h1": {
+        const pageBreakBefore = b.pageBreak && drawn;
+        drawn = true;
+        out.push(
+          new Paragraph({
+            heading: HeadingLevel.HEADING_1,
+            alignment: P.heading.align === "center" ? AlignmentType.CENTER : AlignmentType.LEFT,
+            keepNext: true,
+            ...(pageBreakBefore ? { pageBreakBefore: true } : {}),
+            spacing: { before: 240, after: 120, line, lineRule: LineRuleType.AUTO },
+            children: [K.run(b.text, { bold: true, ...(P.heading.color ? { color: P.heading.color } : {}) })],
+          }),
+        );
+        break;
+      }
+      case "h2":
+        drawn = true;
+        out.push(
+          new Paragraph({
+            heading: HeadingLevel.HEADING_2,
+            alignment: AlignmentType.LEFT,
+            keepNext: true,
+            spacing: { before: 160, after: 80, line, lineRule: LineRuleType.AUTO },
+            children: [K.run(b.text, { bold: true, ...(P.heading.color ? { color: P.heading.color } : {}) })],
+          }),
+        );
+        break;
+      case "h3":
+        drawn = true;
+        out.push(
+          new Paragraph({
+            alignment: AlignmentType.LEFT,
+            keepNext: true,
+            spacing: { before: 120, after: 60, line, lineRule: LineRuleType.AUTO },
+            children: [K.run(b.text, { bold: true })],
+          }),
+        );
+        break;
+      case "p":
+        drawn = true;
+        out.push(
+          new Paragraph({
+            alignment: AlignmentType.LEFT,
+            spacing: { after: P.type.after, line, lineRule: LineRuleType.AUTO },
+            children: [K.run(b.text)],
+          }),
+        );
+        break;
+      case "kv":
+        drawn = true;
+        out.push(kvP(b.label, b.text, { indent: true }));
+        break;
+      case "opt":
+        drawn = true;
+        /*
+         * Javob varianti — RO'YXAT BELGISIZ: `A)` harfi matnning o'zida.
+         * `w:numPr` bullet qo'yilsa Word «• A) …» chizardi, ya'ni ikkita
+         * marker bo'lardi va javob varag'idagi harf bilan chalkashardi.
+         */
+        out.push(
+          new Paragraph({
+            alignment: AlignmentType.LEFT,
+            spacing: { after: 20, line, lineRule: LineRuleType.AUTO },
+            indent: { left: Math.round(0.8 * CM) },
+            children: [K.run(`${b.letter}) ${b.text}`)],
+          }),
+        );
+        break;
+      case "li":
+        drawn = true;
+        out.push(new Paragraph({ bullet: { level: 0 }, spacing: { after: 60, line, lineRule: LineRuleType.AUTO }, children: [K.run(b.text)] }));
+        break;
+      case "quote":
+        drawn = true;
+        out.push(new Paragraph({ indent: { left: CM }, spacing: { after: 160, line, lineRule: LineRuleType.AUTO }, children: [K.run(b.text, { italics: true })] }));
+        break;
+      case "code":
+        drawn = true;
+        out.push(...K.blockToParagraphs({ kind: "code", text: b.text, ...(b.caption ? { caption: b.caption } : {}) }));
+        break;
+      case "note":
+        drawn = true;
+        out.push(
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            keepNext: true,
+            spacing: { before: 80, after: 120, line, lineRule: LineRuleType.AUTO },
+            children: [K.run(b.text, { bold: true })],
+          }),
+        );
+        break;
+      case "lines":
+        drawn = true;
+        /*
+         * Ochiq savol javobi — pastki chegarali BO'SH paragraflar.
+         * Nuqtali chiziq («………») matn tuguni bo'lib qolardi va
+         * ko'ruvchi bilan paritetni shovqin bilan to'ldirardi.
+         */
+        for (let i = 0; i < b.count; i++) {
+          out.push(
+            new Paragraph({
+              spacing: { after: 80, line: 240, lineRule: LineRuleType.AUTO },
+              border: { bottom: { style: BorderStyle.SINGLE, size: 4, space: 2, color: "999999" } },
+              children: [],
+            }),
+          );
+        }
+        break;
+      case "table": {
+        drawn = true;
+        // Raqam TEPA O'NGDA — alohida qator, jadval bilan birga.
+        out.push(
+          new Paragraph({
+            alignment: AlignmentType.RIGHT,
+            keepNext: true,
+            spacing: { before: 160, after: 40, line, lineRule: LineRuleType.AUTO },
+            children: [K.run(b.numberLine)],
+          }),
+        );
+        if (b.caption) {
+          out.push(
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              keepNext: true,
+              spacing: { after: 80, line, lineRule: LineRuleType.AUTO },
+              children: [K.run(b.caption, { bold: true })],
+            }),
+          );
+        }
+        const t = b.table;
+        out.push(K.tableOf(t.headers, t.rows, t.widths ?? columnPercents(t.headers) ?? undefined));
+        out.push(new Paragraph({ spacing: { after: 120, line: 240, lineRule: LineRuleType.AUTO }, children: [] }));
+        break;
+      }
+      case "figure": {
+        drawn = true;
+        const img = await figureBytes(b.figure?.url, opts);
+        if (img && b.figure) {
+          const maxW = Math.min(Math.floor(W / 15), Math.floor((170 / 25.4) * 96));
+          const ratio = b.figure.h && b.figure.w ? b.figure.h / b.figure.w : 1.3;
+          let width = maxW;
+          let height = Math.round(width * ratio);
+          const maxH = Math.floor((210 / 25.4) * 96);
+          if (height > maxH) {
+            height = maxH;
+            width = Math.round(height / ratio);
+          }
+          out.push(
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              keepNext: true,
+              // `lineRule: auto` SHART — usiz LibreOffice rasmni bitta matn qatoriga siqadi.
+              spacing: { before: 120, after: 80, line: 240, lineRule: LineRuleType.AUTO },
+              children: [new ImageRun({ type: img.type, data: img.data, transformation: { width, height } })],
+            }),
+          );
+        } else {
+          const border = { style: BorderStyle.SINGLE, size: 6, color: "999999", space: 8 };
+          out.push(
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              keepNext: true,
+              border: { top: border, bottom: border, left: border, right: border },
+              spacing: { before: 120, after: 80, line, lineRule: LineRuleType.AUTO },
+              children: [K.run(b.placeholder, { italics: true, color: "666666" })],
+            }),
+          );
+        }
+        out.push(
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 200, line, lineRule: LineRuleType.AUTO },
+            children: [K.run(b.caption, { size: small })],
+          }),
+        );
+        break;
+      }
+    }
+  }
+  return out;
+}
+
 /**
  * `opts.resolveImage` — tahrirdan keyingi QAYTA render uchun (B-1).
  *
@@ -845,13 +1141,25 @@ export async function renderDocx(doc: AcademicDoc, opts: ResumeDocxOpts = {}): P
    * quyidagi umumiy yo'l (titul, mundarija, jadval oxirida) o'zgarishsiz.
    */
   const work = !article && doc.work ? planWork(doc) : null;
+  /*
+   * O'qituvchi vositalari 2 (AUDIT-20 WP-C): beshala vosita — dars
+   * ishlanmasi, texnologik xarita, glossariy, keys, test — `planTeacher`
+   * dan. ESKI hujjat (`doc.teacher` yo'q) ham SHU yo'ldan: 4 eski
+   * ko'ruvchi o'chirilgani uchun sayt uni yangi maketda ko'rsatadi,
+   * ya'ni fayl ham shu maketda chiqishi kerak («ko'rdim = oldim»);
+   * modelni `legacyTeacherModel` beradi va tuzilma bo'sh bo'lgani uchun
+   * hujjatning MAZMUNI o'zgarmaydi.
+   */
+  const teacher = !article && !work && isTeacherDoc(doc) ? planTeacher(doc) : null;
   const P = resume
     ? resumeProfile(resume.template)
     : article
       ? articleProfile(article.profile.id, { headingAlign: article.headingAlign })
       : work
         ? workProfile(work.model.subject)
-        : base;
+        : teacher
+          ? teacherProfile(teacher.kind)
+          : base;
   const K = makeKit(P);
   const L = docLabels(meta.language);
   const children: Array<Paragraph | Table> = [];
@@ -923,6 +1231,9 @@ export async function renderDocx(doc: AcademicDoc, opts: ResumeDocxOpts = {}): P
   } else if (work) {
     // Titul yuqorida chizildi; mundarija, tana, adabiyotlar va ilovalar — rejadan.
     children.push(...(await drawWork(work, doc, K, P, opts)));
+  } else if (teacher) {
+    // Titul beti YO'Q (`teacherProfile.titlePage === "none"`) — shapka rejaning o'zida.
+    children.push(...(await drawTeacher(teacher, K, P, opts)));
   } else {
     if (doc.toc) {
       children.push(K.heading(L.toc, HeadingLevel.HEADING_1));
