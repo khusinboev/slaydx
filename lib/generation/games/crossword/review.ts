@@ -65,7 +65,8 @@ import { CROSSWORD_LIMITS } from "./input";
  * — shu sababli ro'yxat R0 tartibini SAQLAB, qo'shimchalarni oxiriga
  * qo'yadi va `GAME_RULE_IDS` bilan mosligi testda qulflanadi.
  */
-export const CROSSWORD_EXTRA_RULE_IDS = ["clueNotContainsAnswer", "gridConnected"] as const;
+// AUDIT-21 R: ikkala qo'shimcha qoida reyestrga ko'chirildi (`GAME_RULE_IDS.crossword`) — ro'yxat bo'sh, nom moslik uchun qoladi.
+export const CROSSWORD_EXTRA_RULE_IDS = [] as const;
 
 export const CROSSWORD_RULE_IDS = [...GAME_RULE_IDS.crossword, ...CROSSWORD_EXTRA_RULE_IDS] as const;
 export type CrosswordRuleId = (typeof CROSSWORD_RULE_IDS)[number];

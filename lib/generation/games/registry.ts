@@ -295,7 +295,7 @@ export const GAME_TYPES: { [K in GameKind]: readonly SpecByKind[K][] } = {
  * to'r ko'rsatardi.
  */
 export const GAME_RULE_IDS: Record<GameKind, readonly string[]> = {
-  crossword: ["wordCount", "gridSize", "minCrossings", "wordLength", "clueLength", "uniqueWords", "answerSheet", "gridMatchesWords"],
+  crossword: ["wordCount", "gridSize", "minCrossings", "wordLength", "clueLength", "uniqueWords", "answerSheet", "gridMatchesWords", "clueNotContainsAnswer", "gridConnected"],
   flashcards: ["cardCount", "frontLength", "backLength", "noDuplicate", "examplePresence", "cardTypeMatch"],
 };
 
