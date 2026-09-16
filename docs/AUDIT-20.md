@@ -407,3 +407,116 @@ avvalgidek «sarlavha + bloklar + langarlangan jadval» bo'lib chiqadi.
 5. **`teacher/lesson.ts` da metod yorlig'i** — bosqich metodikasi
    «Bosqich: Suhbat» bo'lib chiqadi (`L.stage` = «Bosqich»). Ko'z
    tekshiruvida noto'g'ri o'qiladi; yorliq WP-A egaligida.
+### WP-E — forma (`TeacherComposer` + `CurriculumPicker`), 2026-09-16
+
+**Holat:** bajarildi (unit/jsdom/SSR sathida; jonli sinov va ko'z R3
+raundida, WP-C maket kelgandan keyin — WP-A ochiq band 5 bilan bir xil).
+
+**Fayllar:** `components/forms/TeacherComposer.tsx` (bitta forma, 5
+vosita — `lesson-plan`/`texnologik-xarita`/`glossary`/`keys`/`test`),
+`components/forms/CurriculumPicker.tsx` (fan → sinf → mavzular ≤5),
+`components/forms/ToolWorkspace.tsx` (`custom === "teacher"` dispatch
+qatori), `lib/api-client.ts` (`fetchCurriculumTopics`),
+`lib/generation/teacher-params.ts` (`translationLangs` probe tuzatildi
+— pastda), `tests/{teacher-params,client-boundary}.test.mts`,
+`tests/ui/teacher-composer.test.mts`, `tests/viewer/teacher-form.test.mts`.
+
+**Forma tuzilishi** (`WorkComposer` naqshi — kartalar, `useFormDraft`,
+`runGeneration`): Karta 1 «Mavzu va rejim» — `topic` (test kindda
+rejim `topic` bo'lmasa yashirin), test uchun `mode` segmentli plitkalar
+(mavzu/fayl/darslik dasturi) + shartli `SourceFileField`/
+`CurriculumPicker`; lesson/map uchun ixtiyoriy `CurriculumPicker`
+doim ko'rinadi (alohida yoqish tugmasisiz — fan tanlanmasa `subjectId`/
+`topicIds` bo'sh yuboriladi). Karta 2 «Fan, sinf, til» — `subject`
+(mapda `topic` o'zgarganda avtomatik ko'chiriladi, `subjectTouched`
+bilan qo'lda bekor qilinadi — «Xarita: topic = fan nomi, ikkalasi
+yuboriladi»), `grade`, shartli `gradeLetter` (lesson/test),
+`language`, «Tur» segmentli tile (`teacherTypesOf(kind)`, hint bilan,
+`data-field` kindga xos nom — `lessonType`/`mapType`/`glossaryType`/
+`keysType`/`testType`), keyin kind-ga xos sozlamalar (dars rejasi:
+davomiylik/bosqich/kompetensiya/baholash; xarita: haftalik-yillik soat
+(klient + server diapazon)/nazorat ustuni; glossariy: atama soni (narx
+chipi bilan)/misol/tarjima tillari (faqat `uch-tilli`); keys: keyslar
+soni/auditoriya; test: savol soni/ochiq savol/soni savol turlari
+(turga cheklangan)/qiyinlik/variantlar/OMR/javoblar kaliti/mezon
+jadvali (faqat BSB/ChSB)/vaqt). «Shapka» — `university`/`author`
+majburiy, shartli `approver`/`date`. «Qo'shimcha» — `extra`.
+
+**`uiFromValues` ↔ `toValues` yagona manba:** umumiy + lesson/map/
+glossary/keys qismi `teacherInputFromValues`/`encodeTeacherValues`
+(`teacher/input.ts`) orqali — `teacher/input.ts` o'zgartirilmadi
+(ownership: faqat nom nomuvofiqligida minimal tuzatish ruxsat edi,
+kerak bo'lmadi). **Ochiq topilma (muhim):** test vositasining o'ziga
+xos maydonlari — `mode`, `count`, `openCount`, `questionKinds`,
+`difficulty`, `variants`, `omr`, `answerKey`, `criteriaTable`,
+`timeMin` — `TeacherInput` tipida HALI YO'Q, chunki test dvigateli
+(WP-B, `teacher/test/**`) hali yozilmagan (`engine.ts` faqat lesson/
+map/glossary/keys ni biladi). Composer bu 10 maydonni **bevosita**
+`FormValues` orqali o'qiydi/yozadi (izohli, `TeacherComposer.tsx`
+boshida). `testType` va `topicIds`/`sourceText` esa ALLAQACHON ishlaydi
+— `teacherTypeIdOf`/`parseTeacherList` chaqiruvlari kind ga qaramay
+umumiy hisoblanadi. WP-B ulanganda bu 10 maydon `teacher/input.ts`ga
+ko'chishi va `teacher-params.test.mts`dagi `ENGINE_NOT_WIRED` ro'yxati
+bo'shashi kerak — reyestrdan O'CHIRILMAGAN, faqat belgilangan.
+
+**`CurriculumPicker`:** `lib/curriculum.ts curriculumIndex()` klient
+tomonida TO'G'RIDAN-TO'G'RI (statik `index.json`, tarmoqsiz) — alohida
+`?index=1` route KERAK EMASLIGI R0 dayoq hal qilingan (fayl o'zi
+izomorf yozilgan, WP-E buni tekshirdi va tasdiqladi). Mavzular
+`GET /api/curriculum?subject=&grade=` (yangi `fetchCurriculumTopics`
+helper, `lib/api-client.ts`). Faqat `hasCurriculum` fan/sinf ko'rinadi.
+
+**Topilgan va tuzatilgan nuqson:** `teacher-params.ts`dagi
+`translationLangs` probeA=`""`/probeB=`"ru,en"` juftligi
+`teacherInputFromValues` orqali BIR XIL natija berardi — bo'sh tanlov
+`uch-tilli` turida RUXSAT ETILGAN BARCHA tillarga (`["ru","en"]`)
+tushadi, probeB esa aynan shu ikkalasini so'raydi. Differensial zond
+buni RED holatda ushladi (`tests/teacher-params.test.mts`, mutatsiya
+bilan qayta tasdiqlangan); probeB `"ru"` ga tuzatildi.
+
+**Testlar:** `ui/teacher-composer` 16 (qamrov ×2, dispatch, tur
+almashish chegarasi, test rejim tilalari, `CurriculumPicker` mock
+fetch + topicIds, narx, shartli maydonlar ×2 mutatsiya bilan, savol
+soni chegara siqilishi, qoralama saqlash+tiklash, required, «Tozalash»,
+to'liq submit); `viewer/teacher-form` 5 (SSR qamrov, 5 standart tur,
+narx, profil prefill, dispatch predikati); `teacher-params` zond — R0
+dagi 3 + WP-E dagi 2 yangi (differensial `teacherInputFromValues`,
+ochiq topilma ro'yxati). **Mutatsiya 3/3 tasdiqlangan** (qizil →
+tuzatish/tiklash → yashil): (1) `translationLangs` probe juftligi —
+yuqorida; (2) `criteriaTable` ko'rinish sharti (`t.limits.criteriaTable`
+olib tashlansa `ui/teacher-composer` testi qizardi); (3) `omr`
+`data-field` olib tashlansa qamrov testi qizardi.
+
+**Regressiya (yashil):** `ui/work-composer` 30, `ui/article-composer`
+19, `viewer/{teacher,work,article}-form` 17, `pricing`+`client-boundary`
+35 (`teacher-params` bilan birga), to'liq `npm run test:viewer` 174 va
+`npm run test:ui` 225. `tsc --noEmit` va `eslint` toza.
+
+**Pre-existing, WP-E dan tashqari topilma:** to'liq `npm test` (1 828
+dan 1) da `tests/work-wiring.test.mts` — «write-llm: teacher shoxi
+`null` da eski `write-specials.ts` yo'liga TUSHADI» qizil chiqadi:
+`write-llm.ts` (WP-A, `4adcf31`) kod matni endi `if (built) return
+built.doc;` (bitta qator), test esa eski `if (built) {` blok shaklini
+kutadi. WP-E bu faylga tegmagan (`teacher/{engine,layout,edit}` va
+`write-llm.ts` — boshqa WP egaligida), lead/WP-A qaytishida tuzatilishi
+kerak.
+
+**WP-E dan qolgan ochiq bandlar:**
+
+1. Test dvigateli maydonlari (`mode`/`count`/`openCount`/
+   `questionKinds`/`difficulty`/`variants`/`omr`/`answerKey`/
+   `criteriaTable`/`timeMin`) — WP-B ulanganda `teacher/input.ts`ga
+   ko'chirilishi kerak (yuqorida batafsil).
+2. Jonli sinov (`npm run live`) va brauzer smoke (AUDIT-11 lesson) —
+   WP-C maketi va WP-B dvigateli kelgandan keyin, R3 raundida (WP-A
+   bilan bir xil sabab: hozir test/xarita/lesson dvigatelisiz yoki
+   makatsiz DOCX chiqmaydi).
+3. Karta joylashuvi lead tomonidan tasdiqlangan reja bilan bir-birga
+   ozgina farq qiladi: `subject` (fan nomi) topshiriqda Karta 3
+   (shapka) ostida ko'rsatilgan edi, WP-E uni Karta 2 «Fan, sinf, til»
+   ga qo'ydi (mantiqiy guruhlash — shapka faqat muassasa/tuzuvchi/
+   tasdiqlovchi/sana). Funksional farq yo'q, faqat joylashuv.
+4. «Bezak maydon» topilmadi — har 38 parametr kamida bitta jsdom yoki
+   SSR testda ko'rinadi va kind ga xos maydonlar shartli
+   ko'rinish/qiymat orqali tasdiqlangan (band 1 dagi 10 tasidan
+   tashqari, ular dvigatelsiz «bezak» emas — WP-B kutmoqda, izohli).

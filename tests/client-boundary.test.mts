@@ -61,6 +61,11 @@ const ENTRIES = [
   "components/forms/ArticleComposer.tsx",
   "components/forms/EssayComposer.tsx",
   "components/forms/ToolWorkspace.tsx",
+  // AUDIT-20 WP-E: `TeacherComposer` `lib/curriculum.ts` ni bevosita
+  // import qiladi (`CurriculumPicker` orqali) — server modulga zanjir
+  // sahifani SSR da 500 qilardi.
+  "components/forms/TeacherComposer.tsx",
+  "components/forms/CurriculumPicker.tsx",
 ];
 
 for (const e of ENTRIES) {

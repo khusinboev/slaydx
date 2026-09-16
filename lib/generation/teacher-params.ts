@@ -91,7 +91,15 @@ export const TEACHER_PARAMS: TeacherParam[] = [
   // YAGONA narxga ta'sir qiluvchi parametr (6 000/9 000/15 000) — `priceFor`.
   { id: "termCount", kinds: ["glossary"], encode: "number", probeA: 10, probeB: 40, impacts: ["structure", "prompt", "price", "review", "budget"] },
   { id: "includeExample", kinds: ["glossary"], encode: "boolean", probeA: false, probeB: true, impacts: ["prompt", "structure", "review"] },
-  { id: "translationLangs", kinds: ["glossary"], encode: "csv", probeA: "", probeB: "ru,en", probeWith: { glossaryType: "uch-tilli" }, impacts: ["structure", "prompt", "layout"] },
+  /*
+   * probeB QASDAN bitta til ("ru"): bo'sh tanlov (probeA) `teacher/
+   * input.ts`da RUXSAT ETILGAN BARCHA tillarga tushadi (`uch-tilli`
+   * turida ["ru","en"]) — probeB "ru,en" bo'lsa natija AYNI probeA
+   * bilan bir xil chiqib, zond «farqni o'lchay olmadi» deb qizarardi
+   * (WP-E da topilgan, `tests/teacher-params.test.mts` differensial
+   * test).
+   */
+  { id: "translationLangs", kinds: ["glossary"], encode: "csv", probeA: "", probeB: "ru", probeWith: { glossaryType: "uch-tilli" }, impacts: ["structure", "prompt", "layout"] },
 
   /* ── keys (R2 §3) ── */
   { id: "keysType", kinds: ["keys"], encode: "string", probeA: "muammoli", probeB: "rolli", impacts: ["structure", "prompt", "review"] },
