@@ -464,3 +464,4 @@ zondning «o'lik ta'sir yo'q» bandi qizarardi.
    ko'proq blok» ni xohlaydimi (masalan 8 → 12)?
 4. PDF o'rami (bir betlik DOCX) hali yo'q — reja bo'yicha «tadqiqotdan
    keyin»; hozir chiqish faqat PNG.
+- **R (lead) — birlashtiruv va jonli (1)**: R0 (`9e4a0cf`), WP-A (`96244bd`, qoidalar reyestrga `479f353`), WP-F (`a661dcb`), WP-C (`ac4f91d`; `tests/infographic-params` — WP-C nusxasi olindi, `@tabler/icons` devDep o'rnatildi) main da. Jonli: **krossvord** ✔ (10/10 so'z, 15×14, 9 kesishma, 3 bet, 8,8 s, 2 chaqiruv), **infografika** ✔ (PNG 348 KB 2480×3507, 5 blok, 6,8 s, 1 chaqiruv) — ko'z: shapka tasmasi, raqamli zanjir, ikonli kartalar, o'zbekcha matn to'g'ri. Eslatma: Anthropic kaliti hamma joyda tugagan (`credit balance too low`) → baholovchi Gemini flash (100 ball). OMR composer testi (AUDIT-20 qoldig'i) tuzatildi (`e77ea93`).
