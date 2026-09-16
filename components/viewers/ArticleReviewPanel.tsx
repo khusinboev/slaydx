@@ -34,6 +34,14 @@ export const REVIEW_GROUPS: { id: ReviewGroupId; label: string; checks: readonly
   { id: "ai", label: "AI izi", checks: ["unsourcedNumbers", "userFacts", "filler", "repetition"] },
 ];
 
+/**
+ * Inshoda (AUDIT-19) chizilmaydigan guruhlar: insho manbasiz va
+ * sxemasiz janr (`essay/registry.ts` `citations: "none"`), ya'ni bu
+ * guruhlarda BIRORTA ham tekshiruv bo'lmaydi. Ro'yxat shu yerda —
+ * `ResultView` uni panelga `hideGroups` bilan beradi.
+ */
+export const ESSAY_HIDDEN_GROUPS = ["sources", "visuals"] as const satisfies readonly ReviewGroupId[];
+
 /** Tekshiruv id si → guruh (`judge:*` — ilmiy mazmun; noma'lum → tuzilma). */
 export function reviewGroupOf(id: string): ReviewGroupId {
   if (id.startsWith("judge:")) return "science";
@@ -129,8 +137,26 @@ export function polishText(p: PolishLog): string {
   return `Avto-sayqal: ${p.before} → ${p.after} ball, ${p.applied.length} band tuzatildi${tail}`;
 }
 
-/** «Sizdan kutiladi» — forma qoralamasiga havola bilan. */
-const NEED_HREF: Record<UserNeed["id"], string> = { udk: "/uz/article#udk", authors: "/uz/article#authors", results: "/uz/article#userFacts" };
+/**
+ * «Sizdan kutiladi» — forma qoralamasiga havola bilan.
+ *
+ * `UserNeed.id` neytral qatlamda `string` (R0-A), ya'ni jadval TO'LIQ
+ * bo'lishi shart emas: noma'lum band havolasiz chiziladi (havola bezak
+ * emas — u ANIQ maydonga olib borishi kerak, taxminiy havola esa
+ * foydalanuvchini boshqa formaga tashlardi).
+ *
+ * Inshoda bandlar `essay/polish.ts essayUserNeeds` dan: `work`
+ * (adabiy tahlilda asar nomi), `epigraph`, `facts`.
+ */
+const NEED_HREF: Record<string, string> = {
+  udk: "/uz/article#udk",
+  authors: "/uz/article#authors",
+  results: "/uz/article#userFacts",
+  refs: "/uz/article#userRefs",
+  work: "/uz/essay#workTitle",
+  epigraph: "/uz/essay#epigraph",
+  facts: "/uz/essay#userFacts",
+};
 
 export function ArticleReviewPanel({
   review,
@@ -138,6 +164,7 @@ export function ArticleReviewPanel({
   fixing,
   onPolish,
   polishing,
+  hideGroups,
 }: {
   review: ArticleReview;
   onFix?: FixFn;
@@ -145,7 +172,15 @@ export function ArticleReviewPanel({
   /** «Hammasini tuzatish» — `POST …/polish` (AUDIT-18). Berilmasa tugma chizilmaydi. */
   onPolish?: () => void;
   polishing?: boolean;
+  /**
+   * Bu hujjat turida MA'NOSIZ guruhlar (AUDIT-19): inshoda «Manbalar» va
+   * «Vizuallar» — insho manbasiz va sxemasiz janr, ularning bandlari
+   * umuman hisoblanmaydi. Ilgari bunday guruh «Tekshiruv yo'q» deb
+   * bo'sh turardi va foydalanuvchi «manbalar tekshirilmadi» deb o'qirdi.
+   */
+  hideGroups?: readonly ReviewGroupId[];
 }) {
+  const groups = hideGroups?.length ? REVIEW_GROUPS.filter((g) => !hideGroups.includes(g.id)) : REVIEW_GROUPS;
   const byGroup = new Map<ReviewGroupId, ReviewCheck[]>(REVIEW_GROUPS.map((g) => [g.id, []]));
   for (const c of review.checks) byGroup.get(reviewGroupOf(c.id))!.push(c);
   const red = review.checks.filter((c) => c.level === "red").length;
@@ -193,16 +228,18 @@ export function ArticleReviewPanel({
               <li key={n.id} className="flex flex-wrap items-baseline gap-x-2" data-user-need={n.id}>
                 <span className="font-medium">{n.label}</span>
                 <span className="text-muted-foreground text-xs">{n.hint}</span>
-                <Link href={NEED_HREF[n.id]} className="text-xs underline">
-                  formaga
-                </Link>
+                {NEED_HREF[n.id] ? (
+                  <Link href={NEED_HREF[n.id]} className="text-xs underline">
+                    formaga
+                  </Link>
+                ) : null}
               </li>
             ))}
           </ul>
         </div>
       ) : null}
       <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        {REVIEW_GROUPS.map((g) => {
+        {groups.map((g) => {
           const items = byGroup.get(g.id) ?? [];
           return (
             <div key={g.id} className="rounded-lg border p-2" data-review-group={g.id}>

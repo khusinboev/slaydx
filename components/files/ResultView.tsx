@@ -13,7 +13,7 @@ import { TOOL_BY_ID } from "@/lib/tools";
 import { useConfirmClick } from "../overlays/useConfirmClick";
 import { EditActions, type EditActionsState } from "./EditActions";
 import { ArtifactViewer } from "../viewers/ArtifactViewer";
-import { ArticleReviewPanel } from "../viewers/ArticleReviewPanel";
+import { ArticleReviewPanel, ESSAY_HIDDEN_GROUPS } from "../viewers/ArticleReviewPanel";
 import { SlideViewer, asLiveView } from "../viewers/SlideViewer";
 import { liveDocOf, type LiveDeck } from "@/lib/generation/slide-progress";
 import { viewerKind } from "@/lib/viewers/kind";
@@ -242,6 +242,14 @@ export function ResultView({ id }: { id: string }) {
    */
   const flow = completed && gen.type === "translation";
 
+  /*
+   * Tayyorlik hisoboti — YAGONA o'qish nuqtasi: maqola/tezisda
+   * `doc.article.review`, inshoda `doc.essay.review` (AUDIT-19 WP-E1).
+   * Panel ikkalasida ham bir xil `DocReview` shaklini o'qiydi.
+   */
+  const isEssay = gen.type === "essay";
+  const review = gen.doc?.article?.review ?? gen.doc?.essay?.review;
+
   return (
     <div className={cn("flex h-full min-h-0 flex-1 flex-col", flow ? "overflow-y-auto" : "overflow-hidden")} data-result-flow={flow ? "1" : undefined}>
       <nav
@@ -392,19 +400,31 @@ export function ResultView({ id }: { id: string }) {
               {(gen.delivered.refundShare ?? 1) > 0 ? " — farq balansingizga qaytarildi." : "."}
             </p>
           ) : null}
-          {(gen.type === "article" || gen.type === "thesis") && gen.doc?.article?.review ? (
+          {review ? (
             /*
-             * Tayyorlik hisoboti (Maqola 2, WP5) — ko'ruvchi TEPASIDA,
-             * yig'iladigan `<details open>`: ko'ruvchi o'z ichki scroll'i
-             * bilan qoladi, panel esa `shrink-0` va o'z balandligi chegarasi
-             * bilan. «Tuzatish» — `onFix` → `POST …/rewrite` (WP7).
+             * Tayyorlik hisoboti (Maqola 2, WP5; insho — AUDIT-19 WP-E1)
+             * — ko'ruvchi TEPASIDA, yig'iladigan `<details open>`:
+             * ko'ruvchi o'z ichki scroll'i bilan qoladi, panel esa
+             * `shrink-0` va o'z balandligi chegarasi bilan.
+             *
+             * «Tuzatish» (`onFix` → `POST …/rewrite`) FAQAT maqola/tezisda:
+             * insho bitta bo'lim, uning har bandi butun matnga tegishli,
+             * shuning uchun bandma-band tuzatish «Hammasini tuzatish» ning
+             * baholovchisiz nusxasi bo'lardi (server ham 422 qaytaradi).
              */
             <details open className="no-print max-h-[45vh] shrink-0 overflow-y-auto border-b px-3 py-2 sm:px-4" data-article-review-panel>
               <summary className="cursor-pointer text-sm font-medium select-none">
-                Tayyorlik hisoboti · {gen.doc.article.review.score} ball
+                Tayyorlik hisoboti · {review.score} ball
               </summary>
               <div className="mt-2">
-                <ArticleReviewPanel review={gen.doc.article.review} onFix={(fix) => void onFix(fix)} fixing={fixing} onPolish={() => void onPolish()} polishing={polishing} />
+                <ArticleReviewPanel
+                  review={review}
+                  {...(isEssay ? {} : { onFix: (fix: NonNullable<ReviewCheck["fix"]>) => void onFix(fix) })}
+                  fixing={fixing}
+                  onPolish={() => void onPolish()}
+                  polishing={polishing}
+                  {...(isEssay ? { hideGroups: ESSAY_HIDDEN_GROUPS } : {})}
+                />
               </div>
             </details>
           ) : null}
