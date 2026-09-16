@@ -19,6 +19,7 @@
  */
 import type { FormValues } from "../../types";
 import { splitCsv, joinCsv } from "../slide-params";
+import { normalizeIsbn } from "../research/googlebooks";
 import {
   ARTICLE_LIMITS,
   CITE_STYLES,
@@ -37,11 +38,16 @@ import {
 import { ARTICLE_TYPES, normalizeArticleType } from "./types-registry";
 import { normalizePublicationProfile } from "./profiles";
 
-/** Foydalanuvchining o'z manbasi — DOI yoki erkin matn (yoki ikkalasi). */
+/** Foydalanuvchining o'z manbasi — DOI, ISBN yoki erkin matn (yoki bir nechtasi). */
 export type ArticleUserRef = {
   /** `u1`, `u2` … — matndagi iqtibos `[u1]` shu id bilan. */
   id: string;
   doi?: string;
+  /**
+   * Kitob ISBN i (AUDIT-19): Google Books orqali tasdiqlanadi
+   * (`verifyIsbn`) — kurs ishi/referat adabiyotining ko'pi kitob.
+   */
+  isbn?: string;
   /** Erkin matnli manba («Karimov A. Ta'limda AI. — Toshkent: Fan, 2022.»). */
   raw?: string;
   title?: string;
@@ -230,9 +236,12 @@ function userRefOf(row: Record<string, unknown>, i: number): ArticleUserRef | nu
   // DOI ni foydalanuvchi erkin matn ichida ham yozgan bo'lishi mumkin.
   const doiInRaw = !doi && raw ? normalizeDoi(raw.match(/10\.\d{4,9}\/\S+/)?.[0]) : "";
   const finalDoi = doi || doiInRaw;
-  if (!finalDoi && !raw && !title) return null;
+  // ISBN alohida maydonda yoki erkin matn ichida («… ISBN 978-9943-…»).
+  const isbn = normalizeIsbn(row.isbn ?? row.ISBN) || (raw ? normalizeIsbn(raw.match(/ISBN[:\s]*([\d\s‐-―-]{10,20}[\dXx])/i)?.[1]) : "");
+  if (!finalDoi && !isbn && !raw && !title) return null;
   const r: ArticleUserRef = { id: `u${i + 1}` };
   if (finalDoi) r.doi = finalDoi;
+  if (isbn) r.isbn = isbn;
   if (raw) r.raw = raw;
   if (title) r.title = title;
   const authors = Array.isArray(row.authors)
