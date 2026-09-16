@@ -507,9 +507,31 @@ export function planTeacher(doc: AcademicDoc): TeacherPlan {
     });
   };
 
-  const pushBlocks = (blocks: Block[], path: string) => {
+  /**
+   * SHAPKADA allaqachon turgan «Fan: … Sinf: … Davomiyligi: …» takrori.
+   *
+   * Dvigatel (`teacher/lesson.ts`, `teacher/map.ts`) pasport bo'limining
+   * birinchi paragrafiga shu maydonlarni QAYTA yozadi — eski shaklda
+   * shapka yo'q edi va u yagona joy edi. Yangi maketda ular birinchi
+   * betning shapkasida turadi, ya'ni pasportdagi qatori aynan takror.
+   * Ko'z tekshiruvida bu darhol ko'rindi.
+   *
+   * Tekshiruv QAT'IY: paragraf FAQAT shapkada bor «Yorliq: qiymat»
+   * juftlaridan iborat bo'lsagina TASHLANADI. Bitta qo'shimcha fakt
+   * bo'lsa («Haftalar: 12» — shapkada yo'q) paragraf butunligicha
+   * qoladi: matn hech qachon QAYTA YOZILMAYDI, chunki tahrir yo'li
+   * (`sections.<i>.blocks.<j>`) saqlangan matnga tayanadi.
+   */
+  const headPairs = new Set(head.filter((h) => h.k === "field").map((h) => (h.k === "field" ? `${h.label}: ${h.text}` : "")));
+  const isHeadRecap = (text: string): boolean => {
+    const parts = clean(text).replace(/\.$/, "").split(/\.\s+/).filter(Boolean);
+    return parts.length > 0 && parts.every((x) => headPairs.has(x));
+  };
+
+  const pushBlocks = (blocks: Block[], path: string, opts: { dropHeadRecap?: boolean } = {}) => {
     blocks.forEach((b, i) => {
       const p = `${path}.blocks.${i}`;
+      if (opts.dropHeadRecap && b.kind === "p" && isHeadRecap(b.text)) return;
       switch (b.kind) {
         case "h1":
         case "h2":
@@ -646,10 +668,18 @@ export function planTeacher(doc: AcademicDoc): TeacherPlan {
   const pushKeyTables = (t: TestModel) => {
     body.push({ k: "note", text: L.teacherOnly, path: "teacher.test.key" });
     const ids = t.variants.map((v) => v.id);
+    /*
+     * Ustun kengliklari ANIQ beriladi: `columnPercents` 6 ustunli bu
+     * jadvalni tanimaydi va teng taqsimlab qo'yardi — ko'z tekshiruvida
+     * «Variant A» sarlavhasi ikki qatorga sinib («Varia / nt A»),
+     * «Bloom» ustuni esa yarim bo'sh turardi.
+     */
+    const perVariant = Math.floor(34 / Math.max(1, ids.length));
     pushTable(
       {
         id: "key",
         headers: [L.keyCols.n, ...ids.map((id) => `${L.variant} ${id}`), L.keyCols.points, L.keyCols.bloom, L.keyCols.difficulty],
+        widths: [7, ...ids.map(() => perVariant), 10, 26, 23 + (34 - perVariant * ids.length)],
         rows: t.questions.map((q, i) => [String(i + 1), ...ids.map((id) => t.key[id]?.[i] ?? "—"), String(q.points ?? 1), q.bloom, q.difficulty]),
       },
       "teacher.test.key",
@@ -800,9 +830,17 @@ export function planTeacher(doc: AcademicDoc): TeacherPlan {
 
   /* ── bo'limlar (hujjat tartibida) ── */
 
-  /** Bo'lim sarlavhasi: dvigatel yozgani ustun, bo'sh bo'lsa yorliqdan. */
+  /**
+   * Bo'lim sarlavhasi: dvigatel yozgani ustun, bo'sh bo'lsa yorliqdan.
+   *
+   * Old RAQAM olib tashlanadi. `i18n.ts` dagi `subjectPassport`
+   * «1. Fan pasporti» — raqam eski (bo'limlari qo'lda raqamlangan)
+   * xarita shaklidan qolgan va dvigatel uni sarlavha sifatida yozadi.
+   * Yangi maketda bo'limlar raqamlanmaydi: ko'z tekshiruvida birinchi
+   * sarlavha «1.» bilan, qolganlari raqamsiz chiqqan edi.
+   */
   const headingOf = (s: DocSection): string => {
-    const own = clean(s.title);
+    const own = clean(s.title).replace(/^\d+\.\s+/, "");
     if (own) return own;
     const q = quarterIndexOf(s.id);
     if (kind === "map" && q !== null) return L.quarter(q);
@@ -856,7 +894,8 @@ export function planTeacher(doc: AcademicDoc): TeacherPlan {
       if (breaksAt(s.id)) pageBreaks.push(s.id);
       body.push({ k: "h1", text: heading, sectionId: s.id, path: `${path}.title`, pageBreak: breaksAt(s.id) });
     }
-    pushBlocks(s.blocks, path);
+    // Pasport bo'limi shapkani TAKRORLAMAYDI (yuqoridagi `isHeadRecap`).
+    pushBlocks(s.blocks, path, { dropHeadRecap: s.id === "passport" });
     const own = anchored.get(s.id) ?? [];
     for (const t of own) {
       if (drawn.has(t)) continue;

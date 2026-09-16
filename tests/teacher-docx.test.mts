@@ -223,6 +223,42 @@ test("test: javob varianti RO'YXAT BELGISIZ, harf matnning o'zida; kalit ustidag
   assert.ok(!t.some((x) => /^[.…]{4,}$/.test(x)), "javob chizig'i matn tuguni sifatida chizildi");
 });
 
+test("ochiq savol javobi: HAR chiziq alohida jadval qatori (paragraf chegaralari birlashib ketmasin)", async () => {
+  /*
+   * KO'Z TEKSHIRUVI topgan nuqson: pastki chegarali ketma-ket bo'sh
+   * paragraflarni LibreOffice bitta blokka birlashtirib, chiziqni faqat
+   * OXIRIDA chizardi — to'rt chiziq o'rniga bitta, ustida katta bo'sh
+   * joy. Jadval qatorlari birlashmaydi.
+   */
+  const { xml } = await xmlOf(sampleTeacherDoc("test"));
+  const open = xml.indexOf("Javobingizni asoslang.");
+  assert.ok(open > 0, "ochiq savol topilmadi");
+  const after = xml.slice(open, open + 6000);
+  const tbl = after.indexOf("<w:tbl>");
+  assert.ok(tbl >= 0 && tbl < after.indexOf("Variant B"), "javob chiziqlari jadval bilan chizilmadi");
+  const block = after.slice(tbl, after.indexOf("</w:tbl>", tbl));
+  assert.equal((block.match(/<w:tr>/g) ?? []).length, 4, "to'rtta javob chizig'i kutilgan");
+  assert.ok(!/<w:t[ >]/.test(block), "javob chizig'i MATN tuguni qo'shdi (paritetga shovqin)");
+});
+
+test("kalit jadvali ustunlari ANIQ kenglikda — «Variant A» sarlavhasi sinmaydi", async () => {
+  const { xml } = await xmlOf(sampleTeacherDoc("test"));
+  // «Variant A» matni IKKI joyda: variant bo'limi sarlavhasida va kalit
+  // jadvali ustunida — kerakligi ogohlantirishdan KEYINGISI.
+  const after = posOf(xml, "O‘QITUVCHI UCHUN — o‘quvchiga tarqatilmaydi");
+  const at = xml.indexOf(">Variant A<", after);
+  assert.ok(at > 0, "kalit jadvalida variant ustuni yo'q");
+  // Sarlavhadan OLDINGI eng yaqin `tblGrid` — aynan kalit jadvaliniki.
+  const from = xml.lastIndexOf("<w:tblGrid>", at);
+  assert.ok(from >= 0, "kalit jadvalining `tblGrid` i yo'q");
+  const grid = xml.slice(from, xml.indexOf("</w:tblGrid>", from));
+  const cols = [...grid.matchAll(/w:w="(\d+)"/g)].map((m) => Number(m[1]));
+  assert.equal(cols.length, 6);
+  // «№» eng tor, «Bloom» eng keng — teng taqsimotda sarlavha ikki qatorga sinardi.
+  assert.ok(cols[0] < cols[1], "«№» ustuni variant ustunidan keng qolib ketdi");
+  assert.ok(cols[4] > cols[1], "«Bloom» ustuni variant ustunidan tor");
+});
+
 /* ══════════════════════════ eski hujjat ══════════════════════════ */
 
 function legacyLessonDoc(): AcademicDoc {

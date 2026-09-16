@@ -1020,23 +1020,46 @@ async function drawTeacher(plan: TeacherPlan, K: Kit, P: DocProfile, opts: Resum
           }),
         );
         break;
-      case "lines":
+      case "lines": {
         drawn = true;
         /*
-         * Ochiq savol javobi — pastki chegarali BO'SH paragraflar.
-         * Nuqtali chiziq («………») matn tuguni bo'lib qolardi va
-         * ko'ruvchi bilan paritetni shovqin bilan to'ldirardi.
+         * Ochiq savol javobi — chegarasiz JADVALning pastki chizig'i
+         * bo'lgan qatorlari.
+         *
+         * Nega paragraf emas: pastki chegarali ketma-ket BO'SH
+         * paragraflarni LibreOffice ham, Word ham BITTA blokka
+         * birlashtiradi va chiziqni faqat OXIRIDA chizadi — ko'z
+         * tekshiruvida aynan shu ko'rindi (to'rt chiziq o'rniga bitta,
+         * ustida katta bo'sh joy). Jadval qatorlari hech qachon
+         * birlashmaydi. Nuqtali chiziq («………») ham yaramaydi: u MATN
+         * tuguni bo'lib, ko'ruvchi bilan paritetga shovqin qo'shardi.
          */
-        for (let i = 0; i < b.count; i++) {
-          out.push(
-            new Paragraph({
-              spacing: { after: 80, line: 240, lineRule: LineRuleType.AUTO },
-              border: { bottom: { style: BorderStyle.SINGLE, size: 4, space: 2, color: "999999" } },
-              children: [],
-            }),
-          );
-        }
+        const none = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" };
+        const rule = { style: BorderStyle.SINGLE, size: 4, color: "999999" };
+        out.push(
+          new Table({
+            width: { size: W, type: WidthType.DXA },
+            columnWidths: [W],
+            layout: TableLayoutType.FIXED,
+            rows: Array.from(
+              { length: b.count },
+              () =>
+                new TableRow({
+                  children: [
+                    new TableCell({
+                      width: { size: W, type: WidthType.DXA },
+                      borders: { top: none, left: none, right: none, bottom: rule },
+                      margins: { top: 60, bottom: 60, left: 0, right: 0 },
+                      children: [new Paragraph({ spacing: { after: 0, line: 276, lineRule: LineRuleType.AUTO }, children: [] })],
+                    }),
+                  ],
+                }),
+            ),
+          }),
+        );
+        out.push(new Paragraph({ spacing: { after: 120, line: 240, lineRule: LineRuleType.AUTO }, children: [] }));
         break;
+      }
       case "table": {
         drawn = true;
         // Raqam TEPA O'NGDA — alohida qator, jadval bilan birga.

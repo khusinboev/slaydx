@@ -71,6 +71,26 @@ test("`teacherDateText` ISO sanani o'giradi, boshqa shaklni tegmaydi", () => {
   assert.equal(teacherDateText(undefined), "");
 });
 
+test("pasport bo'limi SHAPKANI takrorlamaydi; bo'lim sarlavhasidagi old raqam olinadi", () => {
+  /*
+   * KO'Z TEKSHIRUVI topgan ikki nuqson: (1) dvigatel pasportga «Fan: …
+   * Sinf: … Davomiyligi: …» ni qayta yozadi va u shapkadagi qatorlarni
+   * aynan takrorlardi; (2) `subjectPassport` yorlig'idagi eski «1.»
+   * raqami sarlavhada qolib, qolgan bo'limlar raqamsiz chiqardi.
+   */
+  const lesson = planTeacher(sampleTeacherDoc("lesson"));
+  const ps = texts(lesson.body, "p");
+  assert.ok(!ps.some((x) => /^Fan: Biologiya\. Sinf: 7-A\./.test(x)), `shapka takrori qoldi: ${ps[0]}`);
+  assert.ok(!ps.some((x) => x === "Mavzu: Fotosintez va uning bosqichlari"), "mavzu qatori ikki marta chizildi");
+
+  const map = planTeacher(sampleTeacherDoc("map"));
+  const heads = map.body.filter((b) => b.k === "h1").map((b) => (b.k === "h1" ? b.text : ""));
+  assert.ok(heads.includes("Fan pasporti"), `old raqam olib tashlanmadi: ${heads.join(" | ")}`);
+  // Xarita pasportida shapkada YO'Q fakt ham bor («Haftalar: 12») —
+  // paragraf butunligicha qoladi, matn qayta yozilmaydi.
+  assert.ok(texts(map.body, "p").some((x) => x.includes("Haftalar: 12")), "shapkada yo'q fakt yo'qoldi");
+});
+
 /* ══════════════════════════ dars ishlanmasi ══════════════════════════ */
 
 test("dars ishlanmasi: dvigatel nasri + VAQT JADVALI (maket takrorlamaydi)", () => {
