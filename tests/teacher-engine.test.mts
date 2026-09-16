@@ -2,7 +2,6 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { buildTeacherDoc } from "../lib/generation/teacher/engine.ts";
 import { TEACHER_LIMITS } from "../lib/generation/teacher/types.ts";
-import { weeksFor } from "../lib/generation/teacher/guard.ts";
 import { extractMeta } from "../lib/generation/meta.ts";
 import { writeWithLlm } from "../lib/generation/write-llm.ts";
 import { TOOL_BY_ID } from "../lib/tools.ts";
@@ -234,7 +233,9 @@ test("soat ustuni yig'indisi `totalHours` ga teng, hafta soni soatlardan", async
   const { built } = await build("texnologik-xarita", { mapType: "yillik", weeklyHours: 3, totalHours: 102, topic: "Fizika" });
   assert.ok(built);
   const weeks = built.doc.teacher!.map!.quarters.flatMap((q) => q.weeks);
-  assert.equal(weeks.length, weeksFor(3, 102));
+  // 102 / 3 = 34 — QO'LDA yozilgan: `weeksFor` ning o'zi bilan
+  // solishtirish testni tavtologiyaga aylantirardi (mutatsiya M2).
+  assert.equal(weeks.length, 34);
   assert.equal(weeks.reduce((a, w) => a + w.hours, 0), 102);
   assert.equal(built.doc.tables![0].rows.reduce((a, r) => a + Number(r[1]), 0), 102);
 });
@@ -270,7 +271,7 @@ test("choraklik xarita — 4 chorak, 4 jadval, q1..q4 bo'limlari", async () => {
   assert.equal(built.doc.teacher?.map?.quarters.length, 4);
   // Choraklarning haftalari yig'indisi umumiy hafta soniga teng.
   const weeks = built.doc.teacher!.map!.quarters.flatMap((q) => q.weeks);
-  assert.equal(weeks.length, weeksFor(2, 68));
+  assert.equal(weeks.length, 34, "68 / 2 = 34 hafta");
   assert.equal(weeks.reduce((a, w) => a + w.hours, 0), 68);
 });
 
@@ -343,7 +344,8 @@ test("glossariy 20 talik bo'laklarga bo'linadi", async () => {
 test("delivered: hafta / atama / keys soni", async () => {
   const map = await build("texnologik-xarita", { weeklyHours: 2, totalHours: 68, topic: "Biologiya" });
   assert.equal(map.built?.delivered?.unit, "hafta");
-  assert.equal(map.built?.delivered?.want, weeksFor(2, 68));
+  assert.equal(map.built?.delivered?.want, 34);
+  assert.equal(map.built?.delivered?.got, 34);
 
   const glossary = await build("glossary", { termCount: 20 });
   assert.deepEqual(glossary.built?.delivered, { got: 20, want: 20, unit: "atama" });
