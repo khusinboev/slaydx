@@ -1,5 +1,7 @@
 import { extractMeta } from "./meta";
 import { translationChars } from "../tools";
+import { teacherKindOf } from "./teacher/registry";
+import { TEACHER_LIMITS, type TeacherKind } from "./teacher/types";
 import type { FormValues, ToolConfig, ToolId } from "../types";
 
 /**
@@ -27,10 +29,6 @@ export const MIN_BUDGET_MS = 90_000;
 /** Bet soniga bog'liq bo'lmagan xizmatlar uchun qat'iy byudjet. */
 const FIXED: Partial<Record<ToolId, number>> = {
   image: 90_000,
-  glossary: 150_000,
-  keys: 150_000,
-  "lesson-plan": 120_000,
-  "texnologik-xarita": 150_000,
   /*
    * Rezyume 2: prompt kattalashdi (tuzilmali faktlar JSON, 18 til uchun
    * yorliqlar, boyitish qoidalari) va qisqa summary da BIR marta STRICT
@@ -118,6 +116,68 @@ export const WORK_BASE_MS = 150_000;
 export const WORK_PER_PAGE_MS = 9_000;
 export const WORK_POLISH_MS = 90_000;
 
+/**
+ * O'qituvchi hujjati byudjeti (AUDIT-20 R0).
+ *
+ * Bu oilada BET yo'q — hajm ELEMENT soni bilan o'lchanadi: dars
+ * bosqichi, hafta, atama, keys, savol. Shuning uchun `PER_PAGE_MS`
+ * formulasi ham, eski `FIXED` (120–150 s) ham yaramasdi:
+ *
+ *   34 haftalik texnologik xarita chorak bo'yicha 4 chaqiruvda (mapPool)
+ *   yoziladi va qayta urinishi bor — 150 s da uzilib qolardi (aynan shu
+ *   sabab AUDIT-20 rejasida «xaritada qayta urinish yo'q» deb yozilgan);
+ *
+ *   30 savolli test — savollar partiyasi + kalit + OMR + hisobot; 120 s
+ *   ga sig'maydi, lekin 30 savol 40 savoldan arzonroq bo'lishi kerak.
+ *
+ * Tayanch (`base`) — turdan qat'i nazar bo'ladigan ish: kirish, reja,
+ * hisobot va baholovchi. `per` — element boshiga (jonli o'lchovga qadar
+ * hisobdan: test 30 → ~200 s, xarita 34 hafta → ~240 s).
+ */
+const TEACHER_MS: Record<TeacherKind, { base: number; per: number }> = {
+  lesson: { base: 90_000, per: 3_000 },
+  map: { base: 120_000, per: 3_500 },
+  glossary: { base: 90_000, per: 1_500 },
+  keys: { base: 90_000, per: 12_000 },
+  test: { base: 90_000, per: 3_500 },
+};
+
+/** Hisobotdan keyingi avto-sayqal (`teacher/polish.ts`) ulushi. */
+export const TEACHER_POLISH_MS = 60_000;
+
+/**
+ * @param kind   Vosita oilasi (`teacherKindOf`).
+ * @param n      Element soni: bosqich / hafta / atama / keys / savol.
+ * @param polish Sayqal bosqichi ham hisobga olinsinmi (standart — ha,
+ *   chunki dvigatel uni O'ZI chaqiradi; `false` — WP-A/B ning «sayqalsiz»
+ *   o'lchovini tekshirish uchun).
+ */
+export function teacherBudgetMs(kind: TeacherKind, n: number, polish = true): number {
+  const { base, per } = TEACHER_MS[kind];
+  const count = Math.max(1, Math.round(Number.isFinite(n) ? n : 1));
+  return base + count * per + (polish ? TEACHER_POLISH_MS : 0);
+}
+
+/**
+ * Formadan element sonini o'qiydi — byudjet va dvigatel BITTA qoidadan.
+ * Noto'g'ri/bo'sh qiymat turning standartiga tushadi (forma ham shunday).
+ */
+function teacherSize(kind: TeacherKind, values: FormValues): number {
+  const num = (v: unknown, dflt: number) => {
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? n : dflt;
+  };
+  if (kind === "lesson") return num(values.stageCount, 6);
+  if (kind === "map") {
+    // Hafta soni — jami soat / haftalik soat (`mapWeeks` bilan bir xil klamp).
+    const weeks = Math.ceil(num(values.totalHours, 68) / num(values.weeklyHours, 2));
+    return Math.min(TEACHER_LIMITS.weeksMax, Math.max(TEACHER_LIMITS.weeksMin, weeks));
+  }
+  if (kind === "glossary") return Math.min(TEACHER_LIMITS.termsMax, num(values.termCount, 10));
+  if (kind === "keys") return Math.min(TEACHER_LIMITS.casesMax, num(values.caseCount, 5));
+  return Math.min(TEACHER_LIMITS.questionsMax, num(values.count, 20));
+}
+
 /** @param pages Paketning o'rtacha beti (`pagesMid("25-30")` → 28). */
 export function workBudgetMs(pages: number): number {
   const p = Math.max(1, Number.isFinite(pages) ? pages : 12);
@@ -132,6 +192,12 @@ export function workBudgetMs(pages: number): number {
 export function budgetFor(tool: ToolConfig, values: FormValues, cap: number): number {
   const fixed = FIXED[tool.id];
   let want = fixed;
+  // O'qituvchi oilasi — element soniga qarab (AUDIT-20 R0), `extractMeta`
+  // ning `targetPages` i emas: bu hujjatlarda «bet» tushunchasi yo'q.
+  const teacherKind = teacherKindOf(tool.id);
+  if (want === undefined && teacherKind) {
+    want = teacherBudgetMs(teacherKind, teacherSize(teacherKind, values));
+  }
   if (want === undefined && tool.id === "translation") {
     // Hajm `translationChars` dan — narx bilan BITTA manbadan, ya'ni
     // «pul olindi, lekin vaqt yetmadi» holati kelib chiqmaydi.

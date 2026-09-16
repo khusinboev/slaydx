@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { TOOLS } from "../lib/tools.ts";
 import { viewerKind } from "../lib/viewers/kind.ts";
 
@@ -32,4 +33,33 @@ test("maxsus (custom) vositalar umumiy Word ko'ruvchisiga tushmaydi", () => {
      */
     if (t.custom && t.custom !== "work") assert.notEqual(viewerKind(t.id), "academic", `${t.id}: custom vosita academic ko'ruvchida`);
   }
+});
+
+/**
+ * O'qituvchi vositalari 2 (AUDIT-20 R0): beshala vosita — dars rejasi,
+ * texnologik xarita, glossariy, keys va TEST — bitta `teacher`
+ * ko'ruvchisiga tushadi (rasmiy DOCX shakli, `planTeacher` — WP-C).
+ * Ilgari ularning har biri o'z ko'ruvchisida edi va brend-muqova
+ * chizardi, ya'ni sayt hech qachon fayl bilan bir xil emasdi.
+ */
+test("o'qituvchi guruhidagi HAR vosita `teacher` ko'ruvchisiga tushadi", () => {
+  const teacherTools = TOOLS.filter((t) => t.group === "oqituvchi");
+  assert.equal(teacherTools.length, 5, `o'qituvchi vositalari: ${teacherTools.map((t) => t.id).join(", ")}`);
+  for (const t of teacherTools) assert.equal(viewerKind(t.id), "teacher", `${t.id}: ko'ruvchi ${viewerKind(t.id)}`);
+  assert.equal(viewerKind("test"), "teacher", "yangi test vositasi unutildi");
+  // MUTATSIYA: eski qiymat (`lesson`/`table`/`glossary`/`keys`) qaytsa shu yerda ko'rinadi.
+  for (const old of ["lesson", "table", "glossary", "keys"]) {
+    assert.ok(!TOOLS.some((t) => viewerKind(t.id) === old), `eski ko'ruvchi «${old}» hali ham ishlatilyapti`);
+  }
+});
+
+test("`teacher` ko'ruvchisi `ArtifactViewer` da tahrir proplari bilan ulangan", () => {
+  /*
+   * Talaba ishlaridagi xato takrorlanmasin: ko'ruvchi proplarsiz
+   * ulangani uchun tahrir jimgina o'chiq qolgandi. `WordViewer` R0 da
+   * `doc.teacher` ni bilmaydi, lekin proplar allaqachon uzatiladi.
+   */
+  const src = readFileSync(new URL("../components/viewers/ArtifactViewer.tsx", import.meta.url), "utf8");
+  assert.match(src, /case "teacher":/);
+  assert.match(src, /case "teacher":[\s\S]{0,1200}?<WordViewer doc=\{doc\} gen=\{detail\} onGen=\{onDetail\} onEditState=\{onEditState\} \/>/);
 });

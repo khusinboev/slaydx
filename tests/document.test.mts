@@ -1206,16 +1206,25 @@ test("o'qituvchi hujjatlarida muassasa so'raladi va «Tuzuvchi» yoziladi", asyn
    *    komponentlarda, bu yerda model darajasi sinaladi).
    */
   const teacher = TOOLS.filter((t) => t.group === "oqituvchi");
-  assert.equal(teacher.length, 4, "o'qituvchi guruhida to'rt vosita");
+  // AUDIT-20 R0: guruhga TEST yaratuvchi qo'shildi (beshinchi vosita).
+  assert.equal(teacher.length, 5, "o'qituvchi guruhida besh vosita");
 
   for (const tool of teacher) {
     const names = tool.fields.map((f) => f.name);
     assert.ok(names.includes("university"), `${tool.id}: muassasa maydoni so'ralishi kerak`);
     assert.ok(names.includes("author"), `${tool.id}: tuzuvchi maydoni so'ralishi kerak`);
 
-    // Majburiy EMAS: glossariy shaxsiy ish daftari ham bo'lishi mumkin.
+    /*
+     * AUDIT-20 R0: endi MAJBURIY (`CUSTOM_REQUIRED.teacher`).
+     *
+     * P1-5 da maydon ixtiyoriy qilingan edi — «glossariy shaxsiy ish
+     * daftari ham bo'lishi mumkin». Amalda esa u shunchaki BO'SH kelar
+     * va shapka baribir yarim chizilardi. AUDIT-20 da beshala hujjat
+     * rasmiy MAKTAB SHAKLI bo'ldi («ko'rdim = oldim», egasi qarori 12):
+     * muassasasiz va tuzuvchisiz shakl o'qituvchiga yaroqsiz.
+     */
     const uni = tool.fields.find((f) => f.name === "university")!;
-    assert.ok(!uni.required, `${tool.id}: muassasa majburiy bo'lmasligi kerak`);
+    assert.ok(uni.required, `${tool.id}: muassasa majburiy bo'lishi kerak`);
     // Yorliq maktabga mo'ljallangan, «Oliy ta'lim muassasasi» emas.
     assert.ok(!/oliy/i.test(uni.legend), `${tool.id}: yorliq maktabga mos bo'lishi kerak`);
 

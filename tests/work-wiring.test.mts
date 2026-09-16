@@ -48,3 +48,38 @@ test("hajm darvozasi: talaba ishida bodyWordCount, maqolada wordCount (manba mat
   const src = readFileSync(new URL("../lib/generation/index.ts", import.meta.url), "utf8");
   assert.match(src, /const got = academic\.work \? bodyWordCount\(academic\) : wordCount\(academic\);/);
 });
+
+/* ────────────── O'qituvchi dvigateli dispatchi (AUDIT-20 R0) ────────────── */
+
+/**
+ * R0 SUBSTRAT KAFOLATI: `teacher/engine.ts` hali STUB, shuning uchun
+ * `writeWithLlm` beshala o'qituvchi vositasi uchun ESKI yo'lga
+ * (`write-specials.ts`) qaytishi SHART. Aks holda shu kommitdan keyin
+ * dars rejasi, texnologik xarita, glossariy va kalitlar — to'rttala
+ * sotilayotgan xizmat — bo'sh hujjat qaytarardi.
+ *
+ * Mutatsiya (qizardi): stubga `throw new Error("teacher engine: WP-A")`
+ * qo'yildi — birinchi test; dispatchdagi `if (built)` o'rniga
+ * `if (!built) return null` yozildi — ikkinchi test.
+ */
+test("teacher dvigateli stub: `null` qaytaradi, xato TASHLAMAYDI", async () => {
+  const { buildTeacherDoc } = await import("../lib/generation/teacher/engine.ts");
+  const meta = { toolId: "lesson-plan", topic: "Fotosintez", language: "uz" } as unknown as DocMeta;
+  const built = await buildTeacherDoc(meta, { topic: "Fotosintez" }, { deadline: Date.now() + 60_000 });
+  assert.equal(built, null, "stub null qaytarmasa, chaqiruvchi eski yo'lni tanlay olmaydi");
+});
+
+test("write-llm: teacher shoxi `null` da eski `write-specials.ts` yo'liga TUSHADI", () => {
+  const src = readFileSync(new URL("../lib/generation/write-llm.ts", import.meta.url), "utf8");
+  // Shox bor va bayroq bilan o'chadi (X-6: eski yo'l bir sprint qoladi).
+  assert.match(src, /TEACHER_TOOLS\.has\(meta\.toolId\) && process\.env\.TEACHER_ENGINE !== "0"/);
+  // Natija BO'LSAGINA qaytadi — `if (!built) return null` bo'lsa eski yo'l o'lardi.
+  const branch = src.slice(src.indexOf("TEACHER_TOOLS.has(meta.toolId)"));
+  const body = branch.slice(0, branch.indexOf("\n  if (WRITER.has"));
+  assert.match(body, /if \(built\) \{/);
+  assert.ok(!/if \(!built\) return null;/.test(body), "MUTATSIYA: teacher shoxi eski yo'lni kesib tashladi");
+  // To'rtta eski shox O'Z O'RNIDA (WP-A ko'chirgunga qadar).
+  for (const call of ["writeLessonWithLlm", "writeGlossaryWithLlm", "writeKeysWithLlm", "writeMapWithLlm"]) {
+    assert.ok(src.includes(`return ${call}(meta, deadline)`), `eski shox yo'qoldi: ${call}`);
+  }
+});

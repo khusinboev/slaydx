@@ -15,9 +15,20 @@ export type ToolId =
   | "glossary"
   | "keys"
   | "mustaqil-ish"
-  | "lesson-plan";
+  | "lesson-plan"
+  /** Test yaratuvchi (AUDIT-20) — `teacher/` dvigateli, `custom: "teacher"`. */
+  | "test";
 
-export type ToolGroup = "umumiy" | "talaba" | "oqituvchi";
+/**
+ * Bo'lim (landing, nav, `CreateGrid`).
+ *
+ * `oyinlar` va `media` — AUDIT-21/22 bo'limlari (krossvord, flesh karta,
+ * saralash, tinglash; podkast, tabriknoma). AUDIT-20 da ular HALI
+ * ishlatilmaydi: guruh e'lon qilinadi, vosita esa yo'q. Tip oldindan
+ * kelgani — `ToolGroup` ga bog'liq `switch`/`Record` lar (guruh
+ * yorliqlari) yangi qiymat qo'shilganda TS bilan ushlansin.
+ */
+export type ToolGroup = "umumiy" | "talaba" | "oqituvchi" | "oyinlar" | "media";
 
 export type JobStatus = "QUEUED" | "IN_PROGRESS" | "COMPLETED" | "FAILED" | "REVOKED";
 
@@ -79,7 +90,7 @@ export type ToolConfig = {
   fields: ToolField[];
   extraOptional?: boolean;
   output: "docx" | "pptx" | "png";
-  custom?: "slide" | "pro-slide" | "resume" | "translation" | "image" | "article" | "essay" | "work";
+  custom?: "slide" | "pro-slide" | "resume" | "translation" | "image" | "article" | "essay" | "work" | "teacher";
   basePrice: number;
 };
 

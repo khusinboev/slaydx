@@ -24,6 +24,8 @@ import { buildResumeDoc } from "./resume/write";
 import { buildArticleDoc, type ArticleBuildOpts } from "./article/engine";
 import { buildEssayDoc } from "./essay/engine";
 import { buildWorkDoc } from "./work/engine";
+import { buildTeacherDoc } from "./teacher/engine";
+import { TEACHER_TOOL_LIST } from "./teacher/types";
 import { thesisTypeId } from "../tools";
 import type { FormValues } from "../types";
 import type { AcademicDoc, Block, BuiltFile, DocMeta, DocSection } from "./types";
@@ -850,6 +852,8 @@ export async function writeWriterWithLlm(meta: DocMeta, deadline?: number): Prom
 const WRITER = new Set(["referat", "coursework", "mustaqil-ish"]);
 /** `work/` dvigateli vositalari (AUDIT-19). */
 const WORK_TOOLS = new Set(["referat", "coursework", "mustaqil-ish"]);
+/** O'qituvchi oilasi (AUDIT-20): dars rejasi, xarita, glossariy, keys, test. */
+const TEACHER_TOOLS = new Set<string>(TEACHER_TOOL_LIST);
 
 /**
  * Dvigatelga uzatiladigan qo'shimcha imkoniyatlar (Maqola 2): bosqich
@@ -918,6 +922,27 @@ export async function writeWithLlm(
     if (!built) return null;
     extras.onCost?.(built.cost);
     return built.doc;
+  }
+  /*
+   * O'qituvchi vositalari 2 (AUDIT-20): beshala vosita bitta `teacher/`
+   * dvigatelida (rasmiy shakl, hisobot, avto-sayqal, tahrir).
+   *
+   * R0 da dvigatel STUB va `null` qaytaradi — shunda oqim PASTDAGI eski
+   * `write-specials.ts` shoxlariga tushadi va 4 mavjud xizmat
+   * o'zgarishsiz ishlayveradi. `TEACHER_ENGINE=0` esa dvigatel
+   * yozilgandan keyin ham eski yo'lni majburan tanlash uchun (X-6:
+   * `write-specials.ts` bir sprint qoladi).
+   */
+  if (TEACHER_TOOLS.has(meta.toolId) && process.env.TEACHER_ENGINE !== "0") {
+    const built = await buildTeacherDoc(meta, values as FormValues, {
+      deadline: deadline ?? Date.now() + 300_000,
+      ...(extras.onStage ? { onStage: extras.onStage } : {}),
+      ...(extras.source ? { source: extras.source } : {}),
+    });
+    if (built) {
+      extras.onCost?.(built.cost);
+      return built.doc;
+    }
   }
   if (WRITER.has(meta.toolId)) return writeWriterWithLlm(meta, deadline);
   if (meta.toolId === "lesson-plan") return writeLessonWithLlm(meta, deadline);

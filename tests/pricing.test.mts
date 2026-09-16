@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import type { FormValues, ToolConfig } from "../lib/types.ts";
 import {
   defaultPages,
   isToolSlug,
@@ -274,8 +275,6 @@ test("kalitsiz xizmat sotilmaydi", async () => {
 });
 
 test("sonli maydonda diapazon ham tekshiriladi", () => {
-  const map = TOOL_BY_ID["texnologik-xarita"];
-
   /*
    * AUDIT-5 §4.10. `weeklyHours` uchun `min: 1` e'lon qilingan, lekin
    * hech kim uni o'qimasdi: `missingRequired` faqat «bo'sh emasmi» deb
@@ -283,7 +282,25 @@ test("sonli maydonda diapazon ham tekshiriladi", () => {
    * dvigatel `Math.max(1, weeklyHours)` bilan uni JIM tuzatardi — ya'ni
    * foydalanuvchi kiritgan qiymat e'tiborsiz qolar, xarita esa boshqa
    * hafta soniga qurilardi.
+   *
+   * AUDIT-20 R0: texnologik xarita `custom: "teacher"` ga o'tdi va
+   * `weeklyHours`/`totalHours` `tool.fields` dan `teacher-params.ts`
+   * reyestriga ko'chdi — hozir HECH BIR vosita `kind: "number"` maydon
+   * e'lon qilmaydi. QOIDA esa o'z kuchida qolishi kerak, shuning uchun
+   * u shu yerda SINTETIK `ToolConfig` bilan sinaladi; WP-E
+   * (`TeacherComposer` + `teacher/input.ts`) soat diapazonini SERVERDA
+   * qayta tekshirishi shart — aks holda AUDIT-5 §4.10 qaytadi.
    */
+  const map: ToolConfig = {
+    ...TOOL_BY_ID["texnologik-xarita"],
+    fields: [
+      { kind: "text", name: "subject", legend: "Fan nomi", required: true },
+      { kind: "number", name: "weeklyHours", legend: "Haftalik soatlar", min: 1, max: 20, required: true },
+      { kind: "number", name: "totalHours", legend: "Jami soatlar (o'quv yili bo'yicha)", min: 1, max: 400, required: true },
+    ],
+    topicLegend: undefined,
+  };
+
   const ok = { subject: "Biologiya", weeklyHours: 4, totalHours: 136 };
   assert.deepEqual(missingRequired(map, ok), []);
 
@@ -376,4 +393,87 @@ test("maqola narxi ARTICLE_PRICES jadvalidan — 4 satr, tur hajmni cheklaydi", 
   assert.equal(priceFor(thesis, { articleType: "imrad_oak", pages: "10-15" }), 4000, "MUTATSIYA: ruxsatsiz tur maqola narxiga o'tsa 12 000 chiqadi");
   assert.equal(thesisTypeId({ articleType: "review_narrative" }), "conference_thesis");
   assert.equal(thesisTypeId({ articleType: "conference_extended" }), "conference_extended");
+});
+
+/* ────────────────── O'qituvchi vositalari 2 (AUDIT-20 R0) ────────────────── */
+
+/**
+ * Test yaratuvchi — raqobatchi darajasidagi TEKIS narx (mahsulot egasi
+ * qarori 6): savol soni, variant soni, qiyinlik, OMR — HECH BIRI narxga
+ * ta'sir qilmaydi. Aks holda «30 savol 3 000, 40 savol 4 000» degan
+ * jimgina tarif paydo bo'lardi va forma buni ko'rsatmasdi.
+ */
+test("test vositasi: tekis 3 000, parametrlar narxni o'zgartirmaydi", () => {
+  const t = TOOL_BY_ID.test;
+  assert.equal(t.basePrice, 3000);
+  assert.equal(t.group, "oqituvchi");
+  assert.equal(t.custom, "teacher");
+  assert.equal(t.output, "docx");
+  assert.equal(priceFor(t, {}), 3000);
+  const probes: FormValues[] = [
+    { count: 40, variants: 4, omr: true, testType: "dtm" },
+    { count: 5, variants: 1, omr: false, testType: "diagnostika" },
+    { count: 8, testType: "bsb", criteriaTable: true, openCount: 5 },
+    { mode: "file", sourceText: "x".repeat(2000) },
+    { price: 1, basePrice: 1 },
+  ];
+  for (const values of probes) {
+    assert.equal(priceFor(t, values), 3000, `MUTATSIYA: parametr narxni o'zgartirdi — ${JSON.stringify(values)}`);
+  }
+  // `defaultPages` ga TEGMADIK: yangi vosita eski qiymatlarni o'zgartirmasin.
+  assert.equal(defaultPages("test"), "10-15");
+  assert.equal(defaultPages("essay"), "2");
+  assert.equal(defaultPages("coursework"), "20-25");
+});
+
+/**
+ * Glossariy narxi atama soniga bog'liq (6 000/9 000/15 000) — forma
+ * `TeacherComposer` ga ko'chgani bilan bu qoida O'ZGARMAYDI. `termCount`
+ * `tool.fields` dan chiqib ketgani uchun narxni jimgina `basePrice` ga
+ * tushirib qo'yish — aynan shu sprintning eng oson xatosi bo'lardi.
+ */
+test("glossariy termCount narxi saqlanadi (fields bo'sh bo'lsa ham)", () => {
+  const g = TOOL_BY_ID.glossary;
+  assert.equal(g.custom, "teacher");
+  assert.deepEqual(g.fields.map((f) => f.name), ["university", "author"], "glossariyda faqat shapka maydonlari qoladi");
+  assert.equal(priceFor(g, { termCount: "10" }), 6000);
+  assert.equal(priceFor(g, { termCount: "20" }), 9000);
+  assert.equal(priceFor(g, { termCount: "40" }), 15000);
+  assert.equal(priceFor(g, {}), 6000, "atama soni berilmasa — 10 ta tarifi");
+  assert.equal(priceFor(g, { termCount: "999" }), g.basePrice, "noma'lum son → standart tarif, bepul emas");
+  assert.ok(priceFor(g, { termCount: "40" }) > priceFor(g, { termCount: "10" }), "MUTATSIYA: termCount qoidasi olib tashlandi");
+  // Qolgan 4 vosita — tekis `basePrice` (parametrlar narxsiz).
+  assert.equal(priceFor(TOOL_BY_ID["lesson-plan"], { duration: 90, stageCount: 8 }), 4000);
+  assert.equal(priceFor(TOOL_BY_ID["texnologik-xarita"], { totalHours: 400, mapType: "choraklik" }), 6000);
+  assert.equal(priceFor(TOOL_BY_ID.keys, { caseCount: 8, keysType: "rolli" }), 6000);
+});
+
+/**
+ * `custom: "teacher"` vositalarida majburiy IKKI maydon — muassasa va
+ * tuzuvchi (`CUSTOM_REQUIRED.teacher`), ustiga umumiy mavzu qoidasi.
+ * Ular eski `TEACHER_FIELDS` (ixtiyoriy) dan farq qiladi: rasmiy
+ * shapkasiz hujjat o'qituvchiga yaroqsiz.
+ */
+test("custom teacher: muassasa + tuzuvchi + mavzu majburiy, TEACHER_FIELDS takrorlanmaydi", () => {
+  for (const id of ["lesson-plan", "texnologik-xarita", "glossary", "keys", "test"] as const) {
+    const tool = TOOL_BY_ID[id];
+    assert.equal(tool.custom, "teacher", `${id}: custom teacher emas`);
+    /*
+     * MUTATSIYA: `TEACHER_FIELDS` avtomat qo'shilishi `custom` bo'lgan
+     * vositalarga ham tegsa, `university` IKKI marta chiqadi va
+     * «To'ldirilmagan maydon» ro'yxati takrorlanadi.
+     */
+    assert.deepEqual(tool.fields.map((f) => f.name), ["university", "author"], `${id}: maydonlar ro'yxati`);
+    assert.ok(tool.fields.every((f) => f.required), `${id}: shapka maydonlari majburiy bo'lishi kerak`);
+
+    const missing = missingRequired(tool, {});
+    assert.ok(missing.includes("Ta'lim muassasasi nomi"), `${id}: muassasa tekshirilmadi`);
+    assert.ok(missing.includes("Tuzuvchi (F.I.Sh)"), `${id}: tuzuvchi tekshirilmadi`);
+    assert.ok(missing.includes(tool.topicLegend!), `${id}: mavzu tekshirilmadi`);
+    assert.deepEqual(missingRequired(tool, { topic: "Fotosintez", university: "15-son maktab", author: "Karimova D." }), []);
+  }
+  // Test vositasi FAYL rejimida mavzu o'rniga manba matni so'raydi.
+  const t = TOOL_BY_ID.test;
+  assert.deepEqual(missingRequired(t, { mode: "file", university: "15-son maktab", author: "Karimova D." }), ["Manba fayl matni"]);
+  assert.deepEqual(missingRequired(t, { mode: "file", sourceText: "matn", university: "15-son maktab", author: "K." }), []);
 });
