@@ -4,12 +4,8 @@ import type { Generation } from "@/lib/types";
 import type { EditActionsState } from "../files/EditActions";
 import { academicDocFromHtml } from "@/lib/viewers/from-html";
 import { viewerKind } from "@/lib/viewers/kind";
-import { GlossaryViewer } from "./GlossaryViewer";
-import { KeysViewer } from "./KeysViewer";
-import { LessonViewer } from "./LessonViewer";
 import { ResumeViewer } from "./ResumeViewer";
 import { SlideViewer } from "./SlideViewer";
-import { TableViewer } from "./TableViewer";
 import { WordViewer } from "./WordViewer";
 import { TranslationViewer } from "./TranslationViewer";
 import { ImageViewer } from "./ImageViewer";
@@ -53,26 +49,21 @@ export function ArtifactViewer({
       return <ResumeViewer doc={doc} gen={detail} onGen={onDetail} onEditState={onEditState} />;
     case "teacher":
       /*
-       * O'qituvchi hujjatlari 2 (AUDIT-20 R0): beshala vosita umumiy
-       * Word ko'ruvchisida — rasmiy DOCX shakli «ko'rdim = oldim»
-       * bo'yicha aynan shu yerda chiziladi. R0 da `WordViewer` hali
-       * `doc.teacher` ni bilmaydi (shapka, bosqich/hafta jadvallari,
-       * OMR — WP-C `teacherFlow`), lekin tahrir proplari DARROV
-       * beriladi: WP-D `useTeacherEdit` ni yoqqanda ko'ruvchini qayta
-       * ulash kerak bo'lmasin (talaba ishlaridagi xato — proplar
-       * berilmagani uchun tahrir jimgina o'chiq qolgandi).
+       * O'qituvchi hujjatlari 2 (AUDIT-20 WP-C): beshala vosita umumiy
+       * Word ko'ruvchisida — `planTeacher` → `teacherFlow` rasmiy DOCX
+       * ko'rinishini chizadi (shapka, bosqich/chorak jadvallari, test
+       * variant betlari, albom xarita). Brend-muqovali to'rt ko'ruvchi
+       * (`LessonViewer`/`TableViewer`/`GlossaryViewer`/`KeysViewer`)
+       * O'CHIRILDI: ular saytda faylda yo'q birinchi bet chizardi
+       * (egasi qarori 12 — «sayt = fayl»).
+       *
+       * Tahrir proplari DARROV beriladi: `WordViewer` hozircha o'qituvchi
+       * hujjati uchun tahrirni yoqmaydi (hook WP-D da qo'shiladi), lekin
+       * o'shanda ko'ruvchini qayta ulash kerak bo'lmasin — talaba
+       * ishlaridagi xato aynan shu edi (proplar berilmagani uchun tahrir
+       * jimgina o'chiq qolgandi).
        */
       return <WordViewer doc={doc} gen={detail} onGen={onDetail} onEditState={onEditState} />;
-    case "lesson":
-      // AUDIT-20 R0: bu yo'lga endi hech qaysi vosita tushmaydi
-      // (`viewerKind`); 4 eski ko'ruvchi WP-C da o'chiriladi.
-      return <LessonViewer doc={doc} />;
-    case "table":
-      return <TableViewer doc={doc} />;
-    case "glossary":
-      return <GlossaryViewer doc={doc} />;
-    case "keys":
-      return <KeysViewer doc={doc} />;
     case "image":
       return (
         <div className="flex min-h-0 flex-1 flex-col">

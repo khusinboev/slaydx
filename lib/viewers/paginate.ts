@@ -36,7 +36,19 @@ function isHeading(item: FlowItem): boolean {
     item.type === "udk" ||
     item.type === "articleTitle" ||
     item.type === "authors" ||
-    item.type === "refs2"
+    item.type === "refs2" ||
+    /*
+     * O'qituvchi hujjati SHAPKASI (AUDIT-20): «Tasdiqlayman», muassasa,
+     * hujjat nomi, tur va «Fan: …» qatorlari BITTA blok. Ular titul
+     * betining o'rnini bosadi, ya'ni bir-biridan va birinchi bo'lim
+     * sarlavhasidan ajralib, ikki varaqqa bo'linib ketmasligi kerak
+     * (DOCX da hammasi `keepNext`).
+     */
+    item.type === "teacher-approve" ||
+    item.type === "teacher-org" ||
+    item.type === "teacher-title" ||
+    item.type === "teacher-subtitle" ||
+    item.type === "teacher-field"
   );
 }
 

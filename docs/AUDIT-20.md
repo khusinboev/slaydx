@@ -315,3 +315,95 @@ yillik soat deb olinishi.
    moslandi (mutatsiya qo'riqchisi saqlandi).
 6. Jonli sinov (`npm run live -- test-topic|test-file|test-curriculum`)
    va OMR ning LibreOffice ko'z tekshiruvi — WP-C maketidan keyin.
+### WP-C — render + paritet + legacy (maket, DOCX, ko'ruvchi), 2026-09-16
+
+**Holat:** bajarildi. Jonli sinov (`npm run live`) — R3 raundida, lead.
+
+**Fayllar:** `lib/generation/teacher/{layout,legacy,samples}.ts` (yangi),
+`docx-profile.ts` (`teacherProfile(kind)` + `profileFor` shoxi),
+`render-docx.ts` (`drawTeacher` + `renderDocx` shoxi),
+`lib/viewers/{flow,metrics,paginate}.ts`,
+`components/viewers/{WordViewer,ArtifactViewer}.tsx`,
+`lib/viewers/kind.ts`. **O'CHIRILDI:** `components/viewers/
+{LessonViewer,TableViewer,GlossaryViewer,KeysViewer}.tsx`.
+
+**Qaror 12 bajarildi — «sayt = fayl»:** titul beti ham, brend-muqova
+ham YO'Q. Hujjat birinchi betning O'ZIDAGI rasmiy shapka bilan
+boshlanadi: «Tasdiqlayman» + lavozim + imzo chizig'i O'NG YUQORIDA,
+ostida muassasa va hujjat nomi markazda, keyin «Fan: … Sinf: 7-A …
+Tuzuvchi: … Sana: …» qatorlari (yorliq qalin). `teacherProfile(kind)
+.titlePage === "none"`, `teacherFlow` esa `type:"title"` bandini umuman
+chiqarmaydi. Uch auditda ochiq qolgan AUDIT-6 A1 / AUDIT-5 P1-5 shu
+bilan yopildi.
+
+**`planTeacher(doc)` — yagona manba.** Tartib: sarlavha → bo'lim
+BLOKLARI (dvigatel nasri) → langarlangan JADVALLAR → (faqat bo'lim
+bo'sh bo'lsa) modeldan qurilgan ZAXIRA. Zaxira yo'l qo'lda yig'ilgan
+hujjat, namuna va `test` vositasi (WP-B gacha) uchun; dvigatel chiqishi
+kelganda o'z-o'zidan o'chadi va matn IKKI MARTA chizilmaydi.
+Yo'nalish: xarita ALBOM, qolgan to'rttasi portret. Sahifa uzilishi
+FAQAT testda (har variant, kalit, OMR) — dars ishlanmasi 1–2 bet va
+har bo'limni betga chiqarish qog'ozni behuda sarflardi.
+
+**WP-A shartnomasi bilan kelishildi** (WP-A ochiq bandlari 2–3):
+uch tilli jadval ustunlari «Atama \| Ruscha \| Inglizcha» bo'lib
+QOLADI (ta'rif yuqoridagi ro'yxatda, jadvalda takrorlanmaydi — AUDIT-6
+B5); keys rubrikasi alohida `rubric` bo'limi bo'lib qoladi va alohida
+bet TALAB QILMAYDI. Reyestr skeleti matnini WP-F tuzatsin.
+
+**Testlar:** `teacher-layout` 24, `teacher-docx` 17 (LibreOffice: 5 kind
+→ PDF, bet soni va yo'nalish), `viewer/teacher-parity` 13 (5 kind ×
+TO'LIQ matn pariteti + ru/en), `viewer/teacher-legacy` 14. Mutatsiya 8
+tasi ham ushlandi (shapka, albom, kalit sahifa uzilishi, legacy model,
+alifbo, ko'ruvchi shapkasi, javob chiziqlari, titul beti).
+
+**LibreOffice ko'zi (5 kind → PDF → PNG) topgan va tuzatilgan 4 nuqson:**
+
+1. **Ochiq savol javob chiziqlari BIRLASHIB ketardi** — pastki
+   chegarali ketma-ket bo'sh paragraflarni LibreOffice bitta blokka
+   qo'shib, chiziqni faqat oxirida chizardi (4 chiziq o'rniga 1,
+   ustida katta bo'sh joy). Endi chegarasiz jadvalning qatorlari.
+2. **Kalit jadvalida «Variant A» sarlavhasi ikki qatorga sinardi** —
+   `columnPercents` 6 ustunli bu jadvalni tanimaydi va teng taqsimlab
+   qo'yardi. Ustun kengliklari endi aniq beriladi.
+3. **Pasport bo'limi SHAPKANI takrorlardi** — dvigatel «Fan: … Sinf: …
+   Davomiyligi: …» ni qayta yozadi (eski shaklda shapka yo'q edi).
+   Paragraf FAQAT shapkadagi juftlardan iborat bo'lsa tashlanadi;
+   qo'shimcha fakt bo'lsa («Haftalar: 12») butunligicha qoladi — matn
+   hech qachon qayta yozilmaydi (tahrir yo'li saqlangan matnga tayanadi).
+4. **«1. Fan pasporti»** — `sectionLabels.subjectPassport` dagi eski
+   raqam sarlavhada qolardi, qolgan bo'limlar esa raqamsiz edi.
+
+**Eski hujjatlar (X-5):** `legacyTeacherModel(doc)` shapkani `meta` dan
+tiklaydi (muassasa `meta.university` dan), kind modelini BO'SH
+qoldiradi — ya'ni zaxira yo'l hech narsa qo'shmaydi va hujjat
+avvalgidek «sarlavha + bloklar + langarlangan jadval» bo'lib chiqadi.
+`tests/document.test.mts` ning 62 testi O'ZGARISHSIZ yashil qoldi.
+«Tasdiqlayman» eski hujjatda YO'Q edi — o'ylab topilmaydi.
+
+**WP-D uchun `TeacherPlan` shartnomasi:** har `head`/`body` bandida
+`path` bor — nasr `sections.<i>.blocks.<j>`, hujjat jadvali `table:<n>`
+(`review.ts tableTarget` bilan AYNI), modeldan qurilgan band
+`teacher.<kind>.<...>`. `plan.tablePaths` jadval id → yo'l xaritasi,
+`plan.legacy` esa tahrir 409 qaytarishi kerakligini bildiradi.
+
+**WP-C dan qolgan ochiq bandlar:**
+
+1. **OMR PNG**: `TeacherModel` da sxema ombori yo'q, shuning uchun
+   `planTeacher` hozircha o'rinbosar ramka chizadi. WP-B/WP-D PNG ni
+   aktiv sifatida bergach, `figure` bandiga payload qo'shiladi —
+   shartnoma o'zgarmaydi.
+2. **Test bo'lim tartibi**: reja §1 id lari `instructions · variantX ·
+   key · criteria · omr`, tadqiqot (`test.md` §3.7) esa OMR ni kalitdan
+   OLDIN qo'yadi (o'quvchiga tarqatiladigan qism birga tursin). Maket
+   id tartibiga ergashdi — WP-B bilan tasdiqlansin.
+3. **`match` savoli**: `options` ikki ro'yxatni ketma-ket saqlaydi deb
+   o'qilyapti (chap yarmi / o'ng yarmi) — WP-B shartnomani aniq
+   yozsin.
+4. **`tests/work-wiring.test.mts` qizil** (WP-C emas): R0 testi
+   `write-llm.ts` da `if (built) {` blokini kutadi, WP-A esa uni
+   `if (built) return built.doc;` qilib qisqartirgan. Semantika
+   to'g'ri, test matni eskirgan — `write-llm.ts` egasi yangilasin.
+5. **`teacher/lesson.ts` da metod yorlig'i** — bosqich metodikasi
+   «Bosqich: Suhbat» bo'lib chiqadi (`L.stage` = «Bosqich»). Ko'z
+   tekshiruvida noto'g'ri o'qiladi; yorliq WP-A egaligida.

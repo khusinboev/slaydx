@@ -1,5 +1,6 @@
 import { planArticle, type ArticleAuthorLine, type ArticlePlan, type CiteSpan } from "@/lib/generation/article/layout";
 import { planWork, type WorkBodyItem, type WorkPlan } from "@/lib/generation/work/layout";
+import { isTeacherDoc, planTeacher, type TeacherPlan } from "@/lib/generation/teacher/layout";
 import { docLabels } from "@/lib/generation/i18n";
 import type { AcademicDoc, Block, DocTable } from "@/lib/generation/types";
 
@@ -71,7 +72,35 @@ export type FlowItem =
   /** Formula — KaTeX SSR; raqam o'ngda. Bitta atom band. */
   | { type: "formula"; id: string; latex: string; number: string; display: boolean }
   /** OAK «REFERENCES» ikkinchi ro'yxatining sarlavhasi (`h1` kabi chiziladi). */
-  | { type: "refs2"; id: string; text: string };
+  | { type: "refs2"; id: string; text: string }
+  /*
+   * ── O'qituvchi hujjati (AUDIT-20 WP-C) — `planTeacher` dan.
+   *
+   * Bu bandlar TITUL BETINING o'rnini bosadi: rasmiy hujjatda muqova
+   * yo'q, birinchi betning o'zida shapka turadi. Shuning uchun ular
+   * oddiy oqim bandlari — `packPages` ularni boshqa matn bilan birga
+   * varaqqa joylaydi va sahifa raqami ham to'g'ri chiqadi.
+   */
+  /** «Tasdiqlayman» bloki — O'NG YUQORIDA, lavozim va imzo chizig'i bilan. */
+  | { type: "teacher-approve"; id: string; lines: string[] }
+  /** Muassasa nomi — markazda, qalin. */
+  | { type: "teacher-org"; id: string; text: string }
+  /** Hujjat nomi («DARS ISHLANMASI») — markazda, qalin, kattaroq. */
+  | { type: "teacher-title"; id: string; text: string }
+  /** Tur nomi («Yangi mavzu darsi») — markazda, kursiv. */
+  | { type: "teacher-subtitle"; id: string; text: string }
+  /** «Fan: Biologiya» — yorliq qalin, qiymat oddiy. */
+  | { type: "teacher-field"; id: string; label: string; text: string }
+  /** O'quvchi maydoni — yorliq/chiziq bo'laklari (`parts`), test varag'i shapkasi. */
+  | { type: "teacher-line"; id: string; parts: string[] }
+  /** «Ta’limiy maqsad: …» — yorliq qalin, matn bir paragrafda. */
+  | { type: "kv"; id: string; label: string; text: string }
+  /** Test javob varianti «A) …» — ro'yxat belgisi YO'Q. */
+  | { type: "opt"; id: string; letter: string; text: string }
+  /** Ogohlantirish («O‘QITUVCHI UCHUN …») — markazda, qalin. */
+  | { type: "note"; id: string; text: string }
+  /** Ochiq savol javobi uchun bo'sh chiziqlar (matn tuguni YO'Q). */
+  | { type: "lines"; id: string; count: number };
 
 export { titleModel, type TitleModel } from "@/lib/generation/title-model";
 
@@ -88,6 +117,13 @@ export function docToFlow(doc: AcademicDoc): FlowItem[] {
    * `planWork` dan. Eski hujjat (`doc.work` yo'q) umumiy yo'lda qoladi.
    */
   if (doc.work) return workFlow(planWork(doc), doc);
+  /*
+   * O'qituvchi vositalari 2 (AUDIT-20): dars ishlanmasi, texnologik
+   * xarita, glossariy, keys, test — `planTeacher` dan. ESKI hujjat ham
+   * shu yerdan (`legacyTeacherModel`): 4 alohida ko'ruvchi o'chirildi,
+   * boshqa yo'l yo'q. `renderDocx` dagi shox bilan AYNI shart.
+   */
+  if (isTeacherDoc(doc)) return teacherFlow(planTeacher(doc));
 
   const items: FlowItem[] = [];
   let n = 0;
@@ -295,6 +331,99 @@ export function workFlow(plan: WorkPlan, doc: AcademicDoc): FlowItem[] {
   }
 
   for (const b of plan.appendix) push(b);
+  return items;
+}
+
+/**
+ * O'qituvchi hujjati rejasi → oqim bandlari (AUDIT-20 WP-C).
+ *
+ * Tartib `render-docx.ts drawTeacher` bilan AYNAN bir xil: shapka →
+ * bo'limlar → jadvallar. Titul beti YO'Q (`type: "title"` bandi ham
+ * yo'q) — rasmiy shaklda birinchi betning o'zida shapka turadi.
+ *
+ * Jadval DOCX dagidek uch bandga bo'linadi (raqam, sarlavha + ustunlar,
+ * qatorlar) — matn tugunlari ketma-ketligi bir xil bo'lsin
+ * (`viewer/teacher-parity`).
+ */
+export function teacherFlow(plan: TeacherPlan): FlowItem[] {
+  const items: FlowItem[] = [];
+  let n = 0;
+  const id = (p: string) => `${p}-${++n}`;
+
+  for (const h of plan.head) {
+    switch (h.k) {
+      case "approve":
+        items.push({ type: "teacher-approve", id: id("tapp"), lines: h.lines });
+        break;
+      case "org":
+        items.push({ type: "teacher-org", id: id("torg"), text: h.text });
+        break;
+      case "title":
+        items.push({ type: "teacher-title", id: id("ttitle"), text: h.text });
+        break;
+      case "subtitle":
+        items.push({ type: "teacher-subtitle", id: id("tsub"), text: h.text });
+        break;
+      case "field":
+        items.push({ type: "teacher-field", id: id("tfield"), label: h.label, text: h.text });
+        break;
+      case "line":
+        items.push({ type: "teacher-line", id: id("tline"), parts: h.parts });
+        break;
+    }
+  }
+
+  for (const b of plan.body) {
+    switch (b.k) {
+      case "h1":
+        items.push({ type: "h1", id: id("h1"), sectionId: b.sectionId, text: b.text, pageBreak: b.pageBreak });
+        break;
+      case "h2":
+        items.push({ type: "h2", id: id("h2"), text: b.text });
+        break;
+      case "h3":
+        items.push({ type: "h3", id: id("h3"), text: b.text });
+        break;
+      case "p":
+      case "li":
+      case "quote":
+        items.push({ type: b.k, id: id(b.k), text: b.text });
+        break;
+      case "code":
+        items.push({ type: "code", id: id("code"), text: b.text, caption: b.caption });
+        break;
+      case "kv":
+        items.push({ type: "kv", id: id("kv"), label: b.label, text: b.text });
+        break;
+      case "opt":
+        items.push({ type: "opt", id: id("opt"), letter: b.letter, text: b.text });
+        break;
+      case "note":
+        items.push({ type: "note", id: id("note"), text: b.text });
+        break;
+      case "lines":
+        items.push({ type: "lines", id: id("lines"), count: b.count });
+        break;
+      case "table":
+        items.push({ type: "table-number", id: id("tbn"), text: b.numberLine });
+        items.push({ type: "table-head", id: id("tbh"), table: { ...b.table, caption: b.caption }, captionAlign: "center" });
+        for (const row of b.table.rows) items.push({ type: "table-row", id: id("tbr"), row });
+        break;
+      case "figure":
+        items.push({
+          type: "figure",
+          id: id("fig"),
+          figureId: b.figureId,
+          url: b.figure?.url,
+          w: b.figure?.w,
+          h: b.figure?.h,
+          number: b.number,
+          caption: b.caption,
+          placeholder: b.placeholder,
+        });
+        break;
+    }
+  }
   return items;
 }
 
