@@ -537,3 +537,17 @@ test("blocksFromLlm: `blocks` siz JSON obyekti — kalitlar emas, uzun satr qiym
   // Oddiy matn (JSON emas) avvalgidek bo'linadi.
   assert.ok(blocksFromLlm(undefined, "Bu oddiy matn paragrafi, JSON emas, lekin yetarlicha uzun.").length === 1);
 });
+
+/*
+ * Worker avto-sayqali: kirish `{"parts":{…}}` JSON i `max_tokens` da
+ * KESILGAN → `parseLlmObject` null → eski zaxira yo'l kalitlarni matnga
+ * qoldirardi («parts : relevance : …»). Kesilgan JSON dan qo'shtirnoq
+ * ichidagi uzun qiymatlar olinadi (oxirgi, yopilmagan qiymat ham).
+ */
+test("blocksFromLlm: KESILGAN JSON — kalitlar emas, qo'shtirnoqdagi qiymatlar (oxirgi yopilmagani ham)", () => {
+  const raw = '{"parts":{"relevance":"Mavzuning dolzarbligi shundaki, tizim jadal rivojlanmoqda va o\'rganish talab etiladi.","aim":"Ishning maqsadi — bosqichlarni tahlil qilish va tavsiyalar ishlab chiqish.","tasks":"Ish vazifalari: tarixni o\'rganish; tahlil qilish; tavsiya';
+  const out = blocksFromLlm(undefined, raw);
+  assert.equal(out.length, 3, JSON.stringify(out));
+  assert.ok(out.every((b) => !/[{}"]|parts\s*:|relevance\s*:|\baim\s*:/.test(b.text)), JSON.stringify(out));
+  assert.ok(out[2]!.text.startsWith("Ish vazifalari: tarixni"));
+});

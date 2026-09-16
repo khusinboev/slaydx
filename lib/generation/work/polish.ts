@@ -354,7 +354,8 @@ export async function rewriteWorkFix(doc: AcademicDoc, fix: WorkFix, deps: WorkR
     user = workRewritePrompt(ctx, { plan, wantTable: false, wantFigure: false }, current, fix.instruction);
   }
 
-  const maxTokens = Math.min(8000, Math.max(1200, Math.round(words * 2.4) + 700));
+  // Pol 2 000: kirish `parts` JSON i 1 350 da kesilib qolgan edi (AUDIT-19 smoke).
+  const maxTokens = Math.min(8000, Math.max(2000, Math.round(words * 2.4) + 700));
   const raw = await ask(deps, system, user, maxTokens);
   const parsed = parseLlmObject<{ blocks?: unknown; parts?: Record<string, unknown> }>(raw);
   /*

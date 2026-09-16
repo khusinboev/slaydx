@@ -34,6 +34,10 @@ export function blocksFromLlm(raw: unknown, fallbackText: string): Block[] {
    * `text`…) — kalitlarni matnga aylantirmaymiz («parts : relevance : …»
    * AUDIT-19 smoke), OBYEKT ichidagi uzun satr qiymatlarini olamiz.
    */
+  // Yopilmagan oxirgi qiymat (`"…` qo'shtirnoqsiz tugagan) — kesilgan JSON.
+  // `parseLlmObject` qavslarni yopib «tuzatishi» mumkin, lekin bu qiymat tushib qoladi.
+  const tailRaw = fallbackText.match(/"((?:[^"\\]|\\.){20,})$/);
+  const tailValue = tailRaw ? cleanText(tailRaw[1]!) : "";
   const obj = parseLlmObject<Record<string, unknown>>(fallbackText);
   if (obj && typeof obj === "object") {
     const strings: string[] = [];
@@ -45,7 +49,24 @@ export function blocksFromLlm(raw: unknown, fallbackText: string): Block[] {
       else if (v && typeof v === "object" && depth < 3) Object.values(v as Record<string, unknown>).forEach((x) => walk(x, depth + 1));
     };
     walk(obj, 0);
+    if (tailValue && !strings.some((t) => t.startsWith(tailValue.slice(0, 40)))) strings.push(tailValue);
     if (strings.length) return strings.map((text): Block => ({ kind: "p", text }));
+  }
+  /*
+   * KESILGAN JSON (`max_tokens`, yopilmagan qavs) — `parseLlmObject` null.
+   * Qavs/qo'shtirnoqni oddiy o'chirish kalitlarni matnga qoldiradi
+   * («parts : relevance : …», AUDIT-19 smoke — worker avto-sayqali,
+   * kirish `parts` JSON i kesilgan). Qo'shtirnoq ichidagi uzun satrlar —
+   * qiymatlar; kalitlar qisqa, ular tushib qoladi.
+   */
+  if (/^\s*[{[]/.test(fallbackText)) {
+    const values: string[] = [];
+    for (const m of fallbackText.matchAll(/"((?:[^"\\]|\\.)*)"/g)) {
+      const t = cleanText(m[1]!.replace(/\\n/g, "\n").replace(/\\"/g, '"'));
+      if (t.length >= 20) values.push(t);
+    }
+    if (tailValue) values.push(tailValue);
+    if (values.length) return values.map((text): Block => ({ kind: "p", text }));
   }
   // JSON kelmadi/bo'sh — model oddiy matn yozgan bo'lishi mumkin.
   const plain = fallbackText.replace(/^\s*\{[\s\S]*?"blocks"\s*:/, "").replace(/[{}[\]"]/g, " ");
