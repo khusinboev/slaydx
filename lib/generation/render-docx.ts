@@ -1281,6 +1281,14 @@ async function drawGame(plan: GamePlan, K: Kit, P: DocProfile, opts: ResumeDocxO
             width: { size: W, type: WidthType.DXA },
             columnWidths: b.columns.map(() => colW),
             layout: TableLayoutType.FIXED,
+            /*
+             * Chegara JADVAL darajasida ham o'chiriladi: `docx` standart
+             * bo'yicha `w:tblBorders` ni `single` bilan yozadi va u
+             * katak sozlamasi bilan raqobatlashadi (LibreOffice katakni
+             * tinglaydi, Word esa jadvalni — ya'ni faylning ko'rinishi
+             * dasturga bog'liq bo'lib qolardi).
+             */
+            borders: { top: none, bottom: none, left: none, right: none, insideHorizontal: none, insideVertical: none },
             rows: [
               new TableRow({
                 children: b.columns.map(
@@ -1346,6 +1354,9 @@ async function drawGame(plan: GamePlan, K: Kit, P: DocProfile, opts: ResumeDocxO
             width: { size: cellW * card.cols, type: WidthType.DXA },
             columnWidths: Array.from({ length: card.cols }, () => cellW),
             layout: TableLayoutType.FIXED,
+            // Kesish chizig'i JADVAL darajasida ham — `docx` ning standart
+            // `single` chegarasi Word da qattiq ramka chizib qo'ymasin.
+            borders: { top: cut, bottom: cut, left: cut, right: cut, insideHorizontal: cut, insideVertical: cut },
             rows: b.rows.map(
               (row) =>
                 new TableRow({

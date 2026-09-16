@@ -164,6 +164,8 @@ export type GameLayoutWords = {
   docTitle: Record<GameKind, string>;
   /** Bo'lim sarlavhalari (`doc.sections[].title` bo'sh bo'lsa). */
   sectionTitle: Record<string, string>;
+  /** Shapkadagi «Mavzu:» yorlig'i (`DocLabels.subject` EMAS — u fan nomi). */
+  fieldTopic: string;
   cardsFront: string;
   cardsBack: string;
   duplexHint: string;
@@ -177,6 +179,7 @@ const WORDS: Record<"uz" | "ru" | "en", GameLayoutWords> = {
   uz: {
     docTitle: { crossword: "KROSSVORD", flashcards: "FLESH KARTALAR" },
     sectionTitle: { grid: "To‘r", across: "Gorizontal", down: "Vertikal", answers: "Javoblar", cards: "Kartalar" },
+    fieldTopic: "Mavzu",
     cardsFront: "old yuzlar",
     cardsBack: "orqa yuzlar",
     duplexHint: "Ikki tomonlama chop eting va varaqni UZUN chekka bo‘ylab aylantiring; so‘ng chiziqlar bo‘yicha kesing.",
@@ -188,6 +191,7 @@ const WORDS: Record<"uz" | "ru" | "en", GameLayoutWords> = {
   ru: {
     docTitle: { crossword: "КРОССВОРД", flashcards: "ФЛЕШ-КАРТОЧКИ" },
     sectionTitle: { grid: "Сетка", across: "По горизонтали", down: "По вертикали", answers: "Ответы", cards: "Карточки" },
+    fieldTopic: "Тема",
     cardsFront: "лицевые стороны",
     cardsBack: "обратные стороны",
     duplexHint: "Печатайте двусторонне и переворачивайте лист по ДЛИННОЙ стороне; затем разрежьте по линиям.",
@@ -199,6 +203,7 @@ const WORDS: Record<"uz" | "ru" | "en", GameLayoutWords> = {
   en: {
     docTitle: { crossword: "CROSSWORD", flashcards: "FLASHCARDS" },
     sectionTitle: { grid: "Grid", across: "Across", down: "Down", answers: "Answers", cards: "Cards" },
+    fieldTopic: "Topic",
     cardsFront: "fronts",
     cardsBack: "backs",
     duplexHint: "Print double-sided and flip the sheet on the LONG edge; then cut along the guide lines.",
@@ -433,7 +438,7 @@ function planCrossword(
   head.push({ k: "title", text: L.docTitle.crossword, path: "game.kind" });
   if (typeLabel) head.push({ k: "subtitle", text: typeLabel, path: "game.type" });
   const topic = clean(model.topic) || clean(doc.meta.topic);
-  if (topic) head.push({ k: "field", label: L.doc.subject, text: topic, path: "meta.topic" });
+  if (topic) head.push({ k: "field", label: L.fieldTopic, text: topic, path: "meta.topic" });
 
   const cw: CrosswordModel | undefined = model.crossword;
 
