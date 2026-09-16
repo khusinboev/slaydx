@@ -135,5 +135,13 @@ Jami ≈ 12 kun ish, kalendar ~7 kun (+ R bosqichi 1–2 kun). **Xavflar**: X-1 
 
 R bosqichi: 9 tadqiqot agenti 3 tadan parallel (R1/R3/R4 → R2/R6/R7 → R5/R8/R9), hisobotlar `docs/research/`; TTS lab uchun egasidan 3 provayder kaliti; hisobotlar lead ko'rigidan o'tgach AUDIT-20 R0 substrat boshlanadi.
 
+### Tadqiqotdan keyingi qarorlar (2026-09-16, egasi + lead)
+
+- **Test**: variantlar 1/2/4 tanlov, standart 2 (A/B); BSB/ChSB uslubidagi tur ham 3 000 tekis; `FigureSpec kind:"omr"` (strukturaviy: count, optionCount, columns, variantIds, idBoxes) R0 da; `TestModel` ga `scoring`, `instructions`, `timeMin`, `topicIds`, `criteria` (BSB mezon jadvali), savolda `source.quote`, `points`, `optionOrder[]`; `bsb`/`chsb` turlari ochiq topshiriq + rubrika; 20 hisobot qoidasi + judge `answerCorrectness`; GIFT eksporti keyin (AUDIT-22 bilan); 1–4 sinf 3 variant, rasmli savollar AUDIT-21+; `curriculum` rejimi faqat bazada mavjud fan/sinfda (X-2); rasmiy BSB/ChSB materiallari Markazniki — hujjatda «BSB uslubida» izohi (halollik).
+- **Dars rejasi / xarita / keys**: rasmiy yagona blank yo'q — amaldagi konvensiya (tadqiqot jadvallari) reyestrga; `lesson-plan` ga `extra`, `sinf harfi`, `sana` maydonlari; xaritaga `choraklik` turi (4 jadval) + `yillik`; `pickMapControl` LLM javobidan (fallback saqlanadi); keys turlari tahliliy/muammoli/qaror/rolli, `caseCount` narxsiz, `audience` (maktab/OTM) rubrika shkalasi uchun.
+- **Glossariy**: `type` uch-tilli (uz/ru/en) narx o'zgarmasdan, `includeExample` standart yoqiq, `noStubDefinition` qoidasi; fayl rejimi keyin.
+- **O'quv bazasi**: uzbmb.uz rasmiy RTM dasturlari (`curl -k`) + 121-son buyruq (2025-04-10) soat jadvali; mavzu darajasida soat yo'q (bob darajasida); versiyalash (`version` maydoni) — yangi DTS loyihasi 2026-08 (X-1); 1–4 sinf va informatika manbalari WP-B da qo'shimcha qidiriladi.
+- **Infografika**: alohida `figures/infographic-svg.ts` (rangli; `svg.ts` monoxrom o'zgarmaydi), Tabler Icons (MIT), 6 palitra, 7 tur — AUDIT-21.
+
 ## 5. Bajarilish yozuvi
 
