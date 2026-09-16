@@ -178,7 +178,7 @@ test("ResultView: article natijasida `doc.article.review` bo'lsa ko'ruvchi tepas
    * `doc.article.review`, inshoda `doc.essay.review`; panel sharti
    * hujjat turini emas, hisobotning O'ZI borligini tekshiradi.
    */
-  assert.match(src, /const review = gen\.doc\?\.article\?\.review \?\? gen\.doc\?\.essay\?\.review;/, "hisobot ikkala modeldan");
+  assert.match(src, /const review = gen\.doc\?\.article\?\.review \?\? gen\.doc\?\.essay\?\.review \?\? gen\.doc\?\.work\?\.review;/, "hisobot uchala modeldan (maqola/tezis, insho, talaba ishi)");
   assert.match(src, /\{review \? \(/, "panel sharti — hisobot bor");
   assert.match(src, /<details open[^>]*data-article-review-panel/, "yig'iladigan panel");
   // WP7: `onFix` → `rewriteArticle` (POST …/rewrite), `fixing` — yuklanish holati.

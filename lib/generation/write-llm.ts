@@ -23,6 +23,7 @@ import {
 import { buildResumeDoc } from "./resume/write";
 import { buildArticleDoc, type ArticleBuildOpts } from "./article/engine";
 import { buildEssayDoc } from "./essay/engine";
+import { buildWorkDoc } from "./work/engine";
 import { thesisTypeId } from "../tools";
 import type { FormValues } from "../types";
 import type { AcademicDoc, Block, BuiltFile, DocMeta, DocSection } from "./types";
@@ -846,7 +847,9 @@ export async function writeWriterWithLlm(meta: DocMeta, deadline?: number): Prom
  * (`article/engine.ts`) ketadi — tekshirilgan manbalar, tur skeleti,
  * uch tilli annotatsiya. Eski umumiy yozuvchi yo'li unga qaytmaydi.
  */
-const WRITER = new Set(["referat", "coursework", "mustaqil-ish", "thesis"]);
+const WRITER = new Set(["referat", "coursework", "mustaqil-ish"]);
+/** `work/` dvigateli vositalari (AUDIT-19). */
+const WORK_TOOLS = new Set(["referat", "coursework", "mustaqil-ish"]);
 
 /**
  * Dvigatelga uzatiladigan qo'shimcha imkoniyatlar (Maqola 2): bosqich
@@ -896,6 +899,22 @@ export async function writeWithLlm(
      */
     const v = meta.toolId === "thesis" ? { ...values, articleType: thesisTypeId(values as FormValues) } : values;
     const built = await buildArticleDoc({ ...meta, articleType: meta.toolId === "thesis" ? thesisTypeId(values as FormValues) : meta.articleType }, v as FormValues, { deadline: deadline ?? Date.now() + 240_000, onStage: extras.onStage, source: extras.source });
+    if (!built) return null;
+    extras.onCost?.(built.cost);
+    return built.doc;
+  }
+  /*
+   * Talaba ishlari 2 (AUDIT-19): kurs ishi / referat / mustaqil ish —
+   * `work/` dvigateli (tekshirilgan manbalar, sxema/jadval, hisobot,
+   * avto-sayqal). `WORK_ENGINE=0` — eski yozuvchi yo'li (favqulodda
+   * qaytish); tezis maqola dvigatelida.
+   */
+  if (WORK_TOOLS.has(meta.toolId) && process.env.WORK_ENGINE !== "0") {
+    const built = await buildWorkDoc(meta, values as FormValues, {
+      deadline: deadline ?? Date.now() + 480_000,
+      ...(extras.onStage ? { onStage: extras.onStage } : {}),
+      ...(extras.source ? { source: extras.source } : {}),
+    });
     if (!built) return null;
     extras.onCost?.(built.cost);
     return built.doc;

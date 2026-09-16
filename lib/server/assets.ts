@@ -110,6 +110,8 @@ export function extractAssets(
       resume: doc.resume?.photo?.url ? { ...doc.resume, photo: swapPhoto(doc.resume.photo) } : doc.resume,
       // Maqola sxemalari — har `figure.url` mustaqil ravishda aktivga chiqadi.
       article: doc.article ? { ...doc.article, figures: doc.article.figures.map(swapFigure) } : doc.article,
+      // Talaba ishi sxemalari (AUDIT-19) — maqola bilan bir xil yo'l.
+      work: doc.work ? { ...doc.work, figures: doc.work.figures.map(swapFigure) } : doc.work,
       // «O'z shablonim» fonlari — har rol PNG si aktivga (bir xil rasm bir marta).
       customTemplate: doc.customTemplate
         ? {

@@ -157,6 +157,21 @@ const NEED_HREF: Record<string, string> = {
   epigraph: "/uz/essay#epigraph",
   facts: "/uz/essay#userFacts",
 };
+/** `hrefBase` (masalan `/uz/coursework`) berilsa — band → shu vosita formasidagi langar (AUDIT-19: kurs ishi/referat/mustaqil ish). */
+const NEED_ANCHOR: Record<string, string> = {
+  udk: "udk",
+  authors: "authors",
+  results: "userFacts",
+  refs: "userRefs",
+  work: "workTitle",
+  epigraph: "epigraph",
+  facts: "userFacts",
+  title: "title",
+};
+function needHref(id: string, hrefBase?: string): string | undefined {
+  if (hrefBase && NEED_ANCHOR[id]) return `${hrefBase}#${NEED_ANCHOR[id]}`;
+  return NEED_HREF[id];
+}
 
 export function ArticleReviewPanel({
   review,
@@ -165,6 +180,7 @@ export function ArticleReviewPanel({
   onPolish,
   polishing,
   hideGroups,
+  hrefBase,
 }: {
   review: ArticleReview;
   onFix?: FixFn;
@@ -179,6 +195,8 @@ export function ArticleReviewPanel({
    * bo'sh turardi va foydalanuvchi «manbalar tekshirilmadi» deb o'qirdi.
    */
   hideGroups?: readonly ReviewGroupId[];
+  /** «Sizdan kutiladi» havolalari uchun forma yo'li (`/uz/<vosita>`); berilmasa maqola/insho standarti. */
+  hrefBase?: string;
 }) {
   const groups = hideGroups?.length ? REVIEW_GROUPS.filter((g) => !hideGroups.includes(g.id)) : REVIEW_GROUPS;
   const byGroup = new Map<ReviewGroupId, ReviewCheck[]>(REVIEW_GROUPS.map((g) => [g.id, []]));
@@ -228,8 +246,8 @@ export function ArticleReviewPanel({
               <li key={n.id} className="flex flex-wrap items-baseline gap-x-2" data-user-need={n.id}>
                 <span className="font-medium">{n.label}</span>
                 <span className="text-muted-foreground text-xs">{n.hint}</span>
-                {NEED_HREF[n.id] ? (
-                  <Link href={NEED_HREF[n.id]} className="text-xs underline">
+                {needHref(n.id, hrefBase) ? (
+                  <Link href={needHref(n.id, hrefBase)!} className="text-xs underline">
                     formaga
                   </Link>
                 ) : null}

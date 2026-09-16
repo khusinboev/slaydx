@@ -4,6 +4,7 @@ import { commitDocOps, loadDocForEdit } from "./slide-commit";
 import type { ArticleOp } from "../generation/article/edit";
 import { planPolish, runPolish } from "../generation/article/polish";
 import { planEssayPolish, runEssayPolish } from "../generation/essay/polish";
+import { planWorkPolish, runWorkPolish } from "../generation/work/polish";
 import { essaySection } from "../generation/essay/review";
 import { complete as completeRole } from "../generation/llm-roles";
 import type { DocReview, PolishLog } from "../generation/report/types";
@@ -112,6 +113,15 @@ const POLISHERS: Record<string, Polisher> = {
 };
 
 /** Vosita sayqal qila oladimi — route va testlar uchun. */
+POLISHERS.work = {
+  review: (doc) => doc.work?.review,
+  hasModel: (doc) => Boolean(doc.work),
+  planned: (review, doc) => planWorkPolish(review, doc).fixes.length,
+  run: (doc, review, deps) => runWorkPolish(doc, review, { complete: deps.complete ?? completeRole, deadline: deps.deadline ?? Date.now() + POLISH_TIMEOUT_MS, now: deps.now, judge: true }),
+  // Talaba ishi sayqali `setSection` beradi — adapter tili bilan bir xil (`work/edit.ts`, WP-C).
+  toOps: (r) => r.ops as ArticleOp[],
+};
+
 export function polishableAdapters(): string[] {
   return Object.keys(POLISHERS);
 }
