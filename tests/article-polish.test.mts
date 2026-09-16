@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  rewriteFix,
   POLISH_JUDGE_NOTE,
   POLISH_MAX_FIXES,
   applyPolish,
@@ -421,4 +422,19 @@ test("userNeeds: udk/authors sariq → ro'yxatda; judge:methods qizil + userFact
   const r2 = review([{ id: "udk", level: "green", label: "UDK" }], 3, [fixCheck(1, "results", "Add the sample size and accuracy")]);
   assert.deepEqual(userNeeds(r2, doc()).map((x) => x.id), ["results"]);
   assert.deepEqual(userNeeds(review([{ id: "udk", level: "green", label: "UDK" }], 3), doc()), []);
+});
+
+/* ══════════════════════════════ so'z oralig'i (tezis) ══════════════════════════════ */
+
+test("tezis (wordRange): qayta yozuv oraliqdan chiqsa RAD (RewriteError) — jonli 152 so'z 78→79 bilan qabul bo'lgan edi", async () => {
+  const d = structuredClone(sampleArticleDoc(META, { type: "conference_thesis", profile: "conference" }));
+  d.article!.userFacts = "";
+  const body = d.sections.find((s) => s.blocks.length)!;
+  const words = (n: number) => Array.from({ length: n }, (_, i) => `so‘z${i}`).join(" ");
+  const complete = (n: number) => (async () => ({ text: JSON.stringify({ blocks: [{ kind: "p", text: words(n) }] }), usage: undefined })) as never;
+  const fix = { op: "rewrite" as const, target: body.id, instruction: "Add a limitations sentence." };
+  await assert.rejects(() => rewriteFix(d, fix, { complete: complete(150), deadline: Date.now() + 60_000 }), /hajm oralig'idan tashqarida \(150 so‘z, kerak 200–300\)/, "MUTATSIYA: oraliq tekshiruvi olib tashlansa 150 so'z o'tadi");
+  await assert.rejects(() => rewriteFix(d, fix, { complete: complete(400), deadline: Date.now() + 60_000 }), /tashqarida \(400 so‘z/);
+  const ok = await rewriteFix(d, fix, { complete: complete(250), deadline: Date.now() + 60_000 });
+  assert.equal(ok.ops.length, 1);
 });

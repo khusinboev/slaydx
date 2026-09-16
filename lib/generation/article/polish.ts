@@ -432,6 +432,17 @@ async function rewriteSection(doc: AcademicDoc, section: DocSection, fix: Articl
   if (!guard.report.words) throw new RewriteError(RETRY_MSG, 422, "llm");
   if (verified.unresolved.length) console.warn(`[article] tuzatish «${section.id}»: reyestrda yo'q iqtibos o'chirildi: ${verified.unresolved.map((u) => u.id).join(", ")}`);
   if (guard.report.unsourcedNumbers.length) console.warn(`[article] tuzatish «${section.id}»: manbasiz foizlar: ${guard.report.unsourcedNumbers.join(", ")}`);
+  /*
+   * So'z oralig'i (tezis/qisqa xabar — butun matn bitta blok): qayta yozuv
+   * oraliqdan chiqsa RAD. Jonli (AUDIT-19): «cheklovlar qo'sh» tuzatishi
+   * tezisni 152 so'zga qisqartirdi, ball 78 → 79 oshgani uchun sayqal
+   * qabul qildi — hajm qoidasi qizil bo'lsa ham. Chegara ±10/15 %.
+   */
+  if (ctx.type.wordRange && ctx.type.skeleton.length === 1) {
+    const [lo, hi] = ctx.type.wordRange;
+    const w = guard.report.words;
+    if (w < lo * 0.9 || w > hi * 1.15) throw new RewriteError(`Qayta yozuv hajm oralig'idan tashqarida (${w} so‘z, kerak ${lo}–${hi})`, 422, "llm");
+  }
 
   return {
     ops: [{ op: "setSection", sectionId: section.id, blocks: keepVisuals(section.blocks, clean) }],

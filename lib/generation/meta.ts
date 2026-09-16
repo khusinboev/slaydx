@@ -1,4 +1,6 @@
-import { defaultPages } from "../tools";
+import { defaultPages, thesisTypeId } from "../tools";
+import { articleTypeOf, normalizeArticlePages } from "./article/input";
+import { ARTICLE_TYPES } from "./article/types-registry";
 import { ARTICLE_LIMITS, CITE_STYLES, FIGURES_BY_PAGES, type ArticleTypeId, type CiteStyle, type PagesId, type PublicationProfileId } from "./article/types";
 import { isArticleTypeId } from "./article/types-registry";
 import { isPublicationProfileId } from "./article/profiles";
@@ -133,7 +135,17 @@ export function extractMeta(tool: ToolConfig, values: FormValues): DocMeta {
    * «10–15» berardi, narx esa «3–5» tarifidan hisoblanardi.
    */
   const fallbackLabel = defaultPages(tool.id);
-  const pagesLabel = s(values, "pages", fallbackLabel);
+  /*
+   * Maqola/tezis: paket TURGA moslanadi (`normalizeArticlePages` — narx
+   * ham shu qoida bilan). Aks holda tezisga «3–5» so'ralsa narx 1–2 tarifi,
+   * `targetPages` esa 4 bo'lib, so'z rejasi/hisobot boshqa hajmga
+   * qarardi (AUDIT-19 jonli sinov). Tezisda ruxsatsiz tur → konferensiya
+   * tezisi (`thesisTypeId`).
+   */
+  const pagesLabel =
+    tool.id === "article" || tool.id === "thesis"
+      ? normalizeArticlePages(tool.id === "thesis" ? ARTICLE_TYPES[thesisTypeId(values)] : articleTypeOf(values), s(values, "pages", fallbackLabel))
+      : s(values, "pages", fallbackLabel);
   const fallbackPages = parsePages(fallbackLabel, 12);
   /*
    * Slaydlar soni: ikkala vositada ham SLAYDERDAN (4–30) — «Sifat / hajm»

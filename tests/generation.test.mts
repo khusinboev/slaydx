@@ -1329,6 +1329,11 @@ test("standart hajm narx, dvigatel va formada bir xil", async () => {
   assert.equal(extractMeta(TOOL_BY_ID.article, { topic: "X" } as FormValues).targetPages, 4);
   // Tezis (AUDIT-19): standart paket «1–2» (konferensiya tezisi) → 2 bet; `THESIS_PRICES["1-2"]` bilan bir xil manba (`defaultPages`).
   assert.equal(extractMeta(TOOL_BY_ID.thesis, { topic: "X" } as FormValues).targetPages, 2);
+  // Paket TURGA moslanadi (narx bilan bir xil qoida): tezisga «3–5» so'ralsa ham 2 bet; kengaytirilgan tezis 3–5 → 4; maqola tezisi «10–15» → 2.
+  assert.equal(extractMeta(TOOL_BY_ID.thesis, { topic: "X", pages: "3-5" } as FormValues).targetPages, 2, "MUTATSIYA: normallashtirilmasa 4 chiqadi");
+  assert.equal(extractMeta(TOOL_BY_ID.thesis, { topic: "X", articleType: "conference_extended", pages: "3-5" } as FormValues).targetPages, 4);
+  assert.equal(extractMeta(TOOL_BY_ID.article, { topic: "X", articleType: "conference_thesis", pages: "10-15" } as FormValues).targetPages, 2);
+  assert.equal(extractMeta(TOOL_BY_ID.article, { topic: "X", articleType: "imrad_oak", pages: "10-15" } as FormValues).targetPages, 13);
 });
 
 test("kurs ishi prompti dvigatel so'ragan bob soniga mos keladi", async () => {
