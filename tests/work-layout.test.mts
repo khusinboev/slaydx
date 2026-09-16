@@ -155,8 +155,8 @@ test("adabiyotlar O'zbekiston tartibida: qonun → Prezident → VM → kitob �
   assert.ok(at("lex:2") < at("lex:3"), "Prezident farmoni VM qaroridan oldin");
   assert.ok(at("lex:3") < at("u1"), "normativ hujjatlar kitobdan oldin");
   assert.ok(Math.max(at("u1"), at("u6")) < at("W2741809807"), "kitoblar maqoladan oldin");
-  assert.ok(at("W7731") < at("st1"), "maqola statistikadan oldin");
-  assert.ok(at("st1") < at("w1"), "statistika internetdan oldin");
+  assert.ok(at("W7731") < at("u7"), "maqola statistikadan oldin");
+  assert.ok(at("u7") < at("w1"), "statistika internetdan oldin");
   // GOST shakli: «Karimov A. N. Ta’limda raqamli texnologiyalar. – Toshkent: Fan, 2022. – 240 b.»
   const book = plan.refs.find((r) => r.ref.id === "u1")!;
   assert.ok(book.text.includes("– Toshkent: Fan, 2022"), `GOST kitob shakli emas: ${book.text}`);

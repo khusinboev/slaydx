@@ -164,7 +164,8 @@ test("adapterFor: `article` → articleAdapter; slayd/rezyume yo'li o'zgarmagan"
   assert.equal(adapterFor("article"), articleAdapter);
   assert.equal(adapterFor("slide"), slideAdapter);
   assert.equal(adapterFor("resume"), resumeAdapter);
-  assert.equal(adapterFor("referat"), null, "referat tahrirlanadigan bo'lib qoldi");
+  // AUDIT-19 WP-C: referat endi `workAdapter` da (maqolanikida EMAS).
+  assert.ok(!articleAdapter.tools.has("referat"), "referat maqola adapteriga tushdi");
   assert.equal(articleAdapter.id, "article");
 });
 
