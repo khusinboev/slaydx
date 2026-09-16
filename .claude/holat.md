@@ -1,11 +1,11 @@
-# SlaydX — holat (2026-09-17, main; prod: AUDIT-20 `5852285`; AUDIT-21 kod tayyor — deploy navbatda; tekshiruv: unit 2 355/2 357, ko'ruvchi 212, UI 234, lint/tsc toza)
+# SlaydX — holat (2026-09-17, main `9bb8a43`+; prod: AUDIT-21 `9bb8a43` (2026-09-17); tekshiruv: unit 2 355/2 357, ko'ruvchi 212, UI 234, lint/tsc toza)
 
 Sprint: **O'qituvchi vositalari 2 + 9 yangi xizmat (AUDIT-20…23)** — reja `docs/AUDIT-20.md` §1, tadqiqot `docs/research/` (15 hisobot). Oldingi: Talaba ishlari 2 (AUDIT-19) — prod'da.
 
 Eski sprint jadvali (AUDIT-19) — reja `~/.claude/plans/sen-senior-fullstack-dev-majestic-starfish.md` (§1 `docs/AUDIT-19.md`), jurnal `docs/AUDIT-19.md` §5.
 AUDIT-20: **100 % — prod'da (`5852285`).**
 
-AUDIT-21 (krossvord + flesh kartalar + infografika, bosma): **~95 %** — R0/WP-A/B/C/D/F main da, jonli 3/3, smoke 3/3, ko'z o'tdi; deploy qoldi (`docs/AUDIT-21.md`).
+AUDIT-21 (krossvord + flesh kartalar + infografika, bosma): **100 % — prod'da (`9bb8a43`)**, prod smoke 3/3 (`docs/AUDIT-21.md`).
 
 | # | AUDIT-20 bosqich | % | Izoh |
 |---|---|---|---|
@@ -23,9 +23,8 @@ AUDIT-21 (krossvord + flesh kartalar + infografika, bosma): **~95 %** — R0/WP-
 Yo'q (pauza yakunlandi, hamma worktree birlashtirildi).
 
 ## Davom etish qadamlari (AUDIT-20)
-1. AUDIT-21 deploy (`.claude/deploy.md`): zaxira → push → `nohup deploy.sh` → prod smoke (krossvord/flesh karta/infografika egasi hisobida).
-2. Anthropic hisobini to'ldirish (baholovchi Gemini ga tushgan).
-3. Keyingi: AUDIT-22 (TTS + interaktiv runtime) — Azure Speech / Aisha AI kalitlari egasidan.
+1. Anthropic hisobini to'ldirish (baholovchi Gemini ga tushgan).
+2. Keyingi: AUDIT-22 (TTS podkast/tabriknoma/tinglash + interaktiv runtime, saralash) — reja `docs/AUDIT-20.md` §4; Azure Speech / Aisha AI kalitlari egasidan (TTS lab).
 2. Egasidan (AUDIT-22 uchun, shoshilinch emas): Azure Speech kaliti + region, Aisha AI kaliti.
 
 Oldingi sprint (AUDIT-19) yakuni: **100% — prod'da (2026-09-16, `552a46c`).**

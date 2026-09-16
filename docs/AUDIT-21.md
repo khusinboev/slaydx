@@ -701,3 +701,4 @@ shoxini olib tashlash.
 - Krossvord: rasmli krossvord keyin; interaktiv o'yinchi tomoni — AUDIT-22.
 - `FieldKind` `toggle`/`file` chizilmaydi (o'lik qiymatlar) — tozalash.
 - Anthropic hisobi tugagan — baholovchi Gemini (100 ball moyilligi).
+- **Deploy (2026-09-17)** — zaxira, rollback `5852285`, `nohup deploy.sh` → prod `9bb8a43`, konteynerlar sog'lom, health ok. **Prod smoke** (egasi hisobi): krossvord (14 s, 100 ball/15 band, DOCX 82 KB — to'r PNG lari ichida), flesh kartalar (15 s, 100/11, DOCX 4 varaq), infografika (16 s, 97/16, PNG 299 KB) — 3/3, 0 brauzer xatosi. «Hammasini tuzatish» 100 ballda ko'rinmaydi — kutilgan.
