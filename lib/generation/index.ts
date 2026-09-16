@@ -84,13 +84,30 @@ const MIN_LENGTH_RATIO = 0.8;
 const ESSAY_LENGTH_RATIO = 0.9;
 
 /**
- * Insho so'z darvozasi (`null` — insho emas yoki eski hujjat: u holda
- * odatdagi varaq hisobi ishlaydi).
+ * Insho so'z darvozasi (`null` — insho emas yoki ESKI hujjat: u holda
+ * odatdagi varaq hisobi ishlaydi, ya'ni eski inshoning xulqi o'zgarmaydi).
  */
-function essayGateWords(toolId: string, doc: AcademicDoc): number | null {
+export function essayGateWords(toolId: string, doc: AcademicDoc): number | null {
   if (toolId !== "essay") return null;
   const words = doc.essay?.words;
   return words ? Math.round(words.min * ESSAY_LENGTH_RATIO) : null;
+}
+
+/**
+ * Renderlangan sahifa darvozasi shu hujjatga tegishlimi.
+ *
+ * Eksport testlar uchun: darvoza qarori `buildArtifact` ichida bir
+ * qatorda yashirin turganda, «insho istisnosi» ni faqat haqiqiy
+ * LibreOffice o'girmasi bilan sinash mumkin edi. Qaror endi nomlangan.
+ *
+ * `false` bo'ladigan hollar: hujjat bet VA'DA QILMAYDI —
+ *   • so'z oralig'i bilan o'lchanadigan maqola turi (tezis 200–300 so'z);
+ *   • insho `doc.essay.words` bilan (IELTS Task 2 — 250 so'z, 1 betdan kam).
+ */
+export function pageGateApplies(toolId: string, doc: AcademicDoc): boolean {
+  if (!LENGTH_GATED.has(toolId)) return false;
+  if (isArticleTool(toolId) && articleWordRange(doc)) return false;
+  return essayGateWords(toolId, doc) === null;
 }
 
 /**
@@ -363,10 +380,7 @@ export async function buildArtifact(
    * (250 so'z) bir betdan kam chiqadi va `max(2, …)` uni HAR SAFAR
    * yiqitardi — foydalanuvchi to'g'ri yozilgan inshoni ololmasdi.
    */
-  const pageGated =
-    LENGTH_GATED.has(tool.id) &&
-    !(isArticleTool(tool.id) && articleWordRange(academic)) &&
-    essayGateWords(tool.id, academic) === null;
+  const pageGated = pageGateApplies(tool.id, academic);
   if (llmDoc && pageGated && pdfAvailable() && remainingMs(deadline) > 20_000) {
     const pdf = await toPdf(bytes, `${meta.fileNameHint}.docx`).catch(() => null);
     if (pdf) {
