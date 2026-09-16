@@ -76,7 +76,8 @@ test("write-llm: teacher shoxi `null` da eski `write-specials.ts` yo'liga TUSHAD
   // Natija BO'LSAGINA qaytadi — `if (!built) return null` bo'lsa eski yo'l o'lardi.
   const branch = src.slice(src.indexOf("TEACHER_TOOLS.has(meta.toolId)"));
   const body = branch.slice(0, branch.indexOf("\n  if (WRITER.has"));
-  assert.match(body, /if \(built\) \{/);
+  // Qavsli ham, bir qatorli ham bo'lishi mumkin — MUHIMI shart `built` da.
+  assert.match(body, /if \(built\)\s*(\{|return built\.doc;)/);
   assert.ok(!/if \(!built\) return null;/.test(body), "MUTATSIYA: teacher shoxi eski yo'lni kesib tashladi");
   // To'rtta eski shox O'Z O'RNIDA (WP-A ko'chirgunga qadar).
   for (const call of ["writeLessonWithLlm", "writeGlossaryWithLlm", "writeKeysWithLlm", "writeMapWithLlm"]) {

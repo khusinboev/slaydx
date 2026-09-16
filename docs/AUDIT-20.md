@@ -233,3 +233,85 @@ son maydonlari faqat `values` dan o'qiladi.
    shu ikki vositada faqat WP-E dan keyin ko'rinadi.
 5. Jonli sinov (`npm run live -- lesson|map|glossary|keys`) va
    LibreOffice ko'z — WP-C maketi kelgandan keyin, R3 raundida.
+
+### WP-B — test dvigateli + o'quv dasturi bazasi (2026-09-16)
+
+**Fayllar.** `lib/generation/teacher/test/`: `questions.ts`
+(normalizatsiya, seeded variantlar, kalit, ball), `omr.ts` (spec),
+`input.ts` (forma → `TestInput`, reyestr chegaralari), `prompts.ts`
+(en tizim + tur qoidalari + `sourceBlock`/`curriculumBlock`),
+`engine.ts` (`buildTestDoc`), `review.ts` (20 qoida + baholovchi),
+`export.ts` (GIFT), `labels.ts` (hujjat tili yorliqlari).
+`lib/generation/figures/omr.ts` — javoblar varag'ining SVG maketi;
+`figures/index.ts` ning `omr` shoxi endi PNG chizadi (180 mm @ 300 dpi).
+`scripts/{fetch,gen}-curriculum.mts`, `data/curriculum/` (8 fayl +
+indeks), `data/CURRICULUM-SOURCES.md`.
+
+**`buildTestDoc` imzosi** — WP-A shartnomasi (`TeacherBuilder`) bilan
+AYNI: `buildTestDoc(meta: DocMeta, values: FormValues, opts:
+TestBuildOpts) → Promise<TeacherBuilt | null>`, bunda `TestBuildOpts =
+TeacherBuildOpts & { buildFigures?, topics?, sourceTextOf?, seed? }`
+(hammasi ixtiyoriy test seam lari). `TeacherBuilt` da `delivered =
+{got: savol soni, want: count}` va `opts.onCost(cost)`.
+
+**Bosqichlar** (`onStage`): reja 0→8 · savollar 8→60 (10 talik bo'lak,
+`mapPool(2)`) · yig'ish 60→70 · hisobot 70→85 · sayqal 85→100.
+
+**Qarorlar.**
+- Variantlar YANGI savol yaratmaydi — bitta savol bazasi + seeded
+  Fisher–Yates (qiyinlik pariteti kafolatlanadi, `variantParity`).
+- To'g'ri javob harflari aylanma ro'yxatdan olinadi, ya'ni `keyBalance`
+  ± 1 savol KAFOLATLANGAN, tasodifga tashlanmagan.
+- Sayqal rejasidagi barcha «Tuzatish» bandlari BITTA fix ga
+  birlashtiriladi: hammasi `questions` nishoniga tegadi, parallel qayta
+  yozish bir-birini yo'q qilardi.
+- `explanationPresent` qoidasi reyestrga qo'shildi (R3 §4.1 ning 20-si).
+- OMR PNG `doc.teacher.figures` da (`TeacherModel.figures` qo'shildi) —
+  `data:` URL ni `sections` ichida saqlash tahrir va qidiruvni
+  og'irlashtirardi; `assets.ts` (WP-D) shu ro'yxatdan o'qiydi.
+
+**Baza qamrovi** (8 fan · 42 fan×sinf · 311 bob · 2 424 mavzu, 480 KB):
+
+| Fan | Sinflar | Bob | Mavzu |
+|---|---|---|---|
+| matematika | 5, 6, 7, 8, 10, 11 | 80 | 425 |
+| fizika | 6–11 | 43 | 318 |
+| kimyo | 7–11 | 29 | 210 |
+| biologiya | 5–11 | 49 | 333 |
+| geografiya | 5–10 | 40 | 419 |
+| tarix | 5, 6 | 15 | 128 |
+| jahon-tarixi | 7–11 | 26 | 289 |
+| ozbekiston-tarixi | 7–11 | 29 | 302 |
+
+Bo'shliqlar manbaning o'zida: matematika 9-sinf va geografiya 11-sinf
+fayllari sahifada YO'Q; matematika 6–7 bitta hujjatda; tarix 7-sinfdan
+ikkiga bo'lingan. Hech biri to'ldirilmadi (`hasCurriculum` yo'q deydi).
+
+**Testlar.** `teacher-test-questions` 18, `teacher-test-engine` 17,
+`teacher-test-review` 18, `teacher-omr` 8, `curriculum-data` 11 — jami
+72 yangi test. Mutatsiyalar (har biri qizardi): javob indeksi chegarasi,
+harf aylanasi, `optionOrder` siz kalit, `difficultyTargets` yaxlitlash,
+blanket variant filtri, ball qoldig'i, `omrSpecOf` da ochiq savol, OMR
+PNG shoxi, `assignPoints` siz bsb ball, sayqaldan keyin eski kalit,
+ochiq topshiriqlar bo'lakka tarqalmasligi, fayl rejimida manba
+uzatilmasligi, `difficultyMix` toleransi, `scoreSum` bazasi, `keyTrust`
+chegarasi, `dedupe` siz takroriy id, uslubiy nasr filtri, bob soatining
+yillik soat deb olinishi.
+
+**Ochiq savollar / keyingi ish.**
+1. Tayanch o'quv reja (121-son buyruq) PDF i 502 — bob soatlari
+   dasturning O'ZIDA e'lon qilingan yillik soatga solishtiriladi (42
+   dan 25 tasida bor). Boshqa barqaror ko'zgu topilsa test qattiqlashadi.
+2. Format B hujjatlarida mavzu chegarasi qator uzilishi bilan
+   topiladi — ba'zi mavzu ikkiga bo'linadi. `gen-curriculum.mts --llm`
+   buni tozalaydi, lekin joriy baza LLM SIZ yig'ilgan (kalit/byudjet
+   qarori egasiniki).
+3. 1–4-sinf, informatika, ona tili/adabiyot, chet tillari bazada yo'q
+   (R4 X-3) — manba formati boshqacha, alohida ish.
+4. GIFT eksporti (`test/export.ts`) yozildi, lekin CHIQISHGA ulanmagan
+   (tugma/fayl — AUDIT-22 reja bo'yicha).
+5. `tests/work-wiring.test.mts` dagi «teacher shoxi» assertion i
+   WP-A ning `if (built) return built.doc;` bir qatorli shakliga
+   moslandi (mutatsiya qo'riqchisi saqlandi).
+6. Jonli sinov (`npm run live -- test-topic|test-file|test-curriculum`)
+   va OMR ning LibreOffice ko'z tekshiruvi — WP-C maketidan keyin.
