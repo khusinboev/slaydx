@@ -35,7 +35,7 @@ import { wordCount } from "../lib/generation/quality.ts";
 import { slideNotes } from "../lib/generation/slide-layout.ts";
 import { pdfAvailable, toPdf } from "../lib/server/pdf.ts";
 import { TOOL_BY_ID } from "../lib/tools.ts";
-import type { AcademicDoc, BuiltFile } from "../lib/generation/types.ts";
+import { kindOf, type AcademicDoc, type BuiltFile } from "../lib/generation/types.ts";
 import { verifyCitations } from "../lib/generation/research/verify.ts";
 import { factNumbers } from "../lib/generation/article/guard.ts";
 import { PUBLICATION_PROFILES, isPublicationProfileId } from "../lib/generation/article/profiles.ts";
@@ -542,7 +542,7 @@ const CASES: Case[] = [
           ok("boblar/paragraflar skeletda", chapters.length >= 2 && chapters.every((ch) => ch.paragraphs.length >= 2), chapters.map((ch) => `${ch.id}:${ch.paragraphs.length}`).join(" ")),
           ok("intro/xulosa bo'limlari", secs.some((x) => x.id === "intro") && secs.some((x) => x.id === "conclusion"), secs.map((x) => x.id).join(",")),
           ok("manbalar 100 % tekshirilgan (uydirma yo'q)", cited.length > 0 && cited.every((r) => r.verified !== "unverified"), `${cited.length} cited: ${[...new Set(cited.map((r) => r.verified))].join(",")}`),
-          ok(`manbalar ≥ ${Math.min(c.refsMin, 8)} (mo'ljal ${c.refsMin}; Books kalitsiz 429)`, cited.length >= Math.min(c.refsMin, 8), `${cited.length} (turlar: ${[...new Set(cited.map((r) => r.kind ?? "?"))].join(",")})`),
+          ok(`manbalar ≥ ${Math.min(c.refsMin, 8)} (mo'ljal ${c.refsMin}; Books kalitsiz 429)`, cited.length >= Math.min(c.refsMin, 8), `${cited.length} (turlar: ${[...new Set(cited.map((r) => kindOf(r)))].join(",")})`),
           ok("iqtiboslar reyestrda", (f.doc.work?.review?.checks.find((x) => x.id === "refsCited")?.level ?? "green") !== "red", review?.checks.find((x) => x.id === "refsCited")?.detail ?? "—"),
           ok("hajm darvozasi (so'z)", body >= 0.8 * 230 * c.pagesMin, `${body} so'z (kerak ≥ ${Math.round(0.8 * 230 * c.pagesMin)})`),
           ok("renderlangan sahifa", pages === null || pages >= Math.round(0.85 * c.pagesMin), `${pages ?? "—"} bet (kerak ≥ ${Math.round(0.85 * c.pagesMin)})`),

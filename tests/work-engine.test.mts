@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildWorkDoc, fallbackWorkOutline, introPartsFromLlm, planWorkVisuals, tableFromLlm, taskList, workOutlineFromLlm, EMPTY_RESEARCH_STATS } from "../lib/generation/work/engine.ts";
+import { assignPrimaryRefs, buildWorkDoc, fallbackWorkOutline, introPartsFromLlm, planWorkVisuals, tableFromLlm, taskList, workOutlineFromLlm, EMPTY_RESEARCH_STATS } from "../lib/generation/work/engine.ts";
 import { workKindOf } from "../lib/generation/work/registry.ts";
 import { SUBJECT_PROFILES } from "../lib/generation/work/subjects.ts";
 import { workLabels } from "../lib/generation/work/labels.ts";
@@ -504,4 +504,34 @@ test("kengaytirish javobi bo'sh bo'lsa asl paragraf o'zgarmaydi", async () => {
   const p = doc.sections.find((s) => s.id === "ch1.1")!;
   assert.ok(!p.blocks.some((b) => b.text.startsWith("Kengaytirilgan")));
   assert.ok(p.blocks.some((b) => b.text.startsWith("Bu 1-paragraf")));
+});
+
+/*
+ * Referat jonli sinovi: 7 tekshirilgan manba HAR paragrafga to'liq
+ * ro'yxat bilan berilganda model 2 tasini ishlatdi (`refsMin 5` qizil).
+ * Endi manbalar paragraflar orasida aylanma taqsimlanadi va har paragraf
+ * o'z ulushini «kamida bir marta» ishlatishi so'raladi. Mutatsiya:
+ * `assignPrimaryRefs` bo'sh qaytarsa PRIMARY blok yo'q → test yiqiladi.
+ */
+test("manbalar paragraflar orasida aylanma taqsimlanadi: birlashmasi = barcha manbalar, promptda PRIMARY/OTHER", async () => {
+  const { calls } = await build();
+  const paras = calls.filter((c) => c.user.startsWith("Write the paragraph"));
+  assert.ok(paras.length >= 4);
+  const union = new Set<string>();
+  for (const c of paras) {
+    const m = c.user.match(/PRIMARY SOURCES[^\n]*\n([\s\S]*?)(?:\nOTHER SOURCES|\nReturn JSON|\nInclude ONE)/);
+    if (!m) continue;
+    for (const id of m[1]!.match(/\[([\w:.-]+)\]/g) ?? []) union.add(id);
+  }
+  assert.ok(union.size >= 2, `PRIMARY bloklarida manba id lari bo'lishi kerak (${[...union].join(",")})`);
+  assert.ok(paras.some((c) => c.user.includes("use EACH of them at least once")), "biriktirilgan manba «kamida bir marta» so'raladi");
+  assert.ok(paras.every((c) => !/should draw on about \d+ of them/.test(c.user)), "eski «taxminan N tasi» yo'riqnomasi yo'q");
+});
+
+test("assignPrimaryRefs: aylanma, har manba aynan bir paragrafda", () => {
+  const refs = ["a", "b", "c", "d", "e"].map((id) => ({ id, title: id, authors: [], year: 2020 }) as never);
+  const m = assignPrimaryRefs(refs, ["p1", "p2", "p3"]);
+  assert.deepEqual([...m.values()].map((xs) => xs.map((r: { id: string }) => r.id)), [["a", "d"], ["b", "e"], ["c"]]);
+  assert.equal(assignPrimaryRefs(refs, []).size, 0);
+  assert.deepEqual([...assignPrimaryRefs([], ["p1"]).values()], [[]]);
 });

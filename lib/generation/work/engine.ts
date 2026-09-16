@@ -29,7 +29,7 @@ import { CostMeter, complete as completeRole, type LlmUsage } from "../llm-roles
 import { parseLlmObject } from "../json";
 import { mapPool, remainingMs, unverifiedReferenceNote } from "../quality";
 import { blocksFromLlm, str } from "../article/parse";
-import type { Figure, FigureSpec } from "../types";
+import type { Figure, FigureSpec, Reference } from "../types";
 import { collectReferencesFor, type CollectResult, type CompleteFn, type ResearchAsk, type ResearchStats } from "../research/pipeline";
 import { orderUzReferences } from "../cite/order";
 import { citedOnly, referenceIndex, verifyCitations, verifyCitationsInText, type Unresolved } from "../research/verify";
@@ -224,6 +224,23 @@ export function introPartsFromLlm(raw: string | undefined): Partial<Record<WorkI
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
 
+/* ────────────────────────── manba taqsimoti ────────────────────────── */
+
+/**
+ * Manbalarni paragraflar orasida AYLANMA taqsimlash: `i`-manba
+ * `i mod P`-paragrafga. Paragraflar parallel yoziladi (`mapPool`), shuning
+ * uchun «hali iqtibos qilinmaganlar» ni bilib bo'lmaydi — taqsimot
+ * oldindan qilinadi va har paragraf o'z ulushini «kamida bir marta»
+ * ishlatishi so'raladi. Manba paragrafdan ko'p bo'lsa har paragrafga
+ * bir nechta, kam bo'lsa ba'zi paragraflarga bo'sh tushadi.
+ */
+export function assignPrimaryRefs(refs: readonly Reference[], paragraphIds: readonly string[]): Map<string, Reference[]> {
+  const out = new Map<string, Reference[]>(paragraphIds.map((id) => [id, []]));
+  if (!paragraphIds.length) return out;
+  refs.forEach((r, i) => out.get(paragraphIds[i % paragraphIds.length]!)!.push(r));
+  return out;
+}
+
 /* ────────────────────────── vizual reja ────────────────────────── */
 
 export type WorkVisualPlan = Map<string, { table: boolean; figure: boolean }>;
@@ -340,9 +357,10 @@ export async function buildWorkDoc(meta: DocMeta, values: FormValues, opts: Work
   const visuals = planWorkVisuals(ctx, outline);
   const figureSpecOf = await loadFigureSpec();
   let done = 0;
+  const primaryOf = assignPrimaryRefs(ctx.refs, paragraphPlans.map((p) => p.id));
   const written = await mapPool(paragraphPlans, 3, async (p): Promise<ParagraphOut> => {
     const v = visuals.get(p.id) ?? { table: false, figure: false };
-    const out = await writeParagraph(ctx, { plan: p, wantTable: v.table, wantFigure: v.figure }, system, ask, deadline, figureSpecOf);
+    const out = await writeParagraph(ctx, { plan: p, wantTable: v.table, wantFigure: v.figure, primary: primaryOf.get(p.id) }, system, ask, deadline, figureSpecOf);
     done++;
     stage(24 + Math.round((36 * done) / Math.max(1, paragraphPlans.length)), `Paragraflar · ${done}/${paragraphPlans.length}`);
     return out;

@@ -204,6 +204,14 @@ export type WorkSectionAsk = {
   plan: WorkSectionPlan;
   wantTable: boolean;
   wantFigure: boolean;
+  /**
+   * Shu paragrafga BIRIKTIRILGAN manbalar (dvigatel manbalarni
+   * paragraflar orasida aylanma taqsimlaydi). Jonli sinov: 7 manba
+   * hammasi har paragrafga berilganda model 2 tasini ishlatdi — referat
+   * `refsMin 5` qizil. Biriktirilgani «har birini kamida bir marta»
+   * so'raladi, qolganlari ixtiyoriy.
+   */
+  primary?: Reference[];
 };
 
 /**
@@ -228,12 +236,19 @@ export function workParagraphPrompt(ctx: WorkContext, ask: WorkSectionAsk): stri
     `Plan for this paragraph: ${plan.brief}`,
     lengthLine(plan.words),
   ];
+  const primary = ask.primary?.length ? ask.primary : [];
+  const primaryIds = new Set(primary.map((r) => r.id));
+  const other = refs.filter((r) => !primaryIds.has(r.id));
   if (refs.length) {
-    const want = Math.min(refs.length, Math.max(1, Math.round((ctx.plan.refs * plan.words) / Math.max(1, ctx.plan.chapters))));
     lines.push(
-      `SOURCES (cite by ID; use those that genuinely support a sentence; do not force a citation into every sentence; do not cite what you did not use). The whole work should cite about ${ctx.plan.refs} DIFFERENT sources (not fewer than ${ctx.input.refsMin}), so this paragraph should draw on about ${want} of them:`,
-      ...refs.map((r) => formatRefLine(r)),
+      `SOURCES (cite by ID only; a citation supports a specific sentence; do not force a citation into every sentence; do not cite what you did not use). The whole work must cite about ${ctx.plan.refs} DIFFERENT sources (not fewer than ${ctx.input.refsMin}); the list is shared out between paragraphs, so:`,
     );
+    if (primary.length) {
+      lines.push(`PRIMARY SOURCES for this paragraph — use EACH of them at least once where it genuinely supports a sentence (a claim, a definition, a comparison, a figure):`, ...primary.map((r) => formatRefLine(r)));
+      if (other.length) lines.push(`OTHER SOURCES (optional — only if they fit better):`, ...other.map((r) => formatRefLine(r)));
+    } else {
+      lines.push(...refs.map((r) => formatRefLine(r)));
+    }
   } else {
     lines.push(`SOURCES: none available — write WITHOUT any citations and without any bracketed IDs or numbers.`);
   }
