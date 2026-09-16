@@ -520,3 +520,142 @@ kerak.
    SSR testda ko'rinadi va kind ga xos maydonlar shartli
    ko'rinish/qiymat orqali tasdiqlangan (band 1 dagi 10 tasidan
    tashqari, ular dvigatelsiz «bezak» emas — WP-B kutmoqda, izohli).
+
+### WP-F — ulash (darvoza, delivered, yorliq, jonli holat), 2026-09-16
+
+**Holat:** bajarildi (jonli 7 holat YOZILDI, lekin ISHGA TUSHIRILMADI —
+LLM sarfi lead qarori, R3 raundida).
+
+**Fayllar.** `lib/generation/index.ts` (`teacherGateFail`, `fileSuffix`,
+`pageGateApplies` istisnosi), `lib/generation/structure.ts`
+(`teacher:<id>` talab turi, kind bo'yicha bo'lim shartnomasi),
+`lib/generation/delivered.ts` (`deliveredCount` teacher shoxi),
+`lib/generation/i18n.ts` (`teacherExtraLabels`, `teacherSectionLabel`),
+`lib/generation/teacher/prompts.ts` (yorliqlar `i18n.ts` dan — bitta
+manba), `lib/server/worker.ts` (manba fayl sharti), `scripts/live-engine.mts`
+(7 holat + `--list`), `scripts/seed-demo.mts` (5 namuna).
+Testlar: `tests/teacher-wiring.test.mts` 14, `tests/delivered.test.mts` 6.
+
+**Darvoza qoidalari** (hajm SO'Z bilan emas — `LENGTH_GATED` da beshala
+vosita ATAYIN yo'q, `pageGateApplies` ularda `false`):
+
+| kind | qoida | konstanta |
+|---|---|---|
+| lesson | bosqich ≥ tur minimumi (reyestr) VA \|Σ daqiqa − davomiylik\| ≤ 5 | `TEACHER_MINUTES_TOLERANCE` |
+| map | hafta ≥ 0.9 × `weeksFor(haftalik, jami)`; `choraklik` da 4 chorak | `MAP_WEEK_RATIO` |
+| glossary | atama ≥ 0.7 × `termCount` | `TEACHER_COUNT_RATIO` |
+| keys | keys ≥ 0.7 × `caseCount` | `TEACHER_COUNT_RATIO` |
+| test | savol ≥ 0.8 × `count` VA har variant kaliti savol soniga teng | `TEST_COUNT_RATIO` |
+
+Nisbatlar `delivered` floori bilan AYNI (0.70) — pastda xato + to'liq
+qaytarish, floor va va'da orasida farq qaytariladi. Testda 0.80: test
+BAHOLASH quroli va 20 savolga mo'ljallangan ball shkalasi 12 savolda
+boshqa ish bo'lib qoladi. Xaritada 0.90: xarita YILNI qoplaydi.
+
+Daqiqa toleransi 0 EMAS, chunki `guard.ts normalizeMinutes` yig'indini
+aynan `duration` ga tenglashtiradi — 0 tolerans dvigatel ishlaganda
+hech qachon ishlamas edi. Darvoza DVIGATELDAN KEYINGI qadamlarni
+qo'riqlaydi: avto-sayqal bosqichni qayta yozsa yoki foydalanuvchi
+tahrir qilsa, 45 daqiqalik dars 60 daqiqaga aylanib ketishi mumkin.
+
+**Bo'lim id SHARTNOMASI** (`hard`; WP-A jadvalidan chiqarilgan):
+
+| kind | qat'iy bo'limlar | qat'iy EMAS |
+|---|---|---|
+| lesson | `passport` · `goal` · `stages` · `homework` | `assessment` (tur/uslub tanlovi) |
+| map (yillik) | `passport` · `year` | — |
+| map (choraklik) | `passport` · `q1`..`q4` | — |
+| glossary | `terms` | `intro` (muqaddima, mazmun emas) |
+| keys | `intro` · `case1` · `rubric` | `case2..caseN` (`delivered` o'lchaydi) |
+| test | `instructions` · `variant-<id>` (har variant) | `key`/`criteria`/`omr` (forma tanlovi) |
+
+Talab `doc.teacher` BOR bo'lgandagina qo'yiladi: eski yo'l
+(`TEACHER_ENGINE=0`, `write-specials.ts`, bazadagi eski `doc_json`)
+boshqa bo'lim id lari bilan yozadi va yangi shartnoma bilan o'lchansa
+to'rtala xizmat ham o'lardi. Shu sabab `structureNeeds` endi ikkinchi,
+IXTIYORIY parametr (`doc`) oladi — xarita bo'limlari turga, test
+bo'limlari variant soniga bog'liq va ularni `meta` dan bilib bo'lmaydi.
+
+**`built.delivered` shakli va yagona manba.** Dvigatel
+(`TeacherBuilt.delivered`) va `deliveredCount` ikkalasi ham
+`{got, want, unit}` qaytaradi, lekin YOZUVCHISI bitta:
+`writeWithLlm` shartnomasi `AcademicDoc | null` bo'lgani uchun
+`built.delivered` `index.ts` ga YETIB BORMAYDI, shuning uchun miqdor
+hujjatdan (`doc.teacher`) QAYTA hisoblanadi — bu bir vaqtning o'zida
+to'g'riroq ham: sayqal va tahrirdan keyingi holatni ko'rsatadi.
+Va'da (`want`) esa `values` dan, `teacher/input.ts` orqali — dvigatel
+ishlatgan aynan o'sha reyestr chegaralari bilan. Shuning uchun
+`deliveredCount` uchinchi, ixtiyoriy `values` parametrini oldi.
+
+Eski hisob ikki joyda JIM XATO berardi: `uch-tilli` glossariyda
+atamalar jadvalda TAKRORLANADI (`h3` + jadval), `choraklik` xaritada
+esa `tables[0]` yilning atigi choragi — to'liq bajarilgan 34 haftalik
+xarita «9 hafta» bo'lib ko'rinar va pulning uchdan ikki qismi
+qaytarilardi. Keys va testda umuman o'lchov yo'q edi. Dars rejasida
+miqdor va'dasi YO'Q (narx bosqich soniga bog'lanmagan).
+
+**Yorliqlar bitta manbada.** WP-A vaqtincha `teacher/prompts.ts` ichida
+saqlagan `EXTRA` jadvali `i18n.ts teacherExtraLabels` ga ko'chdi;
+`teacherLabels` o'z joyida qoldi, chunki u KONTEKST yig'uvchisi
+(`sectionLabels` + extra + til kodi). Qo'shilgan qatorlar: WP-C shapkasi
+(«Tasdiqlayman», «Tuzuvchi», «Sana», «Variant», «Javoblar kaliti»,
+«Ko'rsatma») va `delivered` birliklari (hafta/atama/keys/savol) —
+uz/ru/en. «Sinf» va «Baholash mezonlari» QO'SHILMADI: ular allaqachon
+`SectionLabels` da (`fieldGrade`, `rubric`). `teacherSectionLabel(id)`
+bo'lim id ni o'zbekcha nomga o'giradi — tuzilma darvozasi yiqilganda
+foydalanuvchi «`stages` yo'q» emas, «„Dars bosqichlari“ bo'limi yo'q»
+degan xabarni ko'radi.
+
+**Fayl nomi:** `-dars`, `-xarita`, `-glossariy`, `-keys`, `-test`
+(`fileSuffix`). Ilgari faqat ikkitasi bor edi va bitta jildga yuklangan
+uchta hujjat brauzerda `(1)`, `(2)` bo'lib raqamlanardi.
+
+**Worker:** manba fayl endi `tool.modes` e'lon qilgan HAR vositaga
+uzatiladi. `tool.id === "translation"` sharti forma VA'DA QILGAN fayl
+rejimini jimgina o'chirardi — test vositasi «faylingizdan test tuzaman»
+deb yuklatib, testni mavzu nomidan yozardi.
+
+**Jonli holatlar (7, `npm run live`):** `lesson`, `map` (yillik 34
+hafta), `map-quarters` (4 chorak, 4 jadval), `glossary` (uch tilli 20
+atama), `keys` (5 keys, rubrika 10 ball), `test-topic` (20 savol, 2
+variant, OMR PNG, hisobot ≥ 55, `keyMatchesVariants`), `test-file`
+(`--source <docx>` → `sourceGrounded`), `test-curriculum` (fizika
+8-sinf, 5 mavzu → `curriculumCoverage`). Har holatda umumiy blok
+(`teacherChecks`): `doc.teacher` bor, hisobot bali > 0, `cost.calls > 0`,
+`delivered` va'daga mos, DOCX bet chegarada. `doc.json` `eval-out/live/`
+ga yoziladi (WP-C maketi va ko'ruvchi paritetini LLM sarfisiz qayta
+o'lchash uchun urug'). Yangi `--list` bayrog'i holatlarni CHAQIRUVSIZ
+ko'rsatadi.
+
+**Testlar.** `teacher-wiring` 14, `delivered` 6; `generation` (62),
+`document` (62), `work-wiring`, `teacher-engine` (26),
+`teacher-test-engine` (17) yashil. Mutatsiya 6/6 qizardi: daqiqa
+toleransi 5→10, test nisbati 0.8→0.7, xarita haftasi faqat
+1-chorakdan (darvozada), bo'sh bo'lim «bor» deb sanalishi,
+`delivered` da hafta `tables[0]` dan, `delivered` teacher shoxi
+o'chirilishi.
+
+**Ochiq savollar / keyingi ish.**
+1. **Jonli 7 holat ishga tushirilmadi** — LLM sarfi lead qarori
+   (R3). `test-file` uchun `--source <fayl.docx>` namunasi ham kerak.
+2. **Bet chegaralari vaqtinchalik** (`TEACHER_PAGES`): WP-C
+   `planTeacher` maketi bu worktree'da yo'q va DOCX umumiy shox bilan
+   chizilmoqda. Maket kelgach chegaralar toraytiriladi, LibreOffice
+   ko'zi bilan.
+3. **`keys` ning `rubric` bo'limi QAT'IY qilindi** — WP-A ochiq bandi 3
+   (WP-C uni alohida bet qiladimi yoki keys yoniga qaytaradimi) hali
+   yopilmagan. Bo'lim ID i o'zgarsa, shartnoma ham o'zgaradi.
+4. **`test/labels.ts` va `i18n.ts` qisman ustma-ust**: «Ko'rsatma»,
+   «Javoblar kaliti», «Variant» ikkala jadvalda ham bor (qiymatlari
+   bir xil). WP-B fayli hujjat TANASI uchun, `i18n.ts` esa WP-C
+   SHAPKASI uchun — birlashtirish WP-C maketidan keyin, u qaysinisini
+   o'qishini ko'rgach.
+5. **`encodeTeacherValues` test kindini bilmaydi** (`teacher/input.ts`
+   faqat 4 kind uchun teskari yo'l beradi), shuning uchun
+   `seed-demo.mts` da `test` namunasi qo'lda yozildi. Forma qoralamasi
+   (WP-E) shu funksiyani test uchun ham talab qiladi.
+6. **`deliveredCount(meta, doc)` uchinchi parametrsiz chaqirilsa**
+   (eski chaqiruvchi, boshqa modul) teacher hujjatida va'da REYESTR
+   STANDARTI bilan hisoblanadi. Hozir yagona chaqiruvchi `index.ts` va
+   u `values` ni uzatadi; yangi chaqiruvchi qo'shilsa shu shart
+   eslansin.

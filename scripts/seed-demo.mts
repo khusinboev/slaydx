@@ -15,7 +15,9 @@
  * Foydalanish:
  *   npm run seed -- <username> [slug ... | all]
  *   npm run seed -- adkhambek_4 essay glossary lesson-plan
- *   npm run seed -- adkhambek_4 all   # 14 turdagi vositaning HAMMASI
+ *   npm run seed -- adkhambek_4 lesson-plan texnologik-xarita glossary keys test
+ *                                     # o'qituvchi vositalari (AUDIT-20)
+ *   npm run seed -- adkhambek_4 all   # namunasi bor HAMMA vosita
  *
  * Slug berilmasa standart to'plam ishlatiladi.
  */
@@ -23,8 +25,37 @@ import { queryOne, pool } from "../lib/server/db.ts";
 import { budgetFor } from "../lib/generation/budget.ts";
 import { enqueueGeneration } from "../lib/server/jobs.ts";
 import { env } from "../lib/server/env.ts";
-import { priceFor, TOOL_BY_SLUG, topicOf } from "../lib/tools.ts";
+import { extractMeta } from "../lib/generation/meta.ts";
+import { encodeTeacherValues, teacherInputFromValues, type TeacherInput } from "../lib/generation/teacher/input.ts";
+import { TEACHER_TOOL_BY_KIND, type TeacherKind } from "../lib/generation/teacher/types.ts";
+import { priceFor, TOOL_BY_ID, TOOL_BY_SLUG, topicOf } from "../lib/tools.ts";
 import type { FormValues } from "../lib/types.ts";
+
+/**
+ * O'qituvchi hujjatlarining SHAPKASI — beshala namunada bir xil
+ * (demo hisobda hujjatlar bitta maktab nomidan chiqsin).
+ */
+const TEACHER_HEADER = {
+  language: "uz",
+  university: "15-son umumiy o‘rta ta’lim maktabi",
+  author: "Abdujabbor Husinboyev",
+  date: "2026-09-16",
+} as const;
+
+/**
+ * O'qituvchi namunasi — `encodeTeacherValues` orqali (AUDIT-20 WP-F).
+ *
+ * Nega to'g'ridan-to'g'ri `FormValues` yozilmaydi: maydon nomlari kind
+ * bo'yicha farq qiladi (`lessonType`/`mapType`/`glossaryType`/`keysType`)
+ * va ro'yxatlar JSON bo'lib ketadi. Qo'lda yozilganda bitta harf xato
+ * bo'lsa, `teacherInputFromValues` jimgina STANDART turni olardi va
+ * namuna yangi imkoniyatni umuman ko'rsatmasdi.
+ */
+function teacherSample(kind: TeacherKind, over: Partial<TeacherInput>): FormValues {
+  const meta = extractMeta(TOOL_BY_ID[TEACHER_TOOL_BY_KIND[kind]], { ...TEACHER_HEADER } as FormValues);
+  const base = teacherInputFromValues(meta, { ...TEACHER_HEADER } as FormValues, kind);
+  return { ...encodeTeacherValues({ ...base, ...over }), ...TEACHER_HEADER };
+}
 
 /** Namunalar `scripts/live-engine.mts` dagi keyslar bilan bir xil. */
 const SAMPLES: Record<string, FormValues> = {
@@ -79,10 +110,14 @@ const SAMPLES: Record<string, FormValues> = {
     sourceLang: "uz",
     language: "en",
   },
-  keys: {
-    topic: "Pedagogika fanidan vaziyatli topshiriqlar",
-    language: "uz",
-  },
+  keys: teacherSample("keys", {
+    type: "muammoli",
+    topic: "Boshlang‘ich sinfda sinf boshqaruvi",
+    subject: "Pedagogika",
+    institution: "Toshkent davlat pedagogika universiteti",
+    caseCount: 5,
+    audience: "otm",
+  }),
   "mustaqil-ish": {
     topic: "Suv resurslarini muhofaza qilish",
     language: "uz",
@@ -115,29 +150,66 @@ const SAMPLES: Record<string, FormValues> = {
     email: "info@slaydxx.uz",
     annotationLangs: "same",
   },
-  glossary: {
+  /*
+   * ── O'qituvchi vositalari 2 (AUDIT-20) ──
+   *
+   * Namunalar `encodeTeacherValues` bilan yasaladi, ya'ni maydon nomlari
+   * va shakli formaning O'ZI yuboradigani bilan AYNI (`teacher/input.ts`
+   * yagona ko'prik). Qo'lda yozilganda `glossaryType` yoki
+   * `translationLangs` nomi jimgina noto'g'ri bo'lib qolar, namuna esa
+   * standart tur bilan chiqardi — demo aynan YANGI imkoniyatlarni
+   * ko'rsatishi kerak: uch tilli glossariy, choraklik xarita, BSB
+   * baholash, OMR li test.
+   */
+  glossary: teacherSample("glossary", {
+    type: "uch-tilli",
     topic: "Fotosintez va o‘simlik fiziologiyasi",
-    termCount: "20",
-    language: "uz",
-    university: "15-son umumiy o‘rta ta’lim maktabi",
-    author: "Abdujabbor Husinboyev",
-  },
-  "lesson-plan": {
+    subject: "Biologiya",
+    grade: 8,
+    termCount: 20,
+    includeExample: true,
+    translationLangs: ["ru", "en"],
+  }),
+  "lesson-plan": teacherSample("lesson", {
+    type: "yangi-mavzu",
     topic: "Kasrlarni qo‘shish va ayirish",
     subject: "Matematika",
     grade: 5,
-    duration: "45",
-    language: "uz",
-    university: "15-son umumiy o‘rta ta’lim maktabi",
-    author: "Abdujabbor Husinboyev",
-  },
-  "texnologik-xarita": {
+    gradeLetter: "A",
+    duration: 45,
+    stageCount: 6,
+    assessmentStyle: "bsb",
+    competencies: ["Matematik savodxonlik", "Axborot bilan ishlash"],
+  }),
+  "texnologik-xarita": teacherSample("map", {
+    type: "choraklik",
+    topic: "Biologiya",
     subject: "Biologiya",
+    grade: 8,
     weeklyHours: 4,
     totalHours: 136,
-    language: "uz",
-    university: "15-son umumiy o‘rta ta’lim maktabi",
-    author: "Abdujabbor Husinboyev",
+    controlLink: "bsb-chsb",
+  }),
+  /*
+   * Test — `encodeTeacherValues` ga TUSHMAYDI: test kirishi o'z
+   * ko'prigida (`teacher/test/input.ts testInputFromValues`) va uning
+   * teskari yo'li yo'q (forma qoralamasi WP-E da yoziladi). Shuning
+   * uchun maydonlar shu yerda ochiq turadi — nomlari `teacher-params.ts`
+   * reyestridagi bilan bir xil.
+   */
+  test: {
+    ...TEACHER_HEADER,
+    topic: "Hosila va uning tatbiqlari",
+    subject: "Matematika",
+    grade: 10,
+    mode: "topic",
+    testType: "nazorat",
+    count: 20,
+    variants: 2,
+    difficulty: "aralash",
+    omr: true,
+    answerKey: "alohida-bet",
+    timeMin: 45,
   },
   slide: {
     topic: "Fotosintez jarayoni",

@@ -1,4 +1,9 @@
 import { mapWeeks } from "./write-specials";
+import { teacherExtraLabels } from "./i18n";
+import { teacherInputFromValues } from "./teacher/input";
+import { weeksFor } from "./teacher/guard";
+import { testInputFromValues } from "./teacher/test/input";
+import type { FormValues } from "../types";
 import type { AcademicDoc, Delivered, DocMeta } from "./types";
 
 /**
@@ -147,7 +152,73 @@ function countTerms(doc: AcademicDoc): number {
   return n;
 }
 
-export function deliveredCount(meta: DocMeta, doc: AcademicDoc): Delivered | undefined {
+/**
+ * O'qituvchi vositalari (AUDIT-20 WP-F) — miqdor MODELDAN, matndan emas.
+ *
+ * Eski yo'l `h3` sarlavhalarni sanardi va xaritada birinchi jadvalning
+ * qatorlarini olardi. Yangi dvigatelda ikkalasi ham NOTO'G'RI javob
+ * beradi:
+ *   • `uch-tilli` glossariyda atamalar QO'SHIMCHA jadvalda ham turadi;
+ *   • `choraklik` xaritada TO'RTTA jadval bor va birinchisi yilning
+ *     atigi choragi — 34 haftalik xarita «9 hafta» bo'lib ko'rinardi va
+ *     to'liq bajarilgan ish uchun pulning uchdan ikkisi qaytarilardi;
+ *   • keysda va testda esa matnda sanaladigan ishonchli belgi umuman
+ *     yo'q edi (`h3` — «Topshiriqlar» va «Namunaviy kalit» sarlavhalari).
+ *
+ * VA'DA (`want`) esa `values` dan, `teacher/input.ts` orqali: reyestr
+ * chegaralari (tur bo'yicha atama/keys/savol soni) dvigatel bilan AYNI
+ * funksiyada hisoblanadi, ya'ni darvoza va narx bir xil sonni ko'radi.
+ *
+ * Dars rejasida MIQDOR VA'DASI YO'Q (narx bosqich soniga bog'lanmagan) —
+ * u yerda bosqich soni `index.ts` ning tuzilma darvozasida tekshiriladi.
+ */
+function teacherDelivered(meta: DocMeta, doc: AcademicDoc, values: FormValues): Delivered | undefined {
+  const t = doc.teacher;
+  if (!t) return undefined;
+  const L = teacherExtraLabels(doc.meta?.language || meta.language);
+
+  if (t.kind === "test") {
+    const model = t.test;
+    if (!model) return undefined;
+    return { got: model.questions.length, want: testInputFromValues(meta, values).count, unit: L.unitQuestion };
+  }
+
+  const input = teacherInputFromValues(meta, values, t.kind);
+  switch (t.kind) {
+    case "map": {
+      const m = t.map;
+      if (!m) return undefined;
+      // Hafta soni — BARCHA choraklar bo'ylab (choraklik xaritada 4 jadval).
+      const got = m.quarters.reduce((n, q) => n + q.weeks.length, 0);
+      return { got, want: weeksFor(m.weeklyHours || input.weeklyHours, m.totalHours || input.totalHours), unit: L.unitWeek };
+    }
+    case "glossary":
+      return t.glossary ? { got: t.glossary.terms.length, want: input.termCount, unit: L.unitTerm } : undefined;
+    case "keys":
+      return t.keys ? { got: t.keys.cases.length, want: input.caseCount, unit: L.unitCase } : undefined;
+    default:
+      // `lesson` — miqdor va'da qilinmaydi.
+      return undefined;
+  }
+}
+
+/**
+ * `values` — o'qituvchi vositalarining VA'DASI shundan o'qiladi
+ * (`teacher/input.ts`). Qolgan vositalarda `meta` yetarli, shuning uchun
+ * parametr ixtiyoriy va eski chaqiruvchilar o'zgarmaydi.
+ */
+export function deliveredCount(meta: DocMeta, doc: AcademicDoc, values: FormValues = {}): Delivered | undefined {
+  /*
+   * O'qituvchi dvigateli ishlagan bo'lsa (`doc.teacher`) — YANGI yo'l.
+   * Eski hujjatlarda (`TEACHER_ENGINE=0`, `write-specials.ts` va bazadagi
+   * eski `doc_json`) model yo'q va pastdagi `h3`/`mapWeeks` hisobi
+   * o'zgarishsiz ishlaydi.
+   */
+  if (doc.teacher) {
+    const byModel = teacherDelivered(meta, doc, values);
+    return !byModel || !(byModel.want > 0) || byModel.got >= byModel.want ? undefined : byModel;
+  }
+
   let got: number;
   let want: number;
   let unit: string;

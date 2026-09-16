@@ -17,12 +17,13 @@
  * `teacherUserNeeds` da ham ko'rinadi: model bilmagan narsa hujjatga
  * uydirma bo'lib emas, «Sizdan kutiladi» bandi bo'lib tushadi.
  *
- * YORLIQLAR ham shu yerda (`teacherLabels`): `i18n.ts` — WP-F egaligida,
- * shuning uchun AUDIT-20 ning YANGI qatorlari (maqsad uchligi,
- * kompetensiyalar, chorak sarlavhasi, tarjima ustunlari) bu faylda,
- * mavjudlari esa `sectionLabels` dan olinadi. Ikkinchi nusxa yozilmaydi.
+ * YORLIQLAR endi `i18n.ts` da (WP-F ko'chirdi): WP-A ularni vaqtincha
+ * shu faylda (`EXTRA`) saqlagan edi, chunki `i18n.ts` boshqa paketning
+ * egaligida turardi. `teacherLabels` shu yerda qoladi, chunki u
+ * KONTEKST yig'uvchisi (`sectionLabels` + `teacherExtraLabels` + til
+ * kodi), lekin QATORLARNING manbasi bitta — `i18n.ts`.
  */
-import { languageDirective, sectionLabels, type SectionLabels } from "../i18n";
+import { languageDirective, sectionLabels, teacherExtraLabels, type SectionLabels, type TeacherExtraLabels } from "../i18n";
 import { TEACHER_LIMITS } from "./types";
 import type { TeacherKind } from "./types";
 import type { TeacherTypeSpec } from "./registry";
@@ -31,82 +32,18 @@ import type { DocMeta } from "../types";
 
 /* ══════════════════════════ yorliqlar ══════════════════════════ */
 
-/** AUDIT-20 da QO'SHILGAN hujjat qatorlari (`i18n.ts` — WP-F egaligida). */
-export type TeacherExtraLabels = {
-  goal: string;
-  goalTalim: string;
-  goalTarbiya: string;
-  goalRivoj: string;
-  competencies: string;
-  equipment: string;
-  assessment: string;
-  stages: string;
-  situation: string;
-  example: string;
-  /** «I chorak» / «I четверть» / «Quarter I». */
-  quarter: (n: number) => string;
-  /** Uch tilli jadval ustunlari. */
-  triCols: [string, string, string];
-  hoursWord: string;
-  weekWord: string;
-};
-
-const EXTRA: Record<TeacherLang, TeacherExtraLabels> = {
-  uz: {
-    goal: "Dars maqsadi",
-    goalTalim: "Ta’limiy",
-    goalTarbiya: "Tarbiyaviy",
-    goalRivoj: "Rivojlantiruvchi",
-    competencies: "Kompetensiyalar",
-    equipment: "Jihozlar",
-    assessment: "Baholash mezoni",
-    stages: "Dars bosqichlari",
-    situation: "Vaziyat",
-    example: "Misol",
-    quarter: (n) => `${["I", "II", "III", "IV"][n - 1] ?? n} chorak`,
-    triCols: ["Atama", "Ruscha", "Inglizcha"],
-    hoursWord: "soat",
-    weekWord: "hafta",
-  },
-  ru: {
-    goal: "Цель урока",
-    goalTalim: "Обучающая",
-    goalTarbiya: "Воспитательная",
-    goalRivoj: "Развивающая",
-    competencies: "Компетенции",
-    equipment: "Оборудование",
-    assessment: "Критерии оценивания",
-    stages: "Этапы урока",
-    situation: "Ситуация",
-    example: "Пример",
-    quarter: (n) => `${["I", "II", "III", "IV"][n - 1] ?? n} четверть`,
-    triCols: ["Термин", "Русский", "Английский"],
-    hoursWord: "час",
-    weekWord: "неделя",
-  },
-  en: {
-    goal: "Lesson objective",
-    goalTalim: "Educational",
-    goalTarbiya: "Upbringing",
-    goalRivoj: "Developmental",
-    competencies: "Competencies",
-    equipment: "Equipment",
-    assessment: "Assessment criteria",
-    stages: "Lesson stages",
-    situation: "Situation",
-    example: "Example",
-    quarter: (n) => `Quarter ${["I", "II", "III", "IV"][n - 1] ?? n}`,
-    triCols: ["Term", "Russian", "English"],
-    hoursWord: "hours",
-    weekWord: "week",
-  },
-};
+/**
+ * Yorliq qatorlari `i18n.ts` da — bu yerdan RE-EXPORT (bitta manba).
+ * Eski chaqiruvchilar (`lesson.ts`, `map.ts`, `glossary.ts`, `keys.ts`)
+ * turni shu fayldan import qiladi, shuning uchun nom saqlanadi.
+ */
+export type { TeacherExtraLabels } from "../i18n";
 
 export type TeacherLabels = SectionLabels & TeacherExtraLabels & { lang: TeacherLang };
 
 export function teacherLabels(language: string): TeacherLabels {
   const lang: TeacherLang = language === "ru" ? "ru" : language === "en" ? "en" : "uz";
-  return { ...sectionLabels(lang), ...EXTRA[lang], lang };
+  return { ...sectionLabels(lang), ...teacherExtraLabels(lang), lang };
 }
 
 /* ══════════════════════════ kontekst ══════════════════════════ */
