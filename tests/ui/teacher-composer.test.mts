@@ -361,7 +361,8 @@ test("Yaratish: to'liq test formasi — testType/count/questionKinds/variants/om
   });
   await act(async () => {
     // OMR standart YOQIQ (dvigatel standarti bilan mos, smoke topilmasi) — bosilmaydi, `true` submit tanasida.
-    assert.ok((screen.getByLabelText("OMR varag'i") as HTMLInputElement).checked, "OMR standart yoqiq");
+    const omrSwitch = screen.getByLabelText("OMR varag'i");
+    assert.equal(omrSwitch.getAttribute("aria-checked") ?? String((omrSwitch as HTMLInputElement).checked), "true", "OMR standart yoqiq");
   });
   await act(async () => {
     fireEvent.click(screen.getByText(TOOL_BY_ID.test.submitLabel));
