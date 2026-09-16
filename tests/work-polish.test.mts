@@ -223,21 +223,33 @@ test("applyWorkSectionOps: bo'limni almashtiradi, asl hujjatga TEGMAYDI; bo'sh m
 
 /* ───────────────────────────── Q-3 / X-5 ───────────────────────────── */
 
-test("Q-3 + X-5: ball `acceptDelta` (+2) dan ko'p oshsagina qabul qilinadi", async () => {
+test("Q-3 + X-5: ball AYNAN +2 oshsa RAD, +3 oshsa QABUL (standart chegara)", async () => {
   const doc = makeDoc();
-  const review = makeReview({ score: 70, checks: [check("filler", "yellow", { op: "rewrite", target: "ch1.2", instruction: "Suvni olib tashlang" })] });
+  const fix = check("filler", "yellow", { op: "rewrite", target: "ch1.2", instruction: "Suvni olib tashlang" });
   const complete = (async () => ({ text: JSON.stringify({ blocks: [{ kind: "p", text: `Sayqallangan matn [W1]. ${words(400, "s")}` }] }) })) as never;
-
   const deps = { complete, deadline: Date.now() + 120_000, judge: false };
-  // +2 ga teng o'sish — QABUL QILINMAYDI (chegara qat'iy `>`).
-  const exactly = await runWorkPolish(doc, review, { ...deps, acceptDelta: WORK_ACCEPT_DELTA });
-  assert.equal(exactly.log.before, 70);
-  assert.equal(exactly.accepted, exactly.log.after > 70 + WORK_ACCEPT_DELTA);
 
-  // `acceptDelta: 0` bilan aynan shu natija QABUL bo'lishi mumkin — chegara haqiqatan ishlaydi.
-  const loose = await runWorkPolish(doc, review, { ...deps, acceptDelta: 0 });
-  assert.equal(loose.log.after, exactly.log.after, "hisobot bir xil");
-  if (exactly.log.after > 70) assert.ok(loose.accepted, "0 chegarasida qabul bo'ladi");
+  // X-5: chegara AYNAN +2 — baholovchi ballari bir xil matnda ±5 tebranadi.
+  assert.equal(WORK_ACCEPT_DELTA, 2);
+
+  // 1-qadam: sayqaldan keyingi ballni o'lchaymiz (boshlang'ich ball ataylab past).
+  const probe = await runWorkPolish(doc, makeReview({ score: 1, checks: [fix] }), deps);
+  const after = probe.log.after;
+  assert.ok(probe.accepted, "katta o'sish qabul bo'lishi kerak");
+
+  // 2-qadam: o'sish AYNAN +2 — RAD (chegara qat'iy `>`), hujjat o'zgarmaydi.
+  const exact = await runWorkPolish(doc, makeReview({ score: after - 2, checks: [fix] }), deps);
+  assert.equal(exact.log.after, after);
+  assert.equal(exact.accepted, false, `+2 o'sish qabul qilinmasligi kerak (${after - 2} → ${after})`);
+  assert.equal(exact.doc, doc);
+
+  // 3-qadam: o'sish +3 — QABUL.
+  const enough = await runWorkPolish(doc, makeReview({ score: after - 3, checks: [fix] }), deps);
+  assert.equal(enough.accepted, true, `+3 o'sish qabul qilinishi kerak (${after - 3} → ${after})`);
+
+  // `acceptDelta: 0` bilan aynan +2 ham qabul bo'ladi — chegara haqiqatan ishlaydi.
+  const loose = await runWorkPolish(doc, makeReview({ score: after - 2, checks: [fix] }), { ...deps, acceptDelta: 0 });
+  assert.equal(loose.accepted, true);
 });
 
 test("runWorkPolish: fix bo'lmasa hech narsa qilinmaydi, `userNeeds` baribir yoziladi", async () => {
