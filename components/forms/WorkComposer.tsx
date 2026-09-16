@@ -134,7 +134,7 @@ const fmtNum = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1).re
 /** «10-15» → «10–15 bet». */
 const pagesLabel = (id: string) => `${id.replace("-", "–")} bet`;
 
-function emptyUi(profile: UserProfile, genre: WorkGenreId): Ui {
+function emptyUi(profile: UserProfile, tool: ToolConfig, genre: WorkGenreId): Ui {
   const g = WORK_GENRES[genre];
   const kind = g.kinds[g.defaultKind]!;
   const defaults = SUBJECT_PROFILES.humanities.defaultVisuals;
@@ -144,7 +144,7 @@ function emptyUi(profile: UserProfile, genre: WorkGenreId): Ui {
     subjectProfile: "humanities",
     subjectName: profile.subject || "",
     language: "uz",
-    pages: normalizeWorkPages(kind, defaultPages(g.toolId)),
+    pages: normalizeWorkPages(kind, defaultPages(tool.id)),
     university: profile.university || "",
     faculty: profile.faculty || "",
     department: profile.department || "",
@@ -282,7 +282,7 @@ export function WorkComposer({
   const router = useRouter();
   const loggedIn = useAppStore((s) => s.loggedIn);
   const genre: WorkGenreId = workGenreOfTool(tool.id) ?? "coursework";
-  const [ui, setUi] = useState<Ui>(() => emptyUi(profile, genre));
+  const [ui, setUi] = useState<Ui>(() => emptyUi(profile, tool, genre));
   const [loading, setLoading] = useState(false);
   const [fileBusy, setFileBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -347,7 +347,7 @@ export function WorkComposer({
 
   const clearConfirm = useConfirmClick(() => {
     void clear();
-    setUi(emptyUi(profile, genre));
+    setUi(emptyUi(profile, tool, genre));
   });
 
   async function submit() {
