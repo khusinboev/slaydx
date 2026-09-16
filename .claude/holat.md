@@ -1,7 +1,7 @@
-# SlaydX — holat (2026-09-16, main `b15c560`, prod: AUDIT-18 `cfa5b84` (tasdiqlangan); tekshiruv: unit 1768/1770 (2 tasi `.env.local` fal.ai holati), ko'ruvchi 168, UI 209, lint/tsc toza)
+# SlaydX — holat (2026-09-16, main `b15c560`, prod: AUDIT-19 `552a46c` (2026-09-16); tekshiruv: unit 1768/1770 (2 tasi `.env.local` fal.ai holati), ko'ruvchi 168, UI 209, lint/tsc toza)
 
 Sprint: **Talaba ishlari 2 (AUDIT-19)** — reja `~/.claude/plans/sen-senior-fullstack-dev-majestic-starfish.md` (§1 `docs/AUDIT-19.md`), jurnal `docs/AUDIT-19.md` §5.
-Umumiy: **~95% — kod, jonli, smoke (referat/insho/tezis) va ko'z tekshiruvi tayyor; faqat deploy qoldi.**
+Umumiy: **100% — Talaba ishlari 2 prod'da (2026-09-16, `552a46c`).**
 
 | # | Bosqich | % | Izoh |
 |---|---|---|---|
@@ -15,10 +15,10 @@ Umumiy: **~95% — kod, jonli, smoke (referat/insho/tezis) va ko'z tekshiruvi ta
 | 7 | R jonli: referat/kurs ishi nazariy/amaliy/mustaqil ish 4/4 (82–90 ball, manbalar 100 % tekshirilgan) | 100 | 7+ tuzatish: max_tokens poli, workGateWords/bodyWordCount, kengaytirish+to'ldirish, manba taqsimoti, judge timeout, bo'sh paragraf qayta yozish |
 | 8 | R Chromium smoke (forma → natija → hisobot → sayqal → tahrir → DOCX) + LibreOffice ko'z | 100 | referat/insho/tezis yashil; 4 nuqson topilib tuzatildi (klient chegarasi 500, ArtifactViewer proplari, kesilgan JSON kirish, titul yorliqlari) |
 | 9 | Docs (AUDIT-19 §5–§6, CLAUDE.md, structure.md, README, xotira) | 100 | §7 (keyingi sprint) deploydan keyin |
-| 10 | Deploy (zaxira → prod .env GOOGLE_BOOKS_API_KEY → compose → nohup deploy.sh → prod smoke) | 0 | kalit foydalanuvchidan kutilmoqda; kalitsiz ham deploy mumkin (Books 429 → boshqa manbalar) |
+| 10 | Deploy (zaxira → prod .env GOOGLE_BOOKS_API_KEY → nohup deploy.sh → prod smoke) | 100 | zaxira `slaydx-20260916090605.sql`, rollback `cfa5b84`; eski hujjatlar 5/5, yangi referat 90 ball + sayqal + tahrir + DOCX |
 
 ## Ochiq bandlar
-- `GOOGLE_BOOKS_API_KEY` — foydalanuvchidan; `.env.local` + prod `/opt/slaydx/.env` + `docker-compose.yml` (compose-env testi).
+- Google Books: kalit qo'yildi, lekin kalit bilan so'rovga Google javob bermaydi (15–25 s jim; kalitsiz 0,2 s da 429) — Cloud Console'da «Books API» yoqilganini/kalit cheklovlarini tekshirish kerak; hozircha 10 s timeout bilan bo'sh qaytadi, manbalar OpenAlex/Crossref/lex.uz dan.
 - Wi-Fi uzilishlari (ETIMEDOUT) jonli sinovlarda — dvigatel endi chidamli (qayta urinish 2 s/4 s, bo'sh paragraf qayta yoziladi); prod tarmog'ida kuzatilmagan.
 - Eski yozuvchi yo'li (`writeWriterWithLlm`, `WORK_ENGINE=0`) hali kodda — keyingi sprintda olib tashlash.
 - Mundarijada bet raqami LibreOffice'da bo'sh (Word to'ldiradi) — avvalgi qaror.
@@ -27,5 +27,5 @@ Umumiy: **~95% — kod, jonli, smoke (referat/insho/tezis) va ko'z tekshiruvi ta
 - Dev server 3111 va worker to'xtatildi; Playwright scratchpad'da (`work19.mjs`, `mksession.mts`).
 
 ## Davom etish qadamlari
-1. Smoke natijasi (insho/tezis) → jurnal §5; `docs/AUDIT-19.md` §6 ochiq bandlar.
-2. Deploy `.claude/deploy.md` bo'yicha: zaxira, prod `.env` (Books kaliti bo'lsa), `nohup bash /opt/slaydx/deploy.sh`, prod smoke (eski kurs ishi/referat/tezis ochilishi + yangi referat).
+1. Google Books kalitini Cloud Console'da tekshirish (Books API yoqilganmi, cheklovlar) → prod'da `[googlebooks]` log satrlari.
+2. Keyingi sprint — foydalanuvchi bilan kelishiladi (`docs/AUDIT-19.md` §6 dan boshlash mumkin).
