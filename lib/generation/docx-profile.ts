@@ -1,6 +1,9 @@
 import { PUBLICATION_PROFILES } from "./article/profiles";
 import type { PublicationProfileId } from "./article/types";
 import { RESUME_TEMPLATES, type ResumeTemplateId } from "./resume/templates";
+import { WORK_MARGINS_CM, WORK_TYPE } from "./work/layout";
+import { SUBJECT_PROFILES } from "./work/subjects";
+import type { SubjectProfileId } from "./work/types";
 import type { DocMeta } from "./types";
 
 /**
@@ -355,6 +358,37 @@ export function articleProfile(id: PublicationProfileId, opts: { headingAlign?: 
 }
 
 /**
+ * TALABA ISHI profili — FAN PROFILIGA bog'langan (AUDIT-19, WP-C).
+ *
+ * `PROFILES.gost` eski kurs ishi/referat (model yo'q) uchun qoladi.
+ * Yangi hujjatda farq atigi ikkita, lekin ikkalasi ham uslubiy
+ * ko'rsatmadan keladi: (1) o'ng chegara fan profilidan — gumanitar
+ * fanlarda 1,0 sm, qolganlarida 1,5 sm; (2) jadval shrifti 12 pt
+ * (`PROFILES.gost` da 11 pt edi, ya'ni yuklab olingan faylda jadval
+ * ekrandagidan mayda chiqardi). Chegara va tipografiya raqamlari
+ * `work/layout.ts` da — ko'ruvchi varag'i ham AYNAN shu yerdan o'qiydi.
+ *
+ * `id` «gost» bo'lib QOLADI: `titleModel` (`titlePage === "gost"`) va
+ * eski tekshiruvlar shu identifikatorga tayanadi.
+ */
+export function workProfile(subject: SubjectProfileId): DocProfile {
+  const s = SUBJECT_PROFILES[subject] ?? SUBJECT_PROFILES.humanities;
+  const cm = (v: number) => Math.round(v * CM);
+  return {
+    ...PROFILES.gost,
+    page: {
+      ...GOST_PAGE,
+      margin: { top: cm(WORK_MARGINS_CM.top), bottom: cm(WORK_MARGINS_CM.bottom), left: cm(WORK_MARGINS_CM.left), right: cm(s.rightMarginCm) },
+    },
+    type: { ...GOST_TYPE, size: WORK_TYPE.sizePt * 2, line: Math.round(240 * WORK_TYPE.line) },
+    // Jadval `tableRef` joyida — `drawWork` uni o'zi chizadi; bayroq
+    // umumiy yo'lga (eski hujjat) tushib qolmasin uchun aniq yoziladi.
+    tablePlacement: "anchored",
+    tableSize: WORK_TYPE.tableSizePt * 2,
+  };
+}
+
+/**
  * Janr uchun profil. Yagona joy — renderer boshqa hech qayerda
  * `toolId` ni so'ramaydi.
  */
@@ -376,6 +410,18 @@ export function profileFor(meta: DocMeta): DocProfile {
     case "thesis":
       // AUDIT-19: yangi tezis (maqola dvigateli, `pubProfile` bor) — nashr profili; eski tezis — avvalgidek GOST titul.
       return meta.pubProfile ? articleProfile(meta.pubProfile) : PROFILES.gost;
+    case "coursework":
+    case "referat":
+    case "mustaqil-ish":
+      /*
+       * AUDIT-19: TALABA ISHI. Fan profili (o'ng chegara, jadval shrifti)
+       * FAQAT `doc.work` da bor, `meta` da yo'q — shuning uchun bu yer
+       * umumiy GOST qolipini beradi (titul turi, sahifa darvozasi), yangi
+       * hujjatda esa `renderDocx` uni `workProfile(model.subject)` bilan
+       * almashtiradi. Shox ATAYIN aniq yozilgan: standart ham `gost`, lekin
+       * «bu vositalar qaysi profilga tegishli» degan savol kodda ko'rinsin.
+       */
+      return PROFILES.gost;
     case "texnologik-xarita":
       return PROFILES.landscape;
     case "lesson-plan":

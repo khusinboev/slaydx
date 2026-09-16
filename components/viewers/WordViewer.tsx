@@ -4,7 +4,9 @@ import katex from "katex";
 import { Redo2, Undo2 } from "lucide-react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { planArticle, type CiteSpan } from "@/lib/generation/article/layout";
+import { planWork } from "@/lib/generation/work/layout";
 import type { ArticleOp } from "@/lib/generation/article/edit";
+import type { WorkOp } from "@/lib/generation/work/edit";
 import { cn } from "@/lib/cn";
 import { docLabels, sectionLabels } from "@/lib/generation/i18n";
 import { columnPercents, evenPercents } from "@/lib/generation/table-columns";
@@ -15,9 +17,10 @@ import { A4, contentHeightPx, mmPx, ZOOM_STEPS } from "@/lib/viewers/metrics";
 import { continuationTableFor, packPages } from "@/lib/viewers/paginate";
 import { splitByHeight, type TextSplitter } from "@/lib/viewers/split";
 import { useArticleEdit } from "../files/useArticleEdit";
+import { useWorkEdit } from "../files/useWorkEdit";
 import type { EditActionsState } from "../files/EditActions";
 import { ArticleHeadItem, CiteText } from "./ArticleHead";
-import { ArticleEditor, articleEditTargets, legacyEditTargets, targetAttr, type EditTarget } from "./ArticleEditor";
+import { ArticleEditor, articleEditTargets, isWorkOp, legacyEditTargets, targetAttr, workEditTargets, type EditCitePlan, type EditTarget } from "./ArticleEditor";
 import { ZoomFrame, Workspace } from "./sheet";
 import { TitlePage } from "./TitlePage";
 import { ViewerToolbar } from "./toolbar";
@@ -99,6 +102,42 @@ function articleSheet(doc: AcademicDoc) {
 }
 
 /**
+ * TALABA ISHI varag'i (AUDIT-19 WP-C) — `articleSheet` bilan bir juft:
+ * chegara FAN PROFILIDAN (gumanitar o'ng 1,0 sm), jadval 12 pt, «Manba:»
+ * va izohlar 10 pt; hammasi `planWork` dagi `page` dan, ya'ni
+ * `docx-profile.ts workProfile` bilan BITTA manbadan.
+ *
+ * `.word-article` sinfi qayta ishlatiladi ATAYIN: u «o'lchovi profildan
+ * keladigan varaq» degani (sarlavha o'lchami `inherit`, jadval
+ * `--doc-table-size`, paragraf orasi `--doc-p-after`), maqolaga xos hech
+ * narsa emas. Sarlavhaning BOSH HARFI matnning O'ZIDA (`planWork`),
+ * shuning uchun `text-transform: none` to'g'ri — DOCX ham aynan shu
+ * matnni yozadi (paritet).
+ */
+function workSheet(doc: AcademicDoc) {
+  if (!doc.work) return null;
+  const plan = planWork(doc);
+  const m = plan.page.marginsCm;
+  return {
+    plan,
+    style: {
+      padding: `${m.top}cm ${m.right}cm ${m.bottom}cm ${m.left}cm`,
+      fontSize: `${plan.page.sizePt}pt`,
+      lineHeight: "1.5",
+      "--doc-table-size": `${plan.page.tableSizePt}pt`,
+      "--doc-refs-size": `${plan.page.refsSizePt}pt`,
+      "--doc-refs-line": "1.5",
+      "--doc-small": `${plan.page.smallPt}pt`,
+      // DOCX `P.type.after` = 200 twip = 10 pt.
+      "--doc-p-after": "10pt",
+      "--doc-h1-align": plan.headingAlign,
+    } as React.CSSProperties,
+    measureWidth: `${210 - (m.left + m.right) * 10}mm`,
+    limit: Math.round(A4.hPx - mmPx((m.top + m.bottom) * 10) - A4.footerPx),
+  };
+}
+
+/**
  * Akademik / insho / maqola / tarjima hujjatining jonli ko'ruvchisi.
  *
  * Janrga bog'liq farq (insho ramkasi) `doc.meta.toolId` dan olinadi;
@@ -126,15 +165,24 @@ export function WordViewer({
    * `null` va hech narsa o'zgarmaydi.
    */
   const ed = useArticleEdit({ gen, onGen });
-  const doc = ed.doc ?? docProp;
+  /*
+   * Talaba ishi (AUDIT-19): o'z op tili va o'z vositalari. Ikkala hook
+   * ham SHARTSIZ chaqiriladi (React qoidasi) — har biri o'z vositasidan
+   * boshqasida `doc: null` qaytaradi, ya'ni faqat bittasi «yoqiladi».
+   */
+  const wed = useWorkEdit({ gen, onGen });
+  const doc = ed.doc ?? wed.doc ?? docProp;
   const items = useMemo(() => docToFlow(doc), [doc]);
   /*
    * Maqola 2: varaq o'lchovlari nashr profilidan (`articleSheet`), birinchi
    * annotatsiya yangi varaqdan BOSHLANMAYDI, jadval sarlavhasi rejadagi
    * tekislanish bilan. Eski hujjatlarda `null` — hech narsa o'zgarmaydi.
+   * Talaba ishi (`workSheet`) — chegara fan profilidan.
    */
   const sheet = useMemo(() => articleSheet(doc), [doc]);
-  const limit = sheet?.limit ?? contentHeightPx({ footer: true });
+  const work = useMemo(() => workSheet(doc), [doc]);
+  const profiled = sheet ?? work;
+  const limit = profiled?.limit ?? contentHeightPx({ footer: true });
   // Sahifadan uzun matnli bandlar bo'lib ko'rsatiladi (Word kabi) —
   // yuqoridagi `FLOW_SPLITTER` izohiga qarang.
   // Bo'lingan ro'yxat O'Z `items` iga bog'lanadi: hujjat tahrirdan keyin
@@ -190,9 +238,9 @@ export function WordViewer({
       setFlow({ base: items, list: next.list });
       return;
     }
-    setPages(packPages(renderItems, hs, limit, { abstractBreak: !sheet }));
+    setPages(packPages(renderItems, hs, limit, { abstractBreak: !profiled }));
     // eslint-disable-next-line react-hooks/exhaustive-deps -- renderItems barqaror (flow ?? items), `flow` deps'da.
-  }, [items, flow, limit, sheet]);
+  }, [items, flow, limit, profiled]);
 
   // Sof funksiya `paginate.ts` da (mutatsiya bilan tekshirilgan).
   const continuationTables = useMemo(() => (pages ? continuationTableFor(pages) : []), [pages]);
@@ -207,16 +255,37 @@ export function WordViewer({
     pageRefs.current[next - 1]?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
-  /* ═══ tahrir (Maqola 2, WP7) ═══ */
+  /* ═══ tahrir (Maqola 2 WP7; talaba ishi — AUDIT-19 WP-C) ═══ */
   const [editOn, setEditOn] = useState(false);
-  const editable = ed.editable && !ed.legacy;
+  /** Faol tahrir oqimi: maqola yoki talaba ishi (ikkalasi birga bo'lmaydi). */
+  const active = ed.editable ? ed : wed.editable ? wed : null;
+  const editable = Boolean(active) && !(active === ed && ed.legacy);
   const editing = editOn && editable;
-  const { run, undo, redo, save, pending, discard, saving, justSaved } = ed;
-  const runOps = useCallback((ops: ArticleOp[]) => void run(ops), [run]);
+  const { undo, redo, save, pending, discard, saving, justSaved } = active ?? ed;
+  const runArticle = ed.run;
+  const runWork = wed.run;
+  const useWork = active === wed;
+  const runOps = useCallback(
+    (ops: ArticleOp[]) => {
+      /*
+       * Talaba ishi op tili `ArticleOp` ning QISMI: `workEditTargets`
+       * annotatsiya/«asosiy natijalar» nishonini umuman bermaydi.
+       * `isWorkOp` shuni ishga tushirish vaqtida ham tekshiradi — cast
+       * o'rniga filtr, ya'ni yangi maqola opi jimgina o'tib ketmaydi.
+       */
+      if (useWork) {
+        const work: WorkOp[] = ops.filter(isWorkOp);
+        if (work.length === ops.length) void runWork(work);
+        return;
+      }
+      void runArticle(ops);
+    },
+    [useWork, runWork, runArticle],
+  );
   // Oqim bandi → tahrir nishoni (faqat tahrir rejimida; eski maqola — umumiy oqim bo'yicha).
   const targets = useMemo(
-    () => (editing ? (sheet ? articleEditTargets(sheet.plan, items) : legacyEditTargets(doc, items)) : null),
-    [editing, sheet, items, doc],
+    () => (editing ? (sheet ? articleEditTargets(sheet.plan, items) : work ? workEditTargets(work.plan, items) : legacyEditTargets(doc, items)) : null),
+    [editing, sheet, work, items, doc],
   );
 
   const onEditStateRef = useRef(onEditState);
@@ -250,10 +319,10 @@ export function WordViewer({
 
   const right = editable ? (
     <>
-      <button type="button" aria-label="Bekor qilish" title="Bekor qilish (Ctrl+Z)" className="hover:bg-white/10 rounded p-1.5 disabled:opacity-30" disabled={!ed.canUndo} onClick={undo}>
+      <button type="button" aria-label="Bekor qilish" title="Bekor qilish (Ctrl+Z)" className="hover:bg-white/10 rounded p-1.5 disabled:opacity-30" disabled={!(active ?? ed).canUndo} onClick={undo}>
         <Undo2 className="size-4" />
       </button>
-      <button type="button" aria-label="Qaytarish" title="Qaytarish (Ctrl+Shift+Z)" className="hover:bg-white/10 rounded p-1.5 disabled:opacity-30" disabled={!ed.canRedo} onClick={redo}>
+      <button type="button" aria-label="Qaytarish" title="Qaytarish (Ctrl+Shift+Z)" className="hover:bg-white/10 rounded p-1.5 disabled:opacity-30" disabled={!(active ?? ed).canRedo} onClick={redo}>
         <Redo2 className="size-4" />
       </button>
       <button
@@ -291,17 +360,17 @@ export function WordViewer({
         onFit={fit}
         right={right}
       />
-      {ed.error ? (
+      {(active ?? ed).error ? (
         <div className="no-print bg-rose-900/80 flex items-center gap-2 px-3 py-1.5 text-[12px] text-white">
-          <span className="flex-1">{ed.error}</span>
-          <button type="button" className="underline" onClick={ed.clearError}>
+          <span className="flex-1">{(active ?? ed).error}</span>
+          <button type="button" className="underline" onClick={(active ?? ed).clearError}>
             Yopish
           </button>
         </div>
       ) : null}
       <div ref={hostRef} className="min-h-0 flex-1">
         <Workspace ref={scrollRef} className="h-full">
-          <MaybeEditor editing={editing} doc={doc} plan={sheet?.plan ?? null} onOps={runOps}>
+          <MaybeEditor editing={editing} doc={doc} plan={profiled?.plan ?? null} onOps={runOps}>
           <div ref={stackRef} className="flex flex-col items-center gap-8">
             {!pages ? <p className="text-sm text-white/70">Sahifalar tayyorlanmoqda…</p> : null}
             {(pages ?? []).map((pg, i) => {
@@ -319,14 +388,14 @@ export function WordViewer({
                     {isTitle ? (
                       <TitlePage title={title} />
                     ) : (
-                      <div className={sheet ? "word-inner word-article" : "word-inner"} style={sheet?.style}>
+                      <div className={profiled ? "word-inner word-article" : "word-inner"} style={profiled?.style}>
                         <PageBody
                           items={pg}
                           continuation={continuationTables[i] ?? null}
                           continuedLabel={continuedLabel}
                           toc={toc}
                           labels={labels}
-                          tableCaptionAlign={sheet?.plan.tableCaptionAlign}
+                          tableCaptionAlign={sheet ? sheet.plan.tableCaptionAlign : work ? "center" : undefined}
                           edit={targets}
                         />
                       </div>
@@ -351,12 +420,12 @@ export function WordViewer({
       <div
         aria-hidden
         className={
-          sheet
+          profiled
             ? "word-article invisible pointer-events-none fixed top-0 -left-[12000px] font-[family-name:var(--font-doc)]"
             : "invisible pointer-events-none fixed top-0 -left-[12000px] w-[165mm] font-[family-name:var(--font-doc)] text-[14pt] leading-[1.5]"
         }
         // Maqola: o'lchov kengligi/shrifti/intervali ham profildan — varaq bilan bir xil.
-        style={sheet ? { ...sheet.style, padding: 0, width: sheet.measureWidth } : undefined}
+        style={profiled ? { ...profiled.style, padding: 0, width: profiled.measureWidth } : undefined}
         ref={measureRef}
       >
         {renderItems.map((it) => (
@@ -388,7 +457,7 @@ function MaybeEditor({
 }: {
   editing: boolean;
   doc: AcademicDoc;
-  plan: ReturnType<typeof planArticle> | null;
+  plan: EditCitePlan | null;
   onOps: (ops: ArticleOp[]) => void;
   children: React.ReactNode;
 }) {
@@ -433,7 +502,7 @@ function PageBody({
   toc: TocRow[];
   labels: ReturnType<typeof docLabels>;
   /** Maqola 2: «davomi» sarlavhasi uchun ham rejadagi tekislanish (bosh band boshqa varaqda qolgan). */
-  tableCaptionAlign?: "left" | "right";
+  tableCaptionAlign?: "left" | "right" | "center";
   /** Tahrir nishonlari (band id → nishon) — faqat tahrir rejimida (WP7). */
   edit?: Map<string, EditTarget> | null;
 }) {
@@ -486,10 +555,11 @@ function tableCols(table: DocTable) {
  * (`align` berilgan) — tana shriftida, o'ngda (GOST) yoki chapda
  * (APA/IEEE), kursivsiz (`drawArticle` bilan bir xil).
  */
-function TableCaption({ text, align, attr }: { text: string; align?: "left" | "right"; attr?: { "data-path"?: string } }) {
+function TableCaption({ text, align, attr }: { text: string; align?: "left" | "right" | "center"; attr?: { "data-path"?: string } }) {
   if (align) {
     return (
-      <div className="word-table-caption" style={{ textAlign: align, textIndent: 0 }} {...attr}>
+      // Talaba ishida sarlavha MARKAZDA va QALIN (DOCX `drawWork` bilan bir xil).
+      <div className="word-table-caption" style={{ textAlign: align, textIndent: 0, ...(align === "center" ? { fontWeight: 700 } : {}) }} {...attr}>
         {text}
       </div>
     );
@@ -501,7 +571,7 @@ function TableCaption({ text, align, attr }: { text: string; align?: "left" | "r
   );
 }
 
-function TableHeadOnly({ table, captionAlign }: { table: DocTable; captionAlign?: "left" | "right" }) {
+function TableHeadOnly({ table, captionAlign }: { table: DocTable; captionAlign?: "left" | "right" | "center" }) {
   const cols = tableCols(table);
   return (
     <div>
@@ -537,7 +607,7 @@ function TableGroup({
   rows: Extract<FlowItem, { type: "table-row" }>[];
   continued: boolean;
   continuedLabel: string;
-  captionAlign?: "left" | "right";
+  captionAlign?: "left" | "right" | "center";
   edit?: Map<string, EditTarget> | null;
   /** `table-head` bandining id si — sarlavha/ustun nishonlari shundan. */
   headId?: string;
@@ -708,6 +778,23 @@ function FlowBlock({
       );
     case "formula":
       return <Formula item={item} />;
+    case "table-number":
+      /*
+       * Talaba ishi: «1.1-jadval» TEPA O'NGDA, sarlavhadan oldin
+       * (DOCX `drawWork` da ham alohida, `keepNext` li paragraf).
+       */
+      return (
+        <div className="word-table-caption" style={{ textAlign: "right", textIndent: 0, marginBottom: 0 }}>
+          {item.text}
+        </div>
+      );
+    case "table-source":
+      // «Manba: …» — jadval OSTIDA, chapda, 10 pt kursiv (DOCX bilan bir xil).
+      return (
+        <div style={{ textAlign: "left", textIndent: 0, fontStyle: "italic", fontSize: "var(--doc-small, 10pt)", margin: "0 0 8pt" }}>
+          {item.text}
+        </div>
+      );
     case "refs2":
       return <div className="word-h1">{item.text}</div>;
     case "code":

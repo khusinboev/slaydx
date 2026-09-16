@@ -235,6 +235,13 @@ export type DocTable = {
    * Langar berilmasa eski xatti-harakat saqlanadi.
    */
   anchor?: string;
+  /**
+   * «Manba: …» — jadval OSTIDAGI qator (talaba ishi standarti, 10 pt
+   * kursiv). `work/layout.ts planWork` uni yorliq bilan to'ldiradi
+   * («Manba: muallif tomonidan tuzilgan»); maqolada jadval manbasi
+   * sarlavhaga kiradi, shuning uchun u yerda ishlatilmaydi.
+   */
+  source?: string;
 };
 
 export type DocMeta = {

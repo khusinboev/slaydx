@@ -399,7 +399,10 @@ export async function buildWorkDoc(meta: DocMeta, values: FormValues, opts: Work
       }
       if (w.table && tables.length < WORK_LIMITS.tables) {
         const id = `t${tables.length + 1}`;
-        tables.push({ id, ...w.table.table, anchor: p.id });
+        // `source` — «Manba: …» qatori (WP-C `DocTable.source`); modelda
+        // allaqachon o'qilgan edi (`tableFromLlm`), lekin saqlanadigan
+        // maydon WP-C gacha yo'q edi va jimgina tushib qolardi.
+        tables.push({ id, ...w.table.table, anchor: p.id, ...(w.table.source ? { source: w.table.source } : {}) });
         inserts.push({ at: w.table.after, block: { kind: "tableRef", text: w.table.table.caption ?? "", tableId: id } });
       }
       for (const ins of inserts.sort((a, b) => b.at - a.at)) {

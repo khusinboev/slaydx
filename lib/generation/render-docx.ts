@@ -25,7 +25,8 @@ import {
 } from "docx";
 import { ESSAY_DESIGNS } from "../languages";
 import { planArticle, type ArticlePlan, type HeadItem, type BodyItem } from "./article/layout";
-import { articleProfile, CM, contentWidth, profileFor, resumeProfile, type DocProfile } from "./docx-profile";
+import { planWork, type WorkBodyItem, type WorkPlan } from "./work/layout";
+import { articleProfile, CM, contentWidth, profileFor, resumeProfile, workProfile, type DocProfile } from "./docx-profile";
 import { docLabels } from "./i18n";
 import { omml } from "./omml";
 import { cleanText } from "./quality";
@@ -541,6 +542,279 @@ async function drawArticle(plan: ArticlePlan, K: Kit, P: DocProfile, opts: Resum
   return out;
 }
 
+/* ────────────────────────── Talaba ishlari 2 (AUDIT-19) ────────────────────────── */
+
+/**
+ * Kurs ishi / referat / mustaqil ish tanasi — FAQAT `planWork` rejasini
+ * chizadi («ko'rdim = oldim»).
+ *
+ * Joylashuv qoidalari (uslubiy ko'rsatmalar, GOST 7.32):
+ *   • bo'lim sarlavhasi MARKAZDA, BOSH HARF (matn rejada allaqachon shunday);
+ *   • bob/ilova/adabiyotlar YANGI VARAQDAN (`pageBreakBefore`), paragraflar oqadi;
+ *   • paragraf sarlavhasi («1.1. …») CHAPDA, qalin, abzats chekinishi bilan;
+ *   • JADVAL: raqam («1.1-jadval») TEPA O'NGDA alohida qatorda, NOMI uning
+ *     ostida markazda, jadvaldan keyin «Manba: …» 10 pt KURSIV;
+ *   • RASM: sarlavha («1.1-rasm. …») PASTDA markazda, ostida manba;
+ *   • formula markazda, raqami «(1.1)» o'ng chekkada;
+ *   • mundarija Word MAYDONI ichida, lekin tarkibini biz yozamiz
+ *     (LibreOffice maydonni to'ldirmaydi — `renderDocx` dagi izoh).
+ */
+async function drawWork(plan: WorkPlan, doc: AcademicDoc, K: Kit, P: DocProfile, opts: ResumeDocxOpts): Promise<Array<Paragraph | Table>> {
+  const out: Array<Paragraph | Table> = [];
+  const { line, font, size } = P.type;
+  /** «Manba: …» va jadval izohlari — 10 pt (rejadagi `page.smallPt`). */
+  const small = plan.page.smallPt * 2;
+  const W = K.CONTENT_W;
+
+  /** Iqtibosli matn — HAR bo'lak alohida `<w:t>` (ko'ruvchidagi `<span>` lar bilan juft). */
+  const spanRuns = (spans: { text: string }[], extra: RunExtra = {}): TextRun[] =>
+    spans
+      .filter((s) => s.text.length)
+      .map(
+        (s) =>
+          new TextRun({
+            text: `${/^\s/.test(s.text) ? " " : ""}${cleanText(s.text)}${/\s$/.test(s.text) ? " " : ""}`,
+            font,
+            size: extra.size ?? size,
+            bold: extra.bold,
+            italics: extra.italics,
+          }),
+      );
+
+  /*
+   * `drawn` — birinchi chizilgan bandni belgilaydi. Titul o'zidan keyin
+   * varaqni allaqachon yopgan (`renderDocx` uzilish paragrafi), shuning
+   * uchun MUNDARIJA (yoki mundarija bo'lmasa — KIRISH) yangi varaqni
+   * O'ZIDAN so'ramaydi: ikkinchi uzilish BO'SH varaq qoldirardi.
+   * Mundarijadan KEYIN esa kirish o'z uzilishini oladi — bu yerda
+   * bo'sh paragraf ishlatilmaydi (umumiy yo'ldagi naqshdan farqi:
+   * sarlavha ustida sababsiz bo'sh qator qolmasin).
+   */
+  let drawn = false;
+  const breakFor = (want: boolean) => want && drawn;
+
+  /* ── mundarija ── */
+  if (doc.toc && plan.toc.length) {
+    out.push(K.heading(plan.labels.toc, HeadingLevel.HEADING_1));
+    out.push(
+      new TableOfContents(plan.labels.toc, {
+        hyperlink: true,
+        headingStyleRange: "1-2",
+        contentChildren: plan.toc.map((r) => K.tocLine(r.text, r.level)),
+      }),
+    );
+    drawn = true;
+  }
+
+  const drawBody = async (items: WorkBodyItem[]) => {
+  for (const b of items) {
+    switch (b.k) {
+      case "h1": {
+        const pageBreakBefore = breakFor(b.pageBreak);
+        drawn = true;
+        out.push(
+          new Paragraph({
+            heading: HeadingLevel.HEADING_1,
+            alignment: AlignmentType.CENTER,
+            keepNext: true,
+            ...(pageBreakBefore ? { pageBreakBefore: true } : {}),
+            spacing: { before: 280, after: 200, line, lineRule: LineRuleType.AUTO },
+            children: [K.run(b.text, { bold: true, ...(P.heading.color ? { color: P.heading.color } : {}) })],
+          }),
+        );
+        break;
+      }
+      case "h2":
+        drawn = true;
+        out.push(
+          new Paragraph({
+            heading: HeadingLevel.HEADING_2,
+            alignment: AlignmentType.LEFT,
+            keepNext: true,
+            spacing: { before: 240, after: 120, line, lineRule: LineRuleType.AUTO },
+            ...(P.type.firstLine ? { indent: { firstLine: P.type.firstLine } } : {}),
+            children: [K.run(b.text, { bold: true, ...(P.heading.color ? { color: P.heading.color } : {}) })],
+          }),
+        );
+        break;
+      case "h3":
+        drawn = true;
+        out.push(
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            keepNext: true,
+            spacing: { before: 120, after: 120, line, lineRule: LineRuleType.AUTO },
+            children: [K.run(b.text, { bold: true })],
+          }),
+        );
+        break;
+      case "table": {
+        drawn = true;
+        // Raqam TEPA O'NGDA — alohida qator, jadval bilan birga (`keepNext`).
+        out.push(
+          new Paragraph({
+            alignment: AlignmentType.RIGHT,
+            keepNext: true,
+            spacing: { before: 160, after: 40, line, lineRule: LineRuleType.AUTO },
+            children: [K.run(b.numberLine)],
+          }),
+        );
+        if (b.caption) {
+          out.push(
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              keepNext: true,
+              spacing: { after: 80, line, lineRule: LineRuleType.AUTO },
+              children: [K.run(b.caption, { bold: true })],
+            }),
+          );
+        }
+        const t = b.table;
+        out.push(K.tableOf(t.headers, t.rows, t.widths ?? columnPercents(t.headers) ?? undefined));
+        if (b.source) {
+          out.push(
+            new Paragraph({
+              alignment: AlignmentType.LEFT,
+              spacing: { before: 40, after: 160, line, lineRule: LineRuleType.AUTO },
+              children: [K.run(b.source, { italics: true, size: small })],
+            }),
+          );
+        } else {
+          out.push(new Paragraph({ spacing: { after: 120, line: 240, lineRule: LineRuleType.AUTO }, children: [] }));
+        }
+        break;
+      }
+      case "figure": {
+        drawn = true;
+        const img = await figureBytes(b.figure?.url, opts);
+        if (img && b.figure) {
+          const maxW = Math.min(Math.floor(W / 15), Math.floor((160 / 25.4) * 96));
+          const ratio = b.figure.h && b.figure.w ? b.figure.h / b.figure.w : 0.7;
+          let width = maxW;
+          let height = Math.round(width * ratio);
+          const maxH = Math.floor((180 / 25.4) * 96);
+          if (height > maxH) {
+            height = maxH;
+            width = Math.round(height / ratio);
+          }
+          out.push(
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              keepNext: true,
+              // `lineRule: auto` SHART — usiz LibreOffice rasmni bitta matn qatoriga siqadi.
+              spacing: { before: 120, after: 80, line: 240, lineRule: LineRuleType.AUTO },
+              children: [new ImageRun({ type: img.type, data: img.data, transformation: { width, height } })],
+            }),
+          );
+        } else {
+          const border = { style: BorderStyle.SINGLE, size: 6, color: "999999", space: 8 };
+          out.push(
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              keepNext: true,
+              border: { top: border, bottom: border, left: border, right: border },
+              spacing: { before: 120, after: 80, line, lineRule: LineRuleType.AUTO },
+              children: [K.run(b.placeholder, { italics: true, color: "666666" })],
+            }),
+          );
+        }
+        // Sarlavha PASTDA, markazda; ostida «Manba: …».
+        out.push(
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            ...(b.source ? { keepNext: true } : {}),
+            spacing: { after: b.source ? 40 : 200, line, lineRule: LineRuleType.AUTO },
+            children: [K.run(b.caption)],
+          }),
+        );
+        if (b.source) {
+          out.push(
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              spacing: { after: 200, line, lineRule: LineRuleType.AUTO },
+              children: [K.run(b.source, { italics: true, size: small })],
+            }),
+          );
+        }
+        break;
+      }
+      case "formula":
+        drawn = true;
+        out.push(
+          new Paragraph({
+            alignment: AlignmentType.LEFT,
+            tabStops: [
+              { type: TabStopType.CENTER, position: Math.round(W / 2) },
+              { type: TabStopType.RIGHT, position: W },
+            ],
+            spacing: { before: 120, after: 160, line, lineRule: LineRuleType.AUTO },
+            children: [
+              new TextRun({ text: "\t", font, size }),
+              new DocxMath({ children: omml(b.latex) }),
+              new TextRun({ text: "\t", font, size }),
+              K.run(b.number),
+            ],
+          }),
+        );
+        break;
+      case "p":
+        drawn = true;
+        out.push(
+          new Paragraph({
+            alignment: P.type.justify ? AlignmentType.JUSTIFIED : AlignmentType.LEFT,
+            spacing: { after: P.type.after, line, lineRule: LineRuleType.AUTO },
+            ...(P.type.firstLine ? { indent: { firstLine: P.type.firstLine } } : {}),
+            children: spanRuns(b.spans),
+          }),
+        );
+        break;
+      case "li":
+        drawn = true;
+        out.push(new Paragraph({ bullet: { level: 0 }, spacing: { after: 80, line, lineRule: LineRuleType.AUTO }, children: spanRuns(b.spans) }));
+        break;
+      case "quote":
+        drawn = true;
+        out.push(new Paragraph({ indent: { left: CM }, spacing: { after: 200, line, lineRule: LineRuleType.AUTO }, children: spanRuns(b.spans, { italics: true }) }));
+        break;
+      case "code":
+        drawn = true;
+        out.push(...K.blockToParagraphs({ kind: "code", text: b.text, ...(b.caption ? { caption: b.caption } : {}) }));
+        break;
+    }
+  }
+  };
+
+  await drawBody(plan.body as WorkBodyItem[]);
+
+  /* ── adabiyotlar (yangi varaqdan, «1. …» raqamli GOST satrlari) ── */
+  if (plan.refs.length) {
+    out.push(
+      new Paragraph({
+        heading: HeadingLevel.HEADING_1,
+        alignment: AlignmentType.CENTER,
+        keepNext: true,
+        pageBreakBefore: true,
+        spacing: { before: 280, after: 200, line, lineRule: LineRuleType.AUTO },
+        children: [K.run(plan.refsLabel, { bold: true, ...(P.heading.color ? { color: P.heading.color } : {}) })],
+      }),
+    );
+    for (const r of plan.refs) {
+      out.push(
+        new Paragraph({
+          alignment: AlignmentType.JUSTIFIED,
+          spacing: { after: 60, line, lineRule: LineRuleType.AUTO },
+          indent: { left: 0, firstLine: 0 },
+          children: [K.run(r.line)],
+        }),
+      );
+    }
+  }
+
+  /* ── ilovalar (adabiyotlardan KEYIN, har biri yangi varaqdan) ── */
+  await drawBody(plan.appendix);
+  return out;
+}
+
 /**
  * `opts.resolveImage` — tahrirdan keyingi QAYTA render uchun (B-1).
  *
@@ -565,7 +839,19 @@ export async function renderDocx(doc: AcademicDoc, opts: ResumeDocxOpts = {}): P
    * (titul, mundarija, jadval oxirida) o'zgarishsiz.
    */
   const article = doc.article ? planArticle(doc) : null;
-  const P = resume ? resumeProfile(resume.template) : article ? articleProfile(article.profile.id, { headingAlign: article.headingAlign }) : base;
+  /*
+   * Talaba ishlari 2 (AUDIT-19): `doc.work` bo'lsa reja (`planWork`) va
+   * profil FAN PROFILIDAN. Eski kurs ishi/referat (`doc.work` yo'q) —
+   * quyidagi umumiy yo'l (titul, mundarija, jadval oxirida) o'zgarishsiz.
+   */
+  const work = !article && doc.work ? planWork(doc) : null;
+  const P = resume
+    ? resumeProfile(resume.template)
+    : article
+      ? articleProfile(article.profile.id, { headingAlign: article.headingAlign })
+      : work
+        ? workProfile(work.model.subject)
+        : base;
   const K = makeKit(P);
   const L = docLabels(meta.language);
   const children: Array<Paragraph | Table> = [];
@@ -606,14 +892,16 @@ export async function renderDocx(doc: AcademicDoc, opts: ResumeDocxOpts = {}): P
       if (T.department) children.push(K.centerP(T.department));
       children.push(K.centerP(""));
       children.push(K.centerP(""));
+      // Talaba ishi: «"FAN" fanidan» ish turidan OLDINGI qatorda (AUDIT-19).
+      if (T.subjectLine) children.push(K.centerP(T.subjectLine, { bold: true }));
       children.push(K.centerP(T.workLabel.toUpperCase(), { bold: true, size: 32 }));
       children.push(K.centerP(""));
-      children.push(K.centerP(`«${T.topic}»`, { bold: true, italics: true }));
+      children.push(K.centerP(T.topicLabel ? `${T.topicLabel} «${T.topic}»` : `«${T.topic}»`, { bold: true, italics: true }));
       children.push(K.centerP(""));
       children.push(K.centerP(""));
       if (T.author) children.push(K.signatureP(`${T.authorLabel}: ${T.author}`));
       if (T.courseLine) children.push(K.leftP(T.courseLine));
-      if (T.teacher) children.push(K.signatureP(`${T.labels.supervisor}: ${T.teacher}`));
+      if (T.teacher) children.push(K.signatureP(`${T.teacherLabel}: ${T.teacher}`));
       if (T.subject && T.subject.toLowerCase() !== T.workLabel.toLowerCase()) {
         children.push(K.leftP(`${T.labels.subject}: ${T.subject}`));
       }
@@ -632,6 +920,9 @@ export async function renderDocx(doc: AcademicDoc, opts: ResumeDocxOpts = {}): P
   } else if (article) {
     // Titul ham, mundarija ham YO'Q (`doc.toc` e'tiborsiz) — jurnal maqolasi.
     children.push(...(await drawArticle(article, K, P, opts)));
+  } else if (work) {
+    // Titul yuqorida chizildi; mundarija, tana, adabiyotlar va ilovalar — rejadan.
+    children.push(...(await drawWork(work, doc, K, P, opts)));
   } else {
     if (doc.toc) {
       children.push(K.heading(L.toc, HeadingLevel.HEADING_1));

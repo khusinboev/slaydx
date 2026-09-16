@@ -22,6 +22,11 @@ function isHeading(item: FlowItem): boolean {
     item.type === "h3" ||
     item.type === "table-head" ||
     /*
+     * Talaba ishi (AUDIT-19): jadval RAQAMI («1.1-jadval») sarlavha va
+     * birinchi qator bilan bitta blok — DOCX da uchalasi ham `keepNext`.
+     */
+    item.type === "table-number" ||
+    /*
      * Maqola 2 bosh bloki: UDK, sarlavha va mualliflar bir-biridan
      * ajralmasin (DOCX da `keepNext`), «REFERENCES» sarlavhasi ham
      * ro'yxati bilan. `figure`/`formula` bu yerda YO'Q — ular atom band
@@ -121,6 +126,13 @@ export function packPages(items: FlowItem[], rawHeights: number[], limit: number
 
     // Mundarija yangi varaqdan.
     if (item.type === "toc") flush();
+    /*
+     * TALABA ISHI (AUDIT-19): bob, KIRISH/XULOSA, ADABIYOTLAR va ILOVA
+     * YANGI VARAQDAN — DOCX da `pageBreakBefore`, bu yerda majburiy
+     * flush. `cur.length` sharti bilan: varaq boshidagi sarlavha bo'sh
+     * varaq yaratmasin (DOCX da ham birinchi band uzilish olmaydi).
+     */
+    if (item.type === "h1" && item.pageBreak) flush();
     /*
      * Annotatsiya bloki yangi varaqdan boshlanadi — lekin FAQAT BIRINCHISI.
      * `annotationLangs: "all"` da uch tilli annotatsiya bo'ladi;

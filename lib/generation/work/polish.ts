@@ -26,6 +26,7 @@
  * bu yerdagi sodda yo'l esa zaxira bo'lib qoladi.
  */
 import type { AcademicDoc, Block, DocSection } from "../types";
+import { applyWorkOps } from "./edit";
 import type { DocReview, ReviewCheck, ReviewGuardInput, UserNeed } from "../report/types";
 import {
   HONESTY_LIMIT,
@@ -477,7 +478,19 @@ export async function runWorkPolish(doc: AcademicDoc, review: DocReview, deps: W
     plan: planWorkPolish,
     userNeeds: workUserNeeds,
     rewrite: (d, fix, deadline) => rewriteForCore(d, fix, { complete, deadline }),
-    apply: (d, ops) => (deps.apply ?? applyWorkSectionOps)(d, ops),
+    /*
+     * WP-C: `work/edit.ts applyWorkOps` — endi sayqal ham TAHRIR bilan
+     * BITTA yo'ldan o'tadi: `setSection` dan keyin `cited` bayroqlari,
+     * bob daraxti va rasm/jadval sarlavhalari MATNGA qarab tenglashadi
+     * (`settle`). Ilgari bu yerdagi vaqtinchalik `applyWorkSectionOps`
+     * faqat bloklarni almashtirardi va qayta yozilgan bo'limdan chiqib
+     * ketgan manba ro'yxatda qolib ketardi.
+     *
+     * `deps.apply` ustun — testlar «apply yiqildi» holatini shu bilan
+     * sinaydi; eski `applyWorkSectionOps` esa chaqiruvchilar uchun
+     * eksport bo'lib qoladi.
+     */
+    apply: (d, ops) => (deps.apply ? deps.apply(d, ops) : applyWorkOps(d, ops, { genId: "" })),
     review: (d, guard) => reviewWork(d, { complete, deadline: deps.deadline, judge, now, research: deps.research, guard }),
     judgeFromReview: (prev) => workJudgeFromReview(prev, kind),
     rescore: (fresh, j) => {

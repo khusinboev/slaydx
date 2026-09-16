@@ -54,8 +54,12 @@ export function TitlePage({ title }: { title: TitleModel }) {
       </div>
       <div className="flex-1" />
       <div className="text-center">
+        {/* Talaba ishi: «"FAN" fanidan» ish turidan OLDIN (AUDIT-19). */}
+        {title.subjectLine ? <div className="mb-2 text-[14pt] font-bold">{title.subjectLine}</div> : null}
         <div className="text-[16pt] font-bold uppercase">{title.workLabel}</div>
-        <div className="mt-4 text-[14pt] font-bold italic">«{title.topic}»</div>
+        <div className="mt-4 text-[14pt] font-bold italic">
+          {title.topicLabel ? `${title.topicLabel} «${title.topic}»` : `«${title.topic}»`}
+        </div>
       </div>
       <div className="flex-1" />
       <div className="text-[14pt] leading-[1.5]">
@@ -76,7 +80,7 @@ export function TitlePage({ title }: { title: TitleModel }) {
         {title.teacher ? (
           <div className="flex items-baseline gap-2">
             <span>
-              {title.labels.supervisor}: {title.teacher}
+              {title.teacherLabel}: {title.teacher}
             </span>
             <span className="flex-1 border-b border-black/60" />
           </div>

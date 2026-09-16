@@ -1,11 +1,35 @@
 "use client";
 
 import { useCallback, useEffect, useRef, type ReactNode } from "react";
-import { renderCitations, type ArticlePlan } from "@/lib/generation/article/layout";
+import { renderCitations, type ArticlePlan, type RefItem } from "@/lib/generation/article/layout";
+import type { CiteStyle } from "@/lib/generation/article/types";
 import { langKeyOf, parseBlockPath, type ArticleLang, type ArticleOp } from "@/lib/generation/article/edit";
+import type { WorkOp } from "@/lib/generation/work/edit";
+import type { WorkPlan } from "@/lib/generation/work/layout";
 import type { AcademicDoc } from "@/lib/generation/types";
 import type { FlowItem } from "@/lib/viewers/flow";
 import { focusAtEnd } from "./editable";
+
+/**
+ * Tahrir qatlami REJADAN faqat iqtibos ko'rinishi uchun kerak bo'lgan
+ * qismni oladi — maqola (`ArticlePlan`) ham, talaba ishi (`WorkPlan`) ham
+ * shu shartnomaga mos. Butun rejani talab qilish qatlamni maqolaga
+ * bog'lab qo'yardi, holbuki u faqat «xom `[W…]` ni ekrandagi `[3]` ga
+ * qanday o'girish kerak» degan savolga javob izlaydi.
+ */
+export type EditCitePlan = { refs: RefItem[]; cite: CiteStyle; language: string; numbers: { figures: Record<string, string>; tables: Record<string, string> } };
+
+/**
+ * Tahrir qatlami chiqaradigan op lar. Talaba ishi nishon xaritasida
+ * (`workEditTargets`) `abstract`/`highlights` YO'Q — `isWorkOp` shuni
+ * ishga tushirish vaqtida ham tekshiradi, ya'ni `WorkOp` ga cast
+ * qilinmaydi.
+ */
+const WORK_OP_NAMES = new Set(["text", "heading", "cell", "caption", "refRemove", "blockRemove", "blockInsert", "setSection", "set"]);
+
+export function isWorkOp(op: ArticleOp): op is Extract<ArticleOp, { op: "text" | "heading" | "cell" | "caption" | "refRemove" | "blockRemove" }> & WorkOp {
+  return WORK_OP_NAMES.has(op.op);
+}
 
 /**
  * Maqola TAHRIR qatlami (Maqola 2, AUDIT-17 WP7) — `ResumeEditor` naqshi:
@@ -147,6 +171,72 @@ export function articleEditTargets(plan: ArticlePlan, items: FlowItem[]): Map<st
 }
 
 /**
+ * TALABA ISHI: oqim bandi → tahrir nishoni (AUDIT-19 WP-C).
+ *
+ * `workFlow` tartibi qaytadan yuriladi: titul → mundarija → tana →
+ * adabiyotlar → ilovalar. Jadval UCH–TO'RT bandga yoyilgani uchun
+ * (raqam, sarlavha+ustunlar, qatorlar, «Manba:») raqam va manba bandlari
+ * nishonsiz O'TKAZIB yuboriladi: ular REJADAN chiqadi, hujjatda bunday
+ * matn yo'q va tahrir qilinsa keyingi renderda yo'qolardi.
+ */
+export function workEditTargets(plan: WorkPlan, items: FlowItem[]): Map<string, EditTarget> {
+  const map = new Map<string, EditTarget>();
+  let k = 0;
+  const next = (type: FlowItem["type"]): FlowItem | null => {
+    const it = items[k++];
+    return it && it.type === type ? it : null;
+  };
+  // Titul va mundarija — tahrirsiz (titul maydonlari formada, mundarija rejadan).
+  if (items[k]?.type === "title") k++;
+  if (items[k]?.type === "toc") k++;
+
+  const walk = (body: WorkPlan["body"]): boolean => {
+    for (const b of body) {
+      if (b.k === "table") {
+        if (!next("table-number")) return false;
+        const head = next("table-head");
+        if (!head) return false;
+        map.set(head.id, { t: "table", id: b.tableId });
+        for (let r = 0; r < b.table.rows.length; r++) {
+          const row = next("table-row");
+          if (!row) return false;
+          map.set(row.id, { t: "row", tableId: b.tableId, r });
+        }
+        if (b.source && !next("table-source")) return false;
+        continue;
+      }
+      const it = next(b.k);
+      if (!it) return false;
+      switch (b.k) {
+        case "h1":
+        case "h2":
+          map.set(it.id, b.sectionId ? { t: "heading", sectionId: b.sectionId } : { t: "text", path: b.path });
+          break;
+        case "figure":
+          map.set(it.id, { t: "figure", id: b.figureId });
+          break;
+        case "formula":
+          // Formula LaTeX — KaTeX chizmasi ustida tahrir qilinmaydi.
+          break;
+        default:
+          map.set(it.id, { t: "text", path: b.path });
+      }
+    }
+    return true;
+  };
+
+  if (!walk(plan.body)) return new Map();
+  if (plan.refs.length) {
+    // Adabiyotlar sarlavhasi va satrlari REJADAN — tahrir nishoni yo'q
+    // (manbani olib tashlash iqtibos ustida ikki bosish bilan).
+    if (!next("h1")) return new Map();
+    k += plan.refs.length;
+  }
+  if (!walk(plan.appendix)) return new Map();
+  return map;
+}
+
+/**
  * Eski maqola (`doc.article` yo'q) — umumiy `docToFlow` tartibi: titul,
  * mundarija, annotatsiyalar, bo'limlar (h1 + bloklar), jadvallar,
  * adabiyotlar. Faqat matn nishonlari (bo'lim sarlavhasi, bloklar,
@@ -216,7 +306,8 @@ export function rawTextOf(doc: AcademicDoc, p: Parsed): string | null {
     case "highlights":
       return (doc.article?.highlights ?? []).join("\n");
     case "caption":
-      if (p.target === "figure") return doc.article?.figures.find((f) => f.id === p.id)?.caption ?? null;
+      // Sxema reyestri maqolada `doc.article`, talaba ishida `doc.work` da.
+      if (p.target === "figure") return (doc.article?.figures ?? doc.work?.figures ?? []).find((f) => f.id === p.id)?.caption ?? null;
       return (doc.tables ?? []).find((t) => t.id === p.id)?.caption ?? "";
     case "cell": {
       const t = (doc.tables ?? []).find((x) => x.id === p.tableId);
@@ -231,7 +322,7 @@ export function rawTextOf(doc: AcademicDoc, p: Parsed): string | null {
  * o'chirilmas span, ko'rinishi rejadagidek (`renderCitations`); qolgani
  * — matn tugunlari. Rejasiz (eski maqola) hamma narsa oddiy matn.
  */
-export function editNodes(raw: string, plan: ArticlePlan | null, d: Document): Node[] {
+export function editNodes(raw: string, plan: EditCitePlan | null, d: Document): Node[] {
   const out: Node[] = [];
   if (!plan) return [d.createTextNode(raw)];
   const refs = plan.refs.map((r) => r.ref);
@@ -328,7 +419,7 @@ export function opsFor(doc: AcademicDoc, p: Parsed, before: string, value: strin
 export type ArticleEditorProps = {
   doc: AcademicDoc;
   /** Reja — iqtibos ko'rinishi uchun; eski maqolada `null`. */
-  plan: ArticlePlan | null;
+  plan: EditCitePlan | null;
   onOps: (ops: ArticleOp[]) => void;
   children: ReactNode;
 };
