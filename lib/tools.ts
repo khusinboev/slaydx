@@ -119,6 +119,18 @@ const CUSTOM_REQUIRED: Record<string, ToolField[]> = {
    * tekshiriladi.
    */
   article: [{ kind: "text", name: "articleType", legend: "Maqola turi", required: true }],
+  /*
+   * Talaba ishlari 2 (AUDIT-19 WP-E2): kurs ishi / referat / mustaqil ish
+   * `WorkComposer` o'z formasini chizadi (`work-params.ts` reyestri, 28
+   * maydon). Mavzu `tool.topicLegend` orqali allaqachon tekshiriladi
+   * (pastdagi umumiy qoida); bu yerda faqat OTM/muallif — ular titul
+   * sahifasiz hujjat chiqarib bo'lmaydigan ikkita maydon (`tests/pricing.test.mts`
+   * «OTME ishlari universitetsiz qabul qilinmaydi»).
+   */
+  work: [
+    { kind: "text", name: "university", legend: "Oliy ta'lim muassasasi", required: true },
+    { kind: "text", name: "author", legend: "Muallif (F.I.Sh.)", required: true },
+  ],
 };
 
 /**
@@ -264,65 +276,16 @@ export const TOOLS: ToolConfig[] = [
     topicPlaceholder: "Boshlang'ich sinf o'quvchilarida o'qish ko'nikmalarini rivojlantirish",
     extraOptional: true,
     output: "docx",
+    custom: "work",
     basePrice: 12000,
-    fields: [
-      { kind: "language", name: "language", legend: "Kurs ishi tilini tanlang" },
-      ...writerFields({ universityRequired: true }),
-      {
-        kind: "chips",
-        name: "ministry",
-        legend: "Vazirlik",
-        options: [
-          {
-            value: "oliy",
-            label: "Oliy ta'lim, fan va innovatsiyalar",
-          },
-          { value: "maktab", label: "Maktabgacha va maktab ta'limi" },
-        ],
-      },
-      {
-        kind: "chips",
-        name: "tocMethod",
-        legend: "Mundarijani o'zingiz yozasizmi yoki AI avtomatik yaratishini xohlaysizmi?",
-        options: [
-          { value: "ai", label: "Avtomatik AI yaratishi" },
-          { value: "manual", label: "O'zim yozaman" },
-        ],
-      },
-      {
-        kind: "textarea",
-        name: "tocText",
-        legend: "Mundarija matni",
-        placeholder: "Kirish\nI bob. ...\nII bob. ...\nXulosa",
-        extra: true,
-      },
-      {
-        kind: "chips",
-        name: "pages",
-        legend: "Sahifalar soni",
-        options: [
-          { value: "10-15", label: "10-15 bet" },
-          { value: "15-20", label: "15-20 bet" },
-          { value: "20-25", label: "20-25 bet" },
-          { value: "25-30", label: "25-30 bet" },
-          { value: "30-35", label: "30-35 bet" },
-          { value: "35-40", label: "35-40 bet" },
-          { value: "40-45", label: "40-45 bet" },
-        ],
-      },
-      {
-        kind: "chips",
-        name: "images",
-        // Ilgari «Jadval va rasmlar» deb yozilgan, lekin dvigatel DOCX ga
-        // hech qachon rasm qo'ymagan — faqat jadval. Yorliq shu sababli
-        // aniqlashtirildi.
-        legend: "Tasnif jadvali qo'shilsinmi?",
-        options: [
-          { value: "yes", label: "Ha" },
-          { value: "no", label: "Yo'q" },
-        ],
-      },
-    ],
+    /*
+     * Talaba ishlari 2 (AUDIT-19 WP-E2): eski chip maydonlari
+     * `WorkComposer` (`components/forms/WorkComposer.tsx`) bilan
+     * almashtirildi — 27 parametr, janr×tur reyestri (`work/registry.ts`),
+     * 5 fan profili (`work/subjects.ts`). Majburiylari `CUSTOM_REQUIRED.work`
+     * da. Narx JADVALI o'zgarmadi (`priceFor` pastda, `pages` chipi bilan).
+     */
+    fields: [],
   },
   {
     id: "referat",
@@ -348,22 +311,10 @@ export const TOOLS: ToolConfig[] = [
     modes: TOPIC_FILE_MODES,
     extraOptional: true,
     output: "docx",
+    custom: "work",
     basePrice: 3000,
-    fields: [
-      { kind: "language", name: "language", legend: "Referat tilini tanlang" },
-      ...writerFields({ universityRequired: true }),
-      {
-        kind: "chips",
-        name: "pages",
-        legend: "Referat hajmini tanlang (sahifalar soni)",
-        options: [
-          { value: "10-15", label: "10-15 bet" },
-          { value: "15-20", label: "15-20 bet" },
-          { value: "20-25", label: "20-25 bet" },
-          { value: "25-30", label: "25-30 bet" },
-        ],
-      },
-    ],
+    // Talaba ishlari 2 (AUDIT-19 WP-E2) — `WorkComposer`, kurs ishi bilan bir izoh.
+    fields: [],
   },
   {
     id: "essay",
@@ -641,37 +592,10 @@ export const TOOLS: ToolConfig[] = [
     modes: TOPIC_FILE_MODES,
     extraOptional: true,
     output: "docx",
+    custom: "work",
     basePrice: 3000,
-    fields: [
-      { kind: "language", name: "language", legend: "Mustaqil ish tilini tanlang" },
-      ...writerFields({ universityRequired: true }),
-      {
-        kind: "chips",
-        name: "pages",
-        legend: "Hajm (sahifalar soni)",
-        options: [
-          { value: "10-15", label: "10-15 bet" },
-          { value: "15-20", label: "15-20 bet" },
-          { value: "20-25", label: "20-25 bet" },
-          { value: "25-30", label: "25-30 bet" },
-        ],
-      },
-      {
-        kind: "chips",
-        name: "tocMethod",
-        legend: "Rejani o'zingiz yozasizmi yoki AI avtomatik yaratishini xohlaysizmi?",
-        options: [
-          { value: "ai", label: "Avtomatik AI yaratishi" },
-          { value: "manual", label: "O'zim yozaman" },
-        ],
-      },
-      {
-        kind: "textarea",
-        name: "tocText",
-        legend: "Reja matni",
-        extra: true,
-      },
-    ],
+    // Talaba ishlari 2 (AUDIT-19 WP-E2) — `WorkComposer`, kurs ishi bilan bir izoh.
+    fields: [],
   },
   {
     id: "lesson-plan",
