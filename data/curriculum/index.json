@@ -1,0 +1,20 @@
+{
+  "version": "2026-09-16",
+  "sources": [
+    {
+      "title": "Umumiy o'rta ta'limning o'quv dasturlari (qabul-2025 to'plami)",
+      "url": "https://uzbmb.uz/upload/file/pdf/qabul2025/dasturlar/",
+      "publisher": "Respublika ta'lim markazi (Xalq ta'limi vazirligi)",
+      "year": 2018
+    }
+  ],
+  "subjects": [
+    {
+      "id": "matematika",
+      "uz": "Matematika",
+      "ru": "Математика",
+      "en": "Mathematics",
+      "grades": [11]
+    }
+  ]
+}

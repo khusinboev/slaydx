@@ -47,7 +47,21 @@ function walk(entry: string): { chain: string[]; server: string | null } {
   return { chain: [], server: null };
 }
 
-const ENTRIES = ["lib/tools.ts", "components/forms/WorkComposer.tsx", "components/forms/ArticleComposer.tsx", "components/forms/EssayComposer.tsx", "components/forms/ToolWorkspace.tsx"];
+/*
+ * `lib/curriculum.ts` (AUDIT-20 R0) — ATAYLAB izomorf: forma «bu fanda
+ * darslik rejimi bormi» degan savolga TARMOQSIZ javob berishi kerak
+ * (`hasCurriculum`, `index.json` ~5 KB). Agar u mavzularni `node:fs`
+ * bilan o'qishga o'tsa yoki server moduliga ulansa, WP-E ning
+ * `CurriculumPicker` i sahifani SSR da 500 qilardi.
+ */
+const ENTRIES = [
+  "lib/tools.ts",
+  "lib/curriculum.ts",
+  "components/forms/WorkComposer.tsx",
+  "components/forms/ArticleComposer.tsx",
+  "components/forms/EssayComposer.tsx",
+  "components/forms/ToolWorkspace.tsx",
+];
 
 for (const e of ENTRIES) {
   test(`klient chegarasi: ${e} server-only modulga yetmaydi`, () => {
