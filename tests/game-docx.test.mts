@@ -155,8 +155,16 @@ test("savollar CHEGARASIZ ikki ustunli jadvalda; javoblar YANGI BETDAN", async (
   assert.equal(cols.length, 2, "ikki ustun");
   const tbl = xml.slice(xml.indexOf("<w:tbl>"), xml.indexOf("</w:tbl>"));
   assert.ok(!/w:val="single"/.test(tbl.slice(0, tbl.indexOf("Gorizontal"))), "savollar jadvalida chegara chizig'i qoldi");
-  assert.ok(paraOf(xml, "Javoblar").includes("<w:pageBreakBefore/>"), "javoblar varag'i yangi betdan boshlanmadi");
-  assert.ok(!paraOf(xml, "To‘r").includes("<w:pageBreakBefore/>"), "to'r birinchi betda qolishi kerak");
+  /*
+   * Sarlavhalar DVIGATEL bo'limlaridan («Krossvord» / «Javoblar» —
+   * `crosswordLabels`), maketning o'z lug'atidan emas; shuning uchun
+   * sinov ham rejadan o'qiydi.
+   */
+  const plan = planGame(sampleGameDoc("crossword"));
+  const h1 = plan.body.filter((b): b is Extract<(typeof plan.body)[number], { k: "h1" }> => b.k === "h1");
+  assert.equal(h1.length, 2, "to'r va javoblar sarlavhalari");
+  assert.ok(paraOf(xml, h1[1].text).includes("<w:pageBreakBefore/>"), "javoblar varag'i yangi betdan boshlanmadi");
+  assert.ok(!paraOf(xml, h1[0].text).includes("<w:pageBreakBefore/>"), "to'r birinchi betda qolishi kerak");
 });
 
 test("sahifa chegarasi va shrifti PROFILDAN — reja bilan BITTA manbadan", async () => {

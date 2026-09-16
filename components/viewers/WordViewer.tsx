@@ -1076,7 +1076,17 @@ function FlowBlock({
         <div className="word-figure" data-figure={item.figureId}>
           {item.url ? (
             // eslint-disable-next-line @next/next/no-img-element -- aktiv/`data:` URL, optimizator o'chirilgan (next.config).
-            <img src={item.url} alt={item.caption} className="word-figure-img" />
+            <img
+              src={item.url}
+              alt={item.caption}
+              className="word-figure-img"
+              /*
+               * `widthMm` — chop etiladigan kenglik (krossvord to'ri):
+               * DOCX ham aynan shuncha chizadi. Berilmasa `.word-figure-img`
+               * ning eski qoidasi (varaq eniga moslash) qoladi.
+               */
+              style={item.widthMm ? { width: `${item.widthMm}mm`, maxWidth: "100%" } : undefined}
+            />
           ) : (
             <div className="word-figure-placeholder">{item.placeholder}</div>
           )}

@@ -221,16 +221,18 @@ export function gameLayoutLabels(language: string): GameDocLabels {
   return { ...WORDS[lang], lang, doc: docLabels(language) };
 }
 
-/* ══════════════════════════ figure id lari ══════════════════════════ */
+/* ══════════════════════════ bo'lim id lari ══════════════════════════ */
 
 /**
- * Krossvord to'rining rasm id lari — WP-A (`crossword/svg.ts`) ular
- * bilan `GameModel.figures` ni to'ldiradi, maket esa SHU nomlar bilan
- * qidiradi. Rasm topilmasa maket YIQILMAYDI: o'rinbosar ramka chiziladi
- * (namunaviy hujjat va SVG hali ulanmagan holat).
+ * Krossvord bo'limlari — WP-A dvigateli bilan SHARTNOMA
+ * (`crossword/engine.ts crosswordSections`).
+ *
+ * `across` va `down` maketda YONMA-YON chiziladi, shuning uchun ular
+ * bo'lim sifatida EMAS, bitta `clues` bandi bo'lib chiqadi: ikki
+ * mustaqil sarlavha ostidagi ro'yxat bosma krossvordda betning yarmini
+ * behuda egallardi.
  */
-export const GRID_FIGURE_ID = "grid";
-export const ANSWERS_FIGURE_ID = "answers";
+export const CROSSWORD_SECTIONS = { grid: "grid", across: "across", down: "down", answers: "answers" } as const;
 
 /* ══════════════════════════ bandlar ══════════════════════════ */
 
@@ -440,28 +442,57 @@ function planCrossword(
   const topic = clean(model.topic) || clean(doc.meta.topic);
   if (topic) head.push({ k: "field", label: L.fieldTopic, text: topic, path: "meta.topic" });
 
-  const cw: CrosswordModel | undefined = model.crossword;
+  const sectionAt = (id: string) => {
+    const i = doc.sections.findIndex((s) => s.id === id);
+    return i < 0 ? null : { i, s: doc.sections[i] };
+  };
 
-  /* ── to'r ── */
+  /**
+   * Bo'lim BLOKLARI — nasr DVIGATELDAN (`crosswordSections`), maket
+   * uni QAYTA YOZMAYDI.
+   *
+   * Kartalardan farqi shu: karta panjarasi tekis MODELDAN chiziladi
+   * (nasrda old/orqa yuz ajralmaydi), krossvordda esa ko'rsatma
+   * qatorlari, savol matni va javoblar ro'yxati hujjatning O'ZIDA
+   * yozilgan matn — maket faqat ularni JOYLASHTIRADI. Shuning uchun
+   * `path` ham teacher shartnomasidagidek `sections.<i>.blocks.<j>`.
+   */
+  const pushBlocks = (id: string) => {
+    const at = sectionAt(id);
+    if (!at) return;
+    at.s.blocks.forEach((b, j) => {
+      const path = `sections.${at.i}.blocks.${j}`;
+      if (b.kind === "figure") pushFigure(b.figureId, b.text || titleOf(id), path);
+      else if (b.kind === "li") body.push({ k: "li", text: clean(b.text), path });
+      else if (b.kind === "h3") body.push({ k: "h3", text: clean(b.text), path });
+      else body.push({ k: "p", text: clean(b.text), path });
+    });
+  };
+
+  /* ── to'r: ko'rsatma qatorlari + bo'sh to'r rasmi ── */
   body.push({ k: "h1", text: titleOf("grid"), sectionId: "grid", path: "sections.grid.title", pageBreak: false });
-  pushFigure(GRID_FIGURE_ID, titleOf("grid"), "game.crossword.grid");
+  pushBlocks("grid");
 
-  /* ── savollar: IKKI USTUN ── */
-  const clueItems = (list: readonly CrosswordClue[], dir: "across" | "down") =>
-    list.map((c, i) => ({ text: L.clueLine(c.number, clean(c.text), c.length), path: `game.crossword.clues.${dir}.${i}` }));
-  body.push({
-    k: "clues",
-    columns: [
-      { title: titleOf("across"), path: "sections.across.title", items: clueItems(cw?.clues.across ?? [], "across") },
-      { title: titleOf("down"), path: "sections.down.title", items: clueItems(cw?.clues.down ?? [], "down") },
-    ],
-    path: "game.crossword.clues",
-  });
+  /* ── savollar: IKKI USTUN yonma-yon (`across` + `down` bitta bandda) ── */
+  const column = (id: "across" | "down") => {
+    const at = sectionAt(id);
+    const cw: CrosswordModel | undefined = model.crossword;
+    /*
+     * Savol matni BO'LIMDAN olinadi (dvigatel uni «1. Ta'rif (7)»
+     * shaklida yozgan). Bo'lim yo'q bo'lsa — modeldan: eski yoki
+     * qo'lda yig'ilgan hujjat ham chizilsin.
+     */
+    const items = at
+      ? at.s.blocks.map((b, j) => ({ text: clean(b.text), path: `sections.${at.i}.blocks.${j}` }))
+      : (cw?.clues[id] ?? []).map((c, j) => ({ text: L.clueLine(c.number, clean(c.text), c.length), path: `game.crossword.clues.${id}.${j}` }));
+    return { title: titleOf(id), path: at ? `sections.${at.i}.title` : `game.crossword.clues.${id}`, items };
+  };
+  body.push({ k: "clues", columns: [column("across"), column("down")], path: "game.crossword.clues" });
 
-  /* ── javoblar varag'i: YANGI BETDAN (R5 §3 — doim) ── */
+  /* ── javoblar varag'i: YANGI BETDAN (reyestr `answerSeparate` — doim) ── */
   pageBreaks.push("answers");
   body.push({ k: "h1", text: titleOf("answers"), sectionId: "answers", path: "sections.answers.title", pageBreak: true });
-  pushFigure(ANSWERS_FIGURE_ID, titleOf("answers"), "game.crossword.answers");
+  pushBlocks("answers");
 }
 
 /* ────────────────────────── flesh kartalar ────────────────────────── */

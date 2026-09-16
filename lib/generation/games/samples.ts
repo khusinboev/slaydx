@@ -9,16 +9,18 @@
  * namuna maketni HAQIQIY hujjatdan boshqacha sinamasin
  * (`teacher/samples.ts` naqshi).
  *
- * Krossvord namunasi WP-A dan OLDIN yoziladi va shuning uchun `figures`
- * BERMAYDI: `planGame` rasm topolmasa o'rinbosar ramka chizadi
- * («[1-rasm]»). WP-A `crossword/svg.ts` ni ulaganda shu namunaga
- * `figures` qo'shiladi va ikkala chizuvchi ham darhol haqiqiy to'rni
- * ko'rsatadi — maket shartnomasi o'zgarmaydi.
+ * Krossvord namunasi WP-A ning O'Z quvuridan o'tadi (`placeWords` →
+ * `crosswordSections` → `crosswordFigure`): qo'lda yig'ilgan bo'limlar
+ * dvigatel chiqishidan jimgina ajralib ketardi va o'shanda maket
+ * sinovlari HAQIQIY hujjatni emas, namunani sinagan bo'lardi.
  */
-import type { AcademicDoc, DocMeta, DocSection } from "../types";
+import type { AcademicDoc, DocMeta } from "../types";
 import { gameDefaultTypeId } from "./registry";
 import type { CrosswordModel, Flashcard, GameKind, GameModel } from "./types";
 import { cardSections } from "./flashcards/engine";
+import { crosswordFigure, crosswordSections } from "./crossword/engine";
+import { crosswordInputFromValues } from "./crossword/input";
+import { cluesOf, placeWords } from "./crossword/grid";
 import { gameLayoutLabels } from "./layout";
 
 /* ────────────────────────── flesh kartalar ────────────────────────── */
@@ -108,38 +110,39 @@ function cardsDocSample(meta: DocMeta): AcademicDoc {
 
 /* ────────────────────────── krossvord ────────────────────────── */
 
-/** Kichik, lekin HAQIQIY to'r: 4 so'z, 2 kesishma, 13×13. */
-function crosswordModelSample(): CrosswordModel {
-  const words = [
-    { id: "w1", answer: [..."FOTOSINTEZ"], clue: "Yashil bargda quyosh nuri ostida organik modda hosil bo‘lish jarayoni", dir: "across" as const, row: 2, col: 1, number: 1 },
-    { id: "w2", answer: [..."XLOROFILL"], clue: "Bargga yashil rang beruvchi pigment", dir: "down" as const, row: 2, col: 3, number: 2 },
-    { id: "w3", answer: [..."GLYUKOZA"], clue: "Fotosintezning asosiy organik mahsuloti", dir: "across" as const, row: 6, col: 3, number: 3 },
-    { id: "w4", answer: [..."ILDIZ"], clue: "O‘simlikni tuproqqa mahkamlab, suv va mineral moddalarni so‘radi", dir: "down" as const, row: 6, col: 7, number: 4 },
-  ];
-  const rows = 13;
-  const cols = 13;
-  const cells: (string | null)[][] = Array.from({ length: rows }, () => Array.from({ length: cols }, () => null));
-  for (const w of words) {
-    w.answer.forEach((ch, i) => {
-      const r = w.dir === "across" ? w.row : w.row + i;
-      const c = w.dir === "across" ? w.col + i : w.col;
-      if (r < rows && c < cols) cells[r][c] = ch;
-    });
-  }
-  return {
-    words,
-    grid: { rows, cols, cells },
-    clues: {
-      across: words.filter((w) => w.dir === "across").map((w) => ({ number: w.number, text: w.clue, wordId: w.id, length: w.answer.length })),
-      down: words.filter((w) => w.dir === "down").map((w) => ({ number: w.number, text: w.clue, wordId: w.id, length: w.answer.length })),
-    },
-    dropped: [],
-  };
-}
+/**
+ * Krossvord so'zlari — namuna HAQIQIY to'r algoritmidan o'tadi.
+ *
+ * Bo'limlarni qo'lda yig'ish mumkin edi, lekin o'shanda namuna
+ * dvigatelning chiqishidan JIMGINA ajralib ketardi (`teacher/samples.ts`
+ * saboqi: namuna maketni haqiqiy hujjatdan boshqacha sinardi). Endi
+ * `placeWords` + `crosswordSections` — WP-A ning O'Z yo'li — ishlatiladi,
+ * ya'ni maket sinovlari dvigatel bergan aynan o'sha shaklni ko'radi.
+ */
+const CROSSWORD_WORDS = [
+  { answer: "FOTOSINTEZ", clue: "Yashil bargda quyosh nuri ostida organik modda hosil bo‘lish jarayoni" },
+  { answer: "XLOROFILL", clue: "Bargga yashil rang beruvchi pigment" },
+  { answer: "GLYUKOZA", clue: "Fotosintezning asosiy organik mahsuloti" },
+  { answer: "ILDIZ", clue: "O‘simlikni tuproqqa mahkamlab, suv va mineral moddalarni so‘radi" },
+  { answer: "BARG", clue: "O‘simlikning fotosintez boradigan yassi organi" },
+  { answer: "KISLOROD", clue: "Fotosintezda ajraladigan va nafas olish uchun zarur gaz" },
+];
 
 function crosswordDocSample(meta: DocMeta): AcademicDoc {
+  const place = placeWords(CROSSWORD_WORDS, { seed: "sample-crossword", maxSize: 15 });
+  const input = crosswordInputFromValues(meta, { topic: meta.topic, language: meta.language, wordCount: CROSSWORD_WORDS.length });
   const L = gameLayoutLabels(meta.language);
-  const cw = crosswordModelSample();
+  const cw: CrosswordModel = { words: place.placed, grid: place.grid, clues: cluesOf(place.placed), dropped: place.dropped };
+  /*
+   * Rasm SPETSIFIKATSIYASI bor, PNG esa YO'Q (`url` bo'sh).
+   *
+   * `figurePng` `sharp` bilan ishlaydi va uni namunaga tiqish har
+   * render sinovini rasm quvuriga bog'lab qo'yardi (sekin, muhitga
+   * bog'liq). Spec bo'lsa maket rasm bandini ROSTAKAM chizadi va
+   * `widthMm` yo'li ham sinaladi; PNG topilmagani uchun o'rinbosar
+   * ramka chiqadi — aynan `sharp` yiqilgandagi holat.
+   */
+  const figures = [crosswordFigure(place, L.sectionTitle.grid, { answers: false }), crosswordFigure(place, L.sectionTitle.answers, { answers: true })];
   const model: GameModel = {
     v: 1,
     kind: "crossword",
@@ -147,19 +150,15 @@ function crosswordDocSample(meta: DocMeta): AcademicDoc {
     language: meta.language,
     topic: meta.topic,
     crossword: cw,
+    figures,
   };
-  /*
-   * Bo'limlar — WP-A dvigateli beradigan shakl: sarlavha + savol
-   * qatorlari NASR sifatida (hisobot/baholovchi shu matnni o'qiydi),
-   * maket esa ularni MODELDAN chizadi.
-   */
-  const sections: DocSection[] = [
-    { id: "grid", title: L.sectionTitle.grid, blocks: [] },
-    { id: "across", title: L.sectionTitle.across, blocks: cw.clues.across.map((c) => ({ kind: "li" as const, text: L.clueLine(c.number, c.text, c.length) })) },
-    { id: "down", title: L.sectionTitle.down, blocks: cw.clues.down.map((c) => ({ kind: "li" as const, text: L.clueLine(c.number, c.text, c.length) })) },
-    { id: "answers", title: L.sectionTitle.answers, blocks: cw.words.map((w) => ({ kind: "li" as const, text: `${w.number}. ${w.answer.join("")}` })) },
-  ];
-  return { meta, titlePage: false, toc: false, sections, game: model };
+  return {
+    meta,
+    titlePage: false,
+    toc: false,
+    sections: crosswordSections(place, input, { grid: figures[0].id, answers: figures[1].id }),
+    game: model,
+  };
 }
 
 /* ────────────────────────── kirish nuqtasi ────────────────────────── */

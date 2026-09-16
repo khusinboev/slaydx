@@ -69,7 +69,13 @@ export type FlowItem =
   | { type: "authors"; id: string; authors: ArticleAuthorLine[] }
   | { type: "highlights"; id: string; label: string; items: string[] }
   /** Sxema (PNG `url` bo'lsa rasm, bo'lmasa o'rinbosar ramka) + sarlavha PASTDA — bitta atom band. */
-  | { type: "figure"; id: string; figureId: string; url?: string; w?: number; h?: number; number: string; caption: string; placeholder: string; source?: string }
+  /**
+   * `widthMm` — CHOP ETILADIGAN kenglik (`FigureSpec kind:"svg"`).
+   * Krossvord to'ri uni katak o'lchamidan hisoblaydi va DOCX ham aynan
+   * shu kenglikda chizadi; berilmasa eski xulq (varaq eniga moslash)
+   * qoladi, ya'ni maqola/talaba ishi sxemalari o'zgarmaydi.
+   */
+  | { type: "figure"; id: string; figureId: string; url?: string; w?: number; h?: number; widthMm?: number; number: string; caption: string; placeholder: string; source?: string }
   /** Formula — KaTeX SSR; raqam o'ngda. Bitta atom band. */
   | { type: "formula"; id: string; latex: string; number: string; display: boolean }
   /** OAK «REFERENCES» ikkinchi ro'yxatining sarlavhasi (`h1` kabi chiziladi). */
@@ -549,6 +555,7 @@ export function gameFlow(plan: GamePlan): FlowItem[] {
           url: b.figure?.url,
           w: b.figure?.w,
           h: b.figure?.h,
+          ...(b.figure?.spec.kind === "svg" && Number(b.figure.spec.widthMm) > 0 ? { widthMm: Number(b.figure.spec.widthMm) } : {}),
           number: b.number,
           caption: b.caption,
           placeholder: b.placeholder,

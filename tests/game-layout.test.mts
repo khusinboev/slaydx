@@ -262,16 +262,23 @@ test("krossvord shapkasi: hujjat nomi, tur, mavzu", () => {
   assert.ok(plan.head[2].k === "field" && plan.head[2].text.includes("Fotosintez"));
 });
 
-test("krossvord tartibi: to'r (rasm) → savollar (2 ustun) → javoblar YANGI BETDAN", () => {
+test("krossvord tartibi: ko'rsatma + to'r → savollar (2 ustun) → javoblar YANGI BETDAN", () => {
   const plan = crosswordPlan();
-  const kinds = plan.body.map((b) => b.k);
-  assert.deepEqual(kinds, ["h1", "figure", "clues", "h1", "figure"]);
+  /*
+   * Tartib WP-A dvigatelining bo'limlaridan chiqadi: `grid`
+   * (ko'rsatma paragraflari + bo'sh to'r rasmi) → `across`/`down`
+   * (bitta ikki ustunli band) → `answers` (javob to'ri + raqam→so'z).
+   */
+  assert.deepEqual(plan.body.map((b) => b.k), ["h1", "p", "p", "figure", "clues", "h1", "figure", "p", "p"]);
 
-  const answersH1 = plan.body[3];
+  const answersH1 = plan.body[5];
   assert.ok(answersH1.k === "h1" && answersH1.pageBreak, "javoblar varag'i yangi betdan boshlanmadi");
   assert.ok(plan.pageBreaks.includes("answers"));
   const gridH1 = plan.body[0];
   assert.ok(gridH1.k === "h1" && !gridH1.pageBreak, "to'r birinchi betda qolishi kerak");
+  // Javoblar ro'yxati — HUJJAT matnidan, maket uni qayta yozmaydi.
+  const answerLine = plan.body[7];
+  assert.ok(answerLine.k === "p" && /FOTOSINTEZ/.test(answerLine.text), `javoblar ro'yxati: ${answerLine.k === "p" ? answerLine.text : answerLine.k}`);
 });
 
 test("savollar IKKI USTUNDA: Gorizontal/Vertikal, raqam va katak soni bilan", () => {
@@ -281,20 +288,30 @@ test("savollar IKKI USTUNDA: Gorizontal/Vertikal, raqam va katak soni bilan", ()
   assert.equal(clues.columns[0].title, "Gorizontal");
   assert.equal(clues.columns[1].title, "Vertikal");
   assert.ok(clues.columns[0].items.length >= 1 && clues.columns[1].items.length >= 1);
-  assert.match(clues.columns[0].items[0].text, /^1\. .+ \(10\)$/, `savol qatori: ${clues.columns[0].items[0].text}`);
-  assert.equal(clues.columns[0].items[0].path, "game.crossword.clues.across.0");
-  assert.equal(clues.columns[1].items[0].path, "game.crossword.clues.down.0");
+  // Savol qatorini DVIGATEL yozgan («4. Ta'rif (10)») — maket uni ko'chiradi.
+  assert.match(clues.columns[0].items[0].text, /^\d+\. .+ \(\d+\)$/, `savol qatori: ${clues.columns[0].items[0].text}`);
+  // `path` — teacher shartnomasidagidek bo'lim bloki.
+  assert.match(clues.columns[0].items[0].path, /^sections\.\d+\.blocks\.0$/, clues.columns[0].items[0].path);
+  assert.match(clues.columns[1].items[0].path, /^sections\.\d+\.blocks\.0$/, clues.columns[1].items[0].path);
+  // Jami savol soni = joylashtirilgan so'z soni.
+  const placed = plan.model.crossword!.words.length;
+  assert.equal(clues.columns[0].items.length + clues.columns[1].items.length, placed);
 });
 
-test("rasm yo'q bo'lsa maket YIQILMAYDI — o'rinbosar ramka va raqamlangan sarlavha", () => {
+test("rasm SPECI bor, PNG yo'q — maket YIQILMAYDI, o'rinbosar ramka chiziladi", () => {
   const plan = crosswordPlan();
-  const figures = plan.body.filter((b) => b.k === "figure");
+  const figures = plan.body.filter((b): b is Extract<(typeof plan.body)[number], { k: "figure" }> => b.k === "figure");
   assert.equal(figures.length, 2);
-  assert.ok(figures.every((f) => f.k === "figure" && !f.figure), "namunada PNG yo'q (WP-A `svg.ts` gacha)");
-  assert.equal(figures[0].k === "figure" && figures[0].placeholder, "[1-rasm]");
-  assert.equal(figures[1].k === "figure" && figures[1].placeholder, "[2-rasm]");
-  assert.equal(figures[0].k === "figure" && figures[0].figureId, "grid");
-  assert.equal(figures[1].k === "figure" && figures[1].figureId, "answers");
+  assert.equal(figures[0].figureId, "crossword-grid");
+  assert.equal(figures[1].figureId, "crossword-answers");
+  assert.equal(figures[0].placeholder, "[1-rasm]");
+  assert.equal(figures[1].placeholder, "[2-rasm]");
+  for (const f of figures) {
+    assert.ok(f.figure, "rasm reyestrdan topilishi kerak (`model.figures`)");
+    assert.ok(!f.figure!.url, "namunada PNG yo'q — o'rinbosar ramka chiziladi");
+    assert.equal(f.figure!.spec.kind, "svg");
+    assert.ok(f.figure!.spec.kind === "svg" && f.figure!.spec.widthMm > 0, "chop etiladigan kenglik specda bo'lishi kerak");
+  }
 });
 
 /* ══════════════════════════ til ══════════════════════════ */

@@ -1402,7 +1402,17 @@ async function drawGame(plan: GamePlan, K: Kit, P: DocProfile, opts: ResumeDocxO
         if (img && b.figure) {
           const maxW = Math.min(Math.floor(W / 15), Math.floor((170 / 25.4) * 96));
           const ratio = b.figure.h && b.figure.w ? b.figure.h / b.figure.w : 1;
-          let width = maxW;
+          /*
+           * To'rning CHOP ETILADIGAN kengligi SPECDAN (`FigureSpec
+           * kind:"svg"` `widthMm`): kichik to'r (13×13) betning butun
+           * enига cho'zilsa kataklar bemaza katta chiqardi, katta to'r
+           * (21×21) esa 170 mm ga siqilib, harflar o'qilmasdi. WP-A
+           * uni katak o'lchamidan hisoblaydi — maket faqat hurmat
+           * qiladi.
+           */
+          const specMm = b.figure.spec.kind === "svg" ? Number(b.figure.spec.widthMm) : 0;
+          const wantW = specMm > 0 ? Math.floor((specMm / 25.4) * 96) : maxW;
+          let width = Math.min(maxW, wantW);
           let height = Math.round(width * ratio);
           const maxH = Math.floor((200 / 25.4) * 96);
           if (height > maxH) {
