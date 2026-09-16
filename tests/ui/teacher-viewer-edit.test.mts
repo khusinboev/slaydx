@@ -6,7 +6,6 @@ import { render, fireEvent, screen, cleanup } from "@testing-library/react";
 import { WordViewer } from "../../components/viewers/WordViewer.tsx";
 import { EditActions, type EditActionsState } from "../../components/files/EditActions.tsx";
 import { applyTeacherOps, type TeacherOp } from "../../lib/generation/teacher/edit.ts";
-import { planTeacher } from "../../lib/generation/teacher/layout.ts";
 import { sampleTeacherDoc } from "../../lib/generation/teacher/samples.ts";
 import type { AcademicDoc } from "../../lib/generation/types.ts";
 
