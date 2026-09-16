@@ -29,6 +29,24 @@ export function blocksFromLlm(raw: unknown, fallbackText: string): Block[] {
     out.push({ kind, text });
   }
   if (out.length) return out;
+  /*
+   * JSON kelgan, lekin `blocks` boshqa nom ostida (`parts`, `paragraphs`,
+   * `text`…) — kalitlarni matnga aylantirmaymiz («parts : relevance : …»
+   * AUDIT-19 smoke), OBYEKT ichidagi uzun satr qiymatlarini olamiz.
+   */
+  const obj = parseLlmObject<Record<string, unknown>>(fallbackText);
+  if (obj && typeof obj === "object") {
+    const strings: string[] = [];
+    const walk = (v: unknown, depth: number) => {
+      if (typeof v === "string") {
+        const t = cleanText(v);
+        if (t.length >= 20) strings.push(t);
+      } else if (Array.isArray(v) && depth < 3) v.forEach((x) => walk(x, depth + 1));
+      else if (v && typeof v === "object" && depth < 3) Object.values(v as Record<string, unknown>).forEach((x) => walk(x, depth + 1));
+    };
+    walk(obj, 0);
+    if (strings.length) return strings.map((text): Block => ({ kind: "p", text }));
+  }
   // JSON kelmadi/bo'sh — model oddiy matn yozgan bo'lishi mumkin.
   const plain = fallbackText.replace(/^\s*\{[\s\S]*?"blocks"\s*:/, "").replace(/[{}[\]"]/g, " ");
   return /\p{L}{3}/u.test(plain) ? blocksFromText(plain) : [];

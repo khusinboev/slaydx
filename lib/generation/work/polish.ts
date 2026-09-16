@@ -357,14 +357,21 @@ export async function rewriteWorkFix(doc: AcademicDoc, fix: WorkFix, deps: WorkR
   const maxTokens = Math.min(8000, Math.max(1200, Math.round(words * 2.4) + 700));
   const raw = await ask(deps, system, user, maxTokens);
   const parsed = parseLlmObject<{ blocks?: unknown; parts?: Record<string, unknown> }>(raw);
-  let blocks = blocksFromLlm(parsed?.blocks, raw);
-  // Kirish `parts` shaklida ham qaytishi mumkin (`workIntroPrompt` sxemasi).
-  if (!blocks.length && parsed?.parts && typeof parsed.parts === "object") {
+  /*
+   * Kirish `parts` shaklida ham qaytishi mumkin (`workIntroPrompt` sxemasi)
+   * — `parts` AVVAL tekshiriladi: ilgari `blocksFromLlm(parsed.blocks, raw)`
+   * `blocks` yo'qligi uchun xom JSON ni matnga aylantirib qo'ygan («parts :
+   * relevance : Mavzuning dolzarbligi…» — AUDIT-19 smoke, sayqaldan keyin
+   * kirish buzilgan).
+   */
+  let blocks: Block[] = [];
+  if (parsed?.parts && typeof parsed.parts === "object" && !Array.isArray(parsed.blocks)) {
     blocks = Object.values(parsed.parts)
       .map((v) => String(v ?? "").trim())
-      .filter(Boolean)
+      .filter((t) => t.length >= 20)
       .map((text): Block => ({ kind: "p", text }));
   }
+  if (!blocks.length) blocks = blocksFromLlm(parsed?.blocks, raw);
   if (!blocks.length) throw new RewriteError(RETRY_MSG, 422, "llm");
 
   const verified = verifyCitations([{ id: section.id, title: section.title, blocks }], model.references);

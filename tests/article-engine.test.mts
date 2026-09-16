@@ -522,3 +522,18 @@ test("so'z rejasi profilga bog'liq; byudjet 150 000 + 16 000 × bet; prismaSpec 
     assert.deepEqual([p.identified, p.screened, p.excludedScreen, p.eligible, p.excludedElig, p.included], [42, 27, 13, 14, 5, 9]);
   }
 });
+
+/*
+ * AUDIT-19 smoke: model `{"paragraphs":[…]}` / `{"parts":{…}}` kabi boshqa
+ * kalit bilan qaytarsa `blocksFromLlm` xom JSON ni («parts : relevance : …»)
+ * matn qilib qo'yardi. Endi obyekt ichidagi uzun satr qiymatlari olinadi.
+ */
+test("blocksFromLlm: `blocks` siz JSON obyekti — kalitlar emas, uzun satr qiymatlari paragraf bo'ladi", () => {
+  const raw = JSON.stringify({ parts: { relevance: "Mavzuning dolzarbligi shundaki, tizim jadal rivojlanmoqda va o'rganish talab etiladi.", aim: "qisqa" }, note: ["Ikkinchi uzun matn qiymati ham paragraf sifatida olinishi kerak albatta."] });
+  const out = blocksFromLlm(undefined, raw);
+  assert.equal(out.length, 2);
+  assert.ok(out.every((b) => !/[{}"]|parts|relevance/.test(b.text)), JSON.stringify(out));
+  assert.ok(out[0]!.text.startsWith("Mavzuning dolzarbligi"));
+  // Oddiy matn (JSON emas) avvalgidek bo'linadi.
+  assert.ok(blocksFromLlm(undefined, "Bu oddiy matn paragrafi, JSON emas, lekin yetarlicha uzun.").length === 1);
+});

@@ -316,3 +316,24 @@ test("sayqal → qayta hisobot: qabul qilinganda YANGI matn va yangi hisobot qay
   assert.ok(r.review.polish?.applied.some((f) => f.target === "ch1.2"));
   assert.ok((r.review.polish?.applied.length ?? 0) <= 6, "bir sayqalda ko'pi bilan 6 nishon");
 });
+
+/*
+ * Smoke (AUDIT-19): sayqal kirishni `workIntroPrompt` sxemasida
+ * (`{"parts":{…}}`) qaytarganda `blocksFromLlm(parsed.blocks, raw)` xom
+ * JSON ni matnga aylantirib «parts : relevance : Mavzuning…» yozib qo'ydi.
+ * Endi `parts` avval o'qiladi. Mutatsiya: tartib eskisiga qaytsa yiqiladi.
+ */
+test("rewriteWorkFix: kirish `parts` shaklida qaytsa qiymatlar paragraf bo'ladi, JSON kalitlari matnga tushmaydi", async () => {
+  const doc = makeDoc();
+  const parts = {
+    relevance: `Mavzuning dolzarbligi shundaki, inklyuziv ta'lim tizimi jadal rivojlanmoqda. ${words(60, "r")}`,
+    aim: `Ishning maqsadi — inklyuziv ta'limning rivojlanish bosqichlarini tahlil qilish. ${words(60, "a")}`,
+    tasks: `Ish vazifalari: tarixni o'rganish; tahlil qilish; tavsiyalar berish. ${words(60, "t")}`,
+  };
+  const complete = (async () => ({ text: JSON.stringify({ parts }) })) as never;
+  const out = await rewriteWorkFix(doc, { target: "intro", instruction: "Elementlarni yozing", op: "rewrite" } as never, { complete, deadline: Date.now() + 60_000 });
+  const texts = out.ops.flatMap((o) => ("blocks" in o ? (o.blocks as { text: string }[]).map((b) => b.text) : [])).join("\n");
+  assert.ok(texts.length > 0, "oplar bo'lishi kerak");
+  assert.ok(!/parts\s*:|relevance\s*:|[{}"]/.test(texts), `JSON kalitlari matnga tushmasin: ${texts.slice(0, 120)}`);
+  assert.ok(texts.includes("Mavzuning dolzarbligi") && texts.includes("Ish vazifalari"));
+});
