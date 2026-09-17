@@ -948,13 +948,21 @@ function FlowBlock({
        * AUDIT-21 ko'z). Qator-qator tuzilma matn tartibini ham DOCX bilan
        * tenglashtiradi (paritet testi).
        */
-      const rows = Math.max(...item.columns.map((c) => c.items.length), 0);
+      const rows = Math.max(item.minRows ?? 0, ...item.columns.map((c) => c.items.length), 0);
+      /*
+       * SARALASH jadvali esa CHEGARALI va kataklari bo'sh bo'lishi
+       * mumkin (`bordered`/`minRows`): o'quvchi elementni qo'lda
+       * YOZADI, ya'ni katak ko'rinib turishi va balandligi yozishga
+       * yetishi kerak — DOCX da ham aynan shunday (`drawGame`).
+       */
+      const edge = item.bordered ? "1px solid #999999" : "none";
+      const pad = item.bordered ? "3pt 6pt" : "0 6pt 3pt 0";
       return (
         <table style={{ width: "100%", tableLayout: "fixed", borderCollapse: "collapse", textIndent: 0, marginBottom: "6pt" }}>
           <tbody>
             <tr>
               {item.columns.map((col, i) => (
-                <td key={i} style={{ verticalAlign: "top", padding: "2pt 6pt 2pt 0", border: "none", fontWeight: 700 }}>
+                <td key={i} style={{ verticalAlign: "top", padding: item.bordered ? pad : "2pt 6pt 2pt 0", border: edge, fontWeight: 700 }}>
                   {col.title}
                 </td>
               ))}
@@ -962,7 +970,16 @@ function FlowBlock({
             {Array.from({ length: rows }, (_, r) => (
               <tr key={r}>
                 {item.columns.map((col, i) => (
-                  <td key={i} style={{ verticalAlign: "top", padding: "0 6pt 3pt 0", border: "none", fontSize: "var(--doc-table-size, 11pt)" }}>
+                  <td
+                    key={i}
+                    style={{
+                      verticalAlign: "top",
+                      padding: pad,
+                      border: edge,
+                      ...(item.bordered ? { height: "9mm" } : {}),
+                      fontSize: "var(--doc-table-size, 11pt)",
+                    }}
+                  >
                     {col.items[r]?.text ?? ""}
                   </td>
                 ))}
