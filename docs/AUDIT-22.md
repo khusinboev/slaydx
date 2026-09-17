@@ -544,3 +544,64 @@ toza.
    `relation`/`minutes` ni dvigateldan oladi, standalone «Tuzatish»
    esa ularni hujjatdan tiklashi kerak (`minutesOf`/`recipientOf` bor,
    `relation` uchun manba yo'q).
+
+### R (lead) — tinglash TTS seam'i, ochiq audio route, o'yinchi oqimlari (2026-09-17)
+
+**Ulash (`9c780bf`).** WP-D dvigateli `tts`/`putAsset` seam'ini e'lon qilgan,
+lekin uni hech kim bermasdi — tinglash o'yini ishlab chiqarishda DOIM
+audiosiz chiqardi. Endi:
+
+- `lib/server/worker.ts` — `buildArtifact` ga `putAsset: (bytes, mime) =>
+  putAssetBytes(job.id, mime, …)` beradi (aktiv SHU ishning id si bilan
+  yoziladi; qulf yo'qolsa `deleteAssets` baribir tozalaydi).
+- `lib/generation/index.ts` — `BuildOptions.putAsset`/`tts`; `putAsset`
+  bo'lsa standart TTS zanjiri ulanadi (`providerOfChain(ttsChain)`),
+  bo'lmasa sintez umuman chaqirilmaydi (jonli `buildArtifact`
+  chaqiruvlarida behuda TTS puli ketmasin).
+- `lib/generation/tts/chain.ts providerOfChain` — zanjirni bitta-parcha
+  `TtsProvider` shaklida beradi: tinglash har so'zni alohida aktivga
+  yozadi, zanjir esa `synthesizeAll` bilan ishlaydi; provayder tanlovi,
+  qayta urinish, yiqilganda keyingisiga o'tish zanjirda qoladi. `voice`
+  e'tiborsiz — ovoz til jadvalidan (`TTS_VOICE_*` bitta joydan).
+- `write-llm.ts WriteExtras` += `tts`/`putAsset` → `buildGameDoc`.
+- **Ochiq audio route** `GET /api/o/[token]/audio/[assetId]` (loginsiz):
+  sessiya → generatsiya → `getAsset` egalik SQL sessiyadagi `userId`
+  bilan; ikkinchi darvoza — aktiv `publicGameView` ro'yxatida BO'LISHI
+  shart (token bitta generatsiyaning boshqa aktivlariga kalit emas);
+  MIME oq ro'yxati `audio/mpeg`/`audio/wav`, `public, immutable` kesh,
+  `nosniff`, `X-Robots-Tag: noindex`. Har nomuvofiqlik — 404, sabab
+  aytilmaydi. `Player.tsx` allaqachon shu manzilga murojaat qilardi.
+
+Testlar +8: `game-routes` +5 (200/MIME/kesh/egalik parametrlari;
+ro'yxatda yo'q aktiv → 404 va aktiv SQL chaqirilmaydi; saralash/
+noma'lum token/tugallanmagan/yaroqsiz id → 404; oq ro'yxatdan tashqari
+MIME → `octet-stream`; `audioAssetIds`), `tts-chain` +2 (adapter ovozni
+jadvaldan oladi; sozlanmagan zanjir aniq xato), `game-wiring` +1 (manba
+skani: worker → index → write-llm → Player). Mutatsiyalar (ikkalasi
+qizardi): ro'yxat tekshiruvi olib tashlandi; adapter `configured`
+doim `true`.
+
+**Byudjet tuzatuvi (`061e495`).** Saralash/tinglash 90 s byudjeti
+zaxiralardan (hisobot 40 s + sayqal 55 s) kichik bo'lib, yozishga «0 ms»
+qolardi («0 toifa» xatosi). `GAME_MS.sorting {160 s, +0.8 s/element}`,
+`listening {160 s, +9 s/topshiriq}`; `game-wiring` da byudjet ≥
+zaxiralar qulfi. Dars: `WORKER_INLINE` da dev serverni qayta ishga
+tushirmaguncha navbat eski byudjet bilan ishlaydi.
+
+**Chromium smoke (dev 3111, egasi + loginsiz kontekst).**
+`games21.mjs sorting` — forma (2 000 tanga) → natija → hisobot 100/13
+band → DOCX 10,8 KB, 0 brauzer xatosi. O'yinchi oqimlari, TO'G'RI
+javoblar egasi hujjatidan olinib UI orqali kiritildi (`play22b.mjs`
+saralash — element → toifa; `play22c.mjs` krossvord — `data-cell`
+harflari, tinglash — `options[answer]` matni, kartalar — «bilaman»):
+
+| O'yin | Natija ekrani | Egasida `results` | Izoh |
+|---|---|---|---|
+| Saralash (20 element, 4 toifa) | 20/20, 100 % | 20/20 | avvalgi umumiy skript 0/20 bergan edi — skript sababli, ball serverda to'g'ri |
+| Krossvord (10 so'z, 54 katak) | 10/10 | 10/10 | |
+| Tinglash (10 topshiriq) | 10/10 | 10/10 | kalit yo'q → `data-no-audio` belgisi, `[data-audio]` 0 — kutilgan |
+| Flesh kartalar (10) | 10/10 | 10/10 | |
+
+Hammasida 0 brauzer xatosi, natija egasi jadvaliga tushdi.
+Audio bilan tinglash (haqiqiy `/audio/[assetId]` so'rovi) — kalitlar
+kelgach qayta yurgiziladi.
