@@ -66,6 +66,13 @@ const ENTRIES = [
   // sahifani SSR da 500 qilardi.
   "components/forms/TeacherComposer.tsx",
   "components/forms/CurriculumPicker.tsx",
+  /*
+   * AUDIT-22 R0: ochiq o'yin sahifasi (`app/o/[token]`) LOGINSIZ va
+   * `lib/game/public.ts` ni bevosita import qiladi. U izomorf bo'lishi
+   * SHART: `lib/server/**` ga zanjir sahifani SSR da 500 qilardi, ya'ni
+   * o'quvchi havolani umuman ocha olmasdi.
+   */
+  "components/game/Player.tsx",
 ];
 
 for (const e of ENTRIES) {

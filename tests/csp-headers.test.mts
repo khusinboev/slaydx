@@ -41,3 +41,20 @@ test("Content-Disposition: standart attachment, inline faqat so'ralganda; nom UT
   assert.match(contentDisposition("hisobot-ja.pdf", "inline"), /^inline; filename="hisobot-ja\.pdf"/);
   assert.match(contentDisposition("Ichki yonuv (1)-ja.pdf", "inline"), /filename\*=UTF-8''Ichki%20yonuv%20\(1\)-ja\.pdf$/);
 });
+
+/**
+ * AUDIT-22: audio pleer (`AudioViewer`) MP3 ni O'Z domenimizdan oladi
+ * (`/api/generations/{id}/file?inline=1`).
+ *
+ * MUTATSIYA: `media-src` dan `'self'` ni olib tashlash — brauzer
+ * pleerni jimgina bloklardi («content blocked» ham chiqmasdi, chunki
+ * `<audio>` xatosi konsolda qoladi).
+ */
+test("sayt CSP: media-src 'self' — MP3 pleeri o'z faylimizni o'ynata oladi", async () => {
+  const site = (await rules()).find((r) => r.source === "/:path*")!;
+  const ms = directive(csp(site), "media-src");
+  assert.ok(ms.length > 0, "media-src direktivasi yo'q — `default-src` bilan cheklanardi");
+  assert.ok(ms.includes("'self'"), `media-src da 'self' yo'q: ${ms}`);
+  // Tashqi domen QO'SHILMAGAN (audio faqat bizdan keladi).
+  assert.ok(!/https?:\/\//.test(ms), `media-src ga tashqi manba qo'shilgan: ${ms}`);
+});
