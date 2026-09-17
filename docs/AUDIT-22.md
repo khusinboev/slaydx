@@ -166,3 +166,115 @@ sarlavhasida MUTATSIYALAR ro'yxati (jami 30+). `npm test` 2396 yashil,
 - R: `ResultView` «O'yin havolasi + QR» paneli, `/o/` uchun `robots.ts`,
   `worker.ts housekeeping` ga `purgeExpiredSessions`, jonli smoke
   (havola → ism → o'yin → natija egasida).
+
+### WP-C — O'yinchi tomoni: holat mashinasi + 5 ekran + havola paneli (2026-09-17) ✅
+
+R0 ning `publicGameView`/`scoreAnswers` shartnomasini O'YNALADIGAN
+qilib yopdi: havola → ism → o'yin → natija, va egasi tomonida havola +
+QR + natijalar jadvali.
+
+**`lib/game/engine.ts` — sof holat mashinasi**
+
+`createGame(view) → state`, `answer(state, id, value)`, `next`/`prev`/
+`goTo`, `flip`, `pick`/`place`, `toggleIndex`, `progress`/
+`answeredCount`, `elapsed`, `finish(state) → {state, answers, seconds}`.
+React'siz va DOM'siz — `tests/game-engine.test.mts` uni jsdom SIZ
+sinaydi, jsdom testi esa faqat chizilishni.
+
+Ikki shartnoma fayl boshida yozilgan va test bilan qulflangan:
+
+1. **TARTIB TEGILMAYDI.** O'yinchi bosgan OCHIQ indeks
+   (`publicOptionOrder` aralashtirgan) payloadga O'ZGARMASDAN tushadi;
+   `score.ts` uni sof funksiyadan qayta quradi. Dvigatelda «tartibga
+   solish» paydo bo'lsa, ball jimgina noto'g'ri hisoblanardi va na
+   `game-public`, na `game-score` buni ko'rardi — ikkalasi ham
+   dvigatelni chaqirmaydi. Shuning uchun test
+   `publicGameView → engine.finish → scoreAnswers` halqasini besh
+   turda uchidan-uchiga yuradi va TO'LIQ ball talab qiladi.
+2. **To'g'ri javob dvigatelda YO'Q** — ball faqat submit javobidan.
+
+Turga xos qarorlar: quiz/kartalar/tinglash — elementma-element qadam
+(telefon ekraniga bitta savol + katta tugma sig'adi), krossvord va
+saralash — bitta ekran (kesishma va toifalar bir vaqtda ko'rinishi
+shart). Krossvordda `answers` kaliti — KATAK (`r:c`), so'z → harflar
+payload i `finish()` da yig'iladi: kesishgan katakni o'yinchi bir marta
+yozadi va u ikkala so'zga tushadi; katak yo'llari savol raqami +
+yo'nalish + to'r shaklidan tiklanadi (`crosswordSlots`), chunki ochiq
+ko'rinishda so'zning kataklari YO'Q. `oʻ`/`gʻ` — bitta katak
+(`oneLetter` apostrofni ergashtiradi). Xato qiymat ISTISNO EMAS:
+noto'g'ri id/shakl — holat o'zgarmaydi (`score.ts` falsafasi).
+
+**Ekranlar** — `components/game/{NameGate,Quiz,Crossword,Cards,Sorting,
+Listening,Result}.tsx` + qobiq `Player.tsx`; `app/o/[token]/page.tsx`
+mobil maket (360 px, tugmalar ≥48 px, `min-h-dvh`).
+
+- **Ism darvozasi** — 40 belgi (server ham shunga kesadi, o'quvchi buni
+  HOZIR ko'rsin); parol/telefon/sinf SO'RALMAYDI.
+- **Kartalar** — «ag'darish» JAVOBNI KO'RSATMAYDI va ko'rsata olmaydi:
+  `PublicCard` da `back` yo'q (bu ATAYLAB — bosma to'plamning nusxasi
+  emas). Ag'darish — o'zini tekshirishga o'tish; «bildim»/«bilmadim»
+  ikkalasi ham progressda sanaladi (to'plam oxirigacha ko'rilsin).
+- **Saralash** — asosiy oqim TANLAB-JOYLASH: HTML5 DnD mobil
+  brauzerlarda umuman ishlamaydi. Drag ham bor va AYNI `pick`/`place`
+  ga tushadi; joylangan element bosilsa taxtaga qaytadi.
+- **Tinglash** — TTS kelmaguncha (WP-A) «audio hali tayyor emas» deb
+  AYTADI va ishlamaydigan tugmani chizmaydi.
+- **Xatolar** o'zbekcha va SABABSIZ (404 da «yo'q» va «muddati tugagan»
+  farqlanmaydi — route ham ajratmaydi). Submit yiqilsa o'yin
+  YO'QOLMAYDI: javoblar joyida, tugma «Qayta yuborish» ga aylanadi.
+- Natija ekrani QAYSI topshiriq xato ekanini KO'RSATMAYDI (bir
+  urinishdan keyin javob varag'i tarqalardi). «Yana o'ynash» — YANGI
+  qator, eskisini o'chirmaydi.
+
+**`components/files/GameSharePanel.tsx`** — `ResultView` da, tayyorlik
+hisoboti panelidan KEYIN va ko'ruvchidan OLDIN (o'qituvchi avval
+«tayyormi» ni ko'radi, so'ng sinfga beradi). Ro'yxat `publicGameKindOf`
+dan — `share` route bilan BITTA manba, ya'ni «panel bor, tugma 400
+qaytaradi» holati bo'lmaydi. Ichida: bo'sh holat (nima bo'lishini
+aytadi — loginsiz ochiq havola qaytarib bo'lmaydigan qadam), «O'yin
+havolasi yaratish», URL + «Nusxalash», QR, amal muddati, bir nechta
+havola yorlig'i, natijalar jadvali (ism, ball, foiz, vaqt, sana) +
+«CSV» va «Yangilash». **Real-time/leaderboard YO'Q** (egasi qarori 8) —
+avtomatik so'rov ham yo'q, «Yangilash» yetarli.
+
+QR **KLIENTDA** chiziladi (`qrcode` brauzer bandli, `toString` → SVG,
+DINAMIK import — o'yin bo'lmagan hujjatlarda kutubxona yuklanmaydi):
+`lib/game/qr.ts` `server-only` va uni klient komponenti import qila
+olmaydi, ochiq QR route esa yo'q (havolaning o'zi sir). `GAME_KIND_LABEL`
+`engine.ts` da — panel yorliqni `Player.tsx` dan olsa, butun o'yin
+bandli har natija sahifasiga ergashardi.
+
+**Testlar**: `game-engine` 20 (jsdom siz), `ui/game-player` 12,
+`ui/game-share-panel` 9. **13 mutatsiya tasdiqlangan** — dvigatelda 6
+(tartib oynasi, `down` yo'nalishi, apostrof, karta ag'darilgan
+qolishi, buzuq javob yozilishi, yarim so'z sanalishi), o'yinchi UI da 4
+(teskari indeks, ism tanadan tushishi, inglizcha 429 matni, teskari
+katak kaliti), panelda 3 (QR tokendan chizilishi, natijasiz CSV,
+`ResultView` shartining `isGame` ga almashishi). `npm test` 2418
+(2405 pass / 0 fail), `test:viewer` 214, `test:ui` 255, `tsc`/eslint
+toza; `client-boundary` yashil — o'yinchi sahifasi server moduliga
+yetmaydi.
+
+**Ochiq bandlar (R uchun)**
+
+- **Tinglashda audio havolasi**: `Listening` `audioSrc` prop i
+  `/api/o/[token]/audio/[assetId]` ni kutadi, lekin BU ROUTE YO'Q
+  (`/api/generations/[id]/assets/[assetId]` `requireUser` talab qiladi
+  va faqat rasm mime lariga ruxsat beradi). WP-A TTS parchalarini
+  chiqargach, ochiq (tokenga bog'langan) audio route kerak; hozir ekran
+  «audio tayyor emas» holatida qoladi.
+- **`PublicListeningItem` da `text` YO'Q**, shuning uchun «audio
+  bo'lmasa matnni ko'rsatib tinglashni keyinga qoldirish» rejasini
+  bajarib bo'lmadi. Matn javobning O'ZI emas (javob — variantlardan
+  biri), shuning uchun uni ochiq ko'rinishga qo'shish sizish emas —
+  lekin bu `lib/game/public.ts` o'zgarishi (WP-C egaligida emas).
+- **Kartalarda orqa yuz yo'q** — «ag'darish» javobni ko'rsatmaydi.
+  Hozirgi yechim halol (o'zini tekshirish), lekin egasi qarori kerak:
+  takrorlash mashqi shundayligicha qolsinmi yoki `back` ochiq
+  ko'rinishga chiqsinmi (chiqsa — ball «bildim» soni bo'lib qolaveradi,
+  lekin o'quvchi o'zini tekshira oladi).
+- **Chromium smoke bajarilmadi** — dev server (3111) ko'tarilmagan edi;
+  jsdom bilan cheklandi. R bosqichida «havola → ism → o'yin → natija
+  egasida» jonli oqimi brauzerda ko'rilishi shart (AUDIT-11 Y-5
+  darsi: jsdom hit-testing xatolarini ko'rmaydi — ayniqsa krossvord
+  katak fokusi va saralash drag'i).

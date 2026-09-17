@@ -12,6 +12,8 @@ import { useAppStore } from "@/lib/store";
 import { TOOL_BY_ID } from "@/lib/tools";
 import { useConfirmClick } from "../overlays/useConfirmClick";
 import { EditActions, type EditActionsState } from "./EditActions";
+import { GameSharePanel } from "./GameSharePanel";
+import { publicGameKindOf } from "@/lib/game/public";
 import { ArtifactViewer } from "../viewers/ArtifactViewer";
 import { ArticleReviewPanel, ESSAY_HIDDEN_GROUPS } from "../viewers/ArticleReviewPanel";
 import { SlideViewer, asLiveView } from "../viewers/SlideViewer";
@@ -283,6 +285,19 @@ export function ResultView({ id }: { id: string }) {
   const isPoster = Boolean(gen.doc?.infographic);
   const noFix = isEssay || isPoster;
   const hideGroups = isEssay || isGame || isPoster ? ESSAY_HIDDEN_GROUPS : undefined;
+  /*
+   * O'YIN HAVOLASI (AUDIT-22 WP-C) — faqat O'YNALADIGAN vositalarda.
+   *
+   * Ro'yxat `publicGameKindOf` dan keladi, bu yerda QAYTA yozilmaydi:
+   * `share` route ham aynan shu funksiya bilan rad etadi, ya'ni panel
+   * chiqib, tugma 400 qaytaradigan holat bo'lmaydi. Referat yoki
+   * podkastda «o'yin havolasi» tugmasi foydalanuvchini adashtirardi.
+   *
+   * `expired` (fayl yo'q) da ham chizilmaydi: `createGameSession`
+   * hujjatning `COMPLETED` holatiga tayanadi va havola o'ynab
+   * bo'lmaydigan hujjatga olib borardi.
+   */
+  const shareKind = completed && !expired ? publicGameKindOf(gen.type) : null;
 
   return (
     <div className={cn("flex h-full min-h-0 flex-1 flex-col", flow ? "overflow-y-auto" : "overflow-hidden")} data-result-flow={flow ? "1" : undefined}>
@@ -465,6 +480,16 @@ export function ResultView({ id }: { id: string }) {
                 />
               </div>
             </details>
+          ) : null}
+          {shareKind ? (
+            /*
+             * Hisobot panelining OSTIDA va ko'ruvchining USTIDA: o'qituvchi
+             * avval «hujjat tayyormi» ni ko'radi, so'ng uni SINFGA beradi.
+             * `shrink-0` + o'z scroll'i — ko'ruvchi balandligini yemasin.
+             */
+            <div className="no-print max-h-[45vh] shrink-0 overflow-y-auto border-b px-3 py-3 sm:px-4">
+              <GameSharePanel id={gen.id} kind={shareKind} />
+            </div>
           ) : null}
           <ArtifactViewer
             gen={toLegacyShape(gen)}

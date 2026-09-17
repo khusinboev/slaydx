@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { createGame, elapsed, finish, isLast, next, prev, progress, type GameState } from "@/lib/game/engine";
+import { createGame, elapsed, finish, GAME_KIND_LABEL, isLast, next, prev, progress, type GameState } from "@/lib/game/engine";
 import type { PublicGameView } from "@/lib/game/public";
 import { cn } from "@/lib/cn";
 import { Cards } from "./Cards";
@@ -132,7 +132,7 @@ export function GamePlayer({ token }: { token: string }) {
     );
   }
 
-  if (!state) return <NameGate title={title} kindLabel={KIND_LABEL[view.kind]} total={view.total} onStart={start} />;
+  if (!state) return <NameGate title={title} kindLabel={GAME_KIND_LABEL[view.kind]} total={view.total} onStart={start} />;
 
   const p = progress(state);
   const left = p.total - p.done;
@@ -242,11 +242,3 @@ function submitErrorText(status: number, serverText?: string): string {
 }
 
 const mmss = (s: number): string => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
-
-export const KIND_LABEL: Record<PublicGameView["kind"], string> = {
-  quiz: "Test",
-  crossword: "Krossvord",
-  flashcards: "Flesh kartalar",
-  sorting: "Saralash",
-  listening: "Tinglash",
-};

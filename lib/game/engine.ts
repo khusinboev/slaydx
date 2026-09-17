@@ -79,6 +79,24 @@ export type FinishResult = {
   seconds: number;
 };
 
+/**
+ * O'yin turining o'zbekcha nomi — YAGONA manba.
+ *
+ * Ikki tomon ham shu jadvaldan o'qiydi: o'yinchi sahifasi
+ * (`components/game/Player.tsx`) va egasining paneli
+ * (`components/files/GameSharePanel.tsx`). Panel yorliqni o'yinchi
+ * komponentidan olsa, butun o'yin bandli (`Quiz`, `Crossword`, …)
+ * har bir natija sahifasiga ergashib kirardi — shuning uchun jadval
+ * React'siz modulda turadi.
+ */
+export const GAME_KIND_LABEL: Record<PublicGameKind, string> = {
+  quiz: "Test",
+  crossword: "Krossvord",
+  flashcards: "Flesh kartalar",
+  sorting: "Saralash",
+  listening: "Tinglash",
+};
+
 /** Noto'g'ri qiymat belgisi (istisno o'rniga — fayl boshidagi qoida). */
 const INVALID = Symbol("invalid");
 /** «Belgini olib tashla» belgisi (bo'sh katak, tanlovni bekor qilish). */
