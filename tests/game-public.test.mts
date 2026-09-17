@@ -178,10 +178,11 @@ test("KARTALAR: old yuz + orqa yuz (o'zini tekshirish) — misol/maslahat sizmay
   assert.equal(v.kind, "flashcards");
   if (v.kind !== "flashcards") return;
   const cards = doc.game!.cards!.cards;
+  const pcCards = v.cards;
   assert.equal(v.total, cards.length);
   const json = JSON.stringify(v);
   for (const [i, c] of cards.entries()) {
-    const pc = v.cards[i]!;
+    const pc = pcCards[i]!;
     assert.equal(pc.front, c.front.replace(/\s+/g, " ").trim(), `«${c.front}» old yuzi yo'q yoki boshqacha`);
     /*
      * MUTATSIYA (8): `back` ENDI ochiq ko'rinishda — bu javob SIZISHI
