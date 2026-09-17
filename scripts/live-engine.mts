@@ -473,6 +473,143 @@ function gameCases(): Case[] {
         ];
       },
     },
+    {
+      /*
+       * Saralash (AUDIT-22 WP-D/R) — «Toifalar bo'yicha» standart tur,
+       * 4 toifa × 5 element = 20 (`GAME_LIMITS.categoryCountDefault` ×
+       * `itemsPerCategoryDefault`). `GAME_MS.sorting` (160 s + 0,8 s/el)
+       * ≈ 176 s — byudjet shundan sezilarli katta (baholovchi/sayqal
+       * zaxirasi bilan).
+       */
+      name: "sorting",
+      tool: "sorting",
+      budgetMs: 260_000,
+      values: { topic: "Hayvonlar tasnifi", subject: "Biologiya", grade: 5, language: "uz", sortingType: "toifa", categoryCount: 4, itemsPerCategory: 5 },
+      checks: (f, pages) => sortingChecks(f, pages, { categoryCount: 4 }),
+    },
+    {
+      /*
+       * Tinglash (AUDIT-22 WP-D/R) — ona uz, o'rganiladigan en, 10 so'z,
+       * 4 variant (`GAME_LIMITS.listeningOptionsDefault` — forma
+       * maydoni YO'Q, reyestr standarti). `GAME_MS.listening` (160 s +
+       * 9 s/topshiriq) ≈ 250 s.
+       *
+       * TTS kalitlari YO'Q (WP-A ochiq bandi): `putAsset` berilmasa
+       * dvigatel sintezni UMUMAN chaqirmaydi (`index.ts` — behuda TTS
+       * puli ketmasin), shuning uchun bu yerga ATAYLAB `putAsset`
+       * BERILMAYDI — `audioAssetId` bo'sh chiqishi KUTILGAN va
+       * `listeningChecks` buni YUMSHOQ (har doim yashil) tekshiradi.
+       */
+      name: "listening",
+      tool: "listening",
+      budgetMs: 320_000,
+      values: { topic: "Kundalik hayot so'zlari", subject: "Ingliz tili", grade: 6, listeningType: "sozlar", nativeLanguage: "uz", targetLanguage: "en", itemCount: 10 },
+      checks: (f, pages) => listeningChecks(f, pages, { itemCount: 10 }),
+    },
+  ];
+}
+
+/**
+ * Saralash — model + hisobot + fayl. `WP-D`/`R` ulangan (STUB emas):
+ * checks har doim chaqiriladi, dvigatel yiqilsa `buildArtifact` xato
+ * tashlaydi va `runCase` buni «✘ XATO» deb ko'rsatadi (WP-B naqshi).
+ */
+function sortingChecks(f: BuiltFile, pages: number | null, o: { categoryCount: number }): Check[] {
+  const g = f.doc.game;
+  const m = g?.sorting;
+  const categories = m?.categories ?? [];
+  const allItems = categories.flatMap((c) => c.items);
+  const uniqueItems = new Set(allItems.map((s) => s.trim().toLowerCase()));
+  const sectionIds = f.doc.sections.map((s) => s.id);
+  const review = g?.review;
+  const d = f.delivered;
+  return [
+    ok("doc.game.sorting bor", g?.kind === "sorting" && Boolean(m), m ? `${categories.length} toifa, ${allItems.length} element` : "YO'Q — dvigatel ishlamadi"),
+    ok(`toifa ${o.categoryCount}`, categories.length === o.categoryCount, `${categories.length} ta`),
+    // MUTATSIYA (`pickCategories`): element ikki toifada takrorlansa o'yin yechilmaydigan bo'ladi.
+    ok("elementlar NOYOB (butun o'yinda)", allItems.length > 0 && uniqueItems.size === allItems.length, `${uniqueItems.size}/${allItems.length}`),
+    ok("bo'limlar intro·sorting·answers", JSON.stringify(sectionIds) === JSON.stringify(["intro", "sorting", "answers"]), sectionIds.join(" · ")),
+    ok("hisobot ≥ 55 ball", (review?.score ?? 0) >= 55, review ? `${review.score} ball` : "yo'q"),
+    ok("cost.calls > 0", (f.cost?.calls ?? 0) > 0, f.cost ? `${f.cost.calls} chaqiruv, ${f.cost.provider}/${f.cost.model}` : "yo'q"),
+    ok("delivered mos", !d || d.got < d.want, d ? `${d.got}/${d.want} ${d.unit ?? ""}` : "to'liq yetkazildi"),
+    ok("DOCX 2–3 bet", pages === null || (pages >= 2 && pages <= 3), `${pages ?? "o'girilmadi"} bet`),
+    suffixCheck(f, "-saralash"),
+  ];
+}
+
+/**
+ * Tinglash — model + hisobot + fayl. `audioAssetId` YUMSHOQ: kalitsiz
+ * muhitda 0 ta ham YASHIL (WP-A kalitlari kelgach shu son > 0 bo'lishi
+ * kutiladi — o'sha paytda tekshiruv qo'lda kuchaytiriladi).
+ */
+function listeningChecks(f: BuiltFile, pages: number | null, o: { itemCount: number }): Check[] {
+  const g = f.doc.game;
+  const m = g?.listening;
+  const items = m?.items ?? [];
+  const inRange = items.length > 0 && items.every((it) => it.answer >= 0 && it.answer < it.options.length);
+  const withAudio = items.filter((it) => it.audioAssetId).length;
+  const sectionIds = f.doc.sections.map((s) => s.id);
+  const review = g?.review;
+  const d = f.delivered;
+  return [
+    ok("doc.game.listening bor", g?.kind === "listening" && Boolean(m), m ? `${items.length} topshiriq` : "YO'Q — dvigatel ishlamadi"),
+    ok(`topshiriq ${o.itemCount}`, items.length === o.itemCount, `${items.length} ta`),
+    // MUTATSIYA (`answerInRange`): indeks chegaradan chiqsa o'yin har javobni «xato» deb sanardi.
+    ok("javob diapazonda (answer < options.length)", inRange, inRange ? "hammasi ichida" : "chegaradan chiqdi"),
+    ok("variant 4 tadan", items.every((it) => it.options.length === GAME_LIMITS.listeningOptionsDefault), items.map((it) => it.options.length).join(",")),
+    ok("audioAssetId (TTS kalitsiz — yumshoq)", true, `${withAudio}/${items.length} audio bilan`),
+    ok("bo'limlar intro·items·answers", JSON.stringify(sectionIds) === JSON.stringify(["intro", "items", "answers"]), sectionIds.join(" · ")),
+    ok("hisobot ≥ 55 ball", (review?.score ?? 0) >= 55, review ? `${review.score} ball` : "yo'q"),
+    ok("cost.calls > 0", (f.cost?.calls ?? 0) > 0, f.cost ? `${f.cost.calls} chaqiruv` : "yo'q"),
+    ok("delivered mos", !d || d.got < d.want, d ? `${d.got}/${d.want} ${d.unit ?? ""}` : "to'liq yetkazildi"),
+    ok("DOCX render", pages === null || pages >= 1, `${pages ?? "o'girilmadi"} bet`),
+    suffixCheck(f, "-tinglash"),
+  ];
+}
+
+/**
+ * Media (AUDIT-22 WP-A) — podkast va tabriknoma.
+ *
+ * TTS KALITLARI HALI YO'Q (`AZURE_SPEECH_KEY`+`AZURE_SPEECH_REGION`,
+ * `AISHA_API_KEY` — egasidan, WP-A ochiq bandi 1). Dvigatel (`audio/
+ * engine.ts`) buni SSENARIYDAN OLDIN tekshiradi va ANIQ xato tashlaydi
+ * («Ovoz provayderi sozlanmagan. Administrator bilan bog'laning — to'lov
+ * qaytarildi.») — `runCase` buni «✘ XATO» deb ko'rsatadi, LLM puli
+ * sarflanmaydi. `audioChecks` shuning uchun HOZIR ishga tushmaydi;
+ * kalitlar kelgach checks o'zi ishlay boshlaydi (WP-B/WP-D naqshi).
+ */
+function audioChecks(f: BuiltFile, o: { minutes: number }): Check[] {
+  const a = f.doc.audio;
+  const script = a?.script ?? [];
+  const words = script.reduce((n, l) => n + l.text.trim().split(/\s+/).filter(Boolean).length, 0);
+  const wantSeconds = o.minutes * 60;
+  const d = f.delivered;
+  return [
+    ok("doc.audio bor", Boolean(a) && script.length > 0, script.length ? `${script.length} replika` : "YO'Q — dvigatel/provayder yo'q"),
+    ok("MP3 fayl bor", f.mime === "audio/mpeg" && f.bytes.byteLength > 0, `${f.mime}, ${Math.round(f.bytes.byteLength / 1024)} KB`),
+    ok("doc.audio.script bo'sh emas", words > 0, `${words} so'z`),
+    ok(`seconds ≥ 0.8×${o.minutes}×60`, (a?.seconds ?? 0) >= 0.8 * wantSeconds, a?.seconds ? `${a.seconds} s (kerak ≥ ${Math.round(0.8 * wantSeconds)} s)` : "yo'q — TTS ishlamadi"),
+    ok("cost.tts bor (LLM+TTS yig'indisi)", (f.cost?.calls ?? 0) > 0 && (f.cost?.usd ?? 0) > 0, f.cost ? `${f.cost.calls} chaqiruv, $${f.cost.usd}, ${f.cost.provider}` : "yo'q"),
+    ok("delivered mos", !d || d.got < d.want, d ? `${d.got}/${d.want} ${d.unit ?? ""}` : "to'liq yetkazildi"),
+  ];
+}
+
+function audioCases(): Case[] {
+  return [
+    {
+      name: "podcast",
+      tool: "podcast",
+      budgetMs: 240_000,
+      values: { topic: "Sun'iy intellekt ta'limda", mode: "topic", podcastType: "tushuntirish", durationMin: 1, language: "uz" },
+      checks: (f) => audioChecks(f, { minutes: 1 }),
+    },
+    {
+      name: "greeting",
+      tool: "greeting",
+      budgetMs: 180_000,
+      values: { recipient: "Dilnoza opa", relation: "ustozim", occasion: "tugilgan-kun", durationMin: 1, language: "uz" },
+      checks: (f) => audioChecks(f, { minutes: 1 }),
+    },
   ];
 }
 
@@ -960,6 +1097,8 @@ const CASES: Case[] = [
   /* ── 2-dastur (AUDIT-21) — bosma o'yinlar + infografika ── */
   ...gameCases(),
   infographicCase(),
+  /* ── 3-dastur (AUDIT-22) — TTS/media (podkast, tabriknoma) ── */
+  ...audioCases(),
   {
     /*
      * Pro-slayd: har parametr ta'sir qilishi shart (AUDIT-9). Bu keys

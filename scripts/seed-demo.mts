@@ -270,6 +270,48 @@ const SAMPLES: Record<string, FormValues> = {
     size: "A4",
     language: "uz",
   },
+  /*
+   * ── 3-dastur (AUDIT-22): interaktiv o'yinlar + TTS/media ──
+   *
+   * `scripts/live-engine.mts` dagi `sorting`/`listening`/`podcast`/
+   * `greeting` keyslari bilan BIR XIL qiymatlar. `podcast`/`greeting` —
+   * TTS kalitlari (`AZURE_SPEECH_KEY`/`AISHA_API_KEY`) egasidan kelguncha
+   * navbatda ANIQ xato bilan yiqiladi («Ovoz provayderi sozlanmagan…»,
+   * kredit qaytadi) — namuna baribir shu yerda tayyor turadi, kalit
+   * kelgach qayta urinish uchun boshqa hech narsa o'zgartirish shart emas.
+   */
+  sorting: {
+    topic: "Hayvonlar tasnifi",
+    subject: "Biologiya",
+    grade: 5,
+    language: "uz",
+    sortingType: "toifa",
+    categoryCount: 4,
+    itemsPerCategory: 5,
+  },
+  listening: {
+    topic: "Kundalik hayot so'zlari",
+    subject: "Ingliz tili",
+    grade: 6,
+    listeningType: "sozlar",
+    nativeLanguage: "uz",
+    targetLanguage: "en",
+    itemCount: 10,
+  },
+  podcast: {
+    topic: "Sun'iy intellekt ta'limda",
+    mode: "topic",
+    podcastType: "tushuntirish",
+    durationMin: 1,
+    language: "uz",
+  },
+  greeting: {
+    recipient: "Dilnoza opa",
+    relation: "ustozim",
+    occasion: "tugilgan-kun",
+    durationMin: 1,
+    language: "uz",
+  },
   "pro-slide": {
     topic: "Orol dengizi fojiasi va uni tiklash choralari",
     slideCount: 12,

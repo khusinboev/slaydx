@@ -605,3 +605,134 @@ harflari, tinglash — `options[answer]` matni, kartalar — «bilaman»):
 Hammasida 0 brauzer xatosi, natija egasi jadvaliga tushdi.
 Audio bilan tinglash (haqiqiy `/audio/[assetId]` so'rovi) — kalitlar
 kelgach qayta yurgiziladi.
+
+### R1 (lead) — jonli holatlar (sorting/listening/podcast/greeting), o'yinchi javob sizishi (kartalar/tinglash), TUR-XOS va'da, o'yin sessiyalari tozalash, robots.ts (2026-09-17)
+
+WP-C/WP-D/WP-A ochiq qoldirgan to'rtta band shu bosqichda yopildi.
+Ish `main`ni ikki marta o'zib o'tdi (WP-A/R audio ishi parallel
+ketayotgan edi) — `29f0661`/`dcd46aa` merge oldingi ish, `c3bcb57`
+(R: tinglash TTS seam'i) shundan keyin qo'shildi.
+
+**`lib/game/public.ts` — kartalar va tinglash o'yinchi javobi sizishi
+emasligini ANIQLASHTIRISH (WP-C R-ochiq bandlari)**
+
+- `PublicCard.back` qo'shildi: ag'darish endi orqa yuzni ko'rsatadi
+  (o'zini tekshirish). Bu «javob sizishi» EMAS deb rasmiylashtirildi —
+  kartalarda server tekshiradigan to'g'ri javob umuman yo'q
+  (`score.ts` — ball «bildim» soni, orqa yuz bilan hech qachon
+  solishtirilmaydi). `tests/game-public.test.mts`dagi eski «orqa yuz
+  sizmaydi» testi «orqa yuz ENDI bor va bu sizish emas» ga almashtirildi,
+  umumiy `FORBIDDEN_KEYS` skanidan `back` chiqarilib, o'rniga kind
+  bo'yicha alohida tekshiruv qo'shildi (`back` FAQAT `flashcards` da).
+- `PublicListeningItem.text` qo'shildi — eshitiladigan matn
+  (`targetLanguage`). JAVOB EMAS: to'g'ri javob `options` ichida, boshqa
+  (ona) tilda. `components/game/Listening.tsx` audio yo'q/yiqilgan
+  holatda endi «Tinglab bo'lmadi — o'qing» + matnni ko'rsatadi (ilgari
+  faqat «audio hali tayyor emas» deb aytardi, o'yin audiosiz umuman
+  o'ynalmasdi). `components/game/Cards.tsx` ag'darilganda `card.back`ni
+  chizadi.
+- `tests/ui/game-player.test.mts`: kartalar testiga `data-back` matn
+  tekshiruvi, tinglash testiga `data-text` tekshiruvi qo'shildi.
+
+**`gamePromisedCount(kind, values, type?)` — TUR-XOS va'da (WP-D R-ochiq bandi)**
+
+- Funksiya `lib/generation/games/types.ts`dan `lib/generation/games/
+  registry.ts`ga KO'CHDI (imzo/joylashuv o'zgardi — `types.ts` shu bilan
+  registry.ts ni import qila olmaydi: aks holda modul yuklanish tartibiga
+  qarab `SORTING_LIMITS` konstantasi hali ishga tushmagan `GAME_LIMITS`ga
+  tegib TDZ xatosi berardi). `type` berilsa saralashda HAQIQIY toifa soni
+  (`gameTypeOf("sorting", type).limits.categories` — «qarama-qarshi
+  juftlik» uchun DOIM 2) ishlatiladi; berilmasa eski TUR-KO'R shartnoma
+  saqlanadi (orqaga mos).
+- `lib/generation/games/sorting/input.ts`: `promisedItems`/
+  `sortingInputFromValues` dagi ESKI «aylanib o'tish» (elementlarni
+  sun'iy qayta taqsimlash, `SORT_ITEMS_PER_CATEGORY_CAP` bilan 3×
+  inflatsiya) OLIB TASHLANDI — endi `itemsPerCategory` forma chipidan
+  TO'G'RIDAN-TO'G'RI, kategoriyalar soni esa TUR spetsifikatsiyasidan
+  qisqartiriladi, va va'da shu ikkisining ko'paytmasi.
+- `lib/generation/index.ts gameGateFail` va `lib/generation/budget.ts
+  gameSize` endi `values.sortingType`ni uzatadi.
+- Testlar: `game-registry.test.mts` +1 («gamePromisedCount TUR bo'yicha»),
+  `game-wiring.test.mts` +1 («darvoza — saralash: TUR bo'yicha va'da»),
+  `sorting-engine.test.mts` bitta test qayta yozildi (eski «va'da
+  saqlanadi» xulqi endi «va'da HAQIQIY» bilan almashdi).
+
+**`scripts/live-engine.mts` — 4 yangi jonli holat**
+
+- `sorting` (toifa turi, 4 toifa × 5 element, mavzu «Hayvonlar
+  tasnifi»): `doc.game.sorting` toifa soni, elementlar BUTUN o'yinda
+  noyob, bo'limlar `intro·sorting·answers`, hisobot ≥55, `cost.calls>0`,
+  `delivered`, DOCX 2–3 bet, fayl nomi `-saralash`.
+- `listening` (ona uz, o'rganiladigan en, 10 so'z, 4 variant, mavzu
+  «Kundalik hayot so'zlari»): `doc.game.listening.items` 10, javob
+  diapazonda, bo'limlar `intro·items·answers`, hisobot, `delivered`,
+  fayl nomi `-tinglash`. `audioAssetId` — TTS kalitsiz YUMSHOQ (har doim
+  yashil; kalitlar kelgach qo'lda kuchaytiriladi). `putAsset` ATAYLAB
+  berilmaydi — WP-A dvigateli buni faqat `putAsset` bo'lganda chaqiradi
+  (behuda TTS puli ketmasin).
+- `podcast`/`greeting`: WP-A dvigateli ENDI BOR (stub emas), lekin TTS
+  kalitlari (`AZURE_SPEECH_KEY`/`AISHA_API_KEY`) hali YO'Q — dvigatel
+  buni ssenariydan OLDIN tekshirib ANIQ xato tashlaydi («Ovoz provayderi
+  sozlanmagan…», kredit qaytadi), `runCase` buni «✘ XATO» deb aniq
+  ko'rsatadi. `checks` (`audioChecks`: MP3 fayl, `doc.audio.script` bo'sh
+  emas, `seconds ≥ 0.8×daqiqa×60`, `cost` LLM+TTS yig'indisi) kalitlar
+  kelgach ishga tushadi. **Jonli ishga tushirilmadi** (topshiriq: faqat
+  `npm run live -- --list`) — barcha 34 holat (30 eski + 4 yangi) ro'yxatda
+  to'g'ri ko'rinishi `--list` bilan tasdiqlandi.
+- `scripts/seed-demo.mts SAMPLES`: `sorting`/`listening`/`podcast`/
+  `greeting` — jonli holatlar bilan BIR XIL qiymatlar. Ishga tushirilmadi
+  (DB/worker talab qiladi — jonli operatsiya).
+
+**`lib/server/worker.ts housekeeping()` — o'yin havolalari tozalash**
+
+- `lib/server/game-sessions.ts purgeExpiredSessions` (R0da yozilgan,
+  lekin hech qayerdan chaqirilmagan edi) `purgeOldSources`/
+  `purgeOldPhotos` yonida ulandi. Nom to'qnashuvi bor edi (`session.ts`da
+  ham xuddi shu nomda, BOSHQA jadval — auth sessiyalari): `purgeExpiredGameSessions`
+  aliasi bilan ochiq qilindi, ikkalasi ham chaqiriladi.
+  `game_results.session_id` FK `ON DELETE CASCADE` (`021_games.sql`) —
+  natijalar alohida o'chirilmaydi, sessiya bilan avtomatik ketadi.
+  `housekeeping()` testlanishi uchun `export` qilindi.
+- Yangi test `tests/worker-housekeeping.test.mts` (1): `pool().query`/
+  `connect` stublanadi (bazasiz, `game-sessions.test.mts` naqshi),
+  `DELETE FROM game_sessions …` chaqirilgani tekshiriladi; auth
+  sessiyalari tozalanishi HAM davom etishi tasdiqlanadi (alias eskisini
+  ALMASHTIRMAGANI).
+
+**`app/robots.ts`** — `/o/` (o'yin havolalari) `disallow` ro'yxatiga
+qo'shildi (`/api/` yonida): sahifaning o'zida `noindex, nofollow` bor,
+lekin robots.txt darajasidagi taqiq ikkinchi qatlam (robot havolani
+UMUMAN olmasin). Yangi test `tests/robots.test.mts` (1).
+
+**Testlar**: `game-public` 11 (mazmuni yangilandi), `game-registry` 17
+(+1), `game-wiring` 15 (+1), `sorting-engine` 16 (1 tasi qayta yozildi),
+`ui/game-player` 12 (mazmuni +2 tekshiruv), `worker-housekeeping` 1
+(yangi), `robots` 1 (yangi). Har o'zgarish QO'LDA mutatsiya bilan
+tasdiqlandi (`scripts/heavy.sh` orqali kod vaqtincha buzilib, test
+qizarishi ko'zdan kechirilgan): `back`/`text` sizib ketishi, saralash
+TUR e'tiborsiz qoldirilishi, `housekeeping()`dan tozalash chaqiruvi
+olib tashlanishi, `robots.ts`dan `/o/` olinishi — hammasi mos testni
+qizartirdi. `npm test` 2 561 pass / 0 fail (13 skip — env-gated),
+`test:ui` 255, `test:viewer` 216, `tsc`/eslint toza.
+
+**Ochiq bandlar**
+
+- **TTS kalitlari hali yo'q** (WP-A ochiq bandi 1, o'zgarmadi):
+  `AZURE_SPEECH_KEY`+`AZURE_SPEECH_REGION`, `AISHA_API_KEY` egasidan.
+  Kelgach: `npm run live -- podcast greeting listening` haqiqiy audio
+  bilan, `npm run seed -- adkhambek_4 podcast greeting sorting listening`
+  admin hisobiga namuna qo'yadi, `listeningChecks`dagi `audioAssetId`
+  yumshoq tekshiruvi qattiqlashtiriladi (>0 talab qilinsin).
+- **`categoryCount` — «qarama-qarshi juftlik» turida ENDI TO'LIQ INERT**
+  (WP-D dagi eski «aylanib o'tish» buni qisman qoplab turgan edi):
+  forma bu turda ham `categoryCount` chipini ko'rsatadi, lekin natija
+  (2 toifa, jami = 2×itemsPerCategory) undan mustaqil. Differensial
+  probe (`tests/game-params.test.mts`, hali yozilmagan — WP-A ochiq
+  bandi 4 bilan bir xil sabab) bu holatni default («toifa») turda
+  probelab o'tkazib yuboradi, ya'ni hozircha testda ko'rinmaydi. PM
+  qarori kerak: chip qarama-qarshi turida yashirinsinmi (UI) yoki
+  `itemsPerCategory`ni ikkilantirib jami saqlansinmi (eski xulq)?
+- **Chromium smoke bajarilmadi** bu bosqichda (faqat kod/test darajasi):
+  `Cards.tsx`/`Listening.tsx` o'zgarishi jsdom bilan sinaldi
+  (`test:ui` yashil), lekin AUDIT-11 Y-5 saboqi bo'yicha haqiqiy
+  brauzerda ag'darish/audio-yo'q holatini ko'rish tavsiya etiladi.
