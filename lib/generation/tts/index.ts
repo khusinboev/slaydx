@@ -59,5 +59,5 @@ export { AZURE_OUTPUT_FORMAT, azureEndpoint, azureKey, azureRegion, azureSsml, a
 export { AISHA_MAX_CHARS, AISHA_URL, aishaAudioRef, aishaBody, aishaKey, aishaTts, makeAishaTts } from "./aisha";
 export { GEMINI_TTS_BASE, geminiAudioPart, geminiKey, geminiTts, geminiTtsModel, makeGeminiTts, pcmRateOf } from "./gemini";
 
-export { chainOfProvider, makeTtsChain, ttsChain, ttsGroups, ttsVoiceChain, ttsVoiceEnvName } from "./chain";
+export { asTtsChain, chainOfProvider, makeTtsChain, ttsChain, ttsGroups, ttsVoiceChain, ttsVoiceEnvName } from "./chain";
 export type { TtsChain, TtsChainDeps, TtsPart, TtsProviderGroup, TtsRun } from "./chain";

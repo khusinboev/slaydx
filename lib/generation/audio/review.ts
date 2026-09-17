@@ -66,6 +66,16 @@ export type AudioReviewOpts = {
    * ham bir xil baholanishi kerak.
    */
   recipient?: string;
+  /**
+   * «Kim bo'ladi?» (`relation`) — `respectForm` bandining OG'IRLIGI
+   * shunga bog'liq (`greeting.md` §4: «avoiding overly casual language
+   * for a formal relation, e.g. teacher, elder»).
+   *
+   * Ustoz/rahbar/katta yoshlida «sen» — QIZIL band: fayl xonada ovoz
+   * chiqarib qo'yilganda bu hurmatsizlik bo'lib eshitiladi. Do'st yoki
+   * tengdoshda esa sariq: uslub tanlovi, nuqson emas.
+   */
+  relation?: string;
 };
 
 /** Sayqal va «Tuzatish» uchun yagona nishon: ssenariyning O'ZI. */
@@ -112,7 +122,10 @@ export const WRITTEN_ONLY: { id: string; re: RegExp; label: string }[] = [
  * Deterministik bandlar. Id lar `AUDIO_RULE_IDS` bilan AYNAN mos
  * (test buni qulflaydi) — panel va sayqal shu id larni biladi.
  */
-export function audioChecks(model: AudioModel, opts: { minutes?: number; facts?: string; recipient?: string } = {}): ReviewCheck[] {
+/** Hurmat shakli MAJBURIY bo'lgan munosabatlar (`greeting.md` §3–§4). */
+export const FORMAL_RELATIONS = /ustoz|murabbiy|o['’ʻ]qituvchi|domla|rahbar|direktor|boshliq|ota|ona|buvi|bobo|amaki|xola|opa|aka|professor|dekan/i;
+
+export function audioChecks(model: AudioModel, opts: { minutes?: number; facts?: string; recipient?: string; relation?: string } = {}): ReviewCheck[] {
   const kind: AudioKind = model.kind;
   const spec = audioTypeOf(kind, model.type);
   const script = model.script ?? [];
@@ -343,12 +356,21 @@ export function audioChecks(model: AudioModel, opts: { minutes?: number; facts?:
         const uz = String(model.language ?? "uz").toLowerCase().startsWith("uz");
       const informal = /\b(sen|sening|senga|seni|sensiz)\b/i.test(text);
       const asked = /\bsen\b/i.test(String(opts.facts ?? ""));
+      const relation = String(opts.relation ?? "").trim();
+      const formal = FORMAL_RELATIONS.test(relation);
+      const who = relation ? ` (munosabat: ${relation})` : "";
       out.push(
         !uz
-          ? check("respectForm", "green", "Hurmat shakli", "bu tilda tekshirilmaydi")
+          ? check("respectForm", "green", "Hurmat shakli", `bu tilda tekshirilmaydi${who}`)
           : informal && !asked
-            ? check("respectForm", "yellow", "Hurmat shakli", "«sen» shakli ishlatilgan, foydalanuvchi so‘ramagan", rewrite(SCRIPT_TARGET, "Switch the whole greeting to the respectful «Siz» form — the user did not ask for the informal one."))
-            : check("respectForm", "green", "Hurmat shakli", informal ? "«sen» — foydalanuvchi so‘raganidek" : "hurmatli «Siz» shakli"),
+            ? check(
+                "respectForm",
+                formal ? "red" : "yellow",
+                "Hurmat shakli",
+                `«sen» shakli ishlatilgan, foydalanuvchi so‘ramagan${who}`,
+                rewrite(SCRIPT_TARGET, `Switch the whole greeting to the respectful «Siz» form${formal ? ` — the stated relationship («${relation}») requires it` : " — the user did not ask for the informal one"}.`),
+              )
+            : check("respectForm", "green", "Hurmat shakli", `${informal ? "«sen» — foydalanuvchi so‘raganidek" : "hurmatli «Siz» shakli"}${who}`),
       );
     }
   }
@@ -479,7 +501,7 @@ export async function reviewAudio(doc: AcademicDoc, opts: AudioReviewOpts = {}):
 
   const facts = opts.facts ?? String(doc.meta.extra ?? "");
   const recipient = opts.recipient ?? recipientOf(doc);
-  const rules = audioChecks(model, { ...(opts.minutes !== undefined ? { minutes: opts.minutes } : {}), facts, recipient });
+  const rules = audioChecks(model, { ...(opts.minutes !== undefined ? { minutes: opts.minutes } : {}), facts, recipient, relation: opts.relation ?? "" });
   const { judge, answered } = await runJudge(model, facts, opts);
   const review: DocReview = {
     score: scoreAudioReview(rules, model, judge),

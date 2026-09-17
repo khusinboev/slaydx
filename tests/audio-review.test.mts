@@ -212,6 +212,21 @@ test("respectForm faqat o'zbek tilida tekshiriladi", () => {
   assert.equal(levelOf(ru, "respectForm", { minutes: 1, recipient: "Дилноза" }), "green");
 });
 
+test("respectForm og'irligi MUNOSABATGA bog'liq (`relation` bezak maydon emas)", () => {
+  const informal = greetingModel([line("A", "Dilnoza, seni bayram bilan tabriklayman!")]);
+  /*
+   * MUTATSIYA 13: `relation` e'tiborsiz qoldirilganda reyestrdagi
+   * «review» ta'siri BAJARILMAGAN bo'lardi — ya'ni «Kim bo'ladi?»
+   * maydoni bezakka aylanardi. `greeting.md` §4: ustozga «sen» —
+   * nuqson, do'stga — uslub tanlovi.
+   */
+  assert.equal(levelOf(informal, "respectForm", { minutes: 1, recipient: "Dilnoza", relation: "ustozim" }), "red");
+  assert.equal(levelOf(informal, "respectForm", { minutes: 1, recipient: "Dilnoza", relation: "do‘stim" }), "yellow");
+  // Munosabat DETALDA ham ko'rinadi (panel foydalanuvchiga sababni aytadi).
+  const detail = audioChecks(informal, { minutes: 1, recipient: "Dilnoza", relation: "do‘stim" }).find((c) => c.id === "respectForm")?.detail ?? "";
+  assert.ok(detail.includes("do‘stim"), detail);
+});
+
 /* ══════════════════════════ kirish (input.ts) ══════════════════════════ */
 
 test("normalizeScript: rollar faqat A/B, uzun replika BO'LINADI (kesilmaydi)", () => {

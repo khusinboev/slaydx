@@ -250,11 +250,17 @@ async function runGroup(provider: TtsProvider, group: TtsProviderGroup, parts: r
  * Bitta adapterni zanjir shaklida o'raydi — testlar va `tts-lab` uchun.
  *
  * Nega kerak: dvigatel `TtsChain` ni oladi, mock esa odatda bitta
- * `TtsProvider`. Bu o'ram jadval/muhitga UMUMAN qaramaydi, ovoz nomini
- * chaqiruvchidan oladi — shunda test provayder tanlovini emas, o'z
- * mantiqini sinaydi.
+ * `TtsProvider`. `voices` berilmasa ovozlar SHU provayder uchun til
+ * jadvalidan olinadi (`tts-lab` aynan shunday ishlaydi); berilsa esa
+ * jadvalga umuman qaralmaydi — shunda test provayder tanlovini emas,
+ * o'z mantiqini sinaydi.
  */
-export function chainOfProvider(provider: TtsProvider, voices: string[] = ["A", "B"], log?: (line: string) => void): TtsChain {
+export function chainOfProvider(provider: TtsProvider, voices?: string[], log?: (line: string) => void): TtsChain {
+  const voicesFor = (lang: string): string[] => {
+    if (voices?.length) return voices;
+    const group = ttsGroups(lang).find((g) => g.provider === provider.id);
+    return group?.voices.length ? group.voices : ["default"];
+  };
   return {
     configured: () => provider.configured(),
     providersFor: () => (provider.configured() ? [provider.id] : []),
@@ -262,7 +268,7 @@ export function chainOfProvider(provider: TtsProvider, voices: string[] = ["A", 
       const lang = String(opts.lang ?? "uz").toLowerCase();
       if (!provider.configured()) throw new TtsError(provider.id, "Ovoz provayderi sozlanmagan", { retryable: false });
       const started = Date.now();
-      const run = await runGroup(provider, { provider: provider.id, voices }, parts.filter((p) => String(p.text ?? "").trim()), {
+      const run = await runGroup(provider, { provider: provider.id, voices: voicesFor(lang) }, parts.filter((p) => String(p.text ?? "").trim()), {
         lang,
         ...(opts.speed !== undefined ? { speed: opts.speed } : {}),
         ...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}),
@@ -271,6 +277,11 @@ export function chainOfProvider(provider: TtsProvider, voices: string[] = ["A", 
       return run;
     },
   };
+}
+
+/** `TtsProvider` bo'lsa o'raydi, `TtsChain` bo'lsa o'zini qaytaradi. */
+export function asTtsChain(x: TtsChain | TtsProvider): TtsChain {
+  return "synthesizeAll" in x ? x : chainOfProvider(x);
 }
 
 export const ttsChain = makeTtsChain();

@@ -234,6 +234,8 @@ export type AudioPolishDeps = {
   /** Foydalanuvchi bergan matn — halollik bandi sayqaldan keyin ham ishlasin. */
   facts?: string;
   recipient?: string;
+  /** «Kim bo'ladi?» — `respectForm` bandi sayqaldan keyin ham AYNI og'irlikda. */
+  relation?: string;
 };
 
 export type AudioPolishResult = RunPolishResult<AudioOp>;
@@ -254,6 +256,7 @@ export async function runAudioPolish(doc: AcademicDoc, review: DocReview, deps: 
     ...(deps.minutes !== undefined ? { minutes: deps.minutes } : {}),
     ...(deps.facts !== undefined ? { facts: deps.facts } : {}),
     ...(deps.recipient !== undefined ? { recipient: deps.recipient } : {}),
+    ...(deps.relation !== undefined ? { relation: deps.relation } : {}),
   };
 
   return runPolishWith<AudioOp, AudioJudgeResult>(doc, review, {
