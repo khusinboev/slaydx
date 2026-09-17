@@ -396,3 +396,151 @@ nuqson topdi va uchalasi TUZATILDI:
   jadvali hozir YO'Q.
 - Tinglash formasida `optionCount` maydoni yo'q (reyestr standarti 4);
   3 variantli rejim kerakmi — PM qarori.
+
+### WP-A — TTS adapterlari, podkast va tabriknoma dvigateli (2026-09-17) ✅
+
+R0 SHARTNOMASI o'zgarmadi: `buildAudioArtifact(tool, meta, values, opts)`
+imzosi, `AudioModel` shakli va `TtsProvider` interfeysi o'z joyida —
+bu WP faqat TANANI to'ldirdi. **Kalitlar hali YO'Q**, shuning uchun
+provayder adapterlari hujjatga ko'ra yozildi va `deps.fetchImpl` seam'i
+orqali mock `fetch` bilan sinaladi; haqiqiy so'rov `npm run tts-lab`
+bilan, egasi kalit bergach.
+
+**TTS qatlami** (`lib/generation/tts/`)
+
+- `azure.ts` — REST (`https://<region>.tts.speech.microsoft.com/cognitiveservices/v1`,
+  `Ocp-Apim-Subscription-Key`, `X-Microsoft-OutputFormat:
+  audio-24khz-96kbitrate-mono-mp3`), SSML `<speak><voice><prosody>` +
+  `<break>`. SDK ATAYLAB olinmadi (~10 MB, ichida audio qurilma/WebRTC
+  qatlamlari). `xml:lang` OVOZ nomidan olinadi, forma tilidan emas:
+  tasdiqlanmagan to'rtlikda (`kaa`/`ky`/`tg`/`tk`) ovoz qo'shni tilniki
+  va `xml:lang` mos kelmasa Azure 400 qaytaradi. Xato tasnifi
+  401/403/400 → `retryable:false` (zanjir keyingisiga), 429/5xx/tarmoq
+  → `true`. Davomiylik javob sarlavhasida kelmaydi — MP3 KADRLARIDAN
+  o'lchanadi.
+- `aisha.ts` — WAV yo'li. 1 000 belgi chegarasi TARMOQQA CHIQMASDAN
+  tekshiriladi; javobning uch shakli qo'llanadi (xom WAV, base64,
+  havola + ikkinchi so'rov). ⚠ So'rov/javob shakli TASDIQLANMAGAN va
+  ataylab IKKI funksiyada jamlangan (`aishaBody`/`readAishaAudio`) —
+  kalit kelgach `tts-lab` birinchi haqiqiy javobni ko'rsatadi va
+  tuzatiladigan yer shu ikkisi bo'ladi.
+- `gemini.ts` — preview. `configured()` `GEMINI_API_KEY` ga EMAS,
+  `TTS_GEMINI_MODEL` ga bog'langan: o'zbekcha sifat sinovdan o'tmagan
+  va SLA yo'q, shuning uchun provayder ATAYLAB yoqiladi. Aks holda
+  Azure yiqilganda har podkast jimgina preview modelga tushib qolardi.
+  PCM → WAV, chastota `mimeType` dan (`rate=24000`).
+- `chain.ts` — `TTS_VOICE_<TIL>=provider:voice,…` (jadvalni
+  ALMASHTIRADI, kengaytirmaydi). **Eng muhim qaror: provayder BUTUN ISH
+  uchun bog'lanadi**, har bo'lak uchun emas — aks holda bitta faylda
+  Azure 24 kHz MP3 va Aisha 16 kHz WAV aralashib, `concatMp3` yiqilardi
+  (yoki tekshiruvsiz — o'ynamaydigan fayl chiqardi). Provayder yiqilsa
+  keyingisi HAMMA bo'lakni boshidan aytadi. Jurnal `llm/chain.ts`
+  formatida: `[tts:uz] azure → ok 1 284 ms (6 bo'lak, 4 120 belgi)`.
+- `mp3.ts` — kadr sarlavhasi tahlili (MPEG1/2/2.5 Layer III), ID3v2
+  (SYNCSAFE uzunlik)/ID3v1 tashlash, Xing/Info kadrini chiqarib
+  tashlash, PROFIL tekshiruvi bilan konkatenatsiya, `wavInfo` (RIFF
+  bo'laklarini yuradi — `data` 44-baytda bo'lmasligi mumkin),
+  `pcmToWav`, `wavToMp3`.
+- `types.ts` ga kichik qo'shimcha: `TtsError` (shartnomada e'lon
+  qilingan istisnoning shakli), `TtsSynthOpts.pauseMs`/`timeoutMs`,
+  `TTS_LIMITS.callTimeoutMs`.
+
+**Bog'liqlik qarori (`tts.md` §6 ochiq savoli 6)**: `@breezystack/lamejs`
+— sof JavaScript LAME porti (WASM ham, native ham emas), worker rasmiga
+tizim paketi qo'shmaydi; `ffmpeg` esa +30–50 MB bo'lardi. Kutubxona
+LAZY yuklanadi (`await import`), ya'ni Azure yo'li (asosiy zanjir,
+to'g'ridan-to'g'ri MP3) uni UMUMAN ochmaydi; yo'q bo'lsa `wavToMp3`
+`null` beradi va Azure ishlashda davom etadi.
+⚠ **Litsenziya LGPL-3.0, tadqiqotdagi «MIT» — XATO** (`tts.md` §1
+tuzatilishi kerak). Kutubxona o'zgartirilmaydi va faqat SERVERDA
+ishlaydi (foydalanuvchiga tarqatilmaydi), shuning uchun LGPL
+majburiyati yuzaga kelmaydi; MP3 patentlari 2017 da tugagan.
+Jonli tekshirildi: 2 s / 16 kHz WAV → 25 056 bayt MP3, `mp3Seconds`
+2.088 s, profil `mpeg2/16000/mono`, ikki nusxa ulanganda 4.176 s.
+
+**Audio dvigateli** (`lib/generation/audio/`)
+
+- `input.ts` — forma → `AudioInput` (ikki tomonga: `encodeAudioValues`).
+  Rejim/janr/daqiqa SERVERDA qayta siqiladi; `topic` rejimida manba
+  matn ATAYLAB o'qilmaydi. `normalizeScript`: rollar faqat «A»/«B»
+  (uchinchi rol ovozsiz qolardi), uzun replika KESILMAYDI — jumla
+  chegarasida BO'LINADI.
+- `script.ts` — rol → ovoz indeksi, so'z byudjeti (daqiqa × 150 ±15 %),
+  ovoz ulushi SO'Z bo'yicha (replika soni bo'yicha emas: qisqa «ha,
+  tushunarli» javoblar soxta muvozanat berardi), TTS bo'laklari.
+  Pauzalar: replika orasida 350 ms, ROL ALMASHGANDA 500 ms, replika
+  ichidagi bo'laklar orasida 0, oxirida 0. `<break>` teg faqat Azure
+  SSML ida tug'iladi — xom matnga qo'shilsa Aisha uni O'QIB yuborardi.
+- `prompts.ts` — skelet reyestrdan, «aytiladigan matn» qoidalari
+  (qavs/havola/formula/markdown/sahna ko'rsatmasi yo'q) va HALOLLIK
+  CHEGARASI ikki xil: podkastda soxta STATISTIKA, tabriknomada soxta
+  SHAXSIY tafsilot (yosh, sana, xotira) taqiqi.
+- `review.ts` — bandlar `AUDIO_RULE_IDS` bilan AYNAN mos (podkast 8,
+  tabriknoma 7) + baholovchi. `greeting.md` §4 `noCliche` ALOHIDA band
+  EMAS: u baholovchining `originality` mezoni — deterministik klişe
+  ro'yxati yaxshi matnni ham qizartirardi. Yillar `noFakeStats` dan
+  chiqarilgan (bayram yili uydirma emas). `relation` («Kim bo'ladi?»)
+  `respectForm` bandining OG'IRLIGINI belgilaydi: ustoz/rahbar/katta
+  yoshlida «sen» — QIZIL, do'stda — sariq.
+- `polish.ts` — nishon bitta (`script`); qabul qilinganda `seconds`
+  TASHLANADI (u eski matnning o'lchovi edi).
+- `engine.ts` — bosqichlar kirish→ssenariy(+1 qayta so'rov)→hisobot→
+  sayqal→sintez→qadoqlash. ⚠ **TARTIB `infographic` dan FARQ QILADI**:
+  sayqal SINTEZDAN OLDIN, chunki qayta «chizish» bu oilada TTS ni
+  ikkinchi marta to'lash degani. `null` va ISTISNO ajratilgan: matn
+  chiqmasa `null` («Audio yaratilmadi»), OVOZ provayderi sozlanmagan
+  bo'lsa ANIQ xato «Ovoz provayderi sozlanmagan» — va u ssenariydan
+  OLDIN tekshiriladi, ya'ni kalitsiz holatda LLM puli sarflanmaydi.
+  Ikkala yo'lda ham kredit qaytadi. `seconds` FAYLDAN o'lchanadi
+  (`mp3Seconds`), `delivered = {got, want: daqiqa×60, unit:"soniya"}`.
+  `cost` — LLM + TTS yig'indisi (`CostJson` shakli o'zgarmadi; TTS
+  BELGILARI token ustuniga qo'shilmaydi — birlik boshqa).
+
+**Kalitlar va muhit**: `AZURE_SPEECH_KEY`, `AZURE_SPEECH_REGION`,
+`AISHA_API_KEY`, `TTS_GEMINI_MODEL`, `TTS_VOICE_{UZ,RU,EN}` —
+`lib/server/env.ts` (`env.tts`, `ttsConfigured()`,
+`assertRuntimeConfig` ogohlantirishi), `.env.example` (olish yo'li
+bilan), `docker-compose.yml` web+worker, `tests/compose-env.test.mts`
+(+4 kalit va +1 test). Kalitning O'ZI hech qayerda chop etilmaydi.
+
+**`scripts/tts-lab.mts`** (`npm run tts-lab`, hisobot §4): bitta
+~60 soniyalik o'zbek namunasi × barcha sozlangan provayder/ovoz →
+`eval-out/tts/*.mp3` + jadval (soniya / belgi / narx / latensiya /
+bo'lak) + `report.json`. Chiqish `scratch/` emas `eval-out/` ga:
+u allaqachon `.gitignore` da. Kalitsiz YIQILMAYDI — har provayder
+«sozlanmagan» deb belgilanadi va kalitni QAYERDAN olish yozib
+qo'yiladi. Kalitsiz yurgizib tekshirildi.
+
+**Testlar**: `tts-mp3` 14, `tts-azure` 11, `tts-aisha` 10 (Aisha 6 +
+Gemini 4), `tts-chain` 14, `audio-review` 16, `audio-engine` 13,
+`compose-env` +1 — jami +79. Har fayl sarlavhasida MUTATSIYALAR
+ro'yxati (31 + 13 + 12 = **56**). `npm test` 2 477 yashil, `tsc`/eslint
+toza.
+
+**WP-A dan qolgan ochiq bandlar**
+
+1. **Kalitlar egasidan** (`tts.md` §6): `AZURE_SPEECH_KEY` +
+   `AZURE_SPEECH_REGION`, `AISHA_API_KEY`. Ularsiz podkast/tabriknoma
+   ishga tushmaydi va `assertRuntimeConfig` ogohlantiradi.
+2. **Aisha so'rov/javob shakli** tasdiqlanmagan — kalit kelgach
+   `tts-lab` bilan tekshirilib, `aishaBody`/`readAishaAudio` tuzatiladi.
+3. **`docs/research/tts.md` §1 tuzatilsin**: `lamejs` litsenziyasi MIT
+   emas, LGPL-3.0.
+4. **Reyestr nomuvofiqligi (`audio-params.ts`, WP-A egaligidan tashqari)**:
+   `podcastType` va `occasion` parametrlari `structure` ta'sirini e'lon
+   qiladi, lekin uchala podkast turi ham `PODCAST_SKELETON` + `blocks: 3`
+   + `speakers: 2` ni, oltala tabriknoma janri esa `GREETING_SKELETON`
+   ni BIR XIL ishlatadi — ya'ni ssenariy TUZILMASI tur bo'yicha
+   farqlanmaydi (farq faqat `guidance`/`occasion` da, ya'ni `prompt`
+   va `model` da). Differensial zond (`tests/audio-params.test.mts`)
+   shu sababli HALI yozilmadi: u yoki `AUDIO_PARAMS` dagi `structure`
+   ta'sirini olib tashlashni, yoki reyestrga turga xos skelet/replika
+   sonini kiritishni talab qiladi — ikkalasi ham WP-A egaligidan
+   tashqaridagi fayllar (`audio-params.ts`, `audio/registry.ts`).
+5. **Jonli sinov va ko'z bilan tekshirish** (CLAUDE.md 2/3-bosqich)
+   kalitlar kelgandan keyin: `npm run tts-lab`, so'ng `npm run live`
+   podkast/tabriknoma bilan va MP3 ni haqiqatan TINGLAB ko'rish.
+6. `worker.ts`/`doc-polish.ts` audio «Tuzatish» yo'li: sayqal
+   `relation`/`minutes` ni dvigateldan oladi, standalone «Tuzatish»
+   esa ularni hujjatdan tiklashi kerak (`minutesOf`/`recipientOf` bor,
+   `relation` uchun manba yo'q).

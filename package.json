@@ -20,11 +20,13 @@
     "seed": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/seed-demo.mts",
     "seed-images": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/seed-images.mts",
     "image-lab": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/image-lab.mts",
+    "tts-lab": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/tts-lab.mts",
     "test:viewer": "tsx --tsconfig tsconfig.viewer.json --test --test-concurrency=2 tests/viewer/*.test.mts",
     "test:ui": "tsx --tsconfig tsconfig.viewer.json --test --test-concurrency=2 tests/ui/*.test.mts",
     "gen:icons": "tsx scripts/gen-icons.mts"
   },
   "dependencies": {
+    "@breezystack/lamejs": "^1.2.7",
     "@anthropic-ai/sdk": "^0.125.0",
     "docx": "^9.7.1",
     "jszip": "^3.10.1",

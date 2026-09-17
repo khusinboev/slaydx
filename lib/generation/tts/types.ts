@@ -33,7 +33,54 @@ export type TtsSynthOpts = {
   voice?: string;
   /** Tezlik ko'paytuvchisi (1 = normal). Provayder qo'llamasa e'tiborsiz. */
   speed?: number;
+  /*
+   * WP-A qo'shimchasi (shartnoma KENGAYDI, o'zgarmadi — ikkala maydon
+   * ham IXTIYORIY va `speed` bilan ayni semantikada: provayder
+   * qo'llamasa e'tiborsiz qoldiradi).
+   */
+  /**
+   * Replikadan KEYINGI pauza (ms) — SSML `<break time="…"/>`.
+   *
+   * Faqat Azure qo'llaydi (`tts.md` §3: pauza mexanizmi provayderga
+   * bog'liq); Aisha/Gemini uni e'tiborsiz qoldiradi. Nega opsiyada,
+   * matn ichida emas: `<break>` teg XOM MATNGA qo'shilsa, SSML
+   * qo'llamaydigan provayder uni OVOZ CHIQARIB o'qib yuborardi.
+   */
+  pauseMs?: number;
+  /**
+   * Bitta so'rovning vaqt chegarasi (ms) — worker muddatidan keladi.
+   *
+   * Berilmasa adapter o'z standartini oladi (`TTS_LIMITS.callTimeoutMs`).
+   */
+  timeoutMs?: number;
 };
+
+/**
+ * Provayder xatosi (WP-A) — `TtsProvider.synthesize` ISTISNO tashlaydi
+ * (yuqoridagi shartnoma izohi), zanjir esa `retryable` ni ko'rib
+ * qaror qiladi: `false` — keyingi provayderga DARHOL o'tiladi
+ * (`llm/chain.ts` naqshi), `true` — shu provayder qayta uriladi.
+ */
+export class TtsError extends Error {
+  readonly provider: TtsProviderId;
+  readonly retryable: boolean;
+  readonly status?: number;
+  readonly retryAfterMs?: number;
+
+  constructor(provider: TtsProviderId, message: string, o: { retryable?: boolean; status?: number; retryAfterMs?: number } = {}) {
+    super(message);
+    this.name = "TtsError";
+    this.provider = provider;
+    this.retryable = o.retryable ?? false;
+    if (o.status !== undefined) this.status = o.status;
+    if (o.retryAfterMs !== undefined) this.retryAfterMs = o.retryAfterMs;
+  }
+}
+
+/** Xato `retryable` mi — noma'lum istisno (tarmoq) QAYTA URINISHGA arziydi. */
+export function isRetryableTtsError(e: unknown): boolean {
+  return e instanceof TtsError ? e.retryable : true;
+}
 
 /**
  * Sintez natijasi.
@@ -229,6 +276,15 @@ export const TTS_LIMITS = {
   chunkChars: 900,
   /** Bitta ishdagi umumiy belgi (5 daq × ~150 so'z/daq ≈ 4 500 belgi, zaxira bilan). */
   maxChars: 12_000,
+  /**
+   * WP-A: bitta sintez so'rovining standart vaqt chegarasi (ms).
+   *
+   * 900 belgi ≈ 1 daqiqalik audio; Azure real vaqt sintezida bu ~2–4 s
+   * oladi, lekin sovuq ulanish va tarmoq kechikishi bilan 30 s xavfsiz
+   * shift. `TtsSynthOpts.timeoutMs` uni har chaqiruvda pasaytira oladi
+   * (worker muddati tugayotganda).
+   */
+  callTimeoutMs: 30_000,
 } as const;
 
 /**
