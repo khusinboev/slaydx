@@ -822,3 +822,52 @@ qaytarildi). `tests/viewer/audio-viewer.test.mts` — YANGI (bu
 ko'ruvchi uchun test yo'q edi): `<audio>` pleer aniq `?inline=1`
 manbadan, transkript `doc.audio.script`dan (ikki ovoz rangi bilan),
 `doc.audio` yo'q holatda pleer chizmaydi va tushunarli xabar chiqadi.
+
+### R2 (lead) — birlashtiruv, to'liq tekshiruv, jonli, deploy (2026-09-17)
+
+- Merge'lar: WP-A (`247b147`), R1 (ff `a3d8095`), WP-A2 (`e55692c`) —
+  hujjat konfliktlari ikkala yozuv saqlanib hal qilindi.
+- `ToolField.hideWhen` (`7a93b2d`): R1 ochiq bandi — «qarama-qarshi
+  juftlik» turida `categoryCount` chipi inert edi. Endi maydon
+  deklarativ shart bilan yashirinadi (`fieldVisible`, ro'yxat reyestrdan:
+  `limits.categories` bitta qiymatli turlar); `ToolWorkspace` asosiy va
+  qo'shimcha maydonlarni shu bilan filtrlaydi. Test `game-registry` +1,
+  mutatsiya (hideWhen olib tashlandi — qizardi); Chromium: standart turda
+  chip 1, juftlikda 0, qaytganda 1, narx o'zgarmaydi.
+- Jonli: `npm run live -- sorting listening` 2/2 (saralash 100 ball,
+  tinglash 100 ball, `audioAssetId` 0/10 — kalitsiz kutilgan; baholovchi
+  Anthropic 400 «credit balance too low» → Gemini flash zaxirasi).
+- Chromium (merge'dan keyingi dev): saralash yangi generatsiya 20/20,
+  tinglash 10/10 (R1 `data-text` ko'rinishi bilan), kartalar 10/10;
+  podkast kalitsiz — «Ovoz provayderi sozlanmagan … to'lov qaytarildi»
+  ekranda, ish FAILED, 0 brauzer xatosi (LLM puli sarflanmadi — tekshiruv
+  ssenariydan oldin).
+- To'liq tekshiruv: tsc/eslint toza; unit 2 618/2 620 (2 ta ma'lum
+  `.env.local` fal.ai testi), UI 255/255, ko'ruvchi 219/219.
+
+## 6. Ochiq bandlar (keyingi sprintga)
+
+1. **TTS kalitlari egasidan** — `AZURE_SPEECH_KEY`+`AZURE_SPEECH_REGION`
+   (portal.azure.com, F0 bepul), `AISHA_API_KEY` (voicelab.uz). Kelgach:
+   `npm run tts-lab` → egasi eshitib tanlaydi → prod `.env` → `npm run
+   live -- podcast greeting listening` (MP3 ≥ 0.8× daqiqa, audio parcha
+   `/api/o/[token]/audio/[assetId]` orqali brauzerda) → `npm run seed --
+   adkhambek_4 podcast greeting sorting listening` → `listeningChecks`
+   `audioAssetId` tekshiruvi qattiqlashtirilsin.
+2. **Aisha so'rov/javob shakli tasdiqlanmagan** — hujjatdan yozilgan;
+   tuzatiladigan joy faqat `aishaBody`/`readAishaAudio`.
+3. **Anthropic hisobi** — baholovchi hozir Gemini flash da (ballar
+   yumshoq, ~100); to'ldirilgach Claude Sonnet 5 qaytadi.
+4. Tinglash formasida `optionCount` yo'q (standart 4) — 3 variantli rejim
+   kerakmi, PM qarori. Ko'rsatmada til nomi `langInfo(target).native`
+   («English») — 18 tilning o'zbekcha nomlari jadvali yo'q.
+5. `doc-polish.ts` audio yo'li ATAYLAB yo'q (sayqal sintezdan oldin);
+   agar kelajakda «ssenariyni tuzatib qayta aytish» kerak bo'lsa —
+   ikkinchi TTS to'lovi bilan alohida xizmat sifatida.
+6. Sessiya muddati 30 kun (`SESSION_TTL_DAYS`), natijalar egasi jadvalida
+   500 tagacha — cheksiz eksport/sahifalash keyin.
+7. Flesh karta o'yinida ball «bilaman» o'z-o'zini baholash — o'qituvchi
+   uchun bu «o'zlashtirish» emas, «o'quvchi fikri» ekani natijalar
+   panelida izohlansa yaxshi.
+8. AUDIT-20/21 §6 dagi bandlar (eski yozuvchi yo'li, TOC bet raqami,
+   karta A7 o'lchami) o'z kuchida.
