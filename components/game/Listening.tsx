@@ -6,21 +6,19 @@ import { answer, answerOf, type GameState } from "@/lib/game/engine";
 import { cn } from "@/lib/cn";
 
 /**
- * TINGLASH EKRANI (AUDIT-22 WP-C) — audio → variant tanlash.
+ * TINGLASH EKRANI (AUDIT-22 WP-C/R) — audio → variant tanlash.
  *
  * TTS HALI YO'Q (WP-A, kalitlar egasidan): shu sababli `audioAssetId`
- * odatda `undefined` bo'ladi va ekran buni JIMGINA yutmaydi — «audio
- * hali tayyor emas» deb AYTADI va topshiriqni o'tkazib yuborishga
- * ruxsat beradi. Eshitmasdan tanlangan variant baribir yuboriladi va
- * xato deb sanaladi — bu halol, «0 ball» ekranidan ko'ra tushunarli.
- *
- * MATN KO'RSATILMAYDI, chunki uni ochiq ko'rinish BERMAYDI
- * (`PublicListeningItem` da `text` maydoni yo'q). Matnli zaxira
- * («o'qib topish» rejimi) uchun `lib/game/public.ts` ga maydon qo'shish
- * kerak — WP-C egaligida emas, hisobotda ochiq band sifatida.
+ * odatda `undefined` bo'ladi va ekran buni JIMGINA yutmaydi — «Tinglab
+ * bo'lmadi — o'qing» deb AYTADI va `item.text` (eshitiladigan matn,
+ * `PublicListeningItem.text`, AUDIT-22 R) ni ko'rsatadi: o'yinchi
+ * audiosiz ham o'qib javob bera oladi, mashq umuman o'ynalmay
+ * qolmaydi. `text` — JAVOB EMAS (to'g'ri javob `options` ichida, boshqa
+ * tilda), shuning uchun bu sizish emas.
  *
  * Audio `<audio>` elementi bilan: `onError` bo'lsa ham ekran yiqilmaydi,
- * shunchaki «audio yo'q» holatiga tushadi.
+ * shunchaki xuddi shu «o'qing» holatiga tushadi (audio yiqilgan bo'lsa
+ * ham matn bor).
  */
 export function Listening({
   state,
@@ -69,9 +67,12 @@ export function Listening({
           <p className="text-muted-foreground mt-2 text-center text-xs">Xohlagancha qayta eshitishingiz mumkin.</p>
         </>
       ) : (
-        <p className="border-input bg-muted/40 rounded-xl border border-dashed px-4 py-5 text-center text-sm" data-no-audio>
-          Audio hali tayyor emas — bu topshiriqni o‘tkazib yuborishingiz mumkin.
-        </p>
+        <div className="border-input bg-muted/40 rounded-xl border border-dashed px-4 py-5 text-center" data-no-audio>
+          <p className="text-muted-foreground text-xs">Tinglab bo‘lmadi — o‘qing:</p>
+          <p className="mt-2 text-[19px] leading-snug font-semibold text-balance" data-text>
+            {item.text}
+          </p>
+        </div>
       )}
 
       <p className="text-muted-foreground mt-5 text-sm">Qaysi ma’noni eshitdingiz?</p>

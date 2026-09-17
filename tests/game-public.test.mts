@@ -37,7 +37,11 @@ import type { AcademicDoc } from "../lib/generation/types.ts";
  *   6. `publicItemId` tartib indeksidan yasaldi (`i0…iN`) — «id javobni
  *      oshkor qilmaydi» testi;
  *   7. `publicOptionOrder` aynan tartibni qaytardi (aralashtirmadi) —
- *      «variantlar aralashtiriladi» testi.
+ *      «variantlar aralashtiriladi» testi;
+ *   8. kartaning `back` maydoni boshqa kindda ham (masalan tinglashda)
+ *      chiqarilsa — «`back` FAQAT flashcards da» testi;
+ *   9. tinglash elementidagi `text` tushib qolsa — «matn (`text`) yo'q
+ *      yoki boshqacha» testi (audiosiz rejim ishlamay qolardi).
  */
 
 const KINDS: PublicGameKind[] = [...PUBLIC_GAME_KINDS];
@@ -75,7 +79,12 @@ function keysOf(v: unknown, out = new Set<string>()): Set<string> {
  * TOIFA ichidagi `items` (element ↔ toifa bog'i); u pastdagi maxsus
  * tekshiruv bilan ushlanadi.
  */
-const FORBIDDEN_KEYS = ["answer", "answers", "back", "solution", "explanation", "correct", "key"];
+/*
+ * `back` bu ro'yxatda YO'Q: u ENDI `flashcards` da ATAYLAB chiqadi
+ * (o'zini tekshirish, `PublicCard` izohi) — umumiy taqiqdan chiqarilib,
+ * pastdagi «UMUMIY» testda kind bo'yicha alohida tekshiriladi.
+ */
+const FORBIDDEN_KEYS = ["answer", "answers", "solution", "explanation", "correct", "key"];
 
 /** Obyektda bir vaqtda `name` va `items` bo'lsa — element↔toifa bog'i sizgan. */
 function leaksCategoryItems(v: unknown): boolean {
@@ -116,6 +125,8 @@ test("UMUMIY: hech bir kind ko'rinishida javobga olib boradigan KALIT yo'q", () 
       assert.ok(!keys.has(bad), `MUTATSIYA: ${kind} ko'rinishida «${bad}» maydoni bor — javob sizadi`);
     }
     assert.ok(!leaksCategoryItems(viewOf(kind)), `MUTATSIYA: ${kind} da toifa o'z elementlari bilan berildi`);
+    // MUTATSIYA (8): `back` faqat flashcards da — boshqa hech bir kindda emas.
+    if (kind !== "flashcards") assert.ok(!keys.has("back"), `MUTATSIYA: ${kind} da «back» maydoni bor`);
   }
 });
 
@@ -161,18 +172,30 @@ test("KROSSVORD: to'r SHAKLI va savollar, HARFLAR sizmaydi", () => {
   }
 });
 
-test("KARTALAR: faqat OLD yuz; orqa yuz (javob) sizmaydi", () => {
+test("KARTALAR: old yuz + orqa yuz (o'zini tekshirish) — misol/maslahat sizmaydi", () => {
   const doc = docFor("flashcards");
   const v = viewOf("flashcards");
   assert.equal(v.kind, "flashcards");
-  const json = JSON.stringify(v);
+  if (v.kind !== "flashcards") return;
   const cards = doc.game!.cards!.cards;
   assert.equal(v.total, cards.length);
-  for (const c of cards) {
-    assert.ok(json.includes(c.front), `«${c.front}» old yuzi ko'rinishda yo'q`);
-    // MUTATSIYA: `back` ni qo'shish — kartaning butun ma'nosi yo'qolardi.
-    assert.ok(!json.includes(c.back), `MUTATSIYA: «${c.back.slice(0, 30)}…» orqa yuzi ochiq`);
-    if (c.example) assert.ok(!json.includes(c.example), "misol qatori ham sizdi");
+  const json = JSON.stringify(v);
+  for (const [i, c] of cards.entries()) {
+    const pc = v.cards[i]!;
+    assert.equal(pc.front, c.front.replace(/\s+/g, " ").trim(), `«${c.front}» old yuzi yo'q yoki boshqacha`);
+    /*
+     * MUTATSIYA (8): `back` ENDI ochiq ko'rinishda — bu javob SIZISHI
+     * EMAS. Kartalarda server tekshiradigan «to'g'ri javob» umuman yo'q
+     * (`score.ts`): ball o'yinchi o'zi bosgan «bildim» soni va orqa yuz
+     * bilan hech qachon solishtirilmaydi. Shuning uchun bu yerda
+     * TESKARI tekshiruv — `back` YO'Q bo'lib qolsa (ya'ni dvigatel uni
+     * yana yashirsa), o'zini tekshirish ekrani ishlamay qoladi.
+     */
+    assert.equal(pc.back, c.back.replace(/\s+/g, " ").trim(), `«${c.back.slice(0, 30)}…» orqa yuzi yo'q yoki boshqacha`);
+    assert.deepEqual(Object.keys(pc).sort(), ["back", "front", "id"], `MUTATSIYA: kartada ortiqcha maydon — ${JSON.stringify(pc)}`);
+    // Misol/maslahat — o'zini tekshirish uchun shart emas, hamon sizmaydi.
+    if (c.example) assert.ok(!json.includes(c.example), "misol qatori sizdi");
+    if (c.hint) assert.ok(!json.includes(c.hint), "maslahat sizdi");
   }
 });
 
@@ -225,7 +248,15 @@ test("TINGLASH: audio id + variantlar; to'g'ri javob indeksi sizmaydi", () => {
   assert.equal(v.total, model.items.length);
   for (const [i, it] of v.items.entries()) {
     const src = model.items[i];
-    assert.deepEqual(Object.keys(it).sort(), src.audioAssetId ? ["audioAssetId", "id", "options"] : ["id", "options"]);
+    assert.deepEqual(Object.keys(it).sort(), src.audioAssetId ? ["audioAssetId", "id", "options", "text"] : ["id", "options", "text"]);
+    /*
+     * MUTATSIYA (9): `text` tushib qolsa (yoki bo'sh bo'lsa) — audio
+     * yo'q/yiqilgan holatda o'yinchi tomoni o'qib javob berolmay
+     * qoladi (`Listening.tsx` «Tinglab bo'lmadi — o'qing»). `text` —
+     * eshitiladigan matn (`targetLanguage`), JAVOB EMAS: to'g'ri javob
+     * `options` ichida, boshqa (ona) tilda.
+     */
+    assert.equal(it.text, src.text.replace(/\s+/g, " ").trim(), "matn (`text`) yo'q yoki boshqacha");
     // Variantlar to'plami saqlanadi, TARTIB esa boshqa (aralashtirilgan).
     assert.deepEqual([...it.options].sort(), [...src.options].sort(), "variantlar to'plami o'zgardi");
     /*

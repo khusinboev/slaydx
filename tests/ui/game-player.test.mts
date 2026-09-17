@@ -226,9 +226,14 @@ test("kartalar: ag'darilmaguncha baho tugmalari yo'q, «bildim» payloadga tusha
   if (view.kind !== "flashcards") throw new Error("kartalar emas");
 
   assert.ok(!q("[data-know]"), "ag'darilmagan kartada baho so'ralmaydi");
+  assert.ok(!q("[data-back]"), "ag'darilmagan kartada orqa yuz ko'rinmaydi");
   const cardId = q("[data-card]")!.getAttribute("data-card")!;
+  const back = view.cards[0]!.back;
   fireEvent.click(q("[data-flip]")!);
   assert.ok(q("[data-know='true']"), "ag'darilgandan keyin ikki tugma");
+  // MUTATSIYA (AUDIT-22 R): orqa yuz (`card.back`) endi ko'rinishi kerak —
+  // «ag'darish» faqat javobni KO'RSATMAYDI degan eski xulq qaytarilsa qizaradi.
+  assert.equal(q("[data-back]")!.textContent, back, "orqa yuz matni ko'rinmadi");
   fireEvent.click(q("[data-know='true']")!);
 
   fireEvent.click(q("[data-next]")!);
@@ -278,6 +283,9 @@ test("tinglash: audio yo'qligi aytiladi, variant indeksi yuboriladi", async () =
   // WP-A gacha TTS yo'q — ekran buni JIMGINA yutmaydi.
   assert.ok(q("[data-no-audio]"), "audio yo'qligi aytiladi");
   assert.ok(!q("[data-play]"), "ishlamaydigan «Tinglash» tugmasi chizilmaydi");
+  // MUTATSIYA (AUDIT-22 R): audio yo'q holatda matn (`item.text`) ko'rinishi
+  // kerak — «Tinglab bo'lmadi — o'qing» o'qish zaxirasi qulamasin.
+  assert.equal(q("[data-text]")!.textContent, view.items[0]!.text, "audiosiz matn ko'rinmadi");
 
   const itemId = q("[data-item]")!.getAttribute("data-item")!;
   fireEvent.click(q('[data-option="1"]')!);

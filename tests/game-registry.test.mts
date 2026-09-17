@@ -7,13 +7,13 @@ import {
   GAME_TYPES,
   gameDefaultTypeId,
   gameKindOf,
+  gamePromisedCount,
   gameTypeOf,
   gameTypesOf,
   normalizeGameType,
 } from "../lib/generation/games/registry.ts";
 import {
   CARDS_PER_SHEET,
-  gamePromisedCount,
   normalizeCategoryCount,
   normalizeItemsPerCategory,
   normalizeListeningCount,
@@ -259,7 +259,10 @@ test("zond reyestri: id unikal, har parametrning egasi, ta'siri va IKKI XIL qiym
  *   9. `GAME_RULE_IDS.sorting` dan `itemSingleCategory` o'chirildi —
  *      «yechilmaydigan o'yin qoidasi» testi;
  *  10. `gamePromisedCount` saralashda faqat toifani sanadi —
- *      «va'da = toifa × element» testi.
+ *      «va'da = toifa × element» testi;
+ *  11. `gamePromisedCount` (AUDIT-22 R) `type` argumentini e'tiborsiz
+ *      qoldirdi (saralashda har doim umumiy chegaradan hisobladi) —
+ *      «tur bo'yicha va'da» testi (ikki qutbli tur 2 toifaga qulflanadi).
  */
 
 test("saralash chegaralari: toifa 2–6, toifadagi element 3–8 (sorting-game.md §3)", () => {
@@ -321,6 +324,27 @@ test("normalizatorlar chiplardan chiqmaydi; va'da = toifa × element", () => {
   assert.equal(gamePromisedCount("listening", { itemCount: 20 }), 20);
   assert.equal(gamePromisedCount("crossword", { wordCount: 15 }), 15);
   assert.equal(gamePromisedCount("flashcards", { cardCount: 5 }), 5);
+});
+
+test("gamePromisedCount TUR bo'yicha (AUDIT-22 R): «qarama-qarshi juftlik» 2 toifaga qulflanadi", () => {
+  // `type` BERILMASA — eski, TUR-KO'R shartnoma (yuqoridagi test bilan bir xil).
+  assert.equal(gamePromisedCount("sorting", { categoryCount: 6, itemsPerCategory: 8 }), 48);
+  /*
+   * MUTATSIYA (11): `type` berilganda ham umumiy `normalizeCategoryCount`
+   * ishlatilsa — natija baribir 48 bo'lib qolardi, standart forma
+   * (4 toifa × 5 element) esa ikki qutbli turda 20 va'da qilib, real
+   * dvigatel 10 ta (2 × 5) bergani uchun darvoza (70 %) hujjatni RAD
+   * ETARDI.
+   */
+  assert.equal(gamePromisedCount("sorting", { categoryCount: 6, itemsPerCategory: 8 }, "qarama-qarshi"), 16, "MUTATSIYA: type e'tiborsiz qoldirildi (2 toifa × 8 emas)");
+  assert.equal(gamePromisedCount("sorting", { categoryCount: 4, itemsPerCategory: 5 }, "qarama-qarshi"), 10);
+  // Standart «toifa» turida `type` berish natijani O'ZGARTIRMAYDI (chegaralar bir xil).
+  assert.equal(gamePromisedCount("sorting", { categoryCount: 6, itemsPerCategory: 8 }, "toifa"), 48);
+  // Noma'lum tur → standart tur ("toifa") — umumiy chegara bilan bir xil.
+  assert.equal(gamePromisedCount("sorting", { categoryCount: 6, itemsPerCategory: 8 }, "yo'q-bunday"), 48);
+  // Boshqa kindlarda `type` argumenti umuman ta'sir qilmaydi.
+  assert.equal(gamePromisedCount("listening", { itemCount: 20 }, "sozlar"), 20);
+  assert.equal(gamePromisedCount("crossword", { wordCount: 15 }, "klassik"), 15);
 });
 
 test("saralash turlari: standart «toifa», ikki qutbli tur AYNAN 2 toifa", () => {

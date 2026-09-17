@@ -399,18 +399,18 @@ export function normalizeListeningCount(v: unknown): number {
   return GAME_LIMITS.listeningCounts.includes(n) ? n : GAME_LIMITS.listeningCountDefault;
 }
 
-/**
- * Kind bo'yicha VA'DA qilingan element soni — `delivered`, byudjet va
- * darvoza (`gameGateFail`) BITTA qoidadan o'qisin.
+/*
+ * `gamePromisedCount` — AUDIT-22 R: BU YERDA EMAS, `registry.ts` da.
  *
- * Saralashda «element» = toifa × toifadagi element: o'quvchi aynan
- * shuncha kartani joylashtiradi va narx ham shu hajmga to'lanadi.
+ * Saralashda «qarama-qarshi juftlik» turi toifa sonini 2 ga QULFLAYDI
+ * (`gameTypeOf("sorting", …).limits.categories`), ya'ni va'da TURNI
+ * bilishi kerak. Reyestr shu spetsifikatsiyaning yagona manbai va bu
+ * modul (`types.ts`) reyestrni import qila olmaydi (`registry.ts`
+ * allaqachon BU fayldan `GAME_LIMITS`ni import qiladi — teskari yo'nalish
+ * doiraviy import va, agar bu fayl birinchi yuklansa, `registry.ts`
+ * modul darajasidagi `SORTING_LIMITS` konstantasi hali ishga
+ * tushirilmagan `GAME_LIMITS` ga tegib TDZ xatosini berardi).
  */
-export function gamePromisedCount(kind: GameKind, values: { [k: string]: unknown }): number {
-  if (kind === "sorting") return normalizeCategoryCount(values.categoryCount) * normalizeItemsPerCategory(values.itemsPerCategory);
-  if (kind === "listening") return normalizeListeningCount(values.itemCount);
-  return normalizeGameCount(kind === "crossword" ? values.wordCount : values.cardCount);
-}
 
 /**
  * To'r o'lchami TOQ bo'lishi kerak (R5 §1) — raqamlash va markaziy

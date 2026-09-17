@@ -11,7 +11,7 @@ import {
   sortingSections,
   SORTING_FLOOR,
 } from "../lib/generation/games/sorting/engine.ts";
-import { promisedItems, sortingInputFromValues, SORT_ITEMS_PER_CATEGORY_CAP } from "../lib/generation/games/sorting/input.ts";
+import { promisedItems, sortingInputFromValues } from "../lib/generation/games/sorting/input.ts";
 import { sortingRewritePrompt, sortingSystemPrompt, sortingUserPrompt } from "../lib/generation/games/sorting/prompts.ts";
 import { buildGameDoc, type GameBuildOpts } from "../lib/generation/games/engine.ts";
 import { gameDefaultTypeId, gameTypeOf } from "../lib/generation/games/registry.ts";
@@ -127,23 +127,32 @@ test("diapazon QAYTA tekshiriladi: chip bo'lmagan qiymat standartga tushadi", ()
   assert.equal(sortingInputFromValues(meta(), values({ sortingType: "yoq" })).type, gameDefaultTypeId("sorting"));
 });
 
-test("ikki qutbli turda toifa DOIM 2 ta, lekin VA'DA (toifa × element) saqlanadi", () => {
+test("ikki qutbli turda toifa DOIM 2 ta; VA'DA endi HAQIQIY (aylanib o'tish yo'q, AUDIT-22 R)", () => {
   /*
-   * MUTATSIYA: agar dvigatel shunda 2 × 5 = 10 element bersa,
-   * `gamePromisedCount` 4 × 5 = 20 deb hisoblab, darvoza (70 %)
-   * hujjatni RAD ETARDI — standart forma bilan!
+   * MUTATSIYA: `sortingInputFromValues` `itemsPerCategory`ni yana
+   * qayta taqsimlasa (eski «aylanib o'tish» qaytsa) — `got.itemsPerCategory`
+   * forma qiymati (5) emas, undan katta (masalan 10) bo'lib qizardi.
+   * Forma `categoryCount=4` bu turda TA'SIR QILMAYDI (reyestr uni 2 ga
+   * qulflaydi) — `itemsPerCategory` esa TO'G'RIDAN-TO'G'RI forma
+   * qiymati.
    */
   const v = values({ sortingType: "qarama-qarshi", categoryCount: 4, itemsPerCategory: 5 });
   const got = sortingInputFromValues(meta(), v);
   assert.equal(got.type, "qarama-qarshi");
   assert.equal(got.categoryCount, 2);
-  assert.equal(got.categoryCount * got.itemsPerCategory, promisedItems(v), "va'da yo'qoldi");
-  assert.equal(got.itemsPerCategory, 10);
+  assert.equal(got.itemsPerCategory, 5, "MUTATSIYA: elementlar yana qayta taqsimlandi");
+  /*
+   * `gamePromisedCount("sorting", v, "qarama-qarshi")` HAQIQIY toifa
+   * (2) × itemsPerCategory (5) = 10 — turni bilmasdan hisoblansa
+   * (`v.categoryCount` = 4) 4 × 5 = 20 chiqar edi.
+   */
+  assert.equal(got.categoryCount * got.itemsPerCategory, promisedItems(v), "va'da dvigatel bergan sondan farq qiladi");
+  assert.equal(promisedItems(v), 10, "MUTATSIYA: gamePromisedCount type argumentini e'tiborsiz qoldirsa 20 chiqadi");
 
-  // Eng katta buyurtma ham chegaradan chiqmaydi.
+  // Eng katta buyurtma ham chip chegarasidan chiqmaydi (endi inflatsiya yo'q).
   const big = sortingInputFromValues(meta(), values({ sortingType: "qarama-qarshi", categoryCount: 6, itemsPerCategory: 8 }));
-  assert.ok(big.itemsPerCategory <= SORT_ITEMS_PER_CATEGORY_CAP, `chegaradan oshdi: ${big.itemsPerCategory}`);
-  assert.equal(big.categoryCount * big.itemsPerCategory, 48);
+  assert.equal(big.itemsPerCategory, GAME_LIMITS.itemsPerCategoryMax, `chegaradan oshdi: ${big.itemsPerCategory}`);
+  assert.equal(big.categoryCount * big.itemsPerCategory, 16, "2 toifa × 8 element");
 });
 
 /* ══════════════════════════ promptlar ══════════════════════════ */

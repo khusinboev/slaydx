@@ -2,8 +2,8 @@ import { extractMeta } from "./meta";
 import { translationChars } from "../tools";
 import { teacherKindOf } from "./teacher/registry";
 import { TEACHER_LIMITS, type TeacherKind } from "./teacher/types";
-import { gameKindOf } from "./games/registry";
-import { GAME_LIMITS, gamePromisedCount, type GameKind } from "./games/types";
+import { gameKindOf, gamePromisedCount } from "./games/registry";
+import { GAME_LIMITS, type GameKind } from "./games/types";
 import { audioKindOf } from "./audio/registry";
 import { normalizeAudioMinutes, type AudioKind } from "./audio/types";
 import { normalizeBlockCountFor } from "./infographic/registry";
@@ -288,12 +288,15 @@ export function infographicBudgetMs(blocks: number): number {
  */
 function gameSize(kind: GameKind, values: FormValues): number {
   /*
-   * AUDIT-22: `gamePromisedCount` — VA'DA qilingan element soni (saralashda
-   * toifa × element, tinglashda topshiriq soni). Ilgari bu yerda faqat
-   * `wordCount`/`cardCount` bor edi va yangi kindlar jimgina standart
-   * 10 ga tushib, byudjet hajmga ergashmasdi.
+   * AUDIT-22 R: `gamePromisedCount` — VA'DA qilingan element soni
+   * (saralashda toifa × element, tinglashda topshiriq soni). Ilgari bu
+   * yerda faqat `wordCount`/`cardCount` bor edi va yangi kindlar
+   * jimgina standart 10 ga tushib, byudjet hajmga ergashmasdi.
+   * Saralashda `sortingType` ham uzatiladi — «qarama-qarshi juftlik»
+   * turida byudjet HAQIQIY (kichikroq) hajmga mos kelsin, standart
+   * forma qiymati bilan shishib ketmasin.
    */
-  return gamePromisedCount(kind, values as { [k: string]: unknown });
+  return gamePromisedCount(kind, values as { [k: string]: unknown }, kind === "sorting" ? values.sortingType : undefined);
 }
 
 /** @param pages Paketning o'rtacha beti (`pagesMid("25-30")` → 28). */

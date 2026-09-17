@@ -5,7 +5,7 @@ import { GAME_COUNT_RATIO, fileSuffix, gameGateFail } from "../lib/generation/in
 import { deliveredCount, infographicDelivered } from "../lib/generation/delivered.ts";
 import { extractMeta } from "../lib/generation/meta.ts";
 import { TOOL_BY_ID } from "../lib/tools.ts";
-import { GAME_TOOL_LIST, type CrosswordWord, type Flashcard, type GameModel } from "../lib/generation/games/types.ts";
+import { GAME_TOOL_LIST, type CrosswordWord, type Flashcard, type GameModel, type SortingCategory } from "../lib/generation/games/types.ts";
 import type { AcademicDoc, DocMeta } from "../lib/generation/types.ts";
 import type { FormValues } from "../lib/types.ts";
 
@@ -57,6 +57,19 @@ function flashcardsDoc(meta: DocMeta, n: number): AcademicDoc {
   return { meta, titlePage: true, toc: false, sections: [], game };
 }
 
+function sortingCategories(n: number, itemsPer: number): SortingCategory[] {
+  return Array.from({ length: n }, (_, i) => ({
+    id: `cat${i}`,
+    name: `Toifa ${i}`,
+    items: Array.from({ length: itemsPer }, (_, j) => `Element ${i}-${j}`),
+  }));
+}
+
+function sortingDoc(meta: DocMeta, type: string, categories: SortingCategory[]): AcademicDoc {
+  const game: GameModel = { v: 1, kind: "sorting", type, language: "uz", topic: "Hayvonlar tasnifi", sorting: { categories } };
+  return { meta, titlePage: true, toc: false, sections: [], game };
+}
+
 /* ───────────────────────── darvoza (gameGateFail) ───────────────────────── */
 
 test("darvoza — krossvord: so'z 0.7 ulushi", () => {
@@ -78,6 +91,32 @@ test("darvoza — flesh kartalar: karta 0.7 ulushi", () => {
   assert.equal(gameGateFail(meta, v, flashcardsDoc(meta, 7)), null, "7/10 chegarada o'tishi kerak");
   // MUTATSIYA: nisbat pasaytirilsa 6 ham o'tib ketardi.
   assert.equal(gameGateFail(meta, v, flashcardsDoc(meta, 6))?.rule, "flashcards.cards");
+});
+
+test("darvoza — saralash: TUR bo'yicha va'da (AUDIT-22 R, «qarama-qarshi juftlik» 2 toifaga qulflanadi)", () => {
+  const v: FormValues = { sortingType: "qarama-qarshi", categoryCount: 4, itemsPerCategory: 5 };
+  const meta = metaOf("sorting", { topic: "Hayvonlar tasnifi", ...v });
+  /*
+   * Dvigatel REYESTR bo'yicha HAQIQATDA 2 toifa beradi (`sorting/input.ts`
+   * endi elementlarni sun'iy qayta taqsimlamaydi, AUDIT-22 R): va'da ham
+   * shu — 2 × 5 = 10, need = ceil(10 × 0.7) = 7.
+   *
+   * MUTATSIYA: `gameGateFail` `values.sortingType`ni `gamePromisedCount`ga
+   * uzatmasa (yoki u `type` argumentini e'tiborsiz qoldirsa), va'da TUR-KO'R
+   * hisoblanib 4 × 5 = 20, need = 14 bo'lib qolardi — pastdagi 8/10 elementli
+   * hujjat standart forma bilan NOTO'G'RI rad etilardi.
+   */
+  const enough = sortingDoc(meta, "qarama-qarshi", sortingCategories(2, 4)); // 8 element
+  assert.equal(gameGateFail(meta, v, enough), null, "MUTATSIYA: type e'tiborsiz qoldirilsa 8/10 rad etiladi");
+  // Haqiqatan yetarli bo'lmagan hujjat baribir rad etiladi (darvoza ishlayapti).
+  const short = sortingDoc(meta, "qarama-qarshi", sortingCategories(2, 2)); // 4 element
+  assert.equal(gameGateFail(meta, v, short)?.rule, "sorting.items");
+  // Standart «toifa» turida `type` uzatish natijani O'ZGARTIRMAYDI (chegaralar bir xil).
+  const toifaMeta = metaOf("sorting", { topic: "X", sortingType: "toifa", categoryCount: 4, itemsPerCategory: 5 });
+  const toifaV: FormValues = { sortingType: "toifa", categoryCount: 4, itemsPerCategory: 5 };
+  // Va'da = 4 × 5 = 20, need = ceil(20 × 0.7) = 14.
+  assert.equal(gameGateFail(toifaMeta, toifaV, sortingDoc(toifaMeta, "toifa", sortingCategories(4, 4))), null, "16/20 — 70% chegarasidan yuqori o'tishi kerak");
+  assert.equal(gameGateFail(toifaMeta, toifaV, sortingDoc(toifaMeta, "toifa", sortingCategories(4, 3)))?.rule, "sorting.items", "12/20 kerak, 14 yetarli emas");
 });
 
 test("darvoza — `doc.game` yo'q bo'lsa (boshqa vosita) `null`, model yo'q bo'lsa xato", () => {

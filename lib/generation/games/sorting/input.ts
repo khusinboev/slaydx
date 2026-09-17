@@ -1,36 +1,35 @@
 /**
- * SARALASH O'YINI KIRISHI (AUDIT-22 WP-D) — formadan dvigatelgacha.
+ * SARALASH O'YINI KIRISHI (AUDIT-22 WP-D/R) — formadan dvigatelgacha.
  *
  * `flashcards/input.ts` naqshi: `FormValues` bilan `SortingInput`
  * orasidagi YAGONA ko'prik. `extractMeta` umumiy va u `categoryCount`,
  * `itemsPerCategory`, `sortingType` maydonlarini BILMAYDI; mavzu, til,
  * fan va sinf esa `meta` dan keladi.
  *
- * ── Nega «va'da» toifa sonidan emas, KO'PAYTMADAN hisoblanadi
+ * ── «Aylanib o'tish» olib tashlandi (AUDIT-22 R)
  *
  * Formada toifa soni 2–6 chipi bilan so'raladi, lekin «Qarama-qarshi
  * juftlik» turida toifa REYESTR bo'yicha doim IKKITA
- * (`limits.categories: [2]`). Agar dvigatel shunda 2 × `itemsPerCategory`
- * element bersa, `gamePromisedCount` (toifa × element — u turni
- * BILMAYDI) ko'proq va'da qilgan bo'lib chiqar va darvoza
- * (`gameGateFail`) hujjatni RAD ETARDI: 4 toifa × 5 element tanlagan
- * o'qituvchi ikki qutbli o'yinni STANDART forma bilan umuman ola
- * olmasdi (20 va'da, 10 natija — 70 % chegarasidan past).
+ * (`limits.categories: [2]`). Ilgari (`gamePromisedCount` TURNI
+ * BILMAGANda) bu nomuvofiqlikni QOPLASH uchun elementlar mavjud
+ * toifalarga sun'iy QAYTA TAQSIMLANARDI (`SORT_ITEMS_PER_CATEGORY_CAP`
+ * bilan 3× inflatsiya) — aks holda darvoza (`gameGateFail`) hujjatni
+ * RAD ETARDI.
  *
- * Shuning uchun VA'DA (`promisedItems`) saqlanadi va elementlar mavjud
- * toifalarga QAYTA TAQSIMLANADI: ikki qutbli o'yinda har qutb ko'proq
- * element oladi, JAMI esa o'zgarmaydi — o'quvchi baribir shuncha
- * kartani joylashtiradi va narx ham shu hajmga to'langan. Oddiy
- * «Toifalar bo'yicha» turida formula ayni forma qiymatlarini qaytaradi
- * (`promised / categoryCount === itemsPerCategory`), ya'ni bu shox u
- * yerda hech narsani o'zgartirmaydi.
+ * `gamePromisedCount` ENDI turni biladi (`registry.ts`, uchinchi
+ * `type` argumenti): «qarama-qarshi juftlik» uchun va'da HAQIQIY toifa
+ * soni (2) × `itemsPerCategory` bilan hisoblanadi — aynan shuncha
+ * dvigatel beradi. Shuning uchun bu yerda endi hech narsani qayta
+ * taqsimlash SHART EMAS: `categoryCount` va `itemsPerCategory` forma
+ * qiymatlaridan TO'G'RIDAN-TO'G'RI (spetsifikatsiya bo'yicha
+ * qisqartirilib) olinadi.
  *
  * Server importi YO'Q (izomorf: forma zondidan ham chaqiriladi).
  */
 import type { FormValues } from "../../../types";
 import type { DocMeta } from "../../types";
-import { gameTypeOf, type SortingTypeSpec } from "../registry";
-import { GAME_LIMITS, normalizeCategoryCount, normalizeItemsPerCategory } from "../types";
+import { gamePromisedCount, gameTypeOf, type SortingTypeSpec } from "../registry";
+import { GAME_LIMITS, normalizeItemsPerCategory } from "../types";
 
 export type SortingLang = "uz" | "ru" | "en";
 
@@ -50,16 +49,6 @@ export type SortingInput = {
   extra: string;
 };
 
-/**
- * Bitta toifadagi elementning MUTLAQ chegarasi.
- *
- * Forma chipi 3–8 (`itemsPerCategoryCounts`), lekin ikki qutbli o'yinda
- * eng katta buyurtma (6 × 8 = 48) IKKI ustunga taqsimlanadi — 24 tadan.
- * Chegara shu eng yomon holatga qo'yilgan: undan pastda va'da
- * bajarilmasdi va darvoza hujjatni rad etardi.
- */
-export const SORT_ITEMS_PER_CATEGORY_CAP = GAME_LIMITS.itemsPerCategoryMax * 3;
-
 const str = (v: unknown, max: number): string =>
   typeof v === "string" ? v.replace(/\s+/g, " ").trim().slice(0, max) : typeof v === "number" ? String(v) : "";
 
@@ -75,19 +64,23 @@ export function sortingCategoryCount(spec: SortingTypeSpec, v: unknown): number 
 }
 
 /**
- * Va'da qilingan JAMI element — `gamePromisedCount("sorting", …)` bilan
- * AYNI formula (darvoza, byudjet va `delivered` bitta sondan o'qisin).
+ * Va'da qilingan JAMI element — `gamePromisedCount("sorting", values,
+ * TUR)` bilan AYNI (darvoza, byudjet va `delivered` bitta sondan
+ * o'qisin). `sortingType` `values` ichida — alohida argument shart emas.
  */
 export function promisedItems(values: FormValues): number {
-  return normalizeCategoryCount(values.categoryCount) * normalizeItemsPerCategory(values.itemsPerCategory);
+  return gamePromisedCount("sorting", values as { [k: string]: unknown }, values.sortingType);
 }
 
 export function sortingInputFromValues(meta: DocMeta, values: FormValues): SortingInput {
   const spec = gameTypeOf("sorting", values.sortingType);
   const language = str(values.language, 12) || meta.language || "uz";
   const grade = Math.max(0, Math.min(11, Math.round(Number(values.grade ?? meta.grade ?? 0)) || 0));
+  // Tur-xos qisqartirish (spec.limits.categories) — «qarama-qarshi
+  // juftlik»da bu doim 2. Elementlar ENDI qayta taqsimlanmaydi (R
+  // izohi): itemsPerCategory forma chipidan TO'G'RIDAN-TO'G'RI.
   const categoryCount = sortingCategoryCount(spec, values.categoryCount);
-  const perCategory = Math.round(promisedItems(values) / categoryCount);
+  const itemsPerCategory = normalizeItemsPerCategory(values.itemsPerCategory);
   return {
     type: spec.id,
     topic: str(values.topic, GAME_LIMITS.topicChars) || str(meta.topic, GAME_LIMITS.topicChars),
@@ -96,7 +89,7 @@ export function sortingInputFromValues(meta: DocMeta, values: FormValues): Sorti
     lang: sortingLangOf(language),
     grade,
     categoryCount,
-    itemsPerCategory: Math.min(SORT_ITEMS_PER_CATEGORY_CAP, Math.max(GAME_LIMITS.itemsPerCategoryMin, perCategory)),
+    itemsPerCategory,
     extra: typeof values.extra === "string" ? values.extra.trim().slice(0, GAME_LIMITS.extraChars) : str(meta.extra, GAME_LIMITS.extraChars),
   };
 }

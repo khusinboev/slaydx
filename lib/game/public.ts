@@ -83,11 +83,32 @@ export type PublicCrosswordGrid = {
   numbers: { row: number; col: number; number: number }[];
 };
 
-export type PublicCard = { id: string; front: string };
+/**
+ * `back` — AUDIT-22 R: ag'darishning o'zi javob emas.
+ *
+ * Kartalarda serverda tekshiriladigan «to'g'ri javob» umuman yo'q
+ * (`score.ts` — ball o'yinchi o'zi bosgan «bildim» soni, orqa yuz bilan
+ * SOLISHTIRILMAYDI). Shuning uchun `back` ni bu yerga chiqarish
+ * o'yinning boshqa turlaridagi kabi «javob sizishi» emas: o'zini
+ * tekshirish mashqida orqa yuzni yashirib bo'lmaydi — o'quvchi baribir
+ * javobni ICHIDA aytadi, kartani ag'daradi va HALOL belgilaydi (WP-C
+ * ochiq bandi, R da yopildi).
+ */
+export type PublicCard = { id: string; front: string; back: string };
 export type PublicSortingCategory = { id: string; name: string };
 export type PublicSortingItem = { id: string; text: string };
 export type PublicListeningItem = {
   id: string;
+  /**
+   * Eshitiladigan matn (`targetLanguage`) — AUDIT-22 R.
+   *
+   * JAVOB EMAS: to'g'ri javob `options` ichidagi (ona tildagi) element,
+   * bu esa boshqa TILDAGI matn. TTS hali yo'q yoki audio yiqilgan
+   * holatda o'yinchi tomoni buni O'QIB javob berishi uchun kerak
+   * (`Listening.tsx` «Tinglab bo'lmadi — o'qing»); usiz tinglash
+   * mashqi audiosiz umuman o'ynalmasdi.
+   */
+  text: string;
   /** TTS parchasi (`putAssetBytes`) — bo'lmasa o'yinchi tomoni «audio yo'q» deydi. */
   audioAssetId?: string;
   /** Variantlar — ARALASHTIRILGAN tartibda (`publicOptionOrder`). */
@@ -228,11 +249,14 @@ export function publicGameView(doc: AcademicDoc, kind: PublicGameKind, opts: { s
   if (kind === "flashcards") {
     const cards = doc.game?.cards?.cards;
     if (!cards?.length) return null;
-    // FAQAT old yuz: orqa yuz (ta'rif/javob) o'yinchi «eslay oldim» deb
-    // belgilagandan KEYIN, `submit` javobida ham berilmaydi — karta
-    // to'plami bosma hujjatda allaqachon bor, ochiq havola esa TAKRORLASH
-    // mashqi (o'zini tekshirish), nusxa emas.
-    return { kind, title, total: cards.length, cards: cards.map((c) => ({ id: clean(c.id) || publicItemId(c.front), front: clean(c.front) })) };
+    // Old yuz + orqa yuz (`PublicCard.back` izohi) — `example`/`hint`
+    // ATAYLAB chiqarilmaydi (ular o'zini tekshirish uchun shart emas).
+    return {
+      kind,
+      title,
+      total: cards.length,
+      cards: cards.map((c) => ({ id: clean(c.id) || publicItemId(c.front), front: clean(c.front), back: clean(c.back) })),
+    };
   }
 
   if (kind === "sorting") {
@@ -260,6 +284,7 @@ function publicListeningItem(it: ListeningItem): PublicListeningItem {
   const order = publicOptionOrder(id, it.options.length);
   return {
     id,
+    text: clean(it.text),
     ...(it.audioAssetId ? { audioAssetId: it.audioAssetId } : {}),
     options: order.map((i) => clean(it.options[i])),
   };

@@ -4,16 +4,17 @@ import { answer, answerOf, flip, type GameState } from "@/lib/game/engine";
 import { cn } from "@/lib/cn";
 
 /**
- * FLESH KARTALAR EKRANI (AUDIT-22 WP-C) — TAKRORLASH mashqi.
+ * FLESH KARTALAR EKRANI (AUDIT-22 WP-C/R) — TAKRORLASH mashqi.
  *
- * ORQA YUZ BU YERDA YO'Q va bo'lmaydi: `publicGameView` faqat old yuzni
- * beradi (karta to'plami bosma hujjatda allaqachon bor, ochiq havola
- * esa uning nusxasi emas). Shuning uchun «ag'darish» — javobni
- * KO'RSATISH emas, o'zini tekshirishga O'TISH: o'yinchi javobni ichida
- * aytadi, kartani ag'daradi va halol belgilaydi.
+ * ORQA YUZ (`card.back`, AUDIT-22 R) ENDI bor: `publicGameView` uni
+ * ochiq ko'rinishga chiqaradi, chunki bu «javob sizishi» emas —
+ * kartalarda server tekshiradigan to'g'ri javob umuman yo'q
+ * (`score.ts`). «Ag'darish» baribir javobni AVTOMATIK ko'rsatmaydi:
+ * o'yinchi avval javobni ICHIDA aytadi, SO'NG kartani bosadi va orqa
+ * yuzni ko'rib o'zini halol baholaydi.
  *
- * Ball ham shundan: «bildim» soni (`score.ts` izohida — bu imtihon
- * bahosi emas, takrorlash ustuni). Ikki tugma ham javobni YOZADI, ya'ni
+ * Ball shundan: «bildim» soni (`score.ts` izohida — bu imtihon bahosi
+ * emas, takrorlash ustuni). Ikki tugma ham javobni YOZADI, ya'ni
  * «bilmadim» ham progressda sanaladi: o'quvchi to'plamni oxirigacha
  * ko'rib chiqsin, yarmida tashlab ketmasin.
  */
@@ -34,8 +35,8 @@ export function Cards({ state, set }: { state: GameState; set: (s: GameState) =>
         onClick={() => set(flip(state))}
       >
         {state.flipped ? (
-          <span className="text-muted-foreground text-[15px] leading-snug">
-            Javobni esladingizmi? O‘zingizni halol baholang.
+          <span className="text-muted-foreground text-[16px] leading-snug text-balance" data-back>
+            {card.back}
           </span>
         ) : (
           <span className="text-[19px] leading-snug font-semibold text-balance">{card.front}</span>

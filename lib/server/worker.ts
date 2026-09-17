@@ -25,6 +25,10 @@ import { templateForJob } from "./template-upload";
 import { purgeOldSources, sourceForJob } from "./source-upload";
 import { LiveReporter } from "./live";
 import { purgeExpiredSessions } from "./session";
+// `game-sessions.ts`ning O'YIN havolalari (`game_sessions`) — auth
+// sessiyalari (`session.ts`) bilan bir xil nomdagi, lekin BOSHQA jadval;
+// alias shu to'qnashuvni ochiq qiladi (AUDIT-22 R).
+import { purgeExpiredSessions as purgeExpiredGameSessions } from "./game-sessions";
 import { purgeRateLimits } from "./ratelimit";
 import { purgeExpiredTickets } from "./telegram";
 import { queryOne } from "./db";
@@ -307,7 +311,7 @@ async function tick(): Promise<boolean> {
   return true;
 }
 
-async function housekeeping(): Promise<void> {
+export async function housekeeping(): Promise<void> {
   try {
     const dead = await reclaimStaleJobs();
     for (const id of dead) {
@@ -321,6 +325,14 @@ async function housekeeping(): Promise<void> {
     // Fayl/aktiv/generatsiya endi MUDDATSIZ (`011_no_expiry.sql`) —
     // bu yerda faqat haqiqatan vaqt bilan cheklangan narsalar tozalanadi.
     await purgeExpiredSessions();
+    /*
+     * O'YIN havolalari (AUDIT-22 R, `game_sessions.expires_at`, standart
+     * 30 kun) — `purgeOldSources`/`purgeOldPhotos` bilan bir qatorda.
+     * Natijalar (`game_results`) alohida o'chirilmaydi: FK
+     * `ON DELETE CASCADE` (`021_games.sql`) ularni sessiya bilan birga
+     * olib tashlaydi.
+     */
+    await purgeExpiredGameSessions();
     await purgeRateLimits();
     // Webhook rejimida bot processi bo'lmaydi, shuning uchun chipta va
     // update tarixini ham shu yerda tozalaymiz.

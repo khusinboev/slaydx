@@ -29,7 +29,8 @@ import { testInputFromValues } from "./teacher/test/input";
 import { weeksFor } from "./teacher/guard";
 import { TEACHER_LIMITS } from "./teacher/types";
 import { crosswordInputFromValues } from "./games/crossword/input";
-import { gamePromisedCount, normalizeGameCount } from "./games/types";
+import { gamePromisedCount } from "./games/registry";
+import { normalizeGameCount } from "./games/types";
 import { audioKindOf } from "./audio/registry";
 import { buildAudioArtifact } from "./audio/engine";
 import type { AcademicDoc, BuiltFile, DocMeta } from "./types";
@@ -404,16 +405,19 @@ export function gameGateFail(meta: DocMeta, values: FormValues, doc: AcademicDoc
     return null;
   }
   /*
-   * AUDIT-22: saralashda VA'DA — toifa × toifadagi element
+   * AUDIT-22 R: saralashda VA'DA — toifa × toifadagi element
    * (`gamePromisedCount`), ya'ni o'quvchi joylashtiradigan kartalar
    * soni. Faqat toifani sanash yetarli emas: 6 toifa × 8 element
    * so'ragan o'qituvchi 6 toifa × 2 element olsa ham darvoza yashil
-   * bo'lardi.
+   * bo'lardi. TUR (`values.sortingType`) ham uzatiladi: «qarama-qarshi
+   * juftlik» turida haqiqiy toifa soni 2 (reyestr qulflaydi), va'da
+   * ham aynan shuni kutishi kerak — aks holda standart forma bilan
+   * (4 toifa × 5 element) darvoza hujjatni noto'g'ri rad etardi.
    */
   if (g.kind === "sorting") {
     const m = g.sorting;
     if (!m) return { rule: "sorting.model", message: short("Saralash elementlari", 0, 1, "element") };
-    const want = gamePromisedCount("sorting", values as { [k: string]: unknown });
+    const want = gamePromisedCount("sorting", values as { [k: string]: unknown }, values.sortingType);
     const need = Math.ceil(want * GAME_COUNT_RATIO);
     const got = m.categories.reduce((n, c) => n + c.items.length, 0);
     if (got < need) return { rule: "sorting.items", message: short("Saralash elementlari", got, need, "element") };

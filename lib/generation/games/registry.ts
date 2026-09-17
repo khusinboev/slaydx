@@ -15,7 +15,17 @@
  * (noma'lum/bo'sh tur shunga tushadi, `gameTypeOf`).
  */
 import type { JudgeSpec } from "../report/types";
-import { GAME_LIMITS, GAME_TOOL_IDS, isGameToolId, type FlashcardType, type GameKind } from "./types";
+import {
+  GAME_LIMITS,
+  GAME_TOOL_IDS,
+  isGameToolId,
+  normalizeCategoryCount,
+  normalizeGameCount,
+  normalizeItemsPerCategory,
+  normalizeListeningCount,
+  type FlashcardType,
+  type GameKind,
+} from "./types";
 
 /*
  * AUDIT-22 R0: oila ikkitadan TO'RTTAGA chiqdi — interaktiv o'yinlar
@@ -560,4 +570,41 @@ export function gameDefaultTypeId(kind: GameKind): string {
 /** Noma'lum tur → standart id (`normalizeTeacherType` naqshi). */
 export function normalizeGameType(kind: GameKind, v: unknown): string {
   return gameTypeOf(kind, v).id;
+}
+
+/**
+ * Kind (+ TUR) bo'yicha VA'DA qilingan element soni — `delivered`,
+ * byudjet va darvoza (`gameGateFail`) BITTA qoidadan o'qisin
+ * (AUDIT-22 R0). `types.ts`da emas, shu yerda: saralashda «qarama-qarshi
+ * juftlik» turi toifa sonini 2 ga QULFLAYDI (`limits.categories`), ya'ni
+ * va'da hisoblash TURNI bilishi kerak — buni faqat reyestr biladi.
+ *
+ * `type` BERILMASA (ikki argumentli chaqiruv, eski shartnoma) —
+ * saralashda TUR-KO'R umumiy chegara ishlatiladi (`normalizeCategoryCount`,
+ * `categoryCounts` 2–6 ro'yxati): forma qiymati categoryCount qanday
+ * TUR tanlanganidan qat'i nazar hujjatning UMUMIY hajmiga ta'sir qilishi
+ * kerak (`categoryCount` reyestrda HAR TUR uchun `impacts: [...,"budget"]`
+ * deb e'lon qilingan — «bezak maydon yo'q» qoidasi, `game-params.ts`).
+ *
+ * `type` BERILSA (`gameGateFail`, real dvigatel oqimi) — saralashda
+ * TUR-XOS chegara ishlatiladi: «qarama-qarshi juftlik» uchun HAQIQIY
+ * toifa soni (2) × `itemsPerCategory`, chunki `sorting/input.ts` ENDI
+ * elementlarni sun'iy ravishda qayta taqsimlamaydi (eski «aylanib
+ * o'tish» — R0/WP-D ochiq bandi — olib tashlandi): dvigatel aniq
+ * shuncha element beradi, va'da ham aniq shuni kutsin.
+ */
+export function gamePromisedCount(kind: GameKind, values: { [k: string]: unknown }, type?: unknown): number {
+  if (kind === "sorting") {
+    const categoryCount = type !== undefined ? sortingCategoryCountForType(type, values.categoryCount) : normalizeCategoryCount(values.categoryCount);
+    return categoryCount * normalizeItemsPerCategory(values.itemsPerCategory);
+  }
+  if (kind === "listening") return normalizeListeningCount(values.itemCount);
+  return normalizeGameCount(kind === "crossword" ? values.wordCount : values.cardCount);
+}
+
+/** Tur QO'LLAYDIGAN toifa soni (`sorting/input.ts sortingCategoryCount` bilan AYNI formula). */
+function sortingCategoryCountForType(type: unknown, v: unknown): number {
+  const spec = gameTypeOf("sorting", type);
+  const n = Number(v);
+  return spec.limits.categories.includes(n) ? n : spec.limits.categoriesDefault;
 }
