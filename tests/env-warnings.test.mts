@@ -11,7 +11,7 @@ import { readFileSync } from "node:fs";
  * qo'shish — birinchi test qizaradi; `instrumentation.ts` da
  * `runtimeWarnings` chaqiruvini olib tashlash — ikkinchisi.
  */
-process.env.NODE_ENV = "production";
+Object.assign(process.env, { NODE_ENV: "production" });
 process.env.DATABASE_URL = process.env.DATABASE_URL || "postgres://unused/unused";
 process.env.APP_URL = "https://example.uz";
 process.env.TELEGRAM_BOT_TOKEN = "t";
