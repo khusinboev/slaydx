@@ -161,8 +161,9 @@ sarlavhasida MUTATSIYALAR ro'yxati (jami 30+). `npm test` 2396 yashil,
   `ffmpeg` — worker rasmida ffmpeg YO'Q).
 - WP-C: o'yinchi UI 5 tur + `lib/game/engine.ts`; tinglashda audio
   bo'lmasa ekran nima ko'rsatishi (hozir `audioAssetId` yo'q → placeholder).
-- WP-D: `planSectionsOnly` o'rniga haqiqiy bosma jadval (saralash
-  ustunlari, tinglash lug'ati) + `sorting`/`listening` dvigatellari.
+- ~~WP-D: `planSectionsOnly` o'rniga haqiqiy bosma jadval (saralash
+  ustunlari, tinglash lug'ati) + `sorting`/`listening` dvigatellari.~~
+  ✅ quyidagi «WP-D» yozuvi.
 - R: `ResultView` «O'yin havolasi + QR» paneli, `/o/` uchun `robots.ts`,
   `worker.ts housekeeping` ga `purgeExpiredSessions`, jonli smoke
   (havola → ism → o'yin → natija egasida).
@@ -279,3 +280,119 @@ yetmaydi.
   darsi: jsdom hit-testing xatolarini ko'rmaydi — ayniqsa krossvord
   katak fokusi va saralash drag'i).
 - **R (lead) — WP-C birlashtiruvi va o'yinchi oqimi smoke**: WP-C main da (`0002175`). Chromium (dev 3111, scratch `play22.mjs`): egasi `POST …/share` → token; LOGINSIZ kontekstda `/o/<token>` → ism «Smoke O'quvchi» → test 20 savol (har birida birinchi variant) → natija 5/20 (25 %) «Natijangiz o'qituvchingizga yuborildi» → egasida `GET …/results` 1 qator (`answers.results` per-savol), CSV 3 qator; 0 brauzer xatosi. Ochiq: share URL `APP_URL` dan (dev `localhost:3000`); `PublicListeningItem.text` va `PublicCard.back` (javob emas) — R da qo'shiladi; ochiq audio route (`/api/o/[token]/audio/[assetId]`) — WP-A TTS bilan.
+### WP-D — Saralash va tinglash dvigatellari + bosma maketlar (2026-09-17) ✅
+
+R0 ikkala kind uchun MODEL, reyestr, chegara va `null` stubini qoldirgan
+edi; WP-D ularni ishlaydigan vositaga aylantirdi. Naqsh AUDIT-21 WP-B
+(flesh kartalar) bilan AYNI: `{prompts,input,engine,review,polish}.ts`,
+`complete("writer")` + `CostMeter`, MODEL shaklidagi sayqal.
+
+**Saralash** (`lib/generation/games/sorting/`)
+
+- `prompts.ts` — markaziy qoida promptda BIRINCHI o'rinda: «ONE CATEGORY
+  PER ITEM», element HAR toifaga solishtirib ko'riladi, toifa nomlari
+  BIR XIL abstraksiya darajasida (`sorting-game.md` §5 yomon misoli).
+- `input.ts` — VA'DA `categoryCount × itemsPerCategory` KO'PAYTMASIDAN
+  saqlanadi. Sabab moliyaviy: «Qarama-qarshi juftlik» turida reyestr
+  toifani 2 taga qulflaydi, `gamePromisedCount` esa turni BILMAYDI —
+  4 toifa × 5 element tanlagan o'qituvchi 10 element olar va darvoza
+  (`gameGateFail`, 70 %) hujjatni RAD ETARDI. Endi elementlar mavjud
+  toifalarga qayta taqsimlanadi (2 × 10), jami o'zgarmaydi. Oddiy
+  turda formula ayni forma qiymatlarini qaytaradi.
+- `engine.ts buildSortingDoc` — `pickCategories` (global noyoblik:
+  element toifalar ORASIDA ham takrorlanmaydi; element toifa NOMI bilan
+  bir xil bo'lsa tashlanadi), yetishmasa +1 so'rov, `numbered` barqaror
+  id lar (`s1…` — `game_results.answers_json` shularga tayanadi),
+  `shuffleStable` (urug' — elementlarning o'zi, `Math.random` YO'Q) va
+  `sortingSections` → `intro`/`sorting`/`answers`. `delivered` —
+  element soni.
+- `review.ts` — `GAME_RULE_IDS.sorting` (7 band) + `categoryNameDistinct`.
+  Ikki ma'nolilik IKKI marta: deterministik `ambiguousItems`
+  (matndagi to'qnashuv + `sameStem` bilan topilgan DARAJA to'qnashuvi —
+  torroq toifaning har elementi kengrog'iga ham tegishli) va baholovchi
+  `unambiguity`. `itemsPerCategory` TENGLIKNI o'lchaydi: hisobot vaqtida
+  forma qiymatlari yo'q (tahrirdan keyin ham qayta hisoblanadi).
+- `polish.ts` — MODEL qayta yoziladi (aralash nasrdan modelni tiklab
+  BO'LMAYDI); toifa va element soni qo'riqlanadi, id lar saqlanadi.
+
+**Tinglash** (`lib/generation/games/listening/`)
+
+- `prompts.ts` — ikki tillilik ISTISNOSI birinchi qatordan keyin aniq
+  aytiladi (aks holda model butun topshiriqni bitta tilga o'girardi);
+  distraktorlar AYNI semantik maydondan, hech biri ikkinchi tarjima
+  emas. Javob INDEKS emas, MATN sifatida so'raladi — modellar indeksni
+  muntazam bir pozitsiyaga adashtiradi, matnni esa adashtirmaydi.
+- `input.ts` — `nativeLanguage` (variantlar va varaq matni;
+  `GameModel.language` ham SHU) + `targetLanguage` (TTS ovozi). Teng
+  kelgan juftlik zaxiraga tushadi.
+- `engine.ts buildListeningDoc` — `pickItems` javobni indeksga
+  aylantiradi va variantlarni BARQAROR tartibda aralashtiradi (to'g'ri
+  javob doim birinchi turgan to'plamda o'quvchi qoidani payqab qolardi);
+  `attachAudio` — TTS SEAM.
+- **TTS seam**: `GameBuildOpts.tts?: TtsProvider` + `putAsset?`.
+  Kalitlar yo'q (`tts.md` §6), shuning uchun BUGUNGI yo'l — audiosiz:
+  `audioAssetId` bo'sh, bosma varaq baribir chiqadi. Seam berilsa har
+  `text` uchun bitta parcha sintez qilinib aktivga chiqariladi; bitta
+  parcha yiqilsa QOLGANLARI davom etadi. Ikkala shox ham TEST bilan
+  qulflangan (soxta provayder).
+- `review.ts` — `GAME_RULE_IDS.listening` (7 band) +
+  `distractorSimilarity` evristikasi (uzunlik/so'z soni — semantik
+  maydonning IZI). `answerInRange` QIZIL: indeks chegaradan chiqsa o'yin
+  har javobni «xato» deb sanaydi va buni faqat o'ynagan o'quvchi sezadi.
+- `polish.ts` — matn O'ZGARSA `audioAssetId` TASHLANADI (noto'g'ri audio
+  audiosizdan yomonroq), o'zgarmasa saqlanadi (qayta sintez — bekorga
+  sarf).
+
+**Dispatch va maket**
+
+- `games/engine.ts` — to'rtala dvigatel STATIK import (AUDIT-21 smoke
+  saboqi: dinamik `import()` worker qadog'ida jimgina yiqilardi);
+  `GameBuildOpts` ga `tts`/`putAsset` qo'shildi.
+- `games/layout.ts` — `planSectionsOnly` O'CHDI, o'rniga
+  `planInteractive`: saralashda CHEGARALI toifalar jadvali (ustun =
+  toifa, kataklar BO'SH — yozish joyi, `minRows` eng katta toifadan) va
+  javob kalitida to'ldirilgan nusxasi; tinglashda raqam + variantlar
+  (eshitiladigan matn ATAYLAB bosilmaydi — aks holda mashq O'QISHga
+  aylanardi), matn javob kalitida. Javob kaliti ikkalasida ham YANGI
+  BETDAN. `GameCluesItem` `bordered`/`minRows` bilan kengaytirildi —
+  DOCX ham, ko'ruvchi ham SHU bitta banddan chizadi.
+- `samples.ts` — saralash/tinglash namunalari endi dvigatelning O'Z
+  bo'lim quruvchisidan (qo'lda yig'ilgan nasr jimgina ajralib ketardi).
+
+**Testlar**: `sorting-engine` 16, `sorting-review` 13,
+`listening-engine` 16, `listening-review` 13, `game-layout` 26 (+6),
+`viewer/game-parity` 14 (+2). `npm test` 2449 yashil, `test:viewer` 216,
+`tsc`/eslint toza.
+
+**Mutatsiya** (har biri aynan kerakli testni qizartirdi, so'ng
+qaytarildi): (1) `ambiguousItems` → `[]`; (2) `uniqueItems` faqat toifa
+ICHIDA; (3) `answerInRange` tekshiruvi olib tashlandi; (4) dispatch
+saralash/tinglashni `null` qoldirdi (R0 stubi); (5) `planInteractive`
+javob kalitiga sahifa uzilishini qo'ymadi.
+
+**LibreOffice ko'z** (DOCX → PDF → PNG, ikkala namuna × 2 bet) uchta
+nuqson topdi va uchalasi TUZATILDI:
+
+1. tinglash qatorlari `li` edi — raqamlangan matn ustiga marker qo'yilib
+   «• 1. A) …» bo'lib chiqardi; endi `p`;
+2. saralashning javob betida AYNI javob ikki marta turardi (nasr
+   qatorlari + to'ldirilgan jadval) — nasr endi CHIZILMAYDI (hujjatda
+   qoladi: `answerKey` qoidasi, baholovchi va qidiruv shuni o'qiydi);
+3. chegarali jadval ro'yxatning oxirgi bandiga TEGIB turardi — jadval
+   oldiga bo'sh qator qo'shildi (ko'ruvchida `margin-top`).
+
+**Ochiq savollar**
+
+- `gamePromisedCount` (`games/types.ts`, R0 da qulflangan) turni
+  bilmaydi. WP-D uni kirish bosqichida AYLANIB o'tdi (elementlarni qayta
+  taqsimlash), lekin toza yechim — funksiyaga `type` ni uzatish; bu R0
+  shartnomasini va `game-registry` testini o'zgartirishni talab qiladi.
+- Bosma varaqdagi ARALASH ro'yxat bitta ustunda: 6 × 8 = 48 element
+  betning ko'p qismini egallaydi. Ikki ustunli ro'yxat (mavjud
+  chegarasiz `clues` bandi bilan) zichroq bo'lardi — PM qaroriga
+  qoldirildi.
+- Ko'rsatmadagi til nomi `langInfo(target).native` («English»). Uzbek
+  matnda «ingliz tili» tabiiyroq, lekin 18 tilning o'zbekcha nomlari
+  jadvali hozir YO'Q.
+- Tinglash formasida `optionCount` maydoni yo'q (reyestr standarti 4);
+  3 variantli rejim kerakmi — PM qarori.

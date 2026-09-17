@@ -192,12 +192,41 @@ export type GameLayoutWords = {
   sheetOf: (n: number, total: number) => string;
   figureRef: (n: string) => string;
   clueLine: (n: number, text: string, len: number) => string;
+  /**
+   * Saralash varag'ining ko'rsatmasi — dvigatel NASRIGA yoziladi
+   * (`sortingSections`), maket esa uni `note` bandi bilan chizadi.
+   */
+  sortHint: (categories: number, items: number) => string;
+  /** Tinglash varag'ining ko'rsatmasi: matn BOSILMAYDI, o'qituvchi o'qib beradi. */
+  listenHint: (target: string, items: number) => string;
+  /** Javob kaliti betining ko'rsatmasi (o'quvchiga tarqatilmaydi). */
+  keyHint: string;
+  /** Variant harfi — bosma varaqda ham, javob kalitida ham BIR XIL. */
+  optionLabel: (i: number) => string;
+  /** «1. A) ...» qatori — topshiriq ro'yxati uchun. */
+  itemLine: (n: number, options: readonly string[]) => string;
+  /** Javob kalitidagi qator: «1. library — kutubxona (A)». */
+  answerLine: (n: number, text: string, answer: string, letter: string) => string;
+  /** Javob kalitidagi toifa qatori: «Qushlar: laylak, burgut». */
+  categoryLine: (name: string, items: readonly string[]) => string;
 };
 
 const WORDS: Record<"uz" | "ru" | "en", GameLayoutWords> = {
   uz: {
     docTitle: { crossword: "KROSSVORD", flashcards: "FLESH KARTALAR", sorting: "SARALASH O‘YINI", listening: "TINGLASH O‘YINI" },
-    sectionTitle: { grid: "To‘r", across: "Gorizontal", down: "Vertikal", answers: "Javoblar", cards: "Kartalar", categories: "Toifalar", items: "Elementlar", words: "So‘zlar", options: "Variantlar" },
+    sectionTitle: {
+      grid: "To‘r",
+      across: "Gorizontal",
+      down: "Vertikal",
+      answers: "Javoblar",
+      cards: "Kartalar",
+      categories: "Toifalar",
+      items: "Topshiriqlar",
+      words: "So‘zlar",
+      options: "Variantlar",
+      intro: "Ko‘rsatma",
+      sorting: "Saralash",
+    },
     fieldTopic: "Mavzu",
     cardsFront: "old yuzlar",
     cardsBack: "orqa yuzlar",
@@ -206,10 +235,29 @@ const WORDS: Record<"uz" | "ru" | "en", GameLayoutWords> = {
     sheetOf: (n, total) => `${n}/${total}-varaq`,
     figureRef: (n) => `${n}-rasm`,
     clueLine: (n, text, len) => `${n}. ${text} (${len})`,
+    sortHint: (categories, items) => `Quyidagi ${items} ta elementni ${categories} ta toifaga ajrating: har elementni o‘z toifasi ustuniga yozing.`,
+    listenHint: (target, items) => `O‘qituvchi ${target} tilidagi ${items} ta so‘zni baland ovozda o‘qiydi; har raqam uchun to‘g‘ri tarjimani belgilang. So‘zlarning o‘zi bu varaqda yozilmagan.`,
+    keyHint: "Javob kaliti — o‘quvchiga tarqatiladigan varaqqa qo‘shilmaydi.",
+    optionLabel: (i) => "ABCD"[i] ?? String(i + 1),
+    itemLine: (n, options) => `${n}. ${options.join("   ")}`,
+    answerLine: (n, text, answer, letter) => `${n}. ${text} — ${answer} (${letter})`,
+    categoryLine: (name, items) => `${name}: ${items.join(", ")}`,
   },
   ru: {
     docTitle: { crossword: "КРОССВОРД", flashcards: "ФЛЕШ-КАРТОЧКИ", sorting: "ИГРА-СОРТИРОВКА", listening: "ИГРА НА СЛУШАНИЕ" },
-    sectionTitle: { grid: "Сетка", across: "По горизонтали", down: "По вертикали", answers: "Ответы", cards: "Карточки", categories: "Категории", items: "Элементы", words: "Слова", options: "Варианты" },
+    sectionTitle: {
+      grid: "Сетка",
+      across: "По горизонтали",
+      down: "По вертикали",
+      answers: "Ответы",
+      cards: "Карточки",
+      categories: "Категории",
+      items: "Задания",
+      words: "Слова",
+      options: "Варианты",
+      intro: "Инструкция",
+      sorting: "Сортировка",
+    },
     fieldTopic: "Тема",
     cardsFront: "лицевые стороны",
     cardsBack: "обратные стороны",
@@ -218,10 +266,29 @@ const WORDS: Record<"uz" | "ru" | "en", GameLayoutWords> = {
     sheetOf: (n, total) => `Лист ${n}/${total}`,
     figureRef: (n) => `Рис. ${n}`,
     clueLine: (n, text, len) => `${n}. ${text} (${len})`,
+    sortHint: (categories, items) => `Распределите ${items} элементов по ${categories} категориям: запишите каждый элемент в столбец своей категории.`,
+    listenHint: (target, items) => `Учитель вслух читает ${items} слов на языке «${target}»; для каждого номера отметьте верный перевод. Сами слова на этом листе не напечатаны.`,
+    keyHint: "Ключ ответов — не раздаётся ученикам вместе с заданием.",
+    optionLabel: (i) => "ABCD"[i] ?? String(i + 1),
+    itemLine: (n, options) => `${n}. ${options.join("   ")}`,
+    answerLine: (n, text, answer, letter) => `${n}. ${text} — ${answer} (${letter})`,
+    categoryLine: (name, items) => `${name}: ${items.join(", ")}`,
   },
   en: {
     docTitle: { crossword: "CROSSWORD", flashcards: "FLASHCARDS", sorting: "SORTING GAME", listening: "LISTENING GAME" },
-    sectionTitle: { grid: "Grid", across: "Across", down: "Down", answers: "Answers", cards: "Cards", categories: "Categories", items: "Items", words: "Words", options: "Options" },
+    sectionTitle: {
+      grid: "Grid",
+      across: "Across",
+      down: "Down",
+      answers: "Answers",
+      cards: "Cards",
+      categories: "Categories",
+      items: "Tasks",
+      words: "Words",
+      options: "Options",
+      intro: "Instructions",
+      sorting: "Sorting",
+    },
     fieldTopic: "Topic",
     cardsFront: "fronts",
     cardsBack: "backs",
@@ -230,6 +297,13 @@ const WORDS: Record<"uz" | "ru" | "en", GameLayoutWords> = {
     sheetOf: (n, total) => `Sheet ${n}/${total}`,
     figureRef: (n) => `Fig. ${n}`,
     clueLine: (n, text, len) => `${n}. ${text} (${len})`,
+    sortHint: (categories, items) => `Sort the ${items} items below into ${categories} categories: write each item in the column of its own category.`,
+    listenHint: (target, items) => `The teacher reads ${items} words in ${target} aloud; mark the correct translation for each number. The words themselves are not printed on this sheet.`,
+    keyHint: "Answer key — do not hand this page out with the worksheet.",
+    optionLabel: (i) => "ABCD"[i] ?? String(i + 1),
+    itemLine: (n, options) => `${n}. ${options.join("   ")}`,
+    answerLine: (n, text, answer, letter) => `${n}. ${text} — ${answer} (${letter})`,
+    categoryLine: (name, items) => `${name}: ${items.join(", ")}`,
   },
 };
 
@@ -252,6 +326,16 @@ export function gameLayoutLabels(language: string): GameDocLabels {
  * behuda egallardi.
  */
 export const CROSSWORD_SECTIONS = { grid: "grid", across: "across", down: "down", answers: "answers" } as const;
+
+/**
+ * Saralash bo'limlari — WP-D dvigateli bilan SHARTNOMA
+ * (`sorting/engine.ts sortingSections`). Javob kaliti DOIM oxirgi va
+ * DOIM yangi betdan (`answers`).
+ */
+export const SORTING_SECTIONS = { intro: "intro", sorting: "sorting", answers: "answers" } as const;
+
+/** Tinglash bo'limlari — `listening/engine.ts listeningSections`. */
+export const LISTENING_SECTIONS = { intro: "intro", items: "items", answers: "answers" } as const;
 
 /* ══════════════════════════ bandlar ══════════════════════════ */
 
@@ -292,10 +376,27 @@ export type GameCardsItem = {
   path: string;
 };
 
-/** Savollar ro'yxati — IKKI USTUN (DOCX: chegarasiz jadval). */
+/**
+ * USTUNLI band — ikki vazifada, `bordered` bilan farqlanadi:
+ *
+ *   `bordered: false`  krossvord SAVOLLARI — chegarasiz ikki ustun,
+ *                      matn oqimi (AUDIT-21);
+ *   `bordered: true`   saralash TOIFALAR JADVALI — chegarali kataklar;
+ *                      bo'sh katak = o'quvchi qo'lda yozadigan joy.
+ *
+ * Nega yangi band emas: ikkalasi ham «ustun sarlavhasi + ustun ostidagi
+ * qatorlar» va ular DOCX da ham, ko'ruvchida ham AYNI jadval tuzilmasi
+ * bilan chiziladi. Ikkinchi band turi ikkala chizuvchida ham deyarli
+ * bir xil kodni takrorlar va paritet testi ularning jimgina ajralib
+ * ketishini faqat matn darajasida ushlardi (bo'sh katakda matn yo'q).
+ */
 export type GameCluesItem = {
   k: "clues";
   columns: { title: string; path: string; items: { text: string; path: string }[] }[];
+  /** `true` — chegarali jadval (saralash varag'i va javob kaliti). */
+  bordered?: boolean;
+  /** Eng kam qator soni: bo'sh kataklar YOZISH JOYI sifatida qoldiriladi. */
+  minRows?: number;
   path: string;
 };
 
@@ -416,7 +517,7 @@ export function planGame(doc: AcademicDoc): GamePlan {
 
   if (kind === "crossword") planCrossword(model, doc, L, spec.label[L.lang], head, body, pageBreaks, titleOf, pushFigure);
   else if (kind === "flashcards") planCards(model, L, body, pageBreaks);
-  else planSectionsOnly(model, doc, L, spec.label[L.lang], head, body, pageBreaks, titleOf);
+  else planInteractive(model, doc, L, spec.label[L.lang], head, body, pageBreaks, titleOf);
 
   return {
     model,
@@ -530,24 +631,31 @@ function planCrossword(
   pushBlocks("answers");
 }
 
-/* ────────────────────────── saralash / tinglash (AUDIT-22 R0) ────────────────────────── */
+/* ────────────────────────── saralash / tinglash (AUDIT-22 WP-D) ────────────────────────── */
 
 /**
- * INTERAKTIV o'yinlarning BOSMA varag'i — hozircha UMUMIY sxema:
- * shapka + bo'limlar tartib bilan, javob kaliti yangi betdan.
+ * INTERAKTIV o'yinlarning BOSMA varag'i.
  *
- * Nega shunday, «hali maket yo'q» emas: `planGame` — DOCX ning ham,
- * ko'ruvchining ham YAGONA manbasi. Kind uchun shox bo'lmasa, oqim
- * jimgina kartalar panjarasiga tushib ketardi (`else planCards`) va
- * saralash o'yini bo'sh A7 kataklari bo'lib chiqardi — ekran bilan
- * fayl aynan shu yerda ajralardi.
+ * Ikkalasi bitta funksiyada, chunki varaqning SKELETI bir xil va u
+ * reyestrdagi `skeleton` bilan mos: shapka → ko'rsatma (`note`) →
+ * topshiriq → JAVOB KALITI YANGI BETDAN. Farqi bitta bandda:
  *
- * WP-D bu funksiyani ALMASHTIRADI: saralashda toifalar JADVALI
- * (ustunlar) va aralash elementlar ro'yxati, tinglashda «so'z —
- * tarjima» lug'at jadvali. Shartnoma o'zgarmaydi: nasr dvigateldan
- * (`doc.sections`), `path` esa `sections.<i>.blocks.<j>`.
+ *   saralash   ko'rsatmadan keyin ARALASH elementlar ro'yxati (nasrdan)
+ *              va TOIFALAR JADVALI — ustunlar toifa nomlari, kataklar
+ *              BO'SH (o'quvchi qo'lda yozadi); javob kalitida AYNI
+ *              jadval, lekin kataklar to'ldirilgan;
+ *   tinglash   raqamlangan VARIANTLAR ro'yxati (nasrdan). Eshitiladigan
+ *              matn varaqda ATAYLAB YO'Q: uni o'qituvchi ovoz chiqarib
+ *              o'qiydi (TTS kaliti kelmaguncha — `tts.md` §6 — audio
+ *              parchasi ham yo'q), bosilgan matn esa mashqni bekor
+ *              qilardi. Matn javob kalitida turadi.
+ *
+ * Jadval MODELDAN chiziladi (`game.sorting`), nasr esa bo'limlarda
+ * qoladi: hisobot, baholovchi va qidiruv aynan shu matnni o'qiydi.
+ * Kartalardagi bilan bir xil qaror va sababi ham bir xil — jadval
+ * katagining qaysi toifaga tegishli ekani nasrda ajralmaydi.
  */
-function planSectionsOnly(
+function planInteractive(
   model: GameModel,
   doc: AcademicDoc,
   L: GameDocLabels,
@@ -562,18 +670,66 @@ function planSectionsOnly(
   const topic = clean(model.topic) || clean(doc.meta.topic);
   if (topic) head.push({ k: "field", label: L.fieldTopic, text: topic, path: "meta.topic" });
 
+  const categories = model.sorting?.categories ?? [];
+
+  /** Toifalar jadvali — ustun = toifa. `filled: false` da kataklar bo'sh. */
+  const categoryTable = (path: string, filled: boolean): GameCluesItem => ({
+    k: "clues",
+    bordered: true,
+    /*
+     * Bo'sh jadvalda qator soni ENG KATTA toifadan olinadi: o'quvchi
+     * elementni istalgan ustunga yozishi mumkin va tor ustun uni
+     * yozadigan joysiz qoldirardi.
+     */
+    minRows: Math.max(0, ...categories.map((c) => c.items.length)),
+    columns: categories.map((c, i) => ({
+      title: clean(c.name),
+      path: `game.sorting.${i}.name`,
+      items: filled ? c.items.map((t, j) => ({ text: clean(t), path: `game.sorting.${i}.items.${j}` })) : [],
+    })),
+    path,
+  });
+
   doc.sections.forEach((s, i) => {
     // Javob kaliti DOIM yangi betdan — o'quvchiga tarqatiladigan varaqda
     // javoblar ko'rinib turmasligi kerak (reyestr skeleti ham shunday).
     const answers = s.id === "answers";
     if (answers) pageBreaks.push(s.id);
     body.push({ k: "h1", text: titleOf(s.id), sectionId: s.id, path: `sections.${i}.title`, pageBreak: answers });
+
     s.blocks.forEach((b, j) => {
       const path = `sections.${i}.blocks.${j}`;
-      if (b.kind === "li") body.push({ k: "li", text: clean(b.text), path });
-      else if (b.kind === "h3") body.push({ k: "h3", text: clean(b.text), path });
-      else body.push({ k: "p", text: clean(b.text), path });
+      const text = clean(b.text);
+      /*
+       * Ko'rsatma bo'limi MARKAZDA, QALIN (`note`): u topshiriqning
+       * o'zi emas, o'quvchiga aytiladigan qoida va varaqning boshida
+       * ko'zga tashlanishi kerak. Javob kaliti sarlavhasidan keyingi
+       * birinchi qator ham shunday — u o'qituvchiga mo'ljallangan.
+       */
+      if (s.id === "intro" || (answers && j === 0 && b.kind === "p")) body.push({ k: "note", text, path });
+      /*
+       * Saralashning JAVOB KALITIDA nasr qatorlari («Qushlar: Laylak,
+       * Burgut») CHIZILMAYDI: o'sha betda AYNI ma'lumot to'ldirilgan
+       * jadval bo'lib turadi va ikkalasi birga bosilganda bet ikki
+       * marta bir xil javobni ko'rsatardi (LibreOffice ko'z tekshiruvi,
+       * AUDIT-22). Nasrning o'zi hujjatda QOLADI — hisobot
+       * (`answerKey` qoidasi), baholovchi va qidiruv shuni o'qiydi.
+       */
+      else if (answers && model.kind === "sorting" && categories.length && b.kind === "li") return;
+      else if (b.kind === "li") body.push({ k: "li", text, path });
+      else if (b.kind === "h3") body.push({ k: "h3", text, path });
+      else body.push({ k: "p", text, path });
     });
+
+    /*
+     * Jadval bo'lim MATNIDAN KEYIN: avval o'quvchi aralash ro'yxatni
+     * o'qiydi, keyin uni ustunlarga ko'chiradi. Javob betida tartib
+     * ham shunday — ikkala bet bir xil ko'rinadi va tekshirish
+     * qatorma-qator boradi.
+     */
+    if (!categories.length) return;
+    if (s.id === "sorting") body.push(categoryTable("game.sorting.table", false));
+    else if (answers && model.kind === "sorting") body.push(categoryTable("game.sorting.key", true));
   });
 }
 

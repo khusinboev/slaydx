@@ -1,17 +1,17 @@
 /**
- * O'YIN DVIGATELI (AUDIT-21) — `buildGameDoc`.
+ * O'YIN DVIGATELI (AUDIT-21 R0, AUDIT-22 WP-D) — `buildGameDoc`.
  *
- * R0 da bu fayl SHARTNOMA: imzo va `null` xulqi qulflanadi, TANASI esa
- * WP-A (krossvord: `crossword/{grid,svg,prompts}.ts`) va WP-B (flesh
- * kartalar: `flashcards/{prompts,layout}.ts`) da to'ladi. Aynan shu
+ * Bu fayl SHARTNOMA: imzo (`GameBuilder`), `GameBuildOpts` va `null`
+ * xulqi shu yerda qulflangan, TANALARI esa kind papkalarida —
+ * `crossword/`, `flashcards/`, `sorting/`, `listening/`. Aynan shu
  * naqsh AUDIT-20 R0 da ishlagan: `write-llm.ts` dispatchi, byudjet,
- * ko'ruvchi va forma dvigateldan OLDIN ulanadi, shuning uchun WP lar
- * bir-birini kutmasdan parallel ketadi.
+ * ko'ruvchi va forma dvigateldan OLDIN ulanadi, shuning uchun ish
+ * paketlari bir-birini kutmasdan parallel ketadi.
  *
- * Rejalashtirilgan bosqichlar (`onStage` foizlari, WP-A/WP-B):
- *   1 kirish       0→10   forma → `GameInput`, fayl manbasi (krossvord)
- *   2 yozish      10→55   LLM: so'z+savol yoki karta juftliklari
- *   3 qurish      55→75   to'r algoritmi (`grid.ts`) yoki karta varaqlari
+ * To'rtala dvigatelda bosqichlar BIR XIL (`onStage` foizlari):
+ *   1 kirish       0→10   forma → `*Input` (+ fayl manbasi, krossvord)
+ *   2 yozish      10→55   LLM: so'z+savol, karta, toifa yoki topshiriq
+ *   3 qurish      55→75   to'r algoritmi, varaqlar yoki bo'limlar
  *   4 hisobot     75→90   `review.ts` (qoidalar + baholovchi)
  *   5 sayqal      90→96   `polish.ts`
  *
@@ -28,7 +28,12 @@ import type { AcademicDoc, Delivered, DocMeta } from "../types";
 import type { TranslationSource } from "../source-types";
 import type { CompleteFn } from "../research/pipeline";
 import type { CostMeter, LlmUsage } from "../llm-roles";
+import type { TtsProvider } from "../tts/types";
 import { gameKindOf } from "./registry";
+import { buildCrosswordDoc } from "./crossword/engine";
+import { buildFlashcardsDoc } from "./flashcards/engine";
+import { buildSortingDoc } from "./sorting/engine";
+import { buildListeningDoc } from "./listening/engine";
 
 /* ────────────────────────── shartnoma ────────────────────────── */
 
@@ -50,6 +55,25 @@ export type GameBuildOpts = {
   /** `false` — avto-sayqal o'tkazib yuboriladi. */
   polish?: boolean;
   now?: Date;
+  /**
+   * TTS adapteri (tinglash o'yini) — SEAM, majburiy emas.
+   *
+   * Berilmasa dvigatel audiosiz ishlaydi va `ListeningItem.audioAssetId`
+   * bo'sh qoladi: bosma varaq baribir chiqadi, interaktiv ekran esa
+   * audio yo'qligini ko'rsatadi. Provayder zanjiri (`tts/chain.ts`)
+   * WP-A da, kalitlar kelgach ulanadi — dvigatel esa BUGUN sinaladi
+   * (testda soxta provayder beriladi).
+   */
+  tts?: TtsProvider;
+  /**
+   * Sintez qilingan baytni AKTIVGA yozadi va id qaytaradi.
+   *
+   * Nega alohida seam: `putAssetBytes(generationId, …)` server moduli va
+   * `generationId` ni faqat chaqiruvchi (`write-llm.ts`/`worker.ts`)
+   * biladi. Dvigatel izomorf bo'lib qolishi kerak — u shu funksiyani
+   * chaqiradi, bazani BILMAYDI.
+   */
+  putAsset?: (bytes: Uint8Array, mime: string) => Promise<string>;
 };
 
 export type GameCost = ReturnType<CostMeter["toJson"]>;
@@ -75,39 +99,26 @@ export type GameBuilder = (meta: DocMeta, values: FormValues, opts: GameBuildOpt
 
 /* ────────────────────────── dispatch ────────────────────────── */
 
+
 /**
  * Vosita id → kind → o'sha kindning dvigateli.
  *
- * Flesh kartalar shoxi DINAMIK import: WP-B uni parallel yozmoqda va
- * fayl hali bo'lmasligi mumkin — o'shanda `null` qaytadi (R0 ning stub
- * xulqi), ya'ni krossvord WP-B ni KUTMAYDI. Import statik bo'lsa,
- * fayl yo'qligida butun modul (krossvord bilan birga) yiqilardi.
+ * Importlar STATIK va bu AUDIT-21 smoke saboqi: dinamik `import()`
+ * worker qadog'ida (`.next/standalone`) jimgina yiqilib, foydalanuvchiga
+ * «AI javob bermadi» berardi — modul yo'li bundle'ga umuman
+ * tushmagan edi. Statik importda bunday xato QURISH paytida ko'rinadi,
+ * ishlab turgan navbatda emas.
+ *
+ * `null` — kind noma'lum (o'yin vositasi emas). Dvigatelning O'ZI ham
+ * `null` qaytarishi mumkin (kalitsiz muhit, model javob bermadi, sifat
+ * darvozasi) va chaqiruvchi ikkalasini bir xil ko'radi: `write-llm.ts`
+ * `null` qaytaradi, `buildArtifact` esa mavjud xulqni beradi.
  */
 export const buildGameDoc: GameBuilder = async (meta, values, opts) => {
   const kind = gameKindOf(String(meta.toolId ?? ""));
-  if (kind === "crossword") {
-    const { buildCrosswordDoc } = await import("./crossword/engine");
-    return buildCrosswordDoc(meta, values, opts);
-  }
-  if (kind === "flashcards") {
-    // WP-B fayli main da — statik import (o'zgaruvchi yo'lli `import()` worker'da
-    // jimgina yiqilib «AI javob bermadi» berardi, AUDIT-21 smoke).
-    const { buildFlashcardsDoc } = await import("./flashcards/engine");
-    return buildFlashcardsDoc(meta, values, opts);
-  }
-  /*
-   * AUDIT-22 R0: saralash va tinglash dvigatellari WP-D da yoziladi.
-   * Bugun ular ATAYLAB `null` — «dvigatel yo'q» xulqi krossvord/karta
-   * bilan AYNI: `write-llm.ts` `null` qaytaradi va `buildArtifact`
-   * mavjud «AI javob bermadi» yo'lini beradi (kredit qaytadi). Yangi
-   * xato matni kiritilmaydi — u foydalanuvchiga hech narsa bermaydi va
-   * WP tugagach o'chirishni talab qilardi.
-   *
-   * Tinglashda qo'shimcha shart bor: TTS parchalari (`putAssetBytes`)
-   * kalitlarga bog'liq (`tts.md` §6), lekin DVIGATEL ularsiz ham
-   * ishlashi kerak — audio bo'lmasa bosma lug'at varag'i chiqadi va
-   * `ListeningItem.audioAssetId` bo'sh qoladi.
-   */
-  if (kind === "sorting" || kind === "listening") return null;
+  if (kind === "crossword") return buildCrosswordDoc(meta, values, opts);
+  if (kind === "flashcards") return buildFlashcardsDoc(meta, values, opts);
+  if (kind === "sorting") return buildSortingDoc(meta, values, opts);
+  if (kind === "listening") return buildListeningDoc(meta, values, opts);
   return null;
 };

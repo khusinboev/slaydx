@@ -1274,8 +1274,27 @@ async function drawGame(plan: GamePlan, K: Kit, P: DocProfile, opts: ResumeDocxO
          * u BUTUN bo'limga tegishli bo'lar va to'r rasmini ham ikkiga
          * bo'lib yuborardi.
          */
+        /*
+         * SARALASH varag'ida esa jadval CHEGARALI (`bordered`) va
+         * kataklari bo'sh bo'lishi mumkin (`minRows`): o'quvchi
+         * elementni qo'lda YOZADI, ya'ni katak ko'rinib turishi va
+         * yozishga joy qoldirishi kerak. Ikkala holat bitta bandda,
+         * chunki tuzilma (sarlavha qatori + qatorlar) bir xil.
+         */
         const none = { style: BorderStyle.NONE, size: 0, color: "FFFFFF" };
+        const solid = { style: BorderStyle.SINGLE, size: 4, color: "999999" };
+        const edge = b.bordered ? solid : none;
         const colW = Math.floor(W / Math.max(1, b.columns.length));
+        const rowCount = Math.max(b.minRows ?? 0, ...b.columns.map((c) => c.items.length));
+        /** Bo'sh katak ham BALAND bo'lsin — qo'lda yozishga joy (mm → dxa). */
+        const blankRowH = b.bordered ? { value: mmDxa(9), rule: HeightRule.ATLEAST } : undefined;
+        /*
+         * Chegarali jadval oldidan BO'SH qator: ro'yxatning oxirgi
+         * bandi bilan jadvalning yuqori chizig'i orasida havo qolsin.
+         * Ko'z tekshiruvida (AUDIT-22) «Delfin» bulleti jadval
+         * chizig'iga TEGIB turardi.
+         */
+        if (b.bordered) out.push(new Paragraph({ spacing: { after: 0, line: 240, lineRule: LineRuleType.AUTO }, children: [] }));
         out.push(
           new Table({
             width: { size: W, type: WidthType.DXA },
@@ -1288,7 +1307,7 @@ async function drawGame(plan: GamePlan, K: Kit, P: DocProfile, opts: ResumeDocxO
              * tinglaydi, Word esa jadvalni — ya'ni faylning ko'rinishi
              * dasturga bog'liq bo'lib qolardi).
              */
-            borders: { top: none, bottom: none, left: none, right: none, insideHorizontal: none, insideVertical: none },
+            borders: { top: edge, bottom: edge, left: edge, right: edge, insideHorizontal: edge, insideVertical: edge },
             /*
              * HAR SAVOL O'Z QATORIDA (sarlavha qatori + N qator): bitta
              * ulkan qator LibreOffice'da betga sig'masa BUTUNLAY keyingi
@@ -1301,20 +1320,21 @@ async function drawGame(plan: GamePlan, K: Kit, P: DocProfile, opts: ResumeDocxO
                   (col) =>
                     new TableCell({
                       width: { size: colW, type: WidthType.DXA },
-                      borders: { top: none, bottom: none, left: none, right: none },
-                      margins: { top: 40, bottom: 40, left: 0, right: 120 },
+                      borders: { top: edge, bottom: edge, left: edge, right: edge },
+                      margins: { top: 40, bottom: 40, left: b.bordered ? 80 : 0, right: 120 },
                       children: [new Paragraph({ alignment: AlignmentType.LEFT, keepNext: true, spacing: { after: 80, line, lineRule: LineRuleType.AUTO }, children: [K.run(col.title, { bold: true })] })],
                     }),
                 ),
               }),
-              ...Array.from({ length: Math.max(...b.columns.map((c) => c.items.length)) }, (_, i) =>
+              ...Array.from({ length: rowCount }, (_, i) =>
                 new TableRow({
+                  ...(blankRowH ? { height: blankRowH } : {}),
                   children: b.columns.map(
                     (col) =>
                       new TableCell({
                         width: { size: colW, type: WidthType.DXA },
-                        borders: { top: none, bottom: none, left: none, right: none },
-                        margins: { top: 0, bottom: 0, left: 0, right: 120 },
+                        borders: { top: edge, bottom: edge, left: edge, right: edge },
+                        margins: { top: 0, bottom: 0, left: b.bordered ? 80 : 0, right: 120 },
                         children: [
                           new Paragraph({
                             alignment: AlignmentType.LEFT,

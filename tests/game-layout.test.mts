@@ -334,3 +334,119 @@ test("yorliqlar hujjat tiliga ergashadi (uz/ru/en) — maket va dvigatel BITTA m
   assert.ok(sheets[0].title.includes("лицевые стороны"), `ru sarlavha: ${sheets[0].title}`);
   assert.ok(sheets[0].hint.includes("ДЛИННОЙ"), `ru ko'rsatma: ${sheets[0].hint}`);
 });
+
+/* ══════════════════════════ interaktiv o'yinlar (AUDIT-22 WP-D) ══════════════════════════ */
+
+/**
+ * `planSectionsOnly` (R0 ning vaqtinchalik sxemasi) `planInteractive`
+ * bilan ALMASHTIRILDI. Bu yerda qulflanadigan qarorlar: saralashda
+ * TOIFALAR JADVALI (bo'sh kataklar = yozish joyi) va javob kalitidagi
+ * to'ldirilgan nusxasi, tinglashda esa eshitiladigan matnning bosma
+ * varaqda YO'Qligi; ikkalasida javob kaliti YANGI BETDAN.
+ */
+
+const sortingPlan = () => planGame(sampleGameDoc("sorting"));
+const listeningPlan = () => planGame(sampleGameDoc("listening"));
+
+const gridsOf = (plan: ReturnType<typeof planGame>): GameCluesItem[] => plan.body.filter((b): b is GameCluesItem => b.k === "clues");
+
+const h1Answers = (plan: ReturnType<typeof planGame>) => plan.body.find((b) => b.k === "h1" && b.sectionId === "answers")!;
+
+test("saralash: BO'SH toifalar jadvali (ustun = toifa) aralash ro'yxatdan KEYIN", () => {
+  const plan = sortingPlan();
+  const cats = plan.model.sorting!.categories;
+  const grids = gridsOf(plan);
+  assert.equal(grids.length, 2, "saralashda ikkita jadval bo'lishi kerak (varaq + javob kaliti)");
+
+  const sheet = grids[0];
+  assert.equal(sheet.bordered, true, "o'quvchi yozadigan jadval chegarasiz chiqdi");
+  assert.deepEqual(sheet.columns.map((c) => c.title), cats.map((c) => c.name));
+  assert.ok(sheet.columns.every((c) => c.items.length === 0), "varaq jadvalida javoblar ko'rinib turibdi");
+  assert.equal(sheet.minRows, Math.max(...cats.map((c) => c.items.length)), "yozish uchun qator qoldirilmadi");
+
+  // Jadval — ARALASH ro'yxatdan keyin: o'quvchi avval ro'yxatni o'qiydi.
+  const at = plan.body.indexOf(sheet);
+  const items = plan.body.filter((b, i) => i < at && b.k === "li");
+  assert.equal(items.length, cats.flatMap((c) => c.items).length, "aralash ro'yxat jadvaldan oldin chizilmadi");
+  assert.match((items[0] as { path: string }).path, /^sections\.\d+\.blocks\.\d+$/, "nasr `path` shartnomasi buzildi");
+});
+
+test("saralash: javob kaliti TO'LDIRILGAN jadval va YANGI BETDAN", () => {
+  const plan = sortingPlan();
+  const cats = plan.model.sorting!.categories;
+  const key = gridsOf(plan)[1];
+  assert.equal(key.bordered, true);
+  assert.deepEqual(
+    key.columns.map((c) => c.items.map((i) => i.text)),
+    cats.map((c) => c.items),
+  );
+  /*
+   * Javob kalitida nasr qatorlari CHIZILMAYDI: jadval AYNI ma'lumotni
+   * beradi va ikkalasi birga bosilganda bet ikki marta bir xil javobni
+   * ko'rsatardi (ko'z tekshiruvi).
+   */
+  const keyLines = plan.body.slice(plan.body.indexOf(h1Answers(plan))).filter((b) => b.k === "li");
+  assert.equal(keyLines.length, 0, "javob kaliti ikki marta chizildi (nasr + jadval)");
+  assert.ok(key.columns.every((c) => c.items.every((i) => /^game\.sorting\.\d+\.items\.\d+$/.test(i.path))), "javob katagi modelga ishora qilmaydi");
+
+  assert.ok(plan.pageBreaks.includes("answers"), "javob kaliti yangi betdan boshlanmadi");
+  const h1 = plan.body.find((b) => b.k === "h1" && b.sectionId === "answers");
+  assert.ok(h1 && h1.k === "h1" && h1.pageBreak, "javoblar sarlavhasida uzilish yo'q");
+  // Javob jadvali AYNAN o'sha sarlavhadan keyin.
+  assert.ok(plan.body.indexOf(key) > plan.body.indexOf(h1!), "javob jadvali sarlavhadan oldin chizildi");
+});
+
+test("tinglash: bosma varaqda ESHITILADIGAN MATN yo'q, javob kalitida bor", () => {
+  const plan = listeningPlan();
+  const items = plan.model.listening!.items;
+  const at = plan.body.findIndex((b) => b.k === "h1" && b.sectionId === "answers");
+  assert.ok(at > 0);
+
+  /*
+   * Qatorlar `p` (marker YO'Q): ular allaqachon raqamlangan va bullet
+   * qo'shilsa varaqda «• 1.» bo'lib ikki marta belgilanardi.
+   */
+  const before = plan.body.slice(0, at).filter((b) => b.k === "p").map((b) => (b as { text: string }).text);
+  assert.equal(plan.body.filter((b) => b.k === "li").length, 0, "raqamlangan qator ustiga marker qo'yildi");
+  assert.equal(before.length, items.length, "har topshiriq bitta qator bo'lishi kerak");
+  for (const it of items) {
+    assert.ok(!before.some((t) => t.includes(it.text)), `«${it.text}» topshiriq betiga bosildi — mashq o'qishga aylanadi`);
+  }
+  // Variantlar esa BOR va harflangan.
+  assert.match(before[0], /^1\. A\) /);
+  // Javob kalitida so'z ham, tarjimasi ham bor.
+  const after = plan.body.slice(at).filter((b) => b.k === "p").map((b) => (b as { text: string }).text);
+  assert.ok(after.some((t) => t.includes(items[0].text) && t.includes(items[0].options[items[0].answer])), "javob kalitida so'z–tarjima juftligi yo'q");
+});
+
+test("tinglash: javob kaliti YANGI BETDAN, ustunli jadval YO'Q", () => {
+  const plan = listeningPlan();
+  assert.ok(plan.pageBreaks.includes("answers"));
+  assert.equal(gridsOf(plan).length, 0, "tinglashda ustunli jadval kerak emas");
+  assert.deepEqual(
+    plan.body.filter((b) => b.k === "h1").map((b) => (b as { sectionId: string }).sectionId),
+    ["intro", "items", "answers"],
+  );
+});
+
+test("ikkala o'yinda ham shapka (sarlavha, tur, mavzu) va KO'RSATMA `note` bo'lib chiziladi", () => {
+  for (const kind of ["sorting", "listening"] as const) {
+    const plan = planGame(sampleGameDoc(kind));
+    assert.deepEqual(plan.head.map((h) => h.k), ["title", "subtitle", "field"], `${kind}: shapka to'liq emas`);
+    assert.equal(plan.head[0].k === "title" && plan.head[0].text, gameLayoutLabels("uz").docTitle[kind]);
+    // Ko'rsatma + javob kaliti ogohlantirishi — ikkalasi ham markazda.
+    assert.equal(plan.body.filter((b) => b.k === "note").length, 2, `${kind}: ko'rsatma qatorlari markazda chizilmadi`);
+    assert.equal(plan.landscape, false);
+    assert.deepEqual(plan.page.marginsCm, GAME_MARGINS_CM[kind]);
+    assert.equal(plan.page.sizePt, GAME_TYPE[kind].sizePt);
+  }
+});
+
+test("interaktiv o'yinlarda karta panjarasi CHIZILMAYDI (R0 da `planCards` ga tushib ketish xavfi)", () => {
+  for (const kind of ["sorting", "listening"] as const) {
+    const plan = planGame(sampleGameDoc(kind));
+    assert.equal(plan.body.filter((b) => b.k === "cards").length, 0, `${kind}: A7 kataklari chizildi`);
+    assert.equal(plan.body.filter((b) => b.k === "figure").length, 0, `${kind}: rasm bandi paydo bo'ldi`);
+    assert.ok(plan.body.length > 3, `${kind}: maket bo'sh`);
+  }
+});

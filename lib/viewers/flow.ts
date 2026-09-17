@@ -124,7 +124,8 @@ export type FlowItem =
   /** «Mavzu: Fotosintez» — markazda, yorliq qalin. */
   | { type: "game-field"; id: string; label: string; text: string }
   /** Gorizontal/Vertikal savollar — CHEGARASIZ ikki ustunli jadval. */
-  | { type: "game-clues"; id: string; columns: GameCluesItem["columns"] }
+  /** `bordered` — saralash jadvali (chegarali); yo'q bo'lsa krossvord savollari. */
+  | { type: "game-clues"; id: string; columns: GameCluesItem["columns"]; bordered?: boolean; minRows?: number }
   /**
    * Bitta BOSMA VARAQ (2×4 karta) — ATOM band, o'z betida.
    *
@@ -531,7 +532,13 @@ export function gameFlow(plan: GamePlan): FlowItem[] {
         items.push({ type: "note", id: id("note"), text: b.text });
         break;
       case "clues":
-        items.push({ type: "game-clues", id: id("gclues"), columns: b.columns });
+        items.push({
+          type: "game-clues",
+          id: id("gclues"),
+          columns: b.columns,
+          ...(b.bordered ? { bordered: true } : {}),
+          ...(b.minRows ? { minRows: b.minRows } : {}),
+        });
         break;
       case "cards":
         items.push({
