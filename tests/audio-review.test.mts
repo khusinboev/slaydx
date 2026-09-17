@@ -57,7 +57,14 @@ const line = (speaker: string, text: string): AudioLine => ({ speaker, text });
  */
 const words = (speaker: string, n: number, tail = "."): AudioLine => line(speaker, `${Array.from({ length: n }, () => "so'z").join(" ")}${tail}`);
 
-function podcastModel(script: AudioLine[], type = "tushuntirish"): AudioModel {
+/*
+ * Standart tur `intervyu` (WP-A2): DIALOG, 2 ovoz, 3 blok — bu fayldagi
+ * testlarning aksariyati (speakerBalance, blockCount, hook/closing)
+ * ikki ovozli suhbatni sinaydi. `tushuntirish` endi MONOLOG bo'lgani
+ * uchun standart bo'lib qolsa `speakerBalance`ni «monolog — tekshirilmaydi»
+ * qilib, shu testlarni ma'nosiz qilardi.
+ */
+function podcastModel(script: AudioLine[], type = "intervyu"): AudioModel {
   return { v: 1, kind: "podcast", type, language: "uz", script };
 }
 function greetingModel(script: AudioLine[], type = "ustoz-kuni", language = "uz"): AudioModel {
@@ -232,7 +239,8 @@ test("respectForm og'irligi MUNOSABATGA bog'liq (`relation` bezak maydon emas)",
 test("normalizeScript: rollar faqat A/B, uzun replika BO'LINADI (kesilmaydi)", () => {
   const tool = TOOLS.find((t) => t.id === "podcast")!;
   const meta = extractMeta(tool, { topic: "Uyqu" });
-  const input = audioInputFromValues("podcast", meta, { topic: "Uyqu", durationMin: 2, podcastType: "tushuntirish", language: "uz" });
+  // `intervyu` — DIALOG turi (WP-A2): bu test uchinchi rolning ikkitaga tushishini sinaydi, ya'ni `speakers: 2` shart.
+  const input = audioInputFromValues("podcast", meta, { topic: "Uyqu", durationMin: 2, podcastType: "intervyu", language: "uz" });
 
   // MUTATSIYA 9: uchinchi rol saqlansa unga ovoz topilmasdi.
   const three = normalizeScript({ script: [{ speaker: "Host", text: "Birinchi savol nima?" }, { speaker: "Expert", text: "Mana javob, batafsil." }, { speaker: "Guest", text: "Men ham qo'shimcha qilaman." }] }, input);
@@ -269,7 +277,11 @@ test("audioInputFromValues: rejim, janr va daqiqa server tomonida siqiladi", () 
   assert.equal(i1.mode, "topic", "noma'lum rejim `topic` ga tushadi");
   assert.equal(i1.sourceText, "", "`topic` rejimida manba matn O'QILMAYDI");
   assert.equal(i1.wordBudget, AUDIO_LIMITS.podcastMinutesDefault * AUDIO_LIMITS.wordsPerMinute);
-  assert.equal(i1.speakers, 2);
+  // WP-A2: standart tur `tushuntirish` endi MONOLOG — `speakers: 1` (ilgari ikkalasi ham 2 edi).
+  assert.equal(i1.speakers, 1, "standart tur (tushuntirish) monolog bo'lishi kerak");
+
+  const i1b = audioInputFromValues("podcast", meta, { topic: "Uyqu", podcastType: "intervyu", language: "uz" });
+  assert.equal(i1b.speakers, 2, "intervyu dialog bo'lishi kerak");
 
   const i2 = audioInputFromValues("podcast", meta, { topic: "Uyqu", mode: "text", sourceText: "Tayyor matn", durationMin: 4, language: "ru" });
   assert.equal(i2.sourceText, "Tayyor matn");

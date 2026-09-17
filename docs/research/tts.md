@@ -31,6 +31,17 @@ hozircha **uz-UZ bermaydi**, faqat Azure va mahalliy provayderlar beradi.
 chegarasi shunga moslashtirilishi kerak, 4500 emas); Google 5000 bayt/so'rov
 (lekin uz yo'q); Azure SSML/turn 64 KB (yetarli keng).
 
+**MP3 kodlash kutubxonasi — litsenziya tuzatildi (WP-A2):** WAV chiqadigan
+provayderlar (Aisha, Gemini) uchun tanlangan `@breezystack/lamejs` (sof
+JavaScript LAME porti, §6 ochiq savoli 6) ning litsenziyasi **LGPL-3.0**
+(paketning o'z `package.json`i tasdiqlaydi) — **MIT EMAS**. LGPL-3.0
+majburiyati kutubxona O'ZGARTIRILIB qayta TARQATILGANDA yuzaga keladi;
+bizda u faqat SERVER (worker) ichida, o'zgartirilmasdan, `npm` paketi
+sifatida ishlatiladi va foydalanuvchiga alohida tarqatilmaydi — shuning
+uchun LGPL majburiyati (manba kodini ochish/relink imkonini berish)
+kelib chiqmaydi. MP3 formatining o'zi ham 2017-yildan beri patentsiz
+(Fraunhofer/Technicolor litsenziyasi 2017-yil aprelda tugagan).
+
 ## 2. Raqobatchi va NotebookLM formati
 
 **sodda.ai** (`docs/research/slaydtop-b-oyinlar-1.md`,

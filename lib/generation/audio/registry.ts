@@ -150,14 +150,47 @@ type SpecByKind = {
 
 /* ══════════════════════════ skeletlar ══════════════════════════ */
 
-/** `podcast.md` §3: kirish (hook) → 3 blok → yakun. */
-const PODCAST_SKELETON = [
-  "Kirish (hook: savol yoki fakt)",
-  "1-blok (mavzuning birinchi qirrasi)",
-  "2-blok (ikkinchi qirrasi)",
-  "3-blok (uchinchi qirrasi)",
-  "Yakun (xulosa + tinglovchiga savol)",
-] as const;
+/**
+ * PODKAST SKELETLARI — TUR bo'yicha ALOHIDA (WP-A2 tuzatishi).
+ *
+ * WP-A da uchala tur BITTA `PODCAST_SKELETON`ni, bitta `blocks: 3`ni va
+ * bitta `speakers: 2`ni ishlatgan — ya'ni ssenariy TUZILMASI tur
+ * bo'yicha farqlanmagan (farq faqat `guidance` matnida edi, `structure`
+ * ta'siri esa reyestrda (`audio-params.ts podcastType`) e'lon qilingan
+ * bo'lsa ham HAQIQATDA hech narsaga bog'lanmagan — differensial zond
+ * shuni ushlaydi). Lead qarori (`docs/AUDIT-22.md` §5 WP-A2):
+ *   • `tushuntirish` — MONOLOG (bitta hikoyachi), 3 blok;
+ *   • `intervyu` — DIALOG (boshlovchi + mehmon), 3 blok, har blok
+ *     savol→javob juftligi;
+ *   • `savol-javob` — DIALOG, 4 QISQA savol-javob jufti (uchtasi emas).
+ * `prompts.ts`/`review.ts` bloklar sonini/ovoz sonini reyestrdan
+ * (`spec.limits.blocks`, `spec.speakers`) o'qiydi — bu yerdagi son
+ * O'ZGARSA ular AVTOMATIK moslashadi.
+ */
+const PODCAST_SKELETONS: Record<"tushuntirish" | "intervyu" | "savol-javob", readonly string[]> = {
+  tushuntirish: [
+    "Kirish (hook: savol yoki fakt)",
+    "1-blok (mavzuning birinchi qirrasi)",
+    "2-blok (ikkinchi qirrasi)",
+    "3-blok (uchinchi qirrasi)",
+    "Yakun (xulosa + tinglovchiga savol)",
+  ],
+  intervyu: [
+    "Kirish (hook + mehmonni qisqa tanishtirish)",
+    "1-savol → javob (mavzuning birinchi qirrasi)",
+    "2-savol → javob (ikkinchi qirrasi, oldingisidan chuqurroq)",
+    "3-savol → javob (nima qilish kerakligi)",
+    "Yakun (mehmonga rahmat + tinglovchiga xulosa)",
+  ],
+  "savol-javob": [
+    "Kirish (hook: mavzu bir jumlada)",
+    "1-savol → qisqa javob",
+    "2-savol → qisqa javob",
+    "3-savol → qisqa javob",
+    "4-savol → qisqa javob",
+    "Yakun (qisqa xulosa)",
+  ],
+};
 
 /** `greeting.md` §3: murojaat → asosiy tabrik → tilaklar → yakun. */
 const GREETING_SKELETON = [
@@ -177,24 +210,25 @@ const PODCAST_TYPES: readonly PodcastTypeSpec[] = [
     kind: "podcast",
     id: "tushuntirish",
     label: { uz: "Mavzu tushuntirish", ru: "Объяснение темы", en: "Explainer" },
-    hint: "Ikki ovoz mavzuni uchta qirradan tushuntiradi — eng keng tarqalgan format",
-    skeleton: PODCAST_SKELETON,
-    speakers: 2,
+    hint: "Bitta hikoyachi mavzuni uchta qirradan tushuntiradi — eng keng tarqalgan format",
+    skeleton: PODCAST_SKELETONS.tushuntirish,
+    // MONOLOG (WP-A2): dialog turlaridan farqi shu — boshlovchi/mehmon rollari yo'q.
+    speakers: 1,
     limits: { minutes: PODCAST_MINUTES, minutesDefault: AUDIO_LIMITS.podcastMinutesDefault, blocks: 3 },
     guidance: [
-      "Explainer episode with two voices: A hosts (asks, frames, sums up), B explains (gives the substance). Every turn belongs to one of those two roles.",
+      "Explainer episode with ONE voice: a single narrator hosts, frames and explains the topic directly to the listener — there is no second speaker to hand off to.",
       "Open with a hook — a concrete question, number or everyday situation the listener recognises — never with «today we will talk about».",
       "Each of the three middle blocks covers one facet of the topic and ends with a bridge sentence into the next one; a listener has no screen, so the structure must be audible.",
       "Speak in spoken language: short sentences, no parentheses, no abbreviations, no URLs, no formulas. Numbers are written out the way they are said.",
     ],
-    judge: podcastJudge("Two-voice explainer episode"),
+    judge: podcastJudge("Single-voice explainer episode"),
   },
   {
     kind: "podcast",
     id: "intervyu",
     label: { uz: "Intervyu", ru: "Интервью", en: "Interview" },
     hint: "Boshlovchi savol beradi, mehmon-ekspert javob beradi",
-    skeleton: PODCAST_SKELETON,
+    skeleton: PODCAST_SKELETONS.intervyu,
     speakers: 2,
     limits: { minutes: PODCAST_MINUTES, minutesDefault: AUDIO_LIMITS.podcastMinutesDefault, blocks: 3 },
     guidance: [
@@ -213,10 +247,11 @@ const PODCAST_TYPES: readonly PodcastTypeSpec[] = [
     kind: "podcast",
     id: "savol-javob",
     label: { uz: "Savol-javob", ru: "Вопрос-ответ", en: "Q&A" },
-    hint: "Tinglovchilarning tez-tez beriladigan savollariga qisqa javoblar",
-    skeleton: PODCAST_SKELETON,
+    hint: "Tinglovchilarning tez-tez beriladigan savollariga to'rtta qisqa javob",
+    skeleton: PODCAST_SKELETONS["savol-javob"],
     speakers: 2,
-    limits: { minutes: PODCAST_MINUTES, minutesDefault: AUDIO_LIMITS.podcastMinutesDefault, blocks: 3 },
+    // To'RTTA qisqa savol-javob jufti (dialog turlari orasida YAGONA 4 blokli tur — WP-A2).
+    limits: { minutes: PODCAST_MINUTES, minutesDefault: AUDIO_LIMITS.podcastMinutesDefault, blocks: 4 },
     guidance: [
       "Q&A episode: each middle block is one frequently asked question about the topic, read out by A and answered by B in under 60 spoken words.",
       "Questions are the ones people actually ask — practical, concrete, sometimes naive — not the ones a textbook chapter would pose.",

@@ -544,3 +544,90 @@ toza.
    `relation`/`minutes` ni dvigateldan oladi, standalone «Tuzatish»
    esa ularni hujjatdan tiklashi kerak (`minutesOf`/`recipientOf` bor,
    `relation` uchun manba yo'q).
+
+### WP-A2 — WP-A dan qolgan 3 band yopildi (2026-09-17)
+
+Band 3 va 4 YOPILDI, band 6 EGASI QAROR bilan yopiq deb belgilandi
+(audioda «Tuzatish» yo'q — ataylab, pastda). Band 1/2/5 ochiq qoladi
+(kalitlar, Aisha shakli, jonli sinov — egasidan/kalit kelgandan keyin).
+
+**1. Reyestr nomuvofiqligi (band 4) — `lib/generation/audio/registry.ts`.**
+Uchala podkast turi BIR XIL `PODCAST_SKELETON`+`blocks:3`+`speakers:2`
+ishlatardi, ya'ni `audio-params.ts`dagi `podcastType`/`occasion`
+`structure` e'loni HAQIQATDA yolg'on edi. Qaror (lead): `PODCAST_SKELETONS`
+tur bo'yicha ALOHIDA — `tushuntirish` endi MONOLOG (`speakers: 1`, 3
+blok), `intervyu` DIALOG (`speakers: 2`, 3 blok, savol→javob), `savol-javob`
+DIALOG (`speakers: 2`, **4** qisqa savol-javob jufti (ilgari 3 edi)).
+`prompts.ts`/`review.ts`/`script.ts` allaqachon `spec.limits.blocks`/
+`spec.speakers`/`input.speakers` dan o'qir edi (qattiq son yo'q edi) —
+faqat `prompts.ts` da bitta so'z-daражасидаги xato tuzatildi: tizim
+prompti «the **three** middle blocks» deb SO'Z bilan yozardi (sonni
+`limits.blocks`dan olsa ham), `savol-javob` 4 blokka o'tgach bu yolg'on
+bo'lardi — endi «the middle blocks … N of them» (son yagona manbadan).
+`occasion`dan `structure` OLIB TASHLANDI: `GREETING_SKELETON` HAR
+JANRDA bir xil qoladi (bu halol e'lon — tabriknoma tuzilmasi sababga
+bog'liq emas, faqat matn/ohang).
+
+**Yangi test — `tests/audio-params.test.mts`** (8 ta): reyestr
+butunligi (unikal id, probeA≠probeB, narx bog'liq emas, forma↔reyestr
+mosligi) + differensial zond — LLM/TTS CHAQIRILMAYDI (soxta `complete`
+ssenariyni `ctx`dan — spec+input — to'g'ridan-to'g'ri quradi, «aks
+sado» texnikasi bilan mavzu/manba/adresat/sabab/munosabat matnini
+qatorlarga qo'shadi; soxta TTS provayder `audio-engine.test.mts`
+naqshida). Har parametr uchun REYESTRDA e'lon qilingan HAR ta'sir
+(`prompt`/`structure`/`model`/`tts`/`review`/`source`/`language`/`budget`)
+probeA/probeB bilan solishtiriladi; qo'shimcha ikkita test podkast
+turlari HAQIQATAN farq qilishini (`blocks` `[3,3,4]`, `speakers`
+`[1,2,2]`) va tabriknomada `occasion` TUZILMAGA tegmasligini (`structure`
+fingerprint TENG, `prompt`/`model`/`review` esa FARQ qiladi) alohida
+qulflaydi.
+
+**Mutatsiyalar (qo'lda tekshirildi, uchtasi ham qizardi, so'ng
+qaytarildi):**
+1. `savol-javob.limits.blocks` 4→3 (uchalasi yana bir xil) — `tests/
+   audio-registry.test.mts` («podkast turlari tuzilmaviy farq qiladi»)
+   VA `tests/audio-params.test.mts` («structure ta'siri HAQIQIY»)
+   qizardi (2 test).
+2. `tushuntirish.speakers` 1→2 (monolog/dialog farqi yo'qoldi) —
+   `tests/audio-registry.test.mts` («ovoz soni») VA `tests/audio-params.
+   test.mts`ning IKKALA testi (umumiy differensial zond `podcastType →
+   review` bandi + tur-taqqoslash testi) qizardi (3 test) — kutilmagan
+   bonus topilma: `tushuntirish`/`intervyu` orasidagi `review`/`model`
+   farqi FAQAT ovoz soniga (speakerBalance bandi) tayangan ekan.
+3. `audio-params.ts`da `occasion`ga qayta `structure` qo'shildi —
+   umumiy differensial zond (`occasion → structure`) VA maxsus occasion
+   testi ikkalasi ham qizardi (2 test).
+
+**2. Litsenziya (band 3) — `docs/research/tts.md` §1.** Tadqiqot
+hisoboti `@breezystack/lamejs`ni umuman TILGA OLMAGAN edi (kutubxona
+WP-A davomida tanlangan), shuning uchun litsenziya bandi hech qayerda
+YOZILMAGAN edi — endi jadval ostiga aniq yozuv qo'shildi: **LGPL-3.0**
+(paketning o'z `package.json`i — `"license": "LGPL-3.0"`), MIT EMAS.
+Izoh: serverda O'ZGARTIRILMASDAN, `npm` paketi sifatida ishlatiladi va
+foydalanuvchiga ALOHIDA tarqatilmaydi, shuning uchun LGPL majburiyati
+(manba ochish/relink) kelib chiqmaydi; MP3 patentlari 2017-da tugagan.
+
+**3. Audio «Tuzatish» yo'li (band 6, egasi qarori bilan yopiq) —
+`components/files/ResultView.tsx`.** `lib/server/doc-polish.ts POLISHERS`
+va `edit-adapters.ts`da audio ATAYLAB yo'q (sayqal SINTEZDAN OLDIN,
+dvigatel ICHIDA ishlaydi — qayta chaqirish TTS ni ikkinchi marta to'lash
+degani), lekin `ResultView` buni bilmasdi: hisobot (`gen.doc?.audio?.
+review`) YAGONA `review` o'qish zanjiriga ULANMAGAN edi (panel umuman
+CHIQMASDI), va `onPolish`/`onFix` esa SHARTSIZ berilardi — bosilganda
+`polisherIdFor("podcast")` → `null` → server 409 «Bu hujjat eski
+formatda» qaytarardi (noto'g'ri xabar). Tuzatildi: `review` zanjiriga
+`?? gen.doc?.audio?.review` qo'shildi (hisobot ENDI ko'rinadi), `isAudio`
+qo'shildi va `noFix`/`noPolish` (yangi) ikkalasi ham uni hisobga oladi —
+audioda «Tuzatish» HAM, «Hammasini tuzatish» HAM chizilmaydi;
+`hideGroups`ga ham qo'shildi («Manbalar»/«Vizuallar» audioda bo'sh).
+«Tahrirlash» allaqachon to'g'ri yashirilardi (`edit-adapters.ts`da
+adapter yo'q → `EditActions` bo'sh) — o'zgarish kerak emas edi.
+
+Testlar: `tests/viewer/article-review-panel.test.mts`ga ikkita band
+qo'shildi (yagona `review` zanjiri endi SAKKIZ modeldan, `noFix`/
+`noPolish` ikkalasi `isAudio`ni unutmasligi) — mutatsiya bilan
+tekshirildi (`noFix` dan `isAudio` olib tashlanganda 2 test qizardi,
+qaytarildi). `tests/viewer/audio-viewer.test.mts` — YANGI (bu
+ko'ruvchi uchun test yo'q edi): `<audio>` pleer aniq `?inline=1`
+manbadan, transkript `doc.audio.script`dan (ikki ovoz rangi bilan),
+`doc.audio` yo'q holatda pleer chizmaydi va tushunarli xabar chiqadi.
