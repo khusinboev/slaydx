@@ -60,6 +60,17 @@ services:
       OPENALEX_MAILTO: ${OPENALEX_MAILTO:-}
       CROSSREF_MAILTO: ${CROSSREF_MAILTO:-}
       GOOGLE_BOOKS_API_KEY: ${GOOGLE_BOOKS_API_KEY:-}
+      # AUDIT-22 (podkast/tabriknoma): TTS zanjiri — compose faqat SANAB
+      # O'TILGAN o'zgaruvchilarni uzatadi. `tests/compose-env.test.mts`
+      # qulflaydi; kalitsiz dvigatel «Ovoz provayderi sozlanmagan» beradi
+      # va kredit qaytadi, ya'ni yetib bormagan kalit JIM QOLMAYDI.
+      AZURE_SPEECH_KEY: ${AZURE_SPEECH_KEY:-}
+      AZURE_SPEECH_REGION: ${AZURE_SPEECH_REGION:-}
+      AISHA_API_KEY: ${AISHA_API_KEY:-}
+      TTS_GEMINI_MODEL: ${TTS_GEMINI_MODEL:-}
+      TTS_VOICE_UZ: ${TTS_VOICE_UZ:-}
+      TTS_VOICE_RU: ${TTS_VOICE_RU:-}
+      TTS_VOICE_EN: ${TTS_VOICE_EN:-}
       CLICK_SERVICE_ID: ${CLICK_SERVICE_ID:-}
       CLICK_MERCHANT_ID: ${CLICK_MERCHANT_ID:-}
       CLICK_SECRET_KEY: ${CLICK_SECRET_KEY:-}
@@ -124,6 +135,17 @@ services:
       OPENALEX_MAILTO: ${OPENALEX_MAILTO:-}
       CROSSREF_MAILTO: ${CROSSREF_MAILTO:-}
       GOOGLE_BOOKS_API_KEY: ${GOOGLE_BOOKS_API_KEY:-}
+      # AUDIT-22 (podkast/tabriknoma): TTS zanjiri — compose faqat SANAB
+      # O'TILGAN o'zgaruvchilarni uzatadi. `tests/compose-env.test.mts`
+      # qulflaydi; kalitsiz dvigatel «Ovoz provayderi sozlanmagan» beradi
+      # va kredit qaytadi, ya'ni yetib bormagan kalit JIM QOLMAYDI.
+      AZURE_SPEECH_KEY: ${AZURE_SPEECH_KEY:-}
+      AZURE_SPEECH_REGION: ${AZURE_SPEECH_REGION:-}
+      AISHA_API_KEY: ${AISHA_API_KEY:-}
+      TTS_GEMINI_MODEL: ${TTS_GEMINI_MODEL:-}
+      TTS_VOICE_UZ: ${TTS_VOICE_UZ:-}
+      TTS_VOICE_RU: ${TTS_VOICE_RU:-}
+      TTS_VOICE_EN: ${TTS_VOICE_EN:-}
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
       WORKER_JOB_TIMEOUT_MS: ${WORKER_JOB_TIMEOUT_MS:-660000}
 
