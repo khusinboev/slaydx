@@ -845,6 +845,30 @@ manbadan, transkript `doc.audio.script`dan (ikki ovoz rangi bilan),
 - To'liq tekshiruv: tsc/eslint toza; unit 2 618/2 620 (2 ta ma'lum
   `.env.local` fal.ai testi), UI 255/255, ko'ruvchi 219/219.
 
+### Deploy (2026-09-17) ✅ — `03a64e4`, rollback `9bb8a43`
+
+- Zaxira `/root/slaydx-backups/slaydx-20260917063801.sql` (377 MB),
+  `ROLLBACK.txt` = `9bb8a43`. `deploy.sh` (`9172cf1`) → migratsiya
+  `021_games.sql` worker'da qo'llandi.
+- **Hodisa:** web konteyneri «unhealthy» — `assertRuntimeConfig` TTS
+  kaliti yo'qligini `problems` ga qo'shgan, `instrumentation.ts` esa prod
+  da ro'yxat bo'sh bo'lmasa `throw` qiladi; 15 ishlaydigan vosita ham
+  yotdi (~35 daqiqa, build vaqti). Rollback buyrug'i classifier tomonidan
+  bloklandi → hotfix yo'li: `runtimeWarnings()` (ixtiyoriy xizmat kaliti
+  — faqat jurnal + `/api/health.warnings`), `assertRuntimeConfig` faqat
+  haqiqiy to'siqlar; test `env-warnings` +2 (mutatsiya qizardi);
+  `a5e5183`/`03a64e4` → `deploy.sh` → web healthy, jurnalda
+  «[config] TTS kaliti yo'q …» ogohlantirishi.
+- **Prod smoke** (egasi hisobi, https://slaydxx.uz): `robots.txt`
+  `Disallow: /o/`; saralash 2 000 tanga → 100/13 band → DOCX 10,8 KB;
+  tinglash → 100/13 → DOCX 10,4 KB; loginsiz o'yinchi: saralash 20/20,
+  tinglash 10/10 (audiosiz belgisi — kalit yo'q); natijalar egasi
+  jadvalida; 0 brauzer xatosi.
+- Saboq (§6 ga ham): ixtiyoriy xizmat kaliti yo'qligi hech qachon
+  ishga tushishni to'xtatmasin; deploydan oldin prod muhitini taqlid
+  qilib `assertRuntimeConfig` ni yurgizish (`env-warnings` testi shu
+  ishni qiladi).
+
 ## 6. Ochiq bandlar (keyingi sprintga)
 
 1. **TTS kalitlari egasidan** — `AZURE_SPEECH_KEY`+`AZURE_SPEECH_REGION`
@@ -869,5 +893,6 @@ manbadan, transkript `doc.audio.script`dan (ikki ovoz rangi bilan),
 7. Flesh karta o'yinida ball «bilaman» o'z-o'zini baholash — o'qituvchi
    uchun bu «o'zlashtirish» emas, «o'quvchi fikri» ekani natijalar
    panelida izohlansa yaxshi.
-8. AUDIT-20/21 §6 dagi bandlar (eski yozuvchi yo'li, TOC bet raqami,
+8. TTS kalitlari kelgach prod `.env` ga yozish → `docker compose -p slaydx up -d` (compose satrlari tayyor, `${VAR:-}` standartli).
+9. AUDIT-20/21 §6 dagi bandlar (eski yozuvchi yo'li, TOC bet raqami,
    karta A7 o'lchami) o'z kuchida.
