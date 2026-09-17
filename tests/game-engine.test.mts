@@ -130,8 +130,9 @@ function playAll(kind: PublicGameKind) {
   const view = viewOf(kind);
   let s = createGame(view, { now: 1_000 });
   for (const { id, value } of solve(kind, view, doc)) s = answer(s, id, value);
-  const done = finish(s, { now: 61_000 });
-  return { doc, view, state: s, ...done };
+  // `...done` ichida YAKUNLANGAN holat keladi (`finishedAt` qo'yilgan) —
+  // progress javoblar bilan birga o'zgarmaydi.
+  return { doc, view, ...finish(s, { now: 61_000 }) };
 }
 
 /* ────────────────────────── qurish va qadamlar ────────────────────────── */
