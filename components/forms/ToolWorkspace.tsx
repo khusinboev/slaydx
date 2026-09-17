@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { FormValues, ToolConfig } from "@/lib/types";
-import { defaultPages, missingRequired, priceFor, profileDefaults, toolBlockedReason } from "@/lib/tools";
+import { defaultPages, fieldVisible, missingRequired, priceFor, profileDefaults, toolBlockedReason } from "@/lib/tools";
 import { draftOutline } from "@/lib/api-client";
 import { useAppStore, writerProfile } from "@/lib/store";
 import { useUi } from "@/lib/ui";
@@ -163,8 +163,8 @@ function StandardForm({ tool, profile }: { tool: ToolConfig; profile: UserProfil
    * chips esa «AI yaratishi» da qolib, reja jim tashlanardi. Endi
    * signal bitta — matnning o'zi (`setOutline` va `manualOutlineOf`).
    */
-  const mainFields = tool.fields.filter((f) => !f.extra && !(hasOutline && f.name === "tocMethod"));
-  const extraFields = tool.fields.filter((f) => f.extra && !(hasOutline && f.name === "tocText"));
+  const mainFields = tool.fields.filter((f) => !f.extra && !(hasOutline && f.name === "tocMethod") && fieldVisible(f, values));
+  const extraFields = tool.fields.filter((f) => f.extra && !(hasOutline && f.name === "tocText") && fieldVisible(f, values));
   const needsTopic = Boolean(tool.topicLegend);
   const fileMode = tool.modes && values.mode === "file";
   const price = useMemo(() => priceFor(tool, values), [tool, values]);

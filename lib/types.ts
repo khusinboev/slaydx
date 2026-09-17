@@ -86,6 +86,14 @@ export type ToolField = {
   suffix?: string;
   accept?: string;
   extra?: boolean;
+  /**
+   * Shartli yashirish (deklarativ — `ToolConfig` server↔klient chegarasidan
+   * o'tadi, funksiya bo'lmaydi): `field` ning qiymati `values` ichida bo'lsa
+   * maydon CHIZILMAYDI. «Bezak maydon yo'q» qoidasi: parametr biror turda
+   * natijaga ta'sir qilmasa (masalan saralashda «qarama-qarshi juftlik»
+   * toifa sonini 2 ga qulflaydi), u shu turda ko'rinmasligi kerak.
+   */
+  hideWhen?: { field: string; values: readonly string[] };
 };
 
 export type ToolMode = {

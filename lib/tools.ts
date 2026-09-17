@@ -242,7 +242,9 @@ const INTERACTIVE_GAME_FIELDS: Record<"sorting" | "listening", ToolField[]> = {
       name: "categoryCount",
       legend: "Nechta toifa?",
       options: numberChips(GAME_LIMITS.categoryCounts, "toifa"),
-      hint: "«Qarama-qarshi juftlik» turida toifa doim 2 ta bo'ladi.",
+      // Toifa soni reyestrda qulflangan turlarda (`limits.categories` bitta
+      // qiymat — «qarama-qarshi juftlik») chip inert bo'lardi — yashiriladi.
+      hideWhen: { field: "sortingType", values: gameTypesOf("sorting").filter((t) => t.limits.categories.length === 1).map((t) => t.id) },
     },
     { kind: "chips", name: "itemsPerCategory", legend: "Har toifada nechta element?", options: numberChips(GAME_LIMITS.itemsPerCategoryCounts, "element") },
     LANGUAGE_FIELD,
@@ -1354,6 +1356,13 @@ export function defaultPages(toolId: ToolId): string {
   if (toolId === "thesis") return "1-2";
   if (toolId === "coursework") return "20-25";
   return "10-15";
+}
+
+/** `ToolField.hideWhen` — maydon joriy qiymatlarda chiziladimi (forma ham, zond ham shu bilan o'qiydi). */
+export function fieldVisible(field: Pick<ToolField, "hideWhen">, values: Record<string, unknown>): boolean {
+  const h = field.hideWhen;
+  if (!h) return true;
+  return !h.values.includes(String(values[h.field] ?? ""));
 }
 
 export function priceFor(tool: ToolConfig, values: FormValues): number {

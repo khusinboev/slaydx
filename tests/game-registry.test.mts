@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   CARDS_JUDGE_CRITERIA,
   CROSSWORD_JUDGE_CRITERIA,
@@ -390,4 +391,23 @@ test("yangi kindlarning hisobot qoidalari: yechilmaydigan o'yin va indeks chegar
   for (const id of ["itemCount", "optionCount", "answerInRange", "uniqueItems", "textLength", "languagePair"]) {
     assert.ok(GAME_RULE_IDS.listening.includes(id), `MUTATSIYA: tinglash qoidasi «${id}» yo'qoldi`);
   }
+});
+
+/* ───────────── `categoryCount` chipi — qulflangan turda yashirin (AUDIT-22 R2) ───────────── */
+
+test("saralash: «qarama-qarshi juftlik» turida `categoryCount` chipi chizilmaydi (inert parametr ko'rinmaydi), boshqa turlarda ko'rinadi", async () => {
+  const { TOOL_BY_ID, fieldVisible } = await import("../lib/tools.ts");
+  const field = TOOL_BY_ID.sorting.fields.find((f) => f.name === "categoryCount");
+  assert.ok(field, "categoryCount maydoni bor");
+  const locked = gameTypesOf("sorting").filter((t) => t.limits.categories.length === 1).map((t) => t.id);
+  assert.ok(locked.includes("qarama-qarshi"), "reyestrda juftlik turi toifani qulflaydi");
+  assert.deepEqual([...(field.hideWhen?.values ?? [])].sort(), [...locked].sort(), "yashirish ro'yxati reyestrdan keladi");
+  for (const id of locked) assert.equal(fieldVisible(field, { sortingType: id }), false, `${id}: yashirin`);
+  const open = gameTypesOf("sorting").find((t) => t.limits.categories.length > 1);
+  assert.ok(open);
+  assert.equal(fieldVisible(field, { sortingType: open.id }), true, "oddiy turda ko'rinadi");
+  assert.equal(fieldVisible(field, {}), true, "tur tanlanmaguncha ko'rinadi (standart tur qulflamaydi)");
+  const src = readFileSync("components/forms/ToolWorkspace.tsx", "utf8");
+  assert.match(src, /mainFields = tool\.fields\.filter\([^\n]*fieldVisible\(f, values\)/, "forma asosiy maydonlarni fieldVisible bilan filtrlaydi");
+  assert.match(src, /extraFields = tool\.fields\.filter\([^\n]*fieldVisible\(f, values\)/, "qo'shimcha maydonlar ham");
 });
