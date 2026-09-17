@@ -184,30 +184,51 @@ test("ResultView: article natijasida `doc.article.review` bo'lsa ko'ruvchi tepas
    */
   assert.match(
     src,
-    /gen\.doc\?\.article\?\.review \?\? gen\.doc\?\.essay\?\.review \?\? gen\.doc\?\.work\?\.review \?\? gen\.doc\?\.teacher\?\.review \?\? gen\.doc\?\.game\?\.review \?\? gen\.doc\?\.infographic\?\.review;/,
-    "hisobot OLTI modeldan (maqola/tezis, insho, talaba ishi, o'qituvchi, o'yin, plakat)",
+    /gen\.doc\?\.article\?\.review \?\?\s*\n\s*gen\.doc\?\.essay\?\.review \?\?\s*\n\s*gen\.doc\?\.work\?\.review \?\?\s*\n\s*gen\.doc\?\.teacher\?\.review \?\?\s*\n\s*gen\.doc\?\.game\?\.review \?\?\s*\n\s*gen\.doc\?\.infographic\?\.review \?\?\s*\n\s*gen\.doc\?\.audio\?\.review;/,
+    "hisobot SAKKIZ modeldan (maqola/tezis, insho, talaba ishi, o'qituvchi, o'yin, plakat, audio)",
   );
   assert.match(src, /\{review \? \(/, "panel sharti — hisobot bor");
   assert.match(src, /<details open[^>]*data-article-review-panel/, "yig'iladigan panel");
   // WP7: `onFix` → `rewriteArticle` (POST …/rewrite), `fixing` — yuklanish holati.
   assert.match(src, /<ArticleReviewPanel\s+review=\{review\}/, "panel hisobotni oladi");
   assert.match(src, /fixing=\{fixing\}/, "«Tuzatish» yuklanish holati (WP7)");
-  assert.match(src, /onPolish=\{[^}]+\}\s+polishing=\{polishing\}/, "«Hammasini tuzatish» (AUDIT-18)");
+  assert.match(src, /noPolish \? \{\} : \{ onPolish: \(\) => void onPolish\(\), polishing \}/, "«Hammasini tuzatish» (AUDIT-18) — audioda o'chiriladi");
   /*
    * Inshoda BANDMA-BAND «Tuzatish» yo'q (AUDIT-19): `onFix` faqat
    * maqola/tezisga beriladi, «Manbalar»/«Vizuallar» guruhlari esa
    * yashiriladi — insho manbasiz va sxemasiz janr. Mutatsiya: `isEssay`
    * bog'lanishi olib tashlansa insho uchun 422 beradigan tugma chizilardi.
    */
-  assert.match(src, /noFix \? \{\} : \{ onFix:/, "«Tuzatish» inshoda/plakatda chizilmaydi");
-  assert.match(src, /const noFix = isEssay \|\| isPoster;/, "«Tuzatish» yo'q oilalar: insho va plakat");
+  assert.match(src, /noFix \? \{\} : \{ onFix:/, "«Tuzatish» inshoda/plakatda/audioda chizilmaydi");
+  assert.match(src, /const noFix = isEssay \|\| isPoster \|\| isAudio;/, "«Tuzatish» yo'q oilalar: insho, plakat va audio");
+  /*
+   * AUDIT-22 WP-A2: audioda «Hammasini tuzatish» HAM yo'q — boshqa
+   * `noFix` oilalaridan farqi shu (ularda avto-sayqal baribir ishlaydi).
+   * Sabab: audio sayqali TTS sintezidan OLDIN, dvigatel ichida allaqachon
+   * bajarilgan; qayta chaqirish `POLISHERS` jadvalida yo'q va server 409
+   * qaytaradi. Mutatsiya: `noPolish` bog'lanishi olib tashlansa audioda
+   * bosilganda 409 «eski formatda» xatosi chiqadigan tugma ko'rinardi.
+   */
+  assert.match(src, /const noPolish = isAudio;/, "«Hammasini tuzatish» yo'q oila: audio");
   assert.match(src, /hideGroups \? \{ hideGroups \}/, "bo'sh guruhlar yashiriladi");
-  assert.match(src, /const hideGroups = isEssay \|\| isGame \|\| isPoster \? ESSAY_HIDDEN_GROUPS : undefined;/, "insho, o'yin va plakatda «Manbalar»/«Vizuallar» yo'q");
+  assert.match(src, /const hideGroups = isEssay \|\| isGame \|\| isPoster \|\| isAudio \? ESSAY_HIDDEN_GROUPS : undefined;/, "insho, o'yin, plakat va audioda «Manbalar»/«Vizuallar» yo'q");
   assert.match(src, /const isGame = Boolean\(gen\.doc\?\.game\);/, "o'yin — hujjat MODELIDAN, vosita id sidan emas");
   assert.match(src, /const isPoster = Boolean\(gen\.doc\?\.infographic\);/, "plakat — hujjat modelidan");
+  assert.match(src, /const isAudio = Boolean\(gen\.doc\?\.audio\);/, "audio — hujjat modelidan");
   assert.match(src, /rewriteArticle\(cur\.id, base, fix\)/, "«Tuzatish» rewrite marshrutiga bormaydi");
   assert.match(src, /polishArticle\(cur\.id, base\)/, "«Hammasini tuzatish» polish marshrutiga bormaydi");
   assert.ok(src.indexOf("data-article-review-panel") < src.indexOf("<ArtifactViewer"), "panel ko'ruvchidan OLDIN");
+});
+
+test("ResultView: audioda review ko'rinadi, lekin «Tuzatish»/«Hammasini tuzatish» tugmalari YO'Q (qayta sintez = ikkinchi marta TTS to'lovi)", () => {
+  const src = readFileSync(new URL("../../components/files/ResultView.tsx", import.meta.url), "utf8");
+  // `noFix`/`noPolish` ikkalasi ham `isAudio` ni o'z ichiga oladi — bitta joyda unutib qo'yish testda ko'rinadi.
+  const noFixLine = src.match(/const noFix = ([^;]+);/)?.[1] ?? "";
+  const noPolishLine = src.match(/const noPolish = ([^;]+);/)?.[1] ?? "";
+  assert.ok(noFixLine.includes("isAudio"), "noFix audioni hisobga olmadi");
+  assert.ok(noPolishLine.includes("isAudio"), "noPolish audioni hisobga olmadi");
+  // Panel o'zi esa `review` bor bo'lishning O'ZIGA bog'liq — audio review'ni ham chizadi.
+  assert.match(src, /gen\.doc\?\.audio\?\.review/, "audio hisoboti YAGONA nuqtaga ulanmagan");
 });
 
 test("ArticleReviewPanel: `hideGroups` guruhni CHIZMAYDI (o'yin/plakat/insho — manbasiz, sxemasiz janr)", () => {

@@ -3,17 +3,22 @@
  *
  * Qoida (slayd/rezyume/maqola/talaba ishi/o'qituvchi/o'yinlar bilan bir
  * xil): formada ko'ringan HAR maydon shu yerda e'lon qilinadi, va
- * differensial zond (`tests/audio-params.test.mts`, WP-A) uni
+ * differensial zond (`tests/audio-params.test.mts`, WP-A2) uni
  * qulflaydi — parametr chiqishga ta'sir qilmasa test qizaradi («bezak
  * maydon yo'q», mahsulot egasi qarori 14).
  *
- * R0 da bu fayl REYESTRNING O'ZI: har parametr qaysi vositalarda
- * ko'rinadi (`kinds`), nimaga ta'sir qiladi (`impacts`) va zond qaysi
- * ikki qiymatni solishtiradi (`probeA`/`probeB`). Zondning O'ZI (forma →
- * `buildAudioArtifact` → ssenariy farqi) WP-A da ulanadi, chunki
- * dvigatel va TTS kalitlari o'sha yerda. Bugun tekshiriladigan narsa —
- * reyestrning butunligi: id lar unikal, har parametrning egasi va
- * ta'siri bor, va `lib/tools.ts` dagi maydonlar ro'yxati bilan AYNAN mos.
+ * R0/WP-A da bu fayl REYESTRNING O'ZI edi (har parametr qaysi
+ * vositalarda ko'rinadi — `kinds`, nimaga ta'sir qiladi — `impacts`,
+ * zond qaysi ikki qiymatni solishtiradi — `probeA`/`probeB`), lekin
+ * `tests/audio-params.test.mts` HALI YOZILMAGAN edi: `podcastType` va
+ * `occasion` `structure` ta'sirini e'lon qilardi, `audio/registry.ts`
+ * esa uchala podkast turi/oltala tabriknoma janri uchun BIR XIL
+ * skelet+blok+ovoz sonini ishlatardi — e'lon HAQIQATDA ta'sir
+ * qilmasdi. WP-A2 buni ikki tomondan tuzatdi: (1) `audio/registry.ts`
+ * — podkast turlari endi HAQIQATAN tuzilmaviy farq qiladi
+ * (`tushuntirish` monolog, `intervyu`/`savol-javob` dialog, oxirgisi
+ * 4 blok), (2) shu yerda `occasion`dan `structure` OLIB TASHLANDI —
+ * tabriknoma tuzilmasi janrga bog'liq emas, bu halol e'lon.
  *
  * Manba: `docs/research/{podcast,greeting}.md` §3 jadvallari.
  *
@@ -88,9 +93,12 @@ export const AUDIO_PARAMS: AudioParam[] = [
   /*
    * `occasion` — reyestr JANRI (`audio/registry.ts`): chip qiymati tur
    * id si bo'lib, promptga tayyor ibora va o'z `guidance` ini olib
-   * kiradi. Shuning uchun u `podcastType` bilan bir xil ta'sirga ega.
+   * kiradi. `structure` YO'Q (WP-A2 tuzatishi): tabriknoma ssenariysi
+   * HAR JANRDA bitta `GREETING_SKELETON` (murojaat→tabrik→tilak→yakun,
+   * `registry.ts`) — bu halol e'lon, podkast turlaridan farqli o'laroq
+   * janr TUZILMANI o'zgartirmaydi, faqat mazmun/ohangni (`guidance`).
    */
-  { id: "occasion", kinds: ["greeting"], encode: "string", probeA: "ustoz-kuni", probeB: "navroz", impacts: ["prompt", "structure", "review", "model"] },
+  { id: "occasion", kinds: ["greeting"], encode: "string", probeA: "ustoz-kuni", probeB: "navroz", impacts: ["prompt", "review", "model"] },
 ];
 
 /** Formadan yuboriladigan maydon nomlari (`lib/tools.ts` shu ro'yxatni to'ldiradi). */

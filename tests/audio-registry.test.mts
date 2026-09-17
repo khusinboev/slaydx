@@ -46,7 +46,11 @@ import {
  *   5. `audioTypeOf` noma'lum tur uchun `undefined` qaytardi —
  *      «noma'lum tur standartga tushadi» testi;
  *   6. `GREETING_TYPES` boshiga `ustoz-kuni` qo'yildi — «standart janr
- *      umumiy» testi.
+ *      umumiy» testi;
+ *   7. (WP-A2) `savol-javob` blok soni 4 dan 3 ga qaytarildi — «podkast
+ *      turlari haqiqatan tuzilmaviy farq qiladi» testi;
+ *   8. (WP-A2) `tushuntirish.speakers` 1 dan 2 ga qaytarildi — o'sha
+ *      test (monolog/dialog farqi).
  */
 
 test("2 kind, har biri o'z vositasiga bog'langan; xarita ikki tomonlama", () => {
@@ -159,7 +163,34 @@ test("replika TTS bo'lagiga sig'adi; ovoz soni 1 yoki 2", () => {
   assert.equal(normalizeSpeakerCount(3), AUDIO_LIMITS.speakersDefault, "3 ovozli podkast qabul qilindi");
   // Tabriknoma DOIM monolog (`greeting.md` §3).
   for (const t of audioTypesOf("greeting")) assert.equal(t.speakers, 1, `${t.id}: tabriknoma dialogga aylandi`);
-  for (const t of audioTypesOf("podcast")) assert.equal(t.speakers, 2, `${t.id}: podkast turi monolog`);
+  /*
+   * WP-A2: podkast turlari endi BIR XIL EMAS — `tushuntirish» bitta
+   * hikoyachi (monolog), `intervyu`/`savol-javob» dialog. MUTATSIYA 8:
+   * `tushuntirish.speakers` ni 2 ga qaytarsangiz shu yer qizaradi.
+   */
+  const PODCAST_SPEAKERS: Record<string, 1 | 2> = { tushuntirish: 1, intervyu: 2, "savol-javob": 2 };
+  for (const t of audioTypesOf("podcast")) assert.equal(t.speakers, PODCAST_SPEAKERS[t.id], `${t.id}: ovoz soni kutilganidan farq qiladi`);
+});
+
+test("WP-A2: podkast turlari HAQIQATAN tuzilmaviy farq qiladi (skelet va blok soni bir xil EMAS)", () => {
+  const types = audioTypesOf("podcast");
+  /*
+   * MUTATSIYA 7: `savol-javob.limits.blocks` ni 4 dan 3 ga qaytarsangiz
+   * bu tekshiruv qizaradi — reyestr yana «uchalasi bir xil» holatiga
+   * tushib qoladi.
+   */
+  const blocks = Object.fromEntries(types.map((t) => [t.id, t.limits.blocks]));
+  assert.deepEqual(blocks, { tushuntirish: 3, intervyu: 3, "savol-javob": 4 }, "savol-javob 4 blokli bo'lishi kerak — reyestr nomuvofiqligi (WP-A2)");
+
+  // Skeletlar bir xil OB'YEKT emas (referens ham, mazmun ham).
+  const skeletons = types.map((t) => t.skeleton);
+  assert.equal(new Set(skeletons.map((s) => s.join("|"))).size, 3, "uchala tur BIR XIL skeletni ishlatmoqda (reyestr nomuvofiqligi)");
+  // Har skeletning uzunligi `kirish + blocks + yakun` bilan mos.
+  for (const t of types) assert.equal(t.skeleton.length, t.limits.blocks + 2, `${t.id}: skelet uzunligi blok soniga mos emas`);
+
+  // `guidance` monolog/dialogga mos — tushuntirishda ikkinchi ovoz haqida so'z YO'Q.
+  const tushuntirish = types.find((t) => t.id === "tushuntirish")!;
+  assert.ok(!tushuntirish.guidance.some((g) => /\bB\b/.test(g) && /voice|speaker/i.test(g)), "monolog guidance ikkinchi ovozga ishora qilmasligi kerak");
 });
 
 /** Generik `JudgeSpec<C>` ni mezon nomini bilmasdan tekshirish uchun. */

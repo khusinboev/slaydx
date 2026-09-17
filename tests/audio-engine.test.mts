@@ -135,7 +135,13 @@ async function build(tool: ToolConfig, values: FormValues, o: { answers?: AudioL
   return { built, complete, tts: tts as TtsProvider & { calls: Synth[] } };
 }
 
-const PODCAST_VALUES: FormValues = { topic: "Uyqu va xotira", durationMin: 2, podcastType: "tushuntirish", language: "uz", mode: "topic" };
+/*
+ * `intervyu` — DIALOG turi (WP-A2 tuzatishi): bu fayldagi testlar ikki
+ * ovozli suhbatni (voiceB, A/B almashinuvi) sinaydi. Standart tur
+ * `tushuntirish` endi MONOLOG (`speakers: 1`) — o'ziga xos monolog
+ * testi pastda alohida ("monolog: bitta ovoz, voiceB YO'Q").
+ */
+const PODCAST_VALUES: FormValues = { topic: "Uyqu va xotira", durationMin: 2, podcastType: "intervyu", language: "uz", mode: "topic" };
 
 /* ══════════════════════════ asosiy oqim ══════════════════════════ */
 
@@ -155,7 +161,7 @@ test("podkast: MP3, transkript, model va sarf — uchidan uchiga", async () => {
   const model = built.doc.audio;
   assert.ok(model);
   assert.equal(model.kind, "podcast");
-  assert.equal(model.type, "tushuntirish");
+  assert.equal(model.type, "intervyu");
   assert.equal(model.language, "uz");
   assert.equal(model.script.length, 8);
   // MUTATSIYA 2: provayder qaytargan (noto'g'ri) yig'indi olinsa
@@ -170,6 +176,24 @@ test("podkast: MP3, transkript, model va sarf — uchidan uchiga", async () => {
   assert.equal(built.doc.sections.length, 1);
   assert.ok(built.doc.sections[0].blocks.length >= 8);
   assert.ok(built.doc.sections[0].blocks[0].kind === "p" && built.doc.sections[0].blocks[0].text.startsWith("A:"));
+});
+
+/**
+ * WP-A2: `tushuntirish` endi MONOLOG (`registry.ts` — reyestr
+ * nomuvofiqligi tuzatilgach). Dvigatel `input.speakers`/`spec.speakers`
+ * ni O'ZI hisoblaydi (forma bermaydi), ya'ni bu test faqat turni
+ * tanlaydi va qolganini `buildAudioArtifact`ning o'ziga qoldiradi.
+ */
+test("podkast «tushuntirish»: MONOLOG — bitta ovoz, voiceB YO'Q (dialog turidan farqli)", async () => {
+  const values: FormValues = { ...PODCAST_VALUES, podcastType: "tushuntirish" };
+  const monolog = scriptOf(Array.from({ length: 8 }, () => ({ speaker: "A", words: 37 })));
+  const { built, tts } = await build(podcastTool(), values, { answers: [monolog] });
+  assert.ok(built);
+  const model = built.doc.audio!;
+  assert.equal(model.type, "tushuntirish");
+  assert.ok(model.script.every((l) => l.speaker === "A"), "monologda hamma replika A bo'lishi kerak");
+  assert.equal(model.voiceB, undefined, "monologda voiceB yozilmasligi kerak");
+  assert.ok(tts.calls.every((c) => c.voice === "azure-A"), "monologda hamma bo'lak bir ovozda aytilishi kerak");
 });
 
 test("har replika ALOHIDA so'rov, rol bo'yicha ovoz va replikadan keyin pauza", async () => {

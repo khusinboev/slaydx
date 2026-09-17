@@ -114,7 +114,13 @@ export function audioSystemPrompt(ctx: AudioContext): string {
     ...spec.guidance.map((g) => `- ${g}`),
     "",
     skeletonBlock(spec),
-    podcast ? `The three middle blocks are the body of the episode — ${(spec as PodcastTypeSpec).limits.blocks} of them, each on a different facet.` : "",
+    /*
+     * MUTATSIYA (WP-A2): bu qator ilgari SO'Z bilan «three» deb yozardi
+     * (`limits.blocks` sonidan mustaqil) — `savol-javob` turi 4 blokka
+     * o'tganda son to'g'ri, lekin so'z noto'g'ri edi. Endi son YAGONA
+     * manba: `spec.skeleton` uzunligidan chiqadi (kirish+yakundan tashqari).
+     */
+    podcast ? `The middle blocks are the body of the episode — ${(spec as PodcastTypeSpec).limits.blocks} of them, each on a different facet.` : "",
     "",
     rolesBlock(input.speakers),
     "",

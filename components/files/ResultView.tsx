@@ -261,9 +261,21 @@ export function ResultView({ id }: { id: string }) {
    * oltinchi va yettinchi model. Panel ularda ham bir xil `DocReview`
    * shaklini ko'radi; farq faqat qaysi guruhlar chizilishida va
    * bandma-band «Tuzatish» borligida (pastda).
+   *
+   * AUDIT-22 WP-A2: audio (`doc.audio.review`) — SAKKIZINCHI model.
+   * Hisobot ko'rinadi, lekin «Tuzatish»/«Hammasini tuzatish» YO'Q
+   * (`noFix`/`noPolish` pastda) — sayqal audio dvigatelida SINTEZDAN
+   * OLDIN ishlaydi, natija sahifasidan qayta chaqirish qayta TTS
+   * to'lovi bo'lardi va `POLISHERS` jadvalida ataylab yo'q.
    */
   const review =
-    gen.doc?.article?.review ?? gen.doc?.essay?.review ?? gen.doc?.work?.review ?? gen.doc?.teacher?.review ?? gen.doc?.game?.review ?? gen.doc?.infographic?.review;
+    gen.doc?.article?.review ??
+    gen.doc?.essay?.review ??
+    gen.doc?.work?.review ??
+    gen.doc?.teacher?.review ??
+    gen.doc?.game?.review ??
+    gen.doc?.infographic?.review ??
+    gen.doc?.audio?.review;
   /*
    * O'YIN va PLAKAT (AUDIT-21 WP-D).
    *
@@ -283,8 +295,21 @@ export function ResultView({ id }: { id: string }) {
    */
   const isGame = Boolean(gen.doc?.game);
   const isPoster = Boolean(gen.doc?.infographic);
-  const noFix = isEssay || isPoster;
-  const hideGroups = isEssay || isGame || isPoster ? ESSAY_HIDDEN_GROUPS : undefined;
+  /*
+   * AUDIT-22 WP-A2: audio — hujjat MODELIDAN (`isGame`/`isPoster` bilan
+   * ayni naqsh, vosita id sidan emas).
+   */
+  const isAudio = Boolean(gen.doc?.audio);
+  const noFix = isEssay || isPoster || isAudio;
+  /*
+   * «Hammasini tuzatish» AUDIODA YO'Q — bu boshqa oilalardan farq:
+   * inshoda/o'yinda/plakatda avto-sayqal ASOSIY yo'l (nishon bitta
+   * bo'lsa ham), audioda esa sayqal SINTEZDAN OLDIN, dvigatel ICHIDA
+   * ishlaydi (fayl izohi) — `POLISHERS` jadvalida ataylab yo'q, ya'ni
+   * bu yerdan chaqirilsa server 409 «eski formatda» qaytarardi.
+   */
+  const noPolish = isAudio;
+  const hideGroups = isEssay || isGame || isPoster || isAudio ? ESSAY_HIDDEN_GROUPS : undefined;
   /*
    * O'YIN HAVOLASI (AUDIT-22 WP-C) — faqat O'YNALADIGAN vositalarda.
    *
@@ -463,6 +488,13 @@ export function ResultView({ id }: { id: string }) {
              * baholovchisiz nusxasi bo'lardi (server ham 422 qaytaradi).
              * O'yinlarda esa bor — ta'rif/karta matni to'rga tegmasdan
              * almashadi.
+             *
+             * AUDIODA (`noPolish`) «Hammasini tuzatish» HAM yo'q —
+             * boshqa `noFix` oilalaridan farqi shu: ularda avto-sayqal
+             * baribir ishlaydi, audioda esa sayqal MP3 sintezidan OLDIN
+             * dvigatel ichida allaqachon bajarilgan (qayta chaqirish —
+             * TTS ni ikkinchi marta to'lash). Hisobot (`review`) o'zi
+             * baribir ko'rinadi.
              */
             <details open className="no-print max-h-[45vh] shrink-0 overflow-y-auto border-b px-3 py-2 sm:px-4" data-article-review-panel>
               <summary className="cursor-pointer text-sm font-medium select-none">
@@ -474,8 +506,7 @@ export function ResultView({ id }: { id: string }) {
                   hrefBase={`/uz/${gen.type}`}
                   {...(noFix ? {} : { onFix: (fix: NonNullable<ReviewCheck["fix"]>) => void onFix(fix) })}
                   fixing={fixing}
-                  onPolish={() => void onPolish()}
-                  polishing={polishing}
+                  {...(noPolish ? {} : { onPolish: () => void onPolish(), polishing })}
                   {...(hideGroups ? { hideGroups } : {})}
                 />
               </div>
