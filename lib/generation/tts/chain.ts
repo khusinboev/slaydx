@@ -28,6 +28,7 @@
  */
 import {
   TTS_LIMITS,
+  TTS_PROVIDERS,
   TtsError,
   type TtsAudio,
   type TtsProvider,
@@ -285,3 +286,36 @@ export function asTtsChain(x: TtsChain | TtsProvider): TtsChain {
 }
 
 export const ttsChain = makeTtsChain();
+
+/**
+ * Zanjirni BITTA-PARCHA provayder shaklida beradi — tinglash o'yini uchun.
+ *
+ * Nega kerak: `games/engine.ts` seam'i `TtsProvider` (`synthesize(text)`)
+ * kutadi — u har so'z uchun alohida parcha sintez qiladi va har birini
+ * o'z aktiviga yozadi (`putAsset`). Zanjir esa `synthesizeAll(parts)`
+ * bilan ishlaydi. Bu adapter ikkalasini birlashtiradi: bitta matn →
+ * bitta `TtsAudio`; provayder tanlovi, qayta urinish va yiqilganda
+ * keyingisiga o'tish zanjirning o'zida qoladi.
+ *
+ * `voice` e'tiborsiz: ovoz til jadvalidan (`ttsGroups`) olinadi — shunda
+ * tinglash va podkast bir xil ovozda chiqadi va `TTS_VOICE_*` bitta
+ * joydan boshqariladi.
+ */
+export function providerOfChain(chain: TtsChain): TtsProvider {
+  return {
+    get id(): TtsProviderId {
+      return chain.providersFor("uz")[0] ?? TTS_PROVIDERS[0];
+    },
+    configured: () => chain.configured(),
+    async synthesize(text, opts) {
+      const run = await chain.synthesizeAll([{ text }], {
+        lang: opts.lang,
+        ...(opts.speed !== undefined ? { speed: opts.speed } : {}),
+        ...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}),
+      });
+      const audio = run.audios[0];
+      if (!audio) throw new TtsError(run.provider, "sintez natijasi bo'sh", { retryable: false });
+      return audio;
+    },
+  };
+}

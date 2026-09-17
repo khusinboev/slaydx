@@ -53,6 +53,7 @@ const { pool } = await import("../lib/server/db.ts");
 
 const { GET } = await import("../app/api/o/[token]/route.ts");
 const { POST, SUBMIT_PER_MINUTE } = await import("../app/api/o/[token]/submit/route.ts");
+const { GET: AUDIO, audioAssetIds } = await import("../app/api/o/[token]/audio/[assetId]/route.ts");
 const { csvCell, resultsCsv } = await import("../app/api/generations/[id]/results/route.ts");
 const { shareUrl } = await import("../app/api/generations/[id]/share/route.ts");
 const { sampleGameDoc } = await import("../lib/generation/games/samples.ts");
@@ -82,7 +83,7 @@ function sessionRow(doc: AcademicDoc, over: Record<string, unknown> = {}) {
 }
 
 /** `session` — sessiya qatori (yoki `null`), `hits` — rate limit hisobi. */
-function mockDb(t: TestContext, o: { session?: Record<string, unknown> | null; hits?: number } = {}): Seen[] {
+function mockDb(t: TestContext, o: { session?: Record<string, unknown> | null; hits?: number; asset?: { bytes: Buffer; mime: string } } = {}): Seen[] {
   const seen: Seen[] = [];
   const run = async (text: string, params: unknown[] = []) => {
     const q = norm(text);
@@ -91,6 +92,7 @@ function mockDb(t: TestContext, o: { session?: Record<string, unknown> | null; h
     if (/INSERT INTO rate_limits/.test(q)) out = [{ hits: o.hits ?? 1 }];
     else if (/FROM game_sessions s/.test(q)) out = o.session === null ? [] : [o.session ?? sessionRow(sampleGameDoc("sorting"))];
     else if (/INSERT INTO game_results/.test(q)) out = [{ id: "r1", player_name: "Ali", score: 1, total: 12, seconds: 5, answers_json: {}, created_at: NOW }];
+    else if (/FROM generation_assets a/.test(q)) out = o.asset === undefined ? [] : [o.asset];
     return { rows: out, rowCount: out.length };
   };
   const p = pool();
@@ -274,4 +276,61 @@ test("egasi route lari: `requireUser` + egalik, ochiq route larda esa YO'Q", () 
   assert.match(submit, /limit\(`o:submit:/);
   assert.match(submit, /scoreAnswers\(/, "ball serverda hisoblanmayapti");
   assert.ok(!/body\.score/.test(submit), "MUTATSIYA: klient balli o'qilyapti");
+});
+
+/* ───────────── ochiq tinglash audiosi — `/api/o/[token]/audio/[assetId]` (AUDIT-22 R) ───────────── */
+
+const ASSET = "abcdef0123456789abcdef0123456789";
+const actx = (token = TOKEN, assetId = ASSET) => ({ params: Promise.resolve({ token, assetId }) });
+function listeningDoc(assetId: string | undefined = ASSET): AcademicDoc {
+  const doc = structuredClone(sampleGameDoc("listening"));
+  const items = doc.game?.listening?.items ?? [];
+  assert.ok(items.length >= 2, "namunada kamida 2 topshiriq");
+  if (assetId) items[0] = { ...items[0], audioAssetId: assetId };
+  return doc;
+}
+
+test("audio: sessiya + ro'yxatdagi aktiv → 200 audio/mpeg, ochiq kesh, egalik SQL sessiya egasi bilan", async (t) => {
+  const seen = mockDb(t, { session: sessionRow(listeningDoc(), { kind: "listening" }), asset: { bytes: Buffer.from([0xff, 0xfb, 1, 2]), mime: "audio/mpeg" } });
+  const res = await AUDIO(new Request(`http://localhost:3000/api/o/${TOKEN}/audio/${ASSET}`), actx());
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get("content-type"), "audio/mpeg");
+  assert.equal(res.headers.get("content-length"), "4");
+  assert.match(res.headers.get("cache-control") ?? "", /public/);
+  assert.equal(res.headers.get("x-content-type-options"), "nosniff");
+  assert.equal(Buffer.from(await res.arrayBuffer()).length, 4);
+  const q = seen.find((s) => /FROM generation_assets a/.test(s.text));
+  assert.ok(q, "aktiv SQL chaqirildi");
+  assert.deepEqual(q.params, ["a1b2c3d4-0000-4000-8000-000000000001", ASSET, "42"], "egalik — sessiyadagi generatsiya + egasi id");
+});
+
+test("audio: ro'yxatda YO'Q aktiv — 404 va aktiv SQL umuman chaqirilmaydi (token boshqa aktivlarga kalit emas)", async (t) => {
+  const seen = mockDb(t, { session: sessionRow(listeningDoc(), { kind: "listening" }), asset: { bytes: Buffer.from([1]), mime: "audio/mpeg" } });
+  const other = "0000000000000000000000000000ffff";
+  const res = await AUDIO(new Request(`http://localhost:3000/api/o/${TOKEN}/audio/${other}`), actx(TOKEN, other));
+  assert.equal(res.status, 404);
+  assert.ok(!seen.some((s) => /FROM generation_assets a/.test(s.text)), "aktiv SQL chaqirilmadi");
+});
+
+test("audio: tinglash bo'lmagan o'yin, noma'lum token, yaroqsiz id, tugallanmagan ish — hammasi 404", async (t) => {
+  mockDb(t, { session: sessionRow(sampleGameDoc("sorting")), asset: { bytes: Buffer.from([1]), mime: "audio/mpeg" } });
+  assert.equal((await AUDIO(new Request(`http://localhost:3000/api/o/${TOKEN}/audio/${ASSET}`), actx())).status, 404, "saralash o'yinida audio yo'q");
+  mockDb(t, { session: null });
+  assert.equal((await AUDIO(new Request(`http://localhost:3000/api/o/${TOKEN}/audio/${ASSET}`), actx())).status, 404, "token yo'q");
+  mockDb(t, { session: sessionRow(listeningDoc(), { kind: "listening", status: "RUNNING" }), asset: { bytes: Buffer.from([1]), mime: "audio/mpeg" } });
+  assert.equal((await AUDIO(new Request(`http://localhost:3000/api/o/${TOKEN}/audio/${ASSET}`), actx())).status, 404, "tugallanmagan");
+  const bad = "../../etc";
+  assert.equal((await AUDIO(new Request(`http://localhost:3000/api/o/${TOKEN}/audio/x`), actx(TOKEN, bad))).status, 404, "yaroqsiz aktiv id");
+});
+
+test("audio: MIME oq ro'yxatdan tashqarida bo'lsa `octet-stream` (sniff yo'q)", async (t) => {
+  mockDb(t, { session: sessionRow(listeningDoc(), { kind: "listening" }), asset: { bytes: Buffer.from([1]), mime: "text/html" } });
+  const res = await AUDIO(new Request(`http://localhost:3000/api/o/${TOKEN}/audio/${ASSET}`), actx());
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get("content-type"), "application/octet-stream");
+});
+
+test("audioAssetIds: faqat mavjud id lar, kichik harfda", () => {
+  const ids = audioAssetIds({ kind: "listening", items: [{ audioAssetId: "ABC123ab" }, {}, { audioAssetId: "" }] });
+  assert.deepEqual([...ids], ["abc123ab"]);
 });

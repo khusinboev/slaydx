@@ -26,7 +26,7 @@ import { buildEssayDoc } from "./essay/engine";
 import { buildWorkDoc } from "./work/engine";
 import { buildTeacherDoc } from "./teacher/engine";
 import { TEACHER_TOOL_LIST } from "./teacher/types";
-import { buildGameDoc } from "./games/engine";
+import { buildGameDoc, type GameBuildOpts } from "./games/engine";
 import { GAME_TOOL_LIST } from "./games/types";
 import { AUDIO_TOOL_LIST } from "./audio/types";
 import { thesisTypeId } from "../tools";
@@ -868,7 +868,13 @@ const AUDIO_TOOLS = new Set<string>(AUDIO_TOOL_LIST);
  * (`AcademicDoc | null`) o'zgarmaydi — sarf `onCost` orqali chiqadi,
  * `index.ts` uni `BuiltFile.cost` ga yozadi.
  */
-export type WriteExtras = Pick<ArticleBuildOpts, "onStage" | "source"> & { onCost?: (cost: NonNullable<BuiltFile["cost"]>) => void };
+/*
+ * `tts`/`putAsset` — tinglash o'yini seam'i (AUDIT-22 R): TTS parchalari
+ * aktivga yoziladi; `generationId` ni faqat worker biladi, shuning uchun
+ * `putAsset` ham u yerdan keladi. Bo'lmasa o'yin audiosiz chiqadi.
+ */
+export type WriteExtras = Pick<ArticleBuildOpts, "onStage" | "source"> &
+  Pick<GameBuildOpts, "tts" | "putAsset"> & { onCost?: (cost: NonNullable<BuiltFile["cost"]>) => void };
 
 export async function writeWithLlm(
   meta: DocMeta,
@@ -973,6 +979,8 @@ export async function writeWithLlm(
       ...(extras.onStage ? { onStage: extras.onStage } : {}),
       ...(extras.source ? { source: extras.source } : {}),
       ...(extras.onCost ? { onCost: extras.onCost } : {}),
+      ...(extras.tts ? { tts: extras.tts } : {}),
+      ...(extras.putAsset ? { putAsset: extras.putAsset } : {}),
     });
     return built ? built.doc : null;
   }

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { chainOfProvider, makeTtsChain, ttsGroups, ttsVoiceChain, ttsVoiceEnvName } from "../lib/generation/tts/chain.ts";
+import { chainOfProvider, makeTtsChain, providerOfChain, ttsGroups, ttsVoiceChain, ttsVoiceEnvName } from "../lib/generation/tts/chain.ts";
 import { TtsError, type TtsAudio, type TtsProvider, type TtsProviderId, type TtsSynthOpts } from "../lib/generation/tts/types.ts";
 
 /**
@@ -241,4 +241,24 @@ test("chainOfProvider bitta adapterni o'raydi (test/lab yo'li, jadvalga qaramayd
 
   const off = chainOfProvider(fake("azure", { configured: false }));
   await assert.rejects(() => off.synthesizeAll(parts("A"), { lang: "uz" }), /sozlanmagan/);
+});
+
+/* ───────────── providerOfChain — tinglash seam'i uchun bitta-parcha adapter (AUDIT-22 R) ───────────── */
+
+test("providerOfChain: bitta matn → zanjir orqali bitta audio; ovoz jadvaldan, `voice` e'tiborsiz", async () => {
+  const p = fake("azure");
+  const prov = providerOfChain(chainOfProvider(p, ["uz-UZ-MadinaNeural", "uz-UZ-SardorNeural"]));
+  assert.equal(prov.configured(), true);
+  assert.equal(prov.id, "azure");
+  const audio = await prov.synthesize("salom", { lang: "uz", voice: "aisha:whatever" });
+  assert.deepEqual([...(audio.mp3 ?? [])], [1, 2, 3]);
+  assert.equal(audio.chars, 5);
+  assert.equal(p.calls.length, 1);
+  assert.equal(p.calls[0].voice, "uz-UZ-MadinaNeural", "ovoz zanjir jadvalidan (A ovozi)");
+});
+
+test("providerOfChain: sozlanmagan zanjir — `configured()` false, sintez aniq xato (jim bo'sh emas)", async () => {
+  const prov = providerOfChain(chainOfProvider(fake("azure", { configured: false })));
+  assert.equal(prov.configured(), false);
+  await assert.rejects(() => prov.synthesize("salom", { lang: "uz" }), /sozlanmagan/);
 });

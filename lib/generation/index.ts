@@ -32,6 +32,8 @@ import { crosswordInputFromValues } from "./games/crossword/input";
 import { gamePromisedCount, normalizeGameCount } from "./games/types";
 import { audioKindOf } from "./audio/registry";
 import { buildAudioArtifact } from "./audio/engine";
+import { providerOfChain, ttsChain } from "./tts/chain";
+import type { TtsProvider } from "./tts/types";
 import type { AcademicDoc, BuiltFile, DocMeta } from "./types";
 import type { FormValues, ToolConfig } from "../types";
 
@@ -188,6 +190,14 @@ export type BuildOptions = {
    * formati kirishga teng bo'ladi (WP3 shu tarmoqni yozadi).
    */
   source?: TranslationSource;
+  /**
+   * Tinglash o'yini (AUDIT-22 R): sintez qilingan parchani AKTIVGA yozadi
+   * va id qaytaradi — worker `putAssetBytes(job.id, …)` beradi. Berilmasa
+   * o'yin audiosiz chiqadi (bosma varaq baribir bor).
+   */
+  putAsset?: (bytes: Uint8Array, mime: string) => Promise<string>;
+  /** TTS provayderi — berilmasa standart zanjir (`tts/chain.ts`); testlar soxtasini beradi. */
+  tts?: TtsProvider;
   /**
    * Umumiy bosqich hisoboti — slaydning `onProgress` idan FARQLI.
    *
@@ -599,7 +609,13 @@ export async function buildArtifact(
    * (`source`) va LLM sarfini (`onCost` → `BuiltFile.cost`) shu yo'ldan oladi.
    */
   let cost: BuiltFile["cost"];
-  const llmDoc = await writeWithLlm(meta, values, deadline, { onStage: opts.onStage, source: opts.source, onCost: (c) => (cost = c) });
+  const llmDoc = await writeWithLlm(meta, values, deadline, {
+    onStage: opts.onStage,
+    source: opts.source,
+    onCost: (c) => (cost = c),
+    // Tinglash: TTS zanjiri + aktiv yozuvchi (faqat `putAsset` berilganda — aks holda sintez BEHUDA bo'lardi).
+    ...(opts.putAsset ? { putAsset: opts.putAsset, tts: opts.tts ?? providerOfChain(ttsChain) } : {}),
+  });
 
   /**
    * Kalit bor, lekin AI matn yozmadi — shablonga tushmaymiz.
