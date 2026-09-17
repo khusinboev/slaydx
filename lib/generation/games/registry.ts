@@ -17,6 +17,13 @@
 import type { JudgeSpec } from "../report/types";
 import { GAME_LIMITS, GAME_TOOL_IDS, isGameToolId, type FlashcardType, type GameKind } from "./types";
 
+/*
+ * AUDIT-22 R0: oila ikkitadan TO'RTTAGA chiqdi — interaktiv o'yinlar
+ * (saralash, tinglash) shu reyestrga qo'shildi. Ular bosma emas,
+ * EKRAN o'yinlari (`app/o/[token]`), lekin reyestr shakli bir xil
+ * qoladi: dvigatel, hisobot va forma o'sha to'rt joydan o'qiydi.
+ */
+
 /* ══════════════════════════ umumiy shakl ══════════════════════════ */
 
 export type GameLabel = { uz: string; ru: string; en: string };
@@ -104,10 +111,63 @@ function specOf<C extends string>(
   };
 }
 
+/* ── saralash (AUDIT-22, `sorting-game.md` §4) ── */
+
+const SORTING_JUDGE_ROLE = "a subject teacher checking a sorting game before pupils play it on their phones";
+
+export const SORTING_JUDGE_CRITERIA = ["categoryClarity", "itemFit", "unambiguity", "gradeLevel", "balance"] as const;
+export type SortingJudgeCriterion = (typeof SORTING_JUDGE_CRITERIA)[number];
+
+const SORTING_JUDGE_LABELS: Record<SortingJudgeCriterion, string> = {
+  categoryClarity: "Toifa nomlarining aniqligi",
+  itemFit: "Element ↔ toifa mosligi",
+  unambiguity: "Bir ma'nolilik",
+  gradeLevel: "Sinf/fan darajasi",
+  balance: "Toifalar muvozanati",
+};
+
+const SORTING_JUDGE_DESCRIBE: Record<SortingJudgeCriterion, string> = {
+  categoryClarity: "is each category name a term the pupil already knows, short enough to read on a phone button, and clearly different from the others?",
+  itemFit: "does every item genuinely belong to the category it is listed under — would a subject teacher place it there without hesitating?",
+  unambiguity:
+    "the decisive criterion: could ANY item legitimately belong to two of these categories? A tomato under «vegetables» while «fruit» is also on screen makes the game unwinnable and is the worst defect here.",
+  gradeLevel: "are the items ones a pupil of the stated grade has met, rather than specialist examples they would have to guess?",
+  balance: "do the categories carry a comparable number of items, and is no category filled with near-identical items?",
+};
+
+/* ── tinglash (AUDIT-22, `listening-game.md` §4) ── */
+
+const LISTENING_JUDGE_ROLE = "a language teacher checking a listening exercise before pupils play it with headphones";
+
+export const LISTENING_JUDGE_CRITERIA = ["wordChoice", "distractorQuality", "translationAccuracy", "gradeLevel", "pronounceability"] as const;
+export type ListeningJudgeCriterion = (typeof LISTENING_JUDGE_CRITERIA)[number];
+
+const LISTENING_JUDGE_LABELS: Record<ListeningJudgeCriterion, string> = {
+  wordChoice: "So'zlarning tanlovi",
+  distractorQuality: "Distraktorlarning sifati",
+  translationAccuracy: "Tarjimaning to'g'riligi",
+  gradeLevel: "Daraja mosligi",
+  pronounceability: "Talaffuz qilinishi",
+};
+
+const LISTENING_JUDGE_DESCRIBE: Record<ListeningJudgeCriterion, string> = {
+  wordChoice: "do the words belong to the stated topic and to everyday use, rather than being rare dictionary entries a learner will never meet again?",
+  distractorQuality:
+    "are the three wrong options from the SAME semantic field as the answer (all places, all foods), so the pupil must actually hear the word — yet none of them a possible second translation?",
+  translationAccuracy: "is the marked answer the normal translation of the heard word in this context, not a loose association?",
+  gradeLevel: "is the vocabulary appropriate for a beginner-to-intermediate learner of the target language?",
+  pronounceability:
+    "read the heard text aloud: is it one word or a short phrase that a speech synthesiser can say unambiguously — no abbreviations, no digits, no spelling-out?",
+};
+
 const crosswordJudge = (typeLabel: string, o?: JudgeOpts<CrosswordJudgeCriterion>) =>
   specOf(CROSSWORD_JUDGE_CRITERIA, CROSSWORD_JUDGE_DESCRIBE, CROSSWORD_JUDGE_LABELS, CROSSWORD_JUDGE_ROLE, "crossword type", typeLabel, o);
 const cardsJudge = (typeLabel: string, o?: JudgeOpts<CardsJudgeCriterion>) =>
   specOf(CARDS_JUDGE_CRITERIA, CARDS_JUDGE_DESCRIBE, CARDS_JUDGE_LABELS, CARDS_JUDGE_ROLE, "card type", typeLabel, o);
+const sortingJudge = (typeLabel: string, o?: JudgeOpts<SortingJudgeCriterion>) =>
+  specOf(SORTING_JUDGE_CRITERIA, SORTING_JUDGE_DESCRIBE, SORTING_JUDGE_LABELS, SORTING_JUDGE_ROLE, "sorting type", typeLabel, o);
+const listeningJudge = (typeLabel: string, o?: JudgeOpts<ListeningJudgeCriterion>) =>
+  specOf(LISTENING_JUDGE_CRITERIA, LISTENING_JUDGE_DESCRIBE, LISTENING_JUDGE_LABELS, LISTENING_JUDGE_ROLE, "listening type", typeLabel, o);
 
 /* ══════════════════════════ tur shakllari ══════════════════════════ */
 
@@ -140,11 +200,43 @@ export type CardsTypeSpec = TypeBase<"flashcards"> & {
   judge: JudgeSpec<CardsJudgeCriterion>;
 };
 
-export type GameTypeSpec = CrosswordTypeSpec | CardsTypeSpec;
+export type SortingTypeSpec = TypeBase<"sorting"> & {
+  limits: {
+    /** Toifa soni chiplari va standarti (narxga TA'SIR QILMAYDI). */
+    categories: readonly number[];
+    categoriesDefault: number;
+    /** Toifadagi element soni chiplari va standarti. */
+    itemsPerCategory: readonly number[];
+    itemsPerCategoryDefault: number;
+    /** Toifa nomi uzunligi (belgi) [min, max]. */
+    nameChars: readonly [number, number];
+    /** Element matni uzunligi (belgi) [min, max]. */
+    itemChars: readonly [number, number];
+  };
+  judge: JudgeSpec<SortingJudgeCriterion>;
+};
+
+export type ListeningTypeSpec = TypeBase<"listening"> & {
+  limits: {
+    /** Topshiriq soni chiplari va standarti. */
+    items: readonly number[];
+    itemsDefault: number;
+    /** Variantlar soni [min, max] va standarti. */
+    options: readonly [number, number];
+    optionsDefault: number;
+    /** Eshitiladigan matn uzunligi (belgi) [min, max]. */
+    textChars: readonly [number, number];
+  };
+  judge: JudgeSpec<ListeningJudgeCriterion>;
+};
+
+export type GameTypeSpec = CrosswordTypeSpec | CardsTypeSpec | SortingTypeSpec | ListeningTypeSpec;
 
 type SpecByKind = {
   crossword: CrosswordTypeSpec;
   flashcards: CardsTypeSpec;
+  sorting: SortingTypeSpec;
+  listening: ListeningTypeSpec;
 };
 
 /* ══════════════════════════ skeletlar ══════════════════════════ */
@@ -162,6 +254,32 @@ const CARDS_SKELETON = [
   "Bosish ko'rsatmasi (ikki tomonlama, uzun chekka bo'ylab)",
   "Old yuzlar varag'i (2 × 4)",
   "Orqa yuzlar varag'i (oynali tartib)",
+] as const;
+
+/**
+ * Saralash — BOSMA versiya skeleti (`sorting-game.md` §3): toifalar
+ * ustun sifatida, elementlar pastda aralash, javob kaliti alohida bet.
+ * Interaktiv ekran esa shu modeldan (`publicGameView`) chiziladi.
+ */
+const SORTING_SKELETON = [
+  "Sarlavha (mavzu, fan, sinf)",
+  "Ko'rsatma (elementni o'z toifasiga joylashtiring)",
+  "Toifalar jadvali (ustunlar)",
+  "Aralashtirilgan elementlar ro'yxati",
+  "Javob kaliti (yangi betdan)",
+] as const;
+
+/**
+ * Tinglash — bosma versiya lug'at/yodlash varag'i (`listening-game.md`
+ * §3): audio bosma versiyada yo'q, shuning uchun jadval «so'z —
+ * tarjima» bo'ladi, variantlar esa javob kaliti bilan.
+ */
+const LISTENING_SKELETON = [
+  "Sarlavha (mavzu, tillar juftligi)",
+  "Ko'rsatma (audioni tinglang va to'g'ri tarjimani tanlang)",
+  "So'zlar jadvali (so'z — tarjima)",
+  "Variantlar ro'yxati",
+  "Javob kaliti (yangi betdan)",
 ] as const;
 
 /* ══════════════════════════ turlar ══════════════════════════ */
@@ -275,9 +393,111 @@ const CARDS_TYPES: readonly CardsTypeSpec[] = [
   },
 ];
 
+/* ── saralash (AUDIT-22) ── */
+
+const SORTING_LIMITS = {
+  categories: GAME_LIMITS.categoryCounts,
+  categoriesDefault: GAME_LIMITS.categoryCountDefault,
+  itemsPerCategory: GAME_LIMITS.itemsPerCategoryCounts,
+  itemsPerCategoryDefault: GAME_LIMITS.itemsPerCategoryDefault,
+  nameChars: [GAME_LIMITS.categoryNameCharsMin, GAME_LIMITS.categoryNameCharsMax] as const,
+  itemChars: [GAME_LIMITS.sortItemCharsMin, GAME_LIMITS.sortItemCharsMax] as const,
+};
+
+const SORTING_TYPES: readonly SortingTypeSpec[] = [
+  {
+    kind: "sorting",
+    id: "toifa",
+    label: { uz: "Toifalar bo'yicha", ru: "По категориям", en: "By category" },
+    hint: "Elementlarni fan toifalariga ajratish — eng keng tarqalgan format",
+    skeleton: SORTING_SKELETON,
+    limits: SORTING_LIMITS,
+    guidance: [
+      "Category sort: each category is a class of objects from the subject (mammals, metals, nouns) and every item is one short example of exactly ONE of them.",
+      "The decisive rule: no item may fit two categories on the screen. Before writing an item, check it against EVERY category, not only its own.",
+      "Items are one or two words — they are shown on a phone-sized button; a whole sentence breaks the layout and turns the game into reading practice.",
+      "Fill the categories evenly and avoid near-duplicates («olma», «olma daraxti») inside one category.",
+    ],
+    judge: sortingJudge("Category sorting game"),
+  },
+  {
+    kind: "sorting",
+    id: "qarama-qarshi",
+    label: { uz: "Qarama-qarshi juftlik", ru: "Противоположности", en: "Opposite pair" },
+    hint: "Ikki qutbli saralash: to'g'ri/xato, foydali/zararli, tirik/jonsiz",
+    skeleton: SORTING_SKELETON,
+    /*
+     * Ikki qutb — ikkita toifa: chip ro'yxati bir elementli. Forma uni
+     * baribir ko'rsatadi (tanlov cheklangani ko'rinsin), dvigatel esa
+     * boshqa qiymat kelsa ham 2 ga tushiradi (`sortingTypeLimits`).
+     */
+    limits: { ...SORTING_LIMITS, categories: [2] as readonly number[], categoriesDefault: 2 },
+    guidance: [
+      "Two-pole sort: exactly TWO opposite categories (true/false, useful/harmful, living/non-living) named as a clean pair.",
+      "Every item must be decisively on one pole for a pupil of this grade — «sometimes harmful» items belong to a different exercise.",
+      "Keep the two poles equally full: a 9-versus-1 split lets the pupil guess by pressing one button.",
+      "Items stay one or two words, as in the category sort.",
+    ],
+    judge: sortingJudge("Two-pole sorting game", {
+      describe: {
+        balance: "are the two poles equally full? An uneven split lets a pupil score by pressing the bigger side every time.",
+      },
+    }),
+  },
+];
+
+/* ── tinglash (AUDIT-22) ── */
+
+const LISTENING_LIMITS = {
+  items: GAME_LIMITS.listeningCounts,
+  itemsDefault: GAME_LIMITS.listeningCountDefault,
+  options: [GAME_LIMITS.listeningOptionsMin, GAME_LIMITS.listeningOptionsMax] as const,
+  optionsDefault: GAME_LIMITS.listeningOptionsDefault,
+  textChars: [GAME_LIMITS.listeningTextCharsMin, GAME_LIMITS.listeningTextCharsMax] as const,
+};
+
+const LISTENING_TYPES: readonly ListeningTypeSpec[] = [
+  {
+    kind: "listening",
+    id: "sozlar",
+    label: { uz: "So'zlar", ru: "Слова", en: "Words" },
+    hint: "Bitta so'z eshitiladi — o'quvchi tarjimasini tanlaydi",
+    skeleton: LISTENING_SKELETON,
+    limits: LISTENING_LIMITS,
+    guidance: [
+      "Word listening: each item is ONE everyday word of the target language belonging to the stated topic.",
+      "The three wrong options are translations of OTHER words from the same semantic field — never a second valid translation of the heard word.",
+      "Write the heard text exactly as it is spoken: no articles bolted on, no digits, no abbreviations, no spelling.",
+      "Every word appears once in the set; a repeated word wastes a question and reveals the answer.",
+    ],
+    judge: listeningJudge("Single-word listening game"),
+  },
+  {
+    kind: "listening",
+    id: "iboralar",
+    label: { uz: "Iboralar", ru: "Фразы", en: "Phrases" },
+    hint: "Qisqa ibora eshitiladi — kundalik nutq uchun",
+    skeleton: LISTENING_SKELETON,
+    limits: LISTENING_LIMITS,
+    guidance: [
+      "Phrase listening: each item is a short everyday phrase (two to four words) that a learner would really say or hear.",
+      "Options are translations of whole phrases, of similar length, from the same situation — so the pupil must hear the phrase, not count syllables.",
+      "Keep each phrase inside one breath; a full sentence with a subordinate clause is a different exercise.",
+      "No idiom whose translation is disputable — the marked answer must be the one a teacher would accept.",
+    ],
+    judge: listeningJudge("Short-phrase listening game", {
+      describe: {
+        pronounceability: "read the phrase aloud: does it stay inside one breath and keep natural word order for the target language?",
+      },
+    }),
+  },
+];
+
 export const GAME_TYPES: { [K in GameKind]: readonly SpecByKind[K][] } = {
   crossword: CROSSWORD_TYPES,
   flashcards: CARDS_TYPES,
+  sorting: SORTING_TYPES,
+  listening: LISTENING_TYPES,
 };
 
 /* ══════════════════════════ hisobot qoidalari ══════════════════════════ */
@@ -297,6 +517,20 @@ export const GAME_TYPES: { [K in GameKind]: readonly SpecByKind[K][] } = {
 export const GAME_RULE_IDS: Record<GameKind, readonly string[]> = {
   crossword: ["wordCount", "gridSize", "minCrossings", "wordLength", "clueLength", "uniqueWords", "answerSheet", "gridMatchesWords", "clueNotContainsAnswer", "gridConnected"],
   flashcards: ["cardCount", "frontLength", "backLength", "noDuplicate", "examplePresence", "cardTypeMatch"],
+  /*
+   * Saralash (AUDIT-22). `itemSingleCategory` — bu oiladagi ENG muhim
+   * qoida: element ikki toifaga tushsa o'yin yechilmaydigan bo'ladi
+   * (`sorting-game.md` §4 `unambiguity`), lekin buni baholovchi HAR
+   * doim ham ko'rmaydi — bir xil yozilgan element deterministik
+   * topiladi va qizil bo'ladi.
+   */
+  sorting: ["categoryCount", "itemsPerCategory", "uniqueItems", "itemSingleCategory", "categoryNameLength", "itemLength", "answerKey"],
+  /*
+   * Tinglash (AUDIT-22). `oneCorrect` + `answerInRange`: `answer` —
+   * INDEKS, ya'ni u `options` chegarasidan chiqib ketsa o'yin har doim
+   * «xato» deb sanardi va buni faqat o'ynagan o'quvchi sezardi.
+   */
+  listening: ["itemCount", "optionCount", "answerInRange", "uniqueItems", "uniqueOptions", "textLength", "languagePair"],
 };
 
 /* ══════════════════════════ kirish nuqtalari ══════════════════════════ */

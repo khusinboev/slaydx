@@ -431,6 +431,15 @@ export function fileSuffix(toolId: string): string {
       return "-kartalar";
     case "infographic":
       return "-infografika";
+    /* AUDIT-22: interaktiv o'yinlar va audio ham bitta mavzu bo'yicha keladi. */
+    case "sorting":
+      return "-saralash";
+    case "listening":
+      return "-tinglash";
+    case "podcast":
+      return "-podkast";
+    case "greeting":
+      return "-tabriknoma";
     default:
       return "";
   }

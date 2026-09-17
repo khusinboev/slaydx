@@ -135,10 +135,13 @@ test("infographicDelivered — `list` turida 8 ruxsat etilgan (chegara turga bog
 
 /* ───────────────────────── fayl nomi ───────────────────────── */
 
-test("fayl nomi qo'shimchasi — uch vosita bir-biridan ajraladi", () => {
-  assert.deepEqual(GAME_TOOL_LIST.map(fileSuffix), ["-krossvord", "-kartalar"]);
+test("fayl nomi qo'shimchasi — har vosita bir-biridan ajraladi", () => {
+  // AUDIT-22: oila to'rtta o'yinga chiqdi; audio ham shu jadvaldan.
+  assert.deepEqual(GAME_TOOL_LIST.map(fileSuffix), ["-krossvord", "-kartalar", "-saralash", "-tinglash"]);
   assert.equal(fileSuffix("infographic"), "-infografika");
-  const all = [...GAME_TOOL_LIST.map(fileSuffix), fileSuffix("infographic")];
+  assert.equal(fileSuffix("podcast"), "-podkast");
+  assert.equal(fileSuffix("greeting"), "-tabriknoma");
+  const all = [...GAME_TOOL_LIST.map(fileSuffix), fileSuffix("infographic"), fileSuffix("podcast"), fileSuffix("greeting")];
   assert.equal(new Set(all).size, all.length, "qo'shimchalar noyob");
   assert.equal(fileSuffix("referat"), "", "boshqa vositalar o'zgarmaydi");
 });

@@ -16,7 +16,7 @@
  */
 import type { AcademicDoc, DocMeta } from "../types";
 import { gameDefaultTypeId } from "./registry";
-import type { CrosswordModel, Flashcard, GameKind, GameModel } from "./types";
+import type { CrosswordModel, Flashcard, GameKind, GameModel, ListeningItem, SortingCategory } from "./types";
 import { cardSections } from "./flashcards/engine";
 import { crosswordFigure, crosswordSections } from "./crossword/engine";
 import { crosswordInputFromValues } from "./crossword/input";
@@ -161,14 +161,127 @@ function crosswordDocSample(meta: DocMeta): AcademicDoc {
   };
 }
 
+/* ────────────────────────── saralash (AUDIT-22 R0) ────────────────────────── */
+
+/**
+ * To'rt toifa × uch element — `sorting-game.md` §3 chegaralari ichida
+ * (2–6 × 3–8) va ATAYLAB bir ma'noli: hech bir element ikkinchi toifaga
+ * tushmaydi (`itemSingleCategory` qoidasi). Ball testlari (`game-score`)
+ * va ochiq ko'rinish testlari (`game-public`) shu namunada yuradi.
+ *
+ * NASR (`sections`) R0 da MINIMAL: haqiqiy bo'limlarni WP-D dvigateli
+ * yozadi (`sorting/engine.ts sortingSections`) va o'shanda namuna ham
+ * SHU funksiyaga o'tadi — karta/krossvord namunalarida bo'lgani kabi.
+ * Bugun bu yerda qo'lda yig'ilgani halol: dvigatel yo'q.
+ */
+const SORTING_CATEGORIES: SortingCategory[] = [
+  { id: "s1", name: "Sut emizuvchilar", items: ["Mushuk", "Delfin", "Ko‘rshapalak"] },
+  { id: "s2", name: "Qushlar", items: ["Laylak", "Burgut", "Chumchuq"] },
+  { id: "s3", name: "Baliqlar", items: ["Sazan", "Zog‘ora baliq", "Laqqa"] },
+  { id: "s4", name: "Hasharotlar", items: ["Chumoli", "Asalari", "Kapalak"] },
+];
+
+function sortingDocSample(meta: DocMeta): AcademicDoc {
+  const L = gameLayoutLabels(meta.language);
+  const model: GameModel = {
+    v: 1,
+    kind: "sorting",
+    type: gameDefaultTypeId("sorting"),
+    language: meta.language,
+    topic: meta.topic,
+    sorting: { categories: SORTING_CATEGORIES },
+  };
+  const items = SORTING_CATEGORIES.flatMap((c) => c.items);
+  return {
+    meta,
+    titlePage: false,
+    toc: false,
+    sections: [
+      { id: "categories", title: L.sectionTitle.categories, blocks: SORTING_CATEGORIES.map((c) => ({ kind: "li" as const, text: c.name })) },
+      { id: "items", title: L.sectionTitle.items, blocks: items.map((t) => ({ kind: "li" as const, text: t })) },
+      {
+        id: "answers",
+        title: L.sectionTitle.answers,
+        blocks: SORTING_CATEGORIES.map((c) => ({ kind: "li" as const, text: `${c.name}: ${c.items.join(", ")}` })),
+      },
+    ],
+    game: model,
+  };
+}
+
+/* ────────────────────────── tinglash (AUDIT-22 R0) ────────────────────────── */
+
+/**
+ * O'nta topshiriq × to'rt variant (`listening-game.md` §3 standarti).
+ *
+ * Distraktorlar AYNI semantik maydondan (joylar) va hech biri to'g'ri
+ * javobning ikkinchi tarjimasi emas — `distractorQuality` mezoni shuni
+ * talab qiladi. `audioAssetId` YO'Q: TTS kaliti kelmaguncha (WP-A)
+ * parcha ham bo'lmaydi, bosma lug'at varag'i esa baribir chiqadi.
+ */
+const LISTENING_ITEMS: ListeningItem[] = [
+  { id: "l1", text: "library", options: ["kutubxona", "muzey", "dorixona", "bekat"], answer: 0 },
+  { id: "l2", text: "hospital", options: ["maktab", "kasalxona", "bozor", "zavod"], answer: 1 },
+  { id: "l3", text: "market", options: ["kutubxona", "teatr", "bozor", "stadion"], answer: 2 },
+  { id: "l4", text: "school", options: ["muzey", "bekat", "dorixona", "maktab"], answer: 3 },
+  { id: "l5", text: "pharmacy", options: ["dorixona", "kasalxona", "kutubxona", "bozor"], answer: 0 },
+  { id: "l6", text: "station", options: ["maktab", "bekat", "teatr", "muzey"], answer: 1 },
+  { id: "l7", text: "museum", options: ["stadion", "zavod", "muzey", "dorixona"], answer: 2 },
+  { id: "l8", text: "theatre", options: ["bozor", "bekat", "kasalxona", "teatr"], answer: 3 },
+  { id: "l9", text: "stadium", options: ["stadion", "maktab", "muzey", "zavod"], answer: 0 },
+  { id: "l10", text: "factory", options: ["teatr", "zavod", "bekat", "kutubxona"], answer: 1 },
+];
+
+function listeningDocSample(meta: DocMeta): AcademicDoc {
+  const L = gameLayoutLabels(meta.language);
+  const model: GameModel = {
+    v: 1,
+    kind: "listening",
+    type: gameDefaultTypeId("listening"),
+    language: meta.language,
+    topic: meta.topic,
+    listening: { items: LISTENING_ITEMS, nativeLanguage: "uz", targetLanguage: "en" },
+  };
+  return {
+    meta,
+    titlePage: false,
+    toc: false,
+    sections: [
+      {
+        id: "words",
+        title: L.sectionTitle.words,
+        blocks: LISTENING_ITEMS.map((it) => ({ kind: "li" as const, text: `${it.text} — ${it.options[it.answer]}` })),
+      },
+      {
+        id: "options",
+        title: L.sectionTitle.options,
+        blocks: LISTENING_ITEMS.map((it) => ({ kind: "li" as const, text: `${it.text}: ${it.options.join(" / ")}` })),
+      },
+      {
+        id: "answers",
+        title: L.sectionTitle.answers,
+        blocks: LISTENING_ITEMS.map((it, i) => ({ kind: "li" as const, text: `${i + 1}. ${it.options[it.answer]}` })),
+      },
+    ],
+    game: model,
+  };
+}
+
 /* ────────────────────────── kirish nuqtasi ────────────────────────── */
 
 const TOPIC_OF: Record<GameKind, string> = {
   crossword: "Fotosintez va o‘simlik organlari",
   flashcards: "Fotosintez atamalari",
+  sorting: "Hayvonlar sinflari",
+  listening: "Shahardagi joylar (ingliz tili)",
 };
 
-const LABEL_OF: Record<GameKind, string> = { crossword: "Krossvord", flashcards: "Flesh kartalar" };
+const LABEL_OF: Record<GameKind, string> = {
+  crossword: "Krossvord",
+  flashcards: "Flesh kartalar",
+  sorting: "Saralash o‘yini",
+  listening: "Tinglash o‘yini",
+};
 
 export function sampleGameMeta(kind: GameKind): DocMeta {
   return {
@@ -182,8 +295,11 @@ export function sampleGameMeta(kind: GameKind): DocMeta {
   } as unknown as DocMeta;
 }
 
-/** `sampleGameDoc("flashcards")` — ikkala kind uchun to'liq hujjat. */
+/** `sampleGameDoc("sorting")` — to'rtala kind uchun to'liq hujjat. */
 export function sampleGameDoc(kind: GameKind, meta?: Partial<DocMeta>): AcademicDoc {
   const full = { ...sampleGameMeta(kind), ...meta } as DocMeta;
-  return kind === "crossword" ? crosswordDocSample(full) : cardsDocSample(full);
+  if (kind === "crossword") return crosswordDocSample(full);
+  if (kind === "flashcards") return cardsDocSample(full);
+  if (kind === "sorting") return sortingDocSample(full);
+  return listeningDocSample(full);
 }

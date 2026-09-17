@@ -3,7 +3,9 @@ import { translationChars } from "../tools";
 import { teacherKindOf } from "./teacher/registry";
 import { TEACHER_LIMITS, type TeacherKind } from "./teacher/types";
 import { gameKindOf } from "./games/registry";
-import { GAME_LIMITS, normalizeGameCount, type GameKind } from "./games/types";
+import { GAME_LIMITS, gamePromisedCount, type GameKind } from "./games/types";
+import { audioKindOf } from "./audio/registry";
+import { normalizeAudioMinutes, type AudioKind } from "./audio/types";
 import { normalizeBlockCountFor } from "./infographic/registry";
 import { INFOGRAPHIC_LIMITS } from "./infographic/types";
 import type { FormValues, ToolConfig, ToolId } from "../types";
@@ -200,7 +202,43 @@ const GAME_MS: Record<GameKind, { base: number; per: number }> = {
   crossword: { base: 90_000, per: 1_500 },
   // Kartalar: 2 aylanish (≤55 s) + hisobot 40 s + sayqal 55 s zaxiralari — 90 s da yozishga 0 s qolib «0 karta» chiqardi (AUDIT-21 smoke).
   flashcards: { base: 150_000, per: 2_000 },
+  /*
+   * Saralash (AUDIT-22): bitta LLM chaqiruvi (toifalar + elementlar) +
+   * bir ma'nolilik tekshiruvi + bosma jadval. Element boshiga 800 ms —
+   * 6 × 8 = 48 element ≈ 40 s, ya'ni 130 s da hisobot va sayqalga ham
+   * joy qoladi.
+   */
+  sorting: { base: 90_000, per: 800 },
+  /*
+   * Tinglash (AUDIT-22): matn ustiga TTS PARCHALARI qo'shiladi —
+   * har topshiriq alohida sintez chaqiruvi (`putAssetBytes`). 20
+   * topshiriq × ~9 s (chaqiruv + aktivga yozish) ≈ 180 s, shuning
+   * uchun element narxi bu oiladagi eng qimmati. Kalitlar kelmaguncha
+   * (WP-A) parcha bosqichi o'tkazib yuboriladi va ish ertaroq tugaydi —
+   * byudjet YUQORI chegara, sarf emas.
+   */
+  listening: { base: 90_000, per: 9_000 },
 };
+
+/**
+ * AUDIO byudjeti (AUDIT-22 R0) — podkast va tabriknoma.
+ *
+ * Ikki qism: SSENARIY (LLM) va SINTEZ (TTS). Ssenariy uzunligi
+ * daqiqaga chiziqli (150 so'z/daq), sintez esa bo'laklar soniga:
+ * 900 belgilik bo'lak ≈ 1 chaqiruv ≈ 6 s (`tts.md` §3), 5 daqiqalik
+ * podkast ≈ 4 500 belgi ≈ 5 bo'lak, ustiga MP3 birlashtirish.
+ *
+ * Daqiqa boshiga 48 s: 5 daqiqalik podkast 90 + 240 = 330 s. AUDIT-22
+ * §1 rejasidagi «podkast 5 daq ≈ 240 s» aynan shu `per` qismi.
+ */
+export const AUDIO_BASE_MS = 90_000;
+export const AUDIO_PER_MINUTE_MS = 48_000;
+
+/** @param minutes Davomiylik (podkast 1–5, tabriknoma 1–4). */
+export function audioBudgetMs(kind: AudioKind, minutes: number): number {
+  const m = normalizeAudioMinutes(kind, minutes);
+  return AUDIO_BASE_MS + m * AUDIO_PER_MINUTE_MS;
+}
 
 /**
  * @param kind O'yin oilasi (`gameKindOf`).
@@ -209,7 +247,21 @@ const GAME_MS: Record<GameKind, { base: number; per: number }> = {
 export function gameBudgetMs(kind: GameKind, n: number): number {
   const { base, per } = GAME_MS[kind];
   const count = Math.max(1, Math.round(Number.isFinite(n) ? n : GAME_LIMITS.countDefault));
-  return base + Math.min(GAME_LIMITS.countMax, count) * per;
+  return base + Math.min(gameCountCap(kind), count) * per;
+}
+
+/**
+ * Byudjet hisobidagi YUQORI element chegarasi — kind bo'yicha.
+ *
+ * Ilgari bu yerda hamma uchun `GAME_LIMITS.countMax` (20) turardi.
+ * AUDIT-22 dan keyin u saralashni buzardi: 6 toifa × 8 element = 48
+ * element, lekin byudjet 20 tasiga hisoblanib, katta to'plam vaqt
+ * yetmasdan uzilardi.
+ */
+function gameCountCap(kind: GameKind): number {
+  if (kind === "sorting") return GAME_LIMITS.categoryCountMax * GAME_LIMITS.itemsPerCategoryMax;
+  if (kind === "listening") return GAME_LIMITS.listeningCountMax;
+  return GAME_LIMITS.countMax;
 }
 
 /**
@@ -235,7 +287,13 @@ export function infographicBudgetMs(blocks: number): number {
  * (`teacherSize` naqshi). Noto'g'ri/bo'sh qiymat standartga tushadi.
  */
 function gameSize(kind: GameKind, values: FormValues): number {
-  return normalizeGameCount(kind === "crossword" ? values.wordCount : values.cardCount);
+  /*
+   * AUDIT-22: `gamePromisedCount` — VA'DA qilingan element soni (saralashda
+   * toifa × element, tinglashda topshiriq soni). Ilgari bu yerda faqat
+   * `wordCount`/`cardCount` bor edi va yangi kindlar jimgina standart
+   * 10 ga tushib, byudjet hajmga ergashmasdi.
+   */
+  return gamePromisedCount(kind, values as { [k: string]: unknown });
 }
 
 /** @param pages Paketning o'rtacha beti (`pagesMid("25-30")` → 28). */
@@ -266,6 +324,15 @@ export function budgetFor(tool: ToolConfig, values: FormValues, cap: number): nu
   const gameKind = gameKindOf(tool.id);
   if (want === undefined && gameKind) {
     want = gameBudgetMs(gameKind, gameSize(gameKind, values));
+  }
+  /*
+   * Audio (AUDIT-22): hajm — DAQIQA. Ssenariy so'zlari ham, TTS
+   * bo'laklari ham undan chiqadi, ya'ni «bet» yoki «element» tushunchasi
+   * bu oilaga umuman tegishli emas.
+   */
+  const audioKind = audioKindOf(tool.id);
+  if (want === undefined && audioKind) {
+    want = audioBudgetMs(audioKind, normalizeAudioMinutes(audioKind, values.durationMin));
   }
   // Infografika: hajm — BLOK soni (tur chegarasi bilan, forma qoidasi bilan bir xil).
   if (want === undefined && tool.id === "infographic") {

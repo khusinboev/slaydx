@@ -13,6 +13,7 @@ import type { EssayModel } from "./essay/types";
 import type { WorkModel } from "./work/types";
 import type { TeacherModel } from "./teacher/types";
 import type { GameModel } from "./games/types";
+import type { AudioModel } from "./audio/types";
 import type { InfographicModel } from "./infographic/types";
 import type { ResumePaletteId, ResumeTemplateId } from "./resume/templates";
 
@@ -558,6 +559,17 @@ export type AcademicDoc = {
    * `games/layout.ts planGame` (WP-A/WP-B) da.
    */
   game?: GameModel;
+  /**
+   * AUDIO (AUDIT-22): podkast / tabriknoma — ssenariy, ovoz, uzunlik va
+   * hisobot. Chiqish MP3, ya'ni hujjatning ASOSIY mazmuni shu modelda:
+   * `AudioViewer` pleer + transkriptni undan chizadi, TTS (`tts/`,
+   * WP-A) ham AYNAN shu `script` ni aytadi («ko'rdim = oldim» ning
+   * audio varianti — eshitgan matnim ekranda turgan matn).
+   *
+   * `sections` esa transkriptning o'qiladigan ko'rinishi bo'ladi
+   * (WP-A) — qidiruv, kartochka va eski kod uchun.
+   */
+  audio?: AudioModel;
   /**
    * Infografika (AUDIT-21): bir betlik plakatning TO'LIQ
    * spetsifikatsiyasi. Bu oilada `sections` MATNI yo'q — chiqish bitta

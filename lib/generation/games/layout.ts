@@ -85,6 +85,13 @@ import {
 export const GAME_MARGINS_CM: Record<GameKind, { top: number; right: number; bottom: number; left: number }> = {
   crossword: { top: 2, right: 1.5, bottom: 2, left: 2 },
   flashcards: { top: 1, right: 1, bottom: 1, left: 1 },
+  /*
+   * AUDIT-22: interaktiv o'yinlarning BOSMA versiyasi — oddiy o'quv
+   * varag'i (saralash jadvali, lug'at jadvali), shuning uchun chegara
+   * krossvorddagidek. Maketning O'ZI (`planGame` shoxlari) WP-D da.
+   */
+  sorting: { top: 2, right: 1.5, bottom: 2, left: 2 },
+  listening: { top: 2, right: 1.5, bottom: 2, left: 2 },
 };
 
 /**
@@ -98,10 +105,13 @@ export const GAME_MARGINS_CM: Record<GameKind, { top: number; right: number; bot
 export const GAME_TYPE: Record<GameKind, { sizePt: number; line: number; tableSizePt: number; smallPt: number }> = {
   crossword: { sizePt: 12, line: 1.15, tableSizePt: 11, smallPt: 9 },
   flashcards: { sizePt: 14, line: 1, tableSizePt: 12, smallPt: 9 },
+  // AUDIT-22: jadval asosidagi varaqlar — krossvord tipografiyasi.
+  sorting: { sizePt: 12, line: 1.15, tableSizePt: 11, smallPt: 9 },
+  listening: { sizePt: 12, line: 1.15, tableSizePt: 11, smallPt: 9 },
 };
 
-/** Ikkala vosita ham PORTRET (`GamePlan.landscape` doim `false`). */
-export const GAME_LANDSCAPE: Record<GameKind, false> = { crossword: false, flashcards: false };
+/** To'rtala vosita ham PORTRET (`GamePlan.landscape` doim `false`). */
+export const GAME_LANDSCAPE: Record<GameKind, false> = { crossword: false, flashcards: false, sorting: false, listening: false };
 
 /** Orqa yuz (ta'rif/javob) shrifti — old yuzdan kichik. */
 export const CARD_BACK_PT = 10;
@@ -186,8 +196,8 @@ export type GameLayoutWords = {
 
 const WORDS: Record<"uz" | "ru" | "en", GameLayoutWords> = {
   uz: {
-    docTitle: { crossword: "KROSSVORD", flashcards: "FLESH KARTALAR" },
-    sectionTitle: { grid: "To‘r", across: "Gorizontal", down: "Vertikal", answers: "Javoblar", cards: "Kartalar" },
+    docTitle: { crossword: "KROSSVORD", flashcards: "FLESH KARTALAR", sorting: "SARALASH O‘YINI", listening: "TINGLASH O‘YINI" },
+    sectionTitle: { grid: "To‘r", across: "Gorizontal", down: "Vertikal", answers: "Javoblar", cards: "Kartalar", categories: "Toifalar", items: "Elementlar", words: "So‘zlar", options: "Variantlar" },
     fieldTopic: "Mavzu",
     cardsFront: "old yuzlar",
     cardsBack: "orqa yuzlar",
@@ -198,8 +208,8 @@ const WORDS: Record<"uz" | "ru" | "en", GameLayoutWords> = {
     clueLine: (n, text, len) => `${n}. ${text} (${len})`,
   },
   ru: {
-    docTitle: { crossword: "КРОССВОРД", flashcards: "ФЛЕШ-КАРТОЧКИ" },
-    sectionTitle: { grid: "Сетка", across: "По горизонтали", down: "По вертикали", answers: "Ответы", cards: "Карточки" },
+    docTitle: { crossword: "КРОССВОРД", flashcards: "ФЛЕШ-КАРТОЧКИ", sorting: "ИГРА-СОРТИРОВКА", listening: "ИГРА НА СЛУШАНИЕ" },
+    sectionTitle: { grid: "Сетка", across: "По горизонтали", down: "По вертикали", answers: "Ответы", cards: "Карточки", categories: "Категории", items: "Элементы", words: "Слова", options: "Варианты" },
     fieldTopic: "Тема",
     cardsFront: "лицевые стороны",
     cardsBack: "обратные стороны",
@@ -210,8 +220,8 @@ const WORDS: Record<"uz" | "ru" | "en", GameLayoutWords> = {
     clueLine: (n, text, len) => `${n}. ${text} (${len})`,
   },
   en: {
-    docTitle: { crossword: "CROSSWORD", flashcards: "FLASHCARDS" },
-    sectionTitle: { grid: "Grid", across: "Across", down: "Down", answers: "Answers", cards: "Cards" },
+    docTitle: { crossword: "CROSSWORD", flashcards: "FLASHCARDS", sorting: "SORTING GAME", listening: "LISTENING GAME" },
+    sectionTitle: { grid: "Grid", across: "Across", down: "Down", answers: "Answers", cards: "Cards", categories: "Categories", items: "Items", words: "Words", options: "Options" },
     fieldTopic: "Topic",
     cardsFront: "fronts",
     cardsBack: "backs",

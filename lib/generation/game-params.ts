@@ -57,10 +57,21 @@ export type GameParam = {
 
 const ALL = GAME_KINDS;
 
+/**
+ * Hujjat tili SO'RALADIGAN vositalar.
+ *
+ * Tinglash o'yini bu ro'yxatda YO'Q va bu ataylab: u ikkita tilni
+ * so'raydi (`nativeLanguage` + `targetLanguage`, `listening-game.md` §3)
+ * va uchinchi «Til» maydoni formada aynan «bezak» bo'lardi — qaysi
+ * tilga ta'sir qilishi tushunarsiz edi. Hujjat tili u yerda ona tiliga
+ * teng (dvigatel WP-D da shunday o'qiydi).
+ */
+const LANG_KINDS = GAME_KINDS.filter((k) => k !== "listening");
+
 export const GAME_PARAMS: GameParam[] = [
   /* ── umumiy ── */
   { id: "topic", kinds: ALL, encode: "string", probeA: "Fotosintez jarayoni", probeB: "O'zbekiston tarixi: Amir Temur davri", impacts: ["prompt", "layout"] },
-  { id: "language", kinds: ALL, encode: "string", probeA: "uz", probeB: "ru", impacts: ["language", "prompt", "layout"] },
+  { id: "language", kinds: LANG_KINDS, encode: "string", probeA: "uz", probeB: "ru", impacts: ["language", "prompt", "layout"] },
   { id: "extra", kinds: ALL, encode: "string", probeA: "", probeB: "Faqat 7-sinf darsligidagi atamalardan foydalaning.", impacts: ["prompt"] },
 
   /* ── krossvord (crossword.md §3) ── */
@@ -95,6 +106,27 @@ export const GAME_PARAMS: GameParam[] = [
    * `FlashcardsModel.includeExample` bayrog'iga aylantiradi.
    */
   { id: "includeExample", kinds: ["flashcards"], encode: "boolean", probeA: "yoq", probeB: "ha", impacts: ["prompt", "structure", "review"] },
+
+  /* ── saralash (AUDIT-22, sorting-game.md §3) ── */
+  { id: "sortingType", kinds: ["sorting"], encode: "string", probeA: "toifa", probeB: "qarama-qarshi", impacts: ["prompt", "structure", "review", "layout"] },
+  /*
+   * `categoryCount` × `itemsPerCategory` — VA'DA qilingan hajm
+   * (`gamePromisedCount`): `delivered`, byudjet va darvoza shu ikkisidan
+   * hisoblanadi, ya'ni ikkalasi ham chiqishga TA'SIR QILADI.
+   */
+  { id: "categoryCount", kinds: ["sorting"], encode: "number", probeA: 2, probeB: 6, impacts: ["prompt", "structure", "layout", "review", "budget"] },
+  { id: "itemsPerCategory", kinds: ["sorting"], encode: "number", probeA: 3, probeB: 8, impacts: ["prompt", "structure", "layout", "review", "budget"] },
+
+  /* ── tinglash (AUDIT-22, listening-game.md §3) ── */
+  { id: "listeningType", kinds: ["listening"], encode: "string", probeA: "sozlar", probeB: "iboralar", impacts: ["prompt", "structure", "review"] },
+  /*
+   * Til JUFTLIGI — `language` o'rniga: variantlar ona tilida, eshitiladigan
+   * matn esa o'rganiladigan tilda yoziladi va TTS ovozi (`TTS_LANG_VOICES`)
+   * aynan `targetLanguage` dan tanlanadi.
+   */
+  { id: "nativeLanguage", kinds: ["listening"], encode: "string", probeA: "uz", probeB: "ru", impacts: ["language", "prompt", "layout"] },
+  { id: "targetLanguage", kinds: ["listening"], encode: "string", probeA: "en", probeB: "de", impacts: ["prompt", "layout", "review"] },
+  { id: "itemCount", kinds: ["listening"], encode: "number", probeA: 10, probeB: 20, impacts: ["prompt", "structure", "layout", "review", "budget"] },
 ];
 
 /** Formadan yuboriladigan maydon nomlari (`lib/tools.ts` shu ro'yxatni to'ldiradi). */

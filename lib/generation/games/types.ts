@@ -21,7 +21,7 @@ import type { Figure } from "../types";
 
 /* ────────────────────────── kind va vosita ────────────────────────── */
 
-export const GAME_KINDS = ["crossword", "flashcards"] as const;
+export const GAME_KINDS = ["crossword", "flashcards", "sorting", "listening"] as const;
 export type GameKind = (typeof GAME_KINDS)[number];
 
 export const isGameKind = (v: unknown): v is GameKind => (GAME_KINDS as readonly string[]).includes(String(v));
@@ -34,12 +34,14 @@ export const isGameKind = (v: unknown): v is GameKind => (GAME_KINDS as readonly
  * yangi vosita qo'shilganda ular jimgina ajralib ketardi.
  *
  * Hozircha id va kind BIR XIL yozilgan — bu tasodif, shartnoma emas:
- * 3-dasturda `sorting`/`listening` qo'shiladi va o'shanda ham xarita
- * shu yerda qoladi.
+ * 3-dastur (AUDIT-22) `sorting`/`listening` ni qo'shdi va xarita shu
+ * yerda qoldi.
  */
 export const GAME_TOOL_IDS = {
   crossword: "crossword",
   flashcards: "flashcards",
+  sorting: "sorting",
+  listening: "listening",
 } as const satisfies Record<string, GameKind>;
 
 export type GameToolId = keyof typeof GAME_TOOL_IDS;
@@ -173,6 +175,69 @@ export type FlashcardsModel = {
   includeExample?: boolean;
 };
 
+/* ────────────────────────── saralash o'yini ────────────────────────── */
+
+/**
+ * Bitta toifa va unga tegishli elementlar (`sorting-game.md` §3).
+ *
+ * `id` ATAYLAB bor: o'yinchi javobi (`game_results.answers_json`) va ball
+ * hisobi (`lib/game/score.ts`) element → TOIFA id ini yozadi, NOMINI
+ * emas. Nom tahrirda o'zgarishi mumkin va o'shanda eski natijalar
+ * jadvali «Sut emizuvchilar» ni topa olmasdan hammasini xato deb
+ * sanardi.
+ */
+export type SortingCategory = {
+  id: string;
+  name: string;
+  items: string[];
+};
+
+export type SortingModel = {
+  categories: SortingCategory[];
+};
+
+/* ────────────────────────── tinglash o'yini ────────────────────────── */
+
+/**
+ * Bitta tinglash topshirig'i (`listening-game.md` §3).
+ *
+ * `text` — EShITILADIGAN matn (o'rganiladigan tilda): TTS aynan shuni
+ * aytadi. `options` — ona tilidagi variantlar (3–4 ta), `answer` esa
+ * ularning INDEKSI.
+ *
+ * Nega indeks, matn emas: o'yinchi tomoni variantlarni ARALASHTIRIB
+ * ko'rsatadi va javobni indeks bilan yuboradi; to'g'ri javob matn
+ * sifatida saqlansa, uni ochiq JSON dan yashirish uchun modelning
+ * o'zini qayta yozish kerak bo'lardi (`publicGameView` esa faqat
+ * MAYDON tashlaydi). Mutatsiya: `answer` ni ochiq ko'rinishga qo'shish
+ * `tests/game-public.test.mts` da darrov qizaradi.
+ */
+export type ListeningItem = {
+  id: string;
+  /** Eshitiladigan so'z/ibora — `targetLanguage` da. */
+  text: string;
+  /** Variantlar — `nativeLanguage` da; biri to'g'ri, qolgani distraktor. */
+  options: string[];
+  /** To'g'ri variantning indeksi (`options` ichida). */
+  answer: number;
+  /**
+   * TTS parchasi aktivga chiqarilgandan keyingi id (`putAssetBytes`).
+   *
+   * WP-A gacha (kalitlar yo'q) — `undefined`: bosma versiya (lug'at
+   * varag'i) baribir chiqadi, interaktiv rejimda esa o'yinchi tomoni
+   * audio yo'qligini ko'rsatadi.
+   */
+  audioAssetId?: string;
+};
+
+export type ListeningModel = {
+  items: ListeningItem[];
+  /** Variantlar tili (o'quvchining ona tili). */
+  nativeLanguage: string;
+  /** Eshitiladigan matn tili — TTS ovozi SHU kod bo'yicha tanlanadi. */
+  targetLanguage: string;
+};
+
 /* ────────────────────────── model ────────────────────────── */
 
 export type GameModel = {
@@ -186,6 +251,10 @@ export type GameModel = {
   topic: string;
   crossword?: CrosswordModel;
   cards?: FlashcardsModel;
+  /** Saralash o'yini (AUDIT-22): toifalar va ularning elementlari. */
+  sorting?: SortingModel;
+  /** Tinglash o'yini (AUDIT-22): eshitiladigan matn + variantlar. */
+  listening?: ListeningModel;
   /**
    * Chizilgan rasmlar reyestri (krossvord to'ri va javob to'ri).
    *
@@ -259,6 +328,44 @@ export const GAME_LIMITS = {
   /** `includeExample=true` bo'lsa kamida shuncha ulush kartada misol bo'lsin. */
   exampleCoverage: 0.5,
 
+  /* ── saralash o'yini (AUDIT-22, `sorting-game.md` §3) ── */
+  /** Toifalar soni: 2–6 (formadagi chiplar). */
+  categoryCounts: [2, 3, 4, 5, 6] as readonly number[],
+  categoryCountDefault: 4,
+  categoryCountMin: 2,
+  categoryCountMax: 6,
+  /** Har toifadagi element soni: 3–8. */
+  itemsPerCategoryCounts: [3, 4, 5, 6, 8] as readonly number[],
+  itemsPerCategoryDefault: 5,
+  itemsPerCategoryMin: 3,
+  itemsPerCategoryMax: 8,
+  /** Toifa nomi va element matni — ekranda tugma, bosma versiyada jadval katagi. */
+  categoryNameCharsMin: 3,
+  categoryNameCharsMax: 40,
+  sortItemCharsMin: 1,
+  sortItemCharsMax: 40,
+
+  /* ── tinglash o'yini (AUDIT-22, `listening-game.md` §3) ── */
+  /**
+   * Topshiriqlar soni: 10/15/20.
+   *
+   * Krossvord/kartadagi `counts` (5/10/15/20) dan FARQ QILADI va bu
+   * ataylab: har topshiriq TTS chaqiruvi, ya'ni 5 talik to'plam
+   * tannarxni oqlamaydi, 20 dan ortig'i esa byudjetga sig'maydi
+   * (`gameBudgetMs`).
+   */
+  listeningCounts: [10, 15, 20] as readonly number[],
+  listeningCountDefault: 10,
+  listeningCountMin: 10,
+  listeningCountMax: 20,
+  /** Variantlar soni: 3–4 (`listening-game.md` §3 — 3 distraktor). */
+  listeningOptionsMin: 3,
+  listeningOptionsMax: 4,
+  listeningOptionsDefault: 4,
+  /** Eshitiladigan matn — so'z yoki qisqa ibora (TTS bo'lagiga bemalol sig'adi). */
+  listeningTextCharsMin: 2,
+  listeningTextCharsMax: 60,
+
   /* ── umumiy kirish ── */
   topicChars: 300,
   extraChars: 1500,
@@ -272,6 +379,37 @@ export const CARDS_PER_SHEET = GAME_LIMITS.cardCols * GAME_LIMITS.cardRows;
 export function normalizeGameCount(v: unknown): number {
   const n = Number(v);
   return GAME_LIMITS.counts.includes(n) ? n : GAME_LIMITS.countDefault;
+}
+
+/** Toifalar soni (2–6); noma'lum qiymat → standart 4. */
+export function normalizeCategoryCount(v: unknown): number {
+  const n = Number(v);
+  return GAME_LIMITS.categoryCounts.includes(n) ? n : GAME_LIMITS.categoryCountDefault;
+}
+
+/** Toifadagi element soni (3–8); noma'lum qiymat → standart 5. */
+export function normalizeItemsPerCategory(v: unknown): number {
+  const n = Number(v);
+  return GAME_LIMITS.itemsPerCategoryCounts.includes(n) ? n : GAME_LIMITS.itemsPerCategoryDefault;
+}
+
+/** Tinglash topshiriqlari soni (10/15/20); noma'lum qiymat → standart 10. */
+export function normalizeListeningCount(v: unknown): number {
+  const n = Number(v);
+  return GAME_LIMITS.listeningCounts.includes(n) ? n : GAME_LIMITS.listeningCountDefault;
+}
+
+/**
+ * Kind bo'yicha VA'DA qilingan element soni — `delivered`, byudjet va
+ * darvoza (`gameGateFail`) BITTA qoidadan o'qisin.
+ *
+ * Saralashda «element» = toifa × toifadagi element: o'quvchi aynan
+ * shuncha kartani joylashtiradi va narx ham shu hajmga to'lanadi.
+ */
+export function gamePromisedCount(kind: GameKind, values: { [k: string]: unknown }): number {
+  if (kind === "sorting") return normalizeCategoryCount(values.categoryCount) * normalizeItemsPerCategory(values.itemsPerCategory);
+  if (kind === "listening") return normalizeListeningCount(values.itemCount);
+  return normalizeGameCount(kind === "crossword" ? values.wordCount : values.cardCount);
 }
 
 /**

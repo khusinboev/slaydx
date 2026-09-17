@@ -42,7 +42,14 @@ test("har parametrning egasi va TA'SIRI bor; noma'lum kind yo'q", () => {
   for (const kind of GAME_KINDS) {
     const own = gameParamsOf(kind);
     assert.ok(own.length >= 3, `${kind}: ${own.length} parametr — juda kam`);
-    for (const id of ["topic", "language"]) assert.ok(own.some((p) => p.id === id), `${kind}: «${id}» yo'q`);
+    assert.ok(own.some((p) => p.id === "topic"), `${kind}: «topic» yo'q`);
+    /*
+     * AUDIT-22: tinglash o'yinida bitta «Til» o'rniga JUFTLIK bor
+     * (`nativeLanguage` + `targetLanguage`) — uchinchi maydon u yerda
+     * hech narsaga ta'sir qilmasdi («bezak maydon yo'q»).
+     */
+    const langIds = own.map((p) => p.id);
+    assert.ok(langIds.includes("language") || (langIds.includes("nativeLanguage") && langIds.includes("targetLanguage")), `${kind}: til so'ralmaydi`);
   }
   // Krossvord — fayl rejimi tufayli boyroq forma (mode/sourceText qo'shimcha).
   assert.ok(gameParamsOf("crossword").length > gameParamsOf("flashcards").length);

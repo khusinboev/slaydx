@@ -13,6 +13,10 @@ import {
 } from "../lib/generation/games/registry.ts";
 import {
   CARDS_PER_SHEET,
+  gamePromisedCount,
+  normalizeCategoryCount,
+  normalizeItemsPerCategory,
+  normalizeListeningCount,
   GAME_KINDS,
   GAME_LIMITS,
   GAME_TOOL_BY_KIND,
@@ -47,8 +51,8 @@ import { GAME_PARAMS, gameParamsOf } from "../lib/generation/game-params.ts";
  */
 
 test("2 kind, har biri o'z vositasiga bog'langan; xarita ikki tomonlama", () => {
-  assert.deepEqual([...GAME_KINDS], ["crossword", "flashcards"]);
-  assert.deepEqual(GAME_TOOL_LIST, ["crossword", "flashcards"]);
+  assert.deepEqual([...GAME_KINDS], ["crossword", "flashcards", "sorting", "listening"]);
+  assert.deepEqual(GAME_TOOL_LIST, ["crossword", "flashcards", "sorting", "listening"]);
   for (const toolId of GAME_TOOL_LIST) {
     const kind = GAME_TOOL_IDS[toolId];
     assert.equal(gameKindOf(toolId), kind, `${toolId}: kind topilmadi`);
@@ -61,7 +65,10 @@ test("2 kind, har biri o'z vositasiga bog'langan; xarita ikki tomonlama", () => 
   assert.equal(gameKindOf("coursework"), null);
   assert.equal(gameKindOf("test"), null);
   assert.equal(gameKindOf(""), null);
-  assert.ok(!isGameKind("sorting"), "3-dastur turi hozirdan kind bo'lib qolmasin");
+  // AUDIT-22: interaktiv o'yinlar ham SHU oilada (bosma versiyasi bilan).
+  assert.ok(isGameKind("sorting"));
+  assert.ok(isGameKind("listening"));
+  assert.ok(!isGameKind("podcast"), "audio vositasi o'yin kindi bo'lib qolmasin");
 });
 
 test("turlar hisobotlardan; standart — birinchi element; noma'lum tur standartga tushadi", () => {
@@ -222,7 +229,13 @@ test("zond reyestri: id unikal, har parametrning egasi, ta'siri va IKKI XIL qiym
   // Har vositada kamida mavzu, til, tur va son bo'lsin.
   for (const kind of GAME_KINDS) {
     const own = gameParamsOf(kind).map((p) => p.id);
-    for (const need of ["topic", "language", "extra"]) assert.ok(own.includes(need), `${kind}: «${need}» maydoni yo'q`);
+    for (const need of ["topic", "extra"]) assert.ok(own.includes(need), `${kind}: «${need}» maydoni yo'q`);
+    /*
+     * Til: uch vositada bitta «Til», tinglashda esa JUFTLIK (ona tili +
+     * o'rganiladigan til) — uchinchi «Til» maydoni u yerda hech narsaga
+     * ta'sir qilmasdi («bezak maydon yo'q», egasi qarori 14).
+     */
+    assert.ok(own.includes("language") || (own.includes("nativeLanguage") && own.includes("targetLanguage")), `${kind}: til so'ralmaydi`);
     assert.ok(own.some((id) => /Type$/.test(id)), `${kind}: tur tanlovi yo'q`);
     assert.ok(own.some((id) => /Count$/.test(id)), `${kind}: element soni yo'q`);
   }
@@ -231,4 +244,126 @@ test("zond reyestri: id unikal, har parametrning egasi, ta'siri va IKKI XIL qiym
   assert.equal(gameParamsOf("flashcards").filter((p) => p.id === "mode").length, 0);
   // Narx tekis: hech bir parametr narxga ta'sir qilmaydi (egasi qarori 6).
   for (const p of GAME_PARAMS) assert.ok(!(p.impacts as readonly string[]).includes("price"), `MUTATSIYA: ${p.id} narxga ta'sir qiladi`);
+});
+
+/* ══════════════ AUDIT-22: saralash + tinglash (interaktiv o'yinlar) ══════════════ */
+
+/**
+ * Mutatsiyalar (har biri qizardi):
+ *   6. `GAME_LIMITS.categoryCountMax` 6 → 20 (AUDIT-20 §4 dagi eski
+ *      taxmin) — «toifa 2–6» testi;
+ *   7. `qarama-qarshi` turining toifa chiplari umumiy ro'yxatga
+ *      qaytarildi — «ikki qutbli tur 2 toifa» testi;
+ *   8. `normalizeListeningCount` `counts` (5/10/15/20) dan o'qidi —
+ *      «tinglashda 5 talik to'plam yo'q» testi;
+ *   9. `GAME_RULE_IDS.sorting` dan `itemSingleCategory` o'chirildi —
+ *      «yechilmaydigan o'yin qoidasi» testi;
+ *  10. `gamePromisedCount` saralashda faqat toifani sanadi —
+ *      «va'da = toifa × element» testi.
+ */
+
+test("saralash chegaralari: toifa 2–6, toifadagi element 3–8 (sorting-game.md §3)", () => {
+  assert.deepEqual([...GAME_LIMITS.categoryCounts], [2, 3, 4, 5, 6]);
+  assert.equal(GAME_LIMITS.categoryCountDefault, 4);
+  assert.equal(GAME_LIMITS.categoryCountMin, 2);
+  assert.equal(GAME_LIMITS.categoryCountMax, 6);
+  assert.deepEqual([...GAME_LIMITS.itemsPerCategoryCounts], [3, 4, 5, 6, 8]);
+  assert.equal(GAME_LIMITS.itemsPerCategoryDefault, 5);
+  assert.equal(GAME_LIMITS.itemsPerCategoryMin, 3);
+  assert.equal(GAME_LIMITS.itemsPerCategoryMax, 8);
+  // Chiplar chegara ichida (forma reyestrdan chizadi).
+  for (const n of GAME_LIMITS.categoryCounts) assert.ok(n >= GAME_LIMITS.categoryCountMin && n <= GAME_LIMITS.categoryCountMax, `${n}: chegaradan tashqarida`);
+  for (const n of GAME_LIMITS.itemsPerCategoryCounts) assert.ok(n >= GAME_LIMITS.itemsPerCategoryMin && n <= GAME_LIMITS.itemsPerCategoryMax, `${n}`);
+  // Nom va element uzunliklari — telefon tugmasiga sig'sin.
+  assert.ok(GAME_LIMITS.categoryNameCharsMax <= 40 && GAME_LIMITS.sortItemCharsMax <= 40);
+});
+
+test("tinglash chegaralari: 10/15/20 topshiriq, 3–4 variant", () => {
+  assert.deepEqual([...GAME_LIMITS.listeningCounts], [10, 15, 20]);
+  assert.equal(GAME_LIMITS.listeningCountDefault, 10);
+  /*
+   * MUTATSIYA: krossvorddagi 5 talik chip bu yerga o'tsa — har topshiriq
+   * TTS chaqiruvi bo'lgan o'yinda 5 talik to'plam tannarxni oqlamasdi.
+   */
+  assert.ok(!GAME_LIMITS.listeningCounts.includes(5), "tinglashda 5 talik to'plam yo'q");
+  assert.equal(GAME_LIMITS.listeningOptionsMin, 3);
+  assert.equal(GAME_LIMITS.listeningOptionsMax, 4);
+  assert.equal(GAME_LIMITS.listeningOptionsDefault, 4);
+  assert.ok(GAME_LIMITS.listeningTextCharsMax <= 60, "eshitiladigan matn — so'z yoki qisqa ibora");
+  for (const t of gameTypesOf("listening")) {
+    assert.deepEqual([...t.limits.items], [10, 15, 20], `${t.id}: chiplar boshqa`);
+    assert.ok(t.limits.items.includes(t.limits.itemsDefault), `${t.id}: standart chiplar ichida emas`);
+    assert.deepEqual([...t.limits.options], [3, 4], `${t.id}: variant chegarasi`);
+  }
+});
+
+test("normalizatorlar chiplardan chiqmaydi; va'da = toifa × element", () => {
+  for (const n of GAME_LIMITS.categoryCounts) assert.equal(normalizeCategoryCount(n), n);
+  for (const n of GAME_LIMITS.itemsPerCategoryCounts) assert.equal(normalizeItemsPerCategory(n), n);
+  for (const n of GAME_LIMITS.listeningCounts) assert.equal(normalizeListeningCount(n), n);
+  assert.equal(normalizeCategoryCount("6"), 6, "forma qiymati satr bo'lib keladi");
+  for (const bad of [0, 1, 7, 20, "ko'p", null, undefined, Number.NaN]) {
+    assert.equal(normalizeCategoryCount(bad), GAME_LIMITS.categoryCountDefault, `toifa «${String(bad)}»`);
+  }
+  // Tinglashda 20 HAQIQIY chip — noto'g'ri qiymatlar boshqa.
+  for (const bad of [0, 5, 12, 25, "ko'p", null, undefined, Number.NaN]) {
+    assert.equal(normalizeListeningCount(bad), GAME_LIMITS.listeningCountDefault, `topshiriq «${String(bad)}»`);
+  }
+  assert.equal(normalizeItemsPerCategory(7), GAME_LIMITS.itemsPerCategoryDefault, "7 chiplarda yo'q");
+
+  /*
+   * MUTATSIYA: saralashda faqat toifani sanash — 6 toifali to'plam
+   * 6 element deb hisoblanib, byudjet ham, `delivered` ham yolg'on
+   * chiqardi (o'quvchi esa 48 ta elementni joylashtirardi).
+   */
+  assert.equal(gamePromisedCount("sorting", { categoryCount: 6, itemsPerCategory: 8 }), 48);
+  assert.equal(gamePromisedCount("sorting", {}), GAME_LIMITS.categoryCountDefault * GAME_LIMITS.itemsPerCategoryDefault);
+  assert.equal(gamePromisedCount("listening", { itemCount: 20 }), 20);
+  assert.equal(gamePromisedCount("crossword", { wordCount: 15 }), 15);
+  assert.equal(gamePromisedCount("flashcards", { cardCount: 5 }), 5);
+});
+
+test("saralash turlari: standart «toifa», ikki qutbli tur AYNAN 2 toifa", () => {
+  assert.deepEqual(gameTypesOf("sorting").map((t) => t.id), ["toifa", "qarama-qarshi"]);
+  assert.equal(gameDefaultTypeId("sorting"), "toifa");
+  assert.equal(normalizeGameType("sorting", "yo'q-bunday"), "toifa");
+  const classic = gameTypeOf("sorting", "toifa");
+  const poles = gameTypeOf("sorting", "qarama-qarshi");
+  assert.deepEqual([...classic.limits.categories], [...GAME_LIMITS.categoryCounts]);
+  /*
+   * MUTATSIYA: ikki qutbli turga 3+ toifa ruxsat berilsa — «qarama-qarshi
+   * juftlik» uchta qutbga bo'linib, janr ma'nosini yo'qotardi.
+   */
+  assert.deepEqual([...poles.limits.categories], [2], "ikki qutbli tur 2 toifadan boshqasini qabul qildi");
+  assert.equal(poles.limits.categoriesDefault, 2);
+});
+
+test("tinglash turlari: so'zlar va iboralar, ikkalasida ham javob kaliti oxirida", () => {
+  assert.deepEqual(gameTypesOf("listening").map((t) => t.id), ["sozlar", "iboralar"]);
+  assert.equal(gameDefaultTypeId("listening"), "sozlar");
+  assert.equal(normalizeGameType("listening", "iboralar"), "iboralar");
+  assert.equal(normalizeGameType("listening", "toifa"), "sozlar", "MUTATSIYA: saralash turi tinglashga o'tib ketdi");
+  for (const kind of ["sorting", "listening"] as const) {
+    for (const t of gameTypesOf(kind)) {
+      assert.match(t.skeleton[t.skeleton.length - 1], /Javob/i, `${t.id}: javob kaliti skeletning oxirida emas`);
+      assert.equal(t.judge.criteria.length, 5, `${t.id}: baholovchi mezonlari 5 ta bo'lishi kerak`);
+    }
+  }
+  // Tur bo'yicha o'ziga xoslik (bezak judge bo'lmasin).
+  assert.notEqual(gameTypeOf("sorting", "qarama-qarshi").judge.describe.balance, gameTypeOf("sorting", "toifa").judge.describe.balance);
+  assert.notEqual(gameTypeOf("listening", "iboralar").judge.describe.pronounceability, gameTypeOf("listening", "sozlar").judge.describe.pronounceability);
+});
+
+test("yangi kindlarning hisobot qoidalari: yechilmaydigan o'yin va indeks chegarasi", () => {
+  /*
+   * MUTATSIYA: `itemSingleCategory` ni o'chirish — bitta element ikki
+   * toifada bo'lsa o'yin YECHILMAYDIGAN bo'lardi (`unambiguity`, §4).
+   */
+  for (const id of ["categoryCount", "itemsPerCategory", "uniqueItems", "itemSingleCategory", "categoryNameLength", "itemLength"]) {
+    assert.ok(GAME_RULE_IDS.sorting.includes(id), `MUTATSIYA: saralash qoidasi «${id}» yo'qoldi`);
+  }
+  // `answerInRange`: `answer` — INDEKS; chegaradan chiqsa har javob xato sanalardi.
+  for (const id of ["itemCount", "optionCount", "answerInRange", "uniqueItems", "textLength", "languagePair"]) {
+    assert.ok(GAME_RULE_IDS.listening.includes(id), `MUTATSIYA: tinglash qoidasi «${id}» yo'qoldi`);
+  }
 });
