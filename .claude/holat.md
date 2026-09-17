@@ -1,4 +1,4 @@
-# SlaydX — holat (2026-09-17, main `c3bcb57`+; prod: AUDIT-21 `9bb8a43` (2026-09-17); tekshiruv: tsc/lint toza, tegilgan testlar yashil; to'liq to'plam AUDIT-22 merge'laridan keyin)
+# SlaydX — holat (2026-09-17, main `03a64e4`+; prod: AUDIT-22 `03a64e4` (2026-09-17, rollback `9bb8a43`); tekshiruv: unit 2 618/2 620 (2 ma'lum fal.ai), UI 255, ko'ruvchi 219, tsc/lint toza)
 
 Sprint: **O'qituvchi vositalari 2 + 9 yangi xizmat (AUDIT-20…23)** — reja `docs/AUDIT-20.md` §1, tadqiqot `docs/research/` (15 hisobot). Oldingi: Talaba ishlari 2 (AUDIT-19) — prod'da.
 
@@ -7,7 +7,7 @@ AUDIT-20: **100 % — prod'da (`5852285`).**
 
 AUDIT-21 (krossvord + flesh kartalar + infografika, bosma): **100 % — prod'da (`9bb8a43`)**, prod smoke 3/3 (`docs/AUDIT-21.md`).
 
-AUDIT-22 (TTS podkast/tabriknoma/tinglash + interaktiv runtime + saralash): **~85 %** — jurnal `docs/AUDIT-22.md` §5.
+AUDIT-22 (TTS podkast/tabriknoma/tinglash + interaktiv runtime + saralash): **100 % — prod'da (`03a64e4`)**, prod smoke saralash/tinglash + loginsiz o'yinchi yashil; podkast/tabriknoma KALIT KUTMOQDA — jurnal `docs/AUDIT-22.md` §5, ochiq §6.
 
 | # | AUDIT-22 bosqich | % | Izoh |
 |---|---|---|---|
@@ -16,9 +16,9 @@ AUDIT-22 (TTS podkast/tabriknoma/tinglash + interaktiv runtime + saralash): **~8
 | WP-D | Saralash/tinglash dvigatellari + bosma maketlar | 100 | main; byudjet 160 s (`061e495`) |
 | WP-A | TTS adapterlari (Azure/Aisha/Gemini), zanjir, MP3, podkast/tabriknoma dvigateli, tts-lab | 100 | merge `247b147`; +79 test; haqiqiy sinov KALITSIZ |
 | R | Tinglash TTS seam ulash, ochiq audio route, 4 o'yin o'yinchi oqimi 100 % | 100 | `9c780bf`, `c3bcb57` |
-| R1 | Jonli holatlar (sorting/listening/podcast/greeting), public.ts, promised count, purge, robots | 80 | agent ishlamoqda (worktree `agent-abd9c9364f893e484`) |
-| WP-A2 | audio-params differensial zond, turga xos podkast skeletlari, lamejs LGPL, audio «Tuzatish» yashirish | 30 | agent ishlamoqda (worktree `agent-aac90129c4eb6104a`) |
-| R2 | Merge'lar → dev qayta ishga tushirish → `npm run live -- sorting listening` → to'liq to'plam/lint → docs §6, xotira → deploy (`.env` TTS kalitlari, compose, 021) → prod smoke (`/o/<token>` loginsiz) | 0 | |
+| R1 | Jonli holatlar (sorting/listening/podcast/greeting), public.ts, promised count, purge, robots | 100 | merge `a3d8095` |
+| WP-A2 | audio-params differensial zond, turga xos podkast skeletlari, lamejs LGPL, audio «Tuzatish» yashirish | 100 | merge `e55692c` |
+| R2 | Merge'lar, hideWhen (`7a93b2d`), jonli 2/2, to'liq to'plam, docs §6, deploy + hotfix (TTS kaliti = ogohlantirish, `a5e5183`), prod smoke | 100 | prod `03a64e4` |
 
 Egasidan: Azure Speech kaliti + region, Aisha AI kaliti (`npm run tts-lab`), Anthropic to'ldirish.
 
@@ -35,7 +35,7 @@ Egasidan: Azure Speech kaliti + region, Aisha AI kaliti (`npm run tts-lab`), Ant
 | R3 | Jonli 7/7, smoke (lesson-plan, test), ko'z 5 kind, docs, deploy + prod smoke | 100 | prod `5852285`, rollback `552a46c` |
 
 ## To'xtatilgan jarayonlar
-Yo'q — R1 va WP-A2 agentlari faol (yuqoridagi jadval). Dev server 3111 (`WORKER_INLINE`) ishlayapti, `9c780bf` DAN OLDINGI kod bilan — merge'lardan keyin qayta ishga tushirish shart.
+Yo'q — hamma worktree birlashtirildi. Dev server 3111 (`WORKER_INLINE`) ishlayapti (`e55692c` kodi; hotfix'dan keyin restart kerak bo'lsa).
 
 ## Davom etish qadamlari (AUDIT-20)
 1. Anthropic hisobini to'ldirish (baholovchi Gemini ga tushgan).
