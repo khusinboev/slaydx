@@ -707,6 +707,15 @@ function planInteractive(
        * birinchi qator ham shunday — u o'qituvchiga mo'ljallangan.
        */
       if (s.id === "intro" || (answers && j === 0 && b.kind === "p")) body.push({ k: "note", text, path });
+      /*
+       * Saralashning JAVOB KALITIDA nasr qatorlari («Qushlar: Laylak,
+       * Burgut») CHIZILMAYDI: o'sha betda AYNI ma'lumot to'ldirilgan
+       * jadval bo'lib turadi va ikkalasi birga bosilganda bet ikki
+       * marta bir xil javobni ko'rsatardi (LibreOffice ko'z tekshiruvi,
+       * AUDIT-22). Nasrning o'zi hujjatda QOLADI — hisobot
+       * (`answerKey` qoidasi), baholovchi va qidiruv shuni o'qiydi.
+       */
+      else if (answers && model.kind === "sorting" && categories.length && b.kind === "li") return;
       else if (b.kind === "li") body.push({ k: "li", text, path });
       else if (b.kind === "h3") body.push({ k: "h3", text, path });
       else body.push({ k: "p", text, path });

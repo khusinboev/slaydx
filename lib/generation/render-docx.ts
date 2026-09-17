@@ -1288,6 +1288,13 @@ async function drawGame(plan: GamePlan, K: Kit, P: DocProfile, opts: ResumeDocxO
         const rowCount = Math.max(b.minRows ?? 0, ...b.columns.map((c) => c.items.length));
         /** Bo'sh katak ham BALAND bo'lsin — qo'lda yozishga joy (mm → dxa). */
         const blankRowH = b.bordered ? { value: mmDxa(9), rule: HeightRule.ATLEAST } : undefined;
+        /*
+         * Chegarali jadval oldidan BO'SH qator: ro'yxatning oxirgi
+         * bandi bilan jadvalning yuqori chizig'i orasida havo qolsin.
+         * Ko'z tekshiruvida (AUDIT-22) «Delfin» bulleti jadval
+         * chizig'iga TEGIB turardi.
+         */
+        if (b.bordered) out.push(new Paragraph({ spacing: { after: 0, line: 240, lineRule: LineRuleType.AUTO }, children: [] }));
         out.push(
           new Table({
             width: { size: W, type: WidthType.DXA },

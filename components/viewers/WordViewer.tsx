@@ -958,7 +958,17 @@ function FlowBlock({
       const edge = item.bordered ? "1px solid #999999" : "none";
       const pad = item.bordered ? "3pt 6pt" : "0 6pt 3pt 0";
       return (
-        <table style={{ width: "100%", tableLayout: "fixed", borderCollapse: "collapse", textIndent: 0, marginBottom: "6pt" }}>
+        <table
+          style={{
+            width: "100%",
+            tableLayout: "fixed",
+            borderCollapse: "collapse",
+            textIndent: 0,
+            marginBottom: "6pt",
+            // Chegarali jadval oldidan havo — DOCX dagi bo'sh qator bilan bir xil.
+            ...(item.bordered ? { marginTop: "12pt" } : {}),
+          }}
+        >
           <tbody>
             <tr>
               {item.columns.map((col, i) => (

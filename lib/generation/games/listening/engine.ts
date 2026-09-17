@@ -216,13 +216,20 @@ export async function attachAudio(items: ListeningItem[], lang: string, deps: Sy
  */
 export function listeningSections(model: ListeningModel, L: GameDocLabels, targetName: string): DocSection[] {
   const intro: Block[] = [{ kind: "p", text: L.listenHint(targetName, model.items.length) }];
+  /*
+   * Qatorlar `li` EMAS, `p`: ular allaqachon RAQAMLANGAN («1.», «2.»)
+   * va marker qo'shilsa bosma varaqda «• 1.» bo'lib IKKI marta
+   * belgilanardi (LibreOffice ko'z tekshiruvi, AUDIT-22). Raqamni
+   * markerga almashtirib ham bo'lmaydi: o'qituvchi so'zlarni AYNAN shu
+   * tartibda o'qiydi va javob kaliti ham shu raqamga ishora qiladi.
+   */
   const items: Block[] = model.items.map((it, n) => ({
-    kind: "li",
+    kind: "p",
     text: L.itemLine(n + 1, it.options.map((o, i) => `${L.optionLabel(i)}) ${o}`)),
   }));
   const answers: Block[] = [
     { kind: "p", text: L.keyHint },
-    ...model.items.map((it, n): Block => ({ kind: "li", text: L.answerLine(n + 1, it.text, it.options[it.answer] ?? "", L.optionLabel(it.answer)) })),
+    ...model.items.map((it, n): Block => ({ kind: "p", text: L.answerLine(n + 1, it.text, it.options[it.answer] ?? "", L.optionLabel(it.answer)) })),
   ];
   return [
     { id: "intro", title: L.sectionTitle.intro, blocks: intro },

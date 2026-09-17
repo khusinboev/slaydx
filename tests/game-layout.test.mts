@@ -350,6 +350,8 @@ const listeningPlan = () => planGame(sampleGameDoc("listening"));
 
 const gridsOf = (plan: ReturnType<typeof planGame>): GameCluesItem[] => plan.body.filter((b): b is GameCluesItem => b.k === "clues");
 
+const h1Answers = (plan: ReturnType<typeof planGame>) => plan.body.find((b) => b.k === "h1" && b.sectionId === "answers")!;
+
 test("saralash: BO'SH toifalar jadvali (ustun = toifa) aralash ro'yxatdan KEYIN", () => {
   const plan = sortingPlan();
   const cats = plan.model.sorting!.categories;
@@ -378,6 +380,13 @@ test("saralash: javob kaliti TO'LDIRILGAN jadval va YANGI BETDAN", () => {
     key.columns.map((c) => c.items.map((i) => i.text)),
     cats.map((c) => c.items),
   );
+  /*
+   * Javob kalitida nasr qatorlari CHIZILMAYDI: jadval AYNI ma'lumotni
+   * beradi va ikkalasi birga bosilganda bet ikki marta bir xil javobni
+   * ko'rsatardi (ko'z tekshiruvi).
+   */
+  const keyLines = plan.body.slice(plan.body.indexOf(h1Answers(plan))).filter((b) => b.k === "li");
+  assert.equal(keyLines.length, 0, "javob kaliti ikki marta chizildi (nasr + jadval)");
   assert.ok(key.columns.every((c) => c.items.every((i) => /^game\.sorting\.\d+\.items\.\d+$/.test(i.path))), "javob katagi modelga ishora qilmaydi");
 
   assert.ok(plan.pageBreaks.includes("answers"), "javob kaliti yangi betdan boshlanmadi");
@@ -393,7 +402,12 @@ test("tinglash: bosma varaqda ESHITILADIGAN MATN yo'q, javob kalitida bor", () =
   const at = plan.body.findIndex((b) => b.k === "h1" && b.sectionId === "answers");
   assert.ok(at > 0);
 
-  const before = plan.body.slice(0, at).filter((b) => b.k === "li").map((b) => (b as { text: string }).text);
+  /*
+   * Qatorlar `p` (marker YO'Q): ular allaqachon raqamlangan va bullet
+   * qo'shilsa varaqda «• 1.» bo'lib ikki marta belgilanardi.
+   */
+  const before = plan.body.slice(0, at).filter((b) => b.k === "p").map((b) => (b as { text: string }).text);
+  assert.equal(plan.body.filter((b) => b.k === "li").length, 0, "raqamlangan qator ustiga marker qo'yildi");
   assert.equal(before.length, items.length, "har topshiriq bitta qator bo'lishi kerak");
   for (const it of items) {
     assert.ok(!before.some((t) => t.includes(it.text)), `«${it.text}» topshiriq betiga bosildi — mashq o'qishga aylanadi`);
@@ -401,7 +415,7 @@ test("tinglash: bosma varaqda ESHITILADIGAN MATN yo'q, javob kalitida bor", () =
   // Variantlar esa BOR va harflangan.
   assert.match(before[0], /^1\. A\) /);
   // Javob kalitida so'z ham, tarjimasi ham bor.
-  const after = plan.body.slice(at).filter((b) => b.k === "li").map((b) => (b as { text: string }).text);
+  const after = plan.body.slice(at).filter((b) => b.k === "p").map((b) => (b as { text: string }).text);
   assert.ok(after.some((t) => t.includes(items[0].text) && t.includes(items[0].options[items[0].answer])), "javob kalitida so'z–tarjima juftligi yo'q");
 });
 
