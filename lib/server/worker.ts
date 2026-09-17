@@ -17,7 +17,7 @@ import {
 } from "./jobs";
 import { refund, refundPartial } from "./credits";
 import { deleteGenerationFile, putGenerationFile } from "./storage";
-import { deleteAssets, extractAssets, putAssets } from "./assets";
+import { deleteAssets, extractAssets, putAssetBytes, putAssets } from "./assets";
 import { buildPreview } from "./preview";
 import { logoDataUrl } from "./logo";
 import { photoDataUrl, purgeOldPhotos } from "./photo";
@@ -213,7 +213,17 @@ async function runJob(job: ClaimedJob): Promise<void> {
      */
     const photo =
       tool.id === "resume" ? await photoDataUrl(job.userId, String(job.values.photoAssetId ?? "")) : undefined;
-    const file = await buildArtifact(tool, job.values, { deadline, logo, template, source, photo, onStage, onProgress: live?.sink });
+    const file = await buildArtifact(tool, job.values, {
+      deadline,
+      logo,
+      template,
+      source,
+      photo,
+      onStage,
+      onProgress: live?.sink,
+      // Tinglash o'yini TTS parchalari — shu ishning aktivlariga (`/api/o/[token]/audio/[assetId]` orqali ochiq).
+      putAsset: (bytes, mime) => putAssetBytes(job.id, mime, Buffer.from(bytes)),
+    });
 
     if (!file.bytes?.byteLength) {
       throw new Error("Fayl bo'sh chiqdi — qayta urinib ko'ring");

@@ -210,3 +210,26 @@ test("flashcards byudjeti dvigatel zaxiralari + bitta yozish chaqiruvidan katta"
   const { CARDS_REVIEW_RESERVE_MS, CARDS_POLISH_RESERVE_MS } = await import("../lib/generation/games/flashcards/engine.ts");
   assert.ok(gameBudgetMs("flashcards", 5) >= CARDS_REVIEW_RESERVE_MS + CARDS_POLISH_RESERVE_MS + 55_000, `byudjet ${gameBudgetMs("flashcards", 5)} ms`);
 });
+
+test("saralash/tinglash byudjeti dvigatel zaxiralari + bitta yozish chaqiruvidan katta", async () => {
+  const { gameBudgetMs } = await import("../lib/generation/budget.ts");
+  const so = await import("../lib/generation/games/sorting/engine.ts");
+  const li = await import("../lib/generation/games/listening/engine.ts");
+  assert.ok(gameBudgetMs("sorting", 6) >= so.SORTING_REVIEW_RESERVE_MS + so.SORTING_POLISH_RESERVE_MS + 55_000, `saralash ${gameBudgetMs("sorting", 6)}`);
+  assert.ok(gameBudgetMs("listening", 10) >= li.LISTENING_REVIEW_RESERVE_MS + li.LISTENING_POLISH_RESERVE_MS + 55_000, `tinglash ${gameBudgetMs("listening", 10)}`);
+});
+
+/* ───────────── tinglash TTS seam'i ulanishi (AUDIT-22 R) — manba skani ───────────── */
+
+test("tinglash audio seam'i: worker `putAsset` beradi, `buildArtifact` zanjirni ulaydi, `writeWithLlm` ikkalasini dvigatelga uzatadi", () => {
+  const worker = readFileSync("lib/server/worker.ts", "utf8");
+  assert.match(worker, /putAsset:\s*\(bytes, mime\) => putAssetBytes\(job\.id, mime, Buffer\.from\(bytes\)\)/, "worker: aktiv shu ishning id si bilan yoziladi");
+  const index = readFileSync("lib/generation/index.ts", "utf8");
+  assert.match(index, /opts\.putAsset \? \{ putAsset: opts\.putAsset, tts: opts\.tts \?\? providerOfChain\(ttsChain\) \}/, "index: `putAsset` bo'lsa standart TTS zanjiri ulanadi");
+  const write = readFileSync("lib/generation/write-llm.ts", "utf8");
+  const call = write.slice(write.indexOf("await buildGameDoc("), write.indexOf("return built ? built.doc : null;"));
+  assert.match(call, /tts: extras\.tts/, "write-llm: `tts` dvigatelga o'tadi");
+  assert.match(call, /putAsset: extras\.putAsset/, "write-llm: `putAsset` dvigatelga o'tadi");
+  const player = readFileSync("components/game/Player.tsx", "utf8");
+  assert.match(player, /\/api\/o\/\$\{token\}\/audio\/\$\{assetId\}/, "o'yinchi ochiq audio route'ga murojaat qiladi");
+});

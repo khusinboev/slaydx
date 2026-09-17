@@ -160,6 +160,24 @@ export const env = {
     model: str("FAL_MODEL", "fal-ai/flux/schnell"),
   },
 
+  /**
+   * TTS (AUDIT-22: podkast, tabriknoma) — `docs/research/tts.md` §3.
+   *
+   * Nega bu yerda ham, `lib/generation/tts/*` da `process.env` ham:
+   * adapterlar IZOMORF qatlamda (server importi yo'q, mock `fetch`
+   * bilan sinaladi) va `env.ts` `server-only` — ular uni import qila
+   * olmaydi. Bu yerdagi ro'yxat SOZLAMA KO'ZGUSI: `assertRuntimeConfig`
+   * va `ttsConfigured()` shu yerdan o'qiydi, ya'ni kalit yo'qligi
+   * ishga tushishda ko'rinadi, generatsiya yiqilganda emas.
+   */
+  tts: {
+    azureKey: str("AZURE_SPEECH_KEY"),
+    azureRegion: str("AZURE_SPEECH_REGION"),
+    aishaKey: str("AISHA_API_KEY"),
+    /** Gemini TTS PREVIEW modeli — bo'sh bo'lsa provayder o'chiq (ataylab). */
+    geminiModel: str("TTS_GEMINI_MODEL"),
+  },
+
   storageDir: str("STORAGE_DIR", ".data/files"),
 
   click: {
@@ -189,6 +207,18 @@ export const env = {
 
 export function llmConfigured(): boolean {
   return Boolean(env.gemini.key || env.xai.key);
+}
+
+/**
+ * Ovoz provayderi bormi (podkast/tabriknoma).
+ *
+ * Azure IKKALA qiymatni talab qiladi: kalit bo'lib region bo'lmasa URL
+ * `https://.tts.speech…` bo'lib, DNS xatosi «tarmoq nosozligi» deb
+ * ko'rinardi. Gemini ataylab `TTS_GEMINI_MODEL` ga bog'langan —
+ * `GEMINI_API_KEY` ning o'zi preview TTS ni YOQMAYDI.
+ */
+export function ttsConfigured(): boolean {
+  return Boolean((env.tts.azureKey && env.tts.azureRegion) || env.tts.aishaKey || (env.gemini.key && env.tts.geminiModel));
 }
 
 export function paymentsConfigured(): { click: boolean; payme: boolean } {
@@ -221,6 +251,18 @@ export function assertRuntimeConfig(): string[] {
   }
   if (isProd && !env.cronSecret && env.telegramBotToken) {
     problems.push("CRON_SECRET yo'q — Telegram webhook'ni himoyalab bo'lmaydi");
+  }
+  /*
+   * AUDIT-22: TTS kalitisiz podkast/tabriknoma HAR SAFAR «Ovoz
+   * provayderi sozlanmagan» beradi va kredit qaytadi — vosita
+   * ko'rinib turadi, lekin ishlamaydi. Bu ogohlantirish prod da ham
+   * XATO emas (qolgan 15 vosita ishlayveradi), lekin jim qolmasin.
+   */
+  if (!ttsConfigured()) {
+    problems.push("TTS kaliti yo'q (AZURE_SPEECH_KEY+AZURE_SPEECH_REGION / AISHA_API_KEY) — podkast va tabriknoma ishlamaydi");
+  }
+  if (env.tts.azureKey && !env.tts.azureRegion) {
+    problems.push("AZURE_SPEECH_REGION yo'q — AZURE_SPEECH_KEY yolg'iz ishlamaydi");
   }
   return problems;
 }
