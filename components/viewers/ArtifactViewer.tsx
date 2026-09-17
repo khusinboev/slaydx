@@ -9,6 +9,7 @@ import { SlideViewer } from "./SlideViewer";
 import { WordViewer } from "./WordViewer";
 import { TranslationViewer } from "./TranslationViewer";
 import { ImageViewer } from "./ImageViewer";
+import { AudioViewer } from "./AudioViewer";
 
 export function ArtifactViewer({
   gen,
@@ -76,6 +77,20 @@ export function ArtifactViewer({
        * `doc.game` ni bilmaydi va `editable` false bo'lib qoladi.
        */
       return <WordViewer doc={doc} gen={detail} onGen={onDetail} onEditState={onEditState} />;
+    case "audio":
+      /*
+       * AUDIO (AUDIT-22 R0): podkast va tabriknoma — pleer + transkript.
+       * Ko'ruvchiga `gen` beriladi, chunki fayl HAVOLASI (aynan yuklab
+       * olinadigan MP3) generatsiya id sidan quriladi — hujjatda audio
+       * baytlari yo'q. Tahrir proplari ATAYLAB berilmaydi: transkriptni
+       * tahrirlash audio bilan ajralib ketardi (fayl qayta sintez
+       * qilinmaydi), ya'ni «ko'rdim = oldim» buzilardi.
+       */
+      return (
+        <div className="flex min-h-0 flex-1 flex-col">
+          <AudioViewer doc={doc} gen={{ id: gen.id, fileName: gen.fileName }} />
+        </div>
+      );
     case "image":
       return (
         <div className="flex min-h-0 flex-1 flex-col">

@@ -86,8 +86,9 @@ test("`teacher` ko'ruvchisi `ArtifactViewer` da tahrir proplari bilan ulangan", 
  */
 test("o'yin vositalari `game` ko'ruvchisiga tushadi, boshqa hech kim tushmaydi", () => {
   const gameTools = TOOLS.filter((t) => t.group === "oyinlar");
-  assert.equal(gameTools.length, 2, `o'yin vositalari: ${gameTools.map((t) => t.id).join(", ")}`);
-  assert.deepEqual(gameTools.map((t) => t.id).sort(), ["crossword", "flashcards"]);
+  // AUDIT-22: saralash va tinglash qo'shildi — ularning ham bosma varag'i bor.
+  assert.equal(gameTools.length, 4, `o'yin vositalari: ${gameTools.map((t) => t.id).join(", ")}`);
+  assert.deepEqual(gameTools.map((t) => t.id).sort(), ["crossword", "flashcards", "listening", "sorting"]);
   for (const t of gameTools) assert.equal(viewerKind(t.id), "game", `${t.id}: ko'ruvchi ${viewerKind(t.id)}`);
   // Boshqa hech bir vosita `game` ga tushmasin (shox kengayib ketmasin).
   for (const t of TOOLS) {
@@ -109,4 +110,63 @@ test("har `ViewerKind` da `ArtifactViewer` shoxi bor (yangi tur unutilmasin)", (
     if (k === "academic") continue;
     assert.ok(src.includes(`case "${k}":`), `MUTATSIYA: «${k}» ko'ruvchisi ArtifactViewer da ulanmagan`);
   }
+});
+
+/* ══════════════ AUDIT-22: audio ko'ruvchisi ══════════════ */
+
+/**
+ * Mutatsiyalar (har biri qizardi):
+ *   1. `viewerKind` dagi `podcast`/`greeting` shoxi olib tashlandi —
+ *      MP3 `academic` ga tushib, Word ko'ruvchisi bo'sh varaq chizardi;
+ *   2. `ArtifactViewer` da `case "audio"` yozilmadi — «har ViewerKind da
+ *      shox bor» testi;
+ *   3. `AudioViewer` `inline=1` siz havola berdi — Chrome pleerni
+ *      o'ynatmasdan yuklab olishga o'tardi;
+ *   4. `AudioViewer` transkriptni `doc.audio.script` o'rniga
+ *      `doc.sections` dan chizdi — «eshitgan matnim ekranda» buzilardi.
+ */
+
+test("MP3 chiqaradigan HAR vosita `audio` ko'ruvchisiga tushadi", () => {
+  const audioTools = TOOLS.filter((t) => t.output === "mp3");
+  assert.equal(audioTools.length, 2, `audio vositalari: ${audioTools.map((t) => t.id).join(", ")}`);
+  assert.deepEqual(audioTools.map((t) => t.id).sort(), ["greeting", "podcast"]);
+  for (const t of audioTools) assert.equal(viewerKind(t.id), "audio", `${t.id}: ko'ruvchi ${viewerKind(t.id)}`);
+  // Boshqa hech bir vosita `audio` ga tushmasin (shox kengayib ketmasin).
+  for (const t of TOOLS) {
+    if (t.output !== "mp3") assert.notEqual(viewerKind(t.id), "audio", `${t.id}: audio bo'lmagan vosita audio ko'ruvchida`);
+  }
+  // «Media» bo'limi = MP3 vositalari (hozircha aynan mos).
+  assert.deepEqual(TOOLS.filter((t) => t.group === "media").map((t) => t.id).sort(), ["greeting", "podcast"]);
+});
+
+test("`audio` ko'ruvchisi `ArtifactViewer` da ulangan va generatsiya id sini oladi", () => {
+  const src = readFileSync(new URL("../components/viewers/ArtifactViewer.tsx", import.meta.url), "utf8");
+  assert.match(src, /case "audio":/);
+  /*
+   * Ko'ruvchiga `gen` SHART: fayl havolasi generatsiya id sidan
+   * quriladi (hujjatda audio baytlari yo'q). MUTATSIYA: `gen` propini
+   * tushirib qoldirish — pleer manbasiz qolardi.
+   */
+  assert.match(src, /case "audio":[\s\S]{0,1400}?<AudioViewer doc=\{doc\} gen=\{\{ id: gen\.id/);
+});
+
+test("`AudioViewer` pleeri `inline=1` bilan, transkript esa `doc.audio.script` dan", () => {
+  const src = readFileSync(new URL("../components/viewers/AudioViewer.tsx", import.meta.url), "utf8");
+  // MUTATSIYA: `inline=1` ni olib tashlash — Chrome faylni yuklab olardi.
+  assert.match(src, /file\?inline=1/, "pleer manbasi `inline=1` siz");
+  assert.match(src, /<audio[\s\S]{0,200}controls/, "pleer boshqaruvlari yo'q");
+  // Transkript YAGONA manbadan — model, `sections` emas.
+  assert.match(src, /doc\.audio/, "transkript modeldan o'qilmayapti");
+  assert.ok(!/doc\.sections/.test(src), "MUTATSIYA: transkript `sections` dan chizilyapti — audio bilan ajralib ketardi");
+  // Yuklab olish havolasi `inline` SIZ (aks holda fayl tabda ochilib qolardi).
+  assert.match(src, /href=\{`\/api\/generations\/\$\{gen\.id\}\/file`\}/);
+});
+
+test("MP3 fayl javobi: `Accept-Ranges` bor, `inline` esa parametrga bog'liq", () => {
+  const src = readFileSync(new URL("../app/api/generations/[id]/file/route.ts", import.meta.url), "utf8");
+  assert.match(src, /Accept-Ranges/, "audio uchun diapazon qo'llab-quvvatlanmaydi — pleer oldinga sakray olmasdi");
+  assert.match(src, /audio\//, "audio turi aniqlanmayapti");
+  // MUTATSIYA: audio uchun DOIM `inline` qilish — «MP3 yuklab olish» tugmasi
+  // faylni yuklamasdan tabda ochib yuborardi.
+  assert.match(src, /inline \? "inline" : "attachment"/);
 });

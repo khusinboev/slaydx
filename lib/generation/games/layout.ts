@@ -415,7 +415,8 @@ export function planGame(doc: AcademicDoc): GamePlan {
   };
 
   if (kind === "crossword") planCrossword(model, doc, L, spec.label[L.lang], head, body, pageBreaks, titleOf, pushFigure);
-  else planCards(model, L, body, pageBreaks);
+  else if (kind === "flashcards") planCards(model, L, body, pageBreaks);
+  else planSectionsOnly(model, doc, L, spec.label[L.lang], head, body, pageBreaks, titleOf);
 
   return {
     model,
@@ -527,6 +528,53 @@ function planCrossword(
   pageBreaks.push("answers");
   body.push({ k: "h1", text: titleOf("answers"), sectionId: "answers", path: "sections.answers.title", pageBreak: true });
   pushBlocks("answers");
+}
+
+/* ────────────────────────── saralash / tinglash (AUDIT-22 R0) ────────────────────────── */
+
+/**
+ * INTERAKTIV o'yinlarning BOSMA varag'i — hozircha UMUMIY sxema:
+ * shapka + bo'limlar tartib bilan, javob kaliti yangi betdan.
+ *
+ * Nega shunday, «hali maket yo'q» emas: `planGame` — DOCX ning ham,
+ * ko'ruvchining ham YAGONA manbasi. Kind uchun shox bo'lmasa, oqim
+ * jimgina kartalar panjarasiga tushib ketardi (`else planCards`) va
+ * saralash o'yini bo'sh A7 kataklari bo'lib chiqardi — ekran bilan
+ * fayl aynan shu yerda ajralardi.
+ *
+ * WP-D bu funksiyani ALMASHTIRADI: saralashda toifalar JADVALI
+ * (ustunlar) va aralash elementlar ro'yxati, tinglashda «so'z —
+ * tarjima» lug'at jadvali. Shartnoma o'zgarmaydi: nasr dvigateldan
+ * (`doc.sections`), `path` esa `sections.<i>.blocks.<j>`.
+ */
+function planSectionsOnly(
+  model: GameModel,
+  doc: AcademicDoc,
+  L: GameDocLabels,
+  typeLabel: string,
+  head: GameHeadItem[],
+  body: GameBodyItem[],
+  pageBreaks: string[],
+  titleOf: (id: string) => string,
+): void {
+  head.push({ k: "title", text: L.docTitle[model.kind], path: "game.kind" });
+  if (typeLabel) head.push({ k: "subtitle", text: typeLabel, path: "game.type" });
+  const topic = clean(model.topic) || clean(doc.meta.topic);
+  if (topic) head.push({ k: "field", label: L.fieldTopic, text: topic, path: "meta.topic" });
+
+  doc.sections.forEach((s, i) => {
+    // Javob kaliti DOIM yangi betdan — o'quvchiga tarqatiladigan varaqda
+    // javoblar ko'rinib turmasligi kerak (reyestr skeleti ham shunday).
+    const answers = s.id === "answers";
+    if (answers) pageBreaks.push(s.id);
+    body.push({ k: "h1", text: titleOf(s.id), sectionId: s.id, path: `sections.${i}.title`, pageBreak: answers });
+    s.blocks.forEach((b, j) => {
+      const path = `sections.${i}.blocks.${j}`;
+      if (b.kind === "li") body.push({ k: "li", text: clean(b.text), path });
+      else if (b.kind === "h3") body.push({ k: "h3", text: clean(b.text), path });
+      else body.push({ k: "p", text: clean(b.text), path });
+    });
+  });
 }
 
 /* ────────────────────────── flesh kartalar ────────────────────────── */

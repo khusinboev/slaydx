@@ -1,7 +1,11 @@
 import type { LucideIcon } from "lucide-react";
 import {
   BookOpen,
+  Boxes,
   Briefcase,
+  Gift,
+  Headphones,
+  Mic,
   FileSpreadsheet,
   FileText,
   Files,
@@ -38,6 +42,11 @@ export const TOOL_ICONS: Record<string, LucideIcon> = {
    * kartochkasi bo'sh doira bilan chiqardi.
    */
   "list-checks": ListChecks,
+  /* AUDIT-22: interaktiv o'yinlar (saralash, tinglash) va Media bo'limi. */
+  boxes: Boxes,
+  headphones: Headphones,
+  mic: Mic,
+  gift: Gift,
   /* AUDIT-21: krossvord, flesh kartalar, infografika. */
   puzzle: Puzzle,
   layers: Layers,

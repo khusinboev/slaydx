@@ -28,6 +28,7 @@ import { buildTeacherDoc } from "./teacher/engine";
 import { TEACHER_TOOL_LIST } from "./teacher/types";
 import { buildGameDoc } from "./games/engine";
 import { GAME_TOOL_LIST } from "./games/types";
+import { AUDIO_TOOL_LIST } from "./audio/types";
 import { thesisTypeId } from "../tools";
 import type { FormValues } from "../types";
 import type { AcademicDoc, Block, BuiltFile, DocMeta, DocSection } from "./types";
@@ -856,8 +857,10 @@ const WRITER = new Set(["referat", "coursework", "mustaqil-ish"]);
 const WORK_TOOLS = new Set(["referat", "coursework", "mustaqil-ish"]);
 /** O'qituvchi oilasi (AUDIT-20): dars rejasi, xarita, glossariy, keys, test. */
 const TEACHER_TOOLS = new Set<string>(TEACHER_TOOL_LIST);
-/** Bosma o'yinlar (AUDIT-21): krossvord, flesh kartalar — `games/` dvigateli. */
+/** O'yinlar (AUDIT-21/22): krossvord, kartalar, saralash, tinglash — `games/` dvigateli. */
 const GAME_TOOLS = new Set<string>(GAME_TOOL_LIST);
+/** Audio (AUDIT-22): podkast, tabriknoma — `audio/` dvigateli (`BuiltFile`, MP3). */
+const AUDIO_TOOLS = new Set<string>(AUDIO_TOOL_LIST);
 
 /**
  * Dvigatelga uzatiladigan qo'shimcha imkoniyatlar (Maqola 2): bosqich
@@ -973,6 +976,17 @@ export async function writeWithLlm(
     });
     return built ? built.doc : null;
   }
+  /*
+   * AUDIO (AUDIT-22): podkast va tabriknoma bu yo'ldan UMUMAN o'tmaydi —
+   * ular `buildArtifact` ichida o'z dvigateliga (`audio/engine.ts`)
+   * ketadi va `BuiltFile` (MP3) qaytaradi, `AcademicDoc` emas.
+   *
+   * Shox baribir shu yerda turibdi va ANIQ `null` qaytaradi: aks holda
+   * oqim pastdagi `WRITER`/`lesson-plan` shoxlariga tushib, podkast
+   * so'ragan foydalanuvchi referat matnini olardi (aynan shu xato
+   * AUDIT-21 da krossvord uchun yozib qo'yilgan edi).
+   */
+  if (AUDIO_TOOLS.has(meta.toolId)) return null;
   if (WRITER.has(meta.toolId)) return writeWriterWithLlm(meta, deadline);
   if (meta.toolId === "lesson-plan") return writeLessonWithLlm(meta, deadline);
   if (meta.toolId === "glossary") return writeGlossaryWithLlm(meta, deadline);

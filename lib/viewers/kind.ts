@@ -30,6 +30,16 @@ export type ViewerKind =
    * sahifalab yuborardi.
    */
   | "game"
+  /**
+   * AUDIO (AUDIT-22): podkast va tabriknoma — chiqish MP3.
+   *
+   * Nega alohida ko'ruvchi: bu oilada VARAQ yo'q. Word oqimi ham,
+   * rasm galereyasi ham audioga yaramaydi — kerak bo'lgani pleer va
+   * TRANSKRIPT (`doc.audio.script`), ya'ni «eshitgan matnim ekranda
+   * turgan matn». Fayl `/api/generations/{id}/file?inline=1` dan
+   * oqadi (`AudioViewer`).
+   */
+  | "audio"
   | "translation"
   | "image";
 
@@ -49,8 +59,20 @@ export function viewerKind(id: ToolId): ViewerKind {
       return "teacher";
     case "crossword":
     case "flashcards":
-      // AUDIT-21: ikkala bosma o'yin bitta ko'ruvchida (`planGame`).
+    case "sorting":
+    case "listening":
+      /*
+       * AUDIT-21/22: to'rtala o'yin bitta ko'ruvchida (`planGame`).
+       * Saralash va tinglash EKRAN o'yinlari, lekin ularning ham bosma
+       * varag'i bor (jadval + javob kaliti) — natija sahifasida aynan
+       * shu ko'rinadi, interaktiv rejim esa ochiq havolada
+       * (`app/o/[token]`, `publicGameView`).
+       */
       return "game";
+    case "podcast":
+    case "greeting":
+      // AUDIT-22: chiqish MP3 — pleer + transkript (`AudioViewer`).
+      return "audio";
     case "translation":
       return "translation";
     case "image":

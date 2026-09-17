@@ -563,11 +563,17 @@ test("o'yin/plakat vositalarining shartnomasi: guruh, chiqish, forma, majburiy m
 test("bo'lim yorliqlari bitta manbadan; bo'sh bo'lim ko'rinmaydi", () => {
   const groups = visibleToolGroups();
   const ids = groups.map((g) => g.id);
-  assert.deepEqual(ids, ["umumiy", "talaba", "oqituvchi", "oyinlar"], `bo'limlar: ${ids.join(", ")}`);
+  // AUDIT-22: «Media» bo'limi (podkast, tabriknoma) endi VOSITALI — ko'rinadi.
+  assert.deepEqual(ids, ["umumiy", "talaba", "oqituvchi", "oyinlar", "media"], `bo'limlar: ${ids.join(", ")}`);
   assert.equal(groups.find((g) => g.id === "oyinlar")?.label, "O'yinlar");
-  // `media` e'lon qilingan, lekin vositasi yo'q — CHIZILMAYDI.
+  assert.equal(groups.find((g) => g.id === "media")?.label, "Media");
   assert.ok(TOOL_GROUPS.some((g) => g.id === "media"), "media bo'limi reyestrdan yo'qoldi");
-  assert.ok(!ids.includes("media"), "MUTATSIYA: bo'sh «Media» bo'limi ko'rindi");
+  /*
+   * «Bo'sh bo'lim ko'rinmaydi» qoidasi kuchda qoladi — endi uni
+   * to'g'ridan-to'g'ri tekshiramiz (MUTATSIYA: `visibleToolGroups` dagi
+   * filtrni olib tashlash shu yerda qizaradi).
+   */
+  assert.equal(groups.filter((g) => !TOOLS.some((t) => t.group === g.id)).length, 0, "vositasiz bo'lim chizildi");
   // HAR vosita chiziladigan bo'limga tegishli — aks holda u sotib olinmaydi.
   for (const t of TOOLS) assert.ok(ids.includes(t.group), `${t.id}: «${t.group}» bo'limi hech qayerda chizilmaydi`);
   // Ikki komponent ham SHU manbadan o'qiydi (qo'lda yozilgan nusxa qolmasin).
@@ -578,4 +584,111 @@ test("bo'lim yorliqlari bitta manbadan; bo'sh bo'lim ko'rinmaydi", () => {
   // Har vosita ikonkasi HAQIQATAN mavjud (topilmasa kartochka bo'sh chiqardi).
   const icons = readFileSync(new URL("../components/shell/icons.tsx", import.meta.url), "utf8");
   for (const t of TOOLS) assert.ok(icons.includes(`"${t.icon}"`) || new RegExp(`^\\s*${t.icon}:`, "m").test(icons), `${t.id}: «${t.icon}» ikonkasi TOOL_ICONS da yo'q`);
+});
+
+/* ══════════════ AUDIT-22: interaktiv o'yinlar + Media ══════════════ */
+
+/**
+ * Mutatsiyalar (har biri qizardi):
+ *   1. `sorting`/`listening` `basePrice` 2 000 → 3 000 — «tekis 2 000» testi;
+ *   2. `priceFor` ga `durationMin` bo'yicha jadval qo'shildi (podkast
+ *      5 daqiqa qimmatroq) — «audio tekis 4 000» testi;
+ *   3. `podcast.output` `docx` qoldirildi — «chiqish MP3» testi;
+ *   4. tabriknomada `recipient.required` olib tashlandi — «kimga
+ *      to'ldirilmasa navbatga tushmaydi» testi;
+ *   5. podkastning `text` rejimida `missingRequired` mavzu so'radi —
+ *      «matn rejimida mavzu emas, matn» testi.
+ */
+
+test("saralash/tinglash — TEKIS 2 000; parametrlar narxni o'zgartirmaydi", () => {
+  const probes: FormValues[] = [
+    { categoryCount: 6, itemsPerCategory: 8, sortingType: "qarama-qarshi" },
+    { categoryCount: 2, itemsPerCategory: 3 },
+    { itemCount: 20, listeningType: "iboralar", nativeLanguage: "ru", targetLanguage: "de" },
+    { itemCount: 10 },
+    { price: 1, basePrice: 1 },
+  ];
+  for (const id of ["sorting", "listening"] as const) {
+    const tool = TOOL_BY_ID[id];
+    assert.equal(tool.basePrice, 2000, `${id}: tayanch narx`);
+    assert.equal(priceFor(tool, {}), 2000, `${id}: bo'sh forma`);
+    for (const values of probes) {
+      assert.equal(priceFor(tool, values), 2000, `MUTATSIYA: ${id} da parametr narxni o'zgartirdi — ${JSON.stringify(values)}`);
+    }
+  }
+});
+
+test("podkast/tabriknoma — TEKIS 4 000, davomiylik narxga ta'sir qilmaydi", () => {
+  const probes: FormValues[] = [
+    { durationMin: 1 },
+    { durationMin: 5, podcastType: "intervyu", mode: "text", sourceText: "x".repeat(2000) },
+    { durationMin: 4, occasion: "navroz", recipient: "Dilnoza opa", relation: "ustozim" },
+    { language: "ru" },
+    { price: 1, basePrice: 1 },
+  ];
+  for (const id of ["podcast", "greeting"] as const) {
+    const tool = TOOL_BY_ID[id];
+    assert.equal(tool.basePrice, 4000, `${id}: tayanch narx`);
+    assert.equal(priceFor(tool, {}), 4000, `${id}: bo'sh forma`);
+    for (const values of probes) {
+      assert.equal(priceFor(tool, values), 4000, `MUTATSIYA: ${id} da parametr narxni o'zgartirdi — ${JSON.stringify(values)}`);
+    }
+  }
+  // Mavjud narxlar tegilmadi.
+  assert.equal(priceFor(TOOL_BY_ID.crossword, {}), 2000);
+  assert.equal(priceFor(TOOL_BY_ID.test, {}), 3000);
+});
+
+test("Media vositalarining shartnomasi: guruh, MP3 chiqishi, rejimlar", () => {
+  const podcast = TOOL_BY_ID.podcast;
+  const greeting = TOOL_BY_ID.greeting;
+  for (const t of [podcast, greeting]) {
+    assert.equal(t.group, "media", `${t.id}: bo'lim`);
+    // MUTATSIYA: `docx` qolsa — ko'ruvchi Word oqimiga tushib bo'sh varaq chizardi.
+    assert.equal(t.output, "mp3", `${t.id}: chiqish formati`);
+    assert.equal(t.custom, undefined, `${t.id}: custom forma kerak emas edi`);
+    assert.ok(t.extraOptional, `${t.id}: «Qo'shimcha talablar» maydoni yoqilmagan`);
+    assert.ok(isToolSlug(t.slug), `${t.id}: slug ro'yxatda yo'q`);
+    assert.equal(TOOL_BY_SLUG[t.slug].id, t.id);
+    for (const f of t.fields) {
+      if (f.kind === "chips") assert.ok(f.options && f.options.length >= 2, `${t.id}/${f.name}: chip variantlari yo'q`);
+    }
+  }
+  // Podkast — uch rejim (mavzu/matn/fayl), tabriknomada rejim yo'q.
+  assert.deepEqual(podcast.modes?.map((m) => m.id), ["topic", "text", "file"]);
+  assert.equal(greeting.modes, undefined, "tabriknomada rejim tanlovi kerak emas");
+  // Davomiylik chiplari hisobotlardan: podkast 5 ta, tabriknoma 4 ta.
+  assert.equal(podcast.fields.find((f) => f.name === "durationMin")?.options?.length, 5);
+  assert.equal(greeting.fields.find((f) => f.name === "durationMin")?.options?.length, 4);
+  // Ovoz TANLANMAYDI — u til jadvalidan olinadi (`tts.md` §3).
+  for (const t of [podcast, greeting]) assert.ok(!t.fields.some((f) => /voice/i.test(f.name)), `${t.id}: ovoz maydoni formada`);
+});
+
+test("majburiy maydonlar: podkast rejimga qarab, tabriknomada «Kimga?»", () => {
+  const podcast = TOOL_BY_ID.podcast;
+  const greeting = TOOL_BY_ID.greeting;
+  // Mavzu rejimi — mavzu majburiy.
+  assert.deepEqual(missingRequired(podcast, {}), [podcast.topicLegend]);
+  assert.deepEqual(missingRequired(podcast, { topic: "AI va ta'lim" }), []);
+  /*
+   * MUTATSIYA: `text` rejimi `missingRequired` da hisobga olinmasa —
+   * butun matnni qo'ygan foydalanuvchi «Mavzu to'ldirilmagan» olardi.
+   */
+  assert.deepEqual(missingRequired(podcast, { mode: "text" }), ["Manba matni"]);
+  assert.deepEqual(missingRequired(podcast, { mode: "text", sourceText: "Uzun matn" }), []);
+  assert.deepEqual(missingRequired(podcast, { mode: "file" }), ["Manba fayl matni"]);
+
+  // Tabriknomada mavzu YO'Q, lekin «Kimga?» majburiy.
+  assert.equal(greeting.topicLegend, undefined, "tabriknomada mavzu so'ralmaydi");
+  assert.deepEqual(missingRequired(greeting, {}), ["Kimga?"]);
+  assert.deepEqual(missingRequired(greeting, { recipient: "Dilnoza opa" }), []);
+
+  // Interaktiv o'yinlarda mavzu majburiy (bo'sh so'rov navbatga tushmasin).
+  for (const id of ["sorting", "listening"] as const) {
+    const tool = TOOL_BY_ID[id];
+    assert.deepEqual(missingRequired(tool, {}), [tool.topicLegend], `${id}: mavzu majburiy emas`);
+    assert.deepEqual(missingRequired(tool, { topic: "Hayvonlar" }), [], `${id}`);
+  }
+  // Yangi vositalar `defaultPages` ni o'zgartirmasin.
+  for (const id of ["sorting", "listening", "podcast", "greeting"] as const) assert.equal(defaultPages(id), "10-15", id);
 });

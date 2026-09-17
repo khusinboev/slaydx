@@ -162,12 +162,15 @@ test("replika TTS bo'lagiga sig'adi; ovoz soni 1 yoki 2", () => {
   for (const t of audioTypesOf("podcast")) assert.equal(t.speakers, 2, `${t.id}: podkast turi monolog`);
 });
 
+/** Generik `JudgeSpec<C>` ni mezon nomini bilmasdan tekshirish uchun. */
+type AnyJudge = { criteria: readonly string[]; describe: Record<string, string>; labels: Record<string, string>; roleLine?: string; typeLabel?: string; typeNoun?: string };
+
 test("baholovchi mezonlari va hisobot qoidalari to'liq (bezak qolmasin)", () => {
   assert.equal(PODCAST_JUDGE_CRITERIA.length, 5);
   assert.equal(GREETING_JUDGE_CRITERIA.length, 5);
   for (const kind of AUDIO_KINDS) {
     for (const t of AUDIO_TYPES[kind]) {
-      const spec = t.judge;
+      const spec = t.judge as unknown as AnyJudge;
       assert.ok(spec.criteria.length >= 3, `${t.id}: mezon kam`);
       for (const c of spec.criteria) {
         assert.ok(spec.describe[c] && spec.describe[c].length > 40, `${t.id}/${c}: tavsif yo'q yoki juda qisqa`);

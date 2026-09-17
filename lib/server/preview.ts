@@ -91,6 +91,24 @@ export function buildPreview(doc: AcademicDoc | null): GenerationPreview | null 
     if (image || lines.length) return { ...(image ? { url: image } : {}), ...(lines.length ? { lines } : {}) };
     return null;
   }
+  /*
+   * AUDIO (AUDIT-22): podkast/tabriknoma kartochkasi — TRANSKRIPTNING
+   * birinchi replikalari.
+   *
+   * Generik matn ajratgichi (pastda) bu yerda yaramaydi: audio hujjatda
+   * `sections` transkriptning o'qish ko'rinishi bo'lib, birinchi
+   * bloklar ko'pincha sarlavha va «Ovoz A:» kabi xizmat qatorlari
+   * bo'ladi. Model esa aytilgan matnni TOZA holda saqlaydi, ya'ni
+   * kartochkada podkastning haqiqiy birinchi jumlalari ko'rinadi.
+   */
+  if (doc.audio) {
+    const lines = doc.audio.script
+      .map((l) => l.text.trim())
+      .filter((t) => t.length > 12)
+      .slice(0, 3)
+      .map((t) => t.slice(0, 160));
+    return lines.length ? { lines } : null;
+  }
   if (doc.article) {
     const topic = doc.meta?.topic?.trim();
     const lang = doc.article.language;

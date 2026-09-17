@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { FileText, Image as ImageIcon, Presentation } from "lucide-react";
+import { FileText, Image as ImageIcon, Mic, Presentation } from "lucide-react";
 import type { GenerationPreviewSlide, ServerGeneration } from "@/lib/api-client";
 import { getSlideTheme } from "@/lib/generation/slide-themes";
 import { SLIDE } from "@/lib/viewers/metrics";
@@ -76,6 +76,29 @@ export function FilePreview({ gen }: { gen: ServerGeneration }) {
    */
   if (gen.format === "docx" || gen.format === "pptx") {
     return <DocThumb id={gen.id} fallback={linesView} />;
+  }
+
+  /*
+   * AUDIO (AUDIT-22): MP3 da sahifa ham, rasm ham yo'q — birinchi
+   * sahifa eskizi (LibreOffice) unga umuman tegishli emas va so'rov
+   * bekorga 404 bilan tugardi. O'rniga mikrofon belgisi + transkript
+   * qatorlari (`buildPreview` ularni `doc.audio.script` dan tayyorlaydi),
+   * ya'ni ro'yxatda podkast tabriknomadan MAZMUNI bilan ajraladi.
+   */
+  if (gen.format === "mp3") {
+    return (
+      <div className="flex h-full flex-col bg-[#f5f3ff] px-3 py-2.5 text-left">
+        <div className="mb-1 flex items-center gap-1.5 text-[11px] font-bold text-[#5b21b6]">
+          <Mic className="size-3.5 shrink-0" />
+          <span className="line-clamp-1">{gen.topic}</span>
+        </div>
+        {lines.slice(0, 3).map((t, i) => (
+          <p key={i} className="mb-1 line-clamp-2 text-[9px] leading-snug text-[#4c1d95]/80">
+            {t}
+          </p>
+        ))}
+      </div>
+    );
   }
 
   if (linesView) {

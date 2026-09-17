@@ -29,15 +29,27 @@ export type ToolId =
    */
   | "crossword"
   | "flashcards"
-  | "infographic";
+  | "infographic"
+  /*
+   * 3-dastur (AUDIT-22): interaktiv o'yinlar va audio.
+   *
+   * `sorting`/`listening` — `games/` dvigateli (bosma DOCX + ochiq
+   * havolali o'yinchi tomoni, `app/o/[token]`); `podcast`/`greeting` —
+   * `audio/` dvigateli, chiqish MP3 (`ToolGroup "media"`). To'rtalasi
+   * ham STANDART formada (`custom` yo'q).
+   */
+  | "sorting"
+  | "listening"
+  | "podcast"
+  | "greeting";
 
 /**
  * Bo'lim (landing, nav, `CreateGrid`).
  *
- * `oyinlar` — AUDIT-21 bo'limi: krossvord va flesh kartalar (saralash,
- * tinglash — 3-dastur). `media` (podkast, tabriknoma) HALI bo'sh:
- * guruh e'lon qilingan, vosita esa yo'q — `TOOL_GROUPS` dan chizilganda
- * bo'sh bo'lim KO'RINMAYDI (`visibleToolGroups`).
+ * `oyinlar` — AUDIT-21/22 bo'limi: krossvord, flesh kartalar, saralash,
+ * tinglash. `media` — AUDIT-22: podkast va tabriknoma (chiqish MP3);
+ * ilgari u e'lon qilingan-u bo'sh edi va `visibleToolGroups` uni
+ * chizmasdi, endi ikkita vositasi bor.
  */
 export type ToolGroup = "umumiy" | "talaba" | "oqituvchi" | "oyinlar" | "media";
 
@@ -77,7 +89,13 @@ export type ToolField = {
 };
 
 export type ToolMode = {
-  id: "topic" | "file";
+  /*
+   * `text` — AUDIT-22 (podkast): foydalanuvchi TAYYOR matn (maqola,
+   * xabar, o'z yozgani) beradi va ssenariy shundan tuziladi
+   * (`podcast.md` §3 `mode` qatori). Fayl rejimidan farqi — ekstraksiya
+   * yo'q, matn to'g'ridan-to'g'ri formadan keladi (`sourceText`).
+   */
+  id: "topic" | "file" | "text";
   title: string;
   hint: string;
 };
@@ -100,7 +118,15 @@ export type ToolConfig = {
   modes?: ToolMode[];
   fields: ToolField[];
   extraOptional?: boolean;
-  output: "docx" | "pptx" | "png";
+  /**
+   * Chiqish FORMATI.
+   *
+   * `mp3` — AUDIT-22 (podkast, tabriknoma): hujjat emas, AUDIO. Shu
+   * qiymat `Generation.format` ga ko'chadi (`/api/generations`), ya'ni
+   * ko'ruvchi (`AudioViewer`) va yuklash tugmasi to'g'ri kengaytmani
+   * ko'radi.
+   */
+  output: "docx" | "pptx" | "png" | "mp3";
   custom?: "slide" | "pro-slide" | "resume" | "translation" | "image" | "article" | "essay" | "work" | "teacher";
   basePrice: number;
 };
@@ -130,7 +156,7 @@ export type Generation = {
    * Ilgari ro'yxatda faqat `docx|pptx` bor edi va `formatOf` qaytargan
    * haqiqiy kengaytma tipga sig'masdi.
    */
-  format: "docx" | "pptx" | "png" | "jpg" | "zip" | "xlsx" | "txt" | "md" | "csv";
+  format: "docx" | "pptx" | "png" | "jpg" | "zip" | "xlsx" | "txt" | "md" | "csv" | "mp3";
   progress: number;
   step: string;
   doc?: AcademicDoc;

@@ -29,7 +29,9 @@ import { testInputFromValues } from "./teacher/test/input";
 import { weeksFor } from "./teacher/guard";
 import { TEACHER_LIMITS } from "./teacher/types";
 import { crosswordInputFromValues } from "./games/crossword/input";
-import { normalizeGameCount } from "./games/types";
+import { gamePromisedCount, normalizeGameCount } from "./games/types";
+import { audioKindOf } from "./audio/registry";
+import { buildAudioArtifact } from "./audio/engine";
 import type { AcademicDoc, BuiltFile, DocMeta } from "./types";
 import type { FormValues, ToolConfig } from "../types";
 
@@ -401,6 +403,32 @@ export function gameGateFail(meta: DocMeta, values: FormValues, doc: AcademicDoc
     if (m.cards.length < need) return { rule: "flashcards.cards", message: short("Kartalar", m.cards.length, need, "karta") };
     return null;
   }
+  /*
+   * AUDIT-22: saralashda VA'DA — toifa × toifadagi element
+   * (`gamePromisedCount`), ya'ni o'quvchi joylashtiradigan kartalar
+   * soni. Faqat toifani sanash yetarli emas: 6 toifa × 8 element
+   * so'ragan o'qituvchi 6 toifa × 2 element olsa ham darvoza yashil
+   * bo'lardi.
+   */
+  if (g.kind === "sorting") {
+    const m = g.sorting;
+    if (!m) return { rule: "sorting.model", message: short("Saralash elementlari", 0, 1, "element") };
+    const want = gamePromisedCount("sorting", values as { [k: string]: unknown });
+    const need = Math.ceil(want * GAME_COUNT_RATIO);
+    const got = m.categories.reduce((n, c) => n + c.items.length, 0);
+    if (got < need) return { rule: "sorting.items", message: short("Saralash elementlari", got, need, "element") };
+    // Bitta toifali «saralash» o'yin emas — hamma element bitta tugmaga ketadi.
+    if (m.categories.length < 2) return { rule: "sorting.categories", message: short("Toifalar", m.categories.length, 2, "toifa") };
+    return null;
+  }
+  if (g.kind === "listening") {
+    const m = g.listening;
+    if (!m) return { rule: "listening.model", message: short("Tinglash topshiriqlari", 0, 1, "topshiriq") };
+    const want = gamePromisedCount("listening", values as { [k: string]: unknown });
+    const need = Math.ceil(want * GAME_COUNT_RATIO);
+    if (m.items.length < need) return { rule: "listening.items", message: short("Tinglash topshiriqlari", m.items.length, need, "topshiriq") };
+    return null;
+  }
   return null;
 }
 
@@ -504,6 +532,26 @@ export async function buildArtifact(
   if (tool.id === "infographic") {
     const built = await buildInfographicArtifact(tool, values, { deadline, ...(opts.onStage ? { onStage: opts.onStage } : {}) });
     if (!built) throw new Error("Infografika yaratilmadi. Qayta urinib ko‘ring.");
+    return built;
+  }
+
+  /*
+   * AUDIO (AUDIT-22): podkast va tabriknoma — chiqish MP3, ya'ni umumiy
+   * `AcademicDoc` yo'lidagi hajm/sahifa darvozalari ularga tegishli
+   * emas va dvigatel `BuiltFile` ni O'ZI qaytaradi (`infographic`
+   * bilan ayni naqsh).
+   *
+   * `null` — dvigatel ishlamadi (WP-A gacha DOIM shunday: TTS kalitlari
+   * yo'q). Xato matni `rasm`/`infografika` nikidan ko'chirilgan:
+   * foydalanuvchi uchun bu «xizmat javob bermadi, pul qaytadi» degani.
+   */
+  if (audioKindOf(tool.id)) {
+    const built = await buildAudioArtifact(tool, meta, values, {
+      deadline,
+      ...(opts.onStage ? { onStage: opts.onStage } : {}),
+      ...(opts.source ? { source: opts.source } : {}),
+    });
+    if (!built) throw new Error("Audio yaratilmadi. Qayta urinib ko‘ring.");
     return built;
   }
 

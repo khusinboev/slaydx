@@ -95,5 +95,19 @@ export const buildGameDoc: GameBuilder = async (meta, values, opts) => {
     const { buildFlashcardsDoc } = await import("./flashcards/engine");
     return buildFlashcardsDoc(meta, values, opts);
   }
+  /*
+   * AUDIT-22 R0: saralash va tinglash dvigatellari WP-D da yoziladi.
+   * Bugun ular ATAYLAB `null` — «dvigatel yo'q» xulqi krossvord/karta
+   * bilan AYNI: `write-llm.ts` `null` qaytaradi va `buildArtifact`
+   * mavjud «AI javob bermadi» yo'lini beradi (kredit qaytadi). Yangi
+   * xato matni kiritilmaydi — u foydalanuvchiga hech narsa bermaydi va
+   * WP tugagach o'chirishni talab qilardi.
+   *
+   * Tinglashda qo'shimcha shart bor: TTS parchalari (`putAssetBytes`)
+   * kalitlarga bog'liq (`tts.md` §6), lekin DVIGATEL ularsiz ham
+   * ishlashi kerak — audio bo'lmasa bosma lug'at varag'i chiqadi va
+   * `ListeningItem.audioAssetId` bo'sh qoladi.
+   */
+  if (kind === "sorting" || kind === "listening") return null;
   return null;
 };

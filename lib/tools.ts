@@ -1,6 +1,8 @@
 import type { FieldOption, FormValues, ToolConfig, ToolField, ToolGroup, ToolId, UserProfile } from "./types";
 import { gameTypesOf } from "./generation/games/registry";
 import { GAME_LIMITS } from "./generation/games/types";
+import { audioTypesOf } from "./generation/audio/registry";
+import { AUDIO_LIMITS } from "./generation/audio/types";
 import { infographicTypes } from "./generation/infographic/registry";
 import { INFOGRAPHIC_LIMITS, INFOGRAPHIC_SIZES, PALETTES } from "./generation/infographic/types";
 import { PRO_SLIDE_DEFAULT, PRO_SLIDE_MAX, PRO_SLIDE_MIN, PRO_SLIDE_PER_SLIDE, clampInt, slidePrice } from "./generation/slide-params";
@@ -212,6 +214,95 @@ const GAME_FIELDS: Record<"crossword" | "flashcards", ToolField[]> = {
       options: gameTypesOf("flashcards").map((t) => ({ value: t.id, label: t.label.uz, hint: t.hint })),
     },
     { kind: "chips", name: "includeExample", legend: "Misol qo'shilsinmi?", options: YES_NO, hint: "Orqa yuzga atamani ishlatgan bitta jumla qo'shiladi." },
+    LANGUAGE_FIELD,
+  ],
+};
+
+/* ────────────── 3-dastur (AUDIT-22): interaktiv o'yinlar + audio ────────────── */
+
+/**
+ * Saralash va tinglash maydonlari (`sorting-game.md`/`listening-game.md`
+ * §3 jadvallari; reyestr — `game-params.ts`).
+ *
+ * Tinglashda «Til» maydoni YO'Q va bu ataylab: ikkita til so'raladi
+ * (variantlar ona tilida, eshitiladigan matn o'rganiladigan tilda), va
+ * uchinchi «hujjat tili» tanlovi hech qayerga chiqmasdi — aynan «bezak
+ * maydon» bo'lardi (egasi qarori 14).
+ */
+const INTERACTIVE_GAME_FIELDS: Record<"sorting" | "listening", ToolField[]> = {
+  sorting: [
+    {
+      kind: "chips",
+      name: "sortingType",
+      legend: "O'yin turi",
+      options: gameTypesOf("sorting").map((t) => ({ value: t.id, label: t.label.uz, hint: t.hint })),
+    },
+    {
+      kind: "chips",
+      name: "categoryCount",
+      legend: "Nechta toifa?",
+      options: numberChips(GAME_LIMITS.categoryCounts, "toifa"),
+      hint: "«Qarama-qarshi juftlik» turida toifa doim 2 ta bo'ladi.",
+    },
+    { kind: "chips", name: "itemsPerCategory", legend: "Har toifada nechta element?", options: numberChips(GAME_LIMITS.itemsPerCategoryCounts, "element") },
+    LANGUAGE_FIELD,
+  ],
+  listening: [
+    {
+      kind: "chips",
+      name: "listeningType",
+      legend: "Topshiriq turi",
+      options: gameTypesOf("listening").map((t) => ({ value: t.id, label: t.label.uz, hint: t.hint })),
+    },
+    { kind: "language", name: "nativeLanguage", legend: "Ona tili (variantlar tili)" },
+    { kind: "language", name: "targetLanguage", legend: "O'rganiladigan til (audio tili)" },
+    { kind: "chips", name: "itemCount", legend: "Nechta so'z?", options: numberChips(GAME_LIMITS.listeningCounts, "so'z") },
+  ],
+};
+
+/**
+ * Audio maydonlari (`podcast.md`/`greeting.md` §3; reyestr —
+ * `audio-params.ts`).
+ *
+ * Ovoz TANLANMAYDI: u til jadvalidan (`TTS_LANG_VOICES`) olinadi —
+ * foydalanuvchiga 18 til × 2 ovozli ro'yxat berish tanlovni ham
+ * og'irlashtirar, ham provayder almashganda yaroqsiz bo'lib qolardi
+ * (`tts.md` §3).
+ */
+const AUDIO_FIELDS: Record<"podcast" | "greeting", ToolField[]> = {
+  podcast: [
+    {
+      kind: "textarea",
+      name: "sourceText",
+      legend: "Manba matni",
+      placeholder: "«Matn asosida» rejimida: podkast tuziladigan matnni shu yerga qo'ying",
+      hint: "Faqat «Matn asosida» rejimida ishlatiladi.",
+    },
+    {
+      kind: "chips",
+      name: "podcastType",
+      legend: "Podkast turi",
+      options: audioTypesOf("podcast").map((t) => ({ value: t.id, label: t.label.uz, hint: t.hint })),
+    },
+    {
+      kind: "chips",
+      name: "durationMin",
+      legend: "Davomiyligi",
+      options: numberChips(AUDIO_LIMITS.podcastMinutes, "daqiqa"),
+      hint: "Davomiylik narxga ta'sir qilmaydi — 1 daqiqa ham, 5 daqiqa ham 4 000 tanga.",
+    },
+    LANGUAGE_FIELD,
+  ],
+  greeting: [
+    { kind: "text", name: "recipient", legend: "Kimga?", placeholder: "Dilnoza opa", required: true },
+    { kind: "text", name: "relation", legend: "Kim bo'ladi?", placeholder: "ustozim / do'stim / rahbarim", hint: "Murojaat ohangi shunga qarab tanlanadi." },
+    {
+      kind: "chips",
+      name: "occasion",
+      legend: "Sabab",
+      options: audioTypesOf("greeting").map((t) => ({ value: t.id, label: t.label.uz, hint: t.hint })),
+    },
+    { kind: "chips", name: "durationMin", legend: "Davomiyligi", options: numberChips(AUDIO_LIMITS.greetingMinutes, "daqiqa") },
     LANGUAGE_FIELD,
   ],
 };
@@ -703,6 +794,101 @@ export const TOOLS: ToolConfig[] = [
     basePrice: 2000,
     fields: INFOGRAPHIC_FIELDS,
   },
+  /* ────────────── 3-dastur (AUDIT-22): interaktiv o'yinlar + Media ────────────── */
+  {
+    id: "sorting",
+    slug: "sorting",
+    title: "Saralash o'yini",
+    pageTitle: "Saralash o'yini",
+    group: "oyinlar",
+    icon: "boxes",
+    tc: "16 185 129",
+    description: "Elementlarni toifalarga ajratish — ochiq havola bilan o'ynaladi, bosma jadval ham chiqadi",
+    submitLabel: "O'yin yaratish",
+    creatingLabel: "O'yin tuzilmoqda...",
+    createdLabel: "o'yin tayyor!",
+    topicLegend: "O'yin qaysi mavzu bo'yicha?",
+    topicPlaceholder: "Hayvonlar sinflari",
+    extraOptional: true,
+    // Bosma versiya — DOCX (jadval + javob kaliti); interaktiv rejim
+    // AYNI hujjatdan chiziladi (`publicGameView`), alohida fayl emas.
+    output: "docx",
+    // Tekis 2 000 (egasi qarori 6): toifa/element soni narxga ta'sir qilmaydi.
+    basePrice: 2000,
+    fields: INTERACTIVE_GAME_FIELDS.sorting,
+  },
+  {
+    id: "listening",
+    slug: "listening",
+    title: "Tinglash o'yini",
+    pageTitle: "Tinglash o'yini",
+    group: "oyinlar",
+    icon: "headphones",
+    tc: "14 165 233",
+    description: "So'z eshitiladi — o'quvchi to'g'ri tarjimani tanlaydi; bosma versiyasi lug'at varag'i",
+    submitLabel: "O'yin yaratish",
+    creatingLabel: "So'zlar tanlanmoqda...",
+    createdLabel: "o'yin tayyor!",
+    topicLegend: "Qaysi mavzu bo'yicha so'zlar?",
+    topicPlaceholder: "Shahardagi joylar",
+    extraOptional: true,
+    output: "docx",
+    basePrice: 2000,
+    fields: INTERACTIVE_GAME_FIELDS.listening,
+  },
+  {
+    id: "podcast",
+    slug: "podcast",
+    title: "Podkast",
+    pageTitle: "Podkast",
+    group: "media",
+    icon: "mic",
+    tc: "168 85 247",
+    description: "Mavzu, matn yoki fayl asosida 1–5 daqiqalik suhbat — ssenariy va MP3",
+    submitLabel: "Podkast yaratish",
+    creatingLabel: "Ssenariy yozilmoqda...",
+    createdLabel: "podkast tayyor!",
+    topicLegend: "Podkast qaysi mavzu bo'yicha?",
+    topicPlaceholder: "Sun'iy intellekt va ta'lim",
+    /*
+     * Uch rejim (`podcast.md` §3): mavzu / tayyor matn / fayl. Matn
+     * rejimi ekstraksiyasiz — `sourceText` to'g'ridan-to'g'ri formadan;
+     * fayl rejimida esa worker `sourceForJob` bilan matnni uzatadi
+     * (`tool.modes` bo'lgan har vosita uchun).
+     */
+    modes: [
+      ...TOPIC_FILE_MODES.slice(0, 1),
+      { id: "text" as const, title: "Matn asosida", hint: "Tayyor matnni qo'ying — AI uni suhbatga aylantiradi" },
+      ...TOPIC_FILE_MODES.slice(1),
+    ],
+    extraOptional: true,
+    output: "mp3",
+    // Tekis 4 000 (egasi qarori 6): davomiylik va tur narxga ta'sir qilmaydi.
+    basePrice: 4000,
+    fields: AUDIO_FIELDS.podcast,
+  },
+  {
+    id: "greeting",
+    slug: "greeting",
+    title: "Tabriknoma",
+    pageTitle: "Tabriknoma",
+    group: "media",
+    icon: "gift",
+    tc: "244 63 94",
+    description: "Ovozli tabrik — kimga, qaysi sabab bilan; 1–4 daqiqa, MP3",
+    submitLabel: "Tabriknoma yaratish",
+    creatingLabel: "Tabrik yozilmoqda...",
+    createdLabel: "tabriknoma tayyor!",
+    /*
+     * Mavzu MAJBURIY emas: tabriknomada uning o'rnini «Kimga?»
+     * (`recipient`) va sabab egallaydi. `topicLegend` ataylab yo'q —
+     * aks holda `missingRequired` mavzusiz so'rovni rad etardi.
+     */
+    extraOptional: true,
+    output: "mp3",
+    basePrice: 4000,
+    fields: AUDIO_FIELDS.greeting,
+  },
 ];
 
 /*
@@ -808,9 +994,18 @@ export function missingRequired(tool: ToolConfig, values: FormValues): string[] 
   if (tool.id === "translation" && filled("sourceAssetId")) return [];
 
   // «Fayl asosida» rejimida mavzu o'rniga manba matni bo'ladi.
-  const fileMode = Boolean(tool.modes) && String(values.mode ?? "") === "file";
-  if (tool.topicLegend && !fileMode && !filled("topic")) out.push(tool.topicLegend);
+  const mode = String(values.mode ?? "");
+  const fileMode = Boolean(tool.modes) && mode === "file";
+  /*
+   * «Matn asosida» (AUDIT-22, podkast): manba — formadagi textarea,
+   * ya'ni mavzu ham, fayl ham so'ralmaydi. Ilgari bunday rejim yo'q edi
+   * va u qo'shilganda mavzusiz so'rov «Mavzu to'ldirilmagan» bilan rad
+   * etilardi — foydalanuvchi butun matnni qo'ygan bo'lsa ham.
+   */
+  const textMode = Boolean(tool.modes) && mode === "text";
+  if (tool.topicLegend && !fileMode && !textMode && !filled("topic")) out.push(tool.topicLegend);
   if (fileMode && !filled("sourceText")) out.push("Manba fayl matni");
+  if (textMode && !filled("sourceText")) out.push("Manba matni");
 
   for (const f of tool.fields) {
     if (!f.required || f.extra) continue;

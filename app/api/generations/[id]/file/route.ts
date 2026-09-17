@@ -93,14 +93,34 @@ export const GET = handler("generations/file", async (req, ctx: Ctx) => {
     });
   }
 
+  /*
+   * AUDIO (AUDIT-22): `<audio>` elementi faylni SAHIFA ICHIDA o'ynatadi
+   * (`AudioViewer`), ya'ni ikkita sarlavha kerak:
+   *
+   *   `inline` — `attachment` bilan Chrome manbani o'ynatmasdan yuklab
+   *     olishga o'tadi (Tarjimon 2 dagi PDF iframe bilan ayni sabab);
+   *   `Accept-Ranges: bytes` — usiz brauzer o'rtaga «sakray» olmaydi va
+   *     uzun podkastda progress chizig'i faqat oldinga yurardi.
+   *
+   * Diapazon so'rovining O'ZI (`Range: bytes=…`) bu yerda qo'lda
+   * bajarilmaydi: fayl bazadan TO'LIQ o'qiladi (`getGenerationFile`),
+   * ya'ni qisman javob tejamaydi. `Accept-Ranges` esa halol — Next
+   * to'liq javobni beradi va brauzer uni keshlab, o'zi kesadi.
+   *
+   * `inline` PARAMETRGA bog'liq bo'lib qoladi (audio uchun ham): pleer
+   * `?inline=1` bilan so'raydi, «MP3 yuklab olish» havolasi esa usiz —
+   * va o'shanda fayl brauzer tabida ochilib qolmasdan YUKLANADI.
+   */
+  const isAudio = file.mime.startsWith("audio/");
   return new Response(new Uint8Array(file.bytes), {
     headers: {
       "Content-Type": file.mime,
       "Content-Length": String(file.bytes.byteLength),
-      "Content-Disposition": contentDisposition(file.fileName),
+      "Content-Disposition": contentDisposition(file.fileName, inline ? "inline" : "attachment"),
       // Hujjat shaxsiy — proxy yoki CDN keshlamasin.
       "Cache-Control": "private, no-store",
       "X-Content-Type-Options": "nosniff",
+      ...(isAudio ? { "Accept-Ranges": "bytes" } : {}),
     },
   });
 });
