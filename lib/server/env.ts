@@ -252,17 +252,27 @@ export function assertRuntimeConfig(): string[] {
   if (isProd && !env.cronSecret && env.telegramBotToken) {
     problems.push("CRON_SECRET yo'q — Telegram webhook'ni himoyalab bo'lmaydi");
   }
-  /*
-   * AUDIT-22: TTS kalitisiz podkast/tabriknoma HAR SAFAR «Ovoz
-   * provayderi sozlanmagan» beradi va kredit qaytadi — vosita
-   * ko'rinib turadi, lekin ishlamaydi. Bu ogohlantirish prod da ham
-   * XATO emas (qolgan 15 vosita ishlayveradi), lekin jim qolmasin.
-   */
-  if (!ttsConfigured()) {
-    problems.push("TTS kaliti yo'q (AZURE_SPEECH_KEY+AZURE_SPEECH_REGION / AISHA_API_KEY) — podkast va tabriknoma ishlamaydi");
-  }
   if (env.tts.azureKey && !env.tts.azureRegion) {
     problems.push("AZURE_SPEECH_REGION yo'q — AZURE_SPEECH_KEY yolg'iz ishlamaydi");
   }
   return problems;
+}
+
+/**
+ * OGOHLANTIRISHLAR — `assertRuntimeConfig` dan farqli, prod da ham
+ * ishga tushishni TO'XTATMAYDI.
+ *
+ * 2026-09-17 saboq: TTS kaliti yo'qligi `problems` ga qo'shilgan edi va
+ * `instrumentation.ts` prod da ro'yxat bo'sh bo'lmasa `throw` qiladi —
+ * AUDIT-22 deployidan keyin web konteyneri «unhealthy» bo'lib, 15 ta
+ * ishlaydigan vosita ham yotib qoldi. Ixtiyoriy xizmatning kaliti
+ * yo'qligi XATO emas: podkast/tabriknoma «Ovoz provayderi sozlanmagan»
+ * bilan yiqiladi va kredit qaytadi, qolganlari ishlayveradi.
+ */
+export function runtimeWarnings(): string[] {
+  const warnings: string[] = [];
+  if (!ttsConfigured()) {
+    warnings.push("TTS kaliti yo'q (AZURE_SPEECH_KEY+AZURE_SPEECH_REGION / AISHA_API_KEY) — podkast va tabriknoma ishlamaydi");
+  }
+  return warnings;
 }

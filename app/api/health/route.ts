@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { queryOne } from "@/lib/server/db";
 import { queueDepth } from "@/lib/server/jobs";
-import { assertRuntimeConfig, env, llmConfigured, paymentsConfigured } from "@/lib/server/env";
+import { assertRuntimeConfig, env, llmConfigured, paymentsConfigured, runtimeWarnings } from "@/lib/server/env";
 import { safeEqual } from "@/lib/server/session";
 
 export const runtime = "nodejs";
@@ -58,6 +58,7 @@ export async function GET(req: Request) {
   return NextResponse.json(
     {
       status: healthy && problems.length === 0 ? "ok" : healthy ? "degraded" : "down",
+      warnings: runtimeWarnings(),
       version: process.env.npm_package_version ?? "0.0.0",
       uptimeSec: Math.round(process.uptime()),
       latencyMs: Date.now() - started,

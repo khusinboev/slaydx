@@ -8,7 +8,10 @@ export async function register() {
   // Edge runtime da `pg` ishlamaydi — faqat Node.js processda bajaramiz.
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
 
-  const { env, assertRuntimeConfig } = await import("./lib/server/env");
+  const { env, assertRuntimeConfig, runtimeWarnings } = await import("./lib/server/env");
+
+  // Ogohlantirishlar (ixtiyoriy xizmat kalitlari) — hech qachon `throw` emas.
+  for (const w of runtimeWarnings()) console.warn(`[config] ${w}`);
 
   const problems = assertRuntimeConfig();
   for (const p of problems) {
