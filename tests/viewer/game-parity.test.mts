@@ -190,3 +190,52 @@ test("krossvordda to'r rasmi CHOP ETILADIGAN kenglikda (spec `widthMm`)", () => 
   const flowFig = items.find((i): i is Extract<FlowItem, { type: "figure" }> => i.type === "figure");
   assert.equal(flowFig?.widthMm, widthMm, "kenglik oqim bandiga uzatilmadi — ko'ruvchi varaq eniga cho'zib yuborardi");
 });
+
+/* ══════════════════════════ interaktiv o'yinlar (AUDIT-22 WP-D) ══════════════════════════ */
+
+/**
+ * Yuqoridagi to'liq paritet sinovi `GAME_KINDS` bo'ylab yuradi, ya'ni
+ * saralash va tinglash MATNI allaqachon tenglashtirilgan. Bu ikki test
+ * esa maketning MA'NOSINI qulflaydi: bo'sh jadval katagida MATN YO'Q
+ * (ya'ni paritet uni ko'rmaydi) va eshitiladigan so'z bosma varaqqa
+ * tushmasligi kerak — ikkalasi ham faqat TUZILMA darajasida ko'rinadi.
+ */
+
+test("saralash: BO'SH jadval katagi ikkala tomonda ham chegarali va matnsiz", async () => {
+  const doc = sampleGameDoc("sorting");
+  const cats = doc.game!.sorting!.categories;
+  const html = renderToStaticMarkup(h(WordViewer, { doc }));
+  const xml = await docxOf(doc);
+
+  // Ko'ruvchi chegarali jadval chizadi (krossvord savollari chegarasiz).
+  assert.ok(html.includes("1px solid #999999"), "saralash jadvali ko'ruvchida chegarasiz chiqdi");
+  // DOCX da ham chegara bor.
+  assert.match(xml, /w:val="single"/, "DOCX jadvali chegarasiz chiqdi");
+
+  // Toifa nomi IKKALA tomonda ham AYNI marta uchraydi (varaq + javob kaliti).
+  for (const c of cats) {
+    const inView = htmlTexts(viewerHtml(doc)).filter((t) => t === c.name).length;
+    const inDocx = docxTexts(xml).filter((t) => t === c.name).length;
+    assert.equal(inView, inDocx, `«${c.name}» ikki tomonda turlicha marta chizildi`);
+    assert.equal(inView, 2, `«${c.name}» varaqda ham, javob kalitida ham bo'lishi kerak`);
+  }
+  // Element javob kalitida BOR, varaqdagi jadvalda esa faqat aralash ro'yxatda.
+  const first = cats[0].items[0];
+  assert.equal(htmlTexts(viewerHtml(doc)).filter((t) => t === first).length, 2, "element aralash ro'yxatda + javob kalitida bo'lishi kerak");
+});
+
+test("tinglash: eshitiladigan so'z faqat JAVOB KALITIDA (DOCX da ham, ekranda ham)", async () => {
+  const doc = sampleGameDoc("listening");
+  const items = doc.game!.listening!.items;
+  const fromDocx = docxTexts(await docxOf(doc));
+  const fromView = htmlTexts(viewerHtml(doc));
+  assert.deepEqual(fromView, fromDocx, "paritet buzildi");
+
+  const lines = fromDocx.filter((t) => /^\d+\. /.test(t));
+  assert.ok(lines.length >= items.length * 2, `topshiriq + javob qatorlari: ${lines.length}`);
+  for (const it of items) {
+    const withWord = lines.filter((t) => t.includes(it.text));
+    assert.equal(withWord.length, 1, `«${it.text}» ${withWord.length} marta chizildi — u FAQAT javob kalitida bo'lishi kerak`);
+    assert.ok(withWord[0].includes(it.options[it.answer]), "javob kalitida tarjima yo'q");
+  }
+});

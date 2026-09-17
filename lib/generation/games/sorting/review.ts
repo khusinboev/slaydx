@@ -87,36 +87,63 @@ export function contentTokens(s: string): string[] {
 }
 
 /**
+ * Ikki token bir SO'ZNING shakllarimi (prefiks bo'yicha).
+ *
+ * O'zbekchada qo'shimcha so'z oxiriga qo'shiladi: «hayvonlar» va
+ * «hayvonlari» — bir xil tushuncha, lekin satr sifatida teng emas.
+ * Aynan shu farq `sorting-game.md` §5 dagi yomon misolni («Hayvonlar»
+ * va «Uy hayvonlari») deterministik tekshiruvdan o'tkazib yuborardi.
+ */
+export function sameStem(a: string, b: string): boolean {
+  if (a.length < 4 || b.length < 4) return false;
+  return a === b || a.startsWith(b) || b.startsWith(a);
+}
+
+/**
  * Element BIR NECHTA toifaga mos keladimi (deterministik evristika).
  *
- * Signal: element matni O'ZIDAN BOSHQA toifaning nomini (yoki uning
- * ma'noli tokenini) o'z ichiga oladi — «Uy mushugi» elementi «Uy
- * hayvonlari» toifasi ekranda turganda aynan shunday ushlanadi.
- * Teskari yo'nalish ham sanaladi: toifa nomi elementning ichida emas,
- * element toifa nomining ichida bo'lishi mumkin.
+ * IKKI signal:
  *
- * Evristika ATAYLAB tor: u faqat MATNDA ko'rinadigan to'qnashuvni
+ *   1. MATNDA ko'rinadigan to'qnashuv — element o'zidan boshqa
+ *      toifaning nomini (yoki uning ma'noli tokenini) o'z ichiga oladi:
+ *      «Qushlar» toifasi ekranda turganda «Hasharotlar» ichidagi
+ *      «Qushlar» elementi aynan shunday ushlanadi;
+ *   2. DARAJA to'qnashuvi — ikki toifa nomi bir so'zning shakllari
+ *      («Hayvonlar» / «Uy hayvonlari»), ya'ni biri ikkinchisini QAMRAB
+ *      oladi. Bunda TORROQ (uzunroq nomli) toifaning HAR elementi
+ *      kengrog'iga ham tegishli bo'lib qoladi va o'yin yechilmaydigan
+ *      bo'ladi. Bu aynan `sorting-game.md` §5 dagi yomon misol.
+ *
+ * Evristika ATAYLAB tor: u faqat NOMLARDA ko'rinadigan to'qnashuvni
  * ushlaydi va yolg'on qizil bermasligi kerak — ma'noviy ikki ma'nolilik
  * baholovchining (`unambiguity`) ishi.
  */
 export function ambiguousItems(categories: readonly SortingCategory[]): { item: string; owner: string; other: string }[] {
   const out: { item: string; owner: string; other: string }[] = [];
   const names = categories.map((c) => ({ name: c.name, key: itemKey(c.name), tokens: contentTokens(c.name) }));
+  const add = (item: string, owner: string, other: string) => {
+    if (!out.some((x) => x.item === item)) out.push({ item, owner, other });
+  };
+
   for (const [i, cat] of categories.entries()) {
-    for (const raw of cat.items) {
-      const key = itemKey(raw);
-      if (!key) continue;
-      for (const [j, other] of names.entries()) {
-        if (i === j || !other.key) continue;
+    for (const [j, other] of names.entries()) {
+      if (i === j || !other.key || !names[i].key) continue;
+      // 2. Daraja to'qnashuvi: TORROQ toifaning hamma elementi shubhali.
+      const overlap = names[i].tokens.some((t) => other.tokens.some((o) => sameStem(t, o)));
+      if (overlap && names[i].key.length > other.key.length) {
+        for (const raw of cat.items) add(raw, cat.name, other.name);
+        continue;
+      }
+      // 1. Matndagi to'qnashuv.
+      for (const raw of cat.items) {
+        const key = itemKey(raw);
+        if (!key) continue;
         const hit =
           key === other.key ||
           key.includes(` ${other.key}`) ||
           key.startsWith(`${other.key} `) ||
           other.tokens.some((t) => key === t || key.startsWith(`${t} `) || key.includes(` ${t}`));
-        if (hit) {
-          out.push({ item: raw, owner: cat.name, other: other.name });
-          break;
-        }
+        if (hit) add(raw, cat.name, other.name);
       }
     }
   }
@@ -129,7 +156,7 @@ export function nameCollisions(categories: readonly SortingCategory[]): { a: str
   const toks = categories.map((c) => ({ name: c.name, tokens: new Set(contentTokens(c.name)) }));
   for (let i = 0; i < toks.length; i++) {
     for (let j = i + 1; j < toks.length; j++) {
-      const shared = [...toks[i].tokens].find((t) => toks[j].tokens.has(t));
+      const shared = [...toks[i].tokens].find((t) => [...toks[j].tokens].some((o) => sameStem(t, o)));
       if (shared) out.push({ a: toks[i].name, b: toks[j].name, token: shared });
     }
   }
@@ -177,8 +204,8 @@ export function sortingRuleChecks(doc: AcademicDoc): ReviewCheck[] {
      * (`balance` mezoni bilan bir xil sabab).
      */
     const counts = cats.map((c) => c.items.length);
-    const min = Math.min(...counts, 0);
-    const max = Math.max(...counts, 0);
+    const min = counts.length ? Math.min(...counts) : 0;
+    const max = counts.length ? Math.max(...counts) : 0;
     const thin = counts.filter((n) => n < GAME_LIMITS.itemsPerCategoryMin).length;
     out.push(
       thin > 0
