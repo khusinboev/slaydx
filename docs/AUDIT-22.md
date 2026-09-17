@@ -278,3 +278,4 @@ yetmaydi.
   egasida» jonli oqimi brauzerda ko'rilishi shart (AUDIT-11 Y-5
   darsi: jsdom hit-testing xatolarini ko'rmaydi — ayniqsa krossvord
   katak fokusi va saralash drag'i).
+- **R (lead) — WP-C birlashtiruvi va o'yinchi oqimi smoke**: WP-C main da (`0002175`). Chromium (dev 3111, scratch `play22.mjs`): egasi `POST …/share` → token; LOGINSIZ kontekstda `/o/<token>` → ism «Smoke O'quvchi» → test 20 savol (har birida birinchi variant) → natija 5/20 (25 %) «Natijangiz o'qituvchingizga yuborildi» → egasida `GET …/results` 1 qator (`answers.results` per-savol), CSV 3 qator; 0 brauzer xatosi. Ochiq: share URL `APP_URL` dan (dev `localhost:3000`); `PublicListeningItem.text` va `PublicCard.back` (javob emas) — R da qo'shiladi; ochiq audio route (`/api/o/[token]/audio/[assetId]`) — WP-A TTS bilan.
