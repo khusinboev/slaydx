@@ -171,3 +171,11 @@ test("flashcards byudjeti dvigatel zaxiralari + bitta yozish chaqiruvidan katta"
   const { CARDS_REVIEW_RESERVE_MS, CARDS_POLISH_RESERVE_MS } = await import("../lib/generation/games/flashcards/engine.ts");
   assert.ok(gameBudgetMs("flashcards", 5) >= CARDS_REVIEW_RESERVE_MS + CARDS_POLISH_RESERVE_MS + 55_000, `byudjet ${gameBudgetMs("flashcards", 5)} ms`);
 });
+
+test("saralash/tinglash byudjeti dvigatel zaxiralari + bitta yozish chaqiruvidan katta", async () => {
+  const { gameBudgetMs } = await import("../lib/generation/budget.ts");
+  const so = await import("../lib/generation/games/sorting/engine.ts");
+  const li = await import("../lib/generation/games/listening/engine.ts");
+  assert.ok(gameBudgetMs("sorting", 6) >= so.SORTING_REVIEW_RESERVE_MS + so.SORTING_POLISH_RESERVE_MS + 55_000, `saralash ${gameBudgetMs("sorting", 6)}`);
+  assert.ok(gameBudgetMs("listening", 10) >= li.LISTENING_REVIEW_RESERVE_MS + li.LISTENING_POLISH_RESERVE_MS + 55_000, `tinglash ${gameBudgetMs("listening", 10)}`);
+});

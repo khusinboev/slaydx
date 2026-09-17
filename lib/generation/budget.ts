@@ -208,7 +208,8 @@ const GAME_MS: Record<GameKind, { base: number; per: number }> = {
    * 6 × 8 = 48 element ≈ 40 s, ya'ni 130 s da hisobot va sayqalga ham
    * joy qoladi.
    */
-  sorting: { base: 90_000, per: 800 },
+  // Saralash/tinglash: dvigatel zaxiralari (hisobot 40 s + sayqal 55 s) + ≥1 to'liq yozish chaqiruvi (55 s) — 90 s da «0 ms qoldi» (AUDIT-22 smoke).
+  sorting: { base: 160_000, per: 800 },
   /*
    * Tinglash (AUDIT-22): matn ustiga TTS PARCHALARI qo'shiladi —
    * har topshiriq alohida sintez chaqiruvi (`putAssetBytes`). 20
@@ -217,7 +218,7 @@ const GAME_MS: Record<GameKind, { base: number; per: number }> = {
    * (WP-A) parcha bosqichi o'tkazib yuboriladi va ish ertaroq tugaydi —
    * byudjet YUQORI chegara, sarf emas.
    */
-  listening: { base: 90_000, per: 9_000 },
+  listening: { base: 160_000, per: 9_000 },
 };
 
 /**
