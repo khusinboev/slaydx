@@ -78,7 +78,14 @@ function fakeTts(o: { configured?: boolean; framesPerCall?: number; fail?: TtsEr
       calls.push({ text, ...(opts.voice !== undefined ? { voice: opts.voice } : {}), ...(opts.pauseMs !== undefined ? { pauseMs: opts.pauseMs } : {}) });
       if (o.fail) throw o.fail;
       const n = o.framesPerCall ?? 20;
-      return { mp3: mp3Of(n), seconds: n * FRAME_SECONDS, chars: text.length };
+      /*
+       * `seconds` ATAYLAB NOTO'G'RI (3×): haqiqiy provayderlar
+       * davomiylikni qaytarmaydi yoki taxminiy qaytaradi, dvigatel esa
+       * uni FAYLDAN o'lchashi shart. Agar bu yerda to'g'ri son
+       * berilsa, «fayldan o'lchanadi» tekshiruvi hech narsani
+       * sinamasdi (ikkala yo'l ham bir xil javob berardi).
+       */
+      return { mp3: mp3Of(n), seconds: n * FRAME_SECONDS * 3, chars: text.length };
     },
   };
 }
@@ -151,8 +158,10 @@ test("podkast: MP3, transkript, model va sarf — uchidan uchiga", async () => {
   assert.equal(model.type, "tushuntirish");
   assert.equal(model.language, "uz");
   assert.equal(model.script.length, 8);
-  // MUTATSIYA 2: provayder yig'indisi Xing/yaxlitlash farqini hisobga olmaydi.
+  // MUTATSIYA 2: provayder qaytargan (noto'g'ri) yig'indi olinsa
+  // `delivered` va ko'ruvchidagi davomiylik yolg'on chiqardi.
   assert.equal(model.seconds, Math.round(mp3Seconds(built.bytes)));
+  assert.notEqual(model.seconds, Math.round(tts.calls.length * perCall * (576 / 24_000) * 3), "provayder yig'indisi EMAS");
   assert.equal(model.voice, "azure:azure-A");
   assert.equal(model.voiceB, "azure:azure-B", "ikki ovozli suhbatda B ovozi ham yoziladi");
   assert.ok(model.review, "hisobot modelga yoziladi");
