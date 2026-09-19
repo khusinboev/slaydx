@@ -1,0 +1,413 @@
+<title>SlaydX Tannarx Xaritasi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  color-scheme:light;
+  --plane:#f5f4ef; --surface:#fcfcfb; --surface-2:#f0efe9; --ink:#141412; --ink-2:#55534d; --muted:#8a8882;
+  --line:#e2e1da; --line-2:#c9c8c0; --accent:#1c5cab; --accent-ink:#ffffff; --accent-soft:#e3edfa;
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a; --s4:#eda100; --s5:#e87ba4; --s6:#008300;
+  --good:#0ca30c; --good-ink:#006300; --warn:#fab219; --warn-ink:#7a5200; --crit:#d03b3b; --crit-ink:#a52a2a;
+  --grid:#e1e0d9; --axis:#c3c2b7; --shadow:0 1px 2px rgba(20,20,18,.06),0 8px 24px rgba(20,20,18,.06);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --plane:#111110; --surface:#1a1a19; --surface-2:#232321; --ink:#f4f3ee; --ink-2:#c3c2b7; --muted:#8f8e87;
+    --line:#2c2c2a; --line-2:#3a3a37; --accent:#5598e7; --accent-ink:#0b1a2e; --accent-soft:#1d2a3d;
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; --s6:#008300;
+    --good:#0ca30c; --good-ink:#3ed13e; --warn:#fab219; --warn-ink:#f2c15a; --crit:#d03b3b; --crit-ink:#f08a8a;
+    --grid:#2c2c2a; --axis:#383835; --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --plane:#111110; --surface:#1a1a19; --surface-2:#232321; --ink:#f4f3ee; --ink-2:#c3c2b7; --muted:#8f8e87;
+  --line:#2c2c2a; --line-2:#3a3a37; --accent:#5598e7; --accent-ink:#0b1a2e; --accent-soft:#1d2a3d;
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70; --s4:#c98500; --s5:#d55181; --s6:#008300;
+  --good:#0ca30c; --good-ink:#3ed13e; --warn:#fab219; --warn-ink:#f2c15a; --crit:#d03b3b; --crit-ink:#f08a8a;
+  --grid:#2c2c2a; --axis:#383835; --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box}
+body{background:var(--plane);color:var(--ink);font-family:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;font-size:15px;line-height:1.55;margin:0}
+.wrap{max-width:1180px;margin:0 auto;padding-block:0 64px;padding-inline:20px}
+h1,h2,h3{font-family:Manrope,"IBM Plex Sans",system-ui,sans-serif;text-wrap:balance;margin:0}
+h1{font-size:clamp(28px,4vw,42px);font-weight:800;letter-spacing:-.02em;line-height:1.1}
+h2{font-size:clamp(20px,2.6vw,26px);font-weight:700;letter-spacing:-.01em}
+h3{font-size:16px;font-weight:700}
+p{margin:0}
+.mono,.num{font-family:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+.num{font-variant-numeric:tabular-nums}
+a{color:var(--accent)}
+.eyebrow{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+nav.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:color-mix(in srgb,var(--plane) 88%,transparent);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+nav.top .row{max-width:1180px;margin:0 auto;padding:10px 20px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+nav.top .brand{font-family:Manrope,sans-serif;font-weight:800;margin-right:auto;letter-spacing:-.01em}
+nav.top a{font-size:13px;color:var(--ink-2);text-decoration:none;padding:6px 10px;border-radius:999px}
+nav.top a:hover,nav.top a:focus-visible{background:var(--surface-2);color:var(--ink);outline:none}
+header.hero{padding-block:44px 28px;display:grid;gap:18px}
+header.hero .lede{max-width:64ch;color:var(--ink-2);font-size:17px}
+.meta{display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--muted)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px 18px;display:grid;gap:6px}
+.tile .v{font-family:Manrope,sans-serif;font-size:30px;font-weight:800;letter-spacing:-.02em;line-height:1}
+.tile .l{font-size:13px;color:var(--ink-2)}
+.tile .d{font-size:12px;color:var(--muted)}
+section{padding-block:36px 8px;display:grid;gap:16px}
+section>.head{display:grid;gap:6px;max-width:72ch}
+section>.head p{color:var(--ink-2)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:var(--shadow);align-content:start}
+.tile{align-content:start}
+td .small{white-space:nowrap}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media (max-width:820px){.grid2{grid-template-columns:1fr}}
+.controls{display:flex;flex-wrap:wrap;gap:14px 22px;align-items:end;padding:14px 18px;background:var(--surface);border:1px solid var(--line);border-radius:16px;position:sticky;top:calc(env(safe-area-inset-top,0px) + 46px);z-index:10;box-shadow:var(--shadow)}
+.ctl{display:grid;gap:4px;font-size:13px;color:var(--ink-2)}
+.ctl label{font-weight:600;color:var(--ink)}
+.ctl input[type=number]{width:120px;padding:7px 9px;border:1px solid var(--line-2);border-radius:8px;background:var(--surface);color:var(--ink);font:inherit}
+.ctl input[type=range]{width:180px;accent-color:var(--accent)}
+.seg{display:inline-flex;border:1px solid var(--line-2);border-radius:999px;overflow:hidden}
+.seg button{border:0;background:transparent;color:var(--ink-2);padding:7px 12px;font:inherit;font-size:13px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.seg button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--line-2);background:transparent;color:var(--ink-2);border-radius:999px;padding:5px 11px;font:inherit;font-size:13px;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.chip:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tablewrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);font-weight:600;white-space:nowrap;position:sticky;top:0;background:var(--surface)}
+td.r,th.r{text-align:right}
+tbody tr:hover{background:var(--surface-2)}
+.badge{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;font-weight:600;padding:2px 8px;border-radius:999px;border:1px solid var(--line-2);color:var(--ink-2);white-space:nowrap}
+.badge.good{color:var(--good-ink);border-color:color-mix(in srgb,var(--good) 45%,transparent)}
+.badge.warn{color:var(--warn-ink);border-color:color-mix(in srgb,var(--warn) 55%,transparent)}
+.badge.crit{color:var(--crit-ink);border-color:color-mix(in srgb,var(--crit) 55%,transparent)}
+.badge.tel{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 45%,transparent)}
+.dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:13px;color:var(--ink-2)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:12px;height:12px;border-radius:3px;display:inline-block}
+svg.chart{width:100%;height:auto;display:block;font-family:"IBM Plex Sans",system-ui,sans-serif}
+svg.chart text{fill:var(--ink-2);font-size:12px}
+svg.chart .lab{fill:var(--ink);font-size:12.5px}
+svg.chart .val{fill:var(--ink-2);font-size:11.5px;font-family:"IBM Plex Mono",monospace}
+svg.chart .grid{stroke:var(--grid);stroke-width:1}
+svg.chart .axis{stroke:var(--axis);stroke-width:1}
+svg.chart rect.hit{fill:transparent}
+svg.chart g.row:hover rect.bar{filter:brightness(1.08)}
+.tip{position:fixed;z-index:50;pointer-events:none;background:var(--ink);color:var(--surface);padding:8px 10px;border-radius:8px;font-size:12.5px;line-height:1.4;max-width:280px;box-shadow:var(--shadow);opacity:0;transition:opacity .12s}
+.tip b{font-weight:600}
+.callout{border-left:3px solid var(--accent);background:var(--accent-soft);padding:12px 14px;border-radius:0 12px 12px 0;display:grid;gap:4px}
+.callout.warn{border-left-color:var(--warn);background:color-mix(in srgb,var(--warn) 14%,var(--surface))}
+.callout.crit{border-left-color:var(--crit);background:color-mix(in srgb,var(--crit) 12%,var(--surface))}
+ul.clean{margin:0;padding-left:18px;display:grid;gap:6px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:13.5px}
+.kv dt{color:var(--muted)}
+.kv dd{margin:0}
+.small{font-size:12.5px;color:var(--muted)}
+details{border:1px solid var(--line);border-radius:12px;padding:10px 14px;background:var(--surface)}
+summary{cursor:pointer;font-weight:600}
+footer{padding-block:28px;color:var(--muted);font-size:13px;border-top:1px solid var(--line);margin-top:24px}
+.bar-inline{height:8px;border-radius:4px;background:var(--surface-2);overflow:hidden;min-width:90px}
+.bar-inline i{display:block;height:100%;border-radius:4px}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+
+<nav class="top"><div class="row">
+  <span class="brand">SlaydX · tannarx xaritasi</span>
+  <a href="#xulosa">Xulosa</a><a href="#servislar">Servislar</a><a href="#narxlar">Narxlar</a><a href="#vositalar">Vositalar</a><a href="#oylik">Oylik</a><a href="#tarkib">Tarkib</a><a href="#xavflar">Xavflar</a>
+</div></nav>
+
+<div class="wrap">
+<header class="hero">
+  <span class="eyebrow">Moliyaviy audit · 2026-09-20 · prod `03a64e4`</span>
+  <h1>Har bir hujjat bizga qanchaga tushadi va qancha foyda beradi</h1>
+  <p class="lede">SlaydX 21 xil hujjatni 13 ta tashqi servis (LLM, rasm, TTS, ilmiy manba, to'lov) yordamida yaratadi. Bu sahifa har servisning o'rni va narxini, har vosita uchun tannarx–narx–marjani, va 30 kunlik prod hajmidagi umumiy iqtisodni ko'rsatadi. Boshqaruvlar (kurs, baholovchi, TTS provayderi, slayd soni) hisobni jonli qayta hisoblaydi.</p>
+  <div class="meta"><span>Manbalar: prod `generations.cost_json`, kod (`lib/generation/**`), rasmiy narx sahifalari</span><span>Tafsilot: `docs/research/external-services.md`, `provider-pricing.md`, `unit-economics.md`</span></div>
+  <div class="tiles" id="tiles"></div>
+</header>
+
+<section id="xulosa">
+  <div class="head"><h2>Xulosa — beshta gap</h2></div>
+  <div class="grid2">
+    <div class="card" style="display:grid;gap:10px">
+      <div class="callout"><b>Yalpi marja ~83 %.</b> 30 kunda 89 ish, 460 500 so'm tushum, taxminiy tashqi xarajat ~$6,6 (≈79 000 so'm, 17 %). Matnli vositalarda tannarx narxning 1–5 % i.</div>
+      <div class="callout warn"><b>Pro slayd — xarajatning 2/3 qismi.</b> Buyurtmalarning 5,6 % i, tushumning 33 % i, tannarxning ~63 % i: har slaydga pullik Gemini rasm ($0,067). Marja 55–65 % — loyihada eng past.</div>
+      <div class="callout crit"><b>Podkast/tabriknoma Aisha TTS bilan zararga ishlashi mumkin.</b> $80/1M belgi taxmini bilan 4–5 daqiqalik audio 4 000 so'mlik narxdan oshadi. Azure ($16/1M) bilan marja 60–90 %.</div>
+      <div class="callout"><b>Xarajatning 67 % i telemetriyasiz.</b> Slayd, pro slayd, rasm, tarjimon, rezyume LLM/rasm sarfini `cost_json` ga yozmaydi — hisobot ular uchun kod-baho. Rasm provayderlari hech qayerda hisoblanmaydi.</div>
+      <div class="callout"><b>Haqiqiy to'lov hali yo'q.</b> Barcha to'ldirishlar `admin_credit`/`bonus`; 89 ishdan 72 tasi egasining sinovlari. Bu raqamlar bozor talabini emas, tannarx tuzilmasini ko'rsatadi.</div>
+    </div>
+    <div class="card" style="display:grid;gap:12px">
+      <h3>Tavsiyalar (ta'sir bo'yicha)</h3>
+      <ol class="clean" style="padding-left:20px">
+        <li><b>Pro slayd narxi yoki rasm strategiyasi.</b> Rasmni 1K → 0,5K ($0,045) ga tushirish yoki har slaydga emas, «vizual» slaydlargagina chizish; yoki narxni 2 000 → 2 500 so'm/slayd.</li>
+        <li><b>TTS zanjiri: Azure asosiy, Aisha faqat zaxira.</b> Kalit kelgach `tts-lab` da narxni tasdiqlab, Aisha uchun daqiqa chegarasi (≤3) yoki alohida narx.</li>
+        <li><b>Telemetriyani yopish.</b> `slide-write`, `image-studio`, `translate`, `resume` ni `complete()` rol yo'liga o'tkazish; rasm/TTS chaqiruvlarini `cost_json` ga qo'shish (rasm boshiga narx jadvali).</li>
+        <li><b>Kurs va narx jadvali.</b> `SOUM_PER_USD` 12 700 → CBU kursi (11 840); 200K+ uzun kontekst tarifi (Gemini Pro, Grok) jadvalga; Claude prompt caching chegirmasi.</li>
+        <li><b>Referat/mustaqil ish narxi.</b> Tannarx $0,15 (≈1 800 so'm) — 3 000 so'mda marja 40–55 %. Sahifa bo'yicha narx (kurs ishi kabi) yoki minimal 4 000.</li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<section id="servislar">
+  <div class="head"><h2>Tashqi servislar — qayerda va nima uchun</h2><p>13 ta servis, 6 toifa. «Sarf hisobi» ustuni — chaqiruv `cost_json` telemetriyasiga tushadimi. Toifa bo'yicha filtrlang.</p></div>
+  <div class="chips" id="svcFilter" role="group" aria-label="Toifa filtri"></div>
+  <div class="card tablewrap"><table id="svcTable"><thead><tr><th>Servis</th><th>Toifa</th><th>Nima uchun</th><th>Qayerda (kod)</th><th>Model / rejim</th><th>Zaxira</th><th>Narx</th><th>Sarf hisobi</th></tr></thead><tbody></tbody></table></div>
+</section>
+
+<section id="narxlar">
+  <div class="head"><h2>Rasmiy narxlar va koddagi jadval</h2><p>`lib/generation/llm-pricing.ts` va `tts/types.ts` dagi raqamlar rasmiy sahifalar bilan solishtirildi (2026-09-20). Kurs: CBU 11 839,59 so'm (kodda 12 700).</p></div>
+  <div class="card tablewrap"><table id="priceTable"><thead><tr><th>Servis / model</th><th class="r">Kodda</th><th class="r">Rasmiy</th><th>Holat</th><th>Izoh</th></tr></thead><tbody></tbody></table></div>
+</section>
+
+<section id="vositalar">
+  <div class="head"><h2>Vosita bo'yicha narx, tannarx va marja</h2><p>Tannarx — bitta odatiy hujjat uchun tashqi servis xarajati. Manba: prod/dev `cost_json` telemetriyasi (TELEM) yoki kod bo'yicha baho (KOD). Boshqaruvlar hamma raqamni qayta hisoblaydi.</p></div>
+  <div class="controls" aria-label="Hisob parametrlari">
+    <div class="ctl"><label for="rate">USD → so'm</label><input type="number" id="rate" value="11840" min="8000" max="20000" step="10"><span>CBU 2026-09-19: 11 839,59</span></div>
+    <div class="ctl"><label>Baholovchi (judge)</label><div class="seg" id="judgeSeg"><button aria-pressed="true" data-v="gemini">Gemini (hozir)</button><button aria-pressed="false" data-v="claude">Claude Sonnet 5</button></div><span>Anthropic hisobi tugagan → hozir Gemini</span></div>
+    <div class="ctl"><label>TTS provayderi</label><div class="seg" id="ttsSeg"><button aria-pressed="true" data-v="azure">Azure $16/1M</button><button aria-pressed="false" data-v="aisha">Aisha ~$80/1M</button></div><span>Aisha narxi tasdiqlanmagan</span></div>
+    <div class="ctl"><label for="slides">Pro slayd: slayd soni <span class="num" id="slidesV">15</span></label><input type="range" id="slides" min="4" max="30" value="15"><span>narx 2 000 so'm × slayd</span></div>
+    <div class="ctl"><label for="minutes">Audio davomiyligi <span class="num" id="minutesV">3</span> daq</label><input type="range" id="minutes" min="1" max="5" value="3"><span>~1 000 belgi/daqiqa</span></div>
+  </div>
+  <div class="card" style="display:grid;gap:12px">
+    <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;align-items:baseline"><h3>Marja — odatiy hujjat, % (narxdan)</h3><div class="legend"><span><i class="sw" style="background:var(--good)"></i>≥ 80 %</span><span><i class="sw" style="background:var(--warn)"></i>50–80 %</span><span><i class="sw" style="background:var(--crit)"></i>&lt; 50 %</span></div></div>
+    <div id="marginChart"></div>
+  </div>
+  <div class="card tablewrap"><table id="toolTable"><thead><tr><th>Vosita</th><th>Guruh</th><th class="r">Narx, so'm</th><th>Chaqiruvlar</th><th class="r">Tannarx, $</th><th class="r">Tannarx, so'm</th><th class="r">Marja</th><th>Diapazon (past–yuqori), $</th><th>Manba</th></tr></thead><tbody></tbody></table></div>
+</section>
+
+<section id="oylik">
+  <div class="head"><h2>30 kunlik prod hajmi — tushum va tannarx</h2><p>Prod bazasi, 2026-08-21 → 2026-09-19: 89 tugallangan ish, 7 foydalanuvchi. Har vosita uchun tushum (o'rtacha haqiqiy narx × soni) va taxminiy tannarx. Chiziq ichidagi to'q qism — tannarx.</p></div>
+  <div class="tiles" id="monthTiles"></div>
+  <div class="card" style="display:grid;gap:12px">
+    <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;align-items:baseline"><h3>Tushum va tannarx, so'm (30 kun)</h3><div class="legend"><span><i class="sw" style="background:var(--s1);opacity:.35"></i>tushum</span><span><i class="sw" style="background:var(--s1)"></i>tannarx</span></div></div>
+    <div id="monthChart"></div>
+  </div>
+  <div class="grid2">
+    <div class="card" style="display:grid;gap:10px"><h3>Doimiy xarajatlar (oylik, taxmin)</h3>
+      <div class="ctl"><label for="fixed">Server + domen, so'm/oy</label><input type="number" id="fixed" value="180000" min="0" step="10000"><span>VPS 16 GB bozor narxi $10–20 (provayder noma'lum)</span></div>
+      <dl class="kv" id="fixedKv"></dl>
+    </div>
+    <div class="card" style="display:grid;gap:10px"><h3>Kim to'ladi</h3>
+      <dl class="kv"><dt>adkhambek_4 (egasi)</dt><dd>72 ish · 406 000 so'm — sinov/namuna</dd><dt>Otayeva_dinora</dt><dd>10 ish · 30 000 so'm</dd><dt>egam_haq</dt><dd>3 ish · 13 500 so'm</dd><dt>eduminister</dt><dd>2 ish · 6 000 so'm</dd><dt>To'ldirish manbai</dt><dd>`admin_credit` 12 ta, `bonus` 9 ta — Click/Payme orqali haqiqiy to'lov hali yo'q</dd><dt>Qaytarish</dt><dd>14 ta refund, 43 000 tanga (yiqilgan/kam yetkazilgan ishlar)</dd></dl>
+    </div>
+  </div>
+</section>
+
+<section id="tarkib">
+  <div class="head"><h2>Tannarx tarkibi</h2><p>Bitta hujjat xarajati qaysi bosqichga ketadi. Foizlar kod bo'yicha baho (`cost_json` faqat yig'indini saqlaydi, rollarni ajratmaydi).</p></div>
+  <div class="card" style="display:grid;gap:12px">
+    <div class="legend" id="compLegend"></div>
+    <div id="compChart"></div>
+  </div>
+</section>
+
+<section id="xavflar">
+  <div class="head"><h2>Xavflar, noaniqliklar va manbalar</h2></div>
+  <div class="grid2">
+    <div class="card" style="display:grid;gap:10px"><h3>Noaniqliklar</h3>
+      <ul class="clean">
+        <li><b>Aisha TTS narxi</b> — rasmiy sahifada yo'q; kodda $80/1M (1 so'm/belgi) taxmin. Podkast marjasi shunga bog'liq.</li>
+        <li><b>Telemetriyasiz vositalar</b> (slayd, pro slayd, rasm, tarjimon, rezyume) — token/rasm soni kod bo'yicha; ±30 %.</li>
+        <li><b>Kurs ishi, mustaqil ish, texnologik xarita, glossariy, keys</b> — referat/dars rejasi telemetriyasidan chiziqli masshtab.</li>
+        <li><b>Baholovchi ulushi</b> (15–20 %) — `cost_json` rollarni ajratmaydi; Claude rejimi shu taxminga tayanadi.</li>
+        <li><b>Click/Payme savdogar komissiyasi</b> — ochiq manbada yo'q (odatda 1,5–3 %); jadvalga kiritilmadi.</li>
+        <li><b>fal.ai megapiksel yaxlitlash</b> — 0,5–1 MP rasm uchun $0,003 ± 30 %.</li>
+        <li><b>Grounding</b> (pro slayd qidiruvi) — 5 000 so'rov/oy bepul, keyin $14/1 000; hozirgi hajmda bepul.</li>
+      </ul>
+    </div>
+    <div class="card" style="display:grid;gap:10px"><h3>Manbalar</h3>
+      <ul class="clean">
+        <li>Prod: `generations`, `transactions` (2026-09-20 so'rovi); dev bazasi 190 ish (`cost_json` 24 ta).</li>
+        <li>Kod: `lib/generation/llm-pricing.ts`, `llm-roles.ts`, `tts/types.ts`, `image-provider*.ts`, `slide-images.ts`, `translate/engine.ts`, `work/registry.ts`, `audio/types.ts`, `lib/tools.ts priceFor`.</li>
+        <li>Rasmiy narxlar: ai.google.dev/gemini-api/docs/pricing · claude.com/pricing · docs.x.ai/docs/models · fal.ai/models/fal-ai/flux/schnell · help.openalex.org · cbu.uz (2026-09-19).</li>
+        <li>Azure/Google TTS raqamlari ikkilamchi manbadan (rasmiy sahifa JS bilan chiziladi) — taxmin belgisi bilan.</li>
+        <li>Hisobot fayllari: `docs/research/external-services.md`, `provider-pricing.md`, `unit-economics.md`.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<footer>SlaydX · tannarx xaritasi · 2026-09-20 · barcha so'm qiymatlari tanlangan kurs bilan hisoblanadi; 1 tanga = 1 so'm.</footer>
+</div>
+<div class="tip" id="tip" role="status" aria-live="polite"></div>
+
+<script>
+/* ───────────── ma'lumotlar ───────────── */
+const GROUP = {umumiy:"Umumiy", talaba:"Talaba", oqituvchi:"O'qituvchi", oyinlar:"O'yinlar", media:"Media"};
+// costUsd: Gemini-only, bitta odatiy hujjat. judge: Claude Sonnet 5 yoqilganda ko'paytiruvchi (null = baholovchi zanjiridan mustaqil).
+const TOOLS = [
+ {id:"slide",name:"Slayd",g:"umumiy",price:[3000,3000,8000],calls:"1 matn (+1 grounding)",cost:[0.012,0.021,0.035],judge:null,src:"KOD",vol:26,avg:3192,comp:{writer:100}},
+ {id:"pro-slide",name:"Pro slayd",g:"umumiy",price:null,calls:"1 matn + 1 grounding + ~0,8 rasm/slayd (Gemini)",cost:null,judge:null,src:"KOD",vol:5,avg:30800,comp:{writer:4,image:96}},
+ {id:"image",name:"Rasm",g:"umumiy",price:[2000,3500,6000],calls:"1 kichik LLM + 1–4 fal.ai rasm",cost:[0.004,0.008,0.014],judge:null,src:"KOD",vol:17,avg:2088,comp:{writer:10,image:90}},
+ {id:"translation",name:"Tarjimon",g:"umumiy",price:[3000,3000,11000],calls:"1 glossariy + N partiya (3 500 belgi)",cost:[0.005,0.022,0.103],judge:null,src:"KOD",vol:8,avg:3500,comp:{writer:100}},
+ {id:"resume",name:"Rezyume",g:"umumiy",price:[3000,3000,3000],calls:"0–1 (AI boyitish)",cost:[0,0.010,0.010],judge:null,src:"KOD",vol:4,avg:3000,comp:{writer:100}},
+ {id:"article",name:"Maqola",g:"umumiy",price:[4000,6000,12000],calls:"14 (yozuvchi, tadqiqot, baholovchi, sayqal)",cost:[0.040,0.0585,0.091],judge:1.26,src:"TELEM",vol:7,avg:6857,comp:{writer:72,judge:18,polish:10}},
+ {id:"thesis",name:"Tezis",g:"talaba",price:[4000,4000,5000],calls:"8",cost:[0.010,0.0145,0.020],judge:1.31,src:"TELEM",vol:1,avg:5000,comp:{writer:72,judge:18,polish:10}},
+ {id:"referat",name:"Referat",g:"talaba",price:[3000,4500,6000],calls:"18",cost:[0.110,0.146,0.200],judge:1.21,src:"TELEM",vol:2,avg:3500,comp:{writer:78,judge:16,polish:6}},
+ {id:"mustaqil-ish",name:"Mustaqil ish",g:"talaba",price:[3000,4000,6000],calls:"~15–18",cost:[0.12,0.16,0.24],judge:1.2,src:"KOD",vol:2,avg:3500,comp:{writer:78,judge:16,polish:6}},
+ {id:"coursework",name:"Kurs ishi",g:"talaba",price:[12000,16000,24000],calls:"20+ (bob, jadval, sxema)",cost:[0.18,0.28,0.50],judge:1.2,src:"KOD",vol:1,avg:16000,comp:{writer:78,judge:16,polish:6}},
+ {id:"essay",name:"Insho",g:"talaba",price:[2000,2500,4000],calls:"4",cost:[0.020,0.031,0.045],judge:1.2,src:"TELEM",vol:3,avg:3333,comp:{writer:75,judge:18,polish:7}},
+ {id:"lesson-plan",name:"Dars rejasi",g:"oqituvchi",price:[4000,4000,4000],calls:"1–2",cost:[0.006,0.0078,0.010],judge:1.8,src:"TELEM",vol:3,avg:4000,comp:{writer:85,judge:15}},
+ {id:"texnologik-xarita",name:"Texnologik xarita",g:"oqituvchi",price:[6000,6000,6000],calls:"4–6 (chorak bo'yicha)",cost:[0.03,0.045,0.06],judge:1.2,src:"KOD",vol:1,avg:6000,comp:{writer:85,judge:15}},
+ {id:"glossary",name:"Glossariy",g:"oqituvchi",price:[6000,9000,15000],calls:"1–4",cost:[0.008,0.016,0.028],judge:1.2,src:"KOD",vol:2,avg:9000,comp:{writer:85,judge:15}},
+ {id:"keys",name:"Keys",g:"oqituvchi",price:[6000,6000,6000],calls:"2–4",cost:[0.015,0.02,0.03],judge:1.2,src:"KOD",vol:1,avg:6000,comp:{writer:85,judge:15}},
+ {id:"test",name:"Test",g:"oqituvchi",price:[3000,3000,3000],calls:"3",cost:[0.018,0.0246,0.030],judge:1.32,src:"TELEM",vol:1,avg:3000,comp:{writer:75,judge:20,polish:5}},
+ {id:"infographic",name:"Infografika",g:"oqituvchi",price:[2000,2000,2000],calls:"1–2 + SVG (server)",cost:[0.0015,0.0020,0.0030],judge:3.5,src:"TELEM",vol:1,avg:2000,comp:{writer:65,judge:25,polish:10}},
+ {id:"crossword",name:"Krossvord",g:"oyinlar",price:[2000,2000,2000],calls:"3–5",cost:[0.003,0.0039,0.006],judge:2.6,src:"TELEM",vol:1,avg:2000,comp:{writer:65,judge:25,polish:10}},
+ {id:"flashcards",name:"Flesh kartalar",g:"oyinlar",price:[2000,2000,2000],calls:"2–4",cost:[0.0015,0.0021,0.0030],judge:3.8,src:"TELEM",vol:1,avg:2000,comp:{writer:65,judge:25,polish:10}},
+ {id:"sorting",name:"Saralash",g:"oyinlar",price:[2000,2000,2000],calls:"2–4",cost:[0.0008,0.0010,0.0015],judge:7,src:"TELEM",vol:1,avg:2000,comp:{writer:65,judge:25,polish:10}},
+ {id:"listening",name:"Tinglash",g:"oyinlar",price:[2000,2000,2000],calls:"2–4 + 10–20 TTS parcha",cost:[0.0010,0.0014,0.0020],judge:2.2,src:"TELEM",vol:1,avg:2000,tts:{chars:[150,225,300]},comp:{writer:55,judge:20,polish:5,tts:20}},
+ {id:"podcast",name:"Podkast",g:"media",price:[4000,4000,4000],calls:"4–6 LLM + TTS",cost:[0.020,0.031,0.045],judge:1.2,src:"KOD",vol:0,avg:4000,tts:{perMin:1000},comp:{writer:35,judge:8,polish:7,tts:50}},
+ {id:"greeting",name:"Tabriknoma",g:"media",price:[4000,4000,4000],calls:"4–6 LLM + TTS",cost:[0.020,0.031,0.045],judge:1.2,src:"KOD",vol:0,avg:4000,tts:{perMin:1000,maxMin:4},comp:{writer:35,judge:8,polish:7,tts:50}},
+];
+const TTS_PRICE = {azure:16, aisha:80}; // $/1M belgi
+const IMG_GEMINI = 0.067; // $/rasm 1K
+const SERVICES = [
+ {n:"Google Gemini (matn)",c:"LLM",why:"Asosiy yozuvchi, tadqiqot, tez JSON va hozir baholovchi ham — deyarli barcha vositalar",where:"lib/generation/llm/gemini.ts, llm-roles.ts (rollar), llm.ts (slayd/tarjimon/rezyume to'g'ridan-to'g'ri)",model:"gemini-3.7-flash (writer/researcher/fast/judge zaxira)",fb:"→ xAI Grok (llm.ts), rol zanjiri .env dan",price:"$0,75 in / $3,75 out per 1M (2027-01 dan 2×)",tel:"ha (rol yo'li); yo'q (slayd/tarjimon/rezyume/rasm)",telOk:"part"},
+ {n:"Anthropic Claude",c:"LLM",why:"Tayyorlik baholovchisi (judge) — maqola, talaba ishlari, o'qituvchi, o'yin, audio hisobotlari",where:"lib/generation/llm/anthropic.ts, */review.ts complete(\"judge\")",model:"claude-sonnet-5 (opus-5/haiku-4-5 jadvalda)",fb:"→ gemini-3.7-flash (hozir doim shu — kredit tugagan)",price:"$2 / $10 per 1M; kesh o'qish $0,20; batch −50 %",tel:"ha",telOk:"yes"},
+ {n:"xAI Grok",c:"LLM",why:"Zaxira yozuvchi (Gemini yiqilsa)",where:"lib/generation/llm/xai.ts, llm.ts:8-12",model:"grok-4.3",fb:"oxirgi zaxira",price:"$1,25 / $2,50 per 1M (≥200K: 2×)",tel:"ha (rol yo'li)",telOk:"part"},
+ {n:"OpenRouter / OpenAI",c:"LLM",why:"Universal zaxira (GPT/DeepSeek/Qwen); kod tayyor, kalit sotib olinmagan",where:"lib/generation/llm/openrouter.ts, openai.ts",model:"gpt-5.6-terra / luna (jadvalda)",fb:"ishlatilmaydi",price:"manba narxi × 1,055",tel:"—",telOk:"na"},
+ {n:"Gemini rasm",c:"Rasm",why:"Pro slayd — har mos slaydga AI rasm",where:"lib/generation/image-provider-gemini.ts, image-provider.ts:240",model:"gemini-3.1-flash-image 1K (lite zaxira $0,034)",fb:"→ lite modeli",price:"$0,067 / rasm (0,5K $0,045)",tel:"YO'Q — hisoblanmaydi",telOk:"no"},
+ {n:"fal.ai",c:"Rasm",why:"Mustaqil «Rasm» vositasi (premium 8 qadam)",where:"lib/generation/image-studio.ts:218, image-provider-fal.ts",model:"fal-ai/flux/schnell (dev — premium)",fb:"—",price:"$0,003 / megapiksel",tel:"YO'Q — hisoblanmaydi",telOk:"no"},
+ {n:"Pexels / Pixabay",c:"Rasm",why:"Oddiy slayd — bepul stock foto",where:"lib/generation/image-provider.ts:241, slide-images.ts",model:"qidiruv API",fb:"Pexels → Pixabay",price:"bepul (200/soat; 100/daq)",tel:"—",telOk:"na"},
+ {n:"Azure AI Speech",c:"TTS",why:"Podkast, tabriknoma, tinglash — asosiy ovoz (uz-UZ Madina/Sardor)",where:"lib/generation/tts/azure.ts, chain.ts",model:"Neural TTS, REST, MP3 24 kHz",fb:"→ Aisha → Gemini TTS",price:"~$16 / 1M belgi (F0: 500K/oy bepul)",tel:"ha (TtsMeter)",telOk:"yes"},
+ {n:"Aisha AI (voicelab.uz)",c:"TTS",why:"Mahalliy o'zbek ovoz — zaxira",where:"lib/generation/tts/aisha.ts",model:"WAV, ≤1 000 belgi/so'rov",fb:"→ Gemini TTS",price:"~$80 / 1M belgi (tasdiqlanmagan)",tel:"ha (TtsMeter)",telOk:"yes"},
+ {n:"Gemini TTS (preview)",c:"TTS",why:"Ixtiyoriy 3-zaxira",where:"lib/generation/tts/gemini.ts",model:"TTS_GEMINI_MODEL",fb:"—",price:"$20 / 1M chiqish token",tel:"ha",telOk:"yes"},
+ {n:"OpenAlex",c:"Manba",why:"Maqola/talaba ishlari — jurnal manbalarini qidirish va tekshirish",where:"lib/generation/research/openalex.ts, pipeline.ts",model:"REST, kalit bilan",fb:"Crossref",price:"bepul ($1/kun budjet)",tel:"—",telOk:"na"},
+ {n:"Crossref",c:"Manba",why:"DOI tasdiqlash, bibliografik qidiruv",where:"lib/generation/research/crossref.ts",model:"REST, polite pool (mailto)",fb:"—",price:"bepul (50 so'rov/s)",tel:"—",telOk:"na"},
+ {n:"Google Books",c:"Manba",why:"Darslik/monografiya manbalari",where:"lib/generation/research/googlebooks.ts",model:"REST, kalit bilan (Books API yoqilishi kerak)",fb:"bo'sh qaytadi",price:"bepul (~1 000/kun)",tel:"—",telOk:"na"},
+ {n:"lex.uz",c:"Manba",why:"Normativ hujjatlar — LLM nomzod, sahifa fetch bilan tasdiq",where:"lib/generation/research/lexuz.ts",model:"HTML fetch + fast rol",fb:"rad etiladi",price:"bepul",tel:"LLM qismi ha",telOk:"part"},
+ {n:"Telegram Bot API",c:"Auth",why:"Kirish (OTP chat orqali), xabarlar",where:"lib/server/telegram.ts",model:"Bot API webhook",fb:"—",price:"bepul",tel:"—",telOk:"na"},
+ {n:"Click",c:"To'lov",why:"Balans to'ldirish (1 so'm = 1 tanga)",where:"lib/server/payments.ts:53, app/api/payments/click",model:"webhook, MD5 imzo",fb:"—",price:"savdogar komissiyasi shartnomada (ochiq manbada yo'q)",tel:"—",telOk:"na"},
+ {n:"Payme",c:"To'lov",why:"Balans to'ldirish; Pro tarif 15 000 so'm/30 kun",where:"lib/server/payments.ts:76, app/api/payments/payme",model:"JSON-RPC, Basic auth",fb:"—",price:"savdogar komissiyasi shartnomada",tel:"—",telOk:"na"},
+ {n:"Server + LibreOffice + Postgres",c:"Infra",why:"Docker (web/worker/postgres), DOCX→PDF sahifa darvozasi, fayllar bazada (bytea)",where:".claude/deploy.md, docker-compose.yml, Dockerfile",model:"14 GB RAM VPS, nginx, slaydxx.uz",fb:"—",price:"$10–20/oy (bozor; provayder noma'lum)",tel:"—",telOk:"na"},
+];
+const PRICES = [
+ ["gemini-3.7-flash (in/out, 1M)","0,75 / 3,75","0,75 / 3,75","ok","2027-01-01 dan 1,50 / 7,50 — kodda sanali qator bor"],
+ ["gemini-3.5-flash-lite","0,30 / 2,50","0,30 / 2,50","ok",""],
+ ["gemini-3.1-pro ≤200K","2 / 12","2 / 12","ok",">200K: 4 / 18 — kodda yo'q"],
+ ["claude-sonnet-5","2 / 10","2 / 10","ok","kesh o'qish 0,20; batch −50 % — kodda yo'q"],
+ ["claude-opus-5 · haiku-4-5","5 / 25 · 1 / 5","5 / 25 · 1 / 5","ok",""],
+ ["grok-4.3","1,25 / 2,50","1,25 / 2,50","ok","≥200K: 2,50 / 5,00 — kodda yo'q"],
+ ["gemini-3.1-flash-image","0,067 / rasm (izoh)","0,045 (0,5K) · 0,067 (1K) · 0,101 (2K)","ok","narx jadvalida rasm qatori yo'q"],
+ ["Gemini grounding (qidiruv)","—","5 000/oy bepul, keyin $14 / 1 000","warn","narx jadvalida yo'q; hozirgi hajmda bepul"],
+ ["fal-ai/flux/schnell","—","$0,003 / megapiksel","warn","narx jadvalida yo'q, cost_json ga tushmaydi"],
+ ["Azure Neural TTS","16 / 1M belgi","~16 / 1M (ikkilamchi manba)","ok","F0 500K belgi/oy bepul"],
+ ["Aisha AI TTS","80 / 1M belgi","topilmadi","crit","1 so'm/belgi taxmini; tasdiqlash shart"],
+ ["Gemini TTS","0 (sinov kvota)","$20 / 1M chiqish token","warn","preview; ovoz sifati noma'lum"],
+ ["OpenAlex · Crossref · Google Books","bepul","bepul (kvota)","ok","Books API kalit bilan hozir javob bermaydi"],
+ ["Click · Payme komissiya","—","ochiq manbada yo'q (odatda 1,5–3 %)","warn","shartnomadan olinadi"],
+ ["USD → so'm","12 700","11 839,59 (CBU 2026-09-19)","warn","kodda 7,3 % yuqori — SOUM_PER_USD env"],
+];
+const COMP_KEYS = [["writer","Yozuvchi (LLM)","var(--s1)"],["judge","Baholovchi","var(--s3)"],["polish","Sayqal","var(--s4)"],["image","Rasm","var(--s2)"],["tts","TTS","var(--s5)"]];
+
+/* ───────────── holat va hisob ───────────── */
+const S = {rate:11840, judge:"gemini", tts:"azure", slides:15, minutes:3, fixed:180000};
+const fmtSoum = n => Math.round(n).toLocaleString("uz-UZ").replace(/,/g," ").replace(/ /g," ");
+const fmtUsd = n => n < 0.01 ? n.toFixed(4) : n < 1 ? n.toFixed(3) : n.toFixed(2);
+const pct = n => (n*100).toFixed(n*100 >= 99 ? 1 : 0) + " %";
+
+function priceOf(t){ if(t.id==="pro-slide") return [8000, 2000*S.slides, 60000]; return t.price; }
+function costOf(t){ // [past, odatiy, yuqori] USD, joriy sozlamalar
+  let c;
+  if(t.id==="pro-slide"){ const img = n => 0.03 + Math.round(0.8*n)*IMG_GEMINI; c=[img(4), img(S.slides), img(30)]; }
+  else c=t.cost.slice();
+  if(S.judge==="claude" && t.judge) c=c.map(v=>v*t.judge);
+  if(t.tts){
+    const p=TTS_PRICE[S.tts]/1e6;
+    if(t.tts.perMin){ const m=Math.min(S.minutes, t.tts.maxMin||5); c=[c[0]+1*t.tts.perMin*p, c[1]+m*t.tts.perMin*p, c[2]+(t.tts.maxMin||5)*t.tts.perMin*p]; }
+    else c=c.map((v,i)=>v+t.tts.chars[i]*p);
+  }
+  return c;
+}
+function marginOf(t){ const p=priceOf(t)[1], c=costOf(t)[1]*S.rate; return (p-c)/p; }
+const statusOf = m => m>=0.8?"good":m>=0.5?"warn":"crit";
+
+/* ───────────── tooltip ───────────── */
+const tip=document.getElementById("tip");
+function showTip(html,e){ tip.innerHTML=html; tip.style.opacity=1; moveTip(e); }
+function moveTip(e){ const x=e.clientX+14,y=e.clientY+14; const w=tip.offsetWidth,h=tip.offsetHeight; tip.style.left=Math.min(x,innerWidth-w-8)+"px"; tip.style.top=Math.min(y,innerHeight-h-8)+"px"; }
+function hideTip(){ tip.style.opacity=0; }
+function bindTips(root){ root.querySelectorAll("[data-tip]").forEach(el=>{ el.addEventListener("mouseenter",e=>showTip(el.dataset.tip,e)); el.addEventListener("mousemove",moveTip); el.addEventListener("mouseleave",hideTip); el.addEventListener("focus",e=>{const r=el.getBoundingClientRect(); showTip(el.dataset.tip,{clientX:r.left,clientY:r.bottom});}); el.addEventListener("blur",hideTip); }); }
+
+/* ───────────── chizish ───────────── */
+function hBars(el, rows, opts){ // rows: {label, value, max, color, tip, sub}
+  const W=920, rowH=26, padL=opts.padL||150, padR=opts.padR||70, top=8;
+  const H=top+rows.length*rowH+8; const innerW=W-padL-padR; const max=opts.max;
+  const ticks=opts.ticks||[]; let s=`<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${opts.aria||""}">`;
+  for(const tk of ticks){ const x=padL+innerW*tk/max; s+=`<line class="grid" x1="${x}" x2="${x}" y1="${top}" y2="${H-8}"/><text x="${x}" y="${H-0}" text-anchor="middle" style="font-size:10.5px">${opts.tickLabel?opts.tickLabel(tk):tk}</text>`; }
+  s+=`<line class="axis" x1="${padL}" x2="${padL}" y1="${top}" y2="${H-8}"/>`;
+  rows.forEach((r,i)=>{ const y=top+i*rowH+4; const bw=Math.max(0,innerW*Math.min(r.value,max)/max); const h=rowH-8;
+    s+=`<g class="row" tabindex="0" data-tip="${r.tip.replace(/"/g,"&quot;")}"><rect class="hit" x="0" y="${y-4}" width="${W}" height="${rowH}"/>`;
+    s+=`<text class="lab" x="${padL-8}" y="${y+h/2+4}" text-anchor="end">${r.label}</text>`;
+    if(r.back!=null){ const bb=innerW*Math.min(r.back,max)/max; s+=`<rect x="${padL}" y="${y}" width="${bb}" height="${h}" rx="4" fill="${r.color}" opacity=".28"/>`; }
+    s+=`<rect class="bar" x="${padL}" y="${y}" width="${bw}" height="${h}" rx="${bw<4?1:4}" fill="${r.color}"/>`;
+    s+=`<text class="val" x="${padL+Math.max(bw,(r.back!=null?innerW*Math.min(r.back,max)/max:0))+6}" y="${y+h/2+4}">${r.text}</text></g>`; });
+  s+=`</svg>`; el.innerHTML=s; bindTips(el);
+}
+function stacked(el, rows){ // rows: {label, parts:{key:pct}}
+  const W=920,rowH=26,padL=190,top=8,H=top+rows.length*rowH+4,innerW=W-padL-20;
+  let s=`<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Tannarx tarkibi">`;
+  rows.forEach((r,i)=>{ const y=top+i*rowH+4,h=rowH-8; let x=padL; s+=`<text class="lab" x="${padL-8}" y="${y+h/2+4}" text-anchor="end">${r.label}</text>`;
+    COMP_KEYS.forEach(([k,lab,col])=>{ const v=r.parts[k]||0; if(!v) return; const w=innerW*v/100-2; s+=`<g tabindex="0" data-tip="<b>${r.label}</b><br>${lab}: ${v} %"><rect x="${x}" y="${y}" width="${Math.max(w,1)}" height="${h}" rx="3" fill="${col}"/>${w>34?`<text x="${x+w/2}" y="${y+h/2+4}" text-anchor="middle" style="fill:#fff;font-size:11px">${v}%</text>`:""}</g>`; x+=w+2; }); });
+  s+=`</svg>`; el.innerHTML=s; bindTips(el);
+}
+
+/* ───────────── render ───────────── */
+function renderTiles(){
+  const rows=TOOLS.map(t=>({t,rev:t.vol*t.avg,cost:t.vol*(t.id==="pro-slide"?(0.03+12*IMG_GEMINI):costOf(t)[1])*S.rate}));
+  const rev=rows.reduce((a,r)=>a+r.rev,0), cost=rows.reduce((a,r)=>a+r.cost,0);
+  const pro=rows.find(r=>r.t.id==="pro-slide");
+  document.getElementById("tiles").innerHTML=[
+    ["460 500 so'm","30 kunlik tushum (89 ish)","72/89 — egasining sinovlari; haqiqiy to'lov hali yo'q"],
+    [`~${fmtSoum(cost)} so'm`,"Tashqi servis tannarxi (30 kun)",`≈ $${(cost/S.rate).toFixed(2)} · ${pct(cost/rev)} tushumdan`],
+    [pct((rev-cost)/rev),"Yalpi marja (o'zgaruvchan xarajat)","server/domen kirmaydi"],
+    [pct(pro.cost/cost),"Tannarxdagi pro slayd ulushi","5 buyurtma · Gemini rasm $0,067/dona"],
+  ].map(([v,l,d])=>`<div class="tile"><span class="v">${v}</span><span class="l">${l}</span><span class="d">${d}</span></div>`).join("");
+}
+function renderServices(){
+  const cats=[...new Set(SERVICES.map(s=>s.c))]; const box=document.getElementById("svcFilter");
+  if(!box.children.length){ box.innerHTML=[`<button class="chip" aria-pressed="true" data-c="">Hammasi (${SERVICES.length})</button>`,...cats.map(c=>`<button class="chip" aria-pressed="false" data-c="${c}">${c} (${SERVICES.filter(s=>s.c===c).length})</button>`)].join("");
+    box.addEventListener("click",e=>{ const b=e.target.closest(".chip"); if(!b) return; box.querySelectorAll(".chip").forEach(x=>x.setAttribute("aria-pressed","false")); b.setAttribute("aria-pressed","true"); draw(b.dataset.c); }); }
+  const draw=c=>{ const badge={yes:'<span class="badge good">hisoblanadi</span>',part:'<span class="badge warn">qisman</span>',no:'<span class="badge crit">hisoblanmaydi</span>',na:'<span class="badge">bepul / —</span>'};
+    document.querySelector("#svcTable tbody").innerHTML=SERVICES.filter(s=>!c||s.c===c).map(s=>`<tr><td><b>${s.n}</b></td><td>${s.c}</td><td>${s.why}</td><td class="mono" style="font-size:12px">${s.where}</td><td>${s.model}</td><td>${s.fb}</td><td>${s.price}</td><td>${badge[s.telOk]}<div class="small">${s.tel}</div></td></tr>`).join(""); };
+  draw("");
+}
+function renderPrices(){
+  const st={ok:'<span class="badge good">mos</span>',warn:'<span class="badge warn">jadvalda yo\'q</span>',crit:'<span class="badge crit">tasdiqlanmagan</span>'};
+  document.querySelector("#priceTable tbody").innerHTML=PRICES.map(r=>`<tr><td><b>${r[0]}</b></td><td class="r num">${r[1]}</td><td class="r num">${r[2]}</td><td>${st[r[3]]}</td><td class="small">${r[4]}</td></tr>`).join("");
+}
+function renderTools(){
+  const rows=TOOLS.map(t=>{ const p=priceOf(t),c=costOf(t),m=marginOf(t); return {t,p,c,m}; }).sort((a,b)=>a.m-b.m);
+  const col={good:"var(--good)",warn:"var(--warn)",crit:"var(--crit)"};
+  hBars(document.getElementById("marginChart"), rows.map(r=>({label:r.t.name,value:Math.max(r.m,0),max:1,color:col[statusOf(r.m)],text:pct(r.m)+(r.m<0?" (zarar)":""),tip:`<b>${r.t.name}</b><br>Narx ${fmtSoum(r.p[1])} so'm · tannarx ${fmtSoum(r.c[1]*S.rate)} so'm ($${fmtUsd(r.c[1])})<br>Chaqiruvlar: ${r.t.calls}<br>Manba: ${r.t.src}`})),{max:1,ticks:[0,.25,.5,.75,1],tickLabel:v=>v*100+"%",padL:150,padR:110,aria:"Vositalar marjasi"});
+  document.querySelector("#toolTable tbody").innerHTML=rows.slice().reverse().map(r=>{ const s=statusOf(r.m);
+    return `<tr><td><b>${r.t.name}</b></td><td>${GROUP[r.t.g]}</td><td class="r num">${fmtSoum(r.p[1])}${r.p[0]!==r.p[2]?`<div class="small">${fmtSoum(r.p[0])}–${fmtSoum(r.p[2])}</div>`:""}</td><td class="small">${r.t.calls}</td><td class="r num">${fmtUsd(r.c[1])}</td><td class="r num">${fmtSoum(r.c[1]*S.rate)}</td><td class="r"><span class="badge ${s}">${pct(r.m)}</span></td><td><div class="bar-inline" title="past–yuqori"><i style="width:${Math.min(100,r.c[2]/Math.max(...rows.map(x=>x.c[2]))*100)}%;background:var(--s1)"></i></div><span class="small num">${fmtUsd(r.c[0])} – ${fmtUsd(r.c[2])}</span></td><td><span class="badge ${r.t.src==="TELEM"?"tel":""}">${r.t.src==="TELEM"?"telemetriya":"kod-baho"}</span></td></tr>`; }).join("");
+}
+function renderMonth(){
+  const rows=TOOLS.filter(t=>t.vol>0).map(t=>{ const unit=t.id==="pro-slide"?(0.03+12*IMG_GEMINI)*(S.judge==="claude"?1:1):costOf(t)[1]; return {t,rev:t.vol*t.avg,cost:t.vol*unit*S.rate}; }).sort((a,b)=>b.rev-a.rev);
+  const rev=rows.reduce((a,r)=>a+r.rev,0), cost=rows.reduce((a,r)=>a+r.cost,0), gross=rev-cost, net=gross-S.fixed;
+  document.getElementById("monthTiles").innerHTML=[[fmtSoum(rev)+" so'm","Tushum (89 ish, o'rtacha narx × soni)"],[fmtSoum(cost)+" so'm","O'zgaruvchan tannarx"],[fmtSoum(gross)+" so'm","Yalpi foyda · "+pct(gross/rev)],[fmtSoum(net)+" so'm","Doimiy xarajatdan keyin"]].map(([v,l])=>`<div class="tile"><span class="v" style="font-size:24px">${v}</span><span class="l">${l}</span></div>`).join("");
+  hBars(document.getElementById("monthChart"), rows.map(r=>({label:`${r.t.name} ×${r.t.vol}`,value:r.cost,back:r.rev,max:160000,color:"var(--s1)",text:`${fmtSoum(r.rev)} · tannarx ${fmtSoum(r.cost)} (${pct(r.cost/r.rev)})`,tip:`<b>${r.t.name}</b> — ${r.t.vol} ish<br>Tushum ${fmtSoum(r.rev)} so'm (o'rt. ${fmtSoum(r.t.avg)})<br>Tannarx ${fmtSoum(r.cost)} so'm · marja ${pct((r.rev-r.cost)/r.rev)}`})),{max:160000,ticks:[0,40000,80000,120000,160000],tickLabel:v=>fmtSoum(v/1000)+"k",padL:170,padR:260,aria:"Oylik tushum va tannarx"});
+  document.getElementById("fixedKv").innerHTML=`<dt>Doimiy</dt><dd>${fmtSoum(S.fixed)} so'm/oy (≈ $${(S.fixed/S.rate).toFixed(0)})</dd><dt>Nol foyda nuqtasi</dt><dd>≈ ${fmtSoum(S.fixed/(gross/rev))} so'm tushum/oy (joriy marja ${pct(gross/rev)})</dd><dt>Ishga nisbatan</dt><dd>≈ ${Math.ceil(S.fixed/(gross/89))} ta o'rtacha ish/oy</dd>`;
+}
+function renderComp(){
+  document.getElementById("compLegend").innerHTML=COMP_KEYS.map(([k,l,c])=>`<span><i class="sw" style="background:${c}"></i>${l}</span>`).join("");
+  const groups=[["Slayd","slide"],["Pro slayd","pro-slide"],["Rasm","image"],["Tarjimon / rezyume","translation"],["Maqola / tezis / insho / test","article"],["Referat / kurs ishi / mustaqil ish","referat"],["O'qituvchi hujjatlari","lesson-plan"],["O'yinlar / infografika","crossword"],["Tinglash","listening"],["Podkast / tabriknoma","podcast"]];
+  stacked(document.getElementById("compChart"), groups.map(([label,id])=>({label,parts:TOOLS.find(t=>t.id===id).comp})));
+}
+function renderAll(){ renderTiles(); renderTools(); renderMonth(); }
+
+/* ───────────── boshqaruvlar ───────────── */
+document.getElementById("rate").addEventListener("input",e=>{ const v=Number(e.target.value); if(v>0){S.rate=v; renderAll();} });
+document.getElementById("fixed").addEventListener("input",e=>{ S.fixed=Math.max(0,Number(e.target.value)||0); renderMonth(); });
+document.getElementById("slides").addEventListener("input",e=>{ S.slides=Number(e.target.value); document.getElementById("slidesV").textContent=S.slides; renderAll(); });
+document.getElementById("minutes").addEventListener("input",e=>{ S.minutes=Number(e.target.value); document.getElementById("minutesV").textContent=S.minutes; renderAll(); });
+for(const [id,key] of [["judgeSeg","judge"],["ttsSeg","tts"]]) document.getElementById(id).addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b) return; e.currentTarget.querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed","false")); b.setAttribute("aria-pressed","true"); S[key]=b.dataset.v; renderAll(); });
+
+renderServices(); renderPrices(); renderComp(); renderAll();
+</script>
