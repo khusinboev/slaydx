@@ -65,6 +65,22 @@ export async function getMe(): Promise<{ id: number; username: string } | null> 
   return call<{ id: number; username: string }>("getMe", {});
 }
 
+/**
+ * Bot menyusidagi buyruqlar (Telegram «/» tugmasi). Idempotent — har
+ * ishga tushishda chaqirish xavfsiz. Prod webhook rejimida bo'lgani
+ * uchun `scripts/bot.mts` dan tashqari `npm run bot:commands` ham bor.
+ */
+export async function setBotCommands(): Promise<boolean> {
+  const out = await call("setMyCommands", {
+    commands: [
+      { command: "start", description: "Saytga kirish havolasi" },
+      { command: "login", description: "Yangi kirish havolasi" },
+      { command: "admin", description: "Admin sifatida tasdiqlash" },
+    ],
+  });
+  return out !== null;
+}
+
 /* ───────────────────────── Kirish chiptasi ───────────────────────── */
 
 function hashToken(token: string): string {
@@ -115,6 +131,32 @@ export async function attachTicket(nonce: string, profile: TelegramProfile): Pro
     [nonce, profile.telegramId, profile.username, profile.name, profile.photoUrl, hashToken(token)],
   );
   if (!rows.length) return null;
+  return `${env.appUrl}/api/auth/telegram/enter?t=${token}`;
+}
+
+/**
+ * BOTDAN BOSHLANGAN kirish: foydalanuvchi saytga kirmay, to'g'ridan-to'g'ri
+ * botga `/start` (yoki `/login`) bosdi — chiptani ham, kirish havolasini
+ * ham bot o'zi yaratadi.
+ *
+ * Xavfsizlik modeli saytdan boshlangan oqim bilan BIR XIL: token 32
+ * tasodifiy bayt, bazada faqat xesh, bir martalik, 5 daqiqa; u faqat
+ * shu Telegram chatiga boradi. Farq faqat nonce'ni kim yaratganida —
+ * bu yerda nonce hech qachon brauzerga ko'rinmaydi, shuning uchun
+ * «o'z nonce'ini qurbonga yuborish» hujumi bu oqimda umuman yo'q.
+ *
+ * Ikki qadam (`createTicket` + `attachTicket`) bitta INSERT ga
+ * yig'ildi: oraliq «bog'lanmagan chipta» holati bu yerda kerak emas.
+ */
+export async function createBotLoginLink(profile: TelegramProfile): Promise<string> {
+  await purgeExpiredTickets();
+  const nonce = randomBytes(24).toString("base64url");
+  const token = randomBytes(32).toString("base64url");
+  await query(
+    `INSERT INTO login_tickets (nonce, expires_at, telegram_id, username, name, photo_url, token_hash)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    [nonce, new Date(Date.now() + TICKET_TTL_MS), profile.telegramId, profile.username, profile.name, profile.photoUrl, hashToken(token)],
+  );
   return `${env.appUrl}/api/auth/telegram/enter?t=${token}`;
 }
 
@@ -206,9 +248,29 @@ function publicSiteButton(path = "/uz", label = "Saytni ochish"): Record<string,
 const WELCOME = [
   "Assalomu alaykum! 👋",
   "",
-  "Bu bot orqali saytga kirasiz.",
-  "Saytda «Telegram orqali kirish» tugmasini bosing — kirish havolasi shu yerga keladi.",
+  "SlaydX — AI yordamida slayd, referat, kurs ishi, maqola va o'qituvchi hujjatlarini yaratadi.",
+  "",
+  "Saytga kirish uchun quyidagi tugmani bosing — akkauntingiz avtomatik ochiladi.",
+  "Havola <b>bir martalik</b> va 5 daqiqa amal qiladi. Yangi havola kerak bo'lsa /login yozing.",
 ].join("\n");
+
+/** Kirish havolasi tugmasi — Telegram `localhost` URL ni rad etadi, shunda havola matnda ketadi. */
+function loginButton(link: string, label = "🔑 Saytga kirish"): Record<string, unknown> {
+  const isPublic = /^https:\/\//.test(link) && !/localhost|127\.0\.0\.1|0\.0\.0\.0/.test(link);
+  if (!isPublic) return {};
+  return { reply_markup: { inline_keyboard: [[{ text: label, url: link }]] } };
+}
+
+/**
+ * Havolani yuboradi. Tugma qo'yib bo'lmasa (lokal manzil) havolaning
+ * o'zi matnga qo'shiladi — aks holda dev muhitida foydalanuvchi
+ * «tugmani bosing» degan xabarni tugmasiz olardi.
+ */
+async function sendLoginLink(chatId: number, link: string, intro: string): Promise<void> {
+  const btn = loginButton(link);
+  const text = "reply_markup" in btn ? intro : `${intro}\n\n${link}`;
+  await sendMessage(chatId, text, btn);
+}
 
 /**
  * `/start` va `/start <nonce>` ni qayta ishlaydi.
@@ -308,14 +370,23 @@ export async function handleUpdate(update: TelegramUpdate): Promise<void> {
     return;
   }
 
+  // `/login` — qayta havola (masalan, oldingisi eskirgan bo'lsa).
+  if (text.startsWith("/login")) {
+    await sendLoginLink(msg.chat.id, await createBotLoginLink(profile), "Kirish uchun quyidagi tugmani bosing 👇\n\nHavola <b>bir martalik</b> va 5 daqiqa amal qiladi.");
+    return;
+  }
+
   if (!text.startsWith("/start")) {
-    await sendMessage(msg.chat.id, "Kod olish uchun saytdagi «Telegram orqali kirish» tugmasini bosing.");
+    await sendMessage(msg.chat.id, "Saytga kirish uchun /login yozing yoki saytdagi «Telegram orqali kirish» tugmasini bosing.");
     return;
   }
 
   const nonce = text.slice("/start".length).trim();
   if (!nonce) {
-    await sendMessage(msg.chat.id, WELCOME, publicSiteButton());
+    // Oddiy /start — foydalanuvchi botga saytdan emas, to'g'ridan-to'g'ri
+    // keldi. Uni saytga «bor va u yerdan qayta kel» deb yubormaymiz:
+    // kirish havolasini shu yerning o'zida beramiz.
+    await sendLoginLink(msg.chat.id, await createBotLoginLink(profile), WELCOME);
     return;
   }
 

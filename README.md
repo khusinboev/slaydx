@@ -81,16 +81,23 @@ npm run bot            # 2-terminal: Telegram bot (long-polling)
 
 ### Telegram orqali kirish qanday ishlaydi
 
-1. Sayt «chipta» ochadi (tasodifiy `nonce`) va `t.me/<bot>?start=<nonce>` havolasini beradi
-2. Foydalanuvchi Telegram'da **Start** bosadi → bot uni taniydi
-3. Bot 5 xonali kodni **aynan o'sha chatga** yuboradi
-4. Foydalanuvchi kodni saytga kiritadi → sessiya ochiladi
+Ikkala oqimda ham sessiya **bir martalik havolani bosgan brauzerda** ochiladi
+(`GET /api/auth/telegram/enter?t=<token>`): token 32 tasodifiy bayt, bazada
+faqat xesh, 5 daqiqa, bir marta. Havola faqat foydalanuvchining Telegram
+chatiga boradi — shuning uchun «o'z havolasini qurbonga yuborish» hujumi
+ishlamaydi: tajovuzkor brauzeri tokenni ko'rmaydi.
 
-Nega kod kerak: kodsiz, faqat `nonce` bilan avtomatik kirishda tajovuzkor o'z
-havolasini qurbonga yuborib, uning nomidan o'z brauzerida sessiya ocha olardi.
-Kod esa faqat qurbonning Telegramiga boradi.
+**Saytdan:** «Telegram orqali kirish» → sayt chipta (`nonce`) ochadi va
+`t.me/<bot>?start=<nonce>` ga yuboradi → bot chiptani profilga bog'lab
+kirish havolasini yuboradi → foydalanuvchi bosadi → sayt kirgan holda ochiladi.
 
-Chipta 5 daqiqa, 5 urinish. Mini App ichida kod so'ralmaydi — `initData` imzosi yetarli.
+**Botdan (yangi):** foydalanuvchi botga oddiy `/start` yoki `/login` bosadi →
+bot chiptani va havolani **o'zi** yaratadi (`createBotLoginLink`) va
+«🔑 Saytga kirish» tugmasini yuboradi → bosganda avtomatik kiradi. Nonce bu
+oqimda brauzerga umuman chiqmaydi. Boshqa har qanday matnga bot «/login
+yozing» deb javob beradi. Bot menyusi: `npm run bot:commands` (`setMyCommands`).
+
+Mini App ichida havola kerak emas — `initData` imzosi yetarli.
 
 **Prod da webhook:**
 
@@ -208,7 +215,8 @@ berardi. Eval bitta tarifda sinagani uchun uchalasi ham sezilmay qoldi.
 |---|---|
 | `GET /api/health` | Baza, navbat, yoqilgan imkoniyatlar. Baza tushsa 503 |
 | `POST /api/auth/telegram` | Login Widget yoki Mini App `initData` (imzo serverda tekshiriladi) |
-| `POST /api/auth/telegram/ticket[?action=verify]` | Kirish chiptasi: bot havolasi / kodni tasdiqlash |
+| `POST /api/auth/telegram/ticket` | Kirish chiptasi (saytdan boshlangan oqim) → `t.me/<bot>?start=<nonce>` |
+| `GET /api/auth/telegram/enter?t=<token>` | Bir martalik kirish havolasi (ikkala oqim) → sessiya + redirect `/uz` |
 | `POST /api/telegram/webhook` | Telegram update (maxfiy sarlavha bilan himoyalangan) |
 | `POST /api/auth/otp?action=request\|verify` | Zaxira OTP (yetkazuvchi ulanmagan) |
 | `GET\|DELETE /api/auth/session` | Joriy sessiya / chiqish (`?all=1` — hamma joydan) |

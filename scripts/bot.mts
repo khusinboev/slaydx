@@ -9,7 +9,7 @@
  */
 import { env } from "../lib/server/env.ts";
 import { ensureMigrated, pool } from "../lib/server/db.ts";
-import { botConfigured, getMe, handleUpdate, purgeExpiredTickets } from "../lib/server/telegram.ts";
+import { botConfigured, getMe, handleUpdate, purgeExpiredTickets, setBotCommands } from "../lib/server/telegram.ts";
 import type { TelegramUpdate } from "../lib/server/telegram.ts";
 
 function sleep(ms: number) {
@@ -40,6 +40,7 @@ if (!me) {
   process.exit(1);
 }
 console.log(`[bot] @${me.username} ishga tushdi (long-polling)`);
+await setBotCommands();
 
 // Webhook o'rnatilgan bo'lsa getUpdates ishlamaydi — avval o'chiramiz.
 await fetch(`https://api.telegram.org/bot${env.telegramBotToken}/deleteWebhook`, {
