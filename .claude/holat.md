@@ -1,6 +1,22 @@
-# SlaydX — holat (2026-09-17, main `03a64e4`+; prod: AUDIT-22 `03a64e4` (2026-09-17, rollback `9bb8a43`); tekshiruv: unit 2 618/2 620 (2 ma'lum fal.ai), UI 255, ko'ruvchi 219, tsc/lint toza)
+# SlaydX — holat (2026-09-21, main `15a27c9`+; prod: `406f8ac` (bot avtologin, 2026-09-20; rollback `03a64e4`); tekshiruv: tsc/lint toza, R0 testlari yashil)
 
-Sprint: **O'qituvchi vositalari 2 + 9 yangi xizmat (AUDIT-20…23)** — reja `docs/AUDIT-20.md` §1, tadqiqot `docs/research/` (15 hisobot). Oldingi: Talaba ishlari 2 (AUDIT-19) — prod'da.
+Sprint: **Formalar 3 (AUDIT-24)** — 17 forma + etalon nomuvofiqliklari, reja `docs/AUDIT-24.md` §1, tadqiqot `docs/research/forms3-*.md`.
+
+| # | AUDIT-24 bosqich | % | Izoh |
+|---|---|---|---|
+| R | 4 audit + 22 forma o'lchovi + reja + egasi qarorlari | 100 | `ad0fd8c` |
+| R0 | `components/forms/shared` (SettingsDetails, Field, TopicRow, LimitedTextarea, AuthorRows, SourceFileRow, RangeRow, ColorDots, ClearFormButton), 10 test, 3 mutatsiya | 100 | `15a27c9` |
+| A | WorkComposer (kurs ishi/referat/mustaqil ish) — Titul yig'iq, hajm slayder+narx, Sozlamalar | 0 | agent opus (worktree) |
+| B | TeacherComposer bo'lish (5 kind), Shapka yig'iq, approver faqat bsb/chsb, fan bitta manba | 0 | agent opus (worktree) |
+| C | Insho compact + tezis `variant="thesis"` + insho natija izohi | 0 | agent sonnet (worktree) |
+| D1 | GameComposer (4 o'yin) | 0 | A/B/C dan keyin |
+| D2 | MediaComposer + InfographicComposer + infografika natija yorlig'i | 0 | A/B/C dan keyin |
+| E | Etalon nomuvofiqliklari (slayd/tarjimon/maqola/rezyume SettingsDetails, fayl UI, rasm ToolChrome) | 0 | A/B/C dan keyin |
+| R2 | 22 forma o'lchovi (≤1 200 px, mobil), qorong'i rejim, to'liq to'plam, docs, bitta deploy, prod smoke | 0 | |
+
+Oldingi sprintlar: AUDIT-22 prod'da (`03a64e4`), bot avtologin (`406f8ac`), tannarx hisoboti (`cc074e1`, `docs/research/tannarx-hisobot.html`). Kelajak: admin panel (narx/tannarx, statistika) — xotira `project_slaydx_admin_panel_future.md`.
+
+Oldingi sprint: **O'qituvchi vositalari 2 + 9 yangi xizmat (AUDIT-20…23)** — reja `docs/AUDIT-20.md` §1, tadqiqot `docs/research/` (15 hisobot). Oldingi: Talaba ishlari 2 (AUDIT-19) — prod'da.
 
 Eski sprint jadvali (AUDIT-19) — reja `~/.claude/plans/sen-senior-fullstack-dev-majestic-starfish.md` (§1 `docs/AUDIT-19.md`), jurnal `docs/AUDIT-19.md` §5.
 AUDIT-20: **100 % — prod'da (`5852285`).**
@@ -35,7 +51,7 @@ Egasidan: Azure Speech kaliti + region, Aisha AI kaliti (`npm run tts-lab`), Ant
 | R3 | Jonli 7/7, smoke (lesson-plan, test), ko'z 5 kind, docs, deploy + prod smoke | 100 | prod `5852285`, rollback `552a46c` |
 
 ## To'xtatilgan jarayonlar
-Yo'q — hamma worktree birlashtirildi. Dev server 3111 (`WORKER_INLINE`) ishlayapti (`e55692c` kodi; hotfix'dan keyin restart kerak bo'lsa).
+AUDIT-24 A/B/C agentlari faol (worktree `agent-aa34b17bdcd81789b`, `agent-a4dbc3437ca048e6d`, `agent-aa16a40c40d5fdd68`). Dev server 3111 to'xtatilgan (xotira — agentlar o'z portlarida 3121–3123 o'lchaydi).
 
 ## Davom etish qadamlari (AUDIT-20)
 1. Anthropic hisobini to'ldirish (baholovchi Gemini ga tushgan).
