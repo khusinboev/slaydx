@@ -1,15 +1,25 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles } from "lucide-react";
+import { useConfirmClick } from "@/components/overlays/useConfirmClick";
 import type { FormValues, ToolConfig } from "@/lib/types";
 import { formatTanga, IMAGE_PROMPT_MIN, priceFor } from "@/lib/tools";
 import { IMAGE_RATIOS, IMAGE_STYLES } from "@/lib/generation/image-studio";
-import { cn } from "@/lib/cn";
+import { IMAGE_PROMPT_LIMIT } from "@/lib/generation/image-params";
+import { Card, Row, Segmented, SelectField } from "./compact";
+import { ClearFormButton, Field, LimitedTextarea, SettingsDetails } from "./shared";
+import { ToolChrome } from "./ToolChrome";
 import { runGeneration } from "./runGeneration";
 
 /*
+ * Rasm formasi (WP-E, Formalar 3) — ilgari `ToolChrome`SIZ, o'zining
+ * chizg'ichi bilan edi (1 359 px, etalon nomuvofiqligi — qolgan 21 forma
+ * bitta qobiqda). Endi boshqa umumiy formalar bilan bir xil naqsh: kartalar
+ * → sticky narx (`ToolChrome`), har parametr `data-field` bilan
+ * (`lib/generation/image-params.ts` reyestri — «bezak maydon yo'q»
+ * `tests/image-params.test.mts` bilan qulflangan).
+ *
  * Har biri gazetteer (`uz-gazetteer.ts`) tan oladigan kalit so'zni o'z
  * ichiga oladi — shunda foydalanuvchi bosgan zahoti aniq vizual
  * tafsilotlar bilan boyitilgan, haqiqiyroq rasm ko'radi.
@@ -25,18 +35,28 @@ const EXAMPLES = [
   "Toshkent kechasi, yomg‘irli ko‘cha, neon yorug‘lik, kino kadri",
 ];
 
+const STYLE_OPTIONS = IMAGE_STYLES.map((st) => ({ value: st.id, label: `${st.name} — ${st.blurb}` }));
+const RATIO_OPTIONS = IMAGE_RATIOS.map((r) => ({ value: r.id, label: r.label }));
+const COUNT_OPTIONS = [1, 2, 4].map((n) => ({ value: String(n), label: String(n) }));
+
+const INITIAL: FormValues = {
+  prompt: "",
+  imageStyle: "photo",
+  imageRatio: "1:1",
+  imageCount: 1,
+};
+
 export function ImageStudio({ tool }: { tool: ToolConfig }) {
   const router = useRouter();
-  const [values, setValues] = useState<FormValues>({
-    prompt: "",
-    imageStyle: "photo",
-    imageRatio: "1:1",
-    imageCount: 1,
-  });
+  const [values, setValues] = useState<FormValues>(() => ({ ...INITIAL }));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const price = useMemo(() => priceFor(tool, values), [tool, values]);
+  const set = (name: string, v: string | number) => setValues((s) => ({ ...s, [name]: v }));
+
+  const price = priceFor(tool, values);
   const ratio = IMAGE_RATIOS.find((r) => r.id === values.imageRatio) ?? IMAGE_RATIOS[0];
+
+  const clearConfirm = useConfirmClick(() => setValues({ ...INITIAL }));
 
   async function submit() {
     setError(null);
@@ -59,142 +79,63 @@ export function ImageStudio({ tool }: { tool: ToolConfig }) {
   }
 
   return (
-    <div className="mx-auto w-full max-w-5xl px-4 py-8 pb-28">
-      <div className="mb-8">
-        <p className="text-muted-foreground mb-1 text-xs font-semibold tracking-wider uppercase">Studio</p>
-        <h1 className="text-2xl font-semibold tracking-tight">Rasm generate</h1>
-        <p className="text-muted-foreground mt-1 text-sm">
-          Tavsif yozing, uslub va o‘lchamni tanlang — Flux rasmlarni shu nisbatda chizadi.
-        </p>
-      </div>
-
-      <fieldset className="mb-6">
-        <legend className="mb-2.5 text-[15px] font-medium">Nima chizamiz?</legend>
-        <textarea
-          value={String(values.prompt ?? "")}
-          onChange={(e) => setValues((s) => ({ ...s, prompt: e.target.value }))}
-          rows={5}
-          className="border-input bg-card focus:ring-ring w-full rounded-2xl border px-4 py-3 text-[15px] outline-none focus:ring-2"
-          placeholder="Masalan: ertalabki Buxoro ko‘chasi, quyosh nuri, odamlar yo‘q, kino uslubi..."
-        />
-        <div className="mt-2 flex flex-wrap gap-2">
+    <ToolChrome title={tool.pageTitle} submitLabel={tool.submitLabel} price={price} loading={loading} onSubmit={submit} error={error}>
+      <Card title="Tavsif">
+        <Field id="prompt">
+          <LimitedTextarea
+            value={String(values.prompt ?? "")}
+            onChange={(v) => set("prompt", v)}
+            limit={IMAGE_PROMPT_LIMIT}
+            rows={4}
+            ariaLabel="Rasm tavsifi"
+            placeholder="Masalan: ertalabki Buxoro ko‘chasi, quyosh nuri, odamlar yo‘q, kino uslubi..."
+          />
+        </Field>
+        <div className="mt-2 flex flex-wrap gap-1.5">
           {EXAMPLES.map((ex) => (
             <button
               key={ex}
               type="button"
-              className="text-muted-foreground hover:text-foreground max-w-full truncate rounded-full border px-3 py-1 text-xs"
-              onClick={() => setValues((s) => ({ ...s, prompt: ex }))}
+              className="text-muted-foreground hover:text-foreground max-w-full truncate rounded-full border px-2.5 py-0.5 text-[11.5px]"
+              onClick={() => set("prompt", ex)}
             >
               {ex}
             </button>
           ))}
         </div>
-      </fieldset>
+      </Card>
 
-      <fieldset className="mb-6">
-        <legend className="mb-2.5 text-[15px] font-medium">Uslub</legend>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          {IMAGE_STYLES.map((st) => {
-            const on = values.imageStyle === st.id;
-            return (
-              <button
-                key={st.id}
-                type="button"
-                onClick={() => setValues((s) => ({ ...s, imageStyle: st.id }))}
-                className={cn(
-                  "rounded-2xl border p-3 text-left transition",
-                  on ? "border-primary ring-primary ring-2" : "border-input hover:border-foreground/30",
-                )}
-              >
-                <div className="mb-2 h-10 overflow-hidden rounded-lg" style={swatch(st.id)} />
-                <div className="text-sm font-medium">{st.name}</div>
-                <div className="text-muted-foreground text-xs">{st.blurb}</div>
-              </button>
-            );
-          })}
-        </div>
-      </fieldset>
+      <Card title="Uslub">
+        <Row label="Uslub" hint="Rasmning vizual uslubi — foto, kino kadri, illyustratsiya va h.k.">
+          <Field id="imageStyle">
+            <SelectField ariaLabel="Uslub" options={STYLE_OPTIONS} value={String(values.imageStyle || "photo")} onChange={(v) => set("imageStyle", v)} />
+          </Field>
+        </Row>
+      </Card>
 
-      <div className="mb-6 grid gap-6 md:grid-cols-2">
-        <fieldset>
-          <legend className="mb-2.5 text-[15px] font-medium">O‘lcham</legend>
-          <div className="grid grid-cols-3 gap-2">
-            {IMAGE_RATIOS.map((r) => {
-              const on = values.imageRatio === r.id;
-              const max = 36;
-              const scale = max / Math.max(r.w, r.h);
-              return (
-                <button
-                  key={r.id}
-                  type="button"
-                  onClick={() => setValues((s) => ({ ...s, imageRatio: r.id }))}
-                  className={cn(
-                    "flex flex-col items-center gap-2 rounded-2xl border px-2 py-3",
-                    on ? "border-primary ring-primary ring-2" : "border-input hover:border-foreground/30",
-                  )}
-                >
-                  <span
-                    className="bg-muted border-foreground/15 rounded-sm border"
-                    style={{ width: Math.max(10, r.w * scale), height: Math.max(10, r.h * scale) }}
-                  />
-                  <span className="text-sm font-medium">{r.label}</span>
-                  <span className="text-muted-foreground text-[11px]">{r.hint}</span>
-                </button>
-              );
-            })}
-          </div>
-        </fieldset>
-        <fieldset>
-          <legend className="mb-2.5 text-[15px] font-medium">Nechta rasm</legend>
-          <div className="flex gap-2">
-            {[1, 2, 4].map((n) => (
-              <button
-                key={n}
-                type="button"
-                onClick={() => setValues((s) => ({ ...s, imageCount: n }))}
-                className={cn(
-                  "h-12 flex-1 rounded-2xl border text-sm font-medium",
-                  Number(values.imageCount) === n ? "border-primary bg-primary text-primary-foreground" : "border-input bg-card",
-                )}
-              >
-                {n}
-              </button>
-            ))}
-          </div>
-          <p className="text-muted-foreground mt-3 text-sm">
-            Chiqish: {ratio.w}×{ratio.h} px · tanlangan nisbatga mos
-          </p>
-        </fieldset>
-      </div>
+      <Card
+        title="Nisbat va soni"
+        aside={
+          <span className="font-semibold tabular-nums" data-price>
+            {formatTanga(price)}
+          </span>
+        }
+      >
+        <Row label="Nisbat" hint={`Chiqish: ${ratio.w}×${ratio.h} px`}>
+          <Field id="imageRatio">
+            <Segmented ariaLabel="Nisbat" options={RATIO_OPTIONS} value={String(values.imageRatio || "1:1")} onChange={(v) => set("imageRatio", v)} />
+          </Field>
+        </Row>
+        <Row label="Nechta rasm" hint="1 rasm 2 000 · 2 rasm 3 500 · 4 rasm 6 000">
+          <Field id="imageCount">
+            <Segmented ariaLabel="Nechta rasm" options={COUNT_OPTIONS} value={String(values.imageCount ?? 1)} onChange={(v) => set("imageCount", Number(v))} />
+          </Field>
+        </Row>
+      </Card>
 
-      {error ? <p className="text-destructive mb-4 text-sm">{error}</p> : null}
-
-      <div className="bg-[var(--page-bg)]/90 sticky bottom-0 -mx-4 border-t px-4 py-3 backdrop-blur">
-        <button
-          type="button"
-          disabled={loading}
-          onClick={submit}
-          className="bg-primary text-primary-foreground disabled:opacity-50 flex h-12 w-full items-center justify-center gap-3 rounded-2xl text-[15px] font-medium"
-        >
-          <Sparkles className="size-4" />
-          <span>{loading ? "Chizilmoqda..." : tool.submitLabel}</span>
-          <span className="rounded-full bg-white/15 px-2.5 py-0.5 text-sm">{formatTanga(price)}</span>
-        </button>
-      </div>
-    </div>
+      <SettingsDetails summary={[]}>
+        <ClearFormButton armed={clearConfirm.armed} onClick={clearConfirm.trigger} />
+      </SettingsDetails>
+    </ToolChrome>
   );
-}
-
-function swatch(id: string): { background: string } {
-  const map: Record<string, string> = {
-    photo: "linear-gradient(135deg,#0f172a,#64748b)",
-    cinematic: "linear-gradient(135deg,#7c2d12,#0e7490)",
-    illustration: "linear-gradient(135deg,#4f46e5,#f472b6)",
-    watercolor: "linear-gradient(135deg,#38bdf8,#fde68a)",
-    render3d: "linear-gradient(135deg,#111827,#22d3ee)",
-    minimal: "linear-gradient(135deg,#f8fafc,#cbd5e1)",
-    pencil: "linear-gradient(135deg,#e5e5e5,#525252)",
-    product: "linear-gradient(135deg,#fff7ed,#9a3412)",
-  };
-  return { background: map[id] || map.photo };
 }
