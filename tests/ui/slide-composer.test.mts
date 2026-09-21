@@ -142,3 +142,33 @@ test("Fayl rejimi: umumiy SourceFileRow bitta qatorda — matn sourceText ga tus
     globalThis.fetch = realFetch;
   }
 });
+
+test("qoralama PUT tanasida sourceText/logoAssetId/templateAssetId YO'Q (katta matn va sessiyaga bog'liq aktivlar saqlanmaydi)", async () => {
+  const { useAppStore } = await import("../../lib/store.ts");
+  useAppStore.setState({ loggedIn: true, sessionChecked: true });
+  const puts: Record<string, unknown>[] = [];
+  const realFetch = globalThis.fetch;
+  const json = (status: number, data: unknown) => new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
+  globalThis.fetch = (async (input: unknown, opts?: RequestInit) => {
+    const url = String(input);
+    const method = opts?.method ?? "GET";
+    if (url === "/api/forms/slide/draft" && method === "GET") return json(200, { draft: null });
+    if (url === "/api/forms/slide/draft") {
+      puts.push((JSON.parse(String(opts?.body ?? "{}")) as { data?: Record<string, unknown> }).data ?? {});
+      return json(200, { ok: true, updatedAt: "now" });
+    }
+    return json(200, {});
+  }) as typeof fetch;
+  try {
+    render(h(AppRouterContext.Provider, { value: router }, h(SlideForm, { tool: TOOL_BY_ID.slide, profile })));
+    const topic = (await screen.findByPlaceholderText(TOOL_BY_ID.slide.topicPlaceholder ?? "")) as HTMLInputElement;
+    fireEvent.change(topic, { target: { value: "Qoralama sinovi" } });
+    await waitFor(() => assert.ok(puts.length > 0, "qoralama saqlandi"), { timeout: 5000 });
+    const last = puts[puts.length - 1];
+    assert.equal(last.topic, "Qoralama sinovi");
+    // MUTATSIYA: `draftOf` o'rniga `save(values)` qaytarilsa — uchala kalit tanada paydo bo'lib, qizaradi.
+    for (const k of ["sourceText", "logoAssetId", "templateAssetId"]) assert.ok(!(k in last), `${k} qoralamaga tushmasin`);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
