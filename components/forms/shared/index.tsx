@@ -256,11 +256,23 @@ export type SourceFileValue = { fileName: string; sourceText: string };
  * darrov `/api/extract` ga ketadi, matn `sourceText` ga tushadi. Uzun
  * matn ogohlantirishlari saqlangan — «nega faqat boshi ishlatildi»
  * savoliga javob shu yerda.
+ *
+ * `onFile` berilsa — standart `/api/extract` oqimi O'RNIGA shu chaqiriladi
+ * (Tarjimon: fayl BAYTI serverda `source_uploads`ga tushishi kerak, matn
+ * emas — `TranslationSource`/`uploadSource`). Bu rejimda qator faqat
+ * qobiq (spinner/xato/tugmalar); tanlov/muvaffaqiyat holatini chaqiruvchi
+ * o'zi boshqaradi (`onChange` faqat «Olib tashlash»da chaqiriladi), o'lcham
+ * chegarasi ham chaqiruvchining o'zida (`onFile` `throw` qilsa xato shu
+ * qatorda ko'rinadi) — standart `EXTRACT_MAX_BYTES` bu holatda ishlamaydi.
+ * `badge` berilsa standart «N belgi» o'rniga shu ko'rinadi (masalan
+ * Tarjimon — fayl turi + server hisoblagan belgi soni).
  */
 export function SourceFileRow({
   value,
   onChange,
   onBusyChange,
+  onFile: onFileOverride,
+  badge,
   label = "Fayl",
   hint = `DOCX, PDF, PPTX, XLSX, TXT — ${MAX_MB} MB gacha`,
   id = "sourceText",
@@ -268,6 +280,8 @@ export function SourceFileRow({
   value: SourceFileValue;
   onChange: (next: SourceFileValue) => void;
   onBusyChange?: (busy: boolean) => void;
+  onFile?: (file: File) => Promise<void> | void;
+  badge?: ReactNode;
   label?: string;
   hint?: string;
   id?: string;
@@ -282,6 +296,17 @@ export function SourceFileRow({
 
   async function onFile(f: File) {
     setError(null);
+    if (onFileOverride) {
+      setBusy(true);
+      try {
+        await onFileOverride(f);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "Faylni o‘qib bo‘lmadi");
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
     if (f.size > EXTRACT_MAX_BYTES) {
       setError(`Fayl ${MAX_MB} MB dan katta`);
       return;
@@ -317,7 +342,11 @@ export function SourceFileRow({
               <span className="min-w-0 flex-1 truncate font-medium" title={fileName}>
                 {fileName}
               </span>
-              {sourceText ? <span className="bg-muted rounded-md px-1.5 py-0.5 text-[11px] tabular-nums">{sourceText.length.toLocaleString("uz-UZ")} belgi</span> : null}
+              {badge !== undefined
+                ? badge
+                : sourceText
+                  ? <span className="bg-muted rounded-md px-1.5 py-0.5 text-[11px] tabular-nums">{sourceText.length.toLocaleString("uz-UZ")} belgi</span>
+                  : null}
             </>
           ) : (
             <span className="text-muted-foreground min-w-0 flex-1 truncate">{reading ? "Matn olinmoqda…" : "Fayl tanlanmagan"}</span>

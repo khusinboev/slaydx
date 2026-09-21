@@ -141,6 +141,42 @@ test("SourceFileRow: katta fayl rad etiladi (fetch chaqirilmaydi); muvaffaqiyatd
   }
 });
 
+test("SourceFileRow: `onFile` berilsa standart /api/extract CHAQIRILMAYDI — chaqiruvchining o'z yo'li ishlaydi, `badge` ko'rsatiladi", async () => {
+  // WP-E (AUDIT-24): Tarjimon fayl BAYTINI serverga yuboradi (`uploadSource`),
+  // matnni EMAS — `SourceFileRow` standart oqimini shu maqsadda chetlab o'tish
+  // uchun `onFile` qayta chaqiruvi qo'shildi.
+  const extractCalls: string[] = [];
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async (url: unknown) => {
+    extractCalls.push(String(url));
+    return new Response(JSON.stringify({ text: "bu ishlatilmasligi kerak" }), { status: 200, headers: { "Content-Type": "application/json" } });
+  }) as typeof fetch;
+  try {
+    const ownCalls: string[] = [];
+    function Wrap() {
+      const [v] = useState({ fileName: "hisobot.docx", sourceText: "" });
+      return h(SourceFileRow, {
+        value: v,
+        onChange: () => ownCalls.push("onChange"),
+        onFile: async (f: File) => {
+          ownCalls.push(`onFile:${f.name}`);
+        },
+        badge: h("span", null, "DOCX · 999 belgi"),
+      });
+    }
+    render(h(Wrap));
+    assert.ok(screen.getByText("DOCX · 999 belgi"), "badge ko'rinishi kerak — standart «N belgi» emas");
+    const input = screen.getByLabelText("Fayl") as HTMLInputElement;
+    const file = new File(["x"], "yangi.pdf");
+    fireEvent.change(input, { target: { files: [file] } });
+    await waitFor(() => assert.deepEqual(ownCalls, ["onFile:yangi.pdf"]));
+    // MUTATSIYA: `onFileOverride` chaqirilmasa yoki standart oqim baribir ishlasa — bu qator qizaradi.
+    assert.equal(extractCalls.length, 0, "/api/extract chaqirilmasligi kerak — o'z yo'li ishladi");
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
 test("RangeRow: qiymat formatlanadi, narx AYNAN berilganicha chiqadi, slayder onChange", () => {
   let got = 0;
   render(h(RangeRow, { label: "Hajm", id: "pages", value: 20, min: 10, max: 45, onChange: (v) => (got = v), format: (v) => `${v} bet`, price: 16000, rule: "10 betgacha 12 000" }));

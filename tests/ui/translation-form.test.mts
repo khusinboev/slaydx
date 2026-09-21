@@ -120,6 +120,54 @@ test("fayl rejimi: yuklash → nom · DOCX · belgi, narx serverdagi chars dan; 
   assert.equal(pushes.at(-1), "/uz/files/22222222-2222-4222-8222-222222222222");
 });
 
+test("▸ Sozlamalar — umumiy SettingsDetails: yopiq keladi, chevron bor, uslub o'zgarsa xulosa chipida ko'rinadi", () => {
+  stubApi();
+  mount();
+  const d = document.querySelector("details[data-settings]") as HTMLDetailsElement;
+  assert.ok(d, "Sozlamalar details bo'lishi kerak (umumiy SettingsDetails)");
+  assert.equal(d.open, false, "standart holatda yopiq");
+  assert.ok(d.querySelector("summary span[aria-hidden]"), "chevron belgisi bor");
+  assert.ok((document.querySelector("[data-summary-chips]") as HTMLElement).textContent?.includes("Rasmiy"), "standart uslub yopiq sarlavhada");
+  fireEvent.click(within(screen.getByRole("radiogroup", { name: "Uslub" })).getByRole("radio", { name: "Adabiy" }));
+  // MUTATSIYA: qo'lda `<details>` qaytarilsa (SettingsDetails'siz) — chevron/aria-hidden belgisi yo'qoladi, bu qator qizaradi.
+  assert.ok((document.querySelector("[data-summary-chips]") as HTMLElement).textContent?.includes("Adabiy"));
+});
+
+test("qoralama: kirgan foydalanuvchida til/uslub/lug'at qayta ochilganda tiklanadi; PUT tarkibida sourceText YO'Q", async () => {
+  const { useAppStore } = await import("../../lib/store.ts");
+  useAppStore.setState({ loggedIn: true, sessionChecked: true });
+  const json = (status: number, data: unknown) => new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
+  const putBodies: { data: Record<string, unknown> }[] = [];
+  globalThis.fetch = (async (input: unknown, opts?: RequestInit) => {
+    const url = String(input);
+    const method = opts?.method ?? "GET";
+    if (url === "/api/forms/translation/draft" && method === "GET") {
+      return json(200, { draft: { data: { language: "ja", sourceLang: "ru", style: "adabiy", userGlossary: "atama = term" }, updatedAt: "now" } });
+    }
+    if (url === "/api/forms/translation/draft") {
+      if (typeof opts?.body === "string") putBodies.push(JSON.parse(opts.body));
+      return json(200, { ok: true, updatedAt: "now" });
+    }
+    return json(404, { error: "yo'q" });
+  }) as typeof fetch;
+  try {
+    mount();
+    await waitFor(() => {
+      assert.equal((screen.getByLabelText("Maqsad tili") as HTMLSelectElement).value, "ja");
+    });
+    assert.equal((screen.getByLabelText("Manba tili") as HTMLSelectElement).value, "ru");
+    assert.equal((screen.getByLabelText("O‘z lug‘atim") as HTMLTextAreaElement).value, "atama = term");
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText("Tarjima qilinadigan matn"), { target: { value: "Bu matn qoralamaga tushmasligi kerak" } });
+    });
+    await waitFor(() => assert.ok(putBodies.length >= 1, "debounce'dan keyin saqlanadi"), { timeout: 4000 });
+    // MUTATSIYA: `save` chaqirig'iga `sourceText` qo'shilsa — quyidagi tekshiruv qizaradi.
+    for (const b of putBodies) assert.ok(!("sourceText" in b.data), "sourceText qoralamada bo'lmasligi kerak");
+  } finally {
+    useAppStore.setState({ loggedIn: false, sessionChecked: false });
+  }
+});
+
 test("fayl olib tashlash → DELETE va zona qaytadi; sudrab tashlash yuklaydi; docx bo'lmagan kengaytma serverga bormaydi", async () => {
   const calls = stubApi();
   mount();

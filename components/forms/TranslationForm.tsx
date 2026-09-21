@@ -1,30 +1,42 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeftRight, FileText, Loader2 } from "lucide-react";
 import type { FormValues, ToolConfig } from "@/lib/types";
 
 import { preflightError, translationPrice, TRANSLATION_LANGUAGES, TRANSLATION_MAX_CHARS, TRANSLATION_MIN_CHARS, TRANSLATION_STYLES } from "@/lib/tools";
 import { deleteSource, uploadSource, type SourceUploadResult } from "@/lib/api-client";
+import { useAppStore } from "@/lib/store";
 import { parseUserGlossary } from "@/lib/generation/translate/glossary";
 import { cn } from "@/lib/cn";
-import { Card, Row, Segmented, SelectField, SummaryChips } from "./compact";
+import { Card, Row, Segmented, SelectField } from "./compact";
+import { SettingsDetails, SourceFileRow } from "./shared";
 import { ToolChrome } from "./ToolChrome";
 import { runGeneration } from "./runGeneration";
+import { useFormDraft } from "./useFormDraft";
 
 /**
- * Tarjimon formasi (Tarjimon 2) — Formalar 2 uslubidagi ixcham kartalar.
+ * Tarjimon formasi (Tarjimon 2, WP-E Formalar 3 da etalon nomuvofiqliklari
+ * yopildi) — Formalar 2 uslubidagi ixcham kartalar.
  *
- *   Manba   — Matn (textarea) yoki Fayl (sudrab tashlash; bayt serverda
- *             `source_uploads` ga tushadi, forma faqat `sourceAssetId` yuboradi —
- *             tuzilma saqlanishi uchun matn emas, FAYLNING O'ZI tarjima qilinadi);
+ *   Manba   — Matn (textarea) yoki Fayl (sudrab tashlash dropzone TANLAMAGAN
+ *             holatda; tanlangach umumiy `SourceFileRow` — bayt serverda
+ *             `source_uploads` ga tushadi, `onFile` orqali o'z yuklash yo'li
+ *             (`uploadSource`), standart `/api/extract` EMAS — forma faqat
+ *             `sourceAssetId` yuboradi, tuzilma saqlanishi uchun matn emas,
+ *             FAYLNING O'ZI tarjima qilinadi);
  *   Tillar  — manba (Avto + 18) ⇄ maqsad (18);
- *   ▸ Sozlamalar — uslub, o'z lug'ati.
+ *   ▸ Sozlamalar — uslub, o'z lug'ati (umumiy `SettingsDetails`).
  *
  * Narx hajmdan (`translationPrice`): matnda — yozilgan belgilar, faylda —
  * server hisoblagan `chars` (tarjima qilinadigan segmentlar). Server
  * baribir o'zi qayta hisoblaydi — bu yerdagisi ko'rsatish uchun.
+ *
+ * Qoralama (`useFormDraft`) — FAQAT parametrlar (til, uslub, lug'at);
+ * matn rejimidagi `sourceText` qoralamaga TUSHMAYDI — foydalanuvchi butun
+ * hujjat matnini yozgan bo'lishi mumkin, har 1,2 soniyada shuni serverga
+ * yuborish behuda trafik.
  */
 
 const ACCEPT = ".txt,.md,.csv,.docx,.pdf,.pptx,.xlsx";
@@ -36,6 +48,7 @@ const fmt = (n: number) => n.toLocaleString("ru-RU").replace(/[  ,]/g, " ");
 
 export function TranslationForm({ tool }: { tool: ToolConfig }) {
   const router = useRouter();
+  const loggedIn = useAppStore((s) => s.loggedIn);
   const [mode, setMode] = useState<"text" | "file">("text");
   const [sourceText, setSourceText] = useState("");
   const [upload, setUpload] = useState<SourceUploadResult | null>(null);
@@ -47,6 +60,24 @@ export function TranslationForm({ tool }: { tool: ToolConfig }) {
   const [drag, setDrag] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Qoralama — FAQAT parametrlar (til/uslub/lug'at), `sourceText` YO'Q (izoh yuqorida).
+  const { draft, ready, save, flush } = useFormDraft(tool.id, { enabled: loggedIn });
+  const [restored, setRestored] = useState(false);
+  useEffect(() => {
+    if (!ready || restored) return;
+    setRestored(true);
+    if (draft) {
+      if (typeof draft.language === "string") setLanguage(draft.language);
+      if (typeof draft.sourceLang === "string") setSourceLang(draft.sourceLang);
+      if (typeof draft.style === "string") setStyle(draft.style);
+      if (typeof draft.userGlossary === "string") setUserGlossary(draft.userGlossary);
+    }
+  }, [ready, draft, restored]);
+  useEffect(() => {
+    if (!restored) return;
+    save({ language, sourceLang, style, userGlossary });
+  }, [language, sourceLang, style, userGlossary, restored, save]);
 
   const chars = mode === "file" ? (upload?.chars ?? 0) : sourceText.length;
   const price = translationPrice(chars);
@@ -110,6 +141,7 @@ export function TranslationForm({ tool }: { tool: ToolConfig }) {
       return;
     }
     setLoading(true);
+    flush();
     try {
       const id = await runGeneration(tool, v);
       router.push(`/uz/files/${id}`);
@@ -155,22 +187,27 @@ export function TranslationForm({ tool }: { tool: ToolConfig }) {
             placeholder="Matnni shu yerga yozing yoki joylashtiring…"
           />
         ) : upload ? (
-          <div className="border-input rounded-xl border p-3" data-upload>
-            <div className="flex flex-wrap items-center gap-2 text-[13.5px]">
-              <FileText className="text-muted-foreground size-4" />
-              <span className="min-w-0 flex-1 truncate font-medium" title={upload.name}>
-                {upload.name}
-              </span>
-              <span className="bg-muted rounded-md px-1.5 py-0.5 text-[11px]">{KIND_LABEL[upload.kind] ?? upload.kind}</span>
-              <span className="text-muted-foreground text-[12px]">{fmt(upload.chars)} belgi</span>
-              <label className="cursor-pointer text-[12.5px] underline-offset-2 hover:underline">
-                {busy ? "Yuklanmoqda…" : "Boshqa fayl"}
-                <input type="file" className="hidden" accept={ACCEPT} aria-label="Boshqa fayl" disabled={busy} onChange={(e) => { const f = e.target.files?.[0]; if (f) void onFile(f); e.target.value = ""; }} />
-              </label>
-              <button type="button" className="text-destructive text-[12.5px]" onClick={clearUpload}>
-                Olib tashlash
-              </button>
-            </div>
+          <>
+            {/*
+             * Umumiy `SourceFileRow` (etalon nomuvofiqligi #5) — `onFile`
+             * qayta chaqiruv orqali o'z yuklash yo'lini (`uploadSource`)
+             * ishlatadi, standart `/api/extract` EMAS: fayl BAYTI serverga
+             * ketishi kerak (tuzilma saqlanadi), matn emas. `badge` — fayl
+             * turi + server hisoblagan belgi soni (standart «N belgi»
+             * o'rniga, chunki `sourceText` bu yerda umuman ishlatilmaydi).
+             */}
+            <SourceFileRow
+              label="Fayl"
+              value={{ fileName: upload.name, sourceText: "" }}
+              onFile={onFile}
+              onChange={() => clearUpload()}
+              badge={
+                <>
+                  <span className="bg-muted rounded-md px-1.5 py-0.5 text-[11px]">{KIND_LABEL[upload.kind] ?? upload.kind}</span>
+                  <span className="text-muted-foreground text-[12px] tabular-nums">{fmt(upload.chars)} belgi</span>
+                </>
+              }
+            />
             {upload.text ? (
               <details className="mt-2 text-[12.5px]">
                 <summary className="text-muted-foreground cursor-pointer">Olingan matn (ko‘rish)</summary>
@@ -192,7 +229,7 @@ export function TranslationForm({ tool }: { tool: ToolConfig }) {
                 <pre className="bg-muted/40 mt-1 max-h-60 overflow-auto rounded-lg p-2 whitespace-pre-wrap">{upload.text}</pre>
               </details>
             ) : null}
-          </div>
+          </>
         ) : (
           <label
             data-dropzone
@@ -254,15 +291,8 @@ export function TranslationForm({ tool }: { tool: ToolConfig }) {
         {sameLang ? <p className="text-destructive mt-1 text-[12.5px]">Manba va maqsad tili bir xil</p> : null}
       </Card>
 
-      <details className="group bg-card mb-3 rounded-2xl border" data-settings>
-        <summary className="flex cursor-pointer list-none items-center gap-3 p-4 [&::-webkit-details-marker]:hidden">
-          <span className="text-muted-foreground text-[11.5px] font-semibold tracking-wide uppercase">Sozlamalar</span>
-          <span className="text-muted-foreground text-xs transition group-open:rotate-90">▸</span>
-          <span className="min-w-0 flex-1 group-open:hidden">
-            <SummaryChips items={[TRANSLATION_STYLES.find((s) => s.value === style)?.label ?? style, ...(glossaryCount ? [`Lug‘at · ${glossaryCount}`] : [])]} />
-          </span>
-        </summary>
-        <div className="grid gap-x-6 border-t px-4 pt-2 pb-4 sm:grid-cols-2">
+      <SettingsDetails summary={[TRANSLATION_STYLES.find((s) => s.value === style)?.label ?? style, glossaryCount ? `Lug‘at · ${glossaryCount}` : ""]}>
+        <div className="grid gap-x-6 sm:grid-cols-2">
           <Row label="Uslub" hint="Rasmiy/ilmiy — akademik va rasmiy hujjatlar; Biznes — aniq, faol; Oddiy — sodda til; Adabiy — obraz va ohang saqlanadi.">
             <Segmented ariaLabel="Uslub" options={TRANSLATION_STYLES.map((s) => ({ value: s.value, label: s.label }))} value={style} onChange={setStyle} />
           </Row>
@@ -278,7 +308,7 @@ export function TranslationForm({ tool }: { tool: ToolConfig }) {
             {glossaryCount ? <p className="text-muted-foreground mt-1 text-[11.5px]">{glossaryCount} ta atama</p> : null}
           </Row>
         </div>
-      </details>
+      </SettingsDetails>
     </ToolChrome>
   );
 }
