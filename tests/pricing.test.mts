@@ -532,13 +532,15 @@ test("o'yin/plakat vositalarining shartnomasi: guruh, chiqish, forma, majburiy m
   assert.equal(poster.output, "png");
 
   /*
-   * Formalar 3 (AUDIT-24 WP-D1): krossvord va kartalar `GameComposer` ga
-   * o'tdi (`custom: "game"`) — standartlar reyestrdan, ▸ Sozlamalar
-   * yopiq. Plakat hali `StandardForm` da (WP-D2).
+   * Formalar 3 (AUDIT-24 WP-D1/D2): krossvord va kartalar `GameComposer`
+   * ga (`custom: "game"`), plakat `InfographicComposer` ga
+   * (`custom: "infographic"`) o'tdi — standartlar reyestrdan, ▸ Sozlamalar
+   * yopiq. `fields` massivi StandardForm zaxirasi va `missingRequired`
+   * yorliqlari uchun qoladi.
    */
   assert.equal(crossword.custom, "game", "krossvord GameComposer ga dispatch qilinishi kerak");
   assert.equal(cards.custom, "game", "kartalar GameComposer ga dispatch qilinishi kerak");
-  assert.equal(poster.custom, undefined, "plakat hali standart formada");
+  assert.equal(poster.custom, "infographic", "plakat InfographicComposer ga dispatch qilinishi kerak");
   for (const t of [crossword, cards, poster]) {
     assert.ok(t.extraOptional, `${t.id}: «Qo'shimcha talablar» maydoni yoqilmagan`);
     assert.ok(t.topicLegend, `${t.id}: mavzu so'ralmaydi`);
@@ -652,7 +654,8 @@ test("Media vositalarining shartnomasi: guruh, MP3 chiqishi, rejimlar", () => {
     assert.equal(t.group, "media", `${t.id}: bo'lim`);
     // MUTATSIYA: `docx` qolsa — ko'ruvchi Word oqimiga tushib bo'sh varaq chizardi.
     assert.equal(t.output, "mp3", `${t.id}: chiqish formati`);
-    assert.equal(t.custom, undefined, `${t.id}: custom forma kerak emas edi`);
+    // Formalar 3 (AUDIT-24 WP-D2): ikkalasi `MediaComposer` ga dispatch qilinadi.
+    assert.equal(t.custom, "media", `${t.id}: MediaComposer ga dispatch qilinishi kerak`);
     assert.ok(t.extraOptional, `${t.id}: «Qo'shimcha talablar» maydoni yoqilmagan`);
     assert.ok(isToolSlug(t.slug), `${t.id}: slug ro'yxatda yo'q`);
     assert.equal(TOOL_BY_SLUG[t.slug].id, t.id);

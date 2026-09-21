@@ -608,8 +608,22 @@ test("maxsus formali vositalar serverda ham tekshiriladi", async () => {
    * o'zi, ya'ni `topicLegend` sharti (`missingRequired` uni tekshiradi,
    * `tests/pricing.test.mts` qulflaydi). `CUSTOM_REQUIRED.game` ga
    * `topic` qo'shilsa, u ro'yxatda IKKI marta chiqardi.
+   *
+   * `media` (podkast/tabriknoma) va `infographic` (WP-D2) — xuddi shu
+   * holat: podkast va plakatda majburiy kirish `topicLegend`, tabriknomada
+   * esa mavzu yo'q, uning o'rnini `fields` dagi majburiy `recipient`
+   * egallaydi. Har ikkala yo'l ham `missingRequired` da tekshiriladi;
+   * asosiysi — HAR custom vositada kamida bitta server tomonidagi
+   * majburiy kirish bo'lishi (P0-5). Istisno ro'yxati BITTA joyda tursin.
    */
-  for (const tool of TOOLS.filter((t) => t.custom && t.custom !== "slide" && t.custom !== "pro-slide" && t.custom !== "game")) {
+  const TOPIC_LEGEND_CUSTOMS = new Set(["slide", "pro-slide", "game", "media", "infographic"]);
+  for (const tool of TOOLS.filter((t) => t.custom && TOPIC_LEGEND_CUSTOMS.has(t.custom))) {
+    assert.ok(
+      tool.topicLegend || tool.fields.some((f) => f.required && !f.extra),
+      `${tool.id}: istisno vositada majburiy kirish \`topicLegend\` yoki majburiy maydon orqali bo'lishi kerak`,
+    );
+  }
+  for (const tool of TOOLS.filter((t) => t.custom && !TOPIC_LEGEND_CUSTOMS.has(t.custom))) {
     assert.ok(
       tool.fields.some((f) => f.required),
       `${tool.id}: maxsus formali vositada majburiy maydon e'lon qilinishi kerak`,
