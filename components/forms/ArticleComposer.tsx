@@ -434,6 +434,87 @@ export function ArticleComposer({
     }
   }
 
+  /*
+   * «Materiallar» — Maqolada o'z kartasi, Tezisda (qisqa, ≤3 manba)
+   * yig'iq Sozlamalar ichiga tushadi (bir xil JSX, ikki joyda render
+   * qilinadi — `isThesisTool(tool)` bitta manba).
+   */
+  const materialsFields = (
+    <>
+      <div data-source-file>
+        <SourceFileField
+          legend="Hujjat yuklang (ixtiyoriy)"
+          fileName={ui.fileName}
+          sourceText={ui.sourceText}
+          onChange={({ fileName, sourceText }) => setUi((s) => ({ ...s, fileName, sourceText }))}
+          onBusyChange={setFileBusy}
+        />
+      </div>
+      <Row label="Natijalarim" hint="AI faqat shu faktlarga tayanadi — raqamlar, namuna hajmi, davr" wide>
+        <span data-field="userFacts" id="userFacts" className="block">
+          <TextArea
+            value={ui.userFacts}
+            onChange={(v) => set("userFacts", v.slice(0, ARTICLE_LIMITS.userFactsChars))}
+            placeholder="Tajribada 120 talaba ishtirok etdi, o‘rtacha ball 4,1 dan 4,6 ga oshdi."
+          />
+        </span>
+        <p className="text-muted-foreground mt-1 text-[11px]">
+          {ui.userFacts.length.toLocaleString("uz-UZ")}/{ARTICLE_LIMITS.userFactsChars.toLocaleString("uz-UZ")}
+        </p>
+      </Row>
+      <Row label="Mening manbalarim" wide>
+        <span data-field="userRefs" className="block">
+          <RowList
+            name="userRefs"
+            rows={ui.userRefs}
+            onChange={(rows) => set("userRefs", rows)}
+            max={ARTICLE_LIMITS.userRefs}
+            addLabel="Manba"
+            empty="DOI yoki erkin matnli manba qo‘shing."
+            add={() => ({ mode: "doi" as const, doi: "", raw: "" })}
+            render={(row, set2) => (
+              <div className="flex flex-col gap-1.5">
+                <Segmented
+                  ariaLabel="Manba turi"
+                  options={[
+                    { value: "doi", label: "DOI" },
+                    { value: "text", label: "Matn" },
+                  ]}
+                  value={row.mode}
+                  onChange={(v) => set2({ mode: v as UserRefRow["mode"] })}
+                />
+                {row.mode === "doi" ? (
+                  <TextInput value={row.doi} onChange={(v) => set2({ doi: v })} placeholder="10.1186/s40561-023-00260-y" />
+                ) : (
+                  <TextArea
+                    value={row.raw}
+                    onChange={(v) => set2({ raw: v.slice(0, ARTICLE_INPUT_LIMITS.rawRefChars) })}
+                    placeholder="Karimov A. Ta’limda AI. — Toshkent: Fan, 2022."
+                  />
+                )}
+              </div>
+            )}
+          />
+        </span>
+      </Row>
+      <Row label="Ma’lumot jadvali" hint="Grafik faqat shu ma’lumotdan chiziladi — raqam o‘ylab topilmaydi" wide>
+        <span data-field="userData" className="block">
+          <TextArea
+            value={ui.userDataCsv}
+            onChange={(v) => set("userDataCsv", v)}
+            placeholder={"CSV: sarlavha qatori + qatorlar\n2022,2023,2024\nTalabalar,80,110,120"}
+          />
+        </span>
+        {userDataInvalid ? (
+          <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-500">
+            Jadval o‘qilmadi — birinchi qator sarlavhalar (kamida 2 ustun), keyingi har qator: nom,son,son…
+            (son soni sarlavha soniga teng bo‘lishi kerak).
+          </p>
+        ) : null}
+      </Row>
+    </>
+  );
+
   return (
     <ToolChrome title={tool.pageTitle} submitLabel={tool.submitLabel} price={price} loading={loading} onSubmit={submit} error={error}>
       <Card title="Mavzu va tur">
@@ -469,13 +550,22 @@ export function ArticleComposer({
         </Row>
       </Card>
 
-      <Card title="Nashr profili">
-        <Row label="Profil" wide>
-          <span data-field="pubProfile" className="block">
-            <PublicationProfileTile value={ui.pubProfile} onChange={onProfileChange} />
-          </span>
-        </Row>
-      </Card>
+      {isThesisTool(tool) ? (
+        // Tezis: nashr profili kartasi yashirin — turning standarti (conference)
+        // jim qo'llanadi (`emptyUi`/`onTypeChange`). Reyestr qamrovi buzilmasligi
+        // uchun `data-field="pubProfile"` shu yerda ko'rinmas holda qoladi.
+        <span data-field="pubProfile" hidden>
+          {ui.pubProfile}
+        </span>
+      ) : (
+        <Card title="Nashr profili">
+          <Row label="Profil" wide>
+            <span data-field="pubProfile" className="block">
+              <PublicationProfileTile value={ui.pubProfile} onChange={onProfileChange} />
+            </span>
+          </Row>
+        </Card>
+      )}
 
       <Card title="Mualliflar" aside={<span className="text-muted-foreground text-[11px]">{ui.authors.length}/{ARTICLE_LIMITS.authors}</span>}>
         <span data-field="authors" id="authors" className="block">
@@ -500,79 +590,7 @@ export function ArticleComposer({
         </span>
       </Card>
 
-      <Card title="Materiallar">
-        <div data-source-file>
-          <SourceFileField
-            legend="Hujjat yuklang (ixtiyoriy)"
-            fileName={ui.fileName}
-            sourceText={ui.sourceText}
-            onChange={({ fileName, sourceText }) => setUi((s) => ({ ...s, fileName, sourceText }))}
-            onBusyChange={setFileBusy}
-          />
-        </div>
-        <Row label="Natijalarim" hint="AI faqat shu faktlarga tayanadi — raqamlar, namuna hajmi, davr" wide>
-          <span data-field="userFacts" id="userFacts" className="block">
-            <TextArea
-              value={ui.userFacts}
-              onChange={(v) => set("userFacts", v.slice(0, ARTICLE_LIMITS.userFactsChars))}
-              placeholder="Tajribada 120 talaba ishtirok etdi, o‘rtacha ball 4,1 dan 4,6 ga oshdi."
-            />
-          </span>
-          <p className="text-muted-foreground mt-1 text-[11px]">
-            {ui.userFacts.length.toLocaleString("uz-UZ")}/{ARTICLE_LIMITS.userFactsChars.toLocaleString("uz-UZ")}
-          </p>
-        </Row>
-        <Row label="Mening manbalarim" wide>
-          <span data-field="userRefs" className="block">
-            <RowList
-              name="userRefs"
-              rows={ui.userRefs}
-              onChange={(rows) => set("userRefs", rows)}
-              max={ARTICLE_LIMITS.userRefs}
-              addLabel="Manba"
-              empty="DOI yoki erkin matnli manba qo‘shing."
-              add={() => ({ mode: "doi" as const, doi: "", raw: "" })}
-              render={(row, set2) => (
-                <div className="flex flex-col gap-1.5">
-                  <Segmented
-                    ariaLabel="Manba turi"
-                    options={[
-                      { value: "doi", label: "DOI" },
-                      { value: "text", label: "Matn" },
-                    ]}
-                    value={row.mode}
-                    onChange={(v) => set2({ mode: v as UserRefRow["mode"] })}
-                  />
-                  {row.mode === "doi" ? (
-                    <TextInput value={row.doi} onChange={(v) => set2({ doi: v })} placeholder="10.1186/s40561-023-00260-y" />
-                  ) : (
-                    <TextArea
-                      value={row.raw}
-                      onChange={(v) => set2({ raw: v.slice(0, ARTICLE_INPUT_LIMITS.rawRefChars) })}
-                      placeholder="Karimov A. Ta’limda AI. — Toshkent: Fan, 2022."
-                    />
-                  )}
-                </div>
-              )}
-            />
-          </span>
-        </Row>
-        <Row label="Ma’lumot jadvali" hint="Grafik faqat shu ma’lumotdan chiziladi — raqam o‘ylab topilmaydi" wide>
-          <span data-field="userData" className="block">
-            <TextArea
-              value={ui.userDataCsv}
-              onChange={(v) => set("userDataCsv", v)}
-              placeholder={"CSV: sarlavha qatori + qatorlar\n2022,2023,2024\nTalabalar,80,110,120"}
-            />
-          </span>
-          {userDataInvalid ? (
-            <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-500">
-              Jadval o‘qilmadi — birinchi qator sarlavhalar (kamida 2 ustun), keyingi har qator: nom,son,son…
-              (son soni sarlavha soniga teng bo‘lishi kerak).
-            </p>
-          ) : null}
-        </Row>
-      </Card>
+      {isThesisTool(tool) ? null : <Card title="Materiallar">{materialsFields}</Card>}
 
       <Card title="Hajm va til">
         <Row label="Hajm" hint={pagesHint}>
@@ -601,7 +619,11 @@ export function ArticleComposer({
             <Segmented ariaLabel="Til" options={LANGUAGE_OPTIONS} value={ui.language} onChange={(v) => set("language", v as Ui["language"])} />
           </span>
         </Row>
-        <p className="text-muted-foreground mt-1.5 text-[11px]">Annotatsiya: uz + ru + en (har doim uch tilda chiqadi)</p>
+        {isThesisTool(tool) ? null : (
+          // Tezisda annotatsiya bo'limi yo'q (skeleton — bitta zich blok),
+          // shu izoh maqolaga xos — tezisda ko'rsatilmaydi.
+          <p className="text-muted-foreground mt-1.5 text-[11px]">Annotatsiya: uz + ru + en (har doim uch tilda chiqadi)</p>
+        )}
       </Card>
 
       <details
@@ -625,6 +647,7 @@ export function ArticleComposer({
           ) : null}
         </summary>
         <div className="mt-3">
+          {isThesisTool(tool) ? materialsFields : null}
           <Row label="UDK" hint="Jurnal talab qilsa; «Taklif» — AI mavzudan UDK sinfini taklif qiladi, tekshirib tasdiqlang">
             <span data-field="udk" id="udk" className="flex items-start gap-2">
               <span className="min-w-0 flex-1">

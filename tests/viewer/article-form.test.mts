@@ -88,3 +88,41 @@ test("hajm chiplarida narx ko'rinadi (ARTICLE_PRICES)", () => {
 test("annotatsiya izohi doim 3 tilda ko'rsatiladi", () => {
   assert.ok(html.includes("uz + ru + en"), "3 tilli annotatsiya izohi");
 });
+
+/* ══════════════════════════════ tezis varianti (AUDIT-24 WP-C) ══════════════════════════════ */
+
+const thesisTool = TOOL_BY_ID.thesis;
+const htmlThesis = renderToStaticMarkup(
+  h(AppRouterContext.Provider, { value: mockRouter }, h(ArticleComposer, { tool: thesisTool, profile, user: null })),
+);
+
+test("tezis (SSR, yopiq holat): reyestrdagi HAR `ARTICLE_PARAMS.id` `data-field` bilan chizilgan", () => {
+  const missing = ARTICLE_PARAMS.map((p) => p.id).filter((id) => !htmlThesis.includes(`data-field="${id}"`));
+  assert.deepEqual(missing, [], `tezis formasida yo'q parametrlar: ${missing.join(", ")}`);
+});
+
+test("tezis (SSR): formada reyestrda YO'Q `data-field` bo'lmaydi (teskari yo'nalish)", () => {
+  const known = new Set(ARTICLE_PARAMS.map((p) => p.id));
+  const found = [...htmlThesis.matchAll(/data-field="([a-zA-Z0-9_]+)"/g)].map((m) => m[1]);
+  const stray = [...new Set(found)].filter((id) => !known.has(id));
+  assert.deepEqual(stray, [], `tezis formasida reyestrda yo'q maydonlar: ${stray.join(", ")}`);
+});
+
+test("tezis (SSR): «Nashr profili» kartasi ko'rinmaydi, `pubProfile` yashirin `data-field` sifatida qoladi", () => {
+  assert.ok(!htmlThesis.includes("Nashr profili"), "tezisda alohida profil kartasi bo'lmasligi kerak");
+  assert.match(htmlThesis, /data-field="pubProfile"[^>]*hidden/, "pubProfile hidden field sifatida qoladi");
+  assert.ok(htmlThesis.includes(">conference<"), "standart profil — conference (jim, ko'rinmas)");
+});
+
+test("tezis (SSR): standart tur — «Konferensiya tezisi» (galereya tezis turlariga cheklangan)", () => {
+  assert.ok(htmlThesis.includes("Konferensiya tezisi"), "standart tur tili tile'da ko'rinishi kerak");
+});
+
+test("tezis (SSR): annotatsiya izohi ko'rsatilmaydi (skeleton — bitta zich blok, alohida annotatsiya bo'limi yo'q)", () => {
+  assert.ok(!htmlThesis.includes("uz + ru + en"), "maqolaga xos annotatsiya izohi tezisda yo'q");
+});
+
+test("maqola (article) formasi o'zgarmagan: «Nashr profili» kartasi va annotatsiya izohi bor", () => {
+  assert.ok(html.includes("Nashr profili"), "REGRESSIYA: maqolada profil kartasi bo'lishi shart");
+  assert.ok(html.includes("uz + ru + en"), "REGRESSIYA: maqolada annotatsiya izohi bo'lishi shart");
+});
