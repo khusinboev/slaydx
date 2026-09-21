@@ -20,6 +20,8 @@ import { ArticleComposer } from "./ArticleComposer";
 import { EssayComposer } from "./EssayComposer";
 import { WorkComposer } from "./WorkComposer";
 import { TeacherComposer } from "./TeacherComposer";
+import { MediaComposer } from "./MediaComposer";
+import { InfographicComposer } from "./InfographicComposer";
 import { SourceFileField } from "./SourceFileField";
 import { gameDefaultTypeId } from "@/lib/generation/games/registry";
 import { GAME_LIMITS } from "@/lib/generation/games/types";
@@ -125,6 +127,9 @@ export function ToolWorkspace({ tool }: { tool: ToolConfig }) {
   // O'qituvchi vositalari 2 (AUDIT-20 WP-E): dars rejasi / texnologik
   // xarita / glossariy / keys / test bitta `TeacherComposer` ga o'tadi.
   if (tool.custom === "teacher") return <TeacherComposer tool={tool} profile={profile} user={user} />;
+  // Formalar 3 (AUDIT-24 WP-D2): podkast/tabriknoma va infografika o'z composerlariga o'tadi.
+  if (tool.custom === "media") return <MediaComposer tool={tool} />;
+  if (tool.custom === "infographic") return <InfographicComposer tool={tool} />;
 
   return <StandardForm tool={tool} profile={profile} />;
 }

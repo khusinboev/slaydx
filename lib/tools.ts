@@ -795,6 +795,9 @@ export const TOOLS: ToolConfig[] = [
     output: "png",
     basePrice: 2000,
     fields: INFOGRAPHIC_FIELDS,
+    // Formalar 3 (AUDIT-24 WP-D2b): `InfographicComposer` — tur/blok/palitra
+    // reyestrdan, `ToolWorkspace` dispatch.
+    custom: "infographic",
   },
   /* ────────────── 3-dastur (AUDIT-22): interaktiv o'yinlar + Media ────────────── */
   {
@@ -868,6 +871,8 @@ export const TOOLS: ToolConfig[] = [
     // Tekis 4 000 (egasi qarori 6): davomiylik va tur narxga ta'sir qilmaydi.
     basePrice: 4000,
     fields: AUDIO_FIELDS.podcast,
+    // Formalar 3 (AUDIT-24 WP-D2a): `MediaComposer` — rejim/tur reyestrdan.
+    custom: "media",
   },
   {
     id: "greeting",
@@ -890,6 +895,7 @@ export const TOOLS: ToolConfig[] = [
     output: "mp3",
     basePrice: 4000,
     fields: AUDIO_FIELDS.greeting,
+    custom: "media",
   },
 ];
 
