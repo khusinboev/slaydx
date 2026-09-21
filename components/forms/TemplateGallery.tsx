@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
 import { SLIDE_TEMPLATES, SLIDE_TEMPLATE_BY_ID, normalizeTemplateId, type SlideTemplate, type SlideTemplateId } from "@/lib/generation/slide-templates";
-import { getSlideTheme } from "@/lib/generation/slide-themes";
+import { SLIDE_THEMES, getSlideTheme } from "@/lib/generation/slide-themes";
 import { bodyRules } from "@/lib/generation/slide-audience";
 import { GALLERY_SLIDES, sampleDeck } from "@/lib/generation/slide-samples";
 import type { SlideModel, SlideTheme, SlideThemeId } from "@/lib/generation/slide-types";
@@ -11,7 +11,7 @@ import { listTemplates, type CustomTemplateLite } from "@/lib/api-client";
 import { cn } from "@/lib/cn";
 import { SlideCanvas } from "../viewers/SlideCanvas";
 import { useDialog } from "../overlays/useDialog";
-import { ColorPicker } from "./slide-pickers";
+import { ColorDots } from "./shared";
 import { Row } from "./compact";
 import { Thumb } from "./Thumb";
 import { CustomTemplateCard, CustomPreview } from "./CustomTemplateCard";
@@ -31,6 +31,20 @@ import { CustomTemplateCard, CustomPreview } from "./CustomTemplateCard";
  * oyna yopiladi. Rang swatchlari plitka ostida — oynasiz o'zgartiriladi,
  * plitka preview'i shu zahoti qayta chiziladi.
  */
+
+/**
+ * Rang doiralari — umumiy `ColorDots` (etalon nomuvofiqligi #9, AUDIT-24):
+ * ilgari bu yerda alohida `ColorPicker` bor edi. Har mavzuning ikki rangi
+ * (titul foni + urg'u) `hex` maydoniga CSS gradient sifatida beriladi —
+ * `ColorDots` `background`ni to'g'ridan-to'g'ri `style`ga qo'yadi, shuning
+ * uchun gradient ham oddiy hex kabi ishlaydi, ikki tonli doira saqlanadi.
+ */
+const THEME_COLOR_OPTIONS = SLIDE_THEMES.map((t) => ({
+  id: t.id,
+  hex: `linear-gradient(90deg, ${t.titleBg} 50%, ${t.accent} 50%)`,
+  label: t.nameUz,
+}));
+
 export function TemplateGallery({
   value,
   theme,
@@ -100,7 +114,7 @@ export function TemplateGallery({
           </Row>
         ) : (
           <Row label="Rang" hint="Palitra — tanlangan shablonning barcha slaydlariga; preview ham shu rangda.">
-            <ColorPicker value={themeObj.id} onChange={(v) => onTheme(v as SlideThemeId)} />
+            <ColorDots ariaLabel="Rang" options={THEME_COLOR_OPTIONS} value={themeObj.id} onChange={(id) => onTheme(id as SlideThemeId)} />
           </Row>
         )}
       </div>

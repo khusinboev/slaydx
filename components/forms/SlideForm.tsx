@@ -4,7 +4,6 @@ import type { ToolConfig, UserProfile } from "@/lib/types";
 import { slideParamsFor } from "@/lib/generation/slide-params";
 import { SlideComposer } from "./SlideComposer";
 
-export { ColorPicker } from "./slide-pickers";
 export { TemplateGallery } from "./TemplateGallery";
 
 /**

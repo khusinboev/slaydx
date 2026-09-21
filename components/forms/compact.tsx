@@ -160,32 +160,6 @@ export function Switch({
   );
 }
 
-/** Ixcham matn maydoni (muallif kartasi) — yorliq placeholder sifatida, tepasida kichik nom. */
-export function MiniInput({
-  label,
-  value,
-  onChange,
-  placeholder,
-}: {
-  label: string;
-  value: string;
-  onChange: (v: string) => void;
-  placeholder?: string;
-}) {
-  return (
-    <label className="block min-w-0">
-      <span className="text-muted-foreground mb-1 block text-[11px] font-medium">{label}</span>
-      <input
-        type="text"
-        value={value}
-        placeholder={placeholder}
-        onChange={(e) => onChange(e.target.value)}
-        className="border-input bg-card focus:ring-ring h-9 w-full rounded-lg border px-2.5 text-[13px] outline-none focus:ring-2"
-      />
-    </label>
-  );
-}
-
 /** Yig'iq «Sozlamalar» sarlavhasidagi joriy tanlovlar. */
 export function SummaryChips({ items }: { items: string[] }) {
   return (

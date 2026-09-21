@@ -2,7 +2,7 @@ import "./setup.ts";
 import test, { afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { createElement as h } from "react";
-import { render, fireEvent, screen, cleanup, within } from "@testing-library/react";
+import { render, fireEvent, screen, cleanup, within, waitFor } from "@testing-library/react";
 import { AppRouterContext } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import type { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { SlideForm } from "../../components/forms/SlideForm.tsx";
@@ -79,4 +79,66 @@ test("muallif kartasi profildan to'ladi (tashkilot bo'lmasa universitet); pro'da
   mount("slide");
   assert.equal(screen.queryByLabelText("Lavozim") === null, true, "oddiyda lavozim yo'q");
   assert.equal(screen.queryByLabelText("Rasm uslubi") === null, true, "oddiyda rasm uslubi yo'q");
+});
+
+// ───────────────────── WP-E (AUDIT-24): qoralama, ColorDots, SourceFileRow ─────
+
+test("qoralama: kirgan foydalanuvchida oldin saqlangan qiymatlar qayta ochilganda tiklanadi", async () => {
+  const { useAppStore } = await import("../../lib/store.ts");
+  useAppStore.setState({ loggedIn: true, sessionChecked: true });
+  const realFetch = globalThis.fetch;
+  const json = (status: number, data: unknown) => new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
+  globalThis.fetch = (async (input: unknown, opts?: RequestInit) => {
+    const url = String(input);
+    const method = opts?.method ?? "GET";
+    if (url === "/api/forms/slide/draft" && method === "GET") {
+      return json(200, { draft: { data: { topic: "Saqlangan mavzu", slideCount: 22 }, updatedAt: "now" } });
+    }
+    if (url === "/api/forms/slide/draft") return json(200, { ok: true, updatedAt: "now" });
+    return json(404, { error: "yo'q" });
+  }) as typeof fetch;
+  try {
+    mount("slide");
+    await waitFor(() => {
+      assert.equal((screen.getByLabelText("Taqdimot mavzusini kiriting") as HTMLInputElement).value, "Saqlangan mavzu");
+    });
+    // MUTATSIYA: `restored` effekti `draft`ni qo'llamasa — yuqoridagi qator qizaradi.
+    assert.equal(slider().value, "22", "slideCount ham qoralamadan tiklanadi");
+  } finally {
+    globalThis.fetch = realFetch;
+    useAppStore.setState({ loggedIn: false, sessionChecked: false });
+  }
+});
+
+test("Shablon va rang: rang tanlagich umumiy ColorDots — role=radio/aria-checked, bosilsa slideTheme o'zgaradi", () => {
+  mount("slide");
+  const group = screen.getByRole("radiogroup", { name: "Rang" });
+  const radios = within(group).getAllByRole("radio");
+  assert.ok(radios.length >= 6, "bir nechta mavzu bo'lishi kerak");
+  const active = radios.find((r) => r.getAttribute("aria-checked") === "true");
+  assert.ok(active, "standart mavzu (atlas) tanlangan ko'rinishi kerak");
+  const next = radios.find((r) => r !== active)!;
+  assert.equal(next.getAttribute("aria-checked"), "false");
+  fireEvent.click(next);
+  // MUTATSIYA: `ColorDots` ichida `aria-checked`/`role="radio"` olib tashlansa — bu ikki qator qizaradi.
+  assert.equal(next.getAttribute("aria-checked"), "true", "bosilgan doira tanlangan holatga o'tadi");
+  assert.equal(active!.getAttribute("aria-checked"), "false", "avvalgi tanlov bo'shaydi");
+});
+
+test("Fayl rejimi: umumiy SourceFileRow bitta qatorda — matn sourceText ga tushadi, mavzu bo'sh bo'lsa fayl nomidan to'ladi", async () => {
+  const EXTRACTED = "Fayldan olingan matn";
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async () =>
+    new Response(JSON.stringify({ text: EXTRACTED }), { status: 200, headers: { "content-type": "application/json" } })) as typeof fetch;
+  try {
+    mount("slide");
+    fireEvent.click(screen.getByRole("tab", { name: "Fayl asosida" }));
+    const input = screen.getByLabelText("Fayl biriktirish") as HTMLInputElement;
+    const file = new File(["x"], "mavzu-fayli.docx");
+    fireEvent.change(input, { target: { files: [file] } });
+    await waitFor(() => assert.ok(screen.getByText("mavzu-fayli.docx")));
+    await waitFor(() => assert.ok(screen.getByText(`${EXTRACTED.length.toLocaleString("uz-UZ")} belgi`)), "belgi soni ko'rinishi kerak");
+  } finally {
+    globalThis.fetch = realFetch;
+  }
 });

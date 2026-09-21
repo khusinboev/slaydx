@@ -1,24 +1,27 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { FormValues, ToolConfig, UserProfile } from "@/lib/types";
 import { formatTanga, priceFor, profileDefaults } from "@/lib/tools";
 import { updateProfile } from "@/lib/api-client";
 import { useAppStore } from "@/lib/store";
+import { useConfirmClick } from "@/components/overlays/useConfirmClick";
 import { profilePatchFrom } from "@/lib/profile-sync";
 import { PLAN_ITEMS_DEFAULT, PRO_SLIDE_DEFAULT, SLIDE_DEFAULT, type SlideTool } from "@/lib/generation/slide-params";
 import { cn } from "@/lib/cn";
 import { LanguagePicker } from "./fields";
-import { Card, Row, SummaryChips } from "./compact";
+import { Card, Row } from "./compact";
+import { ClearFormButton, SettingsDetails, SourceFileRow } from "./shared";
 import { ToolChrome } from "./ToolChrome";
 import { runGeneration } from "./runGeneration";
-import { SourceFileField } from "./SourceFileField";
 import { TemplateGallery } from "./TemplateGallery";
+import { useFormDraft } from "./useFormDraft";
 import { renderSlideParam, resetBlocksForPurpose, settingsSummary } from "./slide-fields";
 
 /**
- * IKKALA slayd formasining kompozitori (Formalar 2).
+ * IKKALA slayd formasining kompozitori (Formalar 2, WP-E Formalar 3 da
+ * etalon nomuvofiqliklari yopildi).
  *
  * `SlideForm`/`ProSlideForm` faqat reyestr ro'yxatlarini beradi
  * (`tests/viewer/slide-form.test.mts` ularni reyestr bilan solishtiradi);
@@ -26,11 +29,16 @@ import { renderSlideParam, resetBlocksForPurpose, settingsSummary } from "./slid
  *
  *   Mavzu · Slaydlar soni (narx sarlavhada) · Muallif (profilga
  *   saqlanadi) · Ko'rinish · ▸ Sozlamalar (yopiq holda joriy tanlovlar
- *   qisqa chiplar bilan).
+ *   qisqa chiplar bilan, umumiy `SettingsDetails` — Maqola/Rezyume bilan
+ *   BITTA mexanizm, endi native uncontrolled `<details>` emas).
  *
- * `<details>` — brauzerning o'zi ochib-yopadi va SSR HTML ida hamma
- * maydon bor (qamrov/SSR testlari ko'radi), lekin foydalanuvchi ochmasa
- * forma ~4 karta balandligida qoladi.
+ * Fayl rejimi umumiy `SourceFileRow` (bitta qator) — ilgari `SourceFileField`
+ * (katta dashed quti, Maqolada ham shu) ishlatilardi; ikkalasi bir xil
+ * vazifani bajaradi, shuning uchun umumiylashtirildi (etalon nomuvofiqligi #5).
+ *
+ * Qoralama serverda saqlanadi (`useFormDraft`) — ilgari Slayd/Tarjimonda
+ * yo'q edi (etalon nomuvofiqligi #7): sahifa yangilansa forma bo'shab
+ * qolardi. Kirmagan foydalanuvchida so'ralmaydi/yuborilmaydi.
  *
  * Muallif maydonlari: «Yaratish» muvaffaqiyatli bo'lgach o'zgarganlari
  * profilga yoziladi (`profilePatchFrom`) — keyingi safar standart bo'lib
@@ -78,36 +86,59 @@ export function SlideComposer({
   fields: readonly string[];
 }) {
   const router = useRouter();
+  const loggedIn = useAppStore((s) => s.loggedIn);
   const pro = kind === "pro-slide";
-  const [values, setValues] = useState<FormValues>(() => ({
-    ...profileDefaults(profile),
-    mode: "topic",
-    topic: "",
-    language: "uz",
-    extra: "",
-    slideAudience: "auto",
-    slidePurpose: "general",
-    blocks: resetBlocksForPurpose("general"),
-    planItems: PLAN_ITEMS_DEFAULT,
-    slideCount: pro ? PRO_SLIDE_DEFAULT : SLIDE_DEFAULT,
-    textVolume: "standart",
-    quizCount: 0,
-    slideImageStyle: "photo",
-    titleSlide: true,
-    agendaSlide: true,
-    localExamples: false,
-    internetSearch: false,
-    speakerNotes: true,
-    keyIdeas: "",
-    logoAssetId: "",
-    templateAssetId: "",
-    slideTheme: "atlas",
-    slideTemplate: "auto",
-  }));
+
+  function initialValues(): FormValues {
+    return {
+      ...profileDefaults(profile),
+      mode: "topic",
+      topic: "",
+      language: "uz",
+      extra: "",
+      slideAudience: "auto",
+      slidePurpose: "general",
+      blocks: resetBlocksForPurpose("general"),
+      planItems: PLAN_ITEMS_DEFAULT,
+      slideCount: pro ? PRO_SLIDE_DEFAULT : SLIDE_DEFAULT,
+      textVolume: "standart",
+      quizCount: 0,
+      slideImageStyle: "photo",
+      titleSlide: true,
+      agendaSlide: true,
+      localExamples: false,
+      internetSearch: false,
+      speakerNotes: true,
+      keyIdeas: "",
+      logoAssetId: "",
+      templateAssetId: "",
+      slideTheme: "atlas",
+      slideTemplate: "auto",
+    };
+  }
+
+  const [values, setValues] = useState<FormValues>(initialValues);
   const [loading, setLoading] = useState(false);
   const [reading, setReading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const set = (name: string, v: string | number | boolean) => setValues((s) => ({ ...s, [name]: v }));
+
+  // Qoralama (Maqola/Rezyume naqshi) — `kind` bo'yicha alohida (slide/pro-slide).
+  const { draft, ready, save, clear, flush } = useFormDraft(kind, { enabled: loggedIn });
+  const [restored, setRestored] = useState(false);
+  useEffect(() => {
+    if (!ready || restored) return;
+    setRestored(true);
+    if (draft && Object.keys(draft).length) setValues((s) => ({ ...s, ...draft }));
+  }, [ready, draft, restored]);
+  useEffect(() => {
+    if (!restored) return;
+    save(values);
+  }, [values, restored, save]);
+  const clearConfirm = useConfirmClick(() => {
+    void clear();
+    setValues(initialValues());
+  });
 
   const countIds = fields.filter((id) => id === "slideCount");
   const authorIds = AUTHOR_FIELD_IDS.filter((id) => fields.includes(id));
@@ -132,6 +163,7 @@ export function SlideComposer({
       return;
     }
     setLoading(true);
+    flush();
     try {
       const id = await runGeneration(tool, values);
       syncProfile(values, profile);
@@ -170,10 +202,9 @@ export function SlideComposer({
         }
       >
         {mode === "file" ? (
-          <SourceFileField
-            legend="Fayl biriktirish"
-            fileName={String(values.fileName ?? "")}
-            sourceText={String(values.sourceText ?? "")}
+          <SourceFileRow
+            label="Fayl biriktirish"
+            value={{ fileName: String(values.fileName ?? ""), sourceText: String(values.sourceText ?? "") }}
             onBusyChange={setReading}
             onChange={({ fileName, sourceText }) =>
               setValues((s) => ({
@@ -241,18 +272,12 @@ export function SlideComposer({
       </Card>
 
       {settingIds.length ? (
-        <details className="group bg-card mb-3 rounded-2xl border" data-settings>
-          <summary className="flex cursor-pointer list-none items-center gap-3 p-4 [&::-webkit-details-marker]:hidden">
-            <span className="text-muted-foreground text-[11.5px] font-semibold tracking-wide uppercase">Sozlamalar</span>
-            <span className="text-muted-foreground text-xs transition group-open:rotate-90">▸</span>
-            <span className="min-w-0 flex-1 group-open:hidden">
-              <SummaryChips items={settingsSummary(values, settingIds)} />
-            </span>
-          </summary>
-          <div className="grid gap-x-6 border-t px-4 pt-2 pb-4 sm:grid-cols-2">
-            {settingIds.map((id) => renderSlideParam(id, values, set, ctx))}
+        <SettingsDetails summary={settingsSummary(values, settingIds)}>
+          <div className="grid gap-x-6 sm:grid-cols-2">{settingIds.map((id) => renderSlideParam(id, values, set, ctx))}</div>
+          <div className="mt-2">
+            <ClearFormButton armed={clearConfirm.armed} onClick={clearConfirm.trigger} />
           </div>
-        </details>
+        </SettingsDetails>
       ) : null}
     </ToolChrome>
   );
