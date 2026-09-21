@@ -9,8 +9,8 @@ import { TeacherComposer } from "../../components/forms/TeacherComposer.tsx";
 import { ToolWorkspace } from "../../components/forms/ToolWorkspace.tsx";
 import { TEACHER_PARAMS, teacherParamsOf } from "../../lib/generation/teacher-params.ts";
 import { teacherKindOf } from "../../lib/generation/teacher/registry.ts";
-import { TOOL_BY_ID } from "../../lib/tools.ts";
-import type { UserProfile } from "../../lib/types.ts";
+import { TOOL_BY_ID, missingRequired } from "../../lib/tools.ts";
+import type { FormValues, UserProfile } from "../../lib/types.ts";
 
 /**
  * O'qituvchi formasi (AUDIT-24 WP-B, «Formalar 3») — 5 vosita bitta
@@ -389,6 +389,10 @@ test("test: darslik dasturi rejimi — fan/sinf/mavzu tanlash topicIds ni to'ldi
   const picker = document.querySelector("[data-curriculum-picker]") as HTMLElement;
   assert.ok(picker, "CurriculumPicker chizilishi kerak");
   assert.ok(!isHidden("[data-curriculum-picker]"), "darslik rejimida ko'rinadi");
+  assert.ok(!isHidden('[data-field="topic"]'), "darslik rejimida mavzu qatori KO'RINADI (server uni talab qiladi)");
+  await act(async () => {
+    fireEvent.change(document.querySelector('[data-field="topic"] input')!, { target: { value: "Hosila bo'yicha nazorat ishi" } });
+  });
   await act(async () => {
     fireEvent.change(within(picker).getByLabelText("Fan"), { target: { value: "matematika" } });
   });
@@ -419,6 +423,40 @@ test("test: darslik dasturi rejimi — fan/sinf/mavzu tanlash topicIds ni to'ldi
   assert.equal(values.subjectId, "matematika");
   const ids = JSON.parse(String(values.topicIds)) as string[];
   assert.deepEqual(ids, ["hosila-va-uning-tatbiqlari-1", "hosila-va-uning-tatbiqlari-10"]);
+  /*
+   * Klient va SERVER shartnomasi bitta: `missingRequired` (`lib/tools.ts`)
+   * darslik rejimida ham mavzuni talab qiladi — jonli smoke shu yerda
+   * 400 olgan edi (AUDIT-24 WP-B topilmasi).
+   */
+  assert.deepEqual(missingRequired(TOOL_BY_ID.test, values as FormValues), [], "server majburiy maydonlar ro'yxati bo'sh bo'lishi kerak");
+});
+
+test("darslik rejimi: mavzu bo'sh bo'lsa forma o'zi rad etadi (server 400 gacha bormaydi)", async () => {
+  const calls = stubApi();
+  await login();
+  mount("test");
+  await act(async () => {
+    fireEvent.click(within(screen.getByRole("radiogroup", { name: "Rejim" })).getByText("Darslik dasturi asosida"));
+  });
+  const picker = document.querySelector("[data-curriculum-picker]") as HTMLElement;
+  await act(async () => {
+    fireEvent.change(within(picker).getByLabelText("Fan"), { target: { value: "matematika" } });
+  });
+  await act(async () => {
+    fireEvent.change(within(picker).getByLabelText("Sinf"), { target: { value: "11" } });
+  });
+  await waitFor(() => assert.ok(document.querySelector('[data-topic="hosila-va-uning-tatbiqlari-1"]')));
+  await act(async () => {
+    fireEvent.click(document.querySelector('[data-topic="hosila-va-uning-tatbiqlari-1"]')!);
+  });
+  await act(async () => {
+    fireEvent.change(document.querySelector('[data-field="university"] input')!, { target: { value: "TDPU" } });
+  });
+  await act(async () => {
+    fireEvent.click(screen.getByText(TOOL_BY_ID.test.submitLabel));
+  });
+  assert.ok(!calls.some((c) => c.url === "/api/generations"), "mavzusiz so'rov yuborilmaydi");
+  assert.match(document.body.textContent ?? "", /mavzu/i);
 });
 
 test("test: darslik dasturi rejimida mavzu tanlanmasa submit rad etiladi", async () => {

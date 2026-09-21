@@ -4,8 +4,20 @@ import { TEACHER_LIMITS } from "@/lib/generation/teacher/types";
 import { teacherTypeOf, teacherTypesOf } from "@/lib/generation/teacher/registry";
 import { Row, Segmented } from "../compact";
 import { Field } from "../shared";
-import { TextInput } from "../fields";
 import type { KindProps, Ui } from "./common";
+
+/** Ixcham son maydoni — ikkalasi bitta qatorga sig'ishi uchun. */
+function NumberInput({ value, onChange, ariaLabel }: { value: number; onChange: (v: string) => void; ariaLabel: string }) {
+  return (
+    <input
+      type="number"
+      aria-label={ariaLabel}
+      value={String(value)}
+      onChange={(e) => onChange(e.target.value)}
+      className="border-input bg-card focus:ring-ring h-8 w-full rounded-lg border px-2 text-[13px] tabular-nums outline-none focus:ring-2"
+    />
+  );
+}
 
 /**
  * TEXNOLOGIK XARITA qatorlari (AUDIT-24 WP-B).
@@ -44,15 +56,18 @@ export function MapMain({ ui, setUi, onTypeChange }: KindProps & { onTypeChange:
           />
         </Field>
       </Row>
-      <Row label="Haftalik soat">
-        <Field id="weeklyHours">
-          <TextInput type="number" value={String(ui.weeklyHours)} onChange={onWeekly} />
-        </Field>
-      </Row>
-      <Row label="Yillik soat">
-        <Field id="totalHours">
-          <TextInput type="number" value={String(ui.totalHours)} onChange={onTotal} />
-        </Field>
+      {/* Ikki soat maydoni BITTA qatorda — jadval kattaligi shu juftlikdan chiqadi. */}
+      <Row label="Soatlar" hint="Haftalik va yillik soat">
+        <span className="flex flex-wrap items-center gap-2">
+          <Field id="weeklyHours" className="inline-block w-24">
+            <NumberInput ariaLabel="Haftalik soat" value={ui.weeklyHours} onChange={onWeekly} />
+          </Field>
+          <span className="text-muted-foreground text-[12px]">hafta ·</span>
+          <Field id="totalHours" className="inline-block w-24">
+            <NumberInput ariaLabel="Yillik soat" value={ui.totalHours} onChange={onTotal} />
+          </Field>
+          <span className="text-muted-foreground text-[12px]">yil</span>
+        </span>
       </Row>
     </>
   );

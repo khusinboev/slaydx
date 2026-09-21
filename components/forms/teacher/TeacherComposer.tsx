@@ -149,12 +149,18 @@ export function TeacherComposer({
         setError("Avval fayl tanlang — matn olingandan keyin yaratish boshlanadi.");
         return;
       }
-    } else if (isTest && ui.mode === "curriculum") {
-      if (!ui.topicIds.length) {
-        setError("Kamida bitta mavzu tanlang");
-        return;
-      }
-    } else if (!ui.topic.trim()) {
+    } else if (isTest && ui.mode === "curriculum" && !ui.topicIds.length) {
+      setError("Kamida bitta mavzu tanlang");
+      return;
+    }
+    /*
+     * Mavzu darslik rejimida HAM majburiy: server `missingRequired`
+     * (`lib/tools.ts`) faqat `file`/`text` rejimlarini istisno qiladi,
+     * ya'ni mavzusiz darslik so'rovi 400 bilan qaytardi — forma esa
+     * mavzu qatorini yashirib qo'ygani uchun foydalanuvchi xatoni
+     * tuzata olmasdi (jonli smoke topilmasi, AUDIT-24 WP-B).
+     */
+    if ((!isTest || ui.mode !== "file") && !ui.topic.trim()) {
       setError(tool.topicLegend ? `${tool.topicLegend}` : "Mavzuni kiriting");
       return;
     }
@@ -221,7 +227,14 @@ export function TeacherComposer({
             : `${ui.count} savol`;
   const kindChips =
     kind === "lesson" ? lessonSummary(ui) : kind === "map" ? mapSummary(ui) : kind === "glossary" ? glossarySummary(ui) : kind === "keys" ? keysSummary(ui) : testSummary(ui);
-  const summary = [currentType.label.uz, `${ui.grade}-sinf`, sizeChip, kind === "test" ? MODE_LABEL[ui.mode] : "", ...kindChips];
+  const summary = [
+    currentType.label.uz,
+    `${ui.grade}-sinf`,
+    sizeChip,
+    kind === "test" ? MODE_LABEL[ui.mode] : "",
+    kind !== "test" && ui.topicIds.length ? `${ui.topicIds.length} dastur mavzusi` : "",
+    ...kindChips,
+  ];
 
   /**
    * «Tasdiqlayman» — lesson/map da doim (dvigatel saqlaydi), test da
@@ -234,8 +247,20 @@ export function TeacherComposer({
     <ToolChrome title={tool.pageTitle} submitLabel={tool.submitLabel} price={price} loading={loading} onSubmit={submit} error={error}>
       <Card title="Mavzu va rejim">
         {kind === "test" ? <TestModeRow {...kindProps} /> : null}
-        <div className={kind === "test" && ui.mode !== "topic" ? "hidden" : ""}>
-          <TopicRow value={ui.topic} onChange={onTopicChange} hint={tool.topicLegend} placeholder={tool.topicPlaceholder} limit={TEACHER_LIMITS.topicChars} />
+        {/*
+         * Mavzu faqat FAYL rejimida yashiriladi (manba — fayl matni).
+         * Darslik rejimida u ko'rinib turadi: server `missingRequired`
+         * mavzuni shu rejimda ham talab qiladi, yashirin maydon esa
+         * foydalanuvchini tuzatib bo'lmaydigan 400 ga olib borardi.
+         */}
+        <div className={kind === "test" && ui.mode === "file" ? "hidden" : ""}>
+          <TopicRow
+            value={ui.topic}
+            onChange={onTopicChange}
+            hint={kind === "test" && ui.mode === "curriculum" ? "Ish nomi — dastur mavzulari alohida tanlanadi" : tool.topicLegend}
+            placeholder={tool.topicPlaceholder}
+            limit={TEACHER_LIMITS.topicChars}
+          />
           {tool.topicExamples?.length ? (
             <div className="mt-1.5 flex flex-wrap gap-1.5">
               {tool.topicExamples.map((ex) => (
@@ -247,11 +272,6 @@ export function TeacherComposer({
           ) : null}
         </div>
         {kind === "test" ? <TestSourceRows {...kindProps} onCurriculumChange={onCurriculumChange} onBusyChange={setFileBusy} /> : null}
-        {/*
-         * Dars rejasi/xarita: o'quv dasturidan mavzu tanlash IXTIYORIY —
-         * fan tanlanmasa (`subjectId` bo'sh) `topicIds` ham bo'sh ketadi.
-         */}
-        {kind === "lesson" || kind === "map" ? <CurriculumRow ui={ui} onChange={onCurriculumChange} hint="Ixtiyoriy — dastur mavzularidan tanlash" /> : null}
       </Card>
 
       <Card title="Fan, sinf, til">
@@ -279,6 +299,13 @@ export function TeacherComposer({
       </Card>
 
       <SettingsDetails summary={summary}>
+        {/*
+         * Dars rejasi/xarita: o'quv dasturidan mavzu tanlash IXTIYORIY
+         * (fan tanlanmasa `topicIds` bo'sh ketadi), shuning uchun yig'iq
+         * bo'limda — yopiq forma balandligi 1 200 px me'yoriga shu bilan
+         * tushdi (`docs/AUDIT-24.md` §5, WP-B o'lchovi).
+         */}
+        {kind === "lesson" || kind === "map" ? <CurriculumRow ui={ui} onChange={onCurriculumChange} hint="Ixtiyoriy — dastur mavzularidan tanlash" /> : null}
         {own.has("gradeLetter") ? (
           <Row label="Sinf harfi" hint="«5-A» dagi «A» — ixtiyoriy">
             <Field id="gradeLetter">
