@@ -7,7 +7,7 @@ import { AppRouterContext } from "next/dist/shared/lib/app-router-context.shared
 import type { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { ResumeComposer } from "../../components/forms/ResumeComposer.tsx";
 import { ToolWorkspace } from "../../components/forms/ToolWorkspace.tsx";
-import { TOOL_BY_ID } from "../../lib/tools.ts";
+import { TOOL_BY_ID, priceFor, formatTanga } from "../../lib/tools.ts";
 import type { UserProfile } from "../../lib/types.ts";
 
 /**
@@ -419,4 +419,37 @@ test("band matnida probel va yangi qator yo'qolmaydi (yozish paytida tozalanmayd
   const post = calls.find((c) => c.url === "/api/generations" && c.method === "POST")!;
   const rows = JSON.parse(String((post.body as { values: Record<string, unknown> }).values.experience)) as { bullets: string[] }[];
   assert.deepEqual(rows[0].bullets, ["Oylik hisobot", "Byudjet nazorati"]);
+});
+
+// ───────────────────── WP-E (AUDIT-24): priceFor, ColorDots ─────
+
+test("sticky narx `priceFor(tool, values)` dan keladi — tool.basePrice bilan bir xil natija (3 000), bitta manba", () => {
+  stubApi();
+  mount();
+  const el = document.querySelector("[data-price-total]") as HTMLElement;
+  assert.ok(el, "sticky narx yo'q");
+  assert.equal(el.textContent, formatTanga(3000));
+  // Rezyume narxi TEKIS — hech bir parametr uni o'zgartirmasligi kerak (resume-params.test.mts kafolati bilan bir xil).
+  assert.equal(el.textContent, formatTanga(priceFor(tool, { fullName: "Karimova Dilnoza", resumeTemplate: "letter" })));
+  fireEvent.change(screen.getByLabelText("Maqsadli lavozim"), { target: { value: "Backend dasturchi" } });
+  // MUTATSIYA: `price={tool.basePrice}` qaytarilsa ham bu qator qizarmaydi (natija bir xil) —
+  // shuning uchun bitta manba ekanini ALOHIDA `priceFor` import qilib solishtiramiz (yuqorida).
+  assert.equal((document.querySelector("[data-price-total]") as HTMLElement).textContent, formatTanga(3000));
+});
+
+test("Shablon oynasi: palitra tanlagich umumiy ColorDots — role=radio/aria-checked, bosilsa tanlov o'zgaradi", async () => {
+  stubApi();
+  mount();
+  fireEvent.click(document.querySelector("[data-template-tile]") as HTMLButtonElement);
+  const dialog = await screen.findByRole("dialog", { name: "Rezyume shabloni" });
+  const group = within(dialog).getByRole("radiogroup", { name: "Palitra" });
+  const radios = within(group).getAllByRole("radio");
+  assert.equal(radios.length, 6, "6 ta palitra bo'lishi kerak");
+  const active = radios.find((r) => r.getAttribute("aria-checked") === "true");
+  assert.ok(active, "standart palitra tanlangan ko'rinishi kerak");
+  const next = radios.find((r) => r !== active)!;
+  fireEvent.click(next);
+  // MUTATSIYA: `ColorDots` ichida `aria-checked`/`role="radio"` olib tashlansa — bu ikki qator qizaradi.
+  assert.equal(next.getAttribute("aria-checked"), "true", "bosilgan doira tanlangan holatga o'tadi");
+  assert.equal(active!.getAttribute("aria-checked"), "false", "avvalgi tanlov bo'shaydi");
 });

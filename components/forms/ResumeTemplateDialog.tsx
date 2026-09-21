@@ -16,6 +16,7 @@ import {
 } from "@/lib/generation/resume/templates";
 import { A4 } from "@/lib/viewers/metrics";
 import { cn } from "@/lib/cn";
+import { ColorDots } from "./shared";
 
 /**
  * Shablon galereyasi (Rezyume 2, 6-band) — Shablonlar 2 dagi
@@ -136,18 +137,13 @@ export function ResumeTemplateDialog({
       >
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-[15px] font-semibold">Shablon tanlang</h2>
-          <span className="flex items-center gap-1" data-palettes>
-            {RESUME_PALETTE_IDS.map((p) => (
-              <button
-                key={p}
-                type="button"
-                aria-label={RESUME_PALETTES[p].title}
-                aria-pressed={p === pal}
-                onClick={() => setPal(p)}
-                className={cn("size-5 rounded-full border-2", p === pal ? "border-foreground" : "border-transparent")}
-                style={{ background: `#${RESUME_PALETTES[p].accent}` }}
-              />
-            ))}
+          <span data-palettes>
+            <ColorDots
+              ariaLabel="Palitra"
+              options={RESUME_PALETTE_IDS.map((p) => ({ id: p, hex: `#${RESUME_PALETTES[p].accent}`, label: RESUME_PALETTES[p].title }))}
+              value={pal}
+              onChange={(id) => setPal(id as ResumePaletteId)}
+            />
           </span>
         </div>
         {/*

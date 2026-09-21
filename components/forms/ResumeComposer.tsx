@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import type { FormValues, ToolConfig, UserProfile } from "@/lib/types";
 import { updateProfile, type ServerUser } from "@/lib/api-client";
 import { useAppStore } from "@/lib/store";
+import { useConfirmClick } from "@/components/overlays/useConfirmClick";
+import { priceFor } from "@/lib/tools";
 import { profilePatchFrom } from "@/lib/profile-sync";
 import { searchProfessions, skillsForRole } from "@/lib/professions";
 import {
@@ -24,7 +26,8 @@ import {
 } from "@/lib/generation/resume/model";
 import { RESUME_TEMPLATES, normalizeResumeTemplate, type ResumePaletteId, type ResumeTemplateId } from "@/lib/generation/resume/templates";
 import { SOURCE_LANGUAGES } from "@/lib/languages";
-import { Card, Row, SelectField, Segmented, SummaryChips, Switch } from "./compact";
+import { Card, Row, SelectField, Segmented, Switch } from "./compact";
+import { ClearFormButton, SettingsDetails } from "./shared";
 import { TextArea, TextInput } from "./fields";
 import { Combobox } from "./Combobox";
 import { MonthPicker } from "./MonthPicker";
@@ -247,6 +250,15 @@ export function ResumeComposer({ tool, profile }: { tool: ToolConfig; profile: U
     };
   }, [ui.identity.headline]);
 
+  // Narx BITTA manbadan — `priceFor` (rezyumeda natija hamisha `tool.basePrice`
+  // bilan bir xil, 3 000 tekis; ama kelajakdagi admin panel narxni shu
+  // funksiyadan boshqaradi, qattiq yozilgan qiymat emas).
+  const price = priceFor(tool, toValues(ui));
+  const clearConfirm = useConfirmClick(() => {
+    void clear();
+    setUi(emptyUi(profile, user));
+  });
+
   async function submit() {
     setError(null);
     if (!ui.identity.fullName.trim() || !ui.identity.headline.trim()) {
@@ -273,7 +285,7 @@ export function ResumeComposer({ tool, profile }: { tool: ToolConfig; profile: U
     <ToolChrome
       title={tool.pageTitle}
       submitLabel={tool.submitLabel}
-      price={tool.basePrice}
+      price={price}
       loading={loading}
       onSubmit={submit}
       error={error}
@@ -540,24 +552,16 @@ export function ResumeComposer({ tool, profile }: { tool: ToolConfig; profile: U
         </p>
       </Card>
 
-      <details
+      <SettingsDetails
         open={settingsOpen}
-        onToggle={(e) => setSettingsOpen((e.currentTarget as HTMLDetailsElement).open)}
-        className="bg-card mb-3 rounded-2xl border p-4"
+        onToggle={setSettingsOpen}
+        summary={[
+          TONE_OPTIONS.find((t) => t.value === ui.tone)?.label ?? "",
+          ui.about ? "o‘zi haqida bor" : "",
+          ui.links.length ? `${ui.links.length} havola` : "",
+        ]}
       >
-        <summary className="flex cursor-pointer items-center justify-between gap-2">
-          <span className="text-muted-foreground text-[11.5px] font-semibold tracking-wide uppercase">Sozlamalar</span>
-          {!settingsOpen ? (
-            <SummaryChips
-              items={[
-                TONE_OPTIONS.find((t) => t.value === ui.tone)?.label ?? "",
-                ui.about ? "o‘zi haqida bor" : "",
-                ui.links.length ? `${ui.links.length} havola` : "",
-              ].filter(Boolean)}
-            />
-          ) : null}
-        </summary>
-        <div className="mt-3">
+        <div>
           <Row label="Uslub">
             <span data-field="tone" className="block">
               <Segmented ariaLabel="Uslub" options={TONE_OPTIONS} value={ui.tone} onChange={(v) => set("tone", v as ResumeTone)} />
@@ -599,15 +603,10 @@ export function ResumeComposer({ tool, profile }: { tool: ToolConfig; profile: U
             </span>
           </Row>
           <div className="mt-2">
-            <ClearButton
-              onClear={() => {
-                void clear();
-                setUi(emptyUi(profile, user));
-              }}
-            />
+            <ClearFormButton armed={clearConfirm.armed} onClick={clearConfirm.trigger} />
           </div>
         </div>
-      </details>
+      </SettingsDetails>
     </ToolChrome>
   );
 }
@@ -643,25 +642,3 @@ function Toggle({
   );
 }
 
-function ClearButton({ onClear }: { onClear: () => void }) {
-  const [armed, setArmed] = useState(false);
-  useEffect(() => {
-    if (!armed) return;
-    const t = setTimeout(() => setArmed(false), 3000);
-    return () => clearTimeout(t);
-  }, [armed]);
-  return (
-    <button
-      type="button"
-      onClick={() => {
-        if (armed) {
-          setArmed(false);
-          onClear();
-        } else setArmed(true);
-      }}
-      className="text-muted-foreground hover:text-destructive text-[12px]"
-    >
-      {armed ? "Ishonchingiz komilmi? Yana bosing" : "Formani tozalash"}
-    </button>
-  );
-}
