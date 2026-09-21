@@ -60,9 +60,39 @@ test("har vosita mount qilinganda o'z reyestr (teacherParamsOf) maydonlari data-
     const html = renderTeacher(id);
     const missing = teacherParamsOf(kind!)
       .map((p) => p.id)
+      /*
+       * `approver` TEST vositasida standart tur (`nazorat`) da ataylab
+       * chizilmaydi — dvigatel (`teacher/test/input.ts`) uni faqat
+       * `bsb`/`chsb` da saqlaydi (AUDIT-24 WP-B). Tur tanlash
+       * interaktiv, shuning uchun u `tests/ui/teacher-composer.test.mts`
+       * da (ikki yo'nalishda) tekshiriladi.
+       */
+      .filter((fid) => !(id === "test" && fid === "approver"))
       .filter((fid) => !html.includes(`data-field="${fid}"`));
     assert.deepEqual(missing, [], `${id}: formada yo'q parametrlar: ${missing.join(", ")}`);
   }
+});
+
+test("SSR: «Sozlamalar» YOPIQ keladi va ochiq <details> qolmagan (eski «Shapka» open edi)", () => {
+  for (const id of TEACHER_TOOL_IDS) {
+    const html = renderTeacher(id);
+    assert.ok(html.includes('data-settings="settings"'), `${id}: yig'iq Sozlamalar bo'limi yo'q`);
+    assert.ok(!/<details[^>]*\sopen/.test(html), `${id}: SSR da ochiq <details> bo'lmasligi kerak`);
+    assert.ok(html.includes("Shapka"), `${id}: «Shapka» kartasi bo'lishi kerak`);
+  }
+});
+
+test("SSR: `approver` faqat dars rejasi/xaritada, test standart turida yo'q", () => {
+  assert.ok(renderTeacher("lesson-plan").includes('data-field="approver"'), "dars rejasi: «Tasdiqlayman» bor");
+  assert.ok(renderTeacher("texnologik-xarita").includes('data-field="approver"'), "xarita: «Tasdiqlayman» bor");
+  assert.ok(!renderTeacher("test").includes('data-field="approver"'), "test/nazorat: chizilmaydi");
+  assert.ok(!renderTeacher("glossary").includes('data-field="approver"'), "glossariy: reyestrda yo'q");
+});
+
+test("SSR: sana brauzerning `type=date` maydoni emas (o'zbekcha kun/oy/yil)", () => {
+  const html = renderTeacher("lesson-plan");
+  assert.ok(!html.includes('type="date"'), "mm/dd/yyyy maydoni ishlatilmaydi");
+  assert.ok(html.includes("Sana — oy"), "oy tanlagichi bor");
 });
 
 test("5 ta vosita render bo'ladi va standart turini ko'rsatadi", () => {

@@ -112,6 +112,20 @@ test("AuthorRows: har id uchun data-field, majburiy «*», vositaga xos yorliq",
   assert.deepEqual(set, ["city=Samarqand"]);
 });
 
+test("AuthorRows: vositaga xos namuna matni (`placeholders`) standart misolni almashtiradi", () => {
+  render(
+    h(AuthorRows, {
+      ids: ["university"],
+      values: { university: "" },
+      set: () => {},
+      labels: { university: "Muassasa" },
+      placeholders: { university: "15-son umumiy o'rta ta'lim maktabi" },
+    }),
+  );
+  const input = document.querySelector('[data-field="university"] input') as HTMLInputElement;
+  assert.equal(input.placeholder, "15-son umumiy o'rta ta'lim maktabi", "o'qituvchi vositasida maktab misoli");
+});
+
 test("SourceFileRow: katta fayl rad etiladi (fetch chaqirilmaydi); muvaffaqiyatda matn va belgi soni", async () => {
   const calls: string[] = [];
   const realFetch = globalThis.fetch;

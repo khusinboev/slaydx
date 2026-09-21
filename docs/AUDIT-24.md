@@ -302,6 +302,99 @@ toza.
    — barcha 3 kontekst 5 turdan iborat; kelgusida yangi kontekst/tur
    qo'shilsa avtomatik ishga tushadi, lekin alohida vizual tekshiruv
    yo'q edi.
+### WP-B — `TeacherComposer` bo'lindi, 5 kind kartalari (2026-09-21)
+
+**Fayl bo'linishi.** 831 qatorli `components/forms/TeacherComposer.tsx`
+→ `components/forms/teacher/`: `TeacherComposer.tsx` (qobiq — holat,
+`useFormDraft`, profil, submit, kartalar tartibi), `common.tsx` (`Ui`,
+`emptyUi`/`uiFromValues`/`toValues`, fan/sinf/til, o'quv dasturi qatori,
+sana tanlagichi) va `LessonFields`/`MapFields`/`GlossaryFields`/
+`KeysFields`/`TestFields` (kind-xos qatorlar + `*ApplyType` chegara
+siqish + `*Summary` chiplari). Eski yo'l — re-eksport (ToolWorkspace,
+`tests/client-boundary.test.mts` va mavjud importlar buzilmadi).
+
+**Kartalar (5 kind uchun bir xil skelet).** Mavzu va rejim → Fan, sinf,
+til → `<kind>` turi va hajmi → **Shapka** (endi `<details open>` emas,
+oddiy karta: `AuthorRows` muassasa*/tuzuvchi* + shartli «Tasdiqlayman» +
+sana) → **▸ Sozlamalar** (`SettingsDetails`, YOPIQ; qolgan kind-qatorlar,
+sinf harfi, `extra` `LimitedTextarea`, `ClearFormButton`). Yopiq
+xulosa chiplari: tur · sinf · hajm · rejim · kind-xos (`N savol turi`,
+`OMR`, `N dastur mavzusi`…). Umumiy bo'laklar ishlatildi: `TopicRow`,
+`AuthorRows`, `SourceFileRow` (eski katta dashed quti o'rniga),
+`LimitedTextarea`, `SettingsDetails`, `Field`, `ClearFormButton`;
+`AuthorRows` ga `placeholders` propi qo'shildi (test bilan) — «Muassasa»
+qatorida universitet emas, maktab misoli turishi uchun.
+
+**Yopilgan nuqsonlar.**
+1. `approver` («Tasdiqlayman») test kindida endi FAQAT `bsb`/`chsb`
+   turida chiziladi — dvigatel (`teacher/test/input.ts:156`) qolgan 4
+   turda foydalanuvchi matnini jimgina tashlardi; zond
+   (`probeWith:{testType:"bsb"}`) yolg'on yashil bo'lib turardi.
+   lesson/map da avvalgidek doim ko'rinadi.
+2. **Fan bitta manba**: `CurriculumPicker` da fan tanlansa `subject`
+   matni avtomatik to'ladi va matn qatori yashirinadi (avto nom
+   ko'rsatiladi); ilgari ikki «Fan» maydoni sinxron emasdi.
+3. **Sana** — brauzerning `mm/dd/yyyy` maydoni o'rniga o'zbekcha
+   kun · oy · yil tanlagichi (`DateRow`, `YYYY-MM-DD` chiqaradi,
+   yarim to'ldirilgan sana bo'sh ketadi — `isoDate` shartnomasi).
+4. **Jonli smoke topilmasi (400).** «Darslik dasturi» rejimida mavzu
+   qatori YASHIRIN edi, lekin server `missingRequired` (`lib/tools.ts`)
+   mavzuni faqat `file`/`text` rejimlarida istisno qiladi — mavzusiz
+   so'rov `POST /api/generations 400` bilan qaytar, foydalanuvchi esa
+   ko'rinmaydigan maydonni tuzata olmasdi (eski formada ham shunday
+   edi). Endi mavzu faqat FAYL rejimida yashiriladi, klient ham shu
+   shartni tekshiradi; test `missingRequired` bilan klient/server
+   kelishuvini qulflaydi.
+
+**O'lchov (Chromium, 1400 px, kirgan foydalanuvchi, qoralama tozalangan).**
+
+| Vosita | Oldin (`forms3-olchov.md`) | Keyin | Ochiq | Mobil 390 px |
+|---|---|---|---|---|
+| dars rejasi | 1 424 | **1 153** | 1 620 | 2 028, siljishsiz |
+| texnologik xarita | 1 187 | **1 113** | 1 380 | 1 686, siljishsiz |
+| glossariy | 986 | **1 053** | 1 247 | 1 528, siljishsiz |
+| keys | 989 | **1 053** | 1 250 | 1 505, siljishsiz |
+| test | 1 477 | **1 137** | 1 644 | 2 155, siljishsiz |
+
+Beshtasi ham ≤ 1 200 px me'yorida; glossariy/keys 60–70 px o'sdi (tur
+endi alohida kartada, Shapka karta sifatida ochiq) — me'yor ichida.
+1 200 dan o'tish uchun ikki qadam kerak bo'ldi: lesson/map dagi
+IXTIYORIY o'quv dasturi qatori yig'iq Sozlamalarga ko'chdi (tanlangan
+mavzular xulosa chipida ko'rinadi) va xaritada haftalik/yillik soat
+bitta qatorga birlashdi. Jonli smoke: `/uz/test` → darslik rejimi → fan/
+sinf/mavzu → «Testni yaratish» → `/uz/files/<id>` (navbatga tushdi),
+`[data-price-total]` = 3 000 tanga = `priceFor` (o'zgarmas).
+Skrinshotlar: sessiya scratchpad `b-<slug>.png` / `b-<slug>-mob.png`.
+
+**Testlar.** `tests/ui/teacher-composer.test.mts` 16 → **40** (5 kind
+qamrovi, ORTIQCHA `data-field` yo'qligi, dispatch, yig'iqlik, xulosa
+chiplari, `approver` 6 turda, fan sinxroni 3 ta, rejim tilalari, sana,
+kind mantiqlari, qoralama, submit, tozalash); `tests/viewer/
+teacher-form.test.mts` 5 → **8** (SSR yopiq holat, `approver` yo'qligi,
+`type=date` yo'qligi); `tests/ui/shared-forms.test.mts` 10 → **11**
+(`placeholders`). Yashil: `teacher-params` (4), `client-boundary` (9),
+tsc, eslint.
+
+**Mutatsiyalar (5, har biri qizardi).** (1) `approver` sharti olib
+tashlandi → 2 test; (2) `SettingsDetails open` → ui 1 + ssr 1 test;
+(3) `difficulty` dan `data-field` olib tashlandi → qamrov + joylashuv
+testi; (4) reyestrda yo'q `gradeDecor` belgisi qo'shildi → 6 test
+(ikki yo'nalishli qamrov); (5) o'quv dasturi → `subject` sinxroni
+uzildi → 2 test.
+
+**Ochiq savollar (WP-B).**
+1. `missingRequired` (`lib/tools.ts`) darslik rejimida mavzuni talab
+   qiladi — bu formada hal qilindi (mavzu ko'rinadi), lekin to'g'ri
+   yechim server tomonda `mode === "curriculum"` istisnosi bo'lishi
+   mumkin. `lib/tools.ts` shu sprintda D1/D2/E agentlarida — qaror
+   lead da.
+2. `subjectId` (`CurriculumPicker` fani) `teacher-params.ts` reyestrida
+   YO'Q, lekin `data-field` bilan chiziladi va so'rovda ketadi —
+   qamrov testida yagona ruxsat etilgan istisno. Reyestrga qo'shish
+   `probeWith:{mode:"curriculum"}` bilan mumkin (egasi qarori: id lar
+   o'zgarmaydi — shu sprintda tegilmadi).
+3. Infografika natija yorlig'i (`ImageViewer` shoxi) §1.4 jadvalida
+   WP-B da ham, D2 da ham turibdi — WP-B da BAJARILMADI, D2 da qoladi.
 
 ## 6. Ochiq bandlar
 

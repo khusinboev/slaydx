@@ -218,6 +218,7 @@ export function AuthorRows({
   set,
   required = [],
   labels = {},
+  placeholders = {},
 }: {
   ids: readonly AuthorFieldId[];
   values: FormValues;
@@ -226,6 +227,12 @@ export function AuthorRows({
   required?: readonly AuthorFieldId[];
   /** Vositaga xos yorliq (masalan teacher da `university` → «Muassasa»). */
   labels?: Partial<Record<AuthorFieldId, string>>;
+  /**
+   * Vositaga xos NAMUNA matni: kalit bitta bo'lsa ham (`university`)
+   * misol har vositada boshqacha — o'qituvchida maktab, talaba ishida
+   * OTM (AUDIT-24 WP-B: «Muassasa» qatorida universitet nomi turardi).
+   */
+  placeholders?: Partial<Record<AuthorFieldId, string>>;
 }) {
   return (
     <>
@@ -235,7 +242,7 @@ export function AuthorRows({
         return (
           <Row key={id} label={required.includes(id) ? `${label} *` : label}>
             <Field id={id}>
-              <TextInput value={String(values[id] ?? "")} onChange={(v) => set(id, v)} placeholder={meta.placeholder} />
+              <TextInput value={String(values[id] ?? "")} onChange={(v) => set(id, v)} placeholder={placeholders[id] ?? meta.placeholder} />
             </Field>
           </Row>
         );
