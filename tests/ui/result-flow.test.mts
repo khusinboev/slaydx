@@ -20,6 +20,23 @@ test("ResultView: flow = completed && translation; ildiz overflow-y-auto, nav st
   assert.match(src, /data-result-flow=\{flow \? "1" : undefined\}/, "smoke uchun belgi");
 });
 
+test("ResultView: insho uchun «Tuzatish yo'q» izohi hisobot panelida (AUDIT-24 WP-C)", () => {
+  /*
+   * Insho `noFix` (bandma-band «Tuzatish» yo'q) — sabab foydalanuvchiga
+   * hech qayerda tushuntirilmasdi (`forms3-talaba.md` §4 topilmasi).
+   * MUTATSIYA: `isEssay ?` sharti olib tashlansa izoh HAR vositada
+   * chiqib qolardi (masalan maqolada ham) — shu shart shu yerda qulflanadi.
+   */
+  const src = readFileSync(new URL("../../components/files/ResultView.tsx", import.meta.url), "utf8");
+  assert.match(src, /data-essay-nofix-note/, "izoh belgisi bo'lishi kerak");
+  assert.match(
+    src,
+    /isEssay \? \([\s\S]{0,400}data-essay-nofix-note/,
+    "izoh FAQAT insho uchun (`isEssay` sharti bilan) chizilishi kerak",
+  );
+  assert.match(src, /Insho bitta matn — «Hammasini tuzatish» butun matnni qayta ko‘radi\./, "izoh matni");
+});
+
 test("TranslationViewer: iframe ekran balandligini oladi (peshtoq scroll bilan chiqib ketgach)", () => {
   const src = readFileSync(new URL("../../components/viewers/TranslationViewer.tsx", import.meta.url), "utf8");
   assert.match(src, /h-\[calc\(100vh-4\.5rem\)\][^"]*"[^>]*data-file-preview/, "iframe balandligi 100vh ga bog'liq");
