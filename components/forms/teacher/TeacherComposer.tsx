@@ -287,6 +287,7 @@ export function TeacherComposer({
           set={(id, v) => set(id === "university" ? "university" : "author", v)}
           required={["university", "author"]}
           labels={{ university: "Muassasa", author: "Tuzuvchi" }}
+          placeholders={{ university: "15-son umumiy o'rta ta'lim maktabi" }}
         />
         {showApprover ? (
           <Row label="Tasdiqlayman" hint="Lavozim (masalan direktorning o'quv ishlari bo'yicha o'rinbosari)">
