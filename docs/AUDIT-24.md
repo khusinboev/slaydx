@@ -231,7 +231,7 @@ qatorida universitet emas, maktab misoli turishi uchun.
 | Vosita | Oldin (`forms3-olchov.md`) | Keyin | Ochiq | Mobil 390 px |
 |---|---|---|---|---|
 | dars rejasi | 1 424 | **1 153** | 1 620 | 2 028, siljishsiz |
-| texnologik xarita | 1 187 | **1 109** | 1 376 | 1 682, siljishsiz |
+| texnologik xarita | 1 187 | **1 113** | 1 380 | 1 686, siljishsiz |
 | glossariy | 986 | **1 053** | 1 247 | 1 528, siljishsiz |
 | keys | 989 | **1 053** | 1 250 | 1 505, siljishsiz |
 | test | 1 477 | **1 137** | 1 644 | 2 155, siljishsiz |
