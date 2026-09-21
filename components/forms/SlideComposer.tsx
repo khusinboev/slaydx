@@ -73,6 +73,16 @@ const TOPIC_EXAMPLES = [
   "Maktabda kitobxonlik madaniyati",
 ];
 
+/*
+ * Qoralamaga TUSHMAYDIGAN kalitlar (Tarjimon naqshi): `sourceText` fayl
+ * rejimida katta matn (qoralama PUT har 1,2 s), `logoAssetId`/
+ * `templateAssetId` esa yuklangan aktivlarga ishora — sessiyaga bog'liq,
+ * eskirgan id qoralamadan qaytib «yo'q aktiv» xatosini berardi.
+ * Qulf: `tests/ui/slide-composer.test.mts`.
+ */
+const DRAFT_SKIP = new Set(["sourceText", "logoAssetId", "templateAssetId"]);
+const draftOf = (v: FormValues): FormValues => Object.fromEntries(Object.entries(v).filter(([k]) => !DRAFT_SKIP.has(k))) as FormValues;
+
 export function SlideComposer({
   tool,
   profile,
@@ -118,15 +128,6 @@ export function SlideComposer({
   }
 
   const [values, setValues] = useState<FormValues>(initialValues);
-  /*
-   * Qoralamaga TUSHMAYDIGAN kalitlar (Tarjimon naqshi): `sourceText` fayl
-   * rejimida katta matn (qoralama PUT har 1,2 s), `logoAssetId`/
-   * `templateAssetId` esa yuklangan aktivlarga ishora — ular sessiyaga
-   * bog'liq, eskirgan id qoralamadan qaytib «yo'q aktiv» xatosini
-   * berardi. Qulf: `tests/ui/slide-composer.test.mts`.
-   */
-  const DRAFT_SKIP = new Set(["sourceText", "logoAssetId", "templateAssetId"]);
-  const draftOf = (v: FormValues): FormValues => Object.fromEntries(Object.entries(v).filter(([k]) => !DRAFT_SKIP.has(k))) as FormValues;
   const [loading, setLoading] = useState(false);
   const [reading, setReading] = useState(false);
   const [error, setError] = useState<string | null>(null);
