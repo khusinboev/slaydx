@@ -72,10 +72,14 @@ export function CurriculumPicker({
   function onSubjectChange(id: string) {
     const next = subjects.find((s) => s.id === id) ?? null;
     const grade = next?.grades.includes(value.grade) ? value.grade : (next?.grades[0] ?? 0);
+    setUnitIdx(0);
+    setQ("");
     onChange({ subjectId: next?.id ?? "", grade, topicIds: [] });
   }
 
   function onGradeChange(g: string) {
+    setUnitIdx(0);
+    setQ("");
     onChange({ ...value, grade: Number(g) || 0, topicIds: [] });
   }
 
@@ -90,6 +94,23 @@ export function CurriculumPicker({
   }
 
   const flat = topics ? topics.units.flatMap((u) => u.topics.map((t) => ({ ...t, unit: u.title }))) : [];
+
+  /*
+   * IXCHAMLIK (AUDIT-24 R2 topilmasi): 5-sinf matematikada 70, 11-sinfda
+   * 61 mavzu bor — hammasi chip bulutida chizilsa test formasi 2 246 px
+   * bo'lib ketardi (yopiq me'yor ≤ 1 200). Endi bir vaqtda faqat BITTA
+   * bo'lim (o'rtacha 5–13 mavzu) yoki qidiruv natijasi (≤ 20) ko'rinadi;
+   * tanlanganlar alohida qatorda turadi va bo'lim almashsa yo'qolmaydi.
+   */
+  const [unitIdx, setUnitIdx] = useState(0);
+  const [q, setQ] = useState("");
+  const units = topics?.units ?? [];
+  const safeUnit = Math.min(unitIdx, Math.max(0, units.length - 1));
+  const query = q.trim().toLowerCase();
+  const shown = query
+    ? flat.filter((t) => t.title.toLowerCase().includes(query)).slice(0, 20)
+    : (units[safeUnit]?.topics ?? []).map((t) => ({ ...t, unit: units[safeUnit]?.title ?? "" }));
+  const selected = value.topicIds.map((id) => flat.find((t) => t.id === id)).filter((t): t is (typeof flat)[number] => Boolean(t));
 
   return (
     <div className="space-y-2" data-curriculum-picker>
@@ -124,8 +145,46 @@ export function CurriculumPicker({
             {error ? <p className="text-destructive text-[12px]">{error}</p> : null}
             {topics ? (
               <>
+                {selected.length ? (
+                  <div className="mb-1.5 flex flex-wrap gap-1.5" role="group" aria-label="Tanlangan mavzular" data-selected-topics>
+                    {selected.map((t) => (
+                      <button
+                        key={t.id}
+                        type="button"
+                        aria-pressed
+                        data-topic={t.id}
+                        onClick={() => toggleTopic(t.id)}
+                        title={`${t.unit} · olib tashlash`}
+                        className="border-primary bg-primary text-primary-foreground rounded-full border px-2.5 py-1 text-[12px]"
+                      >
+                        {t.title} <span aria-hidden>×</span>
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                <div className="mb-1.5 flex flex-wrap items-center gap-2">
+                  {units.length > 1 ? (
+                    <SelectField
+                      ariaLabel="Bo'lim"
+                      value={String(safeUnit)}
+                      onChange={(v) => {
+                        setUnitIdx(Number(v) || 0);
+                        setQ("");
+                      }}
+                      options={units.map((u, i) => ({ value: String(i), label: `${i + 1}. ${u.title} (${u.topics.length})` }))}
+                    />
+                  ) : null}
+                  <input
+                    type="search"
+                    value={q}
+                    onChange={(e) => setQ(e.target.value)}
+                    placeholder="Mavzu qidirish…"
+                    aria-label="Mavzu qidirish"
+                    className="border-input bg-card focus:ring-ring h-8 min-w-0 flex-1 rounded-lg border px-2 text-[13px] outline-none focus:ring-2"
+                  />
+                </div>
                 <div className="flex flex-wrap gap-1.5" role="group" aria-label="Mavzular">
-                  {flat.map((t) => {
+                  {shown.filter((t) => !value.topicIds.includes(t.id)).map((t) => {
                     const on = value.topicIds.includes(t.id);
                     const disabled = !on && value.topicIds.length >= TEACHER_LIMITS.curriculumTopicsMax;
                     return (
@@ -147,8 +206,9 @@ export function CurriculumPicker({
                     );
                   })}
                 </div>
+                {query && !shown.length ? <p className="text-muted-foreground text-[12px]">Mos mavzu topilmadi.</p> : null}
                 <p className="text-muted-foreground mt-1 text-[11px]">
-                  {value.topicIds.length}/{TEACHER_LIMITS.curriculumTopicsMax} mavzu tanlandi — manba: {topics.source.title}
+                  {value.topicIds.length}/{TEACHER_LIMITS.curriculumTopicsMax} mavzu tanlandi · {flat.length} mavzu, {units.length} bo&apos;lim — manba: {topics.source.title}
                 </p>
               </>
             ) : null}
