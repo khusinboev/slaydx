@@ -303,6 +303,121 @@ toza.
    qo'shilsa avtomatik ishga tushadi, lekin alohida vizual tekshiruv
    yo'q edi.
 
+### WP-D2 — `MediaComposer` (podkast/tabriknoma) + `InfographicComposer`, 2026-09-21
+
+**MediaComposer (D2a).** Podkast va tabriknoma BITTA composerga
+tushdi — ikkalasi ham `doc.audio` modeliga yoziladi, farq faqat
+`kind` (`audioKindOf(tool.id)`) va reyestr TURI (janr). Karta 1
+«Mavzu va rejim» (podkast) / «Kimga va sabab» (tabriknoma): podkastda
+rejim `Segmented` (mavzu/matn/fayl) BITTASINI ko'rsatadi — `TopicRow` |
+`LimitedTextarea` | `SourceFileRow` (avval uchalasi bir vaqtda ko'rinardi,
+`sourceText` hint'i «faqat matn rejimida ishlatiladi» deb yashirin
+qoidani izohlashga majbur edi); tabriknomada kimga (`TextInput`), kim
+bo'ladi — `Segmented` (5 tayyor variant + «Boshqa» erkin matnni ochadi,
+`relation` reyestrda ENUM emas, erkin satr bo'lgani uchun), sabab —
+`SelectField` (6 janr). Karta 2 «Audio»: tur `Segmented` (podkast 3
+turi, tabriknomada yo'q — sabab allaqachon janr), davomiylik `RangeRow`
+(1–5 / 1–4 daqiqa, `price={priceFor}` — SLAYDER hech narsani
+hisoblamaydi, narx ikkala vosita uchun ham tekis 4 000), til `Segmented`
+(uz/ru/en). ▸ Sozlamalar — `extra` (`LimitedTextarea`),
+`ClearFormButton`. `audioInputFromValues`/`encodeAudioValues`
+(`audio/input.ts`) bitta manba (`EssayComposer` naqshi) — qoralama
+tiklanganda forma DVIGATEL bilan bitta qoidadan normallashadi.
+
+**InfographicComposer (D2b).** Karta 1 «Mavzu»: `TopicRow` + til
+`Segmented`. Karta 2 «Plakat»: tur `SelectField` (7 variant, hint —
+`≥7 SelectField` qoidasi), blok soni `Segmented` (TUR chegarasiga
+kesilgan ro'yxat — `process` da 8 chipi yo'q, `normalizeBlockCountFor`
+tur almashganda joriy qiymatni ham qisqartiradi), palitra `ColorDots`
+(6 rang, reyestr hex'laridan), o'lcham A4/A3 `Segmented`. ▸ Sozlamalar
+— `extra`, `ClearFormButton`. `infographicInputFromValues`/
+`encodeInfographicValues` bitta manba. `lib/generation/infographic-params.ts`
+allaqachon bor edi (R0/WP-C oldidan yaratilgan) — yangi fayl kerak
+bo'lmadi.
+
+**D2c.** `lib/tools.ts`: `podcast`/`greeting` → `custom: "media"`,
+`infographic` → `custom: "infographic"` (`fields`/`modes`/`topicLegend`
+o'zgarmadi — server tekshiruvi shu yerdan o'qiydi). `ToolWorkspace.tsx`
+dispatch'ga ikki qator.
+
+**D2d.** `ImageViewer.tsx` natija sahifasi tepa panelida infografika
+uchun «Foto · 1:1 · N rasm» o'rniga «Infografika · A4 · N blok»
+(`doc.infographic.spec` dan — `size`, `blocks.length`; sarlavha ham
+`spec.title`dan, `ResultView.tsx`dagi `isPoster` bilan bitta naqsh).
+Rasm vositasi (`image`) eski yorlig'ini saqlaydi.
+
+**O'lchov (Chromium, 1400 px, kirgan foydalanuvchi, `.env.local`
+worktree'ga ko'chirilgach — pastga qarang):**
+
+| Vosita | Yopiq | Mobil 390 px | Siljish |
+|---|---|---|---|
+| podcast | **844** | 889 | yo'q |
+| greeting | **844** | 899 | yo'q |
+| infografika | **844** | 940 | yo'q |
+
+Etalon me'yori (≤ 1 200) hammasida katta zaxira bilan bajarildi (avval
+podkast/tabriknoma 844–1 093, infografika 878 — `StandardForm` edi,
+yangi composer HAR uchtasini 844 ga tekislagan). Skrinshotlar:
+scratchpad `wpd2-*.png`.
+
+**Jonli smoke.** `/uz/podcast`, `/uz/greeting`, `/uz/infografika` —
+uchtasi ham ochilib to'g'ri chizildi. Infografika to'liq sinaldi:
+mavzu «Fotosintez jarayoni» → «Infografika yaratish» → navbatga tushdi
+(`/uz/files/42d3db88-…`, narx 2 000 tanga) → generatsiya ~1 daqiqada
+tugadi (Gemini) → natija sahifasida **«Infografika · A4 · 5 blok»**
+yangi yorlig'i, tayyorlik hisoboti 100/100, DOCX/PNG emas — PNG
+plakat to'g'ri chizilgan (skrinshot `wpd2-infografika-result.png`).
+Topilma: worktree'da `.env.local` yo'q edi (`DATABASE_URL yo'q`,
+WP-C ham xuddi shu sabab bilan jonli smoke'ni o'tkazib yuborgan) —
+asosiy checkout'dagi `.env.local` worktree ildiziga nusxalandi
+(gitignore'da, kommitga tushmaydi); shu tuzatishdan keyin smoke to'liq
+o'tdi.
+
+**Testlar.** `tests/ui/media-composer.test.mts` (12): QAMROV har kind
+bo'yicha (`AUDIO_PARAMS`, podkastda uch rejim aylanib), rejim bittasini
+ko'rsatadi, standart tur/sabab reyestrdan, davomiylik slayder +
+narxning O'ZGARMASLIGI, tur almashsa ham narx bir xil, Sozlamalar
+yopiq, ikkala kind submit tanasi, mavzusiz rad etish, «Boshqa»
+munosabat matni, `ToolWorkspace` dispatch. `tests/ui/infographic-composer.test.mts`
+(9): QAMROV (`INFOGRAPHIC_PARAMS`), `ColorDots` aria, standart tur/blok,
+blok soni TUR chegarasiga kesiladi, narx tekis 2 000, Sozlamalar yopiq,
+submit tanasi, mavzusiz rad etish, dispatch. `tests/viewer/media-form.test.mts`
+(5) / `infographic-form.test.mts` (4) — SSR yopiq `<details>`, ikki
+yo'nalishli `data-field` qamrovi, narx, dispatch predikati.
+`tests/ui/image-viewer.test.mts` (2, D2d) — eski yorliq saqlanadi (rasm
+vositasi), yangi yorliq `doc.infographic`dan. `tests/audio-params.test.mts`
+(8) va `tests/infographic-params.test.mts` (5) yashil qoldi o'zgarishsiz.
+Jami yangi/yangilangan test — 40. `tsc` (butun loyiha) va `eslint`
+(tegilgan fayllar) toza.
+
+**Mutatsiyalar (3, har biri qizardi, qaytarilgach yashil):**
+
+1. `InfographicComposer.onTypeChange` dan `normalizeBlockCountFor`
+   chaqiruvi olib tashlandi — 8 blok tanlab «process» ga o'tilganda
+   HECH BIR chip tanlangan holatda qolmadi (eski qiymat ro'yxatdan
+   tushib ketdi) — «blok soni tur chegarasiga kesiladi» testi qizardi.
+2. `MediaComposer`da `price` `ui.durationMin * 100` bilan
+   o'stirilgan — «davomiylik slayder» va «tur almashsa narx bir xil»
+   testlari (ikkalasi) qizardi — narx reyestr qoidasi bo'yicha
+   (egasi qarori 6) davomiylikka BOG'LIQ EMAS.
+3. Podkast rejim shartsiz (`ui.mode === "topic" ?` → `true ?`)
+   doim `TopicRow` chizadigan qilindi — QAMROV testi (formada
+   reyestrsiz/yetishmayotgan maydon) VA «rejim BITTASINI ko'rsatadi»
+   testi qizardi.
+
+**Ochiq savollar.**
+
+1. `relation` (tabriknoma «Kim bo'ladi?») reyestrda ENUM emas — erkin
+   satr. Composer 5 preset + «Boshqa» bilan `Segmented` qildi (etalon
+   qoidasi «3–6 Segmented»), lekin bu UI qaror, dvigatel shartnomasi
+   o'zgarmadi; kelgusida haqiqiy reyestr (masalan `greeting/registry.ts`
+   ga presetlar) qo'shilsa composer shundan o'qishga o'tishi mumkin.
+2. `MediaComposer`/`InfographicComposer` `TARGET_LANGUAGES` (uz/ru/en)
+   dan foydalanadi — audio dvigateli 18 tilni qo'llab-quvvatlaydi
+   (`TTS_LANG_VOICES`), lekin eski `StandardForm` ham shu uch tilni
+   ko'rsatgan edi (`LanguagePicker` standart `scope="target"`); qamrov
+   kengaytirish alohida mahsulot qarori talab qiladi.
+
 ## 6. Ochiq bandlar
 
 1. **Admin panel (egasi, 2026-09-21)** — keyingi dastur: platformani to'liq
