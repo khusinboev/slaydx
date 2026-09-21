@@ -555,3 +555,60 @@ test("tezis vositasi: faqat 2 konferensiya turi, standart «Konferensiya tezisi�
   assert.equal(post.values?.articleType, "conference_extended");
   assert.equal(post.values?.pages, "3-5");
 });
+
+/* ══════════════════════════════ tezis varianti (AUDIT-24 WP-C) ══════════════════════════════ */
+
+test("tezis: «Nashr profili» kartasi umuman ko'rinmaydi (konferensiya profili jim standart)", async () => {
+  stubApi();
+  await login();
+  const { TOOL_BY_ID } = await import("../../lib/tools.ts");
+  render(h(AppRouterContext.Provider, { value: router }, h(ArticleComposer, { tool: TOOL_BY_ID.thesis, profile, user: null })));
+  assert.ok(!screen.queryByText("Nashr profili"), "MUTATSIYA: profil kartasi qaytarilsa bu yerda topiladi va test qizaradi");
+  assert.ok(!screen.queryByRole("dialog", { name: "Nashr profili" }));
+  // Reyestr qamrovi buzilmagan — pubProfile hali ham DOM'da (yashirin).
+  const hidden = document.querySelector('[data-field="pubProfile"]') as HTMLElement | null;
+  assert.ok(hidden, "pubProfile hali data-field sifatida DOM'da bo'lishi kerak");
+  assert.equal(hidden!.textContent, "conference");
+  // Tur almashtirilsa ham (ikkala tezis turi ham conference standart) — o'zgarmaydi.
+  await act(async () => {
+    fireEvent.click(screen.getByText("Konferensiya tezisi"));
+  });
+  await act(async () => {
+    fireEvent.click(within(screen.getByRole("dialog", { name: "Maqola turi" })).getByText("Kengaytirilgan tezis / konferensiya maqolasi"));
+  });
+  assert.equal(document.querySelector('[data-field="pubProfile"]')?.textContent, "conference");
+});
+
+test("tezis: qamrov — reyestrdagi HAR `ARTICLE_PARAMS.id` interaktiv holatda ham `data-field` bilan chizilgan", async () => {
+  stubApi();
+  await login();
+  const { TOOL_BY_ID } = await import("../../lib/tools.ts");
+  const { ARTICLE_PARAMS } = await import("../../lib/generation/article-params.ts");
+  render(h(AppRouterContext.Provider, { value: router }, h(ArticleComposer, { tool: TOOL_BY_ID.thesis, profile, user: null })));
+  await act(async () => {
+    fireEvent.click(screen.getByText("Sozlamalar"));
+  });
+  const seen = new Set([...document.querySelectorAll("[data-field]")].map((el) => el.getAttribute("data-field")));
+  const missing = ARTICLE_PARAMS.map((p) => p.id).filter((id) => !seen.has(id));
+  assert.deepEqual(missing, [], `tezisda yo'q maydonlar: ${missing.join(", ")}`);
+});
+
+test("dispatch: vosita sahifasi tezis uchun `ArticleComposer`ni thesis variantda chizadi («Nashr profili» yo'q, tur ro'yxati cheklangan)", async () => {
+  stubApi();
+  const { useAppStore } = await import("../../lib/store.ts");
+  const { TOOL_BY_ID } = await import("../../lib/tools.ts");
+  useAppStore.setState({
+    loggedIn: true,
+    sessionChecked: true,
+    features: { llm: true, images: true, telegram: false, telegramBot: null, devLogin: true, pdf: true, payments: { click: false, payme: false } },
+  });
+  render(h(AppRouterContext.Provider, { value: router }, h(ToolWorkspace, { tool: TOOL_BY_ID.thesis })));
+  await waitFor(() => assert.ok(document.querySelectorAll("[data-field]").length > 5, "tezis formasining maydonlari"));
+  assert.ok(document.body.textContent?.includes("Mavzu va tur"), "tezisga ham ArticleComposer kartalari chiziladi");
+  assert.ok(!document.body.textContent?.includes("Nashr profili"), "dispatch orqali ham profil kartasi yashirin bo'lishi kerak");
+  await act(async () => {
+    fireEvent.click(screen.getByText("Konferensiya tezisi"));
+  });
+  const dialog = screen.getByRole("dialog", { name: "Maqola turi" });
+  assert.equal(dialog.querySelectorAll("[data-type-card]").length, 2, "tur ro'yxati faqat 2 tezis turi bilan cheklangan");
+});

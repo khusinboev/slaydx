@@ -8,7 +8,9 @@ import {
   ClearFormButton,
   ColorDots,
   Field,
+  FigureKindChips,
   LimitedTextarea,
+  NumberInput,
   RangeRow,
   SettingsDetails,
   SourceFileRow,
@@ -43,7 +45,7 @@ afterEach(() => cleanup());
 
 test("SettingsDetails: yopiq keladi, chevron va xulosa chiplari (bo'shlar tashlanadi); ochilganda onToggle", () => {
   const seen: boolean[] = [];
-  render(h(SettingsDetails, { summary: ["10 bet", "", null, "vizualsiz"], onToggle: (o) => seen.push(o), children: h("p", null, "ichki") }));
+  render(h(SettingsDetails, { summary: ["10 bet", "", null, "vizualsiz"], onToggle: (o) => void seen.push(o), children: h("p", null, "ichki") }));
   const details = document.querySelector("details[data-settings]") as HTMLDetailsElement;
   assert.ok(details, "details bor");
   assert.equal(details.open, false, "yopiq keladi");
@@ -110,6 +112,20 @@ test("AuthorRows: har id uchun data-field, majburiy «*», vositaga xos yorliq",
   assert.deepEqual(set, ["city=Samarqand"]);
 });
 
+test("AuthorRows: vositaga xos namuna matni (`placeholders`) standart misolni almashtiradi", () => {
+  render(
+    h(AuthorRows, {
+      ids: ["university"],
+      values: { university: "" },
+      set: () => {},
+      labels: { university: "Muassasa" },
+      placeholders: { university: "15-son umumiy o'rta ta'lim maktabi" },
+    }),
+  );
+  const input = document.querySelector('[data-field="university"] input') as HTMLInputElement;
+  assert.equal(input.placeholder, "15-son umumiy o'rta ta'lim maktabi", "o'qituvchi vositasida maktab misoli");
+});
+
 test("SourceFileRow: katta fayl rad etiladi (fetch chaqirilmaydi); muvaffaqiyatda matn va belgi soni", async () => {
   const calls: string[] = [];
   const realFetch = globalThis.fetch;
@@ -132,7 +148,7 @@ test("SourceFileRow: katta fayl rad etiladi (fetch chaqirilmaydi); muvaffaqiyatd
     const ok = new File(["x"], "manba.docx");
     fireEvent.change(input, { target: { files: [ok] } });
     await waitFor(() => assert.ok(screen.getByText("manba.docx")));
-    await waitFor(() => assert.ok(screen.getByText(/11 belgi/)), { timeout: 3000 });
+    await waitFor(() => assert.ok(screen.getByText(/11 belgi/), "belgi soni ko'rinadi"));
     assert.equal(calls.length, 1);
     assert.ok(screen.getByText("Olib tashlash"));
     assert.ok(document.querySelector('[data-field="sourceText"]'));
@@ -202,4 +218,34 @@ test("ClearFormButton: ikki bosqichli matn", () => {
   assert.equal(document.querySelector("[data-clear-form]")?.textContent, "Formani tozalash");
   rerender(h(ClearFormButton, { armed: true, onClick() {} }));
   assert.match(document.querySelector("[data-clear-form]")?.textContent ?? "", /Yana bosing/);
+});
+
+/* ───── AUDIT-24 WP-A qo'shgani: NumberInput va FigureKindChips ───── */
+
+test("NumberInput: min/max HTML atributi KO'RINADI va qiymat klamp qilinadi", () => {
+  const got: number[] = [];
+  render(h(NumberInput, { value: 15, min: 0, max: 40, onChange: (v) => got.push(v), ariaLabel: "Manba minimumi" }));
+  const input = screen.getByLabelText("Manba minimumi") as HTMLInputElement;
+  assert.equal(input.type, "number");
+  assert.equal(input.min, "0");
+  assert.equal(input.max, "40", "chegara brauzerga ham ko'rinadi (spinner/validatsiya)");
+  fireEvent.change(input, { target: { value: "100" } });
+  fireEvent.change(input, { target: { value: "-5" } });
+  assert.deepEqual(got, [40, 0], "chegaradan tashqari qiymat klamp qilinadi");
+});
+
+test("FigureKindChips: «Avto» + 8 tur, ko'p tanlov, o'chiq holat", () => {
+  function Wrap({ locked }: { locked: boolean }) {
+    const [v, setV] = useState<Parameters<typeof FigureKindChips>[0]["value"]>([]);
+    return h(FigureKindChips, { value: v, onChange: setV, disabled: locked });
+  }
+  const view = render(h(Wrap, { locked: false }));
+  const chips = () => [...document.querySelectorAll('[role="group"] button')] as HTMLButtonElement[];
+  assert.equal(chips().length, 9, "«Avto» + 8 sxema turi");
+  assert.equal(chips()[0].getAttribute("aria-pressed"), "true", "boshida «Avto»");
+  fireEvent.click(screen.getByText("Sikl"));
+  assert.equal(document.querySelector('[data-kind="cycle"]')?.getAttribute("aria-pressed"), "true");
+  assert.equal(chips()[0].getAttribute("aria-pressed"), "false", "tanlov bo'lsa «Avto» o'chadi");
+  view.rerender(h(Wrap, { locked: true }));
+  assert.ok(chips().every((b) => b.disabled), "sxema so'ralmaganda hammasi o'chiq");
 });

@@ -8,7 +8,9 @@ import type { AppRouterInstance } from "next/dist/shared/lib/app-router-context.
 import { WorkComposer } from "../../components/forms/WorkComposer.tsx";
 import { ToolWorkspace } from "../../components/forms/ToolWorkspace.tsx";
 import { WORK_PARAMS } from "../../lib/generation/work-params.ts";
-import { TOOL_BY_ID } from "../../lib/tools.ts";
+import { TOOL_BY_ID, priceFor, formatTanga } from "../../lib/tools.ts";
+import { WORK_LIMITS } from "../../lib/generation/work/types.ts";
+import { COURSEWORK_PAGES, REFERAT_PAGES, INDEPENDENT_PAGES } from "../../lib/generation/work/registry.ts";
 import type { UserProfile } from "../../lib/types.ts";
 
 /**
@@ -20,6 +22,11 @@ import type { UserProfile } from "../../lib/types.ts";
  * qoralama debounce/tiklash, submit tanasi, vizuallar o'chirilganda
  * bog'liq maydonlar o'chishi, manbalar ro'yxati, «Tozalash», dispatch
  * (`tests/ui/article-composer.test.mts` naqshi).
+ *
+ * FORMALAR 3 (AUDIT-24 WP-A) qo'shgani: «Titul» YIG'IQ (asosiyda faqat
+ * OTM+muallif), «Hajm» SLAYDER + jonli narx (narx faqat `priceFor` dan —
+ * formada hisob yo'q), matn limit hisoblagichlari, `refsMin` min/max
+ * atributlari va ▸ Sozlamalar xulosa chiplari.
  */
 afterEach(() => cleanup());
 
@@ -59,6 +66,7 @@ function stubApi(draft: Record<string, unknown> | null = null) {
     if (/^\/api\/forms\/(coursework|referat|mustaqil-ish)\/draft$/.test(url) && method === "GET") return json(200, { draft: draft ? { data: draft, updatedAt: "now" } : null });
     if (/^\/api\/forms\/(coursework|referat|mustaqil-ish)\/draft$/.test(url)) return json(200, { ok: true, updatedAt: "now" });
     if (url === "/api/generations" && method === "POST") return json(200, { id: "55555555-5555-4555-8555-555555555555", price: 16000 });
+    if (url === "/api/extract" && method === "POST") return json(200, { text: "Maktab hisoboti: 3-sinf o'quvchilari." });
     if (url === "/api/users/me") return json(200, { ok: true });
     return json(404, { error: "yo'q" });
   };
@@ -148,19 +156,57 @@ test("reja usuli manual: tocText ko'rinadi, jonli hisob «2 bob, 4 paragraf»", 
   assert.equal(document.querySelector("[data-outline-summary]")?.textContent, "2 bob, 4 paragraf");
 });
 
+const slider = () => screen.getByLabelText("Hajm") as HTMLInputElement;
+const slide = async (i: number) => {
+  await act(async () => {
+    fireEvent.change(slider(), { target: { value: String(i) } });
+  });
+};
+
+test("hajm SLAYDERI: pog'onalar soni janr ro'yxatiga teng, qiymat «N–M bet» bo'lib chiqadi", async () => {
+  stubApi();
+  await login();
+  mount();
+  assert.equal(slider().type, "range", "hajm endi chip emas, slayder");
+  assert.equal(slider().min, "0");
+  assert.equal(slider().max, String(COURSEWORK_PAGES.length - 1), "kurs ishi 7 pog'ona");
+  assert.equal(document.querySelector("[data-range-value]")?.textContent, "20–25 bet", "standart 20-25");
+  await slide(0);
+  assert.equal(document.querySelector("[data-range-value]")?.textContent, "10–15 bet");
+  await slide(COURSEWORK_PAGES.length - 1);
+  assert.equal(document.querySelector("[data-range-value]")?.textContent, "40–45 bet");
+  assert.ok(!screen.queryByRole("radiogroup", { name: "Hajm" }), "eski 7 chipli radiogroup yo'q");
+});
+
 test("narx hajm bilan o'zgaradi: kurs ishi 10-15 bet 12 000 → 20-25 bet 16 000", async () => {
   stubApi();
   await login();
   mount();
-  const pagesGroup = () => within(screen.getByRole("radiogroup", { name: "Hajm" }));
-  await act(async () => {
-    fireEvent.click(pagesGroup().getByText(/10–15 bet/));
-  });
+  await slide(0);
   assert.match(document.querySelector("[data-price-total]")?.textContent ?? "", /12[\s ]?000/);
-  await act(async () => {
-    fireEvent.click(pagesGroup().getByText(/20–25 bet/));
-  });
+  await slide(2);
   assert.match(document.querySelector("[data-price-total]")?.textContent ?? "", /16[\s ]?000/);
+});
+
+test("slayder yonidagi narx AYNAN `priceFor` dan (3 vosita, har pog'ona) — qattiq yozilgan raqam emas", async () => {
+  const steps = { coursework: COURSEWORK_PAGES, referat: REFERAT_PAGES, "mustaqil-ish": INDEPENDENT_PAGES } as const;
+  for (const id of ["coursework", "referat", "mustaqil-ish"] as const) {
+    cleanup();
+    stubApi();
+    await login();
+    mount(id);
+    const tool = TOOL_BY_ID[id];
+    for (let i = 0; i < steps[id].length; i++) {
+      await slide(i);
+      const want = formatTanga(priceFor(tool, { pages: steps[id][i] }));
+      assert.equal(document.querySelector("[data-price]")?.textContent, want, `${id} ${steps[id][i]}: slayder narxi`);
+      assert.equal(document.querySelector("[data-price-total]")?.textContent, want, `${id} ${steps[id][i]}: sticky narx bilan bir xil`);
+    }
+    // Narx qoidasi ham `priceFor` dan: eng arzon va eng qimmat paket.
+    const rule = document.querySelector("[data-price-rule]")?.textContent ?? "";
+    assert.ok(rule.includes(formatTanga(priceFor(tool, { pages: steps[id][0] }))), `${id}: qoida matnida eng arzon paket`);
+    assert.ok(rule.includes(formatTanga(priceFor(tool, { pages: steps[id][steps[id].length - 1] }))), `${id}: qoida matnida eng qimmat paket`);
+  }
 });
 
 test("profil prefill: universitet/muallif/fan nomi boshlang'ich qiymatlar", async () => {
@@ -211,10 +257,7 @@ test("qoralama tiklanadi: serverdagi qiymatlar formaga tushadi", async () => {
     assert.equal((document.querySelector('[data-field="topic"] input') as HTMLInputElement).value, "Tiklangan mavzu");
   });
   assert.equal((document.querySelector('[data-field="university"] input') as HTMLInputElement).value, "TATU");
-  assert.ok(
-    within(screen.getByRole("radiogroup", { name: "Hajm" })).getByText(/15–20 bet/),
-    "hajm qoralamadan tiklandi",
-  );
+  assert.equal(document.querySelector("[data-range-value]")?.textContent, "15–20 bet", "hajm qoralamadan tiklandi");
 });
 
 test("Yaratish: submit tanasida workKind/subjectProfile/tocText/ministryCustom/userRefs (JSON)", async () => {
@@ -363,4 +406,122 @@ test("dispatch: ToolWorkspace coursework/referat/mustaqil-ish uchun WorkComposer
   render(h(AppRouterContext.Provider, { value: router }, h(ToolWorkspace, { tool: TOOL_BY_ID.essay })));
   await waitFor(() => assert.ok(document.querySelector('[data-field="essayContext"]'), "insho o'z formasini (EssayComposer) chizishi kerak"));
   assert.ok(!document.querySelector('[data-field="workKind"]'), "insho WorkComposer emas");
+});
+
+
+/* ───────────── FORMALAR 3 (AUDIT-24 WP-A) — yangi tuzilma ───────────── */
+
+test("Titul YIG'IQ: asosiyda faqat OTM+muallif, qolgan 7 maydon yopiq ▸ Sozlamalar ichida", async () => {
+  stubApi();
+  await login();
+  mount();
+  const settings = document.querySelector("details[data-settings]") as HTMLDetailsElement;
+  assert.ok(settings, "▸ Sozlamalar bloki bor");
+  assert.equal(settings.open, false, "yopiq keladi (mutatsiya: `open` qo'yilsa qizaradi)");
+  // Asosiy oqimda (Sozlamalardan tashqarida) faqat majburiy ikkitasi.
+  const outside = [...document.querySelectorAll("[data-field]")]
+    .filter((el) => !settings.contains(el))
+    .map((el) => el.getAttribute("data-field"));
+  assert.deepEqual(
+    outside,
+    ["topic", "workKind", "subjectProfile", "subjectName", "pages", "language", "university", "author"],
+    "titulning qolgan maydonlari asosiy oqimda turmasligi kerak",
+  );
+  for (const id of ["faculty", "department", "group", "course", "teacher", "teacherDegree", "city", "ministry"]) {
+    assert.ok(settings.querySelector(`[data-field="${id}"]`), `${id} ▸ Sozlamalar ichida`);
+  }
+  assert.ok(document.querySelector('[data-field="university"] input'), "OTM asosiyda va tahrirlanadi");
+});
+
+test("majburiy maydonlar «*» bilan belgilanadi (CUSTOM_REQUIRED.work bilan bir xil ikkitasi)", async () => {
+  stubApi();
+  await login();
+  mount();
+  assert.ok(screen.getByText("OTM *"), "OTM majburiy");
+  assert.ok(screen.getByText("Muallif *"), "Muallif majburiy");
+  assert.ok(screen.getByText("Fakultet"), "fakultet ixtiyoriy — yulduzchasiz");
+});
+
+test("▸ Sozlamalar xulosa chiplari: tur · profil · hajm · vizual · reja · fayl", async () => {
+  stubApi();
+  await login();
+  mount();
+  const chips = () => [...document.querySelectorAll("[data-summary-chips] span")].map((s) => s.textContent);
+  assert.deepEqual(chips(), ["Nazariy kurs ishi", "Gumanitar fanlar", "20–25 bet", "1 sxema, 1 jadval", "reja: avto", "faylsiz"]);
+  await slide(0);
+  await act(async () => {
+    fireEvent.click(screen.getByLabelText("Vizuallar"));
+  });
+  await act(async () => {
+    fireEvent.click(within(screen.getByRole("radiogroup", { name: "Reja usuli" })).getByText("O'zim yozaman"));
+  });
+  assert.deepEqual(chips(), ["Nazariy kurs ishi", "Gumanitar fanlar", "10–15 bet", "vizualsiz", "reja: o‘zim", "faylsiz"]);
+});
+
+test("matn limitlari: mavzu/natijalar/qo'shimcha kesiladi va hisoblagich ko'rsatiladi", async () => {
+  stubApi();
+  await login();
+  mount();
+  const topic = document.querySelector('[data-field="topic"] input') as HTMLInputElement;
+  await act(async () => {
+    fireEvent.change(topic, { target: { value: "M".repeat(WORK_LIMITS.topicChars + 50) } });
+  });
+  assert.equal(topic.value.length, WORK_LIMITS.topicChars, "mavzu server limitida kesiladi");
+  assert.match(document.querySelector('[data-field="topic"] [data-counter]')?.textContent ?? "", /\/ 300$/, "mavzu hisoblagichi limitni ko'rsatadi");
+
+  const facts = screen.getByLabelText("Natijalarim") as HTMLTextAreaElement;
+  assert.equal(facts.maxLength, WORK_LIMITS.userFactsChars, "natijalar limiti `WORK_LIMITS` dan");
+  await act(async () => {
+    fireEvent.change(facts, { target: { value: "F".repeat(20) } });
+  });
+  assert.equal(
+    document.querySelector('[data-field="userFacts"] [data-counter]')?.textContent,
+    `20 / ${WORK_LIMITS.userFactsChars.toLocaleString("uz-UZ")}`,
+  );
+
+  const extra = screen.getByLabelText("Qo‘shimcha") as HTMLTextAreaElement;
+  await act(async () => {
+    fireEvent.change(extra, { target: { value: "E".repeat(WORK_LIMITS.extraChars + 10) } });
+  });
+  assert.equal(extra.value.length, WORK_LIMITS.extraChars, "qo'shimcha kesiladi");
+});
+
+test("refsMin: min/max HTML atributlari va chegaradan tashqari qiymat klamp qilinadi", async () => {
+  stubApi();
+  await login();
+  mount();
+  const input = document.querySelector('[data-field="refsMin"] input') as HTMLInputElement;
+  assert.equal(input.type, "number");
+  assert.equal(input.min, "0", "chegara brauzerga ham ko'rinadi");
+  assert.equal(input.max, "40");
+  assert.equal(input.value, "15", "kurs ishi standarti reyestrdan");
+  await act(async () => {
+    fireEvent.change(input, { target: { value: "100" } });
+  });
+  assert.equal((document.querySelector('[data-field="refsMin"] input') as HTMLInputElement).value, "40", "40 dan oshmaydi");
+});
+
+test("teskari qamrov: formada WORK_PARAMS da yo'q `data-field` chizilmaydi", async () => {
+  stubApi();
+  await login();
+  mount();
+  const known = new Set(WORK_PARAMS.map((p) => p.id));
+  const found = [...document.querySelectorAll("[data-field]")].map((el) => el.getAttribute("data-field") ?? "");
+  const stray = [...new Set(found)].filter((id) => !known.has(id));
+  assert.deepEqual(stray, [], `reyestrda yo'q maydonlar: ${stray.join(", ")}`);
+  assert.equal(found.length, new Set(found).size, "har maydon AYNAN bitta joyda chiziladi");
+});
+
+test("fayl qatori: yuklangan hujjat `sourceText` ga tushadi va xulosa chipi «fayl bor» bo'ladi", async () => {
+  stubApi();
+  await login();
+  mount();
+  const input = screen.getByLabelText("Hujjat") as HTMLInputElement;
+  await act(async () => {
+    fireEvent.change(input, { target: { files: [new File(["x"], "manba.docx")] } });
+  });
+  await waitFor(() => assert.ok(screen.getByText("manba.docx"), "fayl nomi qatorda"));
+  await waitFor(() => assert.ok(screen.getByText(/belgi$/), "olingan matn uzunligi ko'rinadi"));
+  await waitFor(() => assert.ok([...document.querySelectorAll("[data-summary-chips] span")].some((s) => s.textContent === "fayl bor")));
+  assert.ok(!document.querySelector("[data-source-file]"), "katta dashed quti o'rniga bitta qator");
 });

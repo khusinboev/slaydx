@@ -13,6 +13,14 @@ export function ImageViewer({ doc }: { doc: AcademicDoc }) {
   const [open, setOpen] = useState<number | null>(null);
   const style = imageStyleById(doc.imageStyle || "photo");
   const ratio = imageRatioById(doc.imageRatio || "1:1");
+  /*
+   * Infografika (AUDIT-24 WP-D2d) — SHU ko'ruvchidan chiqadi (`viewerKind`
+   * "image"), lekin «Foto · 1:1 · N rasm» yorlig'i mazmunsiz edi: plakat
+   * uslub/nisbatga ega emas, blok soni esa rasm sonidan muhimroq. Yorliq
+   * `doc.infographic` MODELIDAN o'qiladi (`isPoster` — `ResultView.tsx`
+   * bilan bitta naqsh), qattiq yozilgan matn emas.
+   */
+  const poster = doc.infographic;
 
   // Lightbox ochiq bo'lganda klaviatura: Esc — yopish, ←/→ — almashtirish.
   useEffect(() => {
@@ -31,9 +39,9 @@ export function ImageViewer({ doc }: { doc: AcademicDoc }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-[#111]">
       <div className="no-print flex h-10 shrink-0 items-center gap-3 border-b border-white/10 px-4 text-[13px] text-white/80">
-        <span className="truncate font-medium">{doc.imagePrompt || doc.meta.topic}</span>
+        <span className="truncate font-medium">{poster ? poster.spec.title || doc.meta.topic : doc.imagePrompt || doc.meta.topic}</span>
         <span className="text-white/40">
-          {style.name} · {ratio.label} · {images.length} rasm
+          {poster ? `Infografika · ${poster.spec.size} · ${poster.spec.blocks.length} blok` : `${style.name} · ${ratio.label} · ${images.length} rasm`}
         </span>
       </div>
       <div className="min-h-0 flex-1 overflow-auto p-4 sm:p-6">
