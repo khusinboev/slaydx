@@ -9,6 +9,7 @@ import { EssayComposer } from "../../components/forms/EssayComposer.tsx";
 import { ToolWorkspace } from "../../components/forms/ToolWorkspace.tsx";
 import { TOOL_BY_ID } from "../../lib/tools.ts";
 import { ESSAY_PARAMS } from "../../lib/generation/essay-params.ts";
+import { ESSAY_LIMITS } from "../../lib/generation/essay/types.ts";
 
 /**
  * Insho formasi (Talaba ishlari 2 / AUDIT-19, WP-E1) — interaktiv.
@@ -311,7 +312,66 @@ test("vosita sahifasi insho uchun AYNAN yangi formani chizadi (`custom: essay` d
   });
   render(h(AppRouterContext.Provider, { value: router }, h(ToolWorkspace, { tool })));
   await waitFor(() => assert.ok(document.querySelectorAll("[data-field]").length >= 8, "yangi formaning maydonlari"));
-  assert.ok(document.body.textContent?.includes("Mavzu va kontekst"), "inshoga xos karta ko'rinadi");
+  assert.ok(document.body.textContent?.includes("Mavzu va tur"), "inshoga xos karta ko'rinadi (AUDIT-24 WP-C: «Mavzu va kontekst» → «Mavzu va tur»)");
   // Eski standart forma «Hujjat dizaynini tanlang» legendasi bilan kelardi — u endi yo'q.
   assert.ok(!document.body.textContent?.includes("Hujjat dizaynini tanlang"));
+});
+
+/* ══════════════════════════════ AUDIT-24 WP-C (Formalar 3) ══════════════════════════════ */
+
+test("Mavzu — TopicRow hisoblagichi bilan, 300 belgidan uzunini kesadi", async () => {
+  stubApi();
+  await login();
+  mount();
+  const long = "a".repeat(ESSAY_LIMITS.topicChars + 20);
+  await act(async () => {
+    fireEvent.change(topicInput(), { target: { value: long } });
+  });
+  assert.equal(topicInput().value.length, ESSAY_LIMITS.topicChars, "topicChars dan uzun matn kesiladi");
+  const counter = document.querySelector('[data-field="topic"] [data-counter]');
+  assert.ok(counter, "TopicRow hisoblagichi ko'rinishi kerak — eski formada limit ko'rsatilmasdi");
+  assert.match(counter!.textContent ?? "", new RegExp(String(ESSAY_LIMITS.topicChars)));
+});
+
+test("Sozlamalar yopiq holatda summary: kontekst · tur · hajm · uslub", async () => {
+  stubApi();
+  await login();
+  mount();
+  const summary = document.querySelector('[data-settings] summary')?.textContent ?? "";
+  assert.match(summary, /Maktab \/ DTM inshosi/, "kontekst yorlig'i chipida");
+  assert.match(summary, /Mulohazali insho/, "standart tur yorlig'i chipida");
+  assert.match(summary, /2 varaq/, "hajm chipida");
+  assert.match(summary, /Iris/, "uslub (ramka) chipida");
+  // Kontekstni almashtirsak — summary ham yangilanadi (statik matn emas).
+  await pick("essayContext", /akademik/i);
+  const summary2 = document.querySelector('[data-settings] summary')?.textContent ?? "";
+  assert.match(summary2, /OTM akademik esse/, "kontekst o'zgarganda summary ham yangilanadi");
+});
+
+test("Tur — umumiy Segmented ishlatadi: tugmalarda alohida `title` yo'q, tooltip Row darajasida (ⓘ) saqlanadi", async () => {
+  stubApi();
+  await login();
+  mount();
+  const kindButtons = chips("essayKind");
+  assert.ok(kindButtons.length >= 5, "maktab kontekstida 5 tur bo'lishi kerak");
+  /*
+   * MUTATSIYA: eski qo'lda yozilgan radiogroup har tugmada `title={k.hint}`
+   * qo'yardi (izchillikni buzardi). Endi umumiy `Segmented` — tooltip faqat
+   * Row darajasidagi ⓘ belgisida.
+   */
+  assert.ok(kindButtons.every((b) => !b.hasAttribute("title")), "tugmalarda endi alohida title bo'lmasligi kerak");
+  const row = document.querySelector('[data-field="essayKind"]')!.closest(".grid") as HTMLElement;
+  assert.ok(row.querySelector("[title]"), "Row darajasidagi ⓘ tooltip saqlanishi kerak");
+});
+
+test("«Materiallar» endi alohida karta emas — mazmuni Sozlamalar ichida (O'z fikrlarim, «Formani tozalash»)", async () => {
+  stubApi();
+  await login();
+  mount();
+  assert.ok(!document.body.textContent?.includes("Materiallar"), "alohida «Materiallar» karta sarlavhasi endi yo'q");
+  assert.ok(field("userFacts"), "«O'z fikrlarim» reyestr maydoni saqlanadi (endi Sozlamalar ichida)");
+  await act(async () => {
+    fireEvent.click(screen.getByText("Sozlamalar"));
+  });
+  assert.ok(screen.getByText("Formani tozalash"), "«Tozalash» tugmasi Sozlamalar ichida");
 });

@@ -501,6 +501,13 @@ export function ResultView({ id }: { id: string }) {
                 Tayyorlik hisoboti · {review.score} ball
               </summary>
               <div className="mt-2">
+                {isEssay ? (
+                  // AUDIT-24 WP-C: nega «Tuzatish» yo'qligi tushuntirilmasdi
+                  // (forms3-talaba.md topilmasi) — endi bitta qatorlik izoh.
+                  <p className="text-muted-foreground mb-2 text-[11.5px]" data-essay-nofix-note>
+                    Insho bitta matn — «Hammasini tuzatish» butun matnni qayta ko‘radi.
+                  </p>
+                ) : null}
                 <ArticleReviewPanel
                   review={review}
                   hrefBase={`/uz/${gen.type}`}

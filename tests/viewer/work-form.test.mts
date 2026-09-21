@@ -7,7 +7,8 @@ import type { AppRouterInstance } from "next/dist/shared/lib/app-router-context.
 import { WorkComposer } from "../../components/forms/WorkComposer.tsx";
 import { ArticleComposer } from "../../components/forms/ArticleComposer.tsx";
 import { WORK_PARAMS } from "../../lib/generation/work-params.ts";
-import { TOOL_BY_ID } from "../../lib/tools.ts";
+import { TOOL_BY_ID, priceFor, formatTanga } from "../../lib/tools.ts";
+import { COURSEWORK_PAGES } from "../../lib/generation/work/registry.ts";
 import type { UserProfile } from "../../lib/types.ts";
 
 /**
@@ -79,6 +80,9 @@ test("uchta vosita HAR XIL janr standartini ko'rsatadi (tur/reja/narx)", () => {
   // Narx (kurs ishi 20-25 bet standart → 16 000; referat/mustaqil 10-15 → 3 000).
   assert.match(courseworkHtml, /data-price-total[^>]*>[^<]*16[\s ]?000/);
   assert.match(referatHtml, /data-price-total[^>]*>[^<]*3[\s ]?000/);
+  // Hajm — SLAYDER (kurs ishida 7 pog'ona), eski 7 chip emas.
+  assert.match(courseworkHtml, new RegExp(`type="range"[^>]*max="${COURSEWORK_PAGES.length - 1}"`), "kurs ishi slayderi 7 pog'ona");
+  assert.match(independentHtml, /type="range"[^>]*max="3"/, "mustaqil ish slayderi 4 pog'ona");
 });
 
 test("profildan prefill: universitet, muallif, fan nomi", () => {
@@ -98,4 +102,41 @@ test("insho/maqola WorkComposer dispatch qilinmaydi (`tool.custom` predikati)", 
     h(AppRouterContext.Provider, { value: mockRouter }, h(ArticleComposer, { tool: TOOL_BY_ID.article, profile, user: null })),
   );
   assert.ok(!articleHtml.includes('data-field="workKind"'), "ArticleComposer WorkComposer maydonini chizmaydi");
+});
+
+
+/* ───────────── FORMALAR 3 (AUDIT-24 WP-A) — SSR tuzilmasi ───────────── */
+
+test("SSR da ▸ Sozlamalar YOPIQ keladi va titulning qolgan maydonlari faqat uning ichida", () => {
+  // `<details ... open>` bo'lmasligi (mutatsiya: `open` qo'shilsa qizaradi).
+  assert.ok(!/<details[^>]*data-settings[^>]*\sopen/.test(courseworkHtml), "Sozlamalar yopiq chiqadi");
+  const cut = courseworkHtml.indexOf("<details");
+  assert.ok(cut > 0, "yig'iq blok bor");
+  const main = courseworkHtml.slice(0, cut);
+  const settings = courseworkHtml.slice(cut);
+  for (const id of ["topic", "workKind", "subjectProfile", "subjectName", "pages", "language", "university", "author"]) {
+    assert.ok(main.includes(`data-field="${id}"`), `${id} asosiy oqimda`);
+  }
+  for (const id of ["faculty", "department", "group", "course", "teacher", "teacherDegree", "city", "ministry", "ministryCustom", "tocMethod", "tocText", "userFacts", "userRefs", "refsMin", "extra", "sourceText"]) {
+    assert.ok(!main.includes(`data-field="${id}"`), `${id} asosiy oqimda turmaydi`);
+    assert.ok(settings.includes(`data-field="${id}"`), `${id} ▸ Sozlamalar ichida`);
+  }
+});
+
+test("hajm slayderi yonidagi narx `priceFor` dan (uch vosita) — formada hisob yo'q", () => {
+  for (const id of ["coursework", "referat", "mustaqil-ish"] as const) {
+    const html = renderWork(id);
+    const want = formatTanga(priceFor(TOOL_BY_ID[id], { pages: id === "coursework" ? "20-25" : "10-15" }));
+    const shown = /data-price="true"[^>]*>([^<]*)</.exec(html)?.[1]?.trim();
+    assert.equal(shown, want, `${id}: slayder narxi priceFor natijasi`);
+    assert.ok(html.split(want).length - 1 >= 2, `${id}: sticky narx ham AYNAN shu matn`);
+  }
+});
+
+test("matn maydonlari limit bilan: `maxLength` va hisoblagich (server endi jim kesmaydi)", () => {
+  assert.match(courseworkHtml, /maxlength="12000"/i, "natijalarim — WORK_LIMITS.userFactsChars");
+  assert.match(courseworkHtml, /maxlength="1500"/i, "qo'shimcha — WORK_LIMITS.extraChars");
+  assert.match(courseworkHtml, /maxlength="4000"/i, "reja matni — WORK_LIMITS.tocChars");
+  assert.ok(courseworkHtml.includes("data-counter"), "belgi hisoblagichi chizilgan");
+  assert.match(courseworkHtml, /type="number"[^>]*min="0"[^>]*max="40"/, "refsMin chegarasi HTML atributida");
 });
