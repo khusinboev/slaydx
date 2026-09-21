@@ -137,7 +137,7 @@ test("Fayl rejimi: umumiy SourceFileRow bitta qatorda — matn sourceText ga tus
     const file = new File(["x"], "mavzu-fayli.docx");
     fireEvent.change(input, { target: { files: [file] } });
     await waitFor(() => assert.ok(screen.getByText("mavzu-fayli.docx")));
-    await waitFor(() => assert.ok(screen.getByText(`${EXTRACTED.length.toLocaleString("uz-UZ")} belgi`)), "belgi soni ko'rinishi kerak");
+    await waitFor(() => assert.ok(screen.getByText(`${EXTRACTED.length.toLocaleString("uz-UZ")} belgi`)), { timeout: 3000 });
   } finally {
     globalThis.fetch = realFetch;
   }

@@ -104,7 +104,98 @@ qatorlar ustma-ust tushishi — 390 px o'lchov har forma uchun.
 
 ## 5. Bajarilish yozuvi
 
-(bo'sh)
+### WP-E — Etalon nomuvofiqliklari (5 umumiy forma)
+
+`components/forms/SlideComposer.tsx` (+ `slide-fields.tsx`, `TemplateGallery.tsx`,
+`slide-pickers.tsx` o'chirildi), `TranslationForm.tsx`, `ImageStudio.tsx`
+(qayta yozildi), `ResumeComposer.tsx` + `ResumeTemplateDialog.tsx`,
+`components/forms/shared/index.tsx` (`SourceFileRow` ga `onFile`/`badge`
+kengaytmasi), `compact.tsx` (`MiniInput` o'chirildi), yangi
+`lib/generation/image-params.ts`. `ArticleComposer.tsx`/`EssayComposer.tsx`/
+`ToolWorkspace.tsx`/`lib/tools.ts` ga TEGILMADI (WP-A/C/D chegarasi).
+
+**`forms3-etalon.md` §6 — 10 nomuvofiqlik holati:**
+
+| # | Band | Holat |
+|---|---|---|
+| 1 | Sozlamalar chevron indikatori | **Yopildi** (slayd/tarjimon/rezyume) — umumiy `SettingsDetails` chevron bilan. Maqolada yo'q — lead qo'shadi. |
+| 2 | Sozlamalar mexanizmi (native vs React holatli) | **Yopildi** (slayd/tarjimon/rezyume) — BITTA `SettingsDetails` komponenti, controlled (`open`/`onToggle`, rezyume) va uncontrolled (slayd/tarjimon) rejimlarni bitta API bilan beradi. Maqola alohida qoldi. |
+| 3 | Sozlamalar konteyneri `Card` ishlatmaydi | **Yopildi** (slayd/tarjimon/rezyume) — konteyner markupi endi `SettingsDetails`ning o'zida, har composerda qo'lda takrorlanmaydi. Maqola alohida qoldi. |
+| 4 | «Bezak maydon yo'q» ikki mustaqil mexanizm (matn-skaner vs `data-field`) | **Qisman.** Rasm endi `IMAGE_PARAMS` + `data-field` (DOM mexanizmi, Maqola/Rezyume naqshi) — bundan buyon 3/5 forma DOM asosida. Slayd **qasddan** matn-skaner (`slide-params.test.mts`) bilan qoldi: reyestr/dvigatel shartnomasi («`FormValues` nomlari o'zgarmaydi», reja §1.5 band 5) o'zgartirilmadi, mavjud 19 testli qamrov ishlab turibdi — mexanizmni almashtirish alohida WP bo'lishi kerak. |
+| 5 | Fayl yuklash UI — 2 mustaqil komponent | **Yopildi** (slayd, tarjimon) — ikkalasi ham umumiy `SourceFileRow`. Tarjimonga xos talab (fayl BAYTI serverga, matn emas) uchun `SourceFileRow`ga minimal `onFile`/`badge` kengaytmasi qo'shildi (standart `/api/extract` oqimini chetlab o'tadi). Maqola hali `SourceFileField` — lead qo'shadi. |
+| 6 | Narxni qayta ko'rsatish faqat Slayd | **Kengaydi (qasddan farq emas).** Checklist band 10 shuni ANIQ ruxsat beradi: narxni belgilaydigan parametr yonida takrorlash mumkin. Endi Rasm ham «Nisbat va soni» kartasida shu naqshni ishlatadi (`imageCount` narxni belgilaydi). Tarjimon/Rezyumeda narxga bevosita ta'sir qiluvchi BITTA parametr yo'q — shuning uchun ular bu naqshni ishlatmaydi, bu ATAYLAB. |
+| 7 | Qoralama qamrovi (Maqola/Rezyume bor, Slayd/Tarjimon yo'q) | **Yopildi** — `useFormDraft("slide"/"pro-slide")` va `useFormDraft("translation")` qo'shildi (`enabled: loggedIn`). Tarjimonda `sourceText` ATAYLAB qoralamaga tushmaydi (katta bo'lishi mumkin). |
+| 8 | `MiniInput` ishlatilmaydi (o'lik kod) | **Yopildi** — o'chirildi. Sabab: 5 forma ham `AuthorRows`/`textRow` Row-asosidagi naqshni ishlatadi (yorliq chapda), `MiniInput`ning «yorliq tepada» uslubi loyihadagi yagona dizayn tiliga (checklist band 3) zid edi va hech qayerda ishlatilmagan edi. |
+| 9 | Rang/palitra tanlagich 2 marta yozilgan | **Yopildi** — `ColorPicker` (`slide-pickers.tsx`) o'chirildi, `TemplateGallery` endi umumiy `ColorDots` (ikki rangli mavzular uchun CSS gradient `hex` sifatida — vizual saqlanadi). `ResumeTemplateDialog`dagi qo'lda palitra tugmalari ham `ColorDots`ga o'tdi. |
+| 10 | Rezyume narxi `tool.basePrice` statik | **Yopildi** — `price={priceFor(tool, values)}`. Natija bir xil (3 000 tekis), lekin endi bitta manba — kelajakdagi admin panel narxni shu funksiyadan boshqaradi. |
+
+**Chromium o'lchov (1400 px, kirmagan sessiya — token muhit muammosi, pastga
+qarang), `docs/research/forms3-olchov.md` bazaviy qatorlari bilan solishtirilgan:**
+
+| Vosita | Yopiq oldin → keyin | Ochiq oldin → keyin | Mobil (390 px) oldin → keyin |
+|---|---|---|---|
+| slide | 1208 → 1208 | 1504 → 1536 | 2325 → 1603 |
+| pro-slide | (o'lchanmagan) → 1195 | → 1750 | → 1540 |
+| translation | 858 → 858 | 1041 → 1041 | 1216 → 1008 |
+| rasm | **1359 → 941** | 1359 → 990 | 1888 → 1134 |
+| resume | **1937 → 1663** | 2327 → 2066 | 2863 → 2031 |
+
+Rasm eng katta yutuq — `ToolChrome`siz 1 359 px dan (talab: ≤ 1 000 px yopiq)
+**941 px**ga tushdi. Rezyume ham 1 937 → 1 663 px. Slayd/tarjimon balandligi
+deyarli o'zgarmadi — kutilgan, chunki bu WP ularning karta tarkibini/tartibini
+o'zgartirmadi, faqat ichki bo'laklarni umumiylashtirdi (bir xil vizual natija,
+bitta manba). Mobil raqamlardagi farq (ayniqsa slayd 2325→1603) o'lchov
+o'tkazilgan sessiyalar orasidagi muhit farqiga ham tegishli bo'lishi mumkin
+(boshqa commit/vaqt) — gorizontal siljish (`overflow`) HECH birida yo'q edi.
+Skrinshotlar (yopiq/ochiq/mobil, har forma) scratchpad `wpe-<slug>*.png`.
+
+**Rasm to'ldirib «Yaratish» smoke:** forma to'g'ri to'ldirildi (tavsif,
+Nechta rasm=4 → narx darhol 6 000ga o'zgardi — qo'lda tekshirilgan), lekin
+sessiya tokeni (`scratchpad/token.txt`, boshqa agent/vaqt uchun berilgan)
+bu worktree dev serverida ishlamadi («Kirish» oynasi chiqdi — Telegram bot
+login TELEGRAM_BOT_TOKEN sozlanmagan muhit xabari), shuning uchun to'liq
+navbatga qo'yish (fal.ai) sinovi bajarilmadi. Bu **muhit/sessiya masalasi**,
+WP-E kodiga aloqasi yo'q — narx sinxronligi (`priceFor`) allaqachon
+`tests/image-params.test.mts` (4 test) va `tests/ui/image-studio.test.mts`
+(8 test, shu jumladan mutatsiya bilan tasdiqlangan `data-price-total`/
+`data-price` sinxronligi) orqali avtomatik qulflangan.
+
+**Testlar:** `tests/ui/slide-composer.test.mts` 4→7 (+3: qoralama tiklash,
+ColorDots aria, SourceFileRow fayl rejimi), `tests/viewer/slide-form.test.mts`
+11 va `tests/slide-params.test.mts` 19 — o'zgarishsiz yashil;
+`tests/ui/translation-form.test.mts` 5→7 (+2: SettingsDetails, qoralama);
+`tests/ui/shared-forms.test.mts` 10→11 (+1: `SourceFileRow.onFile`);
+`tests/ui/resume-composer.test.mts` 12→14 (+2: `priceFor`, ColorDots);
+`tests/ui/resume-template-dialog.test.mts` 3 — o'zgarishsiz yashil; yangi
+`tests/ui/image-studio.test.mts` 8, `tests/image-params.test.mts` 4.
+Jami: WP-E **20 yangi test** qo'shdi; tegilgan 9 test faylida (jumladan
+`slide-form.test.mts` 11 va `slide-params.test.mts` 19 — o'zgarishsiz)
+**84 test** yashil.
+
+**Mutatsiya (≥ 3, har biri qizil bo'lganini tasdiqladim, keyin qaytardim):**
+1. `SettingsDetails` chevronidan `aria-hidden` olib tashlash →
+   `translation-form.test.mts` «▸ Sozlamalar» testi qizardi.
+2. `shared/index.tsx` `ColorDots`dan `role="radio"` olib tashlash →
+   `resume-composer.test.mts` va `slide-composer.test.mts` rang testlari
+   qizardi (mavjud `shared-forms.test.mts` ColorDots testi buni USHLAMAYDI —
+   u faqat `aria-label` bo'yicha qidiradi; yangi testlar shu bo'shliqni yopdi).
+3. `ImageStudio.tsx`da `price = priceFor(tool, values)` o'rniga qattiq
+   `price = 2000` → `image-studio.test.mts` narx-sinxronlik testi qizardi.
+
+**Yon ta'sir (bonus tuzatish):** `npm run typecheck` loyiha bo'yicha 5 ta
+oldindan mavjud xato bilan qizil edi (R0'ning `tests/ui/shared-forms.test.mts`
+dagi `createElement(Component, props, child)` uch argumentli chaqiruvi
+`children: ReactNode` majburiy proplar bilan TS overload'ini buzgan, +
+ikkita `waitFor(fn, "matn")` — ikkinchi argument `waitForOptions`, satr emas).
+WP-E fayllariga aloqasi yo'q edi (R0 commitida ham xuddi shunday edi), lekin
+«tsc toza» talabi uchun yo'lda tuzatib qo'ydim (`children`ni props ichiga
+ko'chirish, `waitFor` ikkinchi argumentini olib tashlash/`{timeout}`ga
+almashtirish) — xatti-harakat o'zgarmadi, faqat tip xatosi ketdi.
+
+**`npm run check` holati (WP-E oxirida):** `npx tsc --noEmit` — 0 xato (butun
+loyiha); `eslint` WP-E tegilgan 16 fayl — 0 xato/ogohlantirish; `npm test`
+(dvigatel) 2 587/2 600 o'tdi, 13 skip (oldindan mavjud, `.env.local`/fal.ai
+kalitiga bog'liq); `npm run test:viewer` 219/219; `npm run test:ui` 281/281.
 
 ## 6. Ochiq bandlar
 

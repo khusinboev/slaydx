@@ -43,7 +43,7 @@ afterEach(() => cleanup());
 
 test("SettingsDetails: yopiq keladi, chevron va xulosa chiplari (bo'shlar tashlanadi); ochilganda onToggle", () => {
   const seen: boolean[] = [];
-  render(h(SettingsDetails, { summary: ["10 bet", "", null, "vizualsiz"], onToggle: (o) => seen.push(o) }, h("p", null, "ichki")));
+  render(h(SettingsDetails, { summary: ["10 bet", "", null, "vizualsiz"], onToggle: (o) => seen.push(o), children: h("p", null, "ichki") }));
   const details = document.querySelector("details[data-settings]") as HTMLDetailsElement;
   assert.ok(details, "details bor");
   assert.equal(details.open, false, "yopiq keladi");
@@ -56,13 +56,13 @@ test("SettingsDetails: yopiq keladi, chevron va xulosa chiplari (bo'shlar tashla
 });
 
 test("SettingsDetails: boshqariladigan rejim `open` ni hurmat qiladi", () => {
-  render(h(SettingsDetails, { summary: [], open: true }, h("p", null, "ichki")));
+  render(h(SettingsDetails, { summary: [], open: true, children: h("p", null, "ichki") }));
   assert.equal((document.querySelector("details[data-settings]") as HTMLDetailsElement).open, true);
   assert.ok(!document.querySelector("[data-summary-chips]"), "xulosa bo'sh bo'lsa chip konteyneri chizilmaydi");
 });
 
 test("Field: data-field zond belgisi", () => {
-  render(h(Field, { id: "topic" }, h("input", { "aria-label": "x" })));
+  render(h(Field, { id: "topic", children: h("input", { "aria-label": "x" }) }));
   assert.ok(document.querySelector('[data-field="topic"] input'));
 });
 
@@ -132,7 +132,7 @@ test("SourceFileRow: katta fayl rad etiladi (fetch chaqirilmaydi); muvaffaqiyatd
     const ok = new File(["x"], "manba.docx");
     fireEvent.change(input, { target: { files: [ok] } });
     await waitFor(() => assert.ok(screen.getByText("manba.docx")));
-    await waitFor(() => assert.ok(screen.getByText(/11 belgi/)), "belgi soni ko'rinadi");
+    await waitFor(() => assert.ok(screen.getByText(/11 belgi/)), { timeout: 3000 });
     assert.equal(calls.length, 1);
     assert.ok(screen.getByText("Olib tashlash"));
     assert.ok(document.querySelector('[data-field="sourceText"]'));
