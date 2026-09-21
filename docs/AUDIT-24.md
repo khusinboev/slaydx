@@ -182,6 +182,127 @@ Sozlamalar yopiq va titul maydonlari faqat uning ichida, SSR narxi
    xatosi shu WP da tuzatildi (`createElement` `children` argumenti va
    `waitFor` ning ikkinchi argumenti) — lead bilan kelishilsin.
 
+### WP-C — Insho (`EssayComposer`) + Tezis (`ArticleComposer` thesis varianti), 2026-09-21
+
+**Insho (C1).** Mavzu — `TopicRow` (hisoblagich, `ESSAY_LIMITS.topicChars`
+= 300 — avval limit ko'rsatilmasdi). Tur endi umumiy `Segmented`
+(kontekstdagi 5 tur — etalon qoidasi «≤6 Segmented, aks holda
+`SelectField`» amalga oshdi, hozircha barcha kontekst ≤6 bo'lgani uchun
+`SelectField` shoxi ishlatilmaydi, lekin kodda tayyor); eski qo'lda
+yozilgan radiogroup (har tugmada alohida `title` tooltip) olib
+tashlandi — izoh endi faqat Row darajasidagi ⓘ da (kontekst va tur
+qatorlarida ikkalasida ham ortiqcha paragraf yo'qotildi). ▸ Sozlamalar
+`SettingsDetails` (R0) ga o'tdi, xulosa chiplari endi **kontekst · tur ·
+hajm · uslub** (avval design/person/extra edi — mahsulot egasi
+qarori: kontekst/tur/hajm asosiy kartada ko'rinsa ham xulosada
+takrorlanadi, chunki Sozlamalar yopiq holda forma butun holatini bir
+qarashda ko'rsatishi kerak). «Materiallar» kartasi butunlay Sozlamalar
+ichiga ko'chdi (uslub/ramka, bayon shaxsi, «O'z fikrlarim» endi
+`LimitedTextarea`, shartli «Asar nomi»/«Epigraf», «Qo'shimcha»,
+`ClearFormButton`) — insho qisqa janr, materiallar kamdan-kam
+to'ldiriladi. `FormValues`/`ESSAY_PARAMS` (12) o'zgarmadi.
+
+**Tezis (C2).** `ArticleComposer` ichida `isThesisTool(tool)` (mavjud
+funksiya, `tool.id === "thesis"`) — alohida prop/fayl shart emas, WP-A
+bilan konflikt kamaytirish uchun import blokiga tegilmadi, hammasi JSX
+tanasida shartli render: **«Nashr profili» kartasi yashirin** (tur
+standarti — `conference` — jim qo'llanadi, `data-field="pubProfile"`
+ko'rinmas `<span hidden>` sifatida qoladi — reyestr qamrovi
+buzilmaydi); **«Materiallar» kartasi** (`SourceFileField`, «Natijalarim»,
+«Mening manbalarim», «Ma'lumot jadvali») bitta `materialsFields` JSX
+sifatida chiqarilib, maqolada o'z kartasida, tezisda esa Sozlamalar
+ichida chiziladi; **annotatsiya «uz+ru+en» izohi** tezisda ko'rinmaydi
+(`conference_thesis`/`conference_extended` skeleti — bitta zich blok,
+alohida annotatsiya bo'limi yo'q). Tur galereyasi ilgaridan
+`THESIS_TYPE_IDS` bilan cheklangan edi (AUDIT-19) — o'zgarmadi. Hajm/narx
+`Segmented` + `priceLabelFor`/`THESIS_PRICES` (4 000 / 5 000) — avvaldan
+shunday, o'zgarmadi. **Maqola (`article`) formasi bitta qatori ham
+o'zgarmadi** — mavjud testlar (`article-composer`, `article-form`)
+yashil, alohida regressiya-qulfi test qo'shildi.
+
+**Natija sahifasi (C3).** Insho uchun hisobot panelida bitta qatorlik
+izoh: «Insho bitta matn — «Hammasini tuzatish» butun matnni qayta
+ko'radi» (`data-essay-nofix-note`, faqat `isEssay`) — avval nega
+bandma-band «Tuzatish» yo'qligi hech qayerda tushuntirilmasdi
+(`forms3-talaba.md` §4 topilmasi).
+
+**O'lchov (Chromium, 1400 px, kirgan foydalanuvchi, dev, WP-A/B bilan
+bir vaqtda parallel; `measure-lock.sh` navbat bilan):**
+
+| Vosita | Yopiq (oldin → keyin) | Ochiq | Mobil 390 px | Siljish | Narx |
+|---|---|---|---|---|---|
+| essay | 1 035 → **844** | 1 195 | 1 009 | yo'q | 2 500 tanga (standart) |
+| thesis | 1 894 → **1 020** | 2 076 | 1 243 | yo'q | 4 000 tanga (standart) |
+| article | 1 992 → **1 992** (o'zgarmadi) | 2 485 | 2 406 | yo'q | 6 000 tanga (standart) |
+
+Ikkalasi ham etalon me'yoridan (≤ 1 200) past — tezis maqsadga aynan
+yetdi (1 894 → 1 020, −46 %). Skrinshotlar: scratchpad `wpc-*.png`
+(`wpc-essay.png`, `wpc-thesis.png`, `wpc-article.png` + `-mob` variantlari,
+`wpc-*-filled.png`). Skrinshotda tezis formasi ko'zdan kechirildi:
+«Nashr profili» kartasi yo'q, «Sozlamalar» xulosasi to'g'ri chiqadi.
+
+**Jonli navbat smoke — TO'LIQ bajarilmadi (ochiq savol).** Bu worktree'da
+`.env.local` yo'q (`DATABASE_URL` sozlanmagan) — `/api/auth/*` va
+`/api/generations` DB talab qiladi, shuning uchun mavjud
+`scratchpad/token.txt` (boshqa agent sessiyasidan) sinovda eskirgan
+chiqdi va devLogin orqali yangisini olish ham DB yo'qligi sababli
+ishlamadi (`DATABASE_URL sozlanmagan` xatosi). Bu WP-C kodining nuqsoni
+emas — worktree provisioning masalasi (boshqa worktree'larda
+`.env.local` bor, buni tekshirish `.env.local` fayliga tegishli bo'lgani
+uchun ataylab chuqurroq surishtirilmadi — maxfiylik sabab). O'rniga
+tenglashtiruvchi dalil: (1) Chromium skrinshot — forma to'g'ri
+render qiladi, mavzu to'ldirilgach narx/chiplar to'g'ri; (2)
+`tests/ui/article-composer.test.mts` dagi mavjud «tezis vositasi» testi
+(fetch stub bilan) — `submit()` chaqirilganda `POST /api/generations`
+tanasi `slug: "thesis"`, `articleType`, `pages` to'g'ri kelishini
+tasdiqlaydi — bu jonli navbat bilan funksional ekvivalent.
+
+**Testlar.** `tests/ui/essay-composer.test.mts` 11 → **15** (+4:
+hisoblagich/limit, Sozlamalar xulosasi kontekst·tur·hajm·uslub va uning
+dinamikligi, Segmented mutatsiya qulfi — tugmada `title` yo'q/Row `hint`
+bor, Materiallar konsolidatsiyasi); `tests/viewer/article-form.test.mts`
+7 → **13** (+6: tezis SSR ikki yo'nalishli qamrov, profil kartasi yo'q +
+`pubProfile` hidden, standart tur tile'da, annotatsiya yo'q, maqola
+regressiya-qulfi); `tests/ui/article-composer.test.mts` 19 → **22** (+3
+yangi + 1 mavjud «tezis vositasi» testi endi ham yashil: profil kartasi
+yo'q interaktiv, qamrov interaktiv, dispatch + tur ro'yxati cheklangan);
+`tests/ui/result-flow.test.mts` 2 → **3** (+1, manba-matn qulfi).
+`tests/essay-params.test.mts` (4), `tests/article-params.test.mts` (6),
+`tests/ui/shared-forms.test.mts` (12), `tests/ui/essay-polish.test.mts`
+(4) — barchasi yashil. `tsc --noEmit` va `eslint` (tegilgan fayllar)
+toza.
+
+**Mutatsiyalar (4, har biri qizardi, tekshirilib tiklandi):**
+
+1. Tezisda «Nashr profili» kartasini qaytarish (shartsiz render) —
+   `article-form.test.mts` dagi «kartasi ko'rinmaydi» testi qizardi
+   (1 fail).
+2. `essayKind` uchun eski qo'lda yozilgan radiogroup (har tugmada
+   `title={k.hint}`) qaytarilishi — yangi «Tur — umumiy Segmented»
+   testi qizardi (1 fail).
+3. `pubProfile` hidden span'dan `data-field="pubProfile"` olib
+   tashlash — ikki yo'nalishli qamrov testi VA «hidden field» testi
+   qizardi (2 fail).
+4. `ResultView`dagi insho izohini (`isEssay ?` sharti bilan birga) olib
+   tashlash — `result-flow.test.mts` yangi testi qizardi (1 fail).
+
+**Ochiq savollar.**
+
+1. **Jonli navbat smoke** (yuqorida) — bu worktree'da DB ulanishi yo'q,
+   shuning uchun haqiqiy `/uz/files/…` ga tushish tekshirilmadi; boshqa
+   ish paketi (yoki lead) DB ulangan worktree'da tasdiqlab qo'ysa
+   yaxshi bo'lardi. Kod tomonidan xavf past — `FormValues`/`priceFor`
+   shartnomasi tegilmagan, jsdom submit testi mavjud.
+2. Tezis Sozlamalar ochiq holatda 2 076 px (Materiallar + UDK/kalit
+   so'z/vizual/qidiruv/uslub hammasi bitta blokda) — kelgusida ikki
+   yig'iq blokka bo'lish mumkin, lekin etalon «bitta Sozlamalar»
+   qoidasiga amal qilindi (WP-A xuddi shu qarorni WorkComposer uchun
+   ham qabul qilgan).
+3. Insho «Tur»da `SelectField` shoxi (>6 variant) hozircha sinalmagan
+   — barcha 3 kontekst 5 turdan iborat; kelgusida yangi kontekst/tur
+   qo'shilsa avtomatik ishga tushadi, lekin alohida vizual tekshiruv
+   yo'q edi.
+
 ## 6. Ochiq bandlar
 
 1. **Admin panel (egasi, 2026-09-21)** — keyingi dastur: platformani to'liq
