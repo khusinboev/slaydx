@@ -45,7 +45,7 @@ import { useFormDraft } from "./useFormDraft";
 import { runGeneration } from "./runGeneration";
 
 // Eski importchilar (`WorkComposer` gacha bo'lgan kod) uchun shartnoma saqlanadi.
-export { FIGURE_KIND_LABEL, FigureKindChips };
+
 
 /**
  * Maqola formasi (Maqola 2 / AUDIT-17, WP6) — `ResumeComposer` uslubida
