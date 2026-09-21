@@ -3,21 +3,8 @@
 import { TEACHER_LIMITS } from "@/lib/generation/teacher/types";
 import { teacherTypeOf, teacherTypesOf } from "@/lib/generation/teacher/registry";
 import { Row, Segmented } from "../compact";
-import { Field } from "../shared";
+import { Field, NumberInput } from "../shared";
 import type { KindProps, Ui } from "./common";
-
-/** Ixcham son maydoni — ikkalasi bitta qatorga sig'ishi uchun. */
-function NumberInput({ value, onChange, ariaLabel }: { value: number; onChange: (v: string) => void; ariaLabel: string }) {
-  return (
-    <input
-      type="number"
-      aria-label={ariaLabel}
-      value={String(value)}
-      onChange={(e) => onChange(e.target.value)}
-      className="border-input bg-card focus:ring-ring h-8 w-full rounded-lg border px-2 text-[13px] tabular-nums outline-none focus:ring-2"
-    />
-  );
-}
 
 /**
  * TEXNOLOGIK XARITA qatorlari (AUDIT-24 WP-B).
@@ -38,12 +25,13 @@ export function mapApplyType(prev: Ui, id: string): Ui {
 
 export function MapMain({ ui, setUi, onTypeChange }: KindProps & { onTypeChange: (id: string) => void }) {
   const t = teacherTypeOf("map", ui.typeId);
-  const onWeekly = (v: string) => {
-    const n = Math.max(1, Math.min(TEACHER_LIMITS.weeklyHoursMax, Number(v) || 1));
-    setUi((s) => ({ ...s, weeklyHours: n, totalHours: Math.max(n, s.totalHours) }));
-  };
-  const onTotal = (v: string) =>
-    setUi((s) => ({ ...s, totalHours: Math.max(s.weeklyHours, Math.min(TEACHER_LIMITS.totalHoursMax, Number(v) || s.weeklyHours)) }));
+  /*
+   * Klamp `NumberInput` ichida (min/max HTML atributi bilan KO'RINADI —
+   * R0 izohi), bu yerda faqat juftlik qoidasi: yillik soat haftalikdan
+   * kam bo'lmaydi.
+   */
+  const onWeekly = (n: number) => setUi((s) => ({ ...s, weeklyHours: n, totalHours: Math.max(n, s.totalHours) }));
+  const onTotal = (n: number) => setUi((s) => ({ ...s, totalHours: Math.max(s.weeklyHours, n) }));
   return (
     <>
       <Row label="Xarita turi" hint={t.hint} wide>
@@ -59,12 +47,12 @@ export function MapMain({ ui, setUi, onTypeChange }: KindProps & { onTypeChange:
       {/* Ikki soat maydoni BITTA qatorda — jadval kattaligi shu juftlikdan chiqadi. */}
       <Row label="Soatlar" hint="Haftalik va yillik soat">
         <span className="flex flex-wrap items-center gap-2">
-          <Field id="weeklyHours" className="inline-block w-24">
-            <NumberInput ariaLabel="Haftalik soat" value={ui.weeklyHours} onChange={onWeekly} />
+          <Field id="weeklyHours" className="inline-block">
+            <NumberInput ariaLabel="Haftalik soat" value={ui.weeklyHours} onChange={onWeekly} min={1} max={TEACHER_LIMITS.weeklyHoursMax} />
           </Field>
           <span className="text-muted-foreground text-[12px]">hafta ·</span>
-          <Field id="totalHours" className="inline-block w-24">
-            <NumberInput ariaLabel="Yillik soat" value={ui.totalHours} onChange={onTotal} />
+          <Field id="totalHours" className="inline-block">
+            <NumberInput ariaLabel="Yillik soat" value={ui.totalHours} onChange={onTotal} min={1} max={TEACHER_LIMITS.totalHoursMax} />
           </Field>
           <span className="text-muted-foreground text-[12px]">yil</span>
         </span>

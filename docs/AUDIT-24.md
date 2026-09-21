@@ -104,6 +104,84 @@ qatorlar ustma-ust tushishi — 390 px o'lchov har forma uchun.
 
 ## 5. Bajarilish yozuvi
 
+### WP-A — `WorkComposer` (kurs ishi, referat, mustaqil ish), 2026-09-21
+
+**Nima o'zgardi.** Forma etalon tartibiga keltirildi: `Mavzu va tur` →
+`Hajm va til` → `Titul` → yopiq `▸ Sozlamalar`. «Titul» endi asosiyda
+FAQAT majburiy ikkitasini ko'rsatadi (`CUSTOM_REQUIRED.work`: OTM,
+muallif — `AuthorRows` bilan, «\*» belgisi bilan); qolgan 7 maydon
+(fakultet, kafedra, guruh, kurs, o'qituvchi, unvon, shahar) + vazirlik
+va «o'z matnim» — Sozlamalar ichida. «Materiallar» kartasi ham
+Sozlamalarga kirdi (avval doim ochiq edi).
+
+- **Hajm — slayder + jonli narx** (slayd naqshi, `RangeRow`): 7 uzun chip
+  o'rniga bitta qator. `pages` dvigatel uchun AVVALGIDEK diapazon satri
+  («20-25»), slayder esa `COURSEWORK_PAGES` (7 pog'ona) /
+  `REFERAT_PAGES` / `INDEPENDENT_PAGES` (4 pog'ona) ro'yxatining
+  INDEKSI bo'ylab yuradi — `FormValues` va `work/input.ts` shartnomasi
+  o'zgarmadi.
+- **Narx faqat `priceFor`**: slayder yonidagi raqam ham, uning ostidagi
+  qoida matni («10–15 bet — 12 000 tanga … 40–45 bet — 24 000 tanga»)
+  ham `priceFor(tool, {pages})` natijasidan yig'iladi; formada hech
+  qanday hisob yo'q (§6 admin panel cheklovi).
+- **Matn limitlari**: `topic`, `tocText`, `userFacts`, `extra`,
+  `ministryCustom`, `subjectName` endi `WORK_LIMITS` bo'yicha kesiladi
+  va hisoblagich ko'rsatadi (avval server jimgina kesardi).
+- **`refsMin`** — yangi `NumberInput` (min/max HTML atributi bilan);
+  **fayl** — `SourceFileRow` bitta qatori (katta dashed quti o'rniga).
+- `FigureKindChips`/`FIGURE_KIND_LABEL` `ArticleComposer.tsx` dan
+  `components/forms/shared/index.tsx` ga ko'chdi (Article endi faqat
+  import qiladi va eski importchilar uchun qayta eksport qoladi);
+  `shared/` ga `NumberInput` qo'shildi.
+
+**O'lchov (Chromium, 1400 px, kirgan foydalanuvchi, `main`):**
+
+| Vosita | Yopiq (oldin → keyin) | Ochiq | Mobil 390 px | Siljish |
+|---|---|---|---|---|
+| coursework | 2 027 → **997** | 2 297 | 1 318 | yo'q |
+| referat | 2 001 → **997** | 2 297 | 1 318 | yo'q |
+| mustaqil-ish | 2 001 → **997** | 2 297 | 1 292 | yo'q |
+
+Etalon me'yori (≤ 1 200) bajarildi; yig'iq bo'lim 2/1 (biri ochiq) dan
+1/0 ga tushdi. Jonli smoke: referat formasi to'ldirilib «Yaratish»
+bosildi — slayder 15–20 bet, `[data-price]` = `[data-price-total]` =
+4 000 tanga (`priceFor` bilan mos), so'rov navbatga tushdi
+(`/uz/files/34793f36-…`). Skrinshotlar: scratchpad `wpa-*.png`.
+
+**Testlar.** `tests/ui/work-composer.test.mts` 14 → **23**
+(Titul yig'iqligi, «\*» majburiylik, slayder pog'onalari, uch vosita ×
+har pog'ona uchun `[data-price]` ↔ `priceFor`, xulosa chiplari, matn
+limitlari, `refsMin` min/max, ikki yo'nalishli `data-field` qamrovi,
+fayl qatori); `tests/viewer/work-form.test.mts` 5 → **8** (SSR da
+Sozlamalar yopiq va titul maydonlari faqat uning ichida, SSR narxi
+`priceFor` dan, `maxLength`/hisoblagich/`min`-`max`);
+`tests/ui/shared-forms.test.mts` 10 → **12** (`NumberInput`,
+`FigureKindChips`). `tests/work-params.test.mts` (3) va
+`tests/ui/article-composer.test.mts` (19) yashil; `tsc` va `eslint` toza.
+
+**Mutatsiyalar (4, har biri qizardi):**
+
+1. `price={price}` → `price={16000}` — «slayder yonidagi narx AYNAN
+   `priceFor` dan» qizardi (referat/mustaqil ish 3 000 kutilgan joyda).
+2. `<SettingsDetails summary={summary} open>` — jsdom «Titul YIG'IQ» va
+   SSR «Sozlamalar YOPIQ keladi» qizardi.
+3. `<Field id="refsMin">` → `id="refsMinimum"` — qamrov (oldinga),
+   teskari qamrov va `refsMin` testi (3 ta) qizardi.
+4. `limit={WORK_LIMITS.userFactsChars}` → `limit={999_999}` — «matn
+   limitlari» testi qizardi.
+
+**Ochiq savollar.**
+
+1. Sozlamalar ochiq holda 2 297 px — ichida 16 parametr bor; kelgusida
+   uni ikki yig'iq blokka (titul / materiallar) bo'lish mumkin, lekin
+   etalon «bitta Sozlamalar» qoidasiga amal qilindi.
+2. `figureCount`/`tableCount` hamon 0–3 chip; `maxVisualsFor(pages)`
+   real chegarasi (paketga qarab 1–6) faqat tooltipda — slayderga
+   o'tkazish keyingi WP nomzodi.
+3. R0 test faylidagi (`tests/ui/shared-forms.test.mts`) 4 ta `tsc`
+   xatosi shu WP da tuzatildi (`createElement` `children` argumenti va
+   `waitFor` ning ikkinchi argumenti) — lead bilan kelishilsin.
+
 ### WP-B — `TeacherComposer` bo'lindi, 5 kind kartalari (2026-09-21)
 
 **Fayl bo'linishi.** 831 qatorli `components/forms/TeacherComposer.tsx`

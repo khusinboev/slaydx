@@ -11,7 +11,6 @@ import { priceFor, formatTanga, ARTICLE_PRICES, THESIS_PRICES, THESIS_TYPE_IDS, 
 import {
   ARTICLE_LIMITS,
   CITE_STYLES,
-  SELECTABLE_FIGURE_KINDS,
   maxFiguresFor,
   type ArticleAuthor,
   type ArticleTypeId,
@@ -33,6 +32,8 @@ import {
   type ArticleUserRef,
 } from "@/lib/generation/article/input";
 import { Card, Row, Segmented, SelectField, Switch, SummaryChips } from "./compact";
+// AUDIT-24 WP-A: sxema chiplari umumiy bo'laklarga ko'chdi (`shared/index.tsx`).
+import { FIGURE_KIND_LABEL, FigureKindChips } from "./shared";
 import { TextArea, TextInput } from "./fields";
 import { Combobox } from "./Combobox";
 import { RowList } from "./RowList";
@@ -42,6 +43,9 @@ import { PublicationProfileTile } from "./PublicationProfileDialog";
 import { ToolChrome } from "./ToolChrome";
 import { useFormDraft } from "./useFormDraft";
 import { runGeneration } from "./runGeneration";
+
+// Eski importchilar (`WorkComposer` gacha bo'lgan kod) uchun shartnoma saqlanadi.
+
 
 /**
  * Maqola formasi (Maqola 2 / AUDIT-17, WP6) — `ResumeComposer` uslubida
@@ -82,52 +86,6 @@ type Ui = {
   fileName: string;
   sourceText: string;
 };
-
-/** Sxema turi yorliqlari (forma chips) — tartib `SELECTABLE_FIGURE_KINDS` bilan bir xil. */
-export const FIGURE_KIND_LABEL: Record<SelectableFigureKind, string> = {
-  flow: "Blok-sxema",
-  process: "Jarayon",
-  tree: "Daraxt",
-  layers: "Qatlamlar",
-  cycle: "Sikl",
-  timeline: "Vaqt chizig‘i",
-  matrix: "Matritsa",
-  compare: "Taqqoslash",
-};
-
-/**
- * «Sxema turlari» chips: «Avto» (bo'sh ro'yxat — model mazmunga qarab
- * tanlaydi) + 8 tur, ko'p tanlov. Sxema so'ralmagan (`figureCount === 0`)
- * bo'lsa o'chiq — tanlov hech narsaga ta'sir qilmaydi (UI testi: `disabled`
- * bog'lanishi olib tashlansa qizaradi).
- */
-export function FigureKindChips({ value, onChange, disabled }: { value: SelectableFigureKind[]; onChange: (v: SelectableFigureKind[]) => void; disabled: boolean }) {
-  const chip = (on: boolean) =>
-    `rounded-full border px-3 py-1 text-[12.5px] transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${on ? "border-primary bg-primary text-primary-foreground" : "border-input bg-card hover:bg-muted"}`;
-  return (
-    <div className="flex flex-wrap gap-1.5" role="group" aria-label="Sxema turlari">
-      <button type="button" aria-pressed={value.length === 0} disabled={disabled} onClick={() => onChange([])} className={chip(value.length === 0)}>
-        Avto
-      </button>
-      {SELECTABLE_FIGURE_KINDS.map((k) => {
-        const on = value.includes(k);
-        return (
-          <button
-            key={k}
-            type="button"
-            aria-pressed={on}
-            disabled={disabled}
-            data-kind={k}
-            onClick={() => onChange(on ? value.filter((v) => v !== k) : [...value, k])}
-            className={chip(on)}
-          >
-            {FIGURE_KIND_LABEL[k]}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
 
 const LANGUAGE_OPTIONS = [
   { value: "uz", label: "O‘zbek" },
