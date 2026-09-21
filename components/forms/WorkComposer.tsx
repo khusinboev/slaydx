@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import type { FormValues, ToolConfig, UserProfile } from "@/lib/types";
 import { updateProfile, type ServerUser } from "@/lib/api-client";
@@ -19,36 +19,70 @@ import {
 } from "@/lib/generation/work/registry";
 import { SUBJECT_PROFILES, SUBJECT_PROFILE_LIST } from "@/lib/generation/work/subjects";
 import {
+  WORK_LIMITS,
   workGenreOfTool,
   type WorkGenreId,
   type WorkKindId,
   type SubjectProfileId,
   type WorkMinistryId,
 } from "@/lib/generation/work/types";
-import { workInputFromValues, encodeWorkValues, parseWorkOutline, maxVisualsFor, type WorkInput } from "@/lib/generation/work/input";
-import { Card, Row, Segmented, Switch, SummaryChips } from "./compact";
+import { workInputFromValues, encodeWorkValues, parseWorkOutline, maxVisualsFor, WORK_INPUT_LIMITS, type WorkInput } from "@/lib/generation/work/input";
+import { Card, Row, Segmented, Switch } from "./compact";
 import { TextArea, TextInput } from "./fields";
 import { Combobox } from "./Combobox";
 import { RowList } from "./RowList";
-import { SourceFileField } from "./SourceFileField";
-import { FIGURE_KIND_LABEL, FigureKindChips } from "./ArticleComposer";
+import {
+  AuthorRows,
+  ClearFormButton,
+  Field,
+  FIGURE_KIND_LABEL,
+  FigureKindChips,
+  LimitedTextarea,
+  NumberInput,
+  RangeRow,
+  SettingsDetails,
+  SourceFileRow,
+  TopicRow,
+  type AuthorFieldId,
+} from "./shared";
 import { ToolChrome } from "./ToolChrome";
 import { useFormDraft } from "./useFormDraft";
 import { runGeneration } from "./runGeneration";
 
 /**
- * Talaba ishlari 2 (AUDIT-19, WP-E2) — kurs ishi / referat / mustaqil ish
- * UMUMIY formasi: `ArticleComposer` naqshi (kartalar, `useFormDraft`,
- * `runGeneration`, `uiFromValues` ↔ `encodeWorkValues` bitta manba).
+ * Talaba ishlari — kurs ishi / referat / mustaqil ish UMUMIY formasi.
+ *
+ * FORMALAR 3 (AUDIT-24 WP-A) tuzilmasi — yopiq holda 4 blok:
+ *
+ *   1. «Mavzu va tur»   — mavzu (limit bilan), tur, fan profili, fan nomi;
+ *   2. «Hajm va til»    — HAJM SLAYDERI jonli narx bilan (slayd naqshi) + til;
+ *   3. «Titul»          — asosiyda FAQAT majburiy ikkitasi
+ *                         (`CUSTOM_REQUIRED.work`: OTM + muallif);
+ *   4. «▸ Sozlamalar»   — yopiq: titul tafsilotlari (fakultet…vazirlik),
+ *                         reja, vizuallar, materiallar, qo'shimcha.
+ *
+ * Avval «Titul» 9–10 maydon bilan HECH QACHON yig'ilmasdi va «Materiallar»
+ * kartasi doim ochiq turardi — forma 2 001–2 027 px edi (etalon ≤ 1 200).
  *
  * Reyestr shartnomasi: `lib/generation/work-params.ts` dagi HAR
  * `WORK_PARAMS.id` shu yerda (bevosita yoki holat almashtirilgach)
  * `data-field={id}` bilan chizilishi SHART (`tests/ui/work-composer.test.mts`
- * qamrov testi) — «bezak maydon yo'q» qoidasi. `fileName` reyestrda YO'Q
- * (Article bilan bir xil sabab — fayl nomi hisobga ta'sir qilmaydi).
+ * va `tests/viewer/work-form.test.mts` qamrov testlari) — «bezak maydon
+ * yo'q» qoidasi. `fileName` reyestrda YO'Q (Article bilan bir xil sabab —
+ * fayl nomi hisobga ta'sir qilmaydi).
+ *
+ * NARX: forma hech narsa HISOBLAMAYDI — slayder yonidagi raqam ham,
+ * sticky footer ham `priceFor(tool, values)` natijasi (egasi qarori
+ * 2026-09-21: kelajakdagi admin panel narxni bazadan boshqaradi).
  *
  * `genre` uch vositaning `tool.id`sidan kelib chiqadi
  * (`workGenreOfTool`) — formada alohida maydon emas.
+ *
+ * `FormValues` kalitlari va dvigatel shartnomasi O'ZGARMADI: `pages`
+ * hamon «20-25» ko'rinishidagi DIAPAZON SATRI (`work/registry.ts`
+ * `COURSEWORK_PAGES`/`REFERAT_PAGES`/`INDEPENDENT_PAGES`) — slayder
+ * shu ro'yxat bo'ylab INDEKS bilan yuradi (7 yoki 4 pog'ona), tashqariga
+ * esa baribir satr chiqadi.
  */
 
 type UserRefRow = { mode: "doi" | "isbn" | "text"; doi: string; isbn: string; raw: string };
@@ -88,6 +122,15 @@ type Ui = {
   fileName: string;
   sourceText: string;
 };
+
+/** «Titul» maydonlari — `AuthorRows` id lari AYNAN `Ui`/`FormValues` kalitlari. */
+type TitleFieldId = Extract<keyof Ui, AuthorFieldId>;
+
+/** Asosiy kartada qoladigan ikkitasi — `CUSTOM_REQUIRED.work` bilan bir xil. */
+const REQUIRED_TITLE_IDS = ["university", "author"] as const satisfies readonly TitleFieldId[];
+
+/** Qolgani ▸ Sozlamalar ichida (avval hammasi doim ochiq turardi). */
+const EXTRA_TITLE_IDS = ["faculty", "department", "group", "course", "teacher", "teacherDegree", "city"] as const satisfies readonly TitleFieldId[];
 
 const LANGUAGE_OPTIONS = [
   { value: "uz", label: "O‘zbek" },
@@ -133,6 +176,11 @@ const fmtNum = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1).re
 
 /** «10-15» → «10–15 bet». */
 const pagesLabel = (id: string) => `${id.replace("-", "–")} bet`;
+
+/** ▸ Sozlamalar ichidagi kichik bo'lim sarlavhasi (karta emas — balandlik qimmat). */
+function SubHead({ children }: { children: ReactNode }) {
+  return <h3 className="text-muted-foreground mt-4 mb-1 text-[11px] font-semibold tracking-wide uppercase first:mt-1">{children}</h3>;
+}
 
 function emptyUi(profile: UserProfile, tool: ToolConfig, genre: WorkGenreId): Ui {
   const g = WORK_GENRES[genre];
@@ -286,7 +334,6 @@ export function WorkComposer({
   const [loading, setLoading] = useState(false);
   const [fileBusy, setFileBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const { draft, ready, save, clear, flush } = useFormDraft(tool.id, { enabled: loggedIn });
 
   const [restored, setRestored] = useState(false);
@@ -305,6 +352,7 @@ export function WorkComposer({
   }, [ui, restored, save]);
 
   const set = <K extends keyof Ui>(key: K, v: Ui[K]) => setUi((s) => ({ ...s, [key]: v }));
+  const setTitleField = (id: AuthorFieldId, v: string) => set(id as TitleFieldId, v);
 
   const kind: WorkKind = workKindOf(genre, ui.workKind);
   const subjProfile = SUBJECT_PROFILES[ui.subjectProfile];
@@ -345,6 +393,23 @@ export function WorkComposer({
   const price = priceFor(tool, values);
   const visualsCap = maxVisualsFor(ui.pages);
 
+  /*
+   * HAJM SLAYDERI: `pages` ro'yxatdagi SATR bo'lib qoladi (dvigatel
+   * shartnomasi), slayder esa shu ro'yxatning indeksi bo'ylab yuradi.
+   * Nomuvofiq qiymat (tur almashganda) `normalizeWorkPages` bilan
+   * ro'yxatga tushadi, indeks topilmasa 0 dan boshlanadi.
+   */
+  const pageSteps = kind.pages;
+  const pageIndex = Math.max(0, pageSteps.indexOf(ui.pages));
+  const priceOf = (id: string) => priceFor(tool, { pages: id });
+  const firstStep = pageSteps[0]!;
+  const lastStep = pageSteps[pageSteps.length - 1]!;
+  /** Qoida matni ham `priceFor` dan — formada qattiq yozilgan narx yo'q. */
+  const priceRule =
+    pageSteps.length > 1
+      ? `${pagesLabel(firstStep)} — ${formatTanga(priceOf(firstStep))} … ${pagesLabel(lastStep)} — ${formatTanga(priceOf(lastStep))}`
+      : `${pagesLabel(firstStep)} — ${formatTanga(priceOf(firstStep))}`;
+
   const clearConfirm = useConfirmClick(() => {
     void clear();
     setUi(emptyUi(profile, tool, genre));
@@ -382,130 +447,115 @@ export function WorkComposer({
     }
   }
 
+  /** ▸ Sozlamalar yopiq holatdagi xulosa — yorliqlar REYESTRDAN. */
+  const summary = [
+    kind.label.uz,
+    subjProfile.label.uz,
+    pagesLabel(ui.pages),
+    ui.includeVisuals
+      ? ui.figureKinds.length
+        ? `sxema: ${ui.figureKinds.map((k) => FIGURE_KIND_LABEL[k].toLowerCase()).join(", ")}`
+        : `${ui.figureCount} sxema, ${ui.tableCount} jadval`
+      : "vizualsiz",
+    ui.tocMethod === "manual" ? "reja: o‘zim" : "reja: avto",
+    ui.fileName ? "fayl bor" : "faylsiz",
+  ];
+
   return (
     <ToolChrome title={tool.pageTitle} submitLabel={tool.submitLabel} price={price} loading={loading} onSubmit={submit} error={error}>
       <Card title="Mavzu va tur">
-        <Row label="Mavzu" wide>
-          <span data-field="topic" className="block">
-            <TextInput value={ui.topic} onChange={(v) => set("topic", v)} placeholder={tool.topicPlaceholder} />
-          </span>
-        </Row>
+        <TopicRow value={ui.topic} onChange={(v) => set("topic", v)} placeholder={tool.topicPlaceholder} limit={WORK_LIMITS.topicChars} />
         {tool.topicExamples?.length ? (
           <div className="mt-1.5 flex flex-wrap gap-1.5">
             {tool.topicExamples.map((ex) => (
-              <button key={ex} type="button" onClick={() => set("topic", ex)} className="bg-muted hover:bg-muted/70 rounded-md px-2 py-1 text-left text-[11px]">
+              <button key={ex} type="button" onClick={() => set("topic", ex.slice(0, WORK_LIMITS.topicChars))} className="bg-muted hover:bg-muted/70 rounded-md px-2 py-1 text-left text-[11px]">
                 {ex}
               </button>
             ))}
           </div>
         ) : null}
         <Row label="Tur" hint={kind.hint} wide>
-          <span data-field="workKind" className="block">
+          <Field id="workKind">
             <Segmented ariaLabel="Tur" options={workKindsOf(genre).map((k) => ({ value: k.id, label: k.label.uz }))} value={ui.workKind} onChange={onWorkKindChange} />
-          </span>
+          </Field>
         </Row>
         <Row label="Fan profili" hint={subjProfile.hint} wide>
-          <span data-field="subjectProfile" className="block">
+          <Field id="subjectProfile">
             <Segmented
               ariaLabel="Fan profili"
               options={SUBJECT_PROFILE_LIST.map((p) => ({ value: p.id, label: p.label.uz }))}
               value={ui.subjectProfile}
               onChange={onSubjectProfileChange}
             />
-          </span>
+          </Field>
         </Row>
         <Row label="Fan nomi" hint="Masalan: Pedagogika, Iqtisodiyot nazariyasi">
-          <span data-field="subjectName" className="block">
-            <Combobox ariaLabel="Fan nomi" value={ui.subjectName} onChange={(v) => set("subjectName", v)} suggest={subjectNameSuggest} placeholder="Fan nomi" />
-          </span>
+          <Field id="subjectName">
+            <Combobox ariaLabel="Fan nomi" value={ui.subjectName} onChange={(v) => set("subjectName", v.slice(0, WORK_LIMITS.titleFieldChars))} suggest={subjectNameSuggest} placeholder="Fan nomi" />
+          </Field>
         </Row>
       </Card>
-
-      <details open className="bg-card mb-3 rounded-2xl border p-4">
-        <summary className="mb-1 cursor-pointer text-[11.5px] font-semibold tracking-wide uppercase">
-          <span className="text-muted-foreground">Titul</span>
-        </summary>
-        <div className="mt-2">
-          <Row label="OTM">
-            <span data-field="university" className="block">
-              <TextInput value={ui.university} onChange={(v) => set("university", v)} placeholder="Toshkent davlat universiteti" />
-            </span>
-          </Row>
-          <Row label="Fakultet">
-            <span data-field="faculty" className="block">
-              <TextInput value={ui.faculty} onChange={(v) => set("faculty", v)} placeholder="Fakultet nomi" />
-            </span>
-          </Row>
-          <Row label="Kafedra">
-            <span data-field="department" className="block">
-              <TextInput value={ui.department} onChange={(v) => set("department", v)} placeholder="Kafedra nomi" />
-            </span>
-          </Row>
-          <Row label="Guruh">
-            <span data-field="group" className="block">
-              <TextInput value={ui.group} onChange={(v) => set("group", v)} placeholder="301-guruh" />
-            </span>
-          </Row>
-          <Row label="Kurs">
-            <span data-field="course" className="block">
-              <TextInput value={ui.course} onChange={(v) => set("course", v)} placeholder="3" />
-            </span>
-          </Row>
-          <Row label="Muallif">
-            <span data-field="author" className="block">
-              <TextInput value={ui.author} onChange={(v) => set("author", v)} placeholder="F.I.Sh." />
-            </span>
-          </Row>
-          <Row label="O‘qituvchi" wide>
-            <div className="grid gap-2 sm:grid-cols-2">
-              <span data-field="teacher" className="block">
-                <TextInput value={ui.teacher} onChange={(v) => set("teacher", v)} placeholder="F.I.Sh." />
-              </span>
-              <span data-field="teacherDegree" className="block">
-                <TextInput value={ui.teacherDegree} onChange={(v) => set("teacherDegree", v)} placeholder="Unvon / ilmiy daraja" />
-              </span>
-            </div>
-          </Row>
-          <Row label="Shahar">
-            <span data-field="city" className="block">
-              <TextInput value={ui.city} onChange={(v) => set("city", v)} placeholder="Toshkent" />
-            </span>
-          </Row>
-          <Row label="Vazirlik" wide>
-            <span data-field="ministry" className="block">
-              <Segmented ariaLabel="Vazirlik" options={MINISTRY_OPTIONS} value={ui.ministry} onChange={onMinistryChange} />
-            </span>
-          </Row>
-          <div className={ui.ministry === "custom" ? "" : "hidden"}>
-            <Row label="Vazirlik nomi" wide>
-              <span data-field="ministryCustom" className="block">
-                <TextInput
-                  value={ui.ministryCustom}
-                  onChange={(v) => set("ministryCustom", v)}
-                  placeholder="O'ZBEKISTON RESPUBLIKASI RAQAMLI TEXNOLOGIYALAR VAZIRLIGI"
-                />
-              </span>
-            </Row>
-          </div>
-        </div>
-      </details>
 
       <Card title="Hajm va til">
-        <Row label="Hajm" hint={`Kirish: ${fmtNum(kind.introShare[0] * 100)}–${fmtNum(kind.introShare[1] * 100)} %, xulosa: ${fmtNum(kind.conclusionPages[0])}–${fmtNum(kind.conclusionPages[1])} bet`}>
-          <span data-field="pages" className="block">
-            <Segmented ariaLabel="Hajm" options={kind.pages.map((id) => ({ value: id, label: `${pagesLabel(id)} · ${formatTanga(priceFor(tool, { pages: id }))}` }))} value={ui.pages} onChange={(v) => set("pages", v)} />
-          </span>
-        </Row>
+        <RangeRow
+          label="Hajm"
+          id="pages"
+          hint={`Kirish: ${fmtNum(kind.introShare[0] * 100)}–${fmtNum(kind.introShare[1] * 100)} %, xulosa: ${fmtNum(kind.conclusionPages[0])}–${fmtNum(kind.conclusionPages[1])} bet`}
+          value={pageIndex}
+          min={0}
+          max={pageSteps.length - 1}
+          onChange={(i) => set("pages", pageSteps[Math.max(0, Math.min(pageSteps.length - 1, i))]!)}
+          format={(i) => pagesLabel(pageSteps[Math.max(0, Math.min(pageSteps.length - 1, i))]!)}
+          price={price}
+          rule={priceRule}
+        />
         <Row label="Til">
-          <span data-field="language" className="block">
+          <Field id="language">
             <Segmented ariaLabel="Til" options={LANGUAGE_OPTIONS} value={ui.language} onChange={(v) => set("language", v as Ui["language"])} />
-          </span>
+          </Field>
         </Row>
       </Card>
 
-      <Card title="Reja">
+      <Card title="Titul">
+        <AuthorRows ids={REQUIRED_TITLE_IDS} values={{ university: ui.university, author: ui.author }} set={setTitleField} required={REQUIRED_TITLE_IDS} />
+        <p className="text-muted-foreground mt-1 text-[11px]">Fakultet, kafedra, guruh, kurs, o‘qituvchi, shahar va vazirlik — ▸ Sozlamalar ichida.</p>
+      </Card>
+
+      <SettingsDetails summary={summary}>
+        <SubHead>Titul tafsilotlari</SubHead>
+        <AuthorRows
+          ids={EXTRA_TITLE_IDS}
+          values={{
+            faculty: ui.faculty,
+            department: ui.department,
+            group: ui.group,
+            course: ui.course,
+            teacher: ui.teacher,
+            teacherDegree: ui.teacherDegree,
+            city: ui.city,
+          }}
+          set={setTitleField}
+        />
+        <Row label="Vazirlik" wide>
+          <Field id="ministry">
+            <Segmented ariaLabel="Vazirlik" options={MINISTRY_OPTIONS} value={ui.ministry} onChange={onMinistryChange} />
+          </Field>
+        </Row>
+        <div className={ui.ministry === "custom" ? "" : "hidden"}>
+          <Row label="Vazirlik nomi" wide>
+            <Field id="ministryCustom">
+              <TextInput
+                value={ui.ministryCustom}
+                onChange={(v) => set("ministryCustom", v.slice(0, WORK_LIMITS.ministryChars))}
+                placeholder="O'ZBEKISTON RESPUBLIKASI RAQAMLI TEXNOLOGIYALAR VAZIRLIGI"
+              />
+            </Field>
+          </Row>
+        </div>
+
+        <SubHead>Reja</SubHead>
         <Row label="Reja usuli" wide>
-          <span data-field="tocMethod" className="block">
+          <Field id="tocMethod">
             <Segmented
               ariaLabel="Reja usuli"
               options={[
@@ -515,46 +565,83 @@ export function WorkComposer({
               value={ui.tocMethod}
               onChange={(v) => set("tocMethod", v as Ui["tocMethod"])}
             />
-          </span>
+          </Field>
         </Row>
         <div className={ui.tocMethod === "manual" ? "" : "hidden"}>
           <Row label="Reja matni" wide>
-            <span data-field="tocText" className="block">
-              <TextArea
+            <Field id="tocText">
+              <LimitedTextarea
                 value={ui.tocText}
                 onChange={(v) => set("tocText", v)}
+                limit={WORK_LIMITS.tocChars}
+                rows={5}
+                ariaLabel="Reja matni"
                 placeholder={"1-BOB. Nazariy asoslar\n1.1. Tushuncha\n1.2. Yondashuvlar\n2-BOB. Amaliy tahlil\n2.1. Natijalar"}
               />
-            </span>
+            </Field>
             <p className="text-muted-foreground mt-1 text-[11px]" data-outline-summary>
               {outline.length} bob, {outlineParagraphs} paragraf
             </p>
           </Row>
         </div>
-      </Card>
 
-      <Card title="Materiallar">
-        <div data-field="sourceText" data-source-file>
-          <SourceFileField
-            legend="Hujjat yuklang (ixtiyoriy)"
-            fileName={ui.fileName}
-            sourceText={ui.sourceText}
-            onChange={({ fileName, sourceText }) => setUi((s) => ({ ...s, fileName, sourceText }))}
-            onBusyChange={setFileBusy}
-          />
-        </div>
-        <Row label="Natijalarim" hint="AI faqat shu faktlarga tayanadi" wide>
-          <span data-field="userFacts" className="block">
-            <TextArea value={ui.userFacts} onChange={(v) => set("userFacts", v)} placeholder="Tajribada 120 o'quvchi qatnashdi, o'rtacha ball 4,1 dan 4,6 ga oshdi." />
-          </span>
+        <SubHead>Vizuallar</SubHead>
+        <Row label="Vizuallar" hint="Sxema va jadval qo'shilsinmi?">
+          <Field id="includeVisuals">
+            <Switch checked={ui.includeVisuals} onChange={(v) => set("includeVisuals", v)} ariaLabel="Vizuallar" />
+          </Field>
         </Row>
-        <Row label="Mening manbalarim" wide>
-          <span data-field="userRefs" className="block">
+        <Row label="Sxemalar" hint={`Ushbu paketga ${visualsCap} tagacha sig'adi`}>
+          <Field id="figureCount">
+            <Segmented
+              ariaLabel="Sxemalar soni"
+              options={[0, 1, 2, 3].map((n) => ({ value: String(n), label: String(n) }))}
+              value={String(ui.figureCount)}
+              onChange={(v) => setUi((s) => ({ ...s, figureCount: Number(v), visualsTouched: true }))}
+            />
+          </Field>
+        </Row>
+        <Row label="Sxema turlari" hint={ui.includeVisuals && ui.figureCount ? "Avto — mazmunga qarab; tanlasangiz faqat shu turlar chiziladi" : "Sxema so‘ralmagan"} wide>
+          <Field id="figureKinds">
+            <FigureKindChips value={ui.figureKinds} onChange={(v) => set("figureKinds", v)} disabled={!ui.includeVisuals || ui.figureCount === 0} />
+          </Field>
+        </Row>
+        <Row label="Jadvallar">
+          <Field id="tableCount">
+            <Segmented
+              ariaLabel="Jadvallar soni"
+              options={[0, 1, 2, 3].map((n) => ({ value: String(n), label: String(n) }))}
+              value={String(ui.tableCount)}
+              onChange={(v) => setUi((s) => ({ ...s, tableCount: Number(v), visualsTouched: true }))}
+            />
+          </Field>
+        </Row>
+
+        <SubHead>Materiallar</SubHead>
+        <SourceFileRow
+          value={{ fileName: ui.fileName, sourceText: ui.sourceText }}
+          onChange={({ fileName, sourceText }) => setUi((s) => ({ ...s, fileName, sourceText }))}
+          onBusyChange={setFileBusy}
+          label="Hujjat"
+        />
+        <Row label="Natijalarim" hint="AI faqat shu faktlarga tayanadi" wide>
+          <Field id="userFacts">
+            <LimitedTextarea
+              value={ui.userFacts}
+              onChange={(v) => set("userFacts", v)}
+              limit={WORK_LIMITS.userFactsChars}
+              ariaLabel="Natijalarim"
+              placeholder="Tajribada 120 o'quvchi qatnashdi, o'rtacha ball 4,1 dan 4,6 ga oshdi."
+            />
+          </Field>
+        </Row>
+        <Row label="Manbalarim" wide>
+          <Field id="userRefs">
             <RowList
               name="userRefs"
               rows={ui.userRefs}
               onChange={(rows) => set("userRefs", rows)}
-              max={40}
+              max={WORK_LIMITS.userRefs}
               addLabel="Manba"
               empty="DOI, ISBN yoki erkin matnli manba qo‘shing."
               add={() => ({ mode: "doi" as const, doi: "", isbn: "", raw: "" })}
@@ -580,80 +667,30 @@ export function WorkComposer({
                 </div>
               )}
             />
-          </span>
+          </Field>
         </Row>
-        <Row label="Manba minimumi" hint={`Standart: ${genre === "coursework" ? "kurs ishi ≥15" : genre === "referat" ? "referat ≥5" : "mustaqil ish ≥8"}`}>
-          <span data-field="refsMin" className="block">
-            <TextInput
-              type="number"
-              value={String(ui.refsMin)}
-              onChange={(v) => setUi((s) => ({ ...s, refsMin: Math.max(0, Math.min(40, Number(v) || 0)), refsMinTouched: true }))}
+        <Row label="Manba minimumi" hint={`Standart: ${kind.refsMin} ta; 0–${WORK_INPUT_LIMITS.refsMinMax} oralig‘ida`}>
+          <Field id="refsMin">
+            <NumberInput
+              ariaLabel="Manba minimumi"
+              value={ui.refsMin}
+              min={0}
+              max={WORK_INPUT_LIMITS.refsMinMax}
+              onChange={(n) => setUi((s) => ({ ...s, refsMin: n, refsMinTouched: true }))}
             />
-          </span>
+          </Field>
         </Row>
-      </Card>
 
-      <details
-        open={settingsOpen}
-        onToggle={(e) => setSettingsOpen((e.currentTarget as HTMLDetailsElement).open)}
-        className="bg-card mb-3 rounded-2xl border p-4"
-      >
-        <summary className="flex cursor-pointer items-center justify-between gap-2">
-          <span className="text-muted-foreground text-[11.5px] font-semibold tracking-wide uppercase">Sozlamalar</span>
-          {!settingsOpen ? (
-            <SummaryChips
-              items={[
-                kind.label.uz,
-                subjProfile.label.uz,
-                pagesLabel(ui.pages),
-                ui.includeVisuals ? (ui.figureKinds.length ? `sxema: ${ui.figureKinds.map((k) => FIGURE_KIND_LABEL[k].toLowerCase()).join(", ")}` : `${ui.figureCount} sxema, ${ui.tableCount} jadval`) : "vizualsiz",
-              ].filter(Boolean)}
-            />
-          ) : null}
-        </summary>
-        <div className="mt-3">
-          <Row label="Vizuallar" hint="Sxema va jadval qo'shilsinmi?">
-            <span data-field="includeVisuals" className="block">
-              <Switch checked={ui.includeVisuals} onChange={(v) => set("includeVisuals", v)} ariaLabel="Vizuallar" />
-            </span>
-          </Row>
-          <Row label="Sxemalar soni" hint={`Ushbu paketga ${visualsCap} tagacha sig'adi`}>
-            <span data-field="figureCount" className="block">
-              <Segmented
-                ariaLabel="Sxemalar soni"
-                options={[0, 1, 2, 3].map((n) => ({ value: String(n), label: String(n) }))}
-                value={String(ui.figureCount)}
-                onChange={(v) => setUi((s) => ({ ...s, figureCount: Number(v), visualsTouched: true }))}
-              />
-            </span>
-          </Row>
-          <Row label="Sxema turlari" hint={ui.includeVisuals && ui.figureCount ? "Avto — mazmunga qarab; tanlasangiz faqat shu turlar chiziladi" : "Sxema so‘ralmagan"} wide>
-            <span data-field="figureKinds" className="block">
-              <FigureKindChips value={ui.figureKinds} onChange={(v) => set("figureKinds", v)} disabled={!ui.includeVisuals || ui.figureCount === 0} />
-            </span>
-          </Row>
-          <Row label="Jadvallar soni">
-            <span data-field="tableCount" className="block">
-              <Segmented
-                ariaLabel="Jadvallar soni"
-                options={[0, 1, 2, 3].map((n) => ({ value: String(n), label: String(n) }))}
-                value={String(ui.tableCount)}
-                onChange={(v) => setUi((s) => ({ ...s, tableCount: Number(v), visualsTouched: true }))}
-              />
-            </span>
-          </Row>
-          <Row label="Qo‘shimcha" hint="Modelga alohida talab" wide>
-            <span data-field="extra" className="block">
-              <TextArea value={ui.extra} onChange={(v) => set("extra", v)} placeholder="Ixtiyoriy" />
-            </span>
-          </Row>
-          <div className="mt-2">
-            <button type="button" onClick={clearConfirm.trigger} className="text-muted-foreground hover:text-destructive text-[12px]">
-              {clearConfirm.armed ? "Ishonchingiz komilmi? Yana bosing" : "Formani tozalash"}
-            </button>
-          </div>
+        <SubHead>Qo‘shimcha</SubHead>
+        <Row label="Qo‘shimcha" hint="Modelga alohida talab" wide>
+          <Field id="extra">
+            <LimitedTextarea value={ui.extra} onChange={(v) => set("extra", v)} limit={WORK_LIMITS.extraChars} ariaLabel="Qo‘shimcha" placeholder="Ixtiyoriy" />
+          </Field>
+        </Row>
+        <div className="mt-2">
+          <ClearFormButton armed={clearConfirm.armed} onClick={clearConfirm.trigger} />
         </div>
-      </details>
+      </SettingsDetails>
       {fileBusy ? <p className="text-muted-foreground -mt-2 mb-4 text-[11px]">Fayl o‘qilmoqda…</p> : null}
     </ToolChrome>
   );

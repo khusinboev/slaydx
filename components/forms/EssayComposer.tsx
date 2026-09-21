@@ -17,11 +17,14 @@ import { ESSAY_DESIGNS } from "@/lib/languages";
 import { ESSAY_CONTEXT_IDS, ESSAY_LIMITS, essayKindsOf, type EssayContextId, type EssayKindId } from "@/lib/generation/essay/types";
 import { ESSAY_CONTEXTS, essayKindSpec, essayWords, type EssayLang, type EssayPerson } from "@/lib/generation/essay/registry";
 import { encodeEssayValues, essayInputFromValues, type EssayInput } from "@/lib/generation/essay/input";
-import { Card, Row, Segmented, SummaryChips } from "./compact";
-import { TextArea, TextInput } from "./fields";
+import { Card, Row, Segmented, SelectField } from "./compact";
+import { TextInput } from "./fields";
 import { ToolChrome } from "./ToolChrome";
 import { useFormDraft } from "./useFormDraft";
 import { runGeneration } from "./runGeneration";
+// FORMALAR 3 (AUDIT-24, WP-C): umumiy bo'laklar — yig'iq Sozlamalar,
+// mavzu qatori (hisoblagich bilan), cheklangan matn, «Tozalash», zond belgisi.
+import { SettingsDetails, TopicRow, LimitedTextarea, ClearFormButton, Field } from "./shared";
 
 /**
  * Insho formasi (Talaba ishlari 2 / AUDIT-19, WP-E1) — `ArticleComposer`
@@ -250,6 +253,12 @@ export function EssayComposer({ tool }: { tool: ToolConfig }) {
   const values = toValues(ui);
   const price = priceFor(tool, values);
   const pageLabel = (n: number) => `${n} varaq`;
+  // Tur ro'yxati (etalon qoidasi: ≤6 — Segmented, aks holda SelectField).
+  // Hozirgi hamma kontekstda 5 tur bor, lekin qoidasi umumiy yozilgan.
+  const kindOptions = essayKindsOf(ui.context).map((id) => ({ value: id, label: essayKindSpec(ui.context, id).label.uz }));
+  // Yig'iq «Sozlamalar» xulosasi — mahsulot egasi qarori: kontekst · tur · hajm · uslub.
+  const hajmSummary = spec.sizing === "pages" ? pageLabel(ui.pages) : ui.context === "ielts_task2" ? "250+ so‘z" : `${ui.wordTarget} so‘z`;
+  const designLabel = ESSAY_DESIGNS.find((d) => d.value === ui.design)?.label ?? ui.design;
 
   const clearConfirm = useConfirmClick(() => {
     void clear();
@@ -276,49 +285,29 @@ export function EssayComposer({ tool }: { tool: ToolConfig }) {
 
   return (
     <ToolChrome title={tool.pageTitle} submitLabel={tool.submitLabel} price={price} loading={loading} onSubmit={submit} error={error}>
-      <Card title="Mavzu va kontekst">
-        <Row label="Mavzu" wide>
-          <span data-field="topic" className="block">
-            <TextInput value={ui.topic} onChange={(v) => set("topic", v)} placeholder={tool.topicPlaceholder} />
-          </span>
-        </Row>
+      <Card title="Mavzu va tur">
+        <TopicRow value={ui.topic} onChange={(v) => set("topic", v)} placeholder={tool.topicPlaceholder} limit={ESSAY_LIMITS.topicChars} />
         <Row label="Kontekst" hint={spec.hint} wide>
-          <span data-field="essayContext" className="block">
+          <Field id="essayContext">
             <Segmented ariaLabel="Insho konteksti" options={CONTEXT_OPTIONS} value={ui.context} onChange={(v) => onContext(v as EssayContextId)} />
-          </span>
-          <p className="text-muted-foreground mt-1 text-[11px]">{spec.hint}</p>
+          </Field>
         </Row>
+        {/* Tur — kontekstga bog'liq ro'yxat: ≤6 Segmented, aks holda SelectField (etalon qoidasi #4). Har ikkisida ham izoh Row `hint` tooltipida — alohida paragraf yo'q. */}
         <Row label="Tur" hint={kindSpec.hint} wide>
-          <span data-field="essayKind" className="block">
-            <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Insho turi">
-              {essayKindsOf(ui.context).map((id) => {
-                const k = essayKindSpec(ui.context, id);
-                const on = ui.kind === id;
-                return (
-                  <button
-                    key={id}
-                    type="button"
-                    role="radio"
-                    aria-checked={on}
-                    data-kind={id}
-                    title={k.hint}
-                    onClick={() => onKind(id)}
-                    className={`rounded-full border px-3 py-1 text-[12.5px] transition-colors ${on ? "border-primary bg-primary text-primary-foreground" : "border-input bg-card hover:bg-muted"}`}
-                  >
-                    {k.label.uz}
-                  </button>
-                );
-              })}
-            </div>
-          </span>
-          <p className="text-muted-foreground mt-1 text-[11px]">{kindSpec.hint}</p>
+          <Field id="essayKind">
+            {kindOptions.length <= 6 ? (
+              <Segmented ariaLabel="Insho turi" options={kindOptions} value={ui.kind} onChange={(v) => onKind(v as EssayKindId)} />
+            ) : (
+              <SelectField ariaLabel="Insho turi" options={kindOptions} value={ui.kind} onChange={(v) => onKind(v as EssayKindId)} />
+            )}
+          </Field>
         </Row>
       </Card>
 
       <Card title="Hajm va til">
         {spec.sizing === "pages" ? (
           <Row label="Hajm" hint={wordsHint(ui)}>
-            <span data-field="pages" className="block">
+            <Field id="pages">
               <Segmented
                 ariaLabel="Insho hajmi"
                 options={Array.from({ length: ESSAY_LIMITS.pagesMax - ESSAY_LIMITS.pagesMin + 1 }, (_, i) => {
@@ -328,7 +317,7 @@ export function EssayComposer({ tool }: { tool: ToolConfig }) {
                 value={String(ui.pages)}
                 onChange={(v) => set("pages", Number(v))}
               />
-            </span>
+            </Field>
           </Row>
         ) : ui.context === "ielts_task2" ? (
           /*
@@ -344,7 +333,7 @@ export function EssayComposer({ tool }: { tool: ToolConfig }) {
           </Row>
         ) : (
           <Row label="Hajm" hint={wordsHint(ui)}>
-            <span data-field="wordTarget" className="block">
+            <Field id="wordTarget">
               <Segmented
                 ariaLabel="So‘z hajmi"
                 options={WORD_OPTIONS.map((w) => ({
@@ -354,7 +343,7 @@ export function EssayComposer({ tool }: { tool: ToolConfig }) {
                 value={String(ui.wordTarget)}
                 onChange={(v) => set("wordTarget", Number(v))}
               />
-            </span>
+            </Field>
             {/*
              * Varaq akademik esseda ko'rsatilmaydi (hajm so'z bilan
              * o'lchanadi), lekin reyestr maydoni sifatida mavjud va narx
@@ -364,29 +353,43 @@ export function EssayComposer({ tool }: { tool: ToolConfig }) {
           </Row>
         )}
         <Row label="Til" hint={spec.languages.length === 1 ? `Bu kontekstda faqat ${LANGUAGE_LABEL[spec.languages[0]]}` : undefined}>
-          <span data-field="language" className="block">
+          <Field id="language">
             <Segmented
               ariaLabel="Insho tili"
               options={spec.languages.map((l) => ({ value: l, label: LANGUAGE_LABEL[l] }))}
               value={ui.language}
               onChange={(v) => set("language", v as EssayLang)}
             />
-          </span>
+          </Field>
         </Row>
       </Card>
 
-      <Card title="Materiallar">
+      {/*
+       * ▸ Sozlamalar — R0 `SettingsDetails` (bitta mexanizm, chevron,
+       * SummaryChips). Bu yerga «Materiallar» kartasi ham qo'shildi
+       * (mahsulot egasi qarori: insho ixcham, kamdan-kam to'ldiriladigan
+       * maydonlar — uslub, o'z fikrlar, asar nomi/epigraf — yig'iqda).
+       */}
+      <SettingsDetails title="Sozlamalar" open={settingsOpen} onToggle={setSettingsOpen} summary={[spec.label.uz, kindSpec.label.uz, hajmSummary, designLabel]}>
+        <Row label="Ramka" hint="Hujjat sarvarag‘i va sarlavha ranglari" wide>
+          <Field id="design">
+            <DesignChips value={ui.design} onChange={(v) => set("design", v)} />
+          </Field>
+        </Row>
+        <Row label="Bayon shaxsi" hint="Kontekst standarti: maktab inshosi va IELTS — 1-shaxs, akademik esse — xolis 3-shaxs">
+          <Field id="person">
+            <Segmented ariaLabel="Bayon shaxsi" options={PERSON_OPTIONS} value={ui.person} onChange={(v) => set("person", v as EssayPerson)} />
+          </Field>
+        </Row>
         <Row label="O‘z fikrlarim" hint="AI o‘ylab topmaydigan narsa — shaxsiy tajriba, kuzatuv, raqam" wide>
           <span data-field="userFacts" id="userFacts" className="block">
-            <TextArea
+            <LimitedTextarea
               value={ui.userFacts}
-              onChange={(v) => set("userFacts", v.slice(0, ESSAY_LIMITS.userFactsChars))}
+              onChange={(v) => set("userFacts", v)}
+              limit={ESSAY_LIMITS.userFactsChars}
               placeholder="Sinfimizda o‘tkazgan so‘rovimda 28 o‘quvchidan 22 tasi kuniga bir soatdan kam kitob o‘qishini aytdi."
             />
           </span>
-          <p className="text-muted-foreground mt-1 text-[11px]">
-            {ui.userFacts.length.toLocaleString("uz-UZ")}/{ESSAY_LIMITS.userFactsChars.toLocaleString("uz-UZ")}
-          </p>
         </Row>
         {kindSpec.needsWork ? (
           <Row label="Asar nomi" hint="Iqtibos FAQAT shu asardan olinadi — uydirma parcha yozilmaydi" wide>
@@ -407,48 +410,15 @@ export function EssayComposer({ tool }: { tool: ToolConfig }) {
             </span>
           </Row>
         ) : null}
-      </Card>
-
-      <details
-        open={settingsOpen}
-        onToggle={(e) => setSettingsOpen((e.currentTarget as HTMLDetailsElement).open)}
-        className="bg-card mb-3 rounded-2xl border p-4"
-      >
-        <summary className="flex cursor-pointer items-center justify-between gap-2">
-          <span className="text-muted-foreground text-[11.5px] font-semibold tracking-wide uppercase">Sozlamalar</span>
-          {!settingsOpen ? (
-            <SummaryChips
-              items={[
-                ESSAY_DESIGNS.find((d) => d.value === ui.design)?.label ?? ui.design,
-                ui.person === "first" ? "1-shaxs" : "3-shaxs",
-                ui.extra ? "qo‘shimcha talab bor" : "",
-              ].filter(Boolean)}
-            />
-          ) : null}
-        </summary>
-        <div className="mt-3">
-          <Row label="Ramka" hint="Hujjat sarvarag‘i va sarlavha ranglari" wide>
-            <span data-field="design" className="block">
-              <DesignChips value={ui.design} onChange={(v) => set("design", v)} />
-            </span>
-          </Row>
-          <Row label="Bayon shaxsi" hint="Kontekst standarti: maktab inshosi va IELTS — 1-shaxs, akademik esse — xolis 3-shaxs">
-            <span data-field="person" className="block">
-              <Segmented ariaLabel="Bayon shaxsi" options={PERSON_OPTIONS} value={ui.person} onChange={(v) => set("person", v as EssayPerson)} />
-            </span>
-          </Row>
-          <Row label="Qo‘shimcha" hint="Modelga alohida talab (masalan, uslub bo‘yicha)" wide>
-            <span data-field="extra" className="block">
-              <TextArea value={ui.extra} onChange={(v) => set("extra", v.slice(0, ESSAY_LIMITS.extraChars))} placeholder="Ixtiyoriy" />
-            </span>
-          </Row>
-          <div className="mt-2">
-            <button type="button" onClick={clearConfirm.trigger} className="text-muted-foreground hover:text-destructive text-[12px]">
-              {clearConfirm.armed ? "Ishonchingiz komilmi? Yana bosing" : "Formani tozalash"}
-            </button>
-          </div>
+        <Row label="Qo‘shimcha" hint="Modelga alohida talab (masalan, uslub bo‘yicha)" wide>
+          <span data-field="extra" id="extra" className="block">
+            <LimitedTextarea value={ui.extra} onChange={(v) => set("extra", v)} limit={ESSAY_LIMITS.extraChars} placeholder="Ixtiyoriy" />
+          </span>
+        </Row>
+        <div className="mt-2">
+          <ClearFormButton armed={clearConfirm.armed} onClick={clearConfirm.trigger} />
         </div>
-      </details>
+      </SettingsDetails>
     </ToolChrome>
   );
 }
