@@ -694,3 +694,40 @@ kalitiga bog'liq); `npm run test:viewer` 219/219; `npm run test:ui` 281/281.
    `<details>` → `SettingsDetails`, `SourceFileField` → `SourceFileRow`)
    WP-E qamrovidan chiqarilgan (WP-A/C bilan konflikt) — keyingi kichik WP.
 10. Tinglash `optionCount`, AUDIT-22 §6 bandlari o'z kuchida.
+
+### R2 (lead) — yakuniy o'lchov, to'liq to'plam, smoke (2026-09-21)
+
+**22 forma, Chromium 1400 px, admin hisobi (qoralamalar bilan).** `h` yopiq, `ochiq` — Sozlamalar ochiq, `mob` 390 px (siljish yo'q — `!` yo'q).
+
+| Vosita | Oldin | Keyin | Ochiq | Mobil | Izoh |
+|---|---|---|---|---|---|
+| slide | 1208 | **1208** | 1536 | 2357 | o'zgarmadi — karta tarkibi bir xil, SettingsDetails/qoralama qo'shildi |
+| rasm | 1359 | **941** | 990 | 1183 |  |
+| article | 1992 | **1992** | 2485 | 3112 | WP qamrovidan tashqari (§6 9-band) |
+| resume | 1937 | **1937** | 2340 | 2876 | to'ldirilgan qoralama (ish tajribasi) — toza 1 663 (WP-E) |
+| translation | 858 | **858** | 1041 | 1216 | o'zgarmadi — karta tarkibi bir xil |
+| coursework | 2027 | **997** | 2297 | 3089 |  |
+| referat | 2001 | **997** | 2297 | 3089 |  |
+| mustaqil-ish | 2001 | **997** | 2297 | 3063 |  |
+| essay | 1035 | **844** | 1195 | 1537 |  |
+| thesis | 1894 | **1020** | 2076 | 2588 |  |
+| lesson-plan | 1424 | **1153** | 1620 | 2028 |  |
+| texnologik-xarita | 1187 | **1113** | 1380 | 1686 |  |
+| glossary | 986 | **1053** | 1247 | 1528 |  |
+| keys | 989 | **1053** | 1250 | 1505 |  |
+| test | 1477 | **1450** | 2729 | 4255 | admin qoralamasi darslik rejimida (70 mavzu) — 2 246 → CurriculumPicker ixcham (`b928b01`) → 1 450; toza qoralama 1 137 (WP-B) |
+| infografika | 878 | **844** | 965 | 1144 |  |
+| crossword | 844 | **844** | 876 | 1003 |  |
+| flashcards | 844 | **844** | 902 | 1055 |  |
+| sorting | 844 | **844** | 905 | 1084 |  |
+| listening | 844 | **844** | 905 | 1058 |  |
+| podcast | 1093 | **844** | 940 | 1093 |  |
+| greeting | 844 | **844** | 923 | 1102 |  |
+
+- 17 ta qayta yasalgan formadan 16 tasi yopiq holda ≤ 1 200 px; test formasi faqat darslik rejimidagi qoralama bilan 1 450 (toza 1 137). Mobil 390 px da hech birida gorizontal siljish yo'q.
+- **To'liq tekshiruv (merge'dan keyin):** tsc 0 xato, eslint 0 xato, unit 2 634/2 636 (2 ta ma'lum fal.ai `.env.local` testi), UI 370/370, ko'ruvchi 248/248.
+- **Merge tartibi:** har WP mustaqil ko'rib chiquvchi (sonnet, faqat o'qish, 25 band checklist + shartnoma + a11y) → merge. Topilmalar: WP-A ArticleComposer'dagi o'lik qayta eksport (o'chirildi `5b63118`); D1+D2 birlashuvida shartnoma testlari (`pricing`, `document`) yangi composerlarga moslandi (`36d0c13`, mutatsiya greeting `recipient`); WP-E slayd qoralamasiga `sourceText`/aktiv id lar tushmasin (`5f524a4`, test +1, mutatsiya). Ko'rib chiquvchilarning qolgan tavsiyalari §6 da.
+- **Qorong'i rejim:** kurs ishi, test, krossvord, podkast skrinshotlari — faqat semantik tokenlar, kontrast saqlangan.
+- **Navbat smoke (haqiqiy `POST /api/generations`, dev 3111):** insho 2 500, tezis 4 000, rasm 2 000, krossvord 2 000, tabriknoma 4 000 — hammasi `[data-price-total]` = `priceFor` bilan navbatga tushdi; infografika 429 (5 tez so'rov — rate limit ishlaydi), dars rejasi «Ta'lim muassasasi nomi to'ldirilishi kerak» (profil bo'sh — klient tekshiruvi to'g'ri). Birinchi urinishda barcha ishlar tarmoq (ETIMEDOUT Gemini/Anthropic) sababli yiqildi va kredit qaytdi — qiymatlar (`values_json`) to'g'ri; tarmoq tiklangach qayta yuborildi (natija pastda).
+- **Qayta yuborish (tarmoq tiklangach):** insho, krossvord, tezis, infografika — to'rttalasi ham `COMPLETED` (dvigatel yangi composerlar yuborgan `FormValues` bilan to'liq ishladi); rasm (fal.ai hisobi bo'sh) va tabriknoma (TTS kaliti yo'q) — kutilgan aniq xato + kredit qaytdi.
+- **Deploy:** `docs/AUDIT-24.md` yozuvi va `.claude/holat.md` yangilangach — bitta deploy (egasi qarori 4), prod smoke 22 forma ochilishi + 2 navbat.
