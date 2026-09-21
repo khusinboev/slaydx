@@ -108,4 +108,10 @@ qatorlar ustma-ust tushishi — 390 px o'lchov har forma uchun.
 
 ## 6. Ochiq bandlar
 
-(bo'sh)
+1. **Admin panel (egasi, 2026-09-21)** — keyingi dastur: platformani to'liq
+   boshqarish, har xizmatga narx va haqiqiy tannarx belgilash, statistik
+   diagrammalar. Shu sprintda cheklov: formalar narxni FAQAT `priceFor`
+   orqali ko'rsatadi (rezyume `basePrice` istisnosi ham `priceFor` ga),
+   yangi composerlarda qattiq yozilgan narx yo'q; `cost_json` telemetriyasi
+   yopilishi (slayd/rasm/tarjimon/rezyume, rasm/TTS provayderlari) panel
+   oldidan alohida WP.
