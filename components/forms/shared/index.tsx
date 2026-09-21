@@ -6,6 +6,7 @@ import { cn } from "@/lib/cn";
 import { EXTRACT_ACCEPT, EXTRACT_MAX_BYTES } from "@/lib/extract-text";
 import { extractText } from "@/lib/api-client";
 import { SOURCE_TEXT_LIMIT } from "@/lib/generation/meta";
+import { SELECTABLE_FIGURE_KINDS, type SelectableFigureKind } from "@/lib/generation/article/types";
 import { MAX_SOURCE_CHARS, formatTanga } from "@/lib/tools";
 import type { FormValues } from "@/lib/types";
 import { Row, SummaryChips } from "../compact";
@@ -419,6 +420,97 @@ export function RangeRow({
         ) : null}
       </Field>
     </Row>
+  );
+}
+
+/* ───────────────────────── Raqamli maydon ───────────────────────── */
+
+/**
+ * Chegarasi KO'RINADIGAN raqamli maydon.
+ *
+ * Work formasida `refsMin` oddiy `type=number` edi: `min`/`max` HTML
+ * atributi yo'q, klamp faqat `onChange` ichida — foydalanuvchi 100 yozib,
+ * jimgina 40 ga tushib qolganini bilmasdi (AUDIT-24 talaba auditi, 4.3).
+ */
+export function NumberInput({
+  value,
+  onChange,
+  min,
+  max,
+  step = 1,
+  ariaLabel,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+  min: number;
+  max: number;
+  step?: number;
+  ariaLabel: string;
+}) {
+  return (
+    <input
+      type="number"
+      inputMode="numeric"
+      aria-label={ariaLabel}
+      min={min}
+      max={max}
+      step={step}
+      value={String(value)}
+      onChange={(e) => onChange(Math.max(min, Math.min(max, Math.round(Number(e.target.value) || 0))))}
+      className="border-input bg-card focus:ring-ring h-9 w-24 rounded-lg border px-2.5 text-[13px] outline-none focus:ring-2"
+    />
+  );
+}
+
+/* ───────────────────────── Sxema turlari ───────────────────────── */
+
+/** Sxema turi yorliqlari (forma chips) — tartib `SELECTABLE_FIGURE_KINDS` bilan bir xil. */
+export const FIGURE_KIND_LABEL: Record<SelectableFigureKind, string> = {
+  flow: "Blok-sxema",
+  process: "Jarayon",
+  tree: "Daraxt",
+  layers: "Qatlamlar",
+  cycle: "Sikl",
+  timeline: "Vaqt chizig\u2018i",
+  matrix: "Matritsa",
+  compare: "Taqqoslash",
+};
+
+/**
+ * «Sxema turlari» chips: «Avto» (bo'sh ro'yxat — model mazmunga qarab
+ * tanlaydi) + 8 tur, ko'p tanlov. Sxema so'ralmagan (`figureCount === 0`)
+ * bo'lsa o'chiq — tanlov hech narsaga ta'sir qilmaydi (UI testi: `disabled`
+ * bog'lanishi olib tashlansa qizaradi).
+ *
+ * AUDIT-24 WP-A: ilgari `ArticleComposer.tsx` ichida edi va `WorkComposer`
+ * uni FORMADAN import qilardi (ikki composer bir-biriga bog'lanib qolgan
+ * edi) — endi umumiy bo'laklar faylida.
+ */
+export function FigureKindChips({ value, onChange, disabled }: { value: SelectableFigureKind[]; onChange: (v: SelectableFigureKind[]) => void; disabled: boolean }) {
+  const chip = (on: boolean) =>
+    `rounded-full border px-3 py-1 text-[12.5px] transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${on ? "border-primary bg-primary text-primary-foreground" : "border-input bg-card hover:bg-muted"}`;
+  return (
+    <div className="flex flex-wrap gap-1.5" role="group" aria-label="Sxema turlari">
+      <button type="button" aria-pressed={value.length === 0} disabled={disabled} onClick={() => onChange([])} className={chip(value.length === 0)}>
+        Avto
+      </button>
+      {SELECTABLE_FIGURE_KINDS.map((k) => {
+        const on = value.includes(k);
+        return (
+          <button
+            key={k}
+            type="button"
+            aria-pressed={on}
+            disabled={disabled}
+            data-kind={k}
+            onClick={() => onChange(on ? value.filter((v) => v !== k) : [...value, k])}
+            className={chip(on)}
+          >
+            {FIGURE_KIND_LABEL[k]}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
