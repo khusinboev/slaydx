@@ -1,6 +1,6 @@
-# SlaydX — holat (2026-09-21, main `b928b01`+; prod: `406f8ac` (bot avtologin, 2026-09-20; rollback `03a64e4`) — AUDIT-24 deploy kutilmoqda; tekshiruv: tsc/lint 0, unit 2 634/2 636 (2 ma'lum fal.ai), UI 370, ko'ruvchi 248)
+# SlaydX — holat (2026-09-21, main `b928b01`+; prod: **AUDIT-24 `8194d6a`** (2026-09-21, rollback `406f8ac`); tekshiruv: tsc/lint 0, unit 2 634/2 636 (2 ma'lum fal.ai), UI 370, ko'ruvchi 248)
 
-Sprint: **Formalar 3 (AUDIT-24)** — 17 forma + etalon nomuvofiqliklari, reja `docs/AUDIT-24.md` §1, tadqiqot `docs/research/forms3-*.md`.
+Sprint: **Formalar 3 (AUDIT-24) — 100 %, prod'da.** 17 forma + etalon nomuvofiqliklari, reja `docs/AUDIT-24.md` §1, tadqiqot `docs/research/forms3-*.md`.
 
 | # | AUDIT-24 bosqich | % | Izoh |
 |---|---|---|---|
@@ -12,7 +12,7 @@ Sprint: **Formalar 3 (AUDIT-24)** — 17 forma + etalon nomuvofiqliklari, reja `
 | D1 | GameComposer (4 o'yin), standartlar reyestrdan | 100 | merge `8261a0a` |
 | D2 | MediaComposer + InfographicComposer + «Infografika · A4 · N blok» | 100 | merge `1662b8c` |
 | E | Etalon 10 banddan 9 yopildi (rasm 1 359 → 941, rezyume → 1 663, qoralama, ColorDots, priceFor) | 100 | ff `4760457`, tuzatuv `5f524a4` |
-| R2 | 22 forma o'lchovi, qorong'i rejim, to'liq to'plam, navbat smoke, docs | 90 | deploy + prod smoke qoldi |
+| R2 | 22 forma o'lchovi, qorong'i rejim, to'liq to'plam, navbat smoke, docs, deploy, prod smoke (22 forma + 2 navbat) | 100 | prod `8194d6a` |
 
 Oldingi sprintlar: AUDIT-22 prod'da (`03a64e4`), bot avtologin (`406f8ac`), tannarx hisoboti (`cc074e1`, `docs/research/tannarx-hisobot.html`). Kelajak: admin panel (narx/tannarx, statistika) — xotira `project_slaydx_admin_panel_future.md`.
 
