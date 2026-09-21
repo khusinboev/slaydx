@@ -75,10 +75,17 @@ test("▸ Sozlamalar BIRINCHI bo'yoqda yopiq (`<details>` `open` siz) va xulosa 
 });
 
 test("standart tanlovlar SSR da ALLAQACHON yoqilgan (`aria-checked=\"true\"`)", () => {
-  // Har vositada kamida tur + hajm + til yoqilgan bo'lishi kerak.
+  /*
+   * Yoqilgan tanovlar soni ANIQ: krossvord — rejim/tur/so'z/til,
+   * kartalar — tur/karta/til (misol kaliti `switch`), saralash —
+   * tur/toifa/element/til, tinglash — tur/topshiriq/ona/o'rganiladigan.
+   * Aniq son ataylab: «kamida 3» bo'lsa bitta standart yo'qolganda ham
+   * test yashil qolardi (mutatsiya 1 shuni ko'rsatdi).
+   */
+  const EXPECTED: Record<GameToolId, number> = { crossword: 4, flashcards: 3, sorting: 4, listening: 4 };
   for (const id of GAME_TOOL_LIST) {
     const on = (html[id].match(/aria-checked="true"/g) ?? []).length;
-    assert.ok(on >= 3, `${id}: faqat ${on} ta tanlov yoqilgan — standartlar reyestrdan o'qilmadi`);
+    assert.equal(on, EXPECTED[id], `${id}: ${on} ta tanlov yoqilgan — standartlar reyestrdan to'liq o'qilmadi`);
   }
   // Reyestr yorliqlari markupda ko'rinadi (chip matni qo'lda yozilmagan).
   assert.ok(html.crossword.includes("Klassik"), "krossvord standart turi");

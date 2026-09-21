@@ -209,6 +209,14 @@ function restoreDraft(kind: GameKind, draft: FormValues, base: FormValues): Form
  */
 const SEGMENTED_MAX = 6;
 
+/*
+ * MUHIM: `ChoiceRow` ga beriladigan qiymat FAQAT holatdan o'qiladi —
+ * `values.x ?? standart` shaklidagi zaxira ATAYIN yo'q. Aks holda
+ * standart IKKI joyda bo'lardi (`defaultValuesFor` va chizish joyi) va
+ * biri yo'qolganda ekran «tanlangan» ko'rinib turib, yuborilgan tanada
+ * maydon UMUMAN bo'lmasdi — ya'ni foydalanuvchi ko'rgan qiymat bilan
+ * dvigatel olgan qiymat ayrilardi (mutatsiya testi aynan shuni ushladi).
+ */
 function ChoiceRow({
   id,
   label,
@@ -368,7 +376,7 @@ export function GameComposer({ tool }: { tool: ToolConfig }) {
               label="Ona tili"
               hint="Variantlar va varaq matni shu tilda yoziladi"
               options={LANGUAGE_OPTIONS}
-              value={String(values.nativeLanguage ?? LISTENING_FALLBACK_NATIVE)}
+              value={String(values.nativeLanguage ?? "")}
               onChange={(v) => set("nativeLanguage", v)}
             />
             <ChoiceRow
@@ -376,7 +384,7 @@ export function GameComposer({ tool }: { tool: ToolConfig }) {
               label="O‘rganiladigan til"
               hint="Audio shu tilda eshitiladi — ovoz til jadvalidan tanlanadi"
               options={LANGUAGE_OPTIONS}
-              value={String(values.targetLanguage ?? LISTENING_FALLBACK_TARGET)}
+              value={String(values.targetLanguage ?? "")}
               onChange={(v) => set("targetLanguage", v)}
             />
           </>
@@ -386,7 +394,7 @@ export function GameComposer({ tool }: { tool: ToolConfig }) {
             label="Til"
             hint="Hujjat tili — savollar, javoblar va sarlavhalar shu tilda"
             options={LANGUAGE_OPTIONS}
-            value={String(values.language ?? "uz")}
+            value={String(values.language ?? "")}
             onChange={(v) => set("language", v)}
           />
         )}
@@ -443,7 +451,7 @@ function SizeRows({ kind, values, set }: { kind: GameKind; values: FormValues; s
         label="So‘zlar"
         hint="To‘rga sig‘magan so‘z tashlanadi va hisobotda ko‘rsatiladi"
         options={numberOptions(spec.limits.words, "so‘z")}
-        value={String(values.wordCount ?? spec.limits.wordsDefault)}
+        value={String(values.wordCount ?? "")}
         onChange={(v) => set("wordCount", v)}
       />
     );
@@ -456,7 +464,7 @@ function SizeRows({ kind, values, set }: { kind: GameKind; values: FormValues; s
         label="Kartalar"
         hint={`Bir A4 varaqqa ${GAME_LIMITS.cardCols * GAME_LIMITS.cardRows} ta A7 karta joylashadi`}
         options={numberOptions(spec.limits.cards, "karta")}
-        value={String(values.cardCount ?? spec.limits.cardsDefault)}
+        value={String(values.cardCount ?? "")}
         onChange={(v) => set("cardCount", v)}
       />
     );
@@ -472,7 +480,7 @@ function SizeRows({ kind, values, set }: { kind: GameKind; values: FormValues; s
             label="Toifalar"
             hint="Nechta guruhga ajratiladi"
             options={numberOptions(spec.limits.categories, "toifa")}
-            value={String(values.categoryCount ?? spec.limits.categoriesDefault)}
+            value={String(values.categoryCount ?? "")}
             onChange={(v) => set("categoryCount", v)}
           />
         )}
@@ -481,7 +489,7 @@ function SizeRows({ kind, values, set }: { kind: GameKind; values: FormValues; s
           label="Har toifada"
           hint="Har guruhga tushadigan element soni"
           options={numberOptions(spec.limits.itemsPerCategory, "element")}
-          value={String(values.itemsPerCategory ?? spec.limits.itemsPerCategoryDefault)}
+          value={String(values.itemsPerCategory ?? "")}
           onChange={(v) => set("itemsPerCategory", v)}
         />
       </>
@@ -494,7 +502,7 @@ function SizeRows({ kind, values, set }: { kind: GameKind; values: FormValues; s
       label="Topshiriqlar"
       hint="Har topshiriq alohida audio bo‘lagi"
       options={numberOptions(spec.limits.items, "ta")}
-      value={String(values.itemCount ?? spec.limits.itemsDefault)}
+      value={String(values.itemCount ?? "")}
       onChange={(v) => set("itemCount", v)}
     />
   );
