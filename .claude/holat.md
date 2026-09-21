@@ -1,4 +1,4 @@
-# SlaydX — holat (2026-09-21, main `15a27c9`+; prod: `406f8ac` (bot avtologin, 2026-09-20; rollback `03a64e4`); tekshiruv: tsc/lint toza, R0 testlari yashil)
+# SlaydX — holat (2026-09-21, main `b928b01`+; prod: `406f8ac` (bot avtologin, 2026-09-20; rollback `03a64e4`) — AUDIT-24 deploy kutilmoqda; tekshiruv: tsc/lint 0, unit 2 634/2 636 (2 ma'lum fal.ai), UI 370, ko'ruvchi 248)
 
 Sprint: **Formalar 3 (AUDIT-24)** — 17 forma + etalon nomuvofiqliklari, reja `docs/AUDIT-24.md` §1, tadqiqot `docs/research/forms3-*.md`.
 
@@ -6,13 +6,13 @@ Sprint: **Formalar 3 (AUDIT-24)** — 17 forma + etalon nomuvofiqliklari, reja `
 |---|---|---|---|
 | R | 4 audit + 22 forma o'lchovi + reja + egasi qarorlari | 100 | `ad0fd8c` |
 | R0 | `components/forms/shared` (SettingsDetails, Field, TopicRow, LimitedTextarea, AuthorRows, SourceFileRow, RangeRow, ColorDots, ClearFormButton), 10 test, 3 mutatsiya | 100 | `15a27c9` |
-| A | WorkComposer (kurs ishi/referat/mustaqil ish) — Titul yig'iq, hajm slayder+narx, Sozlamalar | 0 | agent opus (worktree) |
-| B | TeacherComposer bo'lish (5 kind), Shapka yig'iq, approver faqat bsb/chsb, fan bitta manba | 0 | agent opus (worktree) |
-| C | Insho compact + tezis `variant="thesis"` + insho natija izohi | 0 | agent sonnet (worktree) |
-| D1 | GameComposer (4 o'yin) | 0 | A/B/C dan keyin |
-| D2 | MediaComposer + InfographicComposer + infografika natija yorlig'i | 0 | A/B/C dan keyin |
-| E | Etalon nomuvofiqliklari (slayd/tarjimon/maqola/rezyume SettingsDetails, fayl UI, rasm ToolChrome) | 0 | A/B/C dan keyin |
-| R2 | 22 forma o'lchovi (≤1 200 px, mobil), qorong'i rejim, to'liq to'plam, docs, bitta deploy, prod smoke | 0 | |
+| A | WorkComposer — 2 027 → 997 px, hajm slayder+narx, 43 test | 100 | merge `3e2c89c` |
+| B | TeacherComposer 7 faylga, 5 kind ≤ 1 200 px, approver bsb/chsb, fan bitta manba, darslik rejimi 400 tuzatildi | 100 | merge `e1ec29c`; CurriculumPicker ixcham `b928b01` |
+| C | Insho 844 px, tezis 1 020 px, insho natija izohi | 100 | merge `ac103f7` |
+| D1 | GameComposer (4 o'yin), standartlar reyestrdan | 100 | merge `8261a0a` |
+| D2 | MediaComposer + InfographicComposer + «Infografika · A4 · N blok» | 100 | merge `1662b8c` |
+| E | Etalon 10 banddan 9 yopildi (rasm 1 359 → 941, rezyume → 1 663, qoralama, ColorDots, priceFor) | 100 | ff `4760457`, tuzatuv `5f524a4` |
+| R2 | 22 forma o'lchovi, qorong'i rejim, to'liq to'plam, navbat smoke, docs | 90 | deploy + prod smoke qoldi |
 
 Oldingi sprintlar: AUDIT-22 prod'da (`03a64e4`), bot avtologin (`406f8ac`), tannarx hisoboti (`cc074e1`, `docs/research/tannarx-hisobot.html`). Kelajak: admin panel (narx/tannarx, statistika) — xotira `project_slaydx_admin_panel_future.md`.
 
@@ -51,7 +51,7 @@ Egasidan: Azure Speech kaliti + region, Aisha AI kaliti (`npm run tts-lab`), Ant
 | R3 | Jonli 7/7, smoke (lesson-plan, test), ko'z 5 kind, docs, deploy + prod smoke | 100 | prod `5852285`, rollback `552a46c` |
 
 ## To'xtatilgan jarayonlar
-AUDIT-24 A/B/C agentlari faol (worktree `agent-aa34b17bdcd81789b`, `agent-a4dbc3437ca048e6d`, `agent-aa16a40c40d5fdd68`). Dev server 3111 to'xtatilgan (xotira — agentlar o'z portlarida 3121–3123 o'lchaydi).
+Yo'q — 7 WP ham merge qilindi, worktree'lar tozalandi. Dev server 3111 (`WORKER_INLINE`) ishlayapti — yakuniy smoke uchun.
 
 ## Davom etish qadamlari (AUDIT-20)
 1. Anthropic hisobini to'ldirish (baholovchi Gemini ga tushgan).
