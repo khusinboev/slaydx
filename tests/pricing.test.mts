@@ -531,9 +531,15 @@ test("o'yin/plakat vositalarining shartnomasi: guruh, chiqish, forma, majburiy m
   assert.equal(cards.output, "docx");
   assert.equal(poster.output, "png");
 
-  // STANDART forma — `custom` YO'Q (maydonlar orasida bog'liqlik yo'q).
+  /*
+   * Formalar 3 (AUDIT-24 WP-D1): krossvord va kartalar `GameComposer` ga
+   * o'tdi (`custom: "game"`) — standartlar reyestrdan, ▸ Sozlamalar
+   * yopiq. Plakat hali `StandardForm` da (WP-D2).
+   */
+  assert.equal(crossword.custom, "game", "krossvord GameComposer ga dispatch qilinishi kerak");
+  assert.equal(cards.custom, "game", "kartalar GameComposer ga dispatch qilinishi kerak");
+  assert.equal(poster.custom, undefined, "plakat hali standart formada");
   for (const t of [crossword, cards, poster]) {
-    assert.equal(t.custom, undefined, `${t.id}: custom forma kerak emas edi`);
     assert.ok(t.extraOptional, `${t.id}: «Qo'shimcha talablar» maydoni yoqilmagan`);
     assert.ok(t.topicLegend, `${t.id}: mavzu so'ralmaydi`);
     // Slug lar takrorlanmasin va yo'naltirish ishlasin.
