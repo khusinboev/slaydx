@@ -755,6 +755,18 @@ export const TOOLS: ToolConfig[] = [
     output: "docx",
     // Tekis 2 000 (mahsulot egasi qarori 6): so'z soni narxga ta'sir qilmaydi.
     basePrice: 2000,
+    /*
+     * Formalar 3 (AUDIT-24 WP-D1): forma — `GameComposer`.
+     *
+     * `fields` ATAYIN saqlanadi: u reyestrdan quriladi
+     * (`gameTypesOf`/`GAME_LIMITS`, yuqoridagi `GAME_FIELDS`) va uch ishni
+     * bajaradi — (1) `StandardForm` zaxira yo'li, (2) shartnoma testlari
+     * chip variantlarini shu ro'yxatdan o'qiydi (`tests/pricing.test.mts`),
+     * (3) `missingRequired` maydon yorliqlarini undan oladi. Composer
+     * HAM AYNAN shu reyestrdan o'qiydi, ya'ni ikkinchi manba paydo
+     * bo'lmaydi.
+     */
+    custom: "game",
     fields: GAME_FIELDS.crossword,
   },
   {
@@ -774,6 +786,8 @@ export const TOOLS: ToolConfig[] = [
     extraOptional: true,
     output: "docx",
     basePrice: 2000,
+    // Formalar 3 (AUDIT-24 WP-D1): forma — `GameComposer` (izoh krossvordda).
+    custom: "game",
     fields: GAME_FIELDS.flashcards,
   },
   {
@@ -820,6 +834,8 @@ export const TOOLS: ToolConfig[] = [
     output: "docx",
     // Tekis 2 000 (egasi qarori 6): toifa/element soni narxga ta'sir qilmaydi.
     basePrice: 2000,
+    // Formalar 3 (AUDIT-24 WP-D1): forma — `GameComposer` (izoh krossvordda).
+    custom: "game",
     fields: INTERACTIVE_GAME_FIELDS.sorting,
   },
   {
@@ -839,6 +855,8 @@ export const TOOLS: ToolConfig[] = [
     extraOptional: true,
     output: "docx",
     basePrice: 2000,
+    // Formalar 3 (AUDIT-24 WP-D1): forma — `GameComposer` (izoh krossvordda).
+    custom: "game",
     fields: INTERACTIVE_GAME_FIELDS.listening,
   },
   {

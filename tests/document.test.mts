@@ -601,7 +601,15 @@ test("maxsus formali vositalar serverda ham tekshiriladi", async () => {
    * rejimida mavzu o'rniga `sourceText`), shuning uchun u `fields` da
    * emas, route'da `topicLegend`/fayl sharti bilan tekshiriladi.
    */
-  for (const tool of TOOLS.filter((t) => t.custom && t.custom !== "slide" && t.custom !== "pro-slide")) {
+  /*
+   * `game` ham istisno (AUDIT-24 WP-D1) va AYNAN shu sababdan:
+   * krossvordda mavzu REJIMGA bog'liq (fayl rejimida uning o'rniga
+   * `sourceText`), qolgan uch o'yinda esa majburiy kirish — mavzuning
+   * o'zi, ya'ni `topicLegend` sharti (`missingRequired` uni tekshiradi,
+   * `tests/pricing.test.mts` qulflaydi). `CUSTOM_REQUIRED.game` ga
+   * `topic` qo'shilsa, u ro'yxatda IKKI marta chiqardi.
+   */
+  for (const tool of TOOLS.filter((t) => t.custom && t.custom !== "slide" && t.custom !== "pro-slide" && t.custom !== "game")) {
     assert.ok(
       tool.fields.some((f) => f.required),
       `${tool.id}: maxsus formali vositada majburiy maydon e'lon qilinishi kerak`,

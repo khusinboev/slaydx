@@ -511,6 +511,59 @@ Jami yangi/yangilangan test — 40. `tsc` (butun loyiha) va `eslint`
    ko'rsatgan edi (`LanguagePicker` standart `scope="target"`); qamrov
    kengaytirish alohida mahsulot qarori talab qiladi.
 
+### WP-D1 — `GameComposer` (krossvord, flesh kartalar, saralash, tinglash)
+
+Sana: 2026-09-21. To'rtala o'yin `StandardForm` dan chiqib bitta
+`components/forms/GameComposer.tsx` ga o'tdi; `lib/tools.ts` da ularga
+`custom: "game"`, `ToolWorkspace` dispatchiga bitta qator.
+
+- **Tuzilma**: Mavzu (krossvordda rejim `Segmented` → `SourceFileRow`,
+  mavzu `hidden` bilan saqlanadi) → O'yin (tur · hajm · til(lar), har
+  biri bitta `Row`, izoh ⓘ tooltipda) → ▸ Sozlamalar (yopiq,
+  `SummaryChips` «tur · soni · til»; misol kaliti `Switch`, qo'shimcha
+  talab `LimitedTextarea`, «Formani tozalash»). Hammasi R0
+  primitivlaridan (`shared/index.tsx`, `compact.tsx`).
+- **⚠ Topilma yopildi** (`forms3-oyinlar-media.md` §1): saralash va
+  tinglash formasi HECH BIR chip yoqilmagan holda ochilardi. Endi har
+  standart REYESTRDAN — `gameDefaultTypeId` + turning `limits.*Default`
+  lari (`wordsDefault`, `cardsDefault`, `includeExampleDefault`,
+  `categoriesDefault`, `itemsPerCategoryDefault`, `itemsDefault`),
+  tinglashda til juftligi `listening/input.ts` zaxiralaridan (uz → en).
+  Chip/tur `hint` lari ham endi ko'rinadi (ilgari umuman chizilmasdi).
+- **`hideWhen`** reyestrdan hisoblanadi: «qarama-qarshi juftlik» turi
+  toifa sonini 2 ga qulflaydi (`limits.categories.length === 1`) →
+  tanlov chizilmaydi (jonli tasdiq: `before=true, after=false`).
+- **Shartnoma o'zgarmadi**: `FormValues` kalitlari va tekis 2 000 narx
+  (faqat `priceFor`, formada hisob yo'q). `fields` massivi
+  `lib/tools.ts` da ATAYIN qoldi — u ham reyestrdan quriladi va
+  `StandardForm` zaxirasi, shartnoma testlari va `missingRequired`
+  yorliqlari uchun kerak.
+- **O'lchov (Chromium, 1400 px, yopiq)**: 844 → **844** (oldin ham,
+  keyin ham sahifa minimal balandligi; ochiq 876–905, mobil 390 px
+  789–880, gorizontal siljish yo'q). Maydonlar: 6–7, yoqilgan tanlov
+  guruhlari 3–4 (oldin 0–2), tooltip 6 (oldin 0), `details` 1/0.
+- **Jonli smoke**: tinglash formasi to'ldirilib «Yaratish» →
+  `/uz/files/31a121b8-…`, `[data-price-total]` 2 000 tanga, balans
+  24 500 → 22 500 (admin hisobi).
+- **Testlar**: `tests/ui/game-composer.test.mts` 21,
+  `tests/viewer/game-form.test.mts` 8 (SSR yopiq holat + ikki
+  yo'nalishli `data-field` qamrovi); `tests/game-params.test.mts` 6,
+  `pricing` 29, `document` 62, `viewer-kind` 11, `ui/shared-forms` 10
+  yashil. `tests/pricing.test.mts` va `tests/document.test.mts` da
+  `custom: "game"` shartnomasi yangilandi.
+- **Mutatsiyalar** (4, har biri qizardi): (1) `itemsPerCategory`
+  standartini olib tashlash — DASTLAB YASHIL qoldi, chunki chizish
+  joyida ikkinchi zaxira bor edi (`values.x ?? limits.*Default`);
+  zaxira olib tashlandi va SSR testi «yoqilgan tanlovlar soni ANIQ»
+  bo'ldi; (2) `hideWhen` shartini o'chirish; (3) bitta `data-field`
+  id sini buzish (qamrov ikki yo'nalishda qizardi); (4) qoralama
+  normallashtirishini olib tashlash.
+- **Ochiq savol**: tinglashda o'rganiladigan til hozir ham 3 ta
+  (`TARGET_LANGUAGES`) — TTS jadvalida 18 til bor (`TTS_LANG_VOICES`),
+  ya'ni ro'yxatni kengaytirish mumkin; bu UI sprintda xulq
+  o'zgartirilmadi (egasi qarori kerak).
+
+
 ## 6. Ochiq bandlar
 
 1. **Admin panel (egasi, 2026-09-21)** — keyingi dastur: platformani to'liq
