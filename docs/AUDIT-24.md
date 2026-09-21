@@ -665,3 +665,32 @@ kalitiga bog'liq); `npm run test:viewer` 219/219; `npm run test:ui` 281/281.
    yangi composerlarda qattiq yozilgan narx yo'q; `cost_json` telemetriyasi
    yopilishi (slayd/rasm/tarjimon/rezyume, rasm/TTS provayderlari) panel
    oldidan alohida WP.
+2. **Rasm uslubi tanlovi (WP-E)** — eski 8 karta galereya (rang/blurb
+   preview) `SelectField` matn ro'yxatiga almashdi (checklist 4-band
+   ≥7 → select); 8-band (vizual farqli variant → tile + dialog) bilan
+   chegara xira — egasi qarori: preview'li dialog qaytarilsinmi.
+   Nisbat qatorida ham per-variant hint («Post/Stories/Klassik») bitta
+   umumiy hintga qisqardi.
+3. **Predikat takrori** — saralashda «toifa qulflangan tur» sharti
+   (`limits.categories.length === 1`) `lib/tools.ts hideWhen` va
+   `GameComposer.tsx lockedCategories` da ikki joyda yozilgan; kichik
+   `isLockedSortingType(spec)` yordamchisi reyestrga.
+4. **Tabriknoma `relation` presetlari** (5 + «Boshqa») — faqat UI qarori,
+   dvigatel erkin matn o'qiydi; reyestrga kiritish yoki shunday qoldirish.
+5. **Til ro'yxati 3 (uz/ru/en)** o'yin/media/infografikada — dvigatel
+   18 tilni qo'llaydi; kengaytirish mahsulot qarori.
+6. **`subjectId`** (o'qituvchi, darslik rejimi) reyestrda yo'q, lekin
+   formada `data-field` bilan chiziladi va so'rovda ketadi — qamrov
+   testida yagona hujjatlashtirilgan istisno; `teacher-params.ts` ga
+   `probeWith:{mode:"curriculum"}` bilan kiritilsin.
+7. **Kurs ishi Sozlamalari ochiq holda 2 297 px** (16 parametr bitta
+   blokda) — ikkiga bo'lish (Titul tafsilotlari / Materiallar) nomzodi;
+   `figureCount`/`tableCount` 0–3 chip, `maxVisualsFor` chegarasi faqat
+   tooltipda.
+8. **Insho tur tavsiflari** — eski har-tugma `title` o'rniga faqat joriy
+   turning `hint` i; boshqa turlar tavsifini bosishdan oldin ko'rish
+   uchun `Segmented` ga ixtiyoriy per-option `title` (P2).
+9. **Maqola formasi** (`ArticleComposer`) etalon nomuvofiqliklari (o'z
+   `<details>` → `SettingsDetails`, `SourceFileField` → `SourceFileRow`)
+   WP-E qamrovidan chiqarilgan (WP-A/C bilan konflikt) — keyingi kichik WP.
+10. Tinglash `optionCount`, AUDIT-22 §6 bandlari o'z kuchida.
