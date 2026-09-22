@@ -456,6 +456,19 @@ function beatToSlide(beat: { layout: SlideLayout; role: string }, i: number, met
   return { ...base, bullets: [`${t}: ${beat.role}.`, "Mavzuga bog‘liq aniq band."] };
 }
 
+/**
+ * Va'da qilingan hajmning QUYI CHEGARASI — bundan kam slayd yozilsa deka
+ * rad etiladi (`null`, pul qaytadi).
+ *
+ * 85 % qoidasi va «kamida 6» poli katta dekalar uchun; lekin pol so'ralgan
+ * sondan OSHMASLIGI shart. Ilgari `max(6, …)` edi — `PRO_SLIDE_MIN = 4`
+ * bilan 4–5 slaydli pro deka model 4 tasini to'liq yozsa ham
+ * «too few slides 4 want 4» bilan HAR DOIM yiqilardi (prod, 2026-09-22).
+ */
+export function slideFloor(want: number): number {
+  return Math.min(want, Math.max(6, Math.ceil(want * 0.85)));
+}
+
 export function fallbackSlides(meta: DocMeta, tpl?: SlideTemplate, beats?: SlideBeat[]): SlideModel[] {
   const footer = deckFooter(meta);
   const template = tpl ?? resolveSlideTemplate(meta.slideTemplate, meta.topic, meta.extra);
@@ -742,7 +755,7 @@ export async function writeSlidesWithLlm(
    * slayd kam qolishi mumkin, buni butunlay rad etish ko'proq FAILED va
    * qayta-urinishga olib keladi).
    */
-  const floor = Math.max(6, Math.ceil(want * 0.85));
+  const floor = slideFloor(want);
   if (slides.length < floor) {
     console.warn("[slide-write] too few slides", slides.length, "want", want);
     return null;

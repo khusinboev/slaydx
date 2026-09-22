@@ -1163,3 +1163,20 @@ test("to'rt maket hamma `visual` va temada chegara ichida qoladi", () => {
     }
   }
 });
+
+/**
+ * Prod 2026-09-22: 4 slaydli pro deka model 4 tasini yozsa ham
+ * «too few slides 4 want 4» bilan yiqildi — pol `max(6, …)` so'ralgan
+ * sondan katta edi. Pol hech qachon `want` dan oshmasin.
+ * MUTATSIYA: `Math.min(want, …)` olib tashlansa 4 → 6 bo'lib qizil.
+ */
+test("slideFloor: pol so'ralgan sondan oshmaydi, kattalarda 85 % / kamida 6", async () => {
+  const { slideFloor } = await import("../lib/generation/slide-write.ts");
+  assert.equal(slideFloor(4), 4, "4 so'ralsa 4 yetadi");
+  assert.equal(slideFloor(5), 5);
+  assert.equal(slideFloor(6), 6);
+  assert.equal(slideFloor(8), 7, "ceil(8·0.85)=7");
+  assert.equal(slideFloor(16), 14, "ceil(16·0.85)=14");
+  assert.equal(slideFloor(30), 26);
+  for (let w = 4; w <= 30; w++) assert.ok(slideFloor(w) <= w, `want=${w}: pol ${slideFloor(w)} oshib ketdi`);
+});
