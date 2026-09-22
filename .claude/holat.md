@@ -1,4 +1,6 @@
-# SlaydX — holat (2026-09-21, main `b928b01`+; prod: **AUDIT-24 `8194d6a`** (2026-09-21, rollback `406f8ac`); tekshiruv: tsc/lint 0, unit 2 634/2 636 (2 ma'lum fal.ai), UI 370, ko'ruvchi 248)
+# SlaydX — holat (2026-09-22, main `e380940`; prod: **`e380940`** (2026-09-22 — rasm → Gemini lite + slayd poli; rollback `8194d6a`); tekshiruv: tsc/lint 0, unit 2 634/2 636 (2 ma'lum fal.ai), UI 370, ko'ruvchi 248)
+
+**2026-09-22 — Rasm yaratish → Gemini `gemini-3.1-flash-lite-image` ($0.034/rasm, 1K), prod'da.** «Rasm» vositasi fal.ai dan Gemini'ga (`image-studio.ts` → `requestGeminiImage`), pro-slayd standart modeli lite, `GEMINI_IMAGE_MODEL/SIZE` compose orqali, `features.images` = GEMINI_API_KEY. Yangi Gemini/Anthropic kalitlari prod `.env` da (zaxira `/root/slaydx-backups/env-*.bak`). Jonli: lokal 1 rasm 8 s; prod 3 rasm ishi (foto/illyustratsiya/qalam×2) COMPLETED 10–23 s, egasi hisobida. Yo'lakay nuqson tuzatildi: `slideFloor` — 4–5 slaydli pro deka har doim yiqilardi. fal.ai kodi o'lik holda qoladi (egasi qarori); rasm tannarx telemetriyasi — admin panel sprintiga.
 
 Sprint: **Formalar 3 (AUDIT-24) — 100 %, prod'da.** 17 forma + etalon nomuvofiqliklari, reja `docs/AUDIT-24.md` §1, tadqiqot `docs/research/forms3-*.md`.
 
