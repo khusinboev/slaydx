@@ -15,7 +15,7 @@ Brauzer ──► Next.js Route Handlers ──► PostgreSQL
                     │                      ▲
                     │  navbatga qo'yadi    │ holat, fayl
                     ▼                      │
-                 Worker ────► Gemini / xAI / fal.ai
+                 Worker ────► Gemini / Claude / xAI
 ```
 
 Hujjat **HTTP so'rovi ichida yaratilmaydi**. So'rov faqat vazifani navbatga qo'yadi;
@@ -57,7 +57,7 @@ Kalitlarsiz ham ishlaydi:
 | Kalit yo'q | Nima bo'ladi |
 |---|---|
 | `GEMINI_API_KEY` / `XAI_API_KEY` | Matn shablondan yoziladi (LLM chaqirilmaydi) |
-| `FAL_KEY` | «Rasm» vositasi ishlamaydi (oddiy slayd rasmlari fal'dan EMAS — Pexels/Pixabay dan) |
+| `GEMINI_API_KEY` | «Rasm» vositasi va pro-slayd rasmlari ishlamaydi (oddiy slayd rasmlari stock'dan — Pexels/Pixabay) |
 | `PEXELS_API_KEY` / `PIXABAY_API_KEY` | Oddiy slaydlar rasmsiz (bepul stock manbalar yo'q, rasm va'da qilinmaydi) |
 | `TELEGRAM_BOT_TOKEN` | Telegram kirish o'chadi (OTP qoladi) |
 | `CLICK_*` / `PAYME_*` | To'lov usuli UI da «o'chiq» ko'rinadi |

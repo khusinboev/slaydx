@@ -16,8 +16,9 @@
  *
  * Javob: HTTP 200, rasm `$.steps[1].content[0]` da
  * `{ data: <base64>, mime_type: "image/jpeg" }` ko'rinishida (790 KB
- * JPEG, ~1550 output token). Narx $0.067/rasm (1K); zaxira model
- * `gemini-3.1-flash-lite-image` ($0.034).
+ * JPEG, ~1550 output token). Standart model — `gemini-3.1-flash-lite-image`
+ * ($0.034/rasm, 1K); yuqori sifat ixtiyoriy `gemini-3.1-flash-image`
+ * ($0.067) — `GEMINI_IMAGE_MODEL` bilan yoqiladi.
  *
  * `steps[1]` INDEKSI QATTIQ YOZILMAGAN — `findImagePart` `steps[]`
  * ichidan `data` + `mime_type` juftligi bor birinchi tugunni rekursiv
@@ -37,7 +38,7 @@ import { requestBudget, type FalFailure, type ImageAsk, type ImageProvider, type
 export const GEMINI_IMAGE_CAP_MS = 120_000;
 
 const GEMINI_IMAGE_URL = "https://generativelanguage.googleapis.com/v1beta/interactions";
-const DEFAULT_MODEL = "gemini-3.1-flash-image";
+const DEFAULT_MODEL = "gemini-3.1-flash-lite-image";
 const DEFAULT_SIZE = "1K";
 
 /**

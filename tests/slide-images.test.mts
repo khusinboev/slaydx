@@ -8,8 +8,16 @@ import { composeSlideImagePrompt } from "../lib/generation/slide-image-prompts.t
 import { photoSlot, slotPixels } from "../lib/generation/slide-layout.ts";
 import { attachSlideImages, plannedImageSlots, imageBudget, PRO_IMAGE_LANES } from "../lib/generation/slide-images.ts";
 import { pickProvider, requestBudget } from "../lib/generation/image-provider.ts";
-import { aspectFor, requestGeminiImage, GEMINI_ASPECTS, GEMINI_IMAGE_CAP_MS, geminiProvider } from "../lib/generation/image-provider-gemini.ts";
+import {
+  aspectFor,
+  requestGeminiImage,
+  GEMINI_ASPECTS,
+  GEMINI_IMAGE_CAP_MS,
+  geminiProvider,
+  geminiImageModel,
+} from "../lib/generation/image-provider-gemini.ts";
 import { falProvider } from "../lib/generation/image-provider-fal.ts";
+import { buildImageArtifact } from "../lib/generation/image-studio.ts";
 import type { SlideModel } from "../lib/generation/slide-types.ts";
 
 /**
@@ -224,7 +232,7 @@ test("gemini provayderi jonli javob shaklidan data: URL yasaydi", async () => {
     const req = seen!;
     assert.equal(req.url, "https://generativelanguage.googleapis.com/v1beta/interactions");
     assert.equal(req.key, "test-gemini-key", "kalit `x-goog-api-key` sarlavhasida — URL da emas");
-    assert.equal(req.body.model, "gemini-3.1-flash-image", "model TANADA yuboriladi, URL da emas");
+    assert.equal(req.body.model, "gemini-3.1-flash-lite-image", "model TANADA yuboriladi, URL da emas (2026-09-22 standart — lite)");
     assert.deepEqual(req.body.input, [{ type: "text", text: "chalk drawing of the water cycle" }]);
     assert.deepEqual(req.body.response_format, {
       type: "image",
@@ -315,6 +323,75 @@ test("gemini: kalitsiz `no-key`, byudjetsiz `timeout` — tarmoqqa chiqmaydi", a
     const noKey = await requestGeminiImage({ prompt: "x", size: WIDE, styleId: "photo" });
     assert.equal(!noKey.ok && noKey.reason, "no-key");
     assert.equal(calls, 0);
+  } finally {
+    restore();
+  }
+});
+
+/**
+ * 2026-09-22: rasm yaratish fal.ai'dan Gemini `gemini-3.1-flash-lite-image`
+ * ga o'tdi ($0.034/rasm, 1K) — egasi qarori. Standart env'siz shu model
+ * ishlatilishi kerak, `GEMINI_IMAGE_MODEL` berilsa esa u ustun bo'ladi
+ * (masalan yuqori sifat `gemini-3.1-flash-image`, $0.067).
+ */
+test("gemini rasm modeli standarti — lite ($0.034), env berilsa ustun", () => {
+  const saved = process.env.GEMINI_IMAGE_MODEL;
+  try {
+    delete process.env.GEMINI_IMAGE_MODEL;
+    assert.equal(geminiImageModel(), "gemini-3.1-flash-lite-image");
+
+    process.env.GEMINI_IMAGE_MODEL = "gemini-3.1-flash-image";
+    assert.equal(geminiImageModel(), "gemini-3.1-flash-image", "env berilsa u ustun bo'lishi kerak");
+  } finally {
+    if (saved === undefined) delete process.env.GEMINI_IMAGE_MODEL;
+    else process.env.GEMINI_IMAGE_MODEL = saved;
+  }
+});
+
+/**
+ * «Rasm» vositasi (`buildImageArtifact`) ENDI Gemini'ga boradi, fal.ai'ga
+ * EMAS — o'lik `generateFalImage` yo'li endi bu funksiyadan chaqirilmaydi.
+ * `expandPrompt` ham LLM ga (`GEMINI_API_KEY` bo'lgani uchun `llmEnabled()`
+ * true) chaqiruv qiladi — o'sha stub 500 qaytaradi (URL da `/interactions`
+ * yo'q), shu bilan LLM zaxiraga tushadi va `withGrounding(user)` ishlatiladi.
+ */
+test("buildImageArtifact: Gemini'ga boradi, fal.run ga so'rov yo'q", async () => {
+  const restore = geminiEnv();
+  const urls: string[] = [];
+  let interactionsBody: Record<string, unknown> | null = null;
+  let interactionsKey = "";
+  const padded = Buffer.concat([Buffer.from(JPEG_1PX, "base64"), Buffer.alloc(1200, 0)]).toString("base64");
+  globalThis.fetch = (async (url: string, init?: RequestInit) => {
+    urls.push(String(url));
+    if (String(url).includes("/interactions")) {
+      interactionsBody = JSON.parse(String(init?.body));
+      interactionsKey = String((init?.headers as Record<string, string> | undefined)?.["x-goog-api-key"] ?? "");
+      return jsonRes(200, geminiOkBody(padded));
+    }
+    // LLM prompt kengaytiruvchisi (`expandPrompt`) shu stubga uriladi —
+    // 500 uni zaxira yo'lga (foydalanuvchi matni) tushiradi.
+    return jsonRes(500, {});
+  }) as unknown as typeof fetch;
+
+  try {
+    const built = await buildImageArtifact(TOOL_BY_ID.image, {
+      prompt: "Registon maydoni, tong",
+      imageStyle: "photo",
+      imageRatio: "16:9",
+      imageCount: 1,
+    });
+
+    assert.ok(!urls.some((u) => u.includes("fal.run")), "fal.run ga so'rov ketmasligi kerak — endi ishlatilmaydi");
+    assert.ok(interactionsBody, "/interactions ga so'rov borishi kerak");
+    assert.equal((interactionsBody as Record<string, unknown>).model, "gemini-3.1-flash-lite-image", "env yo'q — standart lite model");
+    assert.equal(
+      ((interactionsBody as Record<string, unknown>).response_format as Record<string, unknown>).aspect_ratio,
+      "16:9",
+    );
+    assert.ok(interactionsKey, "x-goog-api-key sarlavhasi bo'lishi kerak");
+
+    assert.equal(built.doc.images?.length, 1, "bitta rasm yetkazilishi kerak");
+    assert.equal(built.doc.images?.[0]?.mime, "image/jpeg");
   } finally {
     restore();
   }

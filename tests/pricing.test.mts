@@ -254,7 +254,7 @@ test("kalitsiz xizmat sotilmaydi", async () => {
   for (const t of TOOLS.filter((x) => x.custom !== "image")) {
     assert.ok(toolBlockedReason(t, noLlm), `${t.id}: matn kalitisiz sotilmasligi kerak`);
   }
-  // Rasm vositasi matn kalitiga BOG'LIQ EMAS — u fal.ai bilan ishlaydi.
+  // Rasm vositasi matn kalitiga BOG'LIQ EMAS — u Gemini rasm modeli bilan ishlaydi.
   assert.equal(toolBlockedReason(TOOL_BY_ID.image, noLlm), null);
 
   // Hech narsa sozlanmagan — hamma vosita to'silади.

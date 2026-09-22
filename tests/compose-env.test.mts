@@ -36,6 +36,14 @@ const KEYS = [
   "AZURE_SPEECH_REGION",
   "AISHA_API_KEY",
   "TTS_GEMINI_MODEL",
+  /*
+   * 2026-09-22: «Rasm» vositasi fal.ai'dan Gemini'ga o'tdi. Rasm modeli
+   * `.env` dan almashtirilsin (standart — kod ichida `gemini-3.1-flash-
+   * lite-image`, $0.034/rasm) — 2026-09-21 gacha compose bu ikkalasini
+   * konteynerga umuman uzatmasdi.
+   */
+  "GEMINI_IMAGE_MODEL",
+  "GEMINI_IMAGE_SIZE",
 ];
 
 function envBlock(yaml: string, service: string): string {

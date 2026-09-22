@@ -66,7 +66,7 @@ export async function GET(req: Request) {
       queue,
       features: {
         llm: llmConfigured(),
-        images: Boolean(env.fal.key),
+        images: Boolean(env.gemini.key),
         telegram: Boolean(env.telegramBotToken),
         payments: paymentsConfigured(),
         worker: env.worker.inline ? "inline" : "external",

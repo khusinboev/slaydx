@@ -19,8 +19,8 @@ telemetriya (1-manba) va kod-baho (3-manba) ga tayanadi.
 | `SOUM_PER_USD` | **12 700** | `lib/generation/llm-pricing.ts` standart; rasmiy CBU kursi 2026-09-19 = **11 839.59** (7.3% past) — pastdagi hammasi 12 700 bilan hisoblangan, ya'ni USD tannarx rasmiydan ~7% KAM ko'rinadi |
 | Gemini 3.7 Flash | $0.75 in / $3.75 out /1M | `llm-pricing.ts`, rasmiy tasdiqlangan |
 | Claude Sonnet 5 | $2 in / $10 out /1M | `llm-pricing.ts`, rasmiy tasdiqlangan |
-| Gemini rasm (`gemini-3.1-flash-image`, 1K) | **$0.067/rasm** | KOD IZOHI `image-provider-gemini.ts:19` + rasmiy (`provider-pricing.md` §2) — taxmin EMAS |
-| fal.ai `flux/schnell` | **$0.003/megapiksel** (≈$0.003/rasm 1024×1024 atrofida) | Rasmiy, `provider-pricing.md` §3 — steps (4 vs premium 8) narxga ta'sir qilmaydi (fal megapiksel bo'yicha to'laydi) |
+| Gemini rasm (`gemini-3.1-flash-lite-image`, 1K — 2026-09-22 dan standart, «Rasm» va pro-slayd) | **$0.034/rasm** | rasmiy (`provider-pricing.md` §2); jonli tasdiq 2026-09-22 (8 s, 785 KB); `gemini-3.1-flash-image` $0.067 ixtiyoriy |
+| fal.ai `flux/schnell` (2026-09-22 dan HAQIQIY yo'lda ishlatilmaydi — o'lik zanjir) | **$0.003/megapiksel** (≈$0.003/rasm 1024×1024 atrofida) | Rasmiy, `provider-pricing.md` §3 — steps (4 vs premium 8) narxga ta'sir qilmaydi (fal megapiksel bo'yicha to'laydi) |
 | Azure TTS | $16/1M belgi | `tts/types.ts TTS_PRICES`, rasmiy taxminan mos |
 | Aisha TTS | $80/1M belgi | `tts/types.ts` — **tasdiqlanmagan taxmin** (rasmiy sahifada narx yo'q, `provider-pricing.md` §4) |
 | Gemini grounding (qidiruv) | 5000/oy bepul, keyin $14/1000 so'rov | Rasmiy — SlaydX hajmida (oyiga ~90 ish) deyarli har doim BEPUL chegarada |

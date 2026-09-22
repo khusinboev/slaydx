@@ -13,7 +13,7 @@ export const GET = handler("auth/session", async (req) => {
     user,
     features: {
       llm: llmConfigured(),
-      images: Boolean(env.fal.key),
+      images: Boolean(env.gemini.key),
       telegram: Boolean(env.telegramBotToken),
       telegramBot: env.telegramBotUsername || null,
       devLogin: env.devLoginEnabled,

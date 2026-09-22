@@ -1,4 +1,5 @@
-import { fetchImageBytes, generateFalImage } from "./slide-images";
+import { fetchImageBytes } from "./slide-images";
+import { requestGeminiImage } from "./image-provider-gemini";
 import { imageExt } from "../viewers/kind";
 import { parseLlmObject } from "./json";
 import { mapPool } from "./quality";
@@ -22,6 +23,8 @@ import type { FormValues, ToolConfig } from "../types";
  * Faqat kuchli, aniq lug'aviy signal ("bu FOTO EMAS", qog'oz donadorligi,
  * moybo'yoq siljishi kabi) va inkor ishlaydi — "qalam" uslubi shu
  * tarzda yozilgani uchun ilgari ham to'g'ri chiqqan edi.
+ *
+ * 2026-09-22 dan rasm Gemini lite'da; uslub suffikslari o'z holida saqlanadi.
  */
 export const IMAGE_STYLES = [
   {
@@ -209,13 +212,12 @@ export async function buildImageArtifact(tool: ToolConfig, values: FormValues): 
 
   const raw = await mapPool(Array.from({ length: count }, (_, i) => i), 2, async (i) => {
     /*
-     * `rasm` — mustaqil pullik mahsulot (slaydga qo'shilgan to'ldiruvchi
-     * surat emas), shuning uchun `premium` bosqichni ishlatamiz: 4 emas,
-     * 8 qadam. Uslub ta'siri asosan promptga bog'liq (yuqoridagi izoh),
-     * lekin ko'proq qadam umumiy tafsilot va kompozitsiya sifatini
-     * oshiradi — ayniqsa haqiqiy joy nomlari uchun.
+     * `rasm` — mustaqil pullik mahsulot, fal endi ishlatilmaydi. Gemini
+     * lite ($0.034) matnni (ayniqsa o'zbekcha mavzu) aniq o'qiydi —
+     * uslub farqi asosan promptga bog'liq (yuqoridagi izoh).
      */
-    const im = await generateFalImage(full, size, undefined, { premium: true });
+    const res = await requestGeminiImage({ prompt: full, size, styleId: "photo" }, undefined);
+    const im = res.ok ? res.image : null;
     if (!im) return null;
     const bytes = await fetchImageBytes(im.url);
     const url = bytes ? `data:${bytes.data}` : im.url;
@@ -299,7 +301,7 @@ export async function packImages(
   /*
    * Va'da qilinganidan kam chiqsa worker farqni qaytaradi.
    *
-   * `fal` 429 yoki kontent filtri qaytarishi odatiy hol, ya'ni bu
+   * provayder 429/kontent filtri qaytarishi odatiy hol, ya'ni bu
    * nazariy holat emas. Ilgari yagona tekshiruv `images.length === 0`
    * edi: 4 tadan 1 tasi kelsa ish `COMPLETED` bo'lardi.
    */
