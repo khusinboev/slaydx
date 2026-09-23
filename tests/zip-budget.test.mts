@@ -104,6 +104,53 @@ test("yozuvlar soni: 10 001 yozuvli arxiv ochishdan OLDIN rad etiladi (EOCD soni
   await assert.rejects(parsePptxTemplate(bytes), (e: unknown) => e instanceof TemplateError && e.code === "too-big");
 });
 
+/**
+ * W1-D review R2: EOCD dan keyin > 64 KB «to'ldirma» yoki ZIP64 belgisi bilan
+ * oldingi sanagich 0 qaytarar va JSZip 60 000 yozuvni ochib bo'lgachgina
+ * rad etilardi. Endi JSZip umuman chaqirilmasligi kerak.
+ */
+async function withLoadSpy<T>(fn: () => Promise<T>): Promise<{ calls: number; error: unknown }> {
+  const JSZip = (await import("jszip")).default;
+  const original = JSZip.loadAsync;
+  let calls = 0;
+  JSZip.loadAsync = ((...args: Parameters<typeof original>) => {
+    calls++;
+    return original.apply(JSZip, args);
+  }) as typeof original;
+  try {
+    await fn();
+    return { calls, error: undefined };
+  } catch (error) {
+    return { calls, error };
+  } finally {
+    JSZip.loadAsync = original;
+  }
+}
+
+async function manyEntries(extra: number): Promise<Buffer> {
+  const max = (xmlScan as { MAX_ZIP_ENTRIES?: number }).MAX_ZIP_ENTRIES ?? 10_000;
+  const entries = Array.from({ length: max + extra }, (_, i) => ({ name: `word/media/f${i}.xml`, data: "", stored: true }));
+  entries.push({ name: "word/document.xml", data: "<w:document/>", stored: true });
+  return Buffer.from(await makeZip(entries));
+}
+
+test("yozuvlar soni: EOCD dan keyin 70 KB to'ldirma — JSZip chaqirilmasdan rad etiladi", async () => {
+  const bytes = new Uint8Array(Buffer.concat([await manyEntries(1), Buffer.alloc(70 * 1024)]));
+  const r = await withLoadSpy(() => extractSegments("docx", bytes));
+  assert.match(String((r.error as Error)?.message), /juda ko'p/);
+  assert.equal(r.calls, 0, "JSZip.loadAsync chaqirilmasligi kerak");
+});
+
+test("ZIP64 belgili EOCD — JSZip chaqirilmasdan rad etiladi", async () => {
+  const zip = Buffer.from(await makeZip([{ name: "word/document.xml", data: "<w:document/>", stored: true }]));
+  const eocd = zip.length - 22;
+  zip.writeUInt32LE(0xffffffff, eocd + 16); // markaziy katalog offseti → ZIP64 da
+  const r = await withLoadSpy(() => extractSegments("docx", new Uint8Array(zip)));
+  assert.ok(r.error instanceof Error, "rad etilishi kerak");
+  assert.match((r.error as Error).message, /ZIP64|juda ko'p/);
+  assert.equal(r.calls, 0, "JSZip.loadAsync chaqirilmasligi kerak");
+});
+
 test("oddiy DOCX/namuna byudjet ostida avvalgidek o'qiladi", async () => {
   const bytes = await makeZip([
     { name: "[Content_Types].xml", data: "<Types/>" },

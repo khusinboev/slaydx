@@ -144,6 +144,38 @@ test("entry yo'q (null) — in-process zaxira bir xil natija beradi", async () =
   assert.deepEqual(await pool.run({ kind: "extract", name: "x.docx", bytes }), { text: "Zaxira yo'li" });
 });
 
+test("in-process zaxira ham chegaralangan (2 ishlaydi + 8 navbat → 503) va har ishlatilishda (siyrak) ogohlantiradi", async () => {
+  const warns: string[] = [];
+  const origWarn = console.warn;
+  console.warn = (...a: unknown[]) => void warns.push(a.map(String).join(" "));
+  try {
+    let active = 0;
+    let peak = 0;
+    const pool = createParsePool({
+      entry: null,
+      runLocal: async () => {
+        active++;
+        peak = Math.max(peak, active);
+        await new Promise((r) => setTimeout(r, 50));
+        active--;
+        return { text: "ok" };
+      },
+    });
+    const task = { kind: "extract", name: "a.txt", bytes: new Uint8Array([120]) } as const;
+    const runs = Array.from({ length: 11 }, () => pool.run(task));
+    assert.deepEqual(pool.stats(), { running: 2, queued: 8 });
+    await assert.rejects(runs[10], (e: unknown) => e instanceof ParsePoolError && e.code === "busy" && e.status === 503);
+    const done = await Promise.all(runs.slice(0, 10));
+    assert.equal(done.length, 10);
+    assert.equal(peak, 2, "bir vaqtda ko'pi bilan 2 ta");
+    assert.deepEqual(pool.stats(), { running: 0, queued: 0 });
+    const fallbackWarns = warns.filter((w) => w.includes("[parse] FALLBACK in-process"));
+    assert.equal(fallbackWarns.length, 1, `ogohlantirishlar: ${JSON.stringify(warns)}`);
+  } finally {
+    console.warn = origWarn;
+  }
+});
+
 test("prod yo'li: esbuild to'plami (parse-worker.mjs) tsx siz, oddiy node worker'ida ishlaydi", async () => {
   const esbuild = await import("esbuild");
   const out = join(dir, "parse-worker.mjs");

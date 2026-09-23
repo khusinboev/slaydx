@@ -4,6 +4,7 @@ import JSZip from "jszip";
 import { extractFromBuffer } from "../lib/extract-text.ts";
 import { applyMd, applyText, mdToSegments, textToSegments } from "../lib/generation/translate/plain.ts";
 import { parsePptxTemplate } from "../lib/generation/pptx-template.ts";
+import { renderLayoutSheet } from "../lib/generation/render-pptx-template.ts";
 import { makeZip, templateEntries, TEMPLATE_PARTS } from "./helpers/parse-fixtures.ts";
 
 /**
@@ -202,4 +203,26 @@ test("parsePptxTemplate: oddiy namuna profili avvalgidek", async () => {
       blank: "ppt/slideLayouts/slideLayout1.xml",
     },
   });
+});
+
+/* ─────────────── render-pptx-template: `assemble` (W1-D review R1) ─────────────── */
+
+test("renderLayoutSheet: yopilmagan `<Override`, `<Relationship`, `<p:sldIdLst>` — chiziqli", async () => {
+  const profile = await parsePptxTemplate(await makeZip(templateEntries()));
+  const n = N / 9;
+  const bytes = await makeZip(
+    templateEntries({
+      "[Content_Types].xml": { name: "[Content_Types].xml", data: "<Types>" + "<Override ".repeat(n) + "</Types>" },
+      "ppt/_rels/presentation.xml.rels": {
+        name: "ppt/_rels/presentation.xml.rels",
+        data: TEMPLATE_PARTS.presentationRels.replace("</Relationships>", "<Relationship ".repeat(n) + "</Relationships>"),
+      },
+      "ppt/presentation.xml": {
+        name: "ppt/presentation.xml",
+        data: TEMPLATE_PARTS.presentation.replace("</p:presentation>", "<p:sldIdLst>".repeat(n) + "</p:presentation>"),
+      },
+    }),
+  );
+  const sheet = await within("renderLayoutSheet", () => renderLayoutSheet(bytes, profile));
+  assert.equal(sheet.pages.length, 1);
 });
