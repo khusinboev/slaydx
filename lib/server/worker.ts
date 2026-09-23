@@ -34,6 +34,7 @@ import { purgeRateLimits } from "./ratelimit";
 import { purgeExpiredTickets } from "./telegram";
 import { expireQueuedJobs } from "./queue-ttl";
 import { purgeBonusFiles } from "./retention";
+import { purgeSourceCache } from "../generation/research/cache";
 import { refundUnrefundedFailed } from "./refund-reconcile";
 import { queryOne } from "./db";
 import type { ToolId } from "../types";
@@ -504,6 +505,13 @@ export async function housekeeping(): Promise<void> {
    * uchun: 90 kundan keyin uni saqlash keraksiz yuk.
    */
   await step("photos", () => purgeOldPhotos(90));
+  /*
+   * Manba keshi (OpenAlex/Crossref xom JSON, EXT-08) — TTL 30 kun, ya'ni
+   * 60 kundan eski yozuv hech qachon o'qilmaydi. Partiyalab o'chiriladi.
+   * Foydalanilmagan logotip/shablon (`purgeUnusedUploads`) ATAYIN ulanmagan —
+   * «O'z shablonim» muddati egasi qaroriga bog'liq.
+   */
+  await step("source-cache", () => purgeSourceCache(60));
 }
 
 async function loop(): Promise<void> {

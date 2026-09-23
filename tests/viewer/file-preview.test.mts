@@ -112,7 +112,8 @@ test("DOCX natija (referat/tarjima): eskiz <img> `/thumb` + yuklanguncha matn qa
     h(FilePreview, { gen: gen({ type: "referat" as never, format: "docx", fileName: "referat.docx", preview: { lines: ["Kirish qismi matni bu yerda."] } }) }),
   );
   assert.match(html, /data-doc-thumb="loading"/);
-  assert.match(html, /src="\/api\/generations\/gen-1\/thumb"/, "eskiz havolasi");
+  // `?v=<fileVersion>` — W2-B/W2-E: eskiz faqat joriy versiya bilan keshlanadi.
+  assert.match(html, /src="\/api\/generations\/gen-1\/thumb(\?v=\d+)?"/, "eskiz havolasi");
   assert.match(html, /Kirish qismi matni bu yerda\./, "yuklanguncha matn qatorlari");
   assert.match(html, /loading="lazy"/);
 });
