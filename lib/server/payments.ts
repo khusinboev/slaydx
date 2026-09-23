@@ -1,7 +1,7 @@
 import "server-only";
 import { createHash, randomUUID } from "node:crypto";
+import type { PoolClient } from "pg";
 import { query, queryOne, transaction } from "./db";
-import { activatePro, topUp } from "./credits";
 import { safeEqual } from "./session";
 
 /**
@@ -271,58 +271,208 @@ export async function findOrderByPrepareId(prepareId: number): Promise<PaymentOr
 }
 
 /**
- * To'lovni yakunlaydi: buyurtmani `paid` qiladi va kreditni qo'shadi.
+ * Payme tranzaksiyasining umri — 12 soat (43 200 000 ms).
+ *
+ * Payme Merchant API, «CreateTransaction» / «PerformTransaction»: holati
+ * `1` bo'lgan tranzaksiya yaratilganidan 12 soat o'tib kelgan Create
+ * (takror) yoki Perform uni `reason = 4` (timeout) bilan bekor qilishi va
+ * -31008 qaytarishi shart; `time` i 12 soatdan eski yangi Create esa
+ * umuman ochilmaydi (BEA-05).
+ */
+export const PAYME_TIMEOUT_MS = 43_200_000;
+
+/** Payme bekor qilish sababi: tranzaksiya muddati o'tdi. */
+export const CANCEL_REASON_TIMEOUT = 4;
+
+export type SettleOutcome =
+  /** Hozir to'landi — kredit shu chaqiruvda yozildi. */
+  | { status: "paid"; order: PaymentOrder }
+  /** Allaqachon to'langan — takroriy yetkazish, hech narsa o'zgarmadi. */
+  | { status: "already_paid"; order: PaymentOrder }
+  /** Bekor qilingan buyurtma — kredit YOZILMADI. */
+  | { status: "cancelled"; order: PaymentOrder }
+  /** Muddati o'tgan (Payme) — shu chaqiruvda `reason = 4` bilan bekor qilindi. */
+  | { status: "expired"; order: PaymentOrder }
+  | { status: "not_found"; order: null };
+
+export type CancelOutcome =
+  | { status: "cancelled"; order: PaymentOrder }
+  /** Takroriy bekor qilish — birinchi `cancel_time`/sabab saqlanadi. */
+  | { status: "already_cancelled"; order: PaymentOrder }
+  /** To'langan buyurtma — xizmat ko'rsatilgan, bekor qilinmaydi. */
+  | { status: "paid"; order: PaymentOrder }
+  | { status: "not_found"; order: null };
+
+/**
+ * Buyurtma qatorini tranzaksiya oxirigacha qulflaydi.
+ *
+ * Holat o'zgarishi (to'lash / bekor qilish / muddati o'tish) FAQAT shu
+ * qulf ostida qaror qilinadi. Ilgari `settleOrder` qatorni qulfsiz o'qib,
+ * kreditni alohida tranzaksiyada yozar, `paid` ni esa uchinchi so'rovda
+ * qo'yardi; `cancelOrder` esa holatga qaramay `cancelled` yozardi. Payme
+ * `CancelTransaction` `PerformTransaction` bilan ustma-ust kelsa,
+ * bekor qilingan buyurtmada kredit qolardi (CONC-02, DB-09).
+ *
+ * Qulf tartibi: avval `payment_orders`, keyin `users` — boshqa hech bir
+ * yo'l bu ikkisini teskari tartibda olmaydi (deadlock yo'q).
+ */
+async function lockOrder(client: PoolClient, orderId: string): Promise<OrderRow | null> {
+  if (!/^[0-9a-f-]{36}$/i.test(orderId)) return null;
+  const res = await client.query<OrderRow>(`SELECT ${COLS} FROM payment_orders WHERE id = $1 FOR UPDATE`, [orderId]);
+  return res.rows[0] ?? null;
+}
+
+async function reread(client: PoolClient, orderId: string): Promise<PaymentOrder> {
+  const res = await client.query<OrderRow>(`SELECT ${COLS} FROM payment_orders WHERE id = $1`, [orderId]);
+  return toOrder(res.rows[0]);
+}
+
+/**
+ * Kreditni CHAQIRUVCHINING tranzaksiyasida yozadi (`credits.ts topUp` ning
+ * tranzaksiya ichidagi nusxasi).
+ *
+ * Nega alohida: `topUp` o'z tranzaksiyasini ochadi — buyurtma qulfi va
+ * `paid` holati bilan bitta atomar qadam bo'lolmaydi. Mantiq `topUp`
+ * bilan bir xil (o'sha jadval, `kind`, `reference`, idempotentlik), faqat
+ * foydalanuvchi qulfi idempotentlik tekshiruvidan OLDIN olinadi: ikki
+ * parallel chaqiruv ikkalasi ham «yozuv yo'q» deb ko'rib, ikkinchisi
+ * `transactions_ref_idx` ga urilib xato qaytarmasin (CONC-02 b).
+ * `credits.ts` ga tranzaksiya ichidagi `topUp` varianti qo'shilsa, bu
+ * funksiya o'shani chaqirishi kerak (bu to'lqinda `credits.ts` boshqa
+ * paketniki).
+ */
+async function creditInTx(
+  client: PoolClient,
+  userId: string,
+  delta: { quota?: number; balance?: number },
+  reference: string,
+  kind: "topup" | "subscription",
+  note: string,
+): Promise<boolean> {
+  const quota = delta.quota ?? 0;
+  const balance = delta.balance ?? 0;
+  if (quota + balance <= 0) return false;
+
+  await client.query("SELECT 1 FROM users WHERE id = $1 FOR UPDATE", [userId]);
+  const done = await client.query("SELECT 1 FROM transactions WHERE kind = $1 AND reference = $2", [kind, reference]);
+  // Webhook ikki marta kelishi normal holat — ikkinchisida pul qo'shilmaydi.
+  if (done.rows[0]) return false;
+
+  await client.query(`UPDATE users SET quota = quota + $2, balance = balance + $3, updated_at = now() WHERE id = $1`, [
+    userId,
+    quota,
+    balance,
+  ]);
+  await client.query(
+    `INSERT INTO transactions (user_id, kind, points_delta, quota_delta, balance_delta, reference, note)
+     VALUES ($1, $2, 0, $3, $4, $5, $6)`,
+    [userId, kind, quota, balance, reference, note],
+  );
+  return true;
+}
+
+/**
+ * To'lovni yakunlaydi: kreditni qo'shadi va buyurtmani `paid` qiladi —
+ * BITTA tranzaksiyada, buyurtma qatori qulflangan holda.
  *
  * `reference` provayder tranzaksiya id sidan quriladi, shuning uchun
- * takroriy webhook ikkinchi marta pul qo'shmaydi.
+ * takroriy webhook ikkinchi marta pul qo'shmaydi; PARALLEL takror esa
+ * qulfda kutadi va `already_paid` oladi (xato emas).
+ *
+ * `expiresBefore` (faqat Payme): holati `pending` va `create_time` shu
+ * vaqtdan eski bo'lsa — to'lanmaydi, `reason = 4` bilan bekor qilinadi.
  */
 export async function settleOrder(
   orderId: string,
   performTime: number,
-): Promise<{ ok: boolean; order: PaymentOrder | null }> {
-  const order = await findOrder(orderId);
-  if (!order) return { ok: false, order: null };
-  if (order.state === "cancelled") return { ok: false, order };
+  opts: { expiresBefore?: number } = {},
+): Promise<SettleOutcome> {
+  return transaction(async (client): Promise<SettleOutcome> => {
+    const row = await lockOrder(client, orderId);
+    if (!row) return { status: "not_found", order: null };
+    const order = toOrder(row);
+    if (order.state === "cancelled") return { status: "cancelled", order };
+    if (order.state === "paid") return { status: "already_paid", order };
 
-  const reference = `${order.provider}:${order.providerTxn ?? order.id}`;
+    if (
+      opts.expiresBefore !== undefined &&
+      order.state === "pending" &&
+      order.createTime > 0 &&
+      order.createTime < opts.expiresBefore
+    ) {
+      await client.query(
+        `UPDATE payment_orders
+            SET state = 'cancelled', cancel_time = $2, cancel_reason = $3, updated_at = now()
+          WHERE id = $1`,
+        [orderId, performTime, CANCEL_REASON_TIMEOUT],
+      );
+      return { status: "expired", order: await reread(client, orderId) };
+    }
 
-  if (order.purpose === "pro") {
-    await activatePro(order.userId, PRO_PLAN.quota, PRO_PLAN.days, reference);
-  } else {
-    await topUp(
-      order.userId,
-      { balance: Math.floor(order.amountSoum / SOUM_PER_COIN) },
-      reference,
-      "topup",
-      `${order.provider} orqali to'ldirish`,
+    const reference = `${order.provider}:${order.providerTxn ?? order.id}`;
+    if (order.purpose === "pro") {
+      // Kvota va tarif BIR tranzaksiyada: ilgari (`activatePro`) ular alohida
+      // yozilardi va orada yiqilish «kvota bor, plan free» holatini qoldirardi.
+      const added = await creditInTx(client, order.userId, { quota: PRO_PLAN.quota }, reference, "subscription", "Pro obuna");
+      if (added) {
+        await client.query(
+          `UPDATE users
+              SET plan = 'pro',
+                  -- Faol obuna ustiga qo'shiladi, tugagani yangidan boshlanadi.
+                  plan_expires_at = GREATEST(COALESCE(plan_expires_at, now()), now()) + ($2 || ' days')::interval,
+                  updated_at = now()
+            WHERE id = $1`,
+          [order.userId, String(PRO_PLAN.days)],
+        );
+      }
+    } else {
+      await creditInTx(
+        client,
+        order.userId,
+        { balance: Math.floor(order.amountSoum / SOUM_PER_COIN) },
+        reference,
+        "topup",
+        `${order.provider} orqali to'ldirish`,
+      );
+    }
+
+    await client.query(
+      `UPDATE payment_orders
+          SET state = 'paid',
+              perform_time = $2,
+              -- Yaratilish vaqti noma'lum bo'lsa (Click Prepare siz
+              -- to'g'ridan-to'g'ri Complete yuborgan holat), to'lov
+              -- vaqtini qo'yamiz — nol qolishidan yaxshiroq.
+              create_time = CASE WHEN create_time = 0 THEN $2 ELSE create_time END,
+              updated_at = now()
+        WHERE id = $1`,
+      [orderId, performTime],
     );
-  }
-
-  await query(
-    `UPDATE payment_orders
-        SET state = 'paid',
-            perform_time = $2,
-            -- Yaratilish vaqti noma'lum bo'lsa (Click Prepare siz
-            -- to'g'ridan-to'g'ri Complete yuborgan holat), to'lov
-            -- vaqtini qo'yamiz — nol qolishidan yaxshiroq.
-            create_time = CASE WHEN create_time = 0 THEN $2 ELSE create_time END,
-            updated_at = now()
-      WHERE id = $1 AND state <> 'cancelled'`,
-    [orderId, performTime],
-  );
-  return { ok: true, order: await findOrder(orderId) };
+    return { status: "paid", order: await reread(client, orderId) };
+  });
 }
 
-export async function cancelOrder(
-  orderId: string,
-  cancelTime: number,
-  reason: number | null,
-): Promise<PaymentOrder | null> {
-  await query(
-    `UPDATE payment_orders
-        SET state = 'cancelled', cancel_time = $2, cancel_reason = $3, updated_at = now()
-      WHERE id = $1`,
-    [orderId, cancelTime, reason],
-  );
-  return findOrder(orderId);
+/**
+ * Buyurtmani bekor qiladi — faqat hali to'lanmagan bo'lsa, qulf ostida.
+ *
+ * To'langan buyurtma bekor qilinmaydi (`paid` qaytadi — route uni
+ * Payme -31007 / Click -4 ga aylantiradi): kredit allaqachon berilgan.
+ * Takroriy bekor qilish birinchi `cancel_time` va sababni saqlaydi.
+ */
+export async function cancelOrder(orderId: string, cancelTime: number, reason: number | null): Promise<CancelOutcome> {
+  return transaction(async (client): Promise<CancelOutcome> => {
+    const row = await lockOrder(client, orderId);
+    if (!row) return { status: "not_found", order: null };
+    const order = toOrder(row);
+    if (order.state === "paid") return { status: "paid", order };
+    if (order.state === "cancelled") return { status: "already_cancelled", order };
+
+    await client.query(
+      `UPDATE payment_orders
+          SET state = 'cancelled', cancel_time = $2, cancel_reason = $3, updated_at = now()
+        WHERE id = $1 AND state IN ('created', 'pending')`,
+      [orderId, cancelTime, reason],
+    );
+    return { status: "cancelled", order: await reread(client, orderId) };
+  });
 }
