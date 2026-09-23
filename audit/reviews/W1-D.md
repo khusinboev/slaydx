@@ -107,3 +107,34 @@ The Dockerfile bundling of `parse-worker.mjs` is not on `audit/production-readin
 - Pool fairness: 2 threads are shared by all users. One user with crafted 15 s files, within the per-user rate limits, can keep a thread busy and push others into 503s. A per-user in-flight cap of 1 would prevent that.
 - Queued tasks keep running after the client disconnects. Consider checking `req.signal.aborted` before `start()`.
 - The `pdfToBlocks` page-limit `if` at `pdf.ts:365` is not indented inside the `try`.
+
+---
+
+## Re-review (commits `0169b3a..f11f551`): **APPROVE**
+
+**Tests** (heavy2 gate, worktree root): `parse-linear`, `zip-budget`, `pdf-limits`, `parse-pool`, `upload-body`, `extract`, `translate-plain`, `pptx-template`, `render-pptx-template`, `template-upload`, `translate-pptx`. **83/83 pass.**
+
+### R1: fixed
+- **Linear now.** `assemble` uses `removeTags` and `replaceFirstBlock`. When a match fails, the scan resumes from `g1`. That is safe because every opening tag inside `(o, g1)` has a subset of the same candidates. The `.` in `REL_SLIDE` still matches any character, and that case is handled (`dotAny`).
+- **Same output as the old regexes.** I ran my own differential fuzz against the old regexes on adversarial alphabets: `>` in place of `.`, `\n` in the URI, nested and unclosed `<Override`, `<Relationship` and `<p:sldIdLst>`. Two runs of 50 000 cases at length ≤ 25 and 20 000 at length ≤ 80 gave **0 diffs**.
+- **Timing, re-measured** (was 200 KB → 2.5 s, ×4 per doubling):
+  - `[Content_Types].xml` with `<Override ` × k: 200 KB → 32 ms, 1 MB → 45 ms, 4 MB → 111 ms.
+  - `presentation.xml.rels` with 950 KB of unclosed `<Relationship … Type="…/slide"`: 28 ms.
+  - 200 KB of `<p:sldIdLst>` × n: 5 ms.
+- **Size limit applies at render time too.** `assemble` reads its XML under the 40 MB `TEMPLATE_MAX_XML` budget. Both render entry points go through `loadZipCapped`, so templates stored before the fix are covered as well.
+- **Layout sheet runs in the pool.** `rasterizeTemplate` now builds the sheet through the `layout-sheet` task. If it fails, it falls back to no background, which is harmless. The worker and in-process results match in the test.
+
+### R2: fixed
+- **Same EOCD search as JSZip.** `zipDirectoryInfo` searches backwards over the whole buffer, as JSZip does. It gives up when the central directory would start at a negative offset, which JSZip rejects anyway. It walks the directory from the same place JSZip does.
+- **ZIP64 is rejected.** Any field set to `0xFFFF` or `0xFFFFFFFF` triggers the rejection.
+- **Re-ran my PoC.** 60k entries followed by 70 KB of padding now report 10 001 entries (the count stops just past the 10 000 limit) and are rejected in 1 ms, with no heap growth. Before the fix this took 337 ms and 49 MB. A zip with a zip64 marker is rejected in 0 ms.
+- **New tests** assert that `JSZip.loadAsync` is called 0 times for both cases.
+
+### R3: fixed
+- **Bounded.** The in-process fallback now goes through the same 2 running + 8 queued limit, and returns 503 beyond it.
+- **Logged.** It logs a `[parse] FALLBACK in-process` warning with a running count, at most once per minute. The test covers both.
+- **Merge gate stands.** C04/C06 only count as closed in prod once the Dockerfile/esbuild bundle of `parse-worker.mjs` lands. Keep this recorded in `03-progress.md`.
+
+### Nits (optional, non-blocking)
+- The fallback line could use `console.error` so log-level alerting catches it. Two in-process parses running "concurrently" still share one event loop. `maxRunning = 1` in fallback mode would be slightly more honest, but the effect is the same either way.
+- Carried over from the first review, still open: postMessage transfer, `maxYoungGenerationSizeMb`, a per-user in-flight cap, and skipping queued tasks for aborted requests. SECB-05 leftovers are assigned to W2-C. The W1-C R4 BEA-02 handoff (`cleanText`/`toJsonb` in `source-upload`/`template-upload`) is still not in this branch, so do it after rebasing onto the W1-C merge.
