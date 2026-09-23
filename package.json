@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --env-file-if-exists=.env.local --conditions=react-server --test --test-concurrency=2 tests/*.test.mts",
+    "test": "tsx --env-file-if-exists=.env.local --import ./tests/helpers/hermetic-env.mts --conditions=react-server --test --test-concurrency=2 tests/*.test.mts",
     "db:migrate": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/migrate.ts",
     "worker": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/worker.ts",
     "topup": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/topup.mts",
