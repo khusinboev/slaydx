@@ -69,10 +69,22 @@ export function clickSignatureValid(p: ClickSignedParams, secretKey: string): bo
 /**
  * Payme: `Authorization: Basic base64("Paycom:KEY")`.
  *
- * Test va prod kalitlari alohida — ikkalasi ham qabul qilinadi.
+ * Qabul qilinadigan kalitlar ro'yxati `acceptedPaymeKeys` dan keladi.
  * Taqqoslash doimiy vaqtda (SHA-256 dan keyin), shunda kalitni
  * bayt-bayt topib bo'lmaydi.
  */
+/**
+ * Payme webhook'i qabul qiladigan kalitlar (C11, EXT-01).
+ *
+ * Sinov (sandbox) kaliti FAQAT `sandbox` yoqilganda ro'yxatga kiradi.
+ * Ilgari ikkalasi so'zsiz qabul qilinardi: prod `.env` da
+ * `PAYME_TEST_KEY` qolib ketsa, test kassadan kelgan «to'lov» haqiqiy
+ * balansga tushardi — ochiq test karta bilan cheksiz tanga.
+ */
+export function acceptedPaymeKeys(cfg: { key: string; testKey: string; sandbox: boolean }): string[] {
+  return [cfg.key, ...(cfg.sandbox ? [cfg.testKey] : [])].filter(Boolean);
+}
+
 export function paymeAuthorized(header: string | null | undefined, keys: readonly string[]): boolean {
   const valid = keys.filter(Boolean);
   if (!valid.length) return false;

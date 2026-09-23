@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { ensureMigrated } from "@/lib/server/db";
 import { env } from "@/lib/server/env";
 import {
+  acceptedPaymeKeys,
   attachTransaction,
   cancelOrder,
   findOrder,
@@ -69,10 +70,12 @@ function paymeState(order: { state: string; cancelReason: number | null }): numb
 }
 
 export async function POST(req: Request) {
-  if (!env.payme.merchantId || (!env.payme.key && !env.payme.testKey)) {
+  // Sinov kaliti faqat `PAYME_SANDBOX=true` da (C11) — prod'da test to'lovi balansga tushmaydi.
+  const keys = acceptedPaymeKeys(env.payme);
+  if (!env.payme.merchantId || !keys.length) {
     return rpcError(null, PAYME_ERRORS.AUTH, "Payme sozlanmagan");
   }
-  if (!paymeAuthorized(req.headers.get("authorization"), [env.payme.key, env.payme.testKey])) {
+  if (!paymeAuthorized(req.headers.get("authorization"), keys)) {
     return rpcError(null, PAYME_ERRORS.AUTH);
   }
 
