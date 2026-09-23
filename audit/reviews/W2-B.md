@@ -56,3 +56,24 @@ Add a DB test: `GET …/thumb?v=1` for a missing or foreign id → 404 with `pri
 - **N2.** `o/[token]/audio` now really sends `public, max-age=86400, immutable`. Before this change, config overwrote it with no-store. Any shared cache or CDN in front would keep serving the audio for up to 24 h after a share session is revoked or closed. If revocation should take effect immediately, use `public, max-age=3600` (or `private`).
 - **N3.** `THUMB_ASSET_ID` (`ab00000000000000000000e1`, `lib/server/thumb.ts:33`) passes the `ASSET_ID` regex. So `…/assets/ab00…e1` serves a *mutable* thumbnail as `immutable` for a day. No client builds that URL, but the assets route could 404 that id or send it no-store.
 - **N4.** `Vary: Cookie` is not needed, since every per-user route is `private` and the URLs are resource-scoped. It is acceptable as is.
+
+---
+
+## Re-review — commit `5240fd9` (on top of merge `d5a946c`, which brings in W2-D2's migration 022)
+
+### Verdict: **APPROVE**
+
+Tests run from the worktree through the gate with the throwaway DB:
+`cache-headers, generations-reads, admission, queue, jobs-live-edit, thumb` → **70 pass, 0 fail, 0 skip**.
+
+- **R1 fixed.** `ADMISSION_COUNTS_SQL` (`jobs.ts`) is now three scalar subcounts. Each one matches exactly one partial predicate, which is the same shape I measured at 0.17 ms. The new test fills 30k COMPLETED rows, runs ANALYZE, and asserts that the EXPLAIN JSON has no `Seq Scan` and uses both `generations_queue_idx` and `generations_stale_idx`. Putting back the old `IN (…)` query makes it fail. The misleading comment is corrected.
+- **R2 fixed.** The thumb route is wrapped in `noStoreOnError`, so 400/401/404/500 and a `busyResponse` without the header all get `private, no-store`. The long cache is used only when `?v=` equals the current `file_version` from `getVersions`, which is scoped by `user_id`. A missing, stale or garbage `v` gets no-store. The tests cover 200 with the current `v`, stale/none/`abc` → no-store, and 404 → no-store.
+- **G1 satisfied.** 022 is merged into the base, so `files_purged_at` exists.
+- **N1.** Now uses `FOR NO KEY UPDATE`. It still serialises admissions, because it conflicts with itself and with `chargeInTx`'s `UPDATE`, and it no longer blocks FK `KEY SHARE` inserts.
+- **N2.** The public audio is now `public, max-age=3600`. It is safe for shared caches. The route reads no cookie, and it serves bytes only for a valid token of a completed session whose `publicGameView` lists that `assetId`. The cache key is a URL that contains the secret token. Audio from private generations is served only by `…/file` (no-store) and `…/assets` (`private`), so it cannot reach a shared cache through this route. After revocation, a cached copy can be served for at most 1 h.
+- **N3.** The assets route now sends no-store for `THUMB_ASSET_ID`, and this is tested.
+- The file route now uses `bytesBody`, and its headers (`private, no-store`) are unchanged.
+
+### Nits (optional, not blocking)
+- **N5.** In the thumb route, the bytes are read before the version (`getOrBuildThumb`, then `getVersions`). If a rebuild commits between the two reads, the old bytes get cached for 1 day under the new `v`. The window is milliseconds and the cache is private. Reading `getVersions` first closes it: new bytes under an old `v` do no harm.
+- **Pre-existing, out of scope.** Only `slide-commit.ts:257` deletes `THUMB_ASSET_ID`. DOCX edits and rebuilds (`rebuild`/`fresh-file`) leave the stored thumb stale in the DB whatever the headers say, and `putAssets … DO NOTHING` from an in-flight build can re-insert it after that delete. This is worth a follow-up ticket for W2-E, because once W2-E sends `?v=`, the browser cache will store those stale thumbs.
