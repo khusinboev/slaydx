@@ -34,16 +34,31 @@ trap cleanup EXIT
 
 echo "restore-check: $dump_file -> $container ($IMAGE)"
 
+# `--network none` — bu konteyner hech qanday tarmoq kirishiga muhtoj emas
+# (faqat `docker exec`/`docker cp` orqali ishlaydi), umumiy box'da qo'shimcha
+# yuzaga chiqmasin. `--memory 1g` — vaqtinchalik konteyner ham chegarasiz
+# bo'lmasin (reviewer topilmasi).
 docker run -d --name "$container" \
+  --network none \
+  --memory 1g \
   -e POSTGRES_PASSWORD="$PG_PASSWORD" \
   -e POSTGRES_DB="$PG_DB" \
   "$IMAGE" >/dev/null
 
+# Rasmiy postgres image konteyner ichida AVVAL vaqtinchalik (`listen_addresses=''`,
+# faqat unix socket) serverni ishga tushiradi va shundan keyingina asosiysini —
+# `pg_isready` unix socket orqali shu VAQTINCHALIK serverga ham "tayyor" deb
+# javob berishi mumkin, hali `$PG_DB` yaratilmasdan yoki yopilish arafasida
+# (reviewer topilmasi — soxta haftalik signal). `-h 127.0.0.1` FAQAT haqiqiy,
+# tarmoqqa quloq soluvchi serverga tegadi; qo'shimcha ravishda haqiqiy
+# `SELECT 1` so'rovi ham o'tishi shart — ikkalasi birga chinakam tayyorlikni
+# bildiradi.
 tries=0
-until docker exec "$container" pg_isready -U postgres >/dev/null 2>&1; do
+until docker exec "$container" pg_isready -h 127.0.0.1 -U postgres >/dev/null 2>&1 \
+  && docker exec "$container" psql -h 127.0.0.1 -U postgres -d "$PG_DB" -tAc "SELECT 1" >/dev/null 2>&1; do
   tries=$((tries + 1))
   if [ "$tries" -ge 30 ]; then
-    echo "restore-check: Postgres 30 soniyada ko'tarilmadi" >&2
+    echo "restore-check: Postgres 30 soniyada tayyor bo'lmadi (pg_isready+SELECT 1)" >&2
     exit 1
   fi
   sleep 1

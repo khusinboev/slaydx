@@ -149,6 +149,27 @@ Sirlar `/opt/slaydx/.env` da (huquq 600). `SESSION_SECRET`,
 `POSTGRES_PASSWORD` va `CRON_SECRET` shu server uchun alohida
 yaratilgan — lokal qiymatlar takrorlanmagan.
 
+### Resurs chegaralari (C18, `docker-compose.yml`)
+
+Box uchta loyiha bilan umumiy — har service'ning xotira/CPU chegarasi
+`.env` orqali sozlanadi (standartlar quyida, o'zgartirmasa shular ishlaydi):
+
+| O'zgaruvchi | Standart | Nima uchun |
+|---|---|---|
+| `WEB_MEM_LIMIT` | `2g` | `web` konteyner xotira shifti |
+| `WEB_CPUS` | `2` | `web` konteyner CPU shifti |
+| `WORKER_MEM_LIMIT` | `2g` | HAR BIR worker konteyner (2 replika — C22) xotira shifti |
+| `WORKER_CPUS` | `2` | HAR BIR worker konteyner CPU shifti |
+| `PG_MEM_LIMIT` | `1g` | Postgres konteyner xotira shifti |
+| `PG_CPUS` | `1` | Postgres konteyner CPU shifti |
+
+**Deploy oldidan tekshiring:** `docker info --format '{{.NCPU}}'` — agar
+host'da jami CPU soni `WEB_CPUS + 2×WORKER_CPUS + PG_CPUS`dan kam bo'lsa,
+Docker konteynerni "Range of CPUs is from 0.01 to N" xatosi bilan
+ko'tarmaydi; kerak bo'lsa `.env`da kichikroq qiymat bering. Peak xotira
+ish boshiga hali o'lchanmagan (`audit/designs/capacity.md`) — 2g ishonchli
+chegara deb tasdiqlanguncha `docker stats` bilan kuzating.
+
 **HTTPS hali yo'q:** `slaydxx.uz` DNS'da umuman ko'rinmaydi (A ham, NS
 ham yo'q). Domen shu serverga yo'naltirilgach `enable-https.sh` ni
 ishga tushiring — u avval DNS ni tekshiradi va mos kelmasa certbot'ni
