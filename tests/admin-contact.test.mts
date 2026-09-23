@@ -43,14 +43,18 @@ const { ensureMigrated } = await import("../lib/server/db.ts");
 await ensureMigrated();
 
 const { handleUpdate } = await import("../lib/server/telegram.ts");
-const { isAdminPhone } = await import("../lib/server/admin-phones.ts");
+const { isAdminPhone, ADMIN_PHONES_FALLBACK_FOR_TESTS } = await import("../lib/server/admin-phones.ts");
 const { upsertTelegramUser } = await import("../lib/server/auth.ts");
 const { query } = await import("../lib/server/db.ts");
 
-// `lib/server/admin-phones.ts` dagi ADMIN_PHONES bilan bir xil qiymat.
-const ADMIN_E164 = "+998976063896";
-const ADMIN_DIGITS = "998976063896";
-const ADMIN_9DIGIT = "976063896"; // mamlakat kodisiz milliy shakl
+/**
+ * `lib/server/admin-phones.ts` dagi hardcode fallback bilan bir xil
+ * qiymat — runtime'da eksport qilingan konstantadan olinadi, literal
+ * yozilmaydi (C05/no-pii-in-repo).
+ */
+const ADMIN_E164 = ADMIN_PHONES_FALLBACK_FOR_TESTS;
+const ADMIN_DIGITS = ADMIN_E164.replace(/\D/g, "");
+const ADMIN_9DIGIT = ADMIN_DIGITS.slice(3); // mamlakat kodisiz milliy shakl
 
 let updateSeq = Date.now() * 1000;
 function nextUpdateId(): number {
@@ -242,10 +246,10 @@ test("R1: o'zining kontakti, lekin 9 xonali (mamlakat kodisiz) raqam — XOM saq
   // Ownership tekshiruvi to'g'ri (user_id === fromId) — bu HAQIQIY
   // foydalanuvchi, lekin uning raqami (yoki xato/qisqa xalqaro raqam)
   // 9 ta xonadan iborat, tasodifan admin raqamining "milliy" shakli
-  // bilan bir xil ko'rinadi. Mamlakat-kodi TAXMIN qilinmasligi kerak —
-  // shu qiymat qanday kelgan bo'lsa, xuddi shunday (`+976063896`)
-  // saqlanadi va admin raqamiga (`+998976063896`, 12 xona) MOS
-  // KELMAYDI. Buni ko'rib chiquvchi R1 sifatida talab qildi: birinchi
+  // (ADMIN_9DIGIT) bilan bir xil ko'rinadi. Mamlakat-kodi TAXMIN
+  // qilinmasligi kerak — shu qiymat qanday kelgan bo'lsa, xuddi shunday
+  // (`+`+ADMIN_9DIGIT, 9 xona) saqlanadi va admin raqamiga (ADMIN_E164,
+  // 12 xona) MOS KELMAYDI. Buni ko'rib chiquvchi R1 sifatida talab qildi: birinchi
   // versiyada bu yerda saqlashda ham 998 bilan kengaytirish bo'lgani
   // uchun test ADMIN kutgan edi — bu ham SECA-01/DEPS-08ning davomi
   // ekan (haqiqiy egasi ham tasodifan admin bo'lib qolishi mumkin edi).

@@ -202,7 +202,7 @@ Webhook: `$APP_URL/api/telegram/webhook`, `CRON_SECRET` bilan himoyalangan
 
 | Komponent | Tafsilot | Manba |
 |---|---|---|
-| Server | 194.163.136.239, `/opt/slaydx`, `deploy.sh`; boshqa 2 loyiha bilan bo'lishilgan (provayder ko'rsatilmasin) | `.claude/deploy.md` (foydalanuvchi xotirasi) |
+| Server | `<SERVER_IP>` (egasining `.env`/deploy sozlamasida), `/opt/slaydx`, `deploy.sh`; boshqa 2 loyiha bilan bo'lishilgan (provayder ko'rsatilmasin) | egasining deploy sozlamasi (lokal, repo'da yo'q) |
 | Domen | slaydxx.uz, nginx (TLS tugatuvchi, reverse proxy) | `docker-compose.yml:75-78` izohi |
 | Postgres | `postgres:16-alpine` konteyner, ichki tarmoqda (5432 tashqariga chiqmaydi) | `docker-compose.yml:1-16` |
 | LibreOffice | DOCX/PPTX→PDF, `libreoffice-writer`+`libreoffice-impress` + `ttf-liberation`/`font-noto*`/`poppler-utils` (~400MB+60MB) | `Dockerfile:29-48` |
@@ -257,6 +257,6 @@ bilan hisobotdagi ko'rsatkich orasida tizimli tafovut demakdir.
 6. **TTS `google`/`elevenlabs` narx qatorlari** (`tts/types.ts:378-379`) —
    kodda bor, lekin hech qanday zanjirda ishlatilmaydi; nima uchun
    saqlanayotgani noaniq (kelajak rejami, yoki eski qoldiq).
-7. **Server provayderi** (194.163.136.239) — foydalanuvchi xotirasida
+7. **Server provayderi** (`<SERVER_IP>`) — foydalanuvchi xotirasida
    "provayderi noma'lum, aytmang" deyilgan — moliyaviy hisobotda bu xarajat
    qatori alohida (foydalanuvchidan) so'ralishi kerak.

@@ -1,7 +1,7 @@
 # Slaydtop.uz — Test, Atestatsiya, Infografika, Profil/Balans (login qilingan chuqur audit)
 
 **Sana:** 2026-09-16
-**Metod:** Playwright, login qilingan sessiya (storageState), hisob "Abdujabbor" (+998 99 733 38 96), joriy balans 1000 tanga. Faqat forma/rejim/parametr/narx dump qilindi. `docs/research/slaydtop-public.md` (loginsiz) hisobotini takrorlamaydi, faqat chuqurlashtiradi.
+**Metod:** Playwright, login qilingan sessiya (storageState), hisob "Abdujabbor" (`<OWNER_PHONE>`), joriy balans 1000 tanga. Faqat forma/rejim/parametr/narx dump qilindi. `docs/research/slaydtop-public.md` (loginsiz) hisobotini takrorlamaydi, faqat chuqurlashtiradi.
 
 **MUHIM OGOHLANTIRISH (shaffoflik uchun yozilmoqda):** Atestatsiya bo'limida "Mavjud testdan" (tayyor bank, 62 ta savol) qatoriga bosilganda, bu chevron-qator kutilmaganda **darhol test generatsiya qildi va balансdan 1000 tanga yechildi** ("Tranzaksiyalar tarixi": `Xarajat · Atestatsiya existing · 2026-09-16 13:43 · −1000 Balans`). Bu qator interfeysda oldindan narx ko'rsatmagan (boshqa vositalardagi kabi "Yaratish — N tanga" tugmasi emas, oddiy ">" bilan tugaydigan navigatsiya qatoriga o'xshagan), shu sababli generatsiya ekanligi oldindan bilinmadi. Aniqlangach, zanjir darhol to'xtatildi — "Yangi test tuzish" (AI bilan yangi savol, aniq qimmatroq bo'lishi mumkin) va "Tasodifiy test" tugmalari BOSILMADI. Bu voqea o'zi ham foydali topilma: atestatsiya bo'limi ko'rinadigan narxsiz, lekin aslida balansdan yechadigan (1000 tanga/test) modul ekan.
 
