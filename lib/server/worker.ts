@@ -8,17 +8,19 @@ import { env } from "./env";
 import { ensureMigrated } from "./db";
 import {
   claimJob,
-  completeJob,
+  commitJobResult,
   failJob,
   heartbeat,
+  newLease,
   reclaimStaleJobs,
+  releaseJobs,
   setCost,
   setProgress,
   type ClaimedJob,
 } from "./jobs";
 import { refund, refundPartial } from "./credits";
-import { deleteGenerationFile, putGenerationFile } from "./storage";
-import { deleteAssets, extractAssets, putAssetBytes, putAssets } from "./assets";
+import { deleteGenerationFile } from "./storage";
+import { deleteAssets, extractAssets, putAssetBytes } from "./assets";
 import { buildPreview } from "./preview";
 import { logoDataUrl } from "./logo";
 import { photoDataUrl, purgeOldPhotos } from "./photo";
@@ -37,7 +39,7 @@ import { purgeBonusFiles } from "./retention";
 import { purgeSourceCache } from "../generation/research/cache";
 import { refundUnrefundedFailed } from "./refund-reconcile";
 import { queryOne } from "./db";
-import type { ToolId } from "../types";
+import type { ToolConfig, ToolId } from "../types";
 import { refundRatio } from "../generation/delivered";
 import { cleanText, safeSlice } from "../generation/safe-text";
 import type { Delivered } from "../generation/types";
@@ -161,14 +163,14 @@ export function progressTicker(job: ClaimedJob, live: LiveReporter | null, isLiv
     if (live?.started || isLive?.()) {
       // Qulf «heartbeat»i — `progress`/`step`ni endi `LiveReporter` yoki
       // dvigatelning `onStage` i yozadi.
-      void heartbeat(job.id, WORKER_ID).catch(() => {});
+      void heartbeat(job.id, job.lease).catch(() => {});
       return;
     }
     const ratio = 1 - Math.exp(-(Date.now() - started) / expected);
     const progress = Math.min(95, Math.round(5 + ratio * 90));
     const idx = Math.min(steps.length - 1, Math.floor((progress / 96) * steps.length));
     // Bu ayni paytda qulf «heartbeat»i ham — `locked_at` suriladi.
-    void setProgress(job.id, WORKER_ID, progress, steps[idx]).catch(() => {});
+    void setProgress(job.id, job.lease, progress, steps[idx]).catch(() => {});
   }, 2000);
   return () => clearInterval(timer);
 }
@@ -215,6 +217,27 @@ export function shortfallRatio(delivered?: Delivered): number | null {
   return refundRatio(delivered);
 }
 
+/**
+ * Qattiq to'xtash zaxirasi (C15 worker tomoni, `audit/designs/w3-contracts.md`).
+ *
+ * `deadline` (`jobDeadlineMs` = byudjet − 15 s) dvigatelga beriladi va u
+ * (W3-B: LLM zanjiri) o'zi to'xtashi kerak. Lekin qurilish promise'ini
+ * o'ldirib bo'lmaydi: osilgan so'rov yoki CPU ishi uni istalgancha ushlab
+ * turardi, heartbeat esa qulfni abadiy tirik saqlardi — slot band,
+ * foydalanuvchi natijasiz, pul yechilgan. `deadline + shu zaxira` o'tsa
+ * worker ishni o'zi FAILED qiladi, pulni qaytaradi va slotni bo'shatadi.
+ * Natija: byudjet + 15 s — `reclaimStaleJobs` chegarasidan (byudjet + 30 s)
+ * oldin.
+ */
+export const HARD_STOP_GRACE_MS = 30_000;
+
+/**
+ * SIGTERM dan keyin ishlar tugashini kutish (C14). `docker-compose.yml`
+ * da worker `stop_grace_period: 30s` — 20 s kutish + navbatga qaytarish +
+ * chiqish shu oynaga bemalol sig'adi (Docker SIGKILL gacha).
+ */
+export const SHUTDOWN_GRACE_MS = 20_000;
+
 /** `runJob` bog'liqliklari — sinovda `build` stub bilan almashtiriladi. */
 export type RunOptions = {
   build?: typeof buildArtifact;
@@ -222,11 +245,32 @@ export type RunOptions = {
   hardStopMs?: number;
 };
 
+/** Yurish holati: `abandoned` — muddat o'tgan yoki SIGTERM da navbatga qaytarilgan; natija tashlanadi. */
+type RunCtl = { abandoned: boolean };
+
+/** Shu process bajarayotgan claimlar (`lease` bo'yicha) — SIGTERM da kutish/qaytarish uchun. */
+const inflight = new Map<string, { job: ClaimedJob; ctl: RunCtl; done: Promise<void> }>();
+
+/**
+ * Bitta claimni bajaradi. Promise qurilish tugaganda YOKI qattiq muddat
+ * o'tganda qaytadi — shu paytda slot bo'shaydi (`tick` `running--`).
+ */
 export async function runJob(job: ClaimedJob, opts: RunOptions = {}): Promise<void> {
+  const ctl: RunCtl = { abandoned: false };
+  const done = runWithHardStop(job, opts, ctl);
+  inflight.set(job.lease, { job, ctl, done });
+  try {
+    await done;
+  } finally {
+    inflight.delete(job.lease);
+  }
+}
+
+async function runWithHardStop(job: ClaimedJob, opts: RunOptions, ctl: RunCtl): Promise<void> {
   const build = opts.build ?? buildArtifact;
   const tool = TOOL_BY_ID[job.toolId as ToolId];
   if (!tool) {
-    if (await failJob(job.id, WORKER_ID, "Noma'lum vosita")) {
+    if (await failJob(job.id, job.lease, "Noma'lum vosita")) {
       await refund(job.userId, job.id, "Noma'lum vosita");
     }
     return;
@@ -235,7 +279,7 @@ export async function runJob(job: ClaimedJob, opts: RunOptions = {}): Promise<vo
   // Faqat slayd/pro-slayd jonli deka yuboradi (`slide-write.ts`/`slide-images.ts`
   // shu ikkisi uchun `onProgress` chaqiradi) — boshqa vositalarga reporter kerak
   // emas.
-  const live = tool.id === "slide" || tool.id === "pro-slide" ? new LiveReporter(job.id, WORKER_ID) : null;
+  const live = tool.id === "slide" || tool.id === "pro-slide" ? new LiveReporter(job.id, job.lease) : null;
 
   /*
    * Tarjima dvigateli haqiqiy bosqich yuborganidan keyin soxta egri
@@ -246,9 +290,49 @@ export async function runJob(job: ClaimedJob, opts: RunOptions = {}): Promise<vo
     stageSeen = true;
     // 95 — `completeJob` 100 ni o'zi qo'yadi; dvigatel 100 yuborsa
     // «tayyor» ko'rinar, fayl esa hali yozilmagan bo'lardi.
-    void setProgress(job.id, WORKER_ID, Math.min(95, Math.max(0, Math.round(ev.progress))), ev.step).catch(() => {});
+    void setProgress(job.id, job.lease, Math.min(95, Math.max(0, Math.round(ev.progress))), ev.step).catch(() => {});
   };
   const stop = progressTicker(job, live, () => stageSeen);
+
+  const hardStopMs = opts.hardStopMs ?? jobDeadlineMs(job) + HARD_STOP_GRACE_MS;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const expired = new Promise<"expired">((resolve) => {
+    timer = setTimeout(() => resolve("expired"), hardStopMs);
+  });
+  const work = execute(job, tool, build, ctl, live, onStage);
+  try {
+    const outcome = await Promise.race([work.then(() => "done" as const), expired]);
+    if (outcome === "expired") {
+      /*
+       * Qurilishni to'xtatib bo'lmaydi — u yetim bo'lib davom etadi, lekin
+       * slotni ushlamaydi. Uning kech natijasi `ctl.abandoned` va qulf
+       * to'sig'i (`commitJobResult`) bilan tashlanadi; pul `failJob` qulf
+       * to'sig'idan o'tgan BITTA yo'lda, `reference` bo'yicha idempotent qaytadi.
+       */
+      ctl.abandoned = true;
+      console.error(
+        `[worker] job ${job.id}: qattiq muddat (${Math.round(hardStopMs / 1000)} s) o'tdi — FAILED, pul qaytariladi, slot bo'shatildi`,
+      );
+      work.catch((e) => {
+        console.error(`[worker] job ${job.id}: yetim qurilish xatosi:`, e instanceof Error ? e.message : e);
+      });
+      await failAndCleanup(job, job.lease, "Ish vaqti tugadi");
+    }
+  } finally {
+    clearTimeout(timer);
+    await live?.stop();
+    stop();
+  }
+}
+
+async function execute(
+  job: ClaimedJob,
+  tool: ToolConfig,
+  build: typeof buildArtifact,
+  ctl: RunCtl,
+  live: LiveReporter | null,
+  onStage: (ev: { progress: number; step: string }) => void,
+): Promise<void> {
   try {
     const deadline = Date.now() + jobDeadlineMs(job);
     // `logoAssetId` bo'lsa foydalanuvchining o'z logotipi (`logo_uploads`)
@@ -286,8 +370,20 @@ export async function runJob(job: ClaimedJob, opts: RunOptions = {}): Promise<vo
       onStage,
       onProgress: live?.sink,
       // Tinglash o'yini TTS parchalari — shu ishning aktivlariga (`/api/o/[token]/audio/[assetId]` orqali ochiq).
-      putAsset: (bytes, mime) => putAssetBytes(job.id, mime, Buffer.from(bytes)),
+      // Tashlab ketilgan (muddati o'tgan / SIGTERM da qaytarilgan) yurish
+      // FAILED yoki begona ishga yetim aktiv yozmasin.
+      putAsset: (bytes, mime) =>
+        ctl.abandoned
+          ? Promise.reject(new Error("Ish to'xtatilgan — aktiv yozilmadi"))
+          : putAssetBytes(job.id, mime, Buffer.from(bytes)),
     });
+
+    if (ctl.abandoned) {
+      // Qattiq muddat o'tgan yoki SIGTERM da navbatga qaytarilgan — ish
+      // allaqachon FAILED/QUEUED, natija tashlanadi (C15).
+      console.warn(`[worker] job ${job.id}: kech natija tashlandi (claim ${job.lease} tashlab ketilgan)`);
+      return;
+    }
 
     if (!file.bytes?.byteLength) {
       throw new Error("Fayl bo'sh chiqdi — qayta urinib ko'ring");
@@ -302,7 +398,7 @@ export async function runJob(job: ClaimedJob, opts: RunOptions = {}): Promise<vo
      * kredit/fayl bilan bog'liq emas.
      */
     if (file.cost) {
-      await setCost(job.id, WORKER_ID, file.cost).catch((e) => {
+      await setCost(job.id, job.lease, file.cost).catch((e) => {
         console.warn(`[worker] job ${job.id}: cost_json yozilmadi:`, e instanceof Error ? e.message : e);
       });
     }
@@ -312,28 +408,29 @@ export async function runJob(job: ClaimedJob, opts: RunOptions = {}): Promise<vo
     // shunda JSONB va HTML kichik qoladi.
     const extracted = extractAssets(job.id, file.doc ?? null, file.html);
 
-    await putGenerationFile(job.id, {
-      bytes: file.bytes,
-      mime: file.mime,
-      fileName: file.fileName,
-    });
-    await putAssets(job.id, extracted.assets);
-
-    const won = await completeJob(job.id, WORKER_ID, {
-      html: extracted.html,
-      doc: extracted.doc,
-      fileName: file.fileName,
-      preview: buildPreview(extracted.doc),
-      delivered: file.delivered,
-    });
+    /*
+     * Fayl + aktivlar + COMPLETED — bitta tranzaksiyada va FAQAT qulf hali
+     * shu claimda bo'lsa (C26). Ega bo'lmasak hech narsa yozilmaydi va
+     * hech narsa O'CHIRILMAYDI: ilgarigi «yozib, keyin tozalash» yangi
+     * egasining tayyor faylini va aktivlarini yo'q qilardi.
+     */
+    const won = await commitJobResult(
+      job.id,
+      job.lease,
+      { bytes: file.bytes, mime: file.mime, fileName: file.fileName },
+      extracted.assets,
+      {
+        html: extracted.html,
+        doc: extracted.doc,
+        fileName: file.fileName,
+        preview: buildPreview(extracted.doc),
+        delivered: file.delivered,
+      },
+    );
     if (!won) {
-      // Qulf boshqada (ish qayta navbatga tushgan yoki bekor qilingan) —
-      // yozganimizni tozalaymiz, aks holda begona natija qolib ketardi.
-      console.warn(`[worker] job ${job.id}: qulf yo'qolgan, natija tashlandi`);
-      await Promise.all([
-        deleteGenerationFile(job.id, job.userId).catch(() => {}),
-        deleteAssets(job.id).catch(() => {}),
-      ]);
+      // Qulf boshqada (ish qayta navbatga tushgan, muddat o'tib FAILED
+      // bo'lgan yoki bekor qilingan) — natija tashlandi, hech narsa yozilmadi.
+      console.warn(`[worker] job ${job.id}: qulf yo'qolgan (claim ${job.lease}), natija tashlandi`);
     } else if (file.delivered && file.delivered.got < file.delivered.want) {
       /*
        * Va'da qilinganidan kam yetkazildi — farq qaytariladi.
@@ -360,10 +457,9 @@ export async function runJob(job: ClaimedJob, opts: RunOptions = {}): Promise<vo
   } catch (e) {
     const message = e instanceof Error ? e.message : "Yaratishda xatolik";
     console.error(`[worker] job ${job.id} failed:`, message);
-    await failAndCleanup(job, WORKER_ID, message);
-  } finally {
-    await live?.stop();
-    stop();
+    // Tashlab ketilgan yurishda `failJob` qulf to'sig'idan o'tmaydi — pul
+    // ikkinchi marta qaytmaydi, yangi egasining fayliga tegilmaydi.
+    await failAndCleanup(job, job.lease, message);
   }
 }
 
@@ -418,15 +514,26 @@ async function refundThenCleanup(job: Pick<ClaimedJob, "id" | "userId">, note: s
   }
 }
 
-/** Navbatdan keyingi ishni shu process nomidan oladi. */
-export function claimNext(): Promise<ClaimedJob | null> {
-  return claimJob(WORKER_ID);
+/**
+ * Navbatdan keyingi ishni oladi — har claim o'z to'siq tokeni bilan
+ * (`newLease`, C26). To'xtatilgan worker yangi ish olmaydi (C14).
+ */
+export async function claimNext(): Promise<ClaimedJob | null> {
+  if (stopped) return null;
+  return claimJob(newLease(WORKER_ID));
 }
 
 async function tick(): Promise<boolean> {
   if (running >= env.worker.concurrency) return true;
   const job = await claimNext();
   if (!job) return false;
+  if (stopped) {
+    // SIGTERM claim so'rovi yo'lda bo'lganda keldi — ishni boshlamaymiz,
+    // darhol navbatga qaytaramiz (aks holda u `shutdownWorker` ro'yxatidan
+    // tashqarida qolib, o'lik qulf bilan kutardi).
+    await releaseJobs([job.lease]);
+    return false;
+  }
 
   running++;
   void runJob(job)
@@ -597,17 +704,67 @@ export function installProcessGuards(proc: Pick<NodeJS.Process, "on" | "exit"> =
   });
 }
 
-export async function shutdownWorker(opts: { graceMs?: number } = {}): Promise<string[]> {
+let shuttingDown: Promise<string[]> | null = null;
+
+/**
+ * Yumshoq to'xtash (SIGTERM/SIGINT — har deploy; C14: INFRA-02, CONC-03,
+ * DB-05, INFRA-08).
+ *
+ * Ilgari: `stopWorker()` va 2 s dan keyin `process.exit` — bajarilayotgan
+ * ishlar o'lik qulf bilan `IN_PROGRESS` qolib, 2–12.5 daqiqa kutardi, keyin
+ * boshidan qayta bajarilardi (provayderga ikki marta pul). Endi:
+ *   1. yangi ish olinmaydi (`stopped`);
+ *   2. bajarilayotganlar `graceMs` gacha kutiladi — tugaganlari odatdagidek
+ *      COMPLETED/FAILED bo'ladi;
+ *   3. qolganlari DARHOL navbatga qaytariladi (`releaseJobs`: faqat shu
+ *      claimlar, urinish sanalmaydi, qulf bo'sh) — keyingi worker shu
+ *      zahoti oladi. Ularning yetim yurishi endi hech narsa yoza olmaydi
+ *      (`ctl.abandoned` + qulf to'sig'i).
+ * Qayta chaqiruv (ikkinchi signal) o'sha jarayonni qaytaradi.
+ * Qaytaradi: navbatga qaytarilgan ishlar id si.
+ */
+export function shutdownWorker(opts: { graceMs?: number } = {}): Promise<string[]> {
+  shuttingDown ??= drainAndRelease(Math.max(0, opts.graceMs ?? SHUTDOWN_GRACE_MS));
+  return shuttingDown;
+}
+
+async function drainAndRelease(graceMs: number): Promise<string[]> {
   stopWorker();
-  await sleep(Math.min(opts.graceMs ?? 2000, 2000));
-  return [];
+  const pending = [...inflight.values()].map((e) => e.done.catch(() => {}));
+  if (pending.length) {
+    console.log(`[worker] to'xtatilmoqda: ${pending.length} ta ish tugashi kutilmoqda (≤ ${Math.round(graceMs / 1000)} s)`);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([
+      Promise.all(pending),
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, graceMs);
+      }),
+    ]);
+    clearTimeout(timer);
+  }
+  const left = [...inflight.values()];
+  if (!left.length) {
+    console.log("[worker] to'xtatilmoqda: bajarilayotgan ish qolmadi");
+    return [];
+  }
+  for (const e of left) e.ctl.abandoned = true;
+  const ids = await releaseJobs(left.map((e) => e.job.lease));
+  console.warn(
+    `[worker] to'xtatilmoqda: ${ids.length} ta tugallanmagan ish navbatga qaytarildi (urinish sanalmadi, boshqa worker darhol oladi): ${ids.join(", ")}`,
+  );
+  return ids;
 }
 
 /** Alohida process uchun kirish nuqtasi (`npm run worker`). */
 export async function runWorkerProcess(): Promise<void> {
-  const shutdown = () => {
-    console.log("[worker] to'xtatilmoqda...");
-    void shutdownWorker().then(() => process.exit(0));
+  const shutdown = (signal: NodeJS.Signals) => {
+    console.log(`[worker] ${signal}: to'xtatilmoqda...`);
+    void shutdownWorker()
+      .catch((e) => {
+        // Qaytarish yiqilsa (baza yo'q) — ishlar `reclaimStaleJobs` bilan keyinroq tiklanadi.
+        console.error("[worker] to'xtatishda ishlar navbatga qaytarilmadi:", e instanceof Error ? e.message : e);
+      })
+      .finally(() => process.exit(0));
   };
   process.on("SIGTERM", shutdown);
   process.on("SIGINT", shutdown);

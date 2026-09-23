@@ -3,6 +3,8 @@ import { randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
 import { query, queryOne, transaction } from "./db";
 import { chargeInTx } from "./credits";
+import { putGenerationFile } from "./storage";
+import type { PendingAsset } from "./assets";
 import { toJsonb } from "./jsonb";
 import { cleanText, safeSlice } from "../generation/safe-text";
 import { env } from "./env";
@@ -521,10 +523,35 @@ export type ClaimedJob = {
   attempts: number;
   /** Navbatga qo'yishda hisoblangan byudjet (ms). 0 — eski qator. */
   budgetMs: number;
+  /**
+   * Shu CLAIMning to'siq tokeni — qatorga `locked_by` sifatida yozilgan
+   * qiymat (C26). Ishga oid HAR yozuv (`setProgress`, `setLive`,
+   * `heartbeat`, `setCost`, `commitJobResult`, `failJob`, `releaseJobs`)
+   * aynan shu qiymat bilan to'siladi.
+   */
+  lease: string;
 };
 
 /**
+ * Har claim uchun YANGI to'siq tokeni (C26: CONC-06).
+ *
+ * Ilgari token process bo'yicha edi (`WORKER_ID`): process o'z ishini
+ * qayta olsa (qulf yo'qolib, housekeeping qayta navbatga qo'ygach) eski va
+ * yangi yurish bir xil `locked_by` ni ko'tarardi — eski yurish yangi
+ * claim ustidan ishni yakunlar, keyin yangisi natijani o'chirardi.
+ * Tasodifiy qo'shimcha har claimni noyob qiladi; boshidagi `workerId`
+ * jurnal va tashxis uchun (kimning claimi ekani ko'rinsin).
+ */
+export function newLease(workerId: string): string {
+  return `${workerId}:${randomUUID()}`;
+}
+
+/**
  * Navbatdan bitta ish oladi.
+ *
+ * `lease` — qatorga `locked_by` sifatida yoziladigan to'siq tokeni. U HAR
+ * claim uchun noyob bo'lishi SHART (`newLease`); worker aynan shunday
+ * chaqiradi. Qaytgan `ClaimedJob.lease` — shu qiymat.
  *
  * `FOR UPDATE SKIP LOCKED` — bir nechta worker parallel ishlaganda
  * bir vazifani ikki marta bajarmaydi.
@@ -540,7 +567,7 @@ export type ClaimedJob = {
  * bo'ylab yuradi.
  */
 export async function claimJob(
-  workerId: string,
+  lease: string,
   opts: { userMaxRunning?: number } = {},
 ): Promise<ClaimedJob | null> {
   const cap = Math.max(1, Math.floor(opts.userMaxRunning ?? env.queue.userMaxInflight) || 1);
@@ -572,7 +599,7 @@ export async function claimJob(
          FOR UPDATE SKIP LOCKED
       )
       RETURNING g.id, g.user_id, g.tool_id, g.values_json, g.price, g.attempts, g.budget_ms`,
-    [workerId, cap],
+    [lease, cap],
   );
   if (!row) return null;
   return {
@@ -583,7 +610,37 @@ export async function claimJob(
     price: Number(row.price),
     attempts: row.attempts,
     budgetMs: Number(row.budget_ms) || 0,
+    lease,
   };
+}
+
+/**
+ * SIGTERM (deploy): shu process ushlab turgan claimlarni DARHOL navbatga
+ * qaytaradi (C14: INFRA-02, CONC-03, DB-05).
+ *
+ * Ilgari process 2 s dan keyin shunchaki chiqib ketardi: ish
+ * `IN_PROGRESS` bo'lib, o'lik qulf bilan `budget + 30 s` (2–12.5 daqiqa)
+ * turib qolardi, keyin boshidan qayta bajarilib provayderga ikki marta
+ * pul to'lanardi. Endi:
+ *   - faqat SHU claimlar (`locked_by = ANY(leases)`) — begona ishga tegilmaydi;
+ *   - `attempts - 1`: deploy urinish hisoblanmaydi (claim uni oshirgan edi),
+ *     ya'ni ikki deploy ishni «Ish vaqti tugadi» bilan yiqitmaydi;
+ *   - qulf va `run_after` darhol bo'shaydi — boshqa worker shu zahoti oladi;
+ *   - `live_json` tozalanadi (eski yurishning jonli dekasi ko'rinmasin).
+ * Qaytaradi: qaytarilgan ishlar id si.
+ */
+export async function releaseJobs(leases: string[]): Promise<string[]> {
+  if (!leases.length) return [];
+  const rows = await query<{ id: string }>(
+    `UPDATE generations
+        SET status = 'QUEUED', locked_by = NULL, locked_at = NULL,
+            run_after = now(), attempts = GREATEST(attempts - 1, 0),
+            step = 'Qayta navbatga qo''yildi', live_json = NULL
+      WHERE locked_by = ANY($1::text[]) AND status = 'IN_PROGRESS'
+      RETURNING id`,
+    [leases],
+  );
+  return rows.map((r) => r.id);
 }
 
 /**
@@ -609,39 +666,86 @@ export function formatOf(fileName: string): string | null {
   return ext && ext.length <= 5 ? ext : null;
 }
 
-export async function completeJob(
+export type JobResult = {
+  html: string;
+  doc: AcademicDoc | null;
+  fileName: string;
+  preview: GenerationPreview | null;
+  /** Va'da qilinganidan kam yetkazilgan bo'lsa (AUDIT-6 C7). */
+  delivered?: Delivered;
+};
+
+export async function completeJob(id: string, workerId: string, result: JobResult): Promise<boolean> {
+  const rows = await query<{ id: string }>(COMPLETE_SQL, completeParams(id, workerId, result));
+  return rows.length > 0;
+}
+
+/**
+ * Natijani (fayl + aktivlar + COMPLETED) BITTA tranzaksiyada yozadi —
+ * FAQAT qulf hali shu claimda bo'lsa (C26: CONC-06; BEB-01 bilan bir yo'l).
+ *
+ * Ilgari tartib «fayl/aktiv yoz → `completeJob` → yutqazsa hammasini
+ * o'chir» edi: qulfi yo'qolgan eski yurish yangi yurishning TAYYOR faylini
+ * bosib yozar, keyin fayl va BARCHA aktivlarni o'chirardi — pullik,
+ * COMPLETED, lekin faylsiz ish. Endi avval qator `FOR UPDATE` bilan
+ * qulflanib egalik tekshiriladi; ega bo'lmasak hech narsa yozilmaydi va
+ * hech narsa o'chirilmaydi (`false` — natija tashlanadi). Yozuv o'rtasida
+ * xato bo'lsa rollback — yarim natija (fayl bor, holat IN_PROGRESS) qolmaydi.
+ *
+ * Aktivlar `putAssets` bilan bir xil SQL (`ON CONFLICT DO NOTHING`,
+ * kontent-manzilli id), faqat shu tranzaksiya client'i orqali.
+ */
+export async function commitJobResult(
   id: string,
-  workerId: string,
-  result: {
-    html: string;
-    doc: AcademicDoc | null;
-    fileName: string;
-    preview: GenerationPreview | null;
-    /** Va'da qilinganidan kam yetkazilgan bo'lsa (AUDIT-6 C7). */
-    delivered?: Delivered;
-  },
+  lease: string,
+  file: { bytes: Uint8Array; mime: string; fileName: string },
+  assets: PendingAsset[],
+  result: JobResult,
 ): Promise<boolean> {
-  const rows = await query<{ id: string }>(
-    `UPDATE generations
+  return transaction(async (client) => {
+    const own = await client.query(
+      `SELECT 1 FROM generations WHERE id = $1 AND locked_by = $2 AND status = 'IN_PROGRESS' FOR UPDATE`,
+      [id, lease],
+    );
+    if (!own.rows[0]) return false;
+    await putGenerationFile(id, file, client);
+    for (const a of assets) {
+      await client.query(
+        `INSERT INTO generation_assets (generation_id, asset_id, mime, size_bytes, bytes, expires_at)
+         VALUES ($1, $2, $3, $4, $5, NULL)
+         ON CONFLICT (generation_id, asset_id) DO NOTHING`,
+        [id, a.assetId, a.mime, a.bytes.byteLength, a.bytes],
+      );
+    }
+    return completeInTx(client, id, lease, result);
+  });
+}
+
+const COMPLETE_SQL = `UPDATE generations
         SET status = 'COMPLETED', progress = 100, step = 'Tayyor',
             html = $3, doc_json = $4, file_name = $5, preview = $6,
             format = COALESCE($7, format), delivered_json = $8,
             finished_at = now(), locked_by = NULL, locked_at = NULL, error = NULL,
             live_json = NULL
       WHERE id = $1 AND locked_by = $2 AND status = 'IN_PROGRESS'
-      RETURNING id`,
-    [
-      id,
-      workerId,
-      cleanText(result.html),
-      result.doc ? toJsonb(result.doc) : null,
-      cleanText(result.fileName),
-      result.preview ? toJsonb(result.preview) : null,
-      formatOf(result.fileName),
-      result.delivered ? toJsonb(result.delivered) : null,
-    ],
-  );
-  return rows.length > 0;
+      RETURNING id`;
+
+function completeParams(id: string, workerId: string, result: JobResult): unknown[] {
+  return [
+    id,
+    workerId,
+    cleanText(result.html),
+    result.doc ? toJsonb(result.doc) : null,
+    cleanText(result.fileName),
+    result.preview ? toJsonb(result.preview) : null,
+    formatOf(result.fileName),
+    result.delivered ? toJsonb(result.delivered) : null,
+  ];
+}
+
+async function completeInTx(client: PoolClient, id: string, workerId: string, result: JobResult): Promise<boolean> {
+  const res = await client.query<{ id: string }>(COMPLETE_SQL, completeParams(id, workerId, result));
+  return res.rows.length > 0;
 }
 
 /**
