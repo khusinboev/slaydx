@@ -12,7 +12,7 @@ import type { AcademicDoc } from "../lib/generation/types.ts";
  *
  *   • noma'lum/muddati o'tgan token — 404 (sabab aytilmaydi);
  *   • javob ochiq ko'rinishda (`publicGameView`) — TO'G'RI JAVOB YO'Q;
- *   • `submit` — `checkOrigin` (CSRF) va IP bo'yicha 30/daq (429);
+ *   • `submit` — `checkOrigin` (CSRF) va o'yin+IP bo'yicha 120/daq, IP shipi 600/daq (429, C29);
  *   • BALL SERVERDA: klient yuborgan `score` e'tiborsiz;
  *   • ism bo'sh bo'lsa 400.
  *
@@ -204,8 +204,8 @@ test("submit: begona origin — 403 (CSRF)", async (t) => {
   assert.equal(seen.filter((s) => /INSERT INTO game_results/.test(s.text)).length, 0);
 });
 
-test("submit: IP bo'yicha 30/daq — chegaradan keyin 429 va `Retry-After`", async (t) => {
-  assert.equal(SUBMIT_PER_MINUTE, 30);
+test("submit: o'yin+IP bo'yicha 120/daq (C29) — chegaradan keyin 429 va `Retry-After`", async (t) => {
+  assert.equal(SUBMIT_PER_MINUTE, 120);
   const seen = mockDb(t, { hits: SUBMIT_PER_MINUTE + 1 });
   const res = await POST(postReq({ name: "Ali", answers: {} }), ctx());
   assert.equal(res.status, 429, "MUTATSIYA: rate limit yo'q");

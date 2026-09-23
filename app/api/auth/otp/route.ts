@@ -7,7 +7,9 @@ import {
   upsertLocalUser,
 } from "@/lib/server/auth";
 import { createSession, setSessionCookie } from "@/lib/server/session";
-import { clientIp } from "@/lib/server/ratelimit";
+import { clientIp, rateLimit } from "@/lib/server/ratelimit";
+import { IP_LIMITS } from "@/lib/server/ip-limits";
+import { peekRate } from "@/lib/server/rate-peek";
 import { env } from "@/lib/server/env";
 
 export const runtime = "nodejs";
@@ -52,9 +54,10 @@ export const POST = handler("auth/otp", async (req) => {
     const identifier = normalizeIdentifier(String(body.identifier ?? ""));
     if (identifier.length < 3) throw new ApiError("Telefon yoki foydalanuvchi nomini kiriting", 400);
 
-    // Ikki qatlam: bitta raqamga spam va bitta IP dan ko'p raqamga so'rov.
-    await limit(`otp:req:${identifier}`, 3, 600);
-    await limit(`otp:ip:${ip}`, 15, 600);
+    // Ikki qatlam: bitta raqamga spam (qat'iy) va bitta IP dan toshqin (NAT ga keng, C29).
+    const { otpRequestPerIdentifier: perId, otpRequestPerIp: perIp } = IP_LIMITS;
+    await limit(`otp:req:${identifier}`, perId.count, perId.windowSec);
+    await limit(`otp:ip:${ip}`, perIp.count, perIp.windowSec);
 
     const code = await issueLoginCode(identifier);
     return json({ sent: true, delivery: "dev", devCode: code });
@@ -65,11 +68,25 @@ export const POST = handler("auth/otp", async (req) => {
   const code = String(body.code ?? "");
   if (!identifier) throw new ApiError("Identifikator yo'q", 400);
 
-  await limit(`otp:verify:${identifier}`, 10, 600);
-  await limit(`otp:verify:ip:${ip}`, 30, 600);
+  /*
+   * Taxmin qilish himoyasi (C29): identifikator bo'yicha qat'iy chegara,
+   * IP dan esa faqat XATO kodlar sanaladi (turli raqamlarga «purkash»).
+   * Barcha urinishlar uchun IP shipi keng — NAT ortidagi sinf kirsin.
+   */
+  const { otpVerifyPerIdentifier: perId, otpVerifyPerIp: perIp, otpVerifyFailPerIp: failIp } = IP_LIMITS;
+  const failBucket = `otp:verify:fail:${ip}`;
+  await limit(`otp:verify:${identifier}`, perId.count, perId.windowSec);
+  await limit(`otp:verify:ip:${ip}`, perIp.count, perIp.windowSec);
+  const failed = await peekRate(failBucket, failIp.count, failIp.windowSec);
+  if (!failed.ok) {
+    throw new ApiError(`Juda ko'p so'rov. ${failed.retryAfterSec} soniyadan keyin urinib ko'ring.`, 429, {
+      retryAfter: failed.retryAfterSec,
+    });
+  }
 
   const check = await consumeLoginCode(identifier, code);
   if (!check.ok) {
+    await rateLimit(failBucket, failIp.count, failIp.windowSec);
     const message =
       check.reason === "expired"
         ? "Kod muddati tugagan — yangisini so'rang"

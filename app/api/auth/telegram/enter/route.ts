@@ -4,6 +4,8 @@ import { redeemLoginToken } from "@/lib/server/telegram";
 import { createSession, setSessionCookie } from "@/lib/server/session";
 import { clientIp, rateLimit } from "@/lib/server/ratelimit";
 import { env } from "@/lib/server/env";
+import { IP_LIMITS } from "@/lib/server/ip-limits";
+import { peekRate } from "@/lib/server/rate-peek";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,15 +36,25 @@ export async function GET(req: Request) {
   try {
     await ensureMigrated();
 
-    // Tokenni taxmin qilib bo'lmaydi, lekin urinishlar oqimini baribir
-    // cheklaymiz — bo'sh urinishlar bazani bezovta qilmasin.
+    /*
+     * Tokenni taxmin qilib bo'lmaydi, lekin urinishlar oqimini baribir
+     * cheklaymiz (C29): IP bo'yicha keng shift (NAT ortida yuzlab
+     * muvaffaqiyatli kirish) va FAQAT yaroqsiz tokenlar uchun qat'iy
+     * chegara — ilgari 30/IP barcha urinishni sanab, sinfni bloklardi.
+     */
     const ip = clientIp(req);
-    if (!(await rateLimit(`enter:${ip}`, 30, 300)).ok) {
+    const { enterPerIp, enterFailPerIp } = IP_LIMITS;
+    const failBucket = `enter:fail:${ip}`;
+    if (
+      !(await rateLimit(`enter:${ip}`, enterPerIp.count, enterPerIp.windowSec)).ok ||
+      !(await peekRate(failBucket, enterFailPerIp.count, enterFailPerIp.windowSec)).ok
+    ) {
       return fail("Juda ko'p urinish. Bir oz kuting.");
     }
 
     const result = await redeemLoginToken(token);
     if (!result.ok) {
+      await rateLimit(failBucket, enterFailPerIp.count, enterFailPerIp.windowSec);
       return fail(
         result.reason === "expired"
           ? "Havola eskirgan yoki allaqachon ishlatilgan. Qaytadan urinib ko'ring."

@@ -1,5 +1,6 @@
 import "server-only";
 import { BRAND_NAME } from "../brand";
+import { acceptedPaymeKeys } from "./payme-keys";
 
 /**
  * Serverdagi barcha sozlamalar shu yerdan o'qiladi.
@@ -249,7 +250,9 @@ export const env = {
     /** Bitta generatsiyaga ajratilgan maksimal vaqt. */
     jobTimeoutMs: int("WORKER_JOB_TIMEOUT_MS", DEFAULT_JOB_TIMEOUT_MS),
     /** Worker shu processda avtomatik ishga tushsinmi. */
-    inline: bool("WORKER_INLINE", true),
+    // Prod'da standart o'chiq (CONC-17): compose override'siz ishga tushgan web
+    // nusxasi navbatni o'zi bajarib ketmasin. Dev'da avvalgidek yoqiq.
+    inline: bool("WORKER_INLINE", !isProd),
   },
 } as const;
 
@@ -272,7 +275,9 @@ export function ttsConfigured(): boolean {
 export function paymentsConfigured(): { click: boolean; payme: boolean } {
   return {
     click: Boolean(env.click.serviceId && env.click.secretKey && env.click.merchantId),
-    payme: Boolean(env.payme.merchantId && (env.payme.key || env.payme.testKey)),
+    // Webhook bilan BIR XIL qoida (review R1): faqat test kaliti + sandbox o'chiq —
+    // checkout taklif qilinmaydi, aks holda har to'lov Payme'da AUTH bilan yiqilardi.
+    payme: Boolean(env.payme.merchantId && acceptedPaymeKeys(env.payme).length),
   };
 }
 

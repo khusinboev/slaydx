@@ -75,7 +75,7 @@ Summary: P0 1 · P1 5 · P2 7 · P3 2
 - **Location:** `.claude/deploy.md` §"1. Zaxira" and §"4. Orqaga qaytarish"
 - **Evidence:** The only backup mechanism documented anywhere in the repo is:
   ```bash
-  ssh root@194.163.136.239
+  ssh root@<SERVER_IP>
   mkdir -p /root/slaydx-backups
   ts=$(date +%Y%m%d%H%M%S)
   docker exec slaydx-postgres-1 pg_dump -U slaydx slaydx > /root/slaydx-backups/slaydx-$ts.sql
@@ -162,7 +162,7 @@ Summary: P0 1 · P1 5 · P2 7 · P3 2
 - **Reproduction:** N/A — absence confirmed by repo-wide search for nginx config files; the described past incident is documented first-hand in `deploy.md` itself, not inferred.
 - **Proposed fix:** Bring the nginx site config into the repo (even just as a reference file deployed by `deploy.sh`, e.g. `infra/nginx/slaydx.conf` copied to `/etc/nginx/sites-available/slaydx` on deploy) so body-size/timeout/rate-limit settings are diffable, reviewable, and reproducible instead of tribal knowledge on one box.
 - **Effort:** M
-- **Confidence:** high that it's untracked (verifiable); medium on the *current* live values (can't be confirmed without SSH, which is out of scope — orchestrator can verify with `ssh root@194.163.136.239 'nginx -T'` if desired).
+- **Confidence:** high that it's untracked (verifiable); medium on the *current* live values (can't be confirmed without SSH, which is out of scope — orchestrator can verify with `ssh root@<SERVER_IP> 'nginx -T'` if desired).
 
 ---
 
