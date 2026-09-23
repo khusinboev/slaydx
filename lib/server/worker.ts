@@ -38,6 +38,7 @@ import { expireQueuedJobs } from "./queue-ttl";
 import { purgeBonusFiles } from "./retention";
 import { purgeSourceCache } from "../generation/research/cache";
 import { refundUnrefundedFailed } from "./refund-reconcile";
+import { purgePaymentEvents } from "./payment-events";
 import { queryOne } from "./db";
 import type { ToolConfig, ToolId } from "../types";
 import { refundRatio } from "../generation/delivered";
@@ -83,9 +84,21 @@ export const WORKER_ALIVE_FILE = "/tmp/slaydx-worker-alive";
 const RETENTION_EVERY_MS = 6 * 3600_000;
 let lastRetentionAt = -Infinity;
 
-/** Sinov uchun: keyingi `housekeeping()` saqlash skanerini darhol yurgizsin. */
+/**
+ * To'lov webhook izi (`payment_events`, OBS-09) — 365 kundan eskisi shu
+ * cadence bilan (6 soat) tozalanadi. Yil chegarasi uchun daqiqa aniqligi
+ * kerak emas; har daqiqada skaner bazani behuda urardi.
+ */
+const PAYMENT_EVENTS_RETENTION_DAYS = 365;
+let lastPaymentEventsPurgeAt = -Infinity;
+
+/**
+ * Sinov uchun: keyingi `housekeeping()` 6 soatlik qadamlarni (saqlash
+ * skaneri, `payment_events` tozalash) darhol yurgizsin.
+ */
 export function resetRetentionScan(): void {
   lastRetentionAt = -Infinity;
+  lastPaymentEventsPurgeAt = -Infinity;
 }
 /** Har iteratsiyada diskka yozmaslik uchun — 30 s shartnomadan ancha tez. */
 const ALIVE_EVERY_MS = 10_000;
@@ -704,13 +717,27 @@ export async function housekeeping(): Promise<void> {
     lastRetentionAt = Date.now();
     await purgeBonusFiles();
   });
+  /*
+   * To'lov webhook izi (W3 wrap-up): 365 kundan eskisi, 6 soatda bir marta,
+   * ALOHIDA qadam — yiqilsa ham qolgan tozalashlar ishlaydi. Belgi skanerdan
+   * OLDIN qo'yiladi (saqlash qadami naqshi): yiqilayotgan DELETE har
+   * daqiqada qayta urmasin.
+   */
+  await step("payment-events", async () => {
+    if (Date.now() - lastPaymentEventsPurgeAt < RETENTION_EVERY_MS) return;
+    lastPaymentEventsPurgeAt = Date.now();
+    const n = await purgePaymentEvents(PAYMENT_EVENTS_RETENTION_DAYS);
+    if (n) log("info", "[worker] payment_events tozalandi", { deleted: n, retentionDays: PAYMENT_EVENTS_RETENTION_DAYS });
+  });
   await step("sessions", () => purgeExpiredSessions());
   /*
    * O'YIN havolalari (AUDIT-22 R, `game_sessions.expires_at`, standart
    * 30 kun) — `purgeOldSources`/`purgeOldPhotos` bilan bir qatorda.
-   * Natijalar (`game_results`) alohida o'chirilmaydi: FK
-   * `ON DELETE CASCADE` (`021_games.sql`) ularni sessiya bilan birga
-   * olib tashlaydi.
+   * Faqat NATIJASIZ muddati o'tgan havolalar o'chiriladi (W3-G, BEA-08):
+   * natijasi bor sessiya qoladi — token `expires_at` bo'yicha ishlamay
+   * qoladi, o'quvchilar natijalari (`game_results`) esa o'qituvchi uchun
+   * generatsiya o'chirilguncha saqlanadi (FK `ON DELETE CASCADE` faqat
+   * generatsiya/sessiya o'chganda ishlaydi).
    */
   await step("game-sessions", () => purgeExpiredGameSessions());
   await step("rate-limits", () => purgeRateLimits());
