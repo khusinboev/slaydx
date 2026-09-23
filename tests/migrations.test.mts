@@ -40,11 +40,21 @@ test("fayl nomlari: uch xonali raqam + tavsif, ketma-ket va takrorsiz", () => {
   assert.deepEqual(FILES, [...FILES].sort());
 });
 
-test("AUDIT-22: `021_games.sql` ro'yxatda va oxirgisi", () => {
+test("AUDIT-22: `021_games.sql` ro'yxatda", () => {
   assert.ok(FILES.includes("021_games.sql"), "021_games.sql yo'q");
-  assert.equal(FILES[FILES.length - 1], "021_games.sql", "yangi migratsiya oxirgi bo'lishi kerak");
   // Oldingi sprintning oxirgisi joyida (eski fayl o'chirilmagan).
   assert.ok(FILES.includes("020_article.sql"));
+});
+
+test("C23: `022_retention.sql` oxirgisi, orqaga mos va qayta qo'llash xavfsiz", () => {
+  assert.equal(FILES[FILES.length - 1], "022_retention.sql", "yangi migratsiya oxirgi bo'lishi kerak");
+  const sql = sqlOf("022_retention.sql");
+  // Faqat NULL-li ustun qo'shiladi — eski kod uni bilmasa ham ishlaydi.
+  assert.match(sql, /ALTER TABLE generations ADD COLUMN IF NOT EXISTS files_purged_at TIMESTAMPTZ;/);
+  assert.match(sql, /CREATE INDEX IF NOT EXISTS generations_retention_idx/);
+  assert.match(sql, /WHERE status = 'COMPLETED' AND files_purged_at IS NULL/);
+  // Rollback izohda yozilgan.
+  assert.match(sql, /--\s+ALTER TABLE generations DROP COLUMN IF EXISTS files_purged_at;/);
 });
 
 test("021: ikkala jadval, ustunlar va indekslar to'liq", () => {
