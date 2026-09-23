@@ -2,6 +2,7 @@ import { ApiError, handler, requireUser } from "@/lib/server/api";
 import { ensureFreshFileShared } from "@/lib/server/fresh-file";
 import { contentDisposition, pdfResponse } from "@/lib/server/pdf-serve";
 import { getGenerationFile } from "@/lib/server/storage";
+import { bytesBody } from "@/lib/server/http-bytes";
 
 export { contentDisposition };
 
@@ -84,7 +85,8 @@ export const GET = handler("generations/file", async (req, ctx: Ctx) => {
    * va o'shanda fayl brauzer tabida ochilib qolmasdan YUKLANADI.
    */
   const isAudio = file.mime.startsWith("audio/");
-  return new Response(new Uint8Array(file.bytes), {
+  // `bytesBody` — nusxasiz ko'rinish (DB-06/SCALE-08): 25 MB faylni yana nusxalamaydi.
+  return new Response(bytesBody(file.bytes), {
     headers: {
       "Content-Type": file.mime,
       "Content-Length": String(file.bytes.byteLength),
