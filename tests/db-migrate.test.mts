@@ -30,7 +30,13 @@ import { createIsolatedDb } from "./helpers/isolated-db.mts";
  *   2. har fayl `lock_timeout` i olib tashlandi → «lock_timeout» (60 s osildi);
  *   3. advisory qulf kutishi chegarasi olib tashlandi → «advisory qulf kutishi»;
  *   4. `application_name: "slaydx"` (rolsiz) → «hovuz: sozlama»;
- *   5. ogohlantirish chastota chegarasi olib tashlandi → «hovuz to'lishi».
+ *   5. ogohlantirish chastota chegarasi olib tashlandi → «hovuz to'lishi»;
+ *   6. (review R3) `query_timeout: statementTimeout + 5_000` (0 ham) →
+ *      «DATABASE_STATEMENT_TIMEOUT_MS=0»;
+ *   7. (review R1) eski sinxron `waitingCount > 0` tekshiruvi → «iliq hovuz»
+ *      (soxta «hovuz to'lgan … bo'sh 1»);
+ *   8. to'liq shart, lekin `setImmediate` siz → «hovuz to'lishi» (iliq
+ *      hovuzdagi haqiqiy to'lqin ko'rinmadi).
  */
 
 const hasDb = Boolean(process.env.DATABASE_URL) && !process.env.DATABASE_URL!.includes("unused");
