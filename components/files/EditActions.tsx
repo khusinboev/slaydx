@@ -19,7 +19,8 @@ export type EditActionsState = {
   saving: boolean;
   /** Endigina saqlandi — qisqa «Saqlandi ✓». */
   justSaved: boolean;
-  save: () => Promise<void> | void;
+  /** `useDocEdit.save` — `false` bo'lsa saqlanmadi (navbat joyida, sabab ko'ruvchida). */
+  save: () => Promise<boolean | void> | void;
   /** Saqlanmagan o'zgarishlarni bekor qilish (faqat klientda). */
   discard: () => void;
 };

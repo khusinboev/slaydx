@@ -86,16 +86,6 @@ export function isUnpaidError(e: unknown): boolean {
 export const EDIT_CHUNK_OPS = 50;
 
 /**
- * Saqlash xatosi VAQTINCHALIKMI — navbat saqlanib, qayta urinsa bo'ladimi:
- * tarmoq/vaqt tugashi (0), 408, 429, 5xx. 409 (versiya/holat), 400/422
- * (op yaroqsiz) — yo'q: qayta yuborish yana shu xatoni beradi.
- */
-export function isRetryableSaveError(e: unknown): boolean {
-  if (!(e instanceof ApiError)) return true;
-  return e.status === 0 || e.status === 408 || e.status === 429 || e.status >= 500;
-}
-
-/**
  * Operatsiyalar to'plamini yuboradi (atomar: hammasi yoki hech biri).
  *
  * `ops` ATAYIN `unknown[]`: bitta marshrut (`PATCH …/doc`) endi ikki xil

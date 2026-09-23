@@ -1,8 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { getGeneration, type GenerationDetail } from "@/lib/api-client";
-import { editErrorCode, editErrorText, patchGenerationDoc, rebuildGeneration, restoreGenerationDoc } from "@/lib/api-edit";
+import { ApiError, getGeneration, type GenerationDetail } from "@/lib/api-client";
+import {
+  EDIT_CHUNK_OPS,
+  editErrorCode,
+  editErrorText,
+  patchGenerationDoc,
+  rebuildGeneration,
+  restoreGenerationDoc,
+} from "@/lib/api-edit";
 import { UNDO_DEPTH } from "@/lib/generation/slide-limits";
 import type { AcademicDoc } from "@/lib/generation/types";
 
@@ -19,18 +26,24 @@ import type { AcademicDoc } from "@/lib/generation/types";
  * so'z yozgan foydalanuvchi o'nlab PATCH va bir nechta qayta yasashni
  * ishga tushirardi va «qachon saqlandi?» degan savolga javob yo'q edi.
  * Endi operatsiyalar navbatda YIG'ILADI, `pending` ularning sonini
- * beradi, `save()` esa hammasini BITTA `PATCH` bilan yuboradi va darhol
- * `rebuild` qiladi. Sahifadan chiqishda saqlanmagan navbat bo'lsa
- * brauzer ogohlantiradi (`beforeunload`).
+ * beradi, `save()` esa ularni ≤{@link EDIT_CHUNK_OPS} lik bo'laklarda
+ * (server bitta so'rovda 50 tadan ortig'ini rad etadi) ketma-ket
+ * yuboradi va oxirida bir marta `rebuild` qiladi. Sahifadan chiqishda
+ * saqlanmagan navbat bo'lsa brauzer ogohlantiradi (`beforeunload`).
  *
  * Serverdan kelgan `generation` — YAGONA haqiqat: uning `doc` i
  * optimistik nusxaning o'rniga qo'yiladi (server chegara bo'yicha
- * qisqartirgan bo'lishi mumkin).
+ * qisqartirgan bo'lishi mumkin); hali yuborilmagan op lar uning ustiga
+ * qayta qo'llanadi.
  *
- * Har qanday PATCH xatosida (409 `version`/`status`, tarmoq, 422)
- * hujjat serverdan QAYTA YUKLANADI va undo/redo steklari tozalanadi:
- * eski stek endi boshqa hujjatga tegishli bo'lardi va Ctrl+Z boshqa
- * joyni buzardi.
+ * Saqlanmagan tahrir HECH QACHON jim yo'qolmaydi (FE-03):
+ *   • navbatdan faqat server QABUL QILGAN op lar olinadi;
+ *   • tarmoq/vaqt tugashi/429/5xx/413 — navbat va steklar joyida, xabar
+ *     «Saqlanmadi — …», «Saqlash» qayta urinadi;
+ *   • 409 (`version`/`status`/`legacy`), 400, 422 — server bu navbatni
+ *     qabul qilmaydi: hujjat serverdan QAYTA YUKLANADI, steklar tozalanadi
+ *     (eski stek boshqa hujjatga tegishli bo'lardi) va nechta o'zgarish
+ *     qo'llanmagani AYTILADI; qayta yuklash ham yiqilsa navbat qoladi.
  *
  * Rezyume 2 (AUDIT-15) da bu mantiq `useSlideEdit` dan SO'ZMA-SO'Z
  * ko'chirildi va generik qilindi: farq atigi to'rt nuqta — qaysi
@@ -121,8 +134,12 @@ export type DocEdit<Op> = {
   canRedo: boolean;
   /** SAQLANMAGAN operatsiyalar soni — «Saqlash (N o'zgarish)». */
   pending: number;
-  /** Navbatdagi hamma operatsiyani bitta PATCH bilan yuboradi va faylni yangilaydi. */
-  save: () => Promise<void>;
+  /**
+   * Navbatdagi operatsiyalarni (≤50 lik bo'laklarda) yuboradi va faylni
+   * yangilaydi. `false` — hammasi saqlanmadi (sabab `error` da, navbat
+   * joyida yoki qayta yuklangan); chaqiruvchi server tahririni boshlamaydi.
+   */
+  save: () => Promise<boolean>;
   /** PATCH uchayotgani. */
   saving: boolean;
   /** Endigina saqlandi — «Saqlandi ✓» ({@link SAVED_FLASH_MS} ms). */
@@ -206,9 +223,17 @@ export function useDocEdit<Op>({
   const onGenRef = useRef(onGen);
   const rawRef = useRef<Record<string, unknown>>(g?.raw ?? {});
   onGenRef.current = onGen;
+  /*
+   * `apply` REF da: o'ramlar uni har renderda yangi funksiya qilib beradi
+   * (`useResumeEdit`), `save` esa unga bog'lansa har renderda yangilanib,
+   * ko'ruvchining `onEditState` effekti → sahifa holati → render halqasiga
+   * tushardi.
+   */
+  const applyRef = useRef(apply);
+  applyRef.current = apply;
   rawRef.current = g?.raw ?? rawRef.current;
 
-  const inflightRef = useRef<Promise<void> | null>(null);
+  const inflightRef = useRef<Promise<boolean> | null>(null);
   const flashRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const aliveRef = useRef(true);
 
@@ -275,20 +300,49 @@ export function useDocEdit<Op>({
     return () => window.removeEventListener("beforeunload", onLeave);
   }, [pending]);
 
-  /** Serverdan qayta yuklaydi va steklarni tozalaydi (409 va boshqa xatolardan keyin). */
-  const reload = useCallback(async () => {
-    if (!genId) return;
+  /**
+   * Serverdan qayta yuklaydi va steklarni tozalaydi (409 va boshqa
+   * xatolardan keyin). `false` — qayta yuklash ham yiqildi: ekrandagi
+   * hujjat VA steklar joyida qoladi (chaqiruvchi navbatni ham saqlaydi,
+   * aks holda ekrandagi tahrir «saqlangan»dek ko'rinardi).
+   */
+  const reload = useCallback(async (): Promise<boolean> => {
+    if (!genId) return false;
     try {
       const { generation } = await getGeneration(genId);
-      if (!aliveRef.current) return;
+      if (!aliveRef.current) return false;
       adopt(generation);
     } catch {
-      // Qayta yuklash ham yiqilsa ekrandagi holat qoladi — xato matni allaqachon ko'rsatilgan.
+      // Xato matnini chaqiruvchi ko'rsatadi (u `false` ni ko'radi).
+      return false;
     }
     undoRef.current = [];
     redoRef.current = [];
     bump();
+    return true;
   }, [genId, adopt, bump]);
+
+  /**
+   * Server javobini o'zlashtiradi va hali YUBORILMAGAN op larni uning
+   * ustiga qayta qo'llaydi: saqlash davomida yoki yiqilgan bo'lakdan
+   * keyin navbatda qolgan tahrir ekrandan yo'qolmasin.
+   */
+  const adoptKeepingQueue = useCallback(
+    (gd: GenerationDetail) => {
+      adopt(gd);
+      const rest = queueRef.current;
+      if (!rest.length || !gd.doc) return;
+      const res = applyRef.current(gd.doc, rest, { genId });
+      if (res.ok) {
+        docRef.current = res.doc;
+        setDoc(res.doc);
+      } else {
+        // Server hujjatni qisqartirgan bo'lsa navbatdagi op endi qo'llanmaydi.
+        setError(`Saqlanmagan o‘zgarishni qo‘llab bo‘lmadi: ${res.error}`);
+      }
+    },
+    [adopt, genId],
+  );
 
   const doRebuild = useCallback(async () => {
     if (!genId) return;
@@ -310,52 +364,118 @@ export function useDocEdit<Op>({
   }, [genId]);
 
   /**
-   * «Saqlash» — navbatdagi HAMMA operatsiya bitta `PATCH` da, keyin
-   * `rebuild`. Bir vaqtda faqat bitta so'rov uchadi (ikkinchi bosish
-   * birinchisini kutadi), aks holda ikki PATCH bir xil `baseVersion`
-   * bilan yo'lga chiqib, ikkinchisi 409 olardi.
+   * Yiqilgan saqlashni hal qiladi. `sent` — shu saqlashda server qabul
+   * qilgan op lar (ular navbatdan allaqachon olingan), `unsent` — yuborilmay
+   * qolgan snapshot qismi.
+   *
+   * Server bu navbatni HECH QACHON qabul qilmaydigan xatolar (409
+   * `version`/`status`/`legacy`, 400 yaroqsiz op, 422 qo'llanmaydi) —
+   * hujjat qayta yuklanadi va navbat tashlanadi, lekin JIM emas: nechta
+   * o'zgarish qo'llanmagani aytiladi. Qayta yuklash ham yiqilsa navbat
+   * QOLADI (ekrandagi tahrir «saqlangan»dek ko'rinmasin). Qolgan hamma
+   * xato (tarmoq, vaqt tugashi, 429, 5xx, 413, 401) — navbat va steklar
+   * joyida, «Saqlash» qayta urinadi.
    */
-  const save = useCallback(async (): Promise<void> => {
-    if (inflightRef.current) await inflightRef.current;
-    if (!genId) return;
-    const ops = queueRef.current;
-    if (!ops.length) return;
-    queueRef.current = [];
-    setPending(0);
-    setSaving(true);
-    if (flashRef.current) clearTimeout(flashRef.current);
-    setJustSaved(false);
-    const p = (async () => {
-      let ok = false;
-      try {
-        const { generation } = await patchGenerationDoc(genId, versionRef.current, ops as unknown[]);
-        if (aliveRef.current) adopt(generation);
-        ok = true;
-      } catch (e) {
-        if (aliveRef.current) setError(editErrorText(e));
-        // Server HECH NARSANI qo'llamagan (PATCH atomar) — navbat tashlanadi
-        // va haqiqat serverdan qayta olinadi.
+  const settleFailure = useCallback(
+    async (e: unknown, unsent: number) => {
+      const text = editErrorText(e);
+      const rejected =
+        e instanceof ApiError && (e.status === 400 || e.status === 422 || editErrorCode(e) !== null);
+      if (!rejected) {
+        if (aliveRef.current) setError(`Saqlanmadi — qayta urinish uchun «Saqlash» ni bosing. ${text}`);
+        return;
+      }
+      const reloaded = await reload();
+      if (!aliveRef.current) return;
+      if (reloaded) {
         queueRef.current = [];
         setPending(0);
-        await reload();
-      } finally {
-        inflightRef.current = null;
-        if (aliveRef.current) setSaving(false);
+        setError(`${text} Saqlanmagan ${unsent} ta o‘zgarish qo‘llanmadi.`);
+      } else {
+        setError(`${text} Hujjatni qayta yuklab bo‘lmadi — saqlanmagan o‘zgarishlar hali ekranda.`);
       }
-      if (!ok) return;
+    },
+    [reload],
+  );
+
+  /**
+   * «Saqlash» — navbat ≤{@link EDIT_CHUNK_OPS} lik bo'laklarda, ketma-ket
+   * (har bo'lak oldingisining javobidagi `docVersion` bilan), keyin bitta
+   * `rebuild`. Bir vaqtda faqat bitta saqlash uchadi (ikkinchi bosish
+   * birinchisini kutadi), aks holda ikki PATCH bir xil `baseVersion` bilan
+   * yo'lga chiqib, ikkinchisi 409 olardi.
+   *
+   * Saqlash boshida navbat uzunligi olinadi (snapshot): shu vaqt ichida
+   * kiritilgan yangi tahrir navbat oxiriga qo'shiladi va keyingi
+   * «Saqlash» gacha kutadi. Navbatdan FAQAT server qabul qilgan op lar
+   * olinadi. 413 (tana juda katta) — bo'lak ikkiga bo'linib qayta ketadi.
+   */
+  const save = useCallback(async (): Promise<boolean> => {
+    if (inflightRef.current) await inflightRef.current;
+    if (!genId) return true;
+    const total = queueRef.current.length;
+    if (!total) return true;
+    setSaving(true);
+    setError(null);
+    if (flashRef.current) clearTimeout(flashRef.current);
+    setJustSaved(false);
+    const p = (async (): Promise<boolean> => {
+      let sent = 0;
+      let size = EDIT_CHUNK_OPS;
+      let last: GenerationDetail | null = null;
+      let failure: { e: unknown } | null = null;
+      try {
+        while (sent < total) {
+          const chunk = queueRef.current.slice(0, Math.min(size, total - sent));
+          let generation: GenerationDetail;
+          try {
+            ({ generation } = await patchGenerationDoc(genId, versionRef.current, chunk as unknown[]));
+          } catch (e) {
+            if (e instanceof ApiError && e.status === 413 && chunk.length > 1) {
+              size = Math.ceil(chunk.length / 2);
+              continue;
+            }
+            throw e;
+          }
+          // Server shu bo'lakni qabul qildi — endi u navbatda emas.
+          queueRef.current = queueRef.current.slice(chunk.length);
+          sent += chunk.length;
+          versionRef.current = num(generation.docVersion);
+          fileRef.current = num(generation.fileVersion);
+          last = generation;
+          if (aliveRef.current) setPending(queueRef.current.length);
+        }
+      } catch (e) {
+        failure = { e };
+      }
+      // Qisman muvaffaqiyat ham serverdagi haqiqat — ekranga olinadi.
+      if (last && aliveRef.current) adoptKeepingQueue(last);
+      if (failure) {
+        // Qayta yuklash tugaguncha keyingi «Saqlash» kutadi (`inflightRef`).
+        await settleFailure(failure.e, total - sent);
+        inflightRef.current = null;
+        if (aliveRef.current) {
+          setPending(queueRef.current.length);
+          setSaving(false);
+        }
+        return false;
+      }
+      inflightRef.current = null;
+      if (aliveRef.current) setSaving(false);
       // Fayl darhol quvib yetadi: «Saqlash» dan keyin «Yuklab olish»
       // eski faylni bermasligi kerak.
       await doRebuild();
-      if (!aliveRef.current) return;
+      if (!aliveRef.current) return true;
       setJustSaved(true);
       flashRef.current = setTimeout(() => {
         flashRef.current = null;
         if (aliveRef.current) setJustSaved(false);
       }, savedFlashMs);
+      return true;
     })();
     inflightRef.current = p;
-    await p;
-  }, [genId, adopt, reload, doRebuild, savedFlashMs]);
+    return p;
+  }, [genId, adoptKeepingQueue, settleFailure, doRebuild, savedFlashMs]);
 
   const saveRef = useRef(save);
   saveRef.current = save;
@@ -413,6 +533,8 @@ export function useDocEdit<Op>({
   }, [push, bump]);
 
   const ensureFresh = useCallback(async () => {
+    // Saqlash yiqilsa ham saqlangan qism uchun fayl yangilanadi; saqlanmagan
+    // qism `pending` da ko'rinib turadi.
     await saveRef.current();
     await doRebuild();
   }, [doRebuild]);
@@ -444,6 +566,9 @@ export function useDocEdit<Op>({
   const restore = useCallback(async () => {
     if (!genId) return;
     if (inflightRef.current) await inflightRef.current;
+    // Tiklash YIQILSA (tarmoq, 5xx) navbat qaytariladi — aks holda
+    // ekrandagi tahrir «saqlangan»dek ko'rinib, jim yo'qolardi.
+    const dropped = queueRef.current;
     queueRef.current = [];
     setPending(0);
     setSaving(true);
@@ -457,7 +582,9 @@ export function useDocEdit<Op>({
     } catch (e) {
       if (aliveRef.current) setError(editErrorText(e));
       // 409 (`no_prev`/`status`) — serverdagi haqiqat boshqa; qayta yuklaymiz.
-      if (editErrorCode(e)) await reload();
+      if (editErrorCode(e) && (await reload())) return;
+      queueRef.current = [...dropped, ...queueRef.current];
+      if (aliveRef.current) setPending(queueRef.current.length);
       return;
     } finally {
       if (aliveRef.current) setSaving(false);
@@ -473,7 +600,9 @@ export function useDocEdit<Op>({
   const serverEdit = useCallback(
     async (call: (baseVersion: number) => Promise<{ generation: GenerationDetail }>) => {
       if (!genId) return;
-      await saveRef.current();
+      // Navbat saqlanmagan bo'lsa server tahriri BOSHLANMAYDI: u versiyani
+      // oshirib, navbatdagi op larni eski asosga osiltirib qo'yardi.
+      if (!(await saveRef.current())) return;
       setSaving(true);
       try {
         const { generation } = await call(versionRef.current);
