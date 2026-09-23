@@ -28,6 +28,10 @@ export function HomeFiles() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // `ret` so'rov parametridan (masalan `?returnTo=javascript:...`)
+    // keladi — TEKSHIRILMAGAN. Sanatsiya `useUi.open` ichida
+    // (`lib/ui.ts`, `safeReturnTo`) yagona joyda bajariladi, shu bois
+    // bu yerda xom qiymat shunchaki uzatiladi (C02/FE-01/SECA-02).
     const ret = params.get("returnTo");
     if (ret && sessionChecked && !loggedIn) open("login", { returnTo: ret });
   }, [params, loggedIn, sessionChecked, open]);

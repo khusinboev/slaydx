@@ -6,6 +6,7 @@ import { X } from "lucide-react";
 import * as api from "@/lib/api-client";
 import { useAppStore } from "@/lib/store";
 import { useUi } from "@/lib/ui";
+import { safeReturnTo } from "@/lib/safe-return";
 import { useDialog } from "./useDialog";
 
 export function LoginModal() {
@@ -39,7 +40,11 @@ export function LoginModal() {
         <LoginForm
           onDone={() => {
             close();
-            if (returnTo) router.push(returnTo);
+            // Ikkinchi qatlam (birinchisi `useUi.open` ichida): holat
+            // `open()`ni chetlab o'tib to'g'ridan-to'g'ri o'rnatilgan
+            // taqdirda ham, `push()`dan oldin yana bir bor tekshiramiz.
+            const safe = safeReturnTo(returnTo);
+            if (safe) router.push(safe);
             else router.refresh();
           }}
         />
