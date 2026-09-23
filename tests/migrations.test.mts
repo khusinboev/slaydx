@@ -46,8 +46,27 @@ test("AUDIT-22: `021_games.sql` ro'yxatda", () => {
   assert.ok(FILES.includes("020_article.sql"));
 });
 
-test("C23: `022_retention.sql` oxirgisi, orqaga mos va qayta qo'llash xavfsiz", () => {
-  assert.equal(FILES[FILES.length - 1], "022_retention.sql", "yangi migratsiya oxirgi bo'lishi kerak");
+test("DB-11: `023_indexes.sql` oxirgisi — faqat indekslar, qulf chegarasi, rollback izohda", () => {
+  assert.equal(FILES[FILES.length - 1], "023_indexes.sql", "yangi migratsiya oxirgi bo'lishi kerak");
+  const sql = sqlOf("023_indexes.sql");
+  const code = sql.replace(/^\s*--.*$/gm, "");
+  // Faqat indeks qo'shadi — jadval/ustun o'zgarmaydi, eski kod bilan mos.
+  assert.ok(!/\b(ALTER|DROP|UPDATE|DELETE|INSERT)\b/i.test(code), "023 indeksdan boshqa narsani o'zgartiradi");
+  const names = [...code.matchAll(/CREATE INDEX IF NOT EXISTS (\w+)/g)].map((m) => m[1]);
+  assert.deepEqual(names.sort(), [
+    "game_sessions_expires_idx",
+    "generations_queued_created_idx",
+    "login_codes_expires_idx",
+    "login_tickets_token_idx",
+    "sessions_revoked_idx",
+  ]);
+  assert.equal((code.match(/CREATE INDEX/g) ?? []).length, names.length, "`IF NOT EXISTS` siz indeks bor");
+  assert.match(sql, /^SET LOCAL lock_timeout = '5s';/m);
+  // Har indeksning rollback qatori izohda.
+  for (const n of names) assert.match(sql, new RegExp(`--\\s+DROP INDEX IF EXISTS ${n};`), `${n}: rollback yo'q`);
+});
+
+test("C23: `022_retention.sql` orqaga mos va qayta qo'llash xavfsiz", () => {
   const sql = sqlOf("022_retention.sql");
   // Faqat NULL-li ustun qo'shiladi — eski kod uni bilmasa ham ishlaydi.
   assert.match(sql, /ALTER TABLE generations ADD COLUMN IF NOT EXISTS files_purged_at TIMESTAMPTZ;/);
