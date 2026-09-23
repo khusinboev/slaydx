@@ -124,6 +124,16 @@ test("expireQueuedJobs", { skip: hasDb ? false : "DATABASE_URL yo'q" }, async (t
     assert.equal(Number(refunds[0].balance_delta), 700, "balans balansga qaytadi");
     assert.deepEqual(await wallet(), { points: 300, balance: 4000 }, "MUTATSIYA: pul qaytmadi yoki ikki marta qaytdi");
 
+    // Jurnal invarianti (review N7): hamyon o'zgarishi == shu userning barcha
+    // tranzaksiyalari yig'indisi (boshlang'ich 300 / 5000 jurnalsiz berilgan).
+    const sums = await queryOne<{ p: string; b: string }>(
+      "SELECT COALESCE(SUM(points_delta),0)::text AS p, COALESCE(SUM(balance_delta),0)::text AS b FROM transactions WHERE user_id = $1",
+      [uid],
+    );
+    const w = await wallet();
+    assert.equal(w.points - 300, Number(sums!.p), "points jurnal bilan mos emas");
+    assert.equal(w.balance - 5000, Number(sums!.b), "balance jurnal bilan mos emas");
+
     const file = await queryOne("SELECT 1 FROM generation_files WHERE generation_id = $1", [old]);
     assert.ok(!file, "FAILED ishning fayli qoldi");
 

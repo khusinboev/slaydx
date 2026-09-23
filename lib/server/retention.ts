@@ -47,10 +47,22 @@ export type PurgeOptions = {
  * chaqiruv tozalangan qatorga tegmaydi).
  *
  * `doc_prev` ham NULL: aks holda «asl holatga qaytarish» o'chirilgan
- * hujjatni qayta tiklab qo'yardi. `file_version` `doc_version`gacha
- * suriladi: tahrirlangan hujjatda fayl yo'li (`ensureFreshFile`) yo'q
- * `doc_json`dan qayta yasashga urinib «eski format» 409 bermasin — oddiy
- * «Fayl topilmadi» 404 chiqadi.
+ * hujjatni qayta tiklab qo'yardi. `preview` ham NULL: undagi `url` va
+ * slayd modelidagi rasmlar o'chirilgan aktivlarga ishora qiladi — tarix
+ * kartochkasida singan rasm chiqardi, `lines` esa o'chirilgan matnni
+ * saqlab qolardi.
+ *
+ * `doc_version` oshiriladi: tozalashdan OLDIN hujjatni yuklagan tahrir
+ * (`updateGenerationDoc`, `doc_version = base` sharti) qator qulfini
+ * kutib, keyin `doc_json`ni qaytarib yozib qo'ymasin — endi u 409 oladi.
+ * `file_version` yangi `doc_version`gacha suriladi: fayl yo'li
+ * (`ensureFreshFile`) yo'q `doc_json`dan qayta yasashga urinib «eski
+ * format» 409 bermasin — oddiy «Fayl topilmadi» 404 chiqadi.
+ *
+ * Amal qilayotgan O'YIN havolasi (`game_sessions`, `expires_at` NULL yoki
+ * kelajakda) bor ish tozalanmaydi: ochiq o'yin `doc_json`dan o'qiydi, ya'ni
+ * tozalash o'quvchilar o'ynayotgan darsni to'xtatib qo'yardi. Havola
+ * muddati (30 kun) o'tgach keyingi skanerda tozalanadi.
  */
 async function purgeBatch(days: number, limit: number): Promise<number> {
   return transaction(async (client) => {
@@ -70,6 +82,11 @@ async function purgeBatch(days: number, limit: number): Promise<number> {
           AND g.finished_at < now() - make_interval(days => $1::int)
           AND m.money >= 0
           AND m.points < 0
+          AND NOT EXISTS (
+            SELECT 1 FROM game_sessions s
+             WHERE s.generation_id = g.id
+               AND (s.expires_at IS NULL OR s.expires_at > now())
+          )
         ORDER BY g.finished_at
         LIMIT $2
         FOR UPDATE OF g SKIP LOCKED`,
@@ -82,8 +99,9 @@ async function purgeBatch(days: number, limit: number): Promise<number> {
     await client.query("DELETE FROM generation_assets WHERE generation_id = ANY($1::uuid[])", [ids]);
     const done = await client.query(
       `UPDATE generations
-          SET doc_json = NULL, html = NULL, doc_prev = NULL, live_json = NULL,
-              file_version = GREATEST(file_version, doc_version),
+          SET doc_json = NULL, html = NULL, doc_prev = NULL, live_json = NULL, preview = NULL,
+              doc_version = doc_version + 1,
+              file_version = GREATEST(file_version, doc_version + 1),
               files_purged_at = now()
         WHERE id = ANY($1::uuid[]) AND files_purged_at IS NULL`,
       [ids],

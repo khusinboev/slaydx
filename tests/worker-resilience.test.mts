@@ -52,6 +52,7 @@ function quietConsole(t: TestContext) {
 const LATER_STEPS: Array<[string, RegExp]> = [
   ["navbat muddati (queue-ttl)", /FROM generations WHERE status = 'QUEUED' AND created_at </],
   ["saqlash muddati (retention)", /g\.files_purged_at IS NULL/],
+  ["yiqilgan ish pulini tiklash (reconcile)", /WHERE g\.status = 'FAILED' AND g\.finished_at </],
   ["auth sessiyalari", /DELETE FROM sessions WHERE/],
   ["o'yin havolalari", /DELETE FROM game_sessions/],
   ["manba fayllari", /DELETE FROM source_uploads/],
@@ -61,6 +62,7 @@ const LATER_STEPS: Array<[string, RegExp]> = [
 test("housekeeping(): `reclaimStaleJobs` yiqilsa ham qolgan qadamlar ishlaydi (DB-10)", async (t) => {
   quietConsole(t);
   const seen = mockDb(t, (sql) => /SET status = 'QUEUED', locked_by = NULL/.test(sql));
+  worker.resetRetentionScan();
   await worker.housekeeping();
   assert.ok(seen.some((q) => /SET status = 'QUEUED', locked_by = NULL/.test(q)), "reclaim chaqirilmadi");
   for (const [name, re] of LATER_STEPS) {
@@ -76,12 +78,32 @@ test("housekeeping(): o'rtadagi qadam (auth sessiyalari) yiqilsa ham keyingilari
   assert.ok(seen.some((q) => /DELETE FROM photo_uploads/.test(q)), "rezyume suratlari o'tkazib yuborildi");
 });
 
-test("housekeeping(): navbat muddati va saqlash muddati HAQIQATAN chaqiriladi", async (t) => {
+test("housekeeping(): navbat muddati, saqlash muddati va pulni tiklash HAQIQATAN chaqiriladi", async (t) => {
   quietConsole(t);
   const seen = mockDb(t, () => false);
+  worker.resetRetentionScan();
   await worker.housekeeping();
   assert.ok(seen.some((q) => /FROM generations WHERE status = 'QUEUED' AND created_at </.test(q)), "expireQueuedJobs chaqirilmadi");
   assert.ok(seen.some((q) => /g\.files_purged_at IS NULL/.test(q)), "purgeBonusFiles chaqirilmadi");
+  assert.ok(seen.some((q) => /WHERE g\.status = 'FAILED' AND g\.finished_at </.test(q)), "refundUnrefundedFailed chaqirilmadi");
+});
+
+test("housekeeping(): saqlash skaneri har daqiqada EMAS — soatlab bir marta (review R3)", async (t) => {
+  quietConsole(t);
+  const seen = mockDb(t, () => false);
+  worker.resetRetentionScan();
+  await worker.housekeeping();
+  const first = seen.filter((q) => /g\.files_purged_at IS NULL/.test(q)).length;
+  assert.equal(first, 1, "birinchi housekeeping skanerlashi kerak");
+
+  seen.length = 0;
+  await worker.housekeeping();
+  assert.ok(
+    !seen.some((q) => /g\.files_purged_at IS NULL/.test(q)),
+    "MUTATSIYA: saqlash skaneri keyingi daqiqada yana yurdi (to'lov qilingan eski qatorlarni har daqiqada qayta ko'radi)",
+  );
+  // Boshqa qadamlar esa har daqiqada davom etadi.
+  assert.ok(seen.some((q) => /FROM generations WHERE status = 'QUEUED' AND created_at </.test(q)));
 });
 
 // ---------------------------------------------------------------------------

@@ -34,6 +34,7 @@ import { purgeRateLimits } from "./ratelimit";
 import { purgeExpiredTickets } from "./telegram";
 import { expireQueuedJobs } from "./queue-ttl";
 import { purgeBonusFiles } from "./retention";
+import { refundUnrefundedFailed } from "./refund-reconcile";
 import { queryOne } from "./db";
 import type { ToolId } from "../types";
 import { refundRatio } from "../generation/delivered";
@@ -63,6 +64,24 @@ const HOUSEKEEPING_MS = 60_000;
  * yiqilgan bo'lsa fayl eskiradi va konteyner «unhealthy» bo'ladi.
  */
 export const WORKER_ALIVE_FILE = "/tmp/slaydx-worker-alive";
+
+/**
+ * Saqlash skaneri (`purgeBonusFiles`) har daqiqada EMAS (W2-D2 review R3).
+ *
+ * Pullik ishlar hech qachon `files_purged_at` olmaydi, ya'ni 180 kundan
+ * eski HAR tayyor qator indeksda abadiy qoladi va har skanerda qayta
+ * ko'rib chiqiladi (har biriga `transactions` bo'yicha ikki indeks
+ * zondi). 180 kunlik chegara uchun daqiqa aniqligi hech narsa bermaydi —
+ * 6 soatda bir marta yetarli. Vaqt belgisi process ichida: qayta ishga
+ * tushishda birinchi housekeeping darhol skanerlaydi.
+ */
+const RETENTION_EVERY_MS = 6 * 3600_000;
+let lastRetentionAt = -Infinity;
+
+/** Sinov uchun: keyingi `housekeeping()` saqlash skanerini darhol yurgizsin. */
+export function resetRetentionScan(): void {
+  lastRetentionAt = -Infinity;
+}
 /** Har iteratsiyada diskka yozmaslik uchun — 30 s shartnomadan ancha tez. */
 const ALIVE_EVERY_MS = 10_000;
 let lastAliveAt = 0;
@@ -442,11 +461,23 @@ export async function housekeeping(): Promise<void> {
    */
   await step("queue-ttl", () => expireQueuedJobs());
   /*
+   * Xavfsizlik to'ri (review N3): FAILED qilingan, lekin puli qaytmay
+   * qolgan ishlar (yuqoridagi yoki `failAndCleanup`dagi alohida refund
+   * tranzaksiyasi yiqilgan bo'lsa) — aynan bir marta qaytariladi.
+   */
+  await step("refund-reconcile", () => refundUnrefundedFailed());
+  /*
    * Saqlash muddati (C23): faqat bonus bilan to'langan tayyor ishlarning
    * fayllari `RETENTION_BONUS_DAYS` dan keyin tozalanadi. Pullik ishlar —
-   * muddatsiz (`011_no_expiry.sql`).
+   * muddatsiz (`011_no_expiry.sql`). Soatlab bir marta (`RETENTION_EVERY_MS`);
+   * belgi skanerdan OLDIN qo'yiladi — yiqilayotgan skaner ham har daqiqada
+   * bazani qayta urmasin.
    */
-  await step("retention", () => purgeBonusFiles());
+  await step("retention", async () => {
+    if (Date.now() - lastRetentionAt < RETENTION_EVERY_MS) return;
+    lastRetentionAt = Date.now();
+    await purgeBonusFiles();
+  });
   await step("sessions", () => purgeExpiredSessions());
   /*
    * O'YIN havolalari (AUDIT-22 R, `game_sessions.expires_at`, standart

@@ -50,13 +50,14 @@ test("purgeBonusFiles", { skip: hasDb ? false : "DATABASE_URL yo'q" }, async (t)
    */
   async function makeGen(
     ageDays: number,
-    tx: Array<["charge" | "refund", number, number, number]>,
+    tx: Array<["charge" | "refund" | "admin_credit" | "admin_debit", number, number, number]>,
   ): Promise<string> {
     const id = randomUUID();
     await query(
-      `INSERT INTO generations (id, user_id, tool_id, topic, status, price, doc_json, html, doc_prev,
+      `INSERT INTO generations (id, user_id, tool_id, topic, status, price, doc_json, html, doc_prev, preview,
                                 doc_version, file_version, finished_at)
-       VALUES ($1, $2, 'slide', 'Mavzu', 'COMPLETED', 1000, '{"a":1}'::jsonb, '<p>x</p>', '{"b":1}'::jsonb,
+       VALUES ($1::uuid, $2, 'slide', 'Mavzu', 'COMPLETED', 1000, '{"a":1}'::jsonb, '<p>x</p>', '{"b":1}'::jsonb,
+               jsonb_build_object('url', '/api/generations/' || $1::uuid::text || '/assets/img1'),
                3, 1, now() - make_interval(days => $3))`,
       [id, uid, ageDays],
     );
@@ -85,12 +86,13 @@ test("purgeBonusFiles", { skip: hasDb ? false : "DATABASE_URL yo'q" }, async (t)
       doc_json: unknown;
       html: string | null;
       doc_prev: unknown;
+      preview: unknown;
       files_purged_at: Date | null;
       doc_version: number;
       file_version: number;
       status: string;
     }>(
-      `SELECT doc_json, html, doc_prev, files_purged_at, doc_version, file_version, status
+      `SELECT doc_json, html, doc_prev, preview, files_purged_at, doc_version, file_version, status
          FROM generations WHERE id = $1`,
       [id],
     );
@@ -106,8 +108,12 @@ test("purgeBonusFiles", { skip: hasDb ? false : "DATABASE_URL yo'q" }, async (t)
     assert.equal(s.g!.doc_json, null, `${label}: doc_json qoldi`);
     assert.equal(s.g!.html, null, `${label}: html qoldi`);
     assert.equal(s.g!.doc_prev, null, `${label}: doc_prev qoldi (restore hujjatni qaytarib qo'yardi)`);
+    // Tarix kartochkasi o'chirilgan aktivga ishora qilmasin (R2).
+    assert.equal(s.g!.preview, null, `${label}: preview qoldi (kartochkada singan rasm)`);
     // Fayl yo'li `ensureFreshFile` orqali qayta yasashga urinmasin (404, «eski format» 409 emas).
     assert.ok(s.g!.file_version >= s.g!.doc_version, `${label}: file_version doc_version dan orqada`);
+    // Tozalashdan oldin yuklangan eski tahrir (`doc_version = base`) doc_json ni qaytarib yozmasin (N1).
+    assert.ok(s.g!.doc_version > 3, `${label}: doc_version oshmadi — eskirgan tahrir hujjatni tiklab qo'yardi`);
     assert.equal(s.file, false, `${label}: generation_files qoldi`);
     assert.equal(s.asset, false, `${label}: generation_assets qoldi`);
   }
@@ -174,6 +180,40 @@ test("purgeBonusFiles", { skip: hasDb ? false : "DATABASE_URL yo'q" }, async (t)
     assertPurged(await state(netBonus), "pul qismi qaytgan");
     assertKept(await state(netPaid), "pul qismi qisman qaytgan");
     assertPurged(await state(bonusPartial), "bonus qisman qaytgan");
+  });
+
+  await t.test("amal qilayotgan o'yin havolasi bor — tozalanmaydi; muddati o'tgach tozalanadi (R1)", async () => {
+    const live = await makeGen(200, [["charge", -1000, 0, 0]]);
+    const forever = await makeGen(200, [["charge", -1000, 0, 0]]);
+    const sLive = randomUUID();
+    await query(
+      `INSERT INTO game_sessions (id, generation_id, user_id, token, kind, expires_at)
+       VALUES ($1, $2, $3, $4, 'quiz', now() + interval '10 days')`,
+      [sLive, live, uid, `tok-${sLive}`],
+    );
+    const sForever = randomUUID();
+    await query(
+      `INSERT INTO game_sessions (id, generation_id, user_id, token, kind, expires_at)
+       VALUES ($1, $2, $3, $4, 'quiz', NULL)`,
+      [sForever, forever, uid, `tok-${sForever}`],
+    );
+    await purgeAll();
+    assertKept(await state(live), "faol o'yin havolasi");
+    assertKept(await state(forever), "muddatsiz o'yin havolasi");
+
+    await query("UPDATE game_sessions SET expires_at = now() - interval '1 day' WHERE id = $1", [sLive]);
+    await purgeAll();
+    assertPurged(await state(live), "havola muddati o'tgan");
+    assertKept(await state(forever), "muddatsiz o'yin havolasi (2)");
+  });
+
+  await t.test("admin_credit/admin_debit qatorlari (hatto shu reference bilan) hisobga olinmaydi", async () => {
+    const id = await makeGen(200, [
+      ["charge", -1000, 0, 0],
+      ["admin_debit", 0, 0, -500],
+    ]);
+    await purgeAll();
+    assertPurged(await state(id), "admin qatori");
   });
 
   await t.test("charge qatori yo'q (bepul) — tozalanmaydi", async () => {

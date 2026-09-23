@@ -53,8 +53,13 @@ test("C23: `022_retention.sql` oxirgisi, orqaga mos va qayta qo'llash xavfsiz", 
   assert.match(sql, /ALTER TABLE generations ADD COLUMN IF NOT EXISTS files_purged_at TIMESTAMPTZ;/);
   assert.match(sql, /CREATE INDEX IF NOT EXISTS generations_retention_idx/);
   assert.match(sql, /WHERE status = 'COMPLETED' AND files_purged_at IS NULL/);
+  // Pulni tiklash skaneri uchun indeks (review N3).
+  assert.match(sql, /CREATE INDEX IF NOT EXISTS generations_failed_idx\s+ON generations \(finished_at\)\s+WHERE status = 'FAILED';/);
+  // Uzoq tranzaksiya ACCESS EXCLUSIVE navbati bilan butun trafikni to'xtatmasin (review N4).
+  assert.match(sql, /^SET LOCAL lock_timeout = '5s';/m);
   // Rollback izohda yozilgan.
   assert.match(sql, /--\s+ALTER TABLE generations DROP COLUMN IF EXISTS files_purged_at;/);
+  assert.match(sql, /--\s+DROP INDEX IF EXISTS generations_failed_idx;/);
 });
 
 test("021: ikkala jadval, ustunlar va indekslar to'liq", () => {
