@@ -1,5 +1,6 @@
 import "server-only";
 import { limit } from "./api";
+import { adapterFor } from "./edit-adapters";
 import { getVersions } from "./jobs";
 import { ensureFreshFile } from "./slide-commit";
 
@@ -19,13 +20,21 @@ import { ensureFreshFile } from "./slide-commit";
  *     30/soat), faqat haqiqatan render kerak bo'lganda — yangi faylni
  *     yuklab olish limit sarflamaydi. Limit tugasa 429: eskirgan fayl
  *     HECH QACHON berilmaydi («ko'rdim = oldim»).
+ *
+ * `filerender:` va `rebuild:` (POST …/rebuild, 30/soat) — ALOHIDA
+ * chelaklar: faol muharrir «Saqlash» bilan o'z rebuild kvotasini
+ * tugatsa ham yuklab olishi bloklanmasin. Natijada bitta foydalanuvchi
+ * uchun jami shift — soatiga 60 render; bu qabul qilingan.
  */
 
 const RENDER_LIMIT = 30;
 const RENDER_WINDOW_SEC = 3600;
 
 export type FreshFileDeps = {
-  versions?: (id: string, userId: string) => Promise<{ docVersion: number; fileVersion: number; status: string } | null>;
+  versions?: (
+    id: string,
+    userId: string,
+  ) => Promise<{ docVersion: number; fileVersion: number; status: string; toolId: string } | null>;
   ensure?: (id: string, userId: string) => Promise<void>;
   limitFn?: (userId: string) => Promise<void>;
 };
@@ -57,8 +66,9 @@ export async function ensureFreshFileShared(id: string, userId: string, deps: Fr
       continue;
     }
     const v = await versions(id, userId);
-    // Yo'q/begona — 404 ni fayl yo'lining o'zi beradi; tayyor emas yoki yangi — ish yo'q.
-    if (!v || v.status !== "COMPLETED" || v.fileVersion >= v.docVersion) return;
+    // Yo'q/begona — 404 ni fayl yo'lining o'zi beradi; tayyor emas, yangi yoki
+    // tahrirlanmaydigan vosita (`ensureFreshFile` bilan AYNAN bir xil shartlar) — ish yo'q.
+    if (!v || v.status !== "COMPLETED" || v.fileVersion >= v.docVersion || !adapterFor(v.toolId)) return;
     const started = map.get(key);
     if (started) {
       await started;

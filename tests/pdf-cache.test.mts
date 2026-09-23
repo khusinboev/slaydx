@@ -28,7 +28,9 @@ async function freshCache(t: TestContext, maxBytes = 1024 * 1024, maxAgeMs = 60_
 
 function countingConverter(delayMs = 0) {
   const calls: string[] = [];
-  const convert = async (bytes: Uint8Array, name: string) => {
+  // Haqiqiy `toPdf` kabi: `beforeRun` — slot olingandan KEYIN chaqiriladi.
+  const convert = async (bytes: Uint8Array, name: string, beforeRun?: () => Promise<void>) => {
+    await beforeRun?.();
     calls.push(name);
     if (delayMs) await new Promise((r) => setTimeout(r, delayMs));
     return Buffer.from(`%PDF-1.4 ${Buffer.from(bytes).toString("hex")}`);
@@ -132,16 +134,19 @@ test("pdfResponse: keshda bo'lsa soffice chaqirilmaydi; sarlavhalar to'g'ri", as
   assert.equal((await r2.arrayBuffer()).byteLength, Number(r2.headers.get("content-length")));
 });
 
-test("pdfResponse: hamma slot band — 503 + Retry-After + o'zbekcha xato", async (t) => {
+test("pdfResponse: hamma slot band — 503 + Retry-After + o'zbekcha xato; limit SARFLANMAYDI (R2)", async (t) => {
   const { cache } = await freshCache(t);
+  // Haqiqiy `toPdf` kabi: slot olinmadi → `beforeRun` hech qachon chaqirilmaydi.
   const convert = async () => {
     throw new SofficeBusyError(15);
   };
+  let charged = 0;
   const file = { bytes: Buffer.from([2, 2, 2]), fileName: "a.docx", mime: DOCX_MIME };
   const res = await pdfResponse(
     { userId: "u1", generationId: GEN, file, inline: false },
-    { available: () => true, convert, cache, limitFn: async () => {} },
+    { available: () => true, convert, cache, limitFn: async () => void (charged += 1) },
   );
+  assert.equal(charged, 0, "503 (Retry-After) ga amal qilgan foydalanuvchi kvotasi yonmasligi kerak");
   assert.equal(res.status, 503);
   assert.equal(res.headers.get("retry-after"), "15");
   const body = (await res.json()) as { error: string; code: string; retryAfterSec: number };

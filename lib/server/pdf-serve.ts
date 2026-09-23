@@ -1,7 +1,7 @@
 import "server-only";
 import { ApiError, limit } from "./api";
-import { getOrConvertPdf, type PdfDiskCache } from "./pdf-cache";
-import { pdfAvailable, pdfFileName, toPdf } from "./pdf";
+import { getOrConvertPdf, type PdfConverter, type PdfDiskCache } from "./pdf-cache";
+import { pdfAvailable, pdfFileName } from "./pdf";
 import { busyResponse, SofficeBusyError } from "./soffice-gate";
 
 /**
@@ -14,8 +14,9 @@ import { busyResponse, SofficeBusyError } from "./soffice-gate";
  * Tartib muhim:
  *   1) LibreOffice yo'q → 503; o'girib bo'lmaydigan tur → 400 (limit sarflanmaydi);
  *   2) keshda bor → darhol (limit ham, `soffice` ham yo'q);
- *   3) aks holda foydalanuvchi limiti (10 / 10 daqiqa → 429 + `Retry-After`),
- *      keyin umumiy darvoza (band → 503 + `Retry-After`).
+ *   3) aks holda umumiy darvoza (band → 503 + `Retry-After`, limit
+ *      sarflanmaydi), slot olingach foydalanuvchi limiti (10 / 10 daqiqa →
+ *      429 + `Retry-After`; slot `finally` da qaytadi), keyin `soffice`.
  */
 
 /** LibreOffice PDF ga o'gira oladigan turlar. */
@@ -43,7 +44,7 @@ export type PdfServeArgs = {
 
 export type PdfServeDeps = {
   available?: () => boolean;
-  convert?: (bytes: Uint8Array, fileName: string) => Promise<Buffer | null>;
+  convert?: PdfConverter;
   cache?: PdfDiskCache;
   /** Standart — `limit(pdf:<user>, 10, 600)` (429 `ApiError`). */
   limitFn?: (userId: string) => Promise<void>;
@@ -73,7 +74,8 @@ export async function pdfResponse(args: PdfServeArgs, deps: PdfServeDeps = {}): 
       bytes: new Uint8Array(file.bytes),
       fileName: file.fileName,
       beforeConvert: () => limitFn(args.userId),
-      convert: deps.convert ?? toPdf,
+      // Standart — `toPdf` (limit slot ichida, `beforeRun`).
+      convert: deps.convert,
       cache: deps.cache,
     });
   } catch (e) {

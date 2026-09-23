@@ -48,6 +48,13 @@ export type ToPdfDeps = {
   gate?: Gate;
   /** Test seam: vaqt chegarasi (standart 90 s). */
   timeoutMs?: number;
+  /**
+   * Slot OLINGANDAN KEYIN, `soffice` dan oldin (masalan foydalanuvchi
+   * limiti). Band (503) urinishda chaqirilmaydi — `Retry-After` ga amal
+   * qilgan foydalanuvchi kvotasini yoqmaydi (W2-A review R2). Xato
+   * tashlasa `soffice` ishga tushmaydi, slot `run` ning `finally` sida qaytadi.
+   */
+  beforeRun?: () => Promise<void>;
 };
 
 /**
@@ -60,7 +67,10 @@ export async function toPdf(bytes: Uint8Array, fileName: string, deps: ToPdfDeps
   if (!bin) return null;
   if (!bytes.byteLength || bytes.byteLength > MAX_INPUT_BYTES) return null;
   const gate = deps.gate ?? sofficeGate();
-  return gate.run(() => convert(bin, bytes, fileName, deps.timeoutMs ?? TIMEOUT_MS));
+  return gate.run(async () => {
+    await deps.beforeRun?.();
+    return convert(bin, bytes, fileName, deps.timeoutMs ?? TIMEOUT_MS);
+  });
 }
 
 async function convert(bin: string, bytes: Uint8Array, fileName: string, timeoutMs: number): Promise<Buffer | null> {

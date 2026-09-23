@@ -17,14 +17,14 @@ const { ApiError } = await import("../lib/server/api.ts");
 
 const GEN = "a1b2c3d4-0000-4000-8000-0000000000f1";
 
-function world(opts: { docVersion: number; fileVersion: number; status?: string; renderMs?: number }) {
-  const state = { ...opts, status: opts.status ?? "COMPLETED" };
+function world(opts: { docVersion: number; fileVersion: number; status?: string; renderMs?: number; toolId?: string }) {
+  const state = { ...opts, status: opts.status ?? "COMPLETED", toolId: opts.toolId ?? "slide" };
   let inFlight = 0;
   let maxInFlight = 0;
   let renders = 0;
   let charged = 0;
   const deps = {
-    versions: async () => ({ docVersion: state.docVersion, fileVersion: state.fileVersion, status: state.status }),
+    versions: async () => ({ docVersion: state.docVersion, fileVersion: state.fileVersion, status: state.status, toolId: state.toolId }),
     ensure: async () => {
       inFlight += 1;
       maxInFlight = Math.max(maxInFlight, inFlight);
@@ -53,6 +53,10 @@ test("fayl yangi / tayyor emas — render ham, limit ham yo'q", async () => {
   const running = world({ docVersion: 3, fileVersion: 2, status: "IN_PROGRESS" });
   await ensureFreshFileShared(GEN, "u1", running.deps);
   assert.deepEqual(running.stats(), { renders: 0, maxInFlight: 0, charged: 0 });
+  // Tahrirlanmaydigan vosita (adapter yo'q) — `ensureFreshFile` ham hech narsa qilmaydi, token yonmasin.
+  const noAdapter = world({ docVersion: 3, fileVersion: 2, toolId: "image" });
+  await ensureFreshFileShared(GEN, "u1", noAdapter.deps);
+  assert.deepEqual(noAdapter.stats(), { renders: 0, maxInFlight: 0, charged: 0 });
 });
 
 test("limit tugagan — 429, render bo'lmaydi; kutayotganlar ham 429 oladi", async () => {

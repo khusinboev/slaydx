@@ -29,6 +29,8 @@ import { toPdf } from "./pdf";
 const DEFAULT_DIR = join(tmpdir(), "slaydx-pdf-cache");
 const DEFAULT_MAX_BYTES = 500 * 1024 * 1024;
 const DEFAULT_MAX_AGE_MS = 24 * 3600 * 1000;
+/** `get` dagi yosh supurishi oralig'i. */
+const SWEEP_EVERY_MS = 60_000;
 
 export type PdfCacheOptions = { dir: string; maxBytes: number; maxAgeMs: number };
 
@@ -50,6 +52,7 @@ export class PdfDiskCache {
   private readonly index = new Map<string, Entry>();
   private total = 0;
   private ready: Promise<void> | null = null;
+  private lastSweep = Date.now();
 
   constructor(private readonly opts: PdfCacheOptions) {}
 
@@ -112,6 +115,15 @@ export class PdfDiskCache {
 
   async get(key: string): Promise<Buffer | null> {
     await this.init();
+    /*
+     * Yosh chegarasi faqat `put` da tekshirilsa, yangi o'girish bo'lmagan
+     * davrda o'chirilgan/tozalangan hujjatning PDF i diskda 24 soatdan
+     * uzoq qolardi. O'qishda ham supuramiz — lekin daqiqasiga ko'pi bilan bir marta.
+     */
+    if (Date.now() - this.lastSweep > SWEEP_EVERY_MS) {
+      this.lastSweep = Date.now();
+      await this.evict();
+    }
     const e = this.index.get(key);
     if (!e) return null;
     if (Date.now() - e.mtimeMs > this.opts.maxAgeMs) {
@@ -181,13 +193,24 @@ export type ConvertArgs = {
   bytes: Uint8Array;
   fileName: string;
   /**
-   * HAQIQIY o'girishdan oldin (keshdan berilganda emas) — masalan
-   * foydalanuvchi limiti. Xato tashlasa o'girish boshlanmaydi.
+   * HAQIQIY o'girish uchun (keshdan berilganda emas) — masalan
+   * foydalanuvchi limiti. Konvertorga `beforeRun` sifatida uzatiladi va
+   * `soffice` slotini OLGANDAN KEYIN chaqiriladi: band (503) urinish
+   * kvotani yoqmaydi (W2-A review R2). Xato tashlasa o'girish boshlanmaydi.
    */
   beforeConvert?: () => Promise<void>;
-  convert?: (bytes: Uint8Array, fileName: string) => Promise<Buffer | null>;
+  /** Shartnoma: `beforeRun` ni slot olingandan keyin, o'girishdan oldin chaqirishi SHART. */
+  convert?: PdfConverter;
   cache?: PdfDiskCache;
 };
+
+export type PdfConverter = (
+  bytes: Uint8Array,
+  fileName: string,
+  beforeRun?: () => Promise<void>,
+) => Promise<Buffer | null>;
+
+const defaultConvert: PdfConverter = (bytes, fileName, beforeRun) => toPdf(bytes, fileName, { beforeRun });
 
 /**
  * Keshdan PDF, bo'lmasa o'girib keshlaydi. `null` — o'girib bo'lmadi.
@@ -196,7 +219,7 @@ export type ConvertArgs = {
  */
 export async function getOrConvertPdf(args: ConvertArgs): Promise<Buffer | null> {
   const cache = args.cache ?? pdfCache();
-  const convert = args.convert ?? toPdf;
+  const convert = args.convert ?? defaultConvert;
   const key = pdfCacheKey(args.generationId, args.bytes);
   const map = inflight();
 
@@ -212,8 +235,7 @@ export async function getOrConvertPdf(args: ConvertArgs): Promise<Buffer | null>
   if (started) return started;
 
   const job = (async () => {
-    await args.beforeConvert?.();
-    const pdf = await convert(args.bytes, args.fileName);
+    const pdf = await convert(args.bytes, args.fileName, args.beforeConvert);
     if (pdf) await cache.put(key, pdf).catch((e) => warn("yozilmadi", e));
     return pdf;
   })().finally(() => map.delete(key));

@@ -55,7 +55,9 @@ test("C07 bazali", { skip: hasDb ? false : "DATABASE_URL yo'q" }, async (t) => {
   await t.test("?format=pdf: 11-chi o'girish 10 daqiqa ichida — 429 + Retry-After", async () => {
     const cache = new PdfDiskCache({ dir: cacheDir, maxBytes: 1024 * 1024, maxAgeMs: 60_000 });
     let converted = 0;
-    const convert = async () => {
+    // Haqiqiy `toPdf` kabi: limit (`beforeRun`) slot olingandan keyin.
+    const convert = async (_b: Uint8Array, _n: string, beforeRun?: () => Promise<void>) => {
+      await beforeRun?.();
       converted += 1;
       return Buffer.from("%PDF-1.4 stub");
     };

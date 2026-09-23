@@ -99,9 +99,11 @@ const g = globalThis as Globals;
 
 /**
  * Eskizlarning ICHKI chegarasi (umumiy `soffice` darvozasi ustidan):
- * `PDF_MAX_CONCURRENCY − 1` (kamida 1) — bitta slot doim foydalanuvchi
- * so'ragan PDF uchun qoladi. Kutish ham chegaralangan (ilgari cheksiz
- * `waiters` massivi edi — SCALE-07).
+ * `PDF_MAX_CONCURRENCY − 1` (kamida 1) — N ≥ 2 da bitta slot doim
+ * foydalanuvchi so'ragan PDF uchun qoladi. `PDF_MAX_CONCURRENCY=1` da
+ * eskiz ham o'sha yagona slotni oladi (0 bo'lsa eskizlar butunlay
+ * o'chardi) — PDF so'rovi navbatda kutadi, 20 s dan keyin 503.
+ * Kutish ham chegaralangan (ilgari cheksiz `waiters` massivi edi — SCALE-07).
  */
 function thumbGate(): Gate {
   g.__slaydxThumbGate ??= new Gate({

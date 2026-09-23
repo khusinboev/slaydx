@@ -204,3 +204,38 @@ test("toPdf: hamma slot band va kutish tugasa SofficeBusyError (null emas)", asy
   assert.ok(await first);
   assert.deepEqual(gate.stats(), { active: 0, waiting: 0 });
 });
+
+test("toPdf beforeRun: faqat slot olingandan KEYIN; band bo'lsa chaqirilmaydi; xato slotni bo'shatadi (R2)", async (t) => {
+  const { Gate, SofficeBusyError } = await import("../lib/server/soffice-gate.ts");
+  const dir = await stubSoffice(t, `echo 1 >> "$STUB_DIR/spawned"; sleep 0.4; printf '%%PDF-1.4 stub' > "$out/manba.pdf"`);
+  const gate = new Gate({ max: 1, waitMs: 100, maxWaiters: 4, retryAfterSec: 9 });
+  const order: string[] = [];
+  const first = toPdf(DOCX, "a.docx", {
+    gate,
+    beforeRun: async () => {
+      order.push(`run:${gate.stats().active}`);
+    },
+  });
+  let charged = 0;
+  await assert.rejects(
+    toPdf(DOCX, "a.docx", { gate, beforeRun: async () => void (charged += 1) }),
+    SofficeBusyError,
+  );
+  assert.equal(charged, 0, "band — limit sarflanmaydi");
+  assert.ok(await first);
+  assert.deepEqual(order, ["run:1"], "beforeRun slot ichida (active=1)");
+
+  // beforeRun xatosi (masalan 429): soffice ishga tushmaydi, slot qaytadi.
+  await assert.rejects(
+    toPdf(DOCX, "a.docx", {
+      gate,
+      beforeRun: async () => {
+        throw new Error("429");
+      },
+    }),
+    /429/,
+  );
+  assert.deepEqual(gate.stats(), { active: 0, waiting: 0 });
+  const spawned = (await readFile(join(dir, "spawned"), "utf8")).trim().split("\n").length;
+  assert.equal(spawned, 1, "faqat birinchi so'rov soffice ni ishga tushirgan");
+});
