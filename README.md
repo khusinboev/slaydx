@@ -193,8 +193,6 @@ qo'lda bajariladi:
 `backup.sh` — `pg_dump -Fc` (siqilgan, `bytea` ikki barobar shishmaydi)
 `${BACKUP_DIR:-/root/slaydx-backups}` ga, `pg_restore --list` bilan
 tekshirilgan, `BACKUP_KEEP_DAYS` (standart 7) dan eskisi o'chiriladi.
-`BACKUP_REMOTE` (rclone masofaviy nomi yoki `user@host:/yo'l`) berilsa
-box TASHQARISIGA ham nusxalanadi — bo'lmasa skript ochiq ogohlantiradi.
 `restore-check.sh` — eng so'nggi dumpni MUSTAQIL (`slaydx-*` OILASIGA
 UMUMAN TEGMAYDIGAN), vaqtinchalik Postgres konteynerga tiklab, asosiy
 jadvallar va balans invariantini (`balance == sum(transactions)`)
@@ -202,6 +200,27 @@ tekshiradi, oxirida shu vaqtinchalik konteynerni o'chiradi. Ikkalasi ham
 hech qachon `docker compose down`/prune ishlatmaydi va boshqa (slaydx
 yoki qo'shni loyiha) konteynerlariga tegmaydi (`.claude/deploy.md`ning
 umumiy box qoidasi).
+
+**Box tashqarisiga nusxa va Telegram alert — FAQAT `/etc/slaydx/backup.env`
+orqali.** `cron` BO'SH muhitda ishga tushadi va `/opt/slaydx/.env`ni
+O'QIMAYDI — `BACKUP_REMOTE`/`BACKUP_TG_CHAT`/`TELEGRAM_BOT_TOKEN` uchun
+BOSHQA hech qanday joy YO'Q. Fayl repo checkout'idan (`/opt/slaydx`)
+ATAYLAB TASHQARIDA — `git`/`docker build` uni umuman ko'rmaydi:
+
+```bash
+install -d -m 700 /etc/slaydx
+cat > /etc/slaydx/backup.env <<'EOF'
+BACKUP_REMOTE=b2:slaydx-backups
+BACKUP_TG_CHAT=123456789
+TELEGRAM_BOT_TOKEN=...
+EOF
+chmod 600 /etc/slaydx/backup.env
+```
+
+600 huquq shart emas — skript boshqacha ruxsat bo'lsa ochiq ogohlantiradi,
+lekin baribir o'qiydi. Fayl umuman bo'lmasa — muammo emas: faqat lokal
+dump olinadi, box tashqarisiga nusxa YO'Q va skript har safar buni ochiq
+ogohlantiradi. Yo'l `BACKUP_ENV_FILE` bilan almashtiriladi.
 
 ## Buyruqlar
 

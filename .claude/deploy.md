@@ -65,16 +65,35 @@ serverda cron orqali ishga tushiriladi (egasi tomonidan, bir marta):
 ikki barobar shishirmaydi) `slaydx-postgres-1`dan, `${BACKUP_DIR:-
 /root/slaydx-backups}`ga, `pg_restore --list` bilan tasdiqlangan,
 `BACKUP_KEEP_DAYS` (standart 7 kun) dan eskisi avtomatik o'chadi.
-Box TASHQARISIGA nusxa uchun `BACKUP_REMOTE` (rclone nomi yoki
-`user@host:/yo'l`) `.env` yoki cron muhitida belgilang — bo'lmasa
-skript har safar ochiq ogohlantiradi (stderr + `backup.log`).
 `restore-check.sh` — eng so'nggi dumpni MUSTAQIL, vaqtinchalik Postgres
-konteynerga (`slaydx-*` OILASIGA TEGMAYDI) tiklab, `users`/
-`generations`/`transactions` qatorlari va balans invarianti
-(`balance == sum(transactions)`) ni tekshiradi; muammo bo'lsa
-non-zero bilan chiqadi. Ikkalasi ham hech qachon `docker compose
+konteynerga (`slaydx-*` OILASIGA TEGMAYDI, `--network none --memory 1g`)
+tiklab, `users`/`generations`/`transactions` qatorlari va balans
+invarianti (`balance == sum(transactions)`) ni tekshiradi; muammo
+bo'lsa non-zero bilan chiqadi. Ikkalasi ham hech qachon `docker compose
 down`/prune ishlatmaydi va boshqa (slaydx yoki qo'shni loyiha)
 konteynerlariga tegmaydi (yuqoridagi umumiy box qoidalari).
+
+**Box tashqarisiga nusxa va Telegram alert — FAQAT `/etc/slaydx/backup.env`
+orqali (BOSHQA hech qanday joy YO'Q).** `cron` BO'SH muhitda ishga
+tushadi, `/opt/slaydx/.env`ni O'QIMAYDI — `BACKUP_REMOTE`/`BACKUP_TG_CHAT`/
+`TELEGRAM_BOT_TOKEN`ni shu faylga yozing. ATAYLAB `/opt/slaydx` (git
+checkout) TASHQARISIDA — `git`/`docker build`ning `COPY . .`si uni
+UMUMAN ko'rmaydi (reviewer topilmasi R2a: sirlar image qatlamiga yoki
+`git add -A` bilan PUBLIC repo'ga tushib qolishi mumkin edi):
+
+```bash
+install -d -m 700 /etc/slaydx
+cat > /etc/slaydx/backup.env <<'EOF'
+BACKUP_REMOTE=b2:slaydx-backups
+BACKUP_TG_CHAT=123456789
+TELEGRAM_BOT_TOKEN=...
+EOF
+chmod 600 /etc/slaydx/backup.env
+```
+
+Fayl yo'q bo'lsa — muammo emas: skript baribir ishlaydi, faqat box
+tashqarisiga nusxa YO'Q va har run buni ochiq ogohlantiradi (stderr +
+`backup.log`). Yo'l kerak bo'lsa `BACKUP_ENV_FILE` bilan almashtiriladi.
 
 ### 2. Deploy
 

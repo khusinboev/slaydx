@@ -21,3 +21,9 @@ audit
 eval-out
 scratch-tmp
 docs
+# scripts/backup.sh BACKUP_ENV_FILE (R2a re-review): belt-and-braces —
+# standart joyi repo/build kontekstidan tashqarida (/etc/slaydx/backup.env),
+# lekin shu nomdagi fayl repo ichida qolib ketsa ham `builder`ning
+# `COPY . .` orqali image qatlamiga (BACKUP_REMOTE/TELEGRAM_BOT_TOKEN) kirmasin.
+.backup.env
+*.backup.env

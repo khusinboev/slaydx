@@ -371,3 +371,108 @@ test("restore-check.sh: --network none, --memory 1g va -h 127.0.0.1 orqali tayyo
   assert.match(src, /pg_isready -h 127\.0\.0\.1 -U postgres/, "pg_isready -h 127.0.0.1 yo'q — unix-socket orqali soxta tayyorlik signali berishi mumkin");
   assert.match(src, /psql -h 127\.0\.0\.1 -U postgres -d "\$PG_DB" -tAc "SELECT 1"/, "haqiqiy SELECT 1 tekshiruvi yo'q");
 });
+
+/**
+ * R2 re-review (`audit/reviews/W2-D1.md`, "Re-review — ec68d0b"): standart
+ * `BACKUP_ENV_FILE` ATAYLAB REPO CHECKOUT'IDAN (`/opt/slaydx`) TASHQARIDA
+ * turishi SHART — `/opt/slaydx/.backup.env` bo'lganida `docker build`ning
+ * `builder` bosqichi (`COPY . .`) uni image qatlamiga pishirib qo'yardi va
+ * `git add -A` bilan PUBLIC repo'ga BACKUP_REMOTE/TELEGRAM_BOT_TOKEN
+ * tushib qolishi mumkin edi (R2a).
+ */
+test("backup.sh: standart BACKUP_ENV_FILE repo checkout'idan (/opt/slaydx) tashqarida", () => {
+  const src = readFileSync("scripts/backup.sh", "utf8");
+  const m = src.match(/BACKUP_ENV_FILE="\$\{BACKUP_ENV_FILE:-([^}]+)\}"/);
+  assert.ok(m, "BACKUP_ENV_FILE standart qiymati topilmadi");
+  const def = m![1];
+  assert.equal(def, "/etc/slaydx/backup.env", `standart /etc/slaydx/backup.env bo'lishi kerak, keldi: ${def}`);
+  assert.ok(!def.startsWith("/opt/slaydx"), "standart /opt/slaydx (repo checkout) ICHIDA bo'lmasligi kerak");
+});
+
+/**
+ * R2a: belt-and-braces — agar egasi shunga qaramay `.backup.env` nomli
+ * faylni REPO ICHIDA qoldirsa ham, na `git`, na `docker build` uni
+ * ko'rmasligi kerak.
+ */
+test(".gitignore va .dockerignore .backup.env / *.backup.env'ni yashiradi", () => {
+  const gi = readFileSync(".gitignore", "utf8");
+  const di = readFileSync(".dockerignore", "utf8");
+  for (const pattern of [".backup.env", "*.backup.env"]) {
+    assert.ok(
+      gi.split("\n").some((l) => l.trim() === pattern),
+      `.gitignore'da "${pattern}" qatori yo'q`,
+    );
+    assert.ok(
+      di.split("\n").some((l) => l.trim() === pattern),
+      `.dockerignore'da "${pattern}" qatori yo'q`,
+    );
+  }
+});
+
+/**
+ * `BACKUP_ENV_FILE` fayli umuman bo'lmasa ham skript ishlashi SHART
+ * (koordinator talabi) — faqat lokal dump, box tashqarisiga nusxa YO'Q,
+ * ochiq ogohlantirish. Standart yo'l shu sandbox'da mavjud emas (root
+ * kerak), shuning uchun `BACKUP_ENV_FILE`ni ataylab mavjud bo'lmagan
+ * yo'lga yo'naltiramiz — xatti-harakat bir xil.
+ */
+test(
+  "backup.sh: BACKUP_ENV_FILE mavjud bo'lmasa ham muvaffaqiyatli ishlaydi (faqat ogohlantiradi)",
+  { skip: hasDocker ? false : "docker mavjud emas" },
+  async (t: TestContext) => {
+    const container = `slaydx-backup-test-noenvfile-${process.pid}`;
+    t.after(() => {
+      try {
+        execFileSync("docker", ["rm", "-f", container], { stdio: "ignore" });
+      } catch {
+        // konteyner allaqachon yo'q bo'lishi mumkin
+      }
+    });
+    execFileSync("docker", [
+      "run",
+      "-d",
+      "--name",
+      container,
+      "-e",
+      "POSTGRES_PASSWORD=test",
+      "-e",
+      "POSTGRES_USER=slaydx",
+      "-e",
+      "POSTGRES_DB=slaydx",
+      "postgres:16-alpine",
+    ]);
+    let ready = false;
+    for (let i = 0; i < 30 && !ready; i++) {
+      try {
+        execFileSync("docker", ["exec", container, "pg_isready", "-U", "slaydx"], { stdio: "ignore" });
+        ready = true;
+      } catch {
+        await new Promise((r) => setTimeout(r, 1000));
+      }
+    }
+    assert.ok(ready, "Postgres 30 soniyada tayyor bo'lmadi");
+
+    const backupDir = mkdtempSync(path.join(tmpdir(), "slaydx-backup-noenvfile-"));
+    t.after(() => rmSync(backupDir, { recursive: true, force: true }));
+
+    // Ogohlantirish stderr'ga chiqadi — `bash -c "... 2>&1"` orqali stdout'ga
+    // birlashtiramiz, aks holda `execFileSync`ning qaytgan qiymati faqat
+    // stdout bo'lardi va ogohlantirish ko'rinmasdi.
+    const output = execFileSync("bash", ["-c", "scripts/backup.sh 2>&1"], {
+      env: {
+        ...process.env,
+        PG_CONTAINER: container,
+        PG_USER: "slaydx",
+        PG_DB: "slaydx",
+        BACKUP_DIR: backupDir,
+        BACKUP_MIN_SIZE_BYTES: "10",
+        BACKUP_ENV_FILE: "/nonexistent-path-for-test/backup.env",
+      },
+      encoding: "utf8",
+      timeout: 60_000,
+    });
+    assert.match(output, /BACKUP_REMOTE sozlanmagan/, "fayl yo'qligida ochiq ogohlantirish kutilgan edi");
+    const dumps = readdirSync(backupDir).filter((f) => f.endsWith(".dump"));
+    assert.equal(dumps.length, 1, "lokal dump baribir yaratilishi kerak");
+  },
+);

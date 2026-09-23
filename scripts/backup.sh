@@ -69,13 +69,19 @@ trap 'rm -f -- "${tmp:-}" "${errfile:-}" 2>/dev/null; [ -n "${PG_CONTAINER:-}" ]
 # ── Sozlama fayli (reviewer topilmasi) ──────────────────────────────────
 # `cron` BO'SH muhitda ishga tushadi — `.env`ni O'QIMAYDI. `BACKUP_REMOTE`/
 # `BACKUP_TG_CHAT`/`TELEGRAM_BOT_TOKEN`ni ATAYLAB shu alohida faylga
-# qo'ying (600 huquq — sirlar bor), MASALAN `/opt/slaydx/.backup.env`:
+# qo'ying (600 huquq, root egasi — sirlar bor), MASALAN `/etc/slaydx/backup.env`:
 #   BACKUP_REMOTE=b2:slaydx-backups
 #   BACKUP_TG_CHAT=123456789
 #   TELEGRAM_BOT_TOKEN=...
+# ATAYLAB REPO CHECKOUT'DAN TASHQARIDA (`/opt/slaydx` EMAS): git bilan
+# tegishli emas, `docker build`ning `COPY . .` (builder bosqichi) uni
+# UMUMAN ko'rmaydi — repo ICHIDA turgan bo'lsa, sirlar image qatlamiga
+# yoki `git add -A` bilan PUBLIC repo'ga tushib qolishi mumkin edi
+# (reviewer topilmasi, R2a). Fayl bo'lmasa — muammo emas: box tashqarisiga
+# nusxa yo'q, faqat ochiq ogohlantirish (pastda).
 # `/opt/slaydx/.env`ning o'zini bu yerda source qilmang — u boshqa juda
 # ko'p narsani ham export qiladi va bash sintaksisiga mos kelmasligi mumkin.
-BACKUP_ENV_FILE="${BACKUP_ENV_FILE:-/opt/slaydx/.backup.env}"
+BACKUP_ENV_FILE="${BACKUP_ENV_FILE:-/etc/slaydx/backup.env}"
 if [ -f "$BACKUP_ENV_FILE" ]; then
   perm=$(stat -c%a "$BACKUP_ENV_FILE" 2>/dev/null || stat -f%Lp "$BACKUP_ENV_FILE" 2>/dev/null || echo "")
   if [ -n "$perm" ] && [ "$perm" != "600" ]; then
