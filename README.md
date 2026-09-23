@@ -132,7 +132,7 @@ xizmati) — shuning uchun hamma narsa ajratilgan:
 | | |
 |---|---|
 | Compose proyekt nomi | `slaydx` (`docker compose -p slaydx`) |
-| Konteynerlar | `slaydx-web-1`, `slaydx-worker-1`, `slaydx-postgres-1` |
+| Konteynerlar | `slaydx-web-1`, `slaydx-worker-1`, `slaydx-worker-2`, `slaydx-postgres-1` (C22: worker 2 replika) |
 | Port | `127.0.0.1:3000` — faqat localhost, nginx proxy qiladi |
 | Postgres | konteyner ichida, host portiga CHIQARILMAGAN |
 | nginx | `/etc/nginx/sites-available/slaydx`, `default_server` emas |
@@ -154,6 +154,33 @@ ham yo'q). Domen shu serverga yo'naltirilgach `enable-https.sh` ni
 ishga tushiring — u avval DNS ni tekshiradi va mos kelmasa certbot'ni
 umuman chaqirmaydi, chunki muvaffaqiyatsiz urinishlar Let's Encrypt
 chegarasini yeydi.
+
+### Zaxira (backup)
+
+Ilgari zaxira faqat qo'lda, deploydan oldin olinardi va bitta diskda
+saqlanardi — tiklash hech qachon sinalmagan edi (INFRA-05). Endi ikkita
+skript bor (`scripts/backup.sh`, `scripts/restore-check.sh`), lekin ular
+faqat REPO'da — serverga o'rnatish (cron qo'shish) egasi tomonidan
+qo'lda bajariladi:
+
+```bash
+# /etc/cron.d/slaydx-backup yoki `crontab -e` (root):
+30 3 * * * /opt/slaydx/scripts/backup.sh >> /var/log/slaydx-backup.log 2>&1
+0 5 * * 0 /opt/slaydx/scripts/restore-check.sh >> /var/log/slaydx-backup.log 2>&1
+```
+
+`backup.sh` — `pg_dump -Fc` (siqilgan, `bytea` ikki barobar shishmaydi)
+`${BACKUP_DIR:-/root/slaydx-backups}` ga, `pg_restore --list` bilan
+tekshirilgan, `BACKUP_KEEP_DAYS` (standart 7) dan eskisi o'chiriladi.
+`BACKUP_REMOTE` (rclone masofaviy nomi yoki `user@host:/yo'l`) berilsa
+box TASHQARISIGA ham nusxalanadi — bo'lmasa skript ochiq ogohlantiradi.
+`restore-check.sh` — eng so'nggi dumpni MUSTAQIL (`slaydx-*` OILASIGA
+UMUMAN TEGMAYDIGAN), vaqtinchalik Postgres konteynerga tiklab, asosiy
+jadvallar va balans invariantini (`balance == sum(transactions)`)
+tekshiradi, oxirida shu vaqtinchalik konteynerni o'chiradi. Ikkalasi ham
+hech qachon `docker compose down`/prune ishlatmaydi va boshqa (slaydx
+yoki qo'shni loyiha) konteynerlariga tegmaydi (`.claude/deploy.md`ning
+umumiy box qoidasi).
 
 ## Buyruqlar
 
@@ -351,7 +378,10 @@ ikkalasi ham doimiy vaqtli taqqoslash ishlatadi.
 
 **Ma'lumot**
 - Egalik SQL darajasida: id ni bilgan begona foydalanuvchi hujjat ham, rasm ham ola olmaydi
-- Fayl, media va generatsiya yozuvlari **muddatsiz** saqlanadi — avtomatik o'chirilish yo'q (foydalanuvchi o'zi o'chirmasa)
+- Fayl saqlash muddati (C23): **real to'lov bilan** (balans yoki Pro `quota`) yaratilgan
+  hujjatlar — **muddatsiz**; **faqat bonus** (ro'yxatdan o'tish ballari) bilan yaratilganlar —
+  **180 kun**, shundan keyin fayl/rasm o'chiriladi, lekin generatsiya yozuvi va tarix (kredit
+  jurnali bilan) saqlanib qoladi — foydalanuvchi "fayl muddati tugagan" holatini ko'radi
 - CSP, HSTS, nosniff, Referrer-Policy, Cross-Origin-Resource-Policy
 
 **Ma'lum cheklov:** `script-src` da `'unsafe-inline'` bor — Next.js inline runtime

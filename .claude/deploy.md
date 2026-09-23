@@ -12,7 +12,7 @@ Bu fayl productionga qanday xavfsiz deploy qilishni tasvirlaydi. Serverda
 | Ochiq domen | `https://slaydxx.uz` |
 | Loyiha jildi | `/opt/slaydx` — `origin/main`ni kuzatuvchi git checkout |
 | Compose loyiha nomi | `slaydx` — **HAR DOIM** `docker compose -p slaydx ...` |
-| Konteynerlar | `slaydx-web-1`, `slaydx-worker-1`, `slaydx-postgres-1` |
+| Konteynerlar | `slaydx-web-1`, `slaydx-worker-1`, `slaydx-worker-2`, `slaydx-postgres-1` (C22: worker 2 replika, `deploy.replicas: 2`, `WORKER_CONCURRENCY=4`) |
 | Web porti | `127.0.0.1:3000` — faqat localhost, nginx proxy qiladi |
 | Postgres | konteyner ichida, host portiga CHIQARILMAGAN |
 | Sirlar | `/opt/slaydx/.env` (huquq 600) — **git'da YO'Q** |
@@ -32,7 +32,7 @@ Bir xil box'da yana ikkita mustaqil loyiha ishlaydi:
 3. **`docker ps`/`docker stop`/`docker rm`ni konteyner nomi bilan ANIQ ko'rsatib ishlating** (`slaydx-*`), hech qachon hammasini qamrab oluvchi buyruq bilan emas.
 4. **nginx konfiguratsiyasini tekshirmasdan tahrirlamang** — `/etc/nginx/sites-available/slaydx` FAQAT SlaydX uchun, lekin `nginx -t` yoki `systemctl reload nginx` boshqa saytlarga ham ta'sir qiladi (reload — xavfsiz, restart — qisqa uzilish beradi, ehtiyot bo'ling).
 5. **Postgres portini hech qachon hostga chiqarmang** (`docker-compose.yml`da `ports:` emas, `expose:` bo'lishi shart) — boshqa loyihalarning DB porti bilan to'qnashmasligi uchun.
-6. Har doim `docker ps` bilan **BARCHA** konteynerlarni ko'rib, faqat `slaydx-*` uchlikni kutilgan holatda ekanini tasdiqlang — buyruqdan OLDIN va KEYIN.
+6. Har doim `docker ps` bilan **BARCHA** konteynerlarni ko'rib, faqat `slaydx-*` to'rttasini (web, worker-1, worker-2, postgres — C22 dan beri worker 2 replika) kutilgan holatda ekanini tasdiqlang — buyruqdan OLDIN va KEYIN.
 
 ## Deploy qadamlari
 
@@ -48,6 +48,33 @@ cd /opt/slaydx && git rev-parse --short HEAD > /root/slaydx-backups/ROLLBACK.txt
 
 `ROLLBACK.txt` — hozirgi (deploydan OLDINGI) commit. Muammo chiqsa:
 `git reset --hard <shu commit>` + qayta build.
+
+### 1a. Kunlik avtomatik zaxira (C24, bir marta sozlanadi)
+
+Yuqoridagi `.sql` — faqat deploy oldidan tezkor nusxa. Doimiy kunlik
+zaxira uchun repo'dagi `scripts/backup.sh`/`scripts/restore-check.sh`
+serverda cron orqali ishga tushiriladi (egasi tomonidan, bir marta):
+
+```bash
+# /etc/cron.d/slaydx-backup (yoki `crontab -e`, root):
+30 3 * * * /opt/slaydx/scripts/backup.sh >> /var/log/slaydx-backup.log 2>&1
+0 5 * * 0 /opt/slaydx/scripts/restore-check.sh >> /var/log/slaydx-backup.log 2>&1
+```
+
+`backup.sh` — `pg_dump -Fc` (siqilgan format, `bytea`ni hex'ga
+ikki barobar shishirmaydi) `slaydx-postgres-1`dan, `${BACKUP_DIR:-
+/root/slaydx-backups}`ga, `pg_restore --list` bilan tasdiqlangan,
+`BACKUP_KEEP_DAYS` (standart 7 kun) dan eskisi avtomatik o'chadi.
+Box TASHQARISIGA nusxa uchun `BACKUP_REMOTE` (rclone nomi yoki
+`user@host:/yo'l`) `.env` yoki cron muhitida belgilang — bo'lmasa
+skript har safar ochiq ogohlantiradi (stderr + `backup.log`).
+`restore-check.sh` — eng so'nggi dumpni MUSTAQIL, vaqtinchalik Postgres
+konteynerga (`slaydx-*` OILASIGA TEGMAYDI) tiklab, `users`/
+`generations`/`transactions` qatorlari va balans invarianti
+(`balance == sum(transactions)`) ni tekshiradi; muammo bo'lsa
+non-zero bilan chiqadi. Ikkalasi ham hech qachon `docker compose
+down`/prune ishlatmaydi va boshqa (slaydx yoki qo'shni loyiha)
+konteynerlariga tegmaydi (yuqoridagi umumiy box qoidalari).
 
 ### 2. Deploy
 
@@ -83,7 +110,7 @@ reload nginx` (reload — xavfsiz, boshqa saytlarga uzilish bermaydi).
 ### 3. Tekshirish (deploydan keyin, har doim)
 
 ```bash
-docker ps --format 'table {{.Names}}\t{{.Status}}'   # slaydx-* uchtasi + boshqa 5 ta o'zgarishsiz
+docker ps --format 'table {{.Names}}\t{{.Status}}'   # slaydx-* to'rttasi (web/worker-1/worker-2/postgres) + boshqa 5 ta o'zgarishsiz
 cd /opt/slaydx && git log --oneline -1                 # kutilgan commit
 curl -s http://127.0.0.1:3000/api/health               # 200 va JSON
 docker compose -p slaydx logs --tail=50 worker          # xato yo'qligini tekshirish
@@ -117,7 +144,9 @@ kelishib bajaring — bu YO'QOTISHGA olib keladigan amal).
 
 Bular `worker` konteyner ICHIDA ishlaydi — u `scripts/` va to'liq
 `node_modules` (shu jumladan `tsx`) ni o'z ichiga oladi, `web` esa yo'q
-(standalone Next.js image).
+(standalone Next.js image). `worker` 2 replika (C22) — `exec -T worker`
+ikkalasi bir xil image/koddan bo'lgani uchun ular orasidan ixtiyoriy
+birini tanlaydi, bu admin skriptlari (kredit, seed) uchun ahamiyatsiz.
 
 ```bash
 # Kredit qo'shish
