@@ -250,7 +250,9 @@ export const env = {
     /** Bitta generatsiyaga ajratilgan maksimal vaqt. */
     jobTimeoutMs: int("WORKER_JOB_TIMEOUT_MS", DEFAULT_JOB_TIMEOUT_MS),
     /** Worker shu processda avtomatik ishga tushsinmi. */
-    inline: bool("WORKER_INLINE", true),
+    // Prod'da standart o'chiq (CONC-17): compose override'siz ishga tushgan web
+    // nusxasi navbatni o'zi bajarib ketmasin. Dev'da avvalgidek yoqiq.
+    inline: bool("WORKER_INLINE", !isProd),
   },
 } as const;
 
