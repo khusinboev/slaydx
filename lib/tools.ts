@@ -1402,16 +1402,24 @@ export function fieldVisible(field: Pick<ToolField, "hideWhen">, values: Record<
  * jadvalda topilmay eng arzon tarifga tushardi, `work/input.ts`dagi
  * dvigatel esa AYNAN shu qiymatni kesib (`.trim()`) va noma'lum
  * bo'lsa `"20-25"` ga klamp qilib o'qirdi — narx va yozilgan hajm
- * ajralib ketardi (BEA-01/ABUSE-03). `pages` berilmasa `defaultPages`
- * bilan TO'LDIRILADI (forma ko'rsatadigan HAQIQIY standart,
- * `WorkComposer.tsx` xuddi shu ikkalasini ketma-ket chaqiradi) —
- * standart holatdagi narx TEGILMAYDI.
+ * ajralib ketardi (BEA-01/ABUSE-03).
+ *
+ * `pages` XOM holda (`?? defaultPages` bilan TO'LDIRMASDAN) shu
+ * normalizatorga uzatiladi — `work/input.ts` ham AYNAN shunday qiladi
+ * (`values.pages`, standart bilan oldindan to'ldirmaydi). Sharh (R1,
+ * review `audit/reviews/W3-J.md`): `defaultPages("referat")` = "10-15"
+ * bo'lsa-da, `WorkComposer.tsx` HAR DOIM `pages`ni aniq yuboradi
+ * (forma standarti — `normalizeWorkPages(kind, defaultPages(id))` —
+ * shunchaki forma HOLATI, so'rov maydoni emas). Ya'ni `pages`
+ * berilmagan/`null` so'rov faqat qo'lda yozilgan (forma yubormaydi) —
+ * bunda narx endi dvigatel chindan yozadigan «20-25» tarifiga (5 000)
+ * to'g'ri keladi, 3 000 EMAS.
  */
 function workPagesFor(toolId: ToolId, values: FormValues): string {
   const genre = workGenreOfTool(toolId);
   if (!genre) return String(values.pages ?? defaultPages(toolId));
   const kind = workKindOf(genre, values.workKind ?? values.kind);
-  return normalizeWorkPages(kind, values.pages ?? defaultPages(toolId));
+  return normalizeWorkPages(kind, values.pages);
 }
 
 /**

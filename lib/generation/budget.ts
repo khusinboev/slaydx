@@ -8,6 +8,8 @@ import { audioKindOf } from "./audio/registry";
 import { normalizeAudioMinutes, type AudioKind } from "./audio/types";
 import { normalizeBlockCountFor } from "./infographic/registry";
 import { INFOGRAPHIC_LIMITS } from "./infographic/types";
+import { normalizeWorkPages, pagesMid, workKindOf } from "./work/registry";
+import { workGenreOfTool } from "./work/types";
 import type { FormValues, ToolConfig, ToolId } from "../types";
 
 /**
@@ -347,6 +349,22 @@ export function budgetFor(tool: ToolConfig, values: FormValues, cap: number): nu
     // «pul olindi, lekin vaqt yetmadi» holati kelib chiqmaydi.
     want = TRANSLATION_BASE_MS + Math.ceil(translationChars(values) / 1000) * TRANSLATION_PER_KCHARS_MS;
   }
+  /*
+   * Kurs ishi / referat / mustaqil ish (C12 R2): hajm `extractMeta`ning
+   * `targetPages`i (faqat `.trim()`, tarifga QISILMAYDI) EMAS, balki
+   * dvigatel chaqiradigan AYNAN o'sha normalizator — `normalizeWorkPages`
+   * (`work/input.ts` bilan bir manba, `lib/tools.ts priceFor`dagi
+   * `workPagesFor` bilan bir xil chaqiruv shakli). Aks holda `pages`
+   * yo'q/noma'lum so'rov (narx endi dvigatel hajmiga to'g'ri hisoblanadi,
+   * C12 R1) kamroq byudjet olib, muddat yoki hajm darvozasidan
+   * yiqilib, PULLIK ish bekor bo'lib qolar edi.
+   */
+  const workGenre = workGenreOfTool(tool.id);
+  if (want === undefined && workGenre) {
+    const kind = workKindOf(workGenre, values.workKind ?? values.kind);
+    const pages = normalizeWorkPages(kind, values.pages);
+    want = workBudgetMs(pagesMid(pages));
+  }
   if (want === undefined) {
     // Slaydda `targetPages` — betlar emas, SLAYDLAR soni (`extractMeta`).
     const size = extractMeta(tool, values).targetPages;
@@ -357,9 +375,7 @@ export function budgetFor(tool: ToolConfig, values: FormValues, cap: number): nu
           ? SLIDE_BASE_MS + size * SLIDE_PER_SLIDE_MS
           : tool.id === "article" || tool.id === "thesis"
             ? ARTICLE_BASE_MS + ARTICLE_POLISH_MS + size * ARTICLE_PER_PAGE_MS
-            : tool.id === "coursework" || tool.id === "referat" || tool.id === "mustaqil-ish"
-              ? workBudgetMs(size)
-              : MIN_BUDGET_MS + size * PER_PAGE_MS;
+            : MIN_BUDGET_MS + size * PER_PAGE_MS;
   }
   return Math.max(MIN_BUDGET_MS, Math.min(want, Math.max(MIN_BUDGET_MS, cap)));
 }
