@@ -309,14 +309,19 @@ test("to'lov buyurtmalari: Payme JSON-RPC + Click holat mashinasi", { skip: hasD
     const amount = order.amountSoum * 100;
     await rpc("CreateTransaction", { id: `pm-busy1-${order.id.slice(0, 8)}`, time: Date.now(), amount, account });
 
-    assertAccountError(await rpc("CheckPerformTransaction", { amount, account }), "CheckPerform band");
-    assertAccountError(
-      await rpc("CreateTransaction", { id: `pm-busy2-${order.id.slice(0, 8)}`, time: Date.now(), amount, account }),
-      "Create boshqa id bilan",
-    );
+    // Diapazon — spetsifikatsiya talabi; aniq kod (-31051 «to'lov kutmoqda» /
+    // -31052 «yopilgan») — to'lovchiga to'g'ri sabab ko'rsatilishi uchun.
+    const busy = await rpc("CheckPerformTransaction", { amount, account });
+    assertAccountError(busy, "CheckPerform band");
+    assert.equal(busy.error?.code, -31051);
+    const busy2 = await rpc("CreateTransaction", { id: `pm-busy2-${order.id.slice(0, 8)}`, time: Date.now(), amount, account });
+    assertAccountError(busy2, "Create boshqa id bilan");
+    assert.equal(busy2.error?.code, -31051);
     // Birinchisi bekor qilingach ham buyurtma yopiq — bir martalik to'lov.
     await rpc("CancelTransaction", { id: `pm-busy1-${order.id.slice(0, 8)}`, reason: 3 });
-    assertAccountError(await rpc("CheckPerformTransaction", { amount, account }), "CheckPerform bekor qilingan");
+    const closed = await rpc("CheckPerformTransaction", { amount, account });
+    assertAccountError(closed, "CheckPerform bekor qilingan");
+    assert.equal(closed.error?.code, -31052);
   });
 
   await t.test("Payme: 12 soatlik timeout — eski Create rad; eski tranzaksiya Perform/Create'da reason 4 bilan bekor", async () => {
