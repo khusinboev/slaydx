@@ -24,20 +24,36 @@
  * prod'ga `ADMIN_PHONES` qo'shilmasdan deploy qilinsa ham admin kirishi
  * buzilmasin. EGASI QADAMI: prod `.env`ga `ADMIN_PHONES` qo'shing, keyin
  * quyidagi hardcode qatorni reponi kommit qilib o'chirib tashlash mumkin.
+ *
+ * Yagona joy — bu hardcode fallback qatorda. Repo bo'ylab (audit/production-
+ * readiness C05, `tests/no-pii-in-repo.test.mts`) real admin raqamining
+ * FAQAT shu bitta nusxasiga ruxsat berilgan; boshqa hech qaysi fayl/izoh/
+ * test bu raqamni takrorlamasin (testlar quyidagi
+ * `ADMIN_PHONES_FALLBACK_FOR_TESTS` orqali solishtirsin).
  */
+const ADMIN_PHONES_FALLBACK = ["+998976063896"];
+
 const ADMIN_PHONES_ENV = (process.env.ADMIN_PHONES ?? "")
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
 
-const ADMIN_PHONES = ADMIN_PHONES_ENV.length > 0 ? ADMIN_PHONES_ENV : ["+998976063896"];
+const ADMIN_PHONES = ADMIN_PHONES_ENV.length > 0 ? ADMIN_PHONES_ENV : ADMIN_PHONES_FALLBACK;
+
+/**
+ * FAQAT testlar uchun — `tests/admin-phones-env.test.mts` fallback
+ * xatti-harakatini ("env o'rnatilmasa hardcode ishlaydi") real raqamni
+ * o'zida qayta yozmasdan tekshirishi uchun.
+ */
+export const ADMIN_PHONES_FALLBACK_FOR_TESTS = ADMIN_PHONES_FALLBACK[0];
 
 /**
  * Telefon raqamini raqamlarga tekislaydi.
  *
- * Turli formatlar bir xil natija berishi kerak: "+998 97 606 38 96",
- * "998976063896", "+998-97-606-38-96" — hammasi bitta kalitga tushadi.
- * Milliy format (mamlakat kodisiz, 9 xonali, masalan "976063896") ham
+ * Turli formatlar bir xil natija berishi kerak: "+998 90 000 00 01",
+ * "998900000001", "+998-90-000-00-01" — hammasi bitta kalitga tushadi
+ * (raqamlar shunchaki FORMAT namunasi, admin bilan bog'liq emas).
+ * Milliy format (mamlakat kodisiz, 9 xonali, masalan "900000001") ham
  * qo'llab-quvvatlanadi: "998" ustiga qo'yiladi.
  */
 export function normalizePhone(raw: string | null | undefined): string {

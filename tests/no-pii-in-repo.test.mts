@@ -7,20 +7,15 @@ import { execFileSync } from "node:child_process";
  *
  * Bu repo PUBLIC. Prod server IP'si va egasining telefon raqami bir marta
  * (`.claude/deploy.md` force-add, `README.md`/`docs/`/`scripts/`da qo'lda)
- * ochiq repo'ga tushib qolgan edi. Bu test SHU IKKI naqshni qayta
- * qo'shilishdan saqlaydi: `git ls-files`dagi HAR bir tracked faylni
- * `git grep` bilan tekshiradi.
+ * ochiq repo'ga tushib qolgan edi. Bu test SHU IKKI naqshni butun tracked
+ * daraxtda (audit/ va tests/ ham SHU JUMLADAN — qamrov chegarasi yo'q)
+ * qayta qo'shilishdan saqlaydi.
  *
- * DIQQAT — raqamlarni HECH QACHON konsolga chiqarmang (audit qoidasi):
- * xato xabarlarida faqat `fayl:qator` ko'rsatiladi, mos qator matni EMAS.
- *
- * `audit/` chiqarib tashlangan — u auditning o'zi (topilmalar, sharhlar),
- * masalan `audit/findings/*.md` haqiqiy qiymatlarni `…`/`<IP>` bilan
- * MASKALAYDI (brief qoidasi), lekin BU YOZILGANDA tekshirilganda
- * `audit/findings/infra-devops.md` va `audit/reviews/W1-A.md` da HALI
- * ham maskalanmagan IP/telefon topildi — bu boshqa fixer paketi
- * egaligidagi fayllar, shu sabab bu yerda TUZATILMAYDI, faqat
- * hisobotda bayon qilinadi.
+ * DIQQAT — raqamlar/IP HECH QACHON konsolga chiqarilmaydi: xato
+ * xabarlarida faqat `fayl:qator` ko'rsatiladi. Test faylining o'zi ham
+ * real qiymatni LITERAL yozmaydi — admin raqami `admin-phones.ts`dagi
+ * eksport qilingan fallback konstantasidan RUNTIME'da olinadi (shu
+ * sabab bu faylni grep qilish ham hech narsa bermaydi).
  */
 const isGitRepo = (() => {
   try {
@@ -32,64 +27,17 @@ const isGitRepo = (() => {
 })();
 
 /**
- * Ishlab chiqarish server IP manzili (194.163.x.x) — real qism.
- * Bironta tracked faylda (audit'dan tashqari) HECH QACHON bo'lmasligi
- * kerak — hammasi `<SERVER_IP>` placeholder bilan almashtirilgan.
+ * `git grep -P -n -o <pattern>` — faqat MOS QISMni (`-o`) qaytaradi, shu
+ * bilan butun qatorni o'qib PII'ni xotiraga tashimaymiz. Mos yo'q bo'lsa
+ * `git grep` 1 bilan chiqadi (xato emas).
  */
-const IP_PATTERN = "194\\.163\\.[0-9]{1,3}\\.[0-9]{1,3}";
-
-/** 998 bilan boshlanuvchi 12 xonali (E.164 formatidagi O'zbekiston) raqam. */
-const PHONE_PATTERN = "998[0-9]{9}";
-
-/**
- * Ruxsat etilgan joylar — "fixtures": test fayllari o'zbek telefon
- * formatlash/validatsiya mantig'ini haqiqiy shakldagi (garchi ko'pi
- * o'ylab topilgan) raqamlar bilan sinaydi, shuning uchun BUTUN `tests/`
- * papkasi ruxsat etilgan. Undan tashqarida faqat aniq, izohlangan
- * fayllar — har biri NEGA xavfsizligi tushuntirilgan.
- */
-const ALLOWLIST_PREFIXES = ["tests/"];
-
-const ALLOWLIST_FILES = new Set([
-  // Admin ro'yxati ATAYLAB hardcode (lib/server/admin-phones.ts o'zi) —
-  // DEPS-08 hali yopilmagan: ADMIN_PHONES env o'rnatilsa buni almashtiradi,
-  // lekin prod deploy buzilmasligi uchun hardcode hozircha qoladi.
-  "lib/server/admin-phones.ts",
-  // Faqat FORMAT namunasi (izoh/placeholder) — o'ylab topilgan raqam,
-  // haqiqiy foydalanuvchi/admin bilan bog'liq emas.
-  "components/forms/PhoneInput.tsx",
-  "components/overlays/LoginModal.tsx",
-  "lib/generation/resume/input.ts",
-  "lib/phone.ts",
-  "docs/AUDIT-15.md",
-  // Demo/sinov skriptlari — kirish uchun ENDI majburiy env talab qiladi
-  // (SMOKE_USER/EVAL_USER), qolgan literal raqamlar esa o'ylab topilgan
-  // namuna ma'lumot (masalan seed-demo.mts'dagi rezyume DEMO kontenti).
-  "scripts/eval-services.mjs",
-  "scripts/live-engine.mts",
-  "scripts/run-build.mts",
-  "scripts/seed-demo.mts",
-]);
-
-function isAllowlisted(file: string): boolean {
-  if (ALLOWLIST_FILES.has(file)) return true;
-  return ALLOWLIST_PREFIXES.some((p) => file.startsWith(p));
-}
-
-/**
- * `git grep -I -n -E <pattern>` — `-I` binary fayllarni o'tkazib
- * yuboradi. Mos qator YO'Q bo'lsa `git grep` 1 bilan chiqadi (xato
- * emas), shu sabab try/catch bilan ushlanadi.
- */
-function findMatches(pattern: string): { file: string; line: string }[] {
+function grepMatches(pattern: string): { file: string; line: string; match: string }[] {
   let out = "";
   try {
-    out = execFileSync("git", ["grep", "-I", "-n", "-E", pattern, "--", ".", ":!audit/**"], {
-      encoding: "utf8",
-    });
+    out = execFileSync("git", ["grep", "-P", "-n", "-o", pattern, "--", "."], { encoding: "utf8" });
   } catch (err: unknown) {
-    const e = err as { status?: number; stdout?: string };
-    if (e.status === 1) return []; // hech qanday moslik yo'q
+    const e = err as { status?: number };
+    if (e.status === 1) return [];
     throw err;
   }
   return out
@@ -98,24 +46,136 @@ function findMatches(pattern: string): { file: string; line: string }[] {
     .map((row) => {
       const idx1 = row.indexOf(":");
       const idx2 = row.indexOf(":", idx1 + 1);
-      return { file: row.slice(0, idx1), line: row.slice(idx1 + 1, idx2) };
+      return { file: row.slice(0, idx1), line: row.slice(idx1 + 1, idx2), match: row.slice(idx2 + 1) };
     });
 }
 
-test("tracked fayllarda prod server IP manzili yo'q (audit/ va allowlist'dan tashqari)", { skip: isGitRepo ? false : "git repo emas" }, () => {
-  const hits = findMatches(IP_PATTERN).filter((h) => !isAllowlisted(h.file));
-  assert.deepEqual(
-    hits.map((h) => `${h.file}:${h.line}`),
-    [],
-    "IP manzili topildi (fayl:qator yuqorida) — <SERVER_IP> bilan almashtiring",
-  );
-});
+function digitsOf(s: string): string {
+  return s.replace(/\D/g, "");
+}
 
-test("tracked fayllarda 998-prefiksli 12 xonali raqam faqat allowlist'da (audit/ bundan mustasno)", { skip: isGitRepo ? false : "git repo emas" }, () => {
-  const hits = findMatches(PHONE_PATTERN).filter((h) => !isAllowlisted(h.file));
-  assert.deepEqual(
-    hits.map((h) => `${h.file}:${h.line}`),
-    [],
-    "Telefon raqami topildi (fayl:qator yuqorida) — <ADMIN_PHONE> bilan almashtiring yoki allowlist'ga qo'shing (fixture bo'lsa)",
-  );
-});
+// ---------------------------------------------------------------------
+// 1) Telefon: 998-prefiksli 12 xonali raqam, ajratuvchilarga (bo'shliq/
+//    tire/nuqta/qavs) chidamli, chegara bilan ANGLANGAN — shunda "998"
+//    boshqa uzun raqam ichida (ID/hash/timestamp) TASODIFAN uchramaydi.
+// ---------------------------------------------------------------------
+const PHONE_PATTERN =
+  "(?<![0-9])\\+?998[ ().-]{0,3}[0-9]{2}[ ().-]{0,3}[0-9]{3}[ .-]?[0-9]{2}[ .-]?[0-9]{2}(?![0-9])";
+
+/**
+ * O'ylab topilgan (haqiqiy emas) namuna raqamlar — kod/testlarda FORMAT
+ * yoki DEMO kontent sifatida ishlatiladi, repo bo'ylab qayerda uchrashidan
+ * qat'i nazar ruxsat etilgan.
+ */
+const SYNTHETIC_FIXTURE_DIGITS = new Set([
+  "998901234567",
+  "998712000000",
+  "998900000000",
+  "998901112233",
+  "998911112233",
+  "998911112244",
+  "998900000001",
+  "998900000002",
+  "998907654321",
+]);
+
+/**
+ * Uchinchi tomon (Click, GLOWLEDGE MChJ) o'zining OMMAVIY sahifasida
+ * e'lon qilgan raqami — raqobatchi tadqiqoti hisobotida iqtibos
+ * sifatida (`docs/research/*`). SlaydX/egasining PII'si EMAS.
+ */
+const THIRD_PARTY_PUBLIC_DIGITS = new Set([
+  "998712310880", // Click Business — click.uz/uz/faq da e'lon qilingan
+  "998919652429", // GLOWLEDGE MChJ (slaydtop.uz operatori) — oferta sahifasida
+]);
+
+test(
+  "tracked fayllarda 998-prefiksli telefon raqami faqat sintetik/uchinchi-tomon/hujjatlashtirilgan admin fallback",
+  { skip: isGitRepo ? false : "git repo emas" },
+  async () => {
+    const { ADMIN_PHONES_FALLBACK_FOR_TESTS } = await import("../lib/server/admin-phones.ts");
+    const realAdminDigits = digitsOf(ADMIN_PHONES_FALLBACK_FOR_TESTS);
+
+    /**
+     * Admin real raqamining HOZIRGI ma'lum joylari — faqat shu fayllarda
+     * ruxsat etiladi (boshqa hech qayerda emas). `tests/admin.test.mts` va
+     * `tests/admin-contact.test.mts` bu paketning egaligida EMAS (DEPS-08
+     * hali yopilmagan, ular boshqa fixer paketiga tegishli) — shu sabab
+     * bu yerda TUZATILMAYDI, faqat hujjatlashtirilgan ma'lum istisno.
+     * `lib/server/admin-phones.ts` esa BITTA qatordagi ataylab hardcode
+     * (o'zi shu faylda, o'zgartirilmaydi).
+     */
+    const KNOWN_ADMIN_NUMBER_FILES = new Set([
+      "lib/server/admin-phones.ts",
+      "tests/admin.test.mts",
+      "tests/admin-contact.test.mts",
+    ]);
+
+    const hits = grepMatches(PHONE_PATTERN)
+      .map((h) => ({ ...h, digits: digitsOf(h.match) }))
+      .filter((h) => {
+        if (SYNTHETIC_FIXTURE_DIGITS.has(h.digits)) return false;
+        if (THIRD_PARTY_PUBLIC_DIGITS.has(h.digits)) return false;
+        if (h.digits === realAdminDigits && KNOWN_ADMIN_NUMBER_FILES.has(h.file)) return false;
+        return true; // qolgani — noma'lum 998-raqam, MUVAFFAQIYATSIZ
+      });
+
+    assert.deepEqual(
+      hits.map((h) => `${h.file}:${h.line}`),
+      [],
+      "Kutilmagan telefon raqami topildi (fayl:qator yuqorida) — <ADMIN_PHONE>/<OWNER_PHONE> bilan almashtiring yoki sintetik namuna ishlating",
+    );
+  },
+);
+
+// ---------------------------------------------------------------------
+// 2) IPv4: har qanday to'g'ri shakldagi IPv4 (har oktet 0-255) —
+//    private/loopback/link-local/hujjat diapazonlari va repo'dagi ma'lum
+//    ommaviy (uchinchi tomon) qiymatlar ruxsat etilgan, qolgan HAR QANDAY
+//    ommaviy IP MUVAFFAQIYATSIZ — prod IP'ning aniq /16'sini test kodida
+//    ATAYLAB yozmaymiz (shu sababning o'zi ham oldingi leak edi).
+// ---------------------------------------------------------------------
+const IP_OCTET = "(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)";
+const IP_PATTERN = `(?<![0-9.])${IP_OCTET}\\.${IP_OCTET}\\.${IP_OCTET}\\.${IP_OCTET}(?![0-9.])`;
+
+/** Repo'da uchraydigan, PII bo'lmagan ommaviy/hujjat namunalari (fixture). */
+const KNOWN_PUBLIC_IP_ALLOWLIST = new Set([
+  "1.2.3.4", // umumiy "misol" IP (RFC 5737 uslubidagi placeholder, test fixture)
+  "1.2.3.5",
+  "6.6.6.6", // test fixture placeholder
+  "149.154.160.0", // Telegram'ning O'ZI e'lon qilgan webhook IP diapazoni (ommaviy ma'lumot)
+  "91.108.4.0",
+]);
+
+function isReservedOrPrivateIPv4(ip: string): boolean {
+  const [a, b] = ip.split(".").map(Number);
+  if (a === 0) return true; // "this network"
+  if (a === 10) return true; // RFC1918
+  if (a === 127) return true; // loopback
+  if (a === 169 && b === 254) return true; // link-local
+  if (a === 172 && b >= 16 && b <= 31) return true; // RFC1918
+  if (a === 192 && b === 168) return true; // RFC1918
+  if (a === 192 && b === 0) return true; // 192.0.2.0/24 doc (TEST-NET-1) — b===0 & c===2 tekshiruvsiz, kifoya
+  if (a === 198 && b === 51) return true; // TEST-NET-2
+  if (a === 203 && b === 0) return true; // TEST-NET-3
+  if (a >= 224) return true; // multicast/reserved (224-255)
+  return false;
+}
+
+test(
+  "tracked fayllarda ommaviy (real) IPv4 manzili yo'q — faqat reserved/private/ma'lum-uchinchi-tomon",
+  { skip: isGitRepo ? false : "git repo emas" },
+  () => {
+    const hits = grepMatches(IP_PATTERN).filter((h) => {
+      if (isReservedOrPrivateIPv4(h.match)) return false;
+      if (KNOWN_PUBLIC_IP_ALLOWLIST.has(h.match)) return false;
+      return true;
+    });
+
+    assert.deepEqual(
+      hits.map((h) => `${h.file}:${h.line}`),
+      [],
+      "Kutilmagan ommaviy IPv4 manzili topildi (fayl:qator yuqorida) — <SERVER_IP> bilan almashtiring",
+    );
+  },
+);
