@@ -69,6 +69,20 @@ test("siyosat: standartlar va env o'qilishi", async () => {
   assert.deepEqual(p.daily, FREE_LLM_DEFAULTS.daily);
 });
 
+test("o'chirish tugmasidagi tanilmagan qiymat ogohlantiradi", async () => {
+  const { runtimeWarnings } = await import("../lib/server/env.ts");
+  const prev = process.env.FREE_LLM_DISABLED;
+  try {
+    process.env.FREE_LLM_DISABLED = "on";
+    assert.ok(runtimeWarnings().some((w) => w.includes("FREE_LLM_DISABLED")));
+    process.env.FREE_LLM_DISABLED = "true";
+    assert.ok(!runtimeWarnings().some((w) => w.includes("FREE_LLM_DISABLED")));
+  } finally {
+    if (prev === undefined) delete process.env.FREE_LLM_DISABLED;
+    else process.env.FREE_LLM_DISABLED = prev;
+  }
+});
+
 test("o'chirish tugmasi: 503, provayder va baza chaqirilmaydi", async () => {
   const { withFreeLlm, assertFreeLlmEnabled } = await import("../lib/server/spend.ts");
   const { pool } = await import("../lib/server/db.ts");
@@ -309,6 +323,78 @@ test("bepul LLM — Postgres", { skip: hasDb ? false : "DATABASE_URL yo'q" }, as
     await assert.rejects(withFreeLlm({ endpoint: "rewrite", userId: uid, doc: { id: doc, baseVersion: 0 } }, async () => { throw new Error("x"); }, deps));
     assert.equal(await withFreeLlm({ endpoint: "rewrite", userId: uid, doc: { id: doc, baseVersion: 0 } }, async () => "d", deps), "d");
   });
+
+  /*
+   * R1 (ko'rib chiqish): qulf eskirganligi EGASINING muddati bilan
+   * o'lchanadi. Ilgari kiruvchi so'rovning TTL i ishlatilardi: 100 s
+   * davom etayotgan «Hammasini tuzatish» qulfini (180 s) «Tuzatish»
+   * (90 s) eskirgan deb o'chirib, ikkalasi ham LLM pulini yerdi.
+   */
+  await t.test("tirik polish qulfini rewrite o'g'irlamaydi (egasining muddati)", async () => {
+    const uid = await user();
+    const doc = await gen(uid, { balance: 4000 });
+    const T = Date.parse("2026-09-23T08:00:00Z");
+    const deps = (now: number) => ({ policy: policy(), bucketPrefix: tag, now });
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const first = withFreeLlm({ endpoint: "polish", userId: uid, doc: { id: doc, baseVersion: 0 } }, async () => { await gate; return "a"; }, deps(T - 100_000));
+    await new Promise((r) => setTimeout(r, 150));
+    let provider = 0;
+    const r = await status(withFreeLlm({ endpoint: "rewrite", userId: uid, doc: { id: doc, baseVersion: 0 } }, async () => { provider++; return "b"; }, deps(T)));
+    release();
+    assert.equal(await first, "a");
+    assert.equal(r.status, 409, "100 s lik polish qulfi hali tirik — rewrite 409 busy olishi kerak");
+    assert.equal(r.code, "busy");
+    assert.equal(provider, 0);
+    // Egasining muddati o'tgach (jarayon yiqilgan holat) — qulf eskiradi.
+    const stale = withFreeLlm({ endpoint: "polish", userId: uid, doc: { id: doc, baseVersion: 0 } }, () => new Promise<string>(() => {}), deps(T));
+    void stale;
+    await new Promise((r) => setTimeout(r, 150));
+    assert.equal(await withFreeLlm({ endpoint: "rewrite", userId: uid, doc: { id: doc, baseVersion: 0 } }, async () => "c", deps(T + 3_600_000)), "c");
+  });
+
+  /*
+   * R2 (ko'rib chiqish): 409 `busy` rad etilgan so'rov chelak YEMAYDI —
+   * nginx 504 dan keyin qayta bosish hujjatning 3/kun sayqalini, kunlik
+   * va global hisobni kamaytirmasin (BEA-11).
+   */
+  await t.test("409 busy chelaklarni yemaydi", async () => {
+    const uid = await user();
+    const doc = await gen(uid, { balance: 4000 });
+    const pre = `${tag}-busy:`;
+    const deps = { policy: policy(), bucketPrefix: pre };
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    const first = withFreeLlm({ endpoint: "polish", userId: uid, doc: { id: doc, baseVersion: 0 } }, async () => { await gate; return "a"; }, deps);
+    await new Promise((r) => setTimeout(r, 150));
+    const before = await hits(pre);
+    for (const endpoint of ["polish", "rewrite"] as const) {
+      const r = await status(withFreeLlm({ endpoint, userId: uid, doc: { id: doc, baseVersion: 0 } }, async () => "b", deps));
+      assert.equal(r.code, "busy", endpoint);
+    }
+    const after = await hits(pre);
+    release();
+    await first;
+    assert.deepEqual(after, before, "rad etilgan so'rov chelak yemasligi kerak");
+    assert.equal(before[`${pre}polish:${uid}:${doc}`], 1);
+  });
+
+  await t.test("rateLimit: vazn birdan ortiq birlik yeydi", async () => {
+    const { rateLimit } = await import("../lib/server/ratelimit.ts");
+    const b = `${tag}-w`;
+    assert.equal((await rateLimit(b, 5, 600, { weight: 3 })).ok, true);
+    const second = await rateLimit(b, 5, 600, { weight: 3 });
+    assert.equal(second.ok, false);
+    assert.equal(second.remaining, 0);
+  });
+
+  async function hits(prefix: string): Promise<Record<string, number>> {
+    const rows = await query<{ bucket: string; hits: number }>(
+      `SELECT bucket, hits FROM rate_limits WHERE bucket LIKE $1 AND bucket NOT LIKE $2`,
+      [`${prefix}%`, `${prefix}inflight:%`],
+    );
+    return Object.fromEntries(rows.map((r) => [r.bucket, r.hits]));
+  }
 
   await t.test("mijoz uzilsa keyingi provayder chaqiruvlari qilinmaydi", async () => {
     const uid = await user();

@@ -85,11 +85,18 @@ export const FREE_LLM_BURST: Partial<Record<FreeLlmEndpoint, { count: number; wi
 export const POLISH_PER_DOC_DAILY = 3;
 
 /**
- * Bitta-parvoz qulfining muddati (s) — route ning `maxDuration` idan
- * katta: jarayon yiqilib qulf bo'shatilmasa ham, shundan keyin o'z-o'zidan
- * eskiradi.
+ * Bitta-parvoz qulfining muddati (s) — faqat jarayon yiqilib qulf
+ * bo'shatilmagan holat uchun (odatda `finally` bo'shatadi). `maxDuration`
+ * ga tayanmaydi: self-hosted Next uni e'tiborsiz qoldiradi (CONC-11).
+ * Shuning uchun dvigatel muddatlaridan hisoblanadi:
+ *   • polish — `POLISH_TIMEOUT_MS` 120 s + ketayotgan chaqiruv (≤40 s)
+ *     + fayl qayta yasash (o'yin DOCX / plakat PNG) → 240 s;
+ *   • rewrite — `REWRITE_TIMEOUT_MS` 30 s + ketayotgan chaqiruv + o'yin
+ *     DOCX i → 90 s.
+ * Muddat qulf QATORIGA yoziladi (egasining muddati) — kiruvchi so'rov
+ * o'z TTL i bilan boshqaning tirik qulfini «eskirgan» deb o'chirmaydi.
  */
-const LEASE_TTL_SEC: Record<"rewrite" | "polish", number> = { rewrite: 90, polish: 180 };
+const LEASE_TTL_SEC: Record<"rewrite" | "polish", number> = { rewrite: 90, polish: 240 };
 
 /** Toshkent: UTC+5, yozgi vaqt yo'q. */
 export const TASHKENT_UTC_OFFSET_SEC = 5 * 3600;
@@ -150,22 +157,33 @@ export async function withFreeLlm<T>(
   if ((endpoint === "rewrite" || endpoint === "polish") && !doc) throw new Error(`withFreeLlm: ${endpoint} hujjatsiz chaqirildi`);
   if (doc) await assertPaidDocument(doc.id, userId, doc.baseVersion);
 
-  const burst = FREE_LLM_BURST[endpoint];
-  if (burst) await hit(`${pre}${endpoint}:${userId}`, burst.count, burst.windowSec, {}, "burst");
-  const day: RateOptions = { offsetSec: TASHKENT_UTC_OFFSET_SEC, now };
-  await hit(`${pre}free-llm:${endpoint}:day:${userId}`, policy.daily[endpoint], DAY_SEC, day, "daily");
-  if (endpoint === "polish" && doc) {
-    await hit(`${pre}polish:${userId}:${doc.id}`, POLISH_PER_DOC_DAILY, DAY_SEC, day, "doc");
-  }
-  await hit(`${pre}free-llm:global:day`, policy.globalDaily, DAY_SEC, { ...day, weight: FREE_LLM_WEIGHT[endpoint] }, "global");
+  const consume = async () => {
+    const burst = FREE_LLM_BURST[endpoint];
+    if (burst) await hit(`${pre}${endpoint}:${userId}`, burst.count, burst.windowSec, {}, "burst");
+    const day: RateOptions = { offsetSec: TASHKENT_UTC_OFFSET_SEC, now };
+    await hit(`${pre}free-llm:${endpoint}:day:${userId}`, policy.daily[endpoint], DAY_SEC, day, "daily");
+    if (endpoint === "polish" && doc) {
+      await hit(`${pre}polish:${userId}:${doc.id}`, POLISH_PER_DOC_DAILY, DAY_SEC, day, "doc");
+    }
+    await hit(`${pre}free-llm:global:day`, policy.globalDaily, DAY_SEC, { ...day, weight: FREE_LLM_WEIGHT[endpoint] }, "global");
+  };
 
   const complete = guardComplete(deps.complete ?? completeRole, r.signal);
-  if (!doc) return run(complete);
+  if (!doc) {
+    await consume();
+    return run(complete);
+  }
 
+  /*
+   * Qulf chelaklardan OLDIN (BEA-11): 409 `busy` olgan qayta urinish
+   * (masalan nginx 504 dan keyin) hujjatning 3/kun sayqalini, kunlik va
+   * global hisobni yemaydi. Chelak rad etsa ham qulf `finally` da bo'shaydi.
+   */
   const key = `${pre}inflight:doc:${doc.id}`;
-  const lease = await acquireLease(key, LEASE_TTL_SEC[endpoint as "rewrite" | "polish"]);
+  const lease = await acquireLease(key, LEASE_TTL_SEC[endpoint as "rewrite" | "polish"], now);
   if (!lease) throw new ApiError(BUSY_TEXT, 409, { code: "busy" });
   try {
+    await consume();
     return await run(complete);
   } finally {
     await releaseLease(key, lease);
@@ -199,7 +217,9 @@ async function hit(bucket: string, count: number, windowSec: number, opts: RateO
  * `refund` bilan to'liq qaytarilmagan. Faqat `points` (ro'yxatdan o'tish
  * bonusi) bilan to'langan hujjat — 402: bonus bitta hujjatga yetadi,
  * lekin cheksiz bepul AI tahrirni ochmasligi kerak. `charge` qatori
- * yo'q hujjat ham rad etiladi (xavfsiz standart).
+ * yo'q hujjat ham rad etiladi (xavfsiz standart). Admin `balance`/`quota`
+ * ga qo'shgan mablag' (`admin_credit`) bilan to'langan hujjat ATAYIN
+ * «pullik» hisoblanadi — hamyonni tanlash adminning qarori.
  *
  * Versiya va holat bu yerda — chelaklardan OLDIN (BEA-11): eskirgan tab
  * kunlik hisobni yemasin. Dvigatel ularni baribir qayta tekshiradi.
@@ -242,24 +262,28 @@ function guardComplete(complete: typeof completeRole, signal?: AbortSignal): typ
 }
 
 /**
- * Bitta-parvoz qulfi (`rate_limits` qatori, `window_start` = olingan payt).
+ * Bitta-parvoz qulfi (`rate_limits` qatori, `window_start` = qulfning
+ * TUGASH payti — egasining muddati bilan; `purgeRateLimits` faqat 25 soat
+ * oldingi qatorlarni o'chiradi, kelajakdagi qiymat unga xalal bermaydi).
  *
  * `pg_advisory_lock` ni so'rov davomida ushlab turish hovuzdan bitta
  * ulanishni 2 daqiqagacha band qilardi (hovuz — 10). Bu yerda qisqa
  * tranzaksiya: xact-qulf ostida «tirik qulf bormi» tekshiriladi va qator
- * yoziladi; ish tugagach qator o'chiriladi. Jarayon yiqilsa qator
- * `ttlSec` dan keyin eskiradi va `purgeRateLimits` uni tozalaydi.
+ * yoziladi; ish tugagach qator o'chiriladi. Jarayon yiqilsa qator o'z
+ * muddati o'tgach eskiradi (keyingi `acquireLease` o'chiradi).
  */
-async function acquireLease(key: string, ttlSec: number): Promise<Date | null> {
-  const at = new Date();
+async function acquireLease(key: string, ttlSec: number, nowMs: number): Promise<Date | null> {
+  const at = new Date(nowMs);
+  const expires = new Date(nowMs + ttlSec * 1000);
   try {
     return await transaction(async (c) => {
       await c.query("SELECT pg_advisory_xact_lock(hashtext('free-llm-lease'), hashtext($1))", [key]);
-      await c.query("DELETE FROM rate_limits WHERE bucket = $1 AND window_start <= $2", [key, new Date(at.getTime() - ttlSec * 1000)]);
+      // Eskirgan = EGASINING muddati o'tgan qulf (kiruvchi so'rovning TTL i emas).
+      await c.query("DELETE FROM rate_limits WHERE bucket = $1 AND window_start <= $2", [key, at]);
       const live = await c.query("SELECT 1 FROM rate_limits WHERE bucket = $1 LIMIT 1", [key]);
       if (live.rows[0]) return null;
-      await c.query("INSERT INTO rate_limits (bucket, window_start, hits) VALUES ($1, $2, 1)", [key, at]);
-      return at;
+      await c.query("INSERT INTO rate_limits (bucket, window_start, hits) VALUES ($1, $2, 1)", [key, expires]);
+      return expires;
     });
   } catch (e) {
     console.error("[free-llm] qulf", e instanceof Error ? e.message : e);
@@ -271,7 +295,7 @@ async function releaseLease(key: string, at: Date): Promise<void> {
   try {
     await queryOne("DELETE FROM rate_limits WHERE bucket = $1 AND window_start = $2", [key, at]);
   } catch (e) {
-    // Bo'shatib bo'lmadi — qulf `ttlSec` dan keyin o'zi eskiradi.
+    // Bo'shatib bo'lmadi — qulf o'z muddati (`at`) o'tgach eskiradi.
     console.error("[free-llm] qulfni bo'shatish", e instanceof Error ? e.message : e);
   }
 }

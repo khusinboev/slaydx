@@ -291,5 +291,11 @@ export function runtimeWarnings(): string[] {
   if (!ttsConfigured()) {
     warnings.push("TTS kaliti yo'q (AZURE_SPEECH_KEY+AZURE_SPEECH_REGION / AISHA_API_KEY) — podkast va tabriknoma ishlamaydi");
   }
+  // O'chirish tugmasidagi xato yozuv («on», «enabled») jimgina «o'chirilmagan»
+  // bo'lib qolardi — ya'ni bepul LLM sarfi davom etardi.
+  const killSwitch = str("FREE_LLM_DISABLED").toLowerCase();
+  if (killSwitch && !["1", "true", "yes", "0", "false", "no"].includes(killSwitch)) {
+    warnings.push(`FREE_LLM_DISABLED="${killSwitch}" tanilmadi — bepul LLM YOQIQ qoldi (true/false yozing)`);
+  }
   return warnings;
 }
