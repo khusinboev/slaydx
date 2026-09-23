@@ -33,11 +33,21 @@ test("prod: TTS kalitsiz `assertRuntimeConfig` TTS haqida XATO bermaydi, `runtim
   assert.ok(runtimeWarnings().some((w) => /TTS kaliti yo'q/.test(w)), "ogohlantirish bor");
 });
 
-test("instrumentation ogohlantirishlarni faqat jurnalga yozadi, `throw` faqat `problems` uchun", () => {
+/**
+ * INFRA-01 (C17): ilgari shu yerda `throw` bo'lardi — Next.js `register()`
+ * promise'ini modul darajasida keshlaydi, shuning uchun `throw` process'ni
+ * ANIQ CHIQARMAYDI (HTTP listener allaqachon tinglaydi): process "Up"
+ * bo'lib qoladi va abadiy 500 qaytaradi (2026-09-17 aynan shu sabab bilan
+ * ishlab chiqarish butunlay yotib qoldi). Endi `problems.length` bo'yicha
+ * ANIQ `process.exit(1)` chaqiriladi — real zombie/exit farqi
+ * `tests/instrumentation-boot.test.mts`da bolalar process orqali sinaladi.
+ */
+test("instrumentation ogohlantirishlarni faqat jurnalga yozadi, `process.exit(1)` faqat `problems` uchun", () => {
   const src = readFileSync("instrumentation.ts", "utf8");
   assert.match(src, /for \(const w of runtimeWarnings\(\)\) console\.warn/, "ogohlantirish jurnalda");
-  const throwAt = src.indexOf("throw new Error(`Konfiguratsiya");
-  assert.ok(throwAt > 0);
-  assert.match(src.slice(throwAt - 200, throwAt), /problems\.length/, "throw faqat problems bo'yicha");
-  assert.ok(!/runtimeWarnings\(\)\.length/.test(src), "ogohlantirish soni throw ga ta'sir qilmaydi");
+  assert.ok(!/\bthrow new Error\(`Konfiguratsiya/.test(src), "konfiguratsiya muammosi endi `throw` emas — zombie holatini qaytaradi (INFRA-01)");
+  const exitAt = src.indexOf("process.exit(1)");
+  assert.ok(exitAt > 0, "`process.exit(1)` topilmadi");
+  assert.match(src.slice(exitAt - 1000, exitAt), /problems\.length/, "exit faqat problems bo'yicha");
+  assert.ok(!/runtimeWarnings\(\)\.length/.test(src), "ogohlantirish soni exit'ga ta'sir qilmaydi");
 });
