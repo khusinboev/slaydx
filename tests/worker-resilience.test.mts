@@ -52,7 +52,7 @@ function quietConsole(t: TestContext) {
 const LATER_STEPS: Array<[string, RegExp]> = [
   ["navbat muddati (queue-ttl)", /FROM generations WHERE status = 'QUEUED' AND created_at </],
   ["saqlash muddati (retention)", /g\.files_purged_at IS NULL/],
-  ["yiqilgan ish pulini tiklash (reconcile)", /WHERE g\.status = 'FAILED' AND g\.finished_at </],
+  ["yiqilgan ish pulini tiklash (reconcile)", /FROM schema_migrations WHERE name = '022_retention\.sql'/],
   ["auth sessiyalari", /DELETE FROM sessions WHERE/],
   ["o'yin havolalari", /DELETE FROM game_sessions/],
   ["manba fayllari", /DELETE FROM source_uploads/],
@@ -85,7 +85,22 @@ test("housekeeping(): navbat muddati, saqlash muddati va pulni tiklash HAQIQATAN
   await worker.housekeeping();
   assert.ok(seen.some((q) => /FROM generations WHERE status = 'QUEUED' AND created_at </.test(q)), "expireQueuedJobs chaqirilmadi");
   assert.ok(seen.some((q) => /g\.files_purged_at IS NULL/.test(q)), "purgeBonusFiles chaqirilmadi");
-  assert.ok(seen.some((q) => /WHERE g\.status = 'FAILED' AND g\.finished_at </.test(q)), "refundUnrefundedFailed chaqirilmadi");
+  assert.ok(seen.some((q) => /FROM schema_migrations WHERE name = '022_retention\.sql'/.test(q)), "refundUnrefundedFailed chaqirilmadi");
+});
+
+test("refundUnrefundedFailed: 022 qatori yo'q → hech narsa qilmaydi va ogohlantiradi (RR1)", async (t) => {
+  const warns: unknown[][] = [];
+  t.mock.method(console, "warn", (...a: unknown[]) => warns.push(a));
+  t.mock.method(console, "error", () => {});
+  const seen = mockDb(t, () => false); // Har so'rov bo'sh — `schema_migrations` da 022 yo'q.
+  const { refundUnrefundedFailed } = await import("../lib/server/refund-reconcile.ts");
+  const out = await refundUnrefundedFailed();
+  assert.deepEqual(out, []);
+  assert.ok(
+    !seen.some((q) => /WHERE g\.status = 'FAILED'/.test(q)),
+    "MUTATSIYA: chegara noma'lum bo'lsa ham nomzodlar qidirildi",
+  );
+  assert.ok(warns.some((a) => String(a[0]).includes("022_retention.sql")), "ogohlantirish yozilmadi");
 });
 
 test("housekeeping(): saqlash skaneri har daqiqada EMAS — soatlab bir marta (review R3)", async (t) => {
