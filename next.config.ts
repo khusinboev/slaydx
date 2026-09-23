@@ -68,6 +68,20 @@ const securityHeaders = [
   },
 ];
 
+/**
+ * O'z `Cache-Control` ini qo'yadigan bayt route'lari (`/api/` dan keyingi
+ * qism, regex): slayd/rasm aktivlari va ochiq tinglash audiosi (id —
+ * kontent hashi), rezyume surati (kontent hashi), eskiz (faqat `?v=` bilan
+ * keshlanadi, pastdagi alohida qoida). Ro'yxatni kengaytirganda route
+ * ham `noStoreOnError` bilan o'ralishi SHART.
+ */
+const BYTE_ROUTES = [
+  "generations/[^/]+/assets/[^/]+",
+  "generations/[^/]+/thumb",
+  "o/[^/]+/audio/[^/]+",
+  "uploads/photo/[^/]+",
+].join("|");
+
 const nextConfig: NextConfig = {
   // `sharp` — Maqola 2 sxemalari (SVG → PNG 300 dpi) worker/server tomonda;
   // Next uni bundlega tortmasin (nativ modul).
@@ -104,8 +118,29 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        // API javoblari shaxsiy — proxy yoki CDN keshlamasin.
-        source: "/api/:path*",
+        /*
+         * API javoblari shaxsiy — proxy yoki CDN keshlamasin.
+         *
+         * BAYT route'lari (`BYTE_ROUTES`) bundan ISTISNO: Next konfiguratsiya
+         * sarlavhasini route'ning o'z sarlavhasi USTIDAN yozadi, ya'ni bu
+         * qoida ularning `max-age … immutable` sini yutib yuborardi va har
+         * ko'rishda rasm/surat/audio Postgres'dan qayta o'qilardi
+         * (prod-readiness C08: SCALE-01, BEA-07, FE-05). Ular kesh
+         * sarlavhasini o'zi qo'yadi, xatoda esa `private, no-store`
+         * (`lib/server/http-bytes.ts` `noStoreOnError`).
+         * `tests/cache-headers.test.mts` Next'ning o'z moslashtiruvchisi bilan tekshiradi.
+         */
+        source: `/api/:path((?!(?:${BYTE_ROUTES})$).*)`,
+        headers: [{ key: "Cache-Control", value: "private, no-store" }],
+      },
+      {
+        /*
+         * Eskiz aktiv id si doimiy (`THUMB_ASSET_ID`) — URL tahrirdan keyin
+         * o'zgarmaydi. Versiyasiz so'rov (`?v=<fileVersion>` yo'q) keshlanmaydi,
+         * aks holda brauzer bir kun eski eskizni ko'rsatardi.
+         */
+        source: "/api/generations/:id/thumb",
+        missing: [{ type: "query", key: "v" }],
         headers: [{ key: "Cache-Control", value: "private, no-store" }],
       },
       {

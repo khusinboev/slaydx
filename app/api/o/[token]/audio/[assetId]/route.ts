@@ -1,6 +1,7 @@
 import { ApiError, handler } from "@/lib/server/api";
 import { ensureMigrated } from "@/lib/server/db";
 import { getAsset } from "@/lib/server/assets";
+import { bytesBody, noStoreOnError } from "@/lib/server/http-bytes";
 import { getGameSessionByToken, TOKEN_RE } from "@/lib/server/game-sessions";
 import { publicGameView } from "@/lib/game/public";
 
@@ -25,8 +26,12 @@ const ALLOWED = new Set(["audio/mpeg", "audio/wav"]);
  * bo'lishi kerak (`publicGameView` ro'yxatida bor): token bitta
  * generatsiyaning BOSHQA aktivlariga (kelajakda rasm/kelajak fayllar)
  * kalit bo'lib qolmasin. Har qanday nomuvofiqlik — 404, sabab aytilmaydi.
+ *
+ * Kesh (C08): route `next.config.ts` dagi `/api` no-store qoidasidan
+ * istisno — `public` kesh faqat haqiqiy baytga, har 404 esa
+ * `private, no-store` (`noStoreOnError`).
  */
-export const GET = handler("o/audio", async (req, ctx: Ctx) => {
+export const GET = noStoreOnError(handler("o/audio", async (req, ctx: Ctx) => {
   await ensureMigrated();
   const { token, assetId } = await ctx.params;
   if (!TOKEN_RE.test(token) || !ASSET_ID.test(assetId)) throw new ApiError("Topilmadi", 404);
@@ -40,7 +45,7 @@ export const GET = handler("o/audio", async (req, ctx: Ctx) => {
   if (!asset) throw new ApiError("Topilmadi", 404);
 
   const mime = ALLOWED.has(asset.mime) ? asset.mime : "application/octet-stream";
-  return new Response(new Uint8Array(asset.bytes), {
+  return new Response(bytesBody(asset.bytes), {
     headers: {
       "Content-Type": mime,
       "Content-Length": String(asset.bytes.byteLength),
@@ -51,7 +56,7 @@ export const GET = handler("o/audio", async (req, ctx: Ctx) => {
       "X-Robots-Tag": "noindex",
     },
   });
-});
+}));
 
 /** Ochiq ko'rinishdagi tinglash parchalarining aktiv id lari (kichik harf). */
 export function audioAssetIds(view: { kind: "listening"; items: { audioAssetId?: string }[] }): Set<string> {
