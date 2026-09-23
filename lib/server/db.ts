@@ -85,7 +85,8 @@ export function poolConfig(): PoolConfig {
     statement_timeout: statementTimeout,
     // Mijoz tomoni chegarasi server chegarasidan biroz katta — odatda
     // server o'zi bekor qiladi, bu faqat tarmoq uzilganda ishga tushadi.
-    query_timeout: statementTimeout + 5_000,
+    // 0 — «chegara yo'q»: mijoz tomonida ham yo'q (aks holda 0 + 5 s = 5 s).
+    query_timeout: statementTimeout > 0 ? statementTimeout + 5_000 : undefined,
     // Kutib qolgan tranzaksiya qulflarni ushlab turmasin.
     idle_in_transaction_session_timeout: 60_000,
     application_name: appName(),
@@ -114,14 +115,29 @@ export function pool(): Pool {
 const POOL_WARN_EVERY_MS = 60_000;
 
 /**
- * Hovuz to'lganini qayd etadi (C33): so'rov BERILGANDAN KEYIN chaqiriladi —
- * bo'sh ulanish ham, yangisini ochish imkoni ham bo'lmasa `pg` so'rovni
- * navbatga qo'yadi (`waitingCount`). Ogohlantirish daqiqasiga ko'pi bilan
- * bitta; oradagi holatlar soni va eng katta navbat keyingisida aytiladi.
+ * Hovuz to'lganini qayd etadi (C33): so'rov berilgandan keyin, `setImmediate`
+ * da tekshiriladi.
+ *
+ * Shu lahzaning o'zida o'qish NOTO'G'RI: `pg-pool` bo'sh ulanish bo'lsa ham
+ * so'rovni avval navbatga qo'yadi va ulanishni `process.nextTick` da beradi
+ * — iliq, bo'sh hovuzda ham `waitingCount = 1` ko'rinardi (review R1, soxta
+ * «hovuz to'lgan»); aksincha, bir zumda kelgan to'lqinda `idleCount` hali
+ * kamaymagan bo'ladi va haqiqiy to'lish ko'rinmasdi. `setImmediate` —
+ * barcha `nextTick` lardan keyin: hovuz berishi mumkin bo'lgan hamma
+ * ulanishni bergan. Shunda ham kutayotgan bo'lsa, bo'sh ulanish yo'q va
+ * yangisini ochib bo'lmasa (`totalCount >= max`) — bu haqiqiy to'lish.
+ */
+function schedulePoolPressureCheck(p: Pool): void {
+  setImmediate(() => notePoolPressure(p));
+}
+
+/**
+ * Ogohlantirish daqiqasiga ko'pi bilan bitta; oradagi holatlar soni va
+ * eng katta navbat keyingisida aytiladi.
  */
 function notePoolPressure(p: Pool): void {
   const waiting = p.waitingCount;
-  if (waiting === 0) return;
+  if (waiting === 0 || p.idleCount > 0 || p.totalCount < env.databasePoolMax) return;
   const st = (g.__slaydxPoolPressure ??= { lastWarn: 0, suppressed: 0, peak: 0 });
   st.peak = Math.max(st.peak, waiting);
   const now = Date.now();
@@ -147,7 +163,7 @@ export async function query<T extends QueryResultRow = QueryResultRow>(
 ): Promise<T[]> {
   const p = pool();
   const pending = p.query<T>(text, params as never[]);
-  notePoolPressure(p);
+  schedulePoolPressureCheck(p);
   const res = await pending;
   return res.rows;
 }
@@ -169,7 +185,7 @@ export async function queryOne<T extends QueryResultRow = QueryResultRow>(
 export async function transaction<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
   const p = pool();
   const pending = p.connect();
-  notePoolPressure(p);
+  schedulePoolPressureCheck(p);
   const client = await pending;
   try {
     await client.query("BEGIN");

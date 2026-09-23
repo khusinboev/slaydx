@@ -217,6 +217,52 @@ test("hovuz: sozlama env'dan o'qiladi, application_name va keepAlive bor", { ski
   assert.equal(row.st, "1500ms");
 });
 
+test("DATABASE_STATEMENT_TIMEOUT_MS=0 — chegara yo'q (mijoz tomonida ham)", { skip, timeout: 30_000 }, async () => {
+  const prev = process.env.DATABASE_STATEMENT_TIMEOUT_MS;
+  process.env.DATABASE_STATEMENT_TIMEOUT_MS = "0";
+  let cfg;
+  try {
+    cfg = db!.poolConfig();
+  } finally {
+    process.env.DATABASE_STATEMENT_TIMEOUT_MS = prev;
+  }
+  assert.equal(cfg.statement_timeout, 0);
+  assert.ok(!cfg.query_timeout, `mijoz tomoni chegarasi qoldi: ${cfg.query_timeout}`);
+  // Jonli: 5 s dan uzoq so'rov bekor qilinmaydi (ilgari 0 + 5 000 = 5 s edi).
+  const p = new pg.Pool({ ...cfg, max: 1 });
+  try {
+    await p.query("SELECT pg_sleep(5.5)");
+  } finally {
+    await p.end();
+  }
+});
+
+test("hovuz: iliq, bo'sh ulanishi bor hovuzda ogohlantirish YO'Q", { skip }, async () => {
+  const warns: string[] = [];
+  const orig = console.warn;
+  console.warn = (...a: unknown[]) => {
+    warns.push(a.map(String).join(" "));
+  };
+  try {
+    const g = globalThis as { __slaydxPoolPressure?: { lastWarn: number } };
+    if (g.__slaydxPoolPressure) g.__slaydxPoolPressure.lastWarn = 0;
+    await db!.query("SELECT 1");
+    // Ketma-ket: bo'sh ulanish bor — hech narsa kutmaydi.
+    await db!.query("SELECT 1");
+    await db!.query("SELECT 1");
+    await db!.transaction((c) => c.query("SELECT 1"));
+    // Hovuz chegarasidan kam parallel so'rov ham to'lish emas.
+    await Promise.all([db!.query("SELECT 1"), db!.query("SELECT 1")]);
+    assert.equal(
+      warns.filter((w) => /\[db\] hovuz/.test(w)).length,
+      0,
+      `soxta «hovuz to'lgan»: ${JSON.stringify(warns)}`,
+    );
+  } finally {
+    console.warn = orig;
+  }
+});
+
 test("processRole: web / worker / migrate / cli", { skip }, () => {
   const { processRole } = db!;
   assert.equal(processRole(["node", "server.js"], {}), "web");
@@ -234,6 +280,8 @@ test("hovuz to'lishi: ogohlantirish chiqadi, lekin cheklangan chastotada", { ski
   };
   try {
     const burst = () => Promise.all(Array.from({ length: 8 }, () => db!.query("SELECT pg_sleep(0.2)")));
+    const g0 = globalThis as { __slaydxPoolPressure?: { lastWarn: number } };
+    if (g0.__slaydxPoolPressure) g0.__slaydxPoolPressure.lastWarn = 0;
     await burst();
     const first = warns.filter((w) => /\[db\] hovuz/.test(w));
     assert.equal(first.length, 1, `birinchi to'lqinda bitta ogohlantirish kutilgan: ${JSON.stringify(warns)}`);
