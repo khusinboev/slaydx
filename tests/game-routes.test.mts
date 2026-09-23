@@ -91,8 +91,14 @@ function mockDb(t: TestContext, o: { session?: Record<string, unknown> | null; h
     let out: unknown[] = [];
     if (/INSERT INTO rate_limits/.test(q)) out = [{ hits: o.hits ?? 1 }];
     else if (/FROM game_sessions s/.test(q)) out = o.session === null ? [] : [o.session ?? sessionRow(sampleGameDoc("sorting"))];
-    else if (/INSERT INTO game_results/.test(q)) out = [{ id: "r1", player_name: "Ali", score: 1, total: 12, seconds: 5, answers_json: {}, created_at: NOW }];
-    else if (/FROM generation_assets a/.test(q)) out = o.asset === undefined ? [] : [o.asset];
+    else if (/INSERT INTO game_results/.test(q)) {
+      // HAQIQIY `INSERT … RETURNING` kabi — yozilgan PARAMETRLARDAN
+      // qaytaradi, qattiq yozilgan qiymatdan emas: `submit` route endi
+      // javobni shu qatordan oladi (retry bir xil natija qaytarishi
+      // uchun, C36 UX-06) — mock buni aks ettirmasa, server QAYTA
+      // hisoblagandek ko'rinib, dedupe sinovlarini yashirardi.
+      out = [{ id: "r1", player_name: String(params[2]), score: Number(params[3]), total: Number(params[4]), seconds: Number(params[6]), answers_json: JSON.parse(String(params[5])), created_at: NOW }];
+    } else if (/FROM generation_assets a/.test(q)) out = o.asset === undefined ? [] : [o.asset];
     return { rows: out, rowCount: out.length };
   };
   const p = pool();
@@ -103,11 +109,15 @@ function mockDb(t: TestContext, o: { session?: Record<string, unknown> | null; h
 
 const ctx = (token = TOKEN) => ({ params: Promise.resolve({ token }) });
 
+/** Klient bitta urinish uchun BIR MARTA generatsiya qiladigan id (C36 UX-06). */
+const SUBMISSION_ID = "99999999-0000-4000-8000-000000000009";
+
 const postReq = (body: unknown, headers: Record<string, string> = {}) =>
   new Request(`http://localhost:3000/api/o/${TOKEN}/submit`, {
     method: "POST",
     headers: { "Content-Type": "application/json", ...headers },
-    body: JSON.stringify(body),
+    // `submissionId` standart bilan — faqat uni ATAYLAB sinaydigan testlar ustidan yozadi.
+    body: JSON.stringify({ submissionId: SUBMISSION_ID, ...(body as Record<string, unknown>) }),
   });
 
 /* ══════════════════════════ GET /api/o/[token] ══════════════════════════ */
@@ -229,6 +239,36 @@ test("submit: noma'lum token — 404; buzuq JSON — 400", async (t) => {
   assert.equal((await POST(bad, ctx())).status, 400);
 });
 
+test("submit: submissionId yo'q/yaroqsiz — 400, natija YOZILMAYDI (C36 UX-06)", async (t) => {
+  const seen = mockDb(t, {});
+  const noId = new Request(`http://localhost:3000/api/o/${TOKEN}/submit`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: "Ali", answers: {} }),
+  });
+  assert.equal((await POST(noId, ctx())).status, 400, "submissionId siz qabul qilindi");
+
+  const badId = new Request(`http://localhost:3000/api/o/${TOKEN}/submit`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: "Ali", answers: {}, submissionId: "not-a-uuid" }),
+  });
+  assert.equal((await POST(badId, ctx())).status, 400, "yaroqsiz shakldagi submissionId qabul qilindi");
+  assert.equal(seen.filter((s) => /INSERT INTO game_results/.test(s.text)).length, 0, "yaroqsiz submissionId bilan natija yozildi");
+});
+
+test("submit: submissionId INSERT parametriga tushadi (dedupe/ON CONFLICT uchun asos)", async (t) => {
+  const seen = mockDb(t, { session: sessionRow(sampleGameDoc("sorting")) });
+  const res = await POST(postReq({ name: "Ali", answers: {}, seconds: 1 }), ctx());
+  assert.equal(res.status, 200);
+  const insert = seen.find((s) => /INSERT INTO game_results/.test(s.text));
+  assert.ok(insert);
+  // MUTATSIYA: `submissionId` INSERT ga uzatilmasa — `ON CONFLICT` hech
+  // qachon ishlamas edi (ustun doim NULL, takroriy so'rov yangi qator yozardi).
+  assert.match(insert!.text, /ON CONFLICT \(session_id, submission_id\) DO NOTHING/);
+  assert.equal(insert!.params[8], SUBMISSION_ID, "submissionId INSERT parametriga tushmadi");
+});
+
 /* ══════════════════════════ egasi tomoni ══════════════════════════ */
 
 test("natijalar CSV: BOM, sarlavha va formula injeksiyasidan himoya", () => {
@@ -276,6 +316,14 @@ test("egasi route lari: `requireUser` + egalik, ochiq route larda esa YO'Q", () 
   assert.match(submit, /limit\(`o:submit:/);
   assert.match(submit, /scoreAnswers\(/, "ball serverda hisoblanmayapti");
   assert.ok(!/body\.score/.test(submit), "MUTATSIYA: klient balli o'qilyapti");
+
+  // BEA-10: havola YARATILISHIDAN OLDIN hujjatda o'ynaladigan element
+  // borligi tekshirilishi kerak — aks holda o'quvchilar 404 ga uchraydi.
+  assert.match(share, /publicGameView\(/, "MUTATSIYA: BEA-10 — o'ynaladigan tekshiruv yo'q");
+
+  // DB-15/BEA-16: CSV eksporti eski `resultsCsv(rows)` bilan cheklanmagan
+  // (500 ga kesilgan massiv) — `iterateAllResults` orqali oqim beriladi.
+  assert.match(results, /iterateAllResults\(/, "MUTATSIYA: CSV hali ham kesilgan ro'yxatdan quriladi");
 });
 
 /* ───────────── ochiq tinglash audiosi — `/api/o/[token]/audio/[assetId]` (AUDIT-22 R) ───────────── */

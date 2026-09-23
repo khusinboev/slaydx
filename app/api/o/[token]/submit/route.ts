@@ -2,7 +2,15 @@ import { ApiError, checkOrigin, handler, json, limit, readJson } from "@/lib/ser
 import { ensureMigrated } from "@/lib/server/db";
 import { clientIp } from "@/lib/server/ratelimit";
 import { IP_LIMITS } from "@/lib/server/ip-limits";
-import { addResult, getGameSessionByToken, ipHash, PLAYER_NAME_MAX, TOKEN_RE } from "@/lib/server/game-sessions";
+import {
+  addResult,
+  getGameSessionByToken,
+  ipHash,
+  PLAYER_NAME_MAX,
+  ResultCapError,
+  SUBMISSION_ID_RE,
+  TOKEN_RE,
+} from "@/lib/server/game-sessions";
 import { scoreAnswers, scorePercent, type PlayerAnswers } from "@/lib/game/score";
 
 export const runtime = "nodejs";
@@ -28,6 +36,14 @@ export const SUBMIT_PER_MINUTE = IP_LIMITS.submitPerGamePerIp.count;
  *
  * Himoyalar: `checkOrigin` (CSRF — so'rov bizning sahifamizdan),
  * `rateLimit` IP bo'yicha, ism uzunligi, token shakli.
+ *
+ * IDEMPOTENT (C36 UX-06/ABUSE-04): klient `submissionId` (`crypto.randomUUID()`,
+ * bitta urinish uchun BIR MARTA) yuboradi. Tarmoq uzilib javob kelmay
+ * qolsa-yu, server aslida yozib ulgurgan bo'lsa, "Qayta yuborish" AYNI
+ * id bilan qayta so'raydi — `addResult` ikkinchi qator yozmaydi va
+ * BIRINCHI natijani qaytaradi, ya'ni javob ikkala safar ham bir xil.
+ * Sessiya boshiga natijalar soni `RESULT_CAP_PER_SESSION` dan oshsa —
+ * 409, aniq xabar bilan.
  */
 export const POST = handler("o/submit", async (req, ctx: Ctx) => {
   await ensureMigrated();
@@ -40,7 +56,7 @@ export const POST = handler("o/submit", async (req, ctx: Ctx) => {
   await limit(`o:submit:${token}:${ip}`, SUBMIT_PER_MINUTE, IP_LIMITS.submitPerGamePerIp.windowSec);
   await limit(`o:submit:${ip}`, IP_LIMITS.submitPerIp.count, IP_LIMITS.submitPerIp.windowSec);
 
-  const body = await readJson<{ name?: unknown; answers?: unknown; seconds?: unknown }>(req, 200_000);
+  const body = await readJson<{ name?: unknown; answers?: unknown; seconds?: unknown; submissionId?: unknown }>(req, 200_000);
 
   const session = await getGameSessionByToken(token);
   if (!session || !session.doc || session.status !== "COMPLETED") throw new ApiError("Topilmadi", 404);
@@ -48,29 +64,41 @@ export const POST = handler("o/submit", async (req, ctx: Ctx) => {
   const name = String(body.name ?? "").replace(/\s+/g, " ").trim().slice(0, PLAYER_NAME_MAX);
   if (!name) throw new ApiError("Ismingizni kiriting", 400);
 
+  const submissionId = String(body.submissionId ?? "");
+  if (!SUBMISSION_ID_RE.test(submissionId)) throw new ApiError("Noto'g'ri so'rov", 400);
+
   const answers: PlayerAnswers = body.answers && typeof body.answers === "object" && !Array.isArray(body.answers) ? (body.answers as PlayerAnswers) : {};
   const seconds = Number(body.seconds);
 
   const scored = scoreAnswers(session.doc, session.kind, answers);
-  await addResult({
-    sessionId: session.id,
-    playerName: name,
-    score: scored.score,
-    total: scored.total,
-    seconds: Number.isFinite(seconds) ? seconds : 0,
-    /*
-     * `answers_json` da ELEMENT BO'YICHA to'g'ri/xato saqlanadi (javob
-     * matni emas): o'qituvchi «qaysi savolda ko'pchilik yiqildi» ni
-     * ko'radi, jadval esa o'yinning javoblarini takrorlamaydi.
-     */
-    answers: { results: scored.results, seconds: Number.isFinite(seconds) ? seconds : 0 },
-    ipHash: ipHash(ip),
-  });
+  let result;
+  try {
+    result = await addResult({
+      sessionId: session.id,
+      submissionId,
+      playerName: name,
+      score: scored.score,
+      total: scored.total,
+      seconds: Number.isFinite(seconds) ? seconds : 0,
+      /*
+       * `answers_json` da ELEMENT BO'YICHA to'g'ri/xato saqlanadi (javob
+       * matni emas): o'qituvchi «qaysi savolda ko'pchilik yiqildi» ni
+       * ko'radi, jadval esa o'yinning javoblarini takrorlamaydi.
+       */
+      answers: { results: scored.results, seconds: Number.isFinite(seconds) ? seconds : 0 },
+      ipHash: ipHash(ip),
+    });
+  } catch (e) {
+    if (e instanceof ResultCapError) throw new ApiError(e.message, 409, { code: "result_cap" });
+    throw e;
+  }
 
   /*
    * Javobda FAQAT ball: to'g'ri javoblar ro'yxati qaytarilsa, o'quvchi
    * bitta urinishdan keyin hammasini bilib olardi va havolani
-   * do'stlariga to'liq javob bilan uzatardi.
+   * do'stlariga to'liq javob bilan uzatardi. `result` — YOZILGAN (yoki
+   * takroriy so'rovda AVVAL yozilgan) qator, qayta hisoblangan `scored`
+   * emas: retry har doim BIR XIL javob olishi shart.
    */
-  return json({ score: scored.score, total: scored.total, percent: scorePercent(scored) });
+  return json({ score: result.score, total: result.total, percent: scorePercent(result) });
 });
