@@ -241,43 +241,58 @@ export class ZipLimitError extends Error {
   }
 }
 
+const ZIP64 = "Hujjat arxivi qo'llanmaydigan ZIP64 formatida — faylni qayta saqlab yuboring";
+
 /**
- * Markaziy katalogdagi yozuvlarni HAQIQATDA sanaydi (`limit + 1` da to'xtaydi).
+ * Markaziy katalog — JSZip AYNAN qayerdan o'qiydi, shu joydan HAQIQATDA
+ * sanaladi (`limit + 1` da to'xtaydi). JSZip ochishidan OLDIN.
  *
- * EOCD dagi «jami yozuvlar» maydoniga ishonilmaydi: JSZip ham unga
- * qaramay katalogni imzo tugaguncha o'qiydi. Katalog boshi — `EOCD −
- * katalog hajmi`, JSZip ham (oldiga qo'shilgan ma'lumot bo'lsa) aynan shu
- * joydan o'qiydi. EOCD topilmasa 0 — bunday faylni JSZip o'zi rad etadi.
+ * JSZip mantig'i (`zipEntries.js readEndOfCentral/readCentralDir`) takrorlanadi:
+ *   - EOCD — butun buferdagi OXIRGI `PK\x05\x06` (orqaga to'liq qidiruv;
+ *     ilgari faqat oxirgi 64 KB ko'rilardi va EOCD dan keyingi 70 KB
+ *     «to'ldirma» sanagichni 0 ga tushirib, JSZip 60 000 yozuvni ochardi);
+ *   - maydonlardan biri 0xFFFF/0xFFFFFFFF bo'lsa JSZip ZIP64 yozuviga
+ *     o'tadi — biz uni rad etamiz (≤ 20 MB OOXML ga ZIP64 kerak emas);
+ *   - katalog boshi `offset + (EOCD − offset − hajm)` ya'ni `EOCD − hajm`
+ *     (oldiga qo'shilgan ma'lumot bo'lsa JSZip `zero` ni shunga suradi),
+ *     yozuvlar imzo mos kelguncha o'qiladi — EOCD dagi «jami» maydoniga
+ *     JSZip ham ishonmaydi.
+ * EOCD yo'q yoki katalog manfiy joyda — bunday faylni JSZip o'zi rad etadi.
  */
-export function countZipEntries(bytes: Uint8Array, limit = MAX_ZIP_ENTRIES): number {
-  const min = Math.max(0, bytes.length - 22 - 0xffff);
+export function zipDirectoryInfo(bytes: Uint8Array, limit = MAX_ZIP_ENTRIES): { entries: number; zip64: boolean } {
   let eocd = -1;
-  for (let i = bytes.length - 22; i >= min; i--) {
+  for (let i = bytes.length - 4; i >= 0; i--) {
     if (bytes[i] === 0x50 && bytes[i + 1] === 0x4b && bytes[i + 2] === 0x05 && bytes[i + 3] === 0x06) {
       eocd = i;
       break;
     }
   }
-  if (eocd < 0) return 0;
+  if (eocd < 0 || eocd + 22 > bytes.length) return { entries: 0, zip64: false };
   const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  const declared = dv.getUint16(eocd + 10, true);
-  // 0xFFFF — ZIP64: 65 535 dan ko'p yozuv degani, bu bizning chegaradan ancha katta.
-  if (declared === 0xffff) return declared;
+  const zip64 =
+    [4, 6, 8, 10].some((o) => dv.getUint16(eocd + o, true) === 0xffff) ||
+    dv.getUint32(eocd + 12, true) === 0xffffffff ||
+    dv.getUint32(eocd + 16, true) === 0xffffffff;
+  if (zip64) return { entries: 0, zip64: true };
   const cdSize = dv.getUint32(eocd + 12, true);
+  const cdOffset = dv.getUint32(eocd + 16, true);
+  if (eocd - (cdOffset + cdSize) < 0) return { entries: 0, zip64: false };
   let p = eocd - cdSize;
   let count = 0;
-  while (p >= 0 && p + 46 <= eocd && dv.getUint32(p, true) === 0x02014b50) {
+  while (p + 46 <= bytes.length && dv.getUint32(p, true) === 0x02014b50) {
     count++;
     if (count > limit) break;
     p += 46 + dv.getUint16(p + 28, true) + dv.getUint16(p + 30, true) + dv.getUint16(p + 32, true);
   }
-  return Math.max(count, declared);
+  return { entries: count, zip64: false };
 }
 
-/** Foydalanuvchi ZIP ini ochadi — yozuvlar soni ochishdan oldin tekshiriladi. */
+/** Foydalanuvchi ZIP ini ochadi — yozuvlar soni va ZIP64 ochishdan OLDIN tekshiriladi. */
 export async function loadZipCapped(bytes: Uint8Array | ArrayBuffer): Promise<JSZip> {
   const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
-  if (countZipEntries(u8) > MAX_ZIP_ENTRIES) throw new ZipLimitError(TOO_MANY);
+  const dir = zipDirectoryInfo(u8);
+  if (dir.zip64) throw new ZipLimitError(ZIP64);
+  if (dir.entries > MAX_ZIP_ENTRIES) throw new ZipLimitError(TOO_MANY);
   const zip = await JSZip.loadAsync(bytes);
   if (Object.keys(zip.files).length > MAX_ZIP_ENTRIES) throw new ZipLimitError(TOO_MANY);
   return zip;

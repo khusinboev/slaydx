@@ -318,7 +318,7 @@ export async function extractFromBuffer(
     // Ichki kutubxona xatosi foydalanuvchiga tushunarsiz — umumlashtiramiz.
     return {
       text: "",
-      error: /juda (katta|ko'p)/.test(message)
+      error: /juda (katta|ko'p)|ZIP64/.test(message)
         ? message
         : "Faylni o‘qib bo‘lmadi. U buzilgan yoki parol bilan himoyalangan bo‘lishi mumkin.",
     };
