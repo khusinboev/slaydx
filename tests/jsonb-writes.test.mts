@@ -223,4 +223,52 @@ test("JSONB/TEXT yozuvlari yolg'iz surrogat va NUL bilan", { skip: hasDb ? false
     const refunds = await query("SELECT 1 FROM transactions WHERE kind = 'refund' AND reference = $1", [id]);
     assert.equal(refunds.length, 0);
   });
+
+  /** Fayl + aktiv + `charge` yozuvi bor ish — tozalash/qaytarish sinovlari uchun. */
+  const withArtifacts = async (id: string, chargeDelta = -3000) => {
+    await putGenerationFile(id, FILE);
+    await putAssets(id, [{ assetId: "c".repeat(24), mime: "image/png", bytes: Buffer.from([0x89, 0x50, 0x4e, 0x47]) }]);
+    await query(
+      `INSERT INTO transactions (user_id, kind, points_delta, quota_delta, balance_delta, reference, note)
+       VALUES ($1, 'charge', 0, 0, $3, $2, 'resume: Sinov')`,
+      [uid, id, chargeDelta],
+    );
+  };
+  const leftovers = async (id: string) => ({
+    files: (await query("SELECT 1 FROM generation_files WHERE generation_id = $1", [id])).length,
+    assets: (await query("SELECT 1 FROM generation_assets WHERE generation_id = $1", [id])).length,
+  });
+
+  await t.test("(c, R2) failAndCleanup: refund YIQILSA ham fayl/aktivlar o'chadi (xato yuqoriga chiqadi)", async () => {
+    const { failAndCleanup } = await import("../lib/server/worker.ts");
+    const id = await mkRunning();
+    // Haqiqiy baza xatosi: «charge» yozuvi +1e12 — qaytarish balansni manfiy
+    // qilardi va `users.balance >= 0` CHECK uni rad etadi → `refund` throw.
+    await withArtifacts(id, 1_000_000_000_000);
+    await assert.rejects(failAndCleanup({ id, userId: uid }, WORKER, "xato"), /check constraint/);
+    const row = await queryOne<{ status: string }>("SELECT status FROM generations WHERE id = $1", [id]);
+    assert.equal(row!.status, "FAILED");
+    // MUTATSIYA: o'chirishlar `finally` dan refund'dan keyingi oddiy qatorga qaytarilsa — qizaradi.
+    assert.deepEqual(await leftovers(id), { files: 0, assets: 0 }, "refund xatosi tozalashni o'tkazib yubormasligi kerak");
+  });
+
+  await t.test("(c, R1) housekeeping: reclaimStaleJobs FAILED qilgan ish — pul qaytadi, fayl/aktivlar O'CHADI", async () => {
+    const { housekeeping } = await import("../lib/server/worker.ts");
+    const id = randomUUID();
+    await query(
+      `INSERT INTO generations (id, user_id, tool_id, topic, price, format, values_json, step, budget_ms, status,
+                                locked_by, locked_at, attempts)
+       VALUES ($1, $2, 'resume', 'Sinov', 3000, 'docx', '{}'::jsonb, 'Boshlandi', 1000, 'IN_PROGRESS',
+               'o-lgan-worker', now() - interval '1 hour', 2)`,
+      [id, uid],
+    );
+    await withArtifacts(id);
+    await housekeeping();
+    const row = await queryOne<{ status: string }>("SELECT status FROM generations WHERE id = $1", [id]);
+    assert.equal(row!.status, "FAILED", "shart: ikkinchi urinishdagi osilgan ish FAILED bo'lishi kerak");
+    const refunds = await query("SELECT 1 FROM transactions WHERE kind = 'refund' AND reference = $1", [id]);
+    assert.equal(refunds.length, 1);
+    // MUTATSIYA: housekeeping'dagi tozalash olib tashlansa — qizaradi.
+    assert.deepEqual(await leftovers(id), { files: 0, assets: 0 }, "vaqti tugab FAILED bo'lgan ishning fayli qolmasligi kerak");
+  });
 });

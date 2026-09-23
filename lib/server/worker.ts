@@ -326,15 +326,33 @@ export async function failAndCleanup(
   message: string,
 ): Promise<void> {
   if (!(await failJob(job.id, workerId, message))) return;
-  await refund(job.userId, job.id, cleanText(safeSlice(`Xatolik: ${message}`, 200)));
-  await Promise.all([
-    deleteGenerationFile(job.id, job.userId).catch((e) => {
-      console.warn(`[worker] job ${job.id}: FAILED ish fayli o'chirilmadi:`, e instanceof Error ? e.message : e);
-    }),
-    deleteAssets(job.id).catch((e) => {
-      console.warn(`[worker] job ${job.id}: FAILED ish aktivlari o'chirilmadi:`, e instanceof Error ? e.message : e);
-    }),
-  ]);
+  await refundThenCleanup(job, cleanText(safeSlice(`Xatolik: ${message}`, 200)));
+}
+
+/**
+ * FAILED ish uchun: pulni qaytaradi va fayl/aktivlarni o'chiradi.
+ *
+ * O'chirish `finally` da — `refund` yiqilsa ham (ulanish uzilishi, CHECK)
+ * FAILED ishning fayli bazada qolmasin; refund xatosi jurnalga yoziladi va
+ * yuqoriga qaytariladi (chaqiruvchi o'z xatti-harakatini saqlaydi).
+ * `failAndCleanup` va `housekeeping` (`reclaimStaleJobs` FAILED qilganlar) umumiy yo'li.
+ */
+async function refundThenCleanup(job: Pick<ClaimedJob, "id" | "userId">, note: string): Promise<void> {
+  try {
+    await refund(job.userId, job.id, note);
+  } catch (e) {
+    console.error(`[worker] job ${job.id}: pul qaytarilmadi:`, e instanceof Error ? e.message : e);
+    throw e;
+  } finally {
+    await Promise.all([
+      deleteGenerationFile(job.id, job.userId).catch((e) => {
+        console.warn(`[worker] job ${job.id}: FAILED ish fayli o'chirilmadi:`, e instanceof Error ? e.message : e);
+      }),
+      deleteAssets(job.id).catch((e) => {
+        console.warn(`[worker] job ${job.id}: FAILED ish aktivlari o'chirilmadi:`, e instanceof Error ? e.message : e);
+      }),
+    ]);
+  }
 }
 
 async function tick(): Promise<boolean> {
@@ -355,12 +373,13 @@ export async function housekeeping(): Promise<void> {
   try {
     const dead = await reclaimStaleJobs();
     for (const id of dead) {
-      // Osilib qolgan ish uchun ham pul qaytishi kerak.
+      // Osilib qolgan ish uchun ham pul qaytishi kerak — va o'lgan worker
+      // `completeJob`dan oldin saqlab ulgurgan fayl/aktivlar qolmasin (C03).
       const owner = await queryOne<{ user_id: string }>(
         "SELECT user_id FROM generations WHERE id = $1",
         [id],
       );
-      if (owner) await refund(String(owner.user_id), id, "Ish vaqti tugadi");
+      if (owner) await refundThenCleanup({ id, userId: String(owner.user_id) }, "Ish vaqti tugadi");
     }
     // Fayl/aktiv/generatsiya endi MUDDATSIZ (`011_no_expiry.sql`) —
     // bu yerda faqat haqiqatan vaqt bilan cheklangan narsalar tozalanadi.
