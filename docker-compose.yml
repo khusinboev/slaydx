@@ -95,6 +95,16 @@ services:
       FREE_LLM_DAILY_REWRITE: ${FREE_LLM_DAILY_REWRITE:-}
       FREE_LLM_DAILY_POLISH: ${FREE_LLM_DAILY_POLISH:-}
       FREE_LLM_DAILY_GLOBAL: ${FREE_LLM_DAILY_GLOBAL:-}
+      # Prod-readiness W2 (audit/designs/*.md): navbat, saqlash, PDF, Payme sandbox, pool.
+      QUEUE_TOTAL_SLOTS: ${QUEUE_TOTAL_SLOTS:-}
+      QUEUE_MEAN_SERVICE_SEC: ${QUEUE_MEAN_SERVICE_SEC:-}
+      QUEUE_MAX_WAIT_SEC: ${QUEUE_MAX_WAIT_SEC:-}
+      USER_MAX_INFLIGHT: ${USER_MAX_INFLIGHT:-}
+      QUEUE_TTL_SEC: ${QUEUE_TTL_SEC:-}
+      RETENTION_BONUS_DAYS: ${RETENTION_BONUS_DAYS:-}
+      PDF_MAX_CONCURRENCY: ${PDF_MAX_CONCURRENCY:-}
+      PAYME_SANDBOX: ${PAYME_SANDBOX:-}
+      DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-}
       # Reverse proxy ortida turibmiz — `x-forwarded-for` ga ishonamiz,
       # aks holda IP chegarasi hamma so'rovni bitta IP deb hisoblardi.
       TRUST_PROXY: ${TRUST_PROXY:-true}
@@ -162,6 +172,10 @@ services:
       TTS_VOICE_RU: ${TTS_VOICE_RU:-}
       TTS_VOICE_EN: ${TTS_VOICE_EN:-}
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
+      # Prod-readiness W2: housekeeping (QUEUED TTL, bonus fayllar muddati) va pool.
+      QUEUE_TTL_SEC: ${QUEUE_TTL_SEC:-}
+      RETENTION_BONUS_DAYS: ${RETENTION_BONUS_DAYS:-}
+      DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-}
       WORKER_JOB_TIMEOUT_MS: ${WORKER_JOB_TIMEOUT_MS:-660000}
 
 volumes:

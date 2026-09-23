@@ -190,6 +190,12 @@ export const env = {
     merchantId: str("PAYME_MERCHANT_ID"),
     key: str("PAYME_KEY"),
     testKey: str("PAYME_TEST_KEY"),
+    /**
+     * Sinov (sandbox) kaliti FAQAT shu `true` bo'lsa qabul qilinadi (C11).
+     * Prod'da `PAYME_TEST_KEY` tasodifan qolib ketsa ham test to'lovlari
+     * haqiqiy balansga aylanmaydi.
+     */
+    sandbox: bool("PAYME_SANDBOX", false),
   },
 
   /** Ichki xizmat chaqiruvlari (cron, worker) uchun kalit. */
@@ -210,6 +216,31 @@ export const env = {
     dailyPolish: int("FREE_LLM_DAILY_POLISH", 10),
     /** Barcha foydalanuvchilar bo'yicha kunlik birlik (vazn bilan) — xarajat shifti. */
     dailyGlobal: int("FREE_LLM_DAILY_GLOBAL", 20_000),
+  },
+
+  /**
+   * Navbat nazorati (prod-readiness C22/C16, `audit/designs/capacity.md`).
+   * Navbat to'lsa (taxminiy kutish > `maxWaitSec`) yangi ish PUL YECHILMASDAN
+   * 429 + `Retry-After` bilan qaytariladi; bitta foydalanuvchida bir vaqtda
+   * `userMaxInflight` tadan ortiq ish bo'lmaydi; `ttlSec` dan uzoq navbatda
+   * turgan ish FAILED + pul qaytariladi.
+   */
+  queue: {
+    totalSlots: int("QUEUE_TOTAL_SLOTS", 8),
+    meanServiceSec: int("QUEUE_MEAN_SERVICE_SEC", 200),
+    maxWaitSec: int("QUEUE_MAX_WAIT_SEC", 900),
+    userMaxInflight: int("USER_MAX_INFLIGHT", 2),
+    ttlSec: int("QUEUE_TTL_SEC", 2700),
+  },
+
+  /** Saqlash muddati (C23, `audit/designs/retention.md`): faqat bonus bilan yaratilgan fayllar. */
+  retention: {
+    bonusDays: int("RETENTION_BONUS_DAYS", 180),
+  },
+
+  /** LibreOffice PDF konvertatsiyasi (C07): web jarayonida bir vaqtda nechta `soffice`. */
+  pdf: {
+    maxConcurrency: int("PDF_MAX_CONCURRENCY", 2),
   },
 
   worker: {
