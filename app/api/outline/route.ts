@@ -1,5 +1,5 @@
-import { ApiError, handler, json, limit, readJson, requireUser } from "@/lib/server/api";
-import { ensureMigrated } from "@/lib/server/db";
+import { ApiError, handler, json, readJson, requireUser } from "@/lib/server/api";
+import { assertFreeLlmEnabled, withFreeLlm } from "@/lib/server/spend";
 import { extractMeta } from "@/lib/generation/meta";
 import { draftOutline } from "@/lib/generation/write-llm";
 import { sanitizeValues } from "@/lib/server/validate";
@@ -20,12 +20,13 @@ const OUTLINE_BUDGET_MS = 45_000;
  * foydalanuvchi rejani ko'rib tuzatadi va faqat shundan keyin qimmat
  * generatsiyaga o'tadi — yaroqsiz hujjatlar va qaytarishlar kamayadi.
  *
- * Suiiste'moldan himoya: kirish talab qilinadi va soatiga chegara bor.
+ * Suiiste'moldan himoya: kirish talab qilinadi; qisqa oyna (12/10 daq),
+ * kunlik va global chegara, o'chirish tugmasi — `lib/server/spend.ts`
+ * (prod-readiness C10). Chelak faqat yaroqli so'rovda yeyiladi.
  */
 export const POST = handler("outline", async (req) => {
   const { user } = await requireUser(req);
-  await limit(`outline:${user.id}`, 12, 600);
-  await ensureMigrated();
+  assertFreeLlmEnabled();
 
   const body = await readJson<{ slug?: unknown; values?: unknown }>(req, 40_000);
   const slug = typeof body.slug === "string" ? body.slug : "";
@@ -39,7 +40,9 @@ export const POST = handler("outline", async (req) => {
   if (!meta.topic.trim()) throw new ApiError("Avval mavzuni kiriting", 400);
 
   // Rejani AI tuzishi so'ralyapti — foydalanuvchi matnini qayta o'qimaymiz.
-  const text = await draftOutline({ ...meta, tocMethod: "ai" }, Date.now() + OUTLINE_BUDGET_MS);
+  const text = await withFreeLlm({ endpoint: "outline", userId: user.id, signal: req.signal }, () =>
+    draftOutline({ ...meta, tocMethod: "ai" }, Date.now() + OUTLINE_BUDGET_MS),
+  );
   if (!text) throw new ApiError("Reja tuzilmadi — qayta urinib ko'ring", 503);
 
   return json({ text });

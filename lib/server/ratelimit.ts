@@ -16,26 +16,60 @@ export type RateResult = {
   remaining: number;
   limit: number;
   retryAfterSec: number;
+  /** Hisoblab bo'lmadi (baza xatosi) — faqat `failClosed` bilan `true` bo'ladi. */
+  error?: true;
 };
+
+export type RateOptions = {
+  /**
+   * Baza xatosida RAD ETISH (standart — o'tkazib yuborish).
+   *
+   * Umumiy chaqiruvchilar uchun ochiq qolish to'g'ri: baza tushgan bo'lsa
+   * xizmat baribir ishlamaydi, limitlagich esa yagona sabab bo'lmasin.
+   * Lekin pulli/LLM ishini qo'riqlaydigan chelaklarda (bepul LLM —
+   * `spend.ts`) aynan baza zo'riqqanda chegara yo'qolib, provayder puli
+   * cheksiz yonardi (CONC-13, SCALE-14) — ular `failClosed: true` beradi.
+   */
+  failClosed?: boolean;
+  /**
+   * Oyna chegarasi siljishi (s). Kunlik oyna standartda UTC yarim tunida
+   * almashadi; Toshkent kuni uchun `18 000` (UTC+5, yozgi vaqt yo'q).
+   */
+  offsetSec?: number;
+  /** Bitta urinish necha birlik (global sarf hisobi — qimmat chaqiruv ko'proq). */
+  weight?: number;
+  /** Test seam — `Date.now()` o'rniga. */
+  now?: number;
+};
+
+/** Oyna boshlanishi: `offsetSec` bilan siljigan qat'iy oyna. */
+export function windowStartOf(nowMs: number, windowSec: number, offsetSec = 0): Date {
+  const windowMs = windowSec * 1000;
+  const off = offsetSec * 1000;
+  return new Date(Math.floor((nowMs + off) / windowMs) * windowMs - off);
+}
 
 export async function rateLimit(
   bucket: string,
   limit: number,
   windowSec: number,
+  opts: RateOptions = {},
 ): Promise<RateResult> {
+  const now = opts.now ?? Date.now();
   const windowMs = windowSec * 1000;
-  const windowStart = new Date(Math.floor(Date.now() / windowMs) * windowMs);
+  const windowStart = windowStartOf(now, windowSec, opts.offsetSec);
+  const weight = Math.max(1, Math.trunc(opts.weight ?? 1));
 
   try {
     const row = await queryOne<{ hits: number }>(
       `INSERT INTO rate_limits (bucket, window_start, hits)
-       VALUES ($1, $2, 1)
-       ON CONFLICT (bucket, window_start) DO UPDATE SET hits = rate_limits.hits + 1
+       VALUES ($1, $2, $3)
+       ON CONFLICT (bucket, window_start) DO UPDATE SET hits = rate_limits.hits + EXCLUDED.hits
        RETURNING hits`,
-      [bucket.slice(0, 200), windowStart],
+      [bucket.slice(0, 200), windowStart, weight],
     );
-    const hits = row?.hits ?? 1;
-    const retryAfterSec = Math.max(1, Math.ceil((windowStart.getTime() + windowMs - Date.now()) / 1000));
+    const hits = row?.hits ?? weight;
+    const retryAfterSec = Math.max(1, Math.ceil((windowStart.getTime() + windowMs - now) / 1000));
     return {
       ok: hits <= limit,
       remaining: Math.max(0, limit - hits),
@@ -43,8 +77,10 @@ export async function rateLimit(
       retryAfterSec,
     };
   } catch (e) {
+    console.error("[ratelimit]", bucket.split(":")[0], e instanceof Error ? e.message : e);
+    // Pulli/LLM chelagi — hisoblay olmasak rad etamiz (qisqa kutish bilan).
+    if (opts.failClosed) return { ok: false, remaining: 0, limit, retryAfterSec: 30, error: true };
     // Baza tushgan bo'lsa xizmatni butunlay to'xtatmaymiz, lekin buni ko'ramiz.
-    console.error("[ratelimit]", e instanceof Error ? e.message : e);
     return { ok: true, remaining: limit, limit, retryAfterSec: 0 };
   }
 }

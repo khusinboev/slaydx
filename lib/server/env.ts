@@ -195,6 +195,23 @@ export const env = {
   /** Ichki xizmat chaqiruvlari (cron, worker) uchun kalit. */
   cronSecret: str("CRON_SECRET"),
 
+  /**
+   * BEPUL LLM endpointlari (reja, UDK, «Tuzatish», «Hammasini tuzatish») —
+   * sarf shifti (prod-readiness C10). Kredit yechilmaydi, shuning uchun
+   * provayder puli faqat shu chegaralar bilan to'siladi. Kun — Toshkent
+   * vaqti bilan; siyosat va standartlar `lib/server/spend.ts` da.
+   */
+  freeLlm: {
+    /** `true` — to'rttala endpoint darhol 503, provayder chaqirilmaydi. */
+    disabled: bool("FREE_LLM_DISABLED", false),
+    dailyOutline: int("FREE_LLM_DAILY_OUTLINE", 20),
+    dailyUdk: int("FREE_LLM_DAILY_UDK", 20),
+    dailyRewrite: int("FREE_LLM_DAILY_REWRITE", 30),
+    dailyPolish: int("FREE_LLM_DAILY_POLISH", 10),
+    /** Barcha foydalanuvchilar bo'yicha kunlik birlik (vazn bilan) — xarajat shifti. */
+    dailyGlobal: int("FREE_LLM_DAILY_GLOBAL", 20_000),
+  },
+
   worker: {
     /** Bitta processda parallel bajariladigan ish soni. */
     concurrency: int("WORKER_CONCURRENCY", 2),
@@ -273,6 +290,12 @@ export function runtimeWarnings(): string[] {
   const warnings: string[] = [];
   if (!ttsConfigured()) {
     warnings.push("TTS kaliti yo'q (AZURE_SPEECH_KEY+AZURE_SPEECH_REGION / AISHA_API_KEY) — podkast va tabriknoma ishlamaydi");
+  }
+  // O'chirish tugmasidagi xato yozuv («on», «enabled») jimgina «o'chirilmagan»
+  // bo'lib qolardi — ya'ni bepul LLM sarfi davom etardi.
+  const killSwitch = str("FREE_LLM_DISABLED").toLowerCase();
+  if (killSwitch && !["1", "true", "yes", "0", "false", "no"].includes(killSwitch)) {
+    warnings.push(`FREE_LLM_DISABLED="${killSwitch}" tanilmadi — bepul LLM YOQIQ qoldi (true/false yozing)`);
   }
   return warnings;
 }
