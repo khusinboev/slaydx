@@ -1,7 +1,9 @@
 import "server-only";
 import { ApiError } from "./api";
 import { commitDocOps } from "./slide-commit";
-import { assetUrl, putAssetBytes } from "./assets";
+import { assetUrl } from "./assets";
+import { readUploadForm } from "./upload-body";
+import { putGenerationUpload } from "./upload-quota";
 import { sniffImageType } from "../generation/slide-images";
 import { SLIDE_IMAGE_MAX_BYTES } from "../generation/slide-limits";
 import type { DocOp } from "../generation/slide-edit";
@@ -46,12 +48,8 @@ export async function uploadSlideImage(
 ): ReturnType<typeof commitDocOps> {
   assertValidIndex(index);
 
-  const declared = Number(req.headers.get("content-length") ?? 0);
-  if (Number.isFinite(declared) && declared > SLIDE_IMAGE_MAX_BYTES + 64 * 1024) {
-    throw new ApiError("Fayl juda katta", 413);
-  }
-
-  const form = await req.formData().catch(() => null);
+  // Hajm tana o'qilayotganda — chunked so'rovda ham (SECB-05).
+  const form = await readUploadForm(req, SLIDE_IMAGE_MAX_BYTES + 64 * 1024, "Fayl juda katta");
   const file = form?.get("file");
   if (!(file instanceof File)) throw new ApiError("Fayl yuborilmadi", 400);
   if (file.size > SLIDE_IMAGE_MAX_BYTES) throw new ApiError("Fayl juda katta", 413);
@@ -69,7 +67,8 @@ export async function uploadSlideImage(
   if (!type) throw new ApiError("Faqat PNG yoki JPEG qabul qilinadi", 415);
   const mime = type === "png" ? "image/png" : "image/jpeg";
 
-  const assetId = await putAssetBytes(id, mime, bytes);
+  // Egalik + kvota YOZISHDAN OLDIN (C13, BEA-03) — begona hujjatga bayt tushmaydi.
+  const assetId = await putGenerationUpload(id, userId, mime, bytes);
   const url = assetUrl(id, assetId);
   const ops: DocOp[] = [{ op: "image", index, url }];
   return commitDocOps(id, userId, baseVersion, ops);

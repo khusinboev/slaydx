@@ -133,3 +133,31 @@ export function queryKey(prefix: string, text: string): string {
   };
   return `${prefix}:${fnv(0x811c9dc5)}${fnv(0x9747b28c)}:${norm.length}`;
 }
+
+/** Bir o'tishda o'chiriladigan qatorlar — uzun qulf va katta WAL bo'lmasin. */
+const PURGE_BATCH = 5_000;
+
+/**
+ * Eski kesh yozuvlarini o'chiradi (worker `housekeeping`, EXT-08).
+ *
+ * Ilgari `source_cache` hech qachon tozalanmasdi — provayder javoblari
+ * (OpenAlex/Crossref xom JSON) umumiy diskda cheksiz o'sardi. Kesh TTL
+ * 30 kun (`CACHE_DAYS`), ya'ni 60 kundan eski yozuv baribir o'qilmaydi.
+ * Qaytaradi: o'chirilgan qatorlar soni.
+ */
+export async function purgeSourceCache(days = 60, maxBatches = 20): Promise<number> {
+  const db = await import("../../server/db");
+  const age = String(Math.max(1, Math.floor(days)));
+  let total = 0;
+  for (let i = 0; i < maxBatches; i++) {
+    const rows = await db.query<{ key: string }>(
+      `DELETE FROM source_cache
+        WHERE key IN (SELECT key FROM source_cache WHERE fetched_at < now() - ($1 || ' days')::interval LIMIT $2)
+        RETURNING key`,
+      [age, PURGE_BATCH],
+    );
+    total += rows.length;
+    if (rows.length < PURGE_BATCH) break;
+  }
+  return total;
+}

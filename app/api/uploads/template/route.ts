@@ -1,5 +1,5 @@
-import { handler, json, limit, requireUser } from "@/lib/server/api";
-import { listTemplates, uploadTemplate } from "@/lib/server/template-upload";
+import { handler, json, requireUser } from "@/lib/server/api";
+import { handleTemplateUpload, listTemplates } from "@/lib/server/template-upload";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,8 +17,8 @@ export const maxDuration = 120;
  */
 export const POST = handler("uploads-template", async (req) => {
   const { user } = await requireUser(req);
-  await limit(`template:${user.id}`, 5, 600);
-  return json(await uploadTemplate(req, user.id));
+  // Chastota (5 / 10 daqiqa), band LibreOffice → 503 — `handleTemplateUpload` da.
+  return handleTemplateUpload(req, user.id);
 });
 
 /** Foydalanuvchining oldin yuklagan namunalari (baytsiz). */

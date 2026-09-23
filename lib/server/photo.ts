@@ -1,7 +1,10 @@
 import "server-only";
 import { createHash } from "node:crypto";
+import type { PoolClient } from "pg";
 import { query, queryOne } from "./db";
 import { ApiError } from "./api";
+import { readUploadForm } from "./upload-body";
+import { withUploadQuota } from "./upload-quota";
 import { imageDims, sniffImageType } from "../generation/slide-images";
 
 /**
@@ -48,14 +51,18 @@ function parseCrop(raw: unknown): PhotoCrop | undefined {
   }
 }
 
-export async function putPhoto(
+type PhotoOpts = { kind?: "crop" | "original"; originalAssetId?: string; crop?: PhotoCrop };
+
+/** Bitta surat qatori — kvota tranzaksiyasi ichida (`client`). */
+async function insertPhoto(
+  client: PoolClient,
   userId: string,
   bytes: Buffer,
   mime: "image/png" | "image/jpeg",
-  opts: { kind?: "crop" | "original"; originalAssetId?: string; crop?: PhotoCrop } = {},
+  opts: PhotoOpts,
 ): Promise<string> {
   const assetId = assetIdFor(bytes);
-  await query(
+  await client.query(
     `INSERT INTO photo_uploads (user_id, asset_id, kind, mime, size_bytes, bytes, original_asset_id, crop)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      ON CONFLICT (user_id, asset_id) DO UPDATE
@@ -73,6 +80,18 @@ export async function putPhoto(
     ],
   );
   return assetId;
+}
+
+/** Bitta suratni foydalanuvchi kvotasi ostida saqlaydi (C13). */
+export async function putPhoto(
+  userId: string,
+  bytes: Buffer,
+  mime: "image/png" | "image/jpeg",
+  opts: PhotoOpts = {},
+): Promise<string> {
+  return withUploadQuota(userId, "photo", { assetIds: [assetIdFor(bytes)], bytes: bytes.byteLength }, (c) =>
+    insertPhoto(c, userId, bytes, mime, opts),
+  );
 }
 
 export type PhotoRow = {
@@ -133,11 +152,8 @@ export async function photoDataUrl(
  * `crop` (JSON), `shape` ("circle" | "square").
  */
 export async function uploadPhoto(req: Request, userId: string): Promise<PhotoUploadResult> {
-  const declared = Number(req.headers.get("content-length") ?? 0);
-  if (Number.isFinite(declared) && declared > 2 * PHOTO_MAX_BYTES + 64 * 1024) {
-    throw new ApiError("Fayl 5 MB dan katta", 413);
-  }
-  const form = await req.formData().catch(() => null);
+  // Hajm tana o'qilayotganda — chunked so'rovda ham (SECB-05).
+  const form = await readUploadForm(req, 2 * PHOTO_MAX_BYTES + 64 * 1024, "Fayl 5 MB dan katta");
   const file = form?.get("file");
   if (!(file instanceof File)) throw new ApiError("Fayl yuborilmadi", 400);
   if (file.size === 0) throw new ApiError("Fayl bo'sh", 400);
@@ -154,17 +170,24 @@ export async function uploadPhoto(req: Request, userId: string): Promise<PhotoUp
   const shape = form?.get("shape") === "square" ? "square" : "circle";
 
   // Asl nusxa ixtiyoriy: uni saqlash «markazlash» uchun, generatsiya
-  // uchun emas — shuning uchun xatosi butun yuklashni yiqitmaydi.
-  let originalAssetId: string | undefined;
+  // uchun emas — shuning uchun yaroqsiz asl nusxa butun yuklashni yiqitmaydi.
+  let orig: { bytes: Buffer; mime: "image/png" | "image/jpeg" } | undefined;
   const original = form?.get("original");
   if (original instanceof File && original.size > 0 && original.size <= PHOTO_MAX_BYTES) {
     const ob = Buffer.from(await original.arrayBuffer());
     const ot = sniffImageType(ob);
-    if (ot) originalAssetId = await putPhoto(userId, ob, ot === "png" ? "image/png" : "image/jpeg", { kind: "original" });
+    if (ot) orig = { bytes: ob, mime: ot === "png" ? "image/png" : "image/jpeg" };
   }
 
   const mime = type === "png" ? "image/png" : "image/jpeg";
-  const assetId = await putPhoto(userId, bytes, mime, { kind: "crop", originalAssetId, crop });
+  // Juftlik BITTA kvota tekshiruvi va tranzaksiyada: sig'masa ikkalasi ham yozilmaydi.
+  const ids = [assetIdFor(bytes), ...(orig ? [assetIdFor(orig.bytes)] : [])];
+  const incoming = bytes.byteLength + (orig?.bytes.byteLength ?? 0);
+  const { assetId, originalAssetId } = await withUploadQuota(userId, "photo", { assetIds: ids, bytes: incoming }, async (c) => {
+    const originalId = orig ? await insertPhoto(c, userId, orig.bytes, orig.mime, { kind: "original" }) : undefined;
+    const cropId = await insertPhoto(c, userId, bytes, mime, { kind: "crop", originalAssetId: originalId, crop });
+    return { assetId: cropId, originalAssetId: originalId };
+  });
   return { assetId, mime, size: bytes.byteLength, shape, ...(originalAssetId ? { originalAssetId } : {}), ...(crop ? { crop } : {}) };
 }
 

@@ -7,9 +7,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { query, queryOne } from "./db";
-import { ApiError } from "./api";
+import { ApiError, limit } from "./api";
 import { parseFailure, readUploadForm } from "./upload-body";
 import { parseInWorker } from "./parse-pool";
+import { assertUploadQuota, withUploadQuota } from "./upload-quota";
+import { busyResponse, SofficeBusyError } from "./soffice-gate";
+import { refundRate } from "./rate-peek";
 import { toPdf } from "./pdf";
 import {
   TemplateError,
@@ -145,11 +148,16 @@ export async function putTemplate(
   previews: CustomTemplate["previews"],
 ): Promise<TemplateUploadResult> {
   const assetId = assetIdFor(bytes);
-  await query(
-    `INSERT INTO template_uploads (user_id, asset_id, name, size_bytes, bytes, profile, previews)
-     VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb)
-     ON CONFLICT (user_id, asset_id) DO UPDATE SET profile = EXCLUDED.profile, previews = EXCLUDED.previews, name = EXCLUDED.name`,
-    [userId, assetId, name, bytes.byteLength, bytes, JSON.stringify(profile), JSON.stringify(previews)],
+  const previewsJson = JSON.stringify(previews);
+  // Rasterlar ham diskda joy oladi — kvotaga bayt bilan birga kiradi (C13).
+  const size = bytes.byteLength + Buffer.byteLength(previewsJson);
+  await withUploadQuota(userId, "template", { assetIds: [assetId], bytes: size }, (c) =>
+    c.query(
+      `INSERT INTO template_uploads (user_id, asset_id, name, size_bytes, bytes, profile, previews)
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb)
+       ON CONFLICT (user_id, asset_id) DO UPDATE SET profile = EXCLUDED.profile, previews = EXCLUDED.previews, name = EXCLUDED.name`,
+      [userId, assetId, name, bytes.byteLength, bytes, JSON.stringify(profile), previewsJson],
+    ),
   );
   return { assetId, name, size: bytes.byteLength, template: { assetId, name, profile, previews } };
 }
@@ -215,6 +223,10 @@ export async function uploadTemplate(req: Request, userId: string, deps: UploadD
 
   const bytes = Buffer.from(await file.arrayBuffer());
   if (!looksLikePptx(bytes)) throw new ApiError("Faqat PPTX (PowerPoint) fayl qabul qilinadi", 415);
+  // Kvota QIMMAT ishdan (tahlil + LibreOffice rasterlash) oldin — sig'maydigan
+  // yuklama CPU ham yemasin (C13). Yakuniy tekshiruv `putTemplate` da; sinov
+  // seami (`deps.put`) o'z saqlashini beradi va kvota unga tegishli emas.
+  if (!deps.put) await assertUploadQuota(userId, "template", { assetIds: [assetIdFor(bytes)], bytes: bytes.byteLength });
 
   let profile: TemplateProfile;
   try {
@@ -240,4 +252,27 @@ export async function uploadTemplate(req: Request, userId: string, deps: UploadD
   const previews = await (deps.rasterize ?? rasterizeTemplate)(bytes, profile);
   const name = String(file.name || "namuna.pptx").replace(/[\r\n\t]/g, " ").trim().slice(0, 120) || "namuna.pptx";
   return (deps.put ?? putTemplate)(userId, bytes, name, profile, previews);
+}
+
+/** Rasterlash qimmat — foydalanuvchiga 10 daqiqada 5 ta namuna. */
+export const TEMPLATE_RATE = { count: 5, windowSec: 600 } as const;
+
+/**
+ * `POST /api/uploads/template` ning sessiyadan keyingi qismi (route yupqa).
+ *
+ * LibreOffice navbati band bo'lsa (`SofficeBusyError`) — 503 + `Retry-After`
+ * (W2-A review R1). Bu foydalanuvchi aybi emas: chastota ulushi QAYTARILADI,
+ * kvotaga esa hech narsa yozilmagan (saqlash rasterlashdan keyin).
+ */
+export async function handleTemplateUpload(req: Request, userId: string, deps: UploadDeps = {}): Promise<Response> {
+  const bucket = `template:${userId}`;
+  const at = Date.now();
+  await limit(bucket, TEMPLATE_RATE.count, TEMPLATE_RATE.windowSec);
+  try {
+    return Response.json(await uploadTemplate(req, userId, deps));
+  } catch (e) {
+    if (!(e instanceof SofficeBusyError)) throw e;
+    await refundRate(bucket, TEMPLATE_RATE.windowSec, at);
+    return busyResponse(e);
+  }
 }
