@@ -8,10 +8,10 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { query, queryOne } from "./db";
 import { ApiError } from "./api";
-import { readUploadForm } from "./upload-body";
+import { parseFailure, readUploadForm } from "./upload-body";
+import { parseInWorker } from "./parse-pool";
 import { toPdf } from "./pdf";
 import {
-  parsePptxTemplate,
   TemplateError,
   type CustomTemplate,
   type TemplatePreview,
@@ -206,8 +206,11 @@ export async function uploadTemplate(req: Request, userId: string, deps: UploadD
 
   let profile: TemplateProfile;
   try {
-    profile = await parsePptxTemplate(bytes);
+    // Tahlil alohida threadda: timeout + xotira chegarasi (`parse-pool.ts`, CONC-09).
+    profile = await parseInWorker({ kind: "template", bytes });
   } catch (e) {
+    const pool = parseFailure(e);
+    if (pool) throw pool;
     if (e instanceof TemplateError) {
       const msg =
         e.code === "no-content"

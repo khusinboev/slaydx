@@ -2,9 +2,10 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { query, queryOne } from "./db";
 import { ApiError } from "./api";
-import { readUploadForm } from "./upload-body";
+import { parseFailure, readUploadForm } from "./upload-body";
+import { parseInWorker } from "./parse-pool";
 import { extOf } from "../extract-text";
-import { extractSegments, stripTokens, type Extracted } from "../generation/translate/index";
+import { PdfPageLimitError } from "../generation/translate/pdf";
 import { TRANSLATION_MAX_CHARS, TRANSLATION_MIN_CHARS } from "../tools";
 import {
   SOURCE_MIME,
@@ -135,36 +136,26 @@ export type SourceCounter = (
   bytes: Uint8Array,
 ) => Promise<{ chars: number; text: string; pages?: number; segments?: number }>;
 
-/** `unpdf` sahifa soni — skaner PDF ni aniqlash uchun (`chars < 20 × pages`). */
-async function pdfPages(bytes: Uint8Array): Promise<number> {
-  try {
-    const { getDocumentProxy } = await import("unpdf");
-    const doc = await getDocumentProxy(bytes);
-    return doc.numPages ?? 0;
-  } catch {
-    // Sahifa sonini bilmasak `scanned` qoidasi ishlamaydi — bu XATO emas,
-    // shunchaki qo'shimcha tekshiruv o'tkazib yuboriladi.
-    return 0;
-  }
-}
-
 /**
  * Hisoblagich (WP3): `chars` — TARJIMA QILINADIGAN segmentlar yig'indisi
  * (`extractSegments`), ya'ni narx aynan modelga yuboriladigan hajmga
  * bog'lanadi: raqamli yacheykalar, URL, kod satrlari, sahifa raqami
  * maydonlari sanalmaydi. `text` — ko'rish uchun oddiy matn (tokenlarsiz).
  * `uploadSource` uni `deps.count` orqali chaqiradi (test seam).
+ *
+ * Tahlil alohida THREADda (`parse-pool.ts`, CONC-09): katta PDF yoki
+ * g'alati fayl web jarayonini muzlatmaydi, 15 s dan oshsa to'xtatiladi.
+ * PDF sahifa soni ham shu tahlildan olinadi — ikkinchi marta ochilmaydi.
  */
 export const DEFAULT_COUNTER: SourceCounter = async (kind, bytes) => {
-  let extracted: Extracted;
   try {
-    extracted = await extractSegments(kind, bytes);
+    return await parseInWorker({ kind: "source", source: kind, bytes });
   } catch (e) {
+    const pool = parseFailure(e);
+    if (pool) throw pool;
+    if (e instanceof PdfPageLimitError) throw new ApiError(e.message, 422, { code: "too-many-pages", pages: e.pages });
     throw new ApiError(e instanceof Error && e.message ? `Fayl o'qilmadi: ${e.message}` : "Fayl o'qilmadi", 422, { code: "unreadable" });
   }
-  const text = extracted.segments.map((s) => stripTokens(s.text)).join("\n");
-  const pages = kind === "pdf" ? (extracted.pdf?.pages ?? (await pdfPages(bytes))) : undefined;
-  return { chars: extracted.chars, text, pages, segments: extracted.segments.length };
 };
 
 export async function putSource(

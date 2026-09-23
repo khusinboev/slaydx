@@ -1,7 +1,8 @@
 import { ApiError, handler, json, limit, requireUser } from "@/lib/server/api";
 import { EXTRACT_MAX_BYTES, EXTRACT_MAX_CHARS, extractFromBuffer } from "@/lib/extract-text";
 import { MAX_PDF_PAGES } from "@/lib/generation/translate/pdf";
-import { readUploadForm } from "@/lib/server/upload-body";
+import { parseInWorker } from "@/lib/server/parse-pool";
+import { parseFailure, readUploadForm } from "@/lib/server/upload-body";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,8 +34,14 @@ export const POST = handler("extract", async (req) => {
   }
   if (file.size === 0) throw new ApiError("Fayl bo'sh", 400);
 
-  const buf = await file.arrayBuffer();
-  const out = await extractFromBuffer(file.name, buf);
+  // Tahlil alohida threadda: timeout + xotira chegarasi (`parse-pool.ts`, CONC-09).
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let out: Awaited<ReturnType<typeof extractFromBuffer>>;
+  try {
+    out = await parseInWorker({ kind: "extract", name: file.name, bytes });
+  } catch (e) {
+    throw parseFailure(e) ?? e;
+  }
   if (!out.text.trim()) {
     return json({
       text: "",

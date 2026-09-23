@@ -96,6 +96,24 @@ test("uploadSource: Content-Length siz 21 MB — 413, tana to'liq yutilmaydi", a
   assert.ok(pulled() <= SOURCE_MAX_BYTES + 64 * 1024 + CHUNK + 1024, `o'qildi: ${pulled()}`);
 });
 
+test("uploadSource (haqiqiy DEFAULT_COUNTER, worker thread): 301 sahifali PDF — 422 too-many-pages, saqlanmaydi", async () => {
+  const { makeBlankPagesPdf } = await import("./helpers/parse-fixtures.ts");
+  const { MAX_PDF_PAGES } = await import("../lib/generation/translate/pdf.ts");
+  const fd = new FormData();
+  fd.set("file", new File([makeBlankPagesPdf(MAX_PDF_PAGES + 1) as Uint8Array<ArrayBuffer>], "uzun.pdf"));
+  const req = new Request("http://x/api/uploads/source", { method: "POST", body: fd });
+  await assert.rejects(
+    uploadSource(req, "1", { put: async () => { throw new Error("saqlanmasligi kerak"); } }),
+    (e: unknown) => {
+      assert.ok(e instanceof ApiError, String(e));
+      assert.equal(e.status, 422);
+      assert.equal(e.extra.code, "too-many-pages");
+      assert.match(e.message, /PDF juda uzun/);
+      return true;
+    },
+  );
+});
+
 test("uploadTemplate: Content-Length siz 21 MB — 413, tana to'liq yutilmaydi", async () => {
   const { req, pulled } = chunkedUpload("http://x/api/uploads/template", "a.pptx", TEMPLATE_MAX_BYTES + CHUNK);
   await expect413(uploadTemplate(req, "1", { put: async () => { throw new Error("chaqirilmasligi kerak"); }, rasterize: async () => ({}) }));

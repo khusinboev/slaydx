@@ -1,5 +1,12 @@
 import "server-only";
 import { ApiError } from "./api";
+import { ParsePoolError } from "./parse-pool";
+
+/** Tahlil hovuzi xatosi (timeout/xotira/band) → foydalanuvchiga toza javob; boshqa xato → `null`. */
+export function parseFailure(e: unknown): ApiError | null {
+  if (!(e instanceof ParsePoolError)) return null;
+  return new ApiError(e.message, e.status, { code: e.code === "busy" ? "busy" : `parse-${e.code}` });
+}
 
 /**
  * Yuklash so'rovining `multipart/form-data` tanasini HAJM CHEGARASI bilan o'qiydi (SECB-05).
