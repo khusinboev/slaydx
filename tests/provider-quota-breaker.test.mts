@@ -45,7 +45,7 @@ test("research: 429 takrorlansa host saqlagichi ochiladi — keyingi so'rov tarm
   assert.equal(c.ok, true);
 });
 
-test("research: uzun Retry-After (kunlik kvota) — qayta urinilmaydi, saqlagich darhol ochiladi", async () => {
+test("research: uzun Retry-After (kunlik kvota) — qayta urinilmaydi, saqlagich darhol ochiladi", { timeout: 5_000 }, async () => {
   const { f, urls } = stubFetch([r429({ "retry-after": "3600" }), r200()]);
   const a = await getJson("https://www.googleapis.com/books/v1/volumes?q=x", { fetchImpl: f, retryBaseMs: 0 });
   assert.equal(a.ok, false);
