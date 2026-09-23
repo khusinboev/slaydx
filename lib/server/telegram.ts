@@ -53,8 +53,9 @@ async function call<T>(method: string, payload: unknown): Promise<T | null> {
       if (!data.ok) {
         console.warn(`[telegram] ${method}:`, data.description ?? "xato");
         const after = Number(data.parameters?.retry_after);
-        if (attempt === 0 && data.error_code === 429 && Number.isFinite(after) && after >= 0) {
-          await new Promise((r) => setTimeout(r, Math.min(after, TELEGRAM_RETRY_AFTER_CAP_S) * 1000));
+        // Uzunroq `retry_after` — 5 s dan keyingi urinish ham 429 bo'lardi, kutmaymiz.
+        if (attempt === 0 && data.error_code === 429 && Number.isFinite(after) && after >= 0 && after <= TELEGRAM_RETRY_AFTER_CAP_S) {
+          await new Promise((r) => setTimeout(r, after * 1000));
           continue;
         }
         return null;

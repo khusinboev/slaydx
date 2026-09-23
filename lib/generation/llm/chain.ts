@@ -30,9 +30,9 @@
  * CHEKLAGICH (`limiter.ts`): provayder bo'yicha bir vaqtdagi so'rovlar
  * soni; navbatda kutilgan vaqt urinish timeout'idan ayriladi.
  */
-import { breakerFor, type CircuitBreaker } from "./breaker";
+import { LLM_BREAKER, breakerFor, type CircuitBreaker } from "./breaker";
 import { limiterFor, type Semaphore } from "./limiter";
-import { backoffMs } from "./retry";
+import { backoffMs, equalJitterMs } from "./retry";
 import type { Attempt, ProviderAdapter, ProviderId, RoleSpec } from "./types";
 
 export type ChainOpts = {
@@ -96,8 +96,13 @@ const sleep = (ms: number) => (ms > 0 ? new Promise((r) => setTimeout(r, ms)) : 
  * out"/"aborted" (`APIConnectionTimeoutError`/`APIUserAbortError`).
  */
 function isTimeoutSignal(error: string): boolean {
-  return /abort|timed?\s?out/i.test(error);
+  // `\b` — `ETIMEDOUT`/`UND_ERR_CONNECT_TIMEOUT` (ulanish uzilishi) timeout
+  // EMAS: ular tarmoq xatosi, byudjet ichida qayta uriladi (review R2).
+  return /abort|\btimed?\s?out\b/i.test(error);
 }
+
+/** Ochiq saqlagich uchun eng uzun muddat — soxta ulkan `Retry-After` provayderni abadiy o'chirmasin. */
+const BREAKER_TRIP_MAX_MS = 10 * 60_000;
 
 type Ctx = {
   role: string;
@@ -168,8 +173,20 @@ async function runSpec(
       if (timeoutMs >= BREAKER_TIMEOUT_FLOOR_MS) breaker.failure();
       return "timeout";
     }
-    if (res.status === undefined || res.status >= 500) breaker.failure();
-    else if (res.status !== 429) breaker.success();
+    /*
+     * Saqlagich faqat TRANSPORT nosozligini sanaydi: tarmoq xatosi
+     * (status yo'q + retryable) va 5xx. Bo'sh javob (xavfsizlik bloki,
+     * `max_tokens`), refusal, 4xx — provayder SOG'; ularni sanash bitta
+     * ishning muammoli promptlari tufayli Gemini'ni butun jarayon uchun
+     * o'chirib qo'yardi (review R1). `llm.ts withRetry` bilan bir xil qoida.
+     */
+    if (res.status === undefined ? res.retryable : res.status >= 500) breaker.failure();
+    else if (res.status !== undefined && res.status !== 429) breaker.success();
+    // Kvota: sarf chegarasi (429, retryable:false) yoki uzun `Retry-After` —
+    // provayder shu muddat javob bermaydi; har chaqiruvda qayta urmaslik uchun darhol ochamiz.
+    if (res.status === 429 && (!res.retryable || (res.retryAfterMs ?? 0) > RETRY_AFTER_CAP_MS)) {
+      breaker.trip(Math.min(BREAKER_TRIP_MAX_MS, res.retryAfterMs ?? LLM_BREAKER.cooldownMs), "429 kvota");
+    }
     if (!res.retryable) return null;
     if (attempt === MAX_ATTEMPTS - 1) break;
     if (res.retryAfterMs !== undefined && res.retryAfterMs > RETRY_AFTER_CAP_MS) {
@@ -177,8 +194,9 @@ async function runSpec(
       return null;
     }
     // Tarmoq xatosi (status yo'q: ETIMEDOUT/ECONNRESET) — uzilish odatda bir
-    // necha soniya, shuning uchun asos 2 s (AUDIT-19 smoke); HTTP xatosida 500 ms.
-    const wait = res.retryAfterMs ?? backoffMs(attempt, res.status === undefined ? 2_000 : 500, ctx.random);
+    // necha soniya: asos 2 s va TENG jitter (≥ yarmi kutiladi, AUDIT-19 smoke);
+    // HTTP xatosida 500 ms asos, to'liq jitter.
+    const wait = res.retryAfterMs ?? (res.status === undefined ? equalJitterMs(attempt, 2_000, ctx.random) : backoffMs(attempt, 500, ctx.random));
     if (leftMs(opts) - wait < CHAIN_MIN_ATTEMPT_MS) return "deadline";
     await sleep(wait);
   }

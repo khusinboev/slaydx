@@ -156,6 +156,40 @@ test("breaker: qisqa (byudjet tufayli) timeout'lar provayder nosozligi deb sanal
   assert.equal(gb.state, "open", "to'liq timeout — nosozlik belgisi");
 });
 
+test("breaker: bo'sh javob / refusal / 4xx provayder nosozligi EMAS — 5 martadan keyin ham yopiq (review R1)", async () => {
+  const gb = new CircuitBreaker("gemini", { threshold: 2, log: () => {} });
+  const replies: Attempt[] = [
+    { ok: false, error: "bo'sh javob", retryable: false },
+    { ok: false, error: "refusal", retryable: false },
+    { ok: false, error: "bo'sh javob (max_tokens — fikrlash byudjetni yedi)", retryable: false },
+    { ok: false, error: "bad request", retryable: false, status: 400 },
+    { ok: false, error: "bo'sh javob", retryable: false },
+  ];
+  for (const r of replies) {
+    const g = adapter("gemini", () => r);
+    await completeWithChain("writer", [G], "s", "u", { maxTokens: 10, timeoutMs: 5_000 }, { adapters: { gemini: g.a }, ...isolated(), breakerFor: () => gb });
+  }
+  assert.equal(gb.state, "closed");
+});
+
+test("tarmoq ulanish timeout'i (ETIMEDOUT/UND_ERR_CONNECT_TIMEOUT) — timeout EMAS, qayta uriladi (review R2)", async () => {
+  for (const error of ["fetch failed (ETIMEDOUT)", "fetch failed (UND_ERR_CONNECT_TIMEOUT)"]) {
+    const g = adapter("gemini", (_o, n) => (n === 1 ? { ok: false, error, retryable: true } : ok("ikkinchi")));
+    const res = await completeWithChain("fast", [G], "s", "u", { maxTokens: 10, timeoutMs: 5_000 }, { adapters: { gemini: g.a }, ...isolated({ random: () => 0 }) });
+    assert.equal(res?.text, "ikkinchi", error);
+  }
+});
+
+test("uzun Retry-After / sarf chegarasi 429 — saqlagich darhol ochiladi, keyingi chaqiruv provayderga chiqmaydi (nit 4)", { timeout: 5_000 }, async () => {
+  const gb = new CircuitBreaker("anthropic", { log: () => {} });
+  const a = adapter("anthropic", () => ({ ok: false, error: "enforced_spend_limit_reached", retryable: false, status: 429 }));
+  const g = adapter("gemini", () => ok("zaxira"));
+  const deps = { adapters: { anthropic: a.a, gemini: g.a }, ...isolated(), breakerFor: (p: ProviderId) => (p === "anthropic" ? gb : new CircuitBreaker(p, { log: () => {} })) };
+  await completeWithChain("judge", [A, G], "s", "u", { maxTokens: 10, timeoutMs: 5_000 }, deps);
+  await completeWithChain("judge", [A, G], "s", "u", { maxTokens: 10, timeoutMs: 5_000 }, deps);
+  assert.equal(a.seen.length, 1);
+});
+
 test("limiter: bitta provayderga bir vaqtda chegaradan ko'p so'rov ketmaydi, hammasi navbat bilan bajariladi", async () => {
   let inflight = 0;
   let peak = 0;

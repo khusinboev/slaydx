@@ -83,6 +83,18 @@ test("oxirgi urinishdan keyin uxlanmaydi; backoff jitter'li", async () => {
   assert.ok(elapsed - (calls[2] - t0) < 100, "oxirgi javobdan keyin kutish bo'lmasligi kerak");
 });
 
+test("ulanish timeout'i (fetch failed, cause ETIMEDOUT) — tarmoq xatosi, qayta uriladi (review R2)", async () => {
+  Math.random = () => 0;
+  let n = 0;
+  globalThis.fetch = (async () => {
+    n++;
+    if (n === 1) throw Object.assign(new TypeError("fetch failed"), { cause: { code: "UND_ERR_CONNECT_TIMEOUT" } });
+    return new Response(JSON.stringify(OK.body), { status: 200 });
+  }) as typeof fetch;
+  assert.equal(await llmComplete("s", "u", 100, { timeoutMs: 20_000 }), "javob");
+  assert.equal(n, 2);
+});
+
 test("4xx qayta urinilmaydi", async () => {
   const calls = stub([{ status: 400, body: { error: { message: "bad" } } }]);
   assert.equal(await llmComplete("s", "u", 100, { timeoutMs: 10_000 }), null);

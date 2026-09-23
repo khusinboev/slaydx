@@ -45,6 +45,14 @@ test("429 takrorlansa — faqat bitta qayta urinish, keyin false", async () => {
   assert.equal(at.length, 2);
 });
 
+test("retry_after chegaradan uzun (30 s) — qayta urinish befoyda, darhol false (review nit 3)", async () => {
+  const at = stub([() => TOO_MANY(30), OK]);
+  const t0 = Date.now();
+  assert.equal(await sendMessage(1, "salom"), false);
+  assert.equal(at.length, 1);
+  assert.ok(Date.now() - t0 < 500);
+});
+
 test("boshqa xato (400) qayta yuborilmaydi", async () => {
   const at = stub([() => new Response(JSON.stringify({ ok: false, error_code: 400, description: "Bad Request: chat not found" }), { status: 400 })]);
   assert.equal(await sendMessage(1, "salom"), false);

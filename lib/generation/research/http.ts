@@ -44,12 +44,17 @@ export const RESEARCH_MIN_ATTEMPT_MS = 1_000;
  * 429 (kvota) siyosati (audit EXT-07): qisqa `Retry-After` (≤ 3 s, yoki
  * sarlavhasiz) — BITTA qayta urinish (soniyalik chegara, masalan OpenAlex
  * 10 so'rov/s); ikkinchi 429 yoki uzun `Retry-After` (kunlik kvota) — shu
- * HOST saqlagichi `Retry-After` muddatiga (5 s … 10 min, standart 60 s)
+ * HOST saqlagichi `Retry-After` muddatiga (5 s … 10 min, sarlavhasiz — 10 s)
  * ochiladi va u davrda so'rovlar tarmoqqa chiqmasdan `{ok:false, 429}`
  * bilan qaytadi: manba bo'sh keladi, hujjat esa baribir yoziladi.
  */
 const QUOTA_RETRY_MAX_MS = 3_000;
-const QUOTA_COOLDOWN_DEFAULT_MS = 60_000;
+/**
+ * `Retry-After` yo'q ikkinchi 429 — ko'pincha soniyalik chegara (OpenAlex
+ * 10 so'rov/s), kunlik kvota emas: 60 s butun hostni o'chirib maqolalarni
+ * manbasiz qoldirardi (review nit 2). Kunlik kvota o'zi uzun `Retry-After` beradi.
+ */
+const QUOTA_COOLDOWN_DEFAULT_MS = 10_000;
 const QUOTA_COOLDOWN_MIN_MS = 5_000;
 const QUOTA_COOLDOWN_MAX_MS = 10 * 60_000;
 

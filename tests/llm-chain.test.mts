@@ -177,7 +177,7 @@ test("adapter ro'yxatda yo'q — o'tkazib yuboriladi (kalit bor bo'lsa ham)", as
   });
 });
 
-test("tarmoq xatosida (status yo'q) qayta urinish kutish asosi 2 s, HTTP xatosida 500 ms (to'liq jitter bilan)", () => {
+test("tarmoq xatosida (status yo'q) kutish 2 s asosli TENG jitter (≥ 1 s), HTTP xatosida 500 ms to'liq jitter", () => {
   const src = readFileSync(new URL("../lib/generation/llm/chain.ts", import.meta.url), "utf8");
-  assert.match(src, /backoffMs\(attempt, res\.status === undefined \? 2_000 : 500, ctx\.random\)/);
+  assert.match(src, /res\.status === undefined \? equalJitterMs\(attempt, 2_000, ctx\.random\) : backoffMs\(attempt, 500, ctx\.random\)/);
 });

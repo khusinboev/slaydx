@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { CircuitBreaker, breakerFor, resetBreakers } from "../lib/generation/llm/breaker.ts";
 import { PROVIDER_MAX_INFLIGHT, Semaphore, limiterFor, resetLimiters } from "../lib/generation/llm/limiter.ts";
-import { backoffMs, geminiRetryDelayMs, parseRetryAfter } from "../lib/generation/llm/retry.ts";
+import { backoffMs, equalJitterMs, geminiRetryDelayMs, parseRetryAfter } from "../lib/generation/llm/retry.ts";
 
 /**
  * Provayder chidamliligi qurilish bloklari (audit C28: EXT-04, EXT-09,
@@ -143,6 +143,15 @@ test("backoffMs: to'liq jitter — [0, base·2ⁿ) oralig'ida", () => {
   for (let i = 0; i < 200; i++) {
     const d = backoffMs(1, 500);
     assert.ok(d >= 0 && d < 1_000, `jitter oraliqdan chiqdi: ${d}`);
+  }
+});
+
+test("equalJitterMs: teng jitter — [base·2ⁿ/2, base·2ⁿ) oralig'ida", () => {
+  assert.equal(equalJitterMs(0, 2_000, () => 0), 1_000);
+  assert.ok(equalJitterMs(0, 2_000, () => 0.999) < 2_000);
+  for (let i = 0; i < 200; i++) {
+    const d = equalJitterMs(1, 2_000);
+    assert.ok(d >= 2_000 && d < 4_000, `teng jitter oraliqdan chiqdi: ${d}`);
   }
 });
 

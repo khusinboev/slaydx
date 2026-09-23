@@ -254,6 +254,27 @@ test("sintez yiqilsa xato ko'tariladi (jimgina qisqa fayl emas)", async () => {
   );
 });
 
+test("TTS zanjiriga ish MUDDATI uzatiladi; DeadlineError ish xatosi bo'lib ko'tariladi (audit EXT-10)", async () => {
+  const { DeadlineError } = await import("../lib/generation/llm/chain.ts");
+  const tool = podcastTool();
+  const meta = extractMeta(tool, PODCAST_VALUES);
+  const deadline = Date.now() + 600_000;
+  let seen: { deadline?: number } | null = null;
+  const chain = {
+    configured: () => true,
+    providersFor: () => ["azure" as const],
+    async synthesizeAll(_parts: unknown, o: { deadline?: number }) {
+      seen = o;
+      throw new DeadlineError("tts:uz", 0);
+    },
+  };
+  await assert.rejects(
+    () => buildAudioArtifact(tool, meta, PODCAST_VALUES, { deadline, complete: fakeComplete([goodScript()]), tts: chain as never, judge: false, polish: false }),
+    DeadlineError,
+  );
+  assert.equal(seen!.deadline, deadline, "synthesizeAll ish muddatini olishi kerak");
+});
+
 /* ══════════════════════════ qayta so'rov ══════════════════════════ */
 
 test("byudjetdan chiqqan ssenariy uchun BIR MARTALIK qayta so'rov", async () => {

@@ -16,6 +16,16 @@ export function backoffMs(attempt: number, baseMs: number, random: () => number 
   return Math.floor(Math.min(0.999_999, Math.max(0, random())) * cap);
 }
 
+/**
+ * TENG jitter (`cap/2 + random · cap/2`) — tarmoq uzilishi uchun: kutish
+ * kamida yarim asos, aks holda to'liq jitter uch urinishni ~2 s ichida
+ * yeb qo'yishi mumkin edi (AUDIT-19 smoke saboqi, review nit 1).
+ */
+export function equalJitterMs(attempt: number, baseMs: number, random: () => number = Math.random): number {
+  const cap = baseMs * 2 ** Math.max(0, attempt);
+  return Math.floor(cap / 2) + backoffMs(attempt, baseMs / 2, random);
+}
+
 export function parseRetryAfter(raw: string | null | undefined, now: number = Date.now()): number | undefined {
   if (!raw) return undefined;
   const secs = Number(raw);

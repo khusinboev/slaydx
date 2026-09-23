@@ -4,7 +4,7 @@
  */
 import { breakerFor } from "./llm/breaker";
 import { limiterFor } from "./llm/limiter";
-import { backoffMs, geminiRetryDelayMs, parseRetryAfter } from "./llm/retry";
+import { backoffMs, equalJitterMs, geminiRetryDelayMs, parseRetryAfter } from "./llm/retry";
 
 type Provider = "gemini" | "xai" | null;
 
@@ -186,7 +186,8 @@ async function withRetry<T>(
     if (!res.retryable) break;
     // Oxirgi urinishdan keyin uxlash — bekor vaqt (audit EXT-13).
     if (attempt === MAX_ATTEMPTS - 1) break;
-    const wait = res.retryAfterMs ?? backoffMs(attempt, 500);
+    // Tarmoq uzilishida teng jitter (kamida yarim asos), HTTP xatosida to'liq jitter.
+    const wait = res.retryAfterMs ?? (res.status === undefined ? equalJitterMs(attempt, 500) : backoffMs(attempt, 500));
     // Kutish + keyingi urinish byudjetga sig'masa — hozir voz kechamiz.
     if (Date.now() - started + wait + RETRY_MIN_LEFT_MS > budget) break;
     await sleep(wait);
@@ -362,8 +363,8 @@ async function completeGemini(
     // `fetch failed` sababi (`ENOTFOUND`/`EAI_AGAIN`/`ECONNRESET`) `cause` da — logda ko'rinsin.
     const message = describeNetError(e);
     console.warn("[gemini]", message);
-    // `aborted` — bizning timeout'imiz; qolgani tarmoq uzilishi.
-    const timedOut = /abort|timed?\s?out/i.test(message);
+    // `aborted` — FAQAT bizning timer'imiz; `ETIMEDOUT`/`UND_ERR_CONNECT_TIMEOUT` — tarmoq xatosi, qayta uriladi (review R2).
+    const timedOut = /abort/i.test(message);
     return { value: null, retryable: !timedOut, timedOut };
   } finally {
     clearTimeout(timer);
@@ -549,8 +550,8 @@ async function streamGemini(
   } catch (e) {
     const message = describeNetError(e);
     console.warn("[gemini:stream]", message);
-    // `aborted` — bizning timeout'imiz; qolgani tarmoq uzilishi.
-    const timedOut = /abort|timed?\s?out/i.test(message);
+    // `aborted` — FAQAT bizning timer'imiz; `ETIMEDOUT`/`UND_ERR_CONNECT_TIMEOUT` — tarmoq xatosi, qayta uriladi (review R2).
+    const timedOut = /abort/i.test(message);
     return { value: null, retryable: !timedOut, timedOut };
   }
 }
@@ -643,7 +644,8 @@ async function completeXai(
   } catch (e) {
     const message = describeNetError(e);
     console.warn("[xai]", message);
-    const timedOut = /abort|timed?\s?out/i.test(message);
+    // Faqat BIZNING timer abort'imiz; `ETIMEDOUT`/`UND_ERR_CONNECT_TIMEOUT` — tarmoq xatosi, qayta uriladi (review R2).
+    const timedOut = /abort/i.test(message);
     return { value: null, retryable: !timedOut, timedOut };
   } finally {
     clearTimeout(timer);

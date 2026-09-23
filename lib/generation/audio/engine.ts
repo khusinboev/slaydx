@@ -305,7 +305,13 @@ export const buildAudioArtifact: AudioBuilder = async (tool, meta, values, opts)
     return null;
   }
 
-  const run = await chain.synthesizeAll(parts, { lang: input.language, timeoutMs: Math.min(TTS_LIMITS.callTimeoutMs, Math.max(1_000, remainingMs(deadline))) });
+  /*
+   * `deadline` — zanjir har bo'lak/urinishdan oldin soatga qaraydi va vaqt
+   * tugasa `DeadlineError` bilan to'xtaydi (keyingi provayderda BUTUN
+   * skriptni qaytadan boshlamaydi, audit EXT-10). Xato ish xatosi bo'lib
+   * ko'tariladi → FAILED + pul qaytarish (boshqa TTS xatolari kabi).
+   */
+  const run = await chain.synthesizeAll(parts, { lang: input.language, timeoutMs: Math.min(TTS_LIMITS.callTimeoutMs, Math.max(1_000, remainingMs(deadline))), deadline });
   for (const u of run.usages) ttsMeter.add(u);
 
   stage(92, "Audio yig‘ilmoqda");
