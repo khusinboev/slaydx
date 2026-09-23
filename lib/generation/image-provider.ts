@@ -28,6 +28,16 @@ import { falProvider } from "./image-provider-fal";
 import { geminiProvider } from "./image-provider-gemini";
 import { pexelsProvider } from "./image-provider-pexels";
 import { pixabayProvider } from "./image-provider-pixabay";
+import { breakerFor } from "./llm/breaker";
+import { limiterFor, type Semaphore } from "./llm/limiter";
+
+/**
+ * Rasm manbasi 429 (kvota) bergandan keyin qancha vaqt so'ralmaydi.
+ * Pexels 200/soat, Pixabay 100/daqiqa: tugagan kvotani har slot uchun
+ * qayta urish faqat yuklama qo'shardi (audit EXT-06). Daqiqada bitta
+ * sinov so'rovi kvota qaytganini bilishga yetadi.
+ */
+export const IMAGE_QUOTA_COOLDOWN_MS = 60_000;
 
 /**
  * Rasm so'rovi — provayderga yetadigan HAMMA narsa.
@@ -204,12 +214,21 @@ export function chainProvider(providers: ImageProvider[], id: ImageProviderId = 
       let last: ImageResult = { ok: false, reason: "no-key", detail: "provayderlar sozlanmagan" };
       for (const provider of providers) {
         if (!provider.hasKey() || blockedIds.has(provider.id)) continue;
+        // Kvota saqlagichi (audit EXT-06): 429 dan keyin shu manba sovish
+        // davrida BUTUN jarayonda (boshqa dekalarda ham) so'ralmaydi.
+        const quota = breakerFor(`image:${provider.id}`, { cooldownMs: IMAGE_QUOTA_COOLDOWN_MS });
+        if (!quota.allow()) {
+          last = { ok: false, reason: "rate", detail: `${provider.id}: kvota — vaqtincha o'tkazib yuborildi` };
+          continue;
+        }
         const res = await provider.fetchImage({ ...ask, seen }, deadline);
         if (res.ok) {
+          quota.success();
           seen.add(res.image.url);
           return res;
         }
         if (res.reason === "blocked") blockedIds.add(provider.id);
+        if (res.reason === "rate") quota.trip(IMAGE_QUOTA_COOLDOWN_MS, "429 kvota");
         last = res;
       }
       return last;
@@ -237,7 +256,33 @@ export function chainProvider(providers: ImageProvider[], id: ImageProviderId = 
  */
 export function pickProvider(meta?: Pick<DocMeta, "toolId"> | null): ImageProvider {
   const toolId: ToolId | undefined = meta?.toolId;
-  if (toolId === "pro-slide") return geminiProvider;
+  if (toolId === "pro-slide") return limitedProvider(geminiProvider);
   if (toolId === "slide") return chainProvider([pexelsProvider, pixabayProvider], "stock");
   return chainProvider([pexelsProvider, pixabayProvider, falProvider]);
+}
+
+/**
+ * Provayderni jarayon bo'yicha CHEKLAGICH ortiga qo'yadi (audit EXT-09,
+ * SCALE-06): pro-slayd bitta dekada 5 yo'lakda rasm so'raydi, bir necha
+ * deka birga yursa Gemini rasm kvotasi to'lib 429 → `rate` → rasmsiz slayd
+ * va pul qaytarish bo'lardi. Ortiqcha so'rov navbatda kutadi; navbatda
+ * `deadline - minMs` gacha joy bo'shamasa — `timeout` (so'rov yuborilmaydi,
+ * `attachSlideImages` uni `skipped` deb sanaydi).
+ */
+export function limitedProvider(provider: ImageProvider, limiter: Semaphore = limiterFor(`${provider.id}-image`)): ImageProvider {
+  return {
+    id: provider.id,
+    minMs: provider.minMs,
+    hasKey: () => provider.hasKey(),
+    async fetchImage(ask: ImageAsk, deadline?: number): Promise<ImageResult> {
+      const maxWait = deadline === undefined ? undefined : deadline - Date.now() - provider.minMs;
+      const release = await limiter.acquire(maxWait);
+      if (!release) return { ok: false, reason: "timeout", detail: "provayder navbatida vaqt tugadi" };
+      try {
+        return await provider.fetchImage(ask, deadline);
+      } finally {
+        release();
+      }
+    },
+  };
 }
