@@ -86,6 +86,15 @@ services:
       FILE_TTL_HOURS: ${FILE_TTL_HOURS:-72}
       SESSION_COOKIE_SAMESITE: ${SESSION_COOKIE_SAMESITE:-lax}
       SESSION_TTL_DAYS: ${SESSION_TTL_DAYS:-30}
+      # Bepul LLM endpointlari (reja, UDK, «Tuzatish», «Hammasini tuzatish») —
+      # sarf shifti va o'chirish tugmasi (prod-readiness C10). Bo'sh →
+      # `lib/server/env.ts` standarti. `tests/free-llm.test.mts` qulflaydi.
+      FREE_LLM_DISABLED: ${FREE_LLM_DISABLED:-}
+      FREE_LLM_DAILY_OUTLINE: ${FREE_LLM_DAILY_OUTLINE:-}
+      FREE_LLM_DAILY_UDK: ${FREE_LLM_DAILY_UDK:-}
+      FREE_LLM_DAILY_REWRITE: ${FREE_LLM_DAILY_REWRITE:-}
+      FREE_LLM_DAILY_POLISH: ${FREE_LLM_DAILY_POLISH:-}
+      FREE_LLM_DAILY_GLOBAL: ${FREE_LLM_DAILY_GLOBAL:-}
       # Reverse proxy ortida turibmiz — `x-forwarded-for` ga ishonamiz,
       # aks holda IP chegarasi hamma so'rovni bitta IP deb hisoblardi.
       TRUST_PROXY: ${TRUST_PROXY:-true}

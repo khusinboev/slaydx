@@ -195,6 +195,23 @@ export const env = {
   /** Ichki xizmat chaqiruvlari (cron, worker) uchun kalit. */
   cronSecret: str("CRON_SECRET"),
 
+  /**
+   * BEPUL LLM endpointlari (reja, UDK, «Tuzatish», «Hammasini tuzatish») —
+   * sarf shifti (prod-readiness C10). Kredit yechilmaydi, shuning uchun
+   * provayder puli faqat shu chegaralar bilan to'siladi. Kun — Toshkent
+   * vaqti bilan; siyosat va standartlar `lib/server/spend.ts` da.
+   */
+  freeLlm: {
+    /** `true` — to'rttala endpoint darhol 503, provayder chaqirilmaydi. */
+    disabled: bool("FREE_LLM_DISABLED", false),
+    dailyOutline: int("FREE_LLM_DAILY_OUTLINE", 20),
+    dailyUdk: int("FREE_LLM_DAILY_UDK", 20),
+    dailyRewrite: int("FREE_LLM_DAILY_REWRITE", 30),
+    dailyPolish: int("FREE_LLM_DAILY_POLISH", 10),
+    /** Barcha foydalanuvchilar bo'yicha kunlik birlik (vazn bilan) — xarajat shifti. */
+    dailyGlobal: int("FREE_LLM_DAILY_GLOBAL", 20_000),
+  },
+
   worker: {
     /** Bitta processda parallel bajariladigan ish soni. */
     concurrency: int("WORKER_CONCURRENCY", 2),
