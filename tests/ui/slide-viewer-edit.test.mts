@@ -5,6 +5,7 @@ import { createElement as h, act, useState } from "react";
 import { render, fireEvent, screen, cleanup } from "@testing-library/react";
 import { SlideViewer } from "../../components/viewers/SlideViewer.tsx";
 import { EditActions, type EditActionsState } from "../../components/files/EditActions.tsx";
+import { CONFIRM_MIN_MS } from "../../components/overlays/useConfirmClick.ts";
 import { useSlideEdit, type SlideEdit } from "../../components/files/useSlideEdit.ts";
 import { applyDocOps, type DocOp } from "../../lib/generation/slide-edit.ts";
 import type { AcademicDoc } from "../../lib/generation/types.ts";
@@ -408,6 +409,8 @@ test("o'chirish IKKI bosishda, bitta slaydli dekada tugma o'chiq", async () => {
   const btn = screen.getByText("O‘chirish");
   fireEvent.click(btn);
   assert.equal(saveBtn(), null, "birinchi bosish faqat tasdiq so'raydi");
+  // FE-07: tasdiq qo'sh bosish emas — ongli ikkinchi bosish.
+  await pause(CONFIRM_MIN_MS + 30);
   fireEvent.click(screen.getByText("Rostdan?"));
   await act(async () => {
     fireEvent.click(saveBtn()!);
@@ -494,6 +497,7 @@ test("«Asliga qaytarish» IKKI bosishda saqlanmagan o'zgarishlarni bekor qiladi
   fireEvent.click(screen.getByText("Asliga qaytarish"));
   assert.ok(screen.getByText("Rostdan?"), "birinchi bosish faqat tasdiq so'raydi");
   assert.ok(saveBtn(), "hali bekor qilinmagan");
+  await pause(CONFIRM_MIN_MS + 30);
   await act(async () => {
     fireEvent.click(screen.getByText("Rostdan?"));
   });
@@ -524,6 +528,7 @@ test("«Asliga qaytarish» faqat saqlanMAGAN tahrirni tashlaydi — saqlangani q
   moveRight();
   // Ikki bosish IKKI alohida hodisa: birinchisi «Rostdan?» ni chizadi, ikkinchisi bekor qiladi.
   fireEvent.click(screen.getByText("Asliga qaytarish"));
+  await pause(CONFIRM_MIN_MS + 30);
   fireEvent.click(screen.getByText("Rostdan?"));
   await pause(50);
   assert.deepEqual(

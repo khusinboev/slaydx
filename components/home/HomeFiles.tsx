@@ -10,6 +10,7 @@ import { TOOL_BY_ID } from "@/lib/tools";
 import { FILE_FILTERS, FILE_SORTS, useUi } from "@/lib/ui";
 import { cn } from "@/lib/cn";
 import { FilePreview } from "./FilePreview";
+import { confirmAccepted, confirmClock } from "../overlays/useConfirmClick";
 
 export function HomeFiles() {
   const sessionChecked = useAppStore((s) => s.sessionChecked);
@@ -123,16 +124,21 @@ export function HomeFiles() {
    */
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const armedAt = useRef(0);
   useEffect(() => () => {
     if (confirmTimer.current) clearTimeout(confirmTimer.current);
   }, []);
-  function askDelete(id: string) {
-    if (confirmTimer.current) clearTimeout(confirmTimer.current);
+  function askDelete(id: string, e?: { detail?: number }) {
     if (confirmId === id) {
+      // FE-07: qo'sh bosishning ikkinchi yarmi tasdiq emas (`useConfirmClick` bilan bitta qoida).
+      if (!confirmAccepted(armedAt.current, e)) return;
+      if (confirmTimer.current) clearTimeout(confirmTimer.current);
       setConfirmId(null);
       void onDelete(id);
       return;
     }
+    if (confirmTimer.current) clearTimeout(confirmTimer.current);
+    armedAt.current = confirmClock();
     setConfirmId(id);
     confirmTimer.current = setTimeout(() => setConfirmId(null), 3000);
   }
@@ -331,7 +337,7 @@ export function HomeFiles() {
                           ? "text-destructive font-medium"
                           : "text-muted-foreground hover:text-destructive",
                       )}
-                      onClick={() => askDelete(g.id)}
+                      onClick={(e) => askDelete(g.id, e)}
                       aria-label={
                         confirmId === g.id
                           ? `${g.topic} — o'chirishni tasdiqlang`
