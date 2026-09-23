@@ -84,6 +84,38 @@ test("docker-compose: TTS ovoz zanjiri o'zgaruvchilari (uz/ru/en) ikkala servisd
 });
 
 /**
+ * INFRA-09: `lib/brand.ts` `NEXT_PUBLIC_BRAND_NAME`/`NEXT_PUBLIC_BRAND_LOGO`ni
+ * `process.env`dan to'g'ridan-to'g'ri o'qiydi (Next.js build-vaqtidagi inline
+ * qilish worker'ga tegishli emas — u oddiy `tsx` processi). PPTX/DOCX
+ * metama'lumotini (`render-pptx.ts` — `pptx.author`) va navbatdagi boshqa
+ * brendlash aynan WORKER ichida chiziladi, lekin ilgari bu ikkalasi faqat
+ * `web` blokida bor edi — nom o'zgarsa generatsiya qilingan fayl eski nom
+ * bilan chiqib qolardi (compose-env qulfi qoldirgan tuynuk turlaridan biri,
+ * `LLM_JUDGE`/`OPENALEX_API_KEY` bilan bir xil sinf).
+ *
+ * Mutatsiya: `worker` blokidan `NEXT_PUBLIC_BRAND_NAME`/`_LOGO` qatorlarini
+ * olib tashlang — test qizaradi.
+ */
+test("docker-compose: NEXT_PUBLIC_BRAND_NAME/_LOGO web va worker'da bir xil standart bilan", () => {
+  const yaml = readFileSync(new URL("../docker-compose.yml", import.meta.url), "utf8");
+  const defaults: Record<string, string> = {
+    NEXT_PUBLIC_BRAND_NAME: "SlaydX",
+    NEXT_PUBLIC_BRAND_LOGO: "/logo.png",
+  };
+  for (const service of ["web", "worker"]) {
+    const block = envBlock(yaml, service);
+    for (const [k, def] of Object.entries(defaults)) {
+      const escaped = def.replace(/[/.]/g, "\\$&");
+      assert.match(
+        block,
+        new RegExp(`^\\s+${k}: \\$\\{${k}:-${escaped}\\}$`, "m"),
+        `${service}: ${k} compose'da (standart ${def} bilan) uzatilmaydi`,
+      );
+    }
+  }
+});
+
+/**
  * W2-D1 / C18 (INFRA-04, OBS-10, INFRA-15): resurs chegarasi va log
  * aylanishi HAR service'da bo'lishi kerak — box uchta loyiha bilan umumiy
  * (`.claude/deploy.md`), chegarasiz konteyner qo'shnilarni OOM bilan
@@ -157,6 +189,40 @@ test("docker-compose: web va worker'da init: true bor", () => {
   const yaml = readFileSync(new URL("../docker-compose.yml", import.meta.url), "utf8");
   assert.match(envBlock(yaml, "web"), /^\s+init: true$/m, "web: init: true yo'q");
   assert.match(envBlock(yaml, "worker"), /^\s+init: true$/m, "worker: init: true yo'q");
+});
+
+/**
+ * W3-E (`lib/server/db.ts`, C35 kelishuvi): baza so'rov/ulanish
+ * shiftlari — kod standarti mos ravishda 30000/5000 ms. Bu ikkalasi
+ * `env.ts` emas, to'g'ridan-to'g'ri `db.ts` o'qishi rejalashtirilgan
+ * (W3-E o'z paketida ulaydi) — bu test faqat compose PLUMBING'ini
+ * qulflaydi (`LLM_JUDGE`/`OPENALEX_API_KEY` sinfidagi «.env'da bor,
+ * konteynerda yo'q» tuynugi takrorlanmasin), `db.ts`ning o'zini emas.
+ */
+test("docker-compose: DATABASE_STATEMENT_TIMEOUT_MS/DATABASE_CONNECT_TIMEOUT_MS web va worker'ga uzatiladi", () => {
+  const yaml = readFileSync(new URL("../docker-compose.yml", import.meta.url), "utf8");
+  for (const service of ["web", "worker"]) {
+    const block = envBlock(yaml, service);
+    for (const k of ["DATABASE_STATEMENT_TIMEOUT_MS", "DATABASE_CONNECT_TIMEOUT_MS"]) {
+      assert.match(block, new RegExp(`^\\s+${k}: \\$\\{${k}:-\\}$`, "m"), `${service}: ${k} compose'da uzatilmaydi`);
+    }
+  }
+});
+
+/**
+ * DEPS-08 (W3-I): admin telefon ro'yxati ilgari `lib/server/admin-phones.ts`da
+ * QATTIQ YOZILGAN edi — public repo'da kim admin ekani ko'rinib turardi.
+ * Endi `process.env.ADMIN_PHONES`dan o'qiladi; bu test faqat compose
+ * PLUMBING'ini qulflaydi (o'zgaruvchi `.env`da bor-u, konteynerga
+ * YETIB BORMASA — admin ro'yxati bo'sh qolib, hech kim admin panelga
+ * kirolmay qoladi — jim, aniqlash qiyin nosozlik).
+ */
+test("docker-compose: ADMIN_PHONES web va worker'ga uzatiladi", () => {
+  const yaml = readFileSync(new URL("../docker-compose.yml", import.meta.url), "utf8");
+  for (const service of ["web", "worker"]) {
+    const block = envBlock(yaml, service);
+    assert.match(block, /^\s+ADMIN_PHONES: \$\{ADMIN_PHONES:-\}$/m, `${service}: ADMIN_PHONES compose'da uzatilmaydi`);
+  }
 });
 
 /**

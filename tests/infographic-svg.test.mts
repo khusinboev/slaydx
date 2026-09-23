@@ -117,7 +117,9 @@ test("SVG: shrift ro'yxati worker konteyneridagi paketlarga tayanadi", () => {
   assert.ok(/Noto Sans/.test(INFOGRAPHIC_FONT), "kirill/kengaytirilgan lotin uchun Noto Sans kerak");
   assert.ok(svgOf().includes(`font-family="${INFOGRAPHIC_FONT.replace(/&/g, "&amp;")}"`));
   const df = readFileSync(new URL("../Dockerfile", import.meta.url), "utf8");
-  const worker = df.slice(df.indexOf("FROM node:22-alpine AS worker"));
+  // Base image endi `ARG NODE_IMAGE` orqali qulflangan (INFRA-14/DEPS-05) —
+  // qattiq yozilgan "node:22-alpine" emas, `${NODE_IMAGE}` o'zgaruvchisi.
+  const worker = df.slice(df.search(/^FROM \S+ AS worker$/m));
   for (const pkg of ["ttf-liberation", "font-noto"]) {
     assert.ok(worker.includes(pkg), `worker bosqichida ${pkg} yo'q — plakat matni «□□□» chiqadi`);
   }

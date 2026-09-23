@@ -1,0 +1,83 @@
+# CI (INFRA-13): oldin testlar FAQAT dasturchi noutbukida, prod build esa
+# HAR DEPLOY'DA umumiy VPS'da (uch loyiha bilan bir box, `.claude/deploy.md`)
+# ishlardi — birlashtirish (merge) oldidan hech qanday darvoza yo'q edi.
+#
+# Bu workflow HECH QANDAY sirni talab qilmaydi (brief talabi) — barcha
+# testlar `fetch`ni stub qiladi (`CLAUDE.md` testlash standarti), DATABASE_URL
+# esa shu yerdagi vaqtinchalik Postgres xizmat konteyneriga ishora qiladi.
+# `SESSION_SECRET` ham kerak emas — `lib/server/env.ts` faqat `NODE_ENV=
+# production`da uni talab qiladi, CI esa hech qachon prod rejimida
+# ishlamaydi.
+#
+# Atayilab QILINMAGAN: prod image qurish/push qilish. Bu build hali ham
+# `deploy.sh` orqali prod box'da bo'ladi (INFRA-13 topilmasi buni ham
+# tavsiya qiladi — "image'ni prod box'dan chiqarish" — lekin bu alohida,
+# kattaroq o'zgarish: registry, `deploy.sh`ni `build`dan `pull`ga
+# almashtirish. Hozircha faqat "birlashtirish oldidan tekshiruv" darvozasi.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Bitta branch/PR uchun eskirgan ishga tushirishni bekor qiladi — bir nechta
+# push ketma-ket kelsa, faqat oxirgisi tugagunча ishlaydi.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    services:
+      postgres:
+        # `docker-compose.yml`dagi pin bilan bir xil versiya (INFRA-14/DEPS-05).
+        image: postgres:16.15-alpine3.24
+        env:
+          POSTGRES_USER: slaydx
+          POSTGRES_PASSWORD: slaydx
+          POSTGRES_DB: slaydx
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U slaydx"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      # Test bazasi — throwaway, xizmat konteyneri har run'da yangidan
+      # yaratiladi. `.env.local` bu yerda YO'Q (gitignore'da, checkout'da
+      # ham topilmaydi), shuning uchun provayder kalitlarining sizib
+      # chiqishi (`tests/helpers/hermetic-env.mts`) bu yerda muammo emas —
+      # baribir ular process.env'da yo'q.
+      DATABASE_URL: postgres://slaydx:slaydx@localhost:5432/slaydx
+      NEXT_TELEMETRY_DISABLED: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      - run: npm run lint
+
+      # `--test-concurrency=2` `package.json` skriptlarida allaqachon bor
+      # (CLAUDE.md qoidasi) — GitHub Actions standart runner'i 4 yadroli,
+      # lekin loyiha konvensiyasini shu yerda ham buzmaymiz.
+      - run: npm run test
+      - run: npm run test:viewer
+      - run: npm run test:ui
+
+      # `scripts/guard-build.mjs` `process.env.CI` bo'lsa portni tekshirmasdan
+      # o'tadi (dev server bu runner'da baribir yo'q).
+      - run: npm run build

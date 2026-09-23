@@ -126,6 +126,71 @@ ning standart `proxy_read_timeout 60s` ga sig'masligi mumkin.
 uchun `proxy_read_timeout 120s;` qo'ying, `nginx -t` → `systemctl
 reload nginx` (reload — xavfsiz, boshqa saytlarga uzilish bermaydi).
 
+Bu qiymat endi repo'da ham bor — `deploy/nginx/slaydx.conf.example`
+(INFRA-11, prod-readiness W3). Haqiqiy `/etc/nginx/sites-available/
+slaydx` bilan solishtirib turing (`diff`), TLS yo'llari/`server_name`
+host'ga xos qoladi.
+
+### 2b. Uzilish nima uchun hali ham bor va nima uni kamaytiradi (INFRA-07)
+
+`deploy.sh` `docker compose -p slaydx build && up -d` qiladi — bitta
+`web` nusxasi bor (Swarm/tashqi load balancer yo'q), shuning uchun
+Compose eski konteynerni albatta YANGISI tayyor bo'lishidan OLDIN
+to'xtatadi. nginx'ning bitta upstream'i (`127.0.0.1:3000`) bor va
+ikkinchisiga zaxira qilib o'tolmaydi — "eski to'xtadi" bilan "yangi
+tinglay boshladi va healthcheck'dan o'tdi" orasidagi oynada kelgan
+so'rov 502 (connection refused) oladi. Bu HALI HAM shunday — prod-
+readiness W3 buni yo'qotmadi, faqat OYNANI TORAYTIRDI va uning ICHIDA
+nima yo'qolishini kamaytirdi:
+
+- **`stop_grace_period: 60s`** (`web`, `docker-compose.yml`) — SIGTERM
+  kelganda Next endi ISHLAYOTGAN so'rovlarni tugatishga vaqt topadi
+  (`server.close()`, standalone server o'zi shunday drain qiladi) —
+  ilgari standart 10s bunday uzoq (~45–60s) tahrir so'rovlarini
+  SIGKILL bilan kesib tashlardi (INFRA-08). Bu YANGI konteynerning
+  tezroq ko'tarilishiga yordam BERMAYDI — faqat ESKISI to'xtaganda
+  hech narsa YARIM YOZILGAN holda qolmasligini kafolatlaydi.
+- **`HEALTHCHECK`/`healthcheck:`** (`web` — `/api/health`, `start-
+  period: 20s`; `worker` — `/tmp/slaydx-worker-alive` fayl yoshi) va
+  `deploy.sh`ning `/api/health`ni 2 daqiqagacha so'rashi — deploy
+  skripti "tayyor" deb ATAYLAB YOLG'ON aytmaydi: konteyner "Up" bo'lib
+  ko'ringani bilan hali so'rovlarni tinglamasligi mumkin edi (Next
+  `standalone` ishga tushishi, migratsiya `ensureMigrated` bir necha
+  soniya olishi mumkin) — polling shu oralig'ini operatorga KO'RSATADI
+  (log'da "kutilmoqda"), jim qolib false-positive "muvaffaqiyatli
+  deploy" bermaydi. Bu ham uzilish OYNASINI yo'qotmaydi, faqat uni
+  YASHIRMAYDI.
+
+**To'liq rolling/blue-green uchun (hozir YO'Q, keyingi qadam bo'lishi
+mumkin, ATAYLAB shu paketda qilinmadi — brief "yangi infra yo'q"
+deydi):**
+
+1. Ikkinchi `web` nusxasi (`docker compose -p slaydx up -d --no-deps
+   --scale web=2 web`) — ikkalasi HAM eskisi bilan bir vaqtda ishlaydi,
+   yangisi healthcheck'dan o'tgach eskisi olib tashlanadi. Compose'ning
+   o'zi buni Swarm'siz ham qila oladi, lekin nginx bitta upstream'ga
+   yozilgan bo'lgani uchun ikkinchi nusxa hozircha FOYDASIZ — (2) ham
+   kerak.
+2. nginx'da bitta emas, IKKITA upstream (`upstream slaydx { server
+   127.0.0.1:3000; server 127.0.0.1:3001 backup; }` yoki teng
+   og'irlikda) — yoki oldida yengil LB (Caddy/Traefik) konteynerlarni
+   avtomatik kashf qiladigan. Bu `docker-compose.yml`da portlarni ham
+   o'zgartirishni talab qiladi (`127.0.0.1:3000`/`127.0.0.1:3001`).
+3. Sessiya/ulanish drain qoidasi — ikkinchi nusxa ko'tarilgach eskisiga
+   YANGI so'rov yubormaslik, lekin ESKI ulanishlar tugaguncha kutish
+   (nginx `proxy_next_upstream`/graceful worker shutdown bilan qo'lda
+   boshqariladi, avtomatik emas).
+4. `deploy.sh`ning o'zi shu ikki-bosqichli tsiklga yoziladi: yangi
+   nusxa → sog'lom kutish → nginx'ni yangisiga ko'rsatish → eskisini
+   olib tashlash — hozirgi `build && up -d` bitta buyruqli, oddiy,
+   lekin ATOMIK EMAS.
+
+Bularsiz ham hozirgi holat (60s grace + health poll) amaliy uzilishni
+(taxminan) ~1-3 soniyagacha (yangi konteyner `start-period` ichida
+tayyor bo'lgunga qadar) qisqartiradi — INFRA-07 topilmasi buni
+"qabul qilingan tradeoff, hujjatlashtirilsin" deb belgilagan, shu
+bo'lim o'sha hujjat.
+
 ### 3. Tekshirish (deploydan keyin, har doim)
 
 ```bash

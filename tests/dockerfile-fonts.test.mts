@@ -28,7 +28,9 @@ test("Dockerfile: lotin/kirill (font-noto), CJK (font-noto-cjk) va arab (font-no
  */
 test("Dockerfile: worker bosqichida ham lotin/kirill shriftlari (ttf-liberation, font-noto) va fontconfig o'rnatiladi", () => {
   const df = readFileSync(new URL("../Dockerfile", import.meta.url), "utf8");
-  const start = df.indexOf("FROM node:22-alpine AS worker");
+  // Base image endi `ARG NODE_IMAGE` orqali qulflangan (INFRA-14/DEPS-05) —
+  // qattiq yozilgan "node:22-alpine" emas, `${NODE_IMAGE}` o'zgaruvchisi.
+  const start = df.search(/^FROM \S+ AS worker$/m);
   assert.ok(start >= 0, "worker bosqichi yo'q");
   const worker = df.slice(start);
   const apk = worker.split("\n").filter((l) => /^RUN apk add/.test(l)).join("\n");
