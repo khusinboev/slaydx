@@ -59,7 +59,7 @@ const TECH_WORDS =
 const TECH_PREFIX = /^\s*(\[|[a-z]+[A-Z]\w*:|[a-z]+(-[a-z]+)+:|[45]\d\d\b|HTTP\b)/;
 /** O'zbekcha matn belgisi: o'/g' (har xil apostrof) yoki tez-tez uchraydigan so'z. */
 const UZBEK =
-  /[oOgG][ʻ‘'’`][a-zA-Z]|\b(qayta|topilmadi|yaratilmadi|yozilmadi|tugadi|sozlanmagan|kredit|qaytaril\w*|emas|kerak|juda|hujjat\w*|sahifa\w*|vosita\w*|xatolik|urinib|yetmadi)\b|noma[ʻ‘'’]lum/i;
+  /[oOgG][ʻ‘'’`][a-zA-Z]|\b(qayta|topilmadi|yaratilmadi|yozilmadi|tugadi|sozlanmagan|kredit|qaytaril\w*|emas|kerak|juda|hujjat\w*|sahifa\w*|vosita\w*|xatolik|urinib|yetmadi|yozing|tavsif\w*)\b|noma[ʻ‘'’]lum/i;
 
 /** Matn foydalanuvchiga ko'rsatishga yaroqlimi (o'zbekcha va texnik izsiz). */
 export function isUserSafeText(text: string): boolean {

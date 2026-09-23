@@ -94,6 +94,43 @@ test("log(): URL dagi kalit, Bearer token, Authorization maydoni va telefon yash
   assert.match(row.msg, /api\.openalex\.org\/works\?search=x/);
 });
 
+test("redact(): Telegram bot tokeni `/bot<TOKEN>/` URL ichida va yalang'och holda (review R1)", (t) => {
+  const TOKEN = "7123456789:AAH" + "x".repeat(32);
+  const url = `https://api.telegram.org/bot${TOKEN}/sendMessage`;
+  // MUTATSIYA: `\b` chegarasi qaytarilsa — «bot» dan keyin mos kelmaydi, token qoladi.
+  assert.ok(!redact(url).includes(TOKEN.slice(11)), `URL dagi token qoldi: ${redact(url)}`);
+  assert.match(redact(url), /api\.telegram\.org\/bot\[REDACTED\]\/sendMessage/);
+  assert.ok(!redact(`token ${TOKEN}`).includes(TOKEN.slice(11)));
+  const lines = capture(t);
+  log("error", "fetch failed", { url, err: new Error(`request to ${url} failed`) });
+  assert.ok(!lines[0].includes(TOKEN.slice(11)), "log() da token qoldi");
+});
+
+test("redact(): URL dagi login:parol (postgres://user:pass@host) yashiriladi (review R2)", (t) => {
+  const dbUrl = "postgres://slaydx:S3cr3tPass@db:5432/slaydx";
+  // MUTATSIYA: userinfo qoidasi o'chirilsa — parol qoladi.
+  assert.equal(redact(dbUrl), "postgres://slaydx:[REDACTED]@db:5432/slaydx");
+  assert.equal(redact("x https://u:p%40ss@h.example/a"), "x https://u:[REDACTED]@h.example/a");
+  const lines = capture(t);
+  log("error", `ulanish yiqildi ${dbUrl}`, { databaseUrl: dbUrl, err: new Error(`connect ${dbUrl}`) });
+  assert.ok(!lines[0].includes("S3cr3tPass"), "log() da parol qoldi");
+});
+
+test("redact(): matn ko'rinishidagi `password=`/`password:`, `Cookie:`/`Set-Cookie:`, JSON `\"token\":\"…\"`", () => {
+  const cases = [
+    "password=hunter2secret",
+    "password: hunter2secret",
+    "Cookie: slaydx_session=hunter2secret; other=1",
+    "Set-Cookie: slaydx_session=hunter2secret; Path=/; HttpOnly",
+    '{"token":"hunter2secret","ok":1}',
+    "session=hunter2secret",
+  ];
+  for (const c of cases) {
+    // MUTATSIYA: tegishli qoida o'chirilsa — sir qoladi.
+    assert.ok(!redact(c).includes("hunter2secret"), `sir qoldi: ${redact(c)}`);
+  }
+});
+
 test("redact(): oddiy matn va raqamlar buzilmaydi", () => {
   assert.equal(redact("Ish vaqti tugadi (660 s), perform_time 1727000000000"), "Ish vaqti tugadi (660 s), perform_time 1727000000000");
   assert.equal(redact("buyurtma 3f2c9a1e-0000-4000-8000-000000000001"), "buyurtma 3f2c9a1e-0000-4000-8000-000000000001");

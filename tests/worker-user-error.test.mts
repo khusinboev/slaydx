@@ -81,6 +81,8 @@ test("userMessage: dvigatelning ATAYIN yozgan o'zbekcha xabari o'zgarmaydi", () 
     "Ish vaqti tugadi",
     "Noma'lum vosita",
     "Navbat juda uzun edi — pul qaytarildi",
+    // `image-studio.ts` — foydalanuvchi validatsiyasi (review nit 1).
+    "Rasm uchun tavsif yozing",
   ];
   for (const m of keep) assert.equal(userMessage(new Error(m)), m);
   assert.equal(userMessage(new UserFacingError("Maxsus xabar")), "Maxsus xabar");
@@ -192,6 +194,23 @@ test("worker: xom xato foydalanuvchiga chiqmaydi, tafsilot jurnalda (jobId, atte
     const fail = rows.find((r) => r.level === "error" && r.jobId === id && r.err)!;
     assert.equal(fail.provider, "gemini");
     assert.match(String((fail.err as Row).message), /Permission denied/);
+  });
+
+  await t.test("inline worker: ish so'rov kontekstini (reqId/userId) MEROS olmaydi (review nit 3)", async (tt) => {
+    const { withLogContext } = await import("../lib/server/log.ts");
+    let res!: Awaited<ReturnType<typeof runWith>>;
+    await withLogContext({ reqId: "req-stale-123", userId: "999999" }, async () => {
+      res = await runWith(tt, async () => {
+        throw new Error("Tarjima qilinadigan matn topilmadi. Kredit qaytariladi.");
+      });
+    });
+    const jobLines = res.rows.filter((r) => r.jobId === res.id);
+    assert.ok(jobLines.length > 0);
+    // MUTATSIYA: `runJob` yangi kontekst ochmasa — eski so'rov reqId si har ish qatoriga yopishadi.
+    for (const r of jobLines) {
+      assert.equal(r.reqId, undefined, `eski reqId meros qoldi: ${JSON.stringify(r)}`);
+      assert.equal(r.userId, res.uid);
+    }
   });
 
   await t.test("dvigatelning o'zbekcha xabari foydalanuvchiga aynan boradi", async (tt) => {

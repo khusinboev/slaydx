@@ -46,6 +46,18 @@ export function withLogContext<T>(ctx: LogContext, fn: () => T): T {
   return store.run({ ...parent, ...ctx }, fn);
 }
 
+/**
+ * `fn` ni HECH QANDAY meros kontekstsiz, `ctx` bilan yangidan bajaradi.
+ *
+ * Worker ishlari uchun (review nit 3): inline worker birinchi marta
+ * `POST /api/generations` ichidan uyg'onishi mumkin — `withLogContext`
+ * ota kontekstni qo'shib olgani uchun, aks holda o'sha so'rovning
+ * `reqId`/`userId` si keyingi HAR ish qatoriga yopishib qolardi.
+ */
+export function withFreshLogContext<T>(ctx: LogContext, fn: () => T): T {
+  return store.run({ ...ctx }, fn);
+}
+
 /** Joriy kontekstga maydon qo'shadi (masalan `requireUser` → `userId`). Kontekst yo'q bo'lsa — hech narsa. */
 export function addLogContext(ctx: LogContext): void {
   const cur = store.getStore();
@@ -65,23 +77,32 @@ const REDACTED = "[REDACTED]";
  * `SECRET_KEY` bilan bir oila; bu yerda `key` ichida kelganlari ham —
  * `apiKey`, `x-api-key`, `secretKey`).
  */
-const SECRET_FIELD = /^(authorization|cookie|set-cookie|password|passwd|secret|token|sign_string|sign|signature|key)$|(api[_-]?key|secret[_-]?key|access[_-]?token|auth[_-]?token|bot[_-]?token)$/i;
+const SECRET_FIELD = /^(authorization|cookie|set-cookie|password|passwd|secret|token|sign_string|sign|signature|key|session|sessionid|session_id)$|(api[_-]?key|secret[_-]?key|access[_-]?token|auth[_-]?token|bot[_-]?token)$/i;
 
 /** Matn ichidagi sir shakllari — tartib muhim (avval aniqroq). */
 const TEXT_RULES: Array<[RegExp, string | ((m: string, ...g: string[]) => string)]> = [
+  // URL ichidagi login:parol — `postgres://user:pass@host` (review R2). Foydalanuvchi nomi qoladi.
+  [/(\b[a-z][a-z0-9+.-]*:\/\/[^\s:/@]+:)[^\s@/]+@/gi, `$1${REDACTED}@`],
+  // Telegram bot tokeni — `/bot<TOKEN>/` URL ichida ham (u yerda `\b` yo'q: «bot7123…», review R1).
+  [/(?<![0-9])\d{6,12}:[A-Za-z0-9_-]{30,}/g, REDACTED],
   // `Authorization: Bearer xxx`, `Basic xxx`, `Bearer xxx` — qiymat yashiriladi, sxema qoladi.
   [/\b(Bearer|Basic)\s+[A-Za-z0-9._~+/=-]{4,}/gi, (_m, scheme: string) => `${scheme} ${REDACTED}`],
-  // URL/forma parametrlari: `?key=…`, `&api_key=…`, `token=…`, `sign_string=…`.
+  // `Cookie:` / `Set-Cookie:` sarlavhasi matn ko'rinishida — butun qiymat.
+  [/\b((?:set-)?cookie)\s*:\s*[^\r\n]+/gi, (_m, name: string) => `${name}: ${REDACTED}`],
+  // JSON satr ichida: `"token":"…"`, `"password": "…"`.
   [
-    /([?&;\s]|^)((?:api[_-]?)?key|access_token|token|secret|sign_string|password|signature)=([^&\s"'#]+)/gi,
-    (_m, pre: string, name: string) => `${pre}${name}=${REDACTED}`,
+    /("(?:(?:api[_-]?)?key|access_token|token|secret|password|passwd|session|sessionid|sign_string|signature|authorization)"\s*:\s*)"[^"]*"/gi,
+    `$1"${REDACTED}"`,
+  ],
+  // URL/forma parametrlari va `nom: qiymat`: `?key=…`, `&api_key=…`, `token=…`, `password: …`, `session=…`.
+  [
+    /([?&;\s]|^)((?:api[_-]?)?key|access_token|token|secret|sign_string|password|passwd|signature|session|sessionid)(=|:\s*)([^&\s"'#;,]+)/gi,
+    (_m, pre: string, name: string, sep: string) => `${pre}${name}${sep}${REDACTED}`,
   ],
   // Google API kaliti (`AIza` + 35), Anthropic/OpenRouter/OpenAI (`sk-…`), xAI (`xai-…`).
   [/AIza[0-9A-Za-z_-]{20,}/g, REDACTED],
   [/\bsk-[A-Za-z0-9_-]{8,}/g, REDACTED],
   [/\bxai-[A-Za-z0-9_-]{8,}/g, REDACTED],
-  // Telegram bot tokeni: `123456789:AA…` (35 belgi).
-  [/\b\d{6,12}:[A-Za-z0-9_-]{30,}/g, REDACTED],
   // O'zbekiston raqami (+998 XX XXX XX XX, bo'shliq/tire bilan yoki yopishiq) — oxirgi 2 raqam qoladi.
   [/(?<![\w-])\+?998[\s-]?\(?\d{2}\)?[\s-]?\d{3}[\s-]?\d{2}[\s-]?(\d{2})(?![\w-])/g, (_m, last: string) => `***${last}`],
   // Boshqa xalqaro raqam — faqat `+` bilan (aks holda vaqt belgisi/summa buzilardi).

@@ -61,6 +61,9 @@ export async function collectMetrics(daysRaw: number = 7): Promise<Metrics> {
   return transaction(async (client) => {
     // Hisobot hech narsa yozmasligi baza darajasida kafolatlanadi.
     await client.query("SET TRANSACTION READ ONLY");
+    // Oyna filtrlari (`created_at`/`updated_at`) oldingi indekssiz — katta jadvalda
+    // seq scan; hisobot prod bazani 60 s dan uzoq band qilmasin (review nit 4).
+    await client.query("SET LOCAL statement_timeout = '60s'");
     const q = async <T extends Record<string, unknown>>(sql: string) => (await client.query<T>(sql, since)).rows;
 
     const jobs = await q<{ tool_id: string; status: string; n: string }>(

@@ -44,7 +44,7 @@ import type { ToolConfig, ToolId } from "../types";
 import { refundRatio } from "../generation/delivered";
 import { cleanText, safeSlice } from "../generation/safe-text";
 import type { Delivered } from "../generation/types";
-import { log, withLogContext, type LogFields } from "./log";
+import { log, withFreshLogContext, type LogFields } from "./log";
 import { providerOf, userMessage } from "./user-error";
 
 /**
@@ -295,7 +295,7 @@ const inflight = new Map<string, { job: ClaimedJob; ctl: RunCtl; done: Promise<v
 export async function runJob(job: ClaimedJob, opts: RunOptions = {}): Promise<void> {
   const ctl: RunCtl = { abandoned: false };
   // Shu ish ichidagi HAR jurnal qatori (`credits.ts` refund va h.k.) `jobId`/`userId` ni o'zi oladi (OBS-02).
-  const done = withLogContext({ jobId: job.id, userId: job.userId }, () => runWithHardStop(job, opts, ctl));
+  const done = withFreshLogContext({ jobId: job.id, userId: job.userId }, () => runWithHardStop(job, opts, ctl));
   inflight.set(job.lease, { job, ctl, done });
   try {
     await done;
@@ -807,7 +807,8 @@ function sleep(ms: number) {
 export function startInlineWorker(): void {
   if (g.__slaydxWorker) return;
   g.__slaydxWorker = true;
-  void loop().catch((e) => log("error", "[worker] fatal", { err: e }));
+  // So'rov kontekstidan tashqarida: sikl `POST /api/generations` ichidan uyg'onsa ham uning reqId si meros qolmasin.
+  void withFreshLogContext({}, () => loop()).catch((e) => log("error", "[worker] fatal", { err: e }));
 }
 
 export function stopWorker(): void {
