@@ -1,5 +1,6 @@
-import JSZip from "jszip";
+import type JSZip from "jszip";
 import type { Box } from "./slide-layout";
+import { loadZipCapped, readZipText, ZipLimitError, type ZipBudget } from "./translate/xml-scan";
 
 /**
  * «O'Z SHABLONIM» — foydalanuvchi PPTX namunasining TAHLILI (Sprint B).
@@ -48,7 +49,7 @@ export type CustomTemplate = {
   previews: Partial<Record<TemplateRole, TemplatePreview>>;
 };
 
-export type TemplateErrorCode = "not-pptx" | "no-layouts" | "no-content";
+export type TemplateErrorCode = "not-pptx" | "no-layouts" | "no-content" | "too-big";
 export class TemplateError extends Error {
   code: TemplateErrorCode;
   constructor(code: TemplateErrorCode, message: string) {
@@ -292,27 +293,50 @@ function pickRoles(layouts: TemplateLayout[]): TemplateProfile["roles"] {
   return roles;
 }
 
+/**
+ * Namunadan o'qiladigan XML ning umumiy chegarasi (SECB-02). Ilgari bu
+ * yerda hech qanday chegara yo'q edi: 20 MB lik PPTX ning master/layout
+ * XML i gigabaytlarga ochilishi mumkin edi. Real namunaning shu qismlari
+ * (presentation, master, tema, layoutlar) bir necha MB dan oshmaydi.
+ */
+export const TEMPLATE_MAX_XML = 40 * 1024 * 1024;
+/** Layoutlar soni chegarasi — real namunada 10–50 ta. */
+export const MAX_TEMPLATE_LAYOUTS = 100;
+
 export async function parsePptxTemplate(bytes: Uint8Array | ArrayBuffer): Promise<TemplateProfile> {
   let zip: JSZip;
   try {
-    zip = await JSZip.loadAsync(bytes);
-  } catch {
+    zip = await loadZipCapped(bytes);
+  } catch (e) {
+    if (e instanceof ZipLimitError) throw new TemplateError("too-big", e.message);
     throw new TemplateError("not-pptx", "Fayl PPTX emas (zip ochilmadi)");
   }
-  const pres = await zip.file("ppt/presentation.xml")?.async("string");
+  const budget: ZipBudget = { left: TEMPLATE_MAX_XML };
+  const read = async (path: string): Promise<string> => {
+    const file = zip.file(path);
+    if (!file) return "";
+    try {
+      return await readZipText(file, budget);
+    } catch (e) {
+      if (e instanceof ZipLimitError) throw new TemplateError("too-big", "Namuna ichidagi ma'lumot juda katta");
+      throw new TemplateError("not-pptx", "Fayl PPTX sifatida o'qilmadi (buzilgan arxiv)");
+    }
+  };
+
+  const pres = await read("ppt/presentation.xml");
   if (!pres) throw new TemplateError("not-pptx", "Fayl PPTX emas (ppt/presentation.xml yo'q)");
 
   const sz = pres.match(/<p:sldSz\s+cx="(\d+)"\s+cy="(\d+)"/);
   const size = sz ? { w: round(Number(sz[1]) / EMU), h: round(Number(sz[2]) / EMU) } : { w: 13.333, h: 7.5 };
 
   // Master: presentation.xml.rels → birinchi slideMaster.
-  const presRels = (await zip.file("ppt/_rels/presentation.xml.rels")?.async("string")) ?? "";
+  const presRels = await read("ppt/_rels/presentation.xml.rels");
   const masterPath = relTarget(presRels, "slideMaster", "ppt") ?? "ppt/slideMasters/slideMaster1.xml";
-  const masterXml = (await zip.file(masterPath)?.async("string")) ?? "";
-  const masterRels = (await zip.file(relsPathOf(masterPath))?.async("string")) ?? "";
+  const masterXml = await read(masterPath);
+  const masterRels = await read(relsPathOf(masterPath));
   const masterPhs = placeholdersOf(masterXml);
   const themePath = relTarget(masterRels, "theme", dirOf(masterPath));
-  const themeXml = themePath ? ((await zip.file(themePath)?.async("string")) ?? "") : "";
+  const themeXml = themePath ? await read(themePath) : "";
 
   // Layoutlar — master rels tartibida (PowerPoint ko'rsatadigan tartib).
   const layoutPaths: string[] = [];
@@ -325,10 +349,13 @@ export async function parsePptxTemplate(bytes: Uint8Array | ArrayBuffer): Promis
     layoutPaths.sort((a, b) => Number(a.match(/(\d+)\.xml$/)?.[1]) - Number(b.match(/(\d+)\.xml$/)?.[1]));
   }
   if (!layoutPaths.length) throw new TemplateError("no-layouts", "Namunada slayd maketlari (layout) topilmadi");
+  if (layoutPaths.length > MAX_TEMPLATE_LAYOUTS) {
+    throw new TemplateError("too-big", `Namunada maketlar juda ko'p (${layoutPaths.length}, chegara ${MAX_TEMPLATE_LAYOUTS})`);
+  }
 
   const layouts: TemplateLayout[] = [];
   for (const path of layoutPaths) {
-    const xml = await zip.file(path)?.async("string");
+    const xml = await read(path);
     if (!xml) continue;
     const phs = placeholdersOf(xml).map((p) => {
       if (p.box) return p;
@@ -345,6 +372,12 @@ export async function parsePptxTemplate(bytes: Uint8Array | ArrayBuffer): Promis
   if (!usable || !roles.content) {
     throw new TemplateError("no-content", "Namunada sarlavha va matn placeholder'li maket topilmadi — bu fayl shablon sifatida ishlamaydi");
   }
+  /*
+   * `[Content_Types].xml` ni tahlil ishlatmaydi, lekin keyin `renderLayoutSheet`
+   * (web, rasterlash) va `renderPptxWithTemplate` (worker) uni cheklovsiz
+   * ochadi — bomba shu yerda, byudjet ichida ushlanadi.
+   */
+  await read("[Content_Types].xml");
 
   return {
     size,

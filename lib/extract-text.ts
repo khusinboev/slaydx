@@ -1,4 +1,5 @@
-import JSZip from "jszip";
+import type JSZip from "jszip";
+import { loadZipCapped, readZipText, type ZipBudget } from "./generation/translate/xml-scan";
 
 const ENT: Record<string, string> = {
   "&amp;": "&",
@@ -178,34 +179,19 @@ function fromXlsxShared(xml: string) {
  * Arxivdan bitta yozuvni ochadi — ochilgan hajm chegarasi bilan.
  *
  * DOCX/PPTX oddiy ZIP. 8 MB lik arxiv gigabaytlab XML ga ochilishi
- * mumkin («zip bomb»): ilgari `file.async("string")` shunday yozuvni
- * so'zsiz xotiraga chiqarardi va processni yiqitardi.
+ * mumkin («zip bomb»). Ilgari chegara metadatadagi hajmga ishonardi va
+ * haqiqiy uzunlik faqat butun yozuv xotiraga ochilgach tekshirilardi;
+ * endi `readZipText` oqimni sanab, chegarada to'xtatadi (SECB-02).
  */
-async function readEntry(
-  zip: JSZip,
-  name: string,
-  budget: { left: number },
-): Promise<string> {
+async function readEntry(zip: JSZip, name: string, budget: ZipBudget): Promise<string> {
   const file = zip.file(name);
-  if (!file) return "";
-
-  // JSZip yozuvning ochilgan hajmini metadatada saqlaydi.
-  const declared = (file as unknown as { _data?: { uncompressedSize?: number } })._data
-    ?.uncompressedSize;
-  if (typeof declared === "number" && declared > budget.left) {
-    throw new Error("Hujjat ichidagi ma'lumot juda katta");
-  }
-
-  const text = await file.async("string");
-  budget.left -= text.length;
-  if (budget.left < 0) throw new Error("Hujjat ichidagi ma'lumot juda katta");
-  return text;
+  return file ? readZipText(file, budget) : "";
 }
 
 async function fromZip(buf: ArrayBuffer, kind: "docx" | "pptx" | "xlsx") {
-  const zip = await JSZip.loadAsync(buf);
+  const zip = await loadZipCapped(buf);
   // Ochilgan XML uchun umumiy byudjet.
-  const budget = { left: MAX_UNZIPPED_BYTES };
+  const budget: ZipBudget = { left: MAX_UNZIPPED_BYTES };
 
   if (kind === "docx") {
     return fromDocxXml(await readEntry(zip, "word/document.xml", budget));
@@ -297,7 +283,7 @@ export async function extractFromBuffer(name: string, buf: ArrayBuffer): Promise
     // Ichki kutubxona xatosi foydalanuvchiga tushunarsiz — umumlashtiramiz.
     return {
       text: "",
-      error: /juda katta/.test(message)
+      error: /juda (katta|ko'p)/.test(message)
         ? message
         : "Faylni o‘qib bo‘lmadi. U buzilgan yoki parol bilan himoyalangan bo‘lishi mumkin.",
     };

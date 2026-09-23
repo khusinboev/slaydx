@@ -223,6 +223,113 @@ export function attr(attrs: string, name: string): string | undefined {
 /** Ochilgan XML uchun umumiy byudjet — «zip bomba» himoyasi. */
 export const MAX_UNZIPPED_BYTES = 80 * 1024 * 1024;
 
+/**
+ * Arxivdagi yozuvlar soni chegarasi. Eng katta real OOXML (yuzlab slayd +
+ * media) bir necha mingta; 20 MB lik yuklamada esa ~450 000 bo'sh yozuv
+ * sig'adi va JSZip har biriga obyekt quradi — ochishdan OLDIN rad etiladi.
+ */
+export const MAX_ZIP_ENTRIES = 10_000;
+
+const TOO_BIG = "Hujjat ichidagi ma'lumot juda katta";
+const TOO_MANY = "Hujjat ichida fayllar juda ko'p";
+
+/** Arxiv chegarasi buzildi (hajm yoki yozuvlar soni) — foydalanuvchiga aytiladigan xato. */
+export class ZipLimitError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ZipLimitError";
+  }
+}
+
+/**
+ * Markaziy katalogdagi yozuvlarni HAQIQATDA sanaydi (`limit + 1` da to'xtaydi).
+ *
+ * EOCD dagi «jami yozuvlar» maydoniga ishonilmaydi: JSZip ham unga
+ * qaramay katalogni imzo tugaguncha o'qiydi. Katalog boshi — `EOCD −
+ * katalog hajmi`, JSZip ham (oldiga qo'shilgan ma'lumot bo'lsa) aynan shu
+ * joydan o'qiydi. EOCD topilmasa 0 — bunday faylni JSZip o'zi rad etadi.
+ */
+export function countZipEntries(bytes: Uint8Array, limit = MAX_ZIP_ENTRIES): number {
+  const min = Math.max(0, bytes.length - 22 - 0xffff);
+  let eocd = -1;
+  for (let i = bytes.length - 22; i >= min; i--) {
+    if (bytes[i] === 0x50 && bytes[i + 1] === 0x4b && bytes[i + 2] === 0x05 && bytes[i + 3] === 0x06) {
+      eocd = i;
+      break;
+    }
+  }
+  if (eocd < 0) return 0;
+  const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const declared = dv.getUint16(eocd + 10, true);
+  // 0xFFFF — ZIP64: 65 535 dan ko'p yozuv degani, bu bizning chegaradan ancha katta.
+  if (declared === 0xffff) return declared;
+  const cdSize = dv.getUint32(eocd + 12, true);
+  let p = eocd - cdSize;
+  let count = 0;
+  while (p >= 0 && p + 46 <= eocd && dv.getUint32(p, true) === 0x02014b50) {
+    count++;
+    if (count > limit) break;
+    p += 46 + dv.getUint16(p + 28, true) + dv.getUint16(p + 30, true) + dv.getUint16(p + 32, true);
+  }
+  return Math.max(count, declared);
+}
+
+/** Foydalanuvchi ZIP ini ochadi — yozuvlar soni ochishdan oldin tekshiriladi. */
+export async function loadZipCapped(bytes: Uint8Array | ArrayBuffer): Promise<JSZip> {
+  const u8 = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  if (countZipEntries(u8) > MAX_ZIP_ENTRIES) throw new ZipLimitError(TOO_MANY);
+  const zip = await JSZip.loadAsync(bytes);
+  if (Object.keys(zip.files).length > MAX_ZIP_ENTRIES) throw new ZipLimitError(TOO_MANY);
+  return zip;
+}
+
+export type ZipBudget = { left: number };
+
+/**
+ * Bitta yozuvni matn sifatida o'qiydi — HAQIQIY ochilgan hajm byudjetdan
+ * oshgan zahoti to'xtaydi.
+ *
+ * Ilgari `file.async("string")` chaqirilardi: u butun yozuvni xotiraga
+ * ochib bo'lgachgina uzunlikni tekshirish mumkin edi, metadatadagi hajm esa
+ * arxiv muallifining gapi xolos (1 KB deb yozib, 1 GB ga ochilishi mumkin).
+ * Endi JSZip oqimi (`internalStream`, `async` ham uning ustida qurilgan)
+ * bo'lakma-bo'lak sanaladi va chegarada `pause()` qilinadi — qolgan qismi
+ * umuman ochilmaydi. Natija `async("string")` bilan bayt-ba-bayt bir xil.
+ */
+export function readZipText(file: JSZip.JSZipObject, budget: ZipBudget): Promise<string> {
+  // Metadata — faqat tez rad etish uchun; asosiy himoya pastdagi hisoblagich.
+  const declared = (file as unknown as { _data?: { uncompressedSize?: number } })._data?.uncompressedSize;
+  if (typeof declared === "number" && declared > budget.left) return Promise.reject(new ZipLimitError(TOO_BIG));
+  const stream = (file as unknown as { internalStream(type: "string"): JSZip.JSZipStreamHelper<string> }).internalStream("string");
+  return new Promise<string>((resolve, reject) => {
+    const parts: string[] = [];
+    let settled = false;
+    stream
+      .on("data", (chunk) => {
+        if (settled) return;
+        budget.left -= chunk.length;
+        if (budget.left < 0) {
+          settled = true;
+          stream.pause();
+          reject(new ZipLimitError(TOO_BIG));
+          return;
+        }
+        parts.push(chunk);
+      })
+      .on("error", (e) => {
+        if (settled) return;
+        settled = true;
+        reject(e);
+      })
+      .on("end", () => {
+        if (settled) return;
+        settled = true;
+        resolve(parts.join(""));
+      })
+      .resume();
+  });
+}
+
 export type Ooxml = {
   zip: JSZip;
   /** Ochilgan XML yozuvlari (yo'l → matn). */
@@ -231,22 +338,15 @@ export type Ooxml = {
 };
 
 export async function openOoxml(bytes: Uint8Array, want: (name: string) => boolean): Promise<Ooxml> {
-  const zip = await JSZip.loadAsync(bytes);
+  const zip = await loadZipCapped(bytes);
   const names = Object.keys(zip.files).filter((n) => !zip.files[n].dir);
   const parts = new Map<string, string>();
-  let budget = MAX_UNZIPPED_BYTES;
+  const budget: ZipBudget = { left: MAX_UNZIPPED_BYTES };
   for (const name of names) {
     if (!want(name)) continue;
     const file = zip.file(name);
     if (!file) continue;
-    const declared = (file as unknown as { _data?: { uncompressedSize?: number } })._data?.uncompressedSize;
-    if (typeof declared === "number" && declared > budget) {
-      throw new Error("Hujjat ichidagi ma'lumot juda katta");
-    }
-    const text = await file.async("string");
-    budget -= text.length;
-    if (budget < 0) throw new Error("Hujjat ichidagi ma'lumot juda katta");
-    parts.set(name, text);
+    parts.set(name, await readZipText(file, budget));
   }
   return { zip, parts, names };
 }

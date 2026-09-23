@@ -216,7 +216,9 @@ export async function uploadTemplate(req: Request, userId: string, deps: UploadD
           ? "Namunada sarlavha va matn joyli maket topilmadi — boshqa faylni sinab ko'ring"
           : e.code === "no-layouts"
             ? "Namunada slayd maketlari (layout) topilmadi"
-            : "Fayl PPTX sifatida o'qilmadi";
+            : e.code === "too-big"
+              ? "Namuna juda katta yoki murakkab — soddaroq PPTX yuboring"
+              : "Fayl PPTX sifatida o'qilmadi";
       throw new ApiError(msg, 422, { code: e.code });
     }
     throw e;
