@@ -1,9 +1,11 @@
 import "server-only";
+import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { env } from "./env";
 import { ensureMigrated } from "./db";
 import { currentUser, type SessionUser } from "./session";
 import { clientIp, rateLimit } from "./ratelimit";
+import { addLogContext, currentLogContext, log, withLogContext } from "./log";
 
 /**
  * Route handler'lar uchun umumiy yordamchi: migratsiya, sessiya,
@@ -26,14 +28,43 @@ export function fail(message: string, status = 400, extra: Record<string, unknow
  */
 export function serverError(scope: string, e: unknown) {
   const message = e instanceof Error ? e.message : String(e);
-  console.error(`[${scope}]`, message);
+  // Stack bilan bitta JSON qator (OBS-03); `reqId`/`userId` kontekstdan (OBS-02).
+  log("error", `[${scope}] kutilmagan xato`, { err: e });
+  const { reqId } = currentLogContext();
   return NextResponse.json(
     {
       error: "Ichki xatolik. Birozdan keyin qayta urinib ko'ring.",
+      // Foydalanuvchi murojaat qilganda aynan shu jurnal qatorini topish uchun.
+      ...(reqId ? { requestId: reqId } : {}),
       ...(env.isProd ? {} : { detail: message }),
     },
     { status: 500 },
   );
+}
+
+/**
+ * So'rov id si (OBS-02). Proxy/klient yuborgan `x-request-id` faqat xavfsiz
+ * shaklda bo'lsa davom ettiriladi — aks holda (jurnal in'ektsiyasi, haddan
+ * uzun qiymat) yangisi yaratiladi.
+ */
+const REQUEST_ID_RE = /^[A-Za-z0-9._:-]{8,128}$/;
+
+export function requestIdOf(req: Request): string {
+  const raw = req.headers.get("x-request-id")?.trim();
+  return raw && REQUEST_ID_RE.test(raw) ? raw : randomUUID();
+}
+
+/** Javobga `x-request-id` qo'yadi; sarlavhasi o'zgarmas javob (redirect, fetch) nusxalanadi. */
+function withRequestId(res: Response, reqId: string): Response {
+  try {
+    res.headers.set("x-request-id", reqId);
+    return res;
+  } catch {
+    // `Response.redirect()`/`fetch()` javobi — sarlavhalar «immutable»: nusxa bilan.
+    const copy = new Response(res.body, res);
+    copy.headers.set("x-request-id", reqId);
+    return copy;
+  }
 }
 
 export class ApiError extends Error {
@@ -143,6 +174,8 @@ export async function requireUser(req: Request): Promise<AuthedContext> {
   }
   const user = await currentUser();
   if (!user) throw new ApiError("Kirish talab qilinadi", 401);
+  // Shu so'rovning keyingi jurnal qatorlari kimniki ekanini biladi (OBS-02).
+  addLogContext({ userId: String(user.id) });
   return { user, ip: clientIp(req) };
 }
 
@@ -168,24 +201,36 @@ export async function limit(
   }
 }
 
-/** Route handler'ni o'raydi: `ApiError` ni to'g'ri statusga aylantiradi. */
+/**
+ * Route handler'ni o'raydi: `ApiError` ni to'g'ri statusga aylantiradi.
+ *
+ * Har so'rov o'z `reqId` si bilan jurnal kontekstida bajariladi (OBS-02):
+ * route, `jobs.ts`, `credits.ts` ichidagi har `log()` qatori shu id ni
+ * oladi, javob esa uni `x-request-id` sarlavhasida qaytaradi.
+ */
 export function handler<A extends unknown[]>(
   scope: string,
   fn: (req: Request, ...args: A) => Promise<Response>,
 ) {
   return async (req: Request, ...args: A): Promise<Response> => {
-    try {
-      return await fn(req, ...args);
-    } catch (e) {
-      if (e instanceof ApiError) {
-        const headers: Record<string, string> = {};
-        if (e.status === 429 && typeof e.extra.retryAfter === "number") {
-          headers["Retry-After"] = String(e.extra.retryAfter);
+    const reqId = requestIdOf(req);
+    return withLogContext({ reqId }, async () => {
+      let res: Response;
+      try {
+        res = await fn(req, ...args);
+      } catch (e) {
+        if (e instanceof ApiError) {
+          const headers: Record<string, string> = {};
+          if (e.status === 429 && typeof e.extra.retryAfter === "number") {
+            headers["Retry-After"] = String(e.extra.retryAfter);
+          }
+          res = NextResponse.json({ error: e.message, ...e.extra }, { status: e.status, headers });
+        } else {
+          res = serverError(scope, e);
         }
-        return NextResponse.json({ error: e.message, ...e.extra }, { status: e.status, headers });
       }
-      return serverError(scope, e);
-    }
+      return withRequestId(res, reqId);
+    });
   };
 }
 
