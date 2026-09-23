@@ -108,7 +108,7 @@ test("log(): HECH QACHON xato tashlamaydi — aylanma obyekt, BigInt, getter xat
       throw new Error("getter");
     },
   };
-  assert.doesNotThrow(() => log("error", "x", { circ, big: 10n, bad, err: circ }));
+  assert.doesNotThrow(() => log("error", "x", { circ, big: BigInt(10), bad, err: circ }));
   assert.doesNotThrow(() => log("error", "y", undefined));
   assert.doesNotThrow(() => log("error", undefined as unknown as string, null as never));
   assert.equal(lines.length, 3);
