@@ -179,17 +179,24 @@ export type EnqueueInput = {
   admission?: AdmissionLimits;
 };
 
-export type EnqueueResult =
+/** Qabul qarorisiz natija (seed skriptlari shu toraygan tipga tayanadi). */
+export type EnqueueChargeResult =
   | { ok: true; id: string }
-  | { ok: false; reason: "insufficient"; required: number; available: number }
-  | { ok: false; reason: "admission"; decision: AdmissionReject };
+  | { ok: false; reason: "insufficient"; required: number; available: number };
+
+export type EnqueueResult = EnqueueChargeResult | { ok: false; reason: "admission"; decision: AdmissionReject };
 
 /**
  * Ishni navbatga qo'yadi va pulni **bitta tranzaksiyada** yechadi.
  *
  * Ikkisini ajratib bo'lmaydi: alohida qilinsa worker to'lanmagan ishni
  * ushlab olishi yoki pul yechilib ish yaratilmay qolishi mumkin.
+ *
+ * `admission` berilmasa `"admission"` natijasi bo'lishi mumkin emas —
+ * overload buni tipda ham aytadi.
  */
+export function enqueueGeneration(input: EnqueueInput & { admission: AdmissionLimits }): Promise<EnqueueResult>;
+export function enqueueGeneration(input: EnqueueInput & { admission?: undefined }): Promise<EnqueueChargeResult>;
 export async function enqueueGeneration(input: EnqueueInput): Promise<EnqueueResult> {
   const id = randomUUID();
   // NUL/yolg'iz surrogat `topic` (TEXT) va `transactions.note` ni yiqitmasin (C03).

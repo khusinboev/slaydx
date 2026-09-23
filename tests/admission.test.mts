@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { useIsolatedDb } from "./helpers/isolated-db.mts";
+import { createIsolatedDb } from "./helpers/isolated-db.mts";
 import { inRequest } from "./helpers/next-request.mts";
 
 /**
@@ -64,7 +64,7 @@ test("admissionDecision/queueEtaSec: slot 0 yoki noto'g'ri sozlama cheksizlik be
 // ─────────────────────────────── Postgres (alohida baza)
 
 const hasDb = Boolean(process.env.DATABASE_URL) && !process.env.DATABASE_URL!.includes("unused");
-const iso = hasDb ? await useIsolatedDb("admission") : { isolated: false, drop: async () => {} };
+const iso = hasDb ? await createIsolatedDb("admission") : { isolated: false, drop: async () => {} };
 
 test("POST /api/generations qabul qarori va adolatli claimJob", { skip: hasDb ? false : "DATABASE_URL yo'q" }, async (t) => {
   const { query, migrate, pool } = await import("../lib/server/db.ts");
@@ -75,7 +75,7 @@ test("POST /api/generations qabul qarori va adolatli claimJob", { skip: hasDb ? 
   await migrate();
   // 022_retention.sql (W2-D2) bu tarmoqda hali yo'q bo'lishi mumkin — ustun testda qo'shiladi.
   await query(`ALTER TABLE generations ADD COLUMN IF NOT EXISTS files_purged_at TIMESTAMPTZ`);
-  env.worker.inline = false;
+  Object.assign(env.worker, { inline: false });
   Object.assign(env.queue, LIMITS);
 
   t.after(async () => {

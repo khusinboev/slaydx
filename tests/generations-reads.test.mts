@@ -1,6 +1,6 @@
 import test, { type TestContext } from "node:test";
 import assert from "node:assert/strict";
-import { useIsolatedDb } from "./helpers/isolated-db.mts";
+import { createIsolatedDb } from "./helpers/isolated-db.mts";
 import { inRequest } from "./helpers/next-request.mts";
 
 /**
@@ -23,7 +23,7 @@ process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";
 process.env.WORKER_INLINE = "false";
 
 const hasDb = Boolean(process.env.DATABASE_URL) && !process.env.DATABASE_URL!.includes("unused");
-const iso = hasDb ? await useIsolatedDb("reads") : { isolated: false, drop: async () => {} };
+const iso = hasDb ? await createIsolatedDb("reads") : { isolated: false, drop: async () => {} };
 
 type Seen = string[];
 
@@ -204,8 +204,7 @@ test("ro'yxat va poll: values_json yo'q, kursor sahifalash, navbat o'rni", { ski
   });
 
   await t.test("poll: QUEUED → queuePosition (1 dan) va etaSec; boshqa holatda yo'q", { skip: iso.isolated ? false : "alohida baza yaratilmadi" }, async () => {
-    env.queue.totalSlots = 8;
-    env.queue.meanServiceSec = 200;
+    Object.assign(env.queue, { totalSlots: 8, meanServiceSec: 200 });
     const c = await mkUser("reads-c");
     // Navbatdagi 3 ta ish (2 tasi boshqa foydalanuvchiniki) + bittasi `run_after` kelajakda (qayta urinish).
     const q: string[] = [];

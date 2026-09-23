@@ -17,7 +17,7 @@ import pg from "pg";
 
 export type IsolatedDb = { isolated: boolean; drop: () => Promise<void> };
 
-export async function useIsolatedDb(tag: string): Promise<IsolatedDb> {
+export async function createIsolatedDb(tag: string): Promise<IsolatedDb> {
   const base = process.env.DATABASE_URL ?? "";
   if (!base || base.includes("unused")) return { isolated: false, drop: async () => {} };
   const url = new URL(base);
