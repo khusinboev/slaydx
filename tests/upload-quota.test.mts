@@ -116,10 +116,14 @@ test("umumiy hajm: 200 MB dan oshsa 413 va hech narsa yozilmaydi", { skip }, asy
   assert.equal(await count("logo_uploads", uid), 0);
 });
 
-test("logo: parallel ikki yuklama chegarada — faqat bittasi o'tadi (qulf)", { skip }, async () => {
+test("logo: parallel 8 yuklama chegarada — faqat bittasi o'tadi (qulf)", { skip }, async () => {
   const uid = await newUser();
   for (let i = 0; i < UPLOAD_QUOTA.count.logo - 1; i++) await seedBytes(uid, "logo_uploads", 10);
-  const results = await Promise.allSettled([putLogo(uid, png(), "image/png"), putLogo(uid, png(), "image/png")]);
+  // Ulanishlar oldindan ochiladi — aks holda ularni o'rnatish (SCRAM) so'rovlarni
+  // ketma-ket qilib qo'yib, poyga umuman yuz bermasdi.
+  const warm = await Promise.all(Array.from({ length: 8 }, () => pool().connect()));
+  for (const c of warm) c.release();
+  const results = await Promise.allSettled(Array.from({ length: 8 }, () => putLogo(uid, png(MB), "image/png")));
   assert.equal(results.filter((r) => r.status === "fulfilled").length, 1, "MUTATSIYA: poyga chegaradan o'tib ketdi");
   assert.equal(await count("logo_uploads", uid), UPLOAD_QUOTA.count.logo);
 });
