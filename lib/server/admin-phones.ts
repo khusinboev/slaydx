@@ -9,12 +9,28 @@
  *
  * Yangi admin qo'shish: shu ro'yxatga raqam yozib, deploy qilinadi.
  *
- * Bu fayl ATAYLAB sof — hech narsa import qilmaydi. `session.ts` (har
- * so'rovda ishlaydi) ham, `admin.ts` (route himoyasi) ham shu yerdan
- * oladi; ikkalasini bittasiga birlashtirish `session.ts` ↔ `admin.ts`
- * aylanma importini keltirib chiqarardi.
+ * Bu fayl ATAYLAB sof — hech narsa import qilmaydi (shu jumladan
+ * `lib/server/env.ts`): `process.env.ADMIN_PHONES` to'g'ridan-to'g'ri shu
+ * yerda o'qiladi. `session.ts` (har so'rovda ishlaydi) ham, `admin.ts`
+ * (route himoyasi) ham shu yerdan oladi; ikkalasini bittasiga birlashtirish
+ * `session.ts` ↔ `admin.ts` aylanma importini keltirib chiqarardi.
+ *
+ * DEPS-01/DEPS-08 (audit/production-readiness): admin raqami ochiq
+ * (public) repo'da hardcode qilingani PII/recon xavfi. Shuning uchun
+ * `ADMIN_PHONES` env o'rnatilgan bo'lsa (vergul bilan ro'yxat, masalan
+ * `ADMIN_PHONES=+998901112233,+998907654321`), u hardcode ro'yxatni
+ * TO'LIQ ALMASHTIRADI (fallback emas — aks holda raqam baribir ochiq
+ * qoladi). Env O'RNATILMASA, pastdagi hardcode ishlaydi — bu ATAYLAB:
+ * prod'ga `ADMIN_PHONES` qo'shilmasdan deploy qilinsa ham admin kirishi
+ * buzilmasin. EGASI QADAMI: prod `.env`ga `ADMIN_PHONES` qo'shing, keyin
+ * quyidagi hardcode qatorni reponi kommit qilib o'chirib tashlash mumkin.
  */
-const ADMIN_PHONES = ["+998976063896"];
+const ADMIN_PHONES_ENV = (process.env.ADMIN_PHONES ?? "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+const ADMIN_PHONES = ADMIN_PHONES_ENV.length > 0 ? ADMIN_PHONES_ENV : ["+998976063896"];
 
 /**
  * Telefon raqamini raqamlarga tekislaydi.

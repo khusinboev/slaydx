@@ -125,9 +125,9 @@ docker compose up --build
 
 ## Ishlab chiqarish (slaydxx.uz)
 
-Server: `root@194.163.136.239`, jild `/opt/slaydx`. Serverda boshqa
-loyihalar ham bor (`nodav-*` steki, uchta nginx sayti, bir nechta bot
-xizmati) — shuning uchun hamma narsa ajratilgan:
+Server: `root@<SERVER_IP>` (aniq manzil — egasining `.env`/deploy sozlamasida),
+jild `/opt/slaydx`. Serverda boshqa loyihalar ham bor (bir nechta nginx
+sayti, bir nechta bot xizmati) — shuning uchun hamma narsa ajratilgan:
 
 | | |
 |---|---|
@@ -139,7 +139,7 @@ xizmati) — shuning uchun hamma narsa ajratilgan:
 | Kod | GitHub'dan faqat o'qish huquqli deploy kaliti bilan |
 
 ```bash
-ssh root@194.163.136.239
+ssh root@<SERVER_IP>
 /opt/slaydx/deploy.sh          # main dan yangi versiya
 /opt/slaydx/enable-https.sh    # DNS tayyor bo'lgach — certbot
 docker compose -p slaydx logs -f web

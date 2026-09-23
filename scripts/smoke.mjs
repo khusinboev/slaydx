@@ -11,11 +11,16 @@
  *   npm run smoke
  *
  * Kirish uchun `DEV_LOGIN_ENABLED=true` kerak yoki `SMOKE_COOKIE` bering.
- * Foydalanuvchi: `SMOKE_USER` (standart — quyidagi raqam).
+ * Foydalanuvchi: `SMOKE_USER` MAJBURIY (`.env.local` da, repo'da YO'Q —
+ * egasining haqiqiy hisobi, sinov kontenti shu yerga tushishi kerak).
  */
 const B = process.env.BASE || "http://127.0.0.1:3000";
-const PHONE = process.env.SMOKE_USER || "+998997333896";
 let COOKIE = process.env.SMOKE_COOKIE || "";
+const PHONE = process.env.SMOKE_USER || "";
+if (!PHONE && !COOKIE) {
+  console.error("SMOKE_USER (yoki SMOKE_COOKIE) o'rnatilmagan — .env.local ga qo'shing (repo'da saqlanmaydi).");
+  process.exit(1);
+}
 const H = (extra = {}) => ({
   "Content-Type": "application/json",
   Origin: B,
