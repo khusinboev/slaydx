@@ -2,6 +2,18 @@ services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
+    # Resurs chegarasi (INFRA-04): box UCHTA loyiha bilan umumiy — chegarasiz
+    # konteyner Postgres yoki qo'shni loyihalarni OOM bilan yiqitishi mumkin.
+    # `PG_MEM_LIMIT`/`PG_CPUS` orqali sozlanadi.
+    mem_limit: ${PG_MEM_LIMIT:-1g}
+    cpus: ${PG_CPUS:-1}
+    # Log aylanishi (OBS-10/INFRA-15): `json-file` standart bo'yicha
+    # cheksiz o'sadi — umumiy diskda bu boshqa loyihalarni ham siqib qo'yishi mumkin.
+    logging:
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: "5"
     environment:
       POSTGRES_USER: slaydx
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-slaydx}
@@ -27,6 +39,25 @@ services:
       # birinchi haqiqiy deploygacha ko'rinmadi.
       target: runner
     restart: unless-stopped
+    # `node` PID 1 sifatida ishlaydi — init YO'Q bo'lsa, o'ldirilgan
+    # `soffice.bin` (LibreOffice PDF eksport) grandchild'lari zombie bo'lib
+    # qolishi mumkin (W2-A topilmasi). `docker-compose.yml`ning o'zi
+    # `tini`ni init sifatida ulaydi.
+    init: true
+    # INFRA-04: chegarasiz konteyner Postgres'ni yoki qo'shni loyihalarni
+    # (nodavlattalim, mser — bir xil box) OOM bilan siqib qo'yishi mumkin.
+    mem_limit: ${WEB_MEM_LIMIT:-2g}
+    cpus: ${WEB_CPUS:-2}
+    logging:
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: "5"
+    # Deploy paytida `docker compose up -d` eski konteynerga SIGTERM
+    # yuboradi — tahrir yo'nalishlari (`…/rebuild`, `…/image/regenerate`)
+    # 45–60 s cho'zilishi mumkin (INFRA-08/.claude/deploy.md §2a). Docker'ning
+    # standart 10 s grace'i buni kesib tashlar edi.
+    stop_grace_period: 60s
     depends_on:
       postgres:
         condition: service_healthy
@@ -83,7 +114,6 @@ services:
       CLICK_MERCHANT_USER_ID: ${CLICK_MERCHANT_USER_ID:-}
       PAYME_TEST_KEY: ${PAYME_TEST_KEY:-}
       CRON_SECRET: ${CRON_SECRET:-}
-      FILE_TTL_HOURS: ${FILE_TTL_HOURS:-72}
       SESSION_COOKIE_SAMESITE: ${SESSION_COOKIE_SAMESITE:-lax}
       SESSION_TTL_DAYS: ${SESSION_TTL_DAYS:-30}
       # Bepul LLM endpointlari (reja, UDK, «Tuzatish», «Hammasini tuzatish») —
@@ -121,6 +151,35 @@ services:
       context: .
       target: worker
     restart: unless-stopped
+    # Xuddi `web`dagi kabi — worker sxema (SVG→PNG) uchun `sharp`/librsvg
+    # chaqiradi, ular ham grandchild process qoldirishi mumkin.
+    init: true
+    # Sig'im qarori (C22, audit/designs/capacity.md): 2 worker konteyner ×
+    # WORKER_CONCURRENCY=4 = 8 slot. `container_name` ATAYLAB yo'q —
+    # replikalarga avtomatik `slaydx-worker-1`/`slaydx-worker-2` nomi
+    # beriladi (`.claude/deploy.md` shu nomlarga tayanadi).
+    deploy:
+      replicas: 2
+    mem_limit: ${WORKER_MEM_LIMIT:-2g}
+    cpus: ${WORKER_CPUS:-2}
+    logging:
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: "5"
+    # Ish o'rtasida SIGTERM kelsa (deploy) — INFRA-02 uzoq muddatli tuzatishi
+    # alohida, lekin hech bo'lmasa Docker'ning standart 10 s'i eng qisqa
+    # ishni ham kesib tashlamasin.
+    stop_grace_period: 30s
+    # W2-D2 worker sikli har 30 s dan kamida bir marta `/tmp/slaydx-worker-alive`
+    # faylini yangilaydi (`audit/designs/w2-contracts.md`); shartnoma Dockerfile
+    # bilan bir xil: `-mmin -2` (2 daqiqa).
+    healthcheck:
+      test: ["CMD-SHELL", "find /tmp/slaydx-worker-alive -mmin -2 | grep -q ."]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
     depends_on:
       postgres:
         condition: service_healthy
@@ -171,7 +230,8 @@ services:
       TTS_VOICE_UZ: ${TTS_VOICE_UZ:-}
       TTS_VOICE_RU: ${TTS_VOICE_RU:-}
       TTS_VOICE_EN: ${TTS_VOICE_EN:-}
-      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
+      # Owner qarori (C22): 2 replika × 4 = 8 slot (ilgari 2×2=4 edi).
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-4}
       # Prod-readiness W2: housekeeping (QUEUED TTL, bonus fayllar muddati) va pool.
       QUEUE_TTL_SEC: ${QUEUE_TTL_SEC:-}
       RETENTION_BONUS_DAYS: ${RETENTION_BONUS_DAYS:-}

@@ -47,7 +47,15 @@ export async function putGenerationFile(
             size_bytes = EXCLUDED.size_bytes,
             bytes     = EXCLUDED.bytes,
             expires_at = NULL`;
-  const params = [generationId, file.fileName, file.mime, file.bytes.byteLength, Buffer.from(file.bytes)];
+  /*
+   * NUSXASIZ `Buffer` ko'rinishi (DB-06/SCALE-08). Ilgari `Buffer.from(file.bytes)`
+   * 25 MB gacha faylni yozishdan oldin yana bir marta nusxalardi.
+   * `Buffer.from(arrayBuffer, offset, length)` esa xuddi shu xotiraga qaraydi.
+   */
+  const bytes = Buffer.isBuffer(file.bytes)
+    ? file.bytes
+    : Buffer.from(file.bytes.buffer, file.bytes.byteOffset, file.bytes.byteLength);
+  const params = [generationId, file.fileName, file.mime, file.bytes.byteLength, bytes];
   if (client) {
     await client.query(sql, params);
   } else {

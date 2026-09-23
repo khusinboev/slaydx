@@ -31,7 +31,12 @@ export const GET = handler("generations/get", async (req, ctx: Ctx) => {
   if (!UUID.test(id)) throw new ApiError("Noto'g'ri id", 400);
 
   const since = parseSince(req);
-  const gen = await getGeneration(id, user.id, { since });
+  /*
+   * `lean`: `values_json` o'qilmaydi, `doc` bor bo'lsa `html` qayta
+   * yuborilmaydi (C09/SCALE-12). QUEUED bo'lsa javobda `queuePosition`
+   * (1 dan) va `etaSec` (boshlanishigacha taxminiy soniya) bor.
+   */
+  const gen = await getGeneration(id, user.id, { since, lean: true });
   if (!gen) throw new ApiError("Topilmadi", 404);
 
   const hasFile = gen.status === "COMPLETED" ? await hasGenerationFile(id, user.id) : false;

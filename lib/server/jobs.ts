@@ -6,6 +6,13 @@ import { chargeInTx } from "./credits";
 import { toJsonb } from "./jsonb";
 import { cleanText, safeSlice } from "../generation/safe-text";
 import { env } from "./env";
+import {
+  admissionDecision,
+  queueEtaSec,
+  type AdmissionDecision,
+  type AdmissionLimits,
+  type AdmissionReject,
+} from "./admission";
 import type { FormValues, Generation, JobStatus, ToolId } from "../types";
 import type { AcademicDoc, CostJson, Delivered } from "../generation/types";
 import type { SlideModel, SlideThemeId } from "../generation/slide-types";
@@ -61,7 +68,7 @@ export type GenerationRow = {
    */
   image_redraws?: number;
   edited_at?: Date | null;
-  /** Jonli generatsiya davri (`live_json` o'zgarganda oshadi). `live_json`ning o'zi ROW_COLUMNS da YO'Q. */
+  /** Jonli generatsiya davri (`live_json` o'zgarganda oshadi). `live_json`ning o'zi SUMMARY_COLUMNS da YO'Q. */
   live_seq?: number;
   /**
    * `doc_prev IS NOT NULL` hisoblangan ustun (014_doc_prev.sql). `doc_prev`
@@ -69,12 +76,27 @@ export type GenerationRow = {
    * og'ir JSONB, ro'yxat/detal so'rovlarini og'irlashtirmasin.
    */
   has_prev?: boolean;
+  /** Bonus fayllari saqlash muddati tugab o'chirilgan payt (022_retention.sql, W2-D2). */
+  files_purged_at?: Date | null;
+  /** Faqat `getGeneration`: QUEUED bo'lsa navbatdagi o'rni (1 dan), aks holda NULL. */
+  queue_position?: string | number | null;
 };
 
-const ROW_COLUMNS = `
+/**
+ * Ro'yxat va poll uchun YENGIL ustunlar (prod-readiness C09: BEA-06, DB-03,
+ * SCALE-03, CONC-18).
+ *
+ * `values_json` ATAYIN yo'q: unda 200 000 belgigacha `sourceText` (~400 KB)
+ * turadi, `rowToSummary` esa uni hech qachon ishlatmaydi — ilgari har 3
+ * soniyalik ro'yxat va har poll uni detoast qilib, `JSON.parse` qilib,
+ * tashlab yuborardi. Forma qiymatlari kerak bo'lgan joy (`claimJob`,
+ * tahrir yo'llari) ularni o'z so'rovida alohida o'qiydi.
+ */
+const SUMMARY_COLUMNS = `
   id, user_id, tool_id, topic, status, price, format, progress, step,
-  values_json, file_name, error, preview, delivered_json, created_at, started_at, finished_at, expires_at,
-  doc_version, file_version, image_redraws, edited_at, live_seq, doc_prev IS NOT NULL AS has_prev
+  file_name, error, preview, delivered_json, created_at, started_at, finished_at, expires_at,
+  doc_version, file_version, image_redraws, edited_at, live_seq, doc_prev IS NOT NULL AS has_prev,
+  files_purged_at
 `;
 
 /**
@@ -107,6 +129,8 @@ export type GenerationSummary = Omit<Generation, "values" | "doc" | "html"> & {
   liveSeq: number;
   /** Asl holatga qaytarish tugmasi shu bilan ko'rsatiladi/yashiriladi (`doc_prev` mavjudmi). */
   hasPrev: boolean;
+  /** Bonus fayllari saqlash muddati tugab o'chirilgan bo'lsa — qachon (UI sababini tushuntiradi). */
+  filesPurgedAt: string | null;
 };
 
 export function rowToSummary(
@@ -134,6 +158,7 @@ export function rowToSummary(
     editedAt: r.edited_at ? new Date(r.edited_at).toISOString() : null,
     liveSeq: r.live_seq ?? 0,
     hasPrev: r.has_prev ?? false,
+    filesPurgedAt: r.files_purged_at ? new Date(r.files_purged_at).toISOString() : null,
   };
 }
 
@@ -146,23 +171,41 @@ export type EnqueueInput = {
   values: FormValues;
   /** Ishga ajratilgan vaqt (`budgetFor`). Worker va `reclaimStaleJobs` shundan foydalanadi. */
   budgetMs: number;
+  /**
+   * Berilsa — pul yechishdan OLDIN qabul qarori (`admissionDecision`, C22).
+   * `POST /api/generations` `env.queue` ni beradi; seed/test skriptlari
+   * bermasa, eski xatti-harakat (cheklovsiz) saqlanadi.
+   */
+  admission?: AdmissionLimits;
 };
 
-export type EnqueueResult =
+/** Qabul qarorisiz natija (seed skriptlari shu toraygan tipga tayanadi). */
+export type EnqueueChargeResult =
   | { ok: true; id: string }
   | { ok: false; reason: "insufficient"; required: number; available: number };
+
+export type EnqueueResult = EnqueueChargeResult | { ok: false; reason: "admission"; decision: AdmissionReject };
 
 /**
  * Ishni navbatga qo'yadi va pulni **bitta tranzaksiyada** yechadi.
  *
  * Ikkisini ajratib bo'lmaydi: alohida qilinsa worker to'lanmagan ishni
  * ushlab olishi yoki pul yechilib ish yaratilmay qolishi mumkin.
+ *
+ * `admission` berilmasa `"admission"` natijasi bo'lishi mumkin emas —
+ * overload buni tipda ham aytadi.
  */
+export function enqueueGeneration(input: EnqueueInput & { admission: AdmissionLimits }): Promise<EnqueueResult>;
+export function enqueueGeneration(input: EnqueueInput & { admission?: undefined }): Promise<EnqueueChargeResult>;
 export async function enqueueGeneration(input: EnqueueInput): Promise<EnqueueResult> {
   const id = randomUUID();
   // NUL/yolg'iz surrogat `topic` (TEXT) va `transactions.note` ni yiqitmasin (C03).
   const topic = cleanText(input.topic);
   return transaction(async (client) => {
+    if (input.admission) {
+      const decision = await admitInTx(client, input.userId, input.admission);
+      if (!decision.ok) return { ok: false as const, reason: "admission" as const, decision };
+    }
     const charged = await chargeInTx(
       client,
       input.userId,
@@ -196,16 +239,127 @@ export async function enqueueGeneration(input: EnqueueInput): Promise<EnqueueRes
   });
 }
 
-/** Foydalanuvchining o'z ishlari. Boshqa userniki hech qachon chiqmaydi. */
-export async function listGenerations(userId: string, limit = 100): Promise<GenerationSummary[]> {
-  const rows = await query<Omit<GenerationRow, "values_json" | "doc_json" | "html">>(
-    `SELECT ${ROW_COLUMNS} FROM generations
+/**
+ * Qabul qarori uchun sanoqlar — `enqueueGeneration` tranzaksiyasi ICHIDA,
+ * pul yechishdan oldin.
+ *
+ * Avval foydalanuvchi qatori `FOR UPDATE` bilan qulflanadi (`chargeInTx`
+ * baribir shu qatorni qulflaydi — tartib o'zgarmaydi, faqat oldinroq):
+ * bir foydalanuvchining parallel so'rovlari navbatma-navbat sanaladi,
+ * ya'ni 3 ta bir vaqtdagi POST chegaradan (2) oshib keta olmaydi.
+ * Global navbat sanog'i esa yumshoq — ikki foydalanuvchi bir lahzada
+ * chegarani bittaga oshirishi mumkin, bu zararsiz.
+ *
+ * Sanoqlar (`ADMISSION_COUNTS_SQL`) har biri bitta qisman indeks
+ * (`generations_queue_idx` / `generations_stale_idx`) bo'ylab — qabul
+ * chegarasi tufayli ular kichik, tarix (COMPLETED) umuman o'qilmaydi.
+ */
+/**
+ * Har sanoq AYNAN bitta qisman indeks predikatiga mos (`status = 'QUEUED'` →
+ * `generations_queue_idx`, `status = 'IN_PROGRESS'` → `generations_stale_idx`).
+ * `status IN (…)` (`= ANY(array)`) ularning hech biriga mos kelmaydi va
+ * butun (muddatsiz o'sadigan) jadvalni qulf ostida ketma-ket o'qirdi —
+ * review W2-B R1: 200k qatorda 14.6 ms → 0.17 ms. `tests/admission.test.mts`
+ * EXPLAIN bilan qulflaydi.
+ */
+export const ADMISSION_COUNTS_SQL = `SELECT
+    (SELECT count(*) FROM generations WHERE status = 'QUEUED' AND user_id = $1)
+  + (SELECT count(*) FROM generations WHERE status = 'IN_PROGRESS' AND user_id = $1) AS user_inflight,
+    (SELECT count(*) FROM generations WHERE status = 'QUEUED') AS queued`;
+
+async function admitInTx(
+  client: PoolClient,
+  userId: string,
+  limits: AdmissionLimits,
+): Promise<AdmissionDecision> {
+  // `NO KEY UPDATE`: o'zi bilan va `chargeInTx` ning UPDATE i bilan to'qnashadi
+  // (qabul navbatma-navbat), lekin shu foydalanuvchining bola jadvallarga
+  // (transactions, sessions…) FK `KEY SHARE` yozuvlarini to'smaydi.
+  await client.query("SELECT 1 FROM users WHERE id = $1 FOR NO KEY UPDATE", [userId]);
+  const counts = await client.query<{ user_inflight: string; queued: string }>(ADMISSION_COUNTS_SQL, [userId]);
+  const row = counts.rows[0];
+  return admissionDecision({
+    ...limits,
+    userInflight: Number(row?.user_inflight ?? 0),
+    queued: Number(row?.queued ?? 0),
+  });
+}
+
+/** `GET /api/generations?limit=` chegaralari (`audit/designs/w2-contracts.md`). */
+export const LIST_LIMIT_DEFAULT = 50;
+export const LIST_LIMIT_MAX = 100;
+
+/**
+ * Ro'yxat kursori — oxirgi ko'rilgan qatorning `(created_at, id)` jufti.
+ *
+ * Vaqt MIKROSEKUND aniqligida, UTC matn sifatida saqlanadi: JS `Date` faqat
+ * millisekund biladi, `created_at` esa mikrosekundli — `Date` orqali
+ * aylantirilsa, bir millisekund ichidagi qatorlar sahifa chegarasida
+ * yo'qolar yoki takrorlanardi. `id` — bir xil vaqtdagi qatorlar tartibi.
+ * Klient uchun shaffof emas (base64url).
+ */
+export type ListCursor = { ts: string; id: string };
+
+const CURSOR_TS = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}$/;
+const CURSOR_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function encodeCursor(c: ListCursor): string {
+  return Buffer.from(JSON.stringify([c.ts, c.id]), "utf8").toString("base64url");
+}
+
+/** Noto'g'ri/soxta kursor — `null` (route 400 qaytaradi). */
+export function decodeCursor(raw: string): ListCursor | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(Buffer.from(raw, "base64url").toString("utf8"));
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(parsed) || parsed.length !== 2) return null;
+  const [ts, id] = parsed as unknown[];
+  if (typeof ts !== "string" || typeof id !== "string") return null;
+  if (!CURSOR_TS.test(ts) || !CURSOR_ID.test(id)) return null;
+  return { ts, id };
+}
+
+/** `limit` so'rov parametri: butun son 1..100, bo'lmasa standart 50. */
+export function clampListLimit(raw: string | null | undefined): number {
+  const n = raw == null ? Number.NaN : Number.parseInt(raw, 10);
+  if (!Number.isFinite(n)) return LIST_LIMIT_DEFAULT;
+  return Math.min(LIST_LIMIT_MAX, Math.max(1, n));
+}
+
+/**
+ * Foydalanuvchining o'z ishlari, yangidan eskiga, kursor bilan sahifalab.
+ * Boshqa userniki hech qachon chiqmaydi (kursor ham `user_id` predikatidan o'tadi).
+ *
+ * Ilgari faqat eng yangi 100 tasi qaytardi — 101-hujjatdan boshlab
+ * foydalanuvchi eski (pulli, MUDDATSIZ saqlanadigan) hujjatlarini UI da
+ * umuman ko'ra olmasdi (BEA-06, FE-08). `limit + 1` qator o'qiladi —
+ * ortiqchasi bo'lsa keyingi sahifa bor.
+ */
+export async function listGenerations(
+  userId: string,
+  opts: { limit?: number; cursor?: ListCursor | null } = {},
+): Promise<{ items: GenerationSummary[]; nextCursor: string | null }> {
+  const limit = Math.min(LIST_LIMIT_MAX, Math.max(1, Math.floor(opts.limit ?? LIST_LIMIT_DEFAULT)));
+  const cursor = opts.cursor ?? null;
+  const rows = await query<Omit<GenerationRow, "values_json" | "doc_json" | "html"> & { cursor_ts: string }>(
+    `SELECT ${SUMMARY_COLUMNS},
+            to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US') AS cursor_ts
+       FROM generations
       WHERE user_id = $1
-      ORDER BY created_at DESC
-      LIMIT $2`,
-    [userId, Math.min(limit, 300)],
+        AND ($2::timestamp IS NULL
+             OR (created_at <= ($2::timestamp AT TIME ZONE 'UTC')
+                 AND (created_at < ($2::timestamp AT TIME ZONE 'UTC') OR id < $3::uuid)))
+      ORDER BY created_at DESC, id DESC
+      LIMIT $4`,
+    [userId, cursor?.ts ?? null, cursor?.id ?? null, limit + 1],
   );
-  return rows.map(rowToSummary);
+  const page = rows.slice(0, limit);
+  const last = page[page.length - 1];
+  const nextCursor = rows.length > limit && last ? encodeCursor({ ts: last.cursor_ts, id: last.id }) : null;
+  return { items: page.map(rowToSummary), nextCursor };
 }
 
 /**
@@ -214,23 +368,56 @@ export async function listGenerations(userId: string, limit = 100): Promise<Gene
  * KALITI UMUMAN YO'Q (`undefined`) — klient eskisini saqlaydi, hech
  * qachon eski qiymat qayta yuborilmaydi. `liveSeq` esa har doim bor.
  */
+export type GenerationDetailRow = GenerationSummary & {
+  html: string | null;
+  doc: AcademicDoc | null;
+  live?: unknown | null;
+  /** Faqat QUEUED: navbatdagi o'rni, 1 dan (`created_at, id` bo'yicha oldindagi QUEUED ishlar + 1). */
+  queuePosition?: number;
+  /** Faqat QUEUED: ish BOSHLANISHIGACHA taxminiy soniya (`queueEtaSec`, qabul formulasi bilan bir xil). */
+  etaSec?: number;
+};
+
+/**
+ * `opts.lean` — poll rejimi (`GET /api/generations/{id}`): `doc` bor
+ * bo'lsa `html` qayta YUBORILMAYDI (`null`). Ko'ruvchi `doc` dan chizadi,
+ * `html` faqat `doc` siz eski qatorlar uchun zaxira — ilgari tayyor hujjat
+ * javobida bir hujjat ikki marta ketardi (SCALE-12). Server ichidagi
+ * chaqiruvchilar (`doc-polish` eski `html` ni qayta yozadi) `lean` siz,
+ * to'liq `html` oladi.
+ */
 export async function getGeneration(
   id: string,
   userId: string,
-  opts?: { since?: number },
-): Promise<
-  (GenerationSummary & { html: string | null; doc: AcademicDoc | null; live?: unknown | null }) | null
-> {
+  opts?: { since?: number; lean?: boolean },
+): Promise<GenerationDetailRow | null> {
   const since = opts?.since ?? null;
+  const html = opts?.lean ? "CASE WHEN doc_json IS NULL THEN html END AS html" : "html";
+  /*
+   * Navbat o'rni faqat QUEUED qatorda hisoblanadi: oldindagi (`created_at,
+   * id` bo'yicha) QUEUED ishlar soni + 1. Sanoq `generations_queue_idx`
+   * (faqat QUEUED qatorlar) bo'ylab, qabul chegarasi tufayli kichik.
+   * `claimJob` adolat qoidasi tufayli haqiqiy tartib biroz farq qilishi
+   * mumkin — bu taxmin, va'da emas.
+   */
   const row = await queryOne<GenerationRow & { live_json_out: unknown | null }>(
-    `SELECT ${ROW_COLUMNS}, html, doc_json,
+    `SELECT ${SUMMARY_COLUMNS}, ${html}, doc_json,
        CASE WHEN status = 'IN_PROGRESS' AND ($3::int IS NULL OR live_seq > $3)
-            THEN live_json END AS live_json_out
+            THEN live_json END AS live_json_out,
+       CASE WHEN status = 'QUEUED' THEN 1 + (
+         SELECT count(*) FROM generations q
+          WHERE q.status = 'QUEUED'
+            AND (q.created_at, q.id) < (generations.created_at, generations.id)
+       ) END AS queue_position
        FROM generations WHERE id = $1 AND user_id = $2`,
     [id, userId, since],
   );
   if (!row) return null;
-  const base = { ...rowToSummary(row), html: row.html, doc: row.doc_json };
+  const base: GenerationDetailRow = { ...rowToSummary(row), html: row.html, doc: row.doc_json };
+  if (row.status === "QUEUED" && row.queue_position != null) {
+    base.queuePosition = Number(row.queue_position);
+    base.etaSec = queueEtaSec(base.queuePosition, env.queue);
+  }
   const changed = row.status === "IN_PROGRESS" && (since == null || (row.live_seq ?? 0) > since);
   return changed ? { ...base, live: row.live_json_out ?? null } : base;
 }
@@ -341,8 +528,22 @@ export type ClaimedJob = {
  *
  * `FOR UPDATE SKIP LOCKED` — bir nechta worker parallel ishlaganda
  * bir vazifani ikki marta bajarmaydi.
+ *
+ * ADOLAT (C16: CONC-07, SCALE-05): allaqachon ≥ `userMaxRunning` ta
+ * IN_PROGRESS ishi bor foydalanuvchining navbatdagi ishlari o'tkazib
+ * yuboriladi — ilgari global FIFO edi va bitta hisob ketma-ket ish tashlab
+ * hamma slotni band qila olardi. Chegara YUMSHOQ: ikki worker bir lahzada
+ * olsa bittaga oshishi mumkin (zararsiz). Foydalanuvchi abadiy och
+ * qolmaydi — uning ishi tugashi bilan keyingisi yana navbatga kiradi,
+ * bo'sh slot esa shu orada boshqalarga ketadi. Ichki sanoq
+ * `generations_stale_idx` (faqat IN_PROGRESS qatorlar, ≤ slotlar soni)
+ * bo'ylab yuradi.
  */
-export async function claimJob(workerId: string): Promise<ClaimedJob | null> {
+export async function claimJob(
+  workerId: string,
+  opts: { userMaxRunning?: number } = {},
+): Promise<ClaimedJob | null> {
+  const cap = Math.max(1, Math.floor(opts.userMaxRunning ?? env.queue.userMaxInflight) || 1);
   const row = await queryOne<{
     id: string;
     user_id: string;
@@ -362,14 +563,16 @@ export async function claimJob(workerId: string): Promise<ClaimedJob | null> {
             step = 'Boshlandi',
             live_json = NULL
       WHERE g.id = (
-        SELECT id FROM generations
-         WHERE status = 'QUEUED' AND run_after <= now()
-         ORDER BY created_at
+        SELECT q.id FROM generations q
+         WHERE q.status = 'QUEUED' AND q.run_after <= now()
+           AND (SELECT count(*) FROM generations r
+                 WHERE r.status = 'IN_PROGRESS' AND r.user_id = q.user_id) < $2
+         ORDER BY q.created_at
          LIMIT 1
          FOR UPDATE SKIP LOCKED
       )
       RETURNING g.id, g.user_id, g.tool_id, g.values_json, g.price, g.attempts, g.budget_ms`,
-    [workerId],
+    [workerId, cap],
   );
   if (!row) return null;
   return {
