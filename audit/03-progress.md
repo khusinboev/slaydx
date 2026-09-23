@@ -10,7 +10,7 @@ Status legend: ✅ fixed & merged · 🔄 in review · 🛠 in progress · ⏳ p
 | C02 returnTo XSS | FE-01, SECA-02 | W1-B | ✅ merged | `73433e1`, `62b086f` → merge `8da3314` | `audit/reviews/W1-B.md` (approved on re-review) |
 | C03 JSONB surrogate/NUL | BEB-01, BEA-02 | W1-C | ✅ merged | `1e3e864`, `6bc1353` → merge `5b15ad3` | `audit/reviews/W1-C.md` (approved) |
 | C04+C06 parsing freeze | SECB-01, SECB-02, SECB-04, SECB-05, CONC-09, FILE-02, FILE-04, TEST-11 | W1-D | 🛠 in progress | — | — |
-| C10 free-LLM spend | EXT-02, ABUSE-01, CONC-11 (partial), CONC-13, SCALE-14, BEA-11 (partial) | W1-E | 🔄 re-review | `890ce4b`, `0645c82` | `audit/reviews/W1-E.md` |
+| C10 free-LLM spend | EXT-02, ABUSE-01, CONC-11 (partial), CONC-13, SCALE-14, BEA-11 (partial) | W1-E | ✅ merged | `890ce4b`, `0645c82` → merge `3368af3` | `audit/reviews/W1-E.md` (approved on re-review) |
 
 Wave-level gates (after all W1 merges): full `npm run check`, `npm run build`, throwaway-Postgres start smoke — pending.
 
