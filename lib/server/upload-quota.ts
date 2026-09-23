@@ -55,13 +55,32 @@ export type IncomingUpload = {
   generationId?: string;
 };
 
-const LABEL: Record<UploadKind, string> = {
-  photo: "Suratlar",
-  logo: "Logotiplar",
-  template: "Shablonlar",
-  source: "Manba fayllar",
-  generation: "Bu hujjatga yuklangan rasmlar",
-};
+/**
+ * Kvota xabari — har tur uchun ROST (W2-C review R3): chegara va
+ * foydalanuvchi HOZIR nima qila olishi. Faqat haqiqatan ishlaydigan yo'llar
+ * aytiladi: shablon va tarjima manbasini o'chirish mumkin (API bor),
+ * logotipni o'chirish yo'li YO'Q, manbalar 30 kundan va suratlar 90 kundan
+ * keyin worker tomonidan o'chiriladi (`purgeOldSources`/`purgeOldPhotos`).
+ * Foydalanilmagan logotip/shablon tozalash (`purgeUnusedUploads`) ulanmagan —
+ * shuning uchun va'da qilinmaydi.
+ */
+export function quotaMessage(kind: UploadKind, reason: "count" | "bytes"): string {
+  if (reason === "bytes") {
+    return `Yuklangan fayllaringiz jami ${UPLOAD_QUOTA.totalBytes / MB} MB chegarasiga yetdi. Joy bo'shatish uchun keraksiz shablon yoki tarjima manbalarini o'chiring.`;
+  }
+  switch (kind) {
+    case "logo":
+      return `Logotiplar chegarasi — ${UPLOAD_QUOTA.count.logo} ta, yangi logotip qabul qilinmaydi. Avval yuklagan logotip faylingizni qayta tanlashingiz mumkin.`;
+    case "photo":
+      return `Suratlar chegarasi — ${UPLOAD_QUOTA.count.photo} ta. Avval yuklagan suratingizni qayta tanlang; har surat yuklangandan 90 kun o'tib o'chiriladi.`;
+    case "template":
+      return `Shablonlar chegarasi — ${UPLOAD_QUOTA.count.template} ta. Yangisini yuklash uchun «O'z shablonim» ro'yxatidan keraksizini o'chiring.`;
+    case "source":
+      return `Tarjima manbalari chegarasi — ${UPLOAD_QUOTA.count.source} ta. Keraksiz fayllarni ro'yxatdan o'chiring; har fayl yuklangandan 30 kun o'tib o'zi o'chadi.`;
+    case "generation":
+      return `Bu hujjatga ${UPLOAD_QUOTA.perGeneration} ta rasm yuklangan — chegara hujjat umri davomida amal qiladi (almashtirilgan rasmlar ham sanaladi). Mavjud rasmlardan foydalaning yoki yangi hujjat yarating.`;
+  }
+}
 
 type Exec = Pick<PoolClient, "query">;
 
@@ -118,18 +137,10 @@ async function check(exec: Exec, userId: string, kind: UploadKind, incoming: Inc
   const count = kind === "generation" ? Number(row?.gen_count ?? 0) : Number(row?.kind_count ?? 0);
   const max = kind === "generation" ? UPLOAD_QUOTA.perGeneration : UPLOAD_QUOTA.count[kind];
   if (count + ids.length > max) {
-    throw new ApiError(
-      `${LABEL[kind]} soni chegaraga yetdi (${max} ta). Keraksizlarini o'chiring — foydalanilmagan fayllar 90 kundan keyin o'zi tozalanadi.`,
-      413,
-      { code: "quota", kind, limit: max },
-    );
+    throw new ApiError(quotaMessage(kind, "count"), 413, { code: "quota", kind, limit: max });
   }
   if (total + incoming.bytes > UPLOAD_QUOTA.totalBytes) {
-    throw new ApiError(
-      `Yuklangan fayllaringiz hajmi chegaraga yetdi (${UPLOAD_QUOTA.totalBytes / MB} MB). Keraksiz fayllarni o'chiring yoki keyinroq urinib ko'ring.`,
-      413,
-      { code: "quota", kind, limitBytes: UPLOAD_QUOTA.totalBytes },
-    );
+    throw new ApiError(quotaMessage(kind, "bytes"), 413, { code: "quota", kind, limitBytes: UPLOAD_QUOTA.totalBytes });
   }
 }
 

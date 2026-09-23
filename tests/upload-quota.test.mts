@@ -23,7 +23,7 @@ const skip = hasDb ? false : "Postgres kerak (DATABASE_URL)";
 
 const { ApiError } = await import("../lib/server/api.ts");
 const { query, queryOne, pool } = await import("../lib/server/db.ts");
-const { UPLOAD_QUOTA, purgeUnusedUploads, putGenerationUpload } = await import("../lib/server/upload-quota.ts");
+const { UPLOAD_QUOTA, purgeUnusedUploads, putGenerationUpload, quotaMessage } = await import("../lib/server/upload-quota.ts");
 const { putLogo } = await import("../lib/server/logo.ts");
 const { uploadPhoto } = await import("../lib/server/photo.ts");
 const { uploadTemplate } = await import("../lib/server/template-upload.ts");
@@ -265,4 +265,29 @@ test("purgeSourceCache: 60 kundan eski yozuvlar o'chadi, yangilari qoladi (EXT-0
 test("UPLOAD_QUOTA: taklif qilingan sonlar", () => {
   assert.equal(UPLOAD_QUOTA.totalBytes, 200 * MB);
   assert.deepEqual({ ...UPLOAD_QUOTA.count }, { photo: 50, logo: 20, template: 20, source: 30 });
+});
+
+test("quotaMessage: har tur uchun ROST xabar — chegara va foydalanuvchi nima qila olishi (review R3)", () => {
+  const all = (["photo", "logo", "template", "source", "generation"] as const).map((k) => [k, quotaMessage(k, "count")] as const);
+  for (const [kind, msg] of all) {
+    // Ulanmagan tozalash (`purgeUnusedUploads`) va'da qilinmaydi.
+    assert.ok(!/foydalanilmagan fayllar 90 kundan/.test(msg), `${kind}: MUTATSIYA — mavjud bo'lmagan tozalash va'da qilindi`);
+    assert.match(msg, new RegExp(`${kind === "generation" ? UPLOAD_QUOTA.perGeneration : UPLOAD_QUOTA.count[kind]} ta`), `${kind}: chegara aytilmadi`);
+  }
+  const m = Object.fromEntries(all);
+  // Logotipni o'chirish yo'li yo'q — o'chirishni taklif qilmaymiz, qayta tanlashni aytamiz.
+  assert.ok(!/o'chir/.test(m.logo), "logotip: o'chirish yo'li yo'q");
+  assert.match(m.logo, /qayta tanla/);
+  assert.match(m.template, /o'chir/);
+  assert.match(m.source, /o'chir/);
+  // Hujjatga yuklangan rasmlar hujjat umri davomida saqlanadi.
+  assert.match(m.generation, /hujjat umri/);
+  // Faqat haqiqatan ULANGAN tozalashlar aytiladi: manbalar 30, suratlar 90 kun.
+  assert.match(m.source, /30 kun/);
+  assert.match(m.photo, /90 kun/);
+
+  const bytes = quotaMessage("logo", "bytes");
+  assert.match(bytes, new RegExp(`${UPLOAD_QUOTA.totalBytes / MB} MB`));
+  assert.match(bytes, /shablon/);
+  assert.ok(!/90 kundan/.test(bytes));
 });
