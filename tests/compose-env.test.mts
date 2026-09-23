@@ -84,6 +84,38 @@ test("docker-compose: TTS ovoz zanjiri o'zgaruvchilari (uz/ru/en) ikkala servisd
 });
 
 /**
+ * INFRA-09: `lib/brand.ts` `NEXT_PUBLIC_BRAND_NAME`/`NEXT_PUBLIC_BRAND_LOGO`ni
+ * `process.env`dan to'g'ridan-to'g'ri o'qiydi (Next.js build-vaqtidagi inline
+ * qilish worker'ga tegishli emas — u oddiy `tsx` processi). PPTX/DOCX
+ * metama'lumotini (`render-pptx.ts` — `pptx.author`) va navbatdagi boshqa
+ * brendlash aynan WORKER ichida chiziladi, lekin ilgari bu ikkalasi faqat
+ * `web` blokida bor edi — nom o'zgarsa generatsiya qilingan fayl eski nom
+ * bilan chiqib qolardi (compose-env qulfi qoldirgan tuynuk turlaridan biri,
+ * `LLM_JUDGE`/`OPENALEX_API_KEY` bilan bir xil sinf).
+ *
+ * Mutatsiya: `worker` blokidan `NEXT_PUBLIC_BRAND_NAME`/`_LOGO` qatorlarini
+ * olib tashlang — test qizaradi.
+ */
+test("docker-compose: NEXT_PUBLIC_BRAND_NAME/_LOGO web va worker'da bir xil standart bilan", () => {
+  const yaml = readFileSync(new URL("../docker-compose.yml", import.meta.url), "utf8");
+  const defaults: Record<string, string> = {
+    NEXT_PUBLIC_BRAND_NAME: "SlaydX",
+    NEXT_PUBLIC_BRAND_LOGO: "/logo.png",
+  };
+  for (const service of ["web", "worker"]) {
+    const block = envBlock(yaml, service);
+    for (const [k, def] of Object.entries(defaults)) {
+      const escaped = def.replace(/[/.]/g, "\\$&");
+      assert.match(
+        block,
+        new RegExp(`^\\s+${k}: \\$\\{${k}:-${escaped}\\}$`, "m"),
+        `${service}: ${k} compose'da (standart ${def} bilan) uzatilmaydi`,
+      );
+    }
+  }
+});
+
+/**
  * W2-D1 / C18 (INFRA-04, OBS-10, INFRA-15): resurs chegarasi va log
  * aylanishi HAR service'da bo'lishi kerak — box uchta loyiha bilan umumiy
  * (`.claude/deploy.md`), chegarasiz konteyner qo'shnilarni OOM bilan

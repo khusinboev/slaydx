@@ -1,7 +1,42 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    # Base image pin (INFRA-14/DEPS-05): major.minor tegga emas, aniq
+    # patch + Alpine minor'ga qulflangan (`Dockerfile`dagi `ARG
+    # NODE_IMAGE` bilan bir xil sabab — build har doim prod box'da,
+    # deploy vaqtida bo'ladi). Yangilash: eng so'nggi `16.x-alpineN.NN`ni
+    # `https://registry.hub.docker.com/v2/repositories/library/postgres/tags?page_size=100&name=16.`
+    # dan tanlab shu qatorni yangilang, sinab ko'ring, alohida commitda.
+    image: postgres:16.15-alpine3.24
     restart: unless-stopped
+    # Server sozlamalari (C33/C35): standart Postgres konfiguratsiyasi
+    # cheklovsiz — bitta jarayon 1000+ ulanish ochishi yoki katta
+    # sort/join'lar xotirani cheksiz yeyishi mumkin, box esa UCHTA
+    # loyiha bilan umumiy (INFRA-04). Sonlar `${PG_MEM_LIMIT:-1g}`
+    # (pastda, mem_limit) uchun hisoblangan:
+    #   max_connections=100 — haqiqiy talab ~30 (web pool 10 +
+    #     2 worker replika × pool 10 = 20 + migratsiya/admin skriptlar
+    #     uchun zaxira); 100 katta zaxira bilan, lekin PID/xotira
+    #     sarfini cheksiz qilmaydi.
+    #   shared_buffers=256MB — 1 GB limitning ~25% (standart tavsiya).
+    #   work_mem=4MB — har ulanish bittalab sort/hash uchun; eng yomon
+    #     holatda (100 ulanish × bir nechta operatsiya) shared_buffers
+    #     bilan birga limitga yaqinlashadi, lekin amaliyotda faol
+    #     ulanish soni ~30 bo'lgani uchun zaxira yetarli.
+    #   idle_in_transaction_session_timeout=30000 (30 s) — osilib qolgan
+    #     tranzaksiya qulfni abadiy ushlab turmasin (`chargeInTx`/
+    #     `claimJob` qator qulflariga bog'liq — TEST-03/TEST-04).
+    # `PG_MEM_LIMIT` boshqacha sozlansa (masalan kattaroq VPS), bu
+    # sonlarni ham mutanosib oshiring — bir-biriga bog'liq.
+    command:
+      - postgres
+      - -c
+      - max_connections=100
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - work_mem=4MB
+      - -c
+      - idle_in_transaction_session_timeout=30000
     # Resurs chegarasi (INFRA-04): box UCHTA loyiha bilan umumiy — chegarasiz
     # konteyner Postgres yoki qo'shni loyihalarni OOM bilan yiqitishi mumkin.
     # `PG_MEM_LIMIT`/`PG_CPUS` orqali sozlanadi.
@@ -187,6 +222,15 @@ services:
       DATABASE_URL: postgres://slaydx:${POSTGRES_PASSWORD:-slaydx}@postgres:5432/slaydx
       APP_URL: ${APP_URL:-http://localhost:3000}
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET kerak}
+      # INFRA-09: PPTX/DOCX metama'lumotini worker chizadi (`buildArtifact`
+      # shu konteynerda ishlaydi), `lib/brand.ts` esa `NEXT_PUBLIC_BRAND_*`ni
+      # to'g'ridan-to'g'ri `process.env`dan o'qiydi — Next.js build-vaqtidagi
+      # inline qilish bu yerga TEGISHLI EMAS (worker oddiy `tsx` processi).
+      # Shu ikkalasi `web`da bor edi, `worker`da yo'q edi — nom o'zgarsa
+      # generatsiya qilingan fayllar eski nom bilan chiqib qolardi.
+      # `tests/compose-env.test.mts` qulflaydi.
+      NEXT_PUBLIC_BRAND_NAME: ${NEXT_PUBLIC_BRAND_NAME:-SlaydX}
+      NEXT_PUBLIC_BRAND_LOGO: ${NEXT_PUBLIC_BRAND_LOGO:-/logo.png}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.7-flash}
       # Rasm yaratish modeli (bo'sh → kod standarti gemini-3.1-flash-lite-image / 1K)
