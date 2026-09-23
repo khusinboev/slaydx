@@ -298,6 +298,15 @@ export function useDocEdit<Op>({
    */
   useEffect(() => {
     if (!g) return;
+    /*
+     * Saqlanmagan navbat yoki javobi yo'qolgan bo'lak bor ekan, tashqi
+     * versiya OLINMAYDI (review R3). Sahifa `gen` i faqat versiyani
+     * oshirishi mumkin (`ResultView` rebuild javobi, `doc` eskisicha):
+     * uni olsak, keyingi «Saqlash» serverda allaqachon qo'llangan bo'lakni
+     * YANGI `baseVersion` bilan qayta yuborib, ikki marta qo'llardi. Eski
+     * versiya qolsa server 409 beradi va `reconcileLost` hal qiladi.
+     */
+    if (docRef.current !== null && (queueRef.current.length > 0 || uncertainRef.current)) return;
     if (docRef.current === null || g.docVersion > versionRef.current) {
       docRef.current = g.doc;
       baseDocRef.current = g.doc;

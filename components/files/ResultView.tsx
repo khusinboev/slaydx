@@ -135,9 +135,12 @@ export function ResultView({ id }: { id: string }) {
         if (gen) {
           const r = await ensureGenerationFresh(gen);
           if (r) {
-            setGen((prev) =>
-              prev ? { ...prev, fileVersion: r.fileVersion, docVersion: r.docVersion } : prev,
-            );
+            /*
+             * Faqat `fileVersion` (review R3): `docVersion` ni `doc` siz
+             * oshirish tahrir navbatini eski hujjatga «yangi versiya» deb
+             * bog'lab, serverga yetgan bo'lakni ikki marta qo'llatardi.
+             */
+            setGen((prev) => (prev ? { ...prev, fileVersion: r.fileVersion } : prev));
           }
         }
         await api.downloadGeneration(id, format);

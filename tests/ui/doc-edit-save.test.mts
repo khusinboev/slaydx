@@ -417,3 +417,33 @@ test("javob yo'qoldi, keyin hujjat boshqa joyda ham o'zgardi — halol xabar, qo
   assert.equal(hook!.doc?.slides?.[2].title, "Tahrir 10", "ular ekranda ham");
   assert.equal(hook!.doc?.slides?.[3].title, "Boshqa yorliq", "server holati olindi");
 });
+
+test("javob yo'qoldi → «Yuklab olish» faqat versiyani oshirdi → «Saqlash»: bo'lak IKKI MARTA qo'llanmaydi (review R3)", async () => {
+  // Bir xil qiymatni qayta yozuvchi op emas — qo'shish (`add`): ikki marta
+  // qo'llansa slaydlar soni ortiqcha bo'ladi.
+  const s = stubServer();
+  const gen0 = generation(s);
+  const r = render(h(Harness, { gen: gen0 }));
+  await act(async () => {
+    hook!.run([{ op: "add", after: 0 }]);
+  });
+  s.loseNext = true;
+  await act(async () => {
+    await hook!.save();
+  });
+  assert.equal(s.version, 2, "server qo'lladi, javob yo'qoldi");
+  const slidesAfterOne = s.doc.slides?.length ?? 0;
+  // `ResultView.onDownload` → `ensureGenerationFresh` → rebuild javobi:
+  // sahifa `gen` iga faqat versiyalar qo'yiladi, `doc` eskisicha.
+  await act(async () => {
+    r.rerender(h(Harness, { gen: { ...gen0, docVersion: 2, fileVersion: 2 } }));
+  });
+  assert.equal(hook!.pending, 1, "navbat hali saqlanmagan");
+  assert.equal(hook!.doc?.slides?.length, slidesAfterOne, "navbatdagi tahrir ekrandan yo'qolmadi");
+  await act(async () => {
+    await hook!.save();
+  });
+  assert.equal(s.version, 2, "bo'lak ikkinchi marta qo'llanmadi");
+  assert.equal(s.doc.slides?.length, slidesAfterOne);
+  assert.equal(hook!.pending, 0);
+});
