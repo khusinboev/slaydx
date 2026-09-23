@@ -39,6 +39,15 @@ export function editErrorText(e: unknown): string {
   if (e instanceof ApiError) {
     const code = typeof e.data.code === "string" ? e.data.code : "";
     if (code && CODE_TEXT[code]) return CODE_TEXT[code];
+    /*
+     * Server o'z matnini bergan bo'lsa — AYNAN u (W1-E): 429 kunlik
+     * chegara («ertaga 00:00 dan keyin»), 402 `unpaid` (bonus AI tahrirni
+     * qoplamaydi), 503 o'chirilgan/global chegara, 409 `busy`, PATCH 413
+     * («so'rov hajmi»). Ilgari 429 hammasi «Juda tez-tez» ga, 413 esa
+     * PATCH da ham «5 MB gacha rasm» ga aylanardi — foydalanuvchi nima
+     * qilishini bilmasdi. Zaxira jumlalar faqat matnsiz javob (nginx) uchun.
+     */
+    if (typeof e.data.error === "string" && e.data.error) return e.message;
     if (e.status === 413) return "Fayl juda katta — 5 MB gacha rasm yuklang.";
     if (e.status === 415) return "Faqat PNG yoki JPEG rasm qabul qilinadi.";
     if (e.status === 429) return "Juda tez-tez — biroz kuting va qaytadan urinib ko‘ring.";
@@ -47,10 +56,43 @@ export function editErrorText(e: unknown): string {
   return e instanceof Error && e.message ? e.message : "Saqlab bo‘lmadi";
 }
 
-/** `409 {code}` ni ajratadi — `useSlideEdit` shunga qarab qayta yuklaydi. */
+/**
+ * `409 {code}` ni ajratadi — chaqiruvchi shunga qarab hujjatni QAYTA
+ * YUKLAYDI (serverdagi holat boshqa). `busy` bundan mustasno: u
+ * «shu hujjatda AI tahrir allaqachon ketmoqda» degani — hujjat
+ * o'zgarmagan, qayta yuklash (va saqlanmagan navbatni tashlash) kerak emas.
+ */
 export function editErrorCode(e: unknown): string | null {
   if (!(e instanceof ApiError) || e.status !== 409) return null;
-  return typeof e.data.code === "string" ? e.data.code : "version";
+  const code = typeof e.data.code === "string" ? e.data.code : "version";
+  return code === "busy" ? null : code;
+}
+
+/**
+ * 402 `unpaid` — hujjat faqat bonus ball bilan to'langan, bepul AI tahrir
+ * («Tuzatish»/«Hammasini tuzatish») unga ishlamaydi (`lib/server/spend.ts`).
+ * Bu vaqtinchalik xato emas: UI tugmalarni o'chirib, sababini tushuntiradi.
+ */
+export function isUnpaidError(e: unknown): boolean {
+  return e instanceof ApiError && e.status === 402;
+}
+
+/**
+ * Bitta `PATCH …/doc` dagi operatsiyalar soni. Server har so'rovda
+ * `MAX_EDIT_OPS` (50, `lib/server/edit-adapters.ts`) dan ortig'ini rad
+ * etadi — klient navbatni shu o'lchamdagi bo'laklarga bo'lib yuboradi
+ * (FE-03). Mosligini `tests/api-client-poll.test.mts` qulflaydi.
+ */
+export const EDIT_CHUNK_OPS = 50;
+
+/**
+ * Saqlash xatosi VAQTINCHALIKMI — navbat saqlanib, qayta urinsa bo'ladimi:
+ * tarmoq/vaqt tugashi (0), 408, 429, 5xx. 409 (versiya/holat), 400/422
+ * (op yaroqsiz) — yo'q: qayta yuborish yana shu xatoni beradi.
+ */
+export function isRetryableSaveError(e: unknown): boolean {
+  if (!(e instanceof ApiError)) return true;
+  return e.status === 0 || e.status === 408 || e.status === 429 || e.status >= 500;
 }
 
 /**
@@ -66,12 +108,13 @@ export function patchGenerationDoc(id: string, baseVersion: number, ops: unknown
   return request<DocPatchResult>(`/api/generations/${id}/doc`, {
     method: "PATCH",
     body: JSON.stringify({ baseVersion, ops }),
+    timeoutMs: 60_000,
   });
 }
 
 /** PPTX ni hujjatning oxirgi holatidan qayta yasashni so'raydi (fayl yangi bo'lsa — no-op). */
 export function rebuildGeneration(id: string) {
-  return request<RebuildResult>(`/api/generations/${id}/rebuild`, { method: "POST" });
+  return request<RebuildResult>(`/api/generations/${id}/rebuild`, { method: "POST", timeoutMs: 120_000 });
 }
 
 /**
@@ -81,7 +124,7 @@ export function rebuildGeneration(id: string) {
  * boshqa 409 kodlar bilan bir xil ishlanadi.
  */
 export function restoreGenerationDoc(id: string) {
-  return request<DocPatchResult>(`/api/generations/${id}/doc/restore`, { method: "POST" });
+  return request<DocPatchResult>(`/api/generations/${id}/doc/restore`, { method: "POST", timeoutMs: 60_000 });
 }
 
 /** Foydalanuvchi rasmini slaydga qo'yadi (multipart — `Content-Type` ni brauzer yozadi). */
@@ -92,6 +135,7 @@ export function uploadSlideImage(id: string, index: number, file: File, baseVers
   return request<DocPatchResult>(`/api/generations/${id}/slides/${index}/image`, {
     method: "POST",
     body: fd,
+    timeoutMs: 60_000,
   });
 }
 
@@ -107,7 +151,7 @@ export function uploadResumePhoto(
   if (photo.shape) fd.append("shape", photo.shape);
   if (photo.crop) fd.append("crop", JSON.stringify(photo.crop));
   fd.append("baseVersion", String(baseVersion));
-  return request<DocPatchResult>(`/api/generations/${id}/photo`, { method: "POST", body: fd });
+  return request<DocPatchResult>(`/api/generations/${id}/photo`, { method: "POST", body: fd, timeoutMs: 60_000 });
 }
 
 /**
@@ -121,6 +165,7 @@ export function rewriteArticle(id: string, baseVersion: number, fix: { op: "rewr
   return request<DocPatchResult & { ops: unknown[] }>(`/api/generations/${id}/rewrite`, {
     method: "POST",
     body: JSON.stringify({ baseVersion, fix }),
+    timeoutMs: 120_000,
   });
 }
 
@@ -135,6 +180,8 @@ export function polishArticle(id: string, baseVersion: number) {
   return request<DocPatchResult & { ops: unknown[]; polish: import("./generation/article/types").PolishLog }>(`/api/generations/${id}/polish`, {
     method: "POST",
     body: JSON.stringify({ baseVersion }),
+    // Server sayqali ≤120 s + baholovchi + fayl — spend.ts qulf muddati 240 s.
+    timeoutMs: 300_000,
   });
 }
 
@@ -143,7 +190,7 @@ export function removeResumePhoto(id: string, baseVersion: number) {
   const fd = new FormData();
   fd.append("remove", "1");
   fd.append("baseVersion", String(baseVersion));
-  return request<DocPatchResult>(`/api/generations/${id}/photo`, { method: "POST", body: fd });
+  return request<DocPatchResult>(`/api/generations/${id}/photo`, { method: "POST", body: fd, timeoutMs: 60_000 });
 }
 
 /**
