@@ -101,6 +101,8 @@ function scheduleSessionRetry() {
     sessionRetryTimer = null;
     void useAppStore.getState().refreshSession();
   }, sessionRetryDelay);
+  // Node (testlar, SSR) da bu taymer jarayonni tirik ushlab turmasin; brauzerda `unref` yo'q.
+  (sessionRetryTimer as { unref?: () => void }).unref?.();
 }
 
 /** Mini App kirishi — bitta so'rov uchib turadi; avtomatik urinish sahifa yuklanishida BIR marta. */
@@ -186,7 +188,12 @@ export const useAppStore = create<AppState>()(
             return;
           }
           if (get().sessionChecked) return;
-          set({ sessionError: e instanceof Error ? e.message : "Server bilan aloqa yo'q" });
+          if (!api.isTransient(e)) {
+            // Aniq, lekin kutilmagan rad (403/404…) — qayta urinish yordam bermaydi: kirmagan deb hisoblanadi.
+            set({ sessionChecked: true, loggedIn: false, user: null });
+            return;
+          }
+          set({ sessionError: e.message });
           scheduleSessionRetry();
           return;
         }

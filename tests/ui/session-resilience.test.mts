@@ -134,6 +134,15 @@ test("FE-04: birinchi yuklanishda xato — «chiqdi» emas: sessionChecked yolg'
   assert.ok(!screen.queryByRole("status"), "banner yo'qoladi");
 });
 
+test("FE-04: birinchi yuklanishda aniq rad (404) — cheksiz qayta urinish yo'q, kirmagan deb hisoblanadi", async () => {
+  reset();
+  const calls = stubSession([() => json(404, { error: "yo'q" })]);
+  await useAppStore.getState().refreshSession();
+  assert.equal(useAppStore.getState().sessionChecked, true);
+  assert.equal(useAppStore.getState().sessionError, null, "banner yo'q");
+  assert.equal(calls.length, 1);
+});
+
 test("FE-09: /uz/create — seans tekshirilmaguncha kirish oynasi OCHILMAYDI; kirgan bo'lsa umuman ochilmaydi", async () => {
   useAppStore.setState({ hydrated: true, sessionChecked: false, loggedIn: false, user: null, features: features() });
   render(h(CreateGrid));

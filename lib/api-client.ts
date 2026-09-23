@@ -701,7 +701,7 @@ const SLOW_ISSUE: PollIssue = {
  * 408/425/429 va 5xx (deploy paytidagi 502, OOM qayta ishga tushish).
  * 404/400/403 — yo'q: hujjat o'chirilgan yoki so'rov noto'g'ri.
  */
-function isTransient(e: unknown): e is ApiError {
+export function isTransient(e: unknown): e is ApiError {
   return (
     e instanceof ApiError &&
     (e.status === 0 || e.status === 408 || e.status === 425 || e.status === 429 || e.status >= 500)
