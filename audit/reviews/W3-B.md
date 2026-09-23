@@ -86,3 +86,39 @@ However, the chain breaker counts user-caused, non-transport failures, and this 
 4. After a 429 with `retryable:false` (Anthropic spend limit) or `Retry-After > 30 s`, the provider is still attempted on every call. `breaker.trip(retryAfter)` there would skip it at once.
 5. In half-open, a probe that took `allow()` and then received a 429 or hit the limiter-queue timeout keeps the probe slot for a full `cooldownMs`. This is harmless but slows recovery. `research/http.ts` has the same pattern: its own retry after the probe returns the synthetic 429.
 6. **Tracking (orchestrator):** EXT-03 is only fixed for callers that pass `deadline`, which today means research only. Writers, judges and polish/rewrite still run `specs × 3 × timeoutMs` with no deadline. Wiring the job deadline into `complete()` belongs with the C15 caller work (W3-A/phase 2). Mark EXT-03 as partial until that is done.
+
+## Re-review: `b3d327b` (2026-09-24)
+
+### Verdict: APPROVE
+
+- **R1 — fixed.**
+  - `chain.ts` now counts a failure without a status only when it is `retryable`, and counts 5xx; this is the same rule as `withRetry`. Empty answers, refusals and 4xx are neutral.
+  - Re-ran `scratchpad/w3b-probe.mts` with 6 empty Gemini answers: all 6 reached the adapter and the breaker stayed **closed**. Before the fix it opened after 5.
+  - Regression test: `llm-chain-deadline` "bo'sh javob / refusal / 4xx … yopiq".
+- **R2 — fixed.**
+  - `llm.ts` is back to `/abort/i`.
+  - The chain's `isTimeoutSignal` is now `/abort|\btimed?\s?out\b/i`. I checked it against these messages:
+
+    | Error message | Counts as timeout? |
+    |---|---|
+    | `fetch failed (ETIMEDOUT)` | no |
+    | `fetch failed (UND_ERR_CONNECT_TIMEOUT)` | no |
+    | `Request timed out.` | yes |
+    | `This operation was aborted` | yes |
+
+  - Regression test added (llm-retry-hygiene).
+- **R3 — fixed.**
+  - `audio/engine.ts` passes `deadline` to `synthesizeAll`. `DeadlineError` propagates as a job error, which means FAILED + refund.
+  - Test added in `audio-engine.test.mts`.
+- **Nits**
+  - **Nit 1 — done:** `equalJitterMs` gives network errors a wait in `[cap/2, cap)`.
+  - **Nit 2 — done:** research's default 429 cooldown is 10 s.
+  - **Nit 3 — done:** Telegram retries only when `retry_after ≤ 5`.
+  - **Nit 4 — done:** a 429 that is a spend limit, or has `Retry-After > 30 s`, opens the breaker for `min(Retry-After or 30 s, 10 min)`. There is a test for it.
+  - **Nit 5 (probe slot held after a neutral result):** still open, not blocking.
+- **Tests (heavy2.sh 3G/900 s, no provider calls)**
+  - New suites plus audio-engine: **67/67 pass**.
+  - llm-chain, llm-anthropic, llm-roles, llm-stream, research-pipeline, research-openalex, tts-chain, slide-images, image-providers-free and telegram-bot-login: **125/125 pass**.
+- **Remaining non-blocking notes**
+  - A tripped Gemini breaker (for example a per-minute `RetryInfo` of 34 s) fails Gemini-only jobs quickly for that window. The outcome is the same as before the change, minus the wasted requests.
+  - Engine-wide deadline plumbing for writers, judges and polish is a follow-up. Until then, EXT-03 stays partial.
