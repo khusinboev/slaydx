@@ -1,6 +1,6 @@
 import { ApiError, handler, json, limit, readJson, requireUser } from "@/lib/server/api";
 import { budgetFor } from "@/lib/generation/budget";
-import { enqueueGeneration, listGenerations } from "@/lib/server/jobs";
+import { clampListLimit, decodeCursor, enqueueGeneration, listGenerations } from "@/lib/server/jobs";
 import { sanitizeValues } from "@/lib/server/validate";
 import { sourceCharsForRequest } from "@/lib/server/source-upload";
 import { missingRequired, preflightError, priceFor, TOOL_BY_SLUG, topicOf } from "@/lib/tools";
@@ -10,11 +10,24 @@ import { env } from "@/lib/server/env";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** Foydalanuvchining o'z generatsiyalari. Boshqa userniki chiqmaydi. */
+/**
+ * Foydalanuvchining o'z generatsiyalari. Boshqa userniki chiqmaydi.
+ *
+ * Kursor bilan sahifalash (BEA-06, FE-08): `?limit=1..100` (standart 50)
+ * va `?cursor=<oldingi javobdagi nextCursor>`. Javob kaliti `generations`
+ * o'zgarmagan, qo'shimcha `nextCursor` (`null` — oxirgi sahifa).
+ */
 export const GET = handler("generations/list", async (req) => {
   const { user } = await requireUser(req);
-  const rows = await listGenerations(user.id);
-  return json({ generations: rows });
+  const params = new URL(req.url).searchParams;
+  const rawCursor = params.get("cursor");
+  const cursor = rawCursor ? decodeCursor(rawCursor) : null;
+  if (rawCursor && !cursor) throw new ApiError("Noto'g'ri kursor", 400);
+  const { items, nextCursor } = await listGenerations(user.id, {
+    limit: clampListLimit(params.get("limit")),
+    cursor,
+  });
+  return json({ generations: items, nextCursor });
 });
 
 /**
@@ -114,8 +127,22 @@ export const POST = handler("generations/create", async (req) => {
     // slotni band qilmasin, 45 betlik kurs ishi esa unga sig'may
     // yiqilmasin. `WORKER_JOB_TIMEOUT_MS` yuqori chegara bo'lib qoladi.
     budgetMs: budgetFor(tool, values, env.worker.jobTimeoutMs),
+    /*
+     * Qabul qarori (C22, `audit/designs/capacity.md`) — tranzaksiya ichida,
+     * PUL YECHISHDAN OLDIN: foydalanuvchida QUEUED+IN_PROGRESS ≥
+     * `USER_MAX_INFLIGHT` yoki navbatdagi kutish > `QUEUE_MAX_WAIT_SEC`
+     * bo'lsa 429 — pul ham, qator ham yo'q.
+     */
+    admission: env.queue,
   });
 
+  if (!result.ok && result.reason === "admission") {
+    const { code, retryAfterSec, error } = result.decision;
+    return json(
+      { error, code, retryAfterSec },
+      { status: 429, headers: { "Retry-After": String(retryAfterSec) } },
+    );
+  }
   if (!result.ok) {
     throw new ApiError(
       `Balans yetarli emas. Kerak: ${result.required.toLocaleString("uz-UZ")} tanga, mavjud: ${result.available.toLocaleString("uz-UZ")}.`,
