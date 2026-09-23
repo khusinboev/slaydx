@@ -1,13 +1,27 @@
 # syntax=docker/dockerfile:1
 
+# Base image pin (INFRA-14/DEPS-05): faqat major tegga emas, aniq patch +
+# Alpine minor versiyaga qulflangan — bir xil commit ikki xil kunda
+# qurilganda boshqa Node/Alpine patch tortib olinmasin (build har doim
+# prod box'da, deploy vaqtida bo'ladi — INFRA-13, ya'ni "qayta qurish"
+# tez-tez sodir bo'ladigan holat, ixtiyoriy emas).
+#
+# Yangilash tartibi (ataylab, tasodifiy emas): `curl -s
+# "https://registry.hub.docker.com/v2/repositories/library/node/tags?page_size=100&name=22." | jq -r '.results[].name' | grep alpine`
+# dan eng so'nggi `22.x.y-alpineN.NN` ni tanlang, pastdagi `ARG`
+# qiymatini shunga yangilang (to'rtta `FROM` shu bitta manbadan o'qiydi),
+# `docker compose -p slaydx build` bilan sinab ko'ring va alohida
+# commitda kiriting — boshqa o'zgarish bilan aralashtirmang.
+ARG NODE_IMAGE=node:22.23.2-alpine3.24
+
 # ─── Bog'liqliklar ────────────────────────────────────────────────────
-FROM node:22-alpine AS deps
+FROM ${NODE_IMAGE} AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 
 # ─── Qurish ───────────────────────────────────────────────────────────
-FROM node:22-alpine AS builder
+FROM ${NODE_IMAGE} AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
@@ -30,7 +44,7 @@ RUN npx esbuild lib/server/parse-worker.ts --bundle --platform=node --format=esm
   --banner:js="import{createRequire as __cr}from'node:module';const require=__cr(import.meta.url);"
 
 # ─── Ishlash ──────────────────────────────────────────────────────────
-FROM node:22-alpine AS runner
+FROM ${NODE_IMAGE} AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
@@ -80,7 +94,7 @@ CMD ["node", "server.js"]
 # Alohida target: worker Next.js server emas, oddiy Node processi.
 # Standalone to'plamda `scripts/` va `tsx` yo'q, shuning uchun bu yerda
 # to'liq manba va bog'liqliklar saqlanadi.
-FROM node:22-alpine AS worker
+FROM ${NODE_IMAGE} AS worker
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
@@ -92,26 +106,27 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN apk add --no-cache fontconfig ttf-liberation font-noto && fc-cache -f >/dev/null 2>&1 || true
 
 COPY package.json package-lock.json ./
-# `--include=dev` MAJBURIY va u `--omit=dev` ishlatmaslikdan KUCHLIROQ.
-# 
-# Yuqoridagi `ENV NODE_ENV=production` npm ga devDependencies ni
-# tashlab ketishni buyuradi — bayroqsiz ham. Ilgari bu yerda faqat
-# `npm ci` turar va izoh «--omit=dev ishlatmaymiz» deb tinchlantirardi,
-# amalda esa `tsx` O'RNATILMAS edi.
-# 
-# Oqibati jonli serverda ko'rindi: `CMD` dagi `npx tsx` har konteyner
-# ishga tushganda tsx ni INTERNETDAN yuklab olardi —
-# 
+# Tarix (INFRA-12/DEPS-06): ilgari bu yerda `npm ci --include=dev` turardi,
+# chunki `tsx` `devDependencies`da edi va `ENV NODE_ENV=production` uni
+# bayroqsiz tashlab ketardi — o'sha holatda `CMD`dagi `npx tsx` har
+# konteyner ishga tushganda tsx ni INTERNETDAN yuklashga urinardi:
+#
 # npm warn exec The following package was not found and will be
 # installed: tsx@4.23.13
-# 
-# Ya'ni npm registry yetib bo'lmasa worker umuman ko'tarilmaydi va
-# BARCHA generatsiya navbatda abadiy qotib qoladi. Deploy internetga
-# bog'liq bo'lib qolgan edi, tasvirga esa emas.
-# 
-# Yon foyda: `npm run topup` kabi admin vositalari ham ishlaydi — ular
-# `tsx` ni to'g'ridan-to'g'ri chaqiradi.
-RUN npm ci --include=dev && npm cache clean --force
+#
+# Registry yetib bo'lmasa worker umuman ko'tarilmasdi — BARCHA
+# generatsiya navbatda abadiy qotib qolardi. `--include=dev` o'sha
+# muammoni to'g'ri hal qilgan edi, lekin haddan tashqari keng: `tsx`
+# bilan birga eslint/jsdom/tailwindcss/typescript/@testing-library/* —
+# ~430 hech qachon ishlatilmaydigan paket ham prod worker image'iga
+# tushardi (kattaroq attack surface, kattaroq image, foydasiz).
+#
+# Endi `tsx` `package.json`da `dependencies`da (worker CMD va admin
+# skriptlari — `topup`/`seed-demo`/`seed-images`/`bot` — unga to'g'ridan
+# to'g'ri tayanadi), shuning uchun `--omit=dev` xotirjam ishlatiladi:
+# tsx (va uning yagona bog'liqligi `esbuild`) HAR DOIM local diskda,
+# tarmoqqa chiqmasdan bor — aynan o'sha tuzatish, faqat torroq ko'lamda.
+RUN npm ci --omit=dev && npm cache clean --force
 COPY lib ./lib
 COPY scripts ./scripts
 COPY tsconfig.json ./
