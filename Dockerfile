@@ -17,6 +17,18 @@ ENV NEXT_OUTPUT=standalone
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npm run build
 
+# `lib/server/parse-worker.ts` (worker_threads tahlil hovuzi, W1-D) — prod
+# `standalone` to'plamida `tsx`/manba fayllar YO'Q, shuning uchun worker
+# thread'ini bu yerda, build vaqtida, bitta ishlaydigan `.mjs`ga yig'amiz.
+# Bo'lmasa prod jimgina process ichida (in-process) parslashga qaytadi —
+# hovuzning butun maqsadi (asosiy event loop'ni bloklamaslik) yo'qoladi.
+# `esbuild` alohida o'rnatilmagan — `tsx`ning o'z bog'liqligi sifatida
+# `node_modules`da allaqachon bor (`npm ci` shu bosqichda dev bog'liqliklarni
+# ham o'rnatadi, `NODE_ENV=production` faqat keyingi bosqichlarda o'rnatiladi).
+RUN npx esbuild lib/server/parse-worker.ts --bundle --platform=node --format=esm --target=node22 \
+  --outfile=.next/standalone/parse-worker.mjs \
+  --banner:js="import{createRequire as __cr}from'node:module';const require=__cr(import.meta.url);"
+
 # ─── Ishlash ──────────────────────────────────────────────────────────
 FROM node:22-alpine AS runner
 WORKDIR /app
@@ -112,6 +124,15 @@ COPY data ./data
 
 RUN addgroup -g 1001 -S nodejs && adduser -S worker -u 1001 && chown -R worker:nodejs /app
 USER worker
+
+# Worker tarmoq porti tinglamaydi, shuning uchun `web`dagi kabi HTTP
+# HEALTHCHECK ishlamaydi. Shartnoma (`audit/designs/w2-contracts.md`):
+# worker sikli sog'lom bo'lsa `/tmp/slaydx-worker-alive` faylini kamida
+# har 30 s da yangilaydi (`lib/server/worker.ts`, W2-D2); fayl 2 daqiqadan
+# eskirsa — ish to'xtab qolgan (INFRA-06: ilgari o'lik worker hech qanday
+# signal bermasdi, `docker ps` uni abadiy "Up" deb ko'rsatardi).
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+  CMD find /tmp/slaydx-worker-alive -mmin -2 | grep -q .
 
 # `npx` emas, to'g'ridan-to'g'ri o'rnatilgan ikkilik: tarmoqqa chiqmaydi.
 CMD ["./node_modules/.bin/tsx", "--conditions=react-server", "scripts/worker.ts"]

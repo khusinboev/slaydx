@@ -132,7 +132,7 @@ xizmati) — shuning uchun hamma narsa ajratilgan:
 | | |
 |---|---|
 | Compose proyekt nomi | `slaydx` (`docker compose -p slaydx`) |
-| Konteynerlar | `slaydx-web-1`, `slaydx-worker-1`, `slaydx-postgres-1` |
+| Konteynerlar | `slaydx-web-1`, `slaydx-worker-1`, `slaydx-worker-2`, `slaydx-postgres-1` (C22: worker 2 replika) |
 | Port | `127.0.0.1:3000` — faqat localhost, nginx proxy qiladi |
 | Postgres | konteyner ichida, host portiga CHIQARILMAGAN |
 | nginx | `/etc/nginx/sites-available/slaydx`, `default_server` emas |
@@ -149,11 +149,78 @@ Sirlar `/opt/slaydx/.env` da (huquq 600). `SESSION_SECRET`,
 `POSTGRES_PASSWORD` va `CRON_SECRET` shu server uchun alohida
 yaratilgan — lokal qiymatlar takrorlanmagan.
 
+### Resurs chegaralari (C18, `docker-compose.yml`)
+
+Box uchta loyiha bilan umumiy — har service'ning xotira/CPU chegarasi
+`.env` orqali sozlanadi (standartlar quyida, o'zgartirmasa shular ishlaydi):
+
+| O'zgaruvchi | Standart | Nima uchun |
+|---|---|---|
+| `WEB_MEM_LIMIT` | `2g` | `web` konteyner xotira shifti |
+| `WEB_CPUS` | `2` | `web` konteyner CPU shifti |
+| `WORKER_MEM_LIMIT` | `2g` | HAR BIR worker konteyner (2 replika — C22) xotira shifti |
+| `WORKER_CPUS` | `2` | HAR BIR worker konteyner CPU shifti |
+| `PG_MEM_LIMIT` | `1g` | Postgres konteyner xotira shifti |
+| `PG_CPUS` | `1` | Postgres konteyner CPU shifti |
+
+**Deploy oldidan tekshiring:** `docker info --format '{{.NCPU}}'` — agar
+host'da jami CPU soni `WEB_CPUS + 2×WORKER_CPUS + PG_CPUS`dan kam bo'lsa,
+Docker konteynerni "Range of CPUs is from 0.01 to N" xatosi bilan
+ko'tarmaydi; kerak bo'lsa `.env`da kichikroq qiymat bering. Peak xotira
+ish boshiga hali o'lchanmagan (`audit/designs/capacity.md`) — 2g ishonchli
+chegara deb tasdiqlanguncha `docker stats` bilan kuzating.
+
 **HTTPS hali yo'q:** `slaydxx.uz` DNS'da umuman ko'rinmaydi (A ham, NS
 ham yo'q). Domen shu serverga yo'naltirilgach `enable-https.sh` ni
 ishga tushiring — u avval DNS ni tekshiradi va mos kelmasa certbot'ni
 umuman chaqirmaydi, chunki muvaffaqiyatsiz urinishlar Let's Encrypt
 chegarasini yeydi.
+
+### Zaxira (backup)
+
+Ilgari zaxira faqat qo'lda, deploydan oldin olinardi va bitta diskda
+saqlanardi — tiklash hech qachon sinalmagan edi (INFRA-05). Endi ikkita
+skript bor (`scripts/backup.sh`, `scripts/restore-check.sh`), lekin ular
+faqat REPO'da — serverga o'rnatish (cron qo'shish) egasi tomonidan
+qo'lda bajariladi:
+
+```bash
+# /etc/cron.d/slaydx-backup yoki `crontab -e` (root):
+30 3 * * * /opt/slaydx/scripts/backup.sh >> /var/log/slaydx-backup.log 2>&1
+0 5 * * 0 /opt/slaydx/scripts/restore-check.sh >> /var/log/slaydx-backup.log 2>&1
+```
+
+`backup.sh` — `pg_dump -Fc` (siqilgan, `bytea` ikki barobar shishmaydi)
+`${BACKUP_DIR:-/root/slaydx-backups}` ga, `pg_restore --list` bilan
+tekshirilgan, `BACKUP_KEEP_DAYS` (standart 7) dan eskisi o'chiriladi.
+`restore-check.sh` — eng so'nggi dumpni MUSTAQIL (`slaydx-*` OILASIGA
+UMUMAN TEGMAYDIGAN), vaqtinchalik Postgres konteynerga tiklab, asosiy
+jadvallar va balans invariantini (`balance == sum(transactions)`)
+tekshiradi, oxirida shu vaqtinchalik konteynerni o'chiradi. Ikkalasi ham
+hech qachon `docker compose down`/prune ishlatmaydi va boshqa (slaydx
+yoki qo'shni loyiha) konteynerlariga tegmaydi (`.claude/deploy.md`ning
+umumiy box qoidasi).
+
+**Box tashqarisiga nusxa va Telegram alert — FAQAT `/etc/slaydx/backup.env`
+orqali.** `cron` BO'SH muhitda ishga tushadi va `/opt/slaydx/.env`ni
+O'QIMAYDI — `BACKUP_REMOTE`/`BACKUP_TG_CHAT`/`TELEGRAM_BOT_TOKEN` uchun
+BOSHQA hech qanday joy YO'Q. Fayl repo checkout'idan (`/opt/slaydx`)
+ATAYLAB TASHQARIDA — `git`/`docker build` uni umuman ko'rmaydi:
+
+```bash
+install -d -m 700 /etc/slaydx
+cat > /etc/slaydx/backup.env <<'EOF'
+BACKUP_REMOTE=b2:slaydx-backups
+BACKUP_TG_CHAT=123456789
+TELEGRAM_BOT_TOKEN=...
+EOF
+chmod 600 /etc/slaydx/backup.env
+```
+
+600 huquq shart emas — skript boshqacha ruxsat bo'lsa ochiq ogohlantiradi,
+lekin baribir o'qiydi. Fayl umuman bo'lmasa — muammo emas: faqat lokal
+dump olinadi, box tashqarisiga nusxa YO'Q va skript har safar buni ochiq
+ogohlantiradi. Yo'l `BACKUP_ENV_FILE` bilan almashtiriladi.
 
 ## Buyruqlar
 
@@ -351,7 +418,10 @@ ikkalasi ham doimiy vaqtli taqqoslash ishlatadi.
 
 **Ma'lumot**
 - Egalik SQL darajasida: id ni bilgan begona foydalanuvchi hujjat ham, rasm ham ola olmaydi
-- Fayl, media va generatsiya yozuvlari **muddatsiz** saqlanadi — avtomatik o'chirilish yo'q (foydalanuvchi o'zi o'chirmasa)
+- Fayl saqlash muddati (C23): **real to'lov bilan** (balans yoki Pro `quota`) yaratilgan
+  hujjatlar — **muddatsiz**; **faqat bonus** (ro'yxatdan o'tish ballari) bilan yaratilganlar —
+  **180 kun**, shundan keyin fayl/rasm o'chiriladi, lekin generatsiya yozuvi va tarix (kredit
+  jurnali bilan) saqlanib qoladi — foydalanuvchi "fayl muddati tugagan" holatini ko'radi
 - CSP, HSTS, nosniff, Referrer-Policy, Cross-Origin-Resource-Policy
 
 **Ma'lum cheklov:** `script-src` da `'unsafe-inline'` bor — Next.js inline runtime
