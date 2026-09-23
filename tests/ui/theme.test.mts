@@ -83,13 +83,26 @@ test("migrateUiPrefs: allaqachon 'light'/'dark' bo'lsa — o'zgarishsiz qoladi (
   assert.equal(migrateUiPrefs({ theme: "dark" }).theme, "dark");
 });
 
-test("migrateUiPrefs: locale/dir yaroqli bo'lsa saqlanadi, yaroqsiz bo'lsa maydon umuman qaytmaydi", () => {
+test("migrateUiPrefs: dir yaroqli bo'lsa saqlanadi, yaroqsiz bo'lsa maydon qaytmaydi; eski `locale` ko'chirilmaydi (C38)", () => {
   const out = migrateUiPrefs({ theme: "light", locale: "ru", dir: "rtl" });
-  assert.equal(out.locale, "ru");
   assert.equal(out.dir, "rtl");
-  const bad = migrateUiPrefs({ theme: "light", locale: 42, dir: "xx" });
-  assert.equal("locale" in bad, false, "yaroqsiz locale — maydon qo'shilmasligi kerak (undefined bilan bosib yozmaslik uchun)");
-  assert.equal("dir" in bad, false);
+  assert.equal("locale" in out, false, "til menyusi olib tashlangan — eski qiymat holatga qaytmaydi");
+  const bad = migrateUiPrefs({ theme: "light", dir: "xx" });
+  assert.equal("dir" in bad, false, "yaroqsiz dir — maydon qo'shilmasligi kerak (undefined bilan bosib yozmaslik uchun)");
+});
+
+// ═══════════════════════════════════════════ C38 — bezak til menyusi yo'q
+
+test("C38 (UX-09/FE-21): TopBar da interfeys tili menyusi YO'Q, store da `locale` holati yo'q", () => {
+  render(h(TopBar, { onMenu: () => {} }));
+  assert.ok(!screen.queryByLabelText("Tilni o'zgartirish"), "til tugmasi olib tashlangan");
+  for (const name of ["English", "Русский", "Qaraqalpaqsha", "Қазақша", "Кыргызча"]) {
+    assert.ok(!screen.queryByText(name), `${name} yo'q`);
+  }
+  const st = useAppStore.getState() as unknown as Record<string, unknown>;
+  assert.equal("setLocale" in st, false, "ishlatilmaydigan setLocale yo'q");
+  assert.equal("locale" in st, false, "ishlatilmaydigan locale holati yo'q");
+  assert.equal(document.documentElement.getAttribute("lang") === "en", false);
 });
 
 // ═══════════════════════════════════════════ TopBar — haqiqiy DOM hodisasi
