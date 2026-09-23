@@ -13,6 +13,7 @@ import { parseInWorker } from "./parse-pool";
 import { assertUploadQuota, withUploadQuota } from "./upload-quota";
 import { busyResponse, SofficeBusyError } from "./soffice-gate";
 import { refundRate } from "./rate-peek";
+import { rateLimit } from "./ratelimit";
 import { toPdf } from "./pdf";
 import {
   TemplateError,
@@ -258,11 +259,20 @@ export async function uploadTemplate(req: Request, userId: string, deps: UploadD
 export const TEMPLATE_RATE = { count: 5, windowSec: 600 } as const;
 
 /**
+ * Band (503) urinishlar uchun ulush QAYTARISH chegarasi (W2-C review R2).
+ * Cheksiz qaytarilsa bitta hisob «20 s kut → 503 → qayta» aylanasida
+ * `soffice` navbatining 5 o'rnini doim band qilib turardi, 4 hisob esa
+ * navbatni to'ldirib, hammaning PDF yuklab olishini 503 ga aylantirardi.
+ */
+export const TEMPLATE_BUSY_REFUNDS = { count: 3, windowSec: 600 } as const;
+
+/**
  * `POST /api/uploads/template` ning sessiyadan keyingi qismi (route yupqa).
  *
  * LibreOffice navbati band bo'lsa (`SofficeBusyError`) — 503 + `Retry-After`
- * (W2-A review R1). Bu foydalanuvchi aybi emas: chastota ulushi QAYTARILADI,
- * kvotaga esa hech narsa yozilmagan (saqlash rasterlashdan keyin).
+ * (W2-A review R1). Bu foydalanuvchi aybi emas: 10 daqiqada 3 martagacha
+ * chastota ulushi QAYTARILADI, undan keyin band urinish ham ulushdan ketadi.
+ * Kvotaga esa hech narsa yozilmagan (saqlash rasterlashdan keyin).
  */
 export async function handleTemplateUpload(req: Request, userId: string, deps: UploadDeps = {}): Promise<Response> {
   const bucket = `template:${userId}`;
@@ -272,7 +282,11 @@ export async function handleTemplateUpload(req: Request, userId: string, deps: U
     return Response.json(await uploadTemplate(req, userId, deps));
   } catch (e) {
     if (!(e instanceof SofficeBusyError)) throw e;
-    await refundRate(bucket, TEMPLATE_RATE.windowSec, at);
+    // Baza xatosida qaytarmaymiz (`failClosed`) — chegara hisobsiz qolmasin.
+    const refunds = TEMPLATE_BUSY_REFUNDS;
+    if ((await rateLimit(`template:busy:${userId}`, refunds.count, refunds.windowSec, { failClosed: true })).ok) {
+      await refundRate(bucket, TEMPLATE_RATE.windowSec, at);
+    }
     return busyResponse(e);
   }
 }

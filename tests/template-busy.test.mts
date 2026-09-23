@@ -19,14 +19,15 @@ process.env.DATABASE_URL = process.env.DATABASE_URL || "postgres://unused/unused
 const skip = hasDb ? false : "Postgres kerak (DATABASE_URL)";
 
 const { query, queryOne, pool } = await import("../lib/server/db.ts");
-const { handleTemplateUpload, rasterizeTemplate, TEMPLATE_RATE } = await import("../lib/server/template-upload.ts");
+const { handleTemplateUpload, rasterizeTemplate, TEMPLATE_RATE, TEMPLATE_BUSY_REFUNDS } = await import("../lib/server/template-upload.ts");
 const { SofficeBusyError } = await import("../lib/server/soffice-gate.ts");
 const { windowStartOf } = await import("../lib/server/ratelimit.ts");
 
 let uid = "";
+const extraUsers: string[] = [];
 after(async () => {
   if (!hasDb) return;
-  if (uid) await query(`DELETE FROM users WHERE id = $1`, [uid]).catch(() => {});
+  for (const id of [uid, ...extraUsers].filter(Boolean)) await query(`DELETE FROM users WHERE id = $1`, [id]).catch(() => {});
   await pool().end();
 });
 
@@ -79,4 +80,29 @@ test("template: LibreOffice band — 503 + Retry-After, chastota ulushi qaytadi,
   assert.equal(row?.hits ?? 0, 0, "MUTATSIYA: band 503 foydalanuvchi ulushini yedi");
   const stored = await queryOne<{ n: string }>(`SELECT count(*) AS n FROM template_uploads WHERE user_id = $1`, [uid]);
   assert.equal(Number(stored!.n), 0, "band holatda namuna yozildi");
+});
+
+test("template: band refund CHEKLANGAN — 10 daqiqada 3 tadan keyin band urinish ham ulushni yeydi (review R2)", { skip }, async () => {
+  const user = (await queryOne<{ id: string }>(`INSERT INTO users (username) VALUES ($1) RETURNING id::text AS id`, [
+    `tplbusy2_${randomBytes(6).toString("hex")}`,
+  ]))!.id;
+  extraUsers.push(user);
+  const bytes = await fixture();
+  const busy = { rasterize: async () => { throw new SofficeBusyError(15); } };
+  const attempts = TEMPLATE_BUSY_REFUNDS.count + 2;
+  const statuses: number[] = [];
+  for (let i = 0; i < attempts; i++) {
+    const fd = new FormData();
+    fd.set("file", new File([new Uint8Array(bytes)], "namuna.pptx"));
+    const res = await handleTemplateUpload(new Request("http://x/api/uploads/template", { method: "POST", body: fd }), user, busy);
+    statuses.push(res.status);
+  }
+  assert.ok(statuses.every((s) => s === 503), `hammasi 503 bo'lishi kerak: ${statuses}`);
+  const row = await queryOne<{ hits: number }>(`SELECT hits FROM rate_limits WHERE bucket = $1 AND window_start = $2`, [
+    `template:${user}`,
+    windowStartOf(Date.now(), TEMPLATE_RATE.windowSec),
+  ]);
+  // Birinchi 3 tasi qaytarildi, qolgan 2 tasi ulushdan ketdi — cheksiz qayta urinib
+  // `soffice` navbatini band qilib turib bo'lmaydi.
+  assert.equal(row?.hits ?? 0, attempts - TEMPLATE_BUSY_REFUNDS.count, "MUTATSIYA: band refund cheksiz");
 });
