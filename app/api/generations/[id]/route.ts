@@ -1,7 +1,6 @@
 import { ApiError, handler, json, requireUser } from "@/lib/server/api";
 import { cancelGeneration, deleteGeneration, getGeneration } from "@/lib/server/jobs";
 import { hasGenerationFile } from "@/lib/server/storage";
-import { refund } from "@/lib/server/credits";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -64,10 +63,8 @@ export const DELETE = handler("generations/delete", async (req, ctx: Ctx) => {
   const { id } = await ctx.params;
   if (!UUID.test(id)) throw new ApiError("Noto'g'ri id", 400);
 
+  // Bekor qilish va pulni qaytarish BITTA tranzaksiyada (`cancelGeneration`, C25).
   const cancelled = await cancelGeneration(id, user.id);
-  if (cancelled) {
-    await refund(user.id, id, "Foydalanuvchi bekor qildi");
-  }
 
   const removed = await deleteGeneration(id, user.id);
   if (!removed && !cancelled) {

@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
 import { query, queryOne, transaction } from "./db";
 import { chargeInTx } from "./credits";
+import { refundInTx } from "./refund-tx";
 import { putGenerationFile } from "./storage";
 import type { PendingAsset } from "./assets";
 import { toJsonb } from "./jsonb";
@@ -435,16 +436,32 @@ export async function deleteGeneration(id: string, userId: string): Promise<bool
   return rows.length > 0;
 }
 
-/** Faqat navbatdagi ishni bekor qilish mumkin. */
+export const CANCEL_REFUND_NOTE = "Foydalanuvchi bekor qildi";
+
+/**
+ * Navbatdagi ishni bekor qiladi va pulini QAYTARADI — bitta tranzaksiyada
+ * (C25 qolgani). Faqat QUEUED ishni bekor qilish mumkin.
+ *
+ * Ilgari REVOKED alohida COMMIT bo'lib, pul route'da keyin qaytardi: orada
+ * xato (ulanish uzilishi, process o'limi) bo'lsa ish REVOKED, pul esa
+ * qaytmagan qolardi — tiklash skaneri (`refund-reconcile.ts`) faqat
+ * FAILED ni ko'radi, qayta DELETE esa QUEUED topolmay hech narsa qilmasdi.
+ * Endi biri yiqilsa ikkalasi ham bekor: ish QUEUED qoladi va foydalanuvchi
+ * qayta bekor qila oladi. Qaytarish `reference` bo'yicha idempotent.
+ */
 export async function cancelGeneration(id: string, userId: string): Promise<boolean> {
-  const rows = await query<{ id: string }>(
-    `UPDATE generations
-        SET status = 'REVOKED', step = 'Bekor qilindi', progress = 100, finished_at = now()
-      WHERE id = $1 AND user_id = $2 AND status = 'QUEUED'
-      RETURNING id`,
-    [id, userId],
-  );
-  return rows.length > 0;
+  return transaction(async (client) => {
+    const res = await client.query<{ id: string }>(
+      `UPDATE generations
+          SET status = 'REVOKED', step = 'Bekor qilindi', progress = 100, finished_at = now()
+        WHERE id = $1 AND user_id = $2 AND status = 'QUEUED'
+        RETURNING id`,
+      [id, userId],
+    );
+    if (!res.rows[0]) return false;
+    await refundInTx(client, userId, id, CANCEL_REFUND_NOTE);
+    return true;
+  });
 }
 
 /**

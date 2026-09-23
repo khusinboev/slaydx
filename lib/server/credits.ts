@@ -221,45 +221,75 @@ export async function topUp(
   kind: "topup" | "bonus" | "subscription" = "topup",
   note = "",
 ): Promise<boolean> {
+  if ((delta.points ?? 0) + (delta.quota ?? 0) + (delta.balance ?? 0) <= 0) return false;
+  return transaction((client) => topUpInTx(client, userId, delta, reference, kind, note));
+}
+
+/** `topUp`ning tranzaksiya ichidagi varianti (`chargeInTx` ga juft). */
+export async function topUpInTx(
+  client: PoolClient,
+  userId: string,
+  delta: Partial<ChargeSplit>,
+  reference: string,
+  kind: "topup" | "bonus" | "subscription" = "topup",
+  note = "",
+): Promise<boolean> {
   const points = delta.points ?? 0;
   const quota = delta.quota ?? 0;
   const balance = delta.balance ?? 0;
   if (points + quota + balance <= 0) return false;
 
-  return transaction(async (client) => {
-    const done = await client.query("SELECT 1 FROM transactions WHERE kind = $1 AND reference = $2", [
-      kind,
-      reference,
-    ]);
-    // Webhook ikki marta kelishi normal holat — ikkinchisida pul qo'shilmaydi.
-    if (done.rows[0]) return false;
+  const done = await client.query("SELECT 1 FROM transactions WHERE kind = $1 AND reference = $2", [
+    kind,
+    reference,
+  ]);
+  // Webhook ikki marta kelishi normal holat — ikkinchisida pul qo'shilmaydi.
+  if (done.rows[0]) return false;
 
-    await client.query("SELECT 1 FROM users WHERE id = $1 FOR UPDATE", [userId]);
-    await client.query(
-      `UPDATE users
-          SET points = points + $2, quota = quota + $3, balance = balance + $4, updated_at = now()
-        WHERE id = $1`,
-      [userId, points, quota, balance],
-    );
-    await client.query(
-      `INSERT INTO transactions (user_id, kind, points_delta, quota_delta, balance_delta, reference, note)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [userId, kind, points, quota, balance, reference, note],
-    );
-    return true;
-  });
+  await client.query("SELECT 1 FROM users WHERE id = $1 FOR UPDATE", [userId]);
+  await client.query(
+    `UPDATE users
+        SET points = points + $2, quota = quota + $3, balance = balance + $4, updated_at = now()
+      WHERE id = $1`,
+    [userId, points, quota, balance],
+  );
+  await client.query(
+    `INSERT INTO transactions (user_id, kind, points_delta, quota_delta, balance_delta, reference, note)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+    [userId, kind, points, quota, balance, reference, note],
+  );
+  return true;
 }
 
-/** Pro obunani yoqadi va kvota beradi. */
+/**
+ * Pro obunani yoqadi va kvota beradi — BITTA tranzaksiyada (CONC-14).
+ *
+ * Ilgari kvota (`topUp`) alohida COMMIT bo'lib, plan UPDATE keyin
+ * ishlardi: orada xato bo'lsa foydalanuvchida kvota bor, obuna esa
+ * yoqilmagan qolardi, provayderning qayta urinishi `topUp` «allaqachon»
+ * deb qaytgani uchun plan UPDATE ga hech qachon yetmasdi. Endi biri
+ * yiqilsa ikkalasi ham bekor — qayta urinish ikkalasini birga bajaradi.
+ */
 export async function activatePro(
   userId: string,
   quotaAmount: number,
   days: number,
   reference: string,
 ): Promise<boolean> {
-  const added = await topUp(userId, { quota: quotaAmount }, reference, "subscription", "Pro obuna");
+  return transaction((client) => activateProInTx(client, userId, quotaAmount, days, reference));
+}
+
+/** `activatePro`ning tranzaksiya ichidagi varianti — to'lov yakuni bilan bitta tranzaksiyada chaqirish uchun. */
+export async function activateProInTx(
+  client: PoolClient,
+  userId: string,
+  quotaAmount: number,
+  days: number,
+  reference: string,
+): Promise<boolean> {
+  const added = await topUpInTx(client, userId, { quota: quotaAmount }, reference, "subscription", "Pro obuna");
   if (!added) return false;
-  await query(
+  await client.query(
     `UPDATE users
         SET plan = 'pro',
             -- Faol obuna ustiga qo'shiladi, tugagani yangidan boshlanadi.
