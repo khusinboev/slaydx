@@ -171,6 +171,21 @@ export function teacherTypeIdOf(kind: TeacherKind, values: FormValues): string {
   return teacherTypeOf(kind, raw).id;
 }
 
+/**
+ * Glossariy atama soni — dvigatel bilan BIR XIL klamp (C12, W3-J).
+ *
+ * `teacherInputFromValues`dagi `termCount` hisobi shu yerga chiqarildi:
+ * `lib/tools.ts priceFor` ilgari `termCount`ni xom holda 3 ta tarifdan
+ * (10/20/40) qidirar, dvigatel esa `glossarySpec.limits.termsMin`..40
+ * oralig'ida ISTALGAN sonni qabul qilardi — «39» kabi yaqin qiymat eng
+ * arzon tarifda hisoblanib, dvigatel esa 39 atamalik (40 talik tarif)
+ * hujjat yozardi. Narx endi AYNAN shu funksiyadan o'qiydi.
+ */
+export function glossaryTermCount(values: FormValues): number {
+  const spec = teacherTypeOf("glossary", teacherTypeIdOf("glossary", values)) as GlossaryTypeSpec;
+  return num(values.termCount, spec.limits.termsDefault, spec.limits.termsMin, TEACHER_LIMITS.termsMax);
+}
+
 /** Ruxsat etilgan qiymatlar ro'yxatidan eng yaqini (chiplar: 30/45/90). */
 function nearest(allowed: readonly number[], v: unknown, fallback: number): number {
   const n = Number(v);
@@ -210,9 +225,8 @@ export function teacherInputFromValues(meta: DocMeta, values: FormValues, kind: 
 
   /* ── glossariy: atama soni va tarjima ustunlari turdan ── */
   const glossarySpec = kind === "glossary" ? (teacherTypeOf("glossary", type) as GlossaryTypeSpec) : null;
-  const termCount = glossarySpec
-    ? num(values.termCount, glossarySpec.limits.termsDefault, glossarySpec.limits.termsMin, TEACHER_LIMITS.termsMax)
-    : num(values.termCount, 10, TEACHER_LIMITS.termsMin, TEACHER_LIMITS.termsMax);
+  // Hisob `glossaryTermCount` bilan BIR XIL manbadan (C12) — narx ham shu funksiyani chaqiradi.
+  const termCount = glossarySpec ? glossaryTermCount(values) : num(values.termCount, 10, TEACHER_LIMITS.termsMin, TEACHER_LIMITS.termsMax);
   /*
    * Tarjima ustunlari FAQAT turning ruxsat etganlari: `fan-lugati` da
    * `translationLangs: ["ru","en"]` yuborilsa ham jadval kengaymaydi —

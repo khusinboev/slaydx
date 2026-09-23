@@ -1304,7 +1304,7 @@ test("standart hajm narx, dvigatel va formada bir xil", async () => {
   const { TOOLS, TOOL_BY_ID, defaultPages, priceFor } = await import("../lib/tools.ts");
   const { extractMeta } = await import("../lib/generation/meta.ts");
   const { workGenreOfTool } = await import("../lib/generation/work/types.ts");
-  const { workKindOf } = await import("../lib/generation/work/registry.ts");
+  const { normalizeWorkPages, workKindOf } = await import("../lib/generation/work/registry.ts");
 
   /*
    * AYNAN P1-7 (AUDIT-5). Standart hajm UCH joyda mustaqil yozilgan edi:
@@ -1353,10 +1353,21 @@ test("standart hajm narx, dvigatel va formada bir xil", async () => {
     const genre = workGenreOfTool(id)!;
     const kind = workKindOf(genre, undefined);
     assert.ok(kind.pages.includes(fallback), `${id}: standart «${fallback}» reyestr paketlari orasida yo'q`);
+    /*
+     * C12 R1 (`audit/reviews/W3-J.md`): `priceFor` endi `pages`ni XOM
+     * holda dvigatelning `normalizeWorkPages`iga uzatadi — `work/input.ts`
+     * bilan AYNAN bir xil chaqiruv. Bo'sh so'rov (real forma HECH QACHON
+     * yubormaydi — `WorkComposer.tsx` doim `pages` beradi, faqat qo'lda
+     * yozilgan so'rov uchun) dvigatelning REYESTR STANDARTINI oladi —
+     * `normalizeWorkPages(kind, undefined)`. Referat/mustaqil ishda bu
+     * `defaultPages(id)` («10-15», forma HOLATI)dan farq qiladi — narx
+     * endi SHU dvigatel standartiga mos, defaultPages'ga emas.
+     */
+    const engineDefault = normalizeWorkPages(kind, undefined);
     assert.equal(
       priceFor(tool, {} as FormValues),
-      priceFor(tool, { pages: fallback } as FormValues),
-      `${id}: standart narx tarif narxiga teng bo'lishi kerak`,
+      priceFor(tool, { pages: engineDefault } as FormValues),
+      `${id}: bo'sh so'rov narxi dvigatel standartining narxiga teng bo'lishi kerak`,
     );
     assert.equal(
       extractMeta(tool, { topic: "X" } as FormValues).targetPages,
