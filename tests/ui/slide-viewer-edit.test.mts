@@ -769,3 +769,32 @@ test("restore: `doc_prev` yo'q bo'lsa 409 `no_prev` xabari chiqadi", async () =>
   );
   cleanup();
 });
+
+test("W2-E: yiqilgan saqlashdan keyin sarlavhadagi tugma «Qayta urinish · N»; o'tgach yo'qoladi", async () => {
+  const s = stubServer();
+  const inner = globalThis.fetch;
+  let fail = 1;
+  (globalThis as unknown as { fetch: unknown }).fetch = async (input: unknown, opts?: RequestInit) => {
+    if (opts?.method === "PATCH" && fail > 0) {
+      fail--;
+      return new Response(JSON.stringify({ error: "Server javob bermadi" }), { status: 503 });
+    }
+    return inner(input as RequestInfo, opts);
+  };
+  openEditor(s);
+  moveRight();
+  await act(async () => {
+    fireEvent.click(saveBtn()!);
+  });
+  await pause(50);
+  const retry = screen.queryByText(/^Qayta urinish · 1$/);
+  assert.ok(retry, "yiqilgan saqlash — tugma buni aytadi");
+  assert.equal(saveBtn() === null, true, "oddiy «Saqlash · 1» emas");
+  await act(async () => {
+    fireEvent.click(retry);
+  });
+  await pause(50);
+  assert.equal(screen.queryByText(/^Qayta urinish/) === null, true);
+  assert.equal(s.patches.length, 1, "ikkinchi urinish serverga yetdi");
+  cleanup();
+});

@@ -213,6 +213,24 @@ test("FE-08: «Testlar»/«O'yinlar» bo'sh emas — har tur o'z filtrida (pro s
   assert.deepEqual(shown(), ["r1"], "test va o'yinlar endi «Hujjatlar» da yashirinmaydi");
 });
 
+test("W2-E: qidiruv faqat yuklangan sahifada — eskilari bor bo'lsa halol aytiladi, bo'lmasa jim", async () => {
+  const { SearchDialog } = await import("../../components/overlays/SearchDialog.tsx");
+  const { useUi } = await import("../../lib/ui.ts");
+  const show = (cursor: string | null) => {
+    useAppStore.setState({ loggedIn: true, sessionChecked: true, generations: [row("s1")], generationsCursor: cursor });
+    useUi.setState({ overlay: "search" });
+    render(h(AppRouterContext.Provider, { value: router }, h(SearchDialog)));
+  };
+  show("c2");
+  const hint = document.querySelector("[data-search-partial]");
+  assert.ok(hint, "serverda yana sahifa bor — ogohlantirish");
+  assert.match(hint.textContent ?? "", /faqat yuklanganlar orasida/);
+  cleanup();
+  show(null);
+  assert.ok(!document.querySelector("[data-search-partial]"), "hamma fayl yuklangan — ogohlantirish yo'q");
+  useUi.setState({ overlay: null });
+});
+
 test("FE-08: har vosita turi `all` dan tashqari aniq BITTA filtrga tushadi", async () => {
   const { TOOLS } = await import("../../lib/tools.ts");
   const { FILE_FILTERS, fileFilterMatch } = await import("../../lib/ui.ts");
