@@ -116,3 +116,75 @@ Run from the worktree root with `DATABASE_URL=postgres://slaydx:audit@127.0.0.1:
 | `payments-orders` on its own | 18 pass, **0 skipped**; all 17 DB subtests really ran |
 
 Test 6 currently pins the non-conforming -31051/-31052 and must change with #1.
+
+---
+
+## Re-review: commit `5268853`
+
+### Verdict: **APPROVE**
+
+R1 is fixed and verified. R2 is tracked (see below) and does not block.
+
+### R1: busy / paid / cancelled order now → -31008
+
+`payable()` now reads:
+
+```ts
+if (!order || order.provider !== "payme") return rpcError(id, ORDER /* -31050 */, "order_id");
+if (Number(amount) !== tiyin(order.amountSoum)) return rpcError(id, AMOUNT /* -31001 */);
+if (order.state !== "created") return rpcError(id, CANT_PERFORM /* -31008 */);
+```
+
+- **Attach race.** It returns `CANT_PERFORM` too.
+- **Leftovers removed.** `BUSY` and `CLOSED` are gone; `grep 3105[12]|BUSY|CLOSED` over the routes and tests finds nothing.
+- **Same-id concurrent Create.** Two Creates with the same txn id still both succeed: `attachTransaction` returns true when `provider_txn === txn`, so there is no false -31008.
+
+This conforms to the spec on every point:
+
+| case | spec | code now |
+|---|---|---|
+| New Create on an order «В ожидании оплаты» | Payme «Песочница» requires -31008 | -31008 |
+| CheckPerform when another transaction is active or completed | template `CheckPerformTransaction` returns `ERROR_COULD_NOT_PERFORM` | -31008 |
+| Order state is not "waiting pay" | template `Order::validate` returns -31008 | -31008 |
+| Unknown or other-provider order | sandbox «-31050 — -31099: Неверный код заказа», with `data` = account field | -31050 + `data:"order_id"` |
+| Wrong amount | sandbox | -31001, checked before the state check |
+
+**Test 6** was rewritten. It now asserts -31008 for:
+- CheckPerform on a pending order;
+- Create with a new id on a pending order, and the first transaction stays `state 1`;
+- CheckPerform after that transaction is cancelled;
+- CheckPerform and Create on a paid order.
+
+`payme-sandbox.test.mts` still asserts -31050 for an unknown order.
+
+**Suites re-run** (worktree root, `DATABASE_URL=postgres://slaydx:audit@127.0.0.1:55439/slaydx`, `heavy2.sh -m 3G -t 900`):
+
+| suites | tests | pass | fail | skipped |
+|---|---|---|---|---|
+| `payments-orders` + `payments` + `payme-sandbox` | 29 | 29 | 0 | 0 |
+
+Test 6 is GREEN.
+
+The table in section 1 above still shows the rows before `5268853`. For these two rows, the status is now:
+
+| behaviour | conforms? |
+|---|---|
+| Busy order → -31008 | yes |
+| Paid / cancelled order → -31008 | yes |
+
+### R2: `purgePaymentEvents` housekeeping wiring (tracked, not blocking)
+
+The orchestrator will wire it into `lib/server/worker.ts` housekeeping right after the merge. Until that lands, `payment_events` has no retention; this item stays open in the audit trail.
+
+### Still must be sandbox-tested before prod
+
+- **A. Click duplicate Complete on a paid order returns `error: 0`.** The official reference returns `-4 Already paid`. Our 0 is safe for money, but confirm it in Click's test console or with Click support, and record the decision.
+- **B. Payme new Create with `time` ≥ 12 h old returns -31008.** Payme's template returns -31050 with `data:"time"`, but its condition is inverted, and the sandbox does not test this case.
+- **C. An internal exception returns -31008.** The spec has `-32400`. Decide which one after the sandbox run.
+- **D. Run the full Payme sandbox set on staging:**
+  - create → cancel;
+  - create → perform → cancel;
+  - wrong amount;
+  - wrong account;
+  - bad auth;
+  - the «В ожидании оплаты» case, which should now pass.
