@@ -21,6 +21,16 @@ import { createIsolatedDb } from "./helpers/isolated-db.mts";
  * Migratsiya papkasi — vaqtinchalik `lib/server/migrations` (joriy
  * papka unga ko'chiriladi, `db.ts` IMPORTIDAN OLDIN), haqiqiy
  * migratsiyalarga tegmaydi.
+ *
+ * Tuzatishsiz kodda (hovuz ulanishi): 1-test «Migratsiya xatosi
+ * (001_slow.sql): canceling statement due to statement timeout».
+ *
+ * MUTATSIYALAR (har biri qizardi):
+ *   1. migratsiya `statement_timeout` 0 o'rniga 30 000 → «ikki parallel»;
+ *   2. har fayl `lock_timeout` i olib tashlandi → «lock_timeout» (60 s osildi);
+ *   3. advisory qulf kutishi chegarasi olib tashlandi → «advisory qulf kutishi»;
+ *   4. `application_name: "slaydx"` (rolsiz) → «hovuz: sozlama»;
+ *   5. ogohlantirish chastota chegarasi olib tashlandi → «hovuz to'lishi».
  */
 
 const hasDb = Boolean(process.env.DATABASE_URL) && !process.env.DATABASE_URL!.includes("unused");
