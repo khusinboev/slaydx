@@ -93,3 +93,36 @@ C. Add `ADMIN_PHONES=<your number(s), comma-separated, full 998… form>` to `/o
 D. Only after C is verified: delete the hardcoded fallback line in `lib/server/admin-phones.ts` and its test exception (next PR).
 E. Put `SMOKE_USER` / `EVAL_USER` in your local `.env.local`.
 F. The numbers and IP remain in git history. History rewrite is out of scope, so treat them as public. If that matters, consider changing the SIM or number used for admin login, and rely on the OTP flow.
+
+---
+
+## Re-review (branch at `943af2b`, 2026-09-24)
+
+### Verdict: **APPROVE**
+
+All four required changes are resolved: R1–R3 on this branch, R4 on W3-F. Checked with my own greps against `git grep` on `943af2b`. No digits are reproduced here.
+
+- **R1 fixed.** The owner's second number no longer appears anywhere in tracked files, in any format: contiguous, spaced/dashed/parenthesised, or the 9-digit national form. The research doc now uses a placeholder.
+- **R2 fixed.**
+  - The real admin number now appears in exactly **one** place: the fallback line `lib/server/admin-phones.ts:34` (`ADMIN_PHONES_FALLBACK`). No other copy exists in contiguous, separator or national form.
+  - `tests/admin.test.mts`, `tests/admin-contact.test.mts` and `tests/admin-phones-env.test.mts` derive the value at runtime from `ADMIN_PHONES_FALLBACK_FOR_TESTS`.
+  - The doc-comment examples are now synthetic.
+- **R3 fixed.**
+  - Phone regex: separator-tolerant, boundary-anchored lookarounds. Hits are normalised to digits and checked against a **value** allowlist: 9 synthetic numbers plus 2 publicly published third-party numbers.
+  - The admin value is permitted only in `admin-phones.ts`.
+  - Neither owner number (nor its national form) is in any allowlist.
+  - The IP check is a generic IPv4 detector with reserved/private/doc ranges plus a small allowlist of fixture and Telegram ranges. The real /16 is gone from the file.
+  - Scope covers the whole tree, including `tests/` and `audit/`.
+  - **Mutation check:** in a scratch worktree I appended `+998 (NN) NNN-NN-NN` (a synthetic, non-allowlisted number) and a random public IPv4 to `README.md`. Both tests failed and reported only `README.md:<line>`. Removed afterwards.
+- **R4 done in W3-F** (`worktree-agent-ae21573768702bf19` @ `9d5d584`): `ADMIN_PHONES: ${ADMIN_PHONES:-}` is on both `web` and `worker` in `docker-compose.yml`. `:-` yields `""`, which falls back correctly. It is not on this branch, so merge order is irrelevant: until both land, the fallback keeps admin working.
+- **Untrack:** `.claude/*` is still removed from the index, and `.gitignore:60` still covers it. The earlier warning still applies: merging into the main checkout deletes those five files from disk (owner step A).
+- **Tests** (heavy2, `DATABASE_URL` set): `admin-phones-env`, `no-pii-in-repo`, `admin`, `admin-contact`: **24 pass / 0 fail / 0 skip**.
+
+### Remaining should-fix (non-blocking, follow-up PR)
+1. `.env.example` still documents neither `ADMIN_PHONES` nor `SMOKE_USER`/`EVAL_USER`. Check whether W3-F added them; if not, add placeholders.
+2. `tests/admin.test.mts` and `tests/admin-contact.test.mts` assume the fallback is active. If a developer or CI has `ADMIN_PHONES` exported, they fail. Add `delete process.env.ADMIN_PHONES` before the dynamic import. Both tests need rework anyway when owner step D removes the fallback.
+3. `grepMatches` uses `git grep -P -o` without `-I`. A binary file that matches would produce a "Binary file … matches" row that gets parsed as a hit. Add `-I`.
+4. The fallback exception is file-scoped, not line-scoped. A second copy inside `admin-phones.ts` would pass. Acceptable for one file; could pin it to the `ADMIN_PHONES_FALLBACK` line.
+5. The earlier items still stand: filter digitless `ADMIN_PHONES` entries, and the co-tenant names in the `docker-compose.yml:48` comment.
+
+Owner steps A–F above are unchanged.
