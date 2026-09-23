@@ -171,6 +171,21 @@ export function teacherTypeIdOf(kind: TeacherKind, values: FormValues): string {
   return teacherTypeOf(kind, raw).id;
 }
 
+/**
+ * Glossariy atama soni — dvigatel bilan BIR XIL klamp (C12, W3-J).
+ *
+ * `teacherInputFromValues`dagi `termCount` hisobi shu yerga chiqarildi:
+ * `lib/tools.ts priceFor` ilgari `termCount`ni xom holda 3 ta tarifdan
+ * (10/20/40) qidirar, dvigatel esa `glossarySpec.limits.termsMin`..40
+ * oralig'ida ISTALGAN sonni qabul qilardi — «39» kabi yaqin qiymat eng
+ * arzon tarifda hisoblanib, dvigatel esa 39 atamalik (40 talik tarif)
+ * hujjat yozardi. Narx endi AYNAN shu funksiyadan o'qiydi.
+ */
+export function glossaryTermCount(values: FormValues): number {
+  const spec = teacherTypeOf("glossary", teacherTypeIdOf("glossary", values)) as GlossaryTypeSpec;
+  return num(values.termCount, spec.limits.termsDefault, spec.limits.termsMin, TEACHER_LIMITS.termsMax);
+}
+
 /** Ruxsat etilgan qiymatlar ro'yxatidan eng yaqini (chiplar: 30/45/90). */
 function nearest(allowed: readonly number[], v: unknown, fallback: number): number {
   const n = Number(v);
