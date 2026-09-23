@@ -215,7 +215,15 @@ export function shortfallRatio(delivered?: Delivered): number | null {
   return refundRatio(delivered);
 }
 
-async function runJob(job: ClaimedJob): Promise<void> {
+/** `runJob` bog'liqliklari — sinovda `build` stub bilan almashtiriladi. */
+export type RunOptions = {
+  build?: typeof buildArtifact;
+  /** Qattiq to'xtash muddati (ms, claim'dan). Berilmasa `jobDeadlineMs + HARD_STOP_GRACE_MS`. */
+  hardStopMs?: number;
+};
+
+export async function runJob(job: ClaimedJob, opts: RunOptions = {}): Promise<void> {
+  const build = opts.build ?? buildArtifact;
   const tool = TOOL_BY_ID[job.toolId as ToolId];
   if (!tool) {
     if (await failJob(job.id, WORKER_ID, "Noma'lum vosita")) {
@@ -269,7 +277,7 @@ async function runJob(job: ClaimedJob): Promise<void> {
      */
     const photo =
       tool.id === "resume" ? await photoDataUrl(job.userId, String(job.values.photoAssetId ?? "")) : undefined;
-    const file = await buildArtifact(tool, job.values, {
+    const file = await build(tool, job.values, {
       deadline,
       logo,
       template,
@@ -410,9 +418,14 @@ async function refundThenCleanup(job: Pick<ClaimedJob, "id" | "userId">, note: s
   }
 }
 
+/** Navbatdan keyingi ishni shu process nomidan oladi. */
+export function claimNext(): Promise<ClaimedJob | null> {
+  return claimJob(WORKER_ID);
+}
+
 async function tick(): Promise<boolean> {
   if (running >= env.worker.concurrency) return true;
-  const job = await claimJob(WORKER_ID);
+  const job = await claimNext();
   if (!job) return false;
 
   running++;
@@ -584,12 +597,17 @@ export function installProcessGuards(proc: Pick<NodeJS.Process, "on" | "exit"> =
   });
 }
 
+export async function shutdownWorker(opts: { graceMs?: number } = {}): Promise<string[]> {
+  stopWorker();
+  await sleep(Math.min(opts.graceMs ?? 2000, 2000));
+  return [];
+}
+
 /** Alohida process uchun kirish nuqtasi (`npm run worker`). */
 export async function runWorkerProcess(): Promise<void> {
   const shutdown = () => {
     console.log("[worker] to'xtatilmoqda...");
-    stopWorker();
-    setTimeout(() => process.exit(0), 2000);
+    void shutdownWorker().then(() => process.exit(0));
   };
   process.on("SIGTERM", shutdown);
   process.on("SIGINT", shutdown);
