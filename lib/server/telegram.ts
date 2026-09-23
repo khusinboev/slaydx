@@ -4,7 +4,7 @@ import { env } from "./env";
 import { query, transaction } from "./db";
 
 import { upsertTelegramUser, type TelegramProfile } from "./auth";
-import { isAdminPhone } from "./admin-phones";
+import { isAdminPhone, normalizePhone } from "./admin-phones";
 import type { SessionUser } from "./session";
 
 /**
@@ -219,6 +219,14 @@ export type TelegramUpdate = {
     text?: string;
     from?: { id: number; username?: string; first_name?: string; last_name?: string };
     contact?: { phone_number: string; user_id?: number };
+    // Forward qilingan xabar belgilari (Bot API): SECA-01 — forward qilingan
+    // kontaktni ham "o'ziniki" deb qabul qilib bo'lmaydi, hattoki uning
+    // `user_id`si jo'natuvchiga teng chiqib qolgan taqdirda ham (masalan
+    // odam o'z kontaktini o'ziga forward qilsa emas — bu maydonlar aynan
+    // ASL jo'natuvchi haqida, joriy jo'natuvchi haqida emas).
+    forward_origin?: unknown;
+    forward_date?: number;
+    forward_from?: { id: number };
   };
 };
 
@@ -283,11 +291,31 @@ async function sendLoginLink(chatId: number, link: string, intro: string): Promi
  * from.id`) — aks holda foydalanuvchi boshqa birovning vizit
  * kartochkasini ulashib, o'sha raqam nomidan admin bo'lib ololardi.
  *
- * Raqam har doim saqlanadi (keyingi safar qayta ulashish shart
- * bo'lmasin), lekin admin ekanligi HAR SAFAR `isAdminPhone` bilan
- * qayta tekshiriladi — ro'yxatdan o'chirilgan raqam avtomatik
- * huquqini yo'qotadi, saqlangan `phone` qatori o'zi hech narsani
- * bermaydi.
+ * SECA-01: Bot API'da `Contact.user_id` IXTIYORIY — u faqat Telegram
+ * yuboruvchi uchun ANIQLAY OLGAN raqamlarda beriladi. Har qanday
+ * vizit-kartochka yoki MTProto klient (masalan Pyrogram
+ * `send_contact(phone_number=...)`) uni umuman bermaydi. Shuning uchun
+ * "yo'q bo'lsa ham o'tkazib yuborish" QATʼIYAN NOTO'G'RI — faqat
+ * `user_id === fromId` bo'lgan holat qabul qilinadi, aks holda (yo'q
+ * yoki boshqa) rad etiladi. Forward qilingan xabar ham rad etiladi —
+ * forward qilingan kontaktning `user_id`si sof "o'z" kontakti bilan
+ * bir xil chiqishi mumkin, lekin xabarning o'zi jo'natuvchi tomonidan
+ * TANLAB yuborilmagan bo'lishi mumkin.
+ *
+ * Raqam har doim KANONIK shaklda saqlanadi (`normalizePhone` — 9 xonali
+ * milliy shakl `998` bilan kengaytiriladi, boshqa mamlakatlar xom
+ * holda), keyingi safar qayta ulashish shart bo'lmasin. Bu DEPS-08/
+ * SECA-01ning ikkinchi qismini yopadi: xom saqlashda admin raqamining
+ * mamlakat kodisiz shakli (`+<9 raqam>`) raw-string unique indeksdan
+ * qochib ketardi. Endi kanonik shaklda saqlanadi va shu bilan bir xil
+ * raqamga to'g'ridan-to'g'ri to'qnashadi (`users_phone_key`), agar u
+ * allaqachon boshqa akkauntga bog'langan bo'lsa.
+ *
+ * Admin ekanligi HAR SAFAR `isAdminPhone` bilan qayta tekshiriladi —
+ * ro'yxatdan o'chirilgan raqam avtomatik huquqini yo'qotadi, saqlangan
+ * `phone` qatori o'zi hech narsani bermaydi. `isAdminPhone` esa endi
+ * QATʼIY (kengaytirishsiz) taqqoslaydi — admin tekshiruvi darajasida
+ * hech qanday milliy-format kengaytirish yo'q.
  *
  * Foydalanuvchi hali saytga bir marta ham kirmagan bo'lsa (bazada
  * akkaunti yo'q) — kontakt e'tiborsiz qoldiriladi: avval «Telegram
@@ -297,12 +325,13 @@ async function handleContact(
   chatId: number,
   fromId: number,
   contact: { phone_number: string; user_id?: number },
+  forwarded: boolean,
 ): Promise<void> {
-  if (contact.user_id != null && contact.user_id !== fromId) {
+  if (forwarded || contact.user_id !== fromId) {
     await sendMessage(chatId, "Faqat o'zingizning raqamingizni ulashing.");
     return;
   }
-  const phone = `+${contact.phone_number.replace(/\D/g, "")}`;
+  const phone = `+${normalizePhone(contact.phone_number)}`;
   let updated: { id: string }[];
   try {
     updated = await query<{ id: string }>(
@@ -341,7 +370,8 @@ export async function handleUpdate(update: TelegramUpdate): Promise<void> {
   if (!msg?.from) return;
 
   if (msg.contact) {
-    await handleContact(msg.chat.id, msg.from.id, msg.contact);
+    const forwarded = msg.forward_origin != null || msg.forward_date != null || msg.forward_from != null;
+    await handleContact(msg.chat.id, msg.from.id, msg.contact, forwarded);
     return;
   }
   if (!msg.text) return;
