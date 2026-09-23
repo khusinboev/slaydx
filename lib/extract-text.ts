@@ -1,5 +1,6 @@
 import type JSZip from "jszip";
 import { loadZipCapped, readZipText, type ZipBudget } from "./generation/translate/xml-scan";
+import { MAX_PDF_PAGES } from "./generation/translate/pdf";
 
 const ENT: Record<string, string> = {
   "&amp;": "&",
@@ -220,15 +221,44 @@ async function fromZip(buf: ArrayBuffer, kind: "docx" | "pptx" | "xlsx") {
   return tidy(chunks.join("\n\n"));
 }
 
-export async function extractPdfBuffer(buf: ArrayBuffer): Promise<string> {
+type PdfTextItem = { str?: string | null; hasEOL?: boolean };
+
+/**
+ * PDF matni — ko'pi bilan `MAX_PDF_PAGES` sahifa (SECB-04/FILE-04).
+ *
+ * Ilgari `unpdf.extractText` HAMMA sahifani o'qirdi (20 MB = o'n minglab
+ * sahifa). Endi birinchi `MAX_PDF_PAGES` tasi o'qiladi va `truncated`
+ * qaytadi — javob baribir 200 000 belgiga kesiladi, ya'ni «fayl asosida»
+ * rejimi uchun bu natijani o'zgartirmaydi. Sahifa matni va birlashtirish
+ * `extractText({ mergePages: true })` bilan aynan bir xil.
+ */
+async function readPdfText(buf: ArrayBuffer): Promise<{ text: string; truncated: boolean }> {
   if (typeof window !== "undefined") {
     throw new Error("PDF serverda o‘qiladi");
   }
-  const { extractText } = await import("unpdf");
-  const result = await extractText(new Uint8Array(buf), { mergePages: true });
-  const raw = result.text;
-  const text = Array.isArray(raw) ? raw.join("\n\n") : String(raw || "");
-  return tidy(text);
+  const { getDocumentProxy } = await import("unpdf");
+  const doc = await getDocumentProxy(new Uint8Array(buf));
+  try {
+    const count = Math.min(doc.numPages, MAX_PDF_PAGES);
+    const texts: string[] = [];
+    for (let n = 1; n <= count; n++) {
+      const content = await (await doc.getPage(n)).getTextContent();
+      texts.push(
+        (content.items as PdfTextItem[])
+          .filter((item) => item.str != null)
+          .map((item) => item.str + (item.hasEOL ? "\n" : ""))
+          .join(""),
+      );
+    }
+    const merged = texts.join("\n").replace(/[^\S\n]+/g, " ").replace(/ ?\n ?/g, "\n").replace(/\n{3,}/g, "\n\n");
+    return { text: tidy(merged), truncated: doc.numPages > MAX_PDF_PAGES };
+  } finally {
+    await doc.loadingTask.destroy().catch((e: unknown) => console.warn("[extract] pdf yopilmadi", e));
+  }
+}
+
+export async function extractPdfBuffer(buf: ArrayBuffer): Promise<string> {
+  return (await readPdfText(buf)).text;
 }
 
 /** Fayl kengaytmasi emas, haqiqiy imzosi bo'yicha turini aniqlaydi. */
@@ -247,7 +277,11 @@ export function extOf(name: string) {
   return (name.split(".").pop() || "").toLowerCase();
 }
 
-export async function extractFromBuffer(name: string, buf: ArrayBuffer): Promise<{ text: string; error?: string }> {
+/** `truncated` — PDF `MAX_PDF_PAGES` sahifadan uzun edi, faqat boshi o'qildi. */
+export async function extractFromBuffer(
+  name: string,
+  buf: ArrayBuffer,
+): Promise<{ text: string; error?: string; truncated?: boolean }> {
   const ext = extOf(name);
   const kind = sniff(buf);
   try {
@@ -273,7 +307,8 @@ export async function extractFromBuffer(name: string, buf: ArrayBuffer): Promise
       if (kind !== "pdf") {
         return { text: "", error: "Fayl haqiqiy PDF emas. Boshqa fayl yuboring." };
       }
-      return { text: await extractPdfBuffer(buf) };
+      const pdf = await readPdfText(buf);
+      return pdf.truncated ? { text: pdf.text, truncated: true } : { text: pdf.text };
     }
 
     return { text: "", error: "Bu format qo‘llab-quvvatlanmaydi. DOCX, PDF, PPTX, TXT yuboring." };
