@@ -54,7 +54,7 @@ const { pool } = await import("../lib/server/db.ts");
 const { GET } = await import("../app/api/o/[token]/route.ts");
 const { POST, SUBMIT_PER_MINUTE } = await import("../app/api/o/[token]/submit/route.ts");
 const { GET: AUDIO, audioAssetIds } = await import("../app/api/o/[token]/audio/[assetId]/route.ts");
-const { csvCell, resultsCsv } = await import("../app/api/generations/[id]/results/route.ts");
+const { csvCell, csvStream, resultsCsv } = await import("../app/api/generations/[id]/results/route.ts");
 const { shareUrl } = await import("../app/api/generations/[id]/share/route.ts");
 const { sampleGameDoc } = await import("../lib/generation/games/samples.ts");
 const { publicItemId } = await import("../lib/game/public.ts");
@@ -239,15 +239,24 @@ test("submit: noma'lum token — 404; buzuq JSON — 400", async (t) => {
   assert.equal((await POST(bad, ctx())).status, 400);
 });
 
-test("submit: submissionId yo'q/yaroqsiz — 400, natija YOZILMAYDI (C36 UX-06)", async (t) => {
-  const seen = mockDb(t, {});
+test("submit: submissionId YO'Q — 400 EMAS, server o'zi yaratadi (Sharh R3: deploy paytida eski klient)", async (t) => {
+  const seen = mockDb(t, { session: sessionRow(sampleGameDoc("sorting")) });
   const noId = new Request(`http://localhost:3000/api/o/${TOKEN}/submit`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ name: "Ali", answers: {} }),
   });
-  assert.equal((await POST(noId, ctx())).status, 400, "submissionId siz qabul qilindi");
+  const res = await POST(noId, ctx());
+  // MUTATSIYA (R3): submissionId yo'qligida 400 qaytarilsa — deploy
+  // paytida eski sahifadagi o'quvchi urinishini butunlay yo'qotardi.
+  assert.equal(res.status, 200, "submissionId yo'qligi urinishni yo'qotdi (400)");
+  const insertNoId = seen.find((s) => /INSERT INTO game_results/.test(s.text));
+  assert.ok(insertNoId, "submissionId yo'q bo'lsa ham natija yozilishi kerak");
+  assert.match(String(insertNoId!.params[8]), /^[0-9a-f-]{36}$/, "server o'zi yaroqli id yaratmadi");
+});
 
+test("submit: submissionId YAROQSIZ (bo'sh emas, lekin shaklsiz) — 400, natija YOZILMAYDI", async (t) => {
+  const seen = mockDb(t, {});
   const badId = new Request(`http://localhost:3000/api/o/${TOKEN}/submit`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -255,6 +264,19 @@ test("submit: submissionId yo'q/yaroqsiz — 400, natija YOZILMAYDI (C36 UX-06)"
   });
   assert.equal((await POST(badId, ctx())).status, 400, "yaroqsiz shakldagi submissionId qabul qilindi");
   assert.equal(seen.filter((s) => /INSERT INTO game_results/.test(s.text)).length, 0, "yaroqsiz submissionId bilan natija yozildi");
+});
+
+test("submit: submissionId KATTA harfda kelsa ham — kichik harfga o'girilib INSERT ga tushadi (Sharh R3)", async (t) => {
+  const seen = mockDb(t, { session: sessionRow(sampleGameDoc("sorting")) });
+  const upper = "AAAAAAAA-BBBB-4CCC-8DDD-EEEEEEEEEEEE";
+  const res = await POST(postReq({ name: "Ali", answers: {}, submissionId: upper }), ctx());
+  assert.equal(res.status, 200);
+  const insert = seen.find((s) => /INSERT INTO game_results/.test(s.text));
+  assert.ok(insert);
+  // MUTATSIYA: kichik harfga o'girish olib tashlansa — `params[8]` katta
+  // harfda qolib, xuddi shu urinishning boshqa registrdagi nusxasi
+  // (masalan zaxira generator ishlab chiqargani) alohida qator ochardi.
+  assert.equal(insert!.params[8], upper.toLowerCase(), "submissionId kichik harfga o'girilmadi");
 });
 
 test("submit: submissionId INSERT parametriga tushadi (dedupe/ON CONFLICT uchun asos)", async (t) => {
@@ -290,6 +312,67 @@ test("natijalar CSV: BOM, sarlavha va formula injeksiyasidan himoya", () => {
   assert.equal(csvCell(null), `""`);
 });
 
+/** Soxta natija satrlari yaratuvchi generator — `n` ta qator berib, keyin XATO otadi. */
+async function* fakeRowsThenFail(n: number): AsyncGenerator<{ id: string; playerName: string; score: number; total: number; seconds: number; answers: Record<string, unknown>; createdAt: string }> {
+  for (let i = 0; i < n; i++) {
+    yield { id: `r${i}`, playerName: `Q${i}`, score: 1, total: 1, seconds: 1, answers: {}, createdAt: "2026-09-17T10:00:00.000Z" };
+  }
+  throw new Error("baza uzildi (sinov)");
+}
+
+test("csvStream: baza OQIM O'RTASIDA yiqilsa — LOG yoziladi, oqim ANIQ XATOGA chiqadi (200+kesilgan fayl EMAS, Sharh R2)", async () => {
+  const errors: unknown[] = [];
+  const stream = csvStream(fakeRowsThenFail(2), (e) => errors.push(e));
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let threw: unknown = null;
+  for (;;) {
+    try {
+      const { value, done } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+    } catch (e) {
+      threw = e;
+      break;
+    }
+  }
+  /*
+   * MUTATSIYA: eski naqsh (`start()` + `finally { controller.close() }`)
+   * bu holatda oqimni MUVAFFAQIYATLI yopardi — `threw` `null` qolardi va
+   * o'qituvchi 200 + jimgina kesilgan faylni olardi (aynan BEA-16 xatosi).
+   */
+  assert.ok(threw, "MUTATSIYA (R2): oqim xatoni yutib, muvaffaqiyatli yakunladi");
+  assert.equal(errors.length, 1, "xato LOG qilinmadi (`onError` chaqirilmadi)");
+
+  const text = Buffer.concat(chunks.map((c) => Buffer.from(c))).toString("utf8");
+  assert.match(text, /Q0/, "birinchi (muvaffaqiyatli) qator yetib kelmadi");
+  assert.match(text, /Q1/, "ikkinchi (muvaffaqiyatli) qator yetib kelmadi");
+  // Sharh R2: sarlavhalar allaqachon yuborilgan (200) — status o'zgarmaydi,
+  // shuning uchun fayl ICHIDA ham aniq XATOLIK belgisi bo'lishi kerak.
+  assert.match(text, /XATOLIK/, "marker qator yozilmadi — kesilgan fayl jimgina «muvaffaqiyatli» ko'rinardi");
+});
+
+test("csvStream: xatosiz oqim — hammasi keladi, `onError` chaqirilmaydi", async () => {
+  async function* okRows() {
+    yield { id: "r1", playerName: "Ali", score: 1, total: 1, seconds: 1, answers: {}, createdAt: "2026-09-17T10:00:00.000Z" };
+    yield { id: "r2", playerName: "Vali", score: 1, total: 1, seconds: 1, answers: {}, createdAt: "2026-09-17T10:00:01.000Z" };
+  }
+  const errors: unknown[] = [];
+  const stream = csvStream(okRows(), (e) => errors.push(e));
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    chunks.push(value);
+  }
+  const text = Buffer.concat(chunks.map((c) => Buffer.from(c))).toString("utf8");
+  assert.match(text, /Ali/);
+  assert.match(text, /Vali/);
+  assert.ok(!/XATOLIK/.test(text), "xatosiz oqimda marker qator paydo bo'ldi");
+  assert.equal(errors.length, 0);
+});
+
 test("havola manzili: `APP_URL` birinchi, u bo'lmasa so'rov hostidan", () => {
   const req = new Request("http://192.168.1.5:3000/api/generations/x/share", { method: "POST" });
   assert.equal(shareUrl(req, TOKEN), `http://localhost:3000/o/${TOKEN}`, "APP_URL ishlatilmadi");
@@ -322,8 +405,12 @@ test("egasi route lari: `requireUser` + egalik, ochiq route larda esa YO'Q", () 
   assert.match(share, /publicGameView\(/, "MUTATSIYA: BEA-10 — o'ynaladigan tekshiruv yo'q");
 
   // DB-15/BEA-16: CSV eksporti eski `resultsCsv(rows)` bilan cheklanmagan
-  // (500 ga kesilgan massiv) — `iterateAllResults` orqali oqim beriladi.
-  assert.match(results, /iterateAllResults\(/, "MUTATSIYA: CSV hali ham kesilgan ro'yxatdan quriladi");
+  // (500 ga kesilgan massiv) — `iterateAllResultRows` orqali oqim beriladi.
+  assert.match(results, /iterateAllResultRows\(/, "MUTATSIYA: CSV hali ham kesilgan ro'yxatdan quriladi");
+  // Sharh R2: `start()` + shartsiz `finally { close() }` naqshi yo'q —
+  // xato `pull()` ichida ANIQ `controller.error()` bilan ko'rsatiladi.
+  assert.match(results, /pull\(controller\)/, "MUTATSIYA: R2 — oqim hali ham `start()`da hammasini navbatga qo'yadi");
+  assert.match(results, /controller\.error\(/, "MUTATSIYA: R2 — xato oqimda ko'rinmay qoladi");
 });
 
 /* ───────────── ochiq tinglash audiosi — `/api/o/[token]/audio/[assetId]` (AUDIT-22 R) ───────────── */

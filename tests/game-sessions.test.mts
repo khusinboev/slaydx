@@ -189,31 +189,46 @@ test("listResults / listGameSessions: natijalar FAQAT egasiga (JOIN + user_id), 
   assert.match(lastSql, /WHERE generation_id = \$1 AND user_id = \$2/);
 });
 
-test("listResults: sahifa TO'LIQ kelsa `nextCursor` beriladi, kursor SQL da ishlatiladi", async (t) => {
-  const row1 = { id: "r1", player_name: "Ali", score: 1, total: 2, seconds: 5, answers_json: {}, created_at: NOW };
+test("listResults: sahifa TO'LIQ kelsa `nextCursor` MIKROSONIYA aniqlikda beriladi (Sharh R1), SQL da ishlatiladi", async (t) => {
+  /*
+   * `cursor_at` — `to_char(… 'US')` chiqishini taqlid qiladi va ATAYLAB
+   * `created_at.toISOString()` (millisoniya) dan FARQ QILADI: agar kod
+   * kursorni `created_at`dan (millisoniyaga kesib) qurayotgan bo'lsa,
+   * quyidagi `deepEqual` DARHOL qizaradi (R1 — ko'rib chiqish topgan xato).
+   */
+  const row1 = { id: "r1", player_name: "Ali", score: 1, total: 2, seconds: 5, answers_json: {}, created_at: NOW, cursor_at: "2026-09-17T10:00:00.123456Z" };
   const seen = mockDb(t, (q) => (/count\(\*\)/.test(q) ? [{ n: "5" }] : /FROM game_results/.test(q) ? [row1] : [sessionRow()]));
 
   const page1 = await listResults(GEN, USER, { limit: 1 });
   assert.ok(page1.nextCursor, "to'liq sahifa keyingi kursorsiz qaytdi");
-  assert.deepEqual(page1.nextCursor, { createdAt: row1.created_at.toISOString(), id: row1.id });
+  // MUTATSIYA (R1): `lastRaw.cursor_at` o'rniga `lastRaw.created_at.toISOString()`
+  // ishlatilsa — kursor mikrosoniyani yo'qotadi, bu tenglik BUZILADI.
+  assert.deepEqual(page1.nextCursor, { createdAt: row1.cursor_at, id: row1.id });
+  assert.notEqual(page1.nextCursor!.createdAt, row1.created_at.toISOString(), "kursor millisoniyaga kesilgan qiymatdan qurilgan");
 
   await listResults(GEN, USER, { limit: 1, before: page1.nextCursor! });
   const withCursor = seen.find((s) => /FROM game_results/.test(s.text) && /r\.created_at, r\.id\) < /.test(s.text));
   assert.ok(withCursor, "kursor SQL WHERE ga tushmadi");
+  // `to_char(… 'US')` matnini `timestamptz`ga QAYTA o'girish — aniqlik yo'qolmasligi uchun.
+  assert.match(withCursor!.text, /\(\$4::timestamptz, \$5\)/, "kursor parametri timestamptz ga aniq o'girilmagan");
   assert.deepEqual([withCursor!.params[3], withCursor!.params[4]], [page1.nextCursor!.createdAt, page1.nextCursor!.id]);
 });
 
 test("iterateAllResults: BARCHA qatorlarni partiyalab beradi (DB-15 — CSV kesilmasin)", async (t) => {
   // 2 ta partiya: 2+2+1 = 5 qator, batchSize=2.
-  const allRows = Array.from({ length: 5 }, (_, i) => ({
-    id: `r${i}`,
-    player_name: `P${i}`,
-    score: 1,
-    total: 1,
-    seconds: 1,
-    answers_json: {},
-    created_at: new Date(NOW.getTime() - i * 1000),
-  }));
+  const allRows = Array.from({ length: 5 }, (_, i) => {
+    const created = new Date(NOW.getTime() - i * 1000);
+    return {
+      id: `r${i}`,
+      player_name: `P${i}`,
+      score: 1,
+      total: 1,
+      seconds: 1,
+      answers_json: {},
+      created_at: created,
+      cursor_at: `${created.toISOString().slice(0, -1)}000Z`,
+    };
+  });
   let call = 0;
   mockDb(t, (q) => {
     if (/count\(\*\)/.test(q)) return [{ n: String(allRows.length) }];

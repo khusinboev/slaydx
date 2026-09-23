@@ -20,7 +20,9 @@ import { inRequest } from "./helpers/next-request.mts";
  *      409, aniq xabar bilan;
  *   D. DB-15/BEA-16 — 700 qatorli CSV eksporti HAMMASINI beradi,
  *      JSON `total` HAQIQIY son;
- *   E. BEA-10 — o'ynaladigan savoli yo'q hujjatga havola so'ralsa 4xx.
+ *   E. BEA-10 — o'ynaladigan savoli yo'q hujjatga havola so'ralsa 4xx;
+ *   F. R1 (ko'rib chiqish) — bir millisoniyaga tushgan, turli
+ *      mikrosoniyali qatorlar kursor sahifalashda tashlab ketilmaydi.
  *
  * Faqat vaqtinchalik test bazasi: `DATABASE_URL=postgres://slaydx:audit@127.0.0.1:55439/slaydx`
  * (yoki `createIsolatedDb` shu server ustida YANGI, bo'sh baza ochadi).
@@ -174,6 +176,25 @@ test("o'yin natijalari: saqlash, takroriy yuborish, chegara, CSV/sahifalash, o'y
       [token, submissionId2],
     );
     assert.equal(rows2.length, 1, "MUTATSIYA: parallel poyga IKKI qator yozdi — ON CONFLICT ishlamayapti");
+
+    // Registr (Sharh R3, probe: `submissionId.toUpperCase()` ikkinchi qator
+    // ochardi): AYNI id, katta harf bilan — IKKINCHI qator YO'Q.
+    const idMixed = crypto.randomUUID();
+    const lower = await doSubmit(token, { name: "Country", answers: {}, seconds: 3, submissionId: idMixed });
+    assert.equal(lower.status, 200);
+    const upper = await doSubmit(token, { name: "Country", answers: {}, seconds: 3, submissionId: idMixed.toUpperCase() });
+    assert.equal(upper.status, 200);
+    assert.deepEqual(await upper.json(), await lower.json(), "registr farqli id boshqa javob qaytardi");
+    const rowsCase = await query(
+      `SELECT r.id FROM game_results r JOIN game_sessions s ON s.id = r.session_id WHERE s.token = $1 AND r.submission_id = $2`,
+      [token, idMixed.toLowerCase()],
+    );
+    assert.equal(rowsCase.length, 1, "MUTATSIYA (R3): registr farqli id IKKINCHI qator yaratdi");
+
+    // submissionId YO'Q (Sharh R3) — eski/keshlangan klient: 400 EMAS,
+    // server o'zi id yaratadi va urinish baribir yoziladi.
+    const noId = await doSubmit(token, { name: "EskiKlient", answers: {}, seconds: 2 });
+    assert.equal(noId.status, 200, "MUTATSIYA: submissionId yo'qligi 400 qaytardi — eski klient urinishni yo'qotardi");
   });
 
   /* ══════════════════════════ C. ABUSE-04 — sessiya chegarasi ══════════════════════════ */
@@ -246,6 +267,44 @@ test("o'yin natijalari: saqlash, takroriy yuborish, chegara, CSV/sahifalash, o'y
     const lines = csvText.replace(/^﻿/, "").split("\r\n").filter(Boolean);
     // 1 sarlavha + 700 ma'lumot qatori.
     assert.equal(lines.length, 701, `MUTATSIYA: CSV kesilgan (${lines.length - 1} qator, 700 kutilgan) — DB-15/BEA-16`);
+  });
+
+  /* ══════════════════════════ F. R1 — mikrosoniya aniqlikdagi kursor ══════════════════════════ */
+
+  await t.test("F. bir millisoniyaga tushgan (turli mikrosoniyali) qatorlar TASHLAB KETILMAYDI", async () => {
+    const owner = await mkUser("f-owner");
+    const gen = await mkGeneration(owner.uid, playableDoc);
+    const shared = await doShare(gen, owner.cookie);
+    const { token } = (await shared.json()) as { token: string };
+    const sid = (await queryOne<{ id: string }>(`SELECT id FROM game_sessions WHERE token = $1`, [token]))!.id;
+
+    /*
+     * 4 qator, BIR XIL millisoniya (`.123`), TURLI mikrosoniya — sharh
+     * probasi aynan shu holatda `iterateAllResults(batch=1)` 4 tadan
+     * 2 tasini qaytargan edi (JS `toISOString()` mikrosoniyani kesadi).
+     */
+    const micros = ["123450", "123451", "123452", "123453"];
+    for (const [i, m] of micros.entries()) {
+      await query(
+        `INSERT INTO game_results (id, session_id, player_name, score, total, answers_json, seconds, created_at)
+         VALUES ($1, $2, $3, 0, 0, '{}'::jsonb, 0, ($4)::timestamptz)`,
+        [crypto.randomUUID(), sid, `M${i}`, `2026-01-01T12:00:00.${m}Z`],
+      );
+    }
+
+    // `batchSize=1` — sahifa chegarasi AYNAN shu 4 qator ichida bo'lsin.
+    const namesViaIterator: string[] = [];
+    for await (const row of gameSessions.iterateAllResultRows(gen, owner.uid, 1)) {
+      if (row.playerName.startsWith("M")) namesViaIterator.push(row.playerName);
+    }
+    assert.equal(namesViaIterator.length, 4, `MUTATSIYA (R1): iterateAllResultRows ${namesViaIterator.length}/4 qator qaytardi`);
+    assert.equal(new Set(namesViaIterator).size, 4, "takrorlangan qator bor");
+
+    // AYNI narsa HAQIQIY CSV oqimi orqali ham (route darajasida).
+    const csvRes = await doResults(gen, owner.cookie, "?format=csv");
+    const csvText = await csvRes.text();
+    const mLines = csvText.split("\r\n").filter((l) => /"M\d"/.test(l));
+    assert.equal(mLines.length, 4, `MUTATSIYA (R1): CSV eksportida ${mLines.length}/4 «M» qatori bor`);
   });
 
   /* ══════════════════════════ E. BEA-10 — o'ynaladigan savoli yo'q hujjat ══════════════════════════ */

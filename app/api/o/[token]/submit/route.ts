@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { ApiError, checkOrigin, handler, json, limit, readJson } from "@/lib/server/api";
 import { ensureMigrated } from "@/lib/server/db";
 import { clientIp } from "@/lib/server/ratelimit";
@@ -64,7 +65,18 @@ export const POST = handler("o/submit", async (req, ctx: Ctx) => {
   const name = String(body.name ?? "").replace(/\s+/g, " ").trim().slice(0, PLAYER_NAME_MAX);
   if (!name) throw new ApiError("Ismingizni kiriting", 400);
 
-  const submissionId = String(body.submissionId ?? "");
+  /*
+   * submissionId (Sharh R3): BO'SH bo'lsa serverda o'zi yaratamiz —
+   * deploy paytida eski (oldindan yuklangan) sahifadagi o'quvchi bu
+   * maydonni umuman yubormaydi, uni 400 bilan qaytarish esa urinishning
+   * o'zini yo'qotardi (dedupe/cap saqlanadi, faqat RETRY endi bu
+   * urinish bilan qayta yozmaydi — eski klient qayta yuborsa yangi
+   * qator ochiladi, xuddi submissionId kiritilishidan OLDINGI kabi).
+   * Kichik harfga: regex `/i` bo'lsa ham UNIQUE indeks registrga sezgir
+   * (`addResult` ham buni takrorlaydi — mudofaa ikki qatlamda).
+   */
+  const rawSubmissionId = String(body.submissionId ?? "").trim().toLowerCase();
+  const submissionId = rawSubmissionId || randomUUID();
   if (!SUBMISSION_ID_RE.test(submissionId)) throw new ApiError("Noto'g'ri so'rov", 400);
 
   const answers: PlayerAnswers = body.answers && typeof body.answers === "object" && !Array.isArray(body.answers) ? (body.answers as PlayerAnswers) : {};
