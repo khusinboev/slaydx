@@ -25,25 +25,47 @@ function api(method: string): string {
   return `https://api.telegram.org/bot${env.telegramBotToken}/${method}`;
 }
 
+/** 429 dan keyingi yagona qayta urinishgacha eng uzoq kutish (webhook javobi kechikmasin). */
+const TELEGRAM_RETRY_AFTER_CAP_S = 5;
+
 async function call<T>(method: string, payload: unknown): Promise<T | null> {
   if (!botConfigured()) return null;
-  try {
-    const res = await fetch(api(method), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(15_000),
-    });
-    const data = (await res.json()) as { ok: boolean; result?: T; description?: string };
-    if (!data.ok) {
-      console.warn(`[telegram] ${method}:`, data.description ?? "xato");
+  /*
+   * 429 (`parameters.retry_after`) — BITTA cheklangan qayta urinish (audit
+   * EXT-05): ko'p `/start` bir paytda kelganda (~30 xabar/s chegarasi)
+   * kirish havolasi jimgina yo'qolmasin. Boshqa xatolar qayta urinilmaydi.
+   */
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      const res = await fetch(api(method), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(15_000),
+      });
+      const data = (await res.json()) as {
+        ok: boolean;
+        result?: T;
+        description?: string;
+        error_code?: number;
+        parameters?: { retry_after?: number };
+      };
+      if (!data.ok) {
+        console.warn(`[telegram] ${method}:`, data.description ?? "xato");
+        const after = Number(data.parameters?.retry_after);
+        if (attempt === 0 && data.error_code === 429 && Number.isFinite(after) && after >= 0) {
+          await new Promise((r) => setTimeout(r, Math.min(after, TELEGRAM_RETRY_AFTER_CAP_S) * 1000));
+          continue;
+        }
+        return null;
+      }
+      return data.result ?? null;
+    } catch (e) {
+      console.warn(`[telegram] ${method}:`, e instanceof Error ? e.message : "tarmoq xatosi");
       return null;
     }
-    return data.result ?? null;
-  } catch (e) {
-    console.warn(`[telegram] ${method}:`, e instanceof Error ? e.message : "tarmoq xatosi");
-    return null;
   }
+  return null;
 }
 
 export async function sendMessage(
