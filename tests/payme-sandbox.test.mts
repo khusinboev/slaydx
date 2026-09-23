@@ -68,3 +68,19 @@ test("route: sandbox yoqilgan — test kaliti autentifikatsiyadan o'tadi", { ski
   // Buyurtma yo'q — ya'ni AUTH dan o'tib, biznes mantiqqa yetib keldi.
   assert.equal(body.error?.code, -31050);
 });
+
+test("paymentsConfigured: faqat test kaliti + sandbox o'chiq — Payme YOQILMAGAN (review R1)", async (t) => {
+  const { paymentsConfigured } = await import("../lib/server/env.ts");
+  const p = env.payme as { key: string; testKey: string; sandbox: boolean };
+  const saved = { ...p };
+  t.after(() => {
+    Object.assign(p, saved);
+  });
+
+  Object.assign(p, { key: "", testKey: TEST, sandbox: false });
+  assert.equal(paymentsConfigured().payme, false, "MUTATSIYA: UI checkout taklif qiladi, webhook esa AUTH beradi");
+  Object.assign(p, { key: "", testKey: TEST, sandbox: true });
+  assert.equal(paymentsConfigured().payme, true, "sandbox: test kaliti yetarli");
+  Object.assign(p, { key: LIVE, testKey: "", sandbox: false });
+  assert.equal(paymentsConfigured().payme, true, "jonli kalit — yoqilgan");
+});
