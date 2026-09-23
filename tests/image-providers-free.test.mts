@@ -9,6 +9,11 @@ import { requestPexelsImage, pexelsProvider } from "../lib/generation/image-prov
 import { requestPixabayImage, pixabayProvider } from "../lib/generation/image-provider-pixabay.ts";
 import { attachSlideImages } from "../lib/generation/slide-images.ts";
 import type { SlideModel } from "../lib/generation/slide-types.ts";
+import { resetBreakers } from "../lib/generation/llm/breaker.ts";
+
+// Stock kvota saqlagichi jarayon bo'yicha (audit EXT-06) — bir testdagi 429
+// keyingi testning Pexels/Pixabay so'rovlarini o'chirib qo'ymasin.
+test.beforeEach(() => resetBreakers());
 
 /**
  * BEPUL FOTO ZANJIRI (AUDIT-9 P3): Pexels → Pixabay → fal.

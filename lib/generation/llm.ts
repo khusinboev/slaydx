@@ -2,6 +2,9 @@
  * Gemini (asosiy) yoki ixtiyoriy xAI.
  * Kalit bo‘lmasa chaqiruv ketmaydi.
  */
+import { breakerFor } from "./llm/breaker";
+import { limiterFor } from "./llm/limiter";
+import { backoffMs, equalJitterMs, geminiRetryDelayMs, parseRetryAfter } from "./llm/retry";
 
 type Provider = "gemini" | "xai" | null;
 
@@ -76,7 +79,21 @@ export type GroundedResult = {
  * 5xx qayta urinishga arziydi; 4xx (noto'g'ri so'rov, kalit) va to'liq
  * timeout esa yo'q — timeout byudjetni allaqachon yeb bo'lgan.
  */
-type Attempt<T> = { value: T | null; retryable?: boolean };
+type Attempt<T> = {
+  value: T | null;
+  retryable?: boolean;
+  /** HTTP status (tarmoq xatosi/timeout'da yo'q). */
+  status?: number;
+  /** Provayder aytgan kutish: `Retry-After` yoki Gemini `RetryInfo`. */
+  retryAfterMs?: number;
+  /** Bizning timeout'imiz (abort) — sekin provayder belgisi. */
+  timedOut?: boolean;
+};
+
+/** Qayta urinish uchun kamida shuncha vaqt qolishi kerak (ms). */
+const RETRY_MIN_LEFT_MS = 6_000;
+/** Shundan qisqa timeout (byudjet tufayli) saqlagichga nosozlik deb yozilmaydi. */
+const BREAKER_TIMEOUT_FLOOR_MS = 15_000;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -118,18 +135,62 @@ export function describeNetError(e: unknown): string {
  * urinishsiz qolar va bitta tarmoq uzilishi butun tadqiqotni o'chirardi.
  */
 async function withRetry<T>(
+  provider: "gemini" | "xai",
   budget: number,
   call: (timeoutMs: number) => Promise<Attempt<T>>,
 ): Promise<T | null> {
   const started = Date.now();
-  for (let attempt = 0; attempt < 3; attempt++) {
+  const breaker = breakerFor(provider);
+  const limiter = limiterFor(provider);
+  const MAX_ATTEMPTS = 3;
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     const left = budget - (Date.now() - started);
     // Qayta urinish uchun kamida 6 soniya qolishi kerak.
-    if (attempt > 0 && left < 6_000) break;
-    const res = await call(attempt === 0 ? budget : Math.min(left, budget));
-    if (res.value) return res.value;
+    if (attempt > 0 && left < RETRY_MIN_LEFT_MS) break;
+    /*
+     * Saqlagich (audit EXT-04): ketma-ket sekin/5xx javoblardan keyin
+     * provayder sovish davrida CHAQIRILMAYDI — har chaqiruv nosozlikni
+     * qaytadan «kashf qilib» to'liq timeout'ni kutmasin.
+     */
+    if (!breaker.allow()) {
+      console.warn(`[llm] ${provider} saqlagichi ochiq — chaqiruv o'tkazib yuborildi`);
+      return null;
+    }
+    const slot = attempt === 0 ? budget : Math.min(left, budget);
+    // Cheklagich (audit EXT-09): ortiqcha parallel so'rov qisqa navbatda kutadi.
+    const queued = limiter.active >= limiter.max ? Date.now() : 0;
+    const release = await limiter.acquire(slot);
+    if (!release) {
+      console.warn(`[llm] ${provider} navbatida vaqt tugadi (${slot} ms)`);
+      return null;
+    }
+    // Navbatda kutilgan vaqt ayriladi; bo'sh slotda timeout aynan avvalgidek.
+    const timeoutMs = queued ? Math.max(1, slot - (Date.now() - queued)) : slot;
+    let res: Attempt<T>;
+    try {
+      res = await call(timeoutMs);
+    } finally {
+      release();
+    }
+    if (res.value) {
+      breaker.success();
+      return res.value;
+    }
+    if (res.timedOut) {
+      if (timeoutMs >= BREAKER_TIMEOUT_FLOOR_MS) breaker.failure();
+    } else if (res.status === undefined ? res.retryable : res.status >= 500) {
+      breaker.failure();
+    } else if (res.status !== undefined && res.status !== 429) {
+      breaker.success();
+    }
     if (!res.retryable) break;
-    await sleep(500 * 2 ** attempt);
+    // Oxirgi urinishdan keyin uxlash — bekor vaqt (audit EXT-13).
+    if (attempt === MAX_ATTEMPTS - 1) break;
+    // Tarmoq uzilishida teng jitter (kamida yarim asos), HTTP xatosida to'liq jitter.
+    const wait = res.retryAfterMs ?? (res.status === undefined ? equalJitterMs(attempt, 500) : backoffMs(attempt, 500));
+    // Kutish + keyingi urinish byudjetga sig'masa — hozir voz kechamiz.
+    if (Date.now() - started + wait + RETRY_MIN_LEFT_MS > budget) break;
+    await sleep(wait);
   }
   return null;
 }
@@ -152,7 +213,7 @@ async function runLlm(
   if (!provider) return null;
   const call = provider === "gemini" ? completeGemini : completeXai;
   const budget = opts.timeoutMs ?? 40_000;
-  return withRetry(budget, (timeoutMs) => call(system, user, maxTokens, { ...opts, timeoutMs }));
+  return withRetry(provider, budget, (timeoutMs) => call(system, user, maxTokens, { ...opts, timeoutMs }));
 }
 
 export async function llmComplete(
@@ -267,7 +328,12 @@ async function completeGemini(
     };
     if (!res.ok) {
       console.warn("[gemini]", res.status, data.error?.message ?? "request failed");
-      return { value: null, retryable: res.status === 429 || res.status >= 500 };
+      return {
+        value: null,
+        retryable: res.status === 429 || res.status >= 500,
+        status: res.status,
+        retryAfterMs: retryAfterMs(res.headers) ?? geminiRetryDelayMs(data),
+      };
     }
     const cand = data.candidates?.[0];
     const text = cand?.content?.parts
@@ -297,8 +363,9 @@ async function completeGemini(
     // `fetch failed` sababi (`ENOTFOUND`/`EAI_AGAIN`/`ECONNRESET`) `cause` da — logda ko'rinsin.
     const message = describeNetError(e);
     console.warn("[gemini]", message);
-    // `aborted` — bizning timeout'imiz; qolgani tarmoq uzilishi.
-    return { value: null, retryable: !/abort/i.test(message) };
+    // `aborted` — FAQAT bizning timer'imiz; `ETIMEDOUT`/`UND_ERR_CONNECT_TIMEOUT` — tarmoq xatosi, qayta uriladi (review R2).
+    const timedOut = /abort/i.test(message);
+    return { value: null, retryable: !timedOut, timedOut };
   } finally {
     clearTimeout(timer);
   }
@@ -409,7 +476,14 @@ async function streamGemini(
     if (!res.ok) {
       const err = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
       console.warn("[gemini:stream]", res.status, err?.error?.message ?? "request failed");
-      if (res.status === 429 || res.status >= 500) return { value: null, retryable: true };
+      if (res.status === 429 || res.status >= 500) {
+        return {
+          value: null,
+          retryable: true,
+          status: res.status,
+          retryAfterMs: retryAfterMs(res.headers) ?? geminiRetryDelayMs(err),
+        };
+      }
       /*
        * Boshqa 4xx — oqim endpointining O'ZI rad etdi (proksi uni
        * bilmaydi, model oqimni qo'llamaydi, `alt=sse` bloklangan).
@@ -419,7 +493,7 @@ async function streamGemini(
        */
       const fallback = await completeGemini(system, user, maxTokens, opts);
       if (fallback.value) onText(fallback.value.text);
-      return { value: fallback.value?.text ?? null, retryable: fallback.retryable };
+      return { ...fallback, value: fallback.value?.text ?? null };
     }
     if (!res.body) {
       // Oqim tanasi yo'q (proksi buferladi yoki `json:`-only stub) —
@@ -476,8 +550,9 @@ async function streamGemini(
   } catch (e) {
     const message = describeNetError(e);
     console.warn("[gemini:stream]", message);
-    // `aborted` — bizning timeout'imiz; qolgani tarmoq uzilishi.
-    return { value: null, retryable: !/abort/i.test(message) };
+    // `aborted` — FAQAT bizning timer'imiz; `ETIMEDOUT`/`UND_ERR_CONNECT_TIMEOUT` — tarmoq xatosi, qayta uriladi (review R2).
+    const timedOut = /abort/i.test(message);
+    return { value: null, retryable: !timedOut, timedOut };
   }
 }
 
@@ -514,7 +589,7 @@ export async function llmStream(
     return res.text;
   }
   const budget = rest.timeoutMs ?? 40_000;
-  return withRetry(budget, (timeoutMs) =>
+  return withRetry("gemini", budget, (timeoutMs) =>
     streamGemini(system, user, maxTokens, { ...rest, timeoutMs }, onText),
   );
 }
@@ -552,7 +627,12 @@ async function completeXai(
     });
     if (!res.ok) {
       console.warn("[xai]", res.status);
-      return { value: null, retryable: res.status === 429 || res.status >= 500 };
+      return {
+        value: null,
+        retryable: res.status === 429 || res.status >= 500,
+        status: res.status,
+        retryAfterMs: retryAfterMs(res.headers),
+      };
     }
     const data = (await res.json()) as {
       choices?: { message?: { content?: string } }[];
@@ -564,7 +644,9 @@ async function completeXai(
   } catch (e) {
     const message = describeNetError(e);
     console.warn("[xai]", message);
-    return { value: null, retryable: !/abort/i.test(message) };
+    // Faqat BIZNING timer abort'imiz; `ETIMEDOUT`/`UND_ERR_CONNECT_TIMEOUT` — tarmoq xatosi, qayta uriladi (review R2).
+    const timedOut = /abort/i.test(message);
+    return { value: null, retryable: !timedOut, timedOut };
   } finally {
     clearTimeout(timer);
   }
@@ -592,13 +674,9 @@ export type RawAttempt =
   | { ok: false; error: string; retryable: boolean; status?: number; retryAfterMs?: number };
 
 /** `Retry-After` sarlavhasi — soniya (son) yoki HTTP-sana bo'lishi mumkin. */
-function retryAfterMs(headers: Headers): number | undefined {
-  const raw = headers.get("retry-after");
-  if (!raw) return undefined;
-  const secs = Number(raw);
-  if (Number.isFinite(secs)) return Math.max(0, secs * 1000);
-  const at = Date.parse(raw);
-  return Number.isFinite(at) ? Math.max(0, at - Date.now()) : undefined;
+function retryAfterMs(headers: Headers | null | undefined): number | undefined {
+  // Sarlavhasiz javob (proksi/stub) — kutish noma'lum, xato EMAS.
+  return typeof headers?.get === "function" ? parseRetryAfter(headers.get("retry-after")) : undefined;
 }
 
 async function rawGemini(
@@ -633,7 +711,8 @@ async function rawGemini(
         error: data.error?.message ?? `HTTP ${res.status}`,
         retryable: res.status === 429 || res.status >= 500,
         status: res.status,
-        retryAfterMs: retryAfterMs(res.headers),
+        // Gemini kutishni tanada beradi (`RetryInfo`), sarlavhada emas.
+        retryAfterMs: retryAfterMs(res.headers) ?? geminiRetryDelayMs(data),
       };
     }
     const text = (data.candidates?.[0]?.content?.parts ?? [])

@@ -10,11 +10,22 @@
  * 4xx (429 dan tashqari) QAYTA URINILMAYDI — noto'g'ri DOI/so'rov
  * ikkinchi marta ham noto'g'ri. Timeout ham: u byudjetni allaqachon
  * yeb bo'lgan (`llm.ts` bilan bir xil qaror).
+ *
+ * Audit C28: kutishlar to'liq jitter'li, `deadline` hurmat qilinadi, 429
+ * esa host saqlagichini ochadi (quyidagi `QUOTA_*` izohi).
  */
+import { breakerFor } from "../llm/breaker";
+import { backoffMs, parseRetryAfter } from "../llm/retry";
 
 export type HttpOpts = {
   signal?: AbortSignal;
   timeoutMs?: number;
+  /**
+   * Bosqich muddati (epoch ms, audit EXT-03). Berilsa har urinish timeout'i
+   * qolgan vaqt bilan cheklanadi va vaqt `RESEARCH_MIN_ATTEMPT_MS` dan kam
+   * qolsa yangi urinish boshlanmaydi.
+   */
+  deadline?: number;
   retries?: number;
   /** Birinchi kutish (ms); keyingisi ×3. Testda 0. */
   retryBaseMs?: number;
@@ -27,6 +38,35 @@ export type HttpText = { ok: true; status: number; text: string } | { ok: false;
 
 export const RESEARCH_TIMEOUT_MS = 10_000;
 export const RESEARCH_RETRIES = 2;
+/** Muddatgacha shundan kam qolsa yangi urinish boshlanmaydi. */
+export const RESEARCH_MIN_ATTEMPT_MS = 1_000;
+/**
+ * 429 (kvota) siyosati (audit EXT-07): qisqa `Retry-After` (≤ 3 s, yoki
+ * sarlavhasiz) — BITTA qayta urinish (soniyalik chegara, masalan OpenAlex
+ * 10 so'rov/s); ikkinchi 429 yoki uzun `Retry-After` (kunlik kvota) — shu
+ * HOST saqlagichi `Retry-After` muddatiga (5 s … 10 min, sarlavhasiz — 10 s)
+ * ochiladi va u davrda so'rovlar tarmoqqa chiqmasdan `{ok:false, 429}`
+ * bilan qaytadi: manba bo'sh keladi, hujjat esa baribir yoziladi.
+ */
+const QUOTA_RETRY_MAX_MS = 3_000;
+/**
+ * `Retry-After` yo'q ikkinchi 429 — ko'pincha soniyalik chegara (OpenAlex
+ * 10 so'rov/s), kunlik kvota emas: 60 s butun hostni o'chirib maqolalarni
+ * manbasiz qoldirardi (review nit 2). Kunlik kvota o'zi uzun `Retry-After` beradi.
+ */
+const QUOTA_COOLDOWN_DEFAULT_MS = 10_000;
+const QUOTA_COOLDOWN_MIN_MS = 5_000;
+const QUOTA_COOLDOWN_MAX_MS = 10 * 60_000;
+
+function hostBreaker(url: string) {
+  let host = url;
+  try {
+    host = new URL(url).host;
+  } catch {
+    // URL emas — butun satr kalit bo'ladi (manba baribir bitta).
+  }
+  return breakerFor(`research:${host}`, { cooldownMs: QUOTA_COOLDOWN_DEFAULT_MS });
+}
 
 /** `OPENALEX_MAILTO` → `CROSSREF_MAILTO` → bo'sh (mailto qo'shilmaydi). */
 export function contactMail(): string {
@@ -66,16 +106,27 @@ async function request<T>(
   const fetchImpl = opts.fetchImpl ?? globalThis.fetch;
   const retries = opts.retries ?? RESEARCH_RETRIES;
   const base = opts.retryBaseMs ?? 500;
+  const breaker = hostBreaker(url);
+  const left = () => (opts.deadline === undefined ? Number.POSITIVE_INFINITY : opts.deadline - Date.now());
   let last: { ok: false; status: number; error: string } = { ok: false, status: 0, error: "no attempt" };
+  let wait = 0;
+  let saw429 = false;
   for (let attempt = 0; attempt <= retries; attempt++) {
     if (opts.signal?.aborted) return { ok: false, status: 0, error: "aborted" };
-    if (attempt > 0) await sleep(base * 3 ** (attempt - 1));
+    if (!breaker.allow()) return { ok: false, status: 429, error: "manba kvotasi tugagan — vaqtincha o'tkazib yuborildi" };
+    if (attempt > 0) {
+      // Kutish + minimal urinish muddatga sig'masa — yangi urinish yo'q.
+      if (left() - wait < RESEARCH_MIN_ATTEMPT_MS) return last;
+      await sleep(wait);
+    }
+    if (attempt === 0 && left() < RESEARCH_MIN_ATTEMPT_MS) return { ok: false, status: 0, error: "muddat tugadi" };
     try {
       const res = await fetchImpl(url, {
         headers: { Accept: accept, "User-Agent": userAgent(), ...(opts.headers ?? {}) },
-        signal: combineSignals(opts.signal, opts.timeoutMs ?? RESEARCH_TIMEOUT_MS),
+        signal: combineSignals(opts.signal, Math.min(opts.timeoutMs ?? RESEARCH_TIMEOUT_MS, left())),
       });
       if (res.ok) {
+        breaker.success();
         try {
           return await read(res);
         } catch (e) {
@@ -83,11 +134,25 @@ async function request<T>(
         }
       }
       last = { ok: false, status: res.status, error: `HTTP ${res.status}` };
-      const retryable = res.status === 429 || res.status >= 500;
+      if (res.status === 429) {
+        const after = parseRetryAfter(res.headers?.get?.("retry-after"));
+        if (saw429 || attempt >= retries || (after !== undefined && after > QUOTA_RETRY_MAX_MS)) {
+          const cooldown = Math.min(QUOTA_COOLDOWN_MAX_MS, Math.max(QUOTA_COOLDOWN_MIN_MS, after ?? QUOTA_COOLDOWN_DEFAULT_MS));
+          breaker.trip(cooldown, "429 kvota");
+          return last;
+        }
+        saw429 = true;
+        wait = after ?? backoffMs(0, base);
+        continue;
+      }
+      // To'liq jitter'li kutish (audit EXT-13): ~base, ~3·base.
+      wait = backoffMs(0, base * 3 ** attempt);
+      const retryable = res.status >= 500;
       if (!retryable) return last;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       last = { ok: false, status: 0, error: msg };
+      wait = backoffMs(0, base * 3 ** attempt);
       // Timeout — qayta urinilmaydi (byudjet ketgan); tarmoq xatosi — uriniladi.
       if (e instanceof Error && (e.name === "TimeoutError" || e.name === "AbortError")) return last;
     }
