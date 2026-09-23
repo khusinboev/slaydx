@@ -225,9 +225,8 @@ export function teacherInputFromValues(meta: DocMeta, values: FormValues, kind: 
 
   /* ── glossariy: atama soni va tarjima ustunlari turdan ── */
   const glossarySpec = kind === "glossary" ? (teacherTypeOf("glossary", type) as GlossaryTypeSpec) : null;
-  const termCount = glossarySpec
-    ? num(values.termCount, glossarySpec.limits.termsDefault, glossarySpec.limits.termsMin, TEACHER_LIMITS.termsMax)
-    : num(values.termCount, 10, TEACHER_LIMITS.termsMin, TEACHER_LIMITS.termsMax);
+  // Hisob `glossaryTermCount` bilan BIR XIL manbadan (C12) — narx ham shu funksiyani chaqiradi.
+  const termCount = glossarySpec ? glossaryTermCount(values) : num(values.termCount, 10, TEACHER_LIMITS.termsMin, TEACHER_LIMITS.termsMax);
   /*
    * Tarjima ustunlari FAQAT turning ruxsat etganlari: `fan-lugati` da
    * `translationLangs: ["ru","en"]` yuborilsa ham jadval kengaymaydi —
