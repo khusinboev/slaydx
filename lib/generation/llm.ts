@@ -158,13 +158,14 @@ async function withRetry<T>(
     }
     const slot = attempt === 0 ? budget : Math.min(left, budget);
     // Cheklagich (audit EXT-09): ortiqcha parallel so'rov qisqa navbatda kutadi.
-    const queued = Date.now();
+    const queued = limiter.active >= limiter.max ? Date.now() : 0;
     const release = await limiter.acquire(slot);
     if (!release) {
       console.warn(`[llm] ${provider} navbatida vaqt tugadi (${slot} ms)`);
       return null;
     }
-    const timeoutMs = Math.max(1, slot - (Date.now() - queued));
+    // Navbatda kutilgan vaqt ayriladi; bo'sh slotda timeout aynan avvalgidek.
+    const timeoutMs = queued ? Math.max(1, slot - (Date.now() - queued)) : slot;
     let res: Attempt<T>;
     try {
       res = await call(timeoutMs);

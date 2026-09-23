@@ -129,13 +129,14 @@ async function runSpec(
       return null;
     }
     const budget = Math.min(opts.timeoutMs, left);
-    const queued = Date.now();
+    const queued = limiter.active >= limiter.max ? Date.now() : 0;
     const release = await limiter.acquire(budget);
     if (!release) {
       log(`[llm:${role}] ${spec.provider}:${spec.model} → navbatda vaqt tugadi (${budget} ms)`);
       return "timeout";
     }
-    const timeoutMs = Math.max(1, budget - (Date.now() - queued));
+    // Navbatda kutilgan vaqt ayriladi; bo'sh slotda timeout aynan sozlangandek.
+    const timeoutMs = queued ? Math.max(1, budget - (Date.now() - queued)) : budget;
     const started = Date.now();
     let res: Attempt;
     try {

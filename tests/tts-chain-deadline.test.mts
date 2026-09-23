@@ -13,7 +13,7 @@ import { TtsError, type TtsAudio, type TtsProvider, type TtsProviderId, type Tts
  *  - `Retry-After` cheklangan (1 soatlik kutish yo'q).
  */
 
-const ENV = { TTS_VOICE_UZ: "azure:uz-UZ-MadinaNeural,aisha:gulnoza" } as NodeJS.ProcessEnv;
+const ENV = { TTS_VOICE_UZ: "azure:uz-UZ-MadinaNeural,aisha:gulnoza" } as unknown as NodeJS.ProcessEnv;
 const AUDIO: TtsAudio = { mp3: new Uint8Array([0xff, 0xfb, 0x90, 0x00]), seconds: 1, chars: 5 };
 
 function fake(id: TtsProviderId, script: (opts: TtsSynthOpts, n: number) => TtsAudio | Promise<TtsAudio>) {
