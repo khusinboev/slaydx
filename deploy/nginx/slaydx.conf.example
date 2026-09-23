@@ -1,0 +1,97 @@
+# SlaydX — nginx site config TEMPLATE (INFRA-11).
+#
+# Bu fayl SHABLON — prod'dagi haqiqiy `/etc/nginx/sites-available/slaydx`
+# bilan bevosita almashtirilmaydi (TLS sertifikat yo'llari, `server_name`,
+# va ehtimol boshqa qo'shni loyihaga tegishli maxsus qatorlar bor bo'lishi
+# mumkin, `.claude/deploy.md`da tasvirlangan). Maqsad: nginx sozlamalari
+# ENDI reponi ko'rgan har kim uchun DIFFLANADIGAN, TEKSHIRILADIGAN matn —
+# ilgari faqat host'da qo'lda tahrirlanardi, hech qanday nusxasi yo'q edi
+# (INFRA-11, deploy.md §2a'dagi haqiqiy voqea: yangi tahrir yo'nalishi
+# standart `proxy_read_timeout 60s`ga sig'madi, tuzatish operatorning
+# qo'lda eslashi va faylni to'g'ridan-to'g'ri tahrirlashiga bog'liq edi).
+#
+# Ishlatish:
+#   1. Prod'dagi joriy faylni shu bilan solishtiring:
+#        ssh root@<server> 'cat /etc/nginx/sites-available/slaydx' | diff - deploy/nginx/slaydx.conf.example
+#   2. Farqlarni ataylab (TLS yo'llari, server_name) qoldirib, qolganini
+#      moslashtiring.
+#   3. `nginx -t` bilan sinab ko'ring, keyin `systemctl reload nginx`
+#      (reload — xavfsiz, qo'shni saytlarga (nodavlattalim/talim24-landing/
+#      vakant) uzilish bermaydi; `restart` qisqa uzilish beradi, ehtiyot
+#      bo'ling — `.claude/deploy.md`).
+#
+# Web konteyner FAQAT localhost'da tinglaydi (`docker-compose.yml`:
+# `127.0.0.1:${PORT:-3000}:3000`) — nginx TLS'ni shu yerda tugatadi va
+# proxy qiladi.
+
+server {
+    listen 80;
+    server_name slaydxx.uz www.slaydxx.uz;
+
+    # HTTP -> HTTPS. `enable-https.sh` (`.claude/deploy.md`) certbot orqali
+    # bu blokni to'ldiradi/almashtiradi — shu qism odatda avtomatik.
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl http2;
+    server_name slaydxx.uz www.slaydxx.uz;
+
+    # TLS sertifikat yo'llari — certbot/`enable-https.sh` to'ldiradi.
+    # Bu shablonda ATAYLAB qoldirilgan — real yo'llar host'ga xos.
+    # ssl_certificate     /etc/letsencrypt/live/slaydxx.uz/fullchain.pem;
+    # ssl_certificate_key /etc/letsencrypt/live/slaydxx.uz/privkey.pem;
+
+    # HSTS — bir marta HTTPS orqali kirilgach, brauzer HTTP'ga qaytmasin
+    # (aralash TLS/plain-HTTP kontent tahdidiga qarshi standart qoida).
+    # `preload` ATAYLAB YO'Q — domenni preload ro'yxatidan chiqarish qiyin,
+    # HTTPS hali barcha yo'llarda sinalmagan bosqichda xavfli.
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+    # Yuklash chegaralari: `SOURCE_MAX_BYTES`/`TEMPLATE_MAX_BYTES` = 20 MB
+    # (`lib/server/source-upload.ts`, `lib/server/template-upload.ts`).
+    # 32m — shu chegaradan YUQORI, ya'ni nginx emas, ilovaning O'ZI aniq
+    # xabar bilan rad etadi (kodning o'zidagi izoh shu qiymatga tayanadi —
+    # bu yerda o'zgartirsangiz o'sha izohni ham yangilang).
+    client_max_body_size 32m;
+
+    # Standart javob kutish vaqti — aksariyat route sinxron emas (navbatga
+    # qo'yiladi, `GET /api/generations/{id}` bilan so'raladi), shuning
+    # uchun 60s yetarli.
+    proxy_read_timeout 60s;
+    proxy_connect_timeout 10s;
+    proxy_send_timeout 60s;
+
+    # Reverse proxy ortidagi haqiqiy klient IP'i. `lib/server/env.ts`
+    # `TRUST_PROXY` (standart `true` — `docker-compose.yml`) shu
+    # sarlavhalarga ishonadi; ular yo'q bo'lsa IP chegaralash (rate limit)
+    # HAMMA so'rovni bitta IP deb hisoblardi.
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+    }
+
+    # Tahrir yo'nalishlari (INFRA-08, deploy.md §2a): `POST
+    # /api/generations/{id}/rebuild` (30 slaydli PPTX qayta yasash) va
+    # `…/image/regenerate` (Gemini rasm ~35–45 s) standart 60s'ga
+    # sig'maydi — bu aynan 2026-09-11'da prod'da qo'lda topilgan va
+    # tuzatilgan muammo. `docker-compose.yml`dagi `web` servisining
+    # `stop_grace_period: 60s` bilan mos kelsin — ikkalasi ham SHU
+    # yo'nalishning haqiqiy eng yomon holatini (45-60s) qamrab olishi
+    # kerak.
+    location /api/generations/ {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 120s;
+        proxy_send_timeout 120s;
+    }
+}
