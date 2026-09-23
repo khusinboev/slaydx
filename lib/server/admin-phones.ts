@@ -29,9 +29,24 @@ export function normalizePhone(raw: string | null | undefined): string {
   return digits.length === 9 ? `998${digits}` : digits;
 }
 
-const ADMIN_DIGITS = new Set(ADMIN_PHONES.map(normalizePhone));
+/**
+ * Admin tekshiruvi UCHUN qat'iy raqamlash — `normalizePhone`dan farqli,
+ * 9 xonali qiymatni HECH QACHON `998` bilan kengaytirmaydi.
+ *
+ * SECA-01/DEPS-08: agar bu yerda ham `normalizePhone` (milliy-format
+ * kengaytirish) ishlatilsa, admin raqamining mamlakat kodisiz shakli
+ * (`+<9 raqam>`) — hatto boshqa yo'l bilan (masalan eski/qo'lda
+ * yozilgan qator) bazaga tushib qolsa ham — admin deb tanilardi. Admin
+ * tekshiruvi har doim faqat ANIQ, to'liq raqam bilan solishtirilishi
+ * kerak; qisqartirilgan/milliy shakl mos kelmasin.
+ */
+function strictDigits(raw: string | null | undefined): string {
+  return String(raw ?? "").replace(/\D/g, "");
+}
+
+const ADMIN_STRICT_DIGITS = new Set(ADMIN_PHONES.map(strictDigits));
 
 export function isAdminPhone(phone: string | null | undefined): boolean {
   if (!phone) return false;
-  return ADMIN_DIGITS.has(normalizePhone(phone));
+  return ADMIN_STRICT_DIGITS.has(strictDigits(phone));
 }
