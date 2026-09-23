@@ -180,14 +180,57 @@ export type EnqueueInput = {
    * bermasa, eski xatti-harakat (cheklovsiz) saqlanadi.
    */
   admission?: AdmissionLimits;
+  /**
+   * Klient kaliti (`Idempotency-Key`, C34) — kichik harfli UUID. Bir
+   * foydalanuvchi + bir kalit 24 soat ichida o'sha generatsiyani qaytaradi
+   * (`replayed: true`), pul ikkinchi marta yechilmaydi.
+   */
+  idempotencyKey?: string;
 };
 
 /** Qabul qarorisiz natija (seed skriptlari shu toraygan tipga tayanadi). */
 export type EnqueueChargeResult =
-  | { ok: true; id: string }
+  | {
+      ok: true;
+      id: string;
+      /** Yechilgan narx (takrorda — ASL so'rovniki). */
+      price: number;
+      /** `true` — shu kalit bilan avval yaratilgan ish qaytdi, hech narsa yechilmadi. */
+      replayed: boolean;
+    }
   | { ok: false; reason: "insufficient"; required: number; available: number };
 
-export type EnqueueResult = EnqueueChargeResult | { ok: false; reason: "admission"; decision: AdmissionReject };
+export type EnqueueResult =
+  | EnqueueChargeResult
+  | { ok: false; reason: "admission"; decision: AdmissionReject }
+  /** Kalit shu foydalanuvchida BOSHQA vosita uchun ishlatilgan (422). */
+  | { ok: false; reason: "idempotency_conflict" };
+
+/** Idempotentlik oynasi — shundan eski kalit yangi so'rov hisoblanadi. */
+export const IDEMPOTENCY_WINDOW_HOURS = 24;
+
+/** `generations_user_idem_idx` (024_idempotency.sql) buzilishi — parallel takror. */
+function isIdempotencyViolation(e: unknown): boolean {
+  const err = e as { code?: string; constraint?: string } | null;
+  return err?.code === "23505" && err.constraint === "generations_user_idem_idx";
+}
+
+type IdemRow = { id: string; tool_id: string; price: string };
+
+async function findByIdempotencyKey(client: PoolClient, userId: string, key: string): Promise<IdemRow | null> {
+  const res = await client.query<IdemRow>(
+    `SELECT id, tool_id, price FROM generations
+      WHERE user_id = $1 AND idempotency_key = $2
+        AND created_at >= now() - $3::int * interval '1 hour'`,
+    [userId, key, IDEMPOTENCY_WINDOW_HOURS],
+  );
+  return res.rows[0] ?? null;
+}
+
+function replayOf(row: IdemRow, toolId: ToolId): EnqueueResult {
+  if (row.tool_id !== toolId) return { ok: false, reason: "idempotency_conflict" };
+  return { ok: true, id: row.id, price: Number(row.price), replayed: true };
+}
 
 /**
  * Ishni navbatga qo'yadi va pulni **bitta tranzaksiyada** yechadi.
@@ -195,39 +238,62 @@ export type EnqueueResult = EnqueueChargeResult | { ok: false; reason: "admissio
  * Ikkisini ajratib bo'lmaydi: alohida qilinsa worker to'lanmagan ishni
  * ushlab olishi yoki pul yechilib ish yaratilmay qolishi mumkin.
  *
- * `admission` berilmasa `"admission"` natijasi bo'lishi mumkin emas —
- * overload buni tipda ham aytadi.
+ * `admission` va `idempotencyKey` berilmasa `"admission"`/`"idempotency_conflict"`
+ * natijasi bo'lishi mumkin emas — overload buni tipda ham aytadi.
+ *
+ * IDEMPOTENTLIK (C34): kalit berilsa, avval foydalanuvchi qatori qulflanadi
+ * (bir foydalanuvchining parallel so'rovlari navbatma-navbat), so'ng shu
+ * kalitli ish qidiriladi — READ COMMITTED da qulfdan keyingi SELECT oldingi
+ * tranzaksiya COMMIT qilgan qatorni ko'radi, ya'ni takroriy so'rov pul
+ * yechmay o'sha ishni qaytaradi (qabul chegarasi ham qayta tekshirilmaydi —
+ * ish allaqachon qabul qilingan). UNIQUE indeks — oxirgi to'siq: baribir
+ * poyga bo'lsa (23505) tranzaksiya (pul ham) rollback bo'ladi va mavjud ish qaytadi.
  */
-export function enqueueGeneration(input: EnqueueInput & { admission: AdmissionLimits }): Promise<EnqueueResult>;
-export function enqueueGeneration(input: EnqueueInput & { admission?: undefined }): Promise<EnqueueChargeResult>;
+export function enqueueGeneration(
+  input: EnqueueInput & { admission?: undefined; idempotencyKey?: undefined },
+): Promise<EnqueueChargeResult>;
+export function enqueueGeneration(input: EnqueueInput): Promise<EnqueueResult>;
 export async function enqueueGeneration(input: EnqueueInput): Promise<EnqueueResult> {
   const id = randomUUID();
+  const key = input.idempotencyKey;
   // NUL/yolg'iz surrogat `topic` (TEXT) va `transactions.note` ni yiqitmasin (C03).
   const topic = cleanText(input.topic);
-  return transaction(async (client) => {
-    if (input.admission) {
-      const decision = await admitInTx(client, input.userId, input.admission);
-      if (!decision.ok) return { ok: false as const, reason: "admission" as const, decision };
-    }
-    const charged = await chargeInTx(
-      client,
-      input.userId,
-      input.price,
-      id,
-      safeSlice(`${input.toolId}: ${topic}`, 200),
-    );
-    if (!charged.ok) {
-      return { ok: false as const, reason: charged.reason, required: charged.required, available: charged.available };
-    }
-    /*
-     * `expires_at` endi berilmaydi — NULL bo'lib qoladi, ya'ni
-     * generatsiya va unga biriktirilgan fayl/aktiv MUDDATSIZ saqlanadi
-     * (`011_no_expiry.sql`, ilgari 72 soat edi).
-     */
-    await client.query(
-      `INSERT INTO generations (id, user_id, tool_id, topic, price, format, values_json, step, budget_ms)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'Navbatga qo''yildi', $8)`,
-      [
+  try {
+    return await transaction(async (client): Promise<EnqueueResult> => {
+      if (key) {
+        // `admitInTx` bilan bir xil qulf (tartib o'zgarmaydi) — takrorlar navbatma-navbat.
+        await client.query("SELECT 1 FROM users WHERE id = $1 FOR NO KEY UPDATE", [input.userId]);
+        // 24 soatdan eski kalit — yangi so'rov: eski qatordan kalit olinadi (UNIQUE bo'shaydi).
+        await client.query(
+          `UPDATE generations SET idempotency_key = NULL
+            WHERE user_id = $1 AND idempotency_key = $2
+              AND created_at < now() - $3::int * interval '1 hour'`,
+          [input.userId, key, IDEMPOTENCY_WINDOW_HOURS],
+        );
+        const prior = await findByIdempotencyKey(client, input.userId, key);
+        if (prior) return replayOf(prior, input.toolId);
+      }
+      if (input.admission) {
+        const decision = await admitInTx(client, input.userId, input.admission);
+        if (!decision.ok) return { ok: false as const, reason: "admission" as const, decision };
+      }
+      const charged = await chargeInTx(
+        client,
+        input.userId,
+        input.price,
+        id,
+        safeSlice(`${input.toolId}: ${topic}`, 200),
+      );
+      if (!charged.ok) {
+        return { ok: false as const, reason: charged.reason, required: charged.required, available: charged.available };
+      }
+      /*
+       * `expires_at` endi berilmaydi — NULL bo'lib qoladi, ya'ni
+       * generatsiya va unga biriktirilgan fayl/aktiv MUDDATSIZ saqlanadi
+       * (`011_no_expiry.sql`, ilgari 72 soat edi). `idempotency_key`
+       * faqat kalit berilganda yoziladi — kalitsiz yo'lning SQL i o'zgarmagan.
+       */
+      const params = [
         id,
         input.userId,
         input.toolId,
@@ -236,10 +302,29 @@ export async function enqueueGeneration(input: EnqueueInput): Promise<EnqueueRes
         input.format,
         toJsonb(input.values),
         Math.round(input.budgetMs),
-      ],
-    );
-    return { ok: true as const, id };
-  });
+      ];
+      if (key) {
+        await client.query(
+          `INSERT INTO generations (id, user_id, tool_id, topic, price, format, values_json, step, budget_ms, idempotency_key)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, 'Navbatga qo''yildi', $8, $9)`,
+          [...params, key],
+        );
+      } else {
+        await client.query(
+          `INSERT INTO generations (id, user_id, tool_id, topic, price, format, values_json, step, budget_ms)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, 'Navbatga qo''yildi', $8)`,
+          params,
+        );
+      }
+      return { ok: true as const, id, price: input.price, replayed: false };
+    });
+  } catch (e) {
+    if (!key || !isIdempotencyViolation(e)) throw e;
+    // Parallel takror bizdan oldin COMMIT qildi — butun tranzaksiya (pul ham) bekor, o'sha ish qaytadi.
+    const prior = await transaction((client) => findByIdempotencyKey(client, input.userId, key));
+    if (!prior) throw e;
+    return replayOf(prior, input.toolId);
+  }
 }
 
 /**

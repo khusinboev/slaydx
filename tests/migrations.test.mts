@@ -46,8 +46,26 @@ test("AUDIT-22: `021_games.sql` ro'yxatda", () => {
   assert.ok(FILES.includes("020_article.sql"));
 });
 
-test("C23: `022_retention.sql` oxirgisi, orqaga mos va qayta qo'llash xavfsiz", () => {
-  assert.equal(FILES[FILES.length - 1], "022_retention.sql", "yangi migratsiya oxirgi bo'lishi kerak");
+test("C34: `024_idempotency.sql` oxirgisi — NULL-li kalit, (user_id, kalit) qisman UNIQUE, rollback izohda", () => {
+  assert.equal(FILES[FILES.length - 1], "024_idempotency.sql", "yangi migratsiya oxirgi bo'lishi kerak");
+  const sql = sqlOf("024_idempotency.sql");
+  // Faqat NULL-li, standartsiz ustun — eski kod uni bilmasa ham ishlaydi, jadval qayta yozilmaydi.
+  assert.match(sql, /ALTER TABLE generations ADD COLUMN IF NOT EXISTS idempotency_key UUID;/);
+  // MUTATSIYA: UNIQUE tushsa — parallel takror ikkinchi pullik ish yaratardi.
+  assert.match(
+    sql,
+    /CREATE UNIQUE INDEX IF NOT EXISTS generations_user_idem_idx\s+ON generations \(user_id, idempotency_key\)\s+WHERE idempotency_key IS NOT NULL;/,
+  );
+  assert.match(sql, /^SET LOCAL lock_timeout = '5s';/m);
+  assert.match(sql, /--\s+DROP INDEX IF EXISTS generations_user_idem_idx;/);
+  assert.match(sql, /--\s+ALTER TABLE generations DROP COLUMN IF EXISTS idempotency_key;/);
+  // `jobs.ts` 23505 ni aynan shu indeks nomi bilan taniydi.
+  const jobs = readFileSync(path.resolve(DIR, "../jobs.ts"), "utf8");
+  assert.match(jobs, /err\.constraint === "generations_user_idem_idx"/);
+});
+
+test("C23: `022_retention.sql` orqaga mos va qayta qo'llash xavfsiz", () => {
+  assert.ok(FILES.includes("022_retention.sql"));
   const sql = sqlOf("022_retention.sql");
   // Faqat NULL-li ustun qo'shiladi — eski kod uni bilmasa ham ishlaydi.
   assert.match(sql, /ALTER TABLE generations ADD COLUMN IF NOT EXISTS files_purged_at TIMESTAMPTZ;/);
