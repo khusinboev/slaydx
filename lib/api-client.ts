@@ -371,6 +371,12 @@ export type ServerGeneration = Omit<Generation, "values" | "doc" | "html"> & {
   editedAt?: string | null;
   liveSeq?: number;
   live?: unknown | null;
+  /**
+   * Bonus-faqat hujjat fayllari retention bo'yicha o'chirilgan vaqt
+   * (W2-D2/W2-B, ixtiyoriy — eski server bermaydi). O'rnatilgan bo'lsa
+   * eskiz/fayl havolalari o'chgan aktivga olib boradi — UI ularni chizmaydi.
+   */
+  filesPurgedAt?: string | null;
 };
 
 export type GenerationDetail = ServerGeneration & {
@@ -482,9 +488,14 @@ export function deleteGeneration(id: string) {
   return request<{ ok: boolean; refunded: boolean }>(`/api/generations/${id}`, { method: "DELETE" });
 }
 
-/** Fayl kartasi eskizi (DOCX/PPTX 1-sahifa JPEG) — `lib/server/thumb.ts`. */
-export function thumbUrl(id: string) {
-  return `/api/generations/${id}/thumb`;
+/**
+ * Fayl kartasi eskizi (DOCX/PPTX 1-sahifa JPEG) — `lib/server/thumb.ts`.
+ *
+ * `?v=<fileVersion>` bilan (W2-B): marshrut faqat shunda keshlanadi, tahrir
+ * (yangi `fileVersion`) esa keshni o'zi eskirtiradi — eski eskiz qolmaydi.
+ */
+export function thumbUrl(id: string, fileVersion?: number) {
+  return `/api/generations/${id}/thumb${typeof fileVersion === "number" ? `?v=${fileVersion}` : ""}`;
 }
 
 /**

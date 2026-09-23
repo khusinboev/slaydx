@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import type { GenerationDetail } from "../lib/api-client.ts";
+import type { GenerationDetail, PollIssue } from "../lib/api-client.ts";
 
 /**
  * C20/FE-14/C09 (W2-E) — klient transporti: `pollGeneration` hech qachon
@@ -90,7 +90,7 @@ test("poll: 20 daqiqadan keyin ham QUEUED ish uchun polling TO'XTAMAYDI, sekin r
 test("poll: 20 daqiqada bir marta «slow» xabari beriladi (UI tushuntirishi uchun)", async (t) => {
   const clock = fakeClock(t);
   const ctrl = new AbortController();
-  const issues: (api.PollIssue | null)[] = [];
+  const issues: (PollIssue | null)[] = [];
   t.mock.method(globalThis, "fetch", async () => {
     if (clock.now > 22 * 60_000) ctrl.abort();
     return json(200, { generation: gen() });
@@ -119,7 +119,7 @@ test("poll: 502 × 6 (≈30 s dan uzun uzilish) dan keyin ham davom etadi va COM
 test("poll: uzilishda qayta urinish oralig'i 30 s dan oshmaydi va `onIssue` xabar beradi, tiklanganda `null`", async (t) => {
   const clock = fakeClock(t);
   let n = 0;
-  const issues: (api.PollIssue | null)[] = [];
+  const issues: (PollIssue | null)[] = [];
   t.mock.method(globalThis, "fetch", async () => {
     n++;
     if (n >= 2 && n <= 12) throw new TypeError("Failed to fetch");

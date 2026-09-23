@@ -75,7 +75,7 @@ export function FilePreview({ gen }: { gen: ServerGeneration }) {
    * eskiz bo'lmasa (LibreOffice yo'q, xato) matn qatorlari ko'rinadi.
    */
   if (gen.format === "docx" || gen.format === "pptx") {
-    return <DocThumb id={gen.id} fallback={linesView} />;
+    return <DocThumb id={gen.id} fileVersion={gen.fileVersion} fallback={linesView} />;
   }
 
   /*
@@ -168,7 +168,7 @@ function SlideThumb({ slide }: { slide: GenerationPreviewSlide }) {
  * xatoda (404 — eskiz yasalmadi) ham shu qoladi. `loading="lazy"` —
  * ekrandan tashqaridagi kartalar serverga so'rov yubormaydi.
  */
-function DocThumb({ id, fallback }: { id: string; fallback: React.ReactNode }) {
+function DocThumb({ id, fileVersion, fallback }: { id: string; fileVersion?: number; fallback: React.ReactNode }) {
   const [state, setState] = useState<"loading" | "ok" | "error">("loading");
   return (
     <div className="relative h-full w-full overflow-hidden bg-[#f7f4ec]" data-doc-thumb={state}>
@@ -176,7 +176,7 @@ function DocThumb({ id, fallback }: { id: string; fallback: React.ReactNode }) {
       {state !== "error" ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={thumbUrl(id)}
+          src={thumbUrl(id, fileVersion)}
           alt=""
           loading="lazy"
           onLoad={() => setState("ok")}
