@@ -73,3 +73,32 @@ Most of the package holds up: retention, idempotency, the share guard, DEPS-02 a
 4. The "unreachable" branch after the race re-read throws `ResultCapError`, which would surface as a misleading 409. Use a plain `Error`.
 5. The student-facing cap message could add "o'qituvchingizga xabar bering". The retry button is futile on 409, so consider hiding it.
 6. The BEA-10 finding also suggested exposing `playable` to `ResultView` so the panel can warn before a click. Optional; the 409 message is adequate.
+
+---
+
+## Re-review (commit `2779083`): **APPROVE**
+
+Tests (worktree root, via `heavy2.sh`, with `DATABASE_URL` set):
+- game-sessions + game-routes + game-results-lifecycle: **44/44 pass**, 0 skipped.
+- `tests/ui/game-player.test.mts`: **15/15 pass**.
+
+Probes, re-run on an isolated DB. The temporary file was removed and the worktree is clean.
+
+- **R1 (fixed):**
+  - The probe had 6 rows, including 3 in one millisecond and a microsecond tie on two of them. `iterateAllResults` returned all 6 unique rows at batch sizes 1, 2, 3 and 1000.
+  - `listResults` paged with `limit=1` also returned all 6.
+  - The cursor is now `…59.999999Z` (microseconds), cast back with `$4::timestamptz`. The route's `ISO_DATE` regex accepts 6 fractional digits, so the JSON `?before=` round-trips.
+- **R2 (fixed):**
+  - `csvStream` is `pull()`-based. With no reader, exactly 1 row was pulled out of 100 000, so backpressure is real.
+  - A mid-stream throw now errors the stream: `Response.text()` rejects, and `onError` logged the message.
+  - A step-by-step reader receives the head, the rows, the `#XATOLIK` marker, then the error. CSV-injection escaping is intact (`=A` becomes `'=A`).
+  - The marker is best-effort: `controller.error()` can discard it if the reader is behind. The error itself is what matters, so this is acceptable.
+  - `cancel()` returns the generator.
+- **R3 (fixed):**
+  - A missing `submissionId` now gets a server `randomUUID()`, so it is capped but not deduped.
+  - A present id is trimmed and lowercased in the route and again in `addResult`.
+  - A present but malformed id still gets 400.
+- **R4 (fixed):** `newSubmissionId()` tries `randomUUID` (with try/catch for a SecurityError), then a `getRandomValues` v4 UUID, then a `Math.random` v4 UUID. The v4 and variant bits are correct, and both call sites use it.
+- **Nits 1 and 4 (fixed):** the limit is floored and non-finite values fall back to the default. The unreachable branch now throws a plain `Error`, not a 409.
+
+Still open and non-blocking: nits 2 (the panel ignores `total`/`nextCursor`), 3 (expired sessions still show a live-looking QR), 5 and 6. Track them as follow-ups.
