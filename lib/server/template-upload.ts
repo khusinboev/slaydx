@@ -18,7 +18,7 @@ import {
   type TemplateProfile,
   type TemplateRole,
 } from "../generation/pptx-template";
-import { renderLayoutSheet } from "../generation/render-pptx-template";
+import type { LayoutSheet } from "./parse-tasks";
 
 const run = promisify(execFile);
 
@@ -84,7 +84,19 @@ export async function rasterizeTemplate(
 ): Promise<Partial<Record<TemplateRole, TemplatePreview>>> {
   const bin = deps.pdftoppm === undefined ? pdftoppmBinary() : deps.pdftoppm;
   if (!bin) return {};
-  const { bytes: sheet, pages } = await renderLayoutSheet(bytes, profile);
+  /*
+   * Bo'sh slaydli varaq ham foydalanuvchi XML ini qayta ishlaydi — tahlil
+   * bilan bir xil hovuzda, alohida threadda (W1-D review R1). Yiqilsa fonsiz
+   * davom etamiz: ko'ruvchi tema ranglari bilan chizadi.
+   */
+  let sheet: Uint8Array;
+  let pages: LayoutSheet["pages"];
+  try {
+    ({ bytes: sheet, pages } = await parseInWorker({ kind: "layout-sheet", bytes, profile }));
+  } catch (e) {
+    console.warn("[template] layout varag'i", e instanceof Error ? e.message : e);
+    return {};
+  }
   const pdf = await (deps.toPdf ?? toPdf)(sheet, "layoutlar.pptx");
   if (!pdf) return {};
 

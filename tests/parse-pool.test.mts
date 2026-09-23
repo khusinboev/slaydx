@@ -195,4 +195,18 @@ test("prod yo'li: esbuild to'plami (parse-worker.mjs) tsx siz, oddiy node worker
   assert.deepEqual(await pool.run({ kind: "extract", name: "x.docx", bytes: await docx("Prod to'plami") }), { text: "Prod to'plami" });
   const counted = await pool.run({ kind: "source", source: "pdf", bytes: makeTextbookPdf(3) });
   assert.equal(counted.pages, 3);
+  const tpl = await makeZip(templateEntries());
+  const sheet = await pool.run({ kind: "layout-sheet", bytes: tpl, profile: await parsePptxTemplate(tpl) });
+  assert.deepEqual(sheet.pages.map((p) => p.layoutPath), ["ppt/slideLayouts/slideLayout1.xml"]);
+});
+
+test("haqiqiy worker: layout varag'i (renderLayoutSheet) threadda — in-process bilan bir xil sahifalar va XML", async () => {
+  const tpl = await makeZip(templateEntries());
+  const profile = await parsePptxTemplate(tpl);
+  const viaWorker = await real.run({ kind: "layout-sheet", bytes: tpl, profile });
+  const { renderLayoutSheet } = await import("../lib/generation/render-pptx-template.ts");
+  const local = await renderLayoutSheet(tpl, profile);
+  assert.deepEqual(viaWorker.pages, local.pages);
+  const xml = async (b: Uint8Array) => (await JSZip.loadAsync(b)).file("ppt/presentation.xml")!.async("string");
+  assert.equal(await xml(viaWorker.bytes), await xml(local.bytes));
 });

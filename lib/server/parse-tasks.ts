@@ -1,6 +1,12 @@
 import { extractFromBuffer } from "../extract-text";
 import { extractSegments, stripTokens } from "../generation/translate/index";
-import { parsePptxTemplate, TemplateError, type TemplateErrorCode, type TemplateProfile } from "../generation/pptx-template";
+import {
+  parsePptxTemplate,
+  TemplateError,
+  type TemplateErrorCode,
+  type TemplateProfile,
+  type TemplateRole,
+} from "../generation/pptx-template";
 import { PdfPageLimitError } from "../generation/translate/pdf";
 import type { SourceKind } from "../generation/source-types";
 
@@ -17,9 +23,13 @@ import type { SourceKind } from "../generation/source-types";
 export type ParseTask =
   | { kind: "extract"; name: string; bytes: Uint8Array }
   | { kind: "source"; source: SourceKind; bytes: Uint8Array }
-  | { kind: "template"; bytes: Uint8Array };
+  | { kind: "template"; bytes: Uint8Array }
+  | { kind: "layout-sheet"; bytes: Uint8Array; profile: TemplateProfile };
 
 export type ExtractResult = { text: string; error?: string; truncated?: boolean };
+
+/** `renderLayoutSheet` natijasi — rasterlash uchun bo'sh slaydli PPTX va sahifa ↔ rollar. */
+export type LayoutSheet = { bytes: Uint8Array; pages: { layoutPath: string; roles: TemplateRole[] }[] };
 
 /** Tarjima manbasi o'lchovi — `source-upload.ts` `SourceCounter` shartnomasi. */
 export type SourceCount = { chars: number; text: string; pages?: number; segments: number };
@@ -28,7 +38,9 @@ export type ParseResultOf<T extends ParseTask> = T extends { kind: "extract" }
   ? ExtractResult
   : T extends { kind: "source" }
     ? SourceCount
-    : TemplateProfile;
+    : T extends { kind: "layout-sheet" }
+      ? LayoutSheet
+      : TemplateProfile;
 
 function arrayBufferOf(bytes: Uint8Array): ArrayBuffer {
   return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
@@ -52,6 +64,11 @@ export async function runParseTask<T extends ParseTask>(task: T): Promise<ParseR
       return (await extractFromBuffer(task.name, arrayBufferOf(task.bytes))) as ParseResultOf<T>;
     case "source":
       return (await countSource(task.source, task.bytes)) as ParseResultOf<T>;
+    case "layout-sheet": {
+      // Kech import: bu og'ir modul (deka qurilishi) faqat shu vazifada yuklanadi.
+      const { renderLayoutSheet } = await import("../generation/render-pptx-template");
+      return (await renderLayoutSheet(task.bytes, task.profile)) as ParseResultOf<T>;
+    }
     default:
       return (await parsePptxTemplate(task.bytes)) as ParseResultOf<T>;
   }
