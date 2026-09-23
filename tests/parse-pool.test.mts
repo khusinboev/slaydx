@@ -171,6 +171,14 @@ test("in-process zaxira ham chegaralangan (2 ishlaydi + 8 navbat → 503) va har
     assert.deepEqual(pool.stats(), { running: 0, queued: 0 });
     const fallbackWarns = warns.filter((w) => w.includes("[parse] FALLBACK in-process"));
     assert.equal(fallbackWarns.length, 1, `ogohlantirishlar: ${JSON.stringify(warns)}`);
+    // Oraliq o'tgach yana ogohlantiradi — jami son bilan.
+    warns.length = 0;
+    const eager = createParsePool({ entry: null, fallbackLogMs: 0, runLocal: async () => ({ text: "" }) });
+    for (let i = 0; i < 3; i++) await eager.run(task);
+    assert.deepEqual(
+      warns.filter((w) => w.includes("[parse] FALLBACK in-process")).map((w) => /(\d+) ta tahlil/.exec(w)?.[1]),
+      ["1", "2", "3"],
+    );
   } finally {
     console.warn = origWarn;
   }

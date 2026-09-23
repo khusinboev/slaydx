@@ -23,7 +23,8 @@ import { reviveError, runParseTask, type ParseResultOf, type ParseTask, type Ser
  *      prod: esbuild bilan yig'ilgan o'zini-o'zi ta'minlaydigan to'plam
  *      (Next standalone to'plamida TS manba ham, tsx ham yo'q);
  *   2. `<cwd>/lib/server/parse-worker.ts` + `tsx` — dev (`next dev`) va testlar;
- *   3. hech biri yo'q — in-process zaxira (bir marta ogohlantiriladi): parser
+ *   3. hech biri yo'q — in-process zaxira (xuddi shu navbat chegarasi bilan,
+ *      `[parse] FALLBACK in-process` ogohlantirishi daqiqasiga ko'pi bilan bir marta): parser
  *      darajasidagi chegaralar (chiziqli skanerlar, sahifa/zip byudjeti)
  *      baribir ishlaydi, faqat thread izolyatsiyasi bo'lmaydi.
  */
@@ -122,15 +123,45 @@ export type ParsePoolOptions = {
   maxRunning?: number;
   maxQueue?: number;
   maxOldMb?: number;
+  /** In-process zaxira bajaruvchisi (standart `runParseTask`; testda sekin soxta vazifa). */
+  runLocal?: (task: ParseTask) => Promise<unknown>;
+  /** Zaxira ogohlantirishlari orasidagi eng kam oraliq (ms). */
+  fallbackLogMs?: number;
 };
+
+/** Zaxira ishlatilganda ogohlantirish har necha ms da bir marta (jurnal to'lib ketmasin). */
+export const PARSE_FALLBACK_LOG_MS = 60_000;
 
 export function createParsePool(opts: ParsePoolOptions) {
   const timeoutMs = opts.timeoutMs ?? PARSE_TIMEOUT_MS;
   const maxRunning = opts.maxRunning ?? PARSE_MAX_RUNNING;
   const maxQueue = opts.maxQueue ?? PARSE_MAX_QUEUE;
   const maxOldMb = opts.maxOldMb ?? PARSE_MAX_OLD_MB;
+  const runLocal = opts.runLocal ?? runParseTask;
+  const fallbackLogMs = opts.fallbackLogMs ?? PARSE_FALLBACK_LOG_MS;
   let running = 0;
   const queue: Array<() => void> = [];
+  let fallbackRuns = 0;
+  let lastFallbackLog = -Infinity;
+
+  /*
+   * Worker fayli yo'q (prod imijida `parse-worker.mjs` yig'ilmagan) — tahlil
+   * web jarayonining O'ZIDA. Bu jim bo'lmasligi kerak: birinchi qator jurnalda
+   * yo'qolib ketmasin deb har ishlatilishda, lekin `fallbackLogMs` da ko'pi
+   * bilan bir marta, jami son bilan ogohlantiriladi (W1-D review R3).
+   */
+  const inProcess = (task: ParseTask): Promise<unknown> => {
+    fallbackRuns++;
+    const now = Date.now();
+    if (now - lastFallbackLog >= fallbackLogMs) {
+      lastFallbackLog = now;
+      console.warn(
+        `[parse] FALLBACK in-process: worker fayli yo'q — ${fallbackRuns} ta tahlil web jarayonida (oxirgisi: ${task.kind}). ` +
+          "Imijda parse-worker.mjs yig'ilishi kerak (PARSE_WORKER_ENTRY).",
+      );
+    }
+    return runLocal(task);
+  };
 
   const release = () => {
     running--;
@@ -143,11 +174,12 @@ export function createParsePool(opts: ParsePoolOptions) {
 
   function run<T extends ParseTask>(task: T): Promise<ParseResultOf<T>> {
     const entry = opts.entry;
-    if (!entry) return runParseTask(task);
+    // Zaxira ham xuddi shu navbat chegarasi ostida: N ta yuklash event loop'ga N ta tahlil yig'masin.
+    const execute = (): Promise<unknown> => (entry ? runInThread(entry, task, timeoutMs, maxOldMb) : inProcess(task));
     return new Promise<ParseResultOf<T>>((resolve, reject) => {
       // Slot natija chaqiruvchiga yetishidan OLDIN bo'shatiladi.
       const start = () =>
-        runInThread(entry, task, timeoutMs, maxOldMb).then(
+        execute().then(
           (value) => {
             release();
             resolve(value as ParseResultOf<T>);
@@ -175,10 +207,7 @@ let shared: ReturnType<typeof createParsePool> | null = null;
 
 /** Web jarayonining umumiy hovuzi — upload route'lari shu orqali tahlil qiladi. */
 export function parseInWorker<T extends ParseTask>(task: T): Promise<ParseResultOf<T>> {
-  if (!shared) {
-    const entry = resolveParseWorkerEntry();
-    if (!entry) console.warn("[parse] worker fayli topilmadi — fayllar web jarayonining o'zida tahlil qilinadi");
-    shared = createParsePool({ entry });
-  }
+  // Worker fayli yo'q bo'lsa hovuz in-process zaxiraga o'tadi va buni o'zi jurnalga yozadi.
+  shared ??= createParsePool({ entry: resolveParseWorkerEntry() });
   return shared.run(task);
 }
