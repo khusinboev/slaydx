@@ -351,15 +351,15 @@ test("ipHash: `env.sessionSecret` orqali — CALL VAQTIDAGI `process.env`ni EMAS
   const original = process.env.SESSION_SECRET;
   try {
     process.env.SESSION_SECRET = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
-    const got = ipHash("9.9.9.9");
-    const expected = createHash("sha256").update(`${env.sessionSecret}:9.9.9.9`).digest("hex").slice(0, 32);
+    const got = ipHash("203.0.113.9");
+    const expected = createHash("sha256").update(`${env.sessionSecret}:203.0.113.9`).digest("hex").slice(0, 32);
     // MUTATSIYA: `env.sessionSecret` o'rniga `process.env.SESSION_SECRET`
     // qaytarilsa, `got` shu (yangi, "bbbb…") qiymatdan hisoblanardi va
     // quyidagi tenglik BUZILARDI.
     assert.equal(got, expected, "ipHash env.sessionSecret orqali ishlamayapti");
-    const liveWrong = createHash("sha256").update(`${process.env.SESSION_SECRET}:9.9.9.9`).digest("hex").slice(0, 32);
+    const liveWrong = createHash("sha256").update(`${process.env.SESSION_SECRET}:203.0.113.9`).digest("hex").slice(0, 32);
     assert.notEqual(got, liveWrong, "ipHash JONLI process.env dan o'qiyapti — DEPS-02 tuzatilmagan");
-    const hardcoded = createHash("sha256").update(`slaydx:9.9.9.9`).digest("hex").slice(0, 32);
+    const hardcoded = createHash("sha256").update(`slaydx:203.0.113.9`).digest("hex").slice(0, 32);
     assert.notEqual(got, hardcoded, "qattiq yozilgan \"slaydx\" zaxirasi ishlatilyapti");
   } finally {
     process.env.SESSION_SECRET = original;
