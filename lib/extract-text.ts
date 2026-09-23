@@ -1,4 +1,6 @@
-import JSZip from "jszip";
+import type JSZip from "jszip";
+import { loadZipCapped, readZipText, type ZipBudget } from "./generation/translate/xml-scan";
+import { MAX_PDF_PAGES } from "./generation/translate/pdf";
 
 const ENT: Record<string, string> = {
   "&amp;": "&",
@@ -34,39 +36,143 @@ function decode(s: string) {
   });
 }
 
+/*
+ * Chiziqli skanerlar (SECB-01).
+ *
+ * Ilgari bu yerda `/[ \t]+\n/`, `/<[^>]+>/`, `/<w:br\b[^/]*\/>/`,
+ * `/<w:t\b[^>]*>([^<]*)<\/w:t>/` turardi. Ularning har biri «yopilmagan»
+ * uzun qatorda HAR boshlanish nuqtasidan oxirigacha qayta skanerlardi —
+ * O(n²): 40 000 bo'shliq ≈ 1 s, 1 MB ≈ 12 daqiqa, butun web jarayoni shu
+ * vaqt javob bermasdi. Quyidagi funksiyalar AYNAN o'sha regexlar natijasini
+ * beradi (bayt-ba-bayt), lekin muvaffaqiyatsiz urinishdan keyin qidiruv
+ * o'sha urinish ko'rgan joydan davom etadi — oradagi boshlanishlar ham
+ * aynan shu sabab bilan muvaffaqiyatsiz bo'ladi.
+ */
+
+function isWordCode(c: number): boolean {
+  return (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c === 95;
+}
+
+/** Regexdagi `\b`: nomdan keyin so'z belgisi kelmasa (yoki satr tugasa). */
+function boundaryAt(s: string, i: number): boolean {
+  return i >= s.length || !isWordCode(s.charCodeAt(i));
+}
+
+/** `s.replace(/<name\b[^/]*\/>/g, rep)` ning chiziqli teng varianti. */
+function replaceEmptyTag(s: string, name: string, rep: string): string {
+  const open = `<${name}`;
+  let out = "";
+  let from = 0;
+  let at = 0;
+  for (;;) {
+    const o = s.indexOf(open, at);
+    if (o < 0) break;
+    if (!boundaryAt(s, o + open.length)) {
+      at = o + 1;
+      continue;
+    }
+    // `[^/]*` birinchi `/` da to'xtaydi; moslik faqat undan keyin `>` bo'lsa.
+    const slash = s.indexOf("/", o + open.length);
+    if (slash < 0) break;
+    if (s.charCodeAt(slash + 1) !== 62) {
+      at = slash + 1;
+      continue;
+    }
+    out += s.slice(from, o) + rep;
+    from = at = slash + 2;
+  }
+  return from ? out + s.slice(from) : s;
+}
+
+/**
+ * `s.replace(/<name\b[^>]*>([^<]*)<\/name>/g, (_, t) => onMatch(t))` ning
+ * chiziqli teng varianti; `found` — kamida bitta moslik bo'ldimi.
+ */
+function mapElemText(s: string, name: string, onMatch: (text: string) => string): { out: string; found: boolean } {
+  const open = `<${name}`;
+  const close = `</${name}>`;
+  let out = "";
+  let from = 0;
+  let at = 0;
+  let found = false;
+  for (;;) {
+    const o = s.indexOf(open, at);
+    if (o < 0) break;
+    if (!boundaryAt(s, o + open.length)) {
+      at = o + 1;
+      continue;
+    }
+    const gt = s.indexOf(">", o + open.length);
+    if (gt < 0) break;
+    const lt = s.indexOf("<", gt + 1);
+    if (lt < 0) break;
+    if (!s.startsWith(close, lt)) {
+      at = lt;
+      continue;
+    }
+    found = true;
+    out += s.slice(from, o) + onMatch(s.slice(gt + 1, lt));
+    from = at = lt + close.length;
+  }
+  return { out: from ? out + s.slice(from) : s, found };
+}
+
+/** `s.replace(/<[^>]+>/g, "")` ning chiziqli teng varianti. */
+function stripTags(s: string): string {
+  let out = "";
+  let from = 0;
+  let at = 0;
+  for (;;) {
+    const lt = s.indexOf("<", at);
+    if (lt < 0) break;
+    const gt = s.indexOf(">", lt + 1);
+    // Undan keyin `>` yo'q — keyingi hech bir `<` ham yopilmaydi.
+    if (gt < 0) break;
+    if (gt === lt + 1) {
+      at = lt + 1;
+      continue;
+    }
+    out += s.slice(from, lt);
+    from = at = gt + 1;
+  }
+  return from ? out + s.slice(from) : s;
+}
+
+/** Qator oxiridagi `[ \t]+` (boshqa bo'shliq turlari emas). */
+function trimBlankEnd(line: string): string {
+  let end = line.length;
+  while (end > 0) {
+    const c = line.charCodeAt(end - 1);
+    if (c !== 32 && c !== 9) break;
+    end--;
+  }
+  return end === line.length ? line : line.slice(0, end);
+}
+
 function tidy(s: string) {
-  return s
-    .replace(/\r/g, "")
-    .replace(/[ \t]+\n/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+  // `/[ \t]+\n/g → "\n"` = oxirgisidan boshqa har qator oxiridagi bo'shliqni kesish.
+  const lines = s.replace(/\r/g, "").split("\n");
+  for (let i = 0; i < lines.length - 1; i++) lines[i] = trimBlankEnd(lines[i]);
+  return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
 function fromDocxXml(xml: string) {
-  const withBreaks = xml.replace(/<\/w:p>/g, "\n").replace(/<w:br\b[^/]*\/>/g, "\n").replace(/<w:tab\b[^/]*\/>/g, "\t");
-  const texts = [...withBreaks.matchAll(/<w:t\b[^>]*>([^<]*)<\/w:t>/g)].map((m) => decode(m[1]));
-  if (texts.length) {
-    return tidy(
-      withBreaks
-        .replace(/<w:t\b[^>]*>([^<]*)<\/w:t>/g, (_, t) => decode(t))
-        .replace(/<[^>]+>/g, ""),
-    );
-  }
-  return "";
+  const withBreaks = replaceEmptyTag(replaceEmptyTag(xml.replace(/<\/w:p>/g, "\n"), "w:br", "\n"), "w:tab", "\t");
+  const { out, found } = mapElemText(withBreaks, "w:t", (t) => decode(t));
+  return found ? tidy(stripTags(out)) : "";
 }
 
 function fromPptxXml(xml: string) {
-  return tidy(
-    xml
-      .replace(/<\/a:p>/g, "\n")
-      .replace(/<a:br\b[^/]*\/>/g, "\n")
-      .replace(/<a:t\b[^>]*>([^<]*)<\/a:t>/g, (_, t) => decode(t))
-      .replace(/<[^>]+>/g, ""),
-  );
+  const withBreaks = replaceEmptyTag(xml.replace(/<\/a:p>/g, "\n"), "a:br", "\n");
+  return tidy(stripTags(mapElemText(withBreaks, "a:t", (t) => decode(t)).out));
 }
 
 function fromXlsxShared(xml: string) {
-  const parts = [...xml.matchAll(/<t\b[^>]*>([^<]*)<\/t>/g)].map((m) => decode(m[1]).trim());
+  const parts: string[] = [];
+  mapElemText(xml, "t", (t) => {
+    parts.push(decode(t).trim());
+    return "";
+  });
   return tidy(parts.filter(Boolean).join("\n"));
 }
 
@@ -74,34 +180,19 @@ function fromXlsxShared(xml: string) {
  * Arxivdan bitta yozuvni ochadi — ochilgan hajm chegarasi bilan.
  *
  * DOCX/PPTX oddiy ZIP. 8 MB lik arxiv gigabaytlab XML ga ochilishi
- * mumkin («zip bomb»): ilgari `file.async("string")` shunday yozuvni
- * so'zsiz xotiraga chiqarardi va processni yiqitardi.
+ * mumkin («zip bomb»). Ilgari chegara metadatadagi hajmga ishonardi va
+ * haqiqiy uzunlik faqat butun yozuv xotiraga ochilgach tekshirilardi;
+ * endi `readZipText` oqimni sanab, chegarada to'xtatadi (SECB-02).
  */
-async function readEntry(
-  zip: JSZip,
-  name: string,
-  budget: { left: number },
-): Promise<string> {
+async function readEntry(zip: JSZip, name: string, budget: ZipBudget): Promise<string> {
   const file = zip.file(name);
-  if (!file) return "";
-
-  // JSZip yozuvning ochilgan hajmini metadatada saqlaydi.
-  const declared = (file as unknown as { _data?: { uncompressedSize?: number } })._data
-    ?.uncompressedSize;
-  if (typeof declared === "number" && declared > budget.left) {
-    throw new Error("Hujjat ichidagi ma'lumot juda katta");
-  }
-
-  const text = await file.async("string");
-  budget.left -= text.length;
-  if (budget.left < 0) throw new Error("Hujjat ichidagi ma'lumot juda katta");
-  return text;
+  return file ? readZipText(file, budget) : "";
 }
 
 async function fromZip(buf: ArrayBuffer, kind: "docx" | "pptx" | "xlsx") {
-  const zip = await JSZip.loadAsync(buf);
+  const zip = await loadZipCapped(buf);
   // Ochilgan XML uchun umumiy byudjet.
-  const budget = { left: MAX_UNZIPPED_BYTES };
+  const budget: ZipBudget = { left: MAX_UNZIPPED_BYTES };
 
   if (kind === "docx") {
     return fromDocxXml(await readEntry(zip, "word/document.xml", budget));
@@ -130,15 +221,44 @@ async function fromZip(buf: ArrayBuffer, kind: "docx" | "pptx" | "xlsx") {
   return tidy(chunks.join("\n\n"));
 }
 
-export async function extractPdfBuffer(buf: ArrayBuffer): Promise<string> {
+type PdfTextItem = { str?: string | null; hasEOL?: boolean };
+
+/**
+ * PDF matni — ko'pi bilan `MAX_PDF_PAGES` sahifa (SECB-04/FILE-04).
+ *
+ * Ilgari `unpdf.extractText` HAMMA sahifani o'qirdi (20 MB = o'n minglab
+ * sahifa). Endi birinchi `MAX_PDF_PAGES` tasi o'qiladi va `truncated`
+ * qaytadi — javob baribir 200 000 belgiga kesiladi, ya'ni «fayl asosida»
+ * rejimi uchun bu natijani o'zgartirmaydi. Sahifa matni va birlashtirish
+ * `extractText({ mergePages: true })` bilan aynan bir xil.
+ */
+async function readPdfText(buf: ArrayBuffer): Promise<{ text: string; truncated: boolean }> {
   if (typeof window !== "undefined") {
     throw new Error("PDF serverda o‘qiladi");
   }
-  const { extractText } = await import("unpdf");
-  const result = await extractText(new Uint8Array(buf), { mergePages: true });
-  const raw = result.text;
-  const text = Array.isArray(raw) ? raw.join("\n\n") : String(raw || "");
-  return tidy(text);
+  const { getDocumentProxy } = await import("unpdf");
+  const doc = await getDocumentProxy(new Uint8Array(buf));
+  try {
+    const count = Math.min(doc.numPages, MAX_PDF_PAGES);
+    const texts: string[] = [];
+    for (let n = 1; n <= count; n++) {
+      const content = await (await doc.getPage(n)).getTextContent();
+      texts.push(
+        (content.items as PdfTextItem[])
+          .filter((item) => item.str != null)
+          .map((item) => item.str + (item.hasEOL ? "\n" : ""))
+          .join(""),
+      );
+    }
+    const merged = texts.join("\n").replace(/[^\S\n]+/g, " ").replace(/ ?\n ?/g, "\n").replace(/\n{3,}/g, "\n\n");
+    return { text: tidy(merged), truncated: doc.numPages > MAX_PDF_PAGES };
+  } finally {
+    await doc.loadingTask.destroy().catch((e: unknown) => console.warn("[extract] pdf yopilmadi", e));
+  }
+}
+
+export async function extractPdfBuffer(buf: ArrayBuffer): Promise<string> {
+  return (await readPdfText(buf)).text;
 }
 
 /** Fayl kengaytmasi emas, haqiqiy imzosi bo'yicha turini aniqlaydi. */
@@ -157,7 +277,11 @@ export function extOf(name: string) {
   return (name.split(".").pop() || "").toLowerCase();
 }
 
-export async function extractFromBuffer(name: string, buf: ArrayBuffer): Promise<{ text: string; error?: string }> {
+/** `truncated` — PDF `MAX_PDF_PAGES` sahifadan uzun edi, faqat boshi o'qildi. */
+export async function extractFromBuffer(
+  name: string,
+  buf: ArrayBuffer,
+): Promise<{ text: string; error?: string; truncated?: boolean }> {
   const ext = extOf(name);
   const kind = sniff(buf);
   try {
@@ -183,7 +307,8 @@ export async function extractFromBuffer(name: string, buf: ArrayBuffer): Promise
       if (kind !== "pdf") {
         return { text: "", error: "Fayl haqiqiy PDF emas. Boshqa fayl yuboring." };
       }
-      return { text: await extractPdfBuffer(buf) };
+      const pdf = await readPdfText(buf);
+      return pdf.truncated ? { text: pdf.text, truncated: true } : { text: pdf.text };
     }
 
     return { text: "", error: "Bu format qo‘llab-quvvatlanmaydi. DOCX, PDF, PPTX, TXT yuboring." };
@@ -193,7 +318,7 @@ export async function extractFromBuffer(name: string, buf: ArrayBuffer): Promise
     // Ichki kutubxona xatosi foydalanuvchiga tushunarsiz — umumlashtiramiz.
     return {
       text: "",
-      error: /juda katta/.test(message)
+      error: /juda (katta|ko'p)|ZIP64/.test(message)
         ? message
         : "Faylni o‘qib bo‘lmadi. U buzilgan yoki parol bilan himoyalangan bo‘lishi mumkin.",
     };

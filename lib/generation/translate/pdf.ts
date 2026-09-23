@@ -61,23 +61,83 @@ function median(values: number[]): number {
   return s[Math.floor(s.length / 2)];
 }
 
-/** Parchalarni baseline bo'yicha qatorlarga yig'adi. */
+/**
+ * Hujjat sahifalari chegarasi (CONC-09/SECB-04/FILE-04).
+ *
+ * Ilgari `numPages` so'zsiz takrorlanardi: 841 KB, 600 sahifali PDF web
+ * jarayonini 28 s muzlatdi, 20 MB esa o'n minglab sahifa sig'diradi.
+ * 300 sahifa — tarjima chegarasi (200 000 belgi) bilan mos: zich matnda u
+ * ~100 sahifa, siyrakda ~200. Chegara sahifalar O'QILMASDAN tekshiriladi.
+ */
+export const MAX_PDF_PAGES = 300;
+
+export class PdfPageLimitError extends Error {
+  constructor(readonly pages: number) {
+    super(`PDF juda uzun: ${pages} sahifa (chegara ${MAX_PDF_PAGES}). Hujjatni bo'lib yuboring.`);
+    this.name = "PdfPageLimitError";
+  }
+}
+
+/**
+ * Bir sahifadagi jadval aniqlash oynasi (qatorlar). Standart sahifaga
+ * ±2 pt bardoshlik bilan ~400 qator sig'adi — oddiy hujjatda natija
+ * o'zgarmaydi, soxta «cheksiz» sahifada esa har qatordan qayta
+ * skanerlash O(qator²) bo'lmaydi.
+ */
+const MAX_TABLE_ROWS = 400;
+
+const WS_RE = /\s/;
+/** Regexdagi `\s` — bitta UTF-16 birligi uchun. */
+function isWsCode(c: number): boolean {
+  if (c < 128) return c === 32 || (c >= 9 && c <= 13);
+  return WS_RE.test(String.fromCharCode(c));
+}
+
+/** `/\s$/.test(s)` — oxirgi belgini tekshiradi (o'sib boruvchi satrni qayta skanerlamasdan). */
+function endsWithWs(s: string): boolean {
+  return s.length > 0 && isWsCode(s.charCodeAt(s.length - 1));
+}
+
+/**
+ * Parchalarni baseline bo'yicha qatorlarga yig'adi.
+ *
+ * Qator izlash chiziqli: ilgari har parcha uchun `out.find(...)` butun
+ * ro'yxatni ko'rardi (O(parcha × qator)). Ikki qator orasidagi farq doim
+ * `LINE_TOL` dan katta (aks holda birlashardi), ya'ni `LINE_TOL` kenglikdagi
+ * har «savat»da ko'pi bilan bitta qator — qo'shni uch savat yetarli va eng
+ * birinchi yaratilgani tanlanadi (`find` bilan aynan bir xil). Qator matni
+ * bo'laklarda yig'iladi va oxirida bir marta birlashtiriladi.
+ */
 function toLines(items: RawItem[], page: number, bolds: Set<string>): Line[] {
   const out: Line[] = [];
+  const texts: string[][] = [];
+  const buckets = new Map<number, number>();
   for (const it of items) {
     if (!it.str) continue;
     const x = it.transform[4];
     const y = it.transform[5];
+    // Chekli bo'lmagan koordinata faqat buzuq faylda bo'ladi — unday parcha tashlanadi.
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
     const size = Math.abs(it.transform[3]) || Math.hypot(it.transform[2], it.transform[3]) || 10;
     const bold = it.fontName ? bolds.has(it.fontName) : false;
-    const line = out.find((l) => Math.abs(l.y - y) <= LINE_TOL);
-    if (!line) {
-      out.push({ text: it.str, xs: [x], parts: [{ x, str: it.str }], x, right: x + it.width, y, size, bold, page });
+    const b = Math.floor(y / LINE_TOL);
+    let found = -1;
+    for (let k = b - 1; k <= b + 1; k++) {
+      const idx = buckets.get(k);
+      if (idx !== undefined && Math.abs(out[idx].y - y) <= LINE_TOL && (found < 0 || idx < found)) found = idx;
+    }
+    if (found < 0) {
+      buckets.set(b, out.length);
+      out.push({ text: "", xs: [x], parts: [{ x, str: it.str }], x, right: x + it.width, y, size, bold, page });
+      texts.push([it.str]);
       continue;
     }
+    const line = out[found];
+    const pieces = texts[found];
     // Bo'shliq PDF da ko'pincha alohida parcha emas — masofadan tiklanadi.
     const gap = x - line.right;
-    line.text += (gap > size * 0.2 && !/\s$/.test(line.text) && !/^\s/.test(it.str) ? " " : "") + it.str;
+    if (gap > size * 0.2 && !endsWithWs(pieces[pieces.length - 1]) && !/^\s/.test(it.str)) pieces.push(" ");
+    pieces.push(it.str);
     line.xs.push(x);
     line.parts.push({ x, str: it.str });
     line.right = Math.max(line.right, x + it.width);
@@ -86,7 +146,7 @@ function toLines(items: RawItem[], page: number, bolds: Set<string>): Line[] {
     line.bold = line.bold || bold;
   }
   return out
-    .map((l) => ({ ...l, text: l.text.replace(/\s+/g, " ").trim() }))
+    .map((l, k) => ({ ...l, text: texts[k].join("").replace(/\s+/g, " ").trim() }))
     .filter((l) => l.text.length)
     .sort((a, b) => b.y - a.y);
 }
@@ -131,23 +191,61 @@ function xClusters(lines: Line[]): number[] {
   return out;
 }
 
+/** O'sish tartibidagi `list` da `v` dan katta bo'lgan birinchi indeks. */
+function upperBound(list: number[], v: number): number {
+  let lo = 0;
+  let hi = list.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (list[mid] <= v) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
+/**
+ * Qatorlarning ≥ 80 % ida uchraydigan ustunlar.
+ *
+ * Klaster boshlari o'zaro 6 pt dan uzoq, ya'ni har `x` ning ±6 oralig'iga
+ * ko'pi bilan ikki klaster tushadi — ular ikkilik qidiruv bilan topiladi
+ * (ilgari har klaster uchun barcha qatorlar qayta ko'rilardi).
+ */
 function sharedColumns(lines: Line[]): number[] {
   const cols = xClusters(lines);
-  return cols.filter((c) => lines.filter((l) => l.xs.some((x) => Math.abs(x - c) <= 6)).length >= lines.length * 0.8);
+  const count = new Array<number>(cols.length).fill(0);
+  const seenBy = new Array<number>(cols.length).fill(-1);
+  lines.forEach((l, li) => {
+    for (const x of l.xs) {
+      for (let ci = Math.max(0, upperBound(cols, x - 6) - 1); ci < cols.length && cols[ci] <= x + 6; ci++) {
+        if (Math.abs(x - cols[ci]) <= 6 && seenBy[ci] !== li) {
+          seenBy[ci] = li;
+          count[ci]++;
+        }
+      }
+    }
+  });
+  return cols.filter((c, ci) => count[ci] >= lines.length * 0.8);
 }
 
 /** Har parcha o'zining x koordinatasi bo'yicha eng yaqin CHAP ustunga tushadi. */
 function rowOf(line: Line, cols: number[]): string[] {
-  const cells: string[] = cols.map(() => "");
+  const cells: string[][] = cols.map(() => []);
   for (const part of line.parts) {
     if (!part.str.trim()) continue;
-    let col = 0;
-    cols.forEach((c, ci) => {
-      if (part.x >= c - 6) col = ci;
-    });
-    cells[col] += (cells[col] && !/\s$/.test(cells[col]) ? " " : "") + part.str;
+    // `part.x >= c - 6` bo'lgan OXIRGI ustun (shart ustunlar bo'yicha monoton), bo'lmasa 0.
+    let lo = 0;
+    let hi = cols.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if (part.x >= cols[mid] - 6) lo = mid + 1;
+      else hi = mid;
+    }
+    const col = Math.max(0, lo - 1);
+    const cell = cells[col];
+    if (cell.length && !endsWithWs(cell[cell.length - 1])) cell.push(" ");
+    cell.push(part.str);
   }
-  return cells.map((c) => c.replace(/\s+/g, " ").trim());
+  return cells.map((c) => c.join("").replace(/\s+/g, " ").trim());
 }
 
 /**
@@ -163,13 +261,24 @@ function rowOf(line: Line, cols: number[]): string[] {
  */
 function toBlocks(lines: Line[], bodySize: number): PdfBlock[] {
   const blocks: PdfBlock[] = [];
-  const maxRight = Math.max(...lines.map((l) => l.right), 1);
+  // `Math.max(...arr)` o'n minglab qatorda stekni to'ldiradi — oddiy sikl.
+  let maxRight = 1;
+  for (const l of lines) maxRight = Math.max(maxRight, l.right);
+  /*
+   * Jadval guruhi oxiri oldindan: `runEnd[k]` — k dan boshlanib bir sahifadagi
+   * ≥3 bo'lakli ketma-ket qatorlar tugaydigan indeks. Ilgari har qatorda shu
+   * guruh qaytadan sanalardi (jadval bo'lmasa O(qator²)).
+   */
+  const runEnd = new Array<number>(lines.length);
+  for (let k = lines.length - 1; k >= 0; k--) {
+    if (lines[k].xs.length < 3) runEnd[k] = k;
+    else runEnd[k] = k + 1 < lines.length && lines[k + 1].page === lines[k].page && lines[k + 1].xs.length >= 3 ? runEnd[k + 1] : k + 1;
+  }
   let i = 0;
 
   while (i < lines.length) {
     // Jadval: ketma-ket ≥3 qator, ≥3 umumiy ustun.
-    let j = i;
-    while (j < lines.length && lines[j].page === lines[i].page && lines[j].xs.length >= 3) j++;
+    const j = Math.min(runEnd[i], i + MAX_TABLE_ROWS);
     if (j - i >= 3) {
       const group = lines.slice(i, j);
       const cols = sharedColumns(group);
@@ -193,7 +302,14 @@ function toBlocks(lines: Line[], bodySize: number): PdfBlock[] {
       continue;
     }
 
-    let text = line.text;
+    /*
+     * Paragraf bo'laklarda yig'iladi. Ilgari `text += …` va har qatorda
+     * `/[-­]$/.test(text)` butun o'sib borayotgan satrni qayta skanerlardi —
+     * tinish belgisiz uzun matnda O(belgi²): 600 sahifa = 28 s (AUDIT R2).
+     * Endi faqat oxirgi bo'lakning oxirgi belgisi ko'riladi.
+     */
+    const pieces: string[] = [line.text];
+    const seps: string[] = [""];
     let prev = line;
     i++;
     while (i < lines.length) {
@@ -208,12 +324,21 @@ function toBlocks(lines: Line[], bodySize: number): PdfBlock[] {
       if (LIST_RE.test(next.text)) break;
       if (next.x > prev.x + prev.size * 0.8) break;
       if (/[.!?…»"']$/.test(prev.text) && prev.right < maxRight * 0.9 && /^\p{Lu}/u.test(next.text)) break;
-      // Defis bilan bo'lingan so'z qayta yopishtiriladi.
-      if (/[-­]$/.test(text)) text = text.slice(0, -1) + next.text;
-      else text += " " + next.text;
+      // Defis (yoki yumshoq defis U+00AD) bilan bo'lingan so'z qayta yopishtiriladi.
+      const tail = pieces[pieces.length - 1];
+      const last = tail.charCodeAt(tail.length - 1);
+      if (last === 45 || last === 0xad) {
+        pieces[pieces.length - 1] = tail.slice(0, -1);
+        seps.push("");
+      } else {
+        seps.push(" ");
+      }
+      pieces.push(next.text);
       prev = next;
       i++;
     }
+    let text = "";
+    for (let k = 0; k < pieces.length; k++) text += seps[k] + pieces[k];
     blocks.push({ kind: "p", text, page: line.page });
   }
   return blocks;
@@ -237,6 +362,8 @@ export async function pdfToBlocks(bytes: Uint8Array): Promise<{ blocks: PdfBlock
   const lines: Line[] = [];
   const heights: number[] = [];
   try {
+  // Sahifalar O'QILMASDAN rad etiladi (`finally` hujjatni baribir yopadi).
+  if (pages > MAX_PDF_PAGES) throw new PdfPageLimitError(pages);
   for (let n = 1; n <= pages; n++) {
     const page = await doc.getPage(n);
     const view = (page as unknown as { view: number[] }).view ?? [0, 0, 612, 792];
@@ -257,7 +384,8 @@ export async function pdfToBlocks(bytes: Uint8Array): Promise<{ blocks: PdfBlock
         // pdf.js shrift ob'ektini bermadi — muhim emas.
       }
     }
-    lines.push(...toLines(items, n, bolds));
+    // `push(...arr)` katta sahifada stekni to'ldiradi.
+    for (const l of toLines(items, n, bolds)) lines.push(l);
   }
   } finally {
     /*

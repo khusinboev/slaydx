@@ -8,16 +8,17 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { query, queryOne } from "./db";
 import { ApiError } from "./api";
+import { parseFailure, readUploadForm } from "./upload-body";
+import { parseInWorker } from "./parse-pool";
 import { toPdf } from "./pdf";
 import {
-  parsePptxTemplate,
   TemplateError,
   type CustomTemplate,
   type TemplatePreview,
   type TemplateProfile,
   type TemplateRole,
 } from "../generation/pptx-template";
-import { renderLayoutSheet } from "../generation/render-pptx-template";
+import type { LayoutSheet } from "./parse-tasks";
 
 const run = promisify(execFile);
 
@@ -83,7 +84,19 @@ export async function rasterizeTemplate(
 ): Promise<Partial<Record<TemplateRole, TemplatePreview>>> {
   const bin = deps.pdftoppm === undefined ? pdftoppmBinary() : deps.pdftoppm;
   if (!bin) return {};
-  const { bytes: sheet, pages } = await renderLayoutSheet(bytes, profile);
+  /*
+   * Bo'sh slaydli varaq ham foydalanuvchi XML ini qayta ishlaydi — tahlil
+   * bilan bir xil hovuzda, alohida threadda (W1-D review R1). Yiqilsa fonsiz
+   * davom etamiz: ko'ruvchi tema ranglari bilan chizadi.
+   */
+  let sheet: Uint8Array;
+  let pages: LayoutSheet["pages"];
+  try {
+    ({ bytes: sheet, pages } = await parseInWorker({ kind: "layout-sheet", bytes, profile }));
+  } catch (e) {
+    console.warn("[template] layout varag'i", e instanceof Error ? e.message : e);
+    return {};
+  }
   const pdf = await (deps.toPdf ?? toPdf)(sheet, "layoutlar.pptx");
   if (!pdf) return {};
 
@@ -193,11 +206,8 @@ export type UploadDeps = {
  * kontekstisiz chaqiradi.
  */
 export async function uploadTemplate(req: Request, userId: string, deps: UploadDeps = {}): Promise<TemplateUploadResult> {
-  const declared = Number(req.headers.get("content-length") ?? 0);
-  if (Number.isFinite(declared) && declared > TEMPLATE_MAX_BYTES + 64 * 1024) {
-    throw new ApiError("Fayl 20 MB dan katta", 413);
-  }
-  const form = await req.formData().catch(() => null);
+  // Hajm tana o'qilayotganda tekshiriladi — chunked so'rovda ham (SECB-05).
+  const form = await readUploadForm(req, TEMPLATE_MAX_BYTES + 64 * 1024, "Fayl 20 MB dan katta");
   const file = form?.get("file");
   if (!(file instanceof File)) throw new ApiError("Fayl yuborilmadi", 400);
   if (file.size > TEMPLATE_MAX_BYTES) throw new ApiError("Fayl 20 MB dan katta", 413);
@@ -208,15 +218,20 @@ export async function uploadTemplate(req: Request, userId: string, deps: UploadD
 
   let profile: TemplateProfile;
   try {
-    profile = await parsePptxTemplate(bytes);
+    // Tahlil alohida threadda: timeout + xotira chegarasi (`parse-pool.ts`, CONC-09).
+    profile = await parseInWorker({ kind: "template", bytes });
   } catch (e) {
+    const pool = parseFailure(e);
+    if (pool) throw pool;
     if (e instanceof TemplateError) {
       const msg =
         e.code === "no-content"
           ? "Namunada sarlavha va matn joyli maket topilmadi — boshqa faylni sinab ko'ring"
           : e.code === "no-layouts"
             ? "Namunada slayd maketlari (layout) topilmadi"
-            : "Fayl PPTX sifatida o'qilmadi";
+            : e.code === "too-big"
+              ? "Namuna juda katta yoki murakkab — soddaroq PPTX yuboring"
+              : "Fayl PPTX sifatida o'qilmadi";
       throw new ApiError(msg, 422, { code: e.code });
     }
     throw e;
