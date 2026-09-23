@@ -761,8 +761,8 @@ function withFrozenYear(doc: api.GenerationDetail["doc"], createdAt: string): Ge
   return { ...doc, meta: { ...doc.meta, year } };
 }
 
-/** «Tuzatish» dan oldin navbat saqlanmadi — server tahririni boshlamaymiz. */
-const UNSAVED_FIRST = "Avval saqlanmagan o‘zgarishlar saqlanishi kerak — «Saqlash» ni bosing.";
+/** «Tuzatish» dan oldin saqlash yiqildi — sababini ko'ruvchi o'zi ko'rsatadi (navbat qolgan yoki qayta yuklangan). */
+const UNSAVED_FIRST = "«Tuzatish» boshlanmadi — tahrirlar saqlanmadi (sababi hujjat ustida ko‘rsatilgan).";
 
 /** Taxminiy kutish: «1 daqiqadan kam» / «N daqiqa» / «N soat». */
 export function etaText(sec: number): string {

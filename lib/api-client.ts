@@ -513,12 +513,16 @@ export function fileUrl(id: string, format?: "pdf", opts: { inline?: boolean } =
  * `<a download>` to'g'ridan-to'g'ri ishlatilmaydi: xato bo'lsa brauzer
  * jimgina JSON xato sahifasini `.docx` nomi bilan saqlab qo'yardi.
  */
-export async function downloadGeneration(id: string, format?: "pdf"): Promise<void> {
+export async function downloadGeneration(
+  id: string,
+  format?: "pdf",
+  opts: { headerTimeoutMs?: number } = {},
+): Promise<void> {
   /*
    * PDF LibreOffice da o'giriladi (≤90 s) va band bo'lsa bo'sh slotni
    * kutadi — shuning uchun chegara uzun; baribir CHEKSIZ emas (FE-14).
    */
-  const link = linkedSignal(format === "pdf" ? 180_000 : 120_000);
+  const link = linkedSignal(opts.headerTimeoutMs ?? (format === "pdf" ? 180_000 : 120_000));
   try {
     let res: Response;
     try {
@@ -526,6 +530,13 @@ export async function downloadGeneration(id: string, format?: "pdf"): Promise<vo
     } catch {
       throw new ApiError(link.timedOut() ? TIMEOUT_TEXT : OFFLINE_TEXT, 0, { timeout: link.timedOut() });
     }
+    /*
+     * Chegara faqat SARLAVHALARGACHA (server javob berdimi). Tana esa
+     * cheklanmaydi: 10–15 MB deka ~1 Mbit/s mobil aloqada 80–120 s
+     * keladi — normal ketayotgan yuklash «vaqt tugadi» bilan uzilmasin
+     * (review R2). Uzilgan aloqada `blob()` o'zi xato beradi.
+     */
+    link.done();
     if (!res.ok) {
       const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
       /*
@@ -546,7 +557,7 @@ export async function downloadGeneration(id: string, format?: "pdf"): Promise<vo
     try {
       blob = await res.blob();
     } catch {
-      throw new ApiError(link.timedOut() ? TIMEOUT_TEXT : OFFLINE_TEXT, 0, { timeout: link.timedOut() });
+      throw new ApiError(OFFLINE_TEXT, 0);
     }
     saveBlob(blob, name);
   } finally {
@@ -607,7 +618,7 @@ function isTransient(e: unknown): e is ApiError {
  * taymerni kutmasdan darhol so'raladi (FE-12). Brauzersiz muhitda
  * (`document` yo'q) — oddiy taymer.
  */
-export function waitTurn(ms: number, signal?: AbortSignal): Promise<void> {
+export function waitTurn(ms: number, signal?: AbortSignal, opts: { early?: boolean } = {}): Promise<void> {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) {
       reject(abortError());
@@ -616,6 +627,9 @@ export function waitTurn(ms: number, signal?: AbortSignal): Promise<void> {
     const doc = typeof document !== "undefined" ? document : null;
     const win = typeof window !== "undefined" ? window : null;
     let timer: ReturnType<typeof setTimeout> | null = null;
+    // `early: false` — server `Retry-After` i: yorliqni almashtirish uni qisqartirmasin.
+    const early = opts.early !== false;
+    let elapsed = false;
     let settled = false;
     const finish = (err?: DOMException) => {
       if (settled) return;
@@ -629,13 +643,14 @@ export function waitTurn(ms: number, signal?: AbortSignal): Promise<void> {
     };
     const onAbort = () => finish(abortError());
     const onVisible = () => {
-      if (!doc?.hidden) finish();
+      if (!doc?.hidden && (early || elapsed)) finish();
     };
     doc?.addEventListener("visibilitychange", onVisible);
     win?.addEventListener("online", onVisible);
     signal?.addEventListener("abort", onAbort, { once: true });
     timer = setTimeout(() => {
       timer = null;
+      elapsed = true;
       // Yashirin yorliq — `visibilitychange` gacha kutamiz.
       if (!doc?.hidden) finish();
     }, ms);
@@ -686,7 +701,8 @@ export async function pollGeneration(
       if (signal?.aborted) throw abortError();
       if (!isTransient(e)) throw e;
       failures++;
-      const backoff = Math.min(RETRY_CAP_MS, 2000 * failures);
+      // ±20 % tasodif: deploydagi 502 dan keyin hamma ochiq yorliq bir lahzada urilmasin.
+      const backoff = Math.min(RETRY_CAP_MS, 2000 * failures * (0.8 + Math.random() * 0.4));
       const serverWait = Math.min(RETRY_AFTER_CAP_MS, (e.retryAfterSec ?? 0) * 1000);
       const wait = Math.max(backoff, serverWait);
       // Birinchi xato ko'pincha bir lahzalik — ikkinchisidan boshlab aytamiz.
@@ -697,7 +713,8 @@ export async function pollGeneration(
           attempt: failures,
         });
       }
-      await waitTurn(wait, signal);
+      // Server `Retry-After` i hal qilgan kutish yorliq almashtirish bilan qisqarmaydi.
+      await waitTurn(wait, signal, { early: serverWait <= backoff });
       continue;
     }
     if (failures >= 2) onIssue?.(slow ? SLOW_ISSUE : null);

@@ -293,6 +293,56 @@ test("downloadGeneration: 503 — server matni va Retry-After", async (t) => {
   assert.ok(seen instanceof AbortSignal, "yuklab olishda ham vaqt chegarasi bor");
 });
 
+test("downloadGeneration: vaqt chegarasi faqat sarlavhalargacha — sekin tana (katta deka, mobil) uzilmaydi (review R2)", { timeout: 3000 }, async (t) => {
+  const keepAlive = setInterval(() => {}, 1000);
+  const clicked: string[] = [];
+  const g = globalThis as unknown as Record<string, unknown>;
+  const hadDoc = "document" in g;
+  g.document = {
+    createElement: () => ({ click: () => clicked.push("a"), remove() {} }),
+    body: { appendChild() {} },
+  };
+  t.mock.method(globalThis, "fetch", async (_u: unknown, init?: RequestInit) => {
+    const body = new ReadableStream<Uint8Array>({
+      start(ctrl) {
+        init?.signal?.addEventListener("abort", () => ctrl.error(new DOMException("aborted", "AbortError")));
+        // Tana chegaradan (30 ms) ancha keyin tugaydi.
+        setTimeout(() => {
+          try {
+            ctrl.enqueue(new Uint8Array([1, 2, 3]));
+            ctrl.close();
+          } catch {
+            // Oqim allaqachon uzilgan — test pastda buni xato sifatida ko'radi.
+          }
+        }, 120);
+      },
+    });
+    return new Response(body, { status: 200, headers: { "content-disposition": 'attachment; filename="d.pptx"' } });
+  });
+  try {
+    await api.downloadGeneration("g1", undefined, { headerTimeoutMs: 30 });
+    assert.deepEqual(clicked, ["a"], "fayl saqlandi");
+  } finally {
+    clearInterval(keepAlive);
+    if (!hadDoc) delete g.document;
+  }
+});
+
+test("downloadGeneration: sarlavhalar kelmasa — vaqt tugadi xatosi", { timeout: 3000 }, async (t) => {
+  const keepAlive = setInterval(() => {}, 1000);
+  t.mock.method(globalThis, "fetch", (_u: unknown, init?: RequestInit) => {
+    return new Promise((_, rej) => {
+      init?.signal?.addEventListener("abort", () => rej(new DOMException("x", "AbortError")));
+    });
+  });
+  const err = (await api
+    .downloadGeneration("g1", "pdf", { headerTimeoutMs: 30 })
+    .catch((e: unknown) => e)
+    .finally(() => clearInterval(keepAlive))) as InstanceType<typeof ApiError>;
+  assert.ok(err instanceof ApiError);
+  assert.equal(err.data.timeout, true);
+});
+
 // ─────────────────────────── api-edit: server matni (W1-E follow-up)
 
 test("editErrorText: 429 — umumiy «Juda tez-tez» emas, server matni", () => {

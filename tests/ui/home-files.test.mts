@@ -156,3 +156,21 @@ test("retention: `filesPurgedAt` — eskiz so'ralmaydi, neytral belgi; boshqa ka
   assert.ok(!imgs.some((s) => s.includes("/p1/")), "o'chgan hujjat eskizi so'ralmaydi");
   assert.ok(imgs.includes("/api/generations/k1/thumb?v=2"), `eskiz versiya bilan: ${imgs.join(",")}`);
 });
+
+test("waitTurn: `early:false` (server Retry-After) — yorliq almashtirish kutishni qisqartirmaydi; standart holda qisqartiradi", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const flush = async () => {
+    for (let i = 0; i < 5; i++) await Promise.resolve();
+  };
+  let strict = false;
+  let loose = false;
+  void api.waitTurn(10_000, undefined, { early: false }).then(() => (strict = true));
+  void api.waitTurn(10_000).then(() => (loose = true));
+  document.dispatchEvent(new window.Event("visibilitychange"));
+  await flush();
+  assert.equal(loose, true, "oddiy kutish ko'ringanda darhol tugaydi");
+  assert.equal(strict, false, "Retry-After kutishi davom etadi");
+  t.mock.timers.tick(10_000);
+  await flush();
+  assert.equal(strict, true);
+});

@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { createElement as h, act } from "react";
 import { render, cleanup } from "@testing-library/react";
 import { useSlideEdit, type SlideEdit } from "../../components/files/useSlideEdit.ts";
-import { useDocEdit } from "../../components/files/useDocEdit.ts";
+import { sameJson, useDocEdit } from "../../components/files/useDocEdit.ts";
 import { applyDocOps, type DocOp } from "../../lib/generation/slide-edit.ts";
 import type { AcademicDoc } from "../../lib/generation/types.ts";
 import type { SlideModel } from "../../lib/generation/slide-types.ts";
@@ -60,6 +60,8 @@ type Server = {
   maxOpsBeforeTooLarge: number;
   /** PATCH javobini to'xtatib turish (saqlash davomida yangi tahrir). */
   hold: Promise<void> | null;
+  /** Keyingi PATCH serverda QO'LLANADI, lekin javob yo'qoladi (mobil aloqa uzildi). */
+  loseNext: boolean;
 };
 
 function stubServer(init: AcademicDoc = makeDoc()): Server {
@@ -72,6 +74,7 @@ function stubServer(init: AcademicDoc = makeDoc()): Server {
     getFails: false,
     maxOpsBeforeTooLarge: Infinity,
     hold: null,
+    loseNext: false,
   };
   const json = (status: number, data: unknown) =>
     new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
@@ -100,6 +103,10 @@ function stubServer(init: AcademicDoc = makeDoc()): Server {
       if (!res.ok) return json(422, { error: res.error, at: res.at });
       s.doc = res.doc;
       s.version += 1;
+      if (s.loseNext) {
+        s.loseNext = false;
+        throw new TypeError("Failed to fetch");
+      }
       return json(200, { generation: generation(s) });
     }
     if (method === "POST" && url.endsWith("/rebuild")) {
@@ -334,4 +341,79 @@ test("saqlash yiqilsa server tahriri (rasm yuklash) ishga tushmaydi", async () =
   });
   assert.equal(called, false);
   assert.equal(hook!.pending, 1);
+});
+
+// ─────────────── javob yo'qoldi → qayta «Saqlash» → 409 (review R1)
+
+const LOST_WORDS = /qo‘llanmadi|qaytadan kiriting/;
+
+test("sameJson: `jsonb` kalit tartibini o'zgartirsa ham teng, qiymat farqi — teng emas", () => {
+  assert.equal(sameJson({ a: 1, b: [{ x: 1, y: "2" }] }, { b: [{ y: "2", x: 1 }], a: 1 }), true);
+  assert.equal(sameJson({ a: 1, b: undefined }, { a: 1 }), true);
+  assert.equal(sameJson({ a: [1, 2] }, { a: [2, 1] }), false);
+  assert.equal(sameJson({ a: 1 }, { a: "1" }), false);
+});
+
+test("javob yo'qoldi (≤50 op): qayta saqlashdagi 409 — tahrir serverda ekani aniqlanadi, «qaytadan kiriting» YO'Q", async () => {
+  const s = stubServer();
+  render(h(Harness, { gen: generation(s) }));
+  await edits(3);
+  s.loseNext = true;
+  await act(async () => {
+    await hook!.save();
+  });
+  assert.equal(hook!.pending, 3, "javob kelmadi — klient bilmaydi, navbat qoladi");
+  assert.equal(s.doc.slides?.[1].title, "Tahrir 3", "server aslida qo'llagan");
+  await act(async () => {
+    await hook!.save();
+  });
+  assert.equal(hook!.pending, 0);
+  assert.ok(!LOST_WORDS.test(hook!.error ?? ""), `yolg'on xabar: ${hook!.error}`);
+  assert.equal(hook!.error, null, "yetgani ANIQLANDI — ogohlantirish ham kerak emas");
+  assert.equal(hook!.canUndo, true, "tahrir tarixi saqlanadi");
+  assert.equal(hook!.doc?.slides?.[1].title, "Tahrir 3");
+  assert.equal(s.version, 2, "ikki marta qo'llanmadi");
+});
+
+test("javob yo'qoldi (>50 op): yuborilmagan bo'lak TASHLANMAYDI — qayta saqlash uni ham yetkazadi", async () => {
+  const s = stubServer(makeDoc(4));
+  render(h(Harness, { gen: generation(s) }));
+  await edits(50, 1);
+  await edits(10, 2);
+  s.loseNext = true;
+  await act(async () => {
+    await hook!.save();
+  });
+  assert.equal(hook!.pending, 60);
+  await act(async () => {
+    await hook!.save();
+  });
+  assert.equal(hook!.pending, 0, "ikkinchi bo'lak ham yetkazildi");
+  assert.equal(s.doc.slides?.[2].title, "Tahrir 10");
+  assert.equal(s.doc.slides?.[1].title, "Tahrir 50");
+  assert.ok(!LOST_WORDS.test(hook!.error ?? ""));
+});
+
+test("javob yo'qoldi, keyin hujjat boshqa joyda ham o'zgardi — halol xabar, qolgan bo'lak navbatda qoladi", async () => {
+  const s = stubServer(makeDoc(4));
+  render(h(Harness, { gen: generation(s) }));
+  await edits(50, 1);
+  await edits(10, 2);
+  s.loseNext = true;
+  await act(async () => {
+    await hook!.save();
+  });
+  // Boshqa yorliqdan tahrir: versiya yana oshdi, 3-slayd sarlavhasi boshqa.
+  const other = applyDocOps(s.doc, [titleOp(3, "Boshqa yorliq")], { genId: GEN_ID });
+  assert.ok(other.ok);
+  s.doc = other.doc;
+  s.version += 1;
+  await act(async () => {
+    await hook!.save();
+  });
+  assert.ok(!LOST_WORDS.test(hook!.error ?? ""), `yolg'on xabar: ${hook!.error}`);
+  assert.match(hook!.error ?? "", /saqlangan bo‘lishi mumkin/);
+  assert.equal(hook!.pending, 10, "yuborilmagan 10 ta o'zgarish navbatda (tashlanmadi)");
+  assert.equal(hook!.doc?.slides?.[2].title, "Tahrir 10", "ular ekranda ham");
+  assert.equal(hook!.doc?.slides?.[3].title, "Boshqa yorliq", "server holati olindi");
 });

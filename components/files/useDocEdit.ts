@@ -79,6 +79,29 @@ function num(v: unknown): number {
 }
 
 /**
+ * Ikki JSON qiymat MAZMUNAN tengmi. Kalit tartibi hisobga olinmaydi:
+ * hujjat serverda `jsonb` da saqlanadi va kalitlarni qayta tartiblaydi,
+ * ya'ni `JSON.stringify` solishtiruvi haqiqiy tenglikni «farq» deb ko'rardi.
+ */
+export function sameJson(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  if (Array.isArray(a)) {
+    const bb = b as unknown[];
+    return a.length === bb.length && a.every((x, i) => sameJson(x, bb[i]));
+  }
+  const ao = a as Record<string, unknown>;
+  const bo = b as Record<string, unknown>;
+  // `undefined` qiymatli kalit JSON da yo'q kalit bilan bir xil.
+  const keys = new Set([...Object.keys(ao), ...Object.keys(bo)]);
+  for (const k of keys) {
+    if (!sameJson(ao[k], bo[k])) return false;
+  }
+  return true;
+}
+
+/**
  * `gen` propi `unknown` bo'lib keladi (ko'ruvchi uni sahifadan xom
  * oladi). Tahrir MOLIYAVIY emas, lekin `PATCH` yuboradi — shakl shu
  * yerda BIR MARTA tekshiriladi: nimasidir yetishmasa tahrir umuman
@@ -207,6 +230,13 @@ export function useDocEdit<Op>({
   // Saqlanmagan operatsiyalar REF da (async oqim ularni ko'radi), soni holatda.
   const queueRef = useRef<Op[]>([]);
   const [pending, setPending] = useState(0);
+  /**
+   * Javobi YO'QOLGAN oxirgi bo'lak (tarmoq/vaqt tugashi/5xx): u serverga
+   * yetgan bo'lishi mumkin. `base` — u yuborilgan `baseVersion`, `count` —
+   * navbat boshidagi op lar soni, `baseDoc` — o'sha versiyadagi hujjat.
+   * Keyingi saqlash 409 olsa `reconcileLost` shu bilan tekshiradi.
+   */
+  const uncertainRef = useRef<{ base: number; count: number; baseDoc: AcademicDoc | null } | null>(null);
   // Steklar REF da, uzunliklari holatda (render).
   const undoRef = useRef<UndoEntry<Op>[]>([]);
   const redoRef = useRef<UndoEntry<Op>[]>([]);
@@ -382,15 +412,26 @@ export function useDocEdit<Op>({
       const rejected =
         e instanceof ApiError && (e.status === 400 || e.status === 422 || editErrorCode(e) !== null);
       if (!rejected) {
-        if (aliveRef.current) setError(`Saqlanmadi — qayta urinish uchun «Saqlash» ni bosing. ${text}`);
+        // 413 bitta op da ham — qayta urinish yordam bermaydi, nima qilishni aytamiz.
+        const tooBig = e instanceof ApiError && e.status === 413;
+        if (aliveRef.current) {
+          setError(
+            tooBig
+              ? "Bu o‘zgarish serverga sig‘maydi (juda katta) — uni qisqartiring yoki «Asliga qaytarish» bilan bekor qiling."
+              : `Saqlanmadi — qayta urinish uchun «Saqlash» ni bosing. ${text}`,
+          );
+        }
         return;
       }
       const reloaded = await reload();
       if (!aliveRef.current) return;
       if (reloaded) {
+        // Saqlash davomida qo'shilganlar ham shu hujjatga tegishli emas — ular ham sanaladi.
+        const dropped = Math.max(unsent, queueRef.current.length);
         queueRef.current = [];
+        uncertainRef.current = null;
         setPending(0);
-        setError(`${text} Saqlanmagan ${unsent} ta o‘zgarish qo‘llanmadi.`);
+        setError(`${text} Saqlanmagan ${dropped} ta o‘zgarish qo‘llanmadi.`);
       } else {
         setError(`${text} Hujjatni qayta yuklab bo‘lmadi — saqlanmagan o‘zgarishlar hali ekranda.`);
       }
@@ -410,10 +451,52 @@ export function useDocEdit<Op>({
    * «Saqlash» gacha kutadi. Navbatdan FAQAT server qabul qilgan op lar
    * olinadi. 413 (tana juda katta) — bo'lak ikkiga bo'linib qayta ketadi.
    */
+  /**
+   * Oldingi saqlashning javobi YO'QOLGANDAN keyingi 409 ni hal qiladi
+   * (review R1). Server lock qat'iy (`baseVersion` mos kelmasa 409), ya'ni
+   * bo'lak ikki marta qo'llanmaydi — savol faqat: u serverga yetdimi?
+   *
+   * Serverdagi hujjat olinadi. Uning versiyasi aynan `base + 1` va
+   * hujjati «asos + shu bo'lak» ga TENG bo'lsa — bo'lak yetgan: navbatdan
+   * olinadi, qolgan navbat ustiga qo'yiladi va saqlash DAVOM etadi
+   * (`"landed"`). Aks holda (boshqa joyda ham o'zgargan) aniq bilib
+   * bo'lmaydi: bo'lak navbatdan olinadi (u yetgan bo'lishi mumkin — qayta
+   * yuborish takrorlardi), YUBORILMAGAN qolgani navbatda qoladi va
+   * foydalanuvchiga halol aytiladi (`"unknown"`). Serverga yetib
+   * bo'lmasa — `"offline"`, hech narsa o'zgarmaydi.
+   */
+  const reconcileLost = useCallback(async (): Promise<{ kind: "landed" | "unknown" | "offline"; removed: number }> => {
+    const u = uncertainRef.current;
+    if (!u) return { kind: "offline", removed: 0 };
+    let fresh: GenerationDetail;
+    try {
+      ({ generation: fresh } = await getGeneration(genId));
+    } catch {
+      return { kind: "offline", removed: 0 };
+    }
+    uncertainRef.current = null;
+    const head = queueRef.current.slice(0, u.count);
+    const expect = u.baseDoc ? applyRef.current(u.baseDoc, head, { genId }) : null;
+    const landed =
+      num(fresh.docVersion) === u.base + 1 && expect !== null && expect.ok && sameJson(expect.doc, fresh.doc);
+    queueRef.current = queueRef.current.slice(head.length);
+    const kind = landed ? "landed" : "unknown";
+    if (!aliveRef.current) return { kind, removed: head.length };
+    adoptKeepingQueue(fresh);
+    setPending(queueRef.current.length);
+    if (!landed) {
+      // Ekran endi boshqa hujjat — eski steklar unga tegishli emas.
+      undoRef.current = [];
+      redoRef.current = [];
+      bump();
+    }
+    return { kind, removed: head.length };
+  }, [genId, adoptKeepingQueue, bump]);
+
   const save = useCallback(async (): Promise<boolean> => {
     if (inflightRef.current) await inflightRef.current;
     if (!genId) return true;
-    const total = queueRef.current.length;
+    let total = queueRef.current.length;
     if (!total) return true;
     setSaving(true);
     setError(null);
@@ -423,10 +506,15 @@ export function useDocEdit<Op>({
       let sent = 0;
       let size = EDIT_CHUNK_OPS;
       let last: GenerationDetail | null = null;
-      let failure: { e: unknown } | null = null;
+      let failure: { e: unknown; count: number } | null = null;
+      let unsure = false;
+      let count = 0;
       try {
         while (sent < total) {
           const chunk = queueRef.current.slice(0, Math.min(size, total - sent));
+          // Navbat boshi saqlash davomida qisqarmaydi (`discard` o'chiq), lekin bo'sh PATCH hech qachon ketmasin.
+          if (!chunk.length) break;
+          count = chunk.length;
           let generation: GenerationDetail;
           try {
             ({ generation } = await patchGenerationDoc(genId, versionRef.current, chunk as unknown[]));
@@ -435,10 +523,21 @@ export function useDocEdit<Op>({
               size = Math.ceil(chunk.length / 2);
               continue;
             }
+            if (sent === 0 && uncertainRef.current && editErrorCode(e) === "version") {
+              const r = await reconcileLost();
+              // Tekshirilgan bo'lak navbatdan olindi — snapshot ham shuncha qisqaradi.
+              total -= r.removed;
+              if (r.kind === "landed") continue;
+              if (r.kind === "unknown") {
+                unsure = true;
+                break;
+              }
+            }
             throw e;
           }
           // Server shu bo'lakni qabul qildi — endi u navbatda emas.
           queueRef.current = queueRef.current.slice(chunk.length);
+          uncertainRef.current = null;
           sent += chunk.length;
           versionRef.current = num(generation.docVersion);
           fileRef.current = num(generation.fileVersion);
@@ -446,11 +545,29 @@ export function useDocEdit<Op>({
           if (aliveRef.current) setPending(queueRef.current.length);
         }
       } catch (e) {
-        failure = { e };
+        failure = { e, count };
       }
       // Qisman muvaffaqiyat ham serverdagi haqiqat — ekranga olinadi.
       if (last && aliveRef.current) adoptKeepingQueue(last);
+      if (unsure) {
+        inflightRef.current = null;
+        if (aliveRef.current) {
+          const rest = queueRef.current.length;
+          setError(
+            "Oldingi saqlash javobi kelmadi — o‘zgarishlarning bir qismi serverda saqlangan bo‘lishi mumkin. Hujjat yangilandi: tekshirib chiqing, keyin kerak bo‘lsagina qayta kiriting." +
+              (rest ? ` Yuborilmagan ${rest} ta o‘zgarish navbatda — «Saqlash» bilan yuboring.` : ""),
+          );
+          setSaving(false);
+        }
+        return false;
+      }
       if (failure) {
+        // Javobi kelmagan bo'lak serverga yetgan bo'lishi mumkin (tarmoq, vaqt
+        // tugashi, 5xx) — keyingi 409 da `reconcileLost` shuni tekshiradi.
+        const fe = failure.e;
+        if (!(fe instanceof ApiError) || fe.status === 0 || fe.status >= 500) {
+          uncertainRef.current = { base: versionRef.current, count: failure.count, baseDoc: baseDocRef.current };
+        }
         // Qayta yuklash tugaguncha keyingi «Saqlash» kutadi (`inflightRef`).
         await settleFailure(failure.e, total - sent);
         inflightRef.current = null;
@@ -475,7 +592,7 @@ export function useDocEdit<Op>({
     })();
     inflightRef.current = p;
     return p;
-  }, [genId, adoptKeepingQueue, settleFailure, doRebuild, savedFlashMs]);
+  }, [genId, adoptKeepingQueue, settleFailure, reconcileLost, doRebuild, savedFlashMs]);
 
   const saveRef = useRef(save);
   saveRef.current = save;
@@ -540,6 +657,7 @@ export function useDocEdit<Op>({
   }, [doRebuild]);
 
   const discard = useCallback(() => {
+    uncertainRef.current = null;
     queueRef.current = [];
     setPending(0);
     const base = baseDocRef.current;
@@ -570,6 +688,7 @@ export function useDocEdit<Op>({
     // ekrandagi tahrir «saqlangan»dek ko'rinib, jim yo'qolardi.
     const dropped = queueRef.current;
     queueRef.current = [];
+    uncertainRef.current = null;
     setPending(0);
     setSaving(true);
     try {
