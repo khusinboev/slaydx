@@ -43,6 +43,8 @@ import type { ToolConfig, ToolId } from "../types";
 import { refundRatio } from "../generation/delivered";
 import { cleanText, safeSlice } from "../generation/safe-text";
 import type { Delivered } from "../generation/types";
+import { log, withLogContext, type LogFields } from "./log";
+import { providerOf, userMessage } from "./user-error";
 
 /**
  * Navbatni bajaruvchi worker.
@@ -102,9 +104,24 @@ async function touchAlive(): Promise<void> {
     // Faqat birinchi marta — har 10 s da jurnalni to'ldirmasin.
     if (!aliveWarned) {
       aliveWarned = true;
-      console.warn(`[worker] ${WORKER_ALIVE_FILE} yozilmadi:`, e instanceof Error ? e.message : e);
+      log("warn", `[worker] ${WORKER_ALIVE_FILE} yozilmadi`, { err: e });
     }
   }
+}
+
+/**
+ * Tez-tez takrorlanadigan ogohlantirish (heartbeat/progress har 2 s) —
+ * kalit bo'yicha daqiqasiga bir marta (OBS-06: jim `.catch(() => {})`
+ * o'rniga; baza yiqilganda jurnal to'lib ketmasin).
+ */
+const WARN_EVERY_MS = 60_000;
+const lastWarnAt = new Map<string, number>();
+function throttledWarn(key: string, msg: string, fields: LogFields): void {
+  const now = Date.now();
+  if (now - (lastWarnAt.get(key) ?? -Infinity) < WARN_EVERY_MS) return;
+  if (lastWarnAt.size > 1_000) lastWarnAt.clear();
+  lastWarnAt.set(key, now);
+  log("warn", msg, fields);
 }
 
 type Globals = typeof globalThis & { __slaydxWorker?: boolean };
@@ -163,14 +180,18 @@ export function progressTicker(job: ClaimedJob, live: LiveReporter | null, isLiv
     if (live?.started || isLive?.()) {
       // Qulf «heartbeat»i — `progress`/`step`ni endi `LiveReporter` yoki
       // dvigatelning `onStage` i yozadi.
-      void heartbeat(job.id, job.lease).catch(() => {});
+      void heartbeat(job.id, job.lease).catch((e) => {
+        throttledWarn(`hb:${job.id}`, "[worker] heartbeat yozilmadi", { jobId: job.id, err: e });
+      });
       return;
     }
     const ratio = 1 - Math.exp(-(Date.now() - started) / expected);
     const progress = Math.min(95, Math.round(5 + ratio * 90));
     const idx = Math.min(steps.length - 1, Math.floor((progress / 96) * steps.length));
     // Bu ayni paytda qulf «heartbeat»i ham — `locked_at` suriladi.
-    void setProgress(job.id, job.lease, progress, steps[idx]).catch(() => {});
+    void setProgress(job.id, job.lease, progress, steps[idx]).catch((e) => {
+      throttledWarn(`hb:${job.id}`, "[worker] progress yozilmadi", { jobId: job.id, err: e });
+    });
   }, 2000);
   return () => clearInterval(timer);
 }
@@ -245,8 +266,11 @@ export type RunOptions = {
   hardStopMs?: number;
 };
 
-/** Yurish holati: `abandoned` — muddat o'tgan yoki SIGTERM da navbatga qaytarilgan; natija tashlanadi. */
-type RunCtl = { abandoned: boolean };
+/**
+ * Yurish holati: `abandoned` — muddat o'tgan yoki SIGTERM da navbatga qaytarilgan; natija tashlanadi.
+ * `stage` — dvigatel yuborgan oxirgi haqiqiy bosqich (OBS-08: xato qaysi bosqichda bo'lganini jurnalga).
+ */
+type RunCtl = { abandoned: boolean; stage?: string };
 
 /** Shu process bajarayotgan claimlar (`lease` bo'yicha) — SIGTERM da kutish/qaytarish uchun. */
 const inflight = new Map<string, { job: ClaimedJob; ctl: RunCtl; done: Promise<void> }>();
@@ -257,7 +281,8 @@ const inflight = new Map<string, { job: ClaimedJob; ctl: RunCtl; done: Promise<v
  */
 export async function runJob(job: ClaimedJob, opts: RunOptions = {}): Promise<void> {
   const ctl: RunCtl = { abandoned: false };
-  const done = runWithHardStop(job, opts, ctl);
+  // Shu ish ichidagi HAR jurnal qatori (`credits.ts` refund va h.k.) `jobId`/`userId` ni o'zi oladi (OBS-02).
+  const done = withLogContext({ jobId: job.id, userId: job.userId }, () => runWithHardStop(job, opts, ctl));
   inflight.set(job.lease, { job, ctl, done });
   try {
     await done;
@@ -269,9 +294,19 @@ export async function runJob(job: ClaimedJob, opts: RunOptions = {}): Promise<vo
 async function runWithHardStop(job: ClaimedJob, opts: RunOptions, ctl: RunCtl): Promise<void> {
   const build = opts.build ?? buildArtifact;
   const tool = TOOL_BY_ID[job.toolId as ToolId];
+  log("info", "[worker] ish olindi", {
+    jobId: job.id,
+    userId: job.userId,
+    toolId: job.toolId,
+    attempt: job.attempts,
+    budgetMs: job.budgetMs,
+    lease: job.lease,
+  });
   if (!tool) {
+    log("error", "[worker] Noma'lum vosita", { jobId: job.id, toolId: job.toolId, attempt: job.attempts });
     if (await failJob(job.id, job.lease, "Noma'lum vosita")) {
-      await refund(job.userId, job.id, "Noma'lum vosita");
+      const refunded = await refund(job.userId, job.id, "Noma'lum vosita");
+      log("info", "[worker] pul qaytarildi", { jobId: job.id, refunded });
     }
     return;
   }
@@ -288,9 +323,12 @@ async function runWithHardStop(job: ClaimedJob, opts: RunOptions, ctl: RunCtl): 
   let stageSeen = false;
   const onStage = (ev: { progress: number; step: string }) => {
     stageSeen = true;
+    ctl.stage = String(ev.step ?? "").slice(0, 120);
     // 95 — `completeJob` 100 ni o'zi qo'yadi; dvigatel 100 yuborsa
     // «tayyor» ko'rinar, fayl esa hali yozilmagan bo'lardi.
-    void setProgress(job.id, job.lease, Math.min(95, Math.max(0, Math.round(ev.progress))), ev.step).catch(() => {});
+    void setProgress(job.id, job.lease, Math.min(95, Math.max(0, Math.round(ev.progress))), ev.step).catch((e) => {
+      throttledWarn(`hb:${job.id}`, "[worker] bosqich yozilmadi", { jobId: job.id, stage: ctl.stage, err: e });
+    });
   };
   const stop = progressTicker(job, live, () => stageSeen);
 
@@ -310,11 +348,13 @@ async function runWithHardStop(job: ClaimedJob, opts: RunOptions, ctl: RunCtl): 
        * to'sig'idan o'tgan BITTA yo'lda, `reference` bo'yicha idempotent qaytadi.
        */
       ctl.abandoned = true;
-      console.error(
+      log(
+        "error",
         `[worker] job ${job.id}: qattiq muddat (${Math.round(hardStopMs / 1000)} s) o'tdi — FAILED, pul qaytariladi, slot bo'shatildi`,
+        { jobId: job.id, attempt: job.attempts, stage: ctl.stage, hardStopMs, toolId: job.toolId },
       );
       work.catch((e) => {
-        console.error(`[worker] job ${job.id}: yetim qurilish xatosi:`, e instanceof Error ? e.message : e);
+        log("warn", `[worker] job ${job.id}: yetim qurilish xatosi`, { jobId: job.id, attempt: job.attempts, provider: providerOf(e), err: e });
       });
       await failAndCleanup(job, job.lease, "Ish vaqti tugadi");
     }
@@ -333,6 +373,7 @@ async function execute(
   live: LiveReporter | null,
   onStage: (ev: { progress: number; step: string }) => void,
 ): Promise<void> {
+  const startedAt = Date.now();
   try {
     const deadline = Date.now() + jobDeadlineMs(job);
     // `logoAssetId` bo'lsa foydalanuvchining o'z logotipi (`logo_uploads`)
@@ -381,7 +422,10 @@ async function execute(
     if (ctl.abandoned) {
       // Qattiq muddat o'tgan yoki SIGTERM da navbatga qaytarilgan — ish
       // allaqachon FAILED/QUEUED, natija tashlanadi (C15).
-      console.warn(`[worker] job ${job.id}: kech natija tashlandi (claim ${job.lease} tashlab ketilgan)`);
+      log("warn", `[worker] job ${job.id}: kech natija tashlandi (claim ${job.lease} tashlab ketilgan)`, {
+        jobId: job.id,
+        attempt: job.attempts,
+      });
       return;
     }
 
@@ -399,14 +443,14 @@ async function execute(
      */
     if (file.cost) {
       await setCost(job.id, job.lease, file.cost).catch((e) => {
-        console.warn(`[worker] job ${job.id}: cost_json yozilmadi:`, e instanceof Error ? e.message : e);
+        log("warn", `[worker] job ${job.id}: cost_json yozilmadi`, { jobId: job.id, err: e });
       });
     }
 
     // Yuklab olinadigan fayl (DOCX/PPTX/PNG) rasmni allaqachon o'z ichiga
     // olgan. Ko'ruvchi uchun `data:` URL larni alohida aktivga chiqaramiz,
     // shunda JSONB va HTML kichik qoladi.
-    const extracted = extractAssets(job.id, file.doc ?? null, file.html);
+    const extracted = extractAssets(job.id, scrubDoc(job, file.doc ?? null), file.html);
 
     /*
      * Fayl + aktivlar + COMPLETED — bitta tranzaksiyada va FAQAT qulf hali
@@ -430,8 +474,20 @@ async function execute(
     if (!won) {
       // Qulf boshqada (ish qayta navbatga tushgan, muddat o'tib FAILED
       // bo'lgan yoki bekor qilingan) — natija tashlandi, hech narsa yozilmadi.
-      console.warn(`[worker] job ${job.id}: qulf yo'qolgan (claim ${job.lease}), natija tashlandi`);
-    } else if (file.delivered && file.delivered.got < file.delivered.want) {
+      log("warn", `[worker] job ${job.id}: qulf yo'qolgan (claim ${job.lease}), natija tashlandi`, {
+        jobId: job.id,
+        attempt: job.attempts,
+      });
+    } else {
+      log("info", "[worker] ish tayyor", {
+        jobId: job.id,
+        attempt: job.attempts,
+        durationMs: Date.now() - startedAt,
+        bytes: file.bytes.byteLength,
+        delivered: file.delivered,
+      });
+    }
+    if (won && file.delivered && file.delivered.got < file.delivered.want) {
       /*
        * Va'da qilinganidan kam yetkazildi — farq qaytariladi.
        *
@@ -446,21 +502,58 @@ async function execute(
       if (ratio === null) {
         // `refundShare: 0` — kamomad bor, lekin narxda unga ustama yo'q
         // (masalan standart paketda rasm). Jim o'tmasin: qayd etiladi.
-        console.warn(`[worker] job ${job.id}: kam yetkazildi ${label} — narxda ulushi yo'q, pul qaytarilmadi`);
+        log("warn", `[worker] job ${job.id}: kam yetkazildi ${label} — narxda ulushi yo'q, pul qaytarilmadi`, {
+          jobId: job.id,
+          delivered: file.delivered,
+        });
       } else {
         const ok = await refundPartial(job.userId, job.id, ratio, `${label} yaratildi — farq qaytarildi`);
-        console.warn(
-          `[worker] job ${job.id}: qisman yetkazildi ${label}, ulush=${ratio.toFixed(3)}, qaytarish=${ok}`,
-        );
+        log("warn", `[worker] job ${job.id}: qisman yetkazildi ${label}, ulush=${ratio.toFixed(3)}, qaytarish=${ok}`, {
+          jobId: job.id,
+          ratio,
+          refunded: ok,
+          delivered: file.delivered,
+        });
       }
     }
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Yaratishda xatolik";
-    console.error(`[worker] job ${job.id} failed:`, message);
+    /*
+     * Foydalanuvchiga — faqat qisqa o'zbekcha matn (BEA-09, EXT-12): pg/
+     * provayder/kutubxona matni `generations.error` va refund izohiga
+     * tushmaydi. Xom tafsilot (stack, provayder, bosqich, urinish) —
+     * jurnalda, ish id si bilan (OBS-03, OBS-08).
+     */
+    const message = userMessage(e);
+    log("error", `[worker] job ${job.id} failed`, {
+      jobId: job.id,
+      userId: job.userId,
+      toolId: job.toolId,
+      attempt: job.attempts,
+      stage: ctl.stage,
+      provider: providerOf(e),
+      durationMs: Date.now() - startedAt,
+      userError: message,
+      err: e,
+    });
     // Tashlab ketilgan yurishda `failJob` qulf to'sig'idan o'tmaydi — pul
     // ikkinchi marta qaytmaydi, yangi egasining fayliga tegilmaydi.
     await failAndCleanup(job, job.lease, message);
   }
+}
+
+/**
+ * Foydalanuvchiga qaytadigan `doc` dan provayderning xom xato matnini olib
+ * tashlaydi (EXT-12): `slideImages.blockReason` rasm provayderi javobidan
+ * keladi (Google hisob/kalit holati, ba'zan kalitning o'zi) va
+ * `GET /api/generations/[id]` bilan klientga borardi. Tafsilot jurnalda qoladi.
+ */
+function scrubDoc<T>(job: Pick<ClaimedJob, "id">, doc: T): T {
+  const images = (doc as { slideImages?: { blockReason?: unknown } } | null)?.slideImages;
+  if (images && typeof images.blockReason === "string" && images.blockReason) {
+    log("warn", `[worker] job ${job.id}: rasm provayderi so'rovlarni rad etdi`, { jobId: job.id, blockReason: images.blockReason });
+    images.blockReason = "Rasm provayderi so'rovni rad etdi";
+  }
+  return doc;
 }
 
 /**
@@ -484,8 +577,14 @@ export async function failAndCleanup(
   workerId: string,
   message: string,
 ): Promise<void> {
-  if (!(await failJob(job.id, workerId, message))) return;
-  await refundThenCleanup(job, cleanText(safeSlice(`Xatolik: ${message}`, 200)));
+  // Ikkinchi to'siq: chaqiruvchi xom matn uzatsa ham foydalanuvchiga (xato
+  // ustuni, refund izohi) faqat xavfsiz o'zbekcha matn yetadi (BEA-09).
+  const safe = userMessage(message);
+  if (!(await failJob(job.id, workerId, safe))) {
+    log("warn", `[worker] job ${job.id}: qulf boshqada — FAILED yozilmadi, pul qaytarilmadi`, { jobId: job.id, lease: workerId });
+    return;
+  }
+  await refundThenCleanup(job, cleanText(safeSlice(`Xatolik: ${safe}`, 200)));
 }
 
 /**
@@ -498,17 +597,21 @@ export async function failAndCleanup(
  */
 async function refundThenCleanup(job: Pick<ClaimedJob, "id" | "userId">, note: string): Promise<void> {
   try {
-    await refund(job.userId, job.id, note);
+    const refunded = await refund(job.userId, job.id, note);
+    // `false` — allaqachon qaytarilgan yoki yechilmagan (bepul ish): ikkalasi ham normal.
+    log("info", `[worker] job ${job.id}: pul qaytarildi`, { jobId: job.id, userId: job.userId, refunded });
   } catch (e) {
-    console.error(`[worker] job ${job.id}: pul qaytarilmadi:`, e instanceof Error ? e.message : e);
+    // `alert` — egasining ogohlantirish skripti shu qat'iy belgi bo'yicha qidiradi (OBS-05);
+    // `refundUnrefundedFailed` (housekeeping) keyinroq qayta urinadi.
+    log("error", `[worker] job ${job.id}: pul qaytarilmadi`, { jobId: job.id, userId: job.userId, alert: "REFUND_FAILED", err: e });
     throw e;
   } finally {
     await Promise.all([
       deleteGenerationFile(job.id, job.userId).catch((e) => {
-        console.warn(`[worker] job ${job.id}: FAILED ish fayli o'chirilmadi:`, e instanceof Error ? e.message : e);
+        log("warn", `[worker] job ${job.id}: FAILED ish fayli o'chirilmadi`, { jobId: job.id, err: e });
       }),
       deleteAssets(job.id).catch((e) => {
-        console.warn(`[worker] job ${job.id}: FAILED ish aktivlari o'chirilmadi:`, e instanceof Error ? e.message : e);
+        log("warn", `[worker] job ${job.id}: FAILED ish aktivlari o'chirilmadi`, { jobId: job.id, err: e });
       }),
     ]);
   }
@@ -531,13 +634,14 @@ async function tick(): Promise<boolean> {
     // SIGTERM claim so'rovi yo'lda bo'lganda keldi — ishni boshlamaymiz,
     // darhol navbatga qaytaramiz (aks holda u `shutdownWorker` ro'yxatidan
     // tashqarida qolib, o'lik qulf bilan kutardi).
-    await releaseJobs([job.lease]);
+    const ids = await releaseJobs([job.lease]);
+    log("warn", "[worker] to'xtatilmoqda: olingan ish darhol navbatga qaytarildi", { jobId: job.id, released: ids });
     return false;
   }
 
   running++;
   void runJob(job)
-    .catch((e) => console.error("[worker] unexpected:", e))
+    .catch((e) => log("error", "[worker] unexpected", { jobId: job.id, attempt: job.attempts, err: e }))
     .finally(() => {
       running--;
     });
@@ -556,13 +660,14 @@ async function step(name: string, fn: () => Promise<unknown>): Promise<void> {
   try {
     await fn();
   } catch (e) {
-    console.error(`[worker] housekeeping/${name}:`, e instanceof Error ? e.message : e);
+    log("error", `[worker] housekeeping/${name}`, { step: name, err: e });
   }
 }
 
 export async function housekeeping(): Promise<void> {
   await step("reclaim", async () => {
     const dead = await reclaimStaleJobs();
+    if (dead.length) log("warn", "[worker] osilib qolgan ishlar yakuniy FAILED (Ish vaqti tugadi)", { jobIds: dead });
     for (const id of dead) {
       // Osilib qolgan ish uchun ham pul qaytishi kerak — va o'lgan worker
       // `completeJob`dan oldin saqlab ulgurgan fayl/aktivlar qolmasin (C03).
@@ -636,7 +741,10 @@ export async function housekeeping(): Promise<void> {
 
 async function loop(): Promise<void> {
   await ensureMigrated();
-  console.log(`[worker] ${WORKER_ID} ishga tushdi (concurrency=${env.worker.concurrency})`);
+  log("info", `[worker] ${WORKER_ID} ishga tushdi (concurrency=${env.worker.concurrency})`, {
+    workerId: WORKER_ID,
+    concurrency: env.worker.concurrency,
+  });
   let sinceHousekeeping = 0;
 
   while (!stopped) {
@@ -646,7 +754,7 @@ async function loop(): Promise<void> {
       busy = await tick();
     } catch (e) {
       healthy = false;
-      console.error("[worker] tick:", e instanceof Error ? e.message : e);
+      log("error", "[worker] tick", { err: e });
       // Baza tushgan bo'lishi mumkin — tez-tez urinmaymiz.
       await sleep(5000);
     }
@@ -672,7 +780,7 @@ function sleep(ms: number) {
 export function startInlineWorker(): void {
   if (g.__slaydxWorker) return;
   g.__slaydxWorker = true;
-  void loop().catch((e) => console.error("[worker] fatal:", e));
+  void loop().catch((e) => log("error", "[worker] fatal", { err: e }));
 }
 
 export function stopWorker(): void {
@@ -693,13 +801,10 @@ export function stopWorker(): void {
  */
 export function installProcessGuards(proc: Pick<NodeJS.Process, "on" | "exit"> = process): void {
   proc.on("unhandledRejection", (reason: unknown) => {
-    console.error(
-      "[worker] unhandledRejection (process davom etadi):",
-      reason instanceof Error ? (reason.stack ?? reason.message) : reason,
-    );
+    log("error", "[worker] unhandledRejection (process davom etadi)", { err: reason });
   });
   proc.on("uncaughtException", (err: Error) => {
-    console.error("[worker] uncaughtException — process to'xtaydi:", err?.stack ?? err);
+    log("error", "[worker] uncaughtException — process to'xtaydi", { err });
     proc.exit(1);
   });
 }
@@ -730,9 +835,16 @@ export function shutdownWorker(opts: { graceMs?: number } = {}): Promise<string[
 
 async function drainAndRelease(graceMs: number): Promise<string[]> {
   stopWorker();
-  const pending = [...inflight.values()].map((e) => e.done.catch(() => {}));
+  const pending = [...inflight.values()].map((e) =>
+    e.done.catch((err) => {
+      // Kutish to'xtamasin — lekin jim ham qolmasin (OBS-06).
+      log("warn", "[worker] to'xtatilmoqda: ish xato bilan tugadi", { jobId: e.job.id, err });
+    }),
+  );
   if (pending.length) {
-    console.log(`[worker] to'xtatilmoqda: ${pending.length} ta ish tugashi kutilmoqda (≤ ${Math.round(graceMs / 1000)} s)`);
+    log("info", `[worker] to'xtatilmoqda: ${pending.length} ta ish tugashi kutilmoqda (≤ ${Math.round(graceMs / 1000)} s)`, {
+      jobIds: [...inflight.values()].map((e) => e.job.id),
+    });
     let timer: ReturnType<typeof setTimeout> | undefined;
     await Promise.race([
       Promise.all(pending),
@@ -744,13 +856,15 @@ async function drainAndRelease(graceMs: number): Promise<string[]> {
   }
   const left = [...inflight.values()];
   if (!left.length) {
-    console.log("[worker] to'xtatilmoqda: bajarilayotgan ish qolmadi");
+    log("info", "[worker] to'xtatilmoqda: bajarilayotgan ish qolmadi");
     return [];
   }
   for (const e of left) e.ctl.abandoned = true;
   const ids = await releaseJobs(left.map((e) => e.job.lease));
-  console.warn(
+  log(
+    "warn",
     `[worker] to'xtatilmoqda: ${ids.length} ta tugallanmagan ish navbatga qaytarildi (urinish sanalmadi, boshqa worker darhol oladi): ${ids.join(", ")}`,
+    { jobIds: ids, stages: left.map((e) => ({ jobId: e.job.id, attempt: e.job.attempts, stage: e.ctl.stage })) },
   );
   return ids;
 }
@@ -758,11 +872,11 @@ async function drainAndRelease(graceMs: number): Promise<string[]> {
 /** Alohida process uchun kirish nuqtasi (`npm run worker`). */
 export async function runWorkerProcess(): Promise<void> {
   const shutdown = (signal: NodeJS.Signals) => {
-    console.log(`[worker] ${signal}: to'xtatilmoqda...`);
+    log("info", `[worker] ${signal}: to'xtatilmoqda...`);
     void shutdownWorker()
       .catch((e) => {
         // Qaytarish yiqilsa (baza yo'q) — ishlar `reclaimStaleJobs` bilan keyinroq tiklanadi.
-        console.error("[worker] to'xtatishda ishlar navbatga qaytarilmadi:", e instanceof Error ? e.message : e);
+        log("error", "[worker] to'xtatishda ishlar navbatga qaytarilmadi", { err: e });
       })
       .finally(() => process.exit(0));
   };
