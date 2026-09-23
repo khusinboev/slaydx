@@ -55,3 +55,44 @@ Tests: I ran `payme-sandbox`, `ip-limits`, `upload-quota`, `upload-chunked`, `te
   - A document removed by retention unreferences its assets, which is the intended behaviour.
 
   **Fix before wiring:** `putLogo` uses `ON CONFLICT DO NOTHING`, and `putTemplate`'s `DO UPDATE` does not touch `created_at`. Re-uploading an old, unused logo therefore returns a row still dated from the first upload. If the daily purge runs between that upload and «Yaratish» (Create), the logo is deleted and the deck silently renders without it. Set `created_at = now()` on conflict in both. Also note for the owner: a template uploaded but never used disappears from the «O'z shablonim» (My templates) gallery after 90 days. That is a product decision to confirm. The DELETEs are unbatched, which is fine at current table sizes.
+
+---
+
+## Re-review (after `f474cad` merge, `7a2094c`, `9b048c3`, `46934d6`)
+
+### Verdict: **APPROVE**
+
+The branch now contains `audit/production-readiness` (merge `f474cad`), so the rebase note is resolved.
+
+Tests: re-ran the suites through `heavy2.sh`, with `DATABASE_URL` pointing at the throwaway DB. Files: `payme-sandbox`, `ip-limits`, `upload-quota`, `upload-chunked`, `template-busy`, `payments`, `game-routes`, `logo`, `slide-image-edit` and `worker-housekeeping`. Result: **77/77 pass, 0 skipped**. `tsc --noEmit` is clean.
+
+### R1 — Payme configured check: fixed
+- `acceptedPaymeKeys` moved to its own pure file, `lib/server/payme-keys.ts`, which `env.ts` can import without a circular import. `payments.ts` re-exports it.
+- `paymentsConfigured().payme` now requires `merchantId && acceptedPaymeKeys(env.payme).length`. This is the same rule the webhook uses, so a test key alone with sandbox off no longer offers Payme at checkout. A test covers it.
+- `purgeSourceCache(60)` is wired as its own `step("source-cache")` in `housekeeping()`. If it fails, the other housekeeping steps still run. `worker-housekeeping.test` covers it.
+
+### R2 — busy refund cap: fixed
+- A busy (503) response now refunds only while `rateLimit('template:busy:'+userId, 3, 600, { failClosed: true })` is under its limit. That allows at most 3 refunds per user per 10 min. After that, a busy attempt uses up a rate slot like any other attempt.
+- If the database errors, there is no refund.
+- The retry loop that could keep the soffice queue occupied is gone: each account gets at most 8 attempts per 10 min, down from unlimited.
+
+### R3 — quota messages: fixed
+`quotaMessage(kind, reason)` now gives each kind its own message. Every remedy it names exists:
+- **Logo:** says there is no delete and suggests re-selecting a file already uploaded. That works: identical bytes give the same `asset_id`, which the quota check excludes.
+- **Photo:** re-select, plus deletion after 90 days, which matches `step("photos", purgeOldPhotos(90))`.
+- **Template:** delete from the list. `DELETE /api/uploads/template/[assetId]` exists.
+- **Source:** delete, plus deletion after 30 days. `DELETE /api/uploads/source/[assetId]` and `purgeOldSources(30)` both exist.
+- **Generation:** states that the limit lasts the document's whole life and that replaced images count.
+- **Total bytes:** points to deleting templates or sources, both of which can be deleted.
+
+The unwired 90-day promise is gone.
+
+### Still open (non-blocking, from the first review)
+- `purgeUnusedUploads` is not wired, by owner decision. If it is wired later, the `created_at`-on-conflict touch from the first review is still needed first.
+- These optional nits stand as before:
+  - `peekRate` check and increment are not atomic.
+  - Resume crop and original are written in two separate transactions.
+  - Thumbnails count against the quota.
+  - In-flight generations count toward the total.
+  - No warning when `PAYME_SANDBOX` is on in production.
+- The source message says «Tarjima manbalari» (translation sources). That is accurate today: the translator form is the only user of `uploadSource`.
