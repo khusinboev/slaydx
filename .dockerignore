@@ -11,3 +11,13 @@ namunalar
 README.md
 Dockerfile
 docker-compose.yml
+# INFRA-10: `.gitignore` bularni allaqachon tashlab ketadi, lekin `builder`
+# bosqichi `COPY . .` ishlatadi — `.dockerignore`da bo'lmasa build
+# konteksti/qatlamiga (image cache'iga) kirib qoladi. `.claude/` va
+# `audit/` server tafsilotlari va zaiflik topilmalarini o'z ichiga oladi
+# (README: "umumiy repo'ga tushmasligi kerak" — image qatlami ham shunday).
+.claude
+audit
+eval-out
+scratch-tmp
+docs
