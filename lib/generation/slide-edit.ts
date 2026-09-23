@@ -7,6 +7,7 @@ import { buildSlideDeck } from "./slides";
 import { isSlideLayout, type SlideLayout, type SlideModel, type SlideSrc } from "./slide-types";
 import type { BodyRules } from "./slide-audience";
 import type { AcademicDoc } from "./types";
+import { safeSlice } from "./safe-text";
 
 /**
  * Ko'ruvchida tahrirlashning SOF mantig'i — DB, HTTP va React siz.
@@ -126,7 +127,7 @@ function clipNotes(text: string): string {
     .replace(/\n{3,}/g, "\n\n")
     .trim();
   const n = SLIDE_LIMITS.notesEdit;
-  return t.length <= n ? t : `${t.slice(0, n - 1).trimEnd()}…`;
+  return t.length <= n ? t : `${safeSlice(t, n - 1).trimEnd()}…`;
 }
 
 /** Maydonni o'chirish — `undefined` QIYMAT emas, kalitning O'ZI yo'qoladi (JSON tengligi uchun). */

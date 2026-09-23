@@ -1,6 +1,7 @@
 import type { SlideThemeId, SlideModel } from "./slide-types";
 import type { SlideTemplateId } from "./slide-templates";
 import type { AcademicDoc, DocMeta } from "./types";
+import { safeSlice } from "./safe-text";
 
 /**
  * Jonli generatsiya bosqichlari — natija sahifasi va bosh sahifa
@@ -189,7 +190,7 @@ export function liveProgress(s: LiveDeck): number {
 }
 
 function clip(s: string, max: number): string {
-  return s.length > max ? `${s.slice(0, max - 1).trimEnd()}…` : s;
+  return s.length > max ? `${safeSlice(s, max - 1).trimEnd()}…` : s;
 }
 
 /** O'zbekcha bosqich matni, ≤200 belgi — `HomeFiles.tsx`/natija sahifasi to'g'ridan-to'g'ri ko'rsatadi. */

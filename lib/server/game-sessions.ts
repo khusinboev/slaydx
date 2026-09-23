@@ -1,6 +1,8 @@
 import "server-only";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { query, queryOne } from "./db";
+import { toJsonb } from "./jsonb";
+import { cleanText, safeSlice } from "../generation/safe-text";
 import type { AcademicDoc } from "../generation/types";
 import { isPublicGameKind, type PublicGameKind } from "../game/public";
 
@@ -127,7 +129,7 @@ export async function createGameSession(
        FROM generations g
       WHERE g.id = $2 AND g.user_id = $3 AND g.status = 'COMPLETED'
      RETURNING id, generation_id, user_id, token, kind, settings_json, expires_at, created_at`,
-    [randomUUID(), generationId, userId, newToken(), kind, JSON.stringify(settings ?? {}), String(SESSION_TTL_DAYS)],
+    [randomUUID(), generationId, userId, newToken(), kind, toJsonb(settings ?? {}), String(SESSION_TTL_DAYS)],
   );
   return r ? row(r) : null;
 }
@@ -237,7 +239,8 @@ export async function addResult(input: {
   answers: Record<string, unknown>;
   ipHash?: string;
 }): Promise<GameResult> {
-  const name = String(input.playerName ?? "").replace(/\s+/g, " ").trim().slice(0, PLAYER_NAME_MAX) || "Noma'lum";
+  // `cleanText`: NUL (TEXT 22021) va yolg'iz surrogat ochiq endpoint'da 500 bermasin (C03, BEA-02).
+  const name = cleanText(safeSlice(String(input.playerName ?? "").replace(/\s+/g, " ").trim(), PLAYER_NAME_MAX)) || "Noma'lum";
   const score = Math.max(0, Math.round(Number(input.score) || 0));
   const total = Math.max(0, Math.round(Number(input.total) || 0));
   const seconds = Math.max(0, Math.min(86_400, Math.round(Number(input.seconds) || 0)));
@@ -253,7 +256,7 @@ export async function addResult(input: {
     `INSERT INTO game_results (id, session_id, player_name, score, total, answers_json, seconds, ip_hash)
      VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7, $8)
      RETURNING id, player_name, score, total, seconds, answers_json, created_at`,
-    [randomUUID(), input.sessionId, name, score, total, JSON.stringify(input.answers ?? {}), seconds, input.ipHash ?? null],
+    [randomUUID(), input.sessionId, name, score, total, toJsonb(input.answers ?? {}), seconds, input.ipHash ?? null],
   );
   return {
     id: r?.id ?? "",

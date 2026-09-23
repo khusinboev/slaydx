@@ -1,6 +1,7 @@
 import { slideLabels } from "./i18n";
 import type { SlideModel } from "./slide-types";
 import type { DocMeta } from "./types";
+import { safeSlice } from "./safe-text";
 
 /**
  * Nazorat testining DEKA darajasidagi qoidalari.
@@ -38,7 +39,7 @@ const ANSWER_PREFIX = "Javob:";
 
 function clip(text: string, n: number) {
   const t = String(text || "").replace(/\s+/g, " ").trim();
-  return t.length <= n ? t : `${t.slice(0, n - 1).trimEnd()}…`;
+  return t.length <= n ? t : `${safeSlice(t, n - 1).trimEnd()}…`;
 }
 
 /** `answer` maydonini harf indeksiga keltiradi — buzuq qiymat 0 ga tushadi. */

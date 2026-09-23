@@ -1,5 +1,6 @@
 import "server-only";
 import { query, queryOne } from "./db";
+import { toJsonb } from "./jsonb";
 import { sanitizeValues } from "./validate";
 import { ApiError } from "./api";
 import { TOOL_BY_ID } from "../tools";
@@ -62,7 +63,7 @@ export async function putDraft(userId: string, toolId: string, raw: unknown): Pr
      VALUES ($1, $2, $3::jsonb, now())
      ON CONFLICT (user_id, tool_id) DO UPDATE SET data = EXCLUDED.data, updated_at = now()
      RETURNING updated_at`,
-    [userId, toolId, JSON.stringify(data)],
+    [userId, toolId, toJsonb(data)],
   );
   return { updatedAt: new Date(row?.updated_at ?? Date.now()).toISOString() };
 }

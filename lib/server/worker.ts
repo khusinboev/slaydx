@@ -34,6 +34,7 @@ import { purgeExpiredTickets } from "./telegram";
 import { queryOne } from "./db";
 import type { ToolId } from "../types";
 import { refundRatio } from "../generation/delivered";
+import { cleanText, safeSlice } from "../generation/safe-text";
 import type { Delivered } from "../generation/types";
 
 /**
@@ -296,15 +297,44 @@ async function runJob(job: ClaimedJob): Promise<void> {
   } catch (e) {
     const message = e instanceof Error ? e.message : "Yaratishda xatolik";
     console.error(`[worker] job ${job.id} failed:`, message);
-    // Pul faqat biz haqiqatan yakunlagan bo'lsak qaytadi — aks holda
-    // qulfni olgan boshqa worker bilan ikki marta qaytarilardi.
-    if (await failJob(job.id, WORKER_ID, message)) {
-      await refund(job.userId, job.id, `Xatolik: ${message}`.slice(0, 200));
-    }
+    await failAndCleanup(job, WORKER_ID, message);
   } finally {
     await live?.stop();
     stop();
   }
+}
+
+/**
+ * Ishni FAILED qiladi, pulni qaytaradi va shu ishga allaqachon yozilgan
+ * fayl/aktivlarni O'CHIRADI (AUDIT prod-readiness C03, BEB-01).
+ *
+ * `putGenerationFile`/`putAssets` `completeJob`dan OLDIN ishlaydi: undan
+ * keyingi har qanday xato (JSONB rad etishi, ulanish uzilishi…) ilgari
+ * FAILED + to'liq qaytarish, lekin bazada TAYYOR fayl qoldirardi — ya'ni
+ * bepul hujjat. Endi FAILED ishda fayl ham, aktiv ham qolmaydi
+ * (`!won` tarmog'idagi tozalash naqshi). `getGenerationFile`dagi
+ * `status = 'COMPLETED'` sharti — tozalash ham yiqilgan holat uchun
+ * ikkinchi to'siq.
+ *
+ * Pul ham, tozalash ham faqat `failJob` BIZDA yutganda: qulf boshqa
+ * worker'da bo'lsa, uning fayli/natijasiga tegilmaydi va pul ikki marta
+ * qaytmaydi.
+ */
+export async function failAndCleanup(
+  job: Pick<ClaimedJob, "id" | "userId">,
+  workerId: string,
+  message: string,
+): Promise<void> {
+  if (!(await failJob(job.id, workerId, message))) return;
+  await refund(job.userId, job.id, cleanText(safeSlice(`Xatolik: ${message}`, 200)));
+  await Promise.all([
+    deleteGenerationFile(job.id, job.userId).catch((e) => {
+      console.warn(`[worker] job ${job.id}: FAILED ish fayli o'chirilmadi:`, e instanceof Error ? e.message : e);
+    }),
+    deleteAssets(job.id).catch((e) => {
+      console.warn(`[worker] job ${job.id}: FAILED ish aktivlari o'chirilmadi:`, e instanceof Error ? e.message : e);
+    }),
+  ]);
 }
 
 async function tick(): Promise<boolean> {

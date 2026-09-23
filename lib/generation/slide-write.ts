@@ -17,6 +17,7 @@ import { expandBeats, resolveSlideTemplate, type SlideBeat, type SlideTemplate }
 import { getSlideTheme } from "./slide-themes";
 import { isSlideLayout, type SlideLayout, type SlideModel, type SlideThemeId } from "./slide-types";
 import type { AcademicDoc, DocMeta, DocSection } from "./types";
+import { safeSlice } from "./safe-text";
 
 /*
  * Slide Law: bir slaydda 3–4 tadan ortiq band bo'lmasin. Aniq chegara
@@ -52,7 +53,7 @@ export const QUIZ_OPTION_MAX = SLIDE_LIMITS.quizOption;
 
 function clip(text: string, n: number) {
   const t = String(text || "").replace(/\s+/g, " ").trim();
-  return t.length <= n ? t : `${t.slice(0, n - 1).trimEnd()}…`;
+  return t.length <= n ? t : `${safeSlice(t, n - 1).trimEnd()}…`;
 }
 
 function arr(v: unknown, n: number, maxLen: number): string[] {

@@ -21,6 +21,7 @@
  * to'xtatiladi.
  */
 import type { FormValues } from "../types";
+import { safeSlice } from "./safe-text";
 
 /** Matn hajmi — band soni va uzunligini boshqaradi; shrift POLI o'zgarmaydi (Slide Law). */
 export const SLIDE_TEXT_VOLUMES = ["qisqa", "standart", "kop"] as const;
@@ -134,7 +135,7 @@ export function slideParamsFor(tool: SlideTool): SlideParam[] {
 export function splitCsv(v: unknown, max: number, itemMax: number): string[] {
   return String(v ?? "")
     .split(/[,\n]/)
-    .map((s) => s.replace(/\s+/g, " ").trim().slice(0, itemMax))
+    .map((s) => safeSlice(s.replace(/\s+/g, " ").trim(), itemMax))
     .filter(Boolean)
     .slice(0, max);
 }
