@@ -1,5 +1,7 @@
 import { ApiError, handler, json, limit, requireUser } from "@/lib/server/api";
 import { EXTRACT_MAX_BYTES, EXTRACT_MAX_CHARS, extractFromBuffer } from "@/lib/extract-text";
+import { MAX_PDF_PAGES } from "@/lib/generation/translate/pdf";
+import { readUploadForm } from "@/lib/server/upload-body";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,15 +18,14 @@ export const POST = handler("extract", async (req) => {
   const { user } = await requireUser(req);
   await limit(`extract:${user.id}`, 20, 300);
 
-  // MUHIM: `req.formData()` butun tanani xotiraga o'qiydi. Ilgari hajm
-  // faqat shundan keyin tekshirilardi — ya'ni 1 GB yuborilsa server
-  // avval hammasini yutib, keyingina «juda katta» derdi.
-  const declared = Number(req.headers.get("content-length") ?? 0);
-  if (Number.isFinite(declared) && declared > EXTRACT_MAX_BYTES + 64 * 1024) {
-    throw new ApiError(`Fayl ${Math.round(EXTRACT_MAX_BYTES / 1024 / 1024)} MB dan katta`, 413);
-  }
-
-  const form = await req.formData().catch(() => null);
+  // MUHIM: ilgari hajm faqat `req.formData()` dan keyin tekshirilardi — 1 GB
+  // yuborilsa server avval hammasini yutardi; keyin `Content-Length` qo'shildi,
+  // lekin chunked so'rovda u yo'q. Endi tana O'QILAYOTGANDA sanaladi (SECB-05).
+  const form = await readUploadForm(
+    req,
+    EXTRACT_MAX_BYTES + 64 * 1024,
+    `Fayl ${Math.round(EXTRACT_MAX_BYTES / 1024 / 1024)} MB dan katta`,
+  );
   const file = form?.get("file");
   if (!(file instanceof File)) throw new ApiError("Fayl yuborilmadi", 400);
   if (file.size > EXTRACT_MAX_BYTES) {
@@ -45,13 +46,17 @@ export const POST = handler("extract", async (req) => {
 
   // Javob hajmi ham cheklangan: 8 MB TXT dan 8 M belgi qaytarish
   // brauzerni ham, keyingi LLM so'rovini ham cho'ktirardi.
-  const truncated = out.text.length > EXTRACT_MAX_CHARS;
+  const cut = out.text.length > EXTRACT_MAX_CHARS;
+  // PDF sahifa chegarasidan uzun bo'lsa, faqat boshi o'qilgan (`MAX_PDF_PAGES`).
+  const truncated = cut || out.truncated === true;
   return json({
-    text: truncated ? out.text.slice(0, EXTRACT_MAX_CHARS) : out.text,
+    text: cut ? out.text.slice(0, EXTRACT_MAX_CHARS) : out.text,
     chars: Math.min(out.text.length, EXTRACT_MAX_CHARS),
     truncated,
-    ...(truncated
+    ...(cut
       ? { notice: `Matn juda uzun — birinchi ${EXTRACT_MAX_CHARS.toLocaleString("uz-UZ")} belgi olindi.` }
-      : {}),
+      : out.truncated
+        ? { notice: `Hujjat juda uzun — faqat birinchi ${MAX_PDF_PAGES} sahifa o'qildi.` }
+        : {}),
   });
 });

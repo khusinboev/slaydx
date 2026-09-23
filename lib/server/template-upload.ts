@@ -8,6 +8,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { query, queryOne } from "./db";
 import { ApiError } from "./api";
+import { readUploadForm } from "./upload-body";
 import { toPdf } from "./pdf";
 import {
   parsePptxTemplate,
@@ -193,11 +194,8 @@ export type UploadDeps = {
  * kontekstisiz chaqiradi.
  */
 export async function uploadTemplate(req: Request, userId: string, deps: UploadDeps = {}): Promise<TemplateUploadResult> {
-  const declared = Number(req.headers.get("content-length") ?? 0);
-  if (Number.isFinite(declared) && declared > TEMPLATE_MAX_BYTES + 64 * 1024) {
-    throw new ApiError("Fayl 20 MB dan katta", 413);
-  }
-  const form = await req.formData().catch(() => null);
+  // Hajm tana o'qilayotganda tekshiriladi — chunked so'rovda ham (SECB-05).
+  const form = await readUploadForm(req, TEMPLATE_MAX_BYTES + 64 * 1024, "Fayl 20 MB dan katta");
   const file = form?.get("file");
   if (!(file instanceof File)) throw new ApiError("Fayl yuborilmadi", 400);
   if (file.size > TEMPLATE_MAX_BYTES) throw new ApiError("Fayl 20 MB dan katta", 413);

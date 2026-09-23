@@ -2,6 +2,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { query, queryOne } from "./db";
 import { ApiError } from "./api";
+import { readUploadForm } from "./upload-body";
 import { extOf } from "../extract-text";
 import { extractSegments, stripTokens, type Extracted } from "../generation/translate/index";
 import { TRANSLATION_MAX_CHARS, TRANSLATION_MIN_CHARS } from "../tools";
@@ -301,14 +302,9 @@ export async function uploadSource(
   userId: string,
   deps: SourceUploadDeps = {},
 ): Promise<SourceUploadResult> {
-  // MUHIM: `req.formData()` butun tanani xotiraga o'qiydi — hajm shundan
-  // OLDIN, sarlavhadan tekshiriladi (`logo.ts` dagi izohga qarang).
-  const declared = Number(req.headers.get("content-length") ?? 0);
-  if (Number.isFinite(declared) && declared > SOURCE_MAX_BYTES + 64 * 1024) {
-    throw new ApiError("Fayl 20 MB dan katta", 413);
-  }
-
-  const form = await req.formData().catch(() => null);
+  // MUHIM: hajm tana O'QILAYOTGANDA tekshiriladi — sarlavha bo'lmasa ham
+  // (chunked) chegaradan ortiq bayt xotiraga tushmaydi (`upload-body.ts`).
+  const form = await readUploadForm(req, SOURCE_MAX_BYTES + 64 * 1024, "Fayl 20 MB dan katta");
   const file = form?.get("file");
   if (!(file instanceof File)) throw new ApiError("Fayl yuborilmadi", 400);
   if (file.size > SOURCE_MAX_BYTES) throw new ApiError("Fayl 20 MB dan katta", 413);
