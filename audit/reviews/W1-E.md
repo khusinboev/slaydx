@@ -98,3 +98,25 @@ Extend the existing busy subtest so it asserts that the per-doc bucket was **not
 - **N5.** The global cap can be exhausted by signup farming (ABUSE-02): with per-user caps at defaults, about 333 bonus-only accounts spending on outline + udk (60 units/day each) use up 20 000 units, which stops free helpers for everyone. That is the intended trade-off (spend stays bounded), but tell the owner.
 - **N6.** No test covers `rateLimit` `weight` > 1 directly (it is covered indirectly by the global subtest), and none covers N concurrent requests at the cap. The UPSERT is atomic, so this is only a lock-in suggestion.
 - **N7.** The per-endpoint `FREE_LLM_WEIGHT` is a call-count estimate, not USD. The EXT-02 "USD guard" (`llm_spend` row) is still a second step. Note this as residual work in the package report.
+
+---
+
+## Re-review (commit `0645c82`): **APPROVE**
+
+**R1 is fixed.** The lease row now stores the holder's own expiry: `window_start = now + ttlSec`, with polish 240 s and rewrite 90 s. `acquireLease` deletes a row only when `window_start <= now`, so the incoming request's TTL no longer matters. The race is closed:
+- The advisory xact lock serializes each delete → check → insert sequence.
+- `releaseLease` deletes by `(key, expires)`, so it only ever removes its own row.
+- A crashed holder's row expires on its own expiry and is cleared by the next acquire.
+- `purgeRateLimits` (`< now() − 25 h`) never touches a future-dated row.
+
+The TTL comment now uses the engine budgets instead of `maxDuration`. The new test "tirik polish qulfini rewrite o'g'irlamaydi" would fail against `890ce4b`: that code sees `T−100 s ≤ T−90 s` as stale and lets the rewrite in. It passes now. The same test also covers expiry after a crash.
+
+**R2 is fixed.** `consume()` (burst → daily → doc → global) now runs inside the `try` after `acquireLease`, so a 409 `busy` consumes nothing. A 429 or 503 from any bucket still releases the lease in `finally`. The test "409 busy chelaklarni yemaydi" snapshots `rate_limits` before and after two refused calls (one polish, one rewrite) and finds them equal. It also checks that the holder's per-doc count is 1. Requests without a doc (outline, udk) still consume the buckets before `run`.
+
+**N3 and N4 are done.** `runtimeWarnings()` now flags an unrecognised `FREE_LLM_DISABLED` value, and a test covers it. The doc comment now states that `admin_credit` counts as paid on purpose. N6 is partly done: a test for `weight` > 1 was added.
+
+**Test runs (through the gate, throwaway DB):**
+- `tests/free-llm.test.mts`: **17/17 pass**, 0 skipped.
+- `tests/compose-env.test.mts`: **2/2 pass**.
+
+Still open, and not blocking: N1 (engine-level 409/422 rejections before the LLM still consume buckets), N2 (no `Retry-After` header on 503), N5 (signup farming can exhaust the global cap) and N7 (no USD-based guard yet). Record these as residual work in the package report.
