@@ -90,8 +90,8 @@ test("readUploadForm: oddiy FormData so'rovi o'zgarishsiz o'qiladi", async () =>
   assert.equal(f2.size, 1000);
 });
 
-test("uploadSource: Content-Length siz 21 MB — 413, tana to'liq yutilmaydi", async () => {
-  const { req, pulled } = chunkedUpload("http://x/api/uploads/source", "a.txt", SOURCE_MAX_BYTES + CHUNK);
+test("uploadSource: Content-Length siz 25 MB — 413, tana to'liq yutilmaydi", async () => {
+  const { req, pulled } = chunkedUpload("http://x/api/uploads/source", "a.txt", SOURCE_MAX_BYTES + 5 * CHUNK);
   await expect413(uploadSource(req, "1", { count: async () => ({ chars: 1, text: "x" }) }));
   assert.ok(pulled() <= SOURCE_MAX_BYTES + 64 * 1024 + CHUNK + 1024, `o'qildi: ${pulled()}`);
 });
@@ -114,8 +114,8 @@ test("uploadSource (haqiqiy DEFAULT_COUNTER, worker thread): 301 sahifali PDF �
   );
 });
 
-test("uploadTemplate: Content-Length siz 21 MB — 413, tana to'liq yutilmaydi", async () => {
-  const { req, pulled } = chunkedUpload("http://x/api/uploads/template", "a.pptx", TEMPLATE_MAX_BYTES + CHUNK);
+test("uploadTemplate: Content-Length siz 25 MB — 413, tana to'liq yutilmaydi", async () => {
+  const { req, pulled } = chunkedUpload("http://x/api/uploads/template", "a.pptx", TEMPLATE_MAX_BYTES + 5 * CHUNK);
   await expect413(uploadTemplate(req, "1", { put: async () => { throw new Error("chaqirilmasligi kerak"); }, rasterize: async () => ({}) }));
   assert.ok(pulled() <= TEMPLATE_MAX_BYTES + 64 * 1024 + CHUNK + 1024, `o'qildi: ${pulled()}`);
 });
