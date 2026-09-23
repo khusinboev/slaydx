@@ -12,8 +12,9 @@ import type { Attempt, ProviderAdapter, RoleSpec } from "../lib/generation/llm/t
  * chiqmasdan. Qulflanadigan olti holat:
  *  1. 429 — 3 marta uriladi, keyin KEYINGI specga o'tadi.
  *  2. 400 (retryable:false) — DARHOL keyingi specga, qayta urinmasdan.
- *  3. timeout (abort/timed out xabari) — BUTUN zanjir to'xtaydi (`null`),
- *     keyingi specga O'TILMAYDI.
+ *  3. timeout (abort/timed out xabari) — MUDDATSIZ chaqiruvda BUTUN zanjir
+ *     to'xtaydi (`null`), keyingi specga O'TILMAYDI (muddat bilan — zaxiraga
+ *     o'tiladi, `llm-chain-deadline.test.mts`).
  *  4. kalit yo'q provayder — adapter chaqirilmasdan o'tkazib yuboriladi.
  *  5. hamma spec tugasa — `null`.
  *  6. `Retry-After` — eksponensial o'rniga shu qiymat kutiladi.
@@ -176,7 +177,7 @@ test("adapter ro'yxatda yo'q — o'tkazib yuboriladi (kalit bor bo'lsa ham)", as
   });
 });
 
-test("tarmoq xatosida (status yo'q) qayta urinish kutishi 2 s dan boshlanadi, HTTP xatosida 500 ms", () => {
+test("tarmoq xatosida (status yo'q) qayta urinish kutish asosi 2 s, HTTP xatosida 500 ms (to'liq jitter bilan)", () => {
   const src = readFileSync(new URL("../lib/generation/llm/chain.ts", import.meta.url), "utf8");
-  assert.match(src, /res\.status === undefined \? 2_000 : 500\) \* 2 \*\* attempt/);
+  assert.match(src, /backoffMs\(attempt, res\.status === undefined \? 2_000 : 500, ctx\.random\)/);
 });
