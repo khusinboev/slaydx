@@ -1,4 +1,5 @@
 import { ApiError, handler, requireUser } from "@/lib/server/api";
+import { busyResponse, SofficeBusyError } from "@/lib/server/soffice-gate";
 import { getOrBuildThumb } from "@/lib/server/thumb";
 
 export const runtime = "nodejs";
@@ -12,13 +13,20 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /**
  * Fayl kartasi eskizi (AUDIT-14): DOCX/PPTX natijaning 1-sahifasi, kichik JPEG.
  * Egalik SQL da (`getOrBuildThumb`). O'girib bo'lmasa 404 — karta matn
- * ko'rinishiga qaytadi.
+ * ko'rinishiga qaytadi. LibreOffice slotlari band bo'lsa 503 + `Retry-After`
+ * (C07) — karta ham matn ko'rinishida qoladi.
  */
 export const GET = handler("generations/thumb", async (req, ctx: Ctx) => {
   const { user } = await requireUser(req);
   const { id } = await ctx.params;
   if (!UUID.test(id)) throw new ApiError("Noto'g'ri id", 400);
-  const jpeg = await getOrBuildThumb(id, user.id);
+  let jpeg: Buffer | null;
+  try {
+    jpeg = await getOrBuildThumb(id, user.id);
+  } catch (e) {
+    if (e instanceof SofficeBusyError) return busyResponse(e);
+    throw e;
+  }
   if (!jpeg) throw new ApiError("Eskiz yo'q", 404);
   return new Response(new Uint8Array(jpeg), {
     headers: {
