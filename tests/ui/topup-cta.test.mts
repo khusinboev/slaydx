@@ -24,7 +24,7 @@ const user = (balance: number) =>
   }) as unknown as api.ServerUser;
 
 function chrome(props: { price?: number; error?: string | null }) {
-  render(h(ToolChrome, { title: "Slayd", submitLabel: "Yaratish", onSubmit: () => {}, ...props }, h("div")));
+  render(h(ToolChrome, { title: "Slayd", submitLabel: "Yaratish", onSubmit: () => {}, children: h("div"), ...props }));
 }
 
 const topUp = () => document.querySelector<HTMLAnchorElement>("[data-topup]");
