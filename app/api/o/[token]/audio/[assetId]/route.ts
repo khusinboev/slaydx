@@ -50,7 +50,9 @@ export const GET = noStoreOnError(handler("o/audio", async (req, ctx: Ctx) => {
       "Content-Type": mime,
       "Content-Length": String(asset.bytes.byteLength),
       // Aktiv id — kontent hashi; havola ochiq bo'lgani uchun `public` kesh xavfsiz.
-      "Cache-Control": "public, max-age=86400, immutable",
+      // 1 soat (1 kun/immutable emas): o'yin havolasi yopilsa, oraliq kesh uni
+      // ko'pi bilan bir soat berib turadi (review W2-B N2).
+      "Cache-Control": "public, max-age=3600",
       "X-Content-Type-Options": "nosniff",
       "Content-Security-Policy": "default-src 'none'; sandbox",
       "X-Robots-Tag": "noindex",

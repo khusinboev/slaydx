@@ -188,4 +188,51 @@ test("route: bayt javobi o'z keshini, xato javobi `private, no-store` ni beradi"
     assert.equal(res.status, 404);
     assert.equal(res.headers.get("cache-control"), "private, no-store");
   });
+
+  /*
+   * Eskiz (review W2-B R2): route `BYTE_ROUTES` da, ya'ni `?v=` bilan
+   * konfiguratsiya uni YOPMAYDI — xato javobi ham, eski versiya ham
+   * keshlanmasligi kerak. Uzoq kesh faqat `v` joriy `file_version` ga teng bo'lsa.
+   */
+  await t.test("eskiz: ?v= joriy file_version → immutable; eski/yo'q v → no-store; 404 → no-store", async () => {
+    const { putAssets } = await import("../lib/server/assets.ts");
+    const { THUMB_ASSET_ID } = await import("../lib/server/thumb.ts");
+    const thumbRoute = await import("../app/api/generations/[id]/thumb/route.ts");
+    const tg = crypto.randomUUID();
+    await query(
+      `INSERT INTO generations (id, user_id, tool_id, topic, status, file_version) VALUES ($1, $2, 'essay', 'eskiz', 'COMPLETED', 3)`,
+      [tg, uid],
+    );
+    const jpeg = Buffer.from("ffd8ffe000104a464946", "hex");
+    await putAssets(tg, [{ assetId: THUMB_ASSET_ID, mime: "image/jpeg", bytes: jpeg }]);
+    const thumb = async (gid2: string, qs: string) => {
+      const req = get(`/api/generations/${gid2}/thumb${qs}`);
+      return inRequest(req, () => thumbRoute.GET(req, { params: Promise.resolve({ id: gid2 }) }));
+    };
+    const cur = await thumb(tg, "?v=3");
+    assert.equal(cur.status, 200);
+    // MUTATSIYA: versiya solishtiruvini olib tashlash → eski `?v=2` ham immutable bo'lardi.
+    assert.equal(cur.headers.get("cache-control"), "private, max-age=86400, immutable");
+    assert.deepEqual(Buffer.from(await cur.arrayBuffer()), jpeg);
+    for (const qs of ["?v=2", "", "?v=abc"]) {
+      const r = await thumb(tg, qs);
+      assert.equal(r.status, 200);
+      assert.equal(r.headers.get("cache-control"), "private, no-store", `eskiz ${qs || "(v yo'q)"} keshlanmasligi kerak`);
+    }
+    const missing = crypto.randomUUID();
+    const nf = await thumb(missing, "?v=1");
+    assert.equal(nf.status, 404);
+    // MUTATSIYA: `noStoreOnError` o'rami olib tashlansa — sarlavha yo'q.
+    assert.equal(nf.headers.get("cache-control"), "private, no-store");
+  });
+
+  await t.test("aktiv route: o'zgaruvchan eskiz id si (THUMB_ASSET_ID) immutable bo'lib ketmaydi (N3)", async () => {
+    const { putAssets } = await import("../lib/server/assets.ts");
+    const { THUMB_ASSET_ID } = await import("../lib/server/thumb.ts");
+    await putAssets(gid, [{ assetId: THUMB_ASSET_ID, mime: "image/jpeg", bytes: Buffer.from("ffd8ff", "hex") }]);
+    const req = get(`/api/generations/${gid}/assets/${THUMB_ASSET_ID}`);
+    const res = await inRequest(req, () => assetRoute.GET(req, { params: Promise.resolve({ id: gid, assetId: THUMB_ASSET_ID }) }));
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get("cache-control"), "private, no-store");
+  });
 });

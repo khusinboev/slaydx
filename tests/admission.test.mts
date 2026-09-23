@@ -173,6 +173,32 @@ test("POST /api/generations qabul qarori va adolatli claimJob", { skip: hasDb ? 
     assert.equal(Number(await wallet(u.uid)), before - 2 * price);
   });
 
+  /*
+   * Review W2-B R1: qabul sanog'i foydalanuvchi qatori QULFI ostida, har
+   * POST da ishlaydi. `status IN (…)` hech bir qisman indeksga mos kelmaydi
+   * va butun `generations` ni (tarix — muddatsiz) ketma-ket o'qirdi
+   * (200k qatorda 14.6 ms, parallel worker'lar bilan). Katta tarixli
+   * jadvalda reja FAQAT indekslardan o'tishi kerak.
+   */
+  await t.test("qabul sanog'i katta tarixda ham qisman indekslar bilan (Seq Scan yo'q)", needIso, async () => {
+    const { ADMISSION_COUNTS_SQL } = await import("../lib/server/jobs.ts");
+    const hist = await mkUser("adm-history");
+    await query(
+      `INSERT INTO generations (id, user_id, tool_id, topic, status, created_at)
+       SELECT gen_random_uuid(), $1, 'essay', 'tarix', 'COMPLETED', now() - (i || ' minutes')::interval
+         FROM generate_series(1, 30000) AS i`,
+      [hist.uid],
+    );
+    await query(`ANALYZE generations`);
+    const plan = await query<{ "QUERY PLAN": unknown }>(`EXPLAIN (FORMAT JSON) ${ADMISSION_COUNTS_SQL}`, [hist.uid]);
+    const text = JSON.stringify(plan[0]["QUERY PLAN"]);
+    // MUTATSIYA: eski `WHERE status IN ('QUEUED','IN_PROGRESS')` → "Seq Scan" (yoki parallel) qaytadi.
+    assert.ok(!/Seq Scan/.test(text), `qabul sanog'i butun jadvalni o'qiyapti: ${text.slice(0, 400)}`);
+    assert.ok(/generations_queue_idx/.test(text) && /generations_stale_idx/.test(text), `qisman indekslar ishlatilmayapti: ${text.slice(0, 400)}`);
+    assert.ok(!/status IN \(/i.test(ADMISSION_COUNTS_SQL));
+    await query(`DELETE FROM generations WHERE user_id = $1`, [hist.uid]);
+  });
+
   await t.test("adolatli claimJob: A da 2 ta IN_PROGRESS + eski QUEUED, B da yangi QUEUED → B olinadi", needIso, async () => {
     await query(`UPDATE generations SET status = 'COMPLETED' WHERE status IN ('QUEUED','IN_PROGRESS')`);
     const a = await mkUser("fair-a");

@@ -250,23 +250,33 @@ export async function enqueueGeneration(input: EnqueueInput): Promise<EnqueueRes
  * Global navbat sanog'i esa yumshoq — ikki foydalanuvchi bir lahzada
  * chegarani bittaga oshirishi mumkin, bu zararsiz.
  *
- * Sanoq faqat QUEUED/IN_PROGRESS qatorlar bo'ylab (`generations_queue_idx`
- * va `generations_stale_idx` qisman indekslari) — qabul chegarasi tufayli
- * ular soni doim kichik.
+ * Sanoqlar (`ADMISSION_COUNTS_SQL`) har biri bitta qisman indeks
+ * (`generations_queue_idx` / `generations_stale_idx`) bo'ylab — qabul
+ * chegarasi tufayli ular kichik, tarix (COMPLETED) umuman o'qilmaydi.
  */
+/**
+ * Har sanoq AYNAN bitta qisman indeks predikatiga mos (`status = 'QUEUED'` →
+ * `generations_queue_idx`, `status = 'IN_PROGRESS'` → `generations_stale_idx`).
+ * `status IN (…)` (`= ANY(array)`) ularning hech biriga mos kelmaydi va
+ * butun (muddatsiz o'sadigan) jadvalni qulf ostida ketma-ket o'qirdi —
+ * review W2-B R1: 200k qatorda 14.6 ms → 0.17 ms. `tests/admission.test.mts`
+ * EXPLAIN bilan qulflaydi.
+ */
+export const ADMISSION_COUNTS_SQL = `SELECT
+    (SELECT count(*) FROM generations WHERE status = 'QUEUED' AND user_id = $1)
+  + (SELECT count(*) FROM generations WHERE status = 'IN_PROGRESS' AND user_id = $1) AS user_inflight,
+    (SELECT count(*) FROM generations WHERE status = 'QUEUED') AS queued`;
+
 async function admitInTx(
   client: PoolClient,
   userId: string,
   limits: AdmissionLimits,
 ): Promise<AdmissionDecision> {
-  await client.query("SELECT 1 FROM users WHERE id = $1 FOR UPDATE", [userId]);
-  const counts = await client.query<{ user_inflight: string; queued: string }>(
-    `SELECT count(*) FILTER (WHERE user_id = $1) AS user_inflight,
-            count(*) FILTER (WHERE status = 'QUEUED') AS queued
-       FROM generations
-      WHERE status IN ('QUEUED', 'IN_PROGRESS')`,
-    [userId],
-  );
+  // `NO KEY UPDATE`: o'zi bilan va `chargeInTx` ning UPDATE i bilan to'qnashadi
+  // (qabul navbatma-navbat), lekin shu foydalanuvchining bola jadvallarga
+  // (transactions, sessions…) FK `KEY SHARE` yozuvlarini to'smaydi.
+  await client.query("SELECT 1 FROM users WHERE id = $1 FOR NO KEY UPDATE", [userId]);
+  const counts = await client.query<{ user_inflight: string; queued: string }>(ADMISSION_COUNTS_SQL, [userId]);
   const row = counts.rows[0];
   return admissionDecision({
     ...limits,

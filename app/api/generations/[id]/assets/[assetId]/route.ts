@@ -1,6 +1,7 @@
 import { ApiError, handler, requireUser } from "@/lib/server/api";
 import { getAsset } from "@/lib/server/assets";
-import { bytesBody, noStoreOnError } from "@/lib/server/http-bytes";
+import { bytesBody, NO_STORE, noStoreOnError } from "@/lib/server/http-bytes";
+import { THUMB_ASSET_ID } from "@/lib/server/thumb";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,7 +34,9 @@ export const GET = noStoreOnError(
         "Content-Type": mime,
         "Content-Length": String(asset.bytes.byteLength),
         // Aktiv id — kontent hashi, shuning uchun uzoq keshlash xavfsiz.
-        "Cache-Control": "private, max-age=86400, immutable",
+        // ISTISNO: eskiz (`THUMB_ASSET_ID`) — sobit id, bayti tahrirdan keyin
+        // o'zgaradi (review W2-B N3); u faqat `/thumb?v=` orqali keshlanadi.
+        "Cache-Control": assetId.toLowerCase() === THUMB_ASSET_ID ? NO_STORE : "private, max-age=86400, immutable",
         "X-Content-Type-Options": "nosniff",
         "Content-Security-Policy": "default-src 'none'; sandbox",
       },
