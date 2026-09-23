@@ -4,6 +4,7 @@ import { hostname } from "node:os";
 import path from "node:path";
 import { Client, Pool, type PoolClient, type PoolConfig, type QueryResultRow } from "pg";
 import { env } from "./env";
+import { log } from "./log";
 
 /**
  * Postgres ulanish hovuzi va migratsiya yurituvchi.
@@ -22,17 +23,6 @@ type Globals = typeof globalThis & {
 };
 
 const g = globalThis as Globals;
-
-/**
- * Ixtiyoriy millisoniya sozlamasi. `env.ts` da hali yo'q — hovuz vaqt
- * chegaralari faqat shu faylda ishlatiladi (C33, DB-08).
- */
-function envMs(name: string, fallback: number): number {
-  const raw = process.env[name]?.trim();
-  if (!raw) return fallback;
-  const n = Number(raw);
-  return Number.isInteger(n) && n >= 0 ? n : fallback;
-}
 
 /**
  * Bu process kim: `web` (Next.js server, inline worker ham shu yerda),
@@ -74,12 +64,12 @@ function sslFor(url: string): PoolConfig["ssl"] {
  * 10 s osilib turgandan ko'ra tezroq xato qaytgani yaxshi).
  */
 export function poolConfig(): PoolConfig {
-  const statementTimeout = envMs("DATABASE_STATEMENT_TIMEOUT_MS", 30_000);
+  const statementTimeout = env.databaseStatementTimeoutMs;
   return {
     connectionString: env.databaseUrl,
     max: env.databasePoolMax,
     idleTimeoutMillis: 30_000,
-    connectionTimeoutMillis: envMs("DATABASE_CONNECT_TIMEOUT_MS", 5_000),
+    connectionTimeoutMillis: env.databaseConnectTimeoutMs,
     // Bitta so'rov butun hovuzni band qilib qo'ymasin. Katta BYTEA
     // o'qish ham 30 soniyaga bemalol sig'adi.
     statement_timeout: statementTimeout,
@@ -105,7 +95,7 @@ export function pool(): Pool {
     g.__slaydxPool = new Pool(poolConfig());
     // Bo'sh ulanishdagi xato butun processni yiqitmasin.
     g.__slaydxPool.on("error", (err) => {
-      console.error("[db] idle client error:", err.message);
+      log("error", "[db] idle client error", { err });
     });
   }
   return g.__slaydxPool;
@@ -264,7 +254,7 @@ export async function migrate(opts: MigrateOptions = {}): Promise<void> {
 
   const client = new Client({
     connectionString: env.databaseUrl,
-    connectionTimeoutMillis: envMs("DATABASE_CONNECT_TIMEOUT_MS", 5_000),
+    connectionTimeoutMillis: env.databaseConnectTimeoutMs,
     application_name: appName("-migrate"),
     keepAlive: true,
     ssl: sslFor(env.databaseUrl),
