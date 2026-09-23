@@ -58,13 +58,9 @@ const PAYME_ERRORS = {
   CANT_PERFORM: { code: -31008, message: m("Amalni bajarib bo'lmadi", "Невозможно выполнить операцию", "Unable to perform operation") },
   /**
    * -31050…-31099 — hisob (`account`) xatolari; `data` — maydon nomi.
-   * Kodni diapazon ichida savdogar tanlaydi.
+   * Faqat noma'lum (yoki boshqa provayderning) buyurtmasi uchun.
    */
   ORDER: { code: -31050, message: m("Buyurtma topilmadi", "Заказ не найден", "Order not found") },
-  /** Bir martalik buyurtmada boshqa faol tranzaksiya bor («заказ ожидает оплаты»). */
-  BUSY: { code: -31051, message: m("Buyurtma to'lov kutmoqda", "Заказ ожидает оплаты", "Order is awaiting payment") },
-  /** Buyurtma to'langan yoki bekor qilingan — qayta to'lab bo'lmaydi. */
-  CLOSED: { code: -31052, message: m("Buyurtma yopilgan", "Заказ уже оплачен или отменён", "Order is already paid or cancelled") },
 } as const satisfies Record<string, PaymeError>;
 
 /** Hisob maydoni — `data` da qaytariladi (spetsifikatsiya talabi). */
@@ -119,16 +115,19 @@ function paymeState(order: { state: string }): number {
  * CheckPerformTransaction mantig'i (CreateTransaction ham yangi tranzaksiya
  * ochishdan oldin shuni bajaradi). `null` — to'lash mumkin.
  *
- * Buyurtmalar BIR MARTALIK: faol tranzaksiyasi bor buyurtma «band»,
- * to'langan/bekor qilingani «yopiq» — ikkalasi ham hisob xatosi
- * (-31050…-31099, `data: "order_id"`), -31008 yoki `allow: true` emas (BEA-05).
+ * Buyurtmalar BIR MARTALIK: faol tranzaksiyasi bor («В ожидании оплаты»),
+ * to'langan yoki bekor qilingan buyurtma — -31008, `allow: true` emas
+ * (BEA-05 #2). Kod Payme «Песочница» talabidan: «CreateTransaction c новой
+ * транзакцией и состоянием счета «В ожидании оплаты» — ответ с ошибкой
+ * -31008»; rasmiy PHP shablon (`Order::validate`, CheckPerformTransaction
+ * «There is other active/completed transaction») ham -31008 qaytaradi.
+ * Hisob xatosi (-31050, `data: "order_id"`) — faqat noma'lum buyurtma.
  * Click uchun yaratilgan buyurtma Payme orqali to'lanmaydi (BEA-05 #6).
  */
 function payable(id: unknown, order: PaymentOrder | null, amount: unknown): Outcome | null {
   if (!order || order.provider !== "payme") return rpcError(id, PAYME_ERRORS.ORDER, ACCOUNT_FIELD);
   if (Number(amount) !== tiyin(order.amountSoum)) return rpcError(id, PAYME_ERRORS.AMOUNT);
-  if (order.state === "pending") return rpcError(id, PAYME_ERRORS.BUSY, ACCOUNT_FIELD);
-  if (order.state !== "created") return rpcError(id, PAYME_ERRORS.CLOSED, ACCOUNT_FIELD);
+  if (order.state !== "created") return rpcError(id, PAYME_ERRORS.CANT_PERFORM);
   return null;
 }
 
@@ -172,9 +171,9 @@ async function dispatch(body: RpcRequest): Promise<Outcome> {
       // `time` 12 soatdan eski — bunday tranzaksiya ochilmaydi.
       if (Date.now() - time >= PAYME_TIMEOUT_MS) return { ...rpcError(id, PAYME_ERRORS.CANT_PERFORM, "timeout"), ...tag };
 
-      // Poyga: shu orada boshqa tranzaksiya biriktirilgan bo'lsa — band.
+      // Poyga: shu orada boshqa tranzaksiya biriktirilgan bo'lsa — band (-31008).
       const attached = await attachTransaction(order!.id, txn, time);
-      if (!attached) return { ...rpcError(id, PAYME_ERRORS.BUSY, ACCOUNT_FIELD), ...tag };
+      if (!attached) return { ...rpcError(id, PAYME_ERRORS.CANT_PERFORM), ...tag };
       return { ...rpcResult(id, { create_time: time, transaction: order!.id, state: 1 }), ...tag };
     }
 

@@ -303,25 +303,40 @@ test("to'lov buyurtmalari: Payme JSON-RPC + Click holat mashinasi", { skip: hasD
     assert.equal((await rpc("PerformTransaction", { id: t2 })).error?.code, -31008);
   });
 
-  await t.test("Payme: band buyurtma (boshqa faol tranzaksiya) → -31050…-31099", async () => {
+  await t.test("Payme: band / yopiq buyurtma → -31008 (Payme «Песочница» talabi)", async () => {
+    // Payme sandbox: «CreateTransaction c новой транзакцией и состоянием счета
+    // «В ожидании оплаты» — ответ с ошибкой -31008»; rasmiy PHP shablon
+    // (`Order::validate`, CheckPerformTransaction) ham -31008 qaytaradi.
+    // Hisob xatosi (-31050…) faqat noma'lum buyurtma uchun (W3-C review R1).
     const { order } = await mkOrder("payme");
     const account = { order_id: order.id };
     const amount = order.amountSoum * 100;
-    await rpc("CreateTransaction", { id: `pm-busy1-${order.id.slice(0, 8)}`, time: Date.now(), amount, account });
+    const t1 = `pm-busy1-${order.id.slice(0, 8)}`;
+    await rpc("CreateTransaction", { id: t1, time: Date.now(), amount, account });
 
-    // Diapazon — spetsifikatsiya talabi; aniq kod (-31051 «to'lov kutmoqda» /
-    // -31052 «yopilgan») — to'lovchiga to'g'ri sabab ko'rsatilishi uchun.
     const busy = await rpc("CheckPerformTransaction", { amount, account });
-    assertAccountError(busy, "CheckPerform band");
-    assert.equal(busy.error?.code, -31051);
+    assert.equal(busy.error?.code, -31008, `CheckPerform band: ${JSON.stringify(busy)}`);
     const busy2 = await rpc("CreateTransaction", { id: `pm-busy2-${order.id.slice(0, 8)}`, time: Date.now(), amount, account });
-    assertAccountError(busy2, "Create boshqa id bilan");
-    assert.equal(busy2.error?.code, -31051);
-    // Birinchisi bekor qilingach ham buyurtma yopiq — bir martalik to'lov.
-    await rpc("CancelTransaction", { id: `pm-busy1-${order.id.slice(0, 8)}`, reason: 3 });
+    assert.equal(busy2.error?.code, -31008, `Create boshqa id bilan: ${JSON.stringify(busy2)}`);
+    // Birinchi tranzaksiya o'zgarmay qoladi.
+    assert.equal((await rpc("CheckTransaction", { id: t1 })).result?.state, 1);
+
+    // Bekor qilingach ham buyurtma yopiq — bir martalik to'lov.
+    await rpc("CancelTransaction", { id: t1, reason: 3 });
     const closed = await rpc("CheckPerformTransaction", { amount, account });
-    assertAccountError(closed, "CheckPerform bekor qilingan");
-    assert.equal(closed.error?.code, -31052);
+    assert.equal(closed.error?.code, -31008, `CheckPerform bekor qilingan: ${JSON.stringify(closed)}`);
+
+    // To'langan buyurtma ham -31008.
+    const { order: o2 } = await mkOrder("payme");
+    const a2 = { order_id: o2.id };
+    const t2 = `pm-paidc-${o2.id.slice(0, 8)}`;
+    await rpc("CreateTransaction", { id: t2, time: Date.now(), amount: o2.amountSoum * 100, account: a2 });
+    await rpc("PerformTransaction", { id: t2 });
+    assert.equal((await rpc("CheckPerformTransaction", { amount: o2.amountSoum * 100, account: a2 })).error?.code, -31008);
+    assert.equal(
+      (await rpc("CreateTransaction", { id: `${t2}-b`, time: Date.now(), amount: o2.amountSoum * 100, account: a2 })).error?.code,
+      -31008,
+    );
   });
 
   await t.test("Payme: 12 soatlik timeout — eski Create rad; eski tranzaksiya Perform/Create'da reason 4 bilan bekor", async () => {
