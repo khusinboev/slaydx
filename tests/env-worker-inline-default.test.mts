@@ -10,9 +10,9 @@ import { execFileSync } from "node:child_process";
  */
 function inlineFlag(nodeEnv: string): string {
   const code = `import("./lib/server/env.ts").then(m => process.stdout.write(String(m.env.worker.inline)))`;
-  const env: NodeJS.ProcessEnv = { ...process.env, NODE_ENV: nodeEnv, SESSION_SECRET: "x".repeat(48), NEXT_PHASE: "phase-production-build" };
+  const env: Record<string, string | undefined> = { ...process.env, NODE_ENV: nodeEnv, SESSION_SECRET: "x".repeat(48), NEXT_PHASE: "phase-production-build" };
   delete env.WORKER_INLINE;
-  return execFileSync(process.execPath, ["--import", "tsx", "--conditions=react-server", "-e", code], { env, encoding: "utf8" }).trim();
+  return execFileSync(process.execPath, ["--import", "tsx", "--conditions=react-server", "-e", code], { env: env as NodeJS.ProcessEnv, encoding: "utf8" }).trim();
 }
 
 test("production: WORKER_INLINE berilmasa inline worker o'chiq", () => {
