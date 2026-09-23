@@ -4,7 +4,7 @@ import { env } from "./env";
 import { query, transaction } from "./db";
 
 import { upsertTelegramUser, type TelegramProfile } from "./auth";
-import { isAdminPhone, normalizePhone } from "./admin-phones";
+import { isAdminPhone } from "./admin-phones";
 import type { SessionUser } from "./session";
 
 /**
@@ -215,7 +215,10 @@ export async function purgeExpiredTickets(): Promise<void> {
 export type TelegramUpdate = {
   update_id: number;
   message?: {
-    chat: { id: number };
+    // `type` — faqat shaxsiy chatda ("private") kontakt qabul qilinadi;
+    // guruh/kanalda botga ulashilgan kontakt hech qachon "o'zining
+    // raqami" bo'la olmaydi (reviewer nit — chat.type === "private").
+    chat: { id: number; type?: string };
     text?: string;
     from?: { id: number; username?: string; first_name?: string; last_name?: string };
     contact?: { phone_number: string; user_id?: number };
@@ -302,20 +305,26 @@ async function sendLoginLink(chatId: number, link: string, intro: string): Promi
  * bir xil chiqishi mumkin, lekin xabarning o'zi jo'natuvchi tomonidan
  * TANLAB yuborilmagan bo'lishi mumkin.
  *
- * Raqam har doim KANONIK shaklda saqlanadi (`normalizePhone` — 9 xonali
- * milliy shakl `998` bilan kengaytiriladi, boshqa mamlakatlar xom
- * holda), keyingi safar qayta ulashish shart bo'lmasin. Bu DEPS-08/
- * SECA-01ning ikkinchi qismini yopadi: xom saqlashda admin raqamining
- * mamlakat kodisiz shakli (`+<9 raqam>`) raw-string unique indeksdan
- * qochib ketardi. Endi kanonik shaklda saqlanadi va shu bilan bir xil
- * raqamga to'g'ridan-to'g'ri to'qnashadi (`users_phone_key`), agar u
- * allaqachon boshqa akkauntga bog'langan bo'lsa.
+ * Raqam Telegram YUBORGAN holida, XOM saqlanadi (`+<raqamlar>`) —
+ * hech qanday mamlakat-kodi TAXMINI YO'Q. Ilgari 9 xonali qiymat "998"
+ * bilan kengaytirilardi ("milliy format" deb taxmin qilib), lekin bu
+ * ikki jihatdan xato edi: (1) o'zining kontaktini ulashgan foydalanuvchi
+ * 9 xonali raqam yuborsa (masalan +299/+298/+376 kabi qisqa xalqaro
+ * raqamlar), uning haqiqiy raqami BUZILARDI; (2) xuddi shu kengaytirish
+ * tasodifan yoki ataylab admin raqamining ko'rinishini hosil qilishi
+ * mumkin edi. Telegram o'zining kontaktini ulashganda HAR DOIM to'liq
+ * xalqaro raqamni (mamlakat kodi bilan) beradi — taxmin qilish shart
+ * emas. Shubhali uzunlik (E.164 diapazonidan tashqari, 7–15 raqamdan
+ * kam/ko'p) rad etiladi — bunday qiymat haqiqiy telefon bo'la olmaydi.
  *
  * Admin ekanligi HAR SAFAR `isAdminPhone` bilan qayta tekshiriladi —
  * ro'yxatdan o'chirilgan raqam avtomatik huquqini yo'qotadi, saqlangan
- * `phone` qatori o'zi hech narsani bermaydi. `isAdminPhone` esa endi
- * QATʼIY (kengaytirishsiz) taqqoslaydi — admin tekshiruvi darajasida
- * hech qanday milliy-format kengaytirish yo'q.
+ * `phone` qatori o'zi hech narsani bermaydi. `isAdminPhone` QATʼIY
+ * (kengaytirishsiz, aniq raqamlar) taqqoslaydi.
+ *
+ * Faqat SHAXSIY chatda qabul qilinadi (`chat.type === "private"`) —
+ * guruh/kanalda ulashilgan kontakt bot uchun "o'zining raqami" bo'la
+ * olmaydi.
  *
  * Foydalanuvchi hali saytga bir marta ham kirmagan bo'lsa (bazada
  * akkaunti yo'q) — kontakt e'tiborsiz qoldiriladi: avval «Telegram
@@ -326,12 +335,18 @@ async function handleContact(
   fromId: number,
   contact: { phone_number: string; user_id?: number },
   forwarded: boolean,
+  isPrivateChat: boolean,
 ): Promise<void> {
-  if (forwarded || contact.user_id !== fromId) {
+  if (forwarded || contact.user_id !== fromId || !isPrivateChat) {
     await sendMessage(chatId, "Faqat o'zingizning raqamingizni ulashing.");
     return;
   }
-  const phone = `+${normalizePhone(contact.phone_number)}`;
+  const digits = contact.phone_number.replace(/\D/g, "");
+  if (digits.length < 7 || digits.length > 15) {
+    await sendMessage(chatId, "Faqat o'zingizning raqamingizni ulashing.");
+    return;
+  }
+  const phone = `+${digits}`;
   let updated: { id: string }[];
   try {
     updated = await query<{ id: string }>(
@@ -371,7 +386,8 @@ export async function handleUpdate(update: TelegramUpdate): Promise<void> {
 
   if (msg.contact) {
     const forwarded = msg.forward_origin != null || msg.forward_date != null || msg.forward_from != null;
-    await handleContact(msg.chat.id, msg.from.id, msg.contact, forwarded);
+    const isPrivateChat = msg.chat.type === "private";
+    await handleContact(msg.chat.id, msg.from.id, msg.contact, forwarded, isPrivateChat);
     return;
   }
   if (!msg.text) return;

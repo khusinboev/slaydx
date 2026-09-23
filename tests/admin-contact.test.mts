@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
  * C01 (SECA-01 / DEPS-08 / ABUSE-06 / TEST-12) — soxta Telegram kontakt
  * orqali admin bo'lib olish.
  *
- * Ilgari `handleContact` ikkita teshik bilan yozilgan edi:
+ * Ilgari `handleContact` uchta teshik bilan yozilgan edi:
  *   1. `contact.user_id != null && contact.user_id !== fromId` faqat
  *      user_id BOR va BOSHQA bo'lganda rad etardi — Bot API'da
  *      `Contact.user_id` IXTIYORIY: har qanday vizit-kartochka yoki
@@ -16,8 +16,20 @@ import assert from "node:assert/strict";
  *      9 xonali "milliy" shaklni `998` bilan kengaytirardi — ya'ni admin
  *      raqamining mamlakat kodisiz shakli (`+<9 raqam>`) raw-string
  *      unique indeksdan qochib, lekin admin tekshiruvidan o'tardi.
+ *   3. (R1, ko'rib chiquvchi topdi) Birinchi tuzatishda bu ikkinchi
+ *      teshikni "saqlashda ham 9 xonalini 998 bilan kengaytirish" bilan
+ *      yopishga urinildi — lekin bu YANGI xato edi: (a) o'ZINING
+ *      to'g'ri kontaktini ulashgan foydalanuvchi uchun ham xuddi shu
+ *      kengaytirish ishlab, admin raqamiga TASODIFAN to'g'ri kelib
+ *      qolishi mumkin edi; (b) haqiqiy qisqa xalqaro raqamlarni
+ *      (+299/+298/+376 kabi) buzardi. To'g'ri yechim: hech qanday
+ *      mamlakat-kodi TAXMINI yo'q — Telegram YUBORGANDEK xom saqlash,
+ *      faqat uzunlik (7–15 raqam, E.164 diapazoni) tekshiriladi.
  *
- * Bu fayl ikkalasini ham qulflaydi. Haqiqiy Postgres talab qiladi
+ * Nit: kontakt faqat SHAXSIY chatda (`chat.type === "private"`)
+ * qabul qilinadi.
+ *
+ * Bu fayl barchasini qulflaydi. Haqiqiy Postgres talab qiladi
  * (`users`, `telegram_updates`). Telegram'ga HECH QANDAY tarmoq
  * so'rovi ketmaydi — `fetch` stub qilingan.
  */
@@ -108,7 +120,7 @@ test("user_id'siz kontakt (soxta vizit kartochkasi, admin raqamining 9 xonali sh
   await handleUpdate({
     update_id: nextUpdateId(),
     message: {
-      chat: { id: fromId },
+      chat: { id: fromId, type: "private" },
       from: { id: fromId, first_name: "Attacker" },
       contact: { phone_number: ADMIN_9DIGIT }, // user_id YO'Q — DEPS-08/SECA-01 hujumi
     },
@@ -128,7 +140,7 @@ test("boshqa foydalanuvchining user_id bilan yuborilgan kontakt — rad etiladi"
   await handleUpdate({
     update_id: nextUpdateId(),
     message: {
-      chat: { id: fromId },
+      chat: { id: fromId, type: "private" },
       from: { id: fromId, first_name: "Attacker2" },
       contact: { phone_number: ADMIN_DIGITS, user_id: fromId + 1 },
     },
@@ -139,7 +151,7 @@ test("boshqa foydalanuvchining user_id bilan yuborilgan kontakt — rad etiladi"
   assert.match(String(calls[0]!.body.text), /Faqat o'zingizning raqamingizni ulashing/);
 });
 
-test("forward qilingan xabar — user_id o'ziniki bo'lsa ham rad etiladi", async () => {
+test("forward qilingan xabar (forward_date) — user_id o'ziniki bo'lsa ham rad etiladi", async () => {
   installFetchMock();
   const fromId = 800000003;
   const telegramId = trackId(String(fromId));
@@ -148,7 +160,7 @@ test("forward qilingan xabar — user_id o'ziniki bo'lsa ham rad etiladi", async
   await handleUpdate({
     update_id: nextUpdateId(),
     message: {
-      chat: { id: fromId },
+      chat: { id: fromId, type: "private" },
       from: { id: fromId, first_name: "Fwd" },
       contact: { phone_number: "998911112233", user_id: fromId },
       forward_date: 1_700_000_000,
@@ -156,6 +168,50 @@ test("forward qilingan xabar — user_id o'ziniki bo'lsa ham rad etiladi", async
   });
 
   assert.equal(await userPhone(telegramId), null, "forward qilingan kontakt saqlanmasligi kerak");
+  assert.equal(calls.length, 1);
+  assert.match(String(calls[0]!.body.text), /Faqat o'zingizning raqamingizni ulashing/);
+});
+
+test("forward qilingan xabar (forward_origin) — user_id o'ziniki bo'lsa ham rad etiladi", async () => {
+  // Zamonaviy Bot API `forward_date`/`forward_from` o'rniga `forward_origin`
+  // obyektini beradi — shuni alohida tekshiramiz, ikkalasi bir xil bo'lib
+  // qolmasin.
+  installFetchMock();
+  const fromId = 800000006;
+  const telegramId = trackId(String(fromId));
+  await makeUser(telegramId);
+
+  await handleUpdate({
+    update_id: nextUpdateId(),
+    message: {
+      chat: { id: fromId, type: "private" },
+      from: { id: fromId, first_name: "FwdOrigin" },
+      contact: { phone_number: "998911112244", user_id: fromId },
+      forward_origin: { type: "user", sender_user: { id: fromId } },
+    },
+  });
+
+  assert.equal(await userPhone(telegramId), null, "forward_origin bilan kelgan kontakt saqlanmasligi kerak");
+  assert.equal(calls.length, 1);
+  assert.match(String(calls[0]!.body.text), /Faqat o'zingizning raqamingizni ulashing/);
+});
+
+test("guruh chatida ulashilgan kontakt — rad etiladi (faqat shaxsiy chat qabul qilinadi)", async () => {
+  installFetchMock();
+  const fromId = 800000007;
+  const telegramId = trackId(String(fromId));
+  await makeUser(telegramId);
+
+  await handleUpdate({
+    update_id: nextUpdateId(),
+    message: {
+      chat: { id: fromId, type: "group" },
+      from: { id: fromId, first_name: "GroupUser" },
+      contact: { phone_number: ADMIN_DIGITS, user_id: fromId },
+    },
+  });
+
+  assert.equal(await userPhone(telegramId), null, "guruh chatidagi kontakt saqlanmasligi kerak");
   assert.equal(calls.length, 1);
   assert.match(String(calls[0]!.body.text), /Faqat o'zingizning raqamingizni ulashing/);
 });
@@ -170,23 +226,29 @@ test("o'zining xalqaro shakldagi admin raqami — qabul qilinadi va admin bo'lad
   await handleUpdate({
     update_id: nextUpdateId(),
     message: {
-      chat: { id: fromId },
+      chat: { id: fromId, type: "private" },
       from: { id: fromId, first_name: "RealAdmin" },
       contact: { phone_number: ADMIN_DIGITS, user_id: fromId },
     },
   });
 
   const stored = await userPhone(telegramId);
-  assert.equal(stored, ADMIN_E164, "kanonik E.164 shaklda saqlanishi kerak");
+  assert.equal(stored, ADMIN_E164, "Telegram yuborgan to'liq raqam xom holda saqlanadi");
   assert.ok(isAdminPhone(stored), "haqiqiy admin raqami admin deb tanilishi kerak");
   assert.match(String(calls[0]!.body.text), /Admin sifatida tasdiqlandingiz/);
 });
 
-test("o'zining kontakti, lekin 9 xonali (mamlakat kodisiz) raqam yuborilsa — baribir kanonik shaklda saqlanadi va admin bo'ladi", async () => {
-  // Ownership tekshiruvi to'g'ri (user_id === fromId), lekin raqamning
-  // o'zi 9 xonali. Bu DEPS-08: xom saqlashda bunday qiymat unique
-  // indeksdan qochib ketardi. Endi saqlash bosqichida ham kanonik
-  // shaklga keltiriladi.
+test("R1: o'zining kontakti, lekin 9 xonali (mamlakat kodisiz) raqam — XOM saqlanadi, admin BO'LMAYDI", async () => {
+  // Ownership tekshiruvi to'g'ri (user_id === fromId) — bu HAQIQIY
+  // foydalanuvchi, lekin uning raqami (yoki xato/qisqa xalqaro raqam)
+  // 9 ta xonadan iborat, tasodifan admin raqamining "milliy" shakli
+  // bilan bir xil ko'rinadi. Mamlakat-kodi TAXMIN qilinmasligi kerak —
+  // shu qiymat qanday kelgan bo'lsa, xuddi shunday (`+976063896`)
+  // saqlanadi va admin raqamiga (`+998976063896`, 12 xona) MOS
+  // KELMAYDI. Buni ko'rib chiquvchi R1 sifatida talab qildi: birinchi
+  // versiyada bu yerda saqlashda ham 998 bilan kengaytirish bo'lgani
+  // uchun test ADMIN kutgan edi — bu ham SECA-01/DEPS-08ning davomi
+  // ekan (haqiqiy egasi ham tasodifan admin bo'lib qolishi mumkin edi).
   installFetchMock();
   await freeAdminPhone();
   const fromId = 800000005;
@@ -196,15 +258,36 @@ test("o'zining kontakti, lekin 9 xonali (mamlakat kodisiz) raqam yuborilsa — b
   await handleUpdate({
     update_id: nextUpdateId(),
     message: {
-      chat: { id: fromId },
+      chat: { id: fromId, type: "private" },
       from: { id: fromId, first_name: "NineDigit" },
       contact: { phone_number: ADMIN_9DIGIT, user_id: fromId },
     },
   });
 
   const stored = await userPhone(telegramId);
-  assert.equal(stored, ADMIN_E164, "9 xonali kirish ham kanonik E.164 shaklda saqlanishi kerak");
-  assert.ok(isAdminPhone(stored));
+  assert.equal(stored, `+${ADMIN_9DIGIT}`, "hech qanday mamlakat-kodi taxmini bo'lmasligi kerak");
+  assert.notEqual(stored, ADMIN_E164);
+  assert.equal(isAdminPhone(stored), false, "9 xonali qiymat admin bilan MOS KELMASLIGI kerak");
+});
+
+test("uzunligi shubhali raqam (7 xonadan kam) — rad etiladi, saqlanmaydi", async () => {
+  installFetchMock();
+  const fromId = 800000008;
+  const telegramId = trackId(String(fromId));
+  await makeUser(telegramId);
+
+  await handleUpdate({
+    update_id: nextUpdateId(),
+    message: {
+      chat: { id: fromId, type: "private" },
+      from: { id: fromId, first_name: "Short" },
+      contact: { phone_number: "12345", user_id: fromId },
+    },
+  });
+
+  assert.equal(await userPhone(telegramId), null, "E.164 dan tashqari uzunlik saqlanmasligi kerak");
+  assert.equal(calls.length, 1);
+  assert.match(String(calls[0]!.body.text), /Faqat o'zingizning raqamingizni ulashing/);
 });
 
 test("isAdminPhone admin raqamining 9 xonali (mamlakat kodisiz) shaklini rad etadi", () => {
