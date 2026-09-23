@@ -123,3 +123,27 @@ test("limiter: parallel llmComplete'lar provayder chegarasidan oshmaydi", async 
     PROVIDER_MAX_INFLIGHT.gemini = saved;
   }
 });
+
+test("runLlmRaw (zanjir Gemini adapteri): 429 tanasidagi RetryInfo → retryAfterMs", async () => {
+  const { runLlmRaw } = await import("../lib/generation/llm.ts");
+  const r = retryInfo("34s");
+  const fetchImpl = (async () => new Response(JSON.stringify(r.body), { status: 429 })) as typeof fetch;
+  const res = await runLlmRaw("gemini", "m", "s", "u", 100, { timeoutMs: 5_000, fetchImpl });
+  assert.equal(res.ok, false);
+  assert.equal(!res.ok && res.retryAfterMs, 34_000);
+});
+
+test("llm-roles.complete: `deadline` zanjirga uzatiladi — vaqt yo'q bo'lsa DeadlineError, tarmoqqa chiqilmaydi", async () => {
+  const { complete, DeadlineError } = await import("../lib/generation/llm-roles.ts");
+  const calls = stub([OK]);
+  const saved = process.env.LLM_FAST;
+  delete process.env.LLM_FAST;
+  try {
+    await assert.rejects(complete("fast", "s", "u", { timeoutMs: 30_000, deadline: Date.now() + 2_000 }), DeadlineError);
+    assert.equal(calls.length, 0);
+    // Muddatsiz — eski yo'l, javob qaytadi.
+    assert.equal((await complete("fast", "s", "u", { timeoutMs: 30_000 }))?.text, "javob");
+  } finally {
+    if (saved !== undefined) process.env.LLM_FAST = saved;
+  }
+});

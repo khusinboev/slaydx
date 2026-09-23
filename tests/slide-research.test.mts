@@ -4,6 +4,7 @@ import { TOOL_BY_ID } from "../lib/tools.ts";
 import type { FormValues } from "../lib/types.ts";
 import { extractMeta } from "../lib/generation/meta.ts";
 import { llmGrounded } from "../lib/generation/llm.ts";
+import { resetBreakers } from "../lib/generation/llm/breaker.ts";
 import { runSlideResearch } from "../lib/generation/slide-research.ts";
 import type { SlideResearch } from "../lib/generation/slide-research.ts";
 import { slideSystem } from "../lib/generation/slide-prompt/index.ts";
@@ -43,6 +44,8 @@ async function withFetch(
   reply: (req: Caught) => unknown,
   fn: (calls: Caught[]) => Promise<void>,
 ): Promise<void> {
+  // Jarayon bo'yicha provayder saqlagichi testlar orasida oqmasin (5xx testlari uni ochadi).
+  resetBreakers();
   const realFetch = globalThis.fetch;
   const savedGemini = process.env.GEMINI_API_KEY;
   const savedXai = process.env.XAI_API_KEY;
