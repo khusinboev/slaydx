@@ -115,6 +115,11 @@ services:
       DATABASE_URL: postgres://slaydx:${POSTGRES_PASSWORD:-slaydx}@postgres:5432/slaydx
       APP_URL: ${APP_URL:-http://localhost:3000}
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET kerak — openssl rand -base64 48}
+      # DEPS-08: admin ruxsati endi manba kodida QATTIQ YOZILMAGAN
+      # (`lib/server/admin-phones.ts` `process.env.ADMIN_PHONES`ni
+      # o'qiydi) — kompyuterga tushirilgan bo'lsa ham kim admin ekani
+      # public repo'da ko'rinmasin. Bo'sh qolsa admin YO'Q (fail-closed).
+      ADMIN_PHONES: ${ADMIN_PHONES:-}
       NEXT_PUBLIC_BRAND_NAME: ${NEXT_PUBLIC_BRAND_NAME:-SlaydX}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       NEXT_PUBLIC_TELEGRAM_BOT: ${NEXT_PUBLIC_TELEGRAM_BOT:-}
@@ -244,6 +249,10 @@ services:
       DATABASE_URL: postgres://slaydx:${POSTGRES_PASSWORD:-slaydx}@postgres:5432/slaydx
       APP_URL: ${APP_URL:-http://localhost:3000}
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET kerak}
+      # DEPS-08 — web blokidagi izohga qarang. `scripts/bot.mts`/
+      # `bot-commands.mts` (Telegram bot, `lib/server/telegram.ts` orqali
+      # `isAdminPhone` chaqirishi mumkin) shu konteynerda ishlaydi.
+      ADMIN_PHONES: ${ADMIN_PHONES:-}
       # INFRA-09: PPTX/DOCX metama'lumotini worker chizadi (`buildArtifact`
       # shu konteynerda ishlaydi), `lib/brand.ts` esa `NEXT_PUBLIC_BRAND_*`ni
       # to'g'ridan-to'g'ri `process.env`dan o'qiydi — Next.js build-vaqtidagi

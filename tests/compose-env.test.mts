@@ -210,6 +210,22 @@ test("docker-compose: DATABASE_STATEMENT_TIMEOUT_MS/DATABASE_CONNECT_TIMEOUT_MS 
 });
 
 /**
+ * DEPS-08 (W3-I): admin telefon ro'yxati ilgari `lib/server/admin-phones.ts`da
+ * QATTIQ YOZILGAN edi — public repo'da kim admin ekani ko'rinib turardi.
+ * Endi `process.env.ADMIN_PHONES`dan o'qiladi; bu test faqat compose
+ * PLUMBING'ini qulflaydi (o'zgaruvchi `.env`da bor-u, konteynerga
+ * YETIB BORMASA — admin ro'yxati bo'sh qolib, hech kim admin panelga
+ * kirolmay qoladi — jim, aniqlash qiyin nosozlik).
+ */
+test("docker-compose: ADMIN_PHONES web va worker'ga uzatiladi", () => {
+  const yaml = readFileSync(new URL("../docker-compose.yml", import.meta.url), "utf8");
+  for (const service of ["web", "worker"]) {
+    const block = envBlock(yaml, service);
+    assert.match(block, /^\s+ADMIN_PHONES: \$\{ADMIN_PHONES:-\}$/m, `${service}: ADMIN_PHONES compose'da uzatilmaydi`);
+  }
+});
+
+/**
  * C23 (retention.md §6): `FILE_TTL_HOURS` hech qachon o'qilmagan — o'chirib
  * tashlash o'rniga chalg'ituvchi konfiguratsiya bo'lib turardi.
  */
