@@ -1,7 +1,9 @@
 import { ApiError, handler, requireUser } from "@/lib/server/api";
-import { pdfAvailable, pdfFileName, toPdf } from "@/lib/server/pdf";
-import { ensureFreshFile } from "@/lib/server/slide-commit";
+import { ensureFreshFileShared } from "@/lib/server/fresh-file";
+import { contentDisposition, pdfResponse } from "@/lib/server/pdf-serve";
 import { getGenerationFile } from "@/lib/server/storage";
+
+export { contentDisposition };
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -11,18 +13,6 @@ export const maxDuration = 60;
 type Ctx = { params: Promise<{ id: string }> };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/** LibreOffice PDF ga o'gira oladigan turlar. */
-const CONVERTIBLE = new Set([
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-]);
-
-/** Fayl nomidagi sarlavha injeksiyasini oldini oladi. */
-export function contentDisposition(name: string, kind: "attachment" | "inline" = "attachment"): string {
-  const ascii = name.replace(/[^\x20-\x7e]/g, "_").replace(/["\\]/g, "_");
-  return `${kind}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(name)}`;
-}
 
 /**
  * Yaratilgan faylni beradi.
@@ -46,8 +36,11 @@ export const GET = handler("generations/file", async (req, ctx: Ctx) => {
    * uchun bu yerda versiya tekshiriladi va kerak bo'lsa avval qayta
    * yasaladi. Slayd bo'lmagan vositalarda ikkala versiya ham 0 —
    * qo'shimcha ish bo'lmaydi.
+   *
+   * C07 (CONC-08): bir hujjatga parallel yuklab olishlar BITTA renderni
+   * kutadi va render foydalanuvchi bo'yicha chegaralangan (429).
    */
-  await ensureFreshFile(id, user.id);
+  await ensureFreshFileShared(id, user.id);
 
   const file = await getGenerationFile(id, user.id);
   if (!file) throw new ApiError("Fayl topilmadi yoki muddati tugagan", 404);
@@ -57,6 +50,8 @@ export const GET = handler("generations/file", async (req, ctx: Ctx) => {
    *
    * O'girish talab bo'yicha: PDF bazada saqlanmaydi, aks holda har
    * hujjatning ikkinchi nusxasi `BYTEA` ni ikki barobar og'irlashtirardi.
+   * C07: disk keshi, foydalanuvchi limiti (429) va umumiy LibreOffice
+   * darvozasi (503) — `lib/server/pdf-serve.ts`.
    */
   const params = new URL(req.url).searchParams;
   const wantsPdf = params.get("format") === "pdf";
@@ -67,30 +62,7 @@ export const GET = handler("generations/file", async (req, ctx: Ctx) => {
    */
   const inline = params.get("inline") === "1";
   if (wantsPdf) {
-    if (!pdfAvailable()) throw new ApiError("PDF o'girish bu serverda yoqilmagan", 503);
-    /*
-     * Ruxsat etilganlar RO'YXATI, taqiqlanganlar emas.
-     *
-     * Ilgari shart `image/*` ni rad etardi, ya'ni qolgan HAMMA narsa
-     * LibreOffice ga tushardi. Bir nechta rasm endi ZIP bo'lib keladi
-     * va u arxivni o'girishga urinish 90 soniyalik timeout bilan
-     * tugardi. Faqat LibreOffice haqiqatan o'gira oladigan turlar
-     * o'tkaziladi.
-     */
-    if (!CONVERTIBLE.has(file.mime)) {
-      throw new ApiError("Bu fayl allaqachon tayyor formatda", 400);
-    }
-    const pdf = await toPdf(new Uint8Array(file.bytes), file.fileName);
-    if (!pdf) throw new ApiError("PDF tayyorlanmadi — qayta urinib ko'ring", 502);
-    return new Response(new Uint8Array(pdf), {
-      headers: {
-        "Content-Type": "application/pdf",
-        "Content-Length": String(pdf.byteLength),
-        "Content-Disposition": contentDisposition(pdfFileName(file.fileName), inline ? "inline" : "attachment"),
-        "Cache-Control": "private, no-store",
-        "X-Content-Type-Options": "nosniff",
-      },
-    });
+    return pdfResponse({ userId: user.id, generationId: id, file, inline });
   }
 
   /*
