@@ -192,6 +192,24 @@ test("docker-compose: web va worker'da init: true bor", () => {
 });
 
 /**
+ * W3-E (`lib/server/db.ts`, C35 kelishuvi): baza so'rov/ulanish
+ * shiftlari — kod standarti mos ravishda 30000/5000 ms. Bu ikkalasi
+ * `env.ts` emas, to'g'ridan-to'g'ri `db.ts` o'qishi rejalashtirilgan
+ * (W3-E o'z paketida ulaydi) — bu test faqat compose PLUMBING'ini
+ * qulflaydi (`LLM_JUDGE`/`OPENALEX_API_KEY` sinfidagi «.env'da bor,
+ * konteynerda yo'q» tuynugi takrorlanmasin), `db.ts`ning o'zini emas.
+ */
+test("docker-compose: DATABASE_STATEMENT_TIMEOUT_MS/DATABASE_CONNECT_TIMEOUT_MS web va worker'ga uzatiladi", () => {
+  const yaml = readFileSync(new URL("../docker-compose.yml", import.meta.url), "utf8");
+  for (const service of ["web", "worker"]) {
+    const block = envBlock(yaml, service);
+    for (const k of ["DATABASE_STATEMENT_TIMEOUT_MS", "DATABASE_CONNECT_TIMEOUT_MS"]) {
+      assert.match(block, new RegExp(`^\\s+${k}: \\$\\{${k}:-\\}$`, "m"), `${service}: ${k} compose'da uzatilmaydi`);
+    }
+  }
+});
+
+/**
  * C23 (retention.md §6): `FILE_TTL_HOURS` hech qachon o'qilmagan — o'chirib
  * tashlash o'rniga chalg'ituvchi konfiguratsiya bo'lib turardi.
  */
