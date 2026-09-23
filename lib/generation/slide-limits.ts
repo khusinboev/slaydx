@@ -1,3 +1,4 @@
+import { safeSlice } from "./safe-text";
 /**
  * Slayd matn chegaralari — YAGONA jadval.
  *
@@ -116,5 +117,5 @@ export const REBUILD_DEBOUNCE_MS = 3000;
  */
 export function clipTo(text: string, n: number): string {
   const t = String(text ?? "").replace(/\s+/g, " ").trim();
-  return t.length <= n ? t : `${t.slice(0, n - 1).trimEnd()}…`;
+  return t.length <= n ? t : `${safeSlice(t, n - 1).trimEnd()}…`;
 }

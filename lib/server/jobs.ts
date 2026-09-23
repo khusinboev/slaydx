@@ -3,6 +3,8 @@ import { randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
 import { query, queryOne, transaction } from "./db";
 import { chargeInTx } from "./credits";
+import { toJsonb } from "./jsonb";
+import { cleanText, safeSlice } from "../generation/safe-text";
 import { env } from "./env";
 import type { FormValues, Generation, JobStatus, ToolId } from "../types";
 import type { AcademicDoc, CostJson, Delivered } from "../generation/types";
@@ -158,13 +160,15 @@ export type EnqueueResult =
  */
 export async function enqueueGeneration(input: EnqueueInput): Promise<EnqueueResult> {
   const id = randomUUID();
+  // NUL/yolg'iz surrogat `topic` (TEXT) va `transactions.note` ni yiqitmasin (C03).
+  const topic = cleanText(input.topic);
   return transaction(async (client) => {
     const charged = await chargeInTx(
       client,
       input.userId,
       input.price,
       id,
-      `${input.toolId}: ${input.topic}`.slice(0, 200),
+      safeSlice(`${input.toolId}: ${topic}`, 200),
     );
     if (!charged.ok) {
       return { ok: false as const, reason: charged.reason, required: charged.required, available: charged.available };
@@ -181,10 +185,10 @@ export async function enqueueGeneration(input: EnqueueInput): Promise<EnqueueRes
         id,
         input.userId,
         input.toolId,
-        input.topic.slice(0, 300),
+        safeSlice(topic, 300),
         input.price,
         input.format,
-        JSON.stringify(input.values),
+        toJsonb(input.values),
         Math.round(input.budgetMs),
       ],
     );
@@ -270,7 +274,7 @@ export async function setProgress(
     `UPDATE generations
         SET progress = $3, step = $4, locked_at = now()
       WHERE id = $1 AND locked_by = $2 AND status = 'IN_PROGRESS'`,
-    [id, workerId, Math.max(0, Math.min(99, Math.round(progress))), step.slice(0, 200)],
+    [id, workerId, Math.max(0, Math.min(99, Math.round(progress))), cleanText(safeSlice(step, 200))],
   );
 }
 
@@ -299,9 +303,9 @@ export async function setLive(
     [
       id,
       workerId,
-      JSON.stringify(live ?? null),
+      toJsonb(live ?? null),
       Math.max(0, Math.min(99, Math.round(progress))),
-      step.slice(0, 200),
+      cleanText(safeSlice(step, 200)),
     ],
   );
   return row ? row.live_seq : null;
@@ -426,12 +430,12 @@ export async function completeJob(
     [
       id,
       workerId,
-      result.html,
-      result.doc ? JSON.stringify(result.doc) : null,
-      result.fileName,
-      result.preview ? JSON.stringify(result.preview) : null,
+      cleanText(result.html),
+      result.doc ? toJsonb(result.doc) : null,
+      cleanText(result.fileName),
+      result.preview ? toJsonb(result.preview) : null,
       formatOf(result.fileName),
-      result.delivered ? JSON.stringify(result.delivered) : null,
+      result.delivered ? toJsonb(result.delivered) : null,
     ],
   );
   return rows.length > 0;
@@ -453,7 +457,7 @@ export async function setCost(id: string, workerId: string, cost: CostJson): Pro
         SET cost_json = $3
       WHERE id = $1 AND locked_by = $2 AND status = 'IN_PROGRESS'
       RETURNING id`,
-    [id, workerId, JSON.stringify(cost)],
+    [id, workerId, toJsonb(cost)],
   );
   return rows.length > 0;
 }
@@ -467,7 +471,7 @@ export async function failJob(id: string, workerId: string, message: string): Pr
             live_json = NULL
       WHERE id = $1 AND locked_by = $2 AND status = 'IN_PROGRESS'
       RETURNING id`,
-    [id, workerId, message.slice(0, 500)],
+    [id, workerId, cleanText(safeSlice(message, 500))],
   );
   return rows.length > 0;
 }
@@ -573,9 +577,9 @@ export async function updateGenerationDoc(
     [
       id,
       userId,
-      JSON.stringify(patch.doc),
-      patch.html,
-      patch.preview ? JSON.stringify(patch.preview) : null,
+      toJsonb(patch.doc),
+      cleanText(patch.html),
+      patch.preview ? toJsonb(patch.preview) : null,
       expectedVersion,
     ],
   );
@@ -613,7 +617,7 @@ export async function restoreGenerationDoc(
         SET doc_json = doc_prev, html = $3, preview = $4, doc_version = doc_version + 1, edited_at = now()
       WHERE id = $1 AND user_id = $2 AND status = 'COMPLETED' AND doc_prev IS NOT NULL
       RETURNING doc_version`,
-    [id, userId, patch.html, patch.preview ? JSON.stringify(patch.preview) : null],
+    [id, userId, cleanText(patch.html), patch.preview ? toJsonb(patch.preview) : null],
   );
   return res.rows[0]?.doc_version ?? null;
 }

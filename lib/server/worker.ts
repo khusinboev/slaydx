@@ -34,6 +34,7 @@ import { purgeExpiredTickets } from "./telegram";
 import { queryOne } from "./db";
 import type { ToolId } from "../types";
 import { refundRatio } from "../generation/delivered";
+import { cleanText, safeSlice } from "../generation/safe-text";
 import type { Delivered } from "../generation/types";
 
 /**
@@ -296,14 +297,61 @@ async function runJob(job: ClaimedJob): Promise<void> {
   } catch (e) {
     const message = e instanceof Error ? e.message : "Yaratishda xatolik";
     console.error(`[worker] job ${job.id} failed:`, message);
-    // Pul faqat biz haqiqatan yakunlagan bo'lsak qaytadi — aks holda
-    // qulfni olgan boshqa worker bilan ikki marta qaytarilardi.
-    if (await failJob(job.id, WORKER_ID, message)) {
-      await refund(job.userId, job.id, `Xatolik: ${message}`.slice(0, 200));
-    }
+    await failAndCleanup(job, WORKER_ID, message);
   } finally {
     await live?.stop();
     stop();
+  }
+}
+
+/**
+ * Ishni FAILED qiladi, pulni qaytaradi va shu ishga allaqachon yozilgan
+ * fayl/aktivlarni O'CHIRADI (AUDIT prod-readiness C03, BEB-01).
+ *
+ * `putGenerationFile`/`putAssets` `completeJob`dan OLDIN ishlaydi: undan
+ * keyingi har qanday xato (JSONB rad etishi, ulanish uzilishi…) ilgari
+ * FAILED + to'liq qaytarish, lekin bazada TAYYOR fayl qoldirardi — ya'ni
+ * bepul hujjat. Endi FAILED ishda fayl ham, aktiv ham qolmaydi
+ * (`!won` tarmog'idagi tozalash naqshi). `getGenerationFile`dagi
+ * `status = 'COMPLETED'` sharti — tozalash ham yiqilgan holat uchun
+ * ikkinchi to'siq.
+ *
+ * Pul ham, tozalash ham faqat `failJob` BIZDA yutganda: qulf boshqa
+ * worker'da bo'lsa, uning fayli/natijasiga tegilmaydi va pul ikki marta
+ * qaytmaydi.
+ */
+export async function failAndCleanup(
+  job: Pick<ClaimedJob, "id" | "userId">,
+  workerId: string,
+  message: string,
+): Promise<void> {
+  if (!(await failJob(job.id, workerId, message))) return;
+  await refundThenCleanup(job, cleanText(safeSlice(`Xatolik: ${message}`, 200)));
+}
+
+/**
+ * FAILED ish uchun: pulni qaytaradi va fayl/aktivlarni o'chiradi.
+ *
+ * O'chirish `finally` da — `refund` yiqilsa ham (ulanish uzilishi, CHECK)
+ * FAILED ishning fayli bazada qolmasin; refund xatosi jurnalga yoziladi va
+ * yuqoriga qaytariladi (chaqiruvchi o'z xatti-harakatini saqlaydi).
+ * `failAndCleanup` va `housekeeping` (`reclaimStaleJobs` FAILED qilganlar) umumiy yo'li.
+ */
+async function refundThenCleanup(job: Pick<ClaimedJob, "id" | "userId">, note: string): Promise<void> {
+  try {
+    await refund(job.userId, job.id, note);
+  } catch (e) {
+    console.error(`[worker] job ${job.id}: pul qaytarilmadi:`, e instanceof Error ? e.message : e);
+    throw e;
+  } finally {
+    await Promise.all([
+      deleteGenerationFile(job.id, job.userId).catch((e) => {
+        console.warn(`[worker] job ${job.id}: FAILED ish fayli o'chirilmadi:`, e instanceof Error ? e.message : e);
+      }),
+      deleteAssets(job.id).catch((e) => {
+        console.warn(`[worker] job ${job.id}: FAILED ish aktivlari o'chirilmadi:`, e instanceof Error ? e.message : e);
+      }),
+    ]);
   }
 }
 
@@ -325,12 +373,13 @@ export async function housekeeping(): Promise<void> {
   try {
     const dead = await reclaimStaleJobs();
     for (const id of dead) {
-      // Osilib qolgan ish uchun ham pul qaytishi kerak.
+      // Osilib qolgan ish uchun ham pul qaytishi kerak — va o'lgan worker
+      // `completeJob`dan oldin saqlab ulgurgan fayl/aktivlar qolmasin (C03).
       const owner = await queryOne<{ user_id: string }>(
         "SELECT user_id FROM generations WHERE id = $1",
         [id],
       );
-      if (owner) await refund(String(owner.user_id), id, "Ish vaqti tugadi");
+      if (owner) await refundThenCleanup({ id, userId: String(owner.user_id) }, "Ish vaqti tugadi");
     }
     // Fayl/aktiv/generatsiya endi MUDDATSIZ (`011_no_expiry.sql`) —
     // bu yerda faqat haqiqatan vaqt bilan cheklangan narsalar tozalanadi.

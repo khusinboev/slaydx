@@ -65,6 +65,14 @@ export async function putGenerationFile(
  *
  * `user_id` shartsiz so'rov IDOR bo'lardi: id ni bilgan har kim
  * begona hujjatni yuklab olardi.
+ *
+ * `g.status = 'COMPLETED'` — faqat TAYYOR ishning fayli beriladi. Worker
+ * faylni `completeJob`dan OLDIN saqlaydi; keyingi qadam yiqilsa ish FAILED
+ * bo'lib pul to'liq qaytadi, fayl esa (tozalash ham yiqilgan bo'lsa)
+ * bazada qolishi mumkin — u yuklab olinmasligi SHART, aks holda «bepul
+ * hujjat + qaytarish» (AUDIT prod-readiness C03, BEB-01). Tahrirdan keyingi
+ * qayta yasash (`ensureFreshFile`/`rebuildFile`) faqat COMPLETED hujjatda
+ * ishlaydi, ya'ni bu shart unga ta'sir qilmaydi.
  */
 export async function getGenerationFile(
   generationId: string,
@@ -75,7 +83,8 @@ export async function getGenerationFile(
        FROM generation_files f
        JOIN generations g ON g.id = f.generation_id
       WHERE f.generation_id = $1
-        AND g.user_id = $2`,
+        AND g.user_id = $2
+        AND g.status = 'COMPLETED'`,
     [generationId, userId],
   );
   if (!row) return null;

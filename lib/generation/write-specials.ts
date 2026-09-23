@@ -10,6 +10,7 @@ import {
 import { cleanText, isGenericGlossaryTerm, remainingMs, section } from "./quality";
 import { orgIsKnown, stripUnknownYears } from "./resume/guard";
 import type { AcademicDoc, Block, DocMeta, DocTable } from "./types";
+import { safeSlice } from "./safe-text";
 
 function asText(s: unknown): string {
   if (Array.isArray(s)) return s.map((x) => asText(x)).filter(Boolean).join("\n");
@@ -22,7 +23,7 @@ function asText(s: unknown): string {
 
 function clip(s: unknown, n: number) {
   const t = asText(s);
-  return t.length <= n ? t : `${t.slice(0, n - 1).trimEnd()}…`;
+  return t.length <= n ? t : `${safeSlice(t, n - 1).trimEnd()}…`;
 }
 
 
