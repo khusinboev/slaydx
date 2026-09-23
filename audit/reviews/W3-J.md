@@ -103,3 +103,45 @@ The rewrite is legitimate. Both assertions encoded an accident, not a product ru
 - **Essay word sizing.** In word-sized contexts (academic, range 500–1 000), the price comes from `pages`, while the engine sizes from `wordTarget`, clamped only to the context range. For example, `{essayContext: academic, pages:"1", wordTarget:1000}` costs 2 000; the form would send `pages:"4"` for that input, which costs 3 500. This is the same class of bug. Price from `pagesForWords(wordTarget)` when `sizing === "words"`, or clamp `wordTarget` to `pages`.
 - **Glossary `teacherSize`.** Use `glossaryTermCount(values)` so the budget follows the type default and `termsMin`.
 - **Defence in depth** (triage fix notes): optionally have `preflightError` return 400 for off-tier `pages` / `termCount`, so no fallback is ever billed.
+
+---
+
+## Re-review: commit `1ef9480` (R1 and R2): **APPROVE**
+
+**R1 is fixed.**
+- `workPagesFor` now calls `normalizeWorkPages(kind, values.pages)`, with no `defaultPages` fill. This is exactly how `work/input.ts` reads the value.
+- Referat and mustaqil-ish requests with `pages` omitted or `null` now price at 5 000 (20-25), the tier the engine builds. Coursework is unchanged.
+- The snapshot rows moved into the differential `CASES` table, and `{pages:null}` was added.
+- The `generation.test.mts` "standart hajm narx, dvigatel va formada bir xil" test ("default volume: price, engine and form agree") now compares against the engine default. That is the correct rule.
+
+**R2 is fixed.**
+- `budgetFor` sizes the three work tools with `workBudgetMs(pagesMid(normalizeWorkPages(workKindOf(genre, workKind ?? kind), pages)))`. This uses the same kind resolution as the engine.
+- The new branch sits after the fixed, teacher, game, audio, infographic and translation branches and before the `extractMeta` fallback, so other tools are unaffected.
+- There is no import cycle: `work/registry` and `work/types` do not import `budget.ts` or `tools.ts`.
+
+**Re-run of the comparison script (base `8a41ac0` vs `1ef9480`):**
+
+| check | compared | changed |
+|---|---|---|
+| `priceFor`, canonical inputs | 365 | 2: `referat {}` and `mustaqil-ish {}`, 3 000 → 5 000 |
+| `budgetFor`, canonical inputs × caps {10 M, 600 k} | 730 | 4: the same two `{}` inputs × 2 caps, 357 000 → 447 000 |
+
+The script's sweep included `{}` for every tool. For work tools, `{}` is **not** a form input:
+- `ToolWorkspace` routes `custom === "work"` straight to `WorkComposer` (`ToolWorkspace.tsx:127`).
+- `WorkComposer` always sends `pages` (`:195`, `:288`).
+- Every price label passes an explicit tier (`:404`).
+- No other caller of `priceFor` passes work values without `pages`.
+
+So those two rows are the intended R1/R2 malformed-input fix. For the inputs the forms really send, the result is **363/363 prices and 726/726 budgets unchanged**.
+
+**Malformed-input table re-run:**
+- 0 MISM: every malformed work, essay and glossary input now prices at what the engine builds.
+- 0 UNDER: no work input's budget is below the budget for the tier the engine builds, including `{}`, `null`, `""`, `"zzz"` and the en-dash `"10–15"`.
+
+**Suites through `heavy2.sh`:**
+- `price-normalisation`, `pricing`, `work-params`, `essay-params`: **44/44**.
+- `teacher-params`, `teacher-input`, `work-registry`, `generation`, `slide-params`, `audio-params`: **117/117**.
+
+**Not re-run here:** `tsc --noEmit` and eslint. The commit message says both are clean.
+
+**Still open, non-blocking** (unchanged from above): the essay word-sizing gap, glossary `teacherSize`, and optional `preflightError` 400s for off-tier values.
