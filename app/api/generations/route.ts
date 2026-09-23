@@ -46,6 +46,9 @@ export const POST = handler("generations/create", async (req) => {
   await limit(`gen:burst:${user.id}`, 5, 60);
   await limit(`gen:hour:${user.id}`, 60, 3600);
 
+  // Takroriy yuborish (javob yo'qolgan) ikkinchi marta pul yechmasin (C34).
+  const idempotencyKey = readIdempotencyKey(req);
+
   /*
    * 1 200 000 bayt: tarjima chegarasi 200 000 BELGI, kirill/o'zbek matni
    * UTF-8 da belgisiga ~2 bayt, JSON qochirish (`\n`, `\"`) esa ustiga
@@ -117,6 +120,7 @@ export const POST = handler("generations/create", async (req) => {
   const topic = topicOf(values, tool);
 
   const result = await enqueueGeneration({
+    idempotencyKey,
     userId: user.id,
     toolId: tool.id,
     topic,
@@ -136,6 +140,9 @@ export const POST = handler("generations/create", async (req) => {
     admission: env.queue,
   });
 
+  if (!result.ok && result.reason === "idempotency_conflict") {
+    throw new ApiError("Bu Idempotency-Key boshqa so'rov uchun ishlatilgan — yangi kalit bilan yuboring", 422);
+  }
   if (!result.ok && result.reason === "admission") {
     const { code, retryAfterSec, error } = result.decision;
     return json(
@@ -154,5 +161,29 @@ export const POST = handler("generations/create", async (req) => {
   // Inline rejimda worker shu processda ishlaydi — birinchi so'rovda uyg'otamiz.
   if (env.worker.inline) startInlineWorker();
 
-  return json({ id: result.id, price, status: "QUEUED" }, { status: 202 });
+  /*
+   * Takror (shu kalit bilan avval yaratilgan ish) — ASL javob bilan AYNAN bir
+   * xil: o'sha id, o'sha (yechilgan) narx, o'sha status kodi. Klient javobni
+   * yo'qotib qayta yuborganini bilmasligi ham mumkin — farq faqat sarlavhada.
+   */
+  return json(
+    { id: result.id, price: result.price, status: "QUEUED" },
+    { status: 202, headers: result.replayed ? { "Idempotent-Replayed": "true" } : undefined },
+  );
 });
+
+const IDEMPOTENCY_KEY_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/**
+ * `Idempotency-Key` sarlavhasi (C34, klient shartnomasi: UUID v4). Yo'q —
+ * `undefined` (eski xatti-harakat). Bor, lekin UUID emas — 400: noto'g'ri
+ * kalitni jim e'tiborsiz qoldirish klientni «himoyalangan» deb aldardi.
+ * Katta-kichik harf farq qilmaydi (bazada kichik harfda).
+ */
+function readIdempotencyKey(req: Request): string | undefined {
+  const raw = req.headers.get("idempotency-key");
+  if (raw === null) return undefined;
+  const key = raw.trim().toLowerCase();
+  if (!IDEMPOTENCY_KEY_RE.test(key)) throw new ApiError("Idempotency-Key UUID bo'lishi kerak", 400);
+  return key;
+}
