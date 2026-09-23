@@ -1,6 +1,7 @@
 "use client";
 
 import { create } from "zustand";
+import { safeReturnTo } from "./safe-return";
 
 export type Overlay =
   | "login"
@@ -26,7 +27,10 @@ export const useUi = create<UiState>((set) => ({
   open: (overlay, extra) =>
     set({
       overlay,
-      returnTo: extra?.returnTo ?? null,
+      // C02/FE-01/SECA-02: `returnTo` bu yerga so'rov parametridan
+      // (masalan `?returnTo=javascript:...`) kelishi mumkin — faqat
+      // saytning o'zidagi "/uz" yo'li saqlanadi, aks holda `null`.
+      returnTo: safeReturnTo(extra?.returnTo ?? null),
       payPlan: extra?.payPlan ?? null,
     }),
   close: () => set({ overlay: null }),
