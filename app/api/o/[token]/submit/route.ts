@@ -1,6 +1,7 @@
 import { ApiError, checkOrigin, handler, json, limit, readJson } from "@/lib/server/api";
 import { ensureMigrated } from "@/lib/server/db";
 import { clientIp } from "@/lib/server/ratelimit";
+import { IP_LIMITS } from "@/lib/server/ip-limits";
 import { addResult, getGameSessionByToken, ipHash, PLAYER_NAME_MAX, TOKEN_RE } from "@/lib/server/game-sessions";
 import { scoreAnswers, scorePercent, type PlayerAnswers } from "@/lib/game/score";
 
@@ -9,8 +10,13 @@ export const dynamic = "force-dynamic";
 
 type Ctx = { params: Promise<{ token: string }> };
 
-/** IP boshiga daqiqada 30 yuborish — bitta sinf bemalol sig'adi, bot esa yo'q. */
-export const SUBMIT_PER_MINUTE = 30;
+/**
+ * Bitta o'yin + bitta IP dan daqiqada shuncha natija (C29): ikki sinf bitta
+ * maktab IP sida ham sig'adi. IP shipi (`IP_LIMITS.submitPerIp`) — barcha
+ * o'yinlar bo'yicha toshqin chegarasi. Ilgari barcha o'yinlar uchun 30/IP
+ * edi — 31-o'quvchi 429 olardi.
+ */
+export const SUBMIT_PER_MINUTE = IP_LIMITS.submitPerGamePerIp.count;
 
 /**
  * O'YIN NATIJASINI QABUL QILADI (loginsiz) — egasi qarori 8.
@@ -31,7 +37,8 @@ export const POST = handler("o/submit", async (req, ctx: Ctx) => {
   if (!TOKEN_RE.test(token)) throw new ApiError("Topilmadi", 404);
 
   const ip = clientIp(req);
-  await limit(`o:submit:${ip}`, SUBMIT_PER_MINUTE, 60);
+  await limit(`o:submit:${token}:${ip}`, SUBMIT_PER_MINUTE, IP_LIMITS.submitPerGamePerIp.windowSec);
+  await limit(`o:submit:${ip}`, IP_LIMITS.submitPerIp.count, IP_LIMITS.submitPerIp.windowSec);
 
   const body = await readJson<{ name?: unknown; answers?: unknown; seconds?: unknown }>(req, 200_000);
 
