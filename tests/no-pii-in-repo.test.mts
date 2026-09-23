@@ -97,19 +97,13 @@ test(
     const realAdminDigits = digitsOf(ADMIN_PHONES_FALLBACK_FOR_TESTS);
 
     /**
-     * Admin real raqamining HOZIRGI ma'lum joylari — faqat shu fayllarda
-     * ruxsat etiladi (boshqa hech qayerda emas). `tests/admin.test.mts` va
-     * `tests/admin-contact.test.mts` bu paketning egaligida EMAS (DEPS-08
-     * hali yopilmagan, ular boshqa fixer paketiga tegishli) — shu sabab
-     * bu yerda TUZATILMAYDI, faqat hujjatlashtirilgan ma'lum istisno.
-     * `lib/server/admin-phones.ts` esa BITTA qatordagi ataylab hardcode
-     * (o'zi shu faylda, o'zgartirilmaydi).
+     * Admin real raqamining YAGONA ruxsat etilgan joyi —
+     * `lib/server/admin-phones.ts`dagi bitta hardcode fallback qatori.
+     * `tests/admin.test.mts` va `tests/admin-contact.test.mts` endi bu
+     * raqamni `ADMIN_PHONES_FALLBACK_FOR_TESTS` orqali runtime'da oladi,
+     * literal yozmaydi — shu sabab ular bu ro'yxatda YO'Q (DEPS-08).
      */
-    const KNOWN_ADMIN_NUMBER_FILES = new Set([
-      "lib/server/admin-phones.ts",
-      "tests/admin.test.mts",
-      "tests/admin-contact.test.mts",
-    ]);
+    const KNOWN_ADMIN_NUMBER_FILES = new Set(["lib/server/admin-phones.ts"]);
 
     const hits = grepMatches(PHONE_PATTERN)
       .map((h) => ({ ...h, digits: digitsOf(h.match) }))

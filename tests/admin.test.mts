@@ -9,21 +9,33 @@ import assert from "node:assert/strict";
 const hasDb = Boolean(process.env.DATABASE_URL) && !process.env.DATABASE_URL!.includes("unused");
 process.env.SESSION_SECRET ??= "test-session-secret-at-least-32-characters";
 
-const { normalizePhone, isAdminPhone } = await import("../lib/server/admin-phones.ts");
+const { normalizePhone, isAdminPhone, ADMIN_PHONES_FALLBACK_FOR_TESTS } = await import(
+  "../lib/server/admin-phones.ts"
+);
+
+/**
+ * Admin raqami HECH QACHON literal yozilmaydi (C05/no-pii-in-repo) —
+ * `admin-phones.ts`dagi hardcode fallbackdan runtime'da olinadi, formatlar
+ * shu qiymatdan hisoblanadi.
+ */
+const ADMIN_DIGITS = ADMIN_PHONES_FALLBACK_FOR_TESTS.replace(/\D/g, "");
+const ADMIN_NATIONAL_9 = ADMIN_DIGITS.slice(3); // mamlakat kodisiz milliy shakl
+const ADMIN_SPACED = `+${ADMIN_DIGITS.slice(0, 3)} ${ADMIN_DIGITS.slice(3, 5)} ${ADMIN_DIGITS.slice(5, 8)} ${ADMIN_DIGITS.slice(8, 10)} ${ADMIN_DIGITS.slice(10, 12)}`;
+const ADMIN_DASHED = `+${ADMIN_DIGITS.slice(0, 3)}-${ADMIN_DIGITS.slice(3, 5)}-${ADMIN_DIGITS.slice(5, 8)}-${ADMIN_DIGITS.slice(8, 10)}-${ADMIN_DIGITS.slice(10, 12)}`;
 
 test("normalizePhone turli formatlarni bitta kalitga tushiradi", () => {
-  assert.equal(normalizePhone("+998976063896"), "998976063896");
-  assert.equal(normalizePhone("998976063896"), "998976063896");
-  assert.equal(normalizePhone("+998 97 606 38 96"), "998976063896");
-  assert.equal(normalizePhone("+998-97-606-38-96"), "998976063896");
+  assert.equal(normalizePhone(ADMIN_PHONES_FALLBACK_FOR_TESTS), ADMIN_DIGITS);
+  assert.equal(normalizePhone(ADMIN_DIGITS), ADMIN_DIGITS);
+  assert.equal(normalizePhone(ADMIN_SPACED), ADMIN_DIGITS);
+  assert.equal(normalizePhone(ADMIN_DASHED), ADMIN_DIGITS);
   // Milliy format — mamlakat kodisiz, 9 xonali.
-  assert.equal(normalizePhone("976063896"), "998976063896");
+  assert.equal(normalizePhone(ADMIN_NATIONAL_9), ADMIN_DIGITS);
 });
 
 test("isAdminPhone faqat ro'yxatdagi raqamni tan oladi", () => {
-  assert.equal(isAdminPhone("+998976063896"), true);
-  assert.equal(isAdminPhone("998976063896"), true, "formatidan qat'i nazar bir xil odam");
-  assert.equal(isAdminPhone("+998901234567"), false);
+  assert.equal(isAdminPhone(ADMIN_PHONES_FALLBACK_FOR_TESTS), true);
+  assert.equal(isAdminPhone(ADMIN_DIGITS), true, "formatidan qat'i nazar bir xil odam");
+  assert.equal(isAdminPhone("+998901234567"), false); // sintetik, admin emas
   assert.equal(isAdminPhone(null), false);
   assert.equal(isAdminPhone(""), false);
 });
