@@ -6,7 +6,7 @@ Status legend: ✅ fixed & merged · 🔄 in review · 🛠 in progress · ⏳ p
 
 | Cluster | Findings | Package | Status | Commit(s) | Review |
 |---|---|---|---|---|---|
-| C01 admin takeover | SECA-01, DEPS-08, ABUSE-06, TEST-12 | W1-A | 🛠 review R1 being applied | `44aab5b` | `audit/reviews/W1-A.md` (changes requested) |
+| C01 admin takeover | SECA-01, DEPS-08, ABUSE-06, TEST-12 (partial) | W1-A | ✅ merged | `44aab5b`, `94b9689` → merge `c0a3dec` | `audit/reviews/W1-A.md` (approved on re-review) |
 | C02 returnTo XSS | FE-01, SECA-02 | W1-B | ✅ merged | `73433e1`, `62b086f` → merge `8da3314` | `audit/reviews/W1-B.md` (approved on re-review) |
 | C03 JSONB surrogate/NUL | BEB-01, BEA-02 | W1-C | ✅ merged | `1e3e864`, `6bc1353` → merge `5b15ad3` | `audit/reviews/W1-C.md` (approved) |
 | C04+C06 parsing freeze | SECB-01, SECB-02, SECB-04, SECB-05, CONC-09, FILE-02, FILE-04, TEST-11 | W1-D | 🛠 in progress | — | — |
