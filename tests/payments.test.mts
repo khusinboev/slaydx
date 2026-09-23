@@ -198,7 +198,7 @@ test("Payme: faqat to'g'ri Basic kalit o'tadi", async () => {
   const keys = [PAYME_KEY, PAYME_TEST_KEY];
 
   assert.equal(paymeAuthorized(basic("Paycom", PAYME_KEY), keys), true);
-  // Test kaliti ham qabul qilinadi — sandbox shu bilan ishlaydi.
+  // Ro'yxatdagi har kalit o'tadi (sandbox rejimidagi ro'yxat — `acceptedPaymeKeys`, `payme-sandbox.test.mts`).
   assert.equal(paymeAuthorized(basic("Paycom", PAYME_TEST_KEY), keys), true, "kalitda ':' bo'lsa ham");
 
   // Login `Paycom` bo'lishi SHART.

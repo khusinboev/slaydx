@@ -1,5 +1,6 @@
 import "server-only";
 import { BRAND_NAME } from "../brand";
+import { acceptedPaymeKeys } from "./payme-keys";
 
 /**
  * Serverdagi barcha sozlamalar shu yerdan o'qiladi.
@@ -272,7 +273,9 @@ export function ttsConfigured(): boolean {
 export function paymentsConfigured(): { click: boolean; payme: boolean } {
   return {
     click: Boolean(env.click.serviceId && env.click.secretKey && env.click.merchantId),
-    payme: Boolean(env.payme.merchantId && (env.payme.key || env.payme.testKey)),
+    // Webhook bilan BIR XIL qoida (review R1): faqat test kaliti + sandbox o'chiq —
+    // checkout taklif qilinmaydi, aks holda har to'lov Payme'da AUTH bilan yiqilardi.
+    payme: Boolean(env.payme.merchantId && acceptedPaymeKeys(env.payme).length),
   };
 }
 

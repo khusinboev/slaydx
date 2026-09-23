@@ -66,10 +66,13 @@ export function clickSignatureValid(p: ClickSignedParams, secretKey: string): bo
   return safeEqual(expected, String(p.sign_string ?? "").toLowerCase());
 }
 
+/** Qabul qilinadigan kalitlar — `payme-keys.ts` (env.ts bilan umumiy). */
+export { acceptedPaymeKeys } from "./payme-keys";
+
 /**
  * Payme: `Authorization: Basic base64("Paycom:KEY")`.
  *
- * Test va prod kalitlari alohida — ikkalasi ham qabul qilinadi.
+ * Qabul qilinadigan kalitlar ro'yxati `acceptedPaymeKeys` dan keladi.
  * Taqqoslash doimiy vaqtda (SHA-256 dan keyin), shunda kalitni
  * bayt-bayt topib bo'lmaydi.
  */

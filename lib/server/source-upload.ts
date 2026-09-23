@@ -4,6 +4,7 @@ import { query, queryOne } from "./db";
 import { ApiError } from "./api";
 import { parseFailure, readUploadForm } from "./upload-body";
 import { parseInWorker } from "./parse-pool";
+import { assertUploadQuota, withUploadQuota } from "./upload-quota";
 import { extOf } from "../extract-text";
 import { PdfPageLimitError } from "../generation/translate/pdf";
 import { TRANSLATION_MAX_CHARS, TRANSLATION_MIN_CHARS } from "../tools";
@@ -165,12 +166,16 @@ export async function putSource(
 ): Promise<SourceUploadResult> {
   const assetId = assetIdFor(bytes);
   const text = row.text.slice(0, SOURCE_TEXT_LIMIT);
-  await query(
-    `INSERT INTO source_uploads (user_id, asset_id, name, kind, mime, size_bytes, bytes, chars, text)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-     ON CONFLICT (user_id, asset_id) DO UPDATE
-       SET chars = EXCLUDED.chars, text = EXCLUDED.text, name = EXCLUDED.name`,
-    [userId, assetId, row.name, row.kind, row.mime, bytes.byteLength, bytes, row.chars, text],
+  // Ajratilgan matn ham saqlanadi — kvotaga bayt bilan birga kiradi (C13).
+  const size = bytes.byteLength + Buffer.byteLength(text);
+  await withUploadQuota(userId, "source", { assetIds: [assetId], bytes: size }, (c) =>
+    c.query(
+      `INSERT INTO source_uploads (user_id, asset_id, name, kind, mime, size_bytes, bytes, chars, text)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       ON CONFLICT (user_id, asset_id) DO UPDATE
+         SET chars = EXCLUDED.chars, text = EXCLUDED.text, name = EXCLUDED.name`,
+      [userId, assetId, row.name, row.kind, row.mime, bytes.byteLength, bytes, row.chars, text],
+    ),
   );
   return {
     assetId,
@@ -313,6 +318,10 @@ export async function uploadSource(
   // nomni avval kesib qo'ysak, kengaytma yo'qolib, haqiqiy DOCX 415 olardi.
   const kind = sniffSourceKind(clean, bytes);
   if (!kind) throw new ApiError("Format qo'llanmaydi: DOCX, PPTX, XLSX, PDF, TXT, MD, CSV", 415);
+
+  // Kvota sanashdan (PDF da soniyalar) OLDIN — sig'maydigan fayl CPU yemasin (C13).
+  // Yakuniy tekshiruv `putSource` da; sinov seami (`deps.put`) o'z saqlashini beradi.
+  if (!deps.put) await assertUploadQuota(userId, "source", { assetIds: [assetIdFor(bytes)], bytes: bytes.byteLength });
 
   const counted = await (deps.count ?? DEFAULT_COUNTER)(kind, bytes);
   const chars = Math.max(0, Math.floor(counted.chars));
