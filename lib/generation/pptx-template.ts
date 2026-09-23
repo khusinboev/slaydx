@@ -64,9 +64,76 @@ function attr(tag: string, name: string): string | null {
   return m ? m[1] : null;
 }
 
+/*
+ * SECB-01: namuna XML i ham foydalanuvchi fayli. Ilgari `/<p:sp>([\s\S]*?)<\/p:sp>/`,
+ * `/<a:xfrm[^>]*>…/`, `/<Relationship\b[^>]*Type="…"[^>]*\/>/` kabi regexlar
+ * yopilmagan tegda har boshlanishdan oxirigacha qayta skanerlardi (O(n²)).
+ * Quyidagi skanerlar oddiy OOXML da aynan o'sha natijani beradi, lekin
+ * muvaffaqiyatsiz urinishdan keyin qidiruvni o'sha joydan davom ettiradi.
+ */
+
+function isWordCode(c: number): boolean {
+  return (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c === 95;
+}
+
+/** `xml.match(/<name\b[^>]*>/)?.[0]` ning chiziqli teng varianti. */
+function firstTag(xml: string, name: string): string | null {
+  const open = `<${name}`;
+  for (let o = xml.indexOf(open); o >= 0; o = xml.indexOf(open, o + 1)) {
+    const after = o + open.length;
+    if (after < xml.length && isWordCode(xml.charCodeAt(after))) continue;
+    const gt = xml.indexOf(">", after);
+    // Undan keyingi hech bir ochilishda ham `>` bo'lmaydi.
+    return gt < 0 ? null : xml.slice(o, gt + 1);
+  }
+  return null;
+}
+
+/**
+ * `.rels` dagi `<Relationship … Type="…/{suffix}" … />` teglari (hujjat tartibida).
+ * Teg — `<Relationship` dan birinchi `>` gacha (`[^>]*`), `/>` bilan tugashi shart.
+ */
+function relTags(rels: string, suffix: string): string[] {
+  const out: string[] = [];
+  const open = "<Relationship";
+  const want = `/${suffix}`;
+  for (let o = rels.indexOf(open); o >= 0; ) {
+    const after = o + open.length;
+    if (after < rels.length && isWordCode(rels.charCodeAt(after))) {
+      o = rels.indexOf(open, o + 1);
+      continue;
+    }
+    const gt = rels.indexOf(">", after);
+    if (gt < 0) break;
+    const tag = rels.slice(o, gt + 1);
+    if (tag.endsWith("/>")) {
+      for (let p = tag.indexOf('Type="', open.length); p >= 0; p = tag.indexOf('Type="', p + 1)) {
+        const q = tag.indexOf('"', p + 6);
+        if (q < 0) break;
+        if (q < tag.length - 2 && tag.slice(p + 6, q).endsWith(want)) {
+          out.push(tag);
+          break;
+        }
+      }
+    }
+    o = rels.indexOf(open, gt + 1);
+  }
+  return out;
+}
+
+const XFRM_REST = /\s*<a:off\s+x="(-?\d+)"\s+y="(-?\d+)"\s*\/>\s*<a:ext\s+cx="(\d+)"\s+cy="(\d+)"\s*\/>/y;
+
 /** `<a:xfrm><a:off x y/><a:ext cx cy/></a:xfrm>` → dyuym qutisi. */
 function xfrmBox(xml: string): Box | null {
-  const m = xml.match(/<a:xfrm[^>]*>\s*<a:off\s+x="(-?\d+)"\s+y="(-?\d+)"\s*\/>\s*<a:ext\s+cx="(\d+)"\s+cy="(\d+)"\s*\/>/);
+  let m: RegExpExecArray | null = null;
+  for (let o = xml.indexOf("<a:xfrm"); o >= 0 && !m; ) {
+    const gt = xml.indexOf(">", o + 7);
+    if (gt < 0) return null;
+    XFRM_REST.lastIndex = gt + 1;
+    m = XFRM_REST.exec(xml);
+    // `(o, gt)` oralig'idagi ochilishlar ham aynan shu `>` ga tayanadi.
+    o = xml.indexOf("<a:xfrm", gt + 1);
+  }
   if (!m) return null;
   const [x, y, w, h] = m.slice(1).map((v) => Number(v) / EMU);
   if (![x, y, w, h].every(Number.isFinite) || w <= 0 || h <= 0) return null;
@@ -86,21 +153,24 @@ function phType(raw: string | null): PhType {
 /** Bitta layout/master XML dan placeholder'lar (faqat `<p:sp>` ichidagilar). */
 function placeholdersOf(xml: string): Placeholder[] {
   const out: Placeholder[] = [];
-  const spRe = /<p:sp>([\s\S]*?)<\/p:sp>/g;
-  let m: RegExpExecArray | null;
-  while ((m = spRe.exec(xml))) {
-    const sp = m[1];
-    const ph = sp.match(/<p:ph\b[^>]*\/?>/);
+  // `/<p:sp>([\s\S]*?)<\/p:sp>/g` — yopuvchisiz ochilishdan keyin moslik bo'lmaydi.
+  for (let o = xml.indexOf("<p:sp>"); o >= 0; ) {
+    const close = xml.indexOf("</p:sp>", o + 6);
+    if (close < 0) break;
+    const sp = xml.slice(o + 6, close);
+    o = xml.indexOf("<p:sp>", close + 7);
+    // `/<p:ph\b[^>]*\/?>/` — `[^>]*` `/` ni ham yeydi, ya'ni birinchi `>` gacha.
+    const ph = firstTag(sp, "p:ph");
     if (!ph) continue;
-    const idxRaw = attr(ph[0], "idx");
-    const name = attr(sp.match(/<p:cNvPr\b[^>]*>/)?.[0] ?? "", "name") ?? "";
-    out.push({ type: phType(attr(ph[0], "type")), idx: idxRaw === null ? null : Number(idxRaw), name, box: xfrmBox(sp) });
+    const idxRaw = attr(ph, "idx");
+    const name = attr(firstTag(sp, "p:cNvPr") ?? "", "name") ?? "";
+    out.push({ type: phType(attr(ph, "type")), idx: idxRaw === null ? null : Number(idxRaw), name, box: xfrmBox(sp) });
   }
   return out;
 }
 
 function layoutKind(xml: string, phs: Placeholder[]): LayoutKind {
-  const t = attr(xml.match(/<p:sldLayout\b[^>]*>/)?.[0] ?? "", "type");
+  const t = attr(firstTag(xml, "p:sldLayout") ?? "", "type");
   const map: Record<string, LayoutKind> = {
     title: "cover",
     secHead: "section",
@@ -129,10 +199,9 @@ function layoutKind(xml: string, phs: Placeholder[]): LayoutKind {
 
 /** `.rels` dan berilgan tur bo'yicha nishon yo'li (zip ichidagi normal yo'l). */
 function relTarget(rels: string, typeSuffix: string, fromDir: string): string | null {
-  const re = new RegExp(`<Relationship\\b[^>]*Type="[^"]*/${typeSuffix}"[^>]*/>`);
-  const m = rels.match(re);
-  if (!m) return null;
-  const target = attr(m[0], "Target");
+  const tag = relTags(rels, typeSuffix)[0];
+  if (!tag) return null;
+  const target = attr(tag, "Target");
   if (!target) return null;
   return normalizePath(fromDir, target);
 }
@@ -161,18 +230,45 @@ function dirOf(path: string): string {
 /** Tema ranglari: `srgbClr val` yoki `sysClr lastClr`. */
 function themeColors(xml: string): Record<string, string> {
   const out: Record<string, string> = {};
-  const scheme = xml.match(/<a:clrScheme\b[^>]*>([\s\S]*?)<\/a:clrScheme>/)?.[1] ?? "";
-  const re = /<a:(dk1|lt1|dk2|lt2|accent[1-6]|hlink|folHlink)>([\s\S]*?)<\/a:\1>/g;
+  // `/<a:clrScheme\b[^>]*>([\s\S]*?)<\/a:clrScheme>/` — birinchi ochilish yetarli:
+  // undan keyingilarning yopuvchisi ham faqat shu qidiruv sohasida bo'lardi.
+  const openTag = firstTag(xml, "a:clrScheme");
+  let scheme = "";
+  if (openTag) {
+    const start = xml.indexOf(openTag) + openTag.length;
+    const close = xml.indexOf("</a:clrScheme>", start);
+    if (close >= 0) scheme = xml.slice(start, close);
+  }
+  // `/<a:(dk1|…)>([\s\S]*?)<\/a:\1>/g` — har nom uchun yopuvchi topilmasa, keyingi
+  // shu nomli ochilishlar ham yopilmaydi (eslab qolinadi).
+  const re = /<a:(dk1|lt1|dk2|lt2|accent[1-6]|hlink|folHlink)>/g;
+  const noClose = new Set<string>();
   let m: RegExpExecArray | null;
   while ((m = re.exec(scheme))) {
-    const hex = m[2].match(/<a:srgbClr\s+val="([0-9A-Fa-f]{6})"/)?.[1] ?? m[2].match(/lastClr="([0-9A-Fa-f]{6})"/)?.[1];
-    if (hex) out[m[1]] = `#${hex.toUpperCase()}`;
+    const name = m[1];
+    if (noClose.has(name)) continue;
+    const close = scheme.indexOf(`</a:${name}>`, re.lastIndex);
+    if (close < 0) {
+      noClose.add(name);
+      continue;
+    }
+    const inner = scheme.slice(re.lastIndex, close);
+    re.lastIndex = close + name.length + 5;
+    const hex = inner.match(/<a:srgbClr\s+val="([0-9A-Fa-f]{6})"/)?.[1] ?? inner.match(/lastClr="([0-9A-Fa-f]{6})"/)?.[1];
+    if (hex) out[name] = `#${hex.toUpperCase()}`;
   }
   return out;
 }
 
 function themeFonts(xml: string): { major: string; minor: string } {
-  const pick = (tag: string) => xml.match(new RegExp(`<a:${tag}>[\\s\\S]*?<a:latin\\s+typeface="([^"]*)"`))?.[1] ?? "";
+  // `<a:tag>[\s\S]*?<a:latin…>` — birinchi ochilishdan keyingi birinchi `<a:latin>`.
+  const pick = (tag: string) => {
+    const at = xml.indexOf(`<a:${tag}>`);
+    if (at < 0) return "";
+    const re = /<a:latin\s+typeface="([^"]*)"/g;
+    re.lastIndex = at + tag.length + 4;
+    return re.exec(xml)?.[1] ?? "";
+  };
   return { major: pick("majorFont"), minor: pick("minorFont") };
 }
 
@@ -220,10 +316,8 @@ export async function parsePptxTemplate(bytes: Uint8Array | ArrayBuffer): Promis
 
   // Layoutlar — master rels tartibida (PowerPoint ko'rsatadigan tartib).
   const layoutPaths: string[] = [];
-  const lre = /<Relationship\b[^>]*Type="[^"]*\/slideLayout"[^>]*\/>/g;
-  let lm: RegExpExecArray | null;
-  while ((lm = lre.exec(masterRels))) {
-    const t = attr(lm[0], "Target");
+  for (const tag of relTags(masterRels, "slideLayout")) {
+    const t = attr(tag, "Target");
     if (t) layoutPaths.push(normalizePath(dirOf(masterPath), t));
   }
   if (!layoutPaths.length) {
@@ -242,7 +336,7 @@ export async function parsePptxTemplate(bytes: Uint8Array | ArrayBuffer): Promis
       const inherit = masterPhs.find((m) => m.idx !== null && m.idx === p.idx) ?? masterPhs.find((m) => m.type === p.type || (p.type === "ctrTitle" && m.type === "title"));
       return { ...p, box: inherit?.box ?? null };
     });
-    const name = attr(xml.match(/<p:cSld\b[^>]*>/)?.[0] ?? "", "name") ?? path;
+    const name = attr(firstTag(xml, "p:cSld") ?? "", "name") ?? path;
     layouts.push({ path, name, kind: layoutKind(xml, phs), placeholders: phs });
   }
 

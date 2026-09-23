@@ -34,39 +34,143 @@ function decode(s: string) {
   });
 }
 
+/*
+ * Chiziqli skanerlar (SECB-01).
+ *
+ * Ilgari bu yerda `/[ \t]+\n/`, `/<[^>]+>/`, `/<w:br\b[^/]*\/>/`,
+ * `/<w:t\b[^>]*>([^<]*)<\/w:t>/` turardi. Ularning har biri «yopilmagan»
+ * uzun qatorda HAR boshlanish nuqtasidan oxirigacha qayta skanerlardi —
+ * O(n²): 40 000 bo'shliq ≈ 1 s, 1 MB ≈ 12 daqiqa, butun web jarayoni shu
+ * vaqt javob bermasdi. Quyidagi funksiyalar AYNAN o'sha regexlar natijasini
+ * beradi (bayt-ba-bayt), lekin muvaffaqiyatsiz urinishdan keyin qidiruv
+ * o'sha urinish ko'rgan joydan davom etadi — oradagi boshlanishlar ham
+ * aynan shu sabab bilan muvaffaqiyatsiz bo'ladi.
+ */
+
+function isWordCode(c: number): boolean {
+  return (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c === 95;
+}
+
+/** Regexdagi `\b`: nomdan keyin so'z belgisi kelmasa (yoki satr tugasa). */
+function boundaryAt(s: string, i: number): boolean {
+  return i >= s.length || !isWordCode(s.charCodeAt(i));
+}
+
+/** `s.replace(/<name\b[^/]*\/>/g, rep)` ning chiziqli teng varianti. */
+function replaceEmptyTag(s: string, name: string, rep: string): string {
+  const open = `<${name}`;
+  let out = "";
+  let from = 0;
+  let at = 0;
+  for (;;) {
+    const o = s.indexOf(open, at);
+    if (o < 0) break;
+    if (!boundaryAt(s, o + open.length)) {
+      at = o + 1;
+      continue;
+    }
+    // `[^/]*` birinchi `/` da to'xtaydi; moslik faqat undan keyin `>` bo'lsa.
+    const slash = s.indexOf("/", o + open.length);
+    if (slash < 0) break;
+    if (s.charCodeAt(slash + 1) !== 62) {
+      at = slash + 1;
+      continue;
+    }
+    out += s.slice(from, o) + rep;
+    from = at = slash + 2;
+  }
+  return from ? out + s.slice(from) : s;
+}
+
+/**
+ * `s.replace(/<name\b[^>]*>([^<]*)<\/name>/g, (_, t) => onMatch(t))` ning
+ * chiziqli teng varianti; `found` — kamida bitta moslik bo'ldimi.
+ */
+function mapElemText(s: string, name: string, onMatch: (text: string) => string): { out: string; found: boolean } {
+  const open = `<${name}`;
+  const close = `</${name}>`;
+  let out = "";
+  let from = 0;
+  let at = 0;
+  let found = false;
+  for (;;) {
+    const o = s.indexOf(open, at);
+    if (o < 0) break;
+    if (!boundaryAt(s, o + open.length)) {
+      at = o + 1;
+      continue;
+    }
+    const gt = s.indexOf(">", o + open.length);
+    if (gt < 0) break;
+    const lt = s.indexOf("<", gt + 1);
+    if (lt < 0) break;
+    if (!s.startsWith(close, lt)) {
+      at = lt;
+      continue;
+    }
+    found = true;
+    out += s.slice(from, o) + onMatch(s.slice(gt + 1, lt));
+    from = at = lt + close.length;
+  }
+  return { out: from ? out + s.slice(from) : s, found };
+}
+
+/** `s.replace(/<[^>]+>/g, "")` ning chiziqli teng varianti. */
+function stripTags(s: string): string {
+  let out = "";
+  let from = 0;
+  let at = 0;
+  for (;;) {
+    const lt = s.indexOf("<", at);
+    if (lt < 0) break;
+    const gt = s.indexOf(">", lt + 1);
+    // Undan keyin `>` yo'q — keyingi hech bir `<` ham yopilmaydi.
+    if (gt < 0) break;
+    if (gt === lt + 1) {
+      at = lt + 1;
+      continue;
+    }
+    out += s.slice(from, lt);
+    from = at = gt + 1;
+  }
+  return from ? out + s.slice(from) : s;
+}
+
+/** Qator oxiridagi `[ \t]+` (boshqa bo'shliq turlari emas). */
+function trimBlankEnd(line: string): string {
+  let end = line.length;
+  while (end > 0) {
+    const c = line.charCodeAt(end - 1);
+    if (c !== 32 && c !== 9) break;
+    end--;
+  }
+  return end === line.length ? line : line.slice(0, end);
+}
+
 function tidy(s: string) {
-  return s
-    .replace(/\r/g, "")
-    .replace(/[ \t]+\n/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
+  // `/[ \t]+\n/g → "\n"` = oxirgisidan boshqa har qator oxiridagi bo'shliqni kesish.
+  const lines = s.replace(/\r/g, "").split("\n");
+  for (let i = 0; i < lines.length - 1; i++) lines[i] = trimBlankEnd(lines[i]);
+  return lines.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
 function fromDocxXml(xml: string) {
-  const withBreaks = xml.replace(/<\/w:p>/g, "\n").replace(/<w:br\b[^/]*\/>/g, "\n").replace(/<w:tab\b[^/]*\/>/g, "\t");
-  const texts = [...withBreaks.matchAll(/<w:t\b[^>]*>([^<]*)<\/w:t>/g)].map((m) => decode(m[1]));
-  if (texts.length) {
-    return tidy(
-      withBreaks
-        .replace(/<w:t\b[^>]*>([^<]*)<\/w:t>/g, (_, t) => decode(t))
-        .replace(/<[^>]+>/g, ""),
-    );
-  }
-  return "";
+  const withBreaks = replaceEmptyTag(replaceEmptyTag(xml.replace(/<\/w:p>/g, "\n"), "w:br", "\n"), "w:tab", "\t");
+  const { out, found } = mapElemText(withBreaks, "w:t", (t) => decode(t));
+  return found ? tidy(stripTags(out)) : "";
 }
 
 function fromPptxXml(xml: string) {
-  return tidy(
-    xml
-      .replace(/<\/a:p>/g, "\n")
-      .replace(/<a:br\b[^/]*\/>/g, "\n")
-      .replace(/<a:t\b[^>]*>([^<]*)<\/a:t>/g, (_, t) => decode(t))
-      .replace(/<[^>]+>/g, ""),
-  );
+  const withBreaks = replaceEmptyTag(xml.replace(/<\/a:p>/g, "\n"), "a:br", "\n");
+  return tidy(stripTags(mapElemText(withBreaks, "a:t", (t) => decode(t)).out));
 }
 
 function fromXlsxShared(xml: string) {
-  const parts = [...xml.matchAll(/<t\b[^>]*>([^<]*)<\/t>/g)].map((m) => decode(m[1]).trim());
+  const parts: string[] = [];
+  mapElemText(xml, "t", (t) => {
+    parts.push(decode(t).trim());
+    return "";
+  });
   return tidy(parts.filter(Boolean).join("\n"));
 }
 
