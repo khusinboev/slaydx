@@ -116,3 +116,6 @@ export async function completeWithChain(
   }
   return null;
 }
+export const CHAIN_MIN_ATTEMPT_MS = 5_000;
+export const CHAIN_SAFETY_MS = 1_000;
+export class DeadlineError extends Error {}
