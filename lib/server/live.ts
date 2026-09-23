@@ -110,11 +110,29 @@ export class LiveReporter {
   private scheduleAssetSwap(ev: SlideProgressEvent): void {
     if (ev.type === "image" && ev.url.startsWith("data:")) {
       const index = ev.index;
-      this.assetQueue = this.assetQueue.then(() => this.swapImage(index, ev.url));
+      this.assetQueue = this.assetQueue
+        .then(() => this.swapImage(index, ev.url))
+        .catch((e) => this.warn("rasm aktivi saqlanmadi", e));
     } else if (ev.type === "plan" && ev.logo?.startsWith("data:")) {
       const logo = ev.logo;
-      this.assetQueue = this.assetQueue.then(() => this.swapLogo(logo));
+      this.assetQueue = this.assetQueue
+        .then(() => this.swapLogo(logo))
+        .catch((e) => this.warn("logotip aktivi saqlanmadi", e));
     }
+  }
+
+  /**
+   * Zanjir xatosi (AUDIT prod-readiness C27: BEB-03, CONC-04, BEA-18).
+   *
+   * `assetQueue`/`writeChain` — hech kim darhol kutmaydigan promise'lar:
+   * vaqtincha baza xatosi ularni rad etsa, bu «ushlanmagan rad etish»
+   * bo'lib alohida worker processini YIQITARDI (va shu paytda bajarilayotgan
+   * boshqa ishlarni ham). Jonli deka — faqat ko'rinish; uning bitta yozuvi
+   * yo'qolishi ishni to'xtatishga arzimaydi. Jurnalga yoziladi, zanjir
+   * sog'lom (yechilgan) holatga qaytadi.
+   */
+  private warn(what: string, e: unknown): void {
+    console.warn(`[live] ${this.jobId}: ${what}:`, e instanceof Error ? e.message : e);
   }
 
   private async swapImage(index: number, dataUrl: string): Promise<void> {
@@ -169,7 +187,13 @@ export class LiveReporter {
   }
 
   private runFlush(): void {
-    this.writeChain = this.writeChain.then(() => this.doFlush());
+    this.writeChain = this.writeChain
+      .then(() => this.doFlush())
+      .catch((e) => {
+        // Yozilmagan holat keyingi flush (yoki `stop()`) da qayta uriniladi.
+        this.dirty = true;
+        this.warn("jonli deka yozilmadi", e);
+      });
   }
 
   private async doFlush(): Promise<void> {

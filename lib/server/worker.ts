@@ -1,5 +1,6 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
+import { writeFile } from "node:fs/promises";
 import { buildArtifact } from "../generation";
 import { TOOL_BY_ID } from "../tools";
 import { GENERATION_STEPS } from "../generation-steps";
@@ -31,6 +32,9 @@ import { purgeExpiredSessions } from "./session";
 import { purgeExpiredSessions as purgeExpiredGameSessions } from "./game-sessions";
 import { purgeRateLimits } from "./ratelimit";
 import { purgeExpiredTickets } from "./telegram";
+import { expireQueuedJobs } from "./queue-ttl";
+import { purgeBonusFiles } from "./retention";
+import { refundUnrefundedFailed } from "./refund-reconcile";
 import { queryOne } from "./db";
 import type { ToolId } from "../types";
 import { refundRatio } from "../generation/delivered";
@@ -49,6 +53,56 @@ const WORKER_ID = `${process.pid}-${randomUUID().slice(0, 8)}`;
 const IDLE_POLL_MS = 1500;
 const BUSY_POLL_MS = 150;
 const HOUSEKEEPING_MS = 60_000;
+
+/**
+ * «Tiriklik» fayli (W2 shartnomasi, `audit/designs/w2-contracts.md`).
+ *
+ * Sikl sog'lom ekan (`tick` xatosiz o'tdi) shu faylning mtime'i kamida
+ * har 30 s da yangilanadi; Docker HEALTHCHECK (W2-D1)
+ * `find /tmp/slaydx-worker-alive -mmin -2 | grep -q .` bilan tekshiradi.
+ * Sikl osilib qolsa (masalan cheksiz kutilayotgan so'rov) yoki baza
+ * yiqilgan bo'lsa fayl eskiradi va konteyner «unhealthy» bo'ladi.
+ */
+export const WORKER_ALIVE_FILE = "/tmp/slaydx-worker-alive";
+
+/**
+ * Saqlash skaneri (`purgeBonusFiles`) har daqiqada EMAS (W2-D2 review R3).
+ *
+ * Pullik ishlar hech qachon `files_purged_at` olmaydi, ya'ni 180 kundan
+ * eski HAR tayyor qator indeksda abadiy qoladi va har skanerda qayta
+ * ko'rib chiqiladi (har biriga `transactions` bo'yicha ikki indeks
+ * zondi). 180 kunlik chegara uchun daqiqa aniqligi hech narsa bermaydi —
+ * 6 soatda bir marta yetarli. Vaqt belgisi process ichida: qayta ishga
+ * tushishda birinchi housekeeping darhol skanerlaydi.
+ */
+const RETENTION_EVERY_MS = 6 * 3600_000;
+let lastRetentionAt = -Infinity;
+
+/** Sinov uchun: keyingi `housekeeping()` saqlash skanerini darhol yurgizsin. */
+export function resetRetentionScan(): void {
+  lastRetentionAt = -Infinity;
+}
+/** Har iteratsiyada diskka yozmaslik uchun — 30 s shartnomadan ancha tez. */
+const ALIVE_EVERY_MS = 10_000;
+let lastAliveAt = 0;
+let aliveWarned = false;
+
+/** Tiriklik faylini yangilaydi. HECH QACHON xato tashlamaydi — sikl shu sabab to'xtamasin. */
+async function touchAlive(): Promise<void> {
+  const now = Date.now();
+  if (now - lastAliveAt < ALIVE_EVERY_MS) return;
+  lastAliveAt = now;
+  try {
+    await writeFile(WORKER_ALIVE_FILE, String(now));
+    aliveWarned = false;
+  } catch (e) {
+    // Faqat birinchi marta — har 10 s da jurnalni to'ldirmasin.
+    if (!aliveWarned) {
+      aliveWarned = true;
+      console.warn(`[worker] ${WORKER_ALIVE_FILE} yozilmadi:`, e instanceof Error ? e.message : e);
+    }
+  }
+}
 
 type Globals = typeof globalThis & { __slaydxWorker?: boolean };
 const g = globalThis as Globals;
@@ -369,49 +423,87 @@ async function tick(): Promise<boolean> {
   return true;
 }
 
-export async function housekeeping(): Promise<void> {
+/**
+ * Bitta housekeeping qadami — ALOHIDA (AUDIT prod-readiness DB-10).
+ *
+ * Ilgari hamma qadam bitta `try` ichida edi: birinchisi (masalan
+ * `reclaimStaleJobs` ulanish uzilishida) yiqilsa, qolganlari — navbat
+ * muddati, saqlash muddati, sessiya/fayl tozalash — shu daqiqada umuman
+ * bajarilmasdi. Endi xato faqat o'z qadamini to'xtatadi va jurnalga yoziladi.
+ */
+async function step(name: string, fn: () => Promise<unknown>): Promise<void> {
   try {
+    await fn();
+  } catch (e) {
+    console.error(`[worker] housekeeping/${name}:`, e instanceof Error ? e.message : e);
+  }
+}
+
+export async function housekeeping(): Promise<void> {
+  await step("reclaim", async () => {
     const dead = await reclaimStaleJobs();
     for (const id of dead) {
       // Osilib qolgan ish uchun ham pul qaytishi kerak — va o'lgan worker
       // `completeJob`dan oldin saqlab ulgurgan fayl/aktivlar qolmasin (C03).
-      const owner = await queryOne<{ user_id: string }>(
-        "SELECT user_id FROM generations WHERE id = $1",
-        [id],
-      );
-      if (owner) await refundThenCleanup({ id, userId: String(owner.user_id) }, "Ish vaqti tugadi");
+      // Har ish alohida: bittasining qaytarish xatosi qolganlarini to'xtatmasin.
+      await step(`reclaim-refund ${id}`, async () => {
+        const owner = await queryOne<{ user_id: string }>(
+          "SELECT user_id FROM generations WHERE id = $1",
+          [id],
+        );
+        if (owner) await refundThenCleanup({ id, userId: String(owner.user_id) }, "Ish vaqti tugadi");
+      });
     }
-    // Fayl/aktiv/generatsiya endi MUDDATSIZ (`011_no_expiry.sql`) —
-    // bu yerda faqat haqiqatan vaqt bilan cheklangan narsalar tozalanadi.
-    await purgeExpiredSessions();
-    /*
-     * O'YIN havolalari (AUDIT-22 R, `game_sessions.expires_at`, standart
-     * 30 kun) — `purgeOldSources`/`purgeOldPhotos` bilan bir qatorda.
-     * Natijalar (`game_results`) alohida o'chirilmaydi: FK
-     * `ON DELETE CASCADE` (`021_games.sql`) ularni sessiya bilan birga
-     * olib tashlaydi.
-     */
-    await purgeExpiredGameSessions();
-    await purgeRateLimits();
-    // Webhook rejimida bot processi bo'lmaydi, shuning uchun chipta va
-    // update tarixini ham shu yerda tozalaymiz.
-    await purgeExpiredTickets();
-    /*
-     * Tarjima manbasi — bir martalik ish fayli (20 MB gacha har biri).
-     * Namunadan (`template_uploads`, muddatsiz) farqi shu: tarjima
-     * tayyor bo'lgach asl hujjat faqat joy va maxfiylik yuki bo'lib
-     * qoladi.
-     */
-    await purgeOldSources(30);
-    /*
-     * Rezyume surati — shaxsiy ma'lumot. Generatsiyaga tushgan nusxa
-     * allaqachon `generation_assets` da, bu jadval esa faqat FORMA
-     * uchun: 90 kundan keyin uni saqlash keraksiz yuk.
-     */
-    await purgeOldPhotos(90);
-  } catch (e) {
-    console.error("[worker] housekeeping:", e instanceof Error ? e.message : e);
-  }
+  });
+  /*
+   * Navbat muddati (capacity §4): `QUEUE_TTL_SEC` dan uzoq kutgan ish
+   * FAILED + pul qaytariladi (bitta tranzaksiyada, bir marta).
+   */
+  await step("queue-ttl", () => expireQueuedJobs());
+  /*
+   * Xavfsizlik to'ri (review N3): FAILED qilingan, lekin puli qaytmay
+   * qolgan ishlar (yuqoridagi yoki `failAndCleanup`dagi alohida refund
+   * tranzaksiyasi yiqilgan bo'lsa) — aynan bir marta qaytariladi.
+   */
+  await step("refund-reconcile", () => refundUnrefundedFailed());
+  /*
+   * Saqlash muddati (C23): faqat bonus bilan to'langan tayyor ishlarning
+   * fayllari `RETENTION_BONUS_DAYS` dan keyin tozalanadi. Pullik ishlar —
+   * muddatsiz (`011_no_expiry.sql`). Soatlab bir marta (`RETENTION_EVERY_MS`);
+   * belgi skanerdan OLDIN qo'yiladi — yiqilayotgan skaner ham har daqiqada
+   * bazani qayta urmasin.
+   */
+  await step("retention", async () => {
+    if (Date.now() - lastRetentionAt < RETENTION_EVERY_MS) return;
+    lastRetentionAt = Date.now();
+    await purgeBonusFiles();
+  });
+  await step("sessions", () => purgeExpiredSessions());
+  /*
+   * O'YIN havolalari (AUDIT-22 R, `game_sessions.expires_at`, standart
+   * 30 kun) — `purgeOldSources`/`purgeOldPhotos` bilan bir qatorda.
+   * Natijalar (`game_results`) alohida o'chirilmaydi: FK
+   * `ON DELETE CASCADE` (`021_games.sql`) ularni sessiya bilan birga
+   * olib tashlaydi.
+   */
+  await step("game-sessions", () => purgeExpiredGameSessions());
+  await step("rate-limits", () => purgeRateLimits());
+  // Webhook rejimida bot processi bo'lmaydi, shuning uchun chipta va
+  // update tarixini ham shu yerda tozalaymiz.
+  await step("tickets", () => purgeExpiredTickets());
+  /*
+   * Tarjima manbasi — bir martalik ish fayli (20 MB gacha har biri).
+   * Namunadan (`template_uploads`, muddatsiz) farqi shu: tarjima
+   * tayyor bo'lgach asl hujjat faqat joy va maxfiylik yuki bo'lib
+   * qoladi.
+   */
+  await step("sources", () => purgeOldSources(30));
+  /*
+   * Rezyume surati — shaxsiy ma'lumot. Generatsiyaga tushgan nusxa
+   * allaqachon `generation_assets` da, bu jadval esa faqat FORMA
+   * uchun: 90 kundan keyin uni saqlash keraksiz yuk.
+   */
+  await step("photos", () => purgeOldPhotos(90));
 }
 
 async function loop(): Promise<void> {
@@ -421,18 +513,24 @@ async function loop(): Promise<void> {
 
   while (!stopped) {
     let busy = false;
+    let healthy = true;
     try {
       busy = await tick();
     } catch (e) {
+      healthy = false;
       console.error("[worker] tick:", e instanceof Error ? e.message : e);
       // Baza tushgan bo'lishi mumkin — tez-tez urinmaymiz.
       await sleep(5000);
     }
+    // Faqat sog'lom iteratsiyada — baza yiqilsa fayl eskiradi (HEALTHCHECK).
+    if (healthy) await touchAlive();
     const wait = busy ? BUSY_POLL_MS : IDLE_POLL_MS;
     sinceHousekeeping += wait;
     if (sinceHousekeeping >= HOUSEKEEPING_MS) {
       sinceHousekeeping = 0;
       await housekeeping();
+      // Uzoq housekeeping (katta tozalash partiyasi) 30 s oynani yemasin.
+      if (healthy) await touchAlive();
     }
     await sleep(wait);
   }
@@ -451,6 +549,31 @@ export function startInlineWorker(): void {
 
 export function stopWorker(): void {
   stopped = true;
+}
+
+/**
+ * Alohida worker processining global himoyasi (AUDIT prod-readiness C27:
+ * BEB-03, CONC-04, BEA-18). `scripts/worker.ts` chaqiradi.
+ *
+ * - `unhandledRejection`: Node standarti processni YIQITADI — bitta
+ *   ushlanmagan promise (masalan vaqtincha baza xatosi) shu paytda
+ *   bajarilayotgan BARCHA ishlarni o'ldirardi. Jurnalga yoziladi va
+ *   process davom etadi: navbat holati bazada, qulf o'z-o'zidan tiklanadi.
+ * - `uncaughtException`: holat noma'lum — jurnal va nol bo'lmagan kod
+ *   bilan chiqish; Docker (`restart:`) processni qayta ko'taradi, osilib
+ *   qolgan ishlarni `reclaimStaleJobs` qaytaradi.
+ */
+export function installProcessGuards(proc: Pick<NodeJS.Process, "on" | "exit"> = process): void {
+  proc.on("unhandledRejection", (reason: unknown) => {
+    console.error(
+      "[worker] unhandledRejection (process davom etadi):",
+      reason instanceof Error ? (reason.stack ?? reason.message) : reason,
+    );
+  });
+  proc.on("uncaughtException", (err: Error) => {
+    console.error("[worker] uncaughtException — process to'xtaydi:", err?.stack ?? err);
+    proc.exit(1);
+  });
 }
 
 /** Alohida process uchun kirish nuqtasi (`npm run worker`). */
