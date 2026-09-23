@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
+import { requestIdOf } from "@/lib/server/api";
 import { ensureMigrated, query } from "@/lib/server/db";
 import { env } from "@/lib/server/env";
+import { log, withLogContext } from "@/lib/server/log";
 import { recordPaymentEvent } from "@/lib/server/payment-events";
 import {
   PAYME_TIMEOUT_MS,
@@ -293,7 +295,19 @@ async function readRpc(req: Request): Promise<RpcRequest | null> {
   }
 }
 
+/**
+ * Webhook `handler()` bilan o'ralmagan (JSON-RPC javobi har doim 200),
+ * shuning uchun so'rov id si shu yerda beriladi (OBS-02): `settleOrder`/
+ * `cancelOrder` jurnal qatorlari ham shu `reqId` ni oladi.
+ */
 export async function POST(req: Request) {
+  const reqId = requestIdOf(req);
+  const res = await withLogContext({ reqId }, () => handlePayme(req));
+  res.headers.set("x-request-id", reqId);
+  return res;
+}
+
+async function handlePayme(req: Request): Promise<NextResponse> {
   // Tana autentifikatsiyadan OLDIN (chegara bilan) o'qiladi: JSON-RPC 2.0
   // bo'yicha javob — xato bo'lsa ham — so'rov `id` sini qaytarishi kerak.
   const body = await readRpc(req);
@@ -315,7 +329,13 @@ export async function POST(req: Request) {
   try {
     out = await dispatch(body);
   } catch (e) {
-    console.error("[payme]", e instanceof Error ? e.message : e);
+    log("error", "[payme] webhook xatosi", {
+      method: typeof body.method === "string" ? body.method : "?",
+      orderId: orderIdFrom((body.params ?? {}) as Record<string, unknown>) || undefined,
+      providerTxn: typeof body.params?.id === "string" ? body.params.id : undefined,
+      provider: "payme",
+      err: e,
+    });
     out = rpcError(id, PAYME_ERRORS.CANT_PERFORM);
   }
 

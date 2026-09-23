@@ -202,6 +202,23 @@ test("worker: xom xato foydalanuvchiga chiqmaydi, tafsilot jurnalda (jobId, atte
     assert.equal(gen.error, msg);
   });
 
+  await t.test("navbatga qo'yish izi: so'rov reqId si va ish id si bitta qatorda (OBS-02)", async (tt) => {
+    const { withLogContext } = await import("../lib/server/log.ts");
+    const uid = await mkUser();
+    const rows = capture(tt);
+    const r = await withLogContext({ reqId: "req-enqueue-1" }, () =>
+      enqueueGeneration({ userId: uid, toolId: "essay", topic: "Sinov", price: 1000, format: "docx", values: { topic: "Sinov" }, budgetMs: 60_000 }),
+    );
+    assert.ok(r.ok);
+    const line = rows.find((x) => x.jobId === r.id);
+    // MUTATSIYA: `logEnqueue` chaqiruvi olib tashlansa — qizaradi.
+    assert.ok(line, "enqueue jurnali yo'q");
+    assert.equal(line.reqId, "req-enqueue-1");
+    assert.equal(line.userId, uid);
+    assert.equal(line.price, 1000);
+    await query(`UPDATE generations SET status = 'REVOKED' WHERE id = $1`, [r.id]);
+  });
+
   await t.test("eski qatordagi xom xato ham API javobida umumiy matnga aylanadi", async () => {
     const uid = await mkUser();
     const [{ id }] = await query<{ id: string }>(

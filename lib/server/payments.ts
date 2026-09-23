@@ -3,6 +3,8 @@ import { createHash, randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
 import { query, queryOne, transaction } from "./db";
 import { safeEqual } from "./session";
+import { activateProInTx, topUpInTx } from "./credits";
+import { log } from "./log";
 
 /**
  * To'lov buyurtmalari va ularni kreditga aylantirish.
@@ -199,7 +201,15 @@ export async function createOrder(input: {
      RETURNING ${COLS}`,
     [randomUUID(), input.userId, input.provider, input.purpose, amount],
   );
-  return toOrder(row!);
+  const order = toOrder(row!);
+  log("info", "[payments] buyurtma yaratildi", {
+    orderId: order.id,
+    userId: order.userId,
+    provider: order.provider,
+    purpose: order.purpose,
+    amountSoum: order.amountSoum,
+  });
+  return order;
 }
 
 export async function findOrder(id: string): Promise<PaymentOrder | null> {
@@ -328,50 +338,6 @@ async function reread(client: PoolClient, orderId: string): Promise<PaymentOrder
 }
 
 /**
- * Kreditni CHAQIRUVCHINING tranzaksiyasida yozadi (`credits.ts topUp` ning
- * tranzaksiya ichidagi nusxasi).
- *
- * Nega alohida: `topUp` o'z tranzaksiyasini ochadi — buyurtma qulfi va
- * `paid` holati bilan bitta atomar qadam bo'lolmaydi. Mantiq `topUp`
- * bilan bir xil (o'sha jadval, `kind`, `reference`, idempotentlik), faqat
- * foydalanuvchi qulfi idempotentlik tekshiruvidan OLDIN olinadi: ikki
- * parallel chaqiruv ikkalasi ham «yozuv yo'q» deb ko'rib, ikkinchisi
- * `transactions_ref_idx` ga urilib xato qaytarmasin (CONC-02 b).
- * `credits.ts` ga tranzaksiya ichidagi `topUp` varianti qo'shilsa, bu
- * funksiya o'shani chaqirishi kerak (bu to'lqinda `credits.ts` boshqa
- * paketniki).
- */
-async function creditInTx(
-  client: PoolClient,
-  userId: string,
-  delta: { quota?: number; balance?: number },
-  reference: string,
-  kind: "topup" | "subscription",
-  note: string,
-): Promise<boolean> {
-  const quota = delta.quota ?? 0;
-  const balance = delta.balance ?? 0;
-  if (quota + balance <= 0) return false;
-
-  await client.query("SELECT 1 FROM users WHERE id = $1 FOR UPDATE", [userId]);
-  const done = await client.query("SELECT 1 FROM transactions WHERE kind = $1 AND reference = $2", [kind, reference]);
-  // Webhook ikki marta kelishi normal holat — ikkinchisida pul qo'shilmaydi.
-  if (done.rows[0]) return false;
-
-  await client.query(`UPDATE users SET quota = quota + $2, balance = balance + $3, updated_at = now() WHERE id = $1`, [
-    userId,
-    quota,
-    balance,
-  ]);
-  await client.query(
-    `INSERT INTO transactions (user_id, kind, points_delta, quota_delta, balance_delta, reference, note)
-     VALUES ($1, $2, 0, $3, $4, $5, $6)`,
-    [userId, kind, quota, balance, reference, note],
-  );
-  return true;
-}
-
-/**
  * To'lovni yakunlaydi: kreditni qo'shadi va buyurtmani `paid` qiladi —
  * BITTA tranzaksiyada, buyurtma qatori qulflangan holda.
  *
@@ -387,7 +353,9 @@ export async function settleOrder(
   performTime: number,
   opts: { expiresBefore?: number } = {},
 ): Promise<SettleOutcome> {
-  return transaction(async (client): Promise<SettleOutcome> => {
+  let credited = false;
+  const out = await transaction(async (client): Promise<SettleOutcome> => {
+    credited = false;
     const row = await lockOrder(client, orderId);
     if (!row) return { status: "not_found", order: null };
     const order = toOrder(row);
@@ -409,24 +377,19 @@ export async function settleOrder(
       return { status: "expired", order: await reread(client, orderId) };
     }
 
+    /*
+     * Kredit `credits.ts` ning tranzaksiya ichidagi yo'llari bilan — buyurtma
+     * qulfi va `paid` holati bilan BITTA atomar qadam (W3 wrap-up: ilgari bu
+     * yerda `creditInTx` nusxasi bor edi). Idempotentlik `reference` bo'yicha,
+     * foydalanuvchi qulfi tekshiruvdan oldin (`topUpInTx` izohi).
+     */
     const reference = `${order.provider}:${order.providerTxn ?? order.id}`;
     if (order.purpose === "pro") {
       // Kvota va tarif BIR tranzaksiyada: ilgari (`activatePro`) ular alohida
       // yozilardi va orada yiqilish «kvota bor, plan free» holatini qoldirardi.
-      const added = await creditInTx(client, order.userId, { quota: PRO_PLAN.quota }, reference, "subscription", "Pro obuna");
-      if (added) {
-        await client.query(
-          `UPDATE users
-              SET plan = 'pro',
-                  -- Faol obuna ustiga qo'shiladi, tugagani yangidan boshlanadi.
-                  plan_expires_at = GREATEST(COALESCE(plan_expires_at, now()), now()) + ($2 || ' days')::interval,
-                  updated_at = now()
-            WHERE id = $1`,
-          [order.userId, String(PRO_PLAN.days)],
-        );
-      }
+      credited = await activateProInTx(client, order.userId, PRO_PLAN.quota, PRO_PLAN.days, reference);
     } else {
-      await creditInTx(
+      credited = await topUpInTx(
         client,
         order.userId,
         { balance: Math.floor(order.amountSoum / SOUM_PER_COIN) },
@@ -450,6 +413,31 @@ export async function settleOrder(
     );
     return { status: "paid", order: await reread(client, orderId) };
   });
+  // COMMIT dan KEYIN — rollback bo'lgan urinish «to'landi» deb yozilmasin.
+  logOrder("settle", out, { credited });
+  return out;
+}
+
+/**
+ * To'lov holati o'zgarishi izi (OBS-02): buyurtma, provayder, foydalanuvchi,
+ * summa va natija bitta qatorda. `reqId` — route kontekstidan (agar bo'lsa).
+ */
+function logOrder(
+  action: "settle" | "cancel",
+  out: { status: string; order: PaymentOrder | null },
+  extra: Record<string, unknown> = {},
+): void {
+  const o = out.order;
+  log(out.status === "not_found" ? "warn" : "info", `[payments] ${action}: ${out.status}`, {
+    orderId: o?.id,
+    userId: o?.userId,
+    provider: o?.provider,
+    purpose: o?.purpose,
+    amountSoum: o?.amountSoum,
+    providerTxn: o?.providerTxn,
+    state: o?.state,
+    ...extra,
+  });
 }
 
 /**
@@ -460,7 +448,7 @@ export async function settleOrder(
  * Takroriy bekor qilish birinchi `cancel_time` va sababni saqlaydi.
  */
 export async function cancelOrder(orderId: string, cancelTime: number, reason: number | null): Promise<CancelOutcome> {
-  return transaction(async (client): Promise<CancelOutcome> => {
+  const out = await transaction(async (client): Promise<CancelOutcome> => {
     const row = await lockOrder(client, orderId);
     if (!row) return { status: "not_found", order: null };
     const order = toOrder(row);
@@ -475,4 +463,6 @@ export async function cancelOrder(orderId: string, cancelTime: number, reason: n
     );
     return { status: "cancelled", order: await reread(client, orderId) };
   });
+  logOrder("cancel", out, { reason });
+  return out;
 }
