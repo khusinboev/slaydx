@@ -1,5 +1,6 @@
 /**
- * `returnTo` kabi so'rov parametridan kelgan manzilni saf(safe) qiladi.
+ * `returnTo` kabi so'rov parametridan kelgan manzilni xavfsiz manzilga
+ * cheklaydi.
  *
  * C02/FE-01/SECA-02: `?returnTo=javascript:...` login'dan keyin
  * `router.push(returnTo)` ga hech qanday tekshiruvsiz berilardi. Next
@@ -8,47 +9,42 @@
  * bo'lgani uchun `javascript:` sxemasi sayt kelib chiqishi ICHIDA
  * ishga tushadi (DOM XSS). `https://` qiymat esa oddiy open redirect.
  *
- * Shuning uchun faqat saytning o'zidagi, bitta "/" bilan boshlangan,
- * "/uz" ostidagi nisbiy yo'llar o'tkaziladi — boshqa hamma narsa
- * (protokol-nisbiy "//", teskari chiziq, boshqaruv belgilari,
- * bo'shliqlar, foizli kodlash bilan yashiringan "//"/"\\") `null`
- * qaytaradi. Bu modul toza (pure) — hech qanday DOM/tarmoq/store'ga
- * bog'liq emas, shu bois `lib/ui.ts` (zustand do'koni) va
- * `LoginModal.tsx` (router) ikkalasida ham mustaqil ishlatiladi.
+ * Shuning uchun faqat saytning o'zidagi, "/uz" ostidagi nisbiy yo'llar
+ * o'tkaziladi — boshqa hamma narsa (protokol-nisbiy "//", teskari
+ * chiziq, boshqaruv belgilari, bo'shliqlar, foizli kodlash bilan
+ * yashiringan "//"/"\\", nuqta segmentlari — "..") `null` qaytaradi.
+ *
+ * MUHIM: "/uz" tekshiruvi XOM satrda emas, `URL` RESOLVE qilgan
+ * (normallashgan) `pathname`da bajariladi. "/uz/..//evil.com" yoki
+ * "/uz/%2e%2e//evil.com" kabi qiymatlar XOM holda "/uz/" bilan
+ * boshlanadi, lekin brauzer/Next ularni RESOLVE qilganda "/uz" segmenti
+ * ".." bilan yutilib, natija "//evil.com" (protokol-nisbiy, boshqa host)
+ * bo'lib qoladi — shu sabab birinchi (real audit topilmasi, ko'ring
+ * `audit/reviews/W1-B.md`) yechim xom prefiks tekshiruvi yetarli emas
+ * edi.
+ *
+ * Bu modul toza (pure) — hech qanday DOM/tarmoq/store'ga bog'liq emas,
+ * shu bois `lib/ui.ts` (zustand do'koni) va `LoginModal.tsx` (router)
+ * ikkalasida ham mustaqil ishlatiladi.
  */
 export function safeReturnTo(v: unknown): string | null {
   if (typeof v !== "string" || v.length === 0) return null;
 
   // Boshida/oxirida bo'shliq bo'lsa rad etamiz — trim'dan KEYIN emas,
-  // OLDIN tekshiramiz, aks holda " javascript:..." kabi qiymatlar
-  // bo'shliq olib tashlangandan keyin "to'g'ri" ko'rinib qolardi.
+  // OLDIN tekshiramiz: `URL` konstruktori ba'zi bo'shliq/boshqaruv
+  // belgilarini o'zi indamay olib tashlaydi (masalan
+  // `new URL("\x01/uz", base).pathname === "/uz"`), shuning uchun bu
+  // tekshiruvlar RESOLVED URL'dan OLDIN, xom satrda bajariladi.
   if (v !== v.trim()) return null;
-
-  // Xom (encoded emas) boshqaruv belgilari — masalan "\x01/uz".
   if (/[\x00-\x1f\x7f]/.test(v)) return null;
 
-  // Faqat bitta "/" bilan boshlanadi: "//evil.com" (protokol-nisbiy) va
-  // "javascript:...", "https://evil.com", "data:..." kabi sxemali
-  // qiymatlar shu yerda tushib qoladi (ular "/" bilan boshlanmaydi).
+  // Sxemali qiymatlar ("javascript:...", "https://...", "data:...")
+  // "/" bilan boshlanmaydi — arzon, erta rad etish.
   if (!v.startsWith("/")) return null;
-  if (v.startsWith("//")) return null;
-  // Ba'zi brauzerlar "/\evil.com" ni ham protokol-nisbiy deb o'qiydi.
-  if (v.startsWith("/\\")) return null;
-  if (v.includes("\\")) return null;
 
-  // Foizli kodlash orqali "//"/"\\" ni yashirish urinishi
-  // ("/%2F%2Fevil.com" → dekodlanganda "//evil.com" bo'ladi).
-  let decoded: string;
-  try {
-    decoded = decodeURIComponent(v);
-  } catch {
-    return null;
-  }
-  if (decoded.startsWith("//") || decoded.startsWith("/\\") || decoded.includes("\\")) return null;
-
-  // Kelib chiqishi (origin) haqiqatan ham o'zgarmasligini `URL` bilan
-  // ham tasdiqlaymiz — yuqoridagi qatordan chiqib ketgan har qanday
-  // holat uchun ikkinchi qatlam.
+  // Kelib chiqishi (origin) va yo'l (pathname) faqat `URL` RESOLVE
+  // qilgandan keyingi (normallashgan) holatda tekshiriladi — xom satrda
+  // "/uz/" bilan boshlangan ko'rinishi hech narsani kafolatlamaydi.
   let url: URL;
   try {
     url = new URL(v, "https://x.invalid");
@@ -57,9 +53,19 @@ export function safeReturnTo(v: unknown): string | null {
   }
   if (url.origin !== "https://x.invalid") return null;
 
-  // Ilovada yagona marshrut ildizi "/uz" (`app/uz/...`) — shundan
-  // tashqarisiga yo'naltirish ma'nosiz va ehtiyotkorlik uchun rad etiladi.
-  if (!(v === "/uz" || v.startsWith("/uz/") || v.startsWith("/uz?") || v.startsWith("/uz#"))) return null;
+  const p = url.pathname;
+  // Ehtiyot chorasi: resolve qilingandan keyin ham protokol-nisbiy "//"
+  // chiqib qolsa ("/uz/..//evil.com" → pathname "//evil.com") alohida
+  // rad etiladi — origin tekshiruvi bilan bir xil holatni ikkinchi
+  // marta, boshqa maydonda tasdiqlaydi.
+  if (p.startsWith("//")) return null;
+  // Ilovada yagona marshrut ildizi "/uz" (`app/uz/...`) — RESOLVED yo'l
+  // shundan boshlanishi shart (nuqta segmentlari bilan "/uz" doirasidan
+  // chiqib ketish — masalan "/uz/../api/auth/logout" — shu yerda ushlanadi).
+  if (!(p === "/uz" || p.startsWith("/uz/"))) return null;
 
-  return v;
+  // Normallashtirilgan shakl qaytariladi (xom `v` emas) — nuqta
+  // segmentlari va bir xil natijaga olib keladigan boshqa yozuvlar
+  // izchil bitta ko'rinishga keladi.
+  return p + url.search + url.hash;
 }

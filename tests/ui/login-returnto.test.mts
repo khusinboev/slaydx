@@ -20,9 +20,12 @@ import { useAppStore } from "../../lib/store.ts";
  * to'g'ridan-to'g'ri, `open()` chetlab o'tib, o'rnatilgan taqdirda ham).
  */
 
+const originalFetch = globalThis.fetch;
+
 afterEach(() => {
   cleanup();
   useUi.setState({ overlay: null, returnTo: null, payPlan: null });
+  (globalThis as unknown as { fetch: unknown }).fetch = originalFetch;
 });
 
 function stubAuthApi() {
