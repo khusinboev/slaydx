@@ -11,7 +11,7 @@ import assert from "node:assert/strict";
 process.env.SESSION_SECRET ??= "test-session-secret-at-least-32-characters-long";
 process.env.TELEGRAM_BOT_TOKEN = "test-bot-token-fake-1234567890";
 
-const { sendMessage } = await import("../lib/server/telegram.ts");
+const { sendMessage, TelegramTransientError } = await import("../lib/server/telegram.ts");
 
 const realFetch = globalThis.fetch;
 test.afterEach(() => {
@@ -39,16 +39,18 @@ test("429 retry_after → aytilgan vaqt kutiladi va BIR marta qayta yuboriladi",
   assert.ok(at[1] - t0 >= 950, `retry_after kutilmadi: ${at[1] - t0} ms`);
 });
 
-test("429 takrorlansa — faqat bitta qayta urinish, keyin false", async () => {
+// W4-C (BEA-17): vaqtinchalik xato endi `false` emas — `TelegramTransientError`
+// otiladi, webhook 500 qaytaradi va Telegram update'ni qayta yuboradi.
+test("429 takrorlansa — faqat bitta qayta urinish, keyin TelegramTransientError", async () => {
   const at = stub([() => TOO_MANY(1)]);
-  assert.equal(await sendMessage(1, "salom"), false);
+  await assert.rejects(sendMessage(1, "salom"), TelegramTransientError);
   assert.equal(at.length, 2);
 });
 
-test("retry_after chegaradan uzun (30 s) — qayta urinish befoyda, darhol false (review nit 3)", async () => {
+test("retry_after chegaradan uzun (30 s) — qayta urinish befoyda, darhol TelegramTransientError (review nit 3)", async () => {
   const at = stub([() => TOO_MANY(30), OK]);
   const t0 = Date.now();
-  assert.equal(await sendMessage(1, "salom"), false);
+  await assert.rejects(sendMessage(1, "salom"), TelegramTransientError);
   assert.equal(at.length, 1);
   assert.ok(Date.now() - t0 < 500);
 });

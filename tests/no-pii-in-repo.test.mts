@@ -139,6 +139,16 @@ const KNOWN_PUBLIC_IP_ALLOWLIST = new Set([
   "6.6.6.6", // test fixture placeholder
   "149.154.160.0", // Telegram'ning O'ZI e'lon qilgan webhook IP diapazoni (ommaviy ma'lumot)
   "91.108.4.0",
+  // W4 safe-fetch (SSRF/DNS pinning) fixture'lari — "ommaviy" deb tasniflanishi
+  // SHART bo'lgan taniqli uchinchi tomon manzillari (PII emas):
+  "93.184.216.34", // example.com
+  "8.8.8.8", // Google Public DNS
+  "104.18.1.1", // Cloudflare
+  "104.18.2.2",
+  "104.18.3.3",
+  "142.250.1.1", // Google
+  "185.1.1.1", // RIPE ommaviy blok fixture
+  "172.32.0.1", // 172.16/12 dan TASHQARI chegara qiymati (ommaviy bo'lishi kerak)
 ]);
 
 function isReservedOrPrivateIPv4(ip: string): boolean {
@@ -146,6 +156,7 @@ function isReservedOrPrivateIPv4(ip: string): boolean {
   if (a === 0) return true; // "this network"
   if (a === 10) return true; // RFC1918
   if (a === 127) return true; // loopback
+  if (a === 100 && b >= 64 && b <= 127) return true; // RFC 6598 CGNAT (100.64/10)
   if (a === 169 && b === 254) return true; // link-local
   if (a === 172 && b >= 16 && b <= 31) return true; // RFC1918
   if (a === 192 && b === 168) return true; // RFC1918

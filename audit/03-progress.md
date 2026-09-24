@@ -59,3 +59,16 @@ All 10 W3 packages merged (A `4a57589`, B `1f26384`, C `20aeead`, D `b4a9ff1`, E
 - `next build` ok
 - start smoke on a fresh Postgres: health 200, `/uz` 200, `/api/generations` 401, migrations through `026_game_results_keep.sql`, and the worker heartbeat file present
 
+
+## W4 — complete
+All 6 W4 packages merged: F `05b5baf`, C `04126b0`, E `da3c2f5`, B `266e3af`, D `a10da35`, A `f631257`. Reviews are in `audit/reviews/W4-*.md`. The second rejection on W4-B (housekeeping lock wedge) was resolved by the orchestrator; see `.claude/escalations.log`.
+
+**W4 gate (commit `f631257`): ✅ GREEN after test-only fixes**
+- typecheck 0, lint 0, viewer 248/248, UI **453/453**, `next build` ok
+- start smoke on a fresh Postgres: health 200, `/uz` 200, `/api/generations` 401, migrations through `027_queue_indexes.sql`, worker heartbeat file present
+- unit **3 248 / 3 254**. All 6 failures were stale assertions that intended W4 contract changes had made obsolete; no production code changed:
+  - `telegram-429` (2): a persistent 429 now throws `TelegramTransientError`, so the webhook returns 500 and Telegram redelivers (W4-C, BEA-17).
+  - `env-assert-runtime-config` (1): the problem text now names `TELEGRAM_WEBHOOK_SECRET (yoki zaxira CRON_SECRET)`. Added a case where `CRON_SECRET` is missing but `TELEGRAM_WEBHOOK_SECRET` is set (W4-C, EXT-14).
+  - `credits-atomic` (1): a repeated DELETE of a cancelled (deleted) generation returns 404, not 409 (W4-B, BEA-12).
+  - `no-pii-in-repo` (1, plus a subtest): the W4-A safe-fetch fixtures (example.com, 8.8.8.8, Cloudflare, Google, 172.32.0.1 boundary) are allowlisted, and 100.64/10 (CGNAT) is classed as reserved. Mutation check: an injected `185.9.9.9` and `100.128.0.1` are both still caught.
+  - After the fixes, the 4 files pass 21/21 and no-pii passes 2/2.

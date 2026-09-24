@@ -83,9 +83,15 @@ test("assertRuntimeConfig: SESSION_COOKIE_SAMESITE=none lekin APP_URL https — 
   assert.ok(!problems.some((p) => /SESSION_COOKIE_SAMESITE=none/.test(p)), problems.join(" | "));
 });
 
-test("assertRuntimeConfig: CRON_SECRET yo'q, TELEGRAM_BOT_TOKEN bor — webhook himoyalanmaydi", () => {
-  const problems = assertRuntimeConfigProblems({ CRON_SECRET: undefined });
-  assert.ok(problems.some((p) => /CRON_SECRET yo'q/.test(p)), problems.join(" | "));
+// W4-C (EXT-14): webhook kaliti — `TELEGRAM_WEBHOOK_SECRET`, zaxira `CRON_SECRET`.
+test("assertRuntimeConfig: TELEGRAM_WEBHOOK_SECRET ham, CRON_SECRET ham yo'q, TELEGRAM_BOT_TOKEN bor — webhook himoyalanmaydi", () => {
+  const problems = assertRuntimeConfigProblems({ CRON_SECRET: undefined, TELEGRAM_WEBHOOK_SECRET: undefined });
+  assert.ok(problems.some((p) => /TELEGRAM_WEBHOOK_SECRET \(yoki zaxira CRON_SECRET\) yo'q/.test(p)), problems.join(" | "));
+});
+
+test("assertRuntimeConfig: CRON_SECRET yo'q, lekin TELEGRAM_WEBHOOK_SECRET bor — webhook himoyalangan", () => {
+  const problems = assertRuntimeConfigProblems({ CRON_SECRET: undefined, TELEGRAM_WEBHOOK_SECRET: "w" });
+  assert.ok(!problems.some((p) => /Telegram webhook'ni himoyalab bo'lmaydi/.test(p)), problems.join(" | "));
 });
 
 test("assertRuntimeConfig: AZURE_SPEECH_KEY bor, AZURE_SPEECH_REGION yo'q — kalit yolg'iz ishlamaydi", () => {
