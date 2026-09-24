@@ -70,7 +70,7 @@ All 6 W4 packages merged: F `05b5baf`, C `04126b0`, E `da3c2f5`, B `266e3af`, D 
   - `telegram-429` (2): a persistent 429 now throws `TelegramTransientError`, so the webhook returns 500 and Telegram redelivers (W4-C, BEA-17).
   - `env-assert-runtime-config` (1): the problem text now names `TELEGRAM_WEBHOOK_SECRET (yoki zaxira CRON_SECRET)`. Added a case where `CRON_SECRET` is missing but `TELEGRAM_WEBHOOK_SECRET` is set (W4-C, EXT-14).
   - `credits-atomic` (1): a repeated DELETE of a cancelled (deleted) generation returns 404, not 409 (W4-B, BEA-12).
-  - `no-pii-in-repo` (1, plus a subtest): the W4-A safe-fetch fixtures (example.com, 8.8.8.8, Cloudflare, Google, 172.32.0.1 boundary) are allowlisted, and 100.64/10 (CGNAT) is classed as reserved. Mutation check: an injected `185.9.9.9` and `100.128.0.1` are both still caught.
+  - `no-pii-in-repo` (1, plus a subtest): the W4-A safe-fetch fixtures (example.com, 8.8.8.8, Cloudflare, Google, 172.32.0.1 boundary) are allowlisted, and 100.64/10 (CGNAT) is classed as reserved. Mutation check: an injected unknown public IP (185.x) and the first address above the CGNAT range (100.128.x) are both still caught.
   - After the fixes, the 4 files pass 21/21 and no-pii passes 2/2.
 
 ## Live smoke with real Gemini (2026-09-24, commit `cb7aee3`, budget ≤ $5)

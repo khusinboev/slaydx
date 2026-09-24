@@ -105,6 +105,7 @@ test("pul yo'llari atomar: bekor qilish + qaytarish, activatePro", { skip }, asy
     // Takroriy DELETE — pul ikkinchi marta qaytmaydi; qator o'chgan → 404 (W4-B BEA-12).
     const again = await del(r.id, u.cookie);
     assert.equal(again.status, 404);
+    assert.equal(await refunds(r.id), 1);
     assert.equal(await balance(u.uid), 10_000);
   });
 

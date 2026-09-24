@@ -26,7 +26,7 @@ const BASE_ENV: Record<string, string> = {
   SESSION_COOKIE_SAMESITE: "lax",
 };
 // Shoxobchalarga xalaqit bermasin deb — bazaviy holatda TTS/dev-login o'chiq.
-const CLEAR_KEYS = ["AZURE_SPEECH_KEY", "AZURE_SPEECH_REGION", "AISHA_API_KEY", "TTS_GEMINI_MODEL", "DEV_LOGIN_ENABLED"];
+const CLEAR_KEYS = ["AZURE_SPEECH_KEY", "AZURE_SPEECH_REGION", "AISHA_API_KEY", "TTS_GEMINI_MODEL", "DEV_LOGIN_ENABLED", "TELEGRAM_WEBHOOK_SECRET"];
 
 function assertRuntimeConfigProblems(patch: Record<string, string | undefined>): string[] {
   const env: NodeJS.ProcessEnv = { ...process.env };
