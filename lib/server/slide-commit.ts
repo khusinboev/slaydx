@@ -100,9 +100,15 @@ export async function loadDocForEdit(id: string, userId: string): Promise<Editab
   return { ...row, adapter, doc: adapter.prepare(row.doc as AcademicDoc) };
 }
 
-/** Javob shakli `GET /api/generations/{id}` bilan AYNAN bir xil (`GenerationDetail`). */
+/**
+ * Javob shakli `GET /api/generations/{id}` bilan AYNAN bir xil (`GenerationDetail`).
+ *
+ * `lean` — poll bilan bir xil: `doc` bor qatorda `html` YUBORILMAYDI
+ * (`null`). Klient `doc` dan chizadi, `html` faqat `doc` siz eski qator
+ * zaxirasi — ilgari har «Saqlash» javobi hujjatni ikki marta tashirdi (SCALE-12).
+ */
 async function detail(id: string, userId: string) {
-  const gen = await getGeneration(id, userId);
+  const gen = await getGeneration(id, userId, { lean: true });
   if (!gen) throw new ApiError("Topilmadi", 404);
   const hasFile = await hasGenerationFile(id, userId);
   return { ...gen, hasFile };
