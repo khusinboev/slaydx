@@ -208,3 +208,80 @@ imports the module.
   P1 adds any beat the check can fail legitimately. Keep an eye on it after P1 merges.
 - `slide` parity case: `quality: "standard"` (`:753`) is a leftover field from before Formalar 2. It was
   not introduced by this branch.
+
+---
+
+## Re-review — f4b1e10
+
+Scope: `git diff 2ef84bc..f4b1e10` (`scripts/slide-audit.mts`, `scripts/live-engine.mts`,
+`tests/slide-audit.test.mts`). Worktree clean at `f4b1e10`.
+
+### Verdict: APPROVE
+
+All 9 items are fixed as specified. The tests now kill every mutant I tried.
+
+### One heavy command (`heavy2.sh -m 2G -t 600`)
+
+| Step | Result |
+|---|---|
+| `tsx --test tests/slide-audit.test.mts` | **39/39 pass** |
+| Mutant m1: title-first rule off | **killed** (38/39); survived before |
+| Mutant m2: closing-last rule off | **killed** (38/39); survived before |
+| Mutant m3: no `toLowerCase` in `normTitle` | **killed** (38/39); survived before |
+| Mutant m5: no ordinal strip in `normTitle` | **killed** (37/39); survived before |
+| Mutant m6: `plan-untagged` branch off (new) | killed (38/39) |
+| Mutant m7: letter-before-ellipsis requirement removed (new) | killed (38/39), by the `Tayyor!...` test |
+| CLI on `eval-out/audit25-baseline/` | every deck prints one `plan-untagged` issue and `plan=untagged/N`. `trunc=1` (defense-14, closing subtitle) + `trunc=6` (lecture-12: `left[0..2]`, `right[1..2]`, `quoteBy`) = **7**, matching A4 exactly. Exit 1 (correct: the old decks break the contract). |
+| CLI on `eval-out/live/` (only non-slide docs) | each file prints `· skip (slayd emas)`. Exit 2 with "katalogda slayd hujjati topilmadi" (correct) |
+| CLI on a single named non-slide file | exit 1 (correct: the user named it explicitly) |
+| `tsc --noEmit -p <worktree>` | exit 0 |
+
+Reasoning for two of the previously surviving mutants, cross-checked by the runs above:
+
+- **m1** (`tests/slide-audit.test.mts:430-442`). The deck is `[bullets(plan 1), agenda, title, …]`. The
+  agenda stays at #2, so the agenda rule cannot fire. The plan-1 group (#1, #4) is still in order, and its
+  title comes from the section slide. So the only defect is the title rule, and the test asserts
+  `uniqueKinds == ["block-order"]` plus `slide === 1`. With the rule removed there are no issues at all, so
+  the `deepEqual` fails.
+- **m5** (`:154-161`). The section title is `1. Birinchi bo'lim` and the agenda bullet is `Birinchi bo'lim`.
+  Without the ordinal strip, `normTitle` returns `1. birinchi bo'lim`, which differs from the agenda, so
+  `plan-title-mismatch` appears next to `ordinal-leak`. The exact-set assertion `["ordinal-leak"]` then
+  fails; two tests break in total, because the ordinal test at `:222` hits the same section.
+
+### Items
+
+1. **Untagged decks:** fixed. `slide-audit.mts` pushes one `plan-untagged` issue when there is an agenda
+   but no tag. `planCoverage` returns `"untagged"` and the CLI prints `plan=untagged/N`. Tests at
+   `:165-172` and `:212-218` cover this.
+2. **Tag consistency:** fixed.
+   - With an agenda, a `plan` outside `1..N` gives `plan-extra`.
+   - Without an agenda, the tags are checked to run 1..max with no gaps and in order.
+   - Tests: `:174-210`.
+3. **Ordinal regex:** fixed. The regex is exactly the one proposed, and the `I.`/`V.` ambiguity is
+   documented. There are positive tests (`3)`, `II.`) and negative ones (`1.5 million`, `M.`, `D.`).
+4. **Truncation:** fixed. There is a single `truncated` kind with `\p{L}(…|\.\.\.)`, applied to
+   title/subtitle/quote/quoteBy/bullets/left/right/steps/stats labels/quiz/table cells. `quoteBy` and
+   `table` were added to `SlideForAudit`. The negative `Tayyor!...` test exists. The baseline shows the
+   expected 7 hits.
+5. **`skeleton-leak`:** fixed. It covers stats `"—"` and `"…"` items in bullets/left/right. The fuzzy
+   third rule was left out, as allowed.
+6. **`pro-slide-min`:** fixed. `blocks: "reja"` is set (`live-engine.mts:935-944`), the assertion is
+   `1 <= planTotal < 6`, and the comment `AUDIT-25 merge: === planCapacity(values)` marks the follow-up.
+7. **Directory mode and doc.json:** fixed.
+   - (a) In directory mode, non-slide files are skipped; if none are left, exit 2. A named single file that
+     is not a slide doc still fails.
+   - (b) `runCase` now writes `${c.name}.doc.json` when `file.doc.slides?.length`
+     (`live-engine.mts:1619-1627`).
+8. **Tests:** fixed. Tests assert exact kind sets wherever the fixture allows, the title and closing tests
+   are isolated, and new m3/m5 tests plus regression tests for items 1–5 and 9 were added.
+9. **Thin rules:** fixed. `thin-quote` is removed, and `thin-bullets` only applies when
+   `typeof s.plan === "number"` (with a test at `:374-379`). The heuristic is split out as the
+   `thinHeuristic` export, with one call site marked `// AUDIT-25 merge`.
+
+### Merge-time follow-ups (non-blocking, not CHANGES)
+
+- Once P3 merges, replace `thinHeuristic(slides)` with `thinSlides(slides, audienceRules)` (the single
+  marked line), and once P1 merges, assert `planTotal === planCapacity(values)` in `pro-slide-min`. Do both
+  before the live gate is used for sign-off.
+- Once P1 lands, confirm that the agenda sync takes each item's title from the same slide the auditor uses:
+  the `section` slide if there is one, otherwise the first `plan=i` slide.
