@@ -322,6 +322,15 @@ test("apply: maket o'girilganda reja bandi (plan) saqlanadi", () => {
   assert.equal(conv.slides![0].plan, 2, "layout op plan ni tashlab yubordi");
 });
 
+// `convertLayout` ning YALANG'OCH tana/subtitle shoxobchasi (`title`/`quote` → `section`/`closing`)
+// ham `baseOf` orqali quriladi — shu yo'l alohida sinaladi (bullets→process yuqorida stats/steps
+// shoxobchasidan o'tadi, bu esa oxirgi `{...base, subtitle}` shoxobchasidan).
+test("apply: title→section o'girilganda ham reja bandi (plan) saqlanadi", () => {
+  const doc = docOf([{ id: "s0", layout: "title", title: "Muqova", plan: 4 }]);
+  const conv = apply(doc, [{ op: "layout", index: 0, layout: "section" }]);
+  assert.equal(conv.slides![0].plan, 4, "title→section (bare-base/subtitle shoxobchasi) plan ni tashlab yubordi");
+});
+
 test("apply: add — hujjat tilidagi «Yangi slayd», footer qo'shnidan", () => {
   const doc = docOf([{ ...bullets, footer: "Kolontitul" }, table]);
   const added = apply(doc, [{ op: "add", after: 0 }]);
@@ -400,6 +409,14 @@ test("inverse: har op turi uchun aylanma tenglik", () => {
   roundTrip(doc, [{ op: "insert", index: 1, slide: { id: "sX", layout: "bullets", title: "Kirdi", bullets: ["Band."] } }], "insert");
   roundTrip(doc, [{ op: "set", index: 0, slide: { id: "sX", layout: "bullets", title: "Almashdi", bullets: ["Band."] } }], "set");
   roundTrip(doc, [{ op: "reorder", order: [4, 0, 3, 1, 2] }], "reorder");
+});
+
+// AUDIT-25 P7: undo — reja bandi (plan) bo'lgan slaydda ham aylanma tenglik saqlanishi kerak
+// (teskari `set` `sanitizeSlideModel` orqali o'tadi — aynan shu yerda `plan` yo'qolgan bo'lardi).
+test("inverse: reja bandi (plan) bo'lgan slaydda undo aylanma tengligi", () => {
+  const doc = docOf([{ ...bullets, plan: 3 }, table]);
+  roundTrip(doc, [{ op: "text", index: 0, src: { f: "title" }, value: "Yangi sarlavha" }], "text (plan bilan)");
+  roundTrip(doc, [{ op: "layout", index: 0, layout: "process" }], "layout (plan bilan)");
 });
 
 test("inverse: ketma-ket operatsiyalar teskari TARTIBDA qaytariladi", () => {
