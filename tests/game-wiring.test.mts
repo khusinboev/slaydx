@@ -223,7 +223,9 @@ test("saralash/tinglash byudjeti dvigatel zaxiralari + bitta yozish chaqiruvidan
 
 test("tinglash audio seam'i: worker `putAsset` beradi, `buildArtifact` zanjirni ulaydi, `writeWithLlm` ikkalasini dvigatelga uzatadi", () => {
   const worker = readFileSync("lib/server/worker.ts", "utf8");
-  assert.match(worker, /putAsset:\s*\(bytes, mime\) => putAssetBytes\(job\.id, mime, Buffer\.from\(bytes\)\)/, "worker: aktiv shu ishning id si bilan yoziladi");
+  // W3-A (C26): yozuv lease bilan to'siladi — kechikkan (egasiz) ish aktiv yoza olmaydi;
+  // aks holda aktiv baribir shu ishning id si bilan yoziladi.
+  assert.match(worker, /putAsset:\s*\(bytes, mime\) =>[\s\S]{0,160}?putAssetBytes\(job\.id, mime, Buffer\.from\(bytes\)\)/, "worker: aktiv shu ishning id si bilan yoziladi");
   const index = readFileSync("lib/generation/index.ts", "utf8");
   assert.match(index, /opts\.putAsset \? \{ putAsset: opts\.putAsset, tts: opts\.tts \?\? providerOfChain\(ttsChain\) \}/, "index: `putAsset` bo'lsa standart TTS zanjiri ulanadi");
   const write = readFileSync("lib/generation/write-llm.ts", "utf8");
