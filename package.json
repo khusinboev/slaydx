@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --env-file-if-exists=.env.local --conditions=react-server --test --test-concurrency=2 tests/*.test.mts",
+    "test": "tsx --env-file-if-exists=.env.local --import ./tests/helpers/hermetic-env.mts --conditions=react-server --test --test-concurrency=2 tests/*.test.mts",
     "db:migrate": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/migrate.ts",
     "worker": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/worker.ts",
     "topup": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/topup.mts",
@@ -27,8 +27,8 @@
     "gen:icons": "tsx scripts/gen-icons.mts"
   },
   "dependencies": {
-    "@breezystack/lamejs": "^1.2.7",
     "@anthropic-ai/sdk": "^0.125.0",
+    "@breezystack/lamejs": "^1.2.7",
     "docx": "^9.7.1",
     "jszip": "^3.10.1",
     "katex": "^0.16.47",
@@ -40,7 +40,8 @@
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "server-only": "^0.0.1",
-    "sharp": "^0.34.5",
+    "sharp": "^0.35.4",
+    "tsx": "^4.23.12",
     "unpdf": "^1.8.0",
     "zustand": "^5.0.15"
   },
@@ -60,7 +61,6 @@
     "eslint-config-next": "^15.5.23",
     "jsdom": "^30.0.1",
     "tailwindcss": "^4",
-    "tsx": "^4.23.12",
     "typescript": "^5"
   }
 }

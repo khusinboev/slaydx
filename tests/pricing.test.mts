@@ -76,7 +76,15 @@ test("insho narxi varaqqa bog'liq", () => {
 
 test("noma'lum hajm — standart narx, 0 emas", () => {
   const cw = TOOL_BY_ID.coursework;
-  assert.equal(priceFor(cw, { pages: "yo'q-bunday" }), cw.basePrice);
+  /*
+   * C12 (BEA-01/ABUSE-03): ilgari noma'lum `pages` `cw.basePrice`ga
+   * (eng ARZON, 10–15 bet tarifi — 12 000) tushardi, lekin dvigatel
+   * (`normalizeWorkPages`) xuddi shu holatda «20–25» standartiga
+   * KLAMP qiladi va 20–25 betlik ish yozadi (16 000 turadi). Narx endi
+   * SHU normalizatordan — 12 000 EMAS, 16 000 kutiladi.
+   */
+  assert.equal(priceFor(cw, { pages: "yo'q-bunday" }), 16000);
+  assert.notEqual(priceFor(cw, { pages: "yo'q-bunday" }), cw.basePrice, "MUTATSIYA: eski xato — eng arzon tarifga tushib qoldi");
   assert.ok(priceFor(TOOL_BY_ID.referat, { pages: "999" }) > 0);
 });
 
@@ -443,7 +451,14 @@ test("glossariy termCount narxi saqlanadi (fields bo'sh bo'lsa ham)", () => {
   assert.equal(priceFor(g, { termCount: "20" }), 9000);
   assert.equal(priceFor(g, { termCount: "40" }), 15000);
   assert.equal(priceFor(g, {}), 6000, "atama soni berilmasa — 10 ta tarifi");
-  assert.equal(priceFor(g, { termCount: "999" }), g.basePrice, "noma'lum son → standart tarif, bepul emas");
+  /*
+   * C12 (BEA-01/ABUSE-03): ilgari tarifda YO'Q son (`"999"`) `g.basePrice`
+   * (eng ARZON, 10 talik) ga tushardi, dvigatel (`glossaryTermCount`)
+   * esa uni 40 gacha KLAMP qilib 40 atamalik glossariy yozardi (15 000
+   * turadi). Narx endi SHU klampdan — `g.basePrice` EMAS.
+   */
+  assert.equal(priceFor(g, { termCount: "999" }), 15000, "noma'lum son → dvigatel klampiga mos eng yuqori tarif");
+  assert.notEqual(priceFor(g, { termCount: "999" }), g.basePrice, "MUTATSIYA: eski xato — eng arzon tarifga tushib qoldi");
   assert.ok(priceFor(g, { termCount: "40" }) > priceFor(g, { termCount: "10" }), "MUTATSIYA: termCount qoidasi olib tashlandi");
   // Qolgan 4 vosita — tekis `basePrice` (parametrlar narxsiz).
   assert.equal(priceFor(TOOL_BY_ID["lesson-plan"], { duration: 90, stageCount: 8 }), 4000);

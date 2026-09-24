@@ -28,6 +28,18 @@ function bool(name: string, fallback = false): boolean {
   return raw === "1" || raw === "true" || raw === "yes";
 }
 
+/**
+ * Millisoniya: butun va ≥ 0 bo'lsa o'zi (`0` — «chegara yo'q»), aks holda
+ * (bo'sh, manfiy, kasr, matn) standart. `int` dan farqi: «10ms» ni 10 deb
+ * qabul qilmaydi (C33 `db.ts envMs` semantikasi aynan ko'chirildi).
+ */
+function ms(name: string, fallback: number): number {
+  const raw = str(name);
+  if (!raw) return fallback;
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 0 ? n : fallback;
+}
+
 const isProd = process.env.NODE_ENV === "production";
 
 /**
@@ -111,6 +123,17 @@ export const env = {
 
   databaseUrl: str("DATABASE_URL"),
   databasePoolMax: int("DATABASE_POOL_MAX", 10),
+  /**
+   * Hovuz vaqt chegaralari (C33, DB-08; `db.ts poolConfig`). `0` — chegara
+   * yo'q. Getter: hovuz yaratilayotgan paytdagi qiymat o'qiladi (sinovlar
+   * `process.env` ni modul yuklangandan keyin o'zgartiradi).
+   */
+  get databaseStatementTimeoutMs(): number {
+    return ms("DATABASE_STATEMENT_TIMEOUT_MS", 30_000);
+  },
+  get databaseConnectTimeoutMs(): number {
+    return ms("DATABASE_CONNECT_TIMEOUT_MS", 5_000);
+  },
 
   sessionSecret: sessionSecret(),
   sessionTtlDays: int("SESSION_TTL_DAYS", 30),

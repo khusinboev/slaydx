@@ -23,6 +23,7 @@
  */
 import { llmModel, llmProvider, type LlmOpts } from "./llm";
 import { completeWithChain } from "./llm/chain";
+export { DeadlineError } from "./llm/chain";
 import { anthropicAdapter } from "./llm/anthropic";
 import { geminiAdapter } from "./llm/gemini";
 import { openaiAdapter } from "./llm/openai";
@@ -37,7 +38,16 @@ export type LlmUsage = { provider: string; model: string; inputTokens: number; o
 
 export type RoleResult = { text: string; usage?: LlmUsage };
 
-export type RoleOpts = Pick<LlmOpts, "json" | "timeoutMs" | "thinking"> & { maxTokens?: number };
+export type RoleOpts = Pick<LlmOpts, "json" | "timeoutMs" | "thinking"> & {
+  maxTokens?: number;
+  /**
+   * Ish muddati (epoch ms, audit C28/W3 shartnomasi). Berilsa har urinish
+   * timeout'i qolgan vaqt bilan cheklanadi, sekin provayderdan keyin zaxira
+   * specga o'tiladi va vaqt tugasa `DeadlineError` (`llm/chain.ts`) OTILADI —
+   * chaqiruvchi uni ushlashi kerak. Berilmasa — eski xatti-harakat.
+   */
+  deadline?: number;
+};
 
 const ADAPTERS: Partial<Record<ProviderId, ProviderAdapter>> = {
   gemini: geminiAdapter,

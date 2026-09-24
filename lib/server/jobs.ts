@@ -3,9 +3,14 @@ import { randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
 import { query, queryOne, transaction } from "./db";
 import { chargeInTx } from "./credits";
+import { refundInTx } from "./refund-tx";
+import { putGenerationFile } from "./storage";
+import type { PendingAsset } from "./assets";
 import { toJsonb } from "./jsonb";
 import { cleanText, safeSlice } from "../generation/safe-text";
 import { env } from "./env";
+import { log } from "./log";
+import { userMessage } from "./user-error";
 import {
   admissionDecision,
   queueEtaSec,
@@ -150,7 +155,9 @@ export function rowToSummary(
     progress: r.progress,
     step: r.step,
     expiresAt: r.expires_at ? new Date(r.expires_at).toISOString() : null,
-    error: r.error,
+    // O'qishda ham tekshiriladi (BEA-09): tuzatishdan oldin yozilgan eski
+    // qatorlardagi xom pg/provayder matni API javobiga chiqmasin.
+    error: r.error === null || r.error === undefined ? null : userMessage(r.error),
     delivered: r.delivered_json ?? undefined,
     docVersion: r.doc_version ?? 0,
     fileVersion: r.file_version ?? 0,
@@ -177,14 +184,57 @@ export type EnqueueInput = {
    * bermasa, eski xatti-harakat (cheklovsiz) saqlanadi.
    */
   admission?: AdmissionLimits;
+  /**
+   * Klient kaliti (`Idempotency-Key`, C34) — kichik harfli UUID. Bir
+   * foydalanuvchi + bir kalit 24 soat ichida o'sha generatsiyani qaytaradi
+   * (`replayed: true`), pul ikkinchi marta yechilmaydi.
+   */
+  idempotencyKey?: string;
 };
 
 /** Qabul qarorisiz natija (seed skriptlari shu toraygan tipga tayanadi). */
 export type EnqueueChargeResult =
-  | { ok: true; id: string }
+  | {
+      ok: true;
+      id: string;
+      /** Yechilgan narx (takrorda — ASL so'rovniki). */
+      price: number;
+      /** `true` — shu kalit bilan avval yaratilgan ish qaytdi, hech narsa yechilmadi. */
+      replayed: boolean;
+    }
   | { ok: false; reason: "insufficient"; required: number; available: number };
 
-export type EnqueueResult = EnqueueChargeResult | { ok: false; reason: "admission"; decision: AdmissionReject };
+export type EnqueueResult =
+  | EnqueueChargeResult
+  | { ok: false; reason: "admission"; decision: AdmissionReject }
+  /** Kalit shu foydalanuvchida BOSHQA vosita uchun ishlatilgan (422). */
+  | { ok: false; reason: "idempotency_conflict" };
+
+/** Idempotentlik oynasi — shundan eski kalit yangi so'rov hisoblanadi. */
+export const IDEMPOTENCY_WINDOW_HOURS = 24;
+
+/** `generations_user_idem_idx` (024_idempotency.sql) buzilishi — parallel takror. */
+function isIdempotencyViolation(e: unknown): boolean {
+  const err = e as { code?: string; constraint?: string } | null;
+  return err?.code === "23505" && err.constraint === "generations_user_idem_idx";
+}
+
+type IdemRow = { id: string; tool_id: string; price: string };
+
+async function findByIdempotencyKey(client: PoolClient, userId: string, key: string): Promise<IdemRow | null> {
+  const res = await client.query<IdemRow>(
+    `SELECT id, tool_id, price FROM generations
+      WHERE user_id = $1 AND idempotency_key = $2
+        AND created_at >= now() - $3::int * interval '1 hour'`,
+    [userId, key, IDEMPOTENCY_WINDOW_HOURS],
+  );
+  return res.rows[0] ?? null;
+}
+
+function replayOf(row: IdemRow, toolId: ToolId): EnqueueResult {
+  if (row.tool_id !== toolId) return { ok: false, reason: "idempotency_conflict" };
+  return { ok: true, id: row.id, price: Number(row.price), replayed: true };
+}
 
 /**
  * Ishni navbatga qo'yadi va pulni **bitta tranzaksiyada** yechadi.
@@ -192,39 +242,62 @@ export type EnqueueResult = EnqueueChargeResult | { ok: false; reason: "admissio
  * Ikkisini ajratib bo'lmaydi: alohida qilinsa worker to'lanmagan ishni
  * ushlab olishi yoki pul yechilib ish yaratilmay qolishi mumkin.
  *
- * `admission` berilmasa `"admission"` natijasi bo'lishi mumkin emas —
- * overload buni tipda ham aytadi.
+ * `admission` va `idempotencyKey` berilmasa `"admission"`/`"idempotency_conflict"`
+ * natijasi bo'lishi mumkin emas — overload buni tipda ham aytadi.
+ *
+ * IDEMPOTENTLIK (C34): kalit berilsa, avval foydalanuvchi qatori qulflanadi
+ * (bir foydalanuvchining parallel so'rovlari navbatma-navbat), so'ng shu
+ * kalitli ish qidiriladi — READ COMMITTED da qulfdan keyingi SELECT oldingi
+ * tranzaksiya COMMIT qilgan qatorni ko'radi, ya'ni takroriy so'rov pul
+ * yechmay o'sha ishni qaytaradi (qabul chegarasi ham qayta tekshirilmaydi —
+ * ish allaqachon qabul qilingan). UNIQUE indeks — oxirgi to'siq: baribir
+ * poyga bo'lsa (23505) tranzaksiya (pul ham) rollback bo'ladi va mavjud ish qaytadi.
  */
-export function enqueueGeneration(input: EnqueueInput & { admission: AdmissionLimits }): Promise<EnqueueResult>;
-export function enqueueGeneration(input: EnqueueInput & { admission?: undefined }): Promise<EnqueueChargeResult>;
+export function enqueueGeneration(
+  input: EnqueueInput & { admission?: undefined; idempotencyKey?: undefined },
+): Promise<EnqueueChargeResult>;
+export function enqueueGeneration(input: EnqueueInput): Promise<EnqueueResult>;
 export async function enqueueGeneration(input: EnqueueInput): Promise<EnqueueResult> {
   const id = randomUUID();
+  const key = input.idempotencyKey;
   // NUL/yolg'iz surrogat `topic` (TEXT) va `transactions.note` ni yiqitmasin (C03).
   const topic = cleanText(input.topic);
-  return transaction(async (client) => {
-    if (input.admission) {
-      const decision = await admitInTx(client, input.userId, input.admission);
-      if (!decision.ok) return { ok: false as const, reason: "admission" as const, decision };
-    }
-    const charged = await chargeInTx(
-      client,
-      input.userId,
-      input.price,
-      id,
-      safeSlice(`${input.toolId}: ${topic}`, 200),
-    );
-    if (!charged.ok) {
-      return { ok: false as const, reason: charged.reason, required: charged.required, available: charged.available };
-    }
-    /*
-     * `expires_at` endi berilmaydi — NULL bo'lib qoladi, ya'ni
-     * generatsiya va unga biriktirilgan fayl/aktiv MUDDATSIZ saqlanadi
-     * (`011_no_expiry.sql`, ilgari 72 soat edi).
-     */
-    await client.query(
-      `INSERT INTO generations (id, user_id, tool_id, topic, price, format, values_json, step, budget_ms)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'Navbatga qo''yildi', $8)`,
-      [
+  try {
+    const res = await transaction(async (client): Promise<EnqueueResult> => {
+      if (key) {
+        // `admitInTx` bilan bir xil qulf (tartib o'zgarmaydi) — takrorlar navbatma-navbat.
+        await client.query("SELECT 1 FROM users WHERE id = $1 FOR NO KEY UPDATE", [input.userId]);
+        // 24 soatdan eski kalit — yangi so'rov: eski qatordan kalit olinadi (UNIQUE bo'shaydi).
+        await client.query(
+          `UPDATE generations SET idempotency_key = NULL
+            WHERE user_id = $1 AND idempotency_key = $2
+              AND created_at < now() - $3::int * interval '1 hour'`,
+          [input.userId, key, IDEMPOTENCY_WINDOW_HOURS],
+        );
+        const prior = await findByIdempotencyKey(client, input.userId, key);
+        if (prior) return replayOf(prior, input.toolId);
+      }
+      if (input.admission) {
+        const decision = await admitInTx(client, input.userId, input.admission);
+        if (!decision.ok) return { ok: false as const, reason: "admission" as const, decision };
+      }
+      const charged = await chargeInTx(
+        client,
+        input.userId,
+        input.price,
+        id,
+        safeSlice(`${input.toolId}: ${topic}`, 200),
+      );
+      if (!charged.ok) {
+        return { ok: false as const, reason: charged.reason, required: charged.required, available: charged.available };
+      }
+      /*
+       * `expires_at` endi berilmaydi — NULL bo'lib qoladi, ya'ni
+       * generatsiya va unga biriktirilgan fayl/aktiv MUDDATSIZ saqlanadi
+       * (`011_no_expiry.sql`, ilgari 72 soat edi). `idempotency_key`
+       * faqat kalit berilganda yoziladi — kalitsiz yo'lning SQL i o'zgarmagan.
+       */
+      const params = [
         id,
         input.userId,
         input.toolId,
@@ -233,10 +306,61 @@ export async function enqueueGeneration(input: EnqueueInput): Promise<EnqueueRes
         input.format,
         toJsonb(input.values),
         Math.round(input.budgetMs),
-      ],
-    );
-    return { ok: true as const, id };
-  });
+      ];
+      if (key) {
+        await client.query(
+          `INSERT INTO generations (id, user_id, tool_id, topic, price, format, values_json, step, budget_ms, idempotency_key)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, 'Navbatga qo''yildi', $8, $9)`,
+          [...params, key],
+        );
+      } else {
+        await client.query(
+          `INSERT INTO generations (id, user_id, tool_id, topic, price, format, values_json, step, budget_ms)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, 'Navbatga qo''yildi', $8)`,
+          params,
+        );
+      }
+      return { ok: true as const, id, price: input.price, replayed: false };
+    });
+    logEnqueue(input, res);
+    return res;
+  } catch (e) {
+    if (!key || !isIdempotencyViolation(e)) throw e;
+    // Parallel takror bizdan oldin COMMIT qildi — butun tranzaksiya (pul ham) bekor, o'sha ish qaytadi.
+    const prior = await transaction((client) => findByIdempotencyKey(client, input.userId, key));
+    if (!prior) throw e;
+    const res = replayOf(prior, input.toolId);
+    logEnqueue(input, res);
+    return res;
+  }
+}
+
+/**
+ * Navbatga qo'yish izi (OBS-02): so'rovning `reqId` si (kontekstdan) va
+ * ish id si BITTA qatorda — «shu so'rov qaysi ishni yaratdi, qancha
+ * yechildi» degan savol jurnaldan javob topadi.
+ */
+function logEnqueue(input: EnqueueInput, res: EnqueueResult): void {
+  if (res.ok) {
+    log("info", res.replayed ? "[jobs] takroriy so'rov — mavjud ish qaytarildi" : "[jobs] navbatga qo'yildi", {
+      jobId: res.id,
+      genId: res.id,
+      userId: input.userId,
+      toolId: input.toolId,
+      price: res.price,
+      replayed: res.replayed,
+      budgetMs: Math.round(input.budgetMs),
+    });
+  } else {
+    log("info", "[jobs] navbatga qo'yilmadi", {
+      userId: input.userId,
+      toolId: input.toolId,
+      price: input.price,
+      reason: res.reason,
+      ...(res.reason === "admission" ? { code: res.decision.code } : {}),
+      ...(res.reason === "insufficient" ? { required: res.required, available: res.available } : {}),
+    });
+  }
 }
 
 /**
@@ -433,16 +557,32 @@ export async function deleteGeneration(id: string, userId: string): Promise<bool
   return rows.length > 0;
 }
 
-/** Faqat navbatdagi ishni bekor qilish mumkin. */
+export const CANCEL_REFUND_NOTE = "Foydalanuvchi bekor qildi";
+
+/**
+ * Navbatdagi ishni bekor qiladi va pulini QAYTARADI — bitta tranzaksiyada
+ * (C25 qolgani). Faqat QUEUED ishni bekor qilish mumkin.
+ *
+ * Ilgari REVOKED alohida COMMIT bo'lib, pul route'da keyin qaytardi: orada
+ * xato (ulanish uzilishi, process o'limi) bo'lsa ish REVOKED, pul esa
+ * qaytmagan qolardi — tiklash skaneri (`refund-reconcile.ts`) faqat
+ * FAILED ni ko'radi, qayta DELETE esa QUEUED topolmay hech narsa qilmasdi.
+ * Endi biri yiqilsa ikkalasi ham bekor: ish QUEUED qoladi va foydalanuvchi
+ * qayta bekor qila oladi. Qaytarish `reference` bo'yicha idempotent.
+ */
 export async function cancelGeneration(id: string, userId: string): Promise<boolean> {
-  const rows = await query<{ id: string }>(
-    `UPDATE generations
-        SET status = 'REVOKED', step = 'Bekor qilindi', progress = 100, finished_at = now()
-      WHERE id = $1 AND user_id = $2 AND status = 'QUEUED'
-      RETURNING id`,
-    [id, userId],
-  );
-  return rows.length > 0;
+  return transaction(async (client) => {
+    const res = await client.query<{ id: string }>(
+      `UPDATE generations
+          SET status = 'REVOKED', step = 'Bekor qilindi', progress = 100, finished_at = now()
+        WHERE id = $1 AND user_id = $2 AND status = 'QUEUED'
+        RETURNING id`,
+      [id, userId],
+    );
+    if (!res.rows[0]) return false;
+    await refundInTx(client, userId, id, CANCEL_REFUND_NOTE);
+    return true;
+  });
 }
 
 /**
@@ -521,10 +661,35 @@ export type ClaimedJob = {
   attempts: number;
   /** Navbatga qo'yishda hisoblangan byudjet (ms). 0 — eski qator. */
   budgetMs: number;
+  /**
+   * Shu CLAIMning to'siq tokeni — qatorga `locked_by` sifatida yozilgan
+   * qiymat (C26). Ishga oid HAR yozuv (`setProgress`, `setLive`,
+   * `heartbeat`, `setCost`, `commitJobResult`, `failJob`, `releaseJobs`)
+   * aynan shu qiymat bilan to'siladi.
+   */
+  lease: string;
 };
 
 /**
+ * Har claim uchun YANGI to'siq tokeni (C26: CONC-06).
+ *
+ * Ilgari token process bo'yicha edi (`WORKER_ID`): process o'z ishini
+ * qayta olsa (qulf yo'qolib, housekeeping qayta navbatga qo'ygach) eski va
+ * yangi yurish bir xil `locked_by` ni ko'tarardi — eski yurish yangi
+ * claim ustidan ishni yakunlar, keyin yangisi natijani o'chirardi.
+ * Tasodifiy qo'shimcha har claimni noyob qiladi; boshidagi `workerId`
+ * jurnal va tashxis uchun (kimning claimi ekani ko'rinsin).
+ */
+export function newLease(workerId: string): string {
+  return `${workerId}:${randomUUID()}`;
+}
+
+/**
  * Navbatdan bitta ish oladi.
+ *
+ * `lease` — qatorga `locked_by` sifatida yoziladigan to'siq tokeni. U HAR
+ * claim uchun noyob bo'lishi SHART (`newLease`); worker aynan shunday
+ * chaqiradi. Qaytgan `ClaimedJob.lease` — shu qiymat.
  *
  * `FOR UPDATE SKIP LOCKED` — bir nechta worker parallel ishlaganda
  * bir vazifani ikki marta bajarmaydi.
@@ -540,7 +705,7 @@ export type ClaimedJob = {
  * bo'ylab yuradi.
  */
 export async function claimJob(
-  workerId: string,
+  lease: string,
   opts: { userMaxRunning?: number } = {},
 ): Promise<ClaimedJob | null> {
   const cap = Math.max(1, Math.floor(opts.userMaxRunning ?? env.queue.userMaxInflight) || 1);
@@ -572,7 +737,7 @@ export async function claimJob(
          FOR UPDATE SKIP LOCKED
       )
       RETURNING g.id, g.user_id, g.tool_id, g.values_json, g.price, g.attempts, g.budget_ms`,
-    [workerId, cap],
+    [lease, cap],
   );
   if (!row) return null;
   return {
@@ -583,7 +748,37 @@ export async function claimJob(
     price: Number(row.price),
     attempts: row.attempts,
     budgetMs: Number(row.budget_ms) || 0,
+    lease,
   };
+}
+
+/**
+ * SIGTERM (deploy): shu process ushlab turgan claimlarni DARHOL navbatga
+ * qaytaradi (C14: INFRA-02, CONC-03, DB-05).
+ *
+ * Ilgari process 2 s dan keyin shunchaki chiqib ketardi: ish
+ * `IN_PROGRESS` bo'lib, o'lik qulf bilan `budget + 30 s` (2–12.5 daqiqa)
+ * turib qolardi, keyin boshidan qayta bajarilib provayderga ikki marta
+ * pul to'lanardi. Endi:
+ *   - faqat SHU claimlar (`locked_by = ANY(leases)`) — begona ishga tegilmaydi;
+ *   - `attempts - 1`: deploy urinish hisoblanmaydi (claim uni oshirgan edi),
+ *     ya'ni ikki deploy ishni «Ish vaqti tugadi» bilan yiqitmaydi;
+ *   - qulf va `run_after` darhol bo'shaydi — boshqa worker shu zahoti oladi;
+ *   - `live_json` tozalanadi (eski yurishning jonli dekasi ko'rinmasin).
+ * Qaytaradi: qaytarilgan ishlar id si.
+ */
+export async function releaseJobs(leases: string[]): Promise<string[]> {
+  if (!leases.length) return [];
+  const rows = await query<{ id: string }>(
+    `UPDATE generations
+        SET status = 'QUEUED', locked_by = NULL, locked_at = NULL,
+            run_after = now(), attempts = GREATEST(attempts - 1, 0),
+            step = 'Qayta navbatga qo''yildi', live_json = NULL
+      WHERE locked_by = ANY($1::text[]) AND status = 'IN_PROGRESS'
+      RETURNING id`,
+    [leases],
+  );
+  return rows.map((r) => r.id);
 }
 
 /**
@@ -609,39 +804,86 @@ export function formatOf(fileName: string): string | null {
   return ext && ext.length <= 5 ? ext : null;
 }
 
-export async function completeJob(
+export type JobResult = {
+  html: string;
+  doc: AcademicDoc | null;
+  fileName: string;
+  preview: GenerationPreview | null;
+  /** Va'da qilinganidan kam yetkazilgan bo'lsa (AUDIT-6 C7). */
+  delivered?: Delivered;
+};
+
+export async function completeJob(id: string, workerId: string, result: JobResult): Promise<boolean> {
+  const rows = await query<{ id: string }>(COMPLETE_SQL, completeParams(id, workerId, result));
+  return rows.length > 0;
+}
+
+/**
+ * Natijani (fayl + aktivlar + COMPLETED) BITTA tranzaksiyada yozadi —
+ * FAQAT qulf hali shu claimda bo'lsa (C26: CONC-06; BEB-01 bilan bir yo'l).
+ *
+ * Ilgari tartib «fayl/aktiv yoz → `completeJob` → yutqazsa hammasini
+ * o'chir» edi: qulfi yo'qolgan eski yurish yangi yurishning TAYYOR faylini
+ * bosib yozar, keyin fayl va BARCHA aktivlarni o'chirardi — pullik,
+ * COMPLETED, lekin faylsiz ish. Endi avval qator `FOR UPDATE` bilan
+ * qulflanib egalik tekshiriladi; ega bo'lmasak hech narsa yozilmaydi va
+ * hech narsa o'chirilmaydi (`false` — natija tashlanadi). Yozuv o'rtasida
+ * xato bo'lsa rollback — yarim natija (fayl bor, holat IN_PROGRESS) qolmaydi.
+ *
+ * Aktivlar `putAssets` bilan bir xil SQL (`ON CONFLICT DO NOTHING`,
+ * kontent-manzilli id), faqat shu tranzaksiya client'i orqali.
+ */
+export async function commitJobResult(
   id: string,
-  workerId: string,
-  result: {
-    html: string;
-    doc: AcademicDoc | null;
-    fileName: string;
-    preview: GenerationPreview | null;
-    /** Va'da qilinganidan kam yetkazilgan bo'lsa (AUDIT-6 C7). */
-    delivered?: Delivered;
-  },
+  lease: string,
+  file: { bytes: Uint8Array; mime: string; fileName: string },
+  assets: PendingAsset[],
+  result: JobResult,
 ): Promise<boolean> {
-  const rows = await query<{ id: string }>(
-    `UPDATE generations
+  return transaction(async (client) => {
+    const own = await client.query(
+      `SELECT 1 FROM generations WHERE id = $1 AND locked_by = $2 AND status = 'IN_PROGRESS' FOR UPDATE`,
+      [id, lease],
+    );
+    if (!own.rows[0]) return false;
+    await putGenerationFile(id, file, client);
+    for (const a of assets) {
+      await client.query(
+        `INSERT INTO generation_assets (generation_id, asset_id, mime, size_bytes, bytes, expires_at)
+         VALUES ($1, $2, $3, $4, $5, NULL)
+         ON CONFLICT (generation_id, asset_id) DO NOTHING`,
+        [id, a.assetId, a.mime, a.bytes.byteLength, a.bytes],
+      );
+    }
+    return completeInTx(client, id, lease, result);
+  });
+}
+
+const COMPLETE_SQL = `UPDATE generations
         SET status = 'COMPLETED', progress = 100, step = 'Tayyor',
             html = $3, doc_json = $4, file_name = $5, preview = $6,
             format = COALESCE($7, format), delivered_json = $8,
             finished_at = now(), locked_by = NULL, locked_at = NULL, error = NULL,
             live_json = NULL
       WHERE id = $1 AND locked_by = $2 AND status = 'IN_PROGRESS'
-      RETURNING id`,
-    [
-      id,
-      workerId,
-      cleanText(result.html),
-      result.doc ? toJsonb(result.doc) : null,
-      cleanText(result.fileName),
-      result.preview ? toJsonb(result.preview) : null,
-      formatOf(result.fileName),
-      result.delivered ? toJsonb(result.delivered) : null,
-    ],
-  );
-  return rows.length > 0;
+      RETURNING id`;
+
+function completeParams(id: string, workerId: string, result: JobResult): unknown[] {
+  return [
+    id,
+    workerId,
+    cleanText(result.html),
+    result.doc ? toJsonb(result.doc) : null,
+    cleanText(result.fileName),
+    result.preview ? toJsonb(result.preview) : null,
+    formatOf(result.fileName),
+    result.delivered ? toJsonb(result.delivered) : null,
+  ];
+}
+
+async function completeInTx(client: PoolClient, id: string, workerId: string, result: JobResult): Promise<boolean> {
+  const res = await client.query<{ id: string }>(COMPLETE_SQL, completeParams(id, workerId, result));
+  return res.rows.length > 0;
 }
 
 /**
@@ -699,7 +941,7 @@ export async function reclaimStaleJobs(): Promise<string[]> {
   const staleFilter = `locked_at < now() - ((CASE WHEN budget_ms > 0 THEN budget_ms / 1000 ELSE $1::int END) + 30 || ' seconds')::interval`;
   return transaction(async (client) => {
     // Yana urinib ko'rish mumkin bo'lganlari navbatga qaytadi.
-    await client.query(
+    const requeued = await client.query<{ id: string; attempts: number; user_id: string }>(
       `UPDATE generations
           SET status = 'QUEUED', locked_by = NULL, locked_at = NULL,
               run_after = now() + interval '5 seconds',
@@ -707,9 +949,19 @@ export async function reclaimStaleJobs(): Promise<string[]> {
               live_json = NULL
         WHERE status = 'IN_PROGRESS'
           AND attempts < 2
-          AND ${staleFilter}`,
+          AND ${staleFilter}
+        RETURNING id, attempts, user_id`,
       [String(timeoutSec)],
     );
+    // Ish izi (OBS-08): urinish o'lik deb topildi — keyingi urinishdan oldin jurnalga.
+    for (const r of requeued.rows) {
+      log("warn", "[jobs] osilib qolgan ish qayta navbatga qo'yildi", {
+        jobId: r.id,
+        userId: String(r.user_id),
+        attempt: r.attempts,
+        reason: "stale_lock",
+      });
+    }
     // Ikki marta uringanlari — yakuniy xato (pul chaqiruvchi tomonda qaytariladi).
     const dead = await client.query<{ id: string }>(
       `UPDATE generations

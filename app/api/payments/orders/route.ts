@@ -1,6 +1,8 @@
 import { ApiError, handler, json, limit, readJson, requireUser } from "@/lib/server/api";
 import { env, paymentsConfigured } from "@/lib/server/env";
+import { log } from "@/lib/server/log";
 import { PRO_PLAN, createOrder, listOrders, type Provider, type Purpose } from "@/lib/server/payments";
+import { userMessage } from "@/lib/server/user-error";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -44,7 +46,16 @@ export const POST = handler("payments/create", async (req) => {
       amountSoum: Number(body.amount ?? 0),
     });
   } catch (e) {
-    throw new ApiError(e instanceof Error ? e.message : "Buyurtma yaratilmadi", 400);
+    /*
+     * `createOrder` ATAYIN o'zbekcha xato tashlaydi (summa oralig'i) — u 400
+     * bilan foydalanuvchiga boradi. Boshqa har qanday xato (pg, ulanish)
+     * xom matni javobga chiqmasin (BEA-09): `handler` uni 500 + `requestId`
+     * ga aylantiradi va stack bilan jurnalga yozadi.
+     */
+    const safe = userMessage(e, "");
+    if (!safe) throw e;
+    log("info", "[payments] buyurtma rad etildi", { provider, purpose, amount: body.amount, reason: safe });
+    throw new ApiError(safe, 400);
   }
 
   return json({ order, checkoutUrl: checkoutUrl(order.provider, order.id, order.amountSoum) }, { status: 201 });

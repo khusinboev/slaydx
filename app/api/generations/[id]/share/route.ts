@@ -1,7 +1,7 @@
 import { ApiError, handler, json, limit, requireUser } from "@/lib/server/api";
 import { createGameSession, listGameSessions } from "@/lib/server/game-sessions";
 import { getGeneration } from "@/lib/server/jobs";
-import { publicGameKindOf } from "@/lib/game/public";
+import { publicGameKindOf, publicGameView } from "@/lib/game/public";
 import { gamePath } from "@/lib/game/qr";
 import { env } from "@/lib/server/env";
 
@@ -60,6 +60,23 @@ export const POST = handler("generations/share", async (req, ctx: Ctx) => {
    */
   const kind = publicGameKindOf(gen.type);
   if (!kind) throw new ApiError("Bu vosita uchun o'yin havolasi yo'q", 400);
+
+  /*
+   * BEA-10: vosita turi O'YNALADIGAN bo'lsa ham, HUJJATNING O'ZIDA
+   * o'ynaladigan element bo'lmasligi mumkin (masalan faqat "Ochiq
+   * savol"/"Moslashtirish" turlaridan tuzilgan test — `publicGameView`
+   * ularni chiqarmaydi, chunki serverda avtomatik baholab bo'lmaydi).
+   * Bunday holda havola berilmasin: aks holda har o'quvchi
+   * `/api/o/[token]` da 404 ga uchraydi va o'qituvchi buni faqat
+   * darsda bilib oladi.
+   */
+  if (!gen.doc || !publicGameView(gen.doc, kind)) {
+    throw new ApiError(
+      "Bu hujjatda o'ynaladigan savol yo'q (faqat bitta/ko'p tanlov va to'g'ri/noto'g'ri turlari o'ynaladi)",
+      409,
+      { code: "not_playable" },
+    );
+  }
 
   const session = await createGameSession(id, user.id, kind);
   if (!session) throw new ApiError("Topilmadi", 404);

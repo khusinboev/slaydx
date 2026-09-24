@@ -12,6 +12,10 @@ import { isPublicationProfileId } from "./generation/article/profiles";
 import { articleTypeOf, normalizeArticlePages } from "./generation/article/input";
 import { ARTICLE_TYPES } from "./generation/article/types-registry";
 import type { PagesId } from "./generation/article/types";
+import { normalizeWorkPages, workKindOf } from "./generation/work/registry";
+import { workGenreOfTool } from "./generation/work/types";
+import { pagesOf as essayPagesOf } from "./generation/essay/input";
+import { glossaryTermCount } from "./generation/teacher/input";
 
 const TOPIC_FILE_MODES = [
   {
@@ -1389,6 +1393,49 @@ export function fieldVisible(field: Pick<ToolField, "hideWhen">, values: Record<
   return !h.values.includes(String(values[h.field] ?? ""));
 }
 
+/**
+ * Kurs ishi / referat / mustaqil ish hajm paketi — dvigatel bilan BIR
+ * XIL normalizatordan (`work/registry.ts normalizeWorkPages`, C12).
+ *
+ * Ilgari `priceFor` `pages`ni XOM satr sifatida, ANIQ moslikka
+ * qidirardi: `"40-45 "` (oxirida bo'sh joy) yoki `"zzz"` (noma'lum)
+ * jadvalda topilmay eng arzon tarifga tushardi, `work/input.ts`dagi
+ * dvigatel esa AYNAN shu qiymatni kesib (`.trim()`) va noma'lum
+ * bo'lsa `"20-25"` ga klamp qilib o'qirdi — narx va yozilgan hajm
+ * ajralib ketardi (BEA-01/ABUSE-03).
+ *
+ * `pages` XOM holda (`?? defaultPages` bilan TO'LDIRMASDAN) shu
+ * normalizatorga uzatiladi — `work/input.ts` ham AYNAN shunday qiladi
+ * (`values.pages`, standart bilan oldindan to'ldirmaydi). Sharh (R1,
+ * review `audit/reviews/W3-J.md`): `defaultPages("referat")` = "10-15"
+ * bo'lsa-da, `WorkComposer.tsx` HAR DOIM `pages`ni aniq yuboradi
+ * (forma standarti — `normalizeWorkPages(kind, defaultPages(id))` —
+ * shunchaki forma HOLATI, so'rov maydoni emas). Ya'ni `pages`
+ * berilmagan/`null` so'rov faqat qo'lda yozilgan (forma yubormaydi) —
+ * bunda narx endi dvigatel chindan yozadigan «20-25» tarifiga (5 000)
+ * to'g'ri keladi, 3 000 EMAS.
+ */
+function workPagesFor(toolId: ToolId, values: FormValues): string {
+  const genre = workGenreOfTool(toolId);
+  if (!genre) return String(values.pages ?? defaultPages(toolId));
+  const kind = workKindOf(genre, values.workKind ?? values.kind);
+  return normalizeWorkPages(kind, values.pages);
+}
+
+/**
+ * Glossariy atama soni → narx tarifi (10/20/40) — YUQORIGA yaxlitlanadi:
+ * dvigatel (`teacher/input.ts glossaryTermCount`) `termCount`ni
+ * `glossarySpec.termsMin`..40 oralig'ida ISTALGAN songa klamp qiladi,
+ * priceFor esa faqat 3 ta aniq tarif biladi. `39` kabi yaqin qiymat
+ * eng yaqin YUQORI tarifga tushishi kerak — aks holda 40 talik hujjat
+ * 10 talik narxda (yoki `tool.basePrice` zaxirasida) sotilib qoladi.
+ */
+function glossaryPriceTier(n: number): "10" | "20" | "40" {
+  if (n <= 10) return "10";
+  if (n <= 20) return "20";
+  return "40";
+}
+
 export function priceFor(tool: ToolConfig, values: FormValues): number {
   if (tool.id === "image") {
     const n = Number(values.imageCount || 1);
@@ -1408,13 +1455,18 @@ export function priceFor(tool: ToolConfig, values: FormValues): number {
     return n * PRO_SLIDE_PER_SLIDE;
   }
   if (tool.id === "essay") {
-    const pages = String(values.pages ?? defaultPages(tool.id));
-    // Ilgari 1 varaq ham, 5 varaq ham 2 000 tanga turardi — forma 1–5
-    // varaq tanlovini bersa ham, narx hech qachon o'zgarmasdi.
-    return { "1": 2000, "2": 2500, "3": 3000, "4": 3500, "5": 4000 }[pages] ?? 2000;
+    /*
+     * `pagesOf` — insho dvigateli bilan BIR XIL klamp (C12): 1–5 ga
+     * yaxlitlanadi/qisiladi, bo'sh/xato qiymat 2 ga tushadi. Ilgari
+     * `pages` XOM satr sifatida qidirilardi — `"5 "`, `"99"`, `"4.6"`
+     * jadvalda topilmay 2 000 (eng arzon) turardi, dvigatel esa 5
+     * varaqlik insho yozardi (BEA-01).
+     */
+    const pages = essayPagesOf(values.pages);
+    return { 1: 2000, 2: 2500, 3: 3000, 4: 3500, 5: 4000 }[pages] ?? 2000;
   }
   if (tool.id === "referat" || tool.id === "mustaqil-ish") {
-    const pages = String(values.pages ?? defaultPages(tool.id));
+    const pages = workPagesFor(tool.id, values);
     return (
       {
         "10-15": 3000,
@@ -1425,7 +1477,7 @@ export function priceFor(tool: ToolConfig, values: FormValues): number {
     );
   }
   if (tool.id === "coursework") {
-    const pages = String(values.pages ?? defaultPages(tool.id));
+    const pages = workPagesFor(tool.id, values);
     return (
       {
         "10-15": 12000,
@@ -1458,8 +1510,15 @@ export function priceFor(tool: ToolConfig, values: FormValues): number {
     return translationPrice(translationChars(values));
   }
   if (tool.id === "glossary") {
-    const n = String(values.termCount ?? "10");
-    return { "10": 6000, "20": 9000, "40": 15000 }[n] ?? tool.basePrice;
+    /*
+     * `glossaryTermCount` — dvigatel bilan BIR XIL klamp (C12):
+     * tur standarti/`termsMin`..40. Ilgari `termCount` XOM satr
+     * sifatida qidirilardi — `"39"` jadvalda topilmay `tool.basePrice`
+     * (10 talik tarif, 6 000) turardi, dvigatel esa 39 atamalik (40
+     * talik, 15 000) hujjat yozardi (ABUSE-03).
+     */
+    const n = glossaryTermCount(values);
+    return { "10": 6000, "20": 9000, "40": 15000 }[glossaryPriceTier(n)];
   }
   return tool.basePrice;
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createGame, elapsed, finish, GAME_KIND_LABEL, isLast, next, prev, progress, type GameState } from "@/lib/game/engine";
 import type { PublicGameView } from "@/lib/game/public";
 import { cn } from "@/lib/cn";
@@ -11,6 +11,45 @@ import { NameGate } from "./NameGate";
 import { Quiz } from "./Quiz";
 import { Result } from "./Result";
 import { Sorting } from "./Sorting";
+
+/**
+ * Urinish id si — `crypto.randomUUID()`, ZAXIRA bilan (C36 Sharh R4).
+ *
+ * `randomUUID()` faqat XAVFSIZ kontekstda (HTTPS) va yangi brauzerlarda
+ * bor (Chrome 92+/Safari 15.4+/Firefox 95+) — loyihaning brauzer
+ * maqsadi (Safari 12/Chrome 64) buni qamrab olmaydi. Yo'q yoki xato
+ * bersa (`SecurityError` — xavfsiz kontekst emas), `getRandomValues`
+ * asosida v4 UUID quramiz; U HAM yo'q bo'lsa (juda eski brauzer),
+ * `Math.random()` bilan — kriptografik emas, lekin baribir 122 bitlik
+ * TASODIFIY id (bu yerda faqat TAKRORLANMASLIK kerak, bashorat qilinmaslik
+ * emas — token allaqachon sir, `game-sessions.ts TOKEN_CHARS`).
+ */
+export function newSubmissionId(): string {
+  const c = typeof crypto !== "undefined" ? crypto : undefined;
+  if (c && typeof c.randomUUID === "function") {
+    try {
+      return c.randomUUID();
+    } catch {
+      // Xavfsiz kontekst emas — pastga tushamiz.
+    }
+  }
+  if (c && typeof c.getRandomValues === "function") {
+    const b = c.getRandomValues(new Uint8Array(16));
+    b[6] = (b[6]! & 0x0f) | 0x40; // versiya 4
+    b[8] = (b[8]! & 0x3f) | 0x80; // variant (RFC 4122)
+    const hex = Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  }
+  // So'nggi zaxira — `crypto` umuman yo'q (juda eski brauzer/WebView).
+  let out = "";
+  for (let i = 0; i < 36; i++) {
+    if (i === 8 || i === 13 || i === 18 || i === 23) { out += "-"; continue; }
+    if (i === 14) { out += "4"; continue; }
+    const r = Math.floor(Math.random() * 16);
+    out += (i === 19 ? (r & 0x3) | 0x8 : r).toString(16);
+  }
+  return out;
+}
 
 /**
  * O'YINCHI TOMONI (AUDIT-22 WP-C) — qobiq va oqim.
@@ -42,6 +81,15 @@ export function GamePlayer({ token }: { token: string }) {
   const [sending, setSending] = useState(false);
   /** Taymer sekundi — FAQAT ko'rsatkich; o'yin vaqt bilan to'xtamaydi. */
   const [now, setNow] = useState(0);
+  /**
+   * Joriy URINISH id si (C36 UX-06) — `crypto.randomUUID()`, bitta
+   * urinish uchun BIR MARTA (`start`/«Yana o'ynash» da). `useRef`:
+   * qayta chizishga sabab bo'lmasin, lekin `submit()`ning retry
+   * chaqiruvlari (tarmoq xatosidan keyin «Qayta yuborish») AYNI
+   * qiymatni o'qishi kerak — server shu id bilan takroriy yozuvni
+   * blokLaydi va BIRINCHI natijani qaytaradi.
+   */
+  const submissionIdRef = useRef("");
 
   useEffect(() => {
     let alive = true;
@@ -72,6 +120,8 @@ export function GamePlayer({ token }: { token: string }) {
   const start = useCallback(
     (playerName: string) => {
       if (!view) return;
+      // YANGI urinish — YANGI id (eski, tugallangan urinishning retry'i bilan aralashmasin).
+      submissionIdRef.current = newSubmissionId();
       setName(playerName);
       setSendError("");
       setState(createGame(view));
@@ -90,7 +140,7 @@ export function GamePlayer({ token }: { token: string }) {
       const res = await fetch(`/api/o/${token}/submit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, answers: done.answers, seconds: done.seconds }),
+        body: JSON.stringify({ name, answers: done.answers, seconds: done.seconds, submissionId: submissionIdRef.current }),
       });
       const data = (await res.json().catch(() => ({}))) as { score?: number; total?: number; percent?: number; error?: string };
       if (!res.ok) throw new Error(submitErrorText(res.status, data.error));
@@ -124,6 +174,8 @@ export function GamePlayer({ token }: { token: string }) {
         {...result}
         name={name}
         onAgain={() => {
+          // YANGI urinish — natijalar jadvaliga YANGI qator (`Result.tsx` izohi), shuning uchun YANGI id ham.
+          submissionIdRef.current = newSubmissionId();
           setResult(null);
           setState(createGame(view));
           setNow(Date.now());

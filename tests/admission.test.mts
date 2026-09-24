@@ -194,7 +194,11 @@ test("POST /api/generations qabul qarori va adolatli claimJob", { skip: hasDb ? 
     const text = JSON.stringify(plan[0]["QUERY PLAN"]);
     // MUTATSIYA: eski `WHERE status IN ('QUEUED','IN_PROGRESS')` → "Seq Scan" (yoki parallel) qaytadi.
     assert.ok(!/Seq Scan/.test(text), `qabul sanog'i butun jadvalni o'qiyapti: ${text.slice(0, 400)}`);
-    assert.ok(/generations_queue_idx/.test(text) && /generations_stale_idx/.test(text), `qisman indekslar ishlatilmayapti: ${text.slice(0, 400)}`);
+    // Qaysi indeks tanlanishi rejalovchiga bog'liq (W3-E `023` QUEUED uchun yangi
+    // `generations_queued_created_idx` qo'shdi) — muhimi har uchala subsanoq
+    // indeks orqali o'qiladi, butun jadval emas.
+    const indexScans = (text.match(/"Node Type":"Index (Only )?Scan"/g) ?? []).length;
+    assert.ok(indexScans >= 3, `har subsanoq indeksdan o'qishi kerak (${indexScans} ta indeks skani): ${text.slice(0, 400)}`);
     assert.ok(!/status IN \(/i.test(ADMISSION_COUNTS_SQL));
     await query(`DELETE FROM generations WHERE user_id = $1`, [hist.uid]);
   });

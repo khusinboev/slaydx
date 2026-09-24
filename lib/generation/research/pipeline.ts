@@ -28,6 +28,7 @@ import { ARTICLE_TYPES } from "../article/types-registry";
 import { mapPool, remainingMs } from "../quality";
 import { parseLlmObject } from "../json";
 import type { complete as completeRole } from "../llm-roles";
+import { DeadlineError } from "../llm/chain";
 import { searchWorks, type OpenAlexWork } from "./openalex";
 import { searchBibliographic, verifyDoi } from "./crossref";
 import { BOOKS_MAX_RESULTS, searchBooks, verifyIsbn } from "./googlebooks";
@@ -36,6 +37,23 @@ import type { HttpOpts } from "./http";
 import { queriesPrompt, researchSystemPrompt, selectRefsPrompt } from "../article/prompts";
 
 export type CompleteFn = typeof completeRole;
+
+/**
+ * Bosqich muddati tugagani (`DeadlineError`, audit C28) — «model javob
+ * bermadi» bilan bir xil: manba tanlovi deterministik zaxiraga tushadi.
+ * Boshqa istisnolar o'zgarishsiz yuqoriga ketadi.
+ */
+async function withinStage<T>(p: Promise<T | null>): Promise<T | null> {
+  try {
+    return await p;
+  } catch (e) {
+    if (e instanceof DeadlineError) {
+      console.warn(`[research] ${e.message}`);
+      return null;
+    }
+    throw e;
+  }
+}
 
 export type CollectOpts = {
   deadline: number;
@@ -279,7 +297,8 @@ function finish(refs: Reference[], stats: ResearchStats): CollectResult {
 
 export async function collectReferencesFor(ask: ResearchAsk, opts: CollectOpts): Promise<CollectResult> {
   const stageDeadline = Math.min(opts.deadline, Date.now() + RESEARCH_STAGE_MS);
-  const http: HttpOpts = { fetchImpl: opts.fetchImpl, retryBaseMs: opts.retryBaseMs };
+  // `deadline` — har HTTP urinishi bosqich muddatidan oshmasin (audit EXT-03/EXT-07).
+  const http: HttpOpts = { fetchImpl: opts.fetchImpl, retryBaseMs: opts.retryBaseMs, deadline: stageDeadline };
   const stats = emptyStats(ask.userRefs.length);
 
   // (a) Foydalanuvchi manbalari — doim, `research` o'chiq bo'lsa ham.
@@ -296,7 +315,7 @@ export async function collectReferencesFor(ask: ResearchAsk, opts: CollectOpts):
   const sys = researchSystemPrompt();
 
   // (b1) Qidiruv so'rovlari — `fast` rol; javob bo'lmasa deterministik.
-  const qRes = await opts.complete("fast", sys, queriesPrompt(ask), { json: true, maxTokens: 400, timeoutMs: Math.min(12_000, remainingMs(stageDeadline)) });
+  const qRes = await withinStage(opts.complete("fast", sys, queriesPrompt(ask), { json: true, maxTokens: 400, timeoutMs: Math.min(12_000, remainingMs(stageDeadline)), deadline: stageDeadline }));
   opts.onUsage?.(qRes?.usage);
   let queries = parseQueries(qRes?.text);
   if (queries.length < 3) queries = [...new Set([...queries, ...fallbackQueries(ask)])].slice(0, 6);
@@ -383,11 +402,14 @@ export async function collectReferencesFor(ask: ResearchAsk, opts: CollectOpts):
   const byId = new Map<string, Reference>(shortlist.map((c) => [c.id.toUpperCase(), c]));
   let chosen: string[] = [];
   if (remainingMs(stageDeadline) > 5_000) {
-    const sRes = await opts.complete("researcher", sys, selectRefsPrompt(ask, shortlist, want, ask.quota), {
-      json: true,
-      maxTokens: 900,
-      timeoutMs: Math.min(15_000, remainingMs(stageDeadline)),
-    });
+    const sRes = await withinStage(
+      opts.complete("researcher", sys, selectRefsPrompt(ask, shortlist, want, ask.quota), {
+        json: true,
+        maxTokens: 900,
+        timeoutMs: Math.min(15_000, remainingMs(stageDeadline)),
+        deadline: stageDeadline,
+      }),
+    );
     opts.onUsage?.(sRes?.usage);
     chosen = parseSelection(sRes?.text, byId);
   }

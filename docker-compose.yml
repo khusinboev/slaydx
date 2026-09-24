@@ -1,7 +1,57 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    # Base image pin (INFRA-14/DEPS-05): major.minor tegga emas, aniq
+    # patch + Alpine minor'ga qulflangan (`Dockerfile`dagi `ARG
+    # NODE_IMAGE` bilan bir xil sabab — build har doim prod box'da,
+    # deploy vaqtida bo'ladi). Yangilash: eng so'nggi `16.x-alpineN.NN`ni
+    # `https://registry.hub.docker.com/v2/repositories/library/postgres/tags?page_size=100&name=16.`
+    # dan tanlab shu qatorni yangilang, sinab ko'ring, alohida commitda.
+    image: postgres:16.15-alpine3.24
     restart: unless-stopped
+    # Server sozlamalari (C33/C35, W3-E bilan kelishilgan): standart
+    # Postgres konfiguratsiyasi cheklovsiz — bitta jarayon 1000+ ulanish
+    # ochishi yoki katta sort/join'lar xotirani cheksiz yeyishi mumkin,
+    # box esa UCHTA loyiha bilan umumiy (INFRA-04). Sonlar
+    # `${PG_MEM_LIMIT:-1g}` (pastda, mem_limit) uchun hisoblangan:
+    #   max_connections=100 — haqiqiy talab ~20-30 (web pool 10 + 2
+    #     worker replika × WORKER_CONCURRENCY(4)/pool talabi + migratsiya/
+    #     admin skriptlar uchun zaxira); 100 katta zaxira bilan, lekin
+    #     PID/xotira sarfini cheksiz qilmaydi.
+    #   shared_buffers=256MB — 1 GB limitning ~25% (standart tavsiya;
+    #     `PG_MEM_LIMIT` 1GB dan oshirilsa mutanosib oshiring, masalan
+    #     4GB limitda ~1GB).
+    #   work_mem=16MB — har ulanish bittalab sort/hash uchun.
+    #   shared_preload_libraries=pg_stat_statements — sekin so'rovlarni
+    #     kuzatish uchun old-shart (OBS-13); `CREATE EXTENSION` alohida
+    #     migratsiya bilan yoqiladi, bu yerda faqat server kutubxonasi
+    #     yuklanadi.
+    #   log_min_duration_statement=500 (ms) — 500 ms dan sekin so'rov
+    #     jurnalga yoziladi, diagnostika uchun.
+    #   autovacuum_vacuum_scale_factor=0.05 — standart 0.2 dan
+    #     agressivroq: tez-tez yangilanadigan qatorlar (heartbeat,
+    #     `generations` — DB-12/SCALE-13) bloat to'planishidan oldin
+    #     tozalanadi.
+    #   idle_in_transaction_session_timeout=60s — osilib qolgan
+    #     tranzaksiya qulfni abadiy ushlab turmasin (`chargeInTx`/
+    #     `claimJob` qator qulflariga bog'liq — TEST-03/TEST-04).
+    # `PG_MEM_LIMIT` boshqacha sozlansa, shared_buffers/work_mem'ni ham
+    # mutanosib oshiring — bir-biriga bog'liq.
+    command:
+      - postgres
+      - -c
+      - max_connections=100
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - work_mem=16MB
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - log_min_duration_statement=500
+      - -c
+      - autovacuum_vacuum_scale_factor=0.05
+      - -c
+      - idle_in_transaction_session_timeout=60s
     # Resurs chegarasi (INFRA-04): box UCHTA loyiha bilan umumiy — chegarasiz
     # konteyner Postgres yoki qo'shni loyihalarni OOM bilan yiqitishi mumkin.
     # `PG_MEM_LIMIT`/`PG_CPUS` orqali sozlanadi.
@@ -65,6 +115,11 @@ services:
       DATABASE_URL: postgres://slaydx:${POSTGRES_PASSWORD:-slaydx}@postgres:5432/slaydx
       APP_URL: ${APP_URL:-http://localhost:3000}
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET kerak — openssl rand -base64 48}
+      # DEPS-08: admin ruxsati endi manba kodida QATTIQ YOZILMAGAN
+      # (`lib/server/admin-phones.ts` `process.env.ADMIN_PHONES`ni
+      # o'qiydi) — kompyuterga tushirilgan bo'lsa ham kim admin ekani
+      # public repo'da ko'rinmasin. Bo'sh qolsa admin YO'Q (fail-closed).
+      ADMIN_PHONES: ${ADMIN_PHONES:-}
       NEXT_PUBLIC_BRAND_NAME: ${NEXT_PUBLIC_BRAND_NAME:-SlaydX}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       NEXT_PUBLIC_TELEGRAM_BOT: ${NEXT_PUBLIC_TELEGRAM_BOT:-}
@@ -135,6 +190,13 @@ services:
       PDF_MAX_CONCURRENCY: ${PDF_MAX_CONCURRENCY:-}
       PAYME_SANDBOX: ${PAYME_SANDBOX:-}
       DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-}
+      # W3-E (db.ts): so'rov/ulanish shiftlari — standart 30000/5000 ms
+      # `lib/server/db.ts`da. Bo'sh qoldirilsa kod standarti ishlaydi;
+      # bu yerda faqat KONTEYNERGA YETIB BORISHI qulflanadi
+      # (`tests/compose-env.test.mts`), boshqa `LLM_JUDGE`/`OPENALEX_API_KEY`
+      # sinfidagi tuynuklarga o'xshab jim qolib ketmasin.
+      DATABASE_STATEMENT_TIMEOUT_MS: ${DATABASE_STATEMENT_TIMEOUT_MS:-}
+      DATABASE_CONNECT_TIMEOUT_MS: ${DATABASE_CONNECT_TIMEOUT_MS:-}
       # Reverse proxy ortida turibmiz — `x-forwarded-for` ga ishonamiz,
       # aks holda IP chegarasi hamma so'rovni bitta IP deb hisoblardi.
       TRUST_PROXY: ${TRUST_PROXY:-true}
@@ -187,6 +249,19 @@ services:
       DATABASE_URL: postgres://slaydx:${POSTGRES_PASSWORD:-slaydx}@postgres:5432/slaydx
       APP_URL: ${APP_URL:-http://localhost:3000}
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET kerak}
+      # DEPS-08 — web blokidagi izohga qarang. `scripts/bot.mts`/
+      # `bot-commands.mts` (Telegram bot, `lib/server/telegram.ts` orqali
+      # `isAdminPhone` chaqirishi mumkin) shu konteynerda ishlaydi.
+      ADMIN_PHONES: ${ADMIN_PHONES:-}
+      # INFRA-09: PPTX/DOCX metama'lumotini worker chizadi (`buildArtifact`
+      # shu konteynerda ishlaydi), `lib/brand.ts` esa `NEXT_PUBLIC_BRAND_*`ni
+      # to'g'ridan-to'g'ri `process.env`dan o'qiydi — Next.js build-vaqtidagi
+      # inline qilish bu yerga TEGISHLI EMAS (worker oddiy `tsx` processi).
+      # Shu ikkalasi `web`da bor edi, `worker`da yo'q edi — nom o'zgarsa
+      # generatsiya qilingan fayllar eski nom bilan chiqib qolardi.
+      # `tests/compose-env.test.mts` qulflaydi.
+      NEXT_PUBLIC_BRAND_NAME: ${NEXT_PUBLIC_BRAND_NAME:-SlaydX}
+      NEXT_PUBLIC_BRAND_LOGO: ${NEXT_PUBLIC_BRAND_LOGO:-/logo.png}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.7-flash}
       # Rasm yaratish modeli (bo'sh → kod standarti gemini-3.1-flash-lite-image / 1K)
@@ -236,6 +311,9 @@ services:
       QUEUE_TTL_SEC: ${QUEUE_TTL_SEC:-}
       RETENTION_BONUS_DAYS: ${RETENTION_BONUS_DAYS:-}
       DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-}
+      # W3-E (db.ts) — web blokidagi izohga qarang.
+      DATABASE_STATEMENT_TIMEOUT_MS: ${DATABASE_STATEMENT_TIMEOUT_MS:-}
+      DATABASE_CONNECT_TIMEOUT_MS: ${DATABASE_CONNECT_TIMEOUT_MS:-}
       WORKER_JOB_TIMEOUT_MS: ${WORKER_JOB_TIMEOUT_MS:-660000}
 
 volumes:

@@ -3,7 +3,7 @@ import test, { afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { createElement as h } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { GamePlayer } from "../../components/game/Player.tsx";
+import { GamePlayer, newSubmissionId } from "../../components/game/Player.tsx";
 import { crosswordSlots } from "../../lib/game/engine.ts";
 import { publicGameView, publicItemId, type PublicGameKind, type PublicGameView } from "../../lib/game/public.ts";
 import { scoreAnswers, scorePercent } from "../../lib/game/score.ts";
@@ -297,7 +297,7 @@ test("tinglash: audio yo'qligi aytiladi, variant indeksi yuboriladi", async () =
 
 /* ────────────────────────── xatolar va qayta o'ynash ────────────────────────── */
 
-test("429: o'zbekcha xato, javoblar YO'QOLMAYDI va qayta yuborish mumkin", async () => {
+test("429: o'zbekcha xato, javoblar YO'QOLMAYDI va qayta yuborish mumkin, submissionId O'ZGARMAYDI (C36 UX-06)", async () => {
   const { view, calls } = await openGame("quiz", { submit: 429 });
   await enterName();
   fireEvent.click(qq("[data-option]")[0]!);
@@ -316,9 +316,22 @@ test("429: o'zbekcha xato, javoblar YO'QOLMAYDI va qayta yuborish mumkin", async
   assert.equal(qq("[data-option]")[0]!.getAttribute("aria-pressed"), "true", "tanlov saqlandi");
   assert.ok(calls.some((c) => c.method === "POST"), "urinish bo'lgan");
   assert.ok(view.total > 0);
+
+  const firstSubmissionId = lastSubmit(calls).submissionId;
+  assert.ok(typeof firstSubmissionId === "string" && firstSubmissionId.length > 0, "submissionId yuborilmadi");
+
+  // «Qayta yuborish» tugmasi FAQAT oxirgi savolda ko'rinadi — orqaga
+  // qaytgan edik (tanlov saqlanganini tekshirish uchun), yana oxirigacha boramiz.
+  while (q("[data-next]")) fireEvent.click(q("[data-next]")!);
+  // «Qayta yuborish» — AYNI urinish, AYNI submissionId (server shu bilan dedupe qiladi).
+  await clickFinish();
+  await waitFor(() => assert.equal(calls.filter((c) => c.method === "POST").length, 2));
+  // MUTATSIYA: har `submit()` chaqiruvida YANGI id yaratilsa — server
+  // takroriy yuborishni "yangi urinish" deb yozib qo'yardi (UX-06).
+  assert.equal(lastSubmit(calls).submissionId, firstSubmissionId, "qayta yuborishda submissionId o'zgardi");
 });
 
-test("natija ekrani va «Yana o'ynash» yangi urinish boshlaydi", async () => {
+test("natija ekrani va «Yana o'ynash» yangi urinish boshlaydi, YANGI submissionId bilan", async () => {
   const { calls } = await openGame("sorting");
   await enterName("Zulfiya");
   await clickFinish();
@@ -327,6 +340,9 @@ test("natija ekrani va «Yana o'ynash» yangi urinish boshlaydi", async () => {
   assert.match(q("[data-game-result]")!.textContent ?? "", /Zulfiya/, "ism natijada ko'rinadi");
   assert.equal(q("[data-percent]")!.textContent, "0%", "javobsiz o'yin — 0 %");
   assert.ok(!/toifa/i.test(q("[data-game-result]")!.textContent ?? ""), "qaysi topshiriq xato ekani KO'RSATILMAYDI");
+
+  const firstSubmissionId = lastSubmit(calls).submissionId;
+  assert.ok(typeof firstSubmissionId === "string" && firstSubmissionId.length > 0, "submissionId yuborilmadi");
 
   await act(async () => {
     fireEvent.click(q("[data-again]")!);
@@ -338,4 +354,62 @@ test("natija ekrani va «Yana o'ynash» yangi urinish boshlaydi", async () => {
   await clickFinish();
   await waitFor(() => assert.ok(q("[data-game-result]")));
   assert.equal(calls.filter((c) => c.method === "POST").length, 2, "ikkinchi urinish YANGI qator sifatida ketdi");
+  // MUTATSIYA: «Yana o'ynash» ESKI submissionId'ni qayta ishlatsa — server
+  // ikkinchi urinishni BIRINCHISINING TAKRORI deb hisoblab, yozib qo'yardi.
+  assert.notEqual(lastSubmit(calls).submissionId, firstSubmissionId, "yangi urinish ESKI submissionId bilan ketdi");
+});
+
+/* ────────────────────────── `crypto.randomUUID` zaxirasi (Sharh R4) ────────────────────────── */
+
+/*
+ * TO'G'RIDAN-TO'G'RI birlik testi, React/jsdom RENDERSIZ (`newSubmissionId`
+ * eksport qilingan) — render orqali (`fireEvent` → `onSubmit` → `start()`)
+ * tekshirish ISHONCHSIZ chiqdi: Node'ning Web Crypto implementatsiyasida
+ * `randomUUID` INSTANSIYaning o'z xususiyati emas, `Crypto.prototype` da
+ * turadi — `delete crypto.randomUUID` HECH NARSA O'CHIRMAYDI (prototip
+ * usuli zanjir orqali ko'rinib qoladi), va bu holat faqat funksiyani
+ * TO'G'RIDAN-TO'G'RI chaqirganda aniq ko'rinadi. Shuning uchun "yo'qligini"
+ * taqlid qilish `crypto.randomUUID = undefined` (SOYA xususiyat) bilan.
+ */
+test("newSubmissionId: crypto.randomUUID YO'Q bo'lsa — `getRandomValues` zaxirasi v4 UUID beradi, TASHLAMAYDI", () => {
+  const original = crypto.randomUUID;
+  /*
+   * Real brauzerda funksiya umuman YO'Q yoki xavfsiz kontekst emasligi
+   * uchun mavjud emas — shuni taqlid qilamiz. `delete` YETARLI EMAS:
+   * Node'da `randomUUID` `Crypto.prototype` da turadi (instansiyaning
+   * O'Z xususiyati emas), `delete crypto.randomUUID` hech narsa
+   * o'chirmaydi — prototip usuli zanjir orqali ko'rinib qoladi.
+   * O'RNIGA (`undefined`) YOZISH instansiyada SOYA (shadow) xususiyat
+   * yaratadi va prototipni yashiradi — xuddi eski brauzerdagidek.
+   */
+  crypto.randomUUID = undefined as unknown as typeof crypto.randomUUID;
+  try {
+    const id = newSubmissionId();
+    // MUTATSIYA: zaxira generator olib tashlansa — bu yerda `TypeError`
+    // (`crypto.randomUUID is not a function`) otilardi.
+    assert.match(id, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i, "getRandomValues zaxirasi v4 UUID shaklini bermadi");
+    const id2 = newSubmissionId();
+    assert.notEqual(id, id2, "zaxira generator bir xil id qaytardi — TAKRORLANMASLIK buzildi");
+  } finally {
+    crypto.randomUUID = original;
+  }
+});
+
+test("newSubmissionId: crypto BUTUNLAY yo'q (juda eski WebView) — Math.random so'nggi zaxirasi ham v4 shaklini beradi", () => {
+  const g = globalThis as { crypto?: Crypto };
+  const original = g.crypto;
+  delete g.crypto;
+  try {
+    const id = newSubmissionId();
+    // MUTATSIYA: so'nggi (Math.random) zaxira olib tashlansa — bu yerda
+    // `crypto is not defined`/`TypeError` otilardi.
+    assert.match(id, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[0-9a-f]{4}-[0-9a-f]{12}$/i, "so'nggi zaxira v4 shaklini bermadi");
+  } finally {
+    g.crypto = original;
+  }
+});
+
+test("newSubmissionId: crypto.randomUUID BOR bo'lsa — o'shani ishlatadi (asosiy yo'l)", () => {
+  const id = newSubmissionId();
+  assert.match(id, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
 });

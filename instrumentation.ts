@@ -78,25 +78,52 @@ export async function register() {
  * Faqat stdout'ga bitta JSON qator yozadi (Docker `json-file` bilan
  * `docker compose logs` orqali o'qiladi/`grep`lanadi) — tashqi xizmatga
  * hech narsa yuborilmaydi.
+ *
+ * Node runtime'da umumiy `lib/server/log.ts` orqali (C31): stack, `reqId`
+ * (`x-request-id`) va redaksiya (URL dagi `?key=`, telefon) — boshqa
+ * qatorlar bilan bir xil shakl. Log moduli `node:async_hooks` ishlatadi,
+ * shuning uchun u DINAMIK import qilinadi; edge runtime'da esa oldingi
+ * sodda JSON qator qoladi.
  */
-export function onRequestError(
+export async function onRequestError(
   error: unknown,
   request: { path: string; method: string; headers: Record<string, string | string[] | undefined> },
   context: { routerKind: string; routePath: string; routeType: string },
 ) {
+  const digest = (error as { digest?: string } | null)?.digest;
+  const rawId = request?.headers?.["x-request-id"];
+  const reqId = typeof rawId === "string" && /^[A-Za-z0-9._:-]{8,128}$/.test(rawId) ? rawId : undefined;
+  if (process.env.NEXT_RUNTIME !== "edge") {
+    try {
+      const { log } = await import("./lib/server/log");
+      log("error", "request_error", {
+        reqId,
+        digest,
+        path: request?.path,
+        method: request?.method,
+        routeType: context?.routeType,
+        routePath: context?.routePath,
+        err: error,
+      });
+      return;
+    } catch (e) {
+      // Log moduli yuklanmadi — pastdagi sodda qatorga tushamiz (xato yo'qolmasin).
+      console.error("[instrumentation] log moduli yuklanmadi:", e instanceof Error ? e.message : e);
+    }
+  }
   const err = error instanceof Error ? error : undefined;
   console.error(
     JSON.stringify({
       ts: new Date().toISOString(),
       level: "error",
       msg: "request_error",
-      digest: (error as { digest?: string } | null)?.digest,
-      path: request?.path,
+      reqId,
+      digest,
+      path: request?.path?.replace(/([?&](?:api_?)?key|[?&]token)=[^&]*/gi, "$1=[REDACTED]"),
       method: request?.method,
       routeType: context?.routeType,
       routePath: context?.routePath,
-      err: err ? err.message : String(error),
-      stack: err?.stack,
+      err: err ? { message: err.message, stack: err.stack } : { message: String(error) },
     }),
   );
 }

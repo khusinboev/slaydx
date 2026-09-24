@@ -21,9 +21,12 @@ Status legend: ✅ fixed & merged · 🔄 in review · 🛠 in progress · ⏳ p
 | C17/C18/C19/C24 + C22 compose | INFRA-01, TEST-05, INFRA-04, INFRA-15, OBS-10, INFRA-06, OBS-04, OBS-12, OBS-01, INFRA-05, INFRA-10 (CONC-17 partial) | W2-D1 | ✅ merged | `4cbb6d4`..`fbb1bef` → merge `9c7d682` | `audit/reviews/W2-D1.md` (2nd rejection resolved by orchestrator) |
 | C23 retention + queue TTL + C27 | FILE-01, DB-01, BEB-06, BEB-03, CONC-04, BEA-18, DB-10, OBS-05/CONC-05/DB-04 (bounded reconciler) | W2-D2 | ✅ merged | `d3334f3`..`066bb11` → merge `33c3591` | `audit/reviews/W2-D2.md` (2nd rejection resolved by orchestrator, `.claude/escalations.log`) |
 | C20/C21 + UX-08 + W1-E UI + C09 client | FE-02, UX-05, FE-14, FE-03, UX-08, FE-08, FE-12 | W2-E | ✅ merged | `9664c0f`..`4a36ca6` → merge `0568292` | `audit/reviews/W2-E.md` (2nd rejection resolved by orchestrator) |
-| C11/C13/C29 + leftovers | EXT-01, DB-02, EXT-08, SCALE-10, BEA-15, ABUSE-05/SECA-03 (partial), SECB-05 (rest), BEA-03 | W2-C | 🔄 re-review | `ae0c81e`..`46934d6` | `audit/reviews/W2-C.md` |
+| C11/C13/C29 + leftovers | EXT-01, DB-02, EXT-08, SCALE-10, BEA-15, ABUSE-05/SECA-03 (partial), SECB-05 (rest), BEA-03 | W2-C | ✅ merged | `ae0c81e`..`46934d6` → merge `cf3bd1d` | `audit/reviews/W2-C.md` (approved on re-review) |
+| W2 wrap-up | CONC-17 (WORKER_INLINE default off in prod), .env.example limits | orchestrator | ✅ | `fa938a1` | test red→green→mutation |
 
 **W1 gate (commit `5d09028`, includes W2-A + W2-D2): ✅ GREEN** — typecheck 0, lint 0, unit **2 783 / 2 785** (only the 2 known env-dependent `document.test` failures; +146 tests vs baseline 2 639), viewer 248/248, UI 373/373, `next build` ok, start smoke on a fresh Postgres: `/api/health` 200, `/uz` 200, `/api/generations` 401, migrations through `022_retention.sql`.
+
+**W2 gate (commit `fa938a1` + fixes `6a415f0`): ✅ GREEN** — typecheck 0 (after fixing a type error in the new CONC-17 test), lint 0, unit **2 899 / 2 901** (only the 2 known env-dependent failures; +262 vs baseline), viewer **248/248** (one stale assertion updated for the intended `?v=<fileVersion>` thumb URL), UI **401/401**, `next build` ok, start smoke on a fresh Postgres: health 200, `/uz` 200, `/api/generations` 401, migrations through `022_retention.sql`.
 
 ## Wave 3 — P2 (phase 1 running)
 
@@ -38,3 +41,9 @@ Status legend: ✅ fixed & merged · 🔄 in review · 🛠 in progress · ⏳ p
 ## Event log
 - 2026-09-23 22:12 laptop reboot (scratchpad lost, all deliverables committed); ~22:35 VS Code crash (no OOM in kernel log) — agents resumed with SendMessage, no committed work lost.
 - 2026-09-24 ~02:45 session rate limit stopped 6 agents; all uncommitted work intact in worktrees; resumed 02:58 with SendMessage (each told to commit WIP first).
+
+## Pause — 2026-09-24 05:15 (/holats)
+- W3: 9/10 merged (A `4a57589`, B `1f26384`, C `20aeead`, D `b4a9ff1`, E `33d0ce4`, F `8f94120`, G `15cf902`, I `a455603`, J `c3f5e48`); W3-H awaiting review (branch has 9 commits). W3 gate not yet run.
+- W4 started (A, B, C, E, F); WIP commits on branches for C and F; D not started.
+- Phase 5 harness written (`loadtests/` WIP on the P5-prep branch), smoke partial.
+- Test fixes on the audit branch: admission EXPLAIN assertion (`c38a1fd`), no-PII fixture IP (`0bdc2e7`).
