@@ -139,16 +139,26 @@ function planTitle(s: SlideModel, theme: SlideTheme, index: number, total: numbe
 
 /** Bo'lim — tepada ulkan dekorativ raqam, ostida chiziq va bo'lim nomi. */
 function planSection(s: SlideModel, theme: SlideTheme, index: number, total: number): SlidePlan {
-  const { W, H, fitSize, pushFooter, planNumber } = LAYOUT_KIT;
+  const { W, H, fitSize, inkHeight, pushFooter, planNumber, SECTION_TOP, SECTION_BOTTOM } = LAYOUT_KIT;
   const layers: SlideLayer[] = [];
   layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.bg } });
   /*
    * AUDIT-25: ulkan raqam — reja bandi (`s.plan`), deka tartibi emas.
    * Reja bandi yo'q bo'lsa raqam ham, uning 2.4″ lik maydoni ham yo'q:
-   * chiziq + sarlavha + izoh bloki sahifa markaziga ko'tariladi.
+   * chiziq + sarlavha + izoh bloki SIYOH balandligi bo'yicha zonada
+   * markazlanadi (qat'iy siljitish PDF da blokni tepada qoldirib, pastki
+   * yarmni bo'sh qoldirardi — ko'z tekshiruvida ko'rindi).
    */
   const no = planNumber(s);
-  const up = no ? 0 : s.subtitle ? -1.0 : -0.4;
+  const x = 0.85;
+  const tw = 11.6;
+  const titleSize = fitSize(s.title, { x, y: 0, w: tw, h: 1.4 }, 44, 24);
+  const subSize = s.subtitle ? fitSize(s.subtitle, { x, y: 0, w: tw, h: 1.15 }, 19, 13) : 0;
+  let ruleY = 3.35;
+  let titleY = 3.65;
+  let titleH = 1.4;
+  let subY = 5.2;
+  let subH = 1.15;
   if (no) {
     layers.push({
       t: "text",
@@ -159,27 +169,32 @@ function planSection(s: SlideModel, theme: SlideTheme, index: number, total: num
       bold: true,
       valign: "middle",
     });
+  } else {
+    titleH = Math.min(1.4, Math.max((titleSize * 1.3) / 72, inkHeight(s.title, tw, titleSize)));
+    subH = s.subtitle ? Math.min(1.15, Math.max((subSize * 1.3) / 72, inkHeight(s.subtitle, tw, subSize))) : 0;
+    const blockH = 0.03 + 0.27 + titleH + (s.subtitle ? 0.15 + subH : 0);
+    ruleY = SECTION_TOP + Math.max(0, (SECTION_BOTTOM - SECTION_TOP - blockH) / 2);
+    titleY = ruleY + 0.3;
+    subY = titleY + titleH + 0.15;
   }
-  layers.push({ t: "rect", box: { x: 0.85, y: 3.35 + up, w: 11.6, h: 0.03 }, fill: { color: theme.accent } });
-  const titleBox: Box = { x: 0.85, y: 3.65 + up, w: 11.6, h: 1.4 };
+  layers.push({ t: "rect", box: { x, y: ruleY, w: tw, h: 0.03 }, fill: { color: theme.accent } });
   layers.push({
     t: "text",
-    box: titleBox,
+    box: { x, y: titleY, w: tw, h: titleH },
     text: s.title,
     color: theme.text,
-    size: fitSize(s.title, titleBox, 44, 24),
+    size: titleSize,
     bold: true,
     valign: "top",
     src: { f: "title" },
   });
   if (s.subtitle) {
-    const subBox: Box = { x: 0.85, y: 5.2 + up, w: 11.6, h: 1.15 };
     layers.push({
       t: "text",
-      box: subBox,
+      box: { x, y: subY, w: tw, h: subH },
       text: s.subtitle,
       color: theme.muted,
-      size: fitSize(s.subtitle, subBox, 19, 13),
+      size: subSize,
       src: { f: "subtitle" },
     });
   }

@@ -145,9 +145,10 @@ function planSection(s: SlideModel, theme: SlideTheme, index: number, total: num
   /*
    * AUDIT-25: nishon ichidagi raqam — reja bandi (`s.plan`), deka
    * tartibi emas. Reja bandi yo'q bo'lsa bo'sh nishon qoldirilmaydi:
-   * uning o'rnida dizaynning «nishon» naqshi — `titleBg` disk va
-   * markazida `accent2` doira (raqamsiz, lekin doira kompozitsiyasi
-   * buzilmaydi).
+   * uning o'rnida dizaynning «nishon» naqshi — `titleBg` disk, ichida
+   * `bg` halqa va `accent` markaz (raqamsiz, lekin doira kompozitsiyasi
+   * buzilmaydi). `accent2` EMAS: `atlas` da u `titleBg` bilan aynan bir
+   * rang va markaz ko'rinmay, nishon bo'sh bo'lib qolardi (PDF da ko'rindi).
    */
   const disk: Box = { x: 1.4, y: 2.2, w: 3.1, h: 3.1 };
   const no = planNumber(s);
@@ -155,8 +156,11 @@ function planSection(s: SlideModel, theme: SlideTheme, index: number, total: num
     pushBadge(layers, theme, disk, no, 72);
   } else {
     layers.push(circle({ ...disk }, { color: theme.titleBg }));
-    const d = disk.w * 0.42;
-    layers.push(circle({ x: disk.x + (disk.w - d) / 2, y: disk.y + (disk.h - d) / 2, w: d, h: d }, { color: theme.accent2 }));
+    const ring = disk.w * 0.42;
+    const core = disk.w * 0.24;
+    const at = (d: number): Box => ({ x: disk.x + (disk.w - d) / 2, y: disk.y + (disk.h - d) / 2, w: d, h: d });
+    layers.push(circle(at(ring), { color: theme.bg }));
+    layers.push(circle(at(core), { color: theme.accent }));
   }
 
   const x = 5.65;

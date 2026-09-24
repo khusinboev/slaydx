@@ -358,3 +358,53 @@ test("A2-04: ikki qatorli oqim (5 bosqich) — auditoriya polida oddiy izoh quti
     }
   }
 });
+
+// ═══════════════════════════════════ ko'z tekshiruvida topilganlar (PDF)
+
+/**
+ * Bo'lim slaydida ingichka bezak chizig'i sarlavha SIYOHINI kesib
+ * o'tmasin. `dashboard` panel to'rining o'rta chizig'i 3.75 da turardi
+ * va sarlavhaning oxirgi qatorini ustidan chizardi (raqamli va raqamsiz
+ * holatda ham — AUDIT-25 PNG tekshiruvida ko'rindi).
+ */
+test("bo'lim: ingichka chiziq sarlavha siyohini kesib o'tmaydi — har maket, plan bilan/siz", () => {
+  const theme = getSlideTheme("atlas");
+  for (const visual of VISUALS) {
+    for (const plan of [3, undefined]) {
+      const p = planSlide(section({ img: false, sub: true, plan }), theme, visual, INDEX, TOTAL);
+      const title = texts(p.layers).find((l) => l.src?.f === "title")!;
+      const inkH = LAYOUT_KIT.inkHeight(textOf(title), title.box.w, title.size);
+      const bottom = title.valign === "bottom" ? title.box.y + title.box.h : title.box.y + inkH;
+      const top = title.valign === "bottom" ? bottom - inkH : title.valign === "middle" ? title.box.y + (title.box.h - inkH) / 2 : title.box.y;
+      const bot = title.valign === "middle" ? top + inkH : bottom;
+      for (const r of p.layers) {
+        // Daftar katagi (notebook `pushGrid`, alpha 0.1) — qog'oz foni, bezak emas.
+        if (r.t !== "rect" || r.box.h > 0.05 || r.box.w < 2 || (r.fill?.alpha ?? 1) < 0.2) continue;
+        const overlapsX = r.box.x < title.box.x + title.box.w && r.box.x + r.box.w > title.box.x;
+        const inside = r.box.y > top + 0.05 && r.box.y < bot - 0.05;
+        assert.ok(!(overlapsX && inside), `${visual}/plan=${plan ?? "-"}: chiziq y=${r.box.y} sarlavha siyohi (${top.toFixed(2)}–${bot.toFixed(2)}) ichida`);
+      }
+    }
+  }
+});
+
+/**
+ * `circle` plan'siz bo'limida nishon markazi ko'rinsin: `accent2` ba'zi
+ * palitralarda (`atlas`) `titleBg` bilan aynan bir rang — markaz disk
+ * bilan qo'shilib, nishon BO'SH ko'rinardi (PDF da ko'rindi).
+ */
+test("circle plan'siz bo'lim: nishon markazi har temada diskdan farqli rangda", () => {
+  for (const themeId of SLIDE_THEME_IDS) {
+    const theme = getSlideTheme(themeId);
+    const p = planSlide(section({ img: false, sub: true }), theme, "circle", INDEX, TOTAL);
+    const inner = p.layers.filter(
+      (l): l is Extract<SlideLayer, { t: "rect" }> => l.t === "rect" && Boolean(l.radius) && l.box.x > 1.4 && l.box.w < 1.5 && l.box.y > 2.2,
+    );
+    assert.ok(inner.length > 0, `${themeId}: nishon markazi yo'q`);
+    const disk = theme.titleBg.toLowerCase();
+    assert.ok(
+      inner.some((d) => d.fill && d.fill.color.toLowerCase() !== disk),
+      `${themeId}: nishon markazi disk rangida (${disk}) — bo'sh nishon`,
+    );
+  }
+});

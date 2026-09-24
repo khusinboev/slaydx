@@ -130,7 +130,13 @@ function planSection(s: SlideModel, theme: SlideTheme, index: number, total: num
   const { fitSize, pushFooter, planNumber } = LAYOUT_KIT;
   const layers: SlideLayer[] = [];
   pushPage(layers, theme);
-  [1.55, 3.75, 5.95].forEach((y) => {
+  /*
+   * Panel to'ri: o'rta chiziq sarlavha OSTIDA (sarlavha qutisi 4.15 da
+   * tugaydi, izoh 4.3 dan). Ilgari u 3.75 da turardi va sarlavhaning
+   * oxirgi qatorini ustidan kesib o'tardi (AUDIT-25 ko'z tekshiruvi,
+   * PDF da ko'rindi; raqamli va raqamsiz holatda ham).
+   */
+  [1.55, 4.22, 5.95].forEach((y) => {
     layers.push({ t: "rect", box: { x: 0.85, y, w: 11.6, h: 0.02 }, fill: { color: theme.accent2, alpha: 0.35 } });
   });
   /*
