@@ -85,6 +85,11 @@ test("har reja bandi ≥1 mazmun slaydi oladi, tartibda — shablon × tur × uz
         if (first.some((x, k) => k > 0 && x <= first[k - 1])) fails.push(`${tag}: bandlar tartibi buzildi`);
         // Blok/muqova maketlari hech qachon reja slaydi bo'lmaydi.
         for (const b of beats) if (b.plan && !CONTENT.has(b.layout) && b.layout !== "section") fails.push(`${tag}: ${b.layout} reja slaydi bo'ldi`);
+        // Shablonning blok nusxasi («Maqsad …», «Uyga vazifa») reja bandi bo'lmaydi — bu bloklarning ishi.
+        for (const b of beats) if (b.plan && /^(Maqsad|Uyga vazifa)/.test(planRoleText(b.role))) fails.push(`${tag}: «${b.role}»`);
+        // Bo'lim ishorasi takrorlanmaydi (shablon bo'limlari tugasa — umumiy «Keyingi bo‘lim»).
+        const secs = beats.filter((b) => b.plan && b.layout === "section").map((b) => planRoleText(b.role)).filter((r) => r !== "Keyingi bo‘lim");
+        if (new Set(secs).size !== secs.length) fails.push(`${tag}: bo'lim roli takrorlandi — ${secs.join(" | ")}`);
       }
     }
   }
@@ -381,6 +386,14 @@ test("syncAgenda: reja slaydi yo'qolgan band o'tkazib yuboriladi, reja bandsiz d
   assert.equal(deck[0].bullets!.length, 2, "yo'q band (2) agenda'ga tushmasin");
   assert.equal(deck[0].bullets![0], "Kirish qismi");
   assert.ok(deck[0].bullets![1].length <= 40 && deck[0].bullets![1].endsWith("…"), deck[0].bullets![1]);
+  // Band ichida bo'lim mazmundan KEYIN kelsa ham (model maketni almashtirgan) — bo'lim sarlavhasi afzal.
+  const swapped: SlideModel[] = [
+    { id: "a", layout: "agenda", title: "Reja", bullets: [] },
+    { id: "b", layout: "bullets", title: "Mazmun", plan: 1 },
+    { id: "c", layout: "section", title: "Bo‘lim nomi", plan: 1 },
+  ];
+  syncAgenda(swapped, rules);
+  assert.deepEqual(swapped[0].bullets, ["Bo‘lim nomi"]);
   const plain: SlideModel[] = [{ id: "a", layout: "agenda", title: "Reja", bullets: ["model"] }, { id: "b", layout: "bullets", title: "X" }];
   syncAgenda(plain, rules);
   assert.deepEqual(plain[0].bullets, ["model"], "eski deka (plan yo'q) — agenda o'zgarmaydi");
@@ -451,12 +464,12 @@ test("skelet uydirma raqam bermaydi: stats «—», process matni rol, bullets �
 test("prompt reja bandlari slaydlarini va raqamsiz sarlavhani aytadi", () => {
   const meta = extractMeta(pro, { topic: "Suv aylanishi", planItems: 4 });
   const p = slideSystem(meta, resolveDeckTemplate(meta));
-  assert.match(p, /REJA BANDLARI: rejada 4 ta band bor — ketma-ketlikdagi «REJA i-band: …» slaydlari/);
+  assert.match(p, /(^|\n)REJA BANDLARI: rejada 4 ta band bor — ketma-ketlikdagi «REJA i-band: …» slaydlari/);
   assert.match(p, /agenda bandlari AYNAN shu slaydlar sarlavhalari/);
   assert.match(p, /Sarlavhalar raqam bilan BOSHLANMASIN/);
   // Kichik dekada agenda yon bergan — prompt uni so'ramaydi.
   const tiny = extractMeta(pro, { topic: "X", slideCount: 4, quizCount: 3 });
   const pt = slideSystem(tiny, resolveDeckTemplate(tiny));
   assert.doesNotMatch(pt, /agenda: AYNAN/);
-  assert.match(pt, /REJA BANDLARI: rejada 1 ta band/);
+  assert.match(pt, /(^|\n)REJA BANDLARI: rejada 1 ta band/);
 });
