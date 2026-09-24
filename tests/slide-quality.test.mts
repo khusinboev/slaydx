@@ -15,6 +15,7 @@ import {
   STEP_MIN_WORDS,
   THIN_BULLET_K,
   CLIP_FLOOR_CHARS,
+  bulletMaxWords,
   bulletMinWords,
   clipLimit,
   fitChars,
@@ -107,6 +108,9 @@ test("short-columns: ustunda COL_MIN_ITEMS dan kam band yoki o'rtacha COL_MIN_WO
   const col = (k: number, w: number) => Array.from({ length: k }, (_, i) => sent(w, i));
   assert.deepEqual(reasonsOf(S({ layout: "twoCol", left: col(COL_MIN_ITEMS - 1, 9), right: col(3, 9) })), ["short-columns"]);
   assert.deepEqual(reasonsOf(S({ layout: "compare", left: col(3, COL_MIN_WORDS - 1), right: col(3, COL_MIN_WORDS - 1) })), ["short-columns"]);
+  // Mutlaq holat: jonli dekadagi yorliq-ustunlar (2–3 so'z) — yupqa.
+  const labels = ["Suv tanqisligi", "Tuproq sho‘rlanishi", "Chang bo‘ronlari"];
+  assert.deepEqual(reasonsOf(S({ layout: "twoCol", left: labels, right: labels })), ["short-columns"]);
   assert.deepEqual(reasonsOf(S({ layout: "compare", left: col(3, COL_MIN_WORDS), right: col(3, COL_MIN_WORDS) })), []);
 });
 
@@ -119,6 +123,8 @@ test("empty-subtitle: bo'lim subtitle bo'sh yoki SECTION_SUBTITLE_MIN_WORDS dan 
 
 test("short-quote: iqtibos QUOTE_MIN_WORDS dan kam", () => {
   assert.deepEqual(reasonsOf(S({ layout: "quote", quote: sent(QUOTE_MIN_WORDS - 1) })), ["short-quote"]);
+  // Mutlaq holat (konstantaga bog'liq emas): shior — iqtibos emas.
+  assert.deepEqual(reasonsOf(S({ layout: "quote", quote: "Suv — hayot manbai, uni asrang." })), ["short-quote"]);
   assert.deepEqual(reasonsOf(S({ layout: "quote", quote: sent(QUOTE_MIN_WORDS) })), []);
 });
 
@@ -201,11 +207,17 @@ test("element soni auditoriyaga ergashadi: yosh auditoriyaga kam bosqich/karta/u
   const a = layoutWordTargets(bachelor, "classic");
   const k = layoutWordTargets(kids, "classic");
   assert.ok(k.maxSteps <= a.maxSteps && k.maxStats <= a.maxStats && k.maxTableCols <= a.maxTableCols);
-  // Tanlangan son — sig'imi yetadigan eng kattasi: undan bitta ko'pida matn STEP_MIN_WORDS ga yetmaydi.
-  if (a.maxSteps < SLIDE_LIMITS.stepsMax) {
-    assert.ok(Math.floor(fitChars("stepText", bachelor, "classic", a.maxSteps + 1) / CHARS_PER_WORD) < STEP_MIN_WORDS);
-  }
   assert.ok(a.maxSteps >= PROCESS_MIN_STEPS && a.maxSteps <= SLIDE_LIMITS.stepsMax);
+  // (1) Auditoriya ruxsati — yuqori chegara: sig'im yetsa ham `stepsMax` dan oshmaydi.
+  assert.equal(layoutWordTargets({ ...bachelor, stepsMax: 3 }, "classic").maxSteps, 3);
+  // (2) Sig'im — ruxsat 5 bo'lsa ham, matn STEP_MIN_WORDS ga yetmaydigan son taklif qilinmaydi.
+  const wide = layoutWordTargets({ ...kids, stepsMax: 5 }, "classic");
+  assert.ok(wide.maxSteps < 5, `1–4 sinfga ${wide.maxSteps} bosqich`);
+  for (let n = wide.maxSteps + 1; n <= 5; n += 1) {
+    assert.ok(Math.floor(Math.min(fitChars("stepText", kids, "classic", n), limitsFor(kids, { steps: n }).stepText) / CHARS_PER_WORD) < STEP_MIN_WORDS);
+  }
+  // Band yuqori chegarasi qirqishdan oshmaydi (ilgari bulletChars/8 → 21 so'z ≈ 190 belgi > 165).
+  for (const r of [bachelor, kids]) assert.ok(bulletMaxWords(r) * CHARS_PER_WORD <= r.bulletChars);
 });
 
 test("clipLimit: statik qopqoqdan oshmaydi, pol shriftidagi sig'imgacha tushadi, CLIP_FLOOR_CHARS dan past emas", () => {
