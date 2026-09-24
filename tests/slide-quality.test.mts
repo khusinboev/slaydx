@@ -209,8 +209,10 @@ test("chegara auditoriya × matn hajmiga ergashadi (BodyRules)", () => {
 // ───────────────────────────────────────────── 2. maket sig'imi va so'z oraliqlari
 
 test("fitChars: sig'im maketdan — bolalar shrifti torroq, rasm tasmasi va element soni hisobda", () => {
-  const kids = bodyRules({ slideAudience: "school_1_4", textVolume: "standart", planItems: 5 }, "lesson");
-  assert.ok(fitChars("quizOption", kids, "cards") < fitChars("quizOption", bachelor, "cards"), "pol 24 pt < pol 15 pt");
+  assert.ok(
+    fitChars("quizOption", bodyRules({ slideAudience: "school_1_4", textVolume: "standart", planItems: 5 }, "lesson"), "cards") < fitChars("quizOption", bachelor, "cards"),
+    "pol 24 pt < pol 15 pt",
+  );
   // Eng tor (vizual berilmagan) har bir vizualdan kichik yoki teng.
   const all = fitChars("colItem", bachelor);
   for (const v of ["classic", "cards", "academic", "dashboard"] as const) assert.ok(all <= fitChars("colItem", bachelor, v), v);
@@ -219,6 +221,11 @@ test("fitChars: sig'im maketdan — bolalar shrifti torroq, rasm tasmasi va elem
   assert.ok(fitChars("stepText", bachelor, "classic", 5) <= fitChars("stepText", bachelor, "classic", 4));
   assert.ok(fitChars("stepText", bachelor, "classic", 4) < fitChars("stepText", bachelor, "classic", 3));
   assert.ok(fitChars("statLabel", bachelor, "classic", 4) < fitChars("statLabel", bachelor, "classic", 2));
+  // Qalin qatlam `CHAR_EM_BOLD` bilan (P2): savol qalin — 0.55 bilan ~290 ko'ringan, aslida ~104.
+  assert.ok(fitChars("quizQ", bachelor, "classic") < 150, `quizQ ${fitChars("quizQ", bachelor, "classic")}`);
+  // Slide Law poli: P2 `bodyFit` polda sig'masa shriftni poldan PAST tushiradi — bu «sig'di» emas.
+  const kids = bodyRules({ slideAudience: "school_1_4", textVolume: "standart", planItems: 5 }, "lesson");
+  assert.ok(fitChars("stepText", kids, undefined, 5, { images: "none" }) <= 16, `1–4 sinf 5 bosqich ${fitChars("stepText", kids, undefined, 5, { images: "none" })}`);
 });
 
 test("layoutWordTargets: oraliqlar sig'imdan oshmaydi va detektor chegarasidan past emas", () => {
@@ -579,6 +586,8 @@ test("repair: process — son auditoriya ruxsatigacha qisiladi, matn shu sondagi
     async () => {
       const out = await repairThinSlides([thin], kidsMeta, kidsTpl, {}, later(), later());
       const steps = out[0].steps ?? [];
+      assert.notEqual(out[0], thin, "ta'mir qabul qilinishi kerak edi (3 ta to'liq bosqich)");
+      assert.deepEqual(steps.map((st) => st.text), five.slice(0, steps.length).map((st) => st.text), "matn qirqilmagan");
       assert.ok(steps.length <= kr.stepsMax, `${steps.length} bosqich > ${kr.stepsMax}`);
       assert.ok(steps.length >= PROCESS_MIN_STEPS);
       for (const st of steps) assert.ok(!st.text.endsWith("…"), `kesilgan: «${st.text}»`);
@@ -625,12 +634,13 @@ test("SLIDE_LIMITS: qopqoqlar pol shriftidagi sig'imdan oshmaydi (o'lchov qulfi)
   assert.ok(SLIDE_LIMITS.quote <= median("quote") + 1, `quote > mediana ${median("quote")}`);
 });
 
-test("limitsFor jadvali jonli o'lchovga mos: har katak rasmsiz eng tor qutidan ko'pi bilan bitta so'z ortiq", async () => {
+test("limitsFor jadvali jonli o'lchovga mos: har katak ≤ max(5, ⌊0.88 × rasmsiz eng tor sig'im⌋₅)", async () => {
 
-  const WORD = 12; // o'lchov so'z bo'yicha: keyingi uzun so'z sig'magani uchun «sig'im» bir so'zgacha past chiqadi
+  // Jadval shu qoida bilan qurilgan (`COUNT_LIMITS` izohi): min(P2, jonli) × 0.88, 5 ga pastga, kamida 5.
+  const derive = (x: number) => Math.max(5, Math.floor((x * 0.88) / 5) * 5);
   for (const aud of ["school_1_4", "school_5_7", "school_8_9", "school_10_11", "general", "students_bachelor"] as const) {
     const r = bodyRules({ slideAudience: aud, textVolume: "standart", planItems: 5 }, "lecture");
-    const cap = (f: Parameters<typeof fitChars>[0], k: number, rows?: number) => fitChars(f, r, undefined, k, { rows, images: "none" }) + WORD;
+    const cap = (f: Parameters<typeof fitChars>[0], k: number, rows?: number) => derive(fitChars(f, r, undefined, k, { rows, images: "none" }));
     for (const n of [3, 4, 5]) {
       const l = limitsFor(r, { steps: n });
       assert.ok(l.stepText <= cap("stepText", n), `${aud} stepText×${n}: ${l.stepText} > ${cap("stepText", n)}`);
