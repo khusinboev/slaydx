@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { ensureMigrated } from "@/lib/server/db";
-import { env } from "@/lib/server/env";
+import { telegramWebhookSecret } from "@/lib/server/env";
 import { safeEqual } from "@/lib/server/session";
 import { botConfigured, handleUpdate, type TelegramUpdate } from "@/lib/server/telegram";
 
@@ -20,28 +20,47 @@ export const dynamic = "force-dynamic";
 export async function POST(req: Request) {
   if (!botConfigured()) return NextResponse.json({ ok: true });
 
-  // `CRON_SECRET` majburiy.
+  // Kalit majburiy: `TELEGRAM_WEBHOOK_SECRET`, bo'lmasa zaxira `CRON_SECRET` (EXT-14).
   //
   // Ilgari u yo'q bo'lsa `SESSION_SECRET` ga tushardi — ya'ni sessiya
   // imzo kaliti Telegram sozlamalariga ko'chirilardi va u yerdan sizib
   // chiqsa barcha sessiyalarni qalbakilashtirish mumkin bo'lardi.
-  if (!env.cronSecret) {
-    console.error("[telegram/webhook] CRON_SECRET sozlanmagan — webhook o'chirilgan");
+  const secret = telegramWebhookSecret();
+  if (!secret) {
+    console.error("[telegram/webhook] TELEGRAM_WEBHOOK_SECRET sozlanmagan — webhook o'chirilgan");
     return NextResponse.json({ ok: false }, { status: 503 });
   }
 
   const got = req.headers.get("x-telegram-bot-api-secret-token") ?? "";
-  if (!got || !safeEqual(got, env.cronSecret)) {
+  if (!got || !safeEqual(got, secret)) {
     return NextResponse.json({ ok: false }, { status: 401 });
+  }
+
+  // Buzuq tana — qayta yuborish foyda bermaydi, 200 bilan yopamiz.
+  let update: TelegramUpdate;
+  try {
+    update = (await req.json()) as TelegramUpdate;
+  } catch {
+    console.warn("[telegram/webhook] tana JSON emas — e'tiborsiz qoldirildi");
+    return NextResponse.json({ ok: true });
+  }
+  if (!update || !Number.isSafeInteger(update.update_id)) {
+    console.warn("[telegram/webhook] update_id yo'q — e'tiborsiz qoldirildi");
+    return NextResponse.json({ ok: true });
   }
 
   try {
     await ensureMigrated();
-    const update = (await req.json()) as TelegramUpdate;
     await handleUpdate(update);
   } catch (e) {
-    // Telegram 200 dan boshqasini olsa update ni qayta-qayta yuboradi.
-    console.error("[telegram/webhook]", e instanceof Error ? e.message : e);
+    /*
+     * BEA-17: ilgari har xato yutilib 200 qaytardi — Telegram update'ni
+     * qayta yubormas, kirish havolasi jimgina yo'qolardi. Endi 500:
+     * Telegram cheklangan marta qayta yuboradi, `handleUpdate` esa
+     * muvaffaqiyatsiz update'ni «ishlangan» deb belgilamagan.
+     */
+    console.error(`[telegram/webhook] update ${update.update_id}:`, e instanceof Error ? e.message : e);
+    return NextResponse.json({ ok: false }, { status: 500 });
   }
   return NextResponse.json({ ok: true });
 }

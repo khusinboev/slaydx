@@ -28,14 +28,42 @@ function api(method: string): string {
 /** 429 dan keyingi yagona qayta urinishgacha eng uzoq kutish (webhook javobi kechikmasin). */
 const TELEGRAM_RETRY_AFTER_CAP_S = 5;
 
-async function call<T>(method: string, payload: unknown): Promise<T | null> {
+/**
+ * Telegram vaqtincha javob bermadi (tarmoq/timeout, 5xx yoki qayta
+ * urinishdan keyin ham 429) — update'ni keyinroq QAYTA ishlash kerak
+ * (BEA-17). Webhook buni 500 ga aylantiradi va Telegram qayta yuboradi.
+ */
+export class TelegramTransientError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "TelegramTransientError";
+  }
+}
+
+async function call<T>(
+  method: string,
+  payload: unknown,
+  opts: { throwTransient?: boolean } = {},
+): Promise<T | null> {
   if (!botConfigured()) return null;
   /*
    * 429 (`parameters.retry_after`) — BITTA cheklangan qayta urinish (audit
    * EXT-05): ko'p `/start` bir paytda kelganda (~30 xabar/s chegarasi)
    * kirish havolasi jimgina yo'qolmasin. Boshqa xatolar qayta urinilmaydi.
+   *
+   * `throwTransient` — vaqtinchalik xatoda `null` o'rniga
+   * `TelegramTransientError` (BEA-17). Doimiy xato (400/403 — masalan
+   * foydalanuvchi botni bloklagan) baribir `null`: uni qayta urinish
+   * foydasiz.
    */
   for (let attempt = 0; attempt < 2; attempt++) {
+    let data: {
+      ok: boolean;
+      result?: T;
+      description?: string;
+      error_code?: number;
+      parameters?: { retry_after?: number };
+    };
     try {
       const res = await fetch(api(method), {
         method: "POST",
@@ -43,44 +71,54 @@ async function call<T>(method: string, payload: unknown): Promise<T | null> {
         body: JSON.stringify(payload),
         signal: AbortSignal.timeout(15_000),
       });
-      const data = (await res.json()) as {
-        ok: boolean;
-        result?: T;
-        description?: string;
-        error_code?: number;
-        parameters?: { retry_after?: number };
-      };
-      if (!data.ok) {
-        console.warn(`[telegram] ${method}:`, data.description ?? "xato");
-        const after = Number(data.parameters?.retry_after);
-        // Uzunroq `retry_after` — 5 s dan keyingi urinish ham 429 bo'lardi, kutmaymiz.
-        if (attempt === 0 && data.error_code === 429 && Number.isFinite(after) && after >= 0 && after <= TELEGRAM_RETRY_AFTER_CAP_S) {
-          await new Promise((r) => setTimeout(r, after * 1000));
-          continue;
-        }
-        return null;
-      }
-      return data.result ?? null;
+      // 502 da proxy HTML qaytarishi mumkin — `json()` xatosi ham tarmoq xatosi.
+      data = (await res.json()) as typeof data;
     } catch (e) {
-      console.warn(`[telegram] ${method}:`, e instanceof Error ? e.message : "tarmoq xatosi");
+      const why = e instanceof Error ? e.message : "tarmoq xatosi";
+      console.warn(`[telegram] ${method}:`, why);
+      if (opts.throwTransient) throw new TelegramTransientError(`${method}: ${why}`);
       return null;
     }
+    if (!data.ok) {
+      console.warn(`[telegram] ${method}:`, data.description ?? "xato");
+      const after = Number(data.parameters?.retry_after);
+      // Uzunroq `retry_after` — 5 s dan keyingi urinish ham 429 bo'lardi, kutmaymiz.
+      if (attempt === 0 && data.error_code === 429 && Number.isFinite(after) && after >= 0 && after <= TELEGRAM_RETRY_AFTER_CAP_S) {
+        await new Promise((r) => setTimeout(r, after * 1000));
+        continue;
+      }
+      const code = Number(data.error_code ?? 0);
+      if (opts.throwTransient && (code === 429 || code >= 500)) {
+        throw new TelegramTransientError(`${method}: ${code} ${data.description ?? ""}`.trim());
+      }
+      return null;
+    }
+    return data.result ?? null;
   }
   return null;
 }
 
+/**
+ * Xabar yuboradi. Doimiy xatoda (`403` — bot bloklangan, `400`) `false`;
+ * vaqtinchalik xatoda `TelegramTransientError` otadi — `handleUpdate`
+ * update'ni «ishlangan» deb belgilamaydi va Telegram uni qayta yuboradi.
+ */
 export async function sendMessage(
   chatId: number | string,
   text: string,
   extra: Record<string, unknown> = {},
 ): Promise<boolean> {
-  const out = await call("sendMessage", {
-    chat_id: chatId,
-    text,
-    parse_mode: "HTML",
-    disable_web_page_preview: true,
-    ...extra,
-  });
+  const out = await call(
+    "sendMessage",
+    {
+      chat_id: chatId,
+      text,
+      parse_mode: "HTML",
+      disable_web_page_preview: true,
+      ...extra,
+    },
+    { throwTransient: true },
+  );
   return out !== null;
 }
 
@@ -256,13 +294,25 @@ export type TelegramUpdate = {
   };
 };
 
-/** Bir xil update ikki marta kelmasin (webhook takrorlashi normal holat). */
-async function isNewUpdate(updateId: number): Promise<boolean> {
+/**
+ * Bir xil update ikki marta ishlanmasin (webhook takrorlashi normal holat).
+ *
+ * Qator — «bu update'ni men olgan/ishlaganman» belgisi: `INSERT … ON
+ * CONFLICT DO NOTHING` parallel ikkinchi yetkazishni darhol to'sadi.
+ * Ishlash muvaffaqiyatsiz bo'lsa `releaseUpdate` belgini O'CHIRADI
+ * (BEA-17) — ya'ni qator faqat MUVAFFAQIYATLI ishlangan update uchun
+ * qoladi va Telegram'ning qayta yetkazishi yana ishlanadi.
+ */
+async function claimUpdate(updateId: number): Promise<boolean> {
   const rows = await query<{ update_id: string }>(
     "INSERT INTO telegram_updates (update_id) VALUES ($1) ON CONFLICT DO NOTHING RETURNING update_id",
     [updateId],
   );
   return rows.length > 0;
+}
+
+async function releaseUpdate(updateId: number): Promise<void> {
+  await query("DELETE FROM telegram_updates WHERE update_id = $1", [updateId]);
 }
 
 /**
@@ -401,9 +451,37 @@ async function handleContact(
   }
 }
 
+/**
+ * Update'ni bir marta ishlaydi (ko'pi bilan bir muvaffaqiyatli marta).
+ *
+ * BEA-17 / EXT-05: ilgari id ishlashdan OLDIN yozilib qolardi va webhook
+ * har xatoni yutib 200 qaytarardi — Telegram 429/5xx, tarmoq yoki baza
+ * xatosida kirish havolasi jimgina yo'qolar, qayta yetkazish esa
+ * «takror» deb tashlanardi. Endi xatoda belgi olib tashlanadi va xato
+ * yuqoriga otiladi: webhook 500 qaytaradi, Telegram qayta yuboradi.
+ * Qayta ishlash xavfsiz: `/login`/`/start` yangi chipta/token yaratadi
+ * (eskisi yetkazilmagan va 5 daqiqada eskiradi), kontakt UPDATE —
+ * idempotent.
+ */
 export async function handleUpdate(update: TelegramUpdate): Promise<void> {
-  if (!(await isNewUpdate(update.update_id))) return;
+  if (!(await claimUpdate(update.update_id))) return;
+  try {
+    await processUpdate(update);
+  } catch (e) {
+    try {
+      await releaseUpdate(update.update_id);
+    } catch (releaseErr) {
+      // Belgi qolib ketdi — bu update endi qayta ishlanmaydi; jurnalda ko'rinsin.
+      console.error(
+        `[telegram] update ${update.update_id} belgisi o'chirilmadi:`,
+        releaseErr instanceof Error ? releaseErr.message : releaseErr,
+      );
+    }
+    throw e;
+  }
+}
 
+async function processUpdate(update: TelegramUpdate): Promise<void> {
   const msg = update.message;
   if (!msg?.from) return;
 
