@@ -1,5 +1,6 @@
 import { docLabels } from "./i18n";
 import type { AcademicDoc, Block } from "./types";
+import { tashkentYear } from "./tashkent-year";
 
 function esc(s: string) {
   return s
@@ -31,7 +32,8 @@ function blockHtml(b: Block): string {
 export function renderHtml(doc: AcademicDoc): string {
   const { meta } = doc;
   const L = docLabels(meta.language);
-  const year = new Date().getFullYear();
+  // Titul yili — DOCX bilan bir xil manba: muzlatilgan `meta.year`, yo'q bo'lsa Toshkent yili (`title-model.ts`).
+  const year = meta.year || tashkentYear();
   const ministry = (meta.ministry === "maktab" ? L.ministrySchool : L.ministryHigher).replaceAll("\n", "<br/>");
   const cover = doc.titlePage
     ? `<section class="cover">

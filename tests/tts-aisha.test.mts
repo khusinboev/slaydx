@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { AISHA_MAX_CHARS, AISHA_URL, aishaAudioRef, aishaBody, makeAishaTts } from "../lib/generation/tts/aisha.ts";
 import { makeGeminiTts, pcmRateOf, geminiAudioPart } from "../lib/generation/tts/gemini.ts";
 import { TtsError } from "../lib/generation/tts/types.ts";
+import { setSafeFetchLookup } from "../lib/generation/safe-fetch.ts";
 import { pcmToWav, wavSeconds } from "../lib/generation/tts/mp3.ts";
 
 /**
@@ -105,7 +106,9 @@ test("Aisha: javob JSON + havola bo'lsa audio IKKINCHI so'rov bilan yuklanadi", 
   const { tts, calls } = aisha((c) =>
     c.url === AISHA_URL ? Response.json({ audio_path: "/media/tts/a.wav" }) : new Response(body(wav(16_000, 2)), { headers: { "content-type": "audio/wav" } }),
   );
-  const out = await tts.synthesize("Salom", { lang: "uz" });
+  // Germetik: havola `safeFetchUrl` orqali (EXT-15) — DNS stub.
+  setSafeFetchLookup(async () => ["185.1.1.1"]);
+  const out = await tts.synthesize("Salom", { lang: "uz" }).finally(() => setSafeFetchLookup(null));
   assert.equal(calls.length, 2);
   // Nisbiy yo'l xostga bog'lanadi.
   assert.equal(calls[1].url, "https://back.aisha.group/media/tts/a.wav");

@@ -570,7 +570,7 @@ export async function reviewArticle(doc: AcademicDoc, opts: ReviewOpts = {}): Pr
       const ids = doc.sections.filter((s) => s.blocks.length).map((s) => s.id);
       const type = ARTICLE_TYPES[doc.article?.type ?? "imrad_oak"];
       try {
-        const r = await opts.complete("judge", judgeSystemPrompt(ids, type.judge, type.label.en), judgeUserPrompt(doc), { json: true, maxTokens: 1500, timeoutMs });
+        const r = await opts.complete("judge", judgeSystemPrompt(ids, type.judge, type.label.en), judgeUserPrompt(doc), { json: true, deadline: opts.deadline, maxTokens: 1500, timeoutMs });
         if (r?.usage) opts.onUsage?.(r.usage);
         judge = parseJudge(r?.text, ids, type.judge);
       } catch (e) {

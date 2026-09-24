@@ -616,7 +616,33 @@ export type BuiltFile = {
   cost?: CostJson;
 };
 
-export type CostJson = { provider: string; model: string; inputTokens: number; outputTokens: number; calls: number; usd: number };
+export type CostJson = {
+  provider: string;
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  calls: number;
+  usd: number;
+  /**
+   * Xizmat bo'yicha tafsilot (audit EXT-11, `job-cost.ts`): LLM tokenlari,
+   * rasm soni, grounding so'rovlari, TTS belgilari — har biri o'z USD i
+   * bilan. Ixtiyoriy: eski yozuvlar va dvigatel `CostMeter`lari bermaydi.
+   */
+  parts?: CostPart[];
+};
+
+export type CostPart = {
+  kind: "llm" | "image" | "grounding" | "tts";
+  provider: string;
+  /** LLM/rasm modeli; TTS da ovoz; grounding da `google_search`. */
+  model: string;
+  calls: number;
+  inputTokens: number;
+  outputTokens: number;
+  /** Rasm soni / grounding so'rovi / TTS belgisi (LLM da 0). */
+  units: number;
+  usd: number;
+};
 
 export type BuildCtx = {
   tool: ToolConfig;

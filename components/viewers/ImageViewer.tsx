@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Download, Maximize2, X } from "lucide-react";
 import type { AcademicDoc, GenImage } from "@/lib/generation/types";
 import { imageExt } from "@/lib/viewers/kind";
-import { imageRatioById, imageStyleById } from "@/lib/generation/image-studio";
+import { imageRatioById, imageStyleById } from "@/lib/generation/image-studio-options";
 import { cn } from "@/lib/cn";
 
 export function ImageViewer({ doc }: { doc: AcademicDoc }) {

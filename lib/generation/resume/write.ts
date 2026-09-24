@@ -16,6 +16,7 @@
  * qat'iy belgilaydi.
  */
 import { llmComplete, llmEnabled } from "../llm";
+import { isDeadlineError } from "../deadline";
 import { parseLlmObject } from "../json";
 import { languageDirective } from "../i18n";
 import { remainingMs } from "../quality";
@@ -353,9 +354,19 @@ export async function buildResumeDoc(
   }
 
   let attempts = 0;
+  /*
+   * Ish muddati (EXT-03) zanjirga uzatiladi — qayta urinishlar muddatdan
+   * oshmaydi. `DeadlineError` bu yerda XATO EMAS: rezyumening ataylab
+   * qo'yilgan zaxirasi (foydalanuvchi faktlaridan to'liq `draftModel`)
+   * «model javob bermadi» bilan bir xil ishlaydi — yarim hujjat chiqmaydi.
+   */
   const ask = (u: string) => {
     attempts++;
-    return complete(system, u, 3200, { json: true, timeoutMs: Math.min(70_000, budget()) });
+    return complete(system, u, 3200, { json: true, timeoutMs: Math.min(70_000, budget()), deadline: opts.deadline }).catch((e: unknown) => {
+      if (!isDeadlineError(e)) throw e;
+      console.warn("[resume] ish muddati tugadi — zaxira modelga o'tildi");
+      return null;
+    });
   };
   const check = (raw: string | null) => {
     const parsed = parseResumeLlm(raw, input, meta);

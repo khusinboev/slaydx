@@ -190,13 +190,20 @@ test("fayl nomi qo'shimchasi — har vosita bir-biridan ajraladi", () => {
 test("dispatch — kartalar dvigateli hali ulanmagan (WP-B) bo'lsa ANIQ `null`, soxta yashil emas", async () => {
   const { buildGameDoc } = await import("../lib/generation/games/engine.ts");
   const meta = metaOf("flashcards", { topic: "X", cardCount: 10 });
-  const built = await buildGameDoc(meta, { topic: "X", cardCount: 10 }, { deadline: Date.now() + 1000 });
   /*
    * `games/flashcards/engine.ts` hali yo'q bo'lsa bu `null` bo'lishi
-   * SHART. Fayl paydo bo'lgach (WP-B) bu test o'zgarishsiz o'tadi —
-   * `buildFlashcardsDoc` chaqirilib, natija (haqiqiy LLM kalitsiz)
-   * baribir `null` bo'ladi.
+   * SHART. Dvigatel ulangach (WP-B) ish muddati (1 s) yozishga yetmaydi:
+   * EXT-03 dan keyin natija `null` («soxta yashil» emas) YOKI
+   * `DeadlineError` (ish «vaqt tugadi» bilan yiqiladi) — ikkalasi ham
+   * hujjat bermaydi va provayderga so'rov ketmaydi.
    */
+  let built: unknown = "unset";
+  try {
+    built = await buildGameDoc(meta, { topic: "X", cardCount: 10 }, { deadline: Date.now() + 1000 });
+  } catch (e) {
+    assert.equal((e as Error).name, "DeadlineError", `kutilmagan xato: ${(e as Error).message}`);
+    built = null;
+  }
   assert.equal(built, null);
 });
 
@@ -223,9 +230,8 @@ test("saralash/tinglash byudjeti dvigatel zaxiralari + bitta yozish chaqiruvidan
 
 test("tinglash audio seam'i: worker `putAsset` beradi, `buildArtifact` zanjirni ulaydi, `writeWithLlm` ikkalasini dvigatelga uzatadi", () => {
   const worker = readFileSync("lib/server/worker.ts", "utf8");
-  // W3-A (C26): yozuv lease bilan to'siladi — kechikkan (egasiz) ish aktiv yoza olmaydi;
-  // aks holda aktiv baribir shu ishning id si bilan yoziladi.
-  assert.match(worker, /putAsset:\s*\(bytes, mime\) =>[\s\S]{0,160}?putAssetBytes\(job\.id, mime, Buffer\.from\(bytes\)\)/, "worker: aktiv shu ishning id si bilan yoziladi");
+  // W3 (C15): tashlab ketilgan yurish aktiv yozmasligi uchun `ctl.abandoned` qo'riqchisi qo'shildi — id baribir shu ishniki.
+  assert.match(worker, /putAsset:\s*\(bytes, mime\) =>[\s\S]{0,200}?putAssetBytes\(job\.id, mime, Buffer\.from\(bytes\)\)/, "worker: aktiv shu ishning id si bilan yoziladi");
   const index = readFileSync("lib/generation/index.ts", "utf8");
   assert.match(index, /opts\.putAsset \? \{ putAsset: opts\.putAsset, tts: opts\.tts \?\? providerOfChain\(ttsChain\) \}/, "index: `putAsset` bo'lsa standart TTS zanjiri ulanadi");
   const write = readFileSync("lib/generation/write-llm.ts", "utf8");

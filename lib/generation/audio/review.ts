@@ -476,7 +476,7 @@ async function runJudge(model: AudioModel, facts: string, opts: AudioReviewOpts)
     facts.trim() ? `USER DATA (the only admissible source of figures, dates and personal details):\n${facts.slice(0, 4000)}` : "USER DATA: none",
   ].join("\n");
   const r = await opts
-    .complete("judge", system, user, { json: true, maxTokens: 1200, timeoutMs: Math.min(JUDGE_TIMEOUT_MS, Math.max(1, remainingMs(opts.deadline))) })
+    .complete("judge", system, user, { json: true, deadline: opts.deadline, maxTokens: 1200, timeoutMs: Math.min(JUDGE_TIMEOUT_MS, Math.max(1, remainingMs(opts.deadline))) })
     .catch(() => null);
   if (r?.usage) opts.onUsage?.(r.usage);
   const parsed = parseJudgeFor(spec, r?.text, targets);

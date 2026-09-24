@@ -147,7 +147,7 @@ export async function rewriteInfographicFix(doc: AcademicDoc, fix: Fix, deps: In
   const c = infographicCtx(infographicTypeOf(ctx.spec.type), ctx.input);
   const timeoutMs = Math.max(1, Math.min(REWRITE_TIMEOUT_MS, remainingMs(deps.deadline)));
   const r = await deps
-    .complete("writer", infographicSystemPrompt(c), infographicRewritePrompt(c, ctx.spec, [fix.instruction]), { json: true, maxTokens: 2600, timeoutMs })
+    .complete("writer", infographicSystemPrompt(c), infographicRewritePrompt(c, ctx.spec, [fix.instruction]), { json: true, deadline: deps.deadline, maxTokens: 2600, timeoutMs })
     .catch(() => null);
   if (r?.usage) deps.onUsage?.(r.usage);
   const raw = parseLlmObject<Record<string, unknown>>(r?.text ?? "");

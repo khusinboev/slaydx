@@ -237,7 +237,7 @@ async function ask(deps: CardsRewriteDeps, system: string, user: string, maxToke
     timer = setTimeout(() => resolve(null), timeoutMs);
   });
   try {
-    const r = await Promise.race([deps.complete("writer", system, user, { json: true, maxTokens, timeoutMs }).catch(() => null), bomb]);
+    const r = await Promise.race([deps.complete("writer", system, user, { json: true, deadline: deps.deadline, maxTokens, timeoutMs }).catch(() => null), bomb]);
     if (!r?.text) throw new RewriteError(RETRY_MSG, 422, "llm");
     return r.text;
   } finally {
