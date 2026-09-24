@@ -101,9 +101,16 @@ function planTitle(s: SlideModel, theme: SlideTheme, index: number, total: numbe
 
 /** Bo'lim — butun sahifa to'q, chapda aksent ustun, ulkan nom. */
 function planSection(s: SlideModel, theme: SlideTheme, index: number, total: number): SlidePlan {
-  const { H, fitSize, inkHeight, pushFooter, SECTION_TOP, SECTION_BOTTOM } = LAYOUT_KIT;
+  const { H, fitSize, inkHeight, pushFooter, planNumber, SECTION_TOP, SECTION_BOTTOM } = LAYOUT_KIT;
   const layers: SlideLayer[] = [];
   layers.push({ t: "rect", box: { x: 0, y: 0, w: 13.333, h: H }, fill: { color: theme.titleBg } });
+  /*
+   * AUDIT-25: sarlavha ustidagi kichik raqam — reja bandi (`s.plan`).
+   * Reja bandi yo'q bo'lsa uning 0.55″ lik qatori ham yo'q: blok
+   * yig'iladi va aksent ustuni faqat matnni qamraydi.
+   */
+  const no = planNumber(s);
+  const noH = no ? 0.55 : 0;
   const x = 1.75;
   const tw = 10.7;
   const titleSize = fitSize(s.title, { x, y: 0, w: tw, h: 2.6 }, 52, 26);
@@ -111,24 +118,26 @@ function planSection(s: SlideModel, theme: SlideTheme, index: number, total: num
   const avail = SECTION_BOTTOM - SECTION_TOP - 0.85;
   const titleH = Math.min(avail * (s.subtitle ? 0.66 : 1), Math.max(0.7, inkHeight(s.title, tw, titleSize)));
   const subH = s.subtitle ? Math.min(avail - titleH, Math.max(0.4, inkHeight(s.subtitle, tw, subSize))) : 0;
-  const blockH = 0.55 + titleH + (s.subtitle ? 0.34 + subH : 0);
+  const blockH = noH + titleH + (s.subtitle ? 0.34 + subH : 0);
   const y0 = SECTION_TOP + Math.max(0, (SECTION_BOTTOM - SECTION_TOP - blockH) / 2);
   // Aksent ustuni matn blokining O'ZI bilan bir balandlikda — aks holda
   // u zonaning to'liq bo'yiga cho'zilib, matndan uzilib qolardi.
   layers.push({ t: "rect", box: { x: 0.85, y: y0, w: 0.35, h: blockH }, fill: { color: theme.accent } });
+  if (no) {
+    layers.push({
+      t: "text",
+      box: { x, y: y0, w: 2.0, h: 0.45 },
+      text: no,
+      color: theme.titleMuted,
+      size: 15,
+      bold: true,
+      tracking: 2.4,
+      valign: "middle",
+    });
+  }
   layers.push({
     t: "text",
-    box: { x, y: y0, w: 2.0, h: 0.45 },
-    text: two(index + 1),
-    color: theme.titleMuted,
-    size: 15,
-    bold: true,
-    tracking: 2.4,
-    valign: "middle",
-  });
-  layers.push({
-    t: "text",
-    box: { x, y: y0 + 0.55, w: tw, h: titleH },
+    box: { x, y: y0 + noH, w: tw, h: titleH },
     text: s.title,
     color: theme.titleText,
     size: titleSize,
@@ -138,7 +147,7 @@ function planSection(s: SlideModel, theme: SlideTheme, index: number, total: num
   if (s.subtitle) {
     layers.push({
       t: "text",
-      box: { x, y: y0 + 0.55 + titleH + 0.34, w: tw, h: subH },
+      box: { x, y: y0 + noH + titleH + 0.34, w: tw, h: subH },
       text: s.subtitle,
       color: theme.titleMuted,
       size: subSize,
@@ -219,7 +228,7 @@ function planAgenda(s: SlideModel, theme: SlideTheme, index: number, total: numb
  * eng katta element bo'ladi.
  */
 function planStats(s: SlideModel, theme: SlideTheme, index: number, total: number, ctx: PlanCtx): SlidePlan {
-  const { H, fitSize, stripCut, pushFooter } = LAYOUT_KIT;
+  const { H, fitSize, bodyFit, stripCut, pushFooter } = LAYOUT_KIT;
   const layers: SlideLayer[] = [];
   const cut = stripCut(s);
   const tw = 11.6 - cut;
@@ -237,7 +246,7 @@ function planStats(s: SlideModel, theme: SlideTheme, index: number, total: numbe
       box: valBox,
       text: st.value,
       color: theme.accentInk,
-      size: fitSize(st.value, valBox, 66, 24),
+      size: bodyFit(st.value, valBox, 66, ctx.bodyType, 24, true),
       bold: true,
       align: "center",
       valign: "middle",
@@ -250,7 +259,8 @@ function planStats(s: SlideModel, theme: SlideTheme, index: number, total: numbe
       box: labBox,
       text: st.label,
       color: theme.muted,
-      size: fitSize(st.label, labBox, 17, 11),
+      // AUDIT-25 A2-04: auditoriya oralig'i (ilgari qat'iy 17→11 pt).
+      size: bodyFit(st.label, labBox, 17, ctx.bodyType, 11),
       align: "center",
       valign: "top",
       src: { f: "stats", i, k: "label" },

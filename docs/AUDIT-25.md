@@ -51,11 +51,15 @@ Ko'rilgan dekalar: `eval-out/live/Orol dengizi…pptx` (pro-slide, open_lesson, 
 | P4 forma: sig'im ko'rsatkichi | sonnet | `components/forms/slide-fields.tsx`, `SlideComposer.tsx`, `ProSlideForm.tsx`, `SlideForm.tsx` | `tests/ui/slide-*.test.mts`, Playwright smoke |
 | P5 tekshiruv skripti + jonli holatlar | sonnet | `scripts/slide-audit.mts` (yangi), `scripts/live-engine.mts` (slayd holatlari) | — |
 
-Shartnomalar (o'zgarmas): `SlideModel.plan?: number`; `SlideBeat.plan?: number`;
-`planCapacity(v: PlanCapacityInput): number` (`slide-params.ts`); `thinSlides(slides, rules): number[]` va
-`repairThinSlides(slides, meta, tpl, ctx, deadline): Promise<SlideModel[]>` (`slide-quality.ts`) — P1 `writeSlidesWithLlm`
-oxirida (finalizeQuiz dan OLDIN) `repairThinSlides` ni chaqiradi; birlashguncha P1 uni `import` qilib, yo'q bo'lsa
-o'tkazib yuboradi (`try/catch` emas — P3 branch'i merge bo'lguncha P1 chaqiruvni izohda qoldiradi).
+Shartnomalar (yakuniy, review'lardan keyin):
+- `SlideModel.plan?: number`, `SlideBeat.plan?: number`, `SlideBeat.structural?: true` (metodik rol — reja slaydi bo'lmaydi).
+- `slide-params.ts` (klient-xavfsiz): `planCapacity(v: PlanCapacityInput): number` (`tool` maydoni bilan),
+  `effectivePlanItems(raw, capacity, slideCount?)`, `defaultPlanItems(slideCount) = clamp(round(n/3), 3, 6)`,
+  `resolvePlanFlags`, `activeBlockIds`; `slide-blocks.ts`: `plannedBlocks(meta, bodyWant)` — beats va prompt bir manbadan.
+- `slide-quality.ts` (server): `thinSlides(slides, rules, visual?) → {index, reasons}[]`,
+  `repairThinSlides(slides, meta, tpl, ctx, deadline?, jobDeadline?)` — bitta LLM chaqiruvi, xatoda kirishni qaytaradi;
+  `slide-limits.ts`: `limitsFor(rules, counts)`, `clipTo(text, n)` (so'z chegarasida).
+- P1 `writeSlidesWithLlm`: `slideFloor` → `repairThinSlides` (6 arg) → `syncAgenda` → `finalizeQuiz`.
 
 ## 4. Bajarilish yozuvi
 (to'ldiriladi)
