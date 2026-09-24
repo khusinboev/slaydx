@@ -443,10 +443,14 @@ function bodyFit(text: string, box: Box, base: number, bt: BodyRules, floor: num
   if (!t) return start;
   const em = bold ? CHAR_EM_BOLD : CHAR_EM;
   const longest = Math.max(...t.split(/\s+/).map((w) => w.length));
+  // Polda ham qatorga sig'maydigan «so'z» (URL, formula, bo'shliqsiz
+  // satr) baribir bo'linadi — u holda so'z sharti shriftni behuda polga
+  // tushirmasin, faqat balandlik hal qiladi.
+  const wordFitsAtLow = longest * low * em * WORD_HEADROOM <= box.w * 72;
   for (let size = start; size > low; size -= 1) {
     const perLine = Math.max(1, Math.floor((box.w * 72) / (size * em)));
     const fitsH = wrapRows(t, perLine) * size * 1.3 <= box.h * 72;
-    const fitsW = longest * size * em * WORD_HEADROOM <= box.w * 72;
+    const fitsW = !wordFitsAtLow || longest * size * em * WORD_HEADROOM <= box.w * 72;
     if (fitsH && fitsW) return size;
   }
   return low;
