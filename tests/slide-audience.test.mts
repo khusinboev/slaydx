@@ -80,3 +80,21 @@ test("14 auditoriya note si promptda chiqadi va 14 tasi noyob", () => {
   }
   assert.equal(notes.size, 14, "auditoriya note'lari orasida takror bor");
 });
+
+// ───────────────────────────────────────────── AUDIT-25: maket so'z oraliqlari
+
+test("AUDIT-25: brifda har maket so'z oralig'i — BodyRules va deka vizualidan hisoblangan", async () => {
+  const { bodyRules } = await import("../lib/generation/slide-audience.ts");
+  const { layoutWordTargets, wordTargetLines } = await import("../lib/generation/slide-quality.ts");
+  const text = prompt({ slideAudience: "students_bachelor" });
+  const rules = bodyRules(meta({ slideAudience: "students_bachelor" }), lecture.id);
+  for (const line of wordTargetLines(rules, lecture.visual)) assert.ok(text.includes(line), `promptda yo'q: ${line}`);
+  const t = layoutWordTargets(rules, lecture.visual);
+  assert.ok(text.includes(`Har bullet — TO‘LIQ gap, ${t.bullet.min}–${t.bullet.max} so‘z.`));
+  // Band yuqori chegarasi qirqishdan (bulletChars) oshmaydi — ko'rsatmaga rioya qilgan band kesilmasin.
+  assert.ok(t.bullet.max * 9 <= rules.bulletChars, `${t.bullet.max} so'z > ${rules.bulletChars} belgi`);
+  // Differensial: auditoriya ham, matn hajmi ham raqamlarni o'zgartiradi.
+  const maket = (v: FormValues) => prompt(v).split("\n").filter((l) => l.startsWith("— ") || l.startsWith("Har bullet")).join("\n");
+  assert.notEqual(maket({ slideAudience: "school_1_4" }), maket({ slideAudience: "students_master" }));
+  assert.notEqual(maket({ slideAudience: "students_bachelor", textVolume: "qisqa" }), maket({ slideAudience: "students_bachelor", textVolume: "kop" }));
+});

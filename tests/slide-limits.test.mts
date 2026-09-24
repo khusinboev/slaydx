@@ -282,3 +282,50 @@ test("normalize: answers — quizMax qator, answersItem belgisi", async () => {
   assert.equal(s.bullets?.length, SLIDE_LIMITS.quizMax);
   assert.equal(s.bullets?.[0].length, SLIDE_LIMITS.answersItem);
 });
+
+// ═══════════════════════════════════════════ 4. AUDIT-25 — kesilgan matn
+
+/*
+ * Jonli dekada test variantlari «…me'yor…» bilan kesilgan chiqdi:
+ * `quizOption` 60 belgi (~6 so'z) edi. Qopqoq endi maketdan (eng tor
+ * `cards` qutisi talaba polida 129 belgi) — 12 so'zli to'liq variant
+ * normalizatsiyadan butun chiqadi.
+ */
+test("AUDIT-25: 12 so'zli test varianti normalizatsiyada «…» siz saqlanadi", async () => {
+  const option = "Suvni tejash me’yorlarini buzgan korxonalarga nisbatan jarima va cheklov choralarini qo‘llash kerak";
+  assert.ok(option.length > 60 && option.length <= SLIDE_LIMITS.quizOption, `shart: ${option.length} belgi`);
+  const s = body(
+    await deckFrom([
+      { layout: "quiz", title: "Test", quiz: [{ q: "Qaysi chora to‘g‘ri?", options: [option, "Ikkinchi", "Uchinchi", "To‘rtinchi"], answer: 0 }] },
+      ...filler(7),
+    ]),
+  )[0];
+  assert.equal(s.quiz?.[0].options[0], option);
+});
+
+/*
+ * Jonli `lecture-12`: 6 ustun bandining 5 tasi «…imkonini ber…», iqtibos
+ * muallifi «…olim, zam…» — so'z O'RTASIDAN kesilgan. `clipTo` endi so'z
+ * chegarasida kesadi, oxiridagi vergul/tire tashlanadi.
+ */
+test("AUDIT-25: clipTo so'z chegarasida kesadi (so'z o'rtasida «…» yo'q)", () => {
+  assert.equal(
+    clipTo("Adam Smit — Shotlandiyalik faylasuf va iqtisodchi olim, zamonaviy iqtisodiyot asoschisi", 60),
+    "Adam Smit — Shotlandiyalik faylasuf va iqtisodchi olim…",
+  );
+  const src =
+    "Bozor iqtisodiyotida mulk huquqining kafolatlanganligi har bir subyektga o‘z mulkini erkin tasarruf etish imkonini beradi va tadbirkorlikni rag‘batlantiradi";
+  const words = src.split(" ");
+  for (let n = 30; n < src.length; n += 7) {
+    const out = clipTo(src, n);
+    assert.ok(out.length <= n, `${n}: ${out.length} belgi`);
+    assert.ok(out.endsWith("…"));
+    const kept = out.slice(0, -1).split(" ");
+    // Har saqlangan so'z asl matndagi so'z bilan AYNAN bir xil (oxirgisi ham — yarim so'z yo'q).
+    kept.forEach((w, i) => assert.equal(w, words[i].replace(/[,;:]$/u, i === kept.length - 1 ? "" : words[i].slice(-1)), `${n}: «${out}»`));
+  }
+  // Bitta uzun so'z (URL) — eskicha qattiq kesiladi, uzunlik AYNAN n.
+  assert.equal(clipTo("a".repeat(50), 10), `${"a".repeat(9)}…`);
+  // Chegara juda erta bo'lsa (≤ 60 %) — qattiq kesish, joy isrof bo'lmaydi.
+  assert.equal(clipTo(`Ab ${"c".repeat(40)}`, 20).length, 20);
+});

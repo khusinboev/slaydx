@@ -16,53 +16,59 @@ import { safeSlice } from "./safe-text";
  *
  * ── AUDIT-25 O'LCHOVI (2026-09-24) ─────────────────────────────────────
  *
- * Har qirqiladigan KO'RINADIGAN maydon `planSlide` orqali o'lchandi:
- * 17 vizual × {rasmsiz, rasm tasmasi bilan}, real o'zbekcha so'zlar
- * (so'z bo'yicha qatorlash), talaba auditoriyasi (pol 15 pt; `*` —
- * 1–4 sinf, pol 24 pt). «base» = shrift kichraymasdan sig'adigan belgi,
- * «min» = pol shriftida sig'adigan belgi. Har katakda: ENG TOR holat
- * (qaysi vizual) / 25-persentil. Qayta o'lchash: `fitChars`
- * (`slide-quality.ts`) — prompt oraliqlari ham shu funksiyadan.
+ * Har qirqiladigan KO'RINADIGAN maydon `planSlide` orqali o'lchandi
+ * (`fitChars`, `slide-quality.ts`; P2 `c7a1c82` maketi — process/stats/
+ * table ham auditoriya POLIDA, A2-04): 17 vizual, har vizualda rasmsiz
+ * VA rasm tasmasi bilan holatning kichigi, real o'zbekcha so'zlar (so'z
+ * bo'yicha qatorlash). Katak = pol shriftida sig'adigan belgi,
+ * «eng tor / 17 vizual medianasi». Pol (minPt): 15 talaba/pedagog,
+ * 16 rahbariyat/umumiy/kattalar, 18 10–11 sinf/o'smir/keng, 20 8–9 sinf,
+ * 22 5–7 sinf/bolalar markazi, 24 1–4 sinf.
  *
- *   maydon            base (tor / p25)          min (tor / p25)          eski → YANGI
- *   title             36 story / 53             72 classic+rasm / 75     80 → 72
- *   kicker            42 notebook / 60          42 notebook / 60         40 (qoldi)
- *   subtitle (titul)  75 story / 173            173 magazine / 228       140 (qoldi)
- *   subtitleSection   111 story / 205           258 story / 419          300 → 250
- *   subtitleClosing   53 notebook / 139         139 classic / 159        160 → 135
- *   colTitle          16 circle+rasm / 24       16 split+rasm / 24       40 → 24
- *   colItem ×3        53 magazine+rasm / 75     75 dashboard+rasm / 139  ┐
- *   colItem ×4        36 magazine+rasm / 53     36 dashboard+rasm / 111  ┘ 120 → 110
- *   colItem ×4 *      4 circle+rasm / 36        16 circle+rasm / 85      (prompt: vizual × auditoriya)
- *   quote             111 notebook / 139        383 magazine / 495       220 → 280
- *   quoteBy           53 notebook / 85          53 notebook / 85         60 → 50
- *   statLabel ×2      111 bold+rasm / 234       296 dashboard+rasm / 470 ┐
- *   statLabel ×3      60 bold+rasm / 111        159 dashboard+rasm / 205 │ 110 (qoldi)
- *   statLabel ×4      42 bold+rasm / 85         75 dashboard+rasm / 139  ┘
- *   stepTitle ×4/×5   16 / 4 rail+rasm / 53     36 / 24 rail+rasm / 85   40 (qoldi; rail — P2)
- *   stepText ×3       53 rail+rasm / 111        121 rail+rasm / 185      ┐ 160 (qoldi —
- *   stepText ×4       24 classic+rasm / 24      53 rail+rasm / 85        │ slide-chart testi
- *   stepText ×5       16 classic+rasm / 16      42 classic+rasm / 42     ┘ ≥135 ni qulflaydi)
- *   tableHeader 3/5   36 / 16 classic+rasm      75 / 42 classic+rasm     40 / 26 (qoldi)
- *   tableCell 3/5     60 / 24 classic+rasm      111 / 60 classic+rasm    60 (qoldi)
- *   quizQ             121 classic / 121         290 timeline / 351       120 → 200
- *   quizOption        75 cards / 121            129 cards / 185          60 → 130
- *   quizOption *      24 cards / 36             24 cards / 53            (prompt: ≤ 2 so'z — P2)
- *   refTitle / refSource  85 / 673              241 / 673                90 / 200 (qoldi)
- *   bullets ×4 (165)  75 cards+rasm / 135       135 cards+rasm / 216     (auditoriya `bulletChars`)
+ *   maydon        qopqoq   15pt      16pt      18pt      20pt      22pt      24pt     qaror
+ *   title          80→72   72/139    72/139    72/139    72/139    72/139    72/139   72 (rasmli section, classic)
+ *   kicker            40   42/72     42/72     42/72     42/72     42/72     42/72    qoldi
+ *   bullets ×max  bulletChars 135/234  97/222  85/135   60/173    60/152    24/111   auditoriya jadvali; `cards` — P2
+ *   colTitle       40→24   16/24     16/24     16/24     16/24     16/24     16/24    24 (mediana)
+ *   colItem ×3    120→110  75/165    53/165    53/165    42/165    24/165    16/165   ┐ 110 (×4 mediana);
+ *   colItem ×4    120→110  36/111    36/111    36/111    36/111    24/111    16/111   ┘ aniq — clipLimit
+ *   stepText ×3      160   53/139    36/121    36/85     24/53     24/36     24/36    ┐ 160 qoldi (slide-chart
+ *   stepText ×4      160   24/111    24/85     24/60     16/42     16/36     16/36    │ testi ≥135); aniq —
+ *   stepText ×5      160   24/72     16/42     16/36     4/16      4/4       4/4      ┘ clipLimit + maxSteps
+ *   stepTitle ×4/5    40   24/53     24/53     16/24     4/24      4/16      4/16     qoldi; aniq — clipLimit
+ *   statLabel ×2     110   129/234   111/222   85/165    75/129    72/97     42/85    ┐ 110 qoldi; aniq —
+ *   statLabel ×4     110   42/85     42/60     24/53     24/53     24/24     16/16    ┘ clipLimit + maxStats
+ *   tableCell ×3      60   53/53     53/53     24/24     24/24     16/16     16/16    ┐ 60 qoldi (tahrir);
+ *   tableCell ×5      60   24/24     24/24     4/4       4/4       4/4       4/4      ┘ clipLimit + maxTableCols
+ *   tableHeader 3/5 40/26  36 / 16   36 / 16   16 / 4    16 / 4    4 / 4     4 / 4    qoldi; aniq — clipLimit
+ *   subtitleSection 300→250 258/383 (hamma pol — shrift qat'iy)                      250
+ *   subtitleClosing 160→135 139/339 (hamma pol)                                       135 (A4: defense-14 kesilgan)
+ *   quote        220→280   383/383 (hamma pol)                                       280 (prompt 30 so'zgacha)
+ *   quoteBy       60→50    53/85   (hamma pol)                                       50 + prompt «faqat muallif»
+ *   quizQ        120→200   290/383 (hamma pol)                                       200
+ *   quizOption    60→130   129/195   85/185    75/121    53/111    53/75     24/60    130 (15 pt eng tor); aniq — clipLimit
+ *   refTitle / refSource 90 / 200 — 241 / 673, `planReferences` o'zi qisqartiradi     qoldi
  *
- * QAROR QOIDASI: qopqoq ≈ pol shriftidagi TIPIK (p25) sig'im, eng tor
- * holatdan uzoq bo'lmasa — eng tor sig'im. «Qirqmasdan fitSize» varianti
- * YO'Q: `fitSize` pol ostiga tushmaydi, sig'magan matn qutidan chiqadi
- * (qirqilganidan yomonroq). Aniq hajmni PROMPT beradi — deka vizuali ×
- * auditoriya × rasm tasmasi bo'yicha (`layoutWordTargets`), undan oshgan
- * test varianti `thinSlides` da «clipped-option» bo'ladi. Qirqish esa
- * so'z CHEGARASIDA (`clipTo`) — so'z o'rtasida «…» yo'q.
+ * QAROR QOIDASI. (1) `SLIDE_LIMITS` — STATIK qopqoq (tahrir ham o'qiydi):
+ * eng past pol (15 pt) da eng tor holat tipikdan uzoq bo'lmasa — shu
+ * sig'im, aks holda TIPIK vizual (mediana). (2) Model matni esa
+ * `clipLimit(field, rules, visual, count)` bilan qirqiladi —
+ * auditoriya × vizual × element soni, pol shriftidagi sig'im, lekin
+ * statik qopqoqdan oshmaydi va `CLIP_FLOOR_CHARS` (24) dan tushmaydi
+ * (P1 `normalizeSlide` ga ulaydi). «Qirqmasdan fitSize» varianti YO'Q:
+ * `fitSize` pol ostiga tushmaydi, sig'magan matn qutidan chiqadi. Maket
+ * avval polgacha kichraytiradi, keyin ortig'i SO'Z CHEGARASIDA (`clipTo`)
+ * qirqiladi. (3) Qirqish kamdan-kam bo'lsin: prompt aynan shu sig'imdan
+ * so'z oralig'i va ELEMENT SONI oladi (`layoutWordTargets`: 5–7/1–4
+ * sinfga kam bosqich/karta/ustun).
  *
- * Qopqoqdan PAST sig'imli holatlar maket muammosi (P2): rasmli ikki
- * qatorli `process` (4–5 bosqich, matn qutisi 0.5"), `cards` test
- * varianti va bandlari bolalar shriftida, `circle`/`split`/`story`/
- * `dashboard` ustunlari, `rail` bosqich sarlavhasi.
+ * SIG'MAYDIGAN KOMBINATSIYALAR (prompt maqsadiga aylandi, qolgani P2):
+ * 20–24 pt da process kartasi 3 bosqichda ham 6 so'z ko'tarmaydi
+ * (mediana 36–53 belgi), 4–5 bosqich 1–2 so'z; 18–24 pt da 5 ustunli
+ * jadval katagiga bitta so'z sig'maydi, 3 ustunda ~2 so'z; 22–24 pt da
+ * 4 karta stats yorlig'i ~2 so'z; `cards` 1–4 sinf bandi/test varianti
+ * 24 belgi; `rail`/`dashboard`/`circle`/`split` ustun va bosqich qutilari
+ * — mediana yaxshi, eng tor holatlar P2 da.
  */
 export const SLIDE_LIMITS = {
   /**
@@ -119,9 +125,10 @@ export const SLIDE_LIMITS = {
   /** `stats` katta raqami. */
   statValue: 24,
   /**
-   * Yorliq: karta 3.58 × 2.3", 11 pt da ~480 belgi; diagrammada ~220.
-   * AUDIT-25 qayta o'lchovi (17 vizual): 2 karta ≥ 482, 3 karta ≥ 270,
-   * 4 karta ≥ 185 (`dashboard`) — 110 hamma joyda sig'adi, O'ZGARMADI.
+   * Yorliq — STATIK qopqoq (talaba poli 15 pt da 2–3 karta medianasi
+   * ≥ 111). P2 A2-04 dan keyin yorliq auditoriya polida: 1–4 sinf 4
+   * karta ~16 belgi — model matni `clipLimit("statLabel", …, count)`
+   * bilan qirqiladi, prompt esa `maxStats` kartadan ko'p so'ramaydi.
    */
   statLabel: 110,
   /** `stats` kartalari soni. */
@@ -131,11 +138,13 @@ export const SLIDE_LIMITS = {
   /** Bosqich sarlavhasi. */
   stepTitle: 40,
   /**
-   * Bosqich matni: 4 kartali qatorda 2.47 × 1.75", 14 pt da ~138 belgi.
-   * AUDIT-25 qayta o'lchovi (11 pt pol, 17 vizual): 3 bosqich ≥ 205,
-   * 4 bosqich ≥ 135 (`rail`), 5 bosqich ≥ 75 (`classic`). Chegara 160
-   * QOLDI — bu qirqish qopqog'i; hajmni prompt boshqaradi: 4 bosqichgacha
-   * «≤ 15 so'z», 5 bosqichda «≤ 8 so'z» (`layoutWordTargets`, maketdan).
+   * Bosqich matni — STATIK qopqoq 160 QOLDI (bir qatorli rasmsiz karta
+   * 11 pt da ~255; `tests/slide-chart.test.mts` ≥ 135 ni qulflaydi).
+   * Lekin rasm tasmasi bilan 4–5 bosqich IKKI qatorga tushadi (A1-01):
+   * talaba polida 4 bosqich mediana ~111, 5 bosqich ~72, maktab polida
+   * 4–36 belgi (jadval yuqorida). Model matni `clipLimit("stepText", …,
+   * steps.length)` bilan qirqiladi, prompt `maxSteps` va so'z oralig'ini
+   * shu sig'imdan oladi.
    */
   stepText: 160,
   /** `process` bosqichlari soni. */
@@ -146,7 +155,11 @@ export const SLIDE_LIMITS = {
   tableHeader: 26,
   /** Model javobidagi xom sarlavha (keyin ustun soniga qarab qisqaradi). */
   tableHeaderRaw: 60,
-  /** Jadval katagi. */
+  /**
+   * Jadval katagi — STATIK qopqoq (tahrir). Model matni
+   * `clipLimit("tableCell", …, cols)` bilan: 3 ustun talaba polida ~53,
+   * 18–24 pt da 16–24 — prompt `maxTableCols` dan ko'p ustun so'ramaydi.
+   */
   tableCell: 60,
   /** Jadval ustunlari soni. */
   tableCols: 5,

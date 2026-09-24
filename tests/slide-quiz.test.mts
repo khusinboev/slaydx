@@ -4,6 +4,7 @@ import { extractMeta } from "../lib/generation/meta.ts";
 import { slideLabels } from "../lib/generation/i18n.ts";
 import { planSlide, type SlideLayer } from "../lib/generation/slide-layout.ts";
 import { finalizeQuiz, QUIZ_LETTERS } from "../lib/generation/slide-quiz.ts";
+import { SLIDE_LIMITS } from "../lib/generation/slide-limits.ts";
 import { SLIDE_AUDIENCES, bodyRules } from "../lib/generation/slide-audience.ts";
 import { SLIDE_THEMES, getSlideTheme } from "../lib/generation/slide-themes.ts";
 import { resolveSlideTemplate } from "../lib/generation/slide-templates.ts";
@@ -742,4 +743,17 @@ test("answers shrifti AUDITORIYA polidan pastga tushmaydi", () => {
     }
   }
   assert.deepEqual(fails, [], `shrift poli buzildi:\n  ${fails.join("\n  ")}`);
+});
+
+/*
+ * AUDIT-25: variant qopqog'i 60 → 130. Javob izohi variantni qat'iy 120
+ * belgida kesardi — izohdagi javob slayddagi variantdan farq qilardi.
+ */
+test("finalizeQuiz: javob izohidagi variant slayddagi bilan AYNAN (qopqoqqacha)", () => {
+  const long = "Suv resurslarini tejash uchun tomchilatib sug‘orish va zamonaviy o‘lchov asboblarini joriy etish hamda nazoratni kuchaytirish";
+  assert.ok(long.length > 120 && long.length <= SLIDE_LIMITS.quizOption, `shart: ${long.length}`);
+  const one = quizSlide("s1", 1);
+  const slides = deck([{ ...one, quiz: [{ q: "Savol?", options: ["Bir", long, "Uch", "To‘rt"], answer: 1 }] }]);
+  finalizeQuiz(slides, META);
+  assert.equal(slides.find((s) => s.layout === "quiz")!.notes, `Javob: B — ${long}`);
 });

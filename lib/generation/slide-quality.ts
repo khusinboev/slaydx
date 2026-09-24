@@ -80,24 +80,31 @@ export function bulletMaxWords(rules: Pick<BodyRules, "bulletChars">): number {
 
 // ───────────────────────────────────────────────────────── maket sig'imi
 
+/**
+ * O'lchanadigan maydonlar. Soni o'zgaruvchi maydonlarda (`bullets`,
+ * `colItem`, `stepText`, `statLabel`, `tableCell`) sig'im elementlar
+ * SONIGA bog'liq — `fitChars` ning `count` argumenti.
+ */
 export type FitField =
   | "title"
+  | "colTitle"
   | "bullets"
   | "colItem"
-  | "stepText4"
-  | "stepText5"
+  | "stepText"
+  | "stepTitle"
   | "statLabel"
+  | "tableCell"
+  | "tableHeader"
   | "subtitleSection"
   | "subtitleClosing"
   | "quote"
   | "quoteBy"
   | "quizQ"
-  | "quizOption"
-  | "colTitle";
+  | "quizOption";
 
 const ALL_VISUALS: SlideVisual[] = [...LEGACY_VISUALS, ...DESIGN_VISUALS];
 const PROBE_THEME = getSlideTheme("atlas");
-/** Tasma rasmi — `twoCol`/`process`/`stats` da kontent zonasini toraytiradi (A1-01). */
+/** Tasma rasmi — `twoCol`/`process`/`stats`/`table` da kontent zonasini toraytiradi (A1-01). */
 const PROBE_IMAGE = { url: "data:image/png;base64,AAAA" };
 /** Real o'zbekcha so'zlar — sig'im «ooo…» bilan emas, so'z bo'yicha qatorlashda o'lchanadi. */
 const PROBE_WORDS =
@@ -109,27 +116,71 @@ function probeText(words: number): string {
   return Array.from({ length: words }, (_, i) => PROBE_WORDS[i % PROBE_WORDS.length]).join(" ");
 }
 
-type Probe = { slide: (t: string, rules: BodyRules) => SlideModel; match: (src: SlideSrc | undefined) => boolean };
+type Probe = {
+  /** Soni o'zgaruvchi maydonda standart son. */
+  count?: (rules: BodyRules) => number;
+  slide: (t: string, n: number) => SlideModel;
+  match: (src: SlideSrc | undefined) => boolean;
+};
 
-const stepsOf = (n: number, text: string): SlideStep[] =>
-  Array.from({ length: n }, (_, i) => ({ n: String(i + 1), title: "Bosqich nomi", text }));
+const fill = (n: number, t: string) => Array.from({ length: n }, () => t);
 const isSteps = (s: SlideSrc | undefined) => s?.f === "steps" && s.k === "text";
 
 /** Sinov slaydi va shu maydon qatlamini taniydigan predikat. */
 const PROBES: Record<FitField, Probe> = {
+  title: {
+    // Eng tor sarlavha — rasmli `section` (classic): sarlavha qutisi rasm yonida.
+    slide: (t) => ({ id: "fit", layout: "section", title: t, subtitle: probeText(10) }),
+    match: (s) => s?.f === "title",
+  },
+  colTitle: {
+    slide: (t) => ({ id: "fit", layout: "twoCol", title: "Ikki tomon", leftTitle: t, rightTitle: t, left: ["Band matni."], right: ["Band matni."] }),
+    match: (s) => s?.f === "leftTitle" || s?.f === "rightTitle",
+  },
   bullets: {
-    slide: (t, r) => ({ id: "fit", layout: "bullets", title: "Sarlavha", bullets: Array.from({ length: r.maxBullets }, () => t) }),
+    count: (r) => r.maxBullets,
+    slide: (t, n) => ({ id: "fit", layout: "bullets", title: "Sarlavha", bullets: fill(n, t) }),
     match: (s) => s?.f === "bullets",
   },
   colItem: {
-    slide: (t) => ({ id: "fit", layout: "twoCol", title: "Ikki tomon", leftTitle: "Chap", rightTitle: "O‘ng", left: [t, t, t, t], right: [t, t, t, t] }),
+    count: () => SLIDE_LIMITS.colItems,
+    slide: (t, n) => ({ id: "fit", layout: "twoCol", title: "Ikki tomon", leftTitle: "Chap", rightTitle: "O‘ng", left: fill(n, t), right: fill(n, t) }),
     match: (s) => s?.f === "left" || s?.f === "right",
   },
-  stepText4: { slide: (t) => ({ id: "fit", layout: "process", title: "Jarayon", steps: stepsOf(4, t) }), match: isSteps },
-  stepText5: { slide: (t) => ({ id: "fit", layout: "process", title: "Jarayon", steps: stepsOf(5, t) }), match: isSteps },
+  stepText: {
+    count: () => 4,
+    slide: (t, n) => ({
+      id: "fit",
+      layout: "process",
+      title: "Jarayon",
+      steps: Array.from({ length: n }, (_, i) => ({ n: String(i + 1), title: "Bosqich nomi", text: t })),
+    }),
+    match: isSteps,
+  },
+  stepTitle: {
+    count: () => 4,
+    slide: (t, n) => ({
+      id: "fit",
+      layout: "process",
+      title: "Jarayon",
+      steps: Array.from({ length: n }, (_, i) => ({ n: String(i + 1), title: t, text: probeText(5) })),
+    }),
+    match: (s) => s?.f === "steps" && s.k === "title",
+  },
   statLabel: {
-    slide: (t) => ({ id: "fit", layout: "stats", title: "Ko‘rsatkichlar", stats: [2, 3, 4, 5].map((k) => ({ value: `${k}0 %`, label: t })) }),
+    count: () => SLIDE_LIMITS.statsMax,
+    slide: (t, n) => ({ id: "fit", layout: "stats", title: "Ko‘rsatkichlar", stats: Array.from({ length: n }, (_, i) => ({ value: `${i + 2}0 %`, label: t })) }),
     match: (s) => s?.f === "stats" && s.k === "label",
+  },
+  tableCell: {
+    count: () => 4,
+    slide: (t, n) => ({ id: "fit", layout: "table", title: "Jadval", table: { headers: fill(n, "Ustun"), rows: Array.from({ length: 5 }, () => fill(n, t)) } }),
+    match: (s) => s?.f === "table" && s.k === "cell",
+  },
+  tableHeader: {
+    count: () => 4,
+    slide: (t, n) => ({ id: "fit", layout: "table", title: "Jadval", table: { headers: fill(n, t), rows: Array.from({ length: 5 }, () => fill(n, "Katak")) } }),
+    match: (s) => s?.f === "table" && s.k === "header",
   },
   subtitleSection: { slide: (t) => ({ id: "fit", layout: "section", title: "Bo‘lim sarlavhasi", subtitle: t }), match: (s) => s?.f === "subtitle" },
   subtitleClosing: { slide: (t) => ({ id: "fit", layout: "closing", title: "Xulosa", subtitle: t }), match: (s) => s?.f === "subtitle" },
@@ -142,17 +193,8 @@ const PROBES: Record<FitField, Probe> = {
     slide: (t) => ({ id: "fit", layout: "quiz", title: "Nazorat savoli", quiz: [{ q: t, options: ["Bir", "Ikki", "Uch", "To‘rt"], answer: 0 }] }),
     match: (s) => s?.f === "quiz" && "k" in s && s.k === "q",
   },
-  title: {
-    // Eng tor sarlavha — rasmli `section` (classic): sarlavha qutisi rasm yonida.
-    slide: (t) => ({ id: "fit", layout: "section", title: t, subtitle: probeText(10) }),
-    match: (s) => s?.f === "title",
-  },
-  colTitle: {
-    slide: (t) => ({ id: "fit", layout: "twoCol", title: "Ikki tomon", leftTitle: t, rightTitle: t, left: ["Band matni."], right: ["Band matni."] }),
-    match: (s) => s?.f === "leftTitle" || s?.f === "rightTitle",
-  },
   quizOption: {
-    slide: (t) => ({ id: "fit", layout: "quiz", title: "Nazorat savoli", quiz: [{ q: probeText(12), options: [t, t, t, t], answer: 0 }] }),
+    slide: (t) => ({ id: "fit", layout: "quiz", title: "Nazorat savoli", quiz: [{ q: probeText(12), options: fill(4, t), answer: 0 }] }),
     match: (s) => s?.f === "quiz" && "k" in s && s.k === "option",
   },
 };
@@ -176,9 +218,8 @@ function layerFits(l: TextLayer): boolean {
   return rows * l.size * 1.3 <= room;
 }
 
-function fitsAt(field: FitField, words: number, rules: BodyRules, visual: SlideVisual, image: boolean): boolean {
-  const p = PROBES[field];
-  const slide = p.slide(probeText(words), rules);
+function fitsAt(p: Probe, words: number, n: number, rules: BodyRules, visual: SlideVisual, image: boolean): boolean {
+  const slide = p.slide(probeText(words), n);
   const plan = planSlide(image ? { ...slide, image: PROBE_IMAGE } : slide, PROBE_THEME, visual, 3, 10, "auto", "lecture", {
     bodyType: rules,
   });
@@ -195,15 +236,18 @@ const MAX_PROBE_WORDS = 40;
 const fitCache = new Map<string, number>();
 
 /**
- * Maydon maketda auditoriya shrift polida necha BELGI ko'taradi —
- * `planSlide` ning o'zidan o'lchanadi (yagona manba: P2 qutini
- * kattalashtirsa, prompt va detektor ham avtomatik kengayadi). Rasmli
- * VA rasmsiz holatning kichigi olinadi: rasm matn yozilgandan KEYIN
- * qo'shiladi (`attachSlideImages`), yozuv paytida uning bo'lishi
- * noma'lum. `visual` berilmasa — barcha 17 vizualning ENG TORI.
+ * Maydon maketda auditoriya shrift POLIDA necha BELGI ko'taradi —
+ * `planSlide` ning o'zidan o'lchanadi (yagona manba: P2 qutini yoki
+ * polni o'zgartirsa, prompt, detektor va qirqish ham avtomatik
+ * ergashadi). Rasmli VA rasmsiz holatning kichigi olinadi: rasm matn
+ * yozilgandan KEYIN qo'shiladi (`attachSlideImages`), yozuv paytida
+ * uning bo'lishi noma'lum. `visual` berilmasa — 17 vizualning ENG TORI.
+ * `count` — elementlar soni (bosqich, karta, ustun, band).
  */
-export function fitChars(field: FitField, rules: BodyRules, visual?: SlideVisual): number {
-  const key = `${field}|${visual ?? "*"}|${rules.bodyPt}|${rules.minPt}|${rules.maxBullets}`;
+export function fitChars(field: FitField, rules: BodyRules, visual?: SlideVisual, count?: number): number {
+  const p = PROBES[field];
+  const n = Math.max(1, Math.round(count ?? p.count?.(rules) ?? 1));
+  const key = `${field}|${n}|${visual ?? "*"}|${rules.bodyPt}|${rules.minPt}`;
   const hit = fitCache.get(key);
   if (hit !== undefined) return hit;
   let chars = Number.POSITIVE_INFINITY;
@@ -216,12 +260,65 @@ export function fitChars(field: FitField, rules: BodyRules, visual?: SlideVisual
        * topardi (`dashboard` twoCol: 111 o'rniga 75).
        */
       let fit = 0;
-      while (fit < MAX_PROBE_WORDS && fitsAt(field, fit + 1, rules, v, image)) fit += 1;
+      while (fit < MAX_PROBE_WORDS && fitsAt(p, fit + 1, n, rules, v, image)) fit += 1;
       chars = Math.min(chars, probeText(fit).length);
     }
   }
   fitCache.set(key, chars);
   return chars;
+}
+
+// ───────────────────────────────────────────────────────── qirqish chegarasi
+
+/**
+ * Qirqish shundan past tushmaydi (~3 so'z). Quti bundan ham tor bo'lsa
+ * (masalan 1–4 sinf shriftida 5 ustunli jadval katagi) — bu MAKET
+ * muammosi: 3 so'zdan kam qoldiradigan qirqish ma'noni o'ldiradi.
+ */
+export const CLIP_FLOOR_CHARS = 24;
+
+/** `SLIDE_LIMITS` dagi mos qopqoq (bandlar uchun — auditoriya `bulletChars`). */
+function staticCap(field: FitField, rules: BodyRules, count?: number): number {
+  switch (field) {
+    case "bullets":
+      return rules.bulletChars;
+    case "tableHeader":
+      // `normalizeSlide` qoidasi: ≤3 ustun — keng sarlavha, 4+ — tor.
+      return (count ?? 4) <= 3 ? SLIDE_LIMITS.tableHeaderWide : SLIDE_LIMITS.tableHeader;
+    case "subtitleSection":
+    case "subtitleClosing":
+    case "quote":
+    case "quoteBy":
+    case "quizQ":
+    case "quizOption":
+    case "title":
+    case "colTitle":
+    case "colItem":
+    case "stepText":
+    case "stepTitle":
+    case "statLabel":
+    case "tableCell":
+      return SLIDE_LIMITS[field];
+  }
+}
+
+/**
+ * Model matnini QIRQISH chegarasi — auditoriya × vizual × element soni.
+ *
+ * `SLIDE_LIMITS` statik qopqoq (tahrir ham o'qiydi) pol 10–15 pt uchun
+ * o'lchangan edi; auditoriya poli 20–24 pt bo'lganda (maktab) o'sha
+ * uzunlik qutidan CHIQADI (P2 A2-04 dan keyin process/stats/table ham
+ * auditoriya polida). Bu funksiya: maket avval shriftni polgacha
+ * kichraytiradi, pol shriftida ham sig'maydigan qismigina (so'z
+ * chegarasida, `clipTo`) qirqiladi. Hech qachon statik qopqoqdan
+ * oshmaydi va `CLIP_FLOOR_CHARS` dan tushmaydi.
+ *
+ * P1: `normalizeSlide` da `clip(x, SLIDE_LIMITS.stepText)` o'rniga
+ * `clipTo(x, clipLimit("stepText", rules, tpl.visual, steps.length))`.
+ */
+export function clipLimit(field: FitField, rules: BodyRules, visual?: SlideVisual, count?: number): number {
+  const cap = staticCap(field, rules, count);
+  return Math.min(cap, Math.max(CLIP_FLOOR_CHARS, fitChars(field, rules, visual, count)));
 }
 
 // ───────────────────────────────────────────────────────── so'z oraliqlari
@@ -233,11 +330,16 @@ export type LayoutWordTargets = {
   colItem: WordRange;
   /** Ustun sarlavhasi — faqat yuqori chegara (quti va `SLIDE_LIMITS.colTitle`). */
   colTitleMax: number;
-  /** 4 bosqichgacha. */
+  /** Bosqich soni yuqori chegarasi — matn `STEP_MIN_WORDS` dan kam sig'adigan son taklif qilinmaydi. */
+  maxSteps: number;
+  /** `maxSteps` bosqichda bitta bosqich matni. */
   stepText: WordRange;
-  /** 5 bosqichli qatorda (kartalar tor) — faqat yuqori chegara. */
-  stepText5Max: number;
+  /** Karta soni yuqori chegarasi (label kamida `STAT_LABEL_MIN_WORDS` so'z sig'sin). */
+  maxStats: number;
   statLabelMax: number;
+  /** Jadval ustunlari yuqori chegarasi (katak kamida 2 so'z sig'sin). */
+  maxTableCols: number;
+  tableCellMax: number;
   sectionSubtitle: WordRange;
   closingSubtitle: WordRange;
   quote: WordRange;
@@ -246,9 +348,25 @@ export type LayoutWordTargets = {
   quizOptionMax: number;
 };
 
-/** Belgi sig'imi → so'z, `SLIDE_LIMITS` qirqish chegarasidan oshmasdan. */
+/** Stats yorlig'i shundan kam so'z sig'adigan karta soni taklif qilinmaydi. */
+export const STAT_LABEL_MIN_WORDS = 3;
+/** Jadval katagi shundan kam so'z sig'adigan ustun soni taklif qilinmaydi. */
+export const TABLE_CELL_MIN_WORDS = 2;
+
+/** Belgi sig'imi → so'z, statik qopqoqdan oshmasdan. */
 function capWords(chars: number, limit: number): number {
   return Math.max(1, Math.floor(Math.min(chars, limit) / CHARS_PER_WORD));
+}
+
+/** Maydonning so'zdagi sig'imi (qopqoq bilan). */
+function fitWords(field: FitField, rules: BodyRules, visual?: SlideVisual, count?: number): number {
+  return capWords(fitChars(field, rules, visual, count), staticCap(field, rules, count));
+}
+
+/** `from..to` oralig'idagi eng KATTA son, unda maydon kamida `minWords` so'z ko'taradi; yo'q bo'lsa `from`. */
+function maxCount(field: FitField, rules: BodyRules, visual: SlideVisual | undefined, from: number, to: number, minWords: number): number {
+  for (let n = to; n > from; n -= 1) if (fitWords(field, rules, visual, n) >= minWords) return n;
+  return from;
 }
 
 /**
@@ -264,32 +382,34 @@ function range(want: number, floor: number, cap: number, share: number): WordRan
 }
 
 /**
- * Har maket uchun so'z oralig'i — `BodyRules` (auditoriya × matn
- * hajmi) va maket sig'imidan. Prompt (`briefLines`) va `thinSlides`
+ * Har maket uchun so'z oralig'i va element soni — `BodyRules`
+ * (auditoriya × matn hajmi) va maket sig'imidan (auditoriya polida,
+ * rasm tasmasi bilan). Prompt (`briefLines`), `thinSlides` va ta'mir
  * shu funksiyani o'qiydi.
  */
 export function layoutWordTargets(rules: BodyRules, visual?: SlideVisual): LayoutWordTargets {
   // Bitta «to'liq band» so'z soni — auditoriya/hajm shu orqali hammasiga o'tadi.
   const unit = rules.bulletChars / 8;
-  const bulletCap = capWords(fitChars("bullets", rules, visual), rules.bulletChars);
+  const bulletCap = fitWords("bullets", rules, visual);
+  const maxSteps = maxCount("stepText", rules, visual, PROCESS_MIN_STEPS, SLIDE_LIMITS.stepsMax, STEP_MIN_WORDS);
+  const maxStats = maxCount("statLabel", rules, visual, 2, SLIDE_LIMITS.statsMax, STAT_LABEL_MIN_WORDS);
+  const maxTableCols = maxCount("tableCell", rules, visual, 2, SLIDE_LIMITS.tableCols, TABLE_CELL_MIN_WORDS);
   return {
     bullet: { min: Math.min(bulletMinWords(rules), bulletCap), max: Math.min(bulletMaxWords(rules), bulletCap) },
-    colItem: range(Math.round(unit * 0.7), COL_MIN_WORDS + 1, capWords(fitChars("colItem", rules, visual), SLIDE_LIMITS.colItem), 0.6),
-    colTitleMax: capWords(fitChars("colTitle", rules, visual), SLIDE_LIMITS.colTitle),
-    stepText: range(Math.round(unit * 0.7), STEP_MIN_WORDS + 2, capWords(fitChars("stepText4", rules, visual), SLIDE_LIMITS.stepText), 0.6),
-    stepText5Max: capWords(fitChars("stepText5", rules, visual), SLIDE_LIMITS.stepText),
-    statLabelMax: capWords(fitChars("statLabel", rules, visual), SLIDE_LIMITS.statLabel),
-    sectionSubtitle: range(
-      Math.round(unit * 1.5),
-      SECTION_SUBTITLE_MIN_WORDS + 6,
-      capWords(fitChars("subtitleSection", rules, visual), SLIDE_LIMITS.subtitleSection),
-      0.65,
-    ),
-    closingSubtitle: range(Math.round(unit * 0.8), 8, capWords(fitChars("subtitleClosing", rules, visual), SLIDE_LIMITS.subtitleClosing), 0.6),
-    quote: range(Math.round(unit * 1.3), QUOTE_MIN_WORDS + 4, capWords(fitChars("quote", rules, visual), SLIDE_LIMITS.quote), 0.45),
-    quoteByMax: capWords(fitChars("quoteBy", rules, visual), SLIDE_LIMITS.quoteBy),
-    quizQMax: capWords(fitChars("quizQ", rules, visual), SLIDE_LIMITS.quizQ),
-    quizOptionMax: Math.max(2, capWords(fitChars("quizOption", rules, visual), SLIDE_LIMITS.quizOption)),
+    colItem: range(Math.round(unit * 0.7), COL_MIN_WORDS + 1, fitWords("colItem", rules, visual), 0.6),
+    colTitleMax: fitWords("colTitle", rules, visual),
+    maxSteps,
+    stepText: range(Math.round(unit * 0.7), STEP_MIN_WORDS + 2, fitWords("stepText", rules, visual, maxSteps), 0.6),
+    maxStats,
+    statLabelMax: fitWords("statLabel", rules, visual, maxStats),
+    maxTableCols,
+    tableCellMax: fitWords("tableCell", rules, visual, maxTableCols),
+    sectionSubtitle: range(Math.round(unit * 1.5), SECTION_SUBTITLE_MIN_WORDS + 6, fitWords("subtitleSection", rules, visual), 0.65),
+    closingSubtitle: range(Math.round(unit * 0.8), 8, fitWords("subtitleClosing", rules, visual), 0.6),
+    quote: range(Math.round(unit * 1.3), QUOTE_MIN_WORDS + 4, fitWords("quote", rules, visual), 0.45),
+    quoteByMax: fitWords("quoteBy", rules, visual),
+    quizQMax: fitWords("quizQ", rules, visual),
+    quizOptionMax: Math.max(2, fitWords("quizOption", rules, visual)),
   };
 }
 
@@ -300,11 +420,13 @@ export function layoutWordTargets(rules: BodyRules, visual?: SlideVisual): Layou
  */
 export function wordTargetLines(rules: BodyRules, visual?: SlideVisual): string[] {
   const t = layoutWordTargets(rules, visual);
+  const steps = t.maxSteps > PROCESS_MIN_STEPS ? `${PROCESS_MIN_STEPS}–${t.maxSteps}` : `AYNAN ${PROCESS_MIN_STEPS}`;
   return [
     `MAKET HAJMI (so‘z; qutiga sig‘adigan oraliq — kam yozsang slayd bo‘sh ko‘rinadi, ko‘p yozsang kesiladi):`,
     `— twoCol/compare: har ustunda 3–4 band, har band ${t.colItem.min}–${t.colItem.max} so‘z; ustun sarlavhasi (leftTitle/rightTitle) ≤ ${t.colTitleMax} so‘z;`,
-    `— process: 3–4 bosqich, har bosqich text ${t.stepText.min}–${t.stepText.max} so‘z (5 bosqich bo‘lsa ≤ ${t.stepText5Max} so‘z);`,
-    `— stats: har label ≤ ${t.statLabelMax} so‘z;`,
+    `— process: ${steps} bosqich, har bosqich text ${t.stepText.min}–${t.stepText.max} so‘z;`,
+    `— stats: ${t.maxStats} tagacha karta, har label ≤ ${t.statLabelMax} so‘z;`,
+    `— table: ${t.maxTableCols} tagacha ustun, katak ≤ ${t.tableCellMax} so‘z;`,
     `— section: subtitle ${t.sectionSubtitle.min}–${t.sectionSubtitle.max} so‘z, bo‘sh qolmasin;`,
     `— closing: subtitle ${t.closingSubtitle.min}–${t.closingSubtitle.max} so‘z;`,
     `— quote: ${t.quote.min}–${t.quote.max} so‘z; quoteBy — faqat muallif (≤ ${t.quoteByMax} so‘z), tavsif emas;`,
@@ -351,16 +473,17 @@ export function thinReasons(s: SlideModel, rules: BodyRules, visual?: SlideVisua
     return out;
   }
   if (s.layout === "process") {
-    const t = layoutWordTargets(rules, visual);
     const list = s.steps ?? [];
-    const minWords = Math.min(STEP_MIN_WORDS, list.length >= 5 ? t.stepText5Max : t.stepText.max);
+    // Shu SONDAGI bosqich qutisi sig'imi — 5 bosqichli rasmli qatorda 6 so'z ham sig'masligi mumkin.
+    const minWords = Math.min(STEP_MIN_WORDS, fitWords("stepText", rules, visual, Math.max(PROCESS_MIN_STEPS, list.length)));
     if (list.length < PROCESS_MIN_STEPS || list.some((st) => words(st.text) < minWords)) out.push("short-steps");
     return out;
   }
   if (s.layout === "twoCol" || s.layout === "compare") {
-    const minWords = Math.min(COL_MIN_WORDS, layoutWordTargets(rules, visual).colItem.max);
     const left = (s.left ?? []).filter((x) => x.trim());
     const right = (s.right ?? []).filter((x) => x.trim());
+    const n = Math.max(left.length, right.length, COL_MIN_ITEMS);
+    const minWords = Math.min(COL_MIN_WORDS, fitWords("colItem", rules, visual, n));
     if (left.length < COL_MIN_ITEMS || right.length < COL_MIN_ITEMS || avgWords([...left, ...right]) < minWords) {
       out.push("short-columns");
     }
@@ -375,7 +498,7 @@ export function thinReasons(s: SlideModel, rules: BodyRules, visual?: SlideVisua
     return out;
   }
   if (s.layout === "quiz") {
-    const fit = Math.min(fitChars("quizOption", rules, visual), SLIDE_LIMITS.quizOption);
+    const fit = clipLimit("quizOption", rules, visual);
     const bad = (s.quiz ?? []).some((q) => clipped(q.q) || q.options.some((o) => clipped(o) || o.length > fit));
     if (bad) out.push("clipped-option");
   }
@@ -420,21 +543,23 @@ function list(v: unknown, n: number, max: number): string[] {
  * Model javobini ASL slayd ustiga qo'yadi — faqat shu maketning MATN
  * maydonlari. `id`, `layout`, `title`, `plan`, rasm, izoh va boshqa
  * hamma narsa asl slayddan (spread) qoladi. Yaroqsiz javob — `null`.
+ * Qirqish `clipLimit` bilan — ta'mirlangan matn ham qutiga sig'adi.
  */
-function mergeRepair(orig: SlideModel, raw: Record<string, unknown>, rules: BodyRules): SlideModel | null {
+function mergeRepair(orig: SlideModel, raw: Record<string, unknown>, rules: BodyRules, visual?: SlideVisual): SlideModel | null {
   switch (orig.layout) {
     case "bullets": {
-      const bullets = list(raw.bullets, rules.maxBullets, rules.bulletChars);
+      const bullets = list(raw.bullets, rules.maxBullets, clipLimit("bullets", rules, visual));
       return bullets.length ? { ...orig, bullets } : null;
     }
     case "process": {
       if (!Array.isArray(raw.steps)) return null;
+      const textMax = clipLimit("stepText", rules, visual, Math.min(raw.steps.length, SLIDE_LIMITS.stepsMax));
       const steps = raw.steps
         .map((x, i) => {
           if (!x || typeof x !== "object") return null;
           const o = x as Record<string, unknown>;
           const title = clipTo(String(o.title ?? orig.steps?.[i]?.title ?? ""), SLIDE_LIMITS.stepTitle);
-          const text = clipTo(String(o.text ?? ""), SLIDE_LIMITS.stepText);
+          const text = clipTo(String(o.text ?? ""), textMax);
           if (!title || !text) return null;
           return { n: clipTo(String(orig.steps?.[i]?.n ?? o.n ?? i + 1), SLIDE_LIMITS.stepN), title, text };
         })
@@ -444,8 +569,10 @@ function mergeRepair(orig: SlideModel, raw: Record<string, unknown>, rules: Body
     }
     case "twoCol":
     case "compare": {
-      const left = list(raw.left, SLIDE_LIMITS.colItems, SLIDE_LIMITS.colItem);
-      const right = list(raw.right, SLIDE_LIMITS.colItems, SLIDE_LIMITS.colItem);
+      const n = Math.min(SLIDE_LIMITS.colItems, Math.max(Array.isArray(raw.left) ? raw.left.length : 0, Array.isArray(raw.right) ? raw.right.length : 0));
+      const itemMax = clipLimit("colItem", rules, visual, n);
+      const left = list(raw.left, SLIDE_LIMITS.colItems, itemMax);
+      const right = list(raw.right, SLIDE_LIMITS.colItems, itemMax);
       if (!left.length || !right.length) return null;
       return {
         ...orig,
@@ -456,11 +583,11 @@ function mergeRepair(orig: SlideModel, raw: Record<string, unknown>, rules: Body
       };
     }
     case "section": {
-      const subtitle = clipTo(String(raw.subtitle ?? ""), SLIDE_LIMITS.subtitleSection);
+      const subtitle = clipTo(String(raw.subtitle ?? ""), clipLimit("subtitleSection", rules, visual));
       return subtitle ? { ...orig, subtitle } : null;
     }
     case "quote": {
-      const quote = clipTo(String(raw.quote ?? ""), SLIDE_LIMITS.quote);
+      const quote = clipTo(String(raw.quote ?? ""), clipLimit("quote", rules, visual));
       return quote ? { ...orig, quote } : null;
     }
     case "quiz": {
@@ -477,7 +604,7 @@ function mergeRepair(orig: SlideModel, raw: Record<string, unknown>, rules: Body
         const x = raw.quiz[j];
         if (!x || typeof x !== "object") return null;
         const o = x as Record<string, unknown>;
-        const options = list(o.options, SLIDE_LIMITS.quizOptions, SLIDE_LIMITS.quizOption);
+        const options = list(o.options, SLIDE_LIMITS.quizOptions, clipLimit("quizOption", rules, visual));
         if (options.length !== SLIDE_LIMITS.quizOptions) return null;
         if (o.answer !== undefined && Number(o.answer) !== orig_[j].answer) return null;
         const q = clipped(orig_[j].q) && o.q ? clipTo(String(o.q), SLIDE_LIMITS.quizQ) : orig_[j].q;
@@ -493,7 +620,7 @@ function mergeRepair(orig: SlideModel, raw: Record<string, unknown>, rules: Body
 const REASON_TEXT: Record<ThinReason, (t: LayoutWordTargets, r: BodyRules) => string> = {
   "few-bullets": (_t, r) => `band kam — ${r.minBullets}–${r.maxBullets} ta band yozing`,
   "short-bullets": (t) => `bandlar juda qisqa — har biri ${t.bullet.min}–${t.bullet.max} so‘zli TO‘LIQ gap (ta’rif, sabab, misol, oqibat)`,
-  "short-steps": (t) => `bosqich matni qisqa — 3–4 bosqich, har text ${t.stepText.min}–${t.stepText.max} so‘z: nima qilinadi va natija nima`,
+  "short-steps": (t) => `bosqich matni qisqa — ${PROCESS_MIN_STEPS}–${t.maxSteps} bosqich, har text ${t.stepText.min}–${t.stepText.max} so‘z: nima qilinadi va natija nima`,
   "empty-subtitle": (t) => `subtitle bo‘sh — ${t.sectionSubtitle.min}–${t.sectionSubtitle.max} so‘zlik kirish: bu bo‘limda nima ko‘riladi`,
   "clipped-option": (t) => `variant kesilgan yoki qutiga sig‘maydi — har variant ≤ ${t.quizOptionMax} so‘z; variantlar TARTIBI va answer o‘zgarmasin`,
   "short-columns": (t) => `ustunlar yupqa — har ustunda 3–4 band, har band ${t.colItem.min}–${t.colItem.max} so‘z`,
@@ -592,7 +719,7 @@ export async function repairThinSlides(
       const index = Number(o.index);
       if (!Number.isInteger(index) || !wanted.has(index)) continue;
       wanted.delete(index);
-      const merged = mergeRepair(out[index], o, rules);
+      const merged = mergeRepair(out[index], o, rules, visual);
       // Faqat YAXSHILANGAN javob: slayd endi yupqa emas.
       if (merged && !thinReasons(merged, rules, visual).length) {
         out[index] = merged;
