@@ -125,3 +125,37 @@ I wrote my own differential script (`scratchpad/w4e/essay-diff.mts`). It imports
   - `ESSAY_LIMITS.pagesMin` comment.
   - The price for word-sized contexts now comes from the engine volume.
 - Replace the tautological `enginePages()` sweep with an independent oracle, for example a literal table of (`wordTarget` → price) at the boundaries 500/501/750/751/1000.
+
+---
+
+## Re-review (commits `6620466`, `475c6d3`, merged base `6bbdead`): **APPROVE**
+
+I re-checked branch head `475c6d3`. It already contains the earlier base `05b5baf`, and `git merge-tree` against the current base head `04126b0` is clean.
+
+**R1, BEA-13: resolved.**
+- **Telegram login shape check.** `app/api/auth/telegram/route.ts` now checks the request shape *before* the signature:
+  - `initData` that is not a string → 400.
+  - `widget` that is not an object → 400.
+  - `widget.hash` that is not a 64-character hex string → 400.
+  - Each of these is counted in the `tg:bad:<ip>` bucket, so fuzzing still reaches 429.
+  - A correct shape with a wrong signature still returns 401.
+  - The real Telegram hash is 64 hex characters, so no legitimate login is rejected.
+  - This route is the only caller of `verifyLoginWidget` and `verifyMiniAppInitData`, so `safeEqual` can no longer get a non-string.
+- **Admin `[id]`.** `userIdParam` accepts only positive integers in canonical form (`String(n) === raw`), otherwise 404. It is applied to GET, PATCH and PUT.
+- **`?since=`.** This is fixed by **W4-B** `7e2381a` (bounded to int4, out of range → 400), which is not merged yet. It is fine to keep it with W4-B. `parseSince` in this branch is unchanged, and W4-B touches that file while W4-E doesn't, so no conflict is expected. The orchestrator should confirm that W4-B is merged before BEA-13 is closed.
+
+**R2, C41: resolved.**
+- `purgeOldPhotos` now keeps only three kinds of photo:
+  - photos referenced by a draft (crop and original);
+  - photos in `values_json.photoAssetId` of a **QUEUED/IN_PROGRESS** resume;
+  - the originals of the kept crops.
+- The `doc_json` read is gone, and so is the permanent pinning by COMPLETED resumes. The quota message has been updated to match.
+- The new test follows the real worker path: `photoDataUrl` → `extractAssets`/`swapPhoto`. It stores a COMPLETED resume, purges the upload row, and shows that the document still serves its photo from its own copy in `generation_assets`, and that a re-render can resolve it. That is exactly what I asked to see proved.
+- The retention test now also asserts the other cases:
+  - IN_PROGRESS keeps its photo.
+  - COMPLETED (via `values_json` or `doc_json`) is purged.
+  - FAILED is purged.
+
+**Tests.** Run under `heavy2.sh -m 3G -t 900` with `--test-concurrency=1` and `DATABASE_URL` set. The earlier 9 suites, the new `malformed-route-params`, plus upload-quota, resume-commit, slide-image-edit, pricing, telegram-bot-login, auth-first-login-race and admin-contact: **141/141 pass**, 0 skipped, exit 0.
+
+The non-blocking notes above still stand: the registry `wordTarget.impacts` should include `price`, some essay-form comments are stale, and the essay sweep test is tautological.
