@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { extractMeta } from "../lib/generation/meta.ts";
 import { resetBreakers } from "../lib/generation/llm/breaker.ts";
 import { bodyRules } from "../lib/generation/slide-audience.ts";
-import { SLIDE_LIMITS } from "../lib/generation/slide-limits.ts";
+import { SLIDE_LIMITS, limitsFor } from "../lib/generation/slide-limits.ts";
 import {
   CHARS_PER_WORD,
   COL_MIN_ITEMS,
@@ -220,7 +220,9 @@ test("clipLimit: statik qopqoqdan oshmaydi, pol shriftidagi sig'imgacha tushadi,
     for (const rules of [bachelor, kids]) {
       const lim = clipLimit(field, rules, "classic");
       assert.ok(lim <= cap, `${field}: ${lim} > ${cap}`);
-      assert.ok(lim >= CLIP_FLOOR_CHARS, `${field}: ${lim} < pol`);
+      // Pol faqat O'LCHOVNI qisadi; pol × son jadvali (`limitsFor`, P2 o'lchovi) undan ham past bo'lishi mumkin.
+      const table = field === "quizOption" || field === "colItem" ? cap : limitsFor(rules)[field];
+      assert.ok(lim >= Math.min(CLIP_FLOOR_CHARS, table), `${field}: ${lim} < pol`);
       assert.ok(lim <= Math.max(CLIP_FLOOR_CHARS, fitChars(field, rules, "classic")), `${field}: qutidan katta`);
     }
   }
@@ -492,4 +494,33 @@ test("SLIDE_LIMITS: qopqoqlar pol shriftidagi sig'imdan oshmaydi (o'lchov qulfi)
   };
   assert.ok(SLIDE_LIMITS.colTitle <= median("colTitle") + 1, `colTitle > mediana ${median("colTitle")}`);
   assert.ok(SLIDE_LIMITS.colItem <= median("colItem") + 1, `colItem > mediana ${median("colItem")}`);
+});
+
+test("limitsFor jadvali jonli o'lchovga mos: har katak rasmsiz eng tor qutidan ko'pi bilan bitta so'z ortiq", async () => {
+
+  const WORD = 12; // o'lchov so'z bo'yicha: keyingi uzun so'z sig'magani uchun «sig'im» bir so'zgacha past chiqadi
+  for (const aud of ["school_1_4", "school_5_7", "school_8_9", "school_10_11", "general", "students_bachelor"] as const) {
+    const r = bodyRules({ slideAudience: aud, textVolume: "standart", planItems: 5 }, "lecture");
+    for (const n of [3, 4, 5]) {
+      const l = limitsFor(r, { steps: n, stats: Math.min(4, n), cols: n, rows: n <= 4 ? n : 6 });
+      const cap = (f: Parameters<typeof fitChars>[0], k: number) => fitChars(f, r, undefined, k, "none") + WORD;
+      assert.ok(l.stepText <= cap("stepText", n), `${aud} stepText×${n}: ${l.stepText} > ${cap("stepText", n)}`);
+      assert.ok(l.stepTitle <= cap("stepTitle", n), `${aud} stepTitle×${n}`);
+      assert.ok(l.statLabel <= cap("statLabel", Math.min(4, n)), `${aud} statLabel×${Math.min(4, n)}`);
+      assert.ok(l.tableCell <= cap("tableCell", n), `${aud} tableCell×${n}`);
+      assert.ok(l.tableHeader <= cap("tableHeader", n), `${aud} tableHeader×${n}`);
+    }
+  }
+});
+
+test("clipLimit soni o'zgaruvchi maydonda limitsFor dan oshmaydi (generatsiya ⊆ tahrir)", async () => {
+
+  const kids = bodyRules({ slideAudience: "school_1_4", textVolume: "standart", planItems: 5 }, "lesson");
+  for (const rules of [bachelor, kids]) {
+    for (const n of [3, 4, 5]) {
+      assert.ok(clipLimit("stepText", rules, "classic", n) <= limitsFor(rules, { steps: n }).stepText);
+      assert.ok(clipLimit("stepTitle", rules, "classic", n) <= limitsFor(rules, { steps: n }).stepTitle);
+    }
+    for (const n of [2, 3, 4]) assert.ok(clipLimit("statLabel", rules, "classic", n) <= limitsFor(rules, { stats: n }).statLabel);
+  }
 });

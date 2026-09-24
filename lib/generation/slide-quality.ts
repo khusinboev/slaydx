@@ -4,7 +4,7 @@ import { llmComplete, llmEnabled } from "./llm";
 import { remainingMs } from "./quality";
 import { bodyRules, type BodyRules } from "./slide-audience";
 import { LAYOUT_KIT, planSlide, type SlideLayer } from "./slide-layout";
-import { SLIDE_LIMITS, clipTo } from "./slide-limits";
+import { SLIDE_LIMITS, clipTo, limitsFor } from "./slide-limits";
 import type { SlidePromptCtx } from "./slide-prompt/ctx";
 import { researchLines } from "./slide-prompt/research";
 import type { SlideTemplate, SlideVisual } from "./slide-templates";
@@ -124,6 +124,8 @@ type Probe = {
 };
 
 const fill = (n: number, t: string) => Array.from({ length: n }, () => t);
+/** Jadval probasi qatorlari — `limitsFor` kaliti bilan bir xil kombinatsiya (3×3, 4×4, 5×6). */
+const tableRowsOf = (cols: number) => (cols <= 4 ? cols : 6);
 const isSteps = (s: SlideSrc | undefined) => s?.f === "steps" && s.k === "text";
 
 /** Sinov slaydi va shu maydon qatlamini taniydigan predikat. */
@@ -174,12 +176,12 @@ const PROBES: Record<FitField, Probe> = {
   },
   tableCell: {
     count: () => 4,
-    slide: (t, n) => ({ id: "fit", layout: "table", title: "Jadval", table: { headers: fill(n, "Ustun"), rows: Array.from({ length: 5 }, () => fill(n, t)) } }),
+    slide: (t, n) => ({ id: "fit", layout: "table", title: "Jadval", table: { headers: fill(n, "Ustun"), rows: Array.from({ length: tableRowsOf(n) }, () => fill(n, t)) } }),
     match: (s) => s?.f === "table" && s.k === "cell",
   },
   tableHeader: {
     count: () => 4,
-    slide: (t, n) => ({ id: "fit", layout: "table", title: "Jadval", table: { headers: fill(n, t), rows: Array.from({ length: 5 }, () => fill(n, "Katak")) } }),
+    slide: (t, n) => ({ id: "fit", layout: "table", title: "Jadval", table: { headers: fill(n, t), rows: Array.from({ length: tableRowsOf(n) }, () => fill(n, "Katak")) } }),
     match: (s) => s?.f === "table" && s.k === "header",
   },
   subtitleSection: { slide: (t) => ({ id: "fit", layout: "section", title: "Bo‘lim sarlavhasi", subtitle: t }), match: (s) => s?.f === "subtitle" },
@@ -242,17 +244,25 @@ const fitCache = new Map<string, number>();
  * ergashadi). Rasmli VA rasmsiz holatning kichigi olinadi: rasm matn
  * yozilgandan KEYIN qo'shiladi (`attachSlideImages`), yozuv paytida
  * uning bo'lishi noma'lum. `visual` berilmasa — 17 vizualning ENG TORI.
- * `count` — elementlar soni (bosqich, karta, ustun, band).
+ * `count` — elementlar soni (bosqich, karta, ustun, band). `images`:
+ * "both" — rasmli va rasmsizning kichigi (standart), "none" — faqat
+ * rasmsiz (P2 o'lchovi shunday — `limitsFor` jadvali qulfi uchun).
  */
-export function fitChars(field: FitField, rules: BodyRules, visual?: SlideVisual, count?: number): number {
+export function fitChars(
+  field: FitField,
+  rules: BodyRules,
+  visual?: SlideVisual,
+  count?: number,
+  images: "both" | "none" = "both",
+): number {
   const p = PROBES[field];
   const n = Math.max(1, Math.round(count ?? p.count?.(rules) ?? 1));
-  const key = `${field}|${n}|${visual ?? "*"}|${rules.bodyPt}|${rules.minPt}`;
+  const key = `${field}|${n}|${visual ?? "*"}|${rules.bodyPt}|${rules.minPt}|${images}`;
   const hit = fitCache.get(key);
   if (hit !== undefined) return hit;
   let chars = Number.POSITIVE_INFINITY;
   for (const v of visual ? [visual] : ALL_VISUALS) {
-    for (const image of [false, true]) {
+    for (const image of images === "none" ? [false] : [false, true]) {
       /*
        * CHIZIQLI qidiruv — BIRINCHI sig'masligigacha. Ikkilik qidiruv
        * noto'g'ri edi: ba'zi vizuallar matn uzunligiga qarab boshqa
@@ -277,14 +287,23 @@ export function fitChars(field: FitField, rules: BodyRules, visual?: SlideVisual
  */
 export const CLIP_FLOOR_CHARS = 24;
 
-/** `SLIDE_LIMITS` dagi mos qopqoq (bandlar uchun — auditoriya `bulletChars`). */
+/**
+ * Mos qopqoq: bandlar — auditoriya `bulletChars`; soni o'zgaruvchi
+ * maydonlar — `limitsFor` (pol × son jadvali, klient ham o'qiydi);
+ * qolgani — statik `SLIDE_LIMITS`.
+ */
 function staticCap(field: FitField, rules: BodyRules, count?: number): number {
   switch (field) {
     case "bullets":
       return rules.bulletChars;
+    case "stepText":
+    case "stepTitle":
+      return limitsFor(rules, { steps: count })[field];
+    case "statLabel":
+      return limitsFor(rules, { stats: count })[field];
+    case "tableCell":
     case "tableHeader":
-      // `normalizeSlide` qoidasi: ≤3 ustun — keng sarlavha, 4+ — tor.
-      return (count ?? 4) <= 3 ? SLIDE_LIMITS.tableHeaderWide : SLIDE_LIMITS.tableHeader;
+      return limitsFor(rules, { cols: count, rows: count === undefined ? undefined : tableRowsOf(count) })[field];
     case "subtitleSection":
     case "subtitleClosing":
     case "quote":
@@ -294,10 +313,6 @@ function staticCap(field: FitField, rules: BodyRules, count?: number): number {
     case "title":
     case "colTitle":
     case "colItem":
-    case "stepText":
-    case "stepTitle":
-    case "statLabel":
-    case "tableCell":
       return SLIDE_LIMITS[field];
   }
 }
@@ -339,6 +354,8 @@ export type LayoutWordTargets = {
   statLabelMax: number;
   /** Jadval ustunlari yuqori chegarasi (katak kamida 2 so'z sig'sin). */
   maxTableCols: number;
+  /** Jadval qatorlari — auditoriya ruxsati (`BodyRules.tableRows`). */
+  maxTableRows: number;
   tableCellMax: number;
   sectionSubtitle: WordRange;
   closingSubtitle: WordRange;
@@ -391,9 +408,10 @@ export function layoutWordTargets(rules: BodyRules, visual?: SlideVisual): Layou
   // Bitta «to'liq band» so'z soni — auditoriya/hajm shu orqali hammasiga o'tadi.
   const unit = rules.bulletChars / 8;
   const bulletCap = fitWords("bullets", rules, visual);
-  const maxSteps = maxCount("stepText", rules, visual, PROCESS_MIN_STEPS, SLIDE_LIMITS.stepsMax, STEP_MIN_WORDS);
-  const maxStats = maxCount("statLabel", rules, visual, 2, SLIDE_LIMITS.statsMax, STAT_LABEL_MIN_WORDS);
-  const maxTableCols = maxCount("tableCell", rules, visual, 2, SLIDE_LIMITS.tableCols, TABLE_CELL_MIN_WORDS);
+  // Son: auditoriya ruxsati (`countRules`, P2 o'lchovi) — deka vizualining sig'imi bilan yana qisiladi.
+  const maxSteps = maxCount("stepText", rules, visual, PROCESS_MIN_STEPS, Math.max(PROCESS_MIN_STEPS, rules.stepsMax), STEP_MIN_WORDS);
+  const maxStats = maxCount("statLabel", rules, visual, 2, Math.max(2, rules.statsMax), STAT_LABEL_MIN_WORDS);
+  const maxTableCols = maxCount("tableCell", rules, visual, 2, Math.max(2, rules.tableCols), TABLE_CELL_MIN_WORDS);
   return {
     bullet: { min: Math.min(bulletMinWords(rules), bulletCap), max: Math.min(bulletMaxWords(rules), bulletCap) },
     colItem: range(Math.round(unit * 0.7), COL_MIN_WORDS + 1, fitWords("colItem", rules, visual), 0.6),
@@ -403,6 +421,7 @@ export function layoutWordTargets(rules: BodyRules, visual?: SlideVisual): Layou
     maxStats,
     statLabelMax: fitWords("statLabel", rules, visual, maxStats),
     maxTableCols,
+    maxTableRows: rules.tableRows,
     tableCellMax: fitWords("tableCell", rules, visual, maxTableCols),
     sectionSubtitle: range(Math.round(unit * 1.5), SECTION_SUBTITLE_MIN_WORDS + 6, fitWords("subtitleSection", rules, visual), 0.65),
     closingSubtitle: range(Math.round(unit * 0.8), 8, fitWords("subtitleClosing", rules, visual), 0.6),
@@ -426,7 +445,7 @@ export function wordTargetLines(rules: BodyRules, visual?: SlideVisual): string[
     `— twoCol/compare: har ustunda 3–4 band, har band ${t.colItem.min}–${t.colItem.max} so‘z; ustun sarlavhasi (leftTitle/rightTitle) ≤ ${t.colTitleMax} so‘z;`,
     `— process: ${steps} bosqich, har bosqich text ${t.stepText.min}–${t.stepText.max} so‘z;`,
     `— stats: ${t.maxStats} tagacha karta, har label ≤ ${t.statLabelMax} so‘z;`,
-    `— table: ${t.maxTableCols} tagacha ustun, katak ≤ ${t.tableCellMax} so‘z;`,
+    `— table: ${t.maxTableCols} tagacha ustun, ${t.maxTableRows} tagacha qator, katak ≤ ${t.tableCellMax} so‘z;`,
     `— section: subtitle ${t.sectionSubtitle.min}–${t.sectionSubtitle.max} so‘z, bo‘sh qolmasin;`,
     `— closing: subtitle ${t.closingSubtitle.min}–${t.closingSubtitle.max} so‘z;`,
     `— quote: ${t.quote.min}–${t.quote.max} so‘z; quoteBy — faqat muallif (≤ ${t.quoteByMax} so‘z), tavsif emas;`,

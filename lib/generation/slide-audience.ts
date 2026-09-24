@@ -101,8 +101,34 @@ export function audienceRules(a: SlideAudience | string | undefined, tplId: Slid
   return AUDIENCE_RULES.students_bachelor;
 }
 
-/** `planSlide` va `normalizeSlide` o'qiydigan tana qoidasi — auditoriya × matn hajmi. */
-export type BodyRules = AudienceRule & { agendaMax: number };
+/**
+ * Element SONI — auditoriya shrift POLIGA bog'liq (AUDIT-25, P2 A2-04).
+ *
+ * P2 dan keyin process/stats/table matni auditoriya polidan kichraymaydi.
+ * O'lchov (`audit/reviews/AUDIT-25-P2.md` §4, `fitChars`): 1–4 sinf
+ * polida (24 pt) 5 bosqichli kartaga ~15 belgi, 4 karta yorlig'iga ~30,
+ * 5×6 jadval katagiga ~10 belgi sig'adi — ya'ni SON o'zi ma'noli matnni
+ * imkonsiz qiladi. Shuning uchun son ham auditoriyadan: prompt shu sondan
+ * ko'p so'ramaydi (`brief.ts`), `normalizeSlide` ortig'ini tashlaydi (P1).
+ *
+ *   pol      bosqich  karta  jadval (ustun × qator)
+ *   ≥ 20 pt     3       3        3 × 4      (1–9 sinf, bolalar markazi)
+ *   18 pt       4       3        3 × 4      (10–11 sinf, o'smir, keng)
+ *   ≤ 16 pt     4       4        4 × 5      (talaba, pedagog, rahbariyat, kattalar)
+ *
+ * 5 bosqich hech kimga berilmaydi: talaba polida ham 5 bosqich matni
+ * ~35 belgi (3–4 so'z) — «yupqa karta» ning o'zi (AUDIT-25 S4).
+ */
+export type CountRules = { stepsMax: number; statsMax: number; tableCols: number; tableRows: number };
+
+export function countRules(minPt: number): CountRules {
+  if (minPt >= 20) return { stepsMax: 3, statsMax: 3, tableCols: 3, tableRows: 4 };
+  if (minPt >= 18) return { stepsMax: 4, statsMax: 3, tableCols: 3, tableRows: 4 };
+  return { stepsMax: 4, statsMax: 4, tableCols: 4, tableRows: 5 };
+}
+
+/** `planSlide` va `normalizeSlide` o'qiydigan tana qoidasi — auditoriya × matn hajmi × element soni. */
+export type BodyRules = AudienceRule & CountRules & { agendaMax: number };
 
 /**
  * Matn hajmi ko'paytuvchisi — band SONI va UZUNLIGINI o'zgartiradi,
@@ -122,5 +148,6 @@ export function bodyRules(meta: Pick<DocMeta, "slideAudience" | "textVolume" | "
     maxBullets: Math.max(2, Math.min(6, Math.round(base.maxBullets * k))),
     bulletChars: Math.round(base.bulletChars * k),
     agendaMax: meta.planItems || PLAN_ITEMS_DEFAULT,
+    ...countRules(base.minPt),
   };
 }

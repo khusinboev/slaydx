@@ -1,4 +1,6 @@
 import { safeSlice } from "./safe-text";
+// Faqat TUR — ish vaqtida import yo'q (fayl bog'liqliksiz qoladi, klient bundle'i ham o'qiydi).
+import type { BodyRules } from "./slide-audience";
 /**
  * Slayd matn chegaralari — YAGONA jadval.
  *
@@ -25,42 +27,49 @@ import { safeSlice } from "./safe-text";
  * 16 rahbariyat/umumiy/kattalar, 18 10–11 sinf/o'smir/keng, 20 8–9 sinf,
  * 22 5–7 sinf/bolalar markazi, 24 1–4 sinf.
  *
+ *   (process/stats/table son bo'yicha aniq jadvali — `COUNT_LIMITS` pastda)
  *   maydon        qopqoq   15pt      16pt      18pt      20pt      22pt      24pt     qaror
  *   title          80→72   72/139    72/139    72/139    72/139    72/139    72/139   72 (rasmli section, classic)
  *   kicker            40   42/72     42/72     42/72     42/72     42/72     42/72    qoldi
  *   bullets ×max  bulletChars 135/234  97/222  85/135   60/173    60/152    24/111   auditoriya jadvali; `cards` — P2
  *   colTitle       40→24   16/24     16/24     16/24     16/24     16/24     16/24    24 (mediana)
  *   colItem ×3    120→110  75/165    53/165    53/165    42/165    24/165    16/165   ┐ 110 (×4 mediana);
- *   colItem ×4    120→110  36/111    36/111    36/111    36/111    24/111    16/111   ┘ aniq — clipLimit
+ *   colItem ×4    120→110  36/111    36/111    36/111    36/111    24/111    16/111   ┘ aniq — clipLimit (vizual)
  *   stepText ×3      160   53/139    36/121    36/85     24/53     24/36     24/36    ┐ 160 qoldi (slide-chart
  *   stepText ×4      160   24/111    24/85     24/60     16/42     16/36     16/36    │ testi ≥135); aniq —
- *   stepText ×5      160   24/72     16/42     16/36     4/16      4/4       4/4      ┘ clipLimit + maxSteps
- *   stepTitle ×4/5    40   24/53     24/53     16/24     4/24      4/16      4/16     qoldi; aniq — clipLimit
+ *   stepText ×5      160   24/72     16/42     16/36     4/16      4/4       4/4      ┘ limitsFor + maxSteps
+ *   stepTitle ×4/5    40   24/53     24/53     16/24     4/24      4/16      4/16     qoldi; limitsFor
  *   statLabel ×2     110   129/234   111/222   85/165    75/129    72/97     42/85    ┐ 110 qoldi; aniq —
- *   statLabel ×4     110   42/85     42/60     24/53     24/53     24/24     16/16    ┘ clipLimit + maxStats
+ *   statLabel ×4     110   42/85     42/60     24/53     24/53     24/24     16/16    ┘ limitsFor + maxStats
  *   tableCell ×3      60   53/53     53/53     24/24     24/24     16/16     16/16    ┐ 60 qoldi (tahrir);
- *   tableCell ×5      60   24/24     24/24     4/4       4/4       4/4       4/4      ┘ clipLimit + maxTableCols
- *   tableHeader 3/5 40/26  36 / 16   36 / 16   16 / 4    16 / 4    4 / 4     4 / 4    qoldi; aniq — clipLimit
+ *   tableCell ×5      60   24/24     24/24     4/4       4/4       4/4       4/4      ┘ limitsFor + maxTableCols
+ *   tableHeader 3/5 40/26  36 / 16   36 / 16   16 / 4    16 / 4    4 / 4     4 / 4    qoldi; limitsFor
  *   subtitleSection 300→250 258/383 (hamma pol — shrift qat'iy)                      250
  *   subtitleClosing 160→135 139/339 (hamma pol)                                       135 (A4: defense-14 kesilgan)
  *   quote        220→280   383/383 (hamma pol)                                       280 (prompt 30 so'zgacha)
  *   quoteBy       60→50    53/85   (hamma pol)                                       50 + prompt «faqat muallif»
  *   quizQ        120→200   290/383 (hamma pol)                                       200
- *   quizOption    60→130   129/195   85/185    75/121    53/111    53/75     24/60    130 (15 pt eng tor); aniq — clipLimit
+ *   quizOption    60→130   129/195   85/185    75/121    53/111    53/75     24/60    130 (15 pt eng tor); aniq — clipLimit (vizual)
  *   refTitle / refSource 90 / 200 — 241 / 673, `planReferences` o'zi qisqartiradi     qoldi
  *
- * QAROR QOIDASI. (1) `SLIDE_LIMITS` — STATIK qopqoq (tahrir ham o'qiydi):
- * eng past pol (15 pt) da eng tor holat tipikdan uzoq bo'lmasa — shu
- * sig'im, aks holda TIPIK vizual (mediana). (2) Model matni esa
- * `clipLimit(field, rules, visual, count)` bilan qirqiladi —
- * auditoriya × vizual × element soni, pol shriftidagi sig'im, lekin
- * statik qopqoqdan oshmaydi va `CLIP_FLOOR_CHARS` (24) dan tushmaydi
- * (P1 `normalizeSlide` ga ulaydi). «Qirqmasdan fitSize» varianti YO'Q:
- * `fitSize` pol ostiga tushmaydi, sig'magan matn qutidan chiqadi. Maket
- * avval polgacha kichraytiradi, keyin ortig'i SO'Z CHEGARASIDA (`clipTo`)
- * qirqiladi. (3) Qirqish kamdan-kam bo'lsin: prompt aynan shu sig'imdan
- * so'z oralig'i va ELEMENT SONI oladi (`layoutWordTargets`: 5–7/1–4
- * sinfga kam bosqich/karta/ustun).
+ * QAROR QOIDASI — uch qatlam:
+ *  (1) `SLIDE_LIMITS` — STATIK qopqoq: eng past pol (15 pt) da eng tor
+ *      holat tipikdan uzoq bo'lmasa — shu sig'im, aks holda TIPIK vizual
+ *      (mediana). Hech qachon oshib ketmaydigan yuqori chegara.
+ *  (2) `limitsFor(rules, {steps, stats, cols, rows})` — auditoriya POLI ×
+ *      element SONI jadvali (P2 o'lchovi × 0.88) soni o'zgaruvchi
+ *      maydonlar uchun (bosqich, karta, jadval), va son chegaralari
+ *      (`countRules`: yosh auditoriyaga kam bosqich/karta/ustun). Klient
+ *      uchun xavfsiz: `normalizeSlide` (P1) VA `slide-edit.ts` shuni
+ *      chaqiradi.
+ *  (3) `clipLimit(field, rules, visual, count)` (`slide-quality.ts`,
+ *      server) — generatsiyada deka VIZUALI va rasm tasmasi bilan jonli
+ *      o'lchov; (2) dan hech qachon oshmaydi.
+ * «Qirqmasdan fitSize» varianti YO'Q: `fitSize` pol ostiga tushmaydi,
+ * sig'magan matn qutidan chiqadi. Maket avval polgacha kichraytiradi,
+ * keyin ortig'i SO'Z CHEGARASIDA (`clipTo`) qirqiladi. Qirqish kamdan-kam
+ * bo'lsin: prompt aynan shu sig'imdan so'z oralig'i va ELEMENT SONI
+ * oladi (`layoutWordTargets`, `brief.ts`).
  *
  * SIG'MAYDIGAN KOMBINATSIYALAR (prompt maqsadiga aylandi, qolgani P2):
  * 20–24 pt da process kartasi 3 bosqichda ham 6 so'z ko'tarmaydi
@@ -227,6 +236,120 @@ export const SLIDE_LIMITS = {
 } as const;
 
 export type SlideLimits = typeof SLIDE_LIMITS;
+
+/**
+ * Auditoriya POLI qatorlari (pt) — `limitsFor` jadvalining ustunlari.
+ * Jadvalda yo'q pol keyingi KATTAroq (qattiqroq) qatorga tushadi.
+ */
+export const LIMIT_FLOORS = [15, 16, 18, 20, 22, 24] as const;
+
+/**
+ * Soni o'zgaruvchi maydonlar uchun qirqish chegarasi — pol × son.
+ *
+ * Manba: P2 o'lchovi (`audit/reviews/AUDIT-25-P2.md` §4 — «har vizualning
+ * har qutisiga sig'adigan eng uzun so'z bo'yicha kesilgan matn», maketning
+ * o'z `inkHeight`/`fitSize` modeli) × 0.88 (qalin shrift kengligi
+ * taxmini optimistik — 12 % zaxira), 5 ga pastga yaxlitlangan va statik
+ * `SLIDE_LIMITS` qopqog'idan oshmaydi. Kalit — element soni: bosqich
+ * (3/4/5), karta (2/3/4), jadval (3 = 3×3, 4 = 4×4, 5 = 5×6).
+ * `tests/slide-quality.test.mts` jadvalni jonli o'lchovga (`fitChars`)
+ * qarshi qulflaydi — P2 qutini o'zgartirsa, qaysi katak eskirgani chiqadi.
+ *
+ *   maydon ×son       15pt 16pt 18pt 20pt 22pt 24pt
+ */
+const COUNT_LIMITS = {
+  stepText: {
+    3: [90, 75, 65, 45, 40, 40],
+    4: [55, 55, 45, 30, 25, 25],
+    5: [30, 30, 30, 20, 20, 10],
+  },
+  stepTitle: {
+    3: [40, 40, 35, 30, 25, 25],
+    4: [35, 35, 25, 15, 15, 15],
+    5: [25, 25, 25, 10, 10, 10],
+  },
+  statLabel: {
+    2: [110, 110, 110, 110, 95, 70],
+    3: [110, 95, 75, 65, 45, 35],
+    4: [70, 65, 40, 35, 30, 25],
+  },
+  tableCell: {
+    3: [60, 60, 60, 60, 45, 40],
+    4: [60, 60, 40, 35, 20, 20],
+    5: [25, 25, 20, 15, 5, 5],
+  },
+  tableHeader: {
+    3: [40, 40, 25, 15, 15, 15],
+    4: [26, 26, 15, 10, 10, 10],
+    5: [25, 25, 10, 5, 5, 5],
+  },
+} as const;
+
+/** Slaydning element soni — `limitsFor` kaliti. Berilmasa — auditoriya ruxsat bergan eng katta son (qattiqroq). */
+export type LimitCounts = { steps?: number; stats?: number; cols?: number; rows?: number };
+
+/** Auditoriya × element soni bo'yicha chegaralar — `SLIDE_LIMITS` shakli, soni o'zgaruvchi maydonlar almashtirilgan. */
+export type SlideLimitsFor = Omit<SlideLimits, "stepText" | "stepTitle" | "statLabel" | "tableCell" | "tableHeader" | "tableHeaderWide" | "stepsMax" | "statsMax" | "tableCols" | "tableRows"> & {
+  stepText: number;
+  stepTitle: number;
+  statLabel: number;
+  tableCell: number;
+  /** Shu ustun sonidagi sarlavha — `tableHeaderWide` ham shu qiymat (≤3/4+ tanlovi kalitda). */
+  tableHeader: number;
+  tableHeaderWide: number;
+  stepsMax: number;
+  statsMax: number;
+  tableCols: number;
+  tableRows: number;
+};
+
+const clampKey = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, Math.round(n)));
+
+/**
+ * Auditoriya × element soni bo'yicha qirqish chegaralari — YAGONA
+ * funksiya: `normalizeSlide` (P1, model javobi) VA `slide-edit.ts`
+ * (ko'ruvchi tahriri) shuni chaqiradi, statik `SLIDE_LIMITS` o'rniga.
+ *
+ *   limitsFor(rules)                              — son berilmasa auditoriya maksimumi
+ *   limitsFor(rules, { steps: s.steps.length })   — process
+ *   limitsFor(rules, { stats: s.stats.length })   — stats
+ *   limitsFor(rules, { cols, rows })              — table
+ *
+ * `stepsMax`/`statsMax`/`tableCols`/`tableRows` — auditoriya ruxsat
+ * bergan son (`countRules`), statik qopqoqdan oshmaydi. Qolgan maydonlar
+ * `SLIDE_LIMITS` bilan bir xil. Klient uchun xavfsiz (bog'liqliksiz).
+ */
+export function limitsFor(
+  rules: Pick<BodyRules, "minPt" | "stepsMax" | "statsMax" | "tableCols" | "tableRows">,
+  counts: LimitCounts = {},
+): SlideLimitsFor {
+  let col = LIMIT_FLOORS.findIndex((f) => f >= rules.minPt);
+  if (col < 0) col = LIMIT_FLOORS.length - 1;
+  const stepsMax = Math.min(SLIDE_LIMITS.stepsMax, rules.stepsMax);
+  const statsMax = Math.min(SLIDE_LIMITS.statsMax, rules.statsMax);
+  const tableCols = Math.min(SLIDE_LIMITS.tableCols, rules.tableCols);
+  const tableRows = Math.min(SLIDE_LIMITS.tableRows, rules.tableRows);
+  const steps = clampKey(counts.steps ?? stepsMax, 3, 5) as 3 | 4 | 5;
+  const stats = clampKey(counts.stats ?? statsMax, 2, 4) as 2 | 3 | 4;
+  // Jadval kaliti: o'lchangan kombinatsiyalar 3×3, 4×4, 5×6 — ustun VA qatordan kattasi.
+  const rows = counts.rows ?? tableRows;
+  const rowKey = rows <= 3 ? 3 : rows === 4 ? 4 : 5;
+  const table = Math.max(clampKey(counts.cols ?? tableCols, 3, 5), rowKey) as 3 | 4 | 5;
+  const header = Math.min(COUNT_LIMITS.tableHeader[table][col], (counts.cols ?? tableCols) <= 3 ? SLIDE_LIMITS.tableHeaderWide : SLIDE_LIMITS.tableHeader);
+  return {
+    ...SLIDE_LIMITS,
+    stepText: Math.min(SLIDE_LIMITS.stepText, COUNT_LIMITS.stepText[steps][col]),
+    stepTitle: Math.min(SLIDE_LIMITS.stepTitle, COUNT_LIMITS.stepTitle[steps][col]),
+    statLabel: Math.min(SLIDE_LIMITS.statLabel, COUNT_LIMITS.statLabel[stats][col]),
+    tableCell: Math.min(SLIDE_LIMITS.tableCell, COUNT_LIMITS.tableCell[table][col]),
+    tableHeader: header,
+    tableHeaderWide: header,
+    stepsMax,
+    statsMax,
+    tableCols,
+    tableRows,
+  };
+}
 
 /** Foydalanuvchi yuklaydigan slayd rasmi (PNG/JPEG) uchun yuqori chegara. */
 export const SLIDE_IMAGE_MAX_BYTES = 5 * 1024 * 1024;

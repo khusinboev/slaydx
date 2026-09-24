@@ -329,3 +329,44 @@ test("AUDIT-25: clipTo so'z chegarasida kesadi (so'z o'rtasida «…» yo'q)", (
   // Chegara juda erta bo'lsa (≤ 60 %) — qattiq kesish, joy isrof bo'lmaydi.
   assert.equal(clipTo(`Ab ${"c".repeat(40)}`, 20).length, 20);
 });
+
+// ═══════════════════════════════════════════ 5. AUDIT-25 — limitsFor (auditoriya × son)
+
+test("limitsFor: son o'zgaruvchi maydonlar pol × son jadvalidan, statik qopqoqdan oshmaydi", async () => {
+  const { bodyRules } = await import("../lib/generation/slide-audience.ts");
+  const { limitsFor, LIMIT_FLOORS } = await import("../lib/generation/slide-limits.ts");
+  const kids = bodyRules({ slideAudience: "school_1_4", textVolume: "standart", planItems: 5 }, "lesson");
+  const adult = bodyRules({ slideAudience: "students_bachelor", textVolume: "standart", planItems: 5 }, "lecture");
+  // P2 o'lchovi: 1–4 sinf polida 5 bosqich matni ~15 belgi — 160 emas.
+  assert.ok(limitsFor(kids, { steps: 5 }).stepText <= 15);
+  assert.ok(limitsFor(kids, { stats: 4 }).statLabel <= 30);
+  assert.ok(limitsFor(kids, { cols: 5, rows: 6 }).tableCell <= 10);
+  // Hech bir kombinatsiya statik qopqoqdan oshmaydi; qolgan maydonlar statik bilan bir xil.
+  for (const rules of [kids, adult]) {
+    for (const steps of [1, 3, 4, 5, 9]) {
+      const l = limitsFor(rules, { steps, stats: steps, cols: steps, rows: steps });
+      assert.ok(l.stepText <= SLIDE_LIMITS.stepText && l.stepTitle <= SLIDE_LIMITS.stepTitle);
+      assert.ok(l.statLabel <= SLIDE_LIMITS.statLabel && l.tableCell <= SLIDE_LIMITS.tableCell);
+      assert.ok(l.tableHeader <= SLIDE_LIMITS.tableHeaderWide && l.tableHeader === l.tableHeaderWide);
+      assert.equal(l.quizOption, SLIDE_LIMITS.quizOption);
+      assert.equal(l.title, SLIDE_LIMITS.title);
+    }
+  }
+  // Monoton: pol kattalashsa (yosh auditoriya) va son ko'paysa — chegara kamayadi yoki teng.
+  const at = (minPt: number, steps: number) =>
+    limitsFor({ minPt, stepsMax: 5, statsMax: 4, tableCols: 5, tableRows: 6 }, { steps, stats: Math.min(4, steps - 1), cols: steps, rows: steps });
+  for (let i = 1; i < LIMIT_FLOORS.length; i += 1) {
+    for (const n of [3, 4, 5]) {
+      const a = at(LIMIT_FLOORS[i - 1], n);
+      const b = at(LIMIT_FLOORS[i], n);
+      for (const k of ["stepText", "stepTitle", "statLabel", "tableCell", "tableHeader"] as const) assert.ok(b[k] <= a[k], `${k} ${LIMIT_FLOORS[i]}pt×${n}`);
+    }
+  }
+  for (const f of LIMIT_FLOORS) {
+    for (const k of ["stepText", "stepTitle", "tableCell"] as const) assert.ok(at(f, 5)[k] <= at(f, 4)[k] && at(f, 4)[k] <= at(f, 3)[k], `${k} ${f}pt`);
+  }
+  // Son berilmasa — auditoriya ruxsat bergan eng katta son (qattiqroq tomon).
+  assert.deepEqual(limitsFor(kids), limitsFor(kids, { steps: kids.stepsMax, stats: kids.statsMax, cols: kids.tableCols, rows: kids.tableRows }));
+  assert.equal(limitsFor(kids).stepsMax, 3);
+  assert.equal(limitsFor(adult).stepsMax, 4);
+});

@@ -98,3 +98,23 @@ test("AUDIT-25: brifda har maket so'z oralig'i — BodyRules va deka vizualidan 
   assert.notEqual(maket({ slideAudience: "school_1_4" }), maket({ slideAudience: "students_master" }));
   assert.notEqual(maket({ slideAudience: "students_bachelor", textVolume: "qisqa" }), maket({ slideAudience: "students_bachelor", textVolume: "kop" }));
 });
+
+test("AUDIT-25: element soni auditoriya polidan (countRules) — BodyRules va brifda", async () => {
+  const { bodyRules, countRules } = await import("../lib/generation/slide-audience.ts");
+  assert.deepEqual(countRules(24), { stepsMax: 3, statsMax: 3, tableCols: 3, tableRows: 4 });
+  assert.deepEqual(countRules(18), { stepsMax: 4, statsMax: 3, tableCols: 3, tableRows: 4 });
+  assert.deepEqual(countRules(15), { stepsMax: 4, statsMax: 4, tableCols: 4, tableRows: 5 });
+  for (const id of Object.keys(AUDIENCE_RULES)) {
+    const r = bodyRules(meta({ slideAudience: id }), lecture.id);
+    assert.deepEqual(
+      { stepsMax: r.stepsMax, statsMax: r.statsMax, tableCols: r.tableCols, tableRows: r.tableRows },
+      countRules(r.minPt),
+      id,
+    );
+  }
+  // Brif sondan ko'p so'ramaydi: 1–4 sinfga AYNAN 3 bosqich, 3 tagacha ustun.
+  const kids = prompt({ slideAudience: "school_1_4" });
+  assert.match(kids, /— process: AYNAN 3 bosqich/);
+  assert.match(kids, /— table: [23] tagacha ustun, 4 tagacha qator/);
+  assert.match(prompt({ slideAudience: "students_bachelor" }), /— process: 3–4 bosqich/);
+});
