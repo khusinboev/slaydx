@@ -169,6 +169,8 @@ services:
       CLICK_MERCHANT_USER_ID: ${CLICK_MERCHANT_USER_ID:-}
       PAYME_TEST_KEY: ${PAYME_TEST_KEY:-}
       CRON_SECRET: ${CRON_SECRET:-}
+      # EXT-14: webhook'ning ALOHIDA kaliti (bo'sh → vaqtincha CRON_SECRET + ogohlantirish).
+      TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-}
       SESSION_COOKIE_SAMESITE: ${SESSION_COOKIE_SAMESITE:-lax}
       SESSION_TTL_DAYS: ${SESSION_TTL_DAYS:-30}
       # Bepul LLM endpointlari (reja, UDK, «Tuzatish», «Hammasini tuzatish») —

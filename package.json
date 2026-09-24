@@ -33,7 +33,7 @@
     "jszip": "^3.10.1",
     "katex": "^0.16.47",
     "lucide-react": "^1.31.0",
-    "next": "^15.5.23",
+    "next": "^15.5.26",
     "pg": "^8.23.0",
     "pptxgenjs": "^4.0.1",
     "qrcode": "^1.5.4",
@@ -58,7 +58,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "^15.5.23",
+    "eslint-config-next": "^15.5.26",
     "jsdom": "^30.0.1",
     "tailwindcss": "^4",
     "typescript": "^5"
