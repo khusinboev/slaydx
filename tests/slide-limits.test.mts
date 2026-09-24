@@ -3,6 +3,9 @@ import assert from "node:assert/strict";
 import { extractMeta } from "../lib/generation/meta.ts";
 import { SLIDE_LIMITS, clipTo, SLIDE_IMAGE_MAX_BYTES, UNDO_DEPTH, REBUILD_DEBOUNCE_MS } from "../lib/generation/slide-limits.ts";
 import { resolveSlideTemplate } from "../lib/generation/slide-templates.ts";
+import { bodyRules } from "../lib/generation/slide-audience.ts";
+import { limitsFor } from "../lib/generation/slide-limits.ts";
+import { clipLimit } from "../lib/generation/slide-quality.ts";
 import { QUIZ_MAX, QUIZ_OPTION_MAX, QUIZ_Q_MAX, STAT_LABEL_MAX, STEP_TEXT_MAX, writeSlidesWithLlm } from "../lib/generation/slide-write.ts";
 import type { SlideModel } from "../lib/generation/slide-types.ts";
 import { TOOL_BY_ID } from "../lib/tools.ts";
@@ -54,6 +57,16 @@ function filler(n: number): unknown[] {
     bullets: ["Birinchi band gapi.", "Ikkinchi band gapi."],
   }));
 }
+
+/*
+ * AUDIT-25 W3/W4: son va uzunlik chegaralari endi AUDITORIYA × vizual ×
+ * element SONI bo'yicha (`limitsFor`, `clipLimit`) — statik `SLIDE_LIMITS`
+ * faqat qopqoq. `deckFrom` ning metasi (oddiy slayd, «Ma’ruza») uchun
+ * kutilgan qiymatlar shu funksiyalardan hisoblanadi.
+ */
+const RULES = bodyRules(extractMeta(TOOL_BY_ID.slide, { topic: "Suv aylanishi" } as never), "lecture");
+const VISUAL = resolveSlideTemplate("lecture", "Suv aylanishi").visual;
+const LIM = limitsFor(RULES);
 
 /** Chegaradan bitta uzun matn — kesilishi SHART. */
 const long = (n: number) => "a".repeat(n + 1);
@@ -136,7 +149,7 @@ test("normalize: ustun bandlari colItems × colItem", async () => {
     ]),
   )[0];
   assert.equal(s.left?.length, SLIDE_LIMITS.colItems, "ustundagi band soni chegarasi");
-  assert.equal(s.left?.[0].length, SLIDE_LIMITS.colItem, "banddagi belgi chegarasi");
+  assert.equal(s.left?.[0].length, clipLimit("colItem", RULES, VISUAL, SLIDE_LIMITS.colItems), "banddagi belgi chegarasi (ustundagi band SONIDA)");
   assert.equal(s.leftTitle?.length, SLIDE_LIMITS.colTitle);
 });
 
@@ -165,9 +178,9 @@ test("normalize: stats — statsMax karta, statValue/statLabel chegarasi", async
       ...filler(7),
     ]),
   )[0];
-  assert.equal(s.stats?.length, SLIDE_LIMITS.statsMax);
+  assert.equal(s.stats?.length, LIM.statsMax, "karta soni auditoriya ruxsatida");
   assert.equal(s.stats?.[0].value.length, SLIDE_LIMITS.statValue);
-  assert.equal(s.stats?.[0].label.length, SLIDE_LIMITS.statLabel);
+  assert.equal(s.stats?.[0].label.length, clipLimit("statLabel", RULES, VISUAL, LIM.statsMax));
 });
 
 test("normalize: process — stepsMax bosqich, stepTitle/stepText chegarasi", async () => {
@@ -185,9 +198,9 @@ test("normalize: process — stepsMax bosqich, stepTitle/stepText chegarasi", as
       ...filler(7),
     ]),
   )[0];
-  assert.equal(s.steps?.length, SLIDE_LIMITS.stepsMax);
-  assert.equal(s.steps?.[0].title.length, SLIDE_LIMITS.stepTitle);
-  assert.equal(s.steps?.[0].text.length, SLIDE_LIMITS.stepText);
+  assert.equal(s.steps?.length, LIM.stepsMax, "bosqich soni auditoriya ruxsatida");
+  assert.equal(s.steps?.[0].title.length, clipLimit("stepTitle", RULES, VISUAL, LIM.stepsMax));
+  assert.equal(s.steps?.[0].text.length, clipLimit("stepText", RULES, VISUAL, LIM.stepsMax));
 });
 
 test("normalize: jadval — tableCols/tableRows/tableCell va ustun soniga qarab sarlavha", async () => {
@@ -204,9 +217,10 @@ test("normalize: jadval — tableCols/tableRows/tableCell va ustun soniga qarab 
       ...filler(7),
     ]),
   )[0];
-  assert.equal(wide.table?.headers[0].length, SLIDE_LIMITS.tableHeaderWide, "≤3 ustunda keng sarlavha");
-  assert.equal(wide.table?.rows.length, SLIDE_LIMITS.tableRows);
-  assert.equal(wide.table?.rows[0][0].length, SLIDE_LIMITS.tableCell);
+  const rowsN = LIM.tableRows;
+  assert.equal(wide.table?.headers[0].length, clipLimit("tableHeader", RULES, VISUAL, 3, rowsN), "3 ustunda sarlavha (ustun VA qator soni)");
+  assert.equal(wide.table?.rows.length, rowsN);
+  assert.equal(wide.table?.rows[0][0].length, clipLimit("tableCell", RULES, VISUAL, 3, rowsN));
 
   const narrow = body(
     await deckFrom([
@@ -224,7 +238,8 @@ test("normalize: jadval — tableCols/tableRows/tableCell va ustun soniga qarab 
       ...filler(7),
     ]),
   )[0];
-  assert.equal(narrow.table?.headers[0].length, SLIDE_LIMITS.tableHeader, "4+ ustunda tor sarlavha");
+  const cols = Math.min(4, LIM.tableCols);
+  assert.equal(narrow.table?.headers[0].length, clipLimit("tableHeader", RULES, VISUAL, cols, 2), "ustun soniga qarab sarlavha");
 });
 
 test("normalize: quiz — quizOptions AYNAN, quizQ/quizOption chegarasi", async () => {
@@ -246,7 +261,7 @@ test("normalize: quiz — quizOptions AYNAN, quizQ/quizOption chegarasi", async 
   )[0];
   assert.equal(s.quiz?.[0].q.length, SLIDE_LIMITS.quizQ);
   assert.equal(s.quiz?.[0].options.length, SLIDE_LIMITS.quizOptions);
-  assert.equal(s.quiz?.[0].options[0].length, SLIDE_LIMITS.quizOption);
+  assert.equal(s.quiz?.[0].options[0].length, clipLimit("quizOption", RULES, VISUAL));
 });
 
 test("normalize: references — refsMax, refTitle/refSource chegarasi", async () => {
