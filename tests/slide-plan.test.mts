@@ -5,7 +5,7 @@ import type { FormValues } from "../lib/types.ts";
 import { extractMeta } from "../lib/generation/meta.ts";
 import { SLIDE_BLOCKS, blocksToBeats, orderedBlocks, planRoleText } from "../lib/generation/slide-blocks.ts";
 import { PURPOSE_DEFAULTS, SLIDE_PURPOSES } from "../lib/generation/slide-purpose.ts";
-import { PRO_SLIDE_MAX, PRO_SLIDE_MIN, planBudget, planCapacity } from "../lib/generation/slide-params.ts";
+import { PRO_SLIDE_MAX, PRO_SLIDE_MIN, effectivePlanItems, planBudget, planCapacity } from "../lib/generation/slide-params.ts";
 import { slideSystem } from "../lib/generation/slide-prompt/index.ts";
 import { SLIDE_TEMPLATES, SLIDE_TEMPLATE_BY_ID, expandBeats, type SlideBeat } from "../lib/generation/slide-templates.ts";
 import {
@@ -195,6 +195,27 @@ test("planCapacity: forma qiymatlari shakli (satr, csv) va kichik deka", () => {
   assert.equal(extractMeta(pro, { topic: "X", slideCount: 5, quizCount: 3 }).planItems, 1);
   assert.equal(extractMeta(pro, { topic: "X", slideCount: 5, quizCount: 3, titleSlide: false }).planItems, 2);
   assert.equal(extractMeta(pro, { topic: "X", slideCount: 20, planItems: 6 }).planItems, 6);
+});
+
+test("effectivePlanItems: forma va server AYNAN bir xil qisadi (pol 1, shift sig'im)", () => {
+  assert.equal(effectivePlanItems(1, 2), 1);
+  assert.equal(effectivePlanItems(5, 2), 2);
+  assert.equal(effectivePlanItems("x", 9), 5, "noma'lum — standart 5");
+  assert.equal(effectivePlanItems("x", 3), 3);
+  assert.equal(effectivePlanItems(99, 9), 6, "shift PLAN_ITEMS_MAX");
+  assert.equal(effectivePlanItems(0, 9), 1, "pol 1, PLAN_ITEMS_MIN emas");
+  assert.equal(effectivePlanItems(4, 0), 1, "sig'im 0 bo'lsa ham kamida 1");
+  // `extractMeta` shu funksiyadan o'tadi: 1 bandli tanlov 3 ga ko'tarilmaydi.
+  for (const v of [
+    { slideCount: 10, planItems: 1 },
+    { slideCount: 10, planItems: 2 },
+    { slideCount: 4, planItems: 6, quizCount: 3 },
+    { slideCount: 12, planItems: "abc" },
+    { slideCount: 30, planItems: 6, slidePurpose: "open_lesson" },
+  ] as FormValues[]) {
+    const m = extractMeta(pro, { topic: "X", ...v });
+    assert.equal(m.planItems, effectivePlanItems(v.planItems, planCapacity(v)), JSON.stringify(v));
+  }
 });
 
 /**

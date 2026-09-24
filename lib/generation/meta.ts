@@ -14,9 +14,7 @@ import { isSlideBlockId, type SlideBlockId } from "./slide-blocks";
 import {
   KEY_IDEAS_MAX,
   KEY_IDEA_CHARS,
-  PLAN_ITEMS_DEFAULT,
-  PLAN_ITEMS_MAX,
-  PLAN_ITEMS_MIN,
+  effectivePlanItems,
   PRO_SLIDE_DEFAULT,
   PRO_SLIDE_MAX,
   PRO_SLIDE_MIN,
@@ -188,10 +186,13 @@ export function extractMeta(tool: ToolConfig, values: FormValues): DocMeta {
   /*
    * Reja bandlari soni dekaga SIG'ADIGAN songa qisiladi (AUDIT-25, 3-qaror):
    * har band o'z slaydini oladi, deka esa `slideCount` dan uzaymaydi.
-   * Kichik dekada `PLAN_ITEMS_MIN` dan kam ham bo'lishi mumkin (4 slayd → 1–2).
+   * Pol 1 — kichik dekada 1–2 band qonuniy (4 slayd → 1). Forma ham AYNAN
+   * `effectivePlanItems` bilan qisadi. Sig'im kirishi — shu yerda allaqachon
+   * aniqlangan qiymatlar (slayd soni vosita standartiga qisilgan, bloklar
+   * tur standartidan), ya'ni forma yuborgan qiymatlar bilan bir xil.
    */
-  const planItems = Math.min(
-    clampInt(values.planItems, PLAN_ITEMS_MIN, PLAN_ITEMS_MAX, PLAN_ITEMS_DEFAULT),
+  const planItems = effectivePlanItems(
+    values.planItems,
     planCapacity({
       slideCount: slidePages,
       blocks,

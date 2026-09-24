@@ -147,7 +147,9 @@ test("quizCount faqat ruxsat etilgan sonlarga tushadi; logo id regex bilan", () 
   assert.equal(meta({ logoAssetId: "0123456789ABCDEF01234567" }).logoAssetId, "0123456789abcdef01234567");
   assert.equal(meta({ logoAssetId: "../etc/passwd" }).logoAssetId, "");
   assert.equal(meta({ planItems: 9 }).planItems, 6);
-  assert.equal(meta({ planItems: 1 }).planItems, 3);
+  // AUDIT-25: pol 1 (`effectivePlanItems`) — forma bilan bir xil, kichik dekada 1 band qonuniy.
+  assert.equal(meta({ planItems: 1 }).planItems, 1);
+  assert.equal(meta({ planItems: 0 }).planItems, 1);
   assert.equal(meta({ textVolume: "juda-kop" }).textVolume, "standart");
   assert.equal(meta({ slideImageStyle: "oil" }).slideImageStyle, "photo");
 });

@@ -204,15 +204,22 @@ export function activeBlockIds(
  * bloklardan birini qat'iy qilsa hisob faqat shu faylda o'zgaradi.
  */
 export type PlanCapacityInput = {
-  slideCount?: number | string;
-  blocks?: readonly string[] | string | null;
-  quizCount?: number | string | null;
-  agendaSlide?: boolean;
-  titleSlide?: boolean;
-  speakerNotes?: boolean;
-  internetSearch?: boolean;
-  slidePurpose?: string;
+  slideCount?: PlanScalar;
+  blocks?: PlanScalar | readonly string[];
+  quizCount?: PlanScalar;
+  agendaSlide?: PlanScalar;
+  titleSlide?: PlanScalar;
+  speakerNotes?: PlanScalar;
+  internetSearch?: PlanScalar;
+  slidePurpose?: PlanScalar;
 };
+
+/**
+ * Maydon qiymati — `FormValues` bilan mos (forma o'z qiymatlarini
+ * to'g'ridan-to'g'ri uzatadi). Bayroqlar faqat AYNAN `true`/`false`
+ * sifatida o'qiladi — `extractMeta` bilan bir xil.
+ */
+type PlanScalar = FormValues[string] | undefined;
 
 /** Tana bo'yicha sig'im va agenda qarori. */
 export type PlanBudget = {
@@ -268,14 +275,18 @@ export function planBudget(v: PlanCapacityInput): PlanBudget {
   const want = clampInt(v.slideCount, SLIDE_MIN, SLIDE_MAX, SLIDE_DEFAULT);
   const bodyWant = want - (v.titleSlide === false ? 0 : 1) - 1;
   // `extractMeta` bilan BIR XIL: yuborilmagan bloklar — tur standarti.
+  const purpose = typeof v.slidePurpose === "string" ? v.slidePurpose : undefined;
   const blocks =
     v.blocks === undefined || v.blocks === null
-      ? purposeDefaults(v.slidePurpose).blocks
+      ? purposeDefaults(purpose).blocks
       : typeof v.blocks === "string"
         ? splitCsv(v.blocks, 12, 24)
-        : v.blocks;
-  const on = activeBlockIds(blocks, normalizeQuizCount(v.quizCount), v.internetSearch === true, v.agendaSlide);
-  return planBudgetForBody(bodyWant, on, v.agendaSlide);
+        : Array.isArray(v.blocks)
+          ? (v.blocks as readonly string[])
+          : [];
+  const agenda = v.agendaSlide === true ? true : v.agendaSlide === false ? false : undefined;
+  const on = activeBlockIds(blocks, normalizeQuizCount(v.quizCount), v.internetSearch === true, agenda);
+  return planBudgetForBody(bodyWant, on, agenda);
 }
 
 /**
@@ -307,4 +318,16 @@ export function planInputOf(
  */
 export function planCapacity(v: PlanCapacityInput): number {
   return planBudget(v).capacity;
+}
+
+/**
+ * Forma tanlovi → haqiqiy reja bandlari soni. Forma HAM, `extractMeta`
+ * HAM aynan shu funksiyani chaqiradi — ikki xil qisish bo'lsa forma
+ * «4 band» ko'rsatib, deka 3 band bilan chiqardi (P4 ko'rib chiqish, 1-band).
+ *
+ * Pol 1 (`PLAN_ITEMS_MIN` emas): 4 slaydli dekaga qonuniy ravishda 1
+ * band sig'adi. Noma'lum qiymat — `PLAN_ITEMS_DEFAULT`, keyin sig'imga.
+ */
+export function effectivePlanItems(raw: unknown, capacity: number): number {
+  return Math.min(clampInt(raw, 1, PLAN_ITEMS_MAX, PLAN_ITEMS_DEFAULT), Math.max(1, capacity));
 }
