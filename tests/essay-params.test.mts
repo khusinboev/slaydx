@@ -119,9 +119,29 @@ test("zond maydonlari o'lik emas: har ta'sir kamida bitta parametrda e'lon qilin
   }
 });
 
+/*
+ * `wordTarget` — akademik esseda narx dvigatel YOZADIGAN so'z hajmidan
+ * (W4-E, W3-J sharhidagi C12 sinfi): `pages` bilan zid qo'lda yasalgan
+ * so'rov (zond aynan shunday — `pages: "2"`, 550 va 950 so'z) endi
+ * yoziladigan hajm narxini to'laydi. Kanonik forma qiymatlarida
+ * (`pages = pagesForWords(wordTarget)`) narx o'zgarmagan —
+ * `tests/essay-price-words.test.mts`. Reyestrda (`essay-params.ts`,
+ * W4-A egaligida) `wordTarget.impacts` ga `price` qo'shilishi kerak.
+ */
+const PRICED_BY_ENGINE_VOLUME = new Set(["wordTarget"]);
+
 test("narx faqat varaqdan — boshqa parametrlar narxni qimirlatmaydi (narx o'zgarmadi)", () => {
   for (const p of ESSAY_PARAMS) {
     if (p.impacts.includes("price")) continue;
+    if (PRICED_BY_ENGINE_VOLUME.has(p.id)) {
+      const base = p.probeWith ?? {};
+      assert.notEqual(
+        priceFor(essay, { ...BASE, ...base, [p.id]: p.probeA }),
+        priceFor(essay, { ...BASE, ...base, [p.id]: p.probeB }),
+        `${p.id}: dvigatel hajmi narxga ta'sir qilishi kerak`,
+      );
+      continue;
+    }
     const base = p.probeWith ?? {};
     const a = priceFor(essay, { ...BASE, ...base, [p.id]: p.probeA });
     const b = priceFor(essay, { ...BASE, ...base, [p.id]: p.probeB });
@@ -133,6 +153,8 @@ test("narx faqat varaqdan — boshqa parametrlar narxni qimirlatmaydi (narx o'zg
   assert.equal(priceFor(essay, { ...BASE, pages: "3" }), 3000);
   assert.equal(priceFor(essay, { ...BASE, pages: "4" }), 3500);
   assert.equal(priceFor(essay, { ...BASE, pages: "5" }), 4000);
-  // Akademik esse so'z bilan o'lchansa ham narx varaqdan.
-  assert.equal(priceFor(essay, { ...BASE, essayContext: "academic", wordTarget: 1000, pages: "2" }), 2500);
+  // Akademik esse: narx dvigatel yozadigan so'zdan (1 000 so'z = 4 varaq), zid `pages: "2"` dan emas (W4-E).
+  assert.equal(priceFor(essay, { ...BASE, essayContext: "academic", wordTarget: 1000, pages: "2" }), 3500);
+  // Forma yuboradigan juftlik (`pages = pagesForWords(1000)` = 4) — narx avvalgidek.
+  assert.equal(priceFor(essay, { ...BASE, essayContext: "academic", wordTarget: 1000, pages: "4" }), 3500);
 });

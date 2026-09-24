@@ -14,7 +14,9 @@ import { ARTICLE_TYPES } from "./generation/article/types-registry";
 import type { PagesId } from "./generation/article/types";
 import { normalizeWorkPages, workKindOf } from "./generation/work/registry";
 import { workGenreOfTool } from "./generation/work/types";
-import { pagesOf as essayPagesOf } from "./generation/essay/input";
+import { essayInputFromValues } from "./generation/essay/input";
+import { ESSAY_CONTEXTS, essayWords } from "./generation/essay/registry";
+import { ESSAY_LIMITS } from "./generation/essay/types";
 import { glossaryTermCount } from "./generation/teacher/input";
 
 const TOPIC_FILE_MODES = [
@@ -1436,6 +1438,30 @@ function glossaryPriceTier(n: number): "10" | "20" | "40" {
   return "40";
 }
 
+/**
+ * Insho narxi varag'i — dvigatel YOZADIGAN hajmdan (W3-J sharhi, C12 sinfi).
+ *
+ *   • varaq bilan o'lchanadigan kontekst (maktab) — `pages` (1–5, `pagesOf`);
+ *   • IELTS — hajm qat'iy 250–330 so'z, `pages` e'tiborsiz → eng kichik varaq
+ *     (forma ham aynan `pages = 1` yuboradi);
+ *   • akademik esse — dvigatel hajmni `wordTarget` dan oladi va 500–1 000 ga
+ *     qisadi (`essayWords`), narx esa «1 varaq ≈ 250 so'z» bilan shu so'zdan
+ *     (`EssayComposer.pagesForWords` bilan bir formula).
+ *
+ * Kanonik forma qiymatlarida (`pages = pagesForWords(wordTarget)`) natija
+ * avvalgi `pages` narxi bilan AYNAN bir xil — faqat `pages` va `wordTarget`
+ * bir-biriga zid (qo'lda yasalgan) so'rov endi yoziladigan hajm narxini to'laydi.
+ */
+function essayPricePages(values: FormValues): number {
+  const input = essayInputFromValues(values);
+  const spec = ESSAY_CONTEXTS[input.context];
+  if (spec.sizing === "pages") return input.pages;
+  if (input.context === "ielts_task2") return ESSAY_LIMITS.pagesMin;
+  const aim = essayWords(input.context, { pages: input.pages, wordTarget: input.wordTarget }).aim;
+  const pages = Math.ceil(aim / ESSAY_LIMITS.academicWordsPerPage);
+  return Math.max(ESSAY_LIMITS.pagesMin, Math.min(ESSAY_LIMITS.pagesMax, pages));
+}
+
 export function priceFor(tool: ToolConfig, values: FormValues): number {
   if (tool.id === "image") {
     const n = Number(values.imageCount || 1);
@@ -1456,13 +1482,14 @@ export function priceFor(tool: ToolConfig, values: FormValues): number {
   }
   if (tool.id === "essay") {
     /*
-     * `pagesOf` — insho dvigateli bilan BIR XIL klamp (C12): 1–5 ga
-     * yaxlitlanadi/qisiladi, bo'sh/xato qiymat 2 ga tushadi. Ilgari
+     * Varaq dvigatel kirishidan (`essayInputFromValues` → `pagesOf`, C12):
+     * 1–5 ga yaxlitlanadi/qisiladi, bo'sh/xato qiymat 2 ga tushadi. Ilgari
      * `pages` XOM satr sifatida qidirilardi — `"5 "`, `"99"`, `"4.6"`
      * jadvalda topilmay 2 000 (eng arzon) turardi, dvigatel esa 5
-     * varaqlik insho yozardi (BEA-01).
+     * varaqlik insho yozardi (BEA-01). So'z bilan o'lchanadigan
+     * kontekstlar — `essayPricePages` izohida.
      */
-    const pages = essayPagesOf(values.pages);
+    const pages = essayPricePages(values);
     return { 1: 2000, 2: 2500, 3: 3000, 4: 3500, 5: 4000 }[pages] ?? 2000;
   }
   if (tool.id === "referat" || tool.id === "mustaqil-ish") {
