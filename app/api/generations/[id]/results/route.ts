@@ -1,6 +1,7 @@
 import { ApiError, handler, json, requireUser } from "@/lib/server/api";
 import { iterateAllResultRows, listResults, type GameResult } from "@/lib/server/game-sessions";
 import { scorePercent } from "@/lib/game/score";
+import { parseIsoInstant } from "@/lib/server/validate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -8,7 +9,6 @@ export const dynamic = "force-dynamic";
 type Ctx = { params: Promise<{ id: string }> };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
 
 /**
  * CSV maydonini qochirish.
@@ -57,11 +57,15 @@ export function csvErrorMarkerLine(): string {
   return csvLine(["#XATOLIK: eksport oqim o'rtasida uzildi — qayta urinib ko'ring yoki o'qituvchi qo'llab-quvvatlashga murojaat qiling", "", "", "", "", ""]) + "\r\n";
 }
 
-/** `?before=&beforeId=` — keyingi sahifa kursori (DB-15). Yaroqsiz bo'lsa — birinchi sahifa. */
+/**
+ * `?before=&beforeId=` — keyingi sahifa kursori (DB-15). Yaroqsiz bo'lsa — birinchi sahifa.
+ * Sana HAQIQIY bo'lishi shart (BEA-13): `2026-02-30T…Z` ilgari regex dan
+ * o'tib, `::timestamptz` da 500 berardi.
+ */
 function parseCursor(url: URL): { createdAt: string; id: string } | undefined {
-  const createdAt = url.searchParams.get("before");
+  const createdAt = parseIsoInstant(url.searchParams.get("before"));
   const id = url.searchParams.get("beforeId");
-  if (!createdAt || !id || !ISO_DATE.test(createdAt) || !UUID.test(id)) return undefined;
+  if (!createdAt || !id || !UUID.test(id)) return undefined;
   return { createdAt, id };
 }
 
