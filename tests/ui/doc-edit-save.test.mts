@@ -447,3 +447,26 @@ test("javob yo'qoldi → «Yuklab olish» faqat versiyani oshirdi → «Saqlash�
   assert.equal(s.doc.slides?.length, slidesAfterOne);
   assert.equal(hook!.pending, 0);
 });
+
+test("W2-E: `saveFailed` — vaqtinchalik xatodan keyin rost (navbat joyida), muvaffaqiyatda va 409-qayta yuklashda yolg'on", async () => {
+  const s = stubServer();
+  render(h(Harness, { gen: generation(s) }));
+  await edits(1);
+  assert.equal(hook!.saveFailed, false, "hali saqlanmagan — lekin yiqilmagan ham");
+  s.patchFail = { status: 503, times: 1 };
+  await act(async () => {
+    await hook!.save();
+  });
+  assert.equal(hook!.saveFailed, true, "503 — «Qayta urinish»");
+  await act(async () => {
+    await hook!.save();
+  });
+  assert.equal(hook!.saveFailed, false, "qayta urinish o'tdi");
+  await edits(1);
+  s.patchFail = { status: 409, times: 1, code: "version" };
+  await act(async () => {
+    await hook!.save();
+  });
+  assert.equal(hook!.pending, 0, "hujjat qayta yuklandi, navbat tashlandi");
+  assert.equal(hook!.saveFailed, false, "qayta urinadigan narsa yo'q");
+});
