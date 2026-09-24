@@ -35,7 +35,7 @@ import { MultiChipGroup, RangeField } from "./fields";
 import { Row, Segmented, SelectField, Switch, type SegmentedOption } from "./compact";
 import { LogoField } from "./LogoField";
 // AUDIT-25: P1 merge'da lib/generation/slide-params.ts dan import qilinadi (bir xil nom — planCapacity/effectivePlanItems).
-import { planCapacity, effectivePlanItems as planItemsEffective } from "./plan-capacity-stub";
+import { planCapacity, effectivePlanItems as planItemsEffective, defaultPlanItems } from "./plan-capacity-stub";
 
 /**
  * Reyestr id → render xaritasi (WP-G, Formalar 2 da ixcham).
@@ -96,6 +96,15 @@ const QUIZ_COUNT_FALLBACK = 3;
  * `undefined` bo'lib qoladi — server ham AYNAN shu qoidani qo'llaydi,
  * shu sabab bu funksiya faqat KO'RSATISH uchun, yuborilmaydigan qiymatni
  * "to'ldirmaydi".
+ *
+ * TODO (AUDIT-25 N2, re-review 8e4603e — P1 merge'dan keyin, orkestrator
+ * «git merge slides-3» deganda): pro-slaydda bu funksiya `values.blocks`ni
+ * emas, `purposeDefaults`ni o'qiydi — chip/pill «Tuzilma bloklari»dagi
+ * «Test» chip holatidan uzilib qolishi mumkin (masalan foydalanuvchi
+ * «Test»ni yoqib keyin o'chirsa, `quizCount` 3da qolaveradi va chip
+ * «3 savol» ko'rsataveradi). Merge'dan keyin P1ning `resolvePlanFlags`/
+ * `activeBlockIds`idan hisoblanadigan qilib qayta yozing (bloklar ⇄
+ * kalitlar ikki tomonlama sinxron bo'lishi kerak — AUDIT-25-P4.md N2 a-d).
  */
 function resolvedQuizCount(values: FormValues): number {
   if (values.quizCount !== undefined) return clampInt(values.quizCount, 0, 10, 0);
@@ -108,6 +117,9 @@ function resolvedQuizCount(values: FormValues): number {
  * taqdimot turi standartidagi «reja» blokidan kelib chiqadi. Xuddi
  * `resolvedQuizCount` kabi — `values.agendaSlide` o'zi tegilmaguncha
  * `undefined` bo'lib qoladi (yuborilmaydi).
+ *
+ * TODO (AUDIT-25 N2, P1 merge'dan keyin): xuddi `resolvedQuizCount` kabi
+ * — pro-slaydda «Reja» chip holati bilan ikki tomonlama sinxron emas.
  */
 function resolvedAgendaSlide(values: FormValues): boolean {
   if (values.agendaSlide !== undefined) return values.agendaSlide === true;
@@ -170,11 +182,16 @@ function SlideCountField({ values, set, tool }: { values: FormValues; set: Slide
  * reja bandini deka ichiga sig'dirishini hisoblaydi, forma AYNAN shu
  * bilan mos ko'rsatishi kerak (server baribir qisadi — kelishmovchilik
  * bo'lmasin).
+ *
+ * `tool` AUDIT-25 N1: `blocks` FAQAT pro-slaydda yuboriladi. Oddiy
+ * «Slayd»da `values.blocks` bo'lishi mumkin emas (bu maydon uchun UI
+ * yo'q), lekin ehtiyot shart — undefined uzatiladi, server
+ * (`resolvePlanFlags`) so'rovni noto'g'ri "pro" deb o'qimasin.
  */
-function capacityFor(values: FormValues): number {
+function capacityFor(values: FormValues, tool: SlideTool): number {
   return planCapacity({
     slideCount: values.slideCount,
-    blocks: values.blocks,
+    blocks: tool === "pro-slide" ? values.blocks : undefined,
     quizCount: values.quizCount,
     agendaSlide: values.agendaSlide,
     titleSlide: values.titleSlide,
@@ -185,14 +202,28 @@ function capacityFor(values: FormValues): number {
 }
 
 /**
- * Foydalanuvchi tanlagan `planItems` sig'imga qisilgach — server aynan
- * shuni yozadigan (samarali) qiymat. Reviewer CHANGES-1: forma va server
- * BITTA funksiyani chaqirishi kerak (qavat 1) — shu sabab lokal hisoblash
- * emas, stub'dagi (merge'da `slide-params.ts`dagi) `effectivePlanItems`
- * ishlatiladi.
+ * Foydalanuvchi TANLAMAGAN (`values.planItems === undefined`) holatda
+ * ko'rsatiladigan xom qiymat — AUDIT-25 N3: `initialValues` endi
+ * `planItems`ni yubormaydi (server o'zi moslashuvchan standart tanlaydi,
+ * `defaultPlanItems`), shu sabab forma ham xuddi shu funksiyani
+ * chaqiradi — aks holda ko'rsatilgan raqam serverga yozilgan raqamdan
+ * farq qilib qoladi.
  */
-function effectivePlanItems(values: FormValues): number {
-  return planItemsEffective(values.planItems, capacityFor(values));
+function rawPlanItems(values: FormValues): number {
+  return values.planItems === undefined
+    ? defaultPlanItems(values.slideCount)
+    : clampInt(values.planItems, 1, PLAN_ITEMS_MAX, PLAN_ITEMS_DEFAULT);
+}
+
+/**
+ * Foydalanuvchi tanlagan (yoki standart) `planItems` sig'imga qisilgach —
+ * server aynan shuni yozadigan (samarali) qiymat. Reviewer CHANGES-1:
+ * forma va server BITTA funksiyani chaqirishi kerak (qavat 1) — shu
+ * sabab lokal hisoblash emas, stub'dagi (merge'da `slide-params.ts`dagi)
+ * `effectivePlanItems` ishlatiladi.
+ */
+function effectivePlanItems(values: FormValues, tool: SlideTool): number {
+  return planItemsEffective(rawPlanItems(values), capacityFor(values, tool));
 }
 
 /**
@@ -203,14 +234,18 @@ function effectivePlanItems(values: FormValues): number {
  * pastki chegara `effective`gacha kengayadi — shu sabab variantlar
  * ro'yxati statik emas va samarali qiymat DOIM ro'yxatda bo'ladi
  * (CHANGES-1: `lo = min(PLAN_ITEMS_MIN, capacity, effective)`).
+ *
+ * N3: izoh FAQAT foydalanuvchi ANIQ tanlov qilganda («Tanlangan …»
+ * so'zi haqiqat bo'lishi uchun) — standart (tanlanmagan) qiymat
+ * sig'imga qisilsa ham izoh chiqmaydi.
  */
 function PlanItemsField({ values, set, tool }: { values: FormValues; set: SlideFieldSetter; tool: SlideTool }) {
-  const capacity = capacityFor(values);
-  const effective = planItemsEffective(values.planItems, capacity);
+  const capacity = capacityFor(values, tool);
+  const raw = rawPlanItems(values);
+  const effective = planItemsEffective(raw, capacity);
   const lo = Math.min(PLAN_ITEMS_MIN, capacity, effective);
   const options: SegmentedOption[] = [];
   for (let n = lo; n <= PLAN_ITEMS_MAX; n++) options.push({ value: String(n), label: String(n), disabled: n > capacity });
-  const raw = clampInt(values.planItems, 1, PLAN_ITEMS_MAX, PLAN_ITEMS_DEFAULT);
   // Yopiq raqam ko'rsatiladigan variantdan (6) oshmasin — real tanlanadigan maksimum shu.
   const shownCapacity = Math.min(capacity, PLAN_ITEMS_MAX);
   const fallbackSlideCount = tool === "pro-slide" ? PRO_SLIDE_DEFAULT : SLIDE_DEFAULT;
@@ -222,7 +257,7 @@ function PlanItemsField({ values, set, tool }: { values: FormValues; set: SlideF
     >
       <div>
         <Segmented ariaLabel="Reja bandlari" options={options} value={String(effective)} onChange={(v) => set("planItems", Number(v))} />
-        {effective < raw ? (
+        {values.planItems !== undefined && effective < raw ? (
           <p className="text-muted-foreground mt-1 text-[11px]" data-plan-capacity-hint>
             {`Tanlangan ${raw} band sig‘maydi — ${effective} band yoziladi.`}
           </p>
@@ -275,7 +310,12 @@ export function renderSlideParam(
             value={String(values.slidePurpose || "general")}
             onChange={(v) => {
               set("slidePurpose", v);
-              set("blocks", resetBlocksForPurpose(v));
+              // AUDIT-25 N1: `blocks` FAQAT pro-slaydda yuboriladi — oddiy
+              // «Slayd»da bu maydon uchun qator umuman yo'q, lekin eski kod
+              // shu yerda SO'ZSIZ `set("blocks", ...)` chaqirardi, shu sabab
+              // oddiy formada ham `values.blocks` to'lib qolardi va server
+              // (P1 `resolvePlanFlags`) so'rovni "pro" deb noto'g'ri o'qirdi.
+              if (ctx.tool === "pro-slide") set("blocks", resetBlocksForPurpose(v));
             }}
           />
         </Row>
@@ -374,12 +414,12 @@ export function renderSlideParam(
  * Yig'iq «Sozlamalar» sarlavhasi uchun joriy tanlovlar — foydalanuvchi
  * bo'limni ochmasdan nima tanlanganini ko'radi.
  */
-export function settingsSummary(values: FormValues, ids: readonly string[]): string[] {
+export function settingsSummary(values: FormValues, ids: readonly string[], tool: SlideTool = "slide"): string[] {
   const out: string[] = [];
   const has = (id: string) => ids.includes(id);
   if (has("slideAudience")) out.push(AUDIENCE_OPTIONS.find((o) => o.value === String(values.slideAudience || "auto"))?.label ?? "Avtomatik");
   if (has("slidePurpose")) out.push(PURPOSE_OPTIONS.find((o) => o.value === String(values.slidePurpose || "general"))?.label ?? "Umumiy");
-  if (has("planItems")) out.push(`${effectivePlanItems(values)} band`);
+  if (has("planItems")) out.push(`${effectivePlanItems(values, tool)} band`);
   if (has("textVolume")) out.push(TEXT_VOLUME_LABELS[String(values.textVolume || "standart") as keyof typeof TEXT_VOLUME_LABELS] ?? "Standart");
   if (has("quizCount")) {
     const q = resolvedQuizCount(values);

@@ -34,12 +34,13 @@ const chips = () => (document.querySelector("[data-summary-chips]")?.textContent
 const price = () => document.querySelector("[data-price]")?.textContent ?? "";
 const slider = () => document.querySelector('input[type="range"]') as HTMLInputElement;
 
-test("Sozlamalar yopiq: sarlavhada joriy tanlovlar (Avtomatik · Umumiy · 5 band · Standart · Testsiz · Titul · Reja · Izohlar)", () => {
+test("Sozlamalar yopiq: sarlavhada joriy tanlovlar (Avtomatik · Umumiy · 3 band · Standart · Testsiz · Titul · Reja · Izohlar)", () => {
   mount("slide");
   const d = document.querySelector("details[data-settings]") as HTMLDetailsElement;
   assert.ok(d, "Sozlamalar details bo'lishi kerak");
   assert.equal(d.open, false, "standart holatda yopiq");
-  for (const t of ["Avtomatik", "Umumiy taqdimot", "5 band", "Standart", "Testsiz", "Titul", "Reja", "Izohlar"]) {
+  // AUDIT-25 N3: `planItems` endi yubormaydi — standart 10 slaydga moslashuvchan `defaultPlanItems(10)` = 3 (qattiq 5 emas).
+  for (const t of ["Avtomatik", "Umumiy taqdimot", "3 band", "Standart", "Testsiz", "Titul", "Reja", "Izohlar"]) {
     assert.ok(chips().includes(t), `«${t}» yig'iq sarlavhada bo'lishi kerak: ${chips()}`);
   }
   assert.ok(!chips().includes("Misollar") && !chips().includes("Internet"), "o'chiq kalitlar sarlavhada ko'rinmaydi");
@@ -153,31 +154,34 @@ const planGroup = () => screen.getByRole("radiogroup", { name: "Reja bandlari" }
 const planTooltip = () => (planGroup().closest(".grid") as HTMLElement).querySelector("[title]")?.getAttribute("title") ?? "";
 const checkedRadios = () => within(planGroup()).getAllByRole("radio").filter((r) => r.getAttribute("aria-checked") === "true");
 
-test("sig'im yetganda barcha variant yoqilgan; past bo'lsa yuqorilari o'chadi, qiymat sig'imga tushadi, «1» o'zi o'chmaydi", () => {
+test("sig'im yetganda barcha variant yoqilgan; past bo'lsa yuqorilari o'chadi, standart (tanlanmagan) qiymat sig'imga tushadi, «1» o'zi o'chmaydi, izoh chiqmaydi", () => {
   mount("slide");
   // Standart: slideCount=10, blocks=["reja"] (yemaydigan blok yo'q), agendaSlide=true → sig'im 10-2-1=7, hammasi yoqilgan.
+  // planItems TEGILMAGAN — standart `defaultPlanItems(10)` = 3 (AUDIT-25 N3: moslashuvchan, qattiq 5 emas).
   for (const n of ["3", "4", "5", "6"]) {
-    assert.equal(within(planGroup()).getByRole("radio", { name: n }).getAttribute("aria-disabled"), "false", `${n}: boshida yoqilgan bo'lishi kerak`);
+    assert.ok(!within(planGroup()).getByRole("radio", { name: n }).hasAttribute("aria-disabled"), `${n}: boshida yoqilgan bo'lishi kerak (aria-disabled yo'q)`);
   }
+  assert.equal(within(planGroup()).getByRole("radio", { name: "3" }).getAttribute("aria-checked"), "true", "tegilmagan standart defaultPlanItems(10)=3 bo'lishi kerak");
   assert.equal(planHint(), "", "sig'im yetganda izoh chiqmasligi kerak");
-  // Slayder minimal (4) ga tushiriladi: sig'im = 4 - 2 - 1 (reja slaydi) - 0 = 1.
+  // Slayder minimal (4) ga tushiriladi: sig'im = 4 - 2 - 1 (reja slaydi) - 0 = 1. Standart QAYTA hisoblanadi: defaultPlanItems(4)=3.
   fireEvent.change(slider(), { target: { value: "4" } });
   const six = within(planGroup()).getByRole("radio", { name: "6" });
   assert.equal(six.getAttribute("aria-disabled"), "true", "6 band 1 ga sig'im bo'lganda o'chgan bo'lishi kerak");
   assert.ok((six as HTMLButtonElement).disabled, "o'chgan variant haqiqatan ham disabled");
   const one = within(planGroup()).getByRole("radio", { name: "1" });
   // MUTATSIYA (review CHANGES-3): `n > capacity` → `n >= capacity` bo'lsa, sig'im 1 dagi YAGONA yaroqli variant «1» ham o'chib qoladi.
-  assert.equal(one.getAttribute("aria-disabled"), "false", "sig'imga aynan teng variant («1» sig'im 1 da) o'chmasligi kerak");
-  assert.equal(one.getAttribute("aria-checked"), "true", "joriy (standart 5) sig'imga (1) tushirilib ko'rsatilishi kerak");
-  assert.equal(planHint(), "Tanlangan 5 band sig‘maydi — 1 band yoziladi.", `izoh matni: «${planHint()}»`);
+  assert.ok(!one.hasAttribute("aria-disabled"), "sig'imga aynan teng variant («1» sig'im 1 da) o'chmasligi kerak");
+  assert.equal(one.getAttribute("aria-checked"), "true", "tegilmagan standart (3) sig'imga (1) tushirilib ko'rsatilishi kerak");
+  // AUDIT-25 N3: foydalanuvchi HECH QACHON tanlamagan — «Tanlangan …» izohi haqiqatga to'g'ri kelmaydi, shu sabab chiqmaydi.
+  assert.equal(planHint(), "", "standart (tanlanmagan) qiymat qisilganda ham izoh chiqmasligi kerak");
   // Yig'iq sarlavha ham SAMARALI (qisilgan) qiymatni ko'rsatishi kerak — server aynan shunday yozadi.
   assert.ok(chips().includes("1 band"), `yig'iq sarlavha samarali qiymatni ko'rsatishi kerak: ${chips()}`);
-  assert.ok(!chips().includes("5 band"), `yig'iq sarlavha eski (qisilmagan) qiymatni ko'rsatmasligi kerak: ${chips()}`);
-  // Slayder qaytarilsa (30) — sig'im yana yetadi, izoh yo'qoladi, standart 5 band qayta ko'rinadi (foydalanuvchi hech qachon «1»ni bosmagan edi).
+  assert.ok(!chips().includes("3 band"), `yig'iq sarlavha eski (qisilmagan) standart qiymatni ko'rsatmasligi kerak: ${chips()}`);
+  // Slayder qaytarilsa (30) — sig'im yana yetadi, standart QAYTA hisoblanadi: defaultPlanItems(30)=6 (foydalanuvchi hech qachon tegmagan edi).
   fireEvent.change(slider(), { target: { value: "30" } });
   assert.equal(planHint(), "", "sig'im qayta yetganda izoh yo'qolishi kerak");
-  assert.equal(within(planGroup()).getByRole("radio", { name: "6" }).getAttribute("aria-disabled"), "false", "sig'im qaytgach variantlar qayta yoqiladi");
-  assert.equal(within(planGroup()).getByRole("radio", { name: "5" }).getAttribute("aria-checked"), "true", "planItems o'zi o'zgarmagan edi (5) — endi sig'gani uchun ko'rinadi");
+  assert.ok(!within(planGroup()).getByRole("radio", { name: "6" }).hasAttribute("aria-disabled"), "sig'im qaytgach variantlar qayta yoqiladi");
+  assert.equal(within(planGroup()).getByRole("radio", { name: "6" }).getAttribute("aria-checked"), "true", "planItems tegilmagan edi — 30 slaydga standart endi defaultPlanItems(30)=6");
 });
 
 test("sig'im 3 dan kichik bo'lsa variantlar 1 gacha kengayadi", () => {
@@ -189,17 +193,18 @@ test("sig'im 3 dan kichik bo'lsa variantlar 1 gacha kengayadi", () => {
   assert.deepEqual(values, ["1", "2", "3", "4", "5", "6"], `variantlar 1 dan boshlab kengaygan bo'lishi kerak: ${values.join(",")}`);
 });
 
-test("chegara: sig'im aynan 4 bo'lganda «4» yoqilgan, «5» o'chgan; yoqilgan variantni bosish HAQIQATAN chip'ni o'zgartiradi", () => {
+test("chegara: sig'im aynan 4 bo'lganda «4» yoqilgan, «5» o'chgan; standart (tanlanmagan) «3»da turadi, uni haqiqiy tanlov bilan almashtirish chip'ni o'zgartiradi", () => {
   mount("slide");
-  fireEvent.change(slider(), { target: { value: "7" } }); // sig'im = 7-2-1-0 = 4
-  assert.equal(within(planGroup()).getByRole("radio", { name: "4" }).getAttribute("aria-disabled"), "false", "sig'imga teng variant yoqilgan bo'lishi kerak");
+  fireEvent.change(slider(), { target: { value: "7" } }); // sig'im = 7-2-1-0 = 4; standart planItems = defaultPlanItems(7) = 3 (tegilmagan)
+  assert.ok(!within(planGroup()).getByRole("radio", { name: "4" }).hasAttribute("aria-disabled"), "sig'imga teng variant yoqilgan bo'lishi kerak");
   assert.equal(within(planGroup()).getByRole("radio", { name: "5" }).getAttribute("aria-disabled"), "true", "sig'imdan katta variant o'chgan bo'lishi kerak");
-  assert.ok(chips().includes("4 band"), `standart (5) sig'im 4 ga qisilgach: ${chips()}`);
-  // «3» ham yoqilgan (< sig'im) — uni bosish HAQIQIY tanlov, «4» dan farqli natija berishi kerak.
-  fireEvent.click(within(planGroup()).getByRole("radio", { name: "3" }));
-  assert.equal(within(planGroup()).getByRole("radio", { name: "3" }).getAttribute("aria-checked"), "true");
-  assert.equal(within(planGroup()).getByRole("radio", { name: "4" }).getAttribute("aria-checked"), "false");
-  assert.ok(chips().includes("3 band"), `«3» bosilgach chip yangilanishi kerak: ${chips()}`);
+  assert.equal(within(planGroup()).getByRole("radio", { name: "3" }).getAttribute("aria-checked"), "true", "tegilmagan standart defaultPlanItems(7)=3 bo'lishi kerak");
+  assert.ok(chips().includes("3 band"), `standart (tanlanmagan, defaultPlanItems(7)=3) sig'imga (4) sig'gani uchun o'zgarishsiz: ${chips()}`);
+  // «4»ni bosish — HAQIQIY, ONGLI tanlov: «3» standart edi (bosish no-op bo'lardi), «4» farqli natija berishi kerak.
+  fireEvent.click(within(planGroup()).getByRole("radio", { name: "4" }));
+  assert.equal(within(planGroup()).getByRole("radio", { name: "4" }).getAttribute("aria-checked"), "true");
+  assert.equal(within(planGroup()).getByRole("radio", { name: "3" }).getAttribute("aria-checked"), "false");
+  assert.ok(chips().includes("4 band"), `«4» bosilgach chip yangilanishi kerak: ${chips()}`);
 });
 
 test("qavat 1 (review CHANGES-1): «1»ni bosib tanlash sig'im keyin katta bo'lsa ham saqlanadi — aynan bitta radio belgilangan va u chip bilan mos", () => {
@@ -210,22 +215,23 @@ test("qavat 1 (review CHANGES-1): «1»ni bosib tanlash sig'im keyin katta bo'ls
   const checked = checkedRadios();
   assert.equal(checked.length, 1, `aynan bitta radio belgilangan bo'lishi kerak: ${checked.map((r) => r.textContent).join(",")}`);
   const label = checked[0].textContent ?? "";
-  assert.equal(label, "1", "ongli tanlangan «1» standart (5) ga qaytmasligi kerak");
+  assert.equal(label, "1", "ongli tanlangan «1» tegilmagan standart qiymatga qaytmasligi kerak");
   assert.ok(chips().includes(`${label} band`), `chip belgilangan radio bilan mos bo'lishi kerak: ${chips()}`);
 });
 
-test("native disabled (review CHANGES-4): o'chgan variantni bosish HECH NARSANI o'zgartirmaydi — sig'im qaytgach standart (5) qoladi, bosilgan (4) emas", () => {
+test("native disabled (review CHANGES-4): o'chgan variantni bosish HECH NARSANI o'zgartirmaydi — sig'im qaytgach standart (tegilmagan) qiymat qoladi, bosilgan (4) emas", () => {
   mount("slide");
-  fireEvent.change(slider(), { target: { value: "4" } }); // sig'im = 1
+  fireEvent.change(slider(), { target: { value: "4" } }); // sig'im = 1; standart planItems = defaultPlanItems(4) = 3 (tegilmagan)
   const four = within(planGroup()).getByRole("radio", { name: "4" });
   assert.ok((four as HTMLButtonElement).disabled, "«4» sig'im 1 da disabled bo'lishi kerak");
   fireEvent.click(four); // disabled tugma — hech narsa o'zgarmasligi kerak
   assert.ok(chips().includes("1 band"), `o'chgan variant bosilgach ham 1 band qolishi kerak: ${chips()}`);
-  // MUTATSIYA (review CHANGES-4): `disabled={disabled}` olib tashlansa, klik `planItems=4` yozadi — sig'im qaytganda «4» chiqadi, «5» emas.
+  // MUTATSIYA (review CHANGES-4): `disabled={disabled}` olib tashlansa, klik `planItems=4` yozadi — sig'im qaytganda «4» chiqadi, standart (6) emas.
   fireEvent.change(slider(), { target: { value: "30" } });
-  assert.equal(within(planGroup()).getByRole("radio", { name: "5" }).getAttribute("aria-checked"), "true", "standart (5) o'zgarmagan bo'lishi kerak");
+  // planItems HALI HAM tegilmagan (disabled klik hech narsa yozmadi) — standart QAYTA hisoblanadi: defaultPlanItems(30) = 6.
+  assert.equal(within(planGroup()).getByRole("radio", { name: "6" }).getAttribute("aria-checked"), "true", "tegilmagan standart (defaultPlanItems(30)=6) ko'rinishi kerak edi");
   assert.equal(within(planGroup()).getByRole("radio", { name: "4" }).getAttribute("aria-checked"), "false", "o'chgan variantga bosish saqlanmasligi kerak");
-  assert.ok(chips().includes("5 band"), `chip standart qiymatga qaytishi kerak: ${chips()}`);
+  assert.ok(chips().includes("6 band"), `chip standart (tegilmagan) qiymatga mos bo'lishi kerak: ${chips()}`);
 });
 
 test("tooltip izohi (A3-06): «har biri o‘z slaydi bilan», raqam 6 dan oshmaydi, tirik yangilanadi", () => {
@@ -249,10 +255,18 @@ test("simlanish (review CHANGES-5): «Reja slaydi» o'chirilsa sig'im +1, «Nazo
   assert.equal(planTooltip(), "Reja bandlari — har biri o‘z slaydi bilan; 7 slaydga 3 band sig‘adi.", `«Nazorat testi» yoqilgach: «${planTooltip()}»`);
 });
 
-// AUDIT-25: P1 merge'dan keyin yoqiladi — real `planCapacity`/`effectivePlanItems` bilan pro-slide standart 12 slayd sig'imini tekshiradi.
-test("TODO (P1 merge'dan keyin): pro-slide standart 12 slayd → tooltip «12 slaydga 9 band sig‘adi»", { skip: "AUDIT-25: stub formula P1 dvigateli bilan mos emas — merge'da yoqiladi" }, () => {
+// AUDIT-25 N4 (reviewer, re-review 8e4603e): P1 merge'dan keyin yoqiladi. Stub va real
+// dvigatel BU HOLATDA ATAYLAB kelishmaydi — stub «Himoya» (defense) uchun diagramma/
+// adabiyotlar bloklarini ham -1 deb hisoblaydi, real dvigatelda ular sig'imni kamaytirmaydi
+// (AUDIT-25-P4.md §3/N4: real 8-2-1=5, stub 8-2-1-1-1=3). Shu sabab bu holat tanlandi —
+// eski «12 slaydga 9 band» stub bilan HAM, real bilan HAM mos kelmasdi (min(capacity,6) cheklovi
+// tufayli ikkalasi ham "6" ko'rsatardi, farqni ko'rsatmasdi).
+test("TODO (P1 merge'dan keyin): pro-slide + Himoya (defense) + 8 slayd → tooltip «8 slaydga 5 band sig‘adi», «6» o'chgan", { skip: "AUDIT-25 N4: stub formula P1 dvigateli bilan mos emas — merge'da yoqiladi" }, () => {
   mount("pro-slide");
-  assert.equal(planTooltip(), "Reja bandlari — har biri o‘z slaydi bilan; 12 slaydga 9 band sig‘adi.");
+  fireEvent.change(screen.getByLabelText("Taqdimot turi"), { target: { value: "defense" } });
+  fireEvent.change(slider(), { target: { value: "8" } });
+  assert.equal(planTooltip(), "Reja bandlari — har biri o‘z slaydi bilan; 8 slaydga 5 band sig‘adi.");
+  assert.equal(within(planGroup()).getByRole("radio", { name: "6" }).getAttribute("aria-disabled"), "true");
 });
 
 // ───────── AUDIT-25 P1 A3-01/A3-02: quizCount/agendaSlide FAQAT tegilganda yuboriladi ─────────
@@ -351,6 +365,76 @@ test("«Reja slaydi» o'chirilsa agendaSlide ANIQ false yuboriladi", async () =>
   }
 });
 
+test("N1: «Slayd» (oddiy) + open_lesson + «Testsiz» — POST'da blocks kaliti YO'Q, quizCount ANIQ 0", async () => {
+  const cap = captureSubmittedValues();
+  try {
+    mount("slide"); // oddiy «Slayd» — «Tuzilma bloklari» qatori umuman yo'q, lekin slidePurpose bor
+    fireEvent.change(screen.getByLabelText("Taqdimot turi"), { target: { value: "open_lesson" } }); // standartida test bor
+    fireEvent.click(within(screen.getByRole("radiogroup", { name: "Nazorat testi" })).getByRole("radio", { name: "Testsiz" }));
+    fillTopicAndSubmit("slide");
+    await waitFor(() => assert.ok(cap.posts.length > 0));
+    const sent = cap.posts[0];
+    // MUTATSIYA (review N1): `case "slidePurpose"` onChange'i shartsiz `set("blocks", ...)` chaqirsa — bu qator qizaradi
+    // (server `resolvePlanFlags` `blocks` bor-yo'qligidan "pro"ni aniqlaydi — oddiy «Slayd»da bu kalit UMUMAN bo'lmasligi kerak).
+    assert.ok(!("blocks" in sent), `oddiy «Slayd»da blocks kaliti bo'lmasligi kerak: ${JSON.stringify(sent)}`);
+    assert.equal(sent.quizCount, 0, `«Testsiz» ANIQ 0 yuborishi kerak: ${JSON.stringify(sent)}`);
+  } finally {
+    cap.restore();
+  }
+});
+
+test("N1/N3: eski (versiyasiz) qoralama tiklanganda blocks/planItems/quizCount/agendaSlide E'TIBORGA OLINMAYDI", async () => {
+  const { useAppStore } = await import("../../lib/store.ts");
+  useAppStore.setState({ loggedIn: true, sessionChecked: true });
+  const realFetch = globalThis.fetch;
+  const posts: Record<string, unknown>[] = [];
+  const json = (status: number, data: unknown) => new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
+  globalThis.fetch = (async (input: unknown, opts?: RequestInit) => {
+    const url = String(input);
+    const method = opts?.method ?? "GET";
+    if (url === "/api/forms/slide/draft" && method === "GET") {
+      // ESKI (versiyasiz) qoralama — `v` yo'q. Ilgari `initialValues` `blocks`/`planItems`/`quizCount`/`agendaSlide`
+      // ni har doim yozgani uchun bunday qoralamalar ular "ANIQ tanlov" sifatida saqlangan bo'lishi mumkin.
+      return json(200, {
+        draft: {
+          data: {
+            topic: "Eski mavzu",
+            slideCount: 10,
+            blocks: "reja,test",
+            planItems: 5,
+            quizCount: 0,
+            agendaSlide: true,
+            slidePurpose: "open_lesson",
+          },
+          updatedAt: "now",
+        },
+      });
+    }
+    if (url === "/api/forms/slide/draft") return json(200, { ok: true, updatedAt: "now" });
+    if (url === "/api/generations" && method === "POST") {
+      const body = JSON.parse(String(opts?.body ?? "{}")) as { values?: Record<string, unknown> };
+      posts.push(body.values ?? {});
+      return json(200, { id: "gen1", price: 1000, status: "QUEUED" });
+    }
+    return json(404, { error: "yo'q" });
+  }) as typeof fetch;
+  try {
+    mount("slide");
+    await waitFor(() => assert.equal((screen.getByLabelText("Taqdimot mavzusini kiriting") as HTMLInputElement).value, "Eski mavzu"));
+    fillTopicAndSubmit("slide");
+    await waitFor(() => assert.ok(posts.length > 0, "so'rov yuborilishi kerak"));
+    const sent = posts[0];
+    // MUTATSIYA (N1/N3): `sanitizeRestoredDraft` chaqirilmasa (yoki `v` tekshiruvi olib tashlansa) — bu uch qator qizaradi.
+    assert.ok(!("blocks" in sent), `eski qoralamadan tiklangan blocks (oddiy «Slayd»da) tashlab yuborilishi kerak: ${JSON.stringify(sent)}`);
+    assert.ok(!("quizCount" in sent), `eski (versiyasiz) qoralamadan tiklangan quizCount tashlab yuborilishi kerak: ${JSON.stringify(sent)}`);
+    assert.ok(!("agendaSlide" in sent), `eski (versiyasiz) qoralamadan tiklangan agendaSlide tashlab yuborilishi kerak: ${JSON.stringify(sent)}`);
+    assert.ok(!("planItems" in sent), `eski (versiyasiz) qoralamadan tiklangan planItems tashlab yuborilishi kerak: ${JSON.stringify(sent)}`);
+  } finally {
+    globalThis.fetch = realFetch;
+    useAppStore.setState({ loggedIn: false, sessionChecked: false });
+  }
+});
+
 test("sig'im yetganda variant bosilsa oddiy tanlov ishlaydi (regressiya)", () => {
   mount("slide"); // standart sig'im 7 — hammasi yoqilgan
   fireEvent.click(within(planGroup()).getByRole("radio", { name: "6" }));
@@ -383,6 +467,9 @@ test("qoralama PUT tanasida sourceText/logoAssetId/templateAssetId YO'Q (katta m
     assert.equal(last.topic, "Qoralama sinovi");
     // MUTATSIYA: `draftOf` o'rniga `save(values)` qaytarilsa — uchala kalit tanada paydo bo'lib, qizaradi.
     for (const k of ["sourceText", "logoAssetId", "templateAssetId"]) assert.ok(!(k in last), `${k} qoralamaga tushmasin`);
+    // AUDIT-25 N3: yangi saqlanadigan qoralamalar versiya belgisi bilan — eski (versiyasiz)
+    // qoralamalardan farqlash uchun (MUTATSIYA: `v: DRAFT_VERSION` olib tashlansa qizaradi).
+    assert.equal(last.v, 2, `qoralama versiya belgisi bilan saqlanishi kerak: ${JSON.stringify(last)}`);
   } finally {
     globalThis.fetch = realFetch;
   }

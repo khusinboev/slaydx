@@ -38,6 +38,14 @@
  * tegmaguncha yubormaydi (`SlideComposer.tsx initialValues`), shu sabab
  * shu yerdagi hisob ham xuddi shu qoidani qo'llashi kerak — aks holda
  * sig'im ko'rsatkichi (`PlanItemsField` tooltip) serverga mos kelmaydi.
+ *
+ * Qayta ko'rib chiqish N1/N3 (2026-09-24/25): P1 `blocksSent` faqat
+ * pro-slaydda (`tool.id === "pro-slide" && values.blocks != null`) hisoblaydi
+ * — shu sabab `capacityFor` (`slide-fields.tsx`) `blocks`ni FAQAT pro-slayd
+ * uchun uzatadi. `defaultPlanItems(slideCount)` P1ning moslashuvchan
+ * standarti — foydalanuvchi `planItems`ga tegmaganda forma xuddi shuni
+ * ko'rsatishi kerak (aks holda `initialValues`dan `planItems` olib
+ * tashlangani forma va serverni ikki xil sonni ko'rsatishga majburlaydi).
  */
 
 /** `test`/`adabiyotlar`/`diagramma` — sig'imni "yemaydigan" bloklar (har doim o'z slaydini talab qiladi). */
@@ -110,4 +118,17 @@ export function planCapacity(v: PlanCapacityInput): number {
 export function effectivePlanItems(raw: unknown, capacity: number): number {
   const clamped = clampInt(raw, 1, PLAN_ITEMS_MAX, PLAN_ITEMS_DEFAULT);
   return Math.min(clamped, Math.max(1, capacity));
+}
+
+/**
+ * Foydalanuvchi `planItems`ga tegmaganda ishlatiladigan MOSLASHUVCHAN
+ * standart — AUDIT-25 N3 (reviewer, 2026-09-24): `slideCount`dan kelib
+ * chiqadi (`clamp(round(slideCount/3), 3, 6)`), bitta qattiq son (5) emas.
+ * `initialValues`da `planItems` endi yo'q — forma buni chaqirib «tanlanmagan»
+ * holatda nima ko'rsatishini hisoblaydi (server ham AYNAN shu qoidani
+ * qo'llaydi — P1 `defaultPlanItems`, bir xil imzo).
+ */
+export function defaultPlanItems(slideCount: unknown): number {
+  const n = clampInt(slideCount, 4, 30, 10);
+  return Math.max(3, Math.min(6, Math.round(n / 3)));
 }

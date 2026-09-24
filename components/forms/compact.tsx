@@ -93,7 +93,7 @@ export function Segmented({
             type="button"
             role="radio"
             aria-checked={on}
-            aria-disabled={disabled}
+            aria-disabled={disabled || undefined}
             disabled={disabled}
             onClick={() => !disabled && onChange(o.value)}
             className={cn(
