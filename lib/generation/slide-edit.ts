@@ -142,6 +142,16 @@ function setOrDrop(s: SlideModel, key: "kicker" | "subtitle" | "quoteBy" | "imag
   return value ? { ...s, [key]: value } : without(s, key);
 }
 
+/**
+ * `plan` (AUDIT-25) — reja bandi, 1-asosli. Musbat butun son, 99 gacha —
+ * aks holda (0, manfiy, kasr, satr, 100+, NaN) maydon TASHLANADI. Ikkala
+ * qayta quruvchi joy (`sanitizeSlideModel`, `baseOf`) shu bitta manbadan
+ * o'qiydi — aks holda ular orasidagi qoida sirg'alib ketishi mumkin edi.
+ */
+function validPlan(v: unknown): number | undefined {
+  return typeof v === "number" && Number.isInteger(v) && v >= 1 && v <= 99 ? v : undefined;
+}
+
 /** Slaydning `subtitle` chegarasi maketga bog'liq (`normalizeSlide` bilan bir xil). */
 function subtitleMax(layout: SlideLayout): number {
   if (layout === "section") return SLIDE_LIMITS.subtitleSection;
@@ -546,6 +556,9 @@ function baseOf(s: SlideModel, to: SlideLayout): SlideModel {
   if (s.notes) out.notes = s.notes;
   if (s.imageHint) out.imageHint = s.imageHint;
   if (s.image) out.image = s.image;
+  // AUDIT-25: reja bandi maketga bog'liq emas — o'girishda ham saqlanadi.
+  const plan = validPlan(s.plan);
+  if (plan !== undefined) out.plan = plan;
   return out;
 }
 
@@ -651,6 +664,9 @@ export function sanitizeSlideModel(raw: unknown, genId: string, rules: EditRules
   if (subtitle) out.subtitle = subtitle;
   const footer = str(o.footer, FOOTER_MAX);
   if (footer) out.footer = footer;
+  // AUDIT-25: reja bandi — maketdan mustaqil, shu sababdan layout-shoxobchalardan OLDIN.
+  const plan = validPlan(o.plan);
+  if (plan !== undefined) out.plan = plan;
   if (typeof o.notes === "string") {
     const notes = clipNotes(o.notes);
     if (notes) out.notes = notes;
@@ -1128,6 +1144,8 @@ function slideShapeOk(v: unknown): boolean {
   if (!["id", "kicker", "subtitle", "quote", "quoteBy", "leftTitle", "rightTitle", "footer", "notes", "imageHint"].every((k) => strOpt(o[k]))) return false;
   if (!["bullets", "left", "right"].every((k) => strArr(o[k]))) return false;
   if (o.chart !== undefined && typeof o.chart !== "boolean") return false;
+  // AUDIT-25: reja bandi — TIP xatosi (masalan satr) 400 bilan rad etilsin, jim tashlanmasin.
+  if (o.plan !== undefined && typeof o.plan !== "number") return false;
   const imageOk = (x: unknown) => x === undefined || (Boolean(x) && typeof x === "object" && typeof (x as Record<string, unknown>).url === "string");
   if (!imageOk(o.image) || !imageOk(o.imageOrig)) return false;
   for (const k of ["stats", "steps", "refs", "quiz"]) {
