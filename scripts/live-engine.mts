@@ -41,6 +41,7 @@ import { wordCount } from "../lib/generation/quality.ts";
 import { slideNotes } from "../lib/generation/slide-layout.ts";
 import { pdfAvailable, toPdf } from "../lib/server/pdf.ts";
 import { TOOL_BY_ID } from "../lib/tools.ts";
+import { effectivePlanItems, planCapacity } from "../lib/generation/slide-params.ts";
 import { kindOf, type AcademicDoc, type BuiltFile } from "../lib/generation/types.ts";
 import { verifyCitations } from "../lib/generation/research/verify.ts";
 import { factNumbers } from "../lib/generation/article/guard.ts";
@@ -957,6 +958,8 @@ function slideCases(): Case[] {
         const slides = file.doc.slides ?? [];
         const agenda = slides.find((s) => s.layout === "agenda");
         const planTotal = agenda?.bullets?.length ?? 0;
+        const v = { tool: "pro-slide", blocks: "reja", slideCount: 4, planItems: 6, titleSlide: true };
+        const expectedPlan = effectivePlanItems(6, planCapacity(v), 4);
         return [
           ok("slaydlar soni = 4 (PRO_SLIDE_MIN)", slides.length === 4, `${slides.length} / 4`),
           /*
@@ -964,9 +967,14 @@ function slideCases(): Case[] {
            * o'tardi (`PLAN_ITEMS_MAX` allaqachon 6 bilan cheklaydi — bu
            * sig'im qisqartirishni SINAMAYDI). `< 6` qat'iy — faqat haqiqiy
            * qisqartirilganda o'tadi.
-           * AUDIT-25 merge: === planCapacity(values)
+           * P1 birlashgach: kutilgan son AYNAN dvigatel formulasidan —
+           * `effectivePlanItems(6, planCapacity(values), 4)`.
            */
-          ok("reja sig'imga qisqartirilgan (< 6 so'ralgan)", planTotal >= 1 && planTotal < 6, `${planTotal} band (so'ralgan 6)`),
+          ok(
+            "reja sig'imga qisqartirilgan (= effectivePlanItems)",
+            planTotal === expectedPlan,
+            `${planTotal} band (so'ralgan 6, sig'im ${expectedPlan})`,
+          ),
           ...slideAuditChecks(file.doc),
         ];
       },
