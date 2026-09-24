@@ -324,7 +324,56 @@ export type RunOptions = {
  * Yurish holati: `abandoned` — muddat o'tgan yoki SIGTERM da navbatga qaytarilgan; natija tashlanadi.
  * `stage` — dvigatel yuborgan oxirgi haqiqiy bosqich (OBS-08: xato qaysi bosqichda bo'lganini jurnalga).
  */
-type RunCtl = { abandoned: boolean; stage?: string };
+type RunCtl = {
+  abandoned: boolean;
+  stage?: string;
+  /** Yo'ldagi `putAsset` (TTS) yozuvlari — tozalashdan OLDIN kutiladi (W3-A nit 2). */
+  assetWrites: Set<Promise<unknown>>;
+};
+
+/**
+ * Qattiq to'xtashdan keyin hali ishlayotgan (yetim) qurilishlar soni
+ * (W3-A review nit 1). Qurilishni o'ldirib bo'lmaydi — u CPU, xotira va
+ * provayder pulini ishlatishda davom etadi, slot esa darhol bo'shaydi.
+ * Tizimli osilishda (provayder javob bermaydi) ular cheksiz yig'ilib 2 GB
+ * konteynerni OOM ga olib borardi. Soni `WORKER_CONCURRENCY` ga yetsa
+ * `claimNext` yangi ish OLMAYDI — yetim tugagach davom etadi.
+ */
+let orphans = 0;
+
+/** Hozirgi yetim qurilishlar soni (kuzatuv va testlar uchun). */
+export function orphanCount(): number {
+  return orphans;
+}
+
+/** Tozalashdan oldin yo'ldagi yozuvlarni kutish chegarasi — slot abadiy band qolmasin. */
+const QUIESCE_MS = 15_000;
+
+/**
+ * FAILED + tozalashdan OLDIN jonli reporter to'xtatiladi va yo'ldagi aktiv
+ * yozuvlari kutiladi (W3-A review nit 2). Ilgari `deleteAssets` birinchi
+ * ishlardi: navbatdagi slayd rasmi (`LiveReporter` → `putAssets`) yoki TTS
+ * `putAssetBytes` undan KEYIN yozilib, FAILED ishda yetim aktiv qolardi.
+ * Kutish `QUIESCE_MS` bilan chegaralangan (DB yozuvlari o'z statement
+ * timeout'iga ega; bu — oxirgi to'siq).
+ */
+async function quiesce(ctl: RunCtl, live: LiveReporter | null): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const settle = (async () => {
+    await live?.stop();
+    await Promise.allSettled([...ctl.assetWrites]);
+  })();
+  const timeout = new Promise<"timeout">((resolve) => {
+    timer = setTimeout(() => resolve("timeout"), QUIESCE_MS);
+  });
+  try {
+    if ((await Promise.race([settle.then(() => "ok" as const), timeout])) === "timeout") {
+      log("warn", "[worker] tozalashdan oldin yo'ldagi yozuvlar kutib bo'lmadi", { quiesceMs: QUIESCE_MS });
+    }
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 /** Shu process bajarayotgan claimlar (`lease` bo'yicha) — SIGTERM da kutish/qaytarish uchun. */
 const inflight = new Map<string, { job: ClaimedJob; ctl: RunCtl; done: Promise<void> }>();
@@ -334,7 +383,7 @@ const inflight = new Map<string, { job: ClaimedJob; ctl: RunCtl; done: Promise<v
  * o'tganda qaytadi — shu paytda slot bo'shaydi (`tick` `running--`).
  */
 export async function runJob(job: ClaimedJob, opts: RunOptions = {}): Promise<void> {
-  const ctl: RunCtl = { abandoned: false };
+  const ctl: RunCtl = { abandoned: false, assetWrites: new Set() };
   // Shu ish ichidagi HAR jurnal qatori (`credits.ts` refund va h.k.) `jobId`/`userId` ni o'zi oladi (OBS-02).
   const done = withFreshLogContext({ jobId: job.id, userId: job.userId }, () => runWithHardStop(job, opts, ctl));
   inflight.set(job.lease, { job, ctl, done });
@@ -403,14 +452,21 @@ async function runWithHardStop(job: ClaimedJob, opts: RunOptions, ctl: RunCtl): 
        * to'sig'idan o'tgan BITTA yo'lda, `reference` bo'yicha idempotent qaytadi.
        */
       ctl.abandoned = true;
+      orphans++;
       log(
         "error",
         `[worker] job ${job.id}: qattiq muddat (${Math.round(hardStopMs / 1000)} s) o'tdi — FAILED, pul qaytariladi, slot bo'shatildi`,
-        { jobId: job.id, attempt: job.attempts, stage: ctl.stage, hardStopMs, toolId: job.toolId },
+        { jobId: job.id, attempt: job.attempts, stage: ctl.stage, hardStopMs, toolId: job.toolId, orphans },
       );
-      work.catch((e) => {
-        log("warn", `[worker] job ${job.id}: yetim qurilish xatosi`, { jobId: job.id, attempt: job.attempts, provider: providerOf(e), err: e });
-      });
+      void work
+        .catch((e) => {
+          log("warn", `[worker] job ${job.id}: yetim qurilish xatosi`, { jobId: job.id, attempt: job.attempts, provider: providerOf(e), err: e });
+        })
+        .finally(() => {
+          orphans--;
+          log("info", `[worker] job ${job.id}: yetim qurilish tugadi`, { jobId: job.id, orphans });
+        });
+      await quiesce(ctl, live);
       await failAndCleanup(job, job.lease, "Ish vaqti tugadi");
     }
   } finally {
@@ -468,10 +524,17 @@ async function execute(
       // Tinglash o'yini TTS parchalari — shu ishning aktivlariga (`/api/o/[token]/audio/[assetId]` orqali ochiq).
       // Tashlab ketilgan (muddati o'tgan / SIGTERM da qaytarilgan) yurish
       // FAILED yoki begona ishga yetim aktiv yozmasin.
-      putAsset: (bytes, mime) =>
-        ctl.abandoned
-          ? Promise.reject(new Error("Ish to'xtatilgan — aktiv yozilmadi"))
-          : putAssetBytes(job.id, mime, Buffer.from(bytes)),
+      // Yo'ldagi yozuv `ctl.assetWrites` da — tozalash uni kutadi (W3-A nit 2).
+      putAsset: (bytes, mime) => {
+        if (ctl.abandoned) return Promise.reject(new Error("Ish to'xtatilgan — aktiv yozilmadi"));
+        const write = putAssetBytes(job.id, mime, Buffer.from(bytes));
+        ctl.assetWrites.add(write);
+        void write.then(
+          () => ctl.assetWrites.delete(write),
+          () => ctl.assetWrites.delete(write),
+        );
+        return write;
+      },
     });
 
     if (ctl.abandoned) {
@@ -590,6 +653,8 @@ async function execute(
       userError: message,
       err: e,
     });
+    // Avval jonli reporter va yo'ldagi aktiv yozuvlari — keyin tozalash (W3-A nit 2).
+    await quiesce(ctl, live);
     // Tashlab ketilgan yurishda `failJob` qulf to'sig'idan o'tmaydi — pul
     // ikkinchi marta qaytmaydi, yangi egasining fayliga tegilmaydi.
     await failAndCleanup(job, job.lease, message);
@@ -678,6 +743,14 @@ async function refundThenCleanup(job: Pick<ClaimedJob, "id" | "userId">, note: s
  */
 export async function claimNext(): Promise<ClaimedJob | null> {
   if (stopped) return null;
+  // Yetim qurilishlar to'la (W3-A nit 1) — yangi ish olinmaydi, ular tugashini kutamiz.
+  if (orphans >= env.worker.concurrency) {
+    throttledWarn("orphans", "[worker] yetim qurilishlar chegarada — yangi ish olinmayapti", {
+      orphans,
+      concurrency: env.worker.concurrency,
+    });
+    return null;
+  }
   return claimJob(newLease(WORKER_ID));
 }
 

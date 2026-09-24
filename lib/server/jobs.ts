@@ -879,6 +879,15 @@ export type JobResult = {
   delivered?: Delivered;
 };
 
+/**
+ * @deprecated FAQAT TESTLAR UCHUN (W3-A review nit 6). Worker hech qachon
+ * chaqirmaydi: u faylni ham, aktivlarni ham yozmaydi, ya'ni ishlab
+ * chiqarishda chaqirilsa COMPLETED, lekin faylsiz ish qoladi. Haqiqiy yo'l —
+ * `commitJobResult` (fayl + aktivlar + COMPLETED bitta tranzaksiyada, qulf
+ * egasi tekshirilgan). O'chirilmadi: `tests/queue.test.mts`,
+ * `tests/jsonb-writes.test.mts`, `tests/jobs-live-edit.test.mts` SQL ni
+ * shu orqali sinaydi.
+ */
 export async function completeJob(id: string, workerId: string, result: JobResult): Promise<boolean> {
   const rows = await query<{ id: string }>(COMPLETE_SQL, completeParams(id, workerId, result));
   return rows.length > 0;
