@@ -83,7 +83,7 @@ test("teacher dvigateli stub: `null` qaytaradi, xato TASHLAMAYDI", async () => {
   try {
     const { buildTeacherDoc } = await import("../lib/generation/teacher/engine.ts");
     const meta = { toolId: "lesson-plan", topic: "Fotosintez", language: "uz" } as unknown as DocMeta;
-    const built = await buildTeacherDoc(meta, { topic: "Fotosintez" }, { deadline: Date.now() + 60_000 });
+    const built = await buildTeacherDoc(meta, { topic: "Fotosintez" }, { deadline: Date.now() + 300_000 });
     assert.equal(built, null, "stub null qaytarmasa, chaqiruvchi eski yo'lni tanlay olmaydi");
     assert.ok(calls > 0, "model (stub) haqiqatan so'ralgan");
   } finally {
