@@ -458,7 +458,7 @@ export async function reviewWork(doc: AcademicDoc, opts: WorkReviewOpts = {}): P
     if (timeoutMs >= JUDGE_MIN_MS) {
       const ids = textSections(doc).map((s) => s.id);
       try {
-        const r = await opts.complete("judge", workJudgeSystemPrompt(kind, ids), workJudgeUserPrompt(doc), { json: true, maxTokens: 1500, timeoutMs });
+        const r = await opts.complete("judge", workJudgeSystemPrompt(kind, ids), workJudgeUserPrompt(doc), { json: true, deadline: opts.deadline, maxTokens: 1500, timeoutMs });
         if (r?.usage) opts.onUsage?.(r.usage);
         judge = parseWorkJudge(kind, r?.text, ids);
       } catch (e) {

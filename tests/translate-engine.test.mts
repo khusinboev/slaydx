@@ -226,7 +226,8 @@ test("deadline tugagan: qolgan partiyalar chaqirilmaydi → 3% dan ko'p bo'lsa x
     t += 100_000; // har chaqiruv 100 s «oladi»
     return { items: items.map((i) => ({ id: i.id, text: `[T]${i.text}` })) };
   });
-  await assert.rejects(translateSegments(many(200, 100), opts({ deadline: 250_000 }), { complete, now }), /tarjima qilinmadi/);
+  // EXT-03: yetishmovchilik MUDDAT tufayli — `DeadlineError` (worker: «vaqt tugadi» + to'liq qaytarish), umumiy «tarjima qilinmadi» emas.
+  await assert.rejects(translateSegments(many(200, 100), opts({ deadline: 250_000 }), { complete, now }), (e: unknown) => e instanceof Error && e.name === "DeadlineError");
   assert.ok(calls.length < 10, `vaqt tugagach chaqiruvlar to'xtaydi: ${calls.length}`);
 });
 

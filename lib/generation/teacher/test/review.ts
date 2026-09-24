@@ -56,7 +56,7 @@ export type TestReviewAsk = {
 
 export type TestReviewOpts = {
   ask?: TestReviewAsk;
-  complete?: (role: "judge", system: string, user: string, o: { json?: boolean; maxTokens?: number; timeoutMs?: number }) => Promise<{ text: string; usage?: LlmUsage } | null>;
+  complete?: (role: "judge", system: string, user: string, o: { json?: boolean; maxTokens?: number; timeoutMs?: number; deadline?: number }) => Promise<{ text: string; usage?: LlmUsage } | null>;
   deadline?: number;
   /** `false` — baholovchi chaqirilmaydi (testlar). */
   judge?: boolean;
@@ -537,7 +537,7 @@ export async function reviewTest(doc: AcademicDoc, opts: TestReviewOpts = {}): P
     if (timeoutMs >= JUDGE_MIN_MS) {
       try {
         const r = await opts.complete("judge", judgeSystemPromptFor(spec.judge, ["questions"]), testJudgeUserPrompt(model, doc.meta.topic), {
-          json: true,
+          json: true, deadline: opts.deadline,
           maxTokens: 1500,
           timeoutMs,
         });

@@ -37,6 +37,7 @@ import type { AcademicDoc, BuiltFile, DocMeta } from "../types";
 import type { TranslationSource } from "../source-types";
 import type { CompleteFn } from "../research/pipeline";
 import { CostMeter, type LlmUsage, complete as completeRole } from "../llm-roles";
+import { assertJobTime, nullUnlessDeadline } from "../deadline";
 import { llmEnabled } from "../llm";
 import { parseLlmObject } from "../json";
 import { remainingMs } from "../quality";
@@ -105,10 +106,15 @@ async function ask(
   user: string,
   o: { maxTokens: number; timeoutMs: number },
   meter: CostMeter,
-  onUsage?: (u: LlmUsage) => void,
+  onUsage: ((u: LlmUsage) => void) | undefined,
+  deadline: number,
 ): Promise<Record<string, unknown> | null> {
-  if (o.timeoutMs < MIN_CALL_MS) return null;
-  const r = await complete("writer", system, user, { json: true, ...o }).catch(() => null);
+  // Ish muddati (EXT-03) — `infographic/engine.ts ask` bilan bir xil qoida.
+  if (o.timeoutMs < MIN_CALL_MS) {
+    assertJobTime(deadline, "audio:writer", MIN_CALL_MS);
+    return null;
+  }
+  const r = await complete("writer", system, user, { json: true, ...o, deadline }).catch(nullUnlessDeadline);
   if (r?.usage) {
     meter.add(r.usage);
     onUsage?.(r.usage);
@@ -229,7 +235,7 @@ export const buildAudioArtifact: AudioBuilder = async (tool, meta, values, opts)
   const textDeadline = deadline - AUDIO_TTS_RESERVE_MS - (opts.polish === false ? AUDIO_REVIEW_RESERVE_MS : AUDIO_REVIEW_RESERVE_MS + AUDIO_POLISH_RESERVE_MS);
   const budget = () => Math.min(SCRIPT_TIMEOUT_MS, Math.max(0, Math.min(remainingMs(textDeadline), remainingMs(deadline))));
 
-  let script = normalizeScript(await ask(complete, system, audioPrompt(ctx), { maxTokens: 3000, timeoutMs: budget() }, meter, opts.onUsage), input);
+  let script = normalizeScript(await ask(complete, system, audioPrompt(ctx), { maxTokens: 3000, timeoutMs: budget() }, meter, opts.onUsage, deadline), input);
   if (!script) {
     console.warn("[audio] model yaroqli ssenariy bermadi");
     return null;
@@ -243,7 +249,7 @@ export const buildAudioArtifact: AudioBuilder = async (tool, meta, values, opts)
   const problems = retryProblems(script, input);
   if (problems.length) {
     stage(30, "Ssenariy davomiylikka moslanmoqda");
-    const retry = normalizeScript(await ask(complete, system, audioRetryPrompt(ctx, script, problems), { maxTokens: 3000, timeoutMs: budget() }, meter, opts.onUsage), input);
+    const retry = normalizeScript(await ask(complete, system, audioRetryPrompt(ctx, script, problems), { maxTokens: 3000, timeoutMs: budget() }, meter, opts.onUsage, deadline), input);
     // Qayta so'rov YOMONLASHTIRMASIN (`infographic/engine.ts` bilan ayni qoida).
     if (retry && retryProblems(retry, input).length < problems.length) script = retry;
   }

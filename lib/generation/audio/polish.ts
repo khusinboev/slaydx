@@ -161,7 +161,7 @@ export async function rewriteAudioFix(doc: AcademicDoc, fix: Fix, deps: AudioRew
   const c = audioCtx(audioTypeOf(ctx.input.kind, ctx.input.type), ctx.input);
   const timeoutMs = Math.max(1, Math.min(REWRITE_TIMEOUT_MS, remainingMs(deps.deadline)));
   const r = await deps
-    .complete("writer", audioSystemPrompt(c), audioRewritePrompt(c, ctx.script, [fix.instruction]), { json: true, maxTokens: 3000, timeoutMs })
+    .complete("writer", audioSystemPrompt(c), audioRewritePrompt(c, ctx.script, [fix.instruction]), { json: true, deadline: deps.deadline, maxTokens: 3000, timeoutMs })
     .catch(() => null);
   if (r?.usage) deps.onUsage?.(r.usage);
   const raw = parseLlmObject<Record<string, unknown>>(r?.text ?? "");

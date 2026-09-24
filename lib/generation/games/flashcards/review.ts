@@ -274,7 +274,7 @@ export async function reviewFlashcards(doc: AcademicDoc, opts: FlashcardsReviewO
     if (timeoutMs >= JUDGE_MIN_MS) {
       const ids = flashcardsTargets();
       try {
-        const r = await opts.complete("judge", cardsJudgeSystemPrompt(model, ids), cardsJudgeUserPrompt(doc), { json: true, maxTokens: 1200, timeoutMs });
+        const r = await opts.complete("judge", cardsJudgeSystemPrompt(model, ids), cardsJudgeUserPrompt(doc), { json: true, deadline: opts.deadline, maxTokens: 1200, timeoutMs });
         if (r?.usage) opts.onUsage?.(r.usage);
         judge = parseCardsJudge(model, r?.text, ids);
       } catch (e) {

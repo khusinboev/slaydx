@@ -19,6 +19,7 @@ import type { AcademicDoc } from "../../types";
 import type { DocReview, UserNeed } from "../../report/types";
 import { POLISH_MAX_FIXES, RewriteError, runPolishWith, type ApplyOpsResult, type Fix, type PolishPlan, type RewriteOutOf, type RunPolishResult } from "../../report/polish-core";
 import { remainingMs } from "../../quality";
+import { isDeadlineError } from "../../deadline";
 import { parseLlmObject } from "../../json";
 import type { CompleteFn } from "../../research/pipeline";
 import type { CostMeter, LlmUsage } from "../../llm-roles";
@@ -134,9 +135,13 @@ export async function rewriteClues(doc: AcademicDoc, fix: Fix, deps: ClueRewrite
   if (timeoutMs < 5_000) throw new RewriteError("Vaqt yetmadi", 422, "llm");
 
   const r = await deps.complete("writer", clueRewriteSystemPrompt(deps), clueUserPrompt(words, fix.instruction), {
-    json: true,
+    json: true, deadline: deps.deadline,
     maxTokens: Math.min(4000, 300 + words.length * 120),
     timeoutMs,
+  }).catch((e: unknown) => {
+    // Muddat tugashi — yuqoridagi «Vaqt yetmadi» bilan bir xil (sayqal o'tkazib yuboriladi, hujjat o'zgarmaydi).
+    if (isDeadlineError(e)) throw new RewriteError("Vaqt yetmadi", 422, "llm");
+    throw e;
   });
   if (r?.usage) {
     deps.meter?.add(r.usage);

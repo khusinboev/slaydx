@@ -23,6 +23,7 @@ import type { FormValues } from "../../types";
 import type { AcademicDoc, Block, DocMeta, DocSection } from "../types";
 import { llmEnabled } from "../llm";
 import { CostMeter, complete as completeRole, type LlmRole, type LlmUsage, type RoleOpts } from "../llm-roles";
+import { assertJobTime } from "../deadline";
 import { parseLlmObject } from "../json";
 import { cleanText, remainingMs } from "../quality";
 import { guardSection } from "../report/guard";
@@ -139,8 +140,9 @@ export async function buildEssayDoc(meta: DocMeta, values: FormValues, opts: Ess
   const ctx = essayCtx({ ...meta, language: input.language, design: input.design }, input);
   const stage = (progress: number, step: string) => opts.onStage?.({ progress, step });
 
+  // Ish muddati (EXT-03) har chaqiruvga — zanjir qayta urinishni muddatdan oshirmaydi.
   const ask: Ask = async (role, system, user, o = {}) => {
-    const r = await complete(role, system, user, { json: true, ...o });
+    const r = await complete(role, system, user, { json: true, ...o, deadline });
     if (r?.usage) {
       meter.add(r.usage);
       opts.onUsage?.(r.usage);
@@ -290,7 +292,8 @@ async function writeEssay(
 ): Promise<Block[]> {
   const { plans, thesisStatement, title } = outline;
   const one = async (part: "all" | "head" | "tail", subset: EssayParagraphPlan[], written?: string): Promise<Block[]> => {
-    if (remainingMs(deadline) < MIN_CALL_MS) return [];
+    // Insho MATNI — asosiy yozuv: vaqt yo'q bo'lsa bo'sh (yarim) insho emas, `DeadlineError` (EXT-03).
+    assertJobTime(deadline, "essay:writer", MIN_CALL_MS);
     const aim = subset.reduce((n, p) => n + p.words, 0) || ctx.words.aim;
     const user = essayPrompt(ctx, subset, { part, thesisStatement, title, ...(written ? { written } : {}) });
     const maxTokens = Math.min(8000, Math.max(1200, Math.round(aim * 2.6)));

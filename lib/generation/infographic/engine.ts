@@ -32,6 +32,7 @@ import type { TranslationSource } from "../source-types";
 import { extractMeta } from "../meta";
 import { llmEnabled } from "../llm";
 import { CostMeter, type LlmUsage, complete as completeRole } from "../llm-roles";
+import { assertJobTime, nullUnlessDeadline } from "../deadline";
 import { parseLlmObject } from "../json";
 import { remainingMs } from "../quality";
 import type { CompleteFn } from "../research/pipeline";
@@ -83,9 +84,17 @@ export const PREVIEW_DPI = 110;
 
 /* ────────────────────────── yordamchilar ────────────────────────── */
 
-async function ask(complete: CompleteFn, system: string, user: string, o: { maxTokens: number; timeoutMs: number }, meter: CostMeter, onUsage?: (u: LlmUsage) => void): Promise<Record<string, unknown> | null> {
-  if (o.timeoutMs < MIN_CALL_MS) return null;
-  const r = await complete("writer", system, user, { json: true, ...o }).catch(() => null);
+/**
+ * `deadline` — ISH muddati (EXT-03): zanjirga uzatiladi; bosqich ulushi
+ * (`writeDeadline`) tugashi eski yumshoq yo'l (`null`), ish muddati
+ * tugashi esa `DeadlineError` — yuqoriga (plakat chiqmaydi, pul qaytadi).
+ */
+async function ask(complete: CompleteFn, system: string, user: string, o: { maxTokens: number; timeoutMs: number }, meter: CostMeter, onUsage: ((u: LlmUsage) => void) | undefined, deadline: number): Promise<Record<string, unknown> | null> {
+  if (o.timeoutMs < MIN_CALL_MS) {
+    assertJobTime(deadline, "infographic:writer", MIN_CALL_MS);
+    return null;
+  }
+  const r = await complete("writer", system, user, { json: true, ...o, deadline }).catch(nullUnlessDeadline);
   if (r?.usage) {
     meter.add(r.usage);
     onUsage?.(r.usage);
@@ -194,7 +203,7 @@ export const buildInfographicArtifact: InfographicBuilder = async (tool, values,
   const system = infographicSystemPrompt(ctx);
   const writeDeadline = deadline - (opts.polish === false ? INFOGRAPHIC_REVIEW_RESERVE_MS : INFOGRAPHIC_REVIEW_RESERVE_MS + INFOGRAPHIC_POLISH_RESERVE_MS);
   const budget = () => Math.min(SPEC_TIMEOUT_MS, Math.max(0, Math.min(remainingMs(writeDeadline), remainingMs(deadline))));
-  let spec = normalizeSpec(await ask(complete, system, infographicPrompt(ctx), { maxTokens: 2600, timeoutMs: budget() }, meter, opts.onUsage), input);
+  let spec = normalizeSpec(await ask(complete, system, infographicPrompt(ctx), { maxTokens: 2600, timeoutMs: budget() }, meter, opts.onUsage, deadline), input);
   if (!spec) {
     console.warn("[infographic] model yaroqli spetsifikatsiya bermadi");
     return null;
@@ -209,7 +218,7 @@ export const buildInfographicArtifact: InfographicBuilder = async (tool, values,
   if (problems.length) {
     stage(40, "Matn plakatga moslanmoqda");
     const retry = normalizeSpec(
-      await ask(complete, system, infographicRetryPrompt(ctx, spec, problems), { maxTokens: 2600, timeoutMs: budget() }, meter, opts.onUsage),
+      await ask(complete, system, infographicRetryPrompt(ctx, spec, problems), { maxTokens: 2600, timeoutMs: budget() }, meter, opts.onUsage, deadline),
       input,
       { ids: spec.blocks.map((b) => b.id) },
     );
