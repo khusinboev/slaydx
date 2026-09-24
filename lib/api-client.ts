@@ -1010,8 +1010,17 @@ export function photoUrl(assetId: string): string {
 export function getDraft(toolId: string) {
   return request<{ draft: { data: FormValues; updatedAt: string } | null }>(`/api/forms/${toolId}/draft`);
 }
-export function putDraft(toolId: string, data: FormValues) {
-  return request<{ updatedAt: string }>(`/api/forms/${toolId}/draft`, { method: "PUT", body: JSON.stringify({ data }) });
+/**
+ * `keepalive` (FE-17) — sahifa yopilayotganda (`pagehide`) yuborilgan
+ * so'rovni brauzer bekor qilmaydi; tana ~64 KB dan oshmasligi kerak
+ * (chaqiruvchi — `useFormDraft` — buni tekshiradi).
+ */
+export function putDraft(toolId: string, data: FormValues, opts: { keepalive?: boolean } = {}) {
+  return request<{ updatedAt: string }>(`/api/forms/${toolId}/draft`, {
+    method: "PUT",
+    body: JSON.stringify({ data }),
+    ...(opts.keepalive ? { keepalive: true } : {}),
+  });
 }
 export function clearDraft(toolId: string) {
   return request<{ ok: true }>(`/api/forms/${toolId}/draft`, { method: "DELETE" });
