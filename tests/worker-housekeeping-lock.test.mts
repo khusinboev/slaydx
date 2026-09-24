@@ -34,6 +34,12 @@ const skip = hasDb && iso.isolated ? false : "alohida Postgres baza yo'q";
 
 test("housekeepingTick: advisory qulf — bir vaqtda faqat bitta process", { skip }, async (t) => {
   const pg = (await import("pg")).default;
+  /** «Boshqa process» sessiyasi. Uzilsa (57P01) — ushlanmagan `error` hodisasi test processini yiqitmasin (review R2). */
+  const sideClient = () => {
+    const c = new pg.Client({ connectionString: process.env.DATABASE_URL });
+    c.on("error", () => {});
+    return c;
+  };
   const { pool } = await import("../lib/server/db.ts");
   const worker = await import("../lib/server/worker.ts");
   t.mock.method(console, "log", () => {});
@@ -50,7 +56,7 @@ test("housekeepingTick: advisory qulf — bir vaqtda faqat bitta process", { ski
   };
 
   await t.test("boshqa process qulfni ushlab tursa — o'tkazib yuboriladi", async () => {
-    const other = new pg.Client({ connectionString: process.env.DATABASE_URL });
+    const other = sideClient();
     await other.connect();
     try {
       const got = await other.query<{ ok: boolean }>("SELECT pg_try_advisory_lock($1) AS ok", [worker.HOUSEKEEPING_LOCK_ID]);
@@ -73,7 +79,7 @@ test("housekeepingTick: advisory qulf — bir vaqtda faqat bitta process", { ski
   });
 
   await t.test("yetakchi qulfni ushlab turganda boshqa sessiya ololmaydi; qo'yib yuborilgach — oladi", async () => {
-    const other = new pg.Client({ connectionString: process.env.DATABASE_URL });
+    const other = sideClient();
     await other.connect();
     try {
       const busy = await other.query<{ ok: boolean }>("SELECT pg_try_advisory_lock($1) AS ok", [worker.HOUSEKEEPING_LOCK_ID]);
@@ -90,12 +96,15 @@ test("housekeepingTick: advisory qulf — bir vaqtda faqat bitta process", { ski
     runs = 0;
     assert.equal(await worker.housekeepingTick({ run }), true);
     // Serverdan yetakchi sessiyani o'ldiramiz (DB qayta ishga tushishi / tarmoq uzilishi).
-    const admin = new pg.Client({ connectionString: process.env.DATABASE_URL });
+    const admin = sideClient();
     await admin.connect();
     try {
       await admin.query(
+        // FAQAT shu (alohida) bazadagi qulf egasi: `pg_locks` klaster bo'yicha umumiy —
+        // parallel yurgan boshqa test fayllarining sessiyalariga tegilmasin (review R2).
         `SELECT pg_terminate_backend(pid) FROM pg_locks
-          WHERE locktype = 'advisory' AND objid = $1 AND granted AND pid <> pg_backend_pid()`,
+          WHERE locktype = 'advisory' AND objid = $1 AND granted AND pid <> pg_backend_pid()
+            AND database = (SELECT oid FROM pg_database WHERE datname = current_database())`,
         [worker.HOUSEKEEPING_LOCK_ID],
       );
     } finally {

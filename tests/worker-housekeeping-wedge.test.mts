@@ -41,6 +41,9 @@ test("housekeeping: qulf osilgan sessiyada — tiklash baribir, pul aynan bir ma
 
   // «Osilgan yetakchi»: qulfni oladi va boshqa hech narsa qilmaydi (ulanish tirik).
   const wedged = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  // Tashqaridan uzilsa (57P01) ushlanmagan `error` test processini yiqitmasin (review R2);
+  // bunday holda qulf bo'shaydi va quyidagi «qulf band» tekshiruvi buni aniq ko'rsatadi.
+  wedged.on("error", () => {});
   await wedged.connect();
   t.after(async () => {
     await wedged.end().catch(() => {});
