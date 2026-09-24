@@ -213,7 +213,9 @@ test("process qadam matni chegarasi kartaga sig'adi va so'ralgan hajmdan kam ema
     assert.ok(t.size >= 12, `chegaradagi matn ${t.size} pt ga tushdi — quti kichik`);
   }
   /*
-   * Promptda «10–15 so'z» so'raladi. O'zbekcha o'rtacha so'z + probel
+   * Promptda eng keng holatda ~15 so'z so'raladi (AUDIT-25 dan beri
+   * son `wordTargetLines` «MAKET HAJMI» blokidan, auditoriya × vizual ×
+   * bosqich soni bo'yicha; `structure.ts` da qat'iy son yo'q). O'zbekcha o'rtacha so'z + probel
    * ~9 belgi, ya'ni ko'rsatmaga TO'LIQ rioya qilgan model ~135 belgi
    * yozadi. Chegara bundan past bo'lsa, o'z ko'rsatmamizga amal qilgan
    * javobni o'zimiz kesib tashlaymiz.

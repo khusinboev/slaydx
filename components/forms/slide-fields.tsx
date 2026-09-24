@@ -7,9 +7,10 @@ import {
   type SlideAudience,
 } from "@/lib/generation/slide-audience";
 import { PURPOSE_DEFAULTS, SLIDE_PURPOSES, purposeDefaults } from "@/lib/generation/slide-purpose";
-import { SLIDE_BLOCKS, isSlideBlockId, type SlideBlockId } from "@/lib/generation/slide-blocks";
+import { SLIDE_BLOCKS, isSlideBlockId, QUIZ_COUNT_FALLBACK, type SlideBlockId } from "@/lib/generation/slide-blocks";
 import {
-  PLAN_ITEMS_DEFAULT,
+  PLAN_ITEMS_MAX,
+  PLAN_ITEMS_MIN,
   PRO_SLIDE_DEFAULT,
   PRO_SLIDE_MAX,
   PRO_SLIDE_MIN,
@@ -23,14 +24,19 @@ import {
   SLIDE_MAX,
   SLIDE_MIN,
   SLIDE_TEXT_VOLUMES,
+  activeBlockIds,
   clampInt,
+  effectivePlanItems,
   joinCsv,
+  normalizeQuizCount,
+  planCapacity,
+  resolvePlanFlags,
   splitCsv,
   type SlideTool,
 } from "@/lib/generation/slide-params";
 import { formatTanga } from "@/lib/tools";
 import { MultiChipGroup, RangeField } from "./fields";
-import { Row, Segmented, SelectField, Switch } from "./compact";
+import { Row, Segmented, SelectField, Switch, type SegmentedOption } from "./compact";
 import { LogoField } from "./LogoField";
 
 /**
@@ -74,8 +80,6 @@ export const AUDIENCE_OPTIONS = [
 ];
 export const PURPOSE_OPTIONS = SLIDE_PURPOSES.map((p) => ({ value: p, label: PURPOSE_DEFAULTS[p].label }));
 const BLOCK_OPTIONS = SLIDE_BLOCKS.map((b) => ({ value: b.id, label: b.label }));
-// Segment yorliqlari QISQA — qator ichida sig'sin (yorliq «Reja bandlari» chapda turadi).
-const PLAN_ITEMS_OPTIONS = [3, 4, 5, 6].map((n) => ({ value: String(n), label: String(n) }));
 export const TEXT_VOLUME_LABELS: Record<(typeof SLIDE_TEXT_VOLUMES)[number], string> = {
   qisqa: "Qisqa",
   standart: "Standart",
@@ -83,6 +87,47 @@ export const TEXT_VOLUME_LABELS: Record<(typeof SLIDE_TEXT_VOLUMES)[number], str
 };
 const TEXT_VOLUME_OPTIONS = SLIDE_TEXT_VOLUMES.map((v) => ({ value: v, label: TEXT_VOLUME_LABELS[v] }));
 const QUIZ_OPTIONS = QUIZ_COUNTS.map((n) => ({ value: String(n), label: n === 0 ? "Testsiz" : String(n) }));
+
+/**
+ * Bloklar + `quizCount`/`agendaSlide` — server AYNAN shu yo'l bilan
+ * hisoblaydi (`lib/generation/meta.ts extractMeta`, `resolvePlanFlags`
+ * + `activeBlockIds`). AUDIT-25 N2 (re-review 8e4603e): forma bu yo'lni
+ * TAKRORLAYDI, `purposeDefaults`ga qarab taxmin qilmaydi — aks holda
+ * chip («Test»/«Reja» «Tuzilma bloklari»da) va son/kalit (`quizCount`/
+ * `agendaSlide`) bir-biridan uzilib qolar edi (masalan foydalanuvchi
+ * «Test»ni yoqib keyin o'chirsa, `quizCount` eskicha 3da qolaverardi).
+ */
+function resolvedFlags(values: FormValues, tool: SlideTool): { on: Set<string>; quizCount: number | undefined; agendaSlide: boolean | undefined } {
+  const purpose = typeof values.slidePurpose === "string" ? values.slidePurpose : undefined;
+  const given = values.blocks !== undefined && values.blocks !== null;
+  const sent = given && tool === "pro-slide";
+  const blocks: readonly string[] = given ? decodeBlocks(values.blocks) : purposeDefaults(purpose ?? "general").blocks;
+  const rawQuiz = normalizeQuizCount(values.quizCount);
+  const rawAgenda = values.agendaSlide === true ? true : values.agendaSlide === false ? false : undefined;
+  const flags = resolvePlanFlags(sent, blocks, rawQuiz, rawAgenda);
+  const on = activeBlockIds(blocks, flags.quizCount, values.internetSearch === true, flags.agendaSlide);
+  return { on, quizCount: flags.quizCount, agendaSlide: flags.agendaSlide };
+}
+
+/**
+ * `quizCount` KO'RSATILADIGAN qiymati — aniq (resolvePlanFlags'dan
+ * neytrallanmagan) son USTUN; aks holda «test» bloki yoqiqmi (`on`) —
+ * yoqiq bo'lsa `QUIZ_COUNT_FALLBACK`, aks holda 0.
+ */
+function resolvedQuizCount(values: FormValues, tool: SlideTool): number {
+  const { on, quizCount } = resolvedFlags(values, tool);
+  if (quizCount !== undefined) return quizCount;
+  return on.has("test") ? QUIZ_COUNT_FALLBACK : 0;
+}
+
+/**
+ * `agendaSlide` KO'RSATILADIGAN qiymati — `planBudgetForBody` bilan BIR
+ * XIL shart: «reja» bloki yoqiq VA `agendaSlide` aniq `false` emas.
+ */
+function resolvedAgendaSlide(values: FormValues, tool: SlideTool): boolean {
+  const { on, agendaSlide } = resolvedFlags(values, tool);
+  return on.has("reja") && agendaSlide !== false;
+}
 export const IMAGE_STYLE_LABELS: Record<(typeof SLIDE_IMAGE_STYLES)[number], string> = {
   minimal: "Minimal",
   illustration: "Illyustratsiya",
@@ -136,6 +181,88 @@ function SlideCountField({ values, set, tool }: { values: FormValues; set: Slide
 }
 
 /**
+ * `planItems` sig'imi — AUDIT-25 qaror 3: `planCapacity` server nechta
+ * reja bandini deka ichiga sig'dirishini hisoblaydi, forma AYNAN shu
+ * bilan mos ko'rsatishi kerak (server baribir qisadi — kelishmovchilik
+ * bo'lmasin). AUDIT-25 P1 swap: haqiqiy dvigatel funksiyasi
+ * (`lib/generation/slide-params.ts`), stub emas.
+ *
+ * `tool` — real `planCapacity`ning o'zi `blocksSent` (pro-slayd chip
+ * tanlovimi) shartini `v.tool`dan hisoblaydi (`meta.ts` bilan BIR XIL).
+ */
+function capacityFor(values: FormValues, tool: SlideTool): number {
+  return planCapacity({
+    slideCount: values.slideCount,
+    blocks: values.blocks,
+    tool,
+    quizCount: values.quizCount,
+    agendaSlide: values.agendaSlide,
+    titleSlide: values.titleSlide,
+    speakerNotes: values.speakerNotes,
+    internetSearch: values.internetSearch,
+    slidePurpose: values.slidePurpose,
+  });
+}
+
+/** Deka TANASI o'lchamiga qisilgan slaydlar soni — `defaultPlanItems`/`effectivePlanItems` shu bilan chaqiriladi (`meta.ts slidePages` bilan BIR XIL). */
+function slidePagesOf(values: FormValues, tool: SlideTool): number {
+  return tool === "pro-slide"
+    ? clampInt(values.slideCount, PRO_SLIDE_MIN, PRO_SLIDE_MAX, PRO_SLIDE_DEFAULT)
+    : clampInt(values.slideCount, SLIDE_MIN, SLIDE_MAX, SLIDE_DEFAULT);
+}
+
+/**
+ * Foydalanuvchi TANLAMAGAN (`values.planItems === undefined`) holatda
+ * ko'rsatiladigan xom qiymat — AUDIT-25 N3. Real `effectivePlanItems`
+ * "xom" (sig'imdan oldingi) qiymatni alohida qaytarmaydi, shu sabab uni
+ * cheksiz sig'im bilan chaqiramiz (`min(want, cheksiz) = want`) — ikki
+ * xil hisoblash yozish o'rniga BITTA funksiyaning o'zidan olamiz.
+ */
+function rawPlanItems(values: FormValues, tool: SlideTool): number {
+  return effectivePlanItems(values.planItems, Number.MAX_SAFE_INTEGER, slidePagesOf(values, tool));
+}
+
+/**
+ * «Reja bandlari» segmenti — sig'imdan katta variantlar o'chiriladi
+ * (`Segmented`ning `disabled` variant qo'llovi, AUDIT-25 CHANGES-6),
+ * joriy qiymat sig'maganda samarali (qisilgan) qiymat ta'kidlanadi va
+ * bitta qatorli o'zbekcha izoh chiqadi. Sig'im 3 dan kichik bo'lsa
+ * pastki chegara `effective`gacha kengayadi — shu sabab variantlar
+ * ro'yxati statik emas va samarali qiymat DOIM ro'yxatda bo'ladi
+ * (CHANGES-1: `lo = min(PLAN_ITEMS_MIN, capacity, effective)`).
+ *
+ * N3: izoh FAQAT foydalanuvchi ANIQ tanlov qilganda («Tanlangan …»
+ * so'zi haqiqat bo'lishi uchun) — standart (tanlanmagan) qiymat
+ * sig'imga qisilsa ham izoh chiqmaydi.
+ */
+function PlanItemsField({ values, set, tool }: { values: FormValues; set: SlideFieldSetter; tool: SlideTool }) {
+  const capacity = capacityFor(values, tool);
+  const slidePages = slidePagesOf(values, tool);
+  const raw = rawPlanItems(values, tool);
+  const effective = effectivePlanItems(values.planItems, capacity, slidePages);
+  const lo = Math.min(PLAN_ITEMS_MIN, capacity, effective);
+  const options: SegmentedOption[] = [];
+  for (let n = lo; n <= PLAN_ITEMS_MAX; n++) options.push({ value: String(n), label: String(n), disabled: n > capacity });
+  // Yopiq raqam ko'rsatiladigan variantdan (6) oshmasin — real tanlanadigan maksimum shu.
+  const shownCapacity = Math.min(capacity, PLAN_ITEMS_MAX);
+  return (
+    <Row
+      label="Reja bandlari"
+      hint={`Reja bandlari — har biri o‘z slaydi bilan; ${slidePages} slaydga ${shownCapacity} band sig‘adi.`}
+    >
+      <div>
+        <Segmented ariaLabel="Reja bandlari" options={options} value={String(effective)} onChange={(v) => set("planItems", Number(v))} />
+        {values.planItems !== undefined && effective < raw ? (
+          <p className="text-muted-foreground mt-1 text-[11px]" data-plan-capacity-hint>
+            {`Tanlangan ${raw} band sig‘maydi — ${effective} band yoziladi.`}
+          </p>
+        ) : null}
+      </div>
+    </Row>
+  );
+}
+
+/**
  * Reyestr id → render.
  *
  * `default: return null` — `topic`/`language`/`slideTemplate`/
@@ -178,7 +305,30 @@ export function renderSlideParam(
             value={String(values.slidePurpose || "general")}
             onChange={(v) => {
               set("slidePurpose", v);
-              set("blocks", resetBlocksForPurpose(v));
+              // AUDIT-25 N1: `blocks` FAQAT pro-slaydda yuboriladi — oddiy
+              // «Slayd»da bu maydon uchun qator umuman yo'q, lekin eski kod
+              // shu yerda SO'ZSIZ `set("blocks", ...)` chaqirardi, shu sabab
+              // oddiy formada ham `values.blocks` to'lib qolardi va server
+              // (P1 `resolvePlanFlags`) so'rovni "pro" deb noto'g'ri o'qirdi.
+              if (ctx.tool === "pro-slide") {
+                const newBlocks = purposeDefaults(v).blocks;
+                set("blocks", encodeBlocks(newBlocks));
+                /*
+                 * AUDIT-25 F1 (final review caf9fcb): agar foydalanuvchi
+                 * ALLAQACHON aniq tanlov qilgan bo'lsa («Nazorat testi»=5
+                 * yoki «Reja slaydi» kaliti bosilgan), o'sha aniq tanlov
+                 * YANGI bloklarga moslashtiriladi — aks holda eski aniq son
+                 * yangi turda ham qoladi-yu, endi bloklarda yo'q «Test»
+                 * chipi bilan ziddiyatga tushadi. TEGILMAGAN holatga
+                 * TEGMAYMIZ: `resolvedQuizCount`/`resolvedAgendaSlide`
+                 * allaqachon jonli `blocks`dan (shu yangilangan) to'g'ri
+                 * o'qiydi, aniq qiymat yozib "tegilgan" holatga
+                 * aylantirish A3-01/A3-02 "tegilmagan → yuborilmaydi"
+                 * shartnomasini shunchaki tur almashtirish bilan buzardi.
+                 */
+                if (values.quizCount !== undefined) set("quizCount", newBlocks.includes("test") ? QUIZ_COUNT_FALLBACK : 0);
+                if (values.agendaSlide !== undefined) set("agendaSlide", newBlocks.includes("reja"));
+              }
             }}
           />
         </Row>
@@ -189,16 +339,31 @@ export function renderSlideParam(
           <MultiChipGroup
             options={BLOCK_OPTIONS}
             value={decodeBlocks(values.blocks)}
-            onChange={(next) => set("blocks", encodeBlocks(next.filter(isSlideBlockId)))}
+            onChange={(next) => {
+              const nextBlocks = next.filter(isSlideBlockId);
+              const prevBlocks = decodeBlocks(values.blocks);
+              set("blocks", encodeBlocks(nextBlocks));
+              /*
+               * AUDIT-25 N2: «Test»/«Reja» chiplari `quizCount`/`agendaSlide`
+               * bilan IKKI TOMONLAMA sinxron — aks holda chip yoqiq turib son
+               * «Testsiz» (yoki aksincha) ko'rsatishi mumkin edi (re-review
+               * 8e4603e (a)-(d)). `resolvePlanFlags` pro-slaydda `blocks`ni
+               * ustun qo'yadi, shu sabab forma ham ikkalasini birga yozadi.
+               */
+              const hadTest = prevBlocks.includes("test");
+              const hasTestNow = nextBlocks.includes("test");
+              if (hasTestNow && !hadTest) set("quizCount", QUIZ_COUNT_FALLBACK);
+              else if (!hasTestNow && hadTest) set("quizCount", 0);
+              const hadReja = prevBlocks.includes("reja");
+              const hasRejaNow = nextBlocks.includes("reja");
+              if (hasRejaNow && !hadReja) set("agendaSlide", true);
+              else if (!hasRejaNow && hadReja) set("agendaSlide", false);
+            }}
           />
         </Row>
       );
     case "planItems":
-      return (
-        <Row key={id} label="Reja bandlari" hint="Reja slaydidagi va tuzilmadagi band soni.">
-          <Segmented ariaLabel="Reja bandlari" options={PLAN_ITEMS_OPTIONS} value={String(values.planItems ?? PLAN_ITEMS_DEFAULT)} onChange={(v) => set("planItems", Number(v))} />
-        </Row>
-      );
+      return <PlanItemsField key={id} values={values} set={set} tool={ctx.tool} />;
     case "slideCount":
       return <SlideCountField key={id} values={values} set={set} tool={ctx.tool} />;
     case "textVolume":
@@ -210,7 +375,22 @@ export function renderSlideParam(
     case "quizCount":
       return (
         <Row key={id} label="Nazorat testi" hint="Deka oxirida qo‘shiladigan test savollari soni.">
-          <Segmented ariaLabel="Nazorat testi" options={QUIZ_OPTIONS} value={String(clampInt(values.quizCount, 0, 10, 0))} onChange={(v) => set("quizCount", Number(v))} />
+          <Segmented
+            ariaLabel="Nazorat testi"
+            options={QUIZ_OPTIONS}
+            value={String(resolvedQuizCount(values, ctx.tool))}
+            onChange={(v) => {
+              const n = Number(v);
+              set("quizCount", n);
+              // AUDIT-25 N2: pro-slaydda «Tuzilma bloklari»dagi «Test» chipi bilan sinxron (blocks-onChange bilan bir xil qoida).
+              if (ctx.tool === "pro-slide") {
+                const blocks = decodeBlocks(values.blocks);
+                const hasTest = blocks.includes("test");
+                if (n > 0 && !hasTest) set("blocks", encodeBlocks([...blocks, "test"]));
+                else if (n === 0 && hasTest) set("blocks", encodeBlocks(blocks.filter((b) => b !== "test")));
+              }
+            }}
+          />
         </Row>
       );
     case "slideImageStyle":
@@ -222,7 +402,27 @@ export function renderSlideParam(
     case "titleSlide":
       return switchRow("titleSlide", "Titul slaydi", "Birinchi slayd mavzu, muallif va logotip bilan.", true, values, set);
     case "agendaSlide":
-      return switchRow("agendaSlide", "Reja slaydi", "Titul ortidan reja bandlari sanab o‘tiladi.", true, values, set);
+      // AUDIT-25 P1 A3-02: generic `switchRow` ishlatilmaydi — standart holat
+      // (foydalanuvchi tegmaganda) taqdimot turiga bog'liq (`resolvedAgendaSlide`),
+      // doim yoqilgan emas (pitch/training standarti «reja»siz).
+      return (
+        <Row key={id} label="Reja slaydi" hint="Titul ortidan reja bandlari sanab o‘tiladi.">
+          <Switch
+            checked={resolvedAgendaSlide(values, ctx.tool)}
+            ariaLabel="Reja slaydi"
+            onChange={(v) => {
+              set("agendaSlide", v);
+              // AUDIT-25 N2: pro-slaydda «Tuzilma bloklari»dagi «Reja» chipi bilan sinxron (blocks-onChange bilan bir xil qoida).
+              if (ctx.tool === "pro-slide") {
+                const blocks = decodeBlocks(values.blocks);
+                const hasReja = blocks.includes("reja");
+                if (v && !hasReja) set("blocks", encodeBlocks([...blocks, "reja"]));
+                else if (!v && hasReja) set("blocks", encodeBlocks(blocks.filter((b) => b !== "reja")));
+              }
+            }}
+          />
+        </Row>
+      );
     case "localExamples":
       return switchRow("localExamples", "Mahalliy misollar", "O‘zbekiston voqeligidan misol va kontekst qo‘shiladi.", false, values, set);
     case "internetSearch":
@@ -264,15 +464,15 @@ export function renderSlideParam(
  * Yig'iq «Sozlamalar» sarlavhasi uchun joriy tanlovlar — foydalanuvchi
  * bo'limni ochmasdan nima tanlanganini ko'radi.
  */
-export function settingsSummary(values: FormValues, ids: readonly string[]): string[] {
+export function settingsSummary(values: FormValues, ids: readonly string[], tool: SlideTool = "slide"): string[] {
   const out: string[] = [];
   const has = (id: string) => ids.includes(id);
   if (has("slideAudience")) out.push(AUDIENCE_OPTIONS.find((o) => o.value === String(values.slideAudience || "auto"))?.label ?? "Avtomatik");
   if (has("slidePurpose")) out.push(PURPOSE_OPTIONS.find((o) => o.value === String(values.slidePurpose || "general"))?.label ?? "Umumiy");
-  if (has("planItems")) out.push(`${clampInt(values.planItems, 3, 6, PLAN_ITEMS_DEFAULT)} band`);
+  if (has("planItems")) out.push(`${effectivePlanItems(values.planItems, capacityFor(values, tool), slidePagesOf(values, tool))} band`);
   if (has("textVolume")) out.push(TEXT_VOLUME_LABELS[String(values.textVolume || "standart") as keyof typeof TEXT_VOLUME_LABELS] ?? "Standart");
   if (has("quizCount")) {
-    const q = clampInt(values.quizCount, 0, 10, 0);
+    const q = resolvedQuizCount(values, tool);
     out.push(q ? `${q} savol` : "Testsiz");
   }
   if (has("slideImageStyle")) out.push(IMAGE_STYLE_LABELS[String(values.slideImageStyle || "photo") as keyof typeof IMAGE_STYLE_LABELS] ?? "Foto");
@@ -285,7 +485,8 @@ export function settingsSummary(values: FormValues, ids: readonly string[]): str
   ];
   for (const [id, label, def] of flags) {
     if (!has(id)) continue;
-    const on = def ? values[id] !== false : values[id] === true;
+    // `agendaSlide` — AUDIT-25 P1 A3-02: tegilmagan bo'lsa taqdimot turi standartidan (`resolvedAgendaSlide`).
+    const on = id === "agendaSlide" ? resolvedAgendaSlide(values, tool) : def ? values[id] !== false : values[id] === true;
     if (on) out.push(label);
   }
   return out;

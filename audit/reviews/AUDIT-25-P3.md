@@ -348,3 +348,65 @@ Items 1–5 and 7–14 are closed. The three failure modes I reproduced now fail
   - `clipLimit` now takes `(field, rules, visual, count, rows)`, so W4 must pass the table **rows**.
   - `QUIZ_Q_MAX` becomes 100 through `SLIDE_LIMITS.quizQ`, with no code change.
   - W1–W7 from the first review otherwise stand.
+
+---
+
+# Wiring review — 3807d0b (P1: W1–W6 + N4)
+
+- **Scope:** `git diff 720814e..3807d0b -- lib tests` in worktree `agent-a9012405…`. The branch already contains P3 `7d335fb` and P2 `d05550e` (checked with `merge-base`).
+- **Heavy command:** one fresh run through `heavy2.sh`. Files: `slide-plan`, `slide-limits`, `slide-blocks`, `slide-chart` and `slide-quality`. Result: **112/112 pass**.
+
+## Verdict: **CHANGES** (one item, small)
+
+The call site, clip order, counts and `visual` plumbing are all correct. One regression came in with W6: the AUDIT-8 minimum row count for tables was deleted from the prompt.
+
+## CHANGES
+
+1. **The AUDIT-8 minimum table size is gone.**
+   - W6 replaced `structure.ts`'s «table layout: 2–4 ustun, 3–5 qator» with «katak matni qisqa». It also deleted the comment that explained the floor: «Qator soni POLI 3: «2–5» so'ralganda model 2 qator qaytarar, jadval slaydning yuqori uchdan birida qolardi (AUDIT-8)».
+   - The replacement, `wordTargetLines`, gives only an **upper** bound: «— table: N tagacha ustun, M tagacha qator» (`slide-quality.ts:504`).
+   - The model is therefore free to return 2 rows again. That brings back the AUDIT-8 layout defect, and below 2 rows `normalizeSlide` falls back to bullets.
+   - **Fix, preferred in P3's single source:** `wordTargetLines` → «— table: 2–${maxTableCols} ustun, 3–${maxTableRows} qator…». `maxTableRows` is ≥ 4 for every audience, so this never contradicts the maximum.
+   - **Alternative:** a number-free line in `structure.ts` («jadval kamida 3 qatorli bo‘lsin»).
+   - **Pin it in `tests/slide-blocks.test.mts:517-529`.** In the same test, also pin the kept non-numeric tails. Today only the line prefixes are matched, so these could be deleted unnoticed:
+     - «Savollar va muhokama» kabi bo‘sh ibora emas;
+     - Bir so‘zli yorliq emas;
+     - nima qilinadi va natija nima;
+     - Uydirma raqam emas — tasnif, qiyos.
+
+## What I checked (file:line in `3807d0b:lib/generation/slide-write.ts`)
+
+- **Repair call site (W1)** is correct.
+  - The order is `applyResearchRefs` → `syncAgenda` → `slideFloor` (return `null` before any repair spend) → `slides = await repairThinSlides(slides, meta, tpl, ctx, deadline, jobDeadline)` → `syncAgenda` → `finalizeQuiz` (`:858-889`).
+  - `deadline` is `writeSlidesWithLlm`'s text-**stage** deadline, and `jobDeadline` is the EXT-03 job deadline. The contract in `docs/AUDIT-25.md:62` is met.
+  - Moving the floor above `finalizeQuiz` is safe, because `finalizeQuiz` never changes `slides.length` (no splice or push).
+  - The agenda re-sync is harmless: repair keeps titles.
+  - Tests: «W1: … AYNAN bitta ta'mir chaqiruvi…» (calls `["writer","repair"]`, `plan` kept, agenda equals the plan titles) and «… kam slayd (pol) — ta'mirdan OLDIN rad» (no repair call).
+- **No double clipping that cuts a word twice.** The local mid-word `clip` and `clipWords` are removed.
+  - `list()` only normalizes and truncates the **count**; `arr()`, `col()`, table, process, stats and quiz each call `clipTo` **once** (`:85-97`, `:196-200`, `:210-231`, `:244-258`, `:261-291`, `:311`).
+  - The only re-clip is `coerceLayout` bullets→process (`:398-406`). It runs `clipTo` over a string that `clipTo` already cut. Both cuts land at word boundaries (≥ 60 % share), so there is still no mid-word cut. The W2/W5 test asserts the boundary on the coerced text.
+- **Counts are truncated before length clips (W3):**
+  - stats: `.slice(0, lim.statsMax)`, then `clipLimit("statLabel", …, cards.length)`;
+  - process: `.slice(0, lim.stepsMax)`, then title and text limits at `raws.length`;
+  - table: headers `lim.tableCols` and rows `lim.tableRows`, then `clipLimit(…, cols, rows)` (N4);
+  - columns: `SLIDE_LIMITS.colItems`, then `clipLimit("colItem", …, items.length)`.
+
+  The test «W3/W4: normalizeSlide AVVAL sonni kesadi…» proves the count and length for 1–4 grade and bachelor, word-boundary cuts, and that the two audiences differ.
+- **`visual` reaches `normalizeSlide` from the real deck template on both paths:**
+  - streaming: `extractNewSlides(…, { final: false }, tpl.visual)` (`:759`);
+  - batch: `parseDeckJson(raw, footer, n, rules, tpl.visual)` (`:772`);
+  - streamed slides go through `coerceLayout(…, rules)` (`:678`), the same as final assembly (`:851`).
+
+  The new parameter is optional and last, so older callers keep working.
+- **W5:** the hard-coded 40/90/220 are gone. `coerceLayout` uses `limitsFor(rules, {steps})` and `SLIDE_LIMITS.quote`. It is audience-aware but not visual-aware, which is acceptable: `limitsFor` is already the narrowest visual × 0.88.
+- **The `slide-limits` test rewrite did not weaken P3's guarantees.**
+  - Only the `normalize:` expectations changed. The expected values now come from `limitsFor` and `clipLimit` with the deck's own rules and visual, so they check that the right count, rows and visual reach the call. On their own they are a weaker oracle than a fixed number.
+  - The independent checks live in `slide-plan` W3/W4 (counts, audience difference, word boundary).
+  - P3's own sections are **untouched**: the `clipTo` word-boundary, NBSP and «.…» tests, the `limitsFor` table and floor tests, and the `tableKey` test.
+  - `slide-chart`'s ≥ 135 `stepText` lock is still there (comment only).
+
+## Non-blocking
+
+- **N1. No test pins the `jobDeadline` forwarding.** If the 6th argument were dropped, W1 would still be green. Add a case: stage deadline ample, `jobDeadline = now + REPAIR_MIN_MS − 1 s` → `calls` equal `["writer"]`.
+- **N2. `list()` and the title path collapse NBSP before `clipTo`.** Both use `/\s+/`, which undoes P3's NBSP preservation («12 km») for generated text. Use `/[ \t\n\r\f\v]+/`, the same as `clipTo`.
+- **N3. Column item count is still the static 4.** `normalizeSlide` does not apply `layoutWordTargets.maxColItems`, which is prompt-only (for example, 2 for 1–4 grade/circle). A 4-item kids column is clipped to ≥ 24 characters per item (the `CLIP_FLOOR_CHARS` floor), not dropped. That is acceptable, but if P2 cannot enlarge those boxes, consider truncating to `maxColItems`.

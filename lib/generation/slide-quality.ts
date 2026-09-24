@@ -390,7 +390,7 @@ export type LayoutWordTargets = {
   /** Karta soni yuqori chegarasi (label kamida `STAT_LABEL_MIN_WORDS` so'z sig'sin). */
   maxStats: number;
   statLabelMax: number;
-  /** Jadval ustunlari yuqori chegarasi (katak kamida `TABLE_CELL_MIN_WORDS` so'z sig'sin). */
+  /** Jadval ustunlari yuqori chegarasi (katak kamida `tableCellMinWords(rules)` so'z sig'sin). */
   maxTableCols: number;
   /** Jadval qatorlari — auditoriya ruxsati (`BodyRules.tableRows`). */
   maxTableRows: number;
@@ -406,8 +406,19 @@ export type LayoutWordTargets = {
 
 /** Stats yorlig'i shundan kam so'z sig'adigan karta soni taklif qilinmaydi. */
 export const STAT_LABEL_MIN_WORDS = 3;
-/** Jadval katagi shundan kam so'z sig'adigan ustun soni taklif qilinmaydi. */
+/** Jadval katagi shundan kam so'z sig'adigan ustun soni taklif qilinmaydi (yosh auditoriya, pol ≥ 18 pt). */
 export const TABLE_CELL_MIN_WORDS = 2;
+/**
+ * Kattalar (pol ≤ 16 pt) uchun katak poli: talaba jadvali 4 ta 2 so'zli
+ * ustundan ko'ra 3 ta TO'LIQROQ ustunni afzal ko'radi (AUDIT-25 P3
+ * qayta sharh N2 — «4 tagacha ustun, katak ≤ 2 so'z» chiqardi).
+ */
+export const TABLE_CELL_MIN_WORDS_ADULT = 3;
+
+/** Auditoriya uchun katak poli (so'z) — ustun soni shunga qarab tanlanadi. */
+export function tableCellMinWords(rules: Pick<BodyRules, "minPt">): number {
+  return rules.minPt <= 16 ? TABLE_CELL_MIN_WORDS_ADULT : TABLE_CELL_MIN_WORDS;
+}
 
 /** Belgi sig'imi → so'z, qopqoqdan oshmasdan. */
 function capWords(chars: number, limit: number): number {
@@ -456,7 +467,7 @@ export function layoutWordTargets(rules: BodyRules, visual?: SlideVisual): Layou
   const maxSteps = maxCount("stepText", rules, visual, PROCESS_MIN_STEPS, Math.max(PROCESS_MIN_STEPS, rules.stepsMax), STEP_MIN_WORDS);
   const maxStats = maxCount("statLabel", rules, visual, 2, Math.max(2, rules.statsMax), STAT_LABEL_MIN_WORDS);
   const maxTableRows = rules.tableRows;
-  const maxTableCols = maxCount("tableCell", rules, visual, 2, Math.max(2, rules.tableCols), TABLE_CELL_MIN_WORDS, maxTableRows);
+  const maxTableCols = maxCount("tableCell", rules, visual, 2, Math.max(2, rules.tableCols), tableCellMinWords(rules), maxTableRows);
   const maxColItems = maxCount("colItem", rules, visual, COL_MIN_ITEMS, SLIDE_LIMITS.colItems, COL_MIN_WORDS);
   const stepRange = (n: number) => range(Math.round(unit * 0.7), STEP_MIN_WORDS + 2, fitWords("stepText", rules, visual, n), 0.6);
   const stepTextBy: Record<number, WordRange> = {};
@@ -501,7 +512,14 @@ export function wordTargetLines(rules: BodyRules, visual?: SlideVisual): string[
     `— twoCol/compare: har ustunda ${colItems} band, har band ${fmtRange(t.colItem)} so‘z; ustun sarlavhasi (leftTitle/rightTitle) ≤ ${t.colTitleMax} so‘z;`,
     `— process: ${steps} bosqich; har bosqich text: ${stepTexts} so‘z;`,
     `— stats: ${t.maxStats} tagacha karta, har label ≤ ${t.statLabelMax} so‘z;`,
-    `— table: ${t.maxTableCols} tagacha ustun, ${t.maxTableRows} tagacha qator, katak ≤ ${t.tableCellMax} so‘z;`,
+    /*
+     * Qator soni POLI 3 (AUDIT-8): faqat yuqori chegara («N tagacha»)
+     * so'ralganda model 2 qatorli jadval qaytarar, jadval slaydning yuqori
+     * uchdan birida qolardi (2 dan kami esa `normalizeSlide` da bandlarga
+     * tushadi). `maxTableRows` har auditoriyada ≥ 4 — pol shift bilan zid emas.
+     * Katak so'zi — P3 N2: kattalar uchun kamida 3 so'z (`tableCellMinWords`).
+     */
+    `— table: ${t.maxTableCols > 2 ? `2–${t.maxTableCols}` : "AYNAN 2"} ustun, ${t.maxTableRows > 3 ? `3–${t.maxTableRows}` : `AYNAN ${t.maxTableRows}`} qator, katak ${fmtRange({ min: Math.min(tableCellMinWords(rules), t.tableCellMax), max: t.tableCellMax })} so‘z;`,
     `— section: subtitle ${fmtRange(t.sectionSubtitle)} so‘z, bo‘sh qolmasin;`,
     `— closing: subtitle ${fmtRange(t.closingSubtitle)} so‘z;`,
     `— quote: ${fmtRange(t.quote)} so‘z (haqiqiy iqtibos bo‘lsa — aynan asl matn); quoteBy — faqat muallif (≤ ${t.quoteByMax} so‘z), tavsif emas;`,
@@ -647,10 +665,15 @@ function list(v: unknown, n: number, max: number): string[] {
  * (katta-kichik harfsiz) bir xil bo'lishi shart. Kesilgan variantni
  * to'ldirish ham, sig'maydiganini qisqartirish ham o'tadi; boshqa
  * variantning matnini shu o'ringa qo'yish (javob kalitini buzish) — yo'q.
+ *
+ * Qisqartirish ham TO'LIQ bo'lsin: yangi matn kamida min(asl uzunligi,
+ * ⌈0.5 · qopqoq⌉) belgi (qayta sharh N1 — 178 belgilik variant «Am» ga
+ * qisqartirilsa ham 2 belgili umumiy bosh bilan o'tib ketardi).
  */
-function samePrefix(orig: string, next: string): boolean {
+function samePrefix(orig: string, next: string, cap: number): boolean {
   const a = norm(orig.replace(/…\s*$/u, ""));
   const b = norm(next.replace(/…\s*$/u, ""));
+  if (b.length < Math.min(a.length, Math.ceil(0.5 * cap))) return false;
   const k = Math.ceil(REPAIR_PREFIX_SHARE * Math.min(a.length, b.length));
   return k > 0 && a.slice(0, k) === b.slice(0, k);
 }
@@ -737,13 +760,13 @@ function mergeRepair(orig: SlideModel, raw: Record<string, unknown>, rules: Body
             continue;
           }
           const next = clipTo(String(o.options[k] ?? ""), cap);
-          if (!next || !samePrefix(was, next)) return null;
+          if (!next || !samePrefix(was, next, cap)) return null;
           options.push(next);
         }
         let q = orig_[j].q;
         if (clippedAt(q, SLIDE_LIMITS.quizQ) && o.q) {
           const next = clipTo(String(o.q), SLIDE_LIMITS.quizQ);
-          if (!samePrefix(q, next)) return null;
+          if (!samePrefix(q, next, SLIDE_LIMITS.quizQ)) return null;
           q = next;
         }
         quiz.push({ q, options, answer: orig_[j].answer });

@@ -90,3 +90,83 @@ The tests fail before the fix and pass after it (red→green). Mutation plausibi
    keeps `plan` (the bare-`base`/subtitle branch of `convertLayout`). Also add one undo round trip
    `apply(apply(doc, ops), inverseOps(doc, ops)) deepEqual doc` on a slide that has `plan`. This locks the
    `inverseOps`→`set` path end to end.
+
+---
+
+# W7 review — 913ffaf
+
+Commit `913ffaf` on `worktree-agent-a0d5632d4caac1626` (base slides-3 `720814e`, with P3's `limitsFor`).
+Claim: in `slide-edit.ts`, the editor now clips steps/stats/table/quiz text through `limitsFor(rules, counts)` and
+takes its count guards from `rules.*Max`, in `writeSlideField`, `sanitizeSlideModel` and `convertLayout`.
+
+## Verdict: CHANGES (1 required, merge-blocking; 2 optional)
+
+The wiring does what the commit says. Merged alone, though, it makes the editor **stricter than the generator**.
+The result is that a one-character edit, or any undo, on an ordinary generated process or table slide silently
+deletes content.
+
+## What checks out
+
+- **Static uses removed.** `grep SLIDE_LIMITS.(stepText|stepTitle|statLabel|tableCell|tableHeader*|quizOption|stepsMax|statsMax|tableCols|tableRows)`
+  in `slide-edit.ts` finds only the default parameters of `splitStat`/`splitStep` (`:460`, `:471-472`).
+  `canConvert` is the only caller that uses those defaults, and it only checks for null and throws the value away.
+  The `quizOptions` (=4) uses are structural and correct.
+- **Consumers of `EditRules`.** The only places that build it are `applyDocOps` (`buildSlideDeck(doc).bodyType`, the
+  full `BodyRules`) and `SlideEditor.tsx:331` `listCap(slide, field, bodyType)`, where `bodyType` is also the full
+  `BodyRules`. `lib/server/edit-adapters.ts:79` and `components/files/useSlideEdit.ts:53` both reach it through
+  `applyDocOps`. Nothing passes the old narrow type. `rules.*Max` is never larger than the static cap
+  (`countRules`: 3/3/3/4 or 4/4/4/5), so using `rules.stepsMax` directly instead of `limitsFor(...).stepsMax` is
+  equivalent.
+- **Count, then clip.** `convertLayout` (`:627-633`) and `sanitizeSlideModel` (`:746`, `:761`, `:779`) slice the
+  count first and then clip at that count.
+- **`canConvert` unaffected.** It still checks every item in the pool. `convertLayout`'s stats path now slices
+  before calling `splitStat`, which gives the same result because `canConvert` has already guaranteed every item splits.
+- **Tests.** `tests/slide-edit.test.mts` passes **68/68** (one heavy run). The 8 new tests compare school_1_4 against
+  bachelor, so reverting a clip to `SLIDE_LIMITS` would fail the "narrow < wide" assertions. That matches the claimed mutation.
+
+## CHANGES
+
+1. **(required, merge-blocking) Editor ⊄ generator: edits and undo destroy generated content.**
+   `normalizeSlide` in slides-3 (`lib/generation/slide-write.ts:138`, lines ~218/232/238/273, `STEP_TEXT_MAX =
+   SLIDE_LIMITS.stepText`) still accepts **5 steps × 160 chars, 5 columns × 6 rows** from the model. The contract
+   comment at `slide-quality.ts:355-365` ("generatsiya ⊆ tahrir"; P1 was to wire `normalizeSlide` to `rules`
+   counts and `clipLimit`) has not been implemented, and none of the decks already in the DB were built under it.
+   W7 now clips all of these, even for bachelor (`rules` = minPt 15, stepsMax 4, tableCols 4, tableRows 5;
+   `limitsFor(rules,{steps:5}).stepText` = 30).
+   Probe on the W7 tree (bachelor `lecture` deck, a `notes` edit, then undo via `inverseOps`):
+   - process, 5 steps × 109 chars → after undo **4 steps × 50 chars** (round trip `false`)
+   - table 5×6 → after undo **4×5** (a column and a row lost; round trip `false`)
+   - stats with 4 cards: round trip `true`
+   The same happens with no undo at all. Fixing a typo in step 1 of a generated 5-step slide goes through
+   `writeSlideField` (`:353`, count 5 → stepText 30), so that step's 109 characters come back as about 30 plus "…".
+   This breaks the documented invariant `apply(apply(doc,ops), inverseOps(doc,ops)) = doc`.
+   Fix (owner W7, with the P1 area for the generator):
+   (a) wire `normalizeSlide` to `rules.*Max` + `clipLimit`/`limitsFor` (the P3 contract) **before or together
+   with** W7, so that new decks satisfy generation ⊆ edit;
+   (b) for decks that already exist, never let the editor shrink content it did not change:
+   - keep `sanitizeSlideModel` (the channel for undo, redo, delete-undo and restore through `set`/`insert`) on
+     the static `SLIDE_LIMITS` caps for both counts and text, since it is a safety filter and not the fit policy;
+   - in `writeSlideField`, clip the edited field at
+     `max(limitsFor(...), min(staticCap, previousLength))`, so an edit can never make an over-limit field
+     shorter than it already was.
+   Add a regression test: an undo round trip on a bachelor deck with a 5-step process slide and a 5×6 table, `deepEqual`.
+2. (optional) `slide-edit.ts:746-790`: `sanitizeSlideModel` now slices **before** it filters out invalid
+   items. A step without a title or a stat without a value inside the first N therefore pushes a valid later
+   item out, which the old filter-then-slice order kept. `colsN` also counts empty or non-string headers that
+   `list()` then drops, so the limit key is conservative. Filter first, then slice, then clip at the real count.
+3. (optional) `writeSlideField` add-step/add-stat (`:353`, stats new card): the count key goes up by one, but the
+   existing siblings are not re-clipped. The slide can then sit over `limitsFor` at the new count, and the next
+   `set` (undo) clips the siblings. Either re-clip the siblings when adding an item, or state that the layout's
+   `fitSize` covers the difference.
+
+## Client-side note (report only)
+
+The viewer does **not** disagree with the server. It runs the same `applyDocOps`/`inverseOps` optimistically
+(`components/files/useSlideEdit.ts:53-54`) with the same `buildSlideDeck(doc).bodyType`, and it adopts the server's
+doc after each save (`useDocEdit.ts` `adoptKeepingQueue`). `components/viewers/**` has no static `SLIDE_LIMITS` and
+no `maxLength` for the W7 fields. The only pre-check is `SlideEditor.tsx:331` `listCap`, which covers
+bullets/columns and is unchanged. What the user sees: while typing, the inline editor shows the full text, and on
+commit it is clipped with "…". That was already true under the static caps; the clip is just tighter now. An old
+cached bundle clips optimistically at the static caps and then snaps to the server doc on save. Nothing to fix on
+the client. The real visible problem is C1, the loss of content the user never touched, and it belongs to W7 and
+the generator owner, not the viewer.

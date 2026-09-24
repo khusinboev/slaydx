@@ -517,7 +517,21 @@ test("mavjud tuzilma qatorlari saqlandi (WP-0a shartnomasi buzilmasin)", () => {
   assert.match(p, /section slaydda subtitle — BO‘SH QOLMASIN/);
   assert.match(p, /closing slaydda subtitle/);
   assert.match(p, /twoCol va compare/);
-  assert.match(p, /table layout: 2–4 ustun, 3–5 qator/);
+  assert.match(p, /table layout: katak matni qisqa/);
+  /*
+   * AUDIT-25 W6: sonlar `structure.ts` dan olindi — ular «MAKET HAJMI»
+   * blokida (`wordTargetLines`) hisoblanadi. Ikki manba qolsa ular zid
+   * edi («10–15 so‘z» vs hisoblangan oraliq).
+   */
+  assert.match(p, /— section: subtitle \d+–\d+ so‘z/);
+  // Jadval qator POLI 3 (AUDIT-8: 2 qatorli jadval slaydning yuqori uchdan birida qolardi).
+  assert.match(p, /— table: (2–\d+|AYNAN 2) ustun, 3–\d+ qator/);
+  // Sonsiz ko'rsatmalar saqlanadi (W6 faqat SONLARNI olib tashladi).
+  assert.match(p, /«Savollar va muhokama» kabi bo‘sh ibora emas/);
+  assert.match(p, /Bir so‘zli yorliq emas/);
+  assert.match(p, /nima qilinadi va natija nima/);
+  assert.match(p, /Uydirma raqam emas — tasnif, qiyos/);
+  assert.doesNotMatch(p, /20–35 so‘zlik|15–25 so‘zlik|\(10–15 so‘z\)|table layout: 2–4 ustun/);
   assert.match(p, /stats ga uydirma milliard\/tonna\/foiz YOZILMASIN/);
 });
 
