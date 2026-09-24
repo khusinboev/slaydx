@@ -16,6 +16,7 @@
  */
 import { breakerFor } from "../llm/breaker";
 import { backoffMs, parseRetryAfter } from "../llm/retry";
+import { readCapped } from "../safe-fetch";
 
 export type HttpOpts = {
   signal?: AbortSignal;
@@ -31,7 +32,12 @@ export type HttpOpts = {
   retryBaseMs?: number;
   fetchImpl?: typeof fetch;
   headers?: Record<string, string>;
+  /** `getText` tana chegarasi (standart `RESEARCH_MAX_TEXT_BYTES`). */
+  maxBytes?: number;
 };
+
+/** HTML sahifa (lex.uz) tanasining chegarasi — audit EXT-15. */
+export const RESEARCH_MAX_TEXT_BYTES = 2 * 1024 * 1024;
 
 export type HttpJson = { ok: true; status: number; json: unknown } | { ok: false; status: number; error: string };
 export type HttpText = { ok: true; status: number; text: string } | { ok: false; status: number; error: string };
@@ -167,9 +173,17 @@ export async function getJson(url: string, opts: HttpOpts = {}): Promise<HttpJso
 /**
  * GET → matn (HTML). lex.uz hujjat sahifasi JSON bermaydi — tasdiq
  * sarlavha/sana/raqamni HTML dan o'qish orqali bo'ladi.
+ *
+ * Tana `RESEARCH_MAX_TEXT_BYTES` (2 MB) bilan cheklanadi (audit EXT-15):
+ * bir ishda 3 ta parallel sahifa to'liq xotiraga o'qilib regex bilan
+ * skanerlanardi; kattaroq javob — `{ok:false}` (manba tasdiqlanmaydi).
  */
 export async function getText(url: string, opts: HttpOpts = {}): Promise<HttpText> {
-  return request<{ text: string }>(url, "text/html,application/xhtml+xml", opts, async (res) => ({ ok: true, status: res.status, text: await res.text() }));
+  return request<{ text: string }>(url, "text/html,application/xhtml+xml", opts, async (res) => ({
+    ok: true,
+    status: res.status,
+    text: new TextDecoder().decode(await readCapped(res, opts.maxBytes ?? RESEARCH_MAX_TEXT_BYTES)),
+  }));
 }
 
 /** URL so'rov parametrlarini yig'adi; bo'sh qiymatlar tashlanadi. */

@@ -6,6 +6,7 @@ import { extractMeta } from "../lib/generation/meta.ts";
 import { llmGrounded } from "../lib/generation/llm.ts";
 import { resetBreakers } from "../lib/generation/llm/breaker.ts";
 import { runSlideResearch } from "../lib/generation/slide-research.ts";
+import { setSafeFetchLookup } from "../lib/generation/safe-fetch.ts";
 import type { SlideResearch } from "../lib/generation/slide-research.ts";
 import { slideSystem } from "../lib/generation/slide-prompt/index.ts";
 import { SLIDE_TEMPLATE_BY_ID } from "../lib/generation/slide-templates.ts";
@@ -52,6 +53,8 @@ async function withFetch(
   process.env.GEMINI_API_KEY = "test-key";
   delete process.env.XAI_API_KEY;
   const calls: Caught[] = [];
+  // Germetik: redirect xostini haqiqiy DNS siz «ommaviy» deb ochamiz (EXT-15).
+  setSafeFetchLookup(async () => ["142.250.1.1"]);
   globalThis.fetch = (async (url: string, init?: { body?: string; method?: string }) => {
     const req = { url: String(url), body: String(init?.body ?? ""), method: init?.method ?? "GET" };
     calls.push(req);
@@ -61,6 +64,7 @@ async function withFetch(
     await fn(calls);
   } finally {
     globalThis.fetch = realFetch;
+    setSafeFetchLookup(null);
     if (savedGemini === undefined) delete process.env.GEMINI_API_KEY;
     else process.env.GEMINI_API_KEY = savedGemini;
     if (savedXai === undefined) delete process.env.XAI_API_KEY;
@@ -288,6 +292,26 @@ test("Google redirect HEAD bilan haqiqiy manzilga ochiladi", async () => {
       );
       // Dedupdan KEYIN ochiladi: 4 chunk emas, 3 ta HEAD.
       assert.equal(calls.filter((c) => c.method === "HEAD").length, 3, "faqat noyob manbalar ochilsin");
+    },
+  );
+});
+
+test("EXT-15: redirect xosti SUBSTRING bo'yicha emas — begona xost / http ga HEAD yuborilmaydi", async () => {
+  const sneaky = {
+    ...GROUNDING,
+    groundingChunks: [
+      { web: { uri: "https://evil.example/vertexaisearch.cloud.google.com/x", title: "evil.uz" } },
+      { web: { uri: "https://vertexaisearch.cloud.google.com.evil.example/y", title: "evil2.uz" } },
+      { web: { uri: "http://vertexaisearch.cloud.google.com/grounding-api-redirect/zzz", title: "plain.uz" } },
+    ],
+  };
+  await withFetch(
+    (req) => (req.method === "HEAD" ? { ok: true, status: 302, headers: { get: () => "https://ok.uz/" } } : geminiReply(FACTS, sneaky)),
+    async (calls) => {
+      const res = await runSlideResearch(meta({ internetSearch: true }), Date.now() + 60_000);
+      assert.ok(res);
+      assert.equal(calls.filter((c) => c.method === "HEAD").length, 0, `HEAD ketdi: ${calls.filter((c) => c.method === "HEAD").map((c) => c.url).join(", ")}`);
+      assert.ok(res.sources.every((s) => !s.uri.startsWith("https://ok.uz")), "begona redirect ochilmasligi kerak");
     },
   );
 });

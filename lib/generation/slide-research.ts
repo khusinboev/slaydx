@@ -1,6 +1,7 @@
 import { languageDirective } from "./i18n";
 import { llmGrounded } from "./llm";
 import { remainingMs } from "./quality";
+import { safeFetchUrl, UnsafeUrlError } from "./safe-fetch";
 import type { DocMeta } from "./types";
 
 /**
@@ -151,8 +152,22 @@ function dedupSources(list: SlideSource[]): SlideSource[] {
  * Yiqilsa (timeout, tarmoq, 403) — eski `uri` QOLADI. Bu qadam uchun
  * deck qurbon qilinmaydi: umumiy 3 s, hammasi parallel.
  */
+/**
+ * Google redirect xizmatining O'ZIMI (audit EXT-15): ilgari `includes`
+ * — `https://boshqa.xost/vertexaisearch.cloud.google.com/…` ham HEAD
+ * so'rovini olardi. Endi aniq https + xost tengligi.
+ */
+function isGoogleRedirect(uri: string): boolean {
+  try {
+    const u = new URL(uri);
+    return u.protocol === "https:" && u.hostname === REDIRECT_HOST;
+  } catch {
+    return false;
+  }
+}
+
 async function resolveSources(sources: SlideSource[], deadline?: number): Promise<SlideSource[]> {
-  const targets = sources.filter((s) => s.uri.includes(REDIRECT_HOST));
+  const targets = sources.filter((s) => isGoogleRedirect(s.uri));
   if (!targets.length) return sources;
   // Deck muddatidan o'g'irlamaymiz: vaqt qolmagan bo'lsa domen qoladi.
   if (remainingMs(deadline) < REDIRECT_MS) return sources;
@@ -162,12 +177,14 @@ async function resolveSources(sources: SlideSource[], deadline?: number): Promis
   try {
     return await Promise.all(
       sources.map(async (s) => {
-        if (!s.uri.includes(REDIRECT_HOST)) return s;
+        if (!isGoogleRedirect(s.uri)) return s;
         try {
-          const res = await fetch(s.uri, { method: "HEAD", redirect: "manual", signal: ctrl.signal });
-          const loc = res.headers?.get?.("location");
+          // `maxRedirects: 0` — `Location` faqat O'QILADI (havola sifatida), kuzatilmaydi.
+          const res = await safeFetchUrl(s.uri, { method: "HEAD", maxRedirects: 0, signal: ctrl.signal, timeoutMs: REDIRECT_MS });
+          const loc = res.headers.get("location");
           return loc && /^https?:\/\//i.test(loc) ? { title: s.title, uri: loc } : s;
-        } catch {
+        } catch (e) {
+          if (e instanceof UnsafeUrlError) console.warn("[slide-research]", e.message);
           return s;
         }
       }),

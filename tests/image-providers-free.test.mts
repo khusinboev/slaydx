@@ -10,6 +10,11 @@ import { requestPixabayImage, pixabayProvider } from "../lib/generation/image-pr
 import { attachSlideImages } from "../lib/generation/slide-images.ts";
 import type { SlideModel } from "../lib/generation/slide-types.ts";
 import { resetBreakers } from "../lib/generation/llm/breaker.ts";
+import { setSafeFetchLookup } from "../lib/generation/safe-fetch.ts";
+
+// Germetik: stock rasm URL lari `safeFetchUrl` orqali yuklanadi (EXT-15) —
+// haqiqiy DNS so'rovi ketmasin, xostlar «ommaviy» IP ga ochiladi.
+setSafeFetchLookup(async () => ["104.18.1.1"]);
 
 // Stock kvota saqlagichi jarayon bo'yicha (audit EXT-06) — bir testdagi 429
 // keyingi testning Pexels/Pixabay so'rovlarini o'chirib qo'ymasin.
