@@ -100,8 +100,12 @@ function planTitle(s: SlideModel, theme: SlideTheme, index: number, total: numbe
   return { bg: theme.bg, layers };
 }
 
-/** Halqali dumaloq kadr; rasm yo'q bo'lsa — `surface` disk va dekor belgi. */
-function pushRingPhoto(layers: SlideLayer[], s: SlideModel, theme: SlideTheme, slot: Box, mark: string): void {
+/**
+ * Halqali dumaloq kadr; rasm yo'q bo'lsa — `surface` disk va dekor belgi.
+ * `mark` `null` bo'lsa (reja bandisiz bo'lim) belgi o'rnida relsning o'z
+ * TUGUNI turadi — bo'sh disk qolmaydi, raqam ham o'ylab topilmaydi.
+ */
+function pushRingPhoto(layers: SlideLayer[], s: SlideModel, theme: SlideTheme, slot: Box, mark: string | null): void {
   const ring = 0.22;
   layers.push({
     t: "rect",
@@ -114,6 +118,10 @@ function pushRingPhoto(layers: SlideLayer[], s: SlideModel, theme: SlideTheme, s
     return;
   }
   layers.push({ t: "rect", box: { ...slot }, fill: { color: theme.surface }, radius: slot.w / 2 });
+  if (mark === null) {
+    pushNode(layers, theme, slot.x + slot.w / 2, slot.y + slot.h / 2, slot.w * 0.38);
+    return;
+  }
   layers.push({
     t: "text",
     box: { ...slot },
@@ -128,7 +136,7 @@ function pushRingPhoto(layers: SlideLayer[], s: SlideModel, theme: SlideTheme, s
 
 /** Bo'lim — relsdagi BITTA yirik tugun (ichida kadr), ostida bo'lim nomi. */
 function planSection(s: SlideModel, theme: SlideTheme, index: number, total: number): SlidePlan {
-  const { W, H, fitSize, pushFooter } = LAYOUT_KIT;
+  const { W, H, fitSize, pushFooter, planNumber } = LAYOUT_KIT;
   const layers: SlideLayer[] = [];
   layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.bg } });
   const slot = railVisual.photo!.section as Box;
@@ -136,17 +144,27 @@ function planSection(s: SlideModel, theme: SlideTheme, index: number, total: num
   layers.push({ t: "rect", box: { x: 0.85, y: railY - RAIL_H / 2, w: 11.6, h: RAIL_H }, fill: { color: theme.accent, alpha: 0.4 } });
   const cx = slot.x + slot.w / 2;
   [4.6, 6.35, 8.1, 9.85, 11.6].forEach((nx) => pushNode(layers, theme, nx, railY, 0.24));
-  layers.push({
-    t: "text",
-    box: { x: cx - 1.0, y: 0.82, w: 2.0, h: 0.6 },
-    text: two(index + 1),
-    color: theme.accentInk,
-    size: 26,
-    bold: true,
-    align: "center",
-    valign: "middle",
-  });
-  pushRingPhoto(layers, s, theme, slot, two(index + 1));
+  /*
+   * AUDIT-25: raqam — reja bandi (`s.plan`), deka tartibi emas; va
+   * BITTA joyda. Rasm bo'lsa u tugun ustidagi yorliqda (halqa ichini
+   * kadr egallaydi), rasm yo'q bo'lsa — halqaning o'zida. Ilgari rasmsiz
+   * bo'limda bir xil raqam ikki marta (yorliq + halqa) chizilardi.
+   * Reja bandi yo'q bo'lsa yorliq yo'q, halqa ichida rels tuguni.
+   */
+  const no = planNumber(s);
+  if (no && s.image?.url) {
+    layers.push({
+      t: "text",
+      box: { x: cx - 1.0, y: 0.82, w: 2.0, h: 0.6 },
+      text: no,
+      color: theme.accentInk,
+      size: 26,
+      bold: true,
+      align: "center",
+      valign: "middle",
+    });
+  }
+  pushRingPhoto(layers, s, theme, slot, no);
   const x = 0.85;
   const tw = 11.6;
   const titleBox: Box = { x, y: 3.9, w: tw, h: 1.5 };
@@ -253,7 +271,7 @@ function planAgenda(s: SlideModel, theme: SlideTheme, index: number, total: numb
  * tugunlar raqamli va to'q, o'q belgilari yo'q, kartalar chegarasiz.
  */
 function planProcess(s: SlideModel, theme: SlideTheme, index: number, total: number, ctx: PlanCtx): SlidePlan {
-  const { W, H, fitSize, stripCut, pushFooter } = LAYOUT_KIT;
+  const { W, H, fitStepCards, stripCut, pushFooter } = LAYOUT_KIT;
   const layers: SlideLayer[] = [];
   layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.bg } });
   const cut = stripCut(s);
@@ -265,8 +283,32 @@ function planProcess(s: SlideModel, theme: SlideTheme, index: number, total: num
   const gap = 0.34;
   const colW = (tw - gap * (n - 1)) / n;
   const cardY = 2.55;
-  const cardH = 3.35;
   const railY = 2.15;
+  /*
+   * AUDIT-25 A2-04: sarlavha va izoh bitta byudjetni bo'lishadi
+   * (`fitTitleText`) — sarlavha qutisi qat'iy 1.05″ emas, siyoh
+   * balandligida; aksent chiziq va izoh uning ostidan. Karta odatda
+   * 3.35″; biror bosqich izohi eski polda ham sig'masa (4–5 bosqich,
+   * uzun matn) karta kolontitulgacha (6.75) cho'ziladi — toshish yo'q.
+   */
+  const cw = colW - 0.48;
+  const stepFit = (h: number) =>
+    fitStepCards(items, {
+      tw: cw,
+      dw: cw,
+      avail: h - 0.38 - 0.23,
+      gap: 0.39,
+      titleCap: 1.05,
+      bt: ctx.bodyType,
+      title: [19, 12],
+      text: [15, 11],
+    });
+  let cardH = 3.35;
+  let fits = stepFit(cardH);
+  if (fits.some((f) => !f.ok)) {
+    cardH = 6.75 - cardY;
+    fits = stepFit(cardH);
+  }
   const centerOf = (i: number) => x0 + i * (colW + gap) + colW / 2;
   if (n >= 2) {
     layers.push({
@@ -292,25 +334,28 @@ function planProcess(s: SlideModel, theme: SlideTheme, index: number, total: num
       valign: "middle",
       src: { f: "steps", i, k: "n" },
     });
-    const tBox: Box = { x: x + 0.24, y: cardY + 0.38, w: colW - 0.48, h: 1.05 };
+    const f = fits[i];
+    const tBox: Box = { x: x + 0.24, y: cardY + 0.38, w: cw, h: f.tH };
     layers.push({
       t: "text",
       box: tBox,
       text: st.title,
       color: theme.text,
-      size: fitSize(st.title, tBox, 19, 12),
+      // AUDIT-25 A2-04: auditoriya oralig'i (ilgari qat'iy 19→12 pt).
+      size: f.tSize,
       bold: true,
       align: "center",
       src: { f: "steps", i, k: "title" },
     });
-    layers.push({ t: "rect", box: { x: cx - 0.4, y: cardY + 1.58, w: 0.8, h: 0.05 }, fill: { color: theme.accent } });
-    const dBox: Box = { x: x + 0.24, y: cardY + 1.82, w: colW - 0.48, h: cardH - 2.05 };
+    const ruleY = cardY + 0.38 + f.tH + 0.15;
+    layers.push({ t: "rect", box: { x: cx - 0.4, y: ruleY, w: 0.8, h: 0.05 }, fill: { color: theme.accent } });
+    const dBox: Box = { x: x + 0.24, y: ruleY + 0.24, w: cw, h: f.dH };
     layers.push({
       t: "text",
       box: dBox,
       text: st.text,
       color: theme.muted,
-      size: fitSize(st.text, dBox, 15, 11),
+      size: f.dSize,
       align: "center",
       src: { f: "steps", i, k: "text" },
     });

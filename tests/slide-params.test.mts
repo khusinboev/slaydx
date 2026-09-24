@@ -103,10 +103,20 @@ test("yangi maydonlar oddiy formada ham standart qiymat bilan keladi", () => {
   const m = meta({}, slide);
   assert.equal(m.slidePurpose, "general");
   assert.deepEqual(m.blocks, ["reja"]);
-  assert.equal(m.planItems, 5);
-  assert.equal(m.agendaSlide, true);
+  // Moslashuvchan standart (AUDIT-25, egasi qarori): 10 slayd → 3 band.
+  assert.equal(m.planItems, 3);
+  /*
+   * AUDIT-25 A3-01/02: «yuborilmagan» — `undefined` (tur standarti),
+   * aniq tanlov esa o'z qiymatida qoladi: `quizCount: 0` tur standartidagi
+   * testni ham o'chiradi, `agendaSlide: true` rejasiz turga reja qo'shadi.
+   */
+  assert.equal(m.agendaSlide, undefined);
+  assert.equal(meta({ agendaSlide: true }, slide).agendaSlide, true);
+  assert.equal(meta({ agendaSlide: false }, slide).agendaSlide, false);
   assert.equal(m.textVolume, "standart");
-  assert.equal(m.quizCount, 0);
+  assert.equal(m.quizCount, undefined);
+  assert.equal(meta({ quizCount: 0 }, slide).quizCount, 0);
+  assert.equal(meta({ quizCount: 4 }, slide).quizCount, 3, "oraliq qiymat pastkisiga");
   assert.equal(m.internetSearch, false);
   assert.equal(m.speakerNotes, true);
   assert.equal(m.slideImageStyle, "photo");
@@ -138,7 +148,9 @@ test("quizCount faqat ruxsat etilgan sonlarga tushadi; logo id regex bilan", () 
   assert.equal(meta({ logoAssetId: "0123456789ABCDEF01234567" }).logoAssetId, "0123456789abcdef01234567");
   assert.equal(meta({ logoAssetId: "../etc/passwd" }).logoAssetId, "");
   assert.equal(meta({ planItems: 9 }).planItems, 6);
-  assert.equal(meta({ planItems: 1 }).planItems, 3);
+  // AUDIT-25: pol 1 (`effectivePlanItems`) — forma bilan bir xil, kichik dekada 1 band qonuniy.
+  assert.equal(meta({ planItems: 1 }).planItems, 1);
+  assert.equal(meta({ planItems: 0 }).planItems, 1);
   assert.equal(meta({ textVolume: "juda-kop" }).textVolume, "standart");
   assert.equal(meta({ slideImageStyle: "oil" }).slideImageStyle, "photo");
 });

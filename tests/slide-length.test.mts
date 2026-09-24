@@ -220,9 +220,14 @@ test("sig'im: joy yetmasa avval kalit, keyin ortiqcha savollar tashlanadi", () =
   // Javob YO'QOLMAYDI — u izohda qoladi.
   assert.match(tight.slides.find((s) => s.layout === "quiz")!.notes ?? "", /^Javob: /);
 
-  // Bir slayd kengroq deka — kalit qaytadi.
-  const roomy = build({ slideCount: 5, quizCount: 10, speakerNotes: false, slideTemplate: "lecture" }, 10);
-  assert.equal(roomy.slides.length, 5);
+  /*
+   * Joy paydo bo'lgach kalit qaytadi. AUDIT-25: reja bandlari test
+   * guruhidan OLDIN o'rin oladi va `planItems` sig'imga qisiladi — ya'ni
+   * bo'sh o'rin faqat band soni sig'imdan kam bo'lganda qoladi (forma
+   * minimumi 3 band). 8 slayd, 3 band: tana 6 = reja + 3 band + savol + kalit.
+   */
+  const roomy = build({ slideCount: 8, planItems: 3, quizCount: 10, speakerNotes: false, slideTemplate: "lecture" }, 10);
+  assert.equal(roomy.slides.length, 8);
   assert.equal(count(roomy, "answers"), 1, "joy paydo bo'lgach kalit qaytishi kerak");
 });
 
@@ -250,8 +255,9 @@ test("uzunlik quizCount va speakerNotes dan MUSTAQIL — narx bilan bir xil qola
  */
 test("adabiyotlar bloki bilan: quiz → answers → references → closing", () => {
   for (const slideCount of [10, 16, 24]) {
+    // 3 band: 10 slaydda ham kalitga joy qolsin (AUDIT-25 — bandlar birinchi o'rin oladi).
     const b = build(
-      { slideCount, quizCount: 3, speakerNotes: false, blocks: "reja,test,adabiyotlar", slideTemplate: "lecture" },
+      { slideCount, planItems: 3, quizCount: 3, speakerNotes: false, blocks: "reja,test,adabiyotlar", slideTemplate: "lecture" },
       1,
     );
     const tag = `n=${slideCount}`;
@@ -300,10 +306,16 @@ test("titleSlide: false — uzunlik saqlanadi, titul slaydi esa yo'q", () => {
  *
  * Son AYNAN qulflanadi: `TEST_SHARE` (tananing uchdan biri) shifti
  * o'zgarsa yoki yon berish yo'qolsa shu yerda ushlanadi.
+ *
+ * AUDIT-25: reja 3 band — ular test guruhidan OLDIN o'rin oladi
+ * (standart 5 band bilan 10 slaydda savolga bittagina o'rin qolardi;
+ * bu yerda sinaladigan narsa X-5 ulushi, shuning uchun band soni
+ * oshkora).
  */
 test("X-5: 10 slayd + 7 blok + quizCount 3 → 2 savol slaydi, kalit va uzunlik 10", () => {
   const v = {
     slideCount: 10,
+    planItems: 3,
     quizCount: 3,
     speakerNotes: false,
     slidePurpose: "open_lesson",
@@ -352,6 +364,43 @@ test("X-5 supurishi: taqdimot turi standarti bilan ham uzunlik wantSlides ga ten
           if (b.slides.length !== b.want) fails.push(`${tag} → ${b.slides.length} (kutilgan ${b.want})`);
           if (quizCount > 0 && count(b, "quiz") < 1) fails.push(`${tag}: test so'ralgan, quiz slaydi yo'q`);
           if (count(b, "quiz") > Math.max(quizCount, QUIZ_COUNT_FALLBACK)) fails.push(`${tag}: ortiqcha quiz slaydi`);
+        }
+      }
+    }
+  }
+  assert.ok(cases >= 300, `supurish kichik: ${cases}`);
+  assert.deepEqual(fails.slice(0, 10), [], `${fails.length}/${cases} holat:\n  ${fails.slice(0, 10).join("\n  ")}`);
+});
+
+/**
+ * A3-04 — UZUNLIK SHARTNOMASI haqiqiy tur standartlari bilan.
+ *
+ * Yuqoridagi asosiy supurish faqat `general` (`["reja"]`) bilan yurardi —
+ * 9 turning ENG KICHIK blok to'plami. Ko'p bloklik turlarda kichik
+ * dekada bloklar sig'masdi va deka UZAYARDI («Ochiq dars» 4 slayd → 8),
+ * pro slaydda esa narx slayd soniga bog'liq. Endi bloklar formadagidek
+ * TUR STANDARTIDAN keladi (`blocks` yuborilmaydi) va uzunlik doim
+ * `wantSlides`; har reja bandi o'z mazmun slaydini oladi (AUDIT-25 S1).
+ */
+test("A3-04: 9 tur standarti × {4,6,8,10,12,16} × test {0,3,5} — uzunlik = wantSlides, reja qamrovi to'liq", () => {
+  const fails: string[] = [];
+  let cases = 0;
+  for (const slidePurpose of SLIDE_PURPOSES) {
+    for (const slideCount of [4, 6, 8, 10, 12, 16]) {
+      for (const quizCount of [0, 3, 5]) {
+        for (const speakerNotes of [true, false]) {
+          cases += 1;
+          const meta = extractMeta(pro, { topic: "Suv aylanishi", slideCount, quizCount, speakerNotes, slidePurpose });
+          const tpl = resolveDeckTemplate(meta);
+          const beats = deckBeats(meta, tpl);
+          const b = build({ slideCount, quizCount, speakerNotes, slidePurpose }, Math.max(1, quizCount));
+          const tag = `${slidePurpose}/n=${slideCount}/quiz=${quizCount}/izoh=${speakerNotes}`;
+          if (b.slides.length !== b.want || b.want !== slideCount) fails.push(`${tag} → ${b.slides.length} (kutilgan ${slideCount})`);
+          if (quizCount > 0 && count(b, "quiz") < 1) fails.push(`${tag}: test so'ralgan, quiz slaydi yo'q`);
+          if (quizCount === 0 && count(b, "quiz") > 0) fails.push(`${tag}: «Testsiz» — quiz chiqdi`);
+          for (let i = 1; i <= meta.planItems; i += 1) {
+            if (!beats.some((x) => x.plan === i && x.layout !== "section")) fails.push(`${tag}: ${i}-bandning mazmun slaydi yo'q`);
+          }
         }
       }
     }

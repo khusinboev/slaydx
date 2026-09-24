@@ -314,6 +314,23 @@ test("apply: maket o'zgarganda rasm rasm joyi bo'yicha saqlanadi yoki tushadi", 
   assert.ok(checked >= 3, `kamida uchta o'girish sinalishi kerak, sinaldi: ${checked}`);
 });
 
+// AUDIT-25 P7: `layout` op `convertLayout` → `baseOf` orqali slaydni QAYTA quradi — `plan` shu
+// oq-ro'yxatdan ham tushib qolmasligi kerak (bo'lim raqami maket o'zgarganda ham saqlanadi).
+test("apply: maket o'girilganda reja bandi (plan) saqlanadi", () => {
+  const doc = docOf([{ ...bullets, plan: 2 }]);
+  const conv = apply(doc, [{ op: "layout", index: 0, layout: "process" }]);
+  assert.equal(conv.slides![0].plan, 2, "layout op plan ni tashlab yubordi");
+});
+
+// `convertLayout` ning YALANG'OCH tana/subtitle shoxobchasi (`title`/`quote` → `section`/`closing`)
+// ham `baseOf` orqali quriladi — shu yo'l alohida sinaladi (bullets→process yuqorida stats/steps
+// shoxobchasidan o'tadi, bu esa oxirgi `{...base, subtitle}` shoxobchasidan).
+test("apply: title→section o'girilganda ham reja bandi (plan) saqlanadi", () => {
+  const doc = docOf([{ id: "s0", layout: "title", title: "Muqova", plan: 4 }]);
+  const conv = apply(doc, [{ op: "layout", index: 0, layout: "section" }]);
+  assert.equal(conv.slides![0].plan, 4, "title→section (bare-base/subtitle shoxobchasi) plan ni tashlab yubordi");
+});
+
 test("apply: add — hujjat tilidagi «Yangi slayd», footer qo'shnidan", () => {
   const doc = docOf([{ ...bullets, footer: "Kolontitul" }, table]);
   const added = apply(doc, [{ op: "add", after: 0 }]);
@@ -338,6 +355,20 @@ test("apply: insert/set sanitizatsiyadan o'tadi", () => {
   assert.equal("evil" in ins.slides![1], false, "oq-ro'yxatdan tashqari maydon tushmaydi");
   assert.equal(ins.slides![1].id, "s1", "id qayta raqamlanadi");
   assert.match(failure(doc, [{ op: "set", index: 0, slide: { layout: "yo‘q", title: "T" } as unknown as SlideModel }]).error, /yaroqsiz/);
+});
+
+// AUDIT-25 P7 — DEFEKT: ko'ruvchi bandni tahrirlaganda («matn tahrirlagichdan chiqish»)
+// klient BUTUN slaydni {op:"set", slide} bilan qaytaradi — `plan` shu yo'lda YO'QOLARDI,
+// chunki `sanitizeSlideModel` oq-ro'yxatda yo'q edi. `insert` (masalan slaydni nusxalash /
+// undo orqali qaytarish) ham xuddi shu yo'ldan o'tadi.
+test("apply: set/insert reja bandini (plan) yo'qotmaydi", () => {
+  const doc = docOf([{ ...bullets, plan: 3 }]);
+  const edited = apply(doc, [{ op: "set", index: 0, slide: { ...doc.slides![0], title: "Tahrirlangan" } }]);
+  assert.equal(edited.slides![0].plan, 3, "«set» plan ni tashlab yubordi");
+  assert.equal(edited.slides![0].title, "Tahrirlangan");
+
+  const ins = apply(doc, [{ op: "insert", index: 1, slide: { id: "sX", layout: "bullets", title: "Kirdi", bullets: ["B."], plan: 1 } }]);
+  assert.equal(ins.slides![1].plan, 1, "«insert» plan ni tashlab yubordi");
 });
 
 test("apply: oxirida sections qayta yig'iladi", () => {
@@ -378,6 +409,14 @@ test("inverse: har op turi uchun aylanma tenglik", () => {
   roundTrip(doc, [{ op: "insert", index: 1, slide: { id: "sX", layout: "bullets", title: "Kirdi", bullets: ["Band."] } }], "insert");
   roundTrip(doc, [{ op: "set", index: 0, slide: { id: "sX", layout: "bullets", title: "Almashdi", bullets: ["Band."] } }], "set");
   roundTrip(doc, [{ op: "reorder", order: [4, 0, 3, 1, 2] }], "reorder");
+});
+
+// AUDIT-25 P7: undo — reja bandi (plan) bo'lgan slaydda ham aylanma tenglik saqlanishi kerak
+// (teskari `set` `sanitizeSlideModel` orqali o'tadi — aynan shu yerda `plan` yo'qolgan bo'lardi).
+test("inverse: reja bandi (plan) bo'lgan slaydda undo aylanma tengligi", () => {
+  const doc = docOf([{ ...bullets, plan: 3 }, table]);
+  roundTrip(doc, [{ op: "text", index: 0, src: { f: "title" }, value: "Yangi sarlavha" }], "text (plan bilan)");
+  roundTrip(doc, [{ op: "layout", index: 0, layout: "process" }], "layout (plan bilan)");
 });
 
 test("inverse: ketma-ket operatsiyalar teskari TARTIBDA qaytariladi", () => {
@@ -424,6 +463,21 @@ test("sanitize: rasm faqat O'Z aktividan", () => {
   assert.equal(alien?.image, undefined);
 });
 
+// AUDIT-25 P7: `plan` (reja bandi, 1-asosli) oq-ro'yxatdan TUSHIB QOLMASLIGI kerak —
+// aks holda ko'ruvchida "set"/"insert" bilan tahrirlangan slaydning agenda↔plan bog'i uziladi.
+test("sanitize: reja bandi (plan) saqlanadi, yaroqsiz qiymat tashlanadi", () => {
+  const kept = sanitizeSlideModel({ layout: "bullets", title: "T", bullets: ["B"], plan: 3 }, GEN, rules);
+  assert.equal(kept?.plan, 3, "musbat butun son saqlanishi kerak");
+  for (const bad of [0, -1, 1.5, "3", 100, NaN, Infinity]) {
+    const s = sanitizeSlideModel({ layout: "bullets", title: "T", bullets: ["B"], plan: bad }, GEN, rules);
+    assert.equal(s?.plan, undefined, `yaroqsiz plan (${bad}) tashlanishi kerak edi`);
+  }
+  // Chegara: 99 saqlanadi, 100 tashlanadi.
+  assert.equal(sanitizeSlideModel({ layout: "bullets", title: "T", plan: 99 }, GEN, rules)?.plan, 99);
+  // Idempotent: ikkinchi marta sanitizatsiya qilinganda plan yo'qolmaydi.
+  assert.equal(sanitizeSlideModel(kept, GEN, rules)?.plan, 3);
+});
+
 test("sanitize: jadval kataklari FILTRLANMAYDI, qator ustunga tenglashadi", () => {
   const s = sanitizeSlideModel(
     { layout: "table", title: "T", table: { headers: ["A", "B", "C"], rows: [["", "b", "c"], ["a2"]] } },
@@ -467,6 +521,15 @@ test("parse: chart:\"yes\" — TIP xatosi, jim tashlanmaydi", () => {
   assert.equal(r.ok, false);
   assert.match((r as { error: string }).error, /slide/);
   assert.equal(parseDocOps([{ op: "set", index: 0, slide: { layout: "stats", title: "T", chart: true } }]).ok, true);
+});
+
+// AUDIT-25 P7: `plan` klient JSON dan `slideShapeOk` tip tekshiruvidan o'tishi kerak —
+// noto'g'ri TIP (satr) 400 bilan rad etiladi, to'g'ri son esa qabul qilinadi.
+test("parse: plan:\"3\" — TIP xatosi, son esa qabul qilinadi", () => {
+  const bad = parseDocOps([{ op: "set", index: 0, slide: { layout: "bullets", title: "T", plan: "3" } }]);
+  assert.equal(bad.ok, false);
+  assert.match((bad as { error: string }).error, /slide/);
+  assert.equal(parseDocOps([{ op: "set", index: 0, slide: { layout: "bullets", title: "T", plan: 3 } }]).ok, true);
 });
 
 test("parse: 51 operatsiya va 4000+ belgi rad etiladi", () => {

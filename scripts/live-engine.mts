@@ -41,6 +41,7 @@ import { wordCount } from "../lib/generation/quality.ts";
 import { slideNotes } from "../lib/generation/slide-layout.ts";
 import { pdfAvailable, toPdf } from "../lib/server/pdf.ts";
 import { TOOL_BY_ID } from "../lib/tools.ts";
+import { effectivePlanItems, planCapacity } from "../lib/generation/slide-params.ts";
 import { kindOf, type AcademicDoc, type BuiltFile } from "../lib/generation/types.ts";
 import { verifyCitations } from "../lib/generation/research/verify.ts";
 import { factNumbers } from "../lib/generation/article/guard.ts";
@@ -52,6 +53,7 @@ import type { FormValues } from "../lib/types.ts";
 import { countGridCrossings } from "../lib/generation/games/crossword/review.ts";
 import { CROSSWORD_SECTION_IDS } from "../lib/generation/games/crossword/engine.ts";
 import { GAME_LIMITS } from "../lib/generation/games/types.ts";
+import { auditSlideDoc } from "./slide-audit.mts";
 import sharp from "sharp";
 
 type Check = { label: string; ok: boolean; detail: string };
@@ -651,6 +653,335 @@ function infographicCase(): Case {
   };
 }
 
+/**
+ * `scripts/slide-audit.mts` (AUDIT-25 P5) — reja qamrovi, tartib raqami
+ * sizishi, uydirma raqamlar, yupqa mazmun, blok tartibi ustidan bitta
+ * o'qish. Har xil `kind` bitta ALOHIDA "✘" bandiga aylanadi (nuqson
+ * bo'lmasa — bitta "✔ slide-audit"), ya'ni `slide`/`pro-slide`
+ * holatlarining checks ro'yxati yiqilish sababini ANIQ ko'rsatadi.
+ */
+function slideAuditChecks(doc: AcademicDoc): Check[] {
+  const { issues } = auditSlideDoc(doc);
+  if (issues.length === 0) return [ok("slide-audit", true, "reja/mazmun nuqsonsiz")];
+  const kinds = Array.from(new Set(issues.map((i) => i.kind)));
+  return kinds.map((kind) => {
+    const forKind = issues.filter((i) => i.kind === kind);
+    const detail = forKind.map((i) => `#${i.slide || "?"} ${i.detail}`).join(" | ");
+    return ok(`slide-audit:${kind}`, false, detail.length > 240 ? `${detail.slice(0, 240)}…` : detail);
+  });
+}
+
+/**
+ * Slayd holatlari (AUDIT-25 P5) — `slide`/`pro-slide` PARITET keyslari
+ * (yuqorida edi, endi shu yerga ko'chdi) + egasining haqiqiy
+ * foydalanish naqshlarini oynalaydigan yangi 5 ta: dars/ma'ruza/hisobot
+ * (oddiy slayd), ochiq dars (pro) va min-slayd sig'im qisqartirishi
+ * (pro). Har biri `slideAuditChecks` bilan tugaydi — S1–S4 (AUDIT-25 §1)
+ * regressiyaga qaytmasligi shu orqali kafolatlanadi.
+ */
+function slideCases(): Case[] {
+  return [
+    {
+      /*
+       * Pro-slayd: har parametr ta'sir qilishi shart (AUDIT-9). Bu keys
+       * brifni to'liq beradi — auditoriya, tur, bloklar, test, internet,
+       * izohsiz → «Javoblar» slaydi, logo yo'q (worker beradi).
+       */
+      name: "pro-slide",
+      tool: "pro-slide",
+      budgetMs: 400_000,
+      values: {
+        topic: "Orol dengizi fojiasi va uni tiklash choralari",
+        slideAudience: "school_8_9",
+        slidePurpose: "open_lesson",
+        blocks: "reja,maqsadlar,motivatsiya,amaliyot,test,uyga_vazifa,adabiyotlar",
+        planItems: 4,
+        slideCount: 10,
+        subject: "Geografiya",
+        language: "uz",
+        slideImageStyle: "illustration",
+        author: "Karimova Nilufar",
+        position: "Geografiya o‘qituvchisi",
+        organization: "Toshkent shahar 12-maktab",
+        keyIdeas: "Orol qurishi inson faoliyati oqibati\nOrolbo‘yida saksovul ekish\nSuvni tejash har kimga bog‘liq",
+        localExamples: true,
+        internetSearch: true,
+        quizCount: 3,
+        speakerNotes: false,
+        titleSlide: true,
+        agendaSlide: true,
+        textVolume: "standart",
+      },
+      checks: (file) => {
+        const slides = file.doc.slides ?? [];
+        const layouts = slides.map((s) => s.layout);
+        const research = file.doc.slideResearch;
+        const quiz = slides.filter((s) => s.layout === "quiz");
+        const leaked = quiz.filter((s) => (s.quiz ?? []).length === 0);
+        return [
+          ok("slaydlar soni", slides.length === 10, `${slides.length} / 10`),
+          ok("reja bandlari", (slides.find((s) => s.layout === "agenda")?.bullets?.length ?? 0) === 4, `${slides.find((s) => s.layout === "agenda")?.bullets?.length ?? 0} band`),
+          ok("test slaydi", quiz.length >= 1 && leaked.length === 0, `${quiz.length} ta quiz, bo'sh: ${leaked.length}`),
+          ok("javoblar slaydi", layouts.includes("answers"), layouts.join(" › ")),
+          ok("adabiyotlar", layouts.includes("references"), ""),
+          ok("internet manbalari", !!research && research.sources.length > 0, `${research?.sources.length ?? 0} manba, ${research?.queries.length ?? 0} so'rov`),
+          /*
+           * Izoh o'chiq bo'lsa javoblar `notes` da QOLADI (ular «Javoblar»
+           * slaydidan tashqari zaxira), lekin FAYLGA tushmasligi kerak —
+           * shuni `slideNotes` bilan tekshiramiz, xom maydon bilan emas.
+           */
+          ok("izoh fayldan chiqmaydi", slides.every((s) => slideNotes(s, false) === ""), ""),
+          ok("rasm bor", slides.some((s) => !!s.image), `${slides.filter((s) => !!s.image).length} rasm`),
+          ok("footer", slides.some((s) => (s.footer ?? "").includes("Karimova")), slides[1]?.footer ?? ""),
+          ...slideAuditChecks(file.doc),
+        ];
+      },
+    },
+    {
+      /*
+       * Oddiy slayd — PARITET keysi: yangi maydonlar (auditoriya, tur,
+       * matn hajmi, test, internet, reja bandlari, izoh) shu vositada
+       * ham ishlashi kerak, narx esa paketlarda qoladi.
+       */
+      name: "slide",
+      tool: "slide",
+      budgetMs: 260_000,
+      values: {
+        topic: "Kasr sonlarni qo‘shish va ayirish",
+        slideAudience: "school_5_7",
+        slidePurpose: "lesson",
+        planItems: 3,
+        quality: "standard",
+        language: "uz",
+        textVolume: "qisqa",
+        quizCount: 3,
+        internetSearch: false,
+        speakerNotes: true,
+        subject: "Matematika",
+        author: "Sobirov Anvar",
+        organization: "45-maktab",
+      },
+      checks: (file) => {
+        const slides = file.doc.slides ?? [];
+        const layouts = slides.map((s) => s.layout);
+        const body = slides.filter((s) => (s.bullets ?? []).length);
+        const chars = body.flatMap((s) => s.bullets ?? []).map((b) => b.length);
+        const avg = chars.length ? Math.round(chars.reduce((a, b) => a + b, 0) / chars.length) : 0;
+        return [
+          ok("slaydlar", slides.length >= 8, `${slides.length} ta`),
+          ok("test slaydi", layouts.includes("quiz"), layouts.join(" › ")),
+          ok("javob izohda", slides.some((s) => /Javob/i.test(s.notes ?? "")), ""),
+          ok("javoblar slaydi YO‘Q", !layouts.includes("answers"), "izoh yoqiq — kalit izohda"),
+          ok("qisqa matn", avg > 0 && avg <= 120, `o‘rtacha ${avg} belgi/band`),
+          ok("maktab shrifti", true, "maket testlarida qulflangan"),
+          ok("manbasiz", !file.doc.slideResearch, "internet o‘chiq"),
+          ...slideAuditChecks(file.doc),
+        ];
+      },
+    },
+    {
+      /* Dars (lesson) — oddiy slayd, 10 ta, 4 bandli reja — eng ko'p uchraydigan haqiqiy foydalanish. */
+      name: "slide-lesson",
+      tool: "slide",
+      budgetMs: 260_000,
+      values: {
+        topic: "Suv aylanish jarayoni tabiatda",
+        slideAudience: "school_5_7",
+        slidePurpose: "lesson",
+        planItems: 4,
+        slideCount: 10,
+        language: "uz",
+        textVolume: "standart",
+        subject: "Tabiatshunoslik",
+        author: "Yusupova Zarina",
+        organization: "22-maktab",
+        titleSlide: true,
+        agendaSlide: true,
+      },
+      checks: (file) => {
+        const slides = file.doc.slides ?? [];
+        const agenda = slides.find((s) => s.layout === "agenda");
+        return [
+          ok("slaydlar soni", slides.length === 10, `${slides.length} / 10`),
+          ok("reja bandlari 4", (agenda?.bullets?.length ?? 0) === 4, `${agenda?.bullets?.length ?? 0} band`),
+          ...slideAuditChecks(file.doc),
+        ];
+      },
+    },
+    {
+      /* Ma'ruza (lecture) — 12 slayd, 5 bandli reja, test YO'Q (lecture standart bloklarida `test` yo'q). */
+      name: "slide-lecture",
+      tool: "slide",
+      budgetMs: 300_000,
+      values: {
+        topic: "Kvant fizikasi asoslari",
+        slideAudience: "students_bachelor",
+        slidePurpose: "lecture",
+        planItems: 5,
+        slideCount: 12,
+        language: "uz",
+        textVolume: "standart",
+        subject: "Fizika",
+        author: "Rahimov Bahodir",
+        organization: "TATU",
+        titleSlide: true,
+        agendaSlide: true,
+      },
+      checks: (file) => {
+        const slides = file.doc.slides ?? [];
+        const layouts = slides.map((s) => s.layout);
+        const agenda = slides.find((s) => s.layout === "agenda");
+        return [
+          ok("slaydlar soni", slides.length === 12, `${slides.length} / 12`),
+          ok("reja bandlari 5", (agenda?.bullets?.length ?? 0) === 5, `${agenda?.bullets?.length ?? 0} band`),
+          ok("test YO'Q (lecture standart blokida test yo'q)", !layouts.includes("quiz"), layouts.join(" › ")),
+          ...slideAuditChecks(file.doc),
+        ];
+      },
+    },
+    {
+      /*
+       * Ochiq dars (pro) — attestatsiya naqshi: izoh o'chiq, internet
+       * o'chiq, 3 ta test. Rasm: `slideImageStyle` reyestrida ("minimal
+       * / illustration / chalk / photo") «rasmsiz» variant YO'Q — shu
+       * sabab rasm YOQIQ qoladi (AUDIT-25 P5 topshirig'i: «"none" bo'lsa
+       * — aks holda rasmni saqlash»); pro-slayd rasm HAR doim urinadi.
+       */
+      name: "pro-slide-open-lesson",
+      tool: "pro-slide",
+      budgetMs: 380_000,
+      values: {
+        topic: "Ozon qatlami va uni asrash",
+        slideAudience: "school_8_9",
+        slidePurpose: "open_lesson",
+        planItems: 4,
+        slideCount: 12,
+        subject: "Kimyo",
+        language: "uz",
+        slideImageStyle: "minimal",
+        author: "Nazarova Feruza",
+        position: "Kimyo o‘qituvchisi",
+        organization: "7-maktab",
+        quizCount: 3,
+        speakerNotes: false,
+        internetSearch: false,
+        titleSlide: true,
+        agendaSlide: true,
+        textVolume: "standart",
+      },
+      checks: (file) => {
+        const slides = file.doc.slides ?? [];
+        const agenda = slides.find((s) => s.layout === "agenda");
+        const quiz = slides.filter((s) => s.layout === "quiz");
+        return [
+          ok("slaydlar soni", slides.length === 12, `${slides.length} / 12`),
+          ok("reja bandlari 4", (agenda?.bullets?.length ?? 0) === 4, `${agenda?.bullets?.length ?? 0} band`),
+          ok("test 3 ta atrofida", quiz.length >= 1, `${quiz.length} quiz slayd`),
+          ok("izoh o'chiq — fayldan chiqmaydi", slides.every((s) => slideNotes(s, false) === ""), ""),
+          ok("internet o'chiq — manba yo'q", !file.doc.slideResearch, ""),
+          ok("rasm YOQIQ (\"none\" varianti yo'q)", slides.some((s) => !!s.image), `${slides.filter((s) => !!s.image).length} rasm`),
+          ...slideAuditChecks(file.doc),
+        ];
+      },
+    },
+    {
+      /* Hisobot (report) — oddiy slayd, 8 ta, 3 bandli reja; standart bloklarda diagramma(stats)+jadval bor. */
+      name: "slide-report",
+      tool: "slide",
+      budgetMs: 240_000,
+      values: {
+        topic: "2025-yil o'quv yili natijalari tahlili",
+        slideAudience: "management",
+        slidePurpose: "report",
+        planItems: 3,
+        slideCount: 8,
+        language: "uz",
+        textVolume: "standart",
+        subject: "Boshqaruv",
+        author: "Tosheva Madina",
+        organization: "14-maktab",
+        titleSlide: true,
+        agendaSlide: true,
+      },
+      checks: (file) => {
+        const slides = file.doc.slides ?? [];
+        const layouts = slides.map((s) => s.layout);
+        const agenda = slides.find((s) => s.layout === "agenda");
+        return [
+          ok("slaydlar soni", slides.length === 8, `${slides.length} / 8`),
+          ok("reja bandlari 3", (agenda?.bullets?.length ?? 0) === 3, `${agenda?.bullets?.length ?? 0} band`),
+          ok("diagramma (stats) bor", layouts.includes("stats"), layouts.join(" › ")),
+          ok("jadval bor", layouts.includes("table"), layouts.join(" › ")),
+          ...slideAuditChecks(file.doc),
+        ];
+      },
+    },
+    {
+      /*
+       * Min-slayd sig'im qisqartirishi (AUDIT-25 §2.3 `planCapacity`):
+       * 4 slayd (PRO_SLIDE_MIN) so'ralib, 6 bandli reja (PLAN_ITEMS_MAX)
+       * so'raladi — buncha band 4 slaydga jismonan sig'maydi. Dvigatel
+       * `planItems`ni sig'imga QISQARTIRISHI kerak (preflight xato EMAS),
+       * natija baribir REJA=MAZMUN shartnomasiga to'liq mos bo'lishi
+       * kerak — buni `slideAuditChecks` (`plan-coverage`) o'zi ushlaydi:
+       * qisqartirilmagan bo'lsa, qolgan reja bandlari mazmunsiz qoladi.
+       */
+      name: "pro-slide-min",
+      tool: "pro-slide",
+      budgetMs: 220_000,
+      values: {
+        topic: "Ma'lumotlar bazasi asoslari",
+        slideAudience: "students_bachelor",
+        slidePurpose: "lecture",
+        /*
+         * REVIEW item 6(b): lecture'ning standart bloklari
+         * `reja,maqsadlar,adabiyotlar` — `adabiyotlar` `YIELDING_BLOCKS`da
+         * yo'q (`slide-blocks.ts:116`), ya'ni 4 slaydda (title+agenda+
+         * closing = 3 tizim o'rni qoladi 1ga) sig'im 0 bo'lib qolar edi —
+         * bu P1'ning [1,0] chekkasini, klemp'ni EMAS sinaydi. `blocks:
+         * "reja"` bilan sig'im 1 bo'ladi: «6 so'ralib, 1gacha qisqartirildi,
+         * 4 slaydda TO'LIQ qamrov» — haqiqiy clamp sinovi.
+         */
+        blocks: "reja",
+        planItems: 6,
+        slideCount: 4,
+        subject: "Informatika",
+        language: "uz",
+        slideImageStyle: "minimal",
+        author: "Qodirov Sardor",
+        organization: "TATU",
+        titleSlide: true,
+        agendaSlide: true,
+        textVolume: "qisqa",
+      },
+      checks: (file) => {
+        const slides = file.doc.slides ?? [];
+        const agenda = slides.find((s) => s.layout === "agenda");
+        const planTotal = agenda?.bullets?.length ?? 0;
+        const v = { tool: "pro-slide", blocks: "reja", slideCount: 4, planItems: 6, titleSlide: true };
+        const expectedPlan = effectivePlanItems(6, planCapacity(v), 4);
+        return [
+          ok("slaydlar soni = 4 (PRO_SLIDE_MIN)", slides.length === 4, `${slides.length} / 4`),
+          /*
+           * REVIEW item 6(a): `planTotal <= 6` chegarasi klemp BO'LMASA ham
+           * o'tardi (`PLAN_ITEMS_MAX` allaqachon 6 bilan cheklaydi — bu
+           * sig'im qisqartirishni SINAMAYDI). `< 6` qat'iy — faqat haqiqiy
+           * qisqartirilganda o'tadi.
+           * P1 birlashgach: kutilgan son AYNAN dvigatel formulasidan —
+           * `effectivePlanItems(6, planCapacity(values), 4)`.
+           */
+          ok(
+            "reja sig'imga qisqartirilgan (= effectivePlanItems)",
+            planTotal === expectedPlan,
+            `${planTotal} band (so'ralgan 6, sig'im ${expectedPlan})`,
+          ),
+          ...slideAuditChecks(file.doc),
+        ];
+      },
+    },
+  ];
+}
+
 const CASES: Case[] = [
   {
     /*
@@ -1099,102 +1430,8 @@ const CASES: Case[] = [
   infographicCase(),
   /* ── 3-dastur (AUDIT-22) — TTS/media (podkast, tabriknoma) ── */
   ...audioCases(),
-  {
-    /*
-     * Pro-slayd: har parametr ta'sir qilishi shart (AUDIT-9). Bu keys
-     * brifni to'liq beradi — auditoriya, tur, bloklar, test, internet,
-     * izohsiz → «Javoblar» slaydi, logo yo'q (worker beradi).
-     */
-    name: "pro-slide",
-    tool: "pro-slide",
-    budgetMs: 400_000,
-    values: {
-      topic: "Orol dengizi fojiasi va uni tiklash choralari",
-      slideAudience: "school_8_9",
-      slidePurpose: "open_lesson",
-      blocks: "reja,maqsadlar,motivatsiya,amaliyot,test,uyga_vazifa,adabiyotlar",
-      planItems: 4,
-      slideCount: 10,
-      subject: "Geografiya",
-      language: "uz",
-      slideImageStyle: "illustration",
-      author: "Karimova Nilufar",
-      position: "Geografiya o‘qituvchisi",
-      organization: "Toshkent shahar 12-maktab",
-      keyIdeas: "Orol qurishi inson faoliyati oqibati\nOrolbo‘yida saksovul ekish\nSuvni tejash har kimga bog‘liq",
-      localExamples: true,
-      internetSearch: true,
-      quizCount: 3,
-      speakerNotes: false,
-      titleSlide: true,
-      agendaSlide: true,
-      textVolume: "standart",
-    },
-    checks: (file) => {
-      const slides = file.doc.slides ?? [];
-      const layouts = slides.map((s) => s.layout);
-      const research = file.doc.slideResearch;
-      const quiz = slides.filter((s) => s.layout === "quiz");
-      const leaked = quiz.filter((s) => (s.quiz ?? []).length === 0);
-      return [
-        ok("slaydlar soni", slides.length === 10, `${slides.length} / 10`),
-        ok("reja bandlari", (slides.find((s) => s.layout === "agenda")?.bullets?.length ?? 0) === 4, `${slides.find((s) => s.layout === "agenda")?.bullets?.length ?? 0} band`),
-        ok("test slaydi", quiz.length >= 1 && leaked.length === 0, `${quiz.length} ta quiz, bo'sh: ${leaked.length}`),
-        ok("javoblar slaydi", layouts.includes("answers"), layouts.join(" › ")),
-        ok("adabiyotlar", layouts.includes("references"), ""),
-        ok("internet manbalari", !!research && research.sources.length > 0, `${research?.sources.length ?? 0} manba, ${research?.queries.length ?? 0} so'rov`),
-        /*
-         * Izoh o'chiq bo'lsa javoblar `notes` da QOLADI (ular «Javoblar»
-         * slaydidan tashqari zaxira), lekin FAYLGA tushmasligi kerak —
-         * shuni `slideNotes` bilan tekshiramiz, xom maydon bilan emas.
-         */
-        ok("izoh fayldan chiqmaydi", slides.every((s) => slideNotes(s, false) === ""), ""),
-        ok("rasm bor", slides.some((s) => !!s.image), `${slides.filter((s) => !!s.image).length} rasm`),
-        ok("footer", slides.some((s) => (s.footer ?? "").includes("Karimova")), slides[1]?.footer ?? ""),
-      ];
-    },
-  },
-  {
-    /*
-     * Oddiy slayd — PARITET keysi: yangi maydonlar (auditoriya, tur,
-     * matn hajmi, test, internet, reja bandlari, izoh) shu vositada
-     * ham ishlashi kerak, narx esa paketlarda qoladi.
-     */
-    name: "slide",
-    tool: "slide",
-    budgetMs: 260_000,
-    values: {
-      topic: "Kasr sonlarni qo‘shish va ayirish",
-      slideAudience: "school_5_7",
-      slidePurpose: "lesson",
-      planItems: 3,
-      quality: "standard",
-      language: "uz",
-      textVolume: "qisqa",
-      quizCount: 3,
-      internetSearch: false,
-      speakerNotes: true,
-      subject: "Matematika",
-      author: "Sobirov Anvar",
-      organization: "45-maktab",
-    },
-    checks: (file) => {
-      const slides = file.doc.slides ?? [];
-      const layouts = slides.map((s) => s.layout);
-      const body = slides.filter((s) => (s.bullets ?? []).length);
-      const chars = body.flatMap((s) => s.bullets ?? []).map((b) => b.length);
-      const avg = chars.length ? Math.round(chars.reduce((a, b) => a + b, 0) / chars.length) : 0;
-      return [
-        ok("slaydlar", slides.length >= 8, `${slides.length} ta`),
-        ok("test slaydi", layouts.includes("quiz"), layouts.join(" › ")),
-        ok("javob izohda", slides.some((s) => /Javob/i.test(s.notes ?? "")), ""),
-        ok("javoblar slaydi YO‘Q", !layouts.includes("answers"), "izoh yoqiq — kalit izohda"),
-        ok("qisqa matn", avg > 0 && avg <= 120, `o‘rtacha ${avg} belgi/band`),
-        ok("maktab shrifti", true, "maket testlarida qulflangan"),
-        ok("manbasiz", !file.doc.slideResearch, "internet o‘chiq"),
-      ];
-    },
-  },
+  /* ── Slayd (AUDIT-25 P5) — paritet 2 + egasining haqiqiy naqshlarini oynalaydigan 5 ta ── */
+  ...slideCases(),
 ];
 
 /** Glossariy atamalari alifbo tartibidami. */
@@ -1385,6 +1622,15 @@ async function runCase(c: Case) {
       for (const ch of ig.review?.checks ?? []) {
         if (ch.level !== "green") process.stdout.write(`   hisobot ${ch.level}: ${ch.id} — ${(ch.detail ?? "").slice(0, 90)}\n`);
       }
+      await writeFile(path.join(OUT, `${c.name}.doc.json`), JSON.stringify(file.doc, null, 2));
+    }
+    /*
+     * Slayd (AUDIT-25 P5, review item 7b): boshqa oilalar kabi `doc.json`
+     * yozamiz — `scripts/slide-audit.mts` shu faylni o'qiydi
+     * (`npm run slide-audit -- eval-out/live`). Buni qo'shmaguncha CLI'ni
+     * jonli chiqish ustida ishlatib bo'lmasdi.
+     */
+    if (file.doc.slides?.length) {
       await writeFile(path.join(OUT, `${c.name}.doc.json`), JSON.stringify(file.doc, null, 2));
     }
     return { name: c.name, ok: checks.every((x) => x.ok), failed: checks.filter((x) => !x.ok) };

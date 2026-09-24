@@ -152,3 +152,67 @@ test("eski hujjat (`doc.teacher` yo'q) ESKI hisobda qoladi", () => {
   const legacyMap = { meta: mapMeta, titlePage: true, toc: false, sections: [], tables: [{ headers: ["A"], rows: Array.from({ length: 24 }, () => ["x"]) }] } as unknown as AcademicDoc;
   assert.deepEqual(deliveredCount(mapMeta, legacyMap), { got: 24, want: 34, unit: "hafta" });
 });
+
+/* ───────────────────────── pro-slide (A3-03) ───────────────────────── */
+
+/**
+ * A3-03 (auditor, `docs/audit-25/A3-structure.md`): `deliveredCount` `meta.toolId`
+ * bo'yicha tarmoqlanadi va `case "pro-slide":` yo'q edi — `default:` ga tushib
+ * `undefined` qaytarardi. `index.ts` esa ikkala vositani ham BIR dvigateldan
+ * chaqiradi («pro-slide ham shu dvigatel»), shuning uchun pro-slide dekasi
+ * (2 000 tanga/slayd, 30 tagacha, AI rasm) va'da qilingandan kam slayd yoki
+ * kam AI rasm bilan yetkazilsa ham HECH QACHON qisman pul qaytmasdi — oddiy
+ * slayd esa aynan shu holatda qaytaradi. Tuzatish: pro-slide `slide` bilan
+ * BIR tarmoqni ishlatadi (slayd soni HAM, rasm HAM) — alohida hisob emas.
+ */
+function proDeck(n: number, images?: { want: number; got: number }): AcademicDoc {
+  const meta = metaOf("pro-slide", { topic: "X", slideCount: 10 });
+  return {
+    meta,
+    titlePage: true,
+    toc: false,
+    sections: [],
+    slides: Array.from({ length: n }, (_, i) => ({ id: `s${i}`, layout: "bullets", title: `S${i}` })),
+    ...(images ? { slideImages: { ...images, blocked: images.want - images.got, skipped: 0, failed: 0 } } : {}),
+  } as unknown as AcademicDoc;
+}
+
+test("pro-slide: 10 va'da, 8 yetkazilsa farq qaytariladi (ilgari `default:` ga tushib undefined edi)", () => {
+  const meta = metaOf("pro-slide", { topic: "X", slideCount: 10 });
+  assert.equal(meta.targetPages, 10, "slayder 10 slayd va'da qiladi");
+
+  assert.deepEqual(deliveredCount(meta, proDeck(8)), { got: 8, want: 10, unit: "slayd" });
+  // To'liq yetkazilganda — `slide` bilan bir xil: qaytarish yo'q.
+  assert.equal(deliveredCount(meta, proDeck(10)), undefined);
+  // Ortiq yetkazish qaytarish sababi emas (`slide` bilan bir xil qoida).
+  assert.equal(deliveredCount(meta, proDeck(12)), undefined);
+});
+
+test("pro-slide: AI rasm kamomadi ham `slide` bilan bir xil naqshda qaytadi", () => {
+  const meta = metaOf("pro-slide", { topic: "X", slideCount: 10 });
+  assert.equal(meta.premiumVisuals, false, "premium paket yo'q — rasm ustamasi 0 (`slide` bilan bir xil)");
+
+  // 10/10 slayd to'liq, lekin AI rasm 8 tadan 0 tasi keldi — HECH NARSA
+  // yetkazilmadi, refundShare'dan qat'i nazar TO'LIQ qaytariladi.
+  const zero = deliveredCount(meta, proDeck(10, { want: 8, got: 0 }));
+  assert.deepEqual(zero, { got: 0, want: 8, unit: "rasm", refundShare: 0 });
+  assert.equal(refundRatio(zero), 1, "AI rasm umuman chiqmasa pul to'liq qaytadi");
+
+  // To'liq yetkazilganda (slayd va rasm ikkalasi ham) qaytarish yo'q.
+  assert.equal(deliveredCount(meta, proDeck(10, { want: 8, got: 8 })), undefined);
+});
+
+test("regressiya: xuddi shu kirishlarda oddiy `slide` xatti-harakati o'zgarmagan", () => {
+  const meta = metaOf("slide", { topic: "X", slideCount: 10 });
+  const deck = (n: number) =>
+    ({
+      meta,
+      titlePage: true,
+      toc: false,
+      sections: [],
+      slides: Array.from({ length: n }, (_, i) => ({ id: `s${i}`, layout: "bullets", title: `S${i}` })),
+    }) as unknown as AcademicDoc;
+
+  assert.deepEqual(deliveredCount(meta, deck(8)), { got: 8, want: 10, unit: "slayd" });
+  assert.equal(deliveredCount(meta, deck(10)), undefined);
+});

@@ -127,27 +127,41 @@ function planTitle(s: SlideModel, theme: SlideTheme, index: number, total: numbe
 
 /** Bo'lim — chapda soyali raqam kartasi, o'ngda nom; fonda uch xira chiziq. */
 function planSection(s: SlideModel, theme: SlideTheme, index: number, total: number): SlidePlan {
-  const { fitSize, pushFooter } = LAYOUT_KIT;
+  const { fitSize, pushFooter, planNumber } = LAYOUT_KIT;
   const layers: SlideLayer[] = [];
   pushPage(layers, theme);
-  [1.55, 3.75, 5.95].forEach((y) => {
+  /*
+   * Panel to'ri: o'rta chiziq sarlavha OSTIDA (sarlavha qutisi 4.15 da
+   * tugaydi, izoh 4.3 dan). Ilgari u 3.75 da turardi va sarlavhaning
+   * oxirgi qatorini ustidan kesib o'tardi (AUDIT-25 ko'z tekshiruvi,
+   * PDF da ko'rindi; raqamli va raqamsiz holatda ham).
+   */
+  [1.55, 4.22, 5.95].forEach((y) => {
     layers.push({ t: "rect", box: { x: 0.85, y, w: 11.6, h: 0.02 }, fill: { color: theme.accent2, alpha: 0.35 } });
   });
-  const numCard: Box = { x: 0.85, y: 2.55, w: 2.2, h: 2.2 };
-  card(layers, theme, numCard);
-  layers.push({ t: "rect", box: { x: numCard.x, y: numCard.y, w: numCard.w, h: 0.09 }, fill: { color: theme.accent }, radius: 0.04 });
-  layers.push({
-    t: "text",
-    box: { ...numCard },
-    text: two(index + 1),
-    color: theme.accentInk,
-    size: 56,
-    bold: true,
-    align: "center",
-    valign: "middle",
-  });
-  const x = 3.45;
-  const tw = 9.0;
+  /*
+   * AUDIT-25: KPI kartasidagi raqam — reja bandi (`s.plan`), deka
+   * tartibi emas. Reja bandi yo'q bo'lsa bo'sh karta chizilmaydi —
+   * sarlavha va izoh karta o'rnini egallab, to'la kenglikka yoyiladi.
+   */
+  const no = planNumber(s);
+  if (no) {
+    const numCard: Box = { x: 0.85, y: 2.55, w: 2.2, h: 2.2 };
+    card(layers, theme, numCard);
+    layers.push({ t: "rect", box: { x: numCard.x, y: numCard.y, w: numCard.w, h: 0.09 }, fill: { color: theme.accent }, radius: 0.04 });
+    layers.push({
+      t: "text",
+      box: { ...numCard },
+      text: no,
+      color: theme.accentInk,
+      size: 56,
+      bold: true,
+      align: "center",
+      valign: "middle",
+    });
+  }
+  const x = no ? 3.45 : 0.85;
+  const tw = no ? 9.0 : 11.6;
   const titleBox: Box = { x, y: 2.55, w: tw, h: 1.6 };
   layers.push({
     t: "text",
@@ -269,7 +283,7 @@ function planAgenda(s: SlideModel, theme: SlideTheme, index: number, total: numb
 
 /** Raqamlar — KPI plitalari: tepada aksent chizig'i, ostida qiymat va yorliq. */
 function planStats(s: SlideModel, theme: SlideTheme, index: number, total: number, ctx: PlanCtx): SlidePlan {
-  const { fitSize, stripCut, pushFooter } = LAYOUT_KIT;
+  const { fitSize, bodyFit, stripCut, pushFooter } = LAYOUT_KIT;
   const layers: SlideLayer[] = [];
   pushPage(layers, theme);
   const cut = stripCut(s);
@@ -290,7 +304,7 @@ function planStats(s: SlideModel, theme: SlideTheme, index: number, total: numbe
       box: valBox,
       text: st.value,
       color: theme.accentInk,
-      size: fitSize(st.value, valBox, 42, 18),
+      size: bodyFit(st.value, valBox, 42, ctx.bodyType, 18, true),
       bold: true,
       align: "center",
       valign: "middle",
@@ -302,7 +316,8 @@ function planStats(s: SlideModel, theme: SlideTheme, index: number, total: numbe
       box: labBox,
       text: st.label,
       color: theme.muted,
-      size: fitSize(st.label, labBox, 15, 11),
+      // AUDIT-25 A2-04: auditoriya oralig'i (ilgari qat'iy 15→11 pt).
+      size: bodyFit(st.label, labBox, 15, ctx.bodyType, 11),
       align: "center",
       valign: "top",
       src: { f: "stats", i, k: "label" },

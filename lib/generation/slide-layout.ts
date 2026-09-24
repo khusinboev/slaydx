@@ -378,15 +378,143 @@ function wrapRows(text: string, perLine: number): number {
   return rows;
 }
 
-function fitSize(text: string, box: Box, base: number, min: number): number {
+function fitSize(text: string, box: Box, base: number, min: number, em = CHAR_EM): number {
   const t = text.trim();
   if (!t) return base;
   for (let size = base; size > min; size -= 1) {
-    const perLine = Math.max(1, Math.floor((box.w * 72) / (size * CHAR_EM)));
+    const perLine = Math.max(1, Math.floor((box.w * 72) / (size * em)));
     const rows = wrapRows(t, perLine);
     if (rows * size * 1.3 <= box.h * 72) return size;
   }
   return min;
+}
+
+/**
+ * QALIN (bold) matnning o'rtacha belgi kengligi, em ulushida.
+ *
+ * `CHAR_EM` (0.55) oddiy yozuv uchun o'lchangan. Liberation Sans Bold
+ * (Arial Bold metrikasi) o'zbekcha matnda o'lchandi (PIL `getlength`,
+ * AUDIT-25): gaplar 0.475–0.49 em, oddiy yozuvda esa o'sha gaplar
+ * 0.435–0.446 em — qalin ≈ 1.09 × oddiy. `CHAR_EM × 1.09 ≈ 0.60`.
+ * 0.55 bilan qalin sarlavha «sig'adi» deb hisoblanar, haqiqatda esa
+ * so'z o'rtasidan bo'linardi (rail: «Kuzatis|h», «Taqqosl|ash»).
+ */
+export const CHAR_EM_BOLD = 0.6;
+
+/**
+ * Bitta SO'Z uchun qo'shimcha zaxira. Gapda keng va tor harflar
+ * o'rtachalashadi, qisqa so'zda esa yo'q: «Maydon» oddiy 0.593, qalin
+ * 0.630 em/belgi (o'rtacha 0.55/0.60 dan 8–5 % keng). 1.1 — shu
+ * tarqoqlikni qoplaydi (sharhlovchi 10–15 % zaxira tavsiya qilgan).
+ */
+const WORD_HEADROOM = 1.1;
+
+/**
+ * Tana matni uchun `fitSize` — AUDITORIYA oralig'ida (AUDIT-25 A2-04).
+ *
+ * `planProcess`/`planStats`/`planTable` (va `rail` bosqichlari, `bold`/
+ * `dashboard` raqam kartalari) shriftni QAT'IY 16→12, 14→11, 14→10 pt
+ * oralig'ida tanlardi — `bodyType.minPt` (Slide Law: 1–4-sinf 24 pt,
+ * maktab ≥ 20) umuman o'qilmasdi, boshqa hamma maket esa o'qiydi. Natija:
+ * bolalar dekasida bosqich matni 11 pt — egasi ko'rgan «process kartalari
+ * mayda». Endi boshlanish `max(dizayn, bodyPt)`.
+ *
+ * Tanlov qoidasi — pastga qarab birinchi mos o'lcham:
+ *   1. matn qutiga SIG'ADI (qatorlar × 1.3 × pt ≤ quti balandligi) VA
+ *   2. eng uzun SO'Z bitta qatorga sig'adi (qalin qatlamda `CHAR_EM_BOLD`,
+ *      so'z uchun `WORD_HEADROOM`) — so'z o'rtasidan bo'linmaydi.
+ * `minPt` gacha mos o'lcham topilsa — o'sha (auditoriya poli saqlanadi).
+ * Topilmasa, shrift `floor` gacha (maketning ESKI qat'iy poli: 12/11/10)
+ * kichrayishda DAVOM etadi — matn hech qachon qutidan chiqmasin. Bu
+ * ataylab: ko'ruvchi (`SlideCanvas`) qutidan chiqqan matnni KESADI
+ * (`overflow: hidden`), PPTX esa TO'KADI (`shrinkText: false`) — ya'ni
+ * toshib ketish «ko'rdim = oldim» ni buzadi.
+ *
+ * Uzunlik yozuv bosqichida (`SLIDE_LIMITS`) auditoriyaga bog'liq emas
+ * (AUDIT-25 sharhi: 1–4-sinfda chegara uzunligidagi matn polda 884 %
+ * gacha toshardi). P3 auditoriya bo'yicha chegaralarni joriy qilgandan
+ * keyin ham bu himoya QOLADI (ikki qavat): tahrir, eski doc_json va
+ * chegaradan o'tgan har qanday matn baribir qutida qoladi.
+ */
+function bodyFit(text: string, box: Box, base: number, bt: BodyRules, floor: number, bold = false): number {
+  const start = Math.max(base, bt.bodyPt);
+  const low = Math.min(floor, bt.minPt);
+  const t = text.trim();
+  if (!t) return start;
+  const em = bold ? CHAR_EM_BOLD : CHAR_EM;
+  const longest = Math.max(...t.split(/\s+/).map((w) => w.length));
+  // Polda ham qatorga sig'maydigan «so'z» (URL, formula, bo'shliqsiz
+  // satr) baribir bo'linadi — u holda so'z sharti shriftni behuda polga
+  // tushirmasin, faqat balandlik hal qiladi. Bu yerda zaxirasiz o'lchov:
+  // zaxira bilan chegaradagi so'z (rail 15 belgili sarlavha) «sig'maydi»
+  // deb topilib, shart butunlay o'chib qolardi.
+  const wordFitsAtLow = longest * low * em <= box.w * 72;
+  for (let size = start; size > low; size -= 1) {
+    const perLine = Math.max(1, Math.floor((box.w * 72) / (size * em)));
+    const fitsH = wrapRows(t, perLine) * size * 1.3 <= box.h * 72;
+    const fitsW = !wordFitsAtLow || longest * size * em * WORD_HEADROOM <= box.w * 72;
+    if (fitsH && fitsW) return size;
+  }
+  return low;
+}
+
+/**
+ * Bosqich kartasi: QALIN sarlavha + uning ostidagi izoh bitta balandlik
+ * byudjetini (`avail`) bo'lishadi (AUDIT-25 A2-04, sharh 1-band).
+ *
+ * Ilgari sarlavha qutisi qat'iy (0.95″) edi: 40 belgili sarlavha uni
+ * to'ldirar, ikki qatorli oqimda izohga 0.5″ qolar va 160 belgili izoh
+ * eski 11 pt polida ham toshardi (5 bosqich, 185 %). Endi sarlavha
+ * shifti (`titleCap`) 0.1″ qadam bilan pasaytiriladi — sarlavha
+ * kichrayadi, izohga joy ochiladi — izoh o'z qutisiga sig'guncha.
+ * Birinchi (eng katta) mos variant olinadi, ya'ni qisqa matnda
+ * natija eskicha. Sarlavha qutisi har doim uning SIYOH balandligi.
+ */
+function fitTitleText(
+  title: string,
+  text: string,
+  o: { tw: number; dw: number; avail: number; gap: number; titleCap: number; bt: BodyRules; title: [number, number]; text: [number, number] },
+): { tSize: number; tH: number; dSize: number; dH: number; ok: boolean } {
+  let last = { tSize: 0, tH: 0, dSize: 0, dH: 0, ok: false };
+  for (let cap = o.titleCap; cap >= 0.3 - 1e-9; cap -= 0.1) {
+    const tSize = bodyFit(title, { x: 0, y: 0, w: o.tw, h: cap }, o.title[0], o.bt, o.title[1], true);
+    const tInk = inkHeight(title, o.tw, tSize, CHAR_EM_BOLD);
+    const tH = Math.max((tSize * 1.3) / 72, tInk);
+    const dH = Math.max(0.3, o.avail - tH - o.gap);
+    const dSize = bodyFit(text, { x: 0, y: 0, w: o.dw, h: dH }, o.text[0], o.bt, o.text[1]);
+    const ok = tInk <= cap + 1e-9 && inkHeight(text, o.dw, dSize) <= dH + 1e-9;
+    last = { tSize, tH, dSize, dH, ok };
+    if (ok) return last;
+  }
+  return last;
+}
+
+type TitleTextOpts = Parameters<typeof fitTitleText>[2];
+type TitleTextFit = ReturnType<typeof fitTitleText>;
+
+/**
+ * Bir qatordagi bosqich kartalari — BIR XIL shrift (AUDIT-25 ko'z
+ * tekshiruvi: har karta o'z o'lchamini tanlaganda «Kuzatish» 20 pt,
+ * yonidagi «Taqqoslash» 15 pt bo'lib, qator notekis ko'rinardi).
+ *
+ * Avval har karta alohida (`fitTitleText`), keyin hammasiga ENG KICHIK
+ * sarlavha va izoh o'lchami, sarlavha qutisi — eng baland siyoh (chiziq
+ * va izoh hamma kartada bir chiziqda). Bu umumiy variant biror kartada
+ * sig'masa (juda notekis matnlar), har karta o'z natijasida qoladi —
+ * tekislik toshmaslikdan muhim emas.
+ */
+function fitStepCards(steps: { title: string; text: string }[], o: TitleTextOpts): TitleTextFit[] {
+  const own = steps.map((st) => fitTitleText(st.title, st.text, o));
+  if (steps.length < 2 || own.some((f) => !f.ok)) return own;
+  const tSize = Math.min(...own.map((f) => f.tSize));
+  const tH = Math.max(...steps.map((st) => Math.max((tSize * 1.3) / 72, inkHeight(st.title, o.tw, tSize, CHAR_EM_BOLD))));
+  const dH = Math.max(0.3, o.avail - tH - o.gap);
+  const dSize = Math.min(
+    ...own.map((f) => f.dSize),
+    ...steps.map((st) => bodyFit(st.text, { x: 0, y: 0, w: o.dw, h: dH }, o.text[0], o.bt, o.text[1])),
+  );
+  const ok = steps.every((st) => inkHeight(st.text, o.dw, dSize) <= dH + 1e-9);
+  return ok ? steps.map(() => ({ tSize, tH, dSize, dH, ok })) : own;
 }
 
 /**
@@ -413,8 +541,8 @@ function listRows(lines: string[], box: Box, size: number): number {
  * «to'la» hisoblanib, blok ko'zga baribir tepada ko'rinardi
  * (AUDIT-8 N-5 ni birinchi urinishda aynan shu «yopgan» edi).
  */
-function inkHeight(text: string, w: number, size: number): number {
-  const perLine = Math.max(1, Math.floor((w * 72) / (size * CHAR_EM)));
+function inkHeight(text: string, w: number, size: number, em = CHAR_EM): number {
+  const perLine = Math.max(1, Math.floor((w * 72) / (size * em)));
   return (wrapRows(text, perLine) * size * 1.3) / 72;
 }
 
@@ -663,6 +791,32 @@ function RIGHT_COL_W() {
 export const SECTION_TOP = 1.15;
 export const SECTION_BOTTOM = 6.5;
 
+/*
+ * P1 (`slide-types.ts`) `SlideModel.plan?: number` ni qo'shguncha maydon
+ * shu yerda kesishma turi bilan o'qiladi; birlashtirishda alias olib
+ * tashlanadi.
+ */
+
+/**
+ * AUDIT-25, 4-qaror — «Raqam faqat rejadan».
+ *
+ * Bo'lim slaydidagi yirik «03» (va hikoya bandlaridagi kicker raqami)
+ * ilgari DEKADAGI TARTIB edi (`index + 1`): reja 4 band bo'lsa ham
+ * 7-slayddagi bo'lim «07» ko'rsatardi — egasi aynan shuni «reja
+ * raqamlari xato, ba'zida shunchaki 3 turadi» deb ko'rgan. Endi raqam
+ * FAQAT `s.plan` dan (1-asosli reja bandi), ikki xonali ko'rinishda.
+ *
+ * `plan` yo'q (titul, eski doc_json, rejaga tegishli bo'lmagan slayd)
+ * yoki yaroqsiz (0, manfiy, kasr, NaN) bo'lsa — `null`: maket raqamni
+ * CHIZMAYDI va bo'sh nishon/quti ham qoldirmaydi (har maket o'zi
+ * qayta joylashtiradi). Raqam modeldan emas — qatlam `src` OLMAYDI.
+ */
+export function planNumber(s: SlideModel): string | null {
+  const n = s.plan;
+  if (typeof n !== "number" || !Number.isInteger(n) || n < 1 || n > 99) return null;
+  return String(n).padStart(2, "0");
+}
+
 /**
  * `magazine` maketidagi bo'lim slaydi: to'la ekran kadr va pastki matn
  * tasmasi.
@@ -689,6 +843,8 @@ function planSectionMagazine(s: SlideModel, theme: SlideTheme, index: number, to
   const img = Boolean(s.image?.url);
   const x = 0.9;
   const tw = W - 1.8;
+  // AUDIT-25: raqam FAQAT rejadan (`planNumber`); yo'q bo'lsa chizilmaydi.
+  const no = planNumber(s);
 
   if (!img) {
     /*
@@ -703,17 +859,25 @@ function planSectionMagazine(s: SlideModel, theme: SlideTheme, index: number, to
      * to'la kenglikdagi ingichka chiziq (jurnal ruknining naqshi).
      * Raqam modeldan emas — shuning uchun `src` OLMAYDI (dekorativ
      * qatlamlar qoidasi, `tests/slide-src.test.mts`).
+     *
+     * AUDIT-25: raqam endi reja bandi (`s.plan`). Reja bandi yo'q bo'lsa
+     * yirik raqam o'rni bo'sh to'q maydon bo'lib qolmasin — rukn chizig'i
+     * blok tepasiga tushadi va butun blok zonada VERTIKAL markazlanadi
+     * (classic bo'lim naqshi).
      */
-    layers.push({
-      t: "text",
-      box: { x, y: 1.05, w: 4.2, h: 1.75 },
-      text: String(index + 1).padStart(2, "0"),
-      color: theme.accent,
-      size: 96,
-      bold: true,
-      valign: "middle",
-    });
-    layers.push({ t: "rect", box: { x, y: 3.25, w: tw, h: 0.02 }, fill: { color: theme.titleMuted, alpha: 0.55 } });
+    const ruleGap = 0.25;
+    if (no) {
+      layers.push({
+        t: "text",
+        box: { x, y: 1.05, w: 4.2, h: 1.75 },
+        text: no,
+        color: theme.accent,
+        size: 96,
+        bold: true,
+        valign: "middle",
+      });
+      layers.push({ t: "rect", box: { x, y: 3.25, w: tw, h: 0.02 }, fill: { color: theme.titleMuted, alpha: 0.55 } });
+    }
 
     /*
      * Matn bloki PASTGA langar tashlaydi — rasmli variantdagi pastki
@@ -725,13 +889,17 @@ function planSectionMagazine(s: SlideModel, theme: SlideTheme, index: number, to
     // Blok hech qachon rukn chizig'idan yuqoriga chiqmasin — shuning
     // uchun qutilar mavjud balandlikka QIRQILADI (uzun sarlavhali
     // chegara holati; `fitSize` poliga urilganda ham chegara ushlanadi).
-    const avail = SECTION_BOTTOM - 3.5 - barH - 0.3 - (s.subtitle ? 0.3 : 0);
+    const top = no ? 3.5 : SECTION_TOP + ruleGap + 0.02;
+    const avail = SECTION_BOTTOM - top - barH - 0.3 - (s.subtitle ? 0.3 : 0);
     const titleSize = fitSize(s.title, { x, y: 0, w: tw, h: 2.0 }, 40, 24);
     const titleH = Math.min(avail * (s.subtitle ? 0.62 : 1), Math.max(0.62, inkHeight(s.title, tw, titleSize)));
     const subSize = s.subtitle ? fitSize(s.subtitle, { x, y: 0, w: tw, h: 1.5 }, 20, 13) : 0;
     const subH = s.subtitle ? Math.min(avail - titleH, Math.max(0.32, inkHeight(s.subtitle, tw, subSize))) : 0;
     const blockH = barH + 0.3 + titleH + (s.subtitle ? 0.3 + subH : 0);
-    const barY = SECTION_BOTTOM - blockH;
+    const barY = no ? SECTION_BOTTOM - blockH : top + Math.max(0, (SECTION_BOTTOM - top - blockH) / 2);
+    if (!no) {
+      layers.push({ t: "rect", box: { x, y: barY - ruleGap, w: tw, h: 0.02 }, fill: { color: theme.titleMuted, alpha: 0.55 } });
+    }
     layers.push({ t: "rect", box: { x, y: barY, w: 1.35, h: barH }, fill: { color: theme.accent } });
     layers.push({
       t: "text",
@@ -763,6 +931,19 @@ function planSectionMagazine(s: SlideModel, theme: SlideTheme, index: number, to
     fill: { color: theme.titleBg, alpha: 0.82 },
   });
   layers.push({ t: "rect", box: { x, y: bandY + 0.35, w: 1.35, h: 0.08 }, fill: { color: theme.accent } });
+  // Reja bandi raqami — aksent tasmaning davomida, rukn yorlig'i kabi.
+  if (no) {
+    layers.push({
+      t: "text",
+      box: { x: x + 1.55, y: bandY + 0.17, w: 1.2, h: 0.44 },
+      text: no,
+      color: theme.titleMuted,
+      size: 18,
+      bold: true,
+      tracking: 2,
+      valign: "middle",
+    });
+  }
   const titleBox: Box = { x, y: bandY + 0.63, w: tw, h: 1.0 };
   layers.push({
     t: "text",
@@ -791,6 +972,7 @@ function planSectionMagazine(s: SlideModel, theme: SlideTheme, index: number, to
 function planSection(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index: number, total: number): SlidePlan {
   if (visual === "magazine") return planSectionMagazine(s, theme, index, total);
   const img = s.image?.url;
+  const no = planNumber(s);
   const layers: SlideLayer[] = [];
   if (img) {
     layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.bg } });
@@ -798,6 +980,19 @@ function planSection(s: SlideModel, theme: SlideTheme, visual: SlideVisual, inde
     photo(layers, img, photoSlot("section")!, 0);
     const x = M + 0.18;
     const tw = LEFT_COL_W();
+    // AUDIT-25: reja bandi raqami sarlavha ustida, kicker kabi.
+    if (no) {
+      layers.push({
+        t: "text",
+        box: { x, y: 1.38, w: 1.6, h: 0.46 },
+        text: no,
+        color: theme.accentInk,
+        size: 20,
+        bold: true,
+        tracking: 2,
+        valign: "middle",
+      });
+    }
     layers.push({
       t: "text",
       box: { x, y: 2.0, w: tw, h: 1.2 },
@@ -856,8 +1051,27 @@ function planSection(s: SlideModel, theme: SlideTheme, visual: SlideVisual, inde
    * markazlashtirish o'lchovda «to'g'ri», PDF da esa hamon tepaga
    * yopishgan blok berardi.
    */
-  const blockH = titleH + 0.26 + ruleH + (s.subtitle ? 0.3 + subH : 0);
-  const y0 = SECTION_TOP + Math.max(0, (SECTION_BOTTOM - SECTION_TOP - blockH) / 2);
+  /*
+   * AUDIT-25: reja bandi raqami (`s.plan`) sarlavha USTIDA kicker kabi
+   * turadi va blokning bir qismi — markazlash uni ham hisobga oladi.
+   * Raqam yo'q bo'lsa uning o'rni ham yo'q (blok yig'iladi).
+   */
+  const noH = no ? 0.46 + 0.18 : 0;
+  const blockH = noH + titleH + 0.26 + ruleH + (s.subtitle ? 0.3 + subH : 0);
+  const top = SECTION_TOP + Math.max(0, (SECTION_BOTTOM - SECTION_TOP - blockH) / 2);
+  if (no) {
+    layers.push({
+      t: "text",
+      box: { x, y: top, w: 1.6, h: 0.46 },
+      text: no,
+      color: theme.accentInk,
+      size: 20,
+      bold: true,
+      tracking: 2,
+      valign: "middle",
+    });
+  }
+  const y0 = top + noH;
   layers.push({
     t: "text",
     box: { x, y: y0, w: tw, h: titleH },
@@ -1974,6 +2188,8 @@ function planStatChart(
    * ustunlar tasma ostiga kirib ketardi.
    */
   zoneW: number,
+  /** Auditoriya shrift oralig'i (AUDIT-25 A2-04). */
+  bt: BodyRules,
 ): void {
   const max = Math.max(...items.map((x) => Math.abs(x.n)), 1);
   /*
@@ -2019,7 +2235,7 @@ function planStatChart(
       box: labBox,
       text: it.label,
       color: ink,
-      size: fitSize(it.label, labBox, 15, 11),
+      size: bodyFit(it.label, labBox, 15, bt, 11),
       valign: "middle",
       src: { f: "stats", i: it.idx, k: "label" },
     });
@@ -2053,9 +2269,10 @@ function planStatChart(
       fill: { color: dense || i === 0 ? theme.accent : theme.accent2 },
       radius: 0.04,
     });
+    const valBox: Box = { x: barX + barMaxW + 0.14, y: cy - 0.06, w: valueW, h: barH + 0.12 };
     layers.push({
       t: "text",
-      box: { x: barX + barMaxW + 0.14, y: cy - 0.06, w: valueW, h: barH + 0.12 },
+      box: valBox,
       text: it.value,
       /*
        * `accentInk` faqat `bg` va `surface` (yorug') ga qarshi
@@ -2063,7 +2280,9 @@ function planStatChart(
        * juftlik — `titleText`/`titleBg`.
        */
       color: dense ? theme.titleText : theme.accentInk,
-      size: 16,
+      // Qiymat odatda qisqa («68%») — auditoriya polida; uzun qiymat
+      // (`statValue` 24 belgi) qutiga sig'guncha kichrayadi (A2-04).
+      size: bodyFit(it.value, valBox, 16, bt, 11, true),
       bold: true,
       valign: "middle",
       src: { f: "stats", i: it.idx, k: "value" },
@@ -2099,7 +2318,7 @@ function planStats(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
   // Diagramma faqat qiymatlar TAQQOSLANADIGAN bo'lsa (bir xil birlik).
   const oneUnit = new Set(numeric.map((x) => statUnit(x.value))).size <= 1;
   if (numeric.length >= 3 && numeric.length === items.length && oneUnit) {
-    planStatChart(s, theme, numeric, layers, ink, dense, 12.25 - cut);
+    planStatChart(s, theme, numeric, layers, ink, dense, 12.25 - cut, ctx.bodyType);
     pushFooter(layers, s, theme, index, total, { x: M + 0.18, w: 12.2 - cut }, dense);
     return { bg, layers };
   }
@@ -2125,7 +2344,7 @@ function planStats(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
       // sahifada `titleMuted` — u `titleBg` ustida O'LCHANGAN juft; `accent`
       // ba'zi palitralarda (legal: zumrad ustida zumrad) ko'rinmas edi.
       color: dense ? theme.titleMuted : theme.accentInk,
-      size: fitSize(st.value, valBox, 30, 15),
+      size: bodyFit(st.value, valBox, 30, ctx.bodyType, 15, true),
       bold: true,
       align: "center",
       valign: "middle",
@@ -2145,7 +2364,7 @@ function planStats(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
       box: labBox,
       text: st.label,
       color: dense ? theme.titleMuted : theme.muted,
-      size: fitSize(st.label, labBox, 15, 11),
+      size: bodyFit(st.label, labBox, 15, ctx.bodyType, 11),
       align: "center",
       valign: "middle",
       src: { f: "stats", i, k: "label" },
@@ -2235,6 +2454,19 @@ function planProcess(s: SlideModel, theme: SlideTheme, visual: SlideVisual, inde
     }
   }
 
+  const stepOpts = {
+    tw: colW - 0.24,
+    dw: colW - 0.28,
+    avail: rowH - 0.72 - 0.17,
+    gap: 0.12,
+    titleCap: 0.95,
+    bt: ctx.bodyType,
+    title: [16, 12] as [number, number],
+    text: [14, 11] as [number, number],
+  };
+  // Har qator o'z ichida bir xil shriftda (`fitStepCards`).
+  const fits = [...fitStepCards(items.slice(0, perRow), stepOpts), ...fitStepCards(items.slice(perRow), stepOpts)];
+
   items.forEach((st, i) => {
     const row = twoRows && i >= perRow ? 1 : 0;
     const col = row === 1 ? i - perRow : i;
@@ -2253,24 +2485,32 @@ function planProcess(s: SlideModel, theme: SlideTheme, visual: SlideVisual, inde
       align: "center",
       src: { f: "steps", i, k: "n" },
     });
-    const tBox: Box = { x: x + 0.12, y: y + 0.72, w: colW - 0.24, h: 0.95 };
+    /*
+     * AUDIT-25 A2-04: shrift auditoriya oralig'ida (`bodyFit`) — ilgari
+     * qat'iy 16→12 / 14→11 pt edi, bolalar dekasida ham. Sarlavha qutisi
+     * endi SIYOH balandligida (ko'pi bilan 0.95″): qisqa sarlavhadan
+     * qolgan joy izoh matniga o'tadi — katta shriftli izoh sig'adi va
+     * kartaning pastki yarmi bo'sh qolmaydi (A2-05).
+     */
+    const { tSize, tH, dSize, dH } = fits[i];
+    const tBox: Box = { x: x + 0.12, y: y + 0.72, w: stepOpts.tw, h: tH };
     layers.push({
       t: "text",
       box: tBox,
       text: st.title,
       color: theme.text,
-      size: fitSize(st.title, tBox, 16, 12),
+      size: tSize,
       bold: true,
       align: "center",
       src: { f: "steps", i, k: "title" },
     });
-    const dBox: Box = { x: x + 0.14, y: y + 1.78, w: colW - 0.28, h: rowH - 1.95 };
+    const dBox: Box = { x: x + 0.14, y: y + 0.72 + tH + 0.12, w: colW - 0.28, h: dH };
     layers.push({
       t: "text",
       box: dBox,
       text: st.text,
       color: theme.muted,
-      size: fitSize(st.text, dBox, 14, 11),
+      size: dSize,
       align: "center",
       src: { f: "steps", i, k: "text" },
     });
@@ -2375,7 +2615,7 @@ function planTable(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
       box,
       text: h,
       color: headInk,
-      size: fitSize(h, box, 15, 11),
+      size: bodyFit(h, box, 15, ctx.bodyType, 11, true),
       bold: true,
       valign: "middle",
       src: { f: "table", k: "header", c: i },
@@ -2414,7 +2654,7 @@ function planTable(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
         box,
         text: cell,
         color: c === 0 ? keyInk : cellInk,
-        size: fitSize(cell, box, 14, 10),
+        size: bodyFit(cell, box, 14, ctx.bodyType, 10, c === 0),
         bold: c === 0,
         valign: "middle",
         src: { f: "table", k: "cell", r, c },
@@ -2593,6 +2833,10 @@ export const LAYOUT_KIT = {
   fitLines,
   listRows,
   inkHeight,
+  bodyFit,
+  fitTitleText,
+  fitStepCards,
+  CHAR_EM_BOLD,
   bulletGap,
   photo,
   stripCut,
@@ -2608,6 +2852,7 @@ export const LAYOUT_KIT = {
   STRIP_W,
   SECTION_TOP,
   SECTION_BOTTOM,
+  planNumber,
   LOGO_BOX,
   LOGO_RESERVE,
   BULLET_GAP_MIN,

@@ -14,13 +14,13 @@ import { isSlideBlockId, type SlideBlockId } from "./slide-blocks";
 import {
   KEY_IDEAS_MAX,
   KEY_IDEA_CHARS,
-  PLAN_ITEMS_DEFAULT,
-  PLAN_ITEMS_MAX,
-  PLAN_ITEMS_MIN,
+  effectivePlanItems,
   PRO_SLIDE_DEFAULT,
   PRO_SLIDE_MAX,
   PRO_SLIDE_MIN,
-  QUIZ_COUNTS,
+  normalizeQuizCount,
+  resolvePlanFlags,
+  planCapacity,
   SLIDE_DEFAULT,
   SLIDE_MAX,
   SLIDE_MIN,
@@ -176,7 +176,41 @@ export function extractMeta(tool: ToolConfig, values: FormValues): DocMeta {
   const textVolumeRaw = s(values, "textVolume", "standart");
   // Oddiy slayd rasmlari DOIM bepul stock (Pexels/Pixabay) — ular faqat `photo` ni biladi; uslub tanlovi pro'da.
   const imageStyleRaw = tool.id === "slide" ? "photo" : s(values, "slideImageStyle", "photo");
-  const quizRaw = clampInt(values.quizCount, 0, 10, 0);
+  /*
+   * `quizCount` / `agendaSlide`: «yuborilmagan» va «aniq tanlangan» ikki
+   * xil narsa (AUDIT-25 A3-01/02). `quizCount: 0` — tur standartidagi
+   * testni ham o'chiradi, `undefined` — standart qoladi; `agendaSlide:
+   * true` — standartida reja yo'q turga ham reja qo'shadi.
+   */
+  // Chiplar faqat PRO formada (reyestrda `blocks` faqat pro-slide) — oddiy forma ham `blocks` yuboradi, lekin u tanlov emas.
+  const blocksSent = tool.id === "pro-slide" && values.blocks !== undefined && values.blocks !== null;
+  const rawQuiz = normalizeQuizCount(values.quizCount);
+  const rawAgenda = values.agendaSlide === true ? true : values.agendaSlide === false ? false : undefined;
+  // Yuborilgan bloklar (pro chiplari) bu ikki bayroqdan USTUN — `resolvePlanFlags`.
+  const { quizCount, agendaSlide } = resolvePlanFlags(blocksSent, blocks, rawQuiz, rawAgenda);
+  /*
+   * Reja bandlari soni dekaga SIG'ADIGAN songa qisiladi (AUDIT-25, 3-qaror):
+   * har band o'z slaydini oladi, deka esa `slideCount` dan uzaymaydi.
+   * Pol 1 — kichik dekada 1–2 band qonuniy (4 slayd → 1). Forma ham AYNAN
+   * `effectivePlanItems` bilan qisadi; yuborilmagan son — slayd soniga
+   * moslashuvchan standart (`defaultPlanItems`). Sig'im kirishi — forma
+   * yuborgan shakl (bloklar faqat yuborilgan bo'lsa), slayd soni esa vosita
+   * standartiga qisilgan (pro 12, oddiy 10).
+   */
+  const planItems = effectivePlanItems(
+    values.planItems,
+    planCapacity({
+      slideCount: slidePages,
+      blocks: values.blocks === undefined || values.blocks === null ? undefined : blocks,
+      tool: tool.id,
+      quizCount: rawQuiz,
+      agendaSlide: rawAgenda,
+      titleSlide: values.titleSlide !== false,
+      internetSearch: values.internetSearch === true,
+      slidePurpose,
+    }),
+    slidePages,
+  );
   /*
    * Rezyume chiqish tili — 18 ta (B-4). Akademik hujjatlarda skelet
    * («Kirish», «Xulosa») faqat uz/ru/en da bor, shuning uchun u yerda
@@ -253,12 +287,12 @@ export function extractMeta(tool: ToolConfig, values: FormValues): DocMeta {
     keyIdeas: splitCsv(values.keyIdeas, KEY_IDEAS_MAX, KEY_IDEA_CHARS),
     localExamples: values.localExamples === true,
     blocks,
-    planItems: clampInt(values.planItems, PLAN_ITEMS_MIN, PLAN_ITEMS_MAX, PLAN_ITEMS_DEFAULT),
-    // Formada belgilanmagan bo'lsa reja slaydi qoladi (eski xatti-harakat).
-    agendaSlide: values.agendaSlide !== false,
+    planItems,
+    // Belgilanmagan bo'lsa tur standarti: `reja` bloki bo'lsa reja slaydi qoladi (eski xatti-harakat).
+    agendaSlide,
     textVolume: isSlideTextVolume(textVolumeRaw) ? textVolumeRaw : "standart",
-    // Faqat ruxsat etilgan sonlar (0/3/5/10) — oraliq qiymat eng yaqin pastkisiga.
-    quizCount: [...QUIZ_COUNTS].reverse().find((n) => n <= quizRaw) ?? 0,
+    // Faqat ruxsat etilgan sonlar (0/3/5/10) — oraliq qiymat eng yaqin pastkisiga; yuborilmagan — `undefined`.
+    quizCount,
     internetSearch: values.internetSearch === true,
     speakerNotes: values.speakerNotes !== false,
     slideImageStyle: isSlideImageStyle(imageStyleRaw) ? imageStyleRaw : "photo",
