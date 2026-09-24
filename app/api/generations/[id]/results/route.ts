@@ -1,6 +1,7 @@
 import { ApiError, handler, json, requireUser } from "@/lib/server/api";
 import { iterateAllResultRows, listResults, type GameResult } from "@/lib/server/game-sessions";
 import { scorePercent } from "@/lib/game/score";
+import { parseIsoInstant } from "@/lib/server/validate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -8,7 +9,6 @@ export const dynamic = "force-dynamic";
 type Ctx = { params: Promise<{ id: string }> };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const ISO_DATE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
 
 /**
  * CSV maydonini qochirish.
@@ -32,9 +32,27 @@ export function csvHeadLine(): string {
   return `${csvLine(CSV_HEAD)}\r\n`;
 }
 
+/** Toshkent: UTC+5, yozgi vaqt yo'q (`spend.ts` `TASHKENT_UTC_OFFSET_SEC` bilan bir qiymat). */
+const TASHKENT_OFFSET_MS = 5 * 3600 * 1000;
+
+/**
+ * UTC instant → `YYYY-MM-DD HH:mm` Toshkent vaqtida (BEA-14).
+ *
+ * Server UTC da ishlaydi; ilgari CSV da `2026-09-23T04:12:00.000Z` turardi —
+ * o'qituvchi uchun 5 soat orqada va Excel uni matn deb o'qirdi. Bu shakl
+ * Excel/Sheets da sana-vaqt katagi bo'lib ochiladi. Siljish qat'iy (+5 soat):
+ * `Intl` ning vaqt mintaqasi bazasiga (konteyner ICU) bog'lanmaydi.
+ * Yaroqsiz qiymat o'zgarmasdan qaytadi — eksport bitta qator uchun yiqilmaydi.
+ */
+export function tashkentDateTime(iso: string): string {
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return iso;
+  return new Date(t + TASHKENT_OFFSET_MS).toISOString().slice(0, 16).replace("T", " ");
+}
+
 /** Bitta natija qatori — `resultsCsv` ham, oqim eksporti ham shundan foydalanadi. */
 export function csvRowLine(r: GameResult): string {
-  return `${csvLine([r.playerName, r.score, r.total, scorePercent(r), r.seconds, r.createdAt])}\r\n`;
+  return `${csvLine([r.playerName, r.score, r.total, scorePercent(r), r.seconds, tashkentDateTime(r.createdAt)])}\r\n`;
 }
 
 export function resultsCsv(rows: GameResult[]): string {
@@ -57,11 +75,15 @@ export function csvErrorMarkerLine(): string {
   return csvLine(["#XATOLIK: eksport oqim o'rtasida uzildi — qayta urinib ko'ring yoki o'qituvchi qo'llab-quvvatlashga murojaat qiling", "", "", "", "", ""]) + "\r\n";
 }
 
-/** `?before=&beforeId=` — keyingi sahifa kursori (DB-15). Yaroqsiz bo'lsa — birinchi sahifa. */
+/**
+ * `?before=&beforeId=` — keyingi sahifa kursori (DB-15). Yaroqsiz bo'lsa — birinchi sahifa.
+ * Sana HAQIQIY bo'lishi shart (BEA-13): `2026-02-30T…Z` ilgari regex dan
+ * o'tib, `::timestamptz` da 500 berardi.
+ */
 function parseCursor(url: URL): { createdAt: string; id: string } | undefined {
-  const createdAt = url.searchParams.get("before");
+  const createdAt = parseIsoInstant(url.searchParams.get("before"));
   const id = url.searchParams.get("beforeId");
-  if (!createdAt || !id || !ISO_DATE.test(createdAt) || !UUID.test(id)) return undefined;
+  if (!createdAt || !id || !UUID.test(id)) return undefined;
   return { createdAt, id };
 }
 

@@ -3,7 +3,7 @@ import { ApiError } from "./api";
 import { commitDocOps } from "./slide-commit";
 import { assetUrl } from "./assets";
 import { readUploadForm } from "./upload-body";
-import { putGenerationUpload } from "./upload-quota";
+import { pendingUpload } from "./upload-quota";
 import { sniffImageType } from "../generation/slide-images";
 import { SLIDE_IMAGE_MAX_BYTES } from "../generation/slide-limits";
 import type { DocOp } from "../generation/slide-edit";
@@ -36,9 +36,9 @@ function assertValidIndex(index: number): void {
  * Foydalanuvchi o'z PNG/JPEG faylini biriktiradi (AI EMAS).
  *
  * Tartib: hajm (sarlavha, so'ng haqiqiy `file.size`) → sniff (baytlardan,
- * `content-type`dan EMAS — `logo.ts` bilan bir xil naqsh) → aktivga
- * yozish → `commitDocOps` (egalik, versiya qulfi, maket rasm joyi —
- * hammasi shu yerda, ikkinchi marta yozilmaydi).
+ * `content-type`dan EMAS — `logo.ts` bilan bir xil naqsh) →
+ * `commitDocOps` (egalik, versiya qulfi, maket rasm joyi, kvota va
+ * aktivga yozish — hammasi BITTA tranzaksiyada, ikkinchi marta yozilmaydi).
  */
 export async function uploadSlideImage(
   req: Request,
@@ -67,9 +67,13 @@ export async function uploadSlideImage(
   if (!type) throw new ApiError("Faqat PNG yoki JPEG qabul qilinadi", 415);
   const mime = type === "png" ? "image/png" : "image/jpeg";
 
-  // Egalik + kvota YOZISHDAN OLDIN (C13, BEA-03) — begona hujjatga bayt tushmaydi.
-  const assetId = await putGenerationUpload(id, userId, mime, bytes);
-  const url = assetUrl(id, assetId);
-  const ops: DocOp[] = [{ op: "image", index, url }];
-  return commitDocOps(id, userId, baseVersion, ops);
+  /*
+   * `asset_id` baytning xeshi — URL yozishdan OLDIN ma'lum. Bayt esa
+   * hujjat bilan BITTA tranzaksiyada yoziladi (SECB-03): begona hujjat
+   * (404), eskirgan versiya (409), rasm joyi yo'q maket (422) yoki kvota
+   * (413) — bazada yetim aktiv qolmaydi.
+   */
+  const upload = pendingUpload(mime, bytes);
+  const ops: DocOp[] = [{ op: "image", index, url: assetUrl(id, upload.assetId) }];
+  return commitDocOps(id, userId, baseVersion, ops, { uploads: [upload] });
 }

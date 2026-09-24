@@ -350,9 +350,12 @@ export async function loadDocForPolish(id: string, userId: string): Promise<Poli
   };
 }
 
-/** Javob shakli `GET /api/generations/{id}` bilan AYNAN bir xil. */
+/**
+ * Javob shakli `GET /api/generations/{id}` bilan AYNAN bir xil; `lean` —
+ * `doc` bor qatorda `html` javobga tushmaydi (SCALE-12, `slide-commit.ts` `detail` egizagi).
+ */
 async function detail(id: string, userId: string) {
-  const gen = await getGeneration(id, userId);
+  const gen = await getGeneration(id, userId, { lean: true });
   if (!gen) throw new ApiError("Topilmadi", 404);
   const hasFile = await hasGenerationFile(id, userId);
   return { ...gen, hasFile };

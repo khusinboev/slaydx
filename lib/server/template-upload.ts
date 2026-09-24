@@ -151,12 +151,15 @@ export async function putTemplate(
   const assetId = assetIdFor(bytes);
   const previewsJson = JSON.stringify(previews);
   // Rasterlar ham diskda joy oladi — kvotaga bayt bilan birga kiradi (C13).
+  // Qayta yuklash (bir xil xesh) `created_at` ni yangilaydi (W2-C) — ro'yxatda
+  // yuqoriga chiqadi va yoshi bo'yicha tozalashda «yangi» hisoblanadi.
   const size = bytes.byteLength + Buffer.byteLength(previewsJson);
   await withUploadQuota(userId, "template", { assetIds: [assetId], bytes: size }, (c) =>
     c.query(
       `INSERT INTO template_uploads (user_id, asset_id, name, size_bytes, bytes, profile, previews)
        VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::jsonb)
-       ON CONFLICT (user_id, asset_id) DO UPDATE SET profile = EXCLUDED.profile, previews = EXCLUDED.previews, name = EXCLUDED.name`,
+       ON CONFLICT (user_id, asset_id) DO UPDATE
+         SET profile = EXCLUDED.profile, previews = EXCLUDED.previews, name = EXCLUDED.name, created_at = now()`,
       [userId, assetId, name, bytes.byteLength, bytes, JSON.stringify(profile), previewsJson],
     ),
   );
