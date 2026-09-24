@@ -18,7 +18,7 @@ import {
   resolvePlanFlags,
 } from "../lib/generation/slide-params.ts";
 import { SLIDE_LIMITS, clipTo, limitsFor } from "../lib/generation/slide-limits.ts";
-import { clipLimit } from "../lib/generation/slide-quality.ts";
+import { REPAIR_MIN_MS, clipLimit, layoutWordTargets } from "../lib/generation/slide-quality.ts";
 import { AUDIENCE_RULES } from "../lib/generation/slide-audience.ts";
 import type { SlideProgressEvent } from "../lib/generation/slide-progress.ts";
 import { resetBlocksForPurpose } from "../components/forms/slide-fields.tsx";
@@ -721,7 +721,7 @@ function richFor(b: SlideBeat, i: number, thinAt: number): Record<string, unknow
   return raw;
 }
 
-async function writeWithRepairStub(v: FormValues, opts: { thin: boolean; short?: boolean }) {
+async function writeWithRepairStub(v: FormValues, opts: { thin: boolean; short?: boolean; jobMs?: number }) {
   const meta = extractMeta(slideTool, { topic: "Fotosintez", ...v });
   const tpl = resolveDeckTemplate(meta);
   const beats = deckBeats(meta, tpl);
@@ -739,7 +739,7 @@ async function writeWithRepairStub(v: FormValues, opts: { thin: boolean; short?:
       return jsonReply(JSON.stringify({ slides: beats.map((_, index) => ({ index, bullets: LONG_BULLETS })) }));
     },
     async () => {
-      out = await writeSlidesWithLlm(meta, tpl, beats, Date.now() + 120_000, {}, undefined, Date.now() + 300_000);
+      out = await writeSlidesWithLlm(meta, tpl, beats, Date.now() + 120_000, {}, undefined, Date.now() + (opts.jobMs ?? 300_000));
     },
   );
   return { meta, beats, thinAt, calls, slides: out as SlideModel[] | null };
@@ -797,7 +797,7 @@ test("W3/W4: normalizeSlide AVVAL sonni kesadi, keyin uzunlikni auditoriya × so
     const cellMax = clipLimit("tableCell", rules, visual, lim.tableCols, lim.tableRows);
     for (const r of table.table!.rows) for (const c of r) assert.ok(c.length <= cellMax, `${tag}: katak ${c.length} > ${cellMax}`);
     for (const o of quiz.quiz![0].options) assert.ok(o.length <= clipLimit("quizOption", rules, visual), tag);
-    assert.equal(two.left!.length, SLIDE_LIMITS.colItems, tag);
+    assert.equal(two.left!.length, Math.min(SLIDE_LIMITS.colItems, layoutWordTargets(rules, visual).maxColItems), tag);
     for (const x of two.left!) assert.ok(x.length <= clipLimit("colItem", rules, visual, two.left!.length), tag);
     // Bitta bandli ustun — keng chegara (son bo'yicha).
     assert.ok(two.right![0].length >= two.left![0].length, `${tag}: ustun chegarasi band soniga qaramadi`);
@@ -826,4 +826,43 @@ test("W2/W5: bandlar va coerceLayout SO'Z chegarasida, maket chegaralari bilan k
   }
   const q = coerceLayout({ id: "s", layout: "bullets", title: "T", bullets: [long.repeat(3)] }, "quote");
   assert.ok(q.quote!.length <= SLIDE_LIMITS.quote, String(q.quote!.length));
+});
+
+// ═══════════════════════════════════════════ P3 ulanish sharhi (3807d0b): N1–N3
+
+test("N1: ta'mir `jobDeadline` ni oladi — ish muddatiga REPAIR_MIN_MS qolmasa faqat yozuvchi chaqiriladi", async () => {
+  const tight = await writeWithRepairStub(
+    { slideCount: 10, planItems: 3, slideTemplate: "lecture" },
+    { thin: true, jobMs: REPAIR_MIN_MS - 1_000 },
+  );
+  assert.ok(tight.slides, "deka yozilishi kerak");
+  assert.deepEqual(tight.calls, ["writer"], `ish muddati tor — ta'mir chaqirilmasligi kerak: ${tight.calls.join(",")}`);
+});
+
+test("N2: sarlavha va bandlarda NBSP saqlanadi («12 km» ikki qatorga bo'linmasin)", () => {
+  const rules = bodyRules(extractMeta(slideTool, { topic: "X" }), "lecture");
+  const [s] = extractNewSlides(
+    JSON.stringify({ slides: [{ layout: "bullets", title: "Masofa 12 km", bullets: ["Yo‘l 12 km   uzunlikda."] }] }),
+    0,
+    "F",
+    rules,
+    { final: true },
+  ).map((x) => x.slide);
+  assert.equal(s.title, "Masofa 12 km");
+  assert.equal(s.bullets![0], "Yo‘l 12 km uzunlikda.", "NBSP oddiy bo'shliqqa aylandi yoki bo'shliq siqilmadi");
+});
+
+test("N3: ustun bandlari AVVAL auditoriya × vizual sig'imiga kesiladi (1–4-sinf «circle» → 2 band)", () => {
+  const rules = bodyRules(extractMeta(slideTool, { topic: "X", slideAudience: "school_1_4" }), "lesson");
+  const visual = SLIDE_TEMPLATE_BY_ID.lesson.visual;
+  const max = layoutWordTargets(rules, visual).maxColItems;
+  assert.equal(max, 2, "sinov asosi: 1–4-sinf circle da 2 band");
+  const four = ["Birinchi band.", "Ikkinchi band.", "Uchinchi band.", "To‘rtinchi band."];
+  const [s] = extractNewSlides(JSON.stringify({ slides: [{ layout: "twoCol", title: "Ikki ustun", left: four, right: four }] }), 0, "F", rules, { final: true }, visual).map((x) => x.slide);
+  assert.deepEqual(s.left, four.slice(0, 2));
+  assert.deepEqual(s.right, four.slice(0, 2));
+  // Bakalavr ma'ruzasida ko'proq band qoladi.
+  const adult = bodyRules(extractMeta(slideTool, { topic: "X", slideAudience: "students_bachelor" }), "lecture");
+  const [a] = extractNewSlides(JSON.stringify({ slides: [{ layout: "twoCol", title: "Ikki ustun", left: four, right: four }] }), 0, "F", adult, { final: true }, SLIDE_TEMPLATE_BY_ID.lecture.visual).map((x) => x.slide);
+  assert.ok(a.left!.length > 2, `bakalavr: ${a.left!.length}`);
 });

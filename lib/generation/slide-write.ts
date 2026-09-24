@@ -6,7 +6,7 @@ import { assertJobTime } from "./deadline";
 import { bodyRules, type BodyRules } from "./slide-audience";
 import { blocksToBeats, planRoleText } from "./slide-blocks";
 import { SLIDE_LIMITS, clipTo, limitsFor } from "./slide-limits";
-import { clipLimit, repairThinSlides } from "./slide-quality";
+import { clipLimit, layoutWordTargets, repairThinSlides } from "./slide-quality";
 import { deckFooter } from "./slide-identity";
 import { purposeDefaults } from "./slide-purpose";
 import { finalizeQuiz } from "./slide-quiz";
@@ -86,7 +86,7 @@ export function stripOrdinal(title: string): string {
 function list(v: unknown, n: number): string[] {
   if (!Array.isArray(v)) return [];
   return v
-    .map((x) => String(x ?? "").replace(/\s+/g, " ").trim())
+    .map((x) => String(x ?? "").replace(/[ \t\n\r\f\v]+/g, " ").trim())
     .filter(Boolean)
     .slice(0, n);
 }
@@ -146,7 +146,7 @@ function normalizeSlide(raw: unknown, i: number, footer: string, rules: BulletRu
   const lim = limitsFor(rules);
   const o = raw as Record<string, unknown>;
   const layout = asLayout(o.layout, "bullets");
-  const title = clipTo(stripOrdinal(String(o.title ?? "").replace(/\s+/g, " ").trim()), SLIDE_LIMITS.title);
+  const title = clipTo(stripOrdinal(String(o.title ?? "").replace(/[ \t\n\r\f\v]+/g, " ").trim()), SLIDE_LIMITS.title);
   if (!title && layout !== "closing") return null;
   /*
    * `subtitle` chegarasi LAYOUTGA bog'liq — maketdan o'lchangan:
@@ -193,9 +193,15 @@ function normalizeSlide(raw: unknown, i: number, footer: string, rules: BulletRu
       right: col(o.right),
     };
   }
-  // Ustun bandi — o'z ustunidagi band SONIDA o'lchangan chegara.
+  /*
+   * Ustun bandi — AVVAL son (N3): auditoriya × vizual qutisiga sig'adigan
+   * band soni (`layoutWordTargets.maxColItems`, promptdagi bilan bir xil;
+   * masalan 1–4-sinf «circle» da 2). Ilgari statik 4 edi va bolalar
+   * ustunidagi 4 band polga (24 belgi) qadar qirqilardi. Keyin uzunlik —
+   * o'z ustunidagi band SONIDA o'lchangan chegara.
+   */
   function col(v: unknown): string[] {
-    const items = list(v, SLIDE_LIMITS.colItems);
+    const items = list(v, Math.max(1, Math.min(SLIDE_LIMITS.colItems, layoutWordTargets(rules, visual).maxColItems)));
     return items.map((x) => clipTo(x, clipLimit("colItem", rules, visual, items.length)));
   }
   if (layout === "quote") {

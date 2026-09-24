@@ -115,6 +115,7 @@ test("AUDIT-25: element soni auditoriya polidan (countRules) — BodyRules va br
   // Brif sondan ko'p so'ramaydi: 1–4 sinfga AYNAN 3 bosqich, 3 tagacha ustun.
   const kids = prompt({ slideAudience: "school_1_4" });
   assert.match(kids, /— process: AYNAN 3 bosqich/);
-  assert.match(kids, /— table: [23] tagacha ustun, 4 tagacha qator/);
+  // AUDIT-25: qator POLI 3 (AUDIT-8) — «2–3 ustun, 3–4 qator» (yoki «AYNAN 2 ustun»).
+  assert.match(kids, /— table: (2–3|AYNAN 2) ustun, 3–4 qator/);
   assert.match(prompt({ slideAudience: "students_bachelor" }), /— process: 3–4 bosqich/);
 });

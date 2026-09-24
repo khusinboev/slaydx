@@ -5,7 +5,7 @@ import { SLIDE_LIMITS, clipTo, SLIDE_IMAGE_MAX_BYTES, UNDO_DEPTH, REBUILD_DEBOUN
 import { resolveSlideTemplate } from "../lib/generation/slide-templates.ts";
 import { bodyRules } from "../lib/generation/slide-audience.ts";
 import { limitsFor } from "../lib/generation/slide-limits.ts";
-import { clipLimit } from "../lib/generation/slide-quality.ts";
+import { clipLimit, layoutWordTargets } from "../lib/generation/slide-quality.ts";
 import { QUIZ_MAX, QUIZ_OPTION_MAX, QUIZ_Q_MAX, STAT_LABEL_MAX, STEP_TEXT_MAX, writeSlidesWithLlm } from "../lib/generation/slide-write.ts";
 import type { SlideModel } from "../lib/generation/slide-types.ts";
 import { TOOL_BY_ID } from "../lib/tools.ts";
@@ -148,8 +148,9 @@ test("normalize: ustun bandlari colItems × colItem", async () => {
       ...filler(7),
     ]),
   )[0];
-  assert.equal(s.left?.length, SLIDE_LIMITS.colItems, "ustundagi band soni chegarasi");
-  assert.equal(s.left?.[0].length, clipLimit("colItem", RULES, VISUAL, SLIDE_LIMITS.colItems), "banddagi belgi chegarasi (ustundagi band SONIDA)");
+  const colN = Math.min(SLIDE_LIMITS.colItems, layoutWordTargets(RULES, VISUAL).maxColItems);
+  assert.equal(s.left?.length, colN, "ustundagi band soni chegarasi (auditoriya × vizual, N3)");
+  assert.equal(s.left?.[0].length, clipLimit("colItem", RULES, VISUAL, colN), "banddagi belgi chegarasi (ustundagi band SONIDA)");
   assert.equal(s.leftTitle?.length, SLIDE_LIMITS.colTitle);
 });
 

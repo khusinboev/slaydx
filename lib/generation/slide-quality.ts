@@ -501,7 +501,13 @@ export function wordTargetLines(rules: BodyRules, visual?: SlideVisual): string[
     `— twoCol/compare: har ustunda ${colItems} band, har band ${fmtRange(t.colItem)} so‘z; ustun sarlavhasi (leftTitle/rightTitle) ≤ ${t.colTitleMax} so‘z;`,
     `— process: ${steps} bosqich; har bosqich text: ${stepTexts} so‘z;`,
     `— stats: ${t.maxStats} tagacha karta, har label ≤ ${t.statLabelMax} so‘z;`,
-    `— table: ${t.maxTableCols} tagacha ustun, ${t.maxTableRows} tagacha qator, katak ≤ ${t.tableCellMax} so‘z;`,
+    /*
+     * Qator soni POLI 3 (AUDIT-8): faqat yuqori chegara («N tagacha»)
+     * so'ralganda model 2 qatorli jadval qaytarar, jadval slaydning yuqori
+     * uchdan birida qolardi (2 dan kami esa `normalizeSlide` da bandlarga
+     * tushadi). `maxTableRows` har auditoriyada ≥ 4 — pol shift bilan zid emas.
+     */
+    `— table: ${t.maxTableCols > 2 ? `2–${t.maxTableCols}` : "AYNAN 2"} ustun, ${t.maxTableRows > 3 ? `3–${t.maxTableRows}` : `AYNAN ${t.maxTableRows}`} qator, katak ≤ ${t.tableCellMax} so‘z;`,
     `— section: subtitle ${fmtRange(t.sectionSubtitle)} so‘z, bo‘sh qolmasin;`,
     `— closing: subtitle ${fmtRange(t.closingSubtitle)} so‘z;`,
     `— quote: ${fmtRange(t.quote)} so‘z (haqiqiy iqtibos bo‘lsa — aynan asl matn); quoteBy — faqat muallif (≤ ${t.quoteByMax} so‘z), tavsif emas;`,
