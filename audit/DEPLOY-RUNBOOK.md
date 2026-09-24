@@ -91,6 +91,18 @@ va `ADMIN_PHONES`**: bular xavfsizlik bilan bog'liq, standart bo'sh
 qiymat ATAYLAB shunday (fail-closed/fail-safe), egasi qaroriga qadar
 O'ZGARTIRILMASIN.
 
+**`WORKER_CONCURRENCY` — prod `.env`da eski `WORKER_CONCURRENCY=2`
+qolgan bo'lsa, uni `4` ga o'zgartiring** (C22 qarori: 2 worker × 4 = 8 slot).
+Aks holda compose `${WORKER_CONCURRENCY:-4}` o'rniga 2 ni oladi: 2 × 2 = 4 slot,
+web esa qabul/ETA ni 8 slot (`QUEUE_TOTAL_SLOTS` standarti) deb hisoblaydi.
+
+**Deploydan oldin (PRE-DEPLOY R3/R4):** ishlayotgan image'larni tezkor
+orqaga qaytarish uchun belgilang — `docker tag slaydx-web:latest
+slaydx-web:pre-audit && docker tag slaydx-worker:latest slaydx-worker:pre-audit`;
+navbat bo'sh paytni tanlang (`SELECT status, count(*) FROM generations WHERE
+status IN ('QUEUED','IN_PROGRESS') GROUP BY 1` — 0 qator kutiladi), chunki
+Postgres bir marta qayta yaratiladi va eski worker ishni tashlab ketadi.
+
 `FILE_TTL_HOURS` — bu audit davomida OLIB TASHLANGAN (endi
 `RETENTION_BONUS_DAYS` + `files_purged_at` mexanizmi bor, 022-migratsiya).
 Eski `.env`da qolgan bo'lsa — zarasi yo'q (compose uni endi umuman
@@ -115,7 +127,7 @@ o'z ichiga oladi — shu izohni ROLLBACK qadamida ishlatasiz.
 | `024_idempotency.sql` | `generations.idempotency_key` (UUID) ustuni + UNIQUE qisman indeks | `ADD COLUMN` + indeks, `lock_timeout=5s`. Soniyalar. |
 | `025_payment_events.sql` | Yangi jadval `payment_events` + 3 indeks + `payment_ledger` VIEW | Faqat YANGI ob'ektlar — mavjud jadvallarga tegilmaydi, qulf yo'q. Soniyalar. |
 | `026_game_results_keep.sql` | `game_results.submission_id` ustuni + UNIQUE indeks | `ADD COLUMN` + indeks, `lock_timeout=5s`. Soniyalar. |
-| `027_*.sql` / `028_*.sql` (agar mavjud bo'lsa) | **Deploy vaqtida tekshiring** — `ls lib/server/migrations/` va har faylning boshidagi izohini o'qing | Loyiha konvensiyasi bo'yicha ular ham `SET LOCAL lock_timeout='5s'` ishlatishi kerak; agar yo'q bo'lsa yoki `CONCURRENTLY`siz og'ir jadval o'zgarishi bo'lsa (masalan `generations`ga `ALTER TYPE`), DEPLOYDAN OLDIN muallif-fixer bilan tasdiqlang |
+| `027_queue_indexes.sql` | `generations_stale_idx` → `generations_running_user_idx` (IN_PROGRESS, `user_id`), ortiqcha `generations_queue_idx` o'chiriladi, `fillfactor=90` | `CREATE INDEX` (SHARE) + `DROP INDEX` (qisqa ACCESS EXCLUSIVE), `lock_timeout=5s`. Prod'da `generations` ~100 qator — millisekundlar. Orqaga mos: eski kod indeks nomlariga tayanmaydi. |
 
 Hammasi kichik jadvallarda (hozirgi hajmda) ishlaydi — kutilgan umumiy
 vaqt bir necha soniya. `lock_timeout=5s` bor migratsiyalar uzoq davom
@@ -271,11 +283,13 @@ avtomatik hal bo'lmaydi:
    masalan xato kodlari — hali sandbox'da tasdiqlanmagan). `PAYME_SANDBOX`
    prod'da **bo'sh/`false`** qolishi shart shu tasdiqlanguncha.
 2. **`TELEGRAM_WEBHOOK_SECRET` + webhook qayta ro'yxatdan o'tkazish** —
-   hozircha bunday maxsus sir yo'q (Telegram webhook imzosi bot token
-   bilan tekshiriladi); agar audit davomida bu qo'shilgan bo'lsa,
-   egasi yangi sirni `.env`ga qo'yib, Telegram'ga `setWebhook`ni YANGI
-   sir bilan qayta chaqirishi kerak (aks holda eski webhook ishlab
-   turaveradi, lekin yangi himoya YO'QQA teng).
+   hozirgi webhook `CRON_SECRET` ni `secret_token` sifatida ishlatadi va
+   yangi kod `TELEGRAM_WEBHOOK_SECRET` bo'lmasa AYNAN shunga qaytadi
+   (boot'da ogohlantirish yozadi) — ya'ni deploydan keyin login ishlashda
+   davom etadi. `TELEGRAM_WEBHOOK_SECRET` ni `.env`ga qo'yish va
+   `setWebhook`ni YANGI `secret_token` bilan qayta chaqirish BITTA qadamda
+   bajarilsin: faqat birini qilsangiz, Telegram yuborgan update'lar 401
+   oladi va bot orqali kirish to'xtaydi (PRE-DEPLOY R9).
 3. **Hardcoded admin raqamni o'chirish** — `ADMIN_PHONES` prod `.env`ga
    qo'yilgach, `lib/server/admin-phones.ts`dagi `ADMIN_PHONES_FALLBACK`
    qatoridagi haqiqiy raqamni kod'dan o'chirib, alohida commit va deploy

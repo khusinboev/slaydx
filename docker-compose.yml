@@ -57,6 +57,10 @@ services:
     # `PG_MEM_LIMIT`/`PG_CPUS` orqali sozlanadi.
     mem_limit: ${PG_MEM_LIMIT:-1g}
     cpus: ${PG_CPUS:-1}
+    # Docker standarti /dev/shm = 64 MB — parallel so'rovlar (dynamic shared
+    # memory) "could not resize shared memory segment" bilan yiqilishi mumkin;
+    # yuklama testi 256 MB bilan o'tgan (PRE-DEPLOY R7).
+    shm_size: 256mb
     # Log aylanishi (OBS-10/INFRA-15): `json-file` standart bo'yicha
     # cheksiz o'sadi — umumiy diskda bu boshqa loyihalarni ham siqib qo'yishi mumkin.
     logging:
@@ -118,7 +122,8 @@ services:
       # DEPS-08: admin ruxsati endi manba kodida QATTIQ YOZILMAGAN
       # (`lib/server/admin-phones.ts` `process.env.ADMIN_PHONES`ni
       # o'qiydi) — kompyuterga tushirilgan bo'lsa ham kim admin ekani
-      # public repo'da ko'rinmasin. Bo'sh qolsa admin YO'Q (fail-closed).
+      # public repo'da ko'rinmasin. Bo'sh qolsa hozircha `admin-phones.ts`
+      # dagi zaxira raqam ishlaydi (egasi uni ADMIN_PHONES qo'yilgach o'chiradi).
       ADMIN_PHONES: ${ADMIN_PHONES:-}
       NEXT_PUBLIC_BRAND_NAME: ${NEXT_PUBLIC_BRAND_NAME:-SlaydX}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
