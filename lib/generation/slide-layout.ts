@@ -796,7 +796,6 @@ export const SECTION_BOTTOM = 6.5;
  * shu yerda kesishma turi bilan o'qiladi; birlashtirishda alias olib
  * tashlanadi.
  */
-type PlanSlide = SlideModel & { plan?: number };
 
 /**
  * AUDIT-25, 4-qaror — «Raqam faqat rejadan».
@@ -813,7 +812,7 @@ type PlanSlide = SlideModel & { plan?: number };
  * qayta joylashtiradi). Raqam modeldan emas — qatlam `src` OLMAYDI.
  */
 export function planNumber(s: SlideModel): string | null {
-  const n = (s as PlanSlide).plan;
+  const n = s.plan;
   if (typeof n !== "number" || !Number.isInteger(n) || n < 1 || n > 99) return null;
   return String(n).padStart(2, "0");
 }

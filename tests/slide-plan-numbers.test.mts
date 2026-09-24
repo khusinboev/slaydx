@@ -32,7 +32,7 @@ import type { SlideVisual } from "../lib/generation/slide-templates.ts";
  * kesishma turi bilan beradi.
  */
 
-type PlanSlide = SlideModel & { plan?: number };
+type PlanSlide = SlideModel;
 type TextLayer = Extract<SlideLayer, { t: "text" }>;
 
 const W = 13.333;
