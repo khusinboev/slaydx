@@ -203,8 +203,12 @@ export async function attachTicket(nonce: string, profile: TelegramProfile): Pro
  * Xavfsizlik modeli saytdan boshlangan oqim bilan BIR XIL: token 32
  * tasodifiy bayt, bazada faqat xesh, bir martalik, 5 daqiqa; u faqat
  * shu Telegram chatiga boradi. Farq faqat nonce'ni kim yaratganida —
- * bu yerda nonce hech qachon brauzerga ko'rinmaydi, shuning uchun
- * «o'z nonce'ini qurbonga yuborish» hujumi bu oqimda umuman yo'q.
+ * bu yerda nonce hech qachon brauzerga ko'rinmaydi.
+ *
+ * LEKIN (SECA-05): chat egasi HAVOLANING O'ZINI boshqaga yuborishi
+ * mumkin — tajovuzkor o'z akkauntiga havola olib, qurbonga «shu yerdan
+ * kiring» deydi (login-CSRF). Shuning uchun `/enter` GET darhol kirmaydi:
+ * «Siz <ism> sifatida kirmoqdasiz» sahifasi va tugma (POST + Origin).
  *
  * Ikki qadam (`createTicket` + `attachTicket`) bitta INSERT ga
  * yig'ildi: oraliq «bog'lanmagan chipta» holati bu yerda kerak emas.
@@ -263,6 +267,26 @@ export async function redeemLoginToken(token: string): Promise<TicketCheck> {
 
   if ("ok" in profile) return profile;
   return { ok: true, user: await upsertTelegramUser(profile) };
+}
+
+/**
+ * Tokenni SARFLAMASDAN ko'radi: kimning akkauntiga kirilmoqda (SECA-05).
+ * Tasdiqlash sahifasi uchun — sessiya faqat `redeemLoginToken` (POST) da.
+ */
+export async function peekLoginToken(
+  token: string,
+): Promise<{ telegramId: string; username: string | null; name: string } | null> {
+  const raw = String(token ?? "").trim();
+  if (raw.length < 20 || raw.length > 200) return null;
+  const rows = await query<{ telegram_id: string; username: string | null; name: string | null }>(
+    `SELECT telegram_id, username, name
+       FROM login_tickets
+      WHERE token_hash = $1 AND consumed_at IS NULL AND expires_at > now() AND telegram_id IS NOT NULL`,
+    [hashToken(raw)],
+  );
+  const t = rows[0];
+  if (!t) return null;
+  return { telegramId: String(t.telegram_id), username: t.username, name: t.name || "Foydalanuvchi" };
 }
 
 /** Muddati o'tgan chiptalarni tozalaydi. */
@@ -334,7 +358,7 @@ const WELCOME = [
   "",
   "SlaydX — AI yordamida slayd, referat, kurs ishi, maqola va o'qituvchi hujjatlarini yaratadi.",
   "",
-  "Saytga kirish uchun quyidagi tugmani bosing — akkauntingiz avtomatik ochiladi.",
+  "Saytga kirish uchun quyidagi tugmani bosing va ochilgan sahifada «Kirish» ni tasdiqlang.",
   "Havola <b>bir martalik</b> va 5 daqiqa amal qiladi. Yangi havola kerak bo'lsa /login yozing.",
 ].join("\n");
 
