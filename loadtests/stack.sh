@@ -23,7 +23,7 @@ set -euo pipefail
 
 STACK_MEM="${STACK_MEM:-3G}"          # cgroup cap for jail+web+workers (one heavy2 slot)
 STACK_TIMEOUT="${STACK_TIMEOUT:-14400}" # hard stop after 4 h
-PG_PROFILE="${PG_PROFILE:-auto}"      # auto | tuned | default  (PG_CPUS_LT: tuned CPU cap, default 1 = compose PG_CPUS)
+PG_PROFILE="${PG_PROFILE:-auto}"      # auto | tuned | default  (PG_CPUS_LT: tuned CPU cap, default 2 = compose PG_CPUS)
 TARPIT_SEC="${TARPIT_SEC:-20}"
 
 pg_args() {
@@ -34,7 +34,7 @@ pg_args() {
   echo "$profile" >"$STATE_DIR/pg_profile"
   if [[ "$profile" == tuned ]]; then
     # Same flags and limits as the audit branch's docker-compose.yml postgres service.
-    echo "--memory 1g --cpus ${PG_CPUS_LT:-1} --shm-size 256m $PG_IMAGE postgres -c max_connections=100 -c shared_buffers=256MB -c work_mem=16MB -c shared_preload_libraries=pg_stat_statements -c log_min_duration_statement=500 -c autovacuum_vacuum_scale_factor=0.05 -c idle_in_transaction_session_timeout=60s"
+    echo "--memory 1g --cpus ${PG_CPUS_LT:-2} --shm-size 256m $PG_IMAGE postgres -c max_connections=100 -c shared_buffers=256MB -c work_mem=16MB -c shared_preload_libraries=pg_stat_statements -c log_min_duration_statement=500 -c autovacuum_vacuum_scale_factor=0.05 -c idle_in_transaction_session_timeout=60s"
   else
     # main@76ddf91 compose: stock postgres:16 settings, no limits (1 GB cap kept for the laptop).
     echo "--memory 1g --shm-size 256m $PG_IMAGE postgres -c max_connections=100"

@@ -54,9 +54,11 @@ services:
       - idle_in_transaction_session_timeout=60s
     # Resurs chegarasi (INFRA-04): box UCHTA loyiha bilan umumiy — chegarasiz
     # konteyner Postgres yoki qo'shni loyihalarni OOM bilan yiqitishi mumkin.
-    # `PG_MEM_LIMIT`/`PG_CPUS` orqali sozlanadi.
+    # `PG_MEM_LIMIT`/`PG_CPUS` orqali sozlanadi. CPU 2: 1 CPU'da bayt yuklab
+    # olish (bytea o'qish) p95 9 → 77 ms ga sekinlashdi, 2 CPU'da 11.8 ms
+    # (P5 `loadtests/results/after-pgcpu2`).
     mem_limit: ${PG_MEM_LIMIT:-1g}
-    cpus: ${PG_CPUS:-1}
+    cpus: ${PG_CPUS:-2}
     # Docker standarti /dev/shm = 64 MB — parallel so'rovlar (dynamic shared
     # memory) "could not resize shared memory segment" bilan yiqilishi mumkin;
     # yuklama testi 256 MB bilan o'tgan (PRE-DEPLOY R7).

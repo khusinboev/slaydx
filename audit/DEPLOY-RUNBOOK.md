@@ -80,7 +80,7 @@ tavsiya etiladi (audit izi, keyingi operator uchun aniqlik):
 | `WORKER_MEM_LIMIT` | `2g` | Ixtiyoriy — kod standarti |
 | `WORKER_CPUS` | `2` | Ixtiyoriy — kod standarti |
 | `PG_MEM_LIMIT` | `1g` | Ixtiyoriy — kod standarti |
-| `PG_CPUS` | `1` | Ixtiyoriy — kod standarti |
+| `PG_CPUS` | `2` | Ixtiyoriy — kod standarti |
 
 Standart qiymatlar (`docker-compose.yml`dagi `${VAR:-N}`) allaqachon
 yuqoridagi ustundagi bilan BIR XIL — ya'ni `.env`ga hech narsa qo'shmasdan
