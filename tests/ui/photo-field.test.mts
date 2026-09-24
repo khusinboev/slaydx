@@ -59,7 +59,7 @@ test("tiklangan qoralamadagi surat o'chirilgan (404) — siniq rasm yo'q, maydon
   await waitFor(() => assert.ok(screen.getByText(/Suratni qayta yuklang/)));
   assert.ok(!screen.queryByAltText("Rezyume surati"), "siniq <img> qolmaydi");
   assert.ok(calls.some((u) => u === `/api/uploads/photo/${ID}`), "holat serverdan so'raldi");
-  assert.equal(last?.assetId, "", "o'lik id forma qiymatidan olib tashlandi (suratsiz pullik rezyume yo'q)");
+  assert.equal((last as Value | null)?.assetId, "", "o'lik id forma qiymatidan olib tashlandi (suratsiz pullik rezyume yo'q)");
   assert.ok(screen.getByText("Surat qo‘shish"), "qayta yuklash tugmasi");
 });
 
