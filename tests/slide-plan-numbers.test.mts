@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { CHAR_EM, LAYOUT_KIT, planSlide, type SlideLayer } from "../lib/generation/slide-layout.ts";
+import { LAYOUT_KIT, planSlide, type SlideLayer } from "../lib/generation/slide-layout.ts";
 import { AUDIENCE_RULES, bodyRules } from "../lib/generation/slide-audience.ts";
 import { SLIDE_LIMITS } from "../lib/generation/slide-limits.ts";
 import { getSlideTheme } from "../lib/generation/slide-themes.ts";
@@ -261,7 +261,20 @@ test("ro'yxat tartib raqamlari qoladi: reja 1..N, bosqich n, test A–D", () => 
  *       matnni kesadi, PPTX to'kadi — toshish «ko'rdim = oldim» ni buzadi.
  */
 const AUDIENCES = Object.keys(AUDIENCE_RULES) as (keyof typeof AUDIENCE_RULES)[];
-const BOLD_EM = LAYOUT_KIT.CHAR_EM_BOLD ?? 0.6;
+/*
+ * Belgi kengliklari test ichida QAT'IY sonlar — maketdan import qilinmaydi,
+ * aks holda maketdagi xato koeffitsient testni ham «tuzatib» qo'yardi
+ * (sharh: CHAR_EM_BOLD = 0.55 mutanti omon qolgan edi). O'lchov: Liberation
+ * Sans (Arial metrikasi) PIL `getlength`, o'zbekcha gaplar — oddiy
+ * 0.435–0.446 em, qalin 0.475–0.49 em (qalin ≈ 1.09 × oddiy); oddiy uchun
+ * loyiha standarti 0.55 (zaxira bilan), qalin 0.55 × 1.09 ≈ 0.60.
+ */
+const CHAR_EM = 0.55;
+const BOLD_EM = 0.6;
+
+test("qalin matn kengligi koeffitsienti o'lchovdan kam emas (CHAR_EM_BOLD ≥ 0.60)", () => {
+  assert.ok(LAYOUT_KIT.CHAR_EM_BOLD >= 0.6, `CHAR_EM_BOLD ${LAYOUT_KIT.CHAR_EM_BOLD} — qalin so'z o'rtasidan bo'linadi`);
+});
 
 /**
  * Siyoh balandligi — maketdan MUSTAQIL hisob (maketning `inkHeight` i
@@ -479,6 +492,44 @@ test("A2-04: 1–4-sinf bosqichlari (minPt 24) — qisqa matn 24 pt dan kichik e
     for (const l of steps) {
       assert.ok(l.size >= 24, `${visual}: «${textOf(l)}» ${l.size} pt`);
       assertFits(l, `${visual}`);
+    }
+  }
+});
+
+/**
+ * Bir qatordagi bosqich kartalari BIR XIL shriftda (`fitStepCards`):
+ * ko'z tekshiruvida har karta o'z o'lchamini olganda «Kuzatish» 20 pt,
+ * yonidagi «Taqqoslash» 15 pt edi. Qator ichida — sarlavhalar bir o'lcham,
+ * izohlar bir o'lcham, sarlavha qutilari bir balandlik (chiziq va izoh
+ * bir chiziqda). `rail` — bitta qator; boshqalari 5 bosqichda ikki qator.
+ */
+test("bosqich kartalari: qator ichida sarlavha/izoh o'lchami va sarlavha qutisi bir xil — 3/4/5 bosqich, har maket", () => {
+  const theme = getSlideTheme("atlas");
+  const titles = ["Kuzatish", "Taqqoslash", "Tahlil", "Xulosa", "Taklif"];
+  for (const aud of ["school_1_4", "general"] as const) {
+    const bodyType = bodyRules({ slideAudience: aud, textVolume: "standart", planItems: 4 }, "lecture");
+    for (const visual of VISUALS) {
+      for (const n of [3, 4, 5]) {
+        const s = sampleFor("process", false);
+        s.steps = titles.slice(0, n).map((title, i) => ({ n: String(i + 1), title, text: "Suv sathini har oy o'lchab, jadvalga yozamiz." }));
+        const layers = texts(planSlide(s, theme, visual, 3, TOTAL, aud, "lecture", { bodyType }).layers);
+        const of = (k: string) => layers.filter((l) => l.src?.f === "steps" && (l.src as { k: string }).k === k);
+        const tl = of("title");
+        const tx = of("text");
+        assert.equal(tl.length, n, `${aud}/${visual}/${n}: sarlavhalar soni`);
+        // Qatorlar — sarlavha qutisining y bo'yicha guruhi.
+        const rows = new Map<number, number[]>();
+        tl.forEach((l, i) => {
+          const key = Math.round(l.box.y * 100);
+          rows.set(key, [...(rows.get(key) ?? []), i]);
+        });
+        for (const idx of rows.values()) {
+          const tag = `${aud}/${visual}/${n} bosqich (qator ${idx.map((i) => i + 1).join(",")})`;
+          assert.equal(new Set(idx.map((i) => tl[i].size)).size, 1, `${tag}: sarlavha o'lchamlari har xil ${idx.map((i) => tl[i].size)}`);
+          assert.equal(new Set(idx.map((i) => tx[i].size)).size, 1, `${tag}: izoh o'lchamlari har xil ${idx.map((i) => tx[i].size)}`);
+          assert.equal(new Set(idx.map((i) => tl[i].box.h.toFixed(3))).size, 1, `${tag}: sarlavha qutilari balandligi har xil`);
+        }
+      }
     }
   }
 });

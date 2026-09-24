@@ -445,8 +445,10 @@ function bodyFit(text: string, box: Box, base: number, bt: BodyRules, floor: num
   const longest = Math.max(...t.split(/\s+/).map((w) => w.length));
   // Polda ham qatorga sig'maydigan «so'z» (URL, formula, bo'shliqsiz
   // satr) baribir bo'linadi — u holda so'z sharti shriftni behuda polga
-  // tushirmasin, faqat balandlik hal qiladi.
-  const wordFitsAtLow = longest * low * em * WORD_HEADROOM <= box.w * 72;
+  // tushirmasin, faqat balandlik hal qiladi. Bu yerda zaxirasiz o'lchov:
+  // zaxira bilan chegaradagi so'z (rail 15 belgili sarlavha) «sig'maydi»
+  // deb topilib, shart butunlay o'chib qolardi.
+  const wordFitsAtLow = longest * low * em <= box.w * 72;
   for (let size = start; size > low; size -= 1) {
     const perLine = Math.max(1, Math.floor((box.w * 72) / (size * em)));
     const fitsH = wrapRows(t, perLine) * size * 1.3 <= box.h * 72;
