@@ -49,5 +49,6 @@ export const options = {
   },
 };
 
-export default function () {}
+// Every scenario names its own `exec`; the default function is never run.
+export default function idle() {}
 export const handleSummary = summary("mixed");

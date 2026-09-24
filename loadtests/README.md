@@ -15,10 +15,13 @@ All absolute numbers are laptop-relative: k6, Postgres, web and workers share 12
 # whole pipeline for the checkout this harness lives in (≈ 25–35 min with PROFILE=full)
 loadtests/run-all.sh after
 
-# the "before" commit: a worktree of main, harness still from this checkout
-git worktree add --detach ../slaydx-main 76ddf91
-REPO_DIR=$PWD/../slaydx-main loadtests/run-all.sh before
-git worktree remove ../slaydx-main
+# the "before" commit: a worktree of main, harness still from this checkout.
+# It MUST live inside the main checkout (Turbopack rejects a node_modules symlink that
+# points outside its workspace root; stack.sh refuses otherwise).
+M=/home/adhambek/projects/pythons/slaydbot/slaydx
+git worktree add --detach $M/.claude/worktrees/loadtest-main 76ddf91
+REPO_DIR=$M/.claude/worktrees/loadtest-main loadtests/run-all.sh before
+git worktree remove --force $M/.claude/worktrees/loadtest-main   # --force: node_modules symlink + .next
 
 # quick validation (20 VUs × 30 s per scenario + every chaos experiment once, ≈ 15 min)
 PROFILE=smoke loadtests/run-all.sh smoke-x
@@ -130,6 +133,16 @@ Provider modes (`stack.sh provider-mode …`):
 - **Shared `node_modules`.** A checkout without `node_modules` gets a symlink to the main
   repo's (`SHARED_NODE_MODULES`), never `npm install`. For `main@76ddf91` that means it runs
   on the audit branch's lockfile (e.g. `sharp` 0.35 instead of 0.34) — a small confound.
+- On `main` every process uses `application_name = slaydx`, so `pg_conn` rows cannot split
+  web from workers there (the branch names them `slaydx-web@…` / `slaydx-worker@…`).
+- **Expected before/after differences** seen in validation: on `main` the downloads
+  scenario reports `cacheable_asset = 0` / `cacheable_thumb_versioned = 0` (config header
+  overrode the route's cache header, C08), no `enq_429_queue_full` (no admission control,
+  C22), and `worker-sigterm` `drained_or_released` should FAIL (2 s exit, C14).
+- **Worker idle poll is 1.5 s** (`IDLE_POLL_MS`): at a 20 req/s burst the branch queued up
+  to ~37 fast (40 ms) jobs and answered `queue_full` 429 for ~15 % of requests although
+  8 slots were mostly idle — the admission estimate (200 s/job) is far above the real
+  service time of offline-template jobs. Keep this in mind when reading the enqueue split.
 - **Not covered:** real LLM latency/cost, LibreOffice PDF/thumbnail conversion under load
   (disabled on purpose — it is CPU heavy and would dominate the laptop), payments, Telegram
   login (sessions are minted directly with `createSession`), browser rendering.
