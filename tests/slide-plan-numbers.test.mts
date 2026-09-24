@@ -398,13 +398,14 @@ test("circle plan'siz bo'lim: nishon markazi har temada diskdan farqli rangda", 
     const theme = getSlideTheme(themeId);
     const p = planSlide(section({ img: false, sub: true }), theme, "circle", INDEX, TOTAL);
     const inner = p.layers.filter(
-      (l): l is Extract<SlideLayer, { t: "rect" }> => l.t === "rect" && Boolean(l.radius) && l.box.x > 1.4 && l.box.w < 1.5 && l.box.y > 2.2,
+      (l): l is Extract<SlideLayer, { t: "rect" }> => l.t === "rect" && Boolean(l.radius) && l.box.w === l.box.h && l.box.x > 1.4 && l.box.x < 4.5 && l.box.w < 1.5,
     );
     assert.ok(inner.length > 0, `${themeId}: nishon markazi yo'q`);
-    const disk = theme.titleBg.toLowerCase();
-    assert.ok(
-      inner.some((d) => d.fill && d.fill.color.toLowerCase() !== disk),
-      `${themeId}: nishon markazi disk rangida (${disk}) — bo'sh nishon`,
-    );
+    // Ichma-ich doiralar (kichikdan kattaga), oxirida ularni o'rab turgan disk.
+    const rings = [...inner].sort((a, b) => a.box.w - b.box.w).map((d) => (d.fill?.color ?? "").toLowerCase());
+    rings.push(theme.titleBg.toLowerCase());
+    // Markaz (eng kichik) o'zini bevosita o'rab turgan rangdan farqlansin —
+    // oraliq halqa disk bilan bir xil bo'lsa ham (`orbit`: bg = titleBg).
+    assert.notEqual(rings[0], rings[1], `${themeId}: nishon markazi (${rings[0]}) atrofi bilan bir rangda — bo'sh nishon`);
   }
 });
