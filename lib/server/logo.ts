@@ -26,7 +26,10 @@ function assetIdFor(bytes: Buffer): string {
 export type LogoUploadResult = { assetId: string; mime: "image/png" | "image/jpeg"; size: number };
 
 /**
- * `ON CONFLICT DO NOTHING` — ikkinchi marta bir xil bayt kelsa jim o'tadi.
+ * Ikkinchi marta bir xil bayt kelsa o'sha qator qoladi, faqat `created_at`
+ * yangilanadi (W2-C): qayta tanlangan eski logotipni kelajakdagi
+ * «foydalanilmagan 90 kun» tozalashi (`purgeUnusedUploads`) «Yaratish»
+ * bosilguncha o'chirib yubormasin.
  * Yozish foydalanuvchi kvotasi ostida (C13, `upload-quota.ts`).
  */
 export async function putLogo(
@@ -39,7 +42,7 @@ export async function putLogo(
     c.query(
       `INSERT INTO logo_uploads (user_id, asset_id, mime, size_bytes, bytes)
        VALUES ($1, $2, $3, $4, $5)
-       ON CONFLICT (user_id, asset_id) DO NOTHING`,
+       ON CONFLICT (user_id, asset_id) DO UPDATE SET created_at = now()`,
       [userId, assetId, mime, bytes.byteLength, bytes],
     ),
   );

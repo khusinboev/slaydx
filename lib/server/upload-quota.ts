@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import type { PoolClient } from "pg";
 import { pool, query, transaction } from "./db";
 import { ApiError } from "./api";
+import { THUMB_ASSET_ID } from "./thumb";
 
 /**
  * Foydalanuvchi yuklamalari uchun SAQLASH KVOTASI (C13: DB-02).
@@ -59,8 +60,8 @@ export type IncomingUpload = {
  * Kvota xabari — har tur uchun ROST (W2-C review R3): chegara va
  * foydalanuvchi HOZIR nima qila olishi. Faqat haqiqatan ishlaydigan yo'llar
  * aytiladi: shablon va tarjima manbasini o'chirish mumkin (API bor),
- * logotipni o'chirish yo'li YO'Q, manbalar 30 kundan va suratlar 90 kundan
- * keyin worker tomonidan o'chiriladi (`purgeOldSources`/`purgeOldPhotos`).
+ * logotipni o'chirish yo'li YO'Q, manbalar 30 kundan va ishlatilmayotgan
+ * suratlar 90 kundan keyin worker tomonidan o'chiriladi (`purgeOldSources`/`purgeOldPhotos`).
  * Foydalanilmagan logotip/shablon tozalash (`purgeUnusedUploads`) ulanmagan —
  * shuning uchun va'da qilinmaydi.
  */
@@ -72,7 +73,7 @@ export function quotaMessage(kind: UploadKind, reason: "count" | "bytes"): strin
     case "logo":
       return `Logotiplar chegarasi — ${UPLOAD_QUOTA.count.logo} ta, yangi logotip qabul qilinmaydi. Avval yuklagan logotip faylingizni qayta tanlashingiz mumkin.`;
     case "photo":
-      return `Suratlar chegarasi — ${UPLOAD_QUOTA.count.photo} ta. Avval yuklagan suratingizni qayta tanlang; har surat yuklangandan 90 kun o'tib o'chiriladi.`;
+      return `Suratlar chegarasi — ${UPLOAD_QUOTA.count.photo} ta. Avval yuklagan suratingizni qayta tanlang; qoralama yoki rezyumeda ishlatilmayotgan surat 90 kundan keyin o'chiriladi.`;
     case "template":
       return `Shablonlar chegarasi — ${UPLOAD_QUOTA.count.template} ta. Yangisini yuklash uchun «O'z shablonim» ro'yxatidan keraksizini o'chiring.`;
     case "source":
@@ -87,7 +88,10 @@ type Exec = Pick<PoolClient, "query">;
 /*
  * Tayyor hujjatga KEYIN yuklangan rasm = `created_at > finished_at`.
  * Worker yaratgan rasmlar (Gemini, sxemalar) hujjat tugashidan oldin
- * yoziladi va kvotaga kirmaydi — ular pullik ish natijasi.
+ * yoziladi va kvotaga kirmaydi — ular pullik ish natijasi. Fayl kartasi
+ * eskizi (`THUMB_ASSET_ID`, `thumb.ts`) ham tugagandan KEYIN yoziladi,
+ * lekin uni TIZIM yozadi — foydalanuvchi yuklamasi emas, kvotaga kirmaydi
+ * (W2-C): aks holda har ko'rilgan hujjat ko'rinmas tarzda chegarani yerdi.
  */
 const USAGE_SQL = `
   WITH u AS (
@@ -107,6 +111,7 @@ const USAGE_SQL = `
       FROM generation_assets a
       JOIN generations g ON g.id = a.generation_id
      WHERE g.user_id = $1 AND a.created_at > COALESCE(g.finished_at, g.created_at)
+       AND a.asset_id <> $5
   )
   SELECT COALESCE(sum(bytes), 0)::bigint AS total_bytes,
          (count(*) FILTER (WHERE kind = $2))::int AS kind_count,
@@ -130,6 +135,7 @@ async function check(exec: Exec, userId: string, kind: UploadKind, incoming: Inc
     kind,
     ids,
     genId,
+    THUMB_ASSET_ID,
   ]);
   const row = res.rows[0];
   const total = Number(row?.total_bytes ?? 0);
