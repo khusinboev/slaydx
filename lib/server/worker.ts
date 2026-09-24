@@ -5,7 +5,8 @@ import { buildArtifact } from "../generation";
 import { TOOL_BY_ID } from "../tools";
 import { GENERATION_STEPS } from "../generation-steps";
 import { env } from "./env";
-import { ensureMigrated } from "./db";
+import { Client } from "pg";
+import { ensureMigrated, poolConfig } from "./db";
 import {
   claimJob,
   commitJobResult,
@@ -766,6 +767,104 @@ export async function housekeeping(): Promise<void> {
   await step("source-cache", () => purgeSourceCache(60));
 }
 
+/**
+ * Housekeeping advisory qulfi (SCALE-16). Migratsiya qulfi (`db.ts`,
+ * 727_000_001) bilan bir oilada, boshqa raqam.
+ */
+export const HOUSEKEEPING_LOCK_ID = 727_000_002;
+
+/** Qulfni ushlab turgan alohida ulanish (shu process yetakchi bo'lsa). */
+let hkLeader: Client | null = null;
+/** Shu process ichida ikkita tick bir-birining ustiga tushmasin. */
+let hkBusy = false;
+
+export type HousekeepingTickOptions = {
+  /** Test seam: `housekeeping` o'rniga. */
+  run?: () => Promise<void>;
+  /** Test seam: qulf ulanishini ochish (standart — `poolConfig()` bilan yangi `Client`). */
+  connect?: () => Promise<Client>;
+};
+
+async function openLockClient(): Promise<Client> {
+  const c = new Client(poolConfig());
+  // Uzilgan ulanish xatosi processni yiqitmasin — keyingi tick qayta ulanadi.
+  c.on("error", (err) => {
+    log("warn", "[worker] housekeeping qulf ulanishi uzildi", { err });
+  });
+  await c.connect();
+  return c;
+}
+
+/** Qulf HALI shu sessiyadami (ulanish uzilgan bo'lsa — `false`). */
+async function stillLeader(c: Client): Promise<boolean> {
+  try {
+    const r = await c.query(
+      `SELECT 1 FROM pg_locks
+        WHERE locktype = 'advisory' AND pid = pg_backend_pid() AND classid = 0 AND objid = $1 AND granted`,
+      [HOUSEKEEPING_LOCK_ID],
+    );
+    return r.rows.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Housekeeping'ni BITTA process yuritadi (SCALE-16).
+ *
+ * Ilgari har worker replikasi har 60 s da hamma tozalashni o'zi qilardi —
+ * 2 replika = daqiqasiga ikki marta, parallel. Endi Postgres advisory
+ * qulfi (`pg_try_advisory_lock`, pooldan TASHQARI alohida ulanishda):
+ *   - band bo'lsa — shu daqiqa o'tkazib yuboriladi (`false`);
+ *   - olgan process uni USHLAB turadi (yetakchi) — har tickda faqat u
+ *     yuritadi, ya'ni daqiqasiga aynan bir marta;
+ *   - yetakchi o'lsa yoki ulanishi uzilsa sessiya qulfi Postgres tomonida
+ *     bo'shaydi, keyingi tickda boshqa process (yoki o'zi qayta) oladi.
+ * HECH QACHON xato tashlamaydi — sikl to'xtamasin (baza yo'q bo'lsa `false`).
+ */
+export async function housekeepingTick(opts: HousekeepingTickOptions = {}): Promise<boolean> {
+  if (hkBusy) return false;
+  hkBusy = true;
+  try {
+    if (hkLeader && !(await stillLeader(hkLeader))) {
+      log("warn", "[worker] housekeeping qulfi yo'qoldi (ulanish uzilgan) — qayta olinadi");
+      await dropLeader();
+    }
+    if (!hkLeader) {
+      const c = await (opts.connect ?? openLockClient)();
+      let got = false;
+      try {
+        const r = await c.query<{ ok: boolean }>("SELECT pg_try_advisory_lock($1) AS ok", [HOUSEKEEPING_LOCK_ID]);
+        got = r.rows[0]?.ok === true;
+      } finally {
+        if (!got) await c.end().catch(() => undefined);
+      }
+      if (!got) return false;
+      hkLeader = c;
+      log("info", "[worker] housekeeping yetakchisi — shu process", { workerId: WORKER_ID });
+    }
+    await (opts.run ?? housekeeping)();
+    return true;
+  } catch (e) {
+    log("error", "[worker] housekeeping qulfi olinmadi", { err: e });
+    return false;
+  } finally {
+    hkBusy = false;
+  }
+}
+
+async function dropLeader(): Promise<void> {
+  const c = hkLeader;
+  hkLeader = null;
+  // Ulanish yopilsa sessiya qulfi Postgres tomonida o'zi bo'shaydi.
+  await c?.end().catch((e) => log("warn", "[worker] housekeeping qulf ulanishi yopilmadi", { err: e }));
+}
+
+/** Qulfni qo'yib yuboradi (to'xtashda va testlarda). */
+export async function releaseHousekeepingLock(): Promise<void> {
+  await dropLeader();
+}
+
 async function loop(): Promise<void> {
   await ensureMigrated();
   log("info", `[worker] ${WORKER_ID} ishga tushdi (concurrency=${env.worker.concurrency})`, {
@@ -791,7 +890,8 @@ async function loop(): Promise<void> {
     sinceHousekeeping += wait;
     if (sinceHousekeeping >= HOUSEKEEPING_MS) {
       sinceHousekeeping = 0;
-      await housekeeping();
+      // Faqat advisory qulf egasi (bitta process) tozalaydi — SCALE-16.
+      await housekeepingTick();
       // Uzoq housekeeping (katta tozalash partiyasi) 30 s oynani yemasin.
       if (healthy) await touchAlive();
     }
