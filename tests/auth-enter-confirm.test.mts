@@ -110,7 +110,9 @@ test("GET havola: tasdiqlash sahifasi — ism ko'rinadi, token sarflanmaydi, ses
   assert.equal(await consumed(telegramId), false, "GET token'ni sarflamaydi");
   assert.ok(!setCookies.some((c) => c.startsWith(`${SESSION_COOKIE}=`)), "GET sessiya cookie bermaydi");
   assert.match(result.headers.get("cache-control") ?? "", /no-store/);
-  assert.equal(result.headers.get("referrer-policy"), "no-referrer");
+  // `no-referrer` sahifadan yuborilgan POST `Origin: null` oladi → 403 (review).
+  assert.notEqual(result.headers.get("referrer-policy"), "no-referrer", "MUTATSIYA: no-referrer «Kirish» ni buzadi");
+  assert.ok(!result.headers.has("referrer-policy"), "global strict-origin-when-cross-origin amal qilsin");
 });
 
 test("GET: brauzerda BOSHQA akkaunt ochiq — ogohlantirish", { skip }, async () => {
@@ -147,7 +149,7 @@ test("POST o'z sahifamizdan — sessiya ochiladi, eski boshqa sessiya bekor, tok
   const { token, telegramId } = await botToken("Yangi Kiruvchi");
   const { result, setCookies } = await post(token, SAME, oldCookie);
   assert.equal(result.status, 303);
-  assert.equal(new URL(result.headers.get("location")!).pathname, "/uz");
+  assert.equal(result.headers.get("location"), "/uz", "POST yo'naltirishi nisbiy — sahifa hostida qoladi (N4)");
   const sess = setCookies.find((c) => c.startsWith(`${SESSION_COOKIE}=`) && !c.startsWith(`${SESSION_COOKIE}=;`));
   assert.ok(sess, `sessiya cookie yo'q: ${setCookies.join(" | ")}`);
   assert.equal(await consumed(telegramId), true);
@@ -169,11 +171,53 @@ test("POST o'z sahifamizdan — sessiya ochiladi, eski boshqa sessiya bekor, tok
 
   const again = await post(token, SAME);
   assert.equal(again.result.status, 303);
-  assert.match(decodeURIComponent(new URL(again.result.headers.get("location")!).searchParams.get("xato") ?? ""), /eskirgan/);
+  const loc = again.result.headers.get("location")!;
+  assert.match(loc, /^\/uz\/login\?xato=/, "xato yo'naltirishi ham nisbiy");
+  assert.match(decodeURIComponent(new URL(loc, "http://localhost:3000").searchParams.get("xato") ?? ""), /eskirgan/);
 });
 
 test("GET yaroqsiz token — login sahifasiga xato bilan (avvalgidek)", { skip }, async () => {
   const { result } = await get(randomBytes(32).toString("base64url"));
   assert.equal(result.status, 303);
   assert.match(decodeURIComponent(new URL(result.headers.get("location")!).searchParams.get("xato") ?? ""), /eskirgan|yaroqsiz/);
+});
+
+test("POST `Origin: null` (masalan `no-referrer` sahifadan) — 403: shuning uchun sahifa no-referrer QO'YMAYDI", { skip }, async () => {
+  const { token, telegramId } = await botToken("Null Origin");
+  const { result } = await post(token, { origin: "null", "sec-fetch-site": "same-origin" });
+  assert.equal(result.status, 403);
+  assert.equal(await consumed(telegramId), false);
+});
+
+test("POST: brauzerda AYNAN shu akkauntning eski sessiyasi — u ham bazada yopiladi (N5)", { skip }, async () => {
+  const { token, telegramId } = await botToken("Qayta Kiruvchi");
+  const oldCookie = await sessionFor(telegramId, "Qayta Kiruvchi");
+  const { result } = await post(token, SAME, oldCookie);
+  assert.equal(result.status, 303);
+  const { createHash } = await import("node:crypto");
+  const old = await query<{ revoked_at: Date | null }>("SELECT revoked_at FROM sessions WHERE token_hash = $1", [
+    createHash("sha256").update(oldCookie.split("=")[1]!).digest("hex"),
+  ]);
+  assert.ok(old[0]?.revoked_at, "MUTATSIYA: eski sessiya yetim qoldi");
+});
+
+test("POST: Content-Length siz katta tana (chunked) — 413, token sarflanmaydi (N3)", { skip }, async () => {
+  const { token, telegramId } = await botToken("Katta Tana");
+  const big = `t=${token}&pad=${"x".repeat(10_000)}`;
+  const stream = new ReadableStream<Uint8Array>({
+    start(c) {
+      c.enqueue(new TextEncoder().encode(big));
+      c.close();
+    },
+  });
+  const req = new Request("http://localhost:3000/api/auth/telegram/enter", {
+    method: "POST",
+    headers: { host: "localhost:3000", "content-type": "application/x-www-form-urlencoded", "x-forwarded-for": ip(), ...SAME },
+    body: stream,
+    duplex: "half",
+  } as RequestInit);
+  assert.equal(req.headers.get("content-length"), null);
+  const { result } = await inRouteRequest(req, () => route.POST(req));
+  assert.equal(result.status, 413);
+  assert.equal(await consumed(telegramId), false);
 });

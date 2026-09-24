@@ -70,6 +70,41 @@ function failRedirect(req: Request, why: string): NextResponse {
   return NextResponse.redirect(`${baseUrl(req)}/uz/login?xato=${encodeURIComponent(why)}`, 303);
 }
 
+/**
+ * POST javobidagi yo'naltirish — NISBIY `Location` (sahifa qaysi hostda
+ * ochilgan bo'lsa, o'sha hostda qoladi). `APP_URL` dan farqli host
+ * (`www`, IP) da forma yuborilgach absolyut boshqa-origin yo'naltirishni
+ * CSP `form-action 'self'` to'sardi (review N4).
+ */
+function localRedirect(path: string): Response {
+  return new Response(null, { status: 303, headers: { Location: path, "Cache-Control": "private, no-store" } });
+}
+
+function localFail(why: string): Response {
+  return localRedirect(`/uz/login?xato=${encodeURIComponent(why)}`);
+}
+
+/** Tana eng ko'pi `max` bayt — `Content-Length` siz (chunked) tana ham oqim bo'yicha kesiladi (review N3). */
+async function readSmallBody(req: Request, max: number): Promise<string | null> {
+  if (!req.body) return "";
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > max) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(value);
+  }
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+const MAX_FORM_BYTES = 4096;
+
 const EXPIRED = "Havola eskirgan yoki allaqachon ishlatilgan. Qaytadan urinib ko'ring.";
 
 function esc(s: string): string {
@@ -134,8 +169,14 @@ export async function GET(req: Request) {
       headers: {
         "Content-Type": "text/html; charset=utf-8",
         "Cache-Control": "private, no-store",
-        // Token URL da — hech qayerga `Referer` bilan ketmasin.
-        "Referrer-Policy": "no-referrer",
+        /*
+         * `Referrer-Policy` ni bu yerda QO'YMAYMIZ (review, SECA-05): global
+         * `strict-origin-when-cross-origin` (next.config.ts) yetarli —
+         * sahifada faqat o'z havolalarimiz, boshqa-origin so'rovga faqat
+         * origin ketadi. `no-referrer` esa XAVFLI: Fetch spec bo'yicha shunday
+         * sahifadan yuborilgan POST `Origin: null` bilan ketadi va
+         * `checkOrigin` «Kirish» ni hamma uchun 403 qiladi.
+         */
         "X-Robots-Tag": "noindex",
       },
     });
@@ -151,42 +192,38 @@ export async function POST(req: Request) {
   if (!checkOrigin(req)) {
     return NextResponse.json({ error: "So'rov manbasi noto'g'ri" }, { status: 403 });
   }
-  if (Number(req.headers.get("content-length") ?? 0) > 4096) {
+  if (Number(req.headers.get("content-length") ?? 0) > MAX_FORM_BYTES) {
     return NextResponse.json({ error: "So'rov hajmi juda katta" }, { status: 413 });
   }
   try {
     await ensureMigrated();
     const g = await gate(req, true);
-    if (g.blocked) return failRedirect(req, "Juda ko'p urinish. Bir oz kuting.");
+    if (g.blocked) return localFail("Juda ko'p urinish. Bir oz kuting.");
 
-    let token = "";
-    try {
-      token = String((await req.formData()).get("t") ?? "");
-    } catch {
-      // Forma o'qilmadi (buzuq tana) — token yo'q deb hisoblanadi va
-      // pastda «yaroqsiz» sifatida sanaladi.
-      token = "";
-    }
+    const body = await readSmallBody(req, MAX_FORM_BYTES);
+    if (body === null) return NextResponse.json({ error: "So'rov hajmi juda katta" }, { status: 413 });
+    // Buzuq forma — token bo'sh, pastda «yaroqsiz» sifatida sanaladi.
+    const token = new URLSearchParams(body).get("t") ?? "";
 
     const result = await redeemLoginToken(token);
     if (!result.ok) {
       await countFailure(g);
-      return failRedirect(req, result.reason === "expired" ? EXPIRED : "Havola yaroqsiz.");
+      return localFail(result.reason === "expired" ? EXPIRED : "Havola yaroqsiz.");
     }
 
-    // Brauzerda boshqa akkaunt ochiq bo'lsa — u sessiya bazada ham yopiladi
-    // (cookie ustidan yozilgani yetmaydi: eski token tirik qolardi).
-    const current = await currentUser().catch(() => null);
-    if (current && current.id !== result.user.id) await revokeCurrentSession();
+    // Brauzerdagi oldingi sessiya (boshqa YOKI shu akkaunt) bazada ham
+    // yopiladi — cookie ustidan yozilgani yetmaydi: eski token tirik qolardi
+    // (review N5). Cookie bo'lmasa hech narsa qilmaydi.
+    await revokeCurrentSession();
 
     const { token: sessionToken, expiresAt } = await createSession(result.user.id, {
       userAgent: req.headers.get("user-agent"),
       ip: g.ip,
     });
     await setSessionCookie(sessionToken, expiresAt);
-    return NextResponse.redirect(`${baseUrl(req)}/uz`, 303);
+    return localRedirect("/uz");
   } catch (e) {
     console.error("[auth/enter]", e instanceof Error ? e.message : e);
-    return failRedirect(req, "Kirishda xatolik. Qaytadan urinib ko'ring.");
+    return localFail("Kirishda xatolik. Qaytadan urinib ko'ring.");
   }
 }

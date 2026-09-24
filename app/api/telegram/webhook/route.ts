@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { ensureMigrated } from "@/lib/server/db";
 import { telegramWebhookSecret } from "@/lib/server/env";
 import { safeEqual } from "@/lib/server/session";
-import { botConfigured, handleUpdate, type TelegramUpdate } from "@/lib/server/telegram";
+import { botConfigured, handleUpdate, isRetryableUpdateError, type TelegramUpdate } from "@/lib/server/telegram";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -55,12 +55,18 @@ export async function POST(req: Request) {
   } catch (e) {
     /*
      * BEA-17: ilgari har xato yutilib 200 qaytardi — Telegram update'ni
-     * qayta yubormas, kirish havolasi jimgina yo'qolardi. Endi 500:
-     * Telegram cheklangan marta qayta yuboradi, `handleUpdate` esa
-     * muvaffaqiyatsiz update'ni «ishlangan» deb belgilamagan.
+     * qayta yubormas, kirish havolasi jimgina yo'qolardi. Endi VAQTINCHALIK
+     * xatoda (Telegram 429/5xx/tarmoq, baza ulanishi) 500: Telegram qayta
+     * yuboradi, `handleUpdate` esa update'ni «ishlangan» deb belgilamagan.
+     * Aniq xato (kod nuqsoni) — 200 va jurnal: qayta yuborish baribir
+     * yiqiladi va boshqa update'larni sekinlashtirardi (review N1).
      */
-    console.error(`[telegram/webhook] update ${update.update_id}:`, e instanceof Error ? e.message : e);
-    return NextResponse.json({ ok: false }, { status: 500 });
+    const retry = isRetryableUpdateError(e);
+    console.error(
+      `[telegram/webhook] update ${update.update_id} (${retry ? "qayta yuboriladi" : "tashlandi"}):`,
+      e instanceof Error ? e.message : e,
+    );
+    return retry ? NextResponse.json({ ok: false }, { status: 500 }) : NextResponse.json({ ok: true });
   }
   return NextResponse.json({ ok: true });
 }

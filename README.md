@@ -103,9 +103,14 @@ Mini App ichida havola kerak emas — `initData` imzosi yetarli.
 
 ```bash
 curl -F "url=https://<domen>/api/telegram/webhook" \
-     -F "secret_token=$CRON_SECRET" \
+     -F "secret_token=$TELEGRAM_WEBHOOK_SECRET" \
      "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook"
 ```
+
+`TELEGRAM_WEBHOOK_SECRET` — faqat webhook uchun (`CRON_SECRET` emas: u
+`/api/health` bearer'i). Bo'sh bo'lsa vaqtincha `CRON_SECRET` ishlatiladi va
+ishga tushishda ogohlantiriladi. Almashtirish: `.env` → web'ni qayta ishga
+tushirish → darhol yuqoridagi `setWebhook` ni yangi kalit bilan qayta yuborish.
 
 Webhook ham, `npm run bot` ham bir xil `handleUpdate` ni chaqiradi.
 

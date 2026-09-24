@@ -217,4 +217,36 @@ test("EXT-14: TELEGRAM_WEBHOOK_SECRET web konteyneriga uzatiladi va .env.example
   const example = readFileSync(new URL("../.env.example", import.meta.url), "utf8");
   assert.match(example, /^TELEGRAM_WEBHOOK_SECRET=$/m);
   assert.match(example, /secret_token=<TELEGRAM_WEBHOOK_SECRET>/, "setWebhook yo'riqnomasi yangi kalit bilan");
+  const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
+  assert.match(readme, /secret_token=\$TELEGRAM_WEBHOOK_SECRET/, "README setWebhook yangi kalit bilan");
+  assert.ok(!/secret_token=\$CRON_SECRET/.test(readme), "README hali CRON_SECRET ni webhook kaliti deb ko'rsatadi");
+});
+
+test("N1: aniq (deterministik) xato — 200 (Telegram qayta yubormaydi), xabar yo'q, belgi yo'q", { skip }, async () => {
+  // `from.id` BIGINT ga sig'maydi → `login_tickets` INSERT 22003 — har urinishda takrorlanadi.
+  const u = { update_id: ++seq, message: { chat: { id: 1 }, from: { id: 1e20, first_name: "Katta" }, text: "/login" } };
+  stubTelegram("ok");
+  const res = await hook(u);
+  assert.equal(res.status, 200, "MUTATSIYA: aniq xato 500 bilan qayta-qayta yuborilardi");
+  assert.equal(sent.length, 0);
+  assert.equal(await recorded(u.update_id), false);
+});
+
+test("N1: isRetryableUpdateError — faqat vaqtinchalik xatolar", () => {
+  const { isRetryableUpdateError, TelegramTransientError } = telegram;
+  const pg = (code: string) => Object.assign(new Error("pg"), { code });
+  const yes = [
+    new TelegramTransientError("sendMessage: 502"),
+    pg("08006"),
+    pg("57P01"),
+    pg("53300"),
+    pg("57014"),
+    pg("40P01"),
+    pg("ECONNREFUSED"),
+    new Error("Connection terminated unexpectedly"),
+    new Error("timeout exceeded when trying to connect"),
+  ];
+  for (const e of yes) assert.equal(isRetryableUpdateError(e), true, e.message);
+  const no: unknown[] = [new Error("boom"), new TypeError("x is undefined"), pg("22003"), pg("23505"), pg("42P01"), null, "str"];
+  for (const e of no) assert.equal(isRetryableUpdateError(e), false, String(e));
 });

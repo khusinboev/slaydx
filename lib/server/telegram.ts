@@ -40,6 +40,25 @@ export class TelegramTransientError extends Error {
   }
 }
 
+/** Postgres SQLSTATE: ulanish (08), resurs (53), o'chirilmoqda (57P0x), timeout (57014), poyga (40001/40P01). */
+const RETRYABLE_PG = /^(08|53|57P0)|^(57014|40001|40P01)$/;
+const RETRYABLE_NET = new Set(["ECONNREFUSED", "ECONNRESET", "ETIMEDOUT", "EPIPE", "ENOTFOUND", "EAI_AGAIN"]);
+
+/**
+ * Update'ni keyinroq qayta ishlash foyda beradimi (review N1): faqat
+ * Telegram'ning vaqtinchalik xatosi va baza ULANISH/yuklama xatolari.
+ * Aniq (deterministik) xato — masalan kod nuqsoni yoki `22003` — qayta
+ * yetkazishda ham takrorlanadi; unga 500 bersak Telegram uni bir necha
+ * marta qayta yuborib, boshqa update'larni sekinlashtirardi.
+ */
+export function isRetryableUpdateError(e: unknown): boolean {
+  if (e instanceof TelegramTransientError) return true;
+  const code = String((e as { code?: unknown } | null)?.code ?? "");
+  if (RETRYABLE_PG.test(code) || RETRYABLE_NET.has(code)) return true;
+  const msg = e instanceof Error ? e.message : "";
+  return /Connection terminated|timeout exceeded when trying to connect|connect ECONN/i.test(msg);
+}
+
 async function call<T>(
   method: string,
   payload: unknown,
@@ -326,6 +345,12 @@ export type TelegramUpdate = {
  * Ishlash muvaffaqiyatsiz bo'lsa `releaseUpdate` belgini O'CHIRADI
  * (BEA-17) — ya'ni qator faqat MUVAFFAQIYATLI ishlangan update uchun
  * qoladi va Telegram'ning qayta yetkazishi yana ishlanadi.
+ *
+ * Ma'lum bo'shliq (review N2, kam uchraydi): Telegram birinchi urinish
+ * HALI ishlayotganda (15 s timeout ×2 + `retry_after` — ~35 s gacha)
+ * qayta yuborsa, ikkinchisi belgini ko'rib 200 oladi; birinchisi keyin
+ * yiqilib belgini o'chirsa, bu update yo'qoladi. Foydalanuvchi /login ni
+ * qayta yozadi — to'liq kafolat uchun holat ustuni va lease kerak bo'lardi.
  */
 async function claimUpdate(updateId: number): Promise<boolean> {
   const rows = await query<{ update_id: string }>(
