@@ -29,12 +29,13 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   const user = useAppStore((s) => s.user);
   const loggedIn = useAppStore((s) => s.loggedIn);
   const open = useUi((s) => s.open);
-  const hydrated = useAppStore((s) => s.hydrated);
+  const sessionChecked = useAppStore((s) => s.sessionChecked);
   const total = creditTotal(user);
 
   function onToolClick(href: string) {
     onNavigate?.();
-    if (hydrated && !loggedIn) {
+    // FE-09: seans hali tekshirilmagan bo'lsa «kirmagan» deb hisoblanmaydi.
+    if (sessionChecked && !loggedIn) {
       open("login", { returnTo: href });
     }
   }

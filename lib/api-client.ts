@@ -395,21 +395,9 @@ export type GenerationDetail = ServerGeneration & {
 export type GenerationPage = { generations: ServerGeneration[]; nextCursor?: string | null };
 
 /**
- * Birinchi sahifa (kursorsiz so'rov) javobidagi `nextCursor`.
- *
- * `lib/store.ts refreshGenerations` javobdan faqat `generations` ni
- * oladi; «Yana ko'rsatish» (`HomeFiles`) esa ikkinchi sahifa qayerdan
- * boshlanishini bilishi kerak — shu sababli oxirgi birinchi-sahifa
- * kursori shu yerda eslab qolinadi (ikkinchi so'rov yubormaslik uchun).
- */
-let firstCursor: string | null = null;
-export function firstPageCursor(): string | null {
-  return firstCursor;
-}
-
-/**
  * Fayllar ro'yxati. `cursor` — oldingi javobning `nextCursor` i (shaffof
  * satr, W2-B shartnomasi). Eski server `nextCursor` bermaydi → `null`.
+ * Birinchi sahifa kursorini `lib/store.ts` (`generationsCursor`) saqlaydi.
  */
 export async function listGenerations(opts: { cursor?: string; limit?: number } = {}): Promise<GenerationPage> {
   const qs = new URLSearchParams();
@@ -418,7 +406,6 @@ export async function listGenerations(opts: { cursor?: string; limit?: number } 
   const q = qs.toString();
   const page = await request<GenerationPage>(`/api/generations${q ? `?${q}` : ""}`);
   const next = typeof page.nextCursor === "string" && page.nextCursor ? page.nextCursor : null;
-  if (!opts.cursor) firstCursor = next;
   return { ...page, nextCursor: next };
 }
 
@@ -461,15 +448,27 @@ export function nextPollDelay(g: GenerationDetail, delay: number): number {
  *
  * Vaqt tugasa ish baribir navbatga tushgan bo'lishi mumkin — matn
  * qayta yuborishdan oldin «Mening fayllarim» ni tekshirishni aytadi.
+ *
+ * `Idempotency-Key` (C34 / CONC-10): har yuborish NIYATIGA bitta UUID v4
+ * ({@link submitKey}). Javobi yo'qolgan so'rovdan (vaqt tugashi, 5xx,
+ * tarmoq) keyin xuddi shu forma qayta yuborilsa — kalit O'SHA: server
+ * ikkinchi marta pul yechmay, birinchi ishni qaytaradi. Server kalitni
+ * hali o'qimasa ham sarlavha zararsiz.
  */
-export async function createGeneration(slug: string, values: FormValues) {
+export async function createGeneration(slug: string, values: FormValues, opts: { idempotencyKey?: string } = {}) {
+  const body = JSON.stringify({ slug, values });
+  const key = opts.idempotencyKey ?? submitKey(body);
   try {
-    return await request<{ id: string; price: number; status: JobStatus }>("/api/generations", {
+    const res = await request<{ id: string; price: number; status: JobStatus }>("/api/generations", {
       method: "POST",
-      body: JSON.stringify({ slug, values }),
+      body,
+      headers: { "Idempotency-Key": key },
       timeoutMs: 60_000,
     });
+    settleSubmitKey(key, "done");
+    return res;
   } catch (e) {
+    settleSubmitKey(key, submitOutcome(e));
     if (e instanceof ApiError && e.status === 429) {
       throw new ApiError(withRetryHint(e.message, e.retryAfterSec), 429, e.data);
     }
@@ -484,7 +483,70 @@ export async function createGeneration(slug: string, values: FormValues) {
   }
 }
 
+/* ─────────────── Idempotency-Key: bitta niyat — bitta kalit (C34) ─────────────── */
+
+/** Muvaffaqiyatdan keyin shu vaqt ichidagi AYNAN shu forma — o'sha niyat (sahifa o'tishi paytidagi ikkinchi bosish). */
+export const SUBMIT_KEY_AFTER_SUCCESS_MS = 30_000;
+/** Javobi yo'qolgan yuborishdan keyingi qayta urinish shu vaqt ichida o'sha kalitni oladi. */
+export const SUBMIT_KEY_AFTER_UNSURE_MS = 10 * 60_000;
+
+/** Oxirgi yuborish niyati: so'rov tanasi (vosita + qiymatlar), kalit va natija. */
+let lastSubmit: { body: string; key: string; state: "pending" | "done" | "unsure"; at: number } | null = null;
+
+function uuidV4(): string {
+  const c = globalThis.crypto;
+  if (typeof c?.randomUUID === "function") return c.randomUUID();
+  // `randomUUID` faqat xavfsiz kontekstda (https/localhost) — aks holda qo'lda v4.
+  const b = c.getRandomValues(new Uint8Array(16));
+  b[6] = (b[6] & 0x0f) | 0x40;
+  b[8] = (b[8] & 0x3f) | 0x80;
+  const h = Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
+
+/**
+ * Shu yuborish uchun kalit.
+ *
+ * Xuddi shu tana (vosita + forma qiymatlari) javobi aniq bo'lmagan
+ * urinishdan keyin ({@link SUBMIT_KEY_AFTER_UNSURE_MS}) yoki endigina
+ * muvaffaqiyatdan keyin ({@link SUBMIT_KEY_AFTER_SUCCESS_MS}) yuborilsa —
+ * o'sha kalit (bitta niyatning takrori). Boshqa forma, aniq rad
+ * (4xx — hech narsa yaratilmagan) yoki muddat o'tgan — yangi kalit.
+ */
+function submitKey(body: string): string {
+  const now = Date.now();
+  const last = lastSubmit;
+  const reuse =
+    last !== null &&
+    last.body === body &&
+    (last.state === "pending" ||
+      (last.state === "unsure" && now - last.at < SUBMIT_KEY_AFTER_UNSURE_MS) ||
+      (last.state === "done" && now - last.at < SUBMIT_KEY_AFTER_SUCCESS_MS));
+  const key = reuse ? last.key : uuidV4();
+  lastSubmit = { body, key, state: "pending", at: now };
+  return key;
+}
+
+function settleSubmitKey(key: string, state: "done" | "unsure" | "rejected") {
+  if (lastSubmit?.key !== key) return;
+  if (state === "rejected") lastSubmit = null;
+  else lastSubmit = { ...lastSubmit, state, at: Date.now() };
+}
+
+/**
+ * Javob ish yaratilmaganini ANIQ aytadimi. Tarmoq/vaqt tugashi (0), 408,
+ * 5xx — so'rov serverga yetib, pul yechilgan bo'lishi mumkin (`unsure`).
+ * Qolgan 4xx (400/402/403/409/413/422/429…) — server rad etgan (`rejected`).
+ */
+function submitOutcome(e: unknown): "unsure" | "rejected" {
+  if (!(e instanceof ApiError)) return "unsure";
+  if (e.status === 0 || e.status === 408 || e.status >= 500) return "unsure";
+  return "rejected";
+}
+
 export function deleteGeneration(id: string) {
+  // O'chirilgan ishning kaliti qayta ishlatilmasin: keyingi yuborish — yangi niyat.
+  lastSubmit = null;
   return request<{ ok: boolean; refunded: boolean }>(`/api/generations/${id}`, { method: "DELETE" });
 }
 
@@ -603,7 +665,7 @@ const SLOW_ISSUE: PollIssue = {
  * 408/425/429 va 5xx (deploy paytidagi 502, OOM qayta ishga tushish).
  * 404/400/403 — yo'q: hujjat o'chirilgan yoki so'rov noto'g'ri.
  */
-function isTransient(e: unknown): e is ApiError {
+export function isTransient(e: unknown): e is ApiError {
   return (
     e instanceof ApiError &&
     (e.status === 0 || e.status === 408 || e.status === 425 || e.status === 429 || e.status >= 500)

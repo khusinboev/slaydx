@@ -207,7 +207,7 @@ export type EnqueueChargeResult =
 export type EnqueueResult =
   | EnqueueChargeResult
   | { ok: false; reason: "admission"; decision: AdmissionReject }
-  /** Kalit shu foydalanuvchida BOSHQA vosita uchun ishlatilgan (422). */
+  /** Kalit shu foydalanuvchida BOSHQA so'rov (vosita yoki forma qiymatlari) uchun ishlatilgan (422). */
   | { ok: false; reason: "idempotency_conflict" };
 
 /** Idempotentlik oynasi — shundan eski kalit yangi so'rov hisoblanadi. */
@@ -219,20 +219,36 @@ function isIdempotencyViolation(e: unknown): boolean {
   return err?.code === "23505" && err.constraint === "generations_user_idem_idx";
 }
 
-type IdemRow = { id: string; tool_id: string; price: string };
+type IdemRow = { id: string; tool_id: string; price: string; same_values: boolean };
 
-async function findByIdempotencyKey(client: PoolClient, userId: string, key: string): Promise<IdemRow | null> {
+/**
+ * Kalitli ish (24 soat oynasida) va uning TANASI shu so'rovnikiga tengmi
+ * (`same_values`, W3-A review nit 4). Tana = navbatga yoziladigan aynan shu
+ * `toJsonb(values)`; JSONB tengligi kalitlar tartibiga qaramaydi.
+ */
+async function findByIdempotencyKey(
+  client: PoolClient,
+  userId: string,
+  key: string,
+  values: FormValues,
+): Promise<IdemRow | null> {
   const res = await client.query<IdemRow>(
-    `SELECT id, tool_id, price FROM generations
+    `SELECT id, tool_id, price, values_json = $4::jsonb AS same_values FROM generations
       WHERE user_id = $1 AND idempotency_key = $2
         AND created_at >= now() - $3::int * interval '1 hour'`,
-    [userId, key, IDEMPOTENCY_WINDOW_HOURS],
+    [userId, key, IDEMPOTENCY_WINDOW_HOURS, toJsonb(values)],
   );
   return res.rows[0] ?? null;
 }
 
+/**
+ * Takror faqat AYNAN o'sha so'rov uchun: boshqa vosita yoki boshqa forma
+ * qiymatlari bilan kelgan o'sha kalit — 422 (Stripe uslubi). Ilgari boshqa
+ * mavzu jim holda ASL ishni qaytarardi va klient yangi hujjat buyurtma
+ * qildim deb o'ylardi.
+ */
 function replayOf(row: IdemRow, toolId: ToolId): EnqueueResult {
-  if (row.tool_id !== toolId) return { ok: false, reason: "idempotency_conflict" };
+  if (row.tool_id !== toolId || !row.same_values) return { ok: false, reason: "idempotency_conflict" };
   return { ok: true, id: row.id, price: Number(row.price), replayed: true };
 }
 
@@ -274,7 +290,7 @@ export async function enqueueGeneration(input: EnqueueInput): Promise<EnqueueRes
               AND created_at < now() - $3::int * interval '1 hour'`,
           [input.userId, key, IDEMPOTENCY_WINDOW_HOURS],
         );
-        const prior = await findByIdempotencyKey(client, input.userId, key);
+        const prior = await findByIdempotencyKey(client, input.userId, key, input.values);
         if (prior) return replayOf(prior, input.toolId);
       }
       if (input.admission) {
@@ -327,7 +343,7 @@ export async function enqueueGeneration(input: EnqueueInput): Promise<EnqueueRes
   } catch (e) {
     if (!key || !isIdempotencyViolation(e)) throw e;
     // Parallel takror bizdan oldin COMMIT qildi — butun tranzaksiya (pul ham) bekor, o'sha ish qaytadi.
-    const prior = await transaction((client) => findByIdempotencyKey(client, input.userId, key));
+    const prior = await transaction((client) => findByIdempotencyKey(client, input.userId, key, input.values));
     if (!prior) throw e;
     const res = replayOf(prior, input.toolId);
     logEnqueue(input, res);
@@ -375,12 +391,13 @@ function logEnqueue(input: EnqueueInput, res: EnqueueResult): void {
  * chegarani bittaga oshirishi mumkin, bu zararsiz.
  *
  * Sanoqlar (`ADMISSION_COUNTS_SQL`) har biri bitta qisman indeks
- * (`generations_queue_idx` / `generations_stale_idx`) bo'ylab — qabul
+ * (`generations_queued_created_idx` / `generations_running_user_idx`) bo'ylab — qabul
  * chegarasi tufayli ular kichik, tarix (COMPLETED) umuman o'qilmaydi.
  */
 /**
  * Har sanoq AYNAN bitta qisman indeks predikatiga mos (`status = 'QUEUED'` →
- * `generations_queue_idx`, `status = 'IN_PROGRESS'` → `generations_stale_idx`).
+ * `generations_queued_created_idx`, `status = 'IN_PROGRESS'` → `generations_running_user_idx`,
+ * 027_queue_indexes.sql).
  * `status IN (…)` (`= ANY(array)`) ularning hech biriga mos kelmaydi va
  * butun (muddatsiz o'sadigan) jadvalni qulf ostida ketma-ket o'qirdi —
  * review W2-B R1: 200k qatorda 14.6 ms → 0.17 ms. `tests/admission.test.mts`
@@ -519,7 +536,7 @@ export async function getGeneration(
   const html = opts?.lean ? "CASE WHEN doc_json IS NULL THEN html END AS html" : "html";
   /*
    * Navbat o'rni faqat QUEUED qatorda hisoblanadi: oldindagi (`created_at,
-   * id` bo'yicha) QUEUED ishlar soni + 1. Sanoq `generations_queue_idx`
+   * id` bo'yicha) QUEUED ishlar soni + 1. Sanoq `generations_queued_created_idx`
    * (faqat QUEUED qatorlar) bo'ylab, qabul chegarasi tufayli kichik.
    * `claimJob` adolat qoidasi tufayli haqiqiy tartib biroz farq qilishi
    * mumkin — bu taxmin, va'da emas.
@@ -555,6 +572,19 @@ export async function deleteGeneration(id: string, userId: string): Promise<bool
     [id, userId],
   );
   return rows.length > 0;
+}
+
+/**
+ * Egasining ishi holati (`null` — qator yo'q yoki begona). `DELETE` route
+ * bekor qilish ham, o'chirish ham o'tmaganda 404 va 409 ni shu bilan
+ * ajratadi (BEA-12).
+ */
+export async function generationStatus(id: string, userId: string): Promise<JobStatus | null> {
+  const row = await queryOne<{ status: JobStatus }>(
+    "SELECT status FROM generations WHERE id = $1 AND user_id = $2",
+    [id, userId],
+  );
+  return row?.status ?? null;
 }
 
 export const CANCEL_REFUND_NOTE = "Foydalanuvchi bekor qildi";
@@ -668,7 +698,35 @@ export type ClaimedJob = {
    * aynan shu qiymat bilan to'siladi.
    */
   lease: string;
+  /**
+   * Claim paytidagi progress (BEB-07): qayta olingan ishda — oldingi
+   * yurishning erishgan qiymati. Worker bundan PAST yozmaydi
+   * (`monotonicProgress`), ya'ni foydalanuvchi progress orqaga ketganini
+   * ko'rmaydi. Yo'q (eski test literal'lari) — 0.
+   */
+  progressFloor?: number;
+  /** Ish avval boshlangan va qayta olingan (bosqich «Qayta boshlandi»). */
+  restarted?: boolean;
 };
+
+/** Qayta olingan ishning bosqichi — progress eski qiymatga yetguncha shu matn turadi (BEB-07). */
+export const RESTART_STEP = "Qayta boshlandi";
+
+/**
+ * Progress faqat oshadi (BEB-07). Yangi yurish eski qiymatdan past bo'lsa
+ * qiymat `floor` da qoladi; qayta olingan ishda bosqich ham «Qayta
+ * boshlandi» bo'lib turadi (aks holda «Reja tuzilmoqda · 60%» kabi
+ * aralash holat chiqardi).
+ */
+export function monotonicProgress(
+  job: Pick<ClaimedJob, "progressFloor" | "restarted">,
+  progress: number,
+  step: string,
+): { progress: number; step: string } {
+  const floor = job.progressFloor ?? 0;
+  if (progress >= floor) return { progress, step };
+  return { progress: floor, step: job.restarted ? RESTART_STEP : step };
+}
 
 /**
  * Har claim uchun YANGI to'siq tokeni (C26: CONC-06).
@@ -701,8 +759,12 @@ export function newLease(workerId: string): string {
  * olsa bittaga oshishi mumkin (zararsiz). Foydalanuvchi abadiy och
  * qolmaydi — uning ishi tugashi bilan keyingisi yana navbatga kiradi,
  * bo'sh slot esa shu orada boshqalarga ketadi. Ichki sanoq
- * `generations_stale_idx` (faqat IN_PROGRESS qatorlar, ≤ slotlar soni)
+ * `generations_running_user_idx` (faqat IN_PROGRESS qatorlar, ≤ slotlar soni)
  * bo'ylab yuradi.
+ *
+ * PROGRESS (BEB-07): qayta olingan ish (`started_at` bor) progressini
+ * YO'QOTMAYDI (`GREATEST`) va bosqichi «Qayta boshlandi» bo'ladi; qaytgan
+ * `progressFloor` dan worker past yozmaydi (`monotonicProgress`).
  */
 export async function claimJob(
   lease: string,
@@ -717,6 +779,8 @@ export async function claimJob(
     price: string;
     attempts: number;
     budget_ms: number;
+    progress: number;
+    step: string;
   }>(
     `UPDATE generations g
         SET status = 'IN_PROGRESS',
@@ -724,8 +788,8 @@ export async function claimJob(
             locked_at = now(),
             started_at = COALESCE(started_at, now()),
             attempts = attempts + 1,
-            progress = 5,
-            step = 'Boshlandi',
+            progress = GREATEST(g.progress, 5),
+            step = CASE WHEN g.started_at IS NULL THEN 'Boshlandi' ELSE $3 END,
             live_json = NULL
       WHERE g.id = (
         SELECT q.id FROM generations q
@@ -736,8 +800,8 @@ export async function claimJob(
          LIMIT 1
          FOR UPDATE SKIP LOCKED
       )
-      RETURNING g.id, g.user_id, g.tool_id, g.values_json, g.price, g.attempts, g.budget_ms`,
-    [lease, cap],
+      RETURNING g.id, g.user_id, g.tool_id, g.values_json, g.price, g.attempts, g.budget_ms, g.progress, g.step`,
+    [lease, cap, RESTART_STEP],
   );
   if (!row) return null;
   return {
@@ -749,6 +813,8 @@ export async function claimJob(
     attempts: row.attempts,
     budgetMs: Number(row.budget_ms) || 0,
     lease,
+    progressFloor: Number(row.progress) || 0,
+    restarted: row.step === RESTART_STEP,
   };
 }
 
@@ -813,6 +879,15 @@ export type JobResult = {
   delivered?: Delivered;
 };
 
+/**
+ * @deprecated FAQAT TESTLAR UCHUN (W3-A review nit 6). Worker hech qachon
+ * chaqirmaydi: u faylni ham, aktivlarni ham yozmaydi, ya'ni ishlab
+ * chiqarishda chaqirilsa COMPLETED, lekin faylsiz ish qoladi. Haqiqiy yo'l —
+ * `commitJobResult` (fayl + aktivlar + COMPLETED bitta tranzaksiyada, qulf
+ * egasi tekshirilgan). O'chirilmadi: `tests/queue.test.mts`,
+ * `tests/jsonb-writes.test.mts`, `tests/jobs-live-edit.test.mts` SQL ni
+ * shu orqali sinaydi.
+ */
 export async function completeJob(id: string, workerId: string, result: JobResult): Promise<boolean> {
   const rows = await query<{ id: string }>(COMPLETE_SQL, completeParams(id, workerId, result));
   return rows.length > 0;

@@ -54,13 +54,17 @@ function row(id: string, patch: Record<string, unknown> = {}): api.ServerGenerat
   } as api.ServerGeneration;
 }
 
-function mount(generations: api.ServerGeneration[], refresh?: () => Promise<void>) {
+/** Store ning haqiqiy `refreshGenerations` i — `mount` stub bilan almashtirganda qaytarish uchun. */
+const realRefresh = useAppStore.getState().refreshGenerations;
+
+function mount(generations: api.ServerGeneration[], refresh?: () => Promise<void>, cursor: string | null = null) {
   useAppStore.setState({
     sessionChecked: true,
     loggedIn: true,
     generations,
     generationsLoaded: true,
-    ...(refresh ? { refreshGenerations: refresh } : {}),
+    generationsCursor: cursor,
+    refreshGenerations: refresh ?? realRefresh,
   });
   render(
     h(
@@ -123,9 +127,11 @@ test("FE-08: «Yana ko'rsatish» `nextCursor` bilan keyingi sahifani qo'shadi", 
     if (url === "/api/generations?cursor=c2") return json(200, { generations: [row("old1"), row("a1")], nextCursor: null });
     return json(404, { error: "yo'q" });
   };
-  // Store birinchi sahifani shu funksiya orqali oladi — kursor eslab qolinadi.
-  const first = await api.listGenerations();
-  mount(first.generations);
+  // Birinchi sahifani store o'zi oladi va `nextCursor` ni O'ZI saqlaydi (api-client da modul holati yo'q).
+  useAppStore.setState({ loggedIn: true, refreshGenerations: realRefresh });
+  await useAppStore.getState().refreshGenerations();
+  assert.equal(useAppStore.getState().generationsCursor, "c2", "store birinchi sahifa kursorini saqlaydi");
+  mount(useAppStore.getState().generations, undefined, useAppStore.getState().generationsCursor);
   const more = await waitFor(() => screen.getByRole("button", { name: "Yana ko‘rsatish" }));
   assert.ok(!card("old1"));
   await act(async () => {
@@ -139,15 +145,16 @@ test("FE-08: «Yana ko'rsatish» `nextCursor` bilan keyingi sahifani qo'shadi", 
 
 test("FE-08: eski server (`nextCursor` yo'q) — tugma chiqmaydi", async () => {
   (globalThis as unknown as { fetch: unknown }).fetch = async () => json(200, { generations: [row("a1")] });
-  const first = await api.listGenerations();
-  mount(first.generations);
+  useAppStore.setState({ loggedIn: true, refreshGenerations: realRefresh });
+  await useAppStore.getState().refreshGenerations();
+  assert.equal(useAppStore.getState().generationsCursor, null);
+  mount(useAppStore.getState().generations, undefined, useAppStore.getState().generationsCursor);
   await waitFor(() => assert.ok(card("a1")));
   assert.ok(!screen.queryByRole("button", { name: "Yana ko‘rsatish" }));
 });
 
 test("retention: `filesPurgedAt` — eskiz so'ralmaydi, neytral belgi; boshqa karta `?v=` bilan eskiz oladi", async () => {
   (globalThis as unknown as { fetch: unknown }).fetch = async () => json(200, { generations: [] });
-  await api.listGenerations();
   mount([row("p1", { filesPurgedAt: "2026-09-01T00:00:00.000Z" }), row("k1")]);
   await waitFor(() => assert.ok(card("p1")));
   const purged = document.querySelectorAll("[data-files-purged]");
@@ -173,4 +180,62 @@ test("waitTurn: `early:false` (server Retry-After) — yorliq almashtirish kutis
   t.mock.timers.tick(10_000);
   await flush();
   assert.equal(strict, true);
+});
+
+test("FE-08: «Testlar»/«O'yinlar» bo'sh emas — har tur o'z filtrida (pro slayd → Slaydlar, infografika → Rasmlar)", async () => {
+  (globalThis as unknown as { fetch: unknown }).fetch = async () => json(200, { generations: [] });
+  mount([
+    row("t1", { type: "test" }),
+    row("g1", { type: "crossword" }),
+    row("g2", { type: "flashcards" }),
+    row("p1", { type: "pro-slide", format: "pptx" }),
+    row("i1", { type: "infographic", format: "png" }),
+    row("r1", { type: "referat" }),
+  ]);
+  await waitFor(() => assert.ok(card("t1")));
+  const shown = () => ["t1", "g1", "g2", "p1", "i1", "r1"].filter((id) => card(id));
+  const pick = async (label: string) => {
+    const chip = [...document.querySelectorAll("button[aria-pressed]")].find((b) => b.textContent === label);
+    assert.ok(chip, label);
+    await act(async () => {
+      fireEvent.click(chip);
+    });
+  };
+  await pick("Testlar");
+  assert.deepEqual(shown(), ["t1"]);
+  await pick("O'yinlar");
+  assert.deepEqual(shown(), ["g1", "g2"]);
+  await pick("Slaydlar");
+  assert.deepEqual(shown(), ["p1"]);
+  await pick("Rasmlar");
+  assert.deepEqual(shown(), ["i1"]);
+  await pick("Hujjatlar");
+  assert.deepEqual(shown(), ["r1"], "test va o'yinlar endi «Hujjatlar» da yashirinmaydi");
+});
+
+test("W2-E: qidiruv faqat yuklangan sahifada — eskilari bor bo'lsa halol aytiladi, bo'lmasa jim", async () => {
+  const { SearchDialog } = await import("../../components/overlays/SearchDialog.tsx");
+  const { useUi } = await import("../../lib/ui.ts");
+  const show = (cursor: string | null) => {
+    useAppStore.setState({ loggedIn: true, sessionChecked: true, generations: [row("s1")], generationsCursor: cursor });
+    useUi.setState({ overlay: "search" });
+    render(h(AppRouterContext.Provider, { value: router }, h(SearchDialog)));
+  };
+  show("c2");
+  const hint = document.querySelector("[data-search-partial]");
+  assert.ok(hint, "serverda yana sahifa bor — ogohlantirish");
+  assert.match(hint.textContent ?? "", /faqat yuklanganlar orasida/);
+  cleanup();
+  show(null);
+  assert.ok(!document.querySelector("[data-search-partial]"), "hamma fayl yuklangan — ogohlantirish yo'q");
+  useUi.setState({ overlay: null });
+});
+
+test("FE-08: har vosita turi `all` dan tashqari aniq BITTA filtrga tushadi", async () => {
+  const { TOOLS } = await import("../../lib/tools.ts");
+  const { FILE_FILTERS, fileFilterMatch } = await import("../../lib/ui.ts");
+  for (const t of TOOLS) {
+    const hits = FILE_FILTERS.filter((f) => f.id !== "all" && fileFilterMatch(f.id, t.id)).map((f) => f.id);
+    assert.equal(hits.length, 1, `${t.id}: ${hits.join(",")}`);
+  }
 });

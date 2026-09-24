@@ -26,11 +26,21 @@ type AppState = {
   user: ServerUser | null;
   features: Features | null;
 
+  /**
+   * Birinchi seans tekshiruvi tarmoq/server xatosi bilan tugadi (FE-04) —
+   * `AppShell` banner ko'rsatadi, store o'zi qayta urinadi. Muvaffaqiyatda `null`.
+   */
+  sessionError: string | null;
+
   generations: ServerGeneration[];
   generationsLoaded: boolean;
+  /**
+   * Birinchi sahifa javobidagi `nextCursor` (W2-B shartnomasi) — «Yana
+   * ko'rsatish» shu yerdan davom etadi. `null` — boshqa sahifa yo'q.
+   */
+  generationsCursor: string | null;
 
   theme: ThemeMode;
-  locale: string;
   dir: "ltr" | "rtl";
 
   refreshSession: () => Promise<void>;
@@ -41,7 +51,6 @@ type AppState = {
   signOut: (all?: boolean) => Promise<void>;
 
   setTheme: (t: ThemeMode) => void;
-  setLocale: (l: string) => void;
   setDir: (d: "ltr" | "rtl") => void;
   resetUiPrefs: () => void;
 };
@@ -60,8 +69,35 @@ api.setUnauthorizedHandler(() => {
     loggedIn: false,
     generations: [],
     generationsLoaded: false,
+    generationsCursor: null,
   });
 });
+
+/*
+ * FE-04: birinchi seans tekshiruvi tarmoq/5xx bilan yiqilsa — o'sib
+ * boruvchi oraliq bilan qayta so'raladi (2 s → 30 s). Bitta taymer.
+ */
+const SESSION_RETRY_START_MS = 2000;
+const SESSION_RETRY_MAX_MS = 30_000;
+let sessionRetryTimer: ReturnType<typeof setTimeout> | null = null;
+let sessionRetryDelay = 0;
+
+function clearSessionRetry() {
+  if (sessionRetryTimer) clearTimeout(sessionRetryTimer);
+  sessionRetryTimer = null;
+  sessionRetryDelay = 0;
+}
+
+function scheduleSessionRetry() {
+  if (sessionRetryTimer) return;
+  sessionRetryDelay = Math.min(SESSION_RETRY_MAX_MS, sessionRetryDelay ? sessionRetryDelay * 2 : SESSION_RETRY_START_MS);
+  sessionRetryTimer = setTimeout(() => {
+    sessionRetryTimer = null;
+    void useAppStore.getState().refreshSession();
+  }, sessionRetryDelay);
+  // Node (testlar, SSR) da bu taymer jarayonni tirik ushlab turmasin; brauzerda `unref` yo'q.
+  (sessionRetryTimer as { unref?: () => void }).unref?.();
+}
 
 /**
  * OS afzalligini BIR MARTA o'qiydi (birinchi tashrifda standart qiymat
@@ -84,15 +120,14 @@ export function applyTheme(theme: ThemeMode) {
  * (hech narsa saqlanmagan) `persist` bu funksiyani chaqirMAYDI, o'sha
  * holat `onRehydrateStorage`da alohida qopqonlanadi (pastda).
  */
-export function migrateUiPrefs(persisted: unknown): { theme: ThemeMode; locale?: string; dir?: "ltr" | "rtl" } {
-  const p = (persisted ?? {}) as { theme?: unknown; locale?: unknown; dir?: unknown };
+export function migrateUiPrefs(persisted: unknown): { theme: ThemeMode; dir?: "ltr" | "rtl" } {
+  const p = (persisted ?? {}) as { theme?: unknown; dir?: unknown };
   const theme: ThemeMode = p.theme === "light" || p.theme === "dark" ? p.theme : resolveOsTheme();
   // `undefined` KIRITILMAYDI (faqat haqiqiy qiymat bo'lsa maydon
   // qo'shiladi) — `persist`ning standart merge'i sayoz (`{...state,
-  // ...persisted}`), aks holda noto'g'ri `locale: undefined` joriy
-  // holatdagi "uz"ni bosib yozardi.
-  const out: { theme: ThemeMode; locale?: string; dir?: "ltr" | "rtl" } = { theme };
-  if (typeof p.locale === "string") out.locale = p.locale;
+  // ...persisted}`), aks holda `dir: undefined` joriy "ltr"ni bosib yozardi.
+  // Eski `locale` (C38 da olib tashlangan til menyusi) ko'chirilmaydi.
+  const out: { theme: ThemeMode; dir?: "ltr" | "rtl" } = { theme };
   if (p.dir === "rtl" || p.dir === "ltr") out.dir = p.dir;
   return out;
 }
@@ -102,38 +137,71 @@ export const useAppStore = create<AppState>()(
     (set, get) => ({
       hydrated: false,
       sessionChecked: false,
+      sessionError: null,
       loggedIn: false,
       user: null,
       features: null,
       generations: [],
       generationsLoaded: false,
+      generationsCursor: null,
       // SSR uchun joy egallovchi — haqiqiy qiymat `onRehydrateStorage`da
       // (birinchi tashrif → OS afzalligi) yoki `migrate`da (eski "system"
       // → OS afzalligi) o'rnatiladi.
       theme: "light",
-      locale: "uz",
       dir: "ltr",
 
+      /*
+       * FE-04: foydalanuvchini FAQAT aniq javob chiqaradi — 200 `user: null`
+       * (seans yo'q) yoki 401. Ilgari har qanday xato (tarmoq uzilishi, 5xx,
+       * deploy paytidagi 502) seansni «chiqdi» deb belgilardi: kutilgan
+       * hujjat o'rniga «Kirish talab qilinadi», forma ustida kirish oynasi.
+       * Endi seans davomida xato joriy holatni o'zgartirmaydi; birinchi
+       * yuklanishda esa `sessionChecked` yolg'on qoladi (sahifalar
+       * «Yuklanmoqda»), `AppShell` banner ko'rsatadi va qayta urinadi.
+       */
       refreshSession: async () => {
+        let res: Awaited<ReturnType<typeof api.fetchSession>>;
         try {
-          const { user, features } = await api.fetchSession();
-          set({ user, features, loggedIn: Boolean(user), sessionChecked: true });
-          if (user?.language) set({ locale: user.language });
-        } catch {
-          // Tarmoq yo'q — kirgan deb hisoblamaymiz, lekin qayta urinish mumkin.
-          set({ sessionChecked: true, loggedIn: false, user: null });
+          res = await api.fetchSession();
+        } catch (e) {
+          if (e instanceof api.ApiError && e.status === 401) {
+            clearSessionRetry();
+            set({
+              sessionChecked: true,
+              sessionError: null,
+              loggedIn: false,
+              user: null,
+              generations: [],
+              generationsLoaded: false,
+              generationsCursor: null,
+            });
+            return;
+          }
+          if (get().sessionChecked) return;
+          if (!api.isTransient(e)) {
+            // Aniq, lekin kutilmagan rad (403/404…) — qayta urinish yordam bermaydi: kirmagan deb hisoblanadi.
+            set({ sessionChecked: true, loggedIn: false, user: null });
+            return;
+          }
+          set({ sessionError: e.message });
+          scheduleSessionRetry();
+          return;
         }
+        clearSessionRetry();
+        const { user, features } = res;
+        set({ user, features, loggedIn: Boolean(user), sessionChecked: true, sessionError: null });
       },
 
       refreshGenerations: async () => {
         if (!get().loggedIn) {
-          set({ generations: [], generationsLoaded: true });
+          set({ generations: [], generationsLoaded: true, generationsCursor: null });
           return;
         }
         try {
-          const { generations } = await api.listGenerations();
-          set({ generations, generationsLoaded: true });
+          const { generations, nextCursor } = await api.listGenerations();
+          set({ generations, generationsLoaded: true, generationsCursor: nextCursor ?? null });
         } catch {
+          // Ro'yxat eski holicha qoladi; keyingi yangilash (polling/fokus) yana so'raydi.
           set({ generationsLoaded: true });
         }
       },
@@ -156,18 +224,13 @@ export const useAppStore = create<AppState>()(
         try {
           await api.logout(all);
         } finally {
-          set({ user: null, loggedIn: false, generations: [], generationsLoaded: false });
+          set({ user: null, loggedIn: false, generations: [], generationsLoaded: false, generationsCursor: null });
         }
       },
 
       setTheme: (theme) => {
         applyTheme(theme);
         set({ theme });
-      },
-      setLocale: (locale) => {
-        set({ locale });
-        // Til profilga ham yoziladi — boshqa qurilmada ham saqlanadi.
-        if (get().loggedIn) void api.updateProfile({ language: locale }).catch(() => {});
       },
       setDir: (dir) => {
         if (typeof document !== "undefined") document.documentElement.setAttribute("dir", dir);
@@ -177,7 +240,7 @@ export const useAppStore = create<AppState>()(
         const theme = resolveOsTheme();
         applyTheme(theme);
         if (typeof document !== "undefined") document.documentElement.setAttribute("dir", "ltr");
-        set({ theme, locale: "uz", dir: "ltr" });
+        set({ theme, dir: "ltr" });
       },
     }),
     {
@@ -185,7 +248,7 @@ export const useAppStore = create<AppState>()(
       // Faqat interfeys sozlamalari. Hujjat va balans hech qachon
       // localStorage ga yozilmaydi — u yerda kvota ~5 MB va ma'lumot
       // qurilmada qolib ketardi.
-      partialize: (s) => ({ theme: s.theme, locale: s.locale, dir: s.dir }),
+      partialize: (s) => ({ theme: s.theme, dir: s.dir }),
       version: 2,
       // Eski (`version < 2`, `"system"` yoki maydon yo'q) yozuvlarni
       // bir martalik OS o'qishiga aylantiradi (`migrateUiPrefs`).
@@ -212,6 +275,23 @@ export const useAppStore = create<AppState>()(
     },
   ),
 );
+
+/*
+ * FE-10 (qoldirildi): W3-H ning birinchi varianti Mini App `initData` sini
+ * URL dagi `#tgWebAppData` dan o'qib, `sessionStorage` ga yozardi — bu
+ * login-CSRF ochardi (istalgan havola qurbonni hujumchi hisobiga kiritardi,
+ * chiqishdan keyin ham qayta kiritardi). O'qish olib tashlandi; o'sha
+ * versiya yozib qo'ygan eskirgan qiymat ham yuklanishda o'chiriladi, hech
+ * qachon o'qilmaydi.
+ */
+if (typeof window !== "undefined") {
+  try {
+    window.sessionStorage.removeItem("slaydx-tg-init");
+  } catch (e) {
+    // sessionStorage yopiq (maxfiy rejim) — u holda u yerga hech narsa yozilmagan ham.
+    console.warn("[miniapp] sessionStorage:", e instanceof Error ? e.message : e);
+  }
+}
 
 export function creditTotal(user: Pick<ServerUser, "points" | "quota" | "balance"> | null) {
   if (!user) return 0;

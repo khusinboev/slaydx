@@ -5,12 +5,14 @@ import { buildArtifact } from "../generation";
 import { TOOL_BY_ID } from "../tools";
 import { GENERATION_STEPS } from "../generation-steps";
 import { env } from "./env";
-import { ensureMigrated } from "./db";
+import { Client } from "pg";
+import { ensureMigrated, poolConfig } from "./db";
 import {
   claimJob,
   commitJobResult,
   failJob,
   heartbeat,
+  monotonicProgress,
   newLease,
   reclaimStaleJobs,
   releaseJobs,
@@ -189,25 +191,64 @@ export function progressTicker(job: ClaimedJob, live: LiveReporter | null, isLiv
    */
   const expected = Math.max(20_000, jobBudget(job) * 0.7);
   const started = Date.now();
+  /*
+   * Yozuv chastotasi (DB-12, SCALE-13). Ilgari HAR 2 s da UPDATE (180 s lik
+   * ish = 90 ta). Endi ijara (`locked_at`) kamida har `LEASE_EVERY_MS` da,
+   * soxta progress esa faqat O'ZGARGANDA va ko'pi bilan har
+   * `PROGRESS_MIN_GAP_MS` da yoziladi; jonli rejimda `LiveReporter` ning
+   * o'z yozuvi (`setLive` ham `locked_at` ni suradi) ijarani yangilagan
+   * bo'lsa heartbeat yuborilmaydi. `tests/worker-heartbeat-rate.test.mts`.
+   */
+  let lastLeaseAt = -Infinity;
+  let lastProgress = -1;
+  let lastStep = "";
+  let liveMode = false;
   const timer = setInterval(() => {
+    const now = Date.now();
     if (live?.started || isLive?.()) {
       // Qulf «heartbeat»i — `progress`/`step`ni endi `LiveReporter` yoki
-      // dvigatelning `onStage` i yozadi.
+      // dvigatelning `onStage` i yozadi. Rejim almashgan birinchi tickda
+      // darhol (10 s sanog'i shu yerdan boshlanadi), keyin faqat ijara
+      // oxirgi yozuvdan beri `LEASE_EVERY_MS` yangilanmagan bo'lsa.
+      const touched = Math.max(lastLeaseAt, live?.lastWriteAt ?? -Infinity);
+      if (liveMode && now - touched < LEASE_EVERY_MS) return;
+      liveMode = true;
+      lastLeaseAt = now;
       void heartbeat(job.id, job.lease).catch((e) => {
         throttledWarn(`hb:${job.id}`, "[worker] heartbeat yozilmadi", { jobId: job.id, err: e });
       });
       return;
     }
-    const ratio = 1 - Math.exp(-(Date.now() - started) / expected);
-    const progress = Math.min(95, Math.round(5 + ratio * 90));
-    const idx = Math.min(steps.length - 1, Math.floor((progress / 96) * steps.length));
+    const ratio = 1 - Math.exp(-(now - started) / expected);
+    const curve = Math.min(95, Math.round(5 + ratio * 90));
+    const idx = Math.min(steps.length - 1, Math.floor((curve / 96) * steps.length));
+    // Qayta olingan ishda egri chiziq 5 dan boshlanadi — oldingi yurish qiymatidan pastga tushmaydi (BEB-07).
+    const { progress, step } = monotonicProgress(job, curve, steps[idx]);
+    const gap = now - lastLeaseAt;
+    const changed = progress !== lastProgress || step !== lastStep;
+    const due = (changed && gap >= PROGRESS_MIN_GAP_MS) || gap >= LEASE_EVERY_MS;
+    if (!due) return;
+    lastLeaseAt = now;
+    lastProgress = progress;
+    lastStep = step;
     // Bu ayni paytda qulf «heartbeat»i ham — `locked_at` suriladi.
-    void setProgress(job.id, job.lease, progress, steps[idx]).catch((e) => {
+    void setProgress(job.id, job.lease, progress, step).catch((e) => {
       throttledWarn(`hb:${job.id}`, "[worker] progress yozilmadi", { jobId: job.id, err: e });
     });
-  }, 2000);
+  }, PROGRESS_TICK_MS);
   return () => clearInterval(timer);
 }
+
+/** Ticker qadami — faqat hisoblash (xotirada); bazaga yozish quyidagi ikki chegarada. */
+const PROGRESS_TICK_MS = 2_000;
+/** Soxta progress yozuvlari orasidagi eng qisqa oraliq (o'zgargan bo'lsa ham). */
+const PROGRESS_MIN_GAP_MS = 4_000;
+/**
+ * Ijara (`locked_at`) shundan kechikmay yangilanadi. `reclaimStaleJobs`
+ * chegarasi oxirgi yozuvdan byudjet + 30 s — 10 s bilan bir necha ketma-ket
+ * yozuv yo'qolsa ham (baza qisqa uzilishi) ish o'lik hisoblanmaydi.
+ */
+export const LEASE_EVERY_MS = 10_000;
 
 /**
  * Ishga ajratilgan vaqt.
@@ -283,7 +324,56 @@ export type RunOptions = {
  * Yurish holati: `abandoned` — muddat o'tgan yoki SIGTERM da navbatga qaytarilgan; natija tashlanadi.
  * `stage` — dvigatel yuborgan oxirgi haqiqiy bosqich (OBS-08: xato qaysi bosqichda bo'lganini jurnalga).
  */
-type RunCtl = { abandoned: boolean; stage?: string };
+type RunCtl = {
+  abandoned: boolean;
+  stage?: string;
+  /** Yo'ldagi `putAsset` (TTS) yozuvlari — tozalashdan OLDIN kutiladi (W3-A nit 2). */
+  assetWrites: Set<Promise<unknown>>;
+};
+
+/**
+ * Qattiq to'xtashdan keyin hali ishlayotgan (yetim) qurilishlar soni
+ * (W3-A review nit 1). Qurilishni o'ldirib bo'lmaydi — u CPU, xotira va
+ * provayder pulini ishlatishda davom etadi, slot esa darhol bo'shaydi.
+ * Tizimli osilishda (provayder javob bermaydi) ular cheksiz yig'ilib 2 GB
+ * konteynerni OOM ga olib borardi. Soni `WORKER_CONCURRENCY` ga yetsa
+ * `claimNext` yangi ish OLMAYDI — yetim tugagach davom etadi.
+ */
+let orphans = 0;
+
+/** Hozirgi yetim qurilishlar soni (kuzatuv va testlar uchun). */
+export function orphanCount(): number {
+  return orphans;
+}
+
+/** Tozalashdan oldin yo'ldagi yozuvlarni kutish chegarasi — slot abadiy band qolmasin. */
+const QUIESCE_MS = 15_000;
+
+/**
+ * FAILED + tozalashdan OLDIN jonli reporter to'xtatiladi va yo'ldagi aktiv
+ * yozuvlari kutiladi (W3-A review nit 2). Ilgari `deleteAssets` birinchi
+ * ishlardi: navbatdagi slayd rasmi (`LiveReporter` → `putAssets`) yoki TTS
+ * `putAssetBytes` undan KEYIN yozilib, FAILED ishda yetim aktiv qolardi.
+ * Kutish `QUIESCE_MS` bilan chegaralangan (DB yozuvlari o'z statement
+ * timeout'iga ega; bu — oxirgi to'siq).
+ */
+async function quiesce(ctl: RunCtl, live: LiveReporter | null): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const settle = (async () => {
+    await live?.stop();
+    await Promise.allSettled([...ctl.assetWrites]);
+  })();
+  const timeout = new Promise<"timeout">((resolve) => {
+    timer = setTimeout(() => resolve("timeout"), QUIESCE_MS);
+  });
+  try {
+    if ((await Promise.race([settle.then(() => "ok" as const), timeout])) === "timeout") {
+      log("warn", "[worker] tozalashdan oldin yo'ldagi yozuvlar kutib bo'lmadi", { quiesceMs: QUIESCE_MS });
+    }
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 /** Shu process bajarayotgan claimlar (`lease` bo'yicha) — SIGTERM da kutish/qaytarish uchun. */
 const inflight = new Map<string, { job: ClaimedJob; ctl: RunCtl; done: Promise<void> }>();
@@ -293,7 +383,7 @@ const inflight = new Map<string, { job: ClaimedJob; ctl: RunCtl; done: Promise<v
  * o'tganda qaytadi — shu paytda slot bo'shaydi (`tick` `running--`).
  */
 export async function runJob(job: ClaimedJob, opts: RunOptions = {}): Promise<void> {
-  const ctl: RunCtl = { abandoned: false };
+  const ctl: RunCtl = { abandoned: false, assetWrites: new Set() };
   // Shu ish ichidagi HAR jurnal qatori (`credits.ts` refund va h.k.) `jobId`/`userId` ni o'zi oladi (OBS-02).
   const done = withFreshLogContext({ jobId: job.id, userId: job.userId }, () => runWithHardStop(job, opts, ctl));
   inflight.set(job.lease, { job, ctl, done });
@@ -327,7 +417,7 @@ async function runWithHardStop(job: ClaimedJob, opts: RunOptions, ctl: RunCtl): 
   // Faqat slayd/pro-slayd jonli deka yuboradi (`slide-write.ts`/`slide-images.ts`
   // shu ikkisi uchun `onProgress` chaqiradi) — boshqa vositalarga reporter kerak
   // emas.
-  const live = tool.id === "slide" || tool.id === "pro-slide" ? new LiveReporter(job.id, job.lease) : null;
+  const live = tool.id === "slide" || tool.id === "pro-slide" ? new LiveReporter(job.id, job.lease, job) : null;
 
   /*
    * Tarjima dvigateli haqiqiy bosqich yuborganidan keyin soxta egri
@@ -339,7 +429,8 @@ async function runWithHardStop(job: ClaimedJob, opts: RunOptions, ctl: RunCtl): 
     ctl.stage = String(ev.step ?? "").slice(0, 120);
     // 95 — `completeJob` 100 ni o'zi qo'yadi; dvigatel 100 yuborsa
     // «tayyor» ko'rinar, fayl esa hali yozilmagan bo'lardi.
-    void setProgress(job.id, job.lease, Math.min(95, Math.max(0, Math.round(ev.progress))), ev.step).catch((e) => {
+    const next = monotonicProgress(job, Math.min(95, Math.max(0, Math.round(ev.progress))), ev.step);
+    void setProgress(job.id, job.lease, next.progress, next.step).catch((e) => {
       throttledWarn(`hb:${job.id}`, "[worker] bosqich yozilmadi", { jobId: job.id, stage: ctl.stage, err: e });
     });
   };
@@ -361,14 +452,21 @@ async function runWithHardStop(job: ClaimedJob, opts: RunOptions, ctl: RunCtl): 
        * to'sig'idan o'tgan BITTA yo'lda, `reference` bo'yicha idempotent qaytadi.
        */
       ctl.abandoned = true;
+      orphans++;
       log(
         "error",
         `[worker] job ${job.id}: qattiq muddat (${Math.round(hardStopMs / 1000)} s) o'tdi — FAILED, pul qaytariladi, slot bo'shatildi`,
-        { jobId: job.id, attempt: job.attempts, stage: ctl.stage, hardStopMs, toolId: job.toolId },
+        { jobId: job.id, attempt: job.attempts, stage: ctl.stage, hardStopMs, toolId: job.toolId, orphans },
       );
-      work.catch((e) => {
-        log("warn", `[worker] job ${job.id}: yetim qurilish xatosi`, { jobId: job.id, attempt: job.attempts, provider: providerOf(e), err: e });
-      });
+      void work
+        .catch((e) => {
+          log("warn", `[worker] job ${job.id}: yetim qurilish xatosi`, { jobId: job.id, attempt: job.attempts, provider: providerOf(e), err: e });
+        })
+        .finally(() => {
+          orphans--;
+          log("info", `[worker] job ${job.id}: yetim qurilish tugadi`, { jobId: job.id, orphans });
+        });
+      await quiesce(ctl, live);
       await failAndCleanup(job, job.lease, "Ish vaqti tugadi");
     }
   } finally {
@@ -426,10 +524,17 @@ async function execute(
       // Tinglash o'yini TTS parchalari — shu ishning aktivlariga (`/api/o/[token]/audio/[assetId]` orqali ochiq).
       // Tashlab ketilgan (muddati o'tgan / SIGTERM da qaytarilgan) yurish
       // FAILED yoki begona ishga yetim aktiv yozmasin.
-      putAsset: (bytes, mime) =>
-        ctl.abandoned
-          ? Promise.reject(new Error("Ish to'xtatilgan — aktiv yozilmadi"))
-          : putAssetBytes(job.id, mime, Buffer.from(bytes)),
+      // Yo'ldagi yozuv `ctl.assetWrites` da — tozalash uni kutadi (W3-A nit 2).
+      putAsset: (bytes, mime) => {
+        if (ctl.abandoned) return Promise.reject(new Error("Ish to'xtatilgan — aktiv yozilmadi"));
+        const write = putAssetBytes(job.id, mime, Buffer.from(bytes));
+        ctl.assetWrites.add(write);
+        void write.then(
+          () => ctl.assetWrites.delete(write),
+          () => ctl.assetWrites.delete(write),
+        );
+        return write;
+      },
     });
 
     if (ctl.abandoned) {
@@ -548,6 +653,8 @@ async function execute(
       userError: message,
       err: e,
     });
+    // Avval jonli reporter va yo'ldagi aktiv yozuvlari — keyin tozalash (W3-A nit 2).
+    await quiesce(ctl, live);
     // Tashlab ketilgan yurishda `failJob` qulf to'sig'idan o'tmaydi — pul
     // ikkinchi marta qaytmaydi, yangi egasining fayliga tegilmaydi.
     await failAndCleanup(job, job.lease, message);
@@ -636,6 +743,14 @@ async function refundThenCleanup(job: Pick<ClaimedJob, "id" | "userId">, note: s
  */
 export async function claimNext(): Promise<ClaimedJob | null> {
   if (stopped) return null;
+  // Yetim qurilishlar to'la (W3-A nit 1) — yangi ish olinmaydi, ular tugashini kutamiz.
+  if (orphans >= env.worker.concurrency) {
+    throttledWarn("orphans", "[worker] yetim qurilishlar chegarada — yangi ish olinmayapti", {
+      orphans,
+      concurrency: env.worker.concurrency,
+    });
+    return null;
+  }
   return claimJob(newLease(WORKER_ID));
 }
 
@@ -677,7 +792,24 @@ async function step(name: string, fn: () => Promise<unknown>): Promise<void> {
   }
 }
 
+/** To'liq housekeeping (qo'lda/testlarda): tiklash + tozalash. Sikl `housekeepingTick` ni chaqiradi. */
 export async function housekeeping(): Promise<void> {
+  await recoverJobs();
+  await purgeHousekeeping();
+}
+
+/**
+ * Ishlarni TIKLASH qadamlari — HAR worker processida, har tickda, advisory
+ * qulfsiz (W4-B review R1). Qulf ortida bo'lsa, ulangan holda osilib qolgan
+ * (event loop bloklangan, `docker pause`) yetakchi qulfni abadiy ushlab,
+ * butun klasterda osilgan ishlarni qaytarish, pulni qaytarish va navbat
+ * muddatini to'xtatib qo'yardi — o'z ishlarini ham. Uchalasi parallel yurishga
+ * xavfsiz va aynan bir marta: har biri qator predikatli UPDATE (ikkinchi
+ * tranzaksiya qator qulfidan keyin predikatni qayta tekshiradi va 0 qator
+ * oladi), qaytarish `(kind, reference)` bo'yicha idempotent.
+ * `tests/worker-housekeeping-wedge.test.mts`.
+ */
+export async function recoverJobs(): Promise<void> {
   await step("reclaim", async () => {
     const dead = await reclaimStaleJobs();
     if (dead.length) log("warn", "[worker] osilib qolgan ishlar yakuniy FAILED (Ish vaqti tugadi)", { jobIds: dead });
@@ -705,6 +837,15 @@ export async function housekeeping(): Promise<void> {
    * tranzaksiyasi yiqilgan bo'lsa) — aynan bir marta qaytariladi.
    */
   await step("refund-reconcile", () => refundUnrefundedFailed());
+}
+
+/**
+ * Og'ir/ommaviy TOZALASH qadamlari — faqat advisory qulf egasi (bitta
+ * process) yuritadi (SCALE-16): N replika bir xil DELETE larni N marta
+ * qilmasin. Yetakchi osilsa bular kechikadi — pul va navbat holatiga ta'sir
+ * qilmaydi (tiklash `recoverJobs` da, qulfsiz).
+ */
+export async function purgeHousekeeping(): Promise<void> {
   /*
    * Saqlash muddati (C23): faqat bonus bilan to'langan tayyor ishlarning
    * fayllari `RETENTION_BONUS_DAYS` dan keyin tozalanadi. Pullik ishlar —
@@ -766,6 +907,110 @@ export async function housekeeping(): Promise<void> {
   await step("source-cache", () => purgeSourceCache(60));
 }
 
+/**
+ * Housekeeping advisory qulfi (SCALE-16). Migratsiya qulfi (`db.ts`,
+ * 727_000_001) bilan bir oilada, boshqa raqam.
+ */
+export const HOUSEKEEPING_LOCK_ID = 727_000_002;
+
+/** Qulfni ushlab turgan alohida ulanish (shu process yetakchi bo'lsa). */
+let hkLeader: Client | null = null;
+/** Shu process ichida ikkita tick bir-birining ustiga tushmasin. */
+let hkBusy = false;
+
+export type HousekeepingTickOptions = {
+  /** Test seam: qulf ortidagi `purgeHousekeeping` o'rniga. */
+  run?: () => Promise<void>;
+  /** Test seam: qulfsiz `recoverJobs` o'rniga. */
+  recover?: () => Promise<void>;
+  /** Test seam: qulf ulanishini ochish (standart — `poolConfig()` bilan yangi `Client`). */
+  connect?: () => Promise<Client>;
+};
+
+async function openLockClient(): Promise<Client> {
+  const c = new Client(poolConfig());
+  // Uzilgan ulanish xatosi processni yiqitmasin — keyingi tick qayta ulanadi.
+  c.on("error", (err) => {
+    log("warn", "[worker] housekeeping qulf ulanishi uzildi", { err });
+  });
+  await c.connect();
+  return c;
+}
+
+/** Qulf HALI shu sessiyadami (ulanish uzilgan bo'lsa — `false`). */
+async function stillLeader(c: Client): Promise<boolean> {
+  try {
+    const r = await c.query(
+      `SELECT 1 FROM pg_locks
+        WHERE locktype = 'advisory' AND pid = pg_backend_pid() AND classid = 0 AND objid = $1 AND granted`,
+      [HOUSEKEEPING_LOCK_ID],
+    );
+    return r.rows.length > 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Housekeeping tick (SCALE-16, W4-B review R1).
+ *
+ * 1. `recoverJobs` (osilgan ishlar + ularning puli, navbat muddati, pul
+ *    qaytarish skaneri) — HAR processda, QULFSIZ: yetakchi osilib qolsa ham
+ *    boshqa replika ishlarni tiklaydi.
+ * 2. `purgeHousekeeping` (og'ir tozalashlar) — faqat Postgres advisory qulfi
+ *    egasi (`pg_try_advisory_lock`, pooldan TASHQARI alohida ulanishda):
+ *    - band bo'lsa — shu daqiqa o'tkazib yuboriladi (`false`);
+ *    - olgan process uni USHLAB turadi (yetakchi) — daqiqasiga aynan bir marta;
+ *    - yetakchi o'lsa yoki ulanishi uzilsa sessiya qulfi Postgres tomonida
+ *      bo'shaydi, keyingi tickda boshqa process (yoki o'zi qayta) oladi.
+ * Qaytaradi: tozalash (2) shu processda yurdimi. HECH QACHON xato
+ * tashlamaydi — sikl to'xtamasin (baza yo'q bo'lsa `false`).
+ */
+export async function housekeepingTick(opts: HousekeepingTickOptions = {}): Promise<boolean> {
+  // `recoverJobs` qadamlari o'z xatosini o'zi ushlaydi (`step`) — bu yerda tashlamaydi.
+  await (opts.recover ?? recoverJobs)();
+  if (hkBusy) return false;
+  hkBusy = true;
+  try {
+    if (hkLeader && !(await stillLeader(hkLeader))) {
+      log("warn", "[worker] housekeeping qulfi yo'qoldi (ulanish uzilgan) — qayta olinadi");
+      await dropLeader();
+    }
+    if (!hkLeader) {
+      const c = await (opts.connect ?? openLockClient)();
+      let got = false;
+      try {
+        const r = await c.query<{ ok: boolean }>("SELECT pg_try_advisory_lock($1) AS ok", [HOUSEKEEPING_LOCK_ID]);
+        got = r.rows[0]?.ok === true;
+      } finally {
+        if (!got) await c.end().catch(() => undefined);
+      }
+      if (!got) return false;
+      hkLeader = c;
+      log("info", "[worker] housekeeping yetakchisi — shu process", { workerId: WORKER_ID });
+    }
+    await (opts.run ?? purgeHousekeeping)();
+    return true;
+  } catch (e) {
+    log("error", "[worker] housekeeping qulfi olinmadi", { err: e });
+    return false;
+  } finally {
+    hkBusy = false;
+  }
+}
+
+async function dropLeader(): Promise<void> {
+  const c = hkLeader;
+  hkLeader = null;
+  // Ulanish yopilsa sessiya qulfi Postgres tomonida o'zi bo'shaydi.
+  await c?.end().catch((e) => log("warn", "[worker] housekeeping qulf ulanishi yopilmadi", { err: e }));
+}
+
+/** Qulfni qo'yib yuboradi (to'xtashda va testlarda). */
+export async function releaseHousekeepingLock(): Promise<void> {
+  await dropLeader();
+}
+
 async function loop(): Promise<void> {
   await ensureMigrated();
   log("info", `[worker] ${WORKER_ID} ishga tushdi (concurrency=${env.worker.concurrency})`, {
@@ -791,7 +1036,8 @@ async function loop(): Promise<void> {
     sinceHousekeeping += wait;
     if (sinceHousekeeping >= HOUSEKEEPING_MS) {
       sinceHousekeeping = 0;
-      await housekeeping();
+      // Faqat advisory qulf egasi (bitta process) tozalaydi — SCALE-16.
+      await housekeepingTick();
       // Uzoq housekeeping (katta tozalash partiyasi) 30 s oynani yemasin.
       if (healthy) await touchAlive();
     }

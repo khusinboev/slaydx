@@ -167,13 +167,15 @@ export async function putSource(
   const assetId = assetIdFor(bytes);
   const text = row.text.slice(0, SOURCE_TEXT_LIMIT);
   // Ajratilgan matn ham saqlanadi — kvotaga bayt bilan birga kiradi (C13).
+  // Qayta yuklash (bir xil xesh) `created_at` ni yangilaydi (BEA-19): 29-kuni
+  // qayta tanlangan fayl ertasi kuni `purgeOldSources` bilan o'chmasin.
   const size = bytes.byteLength + Buffer.byteLength(text);
   await withUploadQuota(userId, "source", { assetIds: [assetId], bytes: size }, (c) =>
     c.query(
       `INSERT INTO source_uploads (user_id, asset_id, name, kind, mime, size_bytes, bytes, chars, text)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        ON CONFLICT (user_id, asset_id) DO UPDATE
-         SET chars = EXCLUDED.chars, text = EXCLUDED.text, name = EXCLUDED.name`,
+         SET chars = EXCLUDED.chars, text = EXCLUDED.text, name = EXCLUDED.name, created_at = now()`,
       [userId, assetId, row.name, row.kind, row.mime, bytes.byteLength, bytes, row.chars, text],
     ),
   );

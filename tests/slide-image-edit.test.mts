@@ -255,10 +255,20 @@ test("uploadSlideImage: muvaffaqiyat — commitDocOps {op:'image', index, url} b
 });
 
 test("uploadSlideImage: begona hujjat — 404 va aktiv YOZILMAYDI (BEA-03: egalik yozishdan oldin)", async (t) => {
-  const seen = mockDb(t, { forEdit: editRow({ doc_version: 3 }), notOwner: true });
+  // `getGenerationForEdit` `WHERE user_id` — begona hujjat qatori umuman kelmaydi.
+  const seen = mockDb(t, { forEdit: null, notOwner: true });
   const file = new File([blobPart(pngBytes(32))], "rasm.png", { type: "image/png" });
   await expectApiError(uploadSlideImage(uploadReq(file, "3"), GEN, USER, 1), 404);
   assert.equal(found(seen, /INSERT INTO generation_assets/).length, 0, "MUTATSIYA: begona hujjatga bayt yozildi");
+});
+
+test("uploadSlideImage: tranzaksiya ichidagi egalik tekshiruvi ham turadi — 404, INSERT yo'q (SECB-03)", async (t) => {
+  // Ikkinchi himoya chizig'i: `storeGenerationUploads` kvota qulfi ostida egalikni qayta so'raydi.
+  const seen = mockDb(t, { forEdit: editRow({ doc_version: 3 }), updateDoc: { doc_version: 4 }, notOwner: true });
+  const file = new File([blobPart(pngBytes(32))], "rasm.png", { type: "image/png" });
+  await expectApiError(uploadSlideImage(uploadReq(file, "3"), GEN, USER, 1), 404);
+  assert.equal(found(seen, /INSERT INTO generation_assets/).length, 0, "MUTATSIYA: begona hujjatga bayt yozildi");
+  assert.ok(sqls(seen).includes("ROLLBACK"), "doc yozuvi ham qaytarilishi kerak");
 });
 
 test("uploadSlideImage: rasm joyi bo'lmagan maketga yuklash — 422 (applyDocOps orqali, ikkinchi marta yozilmaydi)", async (t) => {

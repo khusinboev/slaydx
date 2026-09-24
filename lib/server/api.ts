@@ -234,15 +234,28 @@ export function handler<A extends unknown[]>(
   };
 }
 
-/** JSON body ni xavfsiz o'qiydi (hajm chegarasi bilan). */
-export async function readJson<T = unknown>(req: Request, maxBytes = 1_000_000): Promise<T> {
+/**
+ * JSON body ni xavfsiz o'qiydi (hajm chegarasi bilan).
+ *
+ * Tana ODDIY OBYEKT bo'lishi shart (BEA-13): `JSON.parse("null")` `null`,
+ * `"[1]"` massiv qaytaradi — ilgari route `body.slug` da `TypeError` bilan
+ * 500 «Ichki xatolik» berardi (klient uni «Server javob bermadi» deb
+ * ko'rsatar, jurnal esa har fuzz so'rovida xato yozardi). Hamma chaqiruvchi
+ * obyekt kutadi, shuning uchun tekshiruv shu yerda — bitta joyda.
+ */
+export async function readJson<T extends object = Record<string, unknown>>(req: Request, maxBytes = 1_000_000): Promise<T> {
   const len = Number(req.headers.get("content-length") ?? 0);
   if (len > maxBytes) throw new ApiError("So'rov hajmi juda katta", 413);
   const text = await req.text();
   if (text.length > maxBytes) throw new ApiError("So'rov hajmi juda katta", 413);
+  let body: unknown;
   try {
-    return JSON.parse(text) as T;
+    body = JSON.parse(text);
   } catch {
     throw new ApiError("Noto'g'ri JSON", 400);
   }
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    throw new ApiError("So'rov tanasi obyekt bo'lishi kerak", 400);
+  }
+  return body as T;
 }

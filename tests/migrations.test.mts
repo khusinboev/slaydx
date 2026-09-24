@@ -89,6 +89,33 @@ test("C34: `024_idempotency.sql` — NULL-li kalit, (user_id, kalit) qisman UNIQ
   assert.match(jobs, /err\.constraint === "generations_user_idem_idx"/);
 });
 
+test("DB-12/SCALE-13: `027_queue_indexes.sql` — locked_at indekssiz, ortiqcha run_after indeksi yo'q, rollback izohda", () => {
+  assert.ok(FILES.includes("027_queue_indexes.sql"));
+  const sql = sqlOf("027_queue_indexes.sql");
+  const code = sql.replace(/^\s*--.*$/gm, "");
+  // Yangi indeks heartbeat yozmaydigan ustunda (user_id) — shu sabab heartbeat HOT.
+  assert.match(
+    code,
+    /CREATE INDEX IF NOT EXISTS generations_running_user_idx\s+ON generations \(user_id\)\s+WHERE status = 'IN_PROGRESS';/,
+  );
+  // MUTATSIYA: bu ikki qatordan biri tushsa — heartbeat non-HOT qoladi / ortiqcha indeks saqlanadi.
+  assert.match(code, /DROP INDEX IF EXISTS generations_stale_idx;/);
+  assert.match(code, /DROP INDEX IF EXISTS generations_queue_idx;/);
+  // Heartbeat/progress yozadigan ustun hech qaysi yangi indeksga kirmaydi.
+  assert.ok(!/CREATE INDEX[^;]*\b(locked_at|progress|step|live_json|live_seq|locked_by)\b/i.test(code), "yangi indeks heartbeat ustunida");
+  // Jadval/ustun o'chirilmaydi — eski kod bilan mos.
+  assert.ok(!/\bDROP (TABLE|COLUMN)\b|\b(UPDATE|DELETE|INSERT)\b/i.test(code));
+  assert.match(sql, /^SET LOCAL lock_timeout = '5s';/m);
+  for (const line of [
+    "CREATE INDEX IF NOT EXISTS generations_queue_idx ON generations\\(run_after\\) WHERE status = 'QUEUED';",
+    "CREATE INDEX IF NOT EXISTS generations_stale_idx ON generations\\(locked_at\\) WHERE status = 'IN_PROGRESS';",
+    "DROP INDEX IF EXISTS generations_running_user_idx;",
+    "ALTER TABLE generations RESET \\(fillfactor\\);",
+  ]) {
+    assert.match(sql, new RegExp(`--\\s+${line}`), `rollback qatori yo'q: ${line}`);
+  }
+});
+
 test("C23: `022_retention.sql` orqaga mos va qayta qo'llash xavfsiz", () => {
   assert.ok(FILES.includes("022_retention.sql"));
   const sql = sqlOf("022_retention.sql");
