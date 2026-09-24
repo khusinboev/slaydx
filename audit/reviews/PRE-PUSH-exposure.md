@@ -56,7 +56,7 @@ non-blocking gaps worth a look.
 
 3. **Prior known-public values, confirmed unchanged / already fixed, not new
    exposure:**
-   - Prod server IP `194.163.136.239` — appears in `.claude/deploy.md`
+   - Prod server IP `<SERVER_IP>` — appears in `.claude/deploy.md`
      content history and in 2 added lines inside `audit/` (ssh command
      references). Matches the already-public IP called out in the task
      brief; not newly introduced.

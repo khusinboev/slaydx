@@ -54,7 +54,7 @@ The test change itself is correct:
 - `100.64/10` (100.64–100.127) is correct per RFC 6598 and is not publicly routable.
 - The allowlist is exact-match only, so any other public IP still fails.
 
-**Blocking problem.** The same commit's `audit/03-progress.md:73` contains the mutation-check literals `185.9.9.9` and `100.128.0.1`. Both are public addresses that are not on the allowlist. The subtest "tracked fayllarda ommaviy (real) IPv4 manzili yo'q" **fails** at `cb7aee3` and at HEAD. I reproduced it both through the test run and with the scanner regex over `git grep`, where these two are the only hits. The upside is live proof that the scanner catches new unknown public IPs, including the 100.128 value just outside CGNAT. The gate claim "no-pii passes 2/2" was presumably true before the progress log was written.
+**Blocking problem.** The same commit's `audit/03-progress.md:73` contains the mutation-check literals `185.x.x.x` and `100.128.x.x`. Both are public addresses that are not on the allowlist. The subtest "tracked fayllarda ommaviy (real) IPv4 manzili yo'q" **fails** at `cb7aee3` and at HEAD. I reproduced it both through the test run and with the scanner regex over `git grep`, where these two are the only hits. The upside is live proof that the scanner catches new unknown public IPs, including the 100.128 value just outside CGNAT. The gate claim "no-pii passes 2/2" was presumably true before the progress log was written.
 
 **Fix.** Reword `audit/03-progress.md:73` so it contains no raw public IPv4. For example: "an injected unknown public IP (185.x) and the first address above CGNAT are both still caught", or use backtick-split placeholders such as `185.9.9.x`. Then re-run `tests/no-pii-in-repo.test.mts`. Do not allowlist these two values, because that would weaken the mutation evidence for no benefit.
 
@@ -69,6 +69,6 @@ Minor, not blocking: 100.64/10 is also Tailscale's range. A developer's tailnet 
 | 1 | tests/telegram-429.test.mts | APPROVE |
 | 2 | tests/env-assert-runtime-config.test.mts | APPROVE (2 optional nits) |
 | 3 | tests/credits-atomic.test.mts | APPROVE (optional `refunds === 1` nit) |
-| 4 | tests/no-pii-in-repo.test.mts + audit/03-progress.md:73 | **CHANGES**: the progress log adds `185.9.9.9` and `100.128.0.1`, and no-pii fails |
+| 4 | tests/no-pii-in-repo.test.mts + audit/03-progress.md:73 | **CHANGES**: the progress log adds `185.x.x.x` and `100.128.x.x`, and no-pii fails |
 
 **Overall: CHANGES** (item 4 only). No production regression is hidden. Once line 73 no longer contains the raw IPs, this becomes APPROVE.
