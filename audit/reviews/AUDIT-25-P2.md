@@ -185,3 +185,85 @@ The model's width estimate is also optimistic for bold text (change 2), so leave
 7. **Observation, no change requested.** The story no-image bullet column shows the plan number on content
    slides that have a `plan`. That gives one number per slide and is consistent with the band number. A2-02
    preferred dropping it, and this is an acceptable reading of decision 4.
+
+---
+
+# Re-review — b90a4db
+
+Commits `e8053de → 63cdb43 → 1d71e2f → 8ff830a → b90a4db`, reviewed as `git diff 754ec44..b90a4db`.
+Heavy commands used: 2/2.
+- Run 1: `tests/slide-plan-numbers.test.mts` + `tests/slide-image-strip.test.mts` (**23/23 pass**), plus a probe script (`scratchpad/p2rev/probe2.mts`).
+- Run 2: six mutants of `slide-layout.ts`, run against a scratch copy (`scratchpad/p2rev/mut/run-mutants.sh`). The worktree was not touched.
+
+Contact sheets checked: `z-rail-atlas-09.png` shows whole words and the same size in every card. `z-classic-atlas-09.png` shows two rows of 3+2 cards, each row at one size, with no overflow.
+
+## Verdict: **CHANGES** (test-only, 2 small items; no code change requested)
+
+The code addresses first-review changes 1–4. The fit test can still pass after two targeted regressions of that code, as shown by the surviving mutants below.
+
+## CHANGES
+
+1. **The fit test reads the width constants from the layout under test, so the rail mid-word regression
+   survives.** `tests/slide-plan-numbers.test.mts` has `BOLD_EM = LAYOUT_KIT.CHAR_EM_BOLD` and imports
+   `CHAR_EM` from `slide-layout.ts`. Mutant **M1** sets `CHAR_EM_BOLD = 0.55` in
+   `lib/generation/slide-layout.ts:402`, which is exactly the value that produced "Kuzatis|h". The mutant
+   **SURVIVES** the whole file.
+   The height model `inkIn` is a real re-implementation, not the layout's `inkHeight`/`wrapRows`, and that
+   part is good. But its constants must also be independent. Pin literals in the test: `0.55` for regular
+   and `0.60` for bold, citing the PIL measurement. Optionally also assert `LAYOUT_KIT.CHAR_EM_BOLD >= 0.6`.
+   After the change, M1 must be killed.
+2. **Nothing locks the "same size across a row" rule.** Mutant **M5** makes `fitStepCards` always
+   `return own`, which undoes 1d71e2f, and it **SURVIVES**.
+   Add a test using the real `Kuzatish/Taqqoslash/Tahlil/Xulosa/Taklif` case with 3, 4 and 5 steps, for
+   every visual and for school_1_4 and general. Within each row, all `steps.title` layers must share one
+   `size`, all `steps.text` layers must share one `size`, and all title boxes must share one `h`. Apply the
+   same check to the single row in `rail`.
+
+## Notes (non-blocking)
+
+- **N1: the word check is switched off for real Uzbek words in narrow rail cards.** `bodyFit`
+  (`slide-layout.ts:436-455`) computes `wordFitsAtLow` **with** `WORD_HEADROOM`. In a 5-step `rail` card
+  (bold title box about 1.6″), natural 15–19 character words fail that check even at the 12 pt floor.
+  Examples are "O'zgartirishlar", "Rivojlanishining", "Tadqiqotchilarning" and "Ko'rsatkichlarining". The
+  check is then disabled, and the probe shows these titles set at **18 pt breaking mid-word**, both for
+  school_1_4 and for general.
+  - "O'zgartirishlar" (15 chars) fits at 12 pt without the headroom, so computing `wordFitsAtLow` without `WORD_HEADROOM` fixes that case.
+  - Words of 16 characters or more cannot fit in that column at any size at or above the floor. That needs a P3 count limit: no 5-step rail at school ages.
+
+  No other box in the probe (base process with 4 or 5 steps, stats cards×4, table with 5 columns) hit this
+  path. So the escape for strings without spaces does not switch off the word check for normal text,
+  except in that one column.
+- **N2: the floors hold.** Across all 14 audiences × 17 visuals, at 1× and at 2× `SLIDE_LIMITS`, the
+  smallest sizes seen are: step title 12, step text 11, table cell 10 (11 at 1×), table header 11, stat
+  label 11 (dashboard 13 at 1×), and stat values base 18, bold 24, dashboard 19. None is below the old
+  floors (12/11/10/11/11/15/24/18).
+  By construction the lowest possible size is `min(floor, minPt)`. For body text that is always the old
+  floor, because `minPt` is at least 15. For the big values in `bold`/`dashboard` it becomes `minPt` when
+  that is below 24 or 18. The chart value was a fixed 16 pt before and can now shrink to 11. Both happen
+  only for values that previously overflowed their box, so this is a deliberate improvement.
+- **N3: overflow.** At 1× `SLIDE_LIMITS`, **0 of 18 802** body layers overflow (the first review measured
+  up to 884 %). At 2× the limits, 10 318 of 18 802 overflow. Text that long is outside the limits, and
+  e89c7c1 overflowed there too, so it needs P3's limits and `slide-edit`'s limits, not the layout.
+- **N4: `fitStepCards` fallback is sound.** If any card fails on its own, each card keeps its own result.
+  The shared attempt uses the smallest title size, which cannot increase any card's title height (it stays
+  within `titleCap`). It then re-checks every description at the shared height and falls back if one does
+  not fit. `fitTitleText` returns its last attempt with `ok: false` when nothing fits. In base
+  `planProcess` that is the one remaining overflow path, and it only happens beyond the limits.
+  `rail` grows the card to 6.75 before giving up. The empty `slice(perRow)` for single-row layouts returns
+  `[]`, which is correct.
+- **N5: the fingerprint comment follows the house format.** It reads "Yangilangan: AUDIT-25 A2-04 — …",
+  lists the affected rows, and keeps the old hash `23b6f081…` and the earlier AUDIT-8 entry. The new hash
+  is `0e94598e…` and the test passes.
+- **Mutation summary:**
+
+  | Mutant | Change | Result |
+  |---|---|---|
+  | M1 | `CHAR_EM_BOLD` 0.55 | SURVIVED (change 1) |
+  | M2 | guard removed (`low = minPt`) | killed |
+  | M3 | `WORD_HEADROOM` 1.0 | survived; acceptable, the test does not model headroom |
+  | M4 | word check disabled | killed |
+  | M5 | `fitStepCards` → own | SURVIVED (change 2) |
+  | M6 | title cap not lowered | killed |
+
+- The earlier change 4 (titles never numbered) is done. `editorial`, `split` and `story` `planTitle` no
+  longer read `plan`, and the test covers `plan: 2`. Change 5 (drop the `PlanSlide` alias at merge) still stands.
