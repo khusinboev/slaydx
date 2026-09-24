@@ -244,6 +244,6 @@ export async function safeFetchUrl(raw: string, opts: SafeFetchOpts = {}): Promi
     const body = opts.method === "HEAD" ? null : await readCapped(res, maxBytes);
     // 1xx/204/304 tanasiz bo'lishi shart — `Response` konstruktori aks holda otadi.
     const bodyless = status === 204 || status === 205 || status === 304 || status < 200;
-    return new Response(bodyless ? null : body, { status: status < 200 || status > 599 ? 502 : status, headers: copyHeaders(res.headers) });
+    return new Response(bodyless || !body ? null : (body as Uint8Array<ArrayBuffer>), { status: status < 200 || status > 599 ? 502 : status, headers: copyHeaders(res.headers) });
   }
 }

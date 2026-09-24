@@ -1,5 +1,6 @@
 import { fetchImageBytes } from "./slide-images";
-import { requestGeminiImage } from "./image-provider-gemini";
+import { geminiProvider } from "./image-provider-gemini";
+import { limitedProvider } from "./image-provider";
 import { imageExt } from "../viewers/kind";
 import { parseLlmObject } from "./json";
 import { mapPool } from "./quality";
@@ -149,7 +150,7 @@ export function withGrounding(scene: string, grounding: string): string {
   return grounding ? `${scene.trim()} Known visual facts about this exact subject: ${grounding}.` : scene.trim();
 }
 
-async function expandPrompt(user: string, styleId: string, ratioId: string): Promise<string> {
+async function expandPrompt(user: string, styleId: string, ratioId: string, deadline?: number): Promise<string> {
   const grounding = groundUzbekScene(user);
   if (!llmEnabled()) return withGrounding(user, grounding);
   const style = imageStyleById(styleId);
@@ -165,7 +166,8 @@ async function expandPrompt(user: string, styleId: string, ratioId: string): Pro
     ].join(" "),
     `User request: «${user}».\nStyle (ignore for subject, only know the medium later): ${style.name}.\nFrame: ${ratioId}.${grounding ? `\nKnown visual facts about this exact subject — reflect them: ${grounding}.` : ""}`,
     500,
-    { json: true, timeoutMs: 20_000 },
+    // Ish muddati (EXT-03): vaqt tugagan bo'lsa `DeadlineError` — ish yiqiladi, pul qaytadi.
+    { json: true, timeoutMs: 20_000, deadline },
   );
   const scene = String(parseLlmObject<{ scene?: string }>(raw)?.scene || "").trim();
   return withGrounding(scene.length > 12 ? scene : user, grounding);
@@ -199,7 +201,16 @@ function dataToBytes(dataUrl: string): Uint8Array | null {
   }
 }
 
-export async function buildImageArtifact(tool: ToolConfig, values: FormValues): Promise<BuiltFile> {
+/**
+ * Rasm provayderi — jarayon bo'yicha CHEKLAGICH ortida (`gemini-image`,
+ * audit EXT-03/EXT-09): ilgari rasm vositasi `requestGeminiImage` ni
+ * to'g'ridan-to'g'ri chaqirardi, ya'ni pro-slayd yo'laklari bilan bitta
+ * kvotani cheklagichsiz bo'lishardi. Modul darajasida bitta o'rovchi —
+ * semafor baribir `limiterFor` reyestridan (jarayonda yagona).
+ */
+const imageProvider = limitedProvider(geminiProvider);
+
+export async function buildImageArtifact(tool: ToolConfig, values: FormValues, deadline?: number): Promise<BuiltFile> {
   const meta = extractMeta(tool, { ...values, topic: String(values.prompt || values.topic || "Rasm") });
   const prompt = String(values.prompt || "").trim();
   if (prompt.length < 3) throw new Error("Rasm uchun tavsif yozing");
@@ -207,7 +218,7 @@ export async function buildImageArtifact(tool: ToolConfig, values: FormValues): 
   const ratio = imageRatioById(String(values.imageRatio || "1:1"));
   const count = Math.max(1, Math.min(4, Number(values.imageCount || 1)));
   const size = { width: ratio.w, height: ratio.h };
-  const scene = await expandPrompt(prompt, styleId, ratio.id);
+  const scene = await expandPrompt(prompt, styleId, ratio.id, deadline);
   const full = composePrompt(scene, styleId, ratio.w, ratio.h);
 
   const raw = await mapPool(Array.from({ length: count }, (_, i) => i), 2, async (i) => {
@@ -216,7 +227,8 @@ export async function buildImageArtifact(tool: ToolConfig, values: FormValues): 
      * lite ($0.034) matnni (ayniqsa o'zbekcha mavzu) aniq o'qiydi —
      * uslub farqi asosan promptga bog'liq (yuqoridagi izoh).
      */
-    const res = await requestGeminiImage({ prompt: full, size, styleId: "photo" }, undefined);
+    // Muddat (EXT-03): har so'rov byudjeti ish muddati bilan cheklanadi (ilgari 120 s shift, muddatsiz).
+    const res = await imageProvider.fetchImage({ prompt: full, size, styleId: "photo" }, deadline);
     const im = res.ok ? res.image : null;
     if (!im) return null;
     const bytes = await fetchImageBytes(im.url);

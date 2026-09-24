@@ -1,5 +1,6 @@
 import { buildAcademicDoc } from "./content";
 import { deliveredCount } from "./delivered";
+import { withJobCost } from "./job-cost";
 import { llmEnabled as llmKeyPresent } from "./llm";
 import { extractMeta, minPages } from "./meta";
 import { bodyWordCount, remainingMs, targetWords, wordCount } from "./quality";
@@ -495,7 +496,28 @@ function articleGateWords(doc: AcademicDoc): number {
   return articleWordPlan(doc.meta, type, PUBLICATION_PROFILES[profileId]).total;
 }
 
+/**
+ * Generatsiya kirish nuqtasi (worker, `scripts/live-engine.mts`).
+ *
+ * Sarf telemetriyasi (audit EXT-11): butun qurish `withJobCost` ichida —
+ * LLM (`llm-roles`, `llm.ts`), Gemini rasm, grounding va TTS chaqiruvlari
+ * sarfini MANBADA shu ishning hisoblagichiga yozadi. Natija `BuiltFile.cost`
+ * (→ `generations.cost_json`); u dvigatelning o'z `CostMeter`idan to'liqroq
+ * (sayqal/baholovchi/tadqiqot/rasm ham kiradi), shuning uchun ustun turadi.
+ * Hisoblagich bo'sh bo'lsa (masalan `complete` stub qilingan test) —
+ * dvigatel bergan `cost` o'zgarmaydi. Narx/kreditga TEGMAYDI.
+ */
 export async function buildArtifact(
+  tool: ToolConfig,
+  values: FormValues,
+  opts: BuildOptions,
+): Promise<BuiltFile> {
+  const { value: file, cost } = await withJobCost(() => buildArtifactInner(tool, values, opts));
+  if (cost.calls > 0) file.cost = cost.toJson();
+  return file;
+}
+
+async function buildArtifactInner(
   tool: ToolConfig,
   values: FormValues,
   opts: BuildOptions,
@@ -530,7 +552,7 @@ export async function buildArtifact(
   }
 
   if (tool.id === "image") {
-    return buildImageArtifact(tool, values);
+    return buildImageArtifact(tool, values, deadline);
   }
 
   /*

@@ -31,6 +31,7 @@ import { openrouterAdapter } from "./llm/openrouter";
 import { parseRoleSpec, type ProviderAdapter, type ProviderId, type RoleSpec } from "./llm/types";
 import { xaiAdapter } from "./llm/xai";
 import { costUsd } from "./llm-pricing";
+import { recordLlmUsage } from "./job-cost";
 
 export type LlmRole = "writer" | "researcher" | "judge" | "fast";
 
@@ -100,6 +101,8 @@ export async function complete(
     { adapters: ADAPTERS, log: (line) => console.log(line) },
   );
   if (!res) return null;
+  // Ish sarfi (EXT-11): `buildArtifact` konteksti bo'lsa `cost_json` ga — dvigatel o'z hisoblagichini yuritmasa ham.
+  recordLlmUsage(res.usage);
   return { text: res.text, usage: res.usage };
 }
 

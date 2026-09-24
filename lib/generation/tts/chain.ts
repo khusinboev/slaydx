@@ -36,8 +36,10 @@ import {
   type TtsSynthOpts,
   type TtsUsage,
   type TtsVoiceSpec,
+  ttsCostUsd,
   ttsVoicesFor,
 } from "./types";
+import { recordTts } from "../job-cost";
 import { makeAzureTts } from "./azure";
 import { makeAishaTts } from "./aisha";
 import { makeGeminiTts } from "./gemini";
@@ -272,6 +274,8 @@ async function runGroup(provider: TtsProvider, group: TtsProviderGroup, parts: r
 
     audios.push(audio);
     usages.push({ provider: provider.id, voice, chars: audio.chars || text.length, seconds: audio.seconds });
+    // Ish sarfi (EXT-11) MANBADA: keyingi provayderda boshidan boshlansa ham bu bo'lak to'langan.
+    recordTts(provider.id, `${provider.id}:${voice}`, audio.chars || text.length, ttsCostUsd(provider.id, audio.chars || text.length));
     seconds += audio.seconds;
     chars += audio.chars || text.length;
   }

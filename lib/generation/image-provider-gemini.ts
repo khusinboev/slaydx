@@ -28,6 +28,7 @@
  * boshlardi.
  */
 import { requestBudget, type FalFailure, type ImageAsk, type ImageProvider, type ImageResult } from "./image-provider";
+import { recordImage } from "./job-cost";
 
 /**
  * Bitta rasm so'rovining eng katta vaqti. O'lchov (2026-09-08,
@@ -246,6 +247,8 @@ export async function requestGeminiImage(ask: ImageAsk, deadline?: number): Prom
      * u yerda baytlar SNIFF qilinadi. Ya'ni provayder yolg'on
      * `mime_type` yuborsa ham PNG/JPEG bo'lmagan bayt o'tmaydi.
      */
+    // Pullik rasm — ish sarfiga (EXT-11; kontekstdan tashqarida no-op).
+    recordImage("gemini", geminiImageModel());
     return {
       ok: true,
       image: { url: `data:${part.mime};base64,${part.data}`, alt: ask.prompt.slice(0, 80) },
