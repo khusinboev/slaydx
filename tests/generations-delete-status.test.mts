@@ -87,6 +87,29 @@ test("DELETE /api/generations/[id]: 404 noma'lum/begona, 409 faqat ishlayotgan",
     assert.equal(again.status, 404, JSON.stringify(again.body));
   });
 
+  /*
+   * GET `?since=` int4 chegarasi (BEA-13, W4-E `parseIntParam` bilan bir xil
+   * qoida): ilgari 99999999999 `$3::int` ga ketib 22003 «out of range» →
+   * 500 berardi. Endi 400; manfiy/raqam emas — avvalgidek e'tiborsiz.
+   * MUTATSIYA: chegara tekshiruvi olib tashlansa — 500 bilan qizaradi.
+   */
+  await t.test("GET ?since= int4 dan katta → 400 (500 emas); chegaradagi qiymat → 200", async (tt) => {
+    tt.mock.method(console, "error", () => {});
+    const id = await mkGen(me.uid, "IN_PROGRESS");
+    const get = async (qs: string) => {
+      const req = new Request(`http://localhost/api/generations/${id}${qs}`, { headers: { cookie: me.cookie } });
+      return inRequest(req, () => route.GET(req, { params: Promise.resolve({ id }) }));
+    };
+    for (const big of ["99999999999", "2147483648", "9007199254740993"]) {
+      const r = await get(`?since=${big}`);
+      assert.equal(r.status, 400, `since=${big}: ${r.status}`);
+    }
+    assert.equal((await get("?since=2147483647")).status, 200);
+    assert.equal((await get("?since=-1")).status, 200, "manfiy — e'tiborsiz (eski shartnoma)");
+    assert.equal(route.parseSince(new Request("http://x/?since=7")), 7);
+    assert.equal(route.parseSince(new Request("http://x/?since=abc")), undefined);
+  });
+
   await t.test("haqiqatan ishlayotgan (IN_PROGRESS) → 409, qator joyida", async () => {
     const id = await mkGen(me.uid, "IN_PROGRESS");
     const r = await del(me.cookie, id);

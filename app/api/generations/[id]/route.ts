@@ -20,9 +20,21 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export function parseSince(req: Request): number | undefined {
   const raw = new URL(req.url).searchParams.get("since");
   if (raw === null) return undefined;
-  const n = Number.parseInt(raw, 10);
-  return Number.isFinite(n) && n >= 0 ? n : undefined;
+  const s = raw.trim();
+  if (!/^\d+$/.test(s)) return undefined;
+  const n = Number(s);
+  /*
+   * int4 chegarasi (BEA-13): `since` SQL da `$3::int` — undan katta son 22003
+   * «out of range» bilan 500 berardi. Soxta/buzuq klient uchun aniq 400.
+   * Qoida W4-E `parseIntParam` (`lib/server/validate.ts`, `PG_INT4_MAX`) bilan
+   * bir xil; u birlashgach shu tekshiruv o'shanga almashtiriladi.
+   */
+  if (!Number.isSafeInteger(n) || n > SINCE_MAX) throw new ApiError("Noto'g'ri since", 400);
+  return n;
 }
+
+/** Postgres `int4` yuqori chegarasi (`live_seq` ham `INT`). */
+const SINCE_MAX = 2_147_483_647;
 
 /** Bitta generatsiya holati — klient shu endpointni polling qiladi. */
 export const GET = handler("generations/get", async (req, ctx: Ctx) => {
