@@ -145,9 +145,14 @@ test("Fayl rejimi: umumiy SourceFileRow bitta qatorda — matn sourceText ga tus
 });
 
 // ───────────────────── AUDIT-25 P4: planItems sig'im (planCapacity) ─────────
-// Reviewer AUDIT-25-P4 (CHANGES) 2026-09-24 dagi tuzatishlar: qavat 1 (stub
-// `effectivePlanItems`), chegara sinovlari (item 3/4), simlanish sinovi
-// (item 5), `Segmented`ga o'tish (item 6), tooltip/hint/apostrof (item 7).
+// Reviewer AUDIT-25-P4 (CHANGES + re-review) dagi tuzatishlar: qavat 1
+// (`effectivePlanItems`), chegara sinovlari (item 3/4), simlanish sinovi
+// (item 5), `Segmented`ga o'tish (item 6), tooltip/hint/apostrof (item 7),
+// N1 (blocks faqat pro-slayd), N2 (bloklar ⇄ quizCount/agendaSlide ikki
+// tomonlama sinxron), N3 (moslashuvchan standart), N4 (defense+8 yoqildi).
+// P1 merge'dan keyin — HAQIQIY `lib/generation/slide-params.ts` dvigateli
+// (planCapacity/effectivePlanItems/defaultPlanItems/resolvePlanFlags/
+// activeBlockIds), stub emas.
 
 const planHint = () => document.querySelector("[data-plan-capacity-hint]")?.textContent ?? "";
 const planGroup = () => screen.getByRole("radiogroup", { name: "Reja bandlari" });
@@ -156,14 +161,14 @@ const checkedRadios = () => within(planGroup()).getAllByRole("radio").filter((r)
 
 test("sig'im yetganda barcha variant yoqilgan; past bo'lsa yuqorilari o'chadi, standart (tanlanmagan) qiymat sig'imga tushadi, «1» o'zi o'chmaydi, izoh chiqmaydi", () => {
   mount("slide");
-  // Standart: slideCount=10, blocks=["reja"] (yemaydigan blok yo'q), agendaSlide=true → sig'im 10-2-1=7, hammasi yoqilgan.
+  // Standart: slideCount=10, blocks=["reja"] (test yo'q), agendaSlide=true → bodyWant=10-titul(1)-yakun(1)=8, room=8-agenda(1)=7, hammasi yoqilgan.
   // planItems TEGILMAGAN — standart `defaultPlanItems(10)` = 3 (AUDIT-25 N3: moslashuvchan, qattiq 5 emas).
   for (const n of ["3", "4", "5", "6"]) {
     assert.ok(!within(planGroup()).getByRole("radio", { name: n }).hasAttribute("aria-disabled"), `${n}: boshida yoqilgan bo'lishi kerak (aria-disabled yo'q)`);
   }
   assert.equal(within(planGroup()).getByRole("radio", { name: "3" }).getAttribute("aria-checked"), "true", "tegilmagan standart defaultPlanItems(10)=3 bo'lishi kerak");
   assert.equal(planHint(), "", "sig'im yetganda izoh chiqmasligi kerak");
-  // Slayder minimal (4) ga tushiriladi: sig'im = 4 - 2 - 1 (reja slaydi) - 0 = 1. Standart QAYTA hisoblanadi: defaultPlanItems(4)=3.
+  // Slayder minimal (4) ga tushiriladi: bodyWant=4-1-1=2, room=2-agenda(1)=1. Standart QAYTA hisoblanadi: defaultPlanItems(4)=3.
   fireEvent.change(slider(), { target: { value: "4" } });
   const six = within(planGroup()).getByRole("radio", { name: "6" });
   assert.equal(six.getAttribute("aria-disabled"), "true", "6 band 1 ga sig'im bo'lganda o'chgan bo'lishi kerak");
@@ -195,7 +200,7 @@ test("sig'im 3 dan kichik bo'lsa variantlar 1 gacha kengayadi", () => {
 
 test("chegara: sig'im aynan 4 bo'lganda «4» yoqilgan, «5» o'chgan; standart (tanlanmagan) «3»da turadi, uni haqiqiy tanlov bilan almashtirish chip'ni o'zgartiradi", () => {
   mount("slide");
-  fireEvent.change(slider(), { target: { value: "7" } }); // sig'im = 7-2-1-0 = 4; standart planItems = defaultPlanItems(7) = 3 (tegilmagan)
+  fireEvent.change(slider(), { target: { value: "7" } }); // bodyWant=7-1-1=5, room=5-agenda(1)=4; standart planItems = defaultPlanItems(7) = 3 (tegilmagan)
   assert.ok(!within(planGroup()).getByRole("radio", { name: "4" }).hasAttribute("aria-disabled"), "sig'imga teng variant yoqilgan bo'lishi kerak");
   assert.equal(within(planGroup()).getByRole("radio", { name: "5" }).getAttribute("aria-disabled"), "true", "sig'imdan katta variant o'chgan bo'lishi kerak");
   assert.equal(within(planGroup()).getByRole("radio", { name: "3" }).getAttribute("aria-checked"), "true", "tegilmagan standart defaultPlanItems(7)=3 bo'lishi kerak");
@@ -221,7 +226,7 @@ test("qavat 1 (review CHANGES-1): «1»ni bosib tanlash sig'im keyin katta bo'ls
 
 test("native disabled (review CHANGES-4): o'chgan variantni bosish HECH NARSANI o'zgartirmaydi — sig'im qaytgach standart (tegilmagan) qiymat qoladi, bosilgan (4) emas", () => {
   mount("slide");
-  fireEvent.change(slider(), { target: { value: "4" } }); // sig'im = 1; standart planItems = defaultPlanItems(4) = 3 (tegilmagan)
+  fireEvent.change(slider(), { target: { value: "4" } }); // bodyWant=4-1-1=2, room=2-agenda(1)=1; standart planItems = defaultPlanItems(4) = 3 (tegilmagan)
   const four = within(planGroup()).getByRole("radio", { name: "4" });
   assert.ok((four as HTMLButtonElement).disabled, "«4» sig'im 1 da disabled bo'lishi kerak");
   fireEvent.click(four); // disabled tugma — hech narsa o'zgarmasligi kerak
@@ -245,7 +250,7 @@ test("tooltip izohi (A3-06): «har biri o‘z slaydi bilan», raqam 6 dan oshmay
 
 test("simlanish (review CHANGES-5): «Reja slaydi» o'chirilsa sig'im +1, «Nazorat testi» yoqilsa −1", () => {
   mount("slide");
-  fireEvent.change(slider(), { target: { value: "7" } }); // sig'im = 7-2-1-0 = 4
+  fireEvent.change(slider(), { target: { value: "7" } }); // bodyWant=7-1-1=5, room=5-agenda(1)=4
   assert.equal(planTooltip(), "Reja bandlari — har biri o‘z slaydi bilan; 7 slaydga 4 band sig‘adi.", `boshlang'ich: «${planTooltip()}»`);
   fireEvent.click(screen.getByRole("switch", { name: "Reja slaydi" })); // agendaSlide: true → false, reserved -1 → sig'im +1
   assert.equal(planTooltip(), "Reja bandlari — har biri o‘z slaydi bilan; 7 slaydga 5 band sig‘adi.", `«Reja slaydi» o'chgach: «${planTooltip()}»`);
@@ -255,13 +260,12 @@ test("simlanish (review CHANGES-5): «Reja slaydi» o'chirilsa sig'im +1, «Nazo
   assert.equal(planTooltip(), "Reja bandlari — har biri o‘z slaydi bilan; 7 slaydga 3 band sig‘adi.", `«Nazorat testi» yoqilgach: «${planTooltip()}»`);
 });
 
-// AUDIT-25 N4 (reviewer, re-review 8e4603e): P1 merge'dan keyin yoqiladi. Stub va real
-// dvigatel BU HOLATDA ATAYLAB kelishmaydi — stub «Himoya» (defense) uchun diagramma/
-// adabiyotlar bloklarini ham -1 deb hisoblaydi, real dvigatelda ular sig'imni kamaytirmaydi
-// (AUDIT-25-P4.md §3/N4: real 8-2-1=5, stub 8-2-1-1-1=3). Shu sabab bu holat tanlandi —
-// eski «12 slaydga 9 band» stub bilan HAM, real bilan HAM mos kelmasdi (min(capacity,6) cheklovi
-// tufayli ikkalasi ham "6" ko'rsatardi, farqni ko'rsatmasdi).
-test("TODO (P1 merge'dan keyin): pro-slide + Himoya (defense) + 8 slayd → tooltip «8 slaydga 5 band sig‘adi», «6» o'chgan", { skip: "AUDIT-25 N4: stub formula P1 dvigateli bilan mos emas — merge'da yoqiladi" }, () => {
+// AUDIT-25 N4 (reviewer, re-review 8e4603e) — YOQILDI (P1 swap, real dvigatel bilan tekshirildi):
+// pro-slide + «Himoya» (defense, blocks=[reja,diagramma,jadval,adabiyotlar], «test» yo'q) + 8 slayd.
+// Real hisob: bodyWant = 8 - titul(1) - yakun(1) = 6; on = {reja,diagramma,jadval,adabiyotlar}
+// («test» yo'q); agenda = on.has(reja) && agendaSlide!==false = true; room = 6 - test(0) - agenda(1) = 5.
+// capacity = 5 — aynan shu qiymat, «6» esa 5 dan katta bo'lgani uchun o'chgan.
+test("pro-slide + Himoya (defense) + 8 slayd → tooltip «8 slaydga 5 band sig‘adi», «6» o'chgan", () => {
   mount("pro-slide");
   fireEvent.change(screen.getByLabelText("Taqdimot turi"), { target: { value: "defense" } });
   fireEvent.change(slider(), { target: { value: "8" } });
@@ -332,6 +336,7 @@ test("«Tuzilma bloklari»da «Test» yoqilsa (Nazorat testi tegilmagan holda) q
     fillTopicAndSubmit("pro-slide");
     await waitFor(() => assert.ok(cap.posts.length > 0));
     assert.equal(cap.posts[0].quizCount, 3, `blok orqali yoqilgan test 3 yuborishi kerak: ${JSON.stringify(cap.posts[0])}`);
+    assert.ok(String(cap.posts[0].blocks ?? "").split(",").includes("test"), `blocks «test»ni o'z ichiga olishi kerak: ${JSON.stringify(cap.posts[0])}`);
   } finally {
     cap.restore();
   }
@@ -347,9 +352,69 @@ test("«Testsiz» chip'i bosilsa quizCount ANIQ 0 yuboriladi", async () => {
     await waitFor(() => assert.ok(cap.posts.length > 0));
     assert.equal(cap.posts[0].quizCount, 0, `«Testsiz» ANIQ 0 yuborishi kerak: ${JSON.stringify(cap.posts[0])}`);
     assert.ok("quizCount" in cap.posts[0], "quizCount kaliti ANIQ 0 bilan bo'lishi kerak — yo'q bo'lib qolmasligi kerak");
+    // AUDIT-25 N2a: pro-slaydda `blocks` ham «test»siz bo'lishi kerak — aks holda `resolvePlanFlags`
+    // ANIQ 0ni neytrallab, «Testsiz» dekorativ bo'lib qolardi (re-review 8e4603e, (a)).
+    assert.ok(!String(cap.posts[0].blocks ?? "").split(",").includes("test"), `blocks «test»siz bo'lishi kerak: ${JSON.stringify(cap.posts[0])}`);
   } finally {
     cap.restore();
   }
+});
+
+test("N2b: «Test» chipini yoqib keyin o'chirsa — quizCount 0ga qaytadi, chip va son sinxron", async () => {
+  const cap = captureSubmittedValues();
+  try {
+    mount("pro-slide"); // standart «Umumiy» — bloklarida «test» yo'q
+    const testChip = screen.getByRole("button", { name: "Test" });
+    fireEvent.click(testChip); // yoqish — avtomatik quizCount=3
+    assert.equal(
+      within(screen.getByRole("radiogroup", { name: "Nazorat testi" })).getByRole("radio", { name: "3" }).getAttribute("aria-checked"),
+      "true",
+      "chip yoqilgach «3» belgilangan bo'lishi kerak",
+    );
+    fireEvent.click(testChip); // o'chirish
+    assert.equal(testChip.getAttribute("aria-pressed"), "false", "chip o'chgan bo'lishi kerak");
+    // MUTATSIYA (N2): blocks-onChange'dagi «!hasTestNow && hadTest → quizCount:0» qatori olib tashlansa — bu ikki qator qizaradi.
+    assert.equal(
+      within(screen.getByRole("radiogroup", { name: "Nazorat testi" })).getByRole("radio", { name: "Testsiz" }).getAttribute("aria-checked"),
+      "true",
+      "chip o'chgach «Testsiz» ko'rinishi kerak — eskicha «3» qolib ketmasligi kerak",
+    );
+    fillTopicAndSubmit("pro-slide");
+    await waitFor(() => assert.ok(cap.posts.length > 0));
+    assert.equal(cap.posts[0].quizCount, 0, `chip o'chgach quizCount 0 yuborishi kerak: ${JSON.stringify(cap.posts[0])}`);
+    assert.ok(!String(cap.posts[0].blocks ?? "").split(",").includes("test"), `blocks «test»siz bo'lishi kerak: ${JSON.stringify(cap.posts[0])}`);
+  } finally {
+    cap.restore();
+  }
+});
+
+test("N2a (teskari yo'nalish): «Nazorat testi»da son tanlansa (pro-slide) «Test» chipi HAM yonadi", () => {
+  mount("pro-slide"); // standart «Umumiy» — bloklarida «test» yo'q
+  const testChip = screen.getByRole("button", { name: "Test" });
+  assert.equal(testChip.getAttribute("aria-pressed"), "false", "boshida o'chgan bo'lishi kerak");
+  fireEvent.click(within(screen.getByRole("radiogroup", { name: "Nazorat testi" })).getByRole("radio", { name: "5" }));
+  // MUTATSIYA (N2): quizCount-onChange'dagi blocks-sinxron qatorlari olib tashlansa — bu qator qizaradi.
+  assert.equal(testChip.getAttribute("aria-pressed"), "true", "son tanlangach «Test» chipi HAM yonishi kerak");
+});
+
+test("N2c: «Reja» chipi o'chirilsa — «Reja slaydi» kaliti HAM o'chgan ko'rinadi (switch chip bilan sinxron)", () => {
+  mount("pro-slide"); // standart «Umumiy» — bloklarida «reja» bor
+  assert.equal(screen.getByRole("switch", { name: "Reja slaydi" }).getAttribute("aria-checked"), "true", "boshida yoqilgan bo'lishi kerak");
+  fireEvent.click(screen.getByRole("button", { name: "Reja" })); // «Tuzilma bloklari» chip'ini o'chiramiz
+  // MUTATSIYA (N2): blocks-onChange'dagi reja-sinxron qatorlari olib tashlansa — bu qator qizaradi
+  // (`resolvedAgendaSlide` eskicha `on.has("reja")`ni to'g'ridan-to'g'ri `values.blocks`dan emas, kesh'dan o'qib qoladi).
+  assert.equal(screen.getByRole("switch", { name: "Reja slaydi" }).getAttribute("aria-checked"), "false", "chip o'chgach kalit HAM o'chgan ko'rinishi kerak (re-review 8e4603e, (c))");
+});
+
+test("N2d: «Reja» chipi o'chgan holda «Reja slaydi» kaliti yoqilsa — chip HAM qayta yonadi", () => {
+  mount("pro-slide");
+  fireEvent.click(screen.getByRole("button", { name: "Reja" })); // avval o'chiramiz
+  assert.equal(screen.getByRole("button", { name: "Reja" }).getAttribute("aria-pressed"), "false");
+  fireEvent.click(screen.getByRole("switch", { name: "Reja slaydi" })); // kalitni yoqamiz
+  // MUTATSIYA (N2): agendaSlide-onChange'dagi blocks-sinxron qatorlari olib tashlansa — bu qator qizaradi
+  // (re-review 8e4603e, (d): kalit yoqilib turib chip o'chgan qolardi — dekorativ).
+  assert.equal(screen.getByRole("button", { name: "Reja" }).getAttribute("aria-pressed"), "true", "kalit yoqilgach chip HAM qayta yonishi kerak (re-review 8e4603e, (d))");
+  assert.equal(screen.getByRole("switch", { name: "Reja slaydi" }).getAttribute("aria-checked"), "true");
 });
 
 test("«Reja slaydi» o'chirilsa agendaSlide ANIQ false yuboriladi", async () => {
