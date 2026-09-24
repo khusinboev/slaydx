@@ -17,7 +17,8 @@ import {
   planCapacity,
   resolvePlanFlags,
 } from "../lib/generation/slide-params.ts";
-import { SLIDE_LIMITS } from "../lib/generation/slide-limits.ts";
+import { SLIDE_LIMITS, clipTo, limitsFor } from "../lib/generation/slide-limits.ts";
+import { REPAIR_MIN_MS, clipLimit, layoutWordTargets } from "../lib/generation/slide-quality.ts";
 import { AUDIENCE_RULES } from "../lib/generation/slide-audience.ts";
 import type { SlideProgressEvent } from "../lib/generation/slide-progress.ts";
 import { resetBlocksForPurpose } from "../components/forms/slide-fields.tsx";
@@ -25,6 +26,7 @@ import { slideSystem } from "../lib/generation/slide-prompt/index.ts";
 import { SLIDE_TEMPLATES, SLIDE_TEMPLATE_BY_ID, expandBeats, type SlideBeat } from "../lib/generation/slide-templates.ts";
 import {
   buildSlideAcademicDoc,
+  coerceLayout,
   deckBeats,
   extractNewSlides,
   fallbackSlides,
@@ -306,7 +308,7 @@ test("A3-02: agendaSlide true standartida reja yo'q turga reja QO'SHADI; undefin
 
 // ═══════════════════════════════════════════ 4. agenda = reja slaydlari sarlavhalari
 
-type Reply = (url: string) => unknown;
+type Reply = (url: string, body: string) => unknown;
 
 /** `globalThis.fetch` + kalitlarni almashtiradi va oxirida TIKLAYDI (`slide-live.test.mts` naqshi). */
 async function withLlm(reply: Reply, fn: () => Promise<void>) {
@@ -314,7 +316,7 @@ async function withLlm(reply: Reply, fn: () => Promise<void>) {
   process.env.GEMINI_API_KEY = "test-key";
   delete process.env.XAI_API_KEY;
   delete process.env.LLM_STREAM;
-  globalThis.fetch = (async (url: string) => reply(String(url)) as never) as unknown as typeof fetch;
+  globalThis.fetch = (async (url: string, init?: { body?: unknown }) => reply(String(url), String(init?.body ?? "")) as never) as unknown as typeof fetch;
   try {
     await fn();
   } finally {
@@ -698,4 +700,169 @@ test("7-band: moslashuvchan standart reja bandlari soni (egasi qarori)", () => {
     for (const role of ["Maqsadlar", "Motivatsiya", "Amaliyot"]) assert.ok(beats.some((b) => b.role.startsWith(role)), `${role} yo'q — ${tag}`);
     assert.ok(beats.some((b) => b.layout === "quiz"), `savol yo'q — ${tag}`);
   }
+});
+
+// ═══════════════════════════════════════════ P3 ulanishi (W1–W5)
+
+const LONG_BULLETS = [
+  "Fotosintez jarayonida yashil o‘simliklar quyosh nuri energiyasini kimyoviy bog‘lar energiyasiga aylantiradi.",
+  "Xlorofill molekulalari yorug‘likni yutadi va suv molekulasini parchalab kislorod ajratib chiqaradi.",
+  "Qorong‘ilik bosqichida karbonat angidrid glyukozaga aylanadi va hujayra uni zaxira sifatida saqlaydi.",
+  "Bu jarayon Yer atmosferasidagi kislorod miqdorini ta’minlaydi va oziq zanjirining asosini tashkil etadi.",
+];
+
+/** Yozuvchi javobi: har beat uchun to'liq slayd, `thinAt` dagi reja slaydi esa ATAYIN yupqa. */
+function richFor(b: SlideBeat, i: number, thinAt: number): Record<string, unknown> {
+  const raw = rawFor(b, i);
+  if (b.layout === "bullets") raw.bullets = i === thinAt ? ["Qisqa."] : LONG_BULLETS;
+  if (b.layout === "section") raw.subtitle = "Bu bo‘limda jarayonning asosiy bosqichlari va ularning ahamiyati batafsil ko‘rib chiqiladi.";
+  if (b.layout === "process") raw.steps = [1, 2, 3].map((n) => ({ title: `Bosqich ${n}`, text: LONG_BULLETS[n - 1] }));
+  if (b.layout === "twoCol" || b.layout === "compare") Object.assign(raw, { left: LONG_BULLETS.slice(0, 2), right: LONG_BULLETS.slice(2) });
+  return raw;
+}
+
+async function writeWithRepairStub(v: FormValues, opts: { thin: boolean; short?: boolean; jobMs?: number }) {
+  const meta = extractMeta(slideTool, { topic: "Fotosintez", ...v });
+  const tpl = resolveDeckTemplate(meta);
+  const beats = deckBeats(meta, tpl);
+  const thinAt = opts.thin ? beats.findIndex((b) => b.plan && b.layout === "bullets") : -1;
+  const writerSlides = beats.map((b, i) => richFor(b, i, thinAt));
+  const calls: string[] = [];
+  let out: SlideModel[] | null = null;
+  await withLlm(
+    (_url, body) => {
+      // Ta'mir chaqiruvi o'z system promptidan taniladi (`repairThinSlides`).
+      const repair = body.includes("taqdimot muharririsiz");
+      calls.push(repair ? "repair" : "writer");
+      if (!repair) return jsonReply(JSON.stringify({ slides: opts.short ? writerSlides.slice(0, 3) : writerSlides }));
+      // Ta'mir javobi: hamma indeks uchun boy bandlar — faqat so'ralgani qabul qilinadi.
+      return jsonReply(JSON.stringify({ slides: beats.map((_, index) => ({ index, bullets: LONG_BULLETS })) }));
+    },
+    async () => {
+      out = await writeSlidesWithLlm(meta, tpl, beats, Date.now() + 120_000, {}, undefined, Date.now() + (opts.jobMs ?? 300_000));
+    },
+  );
+  return { meta, beats, thinAt, calls, slides: out as SlideModel[] | null };
+}
+
+test("W1: yupqa reja slaydi AYNAN bitta ta'mir chaqiruvini qo'zg'aydi, agenda ta'mirdan keyin ham reja sarlavhalari", async () => {
+  const { beats, thinAt, calls, slides } = await writeWithRepairStub({ slideCount: 10, planItems: 3, slideTemplate: "lecture" }, { thin: true });
+  assert.ok(thinAt >= 0, "sinov asosi: reja bullets slaydi yo'q");
+  assert.deepEqual(calls, ["writer", "repair"], `chaqiruvlar: ${calls.join(",")}`);
+  assert.ok(slides);
+  assert.deepEqual(slides[thinAt].bullets, LONG_BULLETS.map((b) => clipTo(b, bodyRules(extractMeta(slideTool, { topic: "X" }), "lecture").bulletChars)), "ta'mir qabul qilinmadi");
+  assert.equal(slides[thinAt].plan, beats[thinAt].plan, "ta'mir `plan` ni yo'qotdi");
+  const agenda = slides.find((s) => s.layout === "agenda")!;
+  const heads = [1, 2, 3].map((i) => slides.find((s) => s.plan === i && s.layout === "section") ?? slides.find((s) => s.plan === i)!);
+  assert.deepEqual(agenda.bullets, heads.map((s) => s.title));
+});
+
+test("W1: yupqa slayd yo'q — ta'mir chaqirilmaydi; kam slayd (pol) — ta'mirdan OLDIN rad, pul sarflanmaydi", async () => {
+  const rich = await writeWithRepairStub({ slideCount: 10, planItems: 3, slideTemplate: "lecture" }, { thin: false });
+  assert.ok(rich.slides);
+  assert.deepEqual(rich.calls, ["writer"], `yupqa slayd yo'q — ortiqcha chaqiruv: ${rich.calls.join(",")}`);
+  const short = await writeWithRepairStub({ slideCount: 10, planItems: 3, slideTemplate: "lecture" }, { thin: true, short: true });
+  assert.equal(short.slides, null);
+  assert.ok(!short.calls.includes("repair"), `pol ostidagi deka uchun ta'mir chaqirildi: ${short.calls.join(",")}`);
+});
+
+test("W3/W4: normalizeSlide AVVAL sonni kesadi, keyin uzunlikni auditoriya × son bo'yicha (1–4-sinf ≠ bakalavr)", () => {
+  const long = "Bu bosqichda o‘quvchilar kuzatuv natijalarini jadvalga yozadilar va o‘qituvchi bilan birga har bir o‘lchovni tekshirib, xatolarni aniqlab, xulosa chiqaradilar hamda keyingi tajribaga tayyorgarlik ko‘radilar.";
+  const raw = [
+    { layout: "process", title: "Jarayon", steps: Array.from({ length: 6 }, (_, k) => ({ title: `Qadam ${k + 1} nomi`, text: long })) },
+    { layout: "stats", title: "Raqamlar", stats: Array.from({ length: 6 }, (_, k) => ({ value: `${k + 1} bosqich`, label: long })) },
+    { layout: "table", title: "Jadval", table: { headers: ["A", "B", "C", "D", "E", "F"], rows: Array.from({ length: 8 }, () => ["x", "y", "z", "w", "v", "u"].map((c) => `${c} ${long}`)) } },
+    { layout: "quiz", title: "Test", quiz: [{ q: "Savol?", options: [long, long, long, long], answer: 1 }] },
+    { layout: "twoCol", title: "Ikki ustun", left: [long, long, long, long, long, long], right: [long] },
+  ];
+  const got: Record<string, SlideModel[]> = {};
+  for (const aud of ["school_1_4", "students_bachelor"]) {
+    const meta = extractMeta(slideTool, { topic: "X", slideAudience: aud });
+    const rules = bodyRules(meta, "lecture");
+    const visual = SLIDE_TEMPLATE_BY_ID.lecture.visual;
+    const lim = limitsFor(rules);
+    const slides = extractNewSlides(JSON.stringify({ slides: raw }), 0, "F", rules, { final: true }, visual).map((x) => x.slide);
+    got[aud] = slides;
+    const [proc, stats, table, quiz, two] = slides;
+    const tag = aud;
+    assert.equal(proc.steps!.length, lim.stepsMax, `${tag}: bosqich soni stepsMax ga kesilmadi`);
+    for (const st of proc.steps!) {
+      assert.ok(st.text.length <= clipLimit("stepText", rules, visual, proc.steps!.length), `${tag}: step ${st.text.length}`);
+      assert.ok(st.text.endsWith("…") && long.startsWith(st.text.slice(0, -1)) && /[\s,;:.!?–—-]/.test(long[st.text.length - 1]), `${tag}: so'z o'rtasidan kesildi «${st.text}»`);
+    }
+    assert.equal(stats.stats!.length, lim.statsMax, tag);
+    for (const s of stats.stats!) assert.ok(s.label.length <= clipLimit("statLabel", rules, visual, stats.stats!.length), tag);
+    assert.equal(table.table!.headers.length, lim.tableCols, tag);
+    assert.equal(table.table!.rows.length, lim.tableRows, tag);
+    const cellMax = clipLimit("tableCell", rules, visual, lim.tableCols, lim.tableRows);
+    for (const r of table.table!.rows) for (const c of r) assert.ok(c.length <= cellMax, `${tag}: katak ${c.length} > ${cellMax}`);
+    for (const o of quiz.quiz![0].options) assert.ok(o.length <= clipLimit("quizOption", rules, visual), tag);
+    assert.equal(two.left!.length, Math.min(SLIDE_LIMITS.colItems, layoutWordTargets(rules, visual).maxColItems), tag);
+    for (const x of two.left!) assert.ok(x.length <= clipLimit("colItem", rules, visual, two.left!.length), tag);
+    // Bitta bandli ustun — keng chegara (son bo'yicha).
+    assert.ok(two.right![0].length >= two.left![0].length, `${tag}: ustun chegarasi band soniga qaramadi`);
+  }
+  // Auditoriya farqi: 1–4-sinf kartasi torroq (yirik shrift) — bakalavr chegarasida qolmaydi.
+  assert.ok(got.school_1_4[0].steps!.length < got.students_bachelor[0].steps!.length, "bosqich soni auditoriyaga bog'lanmadi");
+  assert.ok(got.school_1_4[0].steps![0].text.length < got.students_bachelor[0].steps![0].text.length, "bosqich matni auditoriyaga bog'lanmadi");
+});
+
+test("W2/W5: bandlar va coerceLayout SO'Z chegarasida, maket chegaralari bilan kesiladi", () => {
+  const rules = bodyRules(extractMeta(slideTool, { topic: "X", slideAudience: "school_1_4" }), "lecture");
+  const long = "Birinchi uzun band matni bu yerda davom etadi va chegaradan albatta oshib ketadi chunki juda ko‘p so‘z bor va yana davom etadi hamda tugamaydi hali ham davom etmoqda";
+  const [s] = extractNewSlides(JSON.stringify({ slides: [{ layout: "bullets", title: "T", bullets: [long] }] }), 0, "F", rules, { final: true }).map((x) => x.slide);
+  const b = s.bullets![0];
+  assert.ok(b.length <= rules.bulletChars && b.endsWith("…"), b);
+  assert.match(long[b.length - 1], /[\s,;:.!?–—-]/, `band so'z o'rtasidan kesildi: «${b}»`);
+  // coerceLayout: bandlardan process — sarlavha `stepTitle`, matn bosqich soni bo'yicha `limitsFor`.
+  const pool = [`Qadam — ${long}`, `Ikkinchi — ${long}`, `Uchinchi — ${long}`];
+  const proc = coerceLayout({ id: "s", layout: "bullets", title: "T", bullets: pool }, "process", 4, rules);
+  assert.equal(proc.layout, "process");
+  assert.equal(proc.steps!.length, Math.min(pool.length, limitsFor(rules).stepsMax));
+  const lim = limitsFor(rules, { steps: proc.steps!.length });
+  for (const st of proc.steps!) {
+    assert.ok(st.title.length <= lim.stepTitle && st.text.length <= lim.stepText, JSON.stringify(st));
+    assert.match(long[st.text.length - 1], /[\s,;:.!?–—-]/, `coerce matni so'z o'rtasidan: «${st.text}»`);
+  }
+  const q = coerceLayout({ id: "s", layout: "bullets", title: "T", bullets: [long.repeat(3)] }, "quote");
+  assert.ok(q.quote!.length <= SLIDE_LIMITS.quote, String(q.quote!.length));
+});
+
+// ═══════════════════════════════════════════ P3 ulanish sharhi (3807d0b): N1–N3
+
+test("N1: ta'mir `jobDeadline` ni oladi — ish muddatiga REPAIR_MIN_MS qolmasa faqat yozuvchi chaqiriladi", async () => {
+  const tight = await writeWithRepairStub(
+    { slideCount: 10, planItems: 3, slideTemplate: "lecture" },
+    { thin: true, jobMs: REPAIR_MIN_MS - 1_000 },
+  );
+  assert.ok(tight.slides, "deka yozilishi kerak");
+  assert.deepEqual(tight.calls, ["writer"], `ish muddati tor — ta'mir chaqirilmasligi kerak: ${tight.calls.join(",")}`);
+});
+
+test("N2: sarlavha va bandlarda NBSP saqlanadi («12 km» ikki qatorga bo'linmasin)", () => {
+  const rules = bodyRules(extractMeta(slideTool, { topic: "X" }), "lecture");
+  const [s] = extractNewSlides(
+    JSON.stringify({ slides: [{ layout: "bullets", title: "Masofa 12 km", bullets: ["Yo‘l 12 km   uzunlikda."] }] }),
+    0,
+    "F",
+    rules,
+    { final: true },
+  ).map((x) => x.slide);
+  assert.equal(s.title, "Masofa 12 km");
+  assert.equal(s.bullets![0], "Yo‘l 12 km uzunlikda.", "NBSP oddiy bo'shliqqa aylandi yoki bo'shliq siqilmadi");
+});
+
+test("N3: ustun bandlari AVVAL auditoriya × vizual sig'imiga kesiladi (1–4-sinf «circle» → 2 band)", () => {
+  const rules = bodyRules(extractMeta(slideTool, { topic: "X", slideAudience: "school_1_4" }), "lesson");
+  const visual = SLIDE_TEMPLATE_BY_ID.lesson.visual;
+  const max = layoutWordTargets(rules, visual).maxColItems;
+  assert.equal(max, 2, "sinov asosi: 1–4-sinf circle da 2 band");
+  const four = ["Birinchi band.", "Ikkinchi band.", "Uchinchi band.", "To‘rtinchi band."];
+  const [s] = extractNewSlides(JSON.stringify({ slides: [{ layout: "twoCol", title: "Ikki ustun", left: four, right: four }] }), 0, "F", rules, { final: true }, visual).map((x) => x.slide);
+  assert.deepEqual(s.left, four.slice(0, 2));
+  assert.deepEqual(s.right, four.slice(0, 2));
+  // Bakalavr ma'ruzasida ko'proq band qoladi.
+  const adult = bodyRules(extractMeta(slideTool, { topic: "X", slideAudience: "students_bachelor" }), "lecture");
+  const [a] = extractNewSlides(JSON.stringify({ slides: [{ layout: "twoCol", title: "Ikki ustun", left: four, right: four }] }), 0, "F", adult, { final: true }, SLIDE_TEMPLATE_BY_ID.lecture.visual).map((x) => x.slide);
+  assert.ok(a.left!.length > 2, `bakalavr: ${a.left!.length}`);
 });
