@@ -698,7 +698,35 @@ export type ClaimedJob = {
    * aynan shu qiymat bilan to'siladi.
    */
   lease: string;
+  /**
+   * Claim paytidagi progress (BEB-07): qayta olingan ishda — oldingi
+   * yurishning erishgan qiymati. Worker bundan PAST yozmaydi
+   * (`monotonicProgress`), ya'ni foydalanuvchi progress orqaga ketganini
+   * ko'rmaydi. Yo'q (eski test literal'lari) — 0.
+   */
+  progressFloor?: number;
+  /** Ish avval boshlangan va qayta olingan (bosqich «Qayta boshlandi»). */
+  restarted?: boolean;
 };
+
+/** Qayta olingan ishning bosqichi — progress eski qiymatga yetguncha shu matn turadi (BEB-07). */
+export const RESTART_STEP = "Qayta boshlandi";
+
+/**
+ * Progress faqat oshadi (BEB-07). Yangi yurish eski qiymatdan past bo'lsa
+ * qiymat `floor` da qoladi; qayta olingan ishda bosqich ham «Qayta
+ * boshlandi» bo'lib turadi (aks holda «Reja tuzilmoqda · 60%» kabi
+ * aralash holat chiqardi).
+ */
+export function monotonicProgress(
+  job: Pick<ClaimedJob, "progressFloor" | "restarted">,
+  progress: number,
+  step: string,
+): { progress: number; step: string } {
+  const floor = job.progressFloor ?? 0;
+  if (progress >= floor) return { progress, step };
+  return { progress: floor, step: job.restarted ? RESTART_STEP : step };
+}
 
 /**
  * Har claim uchun YANGI to'siq tokeni (C26: CONC-06).
@@ -733,6 +761,10 @@ export function newLease(workerId: string): string {
  * bo'sh slot esa shu orada boshqalarga ketadi. Ichki sanoq
  * `generations_running_user_idx` (faqat IN_PROGRESS qatorlar, ≤ slotlar soni)
  * bo'ylab yuradi.
+ *
+ * PROGRESS (BEB-07): qayta olingan ish (`started_at` bor) progressini
+ * YO'QOTMAYDI (`GREATEST`) va bosqichi «Qayta boshlandi» bo'ladi; qaytgan
+ * `progressFloor` dan worker past yozmaydi (`monotonicProgress`).
  */
 export async function claimJob(
   lease: string,
@@ -747,6 +779,8 @@ export async function claimJob(
     price: string;
     attempts: number;
     budget_ms: number;
+    progress: number;
+    step: string;
   }>(
     `UPDATE generations g
         SET status = 'IN_PROGRESS',
@@ -754,8 +788,8 @@ export async function claimJob(
             locked_at = now(),
             started_at = COALESCE(started_at, now()),
             attempts = attempts + 1,
-            progress = 5,
-            step = 'Boshlandi',
+            progress = GREATEST(g.progress, 5),
+            step = CASE WHEN g.started_at IS NULL THEN 'Boshlandi' ELSE $3 END,
             live_json = NULL
       WHERE g.id = (
         SELECT q.id FROM generations q
@@ -766,8 +800,8 @@ export async function claimJob(
          LIMIT 1
          FOR UPDATE SKIP LOCKED
       )
-      RETURNING g.id, g.user_id, g.tool_id, g.values_json, g.price, g.attempts, g.budget_ms`,
-    [lease, cap],
+      RETURNING g.id, g.user_id, g.tool_id, g.values_json, g.price, g.attempts, g.budget_ms, g.progress, g.step`,
+    [lease, cap, RESTART_STEP],
   );
   if (!row) return null;
   return {
@@ -779,6 +813,8 @@ export async function claimJob(
     attempts: row.attempts,
     budgetMs: Number(row.budget_ms) || 0,
     lease,
+    progressFloor: Number(row.progress) || 0,
+    restarted: row.step === RESTART_STEP,
   };
 }
 

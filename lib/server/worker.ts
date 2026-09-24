@@ -12,6 +12,7 @@ import {
   commitJobResult,
   failJob,
   heartbeat,
+  monotonicProgress,
   newLease,
   reclaimStaleJobs,
   releaseJobs,
@@ -219,9 +220,10 @@ export function progressTicker(job: ClaimedJob, live: LiveReporter | null, isLiv
       return;
     }
     const ratio = 1 - Math.exp(-(now - started) / expected);
-    const progress = Math.min(95, Math.round(5 + ratio * 90));
-    const idx = Math.min(steps.length - 1, Math.floor((progress / 96) * steps.length));
-    const step = steps[idx];
+    const curve = Math.min(95, Math.round(5 + ratio * 90));
+    const idx = Math.min(steps.length - 1, Math.floor((curve / 96) * steps.length));
+    // Qayta olingan ishda egri chiziq 5 dan boshlanadi — oldingi yurish qiymatidan pastga tushmaydi (BEB-07).
+    const { progress, step } = monotonicProgress(job, curve, steps[idx]);
     const gap = now - lastLeaseAt;
     const changed = progress !== lastProgress || step !== lastStep;
     const due = (changed && gap >= PROGRESS_MIN_GAP_MS) || gap >= LEASE_EVERY_MS;
@@ -366,7 +368,7 @@ async function runWithHardStop(job: ClaimedJob, opts: RunOptions, ctl: RunCtl): 
   // Faqat slayd/pro-slayd jonli deka yuboradi (`slide-write.ts`/`slide-images.ts`
   // shu ikkisi uchun `onProgress` chaqiradi) — boshqa vositalarga reporter kerak
   // emas.
-  const live = tool.id === "slide" || tool.id === "pro-slide" ? new LiveReporter(job.id, job.lease) : null;
+  const live = tool.id === "slide" || tool.id === "pro-slide" ? new LiveReporter(job.id, job.lease, job) : null;
 
   /*
    * Tarjima dvigateli haqiqiy bosqich yuborganidan keyin soxta egri
@@ -378,7 +380,8 @@ async function runWithHardStop(job: ClaimedJob, opts: RunOptions, ctl: RunCtl): 
     ctl.stage = String(ev.step ?? "").slice(0, 120);
     // 95 — `completeJob` 100 ni o'zi qo'yadi; dvigatel 100 yuborsa
     // «tayyor» ko'rinar, fayl esa hali yozilmagan bo'lardi.
-    void setProgress(job.id, job.lease, Math.min(95, Math.max(0, Math.round(ev.progress))), ev.step).catch((e) => {
+    const next = monotonicProgress(job, Math.min(95, Math.max(0, Math.round(ev.progress))), ev.step);
+    void setProgress(job.id, job.lease, next.progress, next.step).catch((e) => {
       throttledWarn(`hb:${job.id}`, "[worker] bosqich yozilmadi", { jobId: job.id, stage: ctl.stage, err: e });
     });
   };
