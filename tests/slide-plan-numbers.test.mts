@@ -252,8 +252,23 @@ test("ro'yxat tartib raqamlari qoladi: reja 1..N, bosqich n, test A–D", () => 
  */
 const AUDIENCES = ["school_1_4", "school_5_7", "school_10_11", "students_bachelor", "general"] as const;
 
-function floorCase(layout: SlideLayout, chart: boolean): PlanSlide {
+/**
+ * `long` — polda ham sig'maydigan matn: pol QAT'IY ekanini aynan shu
+ * holat sinaydi (qisqa matn `bodyPt` da sig'adi va pol hech qachon
+ * ishga tushmaydi — mutatsiya tekshiruvi shuni ko'rsatdi).
+ */
+const LONG_TXT = "Orol dengizi havzasida sug'orish uchun olingan suv hajmi o'n yillar davomida muttasil oshib bordi va dengiz sathi keskin pasaydi. ".repeat(2);
+
+function floorCase(layout: SlideLayout, chart: boolean, long = false): PlanSlide {
   const s = sampleFor(layout, false);
+  if (long) {
+    s.steps = [1, 2, 3].map((n) => ({ n: String(n), title: LONG_TXT.slice(0, 90), text: LONG_TXT }));
+    s.stats = chart
+      ? [{ value: "68%", label: LONG_TXT.slice(0, 120) }, { value: "22%", label: LONG_TXT.slice(0, 120) }, { value: "10%", label: LONG_TXT.slice(0, 120) }]
+      : [{ value: "68%", label: LONG_TXT }, { value: "40 km", label: LONG_TXT }];
+    s.table = { headers: [LONG_TXT.slice(0, 60), "Maydon", "Sho'rlik"], rows: [[LONG_TXT, LONG_TXT, "10 g/l"], ["2020", LONG_TXT, "100 g/l"]] };
+    return s;
+  }
   s.steps = [
     { n: "1", title: "Kuzatish", text: "Suv sathini har oy o'lchab, jadvalga yozamiz." },
     { n: "2", title: "Taqqoslash", text: "Oldingi yil bilan solishtirib, farqni topamiz." },
@@ -271,8 +286,17 @@ test("A2-04: bosqich/raqam/jadval matni auditoriya polidan (minPt) kichik emas �
   for (const aud of AUDIENCES) {
     const bodyType = bodyRules({ slideAudience: aud, textVolume: "standart", planItems: 4 }, "lecture");
     for (const visual of VISUALS) {
-      for (const [layout, chart] of [["process", false], ["stats", false], ["stats", true], ["table", false]] as const) {
-        const plan = planSlide(floorCase(layout, chart), theme, visual, 3, TOTAL, aud, "lecture", { bodyType });
+      for (const [layout, chart, long] of [
+        ["process", false, false],
+        ["process", false, true],
+        ["stats", false, false],
+        ["stats", false, true],
+        ["stats", true, false],
+        ["stats", true, true],
+        ["table", false, false],
+        ["table", false, true],
+      ] as const) {
+        const plan = planSlide(floorCase(layout, chart, long), theme, visual, 3, TOTAL, aud, "lecture", { bodyType });
         const body = texts(plan.layers).filter((l) => {
           const f = l.src?.f;
           if (f === "steps") return (l.src as { k: string }).k !== "n";
@@ -282,7 +306,7 @@ test("A2-04: bosqich/raqam/jadval matni auditoriya polidan (minPt) kichik emas �
         for (const l of body) {
           assert.ok(
             l.size >= bodyType.minPt,
-            `${aud}/${visual}/${layout}${chart ? "/diagramma" : ""}: «${textOf(l)}» ${l.size} pt < pol ${bodyType.minPt} pt`,
+            `${aud}/${visual}/${layout}${chart ? "/diagramma" : ""}${long ? "/uzun" : ""}: «${textOf(l).slice(0, 30)}» ${l.size} pt < pol ${bodyType.minPt} pt`,
           );
         }
         assertInside(plan.layers, `${aud}/${visual}/${layout}`);
@@ -303,6 +327,34 @@ test("A2-04: 1–4-sinf bosqichlari (minPt 24) — matn 24 pt dan kichik emas va
       assert.ok(l.size >= 24, `${visual}: «${textOf(l)}» ${l.size} pt`);
       const ink = LAYOUT_KIT.inkHeight(textOf(l), l.box.w, l.size);
       assert.ok(ink <= l.box.h + 0.01, `${visual}: «${textOf(l)}» ${l.size} pt da ${ink.toFixed(2)}″ — quti ${l.box.h.toFixed(2)}″ dan chiqdi`);
+    }
+  }
+});
+
+/**
+ * Katta shrift joy talab qiladi: ikki qatorli (5 bosqich) oqimda izoh
+ * qutisi ilgari QAT'IY `y + 1.78` dan boshlanardi — karta 2.45″ bo'lsa
+ * izohga 0.5″ (bir qator) qolardi va auditoriya polida matn chiqib
+ * ketardi. Endi sarlavha qutisi siyoh balandligida, qolgani izohga.
+ */
+test("A2-04: ikki qatorli oqim (5 bosqich) — auditoriya polida oddiy izoh qutiga sig'adi", () => {
+  const theme = getSlideTheme("atlas");
+  const bodyType = bodyRules({ slideAudience: "general", textVolume: "standart", planItems: 4 }, "lecture");
+  const s = floorCase("process", false);
+  s.steps = ["Kuzatish", "Taqqoslash", "Tahlil", "Xulosa", "Taklif"].map((title, i) => ({
+    n: String(i + 1),
+    title,
+    text: "Suv sathini har oy o'lchab, jadvalga yozamiz.",
+  }));
+  // `rail` bosqichlari o'z geometriyasida (bir qatorda 5 ta) — u yuqoridagi testda.
+  for (const visual of VISUALS.filter((v) => v !== "rail")) {
+    const plan = planSlide(s, theme, visual, 3, TOTAL, "general", "lecture", { bodyType });
+    const desc = texts(plan.layers).filter((l) => l.src?.f === "steps" && (l.src as { k: string }).k === "text");
+    assert.equal(desc.length, 5, `${visual}: 5 ta izoh kutilgan`);
+    for (const l of desc) {
+      assert.ok(l.size >= bodyType.minPt, `${visual}: izoh ${l.size} pt < ${bodyType.minPt}`);
+      const ink = LAYOUT_KIT.inkHeight(textOf(l), l.box.w, l.size);
+      assert.ok(ink <= l.box.h + 0.01, `${visual}: izoh ${l.size} pt da ${ink.toFixed(2)}″ — quti ${l.box.h.toFixed(2)}″`);
     }
   }
 });
