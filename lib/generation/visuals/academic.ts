@@ -122,12 +122,20 @@ function planTitle(s: SlideModel, theme: SlideTheme, index: number, total: numbe
 }
 
 function planSection(s: SlideModel, theme: SlideTheme, index: number, total: number): SlidePlan {
-  const { fitSize, inkHeight, pushFooter, W, H } = LAYOUT_KIT;
+  const { fitSize, inkHeight, pushFooter, planNumber, W, H } = LAYOUT_KIT;
   const layers: SlideLayer[] = [];
   layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.bg } });
 
-  const x = 4.65;
-  const tw = 8.05;
+  /*
+   * AUDIT-25: yirik raqam — reja bandi (`s.plan`), deka tartibi emas.
+   * Reja bandi yo'q bo'lsa chap raqam ustuni YIG'ILADI: tik chiziq
+   * sahifa chetiga, matn esa to'la kenglikka o'tadi — 4 dyuymlik bo'sh
+   * ustun qolmaydi.
+   */
+  const no = planNumber(s);
+  const ruleX = no ? 4.15 : TEXT_X;
+  const x = no ? 4.65 : TEXT_X + 0.5;
+  const tw = no ? 8.05 : 12.53 - x;
   const top = 1.6;
   const bottom = 5.9;
   const titleSize = fitSize(s.title, { x, y: 0, w: tw, h: 2.4 }, 40, 24);
@@ -147,18 +155,20 @@ function planSection(s: SlideModel, theme: SlideTheme, index: number, total: num
    */
   const ruleTop = Math.max(1.2, y0 - 0.45);
   const ruleBottom = Math.min(6.3, y0 + blockH + 0.45);
-  layers.push({ t: "rect", box: { x: 4.15, y: ruleTop, w: 0.07, h: ruleBottom - ruleTop }, fill: { color: theme.accent } });
-  const numH = 2.2;
-  const numY = Math.max(0.3, Math.min(H - numH - 0.9, (ruleTop + ruleBottom) / 2 - numH / 2));
-  layers.push({
-    t: "text",
-    box: { x: 0.72, y: numY, w: 3.1, h: numH },
-    text: String(index + 1).padStart(2, "0"),
-    color: theme.accentInk,
-    size: 110,
-    bold: true,
-    valign: "middle",
-  });
+  layers.push({ t: "rect", box: { x: ruleX, y: ruleTop, w: 0.07, h: ruleBottom - ruleTop }, fill: { color: theme.accent } });
+  if (no) {
+    const numH = 2.2;
+    const numY = Math.max(0.3, Math.min(H - numH - 0.9, (ruleTop + ruleBottom) / 2 - numH / 2));
+    layers.push({
+      t: "text",
+      box: { x: 0.72, y: numY, w: 3.1, h: numH },
+      text: no,
+      color: theme.accentInk,
+      size: 110,
+      bold: true,
+      valign: "middle",
+    });
+  }
   layers.push({
     t: "text",
     box: { x, y: y0, w: tw, h: titleH },

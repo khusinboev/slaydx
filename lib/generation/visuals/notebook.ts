@@ -155,29 +155,38 @@ function planTitle(s: SlideModel, theme: SlideTheme, index: number, total: numbe
 }
 
 function planSection(s: SlideModel, theme: SlideTheme, index: number, total: number): SlidePlan {
-  const { fitSize, pushFooter, W, H } = LAYOUT_KIT;
+  const { fitSize, pushFooter, planNumber, W, H } = LAYOUT_KIT;
   const layers: SlideLayer[] = [];
   layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.bg } });
   pushGrid(layers, theme);
 
-  // Daftar tabi: to'q blok + tepasida aksent qirra, ichida tartib raqami.
-  const tab: Box = { x: 1.15, y: 1.35, w: 1.95, h: 0.82 };
-  layers.push({ t: "rect", box: { ...tab }, fill: { color: theme.titleBg }, radius: 0.06 });
-  layers.push({ t: "rect", box: { x: tab.x, y: tab.y, w: tab.w, h: 0.13 }, fill: { color: theme.accent } });
-  layers.push({
-    t: "text",
-    box: { x: tab.x, y: tab.y + 0.15, w: tab.w, h: tab.h - 0.15 },
-    text: String(index + 1).padStart(2, "0"),
-    color: theme.titleText,
-    size: 26,
-    bold: true,
-    align: "center",
-    valign: "middle",
-  });
+  /*
+   * Daftar tabi: to'q blok + tepasida aksent qirra, ichida reja bandi
+   * raqami. AUDIT-25: raqam `s.plan` dan (ilgari deka tartibi edi);
+   * reja bandi yo'q bo'lsa BO'SH tab chizilmaydi va butun blok tab
+   * balandligicha yuqoriga ko'tariladi — tepada bo'sh katak qolmaydi.
+   */
+  const no = planNumber(s);
+  const up = no ? 0 : -0.62;
+  if (no) {
+    const tab: Box = { x: 1.15, y: 1.35, w: 1.95, h: 0.82 };
+    layers.push({ t: "rect", box: { ...tab }, fill: { color: theme.titleBg }, radius: 0.06 });
+    layers.push({ t: "rect", box: { x: tab.x, y: tab.y, w: tab.w, h: 0.13 }, fill: { color: theme.accent } });
+    layers.push({
+      t: "text",
+      box: { x: tab.x, y: tab.y + 0.15, w: tab.w, h: tab.h - 0.15 },
+      text: no,
+      color: theme.titleText,
+      size: 26,
+      bold: true,
+      align: "center",
+      valign: "middle",
+    });
+  }
 
   const x = 1.15;
   const tw = 11.2;
-  const titleBox: Box = { x, y: 2.6, w: tw, h: 2.0 };
+  const titleBox: Box = { x, y: 2.6 + up, w: tw, h: 2.0 };
   layers.push({
     t: "text",
     box: titleBox,
@@ -190,10 +199,10 @@ function planSection(s: SlideModel, theme: SlideTheme, index: number, total: num
   });
   // Punktir — mayda to'g'ri to'rtburchaklar ketma-ketligi.
   for (let i = 0; i < 14; i++) {
-    layers.push({ t: "rect", box: { x: x + i * 0.62, y: 4.82, w: 0.36, h: 0.05 }, fill: { color: theme.accent } });
+    layers.push({ t: "rect", box: { x: x + i * 0.62, y: 4.82 + up, w: 0.36, h: 0.05 }, fill: { color: theme.accent } });
   }
   if (s.subtitle) {
-    const subBox: Box = { x, y: 5.18, w: 10.4, h: 1.35 };
+    const subBox: Box = { x, y: 5.18 + up, w: 10.4, h: 1.35 };
     layers.push({
       t: "text",
       box: subBox,

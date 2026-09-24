@@ -180,9 +180,16 @@ test("N-5: subtitlesiz bo'lim sarlavhasi ham vertikal markazda", () => {
  * langar tashlaydi, tepani esa dekorativ element egallaydi. Shuning
  * uchun o'lchov ham markaz emas, LANGAR: blok tugashi zona quyi
  * chegarasiga yopishgan bo'lishi kerak.
+ *
+ * AUDIT-25 («Raqam faqat rejadan»): yirik raqam endi REJA BANDI
+ * (`plan`), deka tartibi emas. Shuning uchun N-6 naqshi (raqam tepada,
+ * blok pastda) `plan` li bo'limga tegishli; `plan` siz bo'limda raqam
+ * yo'q va blok zonada MARKAZLANADI — tepada bo'sh to'q maydon qolmaydi.
  */
-test("N-6: rasmsiz magazine bloki zona quyi chegarasiga langar tashlaydi", () => {
-  const b = sectionBlock("magazine");
+const planned = { ...sectionSlide, plan: 2 } as SlideModel;
+
+test("N-6: rasmsiz magazine bloki (plan bilan) zona quyi chegarasiga langar tashlaydi", () => {
+  const b = sectionBlock("magazine", planned);
   const gap = SECTION_BOTTOM - b.bottom;
   assert.ok(
     Math.abs(gap) <= 0.35,
@@ -193,12 +200,13 @@ test("N-6: rasmsiz magazine bloki zona quyi chegarasiga langar tashlaydi", () =>
 });
 
 test("N-6: rasmsiz magazine bo'limida dekorativ element bo'sh maydonni to'ldiradi", () => {
-  const p = planSlide(sectionSlide, theme, "magazine", 1, 10);
-  const block = sectionBlock("magazine");
+  const p = planSlide(planned, theme, "magazine", 1, 10);
+  const block = sectionBlock("magazine", planned);
 
-  // (1) Yirik raqam — matn blokidan YUQORIDA, modelga bog'liq emas (src'siz).
+  // (1) Yirik raqam — reja bandi, matn blokidan YUQORIDA, src'siz.
   const big = texts(p.layers).filter((t) => t.size >= 60);
   assert.equal(big.length, 1, `yirik dekorativ raqam kutilgan, ${big.length} ta topildi`);
+  assert.equal(big[0].text, "02", "yirik raqam reja bandidan (plan: 2), deka indeksidan emas");
   assert.equal(big[0].src, undefined, "dekorativ raqam `src` olmasligi kerak (tahrirlanmaydi)");
   assert.ok(big[0].box.y < block.top, "dekorativ raqam matn blokidan yuqorida turishi kerak");
 
@@ -207,12 +215,45 @@ test("N-6: rasmsiz magazine bo'limida dekorativ element bo'sh maydonni to'ldirad
   assert.ok(rule, "raqam bilan matn orasida rukn chizig'i bo'lishi kerak");
 
   // Rasmli holat O'ZGARMAYDI — pastki tasma naqshi (AUDIT-8 N-7 qarori).
-  const withImg = planSlide({ ...sectionSlide, image: { url: "https://example.test/a.png" } }, theme, "magazine", 1, 10);
-  assert.equal(texts(withImg.layers).filter((t) => t.size >= 60).length, 0, "rasmli bo'limda dekorativ raqam keraksiz");
+  const withImg = planSlide({ ...planned, image: { url: "https://example.test/a.png" } }, theme, "magazine", 1, 10);
+  assert.equal(texts(withImg.layers).filter((t) => t.size >= 60).length, 0, "rasmli bo'limda yirik dekorativ raqam keraksiz");
   assert.ok(
     rects(withImg.layers).some((r) => r.box.y > 4 && r.box.w > 13 && (r.fill?.alpha ?? 1) > 0.5),
     "rasmli bo'limda pastki tasma saqlanishi kerak",
   );
+});
+
+test("AUDIT-25: plan'siz rasmsiz magazine bo'limi — raqam yo'q, blok markazda, rukn chizig'i blok tepasida", () => {
+  for (const s of [sectionSlide, { ...sectionSlide, subtitle: undefined }]) {
+    const p = planSlide(s, theme, "magazine", 6, 10);
+    const b = sectionBlock("magazine", s);
+    assert.equal(texts(p.layers).filter((t) => t.size >= 60).length, 0, "plan'siz bo'limda yirik raqam chizilmaydi");
+    assert.ok(
+      Math.abs(b.centerOffset) <= 0.35,
+      `plan'siz magazine bloki markazdan ${r3(b.centerOffset)}″ siljigan — tepada/pastda bo'sh to'q maydon`,
+    );
+    const rule = rects(p.layers).find((r) => r.box.w > 10 && r.box.h <= 0.05 && r.box.y >= SECTION_TOP && r.box.y < b.top);
+    assert.ok(rule, "rukn chizig'i blok tepasida qolishi kerak (jurnal naqshi)");
+    assert.ok(b.top - rule!.box.y <= 1.0, "rukn chizig'i blokdan uzilib qolmasin");
+  }
+});
+
+/**
+ * AUDIT-25: classic bo'limda reja bandi raqami sarlavha USTIDA kicker
+ * kabi turadi va markazlashga kiradi — raqam + sarlavha + izoh bloki
+ * zonada markazda (raqamsiz holat N-5 da o'lchanadi).
+ */
+test("AUDIT-25: classic bo'lim plan bilan — «02» sarlavha ustida, butun blok markazda", () => {
+  const p = planSlide(planned, theme, "classic", 6, 10);
+  const no = texts(p.layers).find((t) => t.text === "02");
+  assert.ok(no, "reja bandi raqami «02» topilmadi");
+  assert.equal(no!.src, undefined, "raqam dekorativ — src'siz");
+  const blk = texts(p.layers).filter((t) => t.src?.f === "title" || t.src?.f === "subtitle" || t === no);
+  const sp = span(blk);
+  const off = (sp.top + sp.bottom) / 2 - (SECTION_TOP + SECTION_BOTTOM) / 2;
+  assert.ok(Math.abs(off) <= 0.15, `raqamli classic blok markazdan ${r3(off)}″ siljigan`);
+  const title = texts(p.layers).find((t) => t.src?.f === "title")!;
+  assert.ok(no!.box.y + no!.box.h <= title.box.y, "raqam sarlavha ustida turishi kerak");
 });
 
 // ═══════════════════════════════════════════ N-10: timeline qo'sh chizig'i

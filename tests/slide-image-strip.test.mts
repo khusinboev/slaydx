@@ -356,14 +356,21 @@ test("rasmsiz maket geometriyasi E2 dan oldingi bilan AYNAN teng (barmoq izi)", 
   assert.equal(
     hash,
     /*
-     * Yangilangan: AUDIT-8 N-3 (`planStatChart` qatorlari foydali
-     * balandlikni qoldiqsiz bo'lib oladi) va N-10 (`process` timeline
-     * relsi sarlavha chizig'idan uzoqlashtirildi, tugun nuqtalari
-     * qo'shildi) — ikkalasi ham `stats`/`process` GEOMETRIYASINI
-     * ataylab o'zgartiradi. Tafsilot: `docs/AUDIT-8.md`, «N-3…N-10
-     * yopilishi». Eski xesh: dd1adb15a82b3b6bbb97aa9b4681b11b.
+     * Yangilangan: AUDIT-25 A2-04 — `stats`/`process`/`table` tana matni
+     * endi auditoriya oralig'ida (`bodyFit`: boshlanish max(dizayn,
+     * bodyPt), pol minPt, sig'masa eski polgacha himoya, eng uzun so'z va
+     * qalin kenglik), bosqich kartasida sarlavha+izoh bitta balandlik
+     * byudjetini bo'lishadi (`fitTitleText`/`fitStepCards`) — shrift
+     * o'lchami va izoh qutisi GEOMETRIYASI ataylab o'zgaradi. Faqat
+     * `{classic,cards,dense,timeline,magazine,hero-split} × {stats,
+     * process,table}` qatorlari o'zgargan (twoCol/compare — bayt-bayt
+     * bir xil; AUDIT-25 P2 sharhida tasdiqlangan). Eski xesh:
+     * 23b6f081e48c642414a88a1d96fdcce6.
+     *
+     * Undan oldingi: AUDIT-8 N-3 (`planStatChart` qatorlari) va N-10
+     * (`process` timeline relsi). Eski xesh: dd1adb15a82b3b6bbb97aa9b4681b11b.
      */
-    "23b6f081e48c642414a88a1d96fdcce6",
+    "0e94598ee687fbb3f514c79e617dd5e6",
     "rasmsiz maket geometriyasi o'zgardi — tasma kodi rasmsiz slaydga sizib o'tgan bo'lishi mumkin",
   );
 });
