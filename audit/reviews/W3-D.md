@@ -88,3 +88,36 @@ What leaks: see Required changes 1 and 2.
 4. The `metrics-report` window filters (`created_at`/`updated_at`) have no leading index on `generations`, `transactions` or `payment_orders`, so they seq-scan. That is fine at current size and bounded by the 30 s statement timeout. Consider `SET LOCAL statement_timeout` explicitly and add a note for later.
 5. The `csvStream` `onError` log likely runs outside the request ALS context (it is pulled after `handler` returns), so the line may lack `reqId`. Capture `currentLogContext()` when the stream is created.
 6. `isUserSafeText` passes mixed strings like `"Rasm yaratilmadi: Resource has been exhausted (quota)"`. This leaks no secrets, but English text can reach the user if an engine interpolates a provider message. No such interpolation was found today.
+
+---
+
+## Re-review — commit `f2df490`
+
+### Verdict: **APPROVE**
+
+### Required changes
+- **R1: fixed.** The Telegram token rule now uses `(?<![0-9])`. Probes: `…/bot<TOKEN>/sendMessage`, `…/file/bot<TOKEN>/…`, `Failed to parse URL from …bot<TOKEN>…`, and `bot|x|_<TOKEN>` all come out as `[REDACTED]`. The userinfo rule runs first but does not match `api.telegram.org/…`, so the two rules do not interfere.
+- **R2: fixed.** `postgres://u:[REDACTED]@…` is redacted, including `postgresql://…%40…%2F…@` (percent-encoded password) and `DATABASE_URL=…`. These are left untouched, as they should be: `http://host:8080/path`, and `https://example.com/a:b@c` (the `/` stops the match).
+
+### Nits
+- **Text-form secrets:** `Cookie:` and `Set-Cookie:` redact the whole value. `password:`, `secret:`, `token:`, `session=`, `sessionId=` and JSON `"token"/"password"/"key":"…"` are all redacted. `SECRET_FIELD` now also covers `session`/`sessionid`.
+- **No false positives:** UUIDs, 13-digit timestamps, Payme ids, amounts, `step: Slayd 3/10` and `Idempotency-Key:` all come through unchanged.
+- **image-studio message:** `yozing`/`tavsif*` were added to the UZBEK list, so "Rasm uchun tavsif yozing" is now kept.
+- **Worker context:** `withFreshLogContext` is used for `runJob` and for the inline `loop()`, so worker lines no longer inherit a request's `reqId`.
+- **metrics-report:** `SET LOCAL statement_timeout = '60s'` now runs after `READ ONLY`. It is transaction-scoped, so it does not leak into the pool.
+
+### Tests (heavy2.sh)
+- **W3-D suite: 62/62 pass.** Four new tests since the first review.
+- **Regression batch** (credits, credits-atomic, queue, jobs-live-edit, jsonb-writes, game-routes, refund-reconcile, pdf-limits-db, slide-doc-route, worker-lease): 128/130.
+  - The 2 failures are `queue.test.mts` "navbat SQL i / completeJob format yorlig'i".
+  - Run alone on this branch, `queue.test.mts` passes 13/13, twice. It also passed in the first-review batch.
+  - The likely cause is several test files sharing one DB in a single run: another file's QUEUED jobs get claimed. W3-D's `jobs.ts` changes only add logging, so this is not caused by W3-D. Worth checking under the CI runner.
+- The admission EXPLAIN failures are acknowledged as fixed on base (`c38a1fd`), so I did not re-run them here.
+
+### Residual (non-blocking, low likelihood)
+- Leaks not caught by the current rules:
+  - a token that is percent-encoded (`%3A`);
+  - `redis://:pass@` (empty user; no redis in this stack);
+  - a raw `/` inside a URL password (that is an invalid URL anyway);
+  - double-escaped JSON (`\"token\":\"…\"`).
+- The `csvStream` `onError` line may still lack `reqId` (nit 5 from the first review; not addressed).
