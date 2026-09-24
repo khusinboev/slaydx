@@ -250,7 +250,13 @@ export function MediaComposer({ tool }: { tool: ToolConfig }) {
                 <Field id="sourceText">
                   <LimitedTextarea
                     value={ui.sourceText}
-                    onChange={(v) => set("sourceText", v)}
+                    /*
+                     * W4-D R2: qo'lda yozilgan/tahrirlangan matn — endi fayl
+                     * matni emas, foydalanuvchiniki. `fileName` tozalanadi,
+                     * aks holda qoralama (`draftPayload`, FE-17) uni fayldan
+                     * olingan deb tashlab yuborardi.
+                     */
+                    onChange={(v) => setUi((s) => ({ ...s, sourceText: v, fileName: "" }))}
                     limit={AUDIO_LIMITS.sourceTextChars}
                     rows={5}
                     ariaLabel="Manba matni"

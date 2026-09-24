@@ -28,15 +28,35 @@ const storedName = (f: File) => String(f.name || "namuna.pptx").replace(/[\r\n\t
  * yuborilmaydi: ro'yxat so'raladi va yuklashdan oldin bo'lmagan, shu nomli
  * namuna topilsa — o'sha qaytadi. Topilmasa — aniq jumla.
  */
+async function templateAssetId(f: File): Promise<string | null> {
+  try {
+    if (!globalThis.crypto?.subtle) return null;
+    const digest = await globalThis.crypto.subtle.digest("SHA-256", await f.arrayBuffer());
+    return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 24);
+  } catch (err) {
+    console.warn("[template] fayl xeshini hisoblab bo'lmadi — nom bo'yicha tekshiramiz", err);
+    return null;
+  }
+}
+
 async function uploadConfirmed(f: File, known: CustomTemplateLite[]): Promise<CustomTemplateLite> {
   try {
     return (await uploadTemplate(f)).template;
   } catch (e) {
     if (!isUncertainOutcome(e)) throw e;
+    /*
+     * Aniq moslik: server `assetId` = fayl baytlarining SHA-256 (24 hex,
+     * `lib/server/template-upload.ts assetIdFor`). Bir xil faylni qayta
+     * yuklash (server upsert) ham, ro'yxat hali yuklanmagan holat ham
+     * shu bilan to'g'ri tanib olinadi (W4-D N4). `crypto.subtle` yo'q
+     * (xavfsiz bo'lmagan kontekst) bo'lsa — nom bo'yicha, faqat yangi aktiv.
+     */
+    const expectedId = await templateAssetId(f);
     const before = new Set(known.map((t) => t.assetId));
     const name = storedName(f);
     const found = await reconcile(async () => {
       const list = await listTemplates();
+      if (expectedId) return list.find((t) => t.assetId === expectedId) ?? null;
       return list.find((t) => t.name === name && !before.has(t.assetId)) ?? null;
     });
     if (found) return found;

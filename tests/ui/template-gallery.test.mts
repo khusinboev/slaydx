@@ -218,12 +218,19 @@ test("noto'g'ri fayl (docx) — serverga bormasdan xato; oldingi namunalar ro'yx
  * namunani SAQLAGAN bo'lishi mumkin — ilgari UI «xato» ko'rsatardi va
  * foydalanuvchi qayta yuklab, dublikat yasardi. Endi ro'yxat qayta so'raladi.
  */
-test("FE-15: yuklash 504 bilan uzildi, lekin server namunani saqladi — ro'yxatdan topilib tanlanadi, xato yo'q", async () => {
+/** Server `assetIdFor` bilan bir xil: SHA-256 (hex) ning birinchi 24 belgisi. */
+async function serverAssetId(f: File): Promise<string> {
+  const { createHash } = await import("node:crypto");
+  return createHash("sha256").update(Buffer.from(await f.arrayBuffer())).digest("hex").slice(0, 24);
+}
+
+for (const reupload of [false, true]) test(`FE-15: yuklash 504 bilan uzildi, lekin server namunani saqladi — ro'yxatdan topilib tanlanadi, xato yo'q${reupload ? " (AYNI fayl qayta yuklandi — N4)" : ""}`, async () => {
   const { RECONCILE_POLL } = await import("../../lib/api-edit.ts");
   const saved = RECONCILE_POLL.intervalMs;
   RECONCILE_POLL.intervalMs = 5;
   const calls: Call[] = [];
-  let stored: unknown[] = [];
+  // N4: ayni fayl oldin ham yuklangan — server upsert qiladi, ro'yxatda o'sha id.
+  let stored: unknown[] = reupload ? [{ ...TPL, assetId: await serverAssetId(pptxFile("Kafedra.pptx")), name: "Kafedra.pptx" }] : [];
   let gets = 0;
   const json = (status: number, data: unknown) => new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
   (globalThis as unknown as { fetch: unknown }).fetch = async (input: unknown, opts?: RequestInit) => {
@@ -237,7 +244,7 @@ test("FE-15: yuklash 504 bilan uzildi, lekin server namunani saqladi — ro'yxat
     if (url === "/api/uploads/template" && method === "POST") {
       const f = (opts?.body as FormData).get("file") as File;
       // Server ishni tugatdi, lekin javob proksida kesildi.
-      stored = [{ ...TPL, assetId: "c".repeat(64), name: f.name }];
+      stored = [{ ...TPL, assetId: await serverAssetId(f), name: f.name }];
       return new Response("<html>504 Gateway Time-out</html>", { status: 504, headers: { "content-type": "text/html" } });
     }
     return json(404, { error: "yo'q" });

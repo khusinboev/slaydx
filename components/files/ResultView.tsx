@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { cn } from "@/lib/cn";
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Download, Loader2, RefreshCw, Trash2 } from "lucide-react";
 import * as api from "@/lib/api-client";
@@ -22,17 +22,16 @@ import { useConfirmClick } from "../overlays/useConfirmClick";
 import { EditActions, type EditActionsState } from "./EditActions";
 import { GameSharePanel } from "./GameSharePanel";
 import { publicGameKindOf } from "@/lib/game/public";
-import { ArtifactViewer } from "../viewers/ArtifactViewer";
-import { ArticleReviewPanel, ESSAY_HIDDEN_GROUPS } from "../viewers/ArticleReviewPanel";
-import { asLiveView } from "../viewers/live-view";
-import { liveDocOf, type LiveDeck } from "@/lib/generation/slide-progress";
-
 /*
  * Jonli slayd ko'ruvchisi ALOHIDA bo'lakda (FE-11): u faqat slayd
  * yaratilayotganda kerak, matn hujjatlarining sahifasi esa `planSlide`
- * dvigatelini birinchi yuklanishda olmasin.
+ * dvigatelini birinchi yuklanishda olmasin. `ArtifactViewer` bilan BITTA
+ * `lazy` o'rami (W4-D N3).
  */
-const SlideViewer = lazy(() => import("../viewers/SlideViewer").then((m) => ({ default: m.SlideViewer })));
+import { ArtifactViewer, SlideViewer } from "../viewers/ArtifactViewer";
+import { ArticleReviewPanel, ESSAY_HIDDEN_GROUPS } from "../viewers/ArticleReviewPanel";
+import { asLiveView } from "../viewers/live-view";
+import { liveDocOf, type LiveDeck } from "@/lib/generation/slide-progress";
 import { viewerKind } from "@/lib/viewers/kind";
 import type { Generation } from "@/lib/types";
 
@@ -90,6 +89,13 @@ export function ResultView({ id }: { id: string }) {
   const [polishing, setPolishing] = useState(false);
   const genRef = useRef<api.GenerationDetail | null>(null);
   genRef.current = gen;
+  /** Sahifadan chiqilganda uzoq AI tahrirning natija tekshiruvi to'xtaydi (FE-15, W4-D N2). */
+  const alive = useRef<AbortController | null>(null);
+  useEffect(() => {
+    const ctrl = new AbortController();
+    alive.current = ctrl;
+    return () => ctrl.abort();
+  }, []);
 
   useEffect(() => {
     if (!sessionChecked || !loggedIn) return;
@@ -209,7 +215,7 @@ export function ResultView({ id }: { id: string }) {
         }
         const base = genRef.current?.docVersion ?? cur.docVersion ?? 0;
         // FE-15: 504/vaqt tugashidan keyin natija serverdan tekshiriladi (qayta yuborilmaydi).
-        const { generation } = await withReconcile(cur.id, base, () => rewriteArticle(cur.id, base, fix));
+        const { generation } = await withReconcile(cur.id, base, () => rewriteArticle(cur.id, base, fix), alive.current?.signal);
         adoptDetail(generation);
       } catch (e) {
         if (isUnpaidError(e)) {
@@ -255,7 +261,7 @@ export function ResultView({ id }: { id: string }) {
        * serverdan tekshiriladi va o'zlashtiriladi; ilgari «Server javob
        * bermadi» chiqib, qayta bosish kunlik 3 sayqaldan birini yerdi.
        */
-      const { generation } = await withReconcile(cur.id, base, () => polishArticle(cur.id, base));
+      const { generation } = await withReconcile(cur.id, base, () => polishArticle(cur.id, base), alive.current?.signal);
       adoptDetail(generation);
     } catch (e) {
       if (isUnpaidError(e)) {

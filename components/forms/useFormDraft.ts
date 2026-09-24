@@ -135,6 +135,8 @@ export function useFormDraft(toolId: string, opts: UseFormDraftOptions) {
         useDraftNotice.setState({ failed: true });
         return;
       }
+      // Yopilayotgan sahifada 60 KB dan katta tana oddiy so'rov bo'lib ketadi va brauzer uni
+      // odatda bekor qiladi — `failed` belgisi allaqachon yo'q sahifaga qo'yiladi (zararsiz, W4-D N6).
       putDraft(toolId, payload, { keepalive: unloading && size <= KEEPALIVE_MAX_BYTES })
         .then(() => {
           if (useDraftNotice.getState().failed) useDraftNotice.setState({ failed: false });

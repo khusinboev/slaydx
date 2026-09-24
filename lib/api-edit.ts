@@ -95,9 +95,12 @@ export const RECONCILE_POLL = { attempts: 36, intervalMs: 5_000 };
  * `probe` natija (null emas) qaytarguncha takrorlaydi; chegarada `null`.
  * Tekshiruvning o'zi yiqilsa (aloqa hali tiklanmagan) — keyingi urinish.
  */
-export async function reconcile<T>(probe: () => Promise<T | null>): Promise<T | null> {
+export async function reconcile<T>(probe: () => Promise<T | null>, signal?: AbortSignal): Promise<T | null> {
   for (let k = 0; k < RECONCILE_POLL.attempts; k++) {
+    // Sahifa yopilgan (komponent unmount) — tekshiruvni davom ettirmaymiz (W4-D N2).
+    if (signal?.aborted) return null;
     if (k > 0) await new Promise((r) => setTimeout(r, RECONCILE_POLL.intervalMs));
+    if (signal?.aborted) return null;
     try {
       const hit = await probe();
       if (hit) return hit;
@@ -125,16 +128,24 @@ export async function withReconcile(
   id: string,
   baseVersion: number,
   call: () => Promise<DocPatchResult>,
+  signal?: AbortSignal,
 ): Promise<{ generation: GenerationDetail; reconciled: boolean }> {
   try {
     const { generation } = await call();
     return { generation, reconciled: false };
   } catch (e) {
     if (!isUncertainOutcome(e)) throw e;
+    /*
+     * DIQQAT (W4-D N1): shu oynada versiyani BOSHQA narsa oshirsa ham (boshqa
+     * yorliqdagi tahrir, retention ishi) bu «muvaffaqiyat» deb olinadi.
+     * Zarari yo'q: o'zlashtirilgan narsa baribir serverdagi HAQIQIY holat,
+     * so'rov esa qayta yuborilmaydi — faqat foydalanuvchi o'z tuzatishini
+     * ko'rmasligi mumkin va tugmani yana bosadi.
+     */
     const fresh = await reconcile(async () => {
-      const { generation } = await getGeneration(id);
+      const { generation } = await getGeneration(id, undefined, signal);
       return (generation.docVersion ?? 0) > baseVersion ? generation : null;
-    });
+    }, signal);
     if (fresh) return { generation: fresh, reconciled: true };
     const status = e instanceof ApiError ? e.status : 0;
     throw new ApiError(UNCONFIRMED_TEXT, status, { unconfirmed: true });

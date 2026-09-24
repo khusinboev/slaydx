@@ -1,5 +1,8 @@
 "use client";
 
+import { useEffect } from "react";
+import { isChunkLoadError, reloadOnceForChunkError } from "@/lib/chunk-reload";
+
 /**
  * Root layout ham yiqilgan holat uchun oxirgi chegara.
  * Bu yerda `<html>`/`<body>` ni o'zimiz chizishimiz shart.
@@ -11,6 +14,11 @@ export default function GlobalError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  // W4-D R1: eski bo'lak (deploydan keyin) — bir martalik to'liq qayta yuklash (`app/error.tsx` bilan bir qoida).
+  const chunk = isChunkLoadError(error);
+  useEffect(() => {
+    reloadOnceForChunkError(error);
+  }, [error]);
   return (
     <html lang="uz">
       <body
@@ -35,7 +43,7 @@ export default function GlobalError({
           </p>
           <button
             type="button"
-            onClick={reset}
+            onClick={chunk ? () => window.location.reload() : reset}
             style={{
               marginTop: "1rem",
               height: 40,

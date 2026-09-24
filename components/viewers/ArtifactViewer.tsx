@@ -14,7 +14,9 @@ import { viewerKind } from "@/lib/viewers/kind";
  * birinchi yuklanishda olardi. Endi faqat shu hujjat turining ko'ruvchisi.
  */
 const ResumeViewer = lazy(() => import("./ResumeViewer").then((m) => ({ default: m.ResumeViewer })));
-const SlideViewer = lazy(() => import("./SlideViewer").then((m) => ({ default: m.SlideViewer })));
+// Bitta `lazy` o'rami — `ResultView` (jonli) ham shuni ishlatadi: jonli → tayyor o'tishda
+// ikkinchi o'ram bir kadr «Yuklanmoqda...» ko'rsatmasin (W4-D N3).
+export const SlideViewer = lazy(() => import("./SlideViewer").then((m) => ({ default: m.SlideViewer })));
 const WordViewer = lazy(() => import("./WordViewer").then((m) => ({ default: m.WordViewer })));
 const TranslationViewer = lazy(() => import("./TranslationViewer").then((m) => ({ default: m.TranslationViewer })));
 const ImageViewer = lazy(() => import("./ImageViewer").then((m) => ({ default: m.ImageViewer })));

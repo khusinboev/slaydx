@@ -116,6 +116,20 @@ test("aniq xatolar (409/429/402/matnli 503) tekshiruvsiz o'z holicha otiladi", a
   }
 });
 
+test("W4-D N2: sahifa yopilsa (signal abort) tekshiruv to'xtaydi — 36 ta GET yuborilmaydi", async () => {
+  let gets = 0;
+  stub((url, method) => {
+    if (method === "POST") return gateway(504);
+    gets++;
+    return json(200, { generation: gen(7) });
+  });
+  const ctrl = new AbortController();
+  const p = edit.withReconcile("g1", 7, () => edit.polishArticle("g1", 7), ctrl.signal);
+  setTimeout(() => ctrl.abort(), 12);
+  await assert.rejects(p);
+  assert.ok(gets < edit.RECONCILE_POLL.attempts, `abortdan keyin to'xtadi (GET: ${gets})`);
+});
+
 test("ResultView: «Tuzatish» ham, «Hammasini tuzatish» ham withReconcile orqali", () => {
   const src = readFileSync(new URL("../components/files/ResultView.tsx", import.meta.url), "utf8");
   assert.match(src, /withReconcile\(cur\.id, base, \(\) => rewriteArticle\(/);
