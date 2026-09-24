@@ -240,6 +240,13 @@ test("JobCost: provayder/model — eng ko'p chiqish tokenli LLM; LLM yo'q bo'lsa
   assert.equal(j.calls, 3);
   assert.ok(Math.abs(j.usd - j.parts!.reduce((a, p) => a + p.usd, 0)) < 1e-6);
 
+  // Grounding — QIDIRUV bo'yicha (review N6): 3 qidiruv = 3 birlik; qidiruvsiz javob ham kamida 1.
+  const g = new JobCost();
+  g.addGrounding(3);
+  g.addGrounding(0);
+  assert.equal(g.toJson().parts?.[0].units, 4);
+  assert.equal(g.toJson().usd, Number((4 * GROUNDING_USD).toFixed(6)));
+
   const only = new JobCost();
   only.addImage("gemini", "gemini-3.1-flash-image", 3);
   assert.equal(only.toJson().provider, "gemini");

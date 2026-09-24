@@ -276,7 +276,7 @@ export async function llmGrounded(
   }
   const res = await runLlm(system, user, maxTokens, grounded);
   // Qidiruv haqiqatan bo'lgan javob — alohida pullik birlik (EXT-11).
-  if (res && (res.queries.length || res.sources.length)) recordGrounding();
+  if (res && (res.queries.length || res.sources.length)) recordGrounding(res.queries.length);
   return res;
 }
 

@@ -163,6 +163,44 @@ test("research getText: lex.uz HTML tanasi chegaralanadi (2 MB) — katta javob 
   assert.ok(ok.ok && ok.text === "<h1>Qonun</h1>");
 });
 
+test("review N3: IPv4-compatible / NAT64 / uzun mapped / site-local IPv6 — ichki", () => {
+  for (const ip of ["::7f00:1", "::a00:1", "64:ff9b::a00:1", "0:0:0:0:0:ffff:7f00:1", "fec0::1"]) {
+    assert.equal(isPrivateAddress(ip), true, ip);
+  }
+});
+
+test("review N4: sekin DNS umumiy timeout bilan kesiladi", async () => {
+  const slow: LookupFn = () => new Promise((r) => setTimeout(() => r(["93.184.216.34"]), 5_000));
+  let calls = 0;
+  const fetchImpl = (async () => {
+    calls++;
+    return new Response("x");
+  }) as typeof fetch;
+  const t0 = Date.now();
+  await assert.rejects(safeFetchUrl("https://slow.example.com/a", { fetchImpl, lookup: slow, timeoutMs: 200 }));
+  assert.ok(Date.now() - t0 < 2_000, `DNS kutildi: ${Date.now() - t0} ms`);
+  assert.equal(calls, 0);
+});
+
+test("review N5: Aisha o'z xostidagi http:// havolani https ga ko'taradi; begona http rad", async () => {
+  const { httpsForAisha } = await import("../lib/generation/tts/aisha.ts");
+  assert.equal(httpsForAisha("http://back.aisha.group/media/tts/a.wav"), "https://back.aisha.group/media/tts/a.wav");
+  assert.equal(httpsForAisha("http://cdn.example.com/a.wav"), "http://cdn.example.com/a.wav");
+  const hits: string[] = [];
+  const fetchImpl = (async (url: string) => {
+    hits.push(String(url));
+    return hits.length === 1 ? Response.json({ audio_url: "http://back.aisha.group/media/a.wav" }) : new Response(new Uint8Array(10), { headers: { "content-type": "audio/wav" } });
+  }) as typeof fetch;
+  setSafeFetchLookup(PUBLIC);
+  try {
+    // WAV emas (10 bayt) — xato, lekin ikkinchi so'rov HTTPS ga ketgan bo'lishi kerak.
+    await makeAishaTts({ fetchImpl, key: () => "ak" }).synthesize("Salom", { lang: "uz", timeoutMs: 5_000 }).catch(() => null);
+    assert.equal(hits[1], "https://back.aisha.group/media/a.wav");
+  } finally {
+    setSafeFetchLookup(null);
+  }
+});
+
 test("setSafeFetchLookup(null) tizim DNS iga qaytadi (seam oqmaydi)", async () => {
   setSafeFetchLookup(PUBLIC);
   setSafeFetchLookup(null);

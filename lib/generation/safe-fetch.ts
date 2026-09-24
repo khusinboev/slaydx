@@ -21,8 +21,11 @@
  * Qolgan xavf (ataylab qabul qilingan): DNS tekshiruvi va `fetch` ning
  * o'z ulanishi orasida xost boshqa IP ga «qayta bog'lanishi» mumkin
  * (DNS rebinding). Buni yopish uchun ulanishni IP ga mahkamlash kerak
- * (undici dispatcher) — manbalar provayder javobidan keladi, foydalanuvchidan
- * emas, shuning uchun bu qatlam yetarli.
+ * (undici `Agent({ connect: { lookup } })`) — hozir QILINMAGAN (review N2):
+ * `undici` bevosita bog'liqlik emas, `node_modules` dagisi (8.x) Node 22
+ * ichidagi `fetch` (undici 6.x) bilan dispatcher almashishi qo'llab-
+ * quvvatlanmaydi, va testlar `globalThis.fetch` ni stub qiladi. Manbalar
+ * provayder javobidan keladi, foydalanuvchidan emas — bu qatlam yetarli.
  *
  * Qaytadi: o'qilgan (chegaralangan) tana bilan HAQIQIY `Response`, yoki
  * qoida buzilsa `UnsafeUrlError` OTADI (tarmoq xatosi kabi — chaqiruvchilar
@@ -105,11 +108,15 @@ function privateV6(ip: string): boolean {
   const mapped = /^::(?:ffff:)?(\d+\.\d+\.\d+\.\d+)$/.exec(s);
   if (mapped) return privateV4(mapped[1]);
   if (/^::ffff:/.test(s)) return true; // hex ko'rinishidagi mapped — ishonmaymiz
+  // IPv4-compatible (`::7f00:1`, `::/96`) va NAT64 (`64:ff9b::/96`) — ichida IPv4
+  // yashirinadi; tekshirib o'tirmaymiz, ommaviy provayder bunday manzil bermaydi (review N3).
+  if (/^::[0-9a-f]{1,4}(:[0-9a-f]{1,4})?$/.test(s) || /^64:ff9b:/.test(s) || /^(0{1,4}:){5}ffff:/.test(s)) return true;
   const first = parseInt(s.split(":")[0] || "0", 16);
   if (!Number.isFinite(first)) return true;
   return (
     (first & 0xfe00) === 0xfc00 || // ULA fc00::/7
     (first & 0xffc0) === 0xfe80 || // link-local fe80::/10
+    (first & 0xffc0) === 0xfec0 || // eskirgan site-local fec0::/10
     (first & 0xff00) === 0xff00 || // multicast
     (first === 0x2001 && parseInt(s.split(":")[1] || "0", 16) === 0x0db8) // hujjat namunasi
   );
@@ -123,8 +130,28 @@ export function isPrivateAddress(ip: string): boolean {
   return true;
 }
 
+/** `p` yoki signal (abort) — qaysi biri oldin; signal abort bo'lsa `AbortError` bilan rad. */
+function raceSignal<T>(p: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return p;
+  if (signal.aborted) return Promise.reject(signal.reason ?? new DOMException("This operation was aborted", "AbortError"));
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(signal.reason ?? new DOMException("This operation was aborted", "AbortError"));
+    signal.addEventListener("abort", onAbort, { once: true });
+    p.then(
+      (v) => {
+        signal.removeEventListener("abort", onAbort);
+        resolve(v);
+      },
+      (e: unknown) => {
+        signal.removeEventListener("abort", onAbort);
+        reject(e);
+      },
+    );
+  });
+}
+
 /** URL ni tekshiradi: https + ommaviy xost. Xato bo'lsa `UnsafeUrlError`. */
-export async function assertPublicHttpsUrl(raw: string, lookup: LookupFn = defaultLookup): Promise<URL> {
+export async function assertPublicHttpsUrl(raw: string, lookup: LookupFn = defaultLookup, signal?: AbortSignal): Promise<URL> {
   let url: URL;
   try {
     url = new URL(raw);
@@ -141,7 +168,8 @@ export async function assertPublicHttpsUrl(raw: string, lookup: LookupFn = defau
   }
   let addrs: string[];
   try {
-    addrs = await lookup(host);
+    // DNS ham umumiy timeout ichida (review N4): sekin resolver «3 s jami» byudjetni yemasin.
+    addrs = await raceSignal(lookup(host), signal);
   } catch (e) {
     throw new UnsafeUrlError("host", `DNS ochilmadi: ${host} (${e instanceof Error ? e.message : "xato"})`);
   }
@@ -219,7 +247,7 @@ export async function safeFetchUrl(raw: string, opts: SafeFetchOpts = {}): Promi
   const maxRedirects = opts.maxRedirects ?? SAFE_FETCH_MAX_REDIRECTS;
   const maxBytes = opts.maxBytes ?? SAFE_FETCH_MAX_BYTES;
   const signal = combine(opts.signal, opts.timeoutMs ?? SAFE_FETCH_TIMEOUT_MS);
-  let url = await assertPublicHttpsUrl(raw, lookup);
+  let url = await assertPublicHttpsUrl(raw, lookup, signal);
   for (let hop = 0; ; hop++) {
     const res = await fetchImpl(url.toString(), {
       method: opts.method ?? "GET",
@@ -238,7 +266,7 @@ export async function safeFetchUrl(raw: string, opts: SafeFetchOpts = {}): Promi
       if (!loc) throw new UnsafeUrlError("redirect", `${status} Location siz`);
       if (hop + 1 > maxRedirects) throw new UnsafeUrlError("redirect", `redirect ${maxRedirects} tadan ko'p`);
       // Har qadam QAYTADAN tekshiriladi: https → http yoki ichki xostga o'tish rad.
-      url = await assertPublicHttpsUrl(new URL(loc, url).toString(), lookup);
+      url = await assertPublicHttpsUrl(new URL(loc, url).toString(), lookup, signal);
       continue;
     }
     const body = opts.method === "HEAD" ? null : await readCapped(res, maxBytes);

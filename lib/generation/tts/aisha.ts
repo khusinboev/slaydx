@@ -28,6 +28,22 @@ import { safeFetchUrl, UnsafeUrlError } from "../safe-fetch";
 /** Havola orqali yuklanadigan audio fayl chegarasi (EXT-15). */
 const AISHA_MAX_AUDIO_BYTES = 20 * 1024 * 1024;
 
+/**
+ * Aisha'ning O'Z xostidagi `http://` media havolasi `https://` ga ko'tariladi
+ * (review N5): TLS proksi ortidagi Django ko'pincha `http://` media URL
+ * beradi, `safeFetchUrl` esa faqat https — aks holda kalit ulangach Aisha
+ * har doim jimgina keyingi provayderga tushardi. Begona xost o'zgarmaydi
+ * (http bo'lsa rad etiladi).
+ */
+export function httpsForAisha(url: string): string {
+  // URL emas — o'zgarishsiz (`safeFetchUrl` rad etadi).
+  if (!URL.canParse(url)) return url;
+  const u = new URL(url);
+  if (u.protocol !== "http:" || u.hostname !== new URL(AISHA_URL).hostname) return url;
+  u.protocol = "https:";
+  return u.toString();
+}
+
 /* ══════════════════════════ sozlama ══════════════════════════ */
 
 export const aishaKey = (): string => process.env.AISHA_API_KEY?.trim() || "";
@@ -180,7 +196,7 @@ export async function readAishaAudio(res: Response, doFetch: typeof fetch, timeo
      * ommaviy xost, har redirect qayta tekshiriladi, tana ≤ 20 MB
      * (1 000 belgilik WAV ~1–2 MB). Qoida buzilsa qayta urinish befoyda.
      */
-    file = await safeFetchUrl(ref.url!, { fetchImpl: doFetch, timeoutMs, maxBytes: AISHA_MAX_AUDIO_BYTES });
+    file = await safeFetchUrl(httpsForAisha(ref.url!), { fetchImpl: doFetch, timeoutMs, maxBytes: AISHA_MAX_AUDIO_BYTES });
   } catch (e) {
     if (e instanceof UnsafeUrlError) throw new TtsError("aisha", `audio havolasi rad etildi: ${e.message}`, { retryable: false });
     throw new TtsError("aisha", `audio yuklanmadi: ${e instanceof Error ? e.message : "tarmoq"}`, { retryable: true });

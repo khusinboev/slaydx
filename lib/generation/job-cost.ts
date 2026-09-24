@@ -26,7 +26,7 @@ import { costUsd, type UsageLike } from "./llm-pricing";
 import type { CostJson, CostPart } from "./types";
 
 /**
- * Grounding (Google qidiruvi) — bitta qidiruvli so'rov narxi, USD.
+ * Grounding (Google qidiruvi) — bitta QIDIRUV narxi, USD (Gemini 3 qidiruv bo'yicha to'laydi).
  * Oyiga 5 000 tasi bepul, keyin $14/1 000 (`slide-research.ts`); bepul
  * kvota butun hisob bo'yicha, ish bo'yicha emas — telemetriya ehtiyotkor
  * (yuqori) chegarani yozadi.
@@ -85,12 +85,17 @@ export class JobCost {
     p.usd += count * unitUsd;
   }
 
-  /** Qidiruv bilan javob bergan grounding so'rovi. */
-  addGrounding(provider = "gemini", model = "google_search"): void {
+  /**
+   * Qidiruv bilan javob bergan grounding so'rovi. `queries` — model bajargan
+   * qidiruvlar soni: Gemini 3 da grounding QIDIRUV bo'yicha to'lanadi
+   * (review N6), so'rov bo'yicha emas — kamida 1.
+   */
+  addGrounding(queries = 1, provider = "gemini", model = "google_search"): void {
+    const n = Math.max(1, Math.floor(queries) || 0);
     const p = this.part("grounding", provider, model);
     p.calls += 1;
-    p.units += 1;
-    p.usd += GROUNDING_USD;
+    p.units += n;
+    p.usd += n * GROUNDING_USD;
   }
 
   /** TTS parchasi. `units` — belgilar (token EMAS — `TtsMeter` izohi). */
@@ -153,8 +158,8 @@ export function recordImage(provider: string, model: string, count = 1): void {
   store.getStore()?.addImage(provider, model, count);
 }
 
-export function recordGrounding(): void {
-  store.getStore()?.addGrounding();
+export function recordGrounding(queries = 1): void {
+  store.getStore()?.addGrounding(queries);
 }
 
 export function recordTts(provider: string, voice: string, chars: number, usd: number): void {
