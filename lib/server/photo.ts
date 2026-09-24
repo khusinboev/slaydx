@@ -211,15 +211,20 @@ export async function uploadPhoto(req: Request, userId: string): Promise<PhotoUp
  *     `photoOriginalAssetId`) — tiklangan qoralama singan rasm
  *     ko'rsatmasin va shu qoralamadan to'langan rezyume jimgina suratsiz
  *     chiqmasin (worker suratni `values.photoAssetId` dan o'qiydi);
- *   • foydalanuvchining navbatdagi, ishlayotgan yoki TAYYOR rezyumesi
- *     (`values_json.photoAssetId`, `doc_json.resume.photo.assetId` /
- *     `originalAssetId`) — navbatga qaytgan ish ham, «Markazlash» ham
- *     shu qatorni o'qiydi;
+ *   • foydalanuvchining NAVBATDAGI yoki ISHLAYOTGAN rezyumesi
+ *     (`values_json.photoAssetId`) — worker suratni ish boshida (va
+ *     navbatga qaytgan ish qayta olinganda) shu qatordan o'qiydi;
  *   • saqlanayotgan kesilgan nusxaning asli (`original_asset_id`).
- * FAILED/REVOKED ish suratni ushlab turmaydi (pul qaytarilgan).
  *
- * Ishoralar faqat eski surati bor foydalanuvchilar bo'yicha yig'iladi —
- * butun `generations` jadvali har kuni ko'rilmaydi.
+ * TAYYOR rezyume suratni USHLAB TURMAYDI (review R2): worker suratni
+ * `extractAssets` (`swapPhoto`) bilan hujjatning O'Z aktiviga
+ * (`generation_assets`) ko'chiradi — ko'ruvchi ham, DOCX qayta render ham
+ * o'shani o'qiydi. Tayyor hujjatlar esa o'chmaydi (`retention.ts`), ya'ni
+ * ular ishora qilgan qatorlar abadiy qolib, 50 talik surat kvotasini
+ * (o'chirish yo'li yo'q) ~25 rezyumeda butunlay to'ldirardi.
+ * FAILED/REVOKED ish ham ushlab turmaydi (pul qaytarilgan).
+ *
+ * Ishoralar faqat eski surati bor foydalanuvchilar bo'yicha yig'iladi.
  */
 export async function purgeOldPhotos(days = 90): Promise<number> {
   const res = await query<{ asset_id: string }>(
@@ -232,14 +237,11 @@ export async function purgeOldPhotos(days = 90): Promise<number> {
          CROSS JOIN LATERAL (VALUES (d.data->>'photoAssetId'), (d.data->>'photoOriginalAssetId')) AS x(v)
         WHERE x.v IS NOT NULL AND x.v <> ''
        UNION
-       SELECT g.user_id, lower(x.v)
+       SELECT g.user_id, lower(g.values_json->>'photoAssetId')
          FROM generations g
          JOIN stale s ON s.user_id = g.user_id
-         CROSS JOIN LATERAL (VALUES (g.values_json->>'photoAssetId'),
-                                    (g.doc_json->'resume'->'photo'->>'assetId'),
-                                    (g.doc_json->'resume'->'photo'->>'originalAssetId')) AS x(v)
-        WHERE g.tool_id = 'resume' AND g.status IN ('QUEUED', 'IN_PROGRESS', 'COMPLETED')
-          AND x.v IS NOT NULL AND x.v <> ''
+        WHERE g.tool_id = 'resume' AND g.status IN ('QUEUED', 'IN_PROGRESS')
+          AND COALESCE(g.values_json->>'photoAssetId', '') <> ''
      ), kept AS (
        SELECT user_id, asset_id FROM refs
        UNION

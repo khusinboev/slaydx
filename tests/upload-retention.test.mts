@@ -6,9 +6,11 @@ import { randomBytes, randomUUID } from "node:crypto";
  * Yuklamalar umri va kvota aniqligi (C41: BEA-19 server qismi; W2-C nitlari).
  *
  *   1) `purgeOldPhotos` — 90 kundan eski surat, agar forma qoralamasi yoki
- *      foydalanuvchining tirik/tayyor rezyumesi unga ishora qilsa, O'CHMAYDI:
+ *      navbatdagi/ishlayotgan rezyume unga ishora qilsa, O'CHMAYDI:
  *      ilgari qoralama tiklanganda surat «singan» ko'rinar, pullik rezyume
- *      esa jimgina suratsiz chiqardi.
+ *      esa jimgina suratsiz chiqardi. TAYYOR rezyume esa suratni ushlab
+ *      turmaydi (review R2): uning o'z nusxasi `generation_assets` da —
+ *      aks holda kvota (50 qator, o'chirish yo'li yo'q) abadiy to'lardi.
  *   2) Bir xil faylni qayta yuklash (xesh bo'yicha bitta qator) `created_at`
  *      ni YANGILAYDI — 89-kuni qayta tanlangan surat/logotip ertasi kuni
  *      o'chib ketmasin (`purgeUnusedUploads` ulanishi uchun ham shart).
@@ -31,6 +33,8 @@ const { putPhoto, purgeOldPhotos } = await import("../lib/server/photo.ts");
 const { putTemplate } = await import("../lib/server/template-upload.ts");
 const { putSource } = await import("../lib/server/source-upload.ts");
 const { THUMB_ASSET_ID } = await import("../lib/server/thumb.ts");
+const { assetImageResolver, extractAssets, getAsset, putAssets } = await import("../lib/server/assets.ts");
+const { photoDataUrl } = await import("../lib/server/photo.ts");
 
 const users: string[] = [];
 
@@ -86,7 +90,7 @@ async function resumeGeneration(uid: string, status: string, values: Record<stri
 
 /* ───────────────────────── 1) purgeOldPhotos ───────────────────────── */
 
-test("purgeOldPhotos: qoralama yoki tayyor/tirik rezyume ishora qilgan surat QOLADI, qolgan eskisi o'chadi (C41)", { skip }, async () => {
+test("purgeOldPhotos: qoralama yoki navbatdagi/ishlayotgan rezyume ishora qilgan surat QOLADI, qolgan eskisi (tayyor rezyumeniki ham) o'chadi (C41, R2)", { skip }, async () => {
   const uid = await newUser();
   const other = await newUser();
 
@@ -97,6 +101,7 @@ test("purgeOldPhotos: qoralama yoki tayyor/tirik rezyume ishora qilgan surat QOL
   const completedValues = await oldPhoto(uid);
   const completedDocOriginal = await oldPhoto(uid);
   const queuedValues = await oldPhoto(uid);
+  const runningValues = await oldPhoto(uid);
   const failedOnly = await oldPhoto(uid);
   const unreferenced = await oldPhoto(uid);
   const fresh = await oldPhoto(uid, { ageDays: 10 });
@@ -111,17 +116,49 @@ test("purgeOldPhotos: qoralama yoki tayyor/tirik rezyume ishora qilgan surat QOL
   await resumeGeneration(uid, "COMPLETED", { photoAssetId: completedValues });
   await resumeGeneration(uid, "COMPLETED", {}, { resume: { photo: { url: "/x", assetId: "zz", originalAssetId: completedDocOriginal } } });
   await resumeGeneration(uid, "QUEUED", { photoAssetId: queuedValues });
+  await resumeGeneration(uid, "IN_PROGRESS", { photoAssetId: runningValues });
   await resumeGeneration(uid, "FAILED", { photoAssetId: failedOnly });
 
   await purgeOldPhotos(90);
   const left = await photoIds(uid);
 
-  for (const [name, id] of Object.entries({ draftCrop, draftOriginal, draftCrop2, viaCropOriginal, completedValues, completedDocOriginal, queuedValues, fresh })) {
+  for (const [name, id] of Object.entries({ draftCrop, draftOriginal, draftCrop2, viaCropOriginal, queuedValues, runningValues, fresh })) {
     assert.ok(left.has(id), `MUTATSIYA: ${name} o'chirildi, lekin unga ishora bor`);
   }
-  for (const [name, id] of Object.entries({ failedOnly, unreferenced, foreignRef })) {
-    assert.ok(!left.has(id), `${name} o'chishi kerak edi`);
+  for (const [name, id] of Object.entries({ completedValues, completedDocOriginal, failedOnly, unreferenced, foreignRef })) {
+    assert.ok(!left.has(id), `MUTATSIYA: ${name} o'chishi kerak edi (kvota abadiy band bo'lardi)`);
   }
+});
+
+test("tayyor rezyume surati `photo_uploads` ga bog'liq EMAS — qator o'chgandan keyin ham aktivdan beriladi (R2)", { skip }, async () => {
+  const uid = await newUser();
+  const bytes = png(64);
+  const photoId = await putPhoto(uid, bytes, "image/png");
+
+  // Worker yo'li: `photoDataUrl` → `data:` URL → `extractAssets` (`swapPhoto`) → `generation_assets`.
+  const photo = await photoDataUrl(uid, photoId);
+  assert.ok(photo);
+  const gid = randomUUID();
+  const doc = { meta: {}, sections: [], resume: { photo: { url: photo.url, shape: "circle", assetId: photoId } } };
+  const extracted = extractAssets(gid, doc as never, "");
+  const stored = (extracted.doc as unknown as { resume: { photo: { url: string; assetId: string } } }).resume.photo;
+  assert.equal(stored.url, `/api/generations/${gid}/assets/${stored.assetId}`, "tayyor hujjat suratni o'z aktividan o'qiydi");
+  await query(
+    `INSERT INTO generations (id, user_id, tool_id, topic, status, values_json, doc_json, finished_at)
+     VALUES ($1, $2, 'resume', 'Rezyume', 'COMPLETED', $3, $4, now())`,
+    [gid, uid, toJsonb({ photoAssetId: photoId }), toJsonb(extracted.doc)],
+  );
+  await putAssets(gid, extracted.assets);
+
+  await query(`UPDATE photo_uploads SET created_at = now() - interval '100 days' WHERE user_id = $1`, [uid]);
+  await purgeOldPhotos(90);
+  assert.equal((await photoIds(uid)).size, 0, "tayyor rezyume surat qatorini ushlab turmasligi kerak");
+
+  // Ko'ruvchi (`/api/generations/{id}/assets/{aid}` → `getAsset`) va DOCX qayta render (`assetImageResolver`).
+  const asset = await getAsset(gid, stored.assetId, uid);
+  assert.ok(asset && Buffer.compare(asset.bytes, bytes) === 0, "surat baytlari aktivda qolishi kerak");
+  const img = await assetImageResolver(gid, uid)(stored.url);
+  assert.ok(img && img.type === "png");
 });
 
 /* ───────────────────────── 2) created_at yangilanadi ───────────────────────── */

@@ -73,7 +73,7 @@ export function quotaMessage(kind: UploadKind, reason: "count" | "bytes"): strin
     case "logo":
       return `Logotiplar chegarasi — ${UPLOAD_QUOTA.count.logo} ta, yangi logotip qabul qilinmaydi. Avval yuklagan logotip faylingizni qayta tanlashingiz mumkin.`;
     case "photo":
-      return `Suratlar chegarasi — ${UPLOAD_QUOTA.count.photo} ta. Avval yuklagan suratingizni qayta tanlang; qoralama yoki rezyumeda ishlatilmayotgan surat 90 kundan keyin o'chiriladi.`;
+      return `Suratlar chegarasi — ${UPLOAD_QUOTA.count.photo} ta. Avval yuklagan suratingizni qayta tanlang; qoralamada yoki navbatdagi rezyumeda ishlatilmayotgan surat 90 kundan keyin o'chiriladi (tayyor rezyumeda suratning o'z nusxasi bor).`;
     case "template":
       return `Shablonlar chegarasi — ${UPLOAD_QUOTA.count.template} ta. Yangisini yuklash uchun «O'z shablonim» ro'yxatidan keraksizini o'chiring.`;
     case "source":
