@@ -75,3 +75,33 @@ No DOM node is compared with `equal`/`deepEqual`. The deepEqual calls compare st
   - the results cursor is parsed with `parseIsoInstant` and accepts the ISO string the client sends;
   - photo purge now respects drafts, so C41 is defence in depth.
 - After merging, re-run `tests/bundle-split.test.mts`, `tests/edit-reconcile.test.mts` and `tests/edit-response-lean.test.mts` (the last one needs the DB).
+
+## Re-review — commit `54da245` (after merge `070c4f0`)
+
+### Verdict: **APPROVE**
+
+**R1: fixed.**
+- `lib/chunk-reload.ts` detects chunk errors by `ChunkLoadError` or by the Chromium, Safari, Firefox or Turbopack messages.
+- `app/error.tsx` and `global-error.tsx` call `reloadOnceForChunkError` in an effect.
+- **The reload cannot loop:**
+  - The guard is a `sessionStorage` timestamp, and a second reload within 60 s is refused.
+  - A chunk that is truly missing reloads once and then shows the error screen.
+  - If storage is missing or throws, including `setItem` failing on quota, the page never auto-reloads.
+- For chunk errors the button does `location.reload()` instead of `reset()`.
+- **Non-chunk errors keep the normal UI:** the original text and `reset()`, with no flag written. `tests/ui/chunk-reload.test.mts` checks both cases.
+
+**R2: fixed.** Editing the podcast text now clears `fileName`, so `draftPayload` keeps the text (`tests/ui/media-composer.test.mts`). If the user switches to text mode without editing, the file's text is still dropped and the re-attach notice shows. That is correct.
+
+**Nits:**
+- **N1 and N6** are now documented in the code.
+- **N2:** `withReconcile` and `reconcile` take an `AbortSignal`, and `ResultView` aborts on unmount.
+- **N3:** there is now one shared lazy `SlideViewer`, exported from `ArtifactViewer`.
+- **N4:** the client computes the SHA-256 of the file (first 24 hex characters), which equals the server's `assetIdFor`. It falls back to the name check when `crypto.subtle` is unavailable.
+
+**Tests (heavy2.sh):**
+- 67 of 67 pass: `chunk-reload`, `media-composer`, `render-storm`, `form-draft`, `photo-field`, `template-gallery`, `game-share-panel` and `viewer/live`, run under `tsconfig.viewer.json`.
+- 14 of 14 pass: `bundle-split`, `edit-reconcile` and `ui-strings`, run with `--conditions=react-server`.
+
+**Merge:** `git merge-tree` into `audit/production-readiness` is clean.
+
+**Leftover nit, non-blocking:** a few error screens still say "Qayta urinish" where "Sahifani yangilash" would describe the action better.
