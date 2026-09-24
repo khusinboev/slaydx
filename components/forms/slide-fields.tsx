@@ -31,12 +31,11 @@ import {
   type SlideTool,
 } from "@/lib/generation/slide-params";
 import { formatTanga } from "@/lib/tools";
-import { cn } from "@/lib/cn";
 import { MultiChipGroup, RangeField } from "./fields";
-import { Row, Segmented, SelectField, Switch } from "./compact";
+import { Row, Segmented, SelectField, Switch, type SegmentedOption } from "./compact";
 import { LogoField } from "./LogoField";
-// AUDIT-25: P1 merge'da lib/generation/slide-params.ts dan import qilinadi (bir xil nom — planCapacity).
-import { planCapacity } from "./plan-capacity-stub";
+// AUDIT-25: P1 merge'da lib/generation/slide-params.ts dan import qilinadi (bir xil nom — planCapacity/effectivePlanItems).
+import { planCapacity, effectivePlanItems as planItemsEffective } from "./plan-capacity-stub";
 
 /**
  * Reyestr id → render xaritasi (WP-G, Formalar 2 da ixcham).
@@ -86,6 +85,34 @@ export const TEXT_VOLUME_LABELS: Record<(typeof SLIDE_TEXT_VOLUMES)[number], str
 };
 const TEXT_VOLUME_OPTIONS = SLIDE_TEXT_VOLUMES.map((v) => ({ value: v, label: TEXT_VOLUME_LABELS[v] }));
 const QUIZ_OPTIONS = QUIZ_COUNTS.map((n) => ({ value: String(n), label: n === 0 ? "Testsiz" : String(n) }));
+/** «Tuzilma bloklari»da «Test» yoqilib, foydalanuvchi «Nazorat testi»ga hali tegmagan bo'lsa yuboriladigan son (AUDIT-25 P1 A3-01). */
+const QUIZ_COUNT_FALLBACK = 3;
+
+/**
+ * `quizCount` KO'RSATILADIGAN qiymati — AUDIT-25 P1 A3-01: aniq son
+ * (foydalanuvchi «Nazorat testi»ga tegsa) har doim USTUN; tegilmagan
+ * bo'lsa (`undefined`) taqdimot turi standartidagi «test» blokidan kelib
+ * chiqadi (`purposeDefaults`). `values.quizCount` tegilmaguncha
+ * `undefined` bo'lib qoladi — server ham AYNAN shu qoidani qo'llaydi,
+ * shu sabab bu funksiya faqat KO'RSATISH uchun, yuborilmaydigan qiymatni
+ * "to'ldirmaydi".
+ */
+function resolvedQuizCount(values: FormValues): number {
+  if (values.quizCount !== undefined) return clampInt(values.quizCount, 0, 10, 0);
+  return purposeDefaults(String(values.slidePurpose || "general")).blocks.includes("test") ? QUIZ_COUNT_FALLBACK : 0;
+}
+
+/**
+ * `agendaSlide` KO'RSATILADIGAN qiymati — AUDIT-25 P1 A3-02: aniq
+ * true/false (Reja slaydi kaliti bosilsa) USTUN; tegilmagan bo'lsa
+ * taqdimot turi standartidagi «reja» blokidan kelib chiqadi. Xuddi
+ * `resolvedQuizCount` kabi — `values.agendaSlide` o'zi tegilmaguncha
+ * `undefined` bo'lib qoladi (yuborilmaydi).
+ */
+function resolvedAgendaSlide(values: FormValues): boolean {
+  if (values.agendaSlide !== undefined) return values.agendaSlide === true;
+  return purposeDefaults(String(values.slidePurpose || "general")).blocks.includes("reja");
+}
 export const IMAGE_STYLE_LABELS: Record<(typeof SLIDE_IMAGE_STYLES)[number], string> = {
   minimal: "Minimal",
   illustration: "Illyustratsiya",
@@ -157,66 +184,47 @@ function capacityFor(values: FormValues): number {
   });
 }
 
-/** Foydalanuvchi tanlagan `planItems` sig'imga qisilgach — server aynan shuni yozadigan (samarali) qiymat. */
+/**
+ * Foydalanuvchi tanlagan `planItems` sig'imga qisilgach — server aynan
+ * shuni yozadigan (samarali) qiymat. Reviewer CHANGES-1: forma va server
+ * BITTA funksiyani chaqirishi kerak (qavat 1) — shu sabab lokal hisoblash
+ * emas, stub'dagi (merge'da `slide-params.ts`dagi) `effectivePlanItems`
+ * ishlatiladi.
+ */
 function effectivePlanItems(values: FormValues): number {
-  const capacity = capacityFor(values);
-  const raw = clampInt(values.planItems, 1, PLAN_ITEMS_MAX, PLAN_ITEMS_DEFAULT);
-  return Math.min(raw, capacity);
+  return planItemsEffective(values.planItems, capacityFor(values));
 }
 
 /**
  * «Reja bandlari» segmenti — sig'imdan katta variantlar o'chiriladi
- * (`disabled` + `aria-disabled` + kulrang), joriy qiymat sig'maganda
- * samarali (qisilgan) qiymat ta'kidlanadi va bitta qatorli o'zbekcha
- * izoh chiqadi («N slaydga M band sig'adi»). Sig'im 3 dan kichik bo'lsa
- * pastki chegara sig'imgacha kengayadi (1–2 ham tanlanadigan bo'lib
- * ko'rinsin) — shu sabab variantlar ro'yxati endi statik emas.
+ * (`Segmented`ning `disabled` variant qo'llovi, AUDIT-25 CHANGES-6),
+ * joriy qiymat sig'maganda samarali (qisilgan) qiymat ta'kidlanadi va
+ * bitta qatorli o'zbekcha izoh chiqadi. Sig'im 3 dan kichik bo'lsa
+ * pastki chegara `effective`gacha kengayadi — shu sabab variantlar
+ * ro'yxati statik emas va samarali qiymat DOIM ro'yxatda bo'ladi
+ * (CHANGES-1: `lo = min(PLAN_ITEMS_MIN, capacity, effective)`).
  */
-function PlanItemsField({ values, set }: { values: FormValues; set: SlideFieldSetter }) {
+function PlanItemsField({ values, set, tool }: { values: FormValues; set: SlideFieldSetter; tool: SlideTool }) {
   const capacity = capacityFor(values);
-  const lo = Math.min(PLAN_ITEMS_MIN, Math.max(1, capacity));
-  const options: number[] = [];
-  for (let n = lo; n <= PLAN_ITEMS_MAX; n++) options.push(n);
+  const effective = planItemsEffective(values.planItems, capacity);
+  const lo = Math.min(PLAN_ITEMS_MIN, capacity, effective);
+  const options: SegmentedOption[] = [];
+  for (let n = lo; n <= PLAN_ITEMS_MAX; n++) options.push({ value: String(n), label: String(n), disabled: n > capacity });
   const raw = clampInt(values.planItems, 1, PLAN_ITEMS_MAX, PLAN_ITEMS_DEFAULT);
-  const effective = Math.min(raw, capacity);
-  const slideCount = clampInt(values.slideCount, 1, 999, SLIDE_DEFAULT);
+  // Yopiq raqam ko'rsatiladigan variantdan (6) oshmasin — real tanlanadigan maksimum shu.
+  const shownCapacity = Math.min(capacity, PLAN_ITEMS_MAX);
+  const fallbackSlideCount = tool === "pro-slide" ? PRO_SLIDE_DEFAULT : SLIDE_DEFAULT;
+  const slideCount = clampInt(values.slideCount, SLIDE_MIN, SLIDE_MAX, fallbackSlideCount);
   return (
     <Row
-      key="planItems"
       label="Reja bandlari"
-      hint={`Reja bandlari — har biri o'z slaydi bilan; ${slideCount} slaydga ${capacity} band sig'adi.`}
+      hint={`Reja bandlari — har biri o‘z slaydi bilan; ${slideCount} slaydga ${shownCapacity} band sig‘adi.`}
     >
       <div>
-        <div role="radiogroup" aria-label="Reja bandlari" className="bg-muted/60 inline-flex max-w-full flex-wrap gap-0.5 rounded-lg p-0.5">
-          {options.map((n) => {
-            const disabled = n > capacity;
-            const on = n === effective;
-            return (
-              <button
-                key={n}
-                type="button"
-                role="radio"
-                aria-checked={on}
-                aria-disabled={disabled}
-                disabled={disabled}
-                onClick={() => set("planItems", n)}
-                className={cn(
-                  "rounded-md px-2.5 py-1 text-xs whitespace-nowrap transition-colors",
-                  disabled
-                    ? "text-muted-foreground/40 cursor-not-allowed"
-                    : on
-                      ? "bg-card text-foreground shadow-sm font-medium"
-                      : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {n}
-              </button>
-            );
-          })}
-        </div>
+        <Segmented ariaLabel="Reja bandlari" options={options} value={String(effective)} onChange={(v) => set("planItems", Number(v))} />
         {effective < raw ? (
           <p className="text-muted-foreground mt-1 text-[11px]" data-plan-capacity-hint>
-            {`${slideCount} slaydga ${effective} band sig'adi`}
+            {`Tanlangan ${raw} band sig‘maydi — ${effective} band yoziladi.`}
           </p>
         ) : null}
       </div>
@@ -278,12 +286,22 @@ export function renderSlideParam(
           <MultiChipGroup
             options={BLOCK_OPTIONS}
             value={decodeBlocks(values.blocks)}
-            onChange={(next) => set("blocks", encodeBlocks(next.filter(isSlideBlockId)))}
+            onChange={(next) => {
+              const nextBlocks = next.filter(isSlideBlockId);
+              const hadTest = decodeBlocks(values.blocks).includes("test");
+              set("blocks", encodeBlocks(nextBlocks));
+              // AUDIT-25 P1 A3-01: «Test» endi yoqildi va foydalanuvchi «Nazorat testi»ga
+              // hali tegmagan — aniq son yozamiz, aks holda server buni "testsiz" o'qiydi
+              // (blok ro'yxati endi test sonini boshqarmaydi, faqat `quizCount` boshqaradi).
+              if (!hadTest && nextBlocks.includes("test") && values.quizCount === undefined) {
+                set("quizCount", QUIZ_COUNT_FALLBACK);
+              }
+            }}
           />
         </Row>
       );
     case "planItems":
-      return <PlanItemsField key={id} values={values} set={set} />;
+      return <PlanItemsField key={id} values={values} set={set} tool={ctx.tool} />;
     case "slideCount":
       return <SlideCountField key={id} values={values} set={set} tool={ctx.tool} />;
     case "textVolume":
@@ -295,7 +313,7 @@ export function renderSlideParam(
     case "quizCount":
       return (
         <Row key={id} label="Nazorat testi" hint="Deka oxirida qo‘shiladigan test savollari soni.">
-          <Segmented ariaLabel="Nazorat testi" options={QUIZ_OPTIONS} value={String(clampInt(values.quizCount, 0, 10, 0))} onChange={(v) => set("quizCount", Number(v))} />
+          <Segmented ariaLabel="Nazorat testi" options={QUIZ_OPTIONS} value={String(resolvedQuizCount(values))} onChange={(v) => set("quizCount", Number(v))} />
         </Row>
       );
     case "slideImageStyle":
@@ -307,7 +325,14 @@ export function renderSlideParam(
     case "titleSlide":
       return switchRow("titleSlide", "Titul slaydi", "Birinchi slayd mavzu, muallif va logotip bilan.", true, values, set);
     case "agendaSlide":
-      return switchRow("agendaSlide", "Reja slaydi", "Titul ortidan reja bandlari sanab o‘tiladi.", true, values, set);
+      // AUDIT-25 P1 A3-02: generic `switchRow` ishlatilmaydi — standart holat
+      // (foydalanuvchi tegmaganda) taqdimot turiga bog'liq (`resolvedAgendaSlide`),
+      // doim yoqilgan emas (pitch/training standarti «reja»siz).
+      return (
+        <Row key={id} label="Reja slaydi" hint="Titul ortidan reja bandlari sanab o‘tiladi.">
+          <Switch checked={resolvedAgendaSlide(values)} ariaLabel="Reja slaydi" onChange={(v) => set("agendaSlide", v)} />
+        </Row>
+      );
     case "localExamples":
       return switchRow("localExamples", "Mahalliy misollar", "O‘zbekiston voqeligidan misol va kontekst qo‘shiladi.", false, values, set);
     case "internetSearch":
@@ -357,7 +382,7 @@ export function settingsSummary(values: FormValues, ids: readonly string[]): str
   if (has("planItems")) out.push(`${effectivePlanItems(values)} band`);
   if (has("textVolume")) out.push(TEXT_VOLUME_LABELS[String(values.textVolume || "standart") as keyof typeof TEXT_VOLUME_LABELS] ?? "Standart");
   if (has("quizCount")) {
-    const q = clampInt(values.quizCount, 0, 10, 0);
+    const q = resolvedQuizCount(values);
     out.push(q ? `${q} savol` : "Testsiz");
   }
   if (has("slideImageStyle")) out.push(IMAGE_STYLE_LABELS[String(values.slideImageStyle || "photo") as keyof typeof IMAGE_STYLE_LABELS] ?? "Foto");
@@ -370,7 +395,8 @@ export function settingsSummary(values: FormValues, ids: readonly string[]): str
   ];
   for (const [id, label, def] of flags) {
     if (!has(id)) continue;
-    const on = def ? values[id] !== false : values[id] === true;
+    // `agendaSlide` — AUDIT-25 P1 A3-02: tegilmagan bo'lsa taqdimot turi standartidan (`resolvedAgendaSlide`).
+    const on = id === "agendaSlide" ? resolvedAgendaSlide(values) : def ? values[id] !== false : values[id] === true;
     if (on) out.push(label);
   }
   return out;

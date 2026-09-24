@@ -112,10 +112,14 @@ export function SlideComposer({
       planItems: PLAN_ITEMS_DEFAULT,
       slideCount: pro ? PRO_SLIDE_DEFAULT : SLIDE_DEFAULT,
       textVolume: "standart",
-      quizCount: 0,
+      // `quizCount`/`agendaSlide` ATAYLAB kiritilmagan (AUDIT-25 P1 A3-01/A3-02):
+      // foydalanuvchi tegmagan bo'lsa `undefined` qoladi (JSON.stringify uni
+      // tashlab ketadi), server taqdimot turi standartidan (`test`/`reja`
+      // blok bor-yo'qligi) o'zi hisoblaydi. Aniq qiymat FAQAT foydalanuvchi
+      // «Nazorat testi»/«Reja slaydi»ga tegsa yoziladi — `slide-fields.tsx`
+      // `case "quizCount"`/`case "agendaSlide"`.
       slideImageStyle: "photo",
       titleSlide: true,
-      agendaSlide: true,
       localExamples: false,
       internetSearch: false,
       speakerNotes: true,
