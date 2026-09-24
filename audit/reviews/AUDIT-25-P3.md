@@ -257,3 +257,94 @@ Separately, the prompt and the clip disagree for tables, so an adult table that 
   - the longest-word and bold-width issue (P2 CHANGE 2) cannot be fixed by character limits.
 - **Export the layout's `inkHeight` fit measure** so that `slide-quality.ts layerFits` uses the same model.
 - **After P2's CHANGES 1–2 land,** re-run the P3 lock tests. Update `COUNT_LIMITS` cells where the lock fails, and update the fingerprint only after that.
+
+---
+
+# Re-review — 7d335fb
+
+- **Scope:** `git diff bb61411..7d335fb`. `bb61411` merges `slides-3`, which includes P2's `d05550e`. `6c1dca2` holds the fixes and `7d335fb` the test hardening.
+- **Heavy command:** 2 of 2, one run through `heavy2.sh`. `tests/slide-quality.test.mts` + `tests/slide-limits.test.mts`: **48/48 pass**. The run also re-ran the probe with new re-review cases.
+- **Contract (item 6):** fixed by the lead in `docs/AUDIT-25.md:59-62` (`thinSlides(…, visual?) → {index, reasons}[]`, 6-argument repair, order `slideFloor → repair → syncAgenda → finalizeQuiz`). Confirmed on `slides-3`.
+
+## Verdict: **APPROVE**
+
+Items 1–5 and 7–14 are closed. The three failure modes I reproduced now fail safe, and the probe re-run confirms it.
+
+## Item by item (file:line in `7d335fb:lib/generation/slide-quality.ts` unless noted)
+
+1. **Closed.** `mergeRepair` process:
+   - `n = min(raw.steps.length, rules.stepsMax, maxSteps)`, with a reject below 3 (`:677-678`);
+   - `slice(0, n)` comes before clipping (`:682`);
+   - text and title are clipped with `clipLimit` at `n` (`:679-680`).
+
+   `thinReasons` now evaluates at `min(list.length, stepsMax)` (`:579`), so an oversized list cannot lower its own bar. Test `repair: process — son auditoriya ruxsatigacha qisiladi`.
+2. **Closed.**
+   - Unflagged options are copied byte-for-byte (`:733-737`).
+   - Flagged options must pass `samePrefix` at 60 % (`:651-656`, `:740`), and so must `q` (`:744-746`).
+   - `answer` must match (`:730`).
+   - Probe: the swap attack from the first review is now **rejected**.
+3. **Closed.** `short-quote` is gone from `ThinReason` (`:520`) and from `REASON_TEXT`. `QUOTE_MIN_WORDS` is kept only as the prompt floor (`:56-61`). The quote prompt line adds «haqiqiy iqtibos bo‘lsa — aynan asl matn» (`:507`), and the repair rules add «iqtibos YO‘Q» (`:828`). Probe: «Bilim — kuch.» is left untouched.
+4. **Closed.** The `isPlanSlide` gate (`:541-544`) applies to bullets, process and columns. `empty-subtitle` and `clipped-option` still apply to all slides. This matches P5's rule.
+5. **Closed.**
+   - `tableKey(cols, rows)` picks the smallest measured table that covers both, from 3×3/3×4/4×4/4×5/5×6 (`slide-limits.ts:303-316`).
+   - `fitChars`, `clipLimit` and `staticCap` take `rows`, which defaults to `rules.tableRows` (`:276`, `:339`, `:367-369`).
+   - `tableCellMax` is computed at `(maxTableCols, maxTableRows)` (`:476`).
+   - Probe: adult `limitsFor(rules).tableCell` = 45 (it was 25).
+   - A new test pins prompt ≤ clip on the same key for 5 audiences × 2 visuals.
+7. **Closed on the P3 side.** `limitsFor().quizOption` per floor is `[110,70,65,45,45,20]` (`slide-limits.ts:~299`, `:380`); kids get 20 and adults 110. The editor wiring (`slide-edit.ts`, W7) is still unassigned. It is the lead's item, not P3's.
+8. **Closed.**
+   - `fmtRange` (`:441-443`) removes «N–N».
+   - Step-text ranges are given per count, e.g. bachelor «3 bosqichda 8–10, 4 bosqichda 6».
+   - `maxColItems` now drops the item count first, e.g. kids «har ustunda 2 band».
+   - The prompt says «kam yozilsa … ko‘p yozilsa kesiladi».
+   - The test scans for any `N–N`.
+9. **Closed.** The catch comment now cites the optional-stage rule in `deadline.ts` and logs `isDeadlineError` separately (`:873-884`). The `CLIP_FLOOR_CHARS` comment now says it applies only to live measurement and that P1 W3 truncates counts first (`:312-321`).
+10. **Closed.**
+    - Re-measured on P2's merged layout.
+    - `layerFits` uses `LAYOUT_KIT.inkHeight` with `CHAR_EM_BOLD` for bold layers (`:232-241`).
+    - Floored fields count as "fits" only at ≥ `minPt` (`AUDIENCE_FIELDS`, `:119-128`, `:289-292`), which is correct because P2's `bodyFit` goes below the floor to stay inside the box.
+    - `COUNT_LIMITS` is rebuilt as min(P2, live) × 0.88 (`slide-limits.ts:250-300`).
+    - The lock test now re-derives each cell with the same rule, so it is a real alarm.
+
+    Two consequences are justified by the measurement:
+    - `countRules` at 18 pt → 3 steps (`slide-audience.ts:127-129`);
+    - `quizQ` 200 → 100, because the question is bold: the narrowest box holds 104 and the median 121.
+
+    `title` was removed from the static lock with a note that it is a P2 box problem (bold section title in circle/editorial). The lead should confirm this is on P2's list.
+11. **Closed.** `clipTo` keeps NBSP and uses `/[ \t\n\r\f\v]+/`. It strips `.!?` before `…`. Tests at `tests/slide-limits.test.mts:331-335`.
+12. **Closed.** `clippedAt` checks the length gate `≥ ⌈0.6·(cap−1)⌉` (`:536-539`). «1/2 + 1/4 = …» and «Va hokazo…» are no longer flagged.
+13. **Closed.** The user prompt now lists «Dekadagi slaydlar: 0) … ; 1) …» (`:836`).
+14. **Closed.**
+    - Step rule: average < `minWords` OR any step < min(4, `minWords`) (`:582-583`). One healthy 5-word step passes; a one-word step fails.
+    - `bulletMinWords` uses `floor` (`:72-75`).
+    - A section subtitle equal to its title counts as empty (`:601`).
+
+## Mutations reasoned through (test named, not re-run)
+
+- **R1:** set the process slice back to `SLIDE_LIMITS.stepsMax`, i.e. `n = min(raw.steps.length, 5)` at `:677`.
+  - For kids, `textMax` becomes `clipLimit(stepText, kids, circle, 5)` ≤ `limitsFor(steps 5)` = 5, so every text becomes a stub.
+  - Acceptance then evaluates at n = 3 (`:579`). The average is ≈ 1 word, below `tiny`, so the merged slide is still thin and is rejected, and `out[0] === thin`.
+  - `assert.notEqual(out[0], thin, …)` in «repair: process — son auditoriya ruxsatigacha qisiladi» turns red. **Killed.**
+- **R2:** delete the byte-identical branch (`:735-737`), so every option goes through the model.
+  - «Jarima solish (MODEL O'ZGARTIRDI)» still passes `samePrefix` against «Jarima solish» (60 % of 13 characters = «jarima s»), so it is accepted.
+  - `assert.equal(opts[0], "Jarima solish", …)` turns red. **Killed.**
+- **R3:** drop the `samePrefix` check at `:740`.
+  - In the swap reply, slot 0 is unflagged and kept. Slot 1 (flagged) takes «Yer silkinishi natijasida suv kamaydi», which is not clipped and is ≤ cap, so the slide is accepted.
+  - `assert.equal(…[0], quiz, "almashtirish — rad")` turns red. **Killed.**
+- **Also checked:**
+  - R4, `:579` back to `list.length`: kids 5 × 3 words gives `fitWords` at 5 = 1, the slide is not thin, and the «five … short-steps» assert turns red.
+  - R5, the old `max(cols, rowKey)` key: adult `tableCell` = 20, and «limitsFor(adult).tableCell >= 40» turns red.
+  - R6, `clippedAt` without the length gate: «1/2 + 1/4 = …» is flagged, and the `[]` assert turns red.
+
+## Non-blocking follow-ups (not required for merge)
+
+- **N1. Degenerate shortening passes `samePrefix`.**
+  - **Probe:** a 178-character option (cap 110) that the model shortens to «Am» is **accepted**. `k = ⌈0.6·min(len)⌉ = 2` («am»).
+  - **Why it is non-blocking:** it cannot move the key, because the prefix is the original's, and it needs a pathological reply.
+  - **Fix:** when shortening, also require `next.length ≥ min(was.length, ⌈0.5·cap⌉)` in `samePrefix`/`:740`.
+- **N2. Student tables prefer more columns over fuller cells.** After P2's floors, the bachelor and general brief says «4 tagacha ustun, 5 tagacha qator, katak ≤ 2 so‘z». `TABLE_CELL_MIN_WORDS = 2` (`:410`) lets 4 columns beat 3 fuller columns. Consider 3 for ≤ 16 pt.
+- **N3. Very tight boxes are P2's to fix, not character limits.** For 1–4 grade (circle) the brief says «ustun sarlavhasi ≤ 1 so‘z», «har variant ≤ 2 so‘z» and «2 tagacha karta/ustun»; the general/dashboard column title is also ≤ 1 word. The numbers are coherent (prompt ≤ clip). The boxes are small, which is already on the P2 request list.
+- **N4. P1 wiring changed with this re-review.**
+  - `clipLimit` now takes `(field, rules, visual, count, rows)`, so W4 must pass the table **rows**.
+  - `QUIZ_Q_MAX` becomes 100 through `SLIDE_LIMITS.quizQ`, with no code change.
+  - W1–W7 from the first review otherwise stand.
