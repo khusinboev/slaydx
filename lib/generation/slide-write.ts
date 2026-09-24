@@ -5,7 +5,8 @@ import { remainingMs } from "./quality";
 import { assertJobTime } from "./deadline";
 import { bodyRules, type BodyRules } from "./slide-audience";
 import { blocksToBeats, planRoleText } from "./slide-blocks";
-import { SLIDE_LIMITS } from "./slide-limits";
+import { SLIDE_LIMITS, clipTo, limitsFor } from "./slide-limits";
+import { clipLimit, repairThinSlides } from "./slide-quality";
 import { deckFooter } from "./slide-identity";
 import { purposeDefaults } from "./slide-purpose";
 import { finalizeQuiz } from "./slide-quiz";
@@ -14,11 +15,10 @@ import { SLIDE_MAX } from "./slide-params";
 import { deckJsonSchema, slideSystem, type SlidePromptCtx } from "./slide-prompt";
 import type { SlideProgressSink } from "./slide-progress";
 import { runSlideResearch } from "./slide-research";
-import { expandBeats, resolveSlideTemplate, type SlideBeat, type SlideTemplate } from "./slide-templates";
+import { expandBeats, resolveSlideTemplate, type SlideBeat, type SlideTemplate, type SlideVisual } from "./slide-templates";
 import { getSlideTheme } from "./slide-themes";
 import { isSlideLayout, type SlideLayout, type SlideModel, type SlideThemeId } from "./slide-types";
 import type { AcademicDoc, DocMeta, DocSection } from "./types";
-import { safeSlice } from "./safe-text";
 
 /*
  * Slide Law: bir slaydda 3–4 tadan ortiq band bo'lmasin. Aniq chegara
@@ -52,10 +52,11 @@ export const QUIZ_MAX = SLIDE_LIMITS.quizMax;
 export const QUIZ_Q_MAX = SLIDE_LIMITS.quizQ;
 export const QUIZ_OPTION_MAX = SLIDE_LIMITS.quizOption;
 
-function clip(text: string, n: number) {
-  const t = String(text || "").replace(/\s+/g, " ").trim();
-  return t.length <= n ? t : `${safeSlice(t, n - 1).trimEnd()}…`;
-}
+/*
+ * Qirqish — FAQAT `clipTo` (slide-limits.ts, so'z chegarasida). AUDIT-25
+ * W2: bu yerdagi mahalliy `clip` so'zni O'RTASIDAN kesardi — jonli
+ * «lecture-12» dekasidagi «…» bilan tugagan yarim so'zlar shu yo'ldan edi.
+ */
 
 /**
  * Sarlavha boshidagi TARTIB RAQAMINI olib tashlaydi: «1. », «2) »,
@@ -81,32 +82,29 @@ export function stripOrdinal(title: string): string {
   return out.trim() ? out : title;
 }
 
-/**
- * So'z chegarasida qisqartirish — agenda bandi uchun (P1 sharhi, 5c).
- * Sarlavha 80 belgigacha, «qisqa» hajmda esa reja qatori 58 belgi
- * (`bulletChars × 0.72`) — `clip` bandni so'z o'rtasidan kesardi.
- */
-function clipWords(text: string, n: number): string {
-  const t = String(text || "").replace(/\s+/g, " ").trim();
-  if (t.length <= n) return t;
-  const cut = safeSlice(t, n - 1);
-  const sp = cut.lastIndexOf(" ");
-  return `${(sp > n / 2 ? cut.slice(0, sp) : cut).replace(/[\s,;:—–-]+$/, "")}…`;
+/** Bo'sh bo'lmagan satrlar, AVVAL son bo'yicha kesilgan (W3) — uzunlik keyin qirqiladi. */
+function list(v: unknown, n: number): string[] {
+  if (!Array.isArray(v)) return [];
+  return v
+    .map((x) => String(x ?? "").replace(/\s+/g, " ").trim())
+    .filter(Boolean)
+    .slice(0, n);
 }
 
 function arr(v: unknown, n: number, maxLen: number): string[] {
-  if (!Array.isArray(v)) return [];
-  return v
-    .map((x) => clip(String(x ?? ""), maxLen))
-    .filter(Boolean)
-    .slice(0, n);
+  return list(v, n).map((x) => clipTo(x, maxLen));
 }
 
 function asLayout(v: unknown, fallback: SlideLayout): SlideLayout {
   return typeof v === "string" && isSlideLayout(v) ? v : fallback;
 }
 
-type BulletRules = Pick<BodyRules, "maxBullets" | "bulletChars" | "agendaMax">;
+/**
+ * `normalizeSlide` qoidasi — to'liq `BodyRules` (auditoriya × hajm ×
+ * son chegaralari). Ilgari faqat band maydonlari kelardi va son/uzunlik
+ * chegaralari auditoriyadan qat'i nazar statik edi (AUDIT-25 W3/W4).
+ */
+type BulletRules = BodyRules;
 
 /**
  * Slayd `id` larini absolyut o'rin bo'yicha qayta raqamlaydi.
@@ -137,11 +135,18 @@ export function renumberSlides(slides: SlideModel[]): SlideModel[] {
   return slides.map((sl, i) => (sl.id === `s${i}` ? sl : { ...sl, id: `s${i}` }));
 }
 
-function normalizeSlide(raw: unknown, i: number, footer: string, rules: BulletRules): SlideModel | null {
+function normalizeSlide(raw: unknown, i: number, footer: string, rules: BulletRules, visual?: SlideVisual): SlideModel | null {
   if (!raw || typeof raw !== "object") return null;
+  /*
+   * W3/W4 (AUDIT-25): AVVAL son (auditoriya × maket ruxsati — `limitsFor`),
+   * keyin uzunlik `clipLimit(maydon, rules, visual, son, qator)` bilan —
+   * ya'ni 3 ta bosqich 5 tasiga mo'ljallangan tor chegaradan qirqilmaydi,
+   * 1–4-sinf kartasi esa bakalavr chegarasida qolmaydi.
+   */
+  const lim = limitsFor(rules);
   const o = raw as Record<string, unknown>;
   const layout = asLayout(o.layout, "bullets");
-  const title = clip(stripOrdinal(String(o.title ?? "").replace(/\s+/g, " ").trim()), SLIDE_LIMITS.title);
+  const title = clipTo(stripOrdinal(String(o.title ?? "").replace(/\s+/g, " ").trim()), SLIDE_LIMITS.title);
   if (!title && layout !== "closing") return null;
   /*
    * `subtitle` chegarasi LAYOUTGA bog'liq — maketdan o'lchangan:
@@ -164,16 +169,16 @@ function normalizeSlide(raw: unknown, i: number, footer: string, rules: BulletRu
     id: `s${i}`,
     layout,
     title: title || "Slayd",
-    kicker: o.kicker ? clip(String(o.kicker), SLIDE_LIMITS.kicker) : undefined,
-    subtitle: o.subtitle ? clip(String(o.subtitle), subtitleMax) : undefined,
+    kicker: o.kicker ? clipTo(String(o.kicker), SLIDE_LIMITS.kicker) : undefined,
+    subtitle: o.subtitle ? clipTo(String(o.subtitle), subtitleMax) : undefined,
     footer,
-    notes: o.notes ? clip(String(o.notes), SLIDE_LIMITS.notes) : undefined,
-    imageHint: o.imageHint ? clip(String(o.imageHint), SLIDE_LIMITS.imageHint) : undefined,
+    notes: o.notes ? clipTo(String(o.notes), SLIDE_LIMITS.notes) : undefined,
+    imageHint: o.imageHint ? clipTo(String(o.imageHint), SLIDE_LIMITS.imageHint) : undefined,
   };
   if (layout === "twoCol" || layout === "compare") {
     return {
       ...base,
-      leftTitle: clip(String(o.leftTitle ?? (layout === "compare" ? "Birinchi" : "")), SLIDE_LIMITS.colTitle),
+      leftTitle: clipTo(String(o.leftTitle ?? (layout === "compare" ? "Birinchi" : "")), SLIDE_LIMITS.colTitle),
       /*
        * Ustunda 4 band × 120 belgi → 16 pt (o'lchangan). 130 belgida
        * 14 pt ga tushadi, 5 band ham shunday — shuning uchun ikkala
@@ -183,25 +188,33 @@ function normalizeSlide(raw: unknown, i: number, footer: string, rules: BulletRu
        * o'lchovda twoCol slaydda 8 band jami 172 belgi (21 belgi/band)
        * chiqdi — bandlar to'liq gap emas, yorliq bo'lib qolgan edi.
        */
-      left: arr(o.left, SLIDE_LIMITS.colItems, SLIDE_LIMITS.colItem),
-      rightTitle: clip(String(o.rightTitle ?? (layout === "compare" ? "Ikkinchi" : "")), SLIDE_LIMITS.colTitle),
-      right: arr(o.right, SLIDE_LIMITS.colItems, SLIDE_LIMITS.colItem),
+      left: col(o.left),
+      rightTitle: clipTo(String(o.rightTitle ?? (layout === "compare" ? "Ikkinchi" : "")), SLIDE_LIMITS.colTitle),
+      right: col(o.right),
     };
+  }
+  // Ustun bandi — o'z ustunidagi band SONIDA o'lchangan chegara.
+  function col(v: unknown): string[] {
+    const items = list(v, SLIDE_LIMITS.colItems);
+    return items.map((x) => clipTo(x, clipLimit("colItem", rules, visual, items.length)));
   }
   if (layout === "quote") {
     return {
       ...base,
-      quote: clip(String(o.quote ?? o.subtitle ?? title), SLIDE_LIMITS.quote),
-      quoteBy: o.quoteBy ? clip(String(o.quoteBy), SLIDE_LIMITS.quoteBy) : undefined,
+      quote: clipTo(String(o.quote ?? o.subtitle ?? title), SLIDE_LIMITS.quote),
+      quoteBy: o.quoteBy ? clipTo(String(o.quoteBy), SLIDE_LIMITS.quoteBy) : undefined,
     };
   }
   if (layout === "stats") {
-    const stats = Array.isArray(o.stats)
-      ? o.stats
-          .map((s) => {
-            if (!s || typeof s !== "object") return null;
-            const x = s as Record<string, unknown>;
-            const value = clip(String(x.value ?? ""), SLIDE_LIMITS.statValue);
+    // Son AVVAL (W3): qiymati bor kartalar, `statsMax` gacha.
+    const cards = (Array.isArray(o.stats) ? o.stats : [])
+      .filter((s): s is Record<string, unknown> => Boolean(s) && typeof s === "object" && String((s as Record<string, unknown>).value ?? "").trim() !== "")
+      .slice(0, lim.statsMax);
+    const labelMax = clipLimit("statLabel", rules, visual, cards.length);
+    const stats = cards.length
+      ? cards
+          .map((x) => {
+            const value = clipTo(String(x.value ?? ""), SLIDE_LIMITS.statValue);
             /*
              * Yorliq chegarasi 60 edi va jonli dekalarda muntazam
              * kesardi (`lesson`#6, `problem`#7 ning uchala yorlig'i,
@@ -211,11 +224,10 @@ function normalizeSlide(raw: unknown, i: number, footer: string, rules: BulletRu
              * belgi, diagramma ko'rinishida esa 3.6 × 1.05 da ~220.
              * 110 ikkalasiga ham bemalol sig'adi.
              */
-            const label = clip(String(x.label ?? ""), STAT_LABEL_MAX);
+            const label = clipTo(String(x.label ?? ""), labelMax);
             return value ? { value, label } : null;
           })
           .filter((x): x is { value: string; label: string } => Boolean(x))
-          .slice(0, SLIDE_LIMITS.statsMax)
       : [];
     return { ...base, stats: stats.length ? stats : [{ value: "—", label: title }] };
   }
@@ -229,27 +241,32 @@ function normalizeSlide(raw: unknown, i: number, footer: string, rules: BulletRu
      * ustun kengligi to'liq matnni ko'tarardi. `planTable` shriftni
      * o'zi kichraytiradi, shuning uchun keng ustunda uzunroq matn xavfsiz.
      */
-    const rawHeaders = arr(src.headers, SLIDE_LIMITS.tableCols, SLIDE_LIMITS.tableHeaderRaw);
-    const headers = rawHeaders.map((h) => clip(h, rawHeaders.length <= 3 ? SLIDE_LIMITS.tableHeaderWide : SLIDE_LIMITS.tableHeader));
-    const rows = Array.isArray(src.rows)
-      ? src.rows
-          .map((r) => arr(r, Math.max(1, headers.length), SLIDE_LIMITS.tableCell))
-          .filter((r) => r.some(Boolean))
-          .slice(0, SLIDE_LIMITS.tableRows)
+    // Son AVVAL (W3): ustunlar `tableCols`, qatorlar `tableRows` gacha; keyin sig'im USTUN VA QATOR soniga qarab (W4, N4).
+    const rawHeaders = list(src.headers, lim.tableCols);
+    const rawRows = Array.isArray(src.rows)
+      ? src.rows.map((r) => list(r, Math.max(1, rawHeaders.length))).filter((r) => r.length > 0).slice(0, lim.tableRows)
       : [];
     // Jadvalsiz «table» slayd — bo'sh ramka. Bunday holda bandlarga qaytamiz.
-    if (headers.length < 2 || rows.length < 2) {
+    if (rawHeaders.length < 2 || rawRows.length < 2) {
       return { ...base, layout: "bullets", bullets: arr(o.bullets, rules.maxBullets, rules.bulletChars) };
     }
+    const headMax = clipLimit("tableHeader", rules, visual, rawHeaders.length, rawRows.length);
+    const cellMax = clipLimit("tableCell", rules, visual, rawHeaders.length, rawRows.length);
+    const headers = rawHeaders.map((h) => clipTo(h, headMax));
+    const rows = rawRows.map((r) => r.map((c) => clipTo(c, cellMax)));
     return { ...base, table: { headers, rows } };
   }
   if (layout === "process") {
-    const steps = Array.isArray(o.steps)
-      ? o.steps
-          .map((s, n) => {
-            if (!s || typeof s !== "object") return null;
-            const x = s as Record<string, unknown>;
-            const t = clip(String(x.title ?? ""), SLIDE_LIMITS.stepTitle);
+    // Son AVVAL (W3): sarlavhasi bor bosqichlar, `stepsMax` gacha; chegara shu SONDA (W4).
+    const raws = (Array.isArray(o.steps) ? o.steps : [])
+      .filter((s): s is Record<string, unknown> => Boolean(s) && typeof s === "object" && String((s as Record<string, unknown>).title ?? "").trim() !== "")
+      .slice(0, lim.stepsMax);
+    const titleMax = clipLimit("stepTitle", rules, visual, raws.length);
+    const textMax = clipLimit("stepText", rules, visual, raws.length);
+    const steps = raws.length
+      ? raws
+          .map((x, n) => {
+            const t = clipTo(String(x.title ?? ""), titleMax);
             if (!t) return null;
             /*
              * 90 chegaraga TEGIB turardi (o'lchovda 4 bosqich × ~80
@@ -267,10 +284,9 @@ function normalizeSlide(raw: unknown, i: number, footer: string, rules: BulletRu
              * ~255. 160 shu oraliqda: to'liq gap sig'adi, eng yomon
              * holatda shrift 13 pt ga tushadi, polga (11) yetmaydi.
              */
-            return { n: String(x.n ?? n + 1), title: t, text: clip(String(x.text ?? ""), STEP_TEXT_MAX) };
+            return { n: String(x.n ?? n + 1), title: t, text: clipTo(String(x.text ?? ""), textMax) };
           })
           .filter((x): x is { n: string; title: string; text: string } => Boolean(x))
-          .slice(0, SLIDE_LIMITS.stepsMax)
       : [];
     return { ...base, steps };
   }
@@ -290,8 +306,9 @@ function normalizeSlide(raw: unknown, i: number, footer: string, rules: BulletRu
           .map((q) => {
             if (!q || typeof q !== "object") return null;
             const x = q as Record<string, unknown>;
-            const text = clip(String(x.q ?? ""), QUIZ_Q_MAX);
-            const options = arr(x.options, SLIDE_LIMITS.quizOptions, QUIZ_OPTION_MAX);
+            const text = clipTo(String(x.q ?? ""), QUIZ_Q_MAX);
+            // Variant — auditoriya poli × vizual kartasi bo'yicha (W4; son yo'q — doim 4).
+            const options = arr(x.options, SLIDE_LIMITS.quizOptions, clipLimit("quizOption", rules, visual));
             if (!text || options.length !== SLIDE_LIMITS.quizOptions) return null;
             // Indeks 0..3 dan tashqarida bo'lsa qisiladi — «javobsiz savol» holati bo'lmasin.
             const n = Number(x.answer);
@@ -317,8 +334,8 @@ function normalizeSlide(raw: unknown, i: number, footer: string, rules: BulletRu
           .map((r) => {
             if (!r || typeof r !== "object") return null;
             const x = r as Record<string, unknown>;
-            const title = clip(String(x.title ?? ""), SLIDE_LIMITS.refTitle);
-            const source = clip(String(x.source ?? ""), SLIDE_LIMITS.refSource);
+            const title = clipTo(String(x.title ?? ""), SLIDE_LIMITS.refTitle);
+            const source = clipTo(String(x.source ?? ""), SLIDE_LIMITS.refSource);
             return title || source ? { title: title || source, source } : null;
           })
           .filter((x): x is { title: string; source: string } => Boolean(x))
@@ -352,7 +369,7 @@ function normalizeSlide(raw: unknown, i: number, footer: string, rules: BulletRu
  *   — yo'qotishsiz o'girish mumkin bo'lsa, o'giriladi;
  *   — o'girish uydirma raqam talab qilsa (stats), model layouti saqlanadi.
  */
-export function coerceLayout(s: SlideModel, want: SlideLayout, maxBullets = 4): SlideModel {
+export function coerceLayout(s: SlideModel, want: SlideLayout, maxBullets = 4, rules?: BodyRules): SlideModel {
   if (s.layout === want) return s;
   const pool = (s.bullets?.length ? s.bullets : [s.subtitle, s.quote].filter(Boolean) as string[]).filter(Boolean);
 
@@ -378,12 +395,14 @@ export function coerceLayout(s: SlideModel, want: SlideLayout, maxBullets = 4): 
     return {
       ...s,
       layout: want,
-      steps: pool.slice(0, 4).map((b, i) => {
+      // W5: qattiq 40/90 o'rniga maket chegaralari (bosqich SONI bo'yicha, auditoriya ma'lum bo'lsa).
+      steps: pool.slice(0, rules ? limitsFor(rules).stepsMax : 4).map((b, i, all) => {
         const [head, ...rest] = b.split(/\s+[—–:-]\s+/);
+        const lim = rules ? limitsFor(rules, { steps: all.length }) : SLIDE_LIMITS;
         return {
           n: String(i + 1),
-          title: clip(head, 40),
-          text: clip(rest.join(" — ") || b, 90),
+          title: clipTo(head, lim.stepTitle),
+          text: clipTo(rest.join(" — ") || b, lim.stepText),
         };
       }),
     };
@@ -396,7 +415,7 @@ export function coerceLayout(s: SlideModel, want: SlideLayout, maxBullets = 4): 
   }
   if (want === "quote") {
     const quote = s.quote || pool[0];
-    return quote ? { ...s, layout: want, quote: clip(quote, 220) } : s;
+    return quote ? { ...s, layout: want, quote: clipTo(quote, SLIDE_LIMITS.quote) } : s;
   }
   if (want === "section" || want === "closing" || want === "title") {
     return { ...s, layout: want, subtitle: s.subtitle || pool[0] };
@@ -405,11 +424,11 @@ export function coerceLayout(s: SlideModel, want: SlideLayout, maxBullets = 4): 
   return { ...s, layout: want, bullets: pool.length ? pool.slice(0, maxBullets) : s.bullets };
 }
 
-function parseDeckJson(raw: string, footer: string, want: number, rules: BulletRules): SlideModel[] {
+function parseDeckJson(raw: string, footer: string, want: number, rules: BulletRules, visual?: SlideVisual): SlideModel[] {
   const data = parseLlmJson(raw) as { slides?: unknown } | null;
   if (!Array.isArray(data?.slides)) return [];
   return data.slides
-    .map((s, i) => normalizeSlide(s, i, footer, rules))
+    .map((s, i) => normalizeSlide(s, i, footer, rules, visual))
     .filter((s): s is SlideModel => Boolean(s))
     .slice(0, Math.max(6, Math.min(24, want + 2)));
 }
@@ -436,6 +455,8 @@ export function extractNewSlides(
   footer: string,
   rules: BulletRules,
   opts: { final: boolean },
+  /** Deka vizuali — sig'im (`clipLimit`) shunga qarab; berilmasa auditoriya chegarasi. */
+  visual?: SlideVisual,
 ): { index: number; slide: SlideModel }[] {
   const data = parseLlmJson(partial) as { slides?: unknown } | null;
   if (!Array.isArray(data?.slides)) return [];
@@ -443,7 +464,7 @@ export function extractNewSlides(
   const ready = opts.final ? list.length : list.length - 1;
   const out: { index: number; slide: SlideModel }[] = [];
   for (let i = Math.max(0, emitted); i < ready; i += 1) {
-    const slide = normalizeSlide(list[i], i, footer, rules);
+    const slide = normalizeSlide(list[i], i, footer, rules, visual);
     // `null` — sarlavhasiz element; o'tkazib yuboriladi, lekin keyingi
     // elementlarni bloklamaydi (chaqiruvchi `index + 1` dan davom etadi).
     if (slide) out.push({ index: i, slide });
@@ -554,7 +575,7 @@ export function syncAgenda(slides: SlideModel[], rules: Pick<BodyRules, "bulletC
   const agenda = slides.find((s) => s.layout === "agenda");
   if (!agenda) return;
   const items = planHeads(slides)
-    .map((s) => clipWords(stripOrdinal(s.title), rules.bulletChars))
+    .map((s) => clipTo(stripOrdinal(s.title), rules.bulletChars))
     .filter(Boolean);
   if (items.length) agenda.bullets = items;
 }
@@ -654,7 +675,7 @@ export async function writeSlidesWithLlm(
     // Rejadagi maket va «diagramma» bayrog'i — YAKUNIY yig'ishdagi
     // bilan bir xil qoida, aks holda jonli slayd bir maketda ko'rinib,
     // `deck` kelganda boshqasiga sakrardi.
-    let out = beat ? coerceLayout(sl, beat.layout, rules.maxBullets) : sl;
+    let out = beat ? coerceLayout(sl, beat.layout, rules.maxBullets, rules) : sl;
     if (beat?.chart) out = { ...out, chart: true };
     if (beat?.plan) out = { ...out, plan: beat.plan };
     onProgress({ type: "slide", index: abs, slide: { ...out } });
@@ -735,7 +756,7 @@ export async function writeSlidesWithLlm(
           if (closes === lastCloses || now - lastAt < 300) return;
           lastCloses = closes;
           lastAt = now;
-          for (const item of extractNewSlides(partial, relEmitted, footer, rules, { final: false })) {
+          for (const item of extractNewSlides(partial, relEmitted, footer, rules, { final: false }, tpl.visual)) {
             relEmitted = item.index + 1;
             emitSlide(from + item.index, item.slide);
           }
@@ -748,7 +769,7 @@ export async function writeSlidesWithLlm(
       console.warn("[slide-write] bo‘lak javobsiz", from + 1, "-", to);
       return [];
     }
-    const parsed = parseDeckJson(raw, footer, n, rules);
+    const parsed = parseDeckJson(raw, footer, n, rules, tpl.visual);
     // Bo'lak yopildi — oqimda chiqmay qolgan (yoki umuman oqimsiz
     // kelgan) indekslar SHU YERDA chiqadi. `n` dan ortig'i keyinroq
     // kesiladi, shuning uchun hodisa ham berilmaydi.
@@ -825,9 +846,9 @@ export async function writeSlidesWithLlm(
    * Raqamlash birlashtirish va filtrlashdan KEYIN qilinadi — shunda
    * bo'lakka bog'liq bo'lmagan holda noyoblik kafolatlanadi.
    */
-  const slides = renumberSlides(
+  let slides = renumberSlides(
     slots
-      .map((sl, i) => (sl && plan[i] ? coerceLayout(sl, plan[i].layout, rules.maxBullets) : sl))
+      .map((sl, i) => (sl && plan[i] ? coerceLayout(sl, plan[i].layout, rules.maxBullets, rules) : sl))
       // «Diagramma» bloki beat'dagi `chart` bayrog'ini slaydga o'tkazadi (WP-B qo'yadi).
       .map((sl, i) => (sl && plan[i]?.chart ? { ...sl, chart: true } : sl))
       // Reja bandi raqami — FAQAT rejadan (AUDIT-25): model yozmaydi, maket shuni chizadi.
@@ -837,15 +858,8 @@ export async function writeSlidesWithLlm(
   applyResearchRefs(slides, ctx);
   syncAgenda(slides, rules);
   /*
-   * AUDIT-25 P3: yupqa slaydlarni ta'mirlash shu yerda, `finalizeQuiz`
-   * dan OLDIN chaqiriladi —
-   *   slides = await repairThinSlides(slides, meta, tpl, ctx, deadline);
-   *   syncAgenda(slides, rules); // ta'mir sarlavhani o'zgartirgan bo'lishi mumkin
-   * `slide-quality.ts` P3 filialida; birlashguncha izohda qoladi.
-   */
-  finalizeQuiz(slides, meta);
-  /*
-   * Va'da qilingan hajmning quyi chegarasi. Bundan kam bo'lsa deck
+   * Va'da qilingan hajmning quyi chegarasi — TA'MIRDAN OLDIN (W1): `null`
+   * qaytadigan dekaga qo'shimcha LLM chaqiruvi puli sarflanmasin. Bundan kam bo'lsa deck
    * paketga mos kelmaydi; `null` qaytarib, chaqiruvchi pulni qaytaradi.
    *
    * Ilgari 0.75 edi — «premium_long» (16 slayd, 8 000 tanga) shu bilan
@@ -861,6 +875,18 @@ export async function writeSlidesWithLlm(
     console.warn("[slide-write] too few slides", slides.length, "want", want);
     return null;
   }
+  /*
+   * YUPQA slaydlarni ta'mirlash (AUDIT-25 6-qaror, P3 `slide-quality.ts`):
+   * BITTA qo'shimcha chaqiruv, faqat yupqa slaydlar, byudjet qolsa; slayd
+   * faqat endi yupqa bo'lmasa qabul. Hech qachon otmaydi — yiqilsa asl
+   * slaydlar qaytadi. `finalizeQuiz` dan OLDIN: ta'mir quiz variantini
+   * ham to'ldirishi mumkin, kalit esa yakuniy savollardan yig'ilsin.
+   * Keyin agenda QAYTA sinxronlanadi — ta'mir sarlavhaga tegmaydi, lekin
+   * manba bitta qoidada qolsin (shartnoma: agenda = reja sarlavhalari).
+   */
+  slides = await repairThinSlides(slides, meta, tpl, ctx, deadline, jobDeadline);
+  syncAgenda(slides, rules);
+  finalizeQuiz(slides, meta);
   const L = slideLabels(meta.language);
   if (meta.titleSlide === false) {
     // Foydalanuvchi titul slaydini xohlamadi — model baribir yozgan bo‘lsa olib tashlaymiz.
@@ -875,12 +901,12 @@ export async function writeSlidesWithLlm(
       footer,
     });
   } else {
-    const kick = clip(slides[0].kicker || meta.subject || L.presentation, 28);
+    const kick = clipTo(slides[0].kicker || meta.subject || L.presentation, 28);
     const same = kick.toLowerCase() === meta.topic.toLowerCase();
     slides[0] = {
       ...slides[0],
       title: meta.topic,
-      kicker: same ? clip(meta.subject || meta.workLabel || L.presentation, 28) : kick,
+      kicker: same ? clipTo(meta.subject || meta.workLabel || L.presentation, 28) : kick,
     };
   }
   if (slides[slides.length - 1].layout !== "closing") {

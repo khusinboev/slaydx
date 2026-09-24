@@ -517,7 +517,15 @@ test("mavjud tuzilma qatorlari saqlandi (WP-0a shartnomasi buzilmasin)", () => {
   assert.match(p, /section slaydda subtitle — BO‘SH QOLMASIN/);
   assert.match(p, /closing slaydda subtitle/);
   assert.match(p, /twoCol va compare/);
-  assert.match(p, /table layout: 2–4 ustun, 3–5 qator/);
+  assert.match(p, /table layout: katak matni qisqa/);
+  /*
+   * AUDIT-25 W6: sonlar `structure.ts` dan olindi — ular «MAKET HAJMI»
+   * blokida (`wordTargetLines`) hisoblanadi. Ikki manba qolsa ular zid
+   * edi («10–15 so‘z» vs hisoblangan oraliq).
+   */
+  assert.match(p, /— section: subtitle \d+–\d+ so‘z/);
+  assert.match(p, /— table: \d+ tagacha ustun/);
+  assert.doesNotMatch(p, /20–35 so‘zlik|15–25 so‘zlik|\(10–15 so‘z\)|2–4 ustun, 3–5 qator/);
   assert.match(p, /stats ga uydirma milliard\/tonna\/foiz YOZILMASIN/);
 });
 
