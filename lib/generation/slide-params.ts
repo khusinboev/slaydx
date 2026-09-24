@@ -21,7 +21,6 @@
  * to'xtatiladi.
  */
 import type { FormValues } from "../types";
-import type { DocMeta } from "./types";
 import { safeSlice } from "./safe-text";
 import { purposeDefaults } from "./slide-purpose";
 
@@ -212,6 +211,12 @@ export type PlanCapacityInput = {
   speakerNotes?: PlanScalar;
   internetSearch?: PlanScalar;
   slidePurpose?: PlanScalar;
+  /**
+   * Vosita — `"pro-slide"` bo'lsa yuborilgan `blocks` foydalanuvchi TANLOVI
+   * (chiplar), boshqa hollarda (oddiy slayd ham `blocks` yuboradi) — yo'q.
+   * `extractMeta` o'z `tool.id` sini beradi; forma ham o'z vositasini bersin.
+   */
+  tool?: PlanScalar;
 };
 
 /**
@@ -269,44 +274,67 @@ export function normalizeQuizCount(v: unknown): number | undefined {
   return [...QUIZ_COUNTS].reverse().find((n) => n <= q) ?? 0;
 }
 
-/** Forma yoki `DocMeta` qiymatlaridan sig'im va agenda qarori. */
-export function planBudget(v: PlanCapacityInput): PlanBudget {
-  // `wantSlides` bilan BIR XIL qisish (4…30); titul va yakun ayriladi.
-  const want = clampInt(v.slideCount, SLIDE_MIN, SLIDE_MAX, SLIDE_DEFAULT);
-  const bodyWant = want - (v.titleSlide === false ? 0 : 1) - 1;
-  // `extractMeta` bilan BIR XIL: yuborilmagan bloklar — tur standarti.
-  const purpose = typeof v.slidePurpose === "string" ? v.slidePurpose : undefined;
-  const blocks =
-    v.blocks === undefined || v.blocks === null
-      ? purposeDefaults(purpose).blocks
-      : typeof v.blocks === "string"
-        ? splitCsv(v.blocks, 12, 24)
-        : Array.isArray(v.blocks)
-          ? (v.blocks as readonly string[])
-          : [];
-  const agenda = v.agendaSlide === true ? true : v.agendaSlide === false ? false : undefined;
-  const on = activeBlockIds(blocks, normalizeQuizCount(v.quizCount), v.internetSearch === true, agenda);
-  return planBudgetForBody(bodyWant, on, agenda);
+/**
+ * YUBORILGAN bloklar ro'yxati USTUN (AUDIT-25 P1 sharhi, 1-band).
+ *
+ * Pro formada «Tuzilma bloklari» chiplari bor va forma `blocks` ni
+ * HAR DOIM yuboradi — shu bilan birga `quizCount: 0` va `agendaSlide:
+ * true` ni ham. Agar ular chiplardan ustun tursa, «Test» chipini
+ * belgilagan foydalanuvchi testsiz deka olardi, «Reja» ni olib tashlagani
+ * esa baribir reja slaydini olardi — A3-01 ning ko'zgu nuqsoni. Qoida:
+ *   bloklar YUBORILGAN (pro)  — `quizCount: 0` «test» belgilangan bo'lsa
+ *                               e'tiborsiz (son standartga — `undefined`),
+ *                               `agendaSlide: true` e'tiborsiz (reja faqat
+ *                               chipdan); `agendaSlide: false` baribir
+ *                               agenda SLAYDINI o'chiradi;
+ *   aks holda                 — ikkala o'zgartirish ham ishlaydi (A3-01/02).
+ *   (oddiy slayd yoki          Oddiy forma ham `blocks` yuboradi (tur
+ *    bloklarsiz so'rov)        standarti), lekin unda chip YO'Q — ya'ni u
+ *                              tanlov emas: `blocksSent` faqat pro-slide da.
+ * `extractMeta` va `planBudget` shu funksiyadan o'tadi — forma sig'imi
+ * bilan dvigatel bir xil qoladi.
+ */
+export function resolvePlanFlags(
+  blocksSent: boolean,
+  blocks: readonly string[],
+  quizCount: number | undefined,
+  agendaSlide: boolean | undefined,
+): { quizCount: number | undefined; agendaSlide: boolean | undefined } {
+  if (!blocksSent) return { quizCount, agendaSlide };
+  return {
+    quizCount: quizCount === 0 && blocks.includes("test") ? undefined : quizCount,
+    agendaSlide: agendaSlide === true ? undefined : agendaSlide,
+  };
 }
 
-/**
- * `DocMeta` → sig'im kirishi (dvigatel va prompt `extractMeta` dan keyin
- * shu yo'l bilan hisoblaydi; forma esa qiymatlarini to'g'ridan-to'g'ri).
- */
-export function planInputOf(
-  meta: Pick<DocMeta, "targetPages" | "blocks" | "quizCount" | "agendaSlide" | "titleSlide" | "speakerNotes" | "internetSearch"> &
-    Partial<Pick<DocMeta, "slidePurpose">>,
-): PlanCapacityInput {
-  return {
-    slideCount: meta.targetPages || SLIDE_DEFAULT,
-    blocks: meta.blocks ?? [],
-    quizCount: meta.quizCount,
-    agendaSlide: meta.agendaSlide,
-    titleSlide: meta.titleSlide,
-    speakerNotes: meta.speakerNotes,
-    internetSearch: meta.internetSearch,
-    slidePurpose: meta.slidePurpose,
-  };
+/** Deka TANASI (titul va yakunsiz) — `wantSlides` bilan BIR XIL qisish (4…30). */
+export function bodyWantOf(slideCount: unknown, titleSlide: unknown): number {
+  const want = clampInt(slideCount, SLIDE_MIN, SLIDE_MAX, SLIDE_DEFAULT);
+  return want - (titleSlide === false ? 0 : 1) - 1;
+}
+
+/** Forma qiymatlaridan sig'im va agenda qarori (`extractMeta` bilan bir xil yo'l). */
+export function planBudget(v: PlanCapacityInput): PlanBudget {
+  // `extractMeta` bilan BIR XIL: yuborilmagan bloklar — tur standarti.
+  const purpose = typeof v.slidePurpose === "string" ? v.slidePurpose : undefined;
+  const given = v.blocks !== undefined && v.blocks !== null;
+  // Chip TANLOVI faqat pro formada — `extractMeta` bilan bir xil shart.
+  const sent = given && v.tool === "pro-slide";
+  const blocks = !given
+    ? purposeDefaults(purpose).blocks
+    : typeof v.blocks === "string"
+      ? splitCsv(v.blocks, 12, 24)
+      : Array.isArray(v.blocks)
+        ? (v.blocks as readonly string[])
+        : [];
+  const flags = resolvePlanFlags(
+    sent,
+    blocks,
+    normalizeQuizCount(v.quizCount),
+    v.agendaSlide === true ? true : v.agendaSlide === false ? false : undefined,
+  );
+  const on = activeBlockIds(blocks, flags.quizCount, v.internetSearch === true, flags.agendaSlide);
+  return planBudgetForBody(bodyWantOf(v.slideCount, v.titleSlide), on, flags.agendaSlide);
 }
 
 /**
@@ -326,8 +354,27 @@ export function planCapacity(v: PlanCapacityInput): number {
  * «4 band» ko'rsatib, deka 3 band bilan chiqardi (P4 ko'rib chiqish, 1-band).
  *
  * Pol 1 (`PLAN_ITEMS_MIN` emas): 4 slaydli dekaga qonuniy ravishda 1
- * band sig'adi. Noma'lum qiymat — `PLAN_ITEMS_DEFAULT`, keyin sig'imga.
+ * band sig'adi. Qiymat yuborilmagan/noto'g'ri bo'lsa — `defaultPlanItems
+ * (slideCount)`, slayd soni ham noma'lum bo'lsa `PLAN_ITEMS_DEFAULT`;
+ * keyin sig'imga. Foydalanuvchi ANIQ tanlagan son ustun.
  */
-export function effectivePlanItems(raw: unknown, capacity: number): number {
-  return Math.min(clampInt(raw, 1, PLAN_ITEMS_MAX, PLAN_ITEMS_DEFAULT), Math.max(1, capacity));
+export function effectivePlanItems(raw: unknown, capacity: number, slideCount?: number): number {
+  const fallback = slideCount === undefined ? PLAN_ITEMS_DEFAULT : defaultPlanItems(slideCount);
+  const missing = raw === undefined || raw === null || raw === "" || !Number.isFinite(Number(raw));
+  const want = missing ? fallback : clampInt(raw, 1, PLAN_ITEMS_MAX, fallback);
+  return Math.min(want, Math.max(1, capacity));
+}
+
+/**
+ * MOSLASHUVCHAN standart reja bandlari soni (egasi qarori, AUDIT-25):
+ * taxminan har uch slaydga bitta band — 10 → 3, 12 → 4, 16 → 5, 18+ → 6.
+ *
+ * Qat'iy 5 kichik dekada taqdimot turining bloklarini siqib chiqarardi:
+ * «Ochiq dars» 10 slaydda maqsadlar, motivatsiya, amaliyot va uyga vazifa
+ * HAMMASI 5 ta reja slaydiga yon berardi (P1 sharhi, kuzatuv). 3 band bilan
+ * ular joyida qoladi, katta dekada esa reja to'liq 5–6 band bo'ladi.
+ */
+export function defaultPlanItems(slideCount: number): number {
+  if (!Number.isFinite(slideCount)) return PLAN_ITEMS_DEFAULT;
+  return Math.max(PLAN_ITEMS_MIN, Math.min(PLAN_ITEMS_MAX, Math.round(slideCount / 3)));
 }

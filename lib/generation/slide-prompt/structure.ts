@@ -1,5 +1,5 @@
-import { orderedBlocks } from "../slide-blocks";
-import { PLAN_ITEMS_DEFAULT, planBudget, planInputOf } from "../slide-params";
+import { plannedBlocks, type SlideBlockId } from "../slide-blocks";
+import { bodyWantOf } from "../slide-params";
 import type { SlideTemplate } from "../slide-templates";
 import type { DocMeta } from "../types";
 import type { SlidePromptCtx } from "./ctx";
@@ -29,16 +29,18 @@ export function structureLines(meta: DocMeta, tpl: SlideTemplate, ctx: SlideProm
    * Shuning uchun `internetSearch` ham shu yerga uzatiladi: u
    * `references` beat'ini keltiradi, demak qoidasi ham kerak.
    */
-  const blocks = orderedBlocks(meta.blocks, meta.quizCount, meta.internetSearch === true, meta.agendaSlide);
-  const has = (id: string) => blocks.some((b) => b.id === id);
   /*
-   * `blocksToBeats` bilan BIR XIL manba (`planBudget`): reja bloki bor,
-   * agenda so'ralgan VA dekaga sig'adi — 4 slaydli «reja + test» dekada
-   * agenda reja slaydiga yon beradi, prompt esa uni so'rab turmasin.
+   * AUDIT-25: blok endi sig'masa TASHLANADI — shuning uchun «yoqilgan»
+   * bloklar emas, dekaga HAQIQATAN tushadiganlar (`plannedBlocks`,
+   * `blocksToBeats` bilan bitta hisob). Aks holda prompt tashlangan
+   * `references`/`diagramma` qoidasini va'da qilardi (P1 sharhi, 2-band).
+   * Agenda ham shu yerdan: 4 slaydli «reja + test» dekada agenda reja
+   * slaydiga yon beradi, prompt esa uni so'rab turmasin.
    */
-  const budget = planBudget(planInputOf(meta));
-  const agenda = budget.agenda;
-  const planN = Math.max(1, Math.min(meta.planItems || PLAN_ITEMS_DEFAULT, budget.capacity));
+  const plan = plannedBlocks(meta, bodyWantOf(meta.targetPages || undefined, meta.titleSlide));
+  const has = (id: string) => plan.kept.includes(id as SlideBlockId);
+  const agenda = plan.agenda;
+  const planN = plan.planN;
 
   return [
     /*
@@ -73,8 +75,8 @@ export function structureLines(meta: DocMeta, tpl: SlideTemplate, ctx: SlideProm
      * quriladi (`writeSlidesWithLlm`) — bu qator model sarlavhani
      * reja bandi NOMI qilib yozishi uchun.
      */
-    `REJA BANDLARI: rejada ${planN} ta band bor — ketma-ketlikdagi «REJA i-band: …» slaydlari aynan shu bandlar, tartibi bilan. Band bo‘lim (section) bilan ochilsa — bo‘lim sarlavhasi band nomi, keyingi slayd uning mazmuni. «:» dan keyingi so‘z faqat slayd shakliga ishora, band nomi emas: band nomini mavzudan o‘zingiz tuzing (3–7 so‘z).${agenda ? " agenda bandlari AYNAN shu slaydlar sarlavhalari, shu tartibda." : ""}`,
-    `Sarlavhalar raqam bilan BOSHLANMASIN («1.», «2)», «I.» yo‘q) — tartib raqamini maket o‘zi qo‘yadi.`,
+    `REJA BANDLARI: rejada ${planN} ta band bor — ketma-ketlikdagi «REJA i-band: …» slaydlari aynan shu bandlar, tartibi bilan. Band bo‘lim (section) bilan ochilsa — bo‘lim sarlavhasi band nomi, keyingi slayd uning mazmuni. «:» dan keyingi so‘z faqat slayd shakliga ishora, band nomi emas: band nomini mavzudan o‘zingiz tuzing (3–7 so‘z). «REJA i-band:» yozuvini sarlavhaga ko‘chirmang.${agenda ? " agenda bandlari AYNAN shu slaydlar sarlavhalari, shu tartibda." : ""}`,
+    `Sarlavha boshida TARTIB raqami bo‘lmasin («1.», «2)», «I.» yo‘q; «3D», «5 ta qoida» — mumkin) — tartib raqamini maket o‘zi qo‘yadi.`,
     /*
      * SAVOLLAR SONI bu qatordan OLINDI (X-3).
      *
@@ -110,6 +112,6 @@ export function structureLines(meta: DocMeta, tpl: SlideTemplate, ctx: SlideProm
      * bir-biriga bog'lashga yordam beradi (masalan «maqsadlar» dagi
      * fe'l «uyga vazifa» da takrorlanmasin).
      */
-    blocks.length ? `TUZILMA BLOKLARI (rejada shu tartibda): ${blocks.map((b) => b.id).join(", ")}.` : "",
+    plan.kept.length ? `TUZILMA BLOKLARI (rejada shu tartibda): ${plan.kept.join(", ")}.` : "",
   ];
 }

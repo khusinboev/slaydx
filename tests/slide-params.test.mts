@@ -103,7 +103,8 @@ test("yangi maydonlar oddiy formada ham standart qiymat bilan keladi", () => {
   const m = meta({}, slide);
   assert.equal(m.slidePurpose, "general");
   assert.deepEqual(m.blocks, ["reja"]);
-  assert.equal(m.planItems, 5);
+  // Moslashuvchan standart (AUDIT-25, egasi qarori): 10 slayd → 3 band.
+  assert.equal(m.planItems, 3);
   /*
    * AUDIT-25 A3-01/02: «yuborilmagan» — `undefined` (tur standarti),
    * aniq tanlov esa o'z qiymatida qoladi: `quizCount: 0` tur standartidagi

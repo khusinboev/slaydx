@@ -336,7 +336,12 @@ test("uzunlik `want` ga tenglashadi — bloklar sig'sa", () => {
  */
 test("want bloklardan kichik: deka UZAYMAYDI — bloklar ankor oxiridan tashlanadi, reja va 1 savol qoladi", () => {
   const blocks = [...SLIDE_BLOCK_IDS];
-  // 8 slayd, 2 band: tanada 6 o'rin — reja, 2 band, 1 savol, qolgan 2 o'rin eng OLDINGI bloklarga.
+  /*
+   * 8 slayd, 2 band: tanada 6 o'rin — reja, 2 band, 1 savol, qolgan 2 o'rin.
+   * Avval qo'lda yoqilgan yon beruvchi TURDAGI bloklar (maqsadlar…jadval)
+   * tashlanadi, `diagramma`/`adabiyotlar` — oxirgi chora (prompt qoidasi
+   * bor, `adabiyotlar` ni `internetSearch` so'ragan bo'lishi mumkin).
+   */
   const out = run({ blocks, planItems: 2 }, "lecture", 8);
   const tag = layouts(out).join(",");
   assert.equal(out.length, 8, tag);
@@ -346,7 +351,7 @@ test("want bloklardan kichik: deka UZAYMAYDI — bloklar ankor oxiridan tashlana
   assert.equal(out.filter((b) => b.layout === "quiz").length, 1, tag);
   assert.equal(new Set(out.map((b) => b.plan).filter(Boolean)).size, 2, `reja bandlari: ${tag}`);
   const kept = SLIDE_BLOCKS.filter((blk) => blk.id !== "reja" && blk.id !== "test" && out.some((b) => b.role === blk.role({ planItems: 2, quizCount: 3 }))).map((b) => b.id);
-  assert.deepEqual(kept, ["maqsadlar", "motivatsiya"], `ankor oxiridan tashlanmadi: ${tag}`);
+  assert.deepEqual(kept.sort(), ["adabiyotlar", "diagramma"], `yon beruvchi turdagilar birinchi tashlanmadi: ${tag}`);
   // 4 slayd: agenda ham reja bandiga yon beradi — titul, band, savol, yakun.
   const tiny = run({ blocks }, "lecture", 4);
   assert.deepEqual(layouts(tiny).map((l, i) => (tiny[i].plan ? "plan" : l)), ["title", "plan", "quiz", "closing"]);
@@ -468,8 +473,14 @@ test("quiz qatori faqat test so'ralganda chiqadi va bitta savol talab qiladi", (
   assert.match(on, /answers layout: javob kalitini O‘ZINGIZ yozmang/);
   // Blok bor, son YUBORILMAGAN — qator baribir chiqadi (standart son rejada).
   assert.match(promptFor({ blocks: "reja,test" }), /quiz layout: HAR quiz slaydida/);
-  // A3-01: son ANIQ 0 — blok belgilangan bo'lsa ham test yo'q, qator ham yo'q.
-  assert.doesNotMatch(promptFor({ blocks: "reja,test", quizCount: 0 }), /quiz layout/);
+  /*
+   * P1 sharhi, 1-band: bloklar YUBORILGAN bo'lsa (pro chiplari) «Test»
+   * chipi `quizCount: 0` dan ustun — forma 0 ni doim yuboradi. Bloklar
+   * yuborilmagan (oddiy slayd) — aniq 0 tur standartidagi testni o'chiradi.
+   */
+  assert.match(promptFor({ blocks: "reja,test", quizCount: 0 }), /quiz layout: HAR quiz slaydida/);
+  assert.doesNotMatch(promptFor({ slidePurpose: "open_lesson", quizCount: 0 }), /quiz layout/);
+  assert.match(promptFor({ slidePurpose: "open_lesson" }), /quiz layout/);
   assert.doesNotMatch(promptFor({ blocks: "reja" }), /answers layout/);
 });
 
@@ -566,7 +577,8 @@ test("X-5: sig'im yetmasa STANDART blok yon beradi, quizCount saqlanadi", () => 
  * Bir xil blok ro'yxati bilan, lekin `slidePurpose: "general"` da
  * (standarti — faqat `reja`) hamma blok QO'LDA yoqilgan: birinchi yon
  * beruvchi yo'q, shuning uchun test guruhi 1 savolga qisqaradi va joy
- * (A3-04) ankor OXIRIDAGI bloklardan olinadi — adabiyotlar, uyga vazifa.
+ * (A3-04) ankor OXIRIDAGI yon beruvchi turdagi bloklardan olinadi —
+ * uyga vazifa, amaliyot; `adabiyotlar` oxirgi chora bo'lib qoladi.
  * «Ochiq dars» da esa standart bloklar birinchi yon beradi va test
  * guruhi o'z ulushini oladi.
  */
@@ -576,8 +588,9 @@ test("X-5: qo'lda yoqilgan blok standartdan KEYIN yon beradi", () => {
   assert.equal(hand.length, 10);
   assert.equal(planCount(hand), 3, tag);
   assert.equal(hand.filter((b) => b.layout === "quiz").length, 1, `standart blok yo'q — savol guruhi qisqaradi: ${tag}`);
-  for (const role of ["Reja", "Maqsadlar", "Motivatsiya", "Amaliyot"]) assert.ok(hand.some((b) => b.role.startsWith(role)), `${role}: ${tag}`);
-  for (const role of ["Uyga vazifa", "Adabiyotlar"]) assert.ok(!hand.some((b) => b.role.startsWith(role)), `${role} ankor oxiridan tashlanmadi: ${tag}`);
+  // Qo'lda yoqilgan yon beruvchi TURDAGI bloklar oxiridan tashlanadi; `adabiyotlar` — oxirgi chora.
+  for (const role of ["Reja", "Maqsadlar", "Motivatsiya", "Adabiyotlar"]) assert.ok(hand.some((b) => b.role.startsWith(role)), `${role}: ${tag}`);
+  for (const role of ["Uyga vazifa", "Amaliyot"]) assert.ok(!hand.some((b) => b.role.startsWith(role)), `${role} ankor oxiridan tashlanmadi: ${tag}`);
 
   /*
    * `jadval` «Dars» turining standartida YO'Q — ya'ni u qo'lda

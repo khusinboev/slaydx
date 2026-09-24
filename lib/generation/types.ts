@@ -352,7 +352,7 @@ export type DocMeta = {
   localExamples: boolean;
   /** Tuzilma bloklari; bo'sh — taqdimot turi standarti. */
   blocks: SlideBlockId[];
-  /** Reja slaydidagi bandlar soni (3–6). */
+  /** Reja slaydidagi bandlar soni (1–6, sig‘imga qisilgan; har band o‘z slaydini oladi — AUDIT-25). */
   planItems: number;
   /**
    * Reja (agenda) slaydi bo'lsinmi. `undefined` — taqdimot turi standarti

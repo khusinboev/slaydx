@@ -19,6 +19,7 @@ import {
   PRO_SLIDE_MAX,
   PRO_SLIDE_MIN,
   normalizeQuizCount,
+  resolvePlanFlags,
   planCapacity,
   SLIDE_DEFAULT,
   SLIDE_MAX,
@@ -181,27 +182,34 @@ export function extractMeta(tool: ToolConfig, values: FormValues): DocMeta {
    * testni ham o'chiradi, `undefined` — standart qoladi; `agendaSlide:
    * true` — standartida reja yo'q turga ham reja qo'shadi.
    */
-  const quizCount = normalizeQuizCount(values.quizCount);
-  const agendaSlide = values.agendaSlide === true ? true : values.agendaSlide === false ? false : undefined;
+  // Chiplar faqat PRO formada (reyestrda `blocks` faqat pro-slide) — oddiy forma ham `blocks` yuboradi, lekin u tanlov emas.
+  const blocksSent = tool.id === "pro-slide" && values.blocks !== undefined && values.blocks !== null;
+  const rawQuiz = normalizeQuizCount(values.quizCount);
+  const rawAgenda = values.agendaSlide === true ? true : values.agendaSlide === false ? false : undefined;
+  // Yuborilgan bloklar (pro chiplari) bu ikki bayroqdan USTUN — `resolvePlanFlags`.
+  const { quizCount, agendaSlide } = resolvePlanFlags(blocksSent, blocks, rawQuiz, rawAgenda);
   /*
    * Reja bandlari soni dekaga SIG'ADIGAN songa qisiladi (AUDIT-25, 3-qaror):
    * har band o'z slaydini oladi, deka esa `slideCount` dan uzaymaydi.
    * Pol 1 — kichik dekada 1–2 band qonuniy (4 slayd → 1). Forma ham AYNAN
-   * `effectivePlanItems` bilan qisadi. Sig'im kirishi — shu yerda allaqachon
-   * aniqlangan qiymatlar (slayd soni vosita standartiga qisilgan, bloklar
-   * tur standartidan), ya'ni forma yuborgan qiymatlar bilan bir xil.
+   * `effectivePlanItems` bilan qisadi; yuborilmagan son — slayd soniga
+   * moslashuvchan standart (`defaultPlanItems`). Sig'im kirishi — forma
+   * yuborgan shakl (bloklar faqat yuborilgan bo'lsa), slayd soni esa vosita
+   * standartiga qisilgan (pro 12, oddiy 10).
    */
   const planItems = effectivePlanItems(
     values.planItems,
     planCapacity({
       slideCount: slidePages,
-      blocks,
-      quizCount,
-      agendaSlide,
+      blocks: values.blocks === undefined || values.blocks === null ? undefined : blocks,
+      tool: tool.id,
+      quizCount: rawQuiz,
+      agendaSlide: rawAgenda,
       titleSlide: values.titleSlide !== false,
       internetSearch: values.internetSearch === true,
       slidePurpose,
     }),
+    slidePages,
   );
   /*
    * Rezyume chiqish tili — 18 ta (B-4). Akademik hujjatlarda skelet

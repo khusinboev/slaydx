@@ -144,6 +144,12 @@ export type SlideBeat = {
    * slaydlar sarlavhasidan quriladi.
    */
   plan?: number;
+  /**
+   * Shablonning pedagogik TUZILMA beat'i («Dars oqimi», «Baholash mezoni»…)
+   * — mavzu bandi emas. Reja bandining mazmun slaydi BO'LMAYDI, faqat
+   * qo'shimcha o'ringa (AUDIT-25 P1 sharhi, 3-band; `slide-blocks.ts`).
+   */
+  structural?: true;
 };
 
 export type SlideTemplate = {
@@ -228,20 +234,20 @@ export const SLIDE_TEMPLATES: SlideTemplate[] = [
       { layout: "title", role: "Dars mavzusi" },
       { layout: "bullets", role: "Maqsad — o‘quvchi nimani bilib oladi" },
       { layout: "section", role: "Yangi bilim" },
-      { layout: "process", role: "Dars oqimi" },
+      { layout: "process", role: "Dars oqimi", structural: true },
       { layout: "twoCol", role: "Misol / mashq" },
-      { layout: "stats", role: "Eslab qolinadigan asosiy son" },
+      { layout: "stats", role: "Eslab qolinadigan asosiy son", structural: true },
       { layout: "bullets", role: "Uyga vazifa" },
       { layout: "closing", role: "Yakun va baholash" },
     ],
     fillers: [
-      { layout: "twoCol", role: "To‘g‘ri javob / tipik xato" },
-      { layout: "bullets", role: "Sinfda 2 daqiqada bajariladigan mashq" },
-      { layout: "process", role: "Guruh ishi tartibi" },
+      { layout: "twoCol", role: "To‘g‘ri javob / tipik xato", structural: true },
+      { layout: "bullets", role: "Sinfda 2 daqiqada bajariladigan mashq", structural: true },
+      { layout: "process", role: "Guruh ishi tartibi", structural: true },
       { layout: "section", role: "Mustahkamlash" },
-      { layout: "bullets", role: "Baholash mezoni" },
-      { layout: "table", role: "Dars bosqichlari va vaqti" },
-      { layout: "twoCol", role: "Kuchli o‘quvchi / qiynalayotgan o‘quvchi uchun" },
+      { layout: "bullets", role: "Baholash mezoni", structural: true },
+      { layout: "table", role: "Dars bosqichlari va vaqti", structural: true },
+      { layout: "twoCol", role: "Kuchli o‘quvchi / qiynalayotgan o‘quvchi uchun", structural: true },
       { layout: "quote", role: "Darsning kalit jumlasi" },
     ],
   },

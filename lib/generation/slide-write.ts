@@ -64,14 +64,34 @@ function clip(text: string, n: number) {
  * Raqam maketdan keladi (`SlideModel.plan`, AUDIT-25): model yozgan
  * «3. Mexanizm» esa dekadagi o'rin bilan ham, rejadagi band bilan ham
  * mos kelmasdi — bo'lim slaydida ikkita har xil raqam turardi (S2).
- * Faqat 1–2 xonali son yoki I…X rim raqami VA ortidan ajratgich + bo'shliq:
- * «3D model», «12-maktab», «2024-yil» tegilmaydi.
+ * Faqat 1–2 xonali son (ajratgich «.», «)», «:», tire + bo'shliq, yoki
+ * bo'shliqsiz «1.Kirish») yoki I…X rim raqami (faqat «.»/«)» bilan). Ortidan
+ * RAQAM kelsa — bu oraliq/nisbat («18 – 20 asrlar», «10: 1 nisbat»), rim
+ * harfi ortidan «I.» kelsa — bosh harflar («V. I. Lenin»); tegilmaydi.
+ * «3D model», «12-maktab», «2024-yil», «1.2. Band», «X - noma’lum» ham.
  */
-const LEADING_ORDINAL = /^\s*(?:\d{1,2}|(?:X|IX|IV|V?I{1,3}|V))\s*(?:[.):]|[—–-])\s+/;
+const LEADING_ORDINAL =
+  /^\s*(?:\d{1,2}(?:\s*(?:[.):]|[—–-])\s+(?!\d)|\.(?=\p{Lu}))|(?:X|IX|IV|V?I{1,3}|V)\s*[.)]\s+(?!\d)(?!\p{Lu}\.))/u;
+
+/** Model rejadagi ichki «REJA 2-band:» prefiksini sarlavhaga ko'chirib qo'ysa (P1 sharhi, 4-band). */
+const PLAN_PREFIX = /^\s*REJA\s*\d+\s*-\s*band\s*:\s*/i;
 
 export function stripOrdinal(title: string): string {
-  const out = title.replace(LEADING_ORDINAL, "");
+  const out = title.replace(PLAN_PREFIX, "").replace(LEADING_ORDINAL, "");
   return out.trim() ? out : title;
+}
+
+/**
+ * So'z chegarasida qisqartirish — agenda bandi uchun (P1 sharhi, 5c).
+ * Sarlavha 80 belgigacha, «qisqa» hajmda esa reja qatori 58 belgi
+ * (`bulletChars × 0.72`) — `clip` bandni so'z o'rtasidan kesardi.
+ */
+function clipWords(text: string, n: number): string {
+  const t = String(text || "").replace(/\s+/g, " ").trim();
+  if (t.length <= n) return t;
+  const cut = safeSlice(t, n - 1);
+  const sp = cut.lastIndexOf(" ");
+  return `${(sp > n / 2 ? cut.slice(0, sp) : cut).replace(/[\s,;:—–-]+$/, "")}…`;
 }
 
 function arr(v: unknown, n: number, maxLen: number): string[] {
@@ -534,7 +554,7 @@ export function syncAgenda(slides: SlideModel[], rules: Pick<BodyRules, "bulletC
   const agenda = slides.find((s) => s.layout === "agenda");
   if (!agenda) return;
   const items = planHeads(slides)
-    .map((s) => clip(stripOrdinal(s.title), rules.bulletChars))
+    .map((s) => clipWords(stripOrdinal(s.title), rules.bulletChars))
     .filter(Boolean);
   if (items.length) agenda.bullets = items;
 }
@@ -1002,7 +1022,8 @@ export async function buildSlideAcademicDoc(meta: DocMeta, deadline?: number, op
     // NUSXA: `attachSlideImages` va titul tuzatishlari slaydlarni
     // JOYIDA o'zgartiradi — hodisa obyektiga ta'sir qilmasin.
     slides: structuredClone(fallbackSlides(meta, tpl, beats)),
-    roles: beats.map((b) => b.role),
+    // Skelet yorlig'i ichki «REJA i-band:» prefiksini ko'rsatmasin (P1 sharhi, 5b).
+    roles: beats.map((b) => planRoleText(b.role)),
     meta,
     theme: themeId,
     template: tpl.id,

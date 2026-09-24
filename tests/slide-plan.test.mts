@@ -3,12 +3,28 @@ import assert from "node:assert/strict";
 import { TOOL_BY_ID } from "../lib/tools.ts";
 import type { FormValues } from "../lib/types.ts";
 import { extractMeta } from "../lib/generation/meta.ts";
-import { SLIDE_BLOCKS, blocksToBeats, orderedBlocks, planRoleText } from "../lib/generation/slide-blocks.ts";
+import { SLIDE_BLOCKS, blocksToBeats, orderedBlocks, planRoleText, plannedBlocks } from "../lib/generation/slide-blocks.ts";
 import { PURPOSE_DEFAULTS, SLIDE_PURPOSES } from "../lib/generation/slide-purpose.ts";
-import { PRO_SLIDE_MAX, PRO_SLIDE_MIN, effectivePlanItems, planBudget, planCapacity } from "../lib/generation/slide-params.ts";
+import {
+  PLAN_ITEMS_DEFAULT,
+  PRO_SLIDE_DEFAULT,
+  PRO_SLIDE_MAX,
+  PRO_SLIDE_MIN,
+  activeBlockIds,
+  defaultPlanItems,
+  effectivePlanItems,
+  planBudget,
+  planCapacity,
+  resolvePlanFlags,
+} from "../lib/generation/slide-params.ts";
+import { SLIDE_LIMITS } from "../lib/generation/slide-limits.ts";
+import { AUDIENCE_RULES } from "../lib/generation/slide-audience.ts";
+import type { SlideProgressEvent } from "../lib/generation/slide-progress.ts";
+import { resetBlocksForPurpose } from "../components/forms/slide-fields.tsx";
 import { slideSystem } from "../lib/generation/slide-prompt/index.ts";
 import { SLIDE_TEMPLATES, SLIDE_TEMPLATE_BY_ID, expandBeats, type SlideBeat } from "../lib/generation/slide-templates.ts";
 import {
+  buildSlideAcademicDoc,
   deckBeats,
   extractNewSlides,
   fallbackSlides,
@@ -219,7 +235,7 @@ test("effectivePlanItems: forma va server AYNAN bir xil qisadi (pol 1, shift sig
     { slideCount: 30, planItems: 6, slidePurpose: "open_lesson" },
   ] as FormValues[]) {
     const m = extractMeta(pro, { topic: "X", ...v });
-    assert.equal(m.planItems, effectivePlanItems(v.planItems, planCapacity(v)), JSON.stringify(v));
+    assert.equal(m.planItems, effectivePlanItems(v.planItems, planCapacity(v), Number(v.slideCount)), JSON.stringify(v));
   }
 });
 
@@ -246,8 +262,9 @@ test("A3 oracle: ilgari 0 mazmunli kataklar endi ≥ planItems mazmun, uzunlik =
     const content = beats.filter((b) => b.plan && CONTENT.has(b.layout)).length;
     assert.ok(content >= meta.planItems && meta.planItems >= 1, `${tag}: ${content} mazmun, planItems ${meta.planItems}`);
   }
-  // Standart uzunlikda (10) ochiq dars — reja to'liq 5 band.
-  assert.equal(beatsOf({ slideCount: 10, slidePurpose: "open_lesson" }).meta.planItems, 5);
+  // Standart uzunlikda (10) ochiq dars — moslashuvchan standart 3 band (egasi qarori), 16 da 5.
+  assert.equal(beatsOf({ slideCount: 10, slidePurpose: "open_lesson" }).meta.planItems, 3);
+  assert.equal(beatsOf({ slideCount: 16, slidePurpose: "open_lesson" }).meta.planItems, 5);
 });
 
 // ═══════════════════════════════════════════ A3-01 / A3-02
@@ -415,6 +432,21 @@ test("sarlavha boshidagi tartib raqami olib tashlanadi, raqamli so'z esa qoladi"
     ["1.2. Kichik band", "1.2. Kichik band"],
     ["Ikki bosqich", "Ikki bosqich"],
     ["1.", "1."],
+    // P1 sharhi, 4-band — soxta ijobiylar (oraliq, nisbat, o'zgaruvchi, bosh harflar):
+    ["18 – 20 asrlar", "18 – 20 asrlar"],
+    ["3 - 4 sinflar uchun", "3 - 4 sinflar uchun"],
+    ["5 – 9-sinflar", "5 – 9-sinflar"],
+    ["X - noma’lum son", "X - noma’lum son"],
+    ["I – shaxs olmoshi", "I – shaxs olmoshi"],
+    ["V. I. Lenin", "V. I. Lenin"],
+    ["10: 1 nisbat", "10: 1 nisbat"],
+    ["5-sinf", "5-sinf"],
+    ["II jahon urushi", "II jahon urushi"],
+    ["1-mavzu: Kirish", "1-mavzu: Kirish"],
+    // bo'shliqsiz tartib raqami va ichki reja prefiksi
+    ["1.Kirish", "Kirish"],
+    ["REJA 2-band: Ta’rif", "Ta’rif"],
+    ["reja 3 - band : 2. Mexanizm", "Mexanizm"],
   ];
   for (const [inp, want] of cases) assert.equal(stripOrdinal(inp), want, inp);
   // `normalizeSlide` yo'li (jonli oqim ham shu).
@@ -466,10 +498,199 @@ test("prompt reja bandlari slaydlarini va raqamsiz sarlavhani aytadi", () => {
   const p = slideSystem(meta, resolveDeckTemplate(meta));
   assert.match(p, /(^|\n)REJA BANDLARI: rejada 4 ta band bor — ketma-ketlikdagi «REJA i-band: …» slaydlari/);
   assert.match(p, /agenda bandlari AYNAN shu slaydlar sarlavhalari/);
-  assert.match(p, /Sarlavhalar raqam bilan BOSHLANMASIN/);
+  assert.match(p, /Sarlavha boshida TARTIB raqami bo‘lmasin/);
+  assert.match(p, /«3D», «5 ta qoida» — mumkin/);
+  assert.match(p, /«REJA i-band:» yozuvini sarlavhaga ko‘chirmang/);
   // Kichik dekada agenda yon bergan — prompt uni so'ramaydi.
   const tiny = extractMeta(pro, { topic: "X", slideCount: 4, quizCount: 3 });
   const pt = slideSystem(tiny, resolveDeckTemplate(tiny));
   assert.doesNotMatch(pt, /agenda: AYNAN/);
   assert.match(pt, /(^|\n)REJA BANDLARI: rejada 1 ta band/);
+});
+
+// ═══════════════════════════════════════════ P1 sharhi (AUDIT-25-P1.md) va P4 N1
+
+/** `SlideComposer.initialValues()` ning HAQIQIY shakli — forma nima yuborsa, shu. */
+function formShape(p: string, isPro = true): FormValues {
+  return {
+    topic: "Suv aylanishi",
+    language: "uz",
+    slideAudience: "auto",
+    slidePurpose: p,
+    blocks: resetBlocksForPurpose(p),
+    planItems: PLAN_ITEMS_DEFAULT,
+    slideCount: isPro ? PRO_SLIDE_DEFAULT : 10,
+    textVolume: "standart",
+    quizCount: 0,
+    titleSlide: true,
+    agendaSlide: true,
+    internetSearch: false,
+    speakerNotes: true,
+    slideTemplate: "auto",
+  };
+}
+
+const idsOf = (csv: FormValues[string]) => String(csv ?? "").split(",").filter(Boolean);
+
+test("1-band: pro formasi shaklida «Test» va «Reja» chiplari dekani O'ZGARTIRADI (quizCount 0 / agendaSlide true doim yuborilsa ham)", () => {
+  for (const p of SLIDE_PURPOSES) {
+    const base = formShape(p);
+    const ids = idsOf(base.blocks);
+    const withTest = [...new Set([...ids, "test"])].join(",");
+    const noTest = ids.filter((x) => x !== "test").join(",");
+    assert.ok(beatsOf({ ...base, blocks: withTest }).beats.some((b) => b.layout === "quiz"), `${p}: «Test» chipi belgilangan — test yo'q`);
+    assert.ok(!beatsOf({ ...base, blocks: noTest }).beats.some((b) => b.layout === "quiz"), `${p}: «Test» chipi olingan — test chiqdi`);
+    const withReja = [...new Set(["reja", ...ids])].join(",");
+    const noReja = ids.filter((x) => x !== "reja").join(",");
+    assert.ok(beatsOf({ ...base, blocks: withReja }).beats.some((b) => b.layout === "agenda"), `${p}: «Reja» chipi belgilangan — agenda yo'q`);
+    assert.ok(!beatsOf({ ...base, blocks: noReja }).beats.some((b) => b.layout === "agenda"), `${p}: «Reja» chipi olingan — agenda chiqdi`);
+    // «Reja slaydi» o'chirg'ichi (false) baribir agenda slaydini o'chiradi.
+    assert.ok(!beatsOf({ ...base, blocks: withReja, agendaSlide: false }).beats.some((b) => b.layout === "agenda"), `${p}: agendaSlide false`);
+  }
+});
+
+test("P4 N1: oddiy «Slayd» ham `blocks` yuboradi — u tanlov emas, «Testsiz»/«Reja slaydi» ishlaydi", () => {
+  // Oddiy slayd + ochiq dars + aniq 0 + bloklar yuborilgan → test YO'Q.
+  const plain = extractMeta(slideTool, formShape("open_lesson", false));
+  assert.equal(plain.quizCount, 0);
+  assert.ok(!deckBeats(plain, resolveDeckTemplate(plain)).some((b) => b.layout === "quiz"), "oddiy slaydda «Testsiz» e'tiborsiz qoldi");
+  // Oddiy slayd + pitch + agendaSlide true → reja qo'shiladi.
+  const pitch = extractMeta(slideTool, formShape("pitch", false));
+  assert.ok(deckBeats(pitch, resolveDeckTemplate(pitch)).some((b) => b.layout === "agenda"), "oddiy slaydda «Reja slaydi» e'tiborsiz qoldi");
+  // Pro + «reja,test» + aniq 0 → test QOLADI (chip ustun), son — standart.
+  const chip = extractMeta(pro, { topic: "X", blocks: "reja,test", quizCount: 0 });
+  assert.equal(chip.quizCount, undefined);
+  assert.ok(deckBeats(chip, resolveDeckTemplate(chip)).some((b) => b.layout === "quiz"));
+  // Forma sig'imi dvigatel bilan bir xil — `tool` bilan.
+  for (const [tool, p] of [[slideTool, "open_lesson"], [pro, "open_lesson"], [slideTool, "pitch"], [pro, "training"]] as const) {
+    const v = formShape(p, tool === pro);
+    const m = extractMeta(tool, v);
+    assert.equal(m.planItems, effectivePlanItems(v.planItems, planCapacity({ ...v, tool: tool.id }), Number(v.slideCount)), `${tool.id}/${p}`);
+    const beats = deckBeats(m, resolveDeckTemplate(m));
+    assert.equal(planIds(beats).length, m.planItems, `${tool.id}/${p}: forma sig'imi ≠ dvigatel`);
+  }
+  assert.deepEqual(resolvePlanFlags(true, ["reja", "test"], 0, true), { quizCount: undefined, agendaSlide: undefined });
+  assert.deepEqual(resolvePlanFlags(true, ["reja"], 0, false), { quizCount: 0, agendaSlide: false });
+  assert.deepEqual(resolvePlanFlags(false, ["reja", "test"], 0, true), { quizCount: 0, agendaSlide: true });
+  assert.deepEqual([...activeBlockIds(["reja", "test"], 0, true, true)].sort(), ["adabiyotlar", "reja"]);
+});
+
+/** Beat'dan blok id (prompt ⇔ beat supurishi uchun). */
+function blockIdsInBeats(beats: SlideBeat[]): Set<string> {
+  const out = new Set<string>();
+  for (const b of beats) {
+    if (b.layout === "agenda") out.add("reja");
+    else if (b.layout === "quiz") out.add("test");
+    else if (b.layout === "references") out.add("adabiyotlar");
+    else if (b.layout === "stats" && b.chart) out.add("diagramma");
+    else for (const blk of SLIDE_BLOCKS) if (!b.plan && b.role === blk.role({ planItems: 1, quizCount: 3 })) out.add(blk.id);
+  }
+  return out;
+}
+
+test("2-band: prompt qatorlari ⇔ dekadagi beat (references, diagramma, quiz, TUZILMA) — plannedBlocks yagona manba", () => {
+  const fails: string[] = [];
+  let cases = 0;
+  const sets = ["", "reja", "reja,maqsadlar,motivatsiya,amaliyot,test,jadval,diagramma", "diagramma,adabiyotlar", ...SLIDE_BLOCKS.map((b) => b.id)];
+  for (const slidePurpose of ["general", "open_lesson", "defense", "pitch"]) {
+    for (const blocks of sets) {
+      for (const slideCount of [4, 6, 8, 12, 20]) {
+        for (const internetSearch of [false, true]) {
+          for (const quizCount of [undefined, 0, 3]) {
+            cases += 1;
+            const v: FormValues = { slideCount, slidePurpose, blocks, internetSearch, planItems: 3, ...(quizCount === undefined ? {} : { quizCount }) };
+            const { meta, tpl, beats } = beatsOf(v);
+            const p = slideSystem(meta, tpl);
+            const present = blockIdsInBeats(beats);
+            const tag = `${slidePurpose}/[${blocks}]/n=${slideCount}/net=${internetSearch}/q=${quizCount}`;
+            if (/references layout/.test(p) !== present.has("adabiyotlar")) fails.push(`${tag}: references qatori ⇎ beat`);
+            if (/stats \(diagramma\)/.test(p) !== present.has("diagramma")) fails.push(`${tag}: diagramma qatori ⇎ beat`);
+            if (/quiz layout/.test(p) !== present.has("test")) fails.push(`${tag}: quiz qatori ⇎ beat`);
+            const line = /TUZILMA BLOKLARI \(rejada shu tartibda\): ([^.]*)\./.exec(p)?.[1] ?? "";
+            const listed = line ? line.split(", ").sort().join(",") : "";
+            if (listed !== [...present].sort().join(",")) fails.push(`${tag}: TUZILMA «${line}» ≠ beats {${[...present].join(",")}}`);
+            const planned = plannedBlocks(meta, beats.length - 2);
+            if (planned.kept.slice().sort().join(",") !== listed) fails.push(`${tag}: plannedBlocks ≠ TUZILMA`);
+          }
+        }
+      }
+    }
+  }
+  assert.ok(cases >= 800, `supurish kichik: ${cases}`);
+  assert.deepEqual(fails.slice(0, 10), [], `${fails.length}/${cases}:\n  ${fails.slice(0, 10).join("\n  ")}`);
+  // Sharhdagi misol: 6 slayd, qo'lda 7 blok + internet — yon beruvchi TURDAGI bloklar
+  // `diagramma`/`adabiyotlar` dan OLDIN tashlanadi (4 o'rin: reja, 3 band... → 1 blok o'rni).
+  const { meta, beats } = beatsOf({ slideCount: 8, slidePurpose: "general", blocks: "reja,maqsadlar,motivatsiya,amaliyot,test,jadval,diagramma", internetSearch: true, planItems: 2 });
+  const kept = plannedBlocks(meta, beats.length - 2).kept;
+  assert.deepEqual(kept, ["reja", "diagramma", "test", "adabiyotlar"], `${beats.map((b) => b.layout).join(",")}`);
+});
+
+const STRUCTURAL = new Set([...SLIDE_TEMPLATE_BY_ID.lesson.beats, ...SLIDE_TEMPLATE_BY_ID.lesson.fillers].filter((b) => b.structural).map((b) => b.role));
+
+test("3-band: «Dars» shablonida reja bandi pedagogik tuzilma roli bo'lmaydi, bandlar baribir to'ladi", () => {
+  assert.equal(STRUCTURAL.size, 8, `tuzilma rollari: ${[...STRUCTURAL].join(" | ")}`);
+  for (const slidePurpose of ["lesson", "open_lesson", "training"]) {
+    for (const slideCount of [6, 10, 12, 16, 24, 30]) {
+      for (const planItems of [3, 6]) {
+        const { meta, beats } = beatsOf({ slideCount, slidePurpose, planItems, slideTemplate: "lesson" });
+        const tag = `${slidePurpose}/n=${slideCount}/p=${planItems}: ${beats.filter((b) => b.plan).map((b) => b.role).join(" | ")}`;
+        assert.deepEqual(coverage(beats, meta.planItems), [], tag);
+        for (const b of beats) if (b.plan) assert.ok(!STRUCTURAL.has(planRoleText(b.role)), `tuzilma roli reja bandida — ${tag}`);
+        // Umumiy (shablonniki emas) «stats» reja bandi bo'lmaydi.
+        for (const b of beats) if (b.plan && b.layout === "stats") assert.ok(!/Eslab qolinadigan ko‘rsatkich/.test(b.role), tag);
+      }
+    }
+  }
+  // Tuzilma beat'lari qo'shimcha o'ringa hamon yaraydi (katta dekada paydo bo'ladi).
+  const big = beatsOf({ slideCount: 30, slidePurpose: "lesson", planItems: 3, slideTemplate: "lesson" }).beats;
+  assert.ok(big.some((b) => !b.plan && STRUCTURAL.has(b.role)), big.map((b) => b.role).join(" | "));
+});
+
+test("5-band: skelet (`plan` hodisasi) rollarida ichki prefiks yo'q; sarlavha chegarasi reja qatoriga sig'adi", async () => {
+  const meta = extractMeta(slideTool, { topic: "Suv aylanishi", slideCount: 8 });
+  const tpl = resolveDeckTemplate(meta);
+  const beats = deckBeats(meta, tpl);
+  const events: SlideProgressEvent[] = [];
+  await withLlm(
+    () => jsonReply(JSON.stringify({ slides: beats.map(rawFor) })),
+    async () => {
+      await buildSlideAcademicDoc(meta, Date.now() + 120_000, { onProgress: (e) => events.push(e) }).catch(() => undefined);
+    },
+  );
+  const plan = events.find((e) => e.type === "plan") as Extract<SlideProgressEvent, { type: "plan" }> | undefined;
+  assert.ok(plan, "plan hodisasi yo'q");
+  assert.ok(plan.roles.every((r) => !/^REJA \d+-band/.test(r)), plan.roles.join(" | "));
+  assert.ok(plan.roles.includes(planRoleText(beats.find((b) => b.plan)!.role)));
+  // 5c: sarlavha (80) auditoriyalarning eng tor reja qatoriga sig'adi — `syncAgenda` kesmasin.
+  const minChars = Math.min(...Object.values(AUDIENCE_RULES).map((r) => r.bulletChars));
+  assert.ok(SLIDE_LIMITS.title <= minChars, `title ${SLIDE_LIMITS.title} > bulletChars ${minChars}`);
+  // «qisqa» hajmda qator torroq — kesish SO'Z chegarasida.
+  const long = "Fotosintezning yorug‘lik va qorong‘ilik bosqichlari hamda ularning ahamiyati";
+  const deck: SlideModel[] = [
+    { id: "a", layout: "agenda", title: "Reja", bullets: [] },
+    { id: "b", layout: "bullets", title: long, plan: 1 },
+  ];
+  syncAgenda(deck, { bulletChars: 40 });
+  const item = deck[0].bullets![0];
+  const body = item.slice(0, -1);
+  assert.ok(item.endsWith("…") && item.length <= 40, item);
+  assert.ok(long.startsWith(body) && long[body.length] === " ", `so'z o'rtasidan kesildi: «${item}»`);
+});
+
+test("7-band: moslashuvchan standart reja bandlari soni (egasi qarori)", () => {
+  assert.deepEqual([4, 8, 10, 12, 16, 18, 24, 30].map(defaultPlanItems), [3, 3, 3, 4, 5, 6, 6, 6]);
+  assert.equal(effectivePlanItems(undefined, 9, 12), 4);
+  assert.equal(effectivePlanItems("", 9, 16), 5);
+  assert.equal(effectivePlanItems(undefined, 9), PLAN_ITEMS_DEFAULT, "slayd soni noma'lum — 5");
+  assert.equal(effectivePlanItems(6, 9, 10), 6, "aniq tanlov ustun");
+  // Ochiq dars @10, band soni yuborilmagan: 3 band VA maqsadlar+motivatsiya+amaliyot+savol joyida, uzunlik 10.
+  for (const tool of [slideTool, pro]) {
+    const { meta, beats } = beatsOf({ slideCount: 10, slidePurpose: "open_lesson" }, tool);
+    const tag = `${tool.id}: ${beats.map((b) => b.layout).join(",")}`;
+    assert.equal(beats.length, 10, tag);
+    assert.equal(meta.planItems, 3, tag);
+    assert.equal(planIds(beats).length, 3, tag);
+    for (const role of ["Maqsadlar", "Motivatsiya", "Amaliyot"]) assert.ok(beats.some((b) => b.role.startsWith(role)), `${role} yo'q — ${tag}`);
+    assert.ok(beats.some((b) => b.layout === "quiz"), `savol yo'q — ${tag}`);
+  }
 });
