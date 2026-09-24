@@ -19,6 +19,7 @@ import {
   bulletMinWords,
   clipLimit,
   fmtRange,
+  tableCellMinWords,
   wordTargetLines,
   fitChars,
   layoutWordTargets,
@@ -278,6 +279,24 @@ test("jadval: prompt va qirqish BIR kalitda (ustun × qator) — promptga rioya 
   }
   // Talaba: 4 × 5 jadval (auditoriya ruxsati) — 5×6 ning 20 belgisi emas.
   assert.ok(limitsFor(bachelor).tableCell >= 40, `talaba katak ${limitsFor(bachelor).tableCell}`);
+});
+
+test("N2: kattalar (≤ 16 pt) jadvalida katak kamida 3 so'z — ustun soni shunga qarab; yoshlarga 2", () => {
+  const kids = bodyRules({ slideAudience: "school_1_4", textVolume: "standart", planItems: 5 }, "lesson");
+  const general = bodyRules({ slideAudience: "general", textVolume: "standart", planItems: 5 }, "lecture");
+  assert.equal(tableCellMinWords(bachelor), 3);
+  assert.equal(tableCellMinWords(general), 3);
+  assert.equal(tableCellMinWords(kids), 2);
+  for (const r of [bachelor, general]) {
+    for (const visual of ["classic", "academic", "dashboard"] as const) {
+      const t = layoutWordTargets(r, visual);
+      // Tanlangan ustun sonida katak ≥ 3 so'z (yoki eng kam — 2 ustun); prompt «katak 3–N so'z».
+      assert.ok(t.maxTableCols === 2 || t.tableCellMax >= 3, `${visual}: ${t.maxTableCols} ustun, katak ${t.tableCellMax} so'z`);
+      const line = wordTargetLines(r, visual).find((l) => l.startsWith("— table:"))!;
+      assert.match(line, /katak \d+(–\d+)? so‘z/);
+      assert.doesNotMatch(line, /katak ≤/);
+    }
+  }
 });
 
 test("prompt oraliqlari: «N–N» yo'q, bosqich matni har son uchun, «yozilsa» (sharh 8-band)", () => {
@@ -561,6 +580,21 @@ test("repair: test varianti — faqat belgilangan variant o'zgaradi, asli bilan 
         slides: [{ index: 0, quiz: [{ q: "Qaysi chora to‘g‘ri?", options: [fixedB, "Yer silkinishi natijasida suv kamaydi", "Soliqni oshirish", "Hech narsa qilmaslik"], answer: 1 }] }],
       }),
     async () => assert.equal((await repairThinSlides([quiz], meta, tpl, {}, later(), later()))[0], quiz, "almashtirish — rad"),
+  );
+  // N1: sig'maydigan uzun variantni «Am» ga «qisqartirish» — bosh mos bo'lsa ham RAD (≥ min(asl, ⌈cap/2⌉)).
+  const longA = `Amudaryo va Sirdaryo suvini ${sent(40)}`;
+  assert.ok(longA.length > cap, `shart: ${longA.length} > ${cap}`);
+  const over = S({ id: "q2", layout: "quiz", quiz: [{ q: "Qaysi chora to‘g‘ri?", options: [longA, "B", "C", "D"], answer: 0 }] });
+  assert.deepEqual(reasonsOf(over, rules, tpl.visual), ["clipped-option"]);
+  await withLlm(
+    () => jsonReply({ slides: [{ index: 0, quiz: [{ q: "Qaysi chora to‘g‘ri?", options: ["Am", "B", "C", "D"], answer: 0 }] }] }),
+    async () => assert.equal((await repairThinSlides([over], meta, tpl, {}, later(), later()))[0], over, "«Am» — rad"),
+  );
+  // To'liq qisqartma (bosh mos, yetarli uzun) — qabul.
+  const shortA = clipTo(longA, Math.ceil(0.5 * cap) + 10);
+  await withLlm(
+    () => jsonReply({ slides: [{ index: 0, quiz: [{ q: "Qaysi chora to‘g‘ri?", options: [shortA.replace(/…$/u, ""), "B", "C", "D"], answer: 0 }] }] }),
+    async () => assert.notEqual((await repairThinSlides([over], meta, tpl, {}, later(), later()))[0], over, "to'liq qisqartma — qabul"),
   );
   await withLlm(
     () => jsonReply({ slides: [{ index: 0, quiz: [{ q: "Qaysi chora to‘g‘ri?", options: fixed, answer: 2 }] }] }),
