@@ -64,14 +64,20 @@ export function Row({
   );
 }
 
-/** Qisqa tanlov (3–6 variant) — kichik segment tugmalar. */
+/** `Segmented` uchun variant — AUDIT-25 P4: `disabled` bilan boyitilgan (sig'imdan katta qiymatlarni o'chirish). */
+export type SegmentedOption = FieldOption & {
+  /** `true` bo'lsa tugma `disabled` + `aria-disabled` bilan o'chadi va kulrang bo'ladi (bosilmaydi). Standart: yoqilgan. */
+  disabled?: boolean;
+};
+
+/** Qisqa tanlov (3–6 variant) — kichik segment tugmalar. `disabled` variantlar (AUDIT-25) o'chadi, lekin ko'rinib turadi. */
 export function Segmented({
   options,
   value,
   onChange,
   ariaLabel,
 }: {
-  options: FieldOption[];
+  options: SegmentedOption[];
   value: string;
   onChange: (v: string) => void;
   ariaLabel?: string;
@@ -80,16 +86,23 @@ export function Segmented({
     <div role="radiogroup" aria-label={ariaLabel} className="bg-muted/60 inline-flex max-w-full flex-wrap gap-0.5 rounded-lg p-0.5">
       {options.map((o) => {
         const on = value === o.value;
+        const disabled = o.disabled === true;
         return (
           <button
             key={o.value}
             type="button"
             role="radio"
             aria-checked={on}
-            onClick={() => onChange(o.value)}
+            aria-disabled={disabled || undefined}
+            disabled={disabled}
+            onClick={() => !disabled && onChange(o.value)}
             className={cn(
               "rounded-md px-2.5 py-1 text-xs whitespace-nowrap transition-colors",
-              on ? "bg-card text-foreground shadow-sm font-medium" : "text-muted-foreground hover:text-foreground",
+              disabled
+                ? "text-muted-foreground/40 cursor-not-allowed"
+                : on
+                  ? "bg-card text-foreground shadow-sm font-medium"
+                  : "text-muted-foreground hover:text-foreground",
             )}
           >
             {o.label}

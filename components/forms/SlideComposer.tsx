@@ -8,7 +8,7 @@ import { updateProfile } from "@/lib/api-client";
 import { useAppStore } from "@/lib/store";
 import { useConfirmClick } from "@/components/overlays/useConfirmClick";
 import { profilePatchFrom } from "@/lib/profile-sync";
-import { PLAN_ITEMS_DEFAULT, PRO_SLIDE_DEFAULT, SLIDE_DEFAULT, type SlideTool } from "@/lib/generation/slide-params";
+import { PRO_SLIDE_DEFAULT, SLIDE_DEFAULT, type SlideTool } from "@/lib/generation/slide-params";
 import { cn } from "@/lib/cn";
 import { LanguagePicker } from "./fields";
 import { Card, Row } from "./compact";
@@ -83,6 +83,35 @@ const TOPIC_EXAMPLES = [
 const DRAFT_SKIP = new Set(["sourceText", "logoAssetId", "templateAssetId"]);
 const draftOf = (v: FormValues): FormValues => Object.fromEntries(Object.entries(v).filter(([k]) => !DRAFT_SKIP.has(k))) as FormValues;
 
+/**
+ * Qoralama versiyasi (AUDIT-25 N3): eski (versiyasiz) qoralamalar
+ * `planItems`/`quizCount`/`agendaSlide`ni ANIQ tanlov sifatida saqlagan
+ * (ilgari `initialValues` uchtasini ham doim yozardi). Yangi qoida — bu
+ * uchtasi tegilmaguncha `undefined`, server o'zi hisoblaydi — shu sabab
+ * versiyasiz qoralama tiklanganda ular E'TIBORGA OLINMAYDI (xuddi
+ * foydalanuvchi hech qachon tegmagandek).
+ */
+const DRAFT_VERSION = 2;
+
+/**
+ * Tiklangan qoralamani joriy qoidalarga moslaydi:
+ *  - `blocks` FAQAT pro-slaydda (N1) — oddiy «Slayd» qoralamasi eski
+ *    bo'lsa (o'shanda `blocks` doim yozilgan) bu kalit olib tashlanadi.
+ *  - versiyasiz (eski) qoralamada `planItems`/`quizCount`/`agendaSlide`
+ *    "aniq tanlov emas" deb hisoblanadi.
+ */
+function sanitizeRestoredDraft(draft: FormValues, pro: boolean): FormValues {
+  const out = { ...draft };
+  if (!pro) delete out.blocks;
+  if (out.v !== DRAFT_VERSION) {
+    delete out.planItems;
+    delete out.quizCount;
+    delete out.agendaSlide;
+  }
+  delete out.v;
+  return out;
+}
+
 export function SlideComposer({
   tool,
   profile,
@@ -108,14 +137,25 @@ export function SlideComposer({
       extra: "",
       slideAudience: "auto",
       slidePurpose: "general",
-      blocks: resetBlocksForPurpose("general"),
-      planItems: PLAN_ITEMS_DEFAULT,
+      // `blocks` FAQAT pro-slaydda (AUDIT-25 N1): oddiy «Slayd»da bu
+      // maydon uchun UI yo'q, lekin eski kod ikkalasiga ham yozardi —
+      // server (P1 `resolvePlanFlags`) `blocks` bor-yo'qligidan "pro"ni
+      // aniqlaydi, shu sabab oddiy formada bu maydon UMUMAN bo'lmasligi
+      // kerak. `case "slidePurpose"` onChange'i ham xuddi shu shartni
+      // qo'llaydi (`slide-fields.tsx`).
+      ...(pro ? { blocks: resetBlocksForPurpose("general") } : {}),
       slideCount: pro ? PRO_SLIDE_DEFAULT : SLIDE_DEFAULT,
       textVolume: "standart",
-      quizCount: 0,
+      // `planItems`/`quizCount`/`agendaSlide` ATAYLAB kiritilmagan
+      // (AUDIT-25 P1 A3-01/A3-02/N3): foydalanuvchi tegmagan bo'lsa
+      // `undefined` qoladi (JSON.stringify uni tashlab ketadi), server
+      // o'zi moslashuvchan standartni hisoblaydi (`planItems` —
+      // `defaultPlanItems(slideCount)`; `quizCount`/`agendaSlide` —
+      // taqdimot turi standartidagi `test`/`reja` blok bor-yo'qligi).
+      // Aniq qiymat FAQAT foydalanuvchi tegishli boshqaruvga tegsa
+      // yoziladi — `slide-fields.tsx` `case "planItems"/"quizCount"/"agendaSlide"`.
       slideImageStyle: "photo",
       titleSlide: true,
-      agendaSlide: true,
       localExamples: false,
       internetSearch: false,
       speakerNotes: true,
@@ -139,11 +179,11 @@ export function SlideComposer({
   useEffect(() => {
     if (!ready || restored) return;
     setRestored(true);
-    if (draft && Object.keys(draft).length) setValues((s) => ({ ...s, ...draft }));
-  }, [ready, draft, restored]);
+    if (draft && Object.keys(draft).length) setValues((s) => ({ ...s, ...sanitizeRestoredDraft(draft, pro) }));
+  }, [ready, draft, restored, pro]);
   useEffect(() => {
     if (!restored) return;
-    save(draftOf(values));
+    save({ ...draftOf(values), v: DRAFT_VERSION });
   }, [values, restored, save]);
   const clearConfirm = useConfirmClick(() => {
     void clear();
@@ -282,7 +322,7 @@ export function SlideComposer({
       </Card>
 
       {settingIds.length ? (
-        <SettingsDetails summary={settingsSummary(values, settingIds)}>
+        <SettingsDetails summary={settingsSummary(values, settingIds, kind)}>
           <div className="grid gap-x-6 sm:grid-cols-2">{settingIds.map((id) => renderSlideParam(id, values, set, ctx))}</div>
           <div className="mt-2">
             <ClearFormButton armed={clearConfirm.armed} onClick={clearConfirm.trigger} />
