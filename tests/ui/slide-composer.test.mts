@@ -143,6 +143,69 @@ test("Fayl rejimi: umumiy SourceFileRow bitta qatorda — matn sourceText ga tus
   }
 });
 
+// ───────────────────── AUDIT-25 P4: planItems sig'im (planCapacity) ─────────
+
+const planHint = () => document.querySelector("[data-plan-capacity-hint]")?.textContent ?? "";
+const planGroup = () => screen.getByRole("radiogroup", { name: "Reja bandlari" });
+
+test("planCapacity past bo'lganda yuqori variantlar o'chadi, joriy qiymat sig'imga tushadi, izoh chiqadi", () => {
+  mount("slide");
+  // Standart: slideCount=10, blocks=["reja"] (yemaydigan blok yo'q), agendaSlide=true → sig'im 10-2-1=7, hammasi yoqilgan.
+  for (const n of ["3", "4", "5", "6"]) {
+    assert.equal(within(planGroup()).getByRole("radio", { name: n }).getAttribute("aria-disabled"), "false", `${n}: boshida yoqilgan bo'lishi kerak`);
+  }
+  assert.equal(planHint(), "", "sig'im yetganda izoh chiqmasligi kerak");
+  // Slayder minimal (4) ga tushiriladi: sig'im = 4 - 2 - 1 (reja slaydi) - 0 = 1.
+  fireEvent.change(slider(), { target: { value: "4" } });
+  const six = within(planGroup()).getByRole("radio", { name: "6" });
+  assert.equal(six.getAttribute("aria-disabled"), "true", "6 band 1 ga sig'im bo'lganda o'chgan bo'lishi kerak");
+  assert.ok((six as HTMLButtonElement).disabled, "o'chgan variant haqiqatan ham disabled");
+  const one = within(planGroup()).getByRole("radio", { name: "1" });
+  assert.equal(one.getAttribute("aria-checked"), "true", "joriy (standart 5) sig'imga (1) tushirilib ko'rsatilishi kerak");
+  assert.equal(planHint(), "4 slaydga 1 band sig'adi", `izoh matni: «${planHint()}»`);
+  // Yig'iq sarlavha ham SAMARALI (qisilgan) qiymatni ko'rsatishi kerak — server aynan shunday yozadi.
+  assert.ok(chips().includes("1 band"), `yig'iq sarlavha samarali qiymatni ko'rsatishi kerak: ${chips()}`);
+  assert.ok(!chips().includes("5 band"), `yig'iq sarlavha eski (qisilmagan) qiymatni ko'rsatmasligi kerak: ${chips()}`);
+  // Slayder qaytarilsa (30) — sig'im yana yetadi, izoh yo'qoladi, standart 5 band qayta ko'rinadi.
+  fireEvent.change(slider(), { target: { value: "30" } });
+  assert.equal(planHint(), "", "sig'im qayta yetganda izoh yo'qolishi kerak");
+  assert.equal(within(planGroup()).getByRole("radio", { name: "6" }).getAttribute("aria-disabled"), "false", "sig'im qaytgach variantlar qayta yoqiladi");
+  assert.equal(within(planGroup()).getByRole("radio", { name: "5" }).getAttribute("aria-checked"), "true", "planItems o'zi o'zgarmagan edi (5) — endi sig'gani uchun ko'rinadi");
+});
+
+test("sig'im 3 dan kichik bo'lsa variantlar 1-2 gacha kengayadi, sig'gan variant bosilsa tanlanadi", () => {
+  mount("slide");
+  fireEvent.change(slider(), { target: { value: "4" } }); // sig'im = 1
+  const g = planGroup();
+  const values = within(g)
+    .getAllByRole("radio")
+    .map((r) => r.textContent);
+  assert.deepEqual(values, ["1", "2", "3", "4", "5", "6"], `variantlar 1 dan boshlab kengaygan bo'lishi kerak: ${values.join(",")}`);
+  // O'chgan variantni bosish HECH NARSANI o'zgartirmasligi kerak (disabled tugma klik chiqarmaydi).
+  fireEvent.click(within(g).getByRole("radio", { name: "4" }));
+  assert.ok(chips().includes("1 band"), `o'chgan variant bosilgach ham 1 band qolishi kerak: ${chips()}`);
+  // Sig'gan variantni (1) bossa — belgilangan holicha qoladi (allaqachon tanlangan samarali qiymat).
+  fireEvent.click(within(g).getByRole("radio", { name: "1" }));
+  assert.equal(within(g).getByRole("radio", { name: "1" }).getAttribute("aria-checked"), "true");
+});
+
+test("tooltip izohi (A3-06): «har biri o'z slaydi bilan» va joriy sig'im raqami bilan tirik yangilanadi", () => {
+  mount("slide");
+  const tip = () => (planGroup().closest(".grid") as HTMLElement).querySelector("[title]")?.getAttribute("title") ?? "";
+  // Standart: slideCount=10 → sig'im 7.
+  assert.equal(tip(), "Reja bandlari — har biri o'z slaydi bilan; 10 slaydga 7 band sig'adi.", `tooltip: «${tip()}»`);
+  fireEvent.change(slider(), { target: { value: "4" } });
+  // MUTATSIYA: hint statik qolsa (eski matn yoki eski slideCount/sig'im) — bu qator qizaradi.
+  assert.equal(tip(), "Reja bandlari — har biri o'z slaydi bilan; 4 slaydga 1 band sig'adi.", `tooltip yangilanmadi: «${tip()}»`);
+});
+
+test("sig'im yetganda variant bosilsa oddiy tanlov ishlaydi (regressiya)", () => {
+  mount("slide"); // standart sig'im 7 — hammasi yoqilgan
+  fireEvent.click(within(planGroup()).getByRole("radio", { name: "6" }));
+  assert.ok(chips().includes("6 band"), `6 tanlangach yig'iq sarlavhada ko'rinishi kerak: ${chips()}`);
+  assert.equal(planHint(), "", "sig'gan tanlovda izoh chiqmaydi");
+});
+
 test("qoralama PUT tanasida sourceText/logoAssetId/templateAssetId YO'Q (katta matn va sessiyaga bog'liq aktivlar saqlanmaydi)", async () => {
   const { useAppStore } = await import("../../lib/store.ts");
   useAppStore.setState({ loggedIn: true, sessionChecked: true });

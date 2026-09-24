@@ -10,6 +10,8 @@ import { PURPOSE_DEFAULTS, SLIDE_PURPOSES, purposeDefaults } from "@/lib/generat
 import { SLIDE_BLOCKS, isSlideBlockId, type SlideBlockId } from "@/lib/generation/slide-blocks";
 import {
   PLAN_ITEMS_DEFAULT,
+  PLAN_ITEMS_MAX,
+  PLAN_ITEMS_MIN,
   PRO_SLIDE_DEFAULT,
   PRO_SLIDE_MAX,
   PRO_SLIDE_MIN,
@@ -29,9 +31,12 @@ import {
   type SlideTool,
 } from "@/lib/generation/slide-params";
 import { formatTanga } from "@/lib/tools";
+import { cn } from "@/lib/cn";
 import { MultiChipGroup, RangeField } from "./fields";
 import { Row, Segmented, SelectField, Switch } from "./compact";
 import { LogoField } from "./LogoField";
+// AUDIT-25: P1 merge'da lib/generation/slide-params.ts dan import qilinadi (bir xil nom — planCapacity).
+import { planCapacity } from "./plan-capacity-stub";
 
 /**
  * Reyestr id → render xaritasi (WP-G, Formalar 2 da ixcham).
@@ -74,8 +79,6 @@ export const AUDIENCE_OPTIONS = [
 ];
 export const PURPOSE_OPTIONS = SLIDE_PURPOSES.map((p) => ({ value: p, label: PURPOSE_DEFAULTS[p].label }));
 const BLOCK_OPTIONS = SLIDE_BLOCKS.map((b) => ({ value: b.id, label: b.label }));
-// Segment yorliqlari QISQA — qator ichida sig'sin (yorliq «Reja bandlari» chapda turadi).
-const PLAN_ITEMS_OPTIONS = [3, 4, 5, 6].map((n) => ({ value: String(n), label: String(n) }));
 export const TEXT_VOLUME_LABELS: Record<(typeof SLIDE_TEXT_VOLUMES)[number], string> = {
   qisqa: "Qisqa",
   standart: "Standart",
@@ -132,6 +135,92 @@ function SlideCountField({ values, set, tool }: { values: FormValues; set: Slide
           : `${SLIDE_INCLUDED} tagacha ${formatTanga(SLIDE_BASE_PRICE)} · keyingi har biri +${SLIDE_EXTRA_PRICE} · 1 slayd ≈ 2 daqiqa`}
       </p>
     </div>
+  );
+}
+
+/**
+ * `planItems` sig'imi — AUDIT-25 qaror 3: `planCapacity` server nechta
+ * reja bandini deka ichiga sig'dirishini hisoblaydi, forma AYNAN shu
+ * bilan mos ko'rsatishi kerak (server baribir qisadi — kelishmovchilik
+ * bo'lmasin).
+ */
+function capacityFor(values: FormValues): number {
+  return planCapacity({
+    slideCount: values.slideCount,
+    blocks: values.blocks,
+    quizCount: values.quizCount,
+    agendaSlide: values.agendaSlide,
+    titleSlide: values.titleSlide,
+    speakerNotes: values.speakerNotes,
+    internetSearch: values.internetSearch,
+    slidePurpose: values.slidePurpose,
+  });
+}
+
+/** Foydalanuvchi tanlagan `planItems` sig'imga qisilgach — server aynan shuni yozadigan (samarali) qiymat. */
+function effectivePlanItems(values: FormValues): number {
+  const capacity = capacityFor(values);
+  const raw = clampInt(values.planItems, 1, PLAN_ITEMS_MAX, PLAN_ITEMS_DEFAULT);
+  return Math.min(raw, capacity);
+}
+
+/**
+ * «Reja bandlari» segmenti — sig'imdan katta variantlar o'chiriladi
+ * (`disabled` + `aria-disabled` + kulrang), joriy qiymat sig'maganda
+ * samarali (qisilgan) qiymat ta'kidlanadi va bitta qatorli o'zbekcha
+ * izoh chiqadi («N slaydga M band sig'adi»). Sig'im 3 dan kichik bo'lsa
+ * pastki chegara sig'imgacha kengayadi (1–2 ham tanlanadigan bo'lib
+ * ko'rinsin) — shu sabab variantlar ro'yxati endi statik emas.
+ */
+function PlanItemsField({ values, set }: { values: FormValues; set: SlideFieldSetter }) {
+  const capacity = capacityFor(values);
+  const lo = Math.min(PLAN_ITEMS_MIN, Math.max(1, capacity));
+  const options: number[] = [];
+  for (let n = lo; n <= PLAN_ITEMS_MAX; n++) options.push(n);
+  const raw = clampInt(values.planItems, 1, PLAN_ITEMS_MAX, PLAN_ITEMS_DEFAULT);
+  const effective = Math.min(raw, capacity);
+  const slideCount = clampInt(values.slideCount, 1, 999, SLIDE_DEFAULT);
+  return (
+    <Row
+      key="planItems"
+      label="Reja bandlari"
+      hint={`Reja bandlari — har biri o'z slaydi bilan; ${slideCount} slaydga ${capacity} band sig'adi.`}
+    >
+      <div>
+        <div role="radiogroup" aria-label="Reja bandlari" className="bg-muted/60 inline-flex max-w-full flex-wrap gap-0.5 rounded-lg p-0.5">
+          {options.map((n) => {
+            const disabled = n > capacity;
+            const on = n === effective;
+            return (
+              <button
+                key={n}
+                type="button"
+                role="radio"
+                aria-checked={on}
+                aria-disabled={disabled}
+                disabled={disabled}
+                onClick={() => set("planItems", n)}
+                className={cn(
+                  "rounded-md px-2.5 py-1 text-xs whitespace-nowrap transition-colors",
+                  disabled
+                    ? "text-muted-foreground/40 cursor-not-allowed"
+                    : on
+                      ? "bg-card text-foreground shadow-sm font-medium"
+                      : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {n}
+              </button>
+            );
+          })}
+        </div>
+        {effective < raw ? (
+          <p className="text-muted-foreground mt-1 text-[11px]" data-plan-capacity-hint>
+            {`${slideCount} slaydga ${effective} band sig'adi`}
+          </p>
+        ) : null}
+      </div>
+    </Row>
   );
 }
 
@@ -194,11 +283,7 @@ export function renderSlideParam(
         </Row>
       );
     case "planItems":
-      return (
-        <Row key={id} label="Reja bandlari" hint="Reja slaydidagi va tuzilmadagi band soni.">
-          <Segmented ariaLabel="Reja bandlari" options={PLAN_ITEMS_OPTIONS} value={String(values.planItems ?? PLAN_ITEMS_DEFAULT)} onChange={(v) => set("planItems", Number(v))} />
-        </Row>
-      );
+      return <PlanItemsField key={id} values={values} set={set} />;
     case "slideCount":
       return <SlideCountField key={id} values={values} set={set} tool={ctx.tool} />;
     case "textVolume":
@@ -269,7 +354,7 @@ export function settingsSummary(values: FormValues, ids: readonly string[]): str
   const has = (id: string) => ids.includes(id);
   if (has("slideAudience")) out.push(AUDIENCE_OPTIONS.find((o) => o.value === String(values.slideAudience || "auto"))?.label ?? "Avtomatik");
   if (has("slidePurpose")) out.push(PURPOSE_OPTIONS.find((o) => o.value === String(values.slidePurpose || "general"))?.label ?? "Umumiy");
-  if (has("planItems")) out.push(`${clampInt(values.planItems, 3, 6, PLAN_ITEMS_DEFAULT)} band`);
+  if (has("planItems")) out.push(`${effectivePlanItems(values)} band`);
   if (has("textVolume")) out.push(TEXT_VOLUME_LABELS[String(values.textVolume || "standart") as keyof typeof TEXT_VOLUME_LABELS] ?? "Standart");
   if (has("quizCount")) {
     const q = clampInt(values.quizCount, 0, 10, 0);
