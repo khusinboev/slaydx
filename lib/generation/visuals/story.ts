@@ -27,37 +27,51 @@ function pushScrim(layers: SlideLayer[], from: number, mid: number): void {
   layers.push({ t: "rect", box: { x: 0, y: mid, w: W, h: H - mid }, fill: { color: "#000000", alpha: 0.55 } });
 }
 
-/** Rasm yo'q sahifada dekor: yirik serif raqam va ingichka chiziq. */
-function pushNumberDecor(layers: SlideLayer[], theme: SlideTheme, index: number, box: Box, size: number, ruleY: number): void {
-  layers.push({
-    t: "text",
-    box: { ...box },
-    text: String(index + 1).padStart(2, "0"),
-    color: theme.titleMuted,
-    size,
-    font: SERIF,
-    valign: "middle",
-  });
+/**
+ * Rasm yo'q sahifada dekor: yirik serif raqam va ingichka chiziq.
+ * AUDIT-25: raqam — faqat reja bandi (`planNumber`); `null` bo'lsa
+ * faqat chiziq qoladi (chaqiruvchi blokni shunga qarab joylaydi).
+ */
+function pushNumberDecor(layers: SlideLayer[], theme: SlideTheme, no: string | null, box: Box, size: number, ruleY: number): void {
+  if (no) {
+    layers.push({
+      t: "text",
+      box: { ...box },
+      text: no,
+      color: theme.titleMuted,
+      size,
+      font: SERIF,
+      valign: "middle",
+    });
+  }
   layers.push({ t: "rect", box: { x: box.x, y: ruleY, w: ZONE_W, h: 0.03 }, fill: { color: theme.titleMuted, alpha: 0.5 } });
 }
 
 function planTitle(s: SlideModel, theme: SlideTheme, index: number, total: number): SlidePlan {
-  const { fitSize, pushFooter, photo, W, H } = LAYOUT_KIT;
+  const { fitSize, pushFooter, photo, planNumber, W, H } = LAYOUT_KIT;
   const layers: SlideLayer[] = [];
   layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.titleBg } });
   const img = s.image?.url;
+  /*
+   * AUDIT-25: kadrsiz muqovadagi yirik raqam ilgari deka tartibi (doim
+   * «01») edi. Endi faqat reja bandi — titulda odatda yo'q. Shunda
+   * tepadagi 3″ bo'sh qolmasin: blok (chiziq, tasma, rukn, sarlavha,
+   * izoh) `dy` ga yuqoriga ko'tarilib, sahifa markaziga tushadi.
+   */
+  const no = img ? null : planNumber(s);
+  const dy = img || no ? 0 : -1.6;
   if (img) {
     photo(layers, img, { ...FULL }, 0);
     pushScrim(layers, 2.6, 4.3);
   } else {
     // Kadrsiz muqova ham TUZILGAN ko'rinsin: yirik raqam va chiziq.
-    pushNumberDecor(layers, theme, index, { x: TEXT_X, y: 1.1, w: 5.0, h: 2.6 }, 140, 4.1);
+    pushNumberDecor(layers, theme, no, { x: TEXT_X, y: 1.1, w: 5.0, h: 2.6 }, 140, 4.1 + dy);
   }
-  layers.push({ t: "rect", box: { x: TEXT_X, y: 4.25, w: 2.2, h: 0.06 }, fill: { color: theme.accent } });
+  layers.push({ t: "rect", box: { x: TEXT_X, y: 4.25 + dy, w: 2.2, h: 0.06 }, fill: { color: theme.accent } });
   if (s.kicker) {
     layers.push({
       t: "text",
-      box: { x: TEXT_X, y: 4.5, w: ZONE_W, h: 0.42 },
+      box: { x: TEXT_X, y: 4.5 + dy, w: ZONE_W, h: 0.42 },
       text: s.kicker,
       color: theme.titleMuted,
       size: 13,
@@ -68,7 +82,7 @@ function planTitle(s: SlideModel, theme: SlideTheme, index: number, total: numbe
       src: { f: "kicker" },
     });
   }
-  const titleBox: Box = { x: TEXT_X, y: 4.98, w: 11.0, h: 1.35 };
+  const titleBox: Box = { x: TEXT_X, y: 4.98 + dy, w: 11.0, h: 1.35 };
   layers.push({
     t: "text",
     box: titleBox,
@@ -80,7 +94,7 @@ function planTitle(s: SlideModel, theme: SlideTheme, index: number, total: numbe
     src: { f: "title" },
   });
   if (s.subtitle) {
-    const subBox: Box = { x: TEXT_X, y: 6.42, w: 11.0, h: 0.6 };
+    const subBox: Box = { x: TEXT_X, y: 6.42 + dy, w: 11.0, h: 0.6 };
     layers.push({
       t: "text",
       box: subBox,
@@ -95,7 +109,7 @@ function planTitle(s: SlideModel, theme: SlideTheme, index: number, total: numbe
 }
 
 function planSection(s: SlideModel, theme: SlideTheme, index: number, total: number): SlidePlan {
-  const { fitSize, pushFooter, photo, W, H } = LAYOUT_KIT;
+  const { fitSize, pushFooter, photo, planNumber, W, H } = LAYOUT_KIT;
   const layers: SlideLayer[] = [];
   layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.titleBg } });
   photo(layers, s.image?.url, { ...FULL }, theme.darkContent ? 0.1 : 0.18);
@@ -106,17 +120,26 @@ function planSection(s: SlideModel, theme: SlideTheme, index: number, total: num
 
   const x = 0.75;
   const tw = 3.75;
-  layers.push({
-    t: "text",
-    box: { x, y: 1.15, w: 3.0, h: 1.6 },
-    text: String(index + 1).padStart(2, "0"),
-    color: theme.titleMuted,
-    size: 84,
-    font: SERIF,
-    valign: "middle",
-  });
-  layers.push({ t: "rect", box: { x, y: 3.05, w: 1.5, h: 0.05 }, fill: { color: theme.accent } });
-  const titleBox: Box = { x, y: 3.35, w: tw, h: 1.9 };
+  /*
+   * AUDIT-25: panel tepasidagi serif raqam — reja bandi (`s.plan`), deka
+   * tartibi emas. Reja bandi yo'q bo'lsa panel tepasi bo'sh qolmasin:
+   * chiziq, sarlavha va izoh 1″ yuqoriga ko'tariladi (panel markazi).
+   */
+  const no = planNumber(s);
+  const up = no ? 0 : -1.0;
+  if (no) {
+    layers.push({
+      t: "text",
+      box: { x, y: 1.15, w: 3.0, h: 1.6 },
+      text: no,
+      color: theme.titleMuted,
+      size: 84,
+      font: SERIF,
+      valign: "middle",
+    });
+  }
+  layers.push({ t: "rect", box: { x, y: 3.05 + up, w: 1.5, h: 0.05 }, fill: { color: theme.accent } });
+  const titleBox: Box = { x, y: 3.35 + up, w: tw, h: 1.9 };
   layers.push({
     t: "text",
     box: titleBox,
@@ -128,7 +151,7 @@ function planSection(s: SlideModel, theme: SlideTheme, index: number, total: num
     src: { f: "title" },
   });
   if (s.subtitle) {
-    const subBox: Box = { x, y: 5.4, w: tw, h: 1.35 };
+    const subBox: Box = { x, y: 5.4 + up, w: tw, h: 1.35 };
     layers.push({
       t: "text",
       box: subBox,
@@ -143,7 +166,7 @@ function planSection(s: SlideModel, theme: SlideTheme, index: number, total: num
 }
 
 function planBullets(s: SlideModel, theme: SlideTheme, index: number, total: number, ctx: PlanCtx): SlidePlan {
-  const { fitSize, fitLines, bulletGap, pushFooter, photo, W, H } = LAYOUT_KIT;
+  const { fitSize, fitLines, bulletGap, pushFooter, photo, planNumber, W, H } = LAYOUT_KIT;
   const layers: SlideLayer[] = [];
   layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.bg } });
 
@@ -152,17 +175,37 @@ function planBullets(s: SlideModel, theme: SlideTheme, index: number, total: num
   if (s.image?.url) {
     photo(layers, s.image.url, { ...BULLETS_PHOTO }, 0);
   } else {
-    layers.push({
-      t: "text",
-      box: { x: 0.6, y: 2.9, w: 3.4, h: 1.7 },
-      text: String(index + 1).padStart(2, "0"),
-      color: theme.titleMuted,
-      size: 96,
-      font: SERIF,
-      align: "center",
-      valign: "middle",
-    });
-    layers.push({ t: "rect", box: { x: 1.55, y: 4.85, w: 1.5, h: 0.05 }, fill: { color: theme.accent } });
+    /*
+     * AUDIT-25: kolonkadagi yirik raqam ilgari deka tartibi edi — 3-slayd
+     * «03», reja bilan aloqasiz (egasi ko'rgan «shunchaki 3 raqami»).
+     * Endi faqat reja bandi (`s.plan`, P1 mazmun slaydlariga beradi).
+     * Reja bandi yo'q bo'lsa kolonka bo'sh to'q blok qolmasin: ichki
+     * ingichka ramka (kadr «paspartu»si) va markazda aksent chiziq.
+     * Kolonka YIG'ILMAYDI — u `photoSlot("bullets")`: rasm kutilayotganda
+     * ko'ruvchi plashkasi aynan shu yerda turadi.
+     */
+    const no = planNumber(s);
+    if (no) {
+      layers.push({
+        t: "text",
+        box: { x: 0.6, y: 2.9, w: 3.4, h: 1.7 },
+        text: no,
+        color: theme.titleMuted,
+        size: 96,
+        font: SERIF,
+        align: "center",
+        valign: "middle",
+      });
+      layers.push({ t: "rect", box: { x: 1.55, y: 4.85, w: 1.5, h: 0.05 }, fill: { color: theme.accent } });
+    } else {
+      const inset = 0.45;
+      layers.push({
+        t: "rect",
+        box: { x: inset, y: inset, w: BULLETS_PHOTO.w - inset * 2, h: H - inset * 2 },
+        line: { color: theme.titleMuted, width: 0.75 },
+      });
+      layers.push({ t: "rect", box: { x: 1.55, y: 3.72, w: 1.5, h: 0.05 }, fill: { color: theme.accent } });
+    }
   }
 
   const x = 5.3;

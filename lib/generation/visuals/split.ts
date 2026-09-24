@@ -25,6 +25,23 @@ function two(n: number): string {
   return String(n).padStart(2, "0");
 }
 
+/**
+ * Raqamsiz dekor — ichma-ich kvadratlar (kontur → yarim shaffof →
+ * to'la aksent). AUDIT-25: titul va bo'limdagi yirik raqam endi faqat
+ * reja bandidan (`s.plan`); u yo'q bo'lsa raqam o'rnida BO'SH ramka
+ * emas, shu geometrik belgi turadi — dizaynning «ikkiga bo'lingan»
+ * muvozanati saqlanadi, lekin hech qanday raqam o'ylab topilmaydi.
+ */
+function pushSquares(layers: SlideLayer[], theme: SlideTheme, box: Box, outline: boolean): void {
+  if (outline) layers.push({ t: "rect", box: { ...box }, line: { color: theme.accent, width: 1.5 } });
+  const mid = box.w * 0.56;
+  const core = box.w * 0.22;
+  const cx = box.x + box.w / 2;
+  const cy = box.y + box.h / 2;
+  layers.push({ t: "rect", box: { x: cx - mid / 2, y: cy - mid / 2, w: mid, h: mid }, fill: { color: theme.accent, alpha: 0.22 } });
+  layers.push({ t: "rect", box: { x: cx - core / 2, y: cy - core / 2, w: core, h: core }, fill: { color: theme.accent } });
+}
+
 /** Ikki yarm + chok. `mirror` — to'q yarm o'ngda (yakuniy slayd). */
 function pushHalves(layers: SlideLayer[], theme: SlideTheme, mirror = false): void {
   const { W, H } = LAYOUT_KIT;
@@ -38,7 +55,7 @@ function pushHalves(layers: SlideLayer[], theme: SlideTheme, mirror = false): vo
 
 /** Titul — chapda kicker + sarlavha, o'ngda rasm (yoki yirik raqam). */
 function planTitle(s: SlideModel, theme: SlideTheme, index: number, total: number): SlidePlan {
-  const { fitSize, photo, pushFooter } = LAYOUT_KIT;
+  const { fitSize, photo, pushFooter, planNumber } = LAYOUT_KIT;
   const layers: SlideLayer[] = [];
   pushHalves(layers, theme);
   const x = 0.85;
@@ -85,17 +102,28 @@ function planTitle(s: SlideModel, theme: SlideTheme, index: number, total: numbe
     layers.push({ t: "rect", box: { x: slot.x - 0.12, y: slot.y - 0.12, w: slot.w + 0.24, h: slot.h + 0.24 }, fill: { color: theme.accent, alpha: 0.16 } });
     photo(layers, s.image.url, slot, 0);
   } else {
-    layers.push({ t: "rect", box: { x: 7.6, y: 1.35, w: 4.7, h: 4.7 }, line: { color: theme.accent, width: 1.5 } });
-    layers.push({
-      t: "text",
-      box: { x: 7.6, y: 1.35, w: 4.7, h: 4.7 },
-      text: two(index + 1),
-      color: theme.accentInk,
-      size: 110,
-      bold: true,
-      align: "center",
-      valign: "middle",
-    });
+    /*
+     * AUDIT-25: ramkadagi yirik raqam ilgari deka tartibi (`index + 1`,
+     * titulda doim «01») edi. Endi faqat reja bandi; titulda u odatda
+     * yo'q — ramka ichida ichma-ich kvadratlar belgisi.
+     */
+    const frame: Box = { x: 7.6, y: 1.35, w: 4.7, h: 4.7 };
+    const no = planNumber(s);
+    if (no) {
+      layers.push({ t: "rect", box: { ...frame }, line: { color: theme.accent, width: 1.5 } });
+      layers.push({
+        t: "text",
+        box: { ...frame },
+        text: no,
+        color: theme.accentInk,
+        size: 110,
+        bold: true,
+        align: "center",
+        valign: "middle",
+      });
+    } else {
+      pushSquares(layers, theme, frame, true);
+    }
   }
   pushFooter(layers, s, theme, index, total, { x: 7.1, w: 5.68 }, false);
   return { bg: theme.surface, layers };
@@ -103,19 +131,28 @@ function planTitle(s: SlideModel, theme: SlideTheme, index: number, total: numbe
 
 /** Bo'lim — chapda ulkan raqam, o'ngda bo'lim nomi. */
 function planSection(s: SlideModel, theme: SlideTheme, index: number, total: number): SlidePlan {
-  const { fitSize, pushFooter } = LAYOUT_KIT;
+  const { fitSize, pushFooter, planNumber } = LAYOUT_KIT;
   const layers: SlideLayer[] = [];
   pushHalves(layers, theme);
-  layers.push({
-    t: "text",
-    box: { x: 0.85, y: 1.9, w: 5.0, h: 3.6 },
-    text: two(index + 1),
-    color: theme.titleText,
-    size: 150,
-    bold: true,
-    align: "center",
-    valign: "middle",
-  });
+  /*
+   * AUDIT-25: ulkan raqam — reja bandi (`s.plan`), deka tartibi emas.
+   * Reja bandi yo'q bo'lsa to'q yarm bo'sh qolmasin — kvadratlar belgisi.
+   */
+  const no = planNumber(s);
+  if (no) {
+    layers.push({
+      t: "text",
+      box: { x: 0.85, y: 1.9, w: 5.0, h: 3.6 },
+      text: no,
+      color: theme.titleText,
+      size: 150,
+      bold: true,
+      align: "center",
+      valign: "middle",
+    });
+  } else {
+    pushSquares(layers, theme, { x: 1.7, y: 2.05, w: 3.3, h: 3.3 }, true);
+  }
   layers.push({ t: "rect", box: { x: 2.55, y: 5.55, w: 1.6, h: 0.07 }, fill: { color: theme.accent } });
   const x = 7.1;
   const tw = 5.68;

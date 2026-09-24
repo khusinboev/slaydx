@@ -1,0 +1,239 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { planSlide, type SlideLayer } from "../lib/generation/slide-layout.ts";
+import { getSlideTheme } from "../lib/generation/slide-themes.ts";
+import { SLIDE_LAYOUTS, SLIDE_THEME_IDS, type SlideLayout, type SlideModel } from "../lib/generation/slide-types.ts";
+import { DESIGN_VISUALS, LEGACY_VISUALS } from "../lib/generation/visuals/index.ts";
+import type { SlideVisual } from "../lib/generation/slide-templates.ts";
+
+/**
+ * AUDIT-25, 4-qaror — «Raqam faqat rejadan».
+ *
+ * Egasi shikoyati: «reja raqamlari slaydlarda xato, ba'zida shunchaki
+ * "3" raqami turadi». Sabab: bo'lim slaydidagi yirik «03» va hikoya
+ * bandlaridagi kicker raqami DEKADAGI TARTIB (`index + 1`) edi — reja
+ * bandi emas. Reja 4 band bo'lsa ham, 7-slayddagi bo'lim «07» ko'rsatardi.
+ *
+ * Shartnoma (bu fayl qulflaydi):
+ *   1. `section` slaydi `plan: 3` bilan — AYNAN BITTA dekorativ «03»
+ *      (hamma maketda ikki xonali, `src`siz). Deka indeksi (7) hech
+ *      qayerda ko'rinmaydi.
+ *   2. `plan` yo'q — bo'lim slaydida yalang 1–2 xonali raqam YO'Q
+ *      (eski doc_json ham shunday chiziladi).
+ *   3. HECH BIR maketda matn deka indeksiga bog'liq emas — faqat
+ *      kolontitul sahifa hisoblagichi («3 / 10») bundan mustasno.
+ *   4. Ro'yxat tartib raqamlari (reja 01…N, bosqich `n`, test A–D)
+ *      ro'yxat ichida ma'noli — QOLADI.
+ *   5. Hech bir qatlam slayddan chiqmaydi.
+ *
+ * `plan` maydoni P1 da `SlideModel` ga qo'shiladi; unga qadar test uni
+ * kesishma turi bilan beradi.
+ */
+
+type PlanSlide = SlideModel & { plan?: number };
+type TextLayer = Extract<SlideLayer, { t: "text" }>;
+
+const W = 13.333;
+const H = 7.5;
+const VISUALS = [...LEGACY_VISUALS, ...DESIGN_VISUALS] as SlideVisual[];
+const IMG = "https://example.test/a.png";
+/** Deka indeksi ATAYLAB rejadan farqli: 6 → «07» ko'rinsa, raqam indeksdan. */
+const INDEX = 6;
+const TOTAL = 12;
+
+const texts = (ls: SlideLayer[]) => ls.filter((l): l is TextLayer => l.t === "text");
+const textOf = (l: TextLayer) => (l.text ?? (l.lines ?? []).join("\n")).trim();
+const BARE_NUMBER = /^\d{1,2}$/;
+const PAGE_COUNTER = /^\d+\s*\/\s*\d+$/;
+
+function section(opts: { plan?: number; img: boolean; sub: boolean }): PlanSlide {
+  const s: PlanSlide = {
+    id: "sec",
+    layout: "section",
+    title: "Orol dengizining qurishi sabablari",
+    ...(opts.sub ? { subtitle: "Sug'orish, iqlim va inson omili — uchta asosiy yo'nalish" } : {}),
+    ...(opts.img ? { image: { url: IMG } } : {}),
+  };
+  if (opts.plan !== undefined) s.plan = opts.plan;
+  return s;
+}
+
+function assertInside(layers: SlideLayer[], tag: string) {
+  for (const l of layers) {
+    assert.ok(l.box.x >= -0.01 && l.box.y >= -0.01, `${tag}: manfiy koordinata (${l.t})`);
+    assert.ok(l.box.x + l.box.w <= W + 0.01, `${tag}: kenglikdan chiqdi (${l.t})`);
+    assert.ok(l.box.y + l.box.h <= H + 0.01, `${tag}: balandlikdan chiqdi (${l.t})`);
+  }
+}
+
+const VARIANTS = [
+  { img: true, sub: true },
+  { img: false, sub: true },
+  { img: false, sub: false },
+  { img: true, sub: false },
+];
+
+test("bo'lim slaydi plan: 3 — har maket × har temada AYNAN bitta dekorativ «03», indeks ko'rinmaydi", () => {
+  for (const visual of VISUALS) {
+    for (const themeId of SLIDE_THEME_IDS) {
+      const theme = getSlideTheme(themeId);
+      for (const v of VARIANTS) {
+        const tag = `${visual}/${themeId}/${v.img ? "rasm" : "rasmsiz"}/${v.sub ? "izohli" : "izohsiz"}`;
+        const plan = planSlide(section({ ...v, plan: 3 }), theme, visual, INDEX, TOTAL);
+        const nums = texts(plan.layers).filter((l) => BARE_NUMBER.test(textOf(l)));
+        assert.deepEqual(
+          nums.map(textOf),
+          ["03"],
+          `${tag}: bo'lim raqami rejadan «03» bo'lishi kerak, topildi ${JSON.stringify(nums.map(textOf))}`,
+        );
+        assert.equal(nums[0].src, undefined, `${tag}: bo'lim raqami dekorativ — src olmaydi`);
+        assert.equal(nums[0].srcLines, undefined, `${tag}: bo'lim raqami dekorativ — srcLines olmaydi`);
+        assertInside(plan.layers, tag);
+      }
+    }
+  }
+});
+
+test("bo'lim slaydi plan'siz — hech bir maketda yalang raqam chizilmaydi", () => {
+  for (const visual of VISUALS) {
+    for (const themeId of SLIDE_THEME_IDS) {
+      const theme = getSlideTheme(themeId);
+      for (const v of VARIANTS) {
+        const tag = `${visual}/${themeId}/${v.img ? "rasm" : "rasmsiz"}/${v.sub ? "izohli" : "izohsiz"}`;
+        const plan = planSlide(section(v), theme, visual, INDEX, TOTAL);
+        const nums = texts(plan.layers).map(textOf).filter((t) => BARE_NUMBER.test(t));
+        assert.deepEqual(nums, [], `${tag}: plan'siz bo'limda raqam chizildi: ${JSON.stringify(nums)}`);
+        assertInside(plan.layers, tag);
+      }
+    }
+  }
+});
+
+test("plan 1..12 to'g'ri formatlanadi, noto'g'ri qiymat (0, -1, 2.5, NaN) raqam bermaydi", () => {
+  const theme = getSlideTheme("atlas");
+  for (const visual of VISUALS) {
+    for (const n of [1, 9, 12]) {
+      const nums = texts(planSlide(section({ img: false, sub: true, plan: n }), theme, visual, INDEX, TOTAL).layers)
+        .map(textOf)
+        .filter((t) => BARE_NUMBER.test(t));
+      assert.deepEqual(nums, [String(n).padStart(2, "0")], `${visual}: plan ${n}`);
+    }
+    for (const bad of [0, -1, 2.5, Number.NaN]) {
+      const nums = texts(planSlide(section({ img: false, sub: true, plan: bad }), theme, visual, INDEX, TOTAL).layers)
+        .map(textOf)
+        .filter((t) => BARE_NUMBER.test(t));
+      assert.deepEqual(nums, [], `${visual}: plan ${bad} raqam bermasligi kerak`);
+    }
+  }
+});
+
+/** Har maket uchun to'la namuna — ro'yxat tartib raqamlari ham chiqsin. */
+function sampleFor(layout: SlideLayout, img: boolean): PlanSlide {
+  return {
+    id: "s",
+    layout,
+    kicker: "Geografiya · 8-sinf",
+    title: "Sarlavha matni",
+    subtitle: "Izoh matni bu yerda.",
+    ...(img ? { image: { url: IMG } } : {}),
+    bullets: ["Birinchi band gapi.", "Ikkinchi band gapi.", "Uchinchi band gapi."],
+    leftTitle: "Chap",
+    left: ["Bir", "Ikki"],
+    rightTitle: "O'ng",
+    right: ["Uch", "To'rt"],
+    quote: "Iqtibos matni.",
+    quoteBy: "Muallif",
+    stats: [{ value: "12%", label: "ulush" }, { value: "40 km", label: "masofa" }],
+    steps: [
+      { n: "1", title: "Bir", text: "Izoh" },
+      { n: "2", title: "Ikki", text: "Izoh" },
+      { n: "3", title: "Uch", text: "Izoh" },
+    ],
+    table: { headers: ["A", "B"], rows: [["x", "y"]] },
+    quiz: [{ q: "Savol?", options: ["Bir", "Ikki", "Uch", "To'rt"], answer: 0 }],
+    refs: [{ title: "Manba", source: "example.org" }],
+  };
+}
+
+/** Kolontitul hisoblagichidan tashqari barcha matnlar. */
+function contentTexts(layers: SlideLayer[]): string[] {
+  return texts(layers)
+    .map(textOf)
+    .filter((t) => !PAGE_COUNTER.test(t));
+}
+
+test("hech bir maket × dizaynda matn deka indeksiga bog'liq emas (sahifa hisoblagichidan tashqari)", () => {
+  const theme = getSlideTheme("atlas");
+  for (const visual of VISUALS) {
+    for (const layout of SLIDE_LAYOUTS) {
+      for (const img of [true, false]) {
+        for (const planNo of [undefined, 2]) {
+          const s = sampleFor(layout, img);
+          if (planNo !== undefined) s.plan = planNo;
+          const tag = `${visual}/${layout}/${img ? "rasm" : "rasmsiz"}/plan=${planNo ?? "-"}`;
+          const a = contentTexts(planSlide(s, theme, visual, 0, TOTAL).layers);
+          const b = contentTexts(planSlide(s, theme, visual, INDEX, TOTAL).layers);
+          assert.deepEqual(b, a, `${tag}: indeks 0 → ${INDEX} matnni o'zgartirdi`);
+        }
+      }
+    }
+  }
+});
+
+test("hikoya (story) bandlari: rasmsiz kolonkada raqam FAQAT rejadan", () => {
+  const theme = getSlideTheme("ink");
+  const withPlan = sampleFor("bullets", false);
+  withPlan.plan = 4;
+  const nums = texts(planSlide(withPlan, theme, "story", INDEX, TOTAL).layers).map(textOf).filter((t) => BARE_NUMBER.test(t));
+  assert.deepEqual(nums, ["04"], "story bandlari plan: 4 → «04»");
+  const bare = texts(planSlide(sampleFor("bullets", false), theme, "story", INDEX, TOTAL).layers)
+    .map(textOf)
+    .filter((t) => BARE_NUMBER.test(t));
+  assert.deepEqual(bare, [], "story bandlari plan'siz — raqam yo'q");
+});
+
+test("titul slaydida deka indeksi raqami yo'q (titul rejaga tegishli emas)", () => {
+  for (const visual of VISUALS) {
+    for (const img of [true, false]) {
+      const s = sampleFor("title", img);
+      const nums = texts(planSlide(s, getSlideTheme("atlas"), visual, 0, TOTAL).layers)
+        .map(textOf)
+        .filter((t) => BARE_NUMBER.test(t));
+      assert.deepEqual(nums, [], `${visual}/${img ? "rasm" : "rasmsiz"}: titulda «${nums.join(",")}»`);
+      assertInside(planSlide(s, getSlideTheme("atlas"), visual, 0, TOTAL).layers, `${visual}/title`);
+    }
+  }
+});
+
+test("ro'yxat tartib raqamlari qoladi: reja 1..N, bosqich n, test A–D", () => {
+  const theme = getSlideTheme("atlas");
+  const ord = (t: string, n: number) => t === String(n) || t === String(n).padStart(2, "0") || t === `${n}.`;
+  for (const visual of VISUALS) {
+    // Reja (agenda) — har qator o'z tartib raqamini oladi (plan'dan qat'i nazar).
+    // `notebook` rejasi — raqamsiz katakchalar (dizayn shunday, AUDIT-13).
+    if (visual !== "notebook") {
+      const agenda = contentTexts(planSlide(sampleFor("agenda", false), theme, visual, INDEX, TOTAL).layers);
+      const joined = agenda.join("\n");
+      for (const n of [1, 2, 3]) {
+        assert.ok(
+          agenda.some((t) => ord(t, n)) || new RegExp(`(^|\\n)0?${n}[.)]? `).test(joined),
+          `${visual}/agenda: ${n}-qator tartib raqami yo'qoldi: ${JSON.stringify(agenda)}`,
+        );
+      }
+    }
+    // Raqamli band kartalari (ro'yxat ichidagi tartib) — dizaynlar (rail
+    // bandlari raqamsiz tugunlar, story/split — abzats/ro'yxat, ya'ni raqamsiz).
+    if (["circle", "notebook", "editorial", "bold"].includes(visual)) {
+      const bl = contentTexts(planSlide(sampleFor("bullets", false), theme, visual, INDEX, TOTAL).layers);
+      for (const n of [1, 2, 3]) assert.ok(bl.some((t) => ord(t, n)), `${visual}/bullets: «${n}» karta raqami yo'q: ${JSON.stringify(bl)}`);
+    }
+    // Bosqichlar — `n` modeldan.
+    const proc = contentTexts(planSlide(sampleFor("process", false), theme, visual, INDEX, TOTAL).layers);
+    for (const n of [1, 2, 3]) assert.ok(proc.some((t) => ord(t, n)), `${visual}/process: «${n}» yo'q: ${JSON.stringify(proc)}`);
+    // Test variantlari — harflar.
+    const quiz = contentTexts(planSlide(sampleFor("quiz", false), theme, visual, INDEX, TOTAL).layers).join("\n");
+    for (const letter of ["A", "B", "C", "D"]) {
+      assert.ok(new RegExp(`(^|\\n|\\s)${letter}[).]?(\\s|$)`).test(quiz), `${visual}/quiz: «${letter}» yo'q`);
+    }
+  }
+});

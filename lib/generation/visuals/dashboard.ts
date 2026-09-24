@@ -127,27 +127,35 @@ function planTitle(s: SlideModel, theme: SlideTheme, index: number, total: numbe
 
 /** Bo'lim — chapda soyali raqam kartasi, o'ngda nom; fonda uch xira chiziq. */
 function planSection(s: SlideModel, theme: SlideTheme, index: number, total: number): SlidePlan {
-  const { fitSize, pushFooter } = LAYOUT_KIT;
+  const { fitSize, pushFooter, planNumber } = LAYOUT_KIT;
   const layers: SlideLayer[] = [];
   pushPage(layers, theme);
   [1.55, 3.75, 5.95].forEach((y) => {
     layers.push({ t: "rect", box: { x: 0.85, y, w: 11.6, h: 0.02 }, fill: { color: theme.accent2, alpha: 0.35 } });
   });
-  const numCard: Box = { x: 0.85, y: 2.55, w: 2.2, h: 2.2 };
-  card(layers, theme, numCard);
-  layers.push({ t: "rect", box: { x: numCard.x, y: numCard.y, w: numCard.w, h: 0.09 }, fill: { color: theme.accent }, radius: 0.04 });
-  layers.push({
-    t: "text",
-    box: { ...numCard },
-    text: two(index + 1),
-    color: theme.accentInk,
-    size: 56,
-    bold: true,
-    align: "center",
-    valign: "middle",
-  });
-  const x = 3.45;
-  const tw = 9.0;
+  /*
+   * AUDIT-25: KPI kartasidagi raqam — reja bandi (`s.plan`), deka
+   * tartibi emas. Reja bandi yo'q bo'lsa bo'sh karta chizilmaydi —
+   * sarlavha va izoh karta o'rnini egallab, to'la kenglikka yoyiladi.
+   */
+  const no = planNumber(s);
+  if (no) {
+    const numCard: Box = { x: 0.85, y: 2.55, w: 2.2, h: 2.2 };
+    card(layers, theme, numCard);
+    layers.push({ t: "rect", box: { x: numCard.x, y: numCard.y, w: numCard.w, h: 0.09 }, fill: { color: theme.accent }, radius: 0.04 });
+    layers.push({
+      t: "text",
+      box: { ...numCard },
+      text: no,
+      color: theme.accentInk,
+      size: 56,
+      bold: true,
+      align: "center",
+      valign: "middle",
+    });
+  }
+  const x = no ? 3.45 : 0.85;
+  const tw = no ? 9.0 : 11.6;
   const titleBox: Box = { x, y: 2.55, w: tw, h: 1.6 };
   layers.push({
     t: "text",

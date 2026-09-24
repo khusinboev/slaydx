@@ -130,7 +130,7 @@ function planTitle(s: SlideModel, theme: SlideTheme, index: number, total: numbe
 }
 
 function planSection(s: SlideModel, theme: SlideTheme, index: number, total: number): SlidePlan {
-  const { fitSize, inkHeight, pushFooter, W, H } = LAYOUT_KIT;
+  const { fitSize, inkHeight, pushFooter, planNumber, W, H } = LAYOUT_KIT;
   const layers: SlideLayer[] = [];
   layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.bg } });
 
@@ -142,7 +142,22 @@ function planSection(s: SlideModel, theme: SlideTheme, index: number, total: num
    */
   layers.push(circle({ x: 0.9, y: 1.7, w: 4.1, h: 4.1 }, { color: theme.accent }));
   layers.push(circle({ x: 1.28, y: 2.08, w: 3.34, h: 3.34 }, { color: theme.bg }));
-  pushBadge(layers, theme, { x: 1.4, y: 2.2, w: 3.1, h: 3.1 }, String(index + 1).padStart(2, "0"), 72);
+  /*
+   * AUDIT-25: nishon ichidagi raqam — reja bandi (`s.plan`), deka
+   * tartibi emas. Reja bandi yo'q bo'lsa bo'sh nishon qoldirilmaydi:
+   * uning o'rnida dizaynning «nishon» naqshi — `titleBg` disk va
+   * markazida `accent2` doira (raqamsiz, lekin doira kompozitsiyasi
+   * buzilmaydi).
+   */
+  const disk: Box = { x: 1.4, y: 2.2, w: 3.1, h: 3.1 };
+  const no = planNumber(s);
+  if (no) {
+    pushBadge(layers, theme, disk, no, 72);
+  } else {
+    layers.push(circle({ ...disk }, { color: theme.titleBg }));
+    const d = disk.w * 0.42;
+    layers.push(circle({ x: disk.x + (disk.w - d) / 2, y: disk.y + (disk.h - d) / 2, w: d, h: d }, { color: theme.accent2 }));
+  }
 
   const x = 5.65;
   const tw = 7.05;

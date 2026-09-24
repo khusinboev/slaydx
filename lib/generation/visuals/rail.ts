@@ -100,8 +100,12 @@ function planTitle(s: SlideModel, theme: SlideTheme, index: number, total: numbe
   return { bg: theme.bg, layers };
 }
 
-/** Halqali dumaloq kadr; rasm yo'q bo'lsa — `surface` disk va dekor belgi. */
-function pushRingPhoto(layers: SlideLayer[], s: SlideModel, theme: SlideTheme, slot: Box, mark: string): void {
+/**
+ * Halqali dumaloq kadr; rasm yo'q bo'lsa — `surface` disk va dekor belgi.
+ * `mark` `null` bo'lsa (reja bandisiz bo'lim) belgi o'rnida relsning o'z
+ * TUGUNI turadi — bo'sh disk qolmaydi, raqam ham o'ylab topilmaydi.
+ */
+function pushRingPhoto(layers: SlideLayer[], s: SlideModel, theme: SlideTheme, slot: Box, mark: string | null): void {
   const ring = 0.22;
   layers.push({
     t: "rect",
@@ -114,6 +118,10 @@ function pushRingPhoto(layers: SlideLayer[], s: SlideModel, theme: SlideTheme, s
     return;
   }
   layers.push({ t: "rect", box: { ...slot }, fill: { color: theme.surface }, radius: slot.w / 2 });
+  if (mark === null) {
+    pushNode(layers, theme, slot.x + slot.w / 2, slot.y + slot.h / 2, slot.w * 0.38);
+    return;
+  }
   layers.push({
     t: "text",
     box: { ...slot },
@@ -128,7 +136,7 @@ function pushRingPhoto(layers: SlideLayer[], s: SlideModel, theme: SlideTheme, s
 
 /** Bo'lim — relsdagi BITTA yirik tugun (ichida kadr), ostida bo'lim nomi. */
 function planSection(s: SlideModel, theme: SlideTheme, index: number, total: number): SlidePlan {
-  const { W, H, fitSize, pushFooter } = LAYOUT_KIT;
+  const { W, H, fitSize, pushFooter, planNumber } = LAYOUT_KIT;
   const layers: SlideLayer[] = [];
   layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.bg } });
   const slot = railVisual.photo!.section as Box;
@@ -136,17 +144,27 @@ function planSection(s: SlideModel, theme: SlideTheme, index: number, total: num
   layers.push({ t: "rect", box: { x: 0.85, y: railY - RAIL_H / 2, w: 11.6, h: RAIL_H }, fill: { color: theme.accent, alpha: 0.4 } });
   const cx = slot.x + slot.w / 2;
   [4.6, 6.35, 8.1, 9.85, 11.6].forEach((nx) => pushNode(layers, theme, nx, railY, 0.24));
-  layers.push({
-    t: "text",
-    box: { x: cx - 1.0, y: 0.82, w: 2.0, h: 0.6 },
-    text: two(index + 1),
-    color: theme.accentInk,
-    size: 26,
-    bold: true,
-    align: "center",
-    valign: "middle",
-  });
-  pushRingPhoto(layers, s, theme, slot, two(index + 1));
+  /*
+   * AUDIT-25: raqam — reja bandi (`s.plan`), deka tartibi emas; va
+   * BITTA joyda. Rasm bo'lsa u tugun ustidagi yorliqda (halqa ichini
+   * kadr egallaydi), rasm yo'q bo'lsa — halqaning o'zida. Ilgari rasmsiz
+   * bo'limda bir xil raqam ikki marta (yorliq + halqa) chizilardi.
+   * Reja bandi yo'q bo'lsa yorliq yo'q, halqa ichida rels tuguni.
+   */
+  const no = planNumber(s);
+  if (no && s.image?.url) {
+    layers.push({
+      t: "text",
+      box: { x: cx - 1.0, y: 0.82, w: 2.0, h: 0.6 },
+      text: no,
+      color: theme.accentInk,
+      size: 26,
+      bold: true,
+      align: "center",
+      valign: "middle",
+    });
+  }
+  pushRingPhoto(layers, s, theme, slot, no);
   const x = 0.85;
   const tw = 11.6;
   const titleBox: Box = { x, y: 3.9, w: tw, h: 1.5 };

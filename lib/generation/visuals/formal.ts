@@ -97,23 +97,30 @@ function planTitle(s: SlideModel, theme: SlideTheme, index: number, total: numbe
 }
 
 function planSection(s: SlideModel, theme: SlideTheme, index: number, total: number): SlidePlan {
-  const { fitSize, pushFooter, W, H } = LAYOUT_KIT;
+  const { fitSize, pushFooter, planNumber, W, H } = LAYOUT_KIT;
   const layers: SlideLayer[] = [];
   layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.bg } });
 
-  // Bo'lim raqami — tasmadan yuqorida, kichik harflar oralig'i katta.
-  layers.push({
-    t: "text",
-    box: { x: TEXT_X, y: 1.85, w: ZONE_W, h: 0.45 },
-    text: `${String(index + 1).padStart(2, "0")}`,
-    color: theme.accentInk,
-    size: 16,
-    bold: true,
-    uppercase: true,
-    tracking: 3,
-    align: "center",
-    valign: "middle",
-  });
+  /*
+   * Bo'lim raqami — tasmadan yuqorida, kichik harflar oralig'i katta.
+   * AUDIT-25: raqam reja bandidan (`s.plan`); yo'q bo'lsa chizilmaydi
+   * (tasma sahifa markazida turadi — raqamsiz ham kompozitsiya to'liq).
+   */
+  const no = planNumber(s);
+  if (no) {
+    layers.push({
+      t: "text",
+      box: { x: TEXT_X, y: 1.85, w: ZONE_W, h: 0.45 },
+      text: no,
+      color: theme.accentInk,
+      size: 16,
+      bold: true,
+      uppercase: true,
+      tracking: 3,
+      align: "center",
+      valign: "middle",
+    });
+  }
   // To'q tasma sahifa o'rtasidan o'tadi, ustida ingichka aksent qirra.
   layers.push({ t: "rect", box: { x: 0, y: 2.47, w: W, h: 0.08 }, fill: { color: theme.accent } });
   layers.push({ t: "rect", box: { x: 0, y: 2.55, w: W, h: 2.35 }, fill: { color: theme.titleBg } });

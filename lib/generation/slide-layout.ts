@@ -663,6 +663,33 @@ function RIGHT_COL_W() {
 export const SECTION_TOP = 1.15;
 export const SECTION_BOTTOM = 6.5;
 
+/*
+ * P1 (`slide-types.ts`) `SlideModel.plan?: number` ni qo'shguncha maydon
+ * shu yerda kesishma turi bilan o'qiladi; birlashtirishda alias olib
+ * tashlanadi.
+ */
+type PlanSlide = SlideModel & { plan?: number };
+
+/**
+ * AUDIT-25, 4-qaror — «Raqam faqat rejadan».
+ *
+ * Bo'lim slaydidagi yirik «03» (va hikoya bandlaridagi kicker raqami)
+ * ilgari DEKADAGI TARTIB edi (`index + 1`): reja 4 band bo'lsa ham
+ * 7-slayddagi bo'lim «07» ko'rsatardi — egasi aynan shuni «reja
+ * raqamlari xato, ba'zida shunchaki 3 turadi» deb ko'rgan. Endi raqam
+ * FAQAT `s.plan` dan (1-asosli reja bandi), ikki xonali ko'rinishda.
+ *
+ * `plan` yo'q (titul, eski doc_json, rejaga tegishli bo'lmagan slayd)
+ * yoki yaroqsiz (0, manfiy, kasr, NaN) bo'lsa — `null`: maket raqamni
+ * CHIZMAYDI va bo'sh nishon/quti ham qoldirmaydi (har maket o'zi
+ * qayta joylashtiradi). Raqam modeldan emas — qatlam `src` OLMAYDI.
+ */
+export function planNumber(s: SlideModel): string | null {
+  const n = (s as PlanSlide).plan;
+  if (typeof n !== "number" || !Number.isInteger(n) || n < 1 || n > 99) return null;
+  return String(n).padStart(2, "0");
+}
+
 /**
  * `magazine` maketidagi bo'lim slaydi: to'la ekran kadr va pastki matn
  * tasmasi.
@@ -689,6 +716,8 @@ function planSectionMagazine(s: SlideModel, theme: SlideTheme, index: number, to
   const img = Boolean(s.image?.url);
   const x = 0.9;
   const tw = W - 1.8;
+  // AUDIT-25: raqam FAQAT rejadan (`planNumber`); yo'q bo'lsa chizilmaydi.
+  const no = planNumber(s);
 
   if (!img) {
     /*
@@ -703,17 +732,25 @@ function planSectionMagazine(s: SlideModel, theme: SlideTheme, index: number, to
      * to'la kenglikdagi ingichka chiziq (jurnal ruknining naqshi).
      * Raqam modeldan emas — shuning uchun `src` OLMAYDI (dekorativ
      * qatlamlar qoidasi, `tests/slide-src.test.mts`).
+     *
+     * AUDIT-25: raqam endi reja bandi (`s.plan`). Reja bandi yo'q bo'lsa
+     * yirik raqam o'rni bo'sh to'q maydon bo'lib qolmasin — rukn chizig'i
+     * blok tepasiga tushadi va butun blok zonada VERTIKAL markazlanadi
+     * (classic bo'lim naqshi).
      */
-    layers.push({
-      t: "text",
-      box: { x, y: 1.05, w: 4.2, h: 1.75 },
-      text: String(index + 1).padStart(2, "0"),
-      color: theme.accent,
-      size: 96,
-      bold: true,
-      valign: "middle",
-    });
-    layers.push({ t: "rect", box: { x, y: 3.25, w: tw, h: 0.02 }, fill: { color: theme.titleMuted, alpha: 0.55 } });
+    const ruleGap = 0.25;
+    if (no) {
+      layers.push({
+        t: "text",
+        box: { x, y: 1.05, w: 4.2, h: 1.75 },
+        text: no,
+        color: theme.accent,
+        size: 96,
+        bold: true,
+        valign: "middle",
+      });
+      layers.push({ t: "rect", box: { x, y: 3.25, w: tw, h: 0.02 }, fill: { color: theme.titleMuted, alpha: 0.55 } });
+    }
 
     /*
      * Matn bloki PASTGA langar tashlaydi — rasmli variantdagi pastki
@@ -725,13 +762,17 @@ function planSectionMagazine(s: SlideModel, theme: SlideTheme, index: number, to
     // Blok hech qachon rukn chizig'idan yuqoriga chiqmasin — shuning
     // uchun qutilar mavjud balandlikka QIRQILADI (uzun sarlavhali
     // chegara holati; `fitSize` poliga urilganda ham chegara ushlanadi).
-    const avail = SECTION_BOTTOM - 3.5 - barH - 0.3 - (s.subtitle ? 0.3 : 0);
+    const top = no ? 3.5 : SECTION_TOP + ruleGap + 0.02;
+    const avail = SECTION_BOTTOM - top - barH - 0.3 - (s.subtitle ? 0.3 : 0);
     const titleSize = fitSize(s.title, { x, y: 0, w: tw, h: 2.0 }, 40, 24);
     const titleH = Math.min(avail * (s.subtitle ? 0.62 : 1), Math.max(0.62, inkHeight(s.title, tw, titleSize)));
     const subSize = s.subtitle ? fitSize(s.subtitle, { x, y: 0, w: tw, h: 1.5 }, 20, 13) : 0;
     const subH = s.subtitle ? Math.min(avail - titleH, Math.max(0.32, inkHeight(s.subtitle, tw, subSize))) : 0;
     const blockH = barH + 0.3 + titleH + (s.subtitle ? 0.3 + subH : 0);
-    const barY = SECTION_BOTTOM - blockH;
+    const barY = no ? SECTION_BOTTOM - blockH : top + Math.max(0, (SECTION_BOTTOM - top - blockH) / 2);
+    if (!no) {
+      layers.push({ t: "rect", box: { x, y: barY - ruleGap, w: tw, h: 0.02 }, fill: { color: theme.titleMuted, alpha: 0.55 } });
+    }
     layers.push({ t: "rect", box: { x, y: barY, w: 1.35, h: barH }, fill: { color: theme.accent } });
     layers.push({
       t: "text",
@@ -763,6 +804,19 @@ function planSectionMagazine(s: SlideModel, theme: SlideTheme, index: number, to
     fill: { color: theme.titleBg, alpha: 0.82 },
   });
   layers.push({ t: "rect", box: { x, y: bandY + 0.35, w: 1.35, h: 0.08 }, fill: { color: theme.accent } });
+  // Reja bandi raqami — aksent tasmaning davomida, rukn yorlig'i kabi.
+  if (no) {
+    layers.push({
+      t: "text",
+      box: { x: x + 1.55, y: bandY + 0.17, w: 1.2, h: 0.44 },
+      text: no,
+      color: theme.titleMuted,
+      size: 18,
+      bold: true,
+      tracking: 2,
+      valign: "middle",
+    });
+  }
   const titleBox: Box = { x, y: bandY + 0.63, w: tw, h: 1.0 };
   layers.push({
     t: "text",
@@ -791,6 +845,7 @@ function planSectionMagazine(s: SlideModel, theme: SlideTheme, index: number, to
 function planSection(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index: number, total: number): SlidePlan {
   if (visual === "magazine") return planSectionMagazine(s, theme, index, total);
   const img = s.image?.url;
+  const no = planNumber(s);
   const layers: SlideLayer[] = [];
   if (img) {
     layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.bg } });
@@ -798,6 +853,19 @@ function planSection(s: SlideModel, theme: SlideTheme, visual: SlideVisual, inde
     photo(layers, img, photoSlot("section")!, 0);
     const x = M + 0.18;
     const tw = LEFT_COL_W();
+    // AUDIT-25: reja bandi raqami sarlavha ustida, kicker kabi.
+    if (no) {
+      layers.push({
+        t: "text",
+        box: { x, y: 1.38, w: 1.6, h: 0.46 },
+        text: no,
+        color: theme.accentInk,
+        size: 20,
+        bold: true,
+        tracking: 2,
+        valign: "middle",
+      });
+    }
     layers.push({
       t: "text",
       box: { x, y: 2.0, w: tw, h: 1.2 },
@@ -856,8 +924,27 @@ function planSection(s: SlideModel, theme: SlideTheme, visual: SlideVisual, inde
    * markazlashtirish o'lchovda «to'g'ri», PDF da esa hamon tepaga
    * yopishgan blok berardi.
    */
-  const blockH = titleH + 0.26 + ruleH + (s.subtitle ? 0.3 + subH : 0);
-  const y0 = SECTION_TOP + Math.max(0, (SECTION_BOTTOM - SECTION_TOP - blockH) / 2);
+  /*
+   * AUDIT-25: reja bandi raqami (`s.plan`) sarlavha USTIDA kicker kabi
+   * turadi va blokning bir qismi — markazlash uni ham hisobga oladi.
+   * Raqam yo'q bo'lsa uning o'rni ham yo'q (blok yig'iladi).
+   */
+  const noH = no ? 0.46 + 0.18 : 0;
+  const blockH = noH + titleH + 0.26 + ruleH + (s.subtitle ? 0.3 + subH : 0);
+  const top = SECTION_TOP + Math.max(0, (SECTION_BOTTOM - SECTION_TOP - blockH) / 2);
+  if (no) {
+    layers.push({
+      t: "text",
+      box: { x, y: top, w: 1.6, h: 0.46 },
+      text: no,
+      color: theme.accentInk,
+      size: 20,
+      bold: true,
+      tracking: 2,
+      valign: "middle",
+    });
+  }
+  const y0 = top + noH;
   layers.push({
     t: "text",
     box: { x, y: y0, w: tw, h: titleH },
@@ -2608,6 +2695,7 @@ export const LAYOUT_KIT = {
   STRIP_W,
   SECTION_TOP,
   SECTION_BOTTOM,
+  planNumber,
   LOGO_BOX,
   LOGO_RESERVE,
   BULLET_GAP_MIN,
