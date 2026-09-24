@@ -122,7 +122,7 @@ export function ResumeViewer({
     [total, setPage],
   );
 
-  const { run, undo, redo, save, pending, discard, saving, justSaved } = ed;
+  const { run, undo, redo, save, pending, discard, saving, saveFailed, justSaved } = ed;
   const runOps = useCallback((ops: ResumeOp[]) => void run(ops), [run]);
 
   /* ═══ surat ═══ */
@@ -145,8 +145,8 @@ export function ResumeViewer({
   const onEditStateRef = useRef(onEditState);
   onEditStateRef.current = onEditState;
   useEffect(() => {
-    onEditStateRef.current?.(editable ? { pending, saving, justSaved, save, discard } : null);
-  }, [editable, pending, saving, justSaved, save, discard]);
+    onEditStateRef.current?.(editable ? { pending, saving, saveFailed, justSaved, save, discard } : null);
+  }, [editable, pending, saving, saveFailed, justSaved, save, discard]);
   useEffect(() => () => onEditStateRef.current?.(null), []);
 
   /* Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y / Ctrl+S. */

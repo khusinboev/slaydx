@@ -243,7 +243,7 @@ export function SlideViewer({
    * hali serverda yozilmoqda — PATCH uni ustidan yozib yuborardi).
    */
   const editOn = ed.editable && !lv;
-  const { run: runOps, undo, redo, save, pending, discard, saving, justSaved } = ed;
+  const { run: runOps, undo, redo, save, pending, discard, saving, saveFailed, justSaved } = ed;
 
   const onText = useCallback(
     (src: SlideSrc, value: string) => {
@@ -358,8 +358,8 @@ export function SlideViewer({
   const onEditStateRef = useRef(onEditState);
   onEditStateRef.current = onEditState;
   useEffect(() => {
-    onEditStateRef.current?.(editOn ? { pending, saving, justSaved, save, discard } : null);
-  }, [editOn, pending, saving, justSaved, save, discard]);
+    onEditStateRef.current?.(editOn ? { pending, saving, saveFailed, justSaved, save, discard } : null);
+  }, [editOn, pending, saving, saveFailed, justSaved, save, discard]);
   useEffect(() => () => onEditStateRef.current?.(null), []);
 
   /*

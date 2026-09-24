@@ -165,6 +165,12 @@ export type DocEdit<Op> = {
   save: () => Promise<boolean>;
   /** PATCH uchayotgani. */
   saving: boolean;
+  /**
+   * Oxirgi saqlash yiqildi va navbat hali joyida — tugma «Qayta urinish · N»
+   * (W2-E davomi). Keyingi saqlash boshlanganda, «Asliga qaytarish» yoki
+   * tiklashda tushadi.
+   */
+  saveFailed: boolean;
   /** Endigina saqlandi — «Saqlandi ✓» ({@link SAVED_FLASH_MS} ms). */
   justSaved: boolean;
   /** Fayl hujjatdan orqada (yoki qayta yasalmoqda). */
@@ -224,6 +230,7 @@ export function useDocEdit<Op>({
   const [fileVersion, setFileVersion] = useState(g?.fileVersion ?? 0);
   const [hasPrev, setHasPrev] = useState(g?.hasPrev ?? false);
   const [saving, setSaving] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
   const [justSaved, setJustSaved] = useState(false);
   const [rebuilding, setRebuilding] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -427,7 +434,7 @@ export function useDocEdit<Op>({
           setError(
             tooBig
               ? "Bu o‘zgarish serverga sig‘maydi (juda katta) — uni qisqartiring yoki «Asliga qaytarish» bilan bekor qiling."
-              : `Saqlanmadi — qayta urinish uchun «Saqlash» ni bosing. ${text}`,
+              : `Saqlanmadi — «Qayta urinish» ni bosing. ${text}`,
           );
         }
         return;
@@ -508,6 +515,7 @@ export function useDocEdit<Op>({
     let total = queueRef.current.length;
     if (!total) return true;
     setSaving(true);
+    setSaveFailed(false);
     setError(null);
     if (flashRef.current) clearTimeout(flashRef.current);
     setJustSaved(false);
@@ -583,6 +591,8 @@ export function useDocEdit<Op>({
         if (aliveRef.current) {
           setPending(queueRef.current.length);
           setSaving(false);
+          // Navbat joyida (vaqtinchalik xato yoki qayta yuklash ham yiqildi) — tugma «Qayta urinish».
+          setSaveFailed(queueRef.current.length > 0);
         }
         return false;
       }
@@ -669,6 +679,7 @@ export function useDocEdit<Op>({
     uncertainRef.current = null;
     queueRef.current = [];
     setPending(0);
+    setSaveFailed(false);
     const base = baseDocRef.current;
     if (base) {
       docRef.current = base;
@@ -699,6 +710,7 @@ export function useDocEdit<Op>({
     queueRef.current = [];
     uncertainRef.current = null;
     setPending(0);
+    setSaveFailed(false);
     setSaving(true);
     try {
       const { generation } = await restoreGenerationDoc(genId);
@@ -762,6 +774,7 @@ export function useDocEdit<Op>({
     pending,
     save,
     saving,
+    saveFailed,
     justSaved,
     stale: fileVersion < version,
     rebuilding,
