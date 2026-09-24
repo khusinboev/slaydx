@@ -41,3 +41,9 @@ Status legend: ✅ fixed & merged · 🔄 in review · 🛠 in progress · ⏳ p
 ## Event log
 - 2026-09-23 22:12 laptop reboot (scratchpad lost, all deliverables committed); ~22:35 VS Code crash (no OOM in kernel log) — agents resumed with SendMessage, no committed work lost.
 - 2026-09-24 ~02:45 session rate limit stopped 6 agents; all uncommitted work intact in worktrees; resumed 02:58 with SendMessage (each told to commit WIP first).
+
+## Pause — 2026-09-24 05:15 (/holats)
+- W3: 9/10 merged (A `4a57589`, B `1f26384`, C `20aeead`, D `b4a9ff1`, E `33d0ce4`, F `8f94120`, G `15cf902`, I `a455603`, J `c3f5e48`); W3-H awaiting review (branch has 9 commits). W3 gate not yet run.
+- W4 started (A, B, C, E, F); WIP commits on branches for C and F; D not started.
+- Phase 5 harness written (`loadtests/` WIP on the P5-prep branch), smoke partial.
+- Test fixes on the audit branch: admission EXPLAIN assertion (`c38a1fd`), no-PII fixture IP (`0bdc2e7`).
