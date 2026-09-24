@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
+import { requestIdOf } from "@/lib/server/api";
 import { ensureMigrated } from "@/lib/server/db";
 import { env } from "@/lib/server/env";
+import { log, withLogContext } from "@/lib/server/log";
 import { recordPaymentEvent } from "@/lib/server/payment-events";
 import {
   attachTransaction,
@@ -147,7 +149,19 @@ async function handle(p: ClickParams): Promise<Reply> {
   return reply(p, CLICK_ERROR.ACTION, "Action topilmadi");
 }
 
+/**
+ * Webhook `handler()` bilan o'ralmagan (Click javobi har doim 200 + o'z
+ * xato kodi), shuning uchun so'rov id si shu yerda beriladi (OBS-02):
+ * `settleOrder`/`cancelOrder` jurnal qatorlari ham shu `reqId` ni oladi.
+ */
 export async function POST(req: Request) {
+  const reqId = requestIdOf(req);
+  const res = await withLogContext({ reqId }, () => handleClick(req));
+  res.headers.set("x-request-id", reqId);
+  return res;
+}
+
+async function handleClick(req: Request): Promise<NextResponse> {
   if (!env.click.serviceId || !env.click.secretKey) {
     return NextResponse.json(reply({}, CLICK_ERROR.BAD_REQUEST, "Click sozlanmagan").body);
   }
@@ -168,7 +182,13 @@ export async function POST(req: Request) {
   try {
     out = await handle(p);
   } catch (e) {
-    console.error("[click]", e instanceof Error ? e.message : e);
+    log("error", "[click] webhook xatosi", {
+      orderId: String(p.merchant_trans_id ?? ""),
+      providerTxn: String(p.click_trans_id ?? ""),
+      action: String(p.action ?? ""),
+      provider: "click",
+      err: e,
+    });
     out = reply(p, CLICK_ERROR.UPDATE_FAILED, "Ichki xatolik");
   }
 

@@ -2,6 +2,7 @@ import "server-only";
 import type { PoolClient } from "pg";
 import { randomUUID } from "node:crypto";
 import { query, transaction } from "./db";
+import { log } from "./log";
 
 /**
  * Kredit hisobi — endi serverda.
@@ -174,7 +175,9 @@ export async function refundPartial(
 }
 
 async function refundRatio(userId: string, reference: string, ratio: number, note: string): Promise<boolean> {
-  return transaction(async (client) => {
+  let amount: ChargeSplit = ZERO;
+  const ok = await transaction(async (client) => {
+    amount = ZERO;
     const done = await client.query("SELECT 1 FROM transactions WHERE kind = 'refund' AND reference = $1", [
       reference,
     ]);
@@ -209,8 +212,12 @@ async function refundRatio(userId: string, reference: string, ratio: number, not
        VALUES ($1, 'refund', $2, $3, $4, $5, $6)`,
       [userId, points, quota, balance, reference, note],
     );
+    amount = { points, quota, balance };
     return true;
   });
+  // COMMIT dan keyin (OBS-02): pul harakati jurnalda, `reference` (= ish id si) bilan.
+  if (ok) log("info", "[credits] pul qaytarildi", { userId, reference, ratio, ...amount });
+  return ok;
 }
 
 /** Balansni to'ldirish (to'lov webhook idan). `reference` — provider tranzaksiya id. */
@@ -222,7 +229,9 @@ export async function topUp(
   note = "",
 ): Promise<boolean> {
   if ((delta.points ?? 0) + (delta.quota ?? 0) + (delta.balance ?? 0) <= 0) return false;
-  return transaction((client) => topUpInTx(client, userId, delta, reference, kind, note));
+  const ok = await transaction((client) => topUpInTx(client, userId, delta, reference, kind, note));
+  log("info", ok ? `[credits] ${kind} yozildi` : `[credits] ${kind} takror — yozilmadi`, { userId, reference, kind, ...delta });
+  return ok;
 }
 
 /** `topUp`ning tranzaksiya ichidagi varianti (`chargeInTx` ga juft). */
@@ -239,6 +248,14 @@ export async function topUpInTx(
   const balance = delta.balance ?? 0;
   if (points + quota + balance <= 0) return false;
 
+  /*
+   * Foydalanuvchi qulfi idempotentlik tekshiruvidan OLDIN (CONC-02 b; ilgari
+   * `payments.ts creditInTx` shunday edi, endi u shu funksiyani chaqiradi):
+   * ikki parallel chaqiruv ikkalasi ham «yozuv yo'q» deb ko'rib, ikkinchisi
+   * `transactions_ref_idx` ga urilib xato qaytarmasin — ikkinchisi qulfda
+   * kutadi va birinchisining yozuvini ko'radi.
+   */
+  await client.query("SELECT 1 FROM users WHERE id = $1 FOR UPDATE", [userId]);
   const done = await client.query("SELECT 1 FROM transactions WHERE kind = $1 AND reference = $2", [
     kind,
     reference,
@@ -246,7 +263,6 @@ export async function topUpInTx(
   // Webhook ikki marta kelishi normal holat — ikkinchisida pul qo'shilmaydi.
   if (done.rows[0]) return false;
 
-  await client.query("SELECT 1 FROM users WHERE id = $1 FOR UPDATE", [userId]);
   await client.query(
     `UPDATE users
         SET points = points + $2, quota = quota + $3, balance = balance + $4, updated_at = now()
@@ -276,7 +292,9 @@ export async function activatePro(
   days: number,
   reference: string,
 ): Promise<boolean> {
-  return transaction((client) => activateProInTx(client, userId, quotaAmount, days, reference));
+  const ok = await transaction((client) => activateProInTx(client, userId, quotaAmount, days, reference));
+  log("info", ok ? "[credits] Pro obuna yoqildi" : "[credits] Pro obuna takror — yozilmadi", { userId, reference, quota: quotaAmount, days });
+  return ok;
 }
 
 /** `activatePro`ning tranzaksiya ichidagi varianti — to'lov yakuni bilan bitta tranzaksiyada chaqirish uchun. */
@@ -341,7 +359,7 @@ export async function adminAdjustWallet(
   const amount = Math.trunc(delta);
   if (amount === 0) return { ok: true, before: 0, after: 0 };
 
-  return transaction(async (client) => {
+  const out = await transaction(async (client): Promise<AdminAdjustResult> => {
     const res = await client.query<Record<Wallet, string>>(
       `SELECT points, quota, balance FROM users WHERE id = $1 FOR UPDATE`,
       [userId],
@@ -370,6 +388,15 @@ export async function adminAdjustWallet(
     );
     return { ok: true as const, before, after };
   });
+  // Admin tuzatishi — pul harakati; kim, qaysi hamyon, qancha (telefon `log` da yashiriladi).
+  log(out.ok ? "info" : "warn", `[credits] admin tuzatishi: ${out.ok ? "bajarildi" : "mablag' yetarli emas"}`, {
+    userId,
+    wallet,
+    delta: amount,
+    admin: adminIdentity,
+    ...(out.ok ? { before: out.before, after: out.after } : { available: out.available }),
+  });
+  return out;
 }
 
 export type TransactionRow = {

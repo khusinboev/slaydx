@@ -9,6 +9,8 @@ import type { PendingAsset } from "./assets";
 import { toJsonb } from "./jsonb";
 import { cleanText, safeSlice } from "../generation/safe-text";
 import { env } from "./env";
+import { log } from "./log";
+import { userMessage } from "./user-error";
 import {
   admissionDecision,
   queueEtaSec,
@@ -153,7 +155,9 @@ export function rowToSummary(
     progress: r.progress,
     step: r.step,
     expiresAt: r.expires_at ? new Date(r.expires_at).toISOString() : null,
-    error: r.error,
+    // O'qishda ham tekshiriladi (BEA-09): tuzatishdan oldin yozilgan eski
+    // qatorlardagi xom pg/provayder matni API javobiga chiqmasin.
+    error: r.error === null || r.error === undefined ? null : userMessage(r.error),
     delivered: r.delivered_json ?? undefined,
     docVersion: r.doc_version ?? 0,
     fileVersion: r.file_version ?? 0,
@@ -259,7 +263,7 @@ export async function enqueueGeneration(input: EnqueueInput): Promise<EnqueueRes
   // NUL/yolg'iz surrogat `topic` (TEXT) va `transactions.note` ni yiqitmasin (C03).
   const topic = cleanText(input.topic);
   try {
-    return await transaction(async (client): Promise<EnqueueResult> => {
+    const res = await transaction(async (client): Promise<EnqueueResult> => {
       if (key) {
         // `admitInTx` bilan bir xil qulf (tartib o'zgarmaydi) — takrorlar navbatma-navbat.
         await client.query("SELECT 1 FROM users WHERE id = $1 FOR NO KEY UPDATE", [input.userId]);
@@ -318,12 +322,44 @@ export async function enqueueGeneration(input: EnqueueInput): Promise<EnqueueRes
       }
       return { ok: true as const, id, price: input.price, replayed: false };
     });
+    logEnqueue(input, res);
+    return res;
   } catch (e) {
     if (!key || !isIdempotencyViolation(e)) throw e;
     // Parallel takror bizdan oldin COMMIT qildi — butun tranzaksiya (pul ham) bekor, o'sha ish qaytadi.
     const prior = await transaction((client) => findByIdempotencyKey(client, input.userId, key));
     if (!prior) throw e;
-    return replayOf(prior, input.toolId);
+    const res = replayOf(prior, input.toolId);
+    logEnqueue(input, res);
+    return res;
+  }
+}
+
+/**
+ * Navbatga qo'yish izi (OBS-02): so'rovning `reqId` si (kontekstdan) va
+ * ish id si BITTA qatorda — «shu so'rov qaysi ishni yaratdi, qancha
+ * yechildi» degan savol jurnaldan javob topadi.
+ */
+function logEnqueue(input: EnqueueInput, res: EnqueueResult): void {
+  if (res.ok) {
+    log("info", res.replayed ? "[jobs] takroriy so'rov — mavjud ish qaytarildi" : "[jobs] navbatga qo'yildi", {
+      jobId: res.id,
+      genId: res.id,
+      userId: input.userId,
+      toolId: input.toolId,
+      price: res.price,
+      replayed: res.replayed,
+      budgetMs: Math.round(input.budgetMs),
+    });
+  } else {
+    log("info", "[jobs] navbatga qo'yilmadi", {
+      userId: input.userId,
+      toolId: input.toolId,
+      price: input.price,
+      reason: res.reason,
+      ...(res.reason === "admission" ? { code: res.decision.code } : {}),
+      ...(res.reason === "insufficient" ? { required: res.required, available: res.available } : {}),
+    });
   }
 }
 
@@ -905,7 +941,7 @@ export async function reclaimStaleJobs(): Promise<string[]> {
   const staleFilter = `locked_at < now() - ((CASE WHEN budget_ms > 0 THEN budget_ms / 1000 ELSE $1::int END) + 30 || ' seconds')::interval`;
   return transaction(async (client) => {
     // Yana urinib ko'rish mumkin bo'lganlari navbatga qaytadi.
-    await client.query(
+    const requeued = await client.query<{ id: string; attempts: number; user_id: string }>(
       `UPDATE generations
           SET status = 'QUEUED', locked_by = NULL, locked_at = NULL,
               run_after = now() + interval '5 seconds',
@@ -913,9 +949,19 @@ export async function reclaimStaleJobs(): Promise<string[]> {
               live_json = NULL
         WHERE status = 'IN_PROGRESS'
           AND attempts < 2
-          AND ${staleFilter}`,
+          AND ${staleFilter}
+        RETURNING id, attempts, user_id`,
       [String(timeoutSec)],
     );
+    // Ish izi (OBS-08): urinish o'lik deb topildi — keyingi urinishdan oldin jurnalga.
+    for (const r of requeued.rows) {
+      log("warn", "[jobs] osilib qolgan ish qayta navbatga qo'yildi", {
+        jobId: r.id,
+        userId: String(r.user_id),
+        attempt: r.attempts,
+        reason: "stale_lock",
+      });
+    }
     // Ikki marta uringanlari — yakuniy xato (pul chaqiruvchi tomonda qaytariladi).
     const dead = await client.query<{ id: string }>(
       `UPDATE generations

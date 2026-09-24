@@ -1,6 +1,7 @@
 import { ApiError, handler, json, requireUser } from "@/lib/server/api";
 import { cancelGeneration, deleteGeneration, getGeneration } from "@/lib/server/jobs";
 import { hasGenerationFile } from "@/lib/server/storage";
+import { log } from "@/lib/server/log";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -70,5 +71,7 @@ export const DELETE = handler("generations/delete", async (req, ctx: Ctx) => {
   if (!removed && !cancelled) {
     throw new ApiError("Ishlayotgan hujjatni o'chirib bo'lmaydi", 409);
   }
+  // Pul yo'li (bekor qilish = qaytarish): `reqId`/`userId` kontekstdan (C31).
+  log("info", "[generations] o'chirildi", { jobId: id, genId: id, removed, cancelled, refunded: cancelled });
   return json({ ok: true, refunded: cancelled });
 });

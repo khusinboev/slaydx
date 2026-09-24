@@ -222,6 +222,48 @@ lekin baribir o'qiydi. Fayl umuman bo'lmasa — muammo emas: faqat lokal
 dump olinadi, box tashqarisiga nusxa YO'Q va skript har safar buni ochiq
 ogohlantiradi. Yo'l `BACKUP_ENV_FILE` bilan almashtiriladi.
 
+### Jurnal, ish izi va metrikalar (C31)
+
+Pul va navbat yo'llari (`worker`, `jobs`, `credits`, `payments`, to'lov
+webhook'lari, `handler()` bilan o'ralgan API) `lib/server/log.ts` orqali
+yozadi: har qator — **bitta JSON** (`ts, level, msg, reqId?, jobId?,
+userId?, genId?, provider?, err{message, stack}` + `attempt`, `stage`,
+`orderId` kabi maydonlar). Kalitlar, `?key=`, `Authorization`, telefon
+raqami (oxirgi 2 raqam qoladi) jurnalga yozilishdan oldin yashiriladi.
+
+- Har API javobida `x-request-id` sarlavhasi bor; 500 javobida u
+  `requestId` sifatida ham qaytadi — foydalanuvchi shuni yuborsa, aynan
+  o'sha so'rovning qatorlari topiladi.
+- Foydalanuvchiga (`generations.error`, refund izohi) faqat qisqa o'zbekcha
+  matn boradi; pg/provayder xatosining xom matni va stack'i faqat jurnalda.
+
+```bash
+L="docker compose -p slaydx logs --no-log-prefix --since 24h web worker"
+# Bitta ishning to'liq tarixi (navbat → claim → urinishlar → xato/refund):
+$L | grep -F '"jobId":"<generation-id>"' | jq -c '{ts,level,msg,attempt,stage,provider,err:.err.message}'
+# Foydalanuvchi ko'rsatgan requestId bo'yicha:
+$L | grep -F '"reqId":"<request-id>"' | jq .
+# Pul qaytmay qolgan ishlar (housekeeping keyin qayta urinadi, lekin ko'rib chiqing):
+$L | grep -F '"alert":"REFUND_FAILED"' | jq -c '{ts,jobId,userId,err:.err.message}'
+```
+
+**Metrikalar** — `scripts/metrics-report.mts` (faqat o'qiydi, READ ONLY
+tranzaksiya): oxirgi N kun uchun vosita × holat bo'yicha ishlar, yiqilish
+va qaytarish ulushi, o'rtacha davomiylik, to'lovlar (so'm) va yechimlar,
+buyurtma holatlari, navbat kutishi p50/p95, eng ko'p xato matnlari.
+Worker/web image'da `tsx` yo'q, shuning uchun lokal checkout'dan, bazaga
+SSH tunnel orqali ishga tushiriladi (Postgres host portiga chiqarilmagan):
+
+```bash
+PG_IP=$(ssh root@<SERVER_IP> "docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' slaydx-postgres-1")
+ssh -N -L 55432:$PG_IP:5432 root@<SERVER_IP> &
+DATABASE_URL=postgres://slaydx:<POSTGRES_PASSWORD>@127.0.0.1:55432/slaydx \
+  scripts/heavy.sh npx tsx --conditions=react-server scripts/metrics-report.mts 7          # jadval
+#                                                   ... scripts/metrics-report.mts 30 --json  # JSON
+```
+
+Tannarx/marja uchun — `scripts/cost-report.mts` (xuddi shu usulda).
+
 ## Buyruqlar
 
 > ⚠️ **`npm run build` ni dev server ishlab turganda bajarmang.**
