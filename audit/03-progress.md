@@ -93,3 +93,19 @@ All 6 W4 packages merged: F `05b5baf`, C `04126b0`, E `da3c2f5`, B `266e3af`, D 
 - **Deadline:** a referat with a 20 s deadline threw `DeadlineError` after 13.7 s ("muddat tugadi — yangi urinish boshlanmadi") and returned no file. The worker maps it to FAILED + refund (unit tests plus the P5 provider-down chaos run).
 - **Spend:** ≈ $0.7 in total, including the accidental ≈ $0.007 earlier.
 - Note: Google Books returned 403 locally (key restriction). Research fell back to OpenAlex/Crossref, and every check passed.
+
+## Pre-deploy image verification (PRE-DEPLOY R1, 2026-09-24 ~17:10)
+- `docker build --target runner` and `--target worker` at `03e78c1`: both rc 0 (web 36 min and worker 8 min, both limited by the laptop network).
+- **Offline web image:** `parse-worker.mjs` present, migrations through 027, `sharp` loads, LibreOffice 25.8.7.3, `pdftoppm`, `find`.
+- **Boot test** on a Docker `--internal` network (no internet), with postgres 16.15-alpine3.24 using the compose flags, web, and 2 workers × 4 under `--init`:
+  - all 3 containers HEALTHY within 9 s;
+  - `/api/health` 200, `/uz` 200, `/api/generations` 401;
+  - 27 migrations through `027_queue_indexes.sql`;
+  - the worker logs `concurrency=4`;
+  - DOCX → PDF → PNG works as the `nextjs` user.
+- **Prod pre-deploy (read-only, plus backup):**
+  - `pg_dump -Fc` 277 MB (`pg_restore --list` OK);
+  - `ROLLBACK.txt` = `e380940`;
+  - images tagged `slaydx-{web,worker}:pre-audit`;
+  - `.env` backed up (600);
+  - queue idle.
