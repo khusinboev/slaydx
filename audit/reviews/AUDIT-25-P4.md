@@ -291,3 +291,88 @@ become decorative again (N1, N2). N3 is required for the swap to work.
    - `:295`, `:313`, `:341`, `:354`: semantics unchanged. `:313` should additionally assert `blocks` contains `test`.
    - Every comment with stub arithmetic («10-2-1=7», «7-2-1-0=4», «4 - 2 - 1 (reja slaydi) - 0 = 1») becomes bodyWant wording.
 7. After the swap, re-run this file and the `tests/slide-form.test.mts` / `tests/viewer/slide-form.test.mts` guards. P1's `tests/slide-params.test.mts` probe for `planItems` (probeA 3 / probeB 6) must still differ at the default slide count (capacity 7 at 10 slides; OK).
+
+---
+
+# Final review — caf9fcb
+
+Scope: `git diff 58720e8..caf9fcb` (merge `a0870ab` of `slides-3` with P1/P2/P3/P5/P6/P7, then `caf9fcb` swapping to
+the real engine and adding the N2 sync). The N1/N3/N5 changes from `58720e8` were re-checked in context
+(`SlideComposer.tsx` drafts `v:2`, `compact.tsx`).
+
+**Test run:** one heavy command, `npx tsx --tsconfig tsconfig.viewer.json --test tests/ui/slide-composer.test.mts`
+in the P4 worktree. Result: **27 tests, 27 pass, 0 fail, 0 skipped.**
+
+## Verdict: CHANGES (one small item; the rest are notes)
+
+## What is right
+- **Stub gone.** `plan-capacity-stub.ts` is deleted. `slide-fields.tsx` imports `planCapacity` (with `tool`),
+  `effectivePlanItems`, `normalizeQuizCount`, `resolvePlanFlags` and `activeBlockIds` from
+  `lib/generation/slide-params`, and `QUIZ_COUNT_FALLBACK` from `slide-blocks`.
+- **No leftover data copy.** The only `purposeDefaults` read (`slide-fields.tsx:104`) is the engine's own
+  function, used exactly where `extractMeta`/`planBudget` use it (blocks not given → type default).
+- **Every displayed value is engine-derived:**
+  - the plan-item options and which are disabled: `planCapacity`
+  - the default and effective plan count: `effectivePlanItems(values.planItems, cap, slidePagesOf)`; the raw
+    value is the same function with infinite capacity
+  - the quiz and agenda values shown in the controls and the summary: `resolvedFlags` →
+    `resolvePlanFlags` + `activeBlockIds`
+  - `slidePagesOf` uses the same per-tool clamp as `meta.ts` (`slidePages`)
+- **Parity with `meta.ts`.** `blocksSent` is `tool === "pro-slide" && blocks != null` on both sides.
+  `normalizeQuizCount` and the `agendaSlide` tri-state are the same.
+- **N2 cannot loop.** Each handler calls `set` (a functional `setValues`) directly. A chip handler never
+  calls the quiz or agenda `onChange`, and the reverse is also true. There are no effects that react to these
+  keys, so nothing re-enters. The two `set` calls inside one handler are functional updates, so both apply.
+  Handlers read `values` from the render closure, which is correct for a single user event.
+- **Drafts `v:2`.**
+  - `sanitizeValues` (server `putDraft`/`getDraft`) keeps the numeric `v` key (the key regex allows it), so the
+    version round-trips.
+  - `v` is removed on restore and added only to the saved object, so it never reaches `values` or the POST.
+  - Legacy drafts lose `planItems`/`quizCount`/`agendaSlide`, and «Slayd» drafts lose `blocks`. The first save
+    after restore migrates the draft to `v:2`.
+  - Test `:451` covers the legacy path; `:535` covers the version tag.
+- **No new decorative field.** The registry and field order are unchanged. The «Reja slaydi» switch on plain
+  «Slayd» now truly adds or removes the agenda: `agendaSlide:true` adds `reja` when no blocks are sent.
+- **`compact.tsx`:** `aria-disabled={disabled || undefined}`. The other 16 forms that use `Segmented` render
+  exactly as before.
+
+## CHANGES
+1. **F1 — changing «Taqdimot turi» on pro-slide leaves `quizCount`/`agendaSlide` behind, so chip and control disagree again.**
+   - The `slidePurpose` onChange (`slide-fields.tsx:306–312`) resets `blocks` to the new type's defaults but
+     keeps an explicit `quizCount`/`agendaSlide`.
+   - Example (quiz): pro, «Umumiy», «Nazorat testi»=5 (the sync adds `test`), then type → «Ma'ruza». `blocks`
+     becomes `reja,maqsadlar,adabiyotlar` without `test`, while `quizCount` stays 5.
+     `resolvePlanFlags(sent, …, 5, …)` keeps 5 (only 0 is neutralised), and `activeBlockIds` adds `test`. The
+     deck gets a 5-question test and the «Nazorat testi» control shows 5, but the **«Test» chip is OFF**. This
+     is case (b) of N2 reached by a different route.
+   - Example (agenda): switch «Reja slaydi» OFF (the sync removes `reja`, `agendaSlide=false`), then change the
+     type. `reja` comes back from the new defaults, so the **«Reja» chip is ON**, but the switch stays OFF and no
+     agenda slide is made.
+   - Fix (pro only), in the same handler after resetting `blocks`, set both flags from the new defaults:
+     `quizCount = newBlocks.includes("test") ? QUIZ_COUNT_FALLBACK : 0` and
+     `agendaSlide = newBlocks.includes("reja")`. That matches «Taqdimot turi standart bloklarni beradi».
+     Alternative: unset both keys; this needs a setter that accepts `undefined`.
+   - Test: pro; «Nazorat testi»=5; type → lecture. The Test chip's `aria-pressed` and «Nazorat testi» must agree
+     (both off/«Testsiz»), and the POST must have no `test` in `blocks` and `quizCount` 0. The mirror case: pro;
+     switch OFF; type → lesson; the chip «Reja» and the switch agree.
+
+## Notes (non-blocking)
+- **The uncaught mutation (`else if (!hasRejaNow && hadReja) set("agendaSlide", false)`, blocks onChange) is
+  dead at the moment it runs, and harmless.**
+  - Once `reja` leaves `blocks`, `on.has("reja")` is false. `planBudgetForBody` and `resolvedAgendaSlide` then
+    give "no agenda" whatever `agendaSlide` is. For pro, `resolvePlanFlags` also neutralises `true`.
+  - The only later effect is stickiness: after a type change `reja` returns and the sticky `false` keeps the
+    agenda off. That is the F1 mirror case, and the F1 fix makes it irrelevant.
+  - Keeping the line for symmetry is fine. The opposite branch (`hasRejaNow && !hadReja → true`) is NOT dead: it
+    clears an earlier `false` set by the switch.
+  - The N2c test comment (`:404–405`, «…qatorlari olib tashlansa — bu qator qizaradi») is inaccurate for this
+    line. Reword it, or make N2c also re-tick the chip after the switch was turned off.
+- **No test that a `v:2` draft KEEPS explicit choices.** The mutation "always delete the three keys" survives.
+  One test would close it: GET draft `{ v: 2, quizCount: 5, planItems: 4 }` → the POST carries both.
+- **Small-deck agenda.** `planBudgetForBody` drops the agenda when `room < 1` (e.g. 4 slides + test + reja), but
+  `resolvedAgendaSlide` shows the switch ON. This is automatic adaptation like the `planItems` clamp, but the
+  switch has no hint. Either show `planBudget(…).agenda` in the summary chip, or accept and document it.
+- **Duplicated steps.** `resolvedFlags` repeats the sequence in `planBudget` (`slide-params.ts:319–336`) step by
+  step. It is correct today, but that makes three copies of the procedure (`meta.ts`, `planBudget`, the form). P1
+  could export `planFlags(v): { on, quizCount, agendaSlide }` from `planBudget`, and the form would call it. This
+  is a follow-up, not a merge blocker.
