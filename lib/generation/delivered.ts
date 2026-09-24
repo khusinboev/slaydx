@@ -282,7 +282,18 @@ export function deliveredCount(meta: DocMeta, doc: AcademicDoc, values: FormValu
 
   switch (meta.toolId) {
     case "slide":
-      // `targetPages` slaydda — SLAYDLAR soni (`extractMeta`).
+    case "pro-slide":
+      /*
+       * `targetPages` slaydda — SLAYDLAR soni (`extractMeta`). `pro-slide`
+       * AYNI shu maydondan foydalanadi (`meta.ts`: `slidePages`, faqat
+       * chegara boshqa — 4…30) va AYNI dvigateldan chiqadi
+       * (`index.ts buildArtifactInner`: «pro-slide ham shu dvigatel»).
+       *
+       * A3-03: bu `case` ilgari faqat `slide` uchun bor edi — `pro-slide`
+       * `default:` ga tushib `undefined` qaytarardi, ya'ni 2 000 tanga/slayd
+       * narxlangan deka kam slayd yoki kam AI rasm bilan yetkazilsa ham
+       * HECH QACHON qisman pul qaytmasdi.
+       */
       want = meta.targetPages;
       got = doc.slides?.length ?? 0;
       unit = "slayd";
@@ -303,6 +314,7 @@ export function deliveredCount(meta: DocMeta, doc: AcademicDoc, values: FormValu
 
   // Ortiq yetkazish qaytarish sababi emas.
   const byCount = !(want > 0) || got >= want ? undefined : { got, want, unit };
-  if (meta.toolId !== "slide") return byCount;
+  // Rasm va'dasi ham `slide` va `pro-slide` uchun BIR xil tarmoqdan o'tadi.
+  if (meta.toolId !== "slide" && meta.toolId !== "pro-slide") return byCount;
   return worse(byCount, imagesDelivered(meta, doc));
 }
