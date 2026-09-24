@@ -1,0 +1,3 @@
+[09:41:13] k6 downloads (profile full) -> /home/adhambek/projects/pythons/slaydbot/slaydx/loadtests/results/before/k6-downloads.json
+[k6:downloads] reqs=136080 rps=541.9 p50=3.5ms p95=9.2ms p99=15.0ms failed=0.00%
+time="2026-09-24T04:45:25Z" level=error msg="thresholds on metrics 'cacheable_asset, cacheable_thumb_versioned' have been crossed"

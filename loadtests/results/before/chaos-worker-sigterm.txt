@@ -1,0 +1,32 @@
+== chaos worker-sigterm (before; release expected ≤ 35 s)
+[10:03:35] provider mode now tarpit (workers restarted)
+INFO  worker-1 pid 1044701 holds 4 job(s): ba25bc54-f3f4-468f-ae77-529a214ad819 f7f6f130-7f49-421f-a6c1-07eb689ce4f3 69a64ed4-b6e2-44b5-82e7-22fa351c7fb2 413f8cea-8fb8-4c7b-9ac4-15e87d0f4cc9
+FAIL  drained_or_released — jobs still leased by the stopped worker after 37s: 4 (0 = finished in grace or released to QUEUED)
+PASS  exited_after_sigterm — old worker process exited within 35s of SIGTERM
+INFO  worker-1 log: [worker] to'xtatilmoqda...
+INFO  worker-1 log: [worker] to'xtatilmoqda...
+INFO  worker-1 log: [worker] to'xtatilmoqda...
+PASS  sigtermed_jobs_finish — 4 job(s) terminal after 230 s; still open: 0
+PASS  sigtermed_charged_once_refunded_once — 4 jobs; violations (charge≠1, refund>1, FAILED without exactly one refund): 0
+INFO  sigtermed states — 4× FAILED attempts=2 refunds=1
+PASS  all_enqueued_charged_once_refunded_once — 6 jobs; violations (charge≠1, refund>1, FAILED without exactly one refund): 0
+INFO  all_enqueued states — 2× FAILED attempts=1 refunds=1; 4× FAILED attempts=2 refunds=1
+PASS  no_crash_loop — worker-1 restarts: +1 (expected 1: the SIGTERM)
+INFO  k6 mixed during experiment — reqs=2160 failed=0% p50=3ms p95=8ms p99=12ms max=19ms
+[10:07:42] provider mode now blank (workers restarted)
+  INFO  idle-wait — busy jobs left: 4
+  INFO  jobs by status — COMPLETED=4937 FAILED=1496 QUEUED=4
+  INFO  ledger rows — bonus=2000 charge=6437 refund=1496 topup=2000
+  PASS  ledger_matches_wallet — users whose points/quota/balance != sum(transactions): 0
+  PASS  no_negative_wallet — users with a negative wallet: 0
+  PASS  no_double_charge — references charged twice: 0
+  PASS  no_double_refund — references refunded twice: 0
+  PASS  refund_le_charge — refunds larger than their charge: 0
+  PASS  refund_has_charge — refunds without a charge: 0
+  PASS  paid_job_has_charge — paid jobs without a charge row: 0
+  PASS  charge_has_job — charges whose job row is missing: 0
+  PASS  failed_job_refunded — FAILED paid jobs without a refund: 0
+  PASS  completed_has_file — COMPLETED jobs without a stored file: 0
+  PASS  no_stuck_in_progress — IN_PROGRESS jobs past lease + housekeeping: 0
+  INFO  completed-but-refunded (partial delivery refunds are legal) — 0
+== worker-sigterm: 1 failed check(s)

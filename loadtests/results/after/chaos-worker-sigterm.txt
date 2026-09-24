@@ -1,0 +1,32 @@
+== chaos worker-sigterm (after; release expected ≤ 35 s)
+[10:43:36] provider mode now tarpit (workers restarted)
+INFO  worker-1 pid 1124041 holds 4 job(s): 7d8b1a49-0d3a-411b-9e09-0c719a0cedfb 57410339-a7c4-42b0-867e-0cb4d1ca533e 1a2891c9-8122-48b2-9f3f-28e9284f7e26 53d0eb48-73c4-4aad-b8a4-e23578d4c17c
+PASS  drained_or_released — jobs still leased by the stopped worker after 20s: 0 (0 = finished in grace or released to QUEUED)
+PASS  exited_after_sigterm — old worker process exited within 35s of SIGTERM
+INFO  worker-1 log: {"ts":"2026-09-24T05:43:39.773Z","level":"info","msg":"[worker] SIGTERM: to'xtatilmoqda..."}
+INFO  worker-1 log: {"ts":"2026-09-24T05:43:39.773Z","level":"info","msg":"[worker] to'xtatilmoqda: 4 ta ish tugashi kutilmoqda (≤ 20 s)","jobIds":["1a2891c9-8122-48b2-9f3f-28e9284f7e26","53d0eb48-73c4-4aad-b8a4-e23578d4c17c","7d8b1a49-0d3a-411b-9e09-0c719a0cedfb","57410339-a7c4-42b0-867e-0cb4d1ca533e"]}
+INFO  worker-1 log: {"ts":"2026-09-24T05:43:59.781Z","level":"warn","msg":"[worker] to'xtatilmoqda: 4 ta tugallanmagan ish navbatga qaytarildi (urinish sanalmadi, boshqa worker darhol oladi): 57410339-a7c4-42b0-867e-0cb4d1ca533e, 7d8b1a49-0d3a-411b-9e09-0c719a0cedfb, 53d0eb48-73c4-4aad-b8a4-e23578d4c17c, 1a2891c9-8122-48b2-9f3f-28e9284f7e26","jobIds":["57410339-a7c4-42b0-867e-0cb4d1ca533e","7d8b1a49-0d3a-411b-9e09-0c719a0cedfb","53d0eb48-73c4-4aad-b8a4-e23578d4c17c","1a2891c9-8122-48b2-9f3f-28e9284f7e26"],"stages":[{"jobId":"1a2891c9-8122-48b2-9f3f-28e9284f7e26","attempt":1,"stage":"Insho rejasi"},{"jobId":"53d0eb48-73c4-4aad-b8a4-e23578d4c17c","attempt":1,"stage":"Insho rejasi"},{"jobId":"7d8b1a49-0d3a-411b-9e09-0c719a0cedfb","attempt":1,"stage":"Insho rejasi"},{"jobId":"57410339-a7c4-42b0-867e-0cb4d1ca533e","attempt":1,"stage":"Insho rejasi"}]}
+PASS  sigtermed_jobs_finish — 4 job(s) terminal after 68 s; still open: 0
+PASS  sigtermed_charged_once_refunded_once — 4 jobs; violations (charge≠1, refund>1, FAILED without exactly one refund): 0
+INFO  sigtermed states — 4× FAILED attempts=1 refunds=1
+PASS  all_enqueued_charged_once_refunded_once — 6 jobs; violations (charge≠1, refund>1, FAILED without exactly one refund): 0
+INFO  all_enqueued states — 6× FAILED attempts=1 refunds=1
+PASS  no_crash_loop — worker-1 restarts: +1 (expected 1: the SIGTERM)
+INFO  k6 mixed during experiment — reqs=2216 failed=0% p50=4ms p95=10ms p99=18ms max=47ms
+[10:45:18] provider mode now blank (workers restarted)
+  INFO  idle-wait — busy jobs left: 0
+  INFO  jobs by status — COMPLETED=3203 FAILED=877
+  INFO  ledger rows — bonus=2000 charge=4080 refund=877 topup=2000
+  PASS  ledger_matches_wallet — users whose points/quota/balance != sum(transactions): 0
+  PASS  no_negative_wallet — users with a negative wallet: 0
+  PASS  no_double_charge — references charged twice: 0
+  PASS  no_double_refund — references refunded twice: 0
+  PASS  refund_le_charge — refunds larger than their charge: 0
+  PASS  refund_has_charge — refunds without a charge: 0
+  PASS  paid_job_has_charge — paid jobs without a charge row: 0
+  PASS  charge_has_job — charges whose job row is missing: 0
+  PASS  failed_job_refunded — FAILED paid jobs without a refund: 0
+  PASS  completed_has_file — COMPLETED jobs without a stored file: 0
+  PASS  no_stuck_in_progress — IN_PROGRESS jobs past lease + housekeeping: 0
+  INFO  completed-but-refunded (partial delivery refunds are legal) — 0
+== worker-sigterm: 0 failed check(s)

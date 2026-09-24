@@ -1,0 +1,11 @@
+label:    before
+repo:     /home/adhambek/projects/pythons/slaydbot/slaydx/.claude/worktrees/loadtest-main
+provider: blank  pg: default
+health:   200
+jail         pid=968699   alive=yes restarts=0
+supervisor   pid=968697   alive=yes restarts=0
+web          pid=968701   alive=yes restarts=0
+worker-1     pid=1054143  alive=yes restarts=8
+worker-2     pid=1054425  alive=yes restarts=6
+queue:    COMPLETED=4941 FAILED=1496
+jail hits: 494 (1 = the start-up self-test)

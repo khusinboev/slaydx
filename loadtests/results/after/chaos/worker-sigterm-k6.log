@@ -1,0 +1,2 @@
+[10:43:36] k6 mixed (profile smoke) -> /home/adhambek/projects/pythons/slaydbot/slaydx/loadtests/results/after/chaos/worker-sigterm-k6/k6-mixed.json
+[k6:mixed] reqs=2216 rps=28.3 p50=3.9ms p95=9.8ms p99=18.3ms failed=0.00%

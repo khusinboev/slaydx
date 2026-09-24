@@ -1,0 +1,2 @@
+[10:32:15] k6 mixed (profile full) -> /home/adhambek/projects/pythons/slaydbot/slaydx/loadtests/results/after/k6-mixed.json
+[k6:mixed] reqs=166682 rps=657.2 p50=3.2ms p95=12.1ms p99=22.6ms failed=0.00%

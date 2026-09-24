@@ -1,0 +1,2 @@
+[10:47:29] k6 downloads (profile full) -> /home/adhambek/projects/pythons/slaydbot/slaydx/loadtests/results/after-pgcpu2/k6-downloads.json
+[k6:downloads] reqs=135404 rps=539.8 p50=4.1ms p95=11.8ms p99=23.9ms failed=0.00%

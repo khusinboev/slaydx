@@ -1,0 +1,2 @@
+[10:15:19] k6 poll (profile full) -> /home/adhambek/projects/pythons/slaydbot/slaydx/loadtests/results/after/k6-poll.json
+[k6:poll] reqs=61649 rps=243.2 p50=3.6ms p95=6.3ms p99=10.7ms failed=0.00%

@@ -1,0 +1,2 @@
+[10:10:50] k6 browse (profile full) -> /home/adhambek/projects/pythons/slaydbot/slaydx/loadtests/results/after/k6-browse.json
+[k6:browse] reqs=129382 rps=513.5 p50=1.5ms p95=3.6ms p99=5.6ms failed=0.00%

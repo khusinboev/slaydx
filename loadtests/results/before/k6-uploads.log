@@ -1,0 +1,2 @@
+[09:45:41] k6 uploads (profile full) -> /home/adhambek/projects/pythons/slaydbot/slaydx/loadtests/results/before/k6-uploads.json
+[k6:uploads] reqs=8567 rps=33.9 p50=4.9ms p95=10.0ms p99=16.5ms failed=0.00%
