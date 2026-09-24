@@ -12,10 +12,28 @@ export const dynamic = "force-dynamic";
 
 type Body = {
   /** Mini App dan: `window.Telegram.WebApp.initData` */
-  initData?: string;
+  initData?: unknown;
   /** Login Widget dan: callback obyekt (id, hash, auth_date, ...) */
-  widget?: Record<string, string>;
+  widget?: unknown;
 };
+
+/** Telegram imzosi — HMAC-SHA256 ning hex ko'rinishi (64 belgi). */
+const WIDGET_HASH = /^[0-9a-f]{64}$/i;
+
+/**
+ * So'rov SHAKLI imzodan OLDIN (BEA-13): `widget.hash` son yoki obyekt
+ * bo'lsa `safeEqual` ichida `Buffer.from(1)` TypeError bilan 500 berardi.
+ * Shakl xatosi — 400 (imzo xatosi esa oldingidek 401).
+ */
+function shapeError(body: Body): string | null {
+  if (body.initData !== undefined && typeof body.initData !== "string") return "«initData» satr bo'lishi kerak";
+  if (body.widget === undefined) return null;
+  const w = body.widget;
+  if (!w || typeof w !== "object" || Array.isArray(w)) return "«widget» obyekt bo'lishi kerak";
+  const hash = (w as Record<string, unknown>).hash;
+  if (typeof hash !== "string" || !WIDGET_HASH.test(hash)) return "Telegram imzosi yaroqsiz shaklda";
+  return null;
+}
 
 /**
  * Telegram orqali kirish.
@@ -47,10 +65,16 @@ export const POST = handler("auth/telegram", async (req) => {
   }
 
   const body = await readJson<Body>(req, 20_000);
-  const profile = body.initData
+  const shape = shapeError(body);
+  if (shape) {
+    // Buzuq shakl ham buzuq urinish — IP chelagiga sanaladi (fuzz 429 ga yetadi).
+    await rateLimit(badBucket, tgBadPerIp.count, tgBadPerIp.windowSec);
+    throw new ApiError(shape, 400);
+  }
+  const profile = typeof body.initData === "string" && body.initData
     ? verifyMiniAppInitData(body.initData)
     : body.widget
-      ? verifyLoginWidget(body.widget)
+      ? verifyLoginWidget(body.widget as Record<string, string>)
       : null;
 
   if (!profile) {
