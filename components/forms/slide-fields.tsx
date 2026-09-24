@@ -310,7 +310,25 @@ export function renderSlideParam(
               // shu yerda SO'ZSIZ `set("blocks", ...)` chaqirardi, shu sabab
               // oddiy formada ham `values.blocks` to'lib qolardi va server
               // (P1 `resolvePlanFlags`) so'rovni "pro" deb noto'g'ri o'qirdi.
-              if (ctx.tool === "pro-slide") set("blocks", resetBlocksForPurpose(v));
+              if (ctx.tool === "pro-slide") {
+                const newBlocks = purposeDefaults(v).blocks;
+                set("blocks", encodeBlocks(newBlocks));
+                /*
+                 * AUDIT-25 F1 (final review caf9fcb): agar foydalanuvchi
+                 * ALLAQACHON aniq tanlov qilgan bo'lsa («Nazorat testi»=5
+                 * yoki «Reja slaydi» kaliti bosilgan), o'sha aniq tanlov
+                 * YANGI bloklarga moslashtiriladi — aks holda eski aniq son
+                 * yangi turda ham qoladi-yu, endi bloklarda yo'q «Test»
+                 * chipi bilan ziddiyatga tushadi. TEGILMAGAN holatga
+                 * TEGMAYMIZ: `resolvedQuizCount`/`resolvedAgendaSlide`
+                 * allaqachon jonli `blocks`dan (shu yangilangan) to'g'ri
+                 * o'qiydi, aniq qiymat yozib "tegilgan" holatga
+                 * aylantirish A3-01/A3-02 "tegilmagan → yuborilmaydi"
+                 * shartnomasini shunchaki tur almashtirish bilan buzardi.
+                 */
+                if (values.quizCount !== undefined) set("quizCount", newBlocks.includes("test") ? QUIZ_COUNT_FALLBACK : 0);
+                if (values.agendaSlide !== undefined) set("agendaSlide", newBlocks.includes("reja"));
+              }
             }}
           />
         </Row>

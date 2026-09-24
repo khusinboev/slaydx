@@ -401,8 +401,15 @@ test("N2c: «Reja» chipi o'chirilsa — «Reja slaydi» kaliti HAM o'chgan ko'r
   mount("pro-slide"); // standart «Umumiy» — bloklarida «reja» bor
   assert.equal(screen.getByRole("switch", { name: "Reja slaydi" }).getAttribute("aria-checked"), "true", "boshida yoqilgan bo'lishi kerak");
   fireEvent.click(screen.getByRole("button", { name: "Reja" })); // «Tuzilma bloklari» chip'ini o'chiramiz
-  // MUTATSIYA (N2): blocks-onChange'dagi reja-sinxron qatorlari olib tashlansa — bu qator qizaradi
-  // (`resolvedAgendaSlide` eskicha `on.has("reja")`ni to'g'ridan-to'g'ri `values.blocks`dan emas, kesh'dan o'qib qoladi).
+  /*
+   * Tekshiruv: `resolvedAgendaSlide` `blocks`dan JONLI o'qiydi (kesh emas) — chip o'chishi
+   * bilanoq «reja» `blocks`dan chiqadi va kalit HAM o'chadi. Diqqat (final review caf9fcb,
+   * «Notes»): buni ta'minlaydigan qator `blocks`-onChange'dagi `set("blocks", ...)`ning o'zi
+   * (`activeBlockIds` «reja»ni FAQAT `agendaSlide===true`da qo'shadi, hech qachon olib
+   * tashlamaydi) — pastroqdagi `set("agendaSlide", false)` sinxron qatori bu aniq ssenariyda
+   * ORTIQCHA (blocks allaqachon «reja»siz); u F1/stiklik holatlari uchun kerak, bu test uchun
+   * emas. Shu sabab shu qatorni MUTATSIYA sifatida sinamaymiz — pastdagi F1 testlari sinaydi.
+   */
   assert.equal(screen.getByRole("switch", { name: "Reja slaydi" }).getAttribute("aria-checked"), "false", "chip o'chgach kalit HAM o'chgan ko'rinishi kerak (re-review 8e4603e, (c))");
 });
 
@@ -428,6 +435,40 @@ test("«Reja slaydi» o'chirilsa agendaSlide ANIQ false yuboriladi", async () =>
   } finally {
     cap.restore();
   }
+});
+
+test("F1: pro-slide + «Nazorat testi»=5, keyin tur o'zgartirilsa — «Test» chipi va son yana sinxron qoladi", async () => {
+  const cap = captureSubmittedValues();
+  try {
+    mount("pro-slide"); // standart «Umumiy» — bloklarida «test» yo'q
+    fireEvent.click(within(screen.getByRole("radiogroup", { name: "Nazorat testi" })).getByRole("radio", { name: "5" }));
+    assert.equal(screen.getByRole("button", { name: "Test" }).getAttribute("aria-pressed"), "true", "5 tanlangach «Test» chipi yonishi kerak");
+    fireEvent.change(screen.getByLabelText("Taqdimot turi"), { target: { value: "lecture" } }); // «Ma'ruza» — standartida «test» yo'q
+    // MUTATSIYA (F1): slidePurpose-onChange'dagi quizCount-sinxron qatori olib tashlansa — bu ikki qator qizaradi.
+    assert.equal(screen.getByRole("button", { name: "Test" }).getAttribute("aria-pressed"), "false", "tur o'zgargach «Test» chipi HAM o'chishi kerak");
+    assert.equal(
+      within(screen.getByRole("radiogroup", { name: "Nazorat testi" })).getByRole("radio", { name: "Testsiz" }).getAttribute("aria-checked"),
+      "true",
+      "tur o'zgargach «Nazorat testi» ham «Testsiz» ko'rsatishi kerak",
+    );
+    fillTopicAndSubmit("pro-slide");
+    await waitFor(() => assert.ok(cap.posts.length > 0));
+    assert.equal(cap.posts[0].quizCount, 0, `tur o'zgargach quizCount 0 yuborishi kerak: ${JSON.stringify(cap.posts[0])}`);
+    assert.ok(!String(cap.posts[0].blocks ?? "").split(",").includes("test"), `blocks «test»siz bo'lishi kerak: ${JSON.stringify(cap.posts[0])}`);
+  } finally {
+    cap.restore();
+  }
+});
+
+test("F1 (oyna): pro-slide + «Reja slaydi» OFF, keyin tur o'zgartirilsa — «Reja» chipi va kalit sinxron qoladi", () => {
+  mount("pro-slide"); // standart «Umumiy» — bloklarida «reja» bor
+  fireEvent.click(screen.getByRole("switch", { name: "Reja slaydi" })); // o'chiramiz — blocks'dan «reja» chiqadi
+  assert.equal(screen.getByRole("button", { name: "Reja" }).getAttribute("aria-pressed"), "false");
+  fireEvent.change(screen.getByLabelText("Taqdimot turi"), { target: { value: "lesson" } }); // «Dars» — standartida «reja» bor
+  // MUTATSIYA (F1): slidePurpose-onChange'dagi agendaSlide-sinxron qatori olib tashlansa — bu qator qizaradi
+  // (chip yonadi, chunki `blocks` yangi turdan «reja» oladi, lekin eski `agendaSlide:false` yopishib qolib kalitni o'chirib turaveradi).
+  assert.equal(screen.getByRole("button", { name: "Reja" }).getAttribute("aria-pressed"), "true", "tur o'zgargach «Reja» chipi qayta yonadi");
+  assert.equal(screen.getByRole("switch", { name: "Reja slaydi" }).getAttribute("aria-checked"), "true", "tur o'zgargach kalit HAM yonishi kerak (F1)");
 });
 
 test("N1: «Slayd» (oddiy) + open_lesson + «Testsiz» — POST'da blocks kaliti YO'Q, quizCount ANIQ 0", async () => {
@@ -494,6 +535,42 @@ test("N1/N3: eski (versiyasiz) qoralama tiklanganda blocks/planItems/quizCount/a
     assert.ok(!("quizCount" in sent), `eski (versiyasiz) qoralamadan tiklangan quizCount tashlab yuborilishi kerak: ${JSON.stringify(sent)}`);
     assert.ok(!("agendaSlide" in sent), `eski (versiyasiz) qoralamadan tiklangan agendaSlide tashlab yuborilishi kerak: ${JSON.stringify(sent)}`);
     assert.ok(!("planItems" in sent), `eski (versiyasiz) qoralamadan tiklangan planItems tashlab yuborilishi kerak: ${JSON.stringify(sent)}`);
+  } finally {
+    globalThis.fetch = realFetch;
+    useAppStore.setState({ loggedIn: false, sessionChecked: false });
+  }
+});
+
+test("N3 versiya (final review caf9fcb): v:2 qoralama ANIQ tanlovlarni (quizCount/planItems) SAQLAYDI", async () => {
+  const { useAppStore } = await import("../../lib/store.ts");
+  useAppStore.setState({ loggedIn: true, sessionChecked: true });
+  const realFetch = globalThis.fetch;
+  const posts: Record<string, unknown>[] = [];
+  const json = (status: number, data: unknown) => new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
+  globalThis.fetch = (async (input: unknown, opts?: RequestInit) => {
+    const url = String(input);
+    const method = opts?.method ?? "GET";
+    if (url === "/api/forms/slide/draft" && method === "GET") {
+      // YANGI (v:2) qoralama — `quizCount`/`planItems` ANIQ tanlov sifatida yozilgan, «eski qoralama» emas.
+      return json(200, { draft: { data: { topic: "Yangi mavzu", slideCount: 10, v: 2, quizCount: 5, planItems: 4 }, updatedAt: "now" } });
+    }
+    if (url === "/api/forms/slide/draft") return json(200, { ok: true, updatedAt: "now" });
+    if (url === "/api/generations" && method === "POST") {
+      const body = JSON.parse(String(opts?.body ?? "{}")) as { values?: Record<string, unknown> };
+      posts.push(body.values ?? {});
+      return json(200, { id: "gen1", price: 1000, status: "QUEUED" });
+    }
+    return json(404, { error: "yo'q" });
+  }) as typeof fetch;
+  try {
+    mount("slide");
+    await waitFor(() => assert.equal((screen.getByLabelText("Taqdimot mavzusini kiriting") as HTMLInputElement).value, "Yangi mavzu"));
+    fillTopicAndSubmit("slide");
+    await waitFor(() => assert.ok(posts.length > 0, "so'rov yuborilishi kerak"));
+    const sent = posts[0];
+    // MUTATSIYA: `sanitizeRestoredDraft` versiyadan qat'i nazar uchtasini har doim o'chirsa — bu ikki qator qizaradi.
+    assert.equal(sent.quizCount, 5, `v:2 qoralamadagi ANIQ quizCount saqlanishi kerak: ${JSON.stringify(sent)}`);
+    assert.equal(sent.planItems, 4, `v:2 qoralamadagi ANIQ planItems saqlanishi kerak: ${JSON.stringify(sent)}`);
   } finally {
     globalThis.fetch = realFetch;
     useAppStore.setState({ loggedIn: false, sessionChecked: false });
