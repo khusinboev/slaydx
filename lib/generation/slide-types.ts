@@ -60,6 +60,13 @@ export type SlideModel = {
   /** `stats`: diagramma majburiy («Diagramma» bloki) — 2+ bir birlikli qiymatda ham chiziladi. */
   chart?: boolean;
   /**
+   * Reja bandi raqami (1 dan) — shu slayd rejaning qaysi bandini ochadi
+   * (AUDIT-25). Rejadagi beat'dan keladi (`SlideBeat.plan`), LLM yozmaydi.
+   * Bo'lim raqami FAQAT shundan chiziladi; eski `doc_json` da yo'q —
+   * u holda raqam chizilmaydi.
+   */
+  plan?: number;
+  /**
    * Foydalanuvchi tanlagan shrift o'lchamlari (pt) — kalit `SlideSrc`
    * ning JSON matni (masalan `{"f":"title"}`). `planSlide` OXIRIDA shu
    * qatlamga qo'llanadi, ya'ni PPTX ham, ko'ruvchi ham bir xil o'qiydi.

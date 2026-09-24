@@ -138,6 +138,12 @@ export type SlideBeat = {
   role: string;
   /** «Diagramma» bloki: `stats` majburiy chart rejimida (`blocksToBeats` qo'yadi, `SlideModel.chart` ga o'tadi). */
   chart?: boolean;
+  /**
+   * Reja bandi (1 dan) — shu beat qaysi reja bandining slaydi (AUDIT-25).
+   * `blocksToBeats` qo'yadi, `SlideModel.plan` ga o'tadi; agenda shu
+   * slaydlar sarlavhasidan quriladi.
+   */
+  plan?: number;
 };
 
 export type SlideTemplate = {
@@ -191,10 +197,10 @@ export const SLIDE_TEMPLATES: SlideTemplate[] = [
     beats: [
       { layout: "title", role: "Mavzu va fan" },
       { layout: "agenda", role: "Ma’ruza reja" },
-      { layout: "section", role: "1. Tushuncha" },
+      { layout: "section", role: "Tushuncha" },
       { layout: "bullets", role: "Ta’rif va ahamiyat" },
       { layout: "twoCol", role: "Tarkib / natija" },
-      { layout: "section", role: "2. Mexanizm" },
+      { layout: "section", role: "Mexanizm" },
       { layout: "process", role: "Ketma-ketlik" },
       { layout: "quote", role: "Asosiy g‘oya" },
       { layout: "bullets", role: "Amaliy xulosa" },

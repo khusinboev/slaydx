@@ -354,12 +354,20 @@ export type DocMeta = {
   blocks: SlideBlockId[];
   /** Reja slaydidagi bandlar soni (3–6). */
   planItems: number;
-  /** Reja (agenda) slaydi bo'lsinmi. */
-  agendaSlide: boolean;
+  /**
+   * Reja (agenda) slaydi bo'lsinmi. `undefined` — taqdimot turi standarti
+   * (`reja` bloki bo'lsa bor); `true` — standartida reja yo'q turga ham
+   * qo'shiladi; `false` — olib tashlanadi (AUDIT-25 A3-02).
+   */
+  agendaSlide?: boolean;
   /** Matn hajmi — band soni/uzunligi; shrift poli o'zgarmaydi. */
   textVolume: SlideTextVolume;
-  /** Nazorat testi savollari soni (0 — test yo'q). */
-  quizCount: number;
+  /**
+   * Nazorat testi savollari soni. `0` — foydalanuvchi ANIQ «Testsiz»
+   * tanlagan: tur standartidagi test ham olib tashlanadi; `undefined` —
+   * yuborilmagan: `test` bloki bo'lsa standart son (AUDIT-25 A3-01).
+   */
+  quizCount?: number;
   /** Gemini grounding bilan internet tadqiqoti. */
   internetSearch: boolean;
   /** Ma'ruzachi izohlari (PPTX notes) yozilsinmi. */

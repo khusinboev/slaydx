@@ -9,8 +9,10 @@ import {
   SLIDE_BLOCK_IDS,
   blocksToBeats,
   orderedBlocks,
+  planRoleText,
   type SlideBlockId,
 } from "../lib/generation/slide-blocks.ts";
+import { planBudget } from "../lib/generation/slide-params.ts";
 import { PURPOSE_DEFAULTS, SLIDE_PURPOSES } from "../lib/generation/slide-purpose.ts";
 import { slideSystem } from "../lib/generation/slide-prompt/index.ts";
 import {
@@ -47,8 +49,13 @@ type BlockMeta = Pick<DocMeta, "blocks" | "planItems" | "quizCount" | "agendaSli
 const bm = (v: Partial<BlockMeta> = {}): BlockMeta => ({
   blocks: [],
   planItems: 5,
-  quizCount: 0,
-  agendaSlide: true,
+  /*
+   * AUDIT-25 A3-01/02: `quizCount: 0` va `agendaSlide: true` endi ANIQ
+   * tanlov (0 — tur standartidagi testni ham o'chiradi, true — rejasiz
+   * turga ham reja qo'shadi). Standart holat — «yuborilmagan».
+   */
+  quizCount: undefined,
+  agendaSlide: undefined,
   internetSearch: false,
   // X-3: izohlar YOQIQ — javoblar izohda qoladi, rejaga `answers` slaydi
   // KIRMAYDI. Kalit slaydini sinaydigan holatlar uni oshkora yozadi.
@@ -82,21 +89,25 @@ test("test bloki → savol soncha quiz beat; son roldan ham ko'rinadi", () => {
   assert.match(q[0].role, new RegExp(`jami ${QUIZ_COUNT_FALLBACK} ta savol`), "rol jami sonni aytmadi");
   assert.match(q[1].role, /2-savol/, "rol slaydning tartib raqamini aytmadi");
   // 3-qoida: son tanlangan bo'lsa blok belgisiz ham test so'ralgan.
-  const byCount = run({ blocks: [], quizCount: 10 }, "lecture", 14);
+  // (AUDIT-25: reja bandlari birinchi o'rin oladi — 2 band + 10 savol = 12 = tana.)
+  const byCount = run({ blocks: [], quizCount: 10, planItems: 2 }, "lecture", 14);
   assert.equal(byCount.filter((b) => b.layout === "quiz").length, 10, "quizCount 10 ta quiz beat bermadi");
   assert.match(roleOf(byCount, "quiz"), /jami 10 ta savol/);
   /*
    * Sig'magan savollar TASHLANADI va rol HAQIQIY sonni aytadi. 10
-   * slaydli dekada tana 8 ta (titul + yakun ayrilgan) — ya'ni 10
-   * savol sig'maydi. Rolda hamon «10 ta savol» tursa, model rejadan
-   * ko'p savol yozar va prompt bilan reja ajralib ketardi.
+   * slaydli dekada tana 8 ta (titul + yakun ayrilgan), 5 tasi reja
+   * bandlariga (AUDIT-25) — ya'ni savolga 3 o'rin. Rolda hamon «10 ta
+   * savol» tursa, model rejadan ko'p savol yozar va prompt bilan reja
+   * ajralib ketardi.
    */
   const tight = run({ blocks: [], quizCount: 10 }, "lecture", 10);
-  assert.equal(tight.filter((b) => b.layout === "quiz").length, 8, "sig'gani qadar quiz beat qo'yilmadi");
-  assert.match(roleOf(tight, "quiz"), /jami 8 ta savol/, "rol rejadagi HAQIQIY sonni aytishi kerak");
+  assert.equal(tight.filter((b) => b.layout === "quiz").length, 3, "sig'gani qadar quiz beat qo'yilmadi");
+  assert.match(roleOf(tight, "quiz"), /jami 3 ta savol/, "rol rejadagi HAQIQIY sonni aytishi kerak");
   assert.equal(tight.length, 10, "uzunlik `want` da qolishi kerak");
   // Aksincha: ikkalasi ham yo'q — quiz yo'q.
   assert.ok(!layouts(run({}, "lecture", 10)).includes("quiz"), "so'ralmagan quiz paydo bo'ldi");
+  // A3-01: aniq 0 — blok belgilangan bo'lsa ham test yo'q; yuborilmagan son — standart.
+  assert.ok(!layouts(run({ blocks: ["test"], quizCount: 0 }, "lecture", 10)).includes("quiz"), "aniq 0 testni o'chirmadi");
 });
 
 test("adabiyotlar bloki → references beat, internetSearch o'chiq bo'lsa ham", () => {
@@ -126,7 +137,12 @@ test("adabiyotlar bloki → references beat, internetSearch o'chiq bo'lsa ham", 
     [["adabiyotlar", "maqsadlar", "uyga_vazifa"], "lecture", 8, 5],
   ];
   for (const [blocks, tplId, want, quizCount] of cases) {
-    const long = run({ blocks, quizCount }, tplId, want);
+    /*
+     * AUDIT-25: 2 ta reja bandi — bloklar kichik dekada ham sig'sin
+     * (5 band bilan 7 slaydda `adabiyotlar` reja slaydlariga yon berardi,
+     * ya'ni sinaladigan narsaning o'zi yo'qolardi).
+     */
+    const long = run({ blocks, quizCount, planItems: 2 }, tplId, want);
     const tag = `${tplId}/${want}/[${blocks}]`;
     assert.equal(long[long.length - 1].layout, "closing", tag);
     assert.equal(long[long.length - 2].layout, "references", `${tag}: to'ldirgich references dan KEYIN tushdi`);
@@ -210,7 +226,8 @@ test("ANKOR: qo'shiladigan blok o'z hududiga tushadi, oxiriga emas", () => {
    * dan oldin tushib qolardi.
    */
   for (const want of [6, 8, 10, 14]) {
-    const both = run({ blocks: ["reja", "maqsadlar"] }, "lecture", want);
+    // 2 band — 6 slaydda ham `maqsadlar` reja slaydlariga yon bermasin (AUDIT-25).
+    const both = run({ blocks: ["reja", "maqsadlar"], planItems: 2 }, "lecture", want);
     assert.equal(both[1].layout, "agenda", `want=${want}: reja title dan darhol keyin turmadi`);
     const iR = both.findIndex((b) => b.layout === "agenda");
     const iM = both.findIndex((b) => b.role.startsWith("Maqsadlar"));
@@ -226,8 +243,13 @@ test("ANKOR: qo'shiladigan blok o'z hududiga tushadi, oxiriga emas", () => {
   const at = body.findIndex((b) => b.role.startsWith("Motivatsiya"));
   assert.ok(at >= 0, "motivatsiya beats'ga tushmadi");
   assert.ok(at < Math.ceil(body.length / 3), `motivatsiya early hududda emas: ${at}/${body.length}`);
-  // Uzoqdagi quote bilan QO'SHILMAGANI — asl «Asosiy g‘oya» joyida qolgan.
-  assert.ok(mot.some((b) => b.role === "Asosiy g‘oya"), "motivatsiya hududidan tashqaridagi quote bilan qo'shildi");
+  /*
+   * AUDIT-25: blok endi shablon beat'i bilan «qo'shilmaydi» — tana reja
+   * bandlaridan quriladi. Sinaladigan narsa: motivatsiya O'Z slaydi
+   * (bitta), va shablonning uzoqdagi iqtibosi uning o'rnini egallamagan.
+   */
+  assert.equal(mot.filter((b) => b.role.startsWith("Motivatsiya")).length, 1, "motivatsiya takrorlandi yoki yo'qoldi");
+  assert.equal(body[at].layout, "quote");
 });
 
 test("ANKOR: middle bloki o'rta uchdan birda, late bloki oxirgi uchdan birda", () => {
@@ -305,33 +327,64 @@ test("uzunlik `want` ga tenglashadi — bloklar sig'sa", () => {
   }
 });
 
-test("want bloklardan kichik: deka uzayadi, lekin BIRORTA blok tashlanmaydi", () => {
+/*
+ * A3-04 O'ZGARISHI. Ilgari: «want bloklardan kichik — deka uzayadi,
+ * birorta blok tashlanmaydi» (4 slayd so'ralsa 11 ta chiqardi). Pro
+ * slaydda narx slayd soniga bog'liq — endi deka HECH QACHON `want` dan
+ * uzun emas: bloklar ankor OXIRIDAN tashlanadi, reja slaydi (agenda) va
+ * bitta savol qoladi, har reja bandi o'z slaydini oladi.
+ */
+test("want bloklardan kichik: deka UZAYMAYDI — bloklar ankor oxiridan tashlanadi, reja va 1 savol qoladi", () => {
   const blocks = [...SLIDE_BLOCK_IDS];
-  const out = run({ blocks }, "lecture", 4);
-  assert.ok(out.length > 4, "bloklar sig'magan holatda ham deka 4 ta bo'lib qoldi — blok tashlangan");
-  for (const blk of SLIDE_BLOCKS) {
-    assert.ok(out.some((b) => b.layout === blk.layout), `${blk.id} (${blk.layout}) tashlab yuborildi`);
-  }
-  // Ortiqcha slayd faqat bloklar uchun — generik to'ldirgich qolmasin.
-  assert.equal(out.length, 2 + SLIDE_BLOCKS.length, "blok bo'lmagan beat qolib ketdi");
+  // 8 slayd, 2 band: tanada 6 o'rin — reja, 2 band, 1 savol, qolgan 2 o'rin eng OLDINGI bloklarga.
+  const out = run({ blocks, planItems: 2 }, "lecture", 8);
+  const tag = layouts(out).join(",");
+  assert.equal(out.length, 8, tag);
   assert.equal(out[0].layout, "title");
   assert.equal(out[out.length - 1].layout, "closing");
+  assert.equal(out[1].layout, "agenda", `reja qolishi kerak: ${tag}`);
+  assert.equal(out.filter((b) => b.layout === "quiz").length, 1, tag);
+  assert.equal(new Set(out.map((b) => b.plan).filter(Boolean)).size, 2, `reja bandlari: ${tag}`);
+  const kept = SLIDE_BLOCKS.filter((blk) => blk.id !== "reja" && blk.id !== "test" && out.some((b) => b.role === blk.role({ planItems: 2, quizCount: 3 }))).map((b) => b.id);
+  assert.deepEqual(kept, ["maqsadlar", "motivatsiya"], `ankor oxiridan tashlanmadi: ${tag}`);
+  // 4 slayd: agenda ham reja bandiga yon beradi — titul, band, savol, yakun.
+  const tiny = run({ blocks }, "lecture", 4);
+  assert.deepEqual(layouts(tiny).map((l, i) => (tiny[i].plan ? "plan" : l)), ["title", "plan", "quiz", "closing"]);
 });
 
-test("bir xil maketli ikki blok yonma-yon tushmaydi — orasiga ajratgich kiradi", () => {
-  // `maqsadlar` ham, `uyga_vazifa` ham `bullets`; want=4 da tanada
-  // ikkitagina o'rin bor. Blok tashlanmaydi, ya'ni deka uzayishi kerak.
-  const out = run({ blocks: ["maqsadlar", "uyga_vazifa"] }, "lecture", 4);
+test("bir xil maketli ikki blok yonma-yon tushmaydi — orasiga reja slaydi tushadi", () => {
+  /*
+   * `maqsadlar` ham, `uyga_vazifa` ham `bullets`. Ilgari want=4 da
+   * orasiga ajratgich qo'yilib deka uzayardi; endi (AUDIT-25) ular
+   * orasida doim reja bandi turadi va u `bullets` bo'lmaydi.
+   */
+  const out = run({ blocks: ["maqsadlar", "uyga_vazifa"], planItems: 1 }, "lecture", 5);
   assert.ok(out.some((b) => b.role.startsWith("Maqsadlar")));
   assert.ok(out.some((b) => b.role.startsWith("Uyga vazifa")));
   for (let i = 1; i < out.length; i++) assert.notEqual(out[i].layout, out[i - 1].layout, `@${i}`);
-  assert.equal(out.length, 5, "ajratgich uchun deka aynan bitta slaydga uzayishi kerak edi");
+  assert.equal(out.length, 5);
+  assert.equal(out[2].plan, 1, layouts(out).join(","));
 });
 
-test("bloklarsiz meta shablon beats'ini uzunlikdan boshqa narsada o'zgartirmaydi", () => {
-  // Yagona farq — `reja` yo'qligi uchun agenda olib tashlanadi (2-qoida).
+/*
+ * AUDIT-25 O'ZGARISHI. Ilgari bloksiz deka shablon beats'ining AYNAN
+ * o'zi edi. Endi tana reja bandlaridan quriladi, lekin maketlar va
+ * rollar hamon SHABLONDAN (avval uning o'z beat'lari, tartibida):
+ * «Hisobot» dekasi boshqa shablon tiliga o'tib ketmasin.
+ */
+test("bloklarsiz deka: tana reja bandlari, maket va rollar shablondan, tartibida", () => {
+  const tpl = SLIDE_TEMPLATE_BY_ID.report;
   const out = run({}, "report", 8);
-  assert.deepEqual(out, expandBeats(SLIDE_TEMPLATE_BY_ID.report, 8), "blok yo'q — shablon tegilmasligi kerak");
+  assert.equal(out.length, 8);
+  assert.deepEqual(out[0], tpl.beats[0]);
+  assert.deepEqual(out[out.length - 1], tpl.beats[tpl.beats.length - 1]);
+  const own = new Set([...tpl.beats, ...tpl.fillers].map((b) => b.role));
+  for (const b of out.slice(1, -1)) assert.ok(own.has(planRoleText(b.role)), `shablonda yo'q rol: ${b.role}`);
+  // Shablonning mazmun beat'lari birinchi bo'lib, o'z tartibida ishlatiladi.
+  const content = tpl.beats.filter((b) => ["bullets", "twoCol", "process", "table", "stats"].includes(b.layout)).map((b) => b.role);
+  const used = out.slice(1, -1).map((b) => planRoleText(b.role)).filter((r) => content.includes(r));
+  assert.deepEqual(used, content, `shablon tartibi buzildi: ${out.map((b) => b.role).join(" | ")}`);
+  assert.equal(new Set(out.map((b) => b.plan).filter(Boolean)).size, 5);
 });
 
 test("kirish massivi O'ZGARTIRILMAYDI (koordinator uni qayta ishlatadi)", () => {
@@ -413,8 +466,10 @@ test("quiz qatori faqat test so'ralganda chiqadi va bitta savol talab qiladi", (
   assert.doesNotMatch(on, /quiz layout: \d+ ta savol/);
   // Javob kalitini model yozmasin — uni `finalizeQuiz` to'ldiradi.
   assert.match(on, /answers layout: javob kalitini O‘ZINGIZ yozmang/);
-  // Blok bor, son yo'q — qator baribir chiqadi (standart son rejada).
-  assert.match(promptFor({ blocks: "reja,test", quizCount: 0 }), /quiz layout: HAR quiz slaydida/);
+  // Blok bor, son YUBORILMAGAN — qator baribir chiqadi (standart son rejada).
+  assert.match(promptFor({ blocks: "reja,test" }), /quiz layout: HAR quiz slaydida/);
+  // A3-01: son ANIQ 0 — blok belgilangan bo'lsa ham test yo'q, qator ham yo'q.
+  assert.doesNotMatch(promptFor({ blocks: "reja,test", quizCount: 0 }), /quiz layout/);
   assert.doesNotMatch(promptFor({ blocks: "reja" }), /answers layout/);
 });
 
@@ -455,74 +510,87 @@ test("mavjud tuzilma qatorlari saqlandi (WP-0a shartnomasi buzilmasin)", () => {
   assert.match(p, /stats ga uydirma milliard\/tonna\/foiz YOZILMASIN/);
 });
 
+
 // ───────────────────────────────────────────── 9-qoida (X-5): sig'im urushi
 
 /**
  * X-5 — JONLI nuqson.
  *
  * 10 slaydli dekada 7 blok yoqilgan, `quizCount: 3`, izohlar o'chiq.
- * Tanada 8 o'rin bor, boshqa bloklar 6 tasini oladi — ilgari test
- * guruhi QOLGAN ikki o'rinni olardi va foydalanuvchi tanlagan 3 savol
- * BITTAGA tushardi (kalit birinchi bo'lib joy egallagani uchun).
+ * Ilgari test guruhi boshqa bloklardan QOLGAN joyni olardi va
+ * foydalanuvchi tanlagan 3 savol BITTAGA tushardi.
  *
  * `quizCount` — formada AYNAN tanlangan son, «Uyga vazifa» esa
- * «Ochiq dars» TURINING standarti; endi standart blok yon beradi.
- * Kutilgan taqsimot 8 o'rin uchun: 5 ta boshqa blok + 2 savol + kalit.
+ * «Ochiq dars» TURINING standarti; standart blok yon beradi.
+ *
+ * AUDIT-25: reja bandlari (bu yerda 3 ta) test guruhidan HAM oldin o'rin
+ * oladi. Tana 8 o'rin = reja + 3 band + 2 savol + kalit + adabiyotlar;
+ * to'rtta standart blok (maqsadlar, motivatsiya, amaliyot, uyga vazifa)
+ * avval reja bandlariga, keyin test ulushiga yon beradi.
  */
 const LIVE_BLOCKS = [...PURPOSE_DEFAULTS.open_lesson.blocks, "adabiyotlar"] as SlideBlockId[];
 
+const planCount = (beats: SlideBeat[]) => new Set(beats.map((b) => b.plan).filter(Boolean)).size;
+
 test("X-5: sig'im yetmasa STANDART blok yon beradi, quizCount saqlanadi", () => {
   const out = run(
-    { blocks: LIVE_BLOCKS, quizCount: 3, speakerNotes: false, slidePurpose: "open_lesson" },
+    { blocks: LIVE_BLOCKS, quizCount: 3, speakerNotes: false, slidePurpose: "open_lesson", planItems: 3 },
     "lesson",
     10,
   );
   const tag = layouts(out).join(",");
   assert.equal(out.length, 10, `uzunlik shartnomasi buzildi: ${tag}`);
+  assert.equal(planCount(out), 3, `reja bandlari: ${tag}`);
   assert.equal(out.filter((b) => b.layout === "quiz").length, 2, `savol slaydlari: ${tag}`);
   assert.equal(out.filter((b) => b.layout === "answers").length, 1, `kalit: ${tag}`);
   // Rol REJADAGI haqiqiy sonni aytadi — model rejadan ko'p savol yozmasin.
   assert.match(roleOf(out, "quiz"), /jami 2 ta savol/);
-  // Yon bergan blok — dekadagi OXIRGI standart nomzod («Uyga vazifa»).
-  assert.equal(out.some((b) => b.role.startsWith("Uyga vazifa")), false, `uyga vazifa qolib ketdi: ${tag}`);
-  // Qolgan bloklarning hammasi joyida.
-  for (const role of ["Reja", "Maqsadlar", "Motivatsiya", "Amaliyot", "Adabiyotlar"]) {
-    assert.ok(out.some((b) => b.role.startsWith(role)), `${role} tashlab yuborildi: ${tag}`);
+  // Yon bergan — standart bloklar; yon bermaydiganlar joyida.
+  for (const role of ["Maqsadlar", "Motivatsiya", "Amaliyot", "Uyga vazifa"]) {
+    assert.equal(out.some((b) => b.role.startsWith(role)), false, `${role} yon bermadi: ${tag}`);
   }
+  for (const role of ["Reja", "Adabiyotlar"]) assert.ok(out.some((b) => b.role.startsWith(role)), `${role} tashlab yuborildi: ${tag}`);
 
-  // Joy yetsa (14 slayd) hech kim yon bermaydi: 3 savol ham, uyga vazifa ham bor.
-  const roomy = run({ blocks: LIVE_BLOCKS, quizCount: 3, speakerNotes: false, slidePurpose: "open_lesson" }, "lesson", 14);
+  // Joy yetsa (15 slayd) hech kim yon bermaydi: 3 savol ham, uyga vazifa ham bor.
+  const roomy = run({ blocks: LIVE_BLOCKS, quizCount: 3, speakerNotes: false, slidePurpose: "open_lesson", planItems: 3 }, "lesson", 15);
   assert.equal(roomy.filter((b) => b.layout === "quiz").length, 3, "joy yetganda savollar to'liq qolsin");
-  assert.ok(roomy.some((b) => b.role.startsWith("Uyga vazifa")), "joy yetganda blok tashlanmasin");
-  assert.equal(roomy.length, 14);
+  for (const role of ["Maqsadlar", "Motivatsiya", "Amaliyot", "Uyga vazifa"]) {
+    assert.ok(roomy.some((b) => b.role.startsWith(role)), `joy yetganda ${role} tashlanmasin`);
+  }
+  assert.equal(roomy.length, 15);
 });
 
 /**
- * Yon berish faqat TUR standartidan kelgan blokka tegishli.
+ * Yon berish TARTIBI tur standartiga bog'liq.
  *
  * Bir xil blok ro'yxati bilan, lekin `slidePurpose: "general"` da
- * (standarti — faqat `reja`) hamma blok QO'LDA yoqilgan hisoblanadi:
- * yon beruvchi yo'q, ya'ni eski xatti-harakat qoladi. Aniqlik yo'q
- * joyda hech narsa tashlanmaydi — bu 6-qoidaning kuchi.
+ * (standarti — faqat `reja`) hamma blok QO'LDA yoqilgan: birinchi yon
+ * beruvchi yo'q, shuning uchun test guruhi 1 savolga qisqaradi va joy
+ * (A3-04) ankor OXIRIDAGI bloklardan olinadi — adabiyotlar, uyga vazifa.
+ * «Ochiq dars» da esa standart bloklar birinchi yon beradi va test
+ * guruhi o'z ulushini oladi.
  */
-test("X-5: qo'lda yoqilgan blok yon BERMAYDI", () => {
-  const hand = run({ blocks: LIVE_BLOCKS, quizCount: 3, speakerNotes: false, slidePurpose: "general" }, "lesson", 10);
+test("X-5: qo'lda yoqilgan blok standartdan KEYIN yon beradi", () => {
+  const hand = run({ blocks: LIVE_BLOCKS, quizCount: 3, speakerNotes: false, slidePurpose: "general", planItems: 3 }, "lesson", 10);
+  const tag = layouts(hand).join(",");
   assert.equal(hand.length, 10);
-  assert.equal(hand.filter((b) => b.layout === "quiz").length, 1, "standart blok yo'q — savol guruhi qisqaradi");
-  assert.ok(hand.some((b) => b.role.startsWith("Uyga vazifa")), "qo'lda yoqilgan blok tashlandi");
+  assert.equal(planCount(hand), 3, tag);
+  assert.equal(hand.filter((b) => b.layout === "quiz").length, 1, `standart blok yo'q — savol guruhi qisqaradi: ${tag}`);
+  for (const role of ["Reja", "Maqsadlar", "Motivatsiya", "Amaliyot"]) assert.ok(hand.some((b) => b.role.startsWith(role)), `${role}: ${tag}`);
+  for (const role of ["Uyga vazifa", "Adabiyotlar"]) assert.ok(!hand.some((b) => b.role.startsWith(role)), `${role} ankor oxiridan tashlanmadi: ${tag}`);
 
   /*
    * `jadval` «Dars» turining standartida YO'Q — ya'ni u qo'lda
-   * qo'shilgan va yon beruvchilar ro'yxatiga kirmaydi; uning o'rniga
-   * standart «Uyga vazifa» beradi.
+   * qo'shilgan va birinchi yon beruvchilar ro'yxatiga kirmaydi; uning
+   * o'rniga standart bloklar beradi.
    */
   const mixed = run(
-    { blocks: [...PURPOSE_DEFAULTS.lesson.blocks, "test", "jadval"] as SlideBlockId[], quizCount: 3, speakerNotes: false, slidePurpose: "lesson" },
+    { blocks: [...PURPOSE_DEFAULTS.lesson.blocks, "test", "jadval"] as SlideBlockId[], quizCount: 3, speakerNotes: false, slidePurpose: "lesson", planItems: 3 },
     "lesson",
     10,
   );
   assert.equal(mixed.length, 10);
-  assert.ok(mixed.some((b) => b.layout === "table"), "qo'lda qo'shilgan jadval tashlandi");
+  assert.ok(mixed.some((b) => b.layout === "table" && !b.plan), "qo'lda qo'shilgan jadval tashlandi");
   assert.equal(mixed.filter((b) => b.layout === "quiz").length, 2, "quizCount standart blokdan ustun turmadi");
 });
 
@@ -532,80 +600,72 @@ test("X-5: qo'lda yoqilgan blok yon BERMAYDI", () => {
  * slaydli dekada guruh 3 o'rindan oshmasligi kerak.
  */
 test("X-5: test guruhi tananing uchdan biridan oshmaydi", () => {
-  const out = run({ blocks: LIVE_BLOCKS, quizCount: 10, speakerNotes: false, slidePurpose: "open_lesson" }, "lesson", 10);
+  const out = run({ blocks: LIVE_BLOCKS, quizCount: 10, speakerNotes: false, slidePurpose: "open_lesson", planItems: 3 }, "lesson", 10);
   const group = out.filter((b) => b.layout === "quiz" || b.layout === "answers").length;
   assert.equal(out.length, 10);
   assert.equal(group, 3, `test guruhi ${group} o'rin oldi — tananing yarmi`);
-  // Ya'ni beshta boshqa blok o'z o'rnida qoladi (bittasigina yon berdi).
+  // Qolgan beshtasi: reja, adabiyotlar va 3 ta reja bandi.
+  assert.equal(planCount(out), 3);
   assert.equal(out.filter((b) => b.layout !== "title" && b.layout !== "closing" && b.layout !== "quiz" && b.layout !== "answers").length, 5);
 });
 
 /**
- * Yon berish UZUNLIK SHARTNOMASINI buzmaydi: tashlangan blok soni
- * guruhga qo'shilgan o'rin soniga TENG. Supurish — 9 taqdimot turi ×
- * savol soni × uzunlik.
+ * Uzunlik HAR DOIM `want` (A3-04) va yon berish faqat SIG'IM yetmaganda.
+ * Supurish — 9 taqdimot turi × savol soni × izoh × uzunlik.
  */
-test("X-5 supurishi: yon berish uzunlikni o'zgartirmaydi", () => {
+test("X-5 supurishi: uzunlik doim want, joy yetganda hech bir blok tashlanmaydi", () => {
   const fails: string[] = [];
   let cases = 0;
   for (const p of SLIDE_PURPOSES) {
     const d = PURPOSE_DEFAULTS[p];
     const tplId = d.templateId === "auto" ? "lecture" : d.templateId;
-    for (const quizCount of [0, 3, 5, 10]) {
+    for (const quizCount of [undefined, 0, 3, 5, 10]) {
       for (const speakerNotes of [true, false]) {
-        for (const want of [6, 8, 10, 12, 16, 24]) {
-          /*
-           * 6-qoida hududi o'tkazib yuboriladi: bloklarning O'ZI
-           * `want` ga sig'masa deka ATAYLAB uzayadi (yuqoridagi
-           * «want bloklardan kichik» testi buni qulflaydi) va bu
-           * yerdagi tenglik o'lchovi ma'nosini yo'qotadi.
-           */
-          if (orderedBlocks(d.blocks, quizCount, false).length > want - 2) continue;
+        for (const want of [4, 6, 8, 10, 12, 16, 24]) {
           cases += 1;
           const out = run({ blocks: d.blocks, quizCount, speakerNotes, slidePurpose: p }, tplId, want);
           const tag = `${p}/quiz=${quizCount}/izoh=${speakerNotes}/want=${want}`;
           if (out.length !== want) fails.push(`${tag} → ${out.length}`);
-          const q = out.filter((b) => b.layout === "quiz").length;
-          if (quizCount > 0 && q < 1) fails.push(`${tag}: savol so'ralgan, quiz beat yo'q`);
-          if (q > quizCount && quizCount > 0) fails.push(`${tag}: ${q} quiz beat (so'ralgan ${quizCount})`);
-          /*
-           * Yon berish faqat SIG'IM yetmaganda. Hamma blok va butun
-           * test guruhi tanaga sig'sa, birorta blok tashlanmasligi
-           * kerak — aks holda kafolat «bo'sh joyni ham tortib olish»
-           * ga aylanadi va blok o'rnini generik to'ldirgich egallaydi.
-           */
           const on = orderedBlocks(d.blocks, quizCount, false);
+          const q = out.filter((b) => b.layout === "quiz").length;
+          if (on.some((b) => b.id === "test") && q < 1) fails.push(`${tag}: test so'ralgan, quiz beat yo'q`);
+          if (!on.some((b) => b.id === "test") && q > 0) fails.push(`${tag}: so'ralmagan quiz`);
+          if (quizCount && q > quizCount) fails.push(`${tag}: ${q} quiz beat (so'ralgan ${quizCount})`);
+          /*
+           * Joy yetsa (bloklar + butun test guruhi + reja bandlari tanaga
+           * sig'sa) birorta blok tashlanmasligi kerak — aks holda kafolat
+           * «bo'sh joyni ham tortib olish» ga aylanadi.
+           */
           const asked = on.some((b) => b.id === "test") ? Math.max(1, quizCount || QUIZ_COUNT_FALLBACK) : 0;
           const needed = asked + (asked > 0 && speakerNotes === false ? 1 : 0);
-          if (on.filter((b) => b.id !== "test").length + needed <= want - 2) {
-            const roles = new Set(out.map((b) => b.role));
+          const cap = planBudget({ slideCount: want, blocks: d.blocks, quizCount }).capacity;
+          if (on.filter((b) => b.id !== "test").length + needed + Math.min(5, cap) <= want - 2) {
             for (const blk of on) {
               if (blk.id === "test") continue;
-              const role = blk.role({ planItems: 5, quizCount: quizCount || QUIZ_COUNT_FALLBACK });
-              if (!roles.has(role)) fails.push(`${tag}: joy yetgan holatda «${blk.id}» tashlandi`);
+              const role = blk.role({ planItems: Math.min(5, cap), quizCount: quizCount || QUIZ_COUNT_FALLBACK });
+              if (!out.some((b) => b.role === role)) fails.push(`${tag}: joy yetgan holatda «${blk.id}» tashlandi`);
             }
           }
         }
       }
     }
   }
-  assert.ok(cases >= 300, `supurish kichik: ${cases}`);
+  assert.ok(cases >= 600, `supurish kichik: ${cases}`);
   assert.deepEqual(fails.slice(0, 10), [], `${fails.length}/${cases} holat:\n  ${fails.slice(0, 10).join("\n  ")}`);
 });
 
-/**
- * Yon berish 6-QOIDADAN ustun turmaydi.
- *
- * Bloklarning O'ZI `want` ga sig'masa deka ataylab uzayadi va blok
- * tashlanmaydi. Bunday holatda standart blokni tashlash 6-qoidani
- * teskarisiga o'girardi (deka uzaymay, blok yo'qolardi), savol
- * qo'shish esa dekani yana uzaytirardi — shuning uchun yon berish
- * faqat joy BOR bo'lganda (`room > 0`) ishlaydi.
+/*
+ * A3-04 O'ZGARISHI. Ilgari: «bloklar `want` ga sig'masa yon berish
+ * YO'Q — deka uzayadi» (6 slaydda 11 ta). Endi deka uzaymaydi: hamma
+ * blok yoqilgan 6 slaydli dekada reja slaydi, 2 reja bandi va bitta
+ * savol qoladi, qolgan bloklar ankor oxiridan tashlanadi.
  */
-test("X-5: bloklar `want` ga sig'masa yon berish YO'Q", () => {
+test("A3-04: bloklar `want` ga sig'masa deka uzaymaydi — reja, bandlar va bitta savol qoladi", () => {
   const out = run({ blocks: [...SLIDE_BLOCK_IDS], quizCount: 3, speakerNotes: false, slidePurpose: "open_lesson" }, "lecture", 6);
-  assert.ok(out.length > 6, `deka uzayishi kerak edi: ${layouts(out).join(",")}`);
-  assert.equal(out.length, 2 + SLIDE_BLOCKS.length, `ortiqcha yoki kam slayd: ${layouts(out).join(",")}`);
-  assert.ok(out.some((b) => b.role.startsWith("Uyga vazifa")), "sig'im yo'q joyda standart blok tashlandi");
-  assert.equal(out.filter((b) => b.layout === "quiz").length, 1, "sig'im yo'q joyda savol qo'shildi");
+  const tag = layouts(out).join(",");
+  assert.equal(out.length, 6, tag);
+  assert.equal(out[1].layout, "agenda", tag);
+  assert.equal(planCount(out), 2, tag);
+  assert.equal(out.filter((b) => b.layout === "quiz").length, 1, tag);
+  assert.equal(out.filter((b) => b.layout === "answers").length, 0, `kalit birinchi tashlanadi: ${tag}`);
 });
