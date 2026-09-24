@@ -112,9 +112,12 @@ export function audienceRules(a: SlideAudience | string | undefined, tplId: Slid
  * ko'p so'ramaydi (`brief.ts`), `normalizeSlide` ortig'ini tashlaydi (P1).
  *
  *   pol      bosqich  karta  jadval (ustun × qator)
- *   ≥ 20 pt     3       3        3 × 4      (1–9 sinf, bolalar markazi)
- *   18 pt       4       3        3 × 4      (10–11 sinf, o'smir, keng)
+ *   ≥ 18 pt     3       3        3 × 4      (1–11 sinf, bolalar/o'smir markazi, keng)
  *   ≤ 16 pt     4       4        4 × 5      (talaba, pedagog, rahbariyat, kattalar)
+ *
+ * 18 pt da 4 bosqich: P2 birlashgan maketida karta 10–11 harfli so'zni
+ * polda butun sig'dira olmaydi — matn ~36 belgi (3 so'z, `fitChars`),
+ * ya'ni «yupqa karta». Shuning uchun 18 pt ham 3 bosqich.
  *
  * 5 bosqich hech kimga berilmaydi: talaba polida ham 5 bosqich matni
  * ~35 belgi (3–4 so'z) — «yupqa karta» ning o'zi (AUDIT-25 S4).
@@ -122,8 +125,7 @@ export function audienceRules(a: SlideAudience | string | undefined, tplId: Slid
 export type CountRules = { stepsMax: number; statsMax: number; tableCols: number; tableRows: number };
 
 export function countRules(minPt: number): CountRules {
-  if (minPt >= 20) return { stepsMax: 3, statsMax: 3, tableCols: 3, tableRows: 4 };
-  if (minPt >= 18) return { stepsMax: 4, statsMax: 3, tableCols: 3, tableRows: 4 };
+  if (minPt >= 18) return { stepsMax: 3, statsMax: 3, tableCols: 3, tableRows: 4 };
   return { stepsMax: 4, statsMax: 4, tableCols: 4, tableRows: 5 };
 }
 

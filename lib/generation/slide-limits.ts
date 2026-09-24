@@ -29,7 +29,8 @@ import type { BodyRules } from "./slide-audience";
  *
  *   (process/stats/table son bo'yicha aniq jadvali — `COUNT_LIMITS` pastda)
  *   maydon        qopqoq   15pt      16pt      18pt      20pt      22pt      24pt     qaror
- *   title          80→72   72/139    72/139    72/139    72/139    72/139    72/139   72 (rasmli section, classic)
+ *   title          80→72   72/139    72/139    72/139    72/139    72/139    72/139   72 (rasmli section, classic);
+ *                          P2 dan keyin qalin o'lchovda bo'lim sarlavhasi circle 16/editorial 24 — P2 ga
  *   kicker            40   42/72     42/72     42/72     42/72     42/72     42/72    qoldi
  *   bullets ×max  bulletChars 135/234  97/222  85/135   60/173    60/152    24/111   auditoriya jadvali; `cards` — P2
  *   colTitle       40→24   16/24     16/24     16/24     16/24     16/24     16/24    24 (mediana)
@@ -48,7 +49,7 @@ import type { BodyRules } from "./slide-audience";
  *   subtitleClosing 160→135 139/339 (hamma pol)                                       135 (A4: defense-14 kesilgan)
  *   quote        220→280   383/383 (hamma pol)                                       280 (prompt 30 so'zgacha)
  *   quoteBy       60→50    53/85   (hamma pol)                                       50 + prompt «faqat muallif»
- *   quizQ        120→200   290/383 (hamma pol)                                       200
+ *   quizQ        120→100   104/121 (qalin, P2 dan keyin; hamma pol)                  100
  *   quizOption    60→130   129/195   85/185    75/121    53/111    53/75     24/60    130 (15 pt eng tor); aniq — clipLimit (vizual)
  *   refTitle / refSource 90 / 200 — 241 / 673, `planReferences` o'zi qisqartiradi     qoldi
  *
@@ -114,6 +115,8 @@ export const SLIDE_LIMITS = {
    * ~111 belgi ko'taradi. Jonli `lecture-12` da 6 bandning 5 tasi
    * so'z o'rtasidan kesilgan: prompt «10–15 so'z» (~135) so'rardi.
    * Endi 110 + prompt oralig'i maketdan (`layoutWordTargets.colItem`).
+   * P2 dan keyin (pol shriftida, rasm bilan): 3 bandli ustun mediana 111,
+   * 4 bandli — 60; 4 bandda aniq qirqish `clipLimit("colItem", …, 4)`.
    */
   colItem: 110,
   /** Bitta ustunda eng ko'p band. */
@@ -175,11 +178,12 @@ export const SLIDE_LIMITS = {
   /** Jadval qatorlari soni. */
   tableRows: 6,
   /**
-   * Test savoli. AUDIT-25 o'lchovi: eng tor savol qutisi (`timeline`,
-   * 12.1 × 1.05", pol 16 pt) ~290 belgi ko'taradi; 120 esa 13 so'zdan
-   * uzun savolni «…» bilan kesardi. 200 = 22 so'z, har vizualga sig'adi.
+   * Test savoli — QALIN. P2 birlashgandan keyin qalin shrift kengligi
+   * (`CHAR_EM_BOLD` 0.60) bilan qayta o'lchandi: eng tor `classic`/`lab`/
+   * `academic`/`notebook` ~104 belgi, mediana 121 (oddiy 0.55 bilan
+   * 290 ko'ringan edi — noto'g'ri). 100 ≈ 11 so'z, hamma vizualga sig'adi.
    */
-  quizQ: 200,
+  quizQ: 100,
   /**
    * Test varianti — QIRQISH qopqog'i, maket o'lchovidan.
    *
@@ -246,57 +250,87 @@ export const LIMIT_FLOORS = [15, 16, 18, 20, 22, 24] as const;
 /**
  * Soni o'zgaruvchi maydonlar uchun qirqish chegarasi — pol × son.
  *
- * Manba: P2 o'lchovi (`audit/reviews/AUDIT-25-P2.md` §4 — «har vizualning
- * har qutisiga sig'adigan eng uzun so'z bo'yicha kesilgan matn», maketning
- * o'z `inkHeight`/`fitSize` modeli) × 0.88 (qalin shrift kengligi
- * taxmini optimistik — 12 % zaxira), 5 ga pastga yaxlitlangan va statik
- * `SLIDE_LIMITS` qopqog'idan oshmaydi. Kalit — element soni: bosqich
- * (3/4/5), karta (2/3/4), jadval (3 = 3×3, 4 = 4×4, 5 = 5×6).
- * `tests/slide-quality.test.mts` jadvalni jonli o'lchovga (`fitChars`)
- * qarshi qulflaydi — P2 qutini o'zgartirsa, qaysi katak eskirgani chiqadi.
+ * Manba (AUDIT-25, P2 maketi `d05550e` birlashtirilgandan keyin): har
+ * katak = min(P2 o'lchovi, jonli `fitChars(…, {images: "none"})`) × 0.88
+ * (qalin shrift kengligi taxmini optimistik — 12 % zaxira), 5 ga pastga
+ * yaxlitlangan (kamida 5) va statik `SLIDE_LIMITS` qopqog'idan oshmaydi.
+ * Jonli o'lchov P2 jadvalidan past chiqqan joylarda (tor kartada 10–11
+ * harfli o'zbekcha so'z polda sig'maydi — «so'z butun» qoidasi) o'sha
+ * olindi. Kalit — element soni: bosqich (3/4/5), karta (2/3/4); jadval —
+ * ustun × qator (`countRules` ruxsat bergan 3×3, 3×4, 4×4, 4×5 va eski/
+ * tahrir uchun 5×6). `tests/slide-quality.test.mts` jadvalni jonli
+ * o'lchovga qarshi qulflaydi — P2 qutini o'zgartirsa, eskirgan katak chiqadi.
+ *
+ * 5 ga teng kataklar — shu pol × son sig'maydi: bunday son shu
+ * auditoriyaga ruxsat etilmaydi (`countRules`), `normalizeSlide` AVVAL
+ * sonni qisadi (P1 W3).
  *
  *   maydon ×son       15pt 16pt 18pt 20pt 22pt 24pt
  */
 const COUNT_LIMITS = {
   stepText: {
     3: [90, 75, 65, 45, 40, 40],
-    4: [55, 55, 45, 30, 25, 25],
-    5: [30, 30, 30, 20, 20, 10],
+    4: [55, 55, 30, 30, 20, 5],
+    5: [30, 30, 5, 5, 5, 5],
   },
   stepTitle: {
-    3: [40, 40, 35, 30, 25, 25],
-    4: [35, 35, 25, 15, 15, 15],
-    5: [25, 25, 25, 10, 10, 10],
+    3: [40, 40, 30, 20, 20, 10],
+    4: [35, 30, 20, 10, 5, 5],
+    5: [20, 5, 5, 5, 5, 5],
   },
   statLabel: {
-    2: [110, 110, 110, 110, 95, 70],
-    3: [110, 95, 75, 65, 45, 35],
-    4: [70, 65, 40, 35, 30, 25],
+    2: [110, 110, 110, 95, 95, 65],
+    3: [110, 95, 65, 65, 45, 35],
+    4: [70, 65, 40, 30, 30, 20],
   },
   tableCell: {
-    3: [60, 60, 60, 60, 45, 40],
-    4: [60, 60, 40, 35, 20, 20],
-    5: [25, 25, 20, 15, 5, 5],
+    "3x3": [60, 60, 60, 45, 45, 40],
+    "3x4": [60, 60, 50, 45, 30, 30],
+    "4x4": [60, 45, 35, 30, 10, 10],
+    "4x5": [45, 45, 20, 20, 10, 10],
+    "5x6": [20, 20, 10, 10, 5, 5],
   },
   tableHeader: {
-    3: [40, 40, 25, 15, 15, 15],
-    4: [26, 26, 15, 10, 10, 10],
-    5: [25, 25, 10, 5, 5, 5],
+    "3x3": [40, 40, 20, 10, 10, 10],
+    "3x4": [40, 40, 20, 10, 10, 10],
+    "4x4": [26, 26, 10, 10, 5, 5],
+    "4x5": [26, 26, 10, 10, 5, 5],
+    "5x6": [20, 20, 5, 5, 5, 5],
   },
+  /** Test varianti — songa bog'liq emas (doim 4); eng tor quti `cards`/`circle`/`editorial`. */
+  quizOption: [110, 70, 65, 45, 45, 20],
 } as const;
+
+/** O'lchangan jadval kombinatsiyalari — kichikdan kattaga. */
+const TABLE_KEYS = [
+  [3, 3, "3x3"],
+  [3, 4, "3x4"],
+  [4, 4, "4x4"],
+  [4, 5, "4x5"],
+  [5, 6, "5x6"],
+] as const;
+type TableKey = (typeof TABLE_KEYS)[number][2];
+
+/** (ustun, qator) ni QAMRAYDIGAN eng kichik o'lchangan jadval — ikkalasi ham ≥; yo'q bo'lsa 5×6. */
+export function tableKey(cols: number, rows: number): TableKey {
+  for (const [c, r, key] of TABLE_KEYS) if (cols <= c && rows <= r) return key;
+  return "5x6";
+}
 
 /** Slaydning element soni — `limitsFor` kaliti. Berilmasa — auditoriya ruxsat bergan eng katta son (qattiqroq). */
 export type LimitCounts = { steps?: number; stats?: number; cols?: number; rows?: number };
 
 /** Auditoriya × element soni bo'yicha chegaralar — `SLIDE_LIMITS` shakli, soni o'zgaruvchi maydonlar almashtirilgan. */
-export type SlideLimitsFor = Omit<SlideLimits, "stepText" | "stepTitle" | "statLabel" | "tableCell" | "tableHeader" | "tableHeaderWide" | "stepsMax" | "statsMax" | "tableCols" | "tableRows"> & {
+export type SlideLimitsFor = Omit<SlideLimits, "stepText" | "stepTitle" | "statLabel" | "tableCell" | "tableHeader" | "tableHeaderWide" | "stepsMax" | "statsMax" | "tableCols" | "tableRows" | "quizOption"> & {
   stepText: number;
   stepTitle: number;
   statLabel: number;
   tableCell: number;
-  /** Shu ustun sonidagi sarlavha — `tableHeaderWide` ham shu qiymat (≤3/4+ tanlovi kalitda). */
+  /** Shu (ustun × qator) dagi sarlavha — `tableHeaderWide` ham shu qiymat. */
   tableHeader: number;
   tableHeaderWide: number;
+  /** Test varianti — auditoriya poli bo'yicha (tahrir ham shuni o'qisin). */
+  quizOption: number;
   stepsMax: number;
   statsMax: number;
   tableCols: number;
@@ -313,11 +347,12 @@ const clampKey = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi
  *   limitsFor(rules)                              — son berilmasa auditoriya maksimumi
  *   limitsFor(rules, { steps: s.steps.length })   — process
  *   limitsFor(rules, { stats: s.stats.length })   — stats
- *   limitsFor(rules, { cols, rows })              — table
+ *   limitsFor(rules, { cols, rows })              — table (qator ham kalitda)
  *
  * `stepsMax`/`statsMax`/`tableCols`/`tableRows` — auditoriya ruxsat
- * bergan son (`countRules`), statik qopqoqdan oshmaydi. Qolgan maydonlar
- * `SLIDE_LIMITS` bilan bir xil. Klient uchun xavfsiz (bog'liqliksiz).
+ * bergan son (`countRules`), statik qopqoqdan oshmaydi. `quizOption` —
+ * pol bo'yicha. Qolgan maydonlar `SLIDE_LIMITS` bilan bir xil. Klient
+ * uchun xavfsiz (bog'liqliksiz).
  */
 export function limitsFor(
   rules: Pick<BodyRules, "minPt" | "stepsMax" | "statsMax" | "tableCols" | "tableRows">,
@@ -331,11 +366,9 @@ export function limitsFor(
   const tableRows = Math.min(SLIDE_LIMITS.tableRows, rules.tableRows);
   const steps = clampKey(counts.steps ?? stepsMax, 3, 5) as 3 | 4 | 5;
   const stats = clampKey(counts.stats ?? statsMax, 2, 4) as 2 | 3 | 4;
-  // Jadval kaliti: o'lchangan kombinatsiyalar 3×3, 4×4, 5×6 — ustun VA qatordan kattasi.
-  const rows = counts.rows ?? tableRows;
-  const rowKey = rows <= 3 ? 3 : rows === 4 ? 4 : 5;
-  const table = Math.max(clampKey(counts.cols ?? tableCols, 3, 5), rowKey) as 3 | 4 | 5;
-  const header = Math.min(COUNT_LIMITS.tableHeader[table][col], (counts.cols ?? tableCols) <= 3 ? SLIDE_LIMITS.tableHeaderWide : SLIDE_LIMITS.tableHeader);
+  const cols = counts.cols ?? tableCols;
+  const table = tableKey(cols, counts.rows ?? tableRows);
+  const header = Math.min(COUNT_LIMITS.tableHeader[table][col], cols <= 3 ? SLIDE_LIMITS.tableHeaderWide : SLIDE_LIMITS.tableHeader);
   return {
     ...SLIDE_LIMITS,
     stepText: Math.min(SLIDE_LIMITS.stepText, COUNT_LIMITS.stepText[steps][col]),
@@ -344,6 +377,7 @@ export function limitsFor(
     tableCell: Math.min(SLIDE_LIMITS.tableCell, COUNT_LIMITS.tableCell[table][col]),
     tableHeader: header,
     tableHeaderWide: header,
+    quizOption: Math.min(SLIDE_LIMITS.quizOption, COUNT_LIMITS.quizOption[col]),
     stepsMax,
     statsMax,
     tableCols,
@@ -370,20 +404,22 @@ export const CLIP_WORD_MIN_SHARE = 0.6;
 /**
  * Matnni bitta qatorga keltirib chegaraga qisqartiradi.
  *
- * Ketma-ket bo'shliqlar bittaga tushadi, chetlari kesiladi. Chegaradan
- * uzun matn «…» bilan tugaydi, natija uzunligi ≤ `n`. AUDIT-25: kesish
- * endi SO'Z CHEGARASIDA — ilgari «…imkonini ber…», «…olim, zam…» kabi
- * so'z o'rtasidan kesilardi (jonli `lecture-12`). Oxiridagi vergul/
- * tire tashlanadi («…olim…», «…olim,…» emas). Bitta uzun so'z (URL,
- * `"a".repeat(n)`) — eskicha qattiq kesiladi, uzunlik aynan `n`.
+ * Ketma-ket ODDIY bo'shliqlar bittaga tushadi, chetlari kesiladi.
+ * Bo'linmas bo'shliq (NBSP, U+00A0) SAQLANADI va chegara hisoblanmaydi:
+ * «5 %», «12 km» ikki qatorga/ikki bo'lakka ajralmasin. Chegaradan uzun
+ * matn «…» bilan tugaydi, natija uzunligi ≤ `n`. AUDIT-25: kesish SO'Z
+ * CHEGARASIDA — ilgari «…imkonini ber…», «…olim, zam…» kabi so'z
+ * o'rtasidan kesilardi (jonli `lecture-12`). Oxiridagi tinish belgisi
+ * tashlanadi («…olim…», «…olim,…» ham «…dengizi.…» ham emas). Bitta uzun
+ * so'z (URL, `"a".repeat(n)`) — qattiq kesiladi, uzunlik aynan `n`.
  * Ko'p qatorli matn (notiq izohi) uchun EMAS — u qatorlarni yo'qotadi.
  */
 export function clipTo(text: string, n: number): string {
-  const t = String(text ?? "").replace(/\s+/g, " ").trim();
+  const t = String(text ?? "").replace(/[ \t\n\r\f\v]+/g, " ").trim();
   if (t.length <= n) return t;
   const head = safeSlice(t, n - 1);
   // `t[n-1]` bo'shliq bo'lsa `head` o'zi to'liq so'z bilan tugaydi.
   const cut = t[head.length] === " " ? head.length : head.lastIndexOf(" ");
   const body = cut >= Math.ceil((n - 1) * CLIP_WORD_MIN_SHARE) ? head.slice(0, cut) : head;
-  return `${body.replace(/[\s,;:–—-]+$/u, "")}…`;
+  return `${body.replace(/[\s,;:.!?–—-]+$/u, "")}…`;
 }

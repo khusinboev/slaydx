@@ -328,6 +328,11 @@ test("AUDIT-25: clipTo so'z chegarasida kesadi (so'z o'rtasida «…» yo'q)", (
   assert.equal(clipTo("a".repeat(50), 10), `${"a".repeat(9)}…`);
   // Chegara juda erta bo'lsa (≤ 60 %) — qattiq kesish, joy isrof bo'lmaydi.
   assert.equal(clipTo(`Ab ${"c".repeat(40)}`, 20).length, 20);
+  // Gap oxirida kesilsa «.…» emas (sharh 11-band).
+  assert.equal(clipTo("Orol dengizi. Qurish sabablari va oqibatlari", 16), "Orol dengizi…");
+  // NBSP bo'linmaydi va saqlanadi: «12 km» ikkiga ajralmaydi.
+  assert.equal(clipTo("a\u00a0b", 10), "a\u00a0b");
+  assert.equal(clipTo("Suv hajmi 12\u00a0km ga qisqardi", 15), "Suv hajmi…");
 });
 
 // ═══════════════════════════════════════════ 5. AUDIT-25 — limitsFor (auditoriya × son)
@@ -339,6 +344,14 @@ test("limitsFor: son o'zgaruvchi maydonlar pol × son jadvalidan, statik qopqoqd
   const adult = bodyRules({ slideAudience: "students_bachelor", textVolume: "standart", planItems: 5 }, "lecture");
   // P2 o'lchovi: 1–4 sinf polida 5 bosqich matni ~15 belgi — 160 emas.
   assert.ok(limitsFor(kids, { steps: 5 }).stepText <= 15);
+  // Jadval kaliti ustun × qator: talaba 4×5 (auditoriya ruxsati) — 5×6 ning 20 belgisi emas (sharh 5-band).
+  assert.equal(limitsFor(adult).tableCols, 4);
+  assert.equal(limitsFor(adult).tableRows, 5);
+  assert.ok(limitsFor(adult).tableCell >= 40, `talaba katak ${limitsFor(adult).tableCell}`);
+  assert.ok(limitsFor(adult, { cols: 3, rows: 5 }).tableCell >= limitsFor(adult, { cols: 5, rows: 6 }).tableCell);
+  // Test varianti pol bo'yicha (sharh 7-band): talaba ≤ statik, 1–4 sinf ancha tor.
+  assert.ok(limitsFor(adult).quizOption <= SLIDE_LIMITS.quizOption && limitsFor(adult).quizOption >= 95);
+  assert.ok(limitsFor(kids).quizOption <= 25);
   assert.ok(limitsFor(kids, { stats: 4 }).statLabel <= 30);
   assert.ok(limitsFor(kids, { cols: 5, rows: 6 }).tableCell <= 10);
   // Hech bir kombinatsiya statik qopqoqdan oshmaydi; qolgan maydonlar statik bilan bir xil.
@@ -348,7 +361,7 @@ test("limitsFor: son o'zgaruvchi maydonlar pol × son jadvalidan, statik qopqoqd
       assert.ok(l.stepText <= SLIDE_LIMITS.stepText && l.stepTitle <= SLIDE_LIMITS.stepTitle);
       assert.ok(l.statLabel <= SLIDE_LIMITS.statLabel && l.tableCell <= SLIDE_LIMITS.tableCell);
       assert.ok(l.tableHeader <= SLIDE_LIMITS.tableHeaderWide && l.tableHeader === l.tableHeaderWide);
-      assert.equal(l.quizOption, SLIDE_LIMITS.quizOption);
+      assert.ok(l.quizOption <= SLIDE_LIMITS.quizOption);
       assert.equal(l.title, SLIDE_LIMITS.title);
     }
   }
@@ -369,4 +382,9 @@ test("limitsFor: son o'zgaruvchi maydonlar pol × son jadvalidan, statik qopqoqd
   assert.deepEqual(limitsFor(kids), limitsFor(kids, { steps: kids.stepsMax, stats: kids.statsMax, cols: kids.tableCols, rows: kids.tableRows }));
   assert.equal(limitsFor(kids).stepsMax, 3);
   assert.equal(limitsFor(adult).stepsMax, 4);
+  const k = await import("../lib/generation/slide-limits.ts");
+  assert.equal(k.tableKey(3, 5), "4x5");
+  assert.equal(k.tableKey(2, 2), "3x3");
+  assert.equal(k.tableKey(4, 3), "4x4");
+  assert.equal(k.tableKey(6, 9), "5x6");
 });

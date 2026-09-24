@@ -102,7 +102,7 @@ test("AUDIT-25: brifda har maket so'z oralig'i — BodyRules va deka vizualidan 
 test("AUDIT-25: element soni auditoriya polidan (countRules) — BodyRules va brifda", async () => {
   const { bodyRules, countRules } = await import("../lib/generation/slide-audience.ts");
   assert.deepEqual(countRules(24), { stepsMax: 3, statsMax: 3, tableCols: 3, tableRows: 4 });
-  assert.deepEqual(countRules(18), { stepsMax: 4, statsMax: 3, tableCols: 3, tableRows: 4 });
+  assert.deepEqual(countRules(18), { stepsMax: 3, statsMax: 3, tableCols: 3, tableRows: 4 });
   assert.deepEqual(countRules(15), { stepsMax: 4, statsMax: 4, tableCols: 4, tableRows: 5 });
   for (const id of Object.keys(AUDIENCE_RULES)) {
     const r = bodyRules(meta({ slideAudience: id }), lecture.id);

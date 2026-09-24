@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { extractMeta } from "../lib/generation/meta.ts";
 import { resetBreakers } from "../lib/generation/llm/breaker.ts";
 import { bodyRules } from "../lib/generation/slide-audience.ts";
-import { SLIDE_LIMITS, limitsFor } from "../lib/generation/slide-limits.ts";
+import { SLIDE_LIMITS, clipTo, limitsFor } from "../lib/generation/slide-limits.ts";
 import {
   CHARS_PER_WORD,
   COL_MIN_ITEMS,
@@ -18,6 +18,8 @@ import {
   bulletMaxWords,
   bulletMinWords,
   clipLimit,
+  fmtRange,
+  wordTargetLines,
   fitChars,
   layoutWordTargets,
   repairThinSlides,
@@ -50,7 +52,9 @@ const sent = (n: number, from = 0) => Array.from({ length: n }, (_, i) => POOL[(
 const bachelor = bodyRules({ slideAudience: "students_bachelor", textVolume: "standart", planItems: 5 }, "lecture");
 const VIS = "classic" as const;
 
-const S = (o: Partial<SlideModel> & Pick<SlideModel, "layout">): SlideModel => ({ id: "s", title: "Sarlavha", ...o }) as SlideModel;
+/** Reja MAZMUN slaydi (`plan: 1`) — bandlar/ustun/bosqich qoidalari faqat shularga. Blok slaydi uchun `plan: undefined`. */
+const S = (o: Partial<SlideModel> & Pick<SlideModel, "layout"> & { plan?: number }): SlideModel =>
+  ({ id: "s", title: "Sarlavha", plan: 1, ...o }) as SlideModel;
 
 const healthy: SlideModel[] = [
   S({ layout: "bullets", bullets: [sent(14), sent(14, 3), sent(14, 6)] }),
@@ -77,7 +81,7 @@ test("few-bullets: minBullets dan kam band (uzun bo'lsa ham)", () => {
 
 test("short-bullets: o'rtacha so'z THIN_BULLET_K × bulletChars/8 dan kam", () => {
   const min = bulletMinWords(bachelor);
-  assert.equal(min, Math.round((bachelor.bulletChars * THIN_BULLET_K) / 8));
+  assert.equal(min, Math.floor((bachelor.bulletChars * THIN_BULLET_K) / 8));
   // Chegaradan BITTA so'z kam — yupqa; aynan chegarada — sog'lom.
   const below = S({ layout: "bullets", bullets: [sent(min - 1), sent(min - 1, 2), sent(min - 1, 4)] });
   const at = S({ layout: "bullets", bullets: [sent(min), sent(min, 2), sent(min, 4)] });
@@ -85,6 +89,22 @@ test("short-bullets: o'rtacha so'z THIN_BULLET_K × bulletChars/8 dan kam", () =
   assert.deepEqual(reasonsOf(at), []);
   // Jonli dekadagi naqsh: 2 ta 3 so'zli band — ikkala sabab.
   assert.deepEqual(reasonsOf(S({ layout: "bullets", bullets: ["Suv tanqisligi.", "Iqlim o‘zgarishi."] })), ["few-bullets", "short-bullets"]);
+  // 1–4 sinf: 80 × 0.55 / 8 = 5.5 → 5 (round 6 edi — 5 so'zli bolalar bandi «yupqa» chiqardi).
+  const kids = bodyRules({ slideAudience: "school_1_4", textVolume: "standart", planItems: 5 }, "lesson");
+  assert.equal(bulletMinWords(kids), 5);
+  assert.deepEqual(reasonsOf(S({ layout: "bullets", bullets: [sent(5), sent(5, 2), sent(5, 4)] }), kids, "classic"), []);
+});
+
+test("blok slaydlari (plan yo'q) bandlar/ustun/bosqich qoidasidan ozod; bo'sh subtitle va kesilgan variant — hamma slaydga", () => {
+  // «Dars maqsadlari» — qisqa maqsadlar tabiiy (P5 bilan bir qoida).
+  const goals = S({ layout: "bullets", plan: undefined, title: "Dars maqsadlari", bullets: ["Orol muammosini tushuntirish", "Sabablarni ajratish"] });
+  assert.deepEqual(reasonsOf(goals), []);
+  assert.deepEqual(reasonsOf({ ...goals, plan: 2 } as SlideModel), ["few-bullets", "short-bullets"]);
+  const steps = S({ layout: "process", plan: undefined, steps: [1, 2, 3].map((n) => ({ n: String(n), title: "B", text: "Qisqa" })) });
+  assert.deepEqual(reasonsOf(steps), []);
+  const cols = S({ layout: "twoCol", plan: undefined, left: ["A"], right: ["B"] });
+  assert.deepEqual(reasonsOf(cols), []);
+  assert.deepEqual(reasonsOf(S({ layout: "section", plan: undefined })), ["empty-subtitle"]);
 });
 
 test("short-steps: bosqich matni STEP_MIN_WORDS dan kam yoki bosqich PROCESS_MIN_STEPS dan kam", () => {
@@ -102,6 +122,16 @@ test("short-steps: bosqich matni STEP_MIN_WORDS dan kam yoki bosqich PROCESS_MIN
     ],
   });
   assert.deepEqual(reasonsOf(skeleton), ["short-steps"]);
+  // Ko'pchilik qoidasi: bitta 5 so'zli sog'lom bosqich butun slaydni «yupqa» qilmaydi…
+  const mostly = S({ layout: "process", steps: [sent(9), sent(9, 3), "Natijani baholash va xulosa chiqarish"].map((text, i) => ({ n: String(i + 1), title: "B", text })) });
+  assert.deepEqual(reasonsOf(mostly), []);
+  // …lekin yorliq-bosqich (≤ 3 so'z) — yupqa.
+  const label = S({ layout: "process", steps: [sent(9), sent(9, 3), "Natija"].map((text, i) => ({ n: String(i + 1), title: "B", text })) });
+  assert.deepEqual(reasonsOf(label), ["short-steps"]);
+  // Ortiqcha son o'z chegarasini pasaytirmaydi: 1–4 sinfga 5 × 3 so'z — `stepsMax` (3) dagi chegara bilan yupqa.
+  const kids = bodyRules({ slideAudience: "school_1_4", textVolume: "standart", planItems: 5 }, "lesson");
+  const five = S({ layout: "process", steps: Array.from({ length: 5 }, (_, i) => ({ n: String(i + 1), title: "B", text: sent(3, i) })) });
+  assert.deepEqual(reasonsOf(five, kids, "classic"), ["short-steps"]);
 });
 
 test("short-columns: ustunda COL_MIN_ITEMS dan kam band yoki o'rtacha COL_MIN_WORDS dan kam so'z", () => {
@@ -114,25 +144,32 @@ test("short-columns: ustunda COL_MIN_ITEMS dan kam band yoki o'rtacha COL_MIN_WO
   assert.deepEqual(reasonsOf(S({ layout: "compare", left: col(3, COL_MIN_WORDS), right: col(3, COL_MIN_WORDS) })), []);
 });
 
-test("empty-subtitle: bo'lim subtitle bo'sh yoki SECTION_SUBTITLE_MIN_WORDS dan kam (skelet: faqat mavzu nomi)", () => {
+test("empty-subtitle: bo'lim subtitle bo'sh yoki SECTION_SUBTITLE_MIN_WORDS dan kam (skelet: faqat mavzu nomi) yoki sarlavhaning o'zi", () => {
+  const long = sent(8);
+  assert.deepEqual(reasonsOf(S({ layout: "section", title: long, subtitle: long })), ["empty-subtitle"]);
   assert.deepEqual(reasonsOf(S({ layout: "section" })), ["empty-subtitle"]);
   assert.deepEqual(reasonsOf(S({ layout: "section", subtitle: "Orol dengizi" })), ["empty-subtitle"]);
   assert.deepEqual(reasonsOf(S({ layout: "section", subtitle: sent(SECTION_SUBTITLE_MIN_WORDS - 1) })), ["empty-subtitle"]);
   assert.deepEqual(reasonsOf(S({ layout: "section", subtitle: sent(SECTION_SUBTITLE_MIN_WORDS) })), []);
 });
 
-test("short-quote: iqtibos QUOTE_MIN_WORDS dan kam", () => {
-  assert.deepEqual(reasonsOf(S({ layout: "quote", quote: sent(QUOTE_MIN_WORDS - 1) })), ["short-quote"]);
-  // Mutlaq holat (konstantaga bog'liq emas): shior — iqtibos emas.
-  assert.deepEqual(reasonsOf(S({ layout: "quote", quote: "Suv — hayot manbai, uni asrang." })), ["short-quote"]);
-  assert.deepEqual(reasonsOf(S({ layout: "quote", quote: sent(QUOTE_MIN_WORDS) })), []);
+test("iqtibos HECH QACHON yupqa emas — haqiqiy qisqa iqtibosni uzaytirish uydirma (sharh 3-band)", () => {
+  assert.deepEqual(reasonsOf(S({ layout: "quote", quote: "Bilim — kuch.", quoteBy: "F. Bekon" })), []);
+  assert.deepEqual(reasonsOf(S({ layout: "quote", quote: "Orol nega qurib qoldi?" })), []);
+  assert.deepEqual(reasonsOf(S({ layout: "quote", quote: sent(QUOTE_MIN_WORDS - 1) })), []);
 });
 
 test("clipped-option: «…» bilan tugagan variant/savol, yoki auditoriya qutisiga sig'maydigan variant", () => {
   const quiz = (options: string[], q = "Savol?") => S({ layout: "quiz", quiz: [{ q, options, answer: 1 }] });
-  // Jonli dekadagi naqsh: «…me'yor…».
-  assert.deepEqual(reasonsOf(quiz(["Birinchi", "Suv sarfi me’yor…", "Uchinchi", "To‘rtinchi"])), ["clipped-option"]);
-  assert.deepEqual(reasonsOf(quiz(["A", "B", "C", "D"], "Suvni tejash uchun qaysi…")), ["clipped-option"]);
+  // Jonli dekadagi naqsh: qopqoqda kesilgan variant («…me'yor…»).
+  const cap = clipLimit("quizOption", bachelor, VIS);
+  const cut = clipTo(`Suv sarfi me’yorlari ${sent(30)}`, cap);
+  assert.ok(cut.endsWith("…"));
+  assert.deepEqual(reasonsOf(quiz(["Birinchi", cut, "Uchinchi", "To‘rtinchi"])), ["clipped-option"]);
+  assert.deepEqual(reasonsOf(quiz(["A", "B", "C", "D"], clipTo(sent(40), SLIDE_LIMITS.quizQ))), ["clipped-option"]);
+  // Bo'sh joyli savol / qisqa «…» — qirqilgan EMAS (sharh 12-band).
+  assert.deepEqual(reasonsOf(quiz(["1/2", "3/4", "1/4", "2/3"], "1/2 + 1/4 = …")), []);
+  assert.deepEqual(reasonsOf(quiz(["Va hokazo…", "B", "C", "D"])), []);
   // 60 belgilik variant talabaga sig'adi, 1–4 sinf `cards` qutisiga (pol 24 pt) — yo'q.
   const long = ["a", "b", "c", "d"].map((x) => `${x}) ${sent(7)}`);
   assert.ok(long[0].length > fitChars("quizOption", bodyRules({ slideAudience: "school_1_4", textVolume: "standart", planItems: 5 }, "lesson"), "cards"));
@@ -141,18 +178,19 @@ test("clipped-option: «…» bilan tugagan variant/savol, yoki auditoriya qutis
   assert.deepEqual(reasonsOf(quiz(long), kids, "cards"), ["clipped-option"]);
 });
 
-test("nomzod EMAS: title/agenda/closing/answers/references/stats/table bo'sh bo'lsa ham", () => {
-  const never: SlideModel[] = (["title", "agenda", "closing", "answers", "references", "stats", "table"] as const).map((layout) =>
+test("nomzod EMAS: title/agenda/closing/answers/references/stats/table/quote bo'sh bo'lsa ham", () => {
+  const never: SlideModel[] = (["title", "agenda", "closing", "answers", "references", "stats", "table", "quote"] as const).map((layout) =>
     S({ layout, bullets: [] }),
   );
   assert.deepEqual(thinSlides(never, bachelor, VIS), []);
 });
 
 test("thinSlides: indeks deka tartibida, faqat yupqalar", () => {
-  const deck = [healthy[0], S({ layout: "section" }), healthy[1], S({ layout: "quote", quote: "Qisqa." })];
+  const thinSteps = S({ layout: "process", steps: [1, 2, 3].map((n) => ({ n: String(n), title: "B", text: "Qisqa" })) });
+  const deck = [healthy[0], S({ layout: "section" }), healthy[1], S({ layout: "quote", quote: "Qisqa." }), thinSteps];
   assert.deepEqual(thinSlides(deck, bachelor, VIS), [
     { index: 1, reasons: ["empty-subtitle"] as ThinReason[] },
-    { index: 3, reasons: ["short-quote"] as ThinReason[] },
+    { index: 4, reasons: ["short-steps"] as ThinReason[] },
   ]);
 });
 
@@ -188,9 +226,10 @@ test("layoutWordTargets: oraliqlar sig'imdan oshmaydi va detektor chegarasidan p
     const t = layoutWordTargets(bachelor, visual);
     const cap = (f: Parameters<typeof fitChars>[0], n?: number) => Math.max(CHARS_PER_WORD, fitChars(f, bachelor, visual, n));
     assert.ok(t.colItem.max * CHARS_PER_WORD <= cap("colItem"), `${visual}: colItem`);
-    assert.ok(t.stepText.max * CHARS_PER_WORD <= cap("stepText", t.maxSteps), `${visual}: stepText`);
+    for (const [n, r] of Object.entries(t.stepTextBy)) assert.ok(r.max * CHARS_PER_WORD <= cap("stepText", Number(n)), `${visual}: stepText×${n}`);
+    assert.ok(t.colItem.max * CHARS_PER_WORD <= cap("colItem", t.maxColItems), `${visual}: colItem×${t.maxColItems}`);
     assert.ok(t.statLabelMax * CHARS_PER_WORD <= cap("statLabel", t.maxStats), `${visual}: statLabel`);
-    assert.ok(t.tableCellMax * CHARS_PER_WORD <= cap("tableCell", t.maxTableCols), `${visual}: tableCell`);
+    assert.ok(t.tableCellMax * CHARS_PER_WORD <= Math.max(CHARS_PER_WORD, fitChars("tableCell", bachelor, visual, t.maxTableCols, { rows: t.maxTableRows })), `${visual}: tableCell`);
     assert.ok(t.sectionSubtitle.max * CHARS_PER_WORD <= cap("subtitleSection"), `${visual}: section`);
     assert.ok(t.closingSubtitle.max * CHARS_PER_WORD <= cap("subtitleClosing"), `${visual}: closing`);
     assert.ok(t.quote.max * CHARS_PER_WORD <= cap("quote"), `${visual}: quote`);
@@ -220,6 +259,34 @@ test("element soni auditoriyaga ergashadi: yosh auditoriyaga kam bosqich/karta/u
   for (const r of [bachelor, kids]) assert.ok(bulletMaxWords(r) * CHARS_PER_WORD <= r.bulletChars);
 });
 
+test("jadval: prompt va qirqish BIR kalitda (ustun × qator) — promptga rioya qilgan katak kesilmaydi (sharh 5-band)", () => {
+  for (const aud of ["students_bachelor", "general", "school_10_11", "school_5_7", "school_1_4"] as const) {
+    const r = bodyRules({ slideAudience: aud, textVolume: "standart", planItems: 5 }, "lecture");
+    for (const visual of ["classic", "academic"] as const) {
+      const t = layoutWordTargets(r, visual);
+      const lim = limitsFor(r, { cols: t.maxTableCols, rows: t.maxTableRows }).tableCell;
+      assert.ok(t.tableCellMax * CHARS_PER_WORD <= Math.max(CHARS_PER_WORD, lim), `${aud}/${visual}: katak ${t.tableCellMax} so'z > ${lim}`);
+      assert.ok(clipLimit("tableCell", r, visual, t.maxTableCols, t.maxTableRows) <= lim);
+    }
+  }
+  // Talaba: 4 × 5 jadval (auditoriya ruxsati) — 5×6 ning 20 belgisi emas.
+  assert.ok(limitsFor(bachelor).tableCell >= 40, `talaba katak ${limitsFor(bachelor).tableCell}`);
+});
+
+test("prompt oraliqlari: «N–N» yo'q, bosqich matni har son uchun, «yozilsa» (sharh 8-band)", () => {
+  for (const aud of ["school_1_4", "school_5_7", "students_bachelor", "students_master"] as const) {
+    for (const visual of ["classic", "circle", "academic", "rail"] as const) {
+      const r = bodyRules({ slideAudience: aud, textVolume: "qisqa", planItems: 5 }, "lecture");
+      const text = wordTargetLines(r, visual).join("\n");
+      for (const m of text.matchAll(/(\d+)–(\d+)/g)) assert.notEqual(m[1], m[2], `${aud}/${visual}: «${m[0]}»`);
+      assert.match(text, /3 bosqichda /);
+      assert.match(text, /kam yozilsa .* ko‘p yozilsa kesiladi/);
+    }
+  }
+  assert.equal(fmtRange({ min: 4, max: 4 }), "4");
+  assert.equal(fmtRange({ min: 4, max: 6 }), "4–6");
+});
+
 test("clipLimit: statik qopqoqdan oshmaydi, pol shriftidagi sig'imgacha tushadi, CLIP_FLOOR_CHARS dan past emas", () => {
   const kids = bodyRules({ slideAudience: "school_1_4", textVolume: "standart", planItems: 5 }, "lesson");
   for (const [field, cap] of [
@@ -233,13 +300,13 @@ test("clipLimit: statik qopqoqdan oshmaydi, pol shriftidagi sig'imgacha tushadi,
       const lim = clipLimit(field, rules, "classic");
       assert.ok(lim <= cap, `${field}: ${lim} > ${cap}`);
       // Pol faqat O'LCHOVNI qisadi; pol × son jadvali (`limitsFor`, P2 o'lchovi) undan ham past bo'lishi mumkin.
-      const table = field === "quizOption" || field === "colItem" ? cap : limitsFor(rules)[field];
+      const table = field === "colItem" ? cap : limitsFor(rules)[field];
       assert.ok(lim >= Math.min(CLIP_FLOOR_CHARS, table), `${field}: ${lim} < pol`);
       assert.ok(lim <= Math.max(CLIP_FLOOR_CHARS, fitChars(field, rules, "classic")), `${field}: qutidan katta`);
     }
   }
-  // Talabaga 130 belgilik variant sig'adi (qopqoq); 1–4 sinfga — yo'q, qirqish qutigacha.
-  assert.equal(clipLimit("quizOption", bachelor, "classic"), SLIDE_LIMITS.quizOption);
+  // Variant — pol bo'yicha jadvaldan (`limitsFor.quizOption`, sharh 7-band); 1–4 sinfga — ancha tor.
+  assert.equal(clipLimit("quizOption", bachelor, "classic"), limitsFor(bachelor).quizOption);
   assert.ok(clipLimit("quizOption", kids, "cards") < clipLimit("quizOption", bachelor, "cards"));
   // Rasmli 5 bosqich: 160 emas (A1-01) — qirqish quti sig'imigacha.
   assert.ok(clipLimit("stepText", bachelor, "classic", 5) < SLIDE_LIMITS.stepText);
@@ -295,7 +362,7 @@ function deck(): SlideModel[] {
     { id: "s1", layout: "bullets", title: "Qurish sabablari", bullets: ["Sug‘orish.", "Iqlim."], image: img, imageHint: "dry sea", notes: "Izoh", plan: 1 } as SlideModel,
     { id: "s2", layout: "section", title: "Oqibatlar", subtitle: "Orol dengizi", plan: 2 } as SlideModel,
     { ...healthy[1], id: "s3" },
-    { id: "s4", layout: "process", title: "Tiklash", steps: [1, 2, 3].map((n) => ({ n: String(n), title: `Qadam ${n}`, text: "Qisqa" })) },
+    { id: "s4", layout: "process", title: "Tiklash", plan: 3, steps: [1, 2, 3].map((n) => ({ n: String(n), title: `Qadam ${n}`, text: "Qisqa" })) } as SlideModel,
   ];
 }
 
@@ -329,6 +396,8 @@ test("repair: BITTA chaqiruv, yupqalar to'ldiriladi, sog'lomlarga tegilmaydi, ki
       assert.match(calls[0].user, /index=4 layout=process/);
       assert.doesNotMatch(calls[0].user, /index=0 |index=3 /);
       assert.match(calls[0].system, /MAKET HAJMI/);
+      // «Boshqa slaydlarni takrorlamang» — deka tarkibi ko'rsatiladi (sharh 13-band).
+      assert.match(calls[0].user, /Dekadagi slaydlar: .*3\) Sarlavha/);
     },
   );
 });
@@ -459,24 +528,66 @@ test("repair: LLM kalitsiz yoki yupqa slayd yo'q — chaqiruv YO'Q", async () =>
   );
 });
 
-test("repair: test varianti — javob indeksi va variant soni saqlanmasa RAD", async () => {
-  const quiz = S({ id: "q", layout: "quiz", quiz: [{ q: "Savol?", options: ["Bir", "Suv me’yor…", "Uch", "To‘rt"], answer: 1 }] });
-  const fixed = ["Birinchi javob", "Suv sarfi me’yori", "Uchinchi javob", "To‘rtinchi javob"];
+test("repair: test varianti — faqat belgilangan variant o'zgaradi, asli bilan bir boshli; javob o'rni saqlanadi", async () => {
+  const cap = clipLimit("quizOption", rules, tpl.visual);
+  const full = `Suv sarfi me’yorlarini buzgan korxonalarga ${sent(30)}`;
+  const cutB = clipTo(full, cap);
+  const quiz = S({ id: "q", layout: "quiz", quiz: [{ q: "Qaysi chora to‘g‘ri?", options: ["Jarima solish", cutB, "Soliqni oshirish", "Hech narsa qilmaslik"], answer: 1 }] });
+  assert.deepEqual(reasonsOf(quiz, rules, tpl.visual), ["clipped-option"]);
+  const fixedB = "Suv sarfi me’yorlarini buzgan korxonalarga jarima va cheklov qo‘llash";
+  const fixed = ["Jarima solish (MODEL O'ZGARTIRDI)", fixedB, "Soliqni oshirish", "Hech narsa qilmaslik"];
   await withLlm(
-    () => jsonReply({ slides: [{ index: 0, quiz: [{ q: "Savol?", options: fixed, answer: 1 }] }] }),
+    () => jsonReply({ slides: [{ index: 0, quiz: [{ q: "Qaysi chora to‘g‘ri?", options: fixed, answer: 1 }] }] }),
     async () => {
       const out = await repairThinSlides([quiz], meta, tpl, {}, later(), later());
-      assert.deepEqual(out[0].quiz?.[0].options, fixed);
+      const opts = out[0].quiz?.[0].options ?? [];
+      assert.equal(opts[1], fixedB, "belgilangan variant to'ldirildi");
+      assert.equal(opts[0], "Jarima solish", "belgilanmagan variant BAYTMA-BAYT asl");
+      assert.equal(opts[2], "Soliqni oshirish");
       assert.equal(out[0].quiz?.[0].answer, 1);
     },
   );
+  // Javobni «ko'chirish»: to'g'ri matn B dan boshqa joyga, B ga chalg'ituvchi — B asli bilan bir boshli emas → RAD.
   await withLlm(
-    () => jsonReply({ slides: [{ index: 0, quiz: [{ q: "Savol?", options: fixed, answer: 2 }] }] }),
+    () =>
+      jsonReply({
+        slides: [{ index: 0, quiz: [{ q: "Qaysi chora to‘g‘ri?", options: [fixedB, "Yer silkinishi natijasida suv kamaydi", "Soliqni oshirish", "Hech narsa qilmaslik"], answer: 1 }] }],
+      }),
+    async () => assert.equal((await repairThinSlides([quiz], meta, tpl, {}, later(), later()))[0], quiz, "almashtirish — rad"),
+  );
+  await withLlm(
+    () => jsonReply({ slides: [{ index: 0, quiz: [{ q: "Qaysi chora to‘g‘ri?", options: fixed, answer: 2 }] }] }),
     async () => assert.equal((await repairThinSlides([quiz], meta, tpl, {}, later(), later()))[0], quiz, "javob siljidi — rad"),
   );
   await withLlm(
-    () => jsonReply({ slides: [{ index: 0, quiz: [{ q: "Savol?", options: fixed.slice(0, 3), answer: 1 }] }] }),
+    () => jsonReply({ slides: [{ index: 0, quiz: [{ q: "Qaysi chora to‘g‘ri?", options: fixed.slice(0, 3), answer: 1 }] }] }),
     async () => assert.equal((await repairThinSlides([quiz], meta, tpl, {}, later(), later()))[0], quiz, "3 variant — rad"),
+  );
+});
+
+test("repair: process — son auditoriya ruxsatigacha qisiladi, matn shu sondagi quti bilan (sharh 1-band)", async () => {
+  const kidsMeta = extractMeta(TOOL_BY_ID["pro-slide"], { topic: "Suv", slideAudience: "school_1_4" } as never);
+  const kidsTpl = resolveSlideTemplate("lesson", kidsMeta.topic);
+  const kr = bodyRules(kidsMeta, kidsTpl.id);
+  assert.equal(kr.stepsMax, 3);
+  const thin = S({ id: "p", layout: "process", title: "Tajriba", steps: [1, 2, 3].map((n) => ({ n: String(n), title: "B", text: "Qisqa" })) });
+  // Model 5 bosqich qaytaradi — har biri 3 bosqichli quti sig'imidagi to'liq gap.
+  const w = Math.max(3, Math.min(STEP_MIN_WORDS, Math.floor(clipLimit("stepText", kr, kidsTpl.visual, 3) / CHARS_PER_WORD)));
+  const five = Array.from({ length: 5 }, (_, i) => ({ n: String(i + 1), title: "Qadam", text: sent(w, i) }));
+  await withLlm(
+    () => jsonReply({ slides: [{ index: 0, steps: five }] }),
+    async () => {
+      const out = await repairThinSlides([thin], kidsMeta, kidsTpl, {}, later(), later());
+      const steps = out[0].steps ?? [];
+      assert.ok(steps.length <= kr.stepsMax, `${steps.length} bosqich > ${kr.stepsMax}`);
+      assert.ok(steps.length >= PROCESS_MIN_STEPS);
+      for (const st of steps) assert.ok(!st.text.endsWith("…"), `kesilgan: «${st.text}»`);
+    },
+  );
+  // 3 dan kam bosqich — rad.
+  await withLlm(
+    () => jsonReply({ slides: [{ index: 0, steps: five.slice(0, 2) }] }),
+    async () => assert.equal((await repairThinSlides([thin], kidsMeta, kidsTpl, {}, later(), later()))[0], thin),
   );
 });
 
@@ -484,13 +595,17 @@ test("repair: test varianti — javob indeksi va variant soni saqlanmasa RAD", a
 
 test("SLIDE_LIMITS: qopqoqlar pol shriftidagi sig'imdan oshmaydi (o'lchov qulfi)", () => {
   // Eng past pol (15 pt) — eng katta sig'im. Qopqoq undan oshsa, hech bir auditoriyada sig'maydi.
+  /*
+   * `title` qulfda YO'Q: bo'lim sarlavhasi qalin o'lchovda (P2 dan keyin)
+   * circle/editorial/story/academic/magazine da 16–24 belgidan toshadi —
+   * bu sarlavha QUTISI muammosi (P2 ga so'rov), belgi chegarasi bilan
+   * yechilmaydi (sarlavha 6–10 so'z bo'lishi kerak). `quote` — mediana.
+   */
   const tight: [keyof typeof SLIDE_LIMITS, Parameters<typeof fitChars>[0]][] = [
     ["quizOption", "quizOption"],
     ["subtitleSection", "subtitleSection"],
     ["subtitleClosing", "subtitleClosing"],
     ["quoteBy", "quoteBy"],
-    ["title", "title"],
-    ["quote", "quote"],
     ["quizQ", "quizQ"],
   ];
   for (const [limit, field] of tight) {
@@ -498,14 +613,16 @@ test("SLIDE_LIMITS: qopqoqlar pol shriftidagi sig'imdan oshmaydi (o'lchov qulfi)
     assert.ok(SLIDE_LIMITS[limit] <= cap + 1, `${limit}=${SLIDE_LIMITS[limit]} > eng tor quti ${cap}`);
   }
   // TIPIK vizual (17 vizual medianasi, rasm tasmasi bilan) qutisiga mos: ustun sarlavhasi va bandi.
-  const median = (field: Parameters<typeof fitChars>[0]) => {
+  const median = (field: Parameters<typeof fitChars>[0], n?: number) => {
     const all = (["classic", "hero-split", "cards", "lab", "timeline", "magazine", "dense", "academic", "circle", "notebook", "formal", "story", "split", "bold", "dashboard", "rail", "editorial"] as const)
-      .map((v) => fitChars(field, bachelor, v))
+      .map((v) => fitChars(field, bachelor, v, n))
       .sort((a, b) => a - b);
     return all[Math.floor(all.length / 2)];
   };
   assert.ok(SLIDE_LIMITS.colTitle <= median("colTitle") + 1, `colTitle > mediana ${median("colTitle")}`);
-  assert.ok(SLIDE_LIMITS.colItem <= median("colItem") + 1, `colItem > mediana ${median("colItem")}`);
+  // Statik ustun bandi — 3 bandli ustun medianasi (rasm bilan); 4 band (P2 dan keyin pol shriftida ~60) — `clipLimit`/prompt.
+  assert.ok(SLIDE_LIMITS.colItem <= median("colItem", 3) + 1, `colItem > mediana ${median("colItem", 3)}`);
+  assert.ok(SLIDE_LIMITS.quote <= median("quote") + 1, `quote > mediana ${median("quote")}`);
 });
 
 test("limitsFor jadvali jonli o'lchovga mos: har katak rasmsiz eng tor qutidan ko'pi bilan bitta so'z ortiq", async () => {
@@ -513,15 +630,19 @@ test("limitsFor jadvali jonli o'lchovga mos: har katak rasmsiz eng tor qutidan k
   const WORD = 12; // o'lchov so'z bo'yicha: keyingi uzun so'z sig'magani uchun «sig'im» bir so'zgacha past chiqadi
   for (const aud of ["school_1_4", "school_5_7", "school_8_9", "school_10_11", "general", "students_bachelor"] as const) {
     const r = bodyRules({ slideAudience: aud, textVolume: "standart", planItems: 5 }, "lecture");
+    const cap = (f: Parameters<typeof fitChars>[0], k: number, rows?: number) => fitChars(f, r, undefined, k, { rows, images: "none" }) + WORD;
     for (const n of [3, 4, 5]) {
-      const l = limitsFor(r, { steps: n, stats: Math.min(4, n), cols: n, rows: n <= 4 ? n : 6 });
-      const cap = (f: Parameters<typeof fitChars>[0], k: number) => fitChars(f, r, undefined, k, "none") + WORD;
+      const l = limitsFor(r, { steps: n });
       assert.ok(l.stepText <= cap("stepText", n), `${aud} stepText×${n}: ${l.stepText} > ${cap("stepText", n)}`);
       assert.ok(l.stepTitle <= cap("stepTitle", n), `${aud} stepTitle×${n}`);
-      assert.ok(l.statLabel <= cap("statLabel", Math.min(4, n)), `${aud} statLabel×${Math.min(4, n)}`);
-      assert.ok(l.tableCell <= cap("tableCell", n), `${aud} tableCell×${n}`);
-      assert.ok(l.tableHeader <= cap("tableHeader", n), `${aud} tableHeader×${n}`);
     }
+    for (const n of [2, 3, 4]) assert.ok(limitsFor(r, { stats: n }).statLabel <= cap("statLabel", n), `${aud} statLabel×${n}`);
+    for (const [c, w] of [[3, 3], [3, 4], [4, 4], [4, 5], [5, 6]] as const) {
+      const l = limitsFor(r, { cols: c, rows: w });
+      assert.ok(l.tableCell <= cap("tableCell", c, w), `${aud} tableCell ${c}×${w}: ${l.tableCell} > ${cap("tableCell", c, w)}`);
+      assert.ok(l.tableHeader <= cap("tableHeader", c, w), `${aud} tableHeader ${c}×${w}`);
+    }
+    assert.ok(limitsFor(r).quizOption <= cap("quizOption", 1), `${aud} quizOption`);
   }
 });
 
