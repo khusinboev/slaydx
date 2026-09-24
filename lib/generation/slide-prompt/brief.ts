@@ -1,5 +1,6 @@
 import { bodyRules } from "../slide-audience";
 import { purposeDefaults } from "../slide-purpose";
+import { layoutWordTargets, wordTargetLines } from "../slide-quality";
 import type { SlideTemplate } from "../slide-templates";
 import type { DocMeta } from "../types";
 import type { SlidePromptCtx } from "./ctx";
@@ -16,13 +17,27 @@ export function briefLines(meta: DocMeta, tpl: SlideTemplate, ctx: SlidePromptCt
   void ctx;
   const rules = bodyRules(meta, tpl.id);
   const purpose = purposeDefaults(meta.slidePurpose);
+  const bullet = layoutWordTargets(rules, tpl.visual).bullet;
   return [
     /*
      * ORALIQ beriladi, faqat yuqori chegara emas — model faqat shift
      * berilsa eng qisqasini tanlaydi (jonli o'lchovda 36% to'ldirish).
      */
     `Har slaydda ${rules.minBullets}–${rules.maxBullets} ta bullet (agenda'da ${Math.max(3, rules.agendaMax - 1)}–${rules.agendaMax}).`,
-    `Har bullet — TO‘LIQ gap, ${Math.round((rules.bulletChars * 0.55) / 8)}–${Math.round(rules.bulletChars / 8)} so‘z. Bir-ikki so‘zli sarlavhasimon parcha YOZMANG: fikr tugallangan bo‘lsin.`,
+    /*
+     * Band so'z oralig'i — `slide-quality.ts` dagi detektor bilan BIR
+     * manba: quyi chegara aynan «yupqa band» chegarasi, yuqorisi qirqish
+     * (`bulletChars`) va deka vizualining quti sig'imidan oshmaydi (AUDIT-25).
+     */
+    `Har bullet — TO‘LIQ gap, ${bullet.min}–${bullet.max} so‘z. Bir-ikki so‘zli sarlavhasimon parcha YOZMANG: fikr tugallangan bo‘lsin.`,
+    /*
+     * Har maket uchun so'z oralig'i (AUDIT-25 S4) — qo'lda yozilgan son
+     * emas: `BodyRules` (auditoriya × matn hajmi) va deka vizualining
+     * QUTILARIDAN (`planSlide`, auditoriya shrift poli) hisoblanadi.
+     * Jonli dekada process matni 3–4 so'z, section subtitle bo'sh, test
+     * variantlari «…» bilan kesilgan edi — endi model aniq oraliq oladi.
+     */
+    ...wordTargetLines(rules, tpl.visual),
     rules.note,
     /*
      * Taqdimot turi — `general` da `guidance` bo'sh, qator umuman

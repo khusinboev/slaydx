@@ -1,7 +1,7 @@
 import { slideLabels } from "./i18n";
 import type { SlideModel } from "./slide-types";
 import type { DocMeta } from "./types";
-import { safeSlice } from "./safe-text";
+import { SLIDE_LIMITS, clipTo } from "./slide-limits";
 
 /**
  * Nazorat testining DEKA darajasidagi qoidalari.
@@ -37,10 +37,8 @@ export const QUIZ_LETTERS = ["A", "B", "C", "D"] as const;
 /** Javob izohining boshi — `finalizeQuiz` ikki marta chaqirilsa takrorlamaslik uchun ham kerak. */
 const ANSWER_PREFIX = "Javob:";
 
-function clip(text: string, n: number) {
-  const t = String(text || "").replace(/\s+/g, " ").trim();
-  return t.length <= n ? t : `${safeSlice(t, n - 1).trimEnd()}…`;
-}
+/** Qirqish — `clipTo` bilan bir xil (so'z chegarasida, AUDIT-25); alohida nusxa yo'q. */
+const clip = clipTo;
 
 /** `answer` maydonini harf indeksiga keltiradi — buzuq qiymat 0 ga tushadi. */
 export function answerIndex(answer: unknown, options: string[] = []): number {
@@ -69,7 +67,13 @@ function withAnswerNote(s: SlideModel): SlideModel {
   const q = s.quiz?.[0];
   if (!q) return s;
   const i = answerIndex(q.answer, q.options);
-  const option = clip(q.options[i] ?? "", 120);
+  /*
+   * Izohdagi variant slayddagi bilan AYNAN bir xil bo'lsin: chegara
+   * variant qopqog'idan (`SLIDE_LIMITS.quizOption`) olinadi. Ilgari
+   * qat'iy 120 edi — qopqoq 130 ga ko'tarilgach (AUDIT-25) izohda
+   * javob «…» bilan kesilib, slayddagi variantdan farq qilardi.
+   */
+  const option = clip(q.options[i] ?? "", SLIDE_LIMITS.quizOption);
   const line = `${ANSWER_PREFIX} ${QUIZ_LETTERS[i]}${option ? ` — ${option}` : ""}`;
   const written = (s.notes || "").trim();
   if (written.includes(line)) return s;
