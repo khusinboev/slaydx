@@ -196,7 +196,7 @@ test("route: bayt javobi o'z keshini, xato javobi `private, no-store` ni beradi"
    */
   await t.test("eskiz: ?v= joriy file_version → immutable; eski/yo'q v → no-store; 404 → no-store", async () => {
     const { putAssets } = await import("../lib/server/assets.ts");
-    const { THUMB_ASSET_ID } = await import("../lib/server/thumb.ts");
+    const { thumbAssetId } = await import("../lib/server/thumb.ts");
     const thumbRoute = await import("../app/api/generations/[id]/thumb/route.ts");
     const tg = crypto.randomUUID();
     await query(
@@ -204,7 +204,8 @@ test("route: bayt javobi o'z keshini, xato javobi `private, no-store` ni beradi"
       [tg, uid],
     );
     const jpeg = Buffer.from("ffd8ffe000104a464946", "hex");
-    await putAssets(tg, [{ assetId: THUMB_ASSET_ID, mime: "image/jpeg", bytes: jpeg }]);
+    // Eskiz fayl versiyasi kaliti bilan keshlanadi (DB-14, W4-B) — joriy `file_version = 3` eskizi.
+    await putAssets(tg, [{ assetId: thumbAssetId(3), mime: "image/jpeg", bytes: jpeg }]);
     const thumb = async (gid2: string, qs: string) => {
       const req = get(`/api/generations/${gid2}/thumb${qs}`);
       return inRequest(req, () => thumbRoute.GET(req, { params: Promise.resolve({ id: gid2 }) }));
