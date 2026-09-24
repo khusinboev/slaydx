@@ -207,3 +207,87 @@ With P1's current WIP (`general`, `mount("slide")` defaults) the numbers happen 
 and 4 slides → 2 − 1 = 1 with the agenda kept. The tests should therefore survive the swap unchanged. They will
 break if P1 changes small-deck agenda handling (for example, dropping the agenda when capacity would be 1 gives
 2 at 4 slides). Update the stub-arithmetic comments at the swap either way.
+
+---
+
+# Re-review — 8e4603e
+
+Diff `c9e4323..8e4603e` touches `SlideComposer.tsx`, `compact.tsx`, `plan-capacity-stub.ts`, `slide-fields.tsx`
+and `tests/ui/slide-composer.test.mts`. P1 semantics were checked against worktree `agent-a9012405…` (HEAD
+`2af1974` plus uncommitted `slide-params.ts`/`meta.ts`/`slide-blocks.ts`): `resolvePlanFlags`, `planBudget`,
+`effectivePlanItems(raw, capacity, slideCount)`, `defaultPlanItems`.
+
+**Test run:** one heavy command, `npx tsx --tsconfig tsconfig.viewer.json --test tests/ui/slide-composer.test.mts`
+in the P4 worktree. Result: **21 tests, 20 pass, 0 fail, 1 skipped** (the pro-slide TODO).
+
+## Verdict: CHANGES
+
+Items 1, 3, 4 and 7 are fixed. Item 5 is fixed for the plain «Slayd» form, but the pro-slide test is skipped and
+will fail when turned on (N4). Item 6 is fixed and safe for the other forms. The new «send `quizCount`/`agendaSlide`
+only when the user touched them» logic, however, does not match P1's final rule that an explicitly sent `blocks`
+list wins. The main reason is that **the plain «Slayd» form also sends `blocks`**. Several form controls therefore
+become decorative again (N1, N2). N3 is required for the swap to work.
+
+## Previous items: status
+- **1. Fixed.** Floor 1 via a stub `effectivePlanItems(raw, capacity)` with the P1 signature. `lo = min(PLAN_ITEMS_MIN, capacity, effective)`. New test `:205` checks exactly one checked radio, equal to the chip. The mutations "floor back to 3" and "drop `effective` from `lo`" both turn it red.
+- **3. Fixed.** At capacity 1, «1» must have `aria-disabled="false"` (in test `:156`). New boundary test at capacity 4 (`:192`) makes a click that really changes state.
+- **4. Fixed.** Test `:217`: after a disabled «4» click, raising the slider to 30 must show the default, not 4.
+- **5. Fixed for «Slayd».** Wiring test `:240` (agenda off gives +1, quiz 3 gives −1). With real P1 the numbers are the same: 7 slides gives bodyWant 5, so 4, then 5, then 3. The pro test is skipped (see N4).
+- **6. Fixed.** `Segmented` now takes `SegmentedOption = FieldOption & { disabled?: boolean }`.
+  - `FieldOption` (`lib/types.ts:70`) has no `disabled`, and none of the other 16 files that use `Segmented` (`Article/Essay/Game/Infographic/Media/Resume/Work/Translation`, `ImageStudio`, `teacher/*`) builds options with that key. Their behaviour is unchanged.
+  - The only DOM change for them is a new `aria-disabled="false"` attribute on every segment button. No test outside `slide-composer` refers to it (grep). See N5.
+- **7. Fixed.** Tooltip number `min(capacity, 6)`. Hint «Tanlangan N band sig‘maydi — M band yoziladi.» `o‘`/`g‘` apostrophes. `SLIDE_MIN/MAX` clamp. Pro fallback `PRO_SLIDE_DEFAULT`. Inner `key` removed.
+
+## CHANGES (new)
+
+1. **N1 — the plain «Slayd» form sends `blocks`, so P1 ignores its «Testsiz» and «Reja slaydi» (A3-01/A3-02 regress).**
+   - `SlideComposer.tsx:111` puts `blocks: resetBlocksForPurpose("general")` into the initial values for BOTH tools. `slide-fields.tsx:278` sets `blocks` again whenever the presentation type changes. `sanitizeValues` does not drop unused keys, so `blocks` reaches `extractMeta`.
+   - P1's `resolvePlanFlags(blocksSent=true, …)` then treats the request as pro-slide:
+     - `quizCount: 0` is IGNORED when `blocks` contains `test`: «Ochiq dars»/«Trening» plus «Testsiz» still gives 3 quizzes.
+     - `agendaSlide: true` is IGNORED: «Trening»/«Taklif» plus «Reja slaydi» ON gives no agenda slide.
+   - P1's own comment says «bloklar YUBORILMAGAN (oddiy slayd)». Its assumption does not hold for the current form.
+   - Fix, in both places:
+     - **P4:** set `blocks` only for `kind === "pro-slide"`, in both `initialValues` and the `slidePurpose` onChange (`ctx.tool`). Drop `blocks` from a restored draft when the tool is «Slayd». Have `capacityFor` pass `blocks: ctx.tool === "pro-slide" ? values.blocks : undefined`.
+     - **P1 (server authority, protects against old drafts and old clients):** `blocksSent = tool.id === "pro-slide" && values.blocks != null`.
+   - Test: «Slayd» + open_lesson + «Testsiz». The POST must have no `blocks` key and `quizCount === 0`. Add a meta-level test in P1 as well.
+2. **N2 — in pro-slide the form contradicts «chips win».** `resolvedQuizCount`/`resolvedAgendaSlide` (`slide-fields.tsx:100–115`) read `purposeDefaults(slidePurpose)`, not `values.blocks`. Server outcomes vs what the form shows:
+   - (a) The type has Test (open_lesson) and the user picks «Testsiz». The form sends 0 and shows «Testsiz». The server ignores the 0 and writes 3 quizzes. Test `:326` («Testsiz» sends 0) locks in exactly this decorative state.
+   - (b) The user ticks the Test chip, which auto-sets `quizCount=3`, then unticks it. `quizCount` stays 3 and P1's `activeBlockIds` adds `test` back because `quizCount>0`. The form summary shows «3 savol» while the Test chip is off.
+   - (c) The user unticks the «Reja» chip without touching the agenda switch. The switch and the summary still show «Reja» (from the purpose default), but the server makes no agenda slide.
+   - (d) The Reja chip is off and the user turns the «Reja slaydi» switch ON. The server drops `agendaSlide: true`, so the switch is decorative.
+   - Fix for pro-slide: keep the controls in step.
+     - «Testsiz» removes `test` from `blocks`; N>0 makes sure `test` is in `blocks`.
+     - Unticking the Test chip sets `quizCount: 0`.
+     - Turning the «Reja slaydi» switch ON adds `reja` to `blocks`; unticking the Reja chip must show the switch OFF.
+     - Compute what is displayed from P1's `resolvePlanFlags` + `activeBlockIds` (import at the swap), not from a copy based on `purposeDefaults`.
+   - Tests: one per case (a)–(d). In each, the POST body and the summary chip text must agree with what the server would do.
+3. **N3 — the adaptive default never reaches the server from the form.** `initialValues` still sends `planItems: PLAN_ITEMS_DEFAULT` (5) (`SlideComposer.tsx:112`). P1 treats a sent value as the user's choice, so `defaultPlanItems(slideCount)` (10 → 3, 12 → 4) never applies to form submissions.
+   - Remove `planItems` from `initialValues`.
+   - Call `effectivePlanItems(values.planItems, capacity, slideCount)`. `raw` in `PlanItemsField` should be `values.planItems` if the user set it, otherwise `defaultPlanItems(slideCount)`.
+   - Show the «Tanlangan N band sig‘maydi» hint **only** when `values.planItems !== undefined`. The user never chose the default, so it must not be called «tanlangan».
+   - Note: drafts saved by the current production form contain `planItems: 5`, `quizCount: 0` and `agendaSlide: true`. After deploy, a restored draft turns them into explicit choices. Either accept this or ignore these three keys when restoring legacy drafts (e.g. a draft version tag).
+4. **N4 — the skipped pro test (`:253`) will fail when turned on.** It expects «12 slaydga 9 band», but the tooltip now shows `min(capacity, 6)`, i.e. «12 slaydga 6 band». Use a case where the stub and the engine disagree and the number stays ≤ 6. Example: pro + «Himoya» (defense) + 8 slides. Real gives 8 − 2 − 1 = 5, so assert «8 slaydga 5 band sig‘adi» with «6» disabled; the stub would give 3.
+5. **N5 (nit, `compact.tsx`)** — use `aria-disabled={disabled || undefined}` so the other 16 forms' DOM stays byte-identical. The `onClick` guard is redundant with native `disabled`; harmless.
+
+## Swap checklist (at the P1 merge)
+1. Delete `components/forms/plan-capacity-stub.ts`. In `slide-fields.tsx:38` import `planCapacity`, `effectivePlanItems`, `defaultPlanItems` from `@/lib/generation/slide-params`, plus `resolvePlanFlags`/`activeBlockIds` for N2.
+2. `effectivePlanItems` takes 3 arguments. Pass `slideCount` (the same clamp as `PlanItemsField`) at both call sites: the `effectivePlanItems(values)` wrapper and `PlanItemsField`.
+3. N3: remove `planItems` from `initialValues` and derive `raw` via `defaultPlanItems`. Show the hint only for an explicit user choice.
+4. N1: send `blocks` only for pro-slide, and have `capacityFor` pass `blocks` only for pro-slide. P1's `blocksSent` must also check the tool.
+5. Delete the stub-only `resolvedQuizCount`/`resolvedAgendaSlide` purposeDefaults copies, or rebase them on P1's rule (N2). Keep `QUIZ_COUNT_FALLBACK` equal to P1's `QUIZ_COUNT_FALLBACK` (3) by importing it rather than redefining it.
+6. **Tests/strings that change** (`tests/ui/slide-composer.test.mts`):
+   - `:36` title + list: «5 band» becomes **«3 band»** (10 slides → `defaultPlanItems` 3).
+   - `:156` (capacity test):
+     - At 4 slides the hint must NOT appear, because the default was not chosen.
+     - «joriy (standart 5)» comment: update.
+     - At 30 slides «5» checked becomes **«6»** (`defaultPlanItems(30)=6`).
+     - `!chips().includes("5 band")` remains true.
+   - `:192` boundary: at 7 slides the default is 3 (`round(7/3)` = 2, clamped to 3), so «4 band» becomes **«3 band»**. Clicking «3» is then a no-op: click «4» and assert «4 band».
+   - `:217` native-disabled: after going back to 30 slides, «5»/«5 band» becomes **«6»/«6 band»**. It still tells the default apart from the disabled «4».
+   - `:231` tooltip: «10 slaydga 6 band» and «4 slaydga 1 band». **Unchanged** with real P1 (general: bodyWant 8 − 1 = 7, shown as 6; 4 slides: 2 − 1 = 1, agenda kept).
+   - `:240` wiring (7 → 4, agenda off → 5, quiz 3 → 3): **unchanged** with real P1, **provided** `capacityFor` still reflects explicit `quizCount`/`agendaSlide` for «Slayd» after N1.
+   - `:253` skipped pro test: rewrite per N4 and turn it on.
+   - `:326` «Testsiz» sends 0: for pro-slide also assert that `blocks` lacks `test` (N2a). Add the «Slayd» counterpart asserting there is no `blocks` key (N1).
+   - `:295`, `:313`, `:341`, `:354`: semantics unchanged. `:313` should additionally assert `blocks` contains `test`.
+   - Every comment with stub arithmetic («10-2-1=7», «7-2-1-0=4», «4 - 2 - 1 (reja slaydi) - 0 = 1») becomes bodyWant wording.
+7. After the swap, re-run this file and the `tests/slide-form.test.mts` / `tests/viewer/slide-form.test.mts` guards. P1's `tests/slide-params.test.mts` probe for `planItems` (probeA 3 / probeB 6) must still differ at the default slide count (capacity 7 at 10 slides; OK).
