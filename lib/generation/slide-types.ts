@@ -79,6 +79,8 @@ export type SlideModel = {
    * (`imageRestore` op) uni qaytaradi. `planSlide` bu maydonni CHIZMAYDI.
    */
   imageOrig?: { url: string; alt?: string };
+  /** Reja bandi (1-asosli) — bo'lim raqami shu maydondan; yo'q bo'lsa raqam chizilmaydi. */
+  plan?: number;
 };
 
 export type SlideDeck = {
