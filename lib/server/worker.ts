@@ -190,25 +190,63 @@ export function progressTicker(job: ClaimedJob, live: LiveReporter | null, isLiv
    */
   const expected = Math.max(20_000, jobBudget(job) * 0.7);
   const started = Date.now();
+  /*
+   * Yozuv chastotasi (DB-12, SCALE-13). Ilgari HAR 2 s da UPDATE (180 s lik
+   * ish = 90 ta). Endi ijara (`locked_at`) kamida har `LEASE_EVERY_MS` da,
+   * soxta progress esa faqat O'ZGARGANDA va ko'pi bilan har
+   * `PROGRESS_MIN_GAP_MS` da yoziladi; jonli rejimda `LiveReporter` ning
+   * o'z yozuvi (`setLive` ham `locked_at` ni suradi) ijarani yangilagan
+   * bo'lsa heartbeat yuborilmaydi. `tests/worker-heartbeat-rate.test.mts`.
+   */
+  let lastLeaseAt = -Infinity;
+  let lastProgress = -1;
+  let lastStep = "";
+  let liveMode = false;
   const timer = setInterval(() => {
+    const now = Date.now();
     if (live?.started || isLive?.()) {
       // Qulf «heartbeat»i — `progress`/`step`ni endi `LiveReporter` yoki
-      // dvigatelning `onStage` i yozadi.
+      // dvigatelning `onStage` i yozadi. Rejim almashgan birinchi tickda
+      // darhol (10 s sanog'i shu yerdan boshlanadi), keyin faqat ijara
+      // oxirgi yozuvdan beri `LEASE_EVERY_MS` yangilanmagan bo'lsa.
+      const touched = Math.max(lastLeaseAt, live?.lastWriteAt ?? -Infinity);
+      if (liveMode && now - touched < LEASE_EVERY_MS) return;
+      liveMode = true;
+      lastLeaseAt = now;
       void heartbeat(job.id, job.lease).catch((e) => {
         throttledWarn(`hb:${job.id}`, "[worker] heartbeat yozilmadi", { jobId: job.id, err: e });
       });
       return;
     }
-    const ratio = 1 - Math.exp(-(Date.now() - started) / expected);
+    const ratio = 1 - Math.exp(-(now - started) / expected);
     const progress = Math.min(95, Math.round(5 + ratio * 90));
     const idx = Math.min(steps.length - 1, Math.floor((progress / 96) * steps.length));
+    const step = steps[idx];
+    const gap = now - lastLeaseAt;
+    const changed = progress !== lastProgress || step !== lastStep;
+    const due = (changed && gap >= PROGRESS_MIN_GAP_MS) || gap >= LEASE_EVERY_MS;
+    if (!due) return;
+    lastLeaseAt = now;
+    lastProgress = progress;
+    lastStep = step;
     // Bu ayni paytda qulf «heartbeat»i ham — `locked_at` suriladi.
-    void setProgress(job.id, job.lease, progress, steps[idx]).catch((e) => {
+    void setProgress(job.id, job.lease, progress, step).catch((e) => {
       throttledWarn(`hb:${job.id}`, "[worker] progress yozilmadi", { jobId: job.id, err: e });
     });
-  }, 2000);
+  }, PROGRESS_TICK_MS);
   return () => clearInterval(timer);
 }
+
+/** Ticker qadami — faqat hisoblash (xotirada); bazaga yozish quyidagi ikki chegarada. */
+const PROGRESS_TICK_MS = 2_000;
+/** Soxta progress yozuvlari orasidagi eng qisqa oraliq (o'zgargan bo'lsa ham). */
+const PROGRESS_MIN_GAP_MS = 4_000;
+/**
+ * Ijara (`locked_at`) shundan kechikmay yangilanadi. `reclaimStaleJobs`
+ * chegarasi oxirgi yozuvdan byudjet + 30 s — 10 s bilan bir necha ketma-ket
+ * yozuv yo'qolsa ham (baza qisqa uzilishi) ish o'lik hisoblanmaydi.
+ */
+export const LEASE_EVERY_MS = 10_000;
 
 /**
  * Ishga ajratilgan vaqt.

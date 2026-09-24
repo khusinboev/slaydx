@@ -59,6 +59,13 @@ export class LiveReporter {
    */
   lost = false;
 
+  /**
+   * Oxirgi MUVAFFAQIYATLI `setLive` vaqti (`Date.now()`). U ham `locked_at`
+   * ni suradi — worker ticker'i shu paytdan beri `LEASE_EVERY_MS` o'tmagan
+   * bo'lsa alohida heartbeat yubormaydi (DB-12, SCALE-13).
+   */
+  lastWriteAt = -Infinity;
+
   private state: LiveDeck | undefined;
   private dirty = false;
   private stopped = false;
@@ -205,6 +212,7 @@ export class LiveReporter {
     if (payload === undefined) return;
     const seq = await setLive(this.jobId, this.workerId, payload, progress, step);
     if (seq === null) this.lost = true;
+    else this.lastWriteAt = Date.now();
   }
 
   /**
