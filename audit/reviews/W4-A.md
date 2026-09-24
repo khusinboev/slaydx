@@ -127,3 +127,52 @@ All runs were hermetic: `--import ./tests/helpers/hermetic-env.mts`, `GEMINI_API
   - The legacy `recordLlmUsage` uses `llmModel()` rather than the model actually called (the same value today).
 - **N7:** `getFullYear()` remains in the freshness windows in `article/review.ts` and `work/review.ts`, in the `research/pipeline.ts` fallback, and in `resume/input.ts`. These are harmless, but could use `tashkentYear()` for consistency.
 - **N8:** Follow up on the legacy writer deadline gap from §2.
+
+## Re-review (head `c000b08`, base merged as `3288c03`)
+
+### Verdict: **APPROVE**
+
+**R1: fixed.**
+- **The split:** `lib/generation/image-studio-options.ts` holds the style/ratio catalogue and imports nothing. `ImageStudio.tsx` and `ImageViewer.tsx` now import it. `image-studio.ts` re-exports it, so server callers are unchanged.
+- **Production build:** `next build --turbopack` exits 0 at `c000b08`. I ran it on a scratch worktree with a real `node_modules` copy, via heavy2 with 4G; the scratch tree has been removed. The only remaining output is the existing Edge-runtime warning about `process.exit` in `instrumentation.ts`, which is not related to this branch.
+
+**The guard test catches the regression.** I mutated a scratch copy of `tests/client-bundle-guard.test.mts`'s targets:
+
+| Mutation | Result |
+|---|---|
+| M1: `ImageViewer.tsx` imports `@/lib/generation/image-studio` again | **Fails.** Reports both chains, to `safe-fetch` and to `job-cost`. |
+| M2: `image-studio-options.ts` imports `./slide-images` (transitive) | **Fails.** Reports a 3–5 hop chain. |
+| M4: a client component does a dynamic `import("@/lib/generation/llm-roles")` | **Fails.** Reports `llm-roles → job-cost`. |
+| M3: a client component has an `import type { JobCost }` | Passes. There is no false positive on type-only imports. |
+
+**Nits:**
+- **Done:**
+  - N3: IPv4-compatible `::/96`, NAT64 `64:ff9b::/96`, uncompressed mapped addresses and `fec0::/10` are now private.
+  - N4: the DNS lookup is raced against the shared timeout signal on every hop.
+  - N5: an `http://` link on Aisha's own host is upgraded to `https://`; other hosts are unchanged and still rejected.
+  - N6: grounding is recorded as `max(1, queries.length)` units.
+- **Not done, accepted:**
+  - N2: the rationale is documented in `safe-fetch.ts`. Node 22's built-in `fetch` bundles undici 6, and a dispatcher from `node_modules` undici 8 doesn't work with it. Every URL still comes from a provider.
+  - N1, N7 and N8 stay open as follow-ups.
+- **Test fix:** `c000b08` gives the work-wiring teacher probe a 300 s deadline so it clears the review and polish reserves. This is test-only.
+
+**Tests.** All runs were hermetic: `hermetic-env` loaded, no `.env.local`, `GEMINI_API_KEY` unset, via `heavy2.sh`.
+
+| Run | Pass |
+|---|---|
+| Combined run: client-bundle-guard, safe-fetch, llm-legacy-deadline, engine-deadline-cost, tashkent-year, work-wiring, game-wiring, essay-params, tts-aisha | **84/84** |
+| image-studio | 9 |
+| slide-research | 31 |
+| image-providers-free | 26 |
+| slide-images | 18 |
+| work-engine | 28 |
+| article-engine | 20 |
+| teacher-engine | 26 |
+| translate-engine | 16 |
+| generation | 65 |
+| document | 62 |
+| ui/image-studio (viewer tsconfig) | 8 |
+
+All passed.
+
+**Merge.** Both conflicts from my first review are resolved. `essay-params` keeps the `price` impact with no exemption list and passes (4/4). `game-wiring` uses the W4-A `{0,200}` regex and passes.
