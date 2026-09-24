@@ -1,6 +1,6 @@
 import { slideLabels } from "./i18n";
 import { isSlideFontId, type SlideFontId } from "./slide-fonts";
-import { SLIDE_LIMITS, clipTo } from "./slide-limits";
+import { SLIDE_LIMITS, clipTo, limitsFor } from "./slide-limits";
 import { photoSlot } from "./slide-layout";
 import { refreshAnswerNote, rebuildAnswerKey } from "./slide-quiz";
 import { buildSlideDeck } from "./slides";
@@ -77,8 +77,15 @@ export type ConvertCheck =
   | { ok: true; lossy: boolean }
   | { ok: false; reason: string };
 
-/** `writeSlideField` ga kerak bo'ladigan qoidalar — `bodyRules` ning kichik qismi. */
-export type EditRules = Pick<BodyRules, "maxBullets" | "bulletChars" | "agendaMax">;
+/**
+ * `writeSlideField` ga kerak bo'ladigan qoidalar — `bodyRules` ning kichik qismi.
+ *
+ * AUDIT-25 P3 W7: `minPt`/`stepsMax`/`statsMax`/`tableCols`/`tableRows` ham
+ * shu yerda — `limitsFor(rules, counts)` ularsiz ishlamaydi. Ularsiz tahrir
+ * eski STATIK `SLIDE_LIMITS` qopqog'ini ishlatardi va auditoriya poli
+ * ostidagi qutiga sig'mas matnni qabul qilardi («ko'rdim = oldim» buzilardi).
+ */
+export type EditRules = Pick<BodyRules, "maxBullets" | "bulletChars" | "agendaMax" | "minPt" | "stepsMax" | "statsMax" | "tableCols" | "tableRows">;
 
 // ═══════════════════════════════════════════════════════ Yordamchilar
 
@@ -324,7 +331,7 @@ export function writeSlideField(s: SlideModel, src: SlideSrc, value: string, rul
         // Yangi karta faqat QIYMAT bilan tug'iladi: yorliqsiz raqam ma'noli, raqamsiz yorliq — yo'q.
         const v = clipTo(value, SLIDE_LIMITS.statValue);
         if (src.k !== "value" || !v) return { ok: true, slide: s };
-        if (s.stats.length >= SLIDE_LIMITS.statsMax) return { ok: false, error: `Bu maketda ${SLIDE_LIMITS.statsMax} tadan ortiq raqam bo'lmaydi` };
+        if (s.stats.length >= rules.statsMax) return { ok: false, error: `Bu maketda ${rules.statsMax} tadan ortiq raqam bo'lmaydi` };
         return { ok: true, slide: { ...s, stats: [...s.stats, { value: v, label: "" }] } };
       }
       if (src.k === "value") {
@@ -333,19 +340,22 @@ export function writeSlideField(s: SlideModel, src: SlideSrc, value: string, rul
         if (!v) return { ok: true, slide: { ...s, stats: s.stats.filter((_, k) => k !== i) } };
         return { ok: true, slide: { ...s, stats: s.stats.map((x, k) => (k === i ? { ...x, value: v } : x)) } };
       }
-      // Yorliq bo'sh bo'lishi MUMKIN — raqamning o'zi ham ma'no beradi.
-      const label = clipTo(value, SLIDE_LIMITS.statLabel);
+      // Yorliq bo'sh bo'lishi MUMKIN — raqamning o'zi ham ma'no beradi. Chegara auditoriya POLI × karta SONIdan (`limitsFor`).
+      const label = clipTo(value, limitsFor(rules, { stats: s.stats.length }).statLabel);
       return { ok: true, slide: { ...s, stats: s.stats.map((x, k) => (k === i ? { ...x, label } : x)) } };
     }
     case "steps": {
       if (!s.steps) return { ok: false, error: "Bu maketda bosqichlar yo'q" };
       const i = src.i;
       if (!Number.isInteger(i) || i < 0 || i > s.steps.length) return { ok: false, error: "Bosqich indeksi noto'g'ri" };
-      const max = { n: SLIDE_LIMITS.stepN, title: SLIDE_LIMITS.stepTitle, text: SLIDE_LIMITS.stepText }[src.k];
+      const isNewStep = i === s.steps.length;
+      // Chegara auditoriya POLI × BO'LADIGAN bosqich SONIdan (`limitsFor`) — yangi band qo'shilsa son bittaga oshadi.
+      const lim = limitsFor(rules, { steps: isNewStep ? i + 1 : s.steps.length });
+      const max = { n: SLIDE_LIMITS.stepN, title: lim.stepTitle, text: lim.stepText }[src.k];
       const v = clipTo(value, max);
-      if (i === s.steps.length) {
+      if (isNewStep) {
         if (src.k !== "title" || !v) return { ok: true, slide: s };
-        if (s.steps.length >= SLIDE_LIMITS.stepsMax) return { ok: false, error: `Bu maketda ${SLIDE_LIMITS.stepsMax} tadan ortiq bosqich bo'lmaydi` };
+        if (s.steps.length >= rules.stepsMax) return { ok: false, error: `Bu maketda ${rules.stepsMax} tadan ortiq bosqich bo'lmaydi` };
         return { ok: true, slide: { ...s, steps: [...s.steps, { n: String(i + 1), title: v, text: "" }] } };
       }
       // Sarlavhasiz bosqich karta sifatida ma'nosiz — element o'chadi.
@@ -379,7 +389,8 @@ export function writeSlideField(s: SlideModel, src: SlideSrc, value: string, rul
         return { ok: true, slide: { ...s, quiz: s.quiz!.map((x, k) => (k === src.i ? { ...x, q: v } : x)) } };
       }
       if (src.j < 0 || src.j >= q.options.length) return { ok: false, error: "Variant indeksi noto'g'ri" };
-      const v = clipTo(value, SLIDE_LIMITS.quizOption);
+      // Test varianti — auditoriya POLI bo'yicha (`limitsFor`, son emas — 4 tasi ham bir xil quti).
+      const v = clipTo(value, limitsFor(rules).quizOption);
       /*
        * Variant AYNAN to'rtta bo'lishi shart: `planQuiz` A/B/C/D
        * kartalarini chizadi va `answer` indeksi shu tartibga bog'langan.
@@ -393,7 +404,9 @@ export function writeSlideField(s: SlideModel, src: SlideSrc, value: string, rul
     }
     case "table": {
       if (!s.table) return { ok: false, error: "Bu maketda jadval yo'q" };
-      const v = clipTo(value, src.k === "header" ? SLIDE_LIMITS.tableHeaderWide : SLIDE_LIMITS.tableCell);
+      // Chegara auditoriya POLI × jadval O'LCHAMIdan (`limitsFor`) — ustun/qator soni katakka sig'adigan matnni belgilaydi.
+      const tlim = limitsFor(rules, { cols: s.table.headers.length, rows: s.table.rows.length });
+      const v = clipTo(value, src.k === "header" ? tlim.tableHeaderWide : tlim.tableCell);
       if (src.k === "header") {
         if (src.c < 0 || src.c >= s.table.headers.length) return { ok: false, error: "Ustun indeksi noto'g'ri" };
         if (!v) return { ok: false, error: "Ustun sarlavhasi bo'sh bo'lishi mumkin emas" };
@@ -438,21 +451,31 @@ function parseStatNumber(value: string): number | null {
   return n;
 }
 
-/** Bandni «qiymat + yorliq» ga ajratadi: «95% — qoniqish» → {value:"95%", label:"qoniqish"}. */
-function splitStat(b: string): { value: string; label: string } | null {
+/**
+ * Bandni «qiymat + yorliq» ga ajratadi: «95% — qoniqish» → {value:"95%", label:"qoniqish"}.
+ *
+ * `labelMax` — chaqiruvchi joy beradi (`convertLayout` — `limitsFor` bo'yicha, karta SONIga
+ * qarab); berilmasa STATIK qopqoq (`canConvert` faqat NUL tekshiradi, qiymat tashlanadi).
+ */
+function splitStat(b: string, labelMax: number = SLIDE_LIMITS.statLabel): { value: string; label: string } | null {
   const m = b.trim().match(/^(\S+)\s*(?:[—–:-]\s*)?(.*)$/);
   if (!m) return null;
   if (parseStatNumber(m[1]) == null) return null;
-  return { value: clipTo(m[1], SLIDE_LIMITS.statValue), label: clipTo(m[2], SLIDE_LIMITS.statLabel) };
+  return { value: clipTo(m[1], SLIDE_LIMITS.statValue), label: clipTo(m[2], labelMax) };
 }
 
-/** Bandni «sarlavha — matn» ga ajratadi (`coerceLayout` naqshi). */
-function splitStep(b: string, i: number): { n: string; title: string; text: string } {
+/** Bandni «sarlavha — matn» ga ajratadi (`coerceLayout` naqshi). `titleMax`/`textMax` — `limitsFor` (bosqich SONIga qarab). */
+function splitStep(
+  b: string,
+  i: number,
+  titleMax: number = SLIDE_LIMITS.stepTitle,
+  textMax: number = SLIDE_LIMITS.stepText,
+): { n: string; title: string; text: string } {
   const [head, ...rest] = b.split(/\s+[—–:-]\s+/);
   return {
     n: String(i + 1),
-    title: clipTo(head, SLIDE_LIMITS.stepTitle),
-    text: clipTo(rest.join(" — "), SLIDE_LIMITS.stepText),
+    title: clipTo(head, titleMax),
+    text: clipTo(rest.join(" — "), textMax),
   };
 }
 
@@ -600,11 +623,19 @@ export function convertLayout(s: SlideModel, to: SlideLayout, rules: EditRules):
     };
   }
   if (to === "process") {
-    return { ok: true, slide: { ...base, steps: pool.slice(0, SLIDE_LIMITS.stepsMax).map(splitStep) } };
+    // Son AVVAL rules.stepsMax ga qisqartiriladi, keyin matn SHU songa mos chegarada qirqiladi (`limitsFor`).
+    const n = Math.min(pool.length, rules.stepsMax);
+    const lim = limitsFor(rules, { steps: n });
+    return { ok: true, slide: { ...base, steps: pool.slice(0, n).map((b, i) => splitStep(b, i, lim.stepTitle, lim.stepText)) } };
   }
   if (to === "stats") {
-    const stats = pool.map(splitStat).filter((x): x is { value: string; label: string } => Boolean(x));
-    return { ok: true, slide: { ...base, stats: stats.slice(0, SLIDE_LIMITS.statsMax) } };
+    const n = Math.min(pool.length, rules.statsMax);
+    const lim = limitsFor(rules, { stats: n });
+    const stats = pool
+      .slice(0, n)
+      .map((b) => splitStat(b, lim.statLabel))
+      .filter((x): x is { value: string; label: string } => Boolean(x));
+    return { ok: true, slide: { ...base, stats } };
   }
   if (to === "quote") {
     return { ok: true, slide: { ...base, quote: clipTo(s.quote || pool[0] || s.title, SLIDE_LIMITS.quote) } };
@@ -710,54 +741,68 @@ export function sanitizeSlideModel(raw: unknown, genId: string, rules: EditRules
     if (by) out.quoteBy = by;
     delete out.bullets;
   } else if (layout === "stats") {
-    out.stats = (Array.isArray(o.stats) ? o.stats : [])
+    const rawStats = Array.isArray(o.stats) ? o.stats : [];
+    // Son AVVAL rules.statsMax ga qisqartiriladi (P1 W3 naqshi), keyin yorliq SHU songa mos chegarada qirqiladi (`limitsFor`).
+    const statsN = Math.min(rawStats.length, rules.statsMax);
+    const statLim = limitsFor(rules, { stats: statsN });
+    out.stats = rawStats
+      .slice(0, statsN)
       .map((x) => {
         if (!x || typeof x !== "object") return null;
         const st = x as Record<string, unknown>;
         const value = str(st.value, SLIDE_LIMITS.statValue);
-        return value ? { value, label: str(st.label, SLIDE_LIMITS.statLabel) } : null;
+        return value ? { value, label: str(st.label, statLim.statLabel) } : null;
       })
-      .filter((x): x is { value: string; label: string } => Boolean(x))
-      .slice(0, SLIDE_LIMITS.statsMax);
+      .filter((x): x is { value: string; label: string } => Boolean(x));
     if (typeof o.chart === "boolean") out.chart = o.chart;
     delete out.bullets;
   } else if (layout === "process") {
-    out.steps = (Array.isArray(o.steps) ? o.steps : [])
+    const rawSteps = Array.isArray(o.steps) ? o.steps : [];
+    const stepsN = Math.min(rawSteps.length, rules.stepsMax);
+    const stepLim = limitsFor(rules, { steps: stepsN });
+    out.steps = rawSteps
+      .slice(0, stepsN)
       .map((x, i) => {
         if (!x || typeof x !== "object") return null;
         const st = x as Record<string, unknown>;
-        const t = str(st.title, SLIDE_LIMITS.stepTitle);
+        const t = str(st.title, stepLim.stepTitle);
         if (!t) return null;
-        return { n: str(st.n, SLIDE_LIMITS.stepN) || String(i + 1), title: t, text: str(st.text, SLIDE_LIMITS.stepText) };
+        return { n: str(st.n, SLIDE_LIMITS.stepN) || String(i + 1), title: t, text: str(st.text, stepLim.stepText) };
       })
-      .filter((x): x is { n: string; title: string; text: string } => Boolean(x))
-      .slice(0, SLIDE_LIMITS.stepsMax);
+      .filter((x): x is { n: string; title: string; text: string } => Boolean(x));
     delete out.bullets;
   } else if (layout === "table") {
     const t = (o.table && typeof o.table === "object" ? o.table : {}) as Record<string, unknown>;
-    const headers = list(t.headers, SLIDE_LIMITS.tableCols, SLIDE_LIMITS.tableHeaderWide);
+    const rawHeaders = Array.isArray(t.headers) ? t.headers : [];
+    const rawRows = (Array.isArray(t.rows) ? t.rows : []).filter((r) => Array.isArray(r));
+    // Ustun/qator soni AVVAL rules.tableCols/tableRows ga qisqartiriladi, keyin katak/sarlavha SHU o'lchamga mos chegarada qirqiladi.
+    const colsN = Math.min(rawHeaders.length, rules.tableCols);
+    const rowsN = Math.min(rawRows.length, rules.tableRows);
+    const tableLim = limitsFor(rules, { cols: colsN, rows: rowsN });
+    const headers = list(t.headers, rules.tableCols, tableLim.tableHeaderWide);
     // Jadvalsiz `table` — bo'sh ramka; slayd bandlarga tushadi (`normalizeSlide` naqshi).
     if (headers.length < 2) return { ...out, layout: "bullets", bullets: bullets };
-    const rows = (Array.isArray(t.rows) ? t.rows : [])
-      .filter((r) => Array.isArray(r))
+    const rows = rawRows
       .map((r) =>
         Array.from({ length: headers.length }, (_, c) => {
           const cell = (r as unknown[])[c];
           // Bo'sh katak SAQLANADI — ustun surilmasin.
-          return typeof cell === "string" ? clipTo(cell, SLIDE_LIMITS.tableCell) : "";
+          return typeof cell === "string" ? clipTo(cell, tableLim.tableCell) : "";
         }),
       )
-      .slice(0, SLIDE_LIMITS.tableRows);
+      .slice(0, rules.tableRows);
     if (rows.length < 1) return { ...out, layout: "bullets", bullets: bullets };
     out.table = { headers, rows };
     delete out.bullets;
   } else if (layout === "quiz") {
+    // Test varianti — auditoriya POLI bo'yicha (`limitsFor`, son emas).
+    const quizLim = limitsFor(rules);
     const quiz = (Array.isArray(o.quiz) ? o.quiz : [])
       .map((x) => {
         if (!x || typeof x !== "object") return null;
         const q = x as Record<string, unknown>;
         const text = str(q.q, SLIDE_LIMITS.quizQ);
-        const options = list(q.options, SLIDE_LIMITS.quizOptions, SLIDE_LIMITS.quizOption);
+        const options = list(q.options, SLIDE_LIMITS.quizOptions, quizLim.quizOption);
         // Variant soni AYNAN 4 bo'lmasa savol tashlanadi — `answer` siljib yolg'on kalit bo'lardi.
         if (!text || options.length !== SLIDE_LIMITS.quizOptions) return null;
         const n = Number(q.answer);
