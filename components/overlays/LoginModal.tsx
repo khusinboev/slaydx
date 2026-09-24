@@ -68,6 +68,8 @@ export function LoginForm({ onDone }: { onDone?: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hint, setHint] = useState<string | null>(null);
+  /** UX-01: brauzer yangi oynani bloklagan — havola qo'lda bosiladi. */
+  const [popupBlocked, setPopupBlocked] = useState(false);
 
   const finish = useCallback(
     (user: api.ServerUser) => {
@@ -92,23 +94,42 @@ export function LoginForm({ onDone }: { onDone?: () => void }) {
       .finally(() => setBusy(false));
   }, [features?.telegram, finish]);
 
-  async function startTelegram() {
+  /**
+   * UX-01: yangi oyna bosish ichida SINXRON ochiladi, havola esa chipta
+   * kelgach unga yoziladi. Ilgari `window.open` `await` dan KEYIN edi —
+   * Safari/iOS (va ba'zan Chrome) bu paytda foydalanuvchi harakati
+   * belgisini yo'qotib, oynani JIM bloklardi: ekranda «kutilmoqda»,
+   * aslida hech narsa ochilmagan. Endi oyna ochilmasa (`null`) buni
+   * aytamiz va havolani katta tugma qilib beramiz.
+   */
+  function startTelegram() {
     setError(null);
+    setPopupBlocked(false);
+    const win = window.open("", "_blank");
     setBusy(true);
-    try {
-      const t = await api.createLoginTicket();
-      setTicket(t);
-      setStage("waiting");
-      // Yangi oyna: foydalanuvchi saytdan chiqib ketmasin. Botda
-      // «Saytga kirish» havolasi shu OYNADA ochiladi — sessiya o'sha
-      // yerda o'rnatiladi, biz esa pastdagi effektda uni kutamiz.
-      window.open(t.url, "_blank", "noopener,noreferrer");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Boshlanmadi");
-      setStage("start");
-    } finally {
-      setBusy(false);
-    }
+    void (async () => {
+      try {
+        const t = await api.createLoginTicket();
+        setTicket(t);
+        setStage("waiting");
+        // Yangi oyna: foydalanuvchi saytdan chiqib ketmasin. Botda
+        // «Saytga kirish» havolasi shu OYNADA ochiladi — sessiya o'sha
+        // yerda o'rnatiladi, biz esa pastdagi effektda uni kutamiz.
+        if (win && !win.closed) {
+          // `noopener` o'rniga: ochilgan sahifa bu oynaga qo'l cho'zolmasin.
+          win.opener = null;
+          win.location.href = t.url;
+        } else {
+          setPopupBlocked(true);
+        }
+      } catch (e) {
+        win?.close();
+        setError(e instanceof Error ? e.message : "Boshlanmadi");
+        setStage("start");
+      } finally {
+        setBusy(false);
+      }
+    })();
   }
 
   /**
@@ -127,7 +148,10 @@ export function LoginForm({ onDone }: { onDone?: () => void }) {
       if (Date.now() > deadline) {
         window.clearInterval(id);
         setStage("start");
-        setError("Havola muddati tugadi. Qaytadan urinib ko'ring.");
+        // UX-02: eng ko'p sabab — havola boshqa qurilmada ochilgan.
+        setError(
+          "Havola muddati tugadi. Agar «Saytga kirish» ni boshqa telefon yoki brauzerda bosgan bo‘lsangiz, kirish o‘sha yerda bo‘lgan — bu yerda qaytadan urinib ko‘ring.",
+        );
         return;
       }
       try {
@@ -304,17 +328,33 @@ export function LoginForm({ onDone }: { onDone?: () => void }) {
         <button
           type="button"
           disabled={busy}
-          onClick={() => void startTelegram()}
+          onClick={startTelegram}
           className="bg-primary text-primary-foreground flex h-11 w-full items-center justify-center rounded-xl text-sm font-medium disabled:opacity-60"
         >
           {busy ? "Ochilmoqda..." : "Telegram orqali kirish"}
         </button>
       ) : (
         <>
+          {popupBlocked ? (
+            <p role="alert" data-popup-blocked className="mb-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-300">
+              Yangi oyna ochilmadi — brauzeringiz uni bloklagan bo‘lishi mumkin. Quyidagi «Telegram’da ochish» tugmasini bosing.
+            </p>
+          ) : null}
+
           <ol className="text-muted-foreground mb-4 space-y-1 text-sm">
             <li>1. Ochilgan Telegram chatida «Start» ni bosing</li>
             <li>2. Bot yuborgan «Saytga kirish» tugmasini bosing</li>
           </ol>
+
+          {/*
+           * UX-02: kirish havolasi QAYSI brauzerda ochilsa, seans o'sha yerda
+           * ochiladi. Kompyuterda boshlab telefonda bossa — bu sahifa 5 daqiqa
+           * kutib, «muddati tugadi» derdi, sababini aytmasdan.
+           */}
+          <p className="text-muted-foreground mb-4 rounded-xl bg-muted/60 px-3 py-2 text-xs" data-same-device-hint>
+            <span className="text-foreground font-medium">Shu qurilmada oching.</span> «Saytga kirish» ni boshqa telefon yoki
+            kompyuterda bossangiz, kirish o‘sha yerda bo‘ladi — bu sahifa esa kutib qoladi.
+          </p>
 
           <div className="border-border/60 mb-4 flex items-center justify-center gap-3 rounded-xl border py-6">
             <span className="border-muted-foreground/30 border-t-primary size-5 animate-spin rounded-full border-2" />
@@ -327,9 +367,14 @@ export function LoginForm({ onDone }: { onDone?: () => void }) {
                 href={ticket.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="bg-background hover:bg-muted flex h-10 flex-1 items-center justify-center rounded-xl border text-sm"
+                data-ticket-link
+                className={
+                  popupBlocked
+                    ? "bg-primary text-primary-foreground flex min-h-10 flex-1 items-center px-3 py-2 text-center justify-center rounded-xl text-sm font-medium"
+                    : "bg-background hover:bg-muted flex min-h-10 flex-1 items-center px-3 py-2 text-center justify-center rounded-xl border text-sm"
+                }
               >
-                Telegram&apos;ni qayta ochish
+                {popupBlocked ? "Telegram’da ochish" : "Telegram’ni qayta ochish"}
               </a>
             ) : null}
             <button
@@ -339,6 +384,7 @@ export function LoginForm({ onDone }: { onDone?: () => void }) {
                 setTicket(null);
                 setError(null);
                 setHint(null);
+                setPopupBlocked(false);
               }}
               className="text-muted-foreground hover:text-foreground h-10 px-3 text-xs"
             >

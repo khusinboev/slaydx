@@ -2,6 +2,7 @@ import "server-only";
 import { createHash, createHmac, randomInt } from "node:crypto";
 import { env } from "./env";
 import { query, queryOne, transaction } from "./db";
+import { topUpInTx } from "./credits";
 import { rowToUser, safeEqual, userColumns, type SessionUser } from "./session";
 
 /**
@@ -104,36 +105,33 @@ const USER_COLUMNS = userColumns();
 /**
  * Telegram profili bo'yicha foydalanuvchini topadi yoki yaratadi.
  * Yangi akkauntga tanish bonusi jurnal bilan birga beriladi.
+ *
+ * Bitta `INSERT … ON CONFLICT (telegram_id) DO UPDATE` (CONC-16): ilgari
+ * `SELECT … FOR UPDATE` hali YO'Q qatorni qulflamasdi — ikki parallel
+ * birinchi kirish ikkalasi ham `INSERT` qilib, ikkinchisi
+ * `users_telegram_id_key` ga urilib 500 berardi. Endi ikkinchisi
+ * birinchisining COMMIT ini kutadi va `DO UPDATE` shoxiga tushadi.
+ * `xmax = 0` — qator shu so'rovda YARATILGANINI bildiradi; bonus faqat
+ * shunda va `topUpInTx` orqali (`(kind, reference)` bo'yicha idempotent
+ * jurnal) beriladi — ya'ni har holda bir martadan ortiq emas.
  */
 export async function upsertTelegramUser(p: TelegramProfile): Promise<SessionUser> {
   return transaction(async (client) => {
-    const existing = await client.query(
-      `SELECT ${USER_COLUMNS} FROM users WHERE telegram_id = $1 FOR UPDATE`,
-      [p.telegramId],
-    );
-    if (existing.rows[0]) {
-      const updated = await client.query(
-        `UPDATE users
-            SET username = $2, name = $3, photo_url = $4, updated_at = now()
-          WHERE id = $1
-      RETURNING ${USER_COLUMNS}`,
-        [existing.rows[0].id, p.username, p.name, p.photoUrl],
-      );
-      return rowToUser(updated.rows[0]);
-    }
-
-    const created = await client.query(
+    const res = await client.query<{ id: string; inserted: boolean }>(
       `INSERT INTO users (telegram_id, username, name, photo_url, points, author)
-       VALUES ($1, $2, $3, $4, $5, $3)
-       RETURNING ${USER_COLUMNS}`,
-      [p.telegramId, p.username, p.name, p.photoUrl, SIGNUP_BONUS_POINTS],
+       VALUES ($1, $2, $3, $4, 0, $3)
+       ON CONFLICT (telegram_id) DO UPDATE
+          SET username = EXCLUDED.username, name = EXCLUDED.name,
+              photo_url = EXCLUDED.photo_url, updated_at = now()
+       RETURNING id, (xmax = 0) AS inserted`,
+      [p.telegramId, p.username, p.name, p.photoUrl],
     );
-    await client.query(
-      `INSERT INTO transactions (user_id, kind, points_delta, reference, note)
-       VALUES ($1, 'bonus', $2, $3, 'Ro''yxatdan o''tish bonusi')`,
-      [created.rows[0].id, SIGNUP_BONUS_POINTS, `signup:${created.rows[0].id}`],
-    );
-    return rowToUser(created.rows[0]);
+    const { id, inserted } = res.rows[0]!;
+    if (inserted) {
+      await topUpInTx(client, id, { points: SIGNUP_BONUS_POINTS }, `signup:${id}`, "bonus", "Ro'yxatdan o'tish bonusi");
+    }
+    const user = await client.query(`SELECT ${USER_COLUMNS} FROM users WHERE id = $1`, [id]);
+    return rowToUser(user.rows[0]);
   });
 }
 

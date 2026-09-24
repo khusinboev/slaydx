@@ -6,6 +6,7 @@ import { render, fireEvent, screen, cleanup, act, waitFor, within } from "@testi
 import { AppRouterContext } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import type { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { ImageStudio } from "../../components/forms/ImageStudio.tsx";
+import { CONFIRM_MIN_MS } from "../../components/overlays/useConfirmClick.ts";
 import { TOOL_BY_ID, priceFor, formatTanga } from "../../lib/tools.ts";
 import { IMAGE_FORM_FIELDS, IMAGE_PROMPT_LIMIT } from "../../lib/generation/image-params.ts";
 
@@ -127,6 +128,8 @@ test("▸ Sozlamalar yopiq details ichida — «Formani tozalash» ikki bosqichl
   const btn = screen.getByText("Formani tozalash");
   fireEvent.click(btn);
   assert.equal(textarea.value, "Registon maydoni erta tongda", "birinchi bosish faqat ogohlantiradi");
+  // FE-07: tasdiq qo'sh bosish emas — ongli ikkinchi bosish.
+  await new Promise((r) => setTimeout(r, CONFIRM_MIN_MS + 30));
   fireEvent.click(screen.getByText(/Ishonchingiz komilmi/));
   assert.equal(textarea.value, "", "ikkinchi bosishda forma tozalanadi");
 });
