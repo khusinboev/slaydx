@@ -13,7 +13,7 @@
  * Kontrakt eslatmasi (P1/P3 parallel ishlaydi, §3): `SlideModel.plan?:
  * number` va `thinSlides(slides, rules)` (`lib/generation/slide-quality.ts`)
  * shu paket YOZILAYOTGANDA hali bu worktree'da yo'q edi. Shuning uchun:
- *   - `plan` maydoni DUCK-TYPE bilan o'qiladi (`SlideWithPlan`) — P1
+ *   - `plan` maydoni DUCK-TYPE bilan o'qiladi (`SlideForAudit.plan`) — P1
  *     qo'shgach `SlideModel`ning o'zida bo'ladi, bu yerdagi kasting
  *     zararsiz qoladi;
  *   - yupqa-slayd aniqlash P3'ning `thinSlides()`'ini IMPORT QILMAYDI —
@@ -29,11 +29,32 @@
 import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import type { SlideModel } from "../lib/generation/types.ts";
 
-/** P1 kontrakti hali yo'q — `plan` duck-type bilan o'qiladi (yuqoridagi izoh). */
-type SlideWithPlan = SlideModel & { plan?: number };
-type SlideDocLike = { slides?: SlideWithPlan[] };
+/**
+ * Auditga kerak bo'lgan maydonlargina — TO'LIQ `SlideModel` emas
+ * (`lib/generation/slide-types.ts`) qasddan IMPORT QILINMAGAN: bu
+ * skript qo'lda qurilgan yoki qisman/buzuq JSON ustida ham ishlashi
+ * kerak (`doc.json` — LLM javobidan chiqqan modeldan saqlanadi, CLAUDE.md
+ * qoidasi — «FormValues'dan AcademicDoc'gacha bo'lgan yo'lda hech qanday
+ * qadam ishonchli hisoblanmaydi»). `plan` — P1 kontrakti
+ * (`SlideModel.plan?: number`, hali bu worktree'da yo'q) — shu sabab
+ * duck-type bilan shu yerning O'ZIDA e'lon qilingan.
+ */
+type SlideForAudit = {
+  layout?: string;
+  title?: string;
+  subtitle?: string;
+  bullets?: string[];
+  left?: string[];
+  right?: string[];
+  quote?: string;
+  stats?: { value?: string; label?: string }[];
+  steps?: { n?: string; title?: string; text?: string }[];
+  quiz?: { q?: string; options?: string[]; answer?: number }[];
+  /** P1 kontrakti (`docs/AUDIT-25.md` §3) — duck-type, yuqoridagi izohga qarang. */
+  plan?: number;
+};
+type SlideDocLike = { slides?: SlideForAudit[] };
 
 export type SlideAuditIssue = { slide: number; kind: string; detail: string };
 export type SlideAuditResult = { ok: boolean; issues: SlideAuditIssue[] };
@@ -63,7 +84,7 @@ function normTitle(s: string | undefined | null): string {
  * checks'lari va testlar shu bilan chaqiradi.
  */
 export function auditSlideDoc(doc: SlideDocLike): SlideAuditResult {
-  const slides: SlideWithPlan[] = Array.isArray(doc.slides) ? doc.slides : [];
+  const slides: SlideForAudit[] = Array.isArray(doc.slides) ? doc.slides : [];
   const issues: SlideAuditIssue[] = [];
   const push = (slide: number, kind: string, detail: string) => issues.push({ slide, kind, detail });
 
@@ -186,7 +207,10 @@ function planCoverage(doc: SlideDocLike, issues: SlideAuditIssue[]): { covered: 
 function layoutsSummary(doc: SlideDocLike): string {
   const slides = doc.slides ?? [];
   const counts = new Map<string, number>();
-  for (const s of slides) counts.set(s.layout, (counts.get(s.layout) ?? 0) + 1);
+  for (const s of slides) {
+    const l = s.layout ?? "?";
+    counts.set(l, (counts.get(l) ?? 0) + 1);
+  }
   return Array.from(counts.entries())
     .map(([l, n]) => `${l}×${n}`)
     .join(" · ");
