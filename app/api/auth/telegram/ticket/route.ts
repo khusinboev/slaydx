@@ -14,8 +14,9 @@ export const dynamic = "force-dynamic";
  *   POST /api/auth/telegram/ticket → { nonce, url, expiresAt }
  *
  * Foydalanuvchi `url` orqali botga o'tadi, bot esa unga bir martalik
- * kirish havolasini yuboradi. Sessiya o'sha havolani bosganda ochiladi —
- * `GET /api/auth/telegram/enter`.
+ * kirish havolasini yuboradi. Havola `GET /api/auth/telegram/enter`
+ * tasdiqlash sahifasini ochadi («Siz <ism> sifatida kirmoqdasiz»);
+ * sessiya «Kirish» bosilganda — `POST /api/auth/telegram/enter` (SECA-05).
  *
  * Ilgari bu yerda `?action=verify` ham bor edi: bot 5 xonali kod
  * yuborar, foydalanuvchi uni saytga ko'chirib yozardi. Kod olib

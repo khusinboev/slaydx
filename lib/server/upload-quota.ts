@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import type { PoolClient } from "pg";
 import { pool, query, transaction } from "./db";
 import { ApiError } from "./api";
+import { THUMB_ASSET_ID } from "./thumb";
 
 /**
  * Foydalanuvchi yuklamalari uchun SAQLASH KVOTASI (C13: DB-02).
@@ -59,8 +60,8 @@ export type IncomingUpload = {
  * Kvota xabari — har tur uchun ROST (W2-C review R3): chegara va
  * foydalanuvchi HOZIR nima qila olishi. Faqat haqiqatan ishlaydigan yo'llar
  * aytiladi: shablon va tarjima manbasini o'chirish mumkin (API bor),
- * logotipni o'chirish yo'li YO'Q, manbalar 30 kundan va suratlar 90 kundan
- * keyin worker tomonidan o'chiriladi (`purgeOldSources`/`purgeOldPhotos`).
+ * logotipni o'chirish yo'li YO'Q, manbalar 30 kundan va ishlatilmayotgan
+ * suratlar 90 kundan keyin worker tomonidan o'chiriladi (`purgeOldSources`/`purgeOldPhotos`).
  * Foydalanilmagan logotip/shablon tozalash (`purgeUnusedUploads`) ulanmagan —
  * shuning uchun va'da qilinmaydi.
  */
@@ -72,7 +73,7 @@ export function quotaMessage(kind: UploadKind, reason: "count" | "bytes"): strin
     case "logo":
       return `Logotiplar chegarasi — ${UPLOAD_QUOTA.count.logo} ta, yangi logotip qabul qilinmaydi. Avval yuklagan logotip faylingizni qayta tanlashingiz mumkin.`;
     case "photo":
-      return `Suratlar chegarasi — ${UPLOAD_QUOTA.count.photo} ta. Avval yuklagan suratingizni qayta tanlang; har surat yuklangandan 90 kun o'tib o'chiriladi.`;
+      return `Suratlar chegarasi — ${UPLOAD_QUOTA.count.photo} ta. Avval yuklagan suratingizni qayta tanlang; qoralamada yoki navbatdagi rezyumeda ishlatilmayotgan surat 90 kundan keyin o'chiriladi (tayyor rezyumeda suratning o'z nusxasi bor).`;
     case "template":
       return `Shablonlar chegarasi — ${UPLOAD_QUOTA.count.template} ta. Yangisini yuklash uchun «O'z shablonim» ro'yxatidan keraksizini o'chiring.`;
     case "source":
@@ -87,7 +88,10 @@ type Exec = Pick<PoolClient, "query">;
 /*
  * Tayyor hujjatga KEYIN yuklangan rasm = `created_at > finished_at`.
  * Worker yaratgan rasmlar (Gemini, sxemalar) hujjat tugashidan oldin
- * yoziladi va kvotaga kirmaydi — ular pullik ish natijasi.
+ * yoziladi va kvotaga kirmaydi — ular pullik ish natijasi. Fayl kartasi
+ * eskizi (`THUMB_ASSET_ID`, `thumb.ts`) ham tugagandan KEYIN yoziladi,
+ * lekin uni TIZIM yozadi — foydalanuvchi yuklamasi emas, kvotaga kirmaydi
+ * (W2-C): aks holda har ko'rilgan hujjat ko'rinmas tarzda chegarani yerdi.
  */
 const USAGE_SQL = `
   WITH u AS (
@@ -107,6 +111,7 @@ const USAGE_SQL = `
       FROM generation_assets a
       JOIN generations g ON g.id = a.generation_id
      WHERE g.user_id = $1 AND a.created_at > COALESCE(g.finished_at, g.created_at)
+       AND a.asset_id <> $5
   )
   SELECT COALESCE(sum(bytes), 0)::bigint AS total_bytes,
          (count(*) FILTER (WHERE kind = $2))::int AS kind_count,
@@ -130,6 +135,7 @@ async function check(exec: Exec, userId: string, kind: UploadKind, incoming: Inc
     kind,
     ids,
     genId,
+    THUMB_ASSET_ID,
   ]);
   const row = res.rows[0];
   const total = Number(row?.total_bytes ?? 0);
@@ -175,11 +181,50 @@ export function uploadAssetId(bytes: Buffer): string {
   return createHash("sha256").update(bytes).digest("hex").slice(0, 24);
 }
 
+/** Tayyor hujjatga yoziladigan foydalanuvchi rasmi (hali bazada emas). */
+export type PendingUpload = { assetId: string; mime: string; bytes: Buffer };
+
+/** Baytdan `PendingUpload` — `asset_id` baytning xeshi (bir xil bayt, bitta qator). */
+export function pendingUpload(mime: string, bytes: Buffer): PendingUpload {
+  return { assetId: uploadAssetId(bytes), mime, bytes };
+}
+
 /**
- * Tayyor hujjatga foydalanuvchi rasmini yozadi — kvota va egalik bilan.
+ * Tayyor hujjatga foydalanuvchi rasmlarini CHAQIRUVCHINING tranzaksiyasida
+ * yozadi — kvota qulfi, egalik va chegara shu `client` da (SECB-03).
  *
- * `assets.ts` `putAssets` bilan bir xil INSERT, lekin kvota qulfini
- * ushlab turgan o'sha tranzaksiya mijozi orqali (yuqoridagi izoh).
+ * Nega chaqiruvchining tranzaksiyasi: ko'ruvchidan yuklash rasmni HUJJATGA
+ * ishora bilan birga yozadi (`commitDocOps`). Ilgari rasm alohida
+ * tranzaksiyada oldin yozilardi — versiya to'qnashuvi (409), maket xatosi
+ * (422) yoki juftlikning ikkinchisi kvotaga sig'masa (413) hech kim ishora
+ * qilmaydigan «yetim» aktiv qolib, hujjat umri davomida `perGeneration`
+ * kvotasini yerdi. Endi hujjat yozilmasa — rasm ham yo'q (ROLLBACK).
+ */
+export async function storeGenerationUploads(
+  client: PoolClient,
+  generationId: string,
+  userId: string,
+  uploads: PendingUpload[],
+): Promise<void> {
+  if (!uploads.length) return;
+  await client.query("SELECT pg_advisory_xact_lock(hashtext('upload-quota'), hashtext($1))", [String(userId)]);
+  const unique = [...new Map(uploads.map((u) => [u.assetId, u])).values()];
+  const bytes = unique.reduce((n, u) => n + u.bytes.byteLength, 0);
+  await check(client, userId, "generation", { assetIds: unique.map((u) => u.assetId), bytes, generationId });
+  for (const u of unique) {
+    await client.query(
+      `INSERT INTO generation_assets (generation_id, asset_id, mime, size_bytes, bytes, expires_at)
+       VALUES ($1, $2, $3, $4, $5, NULL)
+       ON CONFLICT (generation_id, asset_id) DO NOTHING`,
+      [generationId, u.assetId, u.mime, u.bytes.byteLength, u.bytes],
+    );
+  }
+}
+
+/**
+ * Tayyor hujjatga bitta foydalanuvchi rasmini O'Z tranzaksiyasida yozadi —
+ * kvota va egalik bilan. Ko'ruvchi yuklamalari buni EMAS, hujjat bilan
+ * birga yozadigan `commitDocOps(..., { uploads })` ni ishlatadi.
  */
 export async function putGenerationUpload(
   generationId: string,
@@ -187,16 +232,9 @@ export async function putGenerationUpload(
   mime: string,
   bytes: Buffer,
 ): Promise<string> {
-  const assetId = uploadAssetId(bytes);
-  await withUploadQuota(userId, "generation", { assetIds: [assetId], bytes: bytes.byteLength, generationId }, (c) =>
-    c.query(
-      `INSERT INTO generation_assets (generation_id, asset_id, mime, size_bytes, bytes, expires_at)
-       VALUES ($1, $2, $3, $4, $5, NULL)
-       ON CONFLICT (generation_id, asset_id) DO NOTHING`,
-      [generationId, assetId, mime, bytes.byteLength, bytes],
-    ),
-  );
-  return assetId;
+  const upload = pendingUpload(mime, bytes);
+  await transaction((client) => storeGenerationUploads(client, generationId, userId, [upload]));
+  return upload.assetId;
 }
 
 /**

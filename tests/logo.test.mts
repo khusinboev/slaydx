@@ -212,7 +212,8 @@ test("putLogo: user_id bilan yoziladi va ON CONFLICT (user_id, asset_id) (bazasi
   const insert = seen.find((s) => /INSERT INTO logo_uploads/.test(s.text))!;
   const sql = insert.text.replace(/\s+/g, " ");
   assert.match(sql, /INSERT INTO logo_uploads \(user_id, asset_id/);
-  assert.match(sql, /ON CONFLICT \(user_id, asset_id\) DO NOTHING/);
+  // Dublikat qator yo'q, qayta yuklash esa `created_at` ni yangilaydi (W2-C).
+  assert.match(sql, /ON CONFLICT \(user_id, asset_id\) DO UPDATE SET created_at = now\(\)/);
   assert.equal(insert.params[0], "42");
   assert.equal(insert.params[1], saved.assetId);
   assert.ok(seen.some((s) => /pg_advisory_xact_lock/.test(s.text)), "kvota qulfisiz yozildi");

@@ -226,6 +226,16 @@ export const env = {
   cronSecret: str("CRON_SECRET"),
 
   /**
+   * Telegram webhook maxfiy sarlavhasi (`setWebhook … secret_token`) —
+   * FAQAT shu yerda ishlatiladi (EXT-14). Ilgari webhook `CRON_SECRET` ni
+   * tekshirardi, u esa `/api/health` bearer'i ham: monitoring sozlamasidan
+   * sizib chiqsa, soxta update bilan istalgan foydalanuvchiga kirish
+   * havolasi olinardi. Bo'sh bo'lsa `telegramWebhookSecret()` vaqtincha
+   * `CRON_SECRET` ga qaytadi (prod egasi qo'yguncha buzilmasin).
+   */
+  telegramWebhookSecret: str("TELEGRAM_WEBHOOK_SECRET"),
+
+  /**
    * BEPUL LLM endpointlari (reja, UDK, «Tuzatish», «Hammasini tuzatish») —
    * sarf shifti (prod-readiness C10). Kredit yechilmaydi, shuning uchun
    * provayder puli faqat shu chegaralar bilan to'siladi. Kun — Toshkent
@@ -284,6 +294,15 @@ export function llmConfigured(): boolean {
 }
 
 /**
+ * Webhook tekshiradigan kalit: avval `TELEGRAM_WEBHOOK_SECRET`, u bo'lmasa
+ * zaxira sifatida `CRON_SECRET` (EXT-14; zaxira — `runtimeWarnings`
+ * ogohlantiradi). Ikkalasi ham bo'lmasa bo'sh satr — webhook o'chiq.
+ */
+export function telegramWebhookSecret(): string {
+  return env.telegramWebhookSecret || env.cronSecret;
+}
+
+/**
  * Ovoz provayderi bormi (podkast/tabriknoma).
  *
  * Azure IKKALA qiymatni talab qiladi: kalit bo'lib region bo'lmasa URL
@@ -325,8 +344,8 @@ export function assertRuntimeConfig(): string[] {
   if (env.sessionSameSite === "none" && isProd && !env.appUrl.startsWith("https://")) {
     problems.push("SESSION_COOKIE_SAMESITE=none HTTPS talab qiladi (APP_URL https bo'lsin)");
   }
-  if (isProd && !env.cronSecret && env.telegramBotToken) {
-    problems.push("CRON_SECRET yo'q — Telegram webhook'ni himoyalab bo'lmaydi");
+  if (isProd && !telegramWebhookSecret() && env.telegramBotToken) {
+    problems.push("TELEGRAM_WEBHOOK_SECRET (yoki zaxira CRON_SECRET) yo'q — Telegram webhook'ni himoyalab bo'lmaydi");
   }
   if (env.tts.azureKey && !env.tts.azureRegion) {
     problems.push("AZURE_SPEECH_REGION yo'q — AZURE_SPEECH_KEY yolg'iz ishlamaydi");
@@ -349,6 +368,13 @@ export function runtimeWarnings(): string[] {
   const warnings: string[] = [];
   if (!ttsConfigured()) {
     warnings.push("TTS kaliti yo'q (AZURE_SPEECH_KEY+AZURE_SPEECH_REGION / AISHA_API_KEY) — podkast va tabriknoma ishlamaydi");
+  }
+  // EXT-14: zaxira ishlaydi, lekin health bearer'i webhook kaliti bo'lib qoladi.
+  if (env.telegramBotToken && !env.telegramWebhookSecret && env.cronSecret) {
+    warnings.push(
+      "TELEGRAM_WEBHOOK_SECRET yo'q — Telegram webhook CRON_SECRET (health bearer'i) bilan himoyalanmoqda; " +
+        "alohida kalit qo'ying va setWebhook ni yangi secret_token bilan qayta o'rnating",
+    );
   }
   // O'chirish tugmasidagi xato yozuv («on», «enabled») jimgina «o'chirilmagan»
   // bo'lib qolardi — ya'ni bepul LLM sarfi davom etardi.

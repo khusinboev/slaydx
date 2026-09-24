@@ -53,7 +53,13 @@ function parseCrop(raw: unknown): PhotoCrop | undefined {
 
 type PhotoOpts = { kind?: "crop" | "original"; originalAssetId?: string; crop?: PhotoCrop };
 
-/** Bitta surat qatori — kvota tranzaksiyasi ichida (`client`). */
+/**
+ * Bitta surat qatori — kvota tranzaksiyasi ichida (`client`).
+ *
+ * Bir xil bayt (xesh) — o'sha qator: `created_at` YANGILANADI (BEA-19).
+ * Aks holda 89-kuni qayta tanlangan surat ertasi kuni `purgeOldPhotos`
+ * bilan o'chib, forma singan rasm ko'rsatardi.
+ */
 async function insertPhoto(
   client: PoolClient,
   userId: string,
@@ -67,7 +73,8 @@ async function insertPhoto(
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      ON CONFLICT (user_id, asset_id) DO UPDATE
         SET original_asset_id = EXCLUDED.original_asset_id,
-            crop              = EXCLUDED.crop`,
+            crop              = EXCLUDED.crop,
+            created_at        = now()`,
     [
       userId,
       assetId,
@@ -198,10 +205,55 @@ export async function uploadPhoto(req: Request, userId: string): Promise<PhotoUp
  * keraksiz yuk. 90 kun: foydalanuvchi rezyumesini mavsumiy yangilashi
  * normal, lekin generatsiyaga tushgan nusxa allaqachon `generation_assets`
  * da — bu jadval faqat FORMA uchun ishlaydi.
+ *
+ * ISHORA QILINGAN surat yoshidan qat'i nazar QOLADI (C41, BEA-19):
+ *   • forma qoralamasi (`form_drafts.data` — `photoAssetId`,
+ *     `photoOriginalAssetId`) — tiklangan qoralama singan rasm
+ *     ko'rsatmasin va shu qoralamadan to'langan rezyume jimgina suratsiz
+ *     chiqmasin (worker suratni `values.photoAssetId` dan o'qiydi);
+ *   • foydalanuvchining NAVBATDAGI yoki ISHLAYOTGAN rezyumesi
+ *     (`values_json.photoAssetId`) — worker suratni ish boshida (va
+ *     navbatga qaytgan ish qayta olinganda) shu qatordan o'qiydi;
+ *   • saqlanayotgan kesilgan nusxaning asli (`original_asset_id`).
+ *
+ * TAYYOR rezyume suratni USHLAB TURMAYDI (review R2): worker suratni
+ * `extractAssets` (`swapPhoto`) bilan hujjatning O'Z aktiviga
+ * (`generation_assets`) ko'chiradi — ko'ruvchi ham, DOCX qayta render ham
+ * o'shani o'qiydi. Tayyor hujjatlar esa o'chmaydi (`retention.ts`), ya'ni
+ * ular ishora qilgan qatorlar abadiy qolib, 50 talik surat kvotasini
+ * (o'chirish yo'li yo'q) ~25 rezyumeda butunlay to'ldirardi.
+ * FAILED/REVOKED ish ham ushlab turmaydi (pul qaytarilgan).
+ *
+ * Ishoralar faqat eski surati bor foydalanuvchilar bo'yicha yig'iladi.
  */
 export async function purgeOldPhotos(days = 90): Promise<number> {
   const res = await query<{ asset_id: string }>(
-    `DELETE FROM photo_uploads WHERE created_at < now() - ($1 || ' days')::interval RETURNING asset_id`,
+    `WITH stale AS (
+       SELECT DISTINCT user_id FROM photo_uploads WHERE created_at < now() - ($1 || ' days')::interval
+     ), refs AS (
+       SELECT d.user_id, lower(x.v) AS asset_id
+         FROM form_drafts d
+         JOIN stale s ON s.user_id = d.user_id
+         CROSS JOIN LATERAL (VALUES (d.data->>'photoAssetId'), (d.data->>'photoOriginalAssetId')) AS x(v)
+        WHERE x.v IS NOT NULL AND x.v <> ''
+       UNION
+       SELECT g.user_id, lower(g.values_json->>'photoAssetId')
+         FROM generations g
+         JOIN stale s ON s.user_id = g.user_id
+        WHERE g.tool_id = 'resume' AND g.status IN ('QUEUED', 'IN_PROGRESS')
+          AND COALESCE(g.values_json->>'photoAssetId', '') <> ''
+     ), kept AS (
+       SELECT user_id, asset_id FROM refs
+       UNION
+       SELECT p.user_id, p.original_asset_id
+         FROM photo_uploads p
+         JOIN refs r ON r.user_id = p.user_id AND r.asset_id = p.asset_id
+        WHERE p.original_asset_id IS NOT NULL
+     )
+     DELETE FROM photo_uploads p
+      WHERE p.created_at < now() - ($1 || ' days')::interval
+        AND NOT EXISTS (SELECT 1 FROM kept k WHERE k.user_id = p.user_id AND k.asset_id = p.asset_id)
+      RETURNING p.asset_id`,
     [String(days)],
   );
   return res.length;

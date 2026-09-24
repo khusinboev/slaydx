@@ -90,4 +90,41 @@ export function sanitizeValues(raw: unknown): FormValues | null {
   return out;
 }
 
+/**
+ * Postgres `int4` yuqori chegarasi. Undan katta son `$n::int` ga ketsa
+ * 22003 «out of range» — ya'ni 400 o'rniga 500 (BEA-13: `?since=3000000000`).
+ */
+export const PG_INT4_MAX = 2_147_483_647;
+
+/**
+ * URL/forma parametridan butun son (BEA-13): faqat o'nlik raqamlar
+ * (ixtiyoriy minus, atrofdagi bo'sh joy kechiriladi), `[min, max]` ichida
+ * (standart `0 … PG_INT4_MAX`). Aks holda `null` — chaqiruvchi 400 yoki
+ * standart qiymat beradi. `Number()` ishlatilmaydi: u `"1e3"`, `"0x10"`,
+ * `" "` (→ 0) ni ham son deb qabul qilardi.
+ */
+export function parseIntParam(raw: unknown, opts: { min?: number; max?: number } = {}): number | null {
+  const min = opts.min ?? 0;
+  const max = opts.max ?? PG_INT4_MAX;
+  const s = typeof raw === "number" ? (Number.isSafeInteger(raw) ? String(raw) : "") : typeof raw === "string" ? raw.trim() : "";
+  if (!/^-?\d{1,16}$/.test(s)) return null;
+  const n = Number(s);
+  return Number.isSafeInteger(n) && n >= min && n <= max ? n : null;
+}
+
+/**
+ * ISO-8601 UTC vaqt (`YYYY-MM-DDTHH:MM:SS[.ffffff]Z`) — faqat HAQIQIY sana
+ * bo'lsa satrning o'zi (mikrosoniya kursor aniqligi saqlanadi), aks holda
+ * `null` (BEA-13). JS `Date` `2026-02-30` ni jimgina 2-martga surardi,
+ * Postgres `::timestamptz` esa 22008 bilan 500 berardi.
+ */
+export function parseIsoInstant(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const m = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(\.\d{1,6})?Z$/.exec(raw);
+  if (!m) return null;
+  const d = new Date(`${m[1]}Z`);
+  if (Number.isNaN(d.getTime()) || d.toISOString().slice(0, 19) !== m[1]) return null;
+  return raw;
+}
+
 export { MAX_FIELD, MAX_JSON, MAX_MID, MAX_SOURCE };

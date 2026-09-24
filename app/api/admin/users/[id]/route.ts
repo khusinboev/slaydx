@@ -3,16 +3,29 @@ import { requireAdmin } from "@/lib/server/admin";
 import { adminAdjustWallet, recentTransactions, type Wallet } from "@/lib/server/credits";
 import { getUserById } from "@/lib/server/session";
 import { query } from "@/lib/server/db";
+import { parseIntParam } from "@/lib/server/validate";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const WALLETS: readonly Wallet[] = ["points", "quota", "balance"];
 
+/**
+ * `[id]` — `users.id` (`BIGINT`), musbat butun son (BEA-13). Raqam bo'lmagan
+ * yoki chegaradan tashqari qiymat ilgari Postgres cast xatosi (22P02/22003)
+ * bilan 500 berardi; endi 404 — admin route'lari «yo'q» ni shunday aytadi.
+ * `bigserial` amalda `Number.MAX_SAFE_INTEGER` ga yetmaydi.
+ */
+function userIdParam(raw: string): string {
+  const n = parseIntParam(raw, { min: 1, max: Number.MAX_SAFE_INTEGER });
+  if (n == null || String(n) !== raw) throw new ApiError("Topilmadi", 404);
+  return raw;
+}
+
 /** Bitta foydalanuvchi — profil + so'nggi 50 tranzaksiya. */
 export const GET = handler("admin/users/get", async (req, ctx: { params: Promise<{ id: string }> }) => {
   await requireAdmin(req);
-  const { id } = await ctx.params;
+  const id = userIdParam((await ctx.params).id);
   const user = await getUserById(id);
   if (!user) throw new ApiError("Topilmadi", 404);
   const transactions = await recentTransactions(id, 50);
@@ -32,7 +45,7 @@ type AdjustBody = { wallet?: unknown; delta?: unknown; note?: unknown };
  */
 export const PATCH = handler("admin/users/adjust", async (req, ctx: { params: Promise<{ id: string }> }) => {
   const { user: admin } = await requireAdmin(req);
-  const { id } = await ctx.params;
+  const id = userIdParam((await ctx.params).id);
 
   const body = await readJson<AdjustBody>(req, 4_000);
   const wallet = String(body.wallet ?? "");
@@ -65,7 +78,7 @@ export const PATCH = handler("admin/users/adjust", async (req, ctx: { params: Pr
 /** Bloklash / blokdan chiqarish — mavjud `is_blocked` ustunidan foydalanadi. */
 export const PUT = handler("admin/users/block", async (req, ctx: { params: Promise<{ id: string }> }) => {
   await requireAdmin(req);
-  const { id } = await ctx.params;
+  const id = userIdParam((await ctx.params).id);
   const body = await readJson<{ blocked?: unknown }>(req, 1_000);
   const blocked = Boolean(body.blocked);
 
