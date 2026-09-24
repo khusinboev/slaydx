@@ -27,11 +27,25 @@ import { cn } from "@/lib/cn";
 
 type Session = { token: string; url: string; kind: PublicGameKind; createdAt?: string; expiresAt: string | null };
 type Row = { id: string; playerName: string; score: number; total: number; percent: number; seconds: number; createdAt: string };
+/** Keyingi sahifa kursori (`app/api/generations/[id]/results` → `?before=&beforeId=`). */
+type Cursor = { createdAt: string; id: string };
+type ResultsPage = { results?: Row[]; total?: number; nextCursor?: Cursor | null };
+
+const resultsUrl = (id: string, c: Cursor | null) =>
+  `/api/generations/${id}/results${c ? `?before=${encodeURIComponent(c.createdAt)}&beforeId=${encodeURIComponent(c.id)}` : ""}`;
 
 export function GameSharePanel({ id, kind }: { id: string; kind: PublicGameKind }) {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [active, setActive] = useState(0);
   const [rows, setRows] = useState<Row[]>([]);
+  /*
+   * Sahifalash (W3-G nit 2): server 500 tadan beradi, `total` — HAQIQIY son.
+   * Ilgari faqat birinchi sahifa ko'rinardi va son `rows.length` edi.
+   * Eski server `total`/`nextCursor` bermasa — son qatorlardan, tugma yo'q.
+   */
+  const [total, setTotal] = useState<number | null>(null);
+  const [cursor, setCursor] = useState<Cursor | null>(null);
+  const [more, setMore] = useState(false);
   const [qr, setQr] = useState("");
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -40,10 +54,35 @@ export function GameSharePanel({ id, kind }: { id: string; kind: PublicGameKind 
 
   const session = sessions[active];
 
+  const takePage = useCallback((r: ResultsPage) => {
+    setTotal(typeof r.total === "number" ? r.total : null);
+    setCursor(r.nextCursor && r.nextCursor.createdAt && r.nextCursor.id ? r.nextCursor : null);
+  }, []);
+
+  /** Birinchi sahifa — ochilganda va «Yangilash» da (eski sahifalar tashlanadi). */
   const loadResults = useCallback(async () => {
-    const r = await request<{ results: Row[] }>(`/api/generations/${id}/results`);
+    const r = await request<ResultsPage>(resultsUrl(id, null));
     setRows(r.results ?? []);
-  }, [id]);
+    takePage(r);
+  }, [id, takePage]);
+
+  const loadMore = useCallback(async () => {
+    if (!cursor || more) return;
+    setMore(true);
+    setError("");
+    try {
+      const r = await request<ResultsPage>(resultsUrl(id, cursor));
+      setRows((prev) => {
+        const seen = new Set(prev.map((x) => x.id));
+        return [...prev, ...(r.results ?? []).filter((x) => !seen.has(x.id))];
+      });
+      takePage(r);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Natijalarni yuklab bo‘lmadi");
+    } finally {
+      setMore(false);
+    }
+  }, [id, cursor, more, takePage]);
 
   useEffect(() => {
     let alive = true;
@@ -235,7 +274,9 @@ export function GameSharePanel({ id, kind }: { id: string; kind: PublicGameKind 
         <div className="mt-4">
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-medium">Natijalar</h3>
-            <span className="text-muted-foreground text-xs">{rows.length} ta</span>
+            <span className="text-muted-foreground text-xs" data-results-total>
+              {total !== null && total > rows.length ? `${rows.length} ta ko‘rsatilgan · jami ${total} ta` : `${total ?? rows.length} ta`}
+            </span>
             <button
               type="button"
               data-results-refresh
@@ -284,6 +325,18 @@ export function GameSharePanel({ id, kind }: { id: string; kind: PublicGameKind 
                   ))}
                 </tbody>
               </table>
+              {cursor ? (
+                <button
+                  type="button"
+                  data-results-more
+                  className="bg-card mt-2 h-9 rounded-lg border px-3 text-sm disabled:opacity-50"
+                  disabled={more || busy}
+                  aria-busy={more || undefined}
+                  onClick={() => void loadMore()}
+                >
+                  {more ? "Yuklanmoqda…" : "Yana ko‘rsatish"}
+                </button>
+              ) : null}
             </div>
           ) : (
             <p className="text-muted-foreground mt-2 text-sm" data-results-empty>
