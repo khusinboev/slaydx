@@ -1,5 +1,5 @@
 import { ApiError, handler, json, requireUser } from "@/lib/server/api";
-import { cancelGeneration, deleteGeneration, getGeneration } from "@/lib/server/jobs";
+import { cancelGeneration, deleteGeneration, generationStatus, getGeneration } from "@/lib/server/jobs";
 import { hasGenerationFile } from "@/lib/server/storage";
 import { log } from "@/lib/server/log";
 
@@ -69,6 +69,13 @@ export const DELETE = handler("generations/delete", async (req, ctx: Ctx) => {
 
   const removed = await deleteGeneration(id, user.id);
   if (!removed && !cancelled) {
+    /*
+     * Ikkalasi ham o'tmadi (BEA-12): qator yo'q/begona/allaqachon o'chirilgan
+     * — 404 (ikkinchi bosish yoki eski ro'yxat «ishlayapti» degan xato
+     * ko'rmasin); qator bor — u hozir ishlayapti (yoki shu lahzada holati
+     * o'zgardi) — 409, qayta urinish mumkin.
+     */
+    if ((await generationStatus(id, user.id)) === null) throw new ApiError("Topilmadi", 404);
     throw new ApiError("Ishlayotgan hujjatni o'chirib bo'lmaydi", 409);
   }
   // Pul yo'li (bekor qilish = qaytarish): `reqId`/`userId` kontekstdan (C31).

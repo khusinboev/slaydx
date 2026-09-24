@@ -557,6 +557,19 @@ export async function deleteGeneration(id: string, userId: string): Promise<bool
   return rows.length > 0;
 }
 
+/**
+ * Egasining ishi holati (`null` — qator yo'q yoki begona). `DELETE` route
+ * bekor qilish ham, o'chirish ham o'tmaganda 404 va 409 ni shu bilan
+ * ajratadi (BEA-12).
+ */
+export async function generationStatus(id: string, userId: string): Promise<JobStatus | null> {
+  const row = await queryOne<{ status: JobStatus }>(
+    "SELECT status FROM generations WHERE id = $1 AND user_id = $2",
+    [id, userId],
+  );
+  return row?.status ?? null;
+}
+
 export const CANCEL_REFUND_NOTE = "Foydalanuvchi bekor qildi";
 
 /**
