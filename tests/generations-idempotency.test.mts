@@ -103,8 +103,9 @@ test("POST /api/generations: Idempotency-Key", { skip }, async (t) => {
     try {
       await other.query("BEGIN");
       await other.query(
-        `INSERT INTO generations (id, user_id, tool_id, topic, price, format, idempotency_key)
-         VALUES ($1, $2, 'essay', 'raqib', 3000, 'docx', $3)`,
+        // Raqib — AYNAN shu so'rov (bir xil tana: vosita + `values`), faqat boshqa tranzaksiyada.
+        `INSERT INTO generations (id, user_id, tool_id, topic, price, format, values_json, idempotency_key)
+         VALUES ($1, $2, 'essay', 'raqib', 3000, 'docx', '{"topic":"Poyga"}'::jsonb, $3)`,
         [rival, u.uid, key],
       );
       const pending = enqueueGeneration({
@@ -160,7 +161,7 @@ test("POST /api/generations: Idempotency-Key", { skip }, async (t) => {
     assert.equal(await charges(u.uid), 2);
   });
 
-  await t.test("noto'g'ri kalit → 400, pul ham, qator ham yo'q; boshqa vosita bilan o'sha kalit → 422", async () => {
+  await t.test("noto'g'ri kalit → 400, pul ham, qator ham yo'q; boshqa tana yoki boshqa vosita bilan o'sha kalit → 422", async () => {
     const u = await mkUser("idem-bad");
     const bad = await post(u.cookie, "salom");
     assert.equal(bad.status, 400, JSON.stringify(bad.body));
@@ -170,8 +171,9 @@ test("POST /api/generations: Idempotency-Key", { skip }, async (t) => {
     const key = randomUUID();
     assert.equal((await post(u.cookie, key)).status, 202);
     const other = await post(u.cookie, key, { slug: "essay", values: { ...ESSAY.values, topic: "Boshqa mavzu" } });
-    // Bir xil vosita — kalit so'rovni aniqlaydi, asl ish qaytadi.
-    assert.equal(other.status, 202);
+    // Bir xil vosita, BOSHQA tana (W3-A nit 4, W4-B): kalit aynan bitta so'rovga
+    // tegishli — jim takror emas, 422; yangi ish ham, yechim ham yo'q (pastdagi sanoqlar).
+    assert.equal(other.status, 422, JSON.stringify(other.body));
     // Boshqa vosita: avval kalitsiz — so'rov o'zi yaroqli ekanini tasdiqlaymiz.
     const GLOSSARY = { slug: "glossary", values: { topic: "Informatika", university: "TATU", author: "Aliyev A." } };
     const plain = await post(u.cookie, undefined, GLOSSARY);
