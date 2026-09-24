@@ -377,11 +377,11 @@ export function LoginForm({ onDone }: { onDone?: () => void }) {
                 data-ticket-link
                 className={
                   popupBlocked
-                    ? "bg-primary text-primary-foreground flex h-10 flex-1 items-center justify-center rounded-xl text-sm font-medium"
-                    : "bg-background hover:bg-muted flex h-10 flex-1 items-center justify-center rounded-xl border text-sm"
+                    ? "bg-primary text-primary-foreground flex min-h-10 flex-1 items-center px-3 py-2 text-center justify-center rounded-xl text-sm font-medium"
+                    : "bg-background hover:bg-muted flex min-h-10 flex-1 items-center px-3 py-2 text-center justify-center rounded-xl border text-sm"
                 }
               >
-                {popupBlocked ? "Telegram’da ochish (shu qurilmada)" : "Telegram’ni shu qurilmada qayta ochish"}
+                {popupBlocked ? "Telegram’da ochish" : "Telegram’ni qayta ochish"}
               </a>
             ) : null}
             <button

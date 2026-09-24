@@ -85,5 +85,6 @@ test("UX-01: brauzer oynani bloklasa (null) — tushuntirish va bosiladigan havo
   const link = document.querySelector<HTMLAnchorElement>("[data-ticket-link]");
   assert.ok(link);
   assert.equal(link.getAttribute("href"), TICKET.url);
-  assert.match(link.textContent ?? "", /shu qurilmada/);
+  assert.match(link.textContent ?? "", /Telegram’da ochish/);
+  assert.ok(document.querySelector("[data-same-device-hint]"), "UX-02 izohi bloklangan holatda ham");
 });
