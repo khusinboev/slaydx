@@ -109,3 +109,24 @@ All 6 W4 packages merged: F `05b5baf`, C `04126b0`, E `da3c2f5`, B `266e3af`, D 
   - images tagged `slaydx-{web,worker}:pre-audit`;
   - `.env` backed up (600);
   - queue idle.
+
+## DEPLOYED to production — 2026-09-24 ~17:20 (server time 12:20 UTC)
+- `main` = `f417123` (stage A squash; code identical to this branch minus `audit/`). `deploy.sh`: `e380940` → `f417123`, «✅ tayyor». The build took ~6 min on the server; Turbopack printed only the known Edge-runtime `process.exit` warnings.
+- **Containers:** `slaydx-web-1`, `slaydx-worker-1`, `slaydx-worker-2` and `slaydx-postgres-1` (recreated on 16.15) are all healthy. Health was 200 within 10 s of `up`.
+- **DB:**
+  - migrations 27/27 through `027_queue_indexes.sql`;
+  - 95/95 generations and 9 users intact;
+  - wallet total unchanged by the deploy.
+- **Env:**
+  - `ADMIN_PHONES` is set in all 3 app containers (2 entries, values never printed);
+  - the workers run `concurrency=4` (the `.env` value changed from 2 to 4);
+  - no error or warn lines in the logs after boot.
+- **Public:** `https://slaydxx.uz/` 307, `/uz` 200, `/uz/slide` 200, `/api/health` 200.
+- **Real generation** through the queue on the admin account (`seed-demo … keys`, 6 000 coins): COMPLETED in 19 s, DOCX 13.8 KB, `cost_json` $0.0166 with parts. The prod web container converts it with LibreOffice into a 5-page PDF.
+- **Rollback kit** on the server: `/root/slaydx-backups/slaydx-20260924140728.dump` (277 MB, `-Fc`), `ROLLBACK.txt` (`e380940`), the `slaydx-{web,worker}:pre-audit` images, and a copy of `.env`.
+- **Owner follow-ups** (`REPORT.md` §5):
+  - remove the `admin-phones.ts` fallback once you confirm the admin panel opens;
+  - `TELEGRAM_WEBHOOK_SECRET` + `setWebhook`;
+  - Payme/Click sandbox re-certification;
+  - the backup cron;
+  - nginx template diff.
