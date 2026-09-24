@@ -175,11 +175,50 @@ export function uploadAssetId(bytes: Buffer): string {
   return createHash("sha256").update(bytes).digest("hex").slice(0, 24);
 }
 
+/** Tayyor hujjatga yoziladigan foydalanuvchi rasmi (hali bazada emas). */
+export type PendingUpload = { assetId: string; mime: string; bytes: Buffer };
+
+/** Baytdan `PendingUpload` — `asset_id` baytning xeshi (bir xil bayt, bitta qator). */
+export function pendingUpload(mime: string, bytes: Buffer): PendingUpload {
+  return { assetId: uploadAssetId(bytes), mime, bytes };
+}
+
 /**
- * Tayyor hujjatga foydalanuvchi rasmini yozadi — kvota va egalik bilan.
+ * Tayyor hujjatga foydalanuvchi rasmlarini CHAQIRUVCHINING tranzaksiyasida
+ * yozadi — kvota qulfi, egalik va chegara shu `client` da (SECB-03).
  *
- * `assets.ts` `putAssets` bilan bir xil INSERT, lekin kvota qulfini
- * ushlab turgan o'sha tranzaksiya mijozi orqali (yuqoridagi izoh).
+ * Nega chaqiruvchining tranzaksiyasi: ko'ruvchidan yuklash rasmni HUJJATGA
+ * ishora bilan birga yozadi (`commitDocOps`). Ilgari rasm alohida
+ * tranzaksiyada oldin yozilardi — versiya to'qnashuvi (409), maket xatosi
+ * (422) yoki juftlikning ikkinchisi kvotaga sig'masa (413) hech kim ishora
+ * qilmaydigan «yetim» aktiv qolib, hujjat umri davomida `perGeneration`
+ * kvotasini yerdi. Endi hujjat yozilmasa — rasm ham yo'q (ROLLBACK).
+ */
+export async function storeGenerationUploads(
+  client: PoolClient,
+  generationId: string,
+  userId: string,
+  uploads: PendingUpload[],
+): Promise<void> {
+  if (!uploads.length) return;
+  await client.query("SELECT pg_advisory_xact_lock(hashtext('upload-quota'), hashtext($1))", [String(userId)]);
+  const unique = [...new Map(uploads.map((u) => [u.assetId, u])).values()];
+  const bytes = unique.reduce((n, u) => n + u.bytes.byteLength, 0);
+  await check(client, userId, "generation", { assetIds: unique.map((u) => u.assetId), bytes, generationId });
+  for (const u of unique) {
+    await client.query(
+      `INSERT INTO generation_assets (generation_id, asset_id, mime, size_bytes, bytes, expires_at)
+       VALUES ($1, $2, $3, $4, $5, NULL)
+       ON CONFLICT (generation_id, asset_id) DO NOTHING`,
+      [generationId, u.assetId, u.mime, u.bytes.byteLength, u.bytes],
+    );
+  }
+}
+
+/**
+ * Tayyor hujjatga bitta foydalanuvchi rasmini O'Z tranzaksiyasida yozadi —
+ * kvota va egalik bilan. Ko'ruvchi yuklamalari buni EMAS, hujjat bilan
+ * birga yozadigan `commitDocOps(..., { uploads })` ni ishlatadi.
  */
 export async function putGenerationUpload(
   generationId: string,
@@ -187,16 +226,9 @@ export async function putGenerationUpload(
   mime: string,
   bytes: Buffer,
 ): Promise<string> {
-  const assetId = uploadAssetId(bytes);
-  await withUploadQuota(userId, "generation", { assetIds: [assetId], bytes: bytes.byteLength, generationId }, (c) =>
-    c.query(
-      `INSERT INTO generation_assets (generation_id, asset_id, mime, size_bytes, bytes, expires_at)
-       VALUES ($1, $2, $3, $4, $5, NULL)
-       ON CONFLICT (generation_id, asset_id) DO NOTHING`,
-      [generationId, assetId, mime, bytes.byteLength, bytes],
-    ),
-  );
-  return assetId;
+  const upload = pendingUpload(mime, bytes);
+  await transaction((client) => storeGenerationUploads(client, generationId, userId, [upload]));
+  return upload.assetId;
 }
 
 /**
