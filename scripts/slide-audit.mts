@@ -37,6 +37,11 @@
 import { readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { bodyRules } from "../lib/generation/slide-audience.ts";
+import { thinSlides } from "../lib/generation/slide-quality.ts";
+import { normalizeTemplateId, type SlideVisual } from "../lib/generation/slide-templates.ts";
+import type { SlideModel } from "../lib/generation/slide-types.ts";
+import type { DocMeta } from "../lib/generation/types.ts";
 
 /**
  * Auditga kerak bo'lgan maydonlargina — TO'LIQ `SlideModel` emas
@@ -64,7 +69,13 @@ type SlideForAudit = {
   /** P1 kontrakti (`docs/AUDIT-25.md` §3) — duck-type, yuqoridagi izohga qarang. */
   plan?: number;
 };
-type SlideDocLike = { slides?: SlideForAudit[] };
+type SlideDocLike = {
+  slides?: SlideForAudit[];
+  /** `AcademicDoc.meta` — bor bo'lsa P3 detektori auditoriya qoidalari bilan ishlaydi. */
+  meta?: Record<string, unknown>;
+  slideTemplate?: string;
+  slideVisual?: string;
+};
 
 export type SlideAuditIssue = { slide: number; kind: string; detail: string };
 export type SlideAuditResult = { ok: boolean; issues: SlideAuditIssue[] };
@@ -156,6 +167,22 @@ export function thinHeuristic(slides: SlideForAudit[]): SlideAuditIssue[] {
  * Bitta dekani tekshiradi — TOZA funksiya (I/O yo'q), `live-engine.mts`
  * checks'lari va testlar shu bilan chaqiradi.
  */
+/**
+ * Yupqa slaydlar — dvigatel detektori (`thinSlides`, P3) bilan, `meta`
+ * bo'lsa. `SlideForAudit` `SlideModel`ning duck-typed qismi: `thinSlides`
+ * faqat matn maydonlarini o'qiydi, shuning uchun to'g'ridan-to'g'ri
+ * uzatiladi. Sabab → `thin-<sabab>` turi (masalan `thin-few-bullets`).
+ */
+function thinIssues(doc: SlideDocLike, slides: SlideForAudit[]): SlideAuditIssue[] {
+  if (!doc.meta || typeof doc.meta !== "object") return thinHeuristic(slides);
+  const meta = doc.meta as unknown as DocMeta;
+  const rules = bodyRules(meta, normalizeTemplateId(doc.slideTemplate ?? meta.slideTemplate));
+  const visual = typeof doc.slideVisual === "string" ? (doc.slideVisual as SlideVisual) : undefined;
+  return thinSlides(slides as unknown as SlideModel[], rules, visual).flatMap((t) =>
+    t.reasons.map((r) => ({ slide: t.index + 1, kind: `thin-${r}`, detail: `${slides[t.index]?.layout ?? "?"}: ${r}` })),
+  );
+}
+
 export function auditSlideDoc(doc: SlideDocLike): SlideAuditResult {
   const slides: SlideForAudit[] = Array.isArray(doc.slides) ? doc.slides : [];
   const issues: SlideAuditIssue[] = [];
@@ -320,12 +347,11 @@ export function auditSlideDoc(doc: SlideDocLike): SlideAuditResult {
 
   /*
    * ── 5. Yupqa mazmun (S4) ──
-   * AUDIT-25 merge: P3 thinSlides bilan almashtiriladi
-   * (`thinHeuristic(slides)` → `thinSlides(slides, audienceRules)`,
-   * `lib/generation/slide-quality.ts`) — BITTA chaqiruv, boshqa hech
-   * narsa o'zgarmaydi.
+   * `meta` bor (haqiqiy `doc.json`) → P3 `thinSlides` — dvigatel bilan
+   * AYNAN bir xil auditoriya qoidalari va vizual sig'imi; `meta` yo'q
+   * (qo'lda tuzilgan fixture) → mahalliy evristika.
    */
-  issues.push(...thinHeuristic(slides));
+  issues.push(...thinIssues(doc, slides));
 
   /* ── 6. Blok qamrovi / tartib: title birinchi, closing oxirgi, agenda ikkinchi ── */
   const layouts = slides.map((s) => s.layout);
