@@ -391,12 +391,13 @@ function logEnqueue(input: EnqueueInput, res: EnqueueResult): void {
  * chegarani bittaga oshirishi mumkin, bu zararsiz.
  *
  * Sanoqlar (`ADMISSION_COUNTS_SQL`) har biri bitta qisman indeks
- * (`generations_queue_idx` / `generations_stale_idx`) bo'ylab — qabul
+ * (`generations_queued_created_idx` / `generations_running_user_idx`) bo'ylab — qabul
  * chegarasi tufayli ular kichik, tarix (COMPLETED) umuman o'qilmaydi.
  */
 /**
  * Har sanoq AYNAN bitta qisman indeks predikatiga mos (`status = 'QUEUED'` →
- * `generations_queue_idx`, `status = 'IN_PROGRESS'` → `generations_stale_idx`).
+ * `generations_queued_created_idx`, `status = 'IN_PROGRESS'` → `generations_running_user_idx`,
+ * 027_queue_indexes.sql).
  * `status IN (…)` (`= ANY(array)`) ularning hech biriga mos kelmaydi va
  * butun (muddatsiz o'sadigan) jadvalni qulf ostida ketma-ket o'qirdi —
  * review W2-B R1: 200k qatorda 14.6 ms → 0.17 ms. `tests/admission.test.mts`
@@ -535,7 +536,7 @@ export async function getGeneration(
   const html = opts?.lean ? "CASE WHEN doc_json IS NULL THEN html END AS html" : "html";
   /*
    * Navbat o'rni faqat QUEUED qatorda hisoblanadi: oldindagi (`created_at,
-   * id` bo'yicha) QUEUED ishlar soni + 1. Sanoq `generations_queue_idx`
+   * id` bo'yicha) QUEUED ishlar soni + 1. Sanoq `generations_queued_created_idx`
    * (faqat QUEUED qatorlar) bo'ylab, qabul chegarasi tufayli kichik.
    * `claimJob` adolat qoidasi tufayli haqiqiy tartib biroz farq qilishi
    * mumkin — bu taxmin, va'da emas.
@@ -730,7 +731,7 @@ export function newLease(workerId: string): string {
  * olsa bittaga oshishi mumkin (zararsiz). Foydalanuvchi abadiy och
  * qolmaydi — uning ishi tugashi bilan keyingisi yana navbatga kiradi,
  * bo'sh slot esa shu orada boshqalarga ketadi. Ichki sanoq
- * `generations_stale_idx` (faqat IN_PROGRESS qatorlar, ≤ slotlar soni)
+ * `generations_running_user_idx` (faqat IN_PROGRESS qatorlar, ≤ slotlar soni)
  * bo'ylab yuradi.
  */
 export async function claimJob(
