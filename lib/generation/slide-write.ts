@@ -4,7 +4,7 @@ import { llmComplete, llmEnabled, llmStream } from "./llm";
 import { remainingMs } from "./quality";
 import { assertJobTime } from "./deadline";
 import { bodyRules, type BodyRules } from "./slide-audience";
-import { blocksToBeats } from "./slide-blocks";
+import { blocksToBeats, planRoleText } from "./slide-blocks";
 import { SLIDE_LIMITS } from "./slide-limits";
 import { deckFooter } from "./slide-identity";
 import { purposeDefaults } from "./slide-purpose";
@@ -57,6 +57,43 @@ function clip(text: string, n: number) {
   return t.length <= n ? t : `${safeSlice(t, n - 1).trimEnd()}…`;
 }
 
+/**
+ * Sarlavha boshidagi TARTIB RAQAMINI olib tashlaydi: «1. », «2) »,
+ * «3 — », «04: », «IV. ».
+ *
+ * Raqam maketdan keladi (`SlideModel.plan`, AUDIT-25): model yozgan
+ * «3. Mexanizm» esa dekadagi o'rin bilan ham, rejadagi band bilan ham
+ * mos kelmasdi — bo'lim slaydida ikkita har xil raqam turardi (S2).
+ * Faqat 1–2 xonali son (ajratgich «.», «)», «:», tire + bo'shliq, yoki
+ * bo'shliqsiz «1.Kirish») yoki I…X rim raqami (faqat «.»/«)» bilan). Ortidan
+ * RAQAM kelsa — bu oraliq/nisbat («18 – 20 asrlar», «10: 1 nisbat»), rim
+ * harfi ortidan «I.» kelsa — bosh harflar («V. I. Lenin»); tegilmaydi.
+ * «3D model», «12-maktab», «2024-yil», «1.2. Band», «X - noma’lum» ham.
+ */
+const LEADING_ORDINAL =
+  /^\s*(?:\d{1,2}(?:\s*(?:[.):]|[—–-])\s+(?!\d)|\.(?=\p{Lu}))|(?:X|IX|IV|V?I{1,3}|V)\s*[.)]\s+(?!\d)(?!\p{Lu}\.))/u;
+
+/** Model rejadagi ichki «REJA 2-band:» prefiksini sarlavhaga ko'chirib qo'ysa (P1 sharhi, 4-band). */
+const PLAN_PREFIX = /^\s*REJA\s*\d+\s*-\s*band\s*:\s*/i;
+
+export function stripOrdinal(title: string): string {
+  const out = title.replace(PLAN_PREFIX, "").replace(LEADING_ORDINAL, "");
+  return out.trim() ? out : title;
+}
+
+/**
+ * So'z chegarasida qisqartirish — agenda bandi uchun (P1 sharhi, 5c).
+ * Sarlavha 80 belgigacha, «qisqa» hajmda esa reja qatori 58 belgi
+ * (`bulletChars × 0.72`) — `clip` bandni so'z o'rtasidan kesardi.
+ */
+function clipWords(text: string, n: number): string {
+  const t = String(text || "").replace(/\s+/g, " ").trim();
+  if (t.length <= n) return t;
+  const cut = safeSlice(t, n - 1);
+  const sp = cut.lastIndexOf(" ");
+  return `${(sp > n / 2 ? cut.slice(0, sp) : cut).replace(/[\s,;:—–-]+$/, "")}…`;
+}
+
 function arr(v: unknown, n: number, maxLen: number): string[] {
   if (!Array.isArray(v)) return [];
   return v
@@ -104,7 +141,7 @@ function normalizeSlide(raw: unknown, i: number, footer: string, rules: BulletRu
   if (!raw || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
   const layout = asLayout(o.layout, "bullets");
-  const title = clip(String(o.title ?? ""), SLIDE_LIMITS.title);
+  const title = clip(stripOrdinal(String(o.title ?? "").replace(/\s+/g, " ").trim()), SLIDE_LIMITS.title);
   if (!title && layout !== "closing") return null;
   /*
    * `subtitle` chegarasi LAYOUTGA bog'liq — maketdan o'lchangan:
@@ -414,21 +451,33 @@ export function extractNewSlides(
   return out;
 }
 
-function beatToSlide(beat: { layout: SlideLayout; role: string }, i: number, meta: DocMeta, footer: string): SlideModel {
+/**
+ * SKELET slayd — `plan` jonli hodisasi (yozuv tugaguncha ko'ruvchida
+ * turadi) va kalitsiz dev rejimi uchun.
+ *
+ * HALOL (AUDIT-25 S3): uydirma raqam yoki gap YO'Q. Ilgari stats
+ * skeleti `{value:"3", label:"Asosiy nuqta"}` edi — ko'ruvchi yozuv
+ * tugaguncha dekada «shunchaki 3 raqami»ni ko'rardi; process esa
+ * «Boshlash / O‘zgarish / Natija» deb o'ylab topilgan bosqichlar berardi.
+ * Endi to'ldirilmagan joy «—»/«…» bilan belgilanadi, matn — faqat rol.
+ */
+function beatToSlide(beat: SlideBeat, i: number, meta: DocMeta, footer: string, agenda?: string[]): SlideModel {
   const t = meta.topic;
   const L = slideLabels(meta.language);
-  const base: SlideModel = { id: `s${i}`, layout: beat.layout, title: beat.role, footer };
+  const role = planRoleText(beat.role);
+  const base: SlideModel = { id: `s${i}`, layout: beat.layout, title: role, footer, ...(beat.plan ? { plan: beat.plan } : {}) };
   if (beat.layout === "title") {
-    return { ...base, title: t, subtitle: beat.role, kicker: meta.subject || L.presentation };
+    return { ...base, title: t, subtitle: role, kicker: meta.subject || L.presentation };
   }
   if (beat.layout === "closing") {
-    return { ...base, title: L.conclusion, subtitle: beat.role || L.questions };
+    return { ...base, title: L.conclusion, subtitle: role || L.questions };
   }
   if (beat.layout === "agenda") {
-    return { ...base, title: beat.role, bullets: [`${t}: kirish`, "Asosiy qism", "Amaliyot", "Xulosa"] };
+    // Reja bandlari rejadagi slaydlar rolidan — yozuvdan keyin ular sarlavhasi bilan almashadi.
+    return { ...base, bullets: agenda?.length ? agenda : [`${t}: kirish`, "Asosiy qism", "Amaliyot", "Xulosa"] };
   }
   if (beat.layout === "section") {
-    return { ...base, title: beat.role, subtitle: t };
+    return { ...base, subtitle: t };
   }
   if (beat.layout === "compare" || beat.layout === "twoCol") {
     return {
@@ -440,22 +489,15 @@ function beatToSlide(beat: { layout: SlideLayout; role: string }, i: number, met
     };
   }
   if (beat.layout === "process") {
-    return {
-      ...base,
-      steps: [
-        { n: "1", title: "Boshlash", text: beat.role },
-        { n: "2", title: "O‘zgarish", text: t },
-        { n: "3", title: "Natija", text: "Kuzatiladigan yakun" },
-      ],
-    };
+    return { ...base, steps: [1, 2, 3].map((n) => ({ n: String(n), title: "…", text: role })) };
   }
   if (beat.layout === "stats") {
-    return { ...base, stats: [{ value: "3", label: "Asosiy nuqta" }, { value: "1", label: beat.role }] };
+    return { ...base, stats: [{ value: "—", label: role }] };
   }
   if (beat.layout === "quote") {
-    return { ...base, quote: `${t} — ${beat.role.toLowerCase()}.` };
+    return { ...base, quote: `${t} — ${role.toLowerCase()}.` };
   }
-  return { ...base, bullets: [`${t}: ${beat.role}.`, "Mavzuga bog‘liq aniq band."] };
+  return { ...base, bullets: ["…"] };
 }
 
 /**
@@ -476,7 +518,45 @@ export function fallbackSlides(meta: DocMeta, tpl?: SlideTemplate, beats?: Slide
   const template = tpl ?? resolveSlideTemplate(meta.slideTemplate, meta.topic, meta.extra);
   const base = beats ?? (template.beats.length ? template.beats : resolveSlideTemplate("lecture", meta.topic).beats);
   const seq = meta.titleSlide === false ? base.filter((b) => b.layout !== "title") : base;
-  return seq.map((b, i) => beatToSlide(b, i, meta, footer));
+  // Agenda — reja bandlari slaydlarining rollari (har band uchun bo'lim afzal), `syncAgenda` naqshi.
+  const agenda = planHeads(seq).map((b) => planRoleText(b.role));
+  return seq.map((b, i) => beatToSlide(b, i, meta, footer, agenda));
+}
+
+/**
+ * Har reja bandining BOSH elementi, band tartibida: shu bandning `section`
+ * i bo'lsa u, bo'lmasa birinchi `plan === i` elementi. Band slaydi
+ * yo'qolgan bo'lsa (bo'lak yozilmay qolgan) — u band o'tkazib yuboriladi:
+ * reja yo'q slaydga ishora qilmasin.
+ */
+function planHeads<T extends { layout: SlideLayout; plan?: number }>(items: T[]): T[] {
+  const max = items.reduce((m, x) => Math.max(m, x.plan ?? 0), 0);
+  const out: T[] = [];
+  for (let i = 1; i <= max; i += 1) {
+    const group = items.filter((x) => x.plan === i);
+    const head = group.find((x) => x.layout === "section") ?? group[0];
+    if (head) out.push(head);
+  }
+  return out;
+}
+
+/**
+ * AGENDA = REJA SLAYDLARI SARLAVHALARI (AUDIT-25, 2-qaror).
+ *
+ * Ilgari agenda bandlarini model mavzudan alohida yozardi va ular
+ * dekadagi slaydlarga mos kelmasdi (S1: «reja 4 band, birortasining
+ * slaydi yo'q»). Endi yozuvdan KEYIN agenda deterministik quriladi:
+ * i-band = `plan === i` slaydining sarlavhasi (bo'lim bo'lsa bo'lim
+ * sarlavhasi), tartib raqamisiz, reja qatori chegarasida. Model yozgan
+ * agenda ustiga yoziladi — manba bitta.
+ */
+export function syncAgenda(slides: SlideModel[], rules: Pick<BodyRules, "bulletChars">): void {
+  const agenda = slides.find((s) => s.layout === "agenda");
+  if (!agenda) return;
+  const items = planHeads(slides)
+    .map((s) => clipWords(stripOrdinal(s.title), rules.bulletChars))
+    .filter(Boolean);
+  if (items.length) agenda.bullets = items;
 }
 
 /**
@@ -576,6 +656,7 @@ export async function writeSlidesWithLlm(
     // `deck` kelganda boshqasiga sakrardi.
     let out = beat ? coerceLayout(sl, beat.layout, rules.maxBullets) : sl;
     if (beat?.chart) out = { ...out, chart: true };
+    if (beat?.plan) out = { ...out, plan: beat.plan };
     onProgress({ type: "slide", index: abs, slide: { ...out } });
   };
 
@@ -749,9 +830,19 @@ export async function writeSlidesWithLlm(
       .map((sl, i) => (sl && plan[i] ? coerceLayout(sl, plan[i].layout, rules.maxBullets) : sl))
       // «Diagramma» bloki beat'dagi `chart` bayrog'ini slaydga o'tkazadi (WP-B qo'yadi).
       .map((sl, i) => (sl && plan[i]?.chart ? { ...sl, chart: true } : sl))
+      // Reja bandi raqami — FAQAT rejadan (AUDIT-25): model yozmaydi, maket shuni chizadi.
+      .map((sl, i) => (sl && plan[i]?.plan ? { ...sl, plan: plan[i].plan } : sl))
       .filter((sl): sl is SlideModel => Boolean(sl)),
   );
   applyResearchRefs(slides, ctx);
+  syncAgenda(slides, rules);
+  /*
+   * AUDIT-25 P3: yupqa slaydlarni ta'mirlash shu yerda, `finalizeQuiz`
+   * dan OLDIN chaqiriladi —
+   *   slides = await repairThinSlides(slides, meta, tpl, ctx, deadline);
+   *   syncAgenda(slides, rules); // ta'mir sarlavhani o'zgartirgan bo'lishi mumkin
+   * `slide-quality.ts` P3 filialida; birlashguncha izohda qoladi.
+   */
   finalizeQuiz(slides, meta);
   /*
    * Va'da qilingan hajmning quyi chegarasi. Bundan kam bo'lsa deck
@@ -931,7 +1022,8 @@ export async function buildSlideAcademicDoc(meta: DocMeta, deadline?: number, op
     // NUSXA: `attachSlideImages` va titul tuzatishlari slaydlarni
     // JOYIDA o'zgartiradi — hodisa obyektiga ta'sir qilmasin.
     slides: structuredClone(fallbackSlides(meta, tpl, beats)),
-    roles: beats.map((b) => b.role),
+    // Skelet yorlig'i ichki «REJA i-band:» prefiksini ko'rsatmasin (P1 sharhi, 5b).
+    roles: beats.map((b) => planRoleText(b.role)),
     meta,
     theme: themeId,
     template: tpl.id,

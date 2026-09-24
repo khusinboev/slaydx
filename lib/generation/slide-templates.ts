@@ -138,6 +138,18 @@ export type SlideBeat = {
   role: string;
   /** «Diagramma» bloki: `stats` majburiy chart rejimida (`blocksToBeats` qo'yadi, `SlideModel.chart` ga o'tadi). */
   chart?: boolean;
+  /**
+   * Reja bandi (1 dan) — shu beat qaysi reja bandining slaydi (AUDIT-25).
+   * `blocksToBeats` qo'yadi, `SlideModel.plan` ga o'tadi; agenda shu
+   * slaydlar sarlavhasidan quriladi.
+   */
+  plan?: number;
+  /**
+   * Shablonning pedagogik TUZILMA beat'i («Dars oqimi», «Baholash mezoni»…)
+   * — mavzu bandi emas. Reja bandining mazmun slaydi BO'LMAYDI, faqat
+   * qo'shimcha o'ringa (AUDIT-25 P1 sharhi, 3-band; `slide-blocks.ts`).
+   */
+  structural?: true;
 };
 
 export type SlideTemplate = {
@@ -191,10 +203,10 @@ export const SLIDE_TEMPLATES: SlideTemplate[] = [
     beats: [
       { layout: "title", role: "Mavzu va fan" },
       { layout: "agenda", role: "Ma’ruza reja" },
-      { layout: "section", role: "1. Tushuncha" },
+      { layout: "section", role: "Tushuncha" },
       { layout: "bullets", role: "Ta’rif va ahamiyat" },
       { layout: "twoCol", role: "Tarkib / natija" },
-      { layout: "section", role: "2. Mexanizm" },
+      { layout: "section", role: "Mexanizm" },
       { layout: "process", role: "Ketma-ketlik" },
       { layout: "quote", role: "Asosiy g‘oya" },
       { layout: "bullets", role: "Amaliy xulosa" },
@@ -222,20 +234,20 @@ export const SLIDE_TEMPLATES: SlideTemplate[] = [
       { layout: "title", role: "Dars mavzusi" },
       { layout: "bullets", role: "Maqsad — o‘quvchi nimani bilib oladi" },
       { layout: "section", role: "Yangi bilim" },
-      { layout: "process", role: "Dars oqimi" },
+      { layout: "process", role: "Dars oqimi", structural: true },
       { layout: "twoCol", role: "Misol / mashq" },
-      { layout: "stats", role: "Eslab qolinadigan asosiy son" },
+      { layout: "stats", role: "Eslab qolinadigan asosiy son", structural: true },
       { layout: "bullets", role: "Uyga vazifa" },
       { layout: "closing", role: "Yakun va baholash" },
     ],
     fillers: [
-      { layout: "twoCol", role: "To‘g‘ri javob / tipik xato" },
-      { layout: "bullets", role: "Sinfda 2 daqiqada bajariladigan mashq" },
-      { layout: "process", role: "Guruh ishi tartibi" },
+      { layout: "twoCol", role: "To‘g‘ri javob / tipik xato", structural: true },
+      { layout: "bullets", role: "Sinfda 2 daqiqada bajariladigan mashq", structural: true },
+      { layout: "process", role: "Guruh ishi tartibi", structural: true },
       { layout: "section", role: "Mustahkamlash" },
-      { layout: "bullets", role: "Baholash mezoni" },
-      { layout: "table", role: "Dars bosqichlari va vaqti" },
-      { layout: "twoCol", role: "Kuchli o‘quvchi / qiynalayotgan o‘quvchi uchun" },
+      { layout: "bullets", role: "Baholash mezoni", structural: true },
+      { layout: "table", role: "Dars bosqichlari va vaqti", structural: true },
+      { layout: "twoCol", role: "Kuchli o‘quvchi / qiynalayotgan o‘quvchi uchun", structural: true },
       { layout: "quote", role: "Darsning kalit jumlasi" },
     ],
   },

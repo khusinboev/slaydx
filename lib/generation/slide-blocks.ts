@@ -1,7 +1,7 @@
-import { PLAN_ITEMS_DEFAULT } from "./slide-params";
+import { PLAN_ITEMS_DEFAULT, activeBlockIds, planBudgetForBody } from "./slide-params";
 import { purposeDefaults } from "./slide-purpose";
 import type { SlideLayout } from "./slide-types";
-import { expandBeats, type SlideBeat, type SlideTemplate } from "./slide-templates";
+import { SLIDE_TEMPLATE_BY_ID, expandBeats, type SlideBeat, type SlideTemplate } from "./slide-templates";
 import type { DocMeta } from "./types";
 
 /**
@@ -97,11 +97,13 @@ const ANSWERS_ROLE = "Test javoblari kaliti — har savol raqami va to‘g‘ri 
 const TEST_SHARE = 3;
 
 /**
- * Sig'im yetmaganda YON BERADIGAN bloklar (X-5).
+ * Sig'im yetmaganda BIRINCHI yon beradigan bloklar (X-5).
  *
- * Faqat shu bloklar tashlanishi mumkin, va faqat ular taqdimot TURINING
- * standartidan kelgan bo'lsa (`purposeDefaults`) — ya'ni foydalanuvchi
- * ularni formada QO'LDA yoqmagan bo'lsa.
+ * Faqat ular taqdimot TURINING standartidan kelgan bo'lsa
+ * (`purposeDefaults`) — ya'ni foydalanuvchi ularni formada QO'LDA
+ * yoqmagan bo'lsa. AUDIT-25 dan keyin boshqa bloklar ham yon berishi
+ * mumkin (reja slaydlari va `want` uchun, 6-qoida), lekin FAQAT shu
+ * beshtasi tugagandan keyin.
  *
  * Ro'yxatdan chiqarilganlar va sababi:
  *   `reja`        — o'z maydonlari bor (`agendaSlide`, `planItems`), ya'ni
@@ -111,7 +113,8 @@ const TEST_SHARE = 3;
  *                   o'z prompt qoidasi bor;
  *   `diagramma`   — `structure.ts` da o'z qoidasi bor (`chart: true`).
  * Oxirgi ikkisi uchun sabab bitta: rejadan tushib qolgan blokning prompt
- * qatori modelga YOLG'ON va'da bo'lardi (AUDIT-8 naqshi).
+ * qatori modelga YOLG'ON va'da bo'lardi (AUDIT-8 naqshi) — shuning uchun
+ * ular faqat oxirgi chorada tashlanadi.
  */
 const YIELDING_BLOCKS = new Set<SlideBlockId>(["maqsadlar", "motivatsiya", "amaliyot", "uyga_vazifa", "jadval"]);
 
@@ -121,15 +124,34 @@ function quizRole(i: number, n: number): string {
 }
 
 /**
- * `chart` maydoni `SlideBeat` ga WP-0b da (koordinator) qo'shiladi.
+ * REJA BANDI slaydining roli (AUDIT-25).
  *
- * Bu ish oqimi WP-0a dan tarmoqlangani uchun tip bu yerda hali yo'q —
- * kesishma bilan yozamiz. Birlashgach kesishma ORTIQCHA bo'ladi, lekin
- * zararsiz (bir xil ixtiyoriy maydon). Aynan shu shakl tanlandi:
- * `@ts-expect-error` birlashgandan KEYIN yiqilardi, `as any` esa
- * `chart` ning tipini butunlay yo'qotardi.
+ * Model promptdagi ketma-ketlikda shu prefiksni ko'radi va slaydni
+ * rejaning i-bandi deb yozadi; `:` dan keyingi qism — shablonning
+ * burchagi (maket va ohang ishorasi), band nomi emas. Prefiks formati
+ * `slide-prompt/structure.ts` dagi qoida bilan BIR XIL bo'lishi shart.
  */
-type ChartBeat = SlideBeat & { chart?: boolean };
+export function planRole(i: number, role: string): string {
+  return `REJA ${i}-band: ${role}`;
+}
+
+/** Roldan «REJA i-band:» prefiksini olib tashlaydi (skelet sarlavhasi, agenda). */
+export function planRoleText(role: string): string {
+  return role.replace(/^REJA \d+-band: /, "");
+}
+
+/**
+ * Reja bandining MAZMUN slaydi bo'la oladigan maketlar.
+ *
+ * `quote` va `section` — yo'q: band o'z slaydini olishi kerak, bitta
+ * iqtibos yoki sarlavha-ajratgich esa band mazmunini bermaydi (AUDIT-25
+ * S4 — «axboriy matn kam»). Blok maketlari (`agenda`, `quiz`,
+ * `answers`, `references`) — ular bloklarniki.
+ */
+const PLAN_CONTENT = new Set<SlideLayout>(["bullets", "twoCol", "compare", "process", "table", "stats"]);
+
+/** Qo'shimcha (reja bandiga bog'lanmagan) slaydlar — mazmun maketlari + iqtibos. */
+const EXTRA_LAYOUTS = new Set<SlideLayout>([...PLAN_CONTENT, "quote"]);
 
 /**
  * Bloklar dekaga chapdan o'ngga shu tartibda kiradi. `SLIDE_BLOCKS`
@@ -139,67 +161,29 @@ type ChartBeat = SlideBeat & { chart?: boolean };
  */
 const ANCHOR_ORDER: SlideBlockAnchor[] = ["after-title", "early", "middle", "late", "end"];
 
-type MarkedBeat = ChartBeat & {
+type MarkedBeat = SlideBeat & {
   /** Shu beat foydalanuvchi BLOKI — hech qachon tashlanmaydi. */
   block?: SlideBlockId;
-  /** Blok ankori — keyingi bloklar undan oldinga o'tib ketmasligi uchun. */
+  /** Blok ankori — dekadagi guruhi. */
   anchor?: SlideBlockAnchor;
-  /** Shu beat `expandBeats` TO'LDIRGICHI — birinchi navbatda tashlanadi. */
-  filler?: boolean;
 };
-
-const anchorRank = (a: SlideBlockAnchor) => ANCHOR_ORDER.indexOf(a);
 
 const beatKey = (b: SlideBeat) => `${b.layout}|${b.role}`;
 
 /**
- * Blok MAVJUD beat bilan qo'shilishi mumkin bo'lgan hudud (yarim ochiq).
+ * Shablon beat'i BLOKNING nusxasimi.
  *
- * `end` uchun bo'sh oraliq: `references` hech bir shablon beats'ida
- * yo'q, ya'ni qo'shiladigan beat ham yo'q — u doim yangi slayd bo'lib
- * kiradi va `closing` dan darhol oldin turadi.
+ * «Dars» shablonida «Maqsad — o‘quvchi nimani bilib oladi» (bullets) va
+ * «Uyga vazifa» (bullets) beat'lari bor — ular mavzuning bandi emas,
+ * dars TUZILMASI, va aynan `maqsadlar`/`uyga_vazifa` bloklarining ishi.
+ * Ilgari ular blok bilan QO'SHILARDI (1-qoida); endi reja bandi slaydi
+ * shablon beat'idan quriladi va «REJA 3-band: Uyga vazifa» chiqib
+ * qolardi. Aniqlash: maket bir xil VA rol blok nomining o'zagi (6 harf)
+ * bilan boshlanadi — «Maqsadlar» → «maqsad», «Uyga vazifa» → «uyga v».
  */
-function mergeRange(anchor: SlideBlockAnchor, n: number): [number, number] {
-  switch (anchor) {
-    case "after-title":
-      return [0, Math.min(1, n)];
-    case "early":
-      return [0, Math.ceil(n / 3)];
-    case "middle":
-      return [Math.floor(n / 3), Math.ceil((2 * n) / 3)];
-    case "late":
-      return [Math.floor((2 * n) / 3), n];
-    case "end":
-      return [n, n];
-  }
-}
-
-/**
- * Qo'shiladigan blok qaysi indeksga tushadi (title/closing chiqarilgan TANADA).
- *
- * Indeks `mergeRange` dan KELTIRILADI — ikkisi ajralib qolsa blok bir
- * hududda qidirilib, boshqasiga qo'yilardi.
- */
-function insertIndex(anchor: SlideBlockAnchor, n: number): number {
-  const [lo, hi] = mergeRange(anchor, n);
-  switch (anchor) {
-    case "after-title":
-      return 0;
-    case "early":
-    case "middle":
-      /*
-       * Hududning OXIRGI o'rni, `hi` ning o'zi emas. Tana qo'shilgandan
-       * keyin bir birlikka uzayadi va chegara ham suriladi: `hi` ga
-       * qo'yilgan blok yangi o'lchovda hududdan BIR QADAM tashqarida
-       * qolardi (7 ta beat, `early` = [0,3): 3-indeks 8 talik tanada
-       * hamon [0,3) dan tashqarida).
-       */
-      return Math.max(lo, hi - 1);
-    case "late":
-    case "end":
-      // Tana oxiri — `closing` dan darhol oldin; uzaygach ham `late` da.
-      return n;
-  }
+function blockLike(b: SlideBeat): boolean {
+  const role = b.role.toLowerCase();
+  return SLIDE_BLOCKS.some((blk) => blk.layout === b.layout && role.startsWith(blk.label.toLowerCase().slice(0, 6)));
 }
 
 /**
@@ -226,184 +210,241 @@ function fillerPool(tpl: SlideTemplate, need: number): SlideBeat[] {
  * shu YAGONA ro'yxatni ko'radi: beats'da bor slayd promptda tushib
  * qolsa, model uni qanday to'ldirishni bilmaydi (AUDIT-8 naqshi).
  *
- * Ikki blok belgisiz ham yoqiladi, chunki foydalanuvchi ularni boshqa
- * maydon bilan SO'RAGAN bo'ladi:
- *   `quizCount > 0`      → `test`
- *   `internetSearch`     → `adabiyotlar`
- * Ikkinchisining sababi: grounding manbalari hech qayerda
- * ko'rsatilmasa, tadqiqot qilingani foydalanuvchiga umuman
- * ko'rinmaydi — u to'lagan ish ko'zga tashlanmay qoladi.
+ * Belgilanmagan blok ham yoqilishi (yoki belgilangani o'chishi) mumkin —
+ * foydalanuvchi uni boshqa maydon bilan SO'RAGAN bo'ladi: `quizCount`
+ * (aniq 0 — testsiz), `internetSearch` (grounding manbalari hech qayerda
+ * ko'rsatilmasa tadqiqot qilingani ko'rinmaydi), `agendaSlide: true`.
+ * Qoida bitta joyda — `activeBlockIds` (`slide-params.ts`), `planCapacity`
+ * ham shundan o'qiydi.
  */
 export function orderedBlocks(
   blocks: readonly SlideBlockId[] | undefined,
-  quizCount = 0,
+  quizCount?: number,
   internetSearch = false,
+  agendaSlide?: boolean,
 ): SlideBlock[] {
-  const on = new Set<SlideBlockId>(blocks ?? []);
-  if (quizCount > 0) on.add("test");
-  if (internetSearch) on.add("adabiyotlar");
+  const on = activeBlockIds(blocks, quizCount, internetSearch, agendaSlide);
   return ANCHOR_ORDER.flatMap((a) => SLIDE_BLOCKS.filter((b) => b.anchor === a && on.has(b.id)));
 }
 
 /**
- * KETMA-KET kelishi ATAYLAB ruxsat etilgan maketlar.
+ * Nomzodlar oqimidan maket tanlovchi — reja bandi mazmuni va qo'shimcha
+ * slaydlar uchun.
  *
- * 5-qoida («yonma-yon bir xil layout yo'q») to'ldirgichlar dekani
- * bir xil qilib qo'yishiga qarshi edi. Nazorat testi esa aksincha —
- * 1 savol = 1 slayd bo'lgani uchun u ATAYLAB ketma-ket turadigan
- * QATOR: 5 savolli test — 5 ta `quiz` slaydi qatorda. Ilgari bu
- * qator rejada emas, `finalizeQuiz` da tug'ilardi (ya'ni qoida uni
- * ko'rmasdi ham) — X-3 uni rejaga ko'chirgach, istisno OSHKORA
- * yozilishi kerak bo'ldi.
+ * Oqim: shablonning O'Z tana beat'lari (tartibida), keyin to'ldirgichlari,
+ * keyin umumiy to'ldirgichlar. Har chaqiruvda eng KAM ishlatilgan (teng
+ * bo'lsa eng oldingi) mos nomzod olinadi — ya'ni avval shablon tartibi,
+ * oqim tugagach aylanib takrorlanadi. `prev`/`next` — qo'shni maketlar:
+ * yonma-yon bir xil maket bo'lmasin (5-qoida). Umumiy to'ldirgichlarda
+ * mazmun maketlarining kamida to'rttasi bor, ya'ni ikki qo'shni bilan
+ * ham tanlov HAR DOIM topiladi; topilmasa (nazariy) avval `next`, keyin
+ * `prev` sharti yumshatiladi.
  */
-const RUN_LAYOUTS = new Set<SlideLayout>(["quiz"]);
-
-/** Yonma-yon bir xil layout turgan birinchi indeks; yo'q bo'lsa −1. */
-function clumpAt(beats: SlideBeat[]): number {
-  for (let i = 1; i < beats.length; i++) {
-    if (beats[i].layout === beats[i - 1].layout && !RUN_LAYOUTS.has(beats[i].layout)) return i;
-  }
-  return -1;
-}
-
-/**
- * `beat` ni `at` ga qo'yish mumkinmi: yonma-yon takror bermasin VA
- * bloklarning ankor tartibini buzmasin (`references` `quiz` dan oldin
- * tushib qolmasin, `reja` esa boshdan siljimasin).
- */
-function fits(beats: MarkedBeat[], at: number, beat: MarkedBeat): boolean {
-  /*
-   * `RUN_LAYOUTS` istisnosi bu yerga KERAK EMAS va ataylab yo'q.
-   * `fits` faqat `deClump` ning ko'chirish bosqichidan chaqiriladi,
-   * u esa `clumpAt` topgan takror ustida ishlaydi — `quiz` juftligi
-   * u yerga hech qachon yetib bormaydi. Istisnoni bu yerga ham
-   * yozish sinab bo'lmaydigan tarmoq qoldirardi (mutatsiya M14 aynan
-   * shuni ko'rsatdi: uni buzsa ham birorta test qizarmadi).
-   */
-  if (beats[at - 1]?.layout === beat.layout || beats[at]?.layout === beat.layout) return false;
-  if (beat.anchor === undefined) return true;
-  const r = anchorRank(beat.anchor);
-  const prev = beats[at - 1]?.anchor;
-  const next = beats[at]?.anchor;
-  if (prev !== undefined && anchorRank(prev) > r) return false;
-  if (next !== undefined && anchorRank(next) < r) return false;
-  return true;
-}
-
-/**
- * `p` va `p+1` ni almashtirish ANKOR tartibini buzmaydimi.
- *
- * Bu shartsiz almashtirish `references` ni ikki `bullets` blokning
- * orasiga tashlardi: takror yo'qolardi, lekin «Adabiyotlar»
- * `closing` dan darhol oldin turish shartini yo'qotardi.
- */
-function swapOk(beats: MarkedBeat[], p: number): boolean {
-  const l = beats[p].anchor;
-  const r = beats[p + 1]?.anchor;
-  // Almashgach `r` chapga, `l` o'ngga o'tadi — tartib faqat `r <= l` da saqlanadi.
-  if (l !== undefined && r !== undefined) return anchorRank(r) <= anchorRank(l);
-  if (r === "end" || l === "after-title") return false;
-  return true;
-}
-
-/**
- * Yonma-yon takrorlarni yo'qotadi (5-qoida).
- *
- * Avval qo'shni bilan ALMASHTIRIB ko'radi — eng kam buzuvchi harakat,
- * hech kim o'z hududidan chiqmaydi; bo'lmasa blok bo'lmagan nusxani
- * eng yaqin toza joyga ko'chiradi. Blok beat'i oxirgi navbatda
- * qimirlaydi va hech qachon TASHLANMAYDI. Sanagich cheklangan:
- * yechimsiz holatda hozirgi holat qaytariladi — bu `expandBeats`
- * ning o'zidagi xatti-harakatdan yomon emas (u ham mos kelmagan
- * to'ldirgichni shunchaki o'tkazib yuboradi).
- */
-function deClump(beats: MarkedBeat[], pool: SlideBeat[]): void {
-  for (let guard = 0; guard < 128; guard += 1) {
-    const i = clumpAt(beats);
-    if (i < 0) return;
-    // 1) o'ng qo'shni bilan almashtirish
-    if (i + 1 < beats.length && beats[i + 1].layout !== beats[i - 1].layout && beats[i + 2]?.layout !== beats[i].layout && swapOk(beats, i)) {
-      [beats[i], beats[i + 1]] = [beats[i + 1], beats[i]];
-      continue;
+function makePicker(stream: Candidate[]) {
+  const used = stream.map(() => 0);
+  return (allowed: (c: Candidate) => boolean, prev?: SlideLayout, next?: SlideLayout): SlideBeat => {
+    for (const [p, n] of [[prev, next], [prev, undefined], [undefined, undefined]] as const) {
+      let best = -1;
+      for (let i = 0; i < stream.length; i += 1) {
+        const c = stream[i];
+        if (!allowed(c) || c.layout === p || c.layout === n) continue;
+        if (best < 0 || used[i] < used[best]) best = i;
+        if (used[best] === 0) break;
+      }
+      if (best >= 0) {
+        used[best] += 1;
+        return { layout: stream[best].layout, role: stream[best].role };
+      }
     }
-    // 2) chap qo'shni bilan almashtirish
-    if (i - 2 >= 0 && beats[i - 2].layout !== beats[i].layout && beats[i - 3]?.layout !== beats[i - 1].layout && swapOk(beats, i - 2)) {
-      [beats[i - 1], beats[i - 2]] = [beats[i - 2], beats[i - 1]];
-      continue;
-    }
-    // 3) ko'chirish — blok BO'LMAGANINI afzal ko'ramiz
-    const from = !beats[i].block ? i : !beats[i - 1].block ? i - 1 : i;
-    const [beat] = beats.splice(from, 1);
-    let at = -1;
-    for (let j = from + 1; j <= beats.length; j += 1) if (fits(beats, j, beat)) { at = j; break; }
-    if (at < 0) for (let j = from - 1; j >= 0; j -= 1) if (fits(beats, j, beat)) { at = j; break; }
-    beats.splice(at < 0 ? from : at, 0, beat);
-    if (at >= 0) continue;
-    /*
-     * 4) Ko'chirib bo'lmadi — demak ikkala qo'shni ham BLOK va tanada
-     *    boshqa layout qolmagan (`want=4` da `maqsadlar` va
-     *    `uyga_vazifa`, ikkalasi ham `bullets`). Orasiga ajratgich
-     *    qo'yiladi va deka bir slaydga uzayadi. Bu 6-qoidaning ayni
-     *    o'zi: blok tashlanmaydi, `want` esa yon beradi.
-     */
-    const sep = pool.find((c) => c.layout !== beats[i].layout);
-    if (!sep) return;
-    beats.splice(i, 0, { ...sep, filler: true });
-  }
+    return { layout: "bullets", role: "Mavzuga oid qo‘shimcha aniq misol" };
+  };
 }
 
 /**
- * Foydalanuvchi bloklarini shablon beats'iga KIRITADI.
+ * Nomzod beat: `structural` — shablonning pedagogik TUZILMA beat'i
+ * (`SlideBeat.structural`); `generic` — shablonniki emas, umumiy
+ * to'ldirgich.
+ */
+type Candidate = SlideBeat & { generic: boolean };
+
+/**
+ * Reja bandining MAZMUN slaydi bo'la oladigan nomzod (P1 sharhi, 3-band).
  *
- * Qoidalar (AUDIT-9, WP-B):
- *   1. Har yoqilgan blok `anchor` hududiga tushadi. Shu hududda AYNAN
- *      o'sha layoutli beat bo'lsa — yangi slayd qo'shilmaydi, mavjud
- *      beat'ning ROLI blok roli bilan almashtiriladi (qo'shiladi).
- *      Shu sabab «Dars» shablonida `maqsadlar` bloki slayd sonini
- *      oshirmaydi: shablonda allaqachon «Maqsad» bandlari bor.
- *   2. `reja` o'chirilgan yoki `agendaSlide === false` — `agenda`
- *      beat'lari butunlay olib tashlanadi.
+ * «Dars» shablonining «Dars oqimi», «Baholash mezoni», «Guruh ishi
+ * tartibi» kabi beat'lari mavzuning bandi emas — dars TUZILMASI. Reja
+ * bandiga tushsa agenda'da «Baholash mezoni» mavzu bandi bo'lib chiqardi
+ * (S1 ning boshqa yo'li). Ular faqat qo'shimcha o'ringa yaraydi.
+ * `stats` esa faqat shablonning O'Z ma'lumotga oid roli bo'lsa: umumiy
+ * «Eslab qolinadigan ko'rsatkich» bilan band slaydi «shunchaki 3» ga
+ * aylanardi (S3/S4). Shablon tugasa — umumiy bullets/twoCol/process.
+ */
+const planContent = (c: Candidate) => PLAN_CONTENT.has(c.layout) && !c.structural && (c.layout !== "stats" || !c.generic);
+const extraContent = (c: Candidate) => EXTRA_LAYOUTS.has(c.layout);
+
+/** `plannedBlocks` natijasi — dekaga AYNAN nima tushadi. */
+export type PlannedBlocks = {
+  /** Dekaga tushadigan bloklar, dekadagi tartibda (`test` — kamida bitta savol qolgan bo'lsa). */
+  kept: SlideBlockId[];
+  /** Agenda (reja slaydi) bormi. */
+  agenda: boolean;
+  /** Reja bandlari soni (sig'imga qisilgan). */
+  planN: number;
+  /** Savol slaydlari soni (0 — test yo'q). */
+  quizBeats: number;
+  /** Javoblar kaliti slaydi bormi. */
+  answers: boolean;
+  /** Rollarda aytiladigan savollar soni (`quizCount` yoki standart). */
+  quizCount: number;
+};
+
+/**
+ * BLOK TANLOVI — sof funksiya, `blocksToBeats` HAM, prompt HAM
+ * (`slide-prompt/structure.ts`) shuni o'qiydi (P1 sharhi, 2-band).
+ *
+ * Nega. AUDIT-25 dan keyin blok sig'masa TASHLANADI (ilgari deka
+ * uzayardi), prompt esa hamon `orderedBlocks` dan «references layout…»,
+ * «stats (diagramma)… chart: true» va «TUZILMA BLOKLARI» qatorlarini
+ * chiqarardi — model yo'q slaydni va'da qilingan deb ko'rardi (AUDIT-8
+ * naqshi; zondda 60 000 dan ~5 000 holat). Endi ikkalasi bitta ro'yxatdan.
+ *
+ * Har blok tanada AYNAN BITTA o'rin egallaydi. Bloklarga qoladigan joy —
+ * `space = bodyWant − planN` (reja slaydlari birinchi); sig'im `space` da
+ * doim agenda va bitta savolga joy qoldiradi. Sig'masa, tartib:
+ *   a) yon beruvchi STANDART bloklar, oxiridan (deka boshi mavzuni ochadi);
+ *   c) qo'lda yoqilgan yon beruvchi TURDAGI bloklar (maqsadlar…jadval),
+ *      oxiridan; keyingina `diagramma`/`adabiyotlar` — ularning prompt
+ *      qoidasi bor va `adabiyotlar` ni `internetSearch` so'ragan bo'lishi
+ *      mumkin, shuning uchun «oxirgi chora». `reja` hech qachon;
+ *   b) test guruhi: `baseSlots` — boshqa bloklardan QOLGAN joy; `share` —
+ *      KAFOLATLANGAN ulush (tananing 1/3 i), unga yetmagani yana standart
+ *      bloklardan (X-5). Ulush faqat savollar soni ANIQ tanlanganda:
+ *      X-5 ning asosi — «foydalanuvchi AYNAN tanlagan son standartdan
+ *      ustun»; standart son (`QUIZ_COUNT_FALLBACK`) esa tanlov emas va
+ *      tur bloklarini siqib chiqarmasligi kerak.
+ * UZUNLIK SHARTNOMASI: bloklar + test guruhi ≤ `space`, bo'sh qolgani
+ * reja bandlariga bo'lim/qo'shimcha slayd bo'lib qaytadi.
+ */
+export function plannedBlocks(
+  meta: Pick<DocMeta, "blocks" | "planItems" | "quizCount" | "agendaSlide" | "internetSearch" | "speakerNotes"> &
+    Partial<Pick<DocMeta, "slidePurpose">>,
+  bodyWant: number,
+): PlannedBlocks {
+  const explicitQuiz = meta.quizCount !== undefined && meta.quizCount > 0;
+  const quizCount = explicitQuiz ? meta.quizCount! : QUIZ_COUNT_FALLBACK;
+  const on = orderedBlocks(meta.blocks, meta.quizCount, meta.internetSearch === true, meta.agendaSlide);
+
+  // ── 10-qoida: reja sig'imi — `planCapacity` bilan YAGONA hisob.
+  const budget = planBudgetForBody(bodyWant, new Set(on.map((b) => b.id)), meta.agendaSlide);
+  const planN = Math.max(1, Math.min(meta.planItems || PLAN_ITEMS_DEFAULT, budget.capacity));
+  // ── 2-qoida (+ kichik dekada agenda reja slaydiga yon beradi — `planBudgetForBody`).
+  const keepAgenda = budget.agenda;
+
+  const testOn = on.some((b) => b.id === "test");
+  const others = on.filter((b) => b.id !== "test" && !(b.id === "reja" && !keepAgenda));
+  const askQuiz = testOn ? Math.max(1, Math.ceil(quizCount / QUIZ_PER_SLIDE)) : 0;
+  const wantAnswers = askQuiz > 0 && meta.speakerNotes === false;
+  const need = askQuiz > 0 ? askQuiz + (wantAnswers ? 1 : 0) : 0;
+  const std = new Set(purposeDefaults(meta.slidePurpose).blocks);
+  const givers = others.filter((b) => YIELDING_BLOCKS.has(b.id) && std.has(b.id));
+  const space = bodyWant - planN;
+  const testMin = askQuiz > 0 ? 1 : 0;
+  const dropped = new Set<SlideBlockId>();
+  let count = others.length;
+  const drop = (list: SlideBlock[], ok: (b: SlideBlock) => boolean) => {
+    for (let i = list.length - 1; i >= 0 && count + testMin > space; i -= 1) {
+      if (!ok(list[i]) || dropped.has(list[i].id)) continue;
+      dropped.add(list[i].id);
+      count -= 1;
+    }
+  };
+  // a) standart yon beruvchilar
+  drop(givers, () => true);
+  // c) qo'lda yoqilgan yon beruvchi turdagilar, keyin qolganlari — `reja` qoladi
+  drop(others, (b) => YIELDING_BLOCKS.has(b.id));
+  drop(others, (b) => b.id !== "reja");
+  const kept = givers.filter((b) => !dropped.has(b.id));
+  const room = space - count;
+  const baseSlots = askQuiz > 0 ? Math.max(1, Math.min(need, room)) : 0;
+  const share = explicitQuiz && room > 0 ? Math.min(need, Math.max(1, Math.ceil(bodyWant / TEST_SHARE))) : 0;
+  const yielded = Math.max(0, Math.min(kept.length, share - baseSlots));
+  for (const b of kept.slice(kept.length - yielded)) dropped.add(b.id);
+  const slots = baseSlots + yielded;
+  const quizBeats = askQuiz > 0 ? Math.max(1, Math.min(askQuiz, slots - (wantAnswers ? 1 : 0))) : 0;
+  return {
+    kept: on.filter((b) => (b.id === "test" ? quizBeats > 0 : !dropped.has(b.id) && !(b.id === "reja" && !keepAgenda))).map((b) => b.id),
+    agenda: keepAgenda,
+    planN,
+    quizBeats,
+    answers: wantAnswers && quizBeats + 1 <= slots,
+    quizCount,
+  };
+}
+
+/**
+ * Foydalanuvchi bloklari va REJA BANDLARINI dekaga joylaydi.
+ *
+ * Qoidalar (AUDIT-9 WP-B, X-3, X-5, AUDIT-25):
+ *   1. Har yoqilgan blok o'z `anchor` guruhida turadi:
+ *        after-title → early → [reja bandlari + middle] → late → end.
+ *      `middle` bloklari reja bandlari ORASIGA teng taqsimlanadi.
+ *      (Ilgari blok shablonning bir xil maketli beat'i bilan
+ *      «qo'shilardi» — shablon ketma-ketligi saqlanib qolsin deb.
+ *      Endi tana reja bandlaridan quriladi, qo'shish kerak emas:
+ *      shablon maketlari reja slaydlariga o'tadi.)
+ *   2. `reja` o'chirilgan yoki `agendaSlide === false` — agenda yo'q;
+ *      `agendaSlide === true` esa standartida reja yo'q turga ham
+ *      agenda QO'SHADI (A3-02). Shablonning o'z `agenda` beat'i HECH
+ *      QACHON qolmaydi: reja slaydi faqat `reja` blokidan (bitta manba).
  *   3. `quizCount > 0` testni SO'RAGAN demakdir: `test` bloki
- *      belgilanmagan bo'lsa ham `quiz` beat qo'yiladi. Aksi ham:
- *      blok bor, son yo'q — `QUIZ_COUNT_FALLBACK`. Xuddi shunday
- *      `internetSearch` `references` beat'ini keltiradi — tadqiqot
- *      manbalari ko'rsatilmasa tadqiqot QILINGANI ko'rinmaydi.
- *      Ikkalasi ham takrorlanmaydi: blok allaqachon yoqilgan bo'lsa
- *      bitta beat qoladi (`orderedBlocks` to'plam ustida ishlaydi).
+ *      belgilanmagan bo'lsa ham `quiz` beat qo'yiladi; aniq `0` esa
+ *      tur standartidagi testni ham OLIB TASHLAYDI (A3-01). Blok bor,
+ *      son yuborilmagan (`undefined`) — `QUIZ_COUNT_FALLBACK`. Xuddi
+ *      shunday `internetSearch` `references` beat'ini keltiradi.
+ *      Hech biri takrorlanmaydi (`activeBlockIds` to'plam ustida).
  *   4. `title` doim boshida; `closing` doim oxirida va BITTA.
- *   5. Yonma-yon bir xil layout yo'q (`expandBeats` qoidasi saqlanadi).
- *   6. Uzunlik `want` ga keltiriladi: ortiqchasi to'ldirgich/oddiy
- *      beat'lardan qirqiladi, kami to'ldirgich oqimidan qo'shiladi.
- *      BLOKLAR HECH QACHON TASHLANMAYDI — `want` 4 bo'lib 6 blok
- *      yoqilsa deka `want` dan UZUN chiqadi: foydalanuvchining aniq
- *      tanlovi shablon uzunligidan ustun turadi.
+ *   5. Yonma-yon bir xil layout yo'q — tana QURILISHDA shunday
+ *      tanlanadi (`makePicker`), keyin tuzatilmaydi. Yagona istisno —
+ *      `quiz` qatori (1 savol = 1 slayd, X-3). Bloklar guruhlari
+ *      o'zaro to'qnashmaydi: har guruh ichidagi maketlar har xil,
+ *      guruhlar orasida esa kamida bitta reja slaydi turadi.
+ *   6. Uzunlik HAR DOIM `want` ga teng (A3-04). Ilgari bloklar
+ *      sig'masa deka UZAYARDI («Ochiq dars» 4 slayd → 8) — pro slaydda
+ *      narx slayd soniga bog'liq, ya'ni forma va'da qilgan formula
+ *      buzilardi. Endi sig'magan blok TASHLANADI, tartib:
+ *        a) yon beruvchi standart bloklar (9-qoida), oxiridan;
+ *        b) ortiqcha savollar va kalit (8-qoida);
+ *        c) qolgan bloklar ankor OXIRIDAN — avval qo'lda yoqilgan yon
+ *           beruvchi turdagilar (maqsadlar…jadval), keyin `diagramma`/
+ *           `adabiyotlar`; `reja` (agenda qolsa) va bitta savol hech qachon.
+ *      Hisob `plannedBlocks` da — prompt ham aynan shuni o'qiydi.
+ *      Reja slaydlari (10-qoida) eng oxirida, lekin sig'im ularni
+ *      shunday tanlaydiki, tashlanishga navbat yetmaydi.
  *   7. Deterministik: bir xil kirish → bir xil chiqish, tasodif yo'q.
  *   8. TEST GURUHI (savol slaydlari + javoblar kaliti) TO'LIQ shu
  *      yerda rejalashtiriladi va `want` ni HECH QACHON oshirmaydi
- *      (X-3). Ilgari reja bitta `quiz` beat qo'yardi, `finalizeQuiz`
- *      esa uni savol soncha slaydga ajratib, yana `answers` qo'shardi —
- *      10 slayd so'ragan foydalanuvchi 13 slayd olardi. Endi savollar
- *      soni rejaga tushadi, sig'magani esa TASHLANADI (6-qoidadan
- *      farqli: qolgan bloklar tashlanmaydi, chunki ular alohida
- *      slayd; ortiqcha savol esa BITTA blokning ichki hajmi).
+ *      (X-3). Sig'magan savollar va kalit TASHLANADI (kamida bitta
+ *      savol qoladi) — ular BITTA blokning ichki hajmi.
  *   9. SIG'IM YETMASA AVVAL STANDART BLOK YON BERADI (X-5). Test
  *      guruhi tananing kamida `1/TEST_SHARE` ulushiga haqli; unga
  *      yetmagan o'rin taqdimot TURIDAN kelgan (`purposeDefaults`)
- *      va `YIELDING_BLOCKS` ro'yxatidagi bloklardan olinadi. Sabab:
- *      `quizCount` — foydalanuvchi formada AYNAN tanlagan son,
- *      standart blok esa turning taklifi. Aniq ajratish uchun
- *      `meta.slidePurpose` kerak; u berilmasa (`general` standarti)
- *      yon beruvchi topilmaydi va eski xatti-harakat qoladi —
- *      ya'ni noaniqlikda hech qanday blok tashlanmaydi.
- *
- *      ESLATMA (bilib qoldirilgan farq). Yon bergan blok
- *      `slide-prompt/structure.ts` ning umumiy «TUZILMA BLOKLARI»
- *      qatorida qolib ketadi — u qator faqat deka NIYATINI aytadi,
- *      slaydni to'ldirish qoidasi emas (har slaydning ko'rsatmasi
- *      beat ROLIDAN keladi, u esa rejadan). Blokka TEGISHLI to'ldirish
+ *      va `YIELDING_BLOCKS` ro'yxatidagi bloklardan olinadi.
+ *      `meta.slidePurpose` berilmasa (`general` standarti) yon
+ *      beruvchi topilmaydi — noaniqlikda hech qanday blok tashlanmaydi.
+ *      ESLATMA: yon bergan blok `structure.ts` ning umumiy «TUZILMA
+ *      BLOKLARI» qatorida qoladi — u faqat deka NIYATI; o'z to'ldirish
  *      qoidasi bor bloklar (`diagramma`, `adabiyotlar`, `reja`, `test`)
- *      aynan shu sabab `YIELDING_BLOCKS` ga KIRITILMAGAN: ular tushib
- *      qolsa prompt yolg'on va'da bergan bo'lardi (AUDIT-8 naqshi).
+ *      shu sabab yon beruvchilar ro'yxatida YO'Q (AUDIT-8 naqshi).
+ *  10. REJA = SHARTNOMA (AUDIT-25). Har reja bandi (`planItems`) KAMIDA
+ *      bitta MAZMUN slaydini oladi (`plan: i`, rejadagi tartibda) va u
+ *      hech qachon qirqilmaydi. O'rin berish tartibi — 6-qoidadagi
+ *      a) → b) → c). Bandlar soni `planBudgetForBody` sig'imiga
+ *      qisiladi (tana − agenda − bitta savol); `extractMeta` va forma
+ *      ham AYNAN shu funksiyadan o'qiydi (`planCapacity`).
+ *      Shablonda `section` bo'lsa va reja uchun ≥ 2 o'rin/band qolsa,
+ *      band = `section` + mazmun (ikkalasi `plan: i`). Qolgan o'rinlar
+ *      bandlar orasiga «qo'shimcha» slayd bo'lib taqsimlanadi (shablon
+ *      oqimidan, `plan` siz). Mazmun maketlari shablon tana beat'lari
+ *      va to'ldirgichlaridan, TARTIBDA (`makePicker`).
  */
 export function blocksToBeats(
   meta: Pick<DocMeta, "blocks" | "planItems" | "quizCount" | "agendaSlide" | "internetSearch" | "speakerNotes"> &
@@ -412,9 +453,19 @@ export function blocksToBeats(
   beats: SlideBeat[],
   want: number,
 ): SlideBeat[] {
-  const quizCount = (meta.quizCount ?? 0) > 0 ? meta.quizCount : QUIZ_COUNT_FALLBACK;
-  const roleMeta = { planItems: meta.planItems || PLAN_ITEMS_DEFAULT, quizCount };
-  const on = orderedBlocks(meta.blocks, meta.quizCount ?? 0, meta.internetSearch === true);
+  /*
+   * title/closing ajratiladi: ular tana hisobiga KIRMAYDI va shu bilan
+   * 4-qoida o'z-o'zidan bajariladi — nechta bo'lishidan qat'i nazar
+   * bittasi boshida, bittasi oxirida qoladi.
+   */
+  const head = beats.find((b) => b.layout === "title") ?? null;
+  const tail = beats.find((b) => b.layout === "closing") ?? null;
+  const bodyWant = Math.max(0, want - (head ? 1 : 0) - (tail ? 1 : 0));
+
+  // ── 6/8/9/10-qoidalar: qaysi blok qoladi — prompt bilan YAGONA hisob (`plannedBlocks`).
+  const plan = plannedBlocks(meta, bodyWant);
+  const { planN, quizBeats, answers: answersBeat } = plan;
+  const roleMeta = { planItems: planN, quizCount: plan.quizCount };
   const asBeat = (blk: SlideBlock): MarkedBeat => ({
     layout: blk.layout,
     role: blk.role(roleMeta),
@@ -423,247 +474,115 @@ export function blocksToBeats(
     ...(blk.chart ? { chart: true } : {}),
   });
 
-  /*
-   * title/closing ajratiladi: ular hudud hisobiga KIRMAYDI (aks holda
-   * «birinchi uchdan bir» doim title bilan band bo'lardi) va shu bilan
-   * 4-qoida o'z-o'zidan bajariladi — nechta bo'lishidan qat'i nazar
-   * bittasi boshida, bittasi oxirida qoladi.
-   */
-  const src: MarkedBeat[] = beats.map((b) => ({ ...(b as ChartBeat) }));
-  const head = src.find((b) => b.layout === "title") ?? null;
-  const tail = src.find((b) => b.layout === "closing") ?? null;
-  const fillerKeys = new Set([...tpl.fillers, ...fillerPool(tpl, 24)].map(beatKey));
-  let body: MarkedBeat[] = src
-    .filter((b) => b.layout !== "title" && b.layout !== "closing")
-    .map((b) => (fillerKeys.has(beatKey(b)) ? { ...b, filler: true } : b));
-
-  // ── 2-qoida
-  const keepAgenda = on.some((b) => b.id === "reja") && meta.agendaSlide !== false;
-  if (!keepAgenda) body = body.filter((b) => b.layout !== "agenda");
-
-  /*
-   * ── 6-qoida BLOKLARDAN OLDIN bajariladi.
-   *
-   * Nega shunday tartib. Hududlar tananing UZUNLIGIDAN o'lchanadi.
-   * Agar avval bloklarni joylab, keyin qirqsak, blok o'z o'rnida
-   * qolgani holda «birinchi uchdan bir» chegarasi suriladi va blok
-   * hududidan chiqib ketadi — 16 beat'li shablondan 6 slaydli deka
-   * so'ralganda `motivatsiya` dekaning o'rtasiga tushardi. Shuning
-   * uchun tana AVVAL yakuniy o'lchamga keltiriladi, qo'shiladigan
-   * bloklar uchun joy qoldirib.
-   */
-  const bodyWant = Math.max(0, want - (head ? 1 : 0) - (tail ? 1 : 0));
-
-  /*
-   * ── 8-qoida: TEST GURUHINI rejalashtirish.
-   *
-   * Har blok tanada AYNAN BITTA o'rin egallaydi (qo'shilgani mavjud
-   * beat'ning o'rnini oladi, qo'shilmagani yangi slayd bo'lib kiradi).
-   * Ya'ni tana `want` da qolishi uchun kerakli shart sodda:
-   *
-   *     blok beat'lari soni ≤ bodyWant
-   *
-   * Test guruhi shu tengsizlikning YON BERUVCHI tomoni: boshqa
-   * bloklardan qolgan `room` ga nechta savol slaydi sig'sa shuncha
-   * qo'yiladi. Sig'mas ekan — javoblar kaliti BIRINCHI bo'lib
-   * tashlanadi (javob baribir izohda qoladi), keyin ortiqcha
-   * savollar. Kamida bitta `quiz` slaydi qoladi: `test` — 6-qoida
-   * himoyasidagi foydalanuvchi BLOKI, faqat uning ichki hajmi
-   * qisqaradi.
-   */
-  const testOn = on.some((b) => b.id === "test");
-  const others = on.filter((b) => b.id !== "test" && !(b.id === "reja" && !keepAgenda));
-  const askQuiz = testOn ? Math.max(1, Math.ceil(quizCount / QUIZ_PER_SLIDE)) : 0;
-  const room = bodyWant - others.length;
-  const wantAnswers = askQuiz > 0 && meta.speakerNotes === false;
-  /*
-   * ── X-5: `quizCount` STANDART bloklardan ustun.
-   *
-   * Ilgari test guruhi boshqa bloklardan QOLGAN joyni olardi va
-   * birinchi bo'lib u qisqarardi: 10 slaydli, 7 blokli dekada
-   * `quizCount: 3` dan bitta savol qolgan edi (tanada 8 o'rin, 6 tasi
-   * boshqa bloklarda). Lekin `quizCount` — foydalanuvchi formada
-   * AYNAN tanlagan son (0/3/5/10 chip'i), boshqa bloklar esa
-   * ko'pincha taqdimot TURINING standarti: `meta.blocks` ni forma
-   * `purposeDefaults` dan to'ldirib yuboradi, ya'ni belgilanganining
-   * hammasi ham qo'lda yoqilgan emas.
-   *
-   * Shuning uchun endi avval STANDART bloklar yon beradi:
-   *   `baseSlots` — eski xatti-harakat (boshqa bloklardan qolgan joy);
-   *   `share`     — test guruhining KAFOLATLANGAN ulushi (tananing 1/3 i);
-   *   `givers`    — tur standartidan kelgan, yon berishi mumkin bo'lgan
-   *                 bloklar (`YIELDING_BLOCKS`), dekadagi tartibda.
-   * Ulushga yetmagan qismi `givers` ning OXIRIDAN olinadi: deka boshi
-   * (reja, maqsadlar) mavzuni ochadi, test guruhi esa oxirda turadi —
-   * unga joy eng yaqin qo'shnidan uzilgani tabiiy.
-   *
-   * `room <= 0` da yon berish YO'Q: bunda bloklar allaqachon `want` ga
-   * sig'magan va deka 6-qoidaga ko'ra uzaygan; blok tashlash o'sha
-   * qoidani teskarisiga o'girardi, savol qo'shish esa dekani yana
-   * uzaytirardi.
-   *
-   * UZUNLIK SHARTNOMASI saqlanadi: tashlangan blok soni guruhga
-   * qo'shilgan o'rin soniga TENG, ya'ni `wanted` uzunligi o'zgarmaydi.
-   */
-  const need = askQuiz > 0 ? askQuiz + (wantAnswers ? 1 : 0) : 0;
-  const baseSlots = askQuiz > 0 ? Math.max(1, Math.min(need, room)) : 0;
-  const share = askQuiz > 0 && room > 0 ? Math.min(need, Math.max(1, Math.ceil(bodyWant / TEST_SHARE))) : 0;
-  const std = new Set(purposeDefaults(meta.slidePurpose).blocks);
-  const givers = others.filter((b) => YIELDING_BLOCKS.has(b.id) && std.has(b.id));
-  const yielded = Math.max(0, Math.min(givers.length, share - baseSlots));
-  const dropped = new Set(givers.slice(givers.length - yielded).map((b) => b.id));
-  const slots = baseSlots + yielded;
-  const quizBeats = askQuiz > 0 ? Math.max(1, Math.min(askQuiz, slots - (wantAnswers ? 1 : 0))) : 0;
-  const answersBeat = wantAnswers && quizBeats + 1 <= slots;
-
-  /**
-   * Dekaga tushishi kerak bo'lgan BLOK beat'lari — dekadagi tartibda.
-   *
-   * `test` bloki bu yerda guruhga YOYILADI: `quizBeats` ta `quiz` va
-   * (kerak bo'lsa) bitta `answers`. Shundan keyin quyidagi mantiq
-   * ular bilan oddiy bloklardek ishlaydi — uzunlik muvozanati,
-   * yonma-yon takror qoidasi va ankor tartibi ularni HISOBGA OLADI.
-   */
-  const wanted: MarkedBeat[] = [];
-  for (const blk of on) {
-    if (blk.id === "reja" && !keepAgenda) continue;
-    // X-5: standart blok test guruhiga o'z o'rnini berdi.
-    if (dropped.has(blk.id)) continue;
-    if (blk.id !== "test") {
-      wanted.push(asBeat(blk));
-      continue;
-    }
-    for (let i = 0; i < quizBeats; i += 1) {
-      wanted.push({ layout: "quiz", role: quizRole(i, quizBeats), block: "test", anchor: blk.anchor });
-    }
-    if (answersBeat) wanted.push({ layout: "answers", role: ANSWERS_ROLE, block: "test", anchor: blk.anchor });
-  }
-
-  /** Tanani joyida `target` uzunlikka keltiradi; BLOKLARGA tegmaydi. */
-  const resize = (out: MarkedBeat[], target: number): MarkedBeat[] => {
-    /*
-     * Ortiqcha beat qirqiladi. Har qadamda bitta ENG YAXSHI nomzod
-     * tanlanadi (oxiridan boshlab), afzallik tartibi:
-     *   0) to'ldirgich, qirqilsa yonma-yon takror yasamaydi
-     *   1) shablonning oddiy beat'i, takror yasamaydi
-     *   2) to'ldirgich, lekin qo'shnilari bir xil layout
-     *   3) oddiy beat, qo'shnilari bir xil layout
-     *
-     * «Takror yasamaydi» sharti kerak: `want=4` li «Pitch» dekada
-     * oxiridan ketma-ket qirqish `bullets, bullets` qoldirardi va uni
-     * `deClump` ham yecholmasdi — tanada boshqa layout qolmagan edi.
-     */
-    while (out.length > target) {
-      let pick = -1;
-      let best = 9;
-      for (let i = out.length - 1; i >= 0; i -= 1) {
-        if (out[i].block) continue; // 6-qoida: blok hech qachon qirqilmaydi
-        const clumps = i > 0 && i + 1 < out.length && out[i - 1].layout === out[i + 1].layout;
-        const rank = (clumps ? 2 : 0) + (out[i].filler ? 0 : 1);
-        if (rank < best) { best = rank; pick = i; }
-        if (best === 0) break;
+  /** Dekaga tushadigan BLOK beat'lari — ankor guruhlari bo'yicha, dekadagi tartibda. */
+  const group: Record<SlideBlockAnchor, MarkedBeat[]> = { "after-title": [], early: [], middle: [], late: [], end: [] };
+  let blockCount = 0;
+  for (const id of plan.kept) {
+    const blk = SLIDE_BLOCK_BY_ID[id];
+    const out = group[blk.anchor];
+    if (blk.id !== "test") out.push(asBeat(blk));
+    else {
+      // `test` bloki guruhga YOYILADI: `quizBeats` ta `quiz` va (kerak bo'lsa) bitta `answers`.
+      for (let i = 0; i < quizBeats; i += 1) {
+        out.push({ layout: "quiz", role: quizRole(i, quizBeats), block: "test", anchor: blk.anchor });
       }
-      if (pick < 0) break; // faqat bloklar qoldi — deka `want` dan uzun qolaveradi
-      out.splice(pick, 1);
+      if (answersBeat) out.push({ layout: "answers", role: ANSWERS_ROLE, block: "test", anchor: blk.anchor });
     }
-    /*
-     * Kami to'ldirgich oqimidan qo'shiladi — yonma-yon takrorni
-     * o'tkazib yuborib va OXIRIDAGI bloklardan oldin: `references`
-     * («Adabiyotlar») `closing` dan darhol oldin turishi shart, uning
-     * ortidan to'ldirgich qo'yilsa `end` ankori buzilardi.
-     */
-    let at = out.length;
-    while (at > 0 && out[at - 1].block) at -= 1;
-    for (let i = 0, guard = 0; out.length < target && guard < 256; i += 1, guard += 1) {
-      const pool = fillerPool(tpl, (target - out.length) * 4 + 8);
-      const cand = pool[i % pool.length];
-      if (!cand || out[at - 1]?.layout === cand.layout || out[at]?.layout === cand.layout) continue;
-      out.splice(at, 0, { ...cand, filler: true });
-      at += 1;
-    }
-    return out;
-  };
-
-  /**
-   * 1-qoida: har blok beat'ini O'Z hududidagi mos layoutli beat bilan
-   * QO'SHADI (uzunlik o'zgarmaydi), qo'sha olmaganlarini qaytaradi.
-   *
-   * `!arr[i].block` sharti guruh uchun ham to'g'ri ishlaydi: allaqachon
-   * qo'shilgan `quiz` beat ikkinchi savolga qayta ishlatilmaydi.
-   */
-  const mergeInto = (arr: MarkedBeat[]): MarkedBeat[] => {
-    const rest: MarkedBeat[] = [];
-    for (const blk of wanted) {
-      const [lo, hi] = mergeRange(blk.anchor as SlideBlockAnchor, arr.length);
-      let at = -1;
-      for (let i = lo; i < hi; i += 1) {
-        if (arr[i].layout === blk.layout && !arr[i].block) { at = i; break; }
-      }
-      if (at < 0) rest.push(blk);
-      else arr[at] = { ...blk };
-    }
-    return rest;
-  };
-
-  /*
-   * Qirqim va qo'shish bir-biriga bog'liq: nechta beat qirqish kerakligi
-   * nechta blok QO'SHILISHIGA, u esa qirqilgan tanaga bog'liq. Qo'zg'almas
-   * nuqta bir-ikki qadamda topiladi (blok soni ≤ 9, ya'ni oraliq kichik);
-   * topilmasa oxirgi baho olinadi — uzunlik `deClump` dan keyin baribir
-   * to'g'ri, chunki qo'shish soni ayni shu bahodan kelib chiqadi.
-   */
-  const base = body;
-  const trial = (target: number) => resize(base.map((b) => ({ ...b })), Math.max(0, target));
-  let k = 0;
-  for (let iter = 0; iter < 4; iter += 1) {
-    const k2 = mergeInto(trial(bodyWant - k)).length;
-    if (k2 === k) break;
-    k = k2;
   }
-  body = trial(bodyWant - k);
-  const pending = mergeInto(body);
+  for (const a of ANCHOR_ORDER) blockCount += group[a].length;
 
   /*
-   * Qolgan bloklar QO'SHILADI — tana allaqachon yakuniy o'lchamda,
-   * ya'ni hududlar ham yakuniy. Indekslar qo'shishdan OLDINGI
-   * uzunlikdan hisoblanadi va guruhlar o'ngdan chapga joylanadi:
-   * shunda oldin hisoblangan indekslar surilmaydi va natija
-   * 7-qoidaga ko'ra deterministik qoladi.
+   * Reja uchun qolgan o'rinlar: `free` — bandlarning mazmun slaydidan
+   * ORTGANI (≥ 0, 6-qoida). Shablonda bo'lim (`section`) bo'lsa va har
+   * bandga ikkinchi o'rin yetsa — band bo'lim bilan ochiladi; qolgani
+   * qo'shimcha slayd.
    */
-  const n0 = body.length;
-  for (let a = ANCHOR_ORDER.length - 1; a >= 0; a -= 1) {
-    const anchor = ANCHOR_ORDER[a];
-    const group = pending.filter((b) => b.anchor === anchor);
-    if (!group.length) continue;
-    let at = Math.min(insertIndex(anchor, n0), body.length);
-    /*
-     * OLDINGI ankor blokidan oldinga o'tib ketmaslik. `reja`
-     * (`after-title`) shablonning `agenda` beat'i bilan QO'SHILGAN
-     * bo'lsa u allaqachon 0-indeksda turadi; kichik tanada `early`
-     * ning hisoblangan o'rni ham 0 bo'lib chiqadi va `maqsadlar`
-     * rejadan OLDIN tushardi.
-     */
-    while (at < body.length) {
-      const other = body[at].anchor;
-      if (other === undefined || anchorRank(other) >= anchorRank(anchor)) break;
-      at += 1;
+  const free = bodyWant - blockCount - planN;
+  const tplBeats = expandBeats(tpl, 0);
+  const useSections = tplBeats.some((b) => b.layout === "section") && free >= planN;
+  const extras = Math.max(0, free - (useSections ? planN : 0));
+
+  /*
+   * Nomzodlar oqimi: kirish TANASI (shablon beats'i, uzun dekada
+   * to'ldirgichlari bilan), keyin to'ldirgich oqimi. Blok nusxasi
+   * (`blockLike`) va blok/muqova maketlari chiqariladi, takror yo'q.
+   */
+  const bodyIn = beats.filter((b) => b.layout !== "title" && b.layout !== "closing");
+  const pool = [...bodyIn, ...fillerPool(tpl, 48)];
+  // Shablonning O'Z beat'lari (auto → lecture, `expandBeats` bilan bir xil) — `structural` bayrog'i shulardan.
+  const own = new Map<string, SlideBeat>();
+  const src = tpl.beats.length ? tpl : SLIDE_TEMPLATE_BY_ID.lecture;
+  for (const b of [...src.beats, ...src.fillers]) own.set(beatKey(b), b);
+  const seen = new Set<string>();
+  const stream: Candidate[] = [];
+  const sections: string[] = [];
+  for (const b of pool) {
+    const k = beatKey(b);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    if (b.layout === "section") sections.push(b.role);
+    else if (EXTRA_LAYOUTS.has(b.layout) && !blockLike(b)) {
+      const mine = own.get(k);
+      stream.push({ layout: b.layout, role: b.role, generic: !mine, ...(b.structural || mine?.structural ? { structural: true as const } : {}) });
     }
-    body.splice(at, 0, ...group.map((b) => ({ ...b })));
   }
+  const pick = makePicker(stream);
 
   /*
-   * Yakuniy uzunlik. Qo'zg'almas nuqta (`k`) deyarli har doim topiladi,
-   * lekin qirqim mergani, merga esa qirqimni o'zgartiradigan chekka
-   * holatlar bor. Shu sabab uzunlik OXIRIDA yana bir marta qat'iy
-   * tenglashtiriladi — endi bloklar belgilangan, ya'ni ular tegilmaydi.
+   * Tana SKELETI: bloklar — tayyor beat, reja/qo'shimcha o'rinlar —
+   * keyin to'ldiriladigan «teshik». Qo'shimchalar bandlarga teng
+   * taqsimlanadi (j-qo'shimcha → floor(j·N/x)-band ortidan), `middle`
+   * bloklari esa bandlar orasiga (j-blok → round((j+1)·N/(m+1))-band
+   * ortidan, kamida 1-band).
    */
-  resize(body, bodyWant);
+  type Hole = { hole: "content" | "extra"; plan?: number };
+  type Cell = MarkedBeat | Hole;
+  const isHole = (c: Cell): c is Hole => "hole" in c;
+  const extraAfter = new Array<number>(planN + 1).fill(0);
+  for (let j = 0; j < extras; j += 1) extraAfter[1 + Math.floor((j * planN) / extras)] += 1;
+  const mid = group.middle;
+  const midAfter = mid.map((_, j) => Math.max(1, Math.min(planN, Math.round(((j + 1) * planN) / (mid.length + 1)))));
 
-  // ── 5-qoida
-  deClump(body, fillerPool(tpl, 12));
+  const cells: Cell[] = [...group["after-title"], ...group.early];
+  for (let i = 1; i <= planN; i += 1) {
+    if (useSections) {
+      // Shablon bo'limlari tugasa — umumiy ishora; oldingi bo'lim roli QAYTARILMAYDI.
+      cells.push({ layout: "section", role: planRole(i, sections[i - 1] ?? "Keyingi bo‘lim"), plan: i });
+    }
+    cells.push({ hole: "content", plan: i });
+    for (let e = 0; e < extraAfter[i]; e += 1) cells.push({ hole: "extra" });
+    mid.forEach((b, j) => {
+      if (midAfter[j] === i) cells.push(b);
+    });
+  }
+  cells.push(...group.late, ...group.end);
 
-  // Ichki belgilar (`block`/`filler`) tashqariga CHIQMAYDI.
-  return [...(head ? [head] : []), ...body, ...(tail ? [tail] : [])].map(
-    (b) => (b.chart ? { layout: b.layout, role: b.role, chart: true } : { layout: b.layout, role: b.role }) as SlideBeat,
+  // ── 5-qoida: teshiklar chapdan o'ngga, qo'shnilarga qarab to'ldiriladi.
+  const body: MarkedBeat[] = [];
+  cells.forEach((c, t) => {
+    if (!isHole(c)) {
+      body.push(c);
+      return;
+    }
+    const prev = body[t - 1]?.layout ?? head?.layout;
+    const nx = cells[t + 1];
+    const next = nx === undefined ? tail?.layout : isHole(nx) ? undefined : nx.layout;
+    if (c.hole === "content") {
+      const b = pick(planContent, prev, next);
+      body.push({ layout: b.layout, role: planRole(c.plan!, b.role), plan: c.plan });
+    } else {
+      body.push(pick(extraContent, prev, next));
+    }
+  });
+
+  // Ichki belgilar (`block`/`anchor`) tashqariga CHIQMAYDI.
+  return [...(head ? [{ layout: head.layout, role: head.role }] : []), ...body, ...(tail ? [{ layout: tail.layout, role: tail.role }] : [])].map(
+    (b) =>
+      ({
+        layout: b.layout,
+        role: b.role,
+        ...(b.chart ? { chart: true } : {}),
+        ...(b.plan ? { plan: b.plan } : {}),
+      }) as SlideBeat,
   );
 }
