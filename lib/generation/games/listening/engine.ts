@@ -32,6 +32,7 @@ import type { AcademicDoc, Block, DocMeta, DocSection } from "../../types";
 import type { CompleteFn } from "../../research/pipeline";
 import { llmEnabled } from "../../llm";
 import { CostMeter, complete as completeRole } from "../../llm-roles";
+import { assertJobTime } from "../../deadline";
 import { parseLlmObject } from "../../json";
 import { remainingMs } from "../../quality";
 import { langInfo } from "../../i18n";
@@ -262,10 +263,12 @@ export async function buildListeningDoc(meta: DocMeta, values: FormValues, opts:
   const ask = async (user: string, maxTokens: number): Promise<string | null> => {
     const timeoutMs = Math.min(CALL_MS, remainingMs(deadline));
     if (timeoutMs < MIN_CALL_MS) {
+      // Ish muddati tugagan (EXT-03) — asosiy yozuv: yarim o'yin emas, `DeadlineError`.
+      assertJobTime(deadline, "listening:writer", MIN_CALL_MS);
       console.warn(`[listening] byudjet tugadi: ${timeoutMs} ms qoldi`);
       return null;
     }
-    const r = await complete("writer", system, user, { json: true, maxTokens, timeoutMs });
+    const r = await complete("writer", system, user, { json: true, maxTokens, timeoutMs, deadline });
     if (r?.usage) {
       meter.add(r.usage);
       opts.onUsage?.(r.usage);
@@ -278,6 +281,7 @@ export async function buildListeningDoc(meta: DocMeta, values: FormValues, opts:
   const want = input.itemCount;
   const seen = new Set<string>();
   const items: ListeningItem[] = [];
+  assertJobTime(deadline, "listening:writer", MIN_CALL_MS);
   const writeDeadline = deadline - (opts.polish === false ? LISTENING_REVIEW_RESERVE_MS : LISTENING_REVIEW_RESERVE_MS + LISTENING_POLISH_RESERVE_MS);
 
   for (let round = 0; round < LISTENING_MAX_ROUNDS && items.length < want; round++) {

@@ -63,10 +63,36 @@ test("hajm darvozasi: talaba ishida bodyWordCount, maqolada wordCount (manba mat
  * `if (!built) return null` yozildi — ikkinchi test.
  */
 test("teacher dvigateli stub: `null` qaytaradi, xato TASHLAMAYDI", async () => {
-  const { buildTeacherDoc } = await import("../lib/generation/teacher/engine.ts");
-  const meta = { toolId: "lesson-plan", topic: "Fotosintez", language: "uz" } as unknown as DocMeta;
-  const built = await buildTeacherDoc(meta, { topic: "Fotosintez" }, { deadline: Date.now() + 60_000 });
-  assert.equal(built, null, "stub null qaytarmasa, chaqiruvchi eski yo'lni tanlay olmaydi");
+  /*
+   * GERMETIK (prod-readiness W4-A): ilgari bu test `.env.local` dagi
+   * HAQIQIY kalit bilan dvigatelni chaqirardi — dvigatel endi stub emas,
+   * ya'ni test pullik Gemini so'rovini yuborardi (va to'liq hujjat olib
+   * yiqilardi). Endi model har so'rovni rad etadi (400), kalit soxta,
+   * `LLM_*` rollari olib tashlanadi: «model javob bermadi → `null`» sinaladi.
+   */
+  const keys = ["GEMINI_API_KEY", "XAI_API_KEY", "ANTHROPIC_API_KEY", "OPENROUTER_API_KEY", "OPENAI_API_KEY", "LLM_WRITER", "LLM_RESEARCHER", "LLM_JUDGE", "LLM_FAST"];
+  const saved = new Map(keys.map((k) => [k, process.env[k]]));
+  const realFetch = globalThis.fetch;
+  for (const k of keys) delete process.env[k];
+  process.env.GEMINI_API_KEY = "test-key";
+  let calls = 0;
+  globalThis.fetch = (async () => {
+    calls++;
+    return new Response(JSON.stringify({ error: { message: "stub" } }), { status: 400 });
+  }) as typeof fetch;
+  try {
+    const { buildTeacherDoc } = await import("../lib/generation/teacher/engine.ts");
+    const meta = { toolId: "lesson-plan", topic: "Fotosintez", language: "uz" } as unknown as DocMeta;
+    const built = await buildTeacherDoc(meta, { topic: "Fotosintez" }, { deadline: Date.now() + 300_000 });
+    assert.equal(built, null, "stub null qaytarmasa, chaqiruvchi eski yo'lni tanlay olmaydi");
+    assert.ok(calls > 0, "model (stub) haqiqatan so'ralgan");
+  } finally {
+    globalThis.fetch = realFetch;
+    for (const [k, v] of saved) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
 });
 
 test("write-llm: teacher shoxi `null` da eski `write-specials.ts` yo'liga TUSHADI", () => {

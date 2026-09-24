@@ -7,7 +7,11 @@
  *
  * Kod web ichidagi inline worker bilan bir xil — farqi faqat joylashuvida.
  */
-import { runWorkerProcess } from "../lib/server/worker";
+import { installProcessGuards, runWorkerProcess } from "../lib/server/worker";
+
+// Ushlanmagan rad etish processni yiqitmasin (jurnal + davom); haqiqiy
+// uncaughtException — nol bo'lmagan kod bilan chiqish, Docker qayta ko'taradi (C27).
+installProcessGuards();
 
 runWorkerProcess().catch((e) => {
   console.error("[worker] fatal:", e);

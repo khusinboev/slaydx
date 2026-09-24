@@ -1,4 +1,5 @@
 import { llmComplete } from "../llm";
+import { DeadlineError, JOB_MIN_CALL_MS, isDeadlineError } from "../deadline";
 import { parseLlmObject } from "../json";
 import { mapPool } from "../quality";
 import { langInfo } from "../i18n";
@@ -70,6 +71,8 @@ export const UNCHANGED_WARN_CHARS = 80;
 export const PAIRS_MAX = 3000;
 export const PAIRS_MAX_CHARS = 700_000;
 const MIN_WAVE_MS = 15_000;
+/** Muddat tufayli tarjima qilinmagan band belgisi (`ItemFail.detail`). */
+const TIME_OUT = "vaqt tugadi";
 
 export type TranslateDeps = {
   complete?: typeof llmComplete;
@@ -172,10 +175,11 @@ type GlossaryPass = { detected?: string; domain?: string; glossary: GlossaryEntr
 
 const KNOWN_LANGS = new Set(["uz", "kaa", "kk", "ky", "tg", "tk", "ru", "en", "tr", "ar", "de", "fr", "es", "zh", "ko", "ja", "it", "pt"]);
 
-async function glossaryPass(segs: Segment[], target: string, timeoutMs: number, complete: typeof llmComplete): Promise<GlossaryPass> {
+async function glossaryPass(segs: Segment[], target: string, timeoutMs: number, complete: typeof llmComplete, deadline: number): Promise<GlossaryPass> {
   const { sample, total } = glossarySample(segs);
   if (!sample.trim()) return { glossary: [] };
-  const raw = await complete(glossarySystem(target), glossaryUser(sample, sample.length, total), 2500, { json: true, timeoutMs, thinking: 0 }).catch(
+  // Ixtiyoriy o'tish: xato ham, muddat tugashi ham — lug'atsiz davom (partiyalar o'zi muddatni tekshiradi).
+  const raw = await complete(glossarySystem(target), glossaryUser(sample, sample.length, total), 2500, { json: true, timeoutMs, thinking: 0, deadline }).catch(
     () => null,
   );
   const data = parseLlmObject<{ detected?: unknown; domain?: unknown; glossary?: unknown }>(raw);
@@ -276,6 +280,11 @@ export async function translateSegments(segs: Segment[], opts: TranslateOpts, de
   const now = deps.now ?? Date.now;
   const remaining = () => Math.max(0, opts.deadline - now());
   const stage = (progress: number, step: string) => opts.onStage?.({ progress, step });
+  /*
+   * Ish muddati (EXT-03): boshlanishdayoq vaqt yo'q — birorta partiya
+   * yozilmaydi, «tarjima qilinmadi» emas, aniq «vaqt tugadi» (pul qaytadi).
+   */
+  if (segs.length && remaining() < JOB_MIN_CALL_MS) throw new DeadlineError("translate", remaining());
 
   // 1) dublikatlar va uzun segmentlar.
   markDuplicates(segs);
@@ -300,7 +309,7 @@ export async function translateSegments(segs: Segment[], opts: TranslateOpts, de
   // 2) 1-o'tish.
   stage(8, "Atamalar aniqlanmoqda");
   const sameLangRequested = opts.sourceLang !== "avto" && opts.sourceLang === opts.target;
-  const gp = total ? await glossaryPass(work, opts.target, Math.min(60_000, Math.max(20_000, remaining() / 6)), complete) : { glossary: [] };
+  const gp = total ? await glossaryPass(work, opts.target, Math.min(60_000, Math.max(20_000, remaining() / 6)), complete, opts.deadline) : { glossary: [] };
   const detected = opts.sourceLang !== "avto" ? opts.sourceLang : (gp.detected ?? "avto");
   const glossary = mergeGlossary(gp.glossary, opts.userGlossary);
   const warnings: TranslationWarning[] = [];
@@ -332,11 +341,23 @@ export async function translateSegments(segs: Segment[], opts: TranslateOpts, de
     const batchChars = items.reduce((n, s) => n + s.text.length, 0);
     const maxTokens = Math.min(8000, Math.ceil((batchChars * 1.6) / 3) + 400);
     const payload: BatchItem[] = items.map((s) => ({ id: s.id, kind: s.kind, ctx: s.ctx, text: s.text }));
+    /*
+     * Muddat (EXT-03) zanjirga uzatiladi: `max(25 s, …)` timeout endi ish
+     * muddatidan oshmaydi. `DeadlineError` — mavjud «vaqt tugadi» yo'li
+     * (band `missing`, qisman qoida hal qiladi; ortiqcha bo'lsa ish
+     * `DeadlineError` bilan yiqiladi — quyida).
+     */
+    let outOfTime = false;
     const raw = await complete(system, translationBatchUser(payload, index, batches.length, prevTail) + suffix, maxTokens, {
       json: true,
       timeoutMs,
       thinking: 0,
-    }).catch(() => null);
+      deadline: opts.deadline,
+    }).catch((e: unknown) => {
+      outOfTime = isDeadlineError(e);
+      return null;
+    });
+    if (outOfTime) return { ok: new Map(), fails: items.map((s) => ({ id: s.id, reason: "missing" as const, detail: TIME_OUT })), parsed: false };
     const data = parseLlmObject(raw);
     if (!data) {
       console.warn(`[translate] partiya ${index + 1}/${batches.length}: JSON kelmadi (${raw === null ? "javob yo'q/xato" : `${raw.length} belgi`}), ${items.length} band`);
@@ -349,7 +370,7 @@ export async function translateSegments(segs: Segment[], opts: TranslateOpts, de
   const translateBatch = async (batch: Segment[], index: number) => {
     const prevTail = index > 0 ? stripTokens(batches[index - 1].map((s) => s.text).join(" ")).slice(-PREV_TAIL_CHARS) : undefined;
     if (remaining() < MIN_WAVE_MS) {
-      for (const s of batch) failed.set(s.id, { id: s.id, reason: "missing", detail: "vaqt tugadi" });
+      for (const s of batch) failed.set(s.id, { id: s.id, reason: "missing", detail: TIME_OUT });
       done++;
       return;
     }
@@ -415,6 +436,8 @@ export async function translateSegments(segs: Segment[], opts: TranslateOpts, de
   }
   const allowed = Math.min(PARTIAL_MAX_COUNT, Math.max(1, Math.ceil(total * PARTIAL_MAX_SHARE)));
   if (failedCount > allowed) {
+    // Yetishmovchilik muddat tufayli — foydalanuvchiga «vaqt tugadi» (worker `DeadlineError` ni taniydi).
+    if ([...failed.values()].some((f) => f.detail === TIME_OUT)) throw new DeadlineError("translate", remaining());
     throw new Error(`Tarjima to‘liq chiqmadi: ${total} banddan ${failedCount} tasi tarjima qilinmadi. Kredit qaytariladi — qayta urinib ko‘ring.`);
   }
   const byId = new Map(work.map((s) => [s.id, s]));

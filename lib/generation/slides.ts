@@ -5,6 +5,7 @@ import { DESIGN_VISUALS, LEGACY_VISUALS } from "./visuals/spec";
 import { getSlideTheme } from "./slide-themes";
 import type { SlideDeck, SlideModel, SlideThemeId } from "./slide-types";
 import type { AcademicDoc } from "./types";
+import { safeSlice } from "./safe-text";
 
 export type { SlideDeck, SlideLayout, SlideModel, SlideThemeId } from "./slide-types";
 
@@ -42,7 +43,7 @@ function isKnownVisual(v: unknown): v is SlideVisual {
 
 function clip(text: string, n: number) {
   const t = text.replace(/\s+/g, " ").trim();
-  return t.length <= n ? t : `${t.slice(0, n - 1).trimEnd()}…`;
+  return t.length <= n ? t : `${safeSlice(t, n - 1).trimEnd()}…`;
 }
 
 function legacyFromSections(doc: AcademicDoc): SlideModel[] {

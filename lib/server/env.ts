@@ -1,5 +1,6 @@
 import "server-only";
 import { BRAND_NAME } from "../brand";
+import { acceptedPaymeKeys } from "./payme-keys";
 
 /**
  * Serverdagi barcha sozlamalar shu yerdan o'qiladi.
@@ -25,6 +26,18 @@ function bool(name: string, fallback = false): boolean {
   const raw = str(name).toLowerCase();
   if (!raw) return fallback;
   return raw === "1" || raw === "true" || raw === "yes";
+}
+
+/**
+ * Millisoniya: butun va ≥ 0 bo'lsa o'zi (`0` — «chegara yo'q»), aks holda
+ * (bo'sh, manfiy, kasr, matn) standart. `int` dan farqi: «10ms» ni 10 deb
+ * qabul qilmaydi (C33 `db.ts envMs` semantikasi aynan ko'chirildi).
+ */
+function ms(name: string, fallback: number): number {
+  const raw = str(name);
+  if (!raw) return fallback;
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 0 ? n : fallback;
 }
 
 const isProd = process.env.NODE_ENV === "production";
@@ -110,6 +123,17 @@ export const env = {
 
   databaseUrl: str("DATABASE_URL"),
   databasePoolMax: int("DATABASE_POOL_MAX", 10),
+  /**
+   * Hovuz vaqt chegaralari (C33, DB-08; `db.ts poolConfig`). `0` — chegara
+   * yo'q. Getter: hovuz yaratilayotgan paytdagi qiymat o'qiladi (sinovlar
+   * `process.env` ni modul yuklangandan keyin o'zgartiradi).
+   */
+  get databaseStatementTimeoutMs(): number {
+    return ms("DATABASE_STATEMENT_TIMEOUT_MS", 30_000);
+  },
+  get databaseConnectTimeoutMs(): number {
+    return ms("DATABASE_CONNECT_TIMEOUT_MS", 5_000);
+  },
 
   sessionSecret: sessionSecret(),
   sessionTtlDays: int("SESSION_TTL_DAYS", 30),
@@ -190,10 +214,68 @@ export const env = {
     merchantId: str("PAYME_MERCHANT_ID"),
     key: str("PAYME_KEY"),
     testKey: str("PAYME_TEST_KEY"),
+    /**
+     * Sinov (sandbox) kaliti FAQAT shu `true` bo'lsa qabul qilinadi (C11).
+     * Prod'da `PAYME_TEST_KEY` tasodifan qolib ketsa ham test to'lovlari
+     * haqiqiy balansga aylanmaydi.
+     */
+    sandbox: bool("PAYME_SANDBOX", false),
   },
 
   /** Ichki xizmat chaqiruvlari (cron, worker) uchun kalit. */
   cronSecret: str("CRON_SECRET"),
+
+  /**
+   * Telegram webhook maxfiy sarlavhasi (`setWebhook … secret_token`) —
+   * FAQAT shu yerda ishlatiladi (EXT-14). Ilgari webhook `CRON_SECRET` ni
+   * tekshirardi, u esa `/api/health` bearer'i ham: monitoring sozlamasidan
+   * sizib chiqsa, soxta update bilan istalgan foydalanuvchiga kirish
+   * havolasi olinardi. Bo'sh bo'lsa `telegramWebhookSecret()` vaqtincha
+   * `CRON_SECRET` ga qaytadi (prod egasi qo'yguncha buzilmasin).
+   */
+  telegramWebhookSecret: str("TELEGRAM_WEBHOOK_SECRET"),
+
+  /**
+   * BEPUL LLM endpointlari (reja, UDK, «Tuzatish», «Hammasini tuzatish») —
+   * sarf shifti (prod-readiness C10). Kredit yechilmaydi, shuning uchun
+   * provayder puli faqat shu chegaralar bilan to'siladi. Kun — Toshkent
+   * vaqti bilan; siyosat va standartlar `lib/server/spend.ts` da.
+   */
+  freeLlm: {
+    /** `true` — to'rttala endpoint darhol 503, provayder chaqirilmaydi. */
+    disabled: bool("FREE_LLM_DISABLED", false),
+    dailyOutline: int("FREE_LLM_DAILY_OUTLINE", 20),
+    dailyUdk: int("FREE_LLM_DAILY_UDK", 20),
+    dailyRewrite: int("FREE_LLM_DAILY_REWRITE", 30),
+    dailyPolish: int("FREE_LLM_DAILY_POLISH", 10),
+    /** Barcha foydalanuvchilar bo'yicha kunlik birlik (vazn bilan) — xarajat shifti. */
+    dailyGlobal: int("FREE_LLM_DAILY_GLOBAL", 20_000),
+  },
+
+  /**
+   * Navbat nazorati (prod-readiness C22/C16, `audit/designs/capacity.md`).
+   * Navbat to'lsa (taxminiy kutish > `maxWaitSec`) yangi ish PUL YECHILMASDAN
+   * 429 + `Retry-After` bilan qaytariladi; bitta foydalanuvchida bir vaqtda
+   * `userMaxInflight` tadan ortiq ish bo'lmaydi; `ttlSec` dan uzoq navbatda
+   * turgan ish FAILED + pul qaytariladi.
+   */
+  queue: {
+    totalSlots: int("QUEUE_TOTAL_SLOTS", 8),
+    meanServiceSec: int("QUEUE_MEAN_SERVICE_SEC", 200),
+    maxWaitSec: int("QUEUE_MAX_WAIT_SEC", 900),
+    userMaxInflight: int("USER_MAX_INFLIGHT", 2),
+    ttlSec: int("QUEUE_TTL_SEC", 2700),
+  },
+
+  /** Saqlash muddati (C23, `audit/designs/retention.md`): faqat bonus bilan yaratilgan fayllar. */
+  retention: {
+    bonusDays: int("RETENTION_BONUS_DAYS", 180),
+  },
+
+  /** LibreOffice PDF konvertatsiyasi (C07): web jarayonida bir vaqtda nechta `soffice`. */
+  pdf: {
+    maxConcurrency: int("PDF_MAX_CONCURRENCY", 2),
+  },
 
   worker: {
     /** Bitta processda parallel bajariladigan ish soni. */
@@ -201,12 +283,23 @@ export const env = {
     /** Bitta generatsiyaga ajratilgan maksimal vaqt. */
     jobTimeoutMs: int("WORKER_JOB_TIMEOUT_MS", DEFAULT_JOB_TIMEOUT_MS),
     /** Worker shu processda avtomatik ishga tushsinmi. */
-    inline: bool("WORKER_INLINE", true),
+    // Prod'da standart o'chiq (CONC-17): compose override'siz ishga tushgan web
+    // nusxasi navbatni o'zi bajarib ketmasin. Dev'da avvalgidek yoqiq.
+    inline: bool("WORKER_INLINE", !isProd),
   },
 } as const;
 
 export function llmConfigured(): boolean {
   return Boolean(env.gemini.key || env.xai.key);
+}
+
+/**
+ * Webhook tekshiradigan kalit: avval `TELEGRAM_WEBHOOK_SECRET`, u bo'lmasa
+ * zaxira sifatida `CRON_SECRET` (EXT-14; zaxira — `runtimeWarnings`
+ * ogohlantiradi). Ikkalasi ham bo'lmasa bo'sh satr — webhook o'chiq.
+ */
+export function telegramWebhookSecret(): string {
+  return env.telegramWebhookSecret || env.cronSecret;
 }
 
 /**
@@ -224,7 +317,9 @@ export function ttsConfigured(): boolean {
 export function paymentsConfigured(): { click: boolean; payme: boolean } {
   return {
     click: Boolean(env.click.serviceId && env.click.secretKey && env.click.merchantId),
-    payme: Boolean(env.payme.merchantId && (env.payme.key || env.payme.testKey)),
+    // Webhook bilan BIR XIL qoida (review R1): faqat test kaliti + sandbox o'chiq —
+    // checkout taklif qilinmaydi, aks holda har to'lov Payme'da AUTH bilan yiqilardi.
+    payme: Boolean(env.payme.merchantId && acceptedPaymeKeys(env.payme).length),
   };
 }
 
@@ -249,8 +344,8 @@ export function assertRuntimeConfig(): string[] {
   if (env.sessionSameSite === "none" && isProd && !env.appUrl.startsWith("https://")) {
     problems.push("SESSION_COOKIE_SAMESITE=none HTTPS talab qiladi (APP_URL https bo'lsin)");
   }
-  if (isProd && !env.cronSecret && env.telegramBotToken) {
-    problems.push("CRON_SECRET yo'q — Telegram webhook'ni himoyalab bo'lmaydi");
+  if (isProd && !telegramWebhookSecret() && env.telegramBotToken) {
+    problems.push("TELEGRAM_WEBHOOK_SECRET (yoki zaxira CRON_SECRET) yo'q — Telegram webhook'ni himoyalab bo'lmaydi");
   }
   if (env.tts.azureKey && !env.tts.azureRegion) {
     problems.push("AZURE_SPEECH_REGION yo'q — AZURE_SPEECH_KEY yolg'iz ishlamaydi");
@@ -273,6 +368,19 @@ export function runtimeWarnings(): string[] {
   const warnings: string[] = [];
   if (!ttsConfigured()) {
     warnings.push("TTS kaliti yo'q (AZURE_SPEECH_KEY+AZURE_SPEECH_REGION / AISHA_API_KEY) — podkast va tabriknoma ishlamaydi");
+  }
+  // EXT-14: zaxira ishlaydi, lekin health bearer'i webhook kaliti bo'lib qoladi.
+  if (env.telegramBotToken && !env.telegramWebhookSecret && env.cronSecret) {
+    warnings.push(
+      "TELEGRAM_WEBHOOK_SECRET yo'q — Telegram webhook CRON_SECRET (health bearer'i) bilan himoyalanmoqda; " +
+        "alohida kalit qo'ying va setWebhook ni yangi secret_token bilan qayta o'rnating",
+    );
+  }
+  // O'chirish tugmasidagi xato yozuv («on», «enabled») jimgina «o'chirilmagan»
+  // bo'lib qolardi — ya'ni bepul LLM sarfi davom etardi.
+  const killSwitch = str("FREE_LLM_DISABLED").toLowerCase();
+  if (killSwitch && !["1", "true", "yes", "0", "false", "no"].includes(killSwitch)) {
+    warnings.push(`FREE_LLM_DISABLED="${killSwitch}" tanilmadi — bepul LLM YOQIQ qoldi (true/false yozing)`);
   }
   return warnings;
 }

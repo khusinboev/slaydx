@@ -73,7 +73,7 @@ const num = (v: unknown): number => {
  * lekin chegaradan tashqari qiymat esa CHEGARAGA qisiladi («0» → 1):
  * `|| 2` bilan nol ham «berilmagan» bo'lib qolardi.
  */
-function pagesOf(v: unknown): number {
+export function pagesOf(v: unknown): number {
   const raw = typeof v === "number" ? String(v) : String(v ?? "").trim();
   if (!raw) return 2;
   const n = Number(raw);

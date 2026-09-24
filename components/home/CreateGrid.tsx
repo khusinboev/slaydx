@@ -9,13 +9,20 @@ import { useUi } from "@/lib/ui";
 
 export function CreateGrid() {
   const hydrated = useAppStore((s) => s.hydrated);
+  const sessionChecked = useAppStore((s) => s.sessionChecked);
   const loggedIn = useAppStore((s) => s.loggedIn);
   const features = useAppStore((s) => s.features);
   const open = useUi((s) => s.open);
 
+  /*
+   * FE-09: kirish oynasi faqat seans SERVERDAN tekshirilgandan keyin.
+   * Ilgari `hydrated` (localStorage o'qildi) ga qarardi — u seans
+   * javobidan oldin keladi, shuning uchun kirgan foydalanuvchi ham
+   * `/uz/create` ni yangilaganda kirish oynasini ko'rardi.
+   */
   useEffect(() => {
-    if (hydrated && !loggedIn) open("login", { returnTo: "/uz/create" });
-  }, [hydrated, loggedIn, open]);
+    if (sessionChecked && !loggedIn) open("login", { returnTo: "/uz/create" });
+  }, [sessionChecked, loggedIn, open]);
 
   if (!hydrated) return <div className="text-muted-foreground p-8 text-sm">Yuklanmoqda...</div>;
 

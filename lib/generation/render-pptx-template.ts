@@ -2,7 +2,8 @@ import JSZip from "jszip";
 import { fetchImageBytes, type ImageBytes } from "./slide-images";
 import { buildSlideDeck } from "./slides";
 import { slideNotes } from "./slide-layout";
-import type { Placeholder, TemplateLayout, TemplateProfile, TemplateRole } from "./pptx-template";
+import { TEMPLATE_MAX_XML, type Placeholder, type TemplateLayout, type TemplateProfile, type TemplateRole } from "./pptx-template";
+import { loadZipCapped, readZipText, type ZipBudget } from "./translate/xml-scan";
 import { contentOf, roleFor, type Para } from "./template-content";
 import { xmlEscape } from "./xml";
 export { contentOf, roleFor };
@@ -139,6 +140,106 @@ type SlideEntry = {
   notes?: string;
 };
 
+/*
+ * SECB-01 (W1-D review R1): `assemble` foydalanuvchi namunasining XML iga
+ * qo'llaydigan `/<Override\b[^>]*PartName="…"[^>]*\/>/g`,
+ * `/<Relationship\b[^>]*Type="…"[^>]*\/>/g`, `/<p:sldIdLst>[\s\S]*?<\/p:sldIdLst>/`
+ * yopilmagan tegda har boshlanishdan oxirigacha qayta skanerlardi (O(n²):
+ * 200 KB ≈ 2,5 s, 40 MB byudjet ichida — daqiqalar, web jarayonida).
+ * Quyidagilar o'sha regexlar bilan AYNAN bir xil natija beradi (differensial
+ * fuzz), lekin har tegni bir marta ko'radi.
+ */
+
+function isWordCode(c: number): boolean {
+  return (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122) || c === 95;
+}
+
+/** `lit` `s` ning `i` o'rnida; `dotAny` — regexdagi `.` (qator oxiridan boshqa har belgi). */
+function litAt(s: string, i: number, lit: string, dotAny: boolean): boolean {
+  if (i + lit.length > s.length) return false;
+  for (let k = 0; k < lit.length; k++) {
+    const c = lit.charCodeAt(k);
+    const d = s.charCodeAt(i + k);
+    if (dotAny && c === 46) {
+      if (d === 10 || d === 13 || d === 0x2028 || d === 0x2029) return false;
+      continue;
+    }
+    if (c !== d) return false;
+  }
+  return true;
+}
+
+/**
+ * `xml.replace(/<NAME\b[^>]*(LIT₁|LIT₂…)([^"]*")?[^>]*\/>/g, "")` ning chiziqli
+ * teng varianti (`quoteTail` — LIT dan keyin `[^"]*"` bormi).
+ *
+ * Birinchi `[^>]*` birinchi `>` (`g1`) dan o'tolmaydi, ya'ni LIT shu oraliqda;
+ * u ochko'z — eng o'ngdagi mos LIT birinchi sinaladi. Oxirgi `[^>]*\/>` —
+ * LIT (va qo'shtirnoq) dan keyingi birinchi `>` va undan oldin `/`. Moslik
+ * bo'lmasa, `(o, g1)` dagi boshqa ochilishlar ham aynan shu sabab bilan
+ * yiqiladi — qidiruv `g1` dan davom etadi.
+ */
+function removeTags(xml: string, name: string, lits: string[], opts: { quoteTail: boolean; dotAny: boolean }): string {
+  const open = `<${name}`;
+  let out = "";
+  let from = 0;
+  let o = xml.indexOf(open);
+  while (o >= 0) {
+    const a = o + open.length;
+    if (a < xml.length && isWordCode(xml.charCodeAt(a))) {
+      o = xml.indexOf(open, o + 1);
+      continue;
+    }
+    const g1 = xml.indexOf(">", a);
+    // `/>` uchun `>` kerak — undan keyingi ochilishlarda ham bo'lmaydi.
+    if (g1 < 0) break;
+    let end = -1;
+    for (let p = g1 - 1; p >= a && end < 0; p--) {
+      for (const lit of lits) {
+        if (!litAt(xml, p, lit, opts.dotAny)) continue;
+        let q = p + lit.length;
+        if (opts.quoteTail) {
+          const quote = xml.indexOf('"', q);
+          if (quote < 0) continue;
+          q = quote + 1;
+        }
+        // `[a, g1)` da `>` yo'q: q ≤ g1 bo'lsa birinchi `>` — aynan g1.
+        const g2 = q <= g1 ? g1 : xml.indexOf(">", q);
+        if (g2 > q && xml.charCodeAt(g2 - 1) === 47) {
+          end = g2 + 1;
+          break;
+        }
+      }
+    }
+    if (end < 0) {
+      o = xml.indexOf(open, g1);
+      continue;
+    }
+    out += xml.slice(from, o);
+    from = end;
+    o = xml.indexOf(open, end);
+  }
+  return from ? out + xml.slice(from) : xml;
+}
+
+/** `xml.replace(/OPEN[\s\S]*?CLOSE/, rep)` — birinchi ochilishdan keyingi birinchi yopilish. */
+function replaceFirstBlock(xml: string, open: string, close: string, rep: string): string {
+  const o = xml.indexOf(open);
+  if (o < 0) return xml;
+  const c = xml.indexOf(close, o + open.length);
+  if (c < 0) return xml;
+  return xml.slice(0, o) + rep + xml.slice(c + close.length);
+}
+
+/**
+ * Namuna zip'idan XML — `parsePptxTemplate` bilan bir xil byudjet ichida.
+ * Tuzatishdan OLDIN saqlangan namunalar hech qachon tekshirilmagan edi.
+ */
+async function readTemplateText(zip: JSZip, path: string, budget: ZipBudget): Promise<string> {
+  const file = zip.file(path);
+  return file ? readZipText(file, budget) : "";
+}
+
 /**
  * Namuna zip'idagi eski slaydlarni olib tashlab, `entries` ni yozadi:
  * `slideN.xml` + rels, notes, `[Content_Types].xml`, `presentation.xml`
@@ -148,15 +249,17 @@ async function assemble(zip: JSZip, entries: SlideEntry[]): Promise<Uint8Array> 
   for (const name of Object.keys(zip.files)) {
     if (/^ppt\/slides\//.test(name) || /^ppt\/notesSlides\//.test(name)) zip.remove(name);
   }
-  let ct = (await zip.file("[Content_Types].xml")?.async("string")) ?? "";
-  ct = ct.replace(/<Override\b[^>]*PartName="\/ppt\/(slides|notesSlides)\/[^"]*"[^>]*\/>/g, "");
+  const budget: ZipBudget = { left: TEMPLATE_MAX_XML };
+  let ct = await readTemplateText(zip, "[Content_Types].xml", budget);
+  ct = removeTags(ct, "Override", ['PartName="/ppt/slides/', 'PartName="/ppt/notesSlides/'], { quoteTail: true, dotAny: false });
   if (!/Extension="jpeg"/i.test(ct)) ct = ct.replace("</Types>", '<Default Extension="jpeg" ContentType="image/jpeg"/></Types>');
   if (!/Extension="png"/i.test(ct)) ct = ct.replace("</Types>", '<Default Extension="png" ContentType="image/png"/></Types>');
 
-  let presRels = (await zip.file("ppt/_rels/presentation.xml.rels")?.async("string")) ?? "";
-  presRels = presRels.replace(new RegExp(`<Relationship\\b[^>]*Type="${REL_SLIDE}"[^>]*/>`, "g"), "");
-  let pres = (await zip.file("ppt/presentation.xml")?.async("string")) ?? "";
-  pres = pres.replace(/<p:sldIdLst>[\s\S]*?<\/p:sldIdLst>/, "<p:sldIdLst/>");
+  let presRels = await readTemplateText(zip, "ppt/_rels/presentation.xml.rels", budget);
+  // Eski kod `new RegExp` bilan qurardi — URI dagi `.` regex «har belgi» edi; shu saqlanadi.
+  presRels = removeTags(presRels, "Relationship", [`Type="${REL_SLIDE}"`], { quoteTail: false, dotAny: true });
+  let pres = await readTemplateText(zip, "ppt/presentation.xml", budget);
+  pres = replaceFirstBlock(pres, "<p:sldIdLst>", "</p:sldIdLst>", "<p:sldIdLst/>");
   if (!/<p:sldIdLst\/>/.test(pres)) {
     // Namunada umuman slayd bo'lmagan — ro'yxatni masterlardan keyin qo'shamiz.
     pres = pres.replace(/(<\/p:sldMasterIdLst>)/, "$1<p:sldIdLst/>");
@@ -225,7 +328,7 @@ export async function renderLayoutSheet(
   templateBytes: Uint8Array | ArrayBuffer,
   profile: TemplateProfile,
 ): Promise<{ bytes: Uint8Array; pages: { layoutPath: string; roles: TemplateRole[] }[] }> {
-  const zip = await JSZip.loadAsync(templateBytes);
+  const zip = await loadZipCapped(templateBytes);
   const pages: { layoutPath: string; roles: TemplateRole[] }[] = [];
   for (const role of TEMPLATE_ROLES) {
     const path = profile.roles[role];
@@ -251,7 +354,7 @@ export async function renderPptxWithTemplate(
   profile: TemplateProfile,
   opts?: { resolveImage?: (url: string) => Promise<ImageBytes | null> },
 ): Promise<BuiltFile> {
-  const zip = await JSZip.loadAsync(templateBytes);
+  const zip = await loadZipCapped(templateBytes);
   const deck = buildSlideDeck(doc);
   const entries: SlideEntry[] = [];
   let mediaN = 1;

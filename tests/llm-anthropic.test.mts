@@ -235,9 +235,9 @@ test("kalitsiz — `new Anthropic()` chaqirilmaydi (deps.client stub ishlatiladi
   assert.equal(called, 1);
 });
 
-test("SDK mijozi `maxRetries: 1` bilan quriladi — timeout uch barobar bo'lmasin", () => {
+test("SDK mijozi `maxRetries: 0` bilan quriladi — qayta urinishni faqat zanjir boshqaradi (timeout ko'paymasin)", () => {
   const src = readFileSync(new URL("../lib/generation/llm/anthropic.ts", import.meta.url), "utf8");
-  assert.match(src, /new Anthropic\(\{[^}]*timeout: opts\.timeoutMs,\s*maxRetries: 1\s*\}\)/);
+  assert.match(src, /new Anthropic\(\{[^}]*timeout: opts\.timeoutMs,\s*maxRetries: 0\s*\}\)/);
 });
 
 test("describeNetError: undici `fetch failed` sababi (`cause.code`) matnga qo'shiladi", async () => {

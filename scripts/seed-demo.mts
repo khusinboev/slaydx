@@ -82,7 +82,7 @@ const SAMPLES: Record<string, FormValues> = {
     fullName: "Abdujabbor Husinboyev",
     location: "Toshkent, O'zbekiston",
     email: "info@slaydxx.uz",
-    phone: "+998997333896",
+    phone: "+998901234567", // namunaviy (haqiqiy emas) raqam — bu shunchaki rezyume DEMO kontenti
     targetRole: "Frontend dasturchi",
     summary: "3 yillik tajribaga ega, React va Next.js bilan ishlaydi.",
     tone: "professional",

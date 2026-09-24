@@ -27,6 +27,7 @@
  */
 import { RESUME_LIMITS, type ResumeExperience, type ResumeLabels } from "./model";
 import type { ResumeInput } from "./input";
+import { safeSlice } from "../safe-text";
 
 /* ────────────────────────── model javobi shakli ────────────────────────── */
 
@@ -267,7 +268,7 @@ export function orgCandidates(text: string): string[] {
 /* ────────────────────────── qo'riqchi ────────────────────────── */
 
 function clip(v: unknown, max: number): string {
-  return typeof v === "string" ? v.trim().slice(0, max) : "";
+  return typeof v === "string" ? safeSlice(v.trim(), max) : "";
 }
 
 /** Jumlalarga ajratadi (nuqta/undov/so'roqdan keyin). */

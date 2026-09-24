@@ -31,6 +31,7 @@ import type { AcademicDoc, Block, DocMeta, DocSection } from "../../types";
 import type { CompleteFn } from "../../research/pipeline";
 import { llmEnabled } from "../../llm";
 import { CostMeter, complete as completeRole } from "../../llm-roles";
+import { assertJobTime } from "../../deadline";
 import { parseLlmObject } from "../../json";
 import { remainingMs } from "../../quality";
 import type { GameBuildOpts, GameBuilt } from "../engine";
@@ -170,10 +171,12 @@ export async function buildFlashcardsDoc(meta: DocMeta, values: FormValues, opts
   const ask = async (user: string, maxTokens: number): Promise<string | null> => {
     const timeoutMs = Math.min(CALL_MS, remainingMs(deadline));
     if (timeoutMs < MIN_CALL_MS) {
+      // Ish muddati tugagan (EXT-03) — asosiy yozuv: yarim o'yin emas, `DeadlineError`.
+      assertJobTime(deadline, "flashcards:writer", MIN_CALL_MS);
       console.warn(`[flashcards] byudjet tugadi: ${timeoutMs} ms qoldi`);
       return null;
     }
-    const r = await complete("writer", system, user, { json: true, maxTokens, timeoutMs });
+    const r = await complete("writer", system, user, { json: true, maxTokens, timeoutMs, deadline });
     if (r?.usage) {
       meter.add(r.usage);
       opts.onUsage?.(r.usage);
@@ -186,6 +189,7 @@ export async function buildFlashcardsDoc(meta: DocMeta, values: FormValues, opts
   const want = input.cardCount;
   const seen = new Set<string>();
   const cards: Flashcard[] = [];
+  assertJobTime(deadline, "flashcards:writer", MIN_CALL_MS);
   const writeDeadline = deadline - (opts.polish === false ? CARDS_REVIEW_RESERVE_MS : CARDS_REVIEW_RESERVE_MS + CARDS_POLISH_RESERVE_MS);
 
   for (let round = 0; round < CARDS_MAX_ROUNDS && cards.length < want; round++) {

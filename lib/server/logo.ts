@@ -1,7 +1,9 @@
 import "server-only";
 import { createHash } from "node:crypto";
-import { query, queryOne } from "./db";
+import { queryOne } from "./db";
 import { ApiError } from "./api";
+import { readUploadForm } from "./upload-body";
+import { withUploadQuota } from "./upload-quota";
 import { sniffImageType } from "../generation/slide-images";
 
 /**
@@ -23,18 +25,26 @@ function assetIdFor(bytes: Buffer): string {
 
 export type LogoUploadResult = { assetId: string; mime: "image/png" | "image/jpeg"; size: number };
 
-/** `ON CONFLICT DO NOTHING` — ikkinchi marta bir xil bayt kelsa jim o'tadi. */
+/**
+ * Ikkinchi marta bir xil bayt kelsa o'sha qator qoladi, faqat `created_at`
+ * yangilanadi (W2-C): qayta tanlangan eski logotipni kelajakdagi
+ * «foydalanilmagan 90 kun» tozalashi (`purgeUnusedUploads`) «Yaratish»
+ * bosilguncha o'chirib yubormasin.
+ * Yozish foydalanuvchi kvotasi ostida (C13, `upload-quota.ts`).
+ */
 export async function putLogo(
   userId: string,
   bytes: Buffer,
   mime: "image/png" | "image/jpeg",
 ): Promise<LogoUploadResult> {
   const assetId = assetIdFor(bytes);
-  await query(
-    `INSERT INTO logo_uploads (user_id, asset_id, mime, size_bytes, bytes)
-     VALUES ($1, $2, $3, $4, $5)
-     ON CONFLICT (user_id, asset_id) DO NOTHING`,
-    [userId, assetId, mime, bytes.byteLength, bytes],
+  await withUploadQuota(userId, "logo", { assetIds: [assetId], bytes: bytes.byteLength }, (c) =>
+    c.query(
+      `INSERT INTO logo_uploads (user_id, asset_id, mime, size_bytes, bytes)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (user_id, asset_id) DO UPDATE SET created_at = now()`,
+      [userId, assetId, mime, bytes.byteLength, bytes],
+    ),
   );
   return { assetId, mime, size: bytes.byteLength };
 }
@@ -77,15 +87,10 @@ export async function logoDataUrl(userId: string, assetId: string): Promise<stri
  * to'g'ridan-to'g'ri chaqira oladi.
  */
 export async function uploadLogo(req: Request, userId: string): Promise<LogoUploadResult> {
-  // MUHIM: `req.formData()` butun tanani xotiraga o'qiydi (`extract`
-  // route'dagi izohga qarang) — hajm shundan OLDIN, sarlavhadan
-  // tekshiriladi.
-  const declared = Number(req.headers.get("content-length") ?? 0);
-  if (Number.isFinite(declared) && declared > LOGO_MAX_BYTES + 64 * 1024) {
-    throw new ApiError("Fayl 2 MB dan katta", 413);
-  }
-
-  const form = await req.formData().catch(() => null);
+  // Hajm tana O'QILAYOTGANDA tekshiriladi — chunked so'rovda ham (SECB-05):
+  // ilgari faqat `Content-Length` ga ishonilardi va sarlavhasiz tana
+  // `req.formData()` bilan to'liq xotiraga yutilardi.
+  const form = await readUploadForm(req, LOGO_MAX_BYTES + 64 * 1024, "Fayl 2 MB dan katta");
   const file = form?.get("file");
   if (!(file instanceof File)) throw new ApiError("Fayl yuborilmadi", 400);
   if (file.size > LOGO_MAX_BYTES) throw new ApiError("Fayl 2 MB dan katta", 413);

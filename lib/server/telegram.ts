@@ -25,39 +25,119 @@ function api(method: string): string {
   return `https://api.telegram.org/bot${env.telegramBotToken}/${method}`;
 }
 
-async function call<T>(method: string, payload: unknown): Promise<T | null> {
-  if (!botConfigured()) return null;
-  try {
-    const res = await fetch(api(method), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(15_000),
-    });
-    const data = (await res.json()) as { ok: boolean; result?: T; description?: string };
-    if (!data.ok) {
-      console.warn(`[telegram] ${method}:`, data.description ?? "xato");
-      return null;
-    }
-    return data.result ?? null;
-  } catch (e) {
-    console.warn(`[telegram] ${method}:`, e instanceof Error ? e.message : "tarmoq xatosi");
-    return null;
+/** 429 dan keyingi yagona qayta urinishgacha eng uzoq kutish (webhook javobi kechikmasin). */
+const TELEGRAM_RETRY_AFTER_CAP_S = 5;
+
+/**
+ * Telegram vaqtincha javob bermadi (tarmoq/timeout, 5xx yoki qayta
+ * urinishdan keyin ham 429) — update'ni keyinroq QAYTA ishlash kerak
+ * (BEA-17). Webhook buni 500 ga aylantiradi va Telegram qayta yuboradi.
+ */
+export class TelegramTransientError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "TelegramTransientError";
   }
 }
 
+/** Postgres SQLSTATE: ulanish (08), resurs (53), o'chirilmoqda (57P0x), timeout (57014), poyga (40001/40P01). */
+const RETRYABLE_PG = /^(08|53|57P0)|^(57014|40001|40P01)$/;
+const RETRYABLE_NET = new Set(["ECONNREFUSED", "ECONNRESET", "ETIMEDOUT", "EPIPE", "ENOTFOUND", "EAI_AGAIN"]);
+
+/**
+ * Update'ni keyinroq qayta ishlash foyda beradimi (review N1): faqat
+ * Telegram'ning vaqtinchalik xatosi va baza ULANISH/yuklama xatolari.
+ * Aniq (deterministik) xato — masalan kod nuqsoni yoki `22003` — qayta
+ * yetkazishda ham takrorlanadi; unga 500 bersak Telegram uni bir necha
+ * marta qayta yuborib, boshqa update'larni sekinlashtirardi.
+ */
+export function isRetryableUpdateError(e: unknown): boolean {
+  if (e instanceof TelegramTransientError) return true;
+  const code = String((e as { code?: unknown } | null)?.code ?? "");
+  if (RETRYABLE_PG.test(code) || RETRYABLE_NET.has(code)) return true;
+  const msg = e instanceof Error ? e.message : "";
+  return /Connection terminated|timeout exceeded when trying to connect|connect ECONN/i.test(msg);
+}
+
+async function call<T>(
+  method: string,
+  payload: unknown,
+  opts: { throwTransient?: boolean } = {},
+): Promise<T | null> {
+  if (!botConfigured()) return null;
+  /*
+   * 429 (`parameters.retry_after`) — BITTA cheklangan qayta urinish (audit
+   * EXT-05): ko'p `/start` bir paytda kelganda (~30 xabar/s chegarasi)
+   * kirish havolasi jimgina yo'qolmasin. Boshqa xatolar qayta urinilmaydi.
+   *
+   * `throwTransient` — vaqtinchalik xatoda `null` o'rniga
+   * `TelegramTransientError` (BEA-17). Doimiy xato (400/403 — masalan
+   * foydalanuvchi botni bloklagan) baribir `null`: uni qayta urinish
+   * foydasiz.
+   */
+  for (let attempt = 0; attempt < 2; attempt++) {
+    let data: {
+      ok: boolean;
+      result?: T;
+      description?: string;
+      error_code?: number;
+      parameters?: { retry_after?: number };
+    };
+    try {
+      const res = await fetch(api(method), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(15_000),
+      });
+      // 502 da proxy HTML qaytarishi mumkin — `json()` xatosi ham tarmoq xatosi.
+      data = (await res.json()) as typeof data;
+    } catch (e) {
+      const why = e instanceof Error ? e.message : "tarmoq xatosi";
+      console.warn(`[telegram] ${method}:`, why);
+      if (opts.throwTransient) throw new TelegramTransientError(`${method}: ${why}`);
+      return null;
+    }
+    if (!data.ok) {
+      console.warn(`[telegram] ${method}:`, data.description ?? "xato");
+      const after = Number(data.parameters?.retry_after);
+      // Uzunroq `retry_after` — 5 s dan keyingi urinish ham 429 bo'lardi, kutmaymiz.
+      if (attempt === 0 && data.error_code === 429 && Number.isFinite(after) && after >= 0 && after <= TELEGRAM_RETRY_AFTER_CAP_S) {
+        await new Promise((r) => setTimeout(r, after * 1000));
+        continue;
+      }
+      const code = Number(data.error_code ?? 0);
+      if (opts.throwTransient && (code === 429 || code >= 500)) {
+        throw new TelegramTransientError(`${method}: ${code} ${data.description ?? ""}`.trim());
+      }
+      return null;
+    }
+    return data.result ?? null;
+  }
+  return null;
+}
+
+/**
+ * Xabar yuboradi. Doimiy xatoda (`403` — bot bloklangan, `400`) `false`;
+ * vaqtinchalik xatoda `TelegramTransientError` otadi — `handleUpdate`
+ * update'ni «ishlangan» deb belgilamaydi va Telegram uni qayta yuboradi.
+ */
 export async function sendMessage(
   chatId: number | string,
   text: string,
   extra: Record<string, unknown> = {},
 ): Promise<boolean> {
-  const out = await call("sendMessage", {
-    chat_id: chatId,
-    text,
-    parse_mode: "HTML",
-    disable_web_page_preview: true,
-    ...extra,
-  });
+  const out = await call(
+    "sendMessage",
+    {
+      chat_id: chatId,
+      text,
+      parse_mode: "HTML",
+      disable_web_page_preview: true,
+      ...extra,
+    },
+    { throwTransient: true },
+  );
   return out !== null;
 }
 
@@ -142,8 +222,12 @@ export async function attachTicket(nonce: string, profile: TelegramProfile): Pro
  * Xavfsizlik modeli saytdan boshlangan oqim bilan BIR XIL: token 32
  * tasodifiy bayt, bazada faqat xesh, bir martalik, 5 daqiqa; u faqat
  * shu Telegram chatiga boradi. Farq faqat nonce'ni kim yaratganida —
- * bu yerda nonce hech qachon brauzerga ko'rinmaydi, shuning uchun
- * «o'z nonce'ini qurbonga yuborish» hujumi bu oqimda umuman yo'q.
+ * bu yerda nonce hech qachon brauzerga ko'rinmaydi.
+ *
+ * LEKIN (SECA-05): chat egasi HAVOLANING O'ZINI boshqaga yuborishi
+ * mumkin — tajovuzkor o'z akkauntiga havola olib, qurbonga «shu yerdan
+ * kiring» deydi (login-CSRF). Shuning uchun `/enter` GET darhol kirmaydi:
+ * «Siz <ism> sifatida kirmoqdasiz» sahifasi va tugma (POST + Origin).
  *
  * Ikki qadam (`createTicket` + `attachTicket`) bitta INSERT ga
  * yig'ildi: oraliq «bog'lanmagan chipta» holati bu yerda kerak emas.
@@ -204,6 +288,26 @@ export async function redeemLoginToken(token: string): Promise<TicketCheck> {
   return { ok: true, user: await upsertTelegramUser(profile) };
 }
 
+/**
+ * Tokenni SARFLAMASDAN ko'radi: kimning akkauntiga kirilmoqda (SECA-05).
+ * Tasdiqlash sahifasi uchun — sessiya faqat `redeemLoginToken` (POST) da.
+ */
+export async function peekLoginToken(
+  token: string,
+): Promise<{ telegramId: string; username: string | null; name: string } | null> {
+  const raw = String(token ?? "").trim();
+  if (raw.length < 20 || raw.length > 200) return null;
+  const rows = await query<{ telegram_id: string; username: string | null; name: string | null }>(
+    `SELECT telegram_id, username, name
+       FROM login_tickets
+      WHERE token_hash = $1 AND consumed_at IS NULL AND expires_at > now() AND telegram_id IS NOT NULL`,
+    [hashToken(raw)],
+  );
+  const t = rows[0];
+  if (!t) return null;
+  return { telegramId: String(t.telegram_id), username: t.username, name: t.name || "Foydalanuvchi" };
+}
+
 /** Muddati o'tgan chiptalarni tozalaydi. */
 export async function purgeExpiredTickets(): Promise<void> {
   await query("DELETE FROM login_tickets WHERE expires_at < now() - interval '1 hour'");
@@ -215,20 +319,49 @@ export async function purgeExpiredTickets(): Promise<void> {
 export type TelegramUpdate = {
   update_id: number;
   message?: {
-    chat: { id: number };
+    // `type` — faqat shaxsiy chatda ("private") kontakt qabul qilinadi;
+    // guruh/kanalda botga ulashilgan kontakt hech qachon "o'zining
+    // raqami" bo'la olmaydi (reviewer nit — chat.type === "private").
+    chat: { id: number; type?: string };
     text?: string;
     from?: { id: number; username?: string; first_name?: string; last_name?: string };
     contact?: { phone_number: string; user_id?: number };
+    // Forward qilingan xabar belgilari (Bot API): SECA-01 — forward qilingan
+    // kontaktni ham "o'ziniki" deb qabul qilib bo'lmaydi, hattoki uning
+    // `user_id`si jo'natuvchiga teng chiqib qolgan taqdirda ham (masalan
+    // odam o'z kontaktini o'ziga forward qilsa emas — bu maydonlar aynan
+    // ASL jo'natuvchi haqida, joriy jo'natuvchi haqida emas).
+    forward_origin?: unknown;
+    forward_date?: number;
+    forward_from?: { id: number };
   };
 };
 
-/** Bir xil update ikki marta kelmasin (webhook takrorlashi normal holat). */
-async function isNewUpdate(updateId: number): Promise<boolean> {
+/**
+ * Bir xil update ikki marta ishlanmasin (webhook takrorlashi normal holat).
+ *
+ * Qator — «bu update'ni men olgan/ishlaganman» belgisi: `INSERT … ON
+ * CONFLICT DO NOTHING` parallel ikkinchi yetkazishni darhol to'sadi.
+ * Ishlash muvaffaqiyatsiz bo'lsa `releaseUpdate` belgini O'CHIRADI
+ * (BEA-17) — ya'ni qator faqat MUVAFFAQIYATLI ishlangan update uchun
+ * qoladi va Telegram'ning qayta yetkazishi yana ishlanadi.
+ *
+ * Ma'lum bo'shliq (review N2, kam uchraydi): Telegram birinchi urinish
+ * HALI ishlayotganda (15 s timeout ×2 + `retry_after` — ~35 s gacha)
+ * qayta yuborsa, ikkinchisi belgini ko'rib 200 oladi; birinchisi keyin
+ * yiqilib belgini o'chirsa, bu update yo'qoladi. Foydalanuvchi /login ni
+ * qayta yozadi — to'liq kafolat uchun holat ustuni va lease kerak bo'lardi.
+ */
+async function claimUpdate(updateId: number): Promise<boolean> {
   const rows = await query<{ update_id: string }>(
     "INSERT INTO telegram_updates (update_id) VALUES ($1) ON CONFLICT DO NOTHING RETURNING update_id",
     [updateId],
   );
   return rows.length > 0;
+}
+
+async function releaseUpdate(updateId: number): Promise<void> {
+  await query("DELETE FROM telegram_updates WHERE update_id = $1", [updateId]);
 }
 
 /**
@@ -250,7 +383,7 @@ const WELCOME = [
   "",
   "SlaydX — AI yordamida slayd, referat, kurs ishi, maqola va o'qituvchi hujjatlarini yaratadi.",
   "",
-  "Saytga kirish uchun quyidagi tugmani bosing — akkauntingiz avtomatik ochiladi.",
+  "Saytga kirish uchun quyidagi tugmani bosing va ochilgan sahifada «Kirish» ni tasdiqlang.",
   "Havola <b>bir martalik</b> va 5 daqiqa amal qiladi. Yangi havola kerak bo'lsa /login yozing.",
 ].join("\n");
 
@@ -283,11 +416,37 @@ async function sendLoginLink(chatId: number, link: string, intro: string): Promi
  * from.id`) — aks holda foydalanuvchi boshqa birovning vizit
  * kartochkasini ulashib, o'sha raqam nomidan admin bo'lib ololardi.
  *
- * Raqam har doim saqlanadi (keyingi safar qayta ulashish shart
- * bo'lmasin), lekin admin ekanligi HAR SAFAR `isAdminPhone` bilan
- * qayta tekshiriladi — ro'yxatdan o'chirilgan raqam avtomatik
- * huquqini yo'qotadi, saqlangan `phone` qatori o'zi hech narsani
- * bermaydi.
+ * SECA-01: Bot API'da `Contact.user_id` IXTIYORIY — u faqat Telegram
+ * yuboruvchi uchun ANIQLAY OLGAN raqamlarda beriladi. Har qanday
+ * vizit-kartochka yoki MTProto klient (masalan Pyrogram
+ * `send_contact(phone_number=...)`) uni umuman bermaydi. Shuning uchun
+ * "yo'q bo'lsa ham o'tkazib yuborish" QATʼIYAN NOTO'G'RI — faqat
+ * `user_id === fromId` bo'lgan holat qabul qilinadi, aks holda (yo'q
+ * yoki boshqa) rad etiladi. Forward qilingan xabar ham rad etiladi —
+ * forward qilingan kontaktning `user_id`si sof "o'z" kontakti bilan
+ * bir xil chiqishi mumkin, lekin xabarning o'zi jo'natuvchi tomonidan
+ * TANLAB yuborilmagan bo'lishi mumkin.
+ *
+ * Raqam Telegram YUBORGAN holida, XOM saqlanadi (`+<raqamlar>`) —
+ * hech qanday mamlakat-kodi TAXMINI YO'Q. Ilgari 9 xonali qiymat "998"
+ * bilan kengaytirilardi ("milliy format" deb taxmin qilib), lekin bu
+ * ikki jihatdan xato edi: (1) o'zining kontaktini ulashgan foydalanuvchi
+ * 9 xonali raqam yuborsa (masalan +299/+298/+376 kabi qisqa xalqaro
+ * raqamlar), uning haqiqiy raqami BUZILARDI; (2) xuddi shu kengaytirish
+ * tasodifan yoki ataylab admin raqamining ko'rinishini hosil qilishi
+ * mumkin edi. Telegram o'zining kontaktini ulashganda HAR DOIM to'liq
+ * xalqaro raqamni (mamlakat kodi bilan) beradi — taxmin qilish shart
+ * emas. Shubhali uzunlik (E.164 diapazonidan tashqari, 7–15 raqamdan
+ * kam/ko'p) rad etiladi — bunday qiymat haqiqiy telefon bo'la olmaydi.
+ *
+ * Admin ekanligi HAR SAFAR `isAdminPhone` bilan qayta tekshiriladi —
+ * ro'yxatdan o'chirilgan raqam avtomatik huquqini yo'qotadi, saqlangan
+ * `phone` qatori o'zi hech narsani bermaydi. `isAdminPhone` QATʼIY
+ * (kengaytirishsiz, aniq raqamlar) taqqoslaydi.
+ *
+ * Faqat SHAXSIY chatda qabul qilinadi (`chat.type === "private"`) —
+ * guruh/kanalda ulashilgan kontakt bot uchun "o'zining raqami" bo'la
+ * olmaydi.
  *
  * Foydalanuvchi hali saytga bir marta ham kirmagan bo'lsa (bazada
  * akkaunti yo'q) — kontakt e'tiborsiz qoldiriladi: avval «Telegram
@@ -297,12 +456,19 @@ async function handleContact(
   chatId: number,
   fromId: number,
   contact: { phone_number: string; user_id?: number },
+  forwarded: boolean,
+  isPrivateChat: boolean,
 ): Promise<void> {
-  if (contact.user_id != null && contact.user_id !== fromId) {
+  if (forwarded || contact.user_id !== fromId || !isPrivateChat) {
     await sendMessage(chatId, "Faqat o'zingizning raqamingizni ulashing.");
     return;
   }
-  const phone = `+${contact.phone_number.replace(/\D/g, "")}`;
+  const digits = contact.phone_number.replace(/\D/g, "");
+  if (digits.length < 7 || digits.length > 15) {
+    await sendMessage(chatId, "Faqat o'zingizning raqamingizni ulashing.");
+    return;
+  }
+  const phone = `+${digits}`;
   let updated: { id: string }[];
   try {
     updated = await query<{ id: string }>(
@@ -334,14 +500,44 @@ async function handleContact(
   }
 }
 
+/**
+ * Update'ni bir marta ishlaydi (ko'pi bilan bir muvaffaqiyatli marta).
+ *
+ * BEA-17 / EXT-05: ilgari id ishlashdan OLDIN yozilib qolardi va webhook
+ * har xatoni yutib 200 qaytarardi — Telegram 429/5xx, tarmoq yoki baza
+ * xatosida kirish havolasi jimgina yo'qolar, qayta yetkazish esa
+ * «takror» deb tashlanardi. Endi xatoda belgi olib tashlanadi va xato
+ * yuqoriga otiladi: webhook 500 qaytaradi, Telegram qayta yuboradi.
+ * Qayta ishlash xavfsiz: `/login`/`/start` yangi chipta/token yaratadi
+ * (eskisi yetkazilmagan va 5 daqiqada eskiradi), kontakt UPDATE —
+ * idempotent.
+ */
 export async function handleUpdate(update: TelegramUpdate): Promise<void> {
-  if (!(await isNewUpdate(update.update_id))) return;
+  if (!(await claimUpdate(update.update_id))) return;
+  try {
+    await processUpdate(update);
+  } catch (e) {
+    try {
+      await releaseUpdate(update.update_id);
+    } catch (releaseErr) {
+      // Belgi qolib ketdi — bu update endi qayta ishlanmaydi; jurnalda ko'rinsin.
+      console.error(
+        `[telegram] update ${update.update_id} belgisi o'chirilmadi:`,
+        releaseErr instanceof Error ? releaseErr.message : releaseErr,
+      );
+    }
+    throw e;
+  }
+}
 
+async function processUpdate(update: TelegramUpdate): Promise<void> {
   const msg = update.message;
   if (!msg?.from) return;
 
   if (msg.contact) {
-    await handleContact(msg.chat.id, msg.from.id, msg.contact);
+    const forwarded = msg.forward_origin != null || msg.forward_date != null || msg.forward_from != null;
+    const isPrivateChat = msg.chat.type === "private";
+    await handleContact(msg.chat.id, msg.from.id, msg.contact, forwarded, isPrivateChat);
     return;
   }
   if (!msg.text) return;

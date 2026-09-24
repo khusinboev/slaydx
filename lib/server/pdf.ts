@@ -1,12 +1,9 @@
 import "server-only";
-import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { promisify } from "node:util";
-
-const run = promisify(execFile);
+import { type Gate, runGroup, sofficeGate } from "./soffice-gate";
 
 /**
  * DOCX / PPTX → PDF.
@@ -18,7 +15,12 @@ const run = promisify(execFile);
  *
  * Konvertatsiya TALAB BO'YICHA qilinadi, generatsiya paytida emas: fayllar
  * Postgres `BYTEA` da saqlanadi va har hujjatning ikkinchi nusxasi bazani
- * ikki barobar og'irlashtirardi.
+ * ikki barobar og'irlashtirardi. Takroriy ko'rishlar uchun natija web
+ * konteynerining vaqtinchalik diskida keshlanadi (`pdf-cache.ts`).
+ *
+ * C07: har chaqiruv umumiy `soffice` darvozasidan o'tadi (bir vaqtda
+ * `PDF_MAX_CONCURRENCY` ta) va jarayonlar guruhida ishlaydi — vaqt
+ * tugasa launcher ham, `soffice.bin` ham o'ldiriladi (`soffice-gate.ts`).
  */
 
 const CANDIDATES = ["/usr/bin/soffice", "/usr/bin/libreoffice", "/usr/local/bin/soffice"];
@@ -41,11 +43,37 @@ export function pdfFileName(name: string): string {
   return `${name.replace(/\.(docx|pptx)$/i, "")}.pdf`;
 }
 
-export async function toPdf(bytes: Uint8Array, fileName: string): Promise<Buffer | null> {
+export type ToPdfDeps = {
+  /** Test seam: umumiy darvoza o'rniga. */
+  gate?: Gate;
+  /** Test seam: vaqt chegarasi (standart 90 s). */
+  timeoutMs?: number;
+  /**
+   * Slot OLINGANDAN KEYIN, `soffice` dan oldin (masalan foydalanuvchi
+   * limiti). Band (503) urinishda chaqirilmaydi — `Retry-After` ga amal
+   * qilgan foydalanuvchi kvotasini yoqmaydi (W2-A review R2). Xato
+   * tashlasa `soffice` ishga tushmaydi, slot `run` ning `finally` sida qaytadi.
+   */
+  beforeRun?: () => Promise<void>;
+};
+
+/**
+ * `null` — LibreOffice yo'q, kirish yaroqsiz yoki o'girish yiqildi/vaqti
+ * tugadi. `SofficeBusyError` — hamma slot band va kutish muddati o'tdi
+ * (chaqiruvchi 503 + `Retry-After` beradi); bu xato YUTILMAYDI.
+ */
+export async function toPdf(bytes: Uint8Array, fileName: string, deps: ToPdfDeps = {}): Promise<Buffer | null> {
   const bin = pdfBinary();
   if (!bin) return null;
   if (!bytes.byteLength || bytes.byteLength > MAX_INPUT_BYTES) return null;
+  const gate = deps.gate ?? sofficeGate();
+  return gate.run(async () => {
+    await deps.beforeRun?.();
+    return convert(bin, bytes, fileName, deps.timeoutMs ?? TIMEOUT_MS);
+  });
+}
 
+async function convert(bin: string, bytes: Uint8Array, fileName: string, timeoutMs: number): Promise<Buffer | null> {
   const dir = await mkdtemp(join(tmpdir(), "slaydx-pdf-"));
   try {
     // Fayl nomi buyruq qatoriga tushadi — faqat xavfsiz belgilar qoldiramiz.
@@ -53,7 +81,9 @@ export async function toPdf(bytes: Uint8Array, fileName: string): Promise<Buffer
     const src = join(dir, `manba.${ext}`);
     await writeFile(src, bytes);
 
-    await run(
+    // Guruh to'liq o'lgandan keyingina qaytadi — `finally` dagi `rm`
+    // ishlayotgan `soffice.bin` ostidan profilni o'chirib yubormaydi (FILE-06).
+    await runGroup(
       bin,
       [
         "--headless",
@@ -69,7 +99,7 @@ export async function toPdf(bytes: Uint8Array, fileName: string): Promise<Buffer
         dir,
         src,
       ],
-      { timeout: TIMEOUT_MS, maxBuffer: 8 * 1024 * 1024 },
+      { timeoutMs },
     );
 
     const out = (await readdir(dir)).find((f) => f.toLowerCase().endsWith(".pdf"));
@@ -83,6 +113,8 @@ export async function toPdf(bytes: Uint8Array, fileName: string): Promise<Buffer
     console.warn("[pdf]", e instanceof Error ? e.message : "o‘girish xatosi");
     return null;
   } finally {
-    await rm(dir, { recursive: true, force: true }).catch(() => {});
+    await rm(dir, { recursive: true, force: true }).catch((e) =>
+      console.warn("[pdf] vaqtinchalik papka o'chmadi:", e instanceof Error ? e.message : e),
+    );
   }
 }

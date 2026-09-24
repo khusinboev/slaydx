@@ -1,4 +1,4 @@
-import { handler, json, optionalUser, requireUser } from "@/lib/server/api";
+import { ApiError, checkOrigin, handler, json, optionalUser, requireUser } from "@/lib/server/api";
 import { clearSessionCookie, revokeAllSessions, revokeCurrentSession } from "@/lib/server/session";
 import { env, llmConfigured, paymentsConfigured } from "@/lib/server/env";
 import { pdfAvailable } from "@/lib/server/pdf";
@@ -23,8 +23,16 @@ export const GET = handler("auth/session", async (req) => {
   });
 });
 
-/** Chiqish. `?all=1` — barcha qurilmalardan. */
+/**
+ * Chiqish. `?all=1` — barcha qurilmalardan.
+ *
+ * `checkOrigin` IKKALA shoxda ham (SECA-04): ilgari faqat `?all=1`
+ * (`requireUser` orqali) tekshirilardi. `SESSION_COOKIE_SAMESITE=none`
+ * rejimida boshqa sayt kredensial bilan `DELETE` yuborib foydalanuvchini
+ * majburan chiqarib yuborardi — chiqish ham holat o'zgarishi.
+ */
 export const DELETE = handler("auth/logout", async (req) => {
+  if (!checkOrigin(req)) throw new ApiError("So'rov manbasi noto'g'ri", 403);
   const url = new URL(req.url);
   if (url.searchParams.get("all") === "1") {
     const { user } = await requireUser(req);

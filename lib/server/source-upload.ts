@@ -2,8 +2,11 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { query, queryOne } from "./db";
 import { ApiError } from "./api";
+import { parseFailure, readUploadForm } from "./upload-body";
+import { parseInWorker } from "./parse-pool";
+import { assertUploadQuota, withUploadQuota } from "./upload-quota";
 import { extOf } from "../extract-text";
-import { extractSegments, stripTokens, type Extracted } from "../generation/translate/index";
+import { PdfPageLimitError } from "../generation/translate/pdf";
 import { TRANSLATION_MAX_CHARS, TRANSLATION_MIN_CHARS } from "../tools";
 import {
   SOURCE_MIME,
@@ -134,36 +137,26 @@ export type SourceCounter = (
   bytes: Uint8Array,
 ) => Promise<{ chars: number; text: string; pages?: number; segments?: number }>;
 
-/** `unpdf` sahifa soni — skaner PDF ni aniqlash uchun (`chars < 20 × pages`). */
-async function pdfPages(bytes: Uint8Array): Promise<number> {
-  try {
-    const { getDocumentProxy } = await import("unpdf");
-    const doc = await getDocumentProxy(bytes);
-    return doc.numPages ?? 0;
-  } catch {
-    // Sahifa sonini bilmasak `scanned` qoidasi ishlamaydi — bu XATO emas,
-    // shunchaki qo'shimcha tekshiruv o'tkazib yuboriladi.
-    return 0;
-  }
-}
-
 /**
  * Hisoblagich (WP3): `chars` — TARJIMA QILINADIGAN segmentlar yig'indisi
  * (`extractSegments`), ya'ni narx aynan modelga yuboriladigan hajmga
  * bog'lanadi: raqamli yacheykalar, URL, kod satrlari, sahifa raqami
  * maydonlari sanalmaydi. `text` — ko'rish uchun oddiy matn (tokenlarsiz).
  * `uploadSource` uni `deps.count` orqali chaqiradi (test seam).
+ *
+ * Tahlil alohida THREADda (`parse-pool.ts`, CONC-09): katta PDF yoki
+ * g'alati fayl web jarayonini muzlatmaydi, 15 s dan oshsa to'xtatiladi.
+ * PDF sahifa soni ham shu tahlildan olinadi — ikkinchi marta ochilmaydi.
  */
 export const DEFAULT_COUNTER: SourceCounter = async (kind, bytes) => {
-  let extracted: Extracted;
   try {
-    extracted = await extractSegments(kind, bytes);
+    return await parseInWorker({ kind: "source", source: kind, bytes });
   } catch (e) {
+    const pool = parseFailure(e);
+    if (pool) throw pool;
+    if (e instanceof PdfPageLimitError) throw new ApiError(e.message, 422, { code: "too-many-pages", pages: e.pages });
     throw new ApiError(e instanceof Error && e.message ? `Fayl o'qilmadi: ${e.message}` : "Fayl o'qilmadi", 422, { code: "unreadable" });
   }
-  const text = extracted.segments.map((s) => stripTokens(s.text)).join("\n");
-  const pages = kind === "pdf" ? (extracted.pdf?.pages ?? (await pdfPages(bytes))) : undefined;
-  return { chars: extracted.chars, text, pages, segments: extracted.segments.length };
 };
 
 export async function putSource(
@@ -173,12 +166,18 @@ export async function putSource(
 ): Promise<SourceUploadResult> {
   const assetId = assetIdFor(bytes);
   const text = row.text.slice(0, SOURCE_TEXT_LIMIT);
-  await query(
-    `INSERT INTO source_uploads (user_id, asset_id, name, kind, mime, size_bytes, bytes, chars, text)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-     ON CONFLICT (user_id, asset_id) DO UPDATE
-       SET chars = EXCLUDED.chars, text = EXCLUDED.text, name = EXCLUDED.name`,
-    [userId, assetId, row.name, row.kind, row.mime, bytes.byteLength, bytes, row.chars, text],
+  // Ajratilgan matn ham saqlanadi — kvotaga bayt bilan birga kiradi (C13).
+  // Qayta yuklash (bir xil xesh) `created_at` ni yangilaydi (BEA-19): 29-kuni
+  // qayta tanlangan fayl ertasi kuni `purgeOldSources` bilan o'chmasin.
+  const size = bytes.byteLength + Buffer.byteLength(text);
+  await withUploadQuota(userId, "source", { assetIds: [assetId], bytes: size }, (c) =>
+    c.query(
+      `INSERT INTO source_uploads (user_id, asset_id, name, kind, mime, size_bytes, bytes, chars, text)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+       ON CONFLICT (user_id, asset_id) DO UPDATE
+         SET chars = EXCLUDED.chars, text = EXCLUDED.text, name = EXCLUDED.name, created_at = now()`,
+      [userId, assetId, row.name, row.kind, row.mime, bytes.byteLength, bytes, row.chars, text],
+    ),
   );
   return {
     assetId,
@@ -301,14 +300,9 @@ export async function uploadSource(
   userId: string,
   deps: SourceUploadDeps = {},
 ): Promise<SourceUploadResult> {
-  // MUHIM: `req.formData()` butun tanani xotiraga o'qiydi — hajm shundan
-  // OLDIN, sarlavhadan tekshiriladi (`logo.ts` dagi izohga qarang).
-  const declared = Number(req.headers.get("content-length") ?? 0);
-  if (Number.isFinite(declared) && declared > SOURCE_MAX_BYTES + 64 * 1024) {
-    throw new ApiError("Fayl 20 MB dan katta", 413);
-  }
-
-  const form = await req.formData().catch(() => null);
+  // MUHIM: hajm tana O'QILAYOTGANDA tekshiriladi — sarlavha bo'lmasa ham
+  // (chunked) chegaradan ortiq bayt xotiraga tushmaydi (`upload-body.ts`).
+  const form = await readUploadForm(req, SOURCE_MAX_BYTES + 64 * 1024, "Fayl 20 MB dan katta");
   const file = form?.get("file");
   if (!(file instanceof File)) throw new ApiError("Fayl yuborilmadi", 400);
   if (file.size > SOURCE_MAX_BYTES) throw new ApiError("Fayl 20 MB dan katta", 413);
@@ -326,6 +320,10 @@ export async function uploadSource(
   // nomni avval kesib qo'ysak, kengaytma yo'qolib, haqiqiy DOCX 415 olardi.
   const kind = sniffSourceKind(clean, bytes);
   if (!kind) throw new ApiError("Format qo'llanmaydi: DOCX, PPTX, XLSX, PDF, TXT, MD, CSV", 415);
+
+  // Kvota sanashdan (PDF da soniyalar) OLDIN — sig'maydigan fayl CPU yemasin (C13).
+  // Yakuniy tekshiruv `putSource` da; sinov seami (`deps.put`) o'z saqlashini beradi.
+  if (!deps.put) await assertUploadQuota(userId, "source", { assetIds: [assetIdFor(bytes)], bytes: bytes.byteLength });
 
   const counted = await (deps.count ?? DEFAULT_COUNTER)(kind, bytes);
   const chars = Math.max(0, Math.floor(counted.chars));

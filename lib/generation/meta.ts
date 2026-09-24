@@ -6,6 +6,9 @@ import { isArticleTypeId } from "./article/types-registry";
 import { isPublicationProfileId } from "./article/profiles";
 import { parseFigureKinds } from "./article/input";
 import type { FormValues, ToolConfig } from "../types";
+// Kesish surrogatga xavfsiz: emoji chegarada yorilsa `doc_json` yozuvi yiqilardi (C03, BEB-01).
+import { safeSlice } from "./safe-text";
+import { tashkentYear } from "./tashkent-year";
 import { normalizeAudienceId } from "./slide-audience";
 import { isSlideBlockId, type SlideBlockId } from "./slide-blocks";
 import {
@@ -191,7 +194,7 @@ export function extractMeta(tool: ToolConfig, values: FormValues): DocMeta {
     topic,
     language,
     extra: s(values, "extra"),
-    sourceText: s(values, "sourceText").slice(0, SOURCE_TEXT_LIMIT),
+    sourceText: safeSlice(s(values, "sourceText"), SOURCE_TEXT_LIMIT),
     author: authorParts.name,
     university: s(values, "university").replace(/\s+/g, " "),
     faculty: s(values, "faculty").replace(/\s+/g, " "),
@@ -232,7 +235,7 @@ export function extractMeta(tool: ToolConfig, values: FormValues): DocMeta {
     termCount: Math.max(6, Math.min(40, Number(values.termCount) || 10)),
     grade: Number(values.grade || 8),
     duration: Number(values.duration || 45),
-    fileNameHint: topic.replace(/[^\p{L}\p{N}\- ]/gu, "").trim().slice(0, 60) || tool.slug,
+    fileNameHint: safeSlice(topic.replace(/[^\p{L}\p{N}\- ]/gu, "").trim(), 60) || tool.slug,
     tocMethod: s(values, "tocMethod", "ai") === "manual" ? "manual" : "ai",
     tocText: s(values, "tocText"),
     includeVisuals: s(values, "images", "yes") !== "no",
@@ -242,7 +245,7 @@ export function extractMeta(tool: ToolConfig, values: FormValues): DocMeta {
     premiumVisuals: false,
     // Eski id lar (`school`, `defense`…) bazada qoladi — alias orqali yangi ro'yxatga.
     slideAudience: normalizeAudienceId(s(values, "slideAudience", "auto")),
-    position: s(values, "position").replace(/\s+/g, " ").slice(0, 80),
+    position: safeSlice(s(values, "position").replace(/\s+/g, " "), 80),
     logoAssetId: /^[0-9a-f]{8,64}$/i.test(s(values, "logoAssetId")) ? s(values, "logoAssetId").toLowerCase() : "",
     // Faqat pro: oddiy slaydda maydon yo'q, kelsa ham e'tiborsiz.
     templateAssetId: tool.id === "pro-slide" && /^[0-9a-f]{24}$/i.test(s(values, "templateAssetId")) ? s(values, "templateAssetId").toLowerCase() : "",
@@ -272,7 +275,7 @@ export function extractMeta(tool: ToolConfig, values: FormValues): DocMeta {
     ...(isArticleTypeId(s(values, "articleType")) ? { articleType: s(values, "articleType") as ArticleTypeId } : {}),
     ...(isPublicationProfileId(s(values, "pubProfile")) ? { pubProfile: s(values, "pubProfile") as PublicationProfileId } : {}),
     ...(isCiteStyle(s(values, "citeStyle")) ? { citeStyle: s(values, "citeStyle") as CiteStyle } : {}),
-    udk: s(values, "udk").slice(0, ARTICLE_LIMITS.udkChars),
+    udk: safeSlice(s(values, "udk"), ARTICLE_LIMITS.udkChars),
     // Sxema soni PAKETGA bog'liq (`FIGURES_BY_PAGES`; `parseArticleInput` bilan bir xil chegara).
     figureCount: Math.max(0, Math.min(articleFigureCap(s(values, "pages")), Math.round(Number(values.figureCount ?? 2)) || 0)),
     // «Sxema turlari» oq ro'yxati (AUDIT-18) — bo'sh bo'lsa maydon umuman yozilmaydi (avtomatik).
@@ -281,6 +284,7 @@ export function extractMeta(tool: ToolConfig, values: FormValues): DocMeta {
     design: s(values, "design", "iris"),
     // Yil SHU YERDA muzlaydi — `title-model.ts` uni `doc.meta` dan oladi,
     // `new Date()` dan emas. Aks holda ekran va fayl yil chegarasida ajralardi.
-    year: new Date().getFullYear(),
+    // Toshkent vaqti (UTC+5): server UTC da, 31-dekabr 19:00 UTC dan keyin Toshkentda yangi yil.
+    year: tashkentYear(),
   };
 }

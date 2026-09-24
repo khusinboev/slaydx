@@ -103,9 +103,14 @@ Mini App ichida havola kerak emas — `initData` imzosi yetarli.
 
 ```bash
 curl -F "url=https://<domen>/api/telegram/webhook" \
-     -F "secret_token=$CRON_SECRET" \
+     -F "secret_token=$TELEGRAM_WEBHOOK_SECRET" \
      "https://api.telegram.org/bot$TELEGRAM_BOT_TOKEN/setWebhook"
 ```
+
+`TELEGRAM_WEBHOOK_SECRET` — faqat webhook uchun (`CRON_SECRET` emas: u
+`/api/health` bearer'i). Bo'sh bo'lsa vaqtincha `CRON_SECRET` ishlatiladi va
+ishga tushishda ogohlantiriladi. Almashtirish: `.env` → web'ni qayta ishga
+tushirish → darhol yuqoridagi `setWebhook` ni yangi kalit bilan qayta yuborish.
 
 Webhook ham, `npm run bot` ham bir xil `handleUpdate` ni chaqiradi.
 
@@ -125,21 +130,21 @@ docker compose up --build
 
 ## Ishlab chiqarish (slaydxx.uz)
 
-Server: `root@194.163.136.239`, jild `/opt/slaydx`. Serverda boshqa
-loyihalar ham bor (`nodav-*` steki, uchta nginx sayti, bir nechta bot
-xizmati) — shuning uchun hamma narsa ajratilgan:
+Server: `root@<SERVER_IP>` (aniq manzil — egasining `.env`/deploy sozlamasida),
+jild `/opt/slaydx`. Serverda boshqa loyihalar ham bor (bir nechta nginx
+sayti, bir nechta bot xizmati) — shuning uchun hamma narsa ajratilgan:
 
 | | |
 |---|---|
 | Compose proyekt nomi | `slaydx` (`docker compose -p slaydx`) |
-| Konteynerlar | `slaydx-web-1`, `slaydx-worker-1`, `slaydx-postgres-1` |
+| Konteynerlar | `slaydx-web-1`, `slaydx-worker-1`, `slaydx-worker-2`, `slaydx-postgres-1` (C22: worker 2 replika) |
 | Port | `127.0.0.1:3000` — faqat localhost, nginx proxy qiladi |
 | Postgres | konteyner ichida, host portiga CHIQARILMAGAN |
 | nginx | `/etc/nginx/sites-available/slaydx`, `default_server` emas |
 | Kod | GitHub'dan faqat o'qish huquqli deploy kaliti bilan |
 
 ```bash
-ssh root@194.163.136.239
+ssh root@<SERVER_IP>
 /opt/slaydx/deploy.sh          # main dan yangi versiya
 /opt/slaydx/enable-https.sh    # DNS tayyor bo'lgach — certbot
 docker compose -p slaydx logs -f web
@@ -149,11 +154,120 @@ Sirlar `/opt/slaydx/.env` da (huquq 600). `SESSION_SECRET`,
 `POSTGRES_PASSWORD` va `CRON_SECRET` shu server uchun alohida
 yaratilgan — lokal qiymatlar takrorlanmagan.
 
+### Resurs chegaralari (C18, `docker-compose.yml`)
+
+Box uchta loyiha bilan umumiy — har service'ning xotira/CPU chegarasi
+`.env` orqali sozlanadi (standartlar quyida, o'zgartirmasa shular ishlaydi):
+
+| O'zgaruvchi | Standart | Nima uchun |
+|---|---|---|
+| `WEB_MEM_LIMIT` | `2g` | `web` konteyner xotira shifti |
+| `WEB_CPUS` | `2` | `web` konteyner CPU shifti |
+| `WORKER_MEM_LIMIT` | `2g` | HAR BIR worker konteyner (2 replika — C22) xotira shifti |
+| `WORKER_CPUS` | `2` | HAR BIR worker konteyner CPU shifti |
+| `PG_MEM_LIMIT` | `1g` | Postgres konteyner xotira shifti |
+| `PG_CPUS` | `1` | Postgres konteyner CPU shifti |
+
+**Deploy oldidan tekshiring:** `docker info --format '{{.NCPU}}'` — agar
+host'da jami CPU soni `WEB_CPUS + 2×WORKER_CPUS + PG_CPUS`dan kam bo'lsa,
+Docker konteynerni "Range of CPUs is from 0.01 to N" xatosi bilan
+ko'tarmaydi; kerak bo'lsa `.env`da kichikroq qiymat bering. Peak xotira
+ish boshiga hali o'lchanmagan (`audit/designs/capacity.md`) — 2g ishonchli
+chegara deb tasdiqlanguncha `docker stats` bilan kuzating.
+
 **HTTPS hali yo'q:** `slaydxx.uz` DNS'da umuman ko'rinmaydi (A ham, NS
 ham yo'q). Domen shu serverga yo'naltirilgach `enable-https.sh` ni
 ishga tushiring — u avval DNS ni tekshiradi va mos kelmasa certbot'ni
 umuman chaqirmaydi, chunki muvaffaqiyatsiz urinishlar Let's Encrypt
 chegarasini yeydi.
+
+### Zaxira (backup)
+
+Ilgari zaxira faqat qo'lda, deploydan oldin olinardi va bitta diskda
+saqlanardi — tiklash hech qachon sinalmagan edi (INFRA-05). Endi ikkita
+skript bor (`scripts/backup.sh`, `scripts/restore-check.sh`), lekin ular
+faqat REPO'da — serverga o'rnatish (cron qo'shish) egasi tomonidan
+qo'lda bajariladi:
+
+```bash
+# /etc/cron.d/slaydx-backup yoki `crontab -e` (root):
+30 3 * * * /opt/slaydx/scripts/backup.sh >> /var/log/slaydx-backup.log 2>&1
+0 5 * * 0 /opt/slaydx/scripts/restore-check.sh >> /var/log/slaydx-backup.log 2>&1
+```
+
+`backup.sh` — `pg_dump -Fc` (siqilgan, `bytea` ikki barobar shishmaydi)
+`${BACKUP_DIR:-/root/slaydx-backups}` ga, `pg_restore --list` bilan
+tekshirilgan, `BACKUP_KEEP_DAYS` (standart 7) dan eskisi o'chiriladi.
+`restore-check.sh` — eng so'nggi dumpni MUSTAQIL (`slaydx-*` OILASIGA
+UMUMAN TEGMAYDIGAN), vaqtinchalik Postgres konteynerga tiklab, asosiy
+jadvallar va balans invariantini (`balance == sum(transactions)`)
+tekshiradi, oxirida shu vaqtinchalik konteynerni o'chiradi. Ikkalasi ham
+hech qachon `docker compose down`/prune ishlatmaydi va boshqa (slaydx
+yoki qo'shni loyiha) konteynerlariga tegmaydi (`.claude/deploy.md`ning
+umumiy box qoidasi).
+
+**Box tashqarisiga nusxa va Telegram alert — FAQAT `/etc/slaydx/backup.env`
+orqali.** `cron` BO'SH muhitda ishga tushadi va `/opt/slaydx/.env`ni
+O'QIMAYDI — `BACKUP_REMOTE`/`BACKUP_TG_CHAT`/`TELEGRAM_BOT_TOKEN` uchun
+BOSHQA hech qanday joy YO'Q. Fayl repo checkout'idan (`/opt/slaydx`)
+ATAYLAB TASHQARIDA — `git`/`docker build` uni umuman ko'rmaydi:
+
+```bash
+install -d -m 700 /etc/slaydx
+cat > /etc/slaydx/backup.env <<'EOF'
+BACKUP_REMOTE=b2:slaydx-backups
+BACKUP_TG_CHAT=123456789
+TELEGRAM_BOT_TOKEN=...
+EOF
+chmod 600 /etc/slaydx/backup.env
+```
+
+600 huquq shart emas — skript boshqacha ruxsat bo'lsa ochiq ogohlantiradi,
+lekin baribir o'qiydi. Fayl umuman bo'lmasa — muammo emas: faqat lokal
+dump olinadi, box tashqarisiga nusxa YO'Q va skript har safar buni ochiq
+ogohlantiradi. Yo'l `BACKUP_ENV_FILE` bilan almashtiriladi.
+
+### Jurnal, ish izi va metrikalar (C31)
+
+Pul va navbat yo'llari (`worker`, `jobs`, `credits`, `payments`, to'lov
+webhook'lari, `handler()` bilan o'ralgan API) `lib/server/log.ts` orqali
+yozadi: har qator — **bitta JSON** (`ts, level, msg, reqId?, jobId?,
+userId?, genId?, provider?, err{message, stack}` + `attempt`, `stage`,
+`orderId` kabi maydonlar). Kalitlar, `?key=`, `Authorization`, telefon
+raqami (oxirgi 2 raqam qoladi) jurnalga yozilishdan oldin yashiriladi.
+
+- Har API javobida `x-request-id` sarlavhasi bor; 500 javobida u
+  `requestId` sifatida ham qaytadi — foydalanuvchi shuni yuborsa, aynan
+  o'sha so'rovning qatorlari topiladi.
+- Foydalanuvchiga (`generations.error`, refund izohi) faqat qisqa o'zbekcha
+  matn boradi; pg/provayder xatosining xom matni va stack'i faqat jurnalda.
+
+```bash
+L="docker compose -p slaydx logs --no-log-prefix --since 24h web worker"
+# Bitta ishning to'liq tarixi (navbat → claim → urinishlar → xato/refund):
+$L | grep -F '"jobId":"<generation-id>"' | jq -c '{ts,level,msg,attempt,stage,provider,err:.err.message}'
+# Foydalanuvchi ko'rsatgan requestId bo'yicha:
+$L | grep -F '"reqId":"<request-id>"' | jq .
+# Pul qaytmay qolgan ishlar (housekeeping keyin qayta urinadi, lekin ko'rib chiqing):
+$L | grep -F '"alert":"REFUND_FAILED"' | jq -c '{ts,jobId,userId,err:.err.message}'
+```
+
+**Metrikalar** — `scripts/metrics-report.mts` (faqat o'qiydi, READ ONLY
+tranzaksiya): oxirgi N kun uchun vosita × holat bo'yicha ishlar, yiqilish
+va qaytarish ulushi, o'rtacha davomiylik, to'lovlar (so'm) va yechimlar,
+buyurtma holatlari, navbat kutishi p50/p95, eng ko'p xato matnlari.
+Worker/web image'da `tsx` yo'q, shuning uchun lokal checkout'dan, bazaga
+SSH tunnel orqali ishga tushiriladi (Postgres host portiga chiqarilmagan):
+
+```bash
+PG_IP=$(ssh root@<SERVER_IP> "docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' slaydx-postgres-1")
+ssh -N -L 55432:$PG_IP:5432 root@<SERVER_IP> &
+DATABASE_URL=postgres://slaydx:<POSTGRES_PASSWORD>@127.0.0.1:55432/slaydx \
+  scripts/heavy.sh npx tsx --conditions=react-server scripts/metrics-report.mts 7          # jadval
+#                                                   ... scripts/metrics-report.mts 30 --json  # JSON
+```
+
+Tannarx/marja uchun — `scripts/cost-report.mts` (xuddi shu usulda).
 
 ## Buyruqlar
 
@@ -351,7 +465,10 @@ ikkalasi ham doimiy vaqtli taqqoslash ishlatadi.
 
 **Ma'lumot**
 - Egalik SQL darajasida: id ni bilgan begona foydalanuvchi hujjat ham, rasm ham ola olmaydi
-- Fayl, media va generatsiya yozuvlari **muddatsiz** saqlanadi — avtomatik o'chirilish yo'q (foydalanuvchi o'zi o'chirmasa)
+- Fayl saqlash muddati (C23): **real to'lov bilan** (balans yoki Pro `quota`) yaratilgan
+  hujjatlar — **muddatsiz**; **faqat bonus** (ro'yxatdan o'tish ballari) bilan yaratilganlar —
+  **180 kun**, shundan keyin fayl/rasm o'chiriladi, lekin generatsiya yozuvi va tarix (kredit
+  jurnali bilan) saqlanib qoladi — foydalanuvchi "fayl muddati tugagan" holatini ko'radi
 - CSP, HSTS, nosniff, Referrer-Policy, Cross-Origin-Resource-Policy
 
 **Ma'lum cheklov:** `script-src` da `'unsafe-inline'` bor — Next.js inline runtime
@@ -405,4 +522,20 @@ Telegram'ning **web** versiyasida ishlatmoqchi bo'lsangiz
   `next/image` yoki foydalanuvchi yuklaydigan rasm qo'shilsa qayta
   ko'rib chiqing.
 - Fayllar Postgres `BYTEA` da (25 MB chegara). Hajm o'sganda S3 ga ko'chirish kerak.
+
+## Uchinchi tomon litsenziyalari
+
+- **`@breezystack/lamejs` — LGPL-3.0.** WAV → MP3 kodlash uchun (TTS,
+  `lib/generation/tts/mp3.ts`), faqat `worker` konteynerida, `loadMp3Encoder()`
+  orqali **lazy** (`import()`) yuklanadi — kod o'zgartirilmagan, npm'dan
+  o'zgarishsiz ishlatiladi. LGPL-3.0 shuni talab qiladi: kutubxona manbasi
+  ochiq qolsin (npm ro'yxati orqali allaqachon ochiq), o'zgartirilsa —
+  o'zgarishlar ham LGPL bilan tarqatilsin, va kutubxona **dinamik** bog'lanishi
+  (alohida almashtirsa bo'ladigan holatda) saqlansin — bu yerda aynan shunday
+  (dependency versiyasi `package.json` orqali erkin yangilanadi/almashtiriladi,
+  ilova kodi bilan statik bog'lanmagan). SlaydX'ning o'zi (server kodi)
+  boshqa litsenziya bilan qoladi — LGPL faqat shu bitta kutubxonaga tegishli.
+- Boshqa bog'liqliklar (Next.js, React va h.k.) — odatiy MIT/Apache-2.0
+  turkumidagi ochiq litsenziyalar; alohida shart qo'ymaydi. To'liq ro'yxat
+  kerak bo'lsa: `npx license-checker --summary`.
 

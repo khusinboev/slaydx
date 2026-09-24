@@ -27,6 +27,7 @@ import type { AcademicDoc, Block, DocMeta, DocSection, DocTable } from "../types
 import type { TranslationSource } from "../source-types";
 import { llmEnabled } from "../llm";
 import { CostMeter, complete as completeRole } from "../llm-roles";
+import { assertJobTime } from "../deadline";
 import { parseLlmObject } from "../json";
 import { mapPool, remainingMs, unverifiedReferenceNote } from "../quality";
 import { abstractFromLlm, blocksFromLlm, clipWords, str } from "./parse";
@@ -476,9 +477,13 @@ export async function buildArticleDoc(meta: DocMeta, values: FormValues, opts: A
   const plan = articleWordPlan(docMeta, type, profile);
   const ctx: ArticleContext = { input, meta: docMeta, type, profile, labels, wordTarget: plan.body, plan, refs: [] };
   const stage = (progress: number, step: string) => opts.onStage?.({ progress, step });
+  // Ish muddati (EXT-03): `work/engine.ts ask` bilan bir xil qoida — vaqt yo'q bo'lsa asosiy matn uchun `DeadlineError`.
   const ask = async (role: Parameters<CompleteFn>[0], system: string, user: string, o: { maxTokens: number; timeoutMs: number }) => {
-    if (o.timeoutMs < MIN_CALL_MS) return null;
-    const r = await complete(role, system, user, { json: true, ...o });
+    if (o.timeoutMs < MIN_CALL_MS) {
+      assertJobTime(deadline, `article:${role}`, MIN_CALL_MS);
+      return null;
+    }
+    const r = await complete(role, system, user, { json: true, ...o, deadline });
     meter.add(r?.usage);
     return r?.text ?? null;
   };

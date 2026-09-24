@@ -3,6 +3,7 @@ import { pickProvider } from "./image-provider";
 import { photoSlot, slotPixels } from "./slide-layout";
 import { composeSlideImagePrompt, writeSlideImagePrompts } from "./slide-image-prompts";
 import { searchQueryFor } from "./image-search-query";
+import { safeFetchUrl, UnsafeUrlError } from "./safe-fetch";
 import type { SlideVisual } from "./slide-templates";
 import type { SlideModel } from "./slide-types";
 import type { DocMeta, SlideImageReport } from "./types";
@@ -155,11 +156,13 @@ export async function fetchImageBytes(url: string): Promise<ImageBytes | null> {
   // tarmoqqa so'rov ketmasin (SSRF).
   if (!/^https:\/\//i.test(url)) return null;
   try {
-    const res = await fetch(url, { signal: AbortSignal.timeout(20_000), redirect: "follow" });
+    /*
+     * `safeFetchUrl` (audit EXT-15): https + ommaviy xost HAR redirect
+     * qadamida qayta tekshiriladi (ilgari `redirect: "follow"` birinchi
+     * URL dan keyin istalgan manzilga borardi), tana 12 MB bilan cheklanadi.
+     */
+    const res = await safeFetchUrl(url, { timeoutMs: 20_000, maxBytes: MAX_IMAGE_BYTES });
     if (!res.ok) return null;
-    // Provayder rasm o'rniga katta narsa qaytarsa, oldindan to'xtatamiz.
-    const declared = Number(res.headers.get("content-length") ?? 0);
-    if (Number.isFinite(declared) && declared > MAX_IMAGE_BYTES) return null;
 
     const buf = Buffer.from(await res.arrayBuffer());
     if (buf.length > MAX_IMAGE_BYTES) return null;
@@ -175,7 +178,9 @@ export async function fetchImageBytes(url: string): Promise<ImageBytes | null> {
       type,
       ...dim,
     };
-  } catch {
+  } catch (e) {
+    // Xavfsizlik qoidasi buzilgani jurnalda ko'rinsin; tarmoq xatosi — odatiy «rasm yo'q».
+    if (e instanceof UnsafeUrlError) console.warn("[rasm]", e.message);
     return null;
   }
 }

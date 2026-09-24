@@ -277,8 +277,13 @@ export async function buildTestDoc(meta: DocMeta, values: FormValues, opts: Test
   const spec = teacherTypeOf("test", input.type);
   const seed = opts.seed ?? `${meta.toolId}:${input.topic}:${input.count}`;
 
+  /*
+   * Ish muddati (EXT-03) har chaqiruvga: savollar bosqichida
+   * `DeadlineError` YUQORIGA (yarim test chiqmaydi, pul qaytadi); sayqal
+   * ichidagi qayta tuzish esa `polish-core` da «bajarilmadi» bo'lib qoladi.
+   */
   const call: Ask = async (role, system, user, o) => {
-    const r = await complete(role, system, user, o);
+    const r = await complete(role, system, user, { ...o, deadline });
     if (r?.usage) {
       meter.add(r.usage);
       opts.onUsage?.(r.usage);

@@ -318,7 +318,7 @@ export async function reviewListening(doc: AcademicDoc, opts: ListeningReviewOpt
     if (timeoutMs >= JUDGE_MIN_MS) {
       const ids = listeningTargets();
       try {
-        const r = await opts.complete("judge", listeningJudgeSystemPrompt(model, ids), listeningJudgeUserPrompt(doc), { json: true, maxTokens: 1200, timeoutMs });
+        const r = await opts.complete("judge", listeningJudgeSystemPrompt(model, ids), listeningJudgeUserPrompt(doc), { json: true, deadline: opts.deadline, maxTokens: 1200, timeoutMs });
         if (r?.usage) opts.onUsage?.(r.usage);
         judge = parseListeningJudge(model, r?.text, ids);
       } catch (e) {

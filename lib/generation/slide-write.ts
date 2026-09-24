@@ -2,6 +2,7 @@ import { slideLabels } from "./i18n";
 import { parseLlmJson } from "./json";
 import { llmComplete, llmEnabled, llmStream } from "./llm";
 import { remainingMs } from "./quality";
+import { assertJobTime } from "./deadline";
 import { bodyRules, type BodyRules } from "./slide-audience";
 import { blocksToBeats } from "./slide-blocks";
 import { SLIDE_LIMITS } from "./slide-limits";
@@ -17,6 +18,7 @@ import { expandBeats, resolveSlideTemplate, type SlideBeat, type SlideTemplate }
 import { getSlideTheme } from "./slide-themes";
 import { isSlideLayout, type SlideLayout, type SlideModel, type SlideThemeId } from "./slide-types";
 import type { AcademicDoc, DocMeta, DocSection } from "./types";
+import { safeSlice } from "./safe-text";
 
 /*
  * Slide Law: bir slaydda 3–4 tadan ortiq band bo'lmasin. Aniq chegara
@@ -52,7 +54,7 @@ export const QUIZ_OPTION_MAX = SLIDE_LIMITS.quizOption;
 
 function clip(text: string, n: number) {
   const t = String(text || "").replace(/\s+/g, " ").trim();
-  return t.length <= n ? t : `${t.slice(0, n - 1).trimEnd()}…`;
+  return t.length <= n ? t : `${safeSlice(t, n - 1).trimEnd()}…`;
 }
 
 function arr(v: unknown, n: number, maxLen: number): string[] {
@@ -517,6 +519,13 @@ export async function writeSlidesWithLlm(
    * va differensial zond aynan shu yo'ldan yuradi).
    */
   onProgress?: SlideProgressSink,
+  /**
+   * ISH muddati (EXT-03) — `deadline` esa matn BOSQICHI muddati (rasm
+   * ulushi ayrilgan). Bosqich tugashi eski yumshoq yo'l (bo'lak
+   * tashlanadi); ish muddati tugashi `DeadlineError` (deka FAILED, pul
+   * qaytadi). Berilmasa — eski xatti-harakat.
+   */
+  jobDeadline?: number,
 ): Promise<SlideModel[] | null> {
   if (!llmEnabled()) return null;
   const rules = bodyRules(meta, tpl.id);
@@ -610,11 +619,12 @@ export async function writeSlidesWithLlm(
      */
     const left = remainingMs(deadline);
     if (left < 8_000) {
+      assertJobTime(jobDeadline, "slide:writer", 8_000);
       console.warn("[slide-write] byudjet tugadi, bo‘lak tashlandi", from + 1, "-", to);
       return [];
     }
     const system = slideSystem(meta, tpl, ctx);
-    const llmOpts = { json: true as const, timeoutMs: Math.min(90_000, left) };
+    const llmOpts = { json: true as const, timeoutMs: Math.min(90_000, left), deadline: jobDeadline };
     /*
      * Oqim OPT-IN: faqat `onProgress` bo'lganda va kill-switch
      * o'chirilmaganda. `LLM_STREAM=false` da (yoki oqimni qo'llamaydigan
@@ -948,6 +958,7 @@ export async function buildSlideAcademicDoc(meta: DocMeta, deadline?: number, op
     Date.now() + stage.researchMs + stage.textMs,
     ctx,
     live,
+    deadline,
   );
   // Kalit bor, lekin matn yozilmadi — shablon deck bermaymiz. `beatToSlide`
   // «Fotosintez: kirish / Asosiy qism / Amaliyot» kabi bo'sh slaydlar

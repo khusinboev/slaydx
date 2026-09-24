@@ -1,4 +1,4 @@
-import type { CSSProperties } from "react";
+import { memo, useMemo, type CSSProperties } from "react";
 import type { CustomTemplate } from "@/lib/generation/pptx-template";
 import type { SlideAudience, SlideTemplateId, SlideVisual } from "@/lib/generation/slide-templates";
 import type { BodyRules } from "@/lib/generation/slide-audience";
@@ -64,7 +64,14 @@ export function textLayerStyle(layer: TextLayer): CSSProperties {
   return style;
 }
 
-export function SlideCanvas({
+/*
+ * `memo` + maket memosi (FE-13): `planSlide` — 2 600 qatorli maket
+ * dvigateli. Ilgari eskiz panelidagi HAR slayd ota-komponent har
+ * chizilganda (jonli yozish animatsiyasida — har kadrda) qayta rejalanardi.
+ * Endi komponent proplari o'zgarmasa umuman chizilmaydi, sahnadagi slayd
+ * esa `reveal` o'zgarganda faqat byudjetni qayta hisoblaydi.
+ */
+export const SlideCanvas = memo(function SlideCanvas({
   slide,
   theme,
   visual = "classic",
@@ -109,7 +116,10 @@ export function SlideCanvas({
    */
   hideSrc?: string;
 }) {
-  const plan = planSlide(slide, theme, visual, index, total, audience, templateId, { bodyType, logo, custom });
+  const plan = useMemo(
+    () => planSlide(slide, theme, visual, index, total, audience, templateId, { bodyType, logo, custom }),
+    [slide, theme, visual, index, total, audience, templateId, bodyType, logo, custom],
+  );
   const budgets =
     reveal === undefined ? null : revealBudgets(plan.layers, Math.max(0, Math.min(1, reveal)) * totalChars(plan.layers));
   return (
@@ -132,7 +142,7 @@ export function SlideCanvas({
       ))}
     </div>
   );
-}
+});
 
 /** Bitta qatlam — eksport paritet testlari uchun (`tests/viewer/parity.test.mts`: dumaloq rasm, soya). */
 export function LayerView({ layer, budget, hidden = false }: { layer: SlideLayer; budget?: number; hidden?: boolean }) {

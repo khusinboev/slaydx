@@ -38,8 +38,11 @@ const OUT = path.resolve(process.cwd(), "eval-out", `eval-${ROUND}`);
  * fayllarni esa hech kim ko'rmasdi.
  *
  * `smoke` ham xuddi shu hisobdan foydalanadi.
+ *
+ * Raqam MAJBURIY env orqali keladi (`.env.local`, repo'da saqlanmaydi) —
+ * default sifatida hardcode qilinmaydi.
  */
-const EVAL_USER = process.env.EVAL_USER || "+998997333896";
+const EVAL_USER = process.env.EVAL_USER || "";
 /** Bitta ish uchun eng ko'p kutish — worker byudjeti 285 s. */
 const POLL_TIMEOUT_MS = Number(process.env.EVAL_TIMEOUT_MS || 330_000);
 
@@ -524,6 +527,10 @@ function takeCookie(res) {
  */
 async function login() {
   if (COOKIE) return true;
+  if (!EVAL_USER) {
+    console.error("EVAL_USER o'rnatilmagan — .env.local ga qo'shing (repo'da saqlanmaydi) yoki EVAL_COOKIE bering.");
+    return false;
+  }
   const req = await fetch(`${BASE}/api/auth/otp?action=request`, {
     method: "POST",
     headers: headers(),

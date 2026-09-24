@@ -1,0 +1,15 @@
+INFO  idle-wait — busy jobs left: 0
+INFO  jobs by status — COMPLETED=2634 FAILED=462
+INFO  ledger rows — bonus=2000 charge=3096 refund=462 topup=2000
+PASS  ledger_matches_wallet — users whose points/quota/balance != sum(transactions): 0
+PASS  no_negative_wallet — users with a negative wallet: 0
+PASS  no_double_charge — references charged twice: 0
+PASS  no_double_refund — references refunded twice: 0
+PASS  refund_le_charge — refunds larger than their charge: 0
+PASS  refund_has_charge — refunds without a charge: 0
+PASS  paid_job_has_charge — paid jobs without a charge row: 0
+PASS  charge_has_job — charges whose job row is missing: 0
+PASS  failed_job_refunded — FAILED paid jobs without a refund: 0
+PASS  completed_has_file — COMPLETED jobs without a stored file: 0
+PASS  no_stuck_in_progress — IN_PROGRESS jobs past lease + housekeeping: 0
+INFO  completed-but-refunded (partial delivery refunds are legal) — 0

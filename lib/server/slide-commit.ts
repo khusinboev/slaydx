@@ -14,6 +14,7 @@ import { assetImageResolver, deleteAssetById } from "./assets";
 import { adapterFor, preParseOps, type EditAdapter, type RebuildDeps } from "./edit-adapters";
 import { buildPreview } from "./preview";
 import { hasGenerationFile, putGenerationFile } from "./storage";
+import { storeGenerationUploads, type PendingUpload } from "./upload-quota";
 import type { DocOp } from "../generation/slide-edit";
 import type { ResumeOp } from "../generation/resume/edit";
 import { renderHtml } from "../generation/render-html";
@@ -99,9 +100,15 @@ export async function loadDocForEdit(id: string, userId: string): Promise<Editab
   return { ...row, adapter, doc: adapter.prepare(row.doc as AcademicDoc) };
 }
 
-/** Javob shakli `GET /api/generations/{id}` bilan AYNAN bir xil (`GenerationDetail`). */
+/**
+ * Javob shakli `GET /api/generations/{id}` bilan AYNAN bir xil (`GenerationDetail`).
+ *
+ * `lean` — poll bilan bir xil: `doc` bor qatorda `html` YUBORILMAYDI
+ * (`null`). Klient `doc` dan chizadi, `html` faqat `doc` siz eski qator
+ * zaxirasi — ilgari har «Saqlash» javobi hujjatni ikki marta tashirdi (SCALE-12).
+ */
 async function detail(id: string, userId: string) {
-  const gen = await getGeneration(id, userId);
+  const gen = await getGeneration(id, userId, { lean: true });
   if (!gen) throw new ApiError("Topilmadi", 404);
   const hasFile = await hasGenerationFile(id, userId);
   return { ...gen, hasFile };
@@ -118,12 +125,19 @@ async function detail(id: string, userId: string) {
  *
  * `html` va `preview` doc bilan BIR TRANZAKSIYADA yoziladi — aks holda
  * ko'ruvchi yangi dokni, ro'yxat kartochkasi esa eski matnni ko'rsatardi.
+ *
+ * `opts.uploads` — ko'ruvchidan yuklangan rasm baytlari (slayd rasmi,
+ * rezyume surati). Ular ham SHU tranzaksiyada, doc yozilgandan KEYIN
+ * yoziladi (kvota va egalik — `storeGenerationUploads`): versiya
+ * to'qnashuvi (409), maket xatosi (422) yoki kvota (413) bo'lsa na doc,
+ * na rasm qoladi — yetim aktiv yo'q (SECB-03).
  */
 export async function commitDocOps(
   id: string,
   userId: string,
   baseVersion: number,
   ops: DocOp[] | ResumeOp[],
+  opts: { uploads?: PendingUpload[] } = {},
 ) {
   const cur = await loadDocForEdit(id, userId);
   if (baseVersion !== cur.docVersion) {
@@ -143,12 +157,15 @@ export async function commitDocOps(
   const html = renderHtml(doc);
   const preview = buildPreview(doc);
 
-  const next = await transaction((client) =>
+  const next = await transaction(async (client) => {
     // `doc_version = 0` — hujjatning ILK tahriri: `doc_prev` shu paytdagi
     // (hali tahrirlanmagan) dokni saqlab qoladi, «Asl holatga qaytarish»
     // shuni o'qiydi (`014_doc_prev.sql`).
-    updateGenerationDoc(client, id, userId, baseVersion, { doc, html, preview }, { keepPrev: cur.docVersion === 0 }),
-  );
+    const v = await updateGenerationDoc(client, id, userId, baseVersion, { doc, html, preview }, { keepPrev: cur.docVersion === 0 });
+    // 0 qator (409) — rasm ham yozilmaydi; kvota 413 bo'lsa esa doc ham qaytadi (ROLLBACK).
+    if (v != null && opts.uploads?.length) await storeGenerationUploads(client, id, userId, opts.uploads);
+    return v;
+  });
   if (next == null) {
     // 0 qator: versiya oshib ketgan, egalik yo'qolgan yoki status
     // `COMPLETED` emas. Klientga eng yangi versiyani beramiz — u shu

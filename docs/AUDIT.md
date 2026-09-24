@@ -907,8 +907,9 @@ faqat DOCX ni ochib mundarijani o'qiganda chiqdi.
 > o'qib chiqish** kerak — hisobotning §8 «inson darvozasi» bandi aynan
 > shu haqda.
 
-Sinov kontenti egasining hisobida: **`+998997333896` — 141 tayyor
-fayl**. `EVAL_USER` va `SMOKE_USER` standarti ham shu.
+Sinov kontenti egasining hisobida: **`<ADMIN_PHONE>` (egasining raqami —
+`.env`/admin sozlamasi) — 141 tayyor fayl**. `EVAL_USER` va `SMOKE_USER`
+standarti ham shu (endi majburiy env, kodda hardcode qilinmaydi).
 
 ### 18.6. Ataylab qilinmagan
 

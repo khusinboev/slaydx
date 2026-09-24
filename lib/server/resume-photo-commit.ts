@@ -1,6 +1,8 @@
 import "server-only";
 import { ApiError } from "./api";
-import { assetUrl, putAssetBytes } from "./assets";
+import { assetUrl } from "./assets";
+import { readUploadForm } from "./upload-body";
+import { pendingUpload, type PendingUpload } from "./upload-quota";
 import { commitDocOps } from "./slide-commit";
 import { sniffImageType } from "../generation/slide-images";
 import { SLIDE_IMAGE_MAX_BYTES } from "../generation/slide-limits";
@@ -37,13 +39,17 @@ function assertBytes(file: unknown, field: string): File {
   return file;
 }
 
-/** `content-type` sarlavhasiga ISHONILMAYDI — faqat magic baytlar (`logo.ts` naqshi). */
-async function storeImage(genId: string, file: File): Promise<{ assetId: string; url: string }> {
+/**
+ * `content-type` sarlavhasiga ISHONILMAYDI — faqat magic baytlar (`logo.ts` naqshi).
+ * Bayt bu yerda YOZILMAYDI: `asset_id` xeshdan ma'lum, yozish esa hujjat
+ * bilan bitta tranzaksiyada (`commitDocOps` → `storeGenerationUploads`).
+ */
+async function readImage(genId: string, file: File): Promise<{ upload: PendingUpload; url: string }> {
   const bytes = Buffer.from(await file.arrayBuffer());
   const type = sniffImageType(bytes);
   if (!type) throw new ApiError("Faqat PNG yoki JPEG qabul qilinadi", 415);
-  const assetId = await putAssetBytes(genId, type === "png" ? "image/png" : "image/jpeg", bytes);
-  return { assetId, url: assetUrl(genId, assetId) };
+  const upload = pendingUpload(type === "png" ? "image/png" : "image/jpeg", bytes);
+  return { upload, url: assetUrl(genId, upload.assetId) };
 }
 
 function parseCrop(raw: unknown): { x: number; y: number; zoom: number } | undefined {
@@ -59,12 +65,8 @@ function parseCrop(raw: unknown): { x: number; y: number; zoom: number } | undef
 }
 
 export async function uploadResumePhoto(req: Request, id: string, userId: string): ResumePhotoResult {
-  const declared = Number(req.headers.get("content-length") ?? 0);
-  if (Number.isFinite(declared) && declared > SLIDE_IMAGE_MAX_BYTES * 2 + 64 * 1024) {
-    throw new ApiError("Fayl juda katta", 413);
-  }
-
-  const form = await req.formData().catch(() => null);
+  // Hajm tana o'qilayotganda — chunked so'rovda ham (SECB-05).
+  const form = await readUploadForm(req, SLIDE_IMAGE_MAX_BYTES * 2 + 64 * 1024, "Fayl juda katta");
   if (!form) throw new ApiError("So'rov tanasi yaroqsiz", 400);
 
   const baseVersionRaw = form.get("baseVersion");
@@ -81,18 +83,25 @@ export async function uploadResumePhoto(req: Request, id: string, userId: string
   const shapeRaw = form.get("shape");
   const shape: "circle" | "square" = shapeRaw === "square" ? "square" : "circle";
 
-  const cropped = await storeImage(id, assertBytes(form.get("file"), "file"));
+  const cropped = await readImage(id, assertBytes(form.get("file"), "file"));
   const originalFile = form.get("original");
-  const original = originalFile instanceof File && originalFile.size ? await storeImage(id, assertBytes(originalFile, "original")) : null;
+  const original =
+    originalFile instanceof File && originalFile.size ? await readImage(id, assertBytes(originalFile, "original")) : null;
   const crop = parseCrop(form.get("crop"));
 
   const op: ResumeOp = {
     op: "photo",
     url: cropped.url,
     shape,
-    assetId: cropped.assetId,
-    ...(original ? { originalAssetId: original.assetId } : {}),
+    assetId: cropped.upload.assetId,
+    ...(original ? { originalAssetId: original.upload.assetId } : {}),
     ...(crop ? { crop } : {}),
   };
-  return commitDocOps(id, userId, baseVersion, [op]);
+  /*
+   * Kesilgan + asl nusxa va hujjat BITTA tranzaksiyada, BITTA kvota
+   * tekshiruvi bilan (W2-C nit, SECB-03): juftlik sig'masa ikkalasi ham
+   * yozilmaydi, 409/422 da ham yetim surat qolmaydi.
+   */
+  const uploads = [cropped.upload, ...(original ? [original.upload] : [])];
+  return commitDocOps(id, userId, baseVersion, [op], { uploads });
 }

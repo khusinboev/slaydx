@@ -35,13 +35,37 @@ export function PhotoField({
   const [recrop, setRecrop] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /*
+   * C41 (BEA-19/FE-20): surat 90 kundan keyin serverdan o'chiriladi, qoralama
+   * esa `photoAssetId` ni saqlab qoladi. Rasm yuklanmasa — `broken` (shu id),
+   * holati serverdan so'raladi: 404/410 → id forma qiymatidan olib tashlanadi
+   * (pullik rezyume o'lik id bilan jimgina suratsiz chiqmasin) va
+   * `expired` ishorasi; boshqa xato (tarmoq) → id saqlanadi, faqat bo'sh joy.
+   */
+  const [broken, setBroken] = useState<string | null>(null);
+  const [expired, setExpired] = useState(false);
+  const showImg = Boolean(assetId) && broken !== assetId;
   const mismatch = Boolean(assetId && savedShape && savedShape !== shape);
+
+  async function onImgError(id: string) {
+    setBroken(id);
+    try {
+      const res = await fetch(photoUrl(id), { credentials: "same-origin", cache: "no-store", signal: AbortSignal.timeout(10_000) });
+      if (res.status === 404 || res.status === 410) {
+        setExpired(true);
+        onChange({ assetId: "", originalAssetId: "", crop: undefined, shape: undefined });
+      }
+    } catch (e) {
+      console.warn("[photo] surat holatini tekshirib bo'lmadi", e);
+    }
+  }
 
   async function save(out: { blob: Blob; crop: Crop; shape: "circle" | "square" }) {
     setBusy(true);
     setError(null);
     try {
       const res = await uploadResumePhoto({ blob: out.blob, original: pending, crop: out.crop, shape: out.shape });
+      setExpired(false);
       onChange({ assetId: res.assetId, originalAssetId: res.originalAssetId ?? originalAssetId, crop: out.crop, shape: out.shape });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Surat yuklanmadi");
@@ -57,9 +81,14 @@ export function PhotoField({
       <div
         className={`bg-muted flex size-16 shrink-0 items-center justify-center overflow-hidden border ${shape === "circle" ? "rounded-full" : "rounded-xl"}`}
       >
-        {assetId ? (
+        {showImg ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={photoUrl(assetId)} alt="Rezyume surati" className="size-full object-cover" />
+          <img
+            src={photoUrl(assetId)}
+            alt="Rezyume surati"
+            className="size-full object-cover"
+            onError={() => void onImgError(assetId)}
+          />
         ) : (
           <span className="text-muted-foreground text-[10px]">surat</span>
         )}
@@ -103,7 +132,15 @@ export function PhotoField({
           * burchak bo'lib ko'rinadi — shuning uchun qayta kesish taklif
           * qilinadi. O'zi kesmasa ham hujjat yiqilmaydi.
           */}
-        {mismatch ? (
+        {expired && !assetId ? (
+          <p className="mt-0.5 text-[11px] text-amber-600" data-photo-expired>
+            Avvalgi surat muddati o‘tib o‘chirilgan. Suratni qayta yuklang.
+          </p>
+        ) : assetId && !showImg ? (
+          <p className="mt-0.5 text-[11px] text-amber-600" data-photo-broken>
+            Surat ochilmadi — sahifani yangilang yoki suratni qayta yuklang.
+          </p>
+        ) : mismatch ? (
           <p className="mt-0.5 text-[11px] text-amber-600">
             Shablon {shape === "circle" ? "doira" : "kvadrat"} surat kutadi — «Markazlash» bilan qayta kesing.
           </p>

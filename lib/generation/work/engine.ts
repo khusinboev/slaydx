@@ -25,6 +25,7 @@ import type { FormValues } from "../../types";
 import type { AcademicDoc, Block, DocMeta, DocSection, DocTable } from "../types";
 import type { TranslationSource } from "../source-types";
 import { llmEnabled } from "../llm";
+import { assertJobTime } from "../deadline";
 import { CostMeter, complete as completeRole, type LlmUsage } from "../llm-roles";
 import { parseLlmObject } from "../json";
 import { mapPool, remainingMs, unverifiedReferenceNote } from "../quality";
@@ -318,9 +319,19 @@ export async function buildWorkDoc(meta: DocMeta, values: FormValues, opts: Work
   const ctx: WorkContext = { input, meta: docMeta, kind, subject, labels, plan, refs: [] };
 
   const stage = (progress: number, step: string) => opts.onStage?.({ progress, step });
+  /*
+   * Ish muddati (EXT-03): har chaqiruvga `deadline` — zanjir qayta
+   * urinish/zaxirani muddatdan oshirmaydi. Vaqt qolmagan bo'lsa ASOSIY
+   * matn uchun `DeadlineError` (yarim ish `COMPLETED` bo'lmasin, pul
+   * qaytadi); ixtiyoriy kengaytirishlar o'zi oldindan `remainingMs` ni
+   * tekshiradi va bu yerga yetmaydi.
+   */
   const ask = async (role: Parameters<CompleteFn>[0], system: string, user: string, o: { maxTokens: number; timeoutMs: number }) => {
-    if (o.timeoutMs < MIN_CALL_MS) return null;
-    const r = await complete(role, system, user, { json: true, ...o });
+    if (o.timeoutMs < MIN_CALL_MS) {
+      assertJobTime(deadline, `work:${role}`, MIN_CALL_MS);
+      return null;
+    }
+    const r = await complete(role, system, user, { json: true, ...o, deadline });
     if (r?.usage) {
       meter.add(r.usage);
       opts.onUsage?.(r.usage);

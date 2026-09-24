@@ -2,7 +2,9 @@ import { ApiError, checkOrigin, handler, json, limit, readJson } from "@/lib/ser
 import { ensureMigrated } from "@/lib/server/db";
 import { upsertTelegramUser, verifyLoginWidget, verifyMiniAppInitData } from "@/lib/server/auth";
 import { createSession, setSessionCookie } from "@/lib/server/session";
-import { clientIp } from "@/lib/server/ratelimit";
+import { clientIp, rateLimit } from "@/lib/server/ratelimit";
+import { IP_LIMITS } from "@/lib/server/ip-limits";
+import { peekRate } from "@/lib/server/rate-peek";
 import { env } from "@/lib/server/env";
 
 export const runtime = "nodejs";
@@ -10,10 +12,28 @@ export const dynamic = "force-dynamic";
 
 type Body = {
   /** Mini App dan: `window.Telegram.WebApp.initData` */
-  initData?: string;
+  initData?: unknown;
   /** Login Widget dan: callback obyekt (id, hash, auth_date, ...) */
-  widget?: Record<string, string>;
+  widget?: unknown;
 };
+
+/** Telegram imzosi — HMAC-SHA256 ning hex ko'rinishi (64 belgi). */
+const WIDGET_HASH = /^[0-9a-f]{64}$/i;
+
+/**
+ * So'rov SHAKLI imzodan OLDIN (BEA-13): `widget.hash` son yoki obyekt
+ * bo'lsa `safeEqual` ichida `Buffer.from(1)` TypeError bilan 500 berardi.
+ * Shakl xatosi — 400 (imzo xatosi esa oldingidek 401).
+ */
+function shapeError(body: Body): string | null {
+  if (body.initData !== undefined && typeof body.initData !== "string") return "«initData» satr bo'lishi kerak";
+  if (body.widget === undefined) return null;
+  const w = body.widget;
+  if (!w || typeof w !== "object" || Array.isArray(w)) return "«widget» obyekt bo'lishi kerak";
+  const hash = (w as Record<string, unknown>).hash;
+  if (typeof hash !== "string" || !WIDGET_HASH.test(hash)) return "Telegram imzosi yaroqsiz shaklda";
+  return null;
+}
 
 /**
  * Telegram orqali kirish.
@@ -29,17 +49,39 @@ export const POST = handler("auth/telegram", async (req) => {
     throw new ApiError("Telegram kirish sozlanmagan (TELEGRAM_BOT_TOKEN yo'q)", 503);
   }
 
+  /*
+   * IP — keng shift (NAT, C29); qat'iy chegara imzo tekshiruvidan KEYIN
+   * Telegram hisobi bo'yicha. Imzosi buzuq so'rovlar alohida sanaladi.
+   */
   const ip = clientIp(req);
-  await limit(`tg:${ip}`, 20, 300);
+  const { tgPerIp, tgBadPerIp, tgPerAccount } = IP_LIMITS;
+  const badBucket = `tg:bad:${ip}`;
+  await limit(`tg:${ip}`, tgPerIp.count, tgPerIp.windowSec);
+  const bad = await peekRate(badBucket, tgBadPerIp.count, tgBadPerIp.windowSec);
+  if (!bad.ok) {
+    throw new ApiError(`Juda ko'p so'rov. ${bad.retryAfterSec} soniyadan keyin urinib ko'ring.`, 429, {
+      retryAfter: bad.retryAfterSec,
+    });
+  }
 
   const body = await readJson<Body>(req, 20_000);
-  const profile = body.initData
+  const shape = shapeError(body);
+  if (shape) {
+    // Buzuq shakl ham buzuq urinish — IP chelagiga sanaladi (fuzz 429 ga yetadi).
+    await rateLimit(badBucket, tgBadPerIp.count, tgBadPerIp.windowSec);
+    throw new ApiError(shape, 400);
+  }
+  const profile = typeof body.initData === "string" && body.initData
     ? verifyMiniAppInitData(body.initData)
     : body.widget
-      ? verifyLoginWidget(body.widget)
+      ? verifyLoginWidget(body.widget as Record<string, string>)
       : null;
 
-  if (!profile) throw new ApiError("Telegram imzosi tekshiruvdan o'tmadi", 401);
+  if (!profile) {
+    await rateLimit(badBucket, tgBadPerIp.count, tgBadPerIp.windowSec);
+    throw new ApiError("Telegram imzosi tekshiruvdan o'tmadi", 401);
+  }
+  await limit(`tg:uid:${profile.telegramId}`, tgPerAccount.count, tgPerAccount.windowSec);
 
   const user = await upsertTelegramUser(profile);
   const { token, expiresAt } = await createSession(user.id, {

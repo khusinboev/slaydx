@@ -198,18 +198,25 @@ test("putLogo: user_id bilan yoziladi va ON CONFLICT (user_id, asset_id) (bazasi
   const { pool } = await import("../lib/server/db.ts");
   const p = pool();
   const seen: { text: string; params: unknown[] }[] = [];
-  t.mock.method(p, "query", async (text: string, params: unknown[]) => {
+  // Yozish kvota tranzaksiyasi ichida (C13) — `connect()` mijozi ham ushlanadi.
+  const run = async (text: string, params: unknown[] = []) => {
     seen.push({ text, params });
-    return { rows: [], rowCount: 1 };
-  });
+    const rows = /WITH u AS/.test(text) ? [{ total_bytes: "0", kind_count: 0, gen_count: 0 }] : [];
+    return { rows, rowCount: 1 };
+  };
+  t.mock.method(p, "query", run);
+  t.mock.method(p, "connect", async () => ({ query: run, release() {} }));
 
   const bytes = pngBytes();
   const saved = await putLogo("42", bytes, "image/png");
-  const sql = seen[0].text.replace(/\s+/g, " ");
+  const insert = seen.find((s) => /INSERT INTO logo_uploads/.test(s.text))!;
+  const sql = insert.text.replace(/\s+/g, " ");
   assert.match(sql, /INSERT INTO logo_uploads \(user_id, asset_id/);
-  assert.match(sql, /ON CONFLICT \(user_id, asset_id\) DO NOTHING/);
-  assert.equal(seen[0].params[0], "42");
-  assert.equal(seen[0].params[1], saved.assetId);
+  // Dublikat qator yo'q, qayta yuklash esa `created_at` ni yangilaydi (W2-C).
+  assert.match(sql, /ON CONFLICT \(user_id, asset_id\) DO UPDATE SET created_at = now\(\)/);
+  assert.equal(insert.params[0], "42");
+  assert.equal(insert.params[1], saved.assetId);
+  assert.ok(seen.some((s) => /pg_advisory_xact_lock/.test(s.text)), "kvota qulfisiz yozildi");
 });
 
 test("logo_uploads: egalik, ON CONFLICT, uploadLogo to'liq yo'li, worker uzatish naqshi", {

@@ -1,0 +1,2 @@
+[10:19:49] k6 enqueue (profile full) -> /home/adhambek/projects/pythons/slaydbot/slaydx/loadtests/results/after/k6-enqueue.json
+[k6:enqueue] reqs=3874 rps=20.4 p50=9.8ms p95=16.9ms p99=20.5ms failed=0.00%

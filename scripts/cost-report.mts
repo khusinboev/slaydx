@@ -3,10 +3,15 @@
  *
  * Vosita bo'yicha: ishlar soni, o'rtacha LLM tannarxi (so'mda,
  * `SOUM_PER_USD` — standart 12 700) va o'rtacha narx (`price`), shulardan
- * marja (narx / tannarx). `generations.cost_json` faqat telemetriya
- * yuritadigan vositalarda to'ladi (hozircha maqola, `worker.ts setCost`)
- * — qolganlarida `NULL`, shuning uchun ular alohida «telemetriyasiz»
- * ustunda hisoblanadi (aks holda 0 tannarx bilan cheksiz marja chiqardi).
+ * marja (narx / tannarx). `generations.cost_json` ni `buildArtifact`
+ * (`lib/generation/job-cost.ts`, audit EXT-11) HAR vositada to'ldiradi:
+ * LLM tokenlari, Gemini rasmlari, grounding, TTS — manbada yozilgan.
+ * Eski yozuvlar (va hech qanday pullik chaqiruvsiz ishlar) `NULL` —
+ * ular alohida «telemetriyasiz» ustunda hisoblanadi (aks holda 0 tannarx
+ * bilan cheksiz marja chiqardi).
+ *
+ * Ikkinchi jadval — xizmat bo'yicha tafsilot (`cost_json.parts`: llm /
+ * image / grounding / tts), faqat `parts` bor yozuvlar bo'yicha.
  *
  * Oxirgi 30 kun, faqat `COMPLETED` ishlar (yiqilgan/bekor qilingan
  * ishning narxi/tannarxi yo'q).
@@ -75,6 +80,38 @@ async function run(): Promise<void> {
 
   const table = [header, ...body];
   const widths = header.map((_, i) => Math.max(...table.map((r) => r[i].length)));
+  console.log(padRow(header, widths));
+  console.log(widths.map((w) => "-".repeat(w)).join("  "));
+  for (const r of body) console.log(padRow(r, widths));
+
+  await parts();
+}
+
+type PartRow = { tool_id: string; kind: string; jobs: string; units: string; calls: string; avg_usd: string };
+
+/** Xizmat bo'yicha: vosita × tur (llm/image/grounding/tts) — ish boshiga o'rtacha so'm. */
+async function parts(): Promise<void> {
+  const rows = await query<PartRow>(
+    `SELECT g.tool_id,
+            p->>'kind' AS kind,
+            count(DISTINCT g.id)::text AS jobs,
+            sum(COALESCE((p->>'units')::numeric, 0))::text AS units,
+            sum(COALESCE((p->>'calls')::numeric, 0))::text AS calls,
+            (sum(COALESCE((p->>'usd')::numeric, 0)) / NULLIF(count(DISTINCT g.id), 0))::text AS avg_usd
+       FROM generations g
+       CROSS JOIN LATERAL jsonb_array_elements(
+         CASE WHEN jsonb_typeof(g.cost_json->'parts') = 'array' THEN g.cost_json->'parts' ELSE '[]'::jsonb END
+       ) AS p
+      WHERE g.status = 'COMPLETED' AND g.created_at >= now() - interval '30 days'
+      GROUP BY g.tool_id, p->>'kind'
+      ORDER BY g.tool_id, p->>'kind'`,
+  );
+  if (!rows.length) return;
+  const header = ["vosita", "xizmat", "ishlar", "chaqiruv", "birlik", "ish boshiga (so'm)"];
+  const body = rows.map((r) => [r.tool_id, r.kind, r.jobs, r.calls, r.units, fmtSoum(Number(r.avg_usd) * SOUM_PER_USD)]);
+  const table = [header, ...body];
+  const widths = header.map((_, i) => Math.max(...table.map((r) => r[i].length)));
+  console.log("");
   console.log(padRow(header, widths));
   console.log(widths.map((w) => "-".repeat(w)).join("  "));
   for (const r of body) console.log(padRow(r, widths));

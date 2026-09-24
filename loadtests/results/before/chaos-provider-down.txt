@@ -1,0 +1,34 @@
+== chaos provider-down (before; 30 jobs per phase under browse load)
+[10:00:54] provider mode already blank
+PASS  blank_image_jobs_terminal — 30 jobs, still open after 4 s: 0
+PASS  blank_image_jobs_failed_not_faked — FAILED/total: 30/30
+INFO  blank_image enqueue→failed p95: 2.8s
+PASS  blank_image_charged_once_refunded_once — 30 jobs; violations (charge≠1, refund>1, FAILED without exactly one refund): 0
+INFO  blank_image states — 30× FAILED attempts=1 refunds=1
+[10:01:12] provider mode now down (workers restarted)
+PASS  down_llm_jobs_terminal — 30 jobs, still open after 99 s: 0
+PASS  down_llm_jobs_failed_not_faked — FAILED/total: 30/30
+INFO  down_llm enqueue→failed p95: 97.0s
+PASS  down_llm_charged_once_refunded_once — 30 jobs; violations (charge≠1, refund>1, FAILED without exactly one refund): 0
+INFO  down_llm states — 30× FAILED attempts=1 refunds=1
+INFO  jail proxy intercepted 360 outbound provider call(s); targets:  360 generativelanguage.googleapis.com:443;
+PASS  provider_calls_jailed — fake-key LLM calls reached the local jail (proves they did not reach the internet)
+[10:03:06] provider mode now blank (workers restarted)
+INFO  k6 browse during experiment — reqs=2062 failed=0% p50=2ms p95=4ms p99=5ms max=6ms
+PASS  web_responsive — browse p95 4 ms (< 500), error rate 0 (< 0.01)
+  INFO  idle-wait — busy jobs left: 0
+  INFO  jobs by status — COMPLETED=4893 FAILED=1462
+  INFO  ledger rows — bonus=2000 charge=6355 refund=1462 topup=2000
+  PASS  ledger_matches_wallet — users whose points/quota/balance != sum(transactions): 0
+  PASS  no_negative_wallet — users with a negative wallet: 0
+  PASS  no_double_charge — references charged twice: 0
+  PASS  no_double_refund — references refunded twice: 0
+  PASS  refund_le_charge — refunds larger than their charge: 0
+  PASS  refund_has_charge — refunds without a charge: 0
+  PASS  paid_job_has_charge — paid jobs without a charge row: 0
+  PASS  charge_has_job — charges whose job row is missing: 0
+  PASS  failed_job_refunded — FAILED paid jobs without a refund: 0
+  PASS  completed_has_file — COMPLETED jobs without a stored file: 0
+  PASS  no_stuck_in_progress — IN_PROGRESS jobs past lease + housekeeping: 0
+  INFO  completed-but-refunded (partial delivery refunds are legal) — 0
+== provider-down: 0 failed check(s)

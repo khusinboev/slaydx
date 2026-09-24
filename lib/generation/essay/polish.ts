@@ -216,7 +216,7 @@ export type EssayRewriteDeps = {
 
 async function ask(deps: EssayRewriteDeps, system: string, user: string, maxTokens: number): Promise<string> {
   const timeoutMs = Math.max(1, Math.min(REWRITE_TIMEOUT_MS, remainingMs(deps.deadline)));
-  const r = await deps.complete("writer", system, user, { json: true, maxTokens, timeoutMs }).catch(() => null);
+  const r = await deps.complete("writer", system, user, { json: true, deadline: deps.deadline, maxTokens, timeoutMs }).catch(() => null);
   if (r?.usage) deps.onUsage?.(r.usage);
   if (!r?.text) throw new RewriteError(RETRY_MSG, 422, "llm");
   return r.text;

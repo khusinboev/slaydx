@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 import { queryOne } from "@/lib/server/db";
-import { queueDepth } from "@/lib/server/jobs";
 import { assertRuntimeConfig, env, llmConfigured, paymentsConfigured, runtimeWarnings } from "@/lib/server/env";
 import { safeEqual } from "@/lib/server/session";
 
@@ -25,6 +24,44 @@ function isInternal(req: Request): boolean {
   return Boolean(token) && safeEqual(token, env.cronSecret);
 }
 
+/**
+ * Navbat/worker chuqur holati — o'z-o'zicha o'qiydigan, faqat SELECT SQL.
+ *
+ * `lib/server/jobs.ts`ga TEGMAYDI (W2-D2 shu faylni navbat TTL/adolat
+ * o'zgarishlari uchun egallagan — shartnoma `audit/designs/w2-contracts.md`).
+ * `oldestQueuedAgeSec`/`newestLockedAt` OBS-12'ni yopadi: sof `queued`/`running`
+ * soni "sog'lom burst" bilan "worker o'lgan, navbat yig'ilib qolgan"ni farqlay
+ * olmaydi — eng eski QUEUED yoshi va IN_PROGRESS'dagi eng yangi `locked_at`
+ * (worker heartbeat'i) shuni ko'rsatadi.
+ */
+async function queueDeepStats(): Promise<{
+  queued: number;
+  running: number;
+  oldestQueuedAgeSec: number | null;
+  newestLockedAt: string | null;
+} | null> {
+  const row = await queryOne<{
+    queued: string;
+    running: string;
+    oldest_queued_age_sec: string | null;
+    newest_locked_at: string | null;
+  }>(
+    `SELECT
+       count(*) FILTER (WHERE status = 'QUEUED')::text      AS queued,
+       count(*) FILTER (WHERE status = 'IN_PROGRESS')::text AS running,
+       EXTRACT(EPOCH FROM (now() - MIN(created_at) FILTER (WHERE status = 'QUEUED')))::text AS oldest_queued_age_sec,
+       MAX(locked_at) FILTER (WHERE status = 'IN_PROGRESS')::text AS newest_locked_at
+     FROM generations`,
+  ).catch(() => null);
+  if (!row) return null;
+  return {
+    queued: Number(row.queued ?? 0),
+    running: Number(row.running ?? 0),
+    oldestQueuedAgeSec: row.oldest_queued_age_sec == null ? null : Math.round(Number(row.oldest_queued_age_sec)),
+    newestLockedAt: row.newest_locked_at,
+  };
+}
+
 export async function GET(req: Request) {
   const started = Date.now();
 
@@ -39,7 +76,8 @@ export async function GET(req: Request) {
 
   const healthy = db === "up";
 
-  // Ommaviy javob — minimal.
+  // Ommaviy javob — minimal (navbat chuqurligi, konfiguratsiya muammolari
+  // ichkariga tegishli — CRON_SECRET bo'lmasa hech narsa oshkor bo'lmaydi).
   if (!isInternal(req)) {
     return NextResponse.json(
       { status: healthy ? "ok" : "degraded" },
@@ -50,10 +88,7 @@ export async function GET(req: Request) {
   const problems = assertRuntimeConfig();
   if (dbError) problems.push(`DB: ${dbError}`);
 
-  let queue: { queued: number; running: number } | null = null;
-  if (healthy) {
-    queue = await queueDepth().catch(() => null);
-  }
+  const queue = healthy ? await queueDeepStats() : null;
 
   return NextResponse.json(
     {

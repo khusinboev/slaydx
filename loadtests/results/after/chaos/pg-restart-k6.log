@@ -1,0 +1,3 @@
+[10:36:45] k6 mixed (profile smoke) -> /home/adhambek/projects/pythons/slaydbot/slaydx/loadtests/results/after/chaos/pg-restart-k6/k6-mixed.json
+time="2026-09-24T05:38:32Z" level=error msg="thresholds on metrics 'http_req_failed' have been crossed"
+[k6:mixed] reqs=3153 rps=29.6 p50=3.8ms p95=8.9ms p99=18.0ms failed=6.22%

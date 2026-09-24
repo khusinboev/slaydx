@@ -3,7 +3,7 @@ import { applyLiveEvent, liveProgress, liveStep } from "../generation/slide-prog
 import type { LiveDeck, SlideProgressEvent, SlideProgressSink } from "../generation/slide-progress";
 import type { SlideModel } from "../generation/slide-types";
 import { assetFromDataUrl, assetUrl, putAssets } from "./assets";
-import { setLive } from "./jobs";
+import { monotonicProgress, setLive, type ClaimedJob } from "./jobs";
 
 /**
  * `LiveReporter` — dvigatel (`lib/generation/`) chiqargan `SlideProgressEvent`
@@ -59,6 +59,13 @@ export class LiveReporter {
    */
   lost = false;
 
+  /**
+   * Oxirgi MUVAFFAQIYATLI `setLive` vaqti (`Date.now()`). U ham `locked_at`
+   * ni suradi — worker ticker'i shu paytdan beri `LEASE_EVERY_MS` o'tmagan
+   * bo'lsa alohida heartbeat yubormaydi (DB-12, SCALE-13).
+   */
+  lastWriteAt = -Infinity;
+
   private state: LiveDeck | undefined;
   private dirty = false;
   private stopped = false;
@@ -82,9 +89,15 @@ export class LiveReporter {
    */
   private writeChain: Promise<void> = Promise.resolve();
 
+  /**
+   * `claim` — claim paytidagi progress va qayta olinganmi (BEB-07): jonli
+   * deka yangi yurishda `plan` (2%) dan boshlanadi, bazaga esa bundan past
+   * yozilmaydi (`monotonicProgress`).
+   */
   constructor(
     private readonly jobId: string,
     private readonly workerId: string,
+    private readonly claim: Pick<ClaimedJob, "progressFloor" | "restarted"> = {},
   ) {
     this.sink = (ev: SlideProgressEvent) => {
       if (this.stopped) return;
@@ -110,11 +123,29 @@ export class LiveReporter {
   private scheduleAssetSwap(ev: SlideProgressEvent): void {
     if (ev.type === "image" && ev.url.startsWith("data:")) {
       const index = ev.index;
-      this.assetQueue = this.assetQueue.then(() => this.swapImage(index, ev.url));
+      this.assetQueue = this.assetQueue
+        .then(() => this.swapImage(index, ev.url))
+        .catch((e) => this.warn("rasm aktivi saqlanmadi", e));
     } else if (ev.type === "plan" && ev.logo?.startsWith("data:")) {
       const logo = ev.logo;
-      this.assetQueue = this.assetQueue.then(() => this.swapLogo(logo));
+      this.assetQueue = this.assetQueue
+        .then(() => this.swapLogo(logo))
+        .catch((e) => this.warn("logotip aktivi saqlanmadi", e));
     }
+  }
+
+  /**
+   * Zanjir xatosi (AUDIT prod-readiness C27: BEB-03, CONC-04, BEA-18).
+   *
+   * `assetQueue`/`writeChain` — hech kim darhol kutmaydigan promise'lar:
+   * vaqtincha baza xatosi ularni rad etsa, bu «ushlanmagan rad etish»
+   * bo'lib alohida worker processini YIQITARDI (va shu paytda bajarilayotgan
+   * boshqa ishlarni ham). Jonli deka — faqat ko'rinish; uning bitta yozuvi
+   * yo'qolishi ishni to'xtatishga arzimaydi. Jurnalga yoziladi, zanjir
+   * sog'lom (yechilgan) holatga qaytadi.
+   */
+  private warn(what: string, e: unknown): void {
+    console.warn(`[live] ${this.jobId}: ${what}:`, e instanceof Error ? e.message : e);
   }
 
   private async swapImage(index: number, dataUrl: string): Promise<void> {
@@ -169,18 +200,24 @@ export class LiveReporter {
   }
 
   private runFlush(): void {
-    this.writeChain = this.writeChain.then(() => this.doFlush());
+    this.writeChain = this.writeChain
+      .then(() => this.doFlush())
+      .catch((e) => {
+        // Yozilmagan holat keyingi flush (yoki `stop()`) da qayta uriniladi.
+        this.dirty = true;
+        this.warn("jonli deka yozilmadi", e);
+      });
   }
 
   private async doFlush(): Promise<void> {
     if (this.lost || !this.dirty || !this.state) return;
     this.dirty = false;
     const payload = this.serialize(this.state);
-    const progress = liveProgress(this.state);
-    const step = liveStep(this.state);
+    const { progress, step } = monotonicProgress(this.claim,liveProgress(this.state), liveStep(this.state));
     if (payload === undefined) return;
     const seq = await setLive(this.jobId, this.workerId, payload, progress, step);
     if (seq === null) this.lost = true;
+    else this.lastWriteAt = Date.now();
   }
 
   /**

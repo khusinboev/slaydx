@@ -65,6 +65,7 @@ type Rows = {
   detail?: Record<string, unknown> | null;
   updateDoc?: Record<string, unknown> | null;
   hasFile?: boolean;
+  notOwner?: boolean;
 };
 
 function norm(s: string): string {
@@ -81,7 +82,10 @@ function mockDb(t: TestContext, rows: Rows): Seen[] {
     else if (/^SELECT doc_json, doc_version/.test(q)) out = rows.forEdit ? [rows.forEdit] : [];
     else if (/UPDATE generations SET doc_json/.test(q)) out = rows.updateDoc ? [rows.updateDoc] : [];
     else if (/FROM generation_files f JOIN generations/.test(q)) out = rows.hasFile ? [{ "?column?": 1 }] : [];
-    else if (/INSERT INTO generation_assets/.test(q)) out = []; // putAssetBytes — ON CONFLICT DO NOTHING
+    else if (/INSERT INTO generation_assets/.test(q)) out = []; // ON CONFLICT DO NOTHING
+    // Egalik va kvota (C13, BEA-03) — `putGenerationUpload` yozishdan OLDIN so'raydi.
+    else if (/^SELECT 1 FROM generations WHERE id = \$1 AND user_id = \$2/.test(q)) out = rows.notOwner ? [] : [{ "?column?": 1 }];
+    else if (/WITH u AS/.test(q)) out = [{ total_bytes: "0", kind_count: 0, gen_count: 0 }];
     return { rows: out, rowCount: out.length };
   };
   const p = pool();
@@ -248,6 +252,23 @@ test("uploadSlideImage: muvaffaqiyat — commitDocOps {op:'image', index, url} b
     new RegExp(`^/api/generations/${GEN}/assets/[0-9a-f]+$`),
     "yozilgan URL shu generatsiyaning aktiviga ishora qilishi kerak",
   );
+});
+
+test("uploadSlideImage: begona hujjat — 404 va aktiv YOZILMAYDI (BEA-03: egalik yozishdan oldin)", async (t) => {
+  // `getGenerationForEdit` `WHERE user_id` — begona hujjat qatori umuman kelmaydi.
+  const seen = mockDb(t, { forEdit: null, notOwner: true });
+  const file = new File([blobPart(pngBytes(32))], "rasm.png", { type: "image/png" });
+  await expectApiError(uploadSlideImage(uploadReq(file, "3"), GEN, USER, 1), 404);
+  assert.equal(found(seen, /INSERT INTO generation_assets/).length, 0, "MUTATSIYA: begona hujjatga bayt yozildi");
+});
+
+test("uploadSlideImage: tranzaksiya ichidagi egalik tekshiruvi ham turadi — 404, INSERT yo'q (SECB-03)", async (t) => {
+  // Ikkinchi himoya chizig'i: `storeGenerationUploads` kvota qulfi ostida egalikni qayta so'raydi.
+  const seen = mockDb(t, { forEdit: editRow({ doc_version: 3 }), updateDoc: { doc_version: 4 }, notOwner: true });
+  const file = new File([blobPart(pngBytes(32))], "rasm.png", { type: "image/png" });
+  await expectApiError(uploadSlideImage(uploadReq(file, "3"), GEN, USER, 1), 404);
+  assert.equal(found(seen, /INSERT INTO generation_assets/).length, 0, "MUTATSIYA: begona hujjatga bayt yozildi");
+  assert.ok(sqls(seen).includes("ROLLBACK"), "doc yozuvi ham qaytarilishi kerak");
 });
 
 test("uploadSlideImage: rasm joyi bo'lmagan maketga yuklash — 422 (applyDocOps orqali, ikkinchi marta yozilmaydi)", async (t) => {

@@ -55,7 +55,7 @@ Tahrir: ResumeOp[] → PATCH /api/generations/{id}/doc → edit-adapters (slide 
 
 ## 5. Deploy (2026-09-10)
 
-- Zaxira: `slaydx-20260910205843.sql` (332 MB), `ROLLBACK.txt` → `5126177`. Deploy: `bash /opt/slaydx/deploy.sh`, HEAD **`5902c7b`**; `019_resume.sql` qo'llandi, `resume_drafts` va `photo_uploads` jadvallari bor, `/api/health` 200, worker ko'tarildi. Boshqa loyihalar (nodav-*, call-tizim-*, mser) tegilmadi.
+- Zaxira: `slaydx-20260910205843.sql` (332 MB), `ROLLBACK.txt` → `5126177`. Deploy: `bash /opt/slaydx/deploy.sh`, HEAD **`5902c7b`**; `019_resume.sql` qo'llandi, `resume_drafts` va `photo_uploads` jadvallari bor, `/api/health` 200, worker ko'tarildi. Boshqa loyihalar (bir xil box'dagi hamkasb servislar) tegilmadi.
 - **Prod smoke** (admin sessiya, Chromium, `https://slaydxx.uz`): forma → telefon formatlanishi → kasb typeahead → ish joyi → surat kesish va yuklash → shablon galereyasi (6 karta) → qoralama qayta yuklashdan keyin tiklandi → «Yaratish» 3 000 tanga → natija → banddagi tahrir saqlandi → ko'ruvchida shablon `creative/plum` ga o'zgardi va saqlandi. **Sahifa xatolari yo'q.**
 - **Eski rezyume** (2026-09-06 da yaratilgan, `doc_json.resume` siz) yangi ko'ruvchida `legacyResumeModel` orqali to'g'ri ochildi — panel, aloqa, ko'nikmalar, tajriba joyida, xato yo'q.
 - Prod DOCX: 436 KB, tahrir matni va surat media faylida; karta eskizi (`/thumb`) 200; `resume_drafts` qatori paydo bo'ldi.

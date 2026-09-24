@@ -1,7 +1,10 @@
 import "server-only";
 import { createHash } from "node:crypto";
+import type { PoolClient } from "pg";
 import { query, queryOne } from "./db";
 import { ApiError } from "./api";
+import { readUploadForm } from "./upload-body";
+import { withUploadQuota } from "./upload-quota";
 import { imageDims, sniffImageType } from "../generation/slide-images";
 
 /**
@@ -48,19 +51,30 @@ function parseCrop(raw: unknown): PhotoCrop | undefined {
   }
 }
 
-export async function putPhoto(
+type PhotoOpts = { kind?: "crop" | "original"; originalAssetId?: string; crop?: PhotoCrop };
+
+/**
+ * Bitta surat qatori — kvota tranzaksiyasi ichida (`client`).
+ *
+ * Bir xil bayt (xesh) — o'sha qator: `created_at` YANGILANADI (BEA-19).
+ * Aks holda 89-kuni qayta tanlangan surat ertasi kuni `purgeOldPhotos`
+ * bilan o'chib, forma singan rasm ko'rsatardi.
+ */
+async function insertPhoto(
+  client: PoolClient,
   userId: string,
   bytes: Buffer,
   mime: "image/png" | "image/jpeg",
-  opts: { kind?: "crop" | "original"; originalAssetId?: string; crop?: PhotoCrop } = {},
+  opts: PhotoOpts,
 ): Promise<string> {
   const assetId = assetIdFor(bytes);
-  await query(
+  await client.query(
     `INSERT INTO photo_uploads (user_id, asset_id, kind, mime, size_bytes, bytes, original_asset_id, crop)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      ON CONFLICT (user_id, asset_id) DO UPDATE
         SET original_asset_id = EXCLUDED.original_asset_id,
-            crop              = EXCLUDED.crop`,
+            crop              = EXCLUDED.crop,
+            created_at        = now()`,
     [
       userId,
       assetId,
@@ -73,6 +87,18 @@ export async function putPhoto(
     ],
   );
   return assetId;
+}
+
+/** Bitta suratni foydalanuvchi kvotasi ostida saqlaydi (C13). */
+export async function putPhoto(
+  userId: string,
+  bytes: Buffer,
+  mime: "image/png" | "image/jpeg",
+  opts: PhotoOpts = {},
+): Promise<string> {
+  return withUploadQuota(userId, "photo", { assetIds: [assetIdFor(bytes)], bytes: bytes.byteLength }, (c) =>
+    insertPhoto(c, userId, bytes, mime, opts),
+  );
 }
 
 export type PhotoRow = {
@@ -133,11 +159,8 @@ export async function photoDataUrl(
  * `crop` (JSON), `shape` ("circle" | "square").
  */
 export async function uploadPhoto(req: Request, userId: string): Promise<PhotoUploadResult> {
-  const declared = Number(req.headers.get("content-length") ?? 0);
-  if (Number.isFinite(declared) && declared > 2 * PHOTO_MAX_BYTES + 64 * 1024) {
-    throw new ApiError("Fayl 5 MB dan katta", 413);
-  }
-  const form = await req.formData().catch(() => null);
+  // Hajm tana o'qilayotganda — chunked so'rovda ham (SECB-05).
+  const form = await readUploadForm(req, 2 * PHOTO_MAX_BYTES + 64 * 1024, "Fayl 5 MB dan katta");
   const file = form?.get("file");
   if (!(file instanceof File)) throw new ApiError("Fayl yuborilmadi", 400);
   if (file.size === 0) throw new ApiError("Fayl bo'sh", 400);
@@ -154,17 +177,24 @@ export async function uploadPhoto(req: Request, userId: string): Promise<PhotoUp
   const shape = form?.get("shape") === "square" ? "square" : "circle";
 
   // Asl nusxa ixtiyoriy: uni saqlash «markazlash» uchun, generatsiya
-  // uchun emas — shuning uchun xatosi butun yuklashni yiqitmaydi.
-  let originalAssetId: string | undefined;
+  // uchun emas — shuning uchun yaroqsiz asl nusxa butun yuklashni yiqitmaydi.
+  let orig: { bytes: Buffer; mime: "image/png" | "image/jpeg" } | undefined;
   const original = form?.get("original");
   if (original instanceof File && original.size > 0 && original.size <= PHOTO_MAX_BYTES) {
     const ob = Buffer.from(await original.arrayBuffer());
     const ot = sniffImageType(ob);
-    if (ot) originalAssetId = await putPhoto(userId, ob, ot === "png" ? "image/png" : "image/jpeg", { kind: "original" });
+    if (ot) orig = { bytes: ob, mime: ot === "png" ? "image/png" : "image/jpeg" };
   }
 
   const mime = type === "png" ? "image/png" : "image/jpeg";
-  const assetId = await putPhoto(userId, bytes, mime, { kind: "crop", originalAssetId, crop });
+  // Juftlik BITTA kvota tekshiruvi va tranzaksiyada: sig'masa ikkalasi ham yozilmaydi.
+  const ids = [assetIdFor(bytes), ...(orig ? [assetIdFor(orig.bytes)] : [])];
+  const incoming = bytes.byteLength + (orig?.bytes.byteLength ?? 0);
+  const { assetId, originalAssetId } = await withUploadQuota(userId, "photo", { assetIds: ids, bytes: incoming }, async (c) => {
+    const originalId = orig ? await insertPhoto(c, userId, orig.bytes, orig.mime, { kind: "original" }) : undefined;
+    const cropId = await insertPhoto(c, userId, bytes, mime, { kind: "crop", originalAssetId: originalId, crop });
+    return { assetId: cropId, originalAssetId: originalId };
+  });
   return { assetId, mime, size: bytes.byteLength, shape, ...(originalAssetId ? { originalAssetId } : {}), ...(crop ? { crop } : {}) };
 }
 
@@ -175,10 +205,55 @@ export async function uploadPhoto(req: Request, userId: string): Promise<PhotoUp
  * keraksiz yuk. 90 kun: foydalanuvchi rezyumesini mavsumiy yangilashi
  * normal, lekin generatsiyaga tushgan nusxa allaqachon `generation_assets`
  * da — bu jadval faqat FORMA uchun ishlaydi.
+ *
+ * ISHORA QILINGAN surat yoshidan qat'i nazar QOLADI (C41, BEA-19):
+ *   • forma qoralamasi (`form_drafts.data` — `photoAssetId`,
+ *     `photoOriginalAssetId`) — tiklangan qoralama singan rasm
+ *     ko'rsatmasin va shu qoralamadan to'langan rezyume jimgina suratsiz
+ *     chiqmasin (worker suratni `values.photoAssetId` dan o'qiydi);
+ *   • foydalanuvchining NAVBATDAGI yoki ISHLAYOTGAN rezyumesi
+ *     (`values_json.photoAssetId`) — worker suratni ish boshida (va
+ *     navbatga qaytgan ish qayta olinganda) shu qatordan o'qiydi;
+ *   • saqlanayotgan kesilgan nusxaning asli (`original_asset_id`).
+ *
+ * TAYYOR rezyume suratni USHLAB TURMAYDI (review R2): worker suratni
+ * `extractAssets` (`swapPhoto`) bilan hujjatning O'Z aktiviga
+ * (`generation_assets`) ko'chiradi — ko'ruvchi ham, DOCX qayta render ham
+ * o'shani o'qiydi. Tayyor hujjatlar esa o'chmaydi (`retention.ts`), ya'ni
+ * ular ishora qilgan qatorlar abadiy qolib, 50 talik surat kvotasini
+ * (o'chirish yo'li yo'q) ~25 rezyumeda butunlay to'ldirardi.
+ * FAILED/REVOKED ish ham ushlab turmaydi (pul qaytarilgan).
+ *
+ * Ishoralar faqat eski surati bor foydalanuvchilar bo'yicha yig'iladi.
  */
 export async function purgeOldPhotos(days = 90): Promise<number> {
   const res = await query<{ asset_id: string }>(
-    `DELETE FROM photo_uploads WHERE created_at < now() - ($1 || ' days')::interval RETURNING asset_id`,
+    `WITH stale AS (
+       SELECT DISTINCT user_id FROM photo_uploads WHERE created_at < now() - ($1 || ' days')::interval
+     ), refs AS (
+       SELECT d.user_id, lower(x.v) AS asset_id
+         FROM form_drafts d
+         JOIN stale s ON s.user_id = d.user_id
+         CROSS JOIN LATERAL (VALUES (d.data->>'photoAssetId'), (d.data->>'photoOriginalAssetId')) AS x(v)
+        WHERE x.v IS NOT NULL AND x.v <> ''
+       UNION
+       SELECT g.user_id, lower(g.values_json->>'photoAssetId')
+         FROM generations g
+         JOIN stale s ON s.user_id = g.user_id
+        WHERE g.tool_id = 'resume' AND g.status IN ('QUEUED', 'IN_PROGRESS')
+          AND COALESCE(g.values_json->>'photoAssetId', '') <> ''
+     ), kept AS (
+       SELECT user_id, asset_id FROM refs
+       UNION
+       SELECT p.user_id, p.original_asset_id
+         FROM photo_uploads p
+         JOIN refs r ON r.user_id = p.user_id AND r.asset_id = p.asset_id
+        WHERE p.original_asset_id IS NOT NULL
+     )
+     DELETE FROM photo_uploads p
+      WHERE p.created_at < now() - ($1 || ' days')::interval
+        AND NOT EXISTS (SELECT 1 FROM kept k WHERE k.user_id = p.user_id AND k.asset_id = p.asset_id)
+      RETURNING p.asset_id`,
     [String(days)],
   );
   return res.length;

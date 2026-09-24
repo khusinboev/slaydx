@@ -423,7 +423,7 @@ export async function reviewEssay(doc: AcademicDoc, opts: EssayReviewOpts = {}):
     if (timeoutMs >= JUDGE_MIN_MS) {
       try {
         const kind = essayKindSpec(model.context, model.kind);
-        const r = await opts.complete("judge", essayJudgeSystemPrompt(model.context, kind.label.en), judgeUserPrompt(doc, model), { json: true, maxTokens: 1200, timeoutMs });
+        const r = await opts.complete("judge", essayJudgeSystemPrompt(model.context, kind.label.en), judgeUserPrompt(doc, model), { json: true, deadline: opts.deadline, maxTokens: 1200, timeoutMs });
         if (r?.usage) opts.onUsage?.(r.usage);
         judge = parseEssayJudge(model.context, r?.text);
       } catch (e) {

@@ -1304,7 +1304,7 @@ test("standart hajm narx, dvigatel va formada bir xil", async () => {
   const { TOOLS, TOOL_BY_ID, defaultPages, priceFor } = await import("../lib/tools.ts");
   const { extractMeta } = await import("../lib/generation/meta.ts");
   const { workGenreOfTool } = await import("../lib/generation/work/types.ts");
-  const { workKindOf } = await import("../lib/generation/work/registry.ts");
+  const { normalizeWorkPages, workKindOf } = await import("../lib/generation/work/registry.ts");
 
   /*
    * AYNAN P1-7 (AUDIT-5). Standart hajm UCH joyda mustaqil yozilgan edi:
@@ -1353,10 +1353,21 @@ test("standart hajm narx, dvigatel va formada bir xil", async () => {
     const genre = workGenreOfTool(id)!;
     const kind = workKindOf(genre, undefined);
     assert.ok(kind.pages.includes(fallback), `${id}: standart «${fallback}» reyestr paketlari orasida yo'q`);
+    /*
+     * C12 R1 (`audit/reviews/W3-J.md`): `priceFor` endi `pages`ni XOM
+     * holda dvigatelning `normalizeWorkPages`iga uzatadi — `work/input.ts`
+     * bilan AYNAN bir xil chaqiruv. Bo'sh so'rov (real forma HECH QACHON
+     * yubormaydi — `WorkComposer.tsx` doim `pages` beradi, faqat qo'lda
+     * yozilgan so'rov uchun) dvigatelning REYESTR STANDARTINI oladi —
+     * `normalizeWorkPages(kind, undefined)`. Referat/mustaqil ishda bu
+     * `defaultPages(id)` («10-15», forma HOLATI)dan farq qiladi — narx
+     * endi SHU dvigatel standartiga mos, defaultPages'ga emas.
+     */
+    const engineDefault = normalizeWorkPages(kind, undefined);
     assert.equal(
       priceFor(tool, {} as FormValues),
-      priceFor(tool, { pages: fallback } as FormValues),
-      `${id}: standart narx tarif narxiga teng bo'lishi kerak`,
+      priceFor(tool, { pages: engineDefault } as FormValues),
+      `${id}: bo'sh so'rov narxi dvigatel standartining narxiga teng bo'lishi kerak`,
     );
     assert.equal(
       extractMeta(tool, { topic: "X" } as FormValues).targetPages,
@@ -1487,16 +1498,42 @@ test("o'yin byudjeti element soniga ergashadi; infografika blok soniga", async (
   for (const t of [cw, fc, ig]) assert.ok(budgetFor(t, {}, cap) >= MIN_BUDGET_MS, `${t.id}: byudjet MIN dan past`);
 });
 
-test("dispatch: o'yin vositalari eski yozuvchilarga TUSHMAYDI; stub `null` qaytaradi", async () => {
+/**
+ * Germetik LLM muhiti: model HAR so'rovni rad etadi (400), kalit soxta,
+ * `.env.local` rollari olib tashlanadi. Ilgari quyidagi ikki test haqiqiy
+ * kalit bilan `deadline: now + 1 s` ga tayanardi — dvigatel «vaqt yo'q»
+ * deb o'zi `null` qaytarib, tarmoqqa chiqmasdi. EXT-03 dan keyin ish
+ * muddati tugashi `DeadlineError` (to'g'ri), shuning uchun «model javob
+ * bermadi» holati endi haqiqiy rad javobi bilan sinaladi.
+ */
+async function withRefusingLlm(fn: () => Promise<void>): Promise<void> {
+  const keys = ["GEMINI_API_KEY", "XAI_API_KEY", "ANTHROPIC_API_KEY", "OPENROUTER_API_KEY", "OPENAI_API_KEY", "LLM_WRITER", "LLM_RESEARCHER", "LLM_JUDGE", "LLM_FAST"];
+  const saved = new Map(keys.map((k) => [k, process.env[k]]));
+  const realFetch = globalThis.fetch;
+  for (const k of keys) delete process.env[k];
+  process.env.GEMINI_API_KEY = "test-key";
+  globalThis.fetch = (async () => new Response(JSON.stringify({ error: { message: "stub" } }), { status: 400 })) as typeof fetch;
+  try {
+    await fn();
+  } finally {
+    globalThis.fetch = realFetch;
+    for (const [k, v] of saved) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  }
+}
+
+test("dispatch: o'yin vositalari eski yozuvchilarga TUSHMAYDI; stub `null` qaytaradi", () => withRefusingLlm(async () => {
   const { writeWithLlm } = await import("../lib/generation/write-llm.ts");
   const { buildGameDoc } = await import("../lib/generation/games/engine.ts");
 
   // R0 stubi — shartnoma `null` (WP-A/WP-B tanani to'ldiradi).
-  assert.equal(await buildGameDoc(extractMeta(TOOL_BY_ID.crossword, { topic: "Fotosintez" }), {}, { deadline: Date.now() + 1000 }), null);
+  assert.equal(await buildGameDoc(extractMeta(TOOL_BY_ID.crossword, { topic: "Fotosintez" }), {}, { deadline: Date.now() + 60_000 }), null);
 
   for (const id of ["crossword", "flashcards"] as const) {
     const meta = extractMeta(TOOL_BY_ID[id], { topic: "Fotosintez", language: "uz" });
-    const doc = await writeWithLlm(meta, { topic: "Fotosintez" }, Date.now() + 1000, {});
+    const doc = await writeWithLlm(meta, { topic: "Fotosintez" }, Date.now() + 60_000, {});
     /*
      * MUTATSIYA: shox bo'lmasa `WRITER`/`lesson-plan` yo'li ishga tushib
      * BOSHQA hujjat (referat/dars rejasi) qaytarardi — foydalanuvchi
@@ -1504,13 +1541,13 @@ test("dispatch: o'yin vositalari eski yozuvchilarga TUSHMAYDI; stub `null` qayta
      */
     assert.equal(doc, null, `${id}: dvigatel yo'q bo'lsa null qaytishi kerak`);
   }
-});
+}));
 
-test("infografika `buildArtifact` da RASM yo'lidan o'tadi; stub xato bilan tugaydi", async () => {
+test("infografika `buildArtifact` da RASM yo'lidan o'tadi; stub xato bilan tugaydi", () => withRefusingLlm(async () => {
   const { buildArtifact, fileSuffix } = await import("../lib/generation/index.ts");
   const { buildInfographicArtifact } = await import("../lib/generation/infographic/engine.ts");
 
-  assert.equal(await buildInfographicArtifact(TOOL_BY_ID.infographic, {}, { deadline: Date.now() + 1000 }), null);
+  assert.equal(await buildInfographicArtifact(TOOL_BY_ID.infographic, {}, { deadline: Date.now() + 60_000 }), null);
 
   /*
    * Xato matni `rasm` vositasinikiga o'xshash: foydalanuvchi uchun bu
@@ -1518,7 +1555,7 @@ test("infografika `buildArtifact` da RASM yo'lidan o'tadi; stub xato bilan tugay
    * kabi ichki xabar ATAYLAB yozilmagan.
    */
   await assert.rejects(
-    () => buildArtifact(TOOL_BY_ID.infographic, { topic: "Suv aylanishi" }, { deadline: Date.now() + 1000 }),
+    () => buildArtifact(TOOL_BY_ID.infographic, { topic: "Suv aylanishi" }, { deadline: Date.now() + 60_000 }),
     (e: Error) => {
       assert.match(e.message, /Infografika yaratilmadi/);
       assert.ok(!/dvigatel|stub|WP-C/i.test(e.message), `ichki xabar foydalanuvchiga chiqdi: ${e.message}`);
@@ -1533,4 +1570,4 @@ test("infografika `buildArtifact` da RASM yo'lidan o'tadi; stub xato bilan tugay
   const suffixes = ["lesson-plan", "texnologik-xarita", "glossary", "keys", "test", "crossword", "flashcards", "infographic"].map(fileSuffix);
   assert.equal(new Set(suffixes).size, suffixes.length, "fayl nomi qo'shimchalari takrorlandi");
   assert.equal(fileSuffix("essay"), "", "boshqa vositalarga qo'shimcha qo'shilmadi");
-});
+}));

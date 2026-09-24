@@ -1,13 +1,15 @@
 "use client";
 
 import { create } from "zustand";
+import { safeReturnTo } from "./safe-return";
+import { TOOL_BY_ID } from "./tools";
+import type { ToolConfig } from "./types";
 
 export type Overlay =
   | "login"
   | "search"
   | "notifications"
   | "pay"
-  | "lang"
   | "sort"
   | null;
 
@@ -26,20 +28,14 @@ export const useUi = create<UiState>((set) => ({
   open: (overlay, extra) =>
     set({
       overlay,
-      returnTo: extra?.returnTo ?? null,
+      // C02/FE-01/SECA-02: `returnTo` bu yerga so'rov parametridan
+      // (masalan `?returnTo=javascript:...`) kelishi mumkin — faqat
+      // saytning o'zidagi "/uz" yo'li saqlanadi, aks holda `null`.
+      returnTo: safeReturnTo(extra?.returnTo ?? null),
       payPlan: extra?.payPlan ?? null,
     }),
   close: () => set({ overlay: null }),
 }));
-
-export const UI_LOCALES = [
-  { value: "uz", label: "O'zbekcha", flag: "🇺🇿" },
-  { value: "en", label: "English", flag: "🇬🇧" },
-  { value: "ru", label: "Русский", flag: "🇷🇺" },
-  { value: "kaa", label: "Qaraqalpaqsha", flag: "🇺🇿" },
-  { value: "kk", label: "Қазақша", flag: "🇰🇿" },
-  { value: "ky", label: "Кыргызча", flag: "🇰🇬" },
-] as const;
 
 export const THEME_OPTIONS = [
   { value: "light", label: "Kun" },
@@ -54,6 +50,34 @@ export const FILE_FILTERS = [
   { id: "tests", label: "Testlar" },
   { id: "games", label: "O'yinlar" },
 ] as const;
+
+export type FileFilterId = (typeof FILE_FILTERS)[number]["id"];
+
+/**
+ * Hujjat turi → «Mening fayllarim» filtri (bitta joyda, `lib/tools.ts`
+ * dan olinadi).
+ *
+ * FE-08: ilgari «Testlar» va «O'yinlar» QAT'IY `false` qaytarardi —
+ * sotilayotgan test, krossvord, kartochka va boshqa o'yinlar u yerda
+ * hech qachon chiqmas, «Hujjatlar» ichida yashirinib qolardi; pro slayd
+ * «Slaydlar»da, infografika «Rasmlar»da yo'q edi. Endi: slayd — PPTX
+ * chiqishi, rasm — PNG, test — `test`, o'yin — «O'yinlar» bo'limi
+ * vositalari, qolgan hammasi — «Hujjatlar». Har tur aniq BITTA toifaga
+ * tushadi (`all` dan tashqari) — hech biri ko'rinmay qolmaydi.
+ */
+export function fileCategory(type: string): Exclude<FileFilterId, "all"> {
+  const tool = (TOOL_BY_ID as Record<string, ToolConfig | undefined>)[type];
+  if (!tool) return "docs";
+  if (tool.group === "oyinlar") return "games";
+  if (tool.id === "test") return "tests";
+  if (tool.output === "pptx") return "slide";
+  if (tool.output === "png") return "image";
+  return "docs";
+}
+
+export function fileFilterMatch(filter: FileFilterId, type: string): boolean {
+  return filter === "all" || fileCategory(type) === filter;
+}
 
 export const FILE_SORTS = [
   { id: "modified", label: "Oxirgi o'zgartirilgan" },

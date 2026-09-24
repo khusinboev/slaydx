@@ -210,6 +210,63 @@ test("xato: server matni o'zbekcha ko'rsatiladi va panel yiqilmaydi", async () =
   assert.ok(q("[data-share-create]"), "tugma joyida — qayta urinish mumkin");
 });
 
+/* ────────────────────────── sahifalash (W3-G nit 2) ────────────────────────── */
+
+/*
+ * Server natijalarni sahifalab beradi (standart 500, `nextCursor`,
+ * HAQIQIY `total`). Ilgari panel faqat birinchi sahifani ko'rsatardi va
+ * sonni `rows.length` dan olardi: 800 o'quvchi o'ynagan bo'lsa «500 ta»
+ * deb yolg'on son chiqardi, qolgan 300 tasi hech qayerda ko'rinmasdi.
+ */
+test("sahifalash: «jami N» serverning `total` idan, «Yana ko‘rsatish» kursor bilan keyingi sahifani qo'shadi", async () => {
+  const r = (n: number) => ({ ...ROW, id: `r${n}`, playerName: `O‘quvchi ${n}`, createdAt: `2026-09-17T09:3${n}:00.000Z` });
+  const calls: Call[] = [];
+  globalThis.fetch = (async (input: unknown, init?: RequestInit) => {
+    const url = String(input);
+    const method = init?.method ?? "GET";
+    calls.push({ url, method });
+    if (url.endsWith("/share")) return json(200, { sessions: [SESSION] });
+    if (url.includes("/results")) {
+      const u = new URL(url, "http://x");
+      if (u.searchParams.get("before") === r(2).createdAt && u.searchParams.get("beforeId") === "r2") {
+        return json(200, { results: [r(3)], count: 1, total: 3, nextCursor: null });
+      }
+      return json(200, { results: [r(1), r(2)], count: 2, total: 3, nextCursor: { createdAt: r(2).createdAt, id: "r2" } });
+    }
+    return json(404, { error: "yo'q" });
+  }) as typeof fetch;
+  await act(async () => {
+    render(h(GameSharePanel, { id: ID, kind: "quiz" }));
+  });
+  await waitFor(() => assert.equal(document.querySelectorAll("[data-result-row]").length, 2));
+  assert.match(q("[data-results-total]")!.textContent ?? "", /jami 3 ta/, "son serverning total idan");
+  const more = q("[data-results-more]");
+  assert.ok(more, "keyingi sahifa bor — tugma chiqadi");
+  assert.match(more!.textContent ?? "", /Yana ko‘rsatish/);
+
+  await act(async () => {
+    fireEvent.click(more!);
+  });
+  await waitFor(() => assert.equal(document.querySelectorAll("[data-result-row]").length, 3));
+  assert.ok(q('[data-result-row="r3"]'), "keyingi sahifa QO'SHILDI (almashtirilmadi)");
+  assert.ok(!q("[data-results-more]"), "oxirgi sahifa — tugma yo'qoladi");
+  assert.ok(calls.some((c) => c.url.includes(`before=${encodeURIComponent(r(2).createdAt)}`) && c.url.includes("beforeId=r2")), "kursor so'rovga uzatildi");
+
+  // «Yangilash» — yana birinchi sahifadan (eski sahifalar tashlanadi, dublikat yo'q).
+  await act(async () => {
+    fireEvent.click(q("[data-results-refresh]")!);
+  });
+  await waitFor(() => assert.equal(document.querySelectorAll("[data-result-row]").length, 2));
+  assert.ok(q("[data-results-more]"), "yangilangandan keyin yana keyingi sahifa taklif qilinadi");
+});
+
+test("sahifalash: eski server (`total`/`nextCursor` yo'q) — son qatorlardan, tugma yo'q", async () => {
+  await open({ sessions: [SESSION], results: [ROW] });
+  await waitFor(() => assert.ok(q("[data-results-table]")));
+  assert.match(q("[data-results-total]")!.textContent ?? "", /1 ta/);
+  assert.ok(!q("[data-results-more]"));
+});
+
 /* ────────────────────────── ResultView shartnomasi ────────────────────────── */
 
 test("shartnoma: `ResultView` panelni `publicGameKindOf` bo'yicha chizadi", () => {

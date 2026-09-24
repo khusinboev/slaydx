@@ -34,6 +34,13 @@ yarn-error.log*
 .env*
 !.env.example
 
+# scripts/backup.sh BACKUP_ENV_FILE (BACKUP_REMOTE/BACKUP_TG_CHAT/
+# TELEGRAM_BOT_TOKEN) — standart joyi repo tashqarisida (/etc/slaydx/backup.env),
+# lekin egasi shu nomdagi faylni repo ichida ham qoldirib qo'yishi mumkin —
+# belt-and-braces (reviewer R2a: sirlar image qatlamiga/git'ga tushmasin).
+.backup.env
+*.backup.env
+
 # vercel
 .vercel
 

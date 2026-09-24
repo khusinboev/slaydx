@@ -87,11 +87,14 @@ export function makeAnthropicAdapter(deps: AnthropicDeps = {}): ProviderAdapter 
     async complete(model, system, user, opts: AdapterOpts): Promise<Attempt> {
       const client: Pick<Anthropic, "messages"> =
         /*
-         * `maxRetries: 1` — SDK standarti 2: timeout'da uch urinish
+         * `maxRetries: 0` — SDK standarti 2: timeout'da uch urinish
          * `timeoutMs` ni uch barobar qiladi (35 s → 106 s, AUDIT-19
-         * referat jonli sinovi). Zaxira zanjiri (`chain.ts`) o'zi bor.
+         * referat jonli sinovi), ustiga SDK har qanday `retry-after` ni
+         * cheklovsiz kutadi. Qayta urinishni FAQAT zanjir (`chain.ts`)
+         * boshqaradi — muddat, jitter va `Retry-After` chegarasi bilan
+         * (audit EXT-03).
          */
-        deps.client ?? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: opts.timeoutMs, maxRetries: 1 });
+        deps.client ?? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY, timeout: opts.timeoutMs, maxRetries: 0 });
       try {
         const res = await client.messages.create({
           model,

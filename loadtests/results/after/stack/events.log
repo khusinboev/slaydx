@@ -1,0 +1,37 @@
+2026-09-24T05:10:32.707Z supervisor 1061235 up (repo=/home/adhambek/projects/pythons/slaydbot/slaydx/.claude/worktrees/loadtest-after)
+2026-09-24T05:10:32.708Z start jail 1061237
+2026-09-24T05:10:32.710Z start web 1061239
+2026-09-24T05:10:34.222Z task seed-1790226633-1061318 start
+2026-09-24T05:10:47.795Z task seed-1790226633-1061318 exit rc=0
+2026-09-24T05:10:48.299Z start worker-1 1061709
+2026-09-24T05:10:48.301Z start worker-2 1061711
+2026-09-24T05:38:50.681Z exit worker-1 1061709 code=0 uptime=1682s restart#1 in 1s
+2026-09-24T05:38:51.187Z start worker-1 1112128
+2026-09-24T05:38:54.716Z exit worker-2 1061711 code=0 uptime=1686s restart#1 in 1s
+2026-09-24T05:38:55.222Z start worker-2 1112297
+2026-09-24T05:39:02.777Z exit worker-1 1112128 code=137 uptime=11s restart#2 in 1s
+2026-09-24T05:39:03.283Z start worker-1 1112720
+2026-09-24T05:41:31.802Z exit worker-1 1112720 code=0 uptime=148s restart#3 in 1s
+2026-09-24T05:41:32.308Z start worker-1 1119419
+2026-09-24T05:41:35.838Z exit worker-2 1112297 code=0 uptime=160s restart#2 in 1s
+2026-09-24T05:41:36.346Z start worker-2 1119635
+2026-09-24T05:42:00.517Z exit worker-1 1119419 code=0 uptime=28s restart#4 in 1s
+2026-09-24T05:42:01.024Z start worker-1 1120660
+2026-09-24T05:42:04.553Z exit worker-2 1119635 code=0 uptime=28s restart#3 in 1s
+2026-09-24T05:42:05.059Z start worker-2 1120824
+2026-09-24T05:42:15.128Z exit worker-1 1120660 code=0 uptime=14s restart#5 in 1s
+2026-09-24T05:42:16.136Z start worker-1 1121474
+2026-09-24T05:42:20.166Z exit worker-2 1120824 code=0 uptime=15s restart#4 in 1s
+2026-09-24T05:42:21.175Z start worker-2 1121700
+2026-09-24T05:43:28.646Z exit worker-1 1121474 code=0 uptime=72s restart#6 in 1s
+2026-09-24T05:43:29.153Z start worker-1 1124041
+2026-09-24T05:43:32.684Z exit worker-2 1121700 code=0 uptime=71s restart#5 in 1s
+2026-09-24T05:43:33.189Z start worker-2 1124210
+2026-09-24T05:43:59.871Z exit worker-1 1124041 code=0 uptime=30s restart#7 in 1s
+2026-09-24T05:44:00.376Z start worker-1 1125412
+2026-09-24T05:45:08.323Z exit worker-1 1125412 code=0 uptime=68s restart#8 in 1s
+2026-09-24T05:45:09.333Z start worker-1 1128082
+2026-09-24T05:45:13.365Z exit worker-2 1124210 code=0 uptime=100s restart#6 in 1s
+2026-09-24T05:45:14.374Z start worker-2 1128315
+2026-09-24T05:45:34.388Z supervisor stopping
+2026-09-24T05:45:34.894Z supervisor stopped

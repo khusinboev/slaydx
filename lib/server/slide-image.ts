@@ -1,7 +1,9 @@
 import "server-only";
 import { ApiError } from "./api";
 import { commitDocOps } from "./slide-commit";
-import { assetUrl, putAssetBytes } from "./assets";
+import { assetUrl } from "./assets";
+import { readUploadForm } from "./upload-body";
+import { pendingUpload } from "./upload-quota";
 import { sniffImageType } from "../generation/slide-images";
 import { SLIDE_IMAGE_MAX_BYTES } from "../generation/slide-limits";
 import type { DocOp } from "../generation/slide-edit";
@@ -34,9 +36,9 @@ function assertValidIndex(index: number): void {
  * Foydalanuvchi o'z PNG/JPEG faylini biriktiradi (AI EMAS).
  *
  * Tartib: hajm (sarlavha, so'ng haqiqiy `file.size`) → sniff (baytlardan,
- * `content-type`dan EMAS — `logo.ts` bilan bir xil naqsh) → aktivga
- * yozish → `commitDocOps` (egalik, versiya qulfi, maket rasm joyi —
- * hammasi shu yerda, ikkinchi marta yozilmaydi).
+ * `content-type`dan EMAS — `logo.ts` bilan bir xil naqsh) →
+ * `commitDocOps` (egalik, versiya qulfi, maket rasm joyi, kvota va
+ * aktivga yozish — hammasi BITTA tranzaksiyada, ikkinchi marta yozilmaydi).
  */
 export async function uploadSlideImage(
   req: Request,
@@ -46,12 +48,8 @@ export async function uploadSlideImage(
 ): ReturnType<typeof commitDocOps> {
   assertValidIndex(index);
 
-  const declared = Number(req.headers.get("content-length") ?? 0);
-  if (Number.isFinite(declared) && declared > SLIDE_IMAGE_MAX_BYTES + 64 * 1024) {
-    throw new ApiError("Fayl juda katta", 413);
-  }
-
-  const form = await req.formData().catch(() => null);
+  // Hajm tana o'qilayotganda — chunked so'rovda ham (SECB-05).
+  const form = await readUploadForm(req, SLIDE_IMAGE_MAX_BYTES + 64 * 1024, "Fayl juda katta");
   const file = form?.get("file");
   if (!(file instanceof File)) throw new ApiError("Fayl yuborilmadi", 400);
   if (file.size > SLIDE_IMAGE_MAX_BYTES) throw new ApiError("Fayl juda katta", 413);
@@ -69,8 +67,13 @@ export async function uploadSlideImage(
   if (!type) throw new ApiError("Faqat PNG yoki JPEG qabul qilinadi", 415);
   const mime = type === "png" ? "image/png" : "image/jpeg";
 
-  const assetId = await putAssetBytes(id, mime, bytes);
-  const url = assetUrl(id, assetId);
-  const ops: DocOp[] = [{ op: "image", index, url }];
-  return commitDocOps(id, userId, baseVersion, ops);
+  /*
+   * `asset_id` baytning xeshi — URL yozishdan OLDIN ma'lum. Bayt esa
+   * hujjat bilan BITTA tranzaksiyada yoziladi (SECB-03): begona hujjat
+   * (404), eskirgan versiya (409), rasm joyi yo'q maket (422) yoki kvota
+   * (413) — bazada yetim aktiv qolmaydi.
+   */
+  const upload = pendingUpload(mime, bytes);
+  const ops: DocOp[] = [{ op: "image", index, url: assetUrl(id, upload.assetId) }];
+  return commitDocOps(id, userId, baseVersion, ops, { uploads: [upload] });
 }

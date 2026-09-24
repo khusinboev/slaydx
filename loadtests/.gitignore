@@ -1,0 +1,5 @@
+.state/
+# validation runs of the harness itself
+results/smoke-*/
+# raw process logs copied by stack.sh down (can be large)
+results/*/stack/logs/

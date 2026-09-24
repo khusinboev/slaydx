@@ -1,0 +1,2 @@
+[10:00:54] k6 browse (profile smoke) -> /home/adhambek/projects/pythons/slaydbot/slaydx/loadtests/results/before/chaos/provider-down-k6/k6-browse.json
+[k6:browse] reqs=2062 rps=27.0 p50=2.4ms p95=3.9ms p99=4.8ms failed=0.00%

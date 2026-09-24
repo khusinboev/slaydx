@@ -17,9 +17,16 @@ export type EditActionsState = {
   /** Saqlanmagan operatsiyalar soni. */
   pending: number;
   saving: boolean;
+  /**
+   * Oxirgi saqlash yiqildi, navbat joyida (`useDocEdit.saveFailed`) —
+   * tugma «Qayta urinish · N»: foydalanuvchi o'zgarish saqlanMAGANINI
+   * xato matnini o'qimasdan ham ko'radi.
+   */
+  saveFailed?: boolean;
   /** Endigina saqlandi — qisqa «Saqlandi ✓». */
   justSaved: boolean;
-  save: () => Promise<void> | void;
+  /** `useDocEdit.save` — `false` bo'lsa saqlanmadi (navbat joyida, sabab ko'ruvchida). */
+  save: () => Promise<boolean | void> | void;
   /** Saqlanmagan o'zgarishlarni bekor qilish (faqat klientda). */
   discard: () => void;
 };
@@ -32,7 +39,7 @@ export function EditActions({ state }: { state: EditActionsState | null }) {
    */
   const discard = useConfirmClick(() => state?.discard());
   if (!state) return null;
-  const { pending, saving, justSaved, save } = state;
+  const { pending, saving, saveFailed, justSaved, save } = state;
   if (pending === 0 && !saving) {
     return justSaved ? (
       <span className="inline-flex items-center gap-1 text-xs text-emerald-600" data-edit-saved>
@@ -58,13 +65,14 @@ export function EditActions({ state }: { state: EditActionsState | null }) {
       </button>
       <button
         type="button"
-        title="Saqlash (Ctrl+S)"
+        title={saveFailed ? "Saqlanmadi — qayta urinish (Ctrl+S)" : "Saqlash (Ctrl+S)"}
+        data-save-failed={saveFailed ? "" : undefined}
         disabled={saving || pending === 0}
         className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-sky-500 px-3 text-sm font-medium text-white hover:bg-sky-400 disabled:opacity-60"
         onClick={() => void save()}
       >
         <Save className="size-4" />
-        {saving ? "Saqlanmoqda…" : `Saqlash · ${pending}`}
+        {saving ? "Saqlanmoqda…" : saveFailed ? `Qayta urinish · ${pending}` : `Saqlash · ${pending}`}
       </button>
     </div>
   );

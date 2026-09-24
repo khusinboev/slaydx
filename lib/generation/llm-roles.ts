@@ -23,6 +23,7 @@
  */
 import { llmModel, llmProvider, type LlmOpts } from "./llm";
 import { completeWithChain } from "./llm/chain";
+export { DeadlineError } from "./llm/chain";
 import { anthropicAdapter } from "./llm/anthropic";
 import { geminiAdapter } from "./llm/gemini";
 import { openaiAdapter } from "./llm/openai";
@@ -30,6 +31,7 @@ import { openrouterAdapter } from "./llm/openrouter";
 import { parseRoleSpec, type ProviderAdapter, type ProviderId, type RoleSpec } from "./llm/types";
 import { xaiAdapter } from "./llm/xai";
 import { costUsd } from "./llm-pricing";
+import { recordLlmUsage } from "./job-cost";
 
 export type LlmRole = "writer" | "researcher" | "judge" | "fast";
 
@@ -37,7 +39,16 @@ export type LlmUsage = { provider: string; model: string; inputTokens: number; o
 
 export type RoleResult = { text: string; usage?: LlmUsage };
 
-export type RoleOpts = Pick<LlmOpts, "json" | "timeoutMs" | "thinking"> & { maxTokens?: number };
+export type RoleOpts = Pick<LlmOpts, "json" | "timeoutMs" | "thinking"> & {
+  maxTokens?: number;
+  /**
+   * Ish muddati (epoch ms, audit C28/W3 shartnomasi). Berilsa har urinish
+   * timeout'i qolgan vaqt bilan cheklanadi, sekin provayderdan keyin zaxira
+   * specga o'tiladi va vaqt tugasa `DeadlineError` (`llm/chain.ts`) OTILADI —
+   * chaqiruvchi uni ushlashi kerak. Berilmasa — eski xatti-harakat.
+   */
+  deadline?: number;
+};
 
 const ADAPTERS: Partial<Record<ProviderId, ProviderAdapter>> = {
   gemini: geminiAdapter,
@@ -90,6 +101,8 @@ export async function complete(
     { adapters: ADAPTERS, log: (line) => console.log(line) },
   );
   if (!res) return null;
+  // Ish sarfi (EXT-11): `buildArtifact` konteksti bo'lsa `cost_json` ga — dvigatel o'z hisoblagichini yuritmasa ham.
+  recordLlmUsage(res.usage);
   return { text: res.text, usage: res.usage };
 }
 

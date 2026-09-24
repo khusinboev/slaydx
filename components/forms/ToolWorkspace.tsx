@@ -1,33 +1,45 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import type { FormValues, ToolConfig } from "@/lib/types";
 import { defaultPages, fieldVisible, missingRequired, priceFor, profileDefaults, toolBlockedReason } from "@/lib/tools";
-import { draftOutline } from "@/lib/api-client";
+import { draftOutline, type ServerUser } from "@/lib/api-client";
 import { useAppStore, writerProfile } from "@/lib/store";
 import { useUi } from "@/lib/ui";
 import type { UserProfile } from "@/lib/types";
 import { FieldBlock, ModeSwitch, TextInput, Legend } from "./fields";
 import { ToolChrome } from "./ToolChrome";
 import { runGeneration } from "./runGeneration";
-import { SlideForm } from "./SlideForm";
-import { ProSlideForm } from "./ProSlideForm";
-import { ResumeComposer } from "./ResumeComposer";
-import { TranslationForm } from "./TranslationForm";
-import { ImageStudio } from "./ImageStudio";
-import { ArticleComposer } from "./ArticleComposer";
-import { EssayComposer } from "./EssayComposer";
-import { WorkComposer } from "./WorkComposer";
-import { TeacherComposer } from "./TeacherComposer";
-import { MediaComposer } from "./MediaComposer";
-import { InfographicComposer } from "./InfographicComposer";
-import { GameComposer } from "./GameComposer";
 import { SourceFileField } from "./SourceFileField";
 import { gameDefaultTypeId } from "@/lib/generation/games/registry";
 import { GAME_LIMITS } from "@/lib/generation/games/types";
 import { infographicDefaultTypeId } from "@/lib/generation/infographic/registry";
 import { INFOGRAPHIC_LIMITS, PALETTES } from "@/lib/generation/infographic/types";
+
+/*
+ * Har vositaning formasi ALOHIDA bo'lakda (FE-11).
+ *
+ * Ilgari 12 ta composer statik import qilinardi: `/uz/rasm` ni ochgan
+ * foydalanuvchi rezyume formasi, kasblar bazasi (~580 KB), maqola va
+ * o'yin formalari bilan birga ~500 KB gz JS yuklardi. Endi sahifa faqat
+ * o'z formasini `import()` bilan oladi. Xulq o'zgarmaydi: forma baribir
+ * sessiya tasdiqlangandan keyin chiziladi, bo'lak shu vaqtda yetib keladi.
+ */
+const SlideForm = lazy(() => import("./SlideForm").then((m) => ({ default: m.SlideForm })));
+const ProSlideForm = lazy(() => import("./ProSlideForm").then((m) => ({ default: m.ProSlideForm })));
+const ResumeComposer = lazy(() => import("./ResumeComposer").then((m) => ({ default: m.ResumeComposer })));
+const TranslationForm = lazy(() => import("./TranslationForm").then((m) => ({ default: m.TranslationForm })));
+const ImageStudio = lazy(() => import("./ImageStudio").then((m) => ({ default: m.ImageStudio })));
+const ArticleComposer = lazy(() => import("./ArticleComposer").then((m) => ({ default: m.ArticleComposer })));
+const EssayComposer = lazy(() => import("./EssayComposer").then((m) => ({ default: m.EssayComposer })));
+const WorkComposer = lazy(() => import("./WorkComposer").then((m) => ({ default: m.WorkComposer })));
+const TeacherComposer = lazy(() => import("./TeacherComposer").then((m) => ({ default: m.TeacherComposer })));
+const MediaComposer = lazy(() => import("./MediaComposer").then((m) => ({ default: m.MediaComposer })));
+const InfographicComposer = lazy(() => import("./InfographicComposer").then((m) => ({ default: m.InfographicComposer })));
+const GameComposer = lazy(() => import("./GameComposer").then((m) => ({ default: m.GameComposer })));
+
+const LOADING = <div className="text-muted-foreground p-8 text-sm">Yuklanmoqda...</div>;
 
 function defaultsFor(tool: ToolConfig, profile: UserProfile): FormValues {
   const v: FormValues = {
@@ -88,9 +100,7 @@ export function ToolWorkspace({ tool }: { tool: ToolConfig }) {
     }
   }, [sessionChecked, loggedIn, open, tool.slug]);
 
-  if (!sessionChecked) {
-    return <div className="text-muted-foreground p-8 text-sm">Yuklanmoqda...</div>;
-  }
+  if (!sessionChecked) return LOADING;
 
   /*
    * Kalitsiz xizmat sotilmaydi (N-6).
@@ -114,7 +124,11 @@ export function ToolWorkspace({ tool }: { tool: ToolConfig }) {
   }
 
   const profile = writerProfile(user);
+  return <Suspense fallback={LOADING}>{toolForm(tool, profile, user)}</Suspense>;
+}
 
+/** Vosita → uning formasi (bo'lagi kerak bo'lganda yuklanadi). */
+function toolForm(tool: ToolConfig, profile: UserProfile, user: ServerUser | null) {
   if (tool.custom === "slide") return <SlideForm tool={tool} profile={profile} />;
   if (tool.custom === "pro-slide") return <ProSlideForm tool={tool} profile={profile} />;
   if (tool.custom === "resume") return <ResumeComposer tool={tool} profile={profile} />;

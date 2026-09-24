@@ -15,6 +15,8 @@ export function SearchDialog() {
   const router = useRouter();
   const loggedIn = useAppStore((s) => s.loggedIn);
   const generations = useAppStore((s) => s.generations);
+  // Serverda yana sahifa bor — qidiruv hamma fayllarni ko'rmaydi.
+  const moreOnServer = useAppStore((s) => s.generationsCursor !== null);
   const openLogin = useUi((s) => s.open);
   const [q, setQ] = useState("");
   const panelRef = useDialog(open, close);
@@ -98,9 +100,20 @@ export function SearchDialog() {
               <p className="text-muted-foreground mt-2 px-2 py-1.5 text-xs font-semibold tracking-wider uppercase">
                 Fayllar
               </p>
+              {/*
+               * W2-E/FE-08: qidiruv faqat yuklangan birinchi sahifa (50 ta)
+               * ichida — server qidiruvi yo'q. Eskilari bor bo'lsa halol aytiladi,
+               * aks holda «topilmadi» = «hujjat o'chib ketgan» deb o'qilardi.
+               */}
+              {moreOnServer ? (
+                <p className="text-muted-foreground px-2 pb-1 text-xs" data-search-partial>
+                  Qidiruv faqat yuklanganlar orasida (oxirgi {generations.length} ta). Eskiroq fayllarni «Mening
+                  fayllarim» dagi «Yana ko‘rsatish» orqali oching.
+                </p>
+              ) : null}
               {files.length === 0 ? (
                 <p className="text-muted-foreground px-2 py-3 text-sm">
-                  Yaratgan fayllaringiz ichidan qidiring
+                  {q.trim() ? "Yuklangan fayllar orasida topilmadi" : "Yaratgan fayllaringiz ichidan qidiring"}
                 </p>
               ) : (
                 files.map((g) => (

@@ -35,6 +35,7 @@ import type { AcademicDoc, Block, DocMeta, DocSection } from "../../types";
 import type { CompleteFn } from "../../research/pipeline";
 import { llmEnabled } from "../../llm";
 import { CostMeter, complete as completeRole } from "../../llm-roles";
+import { assertJobTime } from "../../deadline";
 import { parseLlmObject } from "../../json";
 import { remainingMs } from "../../quality";
 import type { GameBuildOpts, GameBuilt } from "../engine";
@@ -240,10 +241,12 @@ export async function buildSortingDoc(meta: DocMeta, values: FormValues, opts: G
   const ask = async (user: string, maxTokens: number): Promise<string | null> => {
     const timeoutMs = Math.min(CALL_MS, remainingMs(deadline));
     if (timeoutMs < MIN_CALL_MS) {
+      // Ish muddati tugagan (EXT-03) — asosiy yozuv: yarim o'yin emas, `DeadlineError`.
+      assertJobTime(deadline, "sorting:writer", MIN_CALL_MS);
       console.warn(`[sorting] byudjet tugadi: ${timeoutMs} ms qoldi`);
       return null;
     }
-    const r = await complete("writer", system, user, { json: true, maxTokens, timeoutMs });
+    const r = await complete("writer", system, user, { json: true, maxTokens, timeoutMs, deadline });
     if (r?.usage) {
       meter.add(r.usage);
       opts.onUsage?.(r.usage);
@@ -257,6 +260,7 @@ export async function buildSortingDoc(meta: DocMeta, values: FormValues, opts: G
   const seen = new Set<string>();
   const seenNames = new Set<string>();
   const cats: { name: string; items: string[] }[] = [];
+  assertJobTime(deadline, "sorting:writer", MIN_CALL_MS);
   const writeDeadline = deadline - (opts.polish === false ? SORTING_REVIEW_RESERVE_MS : SORTING_REVIEW_RESERVE_MS + SORTING_POLISH_RESERVE_MS);
   const total = () => cats.reduce((n, c) => n + c.items.length, 0);
 

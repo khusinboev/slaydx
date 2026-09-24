@@ -1,0 +1,184 @@
+# SlaydX — nginx site config TEMPLATE (INFRA-11).
+#
+# Bu fayl SHABLON — prod'dagi haqiqiy `/etc/nginx/sites-available/slaydx`
+# bilan bevosita almashtirilmaydi (TLS sertifikat yo'llari, `server_name`,
+# va ehtimol boshqa qo'shni loyihaga tegishli maxsus qatorlar bor bo'lishi
+# mumkin, `.claude/deploy.md`da tasvirlangan). Maqsad: nginx sozlamalari
+# ENDI reponi ko'rgan har kim uchun DIFFLANADIGAN, TEKSHIRILADIGAN matn —
+# ilgari faqat host'da qo'lda tahrirlanardi, hech qanday nusxasi yo'q edi
+# (INFRA-11, deploy.md §2a'dagi haqiqiy voqea: yangi tahrir yo'nalishi
+# standart `proxy_read_timeout 60s`ga sig'madi, tuzatish operatorning
+# qo'lda eslashi va faylni to'g'ridan-to'g'ri tahrirlashiga bog'liq edi).
+#
+# Ishlatish:
+#   1. Prod'dagi joriy faylni shu bilan solishtiring:
+#        ssh root@<server> 'cat /etc/nginx/sites-available/slaydx' | diff - deploy/nginx/slaydx.conf.example
+#   2. Farqlarni ataylab (TLS yo'llari, server_name) qoldirib, qolganini
+#      moslashtiring.
+#   3. `nginx -t` bilan sinab ko'ring, keyin `systemctl reload nginx`
+#      (reload — xavfsiz, qo'shni saytlarga (nodavlattalim/talim24-landing/
+#      vakant) uzilish bermaydi; `restart` qisqa uzilish beradi, ehtiyot
+#      bo'ling — `.claude/deploy.md`).
+#
+# Web konteyner FAQAT localhost'da tinglaydi (`docker-compose.yml`:
+# `127.0.0.1:${PORT:-3000}:3000`) — nginx TLS'ni shu yerda tugatadi va
+# proxy qiladi.
+#
+# SCALE-15: birinchi tashrif buyuruvchilar uchun `.next/static` (JS/CSS)
+# hozir HAR safar `web` konteynerdagi bitta Node jarayoni tomonidan
+# gzip qilinib beriladi — Telegram post portlashida (~17 tashrif/s, 1,5-2 MB
+# siqilmagan JS/CSS) bu gzip ishi generatsiya/login so'rovlari bilan BITTA
+# protsessor/soketni bo'lishadi. Tanlangan yechim: konteyner ichidagi
+# faylni HOST papkasiga ko'chirish yoki `assetPrefix`/CDN o'rniga — nginx
+# `proxy_cache` (pastda). Sabab (eng kam xavfli, tushuntirish):
+#   - konteyner faylini host papkasiga ulash `docker-compose.yml`/
+#     `Dockerfile`ni o'zgartirishni talab qiladi (build bosqichi, volume,
+#     yo'l sinxronligi) — bu fayl (deploy/nginx) EGASI EMAS shu fayllarga;
+#   - `assetPrefix`/CDN — yangi tashqi xizmat, DNS, bo'lim rejasi
+#     TALAB qiladi (brief "yangi infra yo'q" deydi, `.claude/deploy.md`);
+#   - `proxy_cache` — FAQAT shu nginx fayl ichida, mavjud upstream'ga
+#     proxy qilib turgan holda, hech narsani ko'chirmasdan/qurmasdan ishlaydi.
+#     Xeshli fayl nomlari (Next `immutable`) tufayli eskirgan kontent
+#     xavfi yo'q — cache kalitini almashtiradigan yagona narsa yo'l, u esa
+#     har build bilan o'zgaradi.
+#
+# `proxy_cache_path` MAJBURIY `http{}` kontekstida bo'lishi kerak — bu
+# sayt fayli odatda `/etc/nginx/sites-enabled/` orqali ulanadi, ya'ni asosiy
+# `nginx.conf`dagi `http { include sites-enabled/*; }` ICHIDA, demak bu
+# yerga yozish TO'G'RI (agar host boshqacha joylashgan bo'lsa — masalan
+# `conf.d/`da alohida include qilinsa — operator shu qatorni o'sha faylga
+# ko'chirsin, `nginx -t` xato bersa buni ko'rsatadi). Nom/yo'l ATAYLAB
+# `slaydx_` prefiksi bilan — bir xil box'dagi boshqa saytlar
+# (nodavlattalim/talim24-landing/vakant) bilan TO'QNASHMASIN.
+proxy_cache_path /var/cache/nginx/slaydx_static levels=1:2 keys_zone=slaydx_static:10m max_size=512m inactive=7d use_temp_path=off;
+
+server {
+    listen 80;
+    server_name slaydxx.uz www.slaydxx.uz;
+
+    # HTTP -> HTTPS. `enable-https.sh` (`.claude/deploy.md`) certbot orqali
+    # bu blokni to'ldiradi/almashtiradi — shu qism odatda avtomatik.
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl http2;
+    server_name slaydxx.uz www.slaydxx.uz;
+
+    # TLS sertifikat yo'llari — certbot/`enable-https.sh` to'ldiradi.
+    # Bu shablonda ATAYLAB qoldirilgan — real yo'llar host'ga xos.
+    # ssl_certificate     /etc/letsencrypt/live/slaydxx.uz/fullchain.pem;
+    # ssl_certificate_key /etc/letsencrypt/live/slaydxx.uz/privkey.pem;
+
+    # HSTS — bir marta HTTPS orqali kirilgach, brauzer HTTP'ga qaytmasin
+    # (aralash TLS/plain-HTTP kontent tahdidiga qarshi standart qoida).
+    # `preload` ATAYLAB YO'Q — domenni preload ro'yxatidan chiqarish qiyin,
+    # HTTPS hali barcha yo'llarda sinalmagan bosqichda xavfli.
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+    # Yuklash chegaralari: `SOURCE_MAX_BYTES`/`TEMPLATE_MAX_BYTES` = 20 MB
+    # (`lib/server/source-upload.ts`, `lib/server/template-upload.ts`).
+    # 32m — shu chegaradan YUQORI, ya'ni nginx emas, ilovaning O'ZI aniq
+    # xabar bilan rad etadi (kodning o'zidagi izoh shu qiymatga tayanadi —
+    # bu yerda o'zgartirsangiz o'sha izohni ham yangilang).
+    client_max_body_size 32m;
+
+    # Standart javob kutish vaqti — aksariyat route sinxron emas (navbatga
+    # qo'yiladi, `GET /api/generations/{id}` bilan so'raladi), shuning
+    # uchun 60s yetarli.
+    proxy_read_timeout 60s;
+    proxy_connect_timeout 10s;
+    proxy_send_timeout 60s;
+
+    # Reverse proxy ortidagi haqiqiy klient IP'i. `lib/server/env.ts`
+    # `TRUST_PROXY` (standart `true` — `docker-compose.yml`) shu
+    # sarlavhalarga ishonadi; ular yo'q bo'lsa IP chegaralash (rate limit)
+    # HAMMA so'rovni bitta IP deb hisoblardi.
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+
+    # SCALE-15: matn turlari uchun nginz gzip — bu server bloki ICHIDA,
+    # boshqa saytlarga (bir xil nginx instansi) tegmaydi. Brotli ATAYLAB
+    # yo'q: standart Ubuntu nginx paketida `ngx_brotli` moduli YO'Q
+    # (`nginx -V 2>&1 | grep -o brotli` bilan tekshiring) — modul
+    # o'rnatilmasdan `brotli on;` yozish `nginx -t`ni yiqitadi, bu esa
+    # BOSHQA saytlarni ham reload qila olmay qoladi. Modul o'rnatilsa,
+    # shu joyga `brotli on; brotli_types <gzip_types bilan bir xil>;`
+    # qo'shing.
+    gzip on;
+    gzip_vary on;
+    gzip_comp_level 5;
+    gzip_min_length 1024;
+    gzip_proxied any;
+    gzip_types text/plain text/css application/javascript application/json
+      application/xml image/svg+xml font/woff2;
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+    }
+
+    # SCALE-15: Next.js statik (xeshli, `immutable`) JS/CSS — birinchi
+    # tashrifda ham nginx keshidan beriladi (yuqoridagi `proxy_cache_path`),
+    # `web` konteyneridagi Node jarayoni har safar gzip QILMAYDI. Xesh
+    # fayl nomida bo'lgani uchun (masalan `chunks/app-<hash>.js`) MISS
+    # faqat build o'zgarganda bo'ladi — eskirgan kontent xavfi yo'q.
+    location /_next/static/ {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_cache slaydx_static;
+        proxy_cache_valid 200 7d;
+        # Bir vaqtda ko'p MISS bitta faylga tirbandlashsa — faqat BITTASI
+        # upstream'ga boradi, qolganlari kutadi (kesh tirqishi himoyasi).
+        proxy_cache_lock on;
+        proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
+        add_header X-Cache-Status $upstream_cache_status always;
+
+        # Xeshli fayl nomi — kontent HECH QACHON o'zgarmaydi, brauzer ham
+        # 1 yilgacha qayta so'ramasin (Next hujjatidagi standart tavsiya).
+        expires 1y;
+        add_header Cache-Control "public, max-age=31536000, immutable" always;
+    }
+
+    # SCALE-15: `/api/*` HECH QACHON keshlanmasin — yuqoridagi
+    # `proxy_cache slaydx_static` shu locationga TEGMAYDI (faqat
+    # `/_next/static/` ichida e'lon qilingan), lekin buni ANIQ va
+    # tekshiriladigan qilish uchun `proxy_cache off` alohida yozilgan.
+    # `/api/generations/` (pastda) bundan ko'ra ANIQROQ prefiks bo'lgani
+    # uchun nginx uni ustun qo'yadi (eng uzun mos prefiks g'olib) — bu
+    # blok qolgan barcha `/api/*` yo'nalishlarini qamrab oladi.
+    location /api/ {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache off;
+    }
+
+    # Tahrir yo'nalishlari (INFRA-08, deploy.md §2a): `POST
+    # /api/generations/{id}/rebuild` (30 slaydli PPTX qayta yasash) va
+    # `…/image/regenerate` (Gemini rasm ~35–45 s) standart 60s'ga
+    # sig'maydi — bu aynan 2026-09-11'da prod'da qo'lda topilgan va
+    # tuzatilgan muammo. `docker-compose.yml`dagi `web` servisining
+    # `stop_grace_period: 60s` bilan mos kelsin — ikkalasi ham SHU
+    # yo'nalishning haqiqiy eng yomon holatini (45-60s) qamrab olishi
+    # kerak.
+    location /api/generations/ {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 120s;
+        proxy_send_timeout 120s;
+        proxy_cache off;
+    }
+}

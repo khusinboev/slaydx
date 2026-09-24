@@ -533,7 +533,7 @@ export async function reviewTeacher(doc: AcademicDoc, opts: TeacherReviewOpts = 
     if (timeoutMs >= JUDGE_MIN_MS) {
       const ids = teacherTargets(doc);
       try {
-        const r = await opts.complete("judge", teacherJudgeSystemPrompt(model, ids), teacherJudgeUserPrompt(doc), { json: true, maxTokens: 1200, timeoutMs });
+        const r = await opts.complete("judge", teacherJudgeSystemPrompt(model, ids), teacherJudgeUserPrompt(doc), { json: true, deadline: opts.deadline, maxTokens: 1200, timeoutMs });
         if (r?.usage) opts.onUsage?.(r.usage);
         judge = parseTeacherJudge(model, r?.text, ids);
       } catch (e) {

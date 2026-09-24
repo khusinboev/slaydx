@@ -380,7 +380,7 @@ async function ask(deps: RewriteDeps, role: "writer", system: string, user: stri
     timer = setTimeout(() => resolve(null), timeoutMs);
   });
   try {
-    const r = await Promise.race([deps.complete(role, system, user, { json: true, maxTokens, timeoutMs }).catch(() => null), bomb]);
+    const r = await Promise.race([deps.complete(role, system, user, { json: true, deadline: deps.deadline, maxTokens, timeoutMs }).catch(() => null), bomb]);
     if (!r?.text) throw new RewriteError(RETRY_MSG, 422, "llm");
     return r.text;
   } finally {

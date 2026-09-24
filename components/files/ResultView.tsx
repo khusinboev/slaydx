@@ -2,11 +2,19 @@
 
 import Link from "next/link";
 import { cn } from "@/lib/cn";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Download, Trash2 } from "lucide-react";
+import { ArrowLeft, Download, Loader2, RefreshCw, Trash2 } from "lucide-react";
 import * as api from "@/lib/api-client";
-import { editErrorCode, editErrorText, ensureGenerationFresh, polishArticle, rewriteArticle } from "@/lib/api-edit";
+import {
+  editErrorCode,
+  editErrorText,
+  ensureGenerationFresh,
+  isUnpaidError,
+  polishArticle,
+  rewriteArticle,
+  withReconcile,
+} from "@/lib/api-edit";
 import type { ReviewCheck } from "@/lib/generation/article/types";
 import { useAppStore } from "@/lib/store";
 import { TOOL_BY_ID } from "@/lib/tools";
@@ -14,9 +22,15 @@ import { useConfirmClick } from "../overlays/useConfirmClick";
 import { EditActions, type EditActionsState } from "./EditActions";
 import { GameSharePanel } from "./GameSharePanel";
 import { publicGameKindOf } from "@/lib/game/public";
-import { ArtifactViewer } from "../viewers/ArtifactViewer";
+/*
+ * Jonli slayd ko'ruvchisi ALOHIDA bo'lakda (FE-11): u faqat slayd
+ * yaratilayotganda kerak, matn hujjatlarining sahifasi esa `planSlide`
+ * dvigatelini birinchi yuklanishda olmasin. `ArtifactViewer` bilan BITTA
+ * `lazy` o'rami (W4-D N3).
+ */
+import { ArtifactViewer, SlideViewer } from "../viewers/ArtifactViewer";
 import { ArticleReviewPanel, ESSAY_HIDDEN_GROUPS } from "../viewers/ArticleReviewPanel";
-import { SlideViewer, asLiveView } from "../viewers/SlideViewer";
+import { asLiveView } from "../viewers/live-view";
 import { liveDocOf, type LiveDeck } from "@/lib/generation/slide-progress";
 import { viewerKind } from "@/lib/viewers/kind";
 import type { Generation } from "@/lib/types";
@@ -42,6 +56,23 @@ export function ResultView({ id }: { id: string }) {
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(true);
   /**
+   * Polling holati (C20): `issue` — uzilish yoki odatdan uzoq kutish
+   * (polling DAVOM etmoqda); `errorStatus` — polling taslim bo'lgan
+   * xatoning HTTP statusi (404 → «topilmadi», boshqasi → «Qayta
+   * tekshirish»). `pollKey` ni oshirish pollingni boshidan boshlaydi.
+   */
+  const [issue, setIssue] = useState<api.PollIssue | null>(null);
+  const [errorStatus, setErrorStatus] = useState<number | null>(null);
+  const [pollKey, setPollKey] = useState(0);
+  /** Qaysi yuklab olish ketmoqda — PDF o'girish 1 daqiqagacha (UX-08). */
+  const [downloading, setDownloading] = useState<"file" | "pdf" | null>(null);
+  /**
+   * 402 `unpaid` (W1-E): hujjat bonus ball bilan to'langan — bepul AI
+   * tahrir unga ishlamaydi. Sabab bir marta aytiladi va «Tuzatish»/
+   * «Hammasini tuzatish» o'chadi (qayta bosish yana 402 berardi).
+   */
+  const [aiLocked, setAiLocked] = useState<string | null>(null);
+  /**
    * Ko'ruvchi tahririning holati — «Asliga qaytarish» va «Saqlash · N»
    * SHU sarlavha qatorida, «Yuklab olish» yonida turadi: foydalanuvchi
    * faylni olishdan oldin saqlanmagan o'zgarish borligini aynan shu
@@ -58,11 +89,22 @@ export function ResultView({ id }: { id: string }) {
   const [polishing, setPolishing] = useState(false);
   const genRef = useRef<api.GenerationDetail | null>(null);
   genRef.current = gen;
+  /** Sahifadan chiqilganda uzoq AI tahrirning natija tekshiruvi to'xtaydi (FE-15, W4-D N2). */
+  const alive = useRef<AbortController | null>(null);
+  useEffect(() => {
+    const ctrl = new AbortController();
+    alive.current = ctrl;
+    return () => ctrl.abort();
+  }, []);
 
   useEffect(() => {
     if (!sessionChecked || !loggedIn) return;
     const ctrl = new AbortController();
-    setLoading(true);
+    // «Qayta tekshirish» da hujjat allaqachon ekranda — «Yuklanmoqda» ga qaytmaymiz.
+    setLoading(genRef.current === null);
+    setError(null);
+    setErrorStatus(null);
+    setIssue(null);
     void api
       .pollGeneration(
         id,
@@ -72,22 +114,29 @@ export function ResultView({ id }: { id: string }) {
           upsert(g);
         },
         ctrl.signal,
+        setIssue,
       )
       .then(() => {
+        setIssue(null);
         // Tugaganda balans o'zgargan bo'lishi mumkin (xato → qaytarish).
         void useAppStore.getState().refreshSession();
       })
       .catch((e: unknown) => {
         if (e instanceof DOMException && e.name === "AbortError") return;
+        setIssue(null);
         setError(e instanceof Error ? e.message : "Yuklab bo'lmadi");
+        setErrorStatus(e instanceof api.ApiError ? e.status : null);
         setLoading(false);
       });
     return () => ctrl.abort();
-  }, [id, loggedIn, sessionChecked, upsert]);
+  }, [id, loggedIn, sessionChecked, upsert, pollKey]);
+
+  const recheck = useCallback(() => setPollKey((k) => k + 1), []);
 
   const onDownload = useCallback(
     async (format?: "pdf") => {
       setBusy(true);
+      setDownloading(format ?? "file");
       setError(null);
       try {
         /*
@@ -100,16 +149,21 @@ export function ResultView({ id }: { id: string }) {
         if (gen) {
           const r = await ensureGenerationFresh(gen);
           if (r) {
-            setGen((prev) =>
-              prev ? { ...prev, fileVersion: r.fileVersion, docVersion: r.docVersion } : prev,
-            );
+            /*
+             * Faqat `fileVersion` (review R3): `docVersion` ni `doc` siz
+             * oshirish tahrir navbatini eski hujjatga «yangi versiya» deb
+             * bog'lab, serverga yetgan bo'lakni ikki marta qo'llatardi.
+             */
+            setGen((prev) => (prev ? { ...prev, fileVersion: r.fileVersion } : prev));
           }
         }
         await api.downloadGeneration(id, format);
       } catch (e) {
+        // 429/503 (PDF band) — server matni + «qachon qayta» (`downloadGeneration`).
         setError(e instanceof Error ? e.message : "Yuklab olinmadi");
       } finally {
         setBusy(false);
+        setDownloading(null);
       }
     },
     [id, gen],
@@ -155,11 +209,19 @@ export function ResultView({ id }: { id: string }) {
       setFixing(fix.target);
       setError(null);
       try {
-        if (editState?.pending) await editState.save();
+        if (editState?.pending && (await editState.save()) === false) {
+          setError(UNSAVED_FIRST);
+          return;
+        }
         const base = genRef.current?.docVersion ?? cur.docVersion ?? 0;
-        const { generation } = await rewriteArticle(cur.id, base, fix);
+        // FE-15: 504/vaqt tugashidan keyin natija serverdan tekshiriladi (qayta yuborilmaydi).
+        const { generation } = await withReconcile(cur.id, base, () => rewriteArticle(cur.id, base, fix), alive.current?.signal);
         adoptDetail(generation);
       } catch (e) {
+        if (isUnpaidError(e)) {
+          setAiLocked(editErrorText(e));
+          return;
+        }
         setError(editErrorText(e));
         if (editErrorCode(e)) {
           try {
@@ -188,11 +250,24 @@ export function ResultView({ id }: { id: string }) {
     setPolishing(true);
     setError(null);
     try {
-      if (editState?.pending) await editState.save();
+      if (editState?.pending && (await editState.save()) === false) {
+        setError(UNSAVED_FIRST);
+        return;
+      }
       const base = genRef.current?.docVersion ?? cur.docVersion ?? 0;
-      const { generation } = await polishArticle(cur.id, base);
+      /*
+       * FE-15: sayqal ≤120 s + baholovchi — proksi (60/120 s) uni kesib 504
+       * berishi mumkin, server esa natijani saqlaydi. Noaniq javobda hujjat
+       * serverdan tekshiriladi va o'zlashtiriladi; ilgari «Server javob
+       * bermadi» chiqib, qayta bosish kunlik 3 sayqaldan birini yerdi.
+       */
+      const { generation } = await withReconcile(cur.id, base, () => polishArticle(cur.id, base), alive.current?.signal);
       adoptDetail(generation);
     } catch (e) {
+      if (isUnpaidError(e)) {
+        setAiLocked(editErrorText(e));
+        return;
+      }
       setError(editErrorText(e));
       if (editErrorCode(e)) {
         try {
@@ -213,10 +288,26 @@ export function ResultView({ id }: { id: string }) {
     );
   }
   if (loading) {
-    return <Empty title="Yuklanmoqda..." hint="Hujjat holati olinmoqda." />;
+    return (
+      <Empty
+        title="Yuklanmoqda..."
+        hint={issue?.message ?? "Hujjat holati olinmoqda."}
+        action={issue ? <RecheckButton onClick={recheck} /> : null}
+      />
+    );
   }
   if (!gen) {
-    return <Empty title="Fayl topilmadi" hint={error ?? "Hujjat o'chirilgan bo'lishi mumkin."} />;
+    // Faqat 404/403/400 — «topilmadi»; tarmoq va boshqa xato — qayta tekshirish mumkin.
+    const gone = errorStatus === 404 || errorStatus === 403 || errorStatus === 400;
+    return gone ? (
+      <Empty title="Fayl topilmadi" hint={error ?? "Hujjat o'chirilgan bo'lishi mumkin."} />
+    ) : (
+      <Empty
+        title="Hujjat holatini olib bo‘lmadi"
+        hint={error ?? "Aloqani tekshirib, qayta urinib ko‘ring."}
+        action={<RecheckButton onClick={recheck} />}
+      />
+    );
   }
 
   const tool = TOOL_BY_ID[gen.type];
@@ -232,7 +323,13 @@ export function ResultView({ id }: { id: string }) {
    * topilmadi» yoki rasmda «qayta generate qiling» (chalg'ituvchi)
    * ko'rsatardi.
    */
-  const expired = completed && !gen.hasFile;
+  const expired = completed && (!gen.hasFile || Boolean(gen.filesPurgedAt));
+  /*
+   * Bonus-faqat hujjatlar fayli 180 kundan keyin o'chiriladi (W2-D2
+   * retention); server buni `filesPurgedAt` bilan aytadi (ixtiyoriy maydon —
+   * eski server bermaydi, u holda umumiy «topilmadi» matni).
+   */
+  const purged = Boolean(gen.filesPurgedAt);
   /** Ko'ruvchida tahrir bo'lgan, PPTX hali qayta yasalmagan. */
   const fileStale = (gen.fileVersion ?? 0) < (gen.docVersion ?? 0);
   /*
@@ -362,7 +459,9 @@ export function ResultView({ id }: { id: string }) {
                 tugma shuni AYTADI (va bosilganda avval qayta yasaladi) —
                 foydalanuvchi eski PPTX ni olib ketmasin.
               */}
-              <span className="hidden sm:inline">{fileStale || busy ? "Fayl yangilanmoqda…" : "Yuklab olish"}</span>
+              <span className="hidden sm:inline">
+                {fileStale || downloading === "file" ? "Fayl yangilanmoqda…" : "Yuklab olish"}
+              </span>
               <span className="text-primary-foreground/80 hidden text-xs md:inline">
                 {gen.format.toUpperCase()}
               </span>
@@ -379,15 +478,32 @@ export function ResultView({ id }: { id: string }) {
               formatda») — ishlamaydigan tugma ko'rsatilmagani yaxshi.
             */}
             {!expired && features?.pdf && PDF_CONVERTIBLE.has(gen.format) ? (
+              /*
+                O'girish 1 daqiqagacha davom etadi (UX-08): tugma shuni
+                AYTADI — aylanuvchi belgi + «PDF tayyorlanmoqda…» —
+                aks holda o'chgan tugma «ishlamay qoldi» deb o'qilardi.
+              */
               <button
                 type="button"
                 className="bg-card inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm disabled:opacity-60"
                 disabled={busy || !gen.hasFile}
+                aria-busy={downloading === "pdf"}
+                data-pdf-busy={downloading === "pdf" ? "1" : undefined}
                 onClick={() => void onDownload("pdf")}
                 title="PDF ga o‘girib yuklab olish"
               >
-                <Download className="size-4" />
-                PDF
+                {downloading === "pdf" ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" />
+                    <span className="hidden sm:inline">PDF tayyorlanmoqda…</span>
+                    <span className="sm:hidden">PDF…</span>
+                  </>
+                ) : (
+                  <>
+                    <Download className="size-4" />
+                    PDF
+                  </>
+                )}
               </button>
             ) : null}
             <button
@@ -409,6 +525,26 @@ export function ResultView({ id }: { id: string }) {
         ) : null}
       </nav>
 
+      {downloading === "pdf" ? (
+        <p role="status" className="text-muted-foreground no-print px-4 pt-3 text-sm" data-pdf-status>
+          PDF tayyorlanmoqda — bu 1 daqiqagacha davom etishi mumkin.
+        </p>
+      ) : null}
+
+      {/*
+        C20: polling taslim bo'lsa (`error`) yoki qiynalsa (`issue` —
+        uzilish, odatdan uzoq navbat) — ish ketayotgan holatda ham
+        AYTILADI va «Qayta tekshirish» beriladi. Ilgari xato faqat
+        COMPLETED da ko'rinardi, progress esa jimgina qotib qolardi.
+      */}
+      {running && (error || issue) ? (
+        <PollNotice
+          tone={error ? "error" : "info"}
+          text={error ? `Holat yangilanmay qoldi — ${error}` : issue!.message}
+          onRetry={recheck}
+        />
+      ) : null}
+
       {running ? <RunningPanel gen={gen} /> : null}
 
       {gen.status === "FAILED" || gen.status === "REVOKED" ? (
@@ -425,7 +561,7 @@ export function ResultView({ id }: { id: string }) {
         </div>
       ) : null}
 
-      {error && completed ? (
+      {error && !running ? (
         <p role="alert" className="text-destructive px-4 pt-3 text-sm">
           {error}
         </p>
@@ -435,8 +571,10 @@ export function ResultView({ id }: { id: string }) {
         <div className="mx-auto w-full max-w-2xl px-4 py-8">
           <div className="bg-card rounded-2xl border p-6">
             <p className="font-medium">Hujjat topilmadi</p>
-            <p className="text-muted-foreground mt-1 text-sm">
-              Bu hujjatning fayli topilmadi — kerak bo‘lsa, uni qaytadan yarating.
+            <p className="text-muted-foreground mt-1 text-sm" data-files-purged={purged ? "1" : undefined}>
+              {purged
+                ? "Bonus bilan yaratilgan hujjatlar 180 kun saqlanadi — bu hujjat fayli o‘chirilgan."
+                : "Bu hujjatning fayli topilmadi — kerak bo‘lsa, uni qaytadan yarating."}
             </p>
             <Link
               href={tool ? `/uz/${tool.slug}` : "/uz/create"}
@@ -508,12 +646,18 @@ export function ResultView({ id }: { id: string }) {
                     Insho bitta matn — «Hammasini tuzatish» butun matnni qayta ko‘radi.
                   </p>
                 ) : null}
+                {aiLocked ? (
+                  // 402 `unpaid`: tugmalar o'chadi, sabab (server matni) shu yerda turadi.
+                  <p className="mb-2 rounded-md bg-amber-50 px-2 py-1.5 text-[11.5px] text-amber-800" data-ai-unpaid>
+                    {aiLocked}
+                  </p>
+                ) : null}
                 <ArticleReviewPanel
                   review={review}
                   hrefBase={`/uz/${gen.type}`}
-                  {...(noFix ? {} : { onFix: (fix: NonNullable<ReviewCheck["fix"]>) => void onFix(fix) })}
+                  {...(aiLocked ? {} : noFix ? {} : { onFix: (fix: NonNullable<ReviewCheck["fix"]>) => void onFix(fix) })}
                   fixing={fixing}
-                  {...(noPolish ? {} : { onPolish: () => void onPolish(), polishing })}
+                  {...(aiLocked ? {} : noPolish ? {} : { onPolish: () => void onPolish(), polishing })}
                   {...(hideGroups ? { hideGroups } : {})}
                 />
               </div>
@@ -558,11 +702,24 @@ export function RunningPanel({ gen }: { gen: api.GenerationDetail }) {
   const tool = TOOL_BY_ID[gen.type];
   const live =
     viewerKind(gen.type) === "slides" ? asLiveView(gen.live as LiveDeck | null | undefined) : null;
+  /*
+   * FE-13: `liveDocOf` har chaqiriqda slaydlarni KLONLAYDI. Ilgari u har
+   * renderda (har 1,2 s polling tikida) chaqirilardi va `SlideViewer`
+   * ichidagi `buildSlideDeck` memosi o'zgarish bo'lmasa ham buzilardi —
+   * barcha eskizlar qayta rejalanardi. `live` identifikatori `mergeLive`
+   * da saqlanadi, ya'ni o'zgarmagan tikda hujjat ham o'sha-o'sha.
+   */
+  const liveDoc = useMemo(
+    () => (live ? withFrozenYear(liveDocOf(live), gen.createdAt)! : null),
+    [live, gen.createdAt],
+  );
 
-  if (live) {
+  if (live && liveDoc) {
     return (
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <SlideViewer doc={withFrozenYear(liveDocOf(live), gen.createdAt)!} live={live} />
+        <Suspense fallback={<div className="text-muted-foreground p-8 text-sm">Yuklanmoqda...</div>}>
+          <SlideViewer doc={liveDoc} live={live} />
+        </Suspense>
       </div>
     );
   }
@@ -572,6 +729,17 @@ export function RunningPanel({ gen }: { gen: api.GenerationDetail }) {
       <div className="bg-card rounded-2xl border p-6">
         <p className="mb-2 font-medium">{tool?.creatingLabel ?? "Yaratilmoqda..."}</p>
         <p className="text-muted-foreground mb-4 text-sm">{gen.step}</p>
+        {/*
+          UX-07: navbatdagi o'rin va taxminiy kutish — server bersagina
+          (W2-B, ixtiyoriy maydonlar). Aks holda yangi ish va 15 daqiqa
+          navbatda turgan ish bir xil ko'rinardi.
+        */}
+        {gen.status === "QUEUED" && typeof gen.queuePosition === "number" && gen.queuePosition > 0 ? (
+          <p className="mb-4 text-sm" data-queue-position>
+            Navbatdagi o‘rningiz: <b>{gen.queuePosition}</b>
+            {typeof gen.etaSec === "number" && gen.etaSec > 0 ? ` · boshlanishiga taxminan ${etaText(gen.etaSec)}` : null}
+          </p>
+        ) : null}
         <div
           className="bg-muted h-2 overflow-hidden rounded-full"
           role="progressbar"
@@ -630,11 +798,58 @@ function withFrozenYear(doc: api.GenerationDetail["doc"], createdAt: string): Ge
   return { ...doc, meta: { ...doc.meta, year } };
 }
 
-function Empty({ title, hint }: { title: string; hint: string }) {
+/** «Tuzatish» dan oldin saqlash yiqildi — sababini ko'ruvchi o'zi ko'rsatadi (navbat qolgan yoki qayta yuklangan). */
+const UNSAVED_FIRST = "«Tuzatish» boshlanmadi — tahrirlar saqlanmadi (sababi hujjat ustida ko‘rsatilgan).";
+
+/** Taxminiy kutish: «1 daqiqadan kam» / «N daqiqa» / «N soat». */
+export function etaText(sec: number): string {
+  if (sec < 60) return "1 daqiqadan kam";
+  const min = Math.round(sec / 60);
+  if (min < 90) return `${min} daqiqa`;
+  return `${Math.round(min / 60)} soat`;
+}
+
+function RecheckButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="bg-card hover:bg-muted inline-flex h-8 shrink-0 items-center gap-1.5 rounded-lg border px-3 text-sm font-medium"
+    >
+      <RefreshCw className="size-3.5" />
+      Qayta tekshirish
+    </button>
+  );
+}
+
+/**
+ * Ish ketayotganda polling holati (C20). `error` — polling to'xtadi
+ * (`role="alert"`); `info` — polling davom etmoqda, lekin uzilish yoki
+ * odatdan uzoq navbat bor (`role="status"`). Ikkalasida ham qo'lda
+ * «Qayta tekshirish» — pollingni darhol, boshidan qayta boshlaydi.
+ */
+function PollNotice({ tone, text, onRetry }: { tone: "error" | "info"; text: string; onRetry: () => void }) {
+  return (
+    <div
+      role={tone === "error" ? "alert" : "status"}
+      data-poll-notice={tone}
+      className={cn(
+        "no-print mx-auto mt-4 flex w-full max-w-2xl flex-col gap-2 rounded-xl border px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between",
+        tone === "error" ? "border-destructive/30 text-destructive" : "border-amber-300 bg-amber-50 text-amber-900",
+      )}
+    >
+      <p className="min-w-0">{text}</p>
+      <RecheckButton onClick={onRetry} />
+    </div>
+  );
+}
+
+function Empty({ title, hint, action }: { title: string; hint: string; action?: React.ReactNode }) {
   return (
     <div className="mx-auto max-w-3xl px-4 py-16 text-center">
       <p className="font-medium">{title}</p>
       <p className="text-muted-foreground mt-1 text-sm">{hint}</p>
+      {action ? <div className="mt-4 flex justify-center">{action}</div> : null}
       <Link href="/uz" className="text-primary mt-4 inline-block text-sm">
         Bosh sahifaga
       </Link>

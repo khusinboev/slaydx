@@ -3,51 +3,115 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { ArrowDownUp, ChevronDown, FolderOpen, Plus, Trash2 } from "lucide-react";
+import { ArrowDownUp, ChevronDown, FileX, FolderOpen, Plus, Trash2 } from "lucide-react";
 import * as api from "@/lib/api-client";
 import { useAppStore } from "@/lib/store";
 import { TOOL_BY_ID } from "@/lib/tools";
-import { FILE_FILTERS, FILE_SORTS, useUi } from "@/lib/ui";
+import { FILE_FILTERS, FILE_SORTS, fileFilterMatch, type FileFilterId, useUi } from "@/lib/ui";
 import { cn } from "@/lib/cn";
 import { FilePreview } from "./FilePreview";
+import { confirmAccepted, confirmClock } from "../overlays/useConfirmClick";
 
 export function HomeFiles() {
   const sessionChecked = useAppStore((s) => s.sessionChecked);
   const loggedIn = useAppStore((s) => s.loggedIn);
   const generations = useAppStore((s) => s.generations);
   const generationsLoaded = useAppStore((s) => s.generationsLoaded);
+  const firstCursor = useAppStore((s) => s.generationsCursor);
   const refreshGenerations = useAppStore((s) => s.refreshGenerations);
   const drop = useAppStore((s) => s.dropGeneration);
   const open = useUi((s) => s.open);
   const overlay = useUi((s) => s.overlay);
   const close = useUi((s) => s.close);
   const params = useSearchParams();
-  const [filter, setFilter] = useState<(typeof FILE_FILTERS)[number]["id"]>("all");
+  const [filter, setFilter] = useState<FileFilterId>("all");
   const [sort, setSort] = useState<(typeof FILE_SORTS)[number]["id"]>("modified");
   const [desc, setDesc] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    // `ret` so'rov parametridan (masalan `?returnTo=javascript:...`)
+    // keladi — TEKSHIRILMAGAN. Sanatsiya `useUi.open` ichida
+    // (`lib/ui.ts`, `safeReturnTo`) yagona joyda bajariladi, shu bois
+    // bu yerda xom qiymat shunchaki uzatiladi (C02/FE-01/SECA-02).
     const ret = params.get("returnTo");
     if (ret && sessionChecked && !loggedIn) open("login", { returnTo: ret });
   }, [params, loggedIn, sessionChecked, open]);
 
-  // Navbatdagi ish tugaguncha ro'yxatni yangilab turamiz — foydalanuvchi
-  // sahifani qo'lda yangilamasdan «Tayyor» ni ko'radi.
+  /*
+   * Navbatdagi ish tugaguncha ro'yxatni yangilab turamiz — foydalanuvchi
+   * sahifani qo'lda yangilamasdan «Tayyor» ni ko'radi.
+   *
+   * FE-12: oraliq 3 s dan boshlab ×1,5 o'sadi (15 s gacha) — navbat soatlab
+   * cho'zilganda ham har yorliq serverni 3 s da bir bosmasin; yorliq
+   * YASHIRIN bo'lsa umuman so'ramaydi, ko'ringan zahoti darhol so'raydi
+   * (`waitTurn` — natija sahifasi pollingi bilan bir xil qoida).
+   */
   const hasRunning = generations.some(
     (g) => g.status === "QUEUED" || g.status === "IN_PROGRESS",
   );
   useEffect(() => {
     if (!hasRunning || !loggedIn) return;
-    const t = setInterval(() => void refreshGenerations(), 3000);
-    return () => clearInterval(t);
+    const ctrl = new AbortController();
+    void (async () => {
+      let delay = LIST_POLL_START_MS;
+      for (;;) {
+        await api.waitTurn(delay, ctrl.signal);
+        await refreshGenerations();
+        delay = Math.min(LIST_POLL_MAX_MS, Math.round(delay * 1.5));
+      }
+    })().catch((e: unknown) => {
+      // Effekt tozalanganda (`ctrl.abort`) — kutilgan to'xtash.
+      if (e instanceof DOMException && e.name === "AbortError") return;
+      setError(e instanceof Error ? e.message : "Ro'yxat yangilanmadi");
+    });
+    return () => ctrl.abort();
   }, [hasRunning, loggedIn, refreshGenerations]);
+
+  /*
+   * «Yana ko'rsatish» (FE-08): server ro'yxatni sahifalab beradi (standart
+   * 50 ta, `nextCursor`). Store faqat BIRINCHI sahifani yuritadi (polling
+   * ham shuni yangilaydi); eski sahifalar shu yerda, alohida — ikkalasi
+   * id bo'yicha birlashtiriladi. Kursor: birinchi yuklashdan keyin —
+   * store dagi birinchi sahifaniki (`generationsCursor`), keyin — oxirgi
+   * yuklangan sahifaniki. Eski server `nextCursor` bermaydi → tugma chiqmaydi.
+   */
+  const [older, setOlder] = useState<api.ServerGeneration[]>([]);
+  const [olderCursor, setOlderCursor] = useState<string | null | undefined>(undefined);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const moreCursor =
+    olderCursor === undefined ? (loggedIn && generationsLoaded ? firstCursor : null) : olderCursor;
+
+  async function loadMore() {
+    if (!moreCursor || loadingMore) return;
+    setLoadingMore(true);
+    setError(null);
+    try {
+      const page = await api.listGenerations({ cursor: moreCursor });
+      setOlder((prev) => {
+        const seen = new Set(prev.map((g) => g.id));
+        return [...prev, ...page.generations.filter((g) => !seen.has(g.id))];
+      });
+      setOlderCursor(page.nextCursor ?? null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Ro'yxat yuklanmadi");
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
+  const all = useMemo(() => {
+    if (!older.length) return generations;
+    const fresh = new Set(generations.map((g) => g.id));
+    return [...generations, ...older.filter((g) => !fresh.has(g.id))];
+  }, [generations, older]);
 
   async function onDelete(id: string) {
     setError(null);
     try {
       await api.deleteGeneration(id);
       drop(id);
+      setOlder((prev) => prev.filter((g) => g.id !== id));
       void useAppStore.getState().refreshSession();
     } catch (e) {
       setError(e instanceof Error ? e.message : "O'chirilmadi");
@@ -61,28 +125,27 @@ export function HomeFiles() {
    */
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const armedAt = useRef(0);
   useEffect(() => () => {
     if (confirmTimer.current) clearTimeout(confirmTimer.current);
   }, []);
-  function askDelete(id: string) {
-    if (confirmTimer.current) clearTimeout(confirmTimer.current);
+  function askDelete(id: string, e?: { detail?: number }) {
     if (confirmId === id) {
+      // FE-07: qo'sh bosishning ikkinchi yarmi tasdiq emas (`useConfirmClick` bilan bitta qoida).
+      if (!confirmAccepted(armedAt.current, e)) return;
+      if (confirmTimer.current) clearTimeout(confirmTimer.current);
       setConfirmId(null);
       void onDelete(id);
       return;
     }
+    if (confirmTimer.current) clearTimeout(confirmTimer.current);
+    armedAt.current = confirmClock();
     setConfirmId(id);
     confirmTimer.current = setTimeout(() => setConfirmId(null), 3000);
   }
 
   const list = useMemo(() => {
-    let rows = generations.filter((g) => {
-      if (filter === "slide") return g.type === "slide";
-      if (filter === "image") return g.type === "image";
-      if (filter === "docs") return g.type !== "slide" && g.type !== "image";
-      if (filter === "tests" || filter === "games") return false;
-      return true;
-    });
+    let rows = all.filter((g) => fileFilterMatch(filter, g.type));
     rows = [...rows].sort((a, b) => {
       if (sort === "name") return a.topic.localeCompare(b.topic, "uz");
       if (sort === "created") return a.createdAt.localeCompare(b.createdAt);
@@ -90,7 +153,7 @@ export function HomeFiles() {
     });
     if (!desc && sort !== "name") rows.reverse();
     return rows;
-  }, [generations, filter, sort, desc]);
+  }, [all, filter, sort, desc]);
 
   const sortLabel = FILE_SORTS.find((s) => s.id === sort)?.label ?? FILE_SORTS[0].label;
 
@@ -237,7 +300,22 @@ export function HomeFiles() {
                 <div key={g.id} className="border-border/60 bg-card overflow-hidden rounded-xl border">
                   {tool ? <div className="h-1" style={{ background: `rgb(${tool.tc})` }} /> : null}
                   <Link href={`/uz/files/${g.id}`} className="bg-muted block h-36 overflow-hidden sm:h-40">
-                    <FilePreview gen={g} />
+                    {g.filesPurgedAt ? (
+                      /*
+                       * Retention (W2-D2): bonus-faqat hujjat fayllari
+                       * o'chirilgan — eskiz/rasm havolasi o'chgan aktivga
+                       * olib borardi (404). Neytral belgi chiziladi.
+                       */
+                      <div
+                        className="text-muted-foreground flex h-full flex-col items-center justify-center gap-1.5 text-xs"
+                        data-files-purged
+                      >
+                        <FileX className="size-7 opacity-60" />
+                        Fayl o‘chirilgan
+                      </div>
+                    ) : (
+                      <FilePreview gen={g} />
+                    )}
                   </Link>
                   <div className="flex items-start justify-between gap-2 p-4">
                     <Link href={`/uz/files/${g.id}`} className="min-w-0">
@@ -254,7 +332,7 @@ export function HomeFiles() {
                           ? "text-destructive font-medium"
                           : "text-muted-foreground hover:text-destructive",
                       )}
-                      onClick={() => askDelete(g.id)}
+                      onClick={(e) => askDelete(g.id, e)}
                       aria-label={
                         confirmId === g.id
                           ? `${g.topic} — o'chirishni tasdiqlang`
@@ -270,7 +348,25 @@ export function HomeFiles() {
             })}
           </div>
         )}
+        {moreCursor ? (
+          <div className="mt-6 flex justify-center">
+            <button
+              type="button"
+              onClick={() => void loadMore()}
+              disabled={loadingMore}
+              aria-busy={loadingMore}
+              data-load-more
+              className="border-input bg-background hover:bg-accent inline-flex h-10 items-center rounded-full border px-6 text-sm font-medium disabled:opacity-60"
+            >
+              {loadingMore ? "Yuklanmoqda…" : "Yana ko‘rsatish"}
+            </button>
+          </div>
+        ) : null}
       </div>
     </div>
   );
 }
+
+/** Ro'yxat pollingi: birinchi oraliq va yuqori chegara (FE-12). */
+const LIST_POLL_START_MS = 3000;
+const LIST_POLL_MAX_MS = 15_000;

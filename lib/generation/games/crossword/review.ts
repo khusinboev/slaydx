@@ -397,7 +397,7 @@ export type CrosswordReviewOpts = {
     role: "judge",
     system: string,
     user: string,
-    o: { json?: boolean; maxTokens?: number; timeoutMs?: number },
+    o: { json?: boolean; maxTokens?: number; timeoutMs?: number; deadline?: number },
   ) => Promise<{ text: string; usage?: LlmUsage } | null>;
   deadline?: number;
   /** `false` — baholovchi chaqirilmaydi (testlar). */
@@ -436,7 +436,7 @@ export async function reviewCrossword(doc: AcademicDoc, opts: CrosswordReviewOpt
     if (timeoutMs >= JUDGE_MIN_MS) {
       try {
         const r = await opts.complete("judge", judgeSystemPromptFor(spec.judge, JUDGE_TARGETS), crosswordJudgeUserPrompt(model, doc.meta.topic), {
-          json: true,
+          json: true, deadline: opts.deadline,
           maxTokens: 1200,
           timeoutMs,
         });

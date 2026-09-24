@@ -3,6 +3,16 @@
 import Link from "next/link";
 import { ArrowLeft, ChevronDown } from "lucide-react";
 import { formatTanga } from "@/lib/tools";
+import { creditTotal, useAppStore } from "@/lib/store";
+import { DraftNotice } from "./DraftNotice";
+
+/**
+ * Serverning 402 matni (`app/api/generations/route.ts`: «Balans yetarli
+ * emas. Kerak: …, mavjud: …»). Formalar faqat `e.message` ni uzatadi —
+ * shu sababli matn bo'yicha taniladi; qo'shimcha ravishda store dagi
+ * balans narxdan kam bo'lsa ham (quyida) havola chiqadi.
+ */
+const INSUFFICIENT_RE = /balans yetarli emas/i;
 
 export function ToolChrome({
   title,
@@ -30,6 +40,17 @@ export function ToolChrome({
   onSubmit: () => void;
   error?: string | null;
 }) {
+  const loggedIn = useAppStore((s) => s.loggedIn);
+  const user = useAppStore((s) => s.user);
+  const total = creditTotal(user);
+  // UX-03: narx ma'lum va balans yetmaydi — yuborishdan OLDIN aytiladi.
+  const short = loggedIn && user !== null && price !== undefined && price > total;
+  const balanceError = Boolean(error && (INSUFFICIENT_RE.test(error) || short));
+  const topUp = (
+    <Link href="/uz/purchase" data-topup className="text-primary font-medium whitespace-nowrap underline underline-offset-2">
+      Balansni to‘ldirish →
+    </Link>
+  );
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-8 pb-28">
       <nav className="mb-6 flex items-center gap-2.5">
@@ -45,6 +66,9 @@ export function ToolChrome({
 
       {children}
 
+      {/* FE-17: qoralama saqlanmadi / fayl qayta biriktirilsin — har formada. */}
+      <DraftNotice />
+
       {extra ? (
         <button
           type="button"
@@ -57,8 +81,20 @@ export function ToolChrome({
       ) : null}
       {extra && extraOpen ? <div className="mb-8">{extra}</div> : null}
 
+      {/*
+       * UX-03: «Balans yetarli emas» endi o'lik matn emas — yonida to'ldirish
+       * sahifasiga havola. Ilgari foydalanuvchi profil → Tariflar yo'lini
+       * o'zi topishi kerak edi.
+       */}
       {error ? (
-        <p className="text-destructive mb-4 text-sm">{error}</p>
+        <p role="alert" className="text-destructive mb-4 text-sm">
+          {error}
+          {balanceError ? <> {topUp}</> : null}
+        </p>
+      ) : short ? (
+        <p className="text-muted-foreground mb-4 text-sm" data-balance-short>
+          Balansingiz: {formatTanga(total)} — bu hujjat uchun {formatTanga(price ?? 0)} kerak. {topUp}
+        </p>
       ) : null}
 
       <div className="bg-[var(--page-bg)]/90 sticky bottom-0 -mx-4 border-t px-4 py-3 backdrop-blur">

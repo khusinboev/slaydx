@@ -1,0 +1,27 @@
+== chaos pg-restart (before; mixed load 90s, postgres down 10s at +20s)
+INFO  postgres unavailable for 10.6 s
+PASS  web_recovers — /api/health 200 0.0s after postgres ready (limit 30s)
+PASS  workers_take_new_jobs — 4 jobs enqueued after the outage, still open after 120 s: 0
+PASS  web_no_crash_loop — process restarts during experiment: 0 (0 = survived, 1 = crashed once and came back)
+PASS  worker-1_no_crash_loop — process restarts during experiment: 0 (0 = survived, 1 = crashed once and came back)
+PASS  worker-2_no_crash_loop — process restarts during experiment: 0 (0 = survived, 1 = crashed once and came back)
+PASS  stack_alive_after — web + both workers running at the end
+PASS  health_stable_after_recovery — non-200 /api/health probes after recovery: 0
+INFO  non-200 /api/health probes during the outage: 20 (expected: health reports the DB)
+INFO  k6 mixed during experiment — reqs=3185 failed=5.59% p50=3ms p95=8ms p99=14ms max=27ms
+  INFO  idle-wait — busy jobs left: 0
+  INFO  jobs by status — COMPLETED=4893 FAILED=1396
+  INFO  ledger rows — bonus=2000 charge=6289 refund=1396 topup=2000
+  PASS  ledger_matches_wallet — users whose points/quota/balance != sum(transactions): 0
+  PASS  no_negative_wallet — users with a negative wallet: 0
+  PASS  no_double_charge — references charged twice: 0
+  PASS  no_double_refund — references refunded twice: 0
+  PASS  refund_le_charge — refunds larger than their charge: 0
+  PASS  refund_has_charge — refunds without a charge: 0
+  PASS  paid_job_has_charge — paid jobs without a charge row: 0
+  PASS  charge_has_job — charges whose job row is missing: 0
+  PASS  failed_job_refunded — FAILED paid jobs without a refund: 0
+  PASS  completed_has_file — COMPLETED jobs without a stored file: 0
+  PASS  no_stuck_in_progress — IN_PROGRESS jobs past lease + housekeeping: 0
+  INFO  completed-but-refunded (partial delivery refunds are legal) — 0
+== pg-restart: 0 failed check(s)

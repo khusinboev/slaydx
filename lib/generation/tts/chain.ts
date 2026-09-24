@@ -36,11 +36,15 @@ import {
   type TtsSynthOpts,
   type TtsUsage,
   type TtsVoiceSpec,
+  ttsCostUsd,
   ttsVoicesFor,
 } from "./types";
+import { recordTts } from "../job-cost";
 import { makeAzureTts } from "./azure";
 import { makeAishaTts } from "./aisha";
 import { makeGeminiTts } from "./gemini";
+import { DeadlineError } from "../llm/chain";
+import { backoffMs } from "../llm/retry";
 
 /* ══════════════════════════ ovoz zanjiri ══════════════════════════ */
 
@@ -119,7 +123,7 @@ export type TtsChain = {
   configured(): boolean;
   /** Shu til uchun haqiqatan ishlaydigan provayderlar (sozlangan + jadvalda bor). */
   providersFor(lang: string): TtsProviderId[];
-  synthesizeAll(parts: readonly TtsPart[], opts: { lang: string; speed?: number; timeoutMs?: number }): Promise<TtsRun>;
+  synthesizeAll(parts: readonly TtsPart[], opts: TtsRunOpts): Promise<TtsRun>;
 };
 
 /* ══════════════════════════ zanjir ══════════════════════════ */
@@ -132,8 +136,24 @@ export type TtsChainDeps = {
   log?: (line: string) => void;
 };
 
+/**
+ * `synthesizeAll` sozlamalari. `deadline` (epoch ms, ish muddati — audit
+ * EXT-10): berilsa har urinish timeout'i qolgan vaqt bilan cheklanadi,
+ * vaqt yetmasa `DeadlineError` otiladi va keyingi provayderda skript
+ * BOSHIDAN qayta boshlanmaydi. Berilmasa — eski xatti-harakat.
+ */
+export type TtsRunOpts = { lang: string; speed?: number; timeoutMs?: number; deadline?: number };
+
 const MAX_ATTEMPTS = 2;
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+/** Muddatdan oldin qoldiriladigan zaxira (MP3 yig'ish, yozish). */
+const TTS_SAFETY_MS = 1_000;
+/** Bundan kam vaqtda yangi urinish boshlanmaydi. */
+export const TTS_MIN_ATTEMPT_MS = 3_000;
+/** `Retry-After` shundan uzun bo'lsa shu provayder qayta urinilmaydi. */
+export const TTS_RETRY_AFTER_CAP_MS = 5_000;
+const sleep = (ms: number) => (ms > 0 ? new Promise((r) => setTimeout(r, ms)) : Promise.resolve());
+
+const leftMs = (deadline?: number): number => (deadline === undefined ? Number.POSITIVE_INFINITY : deadline - TTS_SAFETY_MS - Date.now());
 
 export function makeTtsChain(deps: TtsChainDeps = {}): TtsChain {
   const providers = deps.providers ?? [makeAzureTts(), makeAishaTts(), makeGeminiTts()];
@@ -176,13 +196,20 @@ export function makeTtsChain(deps: TtsChainDeps = {}): TtsChain {
       for (const { group, provider } of chain) {
         const started = Date.now();
         try {
-          const run = await runGroup(provider, group, live, { lang, ...(opts.speed !== undefined ? { speed: opts.speed } : {}), ...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}) });
+          const run = await runGroup(provider, group, live, {
+            lang,
+            ...(opts.speed !== undefined ? { speed: opts.speed } : {}),
+            ...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}),
+            ...(opts.deadline !== undefined ? { deadline: opts.deadline } : {}),
+          });
           log(`[tts:${lang}] ${provider.id} → ok ${Date.now() - started} ms (${run.audios.length} bo'lak, ${run.chars} belgi)`);
           return run;
         } catch (e) {
           last = e;
           const err = e instanceof TtsError ? e : null;
           log(`[tts:${lang}] ${provider.id} → xato (${err?.status ?? "-"}) ${Date.now() - started} ms: ${e instanceof Error ? e.message : String(e)}`);
+          // Vaqt tugadi — keyingi provayderda skriptni BOSHIDAN boshlash ma'nosiz.
+          if (e instanceof DeadlineError) throw e;
         }
       }
       throw last instanceof Error ? last : new TtsError(chain[0].group.provider, "sintez yiqildi", { retryable: false });
@@ -199,7 +226,7 @@ export function makeTtsChain(deps: TtsChainDeps = {}): TtsChain {
  * `retryable:false` (kalit, 400, chegara) — darhol tashqariga, ya'ni
  * keyingi provayderga.
  */
-async function runGroup(provider: TtsProvider, group: TtsProviderGroup, parts: readonly TtsPart[], opts: { lang: string; speed?: number; timeoutMs?: number }): Promise<TtsRun> {
+async function runGroup(provider: TtsProvider, group: TtsProviderGroup, parts: readonly TtsPart[], opts: TtsRunOpts): Promise<TtsRun> {
   const voiceA = group.voices[0];
   const voiceB = group.voices[1] ?? group.voices[0];
   const audios: TtsAudio[] = [];
@@ -226,19 +253,29 @@ async function runGroup(provider: TtsProvider, group: TtsProviderGroup, parts: r
 
     let audio: TtsAudio | null = null;
     for (let attempt = 0; attempt < MAX_ATTEMPTS && !audio; attempt++) {
+      // Muddat (audit EXT-10): soat HAR urinishdan oldin qaraladi.
+      const left = leftMs(opts.deadline);
+      if (left < TTS_MIN_ATTEMPT_MS) throw new DeadlineError(`tts:${opts.lang}`, left);
+      const call: TtsSynthOpts = opts.deadline === undefined ? synth : { ...synth, timeoutMs: Math.min(opts.timeoutMs ?? TTS_LIMITS.callTimeoutMs, left) };
       try {
-        audio = await provider.synthesize(text, synth);
+        audio = await provider.synthesize(text, call);
       } catch (e) {
         const err = e instanceof TtsError ? e : null;
         const retryable = err ? err.retryable : true;
         if (!retryable || attempt === MAX_ATTEMPTS - 1) throw e;
-        await sleep(err?.retryAfterMs ?? 500 * 2 ** attempt);
+        // Uzun `Retry-After` (kvota) — kutmaymiz, keyingi provayderga.
+        if (err?.retryAfterMs !== undefined && err.retryAfterMs > TTS_RETRY_AFTER_CAP_MS) throw e;
+        const wait = err?.retryAfterMs ?? backoffMs(attempt, 500);
+        if (leftMs(opts.deadline) - wait < TTS_MIN_ATTEMPT_MS) throw new DeadlineError(`tts:${opts.lang}`, leftMs(opts.deadline));
+        await sleep(wait);
       }
     }
     if (!audio) throw new TtsError(provider.id, "sintez natijasi bo'sh", { retryable: false });
 
     audios.push(audio);
     usages.push({ provider: provider.id, voice, chars: audio.chars || text.length, seconds: audio.seconds });
+    // Ish sarfi (EXT-11) MANBADA: keyingi provayderda boshidan boshlansa ham bu bo'lak to'langan.
+    recordTts(provider.id, `${provider.id}:${voice}`, audio.chars || text.length, ttsCostUsd(provider.id, audio.chars || text.length));
     seconds += audio.seconds;
     chars += audio.chars || text.length;
   }
@@ -273,6 +310,7 @@ export function chainOfProvider(provider: TtsProvider, voices?: string[], log?: 
         lang,
         ...(opts.speed !== undefined ? { speed: opts.speed } : {}),
         ...(opts.timeoutMs !== undefined ? { timeoutMs: opts.timeoutMs } : {}),
+        ...(opts.deadline !== undefined ? { deadline: opts.deadline } : {}),
       });
       log?.(`[tts:${lang}] ${provider.id} → ok ${Date.now() - started} ms (${run.audios.length} bo'lak, ${run.chars} belgi)`);
       return run;

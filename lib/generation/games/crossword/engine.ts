@@ -195,7 +195,8 @@ export async function buildCrosswordDoc(meta: DocMeta, values: FormValues, opts:
   const seed = opts.seed ?? crosswordSeed(meta, input);
 
   const call = async (user: string, o: { maxTokens: number; timeoutMs: number }): Promise<string | null> => {
-    const r = await complete("writer", crosswordSystemPrompt(input, spec), user, { json: true, ...o });
+    // Ish muddati (EXT-03): zanjir qayta urinishni muddatdan oshirmaydi, vaqt tugasa `DeadlineError` yuqoriga.
+    const r = await complete("writer", crosswordSystemPrompt(input, spec), user, { json: true, ...o, deadline: opts.deadline });
     if (r?.usage) {
       meter.add(r.usage);
       opts.onUsage?.(r.usage);

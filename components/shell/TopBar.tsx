@@ -1,22 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { Bell, Moon, PanelLeft, Search, Sun } from "lucide-react";
-import { useAppStore } from "@/lib/store";
-import { THEME_OPTIONS, UI_LOCALES, useUi } from "@/lib/ui";
-import { cn } from "@/lib/cn";
+import { Bell, Coins, Moon, PanelLeft, Search, Sun } from "lucide-react";
+import { creditTotal, useAppStore } from "@/lib/store";
+import { THEME_OPTIONS, useUi } from "@/lib/ui";
 
 export function TopBar({ onMenu }: { onMenu: () => void }) {
   const theme = useAppStore((s) => s.theme);
   const setTheme = useAppStore((s) => s.setTheme);
-  const locale = useAppStore((s) => s.locale);
-  const setLocale = useAppStore((s) => s.setLocale);
   const loggedIn = useAppStore((s) => s.loggedIn);
   const user = useAppStore((s) => s.user);
-  const overlay = useUi((s) => s.overlay);
   const open = useUi((s) => s.open);
-  const close = useUi((s) => s.close);
-  const currentLocale = UI_LOCALES.find((l) => l.value === locale) ?? UI_LOCALES[0];
 
   /**
    * Mavzu tugmasi menyu ochmaydi — bosilganda ikkinchi rejimga o'tadi:
@@ -38,7 +32,7 @@ export function TopBar({ onMenu }: { onMenu: () => void }) {
         type="button"
         onClick={onMenu}
         className="hover:bg-accent flex size-8 items-center justify-center rounded-md"
-        aria-label="Toggle Sidebar"
+        aria-label="Yon panelni ko‘rsatish/yashirish"
       >
         <PanelLeft className="size-4" />
       </button>
@@ -55,39 +49,6 @@ export function TopBar({ onMenu }: { onMenu: () => void }) {
         <span className="sr-only">Qidirish...</span>
       </button>
 
-      <div className="relative">
-        <button
-          type="button"
-          onClick={() => (overlay === "lang" ? close() : open("lang"))}
-          className="hover:bg-accent flex h-8 w-8 items-center justify-center rounded-full"
-          aria-label="Tilni o'zgartirish"
-        >
-          <span className="text-lg">{currentLocale.flag}</span>
-          <span className="sr-only">Tilni o&apos;zgartirish</span>
-        </button>
-        {overlay === "lang" ? (
-          <Menu onDismiss={close}>
-            {UI_LOCALES.map((l) => (
-              <button
-                key={l.value}
-                type="button"
-                className={cn(
-                  "hover:bg-muted flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm",
-                  locale === l.value && "font-medium",
-                )}
-                onClick={() => {
-                  setLocale(l.value);
-                  close();
-                }}
-              >
-                <span>{l.flag}</span>
-                {l.label}
-              </button>
-            ))}
-          </Menu>
-        ) : null}
-      </div>
-
       <button
         type="button"
         onClick={() => setTheme(nextTheme)}
@@ -102,10 +63,29 @@ export function TopBar({ onMenu }: { onMenu: () => void }) {
         type="button"
         onClick={() => open("notifications")}
         className="hover:bg-accent flex size-10 scale-95 items-center justify-center rounded-full"
-        aria-label="Notifications alt+T"
+        aria-label="Bildirishnomalar"
+        title="Bildirishnomalar (Alt+T)"
       >
         <Bell className="h-[1.2rem] w-[1.2rem]" />
       </button>
+
+      {loggedIn && user ? (
+        /*
+         * UX-03: balans har sahifada ko'rinadi (ilgari faqat profilda) va
+         * to'ldirish sahifasiga olib boradi — «Balans yetarli emas» ni
+         * ko'rgan foydalanuvchi uni qidirib yurmaydi.
+         */
+        <Link
+          href="/uz/purchase"
+          data-balance
+          title="Balans — to'ldirish"
+          aria-label={`Balans: ${creditTotal(user).toLocaleString("uz-UZ")} tanga. To'ldirish`}
+          className="hover:bg-accent text-muted-foreground hover:text-foreground flex h-8 shrink-0 items-center gap-1 rounded-full px-2.5 text-sm font-medium tabular-nums"
+        >
+          <Coins className="size-4" />
+          {creditTotal(user).toLocaleString("uz-UZ")}
+        </Link>
+      ) : null}
 
       {loggedIn ? (
         // Profil, tariflar, sozlamalar va chiqish — hammasi endi /uz/profile
@@ -131,26 +111,3 @@ export function TopBar({ onMenu }: { onMenu: () => void }) {
   );
 }
 
-function Menu({
-  children,
-  onDismiss,
-  align = "end",
-}: {
-  children: React.ReactNode;
-  onDismiss: () => void;
-  align?: "end" | "start";
-}) {
-  return (
-    <>
-      <button type="button" className="fixed inset-0 z-40" aria-label="Yopish" onClick={onDismiss} />
-      <div
-        className={cn(
-          "bg-popover absolute top-11 z-50 min-w-44 rounded-xl border p-1 shadow-lg",
-          align === "end" ? "end-0" : "start-0",
-        )}
-      >
-        {children}
-      </div>
-    </>
-  );
-}

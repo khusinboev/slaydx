@@ -140,6 +140,29 @@ test("podkast rejimi: mavzu/matn/fayl BITTASINI ko'rsatadi, qolganini yashiradi"
   assert.ok(!document.querySelector("textarea[aria-label='Manba matni']"), "fayl rejimida matn qutisi yo'q");
 });
 
+/*
+ * W4-D R2: FE-17 fayldan olingan matnni qoralamaga kiritmaydi (`fileName`
+ * bor bo'lsa). Podkastda esa fayl biriktirilgach «Matn» rejimida o'sha
+ * matnni TAHRIRLASH mumkin — tahrirlangan matn foydalanuvchiniki va
+ * qoralamada qolishi shart (ilgari `fileName` qolib ketib, u tashlanardi).
+ */
+test("qoralama: fayl matni «Matn» rejimida tahrirlangach qoralamaga KIRADI (fayl havolasi tushadi)", async () => {
+  const calls = stubApi("podcast", { mode: "file", fileName: "kitob.docx", sourceText: "Fayldan olingan matn", topic: "Kitob" });
+  await login();
+  mount(podcastTool);
+  await waitFor(() => assert.ok(calls.some((c) => c.method === "GET" && c.url === "/api/forms/podcast/draft")));
+  await waitFor(() => assert.ok(screen.getByText("kitob.docx"), "fayl biriktirilgan holda tiklandi"));
+  await pick("mode", /^Matn$/);
+  const area = document.querySelector("textarea[aria-label='Manba matni']") as HTMLTextAreaElement;
+  assert.equal(area.value, "Fayldan olingan matn");
+  await act(async () => {
+    fireEvent.change(area, { target: { value: "Fayldan olingan matn — va mening qo‘shimcham" } });
+  });
+  const lastPut = () => calls.filter((c) => c.method === "PUT" && c.url === "/api/forms/podcast/draft").at(-1)?.body as { data?: Record<string, unknown> } | undefined;
+  await waitFor(() => assert.equal(lastPut()?.data?.sourceText, "Fayldan olingan matn — va mening qo‘shimcham"), { timeout: 4000 });
+  assert.ok(!lastPut()?.data?.fileName, "tahrirlangan matn endi fayl emas — havola olib tashlandi");
+});
+
 /* ══════════════════════════════ standartlar ══════════════════════════════ */
 
 test("standart tur/sabab reyestrdan (`audioDefaultTypeId`)", async () => {

@@ -2,6 +2,11 @@
  * Gemini (asosiy) yoki ixtiyoriy xAI.
  * Kalit bo‘lmasa chaqiruv ketmaydi.
  */
+import { recordGrounding, recordLlmUsage } from "./job-cost";
+import { breakerFor } from "./llm/breaker";
+import { CHAIN_MIN_ATTEMPT_MS, CHAIN_SAFETY_MS, DeadlineError } from "./llm/chain";
+import { limiterFor } from "./llm/limiter";
+import { backoffMs, equalJitterMs, geminiRetryDelayMs, parseRetryAfter } from "./llm/retry";
 
 type Provider = "gemini" | "xai" | null;
 
@@ -50,6 +55,16 @@ export type LlmOpts = {
    * deck JSON esa ikkinchi chaqiruvda.
    */
   grounding?: boolean;
+  /**
+   * ISH muddati (epoch ms, audit EXT-03 / W3 shartnomasi — `llm/chain.ts`
+   * bilan bir xil qoida). Berilsa: har urinish timeout'i muddatgacha
+   * qolgan vaqt bilan cheklanadi; qolgan vaqt `CHAIN_MIN_ATTEMPT_MS` dan
+   * kam bo'lsa yangi urinish/qayta urinish BOSHLANMAYDI va natija
+   * bo'lmasa `DeadlineError` OTILADI — ish «AI javob bermadi» bilan
+   * yarim hujjat emas, aniq «vaqt tugadi» bilan yiqiladi (pul qaytadi).
+   * Berilmasa — eski xatti-harakat (faqat `timeoutMs` byudjeti).
+   */
+  deadline?: number;
 };
 
 /** Grounding topgan bitta sahifa. `uri` — Google redirect, `title` — domen. */
@@ -76,7 +91,23 @@ export type GroundedResult = {
  * 5xx qayta urinishga arziydi; 4xx (noto'g'ri so'rov, kalit) va to'liq
  * timeout esa yo'q — timeout byudjetni allaqachon yeb bo'lgan.
  */
-type Attempt<T> = { value: T | null; retryable?: boolean };
+type Attempt<T> = {
+  value: T | null;
+  retryable?: boolean;
+  /** HTTP status (tarmoq xatosi/timeout'da yo'q). */
+  status?: number;
+  /** Provayder aytgan kutish: `Retry-After` yoki Gemini `RetryInfo`. */
+  retryAfterMs?: number;
+  /** Bizning timeout'imiz (abort) — sekin provayder belgisi. */
+  timedOut?: boolean;
+  /** Muvaffaqiyatli javobning token sarfi (EXT-11 telemetriyasi). */
+  usage?: RawUsage;
+};
+
+/** Qayta urinish uchun kamida shuncha vaqt qolishi kerak (ms). */
+const RETRY_MIN_LEFT_MS = 6_000;
+/** Shundan qisqa timeout (byudjet tufayli) saqlagichga nosozlik deb yozilmaydi. */
+const BREAKER_TIMEOUT_FLOOR_MS = 15_000;
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -118,18 +149,73 @@ export function describeNetError(e: unknown): string {
  * urinishsiz qolar va bitta tarmoq uzilishi butun tadqiqotni o'chirardi.
  */
 async function withRetry<T>(
+  provider: "gemini" | "xai",
   budget: number,
   call: (timeoutMs: number) => Promise<Attempt<T>>,
+  deadline?: number,
 ): Promise<T | null> {
   const started = Date.now();
-  for (let attempt = 0; attempt < 3; attempt++) {
+  const breaker = breakerFor(provider);
+  const limiter = limiterFor(provider);
+  const MAX_ATTEMPTS = 3;
+  // Ish muddatigacha ishlatsa bo'ladigan vaqt (`llm/chain.ts leftMs` bilan bir xil); muddatsiz — cheksiz.
+  const jobLeft = () => (deadline === undefined ? Number.POSITIVE_INFINITY : deadline - CHAIN_SAFETY_MS - Date.now());
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     const left = budget - (Date.now() - started);
     // Qayta urinish uchun kamida 6 soniya qolishi kerak.
-    if (attempt > 0 && left < 6_000) break;
-    const res = await call(attempt === 0 ? budget : Math.min(left, budget));
-    if (res.value) return res.value;
+    if (attempt > 0 && left < RETRY_MIN_LEFT_MS) break;
+    // Ish muddati: yangi urinishga joy yo'q — «vaqt tugadi» (EXT-03).
+    const dl = jobLeft();
+    if (dl < CHAIN_MIN_ATTEMPT_MS) throw new DeadlineError(provider, dl);
+    /*
+     * Saqlagich (audit EXT-04): ketma-ket sekin/5xx javoblardan keyin
+     * provayder sovish davrida CHAQIRILMAYDI — har chaqiruv nosozlikni
+     * qaytadan «kashf qilib» to'liq timeout'ni kutmasin.
+     */
+    if (!breaker.allow()) {
+      console.warn(`[llm] ${provider} saqlagichi ochiq — chaqiruv o'tkazib yuborildi`);
+      return null;
+    }
+    const slot = Math.min(attempt === 0 ? budget : Math.min(left, budget), dl);
+    // Cheklagich (audit EXT-09): ortiqcha parallel so'rov qisqa navbatda kutadi.
+    const queued = limiter.active >= limiter.max ? Date.now() : 0;
+    const release = await limiter.acquire(slot);
+    if (!release) {
+      console.warn(`[llm] ${provider} navbatida vaqt tugadi (${slot} ms)`);
+      return null;
+    }
+    // Navbatda kutilgan vaqt ayriladi; bo'sh slotda timeout aynan avvalgidek.
+    const timeoutMs = queued ? Math.max(1, slot - (Date.now() - queued)) : slot;
+    let res: Attempt<T>;
+    try {
+      res = await call(timeoutMs);
+    } finally {
+      release();
+    }
+    if (res.value) {
+      breaker.success();
+      if (res.usage) recordLlmUsage({ provider, model: llmModel(), ...res.usage });
+      return res.value;
+    }
+    if (res.timedOut) {
+      if (timeoutMs >= BREAKER_TIMEOUT_FLOOR_MS) breaker.failure();
+      // Urinishni ish muddati kesgan bo'lsa — bu «vaqt tugadi», «model javob bermadi» emas.
+      if (jobLeft() < CHAIN_MIN_ATTEMPT_MS) throw new DeadlineError(provider, jobLeft());
+    } else if (res.status === undefined ? res.retryable : res.status >= 500) {
+      breaker.failure();
+    } else if (res.status !== undefined && res.status !== 429) {
+      breaker.success();
+    }
     if (!res.retryable) break;
-    await sleep(500 * 2 ** attempt);
+    // Oxirgi urinishdan keyin uxlash — bekor vaqt (audit EXT-13).
+    if (attempt === MAX_ATTEMPTS - 1) break;
+    // Tarmoq uzilishida teng jitter (kamida yarim asos), HTTP xatosida to'liq jitter.
+    const wait = res.retryAfterMs ?? (res.status === undefined ? equalJitterMs(attempt, 500) : backoffMs(attempt, 500));
+    // Kutish + keyingi urinish byudjetga sig'masa — hozir voz kechamiz.
+    if (Date.now() - started + wait + RETRY_MIN_LEFT_MS > budget) break;
+    // Kutishdan keyin ish muddatiga urinish sig'maydi — uxlamasdan «vaqt tugadi».
+    if (jobLeft() - wait < CHAIN_MIN_ATTEMPT_MS) throw new DeadlineError(provider, jobLeft());
+    await sleep(wait);
   }
   return null;
 }
@@ -152,7 +238,7 @@ async function runLlm(
   if (!provider) return null;
   const call = provider === "gemini" ? completeGemini : completeXai;
   const budget = opts.timeoutMs ?? 40_000;
-  return withRetry(budget, (timeoutMs) => call(system, user, maxTokens, { ...opts, timeoutMs }));
+  return withRetry(provider, budget, (timeoutMs) => call(system, user, maxTokens, { ...opts, timeoutMs }), opts.deadline);
 }
 
 export async function llmComplete(
@@ -188,7 +274,25 @@ export async function llmGrounded(
     console.warn("[llm] grounding faqat Gemini da bor — tadqiqot o'tkazib yuborildi");
     return null;
   }
-  return runLlm(system, user, maxTokens, grounded);
+  const res = await runLlm(system, user, maxTokens, grounded);
+  // Qidiruv haqiqatan bo'lgan javob — alohida pullik birlik (EXT-11).
+  if (res && (res.queries.length || res.sources.length)) recordGrounding(res.queries.length);
+  return res;
+}
+
+/** Gemini `usageMetadata` — hisob uchun kerakli qismi. */
+type GeminiUsageMetadata = { promptTokenCount?: number; candidatesTokenCount?: number; thoughtsTokenCount?: number };
+
+/**
+ * Token sarfi. O'ylash tokenlari (`thoughtsTokenCount`) CHIQISH narxida
+ * hisoblanadi — ilgari tashlab ketilardi va o'ylaydigan chaqiruvlar
+ * arzon ko'rinardi (audit EXT-11).
+ */
+function geminiUsage(u: GeminiUsageMetadata): RawUsage {
+  return {
+    inputTokens: u.promptTokenCount ?? 0,
+    outputTokens: (u.candidatesTokenCount ?? 0) + (u.thoughtsTokenCount ?? 0),
+  };
 }
 
 function thinkingBudget(requested?: number): number {
@@ -264,10 +368,16 @@ async function completeGemini(
     const data = (await res.json()) as {
       error?: { message?: string };
       candidates?: GeminiCandidate[];
+      usageMetadata?: GeminiUsageMetadata;
     };
     if (!res.ok) {
       console.warn("[gemini]", res.status, data.error?.message ?? "request failed");
-      return { value: null, retryable: res.status === 429 || res.status >= 500 };
+      return {
+        value: null,
+        retryable: res.status === 429 || res.status >= 500,
+        status: res.status,
+        retryAfterMs: retryAfterMs(res.headers) ?? geminiRetryDelayMs(data),
+      };
     }
     const cand = data.candidates?.[0];
     const text = cand?.content?.parts
@@ -292,13 +402,15 @@ async function completeGemini(
         entryPoint: meta?.searchEntryPoint?.renderedContent,
       },
       retryable: false,
+      ...(data.usageMetadata ? { usage: geminiUsage(data.usageMetadata) } : {}),
     };
   } catch (e) {
     // `fetch failed` sababi (`ENOTFOUND`/`EAI_AGAIN`/`ECONNRESET`) `cause` da — logda ko'rinsin.
     const message = describeNetError(e);
     console.warn("[gemini]", message);
-    // `aborted` — bizning timeout'imiz; qolgani tarmoq uzilishi.
-    return { value: null, retryable: !/abort/i.test(message) };
+    // `aborted` — FAQAT bizning timer'imiz; `ETIMEDOUT`/`UND_ERR_CONNECT_TIMEOUT` — tarmoq xatosi, qayta uriladi (review R2).
+    const timedOut = /abort/i.test(message);
+    return { value: null, retryable: !timedOut, timedOut };
   } finally {
     clearTimeout(timer);
   }
@@ -313,6 +425,8 @@ type GeminiStreamChunk = {
   error?: { message?: string; code?: number };
   promptFeedback?: { blockReason?: string };
   candidates?: GeminiCandidate[];
+  /** Odatda oxirgi bo'lakda — butun javob bo'yicha yig'indi. */
+  usageMetadata?: GeminiUsageMetadata;
 };
 
 /**
@@ -332,10 +446,10 @@ function candidateText(cand: GeminiCandidate | undefined): string {
 
 /** Bitta SSE qatorining ma'nosi. */
 type SseLine =
-  | { kind: "text"; text: string }
+  | { kind: "text"; text: string; usage?: RawUsage }
   | { kind: "blocked" }
   | { kind: "error"; message: string; retryable: boolean }
-  | { kind: "skip" };
+  | { kind: "skip"; usage?: RawUsage };
 
 const SSE_SKIP: SseLine = { kind: "skip" };
 
@@ -370,7 +484,9 @@ function parseSseLine(raw: string): SseLine {
   // Xavfsizlik filtri: matn kelmaydi va qayta urinish ham yordam bermaydi.
   if (chunk.promptFeedback?.blockReason) return { kind: "blocked" };
   const text = candidateText(chunk.candidates?.[0]);
-  return text === "" ? SSE_SKIP : { kind: "text", text };
+  const usage = chunk.usageMetadata ? geminiUsage(chunk.usageMetadata) : undefined;
+  if (text === "") return usage ? { kind: "skip", usage } : SSE_SKIP;
+  return usage ? { kind: "text", text, usage } : { kind: "text", text };
 }
 
 /**
@@ -409,7 +525,14 @@ async function streamGemini(
     if (!res.ok) {
       const err = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;
       console.warn("[gemini:stream]", res.status, err?.error?.message ?? "request failed");
-      if (res.status === 429 || res.status >= 500) return { value: null, retryable: true };
+      if (res.status === 429 || res.status >= 500) {
+        return {
+          value: null,
+          retryable: true,
+          status: res.status,
+          retryAfterMs: retryAfterMs(res.headers) ?? geminiRetryDelayMs(err),
+        };
+      }
       /*
        * Boshqa 4xx — oqim endpointining O'ZI rad etdi (proksi uni
        * bilmaydi, model oqimni qo'llamaydi, `alt=sse` bloklangan).
@@ -419,7 +542,7 @@ async function streamGemini(
        */
       const fallback = await completeGemini(system, user, maxTokens, opts);
       if (fallback.value) onText(fallback.value.text);
-      return { value: fallback.value?.text ?? null, retryable: fallback.retryable };
+      return { ...fallback, value: fallback.value?.text ?? null };
     }
     if (!res.body) {
       // Oqim tanasi yo'q (proksi buferladi yoki `json:`-only stub) —
@@ -428,7 +551,7 @@ async function streamGemini(
       const whole = candidateText(data.candidates?.[0]).trim();
       if (!whole) return { value: null, retryable: false };
       onText(whole);
-      return { value: whole, retryable: false };
+      return { value: whole, retryable: false, ...(data.usageMetadata ? { usage: geminiUsage(data.usageMetadata) } : {}) };
     }
 
     const reader = res.body.getReader();
@@ -440,6 +563,8 @@ async function streamGemini(
      */
     let buf = "";
     let text = "";
+    // `usageMetadata` — oxirgi ko'ringani (yig'indi, delta emas).
+    let usage: RawUsage | undefined;
     for (;;) {
       const { done, value } = await reader.read();
       buf += done ? decoder.decode() : decoder.decode(value, { stream: true });
@@ -450,6 +575,7 @@ async function streamGemini(
       while (nl >= 0) {
         const ev = parseSseLine(buf.slice(0, nl));
         buf = buf.slice(nl + 1);
+        if ((ev.kind === "text" || ev.kind === "skip") && ev.usage) usage = ev.usage;
         if (ev.kind === "text") {
           text += ev.text;
           onText(text);
@@ -472,12 +598,13 @@ async function streamGemini(
     }
     const full = text.trim();
     if (!full) return { value: null, retryable: false };
-    return { value: full, retryable: false };
+    return { value: full, retryable: false, ...(usage ? { usage } : {}) };
   } catch (e) {
     const message = describeNetError(e);
     console.warn("[gemini:stream]", message);
-    // `aborted` — bizning timeout'imiz; qolgani tarmoq uzilishi.
-    return { value: null, retryable: !/abort/i.test(message) };
+    // `aborted` — FAQAT bizning timer'imiz; `ETIMEDOUT`/`UND_ERR_CONNECT_TIMEOUT` — tarmoq xatosi, qayta uriladi (review R2).
+    const timedOut = /abort/i.test(message);
+    return { value: null, retryable: !timedOut, timedOut };
   }
 }
 
@@ -514,8 +641,11 @@ export async function llmStream(
     return res.text;
   }
   const budget = rest.timeoutMs ?? 40_000;
-  return withRetry(budget, (timeoutMs) =>
-    streamGemini(system, user, maxTokens, { ...rest, timeoutMs }, onText),
+  return withRetry(
+    "gemini",
+    budget,
+    (timeoutMs) => streamGemini(system, user, maxTokens, { ...rest, timeoutMs }, onText),
+    rest.deadline,
   );
 }
 
@@ -552,19 +682,31 @@ async function completeXai(
     });
     if (!res.ok) {
       console.warn("[xai]", res.status);
-      return { value: null, retryable: res.status === 429 || res.status >= 500 };
+      return {
+        value: null,
+        retryable: res.status === 429 || res.status >= 500,
+        status: res.status,
+        retryAfterMs: retryAfterMs(res.headers),
+      };
     }
     const data = (await res.json()) as {
       choices?: { message?: { content?: string } }[];
+      usage?: { prompt_tokens?: number; completion_tokens?: number };
     };
     const text = data.choices?.[0]?.message?.content?.trim();
     if (!text) return { value: null, retryable: false };
     // xAI da qidiruv vositasi yo'q — manba ham, so'rov ham bo'sh.
-    return { value: { text, queries: [], sources: [] }, retryable: false };
+    return {
+      value: { text, queries: [], sources: [] },
+      retryable: false,
+      ...(data.usage ? { usage: { inputTokens: data.usage.prompt_tokens ?? 0, outputTokens: data.usage.completion_tokens ?? 0 } } : {}),
+    };
   } catch (e) {
     const message = describeNetError(e);
     console.warn("[xai]", message);
-    return { value: null, retryable: !/abort/i.test(message) };
+    // Faqat BIZNING timer abort'imiz; `ETIMEDOUT`/`UND_ERR_CONNECT_TIMEOUT` — tarmoq xatosi, qayta uriladi (review R2).
+    const timedOut = /abort/i.test(message);
+    return { value: null, retryable: !timedOut, timedOut };
   } finally {
     clearTimeout(timer);
   }
@@ -592,13 +734,9 @@ export type RawAttempt =
   | { ok: false; error: string; retryable: boolean; status?: number; retryAfterMs?: number };
 
 /** `Retry-After` sarlavhasi — soniya (son) yoki HTTP-sana bo'lishi mumkin. */
-function retryAfterMs(headers: Headers): number | undefined {
-  const raw = headers.get("retry-after");
-  if (!raw) return undefined;
-  const secs = Number(raw);
-  if (Number.isFinite(secs)) return Math.max(0, secs * 1000);
-  const at = Date.parse(raw);
-  return Number.isFinite(at) ? Math.max(0, at - Date.now()) : undefined;
+function retryAfterMs(headers: Headers | null | undefined): number | undefined {
+  // Sarlavhasiz javob (proksi/stub) — kutish noma'lum, xato EMAS.
+  return typeof headers?.get === "function" ? parseRetryAfter(headers.get("retry-after")) : undefined;
 }
 
 async function rawGemini(
@@ -625,7 +763,7 @@ async function rawGemini(
     const data = (await res.json()) as {
       error?: { message?: string };
       candidates?: GeminiCandidate[];
-      usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number };
+      usageMetadata?: GeminiUsageMetadata;
     };
     if (!res.ok) {
       return {
@@ -633,7 +771,8 @@ async function rawGemini(
         error: data.error?.message ?? `HTTP ${res.status}`,
         retryable: res.status === 429 || res.status >= 500,
         status: res.status,
-        retryAfterMs: retryAfterMs(res.headers),
+        // Gemini kutishni tanada beradi (`RetryInfo`), sarlavhada emas.
+        retryAfterMs: retryAfterMs(res.headers) ?? geminiRetryDelayMs(data),
       };
     }
     const text = (data.candidates?.[0]?.content?.parts ?? [])
@@ -645,10 +784,7 @@ async function rawGemini(
     return {
       ok: true,
       text,
-      usage: {
-        inputTokens: data.usageMetadata?.promptTokenCount ?? 0,
-        outputTokens: data.usageMetadata?.candidatesTokenCount ?? 0,
-      },
+      usage: geminiUsage(data.usageMetadata ?? {}),
     };
   } catch (e) {
     const message = describeNetError(e);

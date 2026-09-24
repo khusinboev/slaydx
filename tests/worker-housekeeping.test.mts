@@ -61,3 +61,15 @@ test("housekeeping(): muddati o'tgan O'YIN havolalari ham tozalanadi (`game_sess
   assert.ok(seen.some((q) => /DELETE FROM source_uploads/.test(q)), "manba fayllari tozalanmadi");
   assert.ok(seen.some((q) => /DELETE FROM photo_uploads/.test(q)), "rezyume suratlari tozalanmadi");
 });
+
+test("housekeeping(): `source_cache` 60 kundan eskisi tozalanadi (EXT-08); foydalanilmagan logotip/shablon tozalash ULANMAGAN (egasi qarori)", async (t) => {
+  const seen = mockDb(t);
+  await housekeeping();
+  // MUTATSIYA: `step("source-cache", …)` olib tashlansa bu qator topilmaydi.
+  assert.ok(
+    seen.some((q) => /DELETE FROM source_cache WHERE key IN \(SELECT key FROM source_cache WHERE fetched_at < now\(\)/.test(q)),
+    "MUTATSIYA: worker `source_cache` ni tozalamayapti",
+  );
+  // `purgeUnusedUploads` eksport qilingan va sinalgan, lekin muddati egasi qaroriga bog'liq.
+  assert.ok(!seen.some((q) => /DELETE FROM (logo|template)_uploads/.test(q)), "logotip/shablon tozalash egasi qarorisiz ulangan");
+});

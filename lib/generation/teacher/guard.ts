@@ -18,6 +18,7 @@
 import { isGenericGlossaryTerm } from "../quality";
 import { TEACHER_LIMITS, type GlossaryTerm, type KeysRubricRow } from "./types";
 import type { Block, DocTable } from "../types";
+import { safeSlice } from "../safe-text";
 
 /* ────────────────────────── matn ────────────────────────── */
 
@@ -42,7 +43,7 @@ export function clean(s: unknown): string {
 /** Tozalangan matn, `n` belgidan uzun bo'lsa kesiladi. */
 export function clip(s: unknown, n: number): string {
   const t = clean(s);
-  return t.length <= n ? t : `${t.slice(0, n - 1).trimEnd()}…`;
+  return t.length <= n ? t : `${safeSlice(t, n - 1).trimEnd()}…`;
 }
 
 /** Model JSON idagi ro'yxat maydoni — turli nomlar ostida kelishi mumkin. */

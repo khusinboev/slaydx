@@ -1,6 +1,6 @@
 import { ApiError, handler, json, limit, readJson, requireUser } from "@/lib/server/api";
 import { budgetFor } from "@/lib/generation/budget";
-import { enqueueGeneration, listGenerations } from "@/lib/server/jobs";
+import { clampListLimit, decodeCursor, enqueueGeneration, listGenerations } from "@/lib/server/jobs";
 import { sanitizeValues } from "@/lib/server/validate";
 import { sourceCharsForRequest } from "@/lib/server/source-upload";
 import { missingRequired, preflightError, priceFor, TOOL_BY_SLUG, topicOf } from "@/lib/tools";
@@ -10,11 +10,24 @@ import { env } from "@/lib/server/env";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-/** Foydalanuvchining o'z generatsiyalari. Boshqa userniki chiqmaydi. */
+/**
+ * Foydalanuvchining o'z generatsiyalari. Boshqa userniki chiqmaydi.
+ *
+ * Kursor bilan sahifalash (BEA-06, FE-08): `?limit=1..100` (standart 50)
+ * va `?cursor=<oldingi javobdagi nextCursor>`. Javob kaliti `generations`
+ * o'zgarmagan, qo'shimcha `nextCursor` (`null` — oxirgi sahifa).
+ */
 export const GET = handler("generations/list", async (req) => {
   const { user } = await requireUser(req);
-  const rows = await listGenerations(user.id);
-  return json({ generations: rows });
+  const params = new URL(req.url).searchParams;
+  const rawCursor = params.get("cursor");
+  const cursor = rawCursor ? decodeCursor(rawCursor) : null;
+  if (rawCursor && !cursor) throw new ApiError("Noto'g'ri kursor", 400);
+  const { items, nextCursor } = await listGenerations(user.id, {
+    limit: clampListLimit(params.get("limit")),
+    cursor,
+  });
+  return json({ generations: items, nextCursor });
 });
 
 /**
@@ -32,6 +45,9 @@ export const POST = handler("generations/create", async (req) => {
   // Ikki qatlam: qisqa portlash va soatlik umumiy chegara.
   await limit(`gen:burst:${user.id}`, 5, 60);
   await limit(`gen:hour:${user.id}`, 60, 3600);
+
+  // Takroriy yuborish (javob yo'qolgan) ikkinchi marta pul yechmasin (C34).
+  const idempotencyKey = readIdempotencyKey(req);
 
   /*
    * 1 200 000 bayt: tarjima chegarasi 200 000 BELGI, kirill/o'zbek matni
@@ -104,6 +120,7 @@ export const POST = handler("generations/create", async (req) => {
   const topic = topicOf(values, tool);
 
   const result = await enqueueGeneration({
+    idempotencyKey,
     userId: user.id,
     toolId: tool.id,
     topic,
@@ -114,8 +131,25 @@ export const POST = handler("generations/create", async (req) => {
     // slotni band qilmasin, 45 betlik kurs ishi esa unga sig'may
     // yiqilmasin. `WORKER_JOB_TIMEOUT_MS` yuqori chegara bo'lib qoladi.
     budgetMs: budgetFor(tool, values, env.worker.jobTimeoutMs),
+    /*
+     * Qabul qarori (C22, `audit/designs/capacity.md`) — tranzaksiya ichida,
+     * PUL YECHISHDAN OLDIN: foydalanuvchida QUEUED+IN_PROGRESS ≥
+     * `USER_MAX_INFLIGHT` yoki navbatdagi kutish > `QUEUE_MAX_WAIT_SEC`
+     * bo'lsa 429 — pul ham, qator ham yo'q.
+     */
+    admission: env.queue,
   });
 
+  if (!result.ok && result.reason === "idempotency_conflict") {
+    throw new ApiError("Bu Idempotency-Key boshqa so'rov uchun ishlatilgan — yangi kalit bilan yuboring", 422);
+  }
+  if (!result.ok && result.reason === "admission") {
+    const { code, retryAfterSec, error } = result.decision;
+    return json(
+      { error, code, retryAfterSec },
+      { status: 429, headers: { "Retry-After": String(retryAfterSec) } },
+    );
+  }
   if (!result.ok) {
     throw new ApiError(
       `Balans yetarli emas. Kerak: ${result.required.toLocaleString("uz-UZ")} tanga, mavjud: ${result.available.toLocaleString("uz-UZ")}.`,
@@ -127,5 +161,29 @@ export const POST = handler("generations/create", async (req) => {
   // Inline rejimda worker shu processda ishlaydi — birinchi so'rovda uyg'otamiz.
   if (env.worker.inline) startInlineWorker();
 
-  return json({ id: result.id, price, status: "QUEUED" }, { status: 202 });
+  /*
+   * Takror (shu kalit bilan avval yaratilgan ish) — ASL javob bilan AYNAN bir
+   * xil: o'sha id, o'sha (yechilgan) narx, o'sha status kodi. Klient javobni
+   * yo'qotib qayta yuborganini bilmasligi ham mumkin — farq faqat sarlavhada.
+   */
+  return json(
+    { id: result.id, price: result.price, status: "QUEUED" },
+    { status: 202, headers: result.replayed ? { "Idempotent-Replayed": "true" } : undefined },
+  );
 });
+
+const IDEMPOTENCY_KEY_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/**
+ * `Idempotency-Key` sarlavhasi (C34, klient shartnomasi: UUID v4). Yo'q —
+ * `undefined` (eski xatti-harakat). Bor, lekin UUID emas — 400: noto'g'ri
+ * kalitni jim e'tiborsiz qoldirish klientni «himoyalangan» deb aldardi.
+ * Katta-kichik harf farq qilmaydi (bazada kichik harfda).
+ */
+function readIdempotencyKey(req: Request): string | undefined {
+  const raw = req.headers.get("idempotency-key");
+  if (raw === null) return undefined;
+  const key = raw.trim().toLowerCase();
+  if (!IDEMPOTENCY_KEY_RE.test(key)) throw new ApiError("Idempotency-Key UUID bo'lishi kerak", 400);
+  return key;
+}

@@ -36,6 +36,7 @@ import type { TranslationSource } from "../source-types";
 import type { CompleteFn } from "../research/pipeline";
 import { llmEnabled } from "../llm";
 import { CostMeter, type LlmUsage, complete as completeRole } from "../llm-roles";
+import { assertJobTime, isDeadlineError } from "../deadline";
 import { parseLlmObject } from "../json";
 import { remainingMs } from "../quality";
 import { TEACHER_LIMITS, type TeacherKind, type TeacherModel, type TeacherSchool } from "./types";
@@ -198,7 +199,9 @@ async function buildTestDoc(meta: DocMeta, values: FormValues, opts: TeacherBuil
     const mod = (await import(TEST_ENGINE_MODULE)) as { buildTestDoc?: TeacherBuilder };
     if (typeof mod.buildTestDoc !== "function") return null;
     return await mod.buildTestDoc(meta, values, opts);
-  } catch {
+  } catch (e) {
+    // Ish muddati tugashi — «modul yo'q» emas: yuqoriga (ish FAILED + pul qaytadi, EXT-03).
+    if (isDeadlineError(e)) throw e;
     // WP-B hali ulanmagan — `test` vositasi hujjat yaratmaydi (AUDIT-20 §6).
     return null;
   }
@@ -247,9 +250,19 @@ export const buildTeacherDoc: TeacherBuilder = async (meta, values, opts) => {
   };
 
   const system = teacherSystemPrompt(ctx);
+  /*
+   * Ish muddati (EXT-03): yozuvchilar timeout'ni BOSQICH muddatidan
+   * (`writeDeadline` — hisobot/sayqal zaxirasi ayrilgan) oladi; bosqich
+   * tugashi eski yumshoq yo'l (`null`), ISH muddati tugashi esa
+   * `DeadlineError` — eski yo'lga (write-specials) tushib, yarim hujjat
+   * yozish o'rniga ish aniq «vaqt tugadi» bilan yiqiladi.
+   */
   const ask: TeacherAsk = async (role, user, o) => {
-    if (o.timeoutMs < MIN_CALL_MS) return null;
-    const r = await complete(role, system, user, { json: true, ...o });
+    if (o.timeoutMs < MIN_CALL_MS) {
+      assertJobTime(deadline, `teacher:${role}`, MIN_CALL_MS);
+      return null;
+    }
+    const r = await complete(role, system, user, { json: true, ...o, deadline });
     if (r?.usage) {
       meter.add(r.usage);
       opts.onUsage?.(r.usage);
@@ -259,8 +272,12 @@ export const buildTeacherDoc: TeacherBuilder = async (meta, values, opts) => {
 
   stage(10, "Mazmun yozilmoqda");
   const writeDeadline = deadline - (opts.polish === false ? TEACHER_REVIEW_RESERVE_MS : TEACHER_REVIEW_RESERVE_MS + TEACHER_POLISH_RESERVE_MS);
+  // Ish muddati tugagan — yozuvchi (bosqich muddati bilan) jim `null` berib eski yo'lga tushmasin (EXT-03).
+  assertJobTime(deadline, `teacher:${kind}`, MIN_CALL_MS);
   const built = await WRITERS[kind](ctx, ask, { deadline: Math.max(Date.now() + MIN_CALL_MS, writeDeadline), stage });
   if (!built) {
+    // Yozish davomida vaqt tugagan bo'lsa ham eski yo'lga EMAS — «vaqt tugadi».
+    assertJobTime(deadline, `teacher:${kind}`, MIN_CALL_MS);
     console.warn(`[teacher] ${kind}: model yaroqli javob bermadi — eski yo'lga qaytiladi`);
     return null;
   }

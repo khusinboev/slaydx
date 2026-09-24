@@ -14,13 +14,96 @@ import type { BodyRules } from "./generation/slide-audience";
  */
 
 export class ApiError extends Error {
+  /**
+   * Server `Retry-After` sarlavhasi yoki tanadagi `retryAfterSec`/`retryAfter`
+   * (soniya) — bo'lmasa `null`. Polling va UI «qachon qayta urinish» ni
+   * shundan oladi (C09/C20, W2 shartnomalari).
+   */
+  readonly retryAfterSec: number | null;
+
   constructor(
     message: string,
     readonly status: number,
     readonly data: Record<string, unknown> = {},
   ) {
     super(message);
+    this.retryAfterSec = retrySecOf(data);
   }
+}
+
+function positiveSec(v: unknown): number | null {
+  const n = typeof v === "string" ? Number(v) : v;
+  return typeof n === "number" && Number.isFinite(n) && n > 0 ? Math.ceil(n) : null;
+}
+
+/** Tanadagi `retryAfterSec` (W2 shartnomasi) yoki `retryAfter` (`spend.ts`). */
+function retrySecOf(data: Record<string, unknown>): number | null {
+  return positiveSec(data.retryAfterSec) ?? positiveSec(data.retryAfter);
+}
+
+/**
+ * «N soniyadan/daqiqadan keyin» — server `Retry-After` ini o'qiladigan
+ * qilib beradi (navbat to'lgan, PDF band, …).
+ */
+export function retryAfterText(sec: number): string {
+  if (sec < 60) return `${sec} soniyadan keyin`;
+  return `${Math.ceil(sec / 60)} daqiqadan keyin`;
+}
+
+/**
+ * Server matniga qayta urinish vaqtini qo'shadi — faqat matnning o'zida
+ * raqam bo'lmasa (server «30 soniyadan keyin …» desa takrorlanmaydi).
+ */
+export function withRetryHint(message: string, sec: number | null): string {
+  if (!sec || /\d/.test(message)) return message;
+  return `${message} (qayta urinish: ${retryAfterText(sec)})`;
+}
+
+/** Har so'rovning standart vaqt chegarasi (FE-14). Uzun yo'llar o'zinikini beradi. */
+export const DEFAULT_TIMEOUT_MS = 30_000;
+
+/** `fetch` parametrlari + ixtiyoriy vaqt chegarasi (ms). */
+export type RequestOptions = RequestInit & { timeoutMs?: number };
+
+const TIMEOUT_TEXT = "Server javob bermadi (vaqt tugadi). Aloqani tekshirib, qayta urinib ko'ring.";
+const OFFLINE_TEXT = "Internetga ulanib bo'lmadi. Aloqani tekshiring.";
+
+/**
+ * Chaqiruvchi signali + vaqt chegarasi → bitta signal.
+ *
+ * `AbortSignal.any` eski WebView'larda (Telegram iOS) yo'q — shuning uchun
+ * qo'lda ulanadi. Vaqt chegarasi `AbortSignal.timeout` da (bo'lsa):
+ * global `setTimeout` ni almashtiradigan testlar uni buzmaydi.
+ */
+function linkedSignal(ms: number, outer?: AbortSignal | null) {
+  const ctrl = new AbortController();
+  let timedOut = false;
+  const onTimeout = () => {
+    timedOut = true;
+    ctrl.abort(new DOMException("Vaqt tugadi", "TimeoutError"));
+  };
+  const onOuter = () => ctrl.abort(outer?.reason);
+  const t = typeof AbortSignal.timeout === "function" ? AbortSignal.timeout(ms) : null;
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  if (t) t.addEventListener("abort", onTimeout, { once: true });
+  else timer = setTimeout(onTimeout, ms);
+  if (outer) {
+    if (outer.aborted) ctrl.abort(outer.reason);
+    else outer.addEventListener("abort", onOuter, { once: true });
+  }
+  return {
+    signal: ctrl.signal,
+    timedOut: () => timedOut,
+    done: () => {
+      t?.removeEventListener("abort", onTimeout);
+      if (timer) clearTimeout(timer);
+      outer?.removeEventListener("abort", onOuter);
+    },
+  };
+}
+
+function abortError(): DOMException {
+  return new DOMException("Bekor qilindi", "AbortError");
 }
 
 /**
@@ -38,50 +121,75 @@ export function setUnauthorizedHandler(fn: () => void) {
  * `lib/api-edit.ts` (tahrir API funksiyalari) shu funksiyani qayta
  * ishlatadi — ikkinchi `fetch` o'ramini yozmaslik uchun. Boshqa hech
  * qanday funksiya bu faylga QO'SHILMAYDI (tahrir alohida faylda).
+ *
+ * Har so'rovda vaqt chegarasi bor (standart {@link DEFAULT_TIMEOUT_MS}):
+ * mobil aloqa uzilganda `fetch` daqiqalab osilib qolmasin (FE-14). Vaqt
+ * tugasa — `ApiError(status 0, {timeout:true})`, ya'ni tarmoq xatosi
+ * bilan bir xil (qayta urinsa bo'ladi). Chaqiruvchi o'zi bekor qilsa —
+ * `AbortError` (xato emas, UI uni ko'rsatmaydi).
  */
-export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  let res: Response;
+export async function request<T>(path: string, init: RequestOptions = {}): Promise<T> {
+  const { timeoutMs = DEFAULT_TIMEOUT_MS, signal: outer, ...rest } = init;
+  const link = linkedSignal(timeoutMs, outer);
   try {
-    res = await fetch(path, {
-      ...init,
-      // Cookie httpOnly — brauzer o'zi qo'shadi, biz faqat yuborishni so'raymiz.
-      credentials: "same-origin",
-      headers: {
-        ...(init.body && !(init.body instanceof FormData)
-          ? { "Content-Type": "application/json" }
-          : {}),
-        ...init.headers,
-      },
-    });
-  } catch {
-    // Tarmoq uzilgan — «Xatolik (undefined)» o'rniga tushunarli matn.
-    throw new ApiError("Internetga ulanib bo'lmadi. Aloqani tekshiring.", 0);
-  }
-
-  const text = await res.text();
-  let data: Record<string, unknown> = {};
-  if (text) {
+    let res: Response;
     try {
-      data = JSON.parse(text);
+      res = await fetch(path, {
+        ...rest,
+        signal: link.signal,
+        // Cookie httpOnly — brauzer o'zi qo'shadi, biz faqat yuborishni so'raymiz.
+        credentials: "same-origin",
+        headers: {
+          ...(rest.body && !(rest.body instanceof FormData)
+            ? { "Content-Type": "application/json" }
+            : {}),
+          ...rest.headers,
+        },
+      });
     } catch {
-      data = {};
+      if (outer?.aborted) throw abortError();
+      if (link.timedOut()) throw new ApiError(TIMEOUT_TEXT, 0, { timeout: true });
+      // Tarmoq uzilgan — «Xatolik (undefined)» o'rniga tushunarli matn.
+      throw new ApiError(OFFLINE_TEXT, 0);
     }
+
+    let text: string;
+    try {
+      text = await res.text();
+    } catch {
+      // Tana o'qilayotganda uzildi — vaqt tugadi yoki bekor qilindi.
+      if (outer?.aborted) throw abortError();
+      if (link.timedOut()) throw new ApiError(TIMEOUT_TEXT, 0, { timeout: true });
+      throw new ApiError(OFFLINE_TEXT, 0);
+    }
+    let data: Record<string, unknown> = {};
+    if (text) {
+      try {
+        data = JSON.parse(text);
+      } catch {
+        data = {};
+      }
+    }
+    if (!res.ok) {
+      // Sessiya tugagan bo'lsa butun ilova bilib tursin — aks holda
+      // foydalanuvchi har sahifada tushunarsiz xatoga urilardi.
+      if (res.status === 401 && !path.startsWith("/api/auth/")) onUnauthorized?.();
+      const message =
+        typeof data.error === "string" && data.error
+          ? data.error
+          : res.status === 401
+            ? "Sessiya tugagan — qaytadan kiring"
+            : res.status >= 500
+              ? "Server javob bermadi. Birozdan keyin urinib ko'ring."
+              : `Xatolik (${res.status})`;
+      // `Retry-After` sarlavhasi (nginx/route) tanada yo'q bo'lsa — ko'chiriladi.
+      const header = positiveSec(res.headers.get("retry-after"));
+      throw new ApiError(message, res.status, header && data.retryAfterSec == null ? { ...data, retryAfterSec: header } : data);
+    }
+    return data as T;
+  } finally {
+    link.done();
   }
-  if (!res.ok) {
-    // Sessiya tugagan bo'lsa butun ilova bilib tursin — aks holda
-    // foydalanuvchi har sahifada tushunarsiz xatoga urilardi.
-    if (res.status === 401 && !path.startsWith("/api/auth/")) onUnauthorized?.();
-    const message =
-      typeof data.error === "string" && data.error
-        ? data.error
-        : res.status === 401
-          ? "Sessiya tugagan — qaytadan kiring"
-          : res.status >= 500
-            ? "Server javob bermadi. Birozdan keyin urinib ko'ring."
-            : `Xatolik (${res.status})`;
-    throw new ApiError(message, res.status, data);
-  }
-  return data as T;
 }
 
 /* ─────────────────────────────── Auth ─────────────────────────────── */
@@ -263,21 +371,47 @@ export type ServerGeneration = Omit<Generation, "values" | "doc" | "html"> & {
   editedAt?: string | null;
   liveSeq?: number;
   live?: unknown | null;
+  /**
+   * Bonus-faqat hujjat fayllari retention bo'yicha o'chirilgan vaqt
+   * (W2-D2/W2-B, ixtiyoriy — eski server bermaydi). O'rnatilgan bo'lsa
+   * eskiz/fayl havolalari o'chgan aktivga olib boradi — UI ularni chizmaydi.
+   */
+  filesPurgedAt?: string | null;
 };
 
 export type GenerationDetail = ServerGeneration & {
   html: string | null;
   doc: AcademicDoc | null;
   hasFile: boolean;
+  /**
+   * Faqat `QUEUED` da, ixtiyoriy (W2-B shartnomasi): navbatdagi o'rin
+   * (1 dan) va taxminiy kutish (s). Eski server yubormaydi — UI
+   * mavjudligini tekshirib ko'rsatadi (UX-07).
+   */
+  queuePosition?: number;
+  etaSec?: number;
 };
 
-export function listGenerations() {
-  return request<{ generations: ServerGeneration[] }>("/api/generations");
+export type GenerationPage = { generations: ServerGeneration[]; nextCursor?: string | null };
+
+/**
+ * Fayllar ro'yxati. `cursor` — oldingi javobning `nextCursor` i (shaffof
+ * satr, W2-B shartnomasi). Eski server `nextCursor` bermaydi → `null`.
+ * Birinchi sahifa kursorini `lib/store.ts` (`generationsCursor`) saqlaydi.
+ */
+export async function listGenerations(opts: { cursor?: string; limit?: number } = {}): Promise<GenerationPage> {
+  const qs = new URLSearchParams();
+  if (opts.cursor) qs.set("cursor", opts.cursor);
+  if (opts.limit) qs.set("limit", String(opts.limit));
+  const q = qs.toString();
+  const page = await request<GenerationPage>(`/api/generations${q ? `?${q}` : ""}`);
+  const next = typeof page.nextCursor === "string" && page.nextCursor ? page.nextCursor : null;
+  return { ...page, nextCursor: next };
 }
 
-export function getGeneration(id: string, since?: number) {
+export function getGeneration(id: string, since?: number, signal?: AbortSignal) {
   const qs = since != null ? `?since=${since}` : "";
-  return request<{ generation: GenerationDetail }>(`/api/generations/${id}${qs}`);
+  return request<{ generation: GenerationDetail }>(`/api/generations/${id}${qs}`, signal ? { signal } : {});
 }
 
 /**
@@ -304,20 +438,126 @@ export function nextPollDelay(g: GenerationDetail, delay: number): number {
   return Math.min(5000, Math.round(delay * 1.3));
 }
 
-export function createGeneration(slug: string, values: FormValues) {
-  return request<{ id: string; price: number; status: JobStatus }>("/api/generations", {
-    method: "POST",
-    body: JSON.stringify({ slug, values }),
-  });
+/**
+ * Generatsiyani navbatga qo'yadi (pul shu so'rovda yechiladi).
+ *
+ * 429 `queue_full`/`user_inflight` (W2-B): server pul yechishdan OLDIN
+ * rad etadi — foydalanuvchi server matnini va qachon qayta urinishni
+ * ko'radi (barcha formalar `e.message` ni `ToolChrome` da chiqaradi).
+ * Avtomatik qayta yuborilmaydi: har yuborish — yangi to'lov.
+ *
+ * Vaqt tugasa ish baribir navbatga tushgan bo'lishi mumkin — matn
+ * qayta yuborishdan oldin «Mening fayllarim» ni tekshirishni aytadi.
+ *
+ * `Idempotency-Key` (C34 / CONC-10): har yuborish NIYATIGA bitta UUID v4
+ * ({@link submitKey}). Javobi yo'qolgan so'rovdan (vaqt tugashi, 5xx,
+ * tarmoq) keyin xuddi shu forma qayta yuborilsa — kalit O'SHA: server
+ * ikkinchi marta pul yechmay, birinchi ishni qaytaradi. Server kalitni
+ * hali o'qimasa ham sarlavha zararsiz.
+ */
+export async function createGeneration(slug: string, values: FormValues, opts: { idempotencyKey?: string } = {}) {
+  const body = JSON.stringify({ slug, values });
+  const key = opts.idempotencyKey ?? submitKey(body);
+  try {
+    const res = await request<{ id: string; price: number; status: JobStatus }>("/api/generations", {
+      method: "POST",
+      body,
+      headers: { "Idempotency-Key": key },
+      timeoutMs: 60_000,
+    });
+    settleSubmitKey(key, "done");
+    return res;
+  } catch (e) {
+    settleSubmitKey(key, submitOutcome(e));
+    if (e instanceof ApiError && e.status === 429) {
+      throw new ApiError(withRetryHint(e.message, e.retryAfterSec), 429, e.data);
+    }
+    if (e instanceof ApiError && e.data.timeout === true) {
+      throw new ApiError(
+        "Server javob bermadi. Qayta yuborishdan oldin «Mening fayllarim» ni tekshiring — ish navbatga qo'yilgan bo'lishi mumkin.",
+        0,
+        e.data,
+      );
+    }
+    throw e;
+  }
+}
+
+/* ─────────────── Idempotency-Key: bitta niyat — bitta kalit (C34) ─────────────── */
+
+/** Muvaffaqiyatdan keyin shu vaqt ichidagi AYNAN shu forma — o'sha niyat (sahifa o'tishi paytidagi ikkinchi bosish). */
+export const SUBMIT_KEY_AFTER_SUCCESS_MS = 30_000;
+/** Javobi yo'qolgan yuborishdan keyingi qayta urinish shu vaqt ichida o'sha kalitni oladi. */
+export const SUBMIT_KEY_AFTER_UNSURE_MS = 10 * 60_000;
+
+/** Oxirgi yuborish niyati: so'rov tanasi (vosita + qiymatlar), kalit va natija. */
+let lastSubmit: { body: string; key: string; state: "pending" | "done" | "unsure"; at: number } | null = null;
+
+function uuidV4(): string {
+  const c = globalThis.crypto;
+  if (typeof c?.randomUUID === "function") return c.randomUUID();
+  // `randomUUID` faqat xavfsiz kontekstda (https/localhost) — aks holda qo'lda v4.
+  const b = c.getRandomValues(new Uint8Array(16));
+  b[6] = (b[6] & 0x0f) | 0x40;
+  b[8] = (b[8] & 0x3f) | 0x80;
+  const h = Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20)}`;
+}
+
+/**
+ * Shu yuborish uchun kalit.
+ *
+ * Xuddi shu tana (vosita + forma qiymatlari) javobi aniq bo'lmagan
+ * urinishdan keyin ({@link SUBMIT_KEY_AFTER_UNSURE_MS}) yoki endigina
+ * muvaffaqiyatdan keyin ({@link SUBMIT_KEY_AFTER_SUCCESS_MS}) yuborilsa —
+ * o'sha kalit (bitta niyatning takrori). Boshqa forma, aniq rad
+ * (4xx — hech narsa yaratilmagan) yoki muddat o'tgan — yangi kalit.
+ */
+function submitKey(body: string): string {
+  const now = Date.now();
+  const last = lastSubmit;
+  const reuse =
+    last !== null &&
+    last.body === body &&
+    (last.state === "pending" ||
+      (last.state === "unsure" && now - last.at < SUBMIT_KEY_AFTER_UNSURE_MS) ||
+      (last.state === "done" && now - last.at < SUBMIT_KEY_AFTER_SUCCESS_MS));
+  const key = reuse ? last.key : uuidV4();
+  lastSubmit = { body, key, state: "pending", at: now };
+  return key;
+}
+
+function settleSubmitKey(key: string, state: "done" | "unsure" | "rejected") {
+  if (lastSubmit?.key !== key) return;
+  if (state === "rejected") lastSubmit = null;
+  else lastSubmit = { ...lastSubmit, state, at: Date.now() };
+}
+
+/**
+ * Javob ish yaratilmaganini ANIQ aytadimi. Tarmoq/vaqt tugashi (0), 408,
+ * 5xx — so'rov serverga yetib, pul yechilgan bo'lishi mumkin (`unsure`).
+ * Qolgan 4xx (400/402/403/409/413/422/429…) — server rad etgan (`rejected`).
+ */
+function submitOutcome(e: unknown): "unsure" | "rejected" {
+  if (!(e instanceof ApiError)) return "unsure";
+  if (e.status === 0 || e.status === 408 || e.status >= 500) return "unsure";
+  return "rejected";
 }
 
 export function deleteGeneration(id: string) {
+  // O'chirilgan ishning kaliti qayta ishlatilmasin: keyingi yuborish — yangi niyat.
+  lastSubmit = null;
   return request<{ ok: boolean; refunded: boolean }>(`/api/generations/${id}`, { method: "DELETE" });
 }
 
-/** Fayl kartasi eskizi (DOCX/PPTX 1-sahifa JPEG) — `lib/server/thumb.ts`. */
-export function thumbUrl(id: string) {
-  return `/api/generations/${id}/thumb`;
+/**
+ * Fayl kartasi eskizi (DOCX/PPTX 1-sahifa JPEG) — `lib/server/thumb.ts`.
+ *
+ * `?v=<fileVersion>` bilan (W2-B): marshrut faqat shunda keshlanadi, tahrir
+ * (yangi `fileVersion`) esa keshni o'zi eskirtiradi — eski eskiz qolmaydi.
+ */
+export function thumbUrl(id: string, fileVersion?: number) {
+  return `/api/generations/${id}/thumb${typeof fileVersion === "number" ? `?v=${fileVersion}` : ""}`;
 }
 
 /**
@@ -335,17 +575,59 @@ export function fileUrl(id: string, format?: "pdf", opts: { inline?: boolean } =
  * `<a download>` to'g'ridan-to'g'ri ishlatilmaydi: xato bo'lsa brauzer
  * jimgina JSON xato sahifasini `.docx` nomi bilan saqlab qo'yardi.
  */
-export async function downloadGeneration(id: string, format?: "pdf"): Promise<void> {
-  const res = await fetch(fileUrl(id, format), { credentials: "same-origin" });
-  if (!res.ok) {
-    const data = (await res.json().catch(() => ({}))) as { error?: string };
-    throw new ApiError(data.error || "Fayl yuklab olinmadi", res.status);
-  }
-  const disposition = res.headers.get("content-disposition") ?? "";
-  const match = /filename\*=UTF-8''([^;]+)/.exec(disposition) ?? /filename="([^"]+)"/.exec(disposition);
-  const name = match ? decodeURIComponent(match[1]) : "hujjat";
+export async function downloadGeneration(
+  id: string,
+  format?: "pdf",
+  opts: { headerTimeoutMs?: number } = {},
+): Promise<void> {
+  /*
+   * PDF LibreOffice da o'giriladi (≤90 s) va band bo'lsa bo'sh slotni
+   * kutadi — shuning uchun chegara uzun; baribir CHEKSIZ emas (FE-14).
+   */
+  const link = linkedSignal(opts.headerTimeoutMs ?? (format === "pdf" ? 180_000 : 120_000));
+  try {
+    let res: Response;
+    try {
+      res = await fetch(fileUrl(id, format), { credentials: "same-origin", signal: link.signal });
+    } catch {
+      throw new ApiError(link.timedOut() ? TIMEOUT_TEXT : OFFLINE_TEXT, 0, { timeout: link.timedOut() });
+    }
+    /*
+     * Chegara faqat SARLAVHALARGACHA (server javob berdimi). Tana esa
+     * cheklanmaydi: 10–15 MB deka ~1 Mbit/s mobil aloqada 80–120 s
+     * keladi — normal ketayotgan yuklash «vaqt tugadi» bilan uzilmasin
+     * (review R2). Uzilgan aloqada `blob()` o'zi xato beradi.
+     */
+    link.done();
+    if (!res.ok) {
+      const data = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      /*
+       * 429 (kishi boshiga PDF chegarasi) va 503 (hamma PDF sloti band) —
+       * W2-A shartnomasi: o'zbekcha matn `{error}` da, `Retry-After`
+       * sarlavhada. Matn va «qachon qayta urinish» birga ko'rsatiladi.
+       */
+      const header = positiveSec(res.headers.get("retry-after"));
+      const withRetry = header && data.retryAfterSec == null ? { ...data, retryAfterSec: header } : data;
+      const base = typeof data.error === "string" && data.error ? data.error : "Fayl yuklab olinmadi";
+      throw new ApiError(withRetryHint(base, retrySecOf(withRetry)), res.status, withRetry);
+    }
+    const disposition = res.headers.get("content-disposition") ?? "";
+    const match = /filename\*=UTF-8''([^;]+)/.exec(disposition) ?? /filename="([^"]+)"/.exec(disposition);
+    const name = match ? decodeURIComponent(match[1]) : "hujjat";
 
-  const blob = await res.blob();
+    let blob: Blob;
+    try {
+      blob = await res.blob();
+    } catch {
+      throw new ApiError(OFFLINE_TEXT, 0);
+    }
+    saveBlob(blob, name);
+  } finally {
+    link.done();
+  }
+}
+
+function saveBlob(blob: Blob, name: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
@@ -358,51 +640,160 @@ export async function downloadGeneration(id: string, format?: "pdf"): Promise<vo
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
+/** Polling UI ga aytadigan holat (C20): uzilish yoki odatdan uzoq kutish. */
+export type PollIssue =
+  | { kind: "retrying"; message: string; attempt: number }
+  | { kind: "slow"; message: string };
+
+/** Sahifa ochilgandan shuncha vaqt o'tsa polling SEKINLASHADI (to'xtamaydi). */
+export const POLL_SLOW_AFTER_MS = 20 * 60_000;
+/** Sekin rejimdagi oraliq — navbatda kutayotgan yuzlab yorliq serverni bosmasin. */
+export const POLL_SLOW_DELAY_MS = 30_000;
+/** Uzilishda qayta urinishlar oralig'ining yuqori chegarasi. */
+const RETRY_CAP_MS = 30_000;
+/** Server `Retry-After` i bundan uzun bo'lsa ham — shu qadar kutiladi. */
+const RETRY_AFTER_CAP_MS = 5 * 60_000;
+
+const SLOW_ISSUE: PollIssue = {
+  kind: "slow",
+  message:
+    "Ish odatdagidan uzoq davom etmoqda (navbat katta). Holat har 30 soniyada tekshiriladi — sahifani yopsangiz ham ish davom etadi.",
+};
+
+/**
+ * Vaqtinchalik xatomi (qayta urinsa bo'ladi): tarmoq/vaqt tugashi (0),
+ * 408/425/429 va 5xx (deploy paytidagi 502, OOM qayta ishga tushish).
+ * 404/400/403 — yo'q: hujjat o'chirilgan yoki so'rov noto'g'ri.
+ */
+export function isTransient(e: unknown): e is ApiError {
+  return (
+    e instanceof ApiError &&
+    (e.status === 0 || e.status === 408 || e.status === 425 || e.status === 429 || e.status >= 500)
+  );
+}
+
+/**
+ * Keyingi so'rov navbatini kutadi.
+ *
+ * Yorliq YASHIRIN bo'lsa taymer tugagach ham so'rov ketmaydi — yorliq
+ * ko'rinishini kutadi; yorliq ko'ringan yoki internet qaytgan zahoti esa
+ * taymerni kutmasdan darhol so'raladi (FE-12). Brauzersiz muhitda
+ * (`document` yo'q) — oddiy taymer.
+ */
+export function waitTurn(ms: number, signal?: AbortSignal, opts: { early?: boolean } = {}): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(abortError());
+      return;
+    }
+    const doc = typeof document !== "undefined" ? document : null;
+    const win = typeof window !== "undefined" ? window : null;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    // `early: false` — server `Retry-After` i: yorliqni almashtirish uni qisqartirmasin.
+    const early = opts.early !== false;
+    let elapsed = false;
+    let settled = false;
+    const finish = (err?: DOMException) => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      doc?.removeEventListener("visibilitychange", onVisible);
+      win?.removeEventListener("online", onVisible);
+      signal?.removeEventListener("abort", onAbort);
+      if (err) reject(err);
+      else resolve();
+    };
+    const onAbort = () => finish(abortError());
+    const onVisible = () => {
+      if (!doc?.hidden && (early || elapsed)) finish();
+    };
+    doc?.addEventListener("visibilitychange", onVisible);
+    win?.addEventListener("online", onVisible);
+    signal?.addEventListener("abort", onAbort, { once: true });
+    timer = setTimeout(() => {
+      timer = null;
+      elapsed = true;
+      // Yashirin yorliq — `visibilitychange` gacha kutamiz.
+      if (!doc?.hidden) finish();
+    }, ms);
+  });
+}
+
 /**
  * Ish tugaguncha holatni so'rab turadi.
  *
- * Interval o'sib boradi (1s → 4s): uzoq kurs ishi uchun serverni
- * har soniyada bezovta qilmaydi.
+ * Interval o'sib boradi (1s → 5s): uzoq kurs ishi uchun serverni har
+ * soniyada bezovta qilmaydi.
+ *
+ * HECH QACHON «jim» taslim bo'lmaydi (C20). Ilgari 20 daqiqada, ~30 s
+ * lik uzilishda yoki istalgan 4xx da xato otib to'xtardi, natija sahifasi
+ * esa buni ko'rsatmay qotib qolardi. Endi:
+ *   • 20 daqiqadan keyin — to'xtamaydi, har 30 s da so'raydi va bir marta
+ *     `onIssue({kind:"slow"})` beradi (UI tushuntiradi);
+ *   • tarmoq/vaqt tugashi/429/5xx — cheksiz qayta urinadi, oraliq ≤30 s
+ *     (`Retry-After` hurmat qilinadi), ikkinchi ketma-ket xatodan boshlab
+ *     `onIssue({kind:"retrying"})`, tiklanganda `onIssue(null)`;
+ *   • faqat 404/400/403/401 da xato otadi — UI uni «Qayta tekshirish»
+ *     tugmasi bilan ko'rsatadi;
+ *   • yorliq yashirin bo'lsa so'ramaydi, ko'ringanda darhol so'raydi;
+ *   • `signal` ketayotgan so'rovni ham bekor qiladi.
+ * Navbatda qolib ketgan ish baribir tugaydi: server eskirgan QUEUED ni
+ * FAILED qiladi (W2-D2 `queue-ttl`), polling esa yakuniy holatda to'xtaydi.
  */
 export async function pollGeneration(
   id: string,
   onTick: (g: GenerationDetail) => void,
   signal?: AbortSignal,
+  onIssue?: (issue: PollIssue | null) => void,
 ): Promise<GenerationDetail> {
   let delay = 1000;
-  const deadline = Date.now() + 20 * 60_000;
-  let networkErrors = 0;
+  const slowAt = Date.now() + POLL_SLOW_AFTER_MS;
+  let slow = false;
+  let failures = 0;
   let prev: GenerationDetail | null = null;
 
   for (;;) {
-    if (signal?.aborted) throw new DOMException("Bekor qilindi", "AbortError");
+    if (signal?.aborted) throw abortError();
 
     let generation: GenerationDetail;
     try {
       const since = prev?.live != null ? prev.liveSeq : undefined;
-      generation = (await getGeneration(id, since)).generation;
-      networkErrors = 0;
+      generation = (await getGeneration(id, since, signal)).generation;
     } catch (e) {
-      // Vaqtinchalik tarmoq uzilishida polling to'xtamasin, lekin
-      // cheksiz ham urinmasin.
-      if (e instanceof ApiError && (e.status === 0 || e.status >= 500) && networkErrors < 5) {
-        networkErrors++;
-        await new Promise((r) => setTimeout(r, 2000 * networkErrors));
-        continue;
+      if (signal?.aborted) throw abortError();
+      if (!isTransient(e)) throw e;
+      failures++;
+      // ±20 % tasodif: deploydagi 502 dan keyin hamma ochiq yorliq bir lahzada urilmasin.
+      const backoff = Math.min(RETRY_CAP_MS, 2000 * failures * (0.8 + Math.random() * 0.4));
+      const serverWait = Math.min(RETRY_AFTER_CAP_MS, (e.retryAfterSec ?? 0) * 1000);
+      const wait = Math.max(backoff, serverWait);
+      // Birinchi xato ko'pincha bir lahzalik — ikkinchisidan boshlab aytamiz.
+      if (failures >= 2) {
+        onIssue?.({
+          kind: "retrying",
+          message: `Aloqa yo'q yoki server band — holat ${retryAfterText(Math.ceil(wait / 1000))} qayta tekshiriladi.`,
+          attempt: failures,
+        });
       }
-      throw e;
+      // Server `Retry-After` i hal qilgan kutish yorliq almashtirish bilan qisqarmaydi.
+      await waitTurn(wait, signal, { early: serverWait <= backoff });
+      continue;
     }
+    if (failures >= 2) onIssue?.(slow ? SLOW_ISSUE : null);
+    failures = 0;
 
     const merged = mergeLive(prev, generation);
     prev = merged;
     onTick(merged);
     if (merged.status !== "QUEUED" && merged.status !== "IN_PROGRESS") return merged;
 
-    // Worker o'chirilgan bo'lsa polling abadiy davom etmasin.
-    if (Date.now() > deadline) {
-      throw new ApiError("Ish juda uzoq davom etmoqda. Keyinroq «Mening fayllarim» dan tekshiring.", 504);
+    if (!slow && Date.now() >= slowAt) {
+      slow = true;
+      onIssue?.(SLOW_ISSUE);
     }
-    await new Promise((r) => setTimeout(r, delay));
+    // Jonli deka (IN_PROGRESS + live) sekinlashmaydi — u haqiqatan ishlayapti.
+    const live = merged.status === "IN_PROGRESS" && Boolean(merged.live);
+    await waitTurn(slow && !live ? Math.max(POLL_SLOW_DELAY_MS, delay) : delay, signal);
     delay = nextPollDelay(merged, delay);
   }
 }
@@ -445,6 +836,7 @@ export async function extractText(file: File) {
   return request<{ text: string; chars?: number; error?: string }>("/api/extract", {
     method: "POST",
     body: form,
+    timeoutMs: 90_000,
   });
 }
 
@@ -462,7 +854,7 @@ export async function uploadTemplate(file: File): Promise<TemplateUploadResponse
   const form = new FormData();
   form.append("file", file);
   try {
-    return await request<TemplateUploadResponse>("/api/uploads/template", { method: "POST", body: form });
+    return await request<TemplateUploadResponse>("/api/uploads/template", { method: "POST", body: form, timeoutMs: 150_000 });
   } catch (e) {
     if (e instanceof ApiError) {
       if (e.status === 413) throw new ApiError("Fayl 20 MB dan katta", e.status, e.data);
@@ -492,7 +884,7 @@ export type UdkSuggestion = { udk: string; label: string; note: string };
  * «tekshiring» deydi; forma uni maydonga qo'yadi, foydalanuvchi tasdiqlaydi.
  */
 export function suggestUdk(topic: string, language: string) {
-  return request<UdkSuggestion>("/api/article/udk", { method: "POST", body: JSON.stringify({ topic, language }) });
+  return request<UdkSuggestion>("/api/article/udk", { method: "POST", body: JSON.stringify({ topic, language }), timeoutMs: 60_000 });
 }
 
 /* ─────────────────────── Tarjima manbasi (Tarjimon 2) ─────────────────────── */
@@ -523,6 +915,7 @@ export async function uploadSource(file: File): Promise<import("./generation/sou
     return await request<import("./generation/source-types").SourceUploadResult>("/api/uploads/source", {
       method: "POST",
       body: form,
+      timeoutMs: 90_000,
     });
   } catch (e) {
     if (e instanceof ApiError) {
@@ -558,6 +951,7 @@ export async function uploadLogo(file: File): Promise<{ assetId: string; mime: s
     return await request<{ assetId: string; mime: string; size: number }>("/api/uploads/logo", {
       method: "POST",
       body: form,
+      timeoutMs: 60_000,
     });
   } catch (e) {
     if (e instanceof ApiError) {
@@ -589,7 +983,7 @@ export async function uploadResumePhoto(input: {
   if (input.crop) form.append("crop", JSON.stringify(input.crop));
   form.append("shape", input.shape);
   try {
-    return await request("/api/uploads/photo", { method: "POST", body: form });
+    return await request("/api/uploads/photo", { method: "POST", body: form, timeoutMs: 60_000 });
   } catch (e) {
     if (e instanceof ApiError) {
       if (e.status === 413) throw new ApiError("Surat 5 MB dan katta", e.status, e.data);
@@ -616,8 +1010,17 @@ export function photoUrl(assetId: string): string {
 export function getDraft(toolId: string) {
   return request<{ draft: { data: FormValues; updatedAt: string } | null }>(`/api/forms/${toolId}/draft`);
 }
-export function putDraft(toolId: string, data: FormValues) {
-  return request<{ updatedAt: string }>(`/api/forms/${toolId}/draft`, { method: "PUT", body: JSON.stringify({ data }) });
+/**
+ * `keepalive` (FE-17) — sahifa yopilayotganda (`pagehide`) yuborilgan
+ * so'rovni brauzer bekor qilmaydi; tana ~64 KB dan oshmasligi kerak
+ * (chaqiruvchi — `useFormDraft` — buni tekshiradi).
+ */
+export function putDraft(toolId: string, data: FormValues, opts: { keepalive?: boolean } = {}) {
+  return request<{ updatedAt: string }>(`/api/forms/${toolId}/draft`, {
+    method: "PUT",
+    body: JSON.stringify({ data }),
+    ...(opts.keepalive ? { keepalive: true } : {}),
+  });
 }
 export function clearDraft(toolId: string) {
   return request<{ ok: true }>(`/api/forms/${toolId}/draft`, { method: "DELETE" });
@@ -666,6 +1069,8 @@ export async function draftOutline(slug: string, values: FormValues) {
   return request<{ text: string }>("/api/outline", {
     method: "POST",
     body: JSON.stringify({ slug, values }),
+    // LLM chaqiruvi (qayta urinish bilan 2 tagacha) — standart 30 s kam.
+    timeoutMs: 90_000,
   });
 }
 

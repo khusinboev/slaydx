@@ -1,7 +1,75 @@
 services:
   postgres:
-    image: postgres:16-alpine
+    # Base image pin (INFRA-14/DEPS-05): major.minor tegga emas, aniq
+    # patch + Alpine minor'ga qulflangan (`Dockerfile`dagi `ARG
+    # NODE_IMAGE` bilan bir xil sabab — build har doim prod box'da,
+    # deploy vaqtida bo'ladi). Yangilash: eng so'nggi `16.x-alpineN.NN`ni
+    # `https://registry.hub.docker.com/v2/repositories/library/postgres/tags?page_size=100&name=16.`
+    # dan tanlab shu qatorni yangilang, sinab ko'ring, alohida commitda.
+    image: postgres:16.15-alpine3.24
     restart: unless-stopped
+    # Server sozlamalari (C33/C35, W3-E bilan kelishilgan): standart
+    # Postgres konfiguratsiyasi cheklovsiz — bitta jarayon 1000+ ulanish
+    # ochishi yoki katta sort/join'lar xotirani cheksiz yeyishi mumkin,
+    # box esa UCHTA loyiha bilan umumiy (INFRA-04). Sonlar
+    # `${PG_MEM_LIMIT:-1g}` (pastda, mem_limit) uchun hisoblangan:
+    #   max_connections=100 — haqiqiy talab ~20-30 (web pool 10 + 2
+    #     worker replika × WORKER_CONCURRENCY(4)/pool talabi + migratsiya/
+    #     admin skriptlar uchun zaxira); 100 katta zaxira bilan, lekin
+    #     PID/xotira sarfini cheksiz qilmaydi.
+    #   shared_buffers=256MB — 1 GB limitning ~25% (standart tavsiya;
+    #     `PG_MEM_LIMIT` 1GB dan oshirilsa mutanosib oshiring, masalan
+    #     4GB limitda ~1GB).
+    #   work_mem=16MB — har ulanish bittalab sort/hash uchun.
+    #   shared_preload_libraries=pg_stat_statements — sekin so'rovlarni
+    #     kuzatish uchun old-shart (OBS-13); `CREATE EXTENSION` alohida
+    #     migratsiya bilan yoqiladi, bu yerda faqat server kutubxonasi
+    #     yuklanadi.
+    #   log_min_duration_statement=500 (ms) — 500 ms dan sekin so'rov
+    #     jurnalga yoziladi, diagnostika uchun.
+    #   autovacuum_vacuum_scale_factor=0.05 — standart 0.2 dan
+    #     agressivroq: tez-tez yangilanadigan qatorlar (heartbeat,
+    #     `generations` — DB-12/SCALE-13) bloat to'planishidan oldin
+    #     tozalanadi.
+    #   idle_in_transaction_session_timeout=60s — osilib qolgan
+    #     tranzaksiya qulfni abadiy ushlab turmasin (`chargeInTx`/
+    #     `claimJob` qator qulflariga bog'liq — TEST-03/TEST-04).
+    # `PG_MEM_LIMIT` boshqacha sozlansa, shared_buffers/work_mem'ni ham
+    # mutanosib oshiring — bir-biriga bog'liq.
+    command:
+      - postgres
+      - -c
+      - max_connections=100
+      - -c
+      - shared_buffers=256MB
+      - -c
+      - work_mem=16MB
+      - -c
+      - shared_preload_libraries=pg_stat_statements
+      - -c
+      - log_min_duration_statement=500
+      - -c
+      - autovacuum_vacuum_scale_factor=0.05
+      - -c
+      - idle_in_transaction_session_timeout=60s
+    # Resurs chegarasi (INFRA-04): box UCHTA loyiha bilan umumiy — chegarasiz
+    # konteyner Postgres yoki qo'shni loyihalarni OOM bilan yiqitishi mumkin.
+    # `PG_MEM_LIMIT`/`PG_CPUS` orqali sozlanadi. CPU 2: 1 CPU'da bayt yuklab
+    # olish (bytea o'qish) p95 9 → 77 ms ga sekinlashdi, 2 CPU'da 11.8 ms
+    # (P5 `loadtests/results/after-pgcpu2`).
+    mem_limit: ${PG_MEM_LIMIT:-1g}
+    cpus: ${PG_CPUS:-2}
+    # Docker standarti /dev/shm = 64 MB — parallel so'rovlar (dynamic shared
+    # memory) "could not resize shared memory segment" bilan yiqilishi mumkin;
+    # yuklama testi 256 MB bilan o'tgan (PRE-DEPLOY R7).
+    shm_size: 256mb
+    # Log aylanishi (OBS-10/INFRA-15): `json-file` standart bo'yicha
+    # cheksiz o'sadi — umumiy diskda bu boshqa loyihalarni ham siqib qo'yishi mumkin.
+    logging:
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: "5"
     environment:
       POSTGRES_USER: slaydx
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-slaydx}
@@ -27,6 +95,25 @@ services:
       # birinchi haqiqiy deploygacha ko'rinmadi.
       target: runner
     restart: unless-stopped
+    # `node` PID 1 sifatida ishlaydi — init YO'Q bo'lsa, o'ldirilgan
+    # `soffice.bin` (LibreOffice PDF eksport) grandchild'lari zombie bo'lib
+    # qolishi mumkin (W2-A topilmasi). `docker-compose.yml`ning o'zi
+    # `tini`ni init sifatida ulaydi.
+    init: true
+    # INFRA-04: chegarasiz konteyner Postgres'ni yoki qo'shni loyihalarni
+    # (nodavlattalim, mser — bir xil box) OOM bilan siqib qo'yishi mumkin.
+    mem_limit: ${WEB_MEM_LIMIT:-2g}
+    cpus: ${WEB_CPUS:-2}
+    logging:
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: "5"
+    # Deploy paytida `docker compose up -d` eski konteynerga SIGTERM
+    # yuboradi — tahrir yo'nalishlari (`…/rebuild`, `…/image/regenerate`)
+    # 45–60 s cho'zilishi mumkin (INFRA-08/.claude/deploy.md §2a). Docker'ning
+    # standart 10 s grace'i buni kesib tashlar edi.
+    stop_grace_period: 60s
     depends_on:
       postgres:
         condition: service_healthy
@@ -34,6 +121,12 @@ services:
       DATABASE_URL: postgres://slaydx:${POSTGRES_PASSWORD:-slaydx}@postgres:5432/slaydx
       APP_URL: ${APP_URL:-http://localhost:3000}
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET kerak — openssl rand -base64 48}
+      # DEPS-08: admin ruxsati endi manba kodida QATTIQ YOZILMAGAN
+      # (`lib/server/admin-phones.ts` `process.env.ADMIN_PHONES`ni
+      # o'qiydi) — kompyuterga tushirilgan bo'lsa ham kim admin ekani
+      # public repo'da ko'rinmasin. Bo'sh qolsa hozircha `admin-phones.ts`
+      # dagi zaxira raqam ishlaydi (egasi uni ADMIN_PHONES qo'yilgach o'chiradi).
+      ADMIN_PHONES: ${ADMIN_PHONES:-}
       NEXT_PUBLIC_BRAND_NAME: ${NEXT_PUBLIC_BRAND_NAME:-SlaydX}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       NEXT_PUBLIC_TELEGRAM_BOT: ${NEXT_PUBLIC_TELEGRAM_BOT:-}
@@ -83,9 +176,36 @@ services:
       CLICK_MERCHANT_USER_ID: ${CLICK_MERCHANT_USER_ID:-}
       PAYME_TEST_KEY: ${PAYME_TEST_KEY:-}
       CRON_SECRET: ${CRON_SECRET:-}
-      FILE_TTL_HOURS: ${FILE_TTL_HOURS:-72}
+      # EXT-14: webhook'ning ALOHIDA kaliti (bo'sh → vaqtincha CRON_SECRET + ogohlantirish).
+      TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-}
       SESSION_COOKIE_SAMESITE: ${SESSION_COOKIE_SAMESITE:-lax}
       SESSION_TTL_DAYS: ${SESSION_TTL_DAYS:-30}
+      # Bepul LLM endpointlari (reja, UDK, «Tuzatish», «Hammasini tuzatish») —
+      # sarf shifti va o'chirish tugmasi (prod-readiness C10). Bo'sh →
+      # `lib/server/env.ts` standarti. `tests/free-llm.test.mts` qulflaydi.
+      FREE_LLM_DISABLED: ${FREE_LLM_DISABLED:-}
+      FREE_LLM_DAILY_OUTLINE: ${FREE_LLM_DAILY_OUTLINE:-}
+      FREE_LLM_DAILY_UDK: ${FREE_LLM_DAILY_UDK:-}
+      FREE_LLM_DAILY_REWRITE: ${FREE_LLM_DAILY_REWRITE:-}
+      FREE_LLM_DAILY_POLISH: ${FREE_LLM_DAILY_POLISH:-}
+      FREE_LLM_DAILY_GLOBAL: ${FREE_LLM_DAILY_GLOBAL:-}
+      # Prod-readiness W2 (audit/designs/*.md): navbat, saqlash, PDF, Payme sandbox, pool.
+      QUEUE_TOTAL_SLOTS: ${QUEUE_TOTAL_SLOTS:-}
+      QUEUE_MEAN_SERVICE_SEC: ${QUEUE_MEAN_SERVICE_SEC:-}
+      QUEUE_MAX_WAIT_SEC: ${QUEUE_MAX_WAIT_SEC:-}
+      USER_MAX_INFLIGHT: ${USER_MAX_INFLIGHT:-}
+      QUEUE_TTL_SEC: ${QUEUE_TTL_SEC:-}
+      RETENTION_BONUS_DAYS: ${RETENTION_BONUS_DAYS:-}
+      PDF_MAX_CONCURRENCY: ${PDF_MAX_CONCURRENCY:-}
+      PAYME_SANDBOX: ${PAYME_SANDBOX:-}
+      DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-}
+      # W3-E (db.ts): so'rov/ulanish shiftlari — standart 30000/5000 ms
+      # `lib/server/db.ts`da. Bo'sh qoldirilsa kod standarti ishlaydi;
+      # bu yerda faqat KONTEYNERGA YETIB BORISHI qulflanadi
+      # (`tests/compose-env.test.mts`), boshqa `LLM_JUDGE`/`OPENALEX_API_KEY`
+      # sinfidagi tuynuklarga o'xshab jim qolib ketmasin.
+      DATABASE_STATEMENT_TIMEOUT_MS: ${DATABASE_STATEMENT_TIMEOUT_MS:-}
+      DATABASE_CONNECT_TIMEOUT_MS: ${DATABASE_CONNECT_TIMEOUT_MS:-}
       # Reverse proxy ortida turibmiz — `x-forwarded-for` ga ishonamiz,
       # aks holda IP chegarasi hamma so'rovni bitta IP deb hisoblardi.
       TRUST_PROXY: ${TRUST_PROXY:-true}
@@ -102,6 +222,35 @@ services:
       context: .
       target: worker
     restart: unless-stopped
+    # Xuddi `web`dagi kabi — worker sxema (SVG→PNG) uchun `sharp`/librsvg
+    # chaqiradi, ular ham grandchild process qoldirishi mumkin.
+    init: true
+    # Sig'im qarori (C22, audit/designs/capacity.md): 2 worker konteyner ×
+    # WORKER_CONCURRENCY=4 = 8 slot. `container_name` ATAYLAB yo'q —
+    # replikalarga avtomatik `slaydx-worker-1`/`slaydx-worker-2` nomi
+    # beriladi (`.claude/deploy.md` shu nomlarga tayanadi).
+    deploy:
+      replicas: 2
+    mem_limit: ${WORKER_MEM_LIMIT:-2g}
+    cpus: ${WORKER_CPUS:-2}
+    logging:
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: "5"
+    # Ish o'rtasida SIGTERM kelsa (deploy) — INFRA-02 uzoq muddatli tuzatishi
+    # alohida, lekin hech bo'lmasa Docker'ning standart 10 s'i eng qisqa
+    # ishni ham kesib tashlamasin.
+    stop_grace_period: 30s
+    # W2-D2 worker sikli har 30 s dan kamida bir marta `/tmp/slaydx-worker-alive`
+    # faylini yangilaydi (`audit/designs/w2-contracts.md`); shartnoma Dockerfile
+    # bilan bir xil: `-mmin -2` (2 daqiqa).
+    healthcheck:
+      test: ["CMD-SHELL", "find /tmp/slaydx-worker-alive -mmin -2 | grep -q ."]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
     depends_on:
       postgres:
         condition: service_healthy
@@ -109,6 +258,19 @@ services:
       DATABASE_URL: postgres://slaydx:${POSTGRES_PASSWORD:-slaydx}@postgres:5432/slaydx
       APP_URL: ${APP_URL:-http://localhost:3000}
       SESSION_SECRET: ${SESSION_SECRET:?SESSION_SECRET kerak}
+      # DEPS-08 — web blokidagi izohga qarang. `scripts/bot.mts`/
+      # `bot-commands.mts` (Telegram bot, `lib/server/telegram.ts` orqali
+      # `isAdminPhone` chaqirishi mumkin) shu konteynerda ishlaydi.
+      ADMIN_PHONES: ${ADMIN_PHONES:-}
+      # INFRA-09: PPTX/DOCX metama'lumotini worker chizadi (`buildArtifact`
+      # shu konteynerda ishlaydi), `lib/brand.ts` esa `NEXT_PUBLIC_BRAND_*`ni
+      # to'g'ridan-to'g'ri `process.env`dan o'qiydi — Next.js build-vaqtidagi
+      # inline qilish bu yerga TEGISHLI EMAS (worker oddiy `tsx` processi).
+      # Shu ikkalasi `web`da bor edi, `worker`da yo'q edi — nom o'zgarsa
+      # generatsiya qilingan fayllar eski nom bilan chiqib qolardi.
+      # `tests/compose-env.test.mts` qulflaydi.
+      NEXT_PUBLIC_BRAND_NAME: ${NEXT_PUBLIC_BRAND_NAME:-SlaydX}
+      NEXT_PUBLIC_BRAND_LOGO: ${NEXT_PUBLIC_BRAND_LOGO:-/logo.png}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.7-flash}
       # Rasm yaratish modeli (bo'sh → kod standarti gemini-3.1-flash-lite-image / 1K)
@@ -152,7 +314,15 @@ services:
       TTS_VOICE_UZ: ${TTS_VOICE_UZ:-}
       TTS_VOICE_RU: ${TTS_VOICE_RU:-}
       TTS_VOICE_EN: ${TTS_VOICE_EN:-}
-      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-2}
+      # Owner qarori (C22): 2 replika × 4 = 8 slot (ilgari 2×2=4 edi).
+      WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-4}
+      # Prod-readiness W2: housekeeping (QUEUED TTL, bonus fayllar muddati) va pool.
+      QUEUE_TTL_SEC: ${QUEUE_TTL_SEC:-}
+      RETENTION_BONUS_DAYS: ${RETENTION_BONUS_DAYS:-}
+      DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-}
+      # W3-E (db.ts) — web blokidagi izohga qarang.
+      DATABASE_STATEMENT_TIMEOUT_MS: ${DATABASE_STATEMENT_TIMEOUT_MS:-}
+      DATABASE_CONNECT_TIMEOUT_MS: ${DATABASE_CONNECT_TIMEOUT_MS:-}
       WORKER_JOB_TIMEOUT_MS: ${WORKER_JOB_TIMEOUT_MS:-660000}
 
 volumes:

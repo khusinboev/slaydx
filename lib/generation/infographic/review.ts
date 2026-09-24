@@ -353,7 +353,7 @@ async function runJudge(spec: InfographicSpec, facts: string, opts: InfographicR
   const system = judgeSystemPromptFor(judgeSpec, targets);
   const user = [judgeText(spec), "", facts ? `USER DATA (the only admissible source of figures and citations):\n${facts.slice(0, 4000)}` : "USER DATA: none"].join("\n");
   const r = await opts
-    .complete("judge", system, user, { json: true, maxTokens: 1200, timeoutMs: Math.min(JUDGE_TIMEOUT_MS, Math.max(1, remainingMs(opts.deadline))) })
+    .complete("judge", system, user, { json: true, deadline: opts.deadline, maxTokens: 1200, timeoutMs: Math.min(JUDGE_TIMEOUT_MS, Math.max(1, remainingMs(opts.deadline))) })
     .catch(() => null);
   if (r?.usage) opts.onUsage?.(r.usage);
   const parsed = parseJudgeFor(judgeSpec, r?.text, targets);
