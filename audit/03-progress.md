@@ -72,3 +72,24 @@ All 6 W4 packages merged: F `05b5baf`, C `04126b0`, E `da3c2f5`, B `266e3af`, D 
   - `credits-atomic` (1): a repeated DELETE of a cancelled (deleted) generation returns 404, not 409 (W4-B, BEA-12).
   - `no-pii-in-repo` (1, plus a subtest): the W4-A safe-fetch fixtures (example.com, 8.8.8.8, Cloudflare, Google, 172.32.0.1 boundary) are allowlisted, and 100.64/10 (CGNAT) is classed as reserved. Mutation check: an injected `185.9.9.9` and `100.128.0.1` are both still caught.
   - After the fixes, the 4 files pass 21/21 and no-pii passes 2/2.
+
+## Live smoke with real Gemini (2026-09-24, commit `cb7aee3`, budget ≤ $5)
+`npm run live -- pro-slide slide translation-text resume referat article-oak crossword infographic essay-dtm lesson` → **10/10 cases pass** (engine level, `buildArtifact`, real Gemini `gemini-3.7-flash` + `gemini-3.1-flash-lite-image`).
+
+| Case | Time | Calls | Result |
+|---|---|---|---|
+| pro-slide (10 slides, grounding, AI images) | 31.8 s | 8 | 10/10 slides, 7 web sources / 3 queries, 4 images, quiz + answers |
+| slide (10 slides) | 13.8 s | 2 | 4 images |
+| translation-text → en | 4.3 s | 2 | numbers/URLs kept, 16-term glossary |
+| resume | 4.2 s | 1 | en labels, 1 page |
+| referat | 45.3 s | 18 | 2 702 words |
+| article-oak | 32.4 s | 12 | 17 verified sources, 42 citations, report 92/100, 11 pages |
+| essay-dtm | 38.0 s | 6 | 673 words |
+| lesson plan | 12.4 s | 2 | ok |
+| crossword | 10.2 s | 4 | ok |
+| infographic | 7.4 s | 2 | PNG 350 KB |
+
+- **`cost_json.parts`** (probe: 4-slide pro-slide with grounding) shows `llm` $0.0080 (3 calls), `grounding` $0.028 (2 units), `image` $0.068 (2 × $0.034). Total $0.104, reported per service.
+- **Deadline:** a referat with a 20 s deadline threw `DeadlineError` after 13.7 s ("muddat tugadi — yangi urinish boshlanmadi") and returned no file. The worker maps it to FAILED + refund (unit tests plus the P5 provider-down chaos run).
+- **Spend:** ≈ $0.7 in total, including the accidental ≈ $0.007 earlier.
+- Note: Google Books returned 403 locally (key restriction). Research fell back to OpenAlex/Crossref, and every check passed.
