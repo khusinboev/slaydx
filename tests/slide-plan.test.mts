@@ -561,6 +561,10 @@ test("P4 N1: oddiy «Slayd» ham `blocks` yuboradi — u tanlov emas, «Testsiz�
   const chip = extractMeta(pro, { topic: "X", blocks: "reja,test", quizCount: 0 });
   assert.equal(chip.quizCount, undefined);
   assert.ok(deckBeats(chip, resolveDeckTemplate(chip)).some((b) => b.layout === "quiz"));
+  // Forma sig'imi `tool` ga bog'liq: oddiy slaydda «Testsiz» testni o'chiradi (+1 o'rin), pro'da chip ustun.
+  const shape = formShape("open_lesson", false);
+  assert.equal(planCapacity({ ...shape, tool: "slide" }), 7, "oddiy: 8 − reja");
+  assert.equal(planCapacity({ ...shape, tool: "pro-slide" }), 6, "pro: 8 − reja − savol");
   // Forma sig'imi dvigatel bilan bir xil — `tool` bilan.
   for (const [tool, p] of [[slideTool, "open_lesson"], [pro, "open_lesson"], [slideTool, "pitch"], [pro, "training"]] as const) {
     const v = formShape(p, tool === pro);
@@ -670,10 +674,11 @@ test("5-band: skelet (`plan` hodisasi) rollarida ichki prefiks yo'q; sarlavha ch
     { id: "a", layout: "agenda", title: "Reja", bullets: [] },
     { id: "b", layout: "bullets", title: long, plan: 1 },
   ];
-  syncAgenda(deck, { bulletChars: 40 });
+  // 36 — chegara «qorong‘ilik» so'zining O'RTASIGA tushadi.
+  syncAgenda(deck, { bulletChars: 36 });
   const item = deck[0].bullets![0];
   const body = item.slice(0, -1);
-  assert.ok(item.endsWith("…") && item.length <= 40, item);
+  assert.ok(item.endsWith("…") && item.length <= 36, item);
   assert.ok(long.startsWith(body) && long[body.length] === " ", `so'z o'rtasidan kesildi: «${item}»`);
 });
 
