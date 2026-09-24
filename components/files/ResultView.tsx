@@ -13,6 +13,7 @@ import {
   isUnpaidError,
   polishArticle,
   rewriteArticle,
+  withReconcile,
 } from "@/lib/api-edit";
 import type { ReviewCheck } from "@/lib/generation/article/types";
 import { useAppStore } from "@/lib/store";
@@ -207,7 +208,8 @@ export function ResultView({ id }: { id: string }) {
           return;
         }
         const base = genRef.current?.docVersion ?? cur.docVersion ?? 0;
-        const { generation } = await rewriteArticle(cur.id, base, fix);
+        // FE-15: 504/vaqt tugashidan keyin natija serverdan tekshiriladi (qayta yuborilmaydi).
+        const { generation } = await withReconcile(cur.id, base, () => rewriteArticle(cur.id, base, fix));
         adoptDetail(generation);
       } catch (e) {
         if (isUnpaidError(e)) {
@@ -247,7 +249,13 @@ export function ResultView({ id }: { id: string }) {
         return;
       }
       const base = genRef.current?.docVersion ?? cur.docVersion ?? 0;
-      const { generation } = await polishArticle(cur.id, base);
+      /*
+       * FE-15: sayqal ≤120 s + baholovchi — proksi (60/120 s) uni kesib 504
+       * berishi mumkin, server esa natijani saqlaydi. Noaniq javobda hujjat
+       * serverdan tekshiriladi va o'zlashtiriladi; ilgari «Server javob
+       * bermadi» chiqib, qayta bosish kunlik 3 sayqaldan birini yerdi.
+       */
+      const { generation } = await withReconcile(cur.id, base, () => polishArticle(cur.id, base));
       adoptDetail(generation);
     } catch (e) {
       if (isUnpaidError(e)) {
