@@ -27,45 +27,24 @@ function pushScrim(layers: SlideLayer[], from: number, mid: number): void {
   layers.push({ t: "rect", box: { x: 0, y: mid, w: W, h: H - mid }, fill: { color: "#000000", alpha: 0.55 } });
 }
 
-/**
- * Rasm yo'q sahifada dekor: yirik serif raqam va ingichka chiziq.
- * AUDIT-25: raqam — faqat reja bandi (`planNumber`); `null` bo'lsa
- * faqat chiziq qoladi (chaqiruvchi blokni shunga qarab joylaydi).
- */
-function pushNumberDecor(layers: SlideLayer[], theme: SlideTheme, no: string | null, box: Box, size: number, ruleY: number): void {
-  if (no) {
-    layers.push({
-      t: "text",
-      box: { ...box },
-      text: no,
-      color: theme.titleMuted,
-      size,
-      font: SERIF,
-      valign: "middle",
-    });
-  }
-  layers.push({ t: "rect", box: { x: box.x, y: ruleY, w: ZONE_W, h: 0.03 }, fill: { color: theme.titleMuted, alpha: 0.5 } });
-}
-
 function planTitle(s: SlideModel, theme: SlideTheme, index: number, total: number): SlidePlan {
-  const { fitSize, pushFooter, photo, planNumber, W, H } = LAYOUT_KIT;
+  const { fitSize, pushFooter, photo, W, H } = LAYOUT_KIT;
   const layers: SlideLayer[] = [];
   layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.titleBg } });
   const img = s.image?.url;
   /*
-   * AUDIT-25: kadrsiz muqovadagi yirik raqam ilgari deka tartibi (doim
-   * «01») edi. Endi faqat reja bandi — titulda odatda yo'q. Shunda
-   * tepadagi 3″ bo'sh qolmasin: blok (chiziq, tasma, rukn, sarlavha,
-   * izoh) `dy` ga yuqoriga ko'tarilib, sahifa markaziga tushadi.
+   * AUDIT-25 (4-qaror): TITUL HECH QACHON raqamlanmaydi. Kadrsiz
+   * muqovadagi yirik serif raqam ilgari deka tartibi (doim «01») edi.
+   * Tepadagi 3″ bo'sh qolmasin: blok (chiziq, tasma, rukn, sarlavha,
+   * izoh) `dy` ga ko'tarilib, sahifa markaziga tushadi.
    */
-  const no = img ? null : planNumber(s);
-  const dy = img || no ? 0 : -1.6;
+  const dy = img ? 0 : -1.6;
   if (img) {
     photo(layers, img, { ...FULL }, 0);
     pushScrim(layers, 2.6, 4.3);
   } else {
-    // Kadrsiz muqova ham TUZILGAN ko'rinsin: yirik raqam va chiziq.
-    pushNumberDecor(layers, theme, no, { x: TEXT_X, y: 1.1, w: 5.0, h: 2.6 }, 140, 4.1 + dy);
+    // Kadrsiz muqova ham TUZILGAN ko'rinsin: to'la kenglikdagi ingichka chiziq.
+    layers.push({ t: "rect", box: { x: TEXT_X, y: 4.1 + dy, w: ZONE_W, h: 0.03 }, fill: { color: theme.titleMuted, alpha: 0.5 } });
   }
   layers.push({ t: "rect", box: { x: TEXT_X, y: 4.25 + dy, w: 2.2, h: 0.06 }, fill: { color: theme.accent } });
   if (s.kicker) {

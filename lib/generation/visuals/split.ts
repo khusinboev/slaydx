@@ -55,7 +55,7 @@ function pushHalves(layers: SlideLayer[], theme: SlideTheme, mirror = false): vo
 
 /** Titul — chapda kicker + sarlavha, o'ngda rasm (yoki yirik raqam). */
 function planTitle(s: SlideModel, theme: SlideTheme, index: number, total: number): SlidePlan {
-  const { fitSize, photo, pushFooter, planNumber } = LAYOUT_KIT;
+  const { fitSize, photo, pushFooter } = LAYOUT_KIT;
   const layers: SlideLayer[] = [];
   pushHalves(layers, theme);
   const x = 0.85;
@@ -103,27 +103,12 @@ function planTitle(s: SlideModel, theme: SlideTheme, index: number, total: numbe
     photo(layers, s.image.url, slot, 0);
   } else {
     /*
-     * AUDIT-25: ramkadagi yirik raqam ilgari deka tartibi (`index + 1`,
-     * titulda doim «01») edi. Endi faqat reja bandi; titulda u odatda
-     * yo'q — ramka ichida ichma-ich kvadratlar belgisi.
+     * AUDIT-25 (4-qaror): ramkadagi yirik raqam ilgari deka tartibi
+     * (`index + 1`, titulda doim «01») edi. TITUL HECH QACHON
+     * raqamlanmaydi (`s.plan` bo'lsa ham) — ramka ichida ichma-ich
+     * kvadratlar belgisi.
      */
-    const frame: Box = { x: 7.6, y: 1.35, w: 4.7, h: 4.7 };
-    const no = planNumber(s);
-    if (no) {
-      layers.push({ t: "rect", box: { ...frame }, line: { color: theme.accent, width: 1.5 } });
-      layers.push({
-        t: "text",
-        box: { ...frame },
-        text: no,
-        color: theme.accentInk,
-        size: 110,
-        bold: true,
-        align: "center",
-        valign: "middle",
-      });
-    } else {
-      pushSquares(layers, theme, frame, true);
-    }
+    pushSquares(layers, theme, { x: 7.6, y: 1.35, w: 4.7, h: 4.7 }, true);
   }
   pushFooter(layers, s, theme, index, total, { x: 7.1, w: 5.68 }, false);
   return { bg: theme.surface, layers };

@@ -468,16 +468,17 @@ function fitTitleText(
   title: string,
   text: string,
   o: { tw: number; dw: number; avail: number; gap: number; titleCap: number; bt: BodyRules; title: [number, number]; text: [number, number] },
-): { tSize: number; tH: number; dSize: number; dH: number } {
-  let last = { tSize: 0, tH: 0, dSize: 0, dH: 0 };
+): { tSize: number; tH: number; dSize: number; dH: number; ok: boolean } {
+  let last = { tSize: 0, tH: 0, dSize: 0, dH: 0, ok: false };
   for (let cap = o.titleCap; cap >= 0.3 - 1e-9; cap -= 0.1) {
     const tSize = bodyFit(title, { x: 0, y: 0, w: o.tw, h: cap }, o.title[0], o.bt, o.title[1], true);
     const tInk = inkHeight(title, o.tw, tSize, CHAR_EM_BOLD);
     const tH = Math.max((tSize * 1.3) / 72, tInk);
     const dH = Math.max(0.3, o.avail - tH - o.gap);
     const dSize = bodyFit(text, { x: 0, y: 0, w: o.dw, h: dH }, o.text[0], o.bt, o.text[1]);
-    last = { tSize, tH, dSize, dH };
-    if (tInk <= cap + 1e-9 && inkHeight(text, o.dw, dSize) <= dH + 1e-9) return last;
+    const ok = tInk <= cap + 1e-9 && inkHeight(text, o.dw, dSize) <= dH + 1e-9;
+    last = { tSize, tH, dSize, dH, ok };
+    if (ok) return last;
   }
   return last;
 }

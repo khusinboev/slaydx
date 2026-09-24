@@ -271,7 +271,7 @@ function planAgenda(s: SlideModel, theme: SlideTheme, index: number, total: numb
  * tugunlar raqamli va to'q, o'q belgilari yo'q, kartalar chegarasiz.
  */
 function planProcess(s: SlideModel, theme: SlideTheme, index: number, total: number, ctx: PlanCtx): SlidePlan {
-  const { W, H, bodyFit, stripCut, pushFooter } = LAYOUT_KIT;
+  const { W, H, fitTitleText, stripCut, pushFooter } = LAYOUT_KIT;
   const layers: SlideLayer[] = [];
   layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.bg } });
   const cut = stripCut(s);
@@ -283,8 +283,34 @@ function planProcess(s: SlideModel, theme: SlideTheme, index: number, total: num
   const gap = 0.34;
   const colW = (tw - gap * (n - 1)) / n;
   const cardY = 2.55;
-  const cardH = 3.35;
   const railY = 2.15;
+  /*
+   * AUDIT-25 A2-04: sarlavha va izoh bitta byudjetni bo'lishadi
+   * (`fitTitleText`) — sarlavha qutisi qat'iy 1.05″ emas, siyoh
+   * balandligida; aksent chiziq va izoh uning ostidan. Karta odatda
+   * 3.35″; biror bosqich izohi eski polda ham sig'masa (4–5 bosqich,
+   * uzun matn) karta kolontitulgacha (6.75) cho'ziladi — toshish yo'q.
+   */
+  const cw = colW - 0.48;
+  const stepFit = (h: number) =>
+    items.map((st) =>
+      fitTitleText(st.title, st.text, {
+        tw: cw,
+        dw: cw,
+        avail: h - 0.38 - 0.23,
+        gap: 0.39,
+        titleCap: 1.05,
+        bt: ctx.bodyType,
+        title: [19, 12],
+        text: [15, 11],
+      }),
+    );
+  let cardH = 3.35;
+  let fits = stepFit(cardH);
+  if (fits.some((f) => !f.ok)) {
+    cardH = 6.75 - cardY;
+    fits = stepFit(cardH);
+  }
   const centerOf = (i: number) => x0 + i * (colW + gap) + colW / 2;
   if (n >= 2) {
     layers.push({
@@ -310,26 +336,28 @@ function planProcess(s: SlideModel, theme: SlideTheme, index: number, total: num
       valign: "middle",
       src: { f: "steps", i, k: "n" },
     });
-    const tBox: Box = { x: x + 0.24, y: cardY + 0.38, w: colW - 0.48, h: 1.05 };
+    const f = fits[i];
+    const tBox: Box = { x: x + 0.24, y: cardY + 0.38, w: cw, h: f.tH };
     layers.push({
       t: "text",
       box: tBox,
       text: st.title,
       color: theme.text,
       // AUDIT-25 A2-04: auditoriya oralig'i (ilgari qat'iy 19→12 pt).
-      size: bodyFit(st.title, tBox, 19, ctx.bodyType, 12, true),
+      size: f.tSize,
       bold: true,
       align: "center",
       src: { f: "steps", i, k: "title" },
     });
-    layers.push({ t: "rect", box: { x: cx - 0.4, y: cardY + 1.58, w: 0.8, h: 0.05 }, fill: { color: theme.accent } });
-    const dBox: Box = { x: x + 0.24, y: cardY + 1.82, w: colW - 0.48, h: cardH - 2.05 };
+    const ruleY = cardY + 0.38 + f.tH + 0.15;
+    layers.push({ t: "rect", box: { x: cx - 0.4, y: ruleY, w: 0.8, h: 0.05 }, fill: { color: theme.accent } });
+    const dBox: Box = { x: x + 0.24, y: ruleY + 0.24, w: cw, h: f.dH };
     layers.push({
       t: "text",
       box: dBox,
       text: st.text,
       color: theme.muted,
-      size: bodyFit(st.text, dBox, 15, ctx.bodyType, 11),
+      size: f.dSize,
       align: "center",
       src: { f: "steps", i, k: "text" },
     });

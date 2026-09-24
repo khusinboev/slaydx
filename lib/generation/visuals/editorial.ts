@@ -72,20 +72,18 @@ function pushHead(layers: SlideLayer[], s: SlideModel, theme: SlideTheme, w: num
 
 /** Titul — chapda kicker + ulkan raqam + sarlavha, o'ngda kadr ustuni. */
 function planTitle(s: SlideModel, theme: SlideTheme, index: number, total: number): SlidePlan {
-  const { W, H, fitSize, pushFooter, planNumber } = LAYOUT_KIT;
+  const { W, H, fitSize, pushFooter } = LAYOUT_KIT;
   const layers: SlideLayer[] = [];
   layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.bg } });
   pushColumn(layers, s, theme);
   /*
-   * AUDIT-25: muqovadagi yirik raqam ilgari deka tartibi (`index + 1`,
-   * ya'ni doim «01») edi — rejaga hech qanday aloqasi yo'q. Endi faqat
-   * `s.plan` bo'lsa chiziladi (titulda odatda yo'q). Raqamsiz muqovada
-   * uning 1.67″ lik joyi qolmaydi: blok (rukn, chiziq, sarlavha, izoh)
-   * shuncha pastga emas — markazga yig'iladi.
+   * AUDIT-25 (4-qaror): TITUL HECH QACHON raqamlanmaydi. Muqovadagi yirik
+   * raqam ilgari deka tartibi (`index + 1`, ya'ni doim «01») edi — rejaga
+   * aloqasi yo'q; `s.plan` bo'lsa ham e'tiborsiz. Uning 1.67″ lik joyi
+   * qolmaydi: blok (rukn, chiziq, sarlavha, izoh) markazga yig'iladi.
    */
-  const no = planNumber(s);
-  const dy = no ? 0 : 0.8;
-  const up = no ? 0 : -0.87;
+  const dy = 0.8;
+  const up = -0.87;
   if (s.kicker) {
     layers.push({
       t: "text",
@@ -97,17 +95,6 @@ function planTitle(s: SlideModel, theme: SlideTheme, index: number, total: numbe
       uppercase: true,
       tracking: 2.6,
       src: { f: "kicker" },
-    });
-  }
-  if (no) {
-    layers.push({
-      t: "text",
-      box: { x: TX - 0.05, y: 1.45, w: 3.0, h: 1.6 },
-      text: no,
-      color: theme.accentInk,
-      size: 84,
-      bold: true,
-      valign: "middle",
     });
   }
   layers.push({ t: "rect", box: { x: TX, y: 3.12 + up, w: TW, h: 0.04 }, fill: { color: theme.accent, alpha: 0.6 } });

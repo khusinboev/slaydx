@@ -194,15 +194,20 @@ test("hikoya (story) bandlari: rasmsiz kolonkada raqam FAQAT rejadan", () => {
   assert.deepEqual(bare, [], "story bandlari plan'siz — raqam yo'q");
 });
 
-test("titul slaydida deka indeksi raqami yo'q (titul rejaga tegishli emas)", () => {
+test("titul slaydi HECH QACHON raqamlanmaydi — deka indeksi ham, `plan` ham (4-qaror)", () => {
   for (const visual of VISUALS) {
     for (const img of [true, false]) {
-      const s = sampleFor("title", img);
-      const nums = texts(planSlide(s, getSlideTheme("atlas"), visual, 0, TOTAL).layers)
-        .map(textOf)
-        .filter((t) => BARE_NUMBER.test(t));
-      assert.deepEqual(nums, [], `${visual}/${img ? "rasm" : "rasmsiz"}: titulda «${nums.join(",")}»`);
-      assertInside(planSlide(s, getSlideTheme("atlas"), visual, 0, TOTAL).layers, `${visual}/title`);
+      // `plan: 2` — titulga reja bandi tushib qolsa ham raqam chizilmasin.
+      for (const planNo of [undefined, 2]) {
+        const s = sampleFor("title", img);
+        if (planNo !== undefined) s.plan = planNo;
+        const layers = planSlide(s, getSlideTheme("atlas"), visual, 0, TOTAL).layers;
+        const nums = texts(layers)
+          .map(textOf)
+          .filter((t) => BARE_NUMBER.test(t));
+        assert.deepEqual(nums, [], `${visual}/${img ? "rasm" : "rasmsiz"}/plan=${planNo ?? "-"}: titulda «${nums.join(",")}»`);
+        assertInside(layers, `${visual}/title`);
+      }
     }
   }
 });
