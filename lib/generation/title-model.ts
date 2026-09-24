@@ -2,6 +2,7 @@ import { TOOL_BY_ID } from "../tools";
 import { profileFor } from "./docx-profile";
 import { docLabels } from "./i18n";
 import type { AcademicDoc } from "./types";
+import { tashkentYear } from "./tashkent-year";
 import { workLangKey, type WorkLang } from "./work/labels";
 import type { WorkModel } from "./work/types";
 
@@ -121,7 +122,7 @@ export function titleModel(doc: AcademicDoc): TitleModel {
   // Yil hujjat bilan birga muzlaydi (`extractMeta`). Eski `doc_json` da
   // `meta.year` bo'lmasligi mumkin — bunday holatda render vaqti yiliga
   // qaytamiz (avvalgi xatti-harakat, ya'ni regressiya emas).
-  const year = meta.year || new Date(Date.now()).getFullYear();
+  const year = meta.year || tashkentYear();
   const cityYear = `${meta.city || "Toshkent"} — ${year}`;
 
   if (profileFor(meta).titlePage === "article") {

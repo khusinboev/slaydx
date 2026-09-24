@@ -8,6 +8,7 @@ import { parseFigureKinds } from "./article/input";
 import type { FormValues, ToolConfig } from "../types";
 // Kesish surrogatga xavfsiz: emoji chegarada yorilsa `doc_json` yozuvi yiqilardi (C03, BEB-01).
 import { safeSlice } from "./safe-text";
+import { tashkentYear } from "./tashkent-year";
 import { normalizeAudienceId } from "./slide-audience";
 import { isSlideBlockId, type SlideBlockId } from "./slide-blocks";
 import {
@@ -283,6 +284,7 @@ export function extractMeta(tool: ToolConfig, values: FormValues): DocMeta {
     design: s(values, "design", "iris"),
     // Yil SHU YERDA muzlaydi — `title-model.ts` uni `doc.meta` dan oladi,
     // `new Date()` dan emas. Aks holda ekran va fayl yil chegarasida ajralardi.
-    year: new Date().getFullYear(),
+    // Toshkent vaqti (UTC+5): server UTC da, 31-dekabr 19:00 UTC dan keyin Toshkentda yangi yil.
+    year: tashkentYear(),
   };
 }
