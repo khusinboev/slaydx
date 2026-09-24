@@ -96,7 +96,7 @@ All 6 W4 packages merged: F `05b5baf`, C `04126b0`, E `da3c2f5`, B `266e3af`, D 
 
 ## Pre-deploy image verification (PRE-DEPLOY R1, 2026-09-24 ~17:10)
 - `docker build --target runner` and `--target worker` at `03e78c1`: both rc 0 (web 36 min and worker 8 min, both limited by the laptop network).
-- **Offline web image:** `parse-worker.mjs` present, migrations through 027, `sharp` loads, LibreOffice 25.8.7.3, `pdftoppm`, `find`.
+- **Offline web image:** `parse-worker.mjs` present, migrations through 027, `sharp` loads, LibreOffice 25.8.7, `pdftoppm`, `find`.
 - **Boot test** on a Docker `--internal` network (no internet), with postgres 16.15-alpine3.24 using the compose flags, web, and 2 workers × 4 under `--init`:
   - all 3 containers HEALTHY within 9 s;
   - `/api/health` 200, `/uz` 200, `/api/generations` 401;
