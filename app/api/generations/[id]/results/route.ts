@@ -32,9 +32,27 @@ export function csvHeadLine(): string {
   return `${csvLine(CSV_HEAD)}\r\n`;
 }
 
+/** Toshkent: UTC+5, yozgi vaqt yo'q (`spend.ts` `TASHKENT_UTC_OFFSET_SEC` bilan bir qiymat). */
+const TASHKENT_OFFSET_MS = 5 * 3600 * 1000;
+
+/**
+ * UTC instant → `YYYY-MM-DD HH:mm` Toshkent vaqtida (BEA-14).
+ *
+ * Server UTC da ishlaydi; ilgari CSV da `2026-09-23T04:12:00.000Z` turardi —
+ * o'qituvchi uchun 5 soat orqada va Excel uni matn deb o'qirdi. Bu shakl
+ * Excel/Sheets da sana-vaqt katagi bo'lib ochiladi. Siljish qat'iy (+5 soat):
+ * `Intl` ning vaqt mintaqasi bazasiga (konteyner ICU) bog'lanmaydi.
+ * Yaroqsiz qiymat o'zgarmasdan qaytadi — eksport bitta qator uchun yiqilmaydi.
+ */
+export function tashkentDateTime(iso: string): string {
+  const t = Date.parse(iso);
+  if (!Number.isFinite(t)) return iso;
+  return new Date(t + TASHKENT_OFFSET_MS).toISOString().slice(0, 16).replace("T", " ");
+}
+
 /** Bitta natija qatori — `resultsCsv` ham, oqim eksporti ham shundan foydalanadi. */
 export function csvRowLine(r: GameResult): string {
-  return `${csvLine([r.playerName, r.score, r.total, scorePercent(r), r.seconds, r.createdAt])}\r\n`;
+  return `${csvLine([r.playerName, r.score, r.total, scorePercent(r), r.seconds, tashkentDateTime(r.createdAt)])}\r\n`;
 }
 
 export function resultsCsv(rows: GameResult[]): string {
