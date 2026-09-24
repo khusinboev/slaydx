@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { LAYOUT_KIT, planSlide, type SlideLayer } from "../lib/generation/slide-layout.ts";
-import { bodyRules } from "../lib/generation/slide-audience.ts";
+import { CHAR_EM, LAYOUT_KIT, planSlide, type SlideLayer } from "../lib/generation/slide-layout.ts";
+import { AUDIENCE_RULES, bodyRules } from "../lib/generation/slide-audience.ts";
+import { SLIDE_LIMITS } from "../lib/generation/slide-limits.ts";
 import { getSlideTheme } from "../lib/generation/slide-themes.ts";
 import { SLIDE_LAYOUTS, SLIDE_THEME_IDS, type SlideLayout, type SlideModel } from "../lib/generation/slide-types.ts";
 import { DESIGN_VISUALS, LEGACY_VISUALS } from "../lib/generation/visuals/index.ts";
@@ -245,30 +246,189 @@ test("ro'yxat tartib raqamlari qoladi: reja 1..N, bosqich n, test A–D", () => 
  * AUDIT-25 A2-04 («process kartalari mayda»). `planProcess`/`planStats`/
  * `planTable` (va `rail` bosqichlari, `bold`/`dashboard` raqamlari)
  * shrift polini QAT'IY (10–15 pt) yozardi — auditoriya poli
- * (`bodyType.minPt`, Slide Law: 1–4-sinf 24 pt) e'tiborsiz edi. Boshqa
- * hamma maket `minPt` ni o'qiydi. Endi bu matnlar ham auditoriya
- * polidan kichik chizilmaydi (bosqich `n` — tartib belgisi, tana matni
- * emas, u tekshiruvdan tashqari).
+ * (`bodyType.minPt`, Slide Law: 1–4-sinf 24 pt) e'tiborsiz edi.
+ *
+ * Shartnoma (sharhlovchi qarori, AUDIT-25 P2 sharhi 1–2-band):
+ *   (a) SIG'ADIGAN matn auditoriya polidan kichik chizilmaydi;
+ *   (b) HECH BIR tana matni qutidan chiqmaydi va so'z o'rtasidan
+ *       bo'linmaydi — matn polda sig'masa shrift maketning eski
+ *       polgacha kichrayadi (`bodyFit` himoyasi). Ko'ruvchi toshgan
+ *       matnni kesadi, PPTX to'kadi — toshish «ko'rdim = oldim» ni buzadi.
  */
-const AUDIENCES = ["school_1_4", "school_5_7", "school_10_11", "students_bachelor", "general"] as const;
+const AUDIENCES = Object.keys(AUDIENCE_RULES) as (keyof typeof AUDIENCE_RULES)[];
+const BOLD_EM = LAYOUT_KIT.CHAR_EM_BOLD ?? 0.6;
 
 /**
- * `long` — polda ham sig'maydigan matn: pol QAT'IY ekanini aynan shu
- * holat sinaydi (qisqa matn `bodyPt` da sig'adi va pol hech qachon
- * ishga tushmaydi — mutatsiya tekshiruvi shuni ko'rsatdi).
+ * Siyoh balandligi — maketdan MUSTAQIL hisob (maketning `inkHeight` i
+ * buzilsa ham test aldanmasin): ochko'z so'z o'rash, qatordan uzun so'z
+ * bir necha qator oladi.
  */
-const LONG_TXT = "Orol dengizi havzasida sug'orish uchun olingan suv hajmi o'n yillar davomida muttasil oshib bordi va dengiz sathi keskin pasaydi. ".repeat(2);
-
-function floorCase(layout: SlideLayout, chart: boolean, long = false): PlanSlide {
-  const s = sampleFor(layout, false);
-  if (long) {
-    s.steps = [1, 2, 3].map((n) => ({ n: String(n), title: LONG_TXT.slice(0, 90), text: LONG_TXT }));
-    s.stats = chart
-      ? [{ value: "68%", label: LONG_TXT.slice(0, 120) }, { value: "22%", label: LONG_TXT.slice(0, 120) }, { value: "10%", label: LONG_TXT.slice(0, 120) }]
-      : [{ value: "68%", label: LONG_TXT }, { value: "40 km", label: LONG_TXT }];
-    s.table = { headers: [LONG_TXT.slice(0, 60), "Maydon", "Sho'rlik"], rows: [[LONG_TXT, LONG_TXT, "10 g/l"], ["2020", LONG_TXT, "100 g/l"]] };
-    return s;
+function inkIn(text: string, w: number, size: number, em: number): number {
+  const perLine = Math.max(1, Math.floor((w * 72) / (size * em)));
+  let rows = 0;
+  let col = 0;
+  for (const word of text.trim().split(/\s+/).filter(Boolean)) {
+    if (rows === 0) rows = 1;
+    if (word.length > perLine) {
+      if (col > 0) rows += 1;
+      rows += Math.ceil(word.length / perLine) - 1;
+      col = word.length % perLine || perLine;
+      continue;
+    }
+    const next = col === 0 ? word.length : col + 1 + word.length;
+    if (next <= perLine) {
+      col = next;
+    } else {
+      rows += 1;
+      col = word.length;
+    }
   }
+  return (rows * size * 1.3) / 72;
+}
+
+/** Tana matni qatlamlari (bosqich `n` — tartib belgisi, tana emas). */
+function bodyLayers(layers: SlideLayer[]): TextLayer[] {
+  return texts(layers).filter((l) => {
+    const f = l.src?.f;
+    if (f === "steps") return (l.src as { k: string }).k !== "n";
+    return f === "stats" || f === "table";
+  });
+}
+
+function assertFits(l: TextLayer, tag: string) {
+  const t = textOf(l);
+  const em = l.bold ? BOLD_EM : CHAR_EM;
+  const ink = inkIn(t, l.box.w, l.size, em);
+  assert.ok(ink <= l.box.h + 0.01, `${tag}: «${t.slice(0, 28)}…» ${l.size} pt da ${ink.toFixed(2)}″ > quti ${l.box.h.toFixed(2)}″`);
+  const longest = Math.max(...t.split(/\s+/).map((w) => w.length));
+  assert.ok(
+    longest * l.size * em <= l.box.w * 72 + 0.5,
+    `${tag}: «${t.slice(0, 28)}» ${l.size} pt da eng uzun so'z (${longest} belgi) qatorga sig'maydi — so'z o'rtasidan bo'linadi`,
+  );
+}
+
+/** So'z chegarasida kesilgan, AYNAN `n` belgigacha to'ldirilgan o'zbekcha matn. */
+const WORDS =
+  "Orol dengizi havzasida sug'orish uchun olingan suv hajmi o'n yillar davomida muttasil oshib bordi va dengiz sathi keskin pasaydi natijada qirg'oq chekindi".split(
+    " ",
+  );
+function textOfLen(n: number, shift = 0): string {
+  let out = "";
+  for (let i = shift; ; i++) {
+    const w = WORDS[i % WORDS.length];
+    const next = out ? `${out} ${w}` : w;
+    if (next.length > n) return out || w.slice(0, n);
+    out = next;
+  }
+}
+
+const L = SLIDE_LIMITS;
+type FitCase = { tag: string; slide: PlanSlide };
+
+/** Chegara uzunligi va SONLARIDAGI holatlar + sharhlovchi keltirgan real matnlar. */
+function fitCases(): FitCase[] {
+  const base = sampleFor("process", false);
+  const out: FitCase[] = [];
+  for (const n of [3, 4, L.stepsMax]) {
+    out.push({
+      tag: `process×${n}/chegara`,
+      slide: {
+        ...base,
+        layout: "process",
+        steps: Array.from({ length: n }, (_, i) => ({ n: String(i + 1), title: textOfLen(L.stepTitle, i), text: textOfLen(L.stepText, i + 3) })),
+      },
+    });
+  }
+  const realTitles = ["Kuzatish", "Taqqoslash", "Tahlil", "Xulosa", "Taklif"];
+  for (const n of [4, 5]) {
+    out.push({
+      tag: `process×${n}/real`,
+      slide: {
+        ...base,
+        layout: "process",
+        steps: realTitles.slice(0, n).map((title, i) => ({ n: String(i + 1), title, text: "Suv sathini har oy o'lchab, jadvalga yozamiz." })),
+      },
+    });
+  }
+  for (const n of [2, 3, L.statsMax]) {
+    // Aralash birlik — kartalar tarmog'i.
+    out.push({
+      tag: `stats-karta×${n}/chegara`,
+      slide: {
+        ...base,
+        layout: "stats",
+        stats: Array.from({ length: n }, (_, i) => ({ value: i % 2 ? `${40 + i} km` : textOfLen(L.statValue, i), label: textOfLen(L.statLabel, i + 1) })),
+      },
+    });
+  }
+  for (const n of [3, L.statsMax]) {
+    // Bir birlik — diagramma tarmog'i.
+    out.push({
+      tag: `stats-diagramma×${n}/chegara`,
+      slide: {
+        ...base,
+        layout: "stats",
+        stats: Array.from({ length: n }, (_, i) => ({ value: `${70 - i * 10}%`, label: textOfLen(L.statLabel, i + 2) })),
+      },
+    });
+  }
+  out.push({
+    tag: "stats-diagramma×4/real",
+    slide: {
+      ...base,
+      layout: "stats",
+      stats: ["Sug'orishga", "Filtratsiya", "Bug'lanish", "Boshqa"].map((label, i) => ({ value: `${60 - i * 15}%`, label })),
+    },
+  });
+  for (const [cols, rows] of [
+    [3, 3],
+    [4, 4],
+    [L.tableCols, L.tableRows],
+  ] as const) {
+    const head = cols <= 3 ? L.tableHeaderWide : L.tableHeader;
+    out.push({
+      tag: `jadval ${cols}×${rows}/chegara`,
+      slide: {
+        ...base,
+        layout: "table",
+        table: {
+          headers: Array.from({ length: cols }, (_, c) => textOfLen(head, c)),
+          rows: Array.from({ length: rows }, (_, r) => Array.from({ length: cols }, (_, c) => textOfLen(L.tableCell, r + c))),
+        },
+      },
+    });
+  }
+  return out;
+}
+
+test("A2-04: har auditoriya × har maket — process/stats/table tana matni qutidan chiqmaydi, so'z bo'linmaydi (SLIDE_LIMITS uzunlik va sonlarida)", () => {
+  const theme = getSlideTheme("atlas");
+  const cases = fitCases();
+  let checked = 0;
+  for (const aud of AUDIENCES) {
+    const bodyType = bodyRules({ slideAudience: aud, textVolume: "standart", planItems: 4 }, "lecture");
+    for (const visual of VISUALS) {
+      for (const c of cases) {
+        const plan = planSlide(c.slide, theme, visual, 3, TOTAL, aud, "lecture", { bodyType });
+        const body = bodyLayers(plan.layers);
+        assert.ok(body.length > 0, `${aud}/${visual}/${c.tag}: tana matni topilmadi`);
+        for (const l of body) {
+          assertFits(l, `${aud}/${visual}/${c.tag}`);
+          checked += 1;
+        }
+        assertInside(plan.layers, `${aud}/${visual}/${c.tag}`);
+      }
+    }
+  }
+  assert.ok(checked > 10_000, `matritsa kichik: ${checked} qatlam`);
+});
+
+/**
+ * Ijobiy holat: SIG'ADIGAN oddiy matn auditoriya polidan kichik emas —
+ * himoya (b) polni «arzon» qilib qo'ymasin.
+ */
+function shortCase(layout: SlideLayout, chart: boolean): PlanSlide {
+  const s = sampleFor(layout, false);
   s.steps = [
     { n: "1", title: "Kuzatish", text: "Suv sathini har oy o'lchab, jadvalga yozamiz." },
     { n: "2", title: "Taqqoslash", text: "Oldingi yil bilan solishtirib, farqni topamiz." },
@@ -281,80 +441,39 @@ function floorCase(layout: SlideLayout, chart: boolean, long = false): PlanSlide
   return s;
 }
 
-test("A2-04: bosqich/raqam/jadval matni auditoriya polidan (minPt) kichik emas — har maket", () => {
+test("A2-04: sig'adigan oddiy matn auditoriya polidan (minPt) kichik emas — maktab va talaba auditoriyalari, har maket", () => {
   const theme = getSlideTheme("atlas");
-  for (const aud of AUDIENCES) {
+  for (const aud of ["school_1_4", "school_5_7", "school_10_11", "students_bachelor", "general"] as const) {
     const bodyType = bodyRules({ slideAudience: aud, textVolume: "standart", planItems: 4 }, "lecture");
     for (const visual of VISUALS) {
-      for (const [layout, chart, long] of [
-        ["process", false, false],
-        ["process", false, true],
-        ["stats", false, false],
-        ["stats", false, true],
-        ["stats", true, false],
-        ["stats", true, true],
-        ["table", false, false],
-        ["table", false, true],
+      for (const [layout, chart] of [
+        ["process", false],
+        ["stats", false],
+        ["stats", true],
+        ["table", false],
       ] as const) {
-        const plan = planSlide(floorCase(layout, chart, long), theme, visual, 3, TOTAL, aud, "lecture", { bodyType });
-        const body = texts(plan.layers).filter((l) => {
-          const f = l.src?.f;
-          if (f === "steps") return (l.src as { k: string }).k !== "n";
-          return f === "stats" || f === "table";
-        });
-        assert.ok(body.length > 0, `${aud}/${visual}/${layout}: tana matni topilmadi`);
-        for (const l of body) {
-          assert.ok(
-            l.size >= bodyType.minPt,
-            `${aud}/${visual}/${layout}${chart ? "/diagramma" : ""}${long ? "/uzun" : ""}: «${textOf(l).slice(0, 30)}» ${l.size} pt < pol ${bodyType.minPt} pt`,
-          );
+        const plan = planSlide(shortCase(layout, chart), theme, visual, 3, TOTAL, aud, "lecture", { bodyType });
+        for (const l of bodyLayers(plan.layers)) {
+          const tag = `${aud}/${visual}/${layout}${chart ? "/diagramma" : ""}`;
+          assert.ok(l.size >= bodyType.minPt, `${tag}: «${textOf(l)}» ${l.size} pt < pol ${bodyType.minPt} pt`);
+          assertFits(l, tag);
         }
-        assertInside(plan.layers, `${aud}/${visual}/${layout}`);
       }
     }
   }
 });
 
-test("A2-04: 1–4-sinf bosqichlari (minPt 24) — matn 24 pt dan kichik emas va oddiy matn qutiga sig'adi", () => {
+test("A2-04: 1–4-sinf bosqichlari (minPt 24) — qisqa matn 24 pt dan kichik emas va qutiga sig'adi", () => {
   const theme = getSlideTheme("atlas");
   const bodyType = bodyRules({ slideAudience: "school_1_4", textVolume: "standart", planItems: 4 }, "lecture");
   assert.equal(bodyType.minPt, 24);
   for (const visual of VISUALS) {
-    const plan = planSlide(floorCase("process", false), theme, visual, 3, TOTAL, "school_1_4", "lecture", { bodyType });
+    const plan = planSlide(shortCase("process", false), theme, visual, 3, TOTAL, "school_1_4", "lecture", { bodyType });
     const steps = texts(plan.layers).filter((l) => l.src?.f === "steps" && (l.src as { k: string }).k !== "n");
     assert.equal(steps.length, 6, `${visual}: 3 × (sarlavha + matn) kutilgan`);
     for (const l of steps) {
       assert.ok(l.size >= 24, `${visual}: «${textOf(l)}» ${l.size} pt`);
-      const ink = LAYOUT_KIT.inkHeight(textOf(l), l.box.w, l.size);
-      assert.ok(ink <= l.box.h + 0.01, `${visual}: «${textOf(l)}» ${l.size} pt da ${ink.toFixed(2)}″ — quti ${l.box.h.toFixed(2)}″ dan chiqdi`);
-    }
-  }
-});
-
-/**
- * Katta shrift joy talab qiladi: ikki qatorli (5 bosqich) oqimda izoh
- * qutisi ilgari QAT'IY `y + 1.78` dan boshlanardi — karta 2.45″ bo'lsa
- * izohga 0.5″ (bir qator) qolardi va auditoriya polida matn chiqib
- * ketardi. Endi sarlavha qutisi siyoh balandligida, qolgani izohga.
- */
-test("A2-04: ikki qatorli oqim (5 bosqich) — auditoriya polida oddiy izoh qutiga sig'adi", () => {
-  const theme = getSlideTheme("atlas");
-  const bodyType = bodyRules({ slideAudience: "general", textVolume: "standart", planItems: 4 }, "lecture");
-  const s = floorCase("process", false);
-  s.steps = ["Kuzatish", "Taqqoslash", "Tahlil", "Xulosa", "Taklif"].map((title, i) => ({
-    n: String(i + 1),
-    title,
-    text: "Suv sathini har oy o'lchab, jadvalga yozamiz.",
-  }));
-  // `rail` bosqichlari o'z geometriyasida (bir qatorda 5 ta) — u yuqoridagi testda.
-  for (const visual of VISUALS.filter((v) => v !== "rail")) {
-    const plan = planSlide(s, theme, visual, 3, TOTAL, "general", "lecture", { bodyType });
-    const desc = texts(plan.layers).filter((l) => l.src?.f === "steps" && (l.src as { k: string }).k === "text");
-    assert.equal(desc.length, 5, `${visual}: 5 ta izoh kutilgan`);
-    for (const l of desc) {
-      assert.ok(l.size >= bodyType.minPt, `${visual}: izoh ${l.size} pt < ${bodyType.minPt}`);
-      const ink = LAYOUT_KIT.inkHeight(textOf(l), l.box.w, l.size);
-      assert.ok(ink <= l.box.h + 0.01, `${visual}: izoh ${l.size} pt da ${ink.toFixed(2)}″ — quti ${l.box.h.toFixed(2)}″`);
+      assertFits(l, `${visual}`);
     }
   }
 });

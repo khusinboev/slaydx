@@ -317,7 +317,7 @@ function planProcess(s: SlideModel, theme: SlideTheme, index: number, total: num
       text: st.title,
       color: theme.text,
       // AUDIT-25 A2-04: auditoriya oralig'i (ilgari qat'iy 19→12 pt).
-      size: bodyFit(st.title, tBox, 19, ctx.bodyType),
+      size: bodyFit(st.title, tBox, 19, ctx.bodyType, 12, true),
       bold: true,
       align: "center",
       src: { f: "steps", i, k: "title" },
@@ -329,7 +329,7 @@ function planProcess(s: SlideModel, theme: SlideTheme, index: number, total: num
       box: dBox,
       text: st.text,
       color: theme.muted,
-      size: bodyFit(st.text, dBox, 15, ctx.bodyType),
+      size: bodyFit(st.text, dBox, 15, ctx.bodyType, 11),
       align: "center",
       src: { f: "steps", i, k: "text" },
     });

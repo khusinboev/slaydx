@@ -378,16 +378,36 @@ function wrapRows(text: string, perLine: number): number {
   return rows;
 }
 
-function fitSize(text: string, box: Box, base: number, min: number): number {
+function fitSize(text: string, box: Box, base: number, min: number, em = CHAR_EM): number {
   const t = text.trim();
   if (!t) return base;
   for (let size = base; size > min; size -= 1) {
-    const perLine = Math.max(1, Math.floor((box.w * 72) / (size * CHAR_EM)));
+    const perLine = Math.max(1, Math.floor((box.w * 72) / (size * em)));
     const rows = wrapRows(t, perLine);
     if (rows * size * 1.3 <= box.h * 72) return size;
   }
   return min;
 }
+
+/**
+ * QALIN (bold) matnning o'rtacha belgi kengligi, em ulushida.
+ *
+ * `CHAR_EM` (0.55) oddiy yozuv uchun o'lchangan. Liberation Sans Bold
+ * (Arial Bold metrikasi) o'zbekcha matnda o'lchandi (PIL `getlength`,
+ * AUDIT-25): gaplar 0.475–0.49 em, oddiy yozuvda esa o'sha gaplar
+ * 0.435–0.446 em — qalin ≈ 1.09 × oddiy. `CHAR_EM × 1.09 ≈ 0.60`.
+ * 0.55 bilan qalin sarlavha «sig'adi» deb hisoblanar, haqiqatda esa
+ * so'z o'rtasidan bo'linardi (rail: «Kuzatis|h», «Taqqosl|ash»).
+ */
+export const CHAR_EM_BOLD = 0.6;
+
+/**
+ * Bitta SO'Z uchun qo'shimcha zaxira. Gapda keng va tor harflar
+ * o'rtachalashadi, qisqa so'zda esa yo'q: «Maydon» oddiy 0.593, qalin
+ * 0.630 em/belgi (o'rtacha 0.55/0.60 dan 8–5 % keng). 1.1 — shu
+ * tarqoqlikni qoplaydi (sharhlovchi 10–15 % zaxira tavsiya qilgan).
+ */
+const WORD_HEADROOM = 1.1;
 
 /**
  * Tana matni uchun `fitSize` — AUDITORIYA oralig'ida (AUDIT-25 A2-04).
@@ -397,14 +417,69 @@ function fitSize(text: string, box: Box, base: number, min: number): number {
  * oralig'ida tanlardi — `bodyType.minPt` (Slide Law: 1–4-sinf 24 pt,
  * maktab ≥ 20) umuman o'qilmasdi, boshqa hamma maket esa o'qiydi. Natija:
  * bolalar dekasida bosqich matni 11 pt — egasi ko'rgan «process kartalari
- * mayda». Endi boshlanish `max(dizayn, bodyPt)`, pol — `minPt`.
+ * mayda». Endi boshlanish `max(dizayn, bodyPt)`.
  *
- * Matn polda ham sig'masa shrift KICHRAYMAYDI: uzunlik yozuv bosqichida
- * (`SLIDE_LIMITS`/`clipTo`) cheklanadi — maket matnni kesmaydi, aks holda
- * ko'ruvchidagi tahrir (`src`) maydon qiymatidan ajralib qolardi.
+ * Tanlov qoidasi — pastga qarab birinchi mos o'lcham:
+ *   1. matn qutiga SIG'ADI (qatorlar × 1.3 × pt ≤ quti balandligi) VA
+ *   2. eng uzun SO'Z bitta qatorga sig'adi (qalin qatlamda `CHAR_EM_BOLD`,
+ *      so'z uchun `WORD_HEADROOM`) — so'z o'rtasidan bo'linmaydi.
+ * `minPt` gacha mos o'lcham topilsa — o'sha (auditoriya poli saqlanadi).
+ * Topilmasa, shrift `floor` gacha (maketning ESKI qat'iy poli: 12/11/10)
+ * kichrayishda DAVOM etadi — matn hech qachon qutidan chiqmasin. Bu
+ * ataylab: ko'ruvchi (`SlideCanvas`) qutidan chiqqan matnni KESADI
+ * (`overflow: hidden`), PPTX esa TO'KADI (`shrinkText: false`) — ya'ni
+ * toshib ketish «ko'rdim = oldim» ni buzadi.
+ *
+ * Uzunlik yozuv bosqichida (`SLIDE_LIMITS`) auditoriyaga bog'liq emas
+ * (AUDIT-25 sharhi: 1–4-sinfda chegara uzunligidagi matn polda 884 %
+ * gacha toshardi). P3 auditoriya bo'yicha chegaralarni joriy qilgandan
+ * keyin ham bu himoya QOLADI (ikki qavat): tahrir, eski doc_json va
+ * chegaradan o'tgan har qanday matn baribir qutida qoladi.
  */
-function bodyFit(text: string, box: Box, base: number, bt: BodyRules): number {
-  return fitSize(text, box, Math.max(base, bt.bodyPt), bt.minPt);
+function bodyFit(text: string, box: Box, base: number, bt: BodyRules, floor: number, bold = false): number {
+  const start = Math.max(base, bt.bodyPt);
+  const low = Math.min(floor, bt.minPt);
+  const t = text.trim();
+  if (!t) return start;
+  const em = bold ? CHAR_EM_BOLD : CHAR_EM;
+  const longest = Math.max(...t.split(/\s+/).map((w) => w.length));
+  for (let size = start; size > low; size -= 1) {
+    const perLine = Math.max(1, Math.floor((box.w * 72) / (size * em)));
+    const fitsH = wrapRows(t, perLine) * size * 1.3 <= box.h * 72;
+    const fitsW = longest * size * em * WORD_HEADROOM <= box.w * 72;
+    if (fitsH && fitsW) return size;
+  }
+  return low;
+}
+
+/**
+ * Bosqich kartasi: QALIN sarlavha + uning ostidagi izoh bitta balandlik
+ * byudjetini (`avail`) bo'lishadi (AUDIT-25 A2-04, sharh 1-band).
+ *
+ * Ilgari sarlavha qutisi qat'iy (0.95″) edi: 40 belgili sarlavha uni
+ * to'ldirar, ikki qatorli oqimda izohga 0.5″ qolar va 160 belgili izoh
+ * eski 11 pt polida ham toshardi (5 bosqich, 185 %). Endi sarlavha
+ * shifti (`titleCap`) 0.1″ qadam bilan pasaytiriladi — sarlavha
+ * kichrayadi, izohga joy ochiladi — izoh o'z qutisiga sig'guncha.
+ * Birinchi (eng katta) mos variant olinadi, ya'ni qisqa matnda
+ * natija eskicha. Sarlavha qutisi har doim uning SIYOH balandligi.
+ */
+function fitTitleText(
+  title: string,
+  text: string,
+  o: { tw: number; dw: number; avail: number; gap: number; titleCap: number; bt: BodyRules; title: [number, number]; text: [number, number] },
+): { tSize: number; tH: number; dSize: number; dH: number } {
+  let last = { tSize: 0, tH: 0, dSize: 0, dH: 0 };
+  for (let cap = o.titleCap; cap >= 0.3 - 1e-9; cap -= 0.1) {
+    const tSize = bodyFit(title, { x: 0, y: 0, w: o.tw, h: cap }, o.title[0], o.bt, o.title[1], true);
+    const tInk = inkHeight(title, o.tw, tSize, CHAR_EM_BOLD);
+    const tH = Math.max((tSize * 1.3) / 72, tInk);
+    const dH = Math.max(0.3, o.avail - tH - o.gap);
+    const dSize = bodyFit(text, { x: 0, y: 0, w: o.dw, h: dH }, o.text[0], o.bt, o.text[1]);
+    last = { tSize, tH, dSize, dH };
+    if (tInk <= cap + 1e-9 && inkHeight(text, o.dw, dSize) <= dH + 1e-9) return last;
+  }
+  return last;
 }
 
 /**
@@ -431,8 +506,8 @@ function listRows(lines: string[], box: Box, size: number): number {
  * «to'la» hisoblanib, blok ko'zga baribir tepada ko'rinardi
  * (AUDIT-8 N-5 ni birinchi urinishda aynan shu «yopgan» edi).
  */
-function inkHeight(text: string, w: number, size: number): number {
-  const perLine = Math.max(1, Math.floor((w * 72) / (size * CHAR_EM)));
+function inkHeight(text: string, w: number, size: number, em = CHAR_EM): number {
+  const perLine = Math.max(1, Math.floor((w * 72) / (size * em)));
   return (wrapRows(text, perLine) * size * 1.3) / 72;
 }
 
@@ -2126,7 +2201,7 @@ function planStatChart(
       box: labBox,
       text: it.label,
       color: ink,
-      size: bodyFit(it.label, labBox, 15, bt),
+      size: bodyFit(it.label, labBox, 15, bt, 11),
       valign: "middle",
       src: { f: "stats", i: it.idx, k: "label" },
     });
@@ -2160,9 +2235,10 @@ function planStatChart(
       fill: { color: dense || i === 0 ? theme.accent : theme.accent2 },
       radius: 0.04,
     });
+    const valBox: Box = { x: barX + barMaxW + 0.14, y: cy - 0.06, w: valueW, h: barH + 0.12 };
     layers.push({
       t: "text",
-      box: { x: barX + barMaxW + 0.14, y: cy - 0.06, w: valueW, h: barH + 0.12 },
+      box: valBox,
       text: it.value,
       /*
        * `accentInk` faqat `bg` va `surface` (yorug') ga qarshi
@@ -2170,8 +2246,9 @@ function planStatChart(
        * juftlik — `titleText`/`titleBg`.
        */
       color: dense ? theme.titleText : theme.accentInk,
-      // Qiymat qisqa («68%») — auditoriya polidan kichik emas (A2-04).
-      size: Math.max(16, bt.minPt),
+      // Qiymat odatda qisqa («68%») — auditoriya polida; uzun qiymat
+      // (`statValue` 24 belgi) qutiga sig'guncha kichrayadi (A2-04).
+      size: bodyFit(it.value, valBox, 16, bt, 11, true),
       bold: true,
       valign: "middle",
       src: { f: "stats", i: it.idx, k: "value" },
@@ -2233,7 +2310,7 @@ function planStats(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
       // sahifada `titleMuted` — u `titleBg` ustida O'LCHANGAN juft; `accent`
       // ba'zi palitralarda (legal: zumrad ustida zumrad) ko'rinmas edi.
       color: dense ? theme.titleMuted : theme.accentInk,
-      size: fitSize(st.value, valBox, 30, Math.max(15, ctx.bodyType.minPt)),
+      size: bodyFit(st.value, valBox, 30, ctx.bodyType, 15, true),
       bold: true,
       align: "center",
       valign: "middle",
@@ -2253,7 +2330,7 @@ function planStats(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
       box: labBox,
       text: st.label,
       color: dense ? theme.titleMuted : theme.muted,
-      size: bodyFit(st.label, labBox, 15, ctx.bodyType),
+      size: bodyFit(st.label, labBox, 15, ctx.bodyType, 11),
       align: "center",
       valign: "middle",
       src: { f: "stats", i, k: "label" },
@@ -2369,8 +2446,16 @@ function planProcess(s: SlideModel, theme: SlideTheme, visual: SlideVisual, inde
      * kartaning pastki yarmi bo'sh qolmaydi (A2-05).
      */
     const tw = colW - 0.24;
-    const tSize = bodyFit(st.title, { x: 0, y: 0, w: tw, h: 0.95 }, 16, ctx.bodyType);
-    const tH = Math.min(0.95, Math.max((tSize * 1.3) / 72, inkHeight(st.title, tw, tSize)));
+    const { tSize, tH, dSize, dH } = fitTitleText(st.title, st.text, {
+      tw,
+      dw: colW - 0.28,
+      avail: rowH - 0.72 - 0.17,
+      gap: 0.12,
+      titleCap: 0.95,
+      bt: ctx.bodyType,
+      title: [16, 12],
+      text: [14, 11],
+    });
     const tBox: Box = { x: x + 0.12, y: y + 0.72, w: tw, h: tH };
     layers.push({
       t: "text",
@@ -2382,14 +2467,13 @@ function planProcess(s: SlideModel, theme: SlideTheme, visual: SlideVisual, inde
       align: "center",
       src: { f: "steps", i, k: "title" },
     });
-    const dTop = 0.72 + tH + 0.12;
-    const dBox: Box = { x: x + 0.14, y: y + dTop, w: colW - 0.28, h: Math.max(0.3, rowH - dTop - 0.17) };
+    const dBox: Box = { x: x + 0.14, y: y + 0.72 + tH + 0.12, w: colW - 0.28, h: dH };
     layers.push({
       t: "text",
       box: dBox,
       text: st.text,
       color: theme.muted,
-      size: bodyFit(st.text, dBox, 14, ctx.bodyType),
+      size: dSize,
       align: "center",
       src: { f: "steps", i, k: "text" },
     });
@@ -2494,7 +2578,7 @@ function planTable(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
       box,
       text: h,
       color: headInk,
-      size: bodyFit(h, box, 15, ctx.bodyType),
+      size: bodyFit(h, box, 15, ctx.bodyType, 11, true),
       bold: true,
       valign: "middle",
       src: { f: "table", k: "header", c: i },
@@ -2533,7 +2617,7 @@ function planTable(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
         box,
         text: cell,
         color: c === 0 ? keyInk : cellInk,
-        size: bodyFit(cell, box, 14, ctx.bodyType),
+        size: bodyFit(cell, box, 14, ctx.bodyType, 10, c === 0),
         bold: c === 0,
         valign: "middle",
         src: { f: "table", k: "cell", r, c },
@@ -2713,6 +2797,8 @@ export const LAYOUT_KIT = {
   listRows,
   inkHeight,
   bodyFit,
+  fitTitleText,
+  CHAR_EM_BOLD,
   bulletGap,
   photo,
   stripCut,
