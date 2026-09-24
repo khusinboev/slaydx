@@ -263,17 +263,15 @@ test("listGenerations: kursor va limit so'rovga qo'shiladi, `nextCursor` qaytadi
   const first = await api.listGenerations();
   assert.equal(urls[0], "/api/generations");
   assert.equal(first.nextCursor, "c2");
-  assert.equal(api.firstPageCursor(), "c2", "birinchi sahifa kursori eslab qolinadi (store uni tashlab yuboradi)");
   const next = await api.listGenerations({ cursor: "c2", limit: 50 });
   assert.equal(urls[1], "/api/generations?cursor=c2&limit=50");
   assert.equal(next.nextCursor, null);
-  assert.equal(api.firstPageCursor(), "c2", "keyingi sahifa birinchi sahifa kursorini buzmaydi");
 });
 
 test("listGenerations: eski server (`nextCursor` yo'q) — kursor null", async (t) => {
   t.mock.method(globalThis, "fetch", async () => json(200, { generations: [] }));
-  await api.listGenerations();
-  assert.equal(api.firstPageCursor(), null);
+  const page = await api.listGenerations();
+  assert.equal(page.nextCursor, null);
 });
 
 // ─────────────────────────── downloadGeneration: PDF 429/503 (W2-A shartnomasi)

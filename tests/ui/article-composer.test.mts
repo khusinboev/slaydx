@@ -6,6 +6,7 @@ import { render, fireEvent, screen, cleanup, act, waitFor, within } from "@testi
 import { AppRouterContext } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import type { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { ArticleComposer } from "../../components/forms/ArticleComposer.tsx";
+import { CONFIRM_MIN_MS } from "../../components/overlays/useConfirmClick.ts";
 import { ToolWorkspace } from "../../components/forms/ToolWorkspace.tsx";
 import { TOOL_BY_ID } from "../../lib/tools.ts";
 import type { UserProfile } from "../../lib/types.ts";
@@ -459,6 +460,10 @@ test("«Tozalash»: ikkinchi bosishda DELETE ketadi va forma bo'shaydi", async (
     fireEvent.click(btn);
   });
   assert.equal(calls.filter((c) => c.method === "DELETE").length, 0, "birinchi bosish faqat ogohlantiradi");
+  // FE-07: tasdiq qo'sh bosish emas — ongli ikkinchi bosish.
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, CONFIRM_MIN_MS + 30));
+  });
   await act(async () => {
     fireEvent.click(screen.getByText(/Ishonchingiz komilmi/));
   });

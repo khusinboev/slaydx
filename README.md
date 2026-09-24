@@ -518,3 +518,19 @@ Telegram'ning **web** versiyasida ishlatmoqchi bo'lsangiz
   ko'rib chiqing.
 - Fayllar Postgres `BYTEA` da (25 MB chegara). Hajm o'sganda S3 ga ko'chirish kerak.
 
+## Uchinchi tomon litsenziyalari
+
+- **`@breezystack/lamejs` — LGPL-3.0.** WAV → MP3 kodlash uchun (TTS,
+  `lib/generation/tts/mp3.ts`), faqat `worker` konteynerida, `loadMp3Encoder()`
+  orqali **lazy** (`import()`) yuklanadi — kod o'zgartirilmagan, npm'dan
+  o'zgarishsiz ishlatiladi. LGPL-3.0 shuni talab qiladi: kutubxona manbasi
+  ochiq qolsin (npm ro'yxati orqali allaqachon ochiq), o'zgartirilsa —
+  o'zgarishlar ham LGPL bilan tarqatilsin, va kutubxona **dinamik** bog'lanishi
+  (alohida almashtirsa bo'ladigan holatda) saqlansin — bu yerda aynan shunday
+  (dependency versiyasi `package.json` orqali erkin yangilanadi/almashtiriladi,
+  ilova kodi bilan statik bog'lanmagan). SlaydX'ning o'zi (server kodi)
+  boshqa litsenziya bilan qoladi — LGPL faqat shu bitta kutubxonaga tegishli.
+- Boshqa bog'liqliklar (Next.js, React va h.k.) — odatiy MIT/Apache-2.0
+  turkumidagi ochiq litsenziyalar; alohida shart qo'ymaydi. To'liq ro'yxat
+  kerak bo'lsa: `npx license-checker --summary`.
+

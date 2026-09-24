@@ -7,22 +7,24 @@ import { ArrowDownUp, ChevronDown, FileX, FolderOpen, Plus, Trash2 } from "lucid
 import * as api from "@/lib/api-client";
 import { useAppStore } from "@/lib/store";
 import { TOOL_BY_ID } from "@/lib/tools";
-import { FILE_FILTERS, FILE_SORTS, useUi } from "@/lib/ui";
+import { FILE_FILTERS, FILE_SORTS, fileFilterMatch, type FileFilterId, useUi } from "@/lib/ui";
 import { cn } from "@/lib/cn";
 import { FilePreview } from "./FilePreview";
+import { confirmAccepted, confirmClock } from "../overlays/useConfirmClick";
 
 export function HomeFiles() {
   const sessionChecked = useAppStore((s) => s.sessionChecked);
   const loggedIn = useAppStore((s) => s.loggedIn);
   const generations = useAppStore((s) => s.generations);
   const generationsLoaded = useAppStore((s) => s.generationsLoaded);
+  const firstCursor = useAppStore((s) => s.generationsCursor);
   const refreshGenerations = useAppStore((s) => s.refreshGenerations);
   const drop = useAppStore((s) => s.dropGeneration);
   const open = useUi((s) => s.open);
   const overlay = useUi((s) => s.overlay);
   const close = useUi((s) => s.close);
   const params = useSearchParams();
-  const [filter, setFilter] = useState<(typeof FILE_FILTERS)[number]["id"]>("all");
+  const [filter, setFilter] = useState<FileFilterId>("all");
   const [sort, setSort] = useState<(typeof FILE_SORTS)[number]["id"]>("modified");
   const [desc, setDesc] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -71,14 +73,14 @@ export function HomeFiles() {
    * 50 ta, `nextCursor`). Store faqat BIRINCHI sahifani yuritadi (polling
    * ham shuni yangilaydi); eski sahifalar shu yerda, alohida — ikkalasi
    * id bo'yicha birlashtiriladi. Kursor: birinchi yuklashdan keyin —
-   * birinchi sahifaniki (`firstPageCursor`), keyin — oxirgi yuklangan
-   * sahifaniki. Eski server `nextCursor` bermaydi → tugma chiqmaydi.
+   * store dagi birinchi sahifaniki (`generationsCursor`), keyin — oxirgi
+   * yuklangan sahifaniki. Eski server `nextCursor` bermaydi → tugma chiqmaydi.
    */
   const [older, setOlder] = useState<api.ServerGeneration[]>([]);
   const [olderCursor, setOlderCursor] = useState<string | null | undefined>(undefined);
   const [loadingMore, setLoadingMore] = useState(false);
   const moreCursor =
-    olderCursor === undefined ? (loggedIn && generationsLoaded ? api.firstPageCursor() : null) : olderCursor;
+    olderCursor === undefined ? (loggedIn && generationsLoaded ? firstCursor : null) : olderCursor;
 
   async function loadMore() {
     if (!moreCursor || loadingMore) return;
@@ -123,28 +125,27 @@ export function HomeFiles() {
    */
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const armedAt = useRef(0);
   useEffect(() => () => {
     if (confirmTimer.current) clearTimeout(confirmTimer.current);
   }, []);
-  function askDelete(id: string) {
-    if (confirmTimer.current) clearTimeout(confirmTimer.current);
+  function askDelete(id: string, e?: { detail?: number }) {
     if (confirmId === id) {
+      // FE-07: qo'sh bosishning ikkinchi yarmi tasdiq emas (`useConfirmClick` bilan bitta qoida).
+      if (!confirmAccepted(armedAt.current, e)) return;
+      if (confirmTimer.current) clearTimeout(confirmTimer.current);
       setConfirmId(null);
       void onDelete(id);
       return;
     }
+    if (confirmTimer.current) clearTimeout(confirmTimer.current);
+    armedAt.current = confirmClock();
     setConfirmId(id);
     confirmTimer.current = setTimeout(() => setConfirmId(null), 3000);
   }
 
   const list = useMemo(() => {
-    let rows = all.filter((g) => {
-      if (filter === "slide") return g.type === "slide";
-      if (filter === "image") return g.type === "image";
-      if (filter === "docs") return g.type !== "slide" && g.type !== "image";
-      if (filter === "tests" || filter === "games") return false;
-      return true;
-    });
+    let rows = all.filter((g) => fileFilterMatch(filter, g.type));
     rows = [...rows].sort((a, b) => {
       if (sort === "name") return a.topic.localeCompare(b.topic, "uz");
       if (sort === "created") return a.createdAt.localeCompare(b.createdAt);
@@ -331,7 +332,7 @@ export function HomeFiles() {
                           ? "text-destructive font-medium"
                           : "text-muted-foreground hover:text-destructive",
                       )}
-                      onClick={() => askDelete(g.id)}
+                      onClick={(e) => askDelete(g.id, e)}
                       aria-label={
                         confirmId === g.id
                           ? `${g.topic} — o'chirishni tasdiqlang`

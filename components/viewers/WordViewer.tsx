@@ -364,7 +364,7 @@ export function WordViewer({
   const active = ed.editable ? ed : wed.editable ? wed : ted.editable ? ted : null;
   const editable = Boolean(active) && !(active === ed && ed.legacy);
   const editing = editOn && editable;
-  const { undo, redo, save, pending, discard, saving, justSaved } = active ?? ed;
+  const { undo, redo, save, pending, discard, saving, saveFailed, justSaved } = active ?? ed;
   const runArticle = ed.run;
   const runWork = wed.run;
   const runTeacher = ted.run;
@@ -414,8 +414,8 @@ export function WordViewer({
   const onEditStateRef = useRef(onEditState);
   onEditStateRef.current = onEditState;
   useEffect(() => {
-    onEditStateRef.current?.(editable ? { pending, saving, justSaved, save, discard } : null);
-  }, [editable, pending, saving, justSaved, save, discard]);
+    onEditStateRef.current?.(editable ? { pending, saving, saveFailed, justSaved, save, discard } : null);
+  }, [editable, pending, saving, saveFailed, justSaved, save, discard]);
   useEffect(() => () => onEditStateRef.current?.(null), []);
 
   /* Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y / Ctrl+S — ochiq contentEditable ichida brauzerniki. */
