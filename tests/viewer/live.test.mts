@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { renderToStaticMarkup } from "react-dom/server";
+import { prerenderToNodeStream } from "react-dom/static";
 import { createElement as h } from "react";
 import { AppRouterContext } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import type { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
@@ -313,36 +314,44 @@ function genDetail(over: Partial<GenerationDetail> = {}): GenerationDetail {
   } as unknown as GenerationDetail;
 }
 
-function renderPanel(gen: GenerationDetail): string {
-  return renderToStaticMarkup(
+/*
+ * `prerender` — Suspense chegaralarini KUTADI: jonli ko'ruvchi `import()`
+ * bilan alohida bo'lakda keladi (FE-11), `renderToStaticMarkup` esa faqat
+ * «Yuklanmoqda...» zaxirasini chizardi.
+ */
+async function renderPanel(gen: GenerationDetail): Promise<string> {
+  const { prelude } = await prerenderToNodeStream(
     h(AppRouterContext.Provider, { value: mockRouter }, h(RunningPanel, { gen })),
   );
+  let html = "";
+  for await (const chunk of prelude) html += String(chunk);
+  return html;
 }
 
-test("RunningPanel: IN_PROGRESS + live → skelet va tasma (progress bar emas)", () => {
-  const html = renderPanel(genDetail({ live: sampleLive() }));
+test("RunningPanel: IN_PROGRESS + live → skelet va tasma (progress bar emas)", async () => {
+  const html = await renderPanel(genDetail({ live: sampleLive() }));
   assert.ok(html.includes("data-live-strip=\"1\""), "jonli tasma chiqsin");
   assert.ok(html.includes("data-skeleton=\"1\""), "yozilmagan slaydlar skelet bo'lsin");
   assert.ok(!html.includes("role=\"progressbar\" aria-valuenow=\"31\""), "eski progress kartochkasi bo'lmasin");
 });
 
-test("RunningPanel: live yo'q → eski progress bar", () => {
-  const html = renderPanel(genDetail({ live: null }));
+test("RunningPanel: live yo'q → eski progress bar", async () => {
+  const html = await renderPanel(genDetail({ live: null }));
   assert.ok(html.includes("aria-valuenow=\"31\""), "eski progress bar qolishi kerak");
   assert.ok(!html.includes("data-live-strip"), "jonli tasma bo'lmasin");
   assert.ok(!html.includes("data-skeleton"), "skelet bo'lmasin");
 });
 
-test("RunningPanel: slayd BO'LMAGAN vosita jonli holat bilan ham eski progress bar", () => {
+test("RunningPanel: slayd BO'LMAGAN vosita jonli holat bilan ham eski progress bar", async () => {
   // Matn hujjatlari uchun jonli model hali yo'q — `liveDocOf` ularga
   // hech narsa bermaydi, shuning uchun filtr `viewerKind` da.
-  const html = renderPanel(genDetail({ type: "essay", live: sampleLive() }));
+  const html = await renderPanel(genDetail({ type: "essay", live: sampleLive() }));
   assert.ok(html.includes("aria-valuenow=\"31\""), "slayd bo'lmagan vositada eski progress bar");
   assert.ok(!html.includes("data-live-strip"), "jonli tasma bo'lmasin");
 });
 
-test("RunningPanel: live shakli buzilgan bo'lsa ham eski progress bar (yiqilish xavfsiz tomonga)", () => {
-  const html = renderPanel(genDetail({ live: { stage: "text", progress: 5 } as unknown }));
+test("RunningPanel: live shakli buzilgan bo'lsa ham eski progress bar (yiqilish xavfsiz tomonga)", async () => {
+  const html = await renderPanel(genDetail({ live: { stage: "text", progress: 5 } as unknown }));
   assert.ok(html.includes("aria-valuenow=\"31\""));
   assert.ok(!html.includes("data-live-strip"));
 });

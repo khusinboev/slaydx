@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { FileText, Loader2 } from "lucide-react";
-import { EXTRACT_ACCEPT, EXTRACT_MAX_BYTES } from "@/lib/extract-text";
+import { EXTRACT_ACCEPT, EXTRACT_MAX_BYTES } from "@/lib/extract-limits";
 import { extractText } from "@/lib/api-client";
 import { SOURCE_TEXT_LIMIT } from "@/lib/generation/meta";
 import { MAX_SOURCE_CHARS } from "@/lib/tools";

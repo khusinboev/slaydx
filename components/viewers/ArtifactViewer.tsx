@@ -1,15 +1,26 @@
 "use client";
 
+import { lazy, Suspense } from "react";
 import type { Generation } from "@/lib/types";
+import type { AcademicDoc } from "@/lib/generation/types";
 import type { EditActionsState } from "../files/EditActions";
 import { academicDocFromHtml } from "@/lib/viewers/from-html";
 import { viewerKind } from "@/lib/viewers/kind";
-import { ResumeViewer } from "./ResumeViewer";
-import { SlideViewer } from "./SlideViewer";
-import { WordViewer } from "./WordViewer";
-import { TranslationViewer } from "./TranslationViewer";
-import { ImageViewer } from "./ImageViewer";
-import { AudioViewer } from "./AudioViewer";
+
+/*
+ * Har ko'ruvchi ALOHIDA bo'lakda (FE-11): ilgari hujjat sahifasi har
+ * turdagi hujjat uchun barcha ko'ruvchilarni (KaTeX, `planSlide`,
+ * `planResume`, `planTeacher`, `planGame` — bitta ~530 KB bo'lak)
+ * birinchi yuklanishda olardi. Endi faqat shu hujjat turining ko'ruvchisi.
+ */
+const ResumeViewer = lazy(() => import("./ResumeViewer").then((m) => ({ default: m.ResumeViewer })));
+const SlideViewer = lazy(() => import("./SlideViewer").then((m) => ({ default: m.SlideViewer })));
+const WordViewer = lazy(() => import("./WordViewer").then((m) => ({ default: m.WordViewer })));
+const TranslationViewer = lazy(() => import("./TranslationViewer").then((m) => ({ default: m.TranslationViewer })));
+const ImageViewer = lazy(() => import("./ImageViewer").then((m) => ({ default: m.ImageViewer })));
+const AudioViewer = lazy(() => import("./AudioViewer").then((m) => ({ default: m.AudioViewer })));
+
+const VIEWER_LOADING = <div className="text-muted-foreground p-8 text-sm">Yuklanmoqda...</div>;
 
 export function ArtifactViewer({
   gen,
@@ -34,8 +45,26 @@ export function ArtifactViewer({
   onEditState?: (s: EditActionsState | null) => void;
 }) {
   const doc = gen.doc ?? academicDocFromHtml(gen.html, gen);
-  const kind = viewerKind(gen.type);
+  return <Suspense fallback={VIEWER_LOADING}>{viewerFor({ gen, doc, detail, onDetail, onEditState, pdf })}</Suspense>;
+}
 
+/** Hujjat turi → uning ko'ruvchisi (bo'lagi kerak bo'lganda yuklanadi). */
+function viewerFor({
+  gen,
+  doc,
+  detail,
+  onDetail,
+  onEditState,
+  pdf,
+}: {
+  gen: Generation;
+  doc: AcademicDoc;
+  detail?: unknown;
+  onDetail?: (g: unknown) => void;
+  onEditState?: (s: EditActionsState | null) => void;
+  pdf: boolean;
+}) {
+  const kind = viewerKind(gen.type);
   switch (kind) {
     case "slides":
       return (
