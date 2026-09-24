@@ -133,6 +133,14 @@ test("narx faqat varaqdan — boshqa parametrlar narxni qimirlatmaydi (narx o'zg
   assert.equal(priceFor(essay, { ...BASE, pages: "3" }), 3000);
   assert.equal(priceFor(essay, { ...BASE, pages: "4" }), 3500);
   assert.equal(priceFor(essay, { ...BASE, pages: "5" }), 4000);
-  // Akademik esse so'z bilan o'lchansa ham narx varaqdan.
-  assert.equal(priceFor(essay, { ...BASE, essayContext: "academic", wordTarget: 1000, pages: "2" }), 2500);
+  /*
+   * `wordTarget` reyestrda `price` ta'sirini E'LON qiladi (W4-E: akademik
+   * esse narxi dvigatel yozadigan so'z hajmidan) — shuning uchun u yuqoridagi
+   * «narxni qimirlatmaydi» sikliga kirmaydi, differensial zond esa A/B da
+   * narx HAQIQATAN farq qilishini talab qiladi (alohida istisno ro'yxati yo'q).
+   */
+  // Akademik esse: narx dvigatel yozadigan so'zdan (1 000 so'z = 4 varaq), zid `pages: "2"` dan emas (W4-E).
+  assert.equal(priceFor(essay, { ...BASE, essayContext: "academic", wordTarget: 1000, pages: "2" }), 3500);
+  // Forma yuboradigan juftlik (`pages = pagesForWords(1000)` = 4) — narx avvalgidek.
+  assert.equal(priceFor(essay, { ...BASE, essayContext: "academic", wordTarget: 1000, pages: "4" }), 3500);
 });

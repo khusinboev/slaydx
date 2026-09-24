@@ -50,8 +50,13 @@ export const ESSAY_PARAMS: EssayParam[] = [
   // Til — akademik kontekstda tanlanadi (maktab inshosi faqat o'zbekcha, IELTS faqat inglizcha).
   { id: "language", encode: "string", probeA: "uz", probeB: "en", probeWith: { essayContext: "academic", essayKind: "argumentative" }, impacts: ["language", "prompt", "layout"] },
   { id: "pages", encode: "string", probeA: "1", probeB: "5", impacts: ["prompt", "structure", "layout", "price"] },
-  // So'z maqsadi — faqat akademik esseda (IELTS chegarasi qat'iy 250–330).
-  { id: "wordTarget", encode: "number", probeA: 550, probeB: 950, probeWith: { essayContext: "academic", essayKind: "argumentative" }, impacts: ["prompt", "layout"] },
+  /*
+   * So'z maqsadi — faqat akademik esseda (IELTS chegarasi qat'iy 250–330).
+   * `price`: akademik esse narxi dvigatel YOZADIGAN hajmdan (cheklangan
+   * `wordTarget` → varaq, `lib/tools.ts priceFor`, W4-E) — `pages` bilan
+   * zid qo'lda yasalgan so'rov ham yoziladigan hajmni to'laydi.
+   */
+  { id: "wordTarget", encode: "number", probeA: 550, probeB: 950, probeWith: { essayContext: "academic", essayKind: "argumentative" }, impacts: ["prompt", "layout", "price"] },
   // Asar nomi — adabiy tahlilda; hisobotda `workQuote` bandi shunga qaraydi.
   { id: "workTitle", encode: "string", probeA: "", probeB: "Alpomish", probeWith: { essayContext: "school_dtm", essayKind: "literary" }, impacts: ["prompt", "review", "layout"] },
   { id: "epigraph", encode: "string", probeA: "", probeB: "So‘z — qalb kaliti — Alisher Navoiy", probeWith: { essayContext: "school_dtm", essayKind: "literary" }, impacts: ["prompt", "layout"] },
