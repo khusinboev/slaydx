@@ -14,6 +14,10 @@ import { createIsolatedDb } from "./helpers/isolated-db.mts";
  * daqiqada aynan bitta process tozalaydi; u o'lsa ulanish uziladi, qulf
  * bo'shaydi va keyingi daqiqada boshqasi oladi.
  *
+ * (W4-B review R1: qulf ortida endi faqat og'ir TOZALASHLAR — `run` seam'i;
+ * ishlarni tiklash `recoverJobs` har processda qulfsiz yuradi,
+ * `worker-housekeeping-wedge.test.mts`.)
+ *
  * «Boshqa process» — shu testda qulfni ushlab turgan alohida `pg.Client`
  * (boshqa sessiya — Postgres uchun boshqa process bilan bir xil).
  *

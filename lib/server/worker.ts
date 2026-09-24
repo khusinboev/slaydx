@@ -792,7 +792,24 @@ async function step(name: string, fn: () => Promise<unknown>): Promise<void> {
   }
 }
 
+/** To'liq housekeeping (qo'lda/testlarda): tiklash + tozalash. Sikl `housekeepingTick` ni chaqiradi. */
 export async function housekeeping(): Promise<void> {
+  await recoverJobs();
+  await purgeHousekeeping();
+}
+
+/**
+ * Ishlarni TIKLASH qadamlari — HAR worker processida, har tickda, advisory
+ * qulfsiz (W4-B review R1). Qulf ortida bo'lsa, ulangan holda osilib qolgan
+ * (event loop bloklangan, `docker pause`) yetakchi qulfni abadiy ushlab,
+ * butun klasterda osilgan ishlarni qaytarish, pulni qaytarish va navbat
+ * muddatini to'xtatib qo'yardi — o'z ishlarini ham. Uchalasi parallel yurishga
+ * xavfsiz va aynan bir marta: har biri qator predikatli UPDATE (ikkinchi
+ * tranzaksiya qator qulfidan keyin predikatni qayta tekshiradi va 0 qator
+ * oladi), qaytarish `(kind, reference)` bo'yicha idempotent.
+ * `tests/worker-housekeeping-wedge.test.mts`.
+ */
+export async function recoverJobs(): Promise<void> {
   await step("reclaim", async () => {
     const dead = await reclaimStaleJobs();
     if (dead.length) log("warn", "[worker] osilib qolgan ishlar yakuniy FAILED (Ish vaqti tugadi)", { jobIds: dead });
@@ -820,6 +837,15 @@ export async function housekeeping(): Promise<void> {
    * tranzaksiyasi yiqilgan bo'lsa) — aynan bir marta qaytariladi.
    */
   await step("refund-reconcile", () => refundUnrefundedFailed());
+}
+
+/**
+ * Og'ir/ommaviy TOZALASH qadamlari — faqat advisory qulf egasi (bitta
+ * process) yuritadi (SCALE-16): N replika bir xil DELETE larni N marta
+ * qilmasin. Yetakchi osilsa bular kechikadi — pul va navbat holatiga ta'sir
+ * qilmaydi (tiklash `recoverJobs` da, qulfsiz).
+ */
+export async function purgeHousekeeping(): Promise<void> {
   /*
    * Saqlash muddati (C23): faqat bonus bilan to'langan tayyor ishlarning
    * fayllari `RETENTION_BONUS_DAYS` dan keyin tozalanadi. Pullik ishlar —
@@ -893,8 +919,10 @@ let hkLeader: Client | null = null;
 let hkBusy = false;
 
 export type HousekeepingTickOptions = {
-  /** Test seam: `housekeeping` o'rniga. */
+  /** Test seam: qulf ortidagi `purgeHousekeeping` o'rniga. */
   run?: () => Promise<void>;
+  /** Test seam: qulfsiz `recoverJobs` o'rniga. */
+  recover?: () => Promise<void>;
   /** Test seam: qulf ulanishini ochish (standart — `poolConfig()` bilan yangi `Client`). */
   connect?: () => Promise<Client>;
 };
@@ -924,19 +952,23 @@ async function stillLeader(c: Client): Promise<boolean> {
 }
 
 /**
- * Housekeeping'ni BITTA process yuritadi (SCALE-16).
+ * Housekeeping tick (SCALE-16, W4-B review R1).
  *
- * Ilgari har worker replikasi har 60 s da hamma tozalashni o'zi qilardi —
- * 2 replika = daqiqasiga ikki marta, parallel. Endi Postgres advisory
- * qulfi (`pg_try_advisory_lock`, pooldan TASHQARI alohida ulanishda):
- *   - band bo'lsa — shu daqiqa o'tkazib yuboriladi (`false`);
- *   - olgan process uni USHLAB turadi (yetakchi) — har tickda faqat u
- *     yuritadi, ya'ni daqiqasiga aynan bir marta;
- *   - yetakchi o'lsa yoki ulanishi uzilsa sessiya qulfi Postgres tomonida
- *     bo'shaydi, keyingi tickda boshqa process (yoki o'zi qayta) oladi.
- * HECH QACHON xato tashlamaydi — sikl to'xtamasin (baza yo'q bo'lsa `false`).
+ * 1. `recoverJobs` (osilgan ishlar + ularning puli, navbat muddati, pul
+ *    qaytarish skaneri) — HAR processda, QULFSIZ: yetakchi osilib qolsa ham
+ *    boshqa replika ishlarni tiklaydi.
+ * 2. `purgeHousekeeping` (og'ir tozalashlar) — faqat Postgres advisory qulfi
+ *    egasi (`pg_try_advisory_lock`, pooldan TASHQARI alohida ulanishda):
+ *    - band bo'lsa — shu daqiqa o'tkazib yuboriladi (`false`);
+ *    - olgan process uni USHLAB turadi (yetakchi) — daqiqasiga aynan bir marta;
+ *    - yetakchi o'lsa yoki ulanishi uzilsa sessiya qulfi Postgres tomonida
+ *      bo'shaydi, keyingi tickda boshqa process (yoki o'zi qayta) oladi.
+ * Qaytaradi: tozalash (2) shu processda yurdimi. HECH QACHON xato
+ * tashlamaydi — sikl to'xtamasin (baza yo'q bo'lsa `false`).
  */
 export async function housekeepingTick(opts: HousekeepingTickOptions = {}): Promise<boolean> {
+  // `recoverJobs` qadamlari o'z xatosini o'zi ushlaydi (`step`) — bu yerda tashlamaydi.
+  await (opts.recover ?? recoverJobs)();
   if (hkBusy) return false;
   hkBusy = true;
   try {
@@ -957,7 +989,7 @@ export async function housekeepingTick(opts: HousekeepingTickOptions = {}): Prom
       hkLeader = c;
       log("info", "[worker] housekeeping yetakchisi — shu process", { workerId: WORKER_ID });
     }
-    await (opts.run ?? housekeeping)();
+    await (opts.run ?? purgeHousekeeping)();
     return true;
   } catch (e) {
     log("error", "[worker] housekeeping qulfi olinmadi", { err: e });
