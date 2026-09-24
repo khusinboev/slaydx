@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import type { CustomTemplate } from "@/lib/generation/pptx-template";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import type { SlideAudience, SlideTemplateId, SlideVisual } from "@/lib/generation/slide-templates";
@@ -20,8 +20,12 @@ import { SkeletonSlide } from "./SkeletonSlide";
  *  - berilsa, `marks[idx]` yo'q slayd hali yozilmagan → `SkeletonSlide`
  *    va sarlavha o'rniga `roles[idx]`;
  *  - `marks[idx] === "writing"` → «yozilmoqda» nuqtasi.
+ *
+ * `memo` (FE-13): jonli yozish animatsiyasi `SlideViewer` ni har kadrda
+ * qayta chizadi; panel proplari (deka, `i`, `marks`, `go`) esa o'zgarmaydi —
+ * ilgari ikkala panel (yon + mobil tasma) har kadrda N ta eskizni chizardi.
  */
-export function SlideRail({
+export const SlideRail = memo(function SlideRail({
   slides,
   theme,
   visual,
@@ -336,4 +340,4 @@ export function SlideRail({
       })}
     </aside>
   );
-}
+});

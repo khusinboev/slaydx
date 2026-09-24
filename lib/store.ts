@@ -56,6 +56,29 @@ type AppState = {
 };
 
 /**
+ * Yangi ro'yxatda o'zgarmagan qatorlar uchun ESKI obyektni qaytaradi (FE-13).
+ *
+ * Polling har 3–15 s da butun ro'yxatni yangi obyektlar bilan keltiradi.
+ * Ilgari massiv to'liq almashtirilardi: har karta (slayd kartasida
+ * `planSlide` maketi bilan) qayta chizilardi, garchi faqat bitta ishning
+ * progressi o'zgargan bo'lsa ham. Endi qator mazmuni teng bo'lsa o'sha
+ * obyekt saqlanadi (`FilePreview` `memo` si shunga tayanadi), hech narsa
+ * o'zgarmagan bo'lsa — massivning o'zi ham (obunachilar umuman chizilmaydi).
+ * Qator kichik (≤50 ta, `preview` bir necha KB) — JSON solishtirish arzon.
+ */
+export function keepUnchanged(prev: ServerGeneration[], next: ServerGeneration[]): ServerGeneration[] {
+  const old = new Map(prev.map((g) => [g.id, g]));
+  let same = prev.length === next.length;
+  const out = next.map((g, i) => {
+    const p = old.get(g.id);
+    const keep = p !== undefined && JSON.stringify(p) === JSON.stringify(g) ? p : g;
+    if (keep !== prev[i]) same = false;
+    return keep;
+  });
+  return same ? prev : out;
+}
+
+/**
  * Server 401 qaytarsa sessiyani darhol tozalaymiz.
  *
  * Ilgari cookie eskirganda interfeys foydalanuvchini «kirgan» deb
@@ -199,7 +222,11 @@ export const useAppStore = create<AppState>()(
         }
         try {
           const { generations, nextCursor } = await api.listGenerations();
-          set({ generations, generationsLoaded: true, generationsCursor: nextCursor ?? null });
+          set((s) => ({
+            generations: keepUnchanged(s.generations, generations),
+            generationsLoaded: true,
+            generationsCursor: nextCursor ?? null,
+          }));
         } catch {
           // Ro'yxat eski holicha qoladi; keyingi yangilash (polling/fokus) yana so'raydi.
           set({ generationsLoaded: true });
