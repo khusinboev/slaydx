@@ -932,6 +932,16 @@ function slideCases(): Case[] {
         topic: "Ma'lumotlar bazasi asoslari",
         slideAudience: "students_bachelor",
         slidePurpose: "lecture",
+        /*
+         * REVIEW item 6(b): lecture'ning standart bloklari
+         * `reja,maqsadlar,adabiyotlar` — `adabiyotlar` `YIELDING_BLOCKS`da
+         * yo'q (`slide-blocks.ts:116`), ya'ni 4 slaydda (title+agenda+
+         * closing = 3 tizim o'rni qoladi 1ga) sig'im 0 bo'lib qolar edi —
+         * bu P1'ning [1,0] chekkasini, klemp'ni EMAS sinaydi. `blocks:
+         * "reja"` bilan sig'im 1 bo'ladi: «6 so'ralib, 1gacha qisqartirildi,
+         * 4 slaydda TO'LIQ qamrov» — haqiqiy clamp sinovi.
+         */
+        blocks: "reja",
         planItems: 6,
         slideCount: 4,
         subject: "Informatika",
@@ -949,7 +959,14 @@ function slideCases(): Case[] {
         const planTotal = agenda?.bullets?.length ?? 0;
         return [
           ok("slaydlar soni = 4 (PRO_SLIDE_MIN)", slides.length === 4, `${slides.length} / 4`),
-          ok("reja so'ralganidan (6) ko'p emas — sig'imga qisqartirilgan bo'lishi mumkin", planTotal > 0 && planTotal <= 6, `${planTotal} band (so'ralgan 6)`),
+          /*
+           * REVIEW item 6(a): `planTotal <= 6` chegarasi klemp BO'LMASA ham
+           * o'tardi (`PLAN_ITEMS_MAX` allaqachon 6 bilan cheklaydi — bu
+           * sig'im qisqartirishni SINAMAYDI). `< 6` qat'iy — faqat haqiqiy
+           * qisqartirilganda o'tadi.
+           * AUDIT-25 merge: === planCapacity(values)
+           */
+          ok("reja sig'imga qisqartirilgan (< 6 so'ralgan)", planTotal >= 1 && planTotal < 6, `${planTotal} band (so'ralgan 6)`),
           ...slideAuditChecks(file.doc),
         ];
       },
@@ -1597,6 +1614,15 @@ async function runCase(c: Case) {
       for (const ch of ig.review?.checks ?? []) {
         if (ch.level !== "green") process.stdout.write(`   hisobot ${ch.level}: ${ch.id} — ${(ch.detail ?? "").slice(0, 90)}\n`);
       }
+      await writeFile(path.join(OUT, `${c.name}.doc.json`), JSON.stringify(file.doc, null, 2));
+    }
+    /*
+     * Slayd (AUDIT-25 P5, review item 7b): boshqa oilalar kabi `doc.json`
+     * yozamiz — `scripts/slide-audit.mts` shu faylni o'qiydi
+     * (`npm run slide-audit -- eval-out/live`). Buni qo'shmaguncha CLI'ni
+     * jonli chiqish ustida ishlatib bo'lmasdi.
+     */
+    if (file.doc.slides?.length) {
       await writeFile(path.join(OUT, `${c.name}.doc.json`), JSON.stringify(file.doc, null, 2));
     }
     return { name: c.name, ok: checks.every((x) => x.ok), failed: checks.filter((x) => !x.ok) };
