@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { FileText, Loader2 } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { EXTRACT_ACCEPT, EXTRACT_MAX_BYTES } from "@/lib/extract-text";
+import { EXTRACT_ACCEPT, EXTRACT_MAX_BYTES } from "@/lib/extract-limits";
 import { extractText } from "@/lib/api-client";
 import { SOURCE_TEXT_LIMIT } from "@/lib/generation/meta";
 import { SELECTABLE_FIGURE_KINDS, type SelectableFigureKind } from "@/lib/generation/article/types";

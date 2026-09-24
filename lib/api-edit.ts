@@ -1,6 +1,6 @@
 "use client";
 
-import { ApiError, request, type GenerationDetail } from "./api-client";
+import { ApiError, getGeneration, request, type GenerationDetail } from "./api-client";
 
 /**
  * Ko'ruvchidagi tahrir API si — ALOHIDA fayl.
@@ -66,6 +66,90 @@ export function editErrorCode(e: unknown): string | null {
   if (!(e instanceof ApiError) || e.status !== 409) return null;
   const code = typeof e.data.code === "string" ? e.data.code : "version";
   return code === "busy" ? null : code;
+}
+
+/**
+ * Javob NOANIQ: so'rov serverga yetgan, lekin natija bizga kelmadi (FE-15).
+ *
+ * Proksi (nginx `proxy_read_timeout` 60/120 s) uzoq AI tahririni kesib 504/502
+ * qaytaradi, klient vaqt chegarasi (status 0) yoki aloqa uzilishi ham shu —
+ * server esa ishni tugatib, yangi versiyani saqlagan bo'lishi mumkin. Server
+ * O'Z matni bilan bergan 5xx (`{error}`: o'chirilgan xizmat, global chegara)
+ * aniq javob — u noaniq emas.
+ */
+export function isUncertainOutcome(e: unknown): boolean {
+  if (!(e instanceof ApiError)) return false;
+  if (e.status === 0 || e.status === 502 || e.status === 504) return true;
+  return e.status >= 500 && !(typeof e.data.error === "string" && e.data.error);
+}
+
+/**
+ * Noaniq javobdan keyingi tekshiruv: `attempts` marta, `intervalMs` oraliq
+ * bilan (birinchisi darhol). 36 × 5 s = 3 daqiqa — AI tahrir qulfi (240 s,
+ * `lib/server/spend.ts`) proksi uzgan paytdan keyin ham tugashiga yetadi.
+ * Testlar oraliqni qisqartiradi.
+ */
+export const RECONCILE_POLL = { attempts: 36, intervalMs: 5_000 };
+
+/**
+ * `probe` natija (null emas) qaytarguncha takrorlaydi; chegarada `null`.
+ * Tekshiruvning o'zi yiqilsa (aloqa hali tiklanmagan) — keyingi urinish.
+ */
+export async function reconcile<T>(probe: () => Promise<T | null>, signal?: AbortSignal): Promise<T | null> {
+  for (let k = 0; k < RECONCILE_POLL.attempts; k++) {
+    // Sahifa yopilgan (komponent unmount) — tekshiruvni davom ettirmaymiz (W4-D N2).
+    if (signal?.aborted) return null;
+    if (k > 0) await new Promise((r) => setTimeout(r, RECONCILE_POLL.intervalMs));
+    if (signal?.aborted) return null;
+    try {
+      const hit = await probe();
+      if (hit) return hit;
+    } catch (err) {
+      console.warn("[reconcile] tekshiruv so'rovi yiqildi — yana urinamiz", err);
+    }
+  }
+  return null;
+}
+
+const UNCONFIRMED_TEXT = "Server javobi kelmadi va hujjat o‘zgarmadi — birozdan keyin qayta urinib ko‘ring.";
+
+/**
+ * Uzoq AI tahrir (`rewriteArticle`/`polishArticle`) + natijani tekshirish (FE-15).
+ *
+ * Aniq javob (muvaffaqiyat yoki 409/429/402/matnli xato) — o'z holicha.
+ * Noaniq javobda (`isUncertainOutcome`) so'rov QAYTA YUBORILMAYDI (sayqal —
+ * kunlik 3 marta, qayta yuborish ikkinchi LLM yugurishi va 409 bo'lardi):
+ * hujjat serverdan so'raladi va `docVersion` `baseVersion` dan oshgan
+ * bo'lsa — ish serverda bajarilgan, shu generatsiya qaytadi (xato
+ * ko'rsatilmaydi). Sayqal rad etilganda ham server `review` opini yozadi,
+ * ya'ni versiya baribir oshadi. Oshmasa — ANIQ jumla bilan xato.
+ */
+export async function withReconcile(
+  id: string,
+  baseVersion: number,
+  call: () => Promise<DocPatchResult>,
+  signal?: AbortSignal,
+): Promise<{ generation: GenerationDetail; reconciled: boolean }> {
+  try {
+    const { generation } = await call();
+    return { generation, reconciled: false };
+  } catch (e) {
+    if (!isUncertainOutcome(e)) throw e;
+    /*
+     * DIQQAT (W4-D N1): shu oynada versiyani BOSHQA narsa oshirsa ham (boshqa
+     * yorliqdagi tahrir, retention ishi) bu «muvaffaqiyat» deb olinadi.
+     * Zarari yo'q: o'zlashtirilgan narsa baribir serverdagi HAQIQIY holat,
+     * so'rov esa qayta yuborilmaydi — faqat foydalanuvchi o'z tuzatishini
+     * ko'rmasligi mumkin va tugmani yana bosadi.
+     */
+    const fresh = await reconcile(async () => {
+      const { generation } = await getGeneration(id, undefined, signal);
+      return (generation.docVersion ?? 0) > baseVersion ? generation : null;
+    }, signal);
+    if (fresh) return { generation: fresh, reconciled: true };
+    const status = e instanceof ApiError ? e.status : 0;
+    throw new ApiError(UNCONFIRMED_TEXT, status, { unconfirmed: true });
+  }
 }
 
 /**

@@ -32,7 +32,7 @@ export function TopBar({ onMenu }: { onMenu: () => void }) {
         type="button"
         onClick={onMenu}
         className="hover:bg-accent flex size-8 items-center justify-center rounded-md"
-        aria-label="Toggle Sidebar"
+        aria-label="Yon panelni ko‘rsatish/yashirish"
       >
         <PanelLeft className="size-4" />
       </button>
@@ -63,7 +63,8 @@ export function TopBar({ onMenu }: { onMenu: () => void }) {
         type="button"
         onClick={() => open("notifications")}
         className="hover:bg-accent flex size-10 scale-95 items-center justify-center rounded-full"
-        aria-label="Notifications alt+T"
+        aria-label="Bildirishnomalar"
+        title="Bildirishnomalar (Alt+T)"
       >
         <Bell className="h-[1.2rem] w-[1.2rem]" />
       </button>

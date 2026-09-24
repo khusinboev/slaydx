@@ -211,3 +211,89 @@ test("noto'g'ri fayl (docx) — serverga bormasdan xato; oldingi namunalar ro'yx
   await waitFor(() => assert.ok(calls.some((c) => c.method === "DELETE" && c.url.endsWith(TPL.assetId))));
   assert.equal(within(customCard()).queryByText("Universitet.pptx"), null);
 });
+
+/*
+ * FE-15: namuna tahlili + rasterlash 20–40 s (LibreOffice band bo'lsa ko'proq),
+ * `/api/uploads/` da proksi chegarasi 60 s. Proksi 504 bersa ham server
+ * namunani SAQLAGAN bo'lishi mumkin — ilgari UI «xato» ko'rsatardi va
+ * foydalanuvchi qayta yuklab, dublikat yasardi. Endi ro'yxat qayta so'raladi.
+ */
+/** Server `assetIdFor` bilan bir xil: SHA-256 (hex) ning birinchi 24 belgisi. */
+async function serverAssetId(f: File): Promise<string> {
+  const { createHash } = await import("node:crypto");
+  return createHash("sha256").update(Buffer.from(await f.arrayBuffer())).digest("hex").slice(0, 24);
+}
+
+for (const reupload of [false, true]) test(`FE-15: yuklash 504 bilan uzildi, lekin server namunani saqladi — ro'yxatdan topilib tanlanadi, xato yo'q${reupload ? " (AYNI fayl qayta yuklandi — N4)" : ""}`, async () => {
+  const { RECONCILE_POLL } = await import("../../lib/api-edit.ts");
+  const saved = RECONCILE_POLL.intervalMs;
+  RECONCILE_POLL.intervalMs = 5;
+  const calls: Call[] = [];
+  // N4: ayni fayl oldin ham yuklangan — server upsert qiladi, ro'yxatda o'sha id.
+  let stored: unknown[] = reupload ? [{ ...TPL, assetId: await serverAssetId(pptxFile("Kafedra.pptx")), name: "Kafedra.pptx" }] : [];
+  let gets = 0;
+  const json = (status: number, data: unknown) => new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
+  (globalThis as unknown as { fetch: unknown }).fetch = async (input: unknown, opts?: RequestInit) => {
+    const url = String(input);
+    const method = opts?.method ?? "GET";
+    calls.push({ url, method });
+    if (url === "/api/uploads/template" && method === "GET") {
+      gets++;
+      return json(200, { templates: stored });
+    }
+    if (url === "/api/uploads/template" && method === "POST") {
+      const f = (opts?.body as FormData).get("file") as File;
+      // Server ishni tugatdi, lekin javob proksida kesildi.
+      stored = [{ ...TPL, assetId: await serverAssetId(f), name: f.name }];
+      return new Response("<html>504 Gateway Time-out</html>", { status: 504, headers: { "content-type": "text/html" } });
+    }
+    return json(404, { error: "yo'q" });
+  };
+  try {
+    mountPro();
+    await waitFor(() => assert.ok(gets >= 1, "galereya ro'yxatni oldi"));
+    openDialog();
+    const input = within(customCard()).getByLabelText("PPTX namuna") as HTMLInputElement;
+    await act(async () => {
+      fireEvent.change(input, { target: { files: [pptxFile("Kafedra.pptx")] } });
+    });
+    await waitFor(() => assert.equal(tile().getAttribute("data-template-tile"), "custom"));
+    assert.ok(tile().textContent?.includes("Kafedra.pptx"), "saqlangan namuna tanlandi");
+    assert.ok(!screen.queryByText(/Server javob bermadi/), "yolg'on xato ko'rsatilmaydi");
+    assert.equal(calls.filter((c) => c.method === "POST").length, 1, "fayl QAYTA yuborilmaydi");
+  } finally {
+    RECONCILE_POLL.intervalMs = saved;
+  }
+});
+
+test("FE-15: yuklash 504, server namunani saqlamagan — aniq xato (qayta yuklash mumkin), cheklangan tekshiruv", async () => {
+  const { RECONCILE_POLL } = await import("../../lib/api-edit.ts");
+  const saved = { ...RECONCILE_POLL };
+  RECONCILE_POLL.intervalMs = 2;
+  RECONCILE_POLL.attempts = 3;
+  let gets = 0;
+  const json = (status: number, data: unknown) => new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
+  (globalThis as unknown as { fetch: unknown }).fetch = async (input: unknown, opts?: RequestInit) => {
+    const url = String(input);
+    const method = opts?.method ?? "GET";
+    if (url === "/api/uploads/template" && method === "GET") {
+      gets++;
+      return json(200, { templates: [] });
+    }
+    if (url === "/api/uploads/template" && method === "POST") return new Response("", { status: 504 });
+    return json(404, { error: "yo'q" });
+  };
+  try {
+    mountPro();
+    await waitFor(() => assert.ok(gets >= 1));
+    openDialog();
+    const input = within(customCard()).getByLabelText("PPTX namuna") as HTMLInputElement;
+    await act(async () => {
+      fireEvent.change(input, { target: { files: [pptxFile("Boshqa.pptx")] } });
+    });
+    await waitFor(() => assert.ok(within(customCard()).getByText(/Namuna saqlanganini tasdiqlab bo‘lmadi/)));
+    assert.equal(gets, 1 + 3, "boshlang'ich ro'yxat + 3 tekshiruv");
+  } finally {
+    Object.assign(RECONCILE_POLL, saved);
+  }
+});

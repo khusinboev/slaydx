@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { create } from "zustand";
 import { clearDraft, getDraft, putDraft } from "@/lib/api-client";
 import type { FormValues } from "@/lib/types";
 
@@ -13,10 +14,65 @@ import type { FormValues } from "@/lib/types";
  * har harf uchun so'rov yuborish tarmoqni ham, chastota chegarasini ham
  * yeb qo'yardi. Sahifa yopilishi yoki tab almashishi kutilmagan hodisa
  * emas: `visibilitychange`/`pagehide` da kutilayotgan saqlash DARHOL
- * yuboriladi, aks holda oxirgi 1,2 soniyalik yozuv yo'qolardi.
+ * yuboriladi (`keepalive` bilan — oddiy so'rovni brauzer sahifa yopilganda
+ * bekor qiladi), aks holda oxirgi 1,2 soniyalik yozuv yo'qolardi.
  */
 
 const DEBOUNCE_MS = 1_200;
+
+/**
+ * Qoralama hajmi chegarasi — serverdagi `DRAFT_MAX_BYTES` (200 000,
+ * `lib/server/form-draft.ts`) dan biroz past (`{"data":…}` o'rami uchun
+ * zaxira). Undan kattasi yuborilmaydi: server 413 bilan rad etardi.
+ */
+export const DRAFT_BUDGET_BYTES = 190_000;
+/** Brauzer `keepalive` tanasini ~64 KB bilan cheklaydi — kattasi oddiy so'rov. */
+const KEEPALIVE_MAX_BYTES = 60_000;
+
+/**
+ * Qoralamaga ketadigan shakl (FE-17).
+ *
+ * Fayldan olingan matn (`sourceText` + `fileName`) — 200 000 belgigacha,
+ * kirillda ~400 KB: ilgari u HAR PUT ga qo'shilib, 413 bilan butun
+ * qoralamani to'xtatardi. Uni foydalanuvchi faylidan istalgan payt qayta
+ * olish mumkin, shuning uchun qoralamada faqat HAVOLA — fayl nomi qoladi.
+ * Qo'lda yozilgan matn (`fileName` bo'sh) — foydalanuvchining o'z mehnati,
+ * u saqlanadi.
+ */
+export function draftPayload(values: FormValues): FormValues {
+  if (typeof values.fileName === "string" && values.fileName && values.sourceText) {
+    const rest: FormValues = { ...values };
+    delete rest.sourceText;
+    return rest;
+  }
+  return values;
+}
+
+const byteLength = (s: string) => new TextEncoder().encode(s).length;
+
+/**
+ * Qoralama holati — `ToolChrome` dagi `DraftNotice` o'qiydi (har composerni
+ * alohida o'zgartirmaslik uchun umumiy store: bir vaqtda bitta forma ochiq).
+ */
+export type DraftNoticeState = {
+  /** Oxirgi saqlash yiqildi — sahifa yopilsa oxirgi o'zgarishlar yo'qolishi mumkin. */
+  failed: boolean;
+  /** Tiklangan qoralamada matni saqlanmagan fayl nomi — «qayta biriktiring». */
+  detachedFile: string | null;
+};
+export const useDraftNotice = create<DraftNoticeState>(() => ({ failed: false, detachedFile: null }));
+
+/**
+ * Tiklash: fayl nomi bor, matni yo'q (`draftPayload` uni tashlagan) —
+ * fayl «biriktirilgan» bo'lib ko'rinmasin (forma matnsiz fayl bilan
+ * yuborilardi); nomi esa eslatma uchun qaytadi.
+ */
+function restorePayload(data: FormValues): { values: FormValues; detached: string | null } {
+  if (typeof data.fileName === "string" && data.fileName && !data.sourceText) {
+    return { values: { ...data, fileName: "" }, detached: data.fileName };
+  }
+  return { values: data, detached: null };
+}
 
 export type UseFormDraftOptions = {
   /** `false` bo'lsa (kirmagan foydalanuvchi) qoralama umuman so'ralmaydi/yuborilmaydi. */
@@ -46,7 +102,9 @@ export function useFormDraft(toolId: string, opts: UseFormDraftOptions) {
       .then((r) => {
         if (!alive) return;
         if (r.draft?.data) {
-          setDraft(r.draft.data);
+          const { values, detached } = restorePayload(r.draft.data);
+          setDraft(values);
+          if (detached) useDraftNotice.setState({ detachedFile: detached });
         } else {
           const initial = typeof prefill === "function" ? prefill() : prefill;
           setDraft(initial ?? null);
@@ -65,15 +123,45 @@ export function useFormDraft(toolId: string, opts: UseFormDraftOptions) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, toolId]);
 
-  const flush = useCallback(() => {
-    if (timer.current) {
-      clearTimeout(timer.current);
-      timer.current = null;
-    }
-    const data = pending.current;
-    pending.current = null;
-    if (data) void putDraft(toolId, data).catch(() => {});
-  }, [toolId]);
+  // Forma yopilganda eslatmalar keyingi formaga o'tib ketmasin.
+  useEffect(() => () => useDraftNotice.setState({ failed: false, detachedFile: null }), []);
+
+  const send = useCallback(
+    (data: FormValues, unloading: boolean) => {
+      const payload = draftPayload(data);
+      const size = byteLength(JSON.stringify({ data: payload }));
+      if (size > DRAFT_BUDGET_BYTES) {
+        // Server 413 bilan rad etadi — yubormaymiz, lekin JIM ham qolmaymiz.
+        useDraftNotice.setState({ failed: true });
+        return;
+      }
+      // Yopilayotgan sahifada 60 KB dan katta tana oddiy so'rov bo'lib ketadi va brauzer uni
+      // odatda bekor qiladi — `failed` belgisi allaqachon yo'q sahifaga qo'yiladi (zararsiz, W4-D N6).
+      putDraft(toolId, payload, { keepalive: unloading && size <= KEEPALIVE_MAX_BYTES })
+        .then(() => {
+          if (useDraftNotice.getState().failed) useDraftNotice.setState({ failed: false });
+        })
+        .catch((e: unknown) => {
+          console.warn("[draft] qoralama saqlanmadi", e);
+          useDraftNotice.setState({ failed: true });
+        });
+    },
+    [toolId],
+  );
+
+  const flushWith = useCallback(
+    (unloading: boolean) => {
+      if (timer.current) {
+        clearTimeout(timer.current);
+        timer.current = null;
+      }
+      const data = pending.current;
+      pending.current = null;
+      if (data) send(data, unloading);
+    },
+    [send],
+  );
+  const flush = useCallback(() => flushWith(false), [flushWith]);
 
   const save = useCallback(
     (values: FormValues) => {
@@ -86,21 +174,22 @@ export function useFormDraft(toolId: string, opts: UseFormDraftOptions) {
   );
 
   useEffect(() => {
-    const onHide = () => flush();
+    const onHide = () => flushWith(true);
     window.addEventListener("pagehide", onHide);
     document.addEventListener("visibilitychange", onHide);
     return () => {
       window.removeEventListener("pagehide", onHide);
       document.removeEventListener("visibilitychange", onHide);
       // Komponent yo'qolganda ham kutilayotgan yozuv saqlanadi.
-      flush();
+      flushWith(false);
     };
-  }, [flush]);
+  }, [flushWith]);
 
   const clear = useCallback(async () => {
     if (timer.current) clearTimeout(timer.current);
     pending.current = null;
     setDraft(null);
+    useDraftNotice.setState({ failed: false, detachedFile: null });
     if (enabled) await clearDraft(toolId).catch(() => {});
   }, [enabled, toolId]);
 

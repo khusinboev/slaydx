@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { FileText, Image as ImageIcon, Mic, Presentation } from "lucide-react";
 import type { GenerationPreviewSlide, ServerGeneration } from "@/lib/api-client";
 import { getSlideTheme } from "@/lib/generation/slide-themes";
@@ -17,8 +17,11 @@ import { thumbUrl } from "@/lib/api-client";
  * ishlatiladi: slayd dekalari uchun BIRINCHI slaydning to'liq maketi
  * (`preview.slide` — `SlideCanvas` bilan ko'ruvchidagidek chiziladi),
  * qolganlar uchun bitta rasm havolasi yoki bir necha qator matn.
+ *
+ * `memo` (FE-13): ro'yxat pollingida o'zgarmagan qator o'sha obyekt
+ * bo'lib qoladi (`lib/store.ts` `keepUnchanged`) — karta qayta chizilmaydi.
  */
-export function FilePreview({ gen }: { gen: ServerGeneration }) {
+export const FilePreview = memo(function FilePreview({ gen }: { gen: ServerGeneration }) {
   const running = gen.status === "QUEUED" || gen.status === "IN_PROGRESS";
 
   if (running) {
@@ -110,7 +113,7 @@ export function FilePreview({ gen }: { gen: ServerGeneration }) {
       <Icon className="text-muted-foreground size-8" />
     </div>
   );
-}
+});
 
 /**
  * Birinchi slaydning haqiqiy renderi — `SlideCanvas` (1280×720) kartochka

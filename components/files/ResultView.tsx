@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { cn } from "@/lib/cn";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Download, Loader2, RefreshCw, Trash2 } from "lucide-react";
 import * as api from "@/lib/api-client";
@@ -13,6 +13,7 @@ import {
   isUnpaidError,
   polishArticle,
   rewriteArticle,
+  withReconcile,
 } from "@/lib/api-edit";
 import type { ReviewCheck } from "@/lib/generation/article/types";
 import { useAppStore } from "@/lib/store";
@@ -21,9 +22,15 @@ import { useConfirmClick } from "../overlays/useConfirmClick";
 import { EditActions, type EditActionsState } from "./EditActions";
 import { GameSharePanel } from "./GameSharePanel";
 import { publicGameKindOf } from "@/lib/game/public";
-import { ArtifactViewer } from "../viewers/ArtifactViewer";
+/*
+ * Jonli slayd ko'ruvchisi ALOHIDA bo'lakda (FE-11): u faqat slayd
+ * yaratilayotganda kerak, matn hujjatlarining sahifasi esa `planSlide`
+ * dvigatelini birinchi yuklanishda olmasin. `ArtifactViewer` bilan BITTA
+ * `lazy` o'rami (W4-D N3).
+ */
+import { ArtifactViewer, SlideViewer } from "../viewers/ArtifactViewer";
 import { ArticleReviewPanel, ESSAY_HIDDEN_GROUPS } from "../viewers/ArticleReviewPanel";
-import { SlideViewer, asLiveView } from "../viewers/SlideViewer";
+import { asLiveView } from "../viewers/live-view";
 import { liveDocOf, type LiveDeck } from "@/lib/generation/slide-progress";
 import { viewerKind } from "@/lib/viewers/kind";
 import type { Generation } from "@/lib/types";
@@ -82,6 +89,13 @@ export function ResultView({ id }: { id: string }) {
   const [polishing, setPolishing] = useState(false);
   const genRef = useRef<api.GenerationDetail | null>(null);
   genRef.current = gen;
+  /** Sahifadan chiqilganda uzoq AI tahrirning natija tekshiruvi to'xtaydi (FE-15, W4-D N2). */
+  const alive = useRef<AbortController | null>(null);
+  useEffect(() => {
+    const ctrl = new AbortController();
+    alive.current = ctrl;
+    return () => ctrl.abort();
+  }, []);
 
   useEffect(() => {
     if (!sessionChecked || !loggedIn) return;
@@ -200,7 +214,8 @@ export function ResultView({ id }: { id: string }) {
           return;
         }
         const base = genRef.current?.docVersion ?? cur.docVersion ?? 0;
-        const { generation } = await rewriteArticle(cur.id, base, fix);
+        // FE-15: 504/vaqt tugashidan keyin natija serverdan tekshiriladi (qayta yuborilmaydi).
+        const { generation } = await withReconcile(cur.id, base, () => rewriteArticle(cur.id, base, fix), alive.current?.signal);
         adoptDetail(generation);
       } catch (e) {
         if (isUnpaidError(e)) {
@@ -240,7 +255,13 @@ export function ResultView({ id }: { id: string }) {
         return;
       }
       const base = genRef.current?.docVersion ?? cur.docVersion ?? 0;
-      const { generation } = await polishArticle(cur.id, base);
+      /*
+       * FE-15: sayqal ≤120 s + baholovchi — proksi (60/120 s) uni kesib 504
+       * berishi mumkin, server esa natijani saqlaydi. Noaniq javobda hujjat
+       * serverdan tekshiriladi va o'zlashtiriladi; ilgari «Server javob
+       * bermadi» chiqib, qayta bosish kunlik 3 sayqaldan birini yerdi.
+       */
+      const { generation } = await withReconcile(cur.id, base, () => polishArticle(cur.id, base), alive.current?.signal);
       adoptDetail(generation);
     } catch (e) {
       if (isUnpaidError(e)) {
@@ -681,11 +702,24 @@ export function RunningPanel({ gen }: { gen: api.GenerationDetail }) {
   const tool = TOOL_BY_ID[gen.type];
   const live =
     viewerKind(gen.type) === "slides" ? asLiveView(gen.live as LiveDeck | null | undefined) : null;
+  /*
+   * FE-13: `liveDocOf` har chaqiriqda slaydlarni KLONLAYDI. Ilgari u har
+   * renderda (har 1,2 s polling tikida) chaqirilardi va `SlideViewer`
+   * ichidagi `buildSlideDeck` memosi o'zgarish bo'lmasa ham buzilardi —
+   * barcha eskizlar qayta rejalanardi. `live` identifikatori `mergeLive`
+   * da saqlanadi, ya'ni o'zgarmagan tikda hujjat ham o'sha-o'sha.
+   */
+  const liveDoc = useMemo(
+    () => (live ? withFrozenYear(liveDocOf(live), gen.createdAt)! : null),
+    [live, gen.createdAt],
+  );
 
-  if (live) {
+  if (live && liveDoc) {
     return (
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-        <SlideViewer doc={withFrozenYear(liveDocOf(live), gen.createdAt)!} live={live} />
+        <Suspense fallback={<div className="text-muted-foreground p-8 text-sm">Yuklanmoqda...</div>}>
+          <SlideViewer doc={liveDoc} live={live} />
+        </Suspense>
       </div>
     );
   }

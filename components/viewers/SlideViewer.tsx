@@ -24,27 +24,11 @@ import { useReveal, type LiveView } from "./useReveal";
 import { LiveStrip } from "./LiveStrip";
 import { totalChars } from "@/lib/viewers/reveal";
 import { planSlide } from "@/lib/generation/slide-layout";
+import { asLiveView } from "./live-view";
 
 export type { LiveView };
-
-/**
- * `live` propi `unknown` bo'lib keladi (transport paketi uni serverdan
- * xom JSON sifatida oladi). Ko'ruvchi ishonchsiz ma'lumotdan chizmasligi
- * uchun shakl SHU YERDA bir marta tekshiriladi: kerakli maydonlardan
- * biri yetishmasa jonli rejim umuman yoqilmaydi va oddiy ko'ruvchi
- * ishlaydi.
- */
-export function asLiveView(live: unknown): LiveView | null {
-  if (!live || typeof live !== "object") return null;
-  const v = live as Partial<LiveView>;
-  if (!Array.isArray(v.slides) || v.slides.length === 0) return null;
-  if (!Array.isArray(v.written) || !Array.isArray(v.roles) || !Array.isArray(v.imageWait)) return null;
-  if (!v.images || typeof v.images.got !== "number" || typeof v.images.want !== "number") return null;
-  if (typeof v.progress !== "number" || typeof v.step !== "string") return null;
-  // `liveDocOf` shu uchtasisiz hujjat qura olmaydi.
-  if (!v.meta || typeof v.meta !== "object" || typeof v.theme !== "string" || typeof v.template !== "string") return null;
-  return v as LiveView;
-}
+// Shakl tekshiruvi barg modulda (FE-11) — bu yerda eski import yo'li uchun.
+export { asLiveView };
 
 /**
  * Yupqa kompozitor: holatni ushlaydi va `SlideRail`, `SlideStage`,

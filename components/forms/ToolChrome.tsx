@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ArrowLeft, ChevronDown } from "lucide-react";
 import { formatTanga } from "@/lib/tools";
 import { creditTotal, useAppStore } from "@/lib/store";
+import { DraftNotice } from "./DraftNotice";
 
 /**
  * Serverning 402 matni (`app/api/generations/route.ts`: «Balans yetarli
@@ -64,6 +65,9 @@ export function ToolChrome({
       </nav>
 
       {children}
+
+      {/* FE-17: qoralama saqlanmadi / fayl qayta biriktirilsin — har formada. */}
+      <DraftNotice />
 
       {extra ? (
         <button

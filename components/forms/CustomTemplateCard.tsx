@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { deleteTemplate, uploadTemplate, type CustomTemplateLite } from "@/lib/api-client";
+import { deleteTemplate, listTemplates, uploadTemplate, type CustomTemplateLite } from "@/lib/api-client";
+import { isUncertainOutcome, reconcile } from "@/lib/api-edit";
 import { bodyRules } from "@/lib/generation/slide-audience";
 import { GALLERY_SLIDES, sampleDeck } from "@/lib/generation/slide-samples";
 import { getSlideTheme } from "@/lib/generation/slide-themes";
@@ -13,6 +14,55 @@ import { Thumb } from "./Thumb";
 /** Klientda ham oldindan tekshiriladi — serverga borib qaytishni kutmasdan. */
 export const TEMPLATE_MAX_BYTES = 20 * 1024 * 1024;
 export const TEMPLATE_WAIT_NOTE = "Namuna asosida yaratish ko‘proq vaqt oladi (≈1–2 daqiqa qo‘shimcha).";
+
+/** Server saqlagan nom — `lib/server/template-upload.ts` bilan bir xil tozalash. */
+const storedName = (f: File) => String(f.name || "namuna.pptx").replace(/[\r\n\t]/g, " ").trim().slice(0, 120) || "namuna.pptx";
+
+/**
+ * Yuklash + noaniq javobni tekshirish (FE-15).
+ *
+ * Tahlil va rasterlash 20–40 s, LibreOffice band bo'lsa ko'proq; proksi esa
+ * `/api/uploads/` da 60 s dan keyin 504 beradi — server namunani baribir
+ * SAQLAYDI. Ilgari UI xato ko'rsatardi va foydalanuvchi qayta yuklab,
+ * dublikat yasardi. Endi noaniq javobda (`isUncertainOutcome`) fayl QAYTA
+ * yuborilmaydi: ro'yxat so'raladi va yuklashdan oldin bo'lmagan, shu nomli
+ * namuna topilsa — o'sha qaytadi. Topilmasa — aniq jumla.
+ */
+async function templateAssetId(f: File): Promise<string | null> {
+  try {
+    if (!globalThis.crypto?.subtle) return null;
+    const digest = await globalThis.crypto.subtle.digest("SHA-256", await f.arrayBuffer());
+    return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("").slice(0, 24);
+  } catch (err) {
+    console.warn("[template] fayl xeshini hisoblab bo'lmadi — nom bo'yicha tekshiramiz", err);
+    return null;
+  }
+}
+
+async function uploadConfirmed(f: File, known: CustomTemplateLite[]): Promise<CustomTemplateLite> {
+  try {
+    return (await uploadTemplate(f)).template;
+  } catch (e) {
+    if (!isUncertainOutcome(e)) throw e;
+    /*
+     * Aniq moslik: server `assetId` = fayl baytlarining SHA-256 (24 hex,
+     * `lib/server/template-upload.ts assetIdFor`). Bir xil faylni qayta
+     * yuklash (server upsert) ham, ro'yxat hali yuklanmagan holat ham
+     * shu bilan to'g'ri tanib olinadi (W4-D N4). `crypto.subtle` yo'q
+     * (xavfsiz bo'lmagan kontekst) bo'lsa — nom bo'yicha, faqat yangi aktiv.
+     */
+    const expectedId = await templateAssetId(f);
+    const before = new Set(known.map((t) => t.assetId));
+    const name = storedName(f);
+    const found = await reconcile(async () => {
+      const list = await listTemplates();
+      if (expectedId) return list.find((t) => t.assetId === expectedId) ?? null;
+      return list.find((t) => t.name === name && !before.has(t.assetId)) ?? null;
+    });
+    if (found) return found;
+    throw new Error("Namuna saqlanganini tasdiqlab bo‘lmadi (server javobi kelmadi) — qayta yuklab ko‘ring.");
+  }
+}
 
 /**
  * «O'z shablonim» kartasi (Shablonlar 2, B4, faqat pro).
@@ -65,10 +115,10 @@ export function CustomTemplateCard({
     }
     setBusy(true);
     try {
-      const res = await uploadTemplate(f);
-      setTpl(res.template);
-      setList((l) => [res.template, ...l.filter((t) => t.assetId !== res.template.assetId)]);
-      onPick(res.template);
+      const template = await uploadConfirmed(f, list);
+      setTpl(template);
+      setList((l) => [template, ...l.filter((t) => t.assetId !== template.assetId)]);
+      onPick(template);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Namuna yuklanmadi");
     } finally {

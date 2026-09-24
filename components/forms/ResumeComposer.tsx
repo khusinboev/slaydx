@@ -8,7 +8,6 @@ import { useAppStore } from "@/lib/store";
 import { useConfirmClick } from "@/components/overlays/useConfirmClick";
 import { priceFor } from "@/lib/tools";
 import { profilePatchFrom } from "@/lib/profile-sync";
-import { searchProfessions, skillsForRole } from "@/lib/professions";
 import {
   encodeResumeValues,
   resumeInputFromValues,
@@ -39,6 +38,9 @@ import { RowList } from "./RowList";
 import { ToolChrome } from "./ToolChrome";
 import { useResumeDraft } from "./useResumeDraft";
 import { runGeneration } from "./runGeneration";
+
+/** Kasblar bazasi moduli — `import()` bilan kechiktirib yuklanadi (FE-11). */
+type ProfessionsModule = typeof import("@/lib/professions");
 
 /**
  * Rezyume formasi (Rezyume 2) — `ResumeWizard` (5 qadamli, erkin matnli)
@@ -228,15 +230,35 @@ export function ResumeComposer({ tool, profile }: { tool: ToolConfig; profile: U
   const set = <K extends keyof Ui>(key: K, v: Ui[K]) => setUi((s) => ({ ...s, [key]: v }));
   const template = RESUME_TEMPLATES[ui.resumeTemplate];
 
+  /*
+   * Kasblar bazasi (`data/professions.json`, ~580 KB) ALOHIDA bo'lakda
+   * (FE-11): u faqat shu formaga kerak, lekin ilgari har vosita sahifasi
+   * uni birinchi yuklanishda olardi. Forma chizilgach fonda yuklanadi;
+   * yetib kelguncha tavsiya ro'yxati bo'sh, kelgach `Combobox` o'zi
+   * yangilanadi (`suggest` identifikatori o'zgaradi).
+   */
+  const [prof, setProf] = useState<ProfessionsModule | null>(null);
+  useEffect(() => {
+    let alive = true;
+    import("@/lib/professions")
+      .then((m) => {
+        if (alive) setProf(m);
+      })
+      .catch((e: unknown) => console.warn("[resume] kasblar bazasi yuklanmadi — tavsiyasiz davom etamiz", e));
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   const roleSuggest = useMemo(
-    () => (q: string) => searchProfessions(q, 8).map((m) => ({ id: m.id, label: m.label })),
-    [],
+    () => (q: string) => (prof ? prof.searchProfessions(q, 8).map((m) => ({ id: m.id, label: m.label })) : []),
+    [prof],
   );
   const skillSuggest = useMemo(() => {
-    const fromRole = skillsForRole(ui.identity.headline);
+    const fromRole = prof ? prof.skillsForRole(ui.identity.headline) : [];
     return (q: string) => {
       const query = q.trim().toLowerCase();
-      const pool = [...fromRole, ...searchProfessions(q, 3).flatMap((m) => m.skills)];
+      const pool = [...fromRole, ...(prof ? prof.searchProfessions(q, 3).flatMap((m) => m.skills) : [])];
       const seen = new Set<string>();
       return pool
         .filter((s) => {
@@ -248,7 +270,7 @@ export function ResumeComposer({ tool, profile }: { tool: ToolConfig; profile: U
         .slice(0, 8)
         .map((s) => ({ id: s, label: s }));
     };
-  }, [ui.identity.headline]);
+  }, [ui.identity.headline, prof]);
 
   // Narx BITTA manbadan — `priceFor` (rezyumeda natija hamisha `tool.basePrice`
   // bilan bir xil, 3 000 tekis; ama kelajakdagi admin panel narxni shu
