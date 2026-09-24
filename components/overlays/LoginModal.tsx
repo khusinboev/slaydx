@@ -81,22 +81,15 @@ export function LoginForm({ onDone }: { onDone?: () => void }) {
     [setUser, refreshGenerations, onDone, router],
   );
 
-  /*
-   * Telegram Mini App ichida bo'lsak — avtomatik kiramiz, kod so'ralmaydi.
-   * `initData` URL dagi `#tgWebAppData` dan (FE-10, `api.miniAppInitData`);
-   * store ham sahifa ochilganda shu yo'l bilan kiradi — so'rov bitta
-   * (`miniAppLogin` uchayotgan va'dani qaytaradi).
-   */
+  // Telegram Mini App ichida bo'lsak — avtomatik kiramiz, kod so'ralmaydi.
   useEffect(() => {
-    if (!features?.telegram || !api.miniAppInitData()) return;
+    const tg = (window as unknown as { Telegram?: { WebApp?: { initData?: string } } }).Telegram;
+    const initData = tg?.WebApp?.initData;
+    if (!initData || !features?.telegram) return;
     setBusy(true);
-    useAppStore
-      .getState()
-      .miniAppLogin()
-      .then(() => {
-        const user = useAppStore.getState().user;
-        if (user) finish(user);
-      })
+    api
+      .loginWithTelegram({ initData })
+      .then((r) => finish(r.user))
       .catch(() => setError("Telegram orqali kirib bo'lmadi"))
       .finally(() => setBusy(false));
   }, [features?.telegram, finish]);

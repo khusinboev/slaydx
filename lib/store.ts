@@ -44,12 +44,6 @@ type AppState = {
   dir: "ltr" | "rtl";
 
   refreshSession: () => Promise<void>;
-  /**
-   * Telegram Mini App ichida `initData` imzosi bilan kirish (FE-10).
-   * Bir vaqtda bitta so'rov; Mini App bo'lmasa hech narsa qilmaydi.
-   * Xato bo'lsa tashlaydi (chaqiruvchi matnni ko'rsatadi).
-   */
-  miniAppLogin: () => Promise<void>;
   refreshGenerations: () => Promise<void>;
   setUser: (u: ServerUser | null) => void;
   upsertGeneration: (g: ServerGeneration) => void;
@@ -104,10 +98,6 @@ function scheduleSessionRetry() {
   // Node (testlar, SSR) da bu taymer jarayonni tirik ushlab turmasin; brauzerda `unref` yo'q.
   (sessionRetryTimer as { unref?: () => void }).unref?.();
 }
-
-/** Mini App kirishi — bitta so'rov uchib turadi; avtomatik urinish sahifa yuklanishida BIR marta. */
-let miniAppPending: Promise<void> | null = null;
-let miniAppAutoTried = false;
 
 /**
  * OS afzalligini BIR MARTA o'qiydi (birinchi tashrifda standart qiymat
@@ -200,31 +190,6 @@ export const useAppStore = create<AppState>()(
         clearSessionRetry();
         const { user, features } = res;
         set({ user, features, loggedIn: Boolean(user), sessionChecked: true, sessionError: null });
-        // Mini App ichida seans yo'q — `initData` imzosi bilan o'zi kiradi (FE-10).
-        if (!user && features?.telegram && !miniAppAutoTried && api.miniAppInitData()) {
-          miniAppAutoTried = true;
-          get()
-            .miniAppLogin()
-            .catch((e: unknown) => {
-              // Oddiy kirish oynasi ishlayveradi — sabab konsolga (UI jim qolmaydi: «Kirish» tugmasi joyida).
-              console.warn("[miniapp] avtomatik kirish bo'lmadi:", e instanceof Error ? e.message : e);
-            });
-        }
-      },
-
-      miniAppLogin: () => {
-        const initData = api.miniAppInitData();
-        if (!initData) return Promise.resolve();
-        if (miniAppPending) return miniAppPending;
-        miniAppPending = api
-          .loginWithTelegram({ initData })
-          .then(({ user }) => {
-            set({ user, loggedIn: true, sessionChecked: true, sessionError: null });
-          })
-          .finally(() => {
-            miniAppPending = null;
-          });
-        return miniAppPending;
       },
 
       refreshGenerations: async () => {
@@ -312,10 +277,21 @@ export const useAppStore = create<AppState>()(
 );
 
 /*
- * Mini App `initData` si store yuklanishi bilan — Next yo'riqchisi URL
- * `#` qismini keyingi o'tishda tashlashidan OLDIN — ushlab qolinadi (FE-10).
+ * FE-10 (qoldirildi): W3-H ning birinchi varianti Mini App `initData` sini
+ * URL dagi `#tgWebAppData` dan o'qib, `sessionStorage` ga yozardi — bu
+ * login-CSRF ochardi (istalgan havola qurbonni hujumchi hisobiga kiritardi,
+ * chiqishdan keyin ham qayta kiritardi). O'qish olib tashlandi; o'sha
+ * versiya yozib qo'ygan eskirgan qiymat ham yuklanishda o'chiriladi, hech
+ * qachon o'qilmaydi.
  */
-if (typeof window !== "undefined") api.miniAppInitData();
+if (typeof window !== "undefined") {
+  try {
+    window.sessionStorage.removeItem("slaydx-tg-init");
+  } catch (e) {
+    // sessionStorage yopiq (maxfiy rejim) — u holda u yerga hech narsa yozilmagan ham.
+    console.warn("[miniapp] sessionStorage:", e instanceof Error ? e.message : e);
+  }
+}
 
 export function creditTotal(user: Pick<ServerUser, "points" | "quota" | "balance"> | null) {
   if (!user) return 0;

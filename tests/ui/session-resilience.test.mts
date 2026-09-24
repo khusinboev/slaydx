@@ -1,12 +1,15 @@
 import "./setup.ts";
 
 /*
- * Mini App ishga tushirish URL i (FE-10): Telegram mijozi `initData` ni
- * `#tgWebAppData=…` da beradi. Store uni import paytida ushlaydi —
- * shuning uchun hash store yuklanishidan OLDIN qo'yiladi.
+ * FE-10 login-CSRF qo'riqchisi: sahifa hujumchi yuborgan havola bilan
+ * (`#tgWebAppData=<hujumchining imzolangan initData si>`) ochilgan va W3-H
+ * ning birinchi varianti yozib qo'ygan eskirgan `sessionStorage` qiymati
+ * bor — ikkalasi ham store yuklanishidan OLDIN qo'yiladi. Hech biri
+ * hech kimni tizimga KIRITMASLIGI kerak.
  */
 const INIT_DATA = "query_id=AAH1&user=%7B%22id%22%3A42%2C%22first_name%22%3A%22Ali%22%7D&auth_date=1790000000&hash=abc123";
 window.location.hash = `#tgWebAppData=${encodeURIComponent(INIT_DATA)}&tgWebAppVersion=7.0&tgWebAppPlatform=ios`;
+window.sessionStorage.setItem("slaydx-tg-init", INIT_DATA);
 
 import test, { afterEach } from "node:test";
 import assert from "node:assert/strict";
@@ -23,7 +26,7 @@ const { LoginForm } = await import("../../components/overlays/LoginModal.tsx");
 /**
  * FE-04 — vaqtinchalik `/api/auth/session` xatosi foydalanuvchini chiqarmaydi;
  * FE-09 — `/uz/create` kirish oynasini seans tekshirilgandan KEYIN ochadi;
- * FE-10 — Mini App `initData` bilan avtomatik kirish haqiqatan ishlaydi.
+ * FE-10 — qoldirildi: URL dagi `#tgWebAppData` hech kimni kiritmaydi (login-CSRF).
  */
 
 const realFetch = globalThis.fetch;
@@ -159,39 +162,29 @@ test("FE-09: /uz/create — seans tekshirilmaguncha kirish oynasi OCHILMAYDI; ki
   assert.equal(useUi.getState().overlay, "login", "haqiqatan kirmagan — oyna ochiladi");
 });
 
-test("FE-10: Mini App ichida seans yo'q → `initData` (URL #tgWebAppData) bilan avtomatik kiradi", async () => {
+test("FE-10 (qoldirildi): #tgWebAppData li havola va eskirgan sessionStorage qiymati HECH KIMNI kiritmaydi", async () => {
+  assert.equal(window.sessionStorage.getItem("slaydx-tg-init"), null, "eskirgan qiymat yuklanishda o'chirildi");
   reset();
-  const posts: Array<{ url: string; body: string }> = [];
+  const posts: string[] = [];
   (globalThis as unknown as { fetch: unknown }).fetch = async (input: unknown, init?: RequestInit) => {
     const url = String(input);
     if (url.startsWith("/api/auth/session")) return json(200, { user: null, features: features(true) });
     if (url === "/api/auth/telegram" && init?.method === "POST") {
-      posts.push({ url, body: String(init.body) });
-      return json(200, { user });
-    }
-    return json(200, { generations: [] });
-  };
-  await useAppStore.getState().refreshSession();
-  await waitFor(() => assert.equal(useAppStore.getState().loggedIn, true));
-  assert.equal(posts.length, 1);
-  assert.deepEqual(JSON.parse(posts[0].body), { initData: INIT_DATA }, "imzolangan xom initData serverga ketadi");
-});
-
-test("FE-10: kirish oynasi Mini App ichida ochilsa ham `initData` bilan kiradi (bir so'rov)", async () => {
-  reset();
-  useAppStore.setState({ features: features(true) });
-  const posts: string[] = [];
-  (globalThis as unknown as { fetch: unknown }).fetch = async (input: unknown, init?: RequestInit) => {
-    if (String(input) === "/api/auth/telegram" && init?.method === "POST") {
       posts.push(String(init.body));
       return json(200, { user });
     }
     return json(200, { generations: [] });
   };
+  await useAppStore.getState().refreshSession();
   let done = 0;
   const router: AppRouterInstance = { back() {}, forward() {}, refresh() {}, push() {}, replace() {}, prefetch() {} };
   render(h(AppRouterContext.Provider, { value: router }, h(LoginForm, { onDone: () => done++ })));
-  await waitFor(() => assert.equal(done, 1));
-  assert.equal(posts.length, 1);
-  assert.equal(JSON.parse(posts[0]).initData, INIT_DATA);
+  // Avtomatik kirish (bo'lsa) shu vaqt ichida POST yuborgan bo'lardi.
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 100));
+  });
+  assert.equal(posts.length, 0, "initData serverga yuborilmadi");
+  assert.equal(done, 0);
+  assert.equal(useAppStore.getState().loggedIn, false, "hech kim kiritilmadi");
+  assert.ok(screen.getByText("Telegram orqali kirish"), "oddiy kirish oqimi");
 });

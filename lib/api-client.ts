@@ -259,42 +259,6 @@ export function loginWithTelegram(payload: { initData?: string; widget?: Record<
   });
 }
 
-/**
- * Telegram Mini App `initData` si — sayt Mini App ichida ochilgan bo'lsa.
- *
- * FE-10: ilgari faqat `window.Telegram.WebApp.initData` o'qilardi, lekin
- * uni yaratuvchi `telegram-web-app.js` hech qachon yuklanmagan — Mini App
- * kirishi o'lik kod edi. Telegram mijozi ma'lumotni ishga tushirish
- * URL ining `#tgWebAppData=…` qismida beradi (SDK ham aynan shuni o'qiydi);
- * tashqi skript (CSP, yuklash vaqti) o'rniga shu yerdan olinadi. Imzo
- * serverda bot tokeni bilan tekshiriladi (`verifyMiniAppInitData`).
- *
- * Birinchi chaqiruvda o'qib keshlanadi: Next yo'riqchisi keyingi
- * o'tishlarda `#` qismini tashlaydi. `sessionStorage` — Mini App ichida
- * sahifa qayta yuklansa ham topilishi uchun. Mini App bo'lmasa `null`.
- */
-const MINI_APP_KEY = "slaydx-tg-init";
-let miniAppCache: string | null | undefined;
-export function miniAppInitData(): string | null {
-  if (miniAppCache !== undefined) return miniAppCache;
-  if (typeof window === "undefined") return null;
-  const sdk = (window as unknown as { Telegram?: { WebApp?: { initData?: unknown } } }).Telegram?.WebApp?.initData;
-  let value: string | null = typeof sdk === "string" && sdk ? sdk : null;
-  if (!value) {
-    const hash = window.location.hash.replace(/^#/, "");
-    value = hash ? new URLSearchParams(hash).get("tgWebAppData") : null;
-  }
-  try {
-    if (value) window.sessionStorage.setItem(MINI_APP_KEY, value);
-    else value = window.sessionStorage.getItem(MINI_APP_KEY);
-  } catch (e) {
-    // sessionStorage yopiq (maxfiy rejim) — faqat qayta yuklashdan keyingi zaxira yo'qoladi.
-    console.warn("[miniapp] sessionStorage:", e instanceof Error ? e.message : e);
-  }
-  miniAppCache = value || null;
-  return miniAppCache;
-}
-
 export type Ticket = { nonce: string; url: string; expiresAt: string };
 
 /**
