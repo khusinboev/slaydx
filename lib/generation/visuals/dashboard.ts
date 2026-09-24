@@ -277,7 +277,7 @@ function planAgenda(s: SlideModel, theme: SlideTheme, index: number, total: numb
 
 /** Raqamlar — KPI plitalari: tepada aksent chizig'i, ostida qiymat va yorliq. */
 function planStats(s: SlideModel, theme: SlideTheme, index: number, total: number, ctx: PlanCtx): SlidePlan {
-  const { fitSize, stripCut, pushFooter } = LAYOUT_KIT;
+  const { fitSize, bodyFit, stripCut, pushFooter } = LAYOUT_KIT;
   const layers: SlideLayer[] = [];
   pushPage(layers, theme);
   const cut = stripCut(s);
@@ -298,7 +298,7 @@ function planStats(s: SlideModel, theme: SlideTheme, index: number, total: numbe
       box: valBox,
       text: st.value,
       color: theme.accentInk,
-      size: fitSize(st.value, valBox, 42, 18),
+      size: fitSize(st.value, valBox, 42, Math.max(18, ctx.bodyType.minPt)),
       bold: true,
       align: "center",
       valign: "middle",
@@ -310,7 +310,8 @@ function planStats(s: SlideModel, theme: SlideTheme, index: number, total: numbe
       box: labBox,
       text: st.label,
       color: theme.muted,
-      size: fitSize(st.label, labBox, 15, 11),
+      // AUDIT-25 A2-04: auditoriya oralig'i (ilgari qat'iy 15→11 pt).
+      size: bodyFit(st.label, labBox, 15, ctx.bodyType),
       align: "center",
       valign: "top",
       src: { f: "stats", i, k: "label" },

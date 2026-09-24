@@ -228,7 +228,7 @@ function planAgenda(s: SlideModel, theme: SlideTheme, index: number, total: numb
  * eng katta element bo'ladi.
  */
 function planStats(s: SlideModel, theme: SlideTheme, index: number, total: number, ctx: PlanCtx): SlidePlan {
-  const { H, fitSize, stripCut, pushFooter } = LAYOUT_KIT;
+  const { H, fitSize, bodyFit, stripCut, pushFooter } = LAYOUT_KIT;
   const layers: SlideLayer[] = [];
   const cut = stripCut(s);
   const tw = 11.6 - cut;
@@ -246,7 +246,7 @@ function planStats(s: SlideModel, theme: SlideTheme, index: number, total: numbe
       box: valBox,
       text: st.value,
       color: theme.accentInk,
-      size: fitSize(st.value, valBox, 66, 24),
+      size: fitSize(st.value, valBox, 66, Math.max(24, ctx.bodyType.minPt)),
       bold: true,
       align: "center",
       valign: "middle",
@@ -259,7 +259,8 @@ function planStats(s: SlideModel, theme: SlideTheme, index: number, total: numbe
       box: labBox,
       text: st.label,
       color: theme.muted,
-      size: fitSize(st.label, labBox, 17, 11),
+      // AUDIT-25 A2-04: auditoriya oralig'i (ilgari qat'iy 17→11 pt).
+      size: bodyFit(st.label, labBox, 17, ctx.bodyType),
       align: "center",
       valign: "top",
       src: { f: "stats", i, k: "label" },

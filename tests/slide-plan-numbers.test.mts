@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { planSlide, type SlideLayer } from "../lib/generation/slide-layout.ts";
+import { LAYOUT_KIT, planSlide, type SlideLayer } from "../lib/generation/slide-layout.ts";
+import { bodyRules } from "../lib/generation/slide-audience.ts";
 import { getSlideTheme } from "../lib/generation/slide-themes.ts";
 import { SLIDE_LAYOUTS, SLIDE_THEME_IDS, type SlideLayout, type SlideModel } from "../lib/generation/slide-types.ts";
 import { DESIGN_VISUALS, LEGACY_VISUALS } from "../lib/generation/visuals/index.ts";
@@ -234,6 +235,74 @@ test("ro'yxat tartib raqamlari qoladi: reja 1..N, bosqich n, test A–D", () => 
     const quiz = contentTexts(planSlide(sampleFor("quiz", false), theme, visual, INDEX, TOTAL).layers).join("\n");
     for (const letter of ["A", "B", "C", "D"]) {
       assert.ok(new RegExp(`(^|\\n|\\s)${letter}[).]?(\\s|$)`).test(quiz), `${visual}/quiz: «${letter}» yo'q`);
+    }
+  }
+});
+
+// ═══════════════════════════════════════════ A2-04: auditoriya shrift poli
+
+/**
+ * AUDIT-25 A2-04 («process kartalari mayda»). `planProcess`/`planStats`/
+ * `planTable` (va `rail` bosqichlari, `bold`/`dashboard` raqamlari)
+ * shrift polini QAT'IY (10–15 pt) yozardi — auditoriya poli
+ * (`bodyType.minPt`, Slide Law: 1–4-sinf 24 pt) e'tiborsiz edi. Boshqa
+ * hamma maket `minPt` ni o'qiydi. Endi bu matnlar ham auditoriya
+ * polidan kichik chizilmaydi (bosqich `n` — tartib belgisi, tana matni
+ * emas, u tekshiruvdan tashqari).
+ */
+const AUDIENCES = ["school_1_4", "school_5_7", "school_10_11", "students_bachelor", "general"] as const;
+
+function floorCase(layout: SlideLayout, chart: boolean): PlanSlide {
+  const s = sampleFor(layout, false);
+  s.steps = [
+    { n: "1", title: "Kuzatish", text: "Suv sathini har oy o'lchab, jadvalga yozamiz." },
+    { n: "2", title: "Taqqoslash", text: "Oldingi yil bilan solishtirib, farqni topamiz." },
+    { n: "3", title: "Xulosa", text: "Sababini tushuntirib, taklif beramiz." },
+  ];
+  s.stats = chart
+    ? [{ value: "68%", label: "Sug'orish" }, { value: "22%", label: "Iqlim" }, { value: "10%", label: "Boshqa" }]
+    : [{ value: "68%", label: "sug'orishga ketadi" }, { value: "40 km", label: "qirg'oq chekindi" }];
+  s.table = { headers: ["Yil", "Maydon", "Sho'rlik"], rows: [["1960", "68 ming km²", "10 g/l"], ["2020", "8 ming km²", "100 g/l"]] };
+  return s;
+}
+
+test("A2-04: bosqich/raqam/jadval matni auditoriya polidan (minPt) kichik emas — har maket", () => {
+  const theme = getSlideTheme("atlas");
+  for (const aud of AUDIENCES) {
+    const bodyType = bodyRules({ slideAudience: aud, textVolume: "standart", planItems: 4 }, "lecture");
+    for (const visual of VISUALS) {
+      for (const [layout, chart] of [["process", false], ["stats", false], ["stats", true], ["table", false]] as const) {
+        const plan = planSlide(floorCase(layout, chart), theme, visual, 3, TOTAL, aud, "lecture", { bodyType });
+        const body = texts(plan.layers).filter((l) => {
+          const f = l.src?.f;
+          if (f === "steps") return (l.src as { k: string }).k !== "n";
+          return f === "stats" || f === "table";
+        });
+        assert.ok(body.length > 0, `${aud}/${visual}/${layout}: tana matni topilmadi`);
+        for (const l of body) {
+          assert.ok(
+            l.size >= bodyType.minPt,
+            `${aud}/${visual}/${layout}${chart ? "/diagramma" : ""}: «${textOf(l)}» ${l.size} pt < pol ${bodyType.minPt} pt`,
+          );
+        }
+        assertInside(plan.layers, `${aud}/${visual}/${layout}`);
+      }
+    }
+  }
+});
+
+test("A2-04: 1–4-sinf bosqichlari (minPt 24) — matn 24 pt dan kichik emas va oddiy matn qutiga sig'adi", () => {
+  const theme = getSlideTheme("atlas");
+  const bodyType = bodyRules({ slideAudience: "school_1_4", textVolume: "standart", planItems: 4 }, "lecture");
+  assert.equal(bodyType.minPt, 24);
+  for (const visual of VISUALS) {
+    const plan = planSlide(floorCase("process", false), theme, visual, 3, TOTAL, "school_1_4", "lecture", { bodyType });
+    const steps = texts(plan.layers).filter((l) => l.src?.f === "steps" && (l.src as { k: string }).k !== "n");
+    assert.equal(steps.length, 6, `${visual}: 3 × (sarlavha + matn) kutilgan`);
+    for (const l of steps) {
+      assert.ok(l.size >= 24, `${visual}: «${textOf(l)}» ${l.size} pt`);
+      const ink = LAYOUT_KIT.inkHeight(textOf(l), l.box.w, l.size);
+      assert.ok(ink <= l.box.h + 0.01, `${visual}: «${textOf(l)}» ${l.size} pt da ${ink.toFixed(2)}″ — quti ${l.box.h.toFixed(2)}″ dan chiqdi`);
     }
   }
 });

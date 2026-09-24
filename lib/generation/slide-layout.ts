@@ -390,6 +390,24 @@ function fitSize(text: string, box: Box, base: number, min: number): number {
 }
 
 /**
+ * Tana matni uchun `fitSize` — AUDITORIYA oralig'ida (AUDIT-25 A2-04).
+ *
+ * `planProcess`/`planStats`/`planTable` (va `rail` bosqichlari, `bold`/
+ * `dashboard` raqam kartalari) shriftni QAT'IY 16→12, 14→11, 14→10 pt
+ * oralig'ida tanlardi — `bodyType.minPt` (Slide Law: 1–4-sinf 24 pt,
+ * maktab ≥ 20) umuman o'qilmasdi, boshqa hamma maket esa o'qiydi. Natija:
+ * bolalar dekasida bosqich matni 11 pt — egasi ko'rgan «process kartalari
+ * mayda». Endi boshlanish `max(dizayn, bodyPt)`, pol — `minPt`.
+ *
+ * Matn polda ham sig'masa shrift KICHRAYMAYDI: uzunlik yozuv bosqichida
+ * (`SLIDE_LIMITS`/`clipTo`) cheklanadi — maket matnni kesmaydi, aks holda
+ * ko'ruvchidagi tahrir (`src`) maydon qiymatidan ajralib qolardi.
+ */
+function bodyFit(text: string, box: Box, base: number, bt: BodyRules): number {
+  return fitSize(text, box, Math.max(base, bt.bodyPt), bt.minPt);
+}
+
+/**
  * Ro'yxat berilgan shriftda necha QATOR egallashini hisoblaydi.
  *
  * `fitLines` (shrift tanlash) va `bulletGap` (bo'shliqni taqsimlash)
@@ -2061,6 +2079,8 @@ function planStatChart(
    * ustunlar tasma ostiga kirib ketardi.
    */
   zoneW: number,
+  /** Auditoriya shrift oralig'i (AUDIT-25 A2-04). */
+  bt: BodyRules,
 ): void {
   const max = Math.max(...items.map((x) => Math.abs(x.n)), 1);
   /*
@@ -2106,7 +2126,7 @@ function planStatChart(
       box: labBox,
       text: it.label,
       color: ink,
-      size: fitSize(it.label, labBox, 15, 11),
+      size: bodyFit(it.label, labBox, 15, bt),
       valign: "middle",
       src: { f: "stats", i: it.idx, k: "label" },
     });
@@ -2150,7 +2170,8 @@ function planStatChart(
        * juftlik — `titleText`/`titleBg`.
        */
       color: dense ? theme.titleText : theme.accentInk,
-      size: 16,
+      // Qiymat qisqa («68%») — auditoriya polidan kichik emas (A2-04).
+      size: Math.max(16, bt.minPt),
       bold: true,
       valign: "middle",
       src: { f: "stats", i: it.idx, k: "value" },
@@ -2186,7 +2207,7 @@ function planStats(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
   // Diagramma faqat qiymatlar TAQQOSLANADIGAN bo'lsa (bir xil birlik).
   const oneUnit = new Set(numeric.map((x) => statUnit(x.value))).size <= 1;
   if (numeric.length >= 3 && numeric.length === items.length && oneUnit) {
-    planStatChart(s, theme, numeric, layers, ink, dense, 12.25 - cut);
+    planStatChart(s, theme, numeric, layers, ink, dense, 12.25 - cut, ctx.bodyType);
     pushFooter(layers, s, theme, index, total, { x: M + 0.18, w: 12.2 - cut }, dense);
     return { bg, layers };
   }
@@ -2212,7 +2233,7 @@ function planStats(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
       // sahifada `titleMuted` — u `titleBg` ustida O'LCHANGAN juft; `accent`
       // ba'zi palitralarda (legal: zumrad ustida zumrad) ko'rinmas edi.
       color: dense ? theme.titleMuted : theme.accentInk,
-      size: fitSize(st.value, valBox, 30, 15),
+      size: fitSize(st.value, valBox, 30, Math.max(15, ctx.bodyType.minPt)),
       bold: true,
       align: "center",
       valign: "middle",
@@ -2232,7 +2253,7 @@ function planStats(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
       box: labBox,
       text: st.label,
       color: dense ? theme.titleMuted : theme.muted,
-      size: fitSize(st.label, labBox, 15, 11),
+      size: bodyFit(st.label, labBox, 15, ctx.bodyType),
       align: "center",
       valign: "middle",
       src: { f: "stats", i, k: "label" },
@@ -2340,24 +2361,35 @@ function planProcess(s: SlideModel, theme: SlideTheme, visual: SlideVisual, inde
       align: "center",
       src: { f: "steps", i, k: "n" },
     });
-    const tBox: Box = { x: x + 0.12, y: y + 0.72, w: colW - 0.24, h: 0.95 };
+    /*
+     * AUDIT-25 A2-04: shrift auditoriya oralig'ida (`bodyFit`) — ilgari
+     * qat'iy 16→12 / 14→11 pt edi, bolalar dekasida ham. Sarlavha qutisi
+     * endi SIYOH balandligida (ko'pi bilan 0.95″): qisqa sarlavhadan
+     * qolgan joy izoh matniga o'tadi — katta shriftli izoh sig'adi va
+     * kartaning pastki yarmi bo'sh qolmaydi (A2-05).
+     */
+    const tw = colW - 0.24;
+    const tSize = bodyFit(st.title, { x: 0, y: 0, w: tw, h: 0.95 }, 16, ctx.bodyType);
+    const tH = Math.min(0.95, Math.max((tSize * 1.3) / 72, inkHeight(st.title, tw, tSize)));
+    const tBox: Box = { x: x + 0.12, y: y + 0.72, w: tw, h: tH };
     layers.push({
       t: "text",
       box: tBox,
       text: st.title,
       color: theme.text,
-      size: fitSize(st.title, tBox, 16, 12),
+      size: tSize,
       bold: true,
       align: "center",
       src: { f: "steps", i, k: "title" },
     });
-    const dBox: Box = { x: x + 0.14, y: y + 1.78, w: colW - 0.28, h: rowH - 1.95 };
+    const dTop = 0.72 + tH + 0.12;
+    const dBox: Box = { x: x + 0.14, y: y + dTop, w: colW - 0.28, h: Math.max(0.3, rowH - dTop - 0.17) };
     layers.push({
       t: "text",
       box: dBox,
       text: st.text,
       color: theme.muted,
-      size: fitSize(st.text, dBox, 14, 11),
+      size: bodyFit(st.text, dBox, 14, ctx.bodyType),
       align: "center",
       src: { f: "steps", i, k: "text" },
     });
@@ -2462,7 +2494,7 @@ function planTable(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
       box,
       text: h,
       color: headInk,
-      size: fitSize(h, box, 15, 11),
+      size: bodyFit(h, box, 15, ctx.bodyType),
       bold: true,
       valign: "middle",
       src: { f: "table", k: "header", c: i },
@@ -2501,7 +2533,7 @@ function planTable(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
         box,
         text: cell,
         color: c === 0 ? keyInk : cellInk,
-        size: fitSize(cell, box, 14, 10),
+        size: bodyFit(cell, box, 14, ctx.bodyType),
         bold: c === 0,
         valign: "middle",
         src: { f: "table", k: "cell", r, c },
@@ -2680,6 +2712,7 @@ export const LAYOUT_KIT = {
   fitLines,
   listRows,
   inkHeight,
+  bodyFit,
   bulletGap,
   photo,
   stripCut,

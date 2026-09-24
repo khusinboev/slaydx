@@ -271,7 +271,7 @@ function planAgenda(s: SlideModel, theme: SlideTheme, index: number, total: numb
  * tugunlar raqamli va to'q, o'q belgilari yo'q, kartalar chegarasiz.
  */
 function planProcess(s: SlideModel, theme: SlideTheme, index: number, total: number, ctx: PlanCtx): SlidePlan {
-  const { W, H, fitSize, stripCut, pushFooter } = LAYOUT_KIT;
+  const { W, H, bodyFit, stripCut, pushFooter } = LAYOUT_KIT;
   const layers: SlideLayer[] = [];
   layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.bg } });
   const cut = stripCut(s);
@@ -316,7 +316,8 @@ function planProcess(s: SlideModel, theme: SlideTheme, index: number, total: num
       box: tBox,
       text: st.title,
       color: theme.text,
-      size: fitSize(st.title, tBox, 19, 12),
+      // AUDIT-25 A2-04: auditoriya oralig'i (ilgari qat'iy 19→12 pt).
+      size: bodyFit(st.title, tBox, 19, ctx.bodyType),
       bold: true,
       align: "center",
       src: { f: "steps", i, k: "title" },
@@ -328,7 +329,7 @@ function planProcess(s: SlideModel, theme: SlideTheme, index: number, total: num
       box: dBox,
       text: st.text,
       color: theme.muted,
-      size: fitSize(st.text, dBox, 15, 11),
+      size: bodyFit(st.text, dBox, 15, ctx.bodyType),
       align: "center",
       src: { f: "steps", i, k: "text" },
     });
