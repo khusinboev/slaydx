@@ -483,6 +483,34 @@ function fitTitleText(
   return last;
 }
 
+type TitleTextOpts = Parameters<typeof fitTitleText>[2];
+type TitleTextFit = ReturnType<typeof fitTitleText>;
+
+/**
+ * Bir qatordagi bosqich kartalari — BIR XIL shrift (AUDIT-25 ko'z
+ * tekshiruvi: har karta o'z o'lchamini tanlaganda «Kuzatish» 20 pt,
+ * yonidagi «Taqqoslash» 15 pt bo'lib, qator notekis ko'rinardi).
+ *
+ * Avval har karta alohida (`fitTitleText`), keyin hammasiga ENG KICHIK
+ * sarlavha va izoh o'lchami, sarlavha qutisi — eng baland siyoh (chiziq
+ * va izoh hamma kartada bir chiziqda). Bu umumiy variant biror kartada
+ * sig'masa (juda notekis matnlar), har karta o'z natijasida qoladi —
+ * tekislik toshmaslikdan muhim emas.
+ */
+function fitStepCards(steps: { title: string; text: string }[], o: TitleTextOpts): TitleTextFit[] {
+  const own = steps.map((st) => fitTitleText(st.title, st.text, o));
+  if (steps.length < 2 || own.some((f) => !f.ok)) return own;
+  const tSize = Math.min(...own.map((f) => f.tSize));
+  const tH = Math.max(...steps.map((st) => Math.max((tSize * 1.3) / 72, inkHeight(st.title, o.tw, tSize, CHAR_EM_BOLD))));
+  const dH = Math.max(0.3, o.avail - tH - o.gap);
+  const dSize = Math.min(
+    ...own.map((f) => f.dSize),
+    ...steps.map((st) => bodyFit(st.text, { x: 0, y: 0, w: o.dw, h: dH }, o.text[0], o.bt, o.text[1])),
+  );
+  const ok = steps.every((st) => inkHeight(st.text, o.dw, dSize) <= dH + 1e-9);
+  return ok ? steps.map(() => ({ tSize, tH, dSize, dH, ok })) : own;
+}
+
 /**
  * Ro'yxat berilgan shriftda necha QATOR egallashini hisoblaydi.
  *
@@ -2421,6 +2449,19 @@ function planProcess(s: SlideModel, theme: SlideTheme, visual: SlideVisual, inde
     }
   }
 
+  const stepOpts = {
+    tw: colW - 0.24,
+    dw: colW - 0.28,
+    avail: rowH - 0.72 - 0.17,
+    gap: 0.12,
+    titleCap: 0.95,
+    bt: ctx.bodyType,
+    title: [16, 12] as [number, number],
+    text: [14, 11] as [number, number],
+  };
+  // Har qator o'z ichida bir xil shriftda (`fitStepCards`).
+  const fits = [...fitStepCards(items.slice(0, perRow), stepOpts), ...fitStepCards(items.slice(perRow), stepOpts)];
+
   items.forEach((st, i) => {
     const row = twoRows && i >= perRow ? 1 : 0;
     const col = row === 1 ? i - perRow : i;
@@ -2446,18 +2487,8 @@ function planProcess(s: SlideModel, theme: SlideTheme, visual: SlideVisual, inde
      * qolgan joy izoh matniga o'tadi — katta shriftli izoh sig'adi va
      * kartaning pastki yarmi bo'sh qolmaydi (A2-05).
      */
-    const tw = colW - 0.24;
-    const { tSize, tH, dSize, dH } = fitTitleText(st.title, st.text, {
-      tw,
-      dw: colW - 0.28,
-      avail: rowH - 0.72 - 0.17,
-      gap: 0.12,
-      titleCap: 0.95,
-      bt: ctx.bodyType,
-      title: [16, 12],
-      text: [14, 11],
-    });
-    const tBox: Box = { x: x + 0.12, y: y + 0.72, w: tw, h: tH };
+    const { tSize, tH, dSize, dH } = fits[i];
+    const tBox: Box = { x: x + 0.12, y: y + 0.72, w: stepOpts.tw, h: tH };
     layers.push({
       t: "text",
       box: tBox,
@@ -2799,6 +2830,7 @@ export const LAYOUT_KIT = {
   inkHeight,
   bodyFit,
   fitTitleText,
+  fitStepCards,
   CHAR_EM_BOLD,
   bulletGap,
   photo,

@@ -271,7 +271,7 @@ function planAgenda(s: SlideModel, theme: SlideTheme, index: number, total: numb
  * tugunlar raqamli va to'q, o'q belgilari yo'q, kartalar chegarasiz.
  */
 function planProcess(s: SlideModel, theme: SlideTheme, index: number, total: number, ctx: PlanCtx): SlidePlan {
-  const { W, H, fitTitleText, stripCut, pushFooter } = LAYOUT_KIT;
+  const { W, H, fitStepCards, stripCut, pushFooter } = LAYOUT_KIT;
   const layers: SlideLayer[] = [];
   layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.bg } });
   const cut = stripCut(s);
@@ -293,18 +293,16 @@ function planProcess(s: SlideModel, theme: SlideTheme, index: number, total: num
    */
   const cw = colW - 0.48;
   const stepFit = (h: number) =>
-    items.map((st) =>
-      fitTitleText(st.title, st.text, {
-        tw: cw,
-        dw: cw,
-        avail: h - 0.38 - 0.23,
-        gap: 0.39,
-        titleCap: 1.05,
-        bt: ctx.bodyType,
-        title: [19, 12],
-        text: [15, 11],
-      }),
-    );
+    fitStepCards(items, {
+      tw: cw,
+      dw: cw,
+      avail: h - 0.38 - 0.23,
+      gap: 0.39,
+      titleCap: 1.05,
+      bt: ctx.bodyType,
+      title: [19, 12],
+      text: [15, 11],
+    });
   let cardH = 3.35;
   let fits = stepFit(cardH);
   if (fits.some((f) => !f.ok)) {
