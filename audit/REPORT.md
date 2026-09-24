@@ -38,6 +38,12 @@
   - deep health check, worker heartbeat and HEALTHCHECK
   - container limits, log rotation, CI workflow and pinned images
   - daily backup and restore-check scripts, 180-day bonus-file retention, and the server IP / owner phone removed from tracked docs
+- **Load and chaos (§3):**
+  - every money invariant holds after every scenario;
+  - all 4 chaos experiments pass (before, graceful SIGTERM failed);
+  - under an enqueue burst the queue stays at 37 instead of growing to 2 377, because of the 429 admission check;
+  - with a provider outage, jobs fail and refund in 4 s instead of 97 s.
+  - The one latency regression the test found, a Postgres CPU cap, was fixed by setting `PG_CPUS=2`.
 - **Status of all 194 findings:** 177 ✅ fixed · 13 ◐ partial · 2 📝 documented · 1 ⏭ deferred · 1 ⏸ open by owner decision. The full table is in the appendix.
 
 ## 2. Verification
@@ -60,7 +66,57 @@
 
 ## 3. Load and chaos tests (Phase 5)
 
-<!-- P5 -->
+**Setup.** The harness is `loadtests/` (k6 in Docker, driven by `run-all.sh`).
+- **Stacks:** each run gets its own throwaway local Postgres + `next start` + 2 workers × 4.
+- **Seed:** 2 000 users, 400 of them with generations, about 1 570 COMPLETED documents.
+- **Commits:** `before` = `main@76ddf91`, `after` = the branch at `cb7aee3`.
+- **Provider isolation:** a jail proxy intercepts all outbound HTTP. No real provider, payment or Telegram call was made.
+- **Postgres config:** `before` uses main's stock Postgres. `after` uses the branch's compose flags (`shared_buffers=256MB`, `pg_stat_statements`, …) and CPU cap.
+- **Caveat:** the numbers are laptop-relative (12 cores shared by k6, Postgres, web and workers). Compare the two columns, not the absolutes.
+- **Raw results:** `loadtests/results/{before,after,after-pgcpu2}/summary.md`.
+
+### Latency and throughput
+
+| Scenario | Load | before p50 / p95 / p99 ms | after p50 / p95 / p99 ms | req/s before → after | errors |
+|---|---|---|---|---|---|
+| browse (`/uz` + session) | ramp to 600 VUs | 1.5 / 3.7 / 6.0 | 1.5 / 3.6 / 5.6 | 513 → 514 | 0 % / 0 % |
+| poll (`/api/generations/:id`, list) | 800 VUs | 3.4 / 5.8 / 8.8 | 3.6 / 6.3 / 10.7 | 243 → 243 | 0 % / 0 % |
+| enqueue (`POST /api/generations`) | burst | 8.7 / 14.4 / 21.0 | 9.8 / 16.9 / 20.5 | 20.4 → 20.4 | 0 % / 0 % |
+| downloads (file/thumb/asset bytes) | about 540 req/s | 3.5 / 9.2 / 15.0 | 11.7 / **77.1** / 90.0 → **4.1 / 11.8 / 23.9 with `PG_CPUS=2`** | 542 → 509 → **540** | 0 % / 0 % |
+| uploads (photo) | burst | 4.9 / 10.0 / 16.5 | 5.5 / 17.5 / 24.1 | 33.9 → 33.8 | 0 % / 0 % |
+| mixed (all of the above) | 650+ req/s | 2.8 / 9.9 / 18.1 | 3.2 / 12.1 / 22.6 | 659 → 657 | 0 % / 0 % |
+
+**The downloads regression was found and fixed by the load test.** With the branch's new `cpus: ${PG_CPUS:-1}` limit, Postgres ran at 104 % of one CPU while serving `bytea`, and p95 rose 8×. A controlled rerun of the same code with 2 CPUs (`after-pgcpu2`) restored p95 to 11.8 ms. So the compose default is now `PG_CPUS=2` (`8e175bf`). The remaining gap (p95 +2.6 ms on downloads, +0.5 ms on poll) was not profiled. Candidates are the per-request log context and the added `status = 'COMPLETED'` / ownership checks.
+
+### Behaviour under overload (the main goal)
+
+| Signal | before | after |
+|---|---|---|
+| Enqueue burst: accepted / rejected | 3 870 accepted, 4 rate-limited; **the queue grew to 2 377 QUEUED** (oldest 91 s and rising, so hours of wait at real job times) | 1 526 accepted, **2 341 × 429 `queue_full`** + 1 × `user_inflight`, each with `Retry-After` and no charge. **QUEUED peak 37** |
+| Byte caching (`thumb?v=`, assets) | 0 % cacheable (global `no-store`) | **100 %** cacheable (`private, immutable`); unversioned thumb stays `no-store` |
+| Upload abuse | only the rate limit | rate limit + **per-user quota (413)** |
+| 5xx in any scenario | 0 | 0 |
+
+### Data invariants (after every scenario, both runs)
+
+**11 / 11 PASS** in every scenario of both runs:
+- the ledger equals the wallet
+- no negative wallet, no double charge, no double refund
+- a refund never exceeds its charge, and every refund has a charge
+- every paid job has a charge, and every charge has a job
+- every FAILED paid job is refunded
+- every COMPLETED job has a file
+- nothing is stuck IN_PROGRESS
+
+### Chaos experiments
+
+| Experiment | before | after |
+|---|---|---|
+| **pg-restart:** Postgres down 10 s under mixed load | 18/18 PASS | 18/18 PASS; health reports the DB outage, and everything recovers without restarts |
+| **worker-sigkill:** kill -9 a worker holding 2 jobs | 17/17 PASS; reclaimed after the lease | 17/17 PASS; reclaimed after the lease; each job charged once and refunded once |
+| **provider-down:** LLM/image provider rejects every call | 19/19 PASS, but **LLM jobs took p95 97 s to fail** (360 retried provider calls) | 19/19 PASS; **LLM jobs fail in p95 4.2 s** (10 provider calls: breaker + deadline), all 30 + 30 FAILED with exactly one refund |
+| **worker-sigterm:** graceful stop with 4 jobs in flight | **16/17: `drained_or_released` FAIL**. The worker exited after 2 s and left 4 jobs leased, so they were re-run only after the lease expired | **17/17 PASS**. The worker waits ≤ 20 s, then returns unfinished jobs to QUEUED without counting an attempt, and another worker takes them at once |
+
 
 ## 4. What changed, by wave
 
