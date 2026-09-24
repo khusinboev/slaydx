@@ -207,7 +207,7 @@ export type EnqueueChargeResult =
 export type EnqueueResult =
   | EnqueueChargeResult
   | { ok: false; reason: "admission"; decision: AdmissionReject }
-  /** Kalit shu foydalanuvchida BOSHQA vosita uchun ishlatilgan (422). */
+  /** Kalit shu foydalanuvchida BOSHQA so'rov (vosita yoki forma qiymatlari) uchun ishlatilgan (422). */
   | { ok: false; reason: "idempotency_conflict" };
 
 /** Idempotentlik oynasi — shundan eski kalit yangi so'rov hisoblanadi. */
@@ -219,20 +219,36 @@ function isIdempotencyViolation(e: unknown): boolean {
   return err?.code === "23505" && err.constraint === "generations_user_idem_idx";
 }
 
-type IdemRow = { id: string; tool_id: string; price: string };
+type IdemRow = { id: string; tool_id: string; price: string; same_values: boolean };
 
-async function findByIdempotencyKey(client: PoolClient, userId: string, key: string): Promise<IdemRow | null> {
+/**
+ * Kalitli ish (24 soat oynasida) va uning TANASI shu so'rovnikiga tengmi
+ * (`same_values`, W3-A review nit 4). Tana = navbatga yoziladigan aynan shu
+ * `toJsonb(values)`; JSONB tengligi kalitlar tartibiga qaramaydi.
+ */
+async function findByIdempotencyKey(
+  client: PoolClient,
+  userId: string,
+  key: string,
+  values: FormValues,
+): Promise<IdemRow | null> {
   const res = await client.query<IdemRow>(
-    `SELECT id, tool_id, price FROM generations
+    `SELECT id, tool_id, price, values_json = $4::jsonb AS same_values FROM generations
       WHERE user_id = $1 AND idempotency_key = $2
         AND created_at >= now() - $3::int * interval '1 hour'`,
-    [userId, key, IDEMPOTENCY_WINDOW_HOURS],
+    [userId, key, IDEMPOTENCY_WINDOW_HOURS, toJsonb(values)],
   );
   return res.rows[0] ?? null;
 }
 
+/**
+ * Takror faqat AYNAN o'sha so'rov uchun: boshqa vosita yoki boshqa forma
+ * qiymatlari bilan kelgan o'sha kalit — 422 (Stripe uslubi). Ilgari boshqa
+ * mavzu jim holda ASL ishni qaytarardi va klient yangi hujjat buyurtma
+ * qildim deb o'ylardi.
+ */
 function replayOf(row: IdemRow, toolId: ToolId): EnqueueResult {
-  if (row.tool_id !== toolId) return { ok: false, reason: "idempotency_conflict" };
+  if (row.tool_id !== toolId || !row.same_values) return { ok: false, reason: "idempotency_conflict" };
   return { ok: true, id: row.id, price: Number(row.price), replayed: true };
 }
 
@@ -274,7 +290,7 @@ export async function enqueueGeneration(input: EnqueueInput): Promise<EnqueueRes
               AND created_at < now() - $3::int * interval '1 hour'`,
           [input.userId, key, IDEMPOTENCY_WINDOW_HOURS],
         );
-        const prior = await findByIdempotencyKey(client, input.userId, key);
+        const prior = await findByIdempotencyKey(client, input.userId, key, input.values);
         if (prior) return replayOf(prior, input.toolId);
       }
       if (input.admission) {
@@ -327,7 +343,7 @@ export async function enqueueGeneration(input: EnqueueInput): Promise<EnqueueRes
   } catch (e) {
     if (!key || !isIdempotencyViolation(e)) throw e;
     // Parallel takror bizdan oldin COMMIT qildi — butun tranzaksiya (pul ham) bekor, o'sha ish qaytadi.
-    const prior = await transaction((client) => findByIdempotencyKey(client, input.userId, key));
+    const prior = await transaction((client) => findByIdempotencyKey(client, input.userId, key, input.values));
     if (!prior) throw e;
     const res = replayOf(prior, input.toolId);
     logEnqueue(input, res);
