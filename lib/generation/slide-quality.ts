@@ -85,6 +85,17 @@ export const CHARS_PER_WORD = 9;
  */
 export const PROMPT_HEADROOM = 0.85;
 
+/**
+ * Umumiy sarlavha qoidasi (prompt, `base.ts`): so'z oralig'i va belgi
+ * chegarasi. Yozuvchi sarlavhani `SLIDE_LIMITS.title` (72) da qirqadi;
+ * ilgari prompt «6–10 so'z» derdi — 10 o'zbekcha so'z 72 dan oshib,
+ * manbalar/yakun sarlavhasi «…» bilan kesilardi (yakuniy jonli tekshiruv).
+ * Belgi chegarasi 15 % zaxira bilan; REJA slaydlari sarlavhasi alohida
+ * (torroq) — `structure.ts` (P13 `agendaWordsCap`).
+ */
+export const TITLE_WORDS = { min: 4, max: 7 } as const;
+export const TITLE_CHARS = Math.floor(PROMPT_HEADROOM * SLIDE_LIMITS.title);
+
 /** Bandning quyi chegarasi (so'z) — prompt ham, detektor ham shuni o'qiydi. */
 export function bulletMinWords(rules: Pick<BodyRules, "bulletChars">): number {
   // `floor`: 1–4 sinfda 5.5 → 5 (round 6 ga chiqarib, 5 so'zli bolalar bandini «yupqa» derdi).
@@ -511,36 +522,46 @@ function isPlanSlide(s: SlideModel): boolean {
 
 const norm = (s: string | undefined) => String(s ?? "").trim().toLowerCase().replace(/\s+/g, " ");
 
+/** Ta'mir uchun kesilgan maydon: nomi (modelga), qirqish qopqog'i, so'z maqsadi. */
+type ClippedField = { field: "title" | "bullets" | "colItem" | "stepText"; cap: number; words: number };
+
 /**
- * Yozuvchi «…» bilan QIRQQAN gap maydoni (AUDIT-25 yakuniy jonli
+ * Yozuvchi «…» bilan QIRQQAN maydonlar (AUDIT-25 yakuniy jonli
  * tekshiruv): band, ustun bandi, bosqich matni — chegara AYNAN
  * `normalizeSlide` niki (`bulletClipLimit`, `clipLimit(…, NO_IMAGE)`,
- * son — slayddagi haqiqiy son, ustunda o'shaniki). Bunday slayd — HAMMA
- * slaydga (blok slaydi ham: maqsadlar kesilgan chiqmasin) ta'mir nomzodi:
- * model matnni ma'nosini saqlab QISQARTIRADI; qisqartirilgani yana
- * sig'masa — `mergeRepair` yana qirqadi, «…» qoladi va javob rad etiladi
- * (asl kesik saqlanadi — yomonlashmaydi). Test varianti — `clipped-option`.
+ * son — slayddagi haqiqiy son, ustunda o'shaniki); REJASIZ slaydning
+ * sarlavhasi (`SLIDE_LIMITS.title`) — reja slaydi sarlavhasi shartnoma
+ * (agenda bandi), unga tegilmaydi. Bunday slayd — HAMMA slaydga (blok
+ * slaydi ham: maqsadlar kesilgan chiqmasin) ta'mir nomzodi: model matnni
+ * ma'nosini saqlab QISQARTIRADI; qisqartirilgani yana sig'masa —
+ * `mergeRepair` yana qirqadi, «…» qoladi va javob rad etiladi (asl kesik
+ * saqlanadi — yomonlashmaydi). Test varianti — `clipped-option`.
  */
-function clippedText(s: SlideModel, rules: BodyRules, visual?: SlideVisual): boolean {
+function clippedFields(s: SlideModel, rules: BodyRules, visual?: SlideVisual): ClippedField[] {
+  const out: ClippedField[] = [];
+  if (!isPlanSlide(s) && clippedAt(s.title, SLIDE_LIMITS.title)) out.push({ field: "title", cap: SLIDE_LIMITS.title, words: TITLE_WORDS.max });
+  const t = () => layoutWordTargets(rules, visual);
   if (s.layout === "bullets") {
     const list = (s.bullets ?? []).filter((b) => b.trim());
     const cap = bulletClipLimit(rules, visual, list.length);
-    return list.some((b) => clippedAt(b, cap));
-  }
-  if (s.layout === "process") {
+    if (list.some((b) => clippedAt(b, cap))) out.push({ field: "bullets", cap, words: t().bullet.max });
+  } else if (s.layout === "process") {
     const list = s.steps ?? [];
     const cap = clipLimit("stepText", rules, visual, list.length, undefined, NO_IMAGE);
-    return list.some((st) => clippedAt(st.text, cap));
-  }
-  if (s.layout === "twoCol" || s.layout === "compare") {
+    if (list.some((st) => clippedAt(st.text, cap))) {
+      const tt = t();
+      out.push({ field: "stepText", cap, words: (tt.stepTextBy[Math.max(PROCESS_MIN_STEPS, Math.min(list.length, tt.maxSteps))] ?? tt.stepText).max });
+    }
+  } else if (s.layout === "twoCol" || s.layout === "compare") {
     const side = (items: string[] | undefined) => {
       const list = (items ?? []).filter((x) => x.trim());
       const cap = clipLimit("colItem", rules, visual, list.length, undefined, NO_IMAGE);
-      return list.some((x) => clippedAt(x, cap));
+      return list.some((x) => clippedAt(x, cap)) ? cap : 0;
     };
-    return side(s.left) || side(s.right);
+    const cap = Math.max(side(s.left), side(s.right));
+    if (cap) out.push({ field: "colItem", cap, words: t().colItem.max });
   }
-  return false;
+  return out;
 }
 
 /**
@@ -558,7 +579,7 @@ function clippedText(s: SlideModel, rules: BodyRules, visual?: SlideVisual): boo
  */
 export function thinReasons(s: SlideModel, rules: BodyRules, visual?: SlideVisual): ThinReason[] {
   const out: ThinReason[] = [];
-  if (clippedText(s, rules, visual)) out.push("clipped-text");
+  if (clippedFields(s, rules, visual).length) out.push("clipped-text");
   if (s.layout === "bullets") {
     if (!isPlanSlide(s)) return out;
     const list = (s.bullets ?? []).filter((b) => b.trim());
@@ -668,6 +689,25 @@ function samePrefix(orig: string, next: string, cap: number): boolean {
  * sig'masa, rasm keyin joy beradi (`imageYieldField`), matn kesilmaydi.
  */
 function mergeRepair(orig: SlideModel, raw: Record<string, unknown>, rules: BodyRules, visual?: SlideVisual): SlideModel | null {
+  const title = repairedTitle(orig, raw);
+  const body = mergeBody(orig, raw, rules, visual);
+  if (!body && title === undefined) return null;
+  const base = body ?? orig;
+  return title === undefined ? base : { ...base, title };
+}
+
+/**
+ * Kesilgan sarlavha — FAQAT rejasiz slaydda (manbalar, yakun, blok slaydi)
+ * va faqat asli «…» bilan qirqilgan bo'lsa; reja slaydi sarlavhasi —
+ * agenda bandi, o'zgarmaydi. Yozuvchi bilan bir chegara (`SLIDE_LIMITS.title`).
+ */
+function repairedTitle(orig: SlideModel, raw: Record<string, unknown>): string | undefined {
+  if (isPlanSlide(orig) || !clippedAt(orig.title, SLIDE_LIMITS.title) || typeof raw.title !== "string") return undefined;
+  const next = clipTo(raw.title.replace(/[ \t\n\r\f\v]+/g, " ").trim(), SLIDE_LIMITS.title);
+  return next && next !== orig.title ? next : undefined;
+}
+
+function mergeBody(orig: SlideModel, raw: Record<string, unknown>, rules: BodyRules, visual?: SlideVisual): SlideModel | null {
   switch (orig.layout) {
     case "bullets": {
       // Son AVVAL, keyin shu SONDAGI quti — yozuvchi bilan bir funksiya (`bulletClipLimit`).
@@ -770,7 +810,7 @@ function mergeRepair(orig: SlideModel, raw: Record<string, unknown>, rules: Body
   }
 }
 
-const REASON_TEXT: Record<ThinReason, (t: LayoutWordTargets, r: BodyRules, s: SlideModel) => string> = {
+const REASON_TEXT: Record<ThinReason, (t: LayoutWordTargets, r: BodyRules, s: SlideModel, visual?: SlideVisual) => string> = {
   "few-bullets": (_t, r) => `band kam — ${r.minBullets}–${r.maxBullets} ta band yozing`,
   "short-bullets": (t) => `bandlar juda qisqa — har biri ${fmtRange(t.bullet)} so‘zli TO‘LIQ gap (ta’rif, sabab, misol, oqibat)`,
   "short-steps": (t) =>
@@ -781,14 +821,10 @@ const REASON_TEXT: Record<ThinReason, (t: LayoutWordTargets, r: BodyRules, s: Sl
   "clipped-option": (t) =>
     `variant kesilgan yoki qutiga sig‘maydi — faqat shu variantni ≤ ${t.quizOptionMax} so‘z qilib, ASL MATNNING BOSHINI saqlab to‘ldiring/qisqartiring; qolgan variantlar, tartib va answer o‘zgarmasin`,
   "short-columns": (t) => `ustunlar yupqa — har ustunda ${fmtRange({ min: Math.min(3, t.maxColItems), max: t.maxColItems })} band, har band ${fmtRange(t.colItem)} so‘z`,
-  "clipped-text": (t, _r, s) =>
-    `matn kesilgan («…» bilan tugagan band) — FAQAT shu bandlarni ma’nosini saqlab QISQARTIRING: ${
-      s.layout === "bullets"
-        ? `har band ≤ ${t.bullet.max} so‘z`
-        : s.layout === "process"
-          ? `har bosqich text ≤ ${(t.stepTextBy[Math.max(PROCESS_MIN_STEPS, Math.min(s.steps?.length ?? 0, t.maxSteps))] ?? t.stepText).max} so‘z`
-          : `har band ≤ ${t.colItem.max} so‘z`
-    }; qolgan bandlar so‘zma-so‘z qolsin, «…» yozmang`,
+  "clipped-text": (_t, r, s, visual) =>
+    `matn kesilgan («…» bilan tugagan) — FAQAT shu maydonlarni ma’nosini saqlab QISQARTIRING: ${clippedFields(s, r, visual)
+      .map((f) => `${{ title: "title", bullets: "har band", colItem: "har ustun bandi", stepText: "har bosqich text" }[f.field]} ≤ ${f.words} so‘z va ≤ ${Math.floor(PROMPT_HEADROOM * f.cap)} belgi`)
+      .join(", ")}; qolgan matn so‘zma-so‘z qolsin, «…» yozmang`,
 };
 
 /** Maket bo'yicha model qaytaradigan maydonlar (javob sxemasi uchun). */
@@ -862,8 +898,8 @@ export async function repairThinSlides(
         const s = out[index];
         return [
           `index=${index} layout=${s.layout}`,
-          `kamchilik: ${reasons.map((r) => REASON_TEXT[r](t, rules, s)).join("; ")}`,
-          `qaytaring: {"index":${index},${FIELDS[s.layout] ?? ""}}`,
+          `kamchilik: ${reasons.map((r) => REASON_TEXT[r](t, rules, s, visual)).join("; ")}`,
+          `qaytaring: {"index":${index},${[FIELDS[s.layout], clippedFields(s, rules, visual).some((f) => f.field === "title") ? `"title":""` : ""].filter(Boolean).join(",")}}`,
           `hozirgi: ${JSON.stringify(current(s))}`,
         ].join("\n");
       }),

@@ -67,7 +67,7 @@ Shartnomalar (yakuniy, review'lardan keyin):
 - 4 auditor (A1 prompt/limit, A2 maket, A3 tuzilma/parametr, A4 jonli baza) → 24 topilma (`docs/audit-25/`). A4: 6 ta «oldin» deka ($0.46) — hammasida S1+S2 takrorlandi.
 - Paketlar alohida worktree'larda, har biriga mustaqil Opus reviewer (`audit/reviews/AUDIT-25-P*.md`); hech biri birinchi
   urinishda o'tmadi — jami 14 review raundi. Har o'zgarish: qizil→yashil regressiya testi + mutatsiya tekshiruvi.
-- Merge tartibi: P6 → P5 → P2 → P1 → P7 → P3 → P4 → P1 ulanishi (W1–W6) → P3 follow-up.
+- Merge tartibi: P6 → P5 → P2 → P1 → P7 → P3 → P4 → P1 ulanishi (W1–W6) → P3 follow-up → W7 → P10 → P8 → P9 → P11 → P13 → P12 → P14 (yakuniy jonli tuzatish).
 
 ### Nima o'zgardi (merge qilingan)
 | Paket | Natija |
@@ -82,6 +82,10 @@ Shartnomalar (yakuniy, review'lardan keyin):
 | P8 | «Matn rasmdan ustun»: prompt maqsadlariga 15 % zahira (7 jonli dekada p90 = 10.4 belgi/so'z o'lchandi), yozuv bosqichi rasmsiz quti sig'imida kesadi, matni rasm yonida sig'maydigan slayd rasmsiz qoladi (rasm va'dasi shundan keyin hisoblanadi — D1), bullet'lar ham quti sig'imida; rasm yuklash yo'li matn sig'masa 400 qaytaradi. |
 | P9 | Bo'limsiz dekalarda ham reja slaydlari «0N» belgisi bilan (17 vizualda o'z uslubida); rejasiz slaydlar 14 280 kombinatsiyada bayt-bo'yicha o'zgarmagan. |
 | P10 | Grounding redirect'lari 3 tadan parallel, 6 s byudjet, so'rov boshiga 3 s; hal bo'lmasa manbalar slaydida domen ko'rsatiladi, redirect URL hech qachon chiqmaydi. |
+| P11 | Chegaralar DEKANING vizualidan (`slide-limits.ts`, klient-xavfsiz `fitChars`/`clipLimit`; statik «eng tor vizual» jadvali faqat zaxira) — «…» kesiklarning ildizi (circle 121 → 45); ko'ruvchi tahriri ham shu chegaralar bilan (rasmli slaydda yorliq maydonlari uchun rad, proza NO_IMAGE); agenda bandi ham rasmga joy beradi; `clipTo(…, 0/1)`; ro'yxat tahririda «qisqarmaydi» qoidasi identitet bo'yicha. |
+| P12 | Commit nuqtasida matn↔rasm qo'riqchisi (`imageTextOverflow`, `lib/server/slide-commit.ts`): rasmli slaydda matn asl holatdan (`doc_prev`, rasm URL bo'yicha) ko'ra ko'proq toshmasin — monoton; `IMAGE_YIELD_TABLE` bitta o'lchov manbasi; eski dekalar AI rasmini yo'qotmaydi. |
+| P13 | Prompt ≡ beats: test/javob qatorlari `plannedBlocks`dan; agenda oralig'i hech qachon «3–1» (`agenda'da 3)`); forma va dvigatel `defaultSlideCount` bitta manbadan; REJA sarlavhasi so'z chegarasi agenda qutisi VA sarlavha maydonidan (≤ `SLIDE_LIMITS.title`). |
+| P14 | Yakuniy jonli 7-run (3/7 tor vizualda qizil) → `fitWords`: rasmli quti AYNAN 5 so'z bersa ham maqsad rasmsiz qutidan (prompt «5» ≠ detektor «< 5» nol zaxirasi yo'qoldi; 2 679 kombinatsiyadan 429 tasi 4 band × 5 so'z edi); ustun soni 3 ta TO'LIQROQ band tomon (`maxColItems` zaxira bilan > 5 so'z); `clipped-text` — «…» bilan qirqilgan band/ustun/bosqich (blok slaydida ham) ta'mir nomzodi: model ma'nosini saqlab qisqartiradi, yana sig'masa rad. 42/42 test, 3 mutatsiya qizil. |
 
 ### Egasi qarori (2026-09-25)
 - **D1 — «matn rasmdan ustun» (P8):** slayd matni rasm yonida sig'masa, slayd rasmsiz qoladi va rasm va'dasiga

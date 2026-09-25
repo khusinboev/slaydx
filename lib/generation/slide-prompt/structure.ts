@@ -2,7 +2,7 @@ import { bodyRules } from "../slide-audience";
 import { plannedBlocks, type SlideBlockId } from "../slide-blocks";
 import { fitChars, SLIDE_LIMITS } from "../slide-limits";
 import { bodyWantOf } from "../slide-params";
-import { CHARS_PER_WORD, fmtRange, PROMPT_HEADROOM } from "../slide-quality";
+import { CHARS_PER_WORD, fmtRange, PROMPT_HEADROOM, TITLE_WORDS } from "../slide-quality";
 import type { SlideTemplate } from "../slide-templates";
 import type { DocMeta } from "../types";
 import type { SlidePromptCtx } from "./ctx";
@@ -97,13 +97,13 @@ export function structureLines(meta: DocMeta, tpl: SlideTemplate, ctx: SlideProm
     /*
      * INT-02: agenda qutisi torligi (P11) modelga ANIQ raqam sifatida
      * ham beriladi — yuqoridagi qator oraliq, bu qator «eng ko'pi» qat'iy
-     * chegara. Umumiy sarlavha qoidasi («Sarlavha to‘liq fikr, 6–10
-     * so‘z», `base.ts`) BOSHQA slaydlar uchun o'zgarishsiz qoladi — bu
+     * chegara. Umumiy sarlavha qoidasi («Sarlavha to‘liq fikr, 4–7
+     * so‘z», `TITLE_WORDS`, `base.ts`) BOSHQA slaydlar uchun o'zgarishsiz qoladi — bu
      * qator uni qoplamaydi, faqat REJA slaydlariga alohida (torroq)
      * chegara qo'shadi, aks holda ikkalasi ZID ko'rinardi.
      */
     agenda
-      ? `REJA slaydlari sarlavhasi: eng ko‘pi ${agendaWordsCap} so‘z (agenda qutisiga sig‘ishi uchun) — bu FAQAT reja slaydlariga tegishli, boshqa slaydlar sarlavhasi umumiy qoidada (6–10 so‘z) qoladi.`
+      ? `REJA slaydlari sarlavhasi: eng ko‘pi ${agendaWordsCap} so‘z (agenda qutisiga sig‘ishi uchun) — bu FAQAT reja slaydlariga tegishli, boshqa slaydlar sarlavhasi umumiy qoidada (${TITLE_WORDS.min}–${TITLE_WORDS.max} so‘z) qoladi.`
       : "",
     /*
      * REJA = SHARTNOMA (AUDIT-25). Rejadagi har bandning o'z slaydi bor —

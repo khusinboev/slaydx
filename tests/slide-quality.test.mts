@@ -11,6 +11,8 @@ import {
   NO_IMAGE,
   imageYieldField,
   bulletClipLimit,
+  TITLE_CHARS,
+  TITLE_WORDS,
   COL_MIN_ITEMS,
   COL_MIN_WORDS,
   PROCESS_MIN_STEPS,
@@ -868,6 +870,49 @@ test("clipped-text: «…» bilan qirqilgan band/ustun bandi/bosqich — blok sl
   assert.deepEqual(reasonsOf(S({ layout: "bullets", bullets: ["Bir.", "Ikki.", cut] })), ["clipped-text", "short-bullets"]);
 });
 
+test("clipped-text: REJASIZ slayd sarlavhasi «…» bilan kesilgan — nomzod; reja slaydi sarlavhasi (agenda bandi) — emas", () => {
+  const cutTitle = clipTo(sent(20), SLIDE_LIMITS.title);
+  assert.ok(cutTitle.endsWith("…") && cutTitle.length <= SLIDE_LIMITS.title);
+  assert.deepEqual(reasonsOf({ id: "r", layout: "references", title: cutTitle, references: [] } as unknown as SlideModel), ["clipped-text"]);
+  assert.deepEqual(reasonsOf({ id: "c", layout: "closing", title: cutTitle, subtitle: sent(10) } as unknown as SlideModel), ["clipped-text"]);
+  assert.deepEqual(reasonsOf(S({ layout: "bullets", title: cutTitle, bullets: [sent(14), sent(14, 3), sent(14, 6)] })), [], "reja slaydi sarlavhasi shartnoma — tegilmaydi");
+  assert.deepEqual(reasonsOf(S({ layout: "bullets", title: cutTitle, bullets: [sent(14), sent(14, 3), sent(14, 6)], plan: undefined })), ["clipped-text"]);
+  // Prompt: sarlavha qoidasi belgi chegarasi bilan, yozuvchi qopqog'idan 15 % past.
+  assert.equal(TITLE_CHARS, Math.floor(0.85 * SLIDE_LIMITS.title));
+  assert.ok(TITLE_WORDS.max * CHARS_PER_WORD <= SLIDE_LIMITS.title);
+});
+
+test("clipped-text ta'miri: rejasiz sarlavha qisqartiriladi (manbalar/yakun ham), reja sarlavhasi hech qachon almashmaydi", async () => {
+  const cutTitle = clipTo(sent(20), SLIDE_LIMITS.title);
+  const refs = { id: "r", layout: "references", title: cutTitle, references: [{ title: "A", source: "B" }] } as unknown as SlideModel;
+  const shortTitle = sent(5, 2);
+  await withLlm(
+    () => jsonReply({ slides: [{ index: 0, title: shortTitle }] }),
+    async (calls) => {
+      const [out] = await repairThinSlides([refs], meta, tpl, {}, later(), later());
+      assert.match(calls[0].user, /title ≤ 7 so‘z va ≤ 61 belgi/);
+      assert.match(calls[0].user, /"index":0,"title":""/);
+      assert.equal(out.title, shortTitle);
+      assert.deepEqual({ ...out, title: refs.title }, refs, "sarlavhadan boshqa maydon o'zgardi");
+    },
+  );
+  // Yana uzun sarlavha — rad (asl qoladi).
+  await withLlm(
+    () => jsonReply({ slides: [{ index: 0, title: sent(25) }] }),
+    async () => assert.deepEqual(await repairThinSlides([refs], meta, tpl, {}, later(), later()), [refs]),
+  );
+  // Reja slaydi: bandlar yupqa, model sarlavhani ham yuboradi — bandlar qabul, sarlavha ASL.
+  const plan = S({ layout: "bullets", title: cutTitle, bullets: ["Bir.", "Ikki.", "Uch."] });
+  await withLlm(
+    () => jsonReply({ slides: [{ index: 0, title: shortTitle, bullets: [sent(14), sent(14, 3), sent(14, 6)] }] }),
+    async () => {
+      const [out] = await repairThinSlides([plan], meta, tpl, {}, later(), later());
+      assert.equal(out.title, cutTitle);
+      assert.equal(out.bullets!.length, 3);
+    },
+  );
+});
+
 test("clipped-text ta'miri: prompt qisqartirishni so'raydi (blok slaydi ham), sig'adigan javob «…» siz qabul, sig'maydigani rad", async () => {
   const cap3 = bulletClipLimit(rules, tpl.visual, 3);
   const cut = clipTo(sent(40), cap3);
@@ -880,7 +925,7 @@ test("clipped-text ta'miri: prompt qisqartirishni so'raydi (blok slaydi ham), si
       const [out] = await repairThinSlides([goals], meta, tpl, {}, later(), later());
       assert.equal(calls.length, 1);
       assert.match(calls[0].user, /kesilgan/);
-      assert.match(calls[0].user, new RegExp(`har band ≤ ${t.bullet.max} so‘z`));
+      assert.match(calls[0].user, new RegExp(`har band ≤ ${t.bullet.max} so‘z va ≤ ${Math.floor(0.85 * cap3)} belgi`));
       assert.match(calls[0].system, /qisqartirasiz/);
       assert.deepEqual(out.bullets, short);
       assert.ok(out.bullets!.every((b) => !b.endsWith("…")));

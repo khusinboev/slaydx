@@ -622,10 +622,10 @@ test("INT-02: 1–4-sinf/split/6 band — reja sarlavhasi 3 so'zga chegaralanadi
   const meta = extractMeta(pro, { topic: "x", slideAudience: "school_1_4", planItems: 6, blocks: "reja" });
   const cap = agendaWordsCapFrom(meta, "split");
   assert.equal(cap, 3, `probe: 1–4-sinf/split/6 band sig'imi 3 so'z bo'lishi kutilgan, oldi: ${cap}`);
-  // Umumiy sarlavha qoidasi («6–10 so‘z») BOSHQA slaydlar uchun saqlanadi — bu qator uni almashtirmaydi.
+  // Umumiy sarlavha qoidasi («4–7 so‘z, ≤ 61 belgi» — `TITLE_WORDS`/`TITLE_CHARS`) BOSHQA slaydlar uchun saqlanadi — bu qator uni almashtirmaydi.
   const p = promptWith({ slideAudience: "school_1_4", planItems: 6, blocks: "reja" }, compare);
-  assert.match(p, /Sarlavha to‘liq fikr, 6–10 so‘z\./);
-  assert.match(p, /boshqa slaydlar sarlavhasi umumiy qoidada \(6–10 so‘z\) qoladi/);
+  assert.match(p, /Sarlavha to‘liq fikr, 4–7 so‘z, ≤ 61 belgi\./);
+  assert.match(p, /boshqa slaydlar sarlavhasi umumiy qoidada \(4–7 so‘z\) qoladi/);
 });
 
 test("INT-02: invariant — BARCHA 14 auditoriya × 17 vizual: va'da qilingan N so'z ikkala qutidan (agenda VA sarlavha 72 belgi) oshmaydi", () => {
