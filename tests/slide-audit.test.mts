@@ -147,11 +147,11 @@ test("P11/INT-02: agenda bandi sarlavhaning kesilgan prefiksi («…») bo'lsa �
   const agenda = doc.slides.find((s) => s.layout === "agenda")!;
   const section1 = doc.slides.find((s) => s.layout === "section" && s.plan === 1)!;
   section1.title = "Orol dengizining qurishi sabablari va sug'orish tizimlarining ta'siri";
-  agenda.bullets![0] = "Orol dengizining qurishi sabablari va…";
+  (agenda.bullets as string[])[0] = "Orol dengizining qurishi sabablari va…";
   const { ok, issues } = auditSlideDoc(doc);
   assert.equal(ok, true, JSON.stringify(issues));
   // Prefiks BO'LMASA — hamon nomuvofiqlik.
-  agenda.bullets![0] = "Boshqa mavzu haqida…";
+  (agenda.bullets as string[])[0] = "Boshqa mavzu haqida…";
   const bad = auditSlideDoc(doc);
   assert.equal(bad.ok, false);
   assert.ok(uniqueKinds(bad.issues).includes("plan-title-mismatch"));
