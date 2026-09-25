@@ -155,8 +155,12 @@ export async function commitDocOps(
    * Serverga xos tekshiruv (slayd: «matn rasm bilan sig'maydi», AUDIT-25
    * INT-03) — TRANZAKSIYADAN OLDIN: rad etilsa na doc, na yuklangan rasm
    * yoziladi. Yuklash, PATCH, sayqal — hammasi shu nuqtadan o'tadi.
+   * ASL deka (`doc_prev`) faqat guard so'rasa o'qiladi (tez yo'llar
+   * o'tmagan rasmli slayd bo'lsa) — oddiy tahrir qo'shimcha so'rov qilmaydi.
    */
-  cur.adapter.guard?.(cur.doc, doc, ops as unknown[]);
+  await cur.adapter.guard?.(cur.doc, doc, ops as unknown[], {
+    original: async () => (await getGenerationForRestore(id, userId))?.docPrev ?? null,
+  });
 
   // Render TRANZAKSIYADAN OLDIN: sof funksiyalar, ulanishni ushlab
   // turishning hojati yo'q.

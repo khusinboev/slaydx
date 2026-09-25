@@ -11,7 +11,7 @@ import { renderPptx } from "../generation/render-pptx";
 import { renderPptxWithTemplate } from "../generation/render-pptx-template";
 import { getTemplate } from "./template-upload";
 import { ApiError } from "./api";
-import { imageOverflowChars, type FitField } from "../generation/slide-quality";
+import { imageOverflowRatio, imageYieldText, type FitField } from "../generation/slide-quality";
 import { buildSlideDeck } from "../generation/slides";
 import type { ImageBytes } from "../generation/slide-images";
 import type { SlideModel } from "../generation/slide-types";
@@ -76,7 +76,7 @@ export type EditAdapter = {
    * `apply` izomorf (klient bundle ham shu kodni ishlatadi), serverga xos
    * og'ir predikatlar (`slide-quality.ts`) esa u yerga kira olmaydi.
    */
-  guard?: (before: AcademicDoc, after: AcademicDoc, ops: unknown[]) => void;
+  guard?: (before: AcademicDoc, after: AcademicDoc, ops: unknown[], ctx: GuardCtx) => void | Promise<void>;
   render: (ctx: RenderCtx, deps: RebuildDeps) => Promise<RenderedFile>;
 };
 
@@ -85,18 +85,8 @@ const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingm
 /** Rasm tasmasi bilan matn qutidan chiqadigan slayd — foydalanuvchiga ko'rinadigan xabar. */
 export const TEXT_TOO_LONG_FOR_IMAGE = "Matn rasm bilan sig‘maydi — avval matnni qisqartiring";
 
-/**
- * Slaydning «rasm bilan sig'adimi» holatini belgilaydigan matni — AYNAN
- * `imageYieldField` o'qiydigan maydonlar (maket + quti matnlari; ortig'i
- * zarar qilmaydi, faqat ko'proq slayd tekshiriladi). Sarlavha, izoh,
- * shrift/o'lcham, kolontitul, rasm URL i bu yerda YO'Q: ular sig'ishni
- * o'zgartirmaydi. `imageYieldField` ga yangi maydon qo'shilsa — shu
- * ro'yxatga ham (aks holda o'sha maydon tahriri «o'zgarmagan» deb
- * o'tib ketadi; `tests/slide-image-edit.test.mts` INT-03 bloki).
- */
-function yieldText(s: SlideModel): string {
-  return JSON.stringify([s.layout, s.bullets, s.left, s.right, s.steps, s.stats, s.table, s.quote, s.subtitle]);
-}
+/** `guard` konteksti: ASL deka (`doc_prev`) — faqat kerak bo'lganda, dangasa o'qiladi. */
+export type GuardCtx = { original?: () => Promise<AcademicDoc | null> };
 
 /**
  * «Matn rasmdan ustun» qoidasining YAGONA server nuqtasi (AUDIT-25 INT-03).
@@ -107,59 +97,80 @@ function yieldText(s: SlideModel): string {
  * Ilgari faqat birinchisi tekshirilardi (`uploadSlideImage`). Endi
  * hammasi `commitDocOps` → `slideAdapter.guard` → shu funksiyadan o'tadi.
  *
- * QOIDA (eng kam kutilmagan, MONOTON): op lardan keyingi har RASMLI slayd
- * o'z ASL slaydi bilan solishtiriladi. Asl slayd — `slideOrigins` bergan
- * o'rin (joyi `reorder`/`delete`/`add` bilan surilgan bo'lsa ham) yoki
- * `insert`/`set` yukidagi `id` bo'yicha `before` dagi slayd (undo yuki
- * asl slayd obyektini olib keladi). Asl slayd RASMLI bo'lsa — tahrir
- * rasmli qutidan ortiqchani (`imageOverflowChars`) birorta maydonda
- * KO'PAYTIRSAGINA rad etiladi; teng yoki kamaygan ortiqcha — qabul, hatto
- * hali sig'masa ham. Asl slayd rasmsiz yoki yo'q bo'lsa — to'liq tekshiruv
- * (ortiqcha bo'lsa rad). Ya'ni:
+ * QOIDA (MONOTON — eski deka hech qachon o'z AI rasmini yo'qotmaydi):
+ * op lardan keyingi har RASMLI slayd, rasmli qutiga sig'masa, «asos»
+ * slaydlar bilan solishtiriladi va birortasiga nisbatan YOMONLASHMAGAN
+ * bo'lsa qabul qilinadi. Yomonlashmagan = quti matni (`imageYieldText`)
+ * aynan bir xil YOKI har maydonda ortiqcha nisbati (`imageOverflowRatio`)
+ * asosnikidan katta emas (asosda yo'q maydon uchun — asosning ENG YOMON
+ * nisbati: maket o'zgarib ortiqcha kamaysa ham qabul, P12 sharhi 3). Asoslar:
  *
- *   - tegilmagan slayd va quti matniga tegmaydigan tahrir (sarlavha, izoh,
- *     shrift, kolontitul) — ortiqcha o'zgarmaydi, qabul: eski dekalarda
- *     oldindan sig'maydigan rasmli slayd boshqa tahrirni BLOKLAMAYDI
- *     (AUDIT-25-OLDDECKS);
- *   - eski dekada matnni QISQARTIRISH hech qachon rad etilmaydi (hali
- *     sig'masa ham), UZAYTIRISH — rad;
- *   - rasmi BOR slaydda rasmni ALMASHTIRISH (yuklash yoki `image` op),
- *     matn o'zgarmagan — qabul (P8 R3);
- *   - o'chirilgan slaydni undo (`insert`, asl `id` bilan, bir PATCH ichida)
- *     — asl holat, qabul;
- *   - rasmsiz slaydga rasm qo'yish (`image`/`imageRestore`), yangi rasmli
- *     slayd (`insert` begona `id` bilan), yangi dekada rasmli slayd matnini
- *     qutidan oshirish — rad.
+ *   1) o'z ASL slaydi — `slideOrigins` bergan o'rin (`reorder`/`delete`/
+ *      `add` bilan surilgan bo'lsa ham) va `insert`/`set` yukidagi `id`
+ *      bo'yicha `before` dagi slayd — faqat RASMLI bo'lsa;
+ *   2) `before` dagi AYNAN shu `image.url` li rasmli slaydlar;
+ *   3) ASL dekadagi (`doc_prev`, dangasa; `null` bo'lsa `before` asl)
+ *      shu `image.url` li rasmli slaydlar. URL — qayta raqamlashdan
+ *      (`s{i}`) mustaqil kalit: AI rasmi o'z slaydini PATCH lar orasida
+ *      ham topadi (P12 sharhi 1).
+ *
+ * Natija:
+ *   - tegilmagan slayd, sarlavha/izoh/shrift/kolontitul tahriri — qabul;
+ *     eski dekadagi sig'mas rasmli slayd boshqa tahrirni BLOKLAMAYDI;
+ *   - eski dekada matnni QISQARTIRISH — qabul (hali sig'masa ham);
+ *     uzaytirish — rad;
+ *   - rasmni almashtirish (matn o'zgarmagan) — qabul (P8 R3);
+ *   - eski dekada: rasmni o'chirish → Ctrl+Z, «Rasmni qaytarish»,
+ *     slaydni o'chirish → Ctrl+Z, qisqartirish → Ctrl+Z — alohida PATCH
+ *     larda ham qabul (asl dekada shu URL + shu yoki uzunroq matn bor);
+ *   - rasmsiz slaydga yangi rasm, rasmni o'chirib matnni UZAYTIRIB
+ *     qaytarish (INT-03 oqimi 2), yangi dekada qutidan oshirish — rad.
  *
  * Qaytaradi: birinchi rad etilgan slayd indeksi va maydoni yoki `null`.
  * Deka qoidasi va vizuali `buildSlideDeck` dan — op lar ularni
  * o'zgartirmaydi (meta va shablon tahrirlanmaydi).
  */
-export function imageTextOverflow(before: AcademicDoc, after: AcademicDoc, ops: readonly DocOp[]): { index: number; field: FitField } | null {
+export async function imageTextOverflow(
+  before: AcademicDoc,
+  after: AcademicDoc,
+  ops: readonly DocOp[],
+  ctx: GuardCtx = {},
+): Promise<{ index: number; field: FitField } | null> {
   const slides = after.slides ?? [];
   if (!slides.some((s) => s.image)) return null;
   const prev = before.slides ?? [];
   const prevById = new Map(prev.map((s) => [s.id, s]));
   const origin = slideOrigins(prev.length, ops, slides.length);
   const deck = buildSlideDeck(after);
-  const overflow = (s: SlideModel) => imageOverflowChars(s, deck.bodyType, deck.visual);
+  const ratio = (s: SlideModel) => imageOverflowRatio(s, deck.bodyType, deck.visual);
+  let original: SlideModel[] | null = null;
+
   for (let index = 0; index < slides.length; index++) {
     const s = slides[index];
     if (!s.image) continue;
     const e = origin?.[index];
-    const bases = [e?.from == null ? undefined : prev[e.from], e?.via?.id ? prevById.get(e.via.id) : undefined];
-    // Tez yo'l: quti matni asl rasmli slayd bilan AYNAN bir xil — o'lchash shart emas.
-    if (bases.some((b) => b?.image && yieldText(b) === yieldText(s))) continue;
-    const now = overflow(s);
-    const worse = (b: SlideModel | undefined): FitField | null => {
-      const was = b?.image ? overflow(b) : {};
-      for (const [f, n] of Object.entries(now) as [FitField, number][]) if (n > (was[f] ?? 0)) return f;
-      return null;
+    const own = [e?.from == null ? undefined : prev[e.from], e?.via?.id ? prevById.get(e.via.id) : undefined];
+    const text = imageYieldText(s);
+    // Tez yo'l 1: quti matni o'z asl rasmli slaydi bilan AYNAN bir xil — o'lchash shart emas.
+    if (own.some((b) => b?.image && imageYieldText(b) === text)) continue;
+    const now = ratio(s);
+    const fields = Object.keys(now) as FitField[];
+    if (!fields.length) continue; // rasmli qutiga sig'adi
+    const notWorse = (b: SlideModel | undefined): boolean => {
+      if (!b?.image) return false;
+      if (imageYieldText(b) === text) return true;
+      const was = ratio(b);
+      const worst = Math.max(0, ...Object.values(was));
+      return fields.every((f) => now[f]! <= (was[f] ?? worst));
     };
-    // Qaysi asosga nisbatan yomonlashmagan bo'lsa — qabul (eng yumshoq asos).
-    const verdicts = bases.filter((b) => b?.image).map(worse);
-    const field = verdicts.length ? (verdicts.every(Boolean) ? verdicts[0] : null) : worse(undefined);
-    if (field) return { index, field };
+    // Tez yo'l 2: o'z asliga nisbatan yomonlashmagan (monoton).
+    if (own.some(notWorse)) continue;
+    // Sekin yo'l: shu rasm URL i bilan `before` da, keyin ASL dekada.
+    const sameUrl = (list: SlideModel[]) => list.some((b) => b.image?.url === s.image!.url && notWorse(b));
+    if (sameUrl(prev)) continue;
+    original ??= ((await ctx.original?.()) ?? null)?.slides ?? [];
+    if (sameUrl(original)) continue;
+    return { index, field: fields[0] };
   }
   return null;
 }
@@ -215,8 +226,8 @@ export const slideAdapter: EditAdapter = {
    * yo'q. 400 `text_too_long` — ko'ruvchi xabarni ko'rsatadi, hujjatni
    * qayta yuklaydi (`useDocEdit.settleFailure`).
    */
-  guard(before, after, ops) {
-    const bad = imageTextOverflow(before, after, ops as DocOp[]);
+  async guard(before, after, ops, ctx) {
+    const bad = await imageTextOverflow(before, after, ops as DocOp[], ctx);
     if (bad) throw new ApiError(TEXT_TOO_LONG_FOR_IMAGE, 400, { code: "text_too_long", index: bad.index, field: bad.field });
   },
   async render(ctx, deps) {
