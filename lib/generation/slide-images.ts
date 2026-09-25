@@ -3,6 +3,8 @@ import { pickProvider } from "./image-provider";
 import { photoSlot, slotPixels } from "./slide-layout";
 import { composeSlideImagePrompt, writeSlideImagePrompts } from "./slide-image-prompts";
 import { searchQueryFor } from "./image-search-query";
+import type { BodyRules } from "./slide-audience";
+import { imageYieldField } from "./slide-quality";
 import { safeFetchUrl, UnsafeUrlError } from "./safe-fetch";
 import type { SlideVisual } from "./slide-templates";
 import type { SlideModel } from "./slide-types";
@@ -221,14 +223,21 @@ async function persistImage(remote: SlideImage): Promise<SlideImage | null> {
  * cheklash to'langan va'daning bir qismini jimgina yeb qo'yardi.
  * Nechta rasm bo'lishini faqat MAKET hal qiladi — `photoSlot` slot
  * bergan har slayd rasm oladi.
+ *
+ * `rules` (AUDIT-25 P8, «matn rasmdan ustun»): berilsa, matni RASMLI
+ * qutiga sig'maydigan slayd (`imageYieldField`) rejadan CHIQARILADI —
+ * matn to'liq qoladi, rasm qo'yilmaydi. Chiqarish `want` dan OLDIN:
+ * bu siyosat «kam yetkazildi» deb qisman qaytarishga olib kelmaydi.
+ * Rasmi allaqachon bor slayd chiqarilmaydi (u yetkazilgan slot).
  */
 export function plannedImageSlots(
   slides: SlideModel[],
   visual: SlideVisual = "classic",
   premium = false,
   pro = false,
+  rules?: BodyRules,
 ): { s: SlideModel; size: FalSize }[] {
-  const eligible = slides.filter((s) => IMAGE_LAYOUTS.has(s.layout));
+  const eligible = slides.filter((s) => IMAGE_LAYOUTS.has(s.layout) && !(rules && !s.image && imageYieldField(s, rules, visual)));
   /*
    * Shift YO'Q — na oddiy, na pro (AUDIT-14). Formalar 2 dan beri oddiy
    * slayd rasmlari bepul stock (Pexels/Pixabay); `imageBudget` shifti
@@ -280,7 +289,28 @@ export type AttachImageOpts = VisualTier & {
    */
   onPlanned?: (indexes: number[]) => void;
   onImage?: (index: number, url: string) => void;
+  /**
+   * Deka tana qoidasi (`bodyRules(meta, tpl.id)`) — AUDIT-25 P8: matni
+   * rasmli qutiga sig'maydigan slayd rasm olmaydi (`plannedImageSlots`).
+   * Berilmasa siyosat o'chiq (eski chaqiruvlar, `image-lab`).
+   * DIQQAT: generatsiya yo'li (`buildSlideAcademicDoc`, `slide-write.ts`)
+   * uni HAR DOIM uzatishi shart — aks holda matn rasmsiz qutigacha
+   * yozilgan slayd rasm tasmasi bilan qutidan chiqadi (P8 sharhi, N2).
+   */
+  rules?: BodyRules;
 };
+
+/**
+ * Rasm matnga joy bergan slaydlar — har biriga bitta jurnal qatori.
+ * Reja (`plannedImageSlots`) bilan BIR predikat (`imageYieldField`).
+ */
+function logYielded(slides: SlideModel[], visual: SlideVisual, rules: BodyRules): void {
+  slides.forEach((s, i) => {
+    if (!IMAGE_LAYOUTS.has(s.layout) || s.image || !photoSlot(s.layout, visual)) return;
+    const field = imageYieldField(s, rules, visual);
+    if (field) console.info(`[rasm] rasm matnga joy berdi — slayd ${i + 1} (${s.layout}, ${field}): matn rasmli qutiga sig‘maydi`);
+  });
+}
 
 export async function attachSlideImages(
   slides: SlideModel[],
@@ -291,7 +321,8 @@ export async function attachSlideImages(
 ): Promise<SlideImageReport> {
   const pro = opts.meta?.toolId === "pro-slide";
   const provider = pickProvider(opts.meta);
-  const planned = plannedImageSlots(slides, visual, Boolean(opts.premium), pro);
+  // Rasm matnga joy beradi (P8) — `want` shu chiqarishdan KEYIN sanaladi.
+  const planned = plannedImageSlots(slides, visual, Boolean(opts.premium), pro, opts.rules);
   const report: SlideImageReport = {
     want: planned.length,
     got: 0,
@@ -308,6 +339,7 @@ export async function attachSlideImages(
     opts.onPlanned?.([]);
     return { ...report, want: 0 };
   }
+  if (opts.rules) logYielded(slides, visual, opts.rules);
   if (!report.want) {
     opts.onPlanned?.([]);
     return report;
