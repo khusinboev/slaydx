@@ -36,14 +36,19 @@ function pushAcademicHead(
   theme: SlideTheme,
   reserve: number,
 ): void {
-  const { fitSize } = LAYOUT_KIT;
-  const headBox: Box = { x: TEXT_X, y: 0.52, w: Math.max(3, ZONE_W - reserve), h: 0.82 };
+  const { badgedTitle, pushPlanBadge } = LAYOUT_KIT;
+  // AUDIT-25 P9: `plan` li mazmun slaydida sarlavha chapida «0N» (reja
+  // qatorlari uslubi); reja slaydining o'zida — yo'q (`planBadge`).
+  const headBoxT = badgedTitle(s, { x: TEXT_X, y: 0.52, w: Math.max(3, ZONE_W - reserve), h: 0.82 }, 26, 16);
+  const headBox = headBoxT.box;
+  const size = headBoxT.size;
+  pushPlanBadge(layers, s, headBoxT, theme);
   layers.push({
     t: "text",
     box: headBox,
     text: s.title,
     color: theme.text,
-    size: fitSize(s.title, headBox, 26, 16),
+    size,
     bold: true,
     src: { f: "title" },
   });
@@ -230,7 +235,7 @@ function planBullets(s: SlideModel, theme: SlideTheme, index: number, total: num
 }
 
 function planAgenda(s: SlideModel, theme: SlideTheme, index: number, total: number, ctx: PlanCtx): SlidePlan {
-  const { fitSize, pushFooter, W, H } = LAYOUT_KIT;
+  const { pushFooter, W, H } = LAYOUT_KIT;
   const layers: SlideLayer[] = [];
   layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.bg } });
   pushAcademicHead(layers, s, theme, ctx.reserve);
@@ -261,7 +266,7 @@ function planAgenda(s: SlideModel, theme: SlideTheme, index: number, total: numb
       box: lineBox,
       text: line,
       color: theme.text,
-      size: fitSize(line, lineBox, ctx.bodyType.bodyPt, ctx.bodyType.minPt - 1),
+      size: LAYOUT_KIT.agendaFit(line, lineBox, ctx.bodyType.bodyPt),
       valign: "middle",
       src: { f: "bullets", i },
     });
@@ -295,6 +300,8 @@ function planQuote(s: SlideModel, theme: SlideTheme, index: number, total: numbe
   const blockH = 0.06 + 0.42 + qH + (s.quoteBy ? 0.46 + byH + 0.34 + 0.016 : 0);
   const y0 = 1.5 + Math.max(0, (5.9 - 1.5 - blockH) / 2);
   layers.push({ t: "rect", box: { x: (W - 1.8) / 2, y: y0, w: 1.8, h: 0.06 }, fill: { color: theme.accent } });
+  // Reja nishoni (faqat `plan` li iqtibos) — aksent chiziq ustida, markazda.
+  LAYOUT_KIT.pushPlanBadgeAt(layers, s, (W - 1.2) / 2, y0 - 0.44, theme.accentInk, { w: 1.2, align: "center" });
   layers.push({
     t: "text",
     box: { x: 1.9, y: y0 + 0.48, w: tw, h: qH },

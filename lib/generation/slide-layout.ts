@@ -6,6 +6,7 @@ import { designOf } from "./visuals";
 import { planCustom } from "./slide-custom";
 import type { CustomTemplate } from "./pptx-template";
 import type { SlideModel, SlideSrc, SlideTheme } from "./slide-types";
+import { getSlideTheme } from "./slide-themes";
 
 /** Widescreen 16:9 in inches — same coordinate space as PPTX and the on-site viewer. */
 export const SLIDE_IN = { w: 13.333, h: 7.5 } as const;
@@ -436,6 +437,25 @@ const WORD_HEADROOM = 1.1;
  * keyin ham bu himoya QOLADI (ikki qavat): tahrir, eski doc_json va
  * chegaradan o'tgan har qanday matn baribir qutida qoladi.
  */
+/**
+ * Reja (agenda) qatorining himoya poli, pt — AUDIT-25 INT-02.
+ *
+ * Reja bandlari endi reja slaydlarining SARLAVHALARI (`syncAgenda`) —
+ * 72 belgigacha. Ilgari qator shrifti `fitSize(…, minPt - 1)` edi: polda
+ * sig'masa ham shu o'lchamda qolib TOSHARDI (1–4-sinf 6 × 72 belgi — 17
+ * maketning hammasida 112–159 %). Endi pastga `minPt - 1` dan keyin ham
+ * davom etadi, lekin 14 pt dan past emas. Qatorlar geometriyasi (joyi,
+ * balandligi) o'zgarmaydi; odatdagi matnda natija AYNAN eskicha (bir xil
+ * sikl, bir xil mezon) — faqat ilgari toshgan matn kichrayadi. Uzunlikni
+ * yozuv bosqichi (`fitChars("agenda", …)`, P11) `agendaRowBox` qutisidan
+ * `minPt` da cheklaydi — bu pol ikkinchi qavat.
+ */
+export const AGENDA_FLOOR_PT = 14;
+
+function agendaFit(text: string, box: Box, base: number): number {
+  return fitSize(text, box, base, AGENDA_FLOOR_PT);
+}
+
 function bodyFit(text: string, box: Box, base: number, bt: BodyRules, floor: number, bold = false): number {
   const start = Math.max(base, bt.bodyPt);
   const low = Math.min(floor, bt.minPt);
@@ -818,6 +838,211 @@ export function planNumber(s: SlideModel): string | null {
 }
 
 /**
+ * AUDIT-25 P9 — mazmun slaydidagi REJA NISHONI.
+ *
+ * Shablonda bo'lim slaydiga joy bo'lmasa (masalan, ma'ruza @12: titul,
+ * reja, maqsadlar, 5 mazmun slaydi, manbalar, yakun) reja bandining
+ * mazmun slaydi hech qanday raqamsiz qolardi — o'quvchi uni rejadagi
+ * «03» bilan bog'lay olmasdi (egasi shikoyati aynan shu). Endi `plan`
+ * bor mazmun slaydi sarlavha zonasida BITTA kichik «0N» oladi — reja
+ * qatorlaridagi raqam bilan bir uslubda (qalin, `accentInk`, 14–18 pt).
+ *
+ * Faqat shu maketlar: bo'lim o'z yirik raqamini oladi (ikki marta
+ * raqamlanmaydi); titul/reja/yakun/test/javoblar/manbalar — HECH QACHON.
+ * `plan` yo'q bo'lsa hech narsa chizilmaydi va sarlavha qutisi o'sha
+ * qoladi — eski doc_json bayt-bayt eskicha chiziladi. Raqam modeldan
+ * emas — qatlam `src` OLMAYDI (tahrirlanmaydi).
+ */
+const PLAN_BADGE_LAYOUTS: ReadonlySet<string> = new Set([
+  "bullets",
+  "twoCol",
+  "compare",
+  "process",
+  "table",
+  "stats",
+  "quote",
+]);
+
+/** Nishon egallaydigan kenglik (raqam + sarlavhagacha oraliq), dyuym. */
+export const PLAN_BADGE_W = 0.62;
+
+/** Nishon matni («03») yoki `null` — maket nishon olmaydi / `plan` yo'q. */
+export function planBadge(s: SlideModel): string | null {
+  return PLAN_BADGE_LAYOUTS.has(s.layout) ? planNumber(s) : null;
+}
+
+/**
+ * Sarlavha qutisi nishon uchun o'ngga suriladi (`PLAN_BADGE_W`).
+ * Nishon yo'q — AYNAN o'sha obyekt qaytadi (eski chizish o'zgarmaydi).
+ */
+export function planBadgeBox(s: SlideModel, box: Box): Box {
+  if (!planBadge(s)) return box;
+  return { ...box, x: box.x + PLAN_BADGE_W, w: box.w - PLAN_BADGE_W };
+}
+
+/**
+ * Sarlavha + reja nishoni joylashuvi — BITTA qaror (AUDIT-25 P9 sharhi 1).
+ *
+ * Avval nishon sarlavha YONIDA (quti `PLAN_BADGE_W` ga surilgan). Surilgan
+ * qutida sarlavha `min` o'lchamda ham sig'masa (tor panel, logo, 72
+ * belgili sarlavha — ko'ruvchi kesar, PPTX to'kardi) nishon sarlavha
+ * USTIGA, alohida qatorga o'tadi va quti o'z kengligini saqlaydi. Ustida
+ * `room` dyuym joy bo'lmasa — yonida qoladi (sarlavha baribir eng kichik
+ * o'lchamda). Nishon yo'q — `fitSize` aynan eskicha chaqiriladi, quti
+ * o'sha obyekt (eski doc_json bayt-bayt eskicha).
+ */
+export type BadgedTitle = { box: Box; size: number; above: boolean };
+
+export function badgedTitle(
+  s: SlideModel,
+  box: Box,
+  base: number,
+  min: number,
+  room = 0.5,
+): BadgedTitle {
+  if (!planBadge(s)) return { box, size: fitSize(s.title, box, base, min), above: false };
+  const side = planBadgeBox(s, box);
+  const size = fitSize(s.title, side, base, min);
+  if (inkHeight(s.title, side.w, size) <= side.h + 1e-9) return { box: side, size, above: false };
+  if (box.y - room >= 0.08) return { box, size: fitSize(s.title, box, base, min), above: true };
+  // Ustida joy yo'q (magazine y 0.5) — nishon yonida qoladi, sarlavha esa
+  // SHU slaydda polidan 4 pt pastroqqa (≥ 14 pt) tushishi mumkin: toshgandan
+  // ko'ra kichikroq sarlavha yaxshi. Plan'siz slaydda pol o'zgarmaydi.
+  return { box: side, size: fitSize(s.title, side, base, Math.max(14, min - 4)), above: false };
+}
+
+/**
+ * Sarlavha zonasidagi reja nishoni — BITTA registr (P9 sharhi 2).
+ *
+ * Yorug' sahifada — TAB (`pushPlanTab`): to'q blok + aksent qirra +
+ * `titleText` raqam. Oddiy `accentInk` 18 pt «03» bazaviy oilalarda
+ * bosqich raqamlari («1 2 3», `accentInk` 18 pt) va karta/lab band
+ * raqamlari («01…», `accentInk` 18 pt) bilan AYNAN bir registrda edi —
+ * sprint aynan «har xil ma'noli raqamlar bir xil ko'rinadi» deb ochilgan.
+ *
+ * To'q sahifada (`dark`: dense, hero-split paneli) tab ko'rinmaydi —
+ * u yerda `titleMuted` qalin raqam (to'q sahifalarda ro'yxat raqami yo'q).
+ * Yonida — sarlavha birinchi qatorining o'qida (yoki `titleValign:
+ * "middle"`); ustida — sarlavha qutisining chap chetida.
+ */
+export function pushPlanBadge(
+  layers: SlideLayer[],
+  s: SlideModel,
+  t: BadgedTitle,
+  theme: SlideTheme,
+  /**
+   * `plain` — tab o'rniga yalang `accentInk` raqam: dizaynning o'z ro'yxat
+   * raqamlari AYNAN to'q blok/disk ichida bo'lsa (rail bosqich tugunlari),
+   * tab ular bilan bir registrga tushardi.
+   */
+  opts: { font?: string; titleValign?: "middle"; dark?: boolean; plain?: boolean } = {},
+): void {
+  if (!opts.dark && !opts.plain) {
+    pushPlanTab(layers, s, t, theme, { titleValign: opts.titleValign });
+    return;
+  }
+  const color = opts.dark ? theme.titleMuted : theme.accentInk;
+  if (t.above) {
+    const bh = badgeLineIn(16) + 0.06;
+    pushPlanBadgeAt(layers, s, t.box.x, t.box.y - bh - 0.04, color, { size: 16, font: opts.font });
+    return;
+  }
+  const size = Math.min(18, Math.max(14, Math.round(t.size * 0.8)));
+  const bh = badgeLineIn(size) + 0.06;
+  const y =
+    opts.titleValign === "middle"
+      ? t.box.y + (t.box.h - bh) / 2
+      : t.box.y + Math.max(0, (badgeLineIn(t.size) - badgeLineIn(size)) / 2);
+  pushPlanBadgeAt(layers, s, t.box.x - PLAN_BADGE_W, y, color, {
+    size,
+    font: opts.font,
+    ...(opts.titleValign ? { valign: "middle" as const } : {}),
+  });
+}
+
+const badgeLineIn = (pt: number) => (pt * 1.2) / 72;
+
+/** Tab balandligi — `badgedTitle(..., room)` uchun `PLAN_TAB_ROOM`. */
+const PLAN_TAB_H = 0.44;
+export const PLAN_TAB_ROOM = PLAN_TAB_H + 0.06;
+
+/**
+ * Nishonning «TAB» ko'rinishi — bo'lim slaydidagi daftar tabi tilida:
+ * to'q (`titleBg`) blok, tepasida aksent qirra, ichida `titleText` raqam
+ * (o'lchangan juft). Ro'yxat tartib raqamlari (01…N) sahifa rangidagi
+ * YALANG raqam — tab esa boshqa registr: o'quvchi ikkisini adashtirmaydi
+ * (AUDIT-25 P9 sharhi 2: notebook hoshiyasidagi «01» ro'yxatning yana bir
+ * raqamidek o'qilardi). Joy — `badgedTitle` qarori (yonida yoki ustida).
+ */
+export function pushPlanTab(
+  layers: SlideLayer[],
+  s: SlideModel,
+  t: BadgedTitle,
+  theme: SlideTheme,
+  opts: { titleValign?: "middle" } = {},
+): void {
+  const no = planBadge(s);
+  if (!no) return;
+  const w = PLAN_BADGE_W - 0.1;
+  const h = PLAN_TAB_H;
+  const x = t.above ? t.box.x : t.box.x - PLAN_BADGE_W;
+  const y = t.above
+    ? t.box.y - h - 0.05
+    : opts.titleValign === "middle"
+      ? t.box.y + (t.box.h - h) / 2
+      : t.box.y + Math.max(0, (badgeLineIn(t.size) - h) / 2);
+  // To'q kontentli temada `titleBg` ≈ `bg` (orbit — aynan teng): blok
+  // ko'rinsin deb aksent hoshiya; matn baribir `titleText`/`titleBg` ustida.
+  layers.push({
+    t: "rect",
+    box: { x, y, w, h },
+    fill: { color: theme.titleBg },
+    radius: 0.05,
+    ...(theme.darkContent ? { line: { color: theme.accent, width: 1 } } : {}),
+  });
+  layers.push({ t: "rect", box: { x, y, w, h: 0.07 }, fill: { color: theme.accent } });
+  layers.push({
+    t: "text",
+    box: { x, y: y + 0.07, w, h: h - 0.07 },
+    text: no,
+    color: theme.titleText,
+    size: 15,
+    bold: true,
+    align: "center",
+    valign: "middle",
+  });
+}
+
+/**
+ * Nishonni ANIQ nuqtaga chizadi — sarlavhasi yo'q kompozitsiyalar
+ * (iqtibos) va dizaynning o'z idiomasi (halqa, lenta, plitka) uchun.
+ * Quti balandligi bir qator (`size` × 1.2) + 0.06″.
+ */
+export function pushPlanBadgeAt(
+  layers: SlideLayer[],
+  s: SlideModel,
+  x: number,
+  y: number,
+  color: string,
+  opts: { size?: number; w?: number; font?: string; align?: "left" | "center" | "right"; valign?: "middle" } = {},
+): void {
+  const no = planBadge(s);
+  if (!no) return;
+  const size = opts.size ?? 16;
+  layers.push({
+    t: "text",
+    box: { x, y, w: opts.w ?? PLAN_BADGE_W - 0.08, h: badgeLineIn(size) + 0.06 },
+    text: no,
+    color,
+    size,
+    bold: true,
+    ...(opts.font ? { font: opts.font } : {}),
+    ...(opts.align ? { align: opts.align } : {}),
+    ...(opts.valign ? { valign: opts.valign } : {}),
+  });
+}
+
+/**
  * `magazine` maketidagi bo'lim slaydi: to'la ekran kadr va pastki matn
  * tasmasi.
  *
@@ -1142,6 +1367,8 @@ function planOverlay(
     // rangi sifatida o'lchanmagan (`tests/themes.test.mts`).
     layers.push({ t: "rect", box: { x, y: bandY + 0.4, w: 1.7, h: 0.1 }, fill: { color: theme.accent } });
     if (kind === "quote") {
+      // AUDIT-25 P9: reja nishoni aksent brusning o'ng uchida, bir o'qda.
+      pushPlanBadgeAt(layers, s, x + 1.95, bandY + 0.28, theme.titleMuted);
       const qText = s.quote || s.title;
       // Quti ATAYLAB past: ilgari 2.05 edi va ikki qatorli iqtibosdan
       // keyin muallifgacha bir dyuymlik bo'shliq qolardi (PDF da ko'rindi).
@@ -1230,9 +1457,11 @@ function planOverlay(
     layers.push({ t: "rect", box: { x, y: blockY, w: tw, h: 0.035 }, fill: { color: theme.accent } });
     if (kind === "quote") {
       const qText = s.quote || s.title;
+      const capBox = planBadgeBox(s, { x, y: blockY + 0.22, w: tw, h: 0.36 });
+      pushPlanBadge(layers, s, { box: capBox, size: 13, above: false }, theme, { dark: true });
       layers.push({
         t: "text",
-        box: { x, y: blockY + 0.22, w: tw, h: 0.36 },
+        box: capBox,
         text: s.title,
         color: theme.titleMuted,
         size: 13,
@@ -1309,6 +1538,8 @@ function planOverlay(
     const twc = card.w - 1.2;
     if (kind === "quote") {
       const qText = s.quote || s.title;
+      // Reja nishoni kartaning yuqori chap burchagida, iqtibos ustida.
+      pushPlanBadgeAt(layers, s, tx, card.y + 0.1, theme.accentInk);
       const qBox: Box = { x: tx, y: card.y + 0.5, w: twc, h: 1.9 };
       layers.push({
         t: "text",
@@ -1382,6 +1613,8 @@ function planOverlay(
       size: 48,
       bold: true,
     });
+    // Reja nishoni tirnoq belgisining o'ng tomonida (tirnoq ~0.35″ keng).
+    pushPlanBadgeAt(layers, s, panel.x + 1.0, panel.y + 0.42, theme.titleMuted);
     const quoteBox: Box = { x: panel.x + 0.45, y: panel.y + 0.95, w: panel.w - 0.9, h: 2.35 };
     layers.push({
       t: "text",
@@ -1435,13 +1668,18 @@ function planOverlay(
 
 function planHeading(layers: SlideLayer[], s: SlideModel, theme: SlideTheme, textW: number, x: number, reserve = 0) {
   // Logo bo'lsa sarlavha o'ng yuqori burchakka kirmaydi — `fitSize` toraygan qutiga qarab shriftni o'zi tanlaydi.
-  const headBox: Box = { x, y: 0.3, w: textW - reserve, h: 0.88 };
+  // AUDIT-25 P9: reja nishoni (faqat `plan` li mazmun slaydi) sarlavhaning
+  // chap tomonida; aksent chiziq joyida qoladi — nishon ustida turadi.
+  const headBoxT = badgedTitle(s, { x, y: 0.3, w: textW - reserve, h: 0.88 }, 22, 16);
+  const headBox = headBoxT.box;
+  const size = headBoxT.size;
+  pushPlanBadge(layers, s, headBoxT, theme);
   layers.push({
     t: "text",
     box: headBox,
     text: s.title,
     color: theme.text,
-    size: fitSize(s.title, headBox, 22, 16),
+    size,
     bold: true,
     src: { f: "title" },
   });
@@ -1700,7 +1938,7 @@ function planBullets(
         box: lineBox,
         text: line,
         color: theme.text,
-        size: fitSize(line, lineBox, bodyType.bodyPt, bodyType.minPt - 1),
+        size: agendaFit(line, lineBox, bodyType.bodyPt),
         valign: "middle",
         src: { f: "bullets", i },
       });
@@ -1776,13 +2014,17 @@ function planTwoCol(
     const x0 = M + 0.18;
     // Sarlavha `planHeading` dan EMAS: u `theme.text` bilan yozadi, u esa
     // to'q sahifada o'lchanmagan juft. To'q fonda faqat `titleText`.
-    const titleBox: Box = { x: x0, y: 0.34, w: zoneW - ctx.reserve, h: 0.7 };
+    // Reja nishoni to'q sahifada `titleMuted` bilan — o'lchangan juft.
+    const titleBoxT = badgedTitle(s, { x: x0, y: 0.34, w: zoneW - ctx.reserve, h: 0.7 }, 22, 16);
+    const titleBox = titleBoxT.box;
+    const titleSize = titleBoxT.size;
+    pushPlanBadge(layers, s, titleBoxT, theme, { dark: true });
     layers.push({
       t: "text",
       box: titleBox,
       text: s.title,
       color: theme.titleText,
-      size: fitSize(s.title, titleBox, 22, 16),
+      size: titleSize,
       bold: true,
     });
     layers.push({ t: "rect", box: { x: x0, y: 1.1, w: zoneW, h: 0.035 }, fill: { color: theme.accent } });
@@ -1840,13 +2082,16 @@ function planTwoCol(
     layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.bg } });
     const x0 = 0.7;
     const magW = W - 1.4 - cut;
-    const titleBox: Box = { x: x0, y: 0.5, w: magW - ctx.reserve, h: 1.05 };
+    const titleBoxT = badgedTitle(s, { x: x0, y: 0.5, w: magW - ctx.reserve, h: 1.05 }, 34, 22);
+    const titleBox = titleBoxT.box;
+    const titleSize = titleBoxT.size;
+    pushPlanBadge(layers, s, titleBoxT, theme);
     layers.push({
       t: "text",
       box: titleBox,
       text: s.title,
       color: theme.text,
-      size: fitSize(s.title, titleBox, 34, 22),
+      size: titleSize,
       bold: true,
     });
     layers.push({ t: "rect", box: { x: x0, y: 1.68, w: magW, h: 0.045 }, fill: { color: theme.accent } });
@@ -1898,13 +2143,22 @@ function planTwoCol(
     if (compare) layers.push({ t: "rect", box: { x: LEFT_IMG_W, y: 0, w: 0.07, h: H }, fill: { color: theme.accent } });
     const px = M + 0.05;
     const pw = LEFT_IMG_W - px - 0.45;
+    /*
+     * AUDIT-25 P9 (sharh 1): panel sarlavhasi TOR (logo bilan 3.0″) —
+     * nishon yonida tursa quti 2.38″ ga torayib 72 belgili sarlavha 17 pt
+     * da ham sig'masdi (ko'ruvchi kesadi, PPTX to'kadi). Shuning uchun bu
+     * yerda nishon sarlavha USTIDA, alohida qatorda; sarlavha qutisi
+     * kengligini ham, joyini ham saqlaydi.
+     */
     const titleBox: Box = { x: px, y: 0.62, w: pw - ctx.reserve, h: 1.5 };
+    const titleSize = fitSize(s.title, titleBox, 26, 17);
+    pushPlanBadgeAt(layers, s, px, 0.2, theme.titleMuted, { size: 16 });
     layers.push({
       t: "text",
       box: titleBox,
       text: s.title,
       color: theme.titleText,
-      size: fitSize(s.title, titleBox, 26, 17),
+      size: titleSize,
       bold: true,
     });
     layers.push({ t: "rect", box: { x: px, y: 2.25, w: 1.2, h: 0.08 }, fill: { color: theme.accent } });
@@ -2300,13 +2554,17 @@ function planStats(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
   const ink = dense ? theme.titleText : theme.text;
   layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: bg } });
   if (!dense) pushChrome(layers, theme, "full");
-  const titleBox: Box = { x: M + 0.18, y: 0.36, w: 12.2 - cut - ctx.reserve, h: 0.72 };
+  const titleBoxT = badgedTitle(s, { x: M + 0.18, y: 0.36, w: 12.2 - cut - ctx.reserve, h: 0.72 }, 24, 17);
+  const titleBox = titleBoxT.box;
+  const titleSize = titleBoxT.size;
+  // Reja nishoni: to'q (dense) sahifada `titleMuted`, yorug'da `accentInk`.
+  pushPlanBadge(layers, s, titleBoxT, theme, { dark: dense });
   layers.push({
     t: "text",
     box: titleBox,
     text: s.title,
     color: ink,
-    size: fitSize(s.title, titleBox, 24, 17),
+    size: titleSize,
     bold: true,
   });
 
@@ -2572,13 +2830,16 @@ function planTable(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
   const cut = stripCut(s);
   layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: pageBg } });
   if (!dense) pushChrome(layers, theme, "full");
-  const headBox: Box = { x: M + 0.18, y: 0.3, w: 12.2 - cut - ctx.reserve, h: 0.88 };
+  const headBoxT = badgedTitle(s, { x: M + 0.18, y: 0.3, w: 12.2 - cut - ctx.reserve, h: 0.88 }, 22, 16);
+  const headBox = headBoxT.box;
+  const headSize = headBoxT.size;
+  pushPlanBadge(layers, s, headBoxT, theme, { dark: dense });
   layers.push({
     t: "text",
     box: headBox,
     text: s.title,
     color: dense ? theme.titleText : theme.text,
-    size: fitSize(s.title, headBox, 22, 16),
+    size: headSize,
     bold: true,
   });
   layers.push({ t: "rect", box: { x: M + 0.18, y: 1.22, w: 1.1, h: 0.07 }, fill: { color: theme.accent } });
@@ -2821,6 +3082,49 @@ function pushLogo(plan: SlidePlan, s: SlideModel, theme: SlideTheme, url: string
 }
 
 /**
+ * Reja (agenda) qatorining MATN qutisi, dyuym — AUDIT-25 INT-02.
+ *
+ * Yozuv bosqichi (`fitChars("agenda", …)`, P11) reja bandini shu qutiga
+ * `minPt` da sig'adigan uzunlikka qirqadi. Yagona manba: qutini maketning
+ * O'ZI chizadi — `planSlide` `n` bandli sintetik reja slaydi bilan
+ * chaqiriladi, ya'ni bu funksiya maketdan hech qachon ajralmaydi. Qator
+ * geometriyasi matnga bog'liq emas (faqat dizayn, `n`, qoidalar, logo).
+ * Qutilar har xil bo'lsa (plitalar) — eng tor eni va eng past bo'yi
+ * (ehtiyotkor). Rejasiz dizayn (maket reja chizmasa) — `null`.
+ */
+const AGENDA_PROBE_TEXT = "Orol dengizi havzasida sug'orish tizimlarining iqlim va aholiga ta'siri.";
+
+export function agendaRowBox(
+  visual: SlideVisual,
+  n: number,
+  rules: BodyRules,
+  opts: { logo?: boolean; image?: boolean } = {},
+): Box | null {
+  const count = Math.max(1, Math.round(n));
+  const s: SlideModel = {
+    id: "agenda-probe",
+    layout: "agenda",
+    title: "Reja",
+    // Chegara uzunligidagi (72 belgi) band: matnga moslashadigan maket
+    // (split — qo'shni qatorga kengayadi) eng katta qutisini ko'rsatadi.
+    bullets: Array.from({ length: count }, () => AGENDA_PROBE_TEXT),
+    ...(opts.image ? { image: { url: "https://example.invalid/a.png" } } : {}),
+  };
+  const bodyType = { ...rules, agendaMax: Math.max(rules.agendaMax, count) };
+  const plan = planSlide(s, getSlideTheme("atlas"), visual, 1, 10, "auto", "lecture", {
+    bodyType,
+    logo: opts.logo ? "data:image/png;base64,AA" : undefined,
+  });
+  const rows = plan.layers.filter(
+    (l): l is Extract<SlideLayer, { t: "text" }> => l.t === "text" && l.src?.f === "bullets",
+  );
+  if (!rows.length) return null;
+  const w = Math.min(...rows.map((l) => l.box.w));
+  const h = Math.min(...rows.map((l) => l.box.h));
+  return { ...rows[0].box, w, h };
+}
+
+/**
  * Yangi maketlar uchun yordamchilar (`slide-layout-extra.ts`, WP-C).
  * Bu fayl 2000 qatordan oshdi — yangi maket shu yerga emas, o'z fayliga
  * yoziladi va faqat shu to'plamdan foydalanadi.
@@ -2853,6 +3157,17 @@ export const LAYOUT_KIT = {
   SECTION_TOP,
   SECTION_BOTTOM,
   planNumber,
+  planBadge,
+  planBadgeBox,
+  pushPlanBadge,
+  pushPlanBadgeAt,
+  pushPlanTab,
+  agendaFit,
+  AGENDA_FLOOR_PT,
+  agendaRowBox,
+  badgedTitle,
+  PLAN_TAB_ROOM,
+  PLAN_BADGE_W,
   LOGO_BOX,
   LOGO_RESERVE,
   BULLET_GAP_MIN,

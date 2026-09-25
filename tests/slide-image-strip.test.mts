@@ -356,6 +356,12 @@ test("rasmsiz maket geometriyasi E2 dan oldingi bilan AYNAN teng (barmoq izi)", 
   assert.equal(
     hash,
     /*
+     * Tekshirilgan (o'zgarmagan): AUDIT-25 P9 — mazmun slaydidagi reja
+     * nishoni («0N», `planBadge`) FAQAT `plan` li slaydda chiziladi; bu
+     * barmoq izi namunalari `plan`siz, ya'ni xesh ATAYLAB o'sha qoladi
+     * (eski doc_json bayt-bayt eskicha — P9 sharhida 14 280 kombinatsiya
+     * 879f495 bilan `JSON.stringify` darajasida solishtirilgan).
+     *
      * Yangilangan: AUDIT-25 A2-04 — `stats`/`process`/`table` tana matni
      * endi auditoriya oralig'ida (`bodyFit`: boshlanish max(dizayn,
      * bodyPt), pol minPt, sig'masa eski polgacha himoya, eng uzun so'z va
