@@ -373,7 +373,7 @@ export const TOOLS: ToolConfig[] = [
     group: "umumiy",
     icon: "presentation",
     tc: "192 38 211",
-    description: "Har slaydda AI chizgan rasm, boy brif, 4–30 slayd",
+    description: "Har mos slaydga AI chizgan rasm, boy brif, 4–30 slayd",
     submitLabel: "Slaydlarni yaratish",
     creatingLabel: "Pro taqdimot yaratilmoqda...",
     createdLabel: "pro taqdimot tayyor!",

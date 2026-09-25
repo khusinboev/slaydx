@@ -80,6 +80,11 @@ Shartnomalar (yakuniy, review'lardan keyin):
 | P6 | `deliveredCount` pro-slide'ni ham hisoblaydi — kam yetkazilganda qisman qaytarish (A3-03). |
 | P7/W7 | Ko'ruvchi tahriri `plan`ni saqlaydi; tahrir limitlari auditoriya bo'yicha (`limitsFor`), tegilmagan matn qisqarmaydi. |
 
+### Egasi qarori (2026-09-25)
+- **D1 — «matn rasmdan ustun» (P8):** slayd matni rasm yonida sig'masa, slayd rasmsiz qoladi va rasm va'dasiga
+  kirmaydi (qisman qaytarish yo'q). Egasi (a) variantini tanladi: qoida qabul qilindi, pro-slayd tavsifi
+  «Har mos slaydga AI chizgan rasm» (`lib/tools.ts`), narx o'zgarmaydi.
+
 ### Tekshiruv
 - Gate `slides3-pre` (879f495): typecheck 0, lint 0, unit yashil, viewer, UI, build, fresh-Postgres smoke — hammasi yashil.
 - Jonli «keyin» (7 deka, real Gemini): reja qamrovi 7/7 (oldin 0/6), tartib raqami sizishi 0, halol skelet; ko'z bilan: Orol 4/4, Kvant 5/5 band o'z slaydi bilan, sarlavha = reja bandi.
