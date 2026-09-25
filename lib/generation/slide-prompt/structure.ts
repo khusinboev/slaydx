@@ -113,8 +113,12 @@ export function structureLines(meta: DocMeta, tpl: SlideTemplate, ctx: SlideProm
      * Agenda baribir yozuvdan keyin shu slaydlar sarlavhasidan qayta
      * quriladi (`writeSlidesWithLlm`) — bu qator model sarlavhani
      * reja bandi NOMI qilib yozishi uchun.
+     *
+     * Agenda yo'q bo'lsa band nomi — oddiy sarlavha: yuqori chegara
+     * `TITLE_WORDS.max` (P14d N3; «3–7» edi — 7 × 9 = 63 > `TITLE_CHARS`,
+     * reja sarlavhasi esa hech qachon ta'mirlanmaydi — kesilgani qoladi).
      */
-    `REJA BANDLARI: rejada ${planN} ta band bor — ketma-ketlikdagi «REJA i-band: …» slaydlari aynan shu bandlar, tartibi bilan. Band bo‘lim (section) bilan ochilsa — bo‘lim sarlavhasi band nomi, keyingi slayd uning mazmuni. «:» dan keyingi so‘z faqat slayd shakliga ishora, band nomi emas: band nomini mavzudan o‘zingiz tuzing (${agenda ? fmtRange({ min: Math.min(3, agendaWordsCap), max: agendaWordsCap }) : "3–7"} so‘z). «REJA i-band:» yozuvini sarlavhaga ko‘chirmang.${agenda ? " agenda bandlari AYNAN shu slaydlar sarlavhalari, shu tartibda." : ""}`,
+    `REJA BANDLARI: rejada ${planN} ta band bor — ketma-ketlikdagi «REJA i-band: …» slaydlari aynan shu bandlar, tartibi bilan. Band bo‘lim (section) bilan ochilsa — bo‘lim sarlavhasi band nomi, keyingi slayd uning mazmuni. «:» dan keyingi so‘z faqat slayd shakliga ishora, band nomi emas: band nomini mavzudan o‘zingiz tuzing (${agenda ? fmtRange({ min: Math.min(3, agendaWordsCap), max: agendaWordsCap }) : fmtRange({ min: 3, max: TITLE_WORDS.max })} so‘z). «REJA i-band:» yozuvini sarlavhaga ko‘chirmang.${agenda ? " agenda bandlari AYNAN shu slaydlar sarlavhalari, shu tartibda." : ""}`,
     `Sarlavha boshida TARTIB raqami bo‘lmasin («1.», «2)», «I.» yo‘q; «3D», «5 ta qoida» — mumkin) — tartib raqamini maket o‘zi qo‘yadi.`,
     /*
      * SAVOLLAR SONI bu qatordan OLINDI (X-3).

@@ -35,7 +35,7 @@ import type { DocMeta } from "./types";
  * Bandlar: o'rtacha so'z soni ⌊`THIN_BULLET_K × bulletChars/8`⌋ dan kam
  * bo'lsa — yupqa. Promptdagi QUYI chegara ham aynan shu son
  * (`bulletMinWords`), ya'ni ko'rsatmaga rioya qilgan model hech qachon
- * «yupqa» deb topilmaydi. Quti qissa — ikkalasi ham ⌊0.75 × quti⌋ gacha
+ * «yupqa» deb topilmaydi. Quti qissa — ikkalasi ham round(0.75 × quti) gacha
  * tushadi (`slackMin`, P14c).
  */
 export const THIN_BULLET_K = 0.55;
@@ -117,13 +117,21 @@ export const DETECTOR_SHARE = 0.75;
 
 /**
  * Quyi chegara zaxira bilan: `floor`, lekin quti (`cap` so'z) torroq
- * bo'lsa — ⌊`cap` × `DETECTOR_SHARE`⌋ dan oshmaydi (kamida 1). Band,
- * ustun bandi, bosqich matni detektori va `range` ning quyi chegarasi
- * shu funksiyadan — prompt oralig'i «8–8» ga yopilmaydi (max ≤ 1 dan
- * tashqari).
+ * bo'lsa — `round(cap × DETECTOR_SHARE)` dan oshmaydi (kamida 1). Band,
+ * ustun bandi, bosqich matni detektori va detektorli `range` ning quyi
+ * chegarasi shu funksiyadan — prompt oralig'i «8–8» ga yopilmaydi
+ * (max ≤ 2 dan tashqari).
+ *
+ * P14d (N2): YAXLITLASH, `floor` emas. ⌊0.75 × 5⌋ = 3 — 5 so'zlik quti
+ * (1–4 sinf «qisqa» bandlari, `rail` bosqichlari, `circle` 2 bandli
+ * ustuni) 3 so'zli bandni qabul qilar va promptda «3–5» so'rardi (−40 %).
+ * Jonli dalil (8 so'zlik qutiga 7 so'z sig'adi) 1–2 so'z zaxirani
+ * oqlaydi, ko'pini emas: round → 5 → 4, 6 → 5, 8 → 6 (jonli holat
+ * o'zgarmaydi), 12 → 9. Ya'ni ≥ 5 so'zlik quti hech qachon 4 dan past
+ * chegara bermaydi.
  */
 export function slackMin(floor: number, cap: number): number {
-  return Math.min(floor, Math.max(1, Math.floor(cap * DETECTOR_SHARE)));
+  return Math.min(floor, Math.max(1, Math.round(cap * DETECTOR_SHARE)));
 }
 
 /** Bandning quyi chegarasi (so'z) — prompt ham, detektor ham shuni o'qiydi. */
@@ -429,12 +437,18 @@ function maxCount(field: FitField, rules: BodyRules, visual: SlideVisual | undef
  * `slackMin(floor, max)` (8 → «6–8»), lekin DETEKTOR chegarasidan
  * (`detFloor`, xuddi `thinReasons` dagidek `slackMin(detFloor, cap)`)
  * past emas: prompt oralig'iga rioya qilgan matn hech qachon «yupqa»
- * emas. Detektorsiz maydonda `detFloor` = `floor` — quti keng bo'lsa
- * oraliq avvalgidek.
+ * emas.
+ *
+ * P14d (N4): zaxira FAQAT `detFloor` berilganda (ustun bandi, bosqich —
+ * `slackMin` li detektori bor maydonlar). Iqtibosning detektori yo'q
+ * (`QUOTE_MIN_WORDS` — faqat prompt poli), section/yakun subtitle
+ * detektori `slackMin` siz — ularda zaxira faqat prompt polini
+ * tushirardi (magazine/bold iqtibosi «10» → «7–10», 8 dan past). Ular
+ * eski qoida bilan: quyi = `floor`, quti torroq bo'lsa — max.
  */
-function range(want: number, floor: number, cap: number, share: number, detFloor = floor): WordRange {
+function range(want: number, floor: number, cap: number, share: number, detFloor?: number): WordRange {
   const max = Math.min(cap, Math.max(floor, want));
-  const lo = Math.max(slackMin(floor, max), slackMin(detFloor, cap));
+  const lo = detFloor === undefined ? floor : Math.max(slackMin(floor, max), slackMin(detFloor, cap));
   const min = Math.min(max, Math.max(lo, Math.round(max * share)));
   return { min, max };
 }
@@ -471,7 +485,7 @@ export function layoutWordTargets(rules: BodyRules, visual?: SlideVisual): Layou
   const stepTextBy: Record<number, WordRange> = {};
   for (let n = PROCESS_MIN_STEPS; n <= maxSteps; n += 1) stepTextBy[n] = stepRange(n);
   return {
-    // P14c: quti qissa (`bulletCap` ≤ `bulletMinWords`) — quyi chegara ⌊0.75 × quti⌋ (`slackMin`), «8–8» emas.
+    // P14c: quti qissa (`bulletCap` ≤ `bulletMinWords`) — quyi chegara round(0.75 × quti) (`slackMin`), «8–8» emas.
     bullet: { min: slackMin(bulletMinWords(rules), bulletCap), max: Math.min(bulletMaxWords(rules), bulletCap) },
     maxColItems,
     colItem: range(Math.round(unit * 0.7), COL_MIN_WORDS + 1, fitWords("colItem", rules, visual, maxColItems), 0.6, COL_MIN_WORDS),
@@ -497,7 +511,7 @@ export function layoutWordTargets(rules: BodyRules, visual?: SlideVisual): Layou
 /**
  * Detektor chegaralari (so'z, o'rtacha) — `thinReasons` va P14c xossa
  * testi shu funksiyalarni o'qiydi. Quti (`fitWords`) torroq bo'lsa
- * chegara ⌊`DETECTOR_SHARE` × sig'im⌋ ga tushadi (`slackMin`): prompt
+ * chegara round(`DETECTOR_SHARE` × sig'im) ga tushadi (`slackMin`): prompt
  * quyi chegarasidan (`layoutWordTargets`) hech qachon yuqori emas.
  */
 export function colMinWords(rules: BodyRules, visual: SlideVisual | undefined, count: number): number {
@@ -646,7 +660,7 @@ export function thinReasons(s: SlideModel, rules: BodyRules, visual?: SlideVisua
     if (!isPlanSlide(s)) return out;
     const list = (s.bullets ?? []).filter((b) => b.trim());
     if (list.length < rules.minBullets) out.push("few-bullets");
-    // `bullet.min` = `bulletMinWords`, quti qissa — ⌊0.75 × quti⌋ (`slackMin`: sig'maydiganini talab qilmaymiz).
+    // `bullet.min` = `bulletMinWords`, quti qissa — round(0.75 × quti) (`slackMin`: sig'maydiganini talab qilmaymiz).
     if (!list.length || avgWords(list) < layoutWordTargets(rules, visual).bullet.min) out.push("short-bullets");
     return out;
   }
@@ -659,7 +673,7 @@ export function thinReasons(s: SlideModel, rules: BodyRules, visual?: SlideVisua
      * o'zi pasaytira olmaydi (5 bosqich × 2 so'z «sig'adi» ≠ to'liq).
      */
     const n = Math.max(PROCESS_MIN_STEPS, Math.min(list.length, rules.stepsMax));
-    // P14c: quti torroq bo'lsa ⌊0.75 × sig'im⌋ (`slackMin`) — qutiga qisqartirilgan to'la bosqich yupqa emas.
+    // P14c: quti torroq bo'lsa round(0.75 × sig'im) (`slackMin`) — qutiga qisqartirilgan to'la bosqich yupqa emas.
     const minWords = stepMinWords(rules, visual, n);
     // Ko'pchilik qoidasi: o'rtacha past YOKI birorta bosqich deyarli yorliq (≤ 3 so'z).
     const tiny = Math.min(4, minWords);
