@@ -418,7 +418,7 @@ test("limitsFor: son o'zgaruvchi maydonlar pol × son jadvalidan, statik qopqoqd
  * MUTATSIYA: `fieldCap` vizual ma'lum bo'lganda ham `tableCap` (jadval) qaytarsa — (a) qizaradi.
  */
 const G89 = bodyRules({ slideAudience: "school_8_9", textVolume: "standart", planItems: 5 } as never, "lesson");
-/** ~100 belgi, 16 so'z — real o'zbekcha bosqich matni. */
+/** ~100 belgi, 15 so'z — real o'zbekcha bosqich matni. */
 const STEP100 = "Quyosh issiqligi suvni bug‘ga aylantiradi, bug‘ esa havoda sovib bulut hosil qiladi va yomg‘ir yog‘adi";
 
 test("P11 (a): circle 3 bosqich (8–9 sinf) — 100 belgilik matn RASMSIZ qutiga sig'adi, qirqilmaydi; rail o'z (torroq) qutisida", () => {
