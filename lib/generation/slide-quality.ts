@@ -8,7 +8,7 @@ import { NO_IMAGE, SLIDE_LIMITS, clipLimit, clipTo, fieldCap, fitChars, type Fit
 import type { SlidePromptCtx } from "./slide-prompt/ctx";
 import { researchLines } from "./slide-prompt/research";
 import type { SlideTemplate, SlideVisual } from "./slide-templates";
-import type { SlideModel, SlideStep } from "./slide-types";
+import type { SlideLayout, SlideModel, SlideStep } from "./slide-types";
 import type { DocMeta } from "./types";
 
 /**
@@ -141,60 +141,123 @@ export function bulletClipLimit(rules: BodyRules, visual: SlideVisual | undefine
  * matni va sarlavhasi, stats yorlig'i, jadval katagi va sarlavhasi,
  * iqtibos, bo'lim/yakun subtitle. Son — slayddagi haqiqiy son (ustunda —
  * o'sha ustunniki). Qaytaradi: birinchi sig'maydigan maydon yoki `null`.
+ * O'lchovning o'zi — `imageOverflowChars` (bitta manba).
  */
 export function imageYieldField(s: SlideModel, rules: BodyRules, visual?: SlideVisual): FitField | null {
-  const over = (field: FitField, texts: (string | undefined)[], count?: number, rows?: number): boolean => {
+  // Kalitlar tekshiruv tartibida qo'shiladi — birinchisi = avvalgi «birinchi sig'maydigan maydon».
+  for (const field of Object.keys(imageOverflowChars(s, rules, visual))) return field as FitField;
+  return null;
+}
+
+/** Bitta o'lchov: maydon, matnlar, son va qator (maydon takrorlansa — alohida yozuv). */
+type YieldCheck = [field: FitField, texts: (string | undefined)[], count?: number, rows?: number];
+
+/**
+ * «Matn rasmdan ustun» o'lchovining YAGONA jadvali (AUDIT-25 INT-03, P12
+ * sharhi 4-band): maket → u o'qiydigan `SlideModel` kalitlari va shu
+ * kalitlardan yig'iladigan tekshiruvlar. `checks` ga slaydning FAQAT
+ * `keys` dagi maydonlari beriladi (`yieldView`) — ro'yxatda yo'q maydonni
+ * o'qib bo'lmaydi, ya'ni server guard'ining «quti matni o'zgardimi»
+ * kaliti (`imageYieldText`) va o'lchov hech qachon ajralib ketmaydi.
+ */
+export const IMAGE_YIELD_TABLE: Partial<Record<SlideLayout, { keys: readonly (keyof SlideModel)[]; checks: (s: SlideModel) => YieldCheck[] }>> = (() => {
+  const cols = {
+    keys: ["left", "right"] as const,
+    checks: (s: SlideModel) => [s.left ?? [], s.right ?? []].filter((c) => c.length).map((c): YieldCheck => ["colItem", c, c.length]),
+  };
+  return {
+    bullets: { keys: ["bullets"], checks: (s) => [["bullets", s.bullets ?? [], Math.max(1, s.bullets?.length ?? 1)]] },
+    // INT-02 (P11): reja bandlari (sarlavhalar) rasmsiz qatorda qirqilgan — rasm yonida sig'masa, rasm joy beradi.
+    agenda: { keys: ["bullets"], checks: (s) => [["agenda", s.bullets ?? [], Math.max(1, s.bullets?.length ?? 1)]] },
+    twoCol: cols,
+    compare: cols,
+    process: {
+      keys: ["steps"],
+      checks: (s) => {
+        const n = s.steps?.length ?? 0;
+        return n ? [["stepText", s.steps!.map((x) => x.text), n], ["stepTitle", s.steps!.map((x) => x.title), n]] : [];
+      },
+    },
+    stats: {
+      keys: ["stats"],
+      checks: (s) => {
+        const n = s.stats?.length ?? 0;
+        return n ? [["statLabel", s.stats!.map((x) => x.label), n]] : [];
+      },
+    },
+    table: {
+      keys: ["table"],
+      checks: (s) => {
+        const cols = s.table?.headers.length ?? 0;
+        const rows = s.table?.rows.length ?? 0;
+        return cols && rows ? [["tableCell", s.table!.rows.flat(), cols, rows], ["tableHeader", s.table!.headers, cols, rows]] : [];
+      },
+    },
+    quote: { keys: ["quote"], checks: (s) => [["quote", [s.quote]]] },
+    section: { keys: ["subtitle"], checks: (s) => [["subtitleSection", [s.subtitle]]] },
+    closing: { keys: ["subtitle"], checks: (s) => [["subtitleClosing", [s.subtitle]]] },
+  };
+})();
+
+/** Slaydning o'lchovga kiradigan qismi: `layout` + jadvaldagi kalitlar (boshqasi YO'Q). */
+function yieldView(s: SlideModel): SlideModel {
+  const view: Record<string, unknown> = { id: "", layout: s.layout, title: "" };
+  for (const k of IMAGE_YIELD_TABLE[s.layout]?.keys ?? []) view[k] = s[k];
+  return view as SlideModel;
+}
+
+/**
+ * «Quti matni» kaliti — ikki slaydning `imageYieldText` i teng bo'lsa,
+ * ularning `imageOverflowChars`/`imageOverflowRatio` si ham TENG (qurilishi
+ * bo'yicha: o'lchov faqat `yieldView` ni ko'radi).
+ */
+export function imageYieldText(s: SlideModel): string {
+  const keys = IMAGE_YIELD_TABLE[s.layout]?.keys ?? [];
+  return JSON.stringify([s.layout, ...keys.map((k) => s[k] ?? null)]);
+}
+
+/** Rasm haqiqatan joy yeydigan va matn rasmli qutidan uzun maydonlar (tekshiruv tartibida). */
+function imageOverflowEntries(s: SlideModel, rules: BodyRules, visual?: SlideVisual): { field: FitField; longest: number; withImage: number }[] {
+  const out: { field: FitField; longest: number; withImage: number }[] = [];
+  for (const [field, texts, count, rows] of IMAGE_YIELD_TABLE[s.layout]?.checks(yieldView(s)) ?? []) {
     const longest = Math.max(0, ...texts.map((t) => String(t ?? "").trim().length));
-    if (!longest) return false;
+    if (!longest) continue;
     /*
      * XOM quti sig'imi (`fitChars`) — `clipLimit` emas (P8 sharhi, N1):
      * `clipLimit` ichidagi `CLIP_FLOOR_CHARS` (24) poli 4 belgilik rasmli
      * qutini (4 ustunli jadval `circle` da) «24 sig'adi» deb ko'rsatardi.
      */
     const withImage = fitChars(field, rules, visual, count, { rows });
-    return longest > withImage && withImage < fitChars(field, rules, visual, count, { rows, images: "none" });
-  };
-  const checks: [FitField, (string | undefined)[], number?, number?][] = [];
-  switch (s.layout) {
-    case "bullets":
-      checks.push(["bullets", s.bullets ?? [], Math.max(1, s.bullets?.length ?? 1)]);
-      break;
-    case "agenda":
-      // INT-02: reja bandlari (sarlavhalar) rasmsiz qatorda qirqilgan — rasm yonida sig'masa, rasm joy beradi.
-      checks.push(["agenda", s.bullets ?? [], Math.max(1, s.bullets?.length ?? 1)]);
-      break;
-    case "twoCol":
-    case "compare":
-      for (const col of [s.left ?? [], s.right ?? []]) if (col.length) checks.push(["colItem", col, col.length]);
-      break;
-    case "process": {
-      const n = s.steps?.length ?? 0;
-      if (n) checks.push(["stepText", s.steps!.map((x) => x.text), n], ["stepTitle", s.steps!.map((x) => x.title), n]);
-      break;
-    }
-    case "stats": {
-      const n = s.stats?.length ?? 0;
-      if (n) checks.push(["statLabel", s.stats!.map((x) => x.label), n]);
-      break;
-    }
-    case "table": {
-      const cols = s.table?.headers.length ?? 0;
-      const rows = s.table?.rows.length ?? 0;
-      if (cols && rows) checks.push(["tableCell", s.table!.rows.flat(), cols, rows], ["tableHeader", s.table!.headers, cols, rows]);
-      break;
-    }
-    case "quote":
-      checks.push(["quote", [s.quote]]);
-      break;
-    case "section":
-      checks.push(["subtitleSection", [s.subtitle]]);
-      break;
-    case "closing":
-      checks.push(["subtitleClosing", [s.subtitle]]);
-      break;
+    if (longest > withImage && withImage < fitChars(field, rules, visual, count, { rows, images: "none" })) out.push({ field, longest, withImage });
   }
-  for (const [field, texts, count, rows] of checks) if (over(field, texts, count, rows)) return field;
-  return null;
+  return out;
+}
+
+/**
+ * `imageYieldField` ning SON o'lchovi (AUDIT-25 INT-03): har maydon uchun
+ * eng uzun matn RASMLI qutidan necha belgi ortiq (faqat rasm haqiqatan
+ * joy yeydigan va ortiqcha > 0 bo'lgan maydonlar; maydon ikki marta
+ * tekshirilsa — ustunlar — kattasi). Kalitlar tekshiruv tartibida.
+ */
+export function imageOverflowChars(s: SlideModel, rules: BodyRules, visual?: SlideVisual): Partial<Record<FitField, number>> {
+  const out: Partial<Record<FitField, number>> = {};
+  for (const e of imageOverflowEntries(s, rules, visual)) out[e.field] = Math.max(out[e.field] ?? 0, e.longest - e.withImage);
+  return out;
+}
+
+/**
+ * Xuddi shu o'lchov NISBAT bilan (eng uzun / rasmli quti, > 1): turli
+ * maydonlarni (turli qutilarni) solishtirish uchun — server guard'i maket
+ * o'zgarganda (masalan twoCol → bullets) «ortiqcha kamaydimi» ni shu bilan
+ * o'lchaydi (`edit-adapters.ts imageTextOverflow`, P12 sharhi 3-band).
+ */
+export function imageOverflowRatio(s: SlideModel, rules: BodyRules, visual?: SlideVisual): Partial<Record<FitField, number>> {
+  const out: Partial<Record<FitField, number>> = {};
+  for (const e of imageOverflowEntries(s, rules, visual)) {
+    const r = e.withImage > 0 ? e.longest / e.withImage : Number.POSITIVE_INFINITY;
+    out[e.field] = Math.max(out[e.field] ?? 0, r);
+  }
+  return out;
 }
 
 // ───────────────────────────────────────────────────────── so'z oraliqlari
