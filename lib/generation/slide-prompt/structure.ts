@@ -97,7 +97,7 @@ export function structureLines(meta: DocMeta, tpl: SlideTemplate, ctx: SlideProm
     /*
      * INT-02: agenda qutisi torligi (P11) modelga ANIQ raqam sifatida
      * ham beriladi — yuqoridagi qator oraliq, bu qator «eng ko'pi» qat'iy
-     * chegara. Umumiy sarlavha qoidasi («Sarlavha to‘liq fikr, 4–7
+     * chegara. Umumiy sarlavha qoidasi («Sarlavha to‘liq fikr, 4–6
      * so‘z», `TITLE_WORDS`, `base.ts`) BOSHQA slaydlar uchun o'zgarishsiz qoladi — bu
      * qator uni qoplamaydi, faqat REJA slaydlariga alohida (torroq)
      * chegara qo'shadi, aks holda ikkalasi ZID ko'rinardi.

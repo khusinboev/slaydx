@@ -4,7 +4,7 @@ import { llmComplete, llmEnabled } from "./llm";
 import { isDeadlineError } from "./deadline";
 import { remainingMs } from "./quality";
 import { bodyRules, type BodyRules } from "./slide-audience";
-import { NO_IMAGE, SLIDE_LIMITS, clipLimit, clipTo, fieldCap, fitChars, type FitField } from "./slide-limits";
+import { CLIP_WORD_MIN_SHARE, NO_IMAGE, SLIDE_LIMITS, clipLimit, clipTo, fieldCap, fitChars, type FitField } from "./slide-limits";
 import type { SlidePromptCtx } from "./slide-prompt/ctx";
 import { researchLines } from "./slide-prompt/research";
 import type { SlideTemplate, SlideVisual } from "./slide-templates";
@@ -35,7 +35,8 @@ import type { DocMeta } from "./types";
  * Bandlar: o'rtacha so'z soni ⌊`THIN_BULLET_K × bulletChars/8`⌋ dan kam
  * bo'lsa — yupqa. Promptdagi QUYI chegara ham aynan shu son
  * (`bulletMinWords`), ya'ni ko'rsatmaga rioya qilgan model hech qachon
- * «yupqa» deb topilmaydi.
+ * «yupqa» deb topilmaydi. Quti qissa — ikkalasi ham ⌊0.75 × quti⌋ gacha
+ * tushadi (`slackMin`, P14c).
  */
 export const THIN_BULLET_K = 0.55;
 /** `process` bosqich matni shundan kam so'z bo'lsa — yupqa («Boshlash», «Natija» kabi yorliq). */
@@ -93,8 +94,37 @@ export const PROMPT_HEADROOM = 0.85;
  * Belgi chegarasi 15 % zaxira bilan; REJA slaydlari sarlavhasi alohida
  * (torroq) — `structure.ts` (P13 `agendaWordsCap`).
  */
-export const TITLE_WORDS = { min: 4, max: 7 } as const;
 export const TITLE_CHARS = Math.floor(PROMPT_HEADROOM * SLIDE_LIMITS.title);
+/**
+ * Yuqori so'z chegarasi belgi chegarasidan KELIB CHIQADI (AUDIT-25 P14
+ * sharhi C8): `max × CHARS_PER_WORD ≤ TITLE_CHARS` (P8 qoidasi). Ilgari
+ * `max: 7` edi — 7 × 9 = 63 > 61; endi ⌊61 / 9⌋ = 6.
+ */
+export const TITLE_WORDS = { min: 4, max: Math.floor(TITLE_CHARS / CHARS_PER_WORD) } as const;
+
+/**
+ * DETEKTOR ZAXIRASI (AUDIT-25 P14c): QUTI maqsadni qissa (prompt
+ * yuqorisi = quti sig'imi), detektor sig'imning 75 % idan qabul qiladi —
+ * bu yerda cheklov AUDITORIYA emas, QUTI. Jonli dalil (8–9 sinf `circle`,
+ * 3 band, quti 87 belgi): `bulletCap` = ⌊0.85 × 87 / 9⌋ = 8 va
+ * `bulletMinWords` = 8 — prompt «8 so'z», detektor «o'rtacha < 8 —
+ * yupqa», ya'ni NOL zaxira. O'zbekcha fan matni ~11 belgilik so'zlar
+ * bilan qutiga 7 so'z sig'adi: sig'adigan band «yupqa», ta'mir kesilgan
+ * bandni qutiga qisqartiradi (7 so'z) va «0 / 1» rad etiladi. To'la quti
+ * 8 dan 7 so'z bilan yupqa EMAS.
+ */
+export const DETECTOR_SHARE = 0.75;
+
+/**
+ * Quyi chegara zaxira bilan: `floor`, lekin quti (`cap` so'z) torroq
+ * bo'lsa — ⌊`cap` × `DETECTOR_SHARE`⌋ dan oshmaydi (kamida 1). Band,
+ * ustun bandi, bosqich matni detektori va `range` ning quyi chegarasi
+ * shu funksiyadan — prompt oralig'i «8–8» ga yopilmaydi (max ≤ 1 dan
+ * tashqari).
+ */
+export function slackMin(floor: number, cap: number): number {
+  return Math.min(floor, Math.max(1, Math.floor(cap * DETECTOR_SHARE)));
+}
 
 /** Bandning quyi chegarasi (so'z) — prompt ham, detektor ham shuni o'qiydi. */
 export function bulletMinWords(rules: Pick<BodyRules, "bulletChars">): number {
@@ -390,13 +420,22 @@ function maxCount(field: FitField, rules: BodyRules, visual: SlideVisual | undef
 
 /**
  * Oraliq: yuqori = auditoriya istagi (`want`), lekin quti sig'imidan
- * (`cap`) oshmaydi; quyi = `floor` (detektor chegarasi) va yuqorining
- * `share` qismidan kattasi. Quti juda tor bo'lsa (bolalar shrifti) —
- * oraliq quti ichida qoladi: sig'maydigan hajmni so'ramaymiz.
+ * (`cap`) oshmaydi; quyi = `floor` (prompt poli) va yuqorining `share`
+ * qismidan kattasi. Quti juda tor bo'lsa (bolalar shrifti) — oraliq quti
+ * ichida qoladi: sig'maydigan hajmni so'ramaymiz.
+ *
+ * P14c: `floor ≥ max` bo'lsa oraliq «max–max» ga yopilardi — prompt
+ * «8 so'z», detektor «< 8 yupqa», zaxira yo'q. Endi quyi chegara
+ * `slackMin(floor, max)` (8 → «6–8»), lekin DETEKTOR chegarasidan
+ * (`detFloor`, xuddi `thinReasons` dagidek `slackMin(detFloor, cap)`)
+ * past emas: prompt oralig'iga rioya qilgan matn hech qachon «yupqa»
+ * emas. Detektorsiz maydonda `detFloor` = `floor` — quti keng bo'lsa
+ * oraliq avvalgidek.
  */
-function range(want: number, floor: number, cap: number, share: number): WordRange {
+function range(want: number, floor: number, cap: number, share: number, detFloor = floor): WordRange {
   const max = Math.min(cap, Math.max(floor, want));
-  const min = Math.min(max, Math.max(floor, Math.round(max * share)));
+  const lo = Math.max(slackMin(floor, max), slackMin(detFloor, cap));
+  const min = Math.min(max, Math.max(lo, Math.round(max * share)));
   return { min, max };
 }
 
@@ -428,13 +467,14 @@ export function layoutWordTargets(rules: BodyRules, visual?: SlideVisual): Layou
    * AYNAN 5 so'z chiqar, prompt bilan detektor orasida zaxira qolmasdi.
    */
   const maxColItems = maxCount("colItem", rules, visual, COL_MIN_ITEMS, SLIDE_LIMITS.colItems, PROSE_MIN_WORDS + 1, undefined, PROMPT_HEADROOM);
-  const stepRange = (n: number) => range(Math.round(unit * 0.7), STEP_MIN_WORDS + 2, fitWords("stepText", rules, visual, n), 0.6);
+  const stepRange = (n: number) => range(Math.round(unit * 0.7), STEP_MIN_WORDS + 2, fitWords("stepText", rules, visual, n), 0.6, STEP_MIN_WORDS);
   const stepTextBy: Record<number, WordRange> = {};
   for (let n = PROCESS_MIN_STEPS; n <= maxSteps; n += 1) stepTextBy[n] = stepRange(n);
   return {
-    bullet: { min: Math.min(bulletMinWords(rules), bulletCap), max: Math.min(bulletMaxWords(rules), bulletCap) },
+    // P14c: quti qissa (`bulletCap` ≤ `bulletMinWords`) — quyi chegara ⌊0.75 × quti⌋ (`slackMin`), «8–8» emas.
+    bullet: { min: slackMin(bulletMinWords(rules), bulletCap), max: Math.min(bulletMaxWords(rules), bulletCap) },
     maxColItems,
-    colItem: range(Math.round(unit * 0.7), COL_MIN_WORDS + 1, fitWords("colItem", rules, visual, maxColItems), 0.6),
+    colItem: range(Math.round(unit * 0.7), COL_MIN_WORDS + 1, fitWords("colItem", rules, visual, maxColItems), 0.6, COL_MIN_WORDS),
     colTitleMax: fitWords("colTitle", rules, visual),
     maxSteps,
     stepTextBy,
@@ -452,6 +492,21 @@ export function layoutWordTargets(rules: BodyRules, visual?: SlideVisual): Layou
     quizQMax: fitWords("quizQ", rules, visual),
     quizOptionMax: Math.max(2, fitWords("quizOption", rules, visual)),
   };
+}
+
+/**
+ * Detektor chegaralari (so'z, o'rtacha) — `thinReasons` va P14c xossa
+ * testi shu funksiyalarni o'qiydi. Quti (`fitWords`) torroq bo'lsa
+ * chegara ⌊`DETECTOR_SHARE` × sig'im⌋ ga tushadi (`slackMin`): prompt
+ * quyi chegarasidan (`layoutWordTargets`) hech qachon yuqori emas.
+ */
+export function colMinWords(rules: BodyRules, visual: SlideVisual | undefined, count: number): number {
+  return slackMin(COL_MIN_WORDS, fitWords("colItem", rules, visual, count));
+}
+
+/** Bosqich matni detektor chegarasi (`count` bosqichda) — `colMinWords` bilan bir qoida. */
+export function stepMinWords(rules: BodyRules, visual: SlideVisual | undefined, count: number): number {
+  return slackMin(STEP_MIN_WORDS, fitWords("stepText", rules, visual, count));
 }
 
 /**
@@ -506,13 +561,18 @@ function avgWords(list: string[]): number {
 
 /**
  * Qirqilgan matn: «…» bilan tugaydi VA qirqish qopqog'iga yaqin uzun.
- * `clipTo` natijasi doim ≥ ⌈0.6·(qopqoq−1)⌉ belgi (so'z chegarasi 60 %
- * dan keyin, aks holda qattiq kesish). Qisqa «1/2 + 1/4 = …» — bo'sh
+ * `clipTo` kesish nuqtasi ≥ ⌈0.6·(qopqoq−1)⌉ (so'z chegarasi 60 % dan
+ * keyin, aks holda qattiq kesish), LEKIN «…» dan oldin oxiridagi tinish
+ * belgisi va probellarni olib tashlaydi: «so'z, —» da kesilsa 3 belgi
+ * ketadi, «…» 1 qo'shadi — natija ⌈0.6·(qopqoq−1)⌉ − 2 gacha qisqa
+ * (P14 sharhi C7: ilgari chegara buni hisobga olmay, bunday kesik
+ * «qirqilmagan» deb o'tib ketardi). Qisqa «1/2 + 1/4 = …» — bo'sh
  * joyli savol, qirqilgan emas.
  */
+export const CLIP_TAIL_SLACK = 2;
 function clippedAt(s: string | undefined, cap: number): boolean {
   const t = String(s ?? "").trimEnd();
-  return t.endsWith("…") && t.length >= Math.ceil(0.6 * (cap - 1));
+  return t.endsWith("…") && t.length >= Math.ceil(CLIP_WORD_MIN_SHARE * (cap - 1)) - CLIP_TAIL_SLACK;
 }
 
 /** Reja MAZMUN slaydi — P1 `plan` maydoni (1-asosli reja bandi). Blok slaydlari (maqsadlar, uy vazifasi) qisqa bo'lishi tabiiy. */
@@ -539,7 +599,8 @@ type ClippedField = { field: "title" | "bullets" | "colItem" | "stepText"; cap: 
  */
 function clippedFields(s: SlideModel, rules: BodyRules, visual?: SlideVisual): ClippedField[] {
   const out: ClippedField[] = [];
-  if (!isPlanSlide(s) && clippedAt(s.title, SLIDE_LIMITS.title)) out.push({ field: "title", cap: SLIDE_LIMITS.title, words: TITLE_WORDS.max });
+  // Muqova (`title` maketi) sarlavhasi hech qachon nomzod emas: `slide-write.ts` uni `meta.topic` bilan almashtiradi.
+  if (s.layout !== "title" && !isPlanSlide(s) && clippedAt(s.title, SLIDE_LIMITS.title)) out.push({ field: "title", cap: SLIDE_LIMITS.title, words: TITLE_WORDS.max });
   const t = () => layoutWordTargets(rules, visual);
   if (s.layout === "bullets") {
     const list = (s.bullets ?? []).filter((b) => b.trim());
@@ -575,7 +636,8 @@ function clippedFields(s: SlideModel, rules: BodyRules, visual?: SlideVisual): C
  *     `quote` — hech qachon nomzod emas.
  *
  * Chegara quti sig'imidan katta bo'lmaydi: bolalar shriftida ustun
- * bandiga 4 so'z sig'sa, 5 so'z talab qilinmaydi (`Math.min`).
+ * bandiga 4 so'z sig'sa, 5 so'z talab qilinmaydi — va quti qissa, sig'imning
+ * 75 % i yetadi (`slackMin`, `DETECTOR_SHARE`, P14c).
  */
 export function thinReasons(s: SlideModel, rules: BodyRules, visual?: SlideVisual): ThinReason[] {
   const out: ThinReason[] = [];
@@ -584,7 +646,7 @@ export function thinReasons(s: SlideModel, rules: BodyRules, visual?: SlideVisua
     if (!isPlanSlide(s)) return out;
     const list = (s.bullets ?? []).filter((b) => b.trim());
     if (list.length < rules.minBullets) out.push("few-bullets");
-    // `bullet.min` = `bulletMinWords`, quti torroq bo'lsa undan ham past (sig'maydiganini talab qilmaymiz).
+    // `bullet.min` = `bulletMinWords`, quti qissa — ⌊0.75 × quti⌋ (`slackMin`: sig'maydiganini talab qilmaymiz).
     if (!list.length || avgWords(list) < layoutWordTargets(rules, visual).bullet.min) out.push("short-bullets");
     return out;
   }
@@ -597,7 +659,8 @@ export function thinReasons(s: SlideModel, rules: BodyRules, visual?: SlideVisua
      * o'zi pasaytira olmaydi (5 bosqich × 2 so'z «sig'adi» ≠ to'liq).
      */
     const n = Math.max(PROCESS_MIN_STEPS, Math.min(list.length, rules.stepsMax));
-    const minWords = Math.min(STEP_MIN_WORDS, fitWords("stepText", rules, visual, n));
+    // P14c: quti torroq bo'lsa ⌊0.75 × sig'im⌋ (`slackMin`) — qutiga qisqartirilgan to'la bosqich yupqa emas.
+    const minWords = stepMinWords(rules, visual, n);
     // Ko'pchilik qoidasi: o'rtacha past YOKI birorta bosqich deyarli yorliq (≤ 3 so'z).
     const tiny = Math.min(4, minWords);
     if (list.length < PROCESS_MIN_STEPS || avgWords(list.map((st) => st.text)) < minWords || list.some((st) => words(st.text) < tiny)) {
@@ -610,7 +673,7 @@ export function thinReasons(s: SlideModel, rules: BodyRules, visual?: SlideVisua
     const left = (s.left ?? []).filter((x) => x.trim());
     const right = (s.right ?? []).filter((x) => x.trim());
     const n = Math.min(SLIDE_LIMITS.colItems, Math.max(left.length, right.length, COL_MIN_ITEMS));
-    const minWords = Math.min(COL_MIN_WORDS, fitWords("colItem", rules, visual, n));
+    const minWords = colMinWords(rules, visual, n);
     if (left.length < COL_MIN_ITEMS || right.length < COL_MIN_ITEMS || avgWords([...left, ...right]) < minWords) {
       out.push("short-columns");
     }

@@ -877,9 +877,13 @@ test("clipped-text: REJASIZ slayd sarlavhasi «…» bilan kesilgan — nomzod; 
   assert.deepEqual(reasonsOf({ id: "c", layout: "closing", title: cutTitle, subtitle: sent(10) } as unknown as SlideModel), ["clipped-text"]);
   assert.deepEqual(reasonsOf(S({ layout: "bullets", title: cutTitle, bullets: [sent(14), sent(14, 3), sent(14, 6)] })), [], "reja slaydi sarlavhasi shartnoma — tegilmaydi");
   assert.deepEqual(reasonsOf(S({ layout: "bullets", title: cutTitle, bullets: [sent(14), sent(14, 3), sent(14, 6)], plan: undefined })), ["clipped-text"]);
-  // Prompt: sarlavha qoidasi belgi chegarasi bilan, yozuvchi qopqog'idan 15 % past.
-  assert.equal(TITLE_CHARS, Math.floor(0.85 * SLIDE_LIMITS.title));
-  assert.ok(TITLE_WORDS.max * CHARS_PER_WORD <= SLIDE_LIMITS.title);
+  // Prompt: sarlavha qoidasi belgi chegarasi bilan, yozuvchi qopqog'idan ≥ 15 % past (P8 qoidasi).
+  // C8 (P14 sharhi): so'z chegarasi belgi chegarasidan KELIB CHIQADI — max × CHARS_PER_WORD ≤ TITLE_CHARS
+  // (7 × 9 = 63 > 61 edi) va bu eng katta shunday son (o'zboshimcha past emas). MUTATSIYA: max = 7 — qizaradi.
+  assert.ok(TITLE_CHARS <= PROMPT_HEADROOM * SLIDE_LIMITS.title, `TITLE_CHARS ${TITLE_CHARS}`);
+  assert.ok(TITLE_WORDS.max * CHARS_PER_WORD <= TITLE_CHARS, `${TITLE_WORDS.max} so'z × ${CHARS_PER_WORD} > ${TITLE_CHARS}`);
+  assert.ok((TITLE_WORDS.max + 1) * CHARS_PER_WORD > TITLE_CHARS, "so'z chegarasi belgi chegarasidan bir necha so'z past");
+  assert.ok(TITLE_WORDS.min < TITLE_WORDS.max);
 });
 
 test("clipped-text ta'miri: rejasiz sarlavha qisqartiriladi (manbalar/yakun ham), reja sarlavhasi hech qachon almashmaydi", async () => {
@@ -890,7 +894,7 @@ test("clipped-text ta'miri: rejasiz sarlavha qisqartiriladi (manbalar/yakun ham)
     () => jsonReply({ slides: [{ index: 0, title: shortTitle }] }),
     async (calls) => {
       const [out] = await repairThinSlides([refs], meta, tpl, {}, later(), later());
-      assert.match(calls[0].user, /title ≤ 7 so‘z va ≤ 61 belgi/);
+      assert.match(calls[0].user, /title ≤ 6 so‘z va ≤ 61 belgi/);
       assert.match(calls[0].user, /"index":0,"title":""/);
       assert.equal(out.title, shortTitle);
       assert.deepEqual({ ...out, title: refs.title }, refs, "sarlavhadan boshqa maydon o'zgardi");
@@ -1159,6 +1163,157 @@ test("INT-07: ta'mir twoCol bandlar soni = prompt = normalize (8–9 sinf circle
   );
 });
 
+// ───── P14c-B (detektor zaxirasi)
+
+import { CLIP_WORD_MIN_SHARE } from "../lib/generation/slide-limits.ts";
+import { DETECTOR_SHARE, colMinWords, slackMin, stepMinWords } from "../lib/generation/slide-quality.ts";
+
+/*
+ * P14c-B — detektor zaxirasi. Jonli (8–9 sinf `lesson`/`circle`, 3 band, quti 87 belgi):
+ * `bulletCap` = ⌊0.85 × 87 / 9⌋ = 8, `bulletMinWords` = 8 — prompt «8 so'z», detektor
+ * «o'rtacha < 8 — yupqa»: NOL zaxira. ~11 belgilik o'zbekcha fan so'zlari bilan qutiga 7 so'z
+ * sig'adi — sig'adigan band «yupqa», ta'mir kesilgan bandni qutiga qisqartiradi (7 so'z) va
+ * «0 / 1» rad etiladi. Endi quti qissa, detektor ⌊0.75 × quti⌋ dan qabul qiladi (`slackMin`),
+ * prompt oralig'i «8–8» ga yopilmaydi (`range` ham `slackMin` bilan).
+ * MUTATSIYA: `bullet.min` eski formulaga (min(bulletMinWords, bulletCap)) qaytsa yoki `range`
+ * dagi `slackMin` olib tashlansa — xossa testi qizaradi.
+ */
+test("P14c-B: slackMin — quti qissa, chegara ⌊0.75 × quti⌋; quti keng — pol o'zgarmaydi", () => {
+  assert.equal(DETECTOR_SHARE, 0.75);
+  assert.equal(slackMin(8, 8), 6, "jonli: 8 so'zlik qutida 6 dan");
+  assert.equal(slackMin(8, 20), 8, "keng quti — auditoriya poli");
+  assert.equal(slackMin(6, 7), 5);
+  assert.equal(slackMin(8, 1), 1, "kamida 1");
+});
+
+test("P14c-B: xossa — har auditoriya × hajm × shablon × vizual: band/ustun bandi/bosqich oralig'i ochiq (max ≥ 3 da min < max), detektor ≤ prompt min", () => {
+  const bad: string[] = [];
+  let checked = 0;
+  for (const aud of SLIDE_AUDIENCES) {
+    for (const vol of ["qisqa", "standart", "kop"] as const) {
+      for (const tplId of ["lecture", "lesson"] as const) {
+        const r = bodyRules({ slideAudience: aud, textVolume: vol, planItems: 5 }, tplId);
+        for (const visual of [...LEGACY_VISUALS, ...DESIGN_VISUALS]) {
+          const t = layoutWordTargets(r, visual);
+          const at = `${aud}/${vol}/${tplId}/${visual}`;
+          const open = (name: string, w: { min: number; max: number }) => {
+            if (w.max >= 3 && w.min >= w.max) bad.push(`${at} ${name}: «${w.min}–${w.max}» yopiq`);
+          };
+          const le = (name: string, det: number, w: { min: number; max: number }) => {
+            if (det > w.min) bad.push(`${at} ${name}: detektor ${det} > prompt min ${w.min}`);
+          };
+          // Band: detektor chegarasi AYNAN `t.bullet.min` (`thinReasons`); xulq — min so'zli bandlar yupqa emas.
+          open("bullet", t.bullet);
+          const bullets = Array.from({ length: r.maxBullets }, (_, i) => sent(t.bullet.min, i * 3));
+          if (reasonsOf(S({ layout: "bullets", bullets }), r, visual).includes("short-bullets")) bad.push(`${at} bullet: ${t.bullet.min} so'z «yupqa»`);
+          // Ustun bandi (`maxColItems` bandda).
+          open(`colItem×${t.maxColItems}`, t.colItem);
+          le(`colItem×${t.maxColItems}`, colMinWords(r, visual, t.maxColItems), t.colItem);
+          const col = (k: number) => Array.from({ length: t.maxColItems }, (_, i) => sent(t.colItem.min, k + i * 2));
+          if (reasonsOf(S({ layout: "twoCol", leftTitle: "A", rightTitle: "B", left: col(0), right: col(1) }), r, visual).includes("short-columns")) {
+            bad.push(`${at} colItem: ${t.colItem.min} so'z «yupqa»`);
+          }
+          // Bosqich matni — har son uchun.
+          for (const [k, w] of Object.entries(t.stepTextBy)) {
+            const n = Number(k);
+            open(`stepText×${n}`, w);
+            le(`stepText×${n}`, stepMinWords(r, visual, n), w);
+            const steps = Array.from({ length: n }, (_, i) => ({ n: String(i + 1), title: "Bosqich", text: sent(w.min, i * 2) }));
+            if (reasonsOf(S({ layout: "process", steps }), r, visual).includes("short-steps")) bad.push(`${at} stepText×${n}: ${w.min} so'z «yupqa»`);
+          }
+          checked += 1;
+        }
+      }
+    }
+  }
+  assert.ok(checked >= 1500, `probe: ${checked} kombinatsiya`);
+  assert.deepEqual(bad.slice(0, 12), [], `${bad.length} ta nol zaxira`);
+  // Uch jonli deka (sinov asosi — raqamlar hisobotda).
+  const live = (aud: string, tplId: "lesson" | "lecture") => {
+    const m = extractMeta(TOOL_BY_ID["pro-slide"], { topic: "Orol dengizi fojiasi", slideAudience: aud } as never);
+    const tp = resolveSlideTemplate(tplId, m.topic);
+    return { r: bodyRules(m, tp.id), visual: tp.visual };
+  };
+  const g57 = live("school_5_7", "lesson");
+  assert.equal(g57.visual, "circle");
+  assert.deepEqual(layoutWordTargets(g57.r, g57.visual).stepTextBy[3], { min: 6, max: 8 }, "5–7 sinf circle 3 bosqich: «8» emas, «6–8»");
+  const ba = live("students_bachelor", "lecture");
+  assert.equal(ba.visual, "academic");
+  assert.deepEqual(layoutWordTargets(ba.r, ba.visual).bullet, { min: 9, max: 12 }, "bakalavr academic: quti 12 so'z, detektor 9 dan");
+});
+
+test("P14c-B: jonli holat — 8–9 sinf lesson circle, 3 band (quti 87): t.bullet = {6, 8}, 7 so'zli uch band yupqa EMAS", () => {
+  const m = extractMeta(TOOL_BY_ID["pro-slide"], { topic: "Fotosintez", slideAudience: "school_8_9" } as never);
+  const tp = resolveSlideTemplate("lesson", m.topic);
+  const r = bodyRules(m, tp.id);
+  assert.equal(tp.visual, "circle");
+  assert.equal(bulletClipLimit(r, "circle", 3), 87, "sinov asosi: 3 bandli quti 87 belgi");
+  assert.equal(bulletMinWords(r), 8, "sinov asosi: auditoriya poli 8");
+  assert.deepEqual(layoutWordTargets(r, "circle").bullet, { min: 6, max: 8 });
+  // Haqiqiy o'zbekcha fan matni (~10 belgilik so'zlar): 7 so'z, qutiga sig'adi.
+  const bullets = [
+    "Yashil o‘simliklar quyosh energiyasini kimyoviy energiyaga aylantiradi",
+    "Xlorofill pigmenti yorug‘lik nurlarini yutib fotosintezni boshlaydi",
+    "Karbonat angidrid va suvdan organik moddalar sintezlanadi",
+  ];
+  for (const b of bullets) {
+    assert.equal(b.split(" ").length, 7, b);
+    assert.ok(b.length <= 87, `${b.length} > 87`);
+  }
+  assert.deepEqual(reasonsOf(S({ layout: "bullets", bullets }), r, "circle"), []);
+  assert.deepEqual(wordTargetLines(r, "circle").join("\n").match(/har band \d+–\d+ so‘z/)?.[0], "har band 6–9 so‘z", "ustun bandi oralig'i o'zgarmadi (quti keng)");
+});
+
+test("P14c-B: jonli ta'mir — kesilgan uch band qutiga (7 so'z) qisqartirildi → qabul (ilgari «short-bullets» bilan rad, 0 / 1)", async () => {
+  const m = extractMeta(TOOL_BY_ID["pro-slide"], { topic: "Fotosintez", slideAudience: "school_8_9" } as never);
+  const tp = resolveSlideTemplate("lesson", m.topic);
+  const r = bodyRules(m, tp.id);
+  const short = [
+    "Yashil o‘simliklar quyosh energiyasini kimyoviy energiyaga aylantiradi",
+    "Xlorofill pigmenti yorug‘lik nurlarini yutib fotosintezni boshlaydi",
+    "Karbonat angidrid va suvdan organik moddalar sintezlanadi",
+  ];
+  const cap = bulletClipLimit(r, tp.visual, 3);
+  const clipped = short.map((b) => clipTo(`${b} hamda bu jarayon yer yuzidagi barcha tirik organizmlar uchun hayotiy ahamiyatga ega`, cap));
+  for (const c of clipped) assert.ok(c.endsWith("…"), c);
+  const slide = { id: "s1", layout: "bullets", title: "Fotosintez qanday kechadi", bullets: clipped, plan: 1 } as SlideModel;
+  assert.deepEqual(reasonsOf(slide, r, tp.visual), ["clipped-text"]);
+  await withLlm(
+    () => jsonReply({ slides: [{ index: 0, bullets: short }] }),
+    async () => {
+      const [out] = await repairThinSlides([slide], m, tp, {}, later(), later());
+      assert.deepEqual(out.bullets, short, "qutiga sig'adigan 7 so'zli bandlar rad etildi");
+    },
+  );
+});
+
+/*
+ * C7 (P14 sharhi): `clipTo` «…» dan oldin oxirgi tinish belgisi/probelni olib tashlaydi — «so'z —»
+ * da kesilsa natija ⌈0.6·(qopqoq−1)⌉ − 1 belgi, ilgari chegara ⌈0.6·(qopqoq−1)⌉ edi: kesik
+ * «qirqilmagan» deb o'tib ketardi. MUTATSIYA: `CLIP_TAIL_SLACK` = 0 — qizaradi.
+ */
+test("P14c-B C7: «so‘z —» da kesilgan band (⌈0.6·(qopqoq−1)⌉ − 1 belgi) — clipped-text", () => {
+  const cap = bulletClipLimit(bachelor, VIS, 3);
+  const k = Math.ceil(CLIP_WORD_MIN_SHARE * (cap - 1));
+  let head = sent(40).slice(0, k - 2);
+  if (/[\s,;:.!?–—-]$/u.test(head)) head = `${head.slice(0, -1)}a`;
+  const text = `${head} — ${"suvxo‘jaligi".repeat(Math.ceil(cap / 10))}`;
+  const cut = clipTo(text, cap);
+  assert.equal(cut, `${head}…`, "sinov asosi: clipTo « —» ni olib tashlaydi");
+  assert.equal(cut.length, k - 1);
+  const s = S({ layout: "bullets", plan: undefined, title: "Dars maqsadlari", bullets: [sent(14), sent(14, 3), cut] });
+  assert.deepEqual(reasonsOf(s), ["clipped-text"]);
+  // Qisqa bo'sh joyli savol hali ham kesilgan emas.
+  assert.deepEqual(reasonsOf(S({ layout: "bullets", plan: undefined, bullets: [sent(14), "1/2 + 1/4 = …"] })), []);
+});
+
+test("P14c-B: muqova (`title` maketi) sarlavhasi hech qachon clipped-text nomzodi emas (slide-write uni meta.topic bilan almashtiradi)", () => {
+  const cutTitle = clipTo(sent(20), SLIDE_LIMITS.title);
+  assert.ok(cutTitle.endsWith("…"));
+  assert.deepEqual(reasonsOf({ id: "c", layout: "title", title: cutTitle, subtitle: "Ma’ruza" } as unknown as SlideModel), []);
+  // Nazorat: xuddi shu sarlavha yakun slaydida — nomzod.
+  assert.deepEqual(reasonsOf({ id: "z", layout: "closing", title: cutTitle, subtitle: sent(10) } as unknown as SlideModel), ["clipped-text"]);
+});
 // ───── P14c-A (ta'mir merge)
 /*
  * AUDIT-25 P14 sharhi C1/C2/C3/C5/C6 — `clipped-text` ta'miri yaxshi matnni o'chirmasin:
