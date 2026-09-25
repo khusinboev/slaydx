@@ -1109,7 +1109,14 @@ export function applyDocOps(doc: AcademicDoc, ops: DocOp[], ctx: EditCtx): EditR
         const staticCap = listCap(s, field, { ...rules, visual: undefined }).chars;
         const prev = s[field] ?? [];
         // Bo'sh band — o'chirilgan band (`writeList` bilan bir xil ma'no).
-        const items = op.items.map((x, k) => clipTo(String(x ?? ""), editLimit(caps.chars, staticCap, prev[k]?.length ?? 0))).filter(Boolean);
+        // Ro'yxatdagi mavjud bandning AYNAN nusxasi — faqat ko'chirilgan (tartib o'zgardi): o'zgarishsiz qoladi
+        // (P11 qayta sharhi: o'rin bo'yicha `editLimit` qisqa band o'rniga ko'chgan uzun bandni qirqardi).
+        const items = op.items
+          .map((x, k) => {
+            const v = String(x ?? "");
+            return v && prev.includes(v) ? v : clipTo(v, editLimit(caps.chars, staticCap, prev[k]?.length ?? 0));
+          })
+          .filter(Boolean);
         if (items.length > caps.max) return fail(`Bu maketda ${caps.max} tadan ortiq band bo'lmaydi`, at);
         slides[idx] = { ...s, [field]: items };
         break;

@@ -1044,6 +1044,22 @@ test("P12/P11 1b: rasmli rail 4 bosqich — sarlavha sig'masa RAD, qisqasi xom q
   assert.equal((short as { ok: true; doc: AcademicDoc }).doc.slides![0].steps![0].title, fits);
 });
 
+/*
+ * P11 qayta sharhi: `list` op da eski uzunlik O'RIN bo'yicha edi — `[qisqa, uzun, …]` → `[uzun, qisqa, …]`
+ * tartibini almashtirish ko'chgan uzun bandni qirqardi. Mavjud bandning aynan nusxasi — faqat ko'chirilgan.
+ * MUTATSIYA: `prev.includes(v)` shoxobchasi olib tashlansa — qizaradi.
+ */
+test("P11 qayta sharh: list op — uzun bandni ko'chirish (tartib) uni qirqmaydi; yangi uzun band esa qirqiladi", () => {
+  const two: SlideModel = { id: "s0", layout: "twoCol", title: "Ikki ustun", leftTitle: "A", rightTitle: "B", left: ["qisqa", STEP100, "c", "d"], right: ["e"] };
+  const colMax = clipLimit("colItem", buildSlideDeck(circleDoc([two])).bodyType, "circle", 4, undefined, NO_IMAGE);
+  assert.ok(STEP100.length > colMax, `sinov asosi: ${STEP100.length} > ${colMax}`);
+  const r = apply(circleDoc([two]), [{ op: "list", index: 0, field: "left", items: [STEP100, "qisqa", "c", "d"] }]);
+  assert.deepEqual(r.slides![0].left, [STEP100, "qisqa", "c", "d"], "ko'chirilgan uzun band o'zgarmasligi kerak");
+  // Yangi (ro'yxatda yo'q) uzun matn — o'rnidagi eski uzunlik (5) va quti bo'yicha qirqiladi.
+  const n = apply(circleDoc([two]), [{ op: "list", index: 0, field: "left", items: [`${STEP100} yana`, STEP100, "c", "d"] }]);
+  assert.ok(n.slides![0].left![0].length <= colMax && n.slides![0].left![0].endsWith("…"));
+});
+
 // P11 sharhi 3: gap maydonlari tahriri deka vizualining RASMSIZ qutisida (generatsiya bilan bir funksiya).
 test("P11 sharh 3: 8–9 sinf circle — 4 bandli ustun bandi ~60 (110 emas), reja bandi reja qatorida; eski uzunlik saqlanadi", () => {
   const two: SlideModel = { id: "s0", layout: "twoCol", title: "Ikki ustun", leftTitle: "A", rightTitle: "B", left: ["a", "b", "c", "d"], right: ["e"] };
