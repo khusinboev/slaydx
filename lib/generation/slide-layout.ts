@@ -891,6 +891,46 @@ export function pushPlanBadge(
 const badgeLineIn = (pt: number) => (pt * 1.2) / 72;
 
 /**
+ * Nishonning «TAB» ko'rinishi — bo'lim slaydidagi daftar tabi tilida:
+ * to'q (`titleBg`) blok, tepasida aksent qirra, ichida `titleText` raqam
+ * (o'lchangan juft). Ro'yxat tartib raqamlari (01…N) sahifa rangidagi
+ * YALANG raqam — tab esa boshqa registr: o'quvchi ikkisini adashtirmaydi
+ * (AUDIT-25 P9 sharhi 2: notebook hoshiyasidagi «01» ro'yxatning yana bir
+ * raqamidek o'qilardi). Sarlavha qutisi `planBadgeBox` bilan surilgan
+ * bo'lishi kerak; tab uning chapida.
+ */
+export function pushPlanTab(
+  layers: SlideLayer[],
+  s: SlideModel,
+  titleBox: Box,
+  titleSize: number,
+  theme: SlideTheme,
+  opts: { titleValign?: "middle" } = {},
+): void {
+  const no = planBadge(s);
+  if (!no) return;
+  const w = PLAN_BADGE_W - 0.1;
+  const h = 0.44;
+  const y =
+    opts.titleValign === "middle"
+      ? titleBox.y + (titleBox.h - h) / 2
+      : titleBox.y + Math.max(0, (badgeLineIn(titleSize) - h) / 2);
+  const x = titleBox.x - PLAN_BADGE_W;
+  layers.push({ t: "rect", box: { x, y, w, h }, fill: { color: theme.titleBg }, radius: 0.05 });
+  layers.push({ t: "rect", box: { x, y, w, h: 0.07 }, fill: { color: theme.accent } });
+  layers.push({
+    t: "text",
+    box: { x, y: y + 0.07, w, h: h - 0.07 },
+    text: no,
+    color: theme.titleText,
+    size: 15,
+    bold: true,
+    align: "center",
+    valign: "middle",
+  });
+}
+
+/**
  * Nishonni ANIQ nuqtaga chizadi — sarlavhasi yo'q kompozitsiyalar
  * (iqtibos) va dizaynning o'z idiomasi (halqa, lenta, plitka) uchun.
  * Quti balandligi bir qator (`size` × 1.2) + 0.06″.
@@ -2017,9 +2057,16 @@ function planTwoCol(
     if (compare) layers.push({ t: "rect", box: { x: LEFT_IMG_W, y: 0, w: 0.07, h: H }, fill: { color: theme.accent } });
     const px = M + 0.05;
     const pw = LEFT_IMG_W - px - 0.45;
-    const titleBox = planBadgeBox(s, { x: px, y: 0.62, w: pw - ctx.reserve, h: 1.5 });
+    /*
+     * AUDIT-25 P9 (sharh 1): panel sarlavhasi TOR (logo bilan 3.0″) —
+     * nishon yonida tursa quti 2.38″ ga torayib 72 belgili sarlavha 17 pt
+     * da ham sig'masdi (ko'ruvchi kesadi, PPTX to'kadi). Shuning uchun bu
+     * yerda nishon sarlavha USTIDA, alohida qatorda; sarlavha qutisi
+     * kengligini ham, joyini ham saqlaydi.
+     */
+    const titleBox: Box = { x: px, y: 0.62, w: pw - ctx.reserve, h: 1.5 };
     const titleSize = fitSize(s.title, titleBox, 26, 17);
-    pushPlanBadge(layers, s, titleBox, titleSize, theme.titleMuted);
+    pushPlanBadgeAt(layers, s, px, 0.2, theme.titleMuted, { size: 16 });
     layers.push({
       t: "text",
       box: titleBox,
@@ -2983,6 +3030,7 @@ export const LAYOUT_KIT = {
   planBadgeBox,
   pushPlanBadge,
   pushPlanBadgeAt,
+  pushPlanTab,
   PLAN_BADGE_W,
   LOGO_BOX,
   LOGO_RESERVE,

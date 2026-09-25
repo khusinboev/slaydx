@@ -52,15 +52,16 @@ function pushRoundHead(layers: SlideLayer[], s: SlideModel, theme: SlideTheme, r
   const headBox = planBadgeBox(s, { x: TEXT_X, y: 0.5, w: Math.max(3, zoneW - reserve), h: 0.85 });
   const size = fitSize(s.title, headBox, 26, 16);
   /*
-   * AUDIT-25 P9: reja nishoni — dizayn tilida, kichik dumaloq nishoncha
-   * (`titleBg` doira + `titleText` raqam), sarlavhaning birinchi qatori
-   * o'qida. Faqat `plan` li mazmun slaydida (reja/test — hech qachon).
+   * AUDIT-25 P9: reja nishoni — dizayn tilida, lekin BOSHQA registrda:
+   * to'ldirilmagan aksent HALQA + `accentInk` raqam (`pushPlanRing`).
+   * Kartalardagi to'q disk «1 2 3» — ro'yxat tartibi; halqa — reja bandi
+   * (sharh 2). Faqat `plan` li mazmun slaydida (reja/test — hech qachon).
    */
   const no = planBadge(s);
   if (no) {
     const d = 0.5;
     const dy = ((size * 1.2) / 72 - d) / 2;
-    pushBadge(layers, theme, { x: TEXT_X, y: headBox.y + dy, w: d, h: d }, no, 15);
+    pushPlanRing(layers, theme, { x: TEXT_X, y: headBox.y + dy, w: d, h: d }, no);
   }
   layers.push({
     t: "text",
@@ -83,6 +84,25 @@ function pushBadge(layers: SlideLayer[], theme: SlideTheme, box: Box, label: str
     text: label,
     color: theme.titleText,
     size,
+    bold: true,
+    align: "center",
+    valign: "middle",
+  });
+}
+
+/**
+ * Reja bandi nishoni — to'ldirilmagan aksent halqa, ichida `accentInk`
+ * raqam (`accentInk`/`bg` — o'lchangan juft). Ro'yxat nishonchasidan
+ * (`pushBadge`: to'q disk) ataylab farq qiladi. Dekorativ, `src`siz.
+ */
+function pushPlanRing(layers: SlideLayer[], theme: SlideTheme, box: Box, label: string): void {
+  layers.push({ t: "rect", box: { ...box }, line: { color: theme.accent, width: 2 }, radius: box.w / 2 });
+  layers.push({
+    t: "text",
+    box: { ...box },
+    text: label,
+    color: theme.accentInk,
+    size: 14,
     bold: true,
     align: "center",
     valign: "middle",
@@ -315,7 +335,7 @@ function planQuote(s: SlideModel, theme: SlideTheme, index: number, total: numbe
   layers.push({ t: "rect", box: { x, y: y0, w: 1.1, h: 0.12 }, fill: { color: theme.accent }, radius: 0.06 });
   // Reja nishoni (faqat `plan` li iqtibos) — aksent chiziq o'qida, o'ngida.
   const no = LAYOUT_KIT.planBadge(s);
-  if (no) pushBadge(layers, theme, { x: x + 1.3, y: y0 - 0.19, w: 0.5, h: 0.5 }, no, 15);
+  if (no) pushPlanRing(layers, theme, { x: x + 1.3, y: y0 - 0.19, w: 0.5, h: 0.5 }, no);
   layers.push({
     t: "text",
     box: { x, y: y0 + 0.46, w: tw, h: qH },

@@ -86,17 +86,16 @@ function pushPolaroid(
 
 /** Sarlavha + qo'sh chiziq (daftar ustuni) — kontent maketlari uchun. */
 function pushNotebookHead(layers: SlideLayer[], s: SlideModel, theme: SlideTheme, reserve: number): void {
-  const { fitSize, pushPlanBadgeAt } = LAYOUT_KIT;
-  const headBox: Box = { x: TEXT_X + 0.25, y: 0.45, w: Math.max(3, ZONE_W - 0.25 - reserve), h: 0.8 };
+  const { fitSize, planBadgeBox, pushPlanTab } = LAYOUT_KIT;
+  const headBox = planBadgeBox(s, { x: TEXT_X + 0.25, y: 0.45, w: Math.max(3, ZONE_W - 0.25 - reserve), h: 0.8 });
   const size = fitSize(s.title, headBox, 25, 16);
   /*
-   * AUDIT-25 P9: reja nishoni — daftar HOSHIYASIDA (qizil chiziqdan
-   * chapda, o'ngga tekislangan), sarlavhaning birinchi qatori o'qida.
-   * Sarlavha qutisi qo'zg'almaydi. Faqat `plan` li mazmun slaydi.
+   * AUDIT-25 P9: reja nishoni — bo'lim slaydidagi DAFTAR TABI tilida
+   * (to'q blok, aksent qirra), sarlavha chapida. Ilgari u hoshiyada
+   * yalang «01» edi va pastdagi band raqamlari «01 02 03» bilan bir
+   * registrda o'qilardi (sharh 2) — tab boshqa ma'noni ko'rsatadi.
    */
-  const bSize = Math.min(18, Math.max(14, Math.round(size * 0.8)));
-  const dy = Math.max(0, ((size - bSize) * 1.2) / 72 / 2);
-  pushPlanBadgeAt(layers, s, 0.3, headBox.y + dy, theme.accentInk, { size: bSize, w: 0.6, align: "right" });
+  pushPlanTab(layers, s, headBox, size, theme);
   layers.push({
     t: "text",
     box: headBox,
