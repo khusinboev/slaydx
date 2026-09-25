@@ -279,3 +279,66 @@ not a slide. Within one PATCH (tested at `:616`) it is exact. Across PATCHes:
    since `imageYieldField` doesn't read them, but the comment's rule ("add new fields here too") has no test
    pinning it. Add one test that builds `yieldText` keys from the `imageOverflowChars` check list, or derive both
    from one table.
+
+---
+
+# P12 re-review — 00aab23
+
+Commits `882e15a`, `00aab23` on `worktree-agent-a45f8181f192e88ae`. Reviewed `git diff eee9a8a..00aab23`.
+`tests/slide-image-edit.test.mts`: **42/42 pass** (one heavy run).
+
+## Verdict: CHANGES (1 small, one line + one test)
+
+Items 1, 3 and 4 of the first review are fixed. Item 2 is handed to P11 (9c20f85), which I did not re-review here.
+One edge of the new worst-ratio fallback contradicts the rule the code documents; see C1.
+
+## Verified
+
+- **Item 1 (original deck).** `slide-commit.ts:161-163` passes `original: () => getGenerationForRestore(id, userId).docPrev`.
+  - The ownership check lives in that function's SQL (`WHERE id AND user_id`), and `jobs.ts` is unchanged.
+  - `edit-adapters.ts:169-171`: the slow path first matches the same `image.url` in `before`, then lazily in the
+    original deck (`original ??=` gives one read per PATCH at most). A `null` docPrev → `[]` is correct, because
+    `before` is then the original deck and has already been checked.
+  - Matching by URL is independent of renumbering, which also fixes the false refusal (a) from my first review.
+  - Tests cover the four two-PATCH flows (image delete → Ctrl+Z, `imageRestore`, slide delete → Ctrl+Z,
+    shorten → Ctrl+Z; all 200) and INT-03 flow 2 (400). A pin test shows no `SELECT doc_prev` when the fast
+    paths pass.
+- **The loader can't fire for non-slide adapters.** The closure is built for every adapter, but only
+  `slideAdapter` defines `guard` (`guard?.`), so nothing else can call it.
+- **Ordering.** `await cur.adapter.guard?.(…)` runs after `apply` and before render and the transaction. A
+  rejection still writes neither the doc nor the upload row, and 409 still comes first.
+- **Can URL matching widen overflow?** Only up to what the deck **already has**. The `image` op accepts any asset
+  URL of this generation, so on an old deck a user can put overflowing slide X's AI image onto slide Y and
+  write text on Y up to X's ratio: per field, or up to X's worst ratio for a field X lacks. On a new deck every
+  URL holder fits (`was = {}`, `worst = 0`), so any overflow is refused, and an identical duplicate
+  (`imageYieldText` equal) fits by construction. The overflow is bounded, only possible on old decks, and only
+  affects the user's own deck. **Acceptable.**
+- **Item 3 (ratio).** `imageOverflowRatio` compares different boxes correctly: twoCol → bullets with a lower
+  ratio is accepted and a higher one refused (test).
+- **Item 4 (one table).** `IMAGE_YIELD_TABLE` → `yieldView` means the measure can only read table keys, and
+  `imageYieldText` is built from the same keys. Equal text therefore guarantees an equal measure. A pin test covers it.
+- **Remaining debt (accepted).**
+  - A user-uploaded image (not in `doc_prev`) that replaced the AI image on an old overflowing slide cannot come
+    back through Ctrl+Z after it is removed in a separate PATCH. Only its URL-less base exists, so the result is
+    400. `imageRestore` still brings back the original AI image.
+  - `withImage = 0` gives ratio `Infinity`. A base with `Infinity` accepts any finite ratio on its other fields.
+    This only happens on old decks.
+
+## Worst-ratio fallback: the question asked
+
+Can a slide be accepted that overflows a field the base did not overflow at all, when the base's worst was in
+another field? **Yes, and not only on layout change.** `edit-adapters.ts:164`:
+`now[f] <= (was[f] ?? worst)`. Example on the same layout: an old process slide with an image where `stepText`
+is at ratio 3.0 and `stepTitle` fits. Lengthening the step **titles** to ratio 2.9 is accepted, because
+`stepTitle` is absent from `was` and is compared against 3.0. The same applies to a table (cells over →
+headers can grow) and to twoCol (one column over → the other column's key is the same `colItem`, so not
+affected). The overflow stays bounded by the slide's own existing worst, and it only happens on old decks. But it
+contradicts the documented rule in the same function ("eski dekada … uzaytirish — rad") and the intent of item 3,
+which was only about **layout change**.
+
+## CHANGES
+
+1. `lib/server/edit-adapters.ts:164`: apply the worst-ratio fallback only when the layout differs:
+   `now[f] <= (was[f] ?? (b.layout === s.layout ? 0 : worst))`. On the same layout, a field that fit in the base
+   must still fit. Add a test: old process slide with an image, `stepText` over, `stepTitle` fitting;
+   lengthening the titles past the with-image box gives 400, while the twoCol → bullets layout test stays 200.
