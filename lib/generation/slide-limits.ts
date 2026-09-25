@@ -499,6 +499,9 @@ export const CLIP_WORD_MIN_SHARE = 0.6;
 export function clipTo(text: string, n: number): string {
   const t = String(text ?? "").replace(/[ \t\n\r\f\v]+/g, " ").trim();
   if (t.length <= n) return t;
+  // P11 sharhi 1a: 0 belgilik quti (xom rasmli sig'im) — ilgari `safeSlice(t, -1)` deyarli butun matnni qaytarardi.
+  if (n <= 0) return "";
+  if (n === 1) return "…";
   const head = safeSlice(t, n - 1);
   // `t[n-1]` bo'shliq bo'lsa `head` o'zi to'liq so'z bilan tugaydi.
   const cut = t[head.length] === " " ? head.length : head.lastIndexOf(" ");
@@ -726,7 +729,8 @@ export function fitChars(field: FitField, rules: BodyRules, visual?: SlideVisual
   const n = Math.max(1, Math.round(count ?? p.count?.(rules) ?? 1));
   const rows = Math.max(1, Math.round(opts.rows ?? rules.tableRows));
   const images = opts.images ?? "both";
-  const key = `${field}|${n}|${rows}|${visual ?? "*"}|${rules.bodyPt}|${rules.minPt}|${images}`;
+  // Reja o'lchovi `agendaMax` ga bog'liq (`pr`) — kalitda ham bo'lsin (P11 sharhi).
+  const key = `${field}|${n}|${rows}|${visual ?? "*"}|${rules.bodyPt}|${rules.minPt}|${images}${field === "agenda" ? `|${rules.agendaMax}` : ""}`;
   const hit = fitCache.get(key);
   if (hit !== undefined) return hit;
   const floored = AUDIENCE_FIELDS.has(field);

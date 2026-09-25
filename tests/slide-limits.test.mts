@@ -354,6 +354,19 @@ test("AUDIT-25: clipTo so'z chegarasida kesadi (so'z o'rtasida «…» yo'q)", (
   assert.equal(clipTo("Suv hajmi 12\u00a0km ga qisqardi", 15), "Suv hajmi…");
 });
 
+// P11 sharhi 1a: 0 belgilik quti (tahrirning xom rasmli chegarasi) — ilgari `safeSlice(t, -1)` deyarli
+// butun matnni qaytarardi («Suv bug‘lanadi va bulut hosil…» 0 belgiga). MUTATSIYA: ikki qator olib tashlansa — qizaradi.
+test("clipTo: n ≤ 0 — bo'sh; n = 1 — faqat «…»; natija hech qachon n dan uzun emas", () => {
+  const s = "Suv bug‘lanadi va bulut hosil qiladi";
+  assert.equal(clipTo(s, 0), "");
+  assert.equal(clipTo(s, -3), "");
+  assert.equal(clipTo(s, 1), "…");
+  assert.equal(clipTo("", 0), "");
+  assert.equal(clipTo("", 1), "");
+  assert.equal(clipTo("A", 1), "A");
+  for (let n = 0; n <= s.length + 1; n += 1) assert.ok(clipTo(s, n).length <= Math.max(0, n), `n=${n}: ${clipTo(s, n).length}`);
+});
+
 // ═══════════════════════════════════════════ 5. AUDIT-25 — limitsFor (auditoriya × son)
 
 test("limitsFor: son o'zgaruvchi maydonlar pol × son jadvalidan, statik qopqoqdan oshmaydi", async () => {
