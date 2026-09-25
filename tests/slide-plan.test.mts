@@ -18,7 +18,7 @@ import {
   resolvePlanFlags,
 } from "../lib/generation/slide-params.ts";
 import { SLIDE_LIMITS, clipTo, limitsFor } from "../lib/generation/slide-limits.ts";
-import { NO_IMAGE, REPAIR_MIN_MS, clipLimit, layoutWordTargets } from "../lib/generation/slide-quality.ts";
+import { NO_IMAGE, REPAIR_MIN_MS, clipLimit, imageYieldField, layoutWordTargets } from "../lib/generation/slide-quality.ts";
 import { AUDIENCE_RULES } from "../lib/generation/slide-audience.ts";
 import type { SlideProgressEvent } from "../lib/generation/slide-progress.ts";
 import { resetBlocksForPurpose } from "../components/forms/slide-fields.tsx";
@@ -38,6 +38,10 @@ import {
 } from "../lib/generation/slide-write.ts";
 import { bodyRules } from "../lib/generation/slide-audience.ts";
 import type { SlideLayout, SlideModel } from "../lib/generation/slide-types.ts";
+import type { SlideVisual } from "../lib/generation/slide-templates.ts";
+import { CHAR_EM, LAYOUT_KIT, planSlide } from "../lib/generation/slide-layout.ts";
+import { getSlideTheme } from "../lib/generation/slide-themes.ts";
+import { DESIGN_VISUALS, LEGACY_VISUALS } from "../lib/generation/visuals/spec.ts";
 
 /**
  * REJA = SHARTNOMA (AUDIT-25, 1/2/3/5-qarorlar).
@@ -780,7 +784,15 @@ test("W3/W4: normalizeSlide AVVAL sonni kesadi, keyin uzunlikni auditoriya × so
     const meta = extractMeta(slideTool, { topic: "X", slideAudience: aud });
     const rules = bodyRules(meta, "lecture");
     const visual = SLIDE_TEMPLATE_BY_ID.lecture.visual;
-    const lim = limitsFor(rules);
+    // INT-07: son — prompt bilan BIR manba (auditoriya ruxsati ∩ vizual sig'imi, `layoutWordTargets`).
+    const aud0 = limitsFor(rules);
+    const t = layoutWordTargets(rules, visual);
+    const lim = {
+      stepsMax: Math.min(aud0.stepsMax, t.maxSteps),
+      statsMax: Math.min(aud0.statsMax, t.maxStats),
+      tableCols: Math.min(aud0.tableCols, t.maxTableCols),
+      tableRows: Math.min(aud0.tableRows, t.maxTableRows),
+    };
     const slides = extractNewSlides(JSON.stringify({ slides: raw }), 0, "F", rules, { final: true }, visual).map((x) => x.slide);
     got[aud] = slides;
     const [proc, stats, table, quiz, two] = slides;
@@ -921,4 +933,175 @@ test("P8 (d): rasmsiz qutidan ham uzun band — rasmsiz chegarada, SO'Z chegaras
   assert.ok(got.length > withImage, `rasmli chegarada (${withImage}) qirqildi: ${got.length}`);
   assert.ok(long.startsWith(got.slice(0, -1)), "qirqilgan band asl matnning boshi emas");
   assert.match(long[got.length - 1], /\s/, `so'z o'rtasidan kesildi: «${got}»`);
+});
+
+// ═══════════════════════════════════════════ AUDIT-25 integratsiya sharhi (INT-02/07/10/11)
+
+type TL = { t: string; text?: string; lines?: string[]; box: { w: number; h: number }; size: number; bold?: boolean; paraSpace?: number; src?: { f: string }; srcLines?: { f: string }[] };
+/** Qatlam siyohi / quti — `fitChars` ning `layerFits` formulasi. */
+function inkRatio(l: TL): number {
+  const room = l.box.h * 72 + 1;
+  if (l.lines) return (LAYOUT_KIT.listRows(l.lines, l.box as never, l.size) * l.size * 1.3 + Math.max(0, l.lines.length - 1) * (l.paraSpace ?? 0)) / room;
+  return (LAYOUT_KIT.inkHeight(l.text ?? "", l.box.w, l.size, l.bold ? LAYOUT_KIT.CHAR_EM_BOLD : CHAR_EM) * 72) / room;
+}
+/** Slayddagi `f` maydon qatlamlari: eng yomon siyoh nisbati va eng kichik shrift. */
+function worstOf(s: SlideModel, rules: ReturnType<typeof bodyRules>, visual: SlideVisual, f: string): { ratio: number; size: number } {
+  const plan = planSlide(s, getSlideTheme("atlas"), visual, 3, 10, "auto", "lecture", { bodyType: rules });
+  let ratio = 0;
+  let size = Number.POSITIVE_INFINITY;
+  for (const l of plan.layers as unknown as TL[]) {
+    if (l.t !== "text" || !(l.src?.f === f || (l.srcLines ?? []).some((x) => x.f === f))) continue;
+    ratio = Math.max(ratio, inkRatio(l));
+    size = Math.min(size, l.size);
+  }
+  return { ratio, size };
+}
+const ALL_VIS: SlideVisual[] = [...LEGACY_VISUALS, ...DESIGN_VISUALS];
+const TITLE_WORDS = "Orol dengizi havzasidagi ekologik inqiroz va uning mintaqa aholisi salomatligiga ta’siri hamda yechimlari".split(" ");
+/** `n` belgidan oshmaydigan sarlavha (so'z bilan tugaydi), `from` so'zdan. */
+function titleUpTo(n: number, from = 0): string {
+  let out = "";
+  for (let i = 0; ; i += 1) {
+    const next = out ? `${out} ${TITLE_WORDS[(from + i) % TITLE_WORDS.length]}` : TITLE_WORDS[(from + i) % TITLE_WORDS.length];
+    if (next.length > n) return out;
+    out = next;
+  }
+}
+
+/*
+ * INT-02: agenda = reja slaydlari sarlavhalari (≤ 72), lekin `bulletChars` da qirqilardi —
+ * 1–4 sinf 6 × 72 belgi HAMMA 17 vizualda toshardi (112–159 %). Endi `syncAgenda` reja QUTISIDA
+ * qirqadi (`clipLimit("agenda", rules, tpl.visual, n)`, so'z tartibi aylanmalari bilan).
+ * MUTATSIYA: `syncAgenda` yana `rules.bulletChars` ga qaytarilsa — qizaradi.
+ */
+test("INT-02: syncAgenda reja qutisida qirqadi — 1–9 sinf 6 × 72 belgilik reja hech bir vizualda toshmaydi", () => {
+  const bad: string[] = [];
+  for (const aud of ["school_1_4", "school_5_7", "school_8_9"] as const) {
+    const rules = bodyRules(extractMeta(slideTool, { topic: "X", slideAudience: aud, planItems: 6 } as never), "lesson");
+    assert.equal(rules.agendaMax, 6);
+    for (const visual of ALL_VIS) {
+      const deck: SlideModel[] = [
+        { id: "s0", layout: "agenda", title: "Reja", bullets: ["x"] },
+        ...Array.from({ length: 6 }, (_, i): SlideModel => ({ id: `s${i + 1}`, layout: "bullets", title: titleUpTo(72, i * 2), bullets: ["a"], plan: i + 1 })),
+      ];
+      syncAgenda(deck, rules, visual);
+      const items = deck[0].bullets!;
+      assert.equal(items.length, 6);
+      // P8 qoidasi: RASMSIZ reja qatori (rasm keyin, sig'masa joy beradi — `imageYieldField`).
+      const cap = clipLimit("agenda", rules, visual, 6, undefined, NO_IMAGE);
+      for (const b of items) assert.ok(b.length <= cap, `${aud}/${visual}: ${b.length} > ${cap}`);
+      const withImage = { ...deck[0], image: { url: "data:image/png;base64,AAAA" } };
+      const wi = worstOf(withImage, rules, visual, "bullets");
+      if (wi.ratio > 1.001 || wi.size < rules.minPt) {
+        assert.equal(imageYieldField(withImage, rules, visual), "agenda", `${aud}/${visual}: rasm yonida sig'maydi — rasm joy berishi kerak`);
+      }
+      const base = worstOf({ ...deck[0], bullets: items.map(() => "Orol") }, rules, visual, "bullets").size;
+      const w = worstOf(deck[0], rules, visual, "bullets");
+      if (w.ratio > 1.001 || w.size < Math.min(rules.minPt, base)) bad.push(`${aud}/${visual}: ${Math.round(w.ratio * 100)} % ${w.size} pt`);
+    }
+  }
+  assert.deepEqual(bad.slice(0, 8), [], `${bad.length} ta toshish`);
+  // Qisman qoidalar (eski chaqiruvchi) — `bulletChars`, o'zgarmagan.
+  const deck: SlideModel[] = [
+    { id: "s0", layout: "agenda", title: "Reja", bullets: ["x"] },
+    { id: "s1", layout: "bullets", title: titleUpTo(72), bullets: ["a"], plan: 1 },
+  ];
+  syncAgenda(deck, { bulletChars: 36 });
+  assert.ok(deck[0].bullets![0].length <= 36);
+});
+
+// P9 bilan kelishilgan nuqta: 1–4 sinf / circle, 6 × 72 belgilik reja sarlavhasi → band ≤ 51, so'z chegarasida; bakalavr 72 ni saqlaydi.
+test("INT-02: 1–4 sinf circle reja bandi ≤ 51 belgi (so'z chegarasida), bakalavr 72 ni saqlaydi", () => {
+  const titles = Array.from({ length: 6 }, (_, i) => titleUpTo(72, i * 2));
+  assert.ok(titles.every((t) => t.length >= 60 && t.length <= 72), titles.map((t) => t.length).join(","));
+  const deckOf = (): SlideModel[] => [
+    { id: "s0", layout: "agenda", title: "Reja", bullets: ["x"] },
+    ...titles.map((title, i): SlideModel => ({ id: `s${i + 1}`, layout: "bullets", title, bullets: ["a"], plan: i + 1 })),
+  ];
+  const kids = bodyRules(extractMeta(slideTool, { topic: "X", slideAudience: "school_1_4", planItems: 6 } as never), "lesson");
+  const k = deckOf();
+  syncAgenda(k, kids, "circle");
+  for (const [i, b] of k[0].bullets!.entries()) {
+    assert.ok(b.length <= 51 && b.endsWith("…"), `1–4 sinf: ${b.length} «${b}»`);
+    assert.ok(titles[i].startsWith(b.slice(0, -1)) && /\s/.test(titles[i][b.length - 1]), `so'z o'rtasidan kesildi: «${b}»`);
+  }
+  const bach = bodyRules(extractMeta(slideTool, { topic: "X", slideAudience: "students_bachelor", planItems: 6 } as never), "lecture");
+  const b = deckOf();
+  syncAgenda(b, bach, "circle");
+  assert.deepEqual(b[0].bullets, titles, "bakalavr: 72 belgilik sarlavha to'liq");
+});
+
+/*
+ * INT-07 (normalize): son prompt bilan BIR manba — masalan 1–4 sinfga prompt 2 karta / 2 ustun
+ * so'raydi, normalize ham 2 tasini qoldiradi (ilgari auditoriya ruxsati 3).
+ * MUTATSIYA: `counts()` yana faqat `limitsFor(rules)` ga qaytarilsa — qizaradi.
+ */
+test("INT-07: normalize soni = prompt soni (stats/jadval ustuni/bosqich/ustun bandi)", () => {
+  let checked = 0;
+  for (const aud of ["school_1_4", "school_8_9", "students_bachelor"] as const) {
+    const rules = bodyRules(extractMeta(slideTool, { topic: "X", slideAudience: aud } as never), "lesson");
+    for (const visual of ALL_VIS) {
+      const t = layoutWordTargets(rules, visual);
+      const raw = [
+        { layout: "stats", title: "S", stats: Array.from({ length: 5 }, (_, k) => ({ value: `${k + 1}0 %`, label: "yorliq" })) },
+        { layout: "table", title: "J", table: { headers: ["A", "B", "C", "D", "E"], rows: Array.from({ length: 7 }, () => ["a", "b", "c", "d", "e"]) } },
+        { layout: "process", title: "P", steps: Array.from({ length: 5 }, (_, k) => ({ title: `Q${k}`, text: "matn" })) },
+        { layout: "twoCol", title: "T", left: ["a", "b", "c", "d", "e"], right: ["a", "b", "c", "d", "e"] },
+      ];
+      const [stats, table, proc, two] = extractNewSlides(JSON.stringify({ slides: raw }), 0, "F", rules, { final: true }, visual).map((x) => x.slide);
+      const tag = `${aud}/${visual}`;
+      assert.equal(stats.stats!.length, Math.min(rules.statsMax, t.maxStats), `${tag}: stats`);
+      assert.equal(table.table!.headers.length, Math.min(rules.tableCols, t.maxTableCols), `${tag}: ustun`);
+      assert.equal(table.table!.rows.length, Math.min(rules.tableRows, t.maxTableRows), `${tag}: qator`);
+      assert.equal(proc.steps!.length, Math.min(rules.stepsMax, t.maxSteps), `${tag}: bosqich`);
+      assert.equal(two.left!.length, Math.min(SLIDE_LIMITS.colItems, t.maxColItems), `${tag}: ustun bandi`);
+      if (t.maxStats < rules.statsMax || t.maxTableCols < rules.tableCols || t.maxSteps < rules.stepsMax) checked += 1;
+    }
+  }
+  assert.ok(checked > 0, "sinov asosi: kamida bitta holatda prompt soni auditoriya ruxsatidan kam");
+});
+
+/*
+ * INT-10: iqtibos statik 280 da qirqilardi, `magazine`/`rail` qutisi ~130 — 103–107 % toshish.
+ * Endi `clipLimit("quote", …, NO_IMAGE)` (rasm bu qutini toraytirmaydi).
+ * MUTATSIYA: normalize yana `SLIDE_LIMITS.quote` bilan qirqsa — qizaradi.
+ */
+test("INT-10: iqtibos deka vizualining qutisida qirqiladi (magazine/rail ~130), toshmaydi", () => {
+  const long = Array.from({ length: 6 }, (_, i) => titleUpTo(72, i)).join(", ");
+  assert.ok(long.length >= 280, `sinov matni ${long.length}`);
+  const rules = bodyRules(extractMeta(slideTool, { topic: "X", slideAudience: "students_bachelor" } as never), "lecture");
+  for (const visual of ["magazine", "rail", "classic"] as const) {
+    const [q] = extractNewSlides(JSON.stringify({ slides: [{ layout: "quote", title: "Iqtibos", quote: long, quoteBy: "Muallif" }] }), 0, "F", rules, { final: true }, visual).map((x) => x.slide);
+    const cap = clipLimit("quote", rules, visual, undefined, undefined, NO_IMAGE);
+    assert.ok(q.quote!.length <= cap, `${visual}: ${q.quote!.length} > ${cap}`);
+    for (const img of [false, true]) {
+      const w = worstOf(img ? { ...q, image: { url: "data:image/png;base64,AAAA" } } : q, rules, visual, "quote");
+      assert.ok(w.ratio <= 1.001, `${visual}${img ? "+rasm" : ""}: ${Math.round(w.ratio * 100)} %`);
+    }
+  }
+  assert.ok(clipLimit("quote", rules, "magazine", undefined, undefined, NO_IMAGE) < 150, "sinov asosi: magazine qutisi tor");
+});
+
+/*
+ * INT-11: `coerceLayout` bandlardan twoCol/closing ga o'girganda matn qirqilmasdan torroq qutiga
+ * tushardi. Endi `normalizeSlide` bilan bir xil: ustun bandi soni/uzunligi `counts` + `clipLimit`,
+ * izoh maket qopqog'ida.
+ * MUTATSIYA: twoCol/closing shoxobchasidan qirqish olib tashlansa — qizaradi.
+ */
+test("INT-11: coerceLayout bandlar → twoCol/closing/section — chegarada, ustun soni prompt bilan bir", () => {
+  const rules = bodyRules(extractMeta(slideTool, { topic: "X", slideAudience: "school_8_9" } as never), "lesson");
+  const visual = "circle" as const;
+  const long = Array.from({ length: 3 }, (_, i) => titleUpTo(72, i)).join(" — ");
+  const bullets: SlideModel = { id: "s", layout: "bullets", title: "T", bullets: [long, long, long, long, long, long] };
+  const two = coerceLayout(bullets, "twoCol", 4, rules, visual);
+  const per = Math.min(SLIDE_LIMITS.colItems, layoutWordTargets(rules, visual).maxColItems);
+  for (const col of [two.left!, two.right!]) {
+    assert.ok(col.length <= per, `ustunda ${col.length} > ${per}`);
+    const cap = clipLimit("colItem", rules, visual, col.length, undefined, NO_IMAGE);
+    for (const x of col) assert.ok(x.length <= cap && x.endsWith("…"), `${x.length} > ${cap}`);
+  }
+  const closing = coerceLayout({ ...bullets, bullets: [`${long} ${long}`] }, "closing", 4, rules, visual);
+  assert.ok(closing.subtitle!.length <= SLIDE_LIMITS.subtitleClosing, `closing ${closing.subtitle!.length}`);
+  const section = coerceLayout({ ...bullets, bullets: [`${long} ${long} ${long}`] }, "section", 4, rules, visual);
+  assert.ok(section.subtitle!.length <= SLIDE_LIMITS.subtitleSection, `section ${section.subtitle!.length}`);
 });

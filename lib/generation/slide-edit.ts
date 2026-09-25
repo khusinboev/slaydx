@@ -1,11 +1,12 @@
 import { slideLabels } from "./i18n";
 import { isSlideFontId, type SlideFontId } from "./slide-fonts";
-import { SLIDE_LIMITS, clipTo, limitsFor } from "./slide-limits";
+import { CLIP_FLOOR_CHARS, NO_IMAGE, SLIDE_LIMITS, clipLimit, clipTo, limitsFor, type FitField, type LimitCounts, type SlideLimitsFor } from "./slide-limits";
 import { photoSlot } from "./slide-layout";
 import { refreshAnswerNote, rebuildAnswerKey } from "./slide-quiz";
 import { buildSlideDeck } from "./slides";
 import { isSlideLayout, type SlideLayout, type SlideModel, type SlideSrc } from "./slide-types";
 import type { BodyRules } from "./slide-audience";
+import type { SlideVisual } from "./slide-templates";
 import type { AcademicDoc } from "./types";
 import { safeSlice } from "./safe-text";
 
@@ -85,7 +86,77 @@ export type ConvertCheck =
  * eski STATIK `SLIDE_LIMITS` qopqog'ini ishlatardi va auditoriya poli
  * ostidagi qutiga sig'mas matnni qabul qilardi («ko'rdim = oldim» buzilardi).
  */
-export type EditRules = Pick<BodyRules, "maxBullets" | "bulletChars" | "agendaMax" | "minPt" | "stepsMax" | "statsMax" | "tableCols" | "tableRows">;
+export type EditRules = Pick<BodyRules, "maxBullets" | "bulletChars" | "agendaMax" | "minPt" | "stepsMax" | "statsMax" | "tableCols" | "tableRows"> & {
+  /**
+   * AUDIT-25 P11: deka vizuali (`buildSlideDeck(doc).visual`, `applyDocOps`
+   * beradi, to'liq `BodyRules` bilan). Berilsa chegara SHU vizualning
+   * o'lchovidan (`editLimits`) — generatsiya bilan bir funksiya; berilmasa
+   * pol × son zaxira jadvali (eski chaqiruvchilar).
+   */
+  visual?: SlideVisual;
+};
+
+/** `planSlide` o'lchovi to'liq qoidani talab qiladi — qisman `EditRules` bilan jadvalga qaytamiz. */
+function isFullRules(r: EditRules): r is EditRules & BodyRules {
+  return typeof (r as Partial<BodyRules>).bodyPt === "number";
+}
+
+/**
+ * Tahrir chegaralari — `limitsFor` (AUDIT-25 P11). Deka vizuali ma'lum
+ * bo'lsa SHU vizualning o'lchovi, slaydning RASM holati bilan: rasmli
+ * slayd matni rasm yonida sig'sin ("both" — rasmli quti), rasmsiz slayd
+ * rasm qutisi bilan qisilmasin ("none"). Ilgari tahrir doim pol × son
+ * jadvalini (17 vizualning eng tori, rasm bilan) olardi: 8–9 sinf
+ * `circle` rasmsiz bosqichida 121 o'rniga 45. Vizual yo'q — o'sha jadval.
+ */
+function editLimits(rules: EditRules, s: SlideModel, counts: LimitCounts = {}): SlideLimitsFor {
+  const visual = rules.visual;
+  if (!visual || !isFullRules(rules)) return limitsFor(rules, counts);
+  /*
+   * Rasmli slayd — XOM rasmli quti (`raw`, 24 belgilik polisiz): server
+   * qo'riqchisi (`commitDocOps`, P12) aynan xom `fitChars` bilan o'lchaydi.
+   * Pol bilan tahrir (masalan `rail` 4 bosqich, quti 4 belgi) 5–24 belgini
+   * «optimistik» qabul qilar, server esa 400 `text_too_long` bilan navbatdagi
+   * operatsiyalarni tashlardi (P12 sharhi, 2-band).
+   */
+  const none = limitsFor(rules, counts, { visual, images: "none" });
+  if (!s.image) return none;
+  // Bosqich MATNI — gap maydoni (P11 sharhi 3): rasmli slaydda ham rasmsiz quti; toshsa P12 qo'riqchisi aniq 400 beradi.
+  return { ...limitsFor(rules, counts, { visual, images: "both", raw: true }), stepText: none.stepText };
+}
+
+/**
+ * GAP maydonining tahrir chegarasi (P11 sharhi 3) — `bullets`, `agenda`,
+ * ustun bandi, iqtibos, bo'lim/yakun izohi, bosqich matni. Vizual ma'lum
+ * bo'lsa generatsiya bilan BIR funksiya: `clipLimit(maydon, …, NO_IMAGE)`
+ * (statik `cap` dan oshmaydi). RASMLI slaydda ham rasmsiz quti: bunday
+ * matn rasm yonida sig'masa P12 qo'riqchisi (`commitDocOps`) aniq xabarli
+ * 400 beradi — jim «…» qirqish emas; hamma gap maydonida bir xil UX.
+ * Ilgari statik: 8–9 sinf `circle` 4 bandli ustun ~60 belgi ko'taradi,
+ * tahrir 110 ni qabul qilardi. Vizual noma'lum (qisman qoidalar) — `cap`.
+ */
+function proseLimit(field: FitField, rules: EditRules, count: number | undefined, cap: number): number {
+  if (!rules.visual || !isFullRules(rules)) return cap;
+  return Math.min(cap, clipLimit(field, rules, rules.visual, count, undefined, NO_IMAGE));
+}
+
+/**
+ * YORLIQ maydoni rasmli slaydda XOM rasmli qutiga qirqiladi (`editLimits`).
+ * Quti `CLIP_FLOOR_CHARS` dan tor bo'lsa (masalan `rail` 4 bosqich sarlavhasi)
+ * qirqish ma'noni o'ldiradi («Suv…») — tahrir RAD etiladi (P11 sharhi 1b).
+ */
+export const TIGHT_IMAGE_ERROR = "Rasm yonida bu maydonga matn sig‘maydi — rasmni olib tashlang yoki maketni o‘zgartiring";
+
+function tooTight(s: SlideModel, rules: EditRules, value: string, max: number): boolean {
+  if (!s.image || !rules.visual || !isFullRules(rules) || max >= CLIP_FLOOR_CHARS) return false;
+  return clipTo(value, max) !== clipTo(value, Number.MAX_SAFE_INTEGER);
+}
+
+/** Ro'yxatga yozilgandan KEYINGI band soni — chegara shu sonda o'lchanadi. */
+function countAfter(list: string[], i: number, value: string): number {
+  if (!value.trim()) return Math.max(1, i < list.length ? list.length - 1 : list.length);
+  return i === list.length ? list.length + 1 : list.length;
+}
 
 // ═══════════════════════════════════════════════════════ Yordamchilar
 
@@ -166,6 +237,17 @@ function subtitleMax(layout: SlideLayout): number {
   return SLIDE_LIMITS.subtitle;
 }
 
+/**
+ * Izoh tahriri (P11 sharhi 3): `section`/`closing` — deka vizualining qutisi
+ * (`clipLimit`, rasmsiz), statik qopqoqdan oshmaydi va mavjud uzunlikdan
+ * qisqarmaydi (`editLimit`); boshqa maketlar — statik.
+ */
+function subtitleEditMax(s: SlideModel, rules: EditRules): number {
+  const cap = subtitleMax(s.layout);
+  const field = s.layout === "section" ? "subtitleSection" : s.layout === "closing" ? "subtitleClosing" : null;
+  return field ? editLimit(proseLimit(field, rules, undefined, cap), cap, s.subtitle?.length ?? 0) : cap;
+}
+
 /** Bandlar soni va uzunligi maketga bog'liq: reja `agendaMax`, javoblar kaliti 10 qator. */
 function bulletCaps(s: SlideModel, rules: EditRules): { max: number; chars: number } {
   if (s.layout === "agenda") return { max: rules.agendaMax, chars: rules.bulletChars };
@@ -178,8 +260,25 @@ function bulletCaps(s: SlideModel, rules: EditRules): { max: number; chars: numb
  * ko'ruvchidagi butun-quti muharriri (Enter → yangi band, chegarada
  * bloklanadi) BITTA joydan o'qiydi.
  */
-export function listCap(s: SlideModel, field: ListField, rules: EditRules): { max: number; chars: number } {
-  return field === "bullets" ? bulletCaps(s, rules) : { max: SLIDE_LIMITS.colItems, chars: SLIDE_LIMITS.colItem };
+export function listCap(s: SlideModel, field: ListField, rules: EditRules, count?: number): { max: number; chars: number } {
+  if (field === "bullets") {
+    const caps = bulletCaps(s, rules);
+    return { max: caps.max, chars: bulletProse(s, rules, count ?? s.bullets?.length, caps.chars) };
+  }
+  return { max: SLIDE_LIMITS.colItems, chars: proseLimit("colItem", rules, count ?? s[field]?.length, SLIDE_LIMITS.colItem) };
+}
+
+/**
+ * Band uzunligi — tahrir (P11 sharhi 3): `bullets` maketi — `bulletClipLimit` bilan bir
+ * qoida (rasmsiz band qutisi), `agenda` — reja qatori (`syncAgenda` bilan bir). Boshqa
+ * maketlarning bandlari (javoblar kaliti va h.k.) — `cap`. `sanitizeSlideModel` bunga
+ * TEGMAYDI (xavfsizlik filtri — statik).
+ */
+function bulletProse(s: SlideModel, rules: EditRules, count: number | undefined, cap: number): number {
+  const n = Math.max(1, count ?? 1);
+  if (s.layout === "bullets") return proseLimit("bullets", rules, n, cap);
+  if (s.layout === "agenda") return proseLimit("agenda", rules, n, cap);
+  return cap;
 }
 
 /**
@@ -307,7 +406,7 @@ export function writeSlideField(s: SlideModel, src: SlideSrc, value: string, rul
       return { ok: true, slide: { ...s, title: v } };
     }
     case "subtitle":
-      return { ok: true, slide: setOrDrop(s, "subtitle", clipTo(value, subtitleMax(s.layout))) };
+      return { ok: true, slide: setOrDrop(s, "subtitle", clipTo(value, subtitleEditMax(s, rules))) };
     case "kicker":
       return { ok: true, slide: setOrDrop(s, "kicker", clipTo(value, SLIDE_LIMITS.kicker)) };
     case "imageHint":
@@ -319,7 +418,8 @@ export function writeSlideField(s: SlideModel, src: SlideSrc, value: string, rul
       return { ok: false, error: "Kolontitul deka darajasida — footer op" };
     case "quote": {
       if (s.quote == null) return { ok: false, error: "Bu maketda iqtibos yo'q" };
-      const v = clipTo(value, SLIDE_LIMITS.quote);
+      // P11 sharhi 3: deka vizualining iqtibos qutisi (`magazine`/`rail` ~130), mavjud uzunlikdan qisqarmaydi (`editLimit`).
+      const v = clipTo(value, editLimit(proseLimit("quote", rules, undefined, SLIDE_LIMITS.quote), SLIDE_LIMITS.quote, s.quote.length));
       // Bo'sh iqtibos — `planQuote` sarlavhaga qaytadi, ya'ni slayd bo'sh qolmaydi.
       return { ok: true, slide: v ? { ...s, quote: v } : without(s, "quote") };
     }
@@ -331,14 +431,18 @@ export function writeSlideField(s: SlideModel, src: SlideSrc, value: string, rul
     case "bullets": {
       if (!s.bullets) return { ok: false, error: "Bu maketda bandlar yo'q" };
       const caps = bulletCaps(s, rules);
-      const w = writeList(s.bullets, src.i, clipTo(value, caps.chars), caps.max);
+      // P11 sharhi 3: band/reja qutisi YOZUVDAN KEYINGI sonda; mavjud uzunlikdan qisqarmaydi (`editLimit`).
+      const chars = editLimit(bulletProse(s, rules, countAfter(s.bullets, src.i, value), caps.chars), caps.chars, s.bullets[src.i]?.length ?? 0);
+      const w = writeList(s.bullets, src.i, clipTo(value, chars), caps.max);
       return w.ok ? { ok: true, slide: { ...s, bullets: w.list } } : w;
     }
     case "left":
     case "right": {
       const list = s[src.f];
       if (!list) return { ok: false, error: "Bu maketda ustun yo'q" };
-      const w = writeList(list, src.i, clipTo(value, SLIDE_LIMITS.colItem), SLIDE_LIMITS.colItems);
+      // P11 sharhi 3: ustun bandi — o'z ustunidagi SONDA o'lchangan quti (8–9 sinf `circle` 4 band ~60, statik 110 emas).
+      const chars = editLimit(proseLimit("colItem", rules, countAfter(list, src.i, value), SLIDE_LIMITS.colItem), SLIDE_LIMITS.colItem, list[src.i]?.length ?? 0);
+      const w = writeList(list, src.i, clipTo(value, chars), SLIDE_LIMITS.colItems);
       return w.ok ? { ok: true, slide: { ...s, [src.f]: w.list } } : w;
     }
     case "stats": {
@@ -369,7 +473,8 @@ export function writeSlideField(s: SlideModel, src: SlideSrc, value: string, rul
         return { ok: true, slide: { ...s, stats: s.stats.map((x, k) => (k === i ? { ...x, value: v } : x)) } };
       }
       // Yorliq bo'sh bo'lishi MUMKIN — raqamning o'zi ham ma'no beradi. Chegara `limitsFor` VA eski uzunlikning kattasi (`editLimit`).
-      const labelLim = editLimit(limitsFor(rules, { stats: s.stats.length }).statLabel, SLIDE_LIMITS.statLabel, s.stats[i].label.length);
+      const labelLim = editLimit(editLimits(rules, s, { stats: s.stats.length }).statLabel, SLIDE_LIMITS.statLabel, s.stats[i].label.length);
+      if (tooTight(s, rules, value, labelLim)) return { ok: false, error: TIGHT_IMAGE_ERROR };
       const label = clipTo(value, labelLim);
       return { ok: true, slide: { ...s, stats: s.stats.map((x, k) => (k === i ? { ...x, label } : x)) } };
     }
@@ -379,7 +484,7 @@ export function writeSlideField(s: SlideModel, src: SlideSrc, value: string, rul
       if (!Number.isInteger(i) || i < 0 || i > s.steps.length) return { ok: false, error: "Bosqich indeksi noto'g'ri" };
       const isNewStep = i === s.steps.length;
       // Chegara auditoriya POLI × BO'LADIGAN bosqich SONIdan (`limitsFor`) — yangi band qo'shilsa son bittaga oshadi.
-      const lim = limitsFor(rules, { steps: isNewStep ? i + 1 : s.steps.length });
+      const lim = editLimits(rules, s, { steps: isNewStep ? i + 1 : s.steps.length });
       // Mavjud bosqichni tahrirlashda `editLimit` — eski uzunlikdan qisqarmaydi (P7 review, W7 CHANGES 1).
       const prevStep = isNewStep ? null : s.steps[i];
       const max =
@@ -388,6 +493,7 @@ export function writeSlideField(s: SlideModel, src: SlideSrc, value: string, rul
           : src.k === "title"
             ? editLimit(lim.stepTitle, SLIDE_LIMITS.stepTitle, prevStep?.title.length ?? 0)
             : editLimit(lim.stepText, SLIDE_LIMITS.stepText, prevStep?.text.length ?? 0);
+      if (src.k === "title" && tooTight(s, rules, value, max)) return { ok: false, error: TIGHT_IMAGE_ERROR };
       const v = clipTo(value, max);
       if (isNewStep) {
         if (src.k !== "title" || !v) return { ok: true, slide: s };
@@ -428,7 +534,8 @@ export function writeSlideField(s: SlideModel, src: SlideSrc, value: string, rul
       }
       if (src.j < 0 || src.j >= q.options.length) return { ok: false, error: "Variant indeksi noto'g'ri" };
       // Test varianti — `limitsFor` (auditoriya poli, son emas) VA eski uzunlikning kattasi (`editLimit`).
-      const optLim = editLimit(limitsFor(rules).quizOption, SLIDE_LIMITS.quizOption, q.options[src.j].length);
+      const optLim = editLimit(editLimits(rules, s).quizOption, SLIDE_LIMITS.quizOption, q.options[src.j].length);
+      if (tooTight(s, rules, value, optLim)) return { ok: false, error: TIGHT_IMAGE_ERROR };
       const v = clipTo(value, optLim);
       /*
        * Variant AYNAN to'rtta bo'lishi shart: `planQuiz` A/B/C/D
@@ -444,11 +551,12 @@ export function writeSlideField(s: SlideModel, src: SlideSrc, value: string, rul
     case "table": {
       if (!s.table) return { ok: false, error: "Bu maketda jadval yo'q" };
       // Chegara auditoriya POLI × jadval O'LCHAMIdan (`limitsFor`) — ustun/qator soni katakka sig'adigan matnni belgilaydi.
-      const tlim = limitsFor(rules, { cols: s.table.headers.length, rows: s.table.rows.length });
+      const tlim = editLimits(rules, s, { cols: s.table.headers.length, rows: s.table.rows.length });
       if (src.k === "header") {
         if (src.c < 0 || src.c >= s.table.headers.length) return { ok: false, error: "Ustun indeksi noto'g'ri" };
         // `editLimit` — eski sarlavha uzunligidan qisqarmaydi (P7 review, W7 CHANGES 1).
         const headLim = editLimit(tlim.tableHeaderWide, SLIDE_LIMITS.tableHeaderWide, s.table.headers[src.c].length);
+        if (tooTight(s, rules, value, headLim)) return { ok: false, error: TIGHT_IMAGE_ERROR };
         const v = clipTo(value, headLim);
         if (!v) return { ok: false, error: "Ustun sarlavhasi bo'sh bo'lishi mumkin emas" };
         return { ok: true, slide: { ...s, table: { ...s.table, headers: s.table.headers.map((h, c) => (c === src.c ? v : h)) } } };
@@ -457,6 +565,7 @@ export function writeSlideField(s: SlideModel, src: SlideSrc, value: string, rul
       if (!row || src.c < 0 || src.c >= row.length) return { ok: false, error: "Katak indeksi noto'g'ri" };
       // `editLimit` — eski katak uzunligidan qisqarmaydi.
       const cellLim = editLimit(tlim.tableCell, SLIDE_LIMITS.tableCell, row[src.c].length);
+      if (tooTight(s, rules, value, cellLim)) return { ok: false, error: TIGHT_IMAGE_ERROR };
       const v = clipTo(value, cellLim);
       /*
        * Bo'sh katak SAQLANADI. `normalizeSlide` uni filtrlab tashlardi va
@@ -630,6 +739,15 @@ function baseOf(s: SlideModel, to: SlideLayout): SlideModel {
 }
 
 /**
+ * O'girilgan slayd rasmi QOLADIMI — `applyDocOps` `layout` op'i yangi
+ * maketda rasm joyi (`photoSlot`) bo'lmasa rasmni tushiradi; chegara
+ * (`editLimits`) shu yakuniy holatdan o'qilsin (P11).
+ */
+function afterConvert(base: SlideModel, rules: EditRules): SlideModel {
+  return base.image && rules.visual && !photoSlot(base.layout, rules.visual) ? without(base, "image") : base;
+}
+
+/**
  * Maketni o'giradi (sof). `canConvert` rad etsa — xato, model o'zgarmaydi.
  *
  * Kerakmas maydonlar TASHLANADI (bandlarga o'girilgan jadval `table`
@@ -643,8 +761,12 @@ export function convertLayout(s: SlideModel, to: SlideLayout, rules: EditRules):
   const base = baseOf(s, to);
   const pool = bulletPool(s).filter(Boolean);
   if (to === "bullets" || to === "agenda") {
-    const caps = bulletCaps({ ...base, layout: to }, rules);
-    return { ok: true, slide: { ...base, bullets: pool.slice(0, caps.max).map((b) => clipTo(b, caps.chars)) } };
+    const target = { ...base, layout: to };
+    const caps = bulletCaps(target, rules);
+    const items = pool.slice(0, caps.max);
+    // P11 sharhi 3: band/reja qutisi (deka vizuali, rasmsiz) — generatsiya bilan bir chegara.
+    const chars = bulletProse(target, rules, items.length, caps.chars);
+    return { ok: true, slide: { ...base, bullets: items.map((b) => clipTo(b, chars)) } };
   }
   if (to === "twoCol" || to === "compare") {
     if (s.left || s.right) {
@@ -653,28 +775,33 @@ export function convertLayout(s: SlideModel, to: SlideLayout, rules: EditRules):
       slide.rightTitle = s.rightTitle || (to === "compare" ? "Ikkinchi" : "");
       return { ok: true, slide };
     }
-    const items = pool.map((b) => clipTo(b, SLIDE_LIMITS.colItem));
-    const mid = Math.ceil(items.length / 2);
+    const mid = Math.ceil(pool.length / 2);
+    // P11 sharhi 3: ustun bandi — o'z ustunidagi SONDA o'lchangan quti (rasmsiz).
+    const col = (xs: string[]) => {
+      const kept = xs.slice(0, SLIDE_LIMITS.colItems);
+      const max = proseLimit("colItem", rules, kept.length, SLIDE_LIMITS.colItem);
+      return kept.map((b) => clipTo(b, max));
+    };
     return {
       ok: true,
       slide: {
         ...base,
         leftTitle: to === "compare" ? "Birinchi" : "",
-        left: items.slice(0, mid).slice(0, SLIDE_LIMITS.colItems),
+        left: col(pool.slice(0, mid)),
         rightTitle: to === "compare" ? "Ikkinchi" : "",
-        right: items.slice(mid).slice(0, SLIDE_LIMITS.colItems),
+        right: col(pool.slice(mid)),
       },
     };
   }
   if (to === "process") {
     // Son AVVAL rules.stepsMax ga qisqartiriladi, keyin matn SHU songa mos chegarada qirqiladi (`limitsFor`).
     const n = Math.min(pool.length, rules.stepsMax);
-    const lim = limitsFor(rules, { steps: n });
+    const lim = editLimits(rules, afterConvert(base, rules), { steps: n });
     return { ok: true, slide: { ...base, steps: pool.slice(0, n).map((b, i) => splitStep(b, i, lim.stepTitle, lim.stepText)) } };
   }
   if (to === "stats") {
     const n = Math.min(pool.length, rules.statsMax);
-    const lim = limitsFor(rules, { stats: n });
+    const lim = editLimits(rules, afterConvert(base, rules), { stats: n });
     const stats = pool
       .slice(0, n)
       .map((b) => splitStat(b, lim.statLabel))
@@ -682,10 +809,10 @@ export function convertLayout(s: SlideModel, to: SlideLayout, rules: EditRules):
     return { ok: true, slide: { ...base, stats } };
   }
   if (to === "quote") {
-    return { ok: true, slide: { ...base, quote: clipTo(s.quote || pool[0] || s.title, SLIDE_LIMITS.quote) } };
+    return { ok: true, slide: { ...base, quote: clipTo(s.quote || pool[0] || s.title, proseLimit("quote", rules, undefined, SLIDE_LIMITS.quote)) } };
   }
   // title / section / closing — izoh matni saqlanadi.
-  const sub = clipTo(s.subtitle || s.quote || pool[0] || "", subtitleMax(to));
+  const sub = clipTo(s.subtitle || s.quote || pool[0] || "", subtitleEditMax({ ...base, subtitle: "" }, rules));
   return { ok: true, slide: sub ? { ...base, subtitle: sub } : base };
 }
 
@@ -910,7 +1037,7 @@ function fail(error: string, at: number): EditResult {
 export function applyDocOps(doc: AcademicDoc, ops: DocOp[], ctx: EditCtx): EditResult {
   if (!doc.slides?.length) return fail("Bu deka eski formatda — tahrir qilib bo'lmaydi", 0);
   const deck = buildSlideDeck(doc);
-  const rules: EditRules = deck.bodyType;
+  const rules: EditRules = { ...deck.bodyType, visual: deck.visual };
   const lang = doc.meta.language || "uz";
   const assetRe = ownAssetUrlRe(ctx.genId);
   let slides = doc.slides.slice();
@@ -952,10 +1079,12 @@ export function applyDocOps(doc: AcademicDoc, ops: DocOp[], ctx: EditCtx): EditR
         /*
          * «Matn rasm bilan sig'maydimi» (AUDIT-25 P8) tekshiruvi BU YERDA
          * EMAS: bu modul izomorf (klient bundle), `imageYieldField` esa
-         * `slide-quality.ts` da (`llm.ts` ni tortadi). YANGI rasm faqat
-         * yuklash yo'lidan keladi — u serverda `uploadSlideImage`
-         * (`lib/server/slide-image.ts`) da 400 bilan rad etiladi. PATCH dagi
-         * satr URL faqat undo (avvalgi holatga qaytish) dan keladi.
+         * `slide-quality.ts` da (`llm.ts` ni tortadi). U serverda
+         * `commitDocOps` (P12, INT-03) ichida — `applyDocOps` dan keyin HAR
+         * tegilgan rasmli slayd uchun, ya'ni PATCH dagi `image`/`imageRestore`
+         * (va `text`/`list`/`set`/`insert`/`layout`) ham qo'riqlanadi: 400
+         * `text_too_long`. Tahrir chegarasi (`editLimits`, rasmli slaydda xom
+         * quti) shu qo'riqchidan ko'p qabul qilmaydi.
          */
         const alt = op.alt ? clipTo(op.alt, SLIDE_LIMITS.imageAlt) : "";
         slides[idx] = { ...s, ...keep, image: alt ? { url: op.url, alt } : { url: op.url } };
@@ -974,9 +1103,20 @@ export function applyDocOps(doc: AcademicDoc, ops: DocOp[], ctx: EditCtx): EditR
         if (!LIST_FIELDS.includes(field)) return fail("Noma'lum ro'yxat maydoni", at);
         if (!s[field]) return fail(field === "bullets" ? "Bu maketda bandlar yo'q" : "Bu maketda ustun yo'q", at);
         if (!Array.isArray(op.items)) return fail("Bandlar ro'yxati kutilgan", at);
-        const caps = listCap(s, field, rules);
+        // P11 sharhi 3: chegara YANGI band sonida (bo'sh bandlar o'chadi); har band o'z o'rnidagi eski uzunlikdan qisqarmaydi (W7 `editLimit`).
+        const count = op.items.filter((x) => String(x ?? "").trim()).length;
+        const caps = listCap(s, field, rules, count);
+        const staticCap = listCap(s, field, { ...rules, visual: undefined }).chars;
+        const prev = s[field] ?? [];
         // Bo'sh band — o'chirilgan band (`writeList` bilan bir xil ma'no).
-        const items = op.items.map((x) => clipTo(String(x ?? ""), caps.chars)).filter(Boolean);
+        // Ro'yxatdagi mavjud bandning AYNAN nusxasi — faqat ko'chirilgan (tartib o'zgardi): o'zgarishsiz qoladi
+        // (P11 qayta sharhi: o'rin bo'yicha `editLimit` qisqa band o'rniga ko'chgan uzun bandni qirqardi).
+        const items = op.items
+          .map((x, k) => {
+            const v = String(x ?? "");
+            return v && prev.includes(v) ? v : clipTo(v, editLimit(caps.chars, staticCap, prev[k]?.length ?? 0));
+          })
+          .filter(Boolean);
         if (items.length > caps.max) return fail(`Bu maketda ${caps.max} tadan ortiq band bo'lmaydi`, at);
         slides[idx] = { ...s, [field]: items };
         break;
