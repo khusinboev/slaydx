@@ -24,6 +24,9 @@ import {
   type SlideTemplate,
 } from "../lib/generation/slide-templates.ts";
 import type { DocMeta } from "../lib/generation/types.ts";
+import { bodyRules } from "../lib/generation/slide-audience.ts";
+import { fitChars } from "../lib/generation/slide-limits.ts";
+import { CHARS_PER_WORD, PROMPT_HEADROOM } from "../lib/generation/slide-quality.ts";
 
 /**
  * BLOKLAR → BEATS (AUDIT-9, WP-B).
@@ -580,6 +583,71 @@ test("mavjud tuzilma qatorlari saqlandi (WP-0a shartnomasi buzilmasin)", () => {
   assert.match(p, /stats ga uydirma milliard\/tonna\/foiz YOZILMASIN/);
 });
 
+// ───────────────────────────────────────────── INT-02: reja slayd sarlavhasi agenda qutisiga sig'adi
+
+/*
+ * INT-02 (AUDIT-25 integratsiya sharhi, P11 topilmasi). Ilgari
+ * `agenda: AYNAN N ta band, har biri 3–7 so‘z…` statik edi — P11 o'lchovi
+ * (`fitChars("agenda", …)`) ko'rsatdiki, ba'zi auditoriya × vizual
+ * juftliklarida (masalan 1–4-sinf, `split`/`dashboard`) haqiqiy quti
+ * 27–41 belgi (≈3 so'z) — 7 so'zlik band kesilib qolardi. Endi yuqori
+ * chegara HAQIQIY qutidan hisoblanadi (`bulletMaxWords` bilan bir xil
+ * zaxira, `PROMPT_HEADROOM`/`CHARS_PER_WORD`) va promptga alohida qator
+ * («REJA slaydlari sarlavhasi: eng ko‘pi N so‘z») bilan ham chiqadi.
+ */
+const promptWith = (v: FormValues, tpl: SlideTemplate) => slideSystem(extractMeta(pro, { topic: "Suv aylanishi", ...v }), tpl);
+
+test("INT-02: reja slaydi sarlavhasi torroq vizualda kamroq so'z va'da qiladi, kengida ko'proq", () => {
+  const compare = SLIDE_TEMPLATE_BY_ID.compare; // visual: split
+  assert.equal(compare.visual, "split", "probe: `compare` shablon `split` vizualda bo'lishi kerak — testni yangilang");
+
+  // 1–4-sinf, tor `split` vizual, 6 band — agenda qutisi juda tor (P11: 27–41 belgi).
+  const kidsRules = bodyRules(extractMeta(pro, { topic: "x", slideAudience: "school_1_4", planItems: 6, blocks: "reja" }), compare.id);
+  const kidsChars = fitChars("agenda", kidsRules, compare.visual, 6);
+  const kidsCap = Math.max(3, Math.floor((PROMPT_HEADROOM * kidsChars) / CHARS_PER_WORD));
+  assert.ok(kidsCap >= 3 && kidsCap <= 4, `probe: 1–4-sinf/split sig'imi 3–4 so'z oralig'ida bo'lishi kutilgan, oldi: ${kidsCap}`);
+  const kidsPrompt = promptWith({ slideAudience: "school_1_4", planItems: 6, blocks: "reja" }, compare);
+  assert.match(kidsPrompt, new RegExp(`REJA slaydlari sarlavhasi: eng ko‘pi ${kidsCap} so‘z`));
+  // MUTATSIYA: statik "3–7 so'z" qaytarilsa, bu yerda 7 so'z (torroq qutiga sig'maydigan) va'da qilinardi.
+  assert.doesNotMatch(kidsPrompt, /agenda: AYNAN 6 ta band, har biri (5–7|6–7|7) so‘z/);
+
+  // Bakalavr, keng `academic` vizual — sig'im ancha katta (6+ so'z).
+  const academic = SLIDE_TEMPLATE_BY_ID.lecture;
+  const bachelorRules = bodyRules(extractMeta(pro, { topic: "x", slideAudience: "students_bachelor", planItems: 6, blocks: "reja" }), academic.id);
+  const bachelorChars = fitChars("agenda", bachelorRules, academic.visual, 6);
+  const bachelorCap = Math.max(3, Math.floor((PROMPT_HEADROOM * bachelorChars) / CHARS_PER_WORD));
+  assert.ok(bachelorCap >= 6, `probe: bakalavr/academic sig'imi 6 so'zdan kam bo'lmasligi kutilgan, oldi: ${bachelorCap}`);
+  const bachelorPrompt = promptWith({ slideAudience: "students_bachelor", planItems: 6, blocks: "reja" }, academic);
+  assert.match(bachelorPrompt, new RegExp(`REJA slaydlari sarlavhasi: eng ko‘pi ${bachelorCap} so‘z`));
+
+  // Kengroq auditoriyada tor auditoriyadan KAM va'da qilinmasin (monoton emasligi mumkin, lekin bu ikkitasida farq katta).
+  assert.ok(bachelorCap > kidsCap, `bakalavr sig'imi 1–4-sinfdan katta bo'lishi kerak: ${bachelorCap} vs ${kidsCap}`);
+
+  // Umumiy sarlavha qoidasi («6–10 so‘z») BOSHQA slaydlar uchun saqlanadi — bu qator uni almashtirmaydi.
+  assert.match(kidsPrompt, /Sarlavha to‘liq fikr, 6–10 so‘z\./);
+  assert.match(kidsPrompt, /boshqa slaydlar sarlavhasi umumiy qoidada \(6–10 so‘z\) qoladi/);
+});
+
+test("INT-02: invariant — va'da qilingan so'z soni fitChars sig'imidan OSHMAYDI (bir necha auditoriya × vizual)", () => {
+  const cases: Array<{ audience: string; tpl: SlideTemplate }> = [
+    { audience: "school_1_4", tpl: SLIDE_TEMPLATE_BY_ID.compare },
+    { audience: "school_5_7", tpl: SLIDE_TEMPLATE_BY_ID.lecture },
+    { audience: "students_bachelor", tpl: SLIDE_TEMPLATE_BY_ID.lecture },
+    { audience: "students_master", tpl: SLIDE_TEMPLATE_BY_ID.compare },
+    { audience: "employees", tpl: SLIDE_TEMPLATE_BY_ID.compare },
+  ];
+  for (const { audience, tpl } of cases) {
+    const meta = extractMeta(pro, { topic: "x", slideAudience: audience, planItems: 5, blocks: "reja" });
+    const rules = bodyRules(meta, tpl.id);
+    const chars = fitChars("agenda", rules, tpl.visual, 5);
+    const cap = Math.max(3, Math.floor((PROMPT_HEADROOM * chars) / CHARS_PER_WORD));
+    // O'ZI formula bilan mos (regressiya): natural son, quti sig'imidan oshmagan zaxira bilan.
+    assert.ok(cap * CHARS_PER_WORD <= chars, `${audience}/${tpl.visual}: ${cap} so‘z × ${CHARS_PER_WORD} > ${chars} belgi`);
+    assert.ok(cap >= 3, `${audience}/${tpl.visual}: pol 3 so'zdan pastga tushmasin, oldi ${cap}`);
+    const p = promptWith({ slideAudience: audience, planItems: 5, blocks: "reja" }, tpl);
+    assert.match(p, new RegExp(`REJA slaydlari sarlavhasi: eng ko‘pi ${cap} so‘z`), `${audience}/${tpl.visual}: prompt hisoblangan N (${cap}) bilan mos emas`);
+  }
+});
 
 // ───────────────────────────────────────────── 9-qoida (X-5): sig'im urushi
 
