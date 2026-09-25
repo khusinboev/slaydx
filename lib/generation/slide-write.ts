@@ -13,7 +13,7 @@ import { attachSlideImages } from "./slide-images";
 import { SLIDE_MAX } from "./slide-params";
 import { deckJsonSchema, slideSystem, type SlidePromptCtx } from "./slide-prompt";
 import type { SlideProgressSink } from "./slide-progress";
-import { runSlideResearch } from "./slide-research";
+import { isGoogleRedirect, runSlideResearch } from "./slide-research";
 import { expandBeats, resolveSlideTemplate, type SlideBeat, type SlideTemplate } from "./slide-templates";
 import { getSlideTheme } from "./slide-themes";
 import { isSlideLayout, type SlideLayout, type SlideModel, type SlideThemeId } from "./slide-types";
@@ -86,13 +86,26 @@ type BulletRules = Pick<BodyRules, "maxBullets" | "bulletChars" | "agendaMax">;
  * bo'sh qoldirishi yoki uydirishi mumkin. Tadqiqot bo'lsa — manbalar
  * FAQAT undan (uydirma bo'lmasin); bo'lmasa model yozgani qoladi,
  * `references` maketi buni «tekshirilmagan» deb belgilaydi (WP-C).
+ *
+ * Ikkinchi darajali himoya (belts-and-braces, 2026-09-25): `slide-research.ts
+ * resolveSources` Google redirectini ochishga harakat qiladi, lekin sekin
+ * DNS'da baribir yiqilishi mumkin — bunda `src.uri` hali ham
+ * `vertexaisearch.cloud.google.com/...` bo'lib qoladi. Bunday havolani
+ * TO'G'RIDAN-TO'G'RI ko'rsatmaymiz: o'quvchiga foydasiz (redirect ID
+ * hech narsa aytmaydi) va vaqt o'tib eskiradi. `source` maydonini domen
+ * (`title`) bilan cheklaymiz — `planReferences` (slide-layout-extra.ts)
+ * shu maydonni ikkinchi qatorda ko'rsatadi, bo'sh qoldirsak qator OCH
+ * qoladi, shuning uchun bo'sh emas, domen.
  */
 function applyResearchRefs(slides: SlideModel[], ctx: SlidePromptCtx) {
   const sources = ctx.research?.sources ?? [];
   if (!sources.length) return;
   for (const sl of slides) {
     if (sl.layout !== "references") continue;
-    sl.refs = sources.slice(0, 6).map((src) => ({ title: src.title, source: src.uri }));
+    sl.refs = sources.slice(0, 6).map((src) => ({
+      title: src.title,
+      source: isGoogleRedirect(src.uri) ? src.title : src.uri,
+    }));
   }
 }
 
