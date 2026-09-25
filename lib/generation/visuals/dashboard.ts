@@ -317,7 +317,7 @@ function planBullets(s: SlideModel, theme: SlideTheme, index: number, total: num
 
 /** Reja — bir qatorda tik plitalar, tepasida raqam. */
 function planAgenda(s: SlideModel, theme: SlideTheme, index: number, total: number, ctx: PlanCtx): SlidePlan {
-  const { fitSize, pushFooter } = LAYOUT_KIT;
+  const { pushFooter } = LAYOUT_KIT;
   const layers: SlideLayer[] = [];
   pushPage(layers, theme);
   pushHead(layers, s, theme, 11.6, ctx.reserve);
@@ -367,7 +367,7 @@ function planAgenda(s: SlideModel, theme: SlideTheme, index: number, total: numb
 
 /** Raqamlar — KPI plitalari: tepada aksent chizig'i, ostida qiymat va yorliq. */
 function planStats(s: SlideModel, theme: SlideTheme, index: number, total: number, ctx: PlanCtx): SlidePlan {
-  const { fitSize, bodyFit, stripCut, pushFooter } = LAYOUT_KIT;
+  const { bodyFit, stripCut, pushFooter } = LAYOUT_KIT;
   const layers: SlideLayer[] = [];
   pushPage(layers, theme);
   const cut = stripCut(s);

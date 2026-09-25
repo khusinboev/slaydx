@@ -233,7 +233,7 @@ function planAgenda(s: SlideModel, theme: SlideTheme, index: number, total: numb
  * eng katta element bo'ladi.
  */
 function planStats(s: SlideModel, theme: SlideTheme, index: number, total: number, ctx: PlanCtx): SlidePlan {
-  const { H, fitSize, bodyFit, stripCut, pushFooter } = LAYOUT_KIT;
+  const { H, bodyFit, stripCut, pushFooter } = LAYOUT_KIT;
   const layers: SlideLayer[] = [];
   const cut = stripCut(s);
   const tw = 11.6 - cut;

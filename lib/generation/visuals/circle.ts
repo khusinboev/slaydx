@@ -273,7 +273,7 @@ function planBullets(s: SlideModel, theme: SlideTheme, index: number, total: num
 }
 
 function planAgenda(s: SlideModel, theme: SlideTheme, index: number, total: number, ctx: PlanCtx): SlidePlan {
-  const { fitSize, pushFooter, W, H } = LAYOUT_KIT;
+  const { pushFooter, W, H } = LAYOUT_KIT;
   const layers: SlideLayer[] = [];
   layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.bg } });
   layers.push(circle({ x: 10.53, y: 4.7, w: 2.8, h: 2.8 }, { color: theme.accent, alpha: 0.12 }));

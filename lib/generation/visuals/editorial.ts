@@ -258,7 +258,7 @@ function planBullets(s: SlideModel, theme: SlideTheme, index: number, total: num
 
 /** Reja — mundarija: chapda nom, o'ngda raqam, ostida ingichka chiziq. */
 function planAgenda(s: SlideModel, theme: SlideTheme, index: number, total: number, ctx: PlanCtx): SlidePlan {
-  const { W, H, fitSize, pushFooter } = LAYOUT_KIT;
+  const { W, H, pushFooter } = LAYOUT_KIT;
   const layers: SlideLayer[] = [];
   layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.bg } });
   const tw = 11.6;
