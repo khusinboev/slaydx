@@ -733,6 +733,32 @@ test("INT-03 nisbat: maket o'zgarib ortiqcha KAMAYSA (yangi maydon) — qabul; k
   assert.deepEqual(await imageTextOverflow(int3Doc, after(higher), layoutOp), { index: 1, field: "bullets" });
 });
 
+test("INT-03 nisbat: o'sha maketda asosda SIG'GAN maydon (process stepTitle) sig'ishi shart — uzaytirish 400", async () => {
+  const deck = buildSlideDeck(int3Doc);
+  const n = 3; // standart vizualda n=4 da stepTitle rasm bilan toraymaydi, n=3 da ikkalasi ham torayadi
+  const capText = fitChars("stepText", deck.bodyType, deck.visual, n);
+  const capTitle = fitChars("stepTitle", deck.bodyType, deck.visual, n);
+  assert.ok(capText < fitChars("stepText", deck.bodyType, deck.visual, n, { images: "none" }), "sinov asosi: stepText rasm bilan torayadi");
+  assert.ok(capTitle < fitChars("stepTitle", deck.bodyType, deck.visual, n, { images: "none" }), "sinov asosi: stepTitle rasm bilan torayadi");
+  const proc = (titleLen: number): SlideModel => ({
+    id: "s1",
+    layout: "process",
+    title: "Bosqichlar",
+    steps: [0, 1, 2].map((k) => ({ n: String(k + 1), title: p8Text(titleLen, k), text: p8Text(capText * 3, k + 1) })),
+    image: { url: IMG_OLD },
+  });
+  const oldTitle = Math.max(1, capTitle - 2);
+  const old = proc(oldTitle);
+  const was = imageOverflowRatio(old, deck.bodyType, deck.visual);
+  assert.ok(was.stepText && !was.stepTitle, `sinov asosi: eski slaydda stepText ortiq (${was.stepText}), stepTitle sig'adi`);
+  const longer = proc(capTitle + 8);
+  const now = imageOverflowRatio(longer, deck.bodyType, deck.visual);
+  assert.ok(now.stepTitle && now.stepTitle < was.stepText!, `sinov asosi: yangi stepTitle ortig'i (${now.stepTitle}) eski eng yomondan (${was.stepText}) kichik`);
+  const docWith = (s: SlideModel) => docOf([int3Slides[0], s, ...int3Slides.slice(2)]);
+  assert.equal(await imageTextOverflow(docWith(old), docWith(old), []), null, "o'zgarmagan — qabul");
+  assert.deepEqual(await imageTextOverflow(docWith(old), docWith(longer), []), { index: 1, field: "stepTitle" });
+});
+
 test("INT-03 jadval: `imageYieldText` kalitlari = o'lchov o'qiydigan maydonlar (bitta jadval)", () => {
   const keys = Object.fromEntries(Object.entries(IMAGE_YIELD_TABLE).map(([k, v]) => [k, [...v!.keys]]));
   assert.deepEqual(keys, {

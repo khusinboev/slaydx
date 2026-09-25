@@ -156,13 +156,16 @@ export async function imageTextOverflow(
     const now = ratio(s);
     const fields = Object.keys(now) as FitField[];
     if (!fields.length) continue; // rasmli qutiga sig'adi
-    const notWorse = (b: SlideModel | undefined): boolean => {
-      if (!b?.image) return false;
-      if (imageYieldText(b) === text) return true;
+    /** Asosga nisbatan YOMONLASHGAN birinchi maydon (`null` — yomonlashmagan). */
+    const worseField = (b: SlideModel): FitField | null => {
+      if (imageYieldText(b) === text) return null;
       const was = ratio(b);
       const worst = Math.max(0, ...Object.values(was));
-      return fields.every((f) => now[f]! <= (was[f] ?? worst));
+      // Asosda yo'q maydon: maket O'ZGARGAN bo'lsa — asosning eng yomon nisbati; o'sha maketda esa
+      // asosda sig'gan maydon hali ham sig'ishi shart (0) — boshqa maydon ortiqchasi «kredit» bermaydi.
+      return fields.find((f) => now[f]! > (was[f] ?? (b.layout === s.layout ? 0 : worst))) ?? null;
     };
+    const notWorse = (b: SlideModel | undefined): boolean => Boolean(b?.image) && worseField(b!) === null;
     // Tez yo'l 2: o'z asliga nisbatan yomonlashmagan (monoton).
     if (own.some(notWorse)) continue;
     // Sekin yo'l: shu rasm URL i bilan `before` da, keyin ASL dekada.
@@ -170,7 +173,9 @@ export async function imageTextOverflow(
     if (sameUrl(prev)) continue;
     original ??= ((await ctx.original?.()) ?? null)?.slides ?? [];
     if (sameUrl(original)) continue;
-    return { index, field: fields[0] };
+    // Xabardagi maydon — o'z asliga nisbatan yomonlashgani (asl rasmsiz/yo'q bo'lsa — birinchi ortiqcha).
+    const base = own.find((b) => b?.image);
+    return { index, field: (base && worseField(base)) || fields[0] };
   }
   return null;
 }
