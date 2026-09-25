@@ -21,7 +21,7 @@ Ko'rilgan dekalar: `eval-out/live/Orol dengizi…pptx` (pro-slide, open_lesson, 
    tartib rejadagidek. Bu slaydlar hech qachon qirqilmaydi: avval to'ldirgichlar, keyin yon beruvchi standart
    bloklar, keyin test soni 1 gacha va kalit; shunda ham sig'masa — `planCapacity` formada cheklaydi (3-band).
    Shablon `section` beat'i bo'lsa va sig'im yetsa band = `section` + mazmun (2 slayd), aks holda faqat mazmun.
-2. **Reja slaydi mazmundan quriladi.** Modelga reja bandi i uchun slayd roli beriladi («REJA i-band: …»); yozuvdan keyin
+2. **Reja slaydi mazmundan quriladi.** (Nuans, P11: agenda bandi agenda qatori sig'imidan uzun bo'lsa so'z chegarasida «…» bilan kesiladi — sarlavhaning prefiksi; `slide-audit` buni mos deb hisoblaydi.) Modelga reja bandi i uchun slayd roli beriladi («REJA i-band: …»); yozuvdan keyin
    `agenda.bullets[i-1] := plan=i slaydining sarlavhasi` (deterministik, yagona manba). Model yozgan agenda
    ustiga yoziladi. Sarlavhalar boshidagi «1.», «1)» tartib raqami olib tashlanadi (raqam maketdan keladi).
 3. **`planCapacity(v)`** (`slide-params.ts`, klient-xavfsiz): berilgan `slideCount/blocks/quizCount/agendaSlide/
