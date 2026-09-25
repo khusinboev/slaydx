@@ -1,6 +1,6 @@
 import { slideLabels } from "./i18n";
 import { isSlideFontId, type SlideFontId } from "./slide-fonts";
-import { SLIDE_LIMITS, clipTo, limitsFor, type LimitCounts, type SlideLimitsFor } from "./slide-limits";
+import { CLIP_FLOOR_CHARS, NO_IMAGE, SLIDE_LIMITS, clipLimit, clipTo, limitsFor, type FitField, type LimitCounts, type SlideLimitsFor } from "./slide-limits";
 import { photoSlot } from "./slide-layout";
 import { refreshAnswerNote, rebuildAnswerKey } from "./slide-quiz";
 import { buildSlideDeck } from "./slides";
@@ -535,6 +535,7 @@ export function writeSlideField(s: SlideModel, src: SlideSrc, value: string, rul
       if (src.j < 0 || src.j >= q.options.length) return { ok: false, error: "Variant indeksi noto'g'ri" };
       // Test varianti — `limitsFor` (auditoriya poli, son emas) VA eski uzunlikning kattasi (`editLimit`).
       const optLim = editLimit(editLimits(rules, s).quizOption, SLIDE_LIMITS.quizOption, q.options[src.j].length);
+      if (tooTight(s, rules, value, optLim)) return { ok: false, error: TIGHT_IMAGE_ERROR };
       const v = clipTo(value, optLim);
       /*
        * Variant AYNAN to'rtta bo'lishi shart: `planQuiz` A/B/C/D
@@ -555,6 +556,7 @@ export function writeSlideField(s: SlideModel, src: SlideSrc, value: string, rul
         if (src.c < 0 || src.c >= s.table.headers.length) return { ok: false, error: "Ustun indeksi noto'g'ri" };
         // `editLimit` — eski sarlavha uzunligidan qisqarmaydi (P7 review, W7 CHANGES 1).
         const headLim = editLimit(tlim.tableHeaderWide, SLIDE_LIMITS.tableHeaderWide, s.table.headers[src.c].length);
+        if (tooTight(s, rules, value, headLim)) return { ok: false, error: TIGHT_IMAGE_ERROR };
         const v = clipTo(value, headLim);
         if (!v) return { ok: false, error: "Ustun sarlavhasi bo'sh bo'lishi mumkin emas" };
         return { ok: true, slide: { ...s, table: { ...s.table, headers: s.table.headers.map((h, c) => (c === src.c ? v : h)) } } };
@@ -563,6 +565,7 @@ export function writeSlideField(s: SlideModel, src: SlideSrc, value: string, rul
       if (!row || src.c < 0 || src.c >= row.length) return { ok: false, error: "Katak indeksi noto'g'ri" };
       // `editLimit` — eski katak uzunligidan qisqarmaydi.
       const cellLim = editLimit(tlim.tableCell, SLIDE_LIMITS.tableCell, row[src.c].length);
+      if (tooTight(s, rules, value, cellLim)) return { ok: false, error: TIGHT_IMAGE_ERROR };
       const v = clipTo(value, cellLim);
       /*
        * Bo'sh katak SAQLANADI. `normalizeSlide` uni filtrlab tashlardi va
@@ -758,8 +761,12 @@ export function convertLayout(s: SlideModel, to: SlideLayout, rules: EditRules):
   const base = baseOf(s, to);
   const pool = bulletPool(s).filter(Boolean);
   if (to === "bullets" || to === "agenda") {
-    const caps = bulletCaps({ ...base, layout: to }, rules);
-    return { ok: true, slide: { ...base, bullets: pool.slice(0, caps.max).map((b) => clipTo(b, caps.chars)) } };
+    const target = { ...base, layout: to };
+    const caps = bulletCaps(target, rules);
+    const items = pool.slice(0, caps.max);
+    // P11 sharhi 3: band/reja qutisi (deka vizuali, rasmsiz) — generatsiya bilan bir chegara.
+    const chars = bulletProse(target, rules, items.length, caps.chars);
+    return { ok: true, slide: { ...base, bullets: items.map((b) => clipTo(b, chars)) } };
   }
   if (to === "twoCol" || to === "compare") {
     if (s.left || s.right) {
@@ -768,16 +775,21 @@ export function convertLayout(s: SlideModel, to: SlideLayout, rules: EditRules):
       slide.rightTitle = s.rightTitle || (to === "compare" ? "Ikkinchi" : "");
       return { ok: true, slide };
     }
-    const items = pool.map((b) => clipTo(b, SLIDE_LIMITS.colItem));
-    const mid = Math.ceil(items.length / 2);
+    const mid = Math.ceil(pool.length / 2);
+    // P11 sharhi 3: ustun bandi — o'z ustunidagi SONDA o'lchangan quti (rasmsiz).
+    const col = (xs: string[]) => {
+      const kept = xs.slice(0, SLIDE_LIMITS.colItems);
+      const max = proseLimit("colItem", rules, kept.length, SLIDE_LIMITS.colItem);
+      return kept.map((b) => clipTo(b, max));
+    };
     return {
       ok: true,
       slide: {
         ...base,
         leftTitle: to === "compare" ? "Birinchi" : "",
-        left: items.slice(0, mid).slice(0, SLIDE_LIMITS.colItems),
+        left: col(pool.slice(0, mid)),
         rightTitle: to === "compare" ? "Ikkinchi" : "",
-        right: items.slice(mid).slice(0, SLIDE_LIMITS.colItems),
+        right: col(pool.slice(mid)),
       },
     };
   }
@@ -797,10 +809,10 @@ export function convertLayout(s: SlideModel, to: SlideLayout, rules: EditRules):
     return { ok: true, slide: { ...base, stats } };
   }
   if (to === "quote") {
-    return { ok: true, slide: { ...base, quote: clipTo(s.quote || pool[0] || s.title, SLIDE_LIMITS.quote) } };
+    return { ok: true, slide: { ...base, quote: clipTo(s.quote || pool[0] || s.title, proseLimit("quote", rules, undefined, SLIDE_LIMITS.quote)) } };
   }
   // title / section / closing — izoh matni saqlanadi.
-  const sub = clipTo(s.subtitle || s.quote || pool[0] || "", subtitleMax(to));
+  const sub = clipTo(s.subtitle || s.quote || pool[0] || "", subtitleEditMax({ ...base, subtitle: "" }, rules));
   return { ok: true, slide: sub ? { ...base, subtitle: sub } : base };
 }
 
@@ -1091,9 +1103,13 @@ export function applyDocOps(doc: AcademicDoc, ops: DocOp[], ctx: EditCtx): EditR
         if (!LIST_FIELDS.includes(field)) return fail("Noma'lum ro'yxat maydoni", at);
         if (!s[field]) return fail(field === "bullets" ? "Bu maketda bandlar yo'q" : "Bu maketda ustun yo'q", at);
         if (!Array.isArray(op.items)) return fail("Bandlar ro'yxati kutilgan", at);
-        const caps = listCap(s, field, rules);
+        // P11 sharhi 3: chegara YANGI band sonida (bo'sh bandlar o'chadi); har band o'z o'rnidagi eski uzunlikdan qisqarmaydi (W7 `editLimit`).
+        const count = op.items.filter((x) => String(x ?? "").trim()).length;
+        const caps = listCap(s, field, rules, count);
+        const staticCap = listCap(s, field, { ...rules, visual: undefined }).chars;
+        const prev = s[field] ?? [];
         // Bo'sh band — o'chirilgan band (`writeList` bilan bir xil ma'no).
-        const items = op.items.map((x) => clipTo(String(x ?? ""), caps.chars)).filter(Boolean);
+        const items = op.items.map((x, k) => clipTo(String(x ?? ""), editLimit(caps.chars, staticCap, prev[k]?.length ?? 0))).filter(Boolean);
         if (items.length > caps.max) return fail(`Bu maketda ${caps.max} tadan ortiq band bo'lmaydi`, at);
         slides[idx] = { ...s, [field]: items };
         break;
