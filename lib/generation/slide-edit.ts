@@ -270,6 +270,23 @@ export function readSlideField(s: SlideModel, src: SlideSrc): string | null {
 // ═══════════════════════════════════════════════════════ Yozish
 
 /**
+ * Tahrirlangan maydon uchun SAMARALI chegara — `limitsFor` (auditoriya poli ×
+ * SON) VA «eski uzunlik (statik qopqoqqacha)» ning KATTASI.
+ *
+ * AUDIT-25 P7 review (W7 CHANGES 1): dvigatel `limitsFor`ga to'liq
+ * ulanmagan (eski deka, yoki bazadagi hujjat P1 to'liq joylashguncha
+ * yozilgan) bo'lsa, slaydda auditoriya chegarasidan UZUNROQ matn allaqachon
+ * bor bo'lishi mumkin (masalan bakalavr 5 bosqich × 109 belgi). Bitta
+ * harfni tuzatish (yoki undo) shu matnni `limitsFor` bo'yicha qirqib
+ * qo'ymasligi kerak — tahrir hech qachon FAQAT auditoriya torayishi
+ * sababli mavjud uzunlikdan QISQAROQ natija bermaydi. Statik qopqoqdan
+ * baribir oshmaydi (`min(staticCap, previousLength)`).
+ */
+function editLimit(auditLimit: number, staticCap: number, previousLength: number): number {
+  return Math.max(auditLimit, Math.min(staticCap, previousLength));
+}
+
+/**
  * Bitta maydonni yozadi (sof — nusxa qaytaradi).
  *
  * Qoidalar (rejadagi shartnoma):
@@ -279,7 +296,8 @@ export function readSlideField(s: SlideModel, src: SlideSrc): string | null {
  *   — `bullets`/`left`/`right`/`stats`/`steps`/`refs` da bo'sh qiymat
  *     elementni o'chiradi, `i === length` esa qo'shadi;
  *   — variant o'zgarsa javob izohi qayta hisoblanadi;
- *   — har qiymat `clipTo` bilan maket chegarasiga qisqaradi.
+ *   — har qiymat `clipTo` bilan maket chegarasiga qisqaradi (`editLimit`
+ *     — mavjud uzunlikdan qisqarmaydi, statik qopqoqdan oshmaydi).
  */
 export function writeSlideField(s: SlideModel, src: SlideSrc, value: string, rules: EditRules): FieldResult {
   switch (src.f) {
@@ -332,6 +350,16 @@ export function writeSlideField(s: SlideModel, src: SlideSrc, value: string, rul
         const v = clipTo(value, SLIDE_LIMITS.statValue);
         if (src.k !== "value" || !v) return { ok: true, slide: s };
         if (s.stats.length >= rules.statsMax) return { ok: false, error: `Bu maketda ${rules.statsMax} tadan ortiq raqam bo'lmaydi` };
+        /*
+         * P7 review (W7 CHANGES 3): band qo'shilganda SON bittaga oshadi va
+         * `limitsFor` shu yangi songa QATTIQROQ chegara qaytaradi — lekin
+         * ESKI kartalarning yorlig'i shu yerda qayta QISQARTIRILMAYDI:
+         * bu 1(b) qoidasini («tahrir mavjud uzunlikni torayishga majburlamaydi»)
+         * buzardi. Maket (`planSlide`/`fitSize`) yangi son bilan shriftni o'zi
+         * siqadi — yorliq matni ekranda torroq quti ichida qoladi, lekin
+         * MODELDAGI uzunlik saqlanadi (keyingi `set`/undo eski uzunlikni
+         * qaytarsa ham izchil bo'lishi uchun).
+         */
         return { ok: true, slide: { ...s, stats: [...s.stats, { value: v, label: "" }] } };
       }
       if (src.k === "value") {
@@ -340,8 +368,9 @@ export function writeSlideField(s: SlideModel, src: SlideSrc, value: string, rul
         if (!v) return { ok: true, slide: { ...s, stats: s.stats.filter((_, k) => k !== i) } };
         return { ok: true, slide: { ...s, stats: s.stats.map((x, k) => (k === i ? { ...x, value: v } : x)) } };
       }
-      // Yorliq bo'sh bo'lishi MUMKIN — raqamning o'zi ham ma'no beradi. Chegara auditoriya POLI × karta SONIdan (`limitsFor`).
-      const label = clipTo(value, limitsFor(rules, { stats: s.stats.length }).statLabel);
+      // Yorliq bo'sh bo'lishi MUMKIN — raqamning o'zi ham ma'no beradi. Chegara `limitsFor` VA eski uzunlikning kattasi (`editLimit`).
+      const labelLim = editLimit(limitsFor(rules, { stats: s.stats.length }).statLabel, SLIDE_LIMITS.statLabel, s.stats[i].label.length);
+      const label = clipTo(value, labelLim);
       return { ok: true, slide: { ...s, stats: s.stats.map((x, k) => (k === i ? { ...x, label } : x)) } };
     }
     case "steps": {
@@ -351,11 +380,20 @@ export function writeSlideField(s: SlideModel, src: SlideSrc, value: string, rul
       const isNewStep = i === s.steps.length;
       // Chegara auditoriya POLI × BO'LADIGAN bosqich SONIdan (`limitsFor`) — yangi band qo'shilsa son bittaga oshadi.
       const lim = limitsFor(rules, { steps: isNewStep ? i + 1 : s.steps.length });
-      const max = { n: SLIDE_LIMITS.stepN, title: lim.stepTitle, text: lim.stepText }[src.k];
+      // Mavjud bosqichni tahrirlashda `editLimit` — eski uzunlikdan qisqarmaydi (P7 review, W7 CHANGES 1).
+      const prevStep = isNewStep ? null : s.steps[i];
+      const max =
+        src.k === "n"
+          ? SLIDE_LIMITS.stepN
+          : src.k === "title"
+            ? editLimit(lim.stepTitle, SLIDE_LIMITS.stepTitle, prevStep?.title.length ?? 0)
+            : editLimit(lim.stepText, SLIDE_LIMITS.stepText, prevStep?.text.length ?? 0);
       const v = clipTo(value, max);
       if (isNewStep) {
         if (src.k !== "title" || !v) return { ok: true, slide: s };
         if (s.steps.length >= rules.stepsMax) return { ok: false, error: `Bu maketda ${rules.stepsMax} tadan ortiq bosqich bo'lmaydi` };
+        // P7 review (W7 CHANGES 3): eski bosqichlar shu yerda qayta qisqartirilmaydi — yuqoridagi stats
+        // «add» shoxobchasidagi izoh bilan bir xil qaror (1(b) qoidasi — mavjud uzunlik saqlanadi, `fitSize` siqadi).
         return { ok: true, slide: { ...s, steps: [...s.steps, { n: String(i + 1), title: v, text: "" }] } };
       }
       // Sarlavhasiz bosqich karta sifatida ma'nosiz — element o'chadi.
@@ -389,8 +427,9 @@ export function writeSlideField(s: SlideModel, src: SlideSrc, value: string, rul
         return { ok: true, slide: { ...s, quiz: s.quiz!.map((x, k) => (k === src.i ? { ...x, q: v } : x)) } };
       }
       if (src.j < 0 || src.j >= q.options.length) return { ok: false, error: "Variant indeksi noto'g'ri" };
-      // Test varianti — auditoriya POLI bo'yicha (`limitsFor`, son emas — 4 tasi ham bir xil quti).
-      const v = clipTo(value, limitsFor(rules).quizOption);
+      // Test varianti — `limitsFor` (auditoriya poli, son emas) VA eski uzunlikning kattasi (`editLimit`).
+      const optLim = editLimit(limitsFor(rules).quizOption, SLIDE_LIMITS.quizOption, q.options[src.j].length);
+      const v = clipTo(value, optLim);
       /*
        * Variant AYNAN to'rtta bo'lishi shart: `planQuiz` A/B/C/D
        * kartalarini chizadi va `answer` indeksi shu tartibga bog'langan.
@@ -406,14 +445,19 @@ export function writeSlideField(s: SlideModel, src: SlideSrc, value: string, rul
       if (!s.table) return { ok: false, error: "Bu maketda jadval yo'q" };
       // Chegara auditoriya POLI × jadval O'LCHAMIdan (`limitsFor`) — ustun/qator soni katakka sig'adigan matnni belgilaydi.
       const tlim = limitsFor(rules, { cols: s.table.headers.length, rows: s.table.rows.length });
-      const v = clipTo(value, src.k === "header" ? tlim.tableHeaderWide : tlim.tableCell);
       if (src.k === "header") {
         if (src.c < 0 || src.c >= s.table.headers.length) return { ok: false, error: "Ustun indeksi noto'g'ri" };
+        // `editLimit` — eski sarlavha uzunligidan qisqarmaydi (P7 review, W7 CHANGES 1).
+        const headLim = editLimit(tlim.tableHeaderWide, SLIDE_LIMITS.tableHeaderWide, s.table.headers[src.c].length);
+        const v = clipTo(value, headLim);
         if (!v) return { ok: false, error: "Ustun sarlavhasi bo'sh bo'lishi mumkin emas" };
         return { ok: true, slide: { ...s, table: { ...s.table, headers: s.table.headers.map((h, c) => (c === src.c ? v : h)) } } };
       }
       const row = s.table.rows[src.r];
       if (!row || src.c < 0 || src.c >= row.length) return { ok: false, error: "Katak indeksi noto'g'ri" };
+      // `editLimit` — eski katak uzunligidan qisqarmaydi.
+      const cellLim = editLimit(tlim.tableCell, SLIDE_LIMITS.tableCell, row[src.c].length);
+      const v = clipTo(value, cellLim);
       /*
        * Bo'sh katak SAQLANADI. `normalizeSlide` uni filtrlab tashlardi va
        * qatordagi qolgan kataklar chapga surilib, ma'lumot BOSHQA ustunga
@@ -741,68 +785,68 @@ export function sanitizeSlideModel(raw: unknown, genId: string, rules: EditRules
     if (by) out.quoteBy = by;
     delete out.bullets;
   } else if (layout === "stats") {
-    const rawStats = Array.isArray(o.stats) ? o.stats : [];
-    // Son AVVAL rules.statsMax ga qisqartiriladi (P1 W3 naqshi), keyin yorliq SHU songa mos chegarada qirqiladi (`limitsFor`).
-    const statsN = Math.min(rawStats.length, rules.statsMax);
-    const statLim = limitsFor(rules, { stats: statsN });
-    out.stats = rawStats
-      .slice(0, statsN)
+    /*
+     * P7 review (W7 CHANGES 1b): `sanitizeSlideModel` — `set`/`insert` orqali
+     * undo/redo/o'chirishni bekor qilish/qaytarish YO'LI — XAVFSIZLIK
+     * filtri, MOSLASHISH siyosati emas. Auditoriya `limitsFor` bilan
+     * QISQARTIRSA, undo eski (masalan bakalavr, statik qopqoqqacha uzun)
+     * matnni HAQIQIY o'zgarishsiz ham qirqib qo'yar edi — aylanma tenglik
+     * (`apply(apply(doc,ops), inverseOps(doc,ops)) = doc`) buzilardi.
+     * Shu sabab bu yerda YANA statik `SLIDE_LIMITS` (`filter` AVVAL,
+     * `slice` KEYIN — yaroqsiz band ichkarida bo'lsa ham keyingi haqiqiy
+     * bandni chetlab o'tmaydi).
+     */
+    out.stats = (Array.isArray(o.stats) ? o.stats : [])
       .map((x) => {
         if (!x || typeof x !== "object") return null;
         const st = x as Record<string, unknown>;
         const value = str(st.value, SLIDE_LIMITS.statValue);
-        return value ? { value, label: str(st.label, statLim.statLabel) } : null;
+        return value ? { value, label: str(st.label, SLIDE_LIMITS.statLabel) } : null;
       })
-      .filter((x): x is { value: string; label: string } => Boolean(x));
+      .filter((x): x is { value: string; label: string } => Boolean(x))
+      .slice(0, SLIDE_LIMITS.statsMax);
     if (typeof o.chart === "boolean") out.chart = o.chart;
     delete out.bullets;
   } else if (layout === "process") {
-    const rawSteps = Array.isArray(o.steps) ? o.steps : [];
-    const stepsN = Math.min(rawSteps.length, rules.stepsMax);
-    const stepLim = limitsFor(rules, { steps: stepsN });
-    out.steps = rawSteps
-      .slice(0, stepsN)
+    // Statik qopqoq (yuqoridagi izoh) — filter AVVAL, slice KEYIN.
+    out.steps = (Array.isArray(o.steps) ? o.steps : [])
       .map((x, i) => {
         if (!x || typeof x !== "object") return null;
         const st = x as Record<string, unknown>;
-        const t = str(st.title, stepLim.stepTitle);
+        const t = str(st.title, SLIDE_LIMITS.stepTitle);
         if (!t) return null;
-        return { n: str(st.n, SLIDE_LIMITS.stepN) || String(i + 1), title: t, text: str(st.text, stepLim.stepText) };
+        return { n: str(st.n, SLIDE_LIMITS.stepN) || String(i + 1), title: t, text: str(st.text, SLIDE_LIMITS.stepText) };
       })
-      .filter((x): x is { n: string; title: string; text: string } => Boolean(x));
+      .filter((x): x is { n: string; title: string; text: string } => Boolean(x))
+      .slice(0, SLIDE_LIMITS.stepsMax);
     delete out.bullets;
   } else if (layout === "table") {
+    // Statik qopqoq (yuqoridagi izoh).
     const t = (o.table && typeof o.table === "object" ? o.table : {}) as Record<string, unknown>;
-    const rawHeaders = Array.isArray(t.headers) ? t.headers : [];
-    const rawRows = (Array.isArray(t.rows) ? t.rows : []).filter((r) => Array.isArray(r));
-    // Ustun/qator soni AVVAL rules.tableCols/tableRows ga qisqartiriladi, keyin katak/sarlavha SHU o'lchamga mos chegarada qirqiladi.
-    const colsN = Math.min(rawHeaders.length, rules.tableCols);
-    const rowsN = Math.min(rawRows.length, rules.tableRows);
-    const tableLim = limitsFor(rules, { cols: colsN, rows: rowsN });
-    const headers = list(t.headers, rules.tableCols, tableLim.tableHeaderWide);
+    const headers = list(t.headers, SLIDE_LIMITS.tableCols, SLIDE_LIMITS.tableHeaderWide);
     // Jadvalsiz `table` — bo'sh ramka; slayd bandlarga tushadi (`normalizeSlide` naqshi).
     if (headers.length < 2) return { ...out, layout: "bullets", bullets: bullets };
-    const rows = rawRows
+    const rows = (Array.isArray(t.rows) ? t.rows : [])
+      .filter((r) => Array.isArray(r))
       .map((r) =>
         Array.from({ length: headers.length }, (_, c) => {
           const cell = (r as unknown[])[c];
           // Bo'sh katak SAQLANADI — ustun surilmasin.
-          return typeof cell === "string" ? clipTo(cell, tableLim.tableCell) : "";
+          return typeof cell === "string" ? clipTo(cell, SLIDE_LIMITS.tableCell) : "";
         }),
       )
-      .slice(0, rules.tableRows);
+      .slice(0, SLIDE_LIMITS.tableRows);
     if (rows.length < 1) return { ...out, layout: "bullets", bullets: bullets };
     out.table = { headers, rows };
     delete out.bullets;
   } else if (layout === "quiz") {
-    // Test varianti — auditoriya POLI bo'yicha (`limitsFor`, son emas).
-    const quizLim = limitsFor(rules);
+    // Statik qopqoq (yuqoridagi izoh).
     const quiz = (Array.isArray(o.quiz) ? o.quiz : [])
       .map((x) => {
         if (!x || typeof x !== "object") return null;
         const q = x as Record<string, unknown>;
         const text = str(q.q, SLIDE_LIMITS.quizQ);
-        const options = list(q.options, SLIDE_LIMITS.quizOptions, quizLim.quizOption);
+        const options = list(q.options, SLIDE_LIMITS.quizOptions, SLIDE_LIMITS.quizOption);
         // Variant soni AYNAN 4 bo'lmasa savol tashlanadi — `answer` siljib yolg'on kalit bo'lardi.
         if (!text || options.length !== SLIDE_LIMITS.quizOptions) return null;
         const n = Number(q.answer);
