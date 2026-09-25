@@ -433,18 +433,36 @@ export function bulletClipLimit(rules: BodyRules, visual: SlideVisual | undefine
  * matni va sarlavhasi, stats yorlig'i, jadval katagi va sarlavhasi,
  * iqtibos, bo'lim/yakun subtitle. Son — slayddagi haqiqiy son (ustunda —
  * o'sha ustunniki). Qaytaradi: birinchi sig'maydigan maydon yoki `null`.
+ * O'lchovning o'zi — `imageOverflowChars` (bitta manba).
  */
 export function imageYieldField(s: SlideModel, rules: BodyRules, visual?: SlideVisual): FitField | null {
-  const over = (field: FitField, texts: (string | undefined)[], count?: number, rows?: number): boolean => {
+  // Kalitlar tekshiruv tartibida qo'shiladi — birinchisi = avvalgi «birinchi sig'maydigan maydon».
+  for (const field of Object.keys(imageOverflowChars(s, rules, visual))) return field as FitField;
+  return null;
+}
+
+/**
+ * `imageYieldField` ning SON o'lchovi (AUDIT-25 INT-03, monoton guard):
+ * har maydon uchun eng uzun matn RASMLI qutidan necha belgi ortiq
+ * (faqat rasm haqiqatan joy yeydigan va ortiqcha > 0 bo'lgan maydonlar;
+ * bir maydon ikki marta tekshirilsa — ustunlar — kattasi). Server
+ * tahrir guard'i (`edit-adapters.ts imageTextOverflow`) eski dekada
+ * «tahrir ortiqchani KO'PAYTIRDIMI» ni shu bilan solishtiradi.
+ */
+export function imageOverflowChars(s: SlideModel, rules: BodyRules, visual?: SlideVisual): Partial<Record<FitField, number>> {
+  const out: Partial<Record<FitField, number>> = {};
+  const over = (field: FitField, texts: (string | undefined)[], count?: number, rows?: number): void => {
     const longest = Math.max(0, ...texts.map((t) => String(t ?? "").trim().length));
-    if (!longest) return false;
+    if (!longest) return;
     /*
      * XOM quti sig'imi (`fitChars`) — `clipLimit` emas (P8 sharhi, N1):
      * `clipLimit` ichidagi `CLIP_FLOOR_CHARS` (24) poli 4 belgilik rasmli
      * qutini (4 ustunli jadval `circle` da) «24 sig'adi» deb ko'rsatardi.
      */
     const withImage = fitChars(field, rules, visual, count, { rows });
-    return longest > withImage && withImage < fitChars(field, rules, visual, count, { rows, images: "none" });
+    if (longest > withImage && withImage < fitChars(field, rules, visual, count, { rows, images: "none" })) {
+      out[field] = Math.max(out[field] ?? 0, longest - withImage);
+    }
   };
   const checks: [FitField, (string | undefined)[], number?, number?][] = [];
   switch (s.layout) {
@@ -481,8 +499,8 @@ export function imageYieldField(s: SlideModel, rules: BodyRules, visual?: SlideV
       checks.push(["subtitleClosing", [s.subtitle]]);
       break;
   }
-  for (const [field, texts, count, rows] of checks) if (over(field, texts, count, rows)) return field;
-  return null;
+  for (const [field, texts, count, rows] of checks) over(field, texts, count, rows);
+  return out;
 }
 
 // ───────────────────────────────────────────────────────── so'z oraliqlari

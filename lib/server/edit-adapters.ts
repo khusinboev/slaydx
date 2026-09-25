@@ -11,7 +11,7 @@ import { renderPptx } from "../generation/render-pptx";
 import { renderPptxWithTemplate } from "../generation/render-pptx-template";
 import { getTemplate } from "./template-upload";
 import { ApiError } from "./api";
-import { imageYieldField, type FitField } from "../generation/slide-quality";
+import { imageOverflowChars, type FitField } from "../generation/slide-quality";
 import { buildSlideDeck } from "../generation/slides";
 import type { ImageBytes } from "../generation/slide-images";
 import type { SlideModel } from "../generation/slide-types";
@@ -107,24 +107,31 @@ function yieldText(s: SlideModel): string {
  * Ilgari faqat birinchisi tekshirilardi (`uploadSlideImage`). Endi
  * hammasi `commitDocOps` → `slideAdapter.guard` → shu funksiyadan o'tadi.
  *
- * QOIDA (eng kam kutilmagan): op lardan keyingi har RASMLI slayd
- * tekshiriladi, BUNDAN MUSTASNO — uning ASL slaydi (`slideOrigins`) ham
- * rasmli edi VA quti matni (`yieldText`) o'zgarmagan. Ya'ni:
+ * QOIDA (eng kam kutilmagan, MONOTON): op lardan keyingi har RASMLI slayd
+ * o'z ASL slaydi bilan solishtiriladi. Asl slayd — `slideOrigins` bergan
+ * o'rin (joyi `reorder`/`delete`/`add` bilan surilgan bo'lsa ham) yoki
+ * `insert`/`set` yukidagi `id` bo'yicha `before` dagi slayd (undo yuki
+ * asl slayd obyektini olib keladi). Asl slayd RASMLI bo'lsa — tahrir
+ * rasmli qutidan ortiqchani (`imageOverflowChars`) birorta maydonda
+ * KO'PAYTIRSAGINA rad etiladi; teng yoki kamaygan ortiqcha — qabul, hatto
+ * hali sig'masa ham. Asl slayd rasmsiz yoki yo'q bo'lsa — to'liq tekshiruv
+ * (ortiqcha bo'lsa rad). Ya'ni:
  *
- *   - tegilmagan slayd (joyi `reorder`/`delete`/`add` bilan surilgan bo'lsa
- *     ham) tekshirilmaydi — eski dekalarda oldindan sig'maydigan rasmli
- *     slayd boshqa tahrirni BLOKLAMAYDI (AUDIT-25-OLDDECKS);
- *   - quti matniga tegmaydigan tahrir (sarlavha, izoh, shrift, kolontitul)
- *     ham tekshirilmaydi;
+ *   - tegilmagan slayd va quti matniga tegmaydigan tahrir (sarlavha, izoh,
+ *     shrift, kolontitul) — ortiqcha o'zgarmaydi, qabul: eski dekalarda
+ *     oldindan sig'maydigan rasmli slayd boshqa tahrirni BLOKLAMAYDI
+ *     (AUDIT-25-OLDDECKS);
+ *   - eski dekada matnni QISQARTIRISH hech qachon rad etilmaydi (hali
+ *     sig'masa ham), UZAYTIRISH — rad;
  *   - rasmi BOR slaydda rasmni ALMASHTIRISH (yuklash yoki `image` op),
- *     matn o'zgarmagan bo'lsa — qabul: matn va rasm yonma-yon allaqachon
- *     turgan edi, almashtirish hech narsani yomonlashtirmaydi (P8 R3);
- *   - rasmsiz slaydga rasm qo'yish (`image`/`imageRestore`), rasmli slayd
- *     matnini o'zgartirish (`text`/`list`/`set`/`layout`) yoki ikkalasi,
- *     hamda YANGI kelgan rasmli slayd (`insert` — undo) — `imageYieldField`
- *     bilan tekshiriladi.
+ *     matn o'zgarmagan — qabul (P8 R3);
+ *   - o'chirilgan slaydni undo (`insert`, asl `id` bilan, bir PATCH ichida)
+ *     — asl holat, qabul;
+ *   - rasmsiz slaydga rasm qo'yish (`image`/`imageRestore`), yangi rasmli
+ *     slayd (`insert` begona `id` bilan), yangi dekada rasmli slayd matnini
+ *     qutidan oshirish — rad.
  *
- * Qaytaradi: birinchi sig'maydigan slayd indeksi va maydoni yoki `null`.
+ * Qaytaradi: birinchi rad etilgan slayd indeksi va maydoni yoki `null`.
  * Deka qoidasi va vizuali `buildSlideDeck` dan — op lar ularni
  * o'zgartirmaydi (meta va shablon tahrirlanmaydi).
  */
@@ -132,48 +139,64 @@ export function imageTextOverflow(before: AcademicDoc, after: AcademicDoc, ops: 
   const slides = after.slides ?? [];
   if (!slides.some((s) => s.image)) return null;
   const prev = before.slides ?? [];
+  const prevById = new Map(prev.map((s) => [s.id, s]));
   const origin = slideOrigins(prev.length, ops, slides.length);
   const deck = buildSlideDeck(after);
+  const overflow = (s: SlideModel) => imageOverflowChars(s, deck.bodyType, deck.visual);
   for (let index = 0; index < slides.length; index++) {
     const s = slides[index];
     if (!s.image) continue;
-    const o = origin?.[index];
-    const was = o == null ? undefined : prev[o];
-    if (was?.image && yieldText(was) === yieldText(s)) continue;
-    const field = imageYieldField(s, deck.bodyType, deck.visual);
+    const e = origin?.[index];
+    const bases = [e?.from == null ? undefined : prev[e.from], e?.via?.id ? prevById.get(e.via.id) : undefined];
+    // Tez yo'l: quti matni asl rasmli slayd bilan AYNAN bir xil — o'lchash shart emas.
+    if (bases.some((b) => b?.image && yieldText(b) === yieldText(s))) continue;
+    const now = overflow(s);
+    const worse = (b: SlideModel | undefined): FitField | null => {
+      const was = b?.image ? overflow(b) : {};
+      for (const [f, n] of Object.entries(now) as [FitField, number][]) if (n > (was[f] ?? 0)) return f;
+      return null;
+    };
+    // Qaysi asosga nisbatan yomonlashmagan bo'lsa — qabul (eng yumshoq asos).
+    const verdicts = bases.filter((b) => b?.image).map(worse);
+    const field = verdicts.length ? (verdicts.every(Boolean) ? verdicts[0] : null) : worse(undefined);
     if (field) return { index, field };
   }
   return null;
 }
 
+/** `slideOrigins` yozuvi: ASL o'rin (yangi slayd — `null`) va `insert`/`set` yuki (undo — `id` bilan). */
+type Origin = { from: number | null; via?: SlideModel };
+
 /**
- * Natijadagi har slayd ASL hujjatning qaysi slaydidan kelgani (yangi —
- * `null`). Faqat tuzilmani o'zgartiradigan op lar (`add`/`delete`/
- * `insert`/`reorder`) — `applyDocOps` dagi bilan AYNAN bir xil indeks
- * ma'nosi; op lar `apply` dan muvaffaqiyatli o'tgani uchun indekslar
- * yaroqli. Qolgan op lar slaydni JOYIDA o'zgartiradi — kelib chiqishi
- * saqlanadi, o'zgargani esa `yieldText` bilan aniqlanadi.
+ * Natijadagi har slayd ASL hujjatning qaysi slaydidan kelgani. Faqat
+ * tuzilmani o'zgartiradigan op lar (`add`/`delete`/`insert`/`reorder`)
+ * o'rinni suradi — `applyDocOps` dagi bilan AYNAN bir xil indeks ma'nosi;
+ * op lar `apply` dan muvaffaqiyatli o'tgani uchun indekslar yaroqli.
+ * `insert`/`set` yuki (`via`) ham yoziladi — undo yuki asl slaydni `id`
+ * bilan olib keladi. Qolgan op lar slaydni JOYIDA o'zgartiradi.
  *
  * Uzunlik natija bilan mos kelmasa (bu modul va `applyDocOps` ajralib
- * ketgan bo'lsa) — `null`: hamma rasmli slayd tekshiriladi. Ya'ni xato
- * tomoni XAVFSIZ — sig'maslik o'tib ketmaydi, faqat eski dekada ortiqcha
- * rad bo'lishi mumkin.
+ * ketgan bo'lsa) — `null`: hamma rasmli slayd to'liq tekshiriladi. Ya'ni
+ * xato tomoni XAVFSIZ — sig'maslik o'tib ketmaydi.
  */
-function slideOrigins(n: number, ops: readonly DocOp[], expected: number): (number | null)[] | null {
-  let o: (number | null)[] = Array.from({ length: n }, (_, i) => i);
+function slideOrigins(n: number, ops: readonly DocOp[], expected: number): Origin[] | null {
+  let o: Origin[] = Array.from({ length: n }, (_, i) => ({ from: i }));
   for (const op of ops) {
     switch (op.op) {
       case "add":
-        o = [...o.slice(0, op.after + 1), null, ...o.slice(op.after + 1)];
+        o = [...o.slice(0, op.after + 1), { from: null }, ...o.slice(op.after + 1)];
         break;
       case "delete":
         o = o.filter((_, i) => i !== op.index);
         break;
       case "insert":
-        o = [...o.slice(0, op.index), null, ...o.slice(op.index)];
+        o = [...o.slice(0, op.index), { from: null, via: op.slide }, ...o.slice(op.index)];
+        break;
+      case "set":
+        if (o[op.index]) o[op.index] = { from: o[op.index].from, via: op.slide };
         break;
       case "reorder":
-        o = op.order.map((k) => o[k] ?? null);
+        o = op.order.map((k) => o[k] ?? { from: null });
         break;
     }
   }

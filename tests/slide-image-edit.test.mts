@@ -565,6 +565,70 @@ test("INT-03 (6b): rasm almashtirilib BIR VAQTDA matn uzaysa — 400", async (t)
   );
 });
 
+// ─── Monoton qoida (eski deka): qisqartirish hech qachon rad etilmaydi, uzaytirish — rad
+
+const { imageTextOverflow } = await import("../lib/server/edit-adapters.ts");
+const { imageOverflowChars, fitChars } = await import("../lib/generation/slide-quality.ts");
+
+const oldItemSlide = (len: number): SlideModel => ({ ...shortTwo, id: "s1", left: [p8Text(len, 1), ...shortTwo.left!.slice(1)], image: { url: IMG_OLD } });
+const oldDeckWith = (s: SlideModel) => docOf([int3Slides[0], s, ...int3Slides.slice(2)]);
+
+test("INT-03 monoton (sof): eski dekadagi 200 belgilik twoCol bandi rasm yonida — 150 ga qisqartirish OK, 220 ga uzaytirish rad", () => {
+  const before = oldDeckWith(oldItemSlide(200));
+  const deck = buildSlideDeck(before);
+  const at = (len: number) => imageOverflowChars(oldItemSlide(len), deck.bodyType, deck.visual).colItem ?? 0;
+  assert.ok(at(150) > 0 && at(150) < at(200) && at(220) > at(200), "sinov asosi: 150 hali sig'maydi, lekin kamroq; 220 ko'proq");
+  assert.equal(imageTextOverflow(before, oldDeckWith(oldItemSlide(150)), []), null, "qisqartirish (hali sig'masa ham) rad etildi");
+  assert.equal(imageTextOverflow(before, oldDeckWith(oldItemSlide(200)), []), null, "o'zgarmagan holat rad etildi");
+  assert.deepEqual(imageTextOverflow(before, oldDeckWith(oldItemSlide(220)), []), { index: 1, field: "colItem" });
+});
+
+test("INT-03 monoton: `imageYieldField` = `imageOverflowChars` ning birinchi kaliti (bitta o'lchov)", () => {
+  const deck = buildSlideDeck(int3Doc);
+  for (const s of [...int3Slides, oldItemSlide(200), oldItemSlide(10)]) {
+    const keys = Object.keys(imageOverflowChars(s, deck.bodyType, deck.visual));
+    assert.equal(imageYieldField(s, deck.bodyType, deck.visual), keys[0] ?? null);
+  }
+});
+
+test("INT-03 monoton (commit): eski sig'mas bandni qisqartirish (hali sig'masa ham) — 200; uzaytirish — 400", async (t) => {
+  // Tahrirchi ustun bandini 110 belgida qirqadi (`SLIDE_LIMITS.colItem`) — shuning uchun 100 belgilik asos.
+  const deck = buildSlideDeck(int3Doc);
+  const cap = fitChars("colItem", deck.bodyType, deck.visual, 4);
+  const old = oldItemSlide(100);
+  const L0 = old.left![0].length;
+  const shorter = p8Text(Math.floor((cap + L0) / 2), 1);
+  const longer = p8Text(110, 1);
+  assert.ok(shorter.length > cap && shorter.length < L0 && longer.length > L0, `sinov asosi: cap ${cap} < ${shorter.length} < ${L0} < ${longer.length}`);
+  const doc = oldDeckWith(old);
+  const db = (tt: TestContext) => mockDb(tt, { forEdit: editRow({ doc_json: doc }), updateDoc: { doc_version: 4 }, detail: detailRow(), hasFile: true });
+
+  const seen = db(t);
+  await commitDocOps(GEN, USER, 3, [{ op: "text", index: 1, src: { f: "left", i: 0 }, value: shorter }]);
+  const saved = savedDoc(seen).slides![1];
+  assert.equal(saved.left![0], shorter);
+  assert.equal(imageYieldField(saved, deck.bodyType, deck.visual), "colItem", "natija hali sig'maydi — shunga qaramay qabul");
+  t.mock.restoreAll();
+  const seen2 = db(t);
+  await expectTooLong(commitDocOps(GEN, USER, 3, [{ op: "text", index: 1, src: { f: "left", i: 0 }, value: longer }]), seen2);
+});
+
+test("INT-03 undo: eski sig'mas rasmli slaydni o'chirish + undo (`insert` asl `id` bilan) bir PATCH da — 200", async (t) => {
+  const seen = int3Db(t);
+  await commitDocOps(GEN, USER, 3, [
+    { op: "delete", index: 1 },
+    { op: "insert", index: 1, slide: int3Slides[1] },
+  ]);
+  const doc = savedDoc(seen);
+  assert.deepEqual(doc.slides![1].image, { url: IMG_OLD });
+  assert.deepEqual(doc.slides![1].left, longTwo.left);
+});
+
+test("INT-03 undo: begona `id` bilan kelgan sig'mas rasmli slayd — hali ham 400", async (t) => {
+  const seen = int3Db(t);
+  await expectTooLong(commitDocOps(GEN, USER, 3, [{ op: "insert", index: 1, slide: { ...int3Slides[1], id: "s77" } }]), seen);
+});
+
 test("INT-03: yuklash uzun matnli RASMSIZ slaydga — hali ham 400 (yagona nuqta orqali)", async (t) => {
   const seen = int3Db(t);
   await expectTooLong(uploadSlideImage(p8Req(4), GEN, USER, 4), seen);
