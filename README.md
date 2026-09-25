@@ -6,6 +6,17 @@ maqola, tezis, rezyume, tarjima, glossariy, dars rejasi va boshqalar — 15 ta v
 
 Chiqish: **DOCX / PPTX / PNG**.
 
+## Slayd va pro slayd
+
+- **Reja bandlari soni** tanlangan slayd soniga qarab cheklanadi — forma
+  o'zi ko'rsatadi va sig'maydigan variantni o'chiradi, narx o'zgarmaydi.
+- Har reja bandi **o'z slaydi bilan** chiqadi va raqamlangan (bo'lim va
+  mazmun slaydlarida «0N»).
+- «Testsiz» va «Reja slaydi» tanlovlari aynan shu — yoqilsa mos slayd
+  chiqadi, o'chirilsa chiqmaydi.
+- Slayd matni rasm yonida sig'masa, rasm o'sha slaydga **qo'yilmaydi**
+  (pro-slayd va'dasi: «har mos slaydga AI rasm») — narx baribir o'zgarmaydi.
+
 ---
 
 ## Arxitektura
