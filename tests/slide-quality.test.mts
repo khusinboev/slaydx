@@ -243,7 +243,8 @@ test("fitChars: sig'im maketdan — bolalar shrifti torroq, rasm tasmasi va elem
 });
 
 test("layoutWordTargets: oraliqlar sig'imdan oshmaydi va detektor chegarasidan past emas", () => {
-  for (const visual of ["classic", "cards", "academic", "rail", "story"] as const) {
+  // P14d N4: barcha vizual (magazine/bold iqtibosi «7–10» edi — `QUOTE_MIN_WORDS` dan past).
+  for (const visual of [...LEGACY_VISUALS, ...DESIGN_VISUALS]) {
     const t = layoutWordTargets(bachelor, visual);
     const cap = (f: Parameters<typeof fitChars>[0], n?: number) => Math.max(CHARS_PER_WORD, fitChars(f, bachelor, visual, n));
     // GAP maydonlari — yozuvchi chegarasi RASMSIZ quti (P11; rasmli quti ≤ 5 so'z bersa maqsad rasmsizdan).
@@ -880,7 +881,9 @@ test("clipped-text: REJASIZ slayd sarlavhasi «…» bilan kesilgan — nomzod; 
   // Prompt: sarlavha qoidasi belgi chegarasi bilan, yozuvchi qopqog'idan ≥ 15 % past (P8 qoidasi).
   // C8 (P14 sharhi): so'z chegarasi belgi chegarasidan KELIB CHIQADI — max × CHARS_PER_WORD ≤ TITLE_CHARS
   // (7 × 9 = 63 > 61 edi) va bu eng katta shunday son (o'zboshimcha past emas). MUTATSIYA: max = 7 — qizaradi.
-  assert.ok(TITLE_CHARS <= PROMPT_HEADROOM * SLIDE_LIMITS.title, `TITLE_CHARS ${TITLE_CHARS}`);
+  // P14d N8: xulq — TITLE_WORDS.max so'zli o'rtacha sarlavha (CHARS_PER_WORD belgi/so'z) yozuvchi qopqog'ida kesilmaydi.
+  const maxTitle = Array.from({ length: TITLE_WORDS.max }, () => "a".repeat(CHARS_PER_WORD - 1)).join(" ");
+  assert.equal(clipTo(maxTitle, SLIDE_LIMITS.title), maxTitle, `${TITLE_WORDS.max} so'zli sarlavha kesildi`);
   assert.ok(TITLE_WORDS.max * CHARS_PER_WORD <= TITLE_CHARS, `${TITLE_WORDS.max} so'z × ${CHARS_PER_WORD} > ${TITLE_CHARS}`);
   assert.ok((TITLE_WORDS.max + 1) * CHARS_PER_WORD > TITLE_CHARS, "so'z chegarasi belgi chegarasidan bir necha so'z past");
   assert.ok(TITLE_WORDS.min < TITLE_WORDS.max);
@@ -1166,21 +1169,26 @@ test("INT-07: ta'mir twoCol bandlar soni = prompt = normalize (8–9 sinf circle
 // ───── P14c-B (detektor zaxirasi)
 
 import { CLIP_WORD_MIN_SHARE } from "../lib/generation/slide-limits.ts";
-import { DETECTOR_SHARE, colMinWords, slackMin, stepMinWords } from "../lib/generation/slide-quality.ts";
+import { colMinWords, slackMin, stepMinWords } from "../lib/generation/slide-quality.ts";
 
 /*
  * P14c-B — detektor zaxirasi. Jonli (8–9 sinf `lesson`/`circle`, 3 band, quti 87 belgi):
  * `bulletCap` = ⌊0.85 × 87 / 9⌋ = 8, `bulletMinWords` = 8 — prompt «8 so'z», detektor
  * «o'rtacha < 8 — yupqa»: NOL zaxira. ~11 belgilik o'zbekcha fan so'zlari bilan qutiga 7 so'z
  * sig'adi — sig'adigan band «yupqa», ta'mir kesilgan bandni qutiga qisqartiradi (7 so'z) va
- * «0 / 1» rad etiladi. Endi quti qissa, detektor ⌊0.75 × quti⌋ dan qabul qiladi (`slackMin`),
+ * «0 / 1» rad etiladi. Endi quti qissa, detektor round(0.75 × quti) dan qabul qiladi (`slackMin`, P14d: round),
  * prompt oralig'i «8–8» ga yopilmaydi (`range` ham `slackMin` bilan).
  * MUTATSIYA: `bullet.min` eski formulaga (min(bulletMinWords, bulletCap)) qaytsa yoki `range`
  * dagi `slackMin` olib tashlansa — xossa testi qizaradi.
  */
-test("P14c-B: slackMin — quti qissa, chegara ⌊0.75 × quti⌋; quti keng — pol o'zgarmaydi", () => {
-  assert.equal(DETECTOR_SHARE, 0.75);
+test("P14c-B: slackMin — quti qissa, chegara round(0.75 × quti); quti keng — pol o'zgarmaydi", () => {
+  // P14d N8: ta'rifni takrorlash (`DETECTOR_SHARE === 0.75`) o'rniga xulq — har quti o'lchamida chegara.
   assert.equal(slackMin(8, 8), 6, "jonli: 8 so'zlik qutida 6 dan");
+  // P14d N2: yaxlitlash — 5 so'zlik quti 3 so'zli bandni qabul qilmaydi. MUTATSIYA: Math.floor — 5 → 3, 6 → 4, qizaradi.
+  assert.equal(slackMin(8, 5), 4, "5 so'zlik quti: 4 dan (⌊3.75⌋ = 3 emas)");
+  assert.equal(slackMin(8, 6), 5, "6 so'zlik quti: 5 dan");
+  assert.equal(slackMin(12, 12), 9, "bakalavr academic: 12 so'zlik quti, 9 dan");
+  assert.equal(slackMin(8, 3), 2, "3 so'zlik quti — oraliq ochiq «2–3»");
   assert.equal(slackMin(8, 20), 8, "keng quti — auditoriya poli");
   assert.equal(slackMin(6, 7), 5);
   assert.equal(slackMin(8, 1), 1, "kamida 1");
@@ -1206,12 +1214,15 @@ test("P14c-B: xossa — har auditoriya × hajm × shablon × vizual: band/ustun 
           open("bullet", t.bullet);
           const bullets = Array.from({ length: r.maxBullets }, (_, i) => sent(t.bullet.min, i * 3));
           if (reasonsOf(S({ layout: "bullets", bullets }), r, visual).includes("short-bullets")) bad.push(`${at} bullet: ${t.bullet.min} so'z «yupqa»`);
-          // Ustun bandi (`maxColItems` bandda).
+          // Ustun bandi: prompt oralig'i `maxColItems` bo'yicha, model esa kamroq band yozishi mumkin —
+          // kamroq bandda quti kengroq, detektor yuqoriroq (P14d N8: har son COL_MIN_ITEMS..maxColItems).
           open(`colItem×${t.maxColItems}`, t.colItem);
-          le(`colItem×${t.maxColItems}`, colMinWords(r, visual, t.maxColItems), t.colItem);
-          const col = (k: number) => Array.from({ length: t.maxColItems }, (_, i) => sent(t.colItem.min, k + i * 2));
-          if (reasonsOf(S({ layout: "twoCol", leftTitle: "A", rightTitle: "B", left: col(0), right: col(1) }), r, visual).includes("short-columns")) {
-            bad.push(`${at} colItem: ${t.colItem.min} so'z «yupqa»`);
+          for (let n = COL_MIN_ITEMS; n <= t.maxColItems; n += 1) {
+            le(`colItem×${n}`, colMinWords(r, visual, n), t.colItem);
+            const col = (k: number) => Array.from({ length: n }, (_, i) => sent(t.colItem.min, k + i * 2));
+            if (reasonsOf(S({ layout: "twoCol", leftTitle: "A", rightTitle: "B", left: col(0), right: col(1) }), r, visual).includes("short-columns")) {
+              bad.push(`${at} colItem×${n}: ${t.colItem.min} so'z «yupqa»`);
+            }
           }
           // Bosqich matni — har son uchun.
           for (const [k, w] of Object.entries(t.stepTextBy)) {
@@ -1561,6 +1572,134 @@ test("P14c-A C6: rad etilgan har slayd — indeks, maket va qolgan sabab bilan b
   assert.ok(lines.some((l) => /ta’mir qabul qilindi 1 \/ 4/.test(l)), lines.join("\n"));
 });
 
+// ───── P14d-B (zaxira yaxlitlash, detektorsiz maydonlar, reja nomi)
+
+import { structureLines } from "../lib/generation/slide-prompt/structure.ts";
+
+const ALL_VISUALS_D = [...LEGACY_VISUALS, ...DESIGN_VISUALS];
+
+/*
+ * P14d N2 — `slackMin` YAXLITLAYDI: ⌊0.75 × 5⌋ = 3 edi — 5 so'zlik quti (1–4 sinf `rail` bosqichi,
+ * `circle` 2 bandli ustuni) 3 so'zli matnni qabul qilar va promptda «3–5» so'rardi.
+ * HALOL INVARIANT: ≥ 5 so'zlik quti (ya'ni oraliq `max ≥ 5`) hech qachon ZAXIRA tufayli 4 dan past
+ * quyi chegara bermaydi — prompt ham (band, ustun bandi, har bosqich soni), detektor ham (ustun bandi har
+ * `COL_MIN_ITEMS..maxColItems` sonda, bosqich har sonda). Istisno — auditoriya POLI o'zi < 4:
+ * 1–4 sinf «qisqa» `bulletMinWords` = ⌊0.55 × 58 / 8⌋ = 3 (P14c dan oldin ham «3–5») — bu zaxira emas,
+ * shuning uchun band uchun chegara `min(4, bulletMinWords)`.
+ * MUTATSIYA: `Math.round` → `Math.floor` — qizaradi.
+ */
+test("P14d-B N2: ≥ 5 so'zlik quti zaxira bilan ham 4 dan past chegara bermaydi (har auditoriya × hajm × shablon × vizual)", () => {
+  const bad: string[] = [];
+  for (const aud of SLIDE_AUDIENCES) {
+    for (const vol of ["qisqa", "standart", "kop"] as const) {
+      for (const tplId of ["lecture", "lesson"] as const) {
+        const r = bodyRules({ slideAudience: aud, textVolume: vol, planItems: 5 }, tplId);
+        for (const visual of ALL_VISUALS_D) {
+          const t = layoutWordTargets(r, visual);
+          const at = `${aud}/${vol}/${tplId}/${visual}`;
+          const floor4 = (name: string, w: { min: number; max: number }, low: number, lim = 4) => {
+            if (w.max >= 5 && low < lim) bad.push(`${at} ${name}: «${fmtRange(w)}», chegara ${low}`);
+          };
+          floor4("bullet", t.bullet, t.bullet.min, Math.min(4, bulletMinWords(r)));
+          floor4(`colItem×${t.maxColItems}`, t.colItem, t.colItem.min);
+          for (let n = COL_MIN_ITEMS; n <= t.maxColItems; n += 1) floor4(`colItem det×${n}`, t.colItem, colMinWords(r, visual, n));
+          for (const [k, w] of Object.entries(t.stepTextBy)) {
+            floor4(`stepText×${k}`, w, w.min);
+            floor4(`stepText det×${k}`, w, stepMinWords(r, visual, Number(k)));
+          }
+        }
+      }
+    }
+  }
+  assert.deepEqual(bad.slice(0, 12), [], `${bad.length} ta 4 dan past chegara`);
+});
+
+test("P14d-B N2: aniq raqamlar — 1–4 sinf lesson rail/circle, 5–7 sinf lesson circle, bakalavr lecture academic", () => {
+  const rulesOf = (aud: string, tplId: "lesson" | "lecture") => {
+    const m = extractMeta(TOOL_BY_ID["pro-slide"], { topic: "Orol dengizi fojiasi", slideAudience: aud } as never);
+    const tp = resolveSlideTemplate(tplId, m.topic);
+    return { r: bodyRules(m, tp.id), visual: tp.visual };
+  };
+  const g14 = rulesOf("school_1_4", "lesson");
+  assert.equal(g14.visual, "circle", "sinov asosi: 1–4 sinf lesson — circle");
+  const c14 = layoutWordTargets(g14.r, "circle");
+  assert.deepEqual(c14.bullet, { min: 4, max: 5 }, "1–4 circle band: «3–5» emas");
+  assert.equal(c14.maxColItems, 2);
+  assert.deepEqual(c14.colItem, { min: 4, max: 5 }, "1–4 circle 2 bandli ustun: «3–5» emas");
+  assert.equal(colMinWords(g14.r, "circle", 2), 4);
+  const rail = layoutWordTargets(g14.r, "rail");
+  assert.deepEqual(rail.stepTextBy[3], { min: 4, max: 5 }, "1–4 rail 3 bosqich: «3–5» emas");
+  assert.equal(stepMinWords(g14.r, "rail", 3), 4);
+  // 3 so'zli bosqich endi yupqa (ilgari o'tardi).
+  const steps = (w: number) => Array.from({ length: 3 }, (_, i) => ({ n: String(i + 1), title: "Bosqich", text: sent(w, i * 2) }));
+  assert.ok(reasonsOf(S({ layout: "process", steps: steps(3) }), g14.r, "rail").includes("short-steps"));
+  assert.deepEqual(reasonsOf(S({ layout: "process", steps: steps(4) }), g14.r, "rail"), []);
+  const g57 = rulesOf("school_5_7", "lesson");
+  assert.equal(g57.visual, "circle");
+  const t57 = layoutWordTargets(g57.r, "circle");
+  assert.deepEqual(t57.bullet, { min: 5, max: 6 });
+  assert.deepEqual(t57.colItem, { min: 6, max: 8 });
+  assert.deepEqual(t57.stepTextBy, { 3: { min: 6, max: 8 } });
+  const ba = rulesOf("students_bachelor", "lecture");
+  assert.equal(ba.visual, "academic");
+  const tba = layoutWordTargets(ba.r, "academic");
+  assert.deepEqual(tba.bullet, { min: 9, max: 12 });
+  assert.deepEqual(tba.colItem, { min: 6, max: 10 });
+  assert.deepEqual(tba.stepTextBy, { 3: { min: 8, max: 13 }, 4: { min: 8, max: 10 } });
+});
+
+/*
+ * P14d N4 — zaxira faqat `slackMin` li detektori bor maydonda (ustun bandi, bosqich). Iqtibosning detektori
+ * yo'q (`QUOTE_MIN_WORDS` — prompt poli), section subtitle detektori `slackMin` siz (< 6 — «empty-subtitle»):
+ * ularda zaxira faqat prompt polini tushirardi (magazine/bold iqtibosi «10» → «7–10»).
+ * MUTATSIYA: `range` da zaxira hamma maydonga (detFloor = floor) — qizaradi.
+ */
+test("P14d-B N4: iqtibos va section subtitle — quti polni ko'tarsa, prompt min poldan past emas (har auditoriya × hajm × vizual)", () => {
+  const bad: string[] = [];
+  for (const aud of SLIDE_AUDIENCES) {
+    for (const vol of ["qisqa", "standart", "kop"] as const) {
+      for (const tplId of ["lecture", "lesson"] as const) {
+        const r = bodyRules({ slideAudience: aud, textVolume: vol, planItems: 5 }, tplId);
+        for (const visual of ALL_VISUALS_D) {
+          const t = layoutWordTargets(r, visual);
+          const at = `${aud}/${vol}/${tplId}/${visual}`;
+          if (t.quote.min < Math.min(QUOTE_MIN_WORDS, t.quote.max)) bad.push(`${at} quote «${fmtRange(t.quote)}»`);
+          if (t.sectionSubtitle.min < Math.min(SECTION_SUBTITLE_MIN_WORDS, t.sectionSubtitle.max)) bad.push(`${at} section «${fmtRange(t.sectionSubtitle)}»`);
+        }
+      }
+    }
+  }
+  assert.deepEqual(bad.slice(0, 12), [], `${bad.length} ta`);
+  // Jonli ko'rinish: bakalavr magazine/bold iqtibosi yana «10»/«9» (P14c: «7–10»/«6–9»).
+  for (const visual of ["magazine", "bold"] as const) {
+    const q = layoutWordTargets(bachelor, visual).quote;
+    assert.ok(q.min >= QUOTE_MIN_WORDS && q.min === q.max, `${visual}: «${fmtRange(q)}»`);
+  }
+});
+
+/*
+ * P14d N3 — agenda yo'q dekada reja bandi nomi «3–7 so'z» edi: 7 × 9 = 63 > `TITLE_CHARS` (61), reja
+ * sarlavhasi esa hech qachon ta'mirlanmaydi (`clippedFields`) — kesilgani qoladi. Endi yuqori chegara
+ * `TITLE_WORDS.max`. MUTATSIYA: «3–7» qaytarilsa — qizaradi.
+ */
+test("P14d-B N3: agenda yo'q — reja bandi nomi 3–TITLE_WORDS.max so'z (umumiy sarlavha qopqog'ida)", () => {
+  const pro = TOOL_BY_ID["pro-slide"];
+  const tpl = resolveSlideTemplate("lecture", "Orol dengizi");
+  const line = (agendaSlide: boolean) => {
+    const meta = extractMeta(pro, { topic: "Orol dengizi", blocks: "reja", planItems: 5, agendaSlide } as never);
+    return structureLines(meta, tpl, {}).find((l) => l.startsWith("REJA BANDLARI:")) ?? "";
+  };
+  const off = line(false);
+  assert.doesNotMatch(off, /agenda bandlari AYNAN/, "sinov asosi: agenda yo'q");
+  const m = off.match(/band nomini mavzudan o‘zingiz tuzing \((\d+)(?:–(\d+))? so‘z\)/);
+  assert.ok(m, off);
+  const hi = Number(m[2] ?? m[1]);
+  assert.equal(Number(m[1]), 3);
+  assert.equal(hi, TITLE_WORDS.max, `«${m[0]}»`);
+  assert.ok(hi * CHARS_PER_WORD <= TITLE_CHARS, `${hi} so'z × ${CHARS_PER_WORD} > ${TITLE_CHARS}`);
+  // Agenda bor — oraliq agenda qutisidan (o'zgarmagan).
+  assert.match(line(true), /agenda bandlari AYNAN/);
+});
 // ───── P14d-A (ta'mir prompti va merge qoldiqlari)
 /*
  * AUDIT-25 P14c sharhi N1/N5/N6:
