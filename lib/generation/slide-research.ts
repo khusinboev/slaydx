@@ -1,6 +1,6 @@
 import { languageDirective } from "./i18n";
 import { llmGrounded } from "./llm";
-import { remainingMs } from "./quality";
+import { mapPool, remainingMs } from "./quality";
 import { safeFetchUrl, UnsafeUrlError } from "./safe-fetch";
 import type { DocMeta } from "./types";
 
@@ -38,8 +38,37 @@ const MIN_RESEARCH_MS = 8_000;
 /** References slaydiga sig'adigan manba soni. */
 const MAX_SOURCES = 8;
 
-/** Redirectlarni ochishga ajratiladigan UMUMIY vaqt. */
-const REDIRECT_MS = 3_000;
+/**
+ * Redirectlarni ochishga ajratiladigan UMUMIY vaqt.
+ *
+ * Jonli holat (2026-09-25): sekin DNS'li mashinada 8 ta HEAD bitta
+ * 3 s AbortController ostida PARALLEL yuborilgan va hammasi DNS
+ * bosqichida abort bo'lgan («This operation was aborted»), natijada
+ * references slaydida chirigan redirect havolalari chiqqan. 3 s → 6 s:
+ * hali ham deck muddatidan «o'g'irlanmaydi» (pastdagi tekshiruv), lekin
+ * pastroq concurrency bilan (`REDIRECT_CONCURRENCY`) 8 ta manbaga
+ * yetadigan darajada bo'sh joy beradi.
+ */
+const REDIRECT_MS = 6_000;
+
+/**
+ * Bitta HEAD so'roviga ajratiladigan max vaqt.
+ *
+ * `REDIRECT_MS` ning yarmi: bitta manba osilib qolsa ham navbatdagi
+ * manbaga o'rin bo'shaydi, umumiy byudjetni yakkash egallab olmaydi.
+ */
+const REDIRECT_REQUEST_MS = 3_000;
+
+/**
+ * Bir vaqtda ochiladigan redirect soni.
+ *
+ * Ilgari 8 tasi HAM bitta paytda yuborilardi — sekin DNS'da hammasi
+ * birga osilib qolardi (yuqoridagi jonli holat). `safeFetchUrl` DNS
+ * keshini/pin qilishni TAQDIM ETMAYDI (har chaqiruv o'z `lookup`ini
+ * yuboradi), shuning uchun bu yerda faqat concurrency pasaytiriladi —
+ * bitta sekin xostga bir vaqtda ko'pi bilan 3 ta so'rov.
+ */
+const REDIRECT_CONCURRENCY = 3;
 
 /** Grounding javobidagi `uri` shu manzil bo'lsa — ochish mumkin. */
 const REDIRECT_HOST = "vertexaisearch.cloud.google.com";
@@ -150,14 +179,19 @@ function dedupSources(list: SlideSource[]): SlideSource[] {
  * bilan `location` sarlavhasini o'qiymiz.
  *
  * Yiqilsa (timeout, tarmoq, 403) — eski `uri` QOLADI. Bu qadam uchun
- * deck qurbon qilinmaydi: umumiy 3 s, hammasi parallel.
+ * deck qurbon qilinmaydi: umumiy `REDIRECT_MS`, ko'pi bilan
+ * `REDIRECT_CONCURRENCY` ta parallel (pastda batafsil).
  */
 /**
  * Google redirect xizmatining O'ZIMI (audit EXT-15): ilgari `includes`
  * — `https://boshqa.xost/vertexaisearch.cloud.google.com/…` ham HEAD
  * so'rovini olardi. Endi aniq https + xost tengligi.
+ *
+ * Eksport qilingan: `slide-write.ts applyResearchRefs` ham shu tekshiruvni
+ * ishlatadi — resolveSources OCHOLMAGAN (hali ham redirect) manbani
+ * references slaydida URL sifatida ko'rsatmaslik uchun (belts-and-braces).
  */
-function isGoogleRedirect(uri: string): boolean {
+export function isGoogleRedirect(uri: string): boolean {
   try {
     const u = new URL(uri);
     return u.protocol === "https:" && u.hostname === REDIRECT_HOST;
@@ -175,20 +209,30 @@ async function resolveSources(sources: SlideSource[], deadline?: number): Promis
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), REDIRECT_MS);
   try {
-    return await Promise.all(
-      sources.map(async (s) => {
-        if (!isGoogleRedirect(s.uri)) return s;
-        try {
-          // `maxRedirects: 0` — `Location` faqat O'QILADI (havola sifatida), kuzatilmaydi.
-          const res = await safeFetchUrl(s.uri, { method: "HEAD", maxRedirects: 0, signal: ctrl.signal, timeoutMs: REDIRECT_MS });
-          const loc = res.headers.get("location");
-          return loc && /^https?:\/\//i.test(loc) ? { title: s.title, uri: loc } : s;
-        } catch (e) {
-          if (e instanceof UnsafeUrlError) console.warn("[slide-research]", e.message);
-          return s;
-        }
-      }),
-    );
+    /*
+     * `mapPool` (quality.ts) — bir vaqtda ko'pi bilan `REDIRECT_CONCURRENCY`
+     * ta so'rov. Tartib saqlanadi (indeks bo'yicha yoziladi), redirect
+     * bo'lmagan manbalar darhol o'zini qaytaradi va navbat egallamaydi.
+     */
+    return await mapPool(sources, REDIRECT_CONCURRENCY, async (s) => {
+      if (!isGoogleRedirect(s.uri)) return s;
+      try {
+        // `maxRedirects: 0` — `Location` faqat O'QILADI (havola sifatida), kuzatilmaydi.
+        // Bitta so'rov o'z REDIRECT_REQUEST_MS ichida bo'lishi shart — osilib
+        // qolsa navbatdagi manbaga yo'l beradi, umumiy byudjetni yemaydi.
+        const res = await safeFetchUrl(s.uri, {
+          method: "HEAD",
+          maxRedirects: 0,
+          signal: ctrl.signal,
+          timeoutMs: REDIRECT_REQUEST_MS,
+        });
+        const loc = res.headers.get("location");
+        return loc && /^https?:\/\//i.test(loc) ? { title: s.title, uri: loc } : s;
+      } catch (e) {
+        if (e instanceof UnsafeUrlError) console.warn("[slide-research]", e.message);
+        return s;
+      }
+    });
   } catch {
     return sources;
   } finally {
