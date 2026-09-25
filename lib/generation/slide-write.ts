@@ -655,11 +655,15 @@ export function syncAgenda(slides: SlideModel[], rules: Pick<BodyRules, "bulletC
    * INT-02: chegara — REJA qutisi (`clipLimit("agenda", …)`, shu SONDAGI
    * band, deka vizuali), `bulletChars` emas. Bandlar endi slayd
    * sarlavhalari (≤ 72): maktab dekalarida `bulletChars` (80–120) agenda
-   * qatoriga sig'masdi — 102–159 % toshish, shrift poldan past. Rasm
-   * holati noma'lum — "both" (rasmli ham, rasmsiz ham sig'sin).
-   * Qisman qoidalar (eski chaqiruvchi) — `bulletChars`.
+   * qatoriga sig'masdi — 102–159 % toshish, shrift poldan past. Qator
+   * qutisi P9 `agendaRowBox` (maketning o'zi, `planSlide` orqali), pol —
+   * auditoriya `minPt`. P8 qoidasi («matn rasmdan ustun»): RASMSIZ quti
+   * (`NO_IMAGE`); rasm yonida sig'maydigan reja slaydi rasmdan voz kechadi
+   * (`imageYieldField` — `agenda`). Qisman qoidalar (eski chaqiruvchi) —
+   * `bulletChars`.
    */
-  const max = "bodyPt" in rules ? Math.min(rules.bulletChars, clipLimit("agenda", rules, visual, Math.max(1, heads.length))) : rules.bulletChars;
+  const max =
+    "bodyPt" in rules ? Math.min(rules.bulletChars, clipLimit("agenda", rules, visual, Math.max(1, heads.length), undefined, NO_IMAGE)) : rules.bulletChars;
   const items = heads.map((s) => clipTo(stripOrdinal(s.title), max)).filter(Boolean);
   if (items.length) agenda.bullets = items;
 }

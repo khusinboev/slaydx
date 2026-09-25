@@ -159,6 +159,10 @@ export function imageYieldField(s: SlideModel, rules: BodyRules, visual?: SlideV
     case "bullets":
       checks.push(["bullets", s.bullets ?? [], Math.max(1, s.bullets?.length ?? 1)]);
       break;
+    case "agenda":
+      // INT-02: reja bandlari (sarlavhalar) rasmsiz qatorda qirqilgan — rasm yonida sig'masa, rasm joy beradi.
+      checks.push(["agenda", s.bullets ?? [], Math.max(1, s.bullets?.length ?? 1)]);
+      break;
     case "twoCol":
     case "compare":
       for (const col of [s.left ?? [], s.right ?? []]) if (col.length) checks.push(["colItem", col, col.length]);

@@ -18,7 +18,7 @@ import {
   resolvePlanFlags,
 } from "../lib/generation/slide-params.ts";
 import { SLIDE_LIMITS, clipTo, limitsFor } from "../lib/generation/slide-limits.ts";
-import { NO_IMAGE, REPAIR_MIN_MS, clipLimit, layoutWordTargets } from "../lib/generation/slide-quality.ts";
+import { NO_IMAGE, REPAIR_MIN_MS, clipLimit, imageYieldField, layoutWordTargets } from "../lib/generation/slide-quality.ts";
 import { AUDIENCE_RULES } from "../lib/generation/slide-audience.ts";
 import type { SlideProgressEvent } from "../lib/generation/slide-progress.ts";
 import { resetBlocksForPurpose } from "../components/forms/slide-fields.tsx";
@@ -987,8 +987,14 @@ test("INT-02: syncAgenda reja qutisida qirqadi — 1–9 sinf 6 × 72 belgilik r
       syncAgenda(deck, rules, visual);
       const items = deck[0].bullets!;
       assert.equal(items.length, 6);
-      const cap = clipLimit("agenda", rules, visual, 6);
+      // P8 qoidasi: RASMSIZ reja qatori (rasm keyin, sig'masa joy beradi — `imageYieldField`).
+      const cap = clipLimit("agenda", rules, visual, 6, undefined, NO_IMAGE);
       for (const b of items) assert.ok(b.length <= cap, `${aud}/${visual}: ${b.length} > ${cap}`);
+      const withImage = { ...deck[0], image: { url: "data:image/png;base64,AAAA" } };
+      const wi = worstOf(withImage, rules, visual, "bullets");
+      if (wi.ratio > 1.001 || wi.size < rules.minPt) {
+        assert.equal(imageYieldField(withImage, rules, visual), "agenda", `${aud}/${visual}: rasm yonida sig'maydi — rasm joy berishi kerak`);
+      }
       const base = worstOf({ ...deck[0], bullets: items.map(() => "Orol") }, rules, visual, "bullets").size;
       const w = worstOf(deck[0], rules, visual, "bullets");
       if (w.ratio > 1.001 || w.size < Math.min(rules.minPt, base)) bad.push(`${aud}/${visual}: ${Math.round(w.ratio * 100)} % ${w.size} pt`);
@@ -1002,6 +1008,27 @@ test("INT-02: syncAgenda reja qutisida qirqadi — 1–9 sinf 6 × 72 belgilik r
   ];
   syncAgenda(deck, { bulletChars: 36 });
   assert.ok(deck[0].bullets![0].length <= 36);
+});
+
+// P9 bilan kelishilgan nuqta: 1–4 sinf / circle, 6 × 72 belgilik reja sarlavhasi → band ≤ 51, so'z chegarasida; bakalavr 72 ni saqlaydi.
+test("INT-02: 1–4 sinf circle reja bandi ≤ 51 belgi (so'z chegarasida), bakalavr 72 ni saqlaydi", () => {
+  const titles = Array.from({ length: 6 }, (_, i) => titleUpTo(72, i * 2));
+  assert.ok(titles.every((t) => t.length >= 60 && t.length <= 72), titles.map((t) => t.length).join(","));
+  const deckOf = (): SlideModel[] => [
+    { id: "s0", layout: "agenda", title: "Reja", bullets: ["x"] },
+    ...titles.map((title, i): SlideModel => ({ id: `s${i + 1}`, layout: "bullets", title, bullets: ["a"], plan: i + 1 })),
+  ];
+  const kids = bodyRules(extractMeta(slideTool, { topic: "X", slideAudience: "school_1_4", planItems: 6 } as never), "lesson");
+  const k = deckOf();
+  syncAgenda(k, kids, "circle");
+  for (const [i, b] of k[0].bullets!.entries()) {
+    assert.ok(b.length <= 51 && b.endsWith("…"), `1–4 sinf: ${b.length} «${b}»`);
+    assert.ok(titles[i].startsWith(b.slice(0, -1)) && /\s/.test(titles[i][b.length - 1]), `so'z o'rtasidan kesildi: «${b}»`);
+  }
+  const bach = bodyRules(extractMeta(slideTool, { topic: "X", slideAudience: "students_bachelor", planItems: 6 } as never), "lecture");
+  const b = deckOf();
+  syncAgenda(b, bach, "circle");
+  assert.deepEqual(b[0].bullets, titles, "bakalavr: 72 belgilik sarlavha to'liq");
 });
 
 /*

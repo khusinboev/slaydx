@@ -719,10 +719,12 @@ export function fitChars(field: FitField, rules: BodyRules, visual?: SlideVisual
   const hit = fitCache.get(key);
   if (hit !== undefined) return hit;
   const floored = AUDIENCE_FIELDS.has(field);
+  // Reja planeri bandlarni `agendaMax` gacha chizadi — o'lchov `n` bandning HAMMASINI ko'rsin (P9 `agendaRowBox` bilan bir xil).
+  const pr: BodyRules = field === "agenda" ? { ...rules, agendaMax: Math.max(rules.agendaMax, n) } : rules;
   let chars = Number.POSITIVE_INFINITY;
   for (const v of visual ? [visual] : allVisuals()) {
     for (const image of images === "none" ? [false] : [false, true]) {
-      const base = probeLayers(p, 1, n, rows, rules, v, image);
+      const base = probeLayers(p, 1, n, rows, pr, v, image);
       // Bu vizualda maydon chizilmaydi — cheklov yo'q.
       if (!base.length) continue;
       // Pol: auditoriya poli, lekin dizayn shrifti undan kichik bo'lsa — o'sha (1 so'zdagi o'lcham).
@@ -730,7 +732,7 @@ export function fitChars(field: FitField, rules: BodyRules, visual?: SlideVisual
       const rots = ROTATED_FIELDS.has(field) ? PROBE_ROTATIONS : [0];
       const fits = (words: number) =>
         rots.every((rot) => {
-          const ls = probeLayers(p, words, n, rows, rules, v, image, rot);
+          const ls = probeLayers(p, words, n, rows, pr, v, image, rot);
           return ls.length === floors.length && ls.every((l, i) => layerFits(l) && l.size >= floors[i]);
         });
       /*
