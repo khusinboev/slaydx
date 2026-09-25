@@ -301,7 +301,7 @@ function planAgenda(s: SlideModel, theme: SlideTheme, index: number, total: numb
       box: lineBox,
       text: line,
       color: theme.text,
-      size: fitSize(line, lineBox, ctx.bodyType.bodyPt, ctx.bodyType.minPt - 1),
+      size: LAYOUT_KIT.agendaFit(line, lineBox, ctx.bodyType.bodyPt),
       valign: "middle",
       src: { f: "bullets", i },
     });

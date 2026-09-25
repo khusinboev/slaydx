@@ -54,6 +54,45 @@ function pushHead(layers: SlideLayer[], s: SlideModel, theme: SlideTheme, w: num
   });
 }
 
+/**
+ * 5–6 bandli reja — ikki qator plita (har qatorda 3 tagacha). Raqam
+ * plitaning yuqori chap burchagida (22 pt), matn uning ostida; 72
+ * belgili band 14 pt himoya polida ham plitaga sig'adi (INT-02).
+ */
+function planAgendaGrid(layers: SlideLayer[], items: string[], theme: SlideTheme, ctx: PlanCtx): void {
+  const top = 1.9;
+  const zoneH = 4.15;
+  const gap = 0.3;
+  const cols = 3;
+  const tileW = (11.6 - gap * (cols - 1)) / cols;
+  const tileH = (zoneH - gap) / 2;
+  items.forEach((line, i) => {
+    const x = 0.85 + (i % cols) * (tileW + gap);
+    const y = top + Math.floor(i / cols) * (tileH + gap);
+    card(layers, theme, { x, y, w: tileW, h: tileH });
+    layers.push({ t: "rect", box: { x, y, w: tileW, h: 0.08 }, fill: { color: theme.accent }, radius: 0.04 });
+    layers.push({
+      t: "text",
+      box: { x: x + 0.24, y: y + 0.2, w: 0.9, h: 0.5 },
+      text: two(i + 1),
+      color: theme.accentInk,
+      size: 22,
+      bold: true,
+      valign: "middle",
+    });
+    const tBox: Box = { x: x + 0.24, y: y + 0.78, w: tileW - 0.48, h: tileH - 0.93 };
+    layers.push({
+      t: "text",
+      box: tBox,
+      text: line,
+      color: theme.text,
+      size: LAYOUT_KIT.agendaFit(line, tBox, ctx.bodyType.bodyPt),
+      valign: "top",
+      src: { f: "bullets", i },
+    });
+  });
+}
+
 /** Reja bandi plitasi — kichik KPI kartasi (dekorativ, `src`siz). */
 function pushPlanTile(layers: SlideLayer[], theme: SlideTheme, box: Box, no: string): void {
   card(layers, theme, box);
@@ -277,7 +316,19 @@ function planAgenda(s: SlideModel, theme: SlideTheme, index: number, total: numb
   const layers: SlideLayer[] = [];
   pushPage(layers, theme);
   pushHead(layers, s, theme, 11.6, ctx.reserve);
-  const items = (s.bullets ?? []).slice(0, Math.min(4, ctx.bodyType.agendaMax));
+  /*
+   * AUDIT-25 INT-01: reja = shartnoma — `syncAgenda` AYNAN `planN` (5–6)
+   * band yozadi va har bandning o'z slaydi bor. Ilgari bu yerda
+   * `slice(0, 4)` turardi: hisobot dekasi rejaning oxirgi bandlarini
+   * yashirardi. 5–6 band — ikki qator plita (3 + 3 / 3 + 2); 4 tagacha —
+   * eski bitta qator, bayt-bayt eskicha.
+   */
+  const items = (s.bullets ?? []).slice(0, Math.min(6, ctx.bodyType.agendaMax));
+  if (items.length > 4) {
+    planAgendaGrid(layers, items, theme, ctx);
+    pushFooter(layers, s, theme, index, total, { x: 0.85, w: 11.6 }, false);
+    return { bg: theme.bg, layers };
+  }
   const n = Math.max(1, items.length);
   const gap = 0.3;
   const tileW = (11.6 - gap * (n - 1)) / n;
@@ -300,7 +351,7 @@ function planAgenda(s: SlideModel, theme: SlideTheme, index: number, total: numb
       box: tBox,
       text: line,
       color: theme.text,
-      size: fitSize(line, tBox, ctx.bodyType.bodyPt, ctx.bodyType.minPt - 1),
+      size: LAYOUT_KIT.agendaFit(line, tBox, ctx.bodyType.bodyPt),
       valign: "top",
       src: { f: "bullets", i },
     });

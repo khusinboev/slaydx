@@ -253,7 +253,7 @@ function planVertical(
       box,
       text: line,
       color: theme.text,
-      size: fitSize(line, box, ctx.bodyType.bodyPt + (agenda ? 2 : 0), ctx.bodyType.minPt - 1),
+      size: agenda ? LAYOUT_KIT.agendaFit(line, box, ctx.bodyType.bodyPt + 2) : fitSize(line, box, ctx.bodyType.bodyPt, ctx.bodyType.minPt - 1),
       valign: "middle",
       src: { f: "bullets", i },
     });

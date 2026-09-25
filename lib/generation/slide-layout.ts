@@ -6,6 +6,7 @@ import { designOf } from "./visuals";
 import { planCustom } from "./slide-custom";
 import type { CustomTemplate } from "./pptx-template";
 import type { SlideModel, SlideSrc, SlideTheme } from "./slide-types";
+import { getSlideTheme } from "./slide-themes";
 
 /** Widescreen 16:9 in inches — same coordinate space as PPTX and the on-site viewer. */
 export const SLIDE_IN = { w: 13.333, h: 7.5 } as const;
@@ -436,6 +437,25 @@ const WORD_HEADROOM = 1.1;
  * keyin ham bu himoya QOLADI (ikki qavat): tahrir, eski doc_json va
  * chegaradan o'tgan har qanday matn baribir qutida qoladi.
  */
+/**
+ * Reja (agenda) qatorining himoya poli, pt — AUDIT-25 INT-02.
+ *
+ * Reja bandlari endi reja slaydlarining SARLAVHALARI (`syncAgenda`) —
+ * 72 belgigacha. Ilgari qator shrifti `fitSize(…, minPt - 1)` edi: polda
+ * sig'masa ham shu o'lchamda qolib TOSHARDI (1–4-sinf 6 × 72 belgi — 17
+ * maketning hammasida 112–159 %). Endi pastga `minPt - 1` dan keyin ham
+ * davom etadi, lekin 14 pt dan past emas. Qatorlar geometriyasi (joyi,
+ * balandligi) o'zgarmaydi; odatdagi matnda natija AYNAN eskicha (bir xil
+ * sikl, bir xil mezon) — faqat ilgari toshgan matn kichrayadi. Uzunlikni
+ * yozuv bosqichi (`fitChars("agenda", …)`, P11) `agendaRowBox` qutisidan
+ * `minPt` da cheklaydi — bu pol ikkinchi qavat.
+ */
+export const AGENDA_FLOOR_PT = 14;
+
+function agendaFit(text: string, box: Box, base: number): number {
+  return fitSize(text, box, base, AGENDA_FLOOR_PT);
+}
+
 function bodyFit(text: string, box: Box, base: number, bt: BodyRules, floor: number, bold = false): number {
   const start = Math.max(base, bt.bodyPt);
   const low = Math.min(floor, bt.minPt);
@@ -1918,7 +1938,7 @@ function planBullets(
         box: lineBox,
         text: line,
         color: theme.text,
-        size: fitSize(line, lineBox, bodyType.bodyPt, bodyType.minPt - 1),
+        size: agendaFit(line, lineBox, bodyType.bodyPt),
         valign: "middle",
         src: { f: "bullets", i },
       });
@@ -3062,6 +3082,45 @@ function pushLogo(plan: SlidePlan, s: SlideModel, theme: SlideTheme, url: string
 }
 
 /**
+ * Reja (agenda) qatorining MATN qutisi, dyuym — AUDIT-25 INT-02.
+ *
+ * Yozuv bosqichi (`fitChars("agenda", …)`, P11) reja bandini shu qutiga
+ * `minPt` da sig'adigan uzunlikka qirqadi. Yagona manba: qutini maketning
+ * O'ZI chizadi — `planSlide` `n` bandli sintetik reja slaydi bilan
+ * chaqiriladi, ya'ni bu funksiya maketdan hech qachon ajralmaydi. Qator
+ * geometriyasi matnga bog'liq emas (faqat dizayn, `n`, qoidalar, logo).
+ * Qutilar har xil bo'lsa (plitalar) — eng tor eni va eng past bo'yi
+ * (ehtiyotkor). Rejasiz dizayn (maket reja chizmasa) — `null`.
+ */
+export function agendaRowBox(
+  visual: SlideVisual,
+  n: number,
+  rules: BodyRules,
+  opts: { logo?: boolean; image?: boolean } = {},
+): Box | null {
+  const count = Math.max(1, Math.round(n));
+  const s: SlideModel = {
+    id: "agenda-probe",
+    layout: "agenda",
+    title: "Reja",
+    bullets: Array.from({ length: count }, (_, i) => `Band ${i + 1}`),
+    ...(opts.image ? { image: { url: "https://example.invalid/a.png" } } : {}),
+  };
+  const bodyType = { ...rules, agendaMax: Math.max(rules.agendaMax, count) };
+  const plan = planSlide(s, getSlideTheme("atlas"), visual, 1, 10, "auto", "lecture", {
+    bodyType,
+    logo: opts.logo ? "data:image/png;base64,AA" : undefined,
+  });
+  const rows = plan.layers.filter(
+    (l): l is Extract<SlideLayer, { t: "text" }> => l.t === "text" && l.src?.f === "bullets",
+  );
+  if (!rows.length) return null;
+  const w = Math.min(...rows.map((l) => l.box.w));
+  const h = Math.min(...rows.map((l) => l.box.h));
+  return { ...rows[0].box, w, h };
+}
+
+/**
  * Yangi maketlar uchun yordamchilar (`slide-layout-extra.ts`, WP-C).
  * Bu fayl 2000 qatordan oshdi — yangi maket shu yerga emas, o'z fayliga
  * yoziladi va faqat shu to'plamdan foydalanadi.
@@ -3099,6 +3158,9 @@ export const LAYOUT_KIT = {
   pushPlanBadge,
   pushPlanBadgeAt,
   pushPlanTab,
+  agendaFit,
+  AGENDA_FLOOR_PT,
+  agendaRowBox,
   badgedTitle,
   PLAN_TAB_ROOM,
   PLAN_BADGE_W,
