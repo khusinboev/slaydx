@@ -1158,3 +1158,250 @@ test("INT-07: ta'mir twoCol bandlar soni = prompt = normalize (8–9 sinf circle
     },
   );
 });
+
+// ───── P14c-A (ta'mir merge)
+/*
+ * AUDIT-25 P14 sharhi C1/C2/C3/C5/C6 — `clipped-text` ta'miri yaxshi matnni o'chirmasin:
+ *   — C1: faqat kesilgan slayd O'RNI bo'yicha birlashtiriladi (son qulf, kesilmagan band asl,
+ *     sarlavha tanadan mustaqil, `qaytaring:` da faqat kesilgan maydonlar);
+ *   — C2: muqova (`layout:"title"`) sarlavhasi hech qachon so'ralmaydi;
+ *   — C3: tizim prompti «title O‘ZGARMAYDI» / «chuqurlashtiring» ziddiyatisiz;
+ *   — C5: ustunlar har tomon O'Z soni bilan qirqiladi (yozuvchi `col()` kabi);
+ *   — C6: rad etilgan har slayd `console.warn` da sababi bilan.
+ */
+
+/** 10–11 sinf ma'ruza, `bold` vizuali: 3 bandli ustun 75 belgi, 2 bandli 110 — C5 farqi reja slaydida ham. */
+const m1011 = extractMeta(TOOL_BY_ID["pro-slide"], { topic: "Orol dengizi fojiasi", slideAudience: "school_10_11" } as never);
+const tBold = { ...resolveSlideTemplate("lecture", m1011.topic), visual: "bold" } as ReturnType<typeof resolveSlideTemplate>;
+const rBold = bodyRules(m1011, tBold.id);
+
+async function captureWarn(fn: () => Promise<void>): Promise<string[]> {
+  const saved = console.warn;
+  const lines: string[] = [];
+  console.warn = (...a: unknown[]) => void lines.push(a.map(String).join(" "));
+  try {
+    await fn();
+  } finally {
+    console.warn = saved;
+  }
+  return lines;
+}
+
+test("P14c-A C1: blok bandlari — faqat tuzatilgan bandni qaytargan javob RAD (qolgan maqsadlar o'chmaydi); so'rovda faqat bandlar", async () => {
+  const cap3 = bulletClipLimit(rules, tpl.visual, 3);
+  const goals = { id: "g", layout: "bullets", title: "Dars maqsadlari", bullets: [sent(12), sent(12, 3), clipTo(sent(40), cap3)] } as SlideModel;
+  assert.deepEqual(reasonsOf(goals, rules, tpl.visual), ["clipped-text"]);
+  await withLlm(
+    () => jsonReply({ slides: [{ index: 0, bullets: [sent(10, 6)] }] }),
+    async (calls) => {
+      const [out] = await repairThinSlides([goals], meta, tpl, {}, later(), later());
+      assert.equal(out, goals, "1 bandli javob qabul qilindi — ikki maqsad o'chdi");
+      assert.match(calls[0].user, /qaytaring: \{"index":0,"bullets":\[""\]\}/);
+      assert.match(calls[0].user, /SONI va TARTIBI o‘zgarmasin/);
+    },
+  );
+  // Reja slaydi ham: 3 → 2 band (minBullets dan past emas bo'lsa ham) — rad.
+  const plan = S({ layout: "bullets", bullets: [sent(14), sent(14, 3), clipTo(sent(40, 5), cap3)] });
+  assert.deepEqual(reasonsOf(plan, rules, tpl.visual), ["clipped-text"]);
+  await withLlm(
+    () => jsonReply({ slides: [{ index: 0, bullets: [sent(14), sent(12, 6)] }] }),
+    async () => assert.equal((await repairThinSlides([plan], meta, tpl, {}, later(), later()))[0], plan),
+  );
+});
+
+test("P14c-A C1: 3 bandli javobda model kesilmagan bandni ham «yaxshilasa» — u BAYTMA-BAYT asl, kesilgani almashadi", async () => {
+  const cap3 = bulletClipLimit(rules, tpl.visual, 3);
+  const goals = { id: "g", layout: "bullets", title: "Dars maqsadlari", bullets: [sent(12), sent(12, 3), clipTo(sent(40), cap3)] } as SlideModel;
+  const fixed = sent(10, 6);
+  await withLlm(
+    () => jsonReply({ slides: [{ index: 0, bullets: [`${sent(12)} va yana boshqa fikr`, sent(9, 1), fixed] }] }),
+    async () => {
+      const [out] = await repairThinSlides([goals], meta, tpl, {}, later(), later());
+      assert.deepEqual(out.bullets, [goals.bullets![0], goals.bullets![1], fixed]);
+      assert.equal(out.title, goals.title);
+    },
+  );
+});
+
+test("P14c-A C1+C5: twoCol 3+2, faqat o'ngda kesilgan — chap tegilmaydi, o'ng O'Z soni (2) qutisi bilan qirqiladi", async () => {
+  const cap2 = clipLimit("colItem", rBold, "bold", 2, undefined, NO_IMAGE);
+  const cap3 = clipLimit("colItem", rBold, "bold", 3, undefined, NO_IMAGE);
+  assert.ok(layoutWordTargets(rBold, "bold").maxColItems === 3 && cap3 < cap2, `asos: 3 band, ${cap3} < ${cap2}`);
+  const left = [upTo(60), upTo(60, 3), upTo(60, 6)];
+  const slide = S({ layout: "twoCol", leftTitle: "Eski", rightTitle: "Yangi", left, right: [upTo(90, 1), clipTo(sent(40, 2), cap2)] });
+  assert.deepEqual(reasonsOf(slide, rBold, "bold"), ["clipped-text"]);
+  const shortened = upTo(Math.round((cap2 + cap3) / 2), 7);
+  assert.ok(shortened.length > cap3 && shortened.length <= cap2, `asos: ${cap3} < ${shortened.length} ≤ ${cap2}`);
+  await withLlm(
+    () => jsonReply({ slides: [{ index: 0, left: ["Model chapni o‘zgartirdi", upTo(60, 2)], right: [`${upTo(90, 1)} qo‘shimcha`, shortened] }] }),
+    async (calls) => {
+      const [out] = await repairThinSlides([slide], m1011, tBold, {}, later(), later());
+      assert.deepEqual(out.left, left, "kesilmagan chap ustun o'zgardi");
+      assert.deepEqual(out.right, [slide.right![0], shortened], "o'ng: kesilmagan asl, kesilgani 2 band qutisida qirqilmay");
+      assert.match(calls[0].user, /qaytaring: \{"index":0,"right":\[""\]\}/, "faqat kesilgan tomon so'raladi");
+    },
+  );
+  // O'ng tomonda son boshqa — rad.
+  await withLlm(
+    () => jsonReply({ slides: [{ index: 0, right: [shortened] }] }),
+    async () => assert.equal((await repairThinSlides([slide], m1011, tBold, {}, later(), later()))[0], slide),
+  );
+});
+
+test("P14c-A C1: process — son qulf, kesilmagan bosqich asl, kesilgani almashadi (sarlavha/raqam asl)", async () => {
+  const stepCap = clipLimit("stepText", rules, tpl.visual, 3, undefined, NO_IMAGE);
+  const proc = S({
+    layout: "process",
+    steps: [1, 2, 3].map((n) => ({ n: String(n), title: `Bosqich ${n}`, text: n === 2 ? clipTo(sent(40, 4), stepCap) : sent(9, n) })),
+  });
+  assert.deepEqual(reasonsOf(proc, rules, tpl.visual), ["clipped-text"]);
+  const fixed = sent(9, 7);
+  await withLlm(
+    () => jsonReply({ slides: [{ index: 0, steps: [1, 2, 3].map((n) => ({ n: "9", title: "Boshqa", text: n === 2 ? fixed : `${sent(9, n)} yangi` })) }] }),
+    async (calls) => {
+      const [out] = await repairThinSlides([proc], meta, tpl, {}, later(), later());
+      assert.deepEqual(out.steps, [proc.steps![0], { ...proc.steps![1], text: fixed }, proc.steps![2]]);
+      assert.match(calls[0].user, /qaytaring: \{"index":0,"steps":\[/);
+    },
+  );
+  await withLlm(
+    () => jsonReply({ slides: [{ index: 0, steps: [{ n: "1", title: "B", text: fixed }, { n: "2", title: "B", text: fixed }] }] }),
+    async () => assert.equal((await repairThinSlides([proc], meta, tpl, {}, later(), later()))[0], proc, "2 bosqich — rad"),
+  );
+});
+
+test("P14c-A C1+C3: faqat sarlavhasi kesilgan blok slaydi — so'rovda FAQAT title, bandlar tegilmaydi; prompt ziddiyatsiz", async () => {
+  const cutTitle = clipTo(sent(20), SLIDE_LIMITS.title);
+  const goals = { id: "g", layout: "bullets", title: cutTitle, bullets: [sent(12), sent(12, 3), sent(12, 6)] } as SlideModel;
+  assert.deepEqual(reasonsOf(goals, rules, tpl.visual), ["clipped-text"]);
+  const shortTitle = sent(5, 2);
+  await withLlm(
+    () => jsonReply({ slides: [{ index: 0, title: shortTitle, bullets: ["Model bandlarni ham yubordi"] }] }),
+    async (calls) => {
+      const [out] = await repairThinSlides([goals], meta, tpl, {}, later(), later());
+      assert.equal(out.title, shortTitle, "faqat sarlavhali javob qabul qilinishi kerak");
+      assert.deepEqual({ ...out, title: goals.title }, goals, "sarlavhadan boshqa maydon o'zgardi");
+      assert.match(calls[0].user, /qaytaring: \{"index":0,"title":""\}/);
+      assert.doesNotMatch(calls[0].user, /"bullets":\[""\]/);
+      // C3: sarlavha so'raladi — «title O‘ZGARMAYDI» yo'q; faqat kesilgan deka — «chuqurlashtiring» yo'q.
+      assert.doesNotMatch(calls[0].system, /title O‘ZGARMAYDI/);
+      assert.match(calls[0].system, /layout HECH QACHON o‘zgarmaydi; title faqat «qaytaring» qatorida "title" so‘ralgan/);
+      assert.match(calls[0].system, /FAQAT qisqartiring — ma’no saqlansin/);
+      assert.match(calls[0].system, /so‘zma-so‘z, o‘sha son va tartibda/);
+      assert.doesNotMatch(calls[0].system, /chuqurlashtiring/);
+    },
+  );
+  // Yupqa slayd bor dekada — chuqurlashtirish qoidasi bor.
+  await withLlm(
+    () => jsonReply(good),
+    async (calls) => {
+      await repairThinSlides(deck(), meta, tpl, {}, later(), later());
+      assert.match(calls[0].system, /YUPQA slaydda .*chuqurlashtiring/);
+    },
+  );
+});
+
+test("P14c-A C1: yupqa + kesilgan slayd — butun ro'yxat modelniki (hammasi qayta yoziladi)", async () => {
+  const cap3 = bulletClipLimit(rules, tpl.visual, 3);
+  const slide = S({ layout: "bullets", bullets: ["Bir.", "Ikki.", clipTo(sent(40), cap3)] });
+  assert.deepEqual(reasonsOf(slide, rules, tpl.visual), ["clipped-text", "short-bullets"]);
+  const n = Math.min(rules.maxBullets, 4);
+  assert.notEqual(n, 3, "asos: javob soni asl sondan farq qilsin");
+  const fresh = Array.from({ length: n }, (_, i) => sent(14, i * 3));
+  await withLlm(
+    () => jsonReply({ slides: [{ index: 0, bullets: fresh }] }),
+    async (calls) => {
+      const [out] = await repairThinSlides([slide], meta, tpl, {}, later(), later());
+      assert.deepEqual(out.bullets, fresh);
+      assert.match(calls[0].user, /qaytaring: \{"index":0,"bullets":\[""\]\}/);
+    },
+  );
+});
+
+test("P14c-A C2: muqova sarlavhasi (uzun mavzu, «…») so'ralmaydi — yolg'iz bo'lsa chaqiruv ham yo'q", async () => {
+  const topic = `${sent(12)} ${sent(4, 3)}`;
+  assert.ok(topic.length >= 90, `asos: ${topic.length}`);
+  const cover = { id: "c", layout: "title", title: clipTo(topic, SLIDE_LIMITS.title), subtitle: "Ma’ruza" } as SlideModel;
+  await withLlm(
+    () => jsonReply({ slides: [{ index: 0, title: sent(5) }] }),
+    async (calls) => {
+      const out = await repairThinSlides([cover], meta, tpl, {}, later(), later());
+      assert.equal(calls.length, 0, "muqova uchun ta'mir chaqiruvi");
+      assert.equal(out[0], cover);
+    },
+  );
+  const input = [cover, ...deck().slice(1)];
+  await withLlm(
+    () => jsonReply({ slides: [{ index: 0, title: sent(5) }, ...good.slides] }),
+    async (calls) => {
+      const out = await repairThinSlides(input, meta, tpl, {}, later(), later());
+      assert.doesNotMatch(calls[0].user, /index=0 /);
+      assert.equal(out[0], cover, "muqova sarlavhasi almashdi");
+    },
+  );
+});
+
+test("P14c-A C5: 1–4 sinf circle blok ustuni 2+1 — o'ng (1 band) 110 qutisida, 60 da emas", async () => {
+  const k = extractMeta(TOOL_BY_ID["pro-slide"], { topic: "Suv", slideAudience: "school_1_4" } as never);
+  const kt = resolveSlideTemplate("lesson", k.topic);
+  const kr = bodyRules(k, kt.id);
+  const cap1 = clipLimit("colItem", kr, kt.visual, 1, undefined, NO_IMAGE);
+  const cap2 = clipLimit("colItem", kr, kt.visual, 2, undefined, NO_IMAGE);
+  assert.ok(kt.visual === "circle" && cap2 < cap1, `asos: ${cap2} < ${cap1}`);
+  const slide = { id: "b", layout: "twoCol", title: "Ikki tomon", leftTitle: "A", rightTitle: "B", left: [upTo(cap2 - 10), upTo(cap2 - 10, 3)], right: [clipTo(sent(40, 2), cap1)] } as SlideModel;
+  assert.deepEqual(reasonsOf(slide, kr, kt.visual), ["clipped-text"]);
+  const fixed = upTo(cap1 - 10, 5);
+  assert.ok(fixed.length > cap2, `asos: ${fixed.length} > ${cap2}`);
+  await withLlm(
+    () => jsonReply({ slides: [{ index: 0, left: slide.left, right: [fixed] }] }),
+    async () => {
+      const [out] = await repairThinSlides([slide], k, kt, {}, later(), later());
+      assert.deepEqual(out.right, [fixed], "o'ng band ikkinchi tomon soni bilan qirqildi");
+      assert.deepEqual(out.left, slide.left);
+    },
+  );
+});
+
+test("P14c-A C5: yupqa reja twoCol 3+2 javobi — har tomon O'Z sonidagi qutida (bold: 75 / 110)", async () => {
+  const cap2 = clipLimit("colItem", rBold, "bold", 2, undefined, NO_IMAGE);
+  const cap3 = clipLimit("colItem", rBold, "bold", 3, undefined, NO_IMAGE);
+  assert.ok(cap3 < cap2, `asos: ${cap3} < ${cap2}`);
+  const thin = S({ layout: "twoCol", leftTitle: "Eski", rightTitle: "Yangi", left: ["Bir."], right: ["Ikki."] });
+  const left = [upTo(cap3 - 5), upTo(cap3 - 5, 3), upTo(cap3 - 5, 6)];
+  const right = [upTo(cap2 - 8, 1), upTo(cap2 - 8, 4)];
+  assert.ok(right.every((x) => x.length > cap3), "asos: o'ng bandlar 3 band qutisidan uzun");
+  await withLlm(
+    () => jsonReply({ slides: [{ index: 0, left, right }] }),
+    async () => {
+      const [out] = await repairThinSlides([thin], m1011, tBold, {}, later(), later());
+      assert.deepEqual(out.left, left);
+      assert.deepEqual(out.right, right, "o'ng ustun chap ustun soni (3) qutisida qirqildi");
+    },
+  );
+});
+
+test("P14c-A C6: rad etilgan har slayd — indeks, maket va qolgan sabab bilan bitta qator", async () => {
+  const cap3 = bulletClipLimit(rules, tpl.visual, 3);
+  const input = [...deck(), { id: "g", layout: "bullets", title: "Dars maqsadlari", bullets: [sent(12), sent(12, 3), clipTo(sent(40), cap3)] } as SlideModel];
+  const lines = await captureWarn(() =>
+    withLlm(
+      () =>
+        jsonReply({
+          slides: [
+            { index: 1, bullets: ["Hali ham qisqa.", "Yana qisqa.", "Qisqa."] },
+            { index: 2, subtitle: sent(22) },
+            { index: 5, bullets: [sent(10)] },
+          ],
+        }),
+      async () => {
+        await repairThinSlides(input, meta, tpl, {}, later(), later());
+      },
+    ),
+  );
+  const rejected = lines.filter((l) => l.startsWith("[slide-quality] ta’mir rad etildi"));
+  assert.equal(rejected.length, 3, lines.join("\n"));
+  assert.ok(rejected.some((l) => /index=1 layout=bullets — qolgan sabablar: .*short-bullets/.test(l)), lines.join("\n"));
+  assert.ok(rejected.some((l) => /index=4 layout=process — javobda yo‘q/.test(l)), lines.join("\n"));
+  assert.ok(rejected.some((l) => /index=5 layout=bullets — javob yaroqsiz/.test(l)), lines.join("\n"));
+  assert.ok(lines.some((l) => /ta’mir qabul qilindi 1 \/ 4/.test(l)), lines.join("\n"));
+});
