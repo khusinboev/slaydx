@@ -17,7 +17,8 @@ import {
   type EditRules,
 } from "../lib/generation/slide-edit.ts";
 import { photoSlot } from "../lib/generation/slide-layout.ts";
-import { SLIDE_LIMITS, limitsFor } from "../lib/generation/slide-limits.ts";
+import { CLIP_FLOOR_CHARS, SLIDE_LIMITS, fitChars, limitsFor } from "../lib/generation/slide-limits.ts";
+import { imageYieldField } from "../lib/generation/slide-quality.ts";
 import { renumberSlides } from "../lib/generation/slide-write.ts";
 import { buildSlideDeck } from "../lib/generation/slides.ts";
 import type { SlideModel, SlideSrc } from "../lib/generation/slide-types.ts";
@@ -991,4 +992,33 @@ test("P11 (b): vizualsiz chaqiruvchi (writeSlideField, qisman qoidalar) — zaxi
   // Vizual berilsa — shu vizual o'lchovi.
   const v = writeSlideField(threeSteps(false), { f: "steps", i: 0, k: "text" }, STEP100, { ...g89Rules, visual: "circle" });
   assert.equal((v as { slide: SlideModel }).slide.steps![0].text, STEP100);
+});
+
+/*
+ * P12 sharhi (2-band): rasmli slaydda tahrir chegarasi XOM rasmli quti — server qo'riqchisi
+ * (`commitDocOps` → `imageYieldField`) ham xom `fitChars` bilan o'lchaydi. Ilgari `clipLimit`
+ * ning 24 belgilik poli bilan: bakalavr `rail` 4 bosqich (rasmli quti 4 belgi) tahriri 5–24
+ * belgini qabul qilar, server 400 `text_too_long` berib navbatdagi operatsiyalarni tashlardi.
+ * MUTATSIYA: `editLimits` da `raw: true` olib tashlansa — qizaradi.
+ */
+test("P12: rasmli rail 4 bosqich — tahrir server qo'riqchisi rad etadigan matnni qabul qilmaydi", () => {
+  const bachMeta = extractMeta(TOOL_BY_ID.slide, { topic: "Suv aylanishi", slideTemplate: "lecture", slideAudience: "students_bachelor" } as never);
+  const railDoc = (slides: SlideModel[]): AcademicDoc => ({ meta: bachMeta, titlePage: true, toc: true, sections: [], slides, slideTemplate: "lecture", slideVisual: "rail" });
+  const four: SlideModel = {
+    id: "s0",
+    layout: "process",
+    title: "To‘rt bosqich",
+    steps: ["A", "B", "C", "D"].map((t, i) => ({ n: String(i + 1), title: t, text: "" })),
+    image: { url: ASSET },
+  };
+  const deck = buildSlideDeck(railDoc([four]));
+  assert.equal(deck.visual, "rail");
+  assert.equal(deck.bodyType.stepsMax, 4);
+  const raw = fitChars("stepText", deck.bodyType, "rail", 4);
+  assert.ok(raw < CLIP_FLOOR_CHARS, `sinov asosi: rasmli quti ${raw} < ${CLIP_FLOOR_CHARS}`);
+  const r = applyDocOps(railDoc([four]), [{ op: "text", index: 0, src: { f: "steps", i: 0, k: "text" }, value: "Suv bug‘lanadi va bulut hosil qiladi" }], ctx);
+  assert.equal(r.ok, true);
+  const s = (r as { ok: true; doc: AcademicDoc }).doc.slides![0];
+  assert.ok(s.steps![0].text.length <= raw, `tahrir ${s.steps![0].text.length} > xom quti ${raw}`);
+  assert.equal(imageYieldField(s, deck.bodyType, "rail"), null, "server qo'riqchisi bu slaydni rad etmasligi kerak");
 });

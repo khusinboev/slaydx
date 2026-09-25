@@ -401,7 +401,9 @@ export function limitsFor(rules: LimitRules | BodyRules, counts: LimitCounts = {
   const images = opts.images ?? "both";
   const cols = counts.cols ?? table.tableCols;
   const rows = counts.rows ?? table.tableRows;
-  const m = (field: FitField, count?: number, r?: number) => clipLimit(field, rules, visual, count, r, { images });
+  // `raw` — `CLIP_FLOOR_CHARS` (24) polisiz, xom quti sig'imi (P12 sharhi: tahrir server qo'riqchisidan ko'p qabul qilmasin).
+  const m = (field: FitField, count?: number, r?: number) =>
+    opts.raw ? Math.min(fieldCap(field, rules, visual, count, r), fitChars(field, rules, visual, count, { rows: r, images })) : clipLimit(field, rules, visual, count, r, { images });
   const header = m("tableHeader", cols, rows);
   return {
     ...table,
@@ -419,7 +421,16 @@ export function limitsFor(rules: LimitRules | BodyRules, counts: LimitCounts = {
 export type LimitRules = Pick<BodyRules, "minPt" | "stepsMax" | "statsMax" | "tableCols" | "tableRows">;
 
 /** `limitsFor` ning vizual qatlami — deka vizuali va rasm rejimi. */
-export type LimitOpts = { visual?: SlideVisual; images?: "both" | "none" };
+export type LimitOpts = {
+  visual?: SlideVisual;
+  images?: "both" | "none";
+  /**
+   * Xom sig'im — `CLIP_FLOOR_CHARS` (24) polisiz (AUDIT-25 P12 sharhi, 2-band). Rasmli slayd
+   * tahririda: server qo'riqchisi (`commitDocOps` → `imageYieldField`) xom `fitChars` bilan
+   * o'lchaydi — 24 poli bilan tahrir 5–24 belgini qabul qilib, server 400 `text_too_long` berardi.
+   */
+  raw?: boolean;
+};
 
 /** O'lchov `planSlide` ga to'liq qoidani beradi — qisman `Pick` bilan jim noto'g'ri o'lchamasin. */
 function isBodyRules(r: LimitRules | BodyRules): r is BodyRules {

@@ -112,7 +112,14 @@ function isFullRules(r: EditRules): r is EditRules & BodyRules {
 function editLimits(rules: EditRules, s: SlideModel, counts: LimitCounts = {}): SlideLimitsFor {
   const visual = rules.visual;
   if (!visual || !isFullRules(rules)) return limitsFor(rules, counts);
-  return limitsFor(rules, counts, { visual, images: s.image ? "both" : "none" });
+  /*
+   * Rasmli slayd — XOM rasmli quti (`raw`, 24 belgilik polisiz): server
+   * qo'riqchisi (`commitDocOps`, P12) aynan xom `fitChars` bilan o'lchaydi.
+   * Pol bilan tahrir (masalan `rail` 4 bosqich, quti 4 belgi) 5–24 belgini
+   * «optimistik» qabul qilar, server esa 400 `text_too_long` bilan navbatdagi
+   * operatsiyalarni tashlardi (P12 sharhi, 2-band).
+   */
+  return s.image ? limitsFor(rules, counts, { visual, images: "both", raw: true }) : limitsFor(rules, counts, { visual, images: "none" });
 }
 
 // ═══════════════════════════════════════════════════════ Yordamchilar
@@ -989,10 +996,12 @@ export function applyDocOps(doc: AcademicDoc, ops: DocOp[], ctx: EditCtx): EditR
         /*
          * «Matn rasm bilan sig'maydimi» (AUDIT-25 P8) tekshiruvi BU YERDA
          * EMAS: bu modul izomorf (klient bundle), `imageYieldField` esa
-         * `slide-quality.ts` da (`llm.ts` ni tortadi). YANGI rasm faqat
-         * yuklash yo'lidan keladi — u serverda `uploadSlideImage`
-         * (`lib/server/slide-image.ts`) da 400 bilan rad etiladi. PATCH dagi
-         * satr URL faqat undo (avvalgi holatga qaytish) dan keladi.
+         * `slide-quality.ts` da (`llm.ts` ni tortadi). U serverda
+         * `commitDocOps` (P12, INT-03) ichida — `applyDocOps` dan keyin HAR
+         * tegilgan rasmli slayd uchun, ya'ni PATCH dagi `image`/`imageRestore`
+         * (va `text`/`list`/`set`/`insert`/`layout`) ham qo'riqlanadi: 400
+         * `text_too_long`. Tahrir chegarasi (`editLimits`, rasmli slaydda xom
+         * quti) shu qo'riqchidan ko'p qabul qilmaydi.
          */
         const alt = op.alt ? clipTo(op.alt, SLIDE_LIMITS.imageAlt) : "";
         slides[idx] = { ...s, ...keep, image: alt ? { url: op.url, alt } : { url: op.url } };
