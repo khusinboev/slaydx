@@ -763,6 +763,7 @@ test("INT-03 jadval: `imageYieldText` kalitlari = o'lchov o'qiydigan maydonlar (
   const keys = Object.fromEntries(Object.entries(IMAGE_YIELD_TABLE).map(([k, v]) => [k, [...v!.keys]]));
   assert.deepEqual(keys, {
     bullets: ["bullets"],
+    agenda: ["bullets"], // P11 INT-02: reja bandlari ham rasmga joy beradi
     twoCol: ["left", "right"],
     compare: ["left", "right"],
     process: ["steps"],

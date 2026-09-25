@@ -233,7 +233,14 @@ export function auditSlideDoc(doc: SlideDocLike): SlideAuditResult {
       const target = sectionSlide ?? group.reduce((a, b) => (a.idx < b.idx ? a : b));
       const want = normTitle(agendaBullets[i - 1]);
       const got = normTitle(target.s.title);
-      if (want && got && want !== got) {
+      /*
+       * P11 (INT-02): agenda bandi agenda QATORI sig'imida so'z chegarasida
+       * kesiladi (`syncAgenda` → `clipTo`), sarlavha esa to'liq qoladi.
+       * «…» bilan tugagan band sarlavhaning PREFIKSI bo'lsa — bu mos,
+       * kesik emas (qaror 2: agenda = sarlavha, sig'imgacha).
+       */
+      const clippedPrefix = want.endsWith("…") && got.startsWith(want.slice(0, -1).trimEnd());
+      if (want && got && want !== got && !clippedPrefix) {
         push(target.idx + 1, "plan-title-mismatch", `agenda "${agendaBullets[i - 1]}" ≠ slayd sarlavhasi "${target.s.title}"`);
       }
     }
@@ -324,13 +331,22 @@ export function auditSlideDoc(doc: SlideDocLike): SlideAuditResult {
       push(n, "truncated", `${field} kesilgan: "${text}"`);
     }
   };
+  /* Agenda bandi sarlavhaning kesilgan prefiksi bo'lsa — kesik hisoblanmaydi (yuqoridagi qoida). */
+  const planTitles = new Set(slides.filter((s) => typeof s.plan === "number").map((s) => normTitle(s.title)));
+  const isClippedPlanTitle = (b: string) => {
+    const w = normTitle(b);
+    if (!w.endsWith("…")) return false;
+    const pre = w.slice(0, -1).trimEnd();
+    for (const t of planTitles) if (t.startsWith(pre)) return true;
+    return false;
+  };
   slides.forEach((s, idx) => {
     const n = idx + 1;
     pushTrunc(n, "title", s.title);
     pushTrunc(n, "subtitle", s.subtitle);
     pushTrunc(n, "quote", s.quote);
     pushTrunc(n, "quoteBy", s.quoteBy);
-    (s.bullets ?? []).forEach((b, i) => pushTrunc(n, `bullets[${i}]`, b));
+    (s.bullets ?? []).forEach((b, i) => { if (!(s.layout === "agenda" && isClippedPlanTitle(b))) pushTrunc(n, `bullets[${i}]`, b); });
     (s.left ?? []).forEach((b, i) => pushTrunc(n, `left[${i}]`, b));
     (s.right ?? []).forEach((b, i) => pushTrunc(n, `right[${i}]`, b));
     (s.steps ?? []).forEach((st, i) => pushTrunc(n, `steps[${i}].text`, st.text));

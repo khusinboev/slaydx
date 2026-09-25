@@ -453,6 +453,13 @@ export type Delivered = {
    * ustama olmagan holat).
    */
   refundShare?: number;
+  /**
+   * HECH NARSA yetkazilmaganda (`got = 0`) qaytariladigan ulush (0..1).
+   * Yo'q bo'lsa 1 — to'liq qaytarish (`refundRatio`). Pro-slaydda 0.5:
+   * rasm umuman chiqmasa ham matn, maket va PPTX yetkazilgan; egasi
+   * qarori (AUDIT-25, 2026-09-25) — «hamma rasm yo'q» = narxning yarmi.
+   */
+  noneShare?: number;
 };
 
 /** Rasm bosqichi natijasi — `slide-images.ts` `attachSlideImages` dan. */

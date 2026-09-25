@@ -189,13 +189,24 @@ function planBullets(s: SlideModel, theme: SlideTheme, index: number, total: num
 
   const x = 5.3;
   const tw = 7.53;
-  const headBox: Box = { x, y: 0.6, w: Math.max(3, tw - ctx.reserve), h: 0.92 };
+  /*
+   * AUDIT-25 P9: reja nishoni FAQAT rasmli holatda — rasmsiz kolonka
+   * reja raqamini allaqachon yirik ko'rsatadi (ikki marta raqamlanmaydi).
+   */
+  const badged = Boolean(s.image?.url);
+  const head0: Box = { x, y: 0.6, w: Math.max(3, tw - ctx.reserve), h: 0.92 };
+  const headBoxT = badged
+    ? LAYOUT_KIT.badgedTitle(s, head0, 27, 17)
+    : { box: head0, size: fitSize(s.title, head0, 27, 17), above: false };
+  const headBox = headBoxT.box;
+  const headSize = headBoxT.size;
+  if (badged) LAYOUT_KIT.pushPlanBadge(layers, s, headBoxT, theme);
   layers.push({
     t: "text",
     box: headBox,
     text: s.title,
     color: theme.text,
-    size: fitSize(s.title, headBox, 27, 17),
+    size: headSize,
     bold: true,
     font: SERIF,
     src: { f: "title" },
@@ -267,7 +278,7 @@ function planAgenda(s: SlideModel, theme: SlideTheme, index: number, total: numb
       box: textBox,
       text: line,
       color: theme.text,
-      size: fitSize(line, textBox, ctx.bodyType.bodyPt, ctx.bodyType.minPt - 1),
+      size: LAYOUT_KIT.agendaFit(line, textBox, ctx.bodyType.bodyPt),
       valign: "middle",
       src: { f: "bullets", i },
     });
@@ -296,6 +307,13 @@ function planQuote(s: SlideModel, theme: SlideTheme, index: number, total: numbe
   const blockH = 0.05 + 0.45 + qH + (s.quoteBy ? 0.45 + byH : 0);
   const y0 = 1.7 + Math.max(0, (5.0 - blockH) / 2);
   layers.push({ t: "rect", box: { x: (W - 1.8) / 2, y: y0, w: 1.8, h: 0.05 }, fill: { color: theme.accent } });
+  // Reja nishoni (faqat `plan` li iqtibos) — chiziq ustida, markazda, serif.
+  LAYOUT_KIT.pushPlanBadgeAt(layers, s, (W - 1.2) / 2, y0 - 0.44, theme.titleMuted, {
+    size: 18,
+    w: 1.2,
+    align: "center",
+    font: SERIF,
+  });
   layers.push({
     t: "text",
     box: { x: 1.7, y: y0 + 0.5, w: tw, h: qH },
@@ -361,18 +379,22 @@ function planClosing(s: SlideModel, theme: SlideTheme, index: number, total: num
 
 /** Ikki ustun / qiyos — jurnal tarqatmasi: tik ajratgich, abzats matn. */
 function planTwoCol(s: SlideModel, theme: SlideTheme, index: number, total: number, ctx: PlanCtx): SlidePlan {
-  const { fitSize, fitLines, bulletGap, pushFooter, stripCut, W, H } = LAYOUT_KIT;
+  const { fitLines, bulletGap, pushFooter, stripCut, W, H } = LAYOUT_KIT;
   const layers: SlideLayer[] = [];
   layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.bg } });
   const zoneW = ZONE_W - stripCut(s);
 
-  const headBox: Box = { x: TEXT_X, y: 0.6, w: Math.max(3, zoneW - ctx.reserve), h: 0.95 };
+  const headBoxT = LAYOUT_KIT.badgedTitle(s, { x: TEXT_X, y: 0.6, w: Math.max(3, zoneW - ctx.reserve), h: 0.95 }, 28, 18);
+  const headBox = headBoxT.box;
+  const headSize = headBoxT.size;
+  // AUDIT-25 P9: reja nishoni sarlavha chapida, serif (jurnal tili).
+  LAYOUT_KIT.pushPlanBadge(layers, s, headBoxT, theme);
   layers.push({
     t: "text",
     box: headBox,
     text: s.title,
     color: theme.text,
-    size: fitSize(s.title, headBox, 28, 18),
+    size: headSize,
     bold: true,
     font: SERIF,
     src: { f: "title" },

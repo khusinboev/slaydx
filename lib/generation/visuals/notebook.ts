@@ -86,14 +86,23 @@ function pushPolaroid(
 
 /** Sarlavha + qo'sh chiziq (daftar ustuni) — kontent maketlari uchun. */
 function pushNotebookHead(layers: SlideLayer[], s: SlideModel, theme: SlideTheme, reserve: number): void {
-  const { fitSize } = LAYOUT_KIT;
-  const headBox: Box = { x: TEXT_X + 0.25, y: 0.45, w: Math.max(3, ZONE_W - 0.25 - reserve), h: 0.8 };
+  const { badgedTitle, pushPlanTab, PLAN_TAB_ROOM } = LAYOUT_KIT;
+  const headBoxT = badgedTitle(s, { x: TEXT_X + 0.25, y: 0.45, w: Math.max(3, ZONE_W - 0.25 - reserve), h: 0.8 }, 25, 16, PLAN_TAB_ROOM);
+  const headBox = headBoxT.box;
+  const size = headBoxT.size;
+  /*
+   * AUDIT-25 P9: reja nishoni — bo'lim slaydidagi DAFTAR TABI tilida
+   * (to'q blok, aksent qirra), sarlavha chapida. Ilgari u hoshiyada
+   * yalang «01» edi va pastdagi band raqamlari «01 02 03» bilan bir
+   * registrda o'qilardi (sharh 2) — tab boshqa ma'noni ko'rsatadi.
+   */
+  pushPlanTab(layers, s, headBoxT, theme);
   layers.push({
     t: "text",
     box: headBox,
     text: s.title,
     color: theme.text,
-    size: fitSize(s.title, headBox, 25, 16),
+    size,
     bold: true,
     src: { f: "title" },
   });
@@ -279,7 +288,7 @@ function planBullets(s: SlideModel, theme: SlideTheme, index: number, total: num
 }
 
 function planAgenda(s: SlideModel, theme: SlideTheme, index: number, total: number, ctx: PlanCtx): SlidePlan {
-  const { fitSize, pushFooter, W, H } = LAYOUT_KIT;
+  const { pushFooter, W, H } = LAYOUT_KIT;
   const layers: SlideLayer[] = [];
   layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.bg } });
   pushGrid(layers, theme);
@@ -305,7 +314,7 @@ function planAgenda(s: SlideModel, theme: SlideTheme, index: number, total: numb
       box: textBox,
       text: line,
       color: theme.text,
-      size: fitSize(line, textBox, ctx.bodyType.bodyPt, ctx.bodyType.minPt - 1),
+      size: LAYOUT_KIT.agendaFit(line, textBox, ctx.bodyType.bodyPt),
       valign: "middle",
       src: { f: "bullets", i },
     });
@@ -339,6 +348,8 @@ function planQuote(s: SlideModel, theme: SlideTheme, index: number, total: numbe
     size: 58,
     bold: true,
   });
+  // Reja nishoni (faqat `plan` li iqtibos) — tirnoqning o'ngida, varaqchada.
+  LAYOUT_KIT.pushPlanBadgeAt(layers, s, note.x + 1.3, note.y + 0.55, theme.accentInk, { size: 18 });
   const text = s.quote || s.title;
   const tw = note.w - 0.8;
   const qSize = fitSize(text, { x: 0, y: 0, w: tw, h: 2.1 }, 24, 14);

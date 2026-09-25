@@ -493,3 +493,132 @@ The code change is the one field P8 left out: bullets. P8's own rule is "normali
 
 - **N1.** `imageYieldField` compares `clipLimit` values, which include `CLIP_FLOOR_CHARS` 24 and the static cap, not raw `fitChars`. In a with-image box of fewer than 24 characters, a 24-character text is treated as fitting. This is an edge case.
 - **N2.** The `rules` parameter of `plannedImageSlots` and `attachSlideImages` is optional. `image-lab` and other callers keep the old behaviour, as intended. Worth one line in the `AttachImageOpts` doc saying that the `buildSlideAcademicDoc` path must always pass it (it does, at `slide-write.ts:1128`).
+
+---
+
+# P11 review — 74d9446 (+ addendum 9c20f85)
+
+- **Scope:** P11's own files: `git diff 6118d66..74d9446 -- lib tests` (`slide-limits.ts`, `slide-quality.ts`, `slide-edit.ts`, `slide-write.ts` + tests), plus `git diff 74d9446..9c20f85`.
+- **Heavy commands:** 2 of 2, run through `heavy2.sh`.
+  1. `slide-quality`, `slide-limits`, `client-bundle-guard`, `client-boundary`, `bundle-split`: **76/76 pass**. The same run included a module-init cycle probe (`scratchpad/p3rev/cycle.sh`: every cycle member imported **first** in a fresh process, then `clipTo`/`clipLimit`/`QUIZ_LETTERS` called).
+  2. `slide-plan` + `slide-edit` (at `74d9446`): **111/111 pass**. The same run included an agenda-capacity and cold-cost probe (`scratchpad/p3rev/agenda-probe.mts`).
+- `9c20f85` was reviewed by reading only; my heavy budget was already spent.
+
+## Verdict: **CHANGES** (2 blocking, 1 should-fix)
+
+The core is right. `clipLimit` follows the deck visual, with the tightest-visual table used only as a fallback. The prompt rule is "5 words, otherwise the no-image box", and the detector uses the same rule. Counts are the audience limit ∩ `layoutWordTargets` on every path. The quote and `coerceLayout` clips are correct, and so is the P8 bullets fix (`bulletItems`). What remains is the clip edge that `raw` opened and the agenda contract.
+
+## CHANGES
+
+1. **Blocking (addendum `9c20f85`): `clipTo(text, 0)` returns almost the whole text, and the `raw` editor path can pass 0.**
+   - **Where:** `lib/generation/slide-limits.ts clipTo`. With `n = 0`: `safeSlice(t, -1)` is `t.slice(0, -1)`, and `Math.ceil((0 − 1) × 0.6) = −0`, so the word-boundary branch always succeeds. Example: «Suv bug‘lanadi va bulut hosil qiladi» → «Suv bug‘lanadi va bulut hosil…» (30 characters for a 0-character box).
+   - **How 0 happens:** `fitChars` returns 0 when not even one word fits (`probeText(0)`). `limitsFor(…, { raw: true })` no longer has the 24-character floor, so a new step, or a field whose old text is empty, gets `editLimit(0, …, 0) = 0`.
+   - **The result:** the editor writes a long «…» text optimistically. The P12 guard then answers 400 `text_too_long`, and `useDocEdit` drops the queued ops.
+   - **Fix:**
+     - (a) `clipTo`: `if (n <= 0) return ""; if (n === 1) return t ? "…" : "";`, with a test next to the existing `clipTo` tests.
+     - (b) In `writeSlideField`, on an **image** slide where the raw limit is below `CLIP_FLOOR_CHARS` and the value would be cut, **refuse** with a local error (for example «Rasm yonida bu maydonga matn sig‘maydi — rasmni olib tashlang yoki maketni o‘zgartiring») instead of writing «Suv…». Today the rail 4-step image box (4 characters) silently turns a sentence into «Suv…».
+   - **Guard tolerance of ≤ 1 character: not recommended.** A lone «…» in a 0-character box still overflows, and it would make the guard and the editor disagree. The editor should refuse instead.
+   - **`raw` does not leak into generation:** its only use is `slide-edit.ts:122`. Neither `normalizeSlide`, `coerceLayout`, repair nor the prompt passes it.
+2. **Blocking: agenda clipping breaks "agenda == plan titles" and trips P5's live gate.**
+   - **The change:** INT-02 now clips agenda items at `min(bulletChars, clipLimit("agenda", …, n, NO_IMAGE))` (`slide-write.ts syncAgenda`).
+   - **Probe:** titles are ≤ 72 characters, but the agenda box holds much less for schools:
+     - school_1_4 / 5_7 with 5–6 items: 27–53 characters (split, story, editorial, dashboard);
+     - `dashboard` school_1_4 with 3 items: 41.
+     Adults (general, bachelor) are 72 everywhere.
+   - **Consequence:** in school decks, agenda items become «…» cuts of the titles. `scripts/slide-audit.mts:233-237` compares `normTitle(agenda) !== normTitle(title)`, so it reports `plan-title-mismatch` for every clipped item, and its truncation rule (`TRUNCATED_RE`) counts them too. The live gate will fail on correct output. Decision 2's "agenda = sarlavha" also stops being literally true.
+   - **Fix (two parts):**
+     - (a) **Prompt:** give plan-slide titles a word maximum from the agenda box (`layoutWordTargets` → `agendaTitleMax`, one brief line «reja slaydi sarlavhasi ≤ N so‘z»), so clipping becomes rare;
+     - (b) **P5's `slide-audit.mts`:** an agenda item that equals `clipTo(title, cap)`, i.e. a prefix of the title ending in «…», is a match and not a truncation.
+
+     Assign (b) to the P5 owner. Record the contract nuance in `docs/AUDIT-25.md` decision 2.
+
+## Should-fix
+
+3. **The editor's prose fields are still not visual-aware.**
+   - **What is covered:** `editLimits` covers only stats, steps, quiz and table (`slide-edit.ts:369-472`).
+   - **What is not:** everything else still uses static or audience-only caps:
+     - bullets and agenda: `rules.bulletChars` (`:198-201`);
+     - column items: `SLIDE_LIMITS.colItem` 110 (`:369`, `:693`);
+     - quote: `SLIDE_LIMITS.quote` 280 (`:350`, `:722`);
+     - subtitles: `subtitleMax` (`:191`).
+   - **Why it matters:** on a **no-image** slide, an edit can exceed the box that generation clips to and overflow. This is P8 CHANGE 1's bullets case, now fixed in generation but not in the editor. Examples: the 8–9 grade circle 4-item column holds about 60 characters but the editor allows 110; the agenda editor allows `bulletChars` where the box holds 27–53.
+   - **Fix:** route these through `clipLimit(field, rules, visual, count, undefined, NO_IMAGE)` with the W7 never-shrink `editLimit`.
+     - Keep **`NO_IMAGE` for prose fields even on image slides**, and leave image-slide overflow to P12's guard, which returns an explicit 400 message. This keeps every prose field on the same UX.
+     - Today `stepText` on an image slide is silently cut to the raw with-image box (200 with «…»), while `colItem` gets P12's 400. Consider moving `stepText` to the same rule, keeping raw with-image clipping only for the label fields (stat label, cell, header, quiz option).
+
+## Answers
+
+1. **Module-init cycle and client safety.** Safe.
+   - Every real entry imported first initializes correctly: `slide-limits`, `slide-layout`, `slide-quiz`, `slide-layout-extra`, `slide-edit`, `slide-quality`, `slides`, `visuals/index`, `slide-custom`.
+   - At module level, `slide-limits` reads nothing from `slide-layout`, `slide-themes` or `visuals/spec` (`allVisuals`/`probeTheme` are lazy; `layerFits`/`probeLayers` read `LAYOUT_KIT` at call time). `slide-quiz`'s top-level `const clip = clipTo` binds a hoisted function declaration, which is safe in the TDZ. `slide-layout-extra` reads `QUIZ_LETTERS` and `LAYOUT_KIT` only inside functions.
+   - The one failing entry is `visuals/circle` imported first («Cannot access 'circleVisual' before initialization»). That is the **pre-existing** `slide-layout ↔ visuals/*` cycle, not P11's, and no code imports a visual module directly.
+   - `slide-layout` pulls nothing server-only. `client-bundle-guard`, `client-boundary` and `bundle-split` are green.
+   - The viewer bundle already contains `slide-layout` (through `SlideCanvas`), so there is no new weight there.
+2. **Rotation cost.**
+   - `fitChars` is memoised in a module `Map` keyed by field | count | rows | visual | bodyPt | minPt | images.
+   - Measured cold cost is **2–3 ms per rotated bullets key**, warm 0.01 ms. A full sweep of 480 agenda keys took 695 ms cold. `normalizeSlide` hits the cache after the first slide.
+   - Minor: the key omits `agendaMax`, while the agenda probe uses `max(agendaMax, n)`. Calls with the same `n` but a different `agendaMax > n` could reuse a stale value. Add `agendaMax` to the key for `field === "agenda"`.
+3. **`max(24, …)` floor vs the 5-word rule.** Consistent.
+   - The prompt uses the with-image box if it holds ≥ 5 words for a prose field, otherwise the no-image box, always × 0.85. The writer always clips at the no-image box, so "prompt ≤ 0.85 × clip" holds.
+   - The 24-character floor only matters when the no-image box itself is under 24 characters. Then the prompt asks for ≤ 0.85 × box and only an overshoot overflows. That is a layout problem, as P3 documented.
+   - The floor must **not** apply on the editor's image path, which 9c20f85 does correctly, but see CHANGE 1 for the 0 case.
+4. **Agenda images and `want`.** `imageYieldField` now checks `agenda`, and `plannedImageSlots` excludes yielded slides **before** `report.want`, which P8 left unchanged. So `got ≤ want` and there is no refund. The agenda text is clipped at the no-image agenda box; if it does not fit beside the image, the image yields.
+5. **`syncAgenda` order.** `applyResearchRefs → syncAgenda(visual) → slideFloor → repair → syncAgenda(visual) → finalizeQuiz`. Clipping never changes the slide count, so the floor check is unaffected, and repair never touches titles. This is correct; the only problem is the contract issue in CHANGE 2.
+6. **W7 invariants.**
+   - `editLimit(audit, static, previousLength)` (never shrink) wraps every `editLimits` result.
+   - `afterConvert` measures the post-convert image state.
+   - The `slide-edit` suite, including the undo round trip, is green (111 with `slide-plan`).
+   - `9c20f85`'s rail test pins raw ≤ the guard and has a named mutation.
+7. **P12 interaction (branch `worktree-agent-a45f8181…`, `tests/slide-image-edit.test.mts`).**
+   - **No P12 test flips.** Every text-edit test there edits twoCol `left`/`right` (`colItem`, still static 110 in the editor), or uses `set`/`insert`/`image`/`imageRestore`, which are not clipped. `LONG_ITEM` (≈ 100 characters) therefore still reaches the guard and gets 400.
+   - **P11 produces no 422s.** `writeSlideField` clips; it does not fail.
+   - **The real divergence:** with `9c20f85`, step, stat, table and quiz edits on image slides are clipped to the raw with-image box by the editor, so the guard never sees them. The user gets 200 with «…», where `colItem` gets 400 with a message. The exception is the 0-character box, which gets 400 because of the `clipTo` bug in CHANGE 1.
+   - **If CHANGE 3 is done with `"both"` for `colItem` instead of `NO_IMAGE`,** these P12 tests would flip to 200:
+     - INT-03 (1), (1b), (5d) and (6b);
+     - the monotone "uzaytirish — 400" commit case.
+   - **Merge note:** P12 rewrites `imageYieldField` as `imageOverflowChars` in `slide-quality.ts`. That merge must keep P11's `agenda` check and import `fitChars` from `slide-limits.ts`. `edit-adapters.ts yieldText` already includes `s.bullets`, so agenda edits are covered.
+
+## Non-blocking
+
+- **N1.** When the visual is known, the cap is now exactly the model capacity (`fitChars`), with no × 0.88. That is acceptable because bold width is now modelled (`CHAR_EM_BOLD`) and the prompt keeps its 15 % headroom. Keep an eye on LibreOffice PDF parity in the next live run.
+- **N2.** `clipTo("Salom dunyo bu test", 10)` gives «Salom dun…», because the 60 % boundary rule allows a mid-word cut for short limits. This is P3's documented behaviour and matters only below about 20 characters, which the editor's raw path can now reach. Covered by CHANGE 1(b).
+
+---
+
+# P11 re-review — f816372
+
+- **Scope:** `git diff 9c20f85..f816372` (`slide-edit.ts`, `slide-limits.ts` + tests).
+- **Heavy command:** 1 run through `heavy2.sh`. `tests/slide-edit.test.mts` + `tests/slide-limits.test.mts`: **97/97 pass**. The same run included a list-op probe (`scratchpad/p3rev/listop-probe.mts`, 8–9 grade `lesson`/circle, twoCol with 4 items per column).
+
+## Verdict: **CHANGES** (one item, small)
+
+1a, 1b, 3 and the memo key are done correctly. One W7 regression was introduced by the new per-position never-shrink in the `list` op.
+
+## CHANGES
+
+1. **The `list` op's never-shrink is keyed by position, so reordering truncates existing text.**
+   - **Where:** `slide-edit.ts` `case "list"` (≈ `:1106-1112`): `editLimit(caps.chars, staticCap, prev[k]?.length ?? 0)`. `prev[k]` is the item that **used to be at position k**, not the item being written.
+   - **Probe:** a column of `[short(17), long, short, short]` sent back as `[long, short, short, short]` (the same text, reordered in the whole-box editor). The long item is clipped to **43 characters**, «Orol dengizining qurishi mintaqadagi iqlim…», because position 0 used to hold a 17-character item and the 4-item circle column box is 43.
+   - **Why it is a regression:** nothing was deleted or rewritten, yet existing text silently shrank. This breaks W7 ("existing text is never shortened by an edit"). The `text` op is not affected: editing another item leaves the long one intact.
+   - **Fix:** base never-shrink on the item's own identity. An item that is **byte-identical to any previous item** in that list is kept as is (it is only moved). Other items use `editLimit(caps.chars, staticCap, <length of the previous item it replaces, or 0>)`. A simple form: `prev.includes(x) ? x : clipTo(x, editLimit(caps.chars, staticCap, prev[k]?.length ?? 0))`.
+   - **Test:** reorder a long item in a 4-item column and assert it stays unchanged. The existing «list op same order» case covers the same-order path.
+
+## Checked (OK)
+
+- **1a (`slide-limits.ts clipTo`):** `n ≤ 0 → ""` and `n === 1 → "…"`, both after the `t.length <= n` fast path, so empty input returns "". Tests were added.
+- **1b (`TIGHT_IMAGE_ERROR`):**
+  - `tooTight` refuses only on an **image** slide with a known visual and full rules, when the effective (never-shrink) limit is below `CLIP_FLOOR_CHARS` **and** the value would actually be cut (`clipTo(v, max) !== clipTo(v, ∞)`). Clearing a field or entering short text that fits is still allowed.
+  - It applies to the label fields only: stat label, step title (including a new step), quiz option, table cell and header.
+  - `stepText` moved to the prose rule, so on an image slide it uses the no-image box and the P12 guard owns any overflow.
+- **How the refusal surfaces:**
+  - `writeSlideField` → `{ ok: false, error }` → `applyDocOps` `fail(error, at)`, the same path as every other local edit error («Bu maketda … yo'q», «Katak indeksi noto'g'ri»).
+  - In the viewer, `useDocEdit.push` applies ops **locally first** and on `!res.ok` calls `setError(res.error)` (`components/files/useDocEdit.ts:624-627`). The message is shown and nothing is queued or sent.
+  - Server side, the same failure becomes 422 in `commitDocOps` (`slide-commit.ts:44`), and `useDocEdit` treats 400/422 as "not applicable" (`:429`).
+  - So the user sees the Uzbek message either way. It is a 422 and not a 400, which matches the other `applyDocOps` refusals.
+- **3 (prose fields):**
+  - Bullets/agenda (`bulletProse`), column items and quote (`proseLimit`), and the section/closing subtitle (`subtitleEditMax`) all use `clipLimit(…, NO_IMAGE)`, capped by the static ceilings and wrapped in `editLimit` in the text op. Counts are measured **after** the write (`countAfter`), and `convertLayout` and `listCap` follow the same rule.
+  - On image slides the prose fields also use the no-image box, so overflow is left to the P12 guard (400 with a message). The UX is now the same across prose fields, and none of P12's INT-03 tests flip.
+  - `sanitizeSlideModel` stays static, which is correct (it is a safety filter, not a layout rule).
+- **`listCap` signature:** the new 4th parameter `count?` is optional. `components/viewers/SlideEditor.tsx:331` calls `listCap(slide, edit.field, bodyType).max`. Only `.max` is read, and it does not depend on `count` or `visual`, so nothing breaks.
+- **Memo key:** `fitChars` adds `|agendaMax` for `field === "agenda"`.
+- **Note (pre-existing, no change):** a `list` op in the same order still clips a legacy item longer than the static ceiling (probe: a 121-character column item → 110). That is W7's documented "never-shrink up to the static cap", and the `text` op leaves such items untouched.

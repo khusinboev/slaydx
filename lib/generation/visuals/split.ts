@@ -175,13 +175,28 @@ function planBullets(s: SlideModel, theme: SlideTheme, index: number, total: num
   pushHalves(layers, theme);
   const x = 0.85;
   const tw = 5.0;
-  const headBox: Box = { x, y: 1.0, w: tw, h: 1.9 };
+  let headBox: Box = { x, y: 1.0, w: tw, h: 1.9 };
+  const headSize = fitSize(s.title, headBox, 28, 17);
+  /*
+   * AUDIT-25 P9: reja nishoni to'q yarmda, sarlavhaning birinchi qatori
+   * USTIDA — siyoh balandligiga qarab tushadi, qisqa sarlavhadan uzilib
+   * qolmaydi; `titleMuted`/`titleBg` — o'lchangan juft. Sarlavha pastga
+   * tekislangan: quti faqat YUQORIDAN nishon ostigacha qisqaradi — matn
+   * joyidan qimirlamaydi, nishon sarlavha qutisiga kirmaydi.
+   */
+  if (LAYOUT_KIT.planBadge(s)) {
+    const ink = Math.min(headBox.h, LAYOUT_KIT.inkHeight(s.title, tw, headSize, LAYOUT_KIT.CHAR_EM_BOLD));
+    const badgeY = Math.max(0.5, headBox.y + headBox.h - ink - 0.46);
+    LAYOUT_KIT.pushPlanBadgeAt(layers, s, x, badgeY, theme.titleMuted, { size: 18 });
+    const top = Math.max(headBox.y, badgeY + 0.4);
+    headBox = { ...headBox, y: top, h: headBox.y + headBox.h - top };
+  }
   layers.push({
     t: "text",
     box: headBox,
     text: s.title,
     color: theme.titleText,
-    size: fitSize(s.title, headBox, 28, 17),
+    size: headSize,
     bold: true,
     valign: "bottom",
     src: { f: "title" },
@@ -264,15 +279,29 @@ function planAgenda(s: SlideModel, theme: SlideTheme, index: number, total: numb
       align: "center",
       valign: "middle",
     });
-    const box: Box = left
+    let box: Box = left
       ? { x: 0.85, y, w: SEAM - 0.78 - 0.85 - 0.22, h: rowH }
       : { x: SEAM + 0.98, y, w: 13.333 - 0.85 - (SEAM + 0.98), h: rowH };
+    /*
+     * AUDIT-25 INT-02: ustun tor (4.7″) — 72 belgili reja bandi (reja
+     * slaydining sarlavhasi) o'z qatoriga auditoriya polida sig'masdi
+     * (1–4-sinf 40 belgida ham 106 %). Bandlar navbatma-navbat chap/o'ng
+     * yarimda — qo'shni qator BOSHQA yarimda, ya'ni bandning matni
+     * yuqori-pastga qo'shni qatorlar balandligigacha kengaya oladi
+     * (kesishmaydi). Faqat polda sig'maganda — qisqa band eskicha.
+     */
+    const fitsRow = LAYOUT_KIT.inkHeight(line, box.w, ctx.bodyType.minPt) <= box.h;
+    if (!fitsRow && n > 1) {
+      const top = Math.max(2.0, y - rowH * 0.45);
+      const bottom = Math.min(6.8, y + rowH * 1.45);
+      box = { ...box, y: top, h: bottom - top };
+    }
     layers.push({
       t: "text",
       box,
       text: line,
       color: left ? theme.titleText : theme.text,
-      size: fitSize(line, box, ctx.bodyType.bodyPt, ctx.bodyType.minPt - 1),
+      size: LAYOUT_KIT.agendaFit(line, box, ctx.bodyType.bodyPt),
       align: left ? "right" : "left",
       valign: "middle",
       src: { f: "bullets", i },
@@ -297,6 +326,11 @@ function planQuote(s: SlideModel, theme: SlideTheme, index: number, total: numbe
     size: 78,
     bold: true,
     font: "Georgia",
+    valign: "middle",
+  });
+  // Reja nishoni (faqat `plan` li iqtibos) — tirnoqning o'ngida.
+  LAYOUT_KIT.pushPlanBadgeAt(layers, s, x + 1.2, 0.95 + (1.2 - 0.36) / 2, theme.titleMuted, {
+    size: 18,
     valign: "middle",
   });
   const quote = s.quote || s.title;
@@ -407,20 +441,24 @@ function planClosing(s: SlideModel, theme: SlideTheme, index: number, total: num
  * Rasm tasmasi (`stripCut`) bo'lsa butun kompozitsiya shuncha torayadi.
  */
 function planCompare(s: SlideModel, theme: SlideTheme, index: number, total: number, ctx: PlanCtx): SlidePlan {
-  const { H, fitSize, fitLines, stripCut, pushFooter, BULLET_GAP_MIN } = LAYOUT_KIT;
+  const { H, fitLines, stripCut, pushFooter, BULLET_GAP_MIN } = LAYOUT_KIT;
   const layers: SlideLayer[] = [];
   const cut = stripCut(s);
   const zoneW = 13.333 - cut;
   const seam = zoneW * 0.492;
   const top = 1.5;
   layers.push({ t: "rect", box: { x: 0, y: 0, w: 13.333, h: H }, fill: { color: theme.surface } });
-  const titleBox: Box = { x: 0.85, y: 0.36, w: zoneW - 1.7 - ctx.reserve, h: 0.82 };
+  const titleBoxT = LAYOUT_KIT.badgedTitle(s, { x: 0.85, y: 0.36, w: zoneW - 1.7 - ctx.reserve, h: 0.82 }, 26, 17);
+  const titleBox = titleBoxT.box;
+  const titleSize = titleBoxT.size;
+  // AUDIT-25 P9: reja nishoni sarlavha chapida, bir o'qda.
+  LAYOUT_KIT.pushPlanBadge(layers, s, titleBoxT, theme, { titleValign: "middle" });
   layers.push({
     t: "text",
     box: titleBox,
     text: s.title,
     color: theme.text,
-    size: fitSize(s.title, titleBox, 26, 17),
+    size: titleSize,
     bold: true,
     valign: "middle",
     src: { f: "title" },

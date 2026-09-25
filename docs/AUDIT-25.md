@@ -21,7 +21,7 @@ Ko'rilgan dekalar: `eval-out/live/Orol dengizi…pptx` (pro-slide, open_lesson, 
    tartib rejadagidek. Bu slaydlar hech qachon qirqilmaydi: avval to'ldirgichlar, keyin yon beruvchi standart
    bloklar, keyin test soni 1 gacha va kalit; shunda ham sig'masa — `planCapacity` formada cheklaydi (3-band).
    Shablon `section` beat'i bo'lsa va sig'im yetsa band = `section` + mazmun (2 slayd), aks holda faqat mazmun.
-2. **Reja slaydi mazmundan quriladi.** Modelga reja bandi i uchun slayd roli beriladi («REJA i-band: …»); yozuvdan keyin
+2. **Reja slaydi mazmundan quriladi.** (Nuans, P11: agenda bandi agenda qatori sig'imidan uzun bo'lsa so'z chegarasida «…» bilan kesiladi — sarlavhaning prefiksi; `slide-audit` buni mos deb hisoblaydi.) Modelga reja bandi i uchun slayd roli beriladi («REJA i-band: …»); yozuvdan keyin
    `agenda.bullets[i-1] := plan=i slaydining sarlavhasi` (deterministik, yagona manba). Model yozgan agenda
    ustiga yoziladi. Sarlavhalar boshidagi «1.», «1)» tartib raqami olib tashlanadi (raqam maketdan keladi).
 3. **`planCapacity(v)`** (`slide-params.ts`, klient-xavfsiz): berilgan `slideCount/blocks/quizCount/agendaSlide/
@@ -88,8 +88,13 @@ Shartnomalar (yakuniy, review'lardan keyin):
   kirmaydi (qisman qaytarish yo'q). Egasi (a) variantini tanladi: qoida qabul qilindi, pro-slayd tavsifi
   «Har mos slaydga AI chizgan rasm» (`lib/tools.ts`), narx o'zgarmaydi.
 
+- **D2 — pro-slayd rasm qaytarishi (P6 review / INT-06):** «hamma AI rasm yo'q» holatida 100 % emas, **50 %** (`Delivered.noneShare = 0.5`,
+  `delivered.ts`); qisman kamomad — D1 bo'yicha qaytarilmaydi; slaydlar kam bo'lsa — proporsional. Egasi (a) variantini tanladi (2026-09-25).
+
 ### Tekshiruv
 - Gate `slides3-pre` (879f495): typecheck 0, lint 0, unit yashil, viewer, UI, build, fresh-Postgres smoke — hammasi yashil.
+- Gate `slides3-mid` (7d4525c, W7+P10+P8+docs dan keyin): typecheck 0, lint 0, unit **3 412/3 412**, viewer 248/248, UI **475/475**, build (first-load 221/220 kB), smoke — hammasi yashil.
+- Review'lar: INTEGRATION (1 P1 + 5 P2 + 8 P3 → P9/P11/P12/P13 ga taqsimlandi), OLDDECKS — SAFE (6 eski deka piksel-bo'yicha bir xil, faqat mo'ljallangan raqamlar olib tashlangan), PRE-DEPLOY — GO-WITH-FIXES (deploy commit'ida gate, scope muzlatish, qaytarish qoidasi tasdig'i).
 - Jonli «keyin» (7 deka, real Gemini): reja qamrovi 7/7 (oldin 0/6), tartib raqami sizishi 0, halol skelet; ko'z bilan: Orol 4/4, Kvant 5/5 band o'z slaydi bilan, sarlavha = reja bandi.
 - Qolgan (P8/P9/P10 bilan yopildi): «…» kesiklar, reja slaydida raqam, redirect URL — yakuniy jonli tekshiruv pastda.
 
@@ -101,6 +106,9 @@ Shartnomalar (yakuniy, review'lardan keyin):
 - `sanitizeSlideModel` bo'sh satrli `kicker/subtitle/footer` kalitini tashlab yuboradi (render bir xil, lekin undo JSON tengligi qat'iy emas) — testga qulflash yoki `""` saqlash.
 - Vizuallarda bold sarlavha o'lchovi `CHAR_EM_BOLD`siz (`inkHeight`) — `layerFits` bilan kelishtirish (P2 titles follow-up).
 - circle twoCol karta sarlavhasi birinchi band bilan ustma-ust (eski nuqson, AUDIT-25 dan oldin ham bor edi).
+- Agenda ichida element o'lchamlari har xil (uzun band kichikroq) — bitta o'lcham qoidasi (kichik follow-up).
+- Split vizualida o'rta uzunlikdagi eski agenda bandlari endi kattaroq chiziladi (overflow yo'q; qabul qilingan yaxshilanish).
+- Sarlavhalar `fitSize`da bold kengligi 0.55 bilan o'lchanadi (0.60 kerak) — «titles» follow-up.
 - Stok rasm mosligi (Pexels qidiruvi `imageHint` bo'yicha) — mavzuga yaqin emas ba'zan; bu sprint doirasidan tashqarida.
 - Pro-slayd rasm ulushi bo'yicha qaytarish (audit P6 review taklifi: 0.5–0.75 ulush) — egasi qarori kutilmoqda.
 

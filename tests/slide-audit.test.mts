@@ -142,6 +142,21 @@ test("reja sarlavhasi mos emas: plan-title-mismatch", () => {
   assert.deepEqual(uniqueKinds(issues), ["plan-title-mismatch"]);
 });
 
+test("P11/INT-02: agenda bandi sarlavhaning kesilgan prefiksi («…») bo'lsa — mos, kesik EMAS", () => {
+  const doc = goodDeck();
+  const agenda = doc.slides.find((s) => s.layout === "agenda")!;
+  const section1 = doc.slides.find((s) => s.layout === "section" && s.plan === 1)!;
+  section1.title = "Orol dengizining qurishi sabablari va sug'orish tizimlarining ta'siri";
+  agenda.bullets![0] = "Orol dengizining qurishi sabablari va…";
+  const { ok, issues } = auditSlideDoc(doc);
+  assert.equal(ok, true, JSON.stringify(issues));
+  // Prefiks BO'LMASA — hamon nomuvofiqlik.
+  agenda.bullets![0] = "Boshqa mavzu haqida…";
+  const bad = auditSlideDoc(doc);
+  assert.equal(bad.ok, false);
+  assert.ok(uniqueKinds(bad.issues).includes("plan-title-mismatch"));
+});
+
 test("normTitle case-insensitiv: agenda KATTA/kichik harf va ikkilangan probel — plan-title-mismatch YO'Q (m3 mutantini o'ldiradi)", () => {
   const doc = goodDeck();
   const agenda = doc.slides.find((s) => s.layout === "agenda")!;

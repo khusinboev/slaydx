@@ -25,7 +25,13 @@ const SERIF = "Georgia";
 
 /** Serif sarlavha + tepa va past ingichka chiziq — kontent maketlari uchun. */
 function pushFormalHead(layers: SlideLayer[], s: SlideModel, theme: SlideTheme, reserve: number, zoneW: number): void {
-  const { fitSize } = LAYOUT_KIT;
+  const { fitSize, pushPlanBadgeAt } = LAYOUT_KIT;
+  /*
+   * AUDIT-25 P9: reja nishoni hujjat rukni kabi — tepa chiziq USTIDA,
+   * serif, chapda (sarlavha qutisi joyidan qo'zg'almaydi). Matn aksent
+   * tasmaga emas, sahifaga yoziladi (`accentInk`/`bg` — o'lchangan).
+   */
+  pushPlanBadgeAt(layers, s, TEXT_X, 0.24, theme.accentInk, { size: 15, font: SERIF });
   layers.push({ t: "rect", box: { x: TEXT_X, y: 0.6, w: zoneW, h: 0.03 }, fill: { color: theme.accent } });
   const headBox: Box = { x: TEXT_X, y: 0.76, w: Math.max(3, zoneW - reserve), h: 0.78 };
   layers.push({
@@ -187,7 +193,7 @@ function planBullets(s: SlideModel, theme: SlideTheme, index: number, total: num
 }
 
 function planAgenda(s: SlideModel, theme: SlideTheme, index: number, total: number, ctx: PlanCtx): SlidePlan {
-  const { fitSize, pushFooter, W, H } = LAYOUT_KIT;
+  const { pushFooter, W, H } = LAYOUT_KIT;
   const layers: SlideLayer[] = [];
   layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.bg } });
   pushFormalHead(layers, s, theme, ctx.reserve, ZONE_W);
@@ -205,7 +211,7 @@ function planAgenda(s: SlideModel, theme: SlideTheme, index: number, total: numb
       box: textBox,
       text: line,
       color: theme.text,
-      size: fitSize(line, textBox, ctx.bodyType.bodyPt, ctx.bodyType.minPt - 1),
+      size: LAYOUT_KIT.agendaFit(line, textBox, ctx.bodyType.bodyPt),
       valign: "middle",
       font: SERIF,
       src: { f: "bullets", i },
@@ -249,6 +255,8 @@ function planQuote(s: SlideModel, theme: SlideTheme, index: number, total: numbe
     bold: true,
     font: SERIF,
   });
+  // Reja nishoni (faqat `plan` li iqtibos) — rukn kabi, yuqori chapda.
+  LAYOUT_KIT.pushPlanBadgeAt(layers, s, TEXT_X, 0.6, theme.accentInk, { size: 15, font: SERIF });
   // Iqtibos va muallif SIYOH balandligi bo'yicha ketma-ket — qat'iy
   // koordinatalarda qisqa iqtibosdan keyin bir dyuymlik bo'shliq qolardi.
   const text = s.quote || s.title;

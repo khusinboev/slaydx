@@ -320,3 +320,100 @@ circle-atlas, editorial-atlas.
 - **No `src`.** The badge is a plain text layer without `src`/`srcLines` (tested). The dashboard tile uses the existing `card`/rect layers. There is no new layer kind or field, only the existing `font`/`align`/`valign`/`bold`, so viewer and PPTX parity holds. `slide-src` passes.
 - **`LAYOUT_KIT` additions.** `planBadge`, `planBadgeBox`, `pushPlanBadge`, `pushPlanBadgeAt` and `PLAN_BADGE_W` are small and cohesive. `planBadgeBox` returns the **same object** when there is no badge, which is what makes the byte-identity hold.
 - **Fingerprint note.** It is accurate: the hash is unchanged and the note says why. It also cites "14 280 kombinatsiya … solishtirilgan" from the report; change 3 turns that into a test.
+
+---
+
+# Re-review — a4ef5b5 (P9)
+
+Commits `9b23a5e, ebd6cad, 7d39437, a4ef5b5` on top of the slides-3 merge `f9c2597`, reviewed as
+`git diff aa33304..a4ef5b5 -- lib tests` (the P9 files; the other files in the stat come from the slides-3 merge).
+Heavy commands used: 2, both with the main-repo `tsx`.
+- **Run 1:** a probe (`scratchpad/p2rev/probe9c.mts`), the P9 hash test run against the **879f495 lib** (`scratchpad/p2rev/base9`), and 4 mutants on a scratch copy (`scratchpad/p2rev/mut9/run.sh`).
+- **Run 2:** `slide-plan-numbers` + `slide-image-strip` + `slide-layout` + `slide-src` (**84/84**), plus a follow-up collision breakdown (`probe9d.mts`).
+
+Sheets checked:
+- `notebook-atlas`: the tab is clearly distinct from the margin ordinals «01…04».
+- `circle-ink`: the unfilled ring is distinct from the dark «1 2 3» discs.
+- `hero-split-atlas-long-logo`: the panel «02» sits above the title and the tab sits left of the heading, clear of the logo.
+
+## Verdict: **APPROVE**
+
+All three earlier changes are closed, with tests and killed mutants.
+
+1. **Panel title overflow: closed.**
+   - Across 15 themes × 17 visuals × 7 badge layouts × image × logo × titles of 72/60/50 chars × 3 seeds (**55,620 cases**), the badge causes **0 new title overflows** under the layout's own width model (`CHAR_EM` 0.55).
+   - The hero-split/bold panel badge now always sits above the title at `y 0.2–0.53`, and the title box (`y 0.62`) is unchanged.
+   - `badgedTitle` escalates in order: beside → above → floor lowered by 4 pt. That last step applies only where the badge can't go above, and the smallest badged title size observed is 17 pt (dashboard, which is also its normal minimum).
+2. **Register: closed.**
+   - The default light-page badge is now a `titleBg` tab with an `accent` top edge and `titleText` 15 pt. Notebook and editorial also use a tab, circle uses an unfilled accent ring with `accentInk`, and rail uses a plain number.
+   - The register test (same colour ⇒ size differs by at least 6 pt and the two never share the «0N» format) covers every visual × theme × {bullets, process} × image.
+3. **Byte identity: closed, and it genuinely pins the old output.**
+   - The hash test covers 17 visuals × 7 badge layouts × image × logo × short/72-char titles, plan-less. Each layer contributes its **box, size and text**, and rects are included.
+   - Running the same test against the **879f495** lib **passes**, so `5338a2af…` really is the base value and not a self-computed one.
+   - Mutants:
+
+     | Mutant | Change | Caught by |
+     |---|---|---|
+     | Ma | plan-less title box shifted by 0.1″ | the hash test |
+     | Mb | plan-less path gets the −4 pt floor | the unit test |
+     | Mc | "above" branch disabled | the unit test |
+     | Md | tab number coloured `accentInk` | the register test |
+
+     All four are killed.
+
+## Specific checks
+
+- **The lowered floor cannot touch a plan-less title.** `badgedTitle` returns `fitSize(s.title, box, base, min)` with the same box object before any badge logic. The unit test asserts that a plan-less title that does not fit still gets size 17 (`tiny` box), and Mb confirms the test bites.
+- **The tab does not collide with the logo (`ctx.reserve`).**
+  - Beside the title, the tab sits at the original left edge (`box.x − 0.62`); above it, it sits at `box.x`. The logo box is top-right, and `ctx.reserve` only narrows the title from the right.
+  - Checking every theme × visual × badge layout × image × logo × short/72 titles: **0** overlaps with `LOGO_BOX` and 0 off-slide boxes.
+  - The only overlaps with other text layers are 840 overlaps with the wide left-aligned «“» glyph box in quote slides (classic, hero-split, lab, timeline, notebook, split, editorial). The measured gaps between the glyph ink and the badge are 0.25–0.7″ (for example classic 48 pt “ at x 1.60 ends near 1.90, badge at 2.15). These are box overlaps only, the same as in the first review.
+- **Contrast on dark-content themes (graphite, orbit, forge, aurora, chalk)**, measured numerically. No graphite sheet was rendered.
+  - The tab fill `titleBg` is about the same as `bg` there (contrast 1.00–1.14), so the block itself is invisible. What shows is the `accent` outline and top edge, at 4.67 (orbit) to 11.4 (chalk) against `bg`.
+  - The number is `titleText` on `titleBg`, 14.9–19.1.
+  - On light themes, `titleBg` vs `bg` is ≥ 5.28 (lumen lowest), so the tab reads as a solid block.
+  - A graphite or orbit contact sheet at the next visual check would still be worthwhile, since orbit's outline is the weakest at 4.67.
+
+## Notes (non-blocking)
+
+- **Title width model, carried over.** Measured with the bold width 0.60, the badge adds 2,175 title overflows (0 under the layout's 0.55 model). This is the same pre-existing debt as before: title `fitSize` measures bold titles at 0.55. It belongs to whoever owns titles and should be tracked in the AUDIT-25 debt list.
+- The only placements where "above" can trigger are `story` bullets and twoCol (`y 0.6`). Everywhere else the heading `y` is less than `room + 0.08`, so those use beside or the lowered floor. That is consistent with the design, which puts the tab above only where there is room.
+
+---
+
+# Re-review — cf4a493 (P9 increment: INT-01 / INT-02 layout half)
+
+Commits `4ad165d, a3de3a9, cf4a493` on top of the approved `a4ef5b5`, reviewed as `git diff a4ef5b5..cf4a493 -- lib tests`.
+Heavy commands used: 2.
+- **Run 1:** a probe (`scratchpad/p2rev/probe10.mts`, comparing against `a4ef5b5` extracted with `git archive`), plus the new agenda hash test run against the **879f495** lib.
+- **Run 2:** `slide-layout-agenda` + `slide-image-strip` + `slide-layout` + `slide-src` (**66/66**).
+
+Sheet checked: `sheet-agenda6-school_1_4.png`. The dashboard 2×3 grid, the split alternation (item 04 wraps to 3 lines across the neighbouring row's height) and the other visuals are all clean. Item 04 is drawn at the 14 pt safety floor; P11's clip is the planned fix, as noted.
+
+## Verdict: **APPROVE** (no CHANGES)
+
+## Checks
+
+- **Split expansion cannot overlap, even when two adjacent items on opposite halves are both long.**
+  - An expanded item spans `[y − 0.45·rowH, y + 1.45·rowH]` and stays vertically centred on its own row.
+  - The nearest item on the **same** half is `i ± 2`. Even if it is also expanded, its box starts at `y + 1.55·rowH`, leaving a 0.1·rowH gap.
+  - Items on opposite halves are disjoint horizontally. The left text box ends at `SEAM − 1.0` and the right one starts at `SEAM + 0.98`. The number chips sit at `SEAM − 0.78` and `SEAM + 0.23`, outside both text boxes.
+  - The clamps (`top ≥ 2.0`, `bottom ≤ 6.8`) can only shrink the first or last box. Row 0 always starts at `y0 ≥ 2.05` and the last row always ends at ≤ 6.75.
+  - Probe: all 17 visuals × 14 audiences × n 2–6 × image × logo × 4 long/short mixes (all 72 chars; alternating 72/20 in both phases; the first two long). That gives **0** row–row overlaps, 0 overlaps with the number chips, 0 overlaps with the logo and 0 overflows.
+  - The new INT-01 overlap test uses 40-character items at `general`, which never triggers the split expansion. The expansion is covered by this probe rather than by a test (note N1).
+- **`agendaFit` does not change sizes for text that already fitted.** Every replaced call was `fitSize(…, minPt − 1)`, and `minPt − 1 ≥ 14` for every audience (the smallest `minPt` is 15). `fitSize` walks the same sizes with the same test down to the old floor. So wherever a size ≥ `minPt − 1` passed before, it passes at the same size now. The only difference is below the old floor, which the old code returned without checking (i.e. it overflowed).
+  - Probe against `a4ef5b5`: agenda slides × 17 visuals × 14 audiences × n 3–6 (dashboard ≤ 4) × lengths 20–72 × image. **13,929 identical, 855 changed.**
+  - 795 of the changes are rows that overflowed before and now shrink.
+  - The other 60 changes are rows that the probe judged as fitting, within its 0.01″ tolerance:
+    - **(a)** `story` and others, where the old code returned `minPt − 1` without checking and the text overflowed by less than 0.01″. It now drops one more point to fit exactly. This is harmless.
+    - **(b)** `split`: see N2.
+- **`agendaRowBox` returns `null` in no real case.** I tried all 17 visuals × n ∈ {1, 2, 3, 6, 8} × logo × image: 0 nulls and no degenerate boxes. The test matches it against the drawn rows (minimum width and height) for 17 visuals × 2 audiences × n × image. `null` only happens if a design draws no `bullets` rows, and none currently does. `getSlideTheme` imported into `slide-layout` adds no import cycle (`slide-themes` imports only `slide-types`).
+- **Dashboard grid with a logo.** The tiles start at `y 1.85`, while `LOGO_BOX` covers `y 0.18–0.63`, so there is no collision. The heading still uses `ctx.reserve`. The grid ignores image strips, exactly as the old single row did (the agenda has no image slot in dashboard).
+- **Hash test.** It pins box, size and text for the short-item agendas, and it **passes against the 879f495 lib**, so `34e0b602…` is the genuine base value. The dashboard 5–6 case is excluded on purpose, since INT-01 changes it.
+
+## Notes (non-blocking)
+
+- **N1.** Add one overlap assertion to `INT-02: 3–6 × 72` (72-char items, all audiences). That is the case where split expands, and today only the probe covers "both neighbours long".
+- **N2. Old split agendas with mid-length items render differently.** Split decides to expand with `inkHeight(line, box.w, minPt) <= box.h`, but the old floor was `minPt − 1`. An item that used to fit at `minPt − 1` inside its row, for example school_5_7 with 52 chars (old 21 pt, box 1.05″), now expands to 2.00″ and renders at 26 pt. Nothing overflows and the text is larger, but old `doc_json` split agendas of that length no longer match their previous rendering. The hash test (24 chars) does not cover this. To keep old documents identical, check against `minPt − 1`, i.e. `fitSize(line, box, bodyPt, minPt − 1)` fitting, instead. Otherwise record it as an accepted improvement.
+- **N3. Font sizes vary between tiles.** In the dashboard grid and the split alternation, each item picks its own size (on the sheet, dashboard tile 01 is smaller than 02). This is cosmetic and should shrink once P11 clips lengths to `agendaRowBox` at `minPt`.
+- **Mutant I7 survives** (a 3-column dashboard). That is expected: it is a layout choice and not a correctness property.
