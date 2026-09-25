@@ -13,11 +13,12 @@ import {
   readSlideField,
   sanitizeSlideModel,
   writeSlideField,
+  TIGHT_IMAGE_ERROR,
   type DocOp,
   type EditRules,
 } from "../lib/generation/slide-edit.ts";
 import { photoSlot } from "../lib/generation/slide-layout.ts";
-import { CLIP_FLOOR_CHARS, SLIDE_LIMITS, fitChars, limitsFor } from "../lib/generation/slide-limits.ts";
+import { CLIP_FLOOR_CHARS, NO_IMAGE, SLIDE_LIMITS, clipLimit, fitChars, limitsFor } from "../lib/generation/slide-limits.ts";
 import { imageYieldField } from "../lib/generation/slide-quality.ts";
 import { renumberSlides } from "../lib/generation/slide-write.ts";
 import { buildSlideDeck } from "../lib/generation/slides.ts";
@@ -964,8 +965,13 @@ test("P11 (b): circle 8–9 sinf — rasmsiz bosqich ~100 belgini qabul qiladi, 
   assert.equal(plain.steps![0].text, STEP100, "rasmsiz slayd: rasmsiz quti (121) — 100 belgi qirqilmaydi");
   const withImage = limitsFor(deck.bodyType, { steps: 3 }, { visual: "circle", images: "both" }).stepText;
   assert.equal(withImage, 42);
-  const t = pictured.steps![0].text;
-  assert.ok(t.length <= withImage && t.endsWith("…") && STEP100.startsWith(t.slice(0, -1)), `rasmli slayd rasm yonidagi qutiga: ${t.length} «${t}»`);
+  /*
+   * P11 sharhi 3: bosqich matni — GAP maydoni, rasmli slaydda ham RASMSIZ quti (jim «…» emas).
+   * Rasm yonida sig'magani P12 qo'riqchisiga (`commitDocOps` → `imageYieldField`) aniq 400 bilan qoladi.
+   * MUTATSIYA: `editLimits` da `stepText: none.stepText` olib tashlansa — rasmli slayd 42 ga qirqiladi, qizaradi.
+   */
+  assert.equal(pictured.steps![0].text, STEP100, "rasmli slayd: matn jim qirqilmaydi");
+  assert.equal(imageYieldField(pictured, deck.bodyType, "circle"), "stepText", "rasm yonida sig'maydi — qo'riqchi yo'li");
 });
 
 test("P11 (b): rasmli slaydda tegilmagan uzun bosqich QISQARMAYDI, tipo tuzatish uzunlikni saqlaydi (W7 editLimit)", () => {
@@ -995,13 +1001,15 @@ test("P11 (b): vizualsiz chaqiruvchi (writeSlideField, qisman qoidalar) — zaxi
 });
 
 /*
- * P12 sharhi (2-band): rasmli slaydda tahrir chegarasi XOM rasmli quti — server qo'riqchisi
- * (`commitDocOps` → `imageYieldField`) ham xom `fitChars` bilan o'lchaydi. Ilgari `clipLimit`
- * ning 24 belgilik poli bilan: bakalavr `rail` 4 bosqich (rasmli quti 4 belgi) tahriri 5–24
- * belgini qabul qilar, server 400 `text_too_long` berib navbatdagi operatsiyalarni tashlardi.
- * MUTATSIYA: `editLimits` da `raw: true` olib tashlansa — qizaradi.
+ * P12 sharhi (2-band) + P11 sharhi (1b, 3): rasmli slaydda
+ *   — YORLIQ maydoni (bosqich sarlavhasi, stats yorlig'i, katak, variant) — XOM rasmli quti (server
+ *     qo'riqchisi ham xom `fitChars` bilan o'lchaydi); quti `CLIP_FLOOR_CHARS` dan tor bo'lib matn
+ *     qirqilishi kerak bo'lsa — tahrir RAD etiladi (jim «Suv…» emas);
+ *   — GAP maydoni (bosqich matni) — rasmsiz quti, jim qirqilmaydi; rasm yonida sig'masa — qo'riqchi 400.
+ * MUTATSIYA: `tooTight` tekshiruvi olib tashlansa (sarlavha jim qirqiladi) yoki `raw: true` olib
+ * tashlansa (24 poli — qo'riqchi rad etadigan 5–24 belgi qabul) — qizaradi.
  */
-test("P12: rasmli rail 4 bosqich — tahrir server qo'riqchisi rad etadigan matnni qabul qilmaydi", () => {
+test("P12/P11 1b: rasmli rail 4 bosqich — sarlavha sig'masa RAD, qisqasi xom qutida; matn jim qirqilmaydi (qo'riqchi yo'li)", () => {
   const bachMeta = extractMeta(TOOL_BY_ID.slide, { topic: "Suv aylanishi", slideTemplate: "lecture", slideAudience: "students_bachelor" } as never);
   const railDoc = (slides: SlideModel[]): AcademicDoc => ({ meta: bachMeta, titlePage: true, toc: true, sections: [], slides, slideTemplate: "lecture", slideVisual: "rail" });
   const four: SlideModel = {
@@ -1016,9 +1024,49 @@ test("P12: rasmli rail 4 bosqich — tahrir server qo'riqchisi rad etadigan matn
   assert.equal(deck.bodyType.stepsMax, 4);
   const raw = fitChars("stepText", deck.bodyType, "rail", 4);
   assert.ok(raw < CLIP_FLOOR_CHARS, `sinov asosi: rasmli quti ${raw} < ${CLIP_FLOOR_CHARS}`);
-  const r = applyDocOps(railDoc([four]), [{ op: "text", index: 0, src: { f: "steps", i: 0, k: "text" }, value: "Suv bug‘lanadi va bulut hosil qiladi" }], ctx);
+  // Bosqich MATNI — gap maydoni: jim qirqilmaydi; rasm yonida sig'maydi → qo'riqchi (400) yo'li.
+  const text = "Suv bug‘lanadi va bulut hosil qiladi";
+  const r = applyDocOps(railDoc([four]), [{ op: "text", index: 0, src: { f: "steps", i: 0, k: "text" }, value: text }], ctx);
   assert.equal(r.ok, true);
   const s = (r as { ok: true; doc: AcademicDoc }).doc.slides![0];
-  assert.ok(s.steps![0].text.length <= raw, `tahrir ${s.steps![0].text.length} > xom quti ${raw}`);
-  assert.equal(imageYieldField(s, deck.bodyType, "rail"), null, "server qo'riqchisi bu slaydni rad etmasligi kerak");
+  assert.equal(s.steps![0].text, text, "bosqich matni jim qirqilmadi");
+  assert.equal(imageYieldField(s, deck.bodyType, "rail"), "stepText", "qo'riqchi aniq 400 beradi");
+  // Bosqich SARLAVHASI — yorliq: xom rasmli quti tor (< 24) — uzun sarlavha RAD etiladi.
+  const titleRaw = limitsFor(deck.bodyType, { steps: 4 }, { visual: "rail", images: "both", raw: true }).stepTitle;
+  assert.ok(titleRaw < CLIP_FLOOR_CHARS, `sinov asosi: sarlavha qutisi ${titleRaw}`);
+  const long = applyDocOps(railDoc([four]), [{ op: "text", index: 0, src: { f: "steps", i: 0, k: "title" }, value: "Bug‘lanish va kondensatsiya bosqichi" }], ctx);
+  assert.equal(long.ok, false, "sarlavha jim «…» bilan qirqilmasligi kerak");
+  assert.equal((long as { error: string }).error, TIGHT_IMAGE_ERROR);
+  // Sig'adigan (qirqilmaydigan) qisqa qiymat — qabul qilinadi va qo'riqchi ham rad etmaydi.
+  const fits = "Suv".slice(0, Math.max(1, titleRaw));
+  const short = applyDocOps(railDoc([four]), [{ op: "text", index: 0, src: { f: "steps", i: 0, k: "title" }, value: fits }], ctx);
+  assert.equal(short.ok, true, short.ok ? "" : short.error);
+  assert.equal((short as { ok: true; doc: AcademicDoc }).doc.slides![0].steps![0].title, fits);
+});
+
+// P11 sharhi 3: gap maydonlari tahriri deka vizualining RASMSIZ qutisida (generatsiya bilan bir funksiya).
+test("P11 sharh 3: 8–9 sinf circle — 4 bandli ustun bandi ~60 (110 emas), reja bandi reja qatorida; eski uzunlik saqlanadi", () => {
+  const two: SlideModel = { id: "s0", layout: "twoCol", title: "Ikki ustun", leftTitle: "A", rightTitle: "B", left: ["a", "b", "c", "d"], right: ["e"] };
+  const deck = buildSlideDeck(circleDoc([two]));
+  const colMax = clipLimit("colItem", deck.bodyType, "circle", 4, undefined, NO_IMAGE);
+  assert.ok(colMax <= 70, `sinov asosi: 4 bandli ustun qutisi ${colMax}`);
+  const r = apply(circleDoc([two]), [{ op: "text", index: 0, src: { f: "left", i: 0 }, value: STEP100 }]);
+  const got = r.slides![0].left![0];
+  assert.ok(got.length <= colMax && got.endsWith("…"), `ustun bandi ${got.length} > ${colMax}`);
+  // `list` op ham — shu sonda.
+  const l = apply(circleDoc([two]), [{ op: "list", index: 0, field: "left", items: [STEP100, STEP100, STEP100, STEP100] }]);
+  for (const x of l.slides![0].left!) assert.ok(x.length <= colMax, `list ${x.length}`);
+  // Mavjud uzun band (eski deka) tipo tuzatishda qisqarmaydi (W7 editLimit).
+  const old: SlideModel = { ...two, left: [STEP100, "b", "c", "d"] };
+  const typo = `${STEP100.slice(0, 10)}X${STEP100.slice(11)}`;
+  const t = apply(circleDoc([old]), [{ op: "text", index: 0, src: { f: "left", i: 0 }, value: typo }]);
+  assert.equal(t.slides![0].left![0], typo);
+  // Reja bandi — reja qatori (`clipLimit("agenda")`, `syncAgenda` bilan bir chegara), `bulletChars` emas.
+  const agenda: SlideModel = { id: "s0", layout: "agenda", title: "Reja", bullets: ["a", "b", "c", "d", "e", "f"] };
+  const kidsDoc = (slides: SlideModel[]): AcademicDoc => ({ ...circleDoc(slides), meta: extractMeta(TOOL_BY_ID.slide, { topic: "Suv", slideTemplate: "lecture", slideAudience: "school_1_4", planItems: 6 } as never) });
+  const kd = buildSlideDeck(kidsDoc([agenda]));
+  const agMax = clipLimit("agenda", kd.bodyType, "circle", 6, undefined, NO_IMAGE);
+  assert.ok(agMax < kd.bodyType.bulletChars, `sinov asosi: reja qatori ${agMax} < bulletChars ${kd.bodyType.bulletChars}`);
+  const a = apply(kidsDoc([agenda]), [{ op: "text", index: 0, src: { f: "bullets", i: 0 }, value: STEP100 }]);
+  assert.ok(a.slides![0].bullets![0].length <= agMax, `reja bandi ${a.slides![0].bullets![0].length} > ${agMax}`);
 });
