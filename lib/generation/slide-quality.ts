@@ -682,29 +682,160 @@ function samePrefix(orig: string, next: string, cap: number): boolean {
 
 /**
  * Model javobini ASL slayd ustiga qo'yadi — faqat shu maketning MATN
- * maydonlari. `id`, `layout`, `title`, `plan`, rasm, izoh va boshqa
- * hamma narsa asl slayddan (spread) qoladi. Yaroqsiz javob — `null`.
+ * maydonlari. `id`, `layout`, `plan`, rasm, izoh va boshqa hamma narsa
+ * asl slayddan (spread) qoladi; `title` — faqat kesilgan rejasiz
+ * slaydda (`repairedTitle`). Yaroqsiz javob — `null`.
+ *
+ * Ikki rejim (`reasons` bo'yicha):
+ *   — YUPQA slayd (kamida bitta `clipped-text` dan boshqa sabab) — butun
+ *     ro'yxat modelniki (`mergeBody`): hammasi qayta yoziladi;
+ *   — FAQAT kesilgan slayd — o'rni bo'yicha (`mergeClipped`/`byPosition`):
+ *     son qulf, kesilmagan band asl, sarlavha tanadan mustaqil.
+ *
  * Qirqish `clipLimit(…, NO_IMAGE)` bilan — `normalizeSlide` bilan BIR
  * xil rasmsiz chegara (AUDIT-25 P8): ta'mirlangan matn rasmli qutiga
  * sig'masa, rasm keyin joy beradi (`imageYieldField`), matn kesilmaydi.
  */
-function mergeRepair(orig: SlideModel, raw: Record<string, unknown>, rules: BodyRules, visual?: SlideVisual): SlideModel | null {
+function mergeRepair(orig: SlideModel, raw: Record<string, unknown>, reasons: ThinReason[], rules: BodyRules, visual?: SlideVisual): SlideModel | null {
   const title = repairedTitle(orig, raw);
+  if (clippedOnly(reasons)) {
+    // Faqat kesilgan slayd — O'RNI bo'yicha (P14 sharhi C1); sarlavha tanadan mustaqil.
+    const body = clippedBodyKeys(orig, rules, visual).length ? mergeClipped(orig, raw, rules, visual) : orig;
+    if (!body || (body === orig && title === undefined)) return null;
+    return title === undefined ? body : { ...body, title };
+  }
   const body = mergeBody(orig, raw, rules, visual);
   if (!body && title === undefined) return null;
   const base = body ?? orig;
   return title === undefined ? base : { ...base, title };
 }
 
+/** Slayd FAQAT kesilgani uchun nomzod (yupqa emas) — qisqartirish, boyitish emas. */
+function clippedOnly(reasons: readonly ThinReason[]): boolean {
+  return reasons.length > 0 && reasons.every((r) => r === "clipped-text");
+}
+
+/**
+ * Sarlavha ta'mirlanadimi: rejasiz slayd, muqova EMAS, asli «…» bilan
+ * qirqilgan. Muqova (`layout:"title"`) sarlavhasini `slide-write.ts`
+ * ta'mirdan keyin `meta.topic` bilan baribir bosib yozadi (P14 sharhi
+ * C2) — so'rash ham, qabul qilish ham behuda chaqiruv.
+ */
+function titleClipped(s: SlideModel): boolean {
+  return s.layout !== "title" && !isPlanSlide(s) && clippedAt(s.title, SLIDE_LIMITS.title);
+}
+
 /**
  * Kesilgan sarlavha — FAQAT rejasiz slaydda (manbalar, yakun, blok slaydi)
  * va faqat asli «…» bilan qirqilgan bo'lsa; reja slaydi sarlavhasi —
- * agenda bandi, o'zgarmaydi. Yozuvchi bilan bir chegara (`SLIDE_LIMITS.title`).
+ * agenda bandi, o'zgarmaydi; muqova sarlavhasi — `meta.topic`. Yozuvchi
+ * bilan bir chegara (`SLIDE_LIMITS.title`).
  */
 function repairedTitle(orig: SlideModel, raw: Record<string, unknown>): string | undefined {
-  if (isPlanSlide(orig) || !clippedAt(orig.title, SLIDE_LIMITS.title) || typeof raw.title !== "string") return undefined;
+  if (!titleClipped(orig) || typeof raw.title !== "string") return undefined;
   const next = clipTo(raw.title.replace(/[ \t\n\r\f\v]+/g, " ").trim(), SLIDE_LIMITS.title);
   return next && next !== orig.title ? next : undefined;
+}
+
+type ClippedKey = "bullets" | "left" | "right" | "steps";
+
+/** Bo'sh bo'lmagan bandlar — yozuvchi (`list`) va `clippedFields` sanagandek. */
+const filled = (v: string[] | undefined) => (v ?? []).filter((x) => x.trim());
+
+/**
+ * Tanadagi kesilgan RO'YXATLAR — chegara `clippedFields` va yozuvchi
+ * bilan bir xil (`bulletClipLimit`, `clipLimit(…, NO_IMAGE)`, son —
+ * slayddagi haqiqiy son; ustunda HAR TOMON o'z soni bilan).
+ */
+function clippedBodyKeys(s: SlideModel, rules: BodyRules, visual?: SlideVisual): ClippedKey[] {
+  if (s.layout === "bullets") {
+    const list = filled(s.bullets);
+    const cap = bulletClipLimit(rules, visual, list.length);
+    return list.some((b) => clippedAt(b, cap)) ? ["bullets"] : [];
+  }
+  if (s.layout === "process") {
+    const steps = s.steps ?? [];
+    const cap = clipLimit("stepText", rules, visual, steps.length, undefined, NO_IMAGE);
+    return steps.some((st) => clippedAt(st.text, cap)) ? ["steps"] : [];
+  }
+  if (s.layout === "twoCol" || s.layout === "compare") {
+    return (["left", "right"] as const).filter((k) => {
+      const list = filled(s[k]);
+      const cap = clipLimit("colItem", rules, visual, list.length, undefined, NO_IMAGE);
+      return list.some((x) => clippedAt(x, cap));
+    });
+  }
+  return [];
+}
+
+/**
+ * O'RNI bo'yicha birlashtirish: javob ro'yxati asli bilan AYNAN bir xil
+ * sonda (aks holda — rad: «faqat tuzatilgan bandni» qaytargan model
+ * qolgan maqsadlarni o'chirib yubormasin), kesilMAGAN band asl matn
+ * BAYTMA-BAYT (model uni «yaxshilagan» bo'lsa ham), kesilgan band —
+ * modelniki, yozuvchi chegarasi bilan qirqilgan (sig'masa «…» qoladi →
+ * `thinReasons` rad etadi).
+ *
+ * Test variantidan farqi: bu yerda `samePrefix` YO'Q. Test javobida
+ * kalit bor — variant boshqa variant o'rniga «ko'chsa» javob buziladi,
+ * shuning uchun bosh mosligi shart. Nasr bandini qisqartirish esa gapni
+ * qayta tuzishi tabiiy («Orol dengizi … sababli qurigan» → «Sug‘orish
+ * Orolni quritdi»); bosh sharti to'g'ri qisqartmalarni rad etardi. Son va
+ * o'rin qulfi boshqa bandlarni saqlaydi — xavf faqat shu band ichida.
+ */
+function byPosition(orig: string[], raw: unknown, cap: number): string[] | null {
+  if (!Array.isArray(raw) || raw.length !== orig.length) return null;
+  const out: string[] = [];
+  for (const [i, was] of orig.entries()) {
+    if (!clippedAt(was, cap)) {
+      out.push(was);
+      continue;
+    }
+    const next = clipTo(String(raw[i] ?? ""), cap);
+    if (!next) return null;
+    out.push(next);
+  }
+  return out;
+}
+
+/** Faqat kesilgan slayd tanasi — `byPosition` qoidasi har ro'yxatga (ustunda har tomonga alohida). */
+function mergeClipped(orig: SlideModel, raw: Record<string, unknown>, rules: BodyRules, visual?: SlideVisual): SlideModel | null {
+  const keys = clippedBodyKeys(orig, rules, visual);
+  if (orig.layout === "bullets") {
+    const list = filled(orig.bullets);
+    const bullets = byPosition(list, raw.bullets, bulletClipLimit(rules, visual, list.length));
+    return bullets ? { ...orig, bullets } : null;
+  }
+  if (orig.layout === "process") {
+    const was = orig.steps ?? [];
+    const cap = clipLimit("stepText", rules, visual, was.length, undefined, NO_IMAGE);
+    if (!Array.isArray(raw.steps) || raw.steps.length !== was.length) return null;
+    const steps: SlideStep[] = [];
+    for (const [i, st] of was.entries()) {
+      if (!clippedAt(st.text, cap)) {
+        steps.push(st);
+        continue;
+      }
+      const o = raw.steps[i];
+      const text = o && typeof o === "object" ? clipTo(String((o as Record<string, unknown>).text ?? ""), cap) : "";
+      if (!text) return null;
+      steps.push({ ...st, text });
+    }
+    return { ...orig, steps };
+  }
+  if (orig.layout === "twoCol" || orig.layout === "compare") {
+    const next: SlideModel = { ...orig };
+    for (const k of keys) {
+      if (k !== "left" && k !== "right") continue;
+      const list = filled(orig[k]);
+      // Har tomon O'Z sonidagi quti bilan — yozuvchi `col()` kabi (C5).
+      const side = byPosition(list, raw[k], clipLimit("colItem", rules, visual, list.length, undefined, NO_IMAGE));
+      if (!side) return null;
+      next[k] = side;
+    }
+    return next;
+  }
+  return null;
 }
 
 function mergeBody(orig: SlideModel, raw: Record<string, unknown>, rules: BodyRules, visual?: SlideVisual): SlideModel | null {
@@ -746,10 +877,15 @@ function mergeBody(orig: SlideModel, raw: Record<string, unknown>, rules: BodyRu
        * yozuvchi esa 2+2 ni 104 da — ta'mirlangan slayd sayozroq chiqardi.
        */
       const maxItems = Math.max(1, Math.min(SLIDE_LIMITS.colItems, layoutWordTargets(rules, visual).maxColItems));
-      const n = Math.min(maxItems, Math.max(Array.isArray(raw.left) ? raw.left.length : 0, Array.isArray(raw.right) ? raw.right.length : 0));
-      const itemMax = clipLimit("colItem", rules, visual, n, undefined, NO_IMAGE);
-      const left = list(raw.left, maxItems, itemMax);
-      const right = list(raw.right, maxItems, itemMax);
+      /*
+       * Har tomon O'Z sonidagi quti bilan (P14 sharhi C5) — yozuvchi
+       * `col()` (`slide-write.ts`) va `clippedFields` kabi. Ilgari ikkala
+       * tomon katta son bilan qirqilardi: 3+2 da o'ng tomon 75 belgida
+       * «…» olardi, detektor esa uni 2 band qutisi (110) bilan tekshirardi.
+       */
+      const side = (v: unknown) => list(v, maxItems, clipLimit("colItem", rules, visual, list(v, maxItems, Number.MAX_SAFE_INTEGER).length, undefined, NO_IMAGE));
+      const left = side(raw.left);
+      const right = side(raw.right);
       if (!left.length || !right.length) return null;
       return {
         ...orig,
@@ -824,7 +960,7 @@ const REASON_TEXT: Record<ThinReason, (t: LayoutWordTargets, r: BodyRules, s: Sl
   "clipped-text": (_t, r, s, visual) =>
     `matn kesilgan («…» bilan tugagan) — FAQAT shu maydonlarni ma’nosini saqlab QISQARTIRING: ${clippedFields(s, r, visual)
       .map((f) => `${{ title: "title", bullets: "har band", colItem: "har ustun bandi", stepText: "har bosqich text" }[f.field]} ≤ ${f.words} so‘z va ≤ ${Math.floor(PROMPT_HEADROOM * f.cap)} belgi`)
-      .join(", ")}; qolgan matn so‘zma-so‘z qolsin, «…» yozmang`,
+      .join(", ")}; ro‘yxatdagi bandlar SONI va TARTIBI o‘zgarmasin, kesilmagan bandlarni so‘zma-so‘z qaytaring, «…» yozmang`,
 };
 
 /** Maket bo'yicha model qaytaradigan maydonlar (javob sxemasi uchun). */
@@ -836,6 +972,25 @@ const FIELDS: Partial<Record<SlideModel["layout"], string>> = {
   section: `"subtitle":""`,
   quiz: `"quiz":[{"q":"","options":["","","",""],"answer":0}]`,
 };
+
+const CLIPPED_FIELDS: Record<ClippedKey, string> = {
+  bullets: `"bullets":[""]`,
+  left: `"left":[""]`,
+  right: `"right":[""]`,
+  steps: FIELDS.process!,
+};
+
+/**
+ * `qaytaring:` sxemasi — FAQAT haqiqatan kesilgan/yupqa maydonlar (P14
+ * sharhi C1). Yupqa slayd — maketning butun maydonlari (hammasi qayta
+ * yoziladi); faqat kesilgan slayd — faqat kesilgan ro'yxatlar (ustunda
+ * faqat kesilgan tomon). Faqat sarlavhasi kesilgan blok slaydidan
+ * bandlar so'ralmaydi — yaxshi bandlar qayta yozilmasin.
+ */
+function requestFields(s: SlideModel, reasons: ThinReason[], rules: BodyRules, visual?: SlideVisual): string {
+  const body = clippedOnly(reasons) ? clippedBodyKeys(s, rules, visual).map((k) => CLIPPED_FIELDS[k]) : [FIELDS[s.layout]];
+  return [...body, titleClipped(s) ? `"title":""` : ""].filter(Boolean).join(",");
+}
 
 /** Modelga ko'rsatiladigan joriy mazmun — faqat matn maydonlari. */
 function current(s: SlideModel): Record<string, unknown> {
@@ -855,7 +1010,9 @@ function current(s: SlideModel): Record<string, unknown> {
  *   — hech qachon otmaydi: LLM yo'q/yiqildi/vaqt yetmadi → kirish nusxasi;
  *   — faqat yupqa slaydlar so'raladi (ko'pi bilan `REPAIR_MAX_SLIDES`);
  *   — javob faqat slayd ENDI yupqa bo'lmasa qabul qilinadi; `id`,
- *     `layout`, `title`, `plan`, rasm maydonlari asl slayddan qoladi.
+ *     `layout`, `plan`, rasm maydonlari asl slayddan qoladi, `title` —
+ *     faqat kesilgan rejasiz (muqova emas) slaydda qisqartiriladi;
+ *   — rad etilgan har slayd `console.warn` da sababi bilan.
  */
 export async function repairThinSlides(
   slides: SlideModel[],
@@ -870,7 +1027,10 @@ export async function repairThinSlides(
     if (!llmEnabled()) return out;
     const rules = bodyRules(meta, tpl.id);
     const visual = tpl.visual;
-    const thin = thinSlides(out, rules, visual).slice(0, REPAIR_MAX_SLIDES);
+    // Muqova sarlavhasi — `meta.topic` (slide-write.ts ta'mirdan keyin bosib yozadi): kesilgan bo'lsa ham nomzod emas (C2).
+    const thin = thinSlides(out, rules, visual)
+      .filter(({ index, reasons }) => !(out[index].layout === "title" && clippedOnly(reasons)))
+      .slice(0, REPAIR_MAX_SLIDES);
     if (!thin.length) return out;
     const left = remainingMs(deadline);
     if (left < REPAIR_MIN_MS) return out;
@@ -884,7 +1044,22 @@ export async function repairThinSlides(
       rules.note,
       `Har bullet — TO‘LIQ gap, ${fmtRange(t.bullet)} so‘z.`,
       ...wordTargetLines(rules, visual),
-      `QOIDALAR: layout va title O‘ZGARMAYDI; faqat ko‘rsatilgan maydonlarni to‘liq qayta yozing. Mavjud fikrni chuqurlashtiring — ta’rif, sabab, misol, oqibat. Uydirma raqam, sana, manba, iqtibos YO‘Q. Boshqa slaydlarni takrorlamang.`,
+      /*
+       * P14 sharhi C3: «title O‘ZGARMAYDI» kesilgan sarlavhani so'rash bilan
+       * zid edi (model eski sarlavhani qaytarardi → rad), «chuqurlashtiring»
+       * esa faqat kesilgan slaydni UZAYTIRishga undardi (→ yana qirqilib rad).
+       */
+      [
+        `QOIDALAR: layout HECH QACHON o‘zgarmaydi; title faqat «qaytaring» qatorida "title" so‘ralgan slaydda (kesilgan) qisqartiriladi, boshqa slaydlarda title yubormang.`,
+        thin.some(({ reasons }) => !clippedOnly(reasons))
+          ? `YUPQA slaydda ko‘rsatilgan maydonlarni to‘liq qayta yozing — mavjud fikrni chuqurlashtiring: ta’rif, sabab, misol, oqibat.`
+          : "",
+        `KESILGAN («…») maydonni FAQAT qisqartiring — ma’no saqlansin, yangi fikr qo‘shmang.`,
+        `Tegilmagan (kesilmagan) bandlarni so‘zma-so‘z, o‘sha son va tartibda qaytaring.`,
+        `Uydirma raqam, sana, manba, iqtibos YO‘Q. Boshqa slaydlarni takrorlamang.`,
+      ]
+        .filter(Boolean)
+        .join(" "),
       `Faqat JSON: {"slides":[{"index":0, ...maydonlar}]} — index so‘rovdagidek.`,
       ...researchLines(meta, tpl, ctx),
     ]
@@ -899,7 +1074,7 @@ export async function repairThinSlides(
         return [
           `index=${index} layout=${s.layout}`,
           `kamchilik: ${reasons.map((r) => REASON_TEXT[r](t, rules, s, visual)).join("; ")}`,
-          `qaytaring: {"index":${index},${[FIELDS[s.layout], clippedFields(s, rules, visual).some((f) => f.field === "title") ? `"title":""` : ""].filter(Boolean).join(",")}}`,
+          `qaytaring: {"index":${index},${requestFields(s, reasons, rules, visual)}}`,
           `hozirgi: ${JSON.stringify(current(s))}`,
         ].join("\n");
       }),
@@ -912,21 +1087,33 @@ export async function repairThinSlides(
     });
     const data = parseLlmJson(raw) as { slides?: unknown } | null;
     if (!Array.isArray(data?.slides)) return out;
-    const wanted = new Set(thin.map((x) => x.index));
+    const wanted = new Map(thin.map((x) => [x.index, x.reasons]));
     let accepted = 0;
+    /*
+     * Rad etilgan har slayd — bitta qator (P14 sharhi C6): jonli logda
+     * «k / n» nega kamligi ko'rinsin (yupqa ta'mir «…» bilan qirqilsa ham
+     * endi rad — `clipped-text` qoladi).
+     */
+    const reject = (index: number, why: string) =>
+      console.warn(`[slide-quality] ta’mir rad etildi: index=${index} layout=${out[index].layout} — ${why}`);
     for (const item of data.slides) {
       if (!item || typeof item !== "object") continue;
       const o = item as Record<string, unknown>;
       const index = Number(o.index);
-      if (!Number.isInteger(index) || !wanted.has(index)) continue;
+      const reasons = Number.isInteger(index) ? wanted.get(index) : undefined;
+      if (!reasons) continue;
       wanted.delete(index);
-      const merged = mergeRepair(out[index], o, rules, visual);
+      const merged = mergeRepair(out[index], o, reasons, rules, visual);
       // Faqat YAXSHILANGAN javob: slayd endi yupqa emas.
-      if (merged && !thinReasons(merged, rules, visual).length) {
+      const still = merged ? thinReasons(merged, rules, visual) : [];
+      if (merged && !still.length) {
         out[index] = merged;
         accepted += 1;
+      } else {
+        reject(index, merged ? `qolgan sabablar: ${still.join(", ")}` : "javob yaroqsiz (bandlar soni yoki maydon mos emas)");
       }
     }
+    for (const index of wanted.keys()) reject(index, "javobda yo‘q");
     if (accepted < thin.length) console.warn("[slide-quality] ta’mir qabul qilindi", accepted, "/", thin.length);
     return out;
   } catch (e) {
