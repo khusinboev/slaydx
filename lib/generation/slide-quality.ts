@@ -584,10 +584,17 @@ function mergeRepair(orig: SlideModel, raw: Record<string, unknown>, rules: Body
     }
     case "twoCol":
     case "compare": {
-      const n = Math.min(SLIDE_LIMITS.colItems, Math.max(Array.isArray(raw.left) ? raw.left.length : 0, Array.isArray(raw.right) ? raw.right.length : 0));
+      /*
+       * Son — prompt va `normalizeSlide` bilan BIR manba (INT-07):
+       * `layoutWordTargets.maxColItems` (masalan 8–9 sinf `circle` da 2).
+       * Ilgari statik 4 edi: ta'mir 4+4 bandni 42 belgida qabul qilar,
+       * yozuvchi esa 2+2 ni 104 da — ta'mirlangan slayd sayozroq chiqardi.
+       */
+      const maxItems = Math.max(1, Math.min(SLIDE_LIMITS.colItems, layoutWordTargets(rules, visual).maxColItems));
+      const n = Math.min(maxItems, Math.max(Array.isArray(raw.left) ? raw.left.length : 0, Array.isArray(raw.right) ? raw.right.length : 0));
       const itemMax = clipLimit("colItem", rules, visual, n, undefined, NO_IMAGE);
-      const left = list(raw.left, SLIDE_LIMITS.colItems, itemMax);
-      const right = list(raw.right, SLIDE_LIMITS.colItems, itemMax);
+      const left = list(raw.left, maxItems, itemMax);
+      const right = list(raw.right, maxItems, itemMax);
       if (!left.length || !right.length) return null;
       return {
         ...orig,

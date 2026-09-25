@@ -507,6 +507,7 @@ export type FitField =
   | "title"
   | "colTitle"
   | "bullets"
+  | "agenda"
   | "colItem"
   | "stepText"
   | "stepTitle"
@@ -530,6 +531,7 @@ export type FitField =
  */
 const AUDIENCE_FIELDS: ReadonlySet<FitField> = new Set([
   "bullets",
+  "agenda",
   "colItem",
   "stepText",
   "stepTitle",
@@ -550,9 +552,23 @@ const PROBE_WORDS =
     " ",
   );
 
-function probeText(words: number): string {
-  return Array.from({ length: words }, (_, i) => PROBE_WORDS[i % PROBE_WORDS.length]).join(" ");
+/** `rot` — boshlang'ich so'z siljishi: bir xil uzunlikdagi boshqa so'z tartibi (INT-05). */
+function probeText(words: number, rot = 0): string {
+  return Array.from({ length: words }, (_, i) => PROBE_WORDS[(rot + i) % PROBE_WORDS.length]).join(" ");
 }
+
+/**
+ * So'z tartibi AYLANMALARI (AUDIT-25 INT-05). Qatorlash so'z bo'yicha
+ * (`listRows`/`wrapRows`): bir xil uzunlikdagi boshqa tartib yana bitta
+ * qatorga tushishi mumkin — sig'im uzunlikka nisbatan MONOTON EMAS.
+ * Bitta takrorlangan gap bilan o'lchangan chegara nol zaxirali edi:
+ * haqiqiy bandlar 101–149 % gacha toshardi (10–11 sinf / ko'p / `lab`).
+ * Endi `ROTATED_FIELDS` maydonlari har aylanmada sig'ishi shart,
+ * sig'im — aylanmalar ichidagi ENG QISQA matn.
+ */
+const PROBE_ROTATIONS = [0, 2, 3, 5, 7, 9, 11, 13, 16, 19, 22, 26] as const;
+/** Aylanma bilan o'lchanadigan maydonlar — bandlar ro'yxati (har band o'z qatorlarida). */
+const ROTATED_FIELDS: ReadonlySet<FitField> = new Set(["bullets", "agenda"]);
 
 type Probe = {
   /** Soni o'zgaruvchi maydonda standart son (auditoriya ruxsati). */
@@ -584,6 +600,17 @@ const PROBES: Record<FitField, Probe> = {
   bullets: {
     count: (r) => r.maxBullets,
     slide: (t, n) => ({ id: "fit", layout: "bullets", title: "Sarlavha", bullets: fill(n, t) }),
+    match: (s) => s?.f === "bullets",
+  },
+  /*
+   * Reja slaydi bandi (INT-02): agenda = reja slaydlari sarlavhalari
+   * (`syncAgenda`); qutisi `bullets` dan boshqa (agenda planerlari —
+   * `slide-layout.ts`, `visuals/*`). O'lchov `planSlide` orqali, ya'ni
+   * P9 agenda qatorini o'zgartirsa ham avtomatik ergashadi.
+   */
+  agenda: {
+    count: (r) => r.agendaMax,
+    slide: (t, n) => ({ id: "fit", layout: "agenda", title: "Reja", bullets: fill(n, t) }),
     match: (s) => s?.f === "bullets",
   },
   colItem: {
@@ -653,8 +680,8 @@ function layerFits(l: TextLayer): boolean {
   return LAYOUT_KIT.inkHeight(l.text ?? "", l.box.w, l.size, em) * 72 <= room;
 }
 
-function probeLayers(p: Probe, words: number, n: number, rows: number, rules: BodyRules, visual: SlideVisual, image: boolean): TextLayer[] {
-  const slide = p.slide(probeText(words), n, rows);
+function probeLayers(p: Probe, words: number, n: number, rows: number, rules: BodyRules, visual: SlideVisual, image: boolean, rot = 0): TextLayer[] {
+  const slide = p.slide(probeText(words, rot), n, rows);
   const plan = planSlide(image ? { ...slide, image: PROBE_IMAGE } : slide, probeTheme(), visual, 3, 10, "auto", "lecture", {
     bodyType: rules,
   });
@@ -700,10 +727,12 @@ export function fitChars(field: FitField, rules: BodyRules, visual?: SlideVisual
       if (!base.length) continue;
       // Pol: auditoriya poli, lekin dizayn shrifti undan kichik bo'lsa — o'sha (1 so'zdagi o'lcham).
       const floors = base.map((l) => (floored ? Math.min(rules.minPt, l.size) : 0));
-      const fits = (words: number) => {
-        const ls = probeLayers(p, words, n, rows, rules, v, image);
-        return ls.length === floors.length && ls.every((l, i) => layerFits(l) && l.size >= floors[i]);
-      };
+      const rots = ROTATED_FIELDS.has(field) ? PROBE_ROTATIONS : [0];
+      const fits = (words: number) =>
+        rots.every((rot) => {
+          const ls = probeLayers(p, words, n, rows, rules, v, image, rot);
+          return ls.length === floors.length && ls.every((l, i) => layerFits(l) && l.size >= floors[i]);
+        });
       /*
        * CHIZIQLI qidiruv — BIRINCHI sig'masligigacha. Ikkilik qidiruv
        * noto'g'ri edi: ba'zi vizuallar matn uzunligiga qarab boshqa
@@ -712,7 +741,7 @@ export function fitChars(field: FitField, rules: BodyRules, visual?: SlideVisual
        */
       let fit = 0;
       while (fit < MAX_PROBE_WORDS && fits(fit + 1)) fit += 1;
-      chars = Math.min(chars, probeText(fit).length);
+      chars = Math.min(chars, ...rots.map((rot) => probeText(fit, rot).length));
     }
   }
   if (!Number.isFinite(chars)) chars = probeText(MAX_PROBE_WORDS).length;
@@ -743,6 +772,9 @@ function ceilingCap(field: FitField, rules: Pick<BodyRules, "bulletChars" | "tab
   switch (field) {
     case "bullets":
       return rules.bulletChars;
+    case "agenda":
+      // Reja bandi = slayd sarlavhasi (`syncAgenda`) — sarlavha qopqog'idan uzun bo'lmaydi.
+      return SLIDE_LIMITS.title;
     case "tableHeader":
       return (count ?? rules.tableCols) <= 3 ? SLIDE_LIMITS.tableHeaderWide : SLIDE_LIMITS.tableHeader;
     default:

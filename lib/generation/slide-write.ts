@@ -148,6 +148,21 @@ export function renumberSlides(slides: SlideModel[]): SlideModel[] {
   return slides.map((sl, i) => (sl.id === `s${i}` ? sl : { ...sl, id: `s${i}` }));
 }
 
+/** Element soni chegaralari — `normalizeSlide` va `coerceLayout` BIR joydan (INT-07). */
+function counts(rules: BodyRules, visual?: SlideVisual): { stepsMax: number; statsMax: number; tableCols: number; tableRows: number; colItems: number } {
+  const aud = limitsFor(rules);
+  const colItems = (t: { maxColItems: number }) => Math.max(1, Math.min(SLIDE_LIMITS.colItems, t.maxColItems));
+  if (!visual) return { stepsMax: aud.stepsMax, statsMax: aud.statsMax, tableCols: aud.tableCols, tableRows: aud.tableRows, colItems: colItems(layoutWordTargets(rules)) };
+  const t = layoutWordTargets(rules, visual);
+  return {
+    stepsMax: Math.min(aud.stepsMax, t.maxSteps),
+    statsMax: Math.min(aud.statsMax, t.maxStats),
+    tableCols: Math.min(aud.tableCols, t.maxTableCols),
+    tableRows: Math.min(aud.tableRows, t.maxTableRows),
+    colItems: colItems(t),
+  };
+}
+
 function normalizeSlide(raw: unknown, i: number, footer: string, rules: BulletRules, visual?: SlideVisual): SlideModel | null {
   if (!raw || typeof raw !== "object") return null;
   /*
@@ -159,7 +174,15 @@ function normalizeSlide(raw: unknown, i: number, footer: string, rules: BulletRu
    * ya'ni 3 ta bosqich 5 tasiga mo'ljallangan tor chegaradan qirqilmaydi,
    * 1–4-sinf kartasi esa bakalavr chegarasida qolmaydi.
    */
-  const lim = limitsFor(rules);
+  /*
+   * SON — prompt bilan BIR manba (AUDIT-25 INT-07): vizual ma'lum bo'lsa
+   * `layoutWordTargets(rules, visual)` (auditoriya ruxsati ∩ deka vizuali
+   * sig'imi — prompt aynan shu sonni so'raydi, ta'mir ham shuni qo'llaydi).
+   * Ilgari `limitsFor(rules)` (faqat auditoriya): 1–4 sinfga prompt 2
+   * karta/ustun so'rardi, normalize esa 3 tasini qoldirardi. Vizual
+   * noma'lum bo'lsa — auditoriya ruxsati (zaxira).
+   */
+  const lim = counts(rules, visual);
   const o = raw as Record<string, unknown>;
   const layout = asLayout(o.layout, "bullets");
   const title = clipTo(stripOrdinal(String(o.title ?? "").replace(/[ \t\n\r\f\v]+/g, " ").trim()), SLIDE_LIMITS.title);
@@ -217,13 +240,14 @@ function normalizeSlide(raw: unknown, i: number, footer: string, rules: BulletRu
    * o'z ustunidagi band SONIDA o'lchangan chegara.
    */
   function col(v: unknown): string[] {
-    const items = list(v, Math.max(1, Math.min(SLIDE_LIMITS.colItems, layoutWordTargets(rules, visual).maxColItems)));
+    const items = list(v, lim.colItems);
     return items.map((x) => clipTo(x, clipLimit("colItem", rules, visual, items.length, undefined, NO_IMAGE)));
   }
   if (layout === "quote") {
     return {
       ...base,
-      quote: clipTo(String(o.quote ?? o.subtitle ?? title), SLIDE_LIMITS.quote),
+      // INT-10: statik 280 emas — deka vizualining iqtibos qutisi (`magazine`/`rail` ~130 belgi).
+      quote: clipTo(String(o.quote ?? o.subtitle ?? title), clipLimit("quote", rules, visual, undefined, undefined, NO_IMAGE)),
       quoteBy: o.quoteBy ? clipTo(String(o.quoteBy), SLIDE_LIMITS.quoteBy) : undefined,
     };
   }
@@ -404,7 +428,7 @@ function normalizeSlide(raw: unknown, i: number, footer: string, rules: BulletRu
  *   — yo'qotishsiz o'girish mumkin bo'lsa, o'giriladi;
  *   — o'girish uydirma raqam talab qilsa (stats), model layouti saqlanadi.
  */
-export function coerceLayout(s: SlideModel, want: SlideLayout, maxBullets = 4, rules?: BodyRules): SlideModel {
+export function coerceLayout(s: SlideModel, want: SlideLayout, maxBullets = 4, rules?: BodyRules, visual?: SlideVisual): SlideModel {
   if (s.layout === want) return s;
   const pool = (s.bullets?.length ? s.bullets : [s.subtitle, s.quote].filter(Boolean) as string[]).filter(Boolean);
 
@@ -430,30 +454,47 @@ export function coerceLayout(s: SlideModel, want: SlideLayout, maxBullets = 4, r
     return {
       ...s,
       layout: want,
-      // W5: qattiq 40/90 o'rniga maket chegaralari (bosqich SONI bo'yicha, auditoriya ma'lum bo'lsa).
-      steps: pool.slice(0, rules ? limitsFor(rules).stepsMax : 4).map((b, i, all) => {
+      // W5: qattiq 40/90 o'rniga maket chegaralari (bosqich SONI bo'yicha, auditoriya ma'lum bo'lsa) —
+      // son va uzunlik `normalizeSlide` bilan BIR funksiyadan (`counts`, `clipLimit` — INT-07/11).
+      steps: pool.slice(0, rules ? counts(rules, visual).stepsMax : 4).map((b, i, all) => {
         const [head, ...rest] = b.split(/\s+[—–:-]\s+/);
-        const lim = rules ? limitsFor(rules, { steps: all.length }) : SLIDE_LIMITS;
+        const titleMax = rules ? clipLimit("stepTitle", rules, visual, all.length, undefined, NO_IMAGE) : SLIDE_LIMITS.stepTitle;
+        const textMax = rules ? clipLimit("stepText", rules, visual, all.length, undefined, NO_IMAGE) : SLIDE_LIMITS.stepText;
         return {
           n: String(i + 1),
-          title: clipTo(head, lim.stepTitle),
-          text: clipTo(rest.join(" — ") || b, lim.stepText),
+          title: clipTo(head, titleMax),
+          text: clipTo(rest.join(" — ") || b, textMax),
         };
       }),
     };
   }
+  /*
+   * INT-11: bandlardan ustun/izohga o'girishda matn TORROQ qutiga tushadi —
+   * ilgari qirqilmasdan o'tardi (twoCol 9, closing 31 toshish / 238). Endi
+   * `normalizeSlide` bilan bir xil: ustun bandlari soni `counts().colItems`,
+   * uzunligi `clipLimit("colItem")`; izoh maket qopqog'ida.
+   */
   if (want === "twoCol" || want === "compare") {
     if (s.left?.length && s.right?.length) return { ...s, layout: want };
     if (pool.length < 2) return s;
-    const mid = Math.ceil(pool.length / 2);
-    return { ...s, layout: want, left: pool.slice(0, mid), right: pool.slice(mid) };
+    const per = rules ? counts(rules, visual).colItems : SLIDE_LIMITS.colItems;
+    const items = pool.slice(0, per * 2);
+    const mid = Math.ceil(items.length / 2);
+    const col = (xs: string[]) => {
+      const max = rules ? clipLimit("colItem", rules, visual, xs.length, undefined, NO_IMAGE) : SLIDE_LIMITS.colItem;
+      return xs.map((x) => clipTo(x, max));
+    };
+    return { ...s, layout: want, left: col(items.slice(0, mid)), right: col(items.slice(mid)) };
   }
   if (want === "quote") {
     const quote = s.quote || pool[0];
-    return quote ? { ...s, layout: want, quote: clipTo(quote, SLIDE_LIMITS.quote) } : s;
+    const max = rules ? clipLimit("quote", rules, visual, undefined, undefined, NO_IMAGE) : SLIDE_LIMITS.quote;
+    return quote ? { ...s, layout: want, quote: clipTo(quote, max) } : s;
   }
   if (want === "section" || want === "closing" || want === "title") {
-    return { ...s, layout: want, subtitle: s.subtitle || pool[0] };
+    const sub = s.subtitle || pool[0];
+    const max = want === "section" ? SLIDE_LIMITS.subtitleSection : want === "closing" ? SLIDE_LIMITS.subtitleClosing : SLIDE_LIMITS.subtitle;
+    return { ...s, layout: want, subtitle: sub ? clipTo(sub, max) : sub };
   }
   // bullets / agenda
   return { ...s, layout: want, bullets: pool.length ? pool.slice(0, maxBullets) : s.bullets };
@@ -606,12 +647,20 @@ function planHeads<T extends { layout: SlideLayout; plan?: number }>(items: T[])
  * sarlavhasi), tartib raqamisiz, reja qatori chegarasida. Model yozgan
  * agenda ustiga yoziladi — manba bitta.
  */
-export function syncAgenda(slides: SlideModel[], rules: Pick<BodyRules, "bulletChars">): void {
+export function syncAgenda(slides: SlideModel[], rules: Pick<BodyRules, "bulletChars"> | BodyRules, visual?: SlideVisual): void {
   const agenda = slides.find((s) => s.layout === "agenda");
   if (!agenda) return;
-  const items = planHeads(slides)
-    .map((s) => clipTo(stripOrdinal(s.title), rules.bulletChars))
-    .filter(Boolean);
+  const heads = planHeads(slides);
+  /*
+   * INT-02: chegara — REJA qutisi (`clipLimit("agenda", …)`, shu SONDAGI
+   * band, deka vizuali), `bulletChars` emas. Bandlar endi slayd
+   * sarlavhalari (≤ 72): maktab dekalarida `bulletChars` (80–120) agenda
+   * qatoriga sig'masdi — 102–159 % toshish, shrift poldan past. Rasm
+   * holati noma'lum — "both" (rasmli ham, rasmsiz ham sig'sin).
+   * Qisman qoidalar (eski chaqiruvchi) — `bulletChars`.
+   */
+  const max = "bodyPt" in rules ? Math.min(rules.bulletChars, clipLimit("agenda", rules, visual, Math.max(1, heads.length))) : rules.bulletChars;
+  const items = heads.map((s) => clipTo(stripOrdinal(s.title), max)).filter(Boolean);
   if (items.length) agenda.bullets = items;
 }
 
@@ -710,7 +759,7 @@ export async function writeSlidesWithLlm(
     // Rejadagi maket va «diagramma» bayrog'i — YAKUNIY yig'ishdagi
     // bilan bir xil qoida, aks holda jonli slayd bir maketda ko'rinib,
     // `deck` kelganda boshqasiga sakrardi.
-    let out = beat ? coerceLayout(sl, beat.layout, rules.maxBullets, rules) : sl;
+    let out = beat ? coerceLayout(sl, beat.layout, rules.maxBullets, rules, tpl.visual) : sl;
     if (beat?.chart) out = { ...out, chart: true };
     if (beat?.plan) out = { ...out, plan: beat.plan };
     onProgress({ type: "slide", index: abs, slide: { ...out } });
@@ -883,7 +932,7 @@ export async function writeSlidesWithLlm(
    */
   let slides = renumberSlides(
     slots
-      .map((sl, i) => (sl && plan[i] ? coerceLayout(sl, plan[i].layout, rules.maxBullets, rules) : sl))
+      .map((sl, i) => (sl && plan[i] ? coerceLayout(sl, plan[i].layout, rules.maxBullets, rules, tpl.visual) : sl))
       // «Diagramma» bloki beat'dagi `chart` bayrog'ini slaydga o'tkazadi (WP-B qo'yadi).
       .map((sl, i) => (sl && plan[i]?.chart ? { ...sl, chart: true } : sl))
       // Reja bandi raqami — FAQAT rejadan (AUDIT-25): model yozmaydi, maket shuni chizadi.
@@ -891,7 +940,7 @@ export async function writeSlidesWithLlm(
       .filter((sl): sl is SlideModel => Boolean(sl)),
   );
   applyResearchRefs(slides, ctx);
-  syncAgenda(slides, rules);
+  syncAgenda(slides, rules, tpl.visual);
   /*
    * Va'da qilingan hajmning quyi chegarasi — TA'MIRDAN OLDIN (W1): `null`
    * qaytadigan dekaga qo'shimcha LLM chaqiruvi puli sarflanmasin. Bundan kam bo'lsa deck
@@ -920,7 +969,7 @@ export async function writeSlidesWithLlm(
    * manba bitta qoidada qolsin (shartnoma: agenda = reja sarlavhalari).
    */
   slides = await repairThinSlides(slides, meta, tpl, ctx, deadline, jobDeadline);
-  syncAgenda(slides, rules);
+  syncAgenda(slides, rules, tpl.visual);
   finalizeQuiz(slides, meta);
   const L = slideLabels(meta.language);
   if (meta.titleSlide === false) {
