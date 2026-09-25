@@ -324,3 +324,85 @@ If the lead decides to move this to another package or sprint, P1 is APPROVE as 
   P4 should mirror these controls, e.g. disable or annotate the switch when Reja is off, and tick «Test»
   when a count > 0 is picked. Otherwise one control of each pair still shows a state the deck does not
   follow.
+
+---
+
+## P13 review — 3964934
+
+Scope: P13's own diff only. That is `1024bb5` (INT-08/09/13) and the non-merge part of `3964934`
+(INT-02 prompt half) on `worktree-agent-af7d9bfda5cebaeaa`.
+
+I ran one heavy command:
+- `slide-blocks`, `slide-audience`, `slide-plan`, `slide-params`, `client-bundle-guard`, plus my
+  scratchpad probe `p13-probe.test.mts`. Result: **98/99**. The only failure is the known
+  `tests/slide-params.test.mts:203` regex; it now gets `agenda'da 3)`, which the coordinator fixes at
+  merge.
+- I did not run `tests/ui/slide-composer`, which needs the viewer tsconfig.
+
+### Checked and OK
+
+- **INT-08** (`slide-prompt/extensions.ts`):
+  - The quiz count now comes from `plannedBlocks(...).quizBeats`. It equals the number of quiz slides
+    and matches the «HAR quiz slaydida AYNAN BITTA savol» line.
+  - The «Javoblar» promise now reads `plan.answers`, which already requires `speakerNotes === false`
+    and room for the slide, so the `speakerNotes` semantics are kept.
+  - The quiz line now also appears for a default-count test, which is more consistent than before.
+  - `bodyWantOf(targetPages || undefined, titleSlide)` is the same call `structure.ts` makes.
+- **INT-09** (`brief.ts`): `agendaMin = min(agendaMax, max(3, agendaMax−1))` together with `fmtRange`
+  gives `1`, `2`, `3`, `3–4`, `5–6`. It never produces `3–1`.
+- **INT-13** (`slide-params.ts` `defaultSlideCount`, `slide-fields.tsx`):
+  - The probe confirms `defaultSlideCount("pro-slide") = 12 = extractMeta(pro,{}).targetPages` and
+    `defaultSlideCount("slide") = 10 = extractMeta(slide,{}).targetPages`.
+  - `slidePagesOf` now uses the `SLIDE_MIN`/`SLIDE_MAX` bounds for both tools. They are identical to
+    the `PRO_*` bounds (4/30), so there is no behaviour change.
+  - `capacityFor` goes through `slidePagesOf`.
+- **Server-only and determinism:**
+  - `structure.ts` now imports `slide-audience`, `slide-limits` and `slide-quality`.
+    `slide-quality` pulls in `llm`, but `brief.ts` already imported it, so nothing new crosses a
+    boundary. `client-bundle-guard` is green.
+  - `fitChars` memo, warm vs cold: 220 prompts (11 audiences × 10 templates × planItems {3,6}) built
+    cold, then again warm in reverse order, gave **0 differences**.
+- **Pinned lines:** the WP-0a pinned-lines test in `slide-blocks` still asserts every instruction
+  without a number, and it passes.
+- **Scoping:** the new title-cap line is explicitly limited to REJA slides and names the generic
+  «6–10 so‘z» rule. As worded it does not contradict `base.ts`. See change 1 for the numeric problem.
+
+### Verdict: **CHANGES** (1 blocking)
+
+P13-1. **(blocking) The REJA title word cap is bounded only by the agenda box, not by the title field.
+It routinely promises titles 2–4× longer than `SLIDE_LIMITS.title`.**
+- The problem:
+  - Plan-slide titles become the agenda items (`syncAgenda`), and the slide title is clipped by
+    `normalizeSlide` to `SLIDE_LIMITS.title` = **72** chars, with «…».
+  - `agendaWordsCap = max(3, ⌊0.85 · fitChars("agenda", …) / 9⌋)` (`structure.ts`, the new
+    `agendaWordsCap` block) looks only at the agenda row.
+  - For wide boxes this gives absurd numbers.
+- Probe results across all 11 audiences × 10 templates × planItems {3,6}:
+  - the cap ranges over **3 … 31 words**;
+  - in **170 / 220** combinations `cap × 9 > 72`;
+  - the default general/lecture deck at planItems 3 prints `agenda: … har biri 3–31 so‘z` and
+    «REJA slaydlari sarlavhasi: eng ko‘pi 31 so‘z»;
+  - students_bachelor/lecture/6 prints 16 words.
+- The model will write long plan titles. They get cut mid-thought with «…» on the slide and in the
+  agenda, which is worse than the old static «3–7». They also run far longer than the «6–10» asked of
+  every other slide.
+- Fix: `agendaWordsCap = max(3, ⌊PROMPT_HEADROOM · min(fitChars("agenda", rules, tpl.visual, planN), SLIDE_LIMITS.title) / CHARS_PER_WORD⌋)`,
+  which is ≤ 6 at today's limits. Optionally also bound it by the section-title field for band heads
+  that open with `section`.
+- Test changes:
+  - The INT-02 tests re-derive the same formula (a tautology) and pin `bachelorCap ≥ 6` (16). Change
+    them to assert `cap · CHARS_PER_WORD ≤ min(fitChars(agenda), SLIDE_LIMITS.title)` across **all**
+    audiences × visuals.
+  - Keep the school_1_4/split/6 = 3 case.
+  - Mutation check: remove the `min(…, SLIDE_LIMITS.title)` → the test must go red.
+
+### Non-blocking notes
+
+- `meta.ts` still has its own `tool === "pro-slide" ? PRO_SLIDE_DEFAULT : SLIDE_DEFAULT` ternary.
+  Switch it to `defaultSlideCount(tool.id)` and add a one-line test
+  `defaultSlideCount(t) === extractMeta(TOOL_BY_ID[t], {}).targetPages`. Today the values are equal
+  only by coincidence.
+- The `fitChars` cache key (`slide-limits.ts:718`, P11's code) leaves out `agendaMax`, although the
+  agenda probe draws `max(agendaMax, n)` rows. The engine path always has `planN === planItems` after
+  `extractMeta`, so this is safe today. Adding `agendaMax` to the key would make warm/cold
+  determinism hold by construction.
