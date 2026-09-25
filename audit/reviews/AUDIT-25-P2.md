@@ -267,3 +267,56 @@ The code addresses first-review changes 1–4. The fit test can still pass after
 
 - The earlier change 4 (titles never numbered) is done. `editorial`, `split` and `story` `planTitle` no
   longer read `plan`, and the test covers `plan: 2`. Change 5 (drop the `PlanSlide` alias at merge) still stands.
+
+---
+
+# P9 review — aa33304
+
+Branch `audit25-p9-plan-badge` (worktree `agent-ada2d20146d85b071`), commits `c0ce961, 2541aa5, a078a67, aa33304`
+on top of slides-3 `879f495`, reviewed as `git diff 879f495..aa33304 -- lib tests`.
+
+Heavy commands used: 2. Both ran with the main-repo `tsx`, because the worktree has no `node_modules`.
+A first attempt failed instantly on a missing tsx path and ran nothing.
+- Run 1: `slide-plan-numbers` + `slide-src` (**25/25**) plus a probe (`scratchpad/p2rev/probe9.mts`, base `879f495` extracted with `git archive`).
+- Run 2: `slide-layout` + `slide-image-strip` (**55/55**, fingerprint unchanged) plus a probe rerun.
+
+Sheets looked at: split-ink, story-ink, classic-ink, dashboard-ink, formal-atlas, notebook-atlas,
+circle-atlas, editorial-atlas.
+
+## Verdict: **CHANGES** (3 items, all small)
+
+## CHANGES
+
+1. **The badge pushes the dark-panel `twoCol`/`compare` title past its size floor.**
+   - **Where:** `lib/generation/slide-layout.ts:2020`, the panel branch of `planTwoCol` used by `hero-split` and `bold`.
+   - **Trigger:** a logo (`ctx.reserve`) plus a 72-character title (`SLIDE_LIMITS.title`).
+   - **Measured:** `planBadgeBox` narrows the title box from 3.0″ to 2.38″. `fitSize(…, 26, 17)` bottoms out at 17 pt, and the text needs 5 lines = 1.53″ > 1.50″ box. This overflows **even under the layout's own `CHAR_EM` 0.55 model**. The probe found 16 new cases (hero-split and bold × twoCol/compare × with/without image, each with a logo). The same titles fit without the badge.
+   - **Why it matters:** the viewer clips the title (`overflow: hidden`) while the PPTX spills it, which breaks "ko'rdim = oldim".
+   - **Fix:** in narrow title boxes (for example `w < 4″`) put the badge **above** the title, the same way the split bullets do: a badge row at `y ≈ 0.3` and the title box keeps its width. Alternatively, when the badge is present, let `fitSize` drop to 15 pt.
+   - **Test:** add one case to the P9 test: 72-char title + logo + `plan: 3`, asserting that the title ink fits its box in every visual.
+
+   Separate from P9 and not blocking: every title `fitSize` still measures bold titles with `CHAR_EM` 0.55. With the PIL-measured bold 0.60, 534 of 3,708 limit-length titles already overflow **without** a plan, and the badge adds 205. This is a follow-up for whoever owns titles (P2's `CHAR_EM_BOLD` was applied to body text only).
+2. **In `notebook`, the plan badge looks like one more list ordinal.**
+   - **Where:** `lib/generation/visuals/notebook.ts:97-99`.
+   - **What:** the badge «01» sits in the margin column right-aligned at `x 0.3–0.9`, in `accentInk`, at 14–18 pt bold. That is the same column, colour, format and nearly the same size as the bullet timeline ordinals «01 02 03 04» directly below it.
+   - **Evidence:** `sheet-p9-notebook-atlas.png`, slides 3 and 4. Each reads as "01, 01, 02, 03, 04", which is exactly the stray-number confusion AUDIT-25 was opened for.
+   - **Fix:** use a distinct notebook idiom. The section slide already has one: a small `titleBg` tab with an `accent` top edge and a `titleText` number. Alternatively, set the badge in a clearly different register from the ordinals.
+   - **Related, non-blocking:** `circle` (plan badge «01» in the same dark disc as the card badges «1 2 3») and `editorial` (Georgia «01» beside the title, gold «01…04» card ordinals below) have a milder version of this. The size and position differ there, so it is an owner-level design call rather than a defect.
+3. **The byte-identity claim is only partly locked by tests.**
+   - **What is locked:**
+     - the image-strip fingerprint (6 legacy visuals × twoCol/compare/stats/process/table, plan-less);
+     - `P9: titul/reja/…` (non-badge layouts, plan vs no plan).
+   - **The gap:** for the 11 design visuals × 7 badge layouts, nothing compares plan-less output against base. A mutant that makes `planBadgeBox` always shift, or a design `pushHead` that always narrows, would survive. The P9 width test compares no-plan vs plan boxes of the same build, so a shift applied to both passes. `P9: plan'siz` only looks for bare numbers.
+   - **My probe:** all **28,560** plan-less combinations are byte-identical to `879f495` (2 audiences × all themes × all 13 layouts × 17 visuals × image × logo). The claim is true; it is just not in a test.
+   - **Fix:** add a geometry hash test (same format as the image-strip fingerprint) over `DESIGN_VISUALS × BADGE_LAYOUTS × {img, no img}`, plan-less, pinned to the value at `879f495`.
+
+## Checks that passed
+
+- **Dark pages and contrast.** Badges use `titleMuted` on `titleBg`, dense and dark panels (classic, magazine and dense quote/twoCol, split bullets and quote, story quote, bold quote), and `accentInk` on `bg`/`surface`; both are pairs already measured by `themes.test`. Dashboard uses its tile (`accentInk` on `surface` card) and circle uses `pushBadge` (`titleText` on `titleBg`). Nothing is illegible on the ink and dark sheets.
+- **Overlap.** The badge's ink box overlaps **no other text layer** in any theme × visual × badge layout × image × logo combination: 0 hits. It overlaps an image only on the quote-over-photo designs, where the quote itself also sits on the photo behind a scrim, as intended.
+- **Quote badges vs the “ mark.** 0 cases closer than 0.15″ horizontally on the same line. The sheets show a clear gap in classic, split, editorial and notebook. The test asserts that the quote badge sits above the quote text.
+- **Title shift.** The box moves by exactly `PLAN_BADGE_W` 0.62″ and keeps its right edge (tested). The split bottom-aligned title shrinks from the top and its ink still fits (tested). The P2 body-fit guarantees are unaffected, because `planBadgeBox` touches title boxes only. Title sizes do not depend on the audience, so school_1_4 behaves the same as other audiences. The only fit break is change 1.
+- **Never on structural slides.** title, agenda, closing, quiz, answers and references are byte-identical with and without `plan` (tested). Section keeps P2's big number and gets no second one. Story bullets without an image keep the P2 column number and get no badge (tested).
+- **No `src`.** The badge is a plain text layer without `src`/`srcLines` (tested). The dashboard tile uses the existing `card`/rect layers. There is no new layer kind or field, only the existing `font`/`align`/`valign`/`bold`, so viewer and PPTX parity holds. `slide-src` passes.
+- **`LAYOUT_KIT` additions.** `planBadge`, `planBadgeBox`, `pushPlanBadge`, `pushPlanBadgeAt` and `PLAN_BADGE_W` are small and cohesive. `planBadgeBox` returns the **same object** when there is no badge, which is what makes the byte-identity hold.
+- **Fingerprint note.** It is accurate: the hash is unchanged and the note says why. It also cites "14 280 kombinatsiya … solishtirilgan" from the report; change 3 turns that into a test.
