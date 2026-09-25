@@ -62,4 +62,26 @@ Shartnomalar (yakuniy, review'lardan keyin):
 - P1 `writeSlidesWithLlm`: `slideFloor` → `repairThinSlides` (6 arg) → `syncAgenda` → `finalizeQuiz`.
 
 ## 4. Bajarilish yozuvi
-(to'ldiriladi)
+
+### Jarayon
+- 4 auditor (A1 prompt/limit, A2 maket, A3 tuzilma/parametr, A4 jonli baza) → 24 topilma (`docs/audit-25/`). A4: 6 ta «oldin» deka ($0.46) — hammasida S1+S2 takrorlandi.
+- Paketlar alohida worktree'larda, har biriga mustaqil Opus reviewer (`audit/reviews/AUDIT-25-P*.md`); hech biri birinchi
+  urinishda o'tmadi — jami 14 review raundi. Har o'zgarish: qizil→yashil regressiya testi + mutatsiya tekshiruvi.
+- Merge tartibi: P6 → P5 → P2 → P1 → P7 → P3 → P4 → P1 ulanishi (W1–W6) → P3 follow-up.
+
+### Nima o'zgardi (merge qilingan)
+| Paket | Natija |
+|---|---|
+| P1 dvigatel | `deckBeats` har reja bandiga ≥ 1 mazmun slaydi (`plan: i`, hech qachon qirqilmaydi); agenda mazmun sarlavhalaridan quriladi (`syncAgenda`); `planCapacity`/`effectivePlanItems`/`defaultPlanItems` (10 slayd → 3 band); `plannedBlocks` — beats va prompt bir manbadan; aniq `quizCount: 0` = testsiz, aniq `agendaSlide: true` = reja; pro-slide'da yuborilgan `blocks` ustun; lesson shablonining metodik rollari (`structural`) reja bandi bo'lmaydi; sarlavhadagi tartib raqami va `REJA i-band:` prefiksi olib tashlanadi; halol skelet (uydirma raqam yo'q). Reviewer zondi: 60 000 tasodifiy kirishda invariantlar buzilmadi. |
+| P2 maket | 15 ta «deka indeksi» raqami olib tashlandi; bo'lim raqami faqat `s.plan`dan, yo'q bo'lsa chizilmaydi (bo'shliqsiz); `bodyFit` — auditoriya poli (`minPt`), overflow'siz, so'z bo'linmaydi (bold kengligi 0.60 em), qator kartalari bir xil o'lcham; 14 auditoriya × 17 vizual × 14 holat = 35 462 qatlam testi. |
+| P3 zichlik | `slide-quality.ts`: yupqa slayd detektori (`thinSlides`) + BITTA xavfsiz ta'mir chaqiruvi (qadamlar soni, test kaliti, iqtibos saqlanadi); `limitsFor(rules, counts)` — auditoriya poli × element soni bo'yicha P2 maketida o'lchangan limitlar; `clipTo` so'z chegarasida; prompt maqsadlari (`MAKET HAJMI`) qoidalardan hisoblanadi; kattalar jadvali kamida 3 so'zli katak. |
+| P4 forma | «Reja bandlari» sig'imga qarab (o'chirilgan variantlar, moslashuvchan standart, «Tanlangan N band sig‘maydi» izohi); chiplar ⇄ tugmalar dvigatel bilan bir xil (`resolvePlanFlags`/`activeBlockIds`); `quizCount`/`agendaSlide` faqat tanlanganda yuboriladi; `blocks` faqat pro-slide; eski qoralamalar `v:2` bilan tozalanadi; Chromium smoke. |
+| P5 tekshiruv | `scripts/slide-audit.mts` (reja qamrovi, tartib raqami sizishi, «…» kesik, skelet sizishi, yupqa matn — `meta` bo'lsa dvigatel detektori) + 7 jonli holat (`npm run live -- slide pro-slide slide-lesson slide-lecture pro-slide-open-lesson slide-report pro-slide-min`). |
+| P6 | `deliveredCount` pro-slide'ni ham hisoblaydi — kam yetkazilganda qisman qaytarish (A3-03). |
+| P7/W7 | Ko'ruvchi tahriri `plan`ni saqlaydi; tahrir limitlari auditoriya bo'yicha (`limitsFor`), tegilmagan matn qisqarmaydi. |
+
+### Tekshiruv
+- Gate `slides3-pre` (879f495): typecheck 0, lint 0, unit yashil, viewer, UI, build, fresh-Postgres smoke — hammasi yashil.
+- Jonli «keyin» (7 deka, real Gemini): reja qamrovi 7/7 (oldin 0/6), tartib raqami sizishi 0, halol skelet; ko'z bilan: Orol 4/4, Kvant 5/5 band o'z slaydi bilan, sarlavha = reja bandi.
+- Qolgan: 4 dekada bir necha belgi ortiqcha matn «…» bilan kesilgan (rasm bilan siqilgan quti) → P8; bo'limsiz dekalarda reja slaydida raqam ko'rinmaydi → P9; manbalarda Google redirect URL → P10.
+
