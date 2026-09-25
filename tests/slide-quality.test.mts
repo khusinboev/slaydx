@@ -1560,3 +1560,122 @@ test("P14c-A C6: rad etilgan har slayd — indeks, maket va qolgan sabab bilan b
   assert.ok(rejected.some((l) => /index=5 layout=bullets — javob yaroqsiz/.test(l)), lines.join("\n"));
   assert.ok(lines.some((l) => /ta’mir qabul qilindi 1 \/ 4/.test(l)), lines.join("\n"));
 });
+
+// ───── P14d-A (ta'mir prompti va merge qoldiqlari)
+/*
+ * AUDIT-25 P14c sharhi N1/N5/N6:
+ *   — N1: «son va tartib o‘zgarmasin» qulfi faqat FAQAT kesilgan slaydga — yupqa (+kesilgan) slayd
+ *     ro'yxatni butunlay qayta yozadi, unga qulf aytilmaydi;
+ *   — N5: kesilgan band/bosqich o'rniga kamida min(asl, ⌈0.5 · qopqoq⌉) belgili matn — «Ha.» rad;
+ *   — N6: muqova filtri o'lik edi — olib tashlandi (C2 testi `clippedFields` qo'riqchisiga tayanadi).
+ */
+
+test("P14d-A N1: yupqa + kesilgan slayd — «son va tartib» qulfi yo'q, chuqurlashtirish bor; yupqa deka ham qulfsiz", async () => {
+  const cap3 = bulletClipLimit(rules, tpl.visual, 3);
+  const slide = S({ layout: "bullets", bullets: ["Bir.", "Ikki.", clipTo(sent(40), cap3)] });
+  assert.deepEqual(reasonsOf(slide, rules, tpl.visual), ["clipped-text", "short-bullets"]);
+  await withLlm(
+    () => jsonReply({ slides: [] }),
+    async (calls) => {
+      await repairThinSlides([slide], meta, tpl, {}, later(), later());
+      assert.doesNotMatch(calls[0].user, /SONI va TARTIBI/);
+      assert.doesNotMatch(calls[0].user, /so‘zma-so‘z/);
+      assert.match(calls[0].user, /kamchilik: matn kesilgan .*kesilgan bandni ham qutiga sig‘adigan qilib yozing: har band ≤ \d+ so‘z/);
+      assert.match(calls[0].user, /bandlar juda qisqa/);
+      assert.doesNotMatch(calls[0].system, /o‘sha son va tartib/);
+      assert.match(calls[0].system, /YUPQA slaydda .*chuqurlashtiring/);
+    },
+  );
+  // Kesilgansiz yupqa deka — tizim promptida ham qulf yo'q.
+  await withLlm(
+    () => jsonReply(good),
+    async (calls) => {
+      await repairThinSlides(deck(), meta, tpl, {}, later(), later());
+      assert.doesNotMatch(calls[0].system, /o‘sha son va tartib/);
+      assert.doesNotMatch(calls[0].user, /SONI va TARTIBI/);
+      assert.match(calls[0].system, /chuqurlashtiring/);
+    },
+  );
+});
+
+test("P14d-A N1: faqat kesilgan slayd — qulf (tizim + sabab qatori) bor, chuqurlashtirish yo'q; aralash dekada har slaydga o'zi", async () => {
+  const cap3 = bulletClipLimit(rules, tpl.visual, 3);
+  const goals = { id: "g", layout: "bullets", title: "Dars maqsadlari", bullets: [sent(12), sent(12, 3), clipTo(sent(40), cap3)] } as SlideModel;
+  assert.deepEqual(reasonsOf(goals, rules, tpl.visual), ["clipped-text"]);
+  await withLlm(
+    () => jsonReply({ slides: [] }),
+    async (calls) => {
+      await repairThinSlides([goals], meta, tpl, {}, later(), later());
+      assert.match(calls[0].system, /FAQAT kesilgan slaydda tegilmagan \(kesilmagan\) bandlarni so‘zma-so‘z, o‘sha son va tartibda qaytaring/);
+      assert.match(calls[0].user, /FAQAT shu maydonlarni ma’nosini saqlab QISQARTIRING: .*SONI va TARTIBI o‘zgarmasin/);
+      assert.doesNotMatch(calls[0].system, /chuqurlashtiring/);
+      assert.doesNotMatch(calls[0].user, /qutiga sig‘adigan qilib yozing/);
+    },
+  );
+  // Aralash deka: 0 — faqat kesilgan (qulf), 1 — yupqa + kesilgan (qulfsiz).
+  const mixed = S({ layout: "bullets", bullets: ["Bir.", "Ikki.", clipTo(sent(40, 2), cap3)] });
+  await withLlm(
+    () => jsonReply({ slides: [] }),
+    async (calls) => {
+      await repairThinSlides([goals, mixed], meta, tpl, {}, later(), later());
+      const [, block0, block1] = calls[0].user.split(/\n\n(?=index=)/);
+      assert.ok(block0?.startsWith("index=0") && block1?.startsWith("index=1"), calls[0].user);
+      assert.match(block0, /SONI va TARTIBI o‘zgarmasin/);
+      assert.doesNotMatch(block1, /SONI va TARTIBI/);
+      assert.match(calls[0].system, /o‘sha son va tartib/);
+      assert.match(calls[0].system, /chuqurlashtiring/);
+    },
+  );
+});
+
+test("P14d-A N5: kesilgan band o'rniga juda qisqa matn («Ha.») — RAD; chegara ⌈0.5 · so'z maqsadi max⌉ so'z", async () => {
+  const cap3 = bulletClipLimit(rules, tpl.visual, 3);
+  const cut = clipTo(sent(40), cap3);
+  const goals = { id: "g", layout: "bullets", title: "Dars maqsadlari", bullets: [sent(12), sent(12, 3), cut] } as SlideModel;
+  const need = Math.ceil(0.5 * layoutWordTargets(rules, tpl.visual).bullet.max);
+  assert.ok(cut.length >= 80 && cut.split(" ").length - 1 > need, `asos: ${cut.length} belgi, chegara ${need} so'z`);
+  const reply = (third: string) => () => jsonReply({ slides: [{ index: 0, bullets: [goals.bullets![0], goals.bullets![1], third] }] });
+  await withLlm(reply("Ha."), async () => assert.equal((await repairThinSlides([goals], meta, tpl, {}, later(), later()))[0], goals, "3 belgili band qabul qilindi"));
+  await withLlm(reply(sent(need - 1, 4)), async () => assert.equal((await repairThinSlides([goals], meta, tpl, {}, later(), later()))[0], goals, "chegaradan 1 so'z kam — qabul qilindi"));
+  await withLlm(reply(sent(need, 4)), async () => {
+    const [out] = await repairThinSlides([goals], meta, tpl, {}, later(), later());
+    assert.deepEqual(out.bullets, [goals.bullets![0], goals.bullets![1], sent(need, 4)], "chegaradagi band rad etildi");
+  });
+  // Prompt oralig'idagi eng qisqa javob (min so'z) — qabul (belgi qoidasi ⌈0.5 · 165⌉ uni rad etardi).
+  const minBullet = sent(layoutWordTargets(rules, tpl.visual).bullet.min, 2);
+  assert.ok(minBullet.length < Math.ceil(0.5 * cap3), `asos: ${minBullet.length} < ${Math.ceil(0.5 * cap3)}`);
+  await withLlm(reply(minBullet), async () => assert.equal((await repairThinSlides([goals], meta, tpl, {}, later(), later()))[0].bullets![2], minBullet));
+});
+
+test("P14d-A N5: process va ustun — kesilgan bosqich/band o'rniga qisqa matn RAD", async () => {
+  const stepCap = clipLimit("stepText", rules, tpl.visual, 3, undefined, NO_IMAGE);
+  const proc = S({
+    layout: "process",
+    steps: [1, 2, 3].map((n) => ({ n: String(n), title: `Bosqich ${n}`, text: n === 2 ? clipTo(sent(40, 4), stepCap) : sent(9, n) })),
+  });
+  assert.deepEqual(reasonsOf(proc, rules, tpl.visual), ["clipped-text"]);
+  await withLlm(
+    () => jsonReply({ slides: [{ index: 0, steps: proc.steps!.map((st, i) => ({ ...st, text: i === 1 ? "Ha." : st.text })) }] }),
+    async () => assert.equal((await repairThinSlides([proc], meta, tpl, {}, later(), later()))[0], proc),
+  );
+  const cap2 = clipLimit("colItem", rBold, "bold", 2, undefined, NO_IMAGE);
+  const col = S({ layout: "twoCol", leftTitle: "Eski", rightTitle: "Yangi", left: [upTo(60), upTo(60, 3), upTo(60, 6)], right: [upTo(90, 1), clipTo(sent(40, 2), cap2)] });
+  assert.deepEqual(reasonsOf(col, rBold, "bold"), ["clipped-text"]);
+  await withLlm(
+    () => jsonReply({ slides: [{ index: 0, right: [col.right![0], "Yo‘q."] }] }),
+    async () => assert.equal((await repairThinSlides([col], m1011, tBold, {}, later(), later()))[0], col),
+  );
+});
+
+test("P14d-A N6: muqova hech qachon nomzod emas — kesilgan muqova sarlavhasi sababsiz (filtrsiz ham chaqiruv yo'q)", async () => {
+  const cover = { id: "c", layout: "title", title: clipTo(`${sent(12)} ${sent(4, 3)}`, SLIDE_LIMITS.title), subtitle: "Ma’ruza" } as SlideModel;
+  assert.ok(cover.title.endsWith("…"), "asos: sarlavha kesilgan");
+  assert.deepEqual(reasonsOf(cover, rules, tpl.visual), []);
+  await withLlm(
+    () => jsonReply({ slides: [{ index: 0, title: sent(5) }] }),
+    async (calls) => {
+      assert.equal((await repairThinSlides([cover], meta, tpl, {}, later(), later()))[0], cover);
+      assert.equal(calls.length, 0);
+    },
+  );
+});

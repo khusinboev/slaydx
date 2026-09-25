@@ -744,6 +744,21 @@ function samePrefix(orig: string, next: string, cap: number): boolean {
 }
 
 /**
+ * Kesilgan band/bosqich o'rniga kelgan matn TO'LIQ (P14c sharhi N5):
+ * kamida min(asl so'zlari − 1, ⌈0.5 · maydon so'z maqsadi max⌉) so'z —
+ * qisqartirish «Ha.» ga aylanmasin. Asl oxirgi so'z «…» bilan chala,
+ * shuning uchun −1.
+ *
+ * `samePrefix` dagi BELGI qoidasi (⌈0.5 · qopqoq⌉) bu yerda yaramaydi:
+ * nasr bandining qutisi so'z maqsadidan keng (bakalavr: quti 165 belgi,
+ * prompt 9–12 so'z ≈ 70–80 belgi) — promptga to'liq rioya qilgan
+ * qisqartma rad etilardi. Chegara so'z maqsadidan — prompt bilan bir manba.
+ */
+function fullEnough(orig: string, next: string, maxWords: number): boolean {
+  return words(next) >= Math.min(words(orig.replace(/…\s*$/u, "")) - 1, Math.ceil(0.5 * Math.max(1, maxWords)));
+}
+
+/**
  * Model javobini ASL slayd ustiga qo'yadi — faqat shu maketning MATN
  * maydonlari. `id`, `layout`, `plan`, rasm, izoh va boshqa hamma narsa
  * asl slayddan (spread) qoladi; `title` — faqat kesilgan rejasiz
@@ -809,6 +824,10 @@ const filled = (v: string[] | undefined) => (v ?? []).filter((x) => x.trim());
  * Tanadagi kesilgan RO'YXATLAR — chegara `clippedFields` va yozuvchi
  * bilan bir xil (`bulletClipLimit`, `clipLimit(…, NO_IMAGE)`, son —
  * slayddagi haqiqiy son; ustunda HAR TOMON o'z soni bilan).
+ *
+ * TODO(P14c sharhi N6): `clippedFields` shu tekshiruvni (va
+ * `titleClipped` ni) takrorlaydi — uni shu funksiya + `titleClipped` dan
+ * qurish kerak, ikkisi ajralib ketmasin (`clippedFields` P14d-B hududida).
  */
 function clippedBodyKeys(s: SlideModel, rules: BodyRules, visual?: SlideVisual): ClippedKey[] {
   if (s.layout === "bullets") {
@@ -844,9 +863,11 @@ function clippedBodyKeys(s: SlideModel, rules: BodyRules, visual?: SlideVisual):
  * shuning uchun bosh mosligi shart. Nasr bandini qisqartirish esa gapni
  * qayta tuzishi tabiiy («Orol dengizi … sababli qurigan» → «Sug‘orish
  * Orolni quritdi»); bosh sharti to'g'ri qisqartmalarni rad etardi. Son va
- * o'rin qulfi boshqa bandlarni saqlaydi — xavf faqat shu band ichida.
+ * o'rin qulfi boshqa bandlarni saqlaydi — xavf faqat shu band ichida;
+ * u ham `fullEnough` bilan cheklangan (N5): kesilgan band «Ha.» ga
+ * almashsa — rad.
  */
-function byPosition(orig: string[], raw: unknown, cap: number): string[] | null {
+function byPosition(orig: string[], raw: unknown, cap: number, maxWords: number): string[] | null {
   if (!Array.isArray(raw) || raw.length !== orig.length) return null;
   const out: string[] = [];
   for (const [i, was] of orig.entries()) {
@@ -855,7 +876,7 @@ function byPosition(orig: string[], raw: unknown, cap: number): string[] | null 
       continue;
     }
     const next = clipTo(String(raw[i] ?? ""), cap);
-    if (!next) return null;
+    if (!next || !fullEnough(was, next, maxWords)) return null;
     out.push(next);
   }
   return out;
@@ -864,9 +885,12 @@ function byPosition(orig: string[], raw: unknown, cap: number): string[] | null 
 /** Faqat kesilgan slayd tanasi — `byPosition` qoidasi har ro'yxatga (ustunda har tomonga alohida). */
 function mergeClipped(orig: SlideModel, raw: Record<string, unknown>, rules: BodyRules, visual?: SlideVisual): SlideModel | null {
   const keys = clippedBodyKeys(orig, rules, visual);
+  // So'z maqsadi — prompt sabab qatori (`REASON_TEXT["clipped-text"]`) bilan bir manba.
+  const fields = clippedFields(orig, rules, visual);
+  const maxWords = (f: ClippedField["field"]) => fields.find((x) => x.field === f)?.words ?? 1;
   if (orig.layout === "bullets") {
     const list = filled(orig.bullets);
-    const bullets = byPosition(list, raw.bullets, bulletClipLimit(rules, visual, list.length));
+    const bullets = byPosition(list, raw.bullets, bulletClipLimit(rules, visual, list.length), maxWords("bullets"));
     return bullets ? { ...orig, bullets } : null;
   }
   if (orig.layout === "process") {
@@ -881,7 +905,7 @@ function mergeClipped(orig: SlideModel, raw: Record<string, unknown>, rules: Bod
       }
       const o = raw.steps[i];
       const text = o && typeof o === "object" ? clipTo(String((o as Record<string, unknown>).text ?? ""), cap) : "";
-      if (!text) return null;
+      if (!text || !fullEnough(st.text, text, maxWords("stepText"))) return null;
       steps.push({ ...st, text });
     }
     return { ...orig, steps };
@@ -892,7 +916,7 @@ function mergeClipped(orig: SlideModel, raw: Record<string, unknown>, rules: Bod
       if (k !== "left" && k !== "right") continue;
       const list = filled(orig[k]);
       // Har tomon O'Z sonidagi quti bilan — yozuvchi `col()` kabi (C5).
-      const side = byPosition(list, raw[k], clipLimit("colItem", rules, visual, list.length, undefined, NO_IMAGE));
+      const side = byPosition(list, raw[k], clipLimit("colItem", rules, visual, list.length, undefined, NO_IMAGE), maxWords("colItem"));
       if (!side) return null;
       next[k] = side;
     }
@@ -1009,7 +1033,16 @@ function mergeBody(orig: SlideModel, raw: Record<string, unknown>, rules: BodyRu
   }
 }
 
-const REASON_TEXT: Record<ThinReason, (t: LayoutWordTargets, r: BodyRules, s: SlideModel, visual?: SlideVisual) => string> = {
+/**
+ * Har sabab matni. `reasons` — shu slaydning TO'LIQ sabablari (P14c
+ * sharhi N1): yupqa slaydda (`clipped-text` + boshqa sabab) ro'yxat
+ * butunlay qayta yoziladi (`mergeBody`), shuning uchun «son va tartib
+ * o'zgarmasin» qulfi faqat FAQAT kesilgan slaydga aytiladi.
+ */
+const REASON_TEXT: Record<
+  ThinReason,
+  (t: LayoutWordTargets, r: BodyRules, s: SlideModel, visual: SlideVisual | undefined, reasons: readonly ThinReason[]) => string
+> = {
   "few-bullets": (_t, r) => `band kam — ${r.minBullets}–${r.maxBullets} ta band yozing`,
   "short-bullets": (t) => `bandlar juda qisqa — har biri ${fmtRange(t.bullet)} so‘zli TO‘LIQ gap (ta’rif, sabab, misol, oqibat)`,
   "short-steps": (t) =>
@@ -1020,10 +1053,14 @@ const REASON_TEXT: Record<ThinReason, (t: LayoutWordTargets, r: BodyRules, s: Sl
   "clipped-option": (t) =>
     `variant kesilgan yoki qutiga sig‘maydi — faqat shu variantni ≤ ${t.quizOptionMax} so‘z qilib, ASL MATNNING BOSHINI saqlab to‘ldiring/qisqartiring; qolgan variantlar, tartib va answer o‘zgarmasin`,
   "short-columns": (t) => `ustunlar yupqa — har ustunda ${fmtRange({ min: Math.min(3, t.maxColItems), max: t.maxColItems })} band, har band ${fmtRange(t.colItem)} so‘z`,
-  "clipped-text": (_t, r, s, visual) =>
-    `matn kesilgan («…» bilan tugagan) — FAQAT shu maydonlarni ma’nosini saqlab QISQARTIRING: ${clippedFields(s, r, visual)
+  "clipped-text": (_t, r, s, visual, reasons) => {
+    const caps = clippedFields(s, r, visual)
       .map((f) => `${{ title: "title", bullets: "har band", colItem: "har ustun bandi", stepText: "har bosqich text" }[f.field]} ≤ ${f.words} so‘z va ≤ ${Math.floor(PROMPT_HEADROOM * f.cap)} belgi`)
-      .join(", ")}; ro‘yxatdagi bandlar SONI va TARTIBI o‘zgarmasin, kesilmagan bandlarni so‘zma-so‘z qaytaring, «…» yozmang`,
+      .join(", ");
+    return clippedOnly(reasons)
+      ? `matn kesilgan («…» bilan tugagan) — FAQAT shu maydonlarni ma’nosini saqlab QISQARTIRING: ${caps}; ro‘yxatdagi bandlar SONI va TARTIBI o‘zgarmasin, kesilmagan bandlarni so‘zma-so‘z qaytaring, «…» yozmang`
+      : `matn kesilgan («…» bilan tugagan) — qayta yozishda kesilgan bandni ham qutiga sig‘adigan qilib yozing: ${caps}; «…» yozmang`;
+  },
 };
 
 /** Maket bo'yicha model qaytaradigan maydonlar (javob sxemasi uchun). */
@@ -1090,10 +1127,12 @@ export async function repairThinSlides(
     if (!llmEnabled()) return out;
     const rules = bodyRules(meta, tpl.id);
     const visual = tpl.visual;
-    // Muqova sarlavhasi — `meta.topic` (slide-write.ts ta'mirdan keyin bosib yozadi): kesilgan bo'lsa ham nomzod emas (C2).
-    const thin = thinSlides(out, rules, visual)
-      .filter(({ index, reasons }) => !(out[index].layout === "title" && clippedOnly(reasons)))
-      .slice(0, REPAIR_MAX_SLIDES);
+    /*
+     * Muqova (`layout:"title"`) hech qachon nomzod emas (C2): `clippedFields`
+     * uni o'tkazib yuboradi va boshqa qoida unga tegmaydi — alohida filtr
+     * o'lik kod edi (P14c sharhi N6). `repairedTitle` qo'riqchisi qoladi.
+     */
+    const thin = thinSlides(out, rules, visual).slice(0, REPAIR_MAX_SLIDES);
     if (!thin.length) return out;
     const left = remainingMs(deadline);
     if (left < REPAIR_MIN_MS) return out;
@@ -1118,7 +1157,10 @@ export async function repairThinSlides(
           ? `YUPQA slaydda ko‘rsatilgan maydonlarni to‘liq qayta yozing — mavjud fikrni chuqurlashtiring: ta’rif, sabab, misol, oqibat.`
           : "",
         `KESILGAN («…») maydonni FAQAT qisqartiring — ma’no saqlansin, yangi fikr qo‘shmang.`,
-        `Tegilmagan (kesilmagan) bandlarni so‘zma-so‘z, o‘sha son va tartibda qaytaring.`,
+        // N1: son/tartib qulfi faqat FAQAT kesilgan slayd bo'lsa — yupqa slayd ro'yxatni butunlay qayta yozadi.
+        thin.some(({ reasons }) => clippedOnly(reasons))
+          ? `FAQAT kesilgan slaydda tegilmagan (kesilmagan) bandlarni so‘zma-so‘z, o‘sha son va tartibda qaytaring.`
+          : "",
         `Uydirma raqam, sana, manba, iqtibos YO‘Q. Boshqa slaydlarni takrorlamang.`,
       ]
         .filter(Boolean)
@@ -1136,7 +1178,7 @@ export async function repairThinSlides(
         const s = out[index];
         return [
           `index=${index} layout=${s.layout}`,
-          `kamchilik: ${reasons.map((r) => REASON_TEXT[r](t, rules, s, visual)).join("; ")}`,
+          `kamchilik: ${reasons.map((r) => REASON_TEXT[r](t, rules, s, visual, reasons)).join("; ")}`,
           `qaytaring: {"index":${index},${requestFields(s, reasons, rules, visual)}}`,
           `hozirgi: ${JSON.stringify(current(s))}`,
         ].join("\n");
