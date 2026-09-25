@@ -98,6 +98,9 @@ Shartnomalar (yakuniy, review'lardan keyin):
 - Juda kichik dekada (4 slayd, test + reja) reja slaydi tushib qolsa forma tugmasi ON turadi, izoh yo'q.
 - `planFlags` uch joyda takrorlangan (meta.ts, planBudget, forma) — bitta eksportga yig'ish.
 - P2 tor qutilar: circle/editorial bo'lim sarlavhasi (bold, 16–24 belgi), cards test varianti 24 pt da, rail 5 bosqich — maket o'zgarishi kerak; hozir matn ustun, rasm joy beradi.
+- `sanitizeSlideModel` bo'sh satrli `kicker/subtitle/footer` kalitini tashlab yuboradi (render bir xil, lekin undo JSON tengligi qat'iy emas) — testga qulflash yoki `""` saqlash.
+- Vizuallarda bold sarlavha o'lchovi `CHAR_EM_BOLD`siz (`inkHeight`) — `layerFits` bilan kelishtirish (P2 titles follow-up).
+- circle twoCol karta sarlavhasi birinchi band bilan ustma-ust (eski nuqson, AUDIT-25 dan oldin ham bor edi).
 - Stok rasm mosligi (Pexels qidiruvi `imageHint` bo'yicha) — mavzuga yaqin emas ba'zan; bu sprint doirasidan tashqarida.
 - Pro-slayd rasm ulushi bo'yicha qaytarish (audit P6 review taklifi: 0.5–0.75 ulush) — egasi qarori kutilmoqda.
 
