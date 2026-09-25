@@ -287,3 +287,64 @@ test("uploadSlideImage: rasm joyi bo'lmagan maketga yuklash — 422 (applyDocOps
   assert.equal(found(seen, /UPDATE generations SET doc_json/).length, 0);
 });
 
+// ═══════════════════════════════════════════ AUDIT-25 P8: matn rasm bilan sig'maydi — 400
+
+/*
+ * Generatsiya matnni RASMSIZ qutigacha yozadi va bunday slaydga rasm qo'ymaydi
+ * (`imageYieldField`). Ko'ruvchida rasm yuklansa kontent zonasi torayadi va matn
+ * qutidan chiqardi — endi yuklash o'sha predikat bilan 400 oladi, aktiv va doc
+ * yozilmaydi. Qisqa matnli slayd — odatdagidek qabul.
+ */
+const { imageYieldField } = await import("../lib/generation/slide-quality.ts");
+const { buildSlideDeck } = await import("../lib/generation/slides.ts");
+const { TEXT_TOO_LONG_FOR_IMAGE } = await import("../lib/server/slide-image.ts");
+
+const P8_WORDS = "Suv aylanishi okean yuzasidan bug‘lanish bilan boshlanadi va bulutlarda kondensatsiyalanib yomg‘ir hamda qor shaklida yerga qaytadi".split(" ");
+const p8Text = (n: number, from = 0) => {
+  let out = "";
+  for (let i = 0; ; i += 1) {
+    const w = P8_WORDS[(from + i) % P8_WORDS.length];
+    const next = out ? `${out} ${w}` : w;
+    if (next.length > n) return out;
+    out = next;
+  }
+};
+const col = (len: number) => [0, 1, 2, 3].map((k) => p8Text(len, k * 2));
+const longTwo: SlideModel = { id: "s3", layout: "twoCol", title: "Ikki jarayon", leftTitle: "Bug‘lanish", rightTitle: "Yog‘in", left: col(100), right: col(100) };
+const shortTwo: SlideModel = { id: "s4", layout: "twoCol", title: "Ikki jarayon", leftTitle: "Bug‘lanish", rightTitle: "Yog‘in", left: col(30), right: col(30) };
+const p8Doc = docOf([...slides, longTwo, shortTwo]);
+
+function p8Req(index: number): Request {
+  const fd = new FormData();
+  fd.set("file", new File([blobPart(pngBytes(32))], "rasm.png", { type: "image/png" }));
+  fd.set("baseVersion", "3");
+  return new Request(`http://x/api/generations/${GEN}/slides/${index}/image`, { method: "POST", body: fd });
+}
+
+test("P8: matni rasmli qutiga sig'maydigan slaydga rasm yuklash — 400 «Matn rasm bilan sig‘maydi…», hech narsa yozilmaydi", async (t) => {
+  const deck = buildSlideDeck(p8Doc);
+  assert.equal(imageYieldField(longTwo, deck.bodyType, deck.visual), "colItem", "sinov asosi: uzun ustun rasm bilan sig'maydi");
+  assert.equal(imageYieldField(shortTwo, deck.bodyType, deck.visual), null, "sinov asosi: qisqa ustun sig'adi");
+  const seen = mockDb(t, { forEdit: editRow({ doc_json: p8Doc }) });
+  const err = await expectApiError(uploadSlideImage(p8Req(3), GEN, USER, 3), 400);
+  assert.equal(err.message, TEXT_TOO_LONG_FOR_IMAGE);
+  assert.equal(err.message, "Matn rasm bilan sig‘maydi — avval matnni qisqartiring");
+  assert.equal(found(seen, /INSERT INTO generation_assets/).length, 0, "rad etilgan rasm aktiv sifatida yozildi");
+  assert.equal(found(seen, /UPDATE generations SET doc_json/).length, 0);
+});
+
+test("P8: qisqa matnli twoCol ga rasm yuklash — qabul qilinadi", async (t) => {
+  const seen = mockDb(t, {
+    forEdit: editRow({ doc_json: p8Doc }),
+    updateDoc: { doc_version: 4 },
+    detail: detailRow(),
+    hasFile: true,
+  });
+  const gen = await uploadSlideImage(p8Req(4), GEN, USER, 4);
+  assert.equal(gen.docVersion, 4);
+  const upd = seen.find((s) => /UPDATE generations SET doc_json/.test(s.text))!;
+  const nextDoc = JSON.parse(String(upd.params[2])) as AcademicDoc;
+  assert.ok(nextDoc.slides![4].image, "qisqa slayd rasm olishi kerak");
+  assert.deepEqual(nextDoc.slides![4].left, shortTwo.left);
+});
+

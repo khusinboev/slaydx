@@ -358,6 +358,75 @@ test("redirect bo'lmagan manbaga HEAD yuborilmaydi — ortiqcha so'rov yo'q", as
   );
 });
 
+/**
+ * Jonli holat (2026-09-25): sekin DNS'li mashinada 8 ta HEAD BIR VAQTDA
+ * yuborilgan va hammasi 3 s'lik umumiy AbortController ostida birga
+ * abort bo'lgan. Tuzatish — `mapPool` orqali concurrency 3 ga tushirildi.
+ * Bu test har manba HEAD so'rovini «ushlab turadigan» (kichik kechikish)
+ * stub bilan bir vaqtdagi eng ko'p so'rovlarni SANAYDI: mutatsiya
+ * sifatida `resolveSources` eski `Promise.all(sources.map(...))`
+ * shakliga qaytarilsa, `maxInFlight` 3 dan oshib ketadi va test qizil
+ * bo'ladi (tekshirib ko'rildi — pastdagi hisobotda).
+ */
+test("redirect resolveSources: bir vaqtda ko'pi bilan 3 ta HEAD (8 manba baravariga yuborilmaydi)", async () => {
+  const eight = Array.from({ length: 8 }, (_, i) => ({
+    web: { uri: `https://vertexaisearch.cloud.google.com/grounding-api-redirect/x${i}`, title: `site${i}.uz` },
+  }));
+  let inFlight = 0;
+  let maxInFlight = 0;
+  await withFetch(
+    async (req) => {
+      if (req.method !== "HEAD") return geminiReply(FACTS, { ...GROUNDING, groundingChunks: eight });
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise((r) => setTimeout(r, 20));
+      inFlight -= 1;
+      return { ok: true, status: 302, headers: { get: (h: string) => (h === "location" ? `https://real-${req.url.slice(-1)}.uz/` : null) } };
+    },
+    async () => {
+      const res = await runSlideResearch(meta({ internetSearch: true }), Date.now() + 60_000);
+      assert.ok(res);
+      assert.equal(res.sources.length, 8, "8 ta noyob manba saqlansin");
+      assert.ok(
+        res.sources.every((s) => s.uri.startsWith("https://real-")),
+        "hammasi ochilgan bo'lishi kerak — concurrency chegarasi natijani buzmaydi",
+      );
+      assert.ok(maxInFlight <= 3, `bir vaqtda ko'pi bilan 3 ta HEAD kutilgan, kuzatildi: ${maxInFlight}`);
+      assert.ok(maxInFlight >= 2, "concurrency butunlay 1 ga tushib qolmasin (parallellik yo'qolmagan bo'lsin)");
+    },
+  );
+});
+
+/**
+ * Byudjet: `REDIRECT_MS` (6 s) dan kam vaqt qolgan bo'lsa HEAD umuman
+ * yuborilmaydi — domen (eski `uri`) qoladi. Gemini javobi ATAYLAB
+ * kechiktiriladi: `MIN_RESEARCH_MS` (8 s) darvozasidan o'tish uchun
+ * boshida yetarli vaqt bor, lekin kechikish tufayli redirect bosqichiga
+ * kelganda byudjet 6 s dan kamayib qoladi.
+ */
+test("byudjet REDIRECT_MS dan kam qolganda HEAD yuborilmaydi — domen qoladi, byudjet oshirilmaydi", async () => {
+  await withFetch(
+    async (req) => {
+      if (req.method === "HEAD") throw new Error("byudjet yetmasa HEAD umuman yuborilmasligi kerak edi");
+      await new Promise((r) => setTimeout(r, 4_500));
+      return geminiReply(FACTS, GROUNDING);
+    },
+    async (calls) => {
+      const started = Date.now();
+      const res = await runSlideResearch(meta({ internetSearch: true }), started + 10_000);
+      const elapsed = Date.now() - started;
+      assert.ok(res, "matn baribir qaytsin");
+      assert.equal(res.sources.length, 3, "manbalar saqlansin");
+      // Aynan shu qator byudjet chegarasini (REDIRECT_MS) qulflaydi: eski
+      // 3 s'lik qiymatga qaytarilsa, bu yerda ~5.5 s qolgani uchun HEAD
+      // BAribir yuboriladi va assert qizil bo'ladi (qo'lda tekshirildi).
+      assert.equal(calls.filter((c) => c.method === "HEAD").length, 0, "byudjet yetmasa bitta ham HEAD yuborilmasin");
+      assert.ok(res.sources.every((s) => s.uri.includes("vertexaisearch")), "byudjet yetmagani uchun redirect ochilmadi");
+      assert.ok(elapsed < 10_000 + 1_000, `umumiy vaqt deck muddatidan sezilarli oshmasligi kerak, ketdi ${elapsed} ms`);
+    },
+  );
+});
+
 // ───────────────────────────────────────── xato yo'llari
 
 test("groundingMetadata umuman kelmasa — faktlar bor, sources bo'sh", async () => {

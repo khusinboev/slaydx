@@ -62,4 +62,42 @@ Shartnomalar (yakuniy, review'lardan keyin):
 - P1 `writeSlidesWithLlm`: `slideFloor` → `repairThinSlides` (6 arg) → `syncAgenda` → `finalizeQuiz`.
 
 ## 4. Bajarilish yozuvi
-(to'ldiriladi)
+
+### Jarayon
+- 4 auditor (A1 prompt/limit, A2 maket, A3 tuzilma/parametr, A4 jonli baza) → 24 topilma (`docs/audit-25/`). A4: 6 ta «oldin» deka ($0.46) — hammasida S1+S2 takrorlandi.
+- Paketlar alohida worktree'larda, har biriga mustaqil Opus reviewer (`audit/reviews/AUDIT-25-P*.md`); hech biri birinchi
+  urinishda o'tmadi — jami 14 review raundi. Har o'zgarish: qizil→yashil regressiya testi + mutatsiya tekshiruvi.
+- Merge tartibi: P6 → P5 → P2 → P1 → P7 → P3 → P4 → P1 ulanishi (W1–W6) → P3 follow-up.
+
+### Nima o'zgardi (merge qilingan)
+| Paket | Natija |
+|---|---|
+| P1 dvigatel | `deckBeats` har reja bandiga ≥ 1 mazmun slaydi (`plan: i`, hech qachon qirqilmaydi); agenda mazmun sarlavhalaridan quriladi (`syncAgenda`); `planCapacity`/`effectivePlanItems`/`defaultPlanItems` (10 slayd → 3 band); `plannedBlocks` — beats va prompt bir manbadan; aniq `quizCount: 0` = testsiz, aniq `agendaSlide: true` = reja; pro-slide'da yuborilgan `blocks` ustun; lesson shablonining metodik rollari (`structural`) reja bandi bo'lmaydi; sarlavhadagi tartib raqami va `REJA i-band:` prefiksi olib tashlanadi; halol skelet (uydirma raqam yo'q). Reviewer zondi: 60 000 tasodifiy kirishda invariantlar buzilmadi. |
+| P2 maket | 15 ta «deka indeksi» raqami olib tashlandi; bo'lim raqami faqat `s.plan`dan, yo'q bo'lsa chizilmaydi (bo'shliqsiz); `bodyFit` — auditoriya poli (`minPt`), overflow'siz, so'z bo'linmaydi (bold kengligi 0.60 em), qator kartalari bir xil o'lcham; 14 auditoriya × 17 vizual × 14 holat = 35 462 qatlam testi. |
+| P3 zichlik | `slide-quality.ts`: yupqa slayd detektori (`thinSlides`) + BITTA xavfsiz ta'mir chaqiruvi (qadamlar soni, test kaliti, iqtibos saqlanadi); `limitsFor(rules, counts)` — auditoriya poli × element soni bo'yicha P2 maketida o'lchangan limitlar; `clipTo` so'z chegarasida; prompt maqsadlari (`MAKET HAJMI`) qoidalardan hisoblanadi; kattalar jadvali kamida 3 so'zli katak. |
+| P4 forma | «Reja bandlari» sig'imga qarab (o'chirilgan variantlar, moslashuvchan standart, «Tanlangan N band sig‘maydi» izohi); chiplar ⇄ tugmalar dvigatel bilan bir xil (`resolvePlanFlags`/`activeBlockIds`); `quizCount`/`agendaSlide` faqat tanlanganda yuboriladi; `blocks` faqat pro-slide; eski qoralamalar `v:2` bilan tozalanadi; Chromium smoke. |
+| P5 tekshiruv | `scripts/slide-audit.mts` (reja qamrovi, tartib raqami sizishi, «…» kesik, skelet sizishi, yupqa matn — `meta` bo'lsa dvigatel detektori) + 7 jonli holat (`npm run live -- slide pro-slide slide-lesson slide-lecture pro-slide-open-lesson slide-report pro-slide-min`). |
+| P6 | `deliveredCount` pro-slide'ni ham hisoblaydi — kam yetkazilganda qisman qaytarish (A3-03). |
+| P7/W7 | Ko'ruvchi tahriri `plan`ni saqlaydi; tahrir limitlari auditoriya bo'yicha (`limitsFor`), tegilmagan matn qisqarmaydi (undo aynan qaytaradi). |
+| P8 | «Matn rasmdan ustun»: prompt maqsadlariga 15 % zahira (7 jonli dekada p90 = 10.4 belgi/so'z o'lchandi), yozuv bosqichi rasmsiz quti sig'imida kesadi, matni rasm yonida sig'maydigan slayd rasmsiz qoladi (rasm va'dasi shundan keyin hisoblanadi — D1), bullet'lar ham quti sig'imida; rasm yuklash yo'li matn sig'masa 400 qaytaradi. |
+| P9 | Bo'limsiz dekalarda ham reja slaydlari «0N» belgisi bilan (17 vizualda o'z uslubida); rejasiz slaydlar 14 280 kombinatsiyada bayt-bo'yicha o'zgarmagan. |
+| P10 | Grounding redirect'lari 3 tadan parallel, 6 s byudjet, so'rov boshiga 3 s; hal bo'lmasa manbalar slaydida domen ko'rsatiladi, redirect URL hech qachon chiqmaydi. |
+
+### Egasi qarori (2026-09-25)
+- **D1 — «matn rasmdan ustun» (P8):** slayd matni rasm yonida sig'masa, slayd rasmsiz qoladi va rasm va'dasiga
+  kirmaydi (qisman qaytarish yo'q). Egasi (a) variantini tanladi: qoida qabul qilindi, pro-slayd tavsifi
+  «Har mos slaydga AI chizgan rasm» (`lib/tools.ts`), narx o'zgarmaydi.
+
+### Tekshiruv
+- Gate `slides3-pre` (879f495): typecheck 0, lint 0, unit yashil, viewer, UI, build, fresh-Postgres smoke — hammasi yashil.
+- Jonli «keyin» (7 deka, real Gemini): reja qamrovi 7/7 (oldin 0/6), tartib raqami sizishi 0, halol skelet; ko'z bilan: Orol 4/4, Kvant 5/5 band o'z slaydi bilan, sarlavha = reja bandi.
+- Qolgan (P8/P9/P10 bilan yopildi): «…» kesiklar, reja slaydida raqam, redirect URL — yakuniy jonli tekshiruv pastda.
+
+### Qarz (keyingi sprintga)
+- Undo/`imageRestore` orqali rasm qaytarilganda matn uzaytirilgan bo'lsa tekshiruv yo'q (faqat yuklash yo'li himoyalangan; `slide-edit.ts` brauzerga ham yuklanadi, `slide-quality.ts` esa server-only).
+- Juda kichik dekada (4 slayd, test + reja) reja slaydi tushib qolsa forma tugmasi ON turadi, izoh yo'q.
+- `planFlags` uch joyda takrorlangan (meta.ts, planBudget, forma) — bitta eksportga yig'ish.
+- P2 tor qutilar: circle/editorial bo'lim sarlavhasi (bold, 16–24 belgi), cards test varianti 24 pt da, rail 5 bosqich — maket o'zgarishi kerak; hozir matn ustun, rasm joy beradi.
+- Stok rasm mosligi (Pexels qidiruvi `imageHint` bo'yicha) — mavzuga yaqin emas ba'zan; bu sprint doirasidan tashqarida.
+- Pro-slayd rasm ulushi bo'yicha qaytarish (audit P6 review taklifi: 0.5–0.75 ulush) — egasi qarori kutilmoqda.
+

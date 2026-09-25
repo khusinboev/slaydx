@@ -6,7 +6,7 @@ import { assertJobTime } from "./deadline";
 import { bodyRules, type BodyRules } from "./slide-audience";
 import { blocksToBeats, planRoleText } from "./slide-blocks";
 import { SLIDE_LIMITS, clipTo, limitsFor } from "./slide-limits";
-import { clipLimit, layoutWordTargets, repairThinSlides } from "./slide-quality";
+import { NO_IMAGE, bulletClipLimit, clipLimit, layoutWordTargets, repairThinSlides } from "./slide-quality";
 import { deckFooter } from "./slide-identity";
 import { purposeDefaults } from "./slide-purpose";
 import { finalizeQuiz } from "./slide-quiz";
@@ -14,7 +14,7 @@ import { attachSlideImages } from "./slide-images";
 import { SLIDE_MAX } from "./slide-params";
 import { deckJsonSchema, slideSystem, type SlidePromptCtx } from "./slide-prompt";
 import type { SlideProgressSink } from "./slide-progress";
-import { runSlideResearch } from "./slide-research";
+import { isGoogleRedirect, runSlideResearch } from "./slide-research";
 import { expandBeats, resolveSlideTemplate, type SlideBeat, type SlideTemplate, type SlideVisual } from "./slide-templates";
 import { getSlideTheme } from "./slide-themes";
 import { isSlideLayout, type SlideLayout, type SlideModel, type SlideThemeId } from "./slide-types";
@@ -121,13 +121,26 @@ type BulletRules = BodyRules;
  * bo'sh qoldirishi yoki uydirishi mumkin. Tadqiqot bo'lsa — manbalar
  * FAQAT undan (uydirma bo'lmasin); bo'lmasa model yozgani qoladi,
  * `references` maketi buni «tekshirilmagan» deb belgilaydi (WP-C).
+ *
+ * Ikkinchi darajali himoya (belts-and-braces, 2026-09-25): `slide-research.ts
+ * resolveSources` Google redirectini ochishga harakat qiladi, lekin sekin
+ * DNS'da baribir yiqilishi mumkin — bunda `src.uri` hali ham
+ * `vertexaisearch.cloud.google.com/...` bo'lib qoladi. Bunday havolani
+ * TO'G'RIDAN-TO'G'RI ko'rsatmaymiz: o'quvchiga foydasiz (redirect ID
+ * hech narsa aytmaydi) va vaqt o'tib eskiradi. `source` maydonini domen
+ * (`title`) bilan cheklaymiz — `planReferences` (slide-layout-extra.ts)
+ * shu maydonni ikkinchi qatorda ko'rsatadi, bo'sh qoldirsak qator OCH
+ * qoladi, shuning uchun bo'sh emas, domen.
  */
-function applyResearchRefs(slides: SlideModel[], ctx: SlidePromptCtx) {
+export function applyResearchRefs(slides: SlideModel[], ctx: SlidePromptCtx) {
   const sources = ctx.research?.sources ?? [];
   if (!sources.length) return;
   for (const sl of slides) {
     if (sl.layout !== "references") continue;
-    sl.refs = sources.slice(0, 6).map((src) => ({ title: src.title, source: src.uri }));
+    sl.refs = sources.slice(0, 6).map((src) => ({
+      title: src.title,
+      source: isGoogleRedirect(src.uri) ? src.title : src.uri,
+    }));
   }
 }
 
@@ -139,7 +152,10 @@ function normalizeSlide(raw: unknown, i: number, footer: string, rules: BulletRu
   if (!raw || typeof raw !== "object") return null;
   /*
    * W3/W4 (AUDIT-25): AVVAL son (auditoriya × maket ruxsati — `limitsFor`),
-   * keyin uzunlik `clipLimit(maydon, rules, visual, son, qator)` bilan —
+   * keyin uzunlik `clipLimit(maydon, rules, visual, son, qator, NO_IMAGE)` bilan —
+   * RASMSIZ quti sig'imida (P8, «matn rasmdan ustun»): matn bosqichi rasmni
+   * hali bilmaydi; rasmli qutiga sig'maydigan slayd keyin rasmdan voz
+   * kechadi (`imageYieldField`, `attachSlideImages`), matn kesilmaydi —
    * ya'ni 3 ta bosqich 5 tasiga mo'ljallangan tor chegaradan qirqilmaydi,
    * 1–4-sinf kartasi esa bakalavr chegarasida qolmaydi.
    */
@@ -202,7 +218,7 @@ function normalizeSlide(raw: unknown, i: number, footer: string, rules: BulletRu
    */
   function col(v: unknown): string[] {
     const items = list(v, Math.max(1, Math.min(SLIDE_LIMITS.colItems, layoutWordTargets(rules, visual).maxColItems)));
-    return items.map((x) => clipTo(x, clipLimit("colItem", rules, visual, items.length)));
+    return items.map((x) => clipTo(x, clipLimit("colItem", rules, visual, items.length, undefined, NO_IMAGE)));
   }
   if (layout === "quote") {
     return {
@@ -216,7 +232,7 @@ function normalizeSlide(raw: unknown, i: number, footer: string, rules: BulletRu
     const cards = (Array.isArray(o.stats) ? o.stats : [])
       .filter((s): s is Record<string, unknown> => Boolean(s) && typeof s === "object" && String((s as Record<string, unknown>).value ?? "").trim() !== "")
       .slice(0, lim.statsMax);
-    const labelMax = clipLimit("statLabel", rules, visual, cards.length);
+    const labelMax = clipLimit("statLabel", rules, visual, cards.length, undefined, NO_IMAGE);
     const stats = cards.length
       ? cards
           .map((x) => {
@@ -254,10 +270,10 @@ function normalizeSlide(raw: unknown, i: number, footer: string, rules: BulletRu
       : [];
     // Jadvalsiz «table» slayd — bo'sh ramka. Bunday holda bandlarga qaytamiz.
     if (rawHeaders.length < 2 || rawRows.length < 2) {
-      return { ...base, layout: "bullets", bullets: arr(o.bullets, rules.maxBullets, rules.bulletChars) };
+      return { ...base, layout: "bullets", bullets: bulletItems(o.bullets) };
     }
-    const headMax = clipLimit("tableHeader", rules, visual, rawHeaders.length, rawRows.length);
-    const cellMax = clipLimit("tableCell", rules, visual, rawHeaders.length, rawRows.length);
+    const headMax = clipLimit("tableHeader", rules, visual, rawHeaders.length, rawRows.length, NO_IMAGE);
+    const cellMax = clipLimit("tableCell", rules, visual, rawHeaders.length, rawRows.length, NO_IMAGE);
     const headers = rawHeaders.map((h) => clipTo(h, headMax));
     const rows = rawRows.map((r) => r.map((c) => clipTo(c, cellMax)));
     return { ...base, table: { headers, rows } };
@@ -267,8 +283,8 @@ function normalizeSlide(raw: unknown, i: number, footer: string, rules: BulletRu
     const raws = (Array.isArray(o.steps) ? o.steps : [])
       .filter((s): s is Record<string, unknown> => Boolean(s) && typeof s === "object" && String((s as Record<string, unknown>).title ?? "").trim() !== "")
       .slice(0, lim.stepsMax);
-    const titleMax = clipLimit("stepTitle", rules, visual, raws.length);
-    const textMax = clipLimit("stepText", rules, visual, raws.length);
+    const titleMax = clipLimit("stepTitle", rules, visual, raws.length, undefined, NO_IMAGE);
+    const textMax = clipLimit("stepText", rules, visual, raws.length, undefined, NO_IMAGE);
     const steps = raws.length
       ? raws
           .map((x, n) => {
@@ -314,7 +330,7 @@ function normalizeSlide(raw: unknown, i: number, footer: string, rules: BulletRu
             const x = q as Record<string, unknown>;
             const text = clipTo(String(x.q ?? ""), QUIZ_Q_MAX);
             // Variant — auditoriya poli × vizual kartasi bo'yicha (W4; son yo'q — doim 4).
-            const options = arr(x.options, SLIDE_LIMITS.quizOptions, clipLimit("quizOption", rules, visual));
+            const options = arr(x.options, SLIDE_LIMITS.quizOptions, clipLimit("quizOption", rules, visual, undefined, undefined, NO_IMAGE));
             if (!text || options.length !== SLIDE_LIMITS.quizOptions) return null;
             // Indeks 0..3 dan tashqarida bo'lsa qisiladi — «javobsiz savol» holati bo'lmasin.
             const n = Number(x.answer);
@@ -325,7 +341,7 @@ function normalizeSlide(raw: unknown, i: number, footer: string, rules: BulletRu
           .slice(0, QUIZ_MAX)
       : [];
     if (!quiz.length) {
-      return { ...base, layout: "bullets", bullets: arr(o.bullets, rules.maxBullets, rules.bulletChars) };
+      return { ...base, layout: "bullets", bullets: bulletItems(o.bullets) };
     }
     return { ...base, quiz };
   }
@@ -361,8 +377,21 @@ function normalizeSlide(raw: unknown, i: number, footer: string, rules: BulletRu
      */
     return { ...base, bullets: arr(o.bullets, QUIZ_MAX, SLIDE_LIMITS.answersItem) };
   }
+  // `bullets` — quti sig'imida (P8 CHANGES 1); agenda va boshqa maketlarning bandlari — `bulletChars`.
+  if (layout === "bullets") return { ...base, bullets: bulletItems(o.bullets) };
   const limit = layout === "agenda" ? rules.agendaMax : rules.maxBullets;
   return { ...base, bullets: arr(o.bullets, limit, rules.bulletChars) };
+
+  /**
+   * `bullets` maketi bandlari: AVVAL son (`maxBullets`), keyin shu SONDAGI
+   * rasmsiz quti — `bulletClipLimit` (ta'mir ham shuni o'qiydi). Ilgari
+   * faqat `bulletChars`: 5–7 sinf `circle` da 100 belgi 85 lik qutidan chiqardi.
+   */
+  function bulletItems(v: unknown): string[] {
+    const items = list(v, rules.maxBullets);
+    const max = bulletClipLimit(rules, visual, items.length);
+    return items.map((x) => clipTo(x, max));
+  }
 }
 
 /**
@@ -1122,6 +1151,8 @@ export async function buildSlideAcademicDoc(meta: DocMeta, deadline?: number, op
   const images = await attachSlideImages(slides, meta.topic, tpl.visual, budget, {
     premium: meta.premiumVisuals,
     meta,
+    // P8: matni rasmli qutiga sig'maydigan slayd rasm olmaydi — `normalizeSlide` bilan BIR qoida.
+    rules: bodyRules(meta, tpl.id),
     onPlanned: live ? (indexes) => live({ type: "images", wait: [...indexes] }) : undefined,
     onImage: live ? (index, url) => live({ type: "image", index, url }) : undefined,
   });
