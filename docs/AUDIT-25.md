@@ -103,6 +103,9 @@ Shartnomalar (yakuniy, review'lardan keyin):
 - `sanitizeSlideModel` bo'sh satrli `kicker/subtitle/footer` kalitini tashlab yuboradi (render bir xil, lekin undo JSON tengligi qat'iy emas) — testga qulflash yoki `""` saqlash.
 - Vizuallarda bold sarlavha o'lchovi `CHAR_EM_BOLD`siz (`inkHeight`) — `layerFits` bilan kelishtirish (P2 titles follow-up).
 - circle twoCol karta sarlavhasi birinchi band bilan ustma-ust (eski nuqson, AUDIT-25 dan oldin ham bor edi).
+- Agenda ichida element o'lchamlari har xil (uzun band kichikroq) — bitta o'lcham qoidasi (kichik follow-up).
+- Split vizualida o'rta uzunlikdagi eski agenda bandlari endi kattaroq chiziladi (overflow yo'q; qabul qilingan yaxshilanish).
+- Sarlavhalar `fitSize`da bold kengligi 0.55 bilan o'lchanadi (0.60 kerak) — «titles» follow-up.
 - Stok rasm mosligi (Pexels qidiruvi `imageHint` bo'yicha) — mavzuga yaqin emas ba'zan; bu sprint doirasidan tashqarida.
 - Pro-slayd rasm ulushi bo'yicha qaytarish (audit P6 review taklifi: 0.5–0.75 ulush) — egasi qarori kutilmoqda.
 
