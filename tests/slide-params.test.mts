@@ -200,7 +200,7 @@ test("textVolume, slideAudience, planItems, extra promptdagi sonlar/qatorlarni o
   assert.notEqual(a, b);
   assert.match(a, /boshlang‘ich sinf/);
   assert.match(b, /magistrant/);
-  assert.match(prompt({ planItems: 3 }), /agenda'da 3–3|agenda'da 2–3/);
+  assert.match(prompt({ planItems: 3 }), /agenda'da 3\)/);
   assert.match(prompt({ planItems: 6 }), /agenda'da 5–6/);
   assert.match(prompt({ extra: "ko‘proq diagramma" }), /Qo‘shimcha talab: ko‘proq diagramma/);
   // Ikki nuqta bilan: `base.ts` da «Qo‘shimcha talabni kicker qilmang» qatori ham bor.
