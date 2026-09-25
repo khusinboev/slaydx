@@ -86,14 +86,23 @@ function pushPolaroid(
 
 /** Sarlavha + qo'sh chiziq (daftar ustuni) — kontent maketlari uchun. */
 function pushNotebookHead(layers: SlideLayer[], s: SlideModel, theme: SlideTheme, reserve: number): void {
-  const { fitSize } = LAYOUT_KIT;
+  const { fitSize, pushPlanBadgeAt } = LAYOUT_KIT;
   const headBox: Box = { x: TEXT_X + 0.25, y: 0.45, w: Math.max(3, ZONE_W - 0.25 - reserve), h: 0.8 };
+  const size = fitSize(s.title, headBox, 25, 16);
+  /*
+   * AUDIT-25 P9: reja nishoni — daftar HOSHIYASIDA (qizil chiziqdan
+   * chapda, o'ngga tekislangan), sarlavhaning birinchi qatori o'qida.
+   * Sarlavha qutisi qo'zg'almaydi. Faqat `plan` li mazmun slaydi.
+   */
+  const bSize = Math.min(18, Math.max(14, Math.round(size * 0.8)));
+  const dy = Math.max(0, ((size - bSize) * 1.2) / 72 / 2);
+  pushPlanBadgeAt(layers, s, 0.3, headBox.y + dy, theme.accentInk, { size: bSize, w: 0.6, align: "right" });
   layers.push({
     t: "text",
     box: headBox,
     text: s.title,
     color: theme.text,
-    size: fitSize(s.title, headBox, 25, 16),
+    size,
     bold: true,
     src: { f: "title" },
   });
@@ -339,6 +348,8 @@ function planQuote(s: SlideModel, theme: SlideTheme, index: number, total: numbe
     size: 58,
     bold: true,
   });
+  // Reja nishoni (faqat `plan` li iqtibos) — tirnoqning o'ngida, varaqchada.
+  LAYOUT_KIT.pushPlanBadgeAt(layers, s, note.x + 1.3, note.y + 0.55, theme.accentInk, { size: 18 });
   const text = s.quote || s.title;
   const tw = note.w - 0.8;
   const qSize = fitSize(text, { x: 0, y: 0, w: tw, h: 2.1 }, 24, 14);

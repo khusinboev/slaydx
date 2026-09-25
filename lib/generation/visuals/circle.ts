@@ -48,14 +48,26 @@ function pushRoundPhoto(layers: SlideLayer[], theme: SlideTheme, url: string | u
 
 /** Sarlavha + yumaloq aksent tagchizig'i — kontent maketlari uchun bitta naqsh. */
 function pushRoundHead(layers: SlideLayer[], s: SlideModel, theme: SlideTheme, reserve: number, zoneW: number): void {
-  const { fitSize } = LAYOUT_KIT;
-  const headBox: Box = { x: TEXT_X, y: 0.5, w: Math.max(3, zoneW - reserve), h: 0.85 };
+  const { fitSize, planBadge, planBadgeBox } = LAYOUT_KIT;
+  const headBox = planBadgeBox(s, { x: TEXT_X, y: 0.5, w: Math.max(3, zoneW - reserve), h: 0.85 });
+  const size = fitSize(s.title, headBox, 26, 16);
+  /*
+   * AUDIT-25 P9: reja nishoni — dizayn tilida, kichik dumaloq nishoncha
+   * (`titleBg` doira + `titleText` raqam), sarlavhaning birinchi qatori
+   * o'qida. Faqat `plan` li mazmun slaydida (reja/test — hech qachon).
+   */
+  const no = planBadge(s);
+  if (no) {
+    const d = 0.5;
+    const dy = ((size * 1.2) / 72 - d) / 2;
+    pushBadge(layers, theme, { x: TEXT_X, y: headBox.y + dy, w: d, h: d }, no, 15);
+  }
   layers.push({
     t: "text",
     box: headBox,
     text: s.title,
     color: theme.text,
-    size: fitSize(s.title, headBox, 26, 16),
+    size,
     bold: true,
     src: { f: "title" },
   });
@@ -301,6 +313,9 @@ function planQuote(s: SlideModel, theme: SlideTheme, index: number, total: numbe
   const blockH = 0.12 + 0.34 + qH + (s.quoteBy ? 0.4 + byH : 0);
   const y0 = 1.35 + Math.max(0, (4.9 - blockH) / 2);
   layers.push({ t: "rect", box: { x, y: y0, w: 1.1, h: 0.12 }, fill: { color: theme.accent }, radius: 0.06 });
+  // Reja nishoni (faqat `plan` li iqtibos) — aksent chiziq o'qida, o'ngida.
+  const no = LAYOUT_KIT.planBadge(s);
+  if (no) pushBadge(layers, theme, { x: x + 1.3, y: y0 - 0.19, w: 0.5, h: 0.5 }, no, 15);
   layers.push({
     t: "text",
     box: { x, y: y0 + 0.46, w: tw, h: qH },

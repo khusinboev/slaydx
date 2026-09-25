@@ -36,14 +36,18 @@ function pushAcademicHead(
   theme: SlideTheme,
   reserve: number,
 ): void {
-  const { fitSize } = LAYOUT_KIT;
-  const headBox: Box = { x: TEXT_X, y: 0.52, w: Math.max(3, ZONE_W - reserve), h: 0.82 };
+  const { fitSize, planBadgeBox, pushPlanBadge } = LAYOUT_KIT;
+  // AUDIT-25 P9: `plan` li mazmun slaydida sarlavha chapida «0N» (reja
+  // qatorlari uslubi); reja slaydining o'zida — yo'q (`planBadge`).
+  const headBox = planBadgeBox(s, { x: TEXT_X, y: 0.52, w: Math.max(3, ZONE_W - reserve), h: 0.82 });
+  const size = fitSize(s.title, headBox, 26, 16);
+  pushPlanBadge(layers, s, headBox, size, theme.accentInk);
   layers.push({
     t: "text",
     box: headBox,
     text: s.title,
     color: theme.text,
-    size: fitSize(s.title, headBox, 26, 16),
+    size,
     bold: true,
     src: { f: "title" },
   });
@@ -295,6 +299,8 @@ function planQuote(s: SlideModel, theme: SlideTheme, index: number, total: numbe
   const blockH = 0.06 + 0.42 + qH + (s.quoteBy ? 0.46 + byH + 0.34 + 0.016 : 0);
   const y0 = 1.5 + Math.max(0, (5.9 - 1.5 - blockH) / 2);
   layers.push({ t: "rect", box: { x: (W - 1.8) / 2, y: y0, w: 1.8, h: 0.06 }, fill: { color: theme.accent } });
+  // Reja nishoni (faqat `plan` li iqtibos) — aksent chiziq ustida, markazda.
+  LAYOUT_KIT.pushPlanBadgeAt(layers, s, (W - 1.2) / 2, y0 - 0.44, theme.accentInk, { w: 1.2, align: "center" });
   layers.push({
     t: "text",
     box: { x: 1.9, y: y0 + 0.48, w: tw, h: qH },

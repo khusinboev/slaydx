@@ -55,14 +55,17 @@ function pushColumn(layers: SlideLayer[], s: SlideModel, theme: SlideTheme): voi
 
 /** Jurnal sarlavhasi — mayda kapital matn + butun kenglikdagi ingichka chiziq. */
 function pushHead(layers: SlideLayer[], s: SlideModel, theme: SlideTheme, w: number, reserve: number): void {
-  const { fitSize } = LAYOUT_KIT;
-  const box: Box = { x: TX, y: 0.45, w: w - reserve, h: 0.92 };
+  const { fitSize, planBadgeBox, pushPlanBadge } = LAYOUT_KIT;
+  const box = planBadgeBox(s, { x: TX, y: 0.45, w: w - reserve, h: 0.92 });
+  const size = fitSize(s.title, box, 30, 18);
+  // AUDIT-25 P9: reja nishoni jurnal tilida — Georgia, sarlavha o'qida.
+  pushPlanBadge(layers, s, box, size, theme.accentInk, { font: "Georgia", titleValign: "middle" });
   layers.push({
     t: "text",
     box,
     text: s.title,
     color: theme.text,
-    size: fitSize(s.title, box, 30, 18),
+    size,
     bold: true,
     valign: "middle",
     src: { f: "title" },
@@ -302,6 +305,12 @@ function planQuote(s: SlideModel, theme: SlideTheme, index: number, total: numbe
     color: theme.accentInk,
     size: 84,
     bold: true,
+    font: "Georgia",
+    valign: "middle",
+  });
+  // Reja nishoni (faqat `plan` li iqtibos) — tirnoq belgisining o'ngida.
+  LAYOUT_KIT.pushPlanBadgeAt(layers, s, TX + 1.0, 0.85 + (1.3 - 0.36) / 2, theme.accentInk, {
+    size: 18,
     font: "Georgia",
     valign: "middle",
   });

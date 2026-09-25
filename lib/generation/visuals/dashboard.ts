@@ -27,9 +27,21 @@ function pushPage(layers: SlideLayer[], theme: SlideTheme): void {
 
 /** Panel sarlavhasi — lenta ostida, aksent kvadrat belgisi bilan. */
 function pushHead(layers: SlideLayer[], s: SlideModel, theme: SlideTheme, w: number, reserve: number): void {
-  const { fitSize } = LAYOUT_KIT;
-  layers.push({ t: "rect", box: { x: 0.85, y: 0.62, w: 0.26, h: 0.26 }, fill: { color: theme.accent }, radius: 0.05 });
-  const box: Box = { x: 1.32, y: 0.45, w: w - 0.47 - reserve, h: 0.62 };
+  const { fitSize, planBadge } = LAYOUT_KIT;
+  /*
+   * AUDIT-25 P9: `plan` li mazmun slaydida aksent kvadrat o'rnini kichik
+   * KPI plitasi oladi — `surface` karta, tepada aksent lenta, ichida
+   * reja bandi «0N» (`accentInk`/`surface` — o'lchangan juft). Plan
+   * yo'q (yoki reja slaydi) — eski kvadrat, bayt-bayt eskicha.
+   */
+  const no = planBadge(s);
+  let box: Box = { x: 1.32, y: 0.45, w: w - 0.47 - reserve, h: 0.62 };
+  if (no) {
+    pushPlanTile(layers, theme, { x: 0.85, y: 0.47, w: 0.72, h: 0.58 }, no);
+    box = { ...box, x: 1.77, w: box.w - 0.45 };
+  } else {
+    layers.push({ t: "rect", box: { x: 0.85, y: 0.62, w: 0.26, h: 0.26 }, fill: { color: theme.accent }, radius: 0.05 });
+  }
   layers.push({
     t: "text",
     box,
@@ -39,6 +51,22 @@ function pushHead(layers: SlideLayer[], s: SlideModel, theme: SlideTheme, w: num
     bold: true,
     valign: "middle",
     src: { f: "title" },
+  });
+}
+
+/** Reja bandi plitasi — kichik KPI kartasi (dekorativ, `src`siz). */
+function pushPlanTile(layers: SlideLayer[], theme: SlideTheme, box: Box, no: string): void {
+  card(layers, theme, box);
+  layers.push({ t: "rect", box: { x: box.x, y: box.y, w: box.w, h: 0.06 }, fill: { color: theme.accent }, radius: 0.03 });
+  layers.push({
+    t: "text",
+    box: { x: box.x, y: box.y + 0.06, w: box.w, h: box.h - 0.06 },
+    text: no,
+    color: theme.accentInk,
+    size: 18,
+    bold: true,
+    align: "center",
+    valign: "middle",
   });
 }
 
@@ -335,6 +363,9 @@ function planQuote(s: SlideModel, theme: SlideTheme, index: number, total: numbe
   const box: Box = { x: 1.35, y: 1.75, w: 10.65, h: 3.95 };
   card(layers, theme, box);
   layers.push({ t: "rect", box: { x: box.x, y: box.y, w: 0.16, h: box.h }, fill: { color: theme.accent }, radius: 0.08 });
+  // Reja nishoni (faqat `plan` li iqtibos) — karta ustida KPI plitasi.
+  const no = LAYOUT_KIT.planBadge(s);
+  if (no) pushPlanTile(layers, theme, { x: box.x, y: 1.08, w: 0.72, h: 0.58 }, no);
   const quote = s.quote || s.title;
   const qBox: Box = { x: 2.05, y: 2.15, w: 8.4, h: 2.4 };
   layers.push({

@@ -17,14 +17,18 @@ function two(n: number): string {
 
 /** Yuqori sarlavha — qalin aksent lentasi ostidagi yirik matn. */
 function pushHead(layers: SlideLayer[], s: SlideModel, theme: SlideTheme, w: number, reserve: number): void {
-  const { fitSize } = LAYOUT_KIT;
-  const box: Box = { x: 0.85, y: 0.42, w: w - reserve, h: 0.86 };
+  const { fitSize, planBadgeBox, pushPlanBadge } = LAYOUT_KIT;
+  const box = planBadgeBox(s, { x: 0.85, y: 0.42, w: w - reserve, h: 0.86 });
+  const size = fitSize(s.title, box, 27, 17);
+  // AUDIT-25 P9: reja nishoni sarlavha bilan bir o'qda (sarlavha `middle`),
+  // ≤ 18 pt — bandlarning ulkan 01…N raqamidan ATAYLAB kichik, adashmasin.
+  pushPlanBadge(layers, s, box, size, theme.accentInk, { titleValign: "middle" });
   layers.push({
     t: "text",
     box,
     text: s.title,
     color: theme.text,
-    size: fitSize(s.title, box, 27, 17),
+    size,
     bold: true,
     valign: "middle",
     src: { f: "title" },
@@ -278,6 +282,8 @@ function planQuote(s: SlideModel, theme: SlideTheme, index: number, total: numbe
   photo(layers, s.image?.url, { x: 0, y: 0, w: 13.333, h: H }, 0.7);
   layers.push({ t: "rect", box: { x: 1.3, y: 1.35, w: 0.11, h: 4.3 }, fill: { color: theme.accent } });
   const quote = s.quote || s.title;
+  // Reja nishoni (faqat `plan` li iqtibos) — iqtibos qutisi ustida.
+  LAYOUT_KIT.pushPlanBadgeAt(layers, s, 1.85, 1.08, theme.titleMuted, { size: 18 });
   const qBox: Box = { x: 1.85, y: 1.55, w: 10.0, h: 3.4 };
   layers.push({
     t: "text",

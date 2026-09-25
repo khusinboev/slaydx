@@ -176,6 +176,9 @@ function planBullets(s: SlideModel, theme: SlideTheme, index: number, total: num
   const x = 0.85;
   const tw = 5.0;
   const headBox: Box = { x, y: 1.0, w: tw, h: 1.9 };
+  // AUDIT-25 P9: reja nishoni to'q yarmda, sarlavha qutisi USTIDA (sarlavha
+  // pastga tekislangan — quti qo'zg'almaydi); `titleMuted`/`titleBg`.
+  LAYOUT_KIT.pushPlanBadgeAt(layers, s, x, 0.55, theme.titleMuted, { size: 18 });
   layers.push({
     t: "text",
     box: headBox,
@@ -299,6 +302,11 @@ function planQuote(s: SlideModel, theme: SlideTheme, index: number, total: numbe
     font: "Georgia",
     valign: "middle",
   });
+  // Reja nishoni (faqat `plan` li iqtibos) — tirnoqning o'ngida.
+  LAYOUT_KIT.pushPlanBadgeAt(layers, s, x + 1.2, 0.95 + (1.2 - 0.36) / 2, theme.titleMuted, {
+    size: 18,
+    valign: "middle",
+  });
   const quote = s.quote || s.title;
   const qBox: Box = { x, y: 2.15, w: tw, h: 3.6 };
   layers.push({
@@ -414,13 +422,16 @@ function planCompare(s: SlideModel, theme: SlideTheme, index: number, total: num
   const seam = zoneW * 0.492;
   const top = 1.5;
   layers.push({ t: "rect", box: { x: 0, y: 0, w: 13.333, h: H }, fill: { color: theme.surface } });
-  const titleBox: Box = { x: 0.85, y: 0.36, w: zoneW - 1.7 - ctx.reserve, h: 0.82 };
+  const titleBox = LAYOUT_KIT.planBadgeBox(s, { x: 0.85, y: 0.36, w: zoneW - 1.7 - ctx.reserve, h: 0.82 });
+  const titleSize = fitSize(s.title, titleBox, 26, 17);
+  // AUDIT-25 P9: reja nishoni sarlavha chapida, bir o'qda.
+  LAYOUT_KIT.pushPlanBadge(layers, s, titleBox, titleSize, theme.accentInk, { titleValign: "middle" });
   layers.push({
     t: "text",
     box: titleBox,
     text: s.title,
     color: theme.text,
-    size: fitSize(s.title, titleBox, 26, 17),
+    size: titleSize,
     bold: true,
     valign: "middle",
     src: { f: "title" },

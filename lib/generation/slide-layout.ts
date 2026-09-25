@@ -818,6 +818,108 @@ export function planNumber(s: SlideModel): string | null {
 }
 
 /**
+ * AUDIT-25 P9 — mazmun slaydidagi REJA NISHONI.
+ *
+ * Shablonda bo'lim slaydiga joy bo'lmasa (masalan, ma'ruza @12: titul,
+ * reja, maqsadlar, 5 mazmun slaydi, manbalar, yakun) reja bandining
+ * mazmun slaydi hech qanday raqamsiz qolardi — o'quvchi uni rejadagi
+ * «03» bilan bog'lay olmasdi (egasi shikoyati aynan shu). Endi `plan`
+ * bor mazmun slaydi sarlavha zonasida BITTA kichik «0N» oladi — reja
+ * qatorlaridagi raqam bilan bir uslubda (qalin, `accentInk`, 14–18 pt).
+ *
+ * Faqat shu maketlar: bo'lim o'z yirik raqamini oladi (ikki marta
+ * raqamlanmaydi); titul/reja/yakun/test/javoblar/manbalar — HECH QACHON.
+ * `plan` yo'q bo'lsa hech narsa chizilmaydi va sarlavha qutisi o'sha
+ * qoladi — eski doc_json bayt-bayt eskicha chiziladi. Raqam modeldan
+ * emas — qatlam `src` OLMAYDI (tahrirlanmaydi).
+ */
+const PLAN_BADGE_LAYOUTS: ReadonlySet<string> = new Set([
+  "bullets",
+  "twoCol",
+  "compare",
+  "process",
+  "table",
+  "stats",
+  "quote",
+]);
+
+/** Nishon egallaydigan kenglik (raqam + sarlavhagacha oraliq), dyuym. */
+export const PLAN_BADGE_W = 0.62;
+
+/** Nishon matni («03») yoki `null` — maket nishon olmaydi / `plan` yo'q. */
+export function planBadge(s: SlideModel): string | null {
+  return PLAN_BADGE_LAYOUTS.has(s.layout) ? planNumber(s) : null;
+}
+
+/**
+ * Sarlavha qutisi nishon uchun o'ngga suriladi (`PLAN_BADGE_W`).
+ * Nishon yo'q — AYNAN o'sha obyekt qaytadi (eski chizish o'zgarmaydi).
+ */
+export function planBadgeBox(s: SlideModel, box: Box): Box {
+  if (!planBadge(s)) return box;
+  return { ...box, x: box.x + PLAN_BADGE_W, w: box.w - PLAN_BADGE_W };
+}
+
+/**
+ * Nishonni SURILGAN sarlavha qutisining chap tomoniga chizadi: sarlavha
+ * birinchi qatorining o'rtasiga tekislanadi (sarlavha `valign: top`).
+ * `titleSize` — sarlavhaning `fitSize` natijasi; nishon undan kichik
+ * (18 pt dan oshmaydi, 14 pt dan tushmaydi).
+ */
+export function pushPlanBadge(
+  layers: SlideLayer[],
+  s: SlideModel,
+  titleBox: Box,
+  titleSize: number,
+  color: string,
+  /** `titleValign: "middle"` — sarlavha qutida o'rtalangan: nishon ham qutining o'rtasida. */
+  opts: { font?: string; titleValign?: "middle" } = {},
+): void {
+  const size = Math.min(18, Math.max(14, Math.round(titleSize * 0.8)));
+  const bh = badgeLineIn(size) + 0.06;
+  const y =
+    opts.titleValign === "middle"
+      ? titleBox.y + (titleBox.h - bh) / 2
+      : titleBox.y + Math.max(0, (badgeLineIn(titleSize) - badgeLineIn(size)) / 2);
+  pushPlanBadgeAt(layers, s, titleBox.x - PLAN_BADGE_W, y, color, {
+    size,
+    font: opts.font,
+    ...(opts.titleValign ? { valign: "middle" as const } : {}),
+  });
+}
+
+const badgeLineIn = (pt: number) => (pt * 1.2) / 72;
+
+/**
+ * Nishonni ANIQ nuqtaga chizadi — sarlavhasi yo'q kompozitsiyalar
+ * (iqtibos) va dizaynning o'z idiomasi (halqa, lenta, plitka) uchun.
+ * Quti balandligi bir qator (`size` × 1.2) + 0.06″.
+ */
+export function pushPlanBadgeAt(
+  layers: SlideLayer[],
+  s: SlideModel,
+  x: number,
+  y: number,
+  color: string,
+  opts: { size?: number; w?: number; font?: string; align?: "left" | "center" | "right"; valign?: "middle" } = {},
+): void {
+  const no = planBadge(s);
+  if (!no) return;
+  const size = opts.size ?? 16;
+  layers.push({
+    t: "text",
+    box: { x, y, w: opts.w ?? PLAN_BADGE_W - 0.08, h: badgeLineIn(size) + 0.06 },
+    text: no,
+    color,
+    size,
+    bold: true,
+    ...(opts.font ? { font: opts.font } : {}),
+    ...(opts.align ? { align: opts.align } : {}),
+    ...(opts.valign ? { valign: opts.valign } : {}),
+  });
+}
+
+/**
  * `magazine` maketidagi bo'lim slaydi: to'la ekran kadr va pastki matn
  * tasmasi.
  *
@@ -1142,6 +1244,8 @@ function planOverlay(
     // rangi sifatida o'lchanmagan (`tests/themes.test.mts`).
     layers.push({ t: "rect", box: { x, y: bandY + 0.4, w: 1.7, h: 0.1 }, fill: { color: theme.accent } });
     if (kind === "quote") {
+      // AUDIT-25 P9: reja nishoni aksent brusning o'ng uchida, bir o'qda.
+      pushPlanBadgeAt(layers, s, x + 1.95, bandY + 0.28, theme.titleMuted);
       const qText = s.quote || s.title;
       // Quti ATAYLAB past: ilgari 2.05 edi va ikki qatorli iqtibosdan
       // keyin muallifgacha bir dyuymlik bo'shliq qolardi (PDF da ko'rindi).
@@ -1230,9 +1334,11 @@ function planOverlay(
     layers.push({ t: "rect", box: { x, y: blockY, w: tw, h: 0.035 }, fill: { color: theme.accent } });
     if (kind === "quote") {
       const qText = s.quote || s.title;
+      const capBox = planBadgeBox(s, { x, y: blockY + 0.22, w: tw, h: 0.36 });
+      pushPlanBadge(layers, s, capBox, 13, theme.titleMuted);
       layers.push({
         t: "text",
-        box: { x, y: blockY + 0.22, w: tw, h: 0.36 },
+        box: capBox,
         text: s.title,
         color: theme.titleMuted,
         size: 13,
@@ -1309,6 +1415,8 @@ function planOverlay(
     const twc = card.w - 1.2;
     if (kind === "quote") {
       const qText = s.quote || s.title;
+      // Reja nishoni kartaning yuqori chap burchagida, iqtibos ustida.
+      pushPlanBadgeAt(layers, s, tx, card.y + 0.1, theme.accentInk);
       const qBox: Box = { x: tx, y: card.y + 0.5, w: twc, h: 1.9 };
       layers.push({
         t: "text",
@@ -1382,6 +1490,8 @@ function planOverlay(
       size: 48,
       bold: true,
     });
+    // Reja nishoni tirnoq belgisining o'ng tomonida (tirnoq ~0.4″ keng).
+    pushPlanBadgeAt(layers, s, panel.x + 1.2, panel.y + 0.42, theme.titleMuted);
     const quoteBox: Box = { x: panel.x + 0.45, y: panel.y + 0.95, w: panel.w - 0.9, h: 2.35 };
     layers.push({
       t: "text",
@@ -1435,13 +1545,17 @@ function planOverlay(
 
 function planHeading(layers: SlideLayer[], s: SlideModel, theme: SlideTheme, textW: number, x: number, reserve = 0) {
   // Logo bo'lsa sarlavha o'ng yuqori burchakka kirmaydi — `fitSize` toraygan qutiga qarab shriftni o'zi tanlaydi.
-  const headBox: Box = { x, y: 0.3, w: textW - reserve, h: 0.88 };
+  // AUDIT-25 P9: reja nishoni (faqat `plan` li mazmun slaydi) sarlavhaning
+  // chap tomonida; aksent chiziq joyida qoladi — nishon ustida turadi.
+  const headBox = planBadgeBox(s, { x, y: 0.3, w: textW - reserve, h: 0.88 });
+  const size = fitSize(s.title, headBox, 22, 16);
+  pushPlanBadge(layers, s, headBox, size, theme.accentInk);
   layers.push({
     t: "text",
     box: headBox,
     text: s.title,
     color: theme.text,
-    size: fitSize(s.title, headBox, 22, 16),
+    size,
     bold: true,
     src: { f: "title" },
   });
@@ -1776,13 +1890,16 @@ function planTwoCol(
     const x0 = M + 0.18;
     // Sarlavha `planHeading` dan EMAS: u `theme.text` bilan yozadi, u esa
     // to'q sahifada o'lchanmagan juft. To'q fonda faqat `titleText`.
-    const titleBox: Box = { x: x0, y: 0.34, w: zoneW - ctx.reserve, h: 0.7 };
+    // Reja nishoni to'q sahifada `titleMuted` bilan — o'lchangan juft.
+    const titleBox = planBadgeBox(s, { x: x0, y: 0.34, w: zoneW - ctx.reserve, h: 0.7 });
+    const titleSize = fitSize(s.title, titleBox, 22, 16);
+    pushPlanBadge(layers, s, titleBox, titleSize, theme.titleMuted);
     layers.push({
       t: "text",
       box: titleBox,
       text: s.title,
       color: theme.titleText,
-      size: fitSize(s.title, titleBox, 22, 16),
+      size: titleSize,
       bold: true,
     });
     layers.push({ t: "rect", box: { x: x0, y: 1.1, w: zoneW, h: 0.035 }, fill: { color: theme.accent } });
@@ -1840,13 +1957,15 @@ function planTwoCol(
     layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.bg } });
     const x0 = 0.7;
     const magW = W - 1.4 - cut;
-    const titleBox: Box = { x: x0, y: 0.5, w: magW - ctx.reserve, h: 1.05 };
+    const titleBox = planBadgeBox(s, { x: x0, y: 0.5, w: magW - ctx.reserve, h: 1.05 });
+    const titleSize = fitSize(s.title, titleBox, 34, 22);
+    pushPlanBadge(layers, s, titleBox, titleSize, theme.accentInk);
     layers.push({
       t: "text",
       box: titleBox,
       text: s.title,
       color: theme.text,
-      size: fitSize(s.title, titleBox, 34, 22),
+      size: titleSize,
       bold: true,
     });
     layers.push({ t: "rect", box: { x: x0, y: 1.68, w: magW, h: 0.045 }, fill: { color: theme.accent } });
@@ -1898,13 +2017,15 @@ function planTwoCol(
     if (compare) layers.push({ t: "rect", box: { x: LEFT_IMG_W, y: 0, w: 0.07, h: H }, fill: { color: theme.accent } });
     const px = M + 0.05;
     const pw = LEFT_IMG_W - px - 0.45;
-    const titleBox: Box = { x: px, y: 0.62, w: pw - ctx.reserve, h: 1.5 };
+    const titleBox = planBadgeBox(s, { x: px, y: 0.62, w: pw - ctx.reserve, h: 1.5 });
+    const titleSize = fitSize(s.title, titleBox, 26, 17);
+    pushPlanBadge(layers, s, titleBox, titleSize, theme.titleMuted);
     layers.push({
       t: "text",
       box: titleBox,
       text: s.title,
       color: theme.titleText,
-      size: fitSize(s.title, titleBox, 26, 17),
+      size: titleSize,
       bold: true,
     });
     layers.push({ t: "rect", box: { x: px, y: 2.25, w: 1.2, h: 0.08 }, fill: { color: theme.accent } });
@@ -2300,13 +2421,16 @@ function planStats(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
   const ink = dense ? theme.titleText : theme.text;
   layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: bg } });
   if (!dense) pushChrome(layers, theme, "full");
-  const titleBox: Box = { x: M + 0.18, y: 0.36, w: 12.2 - cut - ctx.reserve, h: 0.72 };
+  const titleBox = planBadgeBox(s, { x: M + 0.18, y: 0.36, w: 12.2 - cut - ctx.reserve, h: 0.72 });
+  const titleSize = fitSize(s.title, titleBox, 24, 17);
+  // Reja nishoni: to'q (dense) sahifada `titleMuted`, yorug'da `accentInk`.
+  pushPlanBadge(layers, s, titleBox, titleSize, dense ? theme.titleMuted : theme.accentInk);
   layers.push({
     t: "text",
     box: titleBox,
     text: s.title,
     color: ink,
-    size: fitSize(s.title, titleBox, 24, 17),
+    size: titleSize,
     bold: true,
   });
 
@@ -2572,13 +2696,15 @@ function planTable(s: SlideModel, theme: SlideTheme, visual: SlideVisual, index:
   const cut = stripCut(s);
   layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: pageBg } });
   if (!dense) pushChrome(layers, theme, "full");
-  const headBox: Box = { x: M + 0.18, y: 0.3, w: 12.2 - cut - ctx.reserve, h: 0.88 };
+  const headBox = planBadgeBox(s, { x: M + 0.18, y: 0.3, w: 12.2 - cut - ctx.reserve, h: 0.88 });
+  const headSize = fitSize(s.title, headBox, 22, 16);
+  pushPlanBadge(layers, s, headBox, headSize, dense ? theme.titleMuted : theme.accentInk);
   layers.push({
     t: "text",
     box: headBox,
     text: s.title,
     color: dense ? theme.titleText : theme.text,
-    size: fitSize(s.title, headBox, 22, 16),
+    size: headSize,
     bold: true,
   });
   layers.push({ t: "rect", box: { x: M + 0.18, y: 1.22, w: 1.1, h: 0.07 }, fill: { color: theme.accent } });
@@ -2853,6 +2979,11 @@ export const LAYOUT_KIT = {
   SECTION_TOP,
   SECTION_BOTTOM,
   planNumber,
+  planBadge,
+  planBadgeBox,
+  pushPlanBadge,
+  pushPlanBadgeAt,
+  PLAN_BADGE_W,
   LOGO_BOX,
   LOGO_RESERVE,
   BULLET_GAP_MIN,

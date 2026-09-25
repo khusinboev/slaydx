@@ -32,15 +32,18 @@ function pushNode(layers: SlideLayer[], theme: SlideTheme, cx: number, cy: numbe
 
 /** Rels sarlavhasi — chapdagi tik aksent belgisi bilan. */
 function pushHead(layers: SlideLayer[], s: SlideModel, theme: SlideTheme, x: number, w: number, reserve: number): void {
-  const { fitSize } = LAYOUT_KIT;
+  const { fitSize, planBadgeBox, pushPlanBadge } = LAYOUT_KIT;
   layers.push({ t: "rect", box: { x: x - 0.42, y: 0.4, w: 0.09, h: 0.8 }, fill: { color: theme.accent } });
-  const box: Box = { x, y: 0.4, w: w - reserve, h: 0.8 };
+  // AUDIT-25 P9: reja nishoni tik belgi bilan sarlavha orasida, bir o'qda.
+  const box = planBadgeBox(s, { x, y: 0.4, w: w - reserve, h: 0.8 });
+  const size = fitSize(s.title, box, 25, 16);
+  pushPlanBadge(layers, s, box, size, theme.accentInk, { titleValign: "middle" });
   layers.push({
     t: "text",
     box,
     text: s.title,
     color: theme.text,
-    size: fitSize(s.title, box, 25, 16),
+    size,
     bold: true,
     valign: "middle",
     src: { f: "title" },
@@ -375,6 +378,8 @@ function planQuote(s: SlideModel, theme: SlideTheme, index: number, total: numbe
   pushNode(layers, theme, 1.5, railY, 0.44);
   pushNode(layers, theme, 11.83, railY, 0.44);
   const quote = s.quote || s.title;
+  // Reja nishoni (faqat `plan` li iqtibos) — iqtibos ustida, markazda.
+  LAYOUT_KIT.pushPlanBadgeAt(layers, s, (W - 1.2) / 2, 1.45, theme.accentInk, { size: 18, w: 1.2, align: "center" });
   const qBox: Box = { x: 2.85, y: 1.95, w: 7.65, h: 3.2 };
   layers.push({
     t: "text",
