@@ -677,7 +677,11 @@ test("INT-03 asl deka (c): eski sig'mas rasmli slaydni o'chirish → Ctrl+Z ALOH
 });
 
 test("INT-03 asl deka (d): qisqartirish → Ctrl+Z (asl uzun matnga qaytish, alohida PATCH) — 200", async (t) => {
-  const first: DocOp[] = [{ op: "text", index: 1, src: { f: "left", i: 0 }, value: p8Text(40, 1) }];
+  // Ikkala ustun ham qisqaradi — Ctrl+Z `before` ga nisbatan ortiqchani KO'PAYTIRADI, faqat asl deka qutqaradi.
+  const first: DocOp[] = [
+    { op: "list", index: 1, field: "left", items: shortTwo.left! },
+    { op: "list", index: 1, field: "right", items: shortTwo.right! },
+  ];
   const { seen2, run } = await twoPatches(t, first, (base) => inverseOps(base, first, { genId: GEN }));
   await run();
   assert.deepEqual(savedDoc(seen2).slides![1].left, longTwo.left);
