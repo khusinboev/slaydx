@@ -320,3 +320,61 @@ circle-atlas, editorial-atlas.
 - **No `src`.** The badge is a plain text layer without `src`/`srcLines` (tested). The dashboard tile uses the existing `card`/rect layers. There is no new layer kind or field, only the existing `font`/`align`/`valign`/`bold`, so viewer and PPTX parity holds. `slide-src` passes.
 - **`LAYOUT_KIT` additions.** `planBadge`, `planBadgeBox`, `pushPlanBadge`, `pushPlanBadgeAt` and `PLAN_BADGE_W` are small and cohesive. `planBadgeBox` returns the **same object** when there is no badge, which is what makes the byte-identity hold.
 - **Fingerprint note.** It is accurate: the hash is unchanged and the note says why. It also cites "14 280 kombinatsiya … solishtirilgan" from the report; change 3 turns that into a test.
+
+---
+
+# Re-review — a4ef5b5 (P9)
+
+Commits `9b23a5e, ebd6cad, 7d39437, a4ef5b5` on top of the slides-3 merge `f9c2597`, reviewed as
+`git diff aa33304..a4ef5b5 -- lib tests` (the P9 files; the other files in the stat come from the slides-3 merge).
+Heavy commands used: 2, both with the main-repo `tsx`.
+- **Run 1:** a probe (`scratchpad/p2rev/probe9c.mts`), the P9 hash test run against the **879f495 lib** (`scratchpad/p2rev/base9`), and 4 mutants on a scratch copy (`scratchpad/p2rev/mut9/run.sh`).
+- **Run 2:** `slide-plan-numbers` + `slide-image-strip` + `slide-layout` + `slide-src` (**84/84**), plus a follow-up collision breakdown (`probe9d.mts`).
+
+Sheets checked:
+- `notebook-atlas`: the tab is clearly distinct from the margin ordinals «01…04».
+- `circle-ink`: the unfilled ring is distinct from the dark «1 2 3» discs.
+- `hero-split-atlas-long-logo`: the panel «02» sits above the title and the tab sits left of the heading, clear of the logo.
+
+## Verdict: **APPROVE**
+
+All three earlier changes are closed, with tests and killed mutants.
+
+1. **Panel title overflow: closed.**
+   - Across 15 themes × 17 visuals × 7 badge layouts × image × logo × titles of 72/60/50 chars × 3 seeds (**55,620 cases**), the badge causes **0 new title overflows** under the layout's own width model (`CHAR_EM` 0.55).
+   - The hero-split/bold panel badge now always sits above the title at `y 0.2–0.53`, and the title box (`y 0.62`) is unchanged.
+   - `badgedTitle` escalates in order: beside → above → floor lowered by 4 pt. That last step applies only where the badge can't go above, and the smallest badged title size observed is 17 pt (dashboard, which is also its normal minimum).
+2. **Register: closed.**
+   - The default light-page badge is now a `titleBg` tab with an `accent` top edge and `titleText` 15 pt. Notebook and editorial also use a tab, circle uses an unfilled accent ring with `accentInk`, and rail uses a plain number.
+   - The register test (same colour ⇒ size differs by at least 6 pt and the two never share the «0N» format) covers every visual × theme × {bullets, process} × image.
+3. **Byte identity: closed, and it genuinely pins the old output.**
+   - The hash test covers 17 visuals × 7 badge layouts × image × logo × short/72-char titles, plan-less. Each layer contributes its **box, size and text**, and rects are included.
+   - Running the same test against the **879f495** lib **passes**, so `5338a2af…` really is the base value and not a self-computed one.
+   - Mutants:
+
+     | Mutant | Change | Caught by |
+     |---|---|---|
+     | Ma | plan-less title box shifted by 0.1″ | the hash test |
+     | Mb | plan-less path gets the −4 pt floor | the unit test |
+     | Mc | "above" branch disabled | the unit test |
+     | Md | tab number coloured `accentInk` | the register test |
+
+     All four are killed.
+
+## Specific checks
+
+- **The lowered floor cannot touch a plan-less title.** `badgedTitle` returns `fitSize(s.title, box, base, min)` with the same box object before any badge logic. The unit test asserts that a plan-less title that does not fit still gets size 17 (`tiny` box), and Mb confirms the test bites.
+- **The tab does not collide with the logo (`ctx.reserve`).**
+  - Beside the title, the tab sits at the original left edge (`box.x − 0.62`); above it, it sits at `box.x`. The logo box is top-right, and `ctx.reserve` only narrows the title from the right.
+  - Checking every theme × visual × badge layout × image × logo × short/72 titles: **0** overlaps with `LOGO_BOX` and 0 off-slide boxes.
+  - The only overlaps with other text layers are 840 overlaps with the wide left-aligned «“» glyph box in quote slides (classic, hero-split, lab, timeline, notebook, split, editorial). The measured gaps between the glyph ink and the badge are 0.25–0.7″ (for example classic 48 pt “ at x 1.60 ends near 1.90, badge at 2.15). These are box overlaps only, the same as in the first review.
+- **Contrast on dark-content themes (graphite, orbit, forge, aurora, chalk)**, measured numerically. No graphite sheet was rendered.
+  - The tab fill `titleBg` is about the same as `bg` there (contrast 1.00–1.14), so the block itself is invisible. What shows is the `accent` outline and top edge, at 4.67 (orbit) to 11.4 (chalk) against `bg`.
+  - The number is `titleText` on `titleBg`, 14.9–19.1.
+  - On light themes, `titleBg` vs `bg` is ≥ 5.28 (lumen lowest), so the tab reads as a solid block.
+  - A graphite or orbit contact sheet at the next visual check would still be worthwhile, since orbit's outline is the weakest at 4.67.
+
+## Notes (non-blocking)
+
+- **Title width model, carried over.** Measured with the bold width 0.60, the badge adds 2,175 title overflows (0 under the layout's 0.55 model). This is the same pre-existing debt as before: title `fitSize` measures bold titles at 0.55. It belongs to whoever owns titles and should be tracked in the AUDIT-25 debt list.
+- The only placements where "above" can trigger are `story` bullets and twoCol (`y 0.6`). Everywhere else the heading `y` is less than `room + 0.08`, so those use beside or the lowered floor. That is consistent with the design, which puts the tab above only where there is room.
