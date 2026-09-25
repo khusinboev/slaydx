@@ -348,3 +348,202 @@ test("P8: qisqa matnli twoCol ga rasm yuklash — qabul qilinadi", async (t) => 
   assert.deepEqual(nextDoc.slides![4].left, shortTwo.left);
 });
 
+// ═══════════════════════════════════════════ AUDIT-25 INT-03: yagona server nuqtasi (`commitDocOps`)
+
+/*
+ * Yuklashdagi tekshiruv rasm va matn uchrashadigan 4 yo'lning bittasini
+ * yopardi. Qolgan uchtasi PATCH orqali keladi: rasmli slaydga matn yozish,
+ * rasmni o'chirib matnni uzaytirib «Rasmni qaytarish» (`imageRestore`) va
+ * oldingi yuklangan aktivni `image` op bilan qayta qo'yish. Endi tekshiruv
+ * `commitDocOps` da (slayd adapterining `guard` i): op lar qo'llangandan
+ * keyin RASMLI va «matn + rasm» holati OLDIN bo'lmagan har slayd
+ * `imageYieldField` dan o'tadi; sig'masa — butun PATCH 400, hech narsa
+ * yozilmaydi.
+ */
+const { commitDocOps, patchDocFromRequest } = await import("../lib/server/slide-commit.ts");
+
+const IMG_A = `/api/generations/${GEN}/assets/${"a".repeat(32)}`;
+const IMG_B = `/api/generations/${GEN}/assets/${"b".repeat(32)}`;
+const IMG_OLD = `/api/generations/${GEN}/assets/${"c".repeat(32)}`;
+
+/*
+ * 0 — qisqa twoCol, RASMLI (matn tahriri va almashtirish uchun);
+ * 1 — uzun twoCol, RASMLI: ESKI deka — sig'maslik OLDINDAN bor, unga tegilmasa bloklamasin;
+ * 2 — uzun twoCol, rasmi O'CHIRILGAN (`imageOrig` bor) — `imageRestore` uchun;
+ * 3 — qisqa twoCol, rasmsiz; 4 — uzun twoCol, rasmsiz (`image` op uchun).
+ */
+const int3Slides: SlideModel[] = [
+  { ...shortTwo, id: "s0", image: { url: IMG_A } },
+  { ...longTwo, id: "s1", image: { url: IMG_OLD } },
+  { ...longTwo, id: "s2", imageOrig: { url: IMG_OLD } },
+  { ...shortTwo, id: "s3" },
+  { ...longTwo, id: "s4" },
+];
+const int3Doc = docOf(int3Slides);
+
+function int3Db(t: TestContext) {
+  return mockDb(t, {
+    forEdit: editRow({ doc_json: int3Doc }),
+    updateDoc: { doc_version: 4 },
+    detail: detailRow(),
+    hasFile: true,
+  });
+}
+
+function savedDoc(seen: Seen[]): AcademicDoc {
+  const upd = seen.find((s) => /UPDATE generations SET doc_json/.test(s.text));
+  assert.ok(upd, "doc yozilishi kerak edi");
+  return JSON.parse(String(upd.params[2])) as AcademicDoc;
+}
+
+async function expectTooLong(p: Promise<unknown>, seen: Seen[]) {
+  const err = await expectApiError(p, 400);
+  assert.equal(err.message, TEXT_TOO_LONG_FOR_IMAGE);
+  assert.equal(err.extra.code, "text_too_long");
+  assert.equal(found(seen, /UPDATE generations SET doc_json/).length, 0, "rad etilgan PATCH doc ni yozdi");
+  assert.equal(found(seen, /INSERT INTO generation_assets/).length, 0, "rad etilgan PATCH aktiv yozdi");
+  return err;
+}
+
+const LONG_ITEM = p8Text(100, 3);
+
+test("INT-03 sinov asosi: 1-slayd rasm bilan sig'maydi (eski deka), 0-slayd sig'adi, uzun band 0-slaydni sig'dirmaydi", () => {
+  const deck = buildSlideDeck(int3Doc);
+  assert.equal(imageYieldField(int3Slides[0], deck.bodyType, deck.visual), null);
+  assert.equal(imageYieldField(int3Slides[1], deck.bodyType, deck.visual), "colItem");
+  const longer = { ...int3Slides[0], left: [LONG_ITEM, ...int3Slides[0].left!.slice(1)] };
+  assert.equal(imageYieldField(longer, deck.bodyType, deck.visual), "colItem");
+  assert.ok(LONG_ITEM.length <= 110, "tahrir chegarasidan (colItem 110) o'tadi — tekshiruvni FAQAT server guard qiladi");
+});
+
+test("INT-03 (1): rasmli slaydga rasmli qutidan uzun matn yozish (`text`) — 400, hech narsa yozilmaydi", async (t) => {
+  const seen = int3Db(t);
+  const err = await expectTooLong(commitDocOps(GEN, USER, 3, [{ op: "text", index: 0, src: { f: "left", i: 0 }, value: LONG_ITEM }]), seen);
+  assert.equal(err.extra.index, 0);
+});
+
+test("INT-03 (1b): `list` op bilan ham xuddi shunday — 400", async (t) => {
+  const seen = int3Db(t);
+  await expectTooLong(commitDocOps(GEN, USER, 3, [{ op: "list", index: 0, field: "right", items: [LONG_ITEM, "Qisqa"] }]), seen);
+});
+
+test("INT-03 (2): rasmli slaydga quti ichidagi matn — 200, yoziladi", async (t) => {
+  const seen = int3Db(t);
+  const value = p8Text(30, 5);
+  const gen = await commitDocOps(GEN, USER, 3, [{ op: "text", index: 0, src: { f: "left", i: 0 }, value }]);
+  assert.equal(gen.docVersion, 4);
+  const doc = savedDoc(seen);
+  assert.equal(doc.slides![0].left![0], value);
+  assert.deepEqual(doc.slides![0].image, { url: IMG_A });
+});
+
+test("INT-03 (3): rasm o'chirildi → matn uzaydi → «Rasmni qaytarish» (`imageRestore`) — 400", async (t) => {
+  // 2-slayd: rasmi allaqachon o'chirilgan, matni uzun — qaytarish sig'maslikni tiklardi.
+  const seen = int3Db(t);
+  await expectTooLong(commitDocOps(GEN, USER, 3, [{ op: "imageRestore", index: 2 }]), seen);
+});
+
+test("INT-03 (3b): bitta PATCH ichida o'chirish + uzaytirish + qaytarish — 400", async (t) => {
+  const seen = int3Db(t);
+  await expectTooLong(
+    commitDocOps(GEN, USER, 3, [
+      { op: "image", index: 0, url: null },
+      { op: "text", index: 0, src: { f: "left", i: 0 }, value: LONG_ITEM },
+      { op: "imageRestore", index: 0 },
+    ]),
+    seen,
+  );
+});
+
+test("INT-03 (3c): rasmni o'chirib matnni uzaytirish (rasmsiz qoladi) — 200", async (t) => {
+  const seen = int3Db(t);
+  await commitDocOps(GEN, USER, 3, [
+    { op: "image", index: 0, url: null },
+    { op: "text", index: 0, src: { f: "left", i: 0 }, value: LONG_ITEM },
+  ]);
+  const doc = savedDoc(seen);
+  assert.equal(doc.slides![0].image, undefined);
+  assert.equal(doc.slides![0].left![0], LONG_ITEM);
+});
+
+test("INT-03 (4): PATCH `image` op (oldingi aktiv) uzun matnli rasmsiz slaydga — 400; qisqa matnliga — 200", async (t) => {
+  const seen = int3Db(t);
+  const body = JSON.stringify({ baseVersion: 3, ops: [{ op: "image", index: 4, url: IMG_B }] });
+  await expectTooLong(patchDocFromRequest(new Request(`http://x/api/generations/${GEN}/doc`, { method: "PATCH", body }), GEN, USER), seen);
+  t.mock.restoreAll();
+  const seen2 = int3Db(t);
+  await commitDocOps(GEN, USER, 3, [{ op: "image", index: 3, url: IMG_B }]);
+  assert.deepEqual(savedDoc(seen2).slides![3].image, { url: IMG_B });
+});
+
+test("INT-03 (4b): `set` op (undo yo'li) bilan rasmli slaydga uzun matn — 400", async (t) => {
+  const seen = int3Db(t);
+  await expectTooLong(commitDocOps(GEN, USER, 3, [{ op: "set", index: 3, slide: { ...longTwo, id: "s3", image: { url: IMG_B } } }]), seen);
+});
+
+test("INT-03 (5): tegilmagan sig'mas slayd (eski deka, 1-slayd) boshqa tahrirni bloklamaydi", async (t) => {
+  const seen = int3Db(t);
+  await commitDocOps(GEN, USER, 3, [
+    { op: "text", index: 3, src: { f: "title" }, value: "Yangi sarlavha" },
+    { op: "notes", index: 1, value: "Izoh" },
+    { op: "footer", value: "Maktab" },
+  ]);
+  const doc = savedDoc(seen);
+  assert.equal(doc.slides![3].title, "Yangi sarlavha");
+  assert.deepEqual(doc.slides![1].image, { url: IMG_OLD }, "eski slayd rasmi joyida");
+  assert.deepEqual(doc.slides![1].left, longTwo.left);
+});
+
+test("INT-03 (5b): eski sig'mas slaydning SARLAVHASI yoki uslubi (quti matni emas) — 200", async (t) => {
+  const seen = int3Db(t);
+  await commitDocOps(GEN, USER, 3, [
+    { op: "text", index: 1, src: { f: "title" }, value: "Boshqa sarlavha" },
+    { op: "style", index: 1, src: { f: "left", i: 0 }, size: 20 },
+  ]);
+  assert.equal(savedDoc(seen).slides![1].title, "Boshqa sarlavha");
+});
+
+test("INT-03 (5c): slaydlar tartibi o'zgarsa (reorder/delete/add) — tegilmagan eski slayd bloklamaydi", async (t) => {
+  const seen = int3Db(t);
+  await commitDocOps(GEN, USER, 3, [
+    { op: "reorder", order: [1, 0, 2, 3, 4] },
+    { op: "delete", index: 4 },
+    { op: "add", after: 0 },
+  ]);
+  assert.deepEqual(savedDoc(seen).slides![0].image, { url: IMG_OLD });
+});
+
+test("INT-03 (6): matni o'zgarmagan rasmli slaydda rasmni ALMASHTIRISH — qabul (yuklash ham, PATCH ham)", async (t) => {
+  // 1-slayd: matni rasm bilan allaqachon sig'maydi (eski deka), lekin rasm BOR edi — almashtirish hech narsani yomonlashtirmaydi.
+  const seen = int3Db(t);
+  const gen = await uploadSlideImage(p8Req(1), GEN, USER, 1);
+  assert.equal(gen.docVersion, 4);
+  const doc = savedDoc(seen);
+  assert.notEqual(doc.slides![1].image!.url, IMG_OLD, "yangi rasm qo'yildi");
+  assert.deepEqual(doc.slides![1].imageOrig, { url: IMG_OLD }, "asl rasm «Rasmni qaytarish» uchun saqlandi");
+  t.mock.restoreAll();
+  const seen2 = int3Db(t);
+  await uploadSlideImage(p8Req(0), GEN, USER, 0);
+  assert.ok(savedDoc(seen2).slides![0].image);
+  t.mock.restoreAll();
+  const seen3 = int3Db(t);
+  await commitDocOps(GEN, USER, 3, [{ op: "image", index: 1, url: IMG_B }]);
+  assert.deepEqual(savedDoc(seen3).slides![1].image, { url: IMG_B });
+});
+
+test("INT-03 (6b): rasm almashtirilib BIR VAQTDA matn uzaysa — 400", async (t) => {
+  const seen = int3Db(t);
+  await expectTooLong(
+    commitDocOps(GEN, USER, 3, [
+      { op: "image", index: 0, url: IMG_B },
+      { op: "text", index: 0, src: { f: "right", i: 1 }, value: LONG_ITEM },
+    ]),
+    seen,
+  );
+});
+
+test("INT-03: yuklash uzun matnli RASMSIZ slaydga — hali ham 400 (yagona nuqta orqali)", async (t) => {
+  const seen = int3Db(t);
+  await expectTooLong(uploadSlideImage(p8Req(4), GEN, USER, 4), seen);
+});
+
