@@ -492,17 +492,18 @@ test("P9: reja nishoni ro'yxat raqamlaridan boshqa registrda (rang yoki o'lcham)
 });
 
 /**
- * P9 sharhi 3: bayt-bayt «eskicha» da'vosi QULFLANADI. Dizayn maketlari ×
+ * P9 sharhi 3: bayt-bayt «eskicha» da'vosi QULFLANADI. Barcha 17 maket ×
  * nishon maketlari × {rasm, rasmsiz} × {logo, logosiz}, `plan`SIZ —
  * geometriya barmoq izi (`slide-image-strip` formati: quti + shrift
  * o'lchami + matn) 879f495 (P9 dan oldingi slides-3) qiymatiga
  * mixlangan. `planBadgeBox` doim sursa yoki dizayn sarlavhasi doim
  * toraysa — xesh qizaradi.
  */
-test("P9: plan'siz dizayn slaydlari geometriyasi 879f495 bilan AYNAN teng (barmoq izi)", () => {
+test("P9: plan'siz mazmun slaydlari geometriyasi (17 maket) 879f495 bilan AYNAN teng (barmoq izi)", () => {
   const theme = getSlideTheme("atlas");
   const rows: string[] = [];
-  for (const visual of DESIGN_VISUALS) {
+  // Barcha 17 maket (dizayn + eski oila): dense iqtibos ham `planBadgeBox` dan o'tadi.
+  for (const visual of VISUALS) {
     for (const layout of BADGE_LAYOUTS) {
       for (const img of [false, true]) {
         // Qisqa VA 72 belgili sarlavha — sarlavha o'lchami/qutisi ham qulflansin.
@@ -530,7 +531,7 @@ test("P9: plan'siz dizayn slaydlari geometriyasi 879f495 bilan AYNAN teng (barmo
     }
   }
   const hash = createHash("sha256").update(rows.join("\n")).digest("hex").slice(0, 32);
-  assert.equal(hash, "2bd3c04123f7b1c91ff9c861115105b4", "plan'siz dizayn slaydi geometriyasi o'zgardi — nishon kodi eski doc_json ga sizib o'tgan");
+  assert.equal(hash, "5338a2afd603cbb88278b80f35083c76", "plan'siz dizayn slaydi geometriyasi o'zgardi — nishon kodi eski doc_json ga sizib o'tgan");
 });
 
 /**
@@ -560,6 +561,9 @@ test("P9: badgedTitle — yonida / ustida / pol -4 / plan'siz eskicha", () => {
   assert.equal(b1.box, narrow, "plan'siz — AYNAN o'sha quti obyekti");
   assert.equal(b1.size, LAYOUT_KIT.fitSize(LONG_TITLE, narrow, 26, 17), "plan'siz — fitSize aynan eskicha (pol o'zgarmaydi)");
   assert.equal(b1.above, false);
+  // Sig'maydigan plan'siz sarlavha — pol eskicha 17 (nishonning -4 imtiyozi faqat `plan` li slaydga).
+  const tiny = { x: 1, y: 0.3, w: 2, h: 0.5 };
+  assert.equal(badgedTitle(bare, tiny, 26, 17).size, 17, "plan'siz pol o'zgarmaydi");
 });
 
 // ═══════════════════════════════════════════ A2-04: auditoriya shrift poli
