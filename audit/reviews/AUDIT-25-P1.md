@@ -222,3 +222,105 @@ and the ordinal regex.
   owner may want the default `planItems` to adapt to capacity minus the standard blocks.
 - **With `agendaSlide: true` always sent, every `pitch`/`training` deck now gets an agenda.** It is
   consistent with the switch, but it changes those purposes' defaults.
+
+---
+
+## Re-review — 84573a9
+
+Scope: `git diff 2af1974..84573a9`, commits `1c46b61` and `84573a9`. I ran two heavy commands:
+
+1. `slide-plan`, `slide-blocks`, `slide-length`, `slide-params` and `client-bundle-guard`: **86/86 pass**.
+   This includes the `slide-length` X-5 cases and the new prompt⇔beat sweep.
+2. My probe, updated for the new API (scratchpad `p1-probe2.mts`: `planCapacity` gets `tool`,
+   `effectivePlanItems` gets `slideCount`). It adds `plannedBlocks` determinism and a
+   TUZILMA⇔beats check. **Caveat:** I piped the run through `tail -90`, which cut off the 60k-sweep
+   summary lines (case count and FAIL counters). Only the targeted outputs below survived. I did not
+   re-run it, to stay within the heavy budget. To confirm:
+   `scripts/heavy.sh npx tsx --conditions=react-server <scratchpad>/p1-probe2.mts | head -40`
+   (expect `cases 60000` and no `FAIL` lines). The test suite's own sweeps (the 960-case prompt⇔beat
+   sweep, 4 374-case capacity, 720-case coverage) pass, so the risk is low.
+
+### Items from the first review
+
+- **1 — Chips vs. switches: FIXED (option b).**
+  - `blocksSent` in `meta.ts:186` covers pro only. `resolvePlanFlags` sits in `slide-params.ts`.
+  - I checked the truth table on the real function, 36 rows. With pro (blocks sent):
+    - ticked Test + `quizCount` 0 → `undefined`, so the test is kept (default count);
+    - unticked Test + 0 → 0, no test;
+    - `n` > 0 always wins and adds the test;
+    - `agendaSlide: true` → `undefined`, so the agenda comes only from the «Reja» chip;
+    - `false` still turns the agenda slide off.
+  - With plain slide / blocks not sent, both flags pass through unchanged (A3-01/02).
+  - Real form shape (pro, `quizCount:0, agendaSlide:true`, purpose blocks): `open_lesson` keeps its
+    test, and `pitch`/`training` get no agenda. `{blocks:"maqsadlar", quiz:3, agenda:true}` gives no
+    agenda and 3 quiz slides.
+  - `PlanCapacityInput.tool` keeps the form and the engine in agreement. It is locked by the test
+    «P4 N1» (slide 7 vs pro 6).
+- **2 — Prompt ⇔ beats: FIXED.**
+  - `plannedBlocks` (`slide-blocks.ts`) is the single source for `blocksToBeats` and `structureLines`
+    (`structure.ts:40`). `has()`, agenda, `planN` and TUZILMA all read `plan.kept`.
+  - Step c) now drops manual yielding-type blocks first, then `diagramma`/`adabiyotlar`.
+  - The function is pure, with no mutable state beyond locals; the determinism check in probe 2 was
+    part of the truncated summary, but the code is pure by inspection.
+  - The new 960-case sweep checks references, diagramma, quiz and TUZILMA against the beats, and
+    `plannedBlocks.kept` against TUZILMA.
+- **3 — Lesson template roles: FIXED.**
+  - `structural: true` is set on 8 lesson roles (`slide-templates.ts:237-250`). `planContent` excludes
+    structural candidates and generic `stats`.
+  - Probe, lesson with 16 slides: plan bands are `twoCol#1 bullets#2 twoCol#3 twoCol#4 process#5 process#6`.
+    No structural role and no stats slide is a plan band; the structural ones and stats appear only as
+    extras. There is always at least one allowed layout (generic bullets/twoCol/process), so adjacency
+    still holds.
+- **3b — `plan` stripped by viewer edits: NOT ADDRESSED.**
+  - `slide-edit.ts` is not in the diff. `baseOf`, `sanitizeSlideModel` and `slideShapeOk` still drop
+    `plan` on the `layout`, `set` and `insert` ops.
+- **4 — Ordinal regex and role-prefix copy: FIXED.** Verified on the real function:
+  - These are now kept: `«18 – 20 asrlar»`, `«3 - 4 sinflar uchun»`, `«5 – 9-sinflar»`,
+    `«X - noma’lum son»`, `«I – shaxs olmoshi»`, `«V. I. Lenin»`, `«10: 1 nisbat»`, `«1.5 million»`,
+    `«1.2. Band»`, `«12-maktab»`, `«2024-yil»`, `«3D model»`, `«II jahon urushi»`.
+  - These are now stripped: `«1.Kirish»`, `«3.Qism»`, `«IV. Tarix»`, `«II. Jahon urushi»`,
+    `«REJA 2-band: 3. Mexanizm»` → `«Mexanizm»`.
+  - Prompt wording is updated (`structure.ts:78-79`).
+- **5a / 5b / 5c: FIXED.**
+  - (a) The `types.ts` comment is updated.
+  - (b) Live roles now go through `planRoleText`.
+  - (c) `clipWords` clips at a word boundary and trims trailing punctuation. It falls back to a hard
+    cut only when the last space is before n/2.
+- **Coordinator item 7 — adaptive `planItems` default and the X-5 change: OK in the engine.**
+  - `defaultPlanItems = clamp(round(n/3), 3, 6)`.
+  - The X-5 share now needs an explicit `quizCount` > 0. The contract «quizCount chosen → up to 1/3
+    share» holds:
+    - plain `open_lesson` @10, quiz 3, 3 bands → `quiz×3` (share 3 = ⌈8/3⌉), with maqsadlar kept;
+    - with 5 bands → `quiz×2`, because the givers already went to the bands.
+  - `slide-length` X-5 tests are green.
+  - With nothing sent, `open_lesson` @10 → `title agenda maqsadlar motivatsiya 3×plan amaliyot quiz closing`
+    (uyga_vazifa yields).
+- **Client safety: OK.** `slide-params.ts` dropped its type import of `./types`. It now imports only
+  `../types` (type), `./safe-text` and `./slide-purpose`. The guard is green.
+
+### Verdict: **CHANGES** (1 item; everything else APPROVE)
+
+R1. **(carried over from 3b) Viewer edits drop `plan`.** Change `lib/generation/slide-edit.ts`:
+- `baseOf` (`:542`) and `sanitizeSlideModel` (`:636`) copy
+  `plan` when `Number.isInteger(o.plan) && o.plan >= 1 && o.plan <= 6`;
+- `slideShapeOk` (`:1122`) accepts only `plan === undefined || Number.isInteger(plan)`;
+- tests: `layout` op and `set` op both keep `plan`, with a mutation check.
+
+If the lead decides to move this to another package or sprint, P1 is APPROVE as is.
+
+### Cross-package requirements for P4 (not P1 changes, but P1's fixes only reach users once P4 does these)
+
+- `SlideComposer.tsx initialValues` sends `planItems: PLAN_ITEMS_DEFAULT` (5), so the adaptive default
+  never applies to real form users. Probe, plain `open_lesson` @10 with `planItems:5` sent: 5 bands,
+  amaliyot and uyga_vazifa dropped.
+  - P4 must send `defaultPlanItems(slideCount)`, and follow the slider until the user touches the chip,
+    or leave `planItems` unsent.
+- The form's live capacity must call `planCapacity({ ...values, tool })`. Without `tool`, the pro form
+  shows one band more than the engine produces.
+- In pro, «Reja slaydi» = ON is now inert when the «Reja» chip is off, e.g. for `pitch`/`training`
+  defaults; only OFF acts.
+- «Nazorat testi» > 0 overrides an unticked «Test» chip.
+
+  P4 should mirror these controls, e.g. disable or annotate the switch when Reja is off, and tick «Test»
+  when a count > 0 is picked. Otherwise one control of each pair still shows a state the deck does not
+  follow.
