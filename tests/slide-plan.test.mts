@@ -18,7 +18,7 @@ import {
   resolvePlanFlags,
 } from "../lib/generation/slide-params.ts";
 import { SLIDE_LIMITS, clipTo, limitsFor } from "../lib/generation/slide-limits.ts";
-import { REPAIR_MIN_MS, clipLimit, layoutWordTargets } from "../lib/generation/slide-quality.ts";
+import { NO_IMAGE, REPAIR_MIN_MS, clipLimit, layoutWordTargets } from "../lib/generation/slide-quality.ts";
 import { AUDIENCE_RULES } from "../lib/generation/slide-audience.ts";
 import type { SlideProgressEvent } from "../lib/generation/slide-progress.ts";
 import { resetBlocksForPurpose } from "../components/forms/slide-fields.tsx";
@@ -787,18 +787,18 @@ test("W3/W4: normalizeSlide AVVAL sonni kesadi, keyin uzunlikni auditoriya × so
     const tag = aud;
     assert.equal(proc.steps!.length, lim.stepsMax, `${tag}: bosqich soni stepsMax ga kesilmadi`);
     for (const st of proc.steps!) {
-      assert.ok(st.text.length <= clipLimit("stepText", rules, visual, proc.steps!.length), `${tag}: step ${st.text.length}`);
+      assert.ok(st.text.length <= clipLimit("stepText", rules, visual, proc.steps!.length, undefined, NO_IMAGE), `${tag}: step ${st.text.length}`);
       assert.ok(st.text.endsWith("…") && long.startsWith(st.text.slice(0, -1)) && /[\s,;:.!?–—-]/.test(long[st.text.length - 1]), `${tag}: so'z o'rtasidan kesildi «${st.text}»`);
     }
     assert.equal(stats.stats!.length, lim.statsMax, tag);
-    for (const s of stats.stats!) assert.ok(s.label.length <= clipLimit("statLabel", rules, visual, stats.stats!.length), tag);
+    for (const s of stats.stats!) assert.ok(s.label.length <= clipLimit("statLabel", rules, visual, stats.stats!.length, undefined, NO_IMAGE), tag);
     assert.equal(table.table!.headers.length, lim.tableCols, tag);
     assert.equal(table.table!.rows.length, lim.tableRows, tag);
-    const cellMax = clipLimit("tableCell", rules, visual, lim.tableCols, lim.tableRows);
+    const cellMax = clipLimit("tableCell", rules, visual, lim.tableCols, lim.tableRows, NO_IMAGE);
     for (const r of table.table!.rows) for (const c of r) assert.ok(c.length <= cellMax, `${tag}: katak ${c.length} > ${cellMax}`);
-    for (const o of quiz.quiz![0].options) assert.ok(o.length <= clipLimit("quizOption", rules, visual), tag);
+    for (const o of quiz.quiz![0].options) assert.ok(o.length <= clipLimit("quizOption", rules, visual, undefined, undefined, NO_IMAGE), tag);
     assert.equal(two.left!.length, Math.min(SLIDE_LIMITS.colItems, layoutWordTargets(rules, visual).maxColItems), tag);
-    for (const x of two.left!) assert.ok(x.length <= clipLimit("colItem", rules, visual, two.left!.length), tag);
+    for (const x of two.left!) assert.ok(x.length <= clipLimit("colItem", rules, visual, two.left!.length, undefined, NO_IMAGE), tag);
     // Bitta bandli ustun — keng chegara (son bo'yicha).
     assert.ok(two.right![0].length >= two.left![0].length, `${tag}: ustun chegarasi band soniga qaramadi`);
   }
@@ -865,4 +865,60 @@ test("N3: ustun bandlari AVVAL auditoriya × vizual sig'imiga kesiladi (1–4-si
   const adult = bodyRules(extractMeta(slideTool, { topic: "X", slideAudience: "students_bachelor" }), "lecture");
   const [a] = extractNewSlides(JSON.stringify({ slides: [{ layout: "twoCol", title: "Ikki ustun", left: four, right: four }] }), 0, "F", adult, { final: true }, SLIDE_TEMPLATE_BY_ID.lecture.visual).map((x) => x.slide);
   assert.ok(a.left!.length > 2, `bakalavr: ${a.left!.length}`);
+});
+
+// ═══════════════════════════════════════════ P8: «matn rasmdan ustun» (AUDIT-25 jonli dalil)
+
+/*
+ * Jonli slides-3 dekasi (8–9 sinf, `lesson` → `circle`): twoCol bandlari 54–58 belgida «…» bilan
+ * kesildi — qirqish RASMLI qutida (60) edi, rasm esa matn yozilgandan KEYIN va faqat ba'zi
+ * slaydlarga qo'yiladi. Endi `normalizeSlide` RASMSIZ sig'imda qirqadi (`NO_IMAGE`); rasmli qutiga
+ * sig'maydigan slayd rasmdan voz kechadi (`slide-images.ts`).
+ */
+const P8_WORDS =
+  "Orol dengizining qurishi mintaqadagi iqlim sharoitini keskin o‘zgartirdi va aholining sog‘lig‘iga jiddiy ta’sir ko‘rsatdi shuning uchun suv resurslarini tejash hamda qishloq xo‘jaligida zamonaviy sug‘orish usullarini joriy etish muhim vazifa hisoblanadi".split(
+    " ",
+  );
+/** `n` belgidan oshmaydigan, butun so'z bilan tugaydigan gap. */
+function p8Text(n: number, from = 0): string {
+  let out = "";
+  for (let i = 0; ; i += 1) {
+    const w = P8_WORDS[(from + i) % P8_WORDS.length];
+    const next = out ? `${out} ${w}` : w;
+    if (next.length > n) return out;
+    out = next;
+  }
+}
+
+test("P8 (b): 8–9 sinf «circle» ustun bandi RASMSIZ chegarada — rasmli 60 dan uzun band kesilmaydi", () => {
+  const rules = bodyRules(extractMeta(slideTool, { topic: "X", slideAudience: "school_8_9" }), "lesson");
+  const visual = SLIDE_TEMPLATE_BY_ID.lesson.visual;
+  assert.equal(visual, "circle");
+  const withImage = clipLimit("colItem", rules, visual, 2);
+  const noImage = clipLimit("colItem", rules, visual, 2, undefined, NO_IMAGE);
+  // O'lchov (`fitChars`): rasm tasmasi bilan 60, rasmsiz 104 (2 bandli ustun, pol 20 pt).
+  assert.equal(withImage, 60, "sinov asosi: rasmli quti 60");
+  assert.equal(noImage, 104, "sinov asosi: rasmsiz quti 104");
+  // Jonli dekadagi holat: model limitdan bir necha belgiga oshgan band (~58 → 80 belgi).
+  const items = [p8Text(80), p8Text(80, 4)];
+  assert.ok(items.every((x) => x.length > withImage && x.length <= noImage), items.map((x) => x.length).join(","));
+  const [s] = extractNewSlides(JSON.stringify({ slides: [{ layout: "twoCol", title: "Ikki ustun", left: items, right: items }] }), 0, "F", rules, { final: true }, visual).map((x) => x.slide);
+  assert.deepEqual(s.left, items, "rasmsiz qutiga sig'adigan band «…» bilan kesildi");
+  assert.deepEqual(s.right, items);
+});
+
+test("P8 (d): rasmsiz qutidan ham uzun band — rasmsiz chegarada, SO'Z chegarasida qirqiladi", () => {
+  const rules = bodyRules(extractMeta(slideTool, { topic: "X", slideAudience: "school_8_9" }), "lesson");
+  const visual = SLIDE_TEMPLATE_BY_ID.lesson.visual;
+  const withImage = clipLimit("colItem", rules, visual, 2);
+  const noImage = clipLimit("colItem", rules, visual, 2, undefined, NO_IMAGE);
+  const long = p8Text(170, 2);
+  assert.ok(long.length > noImage);
+  const [s] = extractNewSlides(JSON.stringify({ slides: [{ layout: "twoCol", title: "Ikki ustun", left: [long, long], right: [long] }] }), 0, "F", rules, { final: true }, visual).map((x) => x.slide);
+  const got = s.left![0];
+  assert.ok(got.endsWith("…"), got);
+  assert.ok(got.length <= noImage, `${got.length} > ${noImage}`);
+  assert.ok(got.length > withImage, `rasmli chegarada (${withImage}) qirqildi: ${got.length}`);
+  assert.ok(long.startsWith(got.slice(0, -1)), "qirqilgan band asl matnning boshi emas");
+  assert.match(long[got.length - 1], /\s/, `so'z o'rtasidan kesildi: «${got}»`);
 });

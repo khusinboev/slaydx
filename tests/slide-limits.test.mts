@@ -5,7 +5,7 @@ import { SLIDE_LIMITS, clipTo, SLIDE_IMAGE_MAX_BYTES, UNDO_DEPTH, REBUILD_DEBOUN
 import { resolveSlideTemplate } from "../lib/generation/slide-templates.ts";
 import { bodyRules } from "../lib/generation/slide-audience.ts";
 import { limitsFor } from "../lib/generation/slide-limits.ts";
-import { clipLimit, layoutWordTargets } from "../lib/generation/slide-quality.ts";
+import { NO_IMAGE, clipLimit, layoutWordTargets } from "../lib/generation/slide-quality.ts";
 import { QUIZ_MAX, QUIZ_OPTION_MAX, QUIZ_Q_MAX, STAT_LABEL_MAX, STEP_TEXT_MAX, writeSlidesWithLlm } from "../lib/generation/slide-write.ts";
 import type { SlideModel } from "../lib/generation/slide-types.ts";
 import { TOOL_BY_ID } from "../lib/tools.ts";
@@ -150,7 +150,7 @@ test("normalize: ustun bandlari colItems × colItem", async () => {
   )[0];
   const colN = Math.min(SLIDE_LIMITS.colItems, layoutWordTargets(RULES, VISUAL).maxColItems);
   assert.equal(s.left?.length, colN, "ustundagi band soni chegarasi (auditoriya × vizual, N3)");
-  assert.equal(s.left?.[0].length, clipLimit("colItem", RULES, VISUAL, colN), "banddagi belgi chegarasi (ustundagi band SONIDA)");
+  assert.equal(s.left?.[0].length, clipLimit("colItem", RULES, VISUAL, colN, undefined, NO_IMAGE), "banddagi belgi chegarasi (ustundagi band SONIDA)");
   assert.equal(s.leftTitle?.length, SLIDE_LIMITS.colTitle);
 });
 
@@ -181,7 +181,7 @@ test("normalize: stats — statsMax karta, statValue/statLabel chegarasi", async
   )[0];
   assert.equal(s.stats?.length, LIM.statsMax, "karta soni auditoriya ruxsatida");
   assert.equal(s.stats?.[0].value.length, SLIDE_LIMITS.statValue);
-  assert.equal(s.stats?.[0].label.length, clipLimit("statLabel", RULES, VISUAL, LIM.statsMax));
+  assert.equal(s.stats?.[0].label.length, clipLimit("statLabel", RULES, VISUAL, LIM.statsMax, undefined, NO_IMAGE));
 });
 
 test("normalize: process — stepsMax bosqich, stepTitle/stepText chegarasi", async () => {
@@ -200,8 +200,8 @@ test("normalize: process — stepsMax bosqich, stepTitle/stepText chegarasi", as
     ]),
   )[0];
   assert.equal(s.steps?.length, LIM.stepsMax, "bosqich soni auditoriya ruxsatida");
-  assert.equal(s.steps?.[0].title.length, clipLimit("stepTitle", RULES, VISUAL, LIM.stepsMax));
-  assert.equal(s.steps?.[0].text.length, clipLimit("stepText", RULES, VISUAL, LIM.stepsMax));
+  assert.equal(s.steps?.[0].title.length, clipLimit("stepTitle", RULES, VISUAL, LIM.stepsMax, undefined, NO_IMAGE));
+  assert.equal(s.steps?.[0].text.length, clipLimit("stepText", RULES, VISUAL, LIM.stepsMax, undefined, NO_IMAGE));
 });
 
 test("normalize: jadval — tableCols/tableRows/tableCell va ustun soniga qarab sarlavha", async () => {
@@ -219,9 +219,9 @@ test("normalize: jadval — tableCols/tableRows/tableCell va ustun soniga qarab 
     ]),
   )[0];
   const rowsN = LIM.tableRows;
-  assert.equal(wide.table?.headers[0].length, clipLimit("tableHeader", RULES, VISUAL, 3, rowsN), "3 ustunda sarlavha (ustun VA qator soni)");
+  assert.equal(wide.table?.headers[0].length, clipLimit("tableHeader", RULES, VISUAL, 3, rowsN, NO_IMAGE), "3 ustunda sarlavha (ustun VA qator soni)");
   assert.equal(wide.table?.rows.length, rowsN);
-  assert.equal(wide.table?.rows[0][0].length, clipLimit("tableCell", RULES, VISUAL, 3, rowsN));
+  assert.equal(wide.table?.rows[0][0].length, clipLimit("tableCell", RULES, VISUAL, 3, rowsN, NO_IMAGE));
 
   const narrow = body(
     await deckFrom([
@@ -240,7 +240,7 @@ test("normalize: jadval — tableCols/tableRows/tableCell va ustun soniga qarab 
     ]),
   )[0];
   const cols = Math.min(4, LIM.tableCols);
-  assert.equal(narrow.table?.headers[0].length, clipLimit("tableHeader", RULES, VISUAL, cols, 2), "ustun soniga qarab sarlavha");
+  assert.equal(narrow.table?.headers[0].length, clipLimit("tableHeader", RULES, VISUAL, cols, 2, NO_IMAGE), "ustun soniga qarab sarlavha");
 });
 
 test("normalize: quiz — quizOptions AYNAN, quizQ/quizOption chegarasi", async () => {
@@ -262,7 +262,7 @@ test("normalize: quiz — quizOptions AYNAN, quizQ/quizOption chegarasi", async 
   )[0];
   assert.equal(s.quiz?.[0].q.length, SLIDE_LIMITS.quizQ);
   assert.equal(s.quiz?.[0].options.length, SLIDE_LIMITS.quizOptions);
-  assert.equal(s.quiz?.[0].options[0].length, clipLimit("quizOption", RULES, VISUAL));
+  assert.equal(s.quiz?.[0].options[0].length, clipLimit("quizOption", RULES, VISUAL, undefined, undefined, NO_IMAGE));
 });
 
 test("normalize: references — refsMax, refTitle/refSource chegarasi", async () => {

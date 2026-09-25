@@ -19,6 +19,8 @@ import {
 import { falProvider } from "../lib/generation/image-provider-fal.ts";
 import { buildImageArtifact } from "../lib/generation/image-studio.ts";
 import type { SlideModel } from "../lib/generation/slide-types.ts";
+import { bodyRules } from "../lib/generation/slide-audience.ts";
+import { NO_IMAGE, clipLimit } from "../lib/generation/slide-quality.ts";
 
 /**
  * RASM PROVAYDERI VA USLUBLARI (AUDIT-9 WP-E).
@@ -710,6 +712,70 @@ test("provayder ok, lekin baytlar rasm emas — onImage chaqirilmaydi", async ()
     assert.equal(slides.filter((x) => x.image).length, 0);
     assert.deepEqual(got, [], "saqlanmagan rasm uchun `image` hodisasi bo'lmasin");
   } finally {
+    restore();
+  }
+});
+
+// ───────────────────────────────────────────── AUDIT-25 P8: rasm matnga joy beradi
+
+/**
+ * «Matn rasmdan ustun»: matn RASMSIZ qutiga qirqiladi (`normalizeSlide`,
+ * `NO_IMAGE`); rasmli qutiga sig'maydigan slayd rasm OLMAYDI va bu
+ * `want` dan OLDIN hisobga olinadi — siyosat «kam yetkazildi» (qisman
+ * qaytarish) ga aylanmasin. Qisqa matnli slayd rasmini oladi.
+ */
+test("P8 (c): matni rasmli qutiga sig'maydigan twoCol rejadan chiqadi, want kamayadi; qisqa slayd rasm oladi", async () => {
+  const rules = bodyRules(meta({ slideAudience: "school_8_9" }, pro), "lesson");
+  const withImage = clipLimit("colItem", rules, "circle", 2);
+  const noImage = clipLimit("colItem", rules, "circle", 2, undefined, NO_IMAGE);
+  assert.ok(withImage < noImage, `asos: ${withImage} < ${noImage}`);
+  const words = "Orol dengizining qurishi mintaqadagi iqlim sharoitini keskin o‘zgartirdi va aholining sog‘lig‘iga jiddiy ta’sir ko‘rsatdi".split(" ");
+  const upTo = (n: number) => words.reduce((out, w) => (`${out} ${w}`.trim().length <= n ? `${out} ${w}`.trim() : out), "");
+  const long = upTo(Math.floor(0.9 * noImage));
+  assert.ok(long.length > withImage && long.length <= noImage, `asos: ${long.length}`);
+  const short = upTo(30);
+  const deck = (): SlideModel[] => [
+    { id: "s0", layout: "twoCol", title: "Uzun", leftTitle: "A", rightTitle: "B", left: [long, short], right: [short, short] },
+    { id: "s1", layout: "twoCol", title: "Qisqa", leftTitle: "A", rightTitle: "B", left: [short, short], right: [short, short] },
+    // `circle` da bandlar slaydi rasm joyi yo'q — qahramon rasmli iqtibos (P8 uni o'zgartirmaydi).
+    { id: "s2", layout: "quote", title: "Iqtibos", quote: short, quoteBy: "Muallif" },
+  ];
+  // Reja: qoidasiz — 3 slot (eski yo'l), qoida bilan — 2 (uzun twoCol chiqdi).
+  assert.equal(plannedImageSlots(deck(), "circle", false, true).length, 3);
+  assert.deepEqual(
+    plannedImageSlots(deck(), "circle", false, true, rules).map(({ s }) => s.id),
+    ["s1", "s2"],
+  );
+
+  const restore = geminiEnv();
+  let calls = 0;
+  globalThis.fetch = (async (url: string) => {
+    if (!String(url).includes("/interactions")) return jsonRes(500, {});
+    calls += 1;
+    return jsonRes(200, geminiOkBody());
+  }) as unknown as typeof fetch;
+  const info = console.info;
+  const logged: string[] = [];
+  console.info = (...a: unknown[]) => void logged.push(a.map(String).join(" "));
+  try {
+    const slides = deck();
+    const waits: number[][] = [];
+    const report = await attachSlideImages(slides, "Orol dengizi", "circle", 60_000, {
+      meta: meta({ slideAudience: "school_8_9" }, pro),
+      rules,
+      onPlanned: (ix) => waits.push(ix),
+    });
+    assert.equal(report.want, 2, "va'da chiqarishdan KEYIN sanaladi");
+    assert.equal(report.got, 2, "got = want — qisman qaytarish yo'q");
+    assert.equal(calls, 2);
+    assert.deepEqual(waits, [[1, 2]], "jonli kutish ro'yxatida matnga joy bergan slayd yo'q");
+    assert.ok(!slides[0].image, "uzun matnli slayd rasm olmadi");
+    assert.deepEqual(slides[0].left, [long, short], "matn to'liq qoldi");
+    assert.ok(slides[1].image && slides[2].image, "qisqa matnli slaydlar rasm oldi");
+    assert.equal(logged.filter((l) => l.includes("rasm matnga joy berdi")).length, 1, logged.join("\n"));
+    assert.match(logged.find((l) => l.includes("rasm matnga joy berdi"))!, /slayd 1 \(twoCol, colItem\)/);
+  } finally {
+    console.info = info;
     restore();
   }
 });

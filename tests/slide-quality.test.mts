@@ -2,10 +2,14 @@ import test, { afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { extractMeta } from "../lib/generation/meta.ts";
 import { resetBreakers } from "../lib/generation/llm/breaker.ts";
-import { bodyRules } from "../lib/generation/slide-audience.ts";
+import { SLIDE_AUDIENCES, bodyRules } from "../lib/generation/slide-audience.ts";
+import { DESIGN_VISUALS, LEGACY_VISUALS } from "../lib/generation/visuals/spec.ts";
 import { SLIDE_LIMITS, clipTo, limitsFor } from "../lib/generation/slide-limits.ts";
 import {
   CHARS_PER_WORD,
+  PROMPT_HEADROOM,
+  NO_IMAGE,
+  imageYieldField,
   COL_MIN_ITEMS,
   COL_MIN_WORDS,
   PROCESS_MIN_STEPS,
@@ -129,9 +133,10 @@ test("short-steps: bosqich matni STEP_MIN_WORDS dan kam yoki bosqich PROCESS_MIN
   // …lekin yorliq-bosqich (≤ 3 so'z) — yupqa.
   const label = S({ layout: "process", steps: [sent(9), sent(9, 3), "Natija"].map((text, i) => ({ n: String(i + 1), title: "B", text })) });
   assert.deepEqual(reasonsOf(label), ["short-steps"]);
-  // Ortiqcha son o'z chegarasini pasaytirmaydi: 1–4 sinfga 5 × 3 so'z — `stepsMax` (3) dagi chegara bilan yupqa.
+  // Ortiqcha son o'z chegarasini pasaytirmaydi: 1–4 sinfga 5 × 2 so'z — `stepsMax` (3) dagi chegara bilan yupqa
+  // (P8: 15 % zaxira bilan 3 bosqichli bolalar kartasiga prompt 3 so'z so'raydi — chegara ham 3; 5 bosqichda ~1 bo'lardi).
   const kids = bodyRules({ slideAudience: "school_1_4", textVolume: "standart", planItems: 5 }, "lesson");
-  const five = S({ layout: "process", steps: Array.from({ length: 5 }, (_, i) => ({ n: String(i + 1), title: "B", text: sent(3, i) })) });
+  const five = S({ layout: "process", steps: Array.from({ length: 5 }, (_, i) => ({ n: String(i + 1), title: "B", text: sent(2, i) })) });
   assert.deepEqual(reasonsOf(five, kids, "classic"), ["short-steps"]);
 });
 
@@ -247,6 +252,61 @@ test("layoutWordTargets: oraliqlar sig'imdan oshmaydi va detektor chegarasidan p
     assert.ok(t.quote.min >= QUOTE_MIN_WORDS, `${visual}: quote min`);
     for (const r of [t.bullet, t.colItem, t.stepText, t.sectionSubtitle, t.closingSubtitle, t.quote]) assert.ok(r.min <= r.max);
   }
+});
+
+/*
+ * P8 (a) — «matn rasmdan ustun»: prompt maksimumi qirqish chegarasidan kamida 15 % past.
+ *
+ * Jonli 7 dekaning 4 tasida model limitdan bir necha belgiga oshdi va band «…» bilan
+ * kesildi (8–9 sinf `circle` ustun bandi 54–58 / 60, bosqich 32–39 / 42): prompt
+ * maksimumi = limit edi. Endi har maydon uchun max × CHARS_PER_WORD ≤ 0.85 × clipLimit
+ * (RASMLI quti — eng tori; rasmsiz chegara undan katta, ya'ni u ham ≤ 0.85 ×). Istisno —
+ * poldagi son (1 so'z; test varianti 2): quti bir so'zga ham zo'rg'a yetadigan joyda
+ * «0 so'z» so'ralmaydi.
+ */
+test("P8 (a): prompt oraliqlari har auditoriya × vizual × hajmda ≥ 15 % zaxirali (≤ 0.85 × clipLimit)", () => {
+  assert.equal(PROMPT_HEADROOM, 0.85);
+  const bad: string[] = [];
+  for (const aud of SLIDE_AUDIENCES) {
+    for (const vol of ["qisqa", "standart", "kop"] as const) {
+      const r = bodyRules({ slideAudience: aud, textVolume: vol, planItems: 5 }, "lecture");
+      for (const visual of [...LEGACY_VISUALS, ...DESIGN_VISUALS]) {
+        const t = layoutWordTargets(r, visual);
+        const room = (words: number, chars: number, floor = 1) => {
+          if (words > floor && words * CHARS_PER_WORD > PROMPT_HEADROOM * chars) bad.push(`${aud}/${vol}/${visual}: ${words} so'z > 0.85 × ${chars}`);
+        };
+        room(t.bullet.max, Math.min(r.bulletChars, clipLimit("bullets", r, visual)));
+        room(t.colItem.max, clipLimit("colItem", r, visual, t.maxColItems));
+        room(t.colTitleMax, clipLimit("colTitle", r, visual));
+        for (const [n, w] of Object.entries(t.stepTextBy)) room(w.max, clipLimit("stepText", r, visual, Number(n)));
+        room(t.statLabelMax, clipLimit("statLabel", r, visual, t.maxStats));
+        room(t.tableCellMax, clipLimit("tableCell", r, visual, t.maxTableCols, t.maxTableRows));
+        room(t.sectionSubtitle.max, clipLimit("subtitleSection", r, visual));
+        room(t.closingSubtitle.max, clipLimit("subtitleClosing", r, visual));
+        room(t.quote.max, clipLimit("quote", r, visual));
+        room(t.quoteByMax, clipLimit("quoteBy", r, visual));
+        room(t.quizQMax, clipLimit("quizQ", r, visual));
+        room(t.quizOptionMax, clipLimit("quizOption", r, visual), 2);
+        // Quyi chegara yuqoridan oshmaydi (zaxira bilan ham).
+        for (const w of [t.bullet, t.colItem, t.stepText, t.sectionSubtitle, t.closingSubtitle, t.quote]) if (w.min > w.max) bad.push(`${aud}/${vol}/${visual}: min ${w.min} > max ${w.max}`);
+      }
+    }
+  }
+  assert.deepEqual(bad.slice(0, 10), [], `${bad.length} ta zaxirasiz maqsad`);
+  // Jonli dalil sonlari: 8–9 sinf `circle` 2 bandli ustun — rasmli 60 belgi → 5 so'z (ilgari 6 ≈ 54 → 58 «…»).
+  const g89 = bodyRules({ slideAudience: "school_8_9", textVolume: "standart", planItems: 5 }, "lesson");
+  const t89 = layoutWordTargets(g89, "circle");
+  assert.equal(clipLimit("colItem", g89, "circle", 2), 60, "sinov asosi: rasmli ustun bandi 60");
+  assert.equal(t89.maxColItems, 2);
+  assert.equal(t89.colItem.max, 5);
+  // Bosqich (3 ta) rasmli 42 belgi → 3 so'z (ilgari 4 ≈ 36 → 32–39 «…»).
+  assert.equal(t89.stepTextBy[3].max, Math.floor((0.85 * clipLimit("stepText", g89, "circle", 3)) / CHARS_PER_WORD));
+  assert.ok(t89.stepTextBy[3].max * CHARS_PER_WORD <= 0.85 * 42);
+  // Bakalavr «qisqa» bandi 119 belgi → 11 so'z (ilgari 13 = 117 → 111–114 «…»).
+  const bq = bodyRules({ slideAudience: "students_bachelor", textVolume: "qisqa", planItems: 5 }, "lecture");
+  assert.equal(bq.bulletChars, 119);
+  assert.equal(bulletMaxWords(bq), 11);
+  assert.match(wordTargetLines(g89, "circle").join("\n"), /har band \d+(–5)? so‘z/);
 });
 
 test("element soni auditoriyaga ergashadi: yosh auditoriyaga kam bosqich/karta/ustun (P2 A2-04 pol)", () => {
@@ -604,6 +664,54 @@ test("repair: test varianti — faqat belgilangan variant o'zgaradi, asli bilan 
     () => jsonReply({ slides: [{ index: 0, quiz: [{ q: "Qaysi chora to‘g‘ri?", options: fixed.slice(0, 3), answer: 1 }] }] }),
     async () => assert.equal((await repairThinSlides([quiz], meta, tpl, {}, later(), later()))[0], quiz, "3 variant — rad"),
   );
+});
+
+/** `n` belgidan oshmaydigan, so'z bilan tugaydigan o'zbekcha gap. */
+const upTo = (n: number, from = 0) => {
+  let out = "";
+  for (let i = 0; ; i += 1) {
+    const next = out ? `${out} ${POOL[(from + i) % POOL.length]}` : POOL[(from + i) % POOL.length];
+    if (next.length > n) return out;
+    out = next;
+  }
+};
+
+test("P8 (4): ta'mir RASMSIZ chegarada qabul qiladi — 4 bandli ustunning 90 belgilik bandi 60 da kesilmaydi", async () => {
+  // Sinov asosi: bakalavr `academic` 4 bandli ustun — rasmli 60, rasmsiz 110.
+  const withImage = clipLimit("colItem", rules, tpl.visual, 4);
+  const noImage = clipLimit("colItem", rules, tpl.visual, 4, undefined, NO_IMAGE);
+  assert.ok(withImage < 90 && noImage >= 90, `asos: ${withImage} / ${noImage}`);
+  const thin = { id: "s0", layout: "twoCol", title: "Ikki yondashuv", leftTitle: "Eski", rightTitle: "Yangi", left: ["Bir."], right: ["Ikki."], plan: 1 } as SlideModel;
+  const items = (k: number) => [0, 1, 2, 3].map((i) => upTo(90, k + i * 3));
+  await withLlm(
+    () => jsonReply({ slides: [{ index: 0, left: items(0), right: items(1) }] }),
+    async () => {
+      const [out] = await repairThinSlides([thin], meta, tpl, {}, later(), later());
+      assert.deepEqual(out.left, items(0), "ta'mirlangan band rasmli quti (60) bilan kesildi");
+      assert.deepEqual(out.right, items(1));
+      assert.ok(out.left!.every((x) => !x.endsWith("…") && x.length > withImage));
+    },
+  );
+});
+
+test("P8 imageYieldField: rasmli qutidan uzun VA rasm joy yeydigan maydon — rasm joy beradi", () => {
+  const g89 = bodyRules({ slideAudience: "school_8_9", textVolume: "standart", planItems: 5 }, "lesson");
+  const withImage = clipLimit("colItem", g89, "circle", 2);
+  const noImage = clipLimit("colItem", g89, "circle", 2, undefined, NO_IMAGE);
+  assert.ok(withImage < noImage, `asos: ${withImage} < ${noImage}`);
+  const two = (len: number) => S({ layout: "twoCol", leftTitle: "A", rightTitle: "B", left: [upTo(len), upTo(len, 2)], right: [upTo(40, 1), upTo(40, 3)] });
+  assert.equal(imageYieldField(two(Math.round(0.9 * noImage)), g89, "circle"), "colItem");
+  assert.equal(imageYieldField(two(withImage), g89, "circle"), null, "rasmli qutiga sig'adi — rasm qoladi");
+  // Rasm joy yemaydigan maydon (`circle` bandlari: rasmli = rasmsiz) — rasmdan voz kechish hech narsa bermaydi.
+  assert.equal(clipLimit("bullets", g89, "circle"), clipLimit("bullets", g89, "circle", undefined, undefined, NO_IMAGE));
+  const longBullets = S({ layout: "bullets", bullets: [upTo(g89.bulletChars), upTo(g89.bulletChars, 3), upTo(60, 5)] });
+  assert.ok(longBullets.bullets![0].length > clipLimit("bullets", g89, "circle", 3), "asos: band rasmli qutidan uzun");
+  assert.equal(imageYieldField(longBullets, g89, "circle"), null);
+  // Bosqich, jadval, iqtibos/bo'lim — o'z maydoni bilan.
+  const stepText = upTo(clipLimit("stepText", g89, "circle", 3, undefined, NO_IMAGE));
+  const proc = S({ layout: "process", steps: [1, 2, 3].map((n) => ({ n: String(n), title: "Bosqich", text: stepText })) });
+  assert.equal(imageYieldField(proc, g89, "circle"), clipLimit("stepText", g89, "circle", 3) < stepText.length ? "stepText" : null);
+  assert.equal(imageYieldField(S({ layout: "section", subtitle: sent(20) }), g89, "circle"), null, "bo'lim subtitle rasmli qutiga sig'adi");
 });
 
 test("repair: process — son auditoriya ruxsatigacha qisiladi, matn shu sondagi quti bilan (sharh 1-band)", async () => {

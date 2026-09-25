@@ -65,22 +65,44 @@ export const QUOTE_MIN_WORDS = 8;
  * probel ~9 belgi (`tests/slide-chart.test.mts` o'lchovi bilan bir xil).
  * Belgidan so'zga o'tishda ATAYLAB past baho — «≤ N so'z» ga rioya
  * qilgan javob qutiga albatta sig'sin.
+ *
+ * AUDIT-25 P8 qayta o'lchovi (slides-3 jonli 7 deka, `eval-out/live/
+ * *.doc.json`, 202 matn maydoni, belgi+probel / so'z): o'rtacha 8.42
+ * (band 9.00, ustun bandi 8.45, bosqich 8.01, jadval katagi 8.00, stats
+ * yorlig'i 8.56, test varianti 7.17). O'RTACHA 9 dan past — 9 qoladi.
+ * Lekin bitta matn bo'yicha p90 10.0–10.4 (ustun bandi 10.17, band 10.44):
+ * maksimal so'z soniga rioya qilgan UZUN so'zli band 9 × N dan ~16 %
+ * uzun chiqadi. Jonli «…» kesiklarning sababi shu — o'rtacha emas,
+ * tarqoqlik. Uni `PROMPT_HEADROOM` yopadi (9 / 10.4 ≈ 0.87 ≥ 0.85).
  */
 export const CHARS_PER_WORD = 9;
+
+/**
+ * Prompt ZAXIRASI (AUDIT-25 P8, «matn rasmdan ustun»): yuqori so'z
+ * chegarasi = ⌊0.85 × belgi sig'imi / `CHARS_PER_WORD`⌋. Ilgari zaxira
+ * 0 edi (prompt maksimumi = qirqish chegarasi): jonli 7 dekaning 4 tasida
+ * model limitdan bir necha belgiga oshib, band so'z chegarasida «…» bilan
+ * kesildi (8–9 sinf `circle` ustun bandi 54–58 / 60, bosqich 32–39 / 42,
+ * bakalavr `qisqa` bandi 111–114 / 119). 15 % — o'lchangan p90 so'z
+ * uzunligi (10.4) ni qoplaydi.
+ */
+export const PROMPT_HEADROOM = 0.85;
 
 /** Bandning quyi chegarasi (so'z) — prompt ham, detektor ham shuni o'qiydi. */
 export function bulletMinWords(rules: Pick<BodyRules, "bulletChars">): number {
   // `floor`: 1–4 sinfda 5.5 → 5 (round 6 ga chiqarib, 5 so'zli bolalar bandini «yupqa» derdi).
-  return Math.floor((rules.bulletChars * THIN_BULLET_K) / 8);
+  // Yuqori chegaradan oshmaydi (zaxira bilan ham «min ≤ max»).
+  return Math.min(bulletMaxWords(rules), Math.floor((rules.bulletChars * THIN_BULLET_K) / 8));
 }
 
 /**
  * Bandning yuqori chegarasi (so'z). Ilgari `bulletChars / 8` edi —
  * talabada 21 so'z ≈ 190 belgi, qirqish esa 165 da: ko'rsatmaga TO'LIQ
- * rioya qilgan band «…» bilan kesilardi. Endi `CHARS_PER_WORD` bilan.
+ * rioya qilgan band «…» bilan kesilardi. Endi `CHARS_PER_WORD` va 15 %
+ * zaxira bilan (`PROMPT_HEADROOM`).
  */
 export function bulletMaxWords(rules: Pick<BodyRules, "bulletChars">): number {
-  return Math.floor(rules.bulletChars / CHARS_PER_WORD);
+  return Math.max(1, Math.floor((PROMPT_HEADROOM * rules.bulletChars) / CHARS_PER_WORD));
 }
 
 // ───────────────────────────────────────────────────────── maket sig'imi
@@ -361,12 +383,84 @@ function staticCap(field: FitField, rules: BodyRules, count?: number, rows?: num
  *
  * P1: `normalizeSlide` da AVVAL son (`rules.stepsMax`/`statsMax`/
  * `tableCols`/`tableRows`), keyin `clipTo(x, clipLimit("stepText",
- * rules, tpl.visual, steps.length))`; jadvalda `clipLimit("tableCell",
- * rules, visual, cols, rows)`.
+ * rules, tpl.visual, steps.length, undefined, NO_IMAGE))`; jadvalda
+ * `clipLimit("tableCell", rules, visual, cols, rows, NO_IMAGE)`.
+ *
+ * `opts.images` (AUDIT-25 P8, «matn rasmdan ustun»): "both" (standart) —
+ * rasm tasmasi bilan va rasmsizning kichigi, ya'ni RASMLI quti; "none" —
+ * faqat rasmsiz quti. Matn bosqichi (`normalizeSlide`, ta'mir) rasmni
+ * hali bilmaydi — u RASMSIZ sig'imda qirqadi (`NO_IMAGE`); rasmli qutiga
+ * sig'maydigan slayd keyin rasmdan voz kechadi (`imageYieldField`,
+ * `slide-images.ts`), matn esa kesilmaydi.
  */
-export function clipLimit(field: FitField, rules: BodyRules, visual?: SlideVisual, count?: number, rows?: number): number {
+export function clipLimit(field: FitField, rules: BodyRules, visual?: SlideVisual, count?: number, rows?: number, opts: Pick<FitOpts, "images"> = {}): number {
   const cap = staticCap(field, rules, count, rows);
-  return Math.min(cap, Math.max(CLIP_FLOOR_CHARS, fitChars(field, rules, visual, count, { rows })));
+  return Math.min(cap, Math.max(CLIP_FLOOR_CHARS, fitChars(field, rules, visual, count, { rows, images: opts.images })));
+}
+
+/** Matn bosqichining qirqish rejimi — rasm hali yo'q, sig'im RASMSIZ qutidan. */
+export const NO_IMAGE = { images: "none" } as const satisfies Pick<FitOpts, "images">;
+
+/**
+ * Rasm matnga JOY BERADIMI (AUDIT-25 P8, «matn rasmdan ustun»).
+ *
+ * Matn RASMSIZ qutiga qirqilgan (`NO_IMAGE`); rasm tasmasi esa kontent
+ * zonasini toraytiradi. Qoida: slaydning birorta maydoni RASMLI
+ * qutidan (`clipLimit(…, {images: "both"})`, auditoriya poli) uzun VA
+ * rasm haqiqatan joy yeydi (rasmli chegara < rasmsiz chegara) — rasm
+ * qo'yilmaydi, matn to'liq qoladi. Rasm joy yemaydigan maydonda (masalan
+ * `bullets` `circle` da — ikkala holatda bir xil quti) rasmdan voz
+ * kechish hech narsa bermaydi, shuning uchun u hisobga olinmaydi.
+ *
+ * Maydonlar: band (`bullets`), ustun bandi (`left`/`right`), bosqich
+ * matni va sarlavhasi, stats yorlig'i, jadval katagi va sarlavhasi,
+ * iqtibos, bo'lim/yakun subtitle. Son — slayddagi haqiqiy son (ustunda —
+ * o'sha ustunniki). Qaytaradi: birinchi sig'maydigan maydon yoki `null`.
+ */
+export function imageYieldField(s: SlideModel, rules: BodyRules, visual?: SlideVisual): FitField | null {
+  const over = (field: FitField, texts: (string | undefined)[], count?: number, rows?: number): boolean => {
+    const longest = Math.max(0, ...texts.map((t) => String(t ?? "").trim().length));
+    if (!longest) return false;
+    const withImage = clipLimit(field, rules, visual, count, rows);
+    return longest > withImage && withImage < clipLimit(field, rules, visual, count, rows, NO_IMAGE);
+  };
+  const checks: [FitField, (string | undefined)[], number?, number?][] = [];
+  switch (s.layout) {
+    case "bullets":
+      checks.push(["bullets", s.bullets ?? [], Math.max(1, s.bullets?.length ?? 1)]);
+      break;
+    case "twoCol":
+    case "compare":
+      for (const col of [s.left ?? [], s.right ?? []]) if (col.length) checks.push(["colItem", col, col.length]);
+      break;
+    case "process": {
+      const n = s.steps?.length ?? 0;
+      if (n) checks.push(["stepText", s.steps!.map((x) => x.text), n], ["stepTitle", s.steps!.map((x) => x.title), n]);
+      break;
+    }
+    case "stats": {
+      const n = s.stats?.length ?? 0;
+      if (n) checks.push(["statLabel", s.stats!.map((x) => x.label), n]);
+      break;
+    }
+    case "table": {
+      const cols = s.table?.headers.length ?? 0;
+      const rows = s.table?.rows.length ?? 0;
+      if (cols && rows) checks.push(["tableCell", s.table!.rows.flat(), cols, rows], ["tableHeader", s.table!.headers, cols, rows]);
+      break;
+    }
+    case "quote":
+      checks.push(["quote", [s.quote]]);
+      break;
+    case "section":
+      checks.push(["subtitleSection", [s.subtitle]]);
+      break;
+    case "closing":
+      checks.push(["subtitleClosing", [s.subtitle]]);
+      break;
+  }
+  for (const [field, texts, count, rows] of checks) if (over(field, texts, count, rows)) return field;
+  return null;
 }
 
 // ───────────────────────────────────────────────────────── so'z oraliqlari
@@ -420,19 +514,33 @@ export function tableCellMinWords(rules: Pick<BodyRules, "minPt">): number {
   return rules.minPt <= 16 ? TABLE_CELL_MIN_WORDS_ADULT : TABLE_CELL_MIN_WORDS;
 }
 
-/** Belgi sig'imi → so'z, qopqoqdan oshmasdan. */
-function capWords(chars: number, limit: number): number {
-  return Math.max(1, Math.floor(Math.min(chars, limit) / CHARS_PER_WORD));
+/**
+ * Belgi sig'imi → so'z, qopqoqdan oshmasdan. `headroom` — prompt zaxirasi
+ * (`PROMPT_HEADROOM`); element SONINI tanlashda 1 (xom sig'im).
+ */
+function capWords(chars: number, limit: number, headroom = PROMPT_HEADROOM): number {
+  return Math.max(1, Math.floor((headroom * Math.min(chars, limit)) / CHARS_PER_WORD));
 }
 
-/** Maydonning so'zdagi sig'imi (qopqoq bilan). */
+/**
+ * Maydonning so'zdagi sig'imi (qopqoq bilan, 15 % zaxira) — prompt
+ * oralig'i va detektor chegarasi shundan. Sig'im RASMLI qutidan
+ * (`fitChars` standarti "both"): rasm matndan keyin qo'shiladi, prompt
+ * esa rasmli slaydga ham sig'adigan hajmni so'raydi; model oshirib
+ * yozsa matn rasmsiz qutigacha qirqilmaydi, rasm esa joy beradi.
+ */
 function fitWords(field: FitField, rules: BodyRules, visual?: SlideVisual, count?: number, rows?: number): number {
   return capWords(fitChars(field, rules, visual, count, { rows }), staticCap(field, rules, count, rows));
 }
 
-/** `from..to` oralig'idagi eng KATTA son, unda maydon kamida `minWords` so'z ko'taradi; yo'q bo'lsa `from`. */
+/**
+ * `from..to` oralig'idagi eng KATTA son, unda maydon kamida `minWords` so'z ko'taradi; yo'q bo'lsa `from`.
+ * Son XOM sig'imdan (zaxirasiz) — P2/P3 son qarorlari zaxira bilan o'zgarmasin.
+ */
 function maxCount(field: FitField, rules: BodyRules, visual: SlideVisual | undefined, from: number, to: number, minWords: number, rows?: number): number {
-  for (let n = to; n > from; n -= 1) if (fitWords(field, rules, visual, n, rows) >= minWords) return n;
+  for (let n = to; n > from; n -= 1) {
+    if (capWords(fitChars(field, rules, visual, n, { rows }), staticCap(field, rules, n, rows), 1) >= minWords) return n;
+  }
   return from;
 }
 
@@ -620,7 +728,7 @@ export function thinReasons(s: SlideModel, rules: BodyRules, visual?: SlideVisua
     return out;
   }
   if (s.layout === "quiz") {
-    const cap = clipLimit("quizOption", rules, visual);
+    const cap = clipLimit("quizOption", rules, visual, undefined, undefined, NO_IMAGE);
     const bad = (s.quiz ?? []).some((q) => clippedAt(q.q, SLIDE_LIMITS.quizQ) || q.options.some((o) => clippedAt(o, cap) || o.length > cap));
     if (bad) out.push("clipped-option");
   }
@@ -682,12 +790,14 @@ function samePrefix(orig: string, next: string, cap: number): boolean {
  * Model javobini ASL slayd ustiga qo'yadi — faqat shu maketning MATN
  * maydonlari. `id`, `layout`, `title`, `plan`, rasm, izoh va boshqa
  * hamma narsa asl slayddan (spread) qoladi. Yaroqsiz javob — `null`.
- * Qirqish `clipLimit` bilan — ta'mirlangan matn ham qutiga sig'adi.
+ * Qirqish `clipLimit(…, NO_IMAGE)` bilan — `normalizeSlide` bilan BIR
+ * xil rasmsiz chegara (AUDIT-25 P8): ta'mirlangan matn rasmli qutiga
+ * sig'masa, rasm keyin joy beradi (`imageYieldField`), matn kesilmaydi.
  */
 function mergeRepair(orig: SlideModel, raw: Record<string, unknown>, rules: BodyRules, visual?: SlideVisual): SlideModel | null {
   switch (orig.layout) {
     case "bullets": {
-      const bullets = list(raw.bullets, rules.maxBullets, clipLimit("bullets", rules, visual));
+      const bullets = list(raw.bullets, rules.maxBullets, clipLimit("bullets", rules, visual, undefined, undefined, NO_IMAGE));
       return bullets.length ? { ...orig, bullets } : null;
     }
     case "process": {
@@ -699,8 +809,8 @@ function mergeRepair(orig: SlideModel, raw: Record<string, unknown>, rules: Body
        */
       const n = Math.min(raw.steps.length, rules.stepsMax, layoutWordTargets(rules, visual).maxSteps);
       if (n < PROCESS_MIN_STEPS) return null;
-      const textMax = clipLimit("stepText", rules, visual, n);
-      const titleMax = clipLimit("stepTitle", rules, visual, n);
+      const textMax = clipLimit("stepText", rules, visual, n, undefined, NO_IMAGE);
+      const titleMax = clipLimit("stepTitle", rules, visual, n, undefined, NO_IMAGE);
       const steps: SlideStep[] = [];
       for (const [i, x] of raw.steps.slice(0, n).entries()) {
         if (!x || typeof x !== "object") return null;
@@ -715,7 +825,7 @@ function mergeRepair(orig: SlideModel, raw: Record<string, unknown>, rules: Body
     case "twoCol":
     case "compare": {
       const n = Math.min(SLIDE_LIMITS.colItems, Math.max(Array.isArray(raw.left) ? raw.left.length : 0, Array.isArray(raw.right) ? raw.right.length : 0));
-      const itemMax = clipLimit("colItem", rules, visual, n);
+      const itemMax = clipLimit("colItem", rules, visual, n, undefined, NO_IMAGE);
       const left = list(raw.left, SLIDE_LIMITS.colItems, itemMax);
       const right = list(raw.right, SLIDE_LIMITS.colItems, itemMax);
       if (!left.length || !right.length) return null;
@@ -728,7 +838,7 @@ function mergeRepair(orig: SlideModel, raw: Record<string, unknown>, rules: Body
       };
     }
     case "section": {
-      const subtitle = clipTo(String(raw.subtitle ?? ""), clipLimit("subtitleSection", rules, visual));
+      const subtitle = clipTo(String(raw.subtitle ?? ""), clipLimit("subtitleSection", rules, visual, undefined, undefined, NO_IMAGE));
       return subtitle ? { ...orig, subtitle } : null;
     }
     case "quiz": {
@@ -742,7 +852,7 @@ function mergeRepair(orig: SlideModel, raw: Record<string, unknown>, rules: Body
        *     (`samePrefix`) — boshqa variant matnini shu o'ringa qo'yib
        *     javobni «ko'chirish» rad etiladi.
        */
-      const cap = clipLimit("quizOption", rules, visual);
+      const cap = clipLimit("quizOption", rules, visual, undefined, undefined, NO_IMAGE);
       const orig_ = orig.quiz ?? [];
       if (!Array.isArray(raw.quiz) || raw.quiz.length !== orig_.length) return null;
       const quiz: NonNullable<SlideModel["quiz"]> = [];
