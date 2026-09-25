@@ -78,7 +78,10 @@ Shartnomalar (yakuniy, review'lardan keyin):
 | P4 forma | «Reja bandlari» sig'imga qarab (o'chirilgan variantlar, moslashuvchan standart, «Tanlangan N band sig‘maydi» izohi); chiplar ⇄ tugmalar dvigatel bilan bir xil (`resolvePlanFlags`/`activeBlockIds`); `quizCount`/`agendaSlide` faqat tanlanganda yuboriladi; `blocks` faqat pro-slide; eski qoralamalar `v:2` bilan tozalanadi; Chromium smoke. |
 | P5 tekshiruv | `scripts/slide-audit.mts` (reja qamrovi, tartib raqami sizishi, «…» kesik, skelet sizishi, yupqa matn — `meta` bo'lsa dvigatel detektori) + 7 jonli holat (`npm run live -- slide pro-slide slide-lesson slide-lecture pro-slide-open-lesson slide-report pro-slide-min`). |
 | P6 | `deliveredCount` pro-slide'ni ham hisoblaydi — kam yetkazilganda qisman qaytarish (A3-03). |
-| P7/W7 | Ko'ruvchi tahriri `plan`ni saqlaydi; tahrir limitlari auditoriya bo'yicha (`limitsFor`), tegilmagan matn qisqarmaydi. |
+| P7/W7 | Ko'ruvchi tahriri `plan`ni saqlaydi; tahrir limitlari auditoriya bo'yicha (`limitsFor`), tegilmagan matn qisqarmaydi (undo aynan qaytaradi). |
+| P8 | «Matn rasmdan ustun»: prompt maqsadlariga 15 % zahira (7 jonli dekada p90 = 10.4 belgi/so'z o'lchandi), yozuv bosqichi rasmsiz quti sig'imida kesadi, matni rasm yonida sig'maydigan slayd rasmsiz qoladi (rasm va'dasi shundan keyin hisoblanadi — D1), bullet'lar ham quti sig'imida; rasm yuklash yo'li matn sig'masa 400 qaytaradi. |
+| P9 | Bo'limsiz dekalarda ham reja slaydlari «0N» belgisi bilan (17 vizualda o'z uslubida); rejasiz slaydlar 14 280 kombinatsiyada bayt-bo'yicha o'zgarmagan. |
+| P10 | Grounding redirect'lari 3 tadan parallel, 6 s byudjet, so'rov boshiga 3 s; hal bo'lmasa manbalar slaydida domen ko'rsatiladi, redirect URL hech qachon chiqmaydi. |
 
 ### Egasi qarori (2026-09-25)
 - **D1 — «matn rasmdan ustun» (P8):** slayd matni rasm yonida sig'masa, slayd rasmsiz qoladi va rasm va'dasiga
@@ -88,5 +91,13 @@ Shartnomalar (yakuniy, review'lardan keyin):
 ### Tekshiruv
 - Gate `slides3-pre` (879f495): typecheck 0, lint 0, unit yashil, viewer, UI, build, fresh-Postgres smoke — hammasi yashil.
 - Jonli «keyin» (7 deka, real Gemini): reja qamrovi 7/7 (oldin 0/6), tartib raqami sizishi 0, halol skelet; ko'z bilan: Orol 4/4, Kvant 5/5 band o'z slaydi bilan, sarlavha = reja bandi.
-- Qolgan: 4 dekada bir necha belgi ortiqcha matn «…» bilan kesilgan (rasm bilan siqilgan quti) → P8; bo'limsiz dekalarda reja slaydida raqam ko'rinmaydi → P9; manbalarda Google redirect URL → P10.
+- Qolgan (P8/P9/P10 bilan yopildi): «…» kesiklar, reja slaydida raqam, redirect URL — yakuniy jonli tekshiruv pastda.
+
+### Qarz (keyingi sprintga)
+- Undo/`imageRestore` orqali rasm qaytarilganda matn uzaytirilgan bo'lsa tekshiruv yo'q (faqat yuklash yo'li himoyalangan; `slide-edit.ts` brauzerga ham yuklanadi, `slide-quality.ts` esa server-only).
+- Juda kichik dekada (4 slayd, test + reja) reja slaydi tushib qolsa forma tugmasi ON turadi, izoh yo'q.
+- `planFlags` uch joyda takrorlangan (meta.ts, planBudget, forma) — bitta eksportga yig'ish.
+- P2 tor qutilar: circle/editorial bo'lim sarlavhasi (bold, 16–24 belgi), cards test varianti 24 pt da, rail 5 bosqich — maket o'zgarishi kerak; hozir matn ustun, rasm joy beradi.
+- Stok rasm mosligi (Pexels qidiruvi `imageHint` bo'yicha) — mavzuga yaqin emas ba'zan; bu sprint doirasidan tashqarida.
+- Pro-slayd rasm ulushi bo'yicha qaytarish (audit P6 review taklifi: 0.5–0.75 ulush) — egasi qarori kutilmoqda.
 
