@@ -55,39 +55,44 @@ function pushHead(layers: SlideLayer[], s: SlideModel, theme: SlideTheme, w: num
 }
 
 /**
- * 5–6 bandli reja — ikki qator plita (har qatorda 3 tagacha). Raqam
- * plitaning yuqori chap burchagida (22 pt), matn uning ostida; 72
- * belgili band 14 pt himoya polida ham plitaga sig'adi (INT-02).
+ * 5–6 bandli reja — 2 ustun × 3 qator plita (o'qish tartibi 1 2 / 3 4 /
+ * 5 6). Raqam plitaning chap chetida (22 pt, o'rtada), matn o'ngida. Uch
+ * ustunli plita (3.2″) o'zbekcha uzun so'zlarni («tizimlarining») har
+ * qatorga bittadan sindirardi — 2 ustun (4.5″ matn) 1–4-sinfda ham ~40
+ * belgili bandni auditoriya polida sig'diradi; 72 belgi 14 pt himoya
+ * polida sig'adi (INT-02).
  */
 function planAgendaGrid(layers: SlideLayer[], items: string[], theme: SlideTheme, ctx: PlanCtx): void {
-  const top = 1.9;
-  const zoneH = 4.15;
-  const gap = 0.3;
-  const cols = 3;
-  const tileW = (11.6 - gap * (cols - 1)) / cols;
-  const tileH = (zoneH - gap) / 2;
+  const top = 1.85;
+  const zoneH = 4.4;
+  const gapX = 0.3;
+  const gapY = 0.2;
+  const cols = 2;
+  const rowsN = Math.ceil(items.length / cols);
+  const tileW = (11.6 - gapX * (cols - 1)) / cols;
+  const tileH = (zoneH - gapY * (rowsN - 1)) / rowsN;
   items.forEach((line, i) => {
-    const x = 0.85 + (i % cols) * (tileW + gap);
-    const y = top + Math.floor(i / cols) * (tileH + gap);
+    const x = 0.85 + (i % cols) * (tileW + gapX);
+    const y = top + Math.floor(i / cols) * (tileH + gapY);
     card(layers, theme, { x, y, w: tileW, h: tileH });
-    layers.push({ t: "rect", box: { x, y, w: tileW, h: 0.08 }, fill: { color: theme.accent }, radius: 0.04 });
+    layers.push({ t: "rect", box: { x, y, w: 0.08, h: tileH }, fill: { color: theme.accent }, radius: 0.04 });
     layers.push({
       t: "text",
-      box: { x: x + 0.24, y: y + 0.2, w: 0.9, h: 0.5 },
+      box: { x: x + 0.24, y, w: 0.72, h: tileH },
       text: two(i + 1),
       color: theme.accentInk,
       size: 22,
       bold: true,
       valign: "middle",
     });
-    const tBox: Box = { x: x + 0.24, y: y + 0.78, w: tileW - 0.48, h: tileH - 0.93 };
+    const tBox: Box = { x: x + 1.0, y: y + 0.1, w: tileW - 1.2, h: tileH - 0.2 };
     layers.push({
       t: "text",
       box: tBox,
       text: line,
       color: theme.text,
       size: LAYOUT_KIT.agendaFit(line, tBox, ctx.bodyType.bodyPt),
-      valign: "top",
+      valign: "middle",
       src: { f: "bullets", i },
     });
   });

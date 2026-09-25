@@ -3092,6 +3092,8 @@ function pushLogo(plan: SlidePlan, s: SlideModel, theme: SlideTheme, url: string
  * Qutilar har xil bo'lsa (plitalar) — eng tor eni va eng past bo'yi
  * (ehtiyotkor). Rejasiz dizayn (maket reja chizmasa) — `null`.
  */
+const AGENDA_PROBE_TEXT = "Orol dengizi havzasida sug'orish tizimlarining iqlim va aholiga ta'siri.";
+
 export function agendaRowBox(
   visual: SlideVisual,
   n: number,
@@ -3103,7 +3105,9 @@ export function agendaRowBox(
     id: "agenda-probe",
     layout: "agenda",
     title: "Reja",
-    bullets: Array.from({ length: count }, (_, i) => `Band ${i + 1}`),
+    // Chegara uzunligidagi (72 belgi) band: matnga moslashadigan maket
+    // (split — qo'shni qatorga kengayadi) eng katta qutisini ko'rsatadi.
+    bullets: Array.from({ length: count }, () => AGENDA_PROBE_TEXT),
     ...(opts.image ? { image: { url: "https://example.invalid/a.png" } } : {}),
   };
   const bodyType = { ...rules, agendaMax: Math.max(rules.agendaMax, count) };

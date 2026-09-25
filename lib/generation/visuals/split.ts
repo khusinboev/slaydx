@@ -279,9 +279,23 @@ function planAgenda(s: SlideModel, theme: SlideTheme, index: number, total: numb
       align: "center",
       valign: "middle",
     });
-    const box: Box = left
+    let box: Box = left
       ? { x: 0.85, y, w: SEAM - 0.78 - 0.85 - 0.22, h: rowH }
       : { x: SEAM + 0.98, y, w: 13.333 - 0.85 - (SEAM + 0.98), h: rowH };
+    /*
+     * AUDIT-25 INT-02: ustun tor (4.7″) — 72 belgili reja bandi (reja
+     * slaydining sarlavhasi) o'z qatoriga auditoriya polida sig'masdi
+     * (1–4-sinf 40 belgida ham 106 %). Bandlar navbatma-navbat chap/o'ng
+     * yarimda — qo'shni qator BOSHQA yarimda, ya'ni bandning matni
+     * yuqori-pastga qo'shni qatorlar balandligigacha kengaya oladi
+     * (kesishmaydi). Faqat polda sig'maganda — qisqa band eskicha.
+     */
+    const fitsRow = LAYOUT_KIT.inkHeight(line, box.w, ctx.bodyType.minPt) <= box.h;
+    if (!fitsRow && n > 1) {
+      const top = Math.max(2.0, y - rowH * 0.45);
+      const bottom = Math.min(6.8, y + rowH * 1.45);
+      box = { ...box, y: top, h: bottom - top };
+    }
     layers.push({
       t: "text",
       box,
