@@ -10,7 +10,11 @@ import { renderDocx } from "../generation/render-docx";
 import { renderPptx } from "../generation/render-pptx";
 import { renderPptxWithTemplate } from "../generation/render-pptx-template";
 import { getTemplate } from "./template-upload";
+import { ApiError } from "./api";
+import { imageYieldField, type FitField } from "../generation/slide-quality";
+import { buildSlideDeck } from "../generation/slides";
 import type { ImageBytes } from "../generation/slide-images";
+import type { SlideModel } from "../generation/slide-types";
 import type { AcademicDoc } from "../generation/types";
 
 /**
@@ -65,10 +69,116 @@ export type EditAdapter = {
   prepare: (doc: AcademicDoc) => AcademicDoc;
   parse: (raw: unknown) => ParseResult;
   apply: (doc: AcademicDoc, ops: unknown[], ctx: { genId: string }) => ApplyResult;
+  /**
+   * `apply` dan KEYINGI, faqat serverda ishlaydigan tekshiruv (ixtiyoriy):
+   * `before` — bazadagi hujjat, `after` — op lar qo'llangani. Rad etsa
+   * `ApiError` tashlaydi va `commitDocOps` hech narsa yozmaydi. Sabab —
+   * `apply` izomorf (klient bundle ham shu kodni ishlatadi), serverga xos
+   * og'ir predikatlar (`slide-quality.ts`) esa u yerga kira olmaydi.
+   */
+  guard?: (before: AcademicDoc, after: AcademicDoc, ops: unknown[]) => void;
   render: (ctx: RenderCtx, deps: RebuildDeps) => Promise<RenderedFile>;
 };
 
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+/** Rasm tasmasi bilan matn qutidan chiqadigan slayd — foydalanuvchiga ko'rinadigan xabar. */
+export const TEXT_TOO_LONG_FOR_IMAGE = "Matn rasm bilan sig‘maydi — avval matnni qisqartiring";
+
+/**
+ * Slaydning «rasm bilan sig'adimi» holatini belgilaydigan matni — AYNAN
+ * `imageYieldField` o'qiydigan maydonlar (maket + quti matnlari; ortig'i
+ * zarar qilmaydi, faqat ko'proq slayd tekshiriladi). Sarlavha, izoh,
+ * shrift/o'lcham, kolontitul, rasm URL i bu yerda YO'Q: ular sig'ishni
+ * o'zgartirmaydi. `imageYieldField` ga yangi maydon qo'shilsa — shu
+ * ro'yxatga ham (aks holda o'sha maydon tahriri «o'zgarmagan» deb
+ * o'tib ketadi; `tests/slide-image-edit.test.mts` INT-03 bloki).
+ */
+function yieldText(s: SlideModel): string {
+  return JSON.stringify([s.layout, s.bullets, s.left, s.right, s.steps, s.stats, s.table, s.quote, s.subtitle]);
+}
+
+/**
+ * «Matn rasmdan ustun» qoidasining YAGONA server nuqtasi (AUDIT-25 INT-03).
+ *
+ * Matn va rasm to'rt yo'l bilan uchrashadi: yuklash, rasmli slaydga matn
+ * yozish (`text`/`list`/`set`/`layout`), «Rasmni qaytarish»
+ * (`imageRestore`) va avvalgi aktivni `image` op bilan qayta qo'yish.
+ * Ilgari faqat birinchisi tekshirilardi (`uploadSlideImage`). Endi
+ * hammasi `commitDocOps` → `slideAdapter.guard` → shu funksiyadan o'tadi.
+ *
+ * QOIDA (eng kam kutilmagan): op lardan keyingi har RASMLI slayd
+ * tekshiriladi, BUNDAN MUSTASNO — uning ASL slaydi (`slideOrigins`) ham
+ * rasmli edi VA quti matni (`yieldText`) o'zgarmagan. Ya'ni:
+ *
+ *   - tegilmagan slayd (joyi `reorder`/`delete`/`add` bilan surilgan bo'lsa
+ *     ham) tekshirilmaydi — eski dekalarda oldindan sig'maydigan rasmli
+ *     slayd boshqa tahrirni BLOKLAMAYDI (AUDIT-25-OLDDECKS);
+ *   - quti matniga tegmaydigan tahrir (sarlavha, izoh, shrift, kolontitul)
+ *     ham tekshirilmaydi;
+ *   - rasmi BOR slaydda rasmni ALMASHTIRISH (yuklash yoki `image` op),
+ *     matn o'zgarmagan bo'lsa — qabul: matn va rasm yonma-yon allaqachon
+ *     turgan edi, almashtirish hech narsani yomonlashtirmaydi (P8 R3);
+ *   - rasmsiz slaydga rasm qo'yish (`image`/`imageRestore`), rasmli slayd
+ *     matnini o'zgartirish (`text`/`list`/`set`/`layout`) yoki ikkalasi,
+ *     hamda YANGI kelgan rasmli slayd (`insert` — undo) — `imageYieldField`
+ *     bilan tekshiriladi.
+ *
+ * Qaytaradi: birinchi sig'maydigan slayd indeksi va maydoni yoki `null`.
+ * Deka qoidasi va vizuali `buildSlideDeck` dan — op lar ularni
+ * o'zgartirmaydi (meta va shablon tahrirlanmaydi).
+ */
+export function imageTextOverflow(before: AcademicDoc, after: AcademicDoc, ops: readonly DocOp[]): { index: number; field: FitField } | null {
+  const slides = after.slides ?? [];
+  if (!slides.some((s) => s.image)) return null;
+  const prev = before.slides ?? [];
+  const origin = slideOrigins(prev.length, ops, slides.length);
+  const deck = buildSlideDeck(after);
+  for (let index = 0; index < slides.length; index++) {
+    const s = slides[index];
+    if (!s.image) continue;
+    const o = origin?.[index];
+    const was = o == null ? undefined : prev[o];
+    if (was?.image && yieldText(was) === yieldText(s)) continue;
+    const field = imageYieldField(s, deck.bodyType, deck.visual);
+    if (field) return { index, field };
+  }
+  return null;
+}
+
+/**
+ * Natijadagi har slayd ASL hujjatning qaysi slaydidan kelgani (yangi —
+ * `null`). Faqat tuzilmani o'zgartiradigan op lar (`add`/`delete`/
+ * `insert`/`reorder`) — `applyDocOps` dagi bilan AYNAN bir xil indeks
+ * ma'nosi; op lar `apply` dan muvaffaqiyatli o'tgani uchun indekslar
+ * yaroqli. Qolgan op lar slaydni JOYIDA o'zgartiradi — kelib chiqishi
+ * saqlanadi, o'zgargani esa `yieldText` bilan aniqlanadi.
+ *
+ * Uzunlik natija bilan mos kelmasa (bu modul va `applyDocOps` ajralib
+ * ketgan bo'lsa) — `null`: hamma rasmli slayd tekshiriladi. Ya'ni xato
+ * tomoni XAVFSIZ — sig'maslik o'tib ketmaydi, faqat eski dekada ortiqcha
+ * rad bo'lishi mumkin.
+ */
+function slideOrigins(n: number, ops: readonly DocOp[], expected: number): (number | null)[] | null {
+  let o: (number | null)[] = Array.from({ length: n }, (_, i) => i);
+  for (const op of ops) {
+    switch (op.op) {
+      case "add":
+        o = [...o.slice(0, op.after + 1), null, ...o.slice(op.after + 1)];
+        break;
+      case "delete":
+        o = o.filter((_, i) => i !== op.index);
+        break;
+      case "insert":
+        o = [...o.slice(0, op.index), null, ...o.slice(op.index)];
+        break;
+      case "reorder":
+        o = op.order.map((k) => o[k] ?? null);
+        break;
+    }
+  }
+  return o.length === expected ? o : null;
+}
 
 export const slideAdapter: EditAdapter = {
   id: "slide",
@@ -77,6 +187,15 @@ export const slideAdapter: EditAdapter = {
   prepare: (doc) => doc,
   parse: (raw) => parseDocOps(raw),
   apply: (doc, ops, ctx) => applyDocOps(doc, ops as DocOp[], ctx),
+  /*
+   * Butun PATCH rad etiladi (bitta slayd emas): op lar atomar, qisman yozuv
+   * yo'q. 400 `text_too_long` — ko'ruvchi xabarni ko'rsatadi, hujjatni
+   * qayta yuklaydi (`useDocEdit.settleFailure`).
+   */
+  guard(before, after, ops) {
+    const bad = imageTextOverflow(before, after, ops as DocOp[]);
+    if (bad) throw new ApiError(TEXT_TOO_LONG_FOR_IMAGE, 400, { code: "text_too_long", index: bad.index, field: bad.field });
+  },
   async render(ctx, deps) {
     const render = deps.render ?? renderPptx;
     /*

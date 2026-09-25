@@ -1,8 +1,6 @@
 import "server-only";
 import { ApiError } from "./api";
-import { commitDocOps, loadDocForEdit } from "./slide-commit";
-import { imageYieldField } from "../generation/slide-quality";
-import { buildSlideDeck } from "../generation/slides";
+import { commitDocOps } from "./slide-commit";
 import { assetUrl } from "./assets";
 import { readUploadForm } from "./upload-body";
 import { pendingUpload } from "./upload-quota";
@@ -34,32 +32,22 @@ function assertValidIndex(index: number): void {
   }
 }
 
-/** Rasm tasmasi bilan matn qutidan chiqadigan slayd — foydalanuvchiga ko'rinadigan xabar. */
-export const TEXT_TOO_LONG_FOR_IMAGE = "Matn rasm bilan sig‘maydi — avval matnni qisqartiring";
-
 /**
  * «Matn rasmdan ustun» (AUDIT-25 P8, sharh 5-band): generatsiya matnni
  * RASMSIZ qutigacha yozadi (`normalizeSlide`, `NO_IMAGE`) va matni
  * rasmli qutiga sig'maydigan slaydga rasm qo'ymaydi (`imageYieldField`).
- * Ko'ruvchida shunday slaydga rasm yuklansa, kontent zonasi torayadi:
- * twoCol matni qutidan chiqadi, process/stats/table auditoriya polidan
- * pastga tushadi. Shuning uchun yuklash O'SHA predikat bilan rad etiladi
- * (400) — deka qoidasi va vizuali `buildSlideDeck` dan (`bodyType` =
- * `bodyRules(meta, tpl.id)`, `visual` = `doc.slideVisual` yoki shablon).
+ * Ko'ruvchida shunday slaydga rasm yuklansa, kontent zonasi torayadi —
+ * shuning uchun yuklash O'SHA predikat bilan rad etiladi (400).
  *
- * Bu faqat TEZ oldindan tekshiruv (bitta o'qish): haqiqiy yozuv baribir
- * `commitDocOps` da, versiya qulfi bilan. Begona/tayyor bo'lmagan hujjat
- * shu yerda ham 404/409 oladi — aktiv yozilmaydi. Indeks chegaradan
- * tashqarida yoki maketda rasm joyi yo'q bo'lsa — qaror `applyDocOps`
- * ga qoldiriladi (422, o'z xabari bilan).
+ * Tekshiruv endi bu yerda EMAS (INT-03): u `commitDocOps` ichida, slayd
+ * adapterining `guard` ida (`edit-adapters.ts imageTextOverflow`) —
+ * PATCH (`text`/`list`/`set`/`image`/`imageRestore`/`layout`) ham AYNAN
+ * shu nuqtadan o'tadi. U tranzaksiyadan OLDIN ishlaydi, ya'ni rad
+ * etilgan yuklash aktiv ham, doc ham yozmaydi. Rasmi BOR slaydda
+ * almashtirish (matn o'zgarmagan) — qabul (P8 R3). Xabar shu yerdan ham
+ * eksport qilinadi (eski importlar uchun).
  */
-async function assertTextFitsImage(id: string, userId: string, index: number): Promise<void> {
-  const cur = await loadDocForEdit(id, userId);
-  const slide = cur.doc.slides?.[index];
-  if (!slide) return;
-  const deck = buildSlideDeck(cur.doc);
-  if (imageYieldField(slide, deck.bodyType, deck.visual)) throw new ApiError(TEXT_TOO_LONG_FOR_IMAGE, 400, { code: "text_too_long" });
-}
+export { TEXT_TOO_LONG_FOR_IMAGE } from "./edit-adapters";
 
 /**
  * Foydalanuvchi o'z PNG/JPEG faylini biriktiradi (AI EMAS).
@@ -102,8 +90,7 @@ export async function uploadSlideImage(
    * (404), eskirgan versiya (409), rasm joyi yo'q maket (422) yoki kvota
    * (413) — bazada yetim aktiv qolmaydi.
    */
-  // Matn rasm tasmasi bilan sig'masa — 400, aktiv yozilmaydi (P8).
-  await assertTextFitsImage(id, userId, index);
+  // Matn rasm tasmasi bilan sig'masa — 400, aktiv yozilmaydi (P8; `commitDocOps` → `guard`).
   const upload = pendingUpload(mime, bytes);
   const ops: DocOp[] = [{ op: "image", index, url: assetUrl(id, upload.assetId) }];
   return commitDocOps(id, userId, baseVersion, ops, { uploads: [upload] });

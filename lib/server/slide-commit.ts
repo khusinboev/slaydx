@@ -151,6 +151,12 @@ export async function commitDocOps(
   const applied = cur.adapter.apply(cur.doc, ops as unknown[], { genId: id });
   if (!applied.ok) throw new ApiError(applied.error, 422, { at: applied.at });
   const doc = applied.doc;
+  /*
+   * Serverga xos tekshiruv (slayd: «matn rasm bilan sig'maydi», AUDIT-25
+   * INT-03) — TRANZAKSIYADAN OLDIN: rad etilsa na doc, na yuklangan rasm
+   * yoziladi. Yuklash, PATCH, sayqal — hammasi shu nuqtadan o'tadi.
+   */
+  cur.adapter.guard?.(cur.doc, doc, ops as unknown[]);
 
   // Render TRANZAKSIYADAN OLDIN: sof funksiyalar, ulanishni ushlab
   // turishning hojati yo'q.

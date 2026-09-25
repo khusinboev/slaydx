@@ -424,7 +424,7 @@ test("INT-03 (1): rasmli slaydga rasmli qutidan uzun matn yozish (`text`) — 40
 
 test("INT-03 (1b): `list` op bilan ham xuddi shunday — 400", async (t) => {
   const seen = int3Db(t);
-  await expectTooLong(commitDocOps(GEN, USER, 3, [{ op: "list", index: 0, field: "right", items: [LONG_ITEM, "Qisqa"] }]), seen);
+  await expectTooLong(commitDocOps(GEN, USER, 3, [{ op: "list", index: 0, field: "right", items: [LONG_ITEM, ...shortTwo.right!.slice(1)] }]), seen);
 });
 
 test("INT-03 (2): rasmli slaydga quti ichidagi matn — 200, yoziladi", async (t) => {
@@ -511,6 +511,29 @@ test("INT-03 (5c): slaydlar tartibi o'zgarsa (reorder/delete/add) — tegilmagan
     { op: "add", after: 0 },
   ]);
   assert.deepEqual(savedDoc(seen).slides![0].image, { url: IMG_OLD });
+});
+
+test("INT-03 (5d): surilgan slayd ham kuzatiladi — reorder'dan keyin rasmli slaydga uzun matn 400", async (t) => {
+  // reorder → 1-o'rinda endi asl 0-slayd (qisqa, rasmli); uni uzaytirish rad etiladi.
+  const seen = int3Db(t);
+  const err = await expectTooLong(
+    commitDocOps(GEN, USER, 3, [
+      { op: "reorder", order: [1, 0, 2, 3, 4] },
+      { op: "add", after: -1 },
+      { op: "text", index: 2, src: { f: "left", i: 0 }, value: LONG_ITEM },
+    ]),
+    seen,
+  );
+  assert.equal(err.extra.index, 2);
+});
+
+test("INT-03 (5e): `insert` (o'chirishni undo) — yangi kelgan rasmli slayd tekshiriladi", async (t) => {
+  const seen = int3Db(t);
+  await expectTooLong(commitDocOps(GEN, USER, 3, [{ op: "insert", index: 0, slide: { ...longTwo, id: "s9", image: { url: IMG_B } } }]), seen);
+  t.mock.restoreAll();
+  const seen2 = int3Db(t);
+  await commitDocOps(GEN, USER, 3, [{ op: "insert", index: 0, slide: { ...shortTwo, id: "s9", image: { url: IMG_B } } }]);
+  assert.deepEqual(savedDoc(seen2).slides![0].image, { url: IMG_B });
 });
 
 test("INT-03 (6): matni o'zgarmagan rasmli slaydda rasmni ALMASHTIRISH — qabul (yuklash ham, PATCH ham)", async (t) => {
