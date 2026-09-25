@@ -48,15 +48,17 @@ function pushRoundPhoto(layers: SlideLayer[], theme: SlideTheme, url: string | u
 
 /** Sarlavha + yumaloq aksent tagchizig'i — kontent maketlari uchun bitta naqsh. */
 function pushRoundHead(layers: SlideLayer[], s: SlideModel, theme: SlideTheme, reserve: number, zoneW: number): void {
-  const { fitSize, planBadge, planBadgeBox } = LAYOUT_KIT;
-  const headBox = planBadgeBox(s, { x: TEXT_X, y: 0.5, w: Math.max(3, zoneW - reserve), h: 0.85 });
-  const size = fitSize(s.title, headBox, 26, 16);
+  const { fitSize, planBadge, badgedTitle } = LAYOUT_KIT;
+  const headBoxT = badgedTitle(s, { x: TEXT_X, y: 0.5, w: Math.max(3, zoneW - reserve), h: 0.85 }, 26, 16, 0.6);
+  const headBox = headBoxT.box;
+  const size = headBoxT.size;
   /*
    * AUDIT-25 P9: reja nishoni — dizayn tilida, lekin BOSHQA registrda:
    * to'ldirilmagan aksent HALQA + `accentInk` raqam (`pushPlanRing`).
    * Kartalardagi to'q disk «1 2 3» — ro'yxat tartibi; halqa — reja bandi
    * (sharh 2). Faqat `plan` li mazmun slaydida (reja/test — hech qachon).
    */
+  // Halqa (0.5″) uchun sarlavha ustida joy yo'q (y 0.5, `room` 0.6) — doim yonida.
   const no = planBadge(s);
   if (no) {
     const d = 0.5;

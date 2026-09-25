@@ -55,15 +55,16 @@ function pushColumn(layers: SlideLayer[], s: SlideModel, theme: SlideTheme): voi
 
 /** Jurnal sarlavhasi — mayda kapital matn + butun kenglikdagi ingichka chiziq. */
 function pushHead(layers: SlideLayer[], s: SlideModel, theme: SlideTheme, w: number, reserve: number): void {
-  const { fitSize, planBadgeBox, pushPlanTab } = LAYOUT_KIT;
-  const box = planBadgeBox(s, { x: TX, y: 0.45, w: w - reserve, h: 0.92 });
-  const size = fitSize(s.title, box, 30, 18);
+  const { fitSize, badgedTitle, pushPlanTab, PLAN_TAB_ROOM } = LAYOUT_KIT;
+  const boxT = badgedTitle(s, { x: TX, y: 0.45, w: w - reserve, h: 0.92 }, 30, 18, PLAN_TAB_ROOM);
+  const box = boxT.box;
+  const size = boxT.size;
   /*
    * AUDIT-25 P9: reja nishoni — to'q TAB (o'ng ustun rangida, aksent
    * qirra), sarlavha o'qida. Yalang oltin «01» pastdagi band raqamlari
    * «01…04» bilan bir registrda o'qilardi (sharh 2) — tab boshqa ma'no.
    */
-  pushPlanTab(layers, s, box, size, theme, { titleValign: "middle" });
+  pushPlanTab(layers, s, boxT, theme, { titleValign: "middle" });
   layers.push({
     t: "text",
     box,

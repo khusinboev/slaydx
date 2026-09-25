@@ -17,12 +17,13 @@ function two(n: number): string {
 
 /** Yuqori sarlavha — qalin aksent lentasi ostidagi yirik matn. */
 function pushHead(layers: SlideLayer[], s: SlideModel, theme: SlideTheme, w: number, reserve: number): void {
-  const { fitSize, planBadgeBox, pushPlanBadge } = LAYOUT_KIT;
-  const box = planBadgeBox(s, { x: 0.85, y: 0.42, w: w - reserve, h: 0.86 });
-  const size = fitSize(s.title, box, 27, 17);
+  const { fitSize, badgedTitle, pushPlanBadge } = LAYOUT_KIT;
+  const boxT = badgedTitle(s, { x: 0.85, y: 0.42, w: w - reserve, h: 0.86 }, 27, 17);
+  const box = boxT.box;
+  const size = boxT.size;
   // AUDIT-25 P9: reja nishoni sarlavha bilan bir o'qda (sarlavha `middle`),
   // ≤ 18 pt — bandlarning ulkan 01…N raqamidan ATAYLAB kichik, adashmasin.
-  pushPlanBadge(layers, s, box, size, theme.accentInk, { titleValign: "middle" });
+  pushPlanBadge(layers, s, boxT, theme, { titleValign: "middle" });
   layers.push({
     t: "text",
     box,

@@ -86,16 +86,17 @@ function pushPolaroid(
 
 /** Sarlavha + qo'sh chiziq (daftar ustuni) — kontent maketlari uchun. */
 function pushNotebookHead(layers: SlideLayer[], s: SlideModel, theme: SlideTheme, reserve: number): void {
-  const { fitSize, planBadgeBox, pushPlanTab } = LAYOUT_KIT;
-  const headBox = planBadgeBox(s, { x: TEXT_X + 0.25, y: 0.45, w: Math.max(3, ZONE_W - 0.25 - reserve), h: 0.8 });
-  const size = fitSize(s.title, headBox, 25, 16);
+  const { fitSize, badgedTitle, pushPlanTab, PLAN_TAB_ROOM } = LAYOUT_KIT;
+  const headBoxT = badgedTitle(s, { x: TEXT_X + 0.25, y: 0.45, w: Math.max(3, ZONE_W - 0.25 - reserve), h: 0.8 }, 25, 16, PLAN_TAB_ROOM);
+  const headBox = headBoxT.box;
+  const size = headBoxT.size;
   /*
    * AUDIT-25 P9: reja nishoni — bo'lim slaydidagi DAFTAR TABI tilida
    * (to'q blok, aksent qirra), sarlavha chapida. Ilgari u hoshiyada
    * yalang «01» edi va pastdagi band raqamlari «01 02 03» bilan bir
    * registrda o'qilardi (sharh 2) — tab boshqa ma'noni ko'rsatadi.
    */
-  pushPlanTab(layers, s, headBox, size, theme);
+  pushPlanTab(layers, s, headBoxT, theme);
   layers.push({
     t: "text",
     box: headBox,

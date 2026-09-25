@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { LAYOUT_KIT, planSlide, type SlideLayer } from "../lib/generation/slide-layout.ts";
 import { AUDIENCE_RULES, bodyRules } from "../lib/generation/slide-audience.ts";
 import { SLIDE_LIMITS } from "../lib/generation/slide-limits.ts";
@@ -411,6 +412,112 @@ test("P9: nishon sarlavha qutisining eni — ko'pi bilan 0.62″ torayadi, o'ng 
       assert.ok(Math.abs(a1.x + a1.w - (a0.x + a0.w)) < 1e-9, `${tag}: sarlavhaning o'ng qirrasi siljidi`);
     }
   }
+});
+
+/**
+ * P9 sharhi 1: logo (`reserve`) + 72 belgili sarlavha (`SLIDE_LIMITS.title`)
+ * bilan tor panel (hero-split/bold `twoCol`) sarlavhasi nishon yonida
+ * 17 pt da ham sig'masdi. Shartnoma: nishon qo'shilgani uchun HECH BIR
+ * sarlavha qutidan chiqmaydi — maketning o'z o'lchovi (`CHAR_EM` 0.55)
+ * bilan. (Qalin 0.60 bilan eski, P9 ga bog'liq bo'lmagan toshishlar bor —
+ * ular sarlavha egasiga qarz, bu test faqat nishon keltirganini ushlaydi:
+ * plan'siz sig'adigan sarlavha plan bilan ham sig'adi.)
+ */
+const LONG_TITLE = "Orol dengizi havzasida sug'orish tizimlarining iqlim va aholiga ta'siri.";
+
+test("P9: 72 belgili sarlavha + logo + plan: 3 — nishon sarlavhani qutidan chiqarmaydi (har dizayn × maket × rasm)", () => {
+  assert.equal(LONG_TITLE.length, SLIDE_LIMITS.title);
+  const fits = (l: TextLayer) => inkIn(textOf(l), l.box.w, l.size, CHAR_EM) <= l.box.h + 0.01;
+  let checked = 0;
+  for (const visual of VISUALS) {
+    for (const themeId of ["atlas", "ink"]) {
+      const theme = getSlideTheme(themeId);
+      for (const layout of BADGE_LAYOUTS.filter((l) => l !== "quote")) {
+        for (const img of [false, true]) {
+          const s = contentSample(layout, img, false);
+          s.title = LONG_TITLE;
+          const t0 = anchorOf(planSlide(s, theme, visual, INDEX, TOTAL, "auto", "lecture", { logo: LOGO }).layers, s);
+          s.plan = 3;
+          const t1 = anchorOf(planSlide(s, theme, visual, INDEX, TOTAL, "auto", "lecture", { logo: LOGO }).layers, s);
+          if (!fits(t0)) continue;
+          checked++;
+          const ink = inkIn(textOf(t1), t1.box.w, t1.size, CHAR_EM);
+          assert.ok(
+            fits(t1),
+            `${visual}/${themeId}/${layout}/${img ? "rasm" : "rasmsiz"}: nishon bilan sarlavha ${t1.size} pt da ${ink.toFixed(2)}″ > quti ${t1.box.h.toFixed(2)}″ (eni ${t1.box.w.toFixed(2)}″)`,
+          );
+        }
+      }
+    }
+  }
+  assert.ok(checked > 300, `sinov ma'noli bo'lsin: ${checked} holat`);
+});
+
+/**
+ * P9 sharhi 2: reja nishoni ro'yxat tartib raqamlari bilan BIR REGISTRDA
+ * bo'lmasin (notebook hoshiyasidagi «01» pastdagi «01 02 03 04» ning yana
+ * biridek o'qilardi — sprint aynan shu chalkashlik uchun ochilgan). Tana
+ * zonasidagi har yalang raqam nishondan rangi YOKI o'lchami (≥ 6 pt) bilan
+ * farq qiladi.
+ */
+test("P9: reja nishoni ro'yxat raqamlaridan boshqa registrda (rang yoki o'lcham) — har dizayn × tema", () => {
+  for (const visual of VISUALS) {
+    for (const themeId of SLIDE_THEME_IDS) {
+      const theme = getSlideTheme(themeId);
+      for (const layout of ["bullets", "process"] as SlideLayout[]) {
+        for (const img of [false, true]) {
+          const s = contentSample(layout, img, false);
+          s.bullets = ["Birinchi band gapi.", "Ikkinchi band gapi.", "Uchinchi band gapi.", "To'rtinchi band gapi."];
+          s.plan = 1;
+          const layers = planSlide(s, theme, visual, INDEX, TOTAL).layers;
+          const tag = `${visual}/${themeId}/${layout}/${img ? "rasm" : "rasmsiz"}`;
+          if (visual === "story" && layout === "bullets" && !img) continue; // P2 kolonka raqami
+          const badge = headNumbers(layers, s)[0];
+          assert.ok(badge, `${tag}: nishon yo'q`);
+          const a = anchorOf(layers, s);
+          const ordinals = texts(layers).filter((l) => l !== badge && /^0?\d$/.test(textOf(l)) && l.box.y >= a.box.y + a.box.h);
+          for (const o of ordinals) {
+            const same = o.color.toLowerCase() === badge.color.toLowerCase() && Math.abs(o.size - badge.size) < 6;
+            assert.ok(!same, `${tag}: nishon «${textOf(badge)}» (${badge.color}, ${badge.size} pt) ro'yxat raqami «${textOf(o)}» (${o.color}, ${o.size} pt) bilan bir registrda`);
+          }
+        }
+      }
+    }
+  }
+});
+
+/**
+ * P9 sharhi 3: bayt-bayt «eskicha» da'vosi QULFLANADI. Dizayn maketlari ×
+ * nishon maketlari × {rasm, rasmsiz} × {logo, logosiz}, `plan`SIZ —
+ * geometriya barmoq izi (`slide-image-strip` formati: quti + shrift
+ * o'lchami + matn) 879f495 (P9 dan oldingi slides-3) qiymatiga
+ * mixlangan. `planBadgeBox` doim sursa yoki dizayn sarlavhasi doim
+ * toraysa — xesh qizaradi.
+ */
+test("P9: plan'siz dizayn slaydlari geometriyasi 879f495 bilan AYNAN teng (barmoq izi)", () => {
+  const theme = getSlideTheme("atlas");
+  const rows: string[] = [];
+  for (const visual of DESIGN_VISUALS) {
+    for (const layout of BADGE_LAYOUTS) {
+      for (const img of [false, true]) {
+        for (const logo of [undefined, LOGO]) {
+          const p = planSlide(sampleFor(layout, img), theme, visual, INDEX, TOTAL, "auto", "lecture", { logo });
+          rows.push(
+            `${visual}/${layout}${img ? "+img" : ""}${logo ? "+logo" : ""}|` +
+              p.layers
+                .map((l) => {
+                  const b = l.box;
+                  const tail = l.t === "text" ? `${l.size}:${textOf(l)}` : "";
+                  return `${l.t}:${b.x.toFixed(4)},${b.y.toFixed(4)},${b.w.toFixed(4)},${b.h.toFixed(4)},${tail}`;
+                })
+                .join(";"),
+          );
+        }
+      }
+    }
+  }
+  const hash = createHash("sha256").update(rows.join("\n")).digest("hex").slice(0, 32);
+  assert.equal(hash, "1047149c2073b746d902809824903bdf", "plan'siz dizayn slaydi geometriyasi o'zgardi — nishon kodi eski doc_json ga sizib o'tgan");
 });
 
 // ═══════════════════════════════════════════ A2-04: auditoriya shrift poli

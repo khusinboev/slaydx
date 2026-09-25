@@ -194,11 +194,13 @@ function planBullets(s: SlideModel, theme: SlideTheme, index: number, total: num
    * reja raqamini allaqachon yirik ko'rsatadi (ikki marta raqamlanmaydi).
    */
   const badged = Boolean(s.image?.url);
-  const headBox = badged
-    ? LAYOUT_KIT.planBadgeBox(s, { x, y: 0.6, w: Math.max(3, tw - ctx.reserve), h: 0.92 })
-    : { x, y: 0.6, w: Math.max(3, tw - ctx.reserve), h: 0.92 };
-  const headSize = fitSize(s.title, headBox, 27, 17);
-  if (badged) LAYOUT_KIT.pushPlanBadge(layers, s, headBox, headSize, theme.accentInk, { font: SERIF });
+  const head0: Box = { x, y: 0.6, w: Math.max(3, tw - ctx.reserve), h: 0.92 };
+  const headBoxT = badged
+    ? LAYOUT_KIT.badgedTitle(s, head0, 27, 17)
+    : { box: head0, size: fitSize(s.title, head0, 27, 17), above: false };
+  const headBox = headBoxT.box;
+  const headSize = headBoxT.size;
+  if (badged) LAYOUT_KIT.pushPlanBadge(layers, s, headBoxT, theme);
   layers.push({
     t: "text",
     box: headBox,
@@ -382,10 +384,11 @@ function planTwoCol(s: SlideModel, theme: SlideTheme, index: number, total: numb
   layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.bg } });
   const zoneW = ZONE_W - stripCut(s);
 
-  const headBox = LAYOUT_KIT.planBadgeBox(s, { x: TEXT_X, y: 0.6, w: Math.max(3, zoneW - ctx.reserve), h: 0.95 });
-  const headSize = fitSize(s.title, headBox, 28, 18);
+  const headBoxT = LAYOUT_KIT.badgedTitle(s, { x: TEXT_X, y: 0.6, w: Math.max(3, zoneW - ctx.reserve), h: 0.95 }, 28, 18);
+  const headBox = headBoxT.box;
+  const headSize = headBoxT.size;
   // AUDIT-25 P9: reja nishoni sarlavha chapida, serif (jurnal tili).
-  LAYOUT_KIT.pushPlanBadge(layers, s, headBox, headSize, theme.accentInk, { font: SERIF });
+  LAYOUT_KIT.pushPlanBadge(layers, s, headBoxT, theme);
   layers.push({
     t: "text",
     box: headBox,

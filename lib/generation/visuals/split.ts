@@ -434,10 +434,11 @@ function planCompare(s: SlideModel, theme: SlideTheme, index: number, total: num
   const seam = zoneW * 0.492;
   const top = 1.5;
   layers.push({ t: "rect", box: { x: 0, y: 0, w: 13.333, h: H }, fill: { color: theme.surface } });
-  const titleBox = LAYOUT_KIT.planBadgeBox(s, { x: 0.85, y: 0.36, w: zoneW - 1.7 - ctx.reserve, h: 0.82 });
-  const titleSize = fitSize(s.title, titleBox, 26, 17);
+  const titleBoxT = LAYOUT_KIT.badgedTitle(s, { x: 0.85, y: 0.36, w: zoneW - 1.7 - ctx.reserve, h: 0.82 }, 26, 17);
+  const titleBox = titleBoxT.box;
+  const titleSize = titleBoxT.size;
   // AUDIT-25 P9: reja nishoni sarlavha chapida, bir o'qda.
-  LAYOUT_KIT.pushPlanBadge(layers, s, titleBox, titleSize, theme.accentInk, { titleValign: "middle" });
+  LAYOUT_KIT.pushPlanBadge(layers, s, titleBoxT, theme, { titleValign: "middle" });
   layers.push({
     t: "text",
     box: titleBox,

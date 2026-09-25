@@ -36,12 +36,13 @@ function pushAcademicHead(
   theme: SlideTheme,
   reserve: number,
 ): void {
-  const { fitSize, planBadgeBox, pushPlanBadge } = LAYOUT_KIT;
+  const { fitSize, badgedTitle, pushPlanBadge } = LAYOUT_KIT;
   // AUDIT-25 P9: `plan` li mazmun slaydida sarlavha chapida «0N» (reja
   // qatorlari uslubi); reja slaydining o'zida — yo'q (`planBadge`).
-  const headBox = planBadgeBox(s, { x: TEXT_X, y: 0.52, w: Math.max(3, ZONE_W - reserve), h: 0.82 });
-  const size = fitSize(s.title, headBox, 26, 16);
-  pushPlanBadge(layers, s, headBox, size, theme.accentInk);
+  const headBoxT = badgedTitle(s, { x: TEXT_X, y: 0.52, w: Math.max(3, ZONE_W - reserve), h: 0.82 }, 26, 16);
+  const headBox = headBoxT.box;
+  const size = headBoxT.size;
+  pushPlanBadge(layers, s, headBoxT, theme);
   layers.push({
     t: "text",
     box: headBox,
