@@ -102,9 +102,16 @@ Shartnomalar (yakuniy, review'lardan keyin):
 - Gate `slides3-mid` (7d4525c, W7+P10+P8+docs dan keyin): typecheck 0, lint 0, unit **3 412/3 412**, viewer 248/248, UI **475/475**, build (first-load 221/220 kB), smoke — hammasi yashil.
 - Review'lar: INTEGRATION (1 P1 + 5 P2 + 8 P3 → P9/P11/P12/P13 ga taqsimlandi), OLDDECKS — SAFE (6 eski deka piksel-bo'yicha bir xil, faqat mo'ljallangan raqamlar olib tashlangan), PRE-DEPLOY — GO-WITH-FIXES (deploy commit'ida gate, scope muzlatish, qaytarish qoidasi tasdig'i).
 - Jonli «keyin» (7 deka, real Gemini): reja qamrovi 7/7 (oldin 0/6), tartib raqami sizishi 0, halol skelet; ko'z bilan: Orol 4/4, Kvant 5/5 band o'z slaydi bilan, sarlavha = reja bandi.
-- Qolgan (P8/P9/P10 bilan yopildi): «…» kesiklar, reja slaydida raqam, redirect URL — yakuniy jonli tekshiruv pastda.
+- Gate `slides3-final` (b31af04, 13 paket) va `slides3-final2` (1cebf93, P14–P14d): typecheck 0, lint 0, unit **3 520/3 520**, viewer 248/248, UI **477/477**, build (shared first-load 151 kB), fresh-Postgres smoke — hammasi yashil. Undan keyingi commitlar faqat docs/review fayllari.
+- Review'lar P14 → P14c → P14d: CHANGES (C1 P1 …) → CHANGES (N1 P2 …) → **APPROVE** (`audit/reviews/AUDIT-25-P14{,c,d}.md`).
+- Yakuniy jonli (real Gemini, ≈$3.95 sprint sarfi): 7-run 4/7 → P14 dan keyin qayta yurgizilgan 3 holat (lesson, lecture, open-lesson) hammasi «reja/mazmun nuqsonsiz»: reja qamrovi 7/7, «…» kesik 0, tartib raqami sizishi 0, open-lesson 4 rasm; 5/7-slaydlar rasterda ko'z bilan toza (`scratchpad/final4/`). To'liq 7-run takrori byudjet chegarasi sababli qilinmadi (slide, pro-slide, report, min holatlari P14 dan oldin ham yashil edi; P14 faqat tor qutili holatlarni o'zgartiradi).
 
 ### Qarz (keyingi sprintga)
+- P14d N9: ta'mir so'z poli (⌈0.5·max⌉) prompt matnida yo'q — sabab qatorida to'liq oraliq; N10: slide-audit «…» oldida «%»/«‘» — `/[^\s,;:.!?–—-](…|\.\.\.)\s*$/u`; N11: «KESILGAN … qisqartiring» tizim qatori kesiksiz dekada ham yuboriladi; model o'zi «…» yozgan qisqa javob qabul qilinadi.
+- P14d N6: `clippedFields` va `clippedBodyKeys` bir xil tekshiruvni takrorlaydi (TODO) — bitta manba.
+- Auditoriya poli: 1–4 sinf «qisqa» band 3–5 so'z (`bulletMinWords` = ⌊58·0.55/8⌋ = 3) — mahsulot qarori (P14d N2).
+- P14 C4 (egasi qarori): yangi qoida bilan twoCol 4→3 band (1 530 kombinatsiyadan 384), rasm beradigan twoCol slaydlar 18→81 kombinatsiya, 1–9 sinf «ko'p» hajmda bullets slaydlarining aksari rasmsiz (D1 «matn ustun»). Rasm slotlari boshqa slaydlarga o'tadi (`plannedImageSlots` joy bergan slaydni rejadan chiqaradi), umumiy rasm soni odatda saqlanadi (jonli open-lesson: 4/4).
+- C10: ta'mir 8 slayd chegarasi deka tartibida to'ldiriladi — yupqa slayd kesilgan blok slaydlari ortidan chiqib qolishi mumkin.
 - Undo/`imageRestore` orqali rasm qaytarilganda matn uzaytirilgan bo'lsa tekshiruv yo'q (faqat yuklash yo'li himoyalangan; `slide-edit.ts` brauzerga ham yuklanadi, `slide-quality.ts` esa server-only).
 - Juda kichik dekada (4 slayd, test + reja) reja slaydi tushib qolsa forma tugmasi ON turadi, izoh yo'q.
 - `planFlags` uch joyda takrorlangan (meta.ts, planBudget, forma) — bitta eksportga yig'ish.
