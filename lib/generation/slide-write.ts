@@ -6,7 +6,7 @@ import { assertJobTime } from "./deadline";
 import { bodyRules, type BodyRules } from "./slide-audience";
 import { blocksToBeats, planRoleText } from "./slide-blocks";
 import { SLIDE_LIMITS, clipTo, limitsFor } from "./slide-limits";
-import { NO_IMAGE, clipLimit, layoutWordTargets, repairThinSlides } from "./slide-quality";
+import { NO_IMAGE, bulletClipLimit, clipLimit, layoutWordTargets, repairThinSlides } from "./slide-quality";
 import { deckFooter } from "./slide-identity";
 import { purposeDefaults } from "./slide-purpose";
 import { finalizeQuiz } from "./slide-quiz";
@@ -270,7 +270,7 @@ function normalizeSlide(raw: unknown, i: number, footer: string, rules: BulletRu
       : [];
     // Jadvalsiz «table» slayd — bo'sh ramka. Bunday holda bandlarga qaytamiz.
     if (rawHeaders.length < 2 || rawRows.length < 2) {
-      return { ...base, layout: "bullets", bullets: arr(o.bullets, rules.maxBullets, rules.bulletChars) };
+      return { ...base, layout: "bullets", bullets: bulletItems(o.bullets) };
     }
     const headMax = clipLimit("tableHeader", rules, visual, rawHeaders.length, rawRows.length, NO_IMAGE);
     const cellMax = clipLimit("tableCell", rules, visual, rawHeaders.length, rawRows.length, NO_IMAGE);
@@ -341,7 +341,7 @@ function normalizeSlide(raw: unknown, i: number, footer: string, rules: BulletRu
           .slice(0, QUIZ_MAX)
       : [];
     if (!quiz.length) {
-      return { ...base, layout: "bullets", bullets: arr(o.bullets, rules.maxBullets, rules.bulletChars) };
+      return { ...base, layout: "bullets", bullets: bulletItems(o.bullets) };
     }
     return { ...base, quiz };
   }
@@ -377,8 +377,21 @@ function normalizeSlide(raw: unknown, i: number, footer: string, rules: BulletRu
      */
     return { ...base, bullets: arr(o.bullets, QUIZ_MAX, SLIDE_LIMITS.answersItem) };
   }
+  // `bullets` — quti sig'imida (P8 CHANGES 1); agenda va boshqa maketlarning bandlari — `bulletChars`.
+  if (layout === "bullets") return { ...base, bullets: bulletItems(o.bullets) };
   const limit = layout === "agenda" ? rules.agendaMax : rules.maxBullets;
   return { ...base, bullets: arr(o.bullets, limit, rules.bulletChars) };
+
+  /**
+   * `bullets` maketi bandlari: AVVAL son (`maxBullets`), keyin shu SONDAGI
+   * rasmsiz quti — `bulletClipLimit` (ta'mir ham shuni o'qiydi). Ilgari
+   * faqat `bulletChars`: 5–7 sinf `circle` da 100 belgi 85 lik qutidan chiqardi.
+   */
+  function bulletItems(v: unknown): string[] {
+    const items = list(v, rules.maxBullets);
+    const max = bulletClipLimit(rules, visual, items.length);
+    return items.map((x) => clipTo(x, max));
+  }
 }
 
 /**

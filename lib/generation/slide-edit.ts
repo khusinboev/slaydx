@@ -949,6 +949,14 @@ export function applyDocOps(doc: AcademicDoc, ops: DocOp[], ctx: EditCtx): EditR
         if (typeof op.url !== "string" || !assetRe.test(op.url)) return fail("Rasm manzili bu generatsiyaga tegishli emas", at);
         // Maketda rasm joyi bo'lmasa rasm HECH QAYERDA chizilmasdi — jim yo'qolish o'rniga xato.
         if (!photoSlot(s.layout, deck.visual)) return fail("Bu maketda rasm joyi yo'q", at);
+        /*
+         * «Matn rasm bilan sig'maydimi» (AUDIT-25 P8) tekshiruvi BU YERDA
+         * EMAS: bu modul izomorf (klient bundle), `imageYieldField` esa
+         * `slide-quality.ts` da (`llm.ts` ni tortadi). YANGI rasm faqat
+         * yuklash yo'lidan keladi — u serverda `uploadSlideImage`
+         * (`lib/server/slide-image.ts`) da 400 bilan rad etiladi. PATCH dagi
+         * satr URL faqat undo (avvalgi holatga qaytish) dan keladi.
+         */
         const alt = op.alt ? clipTo(op.alt, SLIDE_LIMITS.imageAlt) : "";
         slides[idx] = { ...s, ...keep, image: alt ? { url: op.url, alt } : { url: op.url } };
         break;

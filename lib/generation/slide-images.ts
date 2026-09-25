@@ -293,6 +293,9 @@ export type AttachImageOpts = VisualTier & {
    * Deka tana qoidasi (`bodyRules(meta, tpl.id)`) — AUDIT-25 P8: matni
    * rasmli qutiga sig'maydigan slayd rasm olmaydi (`plannedImageSlots`).
    * Berilmasa siyosat o'chiq (eski chaqiruvlar, `image-lab`).
+   * DIQQAT: generatsiya yo'li (`buildSlideAcademicDoc`, `slide-write.ts`)
+   * uni HAR DOIM uzatishi shart — aks holda matn rasmsiz qutigacha
+   * yozilgan slayd rasm tasmasi bilan qutidan chiqadi (P8 sharhi, N2).
    */
   rules?: BodyRules;
 };

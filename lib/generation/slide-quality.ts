@@ -402,12 +402,29 @@ export function clipLimit(field: FitField, rules: BodyRules, visual?: SlideVisua
 export const NO_IMAGE = { images: "none" } as const satisfies Pick<FitOpts, "images">;
 
 /**
+ * `bullets` maketidagi band chegarasi — yozuvchi (`normalizeSlide`) VA
+ * ta'mir (`mergeRepair`) BIR funksiyadan o'qiydi (P8 sharhi, CHANGES 1).
+ *
+ * Ilgari yozuvchi faqat `rules.bulletChars` da qirqardi: 5–7 sinf
+ * `circle` da 100 belgi, quti esa 85 (`kop` da 135 / 85, bakalavr `kop`
+ * `circle` 223 / 121) — `fitLines` polda to'xtab, matn qutidan chiqardi
+ * (ko'ruvchi `overflow: hidden` bilan yashiradi, PPTX to'kadi). Endi
+ * min(`bulletChars`, rasmsiz quti sig'imi `count` bandda). Son AVVAL
+ * (`maxBullets`), keyin shu SONDAGI chegara. Agenda/manbalar/kalit —
+ * o'z chegaralari bilan (bu funksiya emas).
+ */
+export function bulletClipLimit(rules: BodyRules, visual: SlideVisual | undefined, count: number): number {
+  return Math.min(rules.bulletChars, clipLimit("bullets", rules, visual, Math.max(1, count), undefined, NO_IMAGE));
+}
+
+/**
  * Rasm matnga JOY BERADIMI (AUDIT-25 P8, «matn rasmdan ustun»).
  *
  * Matn RASMSIZ qutiga qirqilgan (`NO_IMAGE`); rasm tasmasi esa kontent
  * zonasini toraytiradi. Qoida: slaydning birorta maydoni RASMLI
- * qutidan (`clipLimit(…, {images: "both"})`, auditoriya poli) uzun VA
- * rasm haqiqatan joy yeydi (rasmli chegara < rasmsiz chegara) — rasm
+ * qutidan (`fitChars(…, {images: "both"})`, auditoriya poli, xom — 24
+ * belgilik qirqish polisiz) uzun VA rasm haqiqatan joy yeydi (rasmli
+ * sig'im < rasmsiz sig'im) — rasm
  * qo'yilmaydi, matn to'liq qoladi. Rasm joy yemaydigan maydonda (masalan
  * `bullets` `circle` da — ikkala holatda bir xil quti) rasmdan voz
  * kechish hech narsa bermaydi, shuning uchun u hisobga olinmaydi.
@@ -421,8 +438,13 @@ export function imageYieldField(s: SlideModel, rules: BodyRules, visual?: SlideV
   const over = (field: FitField, texts: (string | undefined)[], count?: number, rows?: number): boolean => {
     const longest = Math.max(0, ...texts.map((t) => String(t ?? "").trim().length));
     if (!longest) return false;
-    const withImage = clipLimit(field, rules, visual, count, rows);
-    return longest > withImage && withImage < clipLimit(field, rules, visual, count, rows, NO_IMAGE);
+    /*
+     * XOM quti sig'imi (`fitChars`) — `clipLimit` emas (P8 sharhi, N1):
+     * `clipLimit` ichidagi `CLIP_FLOOR_CHARS` (24) poli 4 belgilik rasmli
+     * qutini (4 ustunli jadval `circle` da) «24 sig'adi» deb ko'rsatardi.
+     */
+    const withImage = fitChars(field, rules, visual, count, { rows });
+    return longest > withImage && withImage < fitChars(field, rules, visual, count, { rows, images: "none" });
   };
   const checks: [FitField, (string | undefined)[], number?, number?][] = [];
   switch (s.layout) {
@@ -797,7 +819,9 @@ function samePrefix(orig: string, next: string, cap: number): boolean {
 function mergeRepair(orig: SlideModel, raw: Record<string, unknown>, rules: BodyRules, visual?: SlideVisual): SlideModel | null {
   switch (orig.layout) {
     case "bullets": {
-      const bullets = list(raw.bullets, rules.maxBullets, clipLimit("bullets", rules, visual, undefined, undefined, NO_IMAGE));
+      // Son AVVAL, keyin shu SONDAGI quti — yozuvchi bilan bir funksiya (`bulletClipLimit`).
+      const n = list(raw.bullets, rules.maxBullets, Number.MAX_SAFE_INTEGER).length;
+      const bullets = list(raw.bullets, rules.maxBullets, bulletClipLimit(rules, visual, n));
       return bullets.length ? { ...orig, bullets } : null;
     }
     case "process": {

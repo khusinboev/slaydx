@@ -10,6 +10,7 @@ import {
   PROMPT_HEADROOM,
   NO_IMAGE,
   imageYieldField,
+  bulletClipLimit,
   COL_MIN_ITEMS,
   COL_MIN_WORDS,
   PROCESS_MIN_STEPS,
@@ -32,6 +33,7 @@ import {
   type ThinReason,
 } from "../lib/generation/slide-quality.ts";
 import { resolveSlideTemplate } from "../lib/generation/slide-templates.ts";
+import { extractNewSlides } from "../lib/generation/slide-write.ts";
 import type { SlideModel } from "../lib/generation/slide-types.ts";
 import { TOOL_BY_ID } from "../lib/tools.ts";
 
@@ -703,15 +705,53 @@ test("P8 imageYieldField: rasmli qutidan uzun VA rasm joy yeydigan maydon — ra
   assert.equal(imageYieldField(two(Math.round(0.9 * noImage)), g89, "circle"), "colItem");
   assert.equal(imageYieldField(two(withImage), g89, "circle"), null, "rasmli qutiga sig'adi — rasm qoladi");
   // Rasm joy yemaydigan maydon (`circle` bandlari: rasmli = rasmsiz) — rasmdan voz kechish hech narsa bermaydi.
-  assert.equal(clipLimit("bullets", g89, "circle"), clipLimit("bullets", g89, "circle", undefined, undefined, NO_IMAGE));
+  assert.equal(fitChars("bullets", g89, "circle", 3), fitChars("bullets", g89, "circle", 3, { images: "none" }));
   const longBullets = S({ layout: "bullets", bullets: [upTo(g89.bulletChars), upTo(g89.bulletChars, 3), upTo(60, 5)] });
-  assert.ok(longBullets.bullets![0].length > clipLimit("bullets", g89, "circle", 3), "asos: band rasmli qutidan uzun");
+  assert.ok(longBullets.bullets![0].length > fitChars("bullets", g89, "circle", 3), "asos: band rasmli qutidan uzun");
   assert.equal(imageYieldField(longBullets, g89, "circle"), null);
   // Bosqich, jadval, iqtibos/bo'lim — o'z maydoni bilan.
   const stepText = upTo(clipLimit("stepText", g89, "circle", 3, undefined, NO_IMAGE));
   const proc = S({ layout: "process", steps: [1, 2, 3].map((n) => ({ n: String(n), title: "Bosqich", text: stepText })) });
-  assert.equal(imageYieldField(proc, g89, "circle"), clipLimit("stepText", g89, "circle", 3) < stepText.length ? "stepText" : null);
+  assert.equal(imageYieldField(proc, g89, "circle"), fitChars("stepText", g89, "circle", 3) < stepText.length ? "stepText" : null);
   assert.equal(imageYieldField(S({ layout: "section", subtitle: sent(20) }), g89, "circle"), null, "bo'lim subtitle rasmli qutiga sig'adi");
+  // N1: XOM sig'im bilan solishtiriladi — 4 ustunli `circle` jadvalida rasmli katak ~4 belgi; 20 belgilik katak
+  // `clipLimit` ning 24 belgilik poli ostida «sig'adi» ko'rinardi, aslida sig'maydi.
+  const cell = upTo(20);
+  assert.ok(fitChars("tableCell", g89, "circle", 4, { rows: 3 }) < cell.length && cell.length <= CLIP_FLOOR_CHARS, `asos: ${fitChars("tableCell", g89, "circle", 4, { rows: 3 })} < ${cell.length} ≤ 24`);
+  assert.ok(fitChars("tableCell", g89, "circle", 4, { rows: 3, images: "none" }) >= cell.length, "asos: rasmsiz qutiga sig'adi");
+  const table = S({ layout: "table", table: { headers: ["A", "B", "C", "D"], rows: [0, 1, 2].map(() => [cell, cell, cell, cell]) } });
+  assert.equal(imageYieldField(table, g89, "circle"), "tableCell");
+});
+
+/*
+ * P8 sharhi CHANGES 1: `bullets` maketi bandi quti sig'imida qirqiladi (ilgari faqat `bulletChars`:
+ * 5–7 sinf `circle` da 100 belgi, quti 85 — matn qutidan chiqardi). Yozuvchi va ta'mir BIR chegara.
+ */
+test("P8 CHANGES 1: bandlar quti sig'imida (5–7 sinf circle), so'z chegarasida; yozuvchi = ta'mir", async () => {
+  const m5 = extractMeta(TOOL_BY_ID["pro-slide"], { topic: "Orol dengizi fojiasi", slideAudience: "school_5_7" } as never);
+  const t5 = resolveSlideTemplate("lesson", m5.topic);
+  const r5 = bodyRules(m5, t5.id);
+  assert.equal(t5.visual, "circle");
+  const box = bulletClipLimit(r5, t5.visual, 3);
+  assert.ok(box < r5.bulletChars, `asos: quti ${box} < bulletChars ${r5.bulletChars}`);
+  assert.equal(box, Math.min(r5.bulletChars, clipLimit("bullets", r5, t5.visual, 3, undefined, NO_IMAGE)));
+  const raw = [upTo(100), upTo(100, 4), upTo(100, 8)];
+  assert.ok(raw.every((b) => b.length > box), raw.map((b) => b.length).join(","));
+  const [written] = extractNewSlides(JSON.stringify({ slides: [{ layout: "bullets", title: "Sabablar", bullets: raw }] }), 0, "F", r5, { final: true }, t5.visual).map((x) => x.slide);
+  for (const [i, b] of written.bullets!.entries()) {
+    assert.ok(b.length <= box && b.endsWith("…"), `${b.length} > ${box}: «${b}»`);
+    assert.ok(raw[i].startsWith(b.slice(0, -1)));
+    assert.match(raw[i][b.length - 1], /\s/, `so'z o'rtasidan kesildi: «${b}»`);
+  }
+  // Ta'mir aynan shu chegarada — yozuvchi bilan bir xil natija.
+  const thin = { id: "s0", layout: "bullets", title: "Sabablar", bullets: ["Qurg‘oqchilik."], plan: 1 } as SlideModel;
+  await withLlm(
+    () => jsonReply({ slides: [{ index: 0, bullets: raw }] }),
+    async () => {
+      const [out] = await repairThinSlides([thin], m5, t5, {}, later(), later());
+      assert.deepEqual(out.bullets, written.bullets, "ta'mir va yozuvchi bandni har xil qirqdi");
+    },
+  );
 });
 
 test("repair: process — son auditoriya ruxsatigacha qisiladi, matn shu sondagi quti bilan (sharh 1-band)", async () => {
