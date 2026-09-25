@@ -245,6 +245,152 @@ test("ro'yxat tartib raqamlari qoladi: reja 1..N, bosqich n, test A–D", () => 
   }
 });
 
+// ═══════════════════════════════════════════ P9: mazmun slaydidagi reja nishoni
+
+/**
+ * AUDIT-25 P9. Shablonda bo'lim slaydiga joy bo'lmasa (ma'ruza @12)
+ * reja bandining mazmun slaydi raqamsiz qolardi — o'quvchi uni rejadagi
+ * «03» bilan bog'lay olmasdi. Shartnoma:
+ *   1. `plan: 3` li mazmun slaydi (bullets/twoCol/compare/process/table/
+ *      stats/quote) — sarlavha zonasida AYNAN BITTA dekorativ «03»
+ *      (`src`siz), sarlavha (iqtibosda — iqtibos) qutisi bilan
+ *      KESISHMAYDI, uning pastidan yuqorida, slayd ichida.
+ *   2. `plan` yo'q — sarlavha zonasida yalang raqam YO'Q.
+ *   3. titul/reja/yakun/test/javoblar/manbalar — `plan` bo'lsa ham
+ *      qatlamlar `plan`siz bilan AYNAN bir xil (nishon hech qachon).
+ *   4. Bo'lim — P2 ning yirik raqami, ikkinchi raqam yo'q (1-test).
+ */
+const BADGE_LAYOUTS: SlideLayout[] = ["bullets", "twoCol", "compare", "process", "table", "stats", "quote"];
+const NO_BADGE_LAYOUTS: SlideLayout[] = ["title", "agenda", "closing", "quiz", "answers", "references"];
+const LOGO = "data:image/png;base64,iVBORw0KGgo=";
+
+/** Sarlavha zonasining langari: iqtibosda iqtibos matni, qolganlarida sarlavha. */
+function anchorOf(layers: SlideLayer[], s: PlanSlide): TextLayer {
+  const ts = texts(layers);
+  const a =
+    s.layout === "quote"
+      ? ts.find((l) => l.src?.f === "quote")
+      : (ts.find((l) => l.src?.f === "title") ?? ts.find((l) => textOf(l) === s.title));
+  assert.ok(a, `${s.layout}: sarlavha/iqtibos qatlami topilmadi`);
+  return a;
+}
+
+const overlaps = (a: { x: number; y: number; w: number; h: number }, b: typeof a) =>
+  Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x) > 0.01 && Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y) > 0.01;
+
+/** Langar pastidan yuqoridagi yalang raqamlar (ro'yxat tartibi tanada — pastda). */
+function headNumbers(layers: SlideLayer[], s: PlanSlide): TextLayer[] {
+  const a = anchorOf(layers, s);
+  return texts(layers).filter((l) => l !== a && BARE_NUMBER.test(textOf(l)) && l.box.y < a.box.y + a.box.h);
+}
+
+function contentSample(layout: SlideLayout, img: boolean, chart: boolean): PlanSlide {
+  const s = sampleFor(layout, img);
+  s.title = "Orol dengizining qurishi: sug'orish, iqlim va inson omili";
+  if (layout === "stats" && chart) {
+    s.stats = [
+      { value: "68%", label: "suv sathi pasayishi" },
+      { value: "74%", label: "maydon qisqarishi" },
+      { value: "90%", label: "baliq ovi kamayishi" },
+    ];
+  }
+  return s;
+}
+
+test("P9: plan: 3 li mazmun slaydi — har dizayn × tema × maket: sarlavha zonasida AYNAN bitta dekorativ «03»", () => {
+  for (const visual of VISUALS) {
+    for (const themeId of SLIDE_THEME_IDS) {
+      const theme = getSlideTheme(themeId);
+      for (const layout of BADGE_LAYOUTS) {
+        for (const img of [false, true]) {
+          for (const chart of layout === "stats" ? [false, true] : [false]) {
+            for (const logo of themeId === "atlas" ? [undefined, LOGO] : [undefined]) {
+              const tag = `${visual}/${themeId}/${layout}${chart ? "(diagramma)" : ""}/${img ? "rasm" : "rasmsiz"}${logo ? "/logo" : ""}`;
+              const s = contentSample(layout, img, chart);
+              const bare = planSlide(s, theme, visual, INDEX, TOTAL, "auto", "lecture", { logo }).layers;
+              s.plan = 3;
+              const layers = planSlide(s, theme, visual, INDEX, TOTAL, "auto", "lecture", { logo }).layers;
+              const count = (ls: SlideLayer[]) => texts(ls).filter((l) => textOf(l) === "03").length;
+              if (visual === "story" && layout === "bullets" && !img) {
+                // Rasmsiz hikoya kolonkasi reja raqamini allaqachon yirik ko'rsatadi
+                // (P2) — nishon ikkinchi marta chizilmaydi.
+                assert.equal(count(layers), 1, `${tag}: kolonka raqami yagona bo'lishi kerak`);
+                continue;
+              }
+              const a = anchorOf(layers, s);
+              const heads = headNumbers(layers, s);
+              assert.deepEqual(heads.map(textOf), ["03"], `${tag}: sarlavha zonasida ${JSON.stringify(heads.map(textOf))}`);
+              const b = heads[0];
+              assert.equal(b.src, undefined, `${tag}: nishon dekorativ — src olmaydi`);
+              assert.equal(b.srcLines, undefined, `${tag}: nishon dekorativ — srcLines olmaydi`);
+              assert.ok(!overlaps(b.box, a.box), `${tag}: nishon ${JSON.stringify(b.box)} sarlavha ${JSON.stringify(a.box)} bilan kesishdi`);
+              if (layout === "quote") {
+                assert.ok(b.box.y + b.box.h <= a.box.y + 0.01, `${tag}: iqtibos nishoni iqtibos USTIDA bo'lishi kerak`);
+              }
+              assert.ok(b.size >= 14 && b.size <= 18, `${tag}: nishon ${b.size} pt (14–18 kutiladi)`);
+              assert.ok(b.bold, `${tag}: nishon qalin (reja qatorlari uslubi)`);
+              // Butun slaydda ham «03» aynan BITTAGA ko'paydi (tana tartib raqamlari o'zgarmaydi).
+              assert.equal(count(layers), count(bare) + 1, `${tag}: slayddagi «03» soni bittaga oshishi kerak`);
+              assertInside(layers, tag);
+            }
+          }
+        }
+      }
+    }
+  }
+});
+
+test("P9: plan'siz mazmun slaydi — sarlavha zonasida yalang raqam YO'Q", () => {
+  for (const visual of VISUALS) {
+    for (const themeId of ["atlas", "ink"]) {
+      const theme = getSlideTheme(themeId);
+      for (const layout of BADGE_LAYOUTS) {
+        for (const img of [false, true]) {
+          const s = contentSample(layout, img, false);
+          const heads = headNumbers(planSlide(s, theme, visual, INDEX, TOTAL).layers, s);
+          assert.deepEqual(heads.map(textOf), [], `${visual}/${themeId}/${layout}/${img ? "rasm" : "rasmsiz"}: plan'siz nishon chizildi`);
+        }
+      }
+    }
+  }
+});
+
+test("P9: titul/reja/yakun/test/javoblar/manbalar — `plan` bo'lsa ham qatlamlar AYNAN plan'sizdek (nishon yo'q)", () => {
+  for (const visual of VISUALS) {
+    for (const themeId of ["atlas", "ink"]) {
+      const theme = getSlideTheme(themeId);
+      for (const layout of NO_BADGE_LAYOUTS) {
+        for (const img of [false, true]) {
+          const s = sampleFor(layout, img);
+          const bare = planSlide(s, theme, visual, INDEX, TOTAL);
+          s.plan = 3;
+          assert.deepEqual(
+            planSlide(s, theme, visual, INDEX, TOTAL),
+            bare,
+            `${visual}/${themeId}/${layout}/${img ? "rasm" : "rasmsiz"}: plan qatlamlarni o'zgartirdi`,
+          );
+        }
+      }
+    }
+  }
+});
+
+test("P9: nishon sarlavhani ortiqcha surmaydi — sarlavha qutisi ko'pi bilan 0.62″ torayadi, yuqori qirrasi joyida", () => {
+  const theme = getSlideTheme("atlas");
+  for (const visual of VISUALS) {
+    for (const layout of BADGE_LAYOUTS.filter((l) => l !== "quote")) {
+      const s = contentSample(layout, true, false);
+      const a0 = anchorOf(planSlide(s, theme, visual, INDEX, TOTAL).layers, s).box;
+      s.plan = 3;
+      const a1 = anchorOf(planSlide(s, theme, visual, INDEX, TOTAL).layers, s).box;
+      const tag = `${visual}/${layout}`;
+      assert.equal(a1.y, a0.y, `${tag}: sarlavha yuqori qirrasi siljidi`);
+      assert.ok(a0.w - a1.w <= 0.62 + 1e-9 && a0.w - a1.w >= 0, `${tag}: sarlavha ${a0.w}→${a1.w}`);
+      assert.ok(Math.abs(a1.x + a1.w - (a0.x + a0.w)) < 1e-9, `${tag}: sarlavhaning o'ng qirrasi siljidi`);
+    }
+  }
+});
+
 // ═══════════════════════════════════════════ A2-04: auditoriya shrift poli
 
 /**
