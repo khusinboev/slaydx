@@ -20,6 +20,8 @@ import {
   STEP_MIN_WORDS,
   THIN_BULLET_K,
   CLIP_FLOOR_CHARS,
+  PROSE_MIN_WORDS,
+  fieldCap,
   bulletMaxWords,
   bulletMinWords,
   clipLimit,
@@ -261,12 +263,14 @@ test("layoutWordTargets: oraliqlar sig'imdan oshmaydi va detektor chegarasidan p
  *
  * Jonli 7 dekaning 4 tasida model limitdan bir necha belgiga oshdi va band «…» bilan
  * kesildi (8–9 sinf `circle` ustun bandi 54–58 / 60, bosqich 32–39 / 42): prompt
- * maksimumi = limit edi. Endi har maydon uchun max × CHARS_PER_WORD ≤ 0.85 × clipLimit
- * (RASMLI quti — eng tori; rasmsiz chegara undan katta, ya'ni u ham ≤ 0.85 ×). Istisno —
- * poldagi son (1 so'z; test varianti 2): quti bir so'zga ham zo'rg'a yetadigan joyda
- * «0 so'z» so'ralmaydi.
+ * maksimumi = limit edi. Endi har maydon uchun max × CHARS_PER_WORD ≤ 0.85 × YOZUVCHI
+ * QO'LLAYDIGAN chegara (P11: `clipLimit(…, NO_IMAGE)` — deka vizualining rasmsiz qutisi;
+ * bandlarda `bulletClipLimit`). Qisqa YORLIQ maydonlari (ustun sarlavhasi, stats yorlig'i,
+ * jadval, iqtibos muallifi, test) rasmni saqlaydi — ular RASMLI qutiga ham ≤ 0.85 ×.
+ * Istisno — poldagi son (1 so'z; test varianti 2): quti bir so'zga ham zo'rg'a yetadigan
+ * joyda «0 so'z» so'ralmaydi.
  */
-test("P8 (a): prompt oraliqlari har auditoriya × vizual × hajmda ≥ 15 % zaxirali (≤ 0.85 × clipLimit)", () => {
+test("P8 (a): prompt oraliqlari har auditoriya × vizual × hajmda ≥ 15 % zaxirali (≤ 0.85 × yozuvchi chegarasi)", () => {
   assert.equal(PROMPT_HEADROOM, 0.85);
   const bad: string[] = [];
   for (const aud of SLIDE_AUDIENCES) {
@@ -277,15 +281,18 @@ test("P8 (a): prompt oraliqlari har auditoriya × vizual × hajmda ≥ 15 % zaxi
         const room = (words: number, chars: number, floor = 1) => {
           if (words > floor && words * CHARS_PER_WORD > PROMPT_HEADROOM * chars) bad.push(`${aud}/${vol}/${visual}: ${words} so'z > 0.85 × ${chars}`);
         };
-        room(t.bullet.max, Math.min(r.bulletChars, clipLimit("bullets", r, visual)));
-        room(t.colItem.max, clipLimit("colItem", r, visual, t.maxColItems));
+        // Yozuvchi chegarasi — rasmsiz quti (`normalizeSlide`).
+        const w = (f: Parameters<typeof clipLimit>[0], n?: number, rows?: number) => clipLimit(f, r, visual, n, rows, NO_IMAGE);
+        room(t.bullet.max, bulletClipLimit(r, visual, r.maxBullets));
+        room(t.colItem.max, w("colItem", t.maxColItems));
+        for (const [n, x] of Object.entries(t.stepTextBy)) room(x.max, w("stepText", Number(n)));
+        room(t.sectionSubtitle.max, w("subtitleSection"));
+        room(t.closingSubtitle.max, w("subtitleClosing"));
+        room(t.quote.max, w("quote"));
+        // Yorliq maydonlari — rasm qoladi: rasmli qutiga ham (u rasmsizdan tor yoki teng).
         room(t.colTitleMax, clipLimit("colTitle", r, visual));
-        for (const [n, w] of Object.entries(t.stepTextBy)) room(w.max, clipLimit("stepText", r, visual, Number(n)));
         room(t.statLabelMax, clipLimit("statLabel", r, visual, t.maxStats));
         room(t.tableCellMax, clipLimit("tableCell", r, visual, t.maxTableCols, t.maxTableRows));
-        room(t.sectionSubtitle.max, clipLimit("subtitleSection", r, visual));
-        room(t.closingSubtitle.max, clipLimit("subtitleClosing", r, visual));
-        room(t.quote.max, clipLimit("quote", r, visual));
         room(t.quoteByMax, clipLimit("quoteBy", r, visual));
         room(t.quizQMax, clipLimit("quizQ", r, visual));
         room(t.quizOptionMax, clipLimit("quizOption", r, visual), 2);
@@ -301,14 +308,53 @@ test("P8 (a): prompt oraliqlari har auditoriya × vizual × hajmda ≥ 15 % zaxi
   assert.equal(clipLimit("colItem", g89, "circle", 2), 60, "sinov asosi: rasmli ustun bandi 60");
   assert.equal(t89.maxColItems, 2);
   assert.equal(t89.colItem.max, 5);
-  // Bosqich (3 ta) rasmli 42 belgi → 3 so'z (ilgari 4 ≈ 36 → 32–39 «…»).
-  assert.equal(t89.stepTextBy[3].max, Math.floor((0.85 * clipLimit("stepText", g89, "circle", 3)) / CHARS_PER_WORD));
-  assert.ok(t89.stepTextBy[3].max * CHARS_PER_WORD <= 0.85 * 42);
+  // Bosqich (3 ta): rasmli 42 belgi → 3 so'z < 5 — P11: maqsad RASMSIZ qutidan (121 → 11 so'z), rasm joy beradi.
+  // (P8 da «3 so'z» so'ralardi; model 5–6 so'z yozib, jadval 45 da HAMMA bosqich «…» bilan kesilardi.)
+  assert.equal(clipLimit("stepText", g89, "circle", 3), 42, "sinov asosi: rasmli bosqich qutisi 42");
+  assert.equal(clipLimit("stepText", g89, "circle", 3, undefined, NO_IMAGE), 121, "sinov asosi: rasmsiz 121");
+  assert.equal(t89.stepTextBy[3].max, Math.floor((0.85 * 121) / CHARS_PER_WORD));
+  assert.equal(t89.stepTextBy[3].max, 11);
   // Bakalavr «qisqa» bandi 119 belgi → 11 so'z (ilgari 13 = 117 → 111–114 «…»).
   const bq = bodyRules({ slideAudience: "students_bachelor", textVolume: "qisqa", planItems: 5 }, "lecture");
   assert.equal(bq.bulletChars, 119);
   assert.equal(bulletMaxWords(bq), 11);
   assert.match(wordTargetLines(g89, "circle").join("\n"), /har band \d+(–5)? so‘z/);
+});
+
+/*
+ * P11 (c) — prompt maqsadi GAP maydonlarida (bosqich matni, ustun bandi, band) kamida
+ * `PROSE_MIN_WORDS` (5) so'z, YOKI — rasmsiz quti ham undan kam ko'tarsa — aynan rasmsiz
+ * sig'im × zaxira. Rasmli qutidan 3 so'z so'rash yolg'on maqsad edi: model 5–6 so'z yozdi.
+ * MUTATSIYA: `fitWords` dagi 5 so'z qoidasi olib tashlansa (doim rasmli quti) — qizaradi
+ * (8–9 sinf `circle` 3 bosqich: 3 so'z, rasmsiz 11).
+ */
+test("P11 (c): bosqich/ustun bandi/band maqsadi ≥ 5 so'z yoki rasmsiz sig'imga teng — har auditoriya × vizual", () => {
+  assert.equal(PROSE_MIN_WORDS, 5);
+  const bad: string[] = [];
+  const words = (chars: number, cap: number) => Math.max(1, Math.floor((PROMPT_HEADROOM * Math.min(chars, cap)) / CHARS_PER_WORD));
+  for (const aud of SLIDE_AUDIENCES) {
+    for (const vol of ["qisqa", "standart", "kop"] as const) {
+      const r = bodyRules({ slideAudience: aud, textVolume: vol, planItems: 5 }, "lecture");
+      for (const visual of [...LEGACY_VISUALS, ...DESIGN_VISUALS]) {
+        const t = layoutWordTargets(r, visual);
+        const noImg = (f: Parameters<typeof fitChars>[0], n?: number) => words(fitChars(f, r, visual, n, NO_IMAGE), fieldCap(f, r, visual, n));
+        const check = (name: string, got: number, capWords: number, want = Number.POSITIVE_INFINITY) => {
+          // Auditoriya istagi (`want`, masalan `bulletMaxWords`) 5 dan kam bo'lsa — o'sha; aks holda ≥ 5 yoki rasmsiz sig'im.
+          if (got < PROSE_MIN_WORDS && got !== capWords && got !== want) bad.push(`${aud}/${vol}/${visual} ${name}: ${got} so'z (rasmsiz ${capWords})`);
+        };
+        for (const [n, x] of Object.entries(t.stepTextBy)) check(`stepText×${n}`, x.max, noImg("stepText", Number(n)));
+        check(`colItem×${t.maxColItems}`, t.colItem.max, noImg("colItem", t.maxColItems));
+        check("bullet", t.bullet.max, noImg("bullets"), bulletMaxWords(r));
+      }
+    }
+  }
+  assert.deepEqual(bad.slice(0, 10), [], `${bad.length} ta 5 so'zdan kam maqsad`);
+  // Jonli holat: 8–9 sinf circle 3 bosqich — rasmsiz 121 → 11 so'z (rasm joy beradi); rail — 85 → 8.
+  const g89 = bodyRules({ slideAudience: "school_8_9", textVolume: "standart", planItems: 5 }, "lesson");
+  assert.equal(layoutWordTargets(g89, "circle").stepTextBy[3].max, 11);
+  assert.equal(layoutWordTargets(g89, "rail").stepTextBy[3].max, 8);
+  // Rasmli quti 5 so'zga yetsa — maqsad o'sha (rasm saqlanadi): 8–9 sinf circle 2 bandli ustun 60 → 5.
+  assert.equal(layoutWordTargets(g89, "circle").colItem.max, 5);
 });
 
 test("element soni auditoriyaga ergashadi: yosh auditoriyaga kam bosqich/karta/ustun (P2 A2-04 pol)", () => {
@@ -334,9 +380,10 @@ test("jadval: prompt va qirqish BIR kalitda (ustun × qator) — promptga rioya 
     const r = bodyRules({ slideAudience: aud, textVolume: "standart", planItems: 5 }, "lecture");
     for (const visual of ["classic", "academic"] as const) {
       const t = layoutWordTargets(r, visual);
-      const lim = limitsFor(r, { cols: t.maxTableCols, rows: t.maxTableRows }).tableCell;
+      // P11: chegara deka vizualidan (`limitsFor` + visual) — yozuvchi (`clipLimit`, rasmsiz) bilan AYNAN bir kalit.
+      const lim = limitsFor(r, { cols: t.maxTableCols, rows: t.maxTableRows }, { visual, images: "none" }).tableCell;
       assert.ok(t.tableCellMax * CHARS_PER_WORD <= Math.max(CHARS_PER_WORD, lim), `${aud}/${visual}: katak ${t.tableCellMax} so'z > ${lim}`);
-      assert.ok(clipLimit("tableCell", r, visual, t.maxTableCols, t.maxTableRows) <= lim);
+      assert.equal(clipLimit("tableCell", r, visual, t.maxTableCols, t.maxTableRows, NO_IMAGE), lim);
     }
   }
   // Talaba: 4 × 5 jadval (auditoriya ruxsati) — 5×6 ning 20 belgisi emas.
@@ -393,8 +440,11 @@ test("clipLimit: statik qopqoqdan oshmaydi, pol shriftidagi sig'imgacha tushadi,
       assert.ok(lim <= Math.max(CLIP_FLOOR_CHARS, fitChars(field, rules, "classic")), `${field}: qutidan katta`);
     }
   }
-  // Variant — pol bo'yicha jadvaldan (`limitsFor.quizOption`, sharh 7-band); 1–4 sinfga — ancha tor.
-  assert.equal(clipLimit("quizOption", bachelor, "classic"), limitsFor(bachelor).quizOption);
+  // Variant — vizual NOMA'LUM: pol jadvalidan (`limitsFor.quizOption`, sharh 7-band); vizual MA'LUM (P11):
+  // shu vizualning qutisidan, tahrir bilan bir funksiya (`limitsFor` + visual). 1–4 sinfga — ancha tor.
+  assert.equal(clipLimit("quizOption", bachelor, undefined), limitsFor(bachelor).quizOption);
+  assert.equal(clipLimit("quizOption", bachelor, "classic"), limitsFor(bachelor, {}, { visual: "classic" }).quizOption);
+  assert.equal(clipLimit("quizOption", bachelor, "classic"), Math.min(SLIDE_LIMITS.quizOption, fitChars("quizOption", bachelor, "classic")));
   assert.ok(clipLimit("quizOption", kids, "cards") < clipLimit("quizOption", bachelor, "cards"));
   // Rasmli 5 bosqich: 160 emas (A1-01) — qirqish quti sig'imigacha.
   assert.ok(clipLimit("stepText", bachelor, "classic", 5) < SLIDE_LIMITS.stepText);
@@ -760,8 +810,10 @@ test("repair: process — son auditoriya ruxsatigacha qisiladi, matn shu sondagi
   const kr = bodyRules(kidsMeta, kidsTpl.id);
   assert.equal(kr.stepsMax, 3);
   const thin = S({ id: "p", layout: "process", title: "Tajriba", steps: [1, 2, 3].map((n) => ({ n: String(n), title: "B", text: "Qisqa" })) });
-  // Model 5 bosqich qaytaradi — har biri 3 bosqichli quti sig'imidagi to'liq gap.
-  const w = Math.max(3, Math.min(STEP_MIN_WORDS, Math.floor(clipLimit("stepText", kr, kidsTpl.visual, 3) / CHARS_PER_WORD)));
+  // Model 5 bosqich qaytaradi — har biri 3 bosqichli prompt maqsadining YUQORI chegarasidagi to'liq gap
+  // (P11: maqsad rasmli quti 5 so'zdan kam bo'lsa rasmsiz qutidan — detektor ham shu sig'imdan o'qiydi).
+  const w = layoutWordTargets(kr, kidsTpl.visual).stepTextBy[3].max;
+  assert.ok(w * CHARS_PER_WORD <= clipLimit("stepText", kr, kidsTpl.visual, 3, undefined, NO_IMAGE), "maqsad yozuvchi qirqishidan oshmaydi");
   const five = Array.from({ length: 5 }, (_, i) => ({ n: String(i + 1), title: "Qadam", text: sent(w, i) }));
   await withLlm(
     () => jsonReply({ slides: [{ index: 0, steps: five }] }),
@@ -816,7 +868,15 @@ test("SLIDE_LIMITS: qopqoqlar pol shriftidagi sig'imdan oshmaydi (o'lchov qulfi)
   assert.ok(SLIDE_LIMITS.quote <= median("quote") + 1, `quote > mediana ${median("quote")}`);
 });
 
-test("limitsFor jadvali jonli o'lchovga mos: har katak ≤ max(5, ⌊0.88 × rasmsiz eng tor sig'im⌋₅)", async () => {
+test("limitsFor ZAXIRA jadvali (vizual noma'lum) jonli o'lchovga mos: har katak ≤ max(5, ⌊0.88 × rasmsiz eng tor sig'im⌋₅)", async () => {
+  // P11: jadval faqat vizual NOMA'LUM bo'lganda (`limitsFor(r, counts)` — ikki argument). Vizual ma'lum
+  // bo'lganda o'sha vizualning o'lchovi — nuqtaviy tekshiruv `tests/slide-limits.test.mts` «P11» da
+  // (8–9 sinf 3 bosqich rasmsiz: circle 121, academic 121, rail 85).
+  const g89 = bodyRules({ slideAudience: "school_8_9", textVolume: "standart", planItems: 5 }, "lesson");
+  for (const [visual, none] of [["circle", 121], ["academic", 121], ["rail", 85]] as const) {
+    assert.equal(limitsFor(g89, { steps: 3 }, { visual, images: "none" }).stepText, none, visual);
+    assert.ok(limitsFor(g89, { steps: 3 }).stepText < none, `${visual}: zaxira jadval vizual o'lchovidan tor`);
+  }
 
   // Jadval shu qoida bilan qurilgan (`COUNT_LIMITS` izohi): min(P2, jonli) × 0.88, 5 ga pastga, kamida 5.
   const derive = (x: number) => Math.max(5, Math.floor((x * 0.88) / 5) * 5);
@@ -838,14 +898,26 @@ test("limitsFor jadvali jonli o'lchovga mos: har katak ≤ max(5, ⌊0.88 × ras
   }
 });
 
-test("clipLimit soni o'zgaruvchi maydonda limitsFor dan oshmaydi (generatsiya ⊆ tahrir)", async () => {
-
+/*
+ * Generatsiya = tahrir (P11): vizual ma'lum bo'lsa ikkalasi BIR funksiyadan (`clipLimit` ↔
+ * `limitsFor(rules, counts, { visual, images })`) — teng; vizual noma'lum bo'lsa `clipLimit`
+ * jadvaldan (zaxira) oshmaydi.
+ */
+test("clipLimit soni o'zgaruvchi maydonda limitsFor bilan bir xil (vizual) / undan oshmaydi (zaxira)", async () => {
   const kids = bodyRules({ slideAudience: "school_1_4", textVolume: "standart", planItems: 5 }, "lesson");
   for (const rules of [bachelor, kids]) {
-    for (const n of [3, 4, 5]) {
-      assert.ok(clipLimit("stepText", rules, "classic", n) <= limitsFor(rules, { steps: n }).stepText);
-      assert.ok(clipLimit("stepTitle", rules, "classic", n) <= limitsFor(rules, { steps: n }).stepTitle);
+    for (const images of ["none", "both"] as const) {
+      for (const n of [3, 4, 5]) {
+        const l = limitsFor(rules, { steps: n }, { visual: "classic", images });
+        assert.equal(clipLimit("stepText", rules, "classic", n, undefined, { images }), l.stepText);
+        assert.equal(clipLimit("stepTitle", rules, "classic", n, undefined, { images }), l.stepTitle);
+      }
+      for (const n of [2, 3, 4]) assert.equal(clipLimit("statLabel", rules, "classic", n, undefined, { images }), limitsFor(rules, { stats: n }, { visual: "classic", images }).statLabel);
     }
-    for (const n of [2, 3, 4]) assert.ok(clipLimit("statLabel", rules, "classic", n) <= limitsFor(rules, { stats: n }).statLabel);
+    for (const n of [3, 4, 5]) {
+      assert.ok(clipLimit("stepText", rules, undefined, n) <= limitsFor(rules, { steps: n }).stepText);
+      assert.ok(clipLimit("stepTitle", rules, undefined, n) <= limitsFor(rules, { steps: n }).stepTitle);
+    }
+    for (const n of [2, 3, 4]) assert.ok(clipLimit("statLabel", rules, undefined, n) <= limitsFor(rules, { stats: n }).statLabel);
   }
 });
