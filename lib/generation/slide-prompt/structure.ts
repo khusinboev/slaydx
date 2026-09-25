@@ -1,6 +1,6 @@
 import { bodyRules } from "../slide-audience";
 import { plannedBlocks, type SlideBlockId } from "../slide-blocks";
-import { fitChars } from "../slide-limits";
+import { fitChars, SLIDE_LIMITS } from "../slide-limits";
 import { bodyWantOf } from "../slide-params";
 import { CHARS_PER_WORD, fmtRange, PROMPT_HEADROOM } from "../slide-quality";
 import type { SlideTemplate } from "../slide-templates";
@@ -45,20 +45,27 @@ export function structureLines(meta: DocMeta, tpl: SlideTemplate, ctx: SlideProm
   const planN = plan.planN;
 
   /*
-   * INT-02 (AUDIT-25 integratsiya sharhi, P11 topilmasi). Reja bandi =
+   * INT-02 (AUDIT-25 integratsiya sharhi, P11 topilmasi; reviewer P1
+   * qaytarishi — AUDIT-25-P1.md "P13 review — 3964934"). Reja bandi =
    * slayd sarlavhasi (`syncAgenda`) VA agenda slaydidagi band matni —
-   * ikkalasi ham BITTA matn. Agenda qutisi (`fitChars("agenda", …)`,
-   * P11: bolalar auditoriyasida ba'zi vizuallarda 27–41 belgi) sarlavha
-   * qopqog'idan (`SLIDE_LIMITS.title`) ancha tor bo'lishi mumkin — statik
-   * «3–7 so'z» katta auditoriya/vizualda sig'sa ham, torida kesilib
-   * qolardi. Endi yuqori chegara HAQIQIY qutidan (auditoriya × vizual ×
-   * band soni) hisoblanadi — `bulletMaxWords` bilan bir xil zaxira
+   * ikkalasi ham BITTA matn, ikkita qutiga sig'ishi kerak:
+   *   1) agenda qutisi (`fitChars("agenda", …)`, P11: bolalar
+   *      auditoriyasida ba'zi vizuallarda 27–41 belgi);
+   *   2) slayd SARLAVHA maydoni (`SLIDE_LIMITS.title` — 72 belgi, HAR
+   *      vizualda, chunki reja bandi keyinchalik `syncAgenda` bilan
+   *      shu maydonga yoziladi).
+   * FAQAT (1) bilan chegaralasa — keng vizualda agenda qutisi katta
+   * (masalan 280+ belgi), lekin sarlavha maydoni hamon 72 da qoladi:
+   * model 31 so'zgacha yozardi, `clipTo(SLIDE_LIMITS.title)` esa uni
+   * «…» bilan kesardi (170/220 auditoriya×vizual juftligida — reviewer
+   * dalili). Shuning uchun yuqori chegara IKKALASINING KICHIGIDAN
+   * hisoblanadi — `bulletMaxWords` bilan bir xil zaxira
    * (`PROMPT_HEADROOM`/`CHARS_PER_WORD`), pastki chegara 3 so'zdan
    * kichraymaydi (qirqishdan past ma'nosiz band).
    */
   const rules = bodyRules(meta, tpl.id);
   const agendaWordsCap = agenda
-    ? Math.max(3, Math.floor((PROMPT_HEADROOM * fitChars("agenda", rules, tpl.visual, planN)) / CHARS_PER_WORD))
+    ? Math.max(3, Math.floor((PROMPT_HEADROOM * Math.min(fitChars("agenda", rules, tpl.visual, planN), SLIDE_LIMITS.title)) / CHARS_PER_WORD))
     : 0;
 
   return [
