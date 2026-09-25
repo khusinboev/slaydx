@@ -35,6 +35,8 @@ import {
   type ThinReason,
 } from "../lib/generation/slide-quality.ts";
 import { resolveSlideTemplate } from "../lib/generation/slide-templates.ts";
+import { CHAR_EM, LAYOUT_KIT, planSlide } from "../lib/generation/slide-layout.ts";
+import { getSlideTheme } from "../lib/generation/slide-themes.ts";
 import { extractNewSlides } from "../lib/generation/slide-write.ts";
 import type { SlideModel } from "../lib/generation/slide-types.ts";
 import { TOOL_BY_ID } from "../lib/tools.ts";
@@ -920,4 +922,104 @@ test("clipLimit soni o'zgaruvchi maydonda limitsFor bilan bir xil (vizual) / und
     }
     for (const n of [2, 3, 4]) assert.ok(clipLimit("statLabel", rules, undefined, n) <= limitsFor(rules, { stats: n }).statLabel);
   }
+});
+
+// ───────────────────────────────────────────── 5. AUDIT-25 integratsiya sharhi (INT-04/05/07)
+
+/*
+ * INT-04: detektorning bosqich matni poli rasmli qutidan edi — `min(6, 3) = 3`, ya'ni 8–9 sinf
+ * `circle` da 3 so'zli bosqich HECH QACHON «yupqa» deb topilmasdi (S4 saqlanardi). P11 qoidasi
+ * (`fitWords`: rasmli quti < 5 so'z → rasmsiz quti) detektorga ham o'tadi: pol `min(6, 11) = 6`.
+ * MUTATSIYA: `fitWords` dagi 5 so'z qoidasi olib tashlansa — qizaradi.
+ */
+test("INT-04: 8–9 sinf circle — 3 so'zli bosqichlar «short-steps» (detektor rasmsiz sig'imdan)", () => {
+  const g89 = bodyRules({ slideAudience: "school_8_9", textVolume: "standart", planItems: 5 }, "lesson");
+  const three = S({ layout: "process", steps: [1, 2, 3].map((n) => ({ n: String(n), title: `Bosqich ${n}`, text: sent(3, n) })) });
+  assert.deepEqual(reasonsOf(three, g89, "circle"), ["short-steps"]);
+  // Prompt oralig'iga rioya qilgan (≥ min) bosqich — yupqa emas.
+  const min = layoutWordTargets(g89, "circle").stepTextBy[3].min;
+  const ok = S({ layout: "process", steps: [1, 2, 3].map((n) => ({ n: String(n), title: `Bosqich ${n}`, text: sent(min, n) })) });
+  assert.deepEqual(reasonsOf(ok, g89, "circle"), []);
+});
+
+/*
+ * INT-05: band chegarasi bitta takrorlangan gap bilan o'lchangan edi — nol zaxira: boshqa so'z
+ * tartibidagi haqiqiy band 101–149 % toshardi (10–11 sinf / ko'p / `lab`). Endi o'lchov so'z tartibi
+ * AYLANMALARI bo'yicha (`PROBE_ROTATIONS`). Tekshiruv — o'lchovda ISHLATILMAGAN gaplar (held-out).
+ * MUTATSIYA: `ROTATED_FIELDS` dan "bullets" olib tashlansa — lab 149 % qaytadi, qizaradi.
+ */
+const HELD_OUT = [
+  "Fotosintez jarayonida yashil o‘simliklar quyosh nurini kimyoviy energiyaga aylantiradi, karbonat angidrid va suvdan glyukoza hosil qiladi hamda atmosferaga kislorod chiqaradi, bu esa yerdagi hayotning asosiy manbai bo‘lib xizmat qiladi",
+  "Kasr sonlarni qo‘shishda avval umumiy maxraj topiladi, so‘ng suratlar qo‘shiladi va natija qisqartiriladi; masalan, ikki beshdan va bir uchdan yig‘indisi o‘n bir o‘n beshdan ga teng bo‘ladi, buni chizmada ham ko‘rsatish mumkin",
+  "Amir Temur davlatida savdo yo‘llari xavfsizligi ta’minlandi, karvonsaroylar qurildi, hunarmandchilik va ilm-fan rivojlandi, Samarqand esa Sharq va G‘arbni bog‘lovchi yirik madaniy markazga aylandi hamda ko‘plab olimlarni o‘ziga jalb qildi",
+];
+type TL = { t: string; text?: string; lines?: string[]; box: { w: number; h: number }; size: number; bold?: boolean; paraSpace?: number; src?: { f: string }; srcLines?: { f: string }[] };
+/** Qatlam siyohi / quti (layerFits bilan bir formula). */
+function inkRatio(l: TL): number {
+  const room = l.box.h * 72 + 1;
+  if (l.lines) return (LAYOUT_KIT.listRows(l.lines, l.box as never, l.size) * l.size * 1.3 + Math.max(0, l.lines.length - 1) * (l.paraSpace ?? 0)) / room;
+  return (LAYOUT_KIT.inkHeight(l.text ?? "", l.box.w, l.size, l.bold ? LAYOUT_KIT.CHAR_EM_BOLD : CHAR_EM) * 72) / room;
+}
+/** `field` qatlamlarining eng yomon siyoh nisbati — held-out gaplar, 12 xil so'z tartibi. */
+function worstBullets(r: ReturnType<typeof bodyRules>, visual: (typeof LEGACY_VISUALS)[number] | (typeof DESIGN_VISUALS)[number], layout: "bullets" | "agenda", n: number, clip: number): number {
+  let worst = 0;
+  for (let rot = 0; rot < 12; rot += 1) {
+    const items = Array.from({ length: n }, (_, i) => {
+      const w = HELD_OUT[(rot + i) % HELD_OUT.length].split(" ");
+      const k = (rot * 3 + i * 5) % w.length;
+      return clipTo([...w.slice(k), ...w.slice(0, k)].join(" "), clip);
+    });
+    const plan = planSlide({ id: "x", layout, title: "Sarlavha", bullets: items }, getSlideTheme("atlas"), visual, 3, 10, "auto", "lecture", { bodyType: r });
+    for (const l of plan.layers as unknown as TL[]) {
+      if (l.t === "text" && (l.src?.f === "bullets" || (l.srcLines ?? []).some((s) => s.f === "bullets"))) worst = Math.max(worst, inkRatio(l));
+    }
+  }
+  return worst;
+}
+
+test("INT-05: band chegarasi so'z tartibi aylanmalarida o'lchanadi — held-out gaplar hech bir auditoriya × vizualda toshmaydi", () => {
+  // Qulf: 10–11 sinf / ko'p / lab (ilgari 149 %).
+  const lab = bodyRules({ slideAudience: "school_10_11", textVolume: "kop", planItems: 5 }, "lecture");
+  const labClip = bulletClipLimit(lab, "lab", lab.maxBullets);
+  assert.ok(worstBullets(lab, "lab", "bullets", lab.maxBullets, labClip) <= 1.001, `lab ${labClip}`);
+  const bad: string[] = [];
+  for (const aud of SLIDE_AUDIENCES) {
+    for (const vol of ["standart", "kop"] as const) {
+      const r = bodyRules({ slideAudience: aud, textVolume: vol, planItems: 5 }, "lecture");
+      for (const visual of [...LEGACY_VISUALS, ...DESIGN_VISUALS]) {
+        const clip = bulletClipLimit(r, visual, r.maxBullets);
+        const w = worstBullets(r, visual, "bullets", r.maxBullets, clip);
+        if (w > 1.001) bad.push(`${aud}/${vol}/${visual}: ${Math.round(w * 100)} % (clip ${clip})`);
+      }
+    }
+  }
+  assert.deepEqual(bad.slice(0, 8), [], `${bad.length} ta toshish`);
+});
+
+/*
+ * INT-07 (ta'mir): twoCol ta'miri ustun bandlarini statik 4 ta emas, prompt/normalize bilan BIR
+ * son (`layoutWordTargets.maxColItems`) bilan qoldiradi — 8–9 sinf `circle` da 2+2.
+ * MUTATSIYA: `mergeRepair` twoCol da `SLIDE_LIMITS.colItems` ga qaytarilsa — qizaradi.
+ */
+test("INT-07: ta'mir twoCol bandlar soni = prompt = normalize (8–9 sinf circle: 2)", async () => {
+  const m = extractMeta(TOOL_BY_ID["pro-slide"], { topic: "Orol dengizi fojiasi", slideAudience: "school_8_9" } as never);
+  const t = resolveSlideTemplate("lesson", m.topic);
+  const r = bodyRules(m, t.id);
+  assert.equal(t.visual, "circle");
+  const max = layoutWordTargets(r, t.visual).maxColItems;
+  assert.equal(max, 2);
+  const thin = { id: "s0", layout: "twoCol", title: "Ikki yondashuv", leftTitle: "Eski", rightTitle: "Yangi", left: ["Bir."], right: ["Ikki."], plan: 1 } as SlideModel;
+  const items = (k: number) => [0, 1, 2, 3].map((i) => upTo(80, k + i * 3));
+  await withLlm(
+    () => jsonReply({ slides: [{ index: 0, left: items(0), right: items(1) }] }),
+    async () => {
+      const [out] = await repairThinSlides([thin], m, t, {}, later(), later());
+      assert.equal(out.left?.length, max, "ta'mir chap ustunda prompt sonidan ko'p band qoldirdi");
+      assert.equal(out.right?.length, max);
+      // Normalize ham aynan shu son.
+      const [norm] = extractNewSlides(JSON.stringify({ slides: [{ layout: "twoCol", title: "T", leftTitle: "A", rightTitle: "B", left: items(0), right: items(1) }] }), 0, "F", r, { final: true }, t.visual).map((x) => x.slide);
+      assert.equal(norm.left?.length, max);
+      assert.deepEqual(out.left, norm.left, "ta'mir va normalize bandni har xil qirqdi");
+    },
+  );
 });

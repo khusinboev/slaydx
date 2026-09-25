@@ -239,8 +239,11 @@ test("normalize: jadval — tableCols/tableRows/tableCell va ustun soniga qarab 
       ...filler(7),
     ]),
   )[0];
-  const cols = Math.min(4, LIM.tableCols);
-  assert.equal(narrow.table?.headers[0].length, clipLimit("tableHeader", RULES, VISUAL, cols, 2, NO_IMAGE), "ustun soniga qarab sarlavha");
+  // INT-07: ustun soni — prompt bilan bir manba (auditoriya ∩ vizual sig'imi, `layoutWordTargets.maxTableCols`).
+  const cols = Math.min(4, LIM.tableCols, layoutWordTargets(RULES, VISUAL).maxTableCols);
+  assert.equal(narrow.table?.headers.length, cols);
+  const raw = long(SLIDE_LIMITS.tableHeader).length;
+  assert.equal(narrow.table?.headers[0].length, Math.min(raw, clipLimit("tableHeader", RULES, VISUAL, cols, 2, NO_IMAGE)), "ustun soniga qarab sarlavha");
 });
 
 test("normalize: quiz — quizOptions AYNAN, quizQ/quizOption chegarasi", async () => {

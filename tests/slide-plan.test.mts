@@ -780,7 +780,15 @@ test("W3/W4: normalizeSlide AVVAL sonni kesadi, keyin uzunlikni auditoriya × so
     const meta = extractMeta(slideTool, { topic: "X", slideAudience: aud });
     const rules = bodyRules(meta, "lecture");
     const visual = SLIDE_TEMPLATE_BY_ID.lecture.visual;
-    const lim = limitsFor(rules);
+    // INT-07: son — prompt bilan BIR manba (auditoriya ruxsati ∩ vizual sig'imi, `layoutWordTargets`).
+    const aud0 = limitsFor(rules);
+    const t = layoutWordTargets(rules, visual);
+    const lim = {
+      stepsMax: Math.min(aud0.stepsMax, t.maxSteps),
+      statsMax: Math.min(aud0.statsMax, t.maxStats),
+      tableCols: Math.min(aud0.tableCols, t.maxTableCols),
+      tableRows: Math.min(aud0.tableRows, t.maxTableRows),
+    };
     const slides = extractNewSlides(JSON.stringify({ slides: raw }), 0, "F", rules, { final: true }, visual).map((x) => x.slide);
     got[aud] = slides;
     const [proc, stats, table, quiz, two] = slides;
