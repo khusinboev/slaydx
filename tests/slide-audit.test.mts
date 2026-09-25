@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { auditSlideDoc, type SlideAuditIssue } from "../scripts/slide-audit.mts";
+import { bodyRules } from "../lib/generation/slide-audience.ts";
+import { bulletClipLimit } from "../lib/generation/slide-quality.ts";
+import { clipTo } from "../lib/generation/slide-limits.ts";
 
 /**
  * `auditSlideDoc` (AUDIT-25 P5) — reja qamrovi, tartib raqami sizishi,
@@ -483,4 +486,57 @@ test("bo'sh deka — ok, hech narsa yo'q", () => {
   const { ok, issues } = auditSlideDoc({ slides: [] });
   assert.equal(ok, true);
   assert.deepEqual(issues, []);
+});
+
+/* ───────────────────────── 7. C9 (AUDIT-25-P14) — kesik ikki marta sanalmasin ───────────────────────── */
+
+/**
+ * `doc.meta` bo'lsa `thinIssues` `thinHeuristic` o'rniga dvigatel
+ * detektorini (`thinSlides`, P3) chaqiradi — shu yo'l `pushTrunc`ning
+ * o'z `truncated` topilmasi bilan QOPLANADI. Review C9: kesilgan band
+ * ilgari HAM `truncated` (aniqroq — maydon va indeks bilan), HAM
+ * `thin-clipped-text` (dvigatel, umumiyroq) sifatida ikki marta
+ * sanalardi. Haqiqiy o'zbekcha so'zlar (`POOL`/`sent`) — `bulletClipLimit`
+ * chegara ULARdan hisoblangani uchun `clipTo` natijasi haqiqatan «…»
+ * bilan tugaydi (slide-quality.test.mts dagi bir xil naqsh).
+ */
+const POOL =
+  "suv resurslari mintaqaning iqlimi va aholining sog'lig'iga bevosita ta'sir qiladi shuning uchun ularni tejash hamda zamonaviy sug'orish usullarini joriy etish muhim vazifa hisoblanadi".split(
+    " ",
+  );
+const sent = (n: number, from = 0) => Array.from({ length: n }, (_, i) => POOL[(from + i) % POOL.length]).join(" ");
+
+test("C9: meta bilan bitta kesilgan band — FAQAT 'truncated', 'thin-clipped-text' YO'Q (ikki marta sanalmaydi)", () => {
+  const rules = bodyRules({ slideAudience: "students_bachelor", textVolume: "standart", planItems: 1 }, "auto");
+  const visual = "classic";
+  const cap = bulletClipLimit(rules, visual, 3);
+  const cut = clipTo(sent(40), cap);
+  assert.ok(cut.endsWith("…") && cut.length > 0.6 * cap, `qirqish sharti bajarilmadi: "${cut}"`);
+  const doc = {
+    meta: { slideAudience: "students_bachelor", textVolume: "standart", planItems: 1 },
+    slideVisual: visual,
+    slides: [
+      { layout: "title", title: "Mavzu" },
+      { layout: "bullets", title: "Sabablar", plan: 1, bullets: [sent(14), sent(14, 3), cut] },
+    ],
+  };
+  const { issues } = auditSlideDoc(doc);
+  const forSlide2 = issues.filter((i) => i.slide === 2);
+  assert.deepEqual(forSlide2.map((i) => i.kind).sort(), ["truncated"], JSON.stringify(issues));
+  assert.ok(!issues.some((i) => i.kind === "thin-clipped-text"), JSON.stringify(issues));
+});
+
+test("C9: chinakam yupqa slayd (meta bilan) hali ham thin-short-bullets beradi — filtr faqat clipped-text ni tashlaydi", () => {
+  const doc = {
+    meta: { slideAudience: "students_bachelor", textVolume: "standart", planItems: 1 },
+    slideVisual: "classic",
+    slides: [
+      { layout: "title", title: "Mavzu" },
+      { layout: "bullets", title: "Sabablar", plan: 1, bullets: ["Qisqa band.", "Yana qisqa.", "Uchinchisi ham."] },
+    ],
+  };
+  const { issues } = auditSlideDoc(doc);
+  assert.ok(issues.some((i) => i.kind === "thin-short-bullets"), JSON.stringify(issues));
+  assert.ok(!issues.some((i) => i.kind === "truncated"), JSON.stringify(issues));
+  assert.ok(!issues.some((i) => i.kind === "thin-clipped-text"), JSON.stringify(issues));
 });
