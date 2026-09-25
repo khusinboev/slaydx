@@ -55,7 +55,7 @@ function pushColumn(layers: SlideLayer[], s: SlideModel, theme: SlideTheme): voi
 
 /** Jurnal sarlavhasi — mayda kapital matn + butun kenglikdagi ingichka chiziq. */
 function pushHead(layers: SlideLayer[], s: SlideModel, theme: SlideTheme, w: number, reserve: number): void {
-  const { fitSize, badgedTitle, pushPlanTab, PLAN_TAB_ROOM } = LAYOUT_KIT;
+  const { badgedTitle, pushPlanTab, PLAN_TAB_ROOM } = LAYOUT_KIT;
   const boxT = badgedTitle(s, { x: TX, y: 0.45, w: w - reserve, h: 0.92 }, 30, 18, PLAN_TAB_ROOM);
   const box = boxT.box;
   const size = boxT.size;

@@ -36,7 +36,7 @@ function pushAcademicHead(
   theme: SlideTheme,
   reserve: number,
 ): void {
-  const { fitSize, badgedTitle, pushPlanBadge } = LAYOUT_KIT;
+  const { badgedTitle, pushPlanBadge } = LAYOUT_KIT;
   // AUDIT-25 P9: `plan` li mazmun slaydida sarlavha chapida «0N» (reja
   // qatorlari uslubi); reja slaydining o'zida — yo'q (`planBadge`).
   const headBoxT = badgedTitle(s, { x: TEXT_X, y: 0.52, w: Math.max(3, ZONE_W - reserve), h: 0.82 }, 26, 16);

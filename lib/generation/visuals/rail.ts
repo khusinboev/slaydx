@@ -32,7 +32,7 @@ function pushNode(layers: SlideLayer[], theme: SlideTheme, cx: number, cy: numbe
 
 /** Rels sarlavhasi — chapdagi tik aksent belgisi bilan. */
 function pushHead(layers: SlideLayer[], s: SlideModel, theme: SlideTheme, x: number, w: number, reserve: number): void {
-  const { fitSize, badgedTitle, pushPlanBadge } = LAYOUT_KIT;
+  const { badgedTitle, pushPlanBadge } = LAYOUT_KIT;
   layers.push({ t: "rect", box: { x: x - 0.42, y: 0.4, w: 0.09, h: 0.8 }, fill: { color: theme.accent } });
   // AUDIT-25 P9: reja nishoni tik belgi bilan sarlavha orasida, bir o'qda —
   // YALANG raqam: bosqich raqamlari to'q tugun ichida, tab ular bilan adashardi.

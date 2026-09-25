@@ -17,7 +17,7 @@ function two(n: number): string {
 
 /** Yuqori sarlavha — qalin aksent lentasi ostidagi yirik matn. */
 function pushHead(layers: SlideLayer[], s: SlideModel, theme: SlideTheme, w: number, reserve: number): void {
-  const { fitSize, badgedTitle, pushPlanBadge } = LAYOUT_KIT;
+  const { badgedTitle, pushPlanBadge } = LAYOUT_KIT;
   const boxT = badgedTitle(s, { x: 0.85, y: 0.42, w: w - reserve, h: 0.86 }, 27, 17);
   const box = boxT.box;
   const size = boxT.size;

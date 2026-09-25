@@ -86,7 +86,7 @@ function pushPolaroid(
 
 /** Sarlavha + qo'sh chiziq (daftar ustuni) — kontent maketlari uchun. */
 function pushNotebookHead(layers: SlideLayer[], s: SlideModel, theme: SlideTheme, reserve: number): void {
-  const { fitSize, badgedTitle, pushPlanTab, PLAN_TAB_ROOM } = LAYOUT_KIT;
+  const { badgedTitle, pushPlanTab, PLAN_TAB_ROOM } = LAYOUT_KIT;
   const headBoxT = badgedTitle(s, { x: TEXT_X + 0.25, y: 0.45, w: Math.max(3, ZONE_W - 0.25 - reserve), h: 0.8 }, 25, 16, PLAN_TAB_ROOM);
   const headBox = headBoxT.box;
   const size = headBoxT.size;

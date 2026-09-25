@@ -379,7 +379,7 @@ function planClosing(s: SlideModel, theme: SlideTheme, index: number, total: num
 
 /** Ikki ustun / qiyos — jurnal tarqatmasi: tik ajratgich, abzats matn. */
 function planTwoCol(s: SlideModel, theme: SlideTheme, index: number, total: number, ctx: PlanCtx): SlidePlan {
-  const { fitSize, fitLines, bulletGap, pushFooter, stripCut, W, H } = LAYOUT_KIT;
+  const { fitLines, bulletGap, pushFooter, stripCut, W, H } = LAYOUT_KIT;
   const layers: SlideLayer[] = [];
   layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.bg } });
   const zoneW = ZONE_W - stripCut(s);

@@ -427,7 +427,7 @@ function planClosing(s: SlideModel, theme: SlideTheme, index: number, total: num
  * Rasm tasmasi (`stripCut`) bo'lsa butun kompozitsiya shuncha torayadi.
  */
 function planCompare(s: SlideModel, theme: SlideTheme, index: number, total: number, ctx: PlanCtx): SlidePlan {
-  const { H, fitSize, fitLines, stripCut, pushFooter, BULLET_GAP_MIN } = LAYOUT_KIT;
+  const { H, fitLines, stripCut, pushFooter, BULLET_GAP_MIN } = LAYOUT_KIT;
   const layers: SlideLayer[] = [];
   const cut = stripCut(s);
   const zoneW = 13.333 - cut;

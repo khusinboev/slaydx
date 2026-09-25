@@ -48,7 +48,7 @@ function pushRoundPhoto(layers: SlideLayer[], theme: SlideTheme, url: string | u
 
 /** Sarlavha + yumaloq aksent tagchizig'i — kontent maketlari uchun bitta naqsh. */
 function pushRoundHead(layers: SlideLayer[], s: SlideModel, theme: SlideTheme, reserve: number, zoneW: number): void {
-  const { fitSize, planBadge, badgedTitle } = LAYOUT_KIT;
+  const { planBadge, badgedTitle } = LAYOUT_KIT;
   const headBoxT = badgedTitle(s, { x: TEXT_X, y: 0.5, w: Math.max(3, zoneW - reserve), h: 0.85 }, 26, 16, 0.6);
   const headBox = headBoxT.box;
   const size = headBoxT.size;
