@@ -369,6 +369,51 @@ test("item 4: tinish belgisidan keyingi qasddan '...' — truncated EMAS (harf t
   assert.ok(!issues.some((i) => i.kind === "truncated"), JSON.stringify(issues));
 });
 
+/*
+ * N7 (`audit/reviews/AUDIT-25-P14c.md`): C9 dvigatelning `clipped-text`
+ * sababini filtrladi va `pushTrunc`/`truncated` yagona manba bo'lib
+ * qoldi — lekin eski `TRUNCATED_RE` faqat HARFdan keyingi «…» ni
+ * ushlardi. `clipTo` (dvigatel) raqam, yopuvchi qo'shtirnoq «»» yoki
+ * qavs «)» bilan ham kesadi — bu holatlar endi hech qayerda
+ * ko'rinmasdi. Har uchoviga alohida test + qasddan qoldirilgan qisqa
+ * bo'sh joyli savol ("1/2 + 1/4 = …") hamon xato hisoblanmasligi.
+ */
+
+test("N7: raqamdan keyingi '…' (masalan '99…') → truncated", () => {
+  const doc = goodDeck();
+  const twoCol = doc.slides.find((s) => s.layout === "twoCol")!;
+  (twoCol.left as string[])[0] = "Yiliga o'sish sur'ati 99…";
+  const { ok, issues } = auditSlideDoc(doc);
+  assert.equal(ok, false);
+  assert.ok(issues.some((i) => i.kind === "truncated" && i.detail.includes("left[0]")), JSON.stringify(issues));
+});
+
+test("N7: yopuvchi qo'shtirnoq «»»dan keyingi '…' (masalan '«ozon»…') → truncated", () => {
+  const doc = goodDeck();
+  const twoCol = doc.slides.find((s) => s.layout === "twoCol")!;
+  (twoCol.left as string[])[0] = "Qatlam nomi «ozon»…";
+  const { ok, issues } = auditSlideDoc(doc);
+  assert.equal(ok, false);
+  assert.ok(issues.some((i) => i.kind === "truncated" && i.detail.includes("left[0]")), JSON.stringify(issues));
+});
+
+test("N7: yopuvchi qavsdan keyingi '…' (masalan '(2020)…') → truncated", () => {
+  const doc = goodDeck();
+  const twoCol = doc.slides.find((s) => s.layout === "twoCol")!;
+  (twoCol.left as string[])[0] = "Hisobot yili (2020)…";
+  const { ok, issues } = auditSlideDoc(doc);
+  assert.equal(ok, false);
+  assert.ok(issues.some((i) => i.kind === "truncated" && i.detail.includes("left[0]")), JSON.stringify(issues));
+});
+
+test("N7: qasddan qisqa bo'sh joyli savol '1/2 + 1/4 = …' — truncated EMAS", () => {
+  const doc = goodDeck();
+  const twoCol = doc.slides.find((s) => s.layout === "twoCol")!;
+  (twoCol.left as string[])[0] = "1/2 + 1/4 = …";
+  const { issues } = auditSlideDoc(doc);
+  assert.ok(!issues.some((i) => i.kind === "truncated"), JSON.stringify(issues));
+});
+
 /* ───────────────────────── 5. Yupqa mazmun (item 9a/9b) ───────────────────────── */
 
 test("yupqa bullets — band soni < 2 → thin-bullets", () => {

@@ -99,11 +99,30 @@ const ORDINAL_LEAK_RE = /^\s*(?:\d{1,2}[.)](?=\s)|(?:I{1,3}|IV|VI?)[.)](?=\s))\s
 /** `stats` uydirma raqam bergan holatlar — qiymat "bor", yorliq umuman ma'nosiz. */
 const GENERIC_STAT_LABELS = new Set(["asosiy nuqta", "—", "-", ""]);
 /**
- * Kesilgan matn — `…`/`...` bilan tugaydi VA undan oldin harf keladi
- * (review item 4: `\p{L}` talabi — qasddan qo'yilgan tinish belgisidan
- * keyingi «…» ni yolg'on ushlamaslik uchun, masalan "Tayyor!..." emas).
+ * Kesilgan matn — `…`/`...` bilan tugaydi VA undan oldin harf, raqam
+ * yoki yopuvchi tinish belgisi keladi (review item 4: qasddan qo'yilgan
+ * tinish belgisidan keyingi «…» ni yolg'on ushlamaslik uchun, masalan
+ * "Tayyor!..." emas — undov belgisi bu sinfga kirmaydi).
+ *
+ * N7 (`AUDIT-25-P14c.md`): faqat `\p{L}` (harf) yetarli emas edi —
+ * `clipTo` (dvigatel) raqam, yopuvchi qo'shtirnoq «»» yoki qavs «)»
+ * bilan ham kesadi (masalan "…2020)…", "«ozon»…", "99…"), C9 esa
+ * dvigatelning `clipped-text` sababini filtrladi (endi `pushTrunc`
+ * yagona manba) — shu holatlar hech qayerda ko'rinmay qolgan edi.
+ * Sinf endi `\p{L}\p{N}\p{Pe}\p{Pf}\p{No}` (harf, raqam, yopuvchi qavs,
+ * yopuvchi qo'shtirnoq, boshqa raqam belgisi kabi «³»).
+ *
+ * Dvigatelning `clippedAt` (`lib/generation/slide-quality.ts`) uzunlik
+ * shartini ham qo'shadi (`length >= ⌈0.6·(cap−1)⌉ − CLIP_TAIL_SLACK`),
+ * lekin bu maydonning qirqish qopqog'iga bog'liq — `pushTrunc` har xil
+ * maydonni bir xil chaqiradi va qopqoqni bilmaydi. Shuning uchun bu
+ * yerda ham eski (harf) yo'l singari qopqoqsiz — undan oldingi belgi
+ * sinfi o'zi filtr vazifasini bajaradi: bo'sh joyli savol ("1/2 + 1/4 =
+ * …") "=" dan keyin BO'SHLIQ keladi, "…" dan oldingi belgi bo'shliqning
+ * o'zi bo'lib, hech qaysi sinfga kirmaydi — mos kelmaydi, qasddan
+ * qoldirilgan qisqa savol xato hisoblanmaydi.
  */
-const TRUNCATED_RE = /\p{L}(…|\.\.\.)\s*$/u;
+const TRUNCATED_RE = /[\p{L}\p{N}\p{Pe}\p{Pf}\p{No}](…|\.\.\.)\s*$/u;
 
 function wordCount(s: string | undefined | null): number {
   return (s ?? "").trim().split(/\s+/).filter(Boolean).length;
