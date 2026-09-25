@@ -375,7 +375,30 @@ test("P9: titul/reja/yakun/test/javoblar/manbalar — `plan` bo'lsa ham qatlamla
   }
 });
 
-test("P9: nishon sarlavhani ortiqcha surmaydi — sarlavha qutisi ko'pi bilan 0.62″ torayadi, yuqori qirrasi joyida", () => {
+test("P9: nishon sarlavhani ortiqcha surmaydi — quti ko'pi bilan 0.62″ torayadi, matn langari (yuqori/past qirra) joyida", () => {
+  const theme = getSlideTheme("atlas");
+  for (const visual of VISUALS) {
+    for (const layout of BADGE_LAYOUTS.filter((l) => l !== "quote")) {
+      const s = contentSample(layout, true, false);
+      const a0 = anchorOf(planSlide(s, theme, visual, INDEX, TOTAL).layers, s);
+      s.plan = 3;
+      const t1 = anchorOf(planSlide(s, theme, visual, INDEX, TOTAL).layers, s);
+      const a1 = t1.box;
+      const tag = `${visual}/${layout}`;
+      // Pastga tekislangan sarlavha (split) — past qirra langar, yuqori qirra nishon uchun qisqarishi mumkin.
+      if (t1.valign === "bottom") {
+        assert.ok(Math.abs(a1.y + a1.h - (a0.box.y + a0.box.h)) < 1e-9, `${tag}: pastga tekislangan sarlavhaning past qirrasi siljidi`);
+        // Qisqargan quti sarlavha siyohini sig'diradi (yuqoriga toshib nishonga urilmaydi).
+        const ink = inkIn(textOf(t1), a1.w, t1.size, BOLD_EM);
+        assert.ok(ink <= a1.h + 0.01, `${tag}: sarlavha siyohi ${ink.toFixed(2)}″ > quti ${a1.h.toFixed(2)}″`);
+      } else {
+        assert.equal(a1.y, a0.box.y, `${tag}: sarlavha yuqori qirrasi siljidi`);
+      }
+    }
+  }
+});
+
+test("P9: nishon sarlavha qutisining eni — ko'pi bilan 0.62″ torayadi, o'ng qirra joyida", () => {
   const theme = getSlideTheme("atlas");
   for (const visual of VISUALS) {
     for (const layout of BADGE_LAYOUTS.filter((l) => l !== "quote")) {
@@ -384,7 +407,6 @@ test("P9: nishon sarlavhani ortiqcha surmaydi — sarlavha qutisi ko'pi bilan 0.
       s.plan = 3;
       const a1 = anchorOf(planSlide(s, theme, visual, INDEX, TOTAL).layers, s).box;
       const tag = `${visual}/${layout}`;
-      assert.equal(a1.y, a0.y, `${tag}: sarlavha yuqori qirrasi siljidi`);
       assert.ok(a0.w - a1.w <= 0.62 + 1e-9 && a0.w - a1.w >= 0, `${tag}: sarlavha ${a0.w}→${a1.w}`);
       assert.ok(Math.abs(a1.x + a1.w - (a0.x + a0.w)) < 1e-9, `${tag}: sarlavhaning o'ng qirrasi siljidi`);
     }

@@ -175,16 +175,28 @@ function planBullets(s: SlideModel, theme: SlideTheme, index: number, total: num
   pushHalves(layers, theme);
   const x = 0.85;
   const tw = 5.0;
-  const headBox: Box = { x, y: 1.0, w: tw, h: 1.9 };
-  // AUDIT-25 P9: reja nishoni to'q yarmda, sarlavha qutisi USTIDA (sarlavha
-  // pastga tekislangan — quti qo'zg'almaydi); `titleMuted`/`titleBg`.
-  LAYOUT_KIT.pushPlanBadgeAt(layers, s, x, 0.55, theme.titleMuted, { size: 18 });
+  let headBox: Box = { x, y: 1.0, w: tw, h: 1.9 };
+  const headSize = fitSize(s.title, headBox, 28, 17);
+  /*
+   * AUDIT-25 P9: reja nishoni to'q yarmda, sarlavhaning birinchi qatori
+   * USTIDA — siyoh balandligiga qarab tushadi, qisqa sarlavhadan uzilib
+   * qolmaydi; `titleMuted`/`titleBg` — o'lchangan juft. Sarlavha pastga
+   * tekislangan: quti faqat YUQORIDAN nishon ostigacha qisqaradi — matn
+   * joyidan qimirlamaydi, nishon sarlavha qutisiga kirmaydi.
+   */
+  if (LAYOUT_KIT.planBadge(s)) {
+    const ink = Math.min(headBox.h, LAYOUT_KIT.inkHeight(s.title, tw, headSize, LAYOUT_KIT.CHAR_EM_BOLD));
+    const badgeY = Math.max(0.5, headBox.y + headBox.h - ink - 0.46);
+    LAYOUT_KIT.pushPlanBadgeAt(layers, s, x, badgeY, theme.titleMuted, { size: 18 });
+    const top = Math.max(headBox.y, badgeY + 0.4);
+    headBox = { ...headBox, y: top, h: headBox.y + headBox.h - top };
+  }
   layers.push({
     t: "text",
     box: headBox,
     text: s.title,
     color: theme.titleText,
-    size: fitSize(s.title, headBox, 28, 17),
+    size: headSize,
     bold: true,
     valign: "bottom",
     src: { f: "title" },

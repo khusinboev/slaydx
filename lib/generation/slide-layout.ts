@@ -1490,8 +1490,8 @@ function planOverlay(
       size: 48,
       bold: true,
     });
-    // Reja nishoni tirnoq belgisining o'ng tomonida (tirnoq ~0.4″ keng).
-    pushPlanBadgeAt(layers, s, panel.x + 1.2, panel.y + 0.42, theme.titleMuted);
+    // Reja nishoni tirnoq belgisining o'ng tomonida (tirnoq ~0.35″ keng).
+    pushPlanBadgeAt(layers, s, panel.x + 1.0, panel.y + 0.42, theme.titleMuted);
     const quoteBox: Box = { x: panel.x + 0.45, y: panel.y + 0.95, w: panel.w - 0.9, h: 2.35 };
     layers.push({
       t: "text",
