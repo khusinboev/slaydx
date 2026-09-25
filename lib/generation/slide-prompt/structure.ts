@@ -1,5 +1,8 @@
+import { bodyRules } from "../slide-audience";
 import { plannedBlocks, type SlideBlockId } from "../slide-blocks";
+import { fitChars, SLIDE_LIMITS } from "../slide-limits";
 import { bodyWantOf } from "../slide-params";
+import { CHARS_PER_WORD, fmtRange, PROMPT_HEADROOM } from "../slide-quality";
 import type { SlideTemplate } from "../slide-templates";
 import type { DocMeta } from "../types";
 import type { SlidePromptCtx } from "./ctx";
@@ -20,7 +23,6 @@ import type { SlidePromptCtx } from "./ctx";
  * esa tushmaydi (ortiqcha qator modelni chalg'itadi).
  */
 export function structureLines(meta: DocMeta, tpl: SlideTemplate, ctx: SlidePromptCtx): string[] {
-  void tpl;
   void ctx;
   /*
    * Bloklar ro'yxati `blocksToBeats` bilan AYNAN bir manbadan —
@@ -41,6 +43,30 @@ export function structureLines(meta: DocMeta, tpl: SlideTemplate, ctx: SlideProm
   const has = (id: string) => plan.kept.includes(id as SlideBlockId);
   const agenda = plan.agenda;
   const planN = plan.planN;
+
+  /*
+   * INT-02 (AUDIT-25 integratsiya sharhi, P11 topilmasi; reviewer P1
+   * qaytarishi — AUDIT-25-P1.md "P13 review — 3964934"). Reja bandi =
+   * slayd sarlavhasi (`syncAgenda`) VA agenda slaydidagi band matni —
+   * ikkalasi ham BITTA matn, ikkita qutiga sig'ishi kerak:
+   *   1) agenda qutisi (`fitChars("agenda", …)`, P11: bolalar
+   *      auditoriyasida ba'zi vizuallarda 27–41 belgi);
+   *   2) slayd SARLAVHA maydoni (`SLIDE_LIMITS.title` — 72 belgi, HAR
+   *      vizualda, chunki reja bandi keyinchalik `syncAgenda` bilan
+   *      shu maydonga yoziladi).
+   * FAQAT (1) bilan chegaralasa — keng vizualda agenda qutisi katta
+   * (masalan 280+ belgi), lekin sarlavha maydoni hamon 72 da qoladi:
+   * model 31 so'zgacha yozardi, `clipTo(SLIDE_LIMITS.title)` esa uni
+   * «…» bilan kesardi (170/220 auditoriya×vizual juftligida — reviewer
+   * dalili). Shuning uchun yuqori chegara IKKALASINING KICHIGIDAN
+   * hisoblanadi — `bulletMaxWords` bilan bir xil zaxira
+   * (`PROMPT_HEADROOM`/`CHARS_PER_WORD`), pastki chegara 3 so'zdan
+   * kichraymaydi (qirqishdan past ma'nosiz band).
+   */
+  const rules = bodyRules(meta, tpl.id);
+  const agendaWordsCap = agenda
+    ? Math.max(3, Math.floor((PROMPT_HEADROOM * Math.min(fitChars("agenda", rules, tpl.visual, planN), SLIDE_LIMITS.title)) / CHARS_PER_WORD))
+    : 0;
 
   return [
     /*
@@ -65,7 +91,20 @@ export function structureLines(meta: DocMeta, tpl: SlideTemplate, ctx: SlideProm
      * chegarani tanlardi — foydalanuvchi 6 ta band so'raganda 5 tasi
      * chiqardi. Bu qator oraliqni emas, SONNI qo'yadi.
      */
-    agenda ? `agenda: AYNAN ${planN} ta band, har biri 3–7 so‘z, raqamlanmagan.` : "",
+    agenda
+      ? `agenda: AYNAN ${planN} ta band, har biri ${fmtRange({ min: Math.min(3, agendaWordsCap), max: agendaWordsCap })} so‘z, raqamlanmagan.`
+      : "",
+    /*
+     * INT-02: agenda qutisi torligi (P11) modelga ANIQ raqam sifatida
+     * ham beriladi — yuqoridagi qator oraliq, bu qator «eng ko'pi» qat'iy
+     * chegara. Umumiy sarlavha qoidasi («Sarlavha to‘liq fikr, 6–10
+     * so‘z», `base.ts`) BOSHQA slaydlar uchun o'zgarishsiz qoladi — bu
+     * qator uni qoplamaydi, faqat REJA slaydlariga alohida (torroq)
+     * chegara qo'shadi, aks holda ikkalasi ZID ko'rinardi.
+     */
+    agenda
+      ? `REJA slaydlari sarlavhasi: eng ko‘pi ${agendaWordsCap} so‘z (agenda qutisiga sig‘ishi uchun) — bu FAQAT reja slaydlariga tegishli, boshqa slaydlar sarlavhasi umumiy qoidada (6–10 so‘z) qoladi.`
+      : "",
     /*
      * REJA = SHARTNOMA (AUDIT-25). Rejadagi har bandning o'z slaydi bor —
      * ketma-ketlikda «REJA i-band: …» roli bilan (`blocksToBeats`
@@ -75,7 +114,7 @@ export function structureLines(meta: DocMeta, tpl: SlideTemplate, ctx: SlideProm
      * quriladi (`writeSlidesWithLlm`) — bu qator model sarlavhani
      * reja bandi NOMI qilib yozishi uchun.
      */
-    `REJA BANDLARI: rejada ${planN} ta band bor — ketma-ketlikdagi «REJA i-band: …» slaydlari aynan shu bandlar, tartibi bilan. Band bo‘lim (section) bilan ochilsa — bo‘lim sarlavhasi band nomi, keyingi slayd uning mazmuni. «:» dan keyingi so‘z faqat slayd shakliga ishora, band nomi emas: band nomini mavzudan o‘zingiz tuzing (3–7 so‘z). «REJA i-band:» yozuvini sarlavhaga ko‘chirmang.${agenda ? " agenda bandlari AYNAN shu slaydlar sarlavhalari, shu tartibda." : ""}`,
+    `REJA BANDLARI: rejada ${planN} ta band bor — ketma-ketlikdagi «REJA i-band: …» slaydlari aynan shu bandlar, tartibi bilan. Band bo‘lim (section) bilan ochilsa — bo‘lim sarlavhasi band nomi, keyingi slayd uning mazmuni. «:» dan keyingi so‘z faqat slayd shakliga ishora, band nomi emas: band nomini mavzudan o‘zingiz tuzing (${agenda ? fmtRange({ min: Math.min(3, agendaWordsCap), max: agendaWordsCap }) : "3–7"} so‘z). «REJA i-band:» yozuvini sarlavhaga ko‘chirmang.${agenda ? " agenda bandlari AYNAN shu slaydlar sarlavhalari, shu tartibda." : ""}`,
     `Sarlavha boshida TARTIB raqami bo‘lmasin («1.», «2)», «I.» yo‘q; «3D», «5 ta qoida» — mumkin) — tartib raqamini maket o‘zi qo‘yadi.`,
     /*
      * SAVOLLAR SONI bu qatordan OLINDI (X-3).

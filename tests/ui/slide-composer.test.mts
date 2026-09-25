@@ -7,8 +7,9 @@ import { AppRouterContext } from "next/dist/shared/lib/app-router-context.shared
 import type { AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 import { SlideForm } from "../../components/forms/SlideForm.tsx";
 import { ProSlideForm } from "../../components/forms/ProSlideForm.tsx";
+import { capacityFor, slidePagesOf } from "../../components/forms/slide-fields.tsx";
 import { TOOL_BY_ID, formatTanga, priceFor } from "../../lib/tools.ts";
-import type { UserProfile } from "../../lib/types.ts";
+import type { FormValues, UserProfile } from "../../lib/types.ts";
 
 /**
  * Ixcham slayd formasi (Formalar 2) — jsdom.
@@ -271,6 +272,34 @@ test("pro-slide + Himoya (defense) + 8 slayd → tooltip «8 slaydga 5 band sig�
   fireEvent.change(slider(), { target: { value: "8" } });
   assert.equal(planTooltip(), "Reja bandlari — har biri o‘z slaydi bilan; 8 slaydga 5 band sig‘adi.");
   assert.equal(within(planGroup()).getByRole("radio", { name: "6" }).getAttribute("aria-disabled"), "true");
+});
+
+// ───────── INT-13 (AUDIT-25 integratsiya sharhi): forma sig'imi ⇄ dvigatel standarti ─────────
+// `slideCount` yuborilmaganda forma `capacityFor` sig'imni 10 slaydli dekadan (SLIDE_DEFAULT,
+// vositani BILMAYDIGAN standart) hisoblardi, pro dvigatel (`extractMeta`) esa 12 dan (F7 dalili:
+// forma 7, dvigatel 9). `slidePagesOf` allaqachon vositaga qarab to'g'ri standart edi
+// («X slaydga» matni tooltipda doim to'g'ri edi) — nuqson faqat `capacityFor`ning XOM
+// `values.slideCount`ni `planCapacity`ga uzatishida edi. `Slaydlar soni` kartasi `slideCount`ni
+// har doim boshlang'ich holatda o'rnatadi (`SlideComposer.initialValues`), shu sabab to'liq
+// montaj orqali `undefined` holatni takrorlash imkonsiz — funksiyalar to'g'ridan-to'g'ri
+// eksport qilinib (`slide-fields.tsx`), `slideCount` chinakam yo'q bo'lgan holatda sinaladi.
+test("INT-13: capacityFor(pro, slideCount yo'q) 12 dan hisoblaydi (10 emas) — slidePagesOf bilan bir xil standart", () => {
+  const values: FormValues = {}; // slideCount ATAYLAB yo'q — F7 stsenariysi
+  assert.equal(slidePagesOf(values, "pro-slide"), 12, "pro standart 12 slayd (PRO_SLIDE_DEFAULT)");
+  assert.equal(slidePagesOf(values, "slide"), 10, "oddiy slayd standart 10 (SLIDE_DEFAULT) — o'zgarishsiz");
+  // bodyWant(12)=12-titul(1)-yakun(1)=10; on={reja} (slidePurpose standart «general»); agenda=true;
+  // room=10-agenda(1)=9 → sig'im 9. MUTATSIYA: `capacityFor` xom `values.slideCount`ga qaytsa,
+  // `bodyWantOf` vositani bilmasdan SLIDE_DEFAULT(10)dan hisoblaydi: bodyWant=8, room=7, sig'im 7.
+  assert.equal(capacityFor(values, "pro-slide"), 9, "pro sig'imi 12 slaydga mos (9) bo'lishi kerak, 10 asosida (7) emas");
+  // oddiy «slide» da standart (10) hech qachon o'zgarmagan — regressiya yo'q.
+  assert.equal(capacityFor(values, "slide"), 7, "oddiy slaydda sig'im standart (10 dan 7) o'zgarishsiz qolishi kerak");
+});
+
+test("INT-13: pro-slide slideCount TEGILMAGAN montajda — tooltip «12 slaydga»dan boshlanadi", () => {
+  mount("pro-slide");
+  // Slayder HECH TEGILMAGAN — kompozitor pro uchun standart 12 bilan boshlaydi.
+  assert.equal(slider().value, "12", "pro-slide montaj slayderi 12 dan boshlanishi kerak");
+  assert.ok(planTooltip().startsWith("Reja bandlari — har biri o‘z slaydi bilan; 12 slaydga"), `tooltip 12 dan boshlanishi kerak: «${planTooltip()}»`);
 });
 
 // ───────── AUDIT-25 P1 A3-01/A3-02: quizCount/agendaSlide FAQAT tegilganda yuboriladi ─────────

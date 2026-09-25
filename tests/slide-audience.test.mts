@@ -119,3 +119,29 @@ test("AUDIT-25: element soni auditoriya polidan (countRules) — BodyRules va br
   assert.match(kids, /— table: (2–3|AYNAN 2) ustun, 3–4 qator/);
   assert.match(prompt({ slideAudience: "students_bachelor" }), /— process: 3–4 bosqich/);
 });
+
+// ───────────────────────────────────────────── INT-09: agenda oralig'i «AYNAN N» bilan zid emas
+
+/*
+ * INT-09 (AUDIT-25 integratsiya sharhi). Ilgari `brief.ts`dagi
+ * «agenda'da ${max(3, agendaMax-1)}–${agendaMax}» sig'im 1 ga qisilganda
+ * («AYNAN 1 ta band» — 4 slaydli reja+... dekada) «3–1» kabi ma'nosiz
+ * oraliq chiqarardi — `structure.ts`ning «AYNAN 1 ta band» qatori bilan
+ * ZID edi. `syncAgenda` baribir agendani qayta quradi, shuning uchun
+ * yagona zarar — chalkash prompt (model ikkilanadi). Endi min max dan
+ * OSHMAYDI (`fmtRange` — min===max bo'lsa bitta son, `slide-quality.ts`
+ * bilan BIR manba, structure.ts «AYNAN N» bilan mos keladi).
+ */
+test("INT-09: agenda oralig'i min max dan oshmaydi — sig'im 1 ga qisilganda yagona son ko'rsatiladi", () => {
+  // 4 slaydli dekada («reja» bloki, boshqa hech narsa) sig'im 1 ga qisiladi.
+  const small = prompt({ slideCount: 4, blocks: "reja" });
+  assert.match(small, /agenda: AYNAN 1 ta band/, "probe: sig'im 1 ga qisilgan bo'lishi kerak — testni yangilang");
+  assert.match(small, /agenda'da 1\)/, "yagona son ko'rsatilishi kerak — «AYNAN 1» bilan zid oraliq emas");
+  // MUTATSIYA: eski `Math.max(3, agendaMax - 1)–${agendaMax}` qaytarilsa bu yerda «agenda'da 3–1)» chiqadi.
+  assert.doesNotMatch(small, /agenda'da 3–1\)/, "«3–1» kabi ma'nosiz oraliq chiqmasligi kerak");
+
+  // Normal holatda (sig'im yetganda, planItems=6) oraliq o'zgarishsiz «5–6» qoladi.
+  const big = prompt({ planItems: 6 });
+  assert.match(big, /agenda: AYNAN 6 ta band/, "probe: planItems 6 saqlanishi kerak — testni yangilang");
+  assert.match(big, /agenda'da 5–6\)/, "sig'im yetganda oraliq saqlanishi kerak");
+});

@@ -15,13 +15,12 @@ import {
   KEY_IDEAS_MAX,
   KEY_IDEA_CHARS,
   effectivePlanItems,
-  PRO_SLIDE_DEFAULT,
+  defaultSlideCount,
   PRO_SLIDE_MAX,
   PRO_SLIDE_MIN,
   normalizeQuizCount,
   resolvePlanFlags,
   planCapacity,
-  SLIDE_DEFAULT,
   SLIDE_MAX,
   SLIDE_MIN,
   clampInt,
@@ -155,10 +154,11 @@ export function extractMeta(tool: ToolConfig, values: FormValues): DocMeta {
    * paketlari yo'q (Formalar 2). `targetPages` ga tushadi; narx
    * (`priceFor` → `slidePrice`) va byudjet (`budgetFor`) shu songa qaraydi.
    */
+  // Standart (slideCount yuborilmaganda) — `slide-fields.tsx`dagi `defaultSlideCount` bilan BIR manba (INT-13).
   const slidePages =
     tool.id === "pro-slide"
-      ? clampInt(values.slideCount, PRO_SLIDE_MIN, PRO_SLIDE_MAX, PRO_SLIDE_DEFAULT)
-      : clampInt(values.slideCount, SLIDE_MIN, SLIDE_MAX, SLIDE_DEFAULT);
+      ? clampInt(values.slideCount, PRO_SLIDE_MIN, PRO_SLIDE_MAX, defaultSlideCount("pro-slide"))
+      : clampInt(values.slideCount, SLIDE_MIN, SLIDE_MAX, defaultSlideCount("slide"));
   const authorParts = parseAuthorLine(s(values, "author", s(values, "fullName")));
   const themeRaw = s(values, "slideTheme", "atlas");
   const templateRaw = s(values, "slideTemplate", "auto");

@@ -11,13 +11,11 @@ import { SLIDE_BLOCKS, isSlideBlockId, QUIZ_COUNT_FALLBACK, type SlideBlockId } 
 import {
   PLAN_ITEMS_MAX,
   PLAN_ITEMS_MIN,
-  PRO_SLIDE_DEFAULT,
   PRO_SLIDE_MAX,
   PRO_SLIDE_MIN,
   PRO_SLIDE_PER_SLIDE,
   QUIZ_COUNTS,
   SLIDE_BASE_PRICE,
-  SLIDE_DEFAULT,
   SLIDE_EXTRA_PRICE,
   SLIDE_IMAGE_STYLES,
   SLIDE_INCLUDED,
@@ -26,6 +24,7 @@ import {
   SLIDE_TEXT_VOLUMES,
   activeBlockIds,
   clampInt,
+  defaultSlideCount,
   effectivePlanItems,
   joinCsv,
   normalizeQuizCount,
@@ -165,9 +164,7 @@ function switchRow(id: string, label: string, hint: string, defaultTrue: boolean
 /** Slaydlar soni — slayder + narx qoidasi (kompozitor «Slaydlar soni» kartasiga qo'yadi). */
 function SlideCountField({ values, set, tool }: { values: FormValues; set: SlideFieldSetter; tool: SlideTool }) {
   const pro = tool === "pro-slide";
-  const n = pro
-    ? clampInt(values.slideCount, PRO_SLIDE_MIN, PRO_SLIDE_MAX, PRO_SLIDE_DEFAULT)
-    : clampInt(values.slideCount, SLIDE_MIN, SLIDE_MAX, SLIDE_DEFAULT);
+  const n = clampInt(values.slideCount, pro ? PRO_SLIDE_MIN : SLIDE_MIN, pro ? PRO_SLIDE_MAX : SLIDE_MAX, defaultSlideCount(tool));
   return (
     <div data-slide-count>
       <RangeField value={n} min={pro ? PRO_SLIDE_MIN : SLIDE_MIN} max={pro ? PRO_SLIDE_MAX : SLIDE_MAX} onChange={(v) => set("slideCount", v)} />
@@ -189,10 +186,18 @@ function SlideCountField({ values, set, tool }: { values: FormValues; set: Slide
  *
  * `tool` — real `planCapacity`ning o'zi `blocksSent` (pro-slayd chip
  * tanlovimi) shartini `v.tool`dan hisoblaydi (`meta.ts` bilan BIR XIL).
+ *
+ * INT-13 (AUDIT-25 integratsiya sharhi): `slideCount` MAYDONI o'rniga
+ * `slidePagesOf(values, tool)` (allaqachon vositaga qarab standartlangan)
+ * uzatiladi — xom `values.slideCount` `planCapacity` → `bodyWantOf`
+ * ichida vositani BILMAYDIGAN `SLIDE_DEFAULT` (10) ga tushib qolardi,
+ * pro dvigatel esa `slideCount` yo'q bo'lganda 12 dan hisoblaydi
+ * (`extractMeta`, `meta.ts`). Natijada `slideCount` yuborilmagan holatda
+ * forma sig'imi 7, dvigatel esa 9 deb hisoblardi (F7 dalili).
  */
-function capacityFor(values: FormValues, tool: SlideTool): number {
+export function capacityFor(values: FormValues, tool: SlideTool): number {
   return planCapacity({
-    slideCount: values.slideCount,
+    slideCount: slidePagesOf(values, tool),
     blocks: values.blocks,
     tool,
     quizCount: values.quizCount,
@@ -205,10 +210,8 @@ function capacityFor(values: FormValues, tool: SlideTool): number {
 }
 
 /** Deka TANASI o'lchamiga qisilgan slaydlar soni — `defaultPlanItems`/`effectivePlanItems` shu bilan chaqiriladi (`meta.ts slidePages` bilan BIR XIL). */
-function slidePagesOf(values: FormValues, tool: SlideTool): number {
-  return tool === "pro-slide"
-    ? clampInt(values.slideCount, PRO_SLIDE_MIN, PRO_SLIDE_MAX, PRO_SLIDE_DEFAULT)
-    : clampInt(values.slideCount, SLIDE_MIN, SLIDE_MAX, SLIDE_DEFAULT);
+export function slidePagesOf(values: FormValues, tool: SlideTool): number {
+  return clampInt(values.slideCount, SLIDE_MIN, SLIDE_MAX, defaultSlideCount(tool));
 }
 
 /**

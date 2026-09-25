@@ -10,9 +10,10 @@ import {
   blocksToBeats,
   orderedBlocks,
   planRoleText,
+  plannedBlocks,
   type SlideBlockId,
 } from "../lib/generation/slide-blocks.ts";
-import { planBudget } from "../lib/generation/slide-params.ts";
+import { bodyWantOf, defaultSlideCount, planBudget } from "../lib/generation/slide-params.ts";
 import { PURPOSE_DEFAULTS, SLIDE_PURPOSES } from "../lib/generation/slide-purpose.ts";
 import { slideSystem } from "../lib/generation/slide-prompt/index.ts";
 import {
@@ -23,6 +24,11 @@ import {
   type SlideTemplate,
 } from "../lib/generation/slide-templates.ts";
 import type { DocMeta } from "../lib/generation/types.ts";
+import { AUDIENCE_RULES, bodyRules } from "../lib/generation/slide-audience.ts";
+import { fitChars, SLIDE_LIMITS } from "../lib/generation/slide-limits.ts";
+import { CHARS_PER_WORD } from "../lib/generation/slide-quality.ts";
+import { structureLines } from "../lib/generation/slide-prompt/structure.ts";
+import { DESIGN_VISUALS, LEGACY_VISUALS } from "../lib/generation/visuals/spec.ts";
 
 /**
  * BLOKLAR → BEATS (AUDIT-9, WP-B).
@@ -484,6 +490,50 @@ test("quiz qatori faqat test so'ralganda chiqadi va bitta savol talab qiladi", (
   assert.doesNotMatch(promptFor({ blocks: "reja" }), /answers layout/);
 });
 
+/*
+ * INT-08 (AUDIT-25 integratsiya sharhi, `extensions.ts`). Ilgari
+ * «NAZORAT TESTI: N ta savol» qatori `meta.quizCount`dan (foydalanuvchi
+ * SO'RAGAN son) olinardi, plan esa sig'imga qarab 1–6 ta quiz slaydiga
+ * qisqarardi — model va'da qilingan sondan ortiqni bitta slaydga
+ * siqib solardi (masalan «10 ta savol» va'da qilinib, reja atigi 6
+ * slaydga sig'ardi). Xuddi shunday izoh o'chiq (`speakerNotes: false`)
+ * bo'lsa ham, «Javoblar» slaydi sig'im yetmaganda REJADAN tushib
+ * qolishi mumkin edi — prompt esa baribir uni va'da qilib turardi.
+ * Endi ikkalasi ham `plannedBlocks(...)` (`quizBeats`/`answers`) dan —
+ * `structure.ts`ning «TUZILMA BLOKLARI» qatori bilan BIR manbadan.
+ */
+test("INT-08: NAZORAT TESTI soni plandagi quiz slaydlari soniga (quizBeats) mos, so'ralgan sonlar EMAS", () => {
+  // quizCount 10 so'ralgan, lekin 14 slaydli dekada 6 tasigagina joy bor (izoh yoqiq — javoblar kerak emas).
+  const v = { blocks: "reja,test", quizCount: 10, slideCount: 14, speakerNotes: true };
+  const m = extractMeta(pro, { topic: "Suv aylanishi", ...v });
+  const plan = plannedBlocks(m, bodyWantOf(m.targetPages || undefined, m.titleSlide));
+  assert.equal(plan.quizBeats, 6, "probe: 14 slaydli dekada quizCount:10 → rejada 6 quiz slaydi bo'lishi kerak");
+  const p = promptFor(v);
+  assert.match(p, /NAZORAT TESTI: 6 ta savol/, `prompt rejadagi sonni (6) aytishi kerak: mos qator topilmadi`);
+  // MUTATSIYA: `extensions.ts` `meta.quizCount`ga qaytsa — bu yerda «10 ta savol» chiqadi.
+  assert.doesNotMatch(p, /NAZORAT TESTI: 10 ta savol/, "so'ralgan (qisqartirilmagan) son va'da qilinmasligi kerak");
+});
+
+test("INT-08: «Javoblar» slaydi FAQAT rejada bor bo'lsa va'da qilinadi — sig'im uni tashlab yuborsa yo'q", () => {
+  // izoh o'chiq (javoblar so'ralgan), lekin 6 slaydli kichik dekada faqat 1 savolga joy bor — kalit slaydiga joy qolmaydi.
+  const v = { blocks: "reja,test", quizCount: 10, slideCount: 6, speakerNotes: false };
+  const m = extractMeta(pro, { topic: "Suv aylanishi", ...v });
+  const plan = plannedBlocks(m, bodyWantOf(m.targetPages || undefined, m.titleSlide));
+  assert.equal(plan.quizBeats, 1);
+  assert.equal(plan.answers, false, "probe: sig'im tor bo'lganda javoblar slaydi rejadan tushib qolishi kerak");
+  const p = promptFor(v);
+  assert.match(p, /NAZORAT TESTI: 1 ta savol/);
+  // MUTATSIYA: eski shart `meta.speakerNotes === false && (meta.quizCount ?? 0) > 0` bo'lsa — bu yerda ham «Javoblar» chiqib qolardi.
+  assert.doesNotMatch(p, /Javoblar/, "rejada yo'q slayd va'da qilinmasligi kerak");
+
+  // Aksincha: sig'im yetganda (8 slayd) javoblar rejada bor — prompt HAM va'da qilishi kerak.
+  const v2 = { blocks: "reja,test", quizCount: 10, slideCount: 8, speakerNotes: false };
+  const m2 = extractMeta(pro, { topic: "Suv aylanishi", ...v2 });
+  const plan2 = plannedBlocks(m2, bodyWantOf(m2.targetPages || undefined, m2.titleSlide));
+  assert.equal(plan2.answers, true, "probe: 8 slaydda javoblar rejada bo'lishi kerak");
+  assert.match(promptFor(v2), /Javoblar/, "rejada bor slayd va'da qilinishi kerak");
+});
+
 test("references qatori adabiyotlar blokida — va internet tadqiqotida ham", () => {
   assert.doesNotMatch(promptFor({ blocks: "reja" }), /references layout/);
   const on = promptFor({ blocks: "reja,adabiyotlar" });
@@ -535,6 +585,79 @@ test("mavjud tuzilma qatorlari saqlandi (WP-0a shartnomasi buzilmasin)", () => {
   assert.match(p, /stats ga uydirma milliard\/tonna\/foiz YOZILMASIN/);
 });
 
+// ───────────────────────────────────────────── INT-02: reja slayd sarlavhasi IKKALA qutiga (agenda + sarlavha 72 belgi) sig'adi
+
+/*
+ * INT-02 (AUDIT-25 integratsiya sharhi, P11 topilmasi; reviewer
+ * qaytarishi — `audit/reviews/AUDIT-25-P1.md` "P13 review — 3964934").
+ * Ilgari yuqori chegara FAQAT agenda qutisidan (`fitChars("agenda", …)`)
+ * hisoblanardi — keng vizual/auditoriyada bu quti katta (masalan 280+
+ * belgi) bo'lishi mumkin, lekin band nomi keyinchalik `syncAgenda` bilan
+ * SLAYD SARLAVHASIGA ko'chadi va u har doim `SLIDE_LIMITS.title` (72
+ * belgi) bilan chegaralangan — model uzoqroq yozsa, `clipTo` uni «…»
+ * bilan kesardi (reviewer o'lchovi: 220 juftlikdan 170 tasida). Endi
+ * ikkalasining KICHIGI olinadi.
+ *
+ * Testlar STATIK sonni EMAS, `structureLines`dan chinakam N ni o'qib,
+ * uni ikkala qutining haqiqiy sig'imi bilan solishtiradi — shu sabab
+ * `Math.min(…, SLIDE_LIMITS.title)` olib tashlansa (yoki formulaning
+ * boshqa qismi buzilsa) test o'zi qizaradi, formulaning nusxasi emas.
+ */
+const promptWith = (v: FormValues, tpl: SlideTemplate) => slideSystem(extractMeta(pro, { topic: "Suv aylanishi", ...v }), tpl);
+const ALL_VISUALS = [...LEGACY_VISUALS, ...DESIGN_VISUALS];
+const ALL_AUDIENCES = Object.keys(AUDIENCE_RULES);
+
+/** `structureLines`dan «REJA slaydlari sarlavhasi: eng ko'pi N so'z» qatoridagi N (topilmasa null). */
+function agendaWordsCapFrom(meta: DocMeta, visual: string): number | null {
+  const tpl = { id: "lecture", visual } as unknown as SlideTemplate;
+  const lines = structureLines(meta, tpl, {});
+  const line = lines.find((l) => l.startsWith("REJA slaydlari sarlavhasi: eng ko‘pi "));
+  const m = line?.match(/eng ko‘pi (\d+) so‘z/);
+  return m ? Number(m[1]) : null;
+}
+
+test("INT-02: 1–4-sinf/split/6 band — reja sarlavhasi 3 so'zga chegaralanadi (tor agenda quti)", () => {
+  const compare = SLIDE_TEMPLATE_BY_ID.compare;
+  assert.equal(compare.visual, "split", "probe: `compare` shablon `split` vizualda bo'lishi kerak — testni yangilang");
+  const meta = extractMeta(pro, { topic: "x", slideAudience: "school_1_4", planItems: 6, blocks: "reja" });
+  const cap = agendaWordsCapFrom(meta, "split");
+  assert.equal(cap, 3, `probe: 1–4-sinf/split/6 band sig'imi 3 so'z bo'lishi kutilgan, oldi: ${cap}`);
+  // Umumiy sarlavha qoidasi («6–10 so‘z») BOSHQA slaydlar uchun saqlanadi — bu qator uni almashtirmaydi.
+  const p = promptWith({ slideAudience: "school_1_4", planItems: 6, blocks: "reja" }, compare);
+  assert.match(p, /Sarlavha to‘liq fikr, 6–10 so‘z\./);
+  assert.match(p, /boshqa slaydlar sarlavhasi umumiy qoidada \(6–10 so‘z\) qoladi/);
+});
+
+test("INT-02: invariant — BARCHA 14 auditoriya × 17 vizual: va'da qilingan N so'z ikkala qutidan (agenda VA sarlavha 72 belgi) oshmaydi", () => {
+  let checked = 0;
+  for (const audience of ALL_AUDIENCES) {
+    for (const visual of ALL_VISUALS) {
+      const meta = extractMeta(pro, { topic: "x", slideAudience: audience, planItems: 5, blocks: "reja" });
+      const rules = bodyRules(meta, "lecture");
+      // IKKALA qutining kichigi — reviewerning talab qilgan invariant chegarasi.
+      const boxChars = Math.min(fitChars("agenda", rules, visual as never, 5), SLIDE_LIMITS.title);
+      const cap = agendaWordsCapFrom(meta, visual);
+      assert.ok(cap !== null, `${audience}/${visual}: «REJA slaydlari sarlavhasi» qatori topilmadi`);
+      assert.ok(cap! >= 3, `${audience}/${visual}: pol 3 so'zdan pastga tushmasin, oldi ${cap}`);
+      /*
+       * ASOSIY INVARIANT (reviewer talabi): cap × CHARS_PER_WORD ≤
+       * min(fitChars(agenda), SLIDE_LIMITS.title) — FAQAT cap POLDAN
+       * (3 so'z) katta bo'lganda qat'iy. Eng tor juftliklarda (masalan
+       * school_1_4/classic — legacy vizual, box ~18 belgi) hatto 3 so'z
+       * ham qutidan katta chiqishi mumkin: bu `Math.max(3, …)` polining
+       * ATAYLAB qilingan asosi — 3 so'zdan kam band ma'nosiz (structure.ts
+       * izohi), shuning uchun bunday holatda qutidan biroz oshishga yo'l
+       * qo'yiladi. Pol ishlagan holatlarda faqat `cap === 3` tekshiriladi
+       * (yuqoridagi qator), qutidan OSHISHNI emas.
+       */
+      if (cap! > 3) {
+        assert.ok(cap! * CHARS_PER_WORD <= boxChars, `${audience}/${visual}: ${cap} so‘z × ${CHARS_PER_WORD} > ${boxChars} belgi (agenda VA sarlavha qutisining kichigi)`);
+      }
+      checked += 1;
+    }
+  }
+  assert.equal(checked, 14 * 17, "auditoriya/vizual soni o'zgargan — testni yangilang");
+});
 
 // ───────────────────────────────────────────── 9-qoida (X-5): sig'im urushi
 
@@ -695,4 +818,19 @@ test("A3-04: bloklar `want` ga sig'masa deka uzaymaydi — reja, bandlar va bitt
   assert.equal(planCount(out), 2, tag);
   assert.equal(out.filter((b) => b.layout === "quiz").length, 1, tag);
   assert.equal(out.filter((b) => b.layout === "answers").length, 0, `kalit birinchi tashlanadi: ${tag}`);
+});
+
+// ───────────────────────────────────────────── INT-13 (non-blocking follow-up): meta.ts ⇄ defaultSlideCount
+
+/**
+ * `extractMeta` (`meta.ts`) endi `defaultSlideCount("pro-slide"|"slide")`
+ * dan o'qiydi — ilgari o'z nusxasi (`PRO_SLIDE_DEFAULT`/`SLIDE_DEFAULT`
+ * to'g'ridan-to'g'ri) bor edi, forma (`slide-fields.tsx slidePagesOf`)
+ * esa BOSHQA nusxadan. Bu test ikkalasi (dvigatel va reyestr funksiyasi)
+ * bir xil sonni berishini qulflaydi — kelajakda biri o'zgarib ikkinchisi
+ * qolib ketmasin.
+ */
+test("meta.ts: slideCount yo'q bo'lganda extractMeta.targetPages defaultSlideCount(tool) bilan bir xil", () => {
+  assert.equal(extractMeta(pro, { topic: "x" }).targetPages, defaultSlideCount("pro-slide"));
+  assert.equal(extractMeta(TOOL_BY_ID.slide, { topic: "x" }).targetPages, defaultSlideCount("slide"));
 });
