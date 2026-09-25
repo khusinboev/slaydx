@@ -76,6 +76,22 @@ export const KEY_IDEAS_MAX = 3;
 export const KEY_IDEA_CHARS = 120;
 
 export type SlideTool = "slide" | "pro-slide";
+
+/**
+ * Vositaga qarab standart slaydlar soni (`slideCount` yuborilmaganda) —
+ * YAGONA manba (INT-13, AUDIT-25 integratsiya sharhi). Ilgari `meta.ts`
+ * (`extractMeta`) va forma (`slide-fields.tsx` — SlideCountField HAM,
+ * `slidePagesOf` HAM) bir xil `tool === "pro-slide" ? PRO_SLIDE_DEFAULT :
+ * SLIDE_DEFAULT` ternar ni har biri o'z nusxasida yozgan edi; `capacityFor`
+ * esa bu ternar dan umuman o'tmay, xom `values.slideCount`ni to'g'ridan-to'g'ri
+ * `planCapacity`ga uzatardi — `slideCount` yo'q bo'lganda pro sig'imi 10
+ * slaydga asoslanib hisoblanardi (dvigatel 12 dan hisoblaydi, F7 dalili:
+ * forma sig'imi 7, dvigatel 9).
+ */
+export function defaultSlideCount(tool: SlideTool): number {
+  return tool === "pro-slide" ? PRO_SLIDE_DEFAULT : SLIDE_DEFAULT;
+}
+
 export type SlideParamImpact = "prompt" | "beats" | "layout" | "price" | "images" | "research";
 
 export type SlideParam = {

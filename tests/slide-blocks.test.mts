@@ -10,9 +10,10 @@ import {
   blocksToBeats,
   orderedBlocks,
   planRoleText,
+  plannedBlocks,
   type SlideBlockId,
 } from "../lib/generation/slide-blocks.ts";
-import { planBudget } from "../lib/generation/slide-params.ts";
+import { bodyWantOf, planBudget } from "../lib/generation/slide-params.ts";
 import { PURPOSE_DEFAULTS, SLIDE_PURPOSES } from "../lib/generation/slide-purpose.ts";
 import { slideSystem } from "../lib/generation/slide-prompt/index.ts";
 import {
@@ -482,6 +483,50 @@ test("quiz qatori faqat test so'ralganda chiqadi va bitta savol talab qiladi", (
   assert.doesNotMatch(promptFor({ slidePurpose: "open_lesson", quizCount: 0 }), /quiz layout/);
   assert.match(promptFor({ slidePurpose: "open_lesson" }), /quiz layout/);
   assert.doesNotMatch(promptFor({ blocks: "reja" }), /answers layout/);
+});
+
+/*
+ * INT-08 (AUDIT-25 integratsiya sharhi, `extensions.ts`). Ilgari
+ * «NAZORAT TESTI: N ta savol» qatori `meta.quizCount`dan (foydalanuvchi
+ * SO'RAGAN son) olinardi, plan esa sig'imga qarab 1–6 ta quiz slaydiga
+ * qisqarardi — model va'da qilingan sondan ortiqni bitta slaydga
+ * siqib solardi (masalan «10 ta savol» va'da qilinib, reja atigi 6
+ * slaydga sig'ardi). Xuddi shunday izoh o'chiq (`speakerNotes: false`)
+ * bo'lsa ham, «Javoblar» slaydi sig'im yetmaganda REJADAN tushib
+ * qolishi mumkin edi — prompt esa baribir uni va'da qilib turardi.
+ * Endi ikkalasi ham `plannedBlocks(...)` (`quizBeats`/`answers`) dan —
+ * `structure.ts`ning «TUZILMA BLOKLARI» qatori bilan BIR manbadan.
+ */
+test("INT-08: NAZORAT TESTI soni plandagi quiz slaydlari soniga (quizBeats) mos, so'ralgan sonlar EMAS", () => {
+  // quizCount 10 so'ralgan, lekin 14 slaydli dekada 6 tasigagina joy bor (izoh yoqiq — javoblar kerak emas).
+  const v = { blocks: "reja,test", quizCount: 10, slideCount: 14, speakerNotes: true };
+  const m = extractMeta(pro, { topic: "Suv aylanishi", ...v });
+  const plan = plannedBlocks(m, bodyWantOf(m.targetPages || undefined, m.titleSlide));
+  assert.equal(plan.quizBeats, 6, "probe: 14 slaydli dekada quizCount:10 → rejada 6 quiz slaydi bo'lishi kerak");
+  const p = promptFor(v);
+  assert.match(p, /NAZORAT TESTI: 6 ta savol/, `prompt rejadagi sonni (6) aytishi kerak: mos qator topilmadi`);
+  // MUTATSIYA: `extensions.ts` `meta.quizCount`ga qaytsa — bu yerda «10 ta savol» chiqadi.
+  assert.doesNotMatch(p, /NAZORAT TESTI: 10 ta savol/, "so'ralgan (qisqartirilmagan) son va'da qilinmasligi kerak");
+});
+
+test("INT-08: «Javoblar» slaydi FAQAT rejada bor bo'lsa va'da qilinadi — sig'im uni tashlab yuborsa yo'q", () => {
+  // izoh o'chiq (javoblar so'ralgan), lekin 6 slaydli kichik dekada faqat 1 savolga joy bor — kalit slaydiga joy qolmaydi.
+  const v = { blocks: "reja,test", quizCount: 10, slideCount: 6, speakerNotes: false };
+  const m = extractMeta(pro, { topic: "Suv aylanishi", ...v });
+  const plan = plannedBlocks(m, bodyWantOf(m.targetPages || undefined, m.titleSlide));
+  assert.equal(plan.quizBeats, 1);
+  assert.equal(plan.answers, false, "probe: sig'im tor bo'lganda javoblar slaydi rejadan tushib qolishi kerak");
+  const p = promptFor(v);
+  assert.match(p, /NAZORAT TESTI: 1 ta savol/);
+  // MUTATSIYA: eski shart `meta.speakerNotes === false && (meta.quizCount ?? 0) > 0` bo'lsa — bu yerda ham «Javoblar» chiqib qolardi.
+  assert.doesNotMatch(p, /Javoblar/, "rejada yo'q slayd va'da qilinmasligi kerak");
+
+  // Aksincha: sig'im yetganda (8 slayd) javoblar rejada bor — prompt HAM va'da qilishi kerak.
+  const v2 = { blocks: "reja,test", quizCount: 10, slideCount: 8, speakerNotes: false };
+  const m2 = extractMeta(pro, { topic: "Suv aylanishi", ...v2 });
+  const plan2 = plannedBlocks(m2, bodyWantOf(m2.targetPages || undefined, m2.titleSlide));
+  assert.equal(plan2.answers, true, "probe: 8 slaydda javoblar rejada bo'lishi kerak");
+  assert.match(promptFor(v2), /Javoblar/, "rejada bor slayd va'da qilinishi kerak");
 });
 
 test("references qatori adabiyotlar blokida — va internet tadqiqotida ham", () => {

@@ -1,6 +1,6 @@
 import { bodyRules } from "../slide-audience";
 import { purposeDefaults } from "../slide-purpose";
-import { layoutWordTargets, wordTargetLines } from "../slide-quality";
+import { fmtRange, layoutWordTargets, wordTargetLines } from "../slide-quality";
 import type { SlideTemplate } from "../slide-templates";
 import type { DocMeta } from "../types";
 import type { SlidePromptCtx } from "./ctx";
@@ -18,12 +18,22 @@ export function briefLines(meta: DocMeta, tpl: SlideTemplate, ctx: SlidePromptCt
   const rules = bodyRules(meta, tpl.id);
   const purpose = purposeDefaults(meta.slidePurpose);
   const bullet = layoutWordTargets(rules, tpl.visual).bullet;
+  /*
+   * INT-09 (AUDIT-25 integratsiya sharhi): `agendaMax − 1` past chegara
+   * `agendaMax` dan katta bo'lib qolishi mumkin edi (masalan agendaMax=1:
+   * «3–1») — `structure.ts` esa shu paytda «AYNAN 1 ta band» deydi, ikki
+   * qator bir-biriga zid. `fmtRange` (`slide-quality.ts`) allaqachon
+   * «min === max bo'lsa bitta son» qoidasini bajaradi — shuning uchun
+   * min ni max dan OSHMAYDIGAN qilib clamp qilamiz, `agendaMax` katta
+   * bo'lganda oraliq ("5–6") o'zgarmaydi.
+   */
+  const agendaMin = Math.min(rules.agendaMax, Math.max(3, rules.agendaMax - 1));
   return [
     /*
      * ORALIQ beriladi, faqat yuqori chegara emas — model faqat shift
      * berilsa eng qisqasini tanlaydi (jonli o'lchovda 36% to'ldirish).
      */
-    `Har slaydda ${rules.minBullets}–${rules.maxBullets} ta bullet (agenda'da ${Math.max(3, rules.agendaMax - 1)}–${rules.agendaMax}).`,
+    `Har slaydda ${rules.minBullets}–${rules.maxBullets} ta bullet (agenda'da ${fmtRange({ min: agendaMin, max: rules.agendaMax })}).`,
     /*
      * Band so'z oralig'i — `slide-quality.ts` dagi detektor bilan BIR
      * manba: quyi chegara aynan «yupqa band» chegarasi, yuqorisi qirqish
