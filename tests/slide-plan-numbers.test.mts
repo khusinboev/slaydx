@@ -457,8 +457,10 @@ test("P9: 72 belgili sarlavha + logo + plan: 3 — nishon sarlavhani qutidan chi
  * P9 sharhi 2: reja nishoni ro'yxat tartib raqamlari bilan BIR REGISTRDA
  * bo'lmasin (notebook hoshiyasidagi «01» pastdagi «01 02 03 04» ning yana
  * biridek o'qilardi — sprint aynan shu chalkashlik uchun ochilgan). Tana
- * zonasidagi har yalang raqam nishondan rangi YOKI o'lchami (≥ 6 pt) bilan
- * farq qiladi.
+ * zonasidagi yalang raqam nishon bilan bir rangda bo'lsa — o'lchami ≥ 6 pt
+ * farq qilishi VA formati boshqa bo'lishi shart (ikkalasi «01» shaklida
+ * bo'lsa, o'lchamdan qat'i nazar bir registr: editorial oltin «01» sarlavha
+ * yonida va oltin «01…04» kartalarda).
  */
 test("P9: reja nishoni ro'yxat raqamlaridan boshqa registrda (rang yoki o'lcham) — har dizayn × tema", () => {
   for (const visual of VISUALS) {
@@ -477,7 +479,10 @@ test("P9: reja nishoni ro'yxat raqamlaridan boshqa registrda (rang yoki o'lcham)
           const a = anchorOf(layers, s);
           const ordinals = texts(layers).filter((l) => l !== badge && /^0?\d$/.test(textOf(l)) && l.box.y >= a.box.y + a.box.h);
           for (const o of ordinals) {
-            const same = o.color.toLowerCase() === badge.color.toLowerCase() && Math.abs(o.size - badge.size) < 6;
+            const padded = (l: TextLayer) => /^0\d$/.test(textOf(l));
+            const same =
+              o.color.toLowerCase() === badge.color.toLowerCase() &&
+              (Math.abs(o.size - badge.size) < 6 || (padded(o) && padded(badge)));
             assert.ok(!same, `${tag}: nishon «${textOf(badge)}» (${badge.color}, ${badge.size} pt) ro'yxat raqami «${textOf(o)}» (${o.color}, ${o.size} pt) bilan bir registrda`);
           }
         }
@@ -500,10 +505,18 @@ test("P9: plan'siz dizayn slaydlari geometriyasi 879f495 bilan AYNAN teng (barmo
   for (const visual of DESIGN_VISUALS) {
     for (const layout of BADGE_LAYOUTS) {
       for (const img of [false, true]) {
-        for (const logo of [undefined, LOGO]) {
-          const p = planSlide(sampleFor(layout, img), theme, visual, INDEX, TOTAL, "auto", "lecture", { logo });
+        // Qisqa VA 72 belgili sarlavha — sarlavha o'lchami/qutisi ham qulflansin.
+        for (const [logo, long] of [
+          [undefined, false],
+          [LOGO, false],
+          [undefined, true],
+          [LOGO, true],
+        ] as const) {
+          const sm = sampleFor(layout, img);
+          if (long) sm.title = LONG_TITLE;
+          const p = planSlide(sm, theme, visual, INDEX, TOTAL, "auto", "lecture", { logo });
           rows.push(
-            `${visual}/${layout}${img ? "+img" : ""}${logo ? "+logo" : ""}|` +
+            `${visual}/${layout}${img ? "+img" : ""}${logo ? "+logo" : ""}${long ? "+long" : ""}|` +
               p.layers
                 .map((l) => {
                   const b = l.box;
@@ -517,7 +530,36 @@ test("P9: plan'siz dizayn slaydlari geometriyasi 879f495 bilan AYNAN teng (barmo
     }
   }
   const hash = createHash("sha256").update(rows.join("\n")).digest("hex").slice(0, 32);
-  assert.equal(hash, "1047149c2073b746d902809824903bdf", "plan'siz dizayn slaydi geometriyasi o'zgardi — nishon kodi eski doc_json ga sizib o'tgan");
+  assert.equal(hash, "2bd3c04123f7b1c91ff9c861115105b4", "plan'siz dizayn slaydi geometriyasi o'zgardi — nishon kodi eski doc_json ga sizib o'tgan");
+});
+
+/**
+ * `badgedTitle` qarori (P9 sharhi 1) — to'g'ridan-to'g'ri: sig'sa yonida;
+ * tor qutida uzun sarlavha sig'masa va ustida joy bo'lsa — USTIDA, quti
+ * o'zgarmaydi; joy bo'lmasa — yonida, pol 4 pt pastroq (≥ 14 pt) va
+ * sarlavha sig'adi; plan'siz — quti o'sha obyekt, o'lcham `fitSize`.
+ */
+test("P9: badgedTitle — yonida / ustida / pol -4 / plan'siz eskicha", () => {
+  const { badgedTitle, PLAN_BADGE_W } = LAYOUT_KIT;
+  const s = { id: "t", layout: "twoCol", title: LONG_TITLE, plan: 2 } as PlanSlide;
+  const wide = { x: 1, y: 1, w: 11, h: 0.9 };
+  const w1 = badgedTitle(s, wide, 22, 16);
+  assert.equal(w1.above, false);
+  assert.equal(w1.box.x, 1 + PLAN_BADGE_W);
+  const narrow = { x: 1, y: 1, w: 3, h: 1.5 };
+  const n1 = badgedTitle(s, narrow, 26, 17);
+  assert.equal(n1.above, true, "tor quti + uzun sarlavha, ustida joy bor → nishon ustida");
+  assert.deepEqual(n1.box, narrow, "ustida — sarlavha qutisi o'zgarmaydi");
+  const top = { x: 1, y: 0.3, w: 3, h: 1.5 };
+  const t1 = badgedTitle(s, top, 26, 17);
+  assert.equal(t1.above, false, "ustida joy yo'q → yonida");
+  assert.ok(t1.size < 17 && t1.size >= 14, `pol 4 pt pastroq: ${t1.size}`);
+  assert.ok(inkIn(LONG_TITLE, t1.box.w, t1.size, CHAR_EM) <= t1.box.h + 0.01, "pol -4 da sarlavha sig'adi");
+  const bare = { ...s, plan: undefined };
+  const b1 = badgedTitle(bare, narrow, 26, 17);
+  assert.equal(b1.box, narrow, "plan'siz — AYNAN o'sha quti obyekti");
+  assert.equal(b1.size, LAYOUT_KIT.fitSize(LONG_TITLE, narrow, 26, 17), "plan'siz — fitSize aynan eskicha (pol o'zgarmaydi)");
+  assert.equal(b1.above, false);
 });
 
 // ═══════════════════════════════════════════ A2-04: auditoriya shrift poli
