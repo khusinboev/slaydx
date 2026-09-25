@@ -582,3 +582,43 @@ The core is right. `clipLimit` follows the deck visual, with the tightest-visual
 
 - **N1.** When the visual is known, the cap is now exactly the model capacity (`fitChars`), with no × 0.88. That is acceptable because bold width is now modelled (`CHAR_EM_BOLD`) and the prompt keeps its 15 % headroom. Keep an eye on LibreOffice PDF parity in the next live run.
 - **N2.** `clipTo("Salom dunyo bu test", 10)` gives «Salom dun…», because the 60 % boundary rule allows a mid-word cut for short limits. This is P3's documented behaviour and matters only below about 20 characters, which the editor's raw path can now reach. Covered by CHANGE 1(b).
+
+---
+
+# P11 re-review — f816372
+
+- **Scope:** `git diff 9c20f85..f816372` (`slide-edit.ts`, `slide-limits.ts` + tests).
+- **Heavy command:** 1 run through `heavy2.sh`. `tests/slide-edit.test.mts` + `tests/slide-limits.test.mts`: **97/97 pass**. The same run included a list-op probe (`scratchpad/p3rev/listop-probe.mts`, 8–9 grade `lesson`/circle, twoCol with 4 items per column).
+
+## Verdict: **CHANGES** (one item, small)
+
+1a, 1b, 3 and the memo key are done correctly. One W7 regression was introduced by the new per-position never-shrink in the `list` op.
+
+## CHANGES
+
+1. **The `list` op's never-shrink is keyed by position, so reordering truncates existing text.**
+   - **Where:** `slide-edit.ts` `case "list"` (≈ `:1106-1112`): `editLimit(caps.chars, staticCap, prev[k]?.length ?? 0)`. `prev[k]` is the item that **used to be at position k**, not the item being written.
+   - **Probe:** a column of `[short(17), long, short, short]` sent back as `[long, short, short, short]` (the same text, reordered in the whole-box editor). The long item is clipped to **43 characters**, «Orol dengizining qurishi mintaqadagi iqlim…», because position 0 used to hold a 17-character item and the 4-item circle column box is 43.
+   - **Why it is a regression:** nothing was deleted or rewritten, yet existing text silently shrank. This breaks W7 ("existing text is never shortened by an edit"). The `text` op is not affected: editing another item leaves the long one intact.
+   - **Fix:** base never-shrink on the item's own identity. An item that is **byte-identical to any previous item** in that list is kept as is (it is only moved). Other items use `editLimit(caps.chars, staticCap, <length of the previous item it replaces, or 0>)`. A simple form: `prev.includes(x) ? x : clipTo(x, editLimit(caps.chars, staticCap, prev[k]?.length ?? 0))`.
+   - **Test:** reorder a long item in a 4-item column and assert it stays unchanged. The existing «list op same order» case covers the same-order path.
+
+## Checked (OK)
+
+- **1a (`slide-limits.ts clipTo`):** `n ≤ 0 → ""` and `n === 1 → "…"`, both after the `t.length <= n` fast path, so empty input returns "". Tests were added.
+- **1b (`TIGHT_IMAGE_ERROR`):**
+  - `tooTight` refuses only on an **image** slide with a known visual and full rules, when the effective (never-shrink) limit is below `CLIP_FLOOR_CHARS` **and** the value would actually be cut (`clipTo(v, max) !== clipTo(v, ∞)`). Clearing a field or entering short text that fits is still allowed.
+  - It applies to the label fields only: stat label, step title (including a new step), quiz option, table cell and header.
+  - `stepText` moved to the prose rule, so on an image slide it uses the no-image box and the P12 guard owns any overflow.
+- **How the refusal surfaces:**
+  - `writeSlideField` → `{ ok: false, error }` → `applyDocOps` `fail(error, at)`, the same path as every other local edit error («Bu maketda … yo'q», «Katak indeksi noto'g'ri»).
+  - In the viewer, `useDocEdit.push` applies ops **locally first** and on `!res.ok` calls `setError(res.error)` (`components/files/useDocEdit.ts:624-627`). The message is shown and nothing is queued or sent.
+  - Server side, the same failure becomes 422 in `commitDocOps` (`slide-commit.ts:44`), and `useDocEdit` treats 400/422 as "not applicable" (`:429`).
+  - So the user sees the Uzbek message either way. It is a 422 and not a 400, which matches the other `applyDocOps` refusals.
+- **3 (prose fields):**
+  - Bullets/agenda (`bulletProse`), column items and quote (`proseLimit`), and the section/closing subtitle (`subtitleEditMax`) all use `clipLimit(…, NO_IMAGE)`, capped by the static ceilings and wrapped in `editLimit` in the text op. Counts are measured **after** the write (`countAfter`), and `convertLayout` and `listCap` follow the same rule.
+  - On image slides the prose fields also use the no-image box, so overflow is left to the P12 guard (400 with a message). The UX is now the same across prose fields, and none of P12's INT-03 tests flip.
+  - `sanitizeSlideModel` stays static, which is correct (it is a safety filter, not a layout rule).
+- **`listCap` signature:** the new 4th parameter `count?` is optional. `components/viewers/SlideEditor.tsx:331` calls `listCap(slide, edit.field, bodyType).max`. Only `.max` is read, and it does not depend on `count` or `visual`, so nothing breaks.
+- **Memo key:** `fitChars` adds `|agendaMax` for `field === "agenda"`.
+- **Note (pre-existing, no change):** a `list` op in the same order still clips a legacy item longer than the static ceiling (probe: a 121-character column item → 110). That is W7's documented "never-shrink up to the static cap", and the `text` op leaves such items untouched.
