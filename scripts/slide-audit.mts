@@ -172,6 +172,14 @@ export function thinHeuristic(slides: SlideForAudit[]): SlideAuditIssue[] {
  * bo'lsa. `SlideForAudit` `SlideModel`ning duck-typed qismi: `thinSlides`
  * faqat matn maydonlarini o'qiydi, shuning uchun to'g'ridan-to'g'ri
  * uzatiladi. Sabab → `thin-<sabab>` turi (masalan `thin-few-bullets`).
+ *
+ * Review C9 (`audit/reviews/AUDIT-25-P14.md`): `clipped-text` sababi shu
+ * yerda TASHLAB YUBORILADI — xuddi shu maydonni pastdagi `pushTrunc`
+ * o'zining `truncated` topilmasi bilan ALLAQACHON hisobga oladi, u
+ * ANIQROQ (maydon nomi va indeksni ataydi). Filtrlamasak, bitta kesilgan
+ * band ikki marta — `truncated` va `thin-clipped-text` — sanalar edi va
+ * xulosa qatoridagi `thin=` soni shishirilardi. Qolgan barcha sabablar
+ * (`few-bullets`, `short-bullets`, ...) o'zgarishsiz o'tadi.
  */
 function thinIssues(doc: SlideDocLike, slides: SlideForAudit[]): SlideAuditIssue[] {
   if (!doc.meta || typeof doc.meta !== "object") return thinHeuristic(slides);
@@ -179,7 +187,9 @@ function thinIssues(doc: SlideDocLike, slides: SlideForAudit[]): SlideAuditIssue
   const rules = bodyRules(meta, normalizeTemplateId(doc.slideTemplate ?? meta.slideTemplate));
   const visual = typeof doc.slideVisual === "string" ? (doc.slideVisual as SlideVisual) : undefined;
   return thinSlides(slides as unknown as SlideModel[], rules, visual).flatMap((t) =>
-    t.reasons.map((r) => ({ slide: t.index + 1, kind: `thin-${r}`, detail: `${slides[t.index]?.layout ?? "?"}: ${r}` })),
+    t.reasons
+      .filter((r) => r !== "clipped-text")
+      .map((r) => ({ slide: t.index + 1, kind: `thin-${r}`, detail: `${slides[t.index]?.layout ?? "?"}: ${r}` })),
   );
 }
 
