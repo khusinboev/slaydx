@@ -193,13 +193,23 @@ test("pro-slide: AI rasm kamomadi ham `slide` bilan bir xil naqshda qaytadi", ()
   assert.equal(meta.premiumVisuals, false, "premium paket yo'q — rasm ustamasi 0 (`slide` bilan bir xil)");
 
   // 10/10 slayd to'liq, lekin AI rasm 8 tadan 0 tasi keldi — HECH NARSA
-  // yetkazilmadi, refundShare'dan qat'i nazar TO'LIQ qaytariladi.
+  // yetkazilmadi. Pro-slaydda egasi qarori (AUDIT-25, 2026-09-25): matn,
+  // maket va PPTX yetkazilgani uchun 100 % emas, narxning YARMI qaytadi.
   const zero = deliveredCount(meta, proDeck(10, { want: 8, got: 0 }));
-  assert.deepEqual(zero, { got: 0, want: 8, unit: "rasm", refundShare: 0 });
-  assert.equal(refundRatio(zero), 1, "AI rasm umuman chiqmasa pul to'liq qaytadi");
+  assert.deepEqual(zero, { got: 0, want: 8, unit: "rasm", refundShare: 0, noneShare: 0.5 });
+  assert.equal(refundRatio(zero), 0.5, "pro-slayd: AI rasm umuman chiqmasa narxning yarmi qaytadi");
+  // Qisman kamomad (8 dan 5) — D1: qaytarish yo'q, faqat qayd.
+  assert.equal(refundRatio(deliveredCount(meta, proDeck(10, { want: 8, got: 5 }))), null);
 
   // To'liq yetkazilganda (slayd va rasm ikkalasi ham) qaytarish yo'q.
   assert.equal(deliveredCount(meta, proDeck(10, { want: 8, got: 8 })), undefined);
+});
+
+test("regressiya: oddiy `slide` da rasm umuman chiqmasa hamon TO'LIQ qaytadi (noneShare yo'q)", () => {
+  const meta = metaOf("slide", { topic: "X", slideCount: 10 });
+  const zero = deliveredCount(meta, { ...proDeck(10, { want: 4, got: 0 }) });
+  assert.equal(zero?.noneShare, undefined);
+  assert.equal(refundRatio(zero), 1);
 });
 
 test("regressiya: xuddi shu kirishlarda oddiy `slide` xatti-harakati o'zgarmagan", () => {

@@ -88,6 +88,9 @@ Shartnomalar (yakuniy, review'lardan keyin):
   kirmaydi (qisman qaytarish yo'q). Egasi (a) variantini tanladi: qoida qabul qilindi, pro-slayd tavsifi
   «Har mos slaydga AI chizgan rasm» (`lib/tools.ts`), narx o'zgarmaydi.
 
+- **D2 — pro-slayd rasm qaytarishi (P6 review / INT-06):** «hamma AI rasm yo'q» holatida 100 % emas, **50 %** (`Delivered.noneShare = 0.5`,
+  `delivered.ts`); qisman kamomad — D1 bo'yicha qaytarilmaydi; slaydlar kam bo'lsa — proporsional. Egasi (a) variantini tanladi (2026-09-25).
+
 ### Tekshiruv
 - Gate `slides3-pre` (879f495): typecheck 0, lint 0, unit yashil, viewer, UI, build, fresh-Postgres smoke — hammasi yashil.
 - Gate `slides3-mid` (7d4525c, W7+P10+P8+docs dan keyin): typecheck 0, lint 0, unit **3 412/3 412**, viewer 248/248, UI **475/475**, build (first-load 221/220 kB), smoke — hammasi yashil.

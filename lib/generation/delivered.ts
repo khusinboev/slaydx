@@ -78,6 +78,18 @@ const IMAGE_PRICE_SHARE = 0.25;
 const IMAGE_PRICE_SHARE_STANDARD = 0;
 
 /**
+ * Pro-slayd: rasm UMUMAN chiqmasa (`got = 0`) — narxning YARMI qaytadi.
+ *
+ * Oddiy slayd/boshqa vositalarda «hech narsa yo'q» to'liq qaytarish
+ * (`refundRatio`). Pro-slayd (2 000 tanga/slayd) esa «har mos slaydga AI
+ * rasm» va'dasi bilan sotiladi: rasm xizmati yiqilsa foydalanuvchi
+ * matn, maket, brif va PPTX'ni oladi, lekin bosh va'da bajarilmaydi.
+ * Egasi qarori (AUDIT-25, 2026-09-25): 100 % emas, 50 %. Qisman kamomad
+ * (ba'zi rasmlar yo'q) — D1 bo'yicha qaytarilmaydi (`refundShare` 0).
+ */
+const PRO_IMAGE_NONE_SHARE = 0.5;
+
+/**
  * Slayd dekasidagi RASM va'dasi.
  *
  * Va'da soni `doc.slideImages.want` dan olinadi — uni rasm bosqichining
@@ -94,6 +106,7 @@ function imagesDelivered(meta: DocMeta, doc: AcademicDoc): Delivered | undefined
     want: rep.want,
     unit: "rasm",
     refundShare: meta.premiumVisuals ? IMAGE_PRICE_SHARE : IMAGE_PRICE_SHARE_STANDARD,
+    ...(meta.toolId === "pro-slide" ? { noneShare: PRO_IMAGE_NONE_SHARE } : {}),
   };
 }
 
@@ -107,8 +120,8 @@ function imagesDelivered(meta: DocMeta, doc: AcademicDoc): Delivered | undefined
  * bu loyihada bir necha marta «ekranda bitta xil, faylda boshqa xil»
  * nuqsoniga olib kelgan naqsh.
  *
- * **HECH NARSA yetkazilmagan bo'lsa — TO'LIQ qaytariladi**, ulushdan
- * qat'i nazar. Ulush («rasm narxning chorak qismi») QISMAN kamomadni
+ * **HECH NARSA yetkazilmagan bo'lsa — TO'LIQ qaytariladi** (`noneShare`
+ * bo'lmasa; pro-slayd rasmi uchun 0.5), ulushdan qat'i nazar. Ulush («rasm narxning chorak qismi») QISMAN kamomadni
  * o'lchash uchun: matn va maket yetkazilgan, faqat rasm kam chiqqan.
  * Rasm UMUMAN bo'lmasa, foydalanuvchi va'da qilingan mahsulotning bir
  * qismini emas, butun bir turini olmaydi — bunda ulush bilan
@@ -118,7 +131,8 @@ export function refundRatio(d: Delivered | undefined): number | null {
   if (!d) return null;
   const { got, want } = d;
   if (!(want > 0) || got >= want) return null;
-  if (got <= 0) return 1;
+  // `noneShare` — «hech narsa yo'q» ulushi (pro-slayd rasmi 0.5); standart 1.
+  if (got <= 0) return d.noneShare ?? 1;
   const share = d.refundShare ?? 1;
   if (!(share > 0)) return null;
   return Math.min(1, (1 - got / want) * share);
