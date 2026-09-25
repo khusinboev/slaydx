@@ -253,14 +253,42 @@ function capWords(chars: number, limit: number, headroom = PROMPT_HEADROOM): num
 }
 
 /**
+ * Prompt maqsadining quyi chegarasi (so'z) — RASMLI quti shundan kam so'z
+ * ko'tarsa, maqsad RASMSIZ qutidan olinadi (AUDIT-25 P11, `fitWords`).
+ */
+export const PROSE_MIN_WORDS = 5;
+
+/**
+ * GAP maydonlari — rasm ularga joy beradi (`imageYieldField`) va 5 so'zdan
+ * kam gap ma'no bermaydi. Qisqa YORLIQ maydonlari (bosqich sarlavhasi,
+ * stats yorlig'i, jadval katagi/sarlavhasi, ustun sarlavhasi, test) —
+ * tabiiy hajmi 1–3 so'z: ularda rasmli quti qoladi, rasm saqlanadi.
+ */
+const PROSE_FIELDS: ReadonlySet<FitField> = new Set(["bullets", "colItem", "stepText", "subtitleSection", "subtitleClosing", "quote"]);
+
+/**
  * Maydonning so'zdagi sig'imi (qopqoq bilan, 15 % zaxira) — prompt
- * oralig'i va detektor chegarasi shundan. Sig'im RASMLI qutidan
- * (`fitChars` standarti "both"): rasm matndan keyin qo'shiladi, prompt
- * esa rasmli slaydga ham sig'adigan hajmni so'raydi; model oshirib
- * yozsa matn rasmsiz qutigacha qirqilmaydi, rasm esa joy beradi.
+ * oralig'i va detektor chegarasi shundan.
+ *
+ * Qoida (AUDIT-25 P11):
+ *   1) odatda RASMLI quti (`fitChars` standarti "both") × zaxira — rasm
+ *      matndan keyin qo'shiladi, prompt rasmli slaydga ham sig'adigan
+ *      hajmni so'raydi;
+ *   2) GAP maydonida (`PROSE_FIELDS`) rasmli quti `PROSE_MIN_WORDS` (5)
+ *      so'zdan kam bersa — RASMSIZ quti × zaxira. Bunday slaydda rasm
+ *      joy beradi (P8, `imageYieldField`), matn esa to'liq gap bo'ladi.
+ *      Ilgari 8–9 sinf `circle` 3 bosqichida rasmli 42 belgi → «3 so'z»
+ *      so'ralardi; model 5–6 so'z yozar va qirqish (jadval 45) HAMMA
+ *      bosqichni «…» bilan kesardi. Endi rasmsiz 121 → 11 so'z.
+ * Qopqoq — `fieldCap` (vizual ma'lum: statik shift; noma'lum: jadval).
+ * Yozuvchi qirqishi (`clipLimit(…, NO_IMAGE)`) doim rasmsiz quti — ya'ni
+ * ikkala holatda ham «prompt ≤ 0.85 × qirqish».
  */
 function fitWords(field: FitField, rules: BodyRules, visual?: SlideVisual, count?: number, rows?: number): number {
-  return capWords(fitChars(field, rules, visual, count, { rows }), fieldCap(field, rules, visual, count, rows));
+  const cap = fieldCap(field, rules, visual, count, rows);
+  const withImage = capWords(fitChars(field, rules, visual, count, { rows }), cap);
+  if (withImage >= PROSE_MIN_WORDS || !PROSE_FIELDS.has(field)) return withImage;
+  return capWords(fitChars(field, rules, visual, count, { rows, ...NO_IMAGE }), cap);
 }
 
 /**

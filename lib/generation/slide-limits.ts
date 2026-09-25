@@ -17,10 +17,12 @@ import { DESIGN_VISUALS, LEGACY_VISUALS } from "./visuals/spec";
 /**
  * Slayd matn chegaralari — YAGONA jadval.
  *
- * Bu fayl ATAYLAB bog'liqliksiz: uni ham dvigatel (`normalizeSlide`,
+ * Bu fayl KLIENT uchun xavfsiz: uni ham dvigatel (`normalizeSlide`,
  * server tomonida), ham ko'ruvchidagi tahrir mantig'i (`slide-edit.ts`,
  * klient bundle'da) import qiladi. Shuning uchun bu yerda `llm.ts`,
  * `server-only` yoki React ga olib boradigan bironta import bo'lmasin.
+ * AUDIT-25 P11 dan beri maket o'lchovi (`fitChars` → `planSlide`) ham
+ * shu yerda: `slide-layout.ts` ko'ruvchining o'zi chizadigan sof modul.
  *
  * Raqamlar MAKETDAN o'lchangan (`slide-layout.ts` qutilari va
  * `fitSize`/`fitLines` pollari) — promptdagi so'z sonidan emas. O'lchov
@@ -76,9 +78,14 @@ import { DESIGN_VISUALS, LEGACY_VISUALS } from "./visuals/spec";
  *      (`countRules`: yosh auditoriyaga kam bosqich/karta/ustun). Klient
  *      uchun xavfsiz: `normalizeSlide` (P1) VA `slide-edit.ts` shuni
  *      chaqiradi.
- *  (3) `clipLimit(field, rules, visual, count)` (`slide-quality.ts`,
- *      server) — generatsiyada deka VIZUALI va rasm tasmasi bilan jonli
- *      o'lchov; (2) dan hech qachon oshmaydi.
+ *  (3) `clipLimit(field, rules, visual, count, rows, {images})` (shu
+ *      fayl, `slide-quality.ts` qayta eksport qiladi) — deka VIZUALI va
+ *      rasm rejimi bilan jonli o'lchov. AUDIT-25 P11: vizual ma'lum
+ *      bo'lsa (2) jadvali QO'LLANMAYDI — faqat (1) shift; jadval 17
+ *      vizualning eng tori rasm bilan edi va `circle` ning rasmsiz 121
+ *      belgilik qutisini 45 ga qisardi. (2) endi vizual NOMA'LUM
+ *      bo'lganda zaxira. Tahrir ham shu o'lchovni oladi:
+ *      `limitsFor(rules, counts, { visual, images })`.
  * «Qirqmasdan fitSize» varianti YO'Q: `fitSize` pol ostiga tushmaydi,
  * sig'magan matn qutidan chiqadi. Maket avval polgacha kichraytiradi,
  * keyin ortig'i SO'Z CHEGARASIDA (`clipTo`) qirqiladi. Qirqish kamdan-kam
@@ -263,6 +270,13 @@ export const LIMIT_FLOORS = [15, 16, 18, 20, 22, 24] as const;
 /**
  * Soni o'zgaruvchi maydonlar uchun qirqish chegarasi — pol × son.
  *
+ * AUDIT-25 P11: bu jadval faqat ZAXIRA — deka vizuali NOMA'LUM bo'lganda
+ * (`limitsFor(rules, counts)` ikki argument bilan, `clipLimit(…, undefined)`).
+ * Vizual ma'lum bo'lsa chegara shu vizualning o'z o'lchovidan
+ * (`limitsFor(rules, counts, { visual, images })` → `clipLimit`): jadval
+ * 17 vizualning ENG TORIDAN olingani uchun keng vizuallarni behuda qisardi
+ * (8–9 sinf 3 bosqich: jadval 45, `circle`/`academic` rasmsiz 121, `rail` 85).
+ *
  * Manba (AUDIT-25, P2 maketi `d05550e` birlashtirilgandan keyin): har
  * katak = min(P2 o'lchovi, jonli `fitChars(…, {images: "none"})`) × 0.88
  * (qalin shrift kengligi taxmini optimistik — 12 % zaxira), 5 ga pastga
@@ -365,12 +379,56 @@ const clampKey = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi
  * `stepsMax`/`statsMax`/`tableCols`/`tableRows` — auditoriya ruxsat
  * bergan son (`countRules`), statik qopqoqdan oshmaydi. `quizOption` —
  * pol bo'yicha. Qolgan maydonlar `SLIDE_LIMITS` bilan bir xil. Klient
- * uchun xavfsiz (bog'liqliksiz).
+ * uchun xavfsiz (`llm.ts`/`server-only` yo'q).
+ *
+ * AUDIT-25 P11 — `opts.visual` berilsa (to'liq `BodyRules` bilan) soni
+ * o'zgaruvchi maydonlar va test varianti JADVALDAN EMAS, `clipLimit`
+ * dan — SHU vizualning o'lchovi, `opts.images` rejimida ("both" —
+ * rasmli quti, standart; "none" — rasmsiz). Ko'ruvchi tahriri
+ * (`slide-edit.ts`) shunday chaqiradi: rasmli slayd matni rasm yonida
+ * sig'sin, rasmsiz slayd rasm qutisi bilan qisilmasin. Son berilmasa —
+ * auditoriya ruxsati (jadval yo'li bilan bir xil).
+ *
+ *   limitsFor(rules, { steps: 3 }, { visual: "circle", images: "none" }) — 8–9 sinf: stepText 121
+ *   limitsFor(rules, { steps: 3 })                                      — zaxira jadval: 45
  */
-export function limitsFor(
-  rules: Pick<BodyRules, "minPt" | "stepsMax" | "statsMax" | "tableCols" | "tableRows">,
-  counts: LimitCounts = {},
-): SlideLimitsFor {
+export function limitsFor(rules: LimitRules, counts?: LimitCounts): SlideLimitsFor;
+export function limitsFor(rules: BodyRules, counts: LimitCounts, opts: LimitOpts): SlideLimitsFor;
+export function limitsFor(rules: LimitRules | BodyRules, counts: LimitCounts = {}, opts: LimitOpts = {}): SlideLimitsFor {
+  const table = tableLimits(rules, counts);
+  const visual = opts.visual;
+  if (!visual || !isBodyRules(rules)) return table;
+  const images = opts.images ?? "both";
+  const cols = counts.cols ?? table.tableCols;
+  const rows = counts.rows ?? table.tableRows;
+  const m = (field: FitField, count?: number, r?: number) => clipLimit(field, rules, visual, count, r, { images });
+  const header = m("tableHeader", cols, rows);
+  return {
+    ...table,
+    stepText: m("stepText", counts.steps ?? table.stepsMax),
+    stepTitle: m("stepTitle", counts.steps ?? table.stepsMax),
+    statLabel: m("statLabel", counts.stats ?? table.statsMax),
+    tableCell: m("tableCell", cols, rows),
+    tableHeader: header,
+    tableHeaderWide: header,
+    quizOption: m("quizOption"),
+  };
+}
+
+/** `limitsFor` ning jadval qatlami uchun kerakli qoidalar. */
+export type LimitRules = Pick<BodyRules, "minPt" | "stepsMax" | "statsMax" | "tableCols" | "tableRows">;
+
+/** `limitsFor` ning vizual qatlami — deka vizuali va rasm rejimi. */
+export type LimitOpts = { visual?: SlideVisual; images?: "both" | "none" };
+
+/** O'lchov `planSlide` ga to'liq qoidani beradi — qisman `Pick` bilan jim noto'g'ri o'lchamasin. */
+function isBodyRules(r: LimitRules | BodyRules): r is BodyRules {
+  const b = r as Partial<BodyRules>;
+  return typeof b.bodyPt === "number" && typeof b.maxBullets === "number" && typeof b.bulletChars === "number";
+}
+
+/** Pol × son jadvali (vizual noma'lum) — `limitsFor` ning zaxira qatlami. */
+function tableLimits(rules: LimitRules, counts: LimitCounts): SlideLimitsFor {
   let col = LIMIT_FLOORS.findIndex((f) => f >= rules.minPt);
   if (col < 0) col = LIMIT_FLOORS.length - 1;
   const stepsMax = Math.min(SLIDE_LIMITS.stepsMax, rules.stepsMax);
@@ -676,14 +734,29 @@ export function fitChars(field: FitField, rules: BodyRules, visual?: SlideVisual
 export const CLIP_FLOOR_CHARS = 24;
 
 /**
- * Mos qopqoq: bandlar — auditoriya `bulletChars`; soni o'zgaruvchi
- * maydonlar va test varianti — `limitsFor` (pol × son jadvali, klient
- * ham o'qiydi); qolgani — statik `SLIDE_LIMITS`.
+ * STATIK shift (`SLIDE_LIMITS`) — vizual ma'lum bo'lganda yagona qopqoq:
+ * bandlar — auditoriya `bulletChars`; jadval sarlavhasi — ustun soniga
+ * qarab (≤ 3 ustun keng, 4+ tor, `limitsFor` jadvali bilan bir xil
+ * qoida); qolgani — `SLIDE_LIMITS[maydon]`.
  */
-export function fieldCap(field: FitField, rules: BodyRules, _visual?: SlideVisual, count?: number, rows?: number): number {
+function ceilingCap(field: FitField, rules: Pick<BodyRules, "bulletChars" | "tableCols">, count?: number): number {
   switch (field) {
     case "bullets":
       return rules.bulletChars;
+    case "tableHeader":
+      return (count ?? rules.tableCols) <= 3 ? SLIDE_LIMITS.tableHeaderWide : SLIDE_LIMITS.tableHeader;
+    default:
+      return SLIDE_LIMITS[field];
+  }
+}
+
+/**
+ * Vizual NOMA'LUM bo'lganda qopqoq (zaxira): soni o'zgaruvchi maydonlar
+ * va test varianti — `limitsFor` jadvali (pol × son; 17 vizualning ENG
+ * TORI × 0.88); qolgani — statik shift (`ceilingCap`).
+ */
+function tableCap(field: FitField, rules: BodyRules, count?: number, rows?: number): number {
+  switch (field) {
     case "stepText":
     case "stepTitle":
       return limitsFor(rules, { steps: count })[field];
@@ -694,25 +767,43 @@ export function fieldCap(field: FitField, rules: BodyRules, _visual?: SlideVisua
       return limitsFor(rules, { cols: count, rows })[field];
     case "quizOption":
       return limitsFor(rules).quizOption;
-    case "subtitleSection":
-    case "subtitleClosing":
-    case "quote":
-    case "quoteBy":
-    case "quizQ":
-    case "title":
-    case "colTitle":
-    case "colItem":
-      return SLIDE_LIMITS[field];
+    default:
+      return ceilingCap(field, rules, count);
   }
 }
 
 /**
- * Model matnini QIRQISH chegarasi — auditoriya × vizual × element soni.
+ * Maydon QOPQOG'I — `clipLimit` va prompt maqsadlari (`layoutWordTargets`)
+ * shu bilan cheklanadi.
  *
- * = min(`limitsFor` (yoki statik qopqoq), max(`CLIP_FLOOR_CHARS`, deka
- * vizualidagi jonli sig'im)). Maket avval shriftni polgacha kichraytiradi,
- * pol shriftida ham sig'maydigan qismigina so'z chegarasida (`clipTo`)
- * qirqiladi. `limitsFor` dan hech qachon oshmaydi (generatsiya ⊆ tahrir).
+ * AUDIT-25 P11: vizual MA'LUM bo'lsa — faqat statik shift (`ceilingCap`),
+ * ya'ni SHU vizualning o'z o'lchovi (`fitChars`) hal qiladi. Ilgari
+ * qopqoq har doim `limitsFor` jadvali edi — 17 vizualning ENG TORI, RASM
+ * bilan, × 0.88: 8–9 sinf `circle` 3 bosqichida rasmsiz quti 121 belgi,
+ * jadval esa 45 — P8 «rasmsiz qutida qirq, rasm joy beradi» qoidasi
+ * amalda o'chgan edi (jonli 6 dekaning 3 tasida HAMMA bosqich «…»).
+ * Vizual NOMA'LUM bo'lsa — eski jadval (`tableCap`), zaxira sifatida.
+ */
+export function fieldCap(field: FitField, rules: BodyRules, visual?: SlideVisual, count?: number, rows?: number): number {
+  return visual ? ceilingCap(field, rules, count) : tableCap(field, rules, count, rows);
+}
+
+/**
+ * Model matnini QIRQISH chegarasi — auditoriya × vizual × element soni ×
+ * rasm rejimi. YAGONA funksiya: generatsiya (`normalizeSlide`, ta'mir) VA
+ * ko'ruvchi tahriri (`limitsFor(rules, counts, { visual, images })` →
+ * `slide-edit.ts`) shundan o'qiydi.
+ *
+ * = min(`fieldCap`, max(`CLIP_FLOOR_CHARS`, `fitChars` — deka vizualidagi
+ * jonli sig'im, `opts.images` rejimida)). Maket avval shriftni polgacha
+ * kichraytiradi, pol shriftida ham sig'maydigan qismigina so'z
+ * chegarasida (`clipTo`) qirqiladi.
+ *
+ *   vizual ma'lum — qopqoq faqat statik shift: SHU vizualning qutisi
+ *                   (8–9 sinf, 3 bosqich, rasmsiz: circle 121, academic
+ *                   121, rail 85; rasm bilan 42 / 42 / 36);
+ *   vizual yo'q   — `limitsFor` jadvali (eng tor vizual) bilan ham
+ *                   qisiladi — eski xulq, zaxira (45).
  *
  * P1: `normalizeSlide` da AVVAL son (`rules.stepsMax`/`statsMax`/
  * `tableCols`/`tableRows`), keyin `clipTo(x, clipLimit("stepText",
