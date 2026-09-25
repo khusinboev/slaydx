@@ -354,7 +354,15 @@ const PROSE_FIELDS: ReadonlySet<FitField> = new Set(["bullets", "colItem", "step
 function fitWords(field: FitField, rules: BodyRules, visual?: SlideVisual, count?: number, rows?: number): number {
   const cap = fieldCap(field, rules, visual, count, rows);
   const withImage = capWords(fitChars(field, rules, visual, count, { rows }), cap);
-  if (withImage >= PROSE_MIN_WORDS || !PROSE_FIELDS.has(field)) return withImage;
+  /*
+   * Qat'iy «>»: rasmli quti AYNAN 5 so'z bersa ham rasmsiz quti olinadi
+   * (AUDIT-25 yakuniy jonli tekshiruv). Aks holda prompt «5 so'z» so'raydi,
+   * detektor esa 5 dan kamini yupqa deydi — nol zaxira: model o'zbekcha
+   * 4 so'zli gap yozadi (5–7 sinf `circle` 2 bandli ustun 53 belgi),
+   * ta'mir ham «5» bilan 4–5 qaytaradi va rad etiladi. 5 so'z — GAPNING
+   * eng kami (`PROSE_MIN_WORDS`), maqsad emas.
+   */
+  if (withImage > PROSE_MIN_WORDS || !PROSE_FIELDS.has(field)) return withImage;
   return capWords(fitChars(field, rules, visual, count, { rows, ...NO_IMAGE }), cap);
 }
 
@@ -362,9 +370,9 @@ function fitWords(field: FitField, rules: BodyRules, visual?: SlideVisual, count
  * `from..to` oralig'idagi eng KATTA son, unda maydon kamida `minWords` so'z ko'taradi; yo'q bo'lsa `from`.
  * Son XOM sig'imdan (zaxirasiz) — P2/P3 son qarorlari zaxira bilan o'zgarmasin.
  */
-function maxCount(field: FitField, rules: BodyRules, visual: SlideVisual | undefined, from: number, to: number, minWords: number, rows?: number): number {
+function maxCount(field: FitField, rules: BodyRules, visual: SlideVisual | undefined, from: number, to: number, minWords: number, rows?: number, headroom = 1): number {
   for (let n = to; n > from; n -= 1) {
-    if (capWords(fitChars(field, rules, visual, n, { rows }), fieldCap(field, rules, visual, n, rows), 1) >= minWords) return n;
+    if (capWords(fitChars(field, rules, visual, n, { rows }), fieldCap(field, rules, visual, n, rows), headroom) >= minWords) return n;
   }
   return from;
 }
@@ -401,7 +409,14 @@ export function layoutWordTargets(rules: BodyRules, visual?: SlideVisual): Layou
   const maxStats = maxCount("statLabel", rules, visual, 2, Math.max(2, rules.statsMax), STAT_LABEL_MIN_WORDS);
   const maxTableRows = rules.tableRows;
   const maxTableCols = maxCount("tableCell", rules, visual, 2, Math.max(2, rules.tableCols), tableCellMinWords(rules), maxTableRows);
-  const maxColItems = maxCount("colItem", rules, visual, COL_MIN_ITEMS, SLIDE_LIMITS.colItems, COL_MIN_WORDS);
+  /*
+   * Ustun soni — 3 ta TO'LIQROQ band 4 ta 5 so'zlidan afzal (P3 qoidasi):
+   * son shunday tanlanadiki, rasmli quti PROMPT zaxirasi bilan ham GAPDAN
+   * (`PROSE_MIN_WORDS`) KO'P so'z ko'tarsin. Ilgari xom sig'im ≥ 5 edi —
+   * deyarli har auditoriya × vizualda (2 679 dan 429 kombinatsiya) 4 band ×
+   * AYNAN 5 so'z chiqar, prompt bilan detektor orasida zaxira qolmasdi.
+   */
+  const maxColItems = maxCount("colItem", rules, visual, COL_MIN_ITEMS, SLIDE_LIMITS.colItems, PROSE_MIN_WORDS + 1, undefined, PROMPT_HEADROOM);
   const stepRange = (n: number) => range(Math.round(unit * 0.7), STEP_MIN_WORDS + 2, fitWords("stepText", rules, visual, n), 0.6);
   const stepTextBy: Record<number, WordRange> = {};
   for (let n = PROCESS_MIN_STEPS; n <= maxSteps; n += 1) stepTextBy[n] = stepRange(n);
@@ -468,7 +483,7 @@ export function wordTargetLines(rules: BodyRules, visual?: SlideVisual): string[
  * iqtibos («Orol nega qurib qoldi?») ham qisqa bo'lishi tabiiy.
  * `QUOTE_MIN_WORDS` faqat prompt poli.
  */
-export type ThinReason = "few-bullets" | "short-bullets" | "short-steps" | "empty-subtitle" | "clipped-option" | "short-columns";
+export type ThinReason = "few-bullets" | "short-bullets" | "short-steps" | "empty-subtitle" | "clipped-option" | "short-columns" | "clipped-text";
 
 function words(s: string | undefined): number {
   return String(s ?? "").trim().split(/\s+/).filter(Boolean).length;
@@ -497,6 +512,38 @@ function isPlanSlide(s: SlideModel): boolean {
 const norm = (s: string | undefined) => String(s ?? "").trim().toLowerCase().replace(/\s+/g, " ");
 
 /**
+ * Yozuvchi «…» bilan QIRQQAN gap maydoni (AUDIT-25 yakuniy jonli
+ * tekshiruv): band, ustun bandi, bosqich matni — chegara AYNAN
+ * `normalizeSlide` niki (`bulletClipLimit`, `clipLimit(…, NO_IMAGE)`,
+ * son — slayddagi haqiqiy son, ustunda o'shaniki). Bunday slayd — HAMMA
+ * slaydga (blok slaydi ham: maqsadlar kesilgan chiqmasin) ta'mir nomzodi:
+ * model matnni ma'nosini saqlab QISQARTIRADI; qisqartirilgani yana
+ * sig'masa — `mergeRepair` yana qirqadi, «…» qoladi va javob rad etiladi
+ * (asl kesik saqlanadi — yomonlashmaydi). Test varianti — `clipped-option`.
+ */
+function clippedText(s: SlideModel, rules: BodyRules, visual?: SlideVisual): boolean {
+  if (s.layout === "bullets") {
+    const list = (s.bullets ?? []).filter((b) => b.trim());
+    const cap = bulletClipLimit(rules, visual, list.length);
+    return list.some((b) => clippedAt(b, cap));
+  }
+  if (s.layout === "process") {
+    const list = s.steps ?? [];
+    const cap = clipLimit("stepText", rules, visual, list.length, undefined, NO_IMAGE);
+    return list.some((st) => clippedAt(st.text, cap));
+  }
+  if (s.layout === "twoCol" || s.layout === "compare") {
+    const side = (items: string[] | undefined) => {
+      const list = (items ?? []).filter((x) => x.trim());
+      const cap = clipLimit("colItem", rules, visual, list.length, undefined, NO_IMAGE);
+      return list.some((x) => clippedAt(x, cap));
+    };
+    return side(s.left) || side(s.right);
+  }
+  return false;
+}
+
+/**
  * Bitta slaydning yupqalik sabablari.
  *
  *   — bandlar/ustunlar/bosqichlar qoidasi FAQAT reja mazmun slaydlariga
@@ -511,6 +558,7 @@ const norm = (s: string | undefined) => String(s ?? "").trim().toLowerCase().rep
  */
 export function thinReasons(s: SlideModel, rules: BodyRules, visual?: SlideVisual): ThinReason[] {
   const out: ThinReason[] = [];
+  if (clippedText(s, rules, visual)) out.push("clipped-text");
   if (s.layout === "bullets") {
     if (!isPlanSlide(s)) return out;
     const list = (s.bullets ?? []).filter((b) => b.trim());
@@ -722,7 +770,7 @@ function mergeRepair(orig: SlideModel, raw: Record<string, unknown>, rules: Body
   }
 }
 
-const REASON_TEXT: Record<ThinReason, (t: LayoutWordTargets, r: BodyRules) => string> = {
+const REASON_TEXT: Record<ThinReason, (t: LayoutWordTargets, r: BodyRules, s: SlideModel) => string> = {
   "few-bullets": (_t, r) => `band kam — ${r.minBullets}–${r.maxBullets} ta band yozing`,
   "short-bullets": (t) => `bandlar juda qisqa — har biri ${fmtRange(t.bullet)} so‘zli TO‘LIQ gap (ta’rif, sabab, misol, oqibat)`,
   "short-steps": (t) =>
@@ -733,6 +781,14 @@ const REASON_TEXT: Record<ThinReason, (t: LayoutWordTargets, r: BodyRules) => st
   "clipped-option": (t) =>
     `variant kesilgan yoki qutiga sig‘maydi — faqat shu variantni ≤ ${t.quizOptionMax} so‘z qilib, ASL MATNNING BOSHINI saqlab to‘ldiring/qisqartiring; qolgan variantlar, tartib va answer o‘zgarmasin`,
   "short-columns": (t) => `ustunlar yupqa — har ustunda ${fmtRange({ min: Math.min(3, t.maxColItems), max: t.maxColItems })} band, har band ${fmtRange(t.colItem)} so‘z`,
+  "clipped-text": (t, _r, s) =>
+    `matn kesilgan («…» bilan tugagan band) — FAQAT shu bandlarni ma’nosini saqlab QISQARTIRING: ${
+      s.layout === "bullets"
+        ? `har band ≤ ${t.bullet.max} so‘z`
+        : s.layout === "process"
+          ? `har bosqich text ≤ ${(t.stepTextBy[Math.max(PROCESS_MIN_STEPS, Math.min(s.steps?.length ?? 0, t.maxSteps))] ?? t.stepText).max} so‘z`
+          : `har band ≤ ${t.colItem.max} so‘z`
+    }; qolgan bandlar so‘zma-so‘z qolsin, «…» yozmang`,
 };
 
 /** Maket bo'yicha model qaytaradigan maydonlar (javob sxemasi uchun). */
@@ -787,7 +843,7 @@ export async function repairThinSlides(
     const t = layoutWordTargets(rules, visual);
     const system = [
       languageDirective(meta.language),
-      `Siz taqdimot muharririsiz: tayyor slaydlardagi YUPQA matnni boyitasiz.`,
+      `Siz taqdimot muharririsiz: tayyor slaydlardagi YUPQA matnni boyitasiz, KESILGAN («…») matnni esa ma’nosini saqlab qisqartirasiz.`,
       `Mavzu: «${meta.topic}». Fan: ${meta.subject || "—"}.`,
       rules.note,
       `Har bullet — TO‘LIQ gap, ${fmtRange(t.bullet)} so‘z.`,
@@ -801,12 +857,12 @@ export async function repairThinSlides(
     const user = [
       // Takrorlamaslik uchun deka tarkibi — bir qator.
       `Dekadagi slaydlar: ${out.map((s, i) => `${i}) ${s.title}`).join("; ")}.`,
-      `Quyidagi ${thin.length} ta slayd yupqa. Har biri uchun ko‘rsatilgan maydonlarni qaytaring.`,
+      `Quyidagi ${thin.length} ta slayd yupqa yoki kesilgan. Har biri uchun ko‘rsatilgan maydonlarni qaytaring.`,
       ...thin.map(({ index, reasons }) => {
         const s = out[index];
         return [
           `index=${index} layout=${s.layout}`,
-          `kamchilik: ${reasons.map((r) => REASON_TEXT[r](t, rules)).join("; ")}`,
+          `kamchilik: ${reasons.map((r) => REASON_TEXT[r](t, rules, s)).join("; ")}`,
           `qaytaring: {"index":${index},${FIELDS[s.layout] ?? ""}}`,
           `hozirgi: ${JSON.stringify(current(s))}`,
         ].join("\n");

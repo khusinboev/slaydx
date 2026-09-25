@@ -244,9 +244,10 @@ test("layoutWordTargets: oraliqlar sig'imdan oshmaydi va detektor chegarasidan p
   for (const visual of ["classic", "cards", "academic", "rail", "story"] as const) {
     const t = layoutWordTargets(bachelor, visual);
     const cap = (f: Parameters<typeof fitChars>[0], n?: number) => Math.max(CHARS_PER_WORD, fitChars(f, bachelor, visual, n));
-    assert.ok(t.colItem.max * CHARS_PER_WORD <= cap("colItem"), `${visual}: colItem`);
-    for (const [n, r] of Object.entries(t.stepTextBy)) assert.ok(r.max * CHARS_PER_WORD <= cap("stepText", Number(n)), `${visual}: stepText×${n}`);
-    assert.ok(t.colItem.max * CHARS_PER_WORD <= cap("colItem", t.maxColItems), `${visual}: colItem×${t.maxColItems}`);
+    // GAP maydonlari — yozuvchi chegarasi RASMSIZ quti (P11; rasmli quti ≤ 5 so'z bersa maqsad rasmsizdan).
+    const capNo = (f: Parameters<typeof fitChars>[0], n?: number) => Math.max(CHARS_PER_WORD, fitChars(f, bachelor, visual, n, NO_IMAGE));
+    for (const [n, r] of Object.entries(t.stepTextBy)) assert.ok(r.max * CHARS_PER_WORD <= capNo("stepText", Number(n)), `${visual}: stepText×${n}`);
+    assert.ok(t.colItem.max * CHARS_PER_WORD <= capNo("colItem", t.maxColItems), `${visual}: colItem×${t.maxColItems}`);
     assert.ok(t.statLabelMax * CHARS_PER_WORD <= cap("statLabel", t.maxStats), `${visual}: statLabel`);
     assert.ok(t.tableCellMax * CHARS_PER_WORD <= Math.max(CHARS_PER_WORD, fitChars("tableCell", bachelor, visual, t.maxTableCols, { rows: t.maxTableRows })), `${visual}: tableCell`);
     assert.ok(t.sectionSubtitle.max * CHARS_PER_WORD <= cap("subtitleSection"), `${visual}: section`);
@@ -304,12 +305,15 @@ test("P8 (a): prompt oraliqlari har auditoriya × vizual × hajmda ≥ 15 % zaxi
     }
   }
   assert.deepEqual(bad.slice(0, 10), [], `${bad.length} ta zaxirasiz maqsad`);
-  // Jonli dalil sonlari: 8–9 sinf `circle` 2 bandli ustun — rasmli 60 belgi → 5 so'z (ilgari 6 ≈ 54 → 58 «…»).
+  // Jonli dalil sonlari: 8–9 sinf `circle` 2 bandli ustun — rasmli 60 belgi → AYNAN 5 so'z = gap poli (zaxirasiz
+  // maqsad: model 4 yozadi, detektor 5 kutadi) → maqsad RASMSIZ 104 belgidan (9 so'z), rasm joy beradi (yakuniy jonli tuzatish).
   const g89 = bodyRules({ slideAudience: "school_8_9", textVolume: "standart", planItems: 5 }, "lesson");
   const t89 = layoutWordTargets(g89, "circle");
   assert.equal(clipLimit("colItem", g89, "circle", 2), 60, "sinov asosi: rasmli ustun bandi 60");
+  assert.equal(clipLimit("colItem", g89, "circle", 2, undefined, NO_IMAGE), 104, "sinov asosi: rasmsiz 104");
   assert.equal(t89.maxColItems, 2);
-  assert.equal(t89.colItem.max, 5);
+  assert.equal(t89.colItem.max, Math.floor((0.85 * 104) / CHARS_PER_WORD));
+  assert.equal(t89.colItem.max, 9);
   // Bosqich (3 ta): rasmli 42 belgi → 3 so'z < 5 — P11: maqsad RASMSIZ qutidan (121 → 11 so'z), rasm joy beradi.
   // (P8 da «3 so'z» so'ralardi; model 5–6 so'z yozib, jadval 45 da HAMMA bosqich «…» bilan kesilardi.)
   assert.equal(clipLimit("stepText", g89, "circle", 3), 42, "sinov asosi: rasmli bosqich qutisi 42");
@@ -320,17 +324,18 @@ test("P8 (a): prompt oraliqlari har auditoriya × vizual × hajmda ≥ 15 % zaxi
   const bq = bodyRules({ slideAudience: "students_bachelor", textVolume: "qisqa", planItems: 5 }, "lecture");
   assert.equal(bq.bulletChars, 119);
   assert.equal(bulletMaxWords(bq), 11);
-  assert.match(wordTargetLines(g89, "circle").join("\n"), /har band \d+(–5)? so‘z/);
+  assert.match(wordTargetLines(g89, "circle").join("\n"), /har ustunda 2 band, har band 6–9 so‘z/);
 });
 
 /*
- * P11 (c) — prompt maqsadi GAP maydonlarida (bosqich matni, ustun bandi, band) kamida
- * `PROSE_MIN_WORDS` (5) so'z, YOKI — rasmsiz quti ham undan kam ko'tarsa — aynan rasmsiz
- * sig'im × zaxira. Rasmli qutidan 3 so'z so'rash yolg'on maqsad edi: model 5–6 so'z yozdi.
- * MUTATSIYA: `fitWords` dagi 5 so'z qoidasi olib tashlansa (doim rasmli quti) — qizaradi
- * (8–9 sinf `circle` 3 bosqich: 3 so'z, rasmsiz 11).
+ * P11 (c) — prompt maqsadi GAP maydonlarida (bosqich matni, ustun bandi, band) `PROSE_MIN_WORDS`
+ * (5) so'zdan KO'P, YOKI — rasmsiz quti ham shuncha ko'tarmasa — aynan rasmsiz sig'im × zaxira.
+ * Rasmli qutidan 3 so'z so'rash yolg'on maqsad edi: model 5–6 so'z yozdi. AYNAN 5 ham yaramaydi
+ * (yakuniy jonli tuzatish): prompt «5», detektor «< 5 yupqa» — zaxira yo'q, 4 so'zli o'zbekcha gap
+ * yupqa chiqib, ta'mir ham rad etilardi (5–7 sinf `circle` 2 bandli ustun, bakalavr `academic` 4 bandli).
+ * MUTATSIYA: `fitWords` dagi qoida olib tashlansa (doim rasmli quti) yoki «>» «≥» ga qaytsa — qizaradi.
  */
-test("P11 (c): bosqich/ustun bandi/band maqsadi ≥ 5 so'z yoki rasmsiz sig'imga teng — har auditoriya × vizual", () => {
+test("P11 (c): bosqich/ustun bandi/band maqsadi > 5 so'z yoki rasmsiz sig'imga teng — har auditoriya × vizual", () => {
   assert.equal(PROSE_MIN_WORDS, 5);
   const bad: string[] = [];
   const words = (chars: number, cap: number) => Math.max(1, Math.floor((PROMPT_HEADROOM * Math.min(chars, cap)) / CHARS_PER_WORD));
@@ -341,12 +346,19 @@ test("P11 (c): bosqich/ustun bandi/band maqsadi ≥ 5 so'z yoki rasmsiz sig'imga
         const t = layoutWordTargets(r, visual);
         const noImg = (f: Parameters<typeof fitChars>[0], n?: number) => words(fitChars(f, r, visual, n, NO_IMAGE), fieldCap(f, r, visual, n));
         const check = (name: string, got: number, capWords: number, want = Number.POSITIVE_INFINITY) => {
-          // Auditoriya istagi (`want`, masalan `bulletMaxWords`) 5 dan kam bo'lsa — o'sha; aks holda ≥ 5 yoki rasmsiz sig'im.
-          if (got < PROSE_MIN_WORDS && got !== capWords && got !== want) bad.push(`${aud}/${vol}/${visual} ${name}: ${got} so'z (rasmsiz ${capWords})`);
+          // Auditoriya istagi (`want`, masalan `bulletMaxWords`) 5 dan kam bo'lsa — o'sha; aks holda > 5 yoki rasmsiz sig'im.
+          if (got <= PROSE_MIN_WORDS && got !== capWords && got !== want) bad.push(`${aud}/${vol}/${visual} ${name}: ${got} so'z (rasmsiz ${capWords})`);
         };
         for (const [n, x] of Object.entries(t.stepTextBy)) check(`stepText×${n}`, x.max, noImg("stepText", Number(n)));
         check(`colItem×${t.maxColItems}`, t.colItem.max, noImg("colItem", t.maxColItems));
         check("bullet", t.bullet.max, noImg("bullets"), bulletMaxWords(r));
+        // Ustun soni: 3 ta TO'LIQROQ band 4 ta 5 so'zlidan afzal — tanlangan sonda rasmli quti zaxira bilan > 5 so'z, yoki son poldа (2).
+        const imgWords = words(fitChars("colItem", r, visual, t.maxColItems), fieldCap("colItem", r, visual, t.maxColItems));
+        if (t.maxColItems > COL_MIN_ITEMS && imgWords <= PROSE_MIN_WORDS) bad.push(`${aud}/${vol}/${visual} maxColItems=${t.maxColItems}: rasmli ${imgWords} so'z`);
+        if (t.maxColItems < SLIDE_LIMITS.colItems) {
+          const more = words(fitChars("colItem", r, visual, t.maxColItems + 1), fieldCap("colItem", r, visual, t.maxColItems + 1));
+          if (more > PROSE_MIN_WORDS) bad.push(`${aud}/${vol}/${visual} maxColItems=${t.maxColItems}: ${t.maxColItems + 1} band ham ${more} so'z ko'tarardi`);
+        }
       }
     }
   }
@@ -355,8 +367,11 @@ test("P11 (c): bosqich/ustun bandi/band maqsadi ≥ 5 so'z yoki rasmsiz sig'imga
   const g89 = bodyRules({ slideAudience: "school_8_9", textVolume: "standart", planItems: 5 }, "lesson");
   assert.equal(layoutWordTargets(g89, "circle").stepTextBy[3].max, 11);
   assert.equal(layoutWordTargets(g89, "rail").stepTextBy[3].max, 8);
-  // Rasmli quti 5 so'zga yetsa — maqsad o'sha (rasm saqlanadi): 8–9 sinf circle 2 bandli ustun 60 → 5.
-  assert.equal(layoutWordTargets(g89, "circle").colItem.max, 5);
+  // Rasmli quti AYNAN 5 so'z bersa — maqsad RASMSIZ qutidan (rasm joy beradi): 8–9 sinf circle 2 bandli ustun 60 → 5, rasmsiz 104 → 9.
+  assert.equal(layoutWordTargets(g89, "circle").colItem.max, 9);
+  // Bakalavr `academic`: 4 band × 5 so'z (rasmli 60) o'rniga 3 band × 10 so'z (rasmli 111).
+  assert.equal(layoutWordTargets(bachelor, "academic").maxColItems, 3);
+  assert.ok(layoutWordTargets(bachelor, "academic").colItem.max >= 8, String(layoutWordTargets(bachelor, "academic").colItem.max));
 });
 
 test("element soni auditoriyaga ergashadi: yosh auditoriyaga kam bosqich/karta/ustun (P2 A2-04 pol)", () => {
@@ -730,17 +745,26 @@ const upTo = (n: number, from = 0) => {
   }
 };
 
-test("P8 (4): ta'mir RASMSIZ chegarada qabul qiladi — 4 bandli ustunning 90 belgilik bandi 60 da kesilmaydi", async () => {
-  // Sinov asosi: bakalavr `academic` 4 bandli ustun — rasmli 60, rasmsiz 110.
-  const withImage = clipLimit("colItem", rules, tpl.visual, 4);
-  const noImage = clipLimit("colItem", rules, tpl.visual, 4, undefined, NO_IMAGE);
-  assert.ok(withImage < 90 && noImage >= 90, `asos: ${withImage} / ${noImage}`);
+test("P8 (4): ta'mir RASMSIZ chegarada qabul qiladi — to'liq ustunning rasmli qutidan uzun bandi kesilmaydi", async () => {
+  /*
+   * Sinov asosi: 8–9 sinf `circle` `maxColItems` (2) bandli ustun — rasmli 60, rasmsiz 104.
+   * (Ilgari bakalavr `academic` 4 band: 60 / 110; endi u yerda 3 band — ikkala chegara ham
+   * `SLIDE_LIMITS.colItem` shiftida (110), farq yo'q.)
+   */
+  const m89 = extractMeta(TOOL_BY_ID["pro-slide"], { topic: "Orol dengizi fojiasi", slideAudience: "school_8_9" } as never);
+  const t89 = resolveSlideTemplate("lesson", m89.topic);
+  const r89 = bodyRules(m89, t89.id);
+  const n = layoutWordTargets(r89, t89.visual).maxColItems;
+  const withImage = clipLimit("colItem", r89, t89.visual, n);
+  const noImage = clipLimit("colItem", r89, t89.visual, n, undefined, NO_IMAGE);
+  const len = withImage + Math.floor((noImage - withImage) / 2);
+  assert.ok(t89.visual === "circle" && n === 2 && withImage < len && len <= noImage, `asos: ${n} band, ${withImage} < ${len} ≤ ${noImage}`);
   const thin = { id: "s0", layout: "twoCol", title: "Ikki yondashuv", leftTitle: "Eski", rightTitle: "Yangi", left: ["Bir."], right: ["Ikki."], plan: 1 } as SlideModel;
-  const items = (k: number) => [0, 1, 2, 3].map((i) => upTo(90, k + i * 3));
+  const items = (k: number) => Array.from({ length: n }, (_, i) => upTo(len, k + i * 3));
   await withLlm(
     () => jsonReply({ slides: [{ index: 0, left: items(0), right: items(1) }] }),
     async () => {
-      const [out] = await repairThinSlides([thin], meta, tpl, {}, later(), later());
+      const [out] = await repairThinSlides([thin], m89, t89, {}, later(), later());
       assert.deepEqual(out.left, items(0), "ta'mirlangan band rasmli quti (60) bilan kesildi");
       assert.deepEqual(out.right, items(1));
       assert.ok(out.left!.every((x) => !x.endsWith("…") && x.length > withImage));
@@ -795,13 +819,79 @@ test("P8 CHANGES 1: bandlar quti sig'imida (5–7 sinf circle), so'z chegarasida
     assert.ok(raw[i].startsWith(b.slice(0, -1)));
     assert.match(raw[i][b.length - 1], /\s/, `so'z o'rtasidan kesildi: «${b}»`);
   }
-  // Ta'mir aynan shu chegarada — yozuvchi bilan bir xil natija.
+  // Ta'mir aynan shu chegarada o'lchaydi — lekin qutiga sig'maydigan javob «…» bilan qirqilardi → `clipped-text` → RAD (asl qoladi).
   const thin = { id: "s0", layout: "bullets", title: "Sabablar", bullets: ["Qurg‘oqchilik."], plan: 1 } as SlideModel;
   await withLlm(
     () => jsonReply({ slides: [{ index: 0, bullets: raw }] }),
     async () => {
       const [out] = await repairThinSlides([thin], m5, t5, {}, later(), later());
-      assert.deepEqual(out.bullets, written.bullets, "ta'mir va yozuvchi bandni har xil qirqdi");
+      assert.deepEqual(out.bullets, thin.bullets, "qutiga sig'maydigan (qirqiladigan) ta'mir qabul qilindi");
+    },
+  );
+  // Qutiga sig'adigan javob — «…» siz qabul qilinadi (yozuvchi ham shu chegarada qirqmaydi).
+  const fit = [upTo(box, 1), upTo(box, 5), upTo(box, 9)];
+  assert.ok(fit.every((b) => b.length <= box && b.split(" ").length >= layoutWordTargets(r5, t5.visual).bullet.min), fit.map((b) => b.length).join(","));
+  await withLlm(
+    () => jsonReply({ slides: [{ index: 0, bullets: fit }] }),
+    async () => {
+      const [out] = await repairThinSlides([thin], m5, t5, {}, later(), later());
+      assert.deepEqual(out.bullets, fit);
+      const [w2] = extractNewSlides(JSON.stringify({ slides: [{ layout: "bullets", title: "Sabablar", bullets: fit }] }), 0, "F", r5, { final: true }, t5.visual).map((x) => x.slide);
+      assert.deepEqual(w2.bullets, fit, "yozuvchi sig'adigan bandni qirqdi");
+    },
+  );
+});
+
+/*
+ * Yakuniy jonli tuzatish — KESILGAN gap maydoni ta'mir nomzodi (`clipped-text`): jonli 8–9 sinf
+ * `circle` maqsadlar slaydi (blok, `plan` yo'q) 87 belgida «…» bilan kesilgan edi — model 8 so'z
+ * o'rniga 9–10 yozdi, hech kim qisqartirmasdi. Endi ta'mir ma'nosini saqlab qisqartiradi; yana
+ * sig'masa — rad (asl kesik qoladi, yomonlashmaydi). MUTATSIYA: `thinReasons` dagi
+ * `clippedText` chaqiruvi olib tashlansa — birinchi va uchinchi test qizaradi.
+ */
+test("clipped-text: «…» bilan qirqilgan band/ustun bandi/bosqich — blok slaydida ham; qisqa «…» savol emas", () => {
+  const cap3 = bulletClipLimit(bachelor, VIS, 3);
+  const cut = clipTo(sent(40), cap3);
+  assert.ok(cut.endsWith("…") && cut.length > 0.6 * cap3);
+  const okB = [sent(14), sent(14, 3)];
+  assert.deepEqual(reasonsOf(S({ layout: "bullets", bullets: [...okB, cut] })), ["clipped-text"]);
+  assert.deepEqual(reasonsOf(S({ layout: "bullets", bullets: [...okB, cut], plan: undefined })), ["clipped-text"], "blok slaydi (maqsadlar) ham");
+  assert.deepEqual(reasonsOf(S({ layout: "bullets", bullets: [...okB, "1/2 + 1/4 = …"] })), [], "bo'sh joyli savol — kesilgan emas");
+  const colCap = clipLimit("colItem", bachelor, VIS, 3, undefined, NO_IMAGE);
+  const cutCol = clipTo(sent(40, 2), colCap);
+  assert.deepEqual(reasonsOf(S({ layout: "twoCol", leftTitle: "A", rightTitle: "B", left: [sent(9), sent(9, 2), cutCol], right: [sent(9, 1), sent(9, 3), sent(9, 5)] })), ["clipped-text"]);
+  assert.deepEqual(reasonsOf(S({ layout: "compare", leftTitle: "A", rightTitle: "B", left: [sent(9), sent(9, 2), sent(9, 4)], right: [sent(9, 1), cutCol, sent(9, 5)] })), ["clipped-text"]);
+  const stepCap = clipLimit("stepText", bachelor, VIS, 3, undefined, NO_IMAGE);
+  const cutStep = clipTo(sent(40, 4), stepCap);
+  assert.deepEqual(reasonsOf(S({ layout: "process", steps: [1, 2, 3].map((n) => ({ n: String(n), title: `Bosqich ${n}`, text: n === 2 ? cutStep : sent(9, n) })) })), ["clipped-text"]);
+  // Yupqa VA kesilgan — ikkala sabab (kesilgan band + 2 ta juda qisqa band).
+  assert.deepEqual(reasonsOf(S({ layout: "bullets", bullets: ["Bir.", "Ikki.", cut] })), ["clipped-text", "short-bullets"]);
+});
+
+test("clipped-text ta'miri: prompt qisqartirishni so'raydi (blok slaydi ham), sig'adigan javob «…» siz qabul, sig'maydigani rad", async () => {
+  const cap3 = bulletClipLimit(rules, tpl.visual, 3);
+  const cut = clipTo(sent(40), cap3);
+  const goals = { id: "g", layout: "bullets", title: "Dars maqsadlari", bullets: [sent(12), sent(12, 3), cut] } as SlideModel;
+  const t = layoutWordTargets(rules, tpl.visual);
+  const short = [sent(12), sent(12, 3), sent(Math.min(t.bullet.max, 12), 6)];
+  await withLlm(
+    () => jsonReply({ slides: [{ index: 0, bullets: short }] }),
+    async (calls) => {
+      const [out] = await repairThinSlides([goals], meta, tpl, {}, later(), later());
+      assert.equal(calls.length, 1);
+      assert.match(calls[0].user, /kesilgan/);
+      assert.match(calls[0].user, new RegExp(`har band ≤ ${t.bullet.max} so‘z`));
+      assert.match(calls[0].system, /qisqartirasiz/);
+      assert.deepEqual(out.bullets, short);
+      assert.ok(out.bullets!.every((b) => !b.endsWith("…")));
+      assert.equal(out.title, goals.title);
+    },
+  );
+  await withLlm(
+    () => jsonReply({ slides: [{ index: 0, bullets: [sent(12), sent(12, 3), sent(40, 6)] }] }),
+    async () => {
+      const [out] = await repairThinSlides([goals], meta, tpl, {}, later(), later());
+      assert.deepEqual(out, goals, "yana sig'maydigan javob qabul qilindi");
     },
   );
 });
