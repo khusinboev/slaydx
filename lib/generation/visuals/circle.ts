@@ -48,14 +48,29 @@ function pushRoundPhoto(layers: SlideLayer[], theme: SlideTheme, url: string | u
 
 /** Sarlavha + yumaloq aksent tagchizig'i — kontent maketlari uchun bitta naqsh. */
 function pushRoundHead(layers: SlideLayer[], s: SlideModel, theme: SlideTheme, reserve: number, zoneW: number): void {
-  const { fitSize } = LAYOUT_KIT;
-  const headBox: Box = { x: TEXT_X, y: 0.5, w: Math.max(3, zoneW - reserve), h: 0.85 };
+  const { planBadge, badgedTitle } = LAYOUT_KIT;
+  const headBoxT = badgedTitle(s, { x: TEXT_X, y: 0.5, w: Math.max(3, zoneW - reserve), h: 0.85 }, 26, 16, 0.6);
+  const headBox = headBoxT.box;
+  const size = headBoxT.size;
+  /*
+   * AUDIT-25 P9: reja nishoni — dizayn tilida, lekin BOSHQA registrda:
+   * to'ldirilmagan aksent HALQA + `accentInk` raqam (`pushPlanRing`).
+   * Kartalardagi to'q disk «1 2 3» — ro'yxat tartibi; halqa — reja bandi
+   * (sharh 2). Faqat `plan` li mazmun slaydida (reja/test — hech qachon).
+   */
+  // Halqa (0.5″) uchun sarlavha ustida joy yo'q (y 0.5, `room` 0.6) — doim yonida.
+  const no = planBadge(s);
+  if (no) {
+    const d = 0.5;
+    const dy = ((size * 1.2) / 72 - d) / 2;
+    pushPlanRing(layers, theme, { x: TEXT_X, y: headBox.y + dy, w: d, h: d }, no);
+  }
   layers.push({
     t: "text",
     box: headBox,
     text: s.title,
     color: theme.text,
-    size: fitSize(s.title, headBox, 26, 16),
+    size,
     bold: true,
     src: { f: "title" },
   });
@@ -71,6 +86,25 @@ function pushBadge(layers: SlideLayer[], theme: SlideTheme, box: Box, label: str
     text: label,
     color: theme.titleText,
     size,
+    bold: true,
+    align: "center",
+    valign: "middle",
+  });
+}
+
+/**
+ * Reja bandi nishoni — to'ldirilmagan aksent halqa, ichida `accentInk`
+ * raqam (`accentInk`/`bg` — o'lchangan juft). Ro'yxat nishonchasidan
+ * (`pushBadge`: to'q disk) ataylab farq qiladi. Dekorativ, `src`siz.
+ */
+function pushPlanRing(layers: SlideLayer[], theme: SlideTheme, box: Box, label: string): void {
+  layers.push({ t: "rect", box: { ...box }, line: { color: theme.accent, width: 2 }, radius: box.w / 2 });
+  layers.push({
+    t: "text",
+    box: { ...box },
+    text: label,
+    color: theme.accentInk,
+    size: 14,
     bold: true,
     align: "center",
     valign: "middle",
@@ -239,7 +273,7 @@ function planBullets(s: SlideModel, theme: SlideTheme, index: number, total: num
 }
 
 function planAgenda(s: SlideModel, theme: SlideTheme, index: number, total: number, ctx: PlanCtx): SlidePlan {
-  const { fitSize, pushFooter, W, H } = LAYOUT_KIT;
+  const { pushFooter, W, H } = LAYOUT_KIT;
   const layers: SlideLayer[] = [];
   layers.push({ t: "rect", box: { x: 0, y: 0, w: W, h: H }, fill: { color: theme.bg } });
   layers.push(circle({ x: 10.53, y: 4.7, w: 2.8, h: 2.8 }, { color: theme.accent, alpha: 0.12 }));
@@ -267,7 +301,7 @@ function planAgenda(s: SlideModel, theme: SlideTheme, index: number, total: numb
       box: lineBox,
       text: line,
       color: theme.text,
-      size: fitSize(line, lineBox, ctx.bodyType.bodyPt, ctx.bodyType.minPt - 1),
+      size: LAYOUT_KIT.agendaFit(line, lineBox, ctx.bodyType.bodyPt),
       valign: "middle",
       src: { f: "bullets", i },
     });
@@ -301,6 +335,9 @@ function planQuote(s: SlideModel, theme: SlideTheme, index: number, total: numbe
   const blockH = 0.12 + 0.34 + qH + (s.quoteBy ? 0.4 + byH : 0);
   const y0 = 1.35 + Math.max(0, (4.9 - blockH) / 2);
   layers.push({ t: "rect", box: { x, y: y0, w: 1.1, h: 0.12 }, fill: { color: theme.accent }, radius: 0.06 });
+  // Reja nishoni (faqat `plan` li iqtibos) — aksent chiziq o'qida, o'ngida.
+  const no = LAYOUT_KIT.planBadge(s);
+  if (no) pushPlanRing(layers, theme, { x: x + 1.3, y: y0 - 0.19, w: 0.5, h: 0.5 }, no);
   layers.push({
     t: "text",
     box: { x, y: y0 + 0.46, w: tw, h: qH },

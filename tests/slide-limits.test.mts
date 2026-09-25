@@ -5,8 +5,8 @@ import { SLIDE_LIMITS, clipTo, SLIDE_IMAGE_MAX_BYTES, UNDO_DEPTH, REBUILD_DEBOUN
 import { resolveSlideTemplate } from "../lib/generation/slide-templates.ts";
 import { bodyRules } from "../lib/generation/slide-audience.ts";
 import { limitsFor } from "../lib/generation/slide-limits.ts";
-import { NO_IMAGE, clipLimit, layoutWordTargets } from "../lib/generation/slide-quality.ts";
-import { QUIZ_MAX, QUIZ_OPTION_MAX, QUIZ_Q_MAX, STAT_LABEL_MAX, STEP_TEXT_MAX, writeSlidesWithLlm } from "../lib/generation/slide-write.ts";
+import { CLIP_FLOOR_CHARS, NO_IMAGE, clipLimit, fitChars, layoutWordTargets } from "../lib/generation/slide-quality.ts";
+import { QUIZ_MAX, QUIZ_OPTION_MAX, QUIZ_Q_MAX, STAT_LABEL_MAX, STEP_TEXT_MAX, extractNewSlides, writeSlidesWithLlm } from "../lib/generation/slide-write.ts";
 import type { SlideModel } from "../lib/generation/slide-types.ts";
 import { TOOL_BY_ID } from "../lib/tools.ts";
 
@@ -239,8 +239,11 @@ test("normalize: jadval — tableCols/tableRows/tableCell va ustun soniga qarab 
       ...filler(7),
     ]),
   )[0];
-  const cols = Math.min(4, LIM.tableCols);
-  assert.equal(narrow.table?.headers[0].length, clipLimit("tableHeader", RULES, VISUAL, cols, 2, NO_IMAGE), "ustun soniga qarab sarlavha");
+  // INT-07: ustun soni — prompt bilan bir manba (auditoriya ∩ vizual sig'imi, `layoutWordTargets.maxTableCols`).
+  const cols = Math.min(4, LIM.tableCols, layoutWordTargets(RULES, VISUAL).maxTableCols);
+  assert.equal(narrow.table?.headers.length, cols);
+  const raw = long(SLIDE_LIMITS.tableHeader).length;
+  assert.equal(narrow.table?.headers[0].length, Math.min(raw, clipLimit("tableHeader", RULES, VISUAL, cols, 2, NO_IMAGE)), "ustun soniga qarab sarlavha");
 });
 
 test("normalize: quiz — quizOptions AYNAN, quizQ/quizOption chegarasi", async () => {
@@ -403,4 +406,85 @@ test("limitsFor: son o'zgaruvchi maydonlar pol × son jadvalidan, statik qopqoqd
   assert.equal(k.tableKey(2, 2), "3x3");
   assert.equal(k.tableKey(4, 3), "4x4");
   assert.equal(k.tableKey(6, 9), "5x6");
+});
+
+// ═══════════════════════════════════════════ 6. AUDIT-25 P11 — chegara deka VIZUALIGA ergashadi
+
+/*
+ * Jonli dalil (slides-3 e268937, 8–9 sinf, `lesson`): 6 dekaning 3 tasida HAMMA process
+ * bosqich matni «…» bilan tugadi. Sabab: `clipLimit` har doim `limitsFor` jadvali bilan
+ * qisilardi — u 17 vizualning ENG TORI, RASM bilan, × 0.88 (20 pt, 3 bosqich → 45).
+ * `circle` ning rasmsiz qutisi esa 121 belgi: P8 «rasmsiz qutida qirq, rasm joy beradi»
+ * qoidasi amalda o'chgan edi. Endi vizual ma'lum bo'lsa — SHU vizualning o'lchovi, statik
+ * shift (`SLIDE_LIMITS`) bilan; jadval faqat vizual noma'lum bo'lganda (zaxira).
+ *
+ * MUTATSIYA: `fieldCap` vizual ma'lum bo'lganda ham `tableCap` (jadval) qaytarsa — (a) qizaradi.
+ */
+const G89 = bodyRules({ slideAudience: "school_8_9", textVolume: "standart", planItems: 5 } as never, "lesson");
+/** ~100 belgi, 15 so'z — real o'zbekcha bosqich matni. */
+const STEP100 = "Quyosh issiqligi suvni bug‘ga aylantiradi, bug‘ esa havoda sovib bulut hosil qiladi va yomg‘ir yog‘adi";
+
+test("P11 (a): circle 3 bosqich (8–9 sinf) — 100 belgilik matn RASMSIZ qutiga sig'adi, qirqilmaydi; rail o'z (torroq) qutisida", () => {
+  assert.ok(STEP100.length >= 95 && STEP100.length <= 105, `sinov matni ${STEP100.length}`);
+  const target = layoutWordTargets(G89, "circle").stepTextBy[3];
+  const words = STEP100.split(/\s+/).length;
+  assert.ok(words <= target.max * 1.5, `sinov matni ${words} so'z > 1.5 × maqsad ${target.max}`);
+  const raw = [{ layout: "process", title: "Suv aylanishi", steps: [1, 2, 3].map((i) => ({ n: String(i), title: `Bosqich ${i}`, text: STEP100 })) }];
+  const write = (visual: "circle" | "rail") => extractNewSlides(JSON.stringify({ slides: raw }), 0, "F", G89, { final: true }, visual).map((x) => x.slide)[0];
+  const circle = write("circle");
+  assert.equal(circle.steps?.length, 3);
+  for (const st of circle.steps!) assert.equal(st.text, STEP100, "circle rasmsiz qutisi 121 — 100 belgi kesilmasligi kerak");
+  // `rail` ning qutisi torroq (85) — o'z o'lchovida qirqiladi, jadvalning 45 iga emas.
+  const railMax = clipLimit("stepText", G89, "rail", 3, undefined, NO_IMAGE);
+  assert.equal(railMax, 85);
+  const rail = write("rail");
+  for (const st of rail.steps!) {
+    assert.ok(st.text.length <= railMax && st.text.length > limitsFor(G89, { steps: 3 }).stepText, `rail ${st.text.length}`);
+    assert.ok(st.text.endsWith("…") && STEP100.startsWith(st.text.slice(0, -1)));
+  }
+});
+
+test("P11: vizual bo'yicha o'lchov (20 pt, 3 bosqich) — circle/academic/rail rasmsiz 121/121/85, rasm bilan 42/42/36; jadval (zaxira) 45", () => {
+  const cases = [
+    ["circle", 121, 42],
+    ["academic", 121, 42],
+    ["rail", 85, 36],
+  ] as const;
+  for (const [visual, none, both] of cases) {
+    assert.equal(fitChars("stepText", G89, visual, 3, { images: "none" }), none, `${visual} rasmsiz`);
+    assert.equal(fitChars("stepText", G89, visual, 3), both, `${visual} rasm bilan`);
+    assert.equal(clipLimit("stepText", G89, visual, 3, undefined, NO_IMAGE), none, `${visual}: qirqish = rasmsiz quti (jadval 45 emas)`);
+    assert.equal(limitsFor(G89, { steps: 3 }, { visual, images: "none" }).stepText, none, `${visual}: tahrir chegarasi ham shu`);
+    assert.equal(limitsFor(G89, { steps: 3 }, { visual, images: "both" }).stepText, Math.max(CLIP_FLOOR_CHARS, both), `${visual}: rasmli slayd — rasmli quti`);
+  }
+  // Vizual noma'lum — eski jadval (zaxira) o'zgarmagan.
+  assert.equal(limitsFor(G89, { steps: 3 }).stepText, 45);
+  assert.equal(clipLimit("stepText", G89, undefined, 3, undefined, NO_IMAGE), 45);
+});
+
+test("P11: limitsFor(rules, counts, {visual, images}) — clipLimit bilan AYNAN bir funksiya (generatsiya = tahrir)", () => {
+  const bach = bodyRules({ slideAudience: "students_bachelor", textVolume: "standart", planItems: 5 } as never, "lecture");
+  for (const rules of [G89, bach]) {
+    for (const visual of ["circle", "academic", "rail", "story", "dashboard", "classic"] as const) {
+      for (const images of ["none", "both"] as const) {
+        for (const n of [2, 3, 4]) {
+          const l = limitsFor(rules, { steps: n, stats: n, cols: n, rows: 4 }, { visual, images });
+          const c = (f: Parameters<typeof clipLimit>[0], k?: number, rows?: number) => clipLimit(f, rules, visual, k, rows, { images });
+          const tag = `${rules.minPt}pt/${visual}/${images}/${n}`;
+          assert.equal(l.stepText, c("stepText", n), tag);
+          assert.equal(l.stepTitle, c("stepTitle", n), tag);
+          assert.equal(l.statLabel, c("statLabel", n), tag);
+          assert.equal(l.tableCell, c("tableCell", n, 4), tag);
+          assert.equal(l.tableHeader, c("tableHeader", n, 4), tag);
+          assert.equal(l.tableHeaderWide, l.tableHeader, tag);
+          assert.equal(l.quizOption, c("quizOption"), tag);
+          // Statik shiftdan hech qachon oshmaydi.
+          assert.ok(l.stepText <= SLIDE_LIMITS.stepText && l.statLabel <= SLIDE_LIMITS.statLabel && l.tableCell <= SLIDE_LIMITS.tableCell && l.quizOption <= SLIDE_LIMITS.quizOption, tag);
+          assert.ok(l.tableHeader <= (n <= 3 ? SLIDE_LIMITS.tableHeaderWide : SLIDE_LIMITS.tableHeader), tag);
+          // Son chegaralari vizualga bog'liq emas.
+          assert.equal(l.stepsMax, limitsFor(rules).stepsMax, tag);
+        }
+      }
+    }
+  }
 });

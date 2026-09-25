@@ -918,3 +918,77 @@ test("convertLayout: bullets→process/stats ham auditoriya POLI bo'yicha qirqil
   const statLim = limitsFor(schoolRules, { stats: stats.length });
   for (const x of stats) assert.ok(x.label.length <= statLim.statLabel, "har yorliq SHU songa mos chegarada");
 });
+
+// ═══════════════════════════════════════════ 13. AUDIT-25 P11 — tahrir deka VIZUALI va RASM holatiga ergashadi
+
+/*
+ * P11: `applyDocOps` `limitsFor` ga deka vizualini (`buildSlideDeck(doc).visual`) va slaydning
+ * rasm holatini beradi. 8–9 sinf `circle` 3 bosqich: rasmsiz quti 121 belgi, rasm bilan 42;
+ * ilgari tahrir doim zaxira jadvalni (45) olardi — generatsiya 100 belgi yozgan bosqichni
+ * foydalanuvchi qayta yoza olmasdi. Rasmli slayd esa rasm yonidagi qutiga (42) qirqiladi.
+ * MUTATSIYA: `editLimits` `images` ni tashlasa (doim "both") — rasmsiz slayd 42 ga qirqiladi, qizaradi;
+ * `applyDocOps` `visual` bermasa — ikkalasi ham 45 (jadval), qizaradi.
+ */
+const g89Meta = extractMeta(TOOL_BY_ID.slide, { topic: "Suv aylanishi", slideTemplate: "lecture", slideAudience: "school_8_9" } as never);
+function circleDoc(slides: SlideModel[]): AcademicDoc {
+  return { meta: g89Meta, titlePage: true, toc: true, sections: [], slides, slideTemplate: "lecture", slideVisual: "circle" };
+}
+/** ~100 belgi — real o'zbekcha bosqich matni. */
+const STEP100 = "Quyosh issiqligi suvni bug‘ga aylantiradi, bug‘ esa havoda sovib bulut hosil qiladi va yomg‘ir yog‘adi";
+function threeSteps(image: boolean, text = ""): SlideModel {
+  return {
+    id: "s0",
+    layout: "process",
+    title: "Suv aylanishi",
+    steps: [1, 2, 3].map((i) => ({ n: String(i), title: `Bosqich ${i}`, text })),
+    ...(image ? { image: { url: ASSET } } : {}),
+  };
+}
+
+test("P11 (b): circle 8–9 sinf — rasmsiz bosqich ~100 belgini qabul qiladi, rasmli — rasm yonidagi quti (42)", () => {
+  const deck = buildSlideDeck(circleDoc([threeSteps(false)]));
+  assert.equal(deck.visual, "circle");
+  assert.equal(deck.bodyType.minPt, 20);
+  const src = { f: "steps", i: 0, k: "text" } as const;
+  const edited = applyDocOps(
+    circleDoc([threeSteps(false), threeSteps(true)]),
+    [
+      { op: "text", index: 0, src, value: STEP100 },
+      { op: "text", index: 1, src, value: STEP100 },
+    ],
+    ctx,
+  );
+  assert.equal(edited.ok, true, edited.ok ? "" : edited.error);
+  const [plain, pictured] = (edited as { ok: true; doc: AcademicDoc }).doc.slides!;
+  assert.equal(plain.steps![0].text, STEP100, "rasmsiz slayd: rasmsiz quti (121) — 100 belgi qirqilmaydi");
+  const withImage = limitsFor(deck.bodyType, { steps: 3 }, { visual: "circle", images: "both" }).stepText;
+  assert.equal(withImage, 42);
+  const t = pictured.steps![0].text;
+  assert.ok(t.length <= withImage && t.endsWith("…") && STEP100.startsWith(t.slice(0, -1)), `rasmli slayd rasm yonidagi qutiga: ${t.length} «${t}»`);
+});
+
+test("P11 (b): rasmli slaydda tegilmagan uzun bosqich QISQARMAYDI, tipo tuzatish uzunlikni saqlaydi (W7 editLimit)", () => {
+  // Rasmli slayd, bosqichlar allaqachon 100 belgi (masalan rasm keyin qo'yilgan) — rasmli quti 42 dan uzun.
+  // Kanonik holat (renumber + sections) — `docOf` naqshi, lekin circle/8–9 sinf dekasi.
+  const doc = apply(circleDoc([threeSteps(true, STEP100)]), [{ op: "reorder", order: [0] }]);
+  const typo = `${STEP100.slice(0, 20)}X${STEP100.slice(21)}`;
+  const r = applyDocOps(doc, [{ op: "text", index: 0, src: { f: "steps", i: 1, k: "text" }, value: typo }], ctx);
+  assert.equal(r.ok, true);
+  const steps = (r as { ok: true; doc: AcademicDoc }).doc.slides![0].steps!;
+  assert.equal(steps[1].text, typo, "tahrirlangan bosqich eski uzunlikda saqlanadi");
+  assert.equal(steps[0].text, STEP100, "tegilmagan bosqich o'zgarmaydi");
+  assert.equal(steps[2].text, STEP100);
+  // Undo aynan qaytaradi.
+  roundTrip(doc, [{ op: "text", index: 0, src: { f: "steps", i: 1, k: "text" }, value: typo }], "P11 rasmli bosqich tipo");
+});
+
+test("P11 (b): vizualsiz chaqiruvchi (writeSlideField, qisman qoidalar) — zaxira jadval o'zgarmagan", () => {
+  const g89Rules: EditRules = buildSlideDeck(circleDoc([threeSteps(false)])).bodyType;
+  const r = writeSlideField(threeSteps(false), { f: "steps", i: 0, k: "text" }, STEP100, g89Rules);
+  const lim = limitsFor(g89Rules, { steps: 3 }).stepText;
+  assert.equal(lim, 45);
+  assert.ok((r as { slide: SlideModel }).slide.steps![0].text.length <= lim);
+  // Vizual berilsa — shu vizual o'lchovi.
+  const v = writeSlideField(threeSteps(false), { f: "steps", i: 0, k: "text" }, STEP100, { ...g89Rules, visual: "circle" });
+  assert.equal((v as { slide: SlideModel }).slide.steps![0].text, STEP100);
+});
