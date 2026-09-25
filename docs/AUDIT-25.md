@@ -90,6 +90,8 @@ Shartnomalar (yakuniy, review'lardan keyin):
 
 ### Tekshiruv
 - Gate `slides3-pre` (879f495): typecheck 0, lint 0, unit yashil, viewer, UI, build, fresh-Postgres smoke — hammasi yashil.
+- Gate `slides3-mid` (7d4525c, W7+P10+P8+docs dan keyin): typecheck 0, lint 0, unit **3 412/3 412**, viewer 248/248, UI **475/475**, build (first-load 221/220 kB), smoke — hammasi yashil.
+- Review'lar: INTEGRATION (1 P1 + 5 P2 + 8 P3 → P9/P11/P12/P13 ga taqsimlandi), OLDDECKS — SAFE (6 eski deka piksel-bo'yicha bir xil, faqat mo'ljallangan raqamlar olib tashlangan), PRE-DEPLOY — GO-WITH-FIXES (deploy commit'ida gate, scope muzlatish, qaytarish qoidasi tasdig'i).
 - Jonli «keyin» (7 deka, real Gemini): reja qamrovi 7/7 (oldin 0/6), tartib raqami sizishi 0, halol skelet; ko'z bilan: Orol 4/4, Kvant 5/5 band o'z slaydi bilan, sarlavha = reja bandi.
 - Qolgan (P8/P9/P10 bilan yopildi): «…» kesiklar, reja slaydida raqam, redirect URL — yakuniy jonli tekshiruv pastda.
 
