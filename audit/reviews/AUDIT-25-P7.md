@@ -170,3 +170,112 @@ commit it is clipped with "…". That was already true under the static caps; th
 cached bundle clips optimistically at the static caps and then snaps to the server doc on save. Nothing to fix on
 the client. The real visible problem is C1, the loss of content the user never touched, and it belongs to W7 and
 the generator owner, not the viewer.
+
+---
+
+# P12 review — eee9a8a
+
+INT-03 fix on `worktree-agent-a45f8181f192e88ae` (3d4587c red tests, 10b648f fix, eee9a8a refinements; base slides-3
+`6a9f101`). Reviewed `git diff 6a9f101..eee9a8a -- lib tests` and the callers in `lib/server/**`.
+
+## Verdict: CHANGES (1 required or owner sign-off, 1 required at the P11 merge, 2 optional)
+
+The chokepoint is right, the ordering is right, the scope is slide-only, and it uses the same measure as generation.
+The gap is **undo and restore across PATCHes on old decks**. The monotone rule compares against `before` only, so an
+old deck can no longer get back its **own original** AI image once that image leaves the slide.
+
+## Verified
+
+- **Slide-only.** `guard` is implemented only by `slideAdapter` (`edit-adapters.ts:218`) and called optionally
+  (`slide-commit.ts:159`, `cur.adapter.guard?.`). The resume, article, work and teacher adapters don't define it.
+  Article polish and rewrite (`doc-polish.ts:469`, `article-rewrite.ts:190/366`) go through `commitDocOps` but get
+  article adapters, so no guard. `commitPolishedDoc` (games and infographic) writes directly and is not a slide path.
+  Deck restore (`doc_json = doc_prev`) bypasses the guard, which is correct: it returns the original state.
+- **Nothing persists on rejection.** `commitDocOps` checks the version (409) → `apply` (422) → `guard` (400) →
+  render → `transaction` (doc + `storeGenerationUploads`). `pendingUpload` is pure (`upload-quota.ts:188`), so a
+  rejected upload writes neither the doc nor the asset row. A stale `baseVersion` gets 409 before anything is
+  measured. Removing `assertTextFitsImage` loses nothing: the upload is an `image` op through the same guard, and
+  test (6) covers replacing an image while the text stays the same.
+- **`slideOrigins` index math.** It mirrors `applyDocOps` for each op:
+  - `add` → `after+1`;
+  - `delete` → filter;
+  - `insert` → splice at `index`;
+  - `set` → in place;
+  - `reorder` → `order.map(k => o[k])`.
+
+  Every other op edits in place. That includes `answer`, whose `rebuildAnswerKey` changes the answers slide in
+  place, so it is not structural. The guard runs only after `apply` succeeded atomically, so every index is valid.
+  I found **no counter-example** for a successful op list, including mixes such as `insert 0; reorder; delete 1;
+  add -1`, where each step applies the same transform in both functions. On a length mismatch, `slideOrigins`
+  returns `null` and every image slide gets the full check, so an error in this code refuses rather than lets
+  overflow through.
+- **Same measure as the writer.** `imageYieldField` is now the first key of `imageOverflowChars`. The predicate is
+  unchanged: `longest > withImage && withImage < none`, with keys inserted in check order, and test `:586` locks it.
+  Generation calls it with `bodyRules(meta, tpl.id)` + `tpl.visual` (`slide-write.ts:1151` →
+  `slide-images.ts:240`). The guard uses `buildSlideDeck(after)`, which gives `bodyRules(doc.meta, tpl.id)` + `doc.slideVisual`,
+  and the latter is pinned to `tpl.visual` at generation. The writer and the editor therefore can't disagree:
+  a freshly generated image slide has overflow 0.
+- **Performance is fine.**
+  - `fitChars` is memoized process-wide (`slide-quality.ts:277/300`, keyed by field|count|rows|visual|bodyPt|minPt|images).
+  - A cold miss is a linear probe of up to `MAX_PROBE_WORDS` layouts × 2 image modes. The key space is small and finite.
+  - Untouched image slides skip measurement through a `yieldText` string compare, and `buildSlideDeck` runs once per PATCH.
+- **Tests.** `slide-image-edit` + `slide-doc-route`: **62/62 pass** (33 + 29, one heavy run). I did not re-run
+  `viewer-upload-commit` (Postgres).
+
+## "Wrong slide after renumber": quantified
+
+`renumber` makes ids positional (`s{i}`) after every commit. `via.id` therefore names a **position in `before`**,
+not a slide. Within one PATCH (tested at `:616`) it is exact. Across PATCHes:
+- (a) **False refusal.** Delete an old-deck image slide A that overflows (PATCH 1), then Ctrl+Z (PATCH 2:
+  `insert` with id `sK`). `prevById("sK")` is now A's former neighbour, so the undo is refused unless that
+  neighbour has an image and at least A's overflow on **every** field. In practice it is almost always refused, so
+  the "undo of delete via id" claim holds **only within one PATCH**.
+- (b) **False accept.** A new image slide with overflowing text, inserted with the id of an existing image slide
+  whose overflow is at least as large per field, is accepted. The accepted overflow is limited by overflow the deck
+  already has, this happens only on old decks, and it only affects the user's own deck. **Acceptable as debt.**
+
+## CHANGES
+
+1. **(required, or explicit owner sign-off as debt) Old decks: across PATCHes, undo and restore of the original
+   image are refused, and the AI image becomes unrecoverable.** `edit-adapters.ts:138-170`: the bases are only
+   `before[from]` and `before[via.id]`. Take an old deck (pre-P8) with an image slide whose box text already
+   overflows the with-image box. INT-03 measured 17/18 audience × visual rows over in some field, so such slides
+   are common:
+   - «Rasmni o'chirish» (PATCH 1) → Ctrl+Z (PATCH 2, inverse `set` with the image). The base now has no image, so
+     the full check runs → **400**, and the client reloads and drops the queue (`useDocEdit.settleFailure`).
+   - «Rasmni qaytarish» (`imageRestore`) on the same unchanged slide → **400**.
+   - Delete the slide → Ctrl+Z in a separate PATCH → **400** (renumber note (a)).
+   - Shorten the text (allowed) → Ctrl+Z back to the original → **400** (the overflow grew relative to `before`).
+
+   Before P12 all four worked. Afterwards, the only way back to the AI image is «Asl holatga qaytarish», which
+   throws away every edit in the deck. Fix: add the **original deck** as a base. Load `doc_prev` lazily, only when
+   a touched image slide fails both fast paths. Accept a slide if some image slide in `doc_prev` (or in `before`)
+   has **the same `image.url`** and has no smaller overflow on any field (or the same `yieldText`). Matching by
+   image URL identifies the slide whatever renumbering happened. That fixes (a) above and all four flows, and it
+   keeps INT-03 flow 2 closed: text lengthened after the image was removed is still worse than the original.
+   If `doc_prev` is null (deck never edited), `before` is the original. Add tests for each of the four flows as
+   two-PATCH sequences.
+2. **(required at the P11 merge; P11/P12 owners) The editor's clip on image slides must not be looser than the
+   guard.** P11 (`worktree-agent-a237fc05b62d8188f`, `slide-edit.ts:112-115` `editLimits`) clips image-slide
+   steps/stats/table/quiz at `clipLimit(…, {images:"both"})` = `max(CLIP_FLOOR_CHARS=24, fitChars)`
+   (`slide-limits.ts:856` there). The guard (`imageOverflowChars`) uses the raw `fitChars`. Where the with-image
+   box is under 24 characters (for example rail `stepText`×4 = 4, per the INT-03 table), the viewer accepts 5–24
+   characters optimistically and then the server returns **400 `text_too_long`**. The client reloads and drops
+   every unsent op. Fix: for `images:"both"` on an image slide, use the raw `fitChars` in `editLimits` (or give
+   the guard the same floor, but then generation's `imageYieldField` would disagree). Lock the fix with a test
+   on a rail process slide that has an image.
+   **P12 tests that expect 400, checked against P11:** none of them change status. P11 text ops clip; they don't
+   return 422, which comes only from count and structure guards. Every P12 test that expects 400 on a
+   text/list/set/insert uses twoCol `left`/`right`, and P11 leaves those at the static `colItem` 110 (P11
+   `slide-edit.ts:210`, `:369`, `:816`). The tests: (1) `:419`, (1b) `:425`, (3b) `:446`, (4b) `:479`, (5d)
+   `:516`, (5e) `:530`, (6b) `:557`, monotone `:594` (second half), undo with a foreign id `:627`. If P11 later
+   makes `colItem` image-aware, (1), (1b), (5d), (6b) and `:594` would flip to 200 (clipped before the guard) and
+   must move to `set`/`image`/`imageRestore` payloads.
+3. (optional) `edit-adapters.ts:150-165`: the monotone comparison is per field **key**. A `layout` op on an old
+   overflowing image slide (twoCol `colItem` +50 → bullets `bullets` +10) is refused, because `bullets` is a new
+   key (0 → 10), even though the overflow shrank. Compare the worst overflow ratio across fields instead, or treat
+   a new key's baseline as the origin's worst overflow.
+4. (optional) `edit-adapters.ts:97` `yieldText` omits `leftTitle`/`rightTitle`/`quoteBy`. It is correct today,
+   since `imageYieldField` doesn't read them, but the comment's rule ("add new fields here too") has no test
+   pinning it. Add one test that builds `yieldText` keys from the `imageOverflowChars` check list, or derive both
+   from one table.
