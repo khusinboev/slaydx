@@ -567,8 +567,8 @@ function probeText(words: number, rot = 0): string {
  * sig'im — aylanmalar ichidagi ENG QISQA matn.
  */
 const PROBE_ROTATIONS = [0, 2, 3, 5, 7, 9, 11, 13, 16, 19, 22, 26] as const;
-/** Aylanma bilan o'lchanadigan maydonlar — bandlar ro'yxati (har band o'z qatorlarida). */
-const ROTATED_FIELDS: ReadonlySet<FitField> = new Set(["bullets", "agenda"]);
+/** Aylanma bilan o'lchanadigan maydonlar — bandlar, reja bandlari, iqtibos (INT-10: `magazine` 131 %). */
+const ROTATED_FIELDS: ReadonlySet<FitField> = new Set(["bullets", "agenda", "quote"]);
 
 type Probe = {
   /** Soni o'zgaruvchi maydonda standart son (auditoriya ruxsati). */
