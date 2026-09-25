@@ -410,3 +410,86 @@ The call site, clip order, counts and `visual` plumbing are all correct. One reg
 - **N1. No test pins the `jobDeadline` forwarding.** If the 6th argument were dropped, W1 would still be green. Add a case: stage deadline ample, `jobDeadline = now + REPAIR_MIN_MS − 1 s` → `calls` equal `["writer"]`.
 - **N2. `list()` and the title path collapse NBSP before `clipTo`.** Both use `/\s+/`, which undoes P3's NBSP preservation («12 km») for generated text. Use `/[ \t\n\r\f\v]+/`, the same as `clipTo`.
 - **N3. Column item count is still the static 4.** `normalizeSlide` does not apply `layoutWordTargets.maxColItems`, which is prompt-only (for example, 2 for 1–4 grade/circle). A 4-item kids column is clipped to ≥ 24 characters per item (the `CLIP_FLOOR_CHARS` floor), not dropped. That is acceptable, but if P2 cannot enlarge those boxes, consider truncating to `maxColItems`.
+
+---
+
+# P8 review — 2244e93 («matn rasmdan ustun»)
+
+- **Scope:** `git diff 879f495..2244e93 -- lib tests`, worktree `agent-a3f1353a…`.
+- **Heavy commands:** 2 fresh runs through `heavy2.sh`.
+  1. `slide-quality` + `slide-images`: **54/54 pass**.
+  2. `slide-plan` + `slide-limits`: **48/48 pass**. The same run included a bullets-capacity probe (`scratchpad/p3rev/p8probe.mts`: 14 audiences × {standart, kop} × 17 visuals, box ink measured with the layout's own `listRows`/`inkHeight`).
+
+  The tests ran with `hermetic-env` and without `.env*`. `fetch` is stubbed in every new test: Gemini `/interactions` for images, and `withLlm` for repair and the writer. No network or LLM call is made (question 6).
+
+## Verdict: **CHANGES** (1 code item) + 1 owner decision
+
+The P8 mechanism is correct and well tested:
+- `PROMPT_HEADROOM` applies to words only, while counts stay on raw capacity;
+- the text stage clips with `NO_IMAGE`;
+- the yield predicate is shared by planning and logging;
+- the exclusion happens before `want`.
+
+The code change is the one field P8 left out: bullets. P8's own rule is "normalizeSlide and repair clip at the same no-image limit", and for bullets it does not hold today.
+
+## CHANGES
+
+1. **Clip bullets at the box, not only at `bulletChars`.**
+   - **Where:** `lib/generation/slide-write.ts:368` (and the table fallback at `:260`). Bullets are clipped at `rules.bulletChars` only. P8's own `mergeRepair` already clips bullets at `clipLimit("bullets", …, NO_IMAGE)` (`slide-quality.ts`, mergeRepair `bullets`), so the writer and the repair disagree for the same field.
+   - **Probe:** at `bulletChars` length, bullets are longer than the no-image bullets box in **21 template-visual cases at `standart`** (11 of them with ink > 100 % of the box) and in most `kop` cases:
+
+     | Case | bulletChars | Box (chars) | Ink / box |
+     |---|---|---|---|
+     | school_1_4/circle | 80 | 75 | 111 % |
+     | school_5_7/circle | 100 | 85 | 101 % |
+     | school_5_7/dashboard | 100 | 75 | 115 % |
+     | school_8_9/editorial | 120 | 104 | 112 % |
+     | school_10_11/dashboard | 140 | 139 | 116 % |
+     | school_5_7/kop/circle | 135 | 85 | 142 % |
+     | school_10_11/kop/circle | 189 | 75 | 241 % |
+     | students_bachelor/kop/circle | 223 | 121 | 201 % |
+
+   - **Why it is visible:** bullets use `fitSize`/`fitLines`, which stop at `minPt` and then overflow. The viewer clips the overflow (`overflow: hidden`) and the PPTX spills it, which breaks "ko'rdim = oldim". This does not happen for a model that obeys the prompt, because the bullet maximum is ≤ 0.85 × box. It does happen on the overshoot that P8's own live data shows (4 of 7 decks).
+   - **Fix:** in the `bullets` layout, clip at `Math.min(rules.bulletChars, clipLimit("bullets", rules, visual, items.length, undefined, NO_IMAGE))` after the count is cut to `maxBullets`, the same "count first" order as the other fields. Agenda, references and answers keep their own limits.
+   - **Test:** school_5_7/circle, 3 bullets of ~100 characters → each ≤ the box limit and cut at a word boundary. Also confirm that normalize and repair agree.
+   - **Not a P8 regression:** the clip has been at `bulletChars` since before AUDIT-25. It is cheapest to fix here, because P8 owns these call sites and the "one rule for writer and repair" claim.
+
+## Owner decision (not a code defect)
+
+- **D1. Dropping images with no refund on `pro-slide`.**
+  - **What the code does:** `plannedImageSlots(…, rules)` removes a slide whose text does not fit the with-image box **before** `want` is set. The image is not produced and no partial refund follows.
+  - **The conflict:** `pro-slide` is advertised as «Har slaydda AI chizgan rasm» (`lib/tools.ts:376`) and priced per slide.
+  - **Why it needs sign-off:** this is a money and promise policy, which by project rule needs the owner's agreement before deploy.
+  - **The choices:**
+    - (a) accept, and optionally reword the promise to «har mos slaydga»; or
+    - (b) count yielded slides in `want` so the existing refund applies.
+
+  The code is correct for either choice; only the placement of `want` changes.
+
+## Questions asked
+
+1. **`want`/`got` and refund.** Correct.
+   - `report.want = planned.length` is taken after the exclusion (`slide-images.ts:~321-325`).
+   - `jobs = planned.filter(!s.image)` and `got = want − jobs.length + successes`, so **`got ≤ want`** always.
+   - `delivered.ts:90-94` reads the **stored** `doc.slideImages.want/got` and never recomputes the plan.
+   - Test (c) asserts want 3 → 2, got = want, and that the live wait list excludes the yielded slide.
+2. **Old docs and re-render.** Safe.
+   - The exclusion applies only to `!s.image` slides, so a slide that already has an image is never excluded.
+   - `plannedImageSlots` is called only from `attachSlideImages`, which runs only at generation time. The render paths, `lib/server/slide-image.ts` and the viewer never call it.
+   - A later layout change can therefore change future plans only. Stored `want`/`got` and attached images are never touched.
+3. **Bullets at `bulletChars`.** A **real overflow risk** (see CHANGE 1). school_5_7/circle is borderline at standard volume (100 vs 85, 101 % ink at the full 100 characters). The wider risk is school_1_4/circle and school_5_7/dashboard at `standart` (111–116 %) and nearly every visual at `kop` (up to 2–2.8×). **Fix it now, in P8** (one line plus a test). It is a pre-existing gap, not a P8 regression, but P8's same-rule claim and the headroom rationale both depend on it.
+4. **The prompt vs clip test is still meaningful.** Test (a) asserts `words × 9 ≤ 0.85 × clipLimit(with-image)` for every audience × volume × visual (floor exceptions only at 1–2 words). It fails if the headroom is removed (`PROMPT_HEADROOM = 1`), or if any field goes back to a static maximum. The earlier P3 invariants, "prompt ≤ `limitsFor` on the same table key" and "min ≤ max", are kept. Counts use raw capacity (`maxCount` with headroom 1), so P2/P3's count decisions do not move.
+5. **Editor path** (the viewer adds an image to an over-long slide; P8's request 2). **Severity: medium. P8 makes it reachable.**
+   - **Why P8 exposes it:** before P8, the text stage clipped at the with-image box, so adding an image could not push text past it. Now text can legitimately reach the larger no-image box.
+   - **What happens:** adding an image through `lib/server/slide-image.ts uploadSlideImage` (or the viewer editor) to a twoCol/process/stats/table slide narrows the content zone.
+     - twoCol (`fitLines`, floor `minPt − 2`) **overflows**, with the viewer/PPTX mismatch described above;
+     - process/stats/table (`bodyFit`) drop **below the audience floor**, down to the old design floor, which breaks the Slide Law but stays inside the box.
+   - **Owner:** the editor/image-route owner (the W7 assignee, `slide-edit.ts`/`slide-image.ts`), not P8.
+   - **Fix:** on image set, call `imageYieldField(slide, bodyRules(meta, tpl), visual)`. If it is non-null, either refuse with «Matn rasm bilan sig‘maydi — avval matnni qisqartiring» or accept with a visible warning.
+   - **Timing:** it should land before P8 is deployed, since P8 widens the gap.
+6. **No network or LLM in tests.** Confirmed (see the top of this section).
+
+## Non-blocking
+
+- **N1.** `imageYieldField` compares `clipLimit` values, which include `CLIP_FLOOR_CHARS` 24 and the static cap, not raw `fitChars`. In a with-image box of fewer than 24 characters, a 24-character text is treated as fitting. This is an edge case.
+- **N2.** The `rules` parameter of `plannedImageSlots` and `attachSlideImages` is optional. `image-lab` and other callers keep the old behaviour, as intended. Worth one line in the `AttachImageOpts` doc saying that the `buildSlideAcademicDoc` path must always pass it (it does, at `slide-write.ts:1128`).

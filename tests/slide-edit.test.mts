@@ -5,6 +5,7 @@ import { slideLabels } from "../lib/generation/i18n.ts";
 import {
   applyDocOps,
   canConvert,
+  convertLayout,
   inverseOps,
   newSlide,
   ownAssetUrlRe,
@@ -16,7 +17,7 @@ import {
   type EditRules,
 } from "../lib/generation/slide-edit.ts";
 import { photoSlot } from "../lib/generation/slide-layout.ts";
-import { SLIDE_LIMITS } from "../lib/generation/slide-limits.ts";
+import { SLIDE_LIMITS, limitsFor } from "../lib/generation/slide-limits.ts";
 import { renumberSlides } from "../lib/generation/slide-write.ts";
 import { buildSlideDeck } from "../lib/generation/slides.ts";
 import type { SlideModel, SlideSrc } from "../lib/generation/slide-types.ts";
@@ -62,6 +63,15 @@ function failure(doc: AcademicDoc, ops: DocOp[]): { error: string; at: number } 
 }
 
 const rules: EditRules = buildSlideDeck(rawDoc([{ id: "s0", layout: "bullets", title: "x" }])).bodyType;
+
+// AUDIT-25 P3 W7: `school_1_4` (pol 24 pt) — eng tor auditoriya, `rules` (yuqorida) esa `lecture`
+// shabloni orqali standart bakalavr (pol 15 pt) — eng keng. Ikkalasi ham `bodyType` orqali,
+// `applyDocOps`ning o'zi ishlatgan YO'Ldan (`buildSlideDeck(doc).bodyType`).
+const schoolMeta = extractMeta(TOOL_BY_ID.slide, { topic: "Suv aylanishi", slideTemplate: "lecture", slideAudience: "school_1_4" } as never);
+function schoolRawDoc(slides: SlideModel[]): AcademicDoc {
+  return { meta: schoolMeta, titlePage: true, toc: true, sections: [], slides, slideTemplate: "lecture" };
+}
+const schoolRules: EditRules = buildSlideDeck(schoolRawDoc([{ id: "s0", layout: "bullets", title: "x" }])).bodyType;
 
 const bullets: SlideModel = { id: "s0", layout: "bullets", title: "Bandlar", bullets: ["Bir.", "Ikki."] };
 const table: SlideModel = {
@@ -668,4 +678,243 @@ test("sanitize/shape: `imageOrig` faqat O'Z aktividan, shakli `image` kabi teksh
   assert.equal(alien?.imageOrig, undefined);
   assert.equal(parseDocOps([{ op: "set", index: 0, slide: { layout: "bullets", title: "T", imageOrig: { url: 5 } } }]).ok, false, "url matn bo'lsin");
   assert.equal(parseDocOps([{ op: "set", index: 0, slide: { layout: "bullets", title: "T", imageOrig: "x" } }]).ok, false);
+});
+
+// ═══════════════════════════════════════════ 11. AUDIT-25 P3 W7 — tahrir `limitsFor` bilan
+
+/*
+ * P3 gacha `slide-edit.ts` faqat STATIK `SLIDE_LIMITS` bilan qirqardi
+ * (masalan `stepText: 160`). P3 dan keyin haqiqiy chegara auditoriya
+ * shrift POLI (`minPt`) × element SONIga bog'liq (`limitsFor`,
+ * `slide-limits.ts`) — generatsiya shu jadvaldan yozadi, lekin tahrir
+ * eski statik qopqoqni ishlatishda davom etardi: maktab (24 pt, 3
+ * bosqich) qutisiga 150 belgi sig'maydi, lekin `writeSlideField` uni
+ * to'liq qabul qilardi — «ko'rdim = oldim» buzilardi (CLAUDE.md).
+ *
+ * P7 review (W7 CHANGES 1) buni ikkiga ajratdi — ikki kanal, ikki qoida:
+ *
+ *   (a) `writeSlideField` — foydalanuvchi BITTA maydonni tahrirlaydi.
+ *       Chegara `editLimit(limitsFor(...), staticCap, ESKI_UZUNLIK)` —
+ *       auditoriya poli YANGI matnni torroq qiladi, lekin ESKI (statik
+ *       qopqoqqacha) uzunlikdan QISQARTIRMAYDI. Quyidagi testlarda "yangi
+ *       matn" holatlari (eski qiymat bo'sh/qisqa) hamon auditoriya
+ *       chegarasiga aynan tushadi — maktab tor, bakalavr keng.
+ *   (b) `sanitizeSlideModel` — `set`/`insert` orqali undo/redo/qaytarish
+ *       YO'LI. Bu XAVFSIZLIK filtri (oq-ro'yxat, uzunlik/son tavan
+ *       qopqog'i), MOSLASHISH siyosati emas — auditoriyadan MUSTAQIL,
+ *       doim STATIK `SLIDE_LIMITS` (masalan bitta "Izoh" tahriri +
+ *       undo bakalavr 5-bosqichli/5×6 jadvalli slaydni qisqartirmasin).
+ *
+ * Agar (a) da `editLimit` olib tashlansa (faqat `limitsFor`), mavjud uzun
+ * matn ham qisqaradi — pastdagi "109 belgi saqlanadi" testi ushlaydi.
+ * Agar (b) ga `limitsFor`/`rules.*Max` qaytarilsa, undo round-trip testi
+ * (`roundTrip`, `deepEqual`) ushlaydi.
+ */
+
+test("write: bosqich matni auditoriya POLI × SONI bo'yicha qirqiladi (`limitsFor`) — maktab tor, bakalavr keng", () => {
+  const twoSteps: SlideModel = {
+    id: "s0",
+    layout: "process",
+    title: "Bosqichlar",
+    steps: [
+      { n: "1", title: "Bir", text: "" },
+      { n: "2", title: "Ikki", text: "" },
+    ],
+  };
+  const long = "a".repeat(150);
+
+  const schoolLim = limitsFor(schoolRules, { steps: twoSteps.steps!.length });
+  const schoolResult = writeSlideField(twoSteps, { f: "steps", i: 0, k: "text" }, long, schoolRules);
+  assert.equal(schoolResult.ok, true);
+  const schoolText = (schoolResult as { slide: SlideModel }).slide.steps![0].text;
+  assert.equal(schoolText.length, schoolLim.stepText, "maktab poli chegarasiga aynan qisqarishi kerak");
+  assert.ok(schoolLim.stepText < SLIDE_LIMITS.stepText, "maktab chegarasi statik qopqoqdan tor (150 belgi eskicha 'qabul qilinardi')");
+
+  const bachLim = limitsFor(rules, { steps: twoSteps.steps!.length });
+  const bachResult = writeSlideField(twoSteps, { f: "steps", i: 0, k: "text" }, long, rules);
+  const bachText = (bachResult as { slide: SlideModel }).slide.steps![0].text;
+  assert.equal(bachText.length, bachLim.stepText, "bakalavr poli chegarasiga aynan qisqarishi kerak");
+  assert.ok(bachLim.stepText > schoolLim.stepText, "bakalavr chegarasi maktabnikidan KATTA bo'lishi kerak (auditoriya poli)");
+  assert.ok(bachLim.stepText <= SLIDE_LIMITS.stepText, "hech qaysi auditoriya statik qopqoqdan oshmaydi");
+});
+
+test("write: bosqich sarlavhasi ham `limitsFor` bo'yicha (stepTitle)", () => {
+  const twoSteps: SlideModel = {
+    id: "s0",
+    layout: "process",
+    title: "Bosqichlar",
+    steps: [
+      { n: "1", title: "", text: "Matn" },
+      { n: "2", title: "Ikki", text: "" },
+    ],
+  };
+  const long = "b".repeat(80);
+  const schoolLim = limitsFor(schoolRules, { steps: twoSteps.steps!.length });
+  const r = writeSlideField(twoSteps, { f: "steps", i: 0, k: "title" }, long, schoolRules);
+  assert.equal((r as { slide: SlideModel }).slide.steps![0].title.length, schoolLim.stepTitle);
+  assert.ok(schoolLim.stepTitle < SLIDE_LIMITS.stepTitle);
+});
+
+test("write: yorliq (statLabel) auditoriya POLI × karta SONI bo'yicha qirqiladi", () => {
+  const two: SlideModel = { id: "s3", layout: "stats", title: "Raqamlar", stats: [{ value: "95%", label: "" }, { value: "12", label: "" }] };
+  const long = "c".repeat(150);
+  const schoolLim = limitsFor(schoolRules, { stats: two.stats!.length });
+  const r = writeSlideField(two, { f: "stats", i: 0, k: "label" }, long, schoolRules);
+  assert.equal((r as { slide: SlideModel }).slide.stats![0].label.length, schoolLim.statLabel);
+  assert.ok(schoolLim.statLabel <= SLIDE_LIMITS.statLabel);
+});
+
+test("write: jadval katak/sarlavha auditoriya POLI × O'LCHAM bo'yicha qirqiladi", () => {
+  const t: SlideModel = { id: "s1", layout: "table", title: "Jadval", table: { headers: ["A", "B"], rows: [["", ""], ["", ""]] } };
+  const long = "d".repeat(120);
+  const cellLim = limitsFor(schoolRules, { cols: 2, rows: 2 });
+  const cellR = writeSlideField(t, { f: "table", k: "cell", r: 0, c: 0 }, long, schoolRules);
+  assert.equal((cellR as { slide: SlideModel }).slide.table!.rows[0][0].length, cellLim.tableCell);
+  assert.ok(cellLim.tableCell <= SLIDE_LIMITS.tableCell);
+
+  const headR = writeSlideField(t, { f: "table", k: "header", c: 0 }, long, schoolRules);
+  assert.equal((headR as { slide: SlideModel }).slide.table!.headers[0].length, cellLim.tableHeaderWide);
+  assert.ok(cellLim.tableHeaderWide <= SLIDE_LIMITS.tableHeaderWide);
+});
+
+test("write: test varianti auditoriya POLI bo'yicha qirqiladi (`limitsFor(...).quizOption`) — son emas, pol", () => {
+  const q: SlideModel = { id: "s2", layout: "quiz", title: "Test", quiz: [{ q: "Savol?", options: ["A", "B", "C", "D"], answer: 0 }] };
+  const long = "e".repeat(200);
+  const schoolLim = limitsFor(schoolRules).quizOption;
+  const bachLim = limitsFor(rules).quizOption;
+  const schoolR = writeSlideField(q, { f: "quiz", i: 0, k: "option", j: 1 }, long, schoolRules);
+  const bachR = writeSlideField(q, { f: "quiz", i: 0, k: "option", j: 1 }, long, rules);
+  assert.equal((schoolR as { slide: SlideModel }).slide.quiz![0].options[1].length, schoolLim);
+  assert.equal((bachR as { slide: SlideModel }).slide.quiz![0].options[1].length, bachLim);
+  assert.ok(schoolLim < bachLim, "maktab quti bakalavrnikidan tor");
+  assert.ok(bachLim <= SLIDE_LIMITS.quizOption, "statik qopqoqdan oshmaydi");
+});
+
+// P7 review (W7 CHANGES 1b): `sanitizeSlideModel` XAVFSIZLIK filtri — auditoriyadan MUSTAQIL,
+// doim STATIK `SLIDE_LIMITS`. school_1_4 va bakalavr BIR XIL natija berishi kerak.
+test("sanitize: 5-bosqichli tahrir STATIK qopqoqqa saqlanadi — auditoriyaga QARAB QISQARTIRILMAYDI (undo xavfsizlik filtri)", () => {
+  const raw = {
+    layout: "process",
+    title: "Besh bosqich",
+    steps: Array.from({ length: 5 }, (_, i) => ({ n: String(i + 1), title: `B${i + 1}`, text: "Matn" })),
+  };
+  const school = sanitizeSlideModel(raw, GEN, schoolRules);
+  assert.equal(school?.steps?.length, SLIDE_LIMITS.stepsMax, "STATIK qopqoq (5) — school_1_4 ning tor stepsMax (3) EMAS");
+  assert.ok(schoolRules.stepsMax < SLIDE_LIMITS.stepsMax, "aks holda bu test hech narsani sinamaydi (ikkalasi bir xil chiqib qolardi)");
+
+  const bach = sanitizeSlideModel(raw, GEN, rules);
+  assert.equal(bach?.steps?.length, SLIDE_LIMITS.stepsMax, "bakalavr ham xuddi shu statik qopqoqni oladi — ikkalasi TENG");
+});
+
+test("sanitize: stats/table SONI ham STATIK qopqoqqa saqlanadi, matn STATIK uzunlikka (auditoriyadan mustaqil)", () => {
+  const rawStats = {
+    layout: "stats",
+    title: "Raqamlar",
+    stats: Array.from({ length: 6 }, (_, i) => ({ value: `${i + 1}%`, label: "x".repeat(150) })),
+  };
+  const school = sanitizeSlideModel(rawStats, GEN, schoolRules);
+  const bach = sanitizeSlideModel(rawStats, GEN, rules);
+  assert.equal(school?.stats?.length, SLIDE_LIMITS.statsMax, "STATIK statsMax (4) — school_1_4 ning tor 3 EMAS");
+  assert.equal(bach?.stats?.length, SLIDE_LIMITS.statsMax, "bakalavr bilan TENG natija");
+  assert.equal(school?.stats?.[0].label.length, SLIDE_LIMITS.statLabel, "yorliq STATIK statLabel (110) ga qirqiladi, auditoriya limitiga emas");
+  assert.deepEqual(school, bach, "sanitizeSlideModel natijasi ikkala auditoriyada AYNAN bir xil");
+
+  const rawTable = {
+    layout: "table",
+    title: "Jadval",
+    table: {
+      headers: Array.from({ length: 6 }, (_, i) => `Ustun ${i + 1}`),
+      rows: Array.from({ length: 8 }, () => Array.from({ length: 6 }, () => "y".repeat(100))),
+    },
+  };
+  const t = sanitizeSlideModel(rawTable, GEN, schoolRules);
+  assert.equal(t?.table?.headers.length, SLIDE_LIMITS.tableCols, "STATIK tableCols (5) — school_1_4 ning tor 3 EMAS");
+  assert.equal(t?.table?.rows.length, SLIDE_LIMITS.tableRows, "STATIK tableRows (6) — school_1_4 ning tor 4 EMAS");
+});
+
+// ═══════════════════════════════════════════ 12. AUDIT-25 P7 W7 CHANGES 1(b) — tahrir mavjud kontentni qisqartirmaydi
+
+/*
+ * P7 reviewer probesi: bakalavr `lecture` dekasida 5 bosqich × 109 belgi (process) va 5×6 jadval
+ * BOR (masalan P1 to'liq joylashguncha yaratilgan yoki bachelor auditoriyasi static qopqoq bilan
+ * yozilgan eski hujjat). `limitsFor(bachelor,{steps:5}).stepText` = 30 — bu ANIQ 109 dan tor,
+ * shuning uchun quyidagi testlar `editLimit`/statik-safety-filter YO'Q bo'lsa aynan shu joyda
+ * qizarardi (109 → ~30, 5 bosqich → 4, 5×6 → 4×5).
+ */
+const FIVE_STEP_TEXT = "a".repeat(109);
+function fiveStepSlide(): SlideModel {
+  return {
+    id: "s0",
+    layout: "process",
+    title: "Besh bosqich",
+    steps: Array.from({ length: 5 }, (_, i) => ({ n: String(i + 1), title: `Bosqich ${i + 1}`, text: FIVE_STEP_TEXT })),
+  };
+}
+function bigTableSlide(): SlideModel {
+  return {
+    id: "s1",
+    layout: "table",
+    title: "Katta jadval",
+    table: {
+      headers: Array.from({ length: 5 }, (_, i) => `Ustun ${i + 1}`),
+      rows: Array.from({ length: 6 }, (_, r) => Array.from({ length: 5 }, (_, c) => `${r}${c}`)),
+    },
+  };
+}
+
+test("sanity: bakalavr auditoriyasida limitsFor(steps:5) 109 belgidan TOR — aks holda pastdagi testlar bo'sh", () => {
+  assert.ok(limitsFor(rules, { steps: 5 }).stepText < 109);
+  assert.ok(rules.stepsMax < 5, "bakalavr countRules ham 5 bosqichni ruxsat bermaydi (4 tagacha) — bu «eski hujjat» stsenariysi");
+});
+
+test("undo round trip: bakalavr 5-bosqichli (109 belgi) + 5×6 jadvalli deka HECH narsani qisqartirmaydi (P7 review probesi, deepEqual)", () => {
+  const doc = docOf([fiveStepSlide(), bigTableSlide()]);
+  // Ikkala slaydga ham tegmaydigan op (notes) + undo — deka AYNAN qaytishi kerak.
+  roundTrip(
+    doc,
+    [
+      { op: "notes", index: 0, value: "Izoh (process)" },
+      { op: "notes", index: 1, value: "Izoh (jadval)" },
+    ],
+    "notes + undo — 5 bosqich/5×6 jadval saqlansin",
+  );
+  // roundTrip allaqachon deepEqual qildi; qo'shimcha — asl hujjatning o'zi ham 5/5×6 ekanini tasdiqlaymiz.
+  assert.equal(doc.slides![0].steps?.length, 5);
+  assert.equal(doc.slides![0].steps?.[0].text.length, 109);
+  assert.equal(doc.slides![1].table?.headers.length, 5);
+  assert.equal(doc.slides![1].table?.rows.length, 6);
+});
+
+test("write: 5-bosqichli bakalavr slaydida 1-bosqichdagi TIPO tuzatish 109 belgini SAQLAYDI (editLimit)", () => {
+  const slide = fiveStepSlide();
+  // Tipo: 50-belgidan keyin bitta harf almashtirildi, uzunlik O'ZGARMAYDI.
+  const typo = `${FIVE_STEP_TEXT.slice(0, 50)}X${FIVE_STEP_TEXT.slice(51)}`;
+  assert.equal(typo.length, 109);
+  const r = writeSlideField(slide, { f: "steps", i: 0, k: "text" }, typo, rules);
+  assert.equal(r.ok, true);
+  const text = (r as { slide: SlideModel }).slide.steps![0].text;
+  assert.equal(text, typo, "tipo tuzatilgan matn qirqilmasdan saqlanadi");
+  assert.equal(text.length, 109, "mavjud uzunlikdan (109) qisqarmaydi — auditoriya limitiga (30) emas");
+});
+
+test("convertLayout: bullets→process/stats ham auditoriya POLI bo'yicha qirqiladi va SONga qisqaradi", () => {
+  const longBullets: SlideModel = {
+    id: "s0",
+    layout: "bullets",
+    title: "Bandlar",
+    bullets: Array.from({ length: 5 }, (_, i) => `${i + 1}% — ${"z".repeat(150)}`),
+  };
+  const proc = convertLayout(longBullets, "process", schoolRules);
+  assert.equal(proc.ok, true);
+  const steps = (proc as { slide: SlideModel }).slide.steps!;
+  assert.ok(steps.length <= schoolRules.stepsMax, "school_1_4 stepsMax dan ortiq bosqich chiqmasin");
+  const stepLim = limitsFor(schoolRules, { steps: steps.length });
+  for (const st of steps) assert.ok(st.text.length <= stepLim.stepText, "har bosqich matni SHU songa mos chegarada");
+
+  const st = convertLayout(longBullets, "stats", schoolRules);
+  assert.equal(st.ok, true);
+  const stats = (st as { slide: SlideModel }).slide.stats!;
+  assert.ok(stats.length <= schoolRules.statsMax, "school_1_4 statsMax dan ortiq karta chiqmasin");
+  const statLim = limitsFor(schoolRules, { stats: stats.length });
+  for (const x of stats) assert.ok(x.label.length <= statLim.statLabel, "har yorliq SHU songa mos chegarada");
 });
