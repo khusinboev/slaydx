@@ -97,7 +97,7 @@ type BulletRules = Pick<BodyRules, "maxBullets" | "bulletChars" | "agendaMax">;
  * shu maydonni ikkinchi qatorda ko'rsatadi, bo'sh qoldirsak qator OCH
  * qoladi, shuning uchun bo'sh emas, domen.
  */
-function applyResearchRefs(slides: SlideModel[], ctx: SlidePromptCtx) {
+export function applyResearchRefs(slides: SlideModel[], ctx: SlidePromptCtx) {
   const sources = ctx.research?.sources ?? [];
   if (!sources.length) return;
   for (const sl of slides) {
