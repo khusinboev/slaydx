@@ -138,3 +138,31 @@ test("admin bandli: iste'molchi kirish nuqtalari admin kodini statik tortmaydi",
     assertUnreachable(path.relative(ROOT, entry), isAdminCode, "admin kodi (components/admin, lib/admin-api)");
   }
 });
+
+/*
+ * F3b: the panel moved to `/admin`. Files loaded on EVERY consumer page (root
+ * layout, providers, the `/uz` shell, error/404 boundaries) and the legacy
+ * `/uz/admin` route (now a plain redirect) must not pull admin client code
+ * into the consumer first load either.
+ */
+test("admin bandli: umumiy layout/provider/xato chegaralari va /uz/admin yo'naltirishi admin kodini tortmaydi", () => {
+  const entries = [
+    "app/layout.tsx",
+    "app/uz/layout.tsx",
+    "components/providers.tsx",
+    "app/error.tsx",
+    "app/global-error.tsx",
+    "app/not-found.tsx",
+    "app/uz/admin/page.tsx",
+  ];
+  for (const entry of entries) {
+    assert.ok(existsSync(path.join(ROOT, entry)), `${entry} topilmadi — ro'yxat eskirgan`);
+    assertUnreachable(entry, isAdminCode, "admin kodi (components/admin, lib/admin-api)");
+  }
+});
+
+test("admin bandli: /uz/admin endi faqat /admin ga server yo'naltirishi", () => {
+  const src = readFileSync(path.join(ROOT, "app/uz/admin/page.tsx"), "utf8");
+  assert.match(src, /redirect\(\s*["']\/admin["']\s*\)/);
+  assert.ok(!/["']use client["']/.test(src), "yo'naltirish serverda bo'lishi kerak");
+});

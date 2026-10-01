@@ -82,11 +82,21 @@ function findViolations(
 
 const isUnder = (file: string, dir: string) => file.startsWith(join(ROOT, dir) + "/");
 
+/** `"use client"` at the top of the module (after comments). */
+function isClientModule(file: string): boolean {
+  const head = readFileSync(file, "utf8").replace(/^\s*(\/\*[\s\S]*?\*\/|\/\/[^\n]*\n|\s)*/, "");
+  return /^["']use client["']/.test(head);
+}
+
 function adminFiles(): string[] {
   return [
     ...walk(join(ROOT, "components/admin")),
     ...walk(join(ROOT, "lib/admin-api")),
-    ...walk(join(ROOT, "app/admin")),
+    // Only the CLIENT modules of app/admin. Its server components (the gate
+    // layouts, thin pages) run only on the server and must read the session and
+    // RBAC from lib/server (plan §12); whatever they render on the client lives
+    // in components/admin, which is scanned in full above.
+    ...walk(join(ROOT, "app/admin")).filter(isClientModule),
     join(ROOT, "lib/admin-format.ts"),
   ];
 }
@@ -94,6 +104,13 @@ function adminFiles(): string[] {
 test("admin klient kodi lib/server/** va server-only modullarga yetmaydi", () => {
   const entries = adminFiles();
   assert.ok(entries.length > 30, `admin fayllari topilmadi (${entries.length}) — skaner buzilgan`);
+  // The app/admin filter must still pick up its client modules (e.g. the error boundary).
+  if (existsSync(join(ROOT, "app/admin/(panel)/error.tsx"))) {
+    assert.ok(
+      entries.includes(join(ROOT, "app/admin/(panel)/error.tsx")),
+      "app/admin klient modullari skanerdan tushib qolgan",
+    );
+  }
   const problems = findViolations(entries, {
     dynamic: true,
     bad: (file, src, specs) => {
