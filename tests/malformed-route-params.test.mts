@@ -31,7 +31,10 @@ const users: string[] = [];
 after(async () => {
   if (!hasDb) return;
   const { query, pool } = await import("../lib/server/db.ts");
-  for (const id of users) await query(`DELETE FROM users WHERE id = $1`, [id]).catch(() => {});
+  for (const id of users) {
+    await query(`DELETE FROM admin_accounts WHERE user_id = $1 AND NOT EXISTS (SELECT 1 FROM admin_audit_log l WHERE l.admin_id = admin_accounts.id)`, [id]).catch(() => {});
+    await query(`DELETE FROM users WHERE id = $1`, [id]).catch(() => {});
+  }
   await pool().end();
 });
 
@@ -75,7 +78,24 @@ test("admin/users/[id]: raqam bo'lmagan yoki chegaradan tashqari id — 404 (500
   ]);
   users.push(row!.id);
   const { token } = await createSession(row!.id);
-  const cookie = `${SESSION_COOKIE}=${token}`;
+  // Admin identity is an admin_accounts row + an admin session bound to the user
+  // session (docs/admin/02-plan.md §3), no longer the phone allow-list. Reauth is
+  // fresh so the legacy mutations reach their id validation.
+  const { transaction } = await import("../lib/server/db.ts");
+  const { createAdminSession, adminCookieName } = await import("../lib/server/admin-session.ts");
+  const { createHash } = await import("node:crypto");
+  const adminToken = await transaction(async (client) => {
+    const acc = await client.query<{ id: string }>(
+      `INSERT INTO admin_accounts (user_id, role, status, totp_enabled_at, totp_secret_enc) VALUES ($1, 'owner', 'active', now(), 'v1.fixture-never-opened') RETURNING id::text AS id`,
+      [row!.id],
+    );
+    const us = await client.query<{ id: string }>(`SELECT id::text AS id FROM sessions WHERE token_hash = $1`, [
+      createHash("sha256").update(token).digest("hex"),
+    ]);
+    const s = await createAdminSession(client, { adminId: acc.rows[0]!.id, userSessionId: us.rows[0]!.id, ip: "10.0.0.1", userAgent: "w4e", reauth: true });
+    return s.token;
+  });
+  const cookie = `${SESSION_COOKIE}=${token}; ${adminCookieName()}=${adminToken}`;
 
   const call = async (method: "GET" | "PATCH" | "PUT", id: string, body?: unknown) => {
     const req = new Request(`http://localhost:3000/api/admin/users/${encodeURIComponent(id)}`, {

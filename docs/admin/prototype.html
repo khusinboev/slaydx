@@ -270,7 +270,7 @@ const users = Array.from({ length: 42 }, (_, i) => {
   const created = ago(60 * 24 * (2 + Math.floor(rnd() * 160)));
   return {
     id: 1840 - i * 37, name: `${f} ${l}`, username: i % 4 === 0 ? null : (f + "_" + l.slice(0, 3)).toLowerCase() + (i % 9),
-    tg: 5000000000 + Math.floor(rnd() * 900000000), phone: i === 3 ? "+998901234512" : null,
+    tg: 5000000000 + Math.floor(rnd() * 900000000), phone: i === 3 ? "+998901234567" : null,
     plan: i % 5 === 0 ? "pro" : "free", points: Math.floor(rnd() * 4) * 1000, quota: i % 5 === 0 ? Math.floor(rnd() * 15) * 1000 : 0,
     balance: Math.floor(rnd() * 12) * 2500, blocked: i === 11 || i === 27, created, seen: ago(Math.floor(rnd() * 60 * 24 * 6)),
     gens: Math.floor(rnd() * 40), uni: pick(UNIS), isAdmin: i === 0,
