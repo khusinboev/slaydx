@@ -13,10 +13,6 @@ import { createIsolatedDb } from "./helpers/isolated-db.mts";
  * must find are written by hand, each next to a negative twin.
  *
  * Mutation checks (each made the named assertion fail, then restored):
- *   - revenue `o.perform_time < $4` → `<=`: the next-day-midnight order lands
- *     in the range (byDay / total assertions fail);
- *   - `generate_series` zero-fill replaced by grouping paid rows only: byDay
- *     loses the empty 10 September;
  *   - partial check without the `refundShare` CASE: G5 (share 0) is reported;
  *   - pending check without `GREATEST(...)`: P3 (fresh provider txn on an old
  *     order) is reported;
@@ -303,6 +299,9 @@ test("summary: cached 60 s per range; bad ranges 400; support lacks finance.view
     const again = await summary(s.cookie, "?from=2026-09-11&to=2026-09-11");
     assert.equal(again.body.generatedAt, first.body.generatedAt, "served from the cache");
     assert.deepEqual((again.body.revenue as Record<string, unknown>).total, { soum: 100_000, orders: 1 });
+    const longer = await summary(s.cookie, "?from=2026-09-11&to=2026-09-12");
+    assert.deepEqual(longer.body.range, { from: "2026-09-11", to: "2026-09-12", days: 2 }, "the cache key covers both ends of the range");
+    assert.deepEqual((longer.body.revenue as Record<string, unknown>).total, { soum: 107_001, orders: 2 });
     clearFinanceCache();
     const fresh = await summary(s.cookie, "?from=2026-09-11&to=2026-09-11");
     assert.deepEqual((fresh.body.revenue as Record<string, unknown>).total, { soum: 100_001, orders: 1 });
