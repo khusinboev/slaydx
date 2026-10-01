@@ -748,6 +748,20 @@ test("CLI re-run is break-glass: resets 2FA, deletes recovery codes, revokes ses
   await assert.rejects(cliUpsertAdmin({ telegramId: "1", role: "owner", host: "box" }), /user not found/);
 });
 
+test("SessionUser.isAdmin comes from admin_accounts (active|pending), not from the phone allow-list", { skip }, async () => {
+  const { getUserById, currentUser } = await import("../lib/server/session.ts");
+  const plain = await mkUser();
+  await query(`UPDATE users SET phone = '+998901234567' WHERE id = $1`, [plain.id]);
+  assert.equal((await getUserById(plain.id))!.isAdmin, false, "a phone alone grants nothing");
+  for (const [status, expected] of [["active", true], ["pending", true], ["disabled", false]] as const) {
+    const a = await mkAdmin("viewer", { status });
+    assert.equal((await getUserById(a.id))!.isAdmin, expected, status);
+    const req = new Request("http://localhost:3000/api/users/me", { headers: { cookie: cookie(a.userToken) } });
+    const viaSession = await inRequest(req, () => currentUser());
+    assert.equal(viaSession!.isAdmin, expected, `${status} via the session query`);
+  }
+});
+
 test("audit log is append-only (028 trigger): UPDATE and DELETE are refused", { skip }, async () => {
   const row = await queryOne<{ id: string }>(`SELECT id::text AS id FROM admin_audit_log ORDER BY id DESC LIMIT 1`);
   assert.ok(row);
