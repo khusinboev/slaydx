@@ -60,7 +60,13 @@ function renderShell(role: Role, pathname = "/admin/users/42") {
   const { router, calls } = makeRouter();
   const utils = render(
     withRouter(
-      h(AdminShell, { role, permissions: ROLE_FIXTURE[role], name: "Ali Valiyev", username: "ali" }, h("p", null, "Sahifa mazmuni")),
+      h(AdminShell, {
+        role,
+        permissions: ROLE_FIXTURE[role],
+        name: "Ali Valiyev",
+        username: "ali",
+        children: h("p", null, "Sahifa mazmuni"),
+      }),
       router,
       pathname,
     ),
