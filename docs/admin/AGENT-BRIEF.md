@@ -10,7 +10,7 @@ You are one of several engineers building the SlaydX admin panel in parallel. A 
 ## Hard rules
 1. Touch ONLY the files your package owns (listed in your task). If you need a change elsewhere, do not make it — report it.
 2. Do not change existing product behavior except where your package spec says so. Defaults must keep current behavior byte-for-byte.
-3. Migrations are additive only. Never edit migrations 001–027.
+3. Migrations are additive only. Never edit migrations 001–033.
 4. Permission checks live on the server (`adminHandler`). Hiding UI is not security.
 5. Every mutating admin action writes exactly one audit row in the same DB transaction as the change (see §8). Money actions require reason + Idempotency-Key; destructive actions need confirmation.
 6. No secrets in code, no mock data, no placeholders, no TODO/FIXME, no `any` unless unavoidable (then justify in a comment).
@@ -33,23 +33,29 @@ You are one of several engineers building the SlaydX admin panel in parallel. A 
 ```bash
 # Your worktree may be based on `main`; the integration branch already holds merged packages
 # (docs/admin, earlier packages). Bring it in FIRST (fast-forward or merge commit, no rebase):
-git merge --no-edit claude/cool-feynman-jiixoi
-# Then report `git log --oneline claude/cool-feynman-jiixoi..HEAD` at the end (your commits only).
-[ -e node_modules ] || ln -s <path-to-main-checkout>/node_modules node_modules   # or: npm ci
+git merge --no-edit feat/admin-panel
+# Then report `git log --oneline feat/admin-panel..HEAD` at the end (your commits only).
+[ -e node_modules ] || ln -s /home/adhambek/projects/pythons/slaydbot/slaydx/node_modules node_modules
 PKG=<your package id, lowercase, e.g. f2>
-psql postgres://slaydx:slaydx@127.0.0.1:5432/postgres -c "DROP DATABASE IF EXISTS slaydx_$PKG" -c "CREATE DATABASE slaydx_$PKG"
-export DATABASE_URL=postgres://slaydx:slaydx@127.0.0.1:5432/slaydx_$PKG
+# Test Postgres 16 is the docker container `slaydx-admin-pg` on 127.0.0.1:55440 (port 5432 is a
+# different host server and 55432 is the owner's dev DB: never point tests at either).
+psql postgres://slaydx:slaydx@127.0.0.1:55440/postgres -c "DROP DATABASE IF EXISTS slaydx_$PKG" -c "CREATE DATABASE slaydx_$PKG"
+export DATABASE_URL=postgres://slaydx:slaydx@127.0.0.1:55440/slaydx_$PKG
+# The exported DATABASE_URL wins over the one in .env.local (node --env-file never overrides).
+# ADMIN_TOTP_KEY comes from .env.local; worktrees need it: ln -s /home/adhambek/projects/pythons/slaydbot/slaydx/.env.local .env.local
 ```
 Migrations apply automatically on first `ensureMigrated()` (any DB test).
 
 ## Checks you must run before reporting (all must pass)
+Every heavy command (tsc, test runs, build, Playwright) goes through `scripts/heavy.sh` (cgroup memory/time cap;
+the laptop OOM-killed the editor twice without it). Run them one at a time; never run the full `npm test` or `npm run test:ui`.
 ```bash
-npm run typecheck
-npm run lint
+scripts/heavy.sh -m 4G npm run typecheck
+scripts/heavy.sh npm run lint
 # your own tests + guard tests:
-npx tsx --env-file-if-exists=.env.local --import ./tests/helpers/hermetic-env.mts --conditions=react-server --test --test-concurrency=2 tests/<your files> tests/ui-strings.test.mts tests/client-bundle-guard.test.mts tests/migrations.test.mts tests/malformed-route-params.test.mts
+scripts/heavy.sh npx tsx --env-file-if-exists=.env.local --import ./tests/helpers/hermetic-env.mts --conditions=react-server --test --test-concurrency=2 tests/<your files> tests/ui-strings.test.mts tests/client-bundle-guard.test.mts tests/migrations.test.mts tests/malformed-route-params.test.mts
 # if you have UI tests:
-npx tsx --tsconfig tsconfig.viewer.json --test tests/ui/<your ui files>
+scripts/heavy.sh npx tsx --tsconfig tsconfig.viewer.json --test tests/ui/<your ui files>
 ```
 Also run (once F2 is merged) `tests/admin-route-guard.test.mts` and (once F3 is merged) `tests/admin-boundary.test.mts` if they exist in your worktree.
 Note: in this container some unrelated existing tests fail for environment reasons (tsx module identity, LibreOffice) — see 01-analysis §8. Do not try to fix those; just make sure none of YOUR files or the guard tests fail. Do NOT run the full `npm test` (the lead does that at merge time; CPU is shared).

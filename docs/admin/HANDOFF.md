@@ -1,6 +1,6 @@
 # Admin panel — handoff for the next session
 
-**Snapshot:** 2026-10-01. The cloud session moved the work to the owner's laptop at this point. Read this file first, then `02-plan.md` (the spec), then `AGENT-BRIEF.md` (the rules every coding agent follows).
+**Snapshot:** 2026-10-02 (laptop session). Work branch: `feat/admin-panel` (from `main` at `ffddd39`). The cloud session moved the work to the owner's laptop on 2026-10-01. Read this file first, then `02-plan.md` (the spec), then `AGENT-BRIEF.md` (the rules every coding agent follows).
 
 ## 1. What this project is
 
@@ -78,6 +78,14 @@ File ownership per package is in `02-plan.md` §13.2 and §18. No two parallel p
 
 ## 4. Local setup on a laptop
 
+**This laptop (verified 2026-10-02):** repo at `/home/adhambek/projects/pythons/slaydbot/slaydx`.
+- Test Postgres 16 = docker container `slaydx-admin-pg` on `127.0.0.1:55440` (user/password `slaydx`). Port 5432 is a host Postgres of other projects; `55432` is the owner's dev DB (`sodda-pg`, used by `.env.local` and `npm run dev`). Never run tests against either.
+- Run tests with an exported `DATABASE_URL=postgres://slaydx:slaydx@127.0.0.1:55440/<db>`; it overrides `.env.local` (Node `--env-file` never overrides set vars).
+- `ADMIN_TOTP_KEY` is in `.env.local` (git-ignored).
+- Heavy commands only through `scripts/heavy.sh` (see `CLAUDE.md`).
+
+Generic recipe (cloud-era, kept for reference):
+
 ```bash
 git clone https://github.com/khusinboev/slaydx.git && cd slaydx   # or: git pull on main
 npm ci
@@ -102,8 +110,8 @@ The enroll page arrives with F3b. Until then the flow can only be exercised thro
 
 ## 5. Known issues and caveats
 
-- **CI test step is intermittent** (01-analysis §0/§8): a docs-only change once failed 4 of 3520 tests. The most recent CI failure could not be traced from the truncated log. Locally, a fresh full run showed no new failing test files compared with the baseline. If CI is red, first open the job log in the browser and search for `not ok`.
-- **Container-specific local failures** (tsx module identity, LibreOffice) are listed in 01-analysis §8. A laptop with docker and LibreOffice may differ.
+- **CI flake root-caused and fixed (2026-10-02).** Every red run (`36905975564`, `36907841671`, `36908956735`, `36911209650`, `36911410685`) failed only docker tests in `tests/backup-script.test.mts` (plus one PII hit in `36907841671`, fixed earlier). Cause: the tests waited with a unix-socket `pg_isready`, which reports ready on the postgres image's socket-only *temporary init server*; the next `psql`/`pg_dump` then hit "the database system is shutting down" or "database does not exist". The probes now use TCP (`-h 127.0.0.1`), as `scripts/restore-check.sh` already did. Not related to F5b.
+- **Container-only failures do not reproduce on the laptop:** full `npm test` 3756/3756, `test:ui` 511/511, `test:viewer` 248/248, 0 skipped.
 - **F5b notes:**
   - Broadcast delivery runs in the background so the worker loop doesn't stall.
   - The breaker and limiter snapshot in the *web* heartbeat may only show the inline worker's registry when Next loads separate module copies.
@@ -134,7 +142,7 @@ Deploying earlier would leave the owner without a working admin UI. Migration `0
   - **Brute-force limits:** a 429 carries `retryAfterSec`, plus `code:"locked"` when the account is locked.
   - **Enrollment secret:** derived from the enrollment token with a keyed MAC; it is sealed into the account only on the first confirmed code.
 - **Test fixture pattern** for an authenticated admin in route tests: insert `admin_accounts` (status `active`, `totp_enabled_at`, a non-null `totp_secret_enc`), then `createAdminSession(client, {adminId, userSessionId, reauth:true})`, then send both cookies (`slaydx_session` and `adminCookieName()`). See `tests/admin-auth.test.mts` (`openSession`) and `tests/malformed-route-params.test.mts`.
-- **⚠️ CI status at hand-off: red.** On the last head, `npm run test` fails **3 of 3756** in GitHub Actions. They could not be identified from the cloud session: the reachable log shows only the last 5 000 lines, and those tests fail locally anyway because of the container's tsx issue.
+- **CI status at cloud hand-off: red** (resolved on the laptop, see §5 and §7). On the last head, `npm run test` fails **3 of 3756** in GitHub Actions. They could not be identified from the cloud session: the reachable log shows only the last 5 000 lines, and those tests fail locally anyway because of the container's tsx issue.
   - The prime suspects are top-level tests numbered below about 2900 in the CI log, most likely in `tests/free-llm.test.mts`. F5b changed `lib/server/spend.ts` (runtime free-LLM settings and `ai_usage` flush).
   - Other candidates are `env-*` and `instrumentation-*` tests touched by F2/F5b, or the known intermittent tests.
   - **First task of the next session:**
@@ -142,3 +150,9 @@ Deploying earlier would leave the owner without a working admin UI. Migration `0
     2. fix the 3 failures without weakening any test;
     3. get CI green before any new package.
 - **Next step:** after CI is green, F3b and F6, then WP1–WP11 (§2).
+
+## 7. Laptop session log
+
+| Date | Stage | Result |
+|---|---|---|
+| 2026-10-02 | (a) baseline + CI fix | `main` fast-forwarded to `ffddd39`, branch `feat/admin-panel`. typecheck ✅, lint ✅, `npm test` 3756/3756, `test:ui` 511/511, `test:viewer` 248/248. CI flake fixed in `tests/backup-script.test.mts` (§5). AGENT-BRIEF and CLAUDE.md adapted to the laptop. Next: (b) F3b + F6 after owner approval. |
