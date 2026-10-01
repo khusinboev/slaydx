@@ -102,7 +102,7 @@ const PART_COLUMNS: Column<CostPartView & { key: string }>[] = [
   },
   { id: "units", header: "Birlik", align: "right", className: "tabular-nums", cell: (p) => (p.units ? fmtNumber(p.units) : "—") },
   { id: "outcome", header: "Natija", cell: (p) => OUTCOME_LABEL[p.outcome] ?? p.outcome },
-  { id: "usd", header: "$", align: "right", className: "tabular-nums", cell: (p) => fmtUsd(p.usd) },
+  { id: "usd", header: "$", align: "right", className: "tabular-nums", cell: (p) => fmtUsd(p.usd, 4) },
 ];
 
 const OUTCOME_LABEL: Record<string, string> = { completed: "Tayyor", failed: "Xato", abandoned: "Tashlab ketilgan" };
@@ -333,7 +333,7 @@ export function GenerationDetail({ id, tools }: { id: string; tools: ReadonlyArr
         <CardHeader
           title="AI xarajat"
           description="Kanonik xarajat yozuvlari (ai_usage yoki eski cost_json)"
-          aside={<span className="text-sm font-semibold tabular-nums">{g.cost ? fmtUsd(g.cost.usd) : "—"}</span>}
+          aside={<span className="text-sm font-semibold tabular-nums">{g.cost ? fmtUsd(g.cost.usd, 4) : "—"}</span>}
         />
         {parts.length ? (
           <div className="p-3">

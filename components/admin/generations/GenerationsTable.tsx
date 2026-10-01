@@ -356,7 +356,7 @@ export function GenerationsTable({ tools, fixedFilters, embedded = false, pageSi
       className: "tabular-nums whitespace-nowrap",
       cell: (g) => fmtDuration(g.durationSec),
     },
-    { id: "cost", header: "AI $", align: "right", className: "tabular-nums whitespace-nowrap", cell: (g) => (g.costUsd === null ? "—" : fmtUsd(g.costUsd)) },
+    { id: "cost", header: "AI $", align: "right", className: "tabular-nums whitespace-nowrap", cell: (g) => (g.costUsd === null ? "—" : fmtUsd(g.costUsd, 4)) },
     {
       id: "created",
       header: "Yaratilgan",
