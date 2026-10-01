@@ -1,11 +1,15 @@
 import { ApiError, handler, json, limit, readJson, requireUser } from "@/lib/server/api";
 import { budgetFor } from "@/lib/generation/budget";
-import { clampListLimit, decodeCursor, enqueueGeneration, listGenerations } from "@/lib/server/jobs";
+import { clampListLimit, decodeCursor, enqueueGeneration, IDEMPOTENCY_WINDOW_HOURS, listGenerations } from "@/lib/server/jobs";
 import { sanitizeValues } from "@/lib/server/validate";
 import { sourceCharsForRequest } from "@/lib/server/source-upload";
-import { missingRequired, preflightError, priceFor, TOOL_BY_SLUG, topicOf } from "@/lib/tools";
+import { missingRequired, preflightError, TOOL_BY_SLUG, topicOf } from "@/lib/tools";
 import { startInlineWorker } from "@/lib/server/worker";
 import { env } from "@/lib/server/env";
+import { queryOne } from "@/lib/server/db";
+import { effectivePrice } from "@/lib/server/pricing";
+import { getSetting } from "@/lib/server/settings";
+import type { ToolId } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -55,7 +59,8 @@ export const POST = handler("generations/create", async (req) => {
    * qo'shadi — 400 000 bayt oldin 200 000 belgilik matnni «So'rov hajmi
    * juda katta» deb rad etardi.
    */
-  const body = await readJson<{ slug?: unknown; values?: unknown }>(req, 1_200_000);
+  const body = await readJson<{ slug?: unknown; values?: unknown; expectedPrice?: unknown }>(req, 1_200_000);
+  const expectedPrice = readExpectedPrice(body.expectedPrice);
   const slug = typeof body.slug === "string" ? body.slug : "";
   const tool = slug ? TOOL_BY_SLUG[slug] : undefined;
   if (!tool) throw new ApiError("Noma'lum vosita", 400);
@@ -116,7 +121,40 @@ export const POST = handler("generations/create", async (req) => {
   const blocked = preflightError(tool, values);
   if (blocked) throw new ApiError(blocked, 400);
 
-  const price = priceFor(tool, values);
+  /*
+   * Idempotent replay (docs/admin/02-plan.md §17.2). A retry of a request
+   * whose response was lost carries the same Idempotency-Key and the same
+   * form, but its `expectedPrice` may be stale (an admin changed the price
+   * in between, or the client re-rendered with fresh pricing), and the
+   * service may have been paused since. `enqueueGeneration` answers such a
+   * request with the ORIGINAL job and charges nothing, so the pause and the
+   * price guard below must not run for it: a 409/503 here would hide a job
+   * the user already paid for, and the "confirm the new price" retry (a new
+   * key) would buy it a second time. When the key is already taken the
+   * request cannot create or charge anything: `enqueueGeneration` either
+   * replays (same tool and values) or rejects with 422 (different ones).
+   */
+  const replay = idempotencyKey ? await idempotencyKeyTaken(user.id, idempotencyKey) : false;
+
+  // Admin pause (§6.10): checked before pricing and charging, so nothing is charged or queued.
+  if (!replay) await assertGenerationOpen(tool.id);
+
+  // Base formula + admin adjustment (`tool_pricing`, 15 s cache); never the client's number.
+  const price = await effectivePrice(tool, values);
+
+  /*
+   * No silent charge mismatch (§17.2, §17.8): the client sends the price it
+   * displayed. If ours differs, refuse BEFORE any charge or enqueue and tell
+   * the client the new price; it asks the user to confirm and retries with a
+   * new key. Absent `expectedPrice` (an old cached client) = old behavior.
+   */
+  if (!replay && expectedPrice !== undefined && expectedPrice !== price) {
+    throw new ApiError(`Narx o'zgardi. Yangi narx: ${price.toLocaleString("uz-UZ")} tanga.`, 409, {
+      code: "price_changed",
+      price,
+    });
+  }
+
   const topic = topicOf(values, tool);
 
   const result = await enqueueGeneration({
@@ -171,6 +209,45 @@ export const POST = handler("generations/create", async (req) => {
     { status: 202, headers: result.replayed ? { "Idempotent-Replayed": "true" } : undefined },
   );
 });
+
+/**
+ * Optional `expectedPrice` (the price the client displayed). Absent: `undefined`;
+ * present but not a non-negative safe integer: 400.
+ */
+function readExpectedPrice(raw: unknown): number | undefined {
+  if (raw === undefined) return undefined;
+  if (typeof raw !== "number" || !Number.isSafeInteger(raw) || raw < 0) {
+    throw new ApiError("Kutilgan narx noto'g'ri", 400);
+  }
+  return raw;
+}
+
+/** 503 when an admin paused all generations or this tool (§6.10). Settings reads never throw. */
+async function assertGenerationOpen(toolId: ToolId): Promise<void> {
+  const [paused, pausedTools] = await Promise.all([getSetting("generation.paused"), getSetting("generation.paused_tools")]);
+  if (paused || pausedTools.includes(toolId)) {
+    throw new ApiError("Xizmat vaqtincha to'xtatilgan. Birozdan keyin urinib ko'ring.", 503, { code: "paused" });
+  }
+}
+
+/**
+ * Whether this user already has a job under `key` that `enqueueGeneration`
+ * will find (its lookup window is IDEMPOTENCY_WINDOW_HOURS). The window here
+ * is 5 minutes SHORTER on purpose: a key about to expire counts as free, so
+ * a "taken" answer cannot turn into a new, unguarded charge a moment later
+ * at enqueue time. A concurrent first request that has not committed yet is
+ * not seen; that request is a new purchase and is guarded like any other.
+ */
+async function idempotencyKeyTaken(userId: string, key: string): Promise<boolean> {
+  const row = await queryOne<{ taken: number }>(
+    `SELECT 1 AS taken FROM generations
+      WHERE user_id = $1 AND idempotency_key = $2
+        AND created_at >= now() - $3::int * interval '1 hour' + interval '5 minutes'
+      LIMIT 1`,
+    [userId, key, IDEMPOTENCY_WINDOW_HOURS],
+  );
+  return row !== null;
+}
 
 const IDEMPOTENCY_KEY_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
