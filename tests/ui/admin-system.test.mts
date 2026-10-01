@@ -52,6 +52,10 @@ function stubFetch(handler: (call: Call, n: number) => Response | Promise<Respon
 const OWNER = ["system.view", "errors.view", "errors.resolve"];
 const VIEWER = ["system.view", "errors.view"];
 
+/** `children` goes in the props: the provider's prop type requires it. */
+const withIdentity = (permissions: string[], children: ReactNode) =>
+  h(AdminIdentityProvider, { value: { role: "owner", permissions, name: "Test", username: null }, children });
+
 function renderAt(pathname: string, query: string, page: () => ReactNode, permissions: string[] = OWNER) {
   const calls = { replace: [] as string[] };
   const router: AppRouterInstance = {
@@ -62,9 +66,8 @@ function renderAt(pathname: string, query: string, page: () => ReactNode, permis
     push() {},
     replace: (href: string) => void calls.replace.push(href),
   };
-  const node: ReactNode = h(
-    AdminIdentityProvider,
-    { value: { role: "owner", permissions, name: "Test", username: null } },
+  const node: ReactNode = withIdentity(
+    permissions,
     h(AppRouterContext.Provider, { value: router }, h(PathnameContext.Provider, { value: pathname }, h(SearchParamsContext.Provider, { value: new URLSearchParams(query) }, page()))),
   );
   return { ...render(node), calls, node };
@@ -365,9 +368,8 @@ test("errors: changing a filter aborts the pending request", async () => {
   assert.ok(signal && !signal.aborted);
   const router: AppRouterInstance = { back() {}, forward() {}, refresh() {}, prefetch() {}, push() {}, replace() {} };
   first.rerender(
-    h(
-      AdminIdentityProvider,
-      { value: { role: "owner", permissions: OWNER, name: "Test", username: null } },
+    withIdentity(
+      OWNER,
       h(AppRouterContext.Provider, { value: router }, h(PathnameContext.Provider, { value: "/admin/errors" }, h(SearchParamsContext.Provider, { value: new URLSearchParams("level=warn") }, h(ErrorsPage)))),
     ),
   );

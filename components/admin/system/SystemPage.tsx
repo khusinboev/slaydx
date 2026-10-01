@@ -96,7 +96,7 @@ function SystemReady({ data }: { data: SystemStatus }) {
         <KpiTile label="Versiya" value={data.version} hint={ENV_TEXT[data.nodeEnv]} />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <Card>
           <CardHeader
             title="Jarayonlar"
@@ -183,13 +183,13 @@ function ConfigCard({ problems, warnings }: { problems: string[]; warnings: stri
       <CardHeader title="Konfiguratsiya" description="Faqat xabarlar ko'rsatiladi; sozlama qiymatlari hech qachon ko'rsatilmaydi." />
       <CardBody className="flex flex-col gap-2">
         {problems.map((m) => (
-          <p key={`p:${m}`} role="alert" data-config="problem" className="border-destructive/40 bg-destructive/10 text-destructive rounded-lg border px-3 py-2 text-[13px] break-words">
+          <p key={`p:${m}`} role="alert" data-config="problem" className="border-destructive/40 bg-destructive/10 text-destructive rounded-lg border px-3 py-2 text-[13px] [overflow-wrap:anywhere]">
             <span className="font-semibold">Muammo: </span>
             {m}
           </p>
         ))}
         {warnings.map((m) => (
-          <p key={`w:${m}`} data-config="warning" className="border-warning/40 bg-warning/10 rounded-lg border px-3 py-2 text-[13px] break-words">
+          <p key={`w:${m}`} data-config="warning" className="border-warning/40 bg-warning/10 rounded-lg border px-3 py-2 text-[13px] [overflow-wrap:anywhere]">
             <span className="text-warning font-semibold">Ogohlantirish: </span>
             {m}
           </p>
