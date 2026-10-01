@@ -37,8 +37,9 @@ The brief's non-negotiable rules:
 | F5a | Runtime price adjustment (`applyPriceAdjust`, `lib/server/pricing.ts`), generation pause, `expectedPrice` 409 guard, client price display | ✅ merged |
 | F5b | Error sink → `error_log`, process heartbeats, housekeeping status, Telegram broadcast delivery, `ai_usage` cost capture, free-LLM runtime settings | ✅ merged |
 | F2 | Security core: crypto/TOTP, RBAC matrix, admin sessions, audit, `adminHandler`, auth/account/admins routes, `scripts/admin-create.mts`, `ADMIN_TOTP_KEY` | ✅ merged |
-| F3b | Admin layouts and pages: `app/admin/layout.tsx`, `(auth)/login`, `(auth)/enroll`, `(panel)/layout.tsx` (shell, nav, Toaster, StepUpProvider), `(panel)/error.tsx`, `loading.tsx`, `account/page.tsx`; `components/admin/shell/*`; `app/uz/admin/page.tsx` → redirect to `/admin`; Sidebar link → `/admin`; delete `components/admin/AdminPage.tsx` and `app/uz/admin/loading.tsx` | ⏳ todo (needs F2) |
-| F6 | Money actions: wallet adjustment, job cancel/fail/refund, external order refund with clawback, plus dialogs (`components/admin/money/*`, `lib/admin-api/money.ts`). Uses `adminAdjustWalletInTx` extracted from `lib/server/credits.ts` | ⏳ todo (opus) |
+| F3b | Admin layouts and pages: `app/admin/layout.tsx`, `(auth)/login`, `(auth)/enroll`, `(panel)/layout.tsx` (shell, nav, Toaster, StepUpProvider), `(panel)/error.tsx`, `loading.tsx`, `account/page.tsx`; `components/admin/shell/*` (incl. `nav-registry.ts`, `useCan`); `app/uz/admin/page.tsx` → redirect to `/admin`; Sidebar link → `/admin`; legacy `AdminPage.tsx` deleted | ✅ merged 2026-10-02 (opus; Chromium smoke 32/32) |
+| F6 | Money actions: wallet adjustment, job cancel/fail/refund, external order refund with clawback, plus dialogs (`components/admin/money/*`, `lib/admin-api/money.ts`). `adminAdjustWalletInTx` extracted from `lib/server/credits.ts`; idempotency in `lib/server/admin-idempotency.ts` | ✅ merged 2026-10-02 (fable; fable review: 1 MAJOR + 3 MINOR fixed) |
+| COST | `lib/server/admin-cost.ts`: the ONE definition of AI spend (ai_usage ∪ legacy completed cost_json, no double count), groupings, coverage, `COST_CAVEATS`. WP1, WP5 and WP11 must use it | ✅ merged 2026-10-02 |
 | WP1 | Dashboard (§6.3, S3) | ⏳ |
 | WP2 | Users (§6.4, S4/S5); rewrites the legacy `app/api/admin/users/**` | ⏳ |
 | WP3 | Generations (§6.5, S6/S7) | ⏳ |
@@ -155,4 +156,5 @@ Deploying earlier would leave the owner without a working admin UI. Migration `0
 
 | Date | Stage | Result |
 |---|---|---|
+| 2026-10-02 | (b) F3b + F6 + COST | merged; merged-state tsc/lint clean, admin+guard tests 338/338, admin UI 72/72; PR #2 CI green (run 36916073054). Owner #1 created in the dev DB (`sodda`, backup taken first) — enroll link to be regenerated once `/admin` has a page. Note: plain `next dev` (webpack) 500s on every page because of `instrumentation.ts` → sharp; use `--turbopack` (pre-existing). Open owner question: pro chargeback leaves plan=pro (spec: quota clawback only). |
 | 2026-10-02 | (a) baseline + CI fix | `main` fast-forwarded to `ffddd39`, branch `feat/admin-panel`. typecheck ✅, lint ✅, `npm test` 3756/3756, `test:ui` 511/511, `test:viewer` 248/248. CI flake fixed in `tests/backup-script.test.mts` (§5). AGENT-BRIEF and CLAUDE.md adapted to the laptop. Next: (b) F3b + F6 after owner approval. |
