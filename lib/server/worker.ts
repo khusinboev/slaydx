@@ -41,13 +41,19 @@ import { purgeBonusFiles } from "./retention";
 import { purgeSourceCache } from "../generation/research/cache";
 import { refundUnrefundedFailed } from "./refund-reconcile";
 import { purgePaymentEvents } from "./payment-events";
-import { queryOne } from "./db";
+import { query, queryOne } from "./db";
 import type { ToolConfig, ToolId } from "../types";
 import { refundRatio } from "../generation/delivered";
 import { cleanText, safeSlice } from "../generation/safe-text";
-import type { Delivered } from "../generation/types";
+import type { CostJson, Delivered } from "../generation/types";
+import { trackJobCost, type TrackedJobCost } from "../generation/job-cost";
 import { log, withFreshLogContext, type LogFields } from "./log";
 import { providerOf, userMessage } from "./user-error";
+import { recordAiUsage, type AiUsageOutcome } from "./ai-usage";
+import { deliverBroadcasts } from "./broadcast-delivery";
+import { registerErrorSink } from "./error-sink";
+import { processIdFor, startHeartbeat, stopHeartbeat } from "./heartbeat";
+import { recordStep } from "./housekeeping-status";
 
 /**
  * Navbatni bajaruvchi worker.
@@ -58,6 +64,8 @@ import { providerOf, userMessage } from "./user-error";
  */
 
 const WORKER_ID = `${process.pid}-${randomUUID().slice(0, 8)}`;
+/** Admin process id (`worker@<host>:<pid>`) — heartbeat row and `housekeeping_status.last_process`. */
+const HK_PROCESS = processIdFor("worker");
 const IDLE_POLL_MS = 1500;
 const BUSY_POLL_MS = 150;
 const HOUSEKEEPING_MS = 60_000;
@@ -332,6 +340,19 @@ type RunCtl = {
 };
 
 /**
+ * Flushes a job's AI spend into `ai_usage` (admin §17.3): completed jobs (the
+ * same cost as `cost_json`, kept even if the user deletes the generation),
+ * failed jobs and abandoned builds. Fire-and-forget; never throws.
+ */
+function flushJobUsage(job: Pick<ClaimedJob, "id" | "userId" | "toolId">, outcome: AiUsageOutcome, cost: () => CostJson): void {
+  try {
+    void recordAiUsage({ source: "job", outcome, generationId: job.id, userId: job.userId, toolId: job.toolId, cost: cost() });
+  } catch {
+    // Telemetry must never affect the job.
+  }
+}
+
+/**
  * Qattiq to'xtashdan keyin hali ishlayotgan (yetim) qurilishlar soni
  * (W3-A review nit 1). Qurilishni o'ldirib bo'lmaydi — u CPU, xotira va
  * provayder pulini ishlatishda davom etadi, slot esa darhol bo'shaydi.
@@ -485,6 +506,10 @@ async function execute(
   onStage: (ev: { progress: number; step: string }) => void,
 ): Promise<void> {
   const startedAt = Date.now();
+  // AI spend of the build (admin `ai_usage`): retrievable even when it throws or is abandoned.
+  let tracked: TrackedJobCost<Awaited<ReturnType<typeof build>>> | undefined;
+  let outcome: AiUsageOutcome | null = null;
+  let completedCost: CostJson | undefined;
   try {
     const deadline = Date.now() + jobDeadlineMs(job);
     // `logoAssetId` bo'lsa foydalanuvchining o'z logotipi (`logo_uploads`)
@@ -513,7 +538,7 @@ async function execute(
      */
     const photo =
       tool.id === "resume" ? await photoDataUrl(job.userId, String(job.values.photoAssetId ?? "")) : undefined;
-    const file = await build(tool, job.values, {
+    tracked = trackJobCost(() => build(tool, job.values, {
       deadline,
       logo,
       template,
@@ -535,11 +560,13 @@ async function execute(
         );
         return write;
       },
-    });
+    }));
+    const file = await tracked.promise;
 
     if (ctl.abandoned) {
       // Qattiq muddat o'tgan yoki SIGTERM da navbatga qaytarilgan — ish
       // allaqachon FAILED/QUEUED, natija tashlanadi (C15).
+      outcome = "abandoned";
       log("warn", `[worker] job ${job.id}: kech natija tashlandi (claim ${job.lease} tashlab ketilgan)`, {
         jobId: job.id,
         attempt: job.attempts,
@@ -589,6 +616,9 @@ async function execute(
         delivered: file.delivered,
       },
     );
+    // The build's spend is final here; a discarded result counts as abandoned.
+    outcome = won ? "completed" : "abandoned";
+    completedCost = won ? file.cost : undefined;
     if (!won) {
       // Qulf boshqada (ish qayta navbatga tushgan, muddat o'tib FAILED
       // bo'lgan yoki bekor qilingan) — natija tashlandi, hech narsa yozilmadi.
@@ -641,6 +671,8 @@ async function execute(
      * tushmaydi. Xom tafsilot (stack, provayder, bosqich, urinish) —
      * jurnalda, ish id si bilan (OBS-03, OBS-08).
      */
+    // After a completed commit (e.g. a partial refund threw) the job stays completed.
+    outcome ??= ctl.abandoned ? "abandoned" : "failed";
     const message = userMessage(e);
     log("error", `[worker] job ${job.id} failed`, {
       jobId: job.id,
@@ -658,6 +690,11 @@ async function execute(
     // Tashlab ketilgan yurishda `failJob` qulf to'sig'idan o'tmaydi — pul
     // ikkinchi marta qaytmaydi, yangi egasining fayliga tegilmaydi.
     await failAndCleanup(job, job.lease, message);
+  } finally {
+    // No tracker = the job failed before the build started: nothing was spent.
+    // A completed job flushes exactly its `cost_json`; otherwise the meter.
+    const meter = tracked;
+    if (meter) flushJobUsage(job, outcome ?? "failed", () => completedCost ?? meter.snapshot().toJson());
   }
 }
 
@@ -783,10 +820,15 @@ async function tick(): Promise<boolean> {
  * `reclaimStaleJobs` ulanish uzilishida) yiqilsa, qolganlari — navbat
  * muddati, saqlash muddati, sessiya/fayl tozalash — shu daqiqada umuman
  * bajarilmasdi. Endi xato faqat o'z qadamini to'xtatadi va jurnalga yoziladi.
+ *
+ * Each named step also updates its `housekeeping_status` row for the admin
+ * system page (`recordStep`: same result and error, the status write is
+ * fire-and-forget). Per-item sub-steps pass `record: false` so they do not
+ * create one status row per job id.
  */
-async function step(name: string, fn: () => Promise<unknown>): Promise<void> {
+async function step(name: string, fn: () => Promise<unknown>, opts: { record?: boolean } = {}): Promise<void> {
   try {
-    await fn();
+    await (opts.record === false ? fn() : recordStep(name, HK_PROCESS, fn));
   } catch (e) {
     log("error", `[worker] housekeeping/${name}`, { step: name, err: e });
   }
@@ -823,8 +865,9 @@ export async function recoverJobs(): Promise<void> {
           [id],
         );
         if (owner) await refundThenCleanup({ id, userId: String(owner.user_id) }, "Ish vaqti tugadi");
-      });
+      }, { record: false });
     }
+    return dead.length;
   });
   /*
    * Navbat muddati (capacity §4): `QUEUE_TTL_SEC` dan uzoq kutgan ish
@@ -852,24 +895,30 @@ export async function purgeHousekeeping(): Promise<void> {
    * muddatsiz (`011_no_expiry.sql`). Soatlab bir marta (`RETENTION_EVERY_MS`);
    * belgi skanerdan OLDIN qo'yiladi — yiqilayotgan skaner ham har daqiqada
    * bazani qayta urmasin.
+   *
+   * The cadence check sits outside `step` so `housekeeping_status` records
+   * only real runs, not the skipped minutes in between.
    */
-  await step("retention", async () => {
-    if (Date.now() - lastRetentionAt < RETENTION_EVERY_MS) return;
-    lastRetentionAt = Date.now();
-    await purgeBonusFiles();
-  });
+  if (Date.now() - lastRetentionAt >= RETENTION_EVERY_MS) {
+    await step("retention", async () => {
+      lastRetentionAt = Date.now();
+      return purgeBonusFiles();
+    });
+  }
   /*
    * To'lov webhook izi (W3 wrap-up): 365 kundan eskisi, 6 soatda bir marta,
    * ALOHIDA qadam — yiqilsa ham qolgan tozalashlar ishlaydi. Belgi skanerdan
    * OLDIN qo'yiladi (saqlash qadami naqshi): yiqilayotgan DELETE har
    * daqiqada qayta urmasin.
    */
-  await step("payment-events", async () => {
-    if (Date.now() - lastPaymentEventsPurgeAt < RETENTION_EVERY_MS) return;
-    lastPaymentEventsPurgeAt = Date.now();
-    const n = await purgePaymentEvents(PAYMENT_EVENTS_RETENTION_DAYS);
-    if (n) log("info", "[worker] payment_events tozalandi", { deleted: n, retentionDays: PAYMENT_EVENTS_RETENTION_DAYS });
-  });
+  if (Date.now() - lastPaymentEventsPurgeAt >= RETENTION_EVERY_MS) {
+    await step("payment-events", async () => {
+      lastPaymentEventsPurgeAt = Date.now();
+      const n = await purgePaymentEvents(PAYMENT_EVENTS_RETENTION_DAYS);
+      if (n) log("info", "[worker] payment_events tozalandi", { deleted: n, retentionDays: PAYMENT_EVENTS_RETENTION_DAYS });
+      return n;
+    });
+  }
   await step("sessions", () => purgeExpiredSessions());
   /*
    * O'YIN havolalari (AUDIT-22 R, `game_sessions.expires_at`, standart
@@ -905,6 +954,90 @@ export async function purgeHousekeeping(): Promise<void> {
    * «O'z shablonim» muddati egasi qaroriga bog'liq.
    */
   await step("source-cache", () => purgeSourceCache(60));
+  /*
+   * Admin panel steps (docs/admin/02-plan.md §5.5, §6.9), after every existing
+   * step so their order is unchanged. Broadcast delivery is detached: a full
+   * tick (600 messages at 25/s) takes ~24 s and must not stall job claiming in
+   * the worker loop; a still-running delivery skips the next start.
+   */
+  startBroadcastDelivery();
+  await step("error-log", () => purgeErrorLog());
+  await step("heartbeats", () => purgeHeartbeats());
+  await step("admin-sessions", () => purgeAdminSessions());
+  await step("broadcast-recipients", () => purgeBroadcastRecipients());
+}
+
+/** In-flight broadcast delivery of this process (one at a time). */
+let broadcastRun: Promise<void> | null = null;
+
+function startBroadcastDelivery(): void {
+  if (broadcastRun) return;
+  const run = recordStep("broadcasts", HK_PROCESS, () => deliverBroadcasts()).then(
+    () => undefined,
+    (e: unknown) => {
+      log("error", "[worker] housekeeping/broadcasts", { step: "broadcasts", err: e });
+    },
+  );
+  broadcastRun = run;
+  void run.finally(() => {
+    if (broadcastRun === run) broadcastRun = null;
+  });
+}
+
+/** Test seam: resolves when the detached broadcast delivery (if any) has finished. */
+export async function broadcastDeliveryIdle(): Promise<void> {
+  await broadcastRun;
+}
+
+/** `error_log`: 90 days after `last_seen_at`, resolved or not (§5.5). */
+export async function purgeErrorLog(): Promise<number> {
+  const rows = await query("DELETE FROM error_log WHERE last_seen_at < now() - interval '90 days' RETURNING id");
+  return rows.length;
+}
+
+/** `process_heartbeats`: a process silent for a day is gone (§5.5). */
+export async function purgeHeartbeats(): Promise<number> {
+  const rows = await query(
+    "DELETE FROM process_heartbeats WHERE last_seen_at < now() - interval '1 day' RETURNING process_id",
+  );
+  return rows.length;
+}
+
+/**
+ * Admin sessions 7 days past their absolute expiry, and enrollment links 7
+ * days old that were consumed or have expired (§5.5). Live rows are never
+ * touched.
+ */
+export async function purgeAdminSessions(): Promise<number> {
+  const s = await query("DELETE FROM admin_sessions WHERE expires_at < now() - interval '7 days' RETURNING id");
+  const e = await query(
+    `DELETE FROM admin_enrollments
+      WHERE created_at < now() - interval '7 days' AND (consumed_at IS NOT NULL OR expires_at < now())
+      RETURNING token_hash`,
+  );
+  return s.length + e.length;
+}
+
+/** `broadcast_recipients` of finished broadcasts after 180 days, in bounded batches (§5.5). */
+export async function purgeBroadcastRecipients(batch = 5_000, maxBatches = 20): Promise<number> {
+  let total = 0;
+  for (let i = 0; i < maxBatches; i++) {
+    const rows = await query(
+      `DELETE FROM broadcast_recipients
+        WHERE (broadcast_id, user_id) IN (
+          SELECT r.broadcast_id, r.user_id
+            FROM broadcast_recipients r
+            JOIN broadcasts b ON b.id = r.broadcast_id
+           WHERE b.status IN ('done', 'cancelled')
+             AND COALESCE(b.finished_at, b.created_at) < now() - interval '180 days'
+           LIMIT $1)
+        RETURNING broadcast_id`,
+      [batch],
+    );
+    total += rows.length;
+    if (rows.length < batch) break;
+  }
+  return total;
 }
 
 /**
@@ -1017,6 +1150,8 @@ async function loop(): Promise<void> {
     workerId: WORKER_ID,
     concurrency: env.worker.concurrency,
   });
+  // Admin system page: liveness, running jobs and this process's breaker/limiter state (§6.11).
+  startHeartbeat({ role: "worker", concurrency: env.worker.concurrency, getRunning: () => running });
   let sinceHousekeeping = 0;
 
   while (!stopped) {
@@ -1043,6 +1178,8 @@ async function loop(): Promise<void> {
     }
     await sleep(wait);
   }
+  // Stopped: the row goes stale and the system page shows the worker as gone.
+  stopHeartbeat("worker");
 }
 
 function sleep(ms: number) {
@@ -1156,5 +1293,7 @@ export async function runWorkerProcess(): Promise<void> {
   };
   process.on("SIGTERM", shutdown);
   process.on("SIGINT", shutdown);
+  // Persist this process's error lines for the admin error log (§6.11).
+  registerErrorSink("worker");
   await loop();
 }
