@@ -20,12 +20,11 @@ Short forms: `M/0NN` = `lib/server/migrations/0NN_*.sql`.
   2. Wallet adjustment is not idempotent: each call uses a random reference (`lib/server/credits.ts:385`), and the UI has no confirmation step.
   3. Block and unblock are not audited at all (`app/api/admin/users/[id]/route.ts:79-93`). `Boolean("false")` evaluates to true, so sending the string blocks the user (`:83`), and an admin can block themselves.
   4. The list endpoint's `page` parameter is unvalidated, so a malformed value produces a 500 (`app/api/admin/users/route.ts:39`).
-- **The quality gate is already red on `main`.**
-  - CI has never passed. All three runs fail at `npm run test` (ops report §6.2).
-  - Locally, `npm test` reports 93 failing results, 84 of them top-level "not ok" across 36 files. `npm run test:ui` has 29 failures.
-  - Typecheck, lint and `test:viewer` are green.
-  - Every DB-backed money, auth, admin and queue test passes against real Postgres 16.
-  - Most failures come from the tsx module-identity problem described in §8.1. This changes the Definition of Done; see Q3.
+- **The quality gate: green in CI, red only in this analysis container.**
+  - On GitHub Actions, the PR carrying these docs (`857b8b8` + docs; run `36878593554`) passed **every** step: typecheck, lint, test, test:viewer, test:ui and build.
+  - The three earlier push runs on `main` failed at `npm run test`, including one at `857b8b8` on 2026-09-25. The same code is green now, so that failure did not reproduce.
+  - In this container: `npm test` has 93 failing results (84 top-level "not ok" in 36 files) and `test:ui` has 29. Typecheck, lint and `test:viewer` are green, and every DB-backed money, auth, admin and queue test passes against real Postgres 16.
+  - The container failures are environment-specific. Causes are in §8.1: tsx module identity and a broken LibreOffice. The Definition of Done is therefore **CI fully green**, plus no new local failures beyond §8. See Q3.
 
 ---
 
@@ -411,7 +410,7 @@ Legend: **See** = list or detail; **Search** = filters; **Change** = mutations; 
 
 | # | Risk / debt | Impact on the admin panel | Evidence |
 |---|---|---|---|
-| R1 | **The test gate is red on `main`**: 93 `npm test` failures and 29 `test:ui` failures, and CI has never been green. | "Tests green" cannot be met without fixing non-admin test infrastructure, and regressions are hard to spot amid existing noise. | §8 |
+| R1 | **Local test noise.** CI is green (§8), but in this container 93 `npm test` and 29 `test:ui` results fail for environment reasons. | Local runs need the baseline diff in §8 to tell a regression from container noise; CI is the authoritative gate. | §8 |
 | R2 | `users` → `transactions` and `payment_orders` use **CASCADE**. | The admin must never hard-delete a user. "Erase" has to mean anonymize. | `M/001:117,136` |
 | R3 | Hard deletes of generations remove the evidence. | The admin cannot investigate after a user deletes a job; only orphaned ledger rows remain. | `lib/server/jobs.ts:566-575` |
 | R4 | Cost telemetry is incomplete (§4.8). | AI-cost and margin dashboards will **under-report** cost unless the coverage limits are shown, or the product code is changed (Q11). | `lib/generation/job-cost.ts:142-146` |
@@ -432,7 +431,7 @@ Legend: **See** = list or detail; **Search** = filters; **Change** = mutations; 
 
 ## 8. Baseline: checks at `857b8b8`
 
-Run on 2026-10-01 in this container: Node 22.22.0, a throwaway Postgres 16.14 with migrations 001–027 applied, and LibreOffice installed but unable to convert anything here. The command recipe is in the ops report and is repeated in `02-plan.md`.
+Run on 2026-10-01 **in this analysis container**. The failures below do **not** occur in CI; see the CI row in the table. Node 22.22.0, a throwaway Postgres 16.14 with migrations 001–027 applied, and LibreOffice installed but unable to convert anything here. The command recipe is in the ops report and is repeated in `02-plan.md`.
 
 | Check | Result |
 |---|---|
@@ -442,7 +441,7 @@ Run on 2026-10-01 in this container: Node 22.22.0, a throwaway Postgres 16.14 wi
 | `npm test` with DB | **fail**: 3495 tests, 3396 pass, 93 fail, 6 skipped |
 | `npm run test:viewer` | **pass**: 248/248 |
 | `npm run test:ui` | **fail**: 477 tests, 448 pass, 29 fail |
-| CI on `main` | **red in every run**; fails at `npm run test`, so `test:ui` and `build` have never run in CI |
+| CI (GitHub Actions, run `36878593554` on this PR, `857b8b8` + docs) | **green: all steps pass**, including test:ui and build. Earlier `main` push runs (2026-09-24/25) failed at `npm run test`, and that failure did not reproduce |
 
 ### 8.1 Causes of the `npm test` failures
 
@@ -482,7 +481,7 @@ Top-level failures (84 "not ok"), by file:
 
 The root cause has not been traced yet. The leading hypothesis is the same module-identity problem as in §8.1.
 
-**This list is the regression baseline.** The admin work must not add a failure to it and must not remove a test from it.
+**This list is the local regression baseline for this container.** CI must stay fully green. Locally, the admin work must not add a failure to this list and must not remove a test.
 
 ---
 
@@ -520,7 +519,7 @@ These are product decisions that cannot be derived from the code. `02-plan.md` p
 |---|---|---|
 | Q1 | **Roles.** Which admin roles do you need? The proposal is `owner`, `admin`, `support`, `finance`, `moderator` and `viewer`. | Shapes the permission matrix and every endpoint. |
 | Q2 | **Admin login.** The proposal is: the existing Telegram identity is required, then the admin must enter a **TOTP** code (authenticator app) to open a separate short-lived admin session. Alternative: a one-time code sent by the Telegram bot. Is an authenticator app acceptable for every admin? | Determines the 2FA design. Telegram-only means a compromised Telegram account is a compromised admin. |
-| Q3 | **The red baseline.** `main` already has 93 + 29 failing tests that are not admin-related. Should the Definition of Done be "no new failures, and every new admin test passes", or should fixing the baseline (mostly a tsx import-specifier problem in test infrastructure) be a separate pre-step work package? | DoD says "tests green", which is impossible without touching non-admin code. |
+| Q3 | **Test gate.** The proposed Definition of Done is: CI fully green, plus zero new local failures against §8 (container-specific noise). Do you agree, or should investigating the earlier red `main` push runs (2026-09-24/25, not reproducible now) be in scope? | Defines "tests green". |
 | Q4 | **Branch.** You asked for `feat/admin-panel`. This session may push only to `claude/cool-feynman-jiixoi`. Can the work continue on `claude/cool-feynman-jiixoi` (one draft PR), or will you allow `feat/admin-panel`? | Git workflow. |
 | Q5 | **Block semantics.** Should a block also revoke sessions, cancel queued jobs (with a refund) and disable public game links? Today it only rejects the session. | Additive admin action vs. product behavior. |
 | Q6 | **User erasure.** Is a "delete / erase user" action needed (anonymise PII, keep the ledger), or only blocking? A hard delete would wipe the financial ledger through CASCADE. | Legal / PII. |

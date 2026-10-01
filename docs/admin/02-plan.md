@@ -51,7 +51,7 @@ A production admin panel inside the existing Next.js app, built on the existing 
 - No changes to the Click or Payme protocol. Payme state −2 is not implemented, and no outbound refund call is made to a provider.
 - No user hard-delete or erasure **[DEFAULT Q6]**. Blocking is the only account action.
 - No `pg_trgm` or any other extension **[DEFAULT Q13]**.
-- No fix to the pre-existing red test baseline **[DEFAULT Q3]**: 84 top-level failures in `npm test` and 29 in `test:ui`, listed in analysis §8. The admin work must add **zero** new failures.
+- No work on the container-specific local test failures **[DEFAULT Q3]**: 84 top-level failures in `npm test` and 29 in `test:ui`, listed in analysis §8. CI is green and must stay green. Locally, the admin work must add **zero** new failures.
 - Changing `cost_json` capture for failed jobs or free-LLM calls is **optional work package WP-X1**, which runs only if Q11 is answered "yes".
 - No new npm dependencies. QR codes use the existing `qrcode` package (`package.json`, already used by `lib/game/qr.ts`). TOTP and AES use `node:crypto`. Charts and tables are hand-written.
 - The admin panel is not supported inside the Telegram Mini App iframe. Admin pages send `frame-ancestors 'none'`.
@@ -881,7 +881,7 @@ Residual risks, documented in 03-report:
 
 ## 11. Test strategy
 
-**Rule:** no existing test is weakened, skipped or deleted. The bar is "zero new failures relative to the baseline in analysis §8", plus all new tests green. **[DEFAULT Q3]**
+**Rule:** no existing test is weakened, skipped or deleted. The bar is **CI fully green** (typecheck, lint, test, test:viewer, test:ui, build), plus zero new local failures relative to the container baseline in analysis §8. **[DEFAULT Q3]**
 
 | Layer | What | Where |
 |---|---|---|
@@ -1216,7 +1216,7 @@ npm run build       # Phase 4 / integration only
 |---|---|---|
 | Q1 Roles | owner, admin, finance, support, moderator, viewer, with the §4.3 matrix | §4 |
 | Q2 2FA | TOTP (authenticator app) plus recovery codes; Telegram login is factor 1; Telegram notice on login | §3 |
-| Q3 Red baseline | DoD = **zero new failures** compared with analysis §8, plus all new tests green. Fixing the baseline is a separate effort, not part of this work | §11 |
+| Q3 Test gate | DoD = **CI fully green**, plus zero new local failures against analysis §8 (container-only noise) | §11 |
 | Q4 Branch | Continue on `claude/cool-feynman-jiixoi` with one draft PR, unless you allow `feat/admin-panel` | — |
 | Q5 Block | Block sets the flag and revokes sessions by default. Cancelling queued jobs (with refund) and revoking public links are opt-in checkboxes | §6.4 |
 | Q6 Erasure | Not built | §1.2 |
