@@ -28,7 +28,8 @@ const COPY: Record<JobAction, { title: string; description: string; confirm: str
   cancel: {
     title: "Ishni bekor qilish",
     description: "Navbatdagi ish bekor qilinadi va yechilgan pul to'liq qaytariladi.",
-    confirm: "Bekor qilish",
+    // Not "Bekor qilish": that is the dialog's own cancel button.
+    confirm: "Ishni bekor qilish",
     from: "QUEUED",
     to: "REVOKED",
     danger: true,
@@ -80,7 +81,7 @@ export function JobActionDialog({ open, onClose, action, generation, onDone }: J
         try {
           if (action === "refund") {
             const r = await refundJob(generation.id, reason, idempotencyKey);
-            toast(`Pul qaytarildi — ${refundText(r.refunded)}`);
+            toast(`Pul ${refundText(r.refunded)}`);
             onDone?.(r.refunded, null);
             return;
           }
