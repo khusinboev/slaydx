@@ -52,6 +52,8 @@ const { createAdminSession, adminCookieName } = await import("../lib/server/admi
 const cost = await import("../lib/server/admin-cost.ts");
 const { parseDateRange } = await import("../lib/server/admin-list.ts");
 const ai = await import("../lib/server/admin-ai.ts");
+const hb = await import("../lib/server/admin-heartbeat.ts");
+const { HEARTBEAT_INTERVAL_MS } = await import("../lib/server/heartbeat.ts");
 const jc = await import("../lib/generation/job-cost.ts");
 const costRoute = await import("../app/api/admin/ai/cost/route.ts");
 const providersRoute = await import("../app/api/admin/ai/providers/route.ts");
@@ -203,6 +205,19 @@ type CostBody = {
   caveats: string[];
   soumPerUsd: number;
 };
+
+// ───────────────────────────── heartbeat staleness rule (no DB)
+
+test("isStale: three missed beats, derived from the heartbeat interval", () => {
+  assert.equal(hb.HEARTBEAT_STALE_SEC, (HEARTBEAT_INTERVAL_MS * 3) / 1000);
+  const now = Date.parse("2026-10-02T10:00:00Z");
+  const ago = (sec: number) => new Date(now - sec * 1000);
+  assert.equal(hb.isStale(ago(5), now), false);
+  assert.equal(hb.isStale(ago(hb.HEARTBEAT_STALE_SEC), now), false, "exactly at the limit is still alive");
+  assert.equal(hb.isStale(ago(hb.HEARTBEAT_STALE_SEC + 1), now), true);
+  assert.equal(hb.isStale(ago(600).toISOString(), now), true, "ISO strings");
+  assert.equal(hb.isStale("not a date", now), true);
+});
 
 // ───────────────────────────── cost
 

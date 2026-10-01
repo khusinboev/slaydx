@@ -259,6 +259,45 @@ test("canonical spend: dedupe, legacy, outcomes, Tashkent days, groupings, cover
     assert.ok(byUsd.every((r, i) => i === 0 || byUsd[i - 1].usd >= r.usd));
   });
 
+  await t.test("spendByProviderModel: pairs sum to the totals and to the provider / model groupings, unknown included", async () => {
+    for (const range of [rD, rDD1]) {
+      const pairs = await cost.spendByProviderModel(pool(), range);
+      const totals = await cost.spendTotals(pool(), range);
+      near(pairs.reduce((a, r) => a + r.usd, 0), totals.usd, "usd = spendTotals");
+      assert.equal(pairs.reduce((a, r) => a + r.calls, 0), totals.calls);
+      assert.equal(pairs.reduce((a, r) => a + r.inputTokens, 0), totals.inputTokens);
+      assert.equal(pairs.reduce((a, r) => a + r.outputTokens, 0), totals.outputTokens);
+      assert.equal(pairs.reduce((a, r) => a + r.unpricedCalls, 0), 2);
+
+      for (const [by, field] of [["provider", "provider"], ["model", "model"]] as const) {
+        for (const g of await cost.spendBy(pool(), range, by)) {
+          const mine = pairs.filter((p) => p[field] === g.key);
+          near(mine.reduce((a, r) => a + r.usd, 0), g.usd, `${by} ${g.key} usd`);
+          assert.equal(mine.reduce((a, r) => a + r.calls, 0), g.calls, `${by} ${g.key} calls`);
+          assert.equal(mine.reduce((a, r) => a + r.units, 0), g.units, `${by} ${g.key} units`);
+          assert.equal(mine.reduce((a, r) => a + r.unpricedCalls, 0), g.unpricedCalls, `${by} ${g.key} unpriced`);
+        }
+      }
+      assert.ok(pairs.every((r, i) => i === 0 || pairs[i - 1].usd >= r.usd), "usd descending");
+    }
+    const pairs = await cost.spendByProviderModel(pool(), rD);
+    const find = (p: string, m: string) => pairs.find((r) => r.provider === p && r.model === m);
+    // The free call recorded with spend but no parts is the unknown/unknown pseudo-part.
+    const unknown = find("unknown", "unknown");
+    assert.ok(unknown, "unknown pseudo-part present");
+    assert.equal(unknown.calls, 1);
+    near(unknown.usd, costFree.usd, "unknown usd");
+    // Legacy CostMeter cost attributed to its top pair; images and grounding as their own pairs.
+    near(find("openai", "gpt-legacy")?.usd ?? -1, costC.usd, "legacy pair");
+    assert.equal(find("gemini", "gemini-3.1-flash-lite-image")?.units, 2);
+    assert.equal(find("fal", "fal-ai/flux/dev")?.unpricedCalls, 1);
+    assert.equal(find("openrouter", "mystery-model")?.unpricedCalls, 1);
+  });
+
+  await t.test("spendByProviderModel: an empty range gives no rows", async () => {
+    assert.deepEqual(await cost.spendByProviderModel(pool(), parseDateRange("2020-01-01", "2020-01-02")), []);
+  });
+
   await t.test("coverage: completed with cost data ÷ completed, by Tashkent day", async () => {
     // D: A, B, C, G, I have cost data; F does not.
     assert.deepEqual(await cost.spendCoverage(pool(), rD), { jobsWithCost: 5, jobsCompleted: 6, pct: (5 / 6) * 100 });

@@ -7,8 +7,9 @@ import { aishaKey } from "../generation/tts/aisha";
 import { azureKey, azureRegion } from "../generation/tts/azure";
 import { geminiKey } from "../generation/tts/gemini";
 import { ApiError } from "./api";
-import { COST_CAVEATS, soumPerUsd, spendBy, spendCoverage, spendRowsSql, spendTotals, type SpendCoverage, type SpendGroupBy, type SpendRange } from "./admin-cost";
+import { COST_CAVEATS, soumPerUsd, spendBy, spendByProviderModel, spendCoverage, spendTotals, type SpendCoverage, type SpendGroupBy, type SpendRange } from "./admin-cost";
 import { parseDateRange, type DateRange } from "./admin-list";
+import { isStale } from "./admin-heartbeat";
 import { env } from "./env";
 import { transaction, query } from "./db";
 
@@ -29,9 +30,6 @@ export type AiGroupBy = (typeof AI_GROUP_BY)[number];
 
 /** Default `groupBy` when the param is absent. */
 export const AI_DEFAULT_GROUP_BY: AiGroupBy = "day";
-
-/** A heartbeat older than this is stale (the beat interval is 30 s: three missed beats). */
-export const HEARTBEAT_STALE_SEC = 90;
 
 const CACHE_TTL_MS = 60_000;
 const CACHE_MAX_ENTRIES = 200;
@@ -220,7 +218,6 @@ type HeartbeatRow = {
   process_id: string;
   role: string;
   last_seen_at: Date | string;
-  stale: boolean;
   breakers: unknown;
   limiters: unknown;
 };
@@ -257,59 +254,20 @@ export function parseLimiters(raw: unknown, process: string, stale: boolean): Ai
   return out;
 }
 
-/** A JSON number at `e` as numeric, 0 for anything else (same rule as admin-cost). */
-const jsonNum = (e: string): string => `(CASE WHEN jsonb_typeof(${e}) = 'number' THEN (${e})::numeric ELSE 0 END)`;
-const jsonCount = (e: string): string => `LEAST(GREATEST(trunc(${jsonNum(e)}), 0), 9223372036854775807)::bigint`;
-
-type UsageRow = { provider: string; model: string; calls: string | number | null; usd: string | number | null };
-
-/**
- * Spend of `[from, to)` per provider/model pair. `admin-cost` groups by one
- * dimension at a time, so the pair is taken from the SAME canonical row set
- * (`spendRowsSql`) with the same part rules (a row with spend but no parts is
- * one `unknown`/`unknown` part). The test pins the sums to `spendBy` provider
- * and model and to `spendTotals`.
- */
-export async function usageByProviderModel(client: Pick<PoolClient, "query">, range: SpendRange): Promise<AiUsage24h[]> {
-  const spend = spendRowsSql(range);
-  const parts = `(CASE WHEN jsonb_typeof(s.parts) = 'array' THEN s.parts ELSE '[]'::jsonb END)`;
-  const res = await client.query<UsageRow>(
-    `SELECT COALESCE(NULLIF(p->>'provider', ''), 'unknown') AS provider,
-            COALESCE(NULLIF(p->>'model', ''), 'unknown') AS model,
-            sum(${jsonCount("p->'calls'")}) AS calls,
-            sum(GREATEST(${jsonNum("p->'usd'")}, 0)) AS usd
-       FROM (${spend.sql}) s
-      CROSS JOIN LATERAL jsonb_array_elements(
-        CASE
-          WHEN jsonb_array_length(${parts}) > 0 THEN ${parts}
-          WHEN s.calls > 0 OR s.usd > 0 OR s.input_tokens > 0 OR s.output_tokens > 0 THEN jsonb_build_array(jsonb_build_object(
-            'provider', 'unknown', 'model', 'unknown', 'calls', s.calls, 'usd', s.usd))
-          ELSE '[]'::jsonb
-        END) AS p
-      GROUP BY 1, 2
-      ORDER BY 4 DESC, 1, 2
-      LIMIT 200`,
-    spend.params,
-  );
-  return res.rows.map((r) => ({ provider: String(r.provider), model: String(r.model), calls: Number(r.calls ?? 0), usd: Number(Number(r.usd ?? 0).toFixed(6)) }));
-}
-
 /** Key presence, per-process breakers and limiters, and the last 24 hours of spend by provider/model. */
 export async function aiProviders(nowMs: number = Date.now()): Promise<AiProvidersBody> {
   const beats = await query<HeartbeatRow>(
-    `SELECT process_id, role, last_seen_at, breakers, limiters,
-            last_seen_at < now() - ($1::int * interval '1 second') AS stale
+    `SELECT process_id, role, last_seen_at, breakers, limiters
        FROM process_heartbeats
       ORDER BY process_id
       LIMIT 200`,
-    [HEARTBEAT_STALE_SEC],
   );
 
   const processes: AiProcess[] = [];
   const breakers: AiBreaker[] = [];
   const limiters: AiLimiter[] = [];
   for (const b of beats) {
-    const stale = Boolean(b.stale);
+    const stale = isStale(b.last_seen_at, nowMs);
     processes.push({
       process: b.process_id,
       role: b.role === "worker" ? "worker" : "web",
@@ -323,7 +281,9 @@ export async function aiProviders(nowMs: number = Date.now()): Promise<AiProvide
   // Rolling window; cached 60 s like every aggregate, keyed by the minute.
   const usage24h = await cached<AiUsage24h[]>(`usage24h|${Math.floor(nowMs / CACHE_TTL_MS)}`, () =>
     aiReadOnlyTx((client) =>
-      usageByProviderModel(client, { fromTs: new Date(nowMs - DAY_MS).toISOString(), toTsExclusive: new Date(nowMs).toISOString() }),
+      spendByProviderModel(client, { fromTs: new Date(nowMs - DAY_MS).toISOString(), toTsExclusive: new Date(nowMs).toISOString() }).then((rows) =>
+        rows.map((r) => ({ provider: r.provider, model: r.model, calls: r.calls, usd: r.usd })),
+      ),
     ),
   );
 
