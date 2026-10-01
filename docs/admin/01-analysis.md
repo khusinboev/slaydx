@@ -20,11 +20,11 @@ Short forms: `M/0NN` = `lib/server/migrations/0NN_*.sql`.
   2. Wallet adjustment is not idempotent: each call uses a random reference (`lib/server/credits.ts:385`), and the UI has no confirmation step.
   3. Block and unblock are not audited at all (`app/api/admin/users/[id]/route.ts:79-93`). `Boolean("false")` evaluates to true, so sending the string blocks the user (`:83`), and an admin can block themselves.
   4. The list endpoint's `page` parameter is unvalidated, so a malformed value produces a 500 (`app/api/admin/users/route.ts:39`).
-- **The quality gate: green in CI, red only in this analysis container.**
+- **The quality gate: intermittent in CI, red in this analysis container.**
   - On GitHub Actions, the PR carrying these docs (`857b8b8` + docs; run `36878593554`) passed **every** step: typecheck, lint, test, test:viewer, test:ui and build.
-  - The three earlier push runs on `main` failed at `npm run test`, including one at `857b8b8` on 2026-09-25. The same code is green now, so that failure did not reproduce.
+  - CI's `npm run test` step is **intermittent**. The next head, `eb7e134`, differs from the green run only in docs text, yet failed 4 of 3520 tests (run `36879797584`). The three earlier push runs on `main` also failed at this step. The 4 tests are not yet identified, because the reachable log is truncated.
   - In this container: `npm test` has 93 failing results (84 top-level "not ok" in 36 files) and `test:ui` has 29. Typecheck, lint and `test:viewer` are green, and every DB-backed money, auth, admin and queue test passes against real Postgres 16.
-  - The container failures are environment-specific. Causes are in §8.1: tsx module identity and a broken LibreOffice. The Definition of Done is therefore **CI fully green**, plus no new local failures beyond §8. See Q3.
+  - The container failures are environment-specific. Causes are in §8.1: tsx module identity and a broken LibreOffice. The Definition of Done is therefore **CI fully green**, which may need the intermittent tests found and fixed first, plus no new local failures beyond §8. See Q3.
 
 ---
 
@@ -441,7 +441,7 @@ Run on 2026-10-01 **in this analysis container**. The failures below do **not** 
 | `npm test` with DB | **fail**: 3495 tests, 3396 pass, 93 fail, 6 skipped |
 | `npm run test:viewer` | **pass**: 248/248 |
 | `npm run test:ui` | **fail**: 477 tests, 448 pass, 29 fail |
-| CI (GitHub Actions, run `36878593554` on this PR, `857b8b8` + docs) | **green: all steps pass**, including test:ui and build. Earlier `main` push runs (2026-09-24/25) failed at `npm run test`, and that failure did not reproduce |
+| CI (GitHub Actions, run `36878593554` on this PR, `857b8b8` + docs) | **green: all steps pass**, including test:ui and build. **But** run `36879797584` on `eb7e134`, a docs-only change, failed 4/3520 at `npm run test`, and earlier `main` push runs failed at the same step. The CI test step is therefore intermittent, and the failing tests are not yet identified |
 
 ### 8.1 Causes of the `npm test` failures
 
@@ -519,7 +519,7 @@ These are product decisions that cannot be derived from the code. `02-plan.md` p
 |---|---|---|
 | Q1 | **Roles.** Which admin roles do you need? The proposal is `owner`, `admin`, `support`, `finance`, `moderator` and `viewer`. | Shapes the permission matrix and every endpoint. |
 | Q2 | **Admin login.** The proposal is: the existing Telegram identity is required, then the admin must enter a **TOTP** code (authenticator app) to open a separate short-lived admin session. Alternative: a one-time code sent by the Telegram bot. Is an authenticator app acceptable for every admin? | Determines the 2FA design. Telegram-only means a compromised Telegram account is a compromised admin. |
-| Q3 | **Test gate.** The proposed Definition of Done is: CI fully green, plus zero new local failures against §8 (container-specific noise). Do you agree, or should investigating the earlier red `main` push runs (2026-09-24/25, not reproducible now) be in scope? | Defines "tests green". |
+| Q3 | **Test gate.** CI's `npm run test` is intermittent: 4/3520 failures on a docs-only change, and the same failures on earlier `main` runs. The proposed Definition of Done is CI fully green plus zero new local failures against §8. Do you agree? Should finding and fixing the intermittent tests be a separate pre-step? That needs the `not ok` lines from the job log (this session sees only the last 5 000 lines) or a re-run permission. | Defines "tests green". |
 | Q4 | **Branch.** You asked for `feat/admin-panel`. This session may push only to `claude/cool-feynman-jiixoi`. Can the work continue on `claude/cool-feynman-jiixoi` (one draft PR), or will you allow `feat/admin-panel`? | Git workflow. |
 | Q5 | **Block semantics.** Should a block also revoke sessions, cancel queued jobs (with a refund) and disable public game links? Today it only rejects the session. | Additive admin action vs. product behavior. |
 | Q6 | **User erasure.** Is a "delete / erase user" action needed (anonymise PII, keep the ledger), or only blocking? A hard delete would wipe the financial ledger through CASCADE. | Legal / PII. |

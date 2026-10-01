@@ -1216,7 +1216,7 @@ npm run build       # Phase 4 / integration only
 |---|---|---|
 | Q1 Roles | owner, admin, finance, support, moderator, viewer, with the §4.3 matrix | §4 |
 | Q2 2FA | TOTP (authenticator app) plus recovery codes; Telegram login is factor 1; Telegram notice on login | §3 |
-| Q3 Test gate | DoD = **CI fully green**, plus zero new local failures against analysis §8 (container-only noise) | §11 |
+| Q3 Test gate | DoD = **CI fully green**, plus zero new local failures against analysis §8 (container-only noise). The intermittent CI tests (analysis §0) must be identified, and fixed in a separate pre-step, if they block green | §11 |
 | Q4 Branch | Continue on `claude/cool-feynman-jiixoi` with one draft PR, unless you allow `feat/admin-panel` | — |
 | Q5 Block | Block sets the flag and revokes sessions by default. Cancelling queued jobs (with refund) and revoking public links are opt-in checkboxes | §6.4 |
 | Q6 Erasure | Not built | §1.2 |
