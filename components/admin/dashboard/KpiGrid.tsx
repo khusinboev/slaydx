@@ -20,7 +20,8 @@ const LABELS = [
   "Marja",
   "Kutilayotgan to'lovlar",
 ] as const;
-const GRID = "grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5";
+// One column on narrow phones: exact money figures ("2 090 000 so'm") must not truncate.
+const GRID = "grid grid-cols-1 gap-2.5 min-[420px]:grid-cols-2 md:grid-cols-3 xl:grid-cols-5";
 
 export function KpiGridSkeleton() {
   return (

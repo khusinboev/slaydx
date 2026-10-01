@@ -110,8 +110,10 @@ export function Charts({ range }: { range: RangeParams }) {
             title="Kunlik AI xarajat, dollar"
             valueLabel="AI xarajat, $"
             color={5}
-            formatValue={(n) => fmtUsd(n)}
-            points={s.points.map((p) => ({ label: dayLabel(p.day), value: p.values.usd }))}
+            // Plotted in cents: LineChart's axis never goes below 1, which would flatten daily
+            // costs of a few cents; the labels convert back to dollars.
+            formatValue={(cents) => fmtUsd(cents / 100)}
+            points={s.points.map((p) => ({ label: dayLabel(p.day), value: Math.round(p.values.usd * 1_000_000) / 10_000 }))}
           />
         )}
       </ChartCard>
