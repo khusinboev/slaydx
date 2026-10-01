@@ -134,4 +134,11 @@ Deploying earlier would leave the owner without a working admin UI. Migration `0
   - **Brute-force limits:** a 429 carries `retryAfterSec`, plus `code:"locked"` when the account is locked.
   - **Enrollment secret:** derived from the enrollment token with a keyed MAC; it is sealed into the account only on the first confirmed code.
 - **Test fixture pattern** for an authenticated admin in route tests: insert `admin_accounts` (status `active`, `totp_enabled_at`, a non-null `totp_secret_enc`), then `createAdminSession(client, {adminId, userSessionId, reauth:true})`, then send both cookies (`slaydx_session` and `adminCookieName()`). See `tests/admin-auth.test.mts` (`openSession`) and `tests/malformed-route-params.test.mts`.
-- **Next step:** F3b and F6, then WP1–WP11 (§2).
+- **⚠️ CI status at hand-off: red.** On the last head, `npm run test` fails **3 of 3756** in GitHub Actions. They could not be identified from the cloud session: the reachable log shows only the last 5 000 lines, and those tests fail locally anyway because of the container's tsx issue.
+  - The prime suspects are top-level tests numbered below about 2900 in the CI log, most likely in `tests/free-llm.test.mts`. F5b changed `lib/server/spend.ts` (runtime free-LLM settings and `ai_usage` flush).
+  - Other candidates are `env-*` and `instrumentation-*` tests touched by F2/F5b, or the known intermittent tests.
+  - **First task of the next session:**
+    1. run `npm test` on the laptop, where tsx behaves like CI, and also open the CI log in the browser and search `not ok`;
+    2. fix the 3 failures without weakening any test;
+    3. get CI green before any new package.
+- **Next step:** after CI is green, F3b and F6, then WP1–WP11 (§2).
