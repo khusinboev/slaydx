@@ -359,7 +359,7 @@ test("tabs: the active tab is in the URL; switching writes it (default tab omits
 test("parseCostSort / sortCostRows: whitelist, direction, stable ties", () => {
   assert.deepEqual(parseCostSort(null), { field: "usd", dir: "desc", value: "usd_desc" });
   assert.equal(parseCostSort("calls_asc").field, "calls");
-  for (const bad of ["drop_table", "usd", "usd_up", "key_asc;--", ""]) assert.equal(parseCostSort(bad).value, "usd_desc", bad);
+  for (const bad of ["drop_table", "drop_asc", "constructor_desc", "usd", "usd_up", "key_asc;--", ""]) assert.equal(parseCostSort(bad).value, "usd_desc", bad);
   const rows = costBody().rows;
   assert.deepEqual(sortCostRows(rows, { field: "usd", dir: "desc" }).map((r) => r.key), ["claude-sonnet-5", "gpt-small", "mystery-model"]);
   assert.deepEqual(sortCostRows(rows, { field: "usd", dir: "asc" }).map((r) => r.key), ["mystery-model", "gpt-small", "claude-sonnet-5"]);
