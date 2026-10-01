@@ -68,6 +68,24 @@ const securityHeaders = [
   },
 ];
 
+/*
+ * Admin panel CSP (docs/admin/02-plan.md §10 T17): the panel must not be
+ * framable, not even by Telegram. Next does not send a second header for the
+ * same key — a later matching rule OVERWRITES the earlier value
+ * (`resolve-routes.js`: `resHeaders[key] = value`). A bare
+ * `frame-ancestors 'none'` rule would therefore replace the site CSP on admin
+ * paths and drop `script-src`, `object-src`, … So the admin value is the site
+ * CSP with only `frame-ancestors` tightened to 'none' (strictly stronger).
+ */
+const SITE_CSP = securityHeaders.find((h) => h.key === "Content-Security-Policy")!.value;
+const ADMIN_CSP = SITE_CSP.split("; ")
+  .map((d) => (d.startsWith("frame-ancestors ") ? "frame-ancestors 'none'" : d))
+  .join("; ");
+const adminHeaders = [
+  { key: "Content-Security-Policy", value: ADMIN_CSP },
+  { key: "X-Robots-Tag", value: "noindex, nofollow" },
+];
+
 /**
  * O'z `Cache-Control` ini qo'yadigan bayt route'lari (`/api/` dan keyingi
  * qism, regex): slayd/rasm aktivlari va ochiq tinglash audiosi (id —
@@ -155,6 +173,20 @@ const nextConfig: NextConfig = {
          */
         source: "/api/generations/:id/file",
         headers: [{ key: "Content-Security-Policy", value: "frame-ancestors 'self'" }],
+      },
+      /*
+       * Admin panel and API (§10 T16, T17): not framable, not indexed, and
+       * pages are never stored by a browser or proxy cache. Listed last so
+       * these values win over the site-wide rules above. `/api/admin` keeps
+       * `private, no-store` from the `/api/` rule.
+       */
+      {
+        source: "/admin/:path*",
+        headers: [...adminHeaders, { key: "Cache-Control", value: "no-store" }],
+      },
+      {
+        source: "/api/admin/:path*",
+        headers: adminHeaders,
       },
     ];
   },

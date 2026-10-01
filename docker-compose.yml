@@ -127,6 +127,9 @@ services:
       # public repo'da ko'rinmasin. Bo'sh qolsa hozircha `admin-phones.ts`
       # dagi zaxira raqam ishlaydi (egasi uni ADMIN_PHONES qo'yilgach o'chiradi).
       ADMIN_PHONES: ${ADMIN_PHONES:-}
+      # Admin panel 2FA master key (docs/admin/02-plan.md §3.4) — web: login/enrollment;
+      # worker: `npm run admin:create`. Empty → admin login is off (503), the app runs.
+      ADMIN_TOTP_KEY: ${ADMIN_TOTP_KEY:-}
       NEXT_PUBLIC_BRAND_NAME: ${NEXT_PUBLIC_BRAND_NAME:-SlaydX}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       NEXT_PUBLIC_TELEGRAM_BOT: ${NEXT_PUBLIC_TELEGRAM_BOT:-}
@@ -262,6 +265,9 @@ services:
       # `bot-commands.mts` (Telegram bot, `lib/server/telegram.ts` orqali
       # `isAdminPhone` chaqirishi mumkin) shu konteynerda ishlaydi.
       ADMIN_PHONES: ${ADMIN_PHONES:-}
+      # Admin panel 2FA master key (docs/admin/02-plan.md §3.4) — web: login/enrollment;
+      # worker: `npm run admin:create`. Empty → admin login is off (503), the app runs.
+      ADMIN_TOTP_KEY: ${ADMIN_TOTP_KEY:-}
       # INFRA-09: PPTX/DOCX metama'lumotini worker chizadi (`buildArtifact`
       # shu konteynerda ishlaydi), `lib/brand.ts` esa `NEXT_PUBLIC_BRAND_*`ni
       # to'g'ridan-to'g'ri `process.env`dan o'qiydi — Next.js build-vaqtidagi

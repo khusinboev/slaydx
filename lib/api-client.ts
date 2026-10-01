@@ -173,7 +173,8 @@ export async function request<T>(path: string, init: RequestOptions = {}): Promi
     if (!res.ok) {
       // Sessiya tugagan bo'lsa butun ilova bilib tursin — aks holda
       // foydalanuvchi har sahifada tushunarsiz xatoga urilardi.
-      if (res.status === 401 && !path.startsWith("/api/auth/")) onUnauthorized?.();
+      // Admin 401s mean "admin session needed", not "logged out" — the admin client handles them.
+      if (res.status === 401 && !path.startsWith("/api/auth/") && !path.startsWith("/api/admin/")) onUnauthorized?.();
       const message =
         typeof data.error === "string" && data.error
           ? data.error
@@ -232,6 +233,8 @@ export type Features = {
   /** Server DOCX/PPTX ni PDF ga o'gira oladimi (LibreOffice o'rnatilganmi). */
   pdf: boolean;
   payments: { click: boolean; payme: boolean };
+  /** Admin price adjustments (non-default tools only); untrusted, validated by `parsePriceAdjustments`. */
+  pricing?: unknown;
 };
 
 export function fetchSession() {
@@ -455,9 +458,22 @@ export function nextPollDelay(g: GenerationDetail, delay: number): number {
  * ikkinchi marta pul yechmay, birinchi ishni qaytaradi. Server kalitni
  * hali o'qimasa ham sarlavha zararsiz.
  */
-export async function createGeneration(slug: string, values: FormValues, opts: { idempotencyKey?: string } = {}) {
-  const body = JSON.stringify({ slug, values });
-  const key = opts.idempotencyKey ?? submitKey(body);
+export async function createGeneration(
+  slug: string,
+  values: FormValues,
+  opts: { idempotencyKey?: string; expectedPrice?: number } = {},
+) {
+  /*
+   * The key identifies the INTENT (tool + form values), not the price: a
+   * retry after a lost response reuses the key even when the displayed price
+   * has changed meanwhile, and the server then replays the original job
+   * (charged at the price shown then) instead of selling it twice. Without
+   * `expectedPrice` the body is byte-identical to the old client's.
+   */
+  const intent = JSON.stringify({ slug, values });
+  const body =
+    opts.expectedPrice === undefined ? intent : JSON.stringify({ slug, values, expectedPrice: opts.expectedPrice });
+  const key = opts.idempotencyKey ?? submitKey(intent);
   try {
     const res = await request<{ id: string; price: number; status: JobStatus }>("/api/generations", {
       method: "POST",
@@ -469,6 +485,9 @@ export async function createGeneration(slug: string, values: FormValues, opts: {
     return res;
   } catch (e) {
     settleSubmitKey(key, submitOutcome(e));
+    // 409 `price_changed`: nothing was charged or queued (a 4xx is "rejected", so the next submit gets a new key).
+    const changed = priceChangedOf(e);
+    if (changed) throw changed;
     if (e instanceof ApiError && e.status === 429) {
       throw new ApiError(withRetryHint(e.message, e.retryAfterSec), 429, e.data);
     }
@@ -481,6 +500,28 @@ export async function createGeneration(slug: string, values: FormValues, opts: {
     }
     throw e;
   }
+}
+
+/**
+ * The server price differs from the `expectedPrice` the client sent
+ * (docs/admin/02-plan.md §17.2). `price` is the server's current price; the
+ * caller shows it and retries only after the user confirms it.
+ */
+export class PriceChangedError extends ApiError {
+  constructor(
+    message: string,
+    readonly price: number,
+    data: Record<string, unknown> = {},
+  ) {
+    super(message, 409, data);
+  }
+}
+
+function priceChangedOf(e: unknown): PriceChangedError | null {
+  if (!(e instanceof ApiError) || e.status !== 409 || e.data.code !== "price_changed") return null;
+  const price = e.data.price;
+  if (typeof price !== "number" || !Number.isSafeInteger(price) || price < 0) return null;
+  return new PriceChangedError(e.message, price, e.data);
 }
 
 /* ─────────────── Idempotency-Key: bitta niyat — bitta kalit (C34) ─────────────── */

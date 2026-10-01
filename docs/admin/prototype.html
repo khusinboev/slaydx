@@ -1,0 +1,1162 @@
+<title>SlaydX Admin prototipi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: fixed left nav (desktop) + scrolling content; drawer nav below 860px. Tokens mirror app/globals.css of SlaydX. */
+:root {
+  --bg: #faf5ee; --fg: #2b2013; --card: #fffdf9; --muted: #f3e9d8; --muted-fg: #6b5540;
+  --border: #ecdfc9; --input: #ecdfc9; --ring: #d9b78a; --side: #f3ead9;
+  --primary: #f59e0b; --primary-fg: #1c1406;
+  --danger: #b91c1c; --danger-bg: #fdecea; --ok: #15803d; --ok-bg: #e7f6ec;
+  --warn: #a16207; --warn-bg: #fdf3d8; --info: #1d4ed8; --info-bg: #e8eefc;
+  --c1: #d97706; --c2: #0f766e; --c3: #b91c1c; --c4: #6d28d9; --c5: #64748b;
+  --shadow: 0 10px 30px rgba(43,32,19,.14);
+  --sans: "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "Geist Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  --r: 10px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #121014; --fg: #f3ece2; --card: #1c1a17; --muted: #232019; --muted-fg: #a89a86;
+  --border: #2e2820; --input: #3a3126; --ring: #8a7355; --side: #0c0b0d;
+  --danger: #f87171; --danger-bg: #3a1716; --ok: #4ade80; --ok-bg: #12301d;
+  --warn: #fbbf24; --warn-bg: #352a10; --info: #93b4ff; --info-bg: #17213d;
+  --c1: #f59e0b; --c2: #2dd4bf; --c3: #f87171; --c4: #a78bfa; --c5: #94a3b8;
+  --shadow: 0 10px 30px rgba(0,0,0,.5); color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #121014; --fg: #f3ece2; --card: #1c1a17; --muted: #232019; --muted-fg: #a89a86;
+  --border: #2e2820; --input: #3a3126; --ring: #8a7355; --side: #0c0b0d;
+  --danger: #f87171; --danger-bg: #3a1716; --ok: #4ade80; --ok-bg: #12301d;
+  --warn: #fbbf24; --warn-bg: #352a10; --info: #93b4ff; --info-bg: #17213d;
+  --c1: #f59e0b; --c2: #2dd4bf; --c3: #f87171; --c4: #a78bfa; --c5: #94a3b8;
+  --shadow: 0 10px 30px rgba(0,0,0,.5); color-scheme: dark; }
+
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; }
+body { background: var(--bg); color: var(--fg); font: 14px/1.5 var(--sans); margin: 0; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
+.num, td.num, .tab { font-variant-numeric: tabular-nums; }
+.mono { font-family: var(--mono); font-size: 12.5px; }
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+h1 { font-size: 22px; font-weight: 650; letter-spacing: -.01em; }
+h2 { font-size: 15px; font-weight: 600; }
+h3 { font-size: 13px; font-weight: 600; }
+.eyebrow { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted-fg); font-weight: 600; }
+.muted { color: var(--muted-fg); }
+
+/* App frame */
+.app { display: grid; grid-template-columns: 236px 1fr; height: 100%; }
+.side { background: var(--side); border-right: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; }
+.brand { display: flex; align-items: center; gap: 10px; padding: 18px 18px 12px; }
+.mark { width: 28px; height: 28px; border-radius: 8px; background: var(--primary); color: var(--primary-fg); display: grid; place-items: center; font-weight: 700; font-size: 13px; }
+.brand b { font-size: 15px; } .brand small { display: block; color: var(--muted-fg); font-size: 11px; }
+.nav { overflow-y: auto; padding: 4px 10px 16px; display: flex; flex-direction: column; gap: 1px; }
+.nav .grp { padding: 14px 8px 4px; }
+.nav button { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; border: 0; background: none; padding: 7px 10px; border-radius: 8px; color: var(--fg); }
+.nav button:hover { background: var(--card); }
+.nav button.on { background: var(--card); box-shadow: inset 3px 0 0 var(--primary); font-weight: 600; }
+.nav svg { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; opacity: .8; }
+.nav .badge { margin-left: auto; }
+.side-foot { margin-top: auto; padding: 12px 14px; border-top: 1px solid var(--border); font-size: 12px; }
+
+.main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.top { display: flex; align-items: center; gap: 12px; padding: 10px 24px; border-bottom: 1px solid var(--border); background: var(--bg); flex-wrap: wrap; }
+.top .menu { display: none; }
+.demo { font-size: 12px; padding: 3px 9px; border-radius: 99px; background: var(--warn-bg); color: var(--warn); font-weight: 600; }
+.top .spacer { flex: 1; }
+.rolepick { display: flex; align-items: center; gap: 8px; font-size: 12px; }
+.content { overflow-y: auto; flex: 1; min-height: 0; }
+.page { max-width: 1240px; margin: 0 auto; padding: 22px 24px 60px; display: flex; flex-direction: column; gap: 18px; }
+.head { display: flex; align-items: flex-end; gap: 12px; flex-wrap: wrap; }
+.head .grow { flex: 1; min-width: 200px; display: flex; flex-direction: column; gap: 4px; }
+.crumb { font-size: 12px; color: var(--muted-fg); }
+.crumb button { border: 0; background: none; padding: 0; color: var(--muted-fg); text-decoration: underline; text-underline-offset: 2px; }
+
+/* Controls */
+.btn { display: inline-flex; align-items: center; gap: 6px; height: 34px; padding: 0 12px; border-radius: 8px; border: 1px solid var(--input); background: var(--card); white-space: nowrap; font-size: 13px; font-weight: 500; }
+.btn:hover { border-color: var(--ring); }
+.btn.primary { background: var(--primary); color: var(--primary-fg); border-color: var(--primary); font-weight: 600; }
+.btn.danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, var(--input)); }
+.btn.danger.solid { background: var(--danger); color: #fff; border-color: var(--danger); }
+.btn.sm { height: 28px; padding: 0 9px; font-size: 12px; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.btn.ghost { border-color: transparent; background: none; }
+.input, select.input, textarea.input { height: 34px; border: 1px solid var(--input); background: var(--card); border-radius: 8px; padding: 0 10px; min-width: 0; }
+textarea.input { height: auto; padding: 8px 10px; resize: vertical; }
+.filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.seg { display: inline-flex; border: 1px solid var(--input); border-radius: 8px; overflow: hidden; background: var(--card); flex-wrap: wrap; }
+.seg button { border: 0; background: none; padding: 6px 11px; font-size: 12.5px; }
+.seg button.on { background: var(--primary); color: var(--primary-fg); font-weight: 600; }
+.tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); overflow-x: auto; }
+.tabs button { border: 0; background: none; padding: 9px 12px; border-bottom: 2px solid transparent; white-space: nowrap; color: var(--muted-fg); font-weight: 500; }
+.tabs button.on { border-color: var(--primary); color: var(--fg); font-weight: 600; }
+
+/* Surfaces */
+.card { background: var(--card); border: 1px solid var(--border); border-radius: var(--r); }
+.card > .ch { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+.card > .ch .grow { flex: 1; }
+.card > .cb { padding: 14px 16px; }
+.grid { display: grid; gap: 14px; }
+.g2 { grid-template-columns: repeat(2, minmax(0,1fr)); }
+.g3 { grid-template-columns: repeat(3, minmax(0,1fr)); }
+.kpis { display: grid; gap: 10px; grid-template-columns: repeat(5, minmax(0,1fr)); }
+.kpi { padding: 12px 14px; display: flex; flex-direction: column; gap: 3px; }
+.kpi .v { font-size: 21px; font-weight: 650; letter-spacing: -.01em; }
+.kpi .d { font-size: 12px; font-weight: 600; }
+.up { color: var(--ok); } .down { color: var(--danger); }
+.live { display: flex; gap: 22px; flex-wrap: wrap; padding: 10px 16px; align-items: center; }
+.live .it { display: flex; gap: 8px; align-items: baseline; }
+.dot { width: 8px; height: 8px; border-radius: 99px; background: var(--ok); display: inline-block; box-shadow: 0 0 0 3px var(--ok-bg); }
+.dot.warn { background: var(--warn); box-shadow: 0 0 0 3px var(--warn-bg); }
+.dot.bad { background: var(--danger); box-shadow: 0 0 0 3px var(--danger-bg); }
+
+/* Tables */
+.tw { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; font-size: 11.5px; font-weight: 600; color: var(--muted-fg); padding: 8px 12px; border-bottom: 1px solid var(--border); white-space: nowrap; background: var(--card); position: sticky; top: 0; }
+td { padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+tr:last-child td { border-bottom: 0; }
+tr.click { cursor: pointer; } tr.click:hover td { background: color-mix(in srgb, var(--muted) 55%, transparent); }
+td.num, th.num { text-align: right; }
+.pager { display: flex; align-items: center; gap: 8px; padding: 10px 16px; border-top: 1px solid var(--border); font-size: 12.5px; color: var(--muted-fg); flex-wrap: wrap; }
+.pager .grow { flex: 1; }
+
+/* Pills */
+.pill { display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; padding: 2px 8px; border-radius: 99px; background: var(--muted); color: var(--muted-fg); white-space: nowrap; }
+.pill.ok { background: var(--ok-bg); color: var(--ok); }
+.pill.bad { background: var(--danger-bg); color: var(--danger); }
+.pill.warn { background: var(--warn-bg); color: var(--warn); }
+.pill.info { background: var(--info-bg); color: var(--info); }
+.pill.pri { background: color-mix(in srgb, var(--primary) 22%, transparent); color: var(--fg); }
+
+/* Key/value */
+.kv { display: grid; grid-template-columns: minmax(120px, 38%) 1fr; gap: 7px 14px; font-size: 13px; }
+.kv dt { color: var(--muted-fg); } .kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
+.wallets { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 10px; }
+.wallet { padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; }
+.wallet .v { font-size: 18px; font-weight: 650; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.timeline { display: flex; flex-direction: column; gap: 0; }
+.timeline .t { display: grid; grid-template-columns: 14px 1fr auto; gap: 10px; padding: 7px 0; font-size: 13px; align-items: start; }
+.timeline .t i { width: 10px; height: 10px; border-radius: 99px; background: var(--primary); margin-top: 5px; }
+.timeline .t i.bad { background: var(--danger); } .timeline .t i.ok { background: var(--ok); } .timeline .t i.m { background: var(--c5); }
+.note { padding: 10px 12px; border-radius: 8px; background: var(--info-bg); color: var(--info); font-size: 12.5px; }
+.note.warn { background: var(--warn-bg); color: var(--warn); }
+.note.bad { background: var(--danger-bg); color: var(--danger); }
+.empty { text-align: center; padding: 40px 16px; color: var(--muted-fg); }
+.json { font-family: var(--mono); font-size: 12px; background: var(--muted); border-radius: 8px; padding: 10px 12px; white-space: pre-wrap; overflow-wrap: anywhere; margin: 0; }
+.diff { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 10px; }
+.bar { height: 6px; border-radius: 99px; background: var(--muted); overflow: hidden; }
+.bar > span { display: block; height: 100%; background: var(--primary); }
+.forbid { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 60px 16px; text-align: center; }
+.forbid .code { font-size: 40px; font-weight: 700; color: var(--muted-fg); }
+
+/* Charts */
+.chart { width: 100%; height: auto; display: block; }
+.chart text { fill: var(--muted-fg); font-size: 10.5px; font-family: var(--sans); }
+.chart .grid line { stroke: var(--border); }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted-fg); }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+
+/* Pricing */
+[hidden] { display: none !important; }
+.nw { white-space: nowrap; }
+.spark { display: inline-block; vertical-align: middle; }
+input[type=range].range { accent-color: var(--primary); }
+
+/* Matrix */
+.matrix td, .matrix th { text-align: center; padding: 6px 8px; }
+.matrix td:first-child, .matrix th:first-child { text-align: left; }
+.yes { color: var(--ok); font-weight: 700; } .step { font-size: 10px; color: var(--warn); font-weight: 700; margin-left: 2px; }
+
+/* Overlay */
+.scrim { position: fixed; inset: 0; background: rgba(20,14,6,.45); display: grid; place-items: center; padding: 16px; z-index: 50; }
+.dialog { background: var(--card); border: 1px solid var(--border); border-radius: 14px; box-shadow: var(--shadow); width: min(520px, 100%); max-height: calc(100% - 32px); overflow-y: auto; display: flex; flex-direction: column; }
+.dialog .dh { padding: 16px 18px 6px; display: flex; flex-direction: column; gap: 4px; }
+.dialog .db { padding: 10px 18px; display: flex; flex-direction: column; gap: 12px; }
+.dialog .df { padding: 12px 18px 16px; display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.field { display: flex; flex-direction: column; gap: 5px; font-size: 12.5px; }
+.field > span { font-weight: 600; }
+.field .hint { color: var(--muted-fg); font-weight: 400; font-size: 12px; }
+.err { color: var(--danger); font-size: 12px; }
+.check { display: flex; gap: 8px; align-items: flex-start; font-size: 13px; }
+.check input { margin-top: 3px; }
+.ba { display: flex; align-items: center; gap: 10px; font-size: 13px; padding: 10px 12px; background: var(--muted); border-radius: 8px; flex-wrap: wrap; }
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(520px, 100%); background: var(--card); border-left: 1px solid var(--border); box-shadow: var(--shadow); z-index: 40; display: flex; flex-direction: column; }
+.drawer .dh { padding: 16px 18px; border-bottom: 1px solid var(--border); display: flex; gap: 10px; align-items: flex-start; }
+.drawer .db { padding: 16px 18px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
+.toasts { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 60; }
+.toast { background: var(--fg); color: var(--bg); padding: 10px 14px; border-radius: 10px; box-shadow: var(--shadow); font-size: 13px; max-width: 360px; }
+.otp { font-family: var(--mono); font-size: 26px; letter-spacing: .4em; text-align: center; height: 52px; }
+
+/* Login */
+.login { min-height: 100%; display: grid; place-items: center; padding: 24px 16px; }
+.login .card { width: min(400px, 100%); padding: 28px 24px; display: flex; flex-direction: column; gap: 16px; }
+
+@media (max-width: 1100px) { .kpis { grid-template-columns: repeat(3, minmax(0,1fr)); } }
+@media (max-width: 860px) {
+  .app { grid-template-columns: 1fr; }
+  .side { position: fixed; inset: 0 auto 0 0; width: 260px; z-index: 45; transform: translateX(-100%); transition: transform .2s; }
+  .side.open { transform: none; box-shadow: var(--shadow); }
+  .top .menu { display: inline-flex; }
+  .top { padding: 10px 16px; }
+  .page { padding: 16px 16px 50px; }
+  .g2, .g3, .diff { grid-template-columns: 1fr; }
+  .kpis { grid-template-columns: repeat(2, minmax(0,1fr)); }
+  .wallets { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) { .side { transition: none; } }
+</style>
+
+<div id="root"></div>
+<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
+
+<script>
+"use strict";
+/* ───────── helpers ───────── */
+const h = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const fmt = (n) => Number(n).toLocaleString("uz-UZ").replace(/,/g, " ");
+const money = (n, u = "so'm") => `${fmt(n)} ${u}`;
+const usd = (n) => "$" + Number(n).toFixed(2);
+let seed = 7; const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+const pick = (a) => a[Math.floor(rnd() * a.length)];
+const pad = (n) => String(n).padStart(2, "0");
+const NOW = new Date(2026, 9, 1, 15, 40);
+const dt = (d) => `${pad(d.getDate())}.${pad(d.getMonth() + 1)}.${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+const day = (d) => `${pad(d.getDate())}.${pad(d.getMonth() + 1)}`;
+const ago = (min) => new Date(NOW.getTime() - min * 60000);
+const ICON = {
+  home: '<path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/>',
+  users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5"/><path d="M16 4.5a3.3 3.3 0 010 6.5M18 14.8c2 .7 3.2 2.5 3.5 5.2"/>',
+  file: '<path d="M14 3H6v18h12V7z"/><path d="M14 3v4h4M9 12h6M9 16h6"/>',
+  card: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M7 15h4"/>',
+  coins: '<ellipse cx="9" cy="7" rx="6" ry="2.5"/><path d="M3 7v5c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5V7"/><path d="M9 17c0 1.4 2.7 2.5 6 2.5s6-1.1 6-2.5v-5c0-1.4-2.7-2.5-6-2.5"/>',
+  cpu: '<rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/>',
+  flag: '<path d="M5 21V4M5 4h11l-2 4 2 4H5"/>',
+  send: '<path d="M22 2L11 13M22 2l-7 20-4-9-9-4z"/>',
+  sliders: '<path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/>',
+  server: '<rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/>',
+  bug: '<rect x="7" y="8" width="10" height="12" rx="5"/><path d="M12 8V5M9 5l-2-2M15 5l2-2M3 13h4M17 13h4M4 19l3-2M20 19l-3-2"/>',
+  list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+  shield: '<path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z"/><path d="M9 12l2 2 4-4"/>',
+  user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c1-4 4-6 8-6s7 2 8 6"/>',
+  tag: '<path d="M3 4h8.5l9 9a1.5 1.5 0 010 2.1l-5.4 5.4a1.5 1.5 0 01-2.1 0L3 11.5z"/><circle cx="7.5" cy="8.5" r="1.3"/>',
+};
+const icon = (k) => `<svg viewBox="0 0 24 24" aria-hidden="true">${ICON[k]}</svg>`;
+
+/* ───────── RBAC (02-plan.md §4.3) ───────── */
+const ALL = ["dashboard.view","users.view","users.pii","users.export","users.block","users.sessions","users.wallet","users.message","jobs.view","jobs.input","jobs.export","jobs.cancel","jobs.refund","payments.view","payments.export","payments.refund_record","finance.view","finance.export","ai.view","moderation.view","moderation.act","broadcasts.view","broadcasts.send","settings.view","settings.edit","system.view","errors.view","errors.resolve","audit.view","audit.export","pricing.view","pricing.edit","admins.view","admins.manage"];
+const STEP_UP = new Set(["users.export","users.wallet","jobs.export","payments.export","payments.refund_record","finance.export","broadcasts.send","settings.edit","audit.export","pricing.edit","admins.manage"]);
+const ROLES = {
+  owner: { label: "Egasi (owner)", perms: ALL },
+  admin: { label: "Admin", perms: ALL.filter((p) => p !== "audit.export") },
+  finance: { label: "Moliya (finance)", perms: ["dashboard.view","users.view","users.export","users.wallet","jobs.view","jobs.export","jobs.refund","payments.view","payments.export","payments.refund_record","finance.view","finance.export","ai.view","pricing.view","settings.view","system.view"] },
+  support: { label: "Qo'llab-quvvatlash (support)", perms: ["dashboard.view","users.view","users.pii","users.block","users.sessions","users.message","jobs.view","jobs.input","jobs.cancel","jobs.refund","payments.view","moderation.view","broadcasts.view","system.view","errors.view"] },
+  moderator: { label: "Moderator", perms: ["dashboard.view","users.view","users.block","jobs.view","moderation.view","moderation.act"] },
+  viewer: { label: "Kuzatuvchi (viewer)", perms: ["dashboard.view","users.view","jobs.view","payments.view","finance.view","ai.view","pricing.view","settings.view","system.view","errors.view"] },
+};
+const can = (p) => ROLES[S.role].perms.includes(p);
+
+/* ───────── sample data (illustrative only) ───────── */
+const TOOLS = [["slide","Slayd"],["pro-slide","Pro slayd"],["coursework","Kurs ishi"],["referat","Referat"],["essay","Insho"],["article","Maqola"],["translation","Tarjimon"],["resume","Rezyume"],["test","Test"],["crossword","Krossvord"],["image","Rasm"],["podcast","Podkast"]];
+const TOOL = Object.fromEntries(TOOLS);
+const FIRST = ["Aziza","Bekzod","Dilnoza","Farrux","Gulnora","Jasur","Kamola","Laziz","Madina","Nodir","Oybek","Sardor","Shahnoza","Temur","Umida","Zafar","Malika","Otabek","Nilufar","Javohir"];
+const LAST = ["Karimova","Tursunov","Rahimova","Yusupov","Ergasheva","Nazarov","Saidova","Qodirov","Abdullayeva","Islomov"];
+const UNIS = ["TDIU","TATU","O'zMU","SamDU","TDPU","Westminster (Toshkent)"];
+const users = Array.from({ length: 42 }, (_, i) => {
+  const f = FIRST[i % FIRST.length], l = LAST[(i * 7) % LAST.length];
+  const created = ago(60 * 24 * (2 + Math.floor(rnd() * 160)));
+  return {
+    id: 1840 - i * 37, name: `${f} ${l}`, username: i % 4 === 0 ? null : (f + "_" + l.slice(0, 3)).toLowerCase() + (i % 9),
+    tg: 5000000000 + Math.floor(rnd() * 900000000), phone: i === 3 ? "+998901234567" : null,
+    plan: i % 5 === 0 ? "pro" : "free", points: Math.floor(rnd() * 4) * 1000, quota: i % 5 === 0 ? Math.floor(rnd() * 15) * 1000 : 0,
+    balance: Math.floor(rnd() * 12) * 2500, blocked: i === 11 || i === 27, created, seen: ago(Math.floor(rnd() * 60 * 24 * 6)),
+    gens: Math.floor(rnd() * 40), uni: pick(UNIS), isAdmin: i === 0,
+  };
+});
+users[0].name = "Adhambek Xusinboyev"; users[0].username = "khusinboev"; users[0].plan = "pro";
+const STATUSES = ["COMPLETED","COMPLETED","COMPLETED","COMPLETED","COMPLETED","FAILED","IN_PROGRESS","QUEUED","REVOKED"];
+const TOPICS = ["Raqamli iqtisodiyot asoslari","O'zbekiston tarixi: Temuriylar davri","Sun'iy intellekt ta'limda","Ekologiya va barqaror rivojlanish","Bank tizimidagi risklar","Kimyoviy reaksiyalar tezligi","Ingliz tili: Present Perfect","Marketing strategiyasi","Iqlim o'zgarishi","Kiberxavfsizlik asoslari"];
+const gens = Array.from({ length: 60 }, (_, i) => {
+  const tool = TOOLS[Math.floor(rnd() * TOOLS.length)][0];
+  const status = i === 2 ? "IN_PROGRESS" : i === 5 ? "FAILED" : pick(STATUSES);
+  const u = users[Math.floor(rnd() * users.length)];
+  const price = [2000, 3000, 4000, 6000, 12000, 24000][Math.floor(rnd() * 6)];
+  const created = ago(i * 47 + Math.floor(rnd() * 40));
+  const dur = 60 + Math.floor(rnd() * 400);
+  const wallet = pick(["balance","balance","points","quota"]);
+  return {
+    id: cryptoish(i), user: u, tool, topic: pick(TOPICS), status, price, created, dur,
+    attempts: status === "FAILED" ? 2 : 1, wallet,
+    refunded: status === "FAILED" ? i % 3 !== 0 : status === "REVOKED",
+    cost: status === "COMPLETED" ? +(rnd() * 0.22 + 0.01).toFixed(3) : null,
+    error: status === "FAILED" ? pick(["Ish vaqti tugadi","Matn sifati talabga javob bermadi","Provayder javob bermadi"]) : null,
+    stuck: i === 2,
+  };
+});
+function cryptoish(i) { const hex = "0123456789abcdef"; let s = ""; for (let k = 0; k < 32; k++) s += hex[Math.floor(rnd() * 16)]; return `${s.slice(0,8)}-${s.slice(8,12)}-4${s.slice(13,16)}-a${s.slice(17,20)}-${s.slice(20,32)}`; }
+const orders = Array.from({ length: 28 }, (_, i) => {
+  const purpose = i % 6 === 0 ? "pro" : "topup";
+  const state = i === 1 ? "pending" : i === 4 ? "cancelled" : i === 9 ? "created" : "paid";
+  return { id: cryptoish(100 + i), user: users[(i * 5) % users.length], provider: i % 3 === 0 ? "click" : "payme", purpose,
+    amount: purpose === "pro" ? 15000 : [10000, 25000, 50000, 100000][i % 4], state, txn: state === "created" ? null : String(6000000 + i * 913),
+    created: ago(i * 190 + 30), refunds: i === 7 ? 1 : 0 };
+});
+const links = Array.from({ length: 14 }, (_, i) => ({
+  id: cryptoish(300 + i), user: users[(i * 3) % users.length], kind: ["quiz","crossword","flashcards","sorting","listening"][i % 5],
+  topic: i === 4 ? "Sinf uchun maxsus test — javoblarni yuboring t.me/…" : pick(TOPICS), created: ago(i * 600 + 100),
+  expires: new Date(NOW.getTime() + (30 - i * 2) * 86400000), results: Math.floor(rnd() * 60), active: i !== 9,
+}));
+let audit = [
+  { id: 9012, at: ago(4), admin: "Adhambek X.", role: "owner", action: "auth.login", target: "—", outcome: "ok", reason: "", ip: "84.54.***.17" },
+  { id: 9011, at: ago(52), admin: "Dilnoza R.", role: "support", action: "jobs.refund", target: "generation 3fa1…", outcome: "ok", reason: "Provayder xatosi, foydalanuvchi murojaati", ip: "213.230.***.9", before: { refunded: false }, after: { refunded: true, balance: "+6 000" } },
+  { id: 9010, at: ago(140), admin: "Jasur N.", role: "moderator", action: "moderation.revoke_link", target: "game_session 8c2d…", outcome: "ok", reason: "Mavzuda reklama havolasi", ip: "195.158.***.4", before: { active: true }, after: { active: false } },
+  { id: 9009, at: ago(310), admin: "Jasur N.", role: "moderator", action: "settings.update", target: "free_llm.disabled", outcome: "denied", reason: "", ip: "195.158.***.4" },
+  { id: 9008, at: ago(1440), admin: "Adhambek X.", role: "owner", action: "users.wallet.adjust", target: "user 1692", outcome: "ok", reason: "compensation: 2 marta yechilgan", ip: "84.54.***.17", before: { balance: 4000 }, after: { balance: 10000 } },
+];
+const errors = [
+  { id: 1, last: ago(3), count: 14, level: "error", scope: "generations/rebuild", msg: "soffice: convert timeout after 90000ms", path: "/api/generations/[id]/rebuild", proc: "web@a1f3", resolved: false },
+  { id: 2, last: ago(26), count: 3, level: "error", scope: "worker", msg: "REFUND_FAILED: connection terminated unexpectedly", path: "—", proc: "worker@7c02", resolved: false },
+  { id: 3, last: ago(180), count: 41, level: "warn", scope: "llm:writer", msg: "gemini → 429 retry-after 32s, chain fallback anthropic", path: "—", proc: "worker@91be", resolved: false },
+  { id: 4, last: ago(900), count: 2, level: "error", scope: "payments/payme", msg: "CheckPerformTransaction: amount mismatch", path: "/api/payments/payme", proc: "web@a1f3", resolved: true },
+];
+const settings = [
+  { key: "free_llm.disabled", group: "Bepul AI", label: "Bepul AI funksiyalarini o'chirish", type: "bool", value: false, env: false, source: "env", desc: "Reja, UDK, «Tuzatish» va «Hammasini tuzatish» 503 qaytaradi." },
+  { key: "free_llm.daily.global", group: "Bepul AI", label: "Kunlik umumiy limit (birlik)", type: "int", value: 20000, env: 20000, source: "env", desc: "Butun platforma bo'yicha Toshkent kuni." },
+  { key: "free_llm.daily.rewrite", group: "Bepul AI", label: "«Tuzatish» — foydalanuvchiga kuniga", type: "int", value: 30, env: 30, source: "env", desc: "" },
+  { key: "generation.paused", group: "Generatsiya", label: "Barcha yangi pullik generatsiyalarni pauza qilish", type: "bool", value: false, env: false, source: "default", desc: "Yangi so'rovlar 503 «Xizmat vaqtincha to'xtatilgan» oladi; navbatdagilar davom etadi." },
+  { key: "generation.paused_tools", group: "Generatsiya", label: "Pauzadagi vositalar", type: "tools", value: [], env: [], source: "default", desc: "Faqat tanlangan vositalar to'xtatiladi." },
+  { key: "finance.soum_per_usd", group: "Moliya", label: "Kurs: 1 USD = so'm", type: "int", value: 12700, env: 12700, source: "env", desc: "Faqat marja hisobida." },
+  { key: "admin.wallet_confirm_threshold", group: "Moliya", label: "Hamyon: qo'shimcha tasdiq chegarasi", type: "int", value: 1000000, env: 1000000, source: "default", desc: "Shundan katta summada miqdorni qayta yozish talab qilinadi." },
+];
+const admins = [
+  { id: 1, user: users[0], role: "owner", status: "active", totp: true, last: ago(4), sessions: 1 },
+  { id: 2, user: users[6], role: "support", status: "active", totp: true, last: ago(52), sessions: 2 },
+  { id: 3, user: users[9], role: "moderator", status: "active", totp: true, last: ago(140), sessions: 1 },
+  { id: 4, user: users[14], role: "finance", status: "pending", totp: false, last: null, sessions: 0 },
+];
+const broadcasts = [
+  { id: 12, status: "done", text: "Yangi vosita: «Tinglash o'yini» qo'shildi! Sinab ko'ring 🎧", aud: "Barchasi", total: 1840, sent: 1791, failed: 49, by: "Adhambek X.", at: ago(60 * 26) },
+  { id: 13, status: "draft", text: "Bugun 22:00–22:30 texnik ishlar bo'ladi. Generatsiyalar biroz sekinlashishi mumkin.", aud: "Oxirgi 30 kunda faol", total: 0, sent: 0, failed: 0, by: "Adhambek X.", at: ago(20) },
+];
+// 30-day series
+const SERIES = Array.from({ length: 30 }, (_, i) => {
+  const d = new Date(NOW.getTime() - (29 - i) * 86400000);
+  const base = 60 + i * 2.2 + Math.sin(i / 2.4) * 14;
+  const completed = Math.round(base + rnd() * 18), failed = Math.round(3 + rnd() * 7);
+  return { d, revenue: Math.round((completed * 2100 + rnd() * 90000) / 1000) * 1000, completed, failed, signups: Math.round(20 + i * .9 + rnd() * 16), ai: +(completed * (0.05 + rnd() * .02)).toFixed(2) };
+});
+
+/* ───────── pricing sample data (02-plan.md §17; illustrative only) ───────── */
+let pz = 4242; const prnd = () => ((pz = (pz * 16807) % 2147483647) / 2147483647);
+const PRICING_CFG = { targetMarkup: 3.0 }; // setting pricing.target_markup
+const fxRate = () => settings.find((s) => s.key === "finance.soum_per_usd").value;
+const PL = (rows) => rows.map(([label, base]) => ({ label, base }));
+const ADMIN_ME = "Adhambek X.";
+// cost = average AI cost per completed job (USD); over = failure overhead per completed job (USD); typ = ladder index of the "typical" order
+const PRICING = [
+  { id: "slide", unit: "slayd", units: 15, typ: 1, ladder: PL([["10 slayd", 3000], ["20 slayd", 3000], ["30 slayd", 8000]]), pct: 100, round: 500, jobs: 1460, fail: 3.1, cost: 0.026, over: 0.004, cover: 97, drift: -0.04, history: [] },
+  { id: "pro-slide", unit: "slayd", units: 15, typ: 1, ladder: PL([["10 slayd", 20000], ["15 slayd", 30000], ["20 slayd", 40000]]), pct: 100, round: 500, jobs: 262, fail: 6.5, cost: 1.70, over: 0.20, cover: 88, drift: 0.14,
+    history: [{ at: ago(60 * 24 * 41), admin: ADMIN_ME, old: 100, nw: 130, reason: "Rasm generatsiyasi qimmatlashdi, marja pasaydi" }, { at: ago(60 * 24 * 33), admin: "Jasur N.", old: 130, nw: 100, reason: "Foydalanuvchi shikoyatlari ko'paydi, vaqtincha qaytarildi" }] },
+  { id: "coursework", unit: "bet", units: 30, typ: 1, ladder: PL([["20–25 bet", 12000], ["30–40 bet", 18000], ["50+ bet", 24000]]), pct: 100, round: 500, jobs: 181, fail: 7.2, cost: 0.62, over: 0.07, cover: 96, drift: 0.03, history: [] },
+  { id: "referat", unit: "bet", units: 15, typ: 1, ladder: PL([["10 bet", 3000], ["15 bet", 4500], ["20+ bet", 6000]]), pct: 100, round: 500, jobs: 412, fail: 4.4, cost: 0.19, over: 0.03, cover: 98, drift: 0.02,
+    history: [{ at: ago(60 * 24 * 58), admin: ADMIN_ME, old: 110, nw: 100, reason: "Raqobat: boshqa botlar 3 000 dan boshlamoqda" }] },
+  { id: "essay", unit: "bet", units: 3, typ: 1, ladder: PL([["1–2 bet", 2000], ["3–4 bet", 3000], ["5+ bet", 4000]]), pct: 100, round: 500, jobs: 524, fail: 2.6, cost: 0.06, over: 0.008, cover: 99, drift: 0, history: [] },
+  { id: "article", unit: "bet", units: 6, typ: 1, ladder: PL([["Tezis", 4000], ["Maqola (5–8 bet)", 8000], ["Ilmiy maqola (10+ bet)", 12000]]), pct: 100, round: 500, jobs: 193, fail: 5.9, cost: 0.27, over: 0.04, cover: 95, drift: 0.01, history: [] },
+  { id: "translation", unit: "1000 belgi", units: 14, typ: 1, ladder: PL([["10 000 belgi", 3000], ["15 000 belgi", 4000], ["25 000 belgi", 6000]]), pct: 100, round: 500, jobs: 231, fail: 3.4, cost: 0.085, over: 0.01, cover: 97, drift: -0.02, history: [] },
+  { id: "resume", unit: "ish", units: 1, typ: 0, ladder: PL([["Standart", 3000]]), pct: 100, round: 500, jobs: 384, fail: 1.9, cost: 0.05, over: 0.005, cover: 99, drift: 0, history: [] },
+  { id: "test", unit: "ish", units: 1, typ: 0, ladder: PL([["Standart", 3000]]), pct: 120, round: 500, jobs: 338, fail: 2.8, cost: 0.075, over: 0.008, cover: 98, drift: 0.01,
+    history: [{ at: ago(60 * 24 * 12), admin: ADMIN_ME, old: 110, nw: 120, reason: "Talab yuqori, narxni biroz oshirish sinovi" }, { at: ago(60 * 24 * 47), admin: ADMIN_ME, old: 100, nw: 110, reason: "Tannarx oshgani uchun" }] },
+  { id: "crossword", unit: "ish", units: 1, typ: 0, ladder: PL([["Standart", 2000]]), pct: 100, round: 500, jobs: 152, fail: 2.1, cost: 0.04, over: 0.004, cover: 99, drift: 0, history: [] },
+  { id: "image", unit: "rasm", units: 1.4, typ: 1, ladder: PL([["Standart", 2000], ["Yuqori sifat", 3500], ["Premium", 6000]]), pct: 90, round: 500, jobs: 611, fail: 4.9, cost: 0.15, over: 0.03, cover: 84, drift: 0.06,
+    history: [{ at: ago(60 * 24 * 5), admin: ADMIN_ME, old: 100, nw: 90, reason: "Aksiya: rasm narxini vaqtincha pasaytirish" }, { at: ago(60 * 24 * 70), admin: "Jasur N.", old: 110, nw: 100, reason: "Standart narxga qaytarish" }, { at: ago(60 * 24 * 96), admin: ADMIN_ME, old: 100, nw: 110, reason: "fal.ai narxlari oshdi" }] },
+  { id: "podcast", unit: "ish", units: 1, typ: 0, ladder: PL([["Standart", 4000]]), pct: 100, round: 500, jobs: 18, fail: 11.1, cost: 0.14, over: 0.02, cover: 92, drift: 0, history: [] },
+];
+const PRICING_BY = Object.fromEntries(PRICING.map((p) => [p.id, p]));
+// 90-day daily average full cost per job (USD): seeded random walk, scaled so the last 30 days average to the tool's full cost
+PRICING.forEach((p) => {
+  let v = 1; const raw = [];
+  for (let i = 0; i < 90; i++) { v += (prnd() - 0.5) * 0.06 + (1 - v) * 0.1 + p.drift / 90; raw.push(v); }
+  const m = raw.slice(60).reduce((a, x) => a + x, 0) / 30, full = p.cost + p.over;
+  p.trend = raw.map((x, i) => ({ d: new Date(NOW.getTime() - (89 - i) * 86400000), usd: (x / m) * full }));
+});
+const applyAdj = (base, pct, roundTo) => (pct === 100 ? base : Math.max(roundTo, Math.round(((base * pct) / 100) / roundTo) * roundTo));
+function priceCalc(p, pct = p.pct, rt = p.round) {
+  const eff = p.ladder.map((l) => applyAdj(l.base, pct, rt));
+  const price = eff[p.typ], full = (p.cost + p.over) * fxRate();
+  return { eff, price, full, perUnit: full / p.units, markup: price / full, margin: ((price - full) / price) * 100 };
+}
+const doneJobs = (p) => Math.round(p.jobs * (1 - p.fail / 100));
+const recPercent = (p, c = priceCalc(p)) => Math.min(1000, Math.max(25, Math.round((p.pct * PRICING_CFG.targetMarkup) / c.markup / 5) * 5));
+const trendOf = (p) => p.trend.map((x) => ({ d: x.d, v: x.usd * fxRate() }));
+const pricingRows = () => PRICING.map((p) => ({ p, c: priceCalc(p), done: doneJobs(p) }));
+
+/* ───────── state ───────── */
+const S = { authed: false, role: "owner", screen: "dashboard", id: null, tab: "overview", reauthAt: 0, range: "30", userQ: "", userFilter: "all", genStatus: "all", orderState: "all", drawer: null, priceSort: "margin", sideOpen: false, errSel: new Set(), revealed: new Set() };
+
+const NAV = [
+  ["Asosiy", [["dashboard","Bosh sahifa","home","dashboard.view"]]],
+  ["Ma'lumotlar", [["users","Foydalanuvchilar","users","users.view"],["generations","Generatsiyalar","file","jobs.view"],["payments","To'lovlar","card","payments.view"],["finance","Moliya","coins","finance.view"],["ai","AI xarajat","cpu","ai.view"],["pricing","Narxlar","tag","pricing.view"]]],
+  ["Boshqaruv", [["moderation","Moderatsiya","flag","moderation.view"],["broadcasts","E'lonlar","send","broadcasts.view"],["settings","Sozlamalar","sliders","settings.view"]]],
+  ["Tizim", [["system","Tizim holati","server","system.view"],["errors","Xatolar","bug","errors.view"],["audit","Audit jurnali","list","audit.view"],["admins","Adminlar","shield","admins.view"]]],
+  ["", [["account","Mening hisobim","user",null]]],
+];
+const SCREEN_PERM = Object.fromEntries(NAV.flatMap(([, it]) => it.map(([k, , , p]) => [k, p])));
+Object.assign(SCREEN_PERM, { user: "users.view", generation: "jobs.view", order: "payments.view" });
+
+function go(screen, id = null, tab = "overview") { S.screen = screen; S.id = id; S.tab = tab; S.drawer = null; S.sideOpen = false; render(); document.querySelector(".content")?.scrollTo(0, 0); }
+
+/* ───────── toasts / overlays ───────── */
+function toast(msg) { const el = document.createElement("div"); el.className = "toast"; el.textContent = msg; document.getElementById("toasts").append(el); setTimeout(() => el.remove(), 3600); }
+function writeAudit(action, target, reason, before, after, outcome = "ok") {
+  audit.unshift({ id: audit[0].id + 1, at: new Date(), admin: S.role === "owner" ? "Adhambek X." : "Siz (" + S.role + ")", role: S.role, action, target, outcome, reason, ip: "84.54.***.17", before, after });
+}
+let modalEl = null;
+function closeModal() { modalEl?.remove(); modalEl = null; }
+function modal({ title, sub = "", body, confirm = "Tasdiqlash", danger = false, onConfirm, validate }) {
+  closeModal();
+  modalEl = document.createElement("div"); modalEl.className = "scrim";
+  modalEl.innerHTML = `<div class="dialog" role="dialog" aria-modal="true" aria-label="${h(title)}">
+    <div class="dh"><h2>${h(title)}</h2>${sub ? `<div class="muted" style="font-size:13px">${sub}</div>` : ""}</div>
+    <div class="db">${body}<div class="err" id="m-err" hidden></div></div>
+    <div class="df"><button class="btn" data-x>Bekor qilish</button><button class="btn ${danger ? "danger solid" : "primary"}" id="m-ok">${h(confirm)}</button></div></div>`;
+  document.body.append(modalEl);
+  modalEl.addEventListener("click", (e) => { if (e.target === modalEl || e.target.hasAttribute("data-x")) closeModal(); });
+  modalEl.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal(); });
+  const ok = modalEl.querySelector("#m-ok");
+  ok.addEventListener("click", () => {
+    const msg = validate ? validate(modalEl) : null;
+    const err = modalEl.querySelector("#m-err");
+    if (msg) { err.textContent = msg; err.hidden = false; return; }
+    ok.disabled = true; ok.textContent = "Yuborilmoqda…";
+    const el = modalEl;
+    setTimeout(() => { if (modalEl === el) closeModal(); onConfirm(el); }, 450);
+  });
+  (modalEl.querySelector("input, select, textarea") || ok).focus();
+}
+function withStepUp(perm, fn) {
+  if (!STEP_UP.has(perm) || Date.now() - S.reauthAt < 10 * 60000) return fn();
+  modal({
+    title: "Qayta tasdiqlash", sub: "Bu amal muhim. Authenticator ilovasidagi 6 xonali kodni kiriting (demo: istalgan 6 raqam).",
+    body: `<input class="input otp" id="m-otp" inputmode="numeric" maxlength="6" autocomplete="one-time-code" aria-label="Tasdiqlash kodi">`,
+    confirm: "Tasdiqlash",
+    validate: (m) => (/^\d{6}$/.test(m.querySelector("#m-otp").value) ? null : "6 xonali kod kiriting"),
+    onConfirm: () => { S.reauthAt = Date.now(); writeAudit("auth.reauth", "—", ""); toast("Tasdiqlandi — 10 daqiqa davomida qayta so'ralmaydi"); setTimeout(fn, 60); },
+  });
+}
+const reasonField = (label = "Sabab", hint = "Audit jurnaliga yoziladi. Kamida 5 belgi.") =>
+  `<label class="field"><span>${label} <span class="hint">· ${hint}</span></span><textarea class="input" id="m-reason" rows="2"></textarea></label>`;
+const reasonOk = (m) => (m.querySelector("#m-reason").value.trim().length < 5 ? "Sababni yozing (kamida 5 belgi)" : null);
+
+/* ───────── charts ───────── */
+function niceMax(v) { const p = Math.pow(10, Math.floor(Math.log10(v))); const m = v / p; return (m <= 1 ? 1 : m <= 2 ? 2 : m <= 5 ? 5 : 10) * p; }
+function lineChart(data, key, { color = "var(--c1)", fmtY = fmt, h: H = 200 } = {}) {
+  const W = 640, L = 52, R = 14, T = 12, B = 26, max = niceMax(Math.max(...data.map((d) => d[key])) * 1.08);
+  const x = (i) => L + (i * (W - L - R)) / (data.length - 1), y = (v) => T + (H - T - B) * (1 - v / max);
+  const pts = data.map((d, i) => `${x(i).toFixed(1)},${y(d[key]).toFixed(1)}`).join(" ");
+  const ticks = [0, .25, .5, .75, 1].map((t) => max * t);
+  const last = data[data.length - 1];
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Kunlik grafik">
+    <g class="grid">${ticks.map((t) => `<line x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}"/>`).join("")}</g>
+    ${ticks.map((t) => `<text x="${L - 6}" y="${y(t) + 3.5}" text-anchor="end">${fmtY(t)}</text>`).join("")}
+    ${data.map((d, i) => (i % 5 === 0 || i === data.length - 1 ? `<text x="${x(i)}" y="${H - 8}" text-anchor="middle">${day(d.d)}</text>` : "")).join("")}
+    <polygon points="${L},${y(0)} ${pts} ${x(data.length - 1)},${y(0)}" fill="${color}" opacity=".12"/>
+    <polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round"/>
+    <circle cx="${x(data.length - 1)}" cy="${y(last[key])}" r="4" fill="${color}" stroke="var(--card)" stroke-width="2"/>
+  </svg>`;
+}
+function stackChart(data, H = 200) {
+  const W = 640, L = 40, R = 10, T = 12, B = 26, max = niceMax(Math.max(...data.map((d) => d.completed + d.failed)) * 1.05);
+  const bw = (W - L - R) / data.length, y = (v) => T + (H - T - B) * (1 - v / max);
+  const ticks = [0, .5, 1].map((t) => max * t);
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Kunlik generatsiyalar">
+    <g class="grid">${ticks.map((t) => `<line x1="${L}" x2="${W - R}" y1="${y(t)}" y2="${y(t)}"/>`).join("")}</g>
+    ${ticks.map((t) => `<text x="${L - 6}" y="${y(t) + 3.5}" text-anchor="end">${fmt(t)}</text>`).join("")}
+    ${data.map((d, i) => { const x0 = L + i * bw + 2, w = bw - 4; return `<rect x="${x0}" y="${y(d.completed)}" width="${w}" height="${y(0) - y(d.completed)}" rx="2" fill="var(--c2)"/><rect x="${x0}" y="${y(d.completed + d.failed)}" width="${w}" height="${y(0) - y(d.failed)}" rx="2" fill="var(--c3)"/>`; }).join("")}
+    ${data.map((d, i) => (i % 5 === 0 || i === data.length - 1 ? `<text x="${L + i * bw + bw / 2}" y="${H - 8}" text-anchor="middle">${day(d.d)}</text>` : "")).join("")}
+  </svg>`;
+}
+
+/* ───────── small builders ───────── */
+const statusPill = (s) => ({ COMPLETED: '<span class="pill ok">Tayyor</span>', FAILED: '<span class="pill bad">Xato</span>', IN_PROGRESS: '<span class="pill info">Ishlanmoqda</span>', QUEUED: '<span class="pill warn">Navbatda</span>', REVOKED: '<span class="pill">Bekor qilingan</span>' }[s]);
+const orderPill = (s) => ({ paid: '<span class="pill ok">To\'langan</span>', pending: '<span class="pill warn">Kutilmoqda</span>', created: '<span class="pill">Yaratilgan</span>', cancelled: '<span class="pill bad">Bekor</span>' }[s]);
+const maskPhone = (p) => (p ? p.slice(0, 4) + " ** *** ** " + p.slice(-2) : "—");
+const short = (id) => id.slice(0, 8);
+function header(title, sub = "", right = "", crumb = "") {
+  return `<div class="head"><div class="grow">${crumb ? `<div class="crumb">${crumb}</div>` : ""}<h1>${title}</h1>${sub ? `<div class="muted">${sub}</div>` : ""}</div><div class="actions">${right}</div></div>`;
+}
+const forbidden = () => `<div class="card forbid"><div class="code">403</div><h2>Ruxsat yo'q</h2><div class="muted">«${h(ROLES[S.role].label)}» roli bu bo'limni ko'ra olmaydi. Server ham xuddi shunday 403 qaytaradi.</div></div>`;
+const pager = (n, total) => `<div class="pager"><span class="grow">${fmt(total)} ta natija · ${n} tasi ko'rsatilmoqda</span><button class="btn sm" disabled>Oldingi</button><button class="btn sm">Keyingi</button></div>`;
+const exportBtn = (perm, what) => (can(perm) ? `<button class="btn" data-export="${perm}" data-what="${h(what)}">CSV eksport${STEP_UP.has(perm) ? ' <span class="pill warn" style="padding:0 6px">2FA</span>' : ""}</button>` : "");
+
+/* ───────── screens ───────── */
+const SCREENS = {
+  dashboard() {
+    const n = { "1": 1, "7": 7, "30": 30 }[S.range] ?? 30;
+    const cur = SERIES.slice(-n);
+    const sum = (k) => cur.reduce((a, d) => a + d[k], 0);
+    const comp = sum("completed"), fail = sum("failed"), rev = sum("revenue"), ai = sum("ai");
+    const rate = (comp / (comp + fail)) * 100;
+    const k = [
+      ["Yangi foydalanuvchilar", fmt(sum("signups")), "+12%", true],
+      ["Generatsiyalar", fmt(comp + fail), "+8%", true],
+      ["Muvaffaqiyat", rate.toFixed(1) + "%", "−0.4 p.p.", false],
+      ["Tushum", money(rev), "+15%", true],
+      ["AI xarajat", usd(ai), "+6%", false],
+    ];
+    const tools = TOOLS.slice(0, 7).map(([id, t], i) => ({ id, t, c: Math.round(comp * [.31, .14, .09, .12, .1, .07, .05][i]), f: [1.8, 4.2, 6.1, 2.3, 1.5, 3.9, 2.2][i], cost: [.024, .19, .21, .05, .03, .08, .02][i] }));
+    return header("Bosh sahifa", `Davr: oxirgi ${n === 1 ? "kun" : n + " kun"} · oldingi davr bilan solishtirilgan`,
+      `<div class="seg" role="group" aria-label="Davr">${[["1","Bugun"],["7","7 kun"],["30","30 kun"]].map(([v, l]) => `<button class="${S.range === v ? "on" : ""}" data-range="${v}">${l}</button>`).join("")}<button disabled title="Ixtiyoriy davr (≤366 kun)">Boshqa…</button></div>`) +
+    `<div class="card live"><span class="eyebrow">Hozir</span>
+      <div class="it"><span class="dot"></span><b class="num">3</b><span class="muted">navbatda</span></div>
+      <div class="it"><b class="num">6</b><span class="muted">ishlanmoqda (8 slotdan)</span></div>
+      <div class="it"><b class="num">48 s</b><span class="muted">eng eski navbat</span></div>
+      <div class="it"><span class="dot"></span><span class="muted">3 jarayon tirik</span></div>
+      <div class="it"><span class="dot warn"></span><b class="num">1</b><span class="muted">to'lov 12 soatdan beri kutilmoqda</span></div></div>
+    <div class="kpis">${k.map(([l, v, d, up]) => `<div class="card kpi"><span class="eyebrow">${l}</span><span class="v num">${v}</span><span class="d ${up ? "up" : "down"}">${d}</span></div>`).join("")}</div>
+    <div class="note warn">AI xarajat faqat muvaffaqiyatli ishlarni o'z ichiga oladi (qamrov 94%). Xato bilan tugagan ishlar va bepul AI so'rovlari hisobga kirmaydi — 01-analysis §4.8.</div>
+    <div class="grid g2">
+      <div class="card"><div class="ch"><h2 class="grow">Kunlik tushum</h2><span class="muted num">${money(rev)}</span></div><div class="cb">${lineChart(cur.length > 1 ? cur : SERIES.slice(-2), "revenue", { fmtY: (v) => (v >= 1e6 ? (v / 1e6).toFixed(1) + " mln" : fmt(v / 1000) + "k") })}</div></div>
+      <div class="card"><div class="ch"><h2 class="grow">Kunlik generatsiyalar</h2><div class="legend"><span><i style="background:var(--c2)"></i>Tayyor</span><span><i style="background:var(--c3)"></i>Xato</span></div></div><div class="cb">${stackChart(cur.length > 1 ? cur : SERIES.slice(-2))}</div></div>
+    </div>
+    <div class="card"><div class="ch"><h2 class="grow">Vositalar bo'yicha</h2><span class="muted" style="font-size:12px">Soni bo'yicha saralangan</span></div>
+      <div class="tw"><table><thead><tr><th>Vosita</th><th class="num">Soni</th><th>Ulush</th><th class="num">Xato %</th><th class="num">AI $ / ish</th></tr></thead><tbody>
+      ${tools.map((t) => `<tr><td>${t.t}</td><td class="num">${fmt(t.c)}</td><td style="min-width:140px"><div class="bar"><span style="width:${(t.c / tools[0].c) * 100}%"></span></div></td><td class="num ${t.f > 5 ? "down" : ""}">${t.f}%</td><td class="num">${usd(t.cost)}</td></tr>`).join("")}
+      </tbody></table></div></div>`;
+  },
+
+  users() {
+    const q = S.userQ.trim().toLowerCase();
+    let list = users.filter((u) => !q || u.name.toLowerCase().startsWith(q) || ("@" + (u.username || "")).startsWith(q) || String(u.tg) === q || String(u.id) === q.replace("#", ""));
+    if (S.userFilter === "blocked") list = list.filter((u) => u.blocked);
+    if (S.userFilter === "pro") list = list.filter((u) => u.plan === "pro");
+    return header("Foydalanuvchilar", "Qidiruv: ism boshi, @username, Telegram ID yoki #ID", exportBtn("users.export", "foydalanuvchilar")) +
+    `<div class="card"><div class="ch"><div class="filters grow">
+        <input class="input" id="uq" placeholder="Qidirish: ism, @username, Telegram ID…" value="${h(S.userQ)}" style="flex:1;min-width:200px" aria-label="Qidirish">
+        <div class="seg" role="group" aria-label="Filtr">${[["all","Hammasi"],["pro","Pro"],["blocked","Bloklangan"]].map(([v, l]) => `<button class="${S.userFilter === v ? "on" : ""}" data-uf="${v}">${l}</button>`).join("")}</div>
+        <select class="input" aria-label="Saralash"><option>Yangi avval</option><option>Eski avval</option><option>Balans ↓</option><option>Oxirgi faollik ↓</option></select>
+      </div></div>
+      ${list.length ? `<div class="tw"><table><thead><tr><th>Foydalanuvchi</th><th>Telegram ID</th><th>Telefon</th><th>Tarif</th><th class="num">Ball</th><th class="num">Kvota</th><th class="num">Balans</th><th class="num">Ishlar</th><th>Ro'yxatdan</th><th>Oxirgi faollik</th></tr></thead><tbody>
+      ${list.slice(0, 15).map((u) => `<tr class="click" data-user="${u.id}"><td><b>${h(u.name)}</b> ${u.blocked ? '<span class="pill bad">Bloklangan</span>' : ""} ${u.isAdmin ? '<span class="pill pri">Admin</span>' : ""}<div class="muted" style="font-size:12px">${u.username ? "@" + h(u.username) : "username yo'q"} · #${u.id}</div></td>
+        <td class="mono">${u.tg}</td><td class="mono">${maskPhone(u.phone)}</td><td>${u.plan === "pro" ? '<span class="pill pri">Pro</span>' : '<span class="pill">Free</span>'}</td>
+        <td class="num">${fmt(u.points)}</td><td class="num">${fmt(u.quota)}</td><td class="num">${fmt(u.balance)}</td><td class="num">${u.gens}</td><td class="num">${dt(u.created).slice(0, 10)}</td><td class="num muted">${dt(u.seen)}</td></tr>`).join("")}
+      </tbody></table></div>${pager(Math.min(15, list.length), list.length)}` : `<div class="empty"><h2>Hech narsa topilmadi</h2><p>«${h(S.userQ)}» bo'yicha foydalanuvchi yo'q. Ism boshini, @username yoki Telegram ID ni sinab ko'ring.</p><button class="btn" data-clear>Filtrlarni tozalash</button></div>`}
+    </div>`;
+  },
+
+  user() {
+    const u = users.find((x) => x.id === S.id);
+    const ug = gens.filter((g) => g.user === u).slice(0, 8);
+    const revealed = S.revealed.has(u.id);
+    const acts = [
+      can("users.wallet") && u.id !== users[0].id ? `<button class="btn primary" data-act="wallet">Hamyonni tuzatish</button>` : "",
+      can("users.block") ? `<button class="btn ${u.blocked ? "" : "danger"}" data-act="block">${u.blocked ? "Blokdan chiqarish" : "Bloklash"}</button>` : "",
+      can("users.sessions") ? `<button class="btn" data-act="sessions">Sessiyalarni bekor qilish</button>` : "",
+      can("users.message") ? `<button class="btn" data-act="message">Telegram xabar</button>` : "",
+    ].join("");
+    const tabs = [["overview","Umumiy"],["gens","Generatsiyalar"],["ledger","Hisob"],["sessions","Sessiyalar"],["uaudit","Audit"]];
+    let body = "";
+    if (S.tab === "overview") body = `<div class="grid g2">
+      <div class="card"><div class="ch"><h2 class="grow">Profil</h2></div><div class="cb"><dl class="kv">
+        <dt>Telegram ID</dt><dd class="mono">${u.tg}</dd><dt>Username</dt><dd>${u.username ? "@" + h(u.username) : "—"}</dd>
+        <dt>Telefon</dt><dd><span class="mono">${revealed ? h(u.phone || "—") : maskPhone(u.phone)}</span> ${can("users.pii") && u.phone && !revealed ? `<button class="btn sm ghost" data-act="reveal">Ko'rsatish</button>` : ""}</dd>
+        <dt>OTM</dt><dd>${can("users.pii") ? h(u.uni) : "•••"}</dd><dt>Tarif</dt><dd>${u.plan === "pro" ? "Pro · 12.10.2026 gacha" : "Free"}</dd>
+        <dt>Ro'yxatdan o'tgan</dt><dd>${dt(u.created)}</dd><dt>Oxirgi faollik</dt><dd>${dt(u.seen)}</dd></dl></div></div>
+      <div class="card"><div class="ch"><h2 class="grow">Statistika</h2></div><div class="cb"><dl class="kv">
+        <dt>Generatsiyalar</dt><dd class="num">${u.gens} (tayyor ${Math.round(u.gens * .9)}, xato ${Math.round(u.gens * .1)})</dd>
+        <dt>Sarflangan</dt><dd class="num">${money(u.gens * 3500, "tanga")}</dd><dt>To'lagan</dt><dd class="num">${money(u.gens * 2500)}</dd>
+        <dt>Xotira</dt><dd class="num">${(u.gens * 0.7).toFixed(1)} MB / 200 MB</dd></dl></div></div></div>`;
+    if (S.tab === "gens") body = genTable(ug, false);
+    if (S.tab === "ledger") body = `<div class="card"><div class="tw"><table><thead><tr><th>Vaqt</th><th>Turi</th><th class="num">Ball</th><th class="num">Kvota</th><th class="num">Balans</th><th>Havola</th><th>Izoh (foydalanuvchiga ko'rinadi)</th></tr></thead><tbody>
+      <tr><td class="num">${dt(ago(30))}</td><td><span class="pill">charge</span></td><td class="num">0</td><td class="num">0</td><td class="num down">−4 000</td><td class="mono">gen ${short(gens[3].id)}</td><td>essay: Iqlim o'zgarishi</td></tr>
+      <tr><td class="num">${dt(ago(300))}</td><td><span class="pill ok">topup</span></td><td class="num">0</td><td class="num">0</td><td class="num up">+25 000</td><td class="mono">payme:6004565</td><td>payme orqali to'ldirish</td></tr>
+      <tr><td class="num">${dt(ago(1440))}</td><td><span class="pill pri">admin_credit</span></td><td class="num">0</td><td class="num">0</td><td class="num up">+6 000</td><td class="mono">admin:7f3c…</td><td>Ma'muriy tuzatish</td></tr>
+      <tr><td class="num">${dt(ago(4000))}</td><td><span class="pill">bonus</span></td><td class="num up">+3 000</td><td class="num">0</td><td class="num">0</td><td class="mono">signup:${u.id}</td><td>Ro'yxatdan o'tish bonusi</td></tr>
+      </tbody></table></div></div><div class="note">Admin ismi va sababi foydalanuvchiga ko'rinmaydi — faqat audit jurnalida saqlanadi (A1 tuzatildi).</div>`;
+    if (S.tab === "sessions") body = can("users.sessions") ? `<div class="card"><div class="tw"><table><thead><tr><th>Yaratilgan</th><th>Oxirgi faollik</th><th>Tugaydi</th><th>Qurilma</th><th>Holat</th></tr></thead><tbody>
+      <tr><td class="num">${dt(ago(2000))}</td><td class="num">${dt(u.seen)}</td><td class="num">${dt(new Date(NOW.getTime() + 20 * 86400000))}</td><td>Chrome · Android</td><td><span class="pill ok">Faol</span></td></tr>
+      <tr><td class="num">${dt(ago(9000))}</td><td class="num">${dt(ago(8000))}</td><td class="num">${dt(new Date(NOW.getTime() + 25 * 86400000))}</td><td>Telegram Mini App</td><td><span class="pill ok">Faol</span></td></tr></tbody></table></div></div>` : forbidden();
+    if (S.tab === "uaudit") body = can("audit.view") ? auditTable(audit.filter((a) => a.target.includes(String(u.id))).concat(audit.slice(-1))) : forbidden();
+    return header(`${h(u.name)} ${u.blocked ? '<span class="pill bad">Bloklangan</span>' : ""}`, `#${u.id} · ${u.username ? "@" + h(u.username) : "username yo'q"}`, "",
+      `<button data-go="users">Foydalanuvchilar</button> / ${h(u.name)}`) +
+    `<div class="wallets">${[["Ball","points","bonus"],["Kvota","quota","Pro"],["Balans","balance","haqiqiy pul"]].map(([l, k, s]) => `<div class="wallet card"><span class="eyebrow">${l} · ${s}</span><div class="v num">${fmt(u[k])}</div></div>`).join("")}</div>
+    ${acts ? `<div class="actions">${acts}</div>` : ""}
+    <div class="tabs" role="tablist">${tabs.map(([k, l]) => `<button role="tab" class="${S.tab === k ? "on" : ""}" data-tab="${k}">${l}</button>`).join("")}</div>${body}`;
+  },
+
+  generations() {
+    let list = gens;
+    if (S.genStatus === "unrefunded") list = gens.filter((g) => g.status === "FAILED" && !g.refunded);
+    else if (S.genStatus === "stuck") list = gens.filter((g) => g.stuck);
+    else if (S.genStatus !== "all") list = gens.filter((g) => g.status === S.genStatus);
+    return header("Generatsiyalar", "Barcha foydalanuvchilarning ishlari", exportBtn("jobs.export", "generatsiyalar")) +
+      `<div class="card"><div class="ch"><div class="filters grow"><div class="seg" role="group" aria-label="Holat">${[["all","Hammasi"],["QUEUED","Navbatda"],["IN_PROGRESS","Ishlanmoqda"],["COMPLETED","Tayyor"],["FAILED","Xato"],["unrefunded","Qaytarilmagan"],["stuck","Osilib qolgan"]].map(([v, l]) => `<button class="${S.genStatus === v ? "on" : ""}" data-gs="${v}">${l}</button>`).join("")}</div>
+      <select class="input" aria-label="Vosita"><option>Barcha vositalar</option>${TOOLS.map(([, t]) => `<option>${t}</option>`).join("")}</select></div></div>
+      ${genTable(list.slice(0, 14), true, list.length)}</div>`;
+  },
+
+  generation() {
+    const g = gens.find((x) => x.id === S.id);
+    const acts = [];
+    if (can("jobs.cancel") && g.status === "QUEUED") acts.push(`<button class="btn danger" data-job="cancel">Bekor qilish va pulni qaytarish</button>`);
+    if (can("jobs.cancel") && g.status === "IN_PROGRESS") acts.push(`<button class="btn danger" data-job="fail">To'xtatish va pulni qaytarish</button>`);
+    if (can("jobs.refund") && g.status === "FAILED" && !g.refunded) acts.push(`<button class="btn primary" data-job="refund">Pulni qaytarish</button>`);
+    if (can("jobs.input") && g.status === "COMPLETED") acts.push(`<button class="btn">Faylni yuklab olish (audit)</button>`);
+    return header(`${TOOL[g.tool]} · ${statusPill(g.status)}`, `<span class="mono">${g.id}</span>`, "", `<button data-go="generations">Generatsiyalar</button> / ${short(g.id)}`) +
+    (g.stuck ? `<div class="note warn">Bu ish 14 daqiqadan beri «Ishlanmoqda» holatida — budjet (11 daq) + 30 s dan oshgan. Worker javob bermayapti bo'lishi mumkin.</div>` : "") +
+    (g.status === "FAILED" && !g.refunded ? `<div class="note bad">Pul yechilgan, lekin qaytarilmagan. Avtomatik tiklash faqat oxirgi 2 kunni ko'radi.</div>` : "") +
+    (acts.length ? `<div class="actions">${acts.join("")}</div>` : "") +
+    `<div class="grid g2">
+      <div class="card"><div class="ch"><h2 class="grow">Holat</h2></div><div class="cb"><dl class="kv">
+        <dt>Foydalanuvchi</dt><dd><button class="btn sm ghost" data-user="${g.user.id}">${h(g.user.name)} · #${g.user.id}</button></dd>
+        <dt>Mavzu</dt><dd>${h(g.topic)}</dd><dt>Narx</dt><dd class="num">${money(g.price, "tanga")} · ${g.wallet} hamyonidan</dd>
+        <dt>Urinishlar</dt><dd class="num">${g.attempts} / 2</dd><dt>Budjet</dt><dd class="num">660 s</dd>
+        <dt>Davomiylik</dt><dd class="num">${g.status === "COMPLETED" || g.status === "FAILED" ? g.dur + " s" : "—"}</dd>
+        <dt>Qulf</dt><dd class="mono">${g.status === "IN_PROGRESS" ? "worker@91be:5c2e…" : "—"}</dd>
+        <dt>Xato</dt><dd>${g.error ? `<span class="down">${h(g.error)}</span>` : "—"}</dd></dl></div></div>
+      <div class="card"><div class="ch"><h2 class="grow">Hayot sikli</h2></div><div class="cb"><div class="timeline">
+        <div class="t"><i class="m"></i><span>Navbatga qo'yildi · pul yechildi</span><span class="muted num">${dt(g.created)}</span></div>
+        ${g.status !== "QUEUED" && g.status !== "REVOKED" ? `<div class="t"><i></i><span>Worker oldi (urinish ${g.attempts})</span><span class="muted num">${dt(new Date(g.created.getTime() + 20000))}</span></div>` : ""}
+        ${g.status === "COMPLETED" ? `<div class="t"><i class="ok"></i><span>Tayyor · fayl 1.4 MB</span><span class="muted num">${dt(new Date(g.created.getTime() + g.dur * 1000))}</span></div>` : ""}
+        ${g.status === "FAILED" ? `<div class="t"><i class="bad"></i><span>Xato: ${h(g.error)}</span><span class="muted num">${dt(new Date(g.created.getTime() + g.dur * 1000))}</span></div>${g.refunded ? `<div class="t"><i class="ok"></i><span>Pul qaytarildi</span><span class="muted num">${dt(new Date(g.created.getTime() + g.dur * 1000 + 2000))}</span></div>` : ""}` : ""}
+        ${g.status === "REVOKED" ? `<div class="t"><i class="m"></i><span>Bekor qilindi · pul qaytarildi</span><span class="muted num">${dt(new Date(g.created.getTime() + 60000))}</span></div>` : ""}
+      </div></div></div></div>
+      <div class="grid g2">
+      <div class="card"><div class="ch"><h2 class="grow">AI xarajat</h2><span class="num">${g.cost ? usd(g.cost) : "—"}</span></div><div class="tw"><table><thead><tr><th>Turi</th><th>Provayder · model</th><th class="num">Chaqiruv</th><th class="num">Token (kirish/chiqish)</th><th class="num">$</th></tr></thead><tbody>
+        ${g.cost ? `<tr><td>llm</td><td class="mono">gemini · 3.7-flash</td><td class="num">6</td><td class="num">41 200 / 9 800</td><td class="num">${usd(g.cost * .7)}</td></tr><tr><td>image</td><td class="mono">gemini · flash-image</td><td class="num">3</td><td class="num">—</td><td class="num">${usd(g.cost * .3)}</td></tr>` : `<tr><td colspan="5" class="muted">Xarajat faqat muvaffaqiyatli ishlar uchun yoziladi.</td></tr>`}
+      </tbody></table></div></div>
+      <div class="card"><div class="ch"><h2 class="grow">Kiritilgan ma'lumot</h2>${can("jobs.input") ? `<button class="btn sm" data-act="reveal-input">Ko'rsatish (audit)</button>` : '<span class="pill">Yashirilgan</span>'}</div><div class="cb">
+        <pre class="json">${S.revealed.has(g.id) ? h(JSON.stringify({ topic: g.topic, pages: "10-15", university: g.user.uni, author: g.user.name, language: "uz" }, null, 2)) : h(JSON.stringify({ topic: g.topic, pages: "•••", university: "•••", author: "•••", language: "•••" }, null, 2))}</pre></div></div></div>`;
+  },
+
+  payments() {
+    const list = S.orderState === "all" ? orders : orders.filter((o) => o.state === S.orderState);
+    return header("To'lovlar", "Click va Payme buyurtmalari", exportBtn("payments.export", "buyurtmalar")) +
+    `<div class="card"><div class="ch"><div class="filters grow"><div class="seg" role="group" aria-label="Holat">${[["all","Hammasi"],["paid","To'langan"],["pending","Kutilmoqda"],["created","Yaratilgan"],["cancelled","Bekor"]].map(([v, l]) => `<button class="${S.orderState === v ? "on" : ""}" data-os="${v}">${l}</button>`).join("")}</div>
+      <input class="input" placeholder="Buyurtma ID yoki tranzaksiya raqami (aniq)" aria-label="Buyurtma qidirish" style="min-width:220px;flex:1"></div></div>
+      <div class="tw"><table><thead><tr><th>Buyurtma</th><th>Foydalanuvchi</th><th>Provayder</th><th>Maqsad</th><th class="num">Summa</th><th>Holat</th><th>Tranzaksiya</th><th>Yaratilgan</th></tr></thead><tbody>
+      ${list.slice(0, 14).map((o) => `<tr class="click" data-order="${o.id}"><td class="mono">${short(o.id)}</td><td>${h(o.user.name)}</td><td>${o.provider === "click" ? "Click" : "Payme"}</td><td>${o.purpose === "pro" ? '<span class="pill pri">Pro</span>' : "To'ldirish"}</td><td class="num">${money(o.amount)}</td><td>${orderPill(o.state)} ${o.refunds ? '<span class="pill bad">Qaytarilgan</span>' : ""}</td><td class="mono">${o.txn ?? "—"}</td><td class="num muted">${dt(o.created)}</td></tr>`).join("")}
+      </tbody></table></div>${pager(Math.min(14, list.length), list.length)}</div>`;
+  },
+
+  order() {
+    const o = orders.find((x) => x.id === S.id);
+    return header(`Buyurtma ${short(o.id)} ${orderPill(o.state)}`, `${o.provider === "click" ? "Click" : "Payme"} · ${o.purpose === "pro" ? "Pro obuna" : "Balansni to'ldirish"} · ${money(o.amount)}`,
+      can("payments.refund_record") && o.state === "paid" ? `<button class="btn danger" data-act="extrefund">Tashqi qaytarishni qayd etish</button>` : "", `<button data-go="payments">To'lovlar</button> / ${short(o.id)}`) +
+    `<div class="grid g2"><div class="card"><div class="ch"><h2 class="grow">Buyurtma</h2></div><div class="cb"><dl class="kv">
+      <dt>ID</dt><dd class="mono">${o.id}</dd><dt>Foydalanuvchi</dt><dd><button class="btn sm ghost" data-user="${o.user.id}">${h(o.user.name)}</button></dd>
+      <dt>Tranzaksiya</dt><dd class="mono">${o.txn ?? "—"}</dd><dt>Yaratilgan (create_time)</dt><dd class="num">${dt(o.created)}</dd>
+      <dt>To'langan (perform_time)</dt><dd class="num">${o.state === "paid" ? dt(new Date(o.created.getTime() + 90000)) : "—"}</dd>
+      <dt>Hisobga yozildi</dt><dd>${o.state === "paid" ? `<span class="pill ok">Ha</span> <span class="mono">${o.provider}:${o.txn}</span>` : "—"}</dd></dl></div></div>
+      <div class="card"><div class="ch"><h2 class="grow">Webhook voqealari</h2><span class="muted" style="font-size:12px">payment_events · maxfiy maydonlar yashirilgan</span></div><div class="cb"><div class="timeline">
+      ${(o.provider === "payme" ? [["CheckPerformTransaction", 0], ["CreateTransaction", 0], ["PerformTransaction", 0]] : [["prepare", 0], ["complete", 0]]).slice(0, o.state === "paid" ? 5 : 2).map(([m, c], i) => `<div class="t"><i class="${o.state === "cancelled" && i === 1 ? "bad" : "ok"}"></i><span class="mono">${m} → ${c}</span><span class="muted num">${dt(new Date(o.created.getTime() + i * 30000))}</span></div>`).join("")}
+      </div><pre class="json" style="margin-top:10px">${h(JSON.stringify({ method: "PerformTransaction", params: { id: o.txn, account: { order_id: short(o.id) + "…" } }, auth: "[yashirilgan]" }, null, 2))}</pre></div></div></div>`;
+  },
+
+  finance() {
+    const checks = [
+      ["To'langan, lekin hisobga yozilmagan buyurtmalar", 0, "ok"],
+      ["Hamyon ≠ hisob yozuvlari yig'indisi", 0, "ok"],
+      ["Xato bilan tugagan, pul qaytarilmagan ishlar", 2, "bad"],
+      ["Qisman qaytarish yo'qolgan (COMPLETED, yetkazilgan < so'ralgan)", 1, "warn"],
+      ["12 soatdan ortiq kutilayotgan buyurtmalar", 1, "warn"],
+      ["24 soatdan ortiq «yaratilgan» holatdagi buyurtmalar", 3, "warn"],
+    ];
+    return header("Moliya", "Tushum, majburiyatlar va muvofiqlashtirish", exportBtn("finance.export", "hisob kitobi")) +
+    `<div class="kpis">${[["Tushum (30 kun)", money(SERIES.reduce((a, d) => a + d.revenue, 0))], ["Click", "38%"], ["Payme", "62%"], ["Majburiyat: balans", money(1284500, "tanga")], ["Majburiyat: kvota", money(462000, "tanga")]].map(([l, v]) => `<div class="card kpi"><span class="eyebrow">${l}</span><span class="v num">${v}</span></div>`).join("")}</div>
+    <div class="grid g2"><div class="card"><div class="ch"><h2 class="grow">Kunlik tushum</h2></div><div class="cb">${lineChart(SERIES, "revenue", { fmtY: (v) => (v >= 1e6 ? (v / 1e6).toFixed(1) + " mln" : fmt(v / 1000) + "k") })}</div></div>
+    <div class="card"><div class="ch"><h2 class="grow">Muvofiqlashtirish tekshiruvlari</h2><button class="btn sm">Qayta tekshirish</button></div>
+      <div class="tw"><table><tbody>${checks.map(([t, n, k]) => `<tr><td><span class="dot ${k === "ok" ? "" : k}"></span></td><td>${t}</td><td class="num"><span class="pill ${k}">${n}</span></td></tr>`).join("")}</tbody></table></div></div></div>`;
+  },
+
+  ai() {
+    const prov = [["gemini","3.7-flash","llm",4120,38.4],["gemini","flash-image","image",1380,46.9],["anthropic","sonnet","llm",310,12.2],["azure","tts uz-UZ","tts",620,3.1],["google","grounding","grounding",540,7.6],["openrouter","—","llm",88,0]];
+    return header("AI xarajat va provayderlar", "Manba: generations.cost_json (muvaffaqiyatli ishlar)") +
+    `<div class="note warn">Qamrov 94%. Hisobga kirmaydi: xato bilan tugagan ishlar, bepul AI so'rovlari, fal.ai rasmlari, OpenRouter modellari ($0 bo'lib yoziladi). Batafsil: 01-analysis §4.8.</div>
+    <div class="grid g2"><div class="card"><div class="ch"><h2 class="grow">Kunlik AI xarajat</h2><span class="num">${usd(SERIES.reduce((a, d) => a + d.ai, 0))}</span></div><div class="cb">${lineChart(SERIES, "ai", { color: "var(--c4)", fmtY: (v) => "$" + Math.round(v) })}</div></div>
+    <div class="card"><div class="ch"><h2 class="grow">Provayderlar holati</h2><span class="muted" style="font-size:12px">jarayonlar yurak urishidan (30 s)</span></div>
+      <div class="tw"><table><thead><tr><th>Provayder</th><th>Kalit</th><th>Breaker</th><th class="num">Band / max</th></tr></thead><tbody>
+      ${[["gemini","ok","Yopiq","7 / 10"],["anthropic","ok","Yopiq","0 / 4"],["xai","—","—","—"],["fal","—","—","—"],["image:pexels","ok","<span class=\"pill warn\">Ochiq · 42 s</span>","0 / 6"],["azure tts","ok","Yopiq","1 / 6"]].map(([p, k, b, l]) => `<tr><td>${p}</td><td>${k === "ok" ? '<span class="pill ok">Bor</span>' : '<span class="pill">Yo\'q</span>'}</td><td>${b}</td><td class="num">${l}</td></tr>`).join("")}
+      </tbody></table></div></div></div>
+    <div class="card"><div class="ch"><h2 class="grow">Provayder va model bo'yicha</h2><div class="seg"><button class="on">Model</button><button>Vosita</button><button>Kun</button><button>Turi</button></div></div>
+      <div class="tw"><table><thead><tr><th>Provayder</th><th>Model</th><th>Turi</th><th class="num">Chaqiruvlar</th><th class="num">$</th><th>Ulush</th></tr></thead><tbody>
+      ${prov.map(([p, m, k, c, d]) => `<tr><td>${p}</td><td class="mono">${m}</td><td><span class="pill">${k}</span></td><td class="num">${fmt(c)}</td><td class="num">${usd(d)}${d === 0 ? ' <span class="pill warn">narx noma\'lum</span>' : ""}</td><td style="min-width:120px"><div class="bar"><span style="width:${(d / 46.9) * 100}%"></span></div></td></tr>`).join("")}
+      </tbody></table></div></div>`;
+  },
+
+  pricing() {
+    const rows = pricingRows(), fx = fxRate(), tm = PRICING_CFG.targetMarkup;
+    const sortBy = S.priceSort || "margin";
+    const sorters = { margin: (a, b) => a.c.margin - b.c.margin, cost: (a, b) => b.c.full - a.c.full, volume: (a, b) => b.p.jobs - a.p.jobs };
+    rows.sort(sorters[sortBy] || sorters.margin);
+    const tot = rows.reduce((a, r) => ({ rev: a.rev + r.done * r.c.price, cost: a.cost + r.done * r.c.full }), { rev: 0, cost: 0 });
+    const avgM = ((tot.rev - tot.cost) / tot.rev) * 100;
+    const low = rows.filter((r) => r.c.margin < 30), lowCov = rows.filter((r) => r.p.cover < 90);
+    const k = [
+      ["O'rtacha marja", avgM.toFixed(1) + "%", "tushum bo'yicha tortilgan", marginTone(avgM) === "bad" ? "down" : marginTone(avgM) === "ok" ? "up" : "muted"],
+      ["Marja < 30% vositalar", String(low.length), low.length ? low.map((r) => TOOL[r.p.id]).join(", ") : "Hammasi me'yorda", low.length ? "down" : "up"],
+      ["AI xarajat · 30 kun (so'm)", fmt(Math.round(tot.cost)), usd(tot.cost / fx) + " · xato xarajati bilan", "muted"],
+      ["Kurs (so'm / USD)", fmt(fx), "finance.soum_per_usd", "muted"],
+      ["Maqsadli ustama", tm.toFixed(1) + "×", "pricing.target_markup", "muted"],
+    ];
+    const rangeTxt = (a) => { const lo = Math.min(...a), hi = Math.max(...a); return lo === hi ? fmt(lo) : fmt(lo) + " – " + fmt(hi); };
+    const tr30 = (p) => { const t = p.trend.slice(-30); return (t[t.length - 1].usd / t[0].usd - 1) * 100; };
+    return header("Narxlar va tannarx", "Asosiy narx kod formulalaridan keladi; admin har bir vosita uchun foizli tuzatish belgilaydi. O'zgarishlar faqat yangi buyurtmalarga ta'sir qiladi.",
+      can("pricing.edit") ? "" : '<span class="pill">Faqat ko\'rish</span>') +
+    `<div class="kpis">${k.map(([l, v, d, cls]) => `<div class="card kpi"><span class="eyebrow">${h(l)}</span><span class="v num">${v}</span><span class="d ${cls}" style="font-size:12px">${h(d)}</span></div>`).join("")}</div>
+    ${lowCov.length ? `<div class="note warn">Tannarx qamrovi 90% dan past: ${lowCov.map((r) => `${h(TOOL[r.p.id])} (${r.p.cover}%)`).join(", ")}. Bu vositalarda tannarx kam baholangan bo'lishi, marja esa haqiqatdagidan optimistik ko'rinishi mumkin.</div>` : ""}
+    ${can("pricing.edit") ? "" : `<div class="note">Sizda <span class="mono">pricing.edit</span> ruxsati yo'q — bo'lim faqat ko'rish rejimida.</div>`}
+    <div class="card"><div class="ch"><h2 class="grow">Vositalar bo'yicha narx va tannarx</h2>
+      <div class="legend"><span><i style="background:var(--danger)"></i>&lt; 30%</span><span><i style="background:var(--warn)"></i>30–60%</span><span><i style="background:var(--ok)"></i>&gt; 60%</span></div>
+      <label class="rolepick"><span class="muted">Saralash:</span><select class="input" id="psort" aria-label="Saralash">${[["margin", "Marja (past avval)"], ["cost", "Tannarx (yuqori avval)"], ["volume", "Hajm (ko'p avval)"]].map(([v, l]) => `<option value="${v}" ${sortBy === v ? "selected" : ""}>${l}</option>`).join("")}</select></label></div>
+      <div class="tw"><table><thead><tr><th>Vosita</th><th class="num">Asosiy narx</th><th>Tuzatish</th><th class="num">Amaldagi narx</th><th class="num">O'rtacha tannarx</th><th class="num">Ustama ×</th><th>Marja %</th><th class="num">Ishlar (30 kun)</th><th>Trend (30 kun)</th><th>Tavsiya</th></tr></thead><tbody>
+      ${rows.map(({ p, c }) => { const t = tr30(p); return `<tr class="click" data-price="${h(p.id)}">
+        <td><b>${h(TOOL[p.id])}</b><div class="muted" style="font-size:12px">birlik: ${h(p.unit)}</div></td>
+        <td class="num nw">${rangeTxt(p.ladder.map((l) => l.base))}</td>
+        <td>${p.pct === 100 ? '<span class="pill">100%</span>' : `<span class="pill pri">${p.pct > 100 ? "▲" : "▼"} ${p.pct}%</span>`}</td>
+        <td class="num nw">${rangeTxt(c.eff)}</td>
+        <td class="num nw">${fmt(Math.round(c.full))} <span class="muted" style="font-size:12px">so'm/ish</span><div class="muted" style="font-size:12px">${fmt(Math.round(c.perUnit))} so'm/${h(p.unit)}</div></td>
+        <td class="num">${c.markup.toFixed(1)}×</td>
+        <td><span class="pill ${marginTone(c.margin)}">${c.margin.toFixed(0)}%</span></td>
+        <td class="num">${fmt(p.jobs)}<div class="muted" style="font-size:12px">xato ${p.fail.toFixed(1)}%</div></td>
+        <td class="nw">${spark(p.trend.slice(-30))} <span class="num ${t > 5 ? "down" : t < -5 ? "up" : "muted"}" style="font-size:12px">${t > 0 ? "+" : ""}${t.toFixed(0)}%</span></td>
+        <td class="nw">${recChip(p, c)}</td></tr>`; }).join("")}
+      </tbody></table></div></div>
+    <div class="note">Marja = (o'rtacha narx − to'liq tannarx) ÷ o'rtacha narx. To'liq tannarx = o'rtacha AI xarajat + xato bilan tugagan ishlarning qo'shimcha xarajati. «Tavsiya» ustamani maqsadli ${tm.toFixed(1)}× ga yetkazadigan foiz; tanlama 20 ishdan kam bo'lsa «kam ishonch» deb belgilanadi. Qatorni bosing — grafik, simulyator va tarix ochiladi.</div>`;
+  },
+
+  moderation() {
+    return header("Moderatsiya", "Ommaviy o'yin havolalari va anonim natijalar") +
+    `<div class="card"><div class="ch"><div class="filters grow"><input class="input" placeholder="Mavzu boshi bo'yicha qidirish" aria-label="Mavzu bo'yicha qidirish" style="flex:1;min-width:200px">
+      <div class="seg"><button class="on">Faol</button><button>Barchasi</button></div><select class="input" aria-label="O'yin turi"><option>Barcha turlar</option><option>quiz</option><option>crossword</option><option>flashcards</option></select></div></div>
+      <div class="tw"><table><thead><tr><th>Mavzu</th><th>Turi</th><th>Egasi</th><th class="num">Natijalar</th><th>Yaratilgan</th><th>Tugaydi</th><th>Holat</th></tr></thead><tbody>
+      ${links.map((l) => `<tr class="click" data-link="${l.id}"><td>${h(l.topic)} ${l.id === links[4].id ? '<span class="pill warn">havola bor</span>' : ""}</td><td><span class="pill">${l.kind}</span></td><td>${h(l.user.name)}</td><td class="num">${l.results}</td><td class="num muted">${dt(l.created)}</td><td class="num muted">${dt(l.expires).slice(0, 10)}</td><td>${l.active ? '<span class="pill ok">Faol</span>' : '<span class="pill">O\'chirilgan</span>'}</td></tr>`).join("")}
+      </tbody></table></div></div>`;
+  },
+
+  broadcasts() {
+    return header("E'lonlar", "Telegram bot orqali — botni bloklamagan, telegram_id bor foydalanuvchilarga", can("broadcasts.send") ? `<button class="btn primary" data-act="newbc">Yangi e'lon</button>` : "") +
+    `<div class="card"><div class="tw"><table><thead><tr><th>Matn</th><th>Auditoriya</th><th>Holat</th><th class="num">Yuborildi</th><th class="num">Xato</th><th>Muallif</th><th>Vaqt</th><th></th></tr></thead><tbody>
+    ${broadcasts.map((b) => `<tr><td style="max-width:360px">${h(b.text)}</td><td>${b.aud}</td><td>${{ done: '<span class="pill ok">Yuborildi</span>', draft: '<span class="pill">Qoralama</span>', sending: '<span class="pill info">Yuborilmoqda</span>' }[b.status]}</td><td class="num">${b.total ? fmt(b.sent) + " / " + fmt(b.total) : "—"}</td><td class="num">${b.failed ? fmt(b.failed) : "—"}</td><td>${b.by}</td><td class="num muted">${dt(b.at)}</td>
+      <td>${b.status === "draft" && can("broadcasts.send") ? `<button class="btn sm" data-bcsend="${b.id}">Yuborish…</button>` : ""}</td></tr>`).join("")}
+    </tbody></table></div></div><div class="note">Har bir e'lon avval o'zingizga sinov sifatida yuboriladi. Ommaviy yuborish auditoriya sonini qayta yozish va 2FA tasdig'ini talab qiladi; tezlik — sekundiga 25 ta xabar.</div>`;
+  },
+
+  settings() {
+    const groups = [...new Set(settings.map((s) => s.group))];
+    const val = (s) => (s.type === "bool" ? (s.value ? '<span class="pill bad">Yoqilgan</span>' : '<span class="pill ok">O\'chiq</span>') : s.type === "tools" ? (s.value.length ? s.value.map((t) => `<span class="pill warn">${TOOL[t]}</span>`).join(" ") : '<span class="muted">Hech biri</span>') : `<b class="num">${fmt(s.value)}</b>`);
+    const src = { env: '<span class="pill">env</span>', db: '<span class="pill pri">admin o\'zgartirgan</span>', default: '<span class="pill">standart</span>' };
+    return header("Sozlamalar", "Qayta deploy qilmasdan o'zgartiriladigan qiymatlar. O'zgarish ~15 soniyada barcha jarayonlarga yetadi.") +
+      groups.map((g) => `<div class="card"><div class="ch"><h2 class="grow">${g}</h2></div>${settings.filter((s) => s.group === g).map((s) => `
+        <div class="cb" style="border-top:1px solid var(--border);display:flex;gap:14px;align-items:center;flex-wrap:wrap">
+          <div style="flex:1;min-width:220px"><b>${s.label}</b><div class="muted" style="font-size:12.5px">${s.desc} <span class="mono">${s.key}</span></div></div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${val(s)} ${src[s.source]}${s.source === "db" ? `<span class="muted" style="font-size:12px">· Siz, hozirgina</span>` : ""}
+          ${can("settings.edit") ? `<button class="btn sm" data-set="${s.key}">O'zgartirish</button>${s.source === "db" ? `<button class="btn sm ghost" data-reset="${s.key}">Standartga</button>` : ""}` : ""}</div></div>`).join("")}</div>`).join("");
+  },
+
+  system() {
+    const procs = [["web@a1f3","web","12 daq oldin","2 s oldin","—"],["worker@91be","worker","3 soat oldin","9 s oldin","4 / 4"],["worker@7c02","worker","3 soat oldin","21 s oldin","2 / 4"]];
+    const steps = [["reclaimStaleJobs","40 s oldin","0","—"],["expireQueuedJobs","40 s oldin","0","—"],["refundUnrefundedFailed","40 s oldin","1","—"],["purgeBonusFiles","2 soat oldin","37","—"],["purgePaymentEvents","2 soat oldin","0","—"],["deliverBroadcasts","40 s oldin","0","—"],["purgeOldSources","40 s oldin","2","1 marta: lock timeout (kecha 03:12)"]];
+    return header("Tizim holati", "Baza, navbat, jarayonlar va fon vazifalari") +
+    `<div class="kpis">${[["Baza", '<span class="dot"></span> 4 ms'], ["Migratsiyalar", "031 / 031"], ["Navbatda", "3"], ["Ishlanmoqda", "6"], ["Versiya", "eb7e134"]].map(([l, v]) => `<div class="card kpi"><span class="eyebrow">${l}</span><span class="v num" style="font-size:18px">${v}</span></div>`).join("")}</div>
+    <div class="grid g2"><div class="card"><div class="ch"><h2 class="grow">Jarayonlar</h2></div><div class="tw"><table><thead><tr><th>ID</th><th>Rol</th><th>Ishga tushgan</th><th>Oxirgi signal</th><th class="num">Band</th></tr></thead><tbody>
+      ${procs.map(([i, r, s, l, b]) => `<tr><td class="mono"><span class="dot"></span> ${i}</td><td>${r}</td><td class="muted">${s}</td><td>${l}</td><td class="num">${b}</td></tr>`).join("")}</tbody></table></div></div>
+    <div class="card"><div class="ch"><h2 class="grow">Konfiguratsiya</h2></div><div class="cb" style="display:flex;flex-direction:column;gap:8px">
+      <div class="note warn">Ogohlantirish: TELEGRAM_WEBHOOK_SECRET o'rnatilmagan — CRON_SECRET ishlatilmoqda.</div>
+      <div class="note">Muammolar: yo'q. Qiymatlar ko'rsatilmaydi, faqat xabarlar.</div></div></div></div>
+    <div class="card"><div class="ch"><h2 class="grow">Fon vazifalari (housekeeping)</h2><span class="muted" style="font-size:12px">Lider: worker@91be</span></div><div class="tw"><table><thead><tr><th>Qadam</th><th>Oxirgi ishga tushish</th><th class="num">Qatorlar</th><th>Oxirgi xato</th></tr></thead><tbody>
+      ${steps.map(([s, t, r, e]) => `<tr><td class="mono">${s}</td><td>${t}</td><td class="num">${r}</td><td class="${e !== "—" ? "down" : "muted"}">${e}</td></tr>`).join("")}</tbody></table></div></div>`;
+  },
+
+  errors() {
+    const sel = S.errSel;
+    return header("Xatolar", "Bir xil xatolar birlashtiriladi (fingerprint). 90 kun saqlanadi.",
+      can("errors.resolve") ? `<button class="btn" data-act="resolve" ${sel.size ? "" : "disabled"}>Hal qilindi deb belgilash (${sel.size})</button>` : "") +
+    `<div class="card"><div class="ch"><div class="filters grow"><div class="seg"><button class="on">Ochiq</button><button>Hal qilingan</button><button>Hammasi</button></div><select class="input" aria-label="Daraja"><option>Barcha darajalar</option><option>error</option><option>warn</option></select></div></div>
+    <div class="tw"><table><thead><tr>${can("errors.resolve") ? "<th></th>" : ""}<th>Oxirgi marta</th><th class="num">Soni</th><th>Daraja</th><th>Joy</th><th>Xabar</th><th>Jarayon</th><th>Holat</th></tr></thead><tbody>
+    ${errors.map((e) => `<tr>${can("errors.resolve") ? `<td><input type="checkbox" data-esel="${e.id}" ${sel.has(e.id) ? "checked" : ""} ${e.resolved ? "disabled" : ""} aria-label="Tanlash"></td>` : ""}<td class="num">${dt(e.last)}</td><td class="num">${e.count}</td><td>${e.level === "error" ? '<span class="pill bad">error</span>' : '<span class="pill warn">warn</span>'}</td><td class="mono">${e.scope}</td><td class="mono" style="max-width:380px">${h(e.msg)}</td><td class="mono">${e.proc}</td><td>${e.resolved ? '<span class="pill ok">Hal qilingan</span>' : '<span class="pill">Ochiq</span>'}</td></tr>`).join("")}
+    </tbody></table></div></div>`;
+  },
+
+  audit() {
+    return header("Audit jurnali", "Faqat qo'shiladi — o'zgartirish yoki o'chirish bazada taqiqlangan", exportBtn("audit.export", "audit")) +
+      `<div class="card"><div class="ch"><div class="filters grow"><select class="input" aria-label="Admin"><option>Barcha adminlar</option>${admins.map((a) => `<option>${h(a.user.name)}</option>`).join("")}</select>
+      <input class="input" placeholder="Amal, masalan users.wallet" aria-label="Amal bo'yicha filtr"><div class="seg"><button class="on">Hammasi</button><button>ok</button><button>denied</button></div></div></div>${auditTable(audit)}</div>`;
+  },
+
+  admins() {
+    return header("Adminlar", "Har bir admin — mavjud Telegram akkaunt + TOTP", can("admins.manage") ? `<button class="btn primary" data-act="newadmin">Admin qo'shish</button>` : "") +
+    `<div class="card"><div class="tw"><table><thead><tr><th>Admin</th><th>Rol</th><th>Holat</th><th>2FA</th><th>Oxirgi kirish</th><th class="num">Sessiyalar</th><th></th></tr></thead><tbody>
+    ${admins.map((a) => `<tr><td><b>${h(a.user.name)}</b><div class="muted" style="font-size:12px">@${h(a.user.username)} · #${a.user.id}</div></td><td><span class="pill pri">${a.role}</span></td><td>${a.status === "active" ? '<span class="pill ok">Faol</span>' : '<span class="pill warn">Ro\'yxatdan o\'tmoqda</span>'}</td><td>${a.totp ? "✓" : "—"}</td><td class="num muted">${a.last ? dt(a.last) : "—"}</td><td class="num">${a.sessions}</td>
+      <td>${can("admins.manage") && a.id !== 1 ? `<button class="btn sm" data-adm="${a.id}">Boshqarish</button>` : a.id === 1 ? '<span class="muted" style="font-size:12px">Siz · oxirgi egasi</span>' : ""}</td></tr>`).join("")}
+    </tbody></table></div></div>
+    <div class="card"><div class="ch"><h2 class="grow">Ruxsatlar matritsasi</h2><span class="muted" style="font-size:12px"><span class="step">2FA</span> — 10 daqiqa ichida kodni qayta kiritish kerak</span></div>
+    <div class="tw"><table class="matrix"><thead><tr><th>Ruxsat</th>${Object.keys(ROLES).map((r) => `<th>${r}</th>`).join("")}</tr></thead><tbody>
+    ${ALL.map((p) => `<tr><td class="mono">${p}${STEP_UP.has(p) ? '<span class="step">2FA</span>' : ""}</td>${Object.keys(ROLES).map((r) => `<td>${ROLES[r].perms.includes(p) ? '<span class="yes">✓</span>' : '<span class="muted">·</span>'}</td>`).join("")}</tr>`).join("")}
+    </tbody></table></div></div>`;
+  },
+
+  account() {
+    return header("Mening hisobim", `Rol: ${h(ROLES[S.role].label)}`, `<button class="btn" data-act="logout">Chiqish</button>`) +
+    `<div class="grid g2"><div class="card"><div class="ch"><h2 class="grow">Sessiyalarim</h2></div><div class="tw"><table><thead><tr><th>Qurilma</th><th>IP</th><th>Oxirgi faollik</th><th></th></tr></thead><tbody>
+      <tr><td>Chrome · macOS <span class="pill ok">Joriy</span></td><td class="mono">84.54.***.17</td><td>hozir</td><td></td></tr>
+      <tr><td>Safari · iPhone</td><td class="mono">213.230.***.9</td><td>2 soat oldin</td><td><button class="btn sm danger">Bekor qilish</button></td></tr></tbody></table></div></div>
+      <div class="card"><div class="ch"><h2 class="grow">Xavfsizlik</h2></div><div class="cb"><dl class="kv"><dt>2FA (TOTP)</dt><dd><span class="pill ok">Yoqilgan</span></dd><dt>Tiklash kodlari</dt><dd>8 / 10 qoldi</dd><dt>Sessiya</dt><dd>30 daqiqa harakatsizlikdan yoki 12 soatdan keyin tugaydi</dd></dl>
+      <div style="margin-top:12px"><button class="btn">Yangi tiklash kodlari</button></div></div></div></div>
+      <div class="card"><div class="ch"><h2 class="grow">Ruxsatlarim</h2></div><div class="cb" style="display:flex;gap:6px;flex-wrap:wrap">${ROLES[S.role].perms.map((p) => `<span class="pill">${p}</span>`).join("")}</div></div>`;
+  },
+};
+
+function genTable(list, withUser, total = list.length) {
+  if (!list.length) return `<div class="empty"><h2>Ish yo'q</h2><p>Bu filtr bo'yicha generatsiya topilmadi.</p></div>`;
+  return `<div class="tw"><table><thead><tr><th>ID</th>${withUser ? "<th>Foydalanuvchi</th>" : ""}<th>Vosita</th><th>Mavzu</th><th>Holat</th><th class="num">Narx</th><th>Qaytarildi</th><th class="num">AI $</th><th>Yaratilgan</th></tr></thead><tbody>
+  ${list.map((g) => `<tr class="click" data-gen="${g.id}"><td class="mono">${short(g.id)}</td>${withUser ? `<td>${h(g.user.name)}</td>` : ""}<td>${TOOL[g.tool]}</td><td style="max-width:240px">${h(g.topic)}${g.error ? `<div class="down" style="font-size:12px">${h(g.error)}</div>` : ""}</td><td>${statusPill(g.status)} ${g.stuck ? '<span class="pill bad">Osilgan</span>' : ""}</td><td class="num">${fmt(g.price)}</td><td>${g.refunded ? '<span class="pill ok">Ha</span>' : g.status === "FAILED" ? '<span class="pill bad">Yo\'q</span>' : "—"}</td><td class="num">${g.cost ? usd(g.cost) : "—"}</td><td class="num muted">${dt(g.created)}</td></tr>`).join("")}
+  </tbody></table></div>${withUser ? pager(list.length, total) : ""}`;
+}
+function auditTable(rows) {
+  return `<div class="tw"><table><thead><tr><th>Vaqt</th><th>Admin</th><th>Amal</th><th>Obyekt</th><th>Natija</th><th>Sabab</th><th>IP</th></tr></thead><tbody>
+  ${rows.map((a) => `<tr class="click" data-audit="${a.id}"><td class="num">${dt(a.at)}</td><td>${h(a.admin)} <span class="muted" style="font-size:12px">${a.role}</span></td><td class="mono">${a.action}</td><td class="mono">${h(a.target)}</td><td>${a.outcome === "ok" ? '<span class="pill ok">ok</span>' : '<span class="pill bad">denied</span>'}</td><td style="max-width:260px">${h(a.reason) || '<span class="muted">—</span>'}</td><td class="mono">${a.ip}</td></tr>`).join("")}
+  </tbody></table></div>`;
+}
+
+/* ───────── pricing helpers ───────── */
+const marginTone = (m) => (m < 30 ? "bad" : m <= 60 ? "warn" : "ok");
+function spark(data, w = 84, hh = 26) {
+  const v = data.map((d) => d.usd), mn = Math.min(...v), mx = Math.max(...v), rg = mx - mn || 1;
+  const x = (i) => 2 + (i * (w - 4)) / (v.length - 1), y = (a) => hh - 3 - ((a - mn) / rg) * (hh - 6);
+  const col = v[v.length - 1] > v[0] * 1.05 ? "var(--danger)" : v[v.length - 1] < v[0] * 0.95 ? "var(--ok)" : "var(--muted-fg)";
+  return `<svg class="spark" width="${w}" height="${hh}" viewBox="0 0 ${w} ${hh}" role="img" aria-label="30 kunlik tannarx trendi"><polyline points="${v.map((a, i) => `${x(i).toFixed(1)},${y(a).toFixed(1)}`).join(" ")}" fill="none" stroke="${col}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${x(v.length - 1).toFixed(1)}" cy="${y(v[v.length - 1]).toFixed(1)}" r="2.2" fill="${col}"/></svg>`;
+}
+function recChip(p, c) {
+  const rec = recPercent(p, c), diff = rec - p.pct, low = doneJobs(p) < 20;
+  const tip = `Tavsiya: ${rec}% (ustama ${c.markup.toFixed(1)}× → ${PRICING_CFG.targetMarkup.toFixed(1)}×) · tanlama: ${doneJobs(p)} ta tayyor ish`;
+  const chip = Math.abs(diff) <= 5 ? '<span class="pill ok">Mos</span>' : diff > 0 ? `<span class="pill ${c.margin < 30 ? "bad" : "warn"}">+${diff}% tavsiya</span>` : `<span class="pill info">−${-diff}% tavsiya</span>`;
+  return `<span title="${h(tip)}">${chip}${low ? ' <span class="pill">kam ishonch</span>' : ""}</span>`;
+}
+const signed = (n) => (n > 0 ? "+" : n < 0 ? "−" : "") + fmt(Math.abs(n));
+function ladderCompare(p, pct, rt) {
+  const cur = priceCalc(p), nw = priceCalc(p, pct, rt);
+  return `<table><thead><tr><th>Daraja</th><th class="num">Hozir</th><th class="num">Yangi</th><th class="num">Farq</th></tr></thead><tbody>
+    ${p.ladder.map((l, i) => `<tr><td>${h(l.label)}</td><td class="num">${fmt(cur.eff[i])}</td><td class="num"><b>${fmt(nw.eff[i])}</b></td><td class="num ${nw.eff[i] > cur.eff[i] ? "up" : nw.eff[i] < cur.eff[i] ? "down" : "muted"}">${nw.eff[i] === cur.eff[i] ? "—" : signed(nw.eff[i] - cur.eff[i])}</td></tr>`).join("")}</tbody></table>`;
+}
+function simOut(p, pct, rt = p.round) {
+  const cur = priceCalc(p), nw = priceCalc(p, pct, rt), n = doneJobs(p);
+  const revC = n * cur.price, revN = n * nw.price, cost = n * cur.full;
+  return `<div class="tw">${ladderCompare(p, pct, rt)}</div>
+    <div class="wallets">
+      <div class="wallet"><span class="eyebrow">Tushum · 30 kun</span><div class="v num">${fmt(revN)}</div><div class="muted num" style="font-size:12px">hozir ${fmt(revC)}</div></div>
+      <div class="wallet"><span class="eyebrow">Xarajat · 30 kun</span><div class="v num">${fmt(Math.round(cost))}</div><div class="muted num" style="font-size:12px">o'zgarmaydi</div></div>
+      <div class="wallet"><span class="eyebrow">Marja</span><div class="v num"><span class="pill ${marginTone(nw.margin)}" style="font-size:15px">${nw.margin.toFixed(1)}%</span></div><div class="muted num" style="font-size:12px">hozir ${cur.margin.toFixed(1)}%</div></div>
+    </div>`;
+}
+function pricingDrawer(d) {
+  const p = PRICING_BY[d.id]; if (!p) return "";
+  const c = priceCalc(p), fx = fxRate(), canEdit = can("pricing.edit");
+  const trend = trendOf(p), avg30 = trend.slice(-30).reduce((a, x) => a + x.v, 0) / 30;
+  return `<aside class="drawer" role="dialog" aria-label="Narx tafsilotlari"><div class="dh"><div style="flex:1"><span class="eyebrow">Narx · birlik: ${h(p.unit)}</span><h2>${h(TOOL[p.id])}</h2></div><button class="btn sm" data-close>Yopish</button></div>
+    <div class="db">
+      <dl class="kv"><dt>Joriy tuzatish</dt><dd>${p.pct === 100 ? '<span class="pill">100%</span>' : `<span class="pill pri">${p.pct}%</span>`} <span class="muted">· yaxlitlash ${p.round}</span></dd>
+        <dt>O'rtacha narx</dt><dd class="num">${fmt(c.price)} so'm / ish</dd><dt>To'liq tannarx</dt><dd class="num">${fmt(Math.round(c.full))} so'm / ish · ${fmt(Math.round(c.perUnit))} so'm / ${h(p.unit)}</dd>
+        <dt>Ustama · marja</dt><dd><span class="num">${c.markup.toFixed(1)}×</span> <span class="pill ${marginTone(c.margin)}">${c.margin.toFixed(0)}%</span></dd>
+        <dt>Tavsiya</dt><dd>${recChip(p, c)}</dd><dt>Ishlar (30 kun)</dt><dd class="num">${fmt(p.jobs)} · xato ${p.fail.toFixed(1)}% · qamrov ${p.cover}%</dd></dl>
+      <div class="card"><div class="ch"><h2 class="grow">Narx pog'onalari</h2></div><div class="tw"><table><thead><tr><th>Daraja</th><th class="num">Asosiy narx</th><th class="num">Amaldagi narx</th></tr></thead><tbody>
+        ${p.ladder.map((l, i) => `<tr><td>${h(l.label)}</td><td class="num">${fmt(l.base)}</td><td class="num">${c.eff[i] === l.base ? fmt(c.eff[i]) : `<b>${fmt(c.eff[i])}</b>`}</td></tr>`).join("")}</tbody></table></div></div>
+      <div class="card"><div class="ch"><h2 class="grow">Tannarx trendi · 90 kun</h2><span class="muted num" style="font-size:12px">so'm / ish · oxirgi 30 kun o'rtachasi ${fmt(Math.round(avg30))}</span></div><div class="cb">${lineChart(trend, "v", { color: "var(--c4)", fmtY: (v) => (v >= 10000 ? Math.round(v / 1000) + "k" : fmt(Math.round(v))) })}</div></div>
+      <div class="card"><div class="ch"><h2 class="grow">Simulyator</h2><span class="muted" style="font-size:12px">saqlanmaydi</span></div><div class="cb" style="display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;gap:10px;align-items:center"><input type="range" class="range" id="sim-range" min="25" max="300" step="1" value="${Math.min(300, d.sim)}" aria-label="Tuzatish foizi (slayder)" style="flex:1;min-width:0"><input class="input num" id="sim-num" type="number" min="25" max="1000" step="1" value="${d.sim}" aria-label="Tuzatish foizi" style="width:84px"><span>%</span></div>
+        <div id="sim-out" style="display:flex;flex-direction:column;gap:12px">${simOut(p, d.sim)}</div>
+        <div class="muted" style="font-size:12px">Hajm o'zgarmaydi deb hisoblanadi (talab elastikligi hisobga olinmaydi). Yaxlitlash: ${p.round} so'm. Qoida: 100% → asosiy narx; aks holda max(${p.round}, round(asosiy × % ÷ 100 ÷ ${p.round}) × ${p.round}).</div></div></div>
+      <div class="card"><div class="ch"><h2 class="grow">O'zgarishlar tarixi</h2></div><div class="cb">${p.history.length ? `<div class="timeline">${p.history.map((e) => `<div class="t"><i></i><span><b class="num">${e.old}% → ${e.nw}%</b> · ${h(e.admin)}<div class="muted" style="font-size:12px">${h(e.reason)}</div></span><span class="muted num">${dt(e.at).slice(0, 10)}</span></div>`).join("")}</div>` : '<span class="muted">Hali o\'zgartirilmagan — 100% (kod formulasi).</span>'}</div></div>
+      ${canEdit ? `<div class="actions"><button class="btn primary" data-pact="edit">Narxni o'zgartirish <span class="pill warn" style="padding:0 6px">2FA</span></button><button class="btn" data-pact="reset" ${p.pct === 100 && p.round === 500 ? "disabled" : ""}>100% ga qaytarish</button></div>` : `<div class="note">Faqat ko'rish rejimi: narxni o'zgartirish uchun <span class="mono">pricing.edit</span> kerak.</div>`}
+    </div></aside>`;
+}
+function pricingWho() { return S.role === "owner" ? ADMIN_ME : "Siz (" + S.role + ")"; }
+function priceEditDialog(p) {
+  if (!can("pricing.edit")) return;
+  modal({
+    title: "Narxni o'zgartirish — " + TOOL[p.id], sub: `Hozir ${p.pct}% · yaxlitlash ${p.round}. O'zgarish faqat yangi buyurtmalarga ta'sir qiladi; navbatdagi ishlar eski narxda qoladi.`,
+    body: `<div class="grid g2" style="gap:10px"><label class="field"><span>Tuzatish, % <span class="hint">· 25–1000</span></span><input class="input num" id="pe-pct" type="number" min="25" max="1000" step="1" value="${p.pct}"></label>
+      <label class="field"><span>Yaxlitlash</span><select class="input" id="pe-rt">${[100, 500, 1000].map((r) => `<option value="${r}" ${p.round === r ? "selected" : ""}>${r} so'm</option>`).join("")}</select></label></div>
+      <div class="tw" id="pe-prev"></div><div class="ba" id="pe-m"></div>
+      <label class="field" id="pe-conf-wrap" hidden><span>Katta o'zgarish (&gt; 50 p.p.): tasdiqlash uchun yangi foizni qayta yozing</span><input class="input num" id="pe-conf" inputmode="numeric" autocomplete="off"></label>
+      ${reasonField()}`,
+    confirm: "Qo'llash",
+    validate: (m) => {
+      const v = Number(m.querySelector("#pe-pct").value), rt = Number(m.querySelector("#pe-rt").value);
+      if (!Number.isInteger(v) || v < 25 || v > 1000) return "Foiz 25 dan 1000 gacha butun son bo'lsin";
+      if (v === p.pct && rt === p.round) return "Hech narsa o'zgarmadi";
+      if (Math.abs(v - p.pct) > 50 && m.querySelector("#pe-conf").value.trim() !== String(v)) return "Katta o'zgarish: tasdiqlash maydoniga yangi foizni aynan yozing";
+      return reasonOk(m);
+    },
+    onConfirm: (m) => {
+      const v = Number(m.querySelector("#pe-pct").value), rt = Number(m.querySelector("#pe-rt").value), reason = m.querySelector("#m-reason").value;
+      const old = p.pct, oldRt = p.round;
+      p.pct = v; p.round = rt; p.history.unshift({ at: new Date(), admin: pricingWho(), old, nw: v, reason });
+      writeAudit("pricing.update", "tool " + p.id, reason, { percent: old, roundTo: oldRt }, { percent: v, roundTo: rt });
+      toast(`${TOOL[p.id]}: ${old}% → ${v}%. Yangi buyurtmalarga ~15 soniyada qo'llanadi.`);
+      if (S.drawer && S.drawer.type === "pricing") S.drawer.sim = v;
+      render();
+    },
+  });
+  const upd = () => {
+    const m = modalEl; if (!m) return;
+    const raw = Number(m.querySelector("#pe-pct").value), v = Math.min(1000, Math.max(25, Math.round(raw) || p.pct)), rt = Number(m.querySelector("#pe-rt").value);
+    const cur = priceCalc(p), nw = priceCalc(p, v, rt), big = Math.abs(v - p.pct) > 50;
+    m.querySelector("#pe-prev").innerHTML = ladderCompare(p, v, rt);
+    m.querySelector("#pe-m").innerHTML = `Marja <b class="num">${cur.margin.toFixed(1)}%</b> → <b class="num">${nw.margin.toFixed(1)}%</b> <span class="pill ${marginTone(nw.margin)}">${nw.markup.toFixed(1)}×</span>`;
+    m.querySelector("#pe-conf-wrap").hidden = !big;
+  };
+  ["#pe-pct", "#pe-rt"].forEach((s) => { modalEl.querySelector(s).addEventListener("input", upd); modalEl.querySelector(s).addEventListener("change", upd); });
+  upd();
+}
+function priceResetDialog(p) {
+  if (!can("pricing.edit")) return;
+  modal({ title: "100% ga qaytarish — " + TOOL[p.id], sub: `Tuzatish ${p.pct}% dan 100% ga (kod formulasi) qaytariladi, yaxlitlash 500 ga.`, confirm: "Qaytarish", danger: true,
+    body: `<div class="tw">${ladderCompare(p, 100, 500)}</div>${reasonField()}`, validate: reasonOk,
+    onConfirm: (m) => {
+      const reason = m.querySelector("#m-reason").value, old = p.pct;
+      p.pct = 100; p.round = 500; p.history.unshift({ at: new Date(), admin: pricingWho(), old, nw: 100, reason });
+      writeAudit("pricing.reset", "tool " + p.id, reason, { percent: old }, { percent: 100 });
+      toast(`${TOOL[p.id]}: 100% ga qaytarildi`); if (S.drawer && S.drawer.type === "pricing") S.drawer.sim = 100; render();
+    } });
+}
+
+/* ───────── drawers ───────── */
+function drawerHtml() {
+  const d = S.drawer; if (!d) return "";
+  if (d.type === "audit") {
+    const a = audit.find((x) => x.id === d.id);
+    return `<aside class="drawer" role="dialog" aria-label="Audit yozuvi"><div class="dh"><div style="flex:1"><span class="eyebrow">Audit #${a.id}</span><h2 class="mono">${a.action}</h2></div><button class="btn sm" data-close>Yopish</button></div>
+      <div class="db"><dl class="kv"><dt>Vaqt</dt><dd>${dt(a.at)}</dd><dt>Admin</dt><dd>${h(a.admin)} (${a.role})</dd><dt>Obyekt</dt><dd class="mono">${h(a.target)}</dd><dt>Natija</dt><dd>${a.outcome}</dd><dt>Sabab</dt><dd>${h(a.reason) || "—"}</dd><dt>IP</dt><dd class="mono">${a.ip}</dd><dt>So'rov ID</dt><dd class="mono">req-${a.id}a7f2</dd></dl>
+      ${a.before || a.after ? `<div class="diff"><div><span class="eyebrow">Oldin</span><pre class="json">${h(JSON.stringify(a.before ?? {}, null, 2))}</pre></div><div><span class="eyebrow">Keyin</span><pre class="json">${h(JSON.stringify(a.after ?? {}, null, 2))}</pre></div></div>` : `<div class="muted">O'zgarish yo'q (kirish yoki rad etilgan urinish).</div>`}</div></aside>`;
+  }
+  if (d.type === "link") {
+    const l = links.find((x) => x.id === d.id);
+    const res = Array.from({ length: Math.min(6, l.results) }, (_, i) => ({ id: i, name: ["Aziz","Malika","8-B sinf","Javohir","???????","Nilufar"][i], score: 6 + i, total: 10 }));
+    return `<aside class="drawer" role="dialog" aria-label="O'yin havolasi"><div class="dh"><div style="flex:1"><span class="eyebrow">${l.kind} · /o/${short(l.id)}…</span><h2>${h(l.topic)}</h2></div><button class="btn sm" data-close>Yopish</button></div>
+      <div class="db"><dl class="kv"><dt>Egasi</dt><dd>${h(l.user.name)}</dd><dt>Yaratilgan</dt><dd>${dt(l.created)}</dd><dt>Tugaydi</dt><dd>${dt(l.expires)}</dd><dt>Holat</dt><dd>${l.active ? "Faol" : "O'chirilgan"}</dd></dl>
+      ${can("moderation.act") && l.active ? `<button class="btn danger" data-act="revoke" data-id="${l.id}">Havolani o'chirish</button>` : ""}
+      <h3>Natijalar (${l.results})</h3><div class="card"><div class="tw"><table><thead><tr><th>Ism</th><th class="num">Ball</th><th></th></tr></thead><tbody>
+      ${res.map((r) => `<tr><td>${h(r.name)}</td><td class="num">${r.score}/${r.total}</td><td>${can("moderation.act") ? `<button class="btn sm danger" data-act="delres" data-name="${h(r.name)}">O'chirish</button>` : ""}</td></tr>`).join("") || '<tr><td colspan="3" class="muted">Natija yo\'q</td></tr>'}
+      </tbody></table></div></div></div></aside>`;
+  }
+  if (d.type === "pricing") return pricingDrawer(d);
+  return "";
+}
+
+/* ───────── render ───────── */
+function render() {
+  const root = document.getElementById("root");
+  if (!S.authed) {
+    root.innerHTML = `<div class="login"><div class="card"><div class="brand" style="padding:0"><div class="mark">S</div><div><b>SlaydX Admin</b><small>Ikki bosqichli kirish</small></div></div>
+      <div class="note">1-qadam bajarilgan: siz Telegram orqali <b>Adhambek X.</b> sifatida kirgansiz.</div>
+      <label class="field"><span>2-qadam: authenticator kodi</span><input class="input otp" id="otp" inputmode="numeric" maxlength="6" autocomplete="one-time-code" placeholder="000000" aria-label="Authenticator kodi"></label>
+      <div class="err" id="lerr" hidden>Kod noto'g'ri</div>
+      <button class="btn primary" id="login" style="height:40px;justify-content:center">Kirish</button>
+      <button class="btn ghost" style="justify-content:center">Tiklash kodi bilan kirish</button>
+      <div class="muted" style="font-size:12px;text-align:center">Demo: istalgan 6 raqam. 5 marta xato → 15 daqiqa bloklanadi; har bir kirish haqida Telegram'ga xabar keladi.</div></div></div>`;
+    const go2 = () => { const v = document.getElementById("otp").value; if (!/^\d{6}$/.test(v)) { document.getElementById("lerr").hidden = false; return; } S.authed = true; S.reauthAt = Date.now() - 11 * 60000; writeAudit("auth.login", "—", ""); render(); toast("Xush kelibsiz! Admin sessiyasi 12 soat amal qiladi."); };
+    document.getElementById("login").onclick = go2;
+    document.getElementById("otp").addEventListener("keydown", (e) => e.key === "Enter" && go2());
+    document.getElementById("otp").focus();
+    return;
+  }
+  const perm = SCREEN_PERM[S.screen];
+  const body = perm && !can(perm) ? forbidden() : SCREENS[S.screen]();
+  const navActive = { user: "users", generation: "generations", order: "payments" }[S.screen] || S.screen;
+  root.innerHTML = `<div class="app">
+    <aside class="side ${S.sideOpen ? "open" : ""}"><div class="brand"><div class="mark">S</div><div><b>SlaydX</b><small>Admin panel</small></div></div>
+      <nav class="nav" aria-label="Bo'limlar">${NAV.map(([g, items]) => { const vis = items.filter(([, , , p]) => !p || can(p)); return vis.length ? (g ? `<div class="grp eyebrow">${g}</div>` : `<div class="grp"></div>`) + vis.map(([k, l, ic]) => `<button class="${navActive === k ? "on" : ""}" data-go="${k}">${icon(ic)}<span>${l}</span>${k === "errors" ? '<span class="pill bad badge">3</span>' : k === "moderation" ? '<span class="pill warn badge">1</span>' : ""}</button>`).join("") : ""; }).join("")}</nav>
+      <div class="side-foot"><b>Adhambek X.</b><div class="muted">${h(ROLES[S.role].label)} · sessiya 11:42 qoldi</div></div></aside>
+    <div class="main"><div class="top"><button class="btn menu" data-menu aria-label="Menyu">☰</button><span class="demo">Prototip · namuna ma'lumotlar</span><span class="spacer"></span>
+      <label class="rolepick"><span class="muted">Rolni sinash:</span><select class="input" id="role" aria-label="Rolni tanlash">${Object.entries(ROLES).map(([k, r]) => `<option value="${k}" ${S.role === k ? "selected" : ""}>${r.label}</option>`).join("")}</select></label></div>
+      <div class="content"><div class="page">${body}</div></div></div></div>${drawerHtml()}`;
+}
+
+/* ───────── events (delegated) ───────── */
+document.addEventListener("click", (e) => {
+  const t = e.target.closest("button, tr.click, input[type=checkbox]");
+  if (!t || !document.getElementById("root").contains(t) && !t.closest(".drawer")) return;
+  const d = t.dataset;
+  if (d.menu !== undefined) { S.sideOpen = !S.sideOpen; render(); return; }
+  if (d.go) return go(d.go);
+  if (d.range) { S.range = d.range; return render(); }
+  if (d.uf) { S.userFilter = d.uf; return render(); }
+  if (d.clear !== undefined) { S.userQ = ""; S.userFilter = "all"; return render(); }
+  if (d.gs) { S.genStatus = d.gs; return render(); }
+  if (d.os) { S.orderState = d.os; return render(); }
+  if (d.tab) { S.tab = d.tab; return render(); }
+  if (d.user) return go("user", Number(d.user));
+  if (d.gen) return go("generation", d.gen);
+  if (d.order) return go("order", d.order);
+  if (d.link) { S.drawer = { type: "link", id: d.link }; return render(); }
+  if (d.price) { const p = PRICING_BY[d.price]; if (!p) return; S.drawer = { type: "pricing", id: p.id, sim: p.pct }; return render(); }
+  if (d.pact) { const p = S.drawer && S.drawer.type === "pricing" && PRICING_BY[S.drawer.id]; if (!p || !can("pricing.edit")) return; return withStepUp("pricing.edit", () => (d.pact === "reset" ? priceResetDialog(p) : priceEditDialog(p))); }
+  if (d.audit) { S.drawer = { type: "audit", id: Number(d.audit) }; return render(); }
+  if (d.close !== undefined) { S.drawer = null; return render(); }
+  if (d.esel) { const id = Number(d.esel); S.errSel.has(id) ? S.errSel.delete(id) : S.errSel.add(id); return render(); }
+  if (d.export) return withStepUp(d.export, () => { writeAudit("export." + d.what, "CSV", "", null, { rows: "≤100 000", filters: "joriy" }); toast(`CSV eksport tayyorlanmoqda: ${d.what}. Amal audit jurnaliga yozildi.`); });
+  if (d.set) return editSetting(d.set);
+  if (d.reset) { const s = settings.find((x) => x.key === d.reset); const before = s.value; s.value = Array.isArray(s.env) ? [...s.env] : s.env; s.source = s.key.startsWith("free_llm") || s.key.startsWith("finance") ? "env" : "default"; writeAudit("settings.reset", s.key, "Standartga qaytarildi", { value: before }, { value: s.value }); toast("Standart qiymat tiklandi"); return render(); }
+  if (d.bcsend) return sendBroadcast(Number(d.bcsend));
+  if (d.adm) return manageAdmin(Number(d.adm));
+  if (d.job) return jobAction(d.job);
+  if (d.act) return act(d.act, t);
+});
+document.addEventListener("input", (e) => {
+  if (e.target.id === "uq") { S.userQ = e.target.value; const pos = e.target.selectionStart; render(); const el = document.getElementById("uq"); el.focus(); el.setSelectionRange(pos, pos); }
+});
+document.addEventListener("change", (e) => { if (e.target.id === "role") { S.role = e.target.value; S.drawer = null; render(); toast(`Endi siz «${ROLES[S.role].label}» rolidasiz — menyu va tugmalar shunga moslashdi`); } });
+document.addEventListener("change", (e) => {
+  if (e.target.id !== "psort") return;
+  S.priceSort = e.target.value; const top = document.querySelector(".content")?.scrollTop || 0; render();
+  const c = document.querySelector(".content"); if (c) c.scrollTop = top; document.getElementById("psort")?.focus();
+});
+document.addEventListener("input", (e) => {
+  const id = e.target.id; if (id !== "sim-range" && id !== "sim-num") return;
+  const dr = S.drawer, p = dr && dr.type === "pricing" && PRICING_BY[dr.id]; if (!p || e.target.value === "") return;
+  const raw = Number(e.target.value); if (!Number.isFinite(raw)) return;
+  const v = Math.min(1000, Math.max(25, Math.round(raw))); dr.sim = v;
+  if (id === "sim-range") document.getElementById("sim-num").value = v; else document.getElementById("sim-range").value = Math.min(300, v);
+  document.getElementById("sim-out").innerHTML = simOut(p, v);
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && S.drawer && !modalEl) { S.drawer = null; render(); } });
+
+/* ───────── actions ───────── */
+function act(a, t) {
+  const u = users.find((x) => x.id === S.id);
+  if (a === "reveal") { S.revealed.add(u.id); writeAudit("users.pii.view", "user " + u.id, "", null, { field: "phone" }); toast("Telefon ko'rsatildi — audit jurnaliga yozildi"); return render(); }
+  if (a === "reveal-input") { S.revealed.add(S.id); writeAudit("jobs.input.view", "generation " + short(S.id), "", null, { field: "values_json" }); toast("Kiritilgan ma'lumot ko'rsatildi — audit jurnaliga yozildi"); return render(); }
+  if (a === "logout") { S.authed = false; return render(); }
+  if (a === "wallet") return withStepUp("users.wallet", () => walletDialog(u));
+  if (a === "block") return blockDialog(u);
+  if (a === "sessions") return modal({ title: "Sessiyalarni bekor qilish", sub: `${h(u.name)} barcha qurilmalardan chiqariladi (2 ta faol sessiya).`, body: reasonField(), confirm: "Bekor qilish", danger: true, validate: reasonOk,
+    onConfirm: (m) => { writeAudit("users.sessions.revoke", "user " + u.id, m.querySelector("#m-reason").value, { active: 2 }, { active: 0 }); toast("2 ta sessiya bekor qilindi"); } });
+  if (a === "message") return modal({ title: "Telegram orqali xabar", sub: `${h(u.name)} ga bot nomidan yuboriladi. HTML belgilar xavfsiz holatga keltiriladi.`, body: `<label class="field"><span>Xabar</span><textarea class="input" id="m-msg" rows="4" maxlength="2000"></textarea></label>`, confirm: "Yuborish",
+    validate: (m) => (m.querySelector("#m-msg").value.trim() ? null : "Xabar matnini yozing"), onConfirm: () => { writeAudit("users.message", "user " + u.id, ""); toast("Xabar yuborildi"); } });
+  if (a === "extrefund") return withStepUp("payments.refund_record", () => extRefundDialog(orders.find((o) => o.id === S.id)));
+  if (a === "revoke") { const l = links.find((x) => x.id === t.dataset.id); return modal({ title: "Havolani o'chirish", sub: `«${h(l.topic)}» — ommaviy havola darhol ishlamay qoladi. Natijalar saqlanadi.`, body: reasonField(), confirm: "O'chirish", danger: true, validate: reasonOk,
+    onConfirm: (m) => { l.active = false; writeAudit("moderation.revoke_link", "game_session " + short(l.id), m.querySelector("#m-reason").value, { active: true }, { active: false }); toast("Havola o'chirildi"); render(); } }); }
+  if (a === "delres") return modal({ title: "Natijani o'chirish", sub: `«${h(t.dataset.name)}» ismli natija butunlay o'chiriladi.`, body: reasonField(), confirm: "O'chirish", danger: true, validate: reasonOk,
+    onConfirm: (m) => { writeAudit("moderation.delete_result", "game_result", m.querySelector("#m-reason").value, { player_name: t.dataset.name }, null); toast("Natija o'chirildi"); } });
+  if (a === "resolve") { const n = S.errSel.size; errors.forEach((e) => S.errSel.has(e.id) && (e.resolved = true)); S.errSel.clear(); writeAudit("errors.resolve", n + " ta xato", ""); toast(`${n} ta xato hal qilindi deb belgilandi`); return render(); }
+  if (a === "newbc") return withStepUp("broadcasts.send", newBroadcast);
+  if (a === "newadmin") return withStepUp("admins.manage", newAdmin);
+}
+
+function walletDialog(u) {
+  const thr = settings.find((s) => s.key === "admin.wallet_confirm_threshold").value;
+  modal({
+    title: "Hamyonni tuzatish", sub: `${h(u.name)} · #${u.id}. Foydalanuvchi tarixida «Ma'muriy tuzatish» deb ko'rinadi; sabab va ismingiz faqat audit jurnalida.`,
+    body: `<div class="grid g2" style="gap:10px"><label class="field"><span>Hamyon</span><select class="input" id="m-w"><option value="balance">Balans (${fmt(u.balance)})</option><option value="points">Ball (${fmt(u.points)})</option><option value="quota">Kvota (${fmt(u.quota)})</option></select></label>
+      <label class="field"><span>Amal</span><select class="input" id="m-sign"><option value="1">+ Qo'shish</option><option value="-1">− Yechish</option></select></label></div>
+      <label class="field"><span>Miqdor (tanga)</span><input class="input num" id="m-amt" inputmode="numeric" placeholder="masalan 6000"></label>
+      <div class="ba" id="m-ba">Oldin <b class="num" id="m-b">${fmt(u.balance)}</b> → keyin <b class="num" id="m-a">${fmt(u.balance)}</b></div>
+      <label class="field"><span>Sabab turi</span><select class="input" id="m-code"><option value="compensation">Kompensatsiya</option><option value="promo">Aksiya / bonus</option><option value="correction">Xatoni tuzatish</option><option value="manual_refund">Qo'lda qaytarish</option><option value="test">Sinov</option><option value="other">Boshqa</option></select></label>
+      ${reasonField("Izoh")}
+      <label class="field" id="m-conf-wrap" hidden><span>Katta summa: tasdiqlash uchun miqdorni qayta yozing</span><input class="input num" id="m-conf"></label>`,
+    confirm: "Qo'llash",
+    validate: (m) => {
+      const amt = Number(m.querySelector("#m-amt").value.replace(/\D/g, "")); const w = m.querySelector("#m-w").value; const sign = Number(m.querySelector("#m-sign").value);
+      if (!amt) return "Musbat butun son kiriting";
+      if (sign < 0 && amt > u[w]) return `Yetarli emas. Mavjud: ${fmt(u[w])}`;
+      if (amt >= thr && m.querySelector("#m-conf").value.replace(/\D/g, "") !== String(amt)) return "Miqdorni tasdiqlash maydoniga aynan qayta yozing";
+      return reasonOk(m);
+    },
+    onConfirm: (m) => {
+      const amt = Number(m.querySelector("#m-amt").value.replace(/\D/g, "")); const w = m.querySelector("#m-w").value; const sign = Number(m.querySelector("#m-sign").value);
+      const before = u[w]; u[w] += sign * amt;
+      writeAudit("users.wallet.adjust", "user " + u.id, m.querySelector("#m-code").value + ": " + m.querySelector("#m-reason").value, { [w]: before }, { [w]: u[w] });
+      toast(`${w}: ${fmt(before)} → ${fmt(u[w])}. Idempotency-Key bilan bir marta yozildi.`); render();
+    },
+  });
+  const upd = () => {
+    const w = modalEl.querySelector("#m-w").value, amt = Number(modalEl.querySelector("#m-amt").value.replace(/\D/g, "")) || 0, sign = Number(modalEl.querySelector("#m-sign").value);
+    modalEl.querySelector("#m-b").textContent = fmt(u[w]); modalEl.querySelector("#m-a").textContent = fmt(u[w] + sign * amt);
+    modalEl.querySelector("#m-conf-wrap").hidden = amt < thr;
+  };
+  ["#m-w", "#m-amt", "#m-sign"].forEach((s) => modalEl.querySelector(s).addEventListener("input", upd));
+}
+function blockDialog(u) {
+  if (u.blocked) return modal({ title: "Blokdan chiqarish", sub: `${h(u.name)} yana tizimga kira oladi.`, body: reasonField(), confirm: "Blokdan chiqarish", validate: reasonOk,
+    onConfirm: (m) => { u.blocked = false; writeAudit("users.unblock", "user " + u.id, m.querySelector("#m-reason").value, { is_blocked: true }, { is_blocked: false }); toast("Blokdan chiqarildi"); render(); } });
+  modal({
+    title: "Foydalanuvchini bloklash", sub: `${h(u.name)} keyingi so'rovdanoq tizimdan chiqariladi.`, danger: true, confirm: "Bloklash",
+    body: `<label class="check"><input type="checkbox" id="m-s" checked> Barcha sessiyalarni bekor qilish</label>
+      <label class="check"><input type="checkbox" id="m-q"> Navbatdagi ishlarni bekor qilish va pulini qaytarish (1 ta)</label>
+      <label class="check"><input type="checkbox" id="m-l"> Ommaviy o'yin havolalarini o'chirish (2 ta)</label>${reasonField()}`,
+    validate: reasonOk,
+    onConfirm: (m) => { u.blocked = true; writeAudit("users.block", "user " + u.id, m.querySelector("#m-reason").value, { is_blocked: false }, { is_blocked: true, sessions_revoked: m.querySelector("#m-s").checked, jobs_cancelled: m.querySelector("#m-q").checked ? 1 : 0, links_revoked: m.querySelector("#m-l").checked ? 2 : 0 }); toast("Bloklandi"); render(); },
+  });
+}
+function jobAction(kind) {
+  const g = gens.find((x) => x.id === S.id);
+  const cfg = {
+    cancel: ["Ishni bekor qilish", "Navbatdagi ish REVOKED bo'ladi va yechilgan pul shu tranzaksiyada qaytariladi.", "REVOKED", "jobs.cancel"],
+    fail: ["Ishni to'xtatish", "Ish FAILED bo'ladi va pul qaytariladi. Worker keyinroq natija yozmoqchi bo'lsa, qulf tekshiruvi uni rad etadi.", "FAILED", "jobs.fail"],
+    refund: ["Pulni qaytarish", `${money(g.price, "tanga")} ${g.wallet} hamyoniga qaytariladi. Takroriy bosish ikkinchi marta qaytarmaydi.`, g.status, "jobs.refund"],
+  }[kind];
+  modal({ title: cfg[0], sub: cfg[1], danger: kind !== "refund", confirm: cfg[0], body: reasonField(), validate: reasonOk,
+    onConfirm: (m) => { const before = { status: g.status, refunded: g.refunded }; g.status = cfg[2]; g.refunded = true; g.stuck = false; writeAudit(cfg[3], "generation " + short(g.id), m.querySelector("#m-reason").value, before, { status: g.status, refunded: true }); toast(`${cfg[0]}: bajarildi`); render(); } });
+}
+function extRefundDialog(o) {
+  modal({ title: "Tashqi qaytarishni qayd etish", sub: "Pul provayder kabinetida qaytarilgan bo'lsa, shu yerda qayd eting. Provayderga hech narsa yuborilmaydi.", danger: true, confirm: "Qayd etish",
+    body: `<label class="field"><span>Turi</span><select class="input" id="m-k"><option>refund — qaytarish</option><option>chargeback — bank orqali qaytarib olingan</option></select></label>
+      <label class="field"><span>Summa (so'm, ≤ ${fmt(o.amount)})</span><input class="input num" id="m-amt" value="${o.amount}"></label>
+      <label class="check"><input type="checkbox" id="m-claw" checked> Hamyondan yechib olish (${o.purpose === "pro" ? "kvota" : "balans"}): foydalanuvchida ${fmt(o.user.balance)} bor</label>
+      <div class="note warn" id="m-short">Hamyon manfiy bo'lmaydi: ${fmt(Math.min(o.amount, o.user.balance))} yechiladi, yetishmovchilik ${fmt(Math.max(0, o.amount - o.user.balance))} sifatida qayd etiladi.</div>${reasonField()}`,
+    validate: (m) => { const a = Number(m.querySelector("#m-amt").value.replace(/\D/g, "")); if (!a || a > o.amount) return "Summa 1 va buyurtma summasi oralig'ida bo'lsin"; return reasonOk(m); },
+    onConfirm: (m) => { o.refunds = 1; writeAudit("payments.refund_record", "order " + short(o.id), m.querySelector("#m-reason").value, { refunds: 0 }, { refunds: 1, clawback: Math.min(o.amount, o.user.balance) }); toast("Qayd etildi"); render(); } });
+}
+function editSetting(key) {
+  const s = settings.find((x) => x.key === key);
+  withStepUp("settings.edit", () => {
+    const input = s.type === "bool" ? `<label class="check"><input type="checkbox" id="m-v" ${s.value ? "checked" : ""}> ${s.label}</label>`
+      : s.type === "tools" ? `<div class="field"><span>Pauza qilinadigan vositalar</span><div style="display:flex;flex-wrap:wrap;gap:8px">${TOOLS.map(([id, t]) => `<label class="check"><input type="checkbox" data-tool="${id}" ${s.value.includes(id) ? "checked" : ""}> ${t}</label>`).join("")}</div></div>`
+      : `<label class="field"><span>${s.label}</span><input class="input num" id="m-v" value="${s.value}"></label>`;
+    modal({ title: "Sozlamani o'zgartirish", sub: `<span class="mono">${s.key}</span> · hozir ${s.source === "env" ? "env qiymati" : s.source === "db" ? "admin qiymati" : "standart"}.`, body: input + reasonField(), confirm: "Saqlash",
+      validate: (m) => (s.type === "int" && !/^\d+$/.test(m.querySelector("#m-v").value) ? "Butun son kiriting" : reasonOk(m)),
+      onConfirm: (m) => { const before = s.value; s.value = s.type === "bool" ? m.querySelector("#m-v").checked : s.type === "tools" ? [...m.querySelectorAll("[data-tool]:checked")].map((x) => x.dataset.tool) : Number(m.querySelector("#m-v").value); s.source = "db";
+        writeAudit("settings.update", s.key, m.querySelector("#m-reason").value, { value: before }, { value: s.value }); toast("Saqlandi. Barcha jarayonlarga 15 soniyada yetadi."); render(); } });
+  });
+}
+function newBroadcast() {
+  modal({ title: "Yangi e'lon", sub: "Avval qoralama sifatida saqlanadi — keyin o'zingizga sinov yuborasiz.", confirm: "Qoralamani saqlash",
+    body: `<label class="field"><span>Matn <span class="hint" id="m-cnt">· 0 / 3500</span></span><textarea class="input" id="m-t" rows="5" maxlength="3500"></textarea></label>
+      <label class="field"><span>Auditoriya</span><select class="input" id="m-aud"><option>Barchasi — 1 840 kishi</option><option>To'lov qilganlar — 412 kishi</option><option>Oxirgi 30 kunda faol — 960 kishi</option></select></label>`,
+    validate: (m) => (m.querySelector("#m-t").value.trim().length < 5 ? "Matn yozing" : null),
+    onConfirm: (m) => { broadcasts.unshift({ id: 20, status: "draft", text: m.querySelector("#m-t").value, aud: m.querySelector("#m-aud").value.split(" — ")[0], total: 0, sent: 0, failed: 0, by: "Siz", at: new Date() }); writeAudit("broadcasts.create", "broadcast 20", ""); toast("Qoralama saqlandi"); render(); } });
+  modalEl.querySelector("#m-t").addEventListener("input", (e) => (modalEl.querySelector("#m-cnt").textContent = `· ${e.target.value.length} / 3500`));
+}
+function sendBroadcast(id) {
+  const b = broadcasts.find((x) => x.id === id);
+  withStepUp("broadcasts.send", () => modal({ title: "E'lonni yuborish", sub: `«${h(b.text.slice(0, 80))}…» · auditoriya: <b>960</b> kishi. Yuborilgandan keyin bekor qilish faqat qolganlarini to'xtatadi.`, danger: true, confirm: "Yuborish",
+    body: `<button class="btn" type="button" id="m-test">O'zimga sinov yuborish</button><label class="field"><span>Tasdiqlash uchun qabul qiluvchilar sonini yozing: 960</span><input class="input num" id="m-c"></label>${reasonField()}`,
+    validate: (m) => (m.querySelector("#m-c").value.trim() !== "960" ? "Sonni aynan 960 deb yozing" : reasonOk(m)),
+    onConfirm: (m) => { b.status = "sending"; b.total = 960; b.sent = 0; writeAudit("broadcasts.send", "broadcast " + id, m.querySelector("#m-reason").value, null, { recipients: 960 }); toast("Navbatga qo'yildi — sekundiga 25 ta xabar"); render();
+      const timer = setInterval(() => { b.sent = Math.min(960, b.sent + 120); if (b.sent >= 960) { b.status = "done"; b.failed = 23; b.sent = 937; clearInterval(timer); } if (S.screen === "broadcasts" && !modalEl) render(); }, 700); } }));
+  setTimeout(() => modalEl?.querySelector("#m-test")?.addEventListener("click", () => toast("Sinov xabari Telegram'ingizga yuborildi")), 0);
+}
+function newAdmin() {
+  modal({ title: "Admin qo'shish", sub: "Foydalanuvchi avval saytga Telegram orqali kirgan bo'lishi kerak. Siz faqat o'zingizdan past rol bera olasiz.", confirm: "Qo'shish va havola yaratish",
+    body: `<label class="field"><span>Telegram ID yoki #foydalanuvchi ID</span><input class="input mono" id="m-id" placeholder="masalan 5123456789"></label>
+      <label class="field"><span>Rol</span><select class="input" id="m-r">${Object.entries(ROLES).filter(([k]) => k !== "owner" || S.role === "owner").map(([k, r]) => `<option value="${k}">${r.label}</option>`).join("")}</select></label>
+      <label class="check"><input type="checkbox" checked> Ro'yxatdan o'tish havolasini Telegram orqali yuborish</label>${reasonField()}`,
+    validate: (m) => (!/^#?\d{3,}$/.test(m.querySelector("#m-id").value.trim()) ? "Telegram ID yoki #ID kiriting" : reasonOk(m)),
+    onConfirm: (m) => { writeAudit("admins.create", "admin (" + m.querySelector("#m-r").value + ")", m.querySelector("#m-reason").value, null, { role: m.querySelector("#m-r").value, status: "pending" });
+      modal({ title: "Ro'yxatdan o'tish havolasi", sub: "Bir marta ko'rsatiladi · 30 daqiqa amal qiladi · faqat shu Telegram akkaunt ochishi mumkin.", confirm: "Tushunarli", body: `<pre class="json">https://slaydxx.uz/admin/enroll?token=q7Rk…3fXa</pre>`, onConfirm: () => {} }); } });
+}
+function manageAdmin(id) {
+  const a = admins.find((x) => x.id === id);
+  withStepUp("admins.manage", () => modal({ title: `${h(a.user.name)} — boshqarish`, sub: "O'zingizni yoki oxirgi egani o'zgartira olmaysiz.", confirm: "Saqlash",
+    body: `<label class="field"><span>Rol</span><select class="input" id="m-r">${Object.keys(ROLES).filter((k) => k !== "owner").map((k) => `<option ${a.role === k ? "selected" : ""}>${k}</option>`).join("")}</select></label>
+      <label class="check"><input type="checkbox" id="m-dis"> O'chirish (barcha sessiyalari ham bekor qilinadi)</label>
+      <label class="check"><input type="checkbox" id="m-2fa"> 2FA ni tiklash (yangi ro'yxatdan o'tish havolasi)</label>${reasonField()}`,
+    validate: reasonOk,
+    onConfirm: (m) => { const before = { role: a.role, status: a.status }; a.role = m.querySelector("#m-r").value; if (m.querySelector("#m-dis").checked) { a.status = "disabled"; a.sessions = 0; } writeAudit("admins.update", "admin " + a.id, m.querySelector("#m-reason").value, before, { role: a.role, status: a.status }); toast("Saqlandi"); render(); } }));
+}
+
+render();
+</script>

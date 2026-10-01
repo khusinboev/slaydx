@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 
 /*
@@ -104,4 +104,37 @@ test("FE-11: ajratilgan klient chegaralari server manbasi bilan bir xil (extract
   const full = await import("../lib/extract-text.ts");
   assert.equal(leaf.EXTRACT_ACCEPT, full.EXTRACT_ACCEPT);
   assert.equal(leaf.EXTRACT_MAX_BYTES, full.EXTRACT_MAX_BYTES);
+});
+
+/*
+ * ADMIN BANDLI (plan §2, A8): admin paneli kodi (`components/admin/**`,
+ * `lib/admin-api/**`) iste'molchi sahifalarning birinchi yuklanishiga
+ * tushmasligi kerak. Ilgari admin funksiyalari `lib/store.ts` → `lib/api-client.ts`
+ * orqali HAR foydalanuvchiga yetib borardi. `import()` chegarasi hisobga olinmaydi.
+ */
+function walkSources(dir: string, out: string[] = []): string[] {
+  if (!existsSync(dir)) return out;
+  for (const name of readdirSync(dir)) {
+    const p = path.join(dir, name);
+    if (statSync(p).isDirectory()) walkSources(p, out);
+    else if (/\.tsx?$/.test(name)) out.push(p);
+  }
+  return out;
+}
+
+const isAdminCode = (f: string) => f.includes("/components/admin/") || f.includes("/lib/admin-api/");
+
+test("admin bandli: iste'molchi kirish nuqtalari admin kodini statik tortmaydi", () => {
+  const entries = [
+    ...walkSources(path.join(ROOT, "app/uz")).filter((f) => f.endsWith("/page.tsx") && !f.includes("/app/uz/admin/")),
+    path.join(ROOT, "app/page.tsx"),
+    ...walkSources(path.join(ROOT, "app/o")),
+    ...walkSources(path.join(ROOT, "components/shell")),
+    path.join(ROOT, "lib/store.ts"),
+    path.join(ROOT, "lib/api-client.ts"),
+  ].filter((f) => existsSync(f));
+  assert.ok(entries.length > 8, `kirish nuqtalari topilmadi (${entries.length})`);
+  for (const entry of entries) {
+    assertUnreachable(path.relative(ROOT, entry), isAdminCode, "admin kodi (components/admin, lib/admin-api)");
+  }
 });

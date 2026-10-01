@@ -42,6 +42,16 @@ export type BreakerOpts = {
   log?: (line: string) => void;
 };
 
+/** State of one breaker as published in `process_heartbeats.breakers` (admin system page). */
+export type BreakerSnapshot = {
+  name: string;
+  state: BreakerState;
+  /** ISO time the open window ends (null when closed). */
+  openUntil: string | null;
+  /** Consecutive failures counted in the current window. */
+  failures: number;
+};
+
 /** LLM provayderlari uchun standart: 60 s ichida 5 ketma-ket timeout/5xx → 30 s ochiq. */
 export const LLM_BREAKER = { threshold: 5, windowMs: 60_000, cooldownMs: 30_000 } as const;
 
@@ -109,6 +119,16 @@ export class CircuitBreaker {
     if (this.failures >= this.threshold) this.open(now, this.cooldownMs, `${this.failures} ketma-ket xato`);
   }
 
+  /** Read-only view for the admin heartbeat; changes nothing. */
+  snapshot(): BreakerSnapshot {
+    return {
+      name: this.name,
+      state: this.state,
+      openUntil: this.openUntil === 0 ? null : new Date(this.openUntil).toISOString(),
+      failures: this.failures,
+    };
+  }
+
   /** Darhol ochish (masalan kvota 429 — `Retry-After` muddatiga). */
   trip(cooldownMs: number = this.cooldownMs, why = "kvota"): void {
     const now = this.now();
@@ -139,6 +159,11 @@ export function breakerFor(name: string, opts?: BreakerOpts): CircuitBreaker {
     REGISTRY.set(name, b);
   }
   return b;
+}
+
+/** Read-only snapshot of every breaker in this process, sorted by name. */
+export function snapshotBreakers(): BreakerSnapshot[] {
+  return [...REGISTRY.values()].map((b) => b.snapshot()).sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /** Testlar uchun: hamma saqlagichni unutadi. */

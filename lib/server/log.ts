@@ -188,6 +188,53 @@ function sanitize(v: unknown, depth: number, seen: WeakSet<object>): unknown {
 
 const ORDER = ["reqId", "jobId", "userId", "genId", "provider"] as const;
 
+// ─────────────────────────────── error sink (admin panel, docs/admin/02-plan.md §13.4)
+
+/** The final, already-redacted record of one log line (what was written to stdout). */
+export type LogRecord = Readonly<Record<string, unknown>>;
+
+/** Receives records of level "error" (and "warn" when installed with `warn: true`). */
+export type ErrorSink = (record: LogRecord) => void | Promise<void>;
+
+type SinkSlot = { fn: ErrorSink; warn: boolean };
+
+// On globalThis: Next.js bundles instrumentation and route code separately, so
+// this module can be loaded more than once in one process; every copy must see
+// the sink that `instrumentation.ts` installed.
+const sinkHost = globalThis as typeof globalThis & { __slaydxErrorSink?: SinkSlot | null };
+
+/**
+ * Installs (or, with `null`, removes) the process-wide error sink. `log()`
+ * hands it each matching record asynchronously and swallows anything it throws
+ * or rejects with, so a sink can never change what `log()` does for its caller.
+ */
+export function setErrorSink(fn: ErrorSink | null, opts: { warn?: boolean } = {}): void {
+  sinkHost.__slaydxErrorSink = fn ? { fn, warn: opts.warn === true } : null;
+}
+
+/** The installed sink, if any. */
+export function getErrorSink(): ErrorSink | null {
+  return sinkHost.__slaydxErrorSink?.fn ?? null;
+}
+
+function forwardToSink(level: LogLevel, record: LogRecord): void {
+  try {
+    const slot = sinkHost.__slaydxErrorSink;
+    if (!slot || !(level === "error" || (level === "warn" && slot.warn))) return;
+    // A microtask: the caller's line is already written and the caller keeps
+    // running before the sink starts its (async, DB-bound) work.
+    queueMicrotask(() => {
+      try {
+        void Promise.resolve(slot.fn(record)).catch(() => undefined);
+      } catch {
+        // A throwing sink must never surface anywhere.
+      }
+    });
+  } catch {
+    // The hook must never affect logging itself.
+  }
+}
+
 /**
  * Bitta JSON qator yozadi. HECH QACHON xato tashlamaydi.
  *
@@ -196,6 +243,7 @@ const ORDER = ["reqId", "jobId", "userId", "genId", "provider"] as const;
  */
 export function log(level: LogLevel, msg: string, fields?: LogFields | null): void {
   let line: string;
+  let record: Record<string, unknown>;
   try {
     const ctx = store.getStore();
     const row: Record<string, unknown> = { ts: new Date().toISOString(), level, msg: clip(redact(String(msg ?? ""))) };
@@ -222,9 +270,11 @@ export function log(level: LogLevel, msg: string, fields?: LogFields | null): vo
     }
     if (merged.err !== undefined && merged.err !== null) row.err = serializeError(merged.err);
     line = JSON.stringify(row);
+    record = row;
   } catch (e) {
     // Oxirgi to'siq: jurnal hech qachon chaqiruvchini yiqitmaydi.
-    line = JSON.stringify({ ts: new Date().toISOString(), level, msg: "log serializatsiyasi yiqildi", logErr: String(e) });
+    record = { ts: new Date().toISOString(), level, msg: "log serializatsiyasi yiqildi", logErr: String(e) };
+    line = JSON.stringify(record);
   }
   try {
     if (level === "error") console.error(line);
@@ -233,4 +283,5 @@ export function log(level: LogLevel, msg: string, fields?: LogFields | null): vo
   } catch {
     // stdout yopilgan (EPIPE) — yozadigan joy yo'q, chaqiruvchi davom etadi.
   }
+  forwardToSink(level, record);
 }
