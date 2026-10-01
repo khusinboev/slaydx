@@ -629,3 +629,17 @@ test("LIKE escaping against Postgres: metacharacters match literally", { skip: h
   assert.deepEqual(await find("100%"), ["100%"]);
   assert.deepEqual(await find("zzz%"), []);
 });
+
+test("parseListParams: enumList accepts comma-separated whitelisted values, dedups, rejects others", async () => {
+  const { parseListParams } = await import("../lib/server/admin-list.ts");
+  const spec = {
+    id: { column: "g.id", type: "uuid" },
+    sorts: { created_desc: { column: "g.created_at", dir: "DESC", type: "timestamptz" } },
+    filters: { status: { kind: "enumList", values: ["QUEUED", "FAILED", "COMPLETED"] } },
+  } as const;
+  const ok = parseListParams(new URL("http://x/a?status=FAILED,QUEUED,FAILED"), spec as never) as { filters: { status?: string[] } };
+  assert.deepEqual(ok.filters.status, ["FAILED", "QUEUED"]);
+  for (const bad of ["FAILED,DROP", "failed", "FAILED,,QUEUED", "A,B,C,D"]) {
+    assert.throws(() => parseListParams(new URL(`http://x/a?status=${encodeURIComponent(bad)}`), spec as never), (e: { status?: number }) => e.status === 400, bad);
+  }
+});

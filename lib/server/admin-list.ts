@@ -33,6 +33,8 @@ export type IdDef = { column: string; type: IdType };
 
 export type FilterDef =
   | { kind: "enum"; values: readonly string[] }
+  /** Comma-separated multi-select (`status=FAILED,QUEUED`), the format lib/admin-api/core.ts sends. */
+  | { kind: "enumList"; values: readonly string[] }
   | { kind: "int"; min?: number; max?: number }
   | { kind: "uuid" }
   | { kind: "flag" };
@@ -56,6 +58,8 @@ export type ListSpec = {
 
 type FilterOut<D> = D extends { kind: "enum"; values: readonly (infer V)[] }
   ? V
+  : D extends { kind: "enumList"; values: readonly (infer V)[] }
+    ? V[]
   : D extends { kind: "int" }
     ? number
     : D extends { kind: "uuid" }
@@ -277,12 +281,23 @@ function single(url: URL, name: string): string | null {
   return v === undefined || v === "" ? null : v;
 }
 
-function parseFilter(name: string, def: FilterDef, raw: string): string | number | boolean {
+function parseFilter(name: string, def: FilterDef, raw: string): string | string[] | number | boolean {
   switch (def.kind) {
     case "enum":
       // Exact (case-sensitive) match against the whitelist; the value still reaches SQL only as `$n`.
       if (!def.values.includes(raw)) throw bad(name);
       return raw;
+    case "enumList": {
+      // Every item must be whitelisted; duplicates collapse; bounded by the whitelist size.
+      const items = raw.split(",");
+      if (items.length > def.values.length) throw bad(name);
+      const out: string[] = [];
+      for (const item of items) {
+        if (!def.values.includes(item)) throw bad(name);
+        if (!out.includes(item)) out.push(item);
+      }
+      return out;
+    }
     case "int": {
       const n = parseIntParam(raw, { min: def.min ?? 0, max: def.max ?? PG_INT4_MAX });
       if (n === null) throw bad(name);
@@ -326,7 +341,7 @@ export function parseListParams<S extends ListSpec>(url: URL, spec: S): ParsedLi
     if (!cursor) throw new ApiError(BAD_CURSOR, 400);
   }
 
-  const filters: Record<string, string | number | boolean> = {};
+  const filters: Record<string, string | string[] | number | boolean> = {};
   for (const [name, def] of Object.entries(spec.filters ?? {})) {
     const raw = single(url, name);
     if (raw !== null) filters[name] = parseFilter(name, def, raw);

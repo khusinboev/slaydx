@@ -173,7 +173,8 @@ export async function request<T>(path: string, init: RequestOptions = {}): Promi
     if (!res.ok) {
       // Sessiya tugagan bo'lsa butun ilova bilib tursin — aks holda
       // foydalanuvchi har sahifada tushunarsiz xatoga urilardi.
-      if (res.status === 401 && !path.startsWith("/api/auth/")) onUnauthorized?.();
+      // Admin 401s mean "admin session needed", not "logged out" — the admin client handles them.
+      if (res.status === 401 && !path.startsWith("/api/auth/") && !path.startsWith("/api/admin/")) onUnauthorized?.();
       const message =
         typeof data.error === "string" && data.error
           ? data.error
