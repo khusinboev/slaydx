@@ -36,7 +36,7 @@ The brief's non-negotiable rules:
 | F3a | UI primitives `components/admin/ui/*` (DataTable, CursorPager, dialogs, StepUp, Toaster, DateRangePicker, charts), `lib/admin-api/core.ts` + `auth.ts`, `lib/admin-format.ts`, chart/status tokens, boundary and bundle tests | ✅ merged |
 | F5a | Runtime price adjustment (`applyPriceAdjust`, `lib/server/pricing.ts`), generation pause, `expectedPrice` 409 guard, client price display | ✅ merged |
 | F5b | Error sink → `error_log`, process heartbeats, housekeeping status, Telegram broadcast delivery, `ai_usage` cost capture, free-LLM runtime settings | ✅ merged |
-| F2 | Security core: crypto/TOTP, RBAC matrix, admin sessions, audit, `adminHandler`, auth/account/admins routes, `scripts/admin-create.mts`, `ADMIN_TOTP_KEY` | see §6 (filled in at the end of the cloud session) |
+| F2 | Security core: crypto/TOTP, RBAC matrix, admin sessions, audit, `adminHandler`, auth/account/admins routes, `scripts/admin-create.mts`, `ADMIN_TOTP_KEY` | ✅ merged |
 | F3b | Admin layouts and pages: `app/admin/layout.tsx`, `(auth)/login`, `(auth)/enroll`, `(panel)/layout.tsx` (shell, nav, Toaster, StepUpProvider), `(panel)/error.tsx`, `loading.tsx`, `account/page.tsx`; `components/admin/shell/*`; `app/uz/admin/page.tsx` → redirect to `/admin`; Sidebar link → `/admin`; delete `components/admin/AdminPage.tsx` and `app/uz/admin/loading.tsx` | ⏳ todo (needs F2) |
 | F6 | Money actions: wallet adjustment, job cancel/fail/refund, external order refund with clawback, plus dialogs (`components/admin/money/*`, `lib/admin-api/money.ts`). Uses `adminAdjustWalletInTx` extracted from `lib/server/credits.ts` | ⏳ todo (opus) |
 | WP1 | Dashboard (§6.3, S3) | ⏳ |
@@ -118,4 +118,20 @@ Deploying earlier would leave the owner without a working admin UI. Migration `0
 
 ## 6. State at the end of the cloud session
 
-(See the bottom of this file. It is updated with the final F2 merge result and the exact head commit.)
+- **Branches.** Everything above is merged into `claude/cool-feynman-jiixoi`, and that branch was merged into `main` via PR khusinboev/slaydx#1.
+- **Local checks at the hand-off head:**
+  - typecheck and lint: clean;
+  - new admin, settings and pricing tests: pass;
+  - full `npm test`: the set of failing files is identical to the container baseline in 01-analysis §8, with no new failures.
+- **F2 decisions the next session must know:**
+  - **Admin CSP:** Next keeps one value per header key, so admin paths get the *full* site CSP with only `frame-ancestors 'none'` changed (locked by `tests/admin-headers.test.mts`).
+  - **`SessionUser.isAdmin`** is now "has an admin_accounts row (active|pending)". The phone allow-list no longer grants anything.
+  - **Legacy `requireAdmin`** (used only by `app/api/admin/users/**`) requires an owner/admin admin session, an Origin header and a fresh step-up for mutations. WP2 replaces those routes; Integration deletes `requireAdmin`.
+  - **Permission `self`** exists for every role and is used by `me/*` and reauth.
+  - **Audit action names in use:**
+    - `auth.login`, `auth.login_failed` (with `meta.flow`), `auth.locked`, `auth.recovery_used`, `auth.reauth`, `auth.enroll`, `auth.logout`, `auth.denied`, `auth.session_revoke`, `auth.recovery_regenerate`;
+    - `admins.create|update|reset_2fa|revoke_sessions`.
+  - **Brute-force limits:** a 429 carries `retryAfterSec`, plus `code:"locked"` when the account is locked.
+  - **Enrollment secret:** derived from the enrollment token with a keyed MAC; it is sealed into the account only on the first confirmed code.
+- **Test fixture pattern** for an authenticated admin in route tests: insert `admin_accounts` (status `active`, `totp_enabled_at`, a non-null `totp_secret_enc`), then `createAdminSession(client, {adminId, userSessionId, reauth:true})`, then send both cookies (`slaydx_session` and `adminCookieName()`). See `tests/admin-auth.test.mts` (`openSession`) and `tests/malformed-route-params.test.mts`.
+- **Next step:** F3b and F6, then WP1–WP11 (§2).
