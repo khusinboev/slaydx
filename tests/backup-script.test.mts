@@ -64,10 +64,14 @@ test(
     ]);
 
     // Postgres tayyor bo'lguncha kutamiz.
+    // Probe over TCP in every test below: the image's entrypoint first runs a
+    // socket-only temporary server for init and then shuts it down, so a
+    // unix-socket pg_isready can report ready during that window and the next
+    // psql/pg_dump hits "shutting down" or a missing database (CI flake).
     let ready = false;
     for (let i = 0; i < 30 && !ready; i++) {
       try {
-        execFileSync("docker", ["exec", container, "pg_isready", "-U", "slaydx"], { stdio: "ignore" });
+        execFileSync("docker", ["exec", container, "pg_isready", "-h", "127.0.0.1", "-U", "slaydx"], { stdio: "ignore" });
         ready = true;
       } catch {
         await new Promise((r) => setTimeout(r, 1000));
@@ -212,7 +216,7 @@ test(
     let ready = false;
     for (let i = 0; i < 30 && !ready; i++) {
       try {
-        execFileSync("docker", ["exec", container, "pg_isready", "-U", "slaydx"], { stdio: "ignore" });
+        execFileSync("docker", ["exec", container, "pg_isready", "-h", "127.0.0.1", "-U", "slaydx"], { stdio: "ignore" });
         ready = true;
       } catch {
         await new Promise((r) => setTimeout(r, 1000));
@@ -315,7 +319,7 @@ test(
     let ready = false;
     for (let i = 0; i < 30 && !ready; i++) {
       try {
-        execFileSync("docker", ["exec", container, "pg_isready", "-U", "slaydx"], { stdio: "ignore" });
+        execFileSync("docker", ["exec", container, "pg_isready", "-h", "127.0.0.1", "-U", "slaydx"], { stdio: "ignore" });
         ready = true;
       } catch {
         await new Promise((r) => setTimeout(r, 1000));
@@ -444,7 +448,7 @@ test(
     let ready = false;
     for (let i = 0; i < 30 && !ready; i++) {
       try {
-        execFileSync("docker", ["exec", container, "pg_isready", "-U", "slaydx"], { stdio: "ignore" });
+        execFileSync("docker", ["exec", container, "pg_isready", "-h", "127.0.0.1", "-U", "slaydx"], { stdio: "ignore" });
         ready = true;
       } catch {
         await new Promise((r) => setTimeout(r, 1000));
