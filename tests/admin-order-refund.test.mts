@@ -329,7 +329,15 @@ test("idempotency: replay returns the original body, a different body is 422, pa
   assert.equal((await refundRows(order)).length, 1);
 
   const key2 = randomUUID();
-  const par = await Promise.all([1, 2, 3].map(() => record(s.cookie, order, { ...body, amountSoum: 4_000 }, { key: key2 })));
+  // Barrier (see admin-wallet.test.mts): hold the order row so all three are in flight together.
+  const gate = await pool().connect();
+  await gate.query("BEGIN");
+  await gate.query(`SELECT 1 FROM payment_orders WHERE id = $1 FOR UPDATE`, [order]);
+  const pending = Promise.all([1, 2, 3].map(() => record(s.cookie, order, { ...body, amountSoum: 4_000 }, { key: key2 })));
+  await new Promise((r) => setTimeout(r, 400));
+  await gate.query("COMMIT");
+  gate.release();
+  const par = await pending;
   for (const r of par) assert.equal(r.status, 201, JSON.stringify(r.body));
   assert.equal(par.filter((r) => r.replayed === null).length, 1);
   assert.equal((await refundRows(order)).length, 2);

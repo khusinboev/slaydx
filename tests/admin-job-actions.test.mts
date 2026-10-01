@@ -319,7 +319,16 @@ test("refund: two parallel refunds with different keys → exactly one refund ro
   const u = await mkUser(1_000);
   const id = await enqueue(u.id, 1_000);
   await query(`UPDATE generations SET status = 'FAILED', locked_by = NULL, finished_at = now() WHERE id = $1`, [id]);
-  const results = await Promise.all([call("refund", s.cookie, id, REASON), call("refund", s.cookie, id, REASON)]);
+  // Barrier: hold the generation row so both requests are in flight; `FOR UPDATE`
+  // in the action then serialises them (MUTATSIYA: without it both refund → 500).
+  const gate = await pool().connect();
+  await gate.query("BEGIN");
+  await gate.query(`SELECT 1 FROM generations WHERE id = $1 FOR UPDATE`, [id]);
+  const pending = Promise.all([call("refund", s.cookie, id, REASON), call("refund", s.cookie, id, REASON)]);
+  await new Promise((r) => setTimeout(r, 400));
+  await gate.query("COMMIT");
+  gate.release();
+  const results = await pending;
   const statuses = results.map((r) => r.status).sort();
   assert.deepEqual(statuses, [200, 409], JSON.stringify(results.map((r) => r.body)));
   assert.equal(await balance(u.id), 1_000);

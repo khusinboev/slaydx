@@ -257,7 +257,16 @@ test("concurrency: four parallel identical requests → one ledger row, one audi
   const u = await mkUser(0);
   const key = randomUUID();
   const body = { wallet: "balance", delta: 7_000, reasonCode: "promo", reason: "Aksiya bo'yicha bonus" };
-  const results = await Promise.all([1, 2, 3, 4].map(() => adjust(s.cookie, u.id, body, { key })));
+  // Barrier: the test holds the user's row lock so every request is in flight
+  // at once; only the advisory lock keeps them from all passing the lookup.
+  const gate = await pool().connect();
+  await gate.query("BEGIN");
+  await gate.query(`SELECT 1 FROM users WHERE id = $1 FOR UPDATE`, [u.id]);
+  const pending = Promise.all([1, 2, 3, 4].map(() => adjust(s.cookie, u.id, body, { key })));
+  await new Promise((r) => setTimeout(r, 400));
+  await gate.query("COMMIT");
+  gate.release();
+  const results = await pending;
   for (const r of results) assert.equal(r.status, 201, JSON.stringify(r.body));
   assert.equal(results.filter((r) => r.replayed === null).length, 1, "exactly one original");
   assert.equal(results.filter((r) => r.replayed === "true").length, 3, "the others are replays");
