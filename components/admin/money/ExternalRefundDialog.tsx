@@ -6,7 +6,7 @@ import { fmtNumber, fmtSoum } from "@/lib/admin-format";
 import { recordExternalRefund, REFUND_KINDS, type ExternalRefundResult, type RefundKind } from "@/lib/admin-api/money";
 import { confirmText, FIELD_CLASS, LABEL_CLASS, moneyError, parseWholeNumber, WALLET_LABEL } from "./shared";
 
-const KIND_LABEL: Record<RefundKind, string> = { refund: "Qaytarish (refund)", chargeback: "Chargeback" };
+const KIND_LABEL: Record<RefundKind, string> = { refund: "Qaytarish (refund)", chargeback: "Chargeback (bank qaytarishi)" };
 
 export type ExternalRefundTarget = {
   id: string;

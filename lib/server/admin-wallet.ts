@@ -4,7 +4,7 @@ import { adminAdjustWalletInTx, type Wallet } from "./credits";
 import { getSetting } from "./settings";
 import { parseReason } from "./admin-accounts";
 import type { AdminActor } from "./admin-handler";
-import { bodyHashOf, idempotentMutation, type IdempotentResult } from "./admin-idempotency";
+import { bodyHashOf, idempotencyConflict, idempotentMutation, type IdempotentResult } from "./admin-idempotency";
 
 /**
  * Admin wallet adjustment (docs/admin/02-plan.md §6.4, §10 T13).
@@ -100,8 +100,9 @@ export async function adjustWallet(
       expected: Math.abs(input.delta).toLocaleString("uz-UZ"),
     });
   }
-  // `confirm` is a UI guard, not part of the action: a corrected retry must not conflict.
-  const bodyHash = bodyHashOf({ wallet: input.wallet, delta: input.delta, reasonCode: input.reasonCode, reason: input.reason });
+  // The target is part of the action (same key for another user is a conflict,
+  // never a replay); `confirm` is a UI guard, so a corrected retry does not conflict.
+  const bodyHash = bodyHashOf({ userId: targetUserId, wallet: input.wallet, delta: input.delta, reasonCode: input.reasonCode, reason: input.reason });
   const reference = `admin:${idempotencyKey}`;
 
   return idempotentMutation<WalletAdjustResponse>(actor, { action: "users.wallet.adjust", key: idempotencyKey, bodyHash }, async (client) => {
@@ -111,15 +112,13 @@ export async function adjustWallet(
     );
     const row = res.rows[0];
     if (!row) throw new ApiError("Topilmadi", 404, { code: "not_found" });
-    // The lookup above is scoped to this admin; a key reused by ANOTHER admin
-    // would otherwise hit the unique ledger reference as a 500.
+    // Second guard (a key older than the audit lookup window): the unique
+    // ledger reference must become a 422, never a 500.
     const taken = await client.query(
       `SELECT 1 FROM transactions WHERE kind IN ('admin_credit', 'admin_debit') AND reference = $1`,
       [reference],
     );
-    if (taken.rows[0]) {
-      throw new ApiError("Bu Idempotency-Key boshqa so'rov uchun ishlatilgan", 422, { code: "idempotency_conflict" });
-    }
+    if (taken.rows[0]) throw idempotencyConflict();
 
     const r = await adminAdjustWalletInTx(client, {
       userId: targetUserId,

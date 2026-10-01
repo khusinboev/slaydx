@@ -244,12 +244,34 @@ test("idempotency: same key + same canonical body → original body, Idempotent-
   assert.equal((await ledger(u.id)).length, 1);
   assert.equal((await audits(s.admin.adminId)).length, 1);
 
-  // Another admin reusing the same key: the scoped lookup misses, the ledger reference catches it.
+  // Another admin reusing the same key (even with the same body): a conflict, never a replay.
   const other = await session("admin");
   const stolen = await adjust(other.cookie, u.id, body, { key });
   assert.equal(stolen.status, 422);
   assert.equal(stolen.body.code, "idempotency_conflict");
+  assert.equal(stolen.replayed, null);
   assert.equal((await ledger(u.id)).length, 1);
+  assert.equal((await audits(other.admin.adminId)).length, 0);
+});
+
+test("same admin, same key, same body, DIFFERENT target → 422; user B gets no ledger or audit row (reviewer finding 1)", { skip }, async () => {
+  const s = await session("finance");
+  const a = await mkUser(0);
+  const b = await mkUser(0);
+  const key = randomUUID();
+  const body = { wallet: "balance", delta: 1_000, reasonCode: "promo", reason: "Aksiya bonusi" };
+  const r1 = await adjust(s.cookie, a.id, body, { key });
+  assert.equal(r1.status, 201, JSON.stringify(r1.body));
+  const r2 = await adjust(s.cookie, b.id, body, { key });
+  assert.equal(r2.status, 422, `MUTATSIYA: ${JSON.stringify(r2.body)}`);
+  assert.equal(r2.body.code, "idempotency_conflict");
+  assert.equal(r2.replayed, null);
+  assert.deepEqual(await wallets(a.id), { points: 0, quota: 0, balance: 1_000 });
+  assert.deepEqual(await wallets(b.id), { points: 0, quota: 0, balance: 0 }, "B is never credited");
+  assert.equal((await ledger(b.id)).length, 0);
+  const a1 = await audits(s.admin.adminId);
+  assert.equal(a1.length, 1);
+  assert.equal(a1[0].target_id, a.id);
 });
 
 test("concurrency: four parallel identical requests → one ledger row, one audit row, one effect", { skip }, async () => {

@@ -17,18 +17,27 @@ import { writeAudit, type AuditActor, type AuditEntry } from "./admin-audit";
  * Design (no new table): the original request's audit row is the record.
  * `meta` of that row carries `idempotencyKey`, `bodyHash` and `response`.
  *   1. the mutation runs in ONE transaction that first takes
- *      `pg_advisory_xact_lock(hash(admin, key))` — two parallel requests with
- *      the same key are serialised, the second one starts only after the
- *      first one committed (or rolled back);
- *   2. the prior row is looked up by `(admin_id, action, meta.idempotencyKey)`
- *      — READ COMMITTED sees the first request's commit at that point;
+ *      `pg_advisory_xact_lock(hash(key))` — two parallel requests with the
+ *      same key are serialised, the second one starts only after the first
+ *      one committed (or rolled back);
+ *   2. the prior row is looked up by KEY ONLY, per action, across all admins
+ *      (`(action, meta.idempotencyKey)` within `LOOKUP_WINDOW`) — READ
+ *      COMMITTED sees the first request's commit at that point. Keys are
+ *      UUID v4, so a key seen from ANOTHER admin is a conflict (422), never a
+ *      replay of someone else's result;
  *   3. a domain failure (4xx thrown by `run`) rolls back and writes NO audit
  *      row (§8: validation failures are not audited), so the client may retry
  *      the same key with a corrected body.
- * The lookup walks `admin_audit_admin_idx (admin_id, at DESC)` and filters on
- * the JSONB key; an admin's own money actions number in the hundreds, so a
- * dedicated table (and migration) is not justified at this scale.
+ * The lookup is a range scan of `admin_audit_action_idx (action, at DESC)`
+ * over the last `LOOKUP_WINDOW` and filters on the JSONB key: bounded work
+ * without a migration. A key is generated per dialog open and retried within
+ * seconds or minutes; after the window it counts as new, and each action has
+ * a second guard for that case (the wallet's unique ledger reference, a job's
+ * refund row, an order's recorded total).
  */
+
+/** How far back a key is recognised (`interval` literal; no admin retry lives longer). */
+export const LOOKUP_WINDOW = "30 days";
 
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -72,12 +81,16 @@ export type IdempotentOutcome<T> = {
 
 export type IdempotentResult<T> = { replayed: boolean; response: T };
 
-type PriorRow = { meta: { bodyHash?: unknown; response?: unknown } | null };
+type PriorRow = { admin_id: string | null; meta: { bodyHash?: unknown; response?: unknown } | null };
+
+export function idempotencyConflict(): ApiError {
+  return new ApiError("Bu Idempotency-Key boshqa so'rov uchun ishlatilgan", 422, { code: "idempotency_conflict" });
+}
 
 /**
- * Runs `run` once per (admin, action, key) inside one transaction with the
- * audit row, or replays the stored response. `run` throws `ApiError` for
- * domain refusals (nothing is written then).
+ * Runs `run` once per (action, key) inside one transaction with the audit
+ * row, or replays the stored response to the admin who made the original
+ * request. `run` throws `ApiError` for domain refusals (nothing is written then).
  */
 export async function idempotentMutation<T>(
   actor: AuditActor,
@@ -87,20 +100,19 @@ export async function idempotentMutation<T>(
   if (!actor.id) throw new ApiError("Admin hisobi aniqlanmadi", 500);
   const adminId = actor.id;
   return transaction(async (client) => {
-    // Serialises same-key requests; released at COMMIT/ROLLBACK.
-    await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [`admin-idem:${adminId}:${opts.key}`]);
+    // Serialises same-key requests (whoever sends them); released at COMMIT/ROLLBACK.
+    await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [`admin-idem:${opts.key}`]);
     const prior = await client.query<PriorRow>(
-      `SELECT meta FROM admin_audit_log
-        WHERE admin_id = $1 AND action = $2 AND outcome = 'ok' AND meta->>'idempotencyKey' = $3
-        ORDER BY id DESC
+      `SELECT admin_id::text AS admin_id, meta FROM admin_audit_log
+        WHERE action = $1 AND at > now() - $3::interval AND outcome = 'ok' AND meta->>'idempotencyKey' = $2
+        ORDER BY at DESC, id DESC
         LIMIT 1`,
-      [adminId, opts.action, opts.key],
+      [opts.action, opts.key, LOOKUP_WINDOW],
     );
     const row = prior.rows[0];
     if (row) {
-      if (row.meta?.bodyHash !== opts.bodyHash) {
-        throw new ApiError("Bu Idempotency-Key boshqa so'rov uchun ishlatilgan", 422, { code: "idempotency_conflict" });
-      }
+      // Another admin's key or a different body: never replay, never re-apply.
+      if (row.admin_id !== adminId || row.meta?.bodyHash !== opts.bodyHash) throw idempotencyConflict();
       return { replayed: true, response: row.meta.response as T };
     }
 

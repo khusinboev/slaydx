@@ -37,6 +37,7 @@ const { createSession, SESSION_COOKIE } = await import("../lib/server/session.ts
 const { createAdminSession, adminCookieName } = await import("../lib/server/admin-session.ts");
 const jobs = await import("../lib/server/jobs.ts");
 const { refund } = await import("../lib/server/credits.ts");
+const { refundInTx } = await import("../lib/server/refund-tx.ts");
 const { ADMIN_CANCEL_NOTE, ADMIN_FAIL_ERROR, ADMIN_REFUND_NOTE } = await import("../lib/server/admin-job-actions.ts");
 const routes = {
   cancel: await import("../app/api/admin/generations/[id]/cancel/route.ts"),
@@ -334,6 +335,50 @@ test("refund: two parallel refunds with different keys → exactly one refund ro
   assert.equal(await balance(u.id), 1_000);
   assert.equal((await refunds(id)).length, 1);
   assert.equal((await audits(s.admin.adminId, "jobs.refund")).length, 1);
+});
+
+test("refund: another admin reusing the key → 422 (key-only scope); the original admin still replays", { skip }, async () => {
+  const a = await session("finance");
+  const b = await session("support");
+  const u = await mkUser(1_000);
+  const id = await enqueue(u.id, 1_000);
+  await query(`UPDATE generations SET status = 'FAILED', locked_by = NULL, finished_at = now() WHERE id = $1`, [id]);
+  const key = randomUUID();
+  const first = await call("refund", a.cookie, id, REASON, { key });
+  assert.equal(first.status, 200, JSON.stringify(first.body));
+  const stolen = await call("refund", b.cookie, id, REASON, { key });
+  assert.equal(stolen.status, 422, JSON.stringify(stolen.body));
+  assert.equal(stolen.body.code, "idempotency_conflict");
+  assert.equal((await audits(b.admin.adminId, "jobs.refund")).length, 0);
+  assert.equal((await refunds(id)).length, 1);
+  assert.equal((await call("refund", a.cookie, id, REASON, { key })).replayed, "true");
+});
+
+test("refund racing the worker's refund: the unique ledger reference becomes 409 not_refundable (allaqachon), never 500", { skip }, async () => {
+  const s = await session("owner");
+  const u = await mkUser(1_000);
+  const id = await enqueue(u.id, 1_000);
+  await query(`UPDATE generations SET status = 'FAILED', locked_by = NULL, finished_at = now() WHERE id = $1`, [id]);
+  // The worker (`credits.refund`) locks only the USER row. Hold it: the admin
+  // request passes its "already refunded" checks and blocks inside refundInTx;
+  // the worker then refunds and commits first.
+  const worker = await pool().connect();
+  await worker.query("BEGIN");
+  await worker.query(`SELECT 1 FROM users WHERE id = $1 FOR UPDATE`, [u.id]);
+  const pending = call("refund", s.cookie, id, REASON);
+  await new Promise((r) => setTimeout(r, 400));
+  assert.equal(await refundInTx(worker, u.id, id, "Xatolik: worker"), true);
+  await worker.query("COMMIT");
+  worker.release();
+  const r = await pending;
+  assert.equal(r.status, 409, `MUTATSIYA: ${JSON.stringify(r.body)}`);
+  assert.equal(r.body.code, "not_refundable");
+  assert.match(String(r.body.error), /allaqachon qaytarilgan/);
+  assert.equal(await balance(u.id), 1_000, "refunded exactly once");
+  const rf = await refunds(id);
+  assert.equal(rf.length, 1);
+  assert.equal(rf[0].note, "Xatolik: worker");
+  assert.equal((await audits(s.admin.adminId, "jobs.refund")).length, 0);
 });
 
 // ───────────────────────────── ids and guard

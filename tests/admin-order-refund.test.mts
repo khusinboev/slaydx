@@ -35,8 +35,8 @@ const iso = hasDb ? await createIsolatedDb("adminorders") : { isolated: false, d
 const { query, queryOne, ensureMigrated, transaction, pool } = await import("../lib/server/db.ts");
 const { createSession, SESSION_COOKIE } = await import("../lib/server/session.ts");
 const { createAdminSession, adminCookieName } = await import("../lib/server/admin-session.ts");
-const { settleOrder, PRO_PLAN, SOUM_PER_COIN } = await import("../lib/server/payments.ts");
-const { clawbackUnits, clawbackWalletOf, parseExternalRefundBody } = await import("../lib/server/admin-order-refund.ts");
+const { settleOrder, PRO_PLAN } = await import("../lib/server/payments.ts");
+const { clawbackUnits, clawbackWalletOf, parseExternalRefundBody, settlementReference } = await import("../lib/server/admin-order-refund.ts");
 const route = await import("../app/api/admin/orders/[id]/external-refund/route.ts");
 
 after(async () => {
@@ -136,13 +136,18 @@ const BODY = { kind: "refund", amountSoum: 20_000, reason: "Click orqali qaytari
 
 // ───────────────────────────── unit
 
-test("clawback units mirror the settlement credit: top-up 1 so'm = 1/SOUM_PER_COIN balance, pro quota pro rata", () => {
+test("clawback units: pro rata of what the ORDER credited, floored, never above the credit; settlement reference format", () => {
   assert.equal(clawbackWalletOf("topup"), "balance");
   assert.equal(clawbackWalletOf("pro"), "quota");
-  assert.equal(clawbackUnits("topup", 20_000), Math.floor(20_000 / SOUM_PER_COIN));
-  assert.equal(clawbackUnits("pro", PRO_PLAN.priceSoum), PRO_PLAN.quota);
-  assert.equal(clawbackUnits("pro", PRO_PLAN.priceSoum / 2), Math.floor(PRO_PLAN.quota / 2));
-  assert.equal(clawbackUnits("pro", 1), Math.floor(PRO_PLAN.quota / PRO_PLAN.priceSoum));
+  assert.equal(clawbackUnits(20_000, 20_000, 20_000), 20_000);
+  assert.equal(clawbackUnits(20_000, 15_000, 30_000), 10_000, "older pro plan: 20 000 quota for 30 000 so'm");
+  assert.equal(clawbackUnits(15_000, 1, 15_000), 1);
+  assert.equal(clawbackUnits(10, 1, 15_000), 0, "floored");
+  assert.equal(clawbackUnits(100, 500, 100), 100, "capped at the credit");
+  assert.equal(clawbackUnits(0, 500, 100), 0);
+  assert.equal(clawbackUnits(100, 500, 0), 0);
+  assert.equal(settlementReference({ id: "o-1", provider: "click", provider_txn: "t-9" }), "click:t-9");
+  assert.equal(settlementReference({ id: "o-1", provider: "payme", provider_txn: null }), "payme:o-1");
 });
 
 test("parseExternalRefundBody: strict fields", () => {
@@ -273,7 +278,7 @@ test("pro order: the clawback hits the quota, pro rata", { skip }, async () => {
   const half = Math.floor(PRO_PLAN.priceSoum / 2);
   const r = await record(s.cookie, order, { ...BODY, amountSoum: half });
   assert.equal(r.status, 201, JSON.stringify(r.body));
-  const expected = clawbackUnits("pro", half);
+  const expected = clawbackUnits(PRO_PLAN.quota, half, PRO_PLAN.priceSoum);
   assert.deepEqual(r.body.clawback, { wallet: "quota", requested: expected, debited: expected, shortfall: 0 });
   assert.equal((await wallets(u.id)).quota, PRO_PLAN.quota - expected);
   assert.equal((await wallets(u.id)).balance, 0, "balance untouched");
@@ -281,6 +286,66 @@ test("pro order: the clawback hits the quota, pro rata", { skip }, async () => {
   assert.equal(d.length, 1);
   assert.equal(d[0].quota_delta, String(-expected));
   assert.equal((await refundRows(order))[0].clawback_wallet, "quota");
+});
+
+test("pro order settled under an OLDER plan: the clawback follows the order's own subscription row, not PRO_PLAN; no row → 409 no_credit", { skip }, async () => {
+  const s = await session("finance");
+  const u = await mkUser();
+  // 30 000 so'm bought 20 000 quota back then (neither value equals today's PRO_PLAN).
+  assert.notEqual(30_000, PRO_PLAN.priceSoum);
+  assert.notEqual(20_000, PRO_PLAN.quota);
+  const order = randomUUID();
+  await query(
+    `INSERT INTO payment_orders (id, user_id, provider, purpose, amount_soum, state, provider_txn, perform_time) VALUES ($1, $2, 'payme', 'pro', 30000, 'paid', $3, 1)`,
+    [order, u.id, `old-${order.slice(0, 8)}`],
+  );
+  await query(
+    `INSERT INTO transactions (user_id, kind, quota_delta, reference, note) VALUES ($1, 'subscription', 20000, $2, 'Pro obuna')`,
+    [u.id, `payme:old-${order.slice(0, 8)}`],
+  );
+  await query(`UPDATE users SET quota = 20000, plan = 'pro' WHERE id = $1`, [u.id]);
+
+  const r = await record(s.cookie, order, { ...BODY, amountSoum: 15_000 });
+  assert.equal(r.status, 201, JSON.stringify(r.body));
+  assert.deepEqual(r.body.clawback, { wallet: "quota", requested: 10_000, debited: 10_000, shortfall: 0 }, "MUTATSIYA: 15 000 / 30 000 of 20 000 quota");
+  assert.equal((await wallets(u.id)).quota, 10_000);
+
+  // Paid order whose credit row is missing (reconciliation case): refuse the clawback whole, record nothing.
+  const u2 = await mkUser();
+  const orphan = randomUUID();
+  await query(
+    `INSERT INTO payment_orders (id, user_id, provider, purpose, amount_soum, state, provider_txn, perform_time) VALUES ($1, $2, 'click', 'topup', 9000, 'paid', $3, 1)`,
+    [orphan, u2.id, `orphan-${orphan.slice(0, 8)}`],
+  );
+  const no = await record(s.cookie, orphan, { ...BODY, amountSoum: 9_000 });
+  assert.equal(no.status, 409);
+  assert.equal(no.body.code, "no_credit");
+  assert.equal((await refundRows(orphan)).length, 0, "nothing recorded on refusal");
+  assert.equal((await audits(s.admin.adminId)).length, 1);
+  // Without a clawback the record itself does not need the credit row.
+  const ok = await record(s.cookie, orphan, { ...BODY, amountSoum: 9_000, clawback: false });
+  assert.equal(ok.status, 201, JSON.stringify(ok.body));
+});
+
+test("another admin reusing a key → 422, no second refund row, no clawback (key-only scope)", { skip }, async () => {
+  const a = await session("finance");
+  const b = await session("owner");
+  const u = await mkUser();
+  const order = await paidOrder(u.id, "topup", 20_000);
+  const key = randomUUID();
+  const body = { ...BODY, amountSoum: 5_000 };
+  const first = await record(a.cookie, order, body, { key });
+  assert.equal(first.status, 201, JSON.stringify(first.body));
+  const stolen = await record(b.cookie, order, body, { key });
+  assert.equal(stolen.status, 422, JSON.stringify(stolen.body));
+  assert.equal(stolen.body.code, "idempotency_conflict");
+  assert.equal(stolen.replayed, null, "never a replay of someone else's result");
+  assert.equal((await refundRows(order)).length, 1);
+  assert.equal((await wallets(u.id)).balance, 15_000, "no second clawback");
+  assert.equal((await audits(b.admin.adminId)).length, 0);
+  // The original admin still gets the replay.
+  const again = await record(a.cookie, order, body, { key });
+  assert.equal(again.replayed, "true");
 });
 
 test("only paid orders: pending / cancelled → 409 state; unknown or malformed id → 404", { skip }, async () => {

@@ -112,6 +112,12 @@ async function refundSplit(client: PoolClient, reference: string): Promise<Charg
 
 export type JobActionResult = { generation: AdminGenerationState; refunded: ChargeSplit | null };
 
+/** Postgres unique_violation (23505) on the named index/constraint. */
+function isUniqueViolation(e: unknown, constraint: string): boolean {
+  const err = e as { code?: unknown; constraint?: unknown } | null;
+  return Boolean(err) && err!.code === "23505" && err!.constraint === constraint;
+}
+
 function wrongState(row: Row, expected: string): ApiError {
   return new ApiError(`Ish holati ${row.status}; faqat ${expected} ish uchun mumkin`, 409, { code: "state", status: row.status });
 }
@@ -193,10 +199,23 @@ export async function refundJob(
     const refuse = (why: string) =>
       new ApiError(`Qaytarib bo'lmaydi: ${why}`, 409, { code: "not_refundable", status: row.status });
     if (row.status !== "FAILED") throw refuse(`ish holati ${row.status}`);
-    if (await refundSplit(client, id)) throw refuse("pul allaqachon qaytarilgan");
-    const refundedNow = await refundInTx(client, row.user_id, id, ADMIN_REFUND_NOTE);
-    // `false` here means there is no (or a zero) charge row: nothing to return.
-    if (!refundedNow) throw refuse("ish uchun pul yechilmagan");
+    const ALREADY = "pul allaqachon qaytarilgan";
+    if (await refundSplit(client, id)) throw refuse(ALREADY);
+    // The worker's own refund (`credits.refund`) does not lock the generation
+    // row, so it can commit between the check above and the insert below:
+    // either `refundInTx` sees its row (READ COMMITTED) and returns false, or
+    // the insert hits `transactions_ref_idx`. Both are "already refunded".
+    let refundedNow: boolean;
+    try {
+      refundedNow = await refundInTx(client, row.user_id, id, ADMIN_REFUND_NOTE);
+    } catch (e) {
+      if (isUniqueViolation(e, "transactions_ref_idx")) throw refuse(ALREADY);
+      throw e;
+    }
+    if (!refundedNow) {
+      // No (or a zero) charge row — unless the worker refunded in between.
+      throw refuse((await refundSplit(client, id)) ? ALREADY : "ish uchun pul yechilmagan");
+    }
     const refunded = (await refundSplit(client, id))!;
     return {
       response: { refunded },

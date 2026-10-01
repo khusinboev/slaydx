@@ -1,7 +1,8 @@
 import "server-only";
 import { ApiError } from "./api";
+import type { PoolClient } from "pg";
 import { adminAdjustWalletInTx, type Wallet } from "./credits";
-import { PRO_PLAN, SOUM_PER_COIN, type Purpose } from "./payments";
+import type { Purpose } from "./payments";
 import { parseReason } from "./admin-accounts";
 import type { AdminActor } from "./admin-handler";
 import { ADMIN_LEDGER_NOTE } from "./admin-wallet";
@@ -13,10 +14,13 @@ import { bodyHashOf, idempotentMutation, type IdempotentResult } from "./admin-i
  * The provider already paid the money back outside the system; finance
  * records it here and optionally claws the credited wallet back:
  *   - the order must be `paid`; the recorded total never exceeds the order;
- *   - the clawback hits the wallet the settlement credited
- *     (`settleOrder`: topup → `balance` by `amountSoum / SOUM_PER_COIN`,
- *     pro → `quota`, `PRO_PLAN.quota` for `PRO_PLAN.priceSoum`), pro rata for
- *     a partial amount, and never below zero — the rest is `shortfall`;
+ *   - the clawback hits the wallet the settlement credited (`settleOrder`:
+ *     topup → `balance`, pro → `quota`) by what THAT order's ledger row
+ *     actually credited (`topup` / `subscription` row with reference
+ *     `<provider>:<provider_txn ?? order id>`), pro rata for a partial amount
+ *     — today's plan constants are never consulted, so an order settled under
+ *     an older price or quota is clawed back correctly; no credit row → 409
+ *     `no_credit`. Never below zero — the rest is `shortfall`;
  *   - the debit is an `admin_debit` ledger row with
  *     `reference = 'refund:' || payment_refunds.id`, so it can never be
  *     written twice for the same record.
@@ -78,13 +82,29 @@ export function clawbackWalletOf(purpose: Purpose): Wallet {
   return purpose === "pro" ? "quota" : "balance";
 }
 
-/** Wallet units for `amountSoum`, mirroring the crediting formulas of `settleOrder`. */
-export function clawbackUnits(purpose: Purpose, amountSoum: number): number {
-  if (purpose === "pro") return Math.floor((amountSoum * PRO_PLAN.quota) / PRO_PLAN.priceSoum);
-  return Math.floor(amountSoum / SOUM_PER_COIN);
+/** `amountSoum / orderSoum` of what the order credited, floored (never more than the credit). */
+export function clawbackUnits(creditedUnits: number, amountSoum: number, orderSoum: number): number {
+  if (!(creditedUnits > 0) || !(orderSoum > 0) || !(amountSoum > 0)) return 0;
+  return Math.min(creditedUnits, Math.floor((creditedUnits * amountSoum) / orderSoum));
 }
 
-type OrderRow = { id: string; user_id: string; purpose: Purpose; amount_soum: string; state: string };
+type OrderRow = { id: string; user_id: string; provider: string; provider_txn: string | null; purpose: Purpose; amount_soum: string; state: string };
+
+/** The ledger reference `settleOrder` used for this order's credit. */
+export function settlementReference(order: Pick<OrderRow, "id" | "provider" | "provider_txn">): string {
+  return `${order.provider}:${order.provider_txn ?? order.id}`;
+}
+
+/** Units the settlement wrote for this order (`topup.balance_delta` / `subscription.quota_delta`); `null` when there is no row. */
+async function creditedUnits(client: PoolClient, order: OrderRow): Promise<number | null> {
+  const kind = order.purpose === "pro" ? "subscription" : "topup";
+  const col = order.purpose === "pro" ? "quota_delta" : "balance_delta";
+  const res = await client.query<{ units: string }>(
+    `SELECT ${col}::text AS units FROM transactions WHERE kind = $1 AND reference = $2`,
+    [kind, settlementReference(order)],
+  );
+  return res.rows[0] ? Number(res.rows[0].units) : null;
+}
 
 type RefundRow = {
   id: string;
@@ -128,7 +148,7 @@ export async function recordExternalRefund(
   const bodyHash = bodyHashOf({ orderId, kind: input.kind, amountSoum: input.amountSoum, reason: input.reason, clawback: input.clawback });
   return idempotentMutation<ExternalRefundResponse>(actor, { action: "payments.refund_record", key: idempotencyKey, bodyHash }, async (client) => {
     const ord = await client.query<OrderRow>(
-      `SELECT id, user_id::text AS user_id, purpose, amount_soum, state FROM payment_orders WHERE id = $1 FOR UPDATE`,
+      `SELECT id, user_id::text AS user_id, provider, provider_txn, purpose, amount_soum, state FROM payment_orders WHERE id = $1 FOR UPDATE`,
       [orderId],
     );
     const order = ord.rows[0];
@@ -151,6 +171,15 @@ export async function recordExternalRefund(
     }
 
     const wallet = clawbackWalletOf(order.purpose);
+    // Resolved before anything is written: a clawback without the credit row is refused whole.
+    let requested = 0;
+    if (input.clawback) {
+      const credited = await creditedUnits(client, order);
+      if (credited === null) {
+        throw new ApiError("Buyurtmaning kredit yozuvi topilmadi — hamyondan yechib bo'lmaydi", 409, { code: "no_credit" });
+      }
+      requested = clawbackUnits(credited, input.amountSoum, orderSoum);
+    }
     const ins = await client.query<{ id: string }>(
       `INSERT INTO payment_refunds (order_id, amount_soum, kind, reason, clawback_wallet, created_by)
        VALUES ($1, $2, $3, $4, $5, $6)
@@ -162,7 +191,6 @@ export async function recordExternalRefund(
     let clawback: ClawbackResult | null = null;
     let walletBefore: number | null = null;
     if (input.clawback) {
-      const requested = clawbackUnits(order.purpose, input.amountSoum);
       const u = await client.query<Record<Wallet, string>>(`SELECT points, quota, balance FROM users WHERE id = $1 FOR UPDATE`, [order.user_id]);
       const available = Number(u.rows[0]![wallet]);
       walletBefore = available;
