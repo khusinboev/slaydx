@@ -69,7 +69,6 @@ function stubFetch(responders: Array<(c: Call) => Response | Promise<Response>>)
   }) as typeof fetch;
   return calls;
 }
-const never = () => new Promise<Response>(() => {});
 const qs = (c: Call) => new URL(c.url, "http://localhost").searchParams;
 
 /** `replace` records the page's URL writes (`history.replaceState`) and any `router.replace`. */
@@ -105,7 +104,7 @@ function mount(node: ReactNode, opts: { role?: Role; search?: string; pathname?:
         h(
           SearchParamsContext.Provider,
           { value: new URLSearchParams(opts.search ?? "") },
-          h(AdminIdentityProvider, { value: { role, permissions: PERMS[role], name: "Admin", username: null } }, node),
+          h(AdminIdentityProvider, { value: { role, permissions: PERMS[role], name: "Admin", username: null }, children: node }),
         ),
       ),
     ),
