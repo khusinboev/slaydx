@@ -106,7 +106,7 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
       <div className="mt-auto p-2">
         {loggedIn && user?.isAdmin ? (
           <Link
-            href="/uz/admin"
+            href="/admin"
             onClick={onNavigate}
             className="hover:bg-white/70 dark:hover:bg-sidebar-accent mb-1 flex items-center gap-2.5 rounded-md px-3 py-2"
           >
