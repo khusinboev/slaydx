@@ -256,6 +256,19 @@ export async function spendTotals(db: Queryable, range: SpendRange): Promise<Spe
   return toTotals(res.rows[0]);
 }
 
+/** Per-key aggregates over exploded parts (`p`); the same list serves every part grouping. */
+const PART_AGGREGATES = `count(DISTINCT s.rid) AS records,
+             sum(${jsonCount("p->'calls'")}) AS calls,
+             sum(${jsonCount("p->'inputTokens'")}) AS input_tokens,
+             sum(${jsonCount("p->'outputTokens'")}) AS output_tokens,
+             sum(GREATEST(${jsonNum("p->'usd'")}, 0)) AS usd,
+             sum(${jsonCount("p->'units'")}) AS units,
+             COALESCE(sum(${jsonCount("p->'calls'")}) FILTER (WHERE ${UNPRICED_PART}), 0) AS unpriced_calls`;
+
+/** Spend rows (CTE `spend`) exploded into their parts: `s` is the numbered row, `p` one part. */
+const PARTS_FROM = `FROM (SELECT r.*, row_number() OVER () AS rid FROM spend r) s
+        CROSS JOIN LATERAL jsonb_array_elements(${EXPLODED_PARTS}) AS p`;
+
 /**
  * Spend grouped by one dimension. `day` is zero-filled over every Tashkent
  * day of the range, ascending; the other groupings list only keys with rows,
@@ -305,16 +318,8 @@ export async function spendBy(db: Queryable, range: SpendRange, groupBy: SpendGr
   } else {
     // `records` counts the spend rows contributing to the key, not parts.
     sql = `WITH ${rows}
-      SELECT ${PART_KEYS[groupBy]} AS key,
-             count(DISTINCT s.rid) AS records,
-             sum(${jsonCount("p->'calls'")}) AS calls,
-             sum(${jsonCount("p->'inputTokens'")}) AS input_tokens,
-             sum(${jsonCount("p->'outputTokens'")}) AS output_tokens,
-             sum(GREATEST(${jsonNum("p->'usd'")}, 0)) AS usd,
-             sum(${jsonCount("p->'units'")}) AS units,
-             COALESCE(sum(${jsonCount("p->'calls'")}) FILTER (WHERE ${UNPRICED_PART}), 0) AS unpriced_calls
-        FROM (SELECT r.*, row_number() OVER () AS rid FROM spend r) s
-        CROSS JOIN LATERAL jsonb_array_elements(${EXPLODED_PARTS}) AS p
+      SELECT ${PART_KEYS[groupBy]} AS key, ${PART_AGGREGATES}
+        ${PARTS_FROM}
        GROUP BY 1
        ORDER BY 6 DESC, 1`;
   }
@@ -324,6 +329,39 @@ export async function spendBy(db: Queryable, range: SpendRange, groupBy: SpendGr
     key: String(r.key),
     ...toTotals(r),
     units: r.units === null || r.units === undefined ? null : n(r.units),
+    unpricedCalls: n(r.unpriced_calls),
+  }));
+}
+
+export type SpendProviderModelRow = SpendTotals & {
+  provider: string;
+  model: string;
+  units: number;
+  unpricedCalls: number;
+};
+
+/**
+ * Spend per provider/model pair (the pair the provider screens show), from the
+ * same exploded parts as the `provider` and `model` groupings, so the sums of
+ * `usd`, `calls` and tokens equal `spendTotals` and each provider's (or
+ * model's) pairs add up to `spendBy`'s row for it. By usd descending, then
+ * provider, model.
+ */
+export async function spendByProviderModel(db: Queryable, range: SpendRange): Promise<SpendProviderModelRow[]> {
+  const spend = spendRowsSql(range);
+  const res = await db.query<SumRow & { provider: string; model: string; units: string | number | null; unpriced_calls: string | number | null }>(
+    `WITH spend AS (${spend.sql})
+      SELECT ${PART_KEYS.provider} AS provider, ${PART_KEYS.model} AS model, ${PART_AGGREGATES}
+        ${PARTS_FROM}
+       GROUP BY 1, 2
+       ORDER BY 7 DESC, 1, 2`,
+    spend.params,
+  );
+  return res.rows.map((r) => ({
+    provider: String(r.provider),
+    model: String(r.model),
+    ...toTotals(r),
+    units: n(r.units),
     unpricedCalls: n(r.unpriced_calls),
   }));
 }
