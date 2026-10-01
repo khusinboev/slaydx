@@ -340,7 +340,66 @@ export type AdminAdjustResult =
   | { ok: true; before: number; after: number }
   | { ok: false; reason: "insufficient"; available: number };
 
+/** `adminAdjustWalletInTx` result: the ledger row id is returned for the audit trail and clawback bookkeeping. */
+export type AdminAdjustTxResult =
+  | { ok: true; before: number; after: number; transactionId: string }
+  | { ok: false; reason: "insufficient"; available: number };
+
+export type AdminAdjustInput = {
+  userId: string;
+  wallet: Wallet;
+  /** Positive credits, negative debits; truncated to an integer, must not be 0. */
+  delta: number;
+  /** Ledger `reference`: unique per (kind, reference), e.g. `admin:<idempotency uuid>` or `refund:<payment_refunds.id>`. */
+  reference: string;
+  /** User-visible ledger note (the admin panel writes the neutral "Ma'muriy tuzatish"; the actor lives in the audit log). */
+  note: string;
+};
+
 const WALLETS: readonly Wallet[] = ["points", "quota", "balance"];
+
+/**
+ * The transaction-scoped core of the admin wallet adjustment (docs/admin/02-plan.md
+ * §6.4, §13.4): the caller owns the transaction, so the audit row and any
+ * related bookkeeping (`payment_refunds`) commit together with the ledger row.
+ * Locks the user row, refuses to take a wallet below zero, writes
+ * `admin_credit` / `admin_debit` with the given reference and note.
+ */
+export async function adminAdjustWalletInTx(client: PoolClient, input: AdminAdjustInput): Promise<AdminAdjustTxResult> {
+  const { userId, wallet, reference, note } = input;
+  // `wallet` SQL ustun nomiga to'g'ridan-to'g'ri interpolyatsiya qilinadi
+  // (parametrlashtirib bo'lmaydi — ustun nomi parametr emas). TypeScript
+  // turi buni chaqiruv vaqtida cheklaydi, lekin bu funksiya JSON'dan
+  // kelgan qiymat bilan ham chaqirilishi mumkin (API route orqali) —
+  // shuning uchun runtime tekshiruvi ham SHART, faqat TS turiga
+  // ishonib bo'lmaydi.
+  if (!WALLETS.includes(wallet)) throw new Error(`Noma'lum hamyon: ${wallet}`);
+  const amount = Math.trunc(input.delta);
+  if (amount === 0) throw new Error("Nol miqdorli tuzatish");
+
+  const res = await client.query<Record<Wallet, string>>(
+    `SELECT points, quota, balance FROM users WHERE id = $1 FOR UPDATE`,
+    [userId],
+  );
+  const row = res.rows[0];
+  if (!row) throw new Error("Foydalanuvchi topilmadi");
+  const before = Number(row[wallet]);
+  const after = before + amount;
+  if (after < 0) return { ok: false as const, reason: "insufficient" as const, available: before };
+
+  await client.query(`UPDATE users SET ${wallet} = ${wallet} + $2, updated_at = now() WHERE id = $1`, [
+    userId,
+    amount,
+  ]);
+  const deltaCol = `${wallet}_delta`;
+  const ins = await client.query<{ id: string }>(
+    `INSERT INTO transactions (user_id, kind, ${deltaCol}, reference, note)
+     VALUES ($1, $2, $3, $4, $5)
+     RETURNING id::text AS id`,
+    [userId, amount >= 0 ? "admin_credit" : "admin_debit", amount, reference, note],
+  );
+  return { ok: true as const, before, after, transactionId: ins.rows[0]!.id };
+}
 
 export async function adminAdjustWallet(
   userId: string,
@@ -349,44 +408,21 @@ export async function adminAdjustWallet(
   adminIdentity: string,
   note = "",
 ): Promise<AdminAdjustResult> {
-  // `wallet` SQL ustun nomiga to'g'ridan-to'g'ri interpolyatsiya qilinadi
-  // (parametrlashtirib bo'lmaydi — ustun nomi parametr emas). TypeScript
-  // turi buni chaqiruv vaqtida cheklaydi, lekin bu funksiya JSON'dan
-  // kelgan qiymat bilan ham chaqirilishi mumkin (API route orqali) —
-  // shuning uchun runtime tekshiruvi ham SHART, faqat TS turiga
-  // ishonib bo'lmaydi.
+  // Shape checks stay here (not only in the InTx core) so the legacy result
+  // for a zero delta is unchanged and no transaction is opened for it.
   if (!WALLETS.includes(wallet)) throw new Error(`Noma'lum hamyon: ${wallet}`);
   const amount = Math.trunc(delta);
   if (amount === 0) return { ok: true, before: 0, after: 0 };
 
   const out = await transaction(async (client): Promise<AdminAdjustResult> => {
-    const res = await client.query<Record<Wallet, string>>(
-      `SELECT points, quota, balance FROM users WHERE id = $1 FOR UPDATE`,
-      [userId],
-    );
-    const row = res.rows[0];
-    if (!row) throw new Error("Foydalanuvchi topilmadi");
-    const before = Number(row[wallet]);
-    const after = before + amount;
-    if (after < 0) return { ok: false as const, reason: "insufficient" as const, available: before };
-
-    await client.query(`UPDATE users SET ${wallet} = ${wallet} + $2, updated_at = now() WHERE id = $1`, [
+    const r = await adminAdjustWalletInTx(client, {
       userId,
-      amount,
-    ]);
-    const deltaCol = `${wallet}_delta`;
-    await client.query(
-      `INSERT INTO transactions (user_id, kind, ${deltaCol}, reference, note)
-       VALUES ($1, $2, $3, $4, $5)`,
-      [
-        userId,
-        amount >= 0 ? "admin_credit" : "admin_debit",
-        amount,
-        randomUUID(),
-        `${adminIdentity}${note ? `: ${note}` : ""}`,
-      ],
-    );
-    return { ok: true as const, before, after };
+      wallet,
+      delta: amount,
+      reference: randomUUID(),
+      note: `${adminIdentity}${note ? `: ${note}` : ""}`,
+    });
+    return r.ok ? { ok: true as const, before: r.before, after: r.after } : r;
   });
   // Admin tuzatishi — pul harakati; kim, qaysi hamyon, qancha (telefon `log` da yashiriladi).
   log(out.ok ? "info" : "warn", `[credits] admin tuzatishi: ${out.ok ? "bajarildi" : "mablag' yetarli emas"}`, {
