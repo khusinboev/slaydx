@@ -233,6 +233,8 @@ export type Features = {
   /** Server DOCX/PPTX ni PDF ga o'gira oladimi (LibreOffice o'rnatilganmi). */
   pdf: boolean;
   payments: { click: boolean; payme: boolean };
+  /** Admin price adjustments (non-default tools only); untrusted, validated by `parsePriceAdjustments`. */
+  pricing?: unknown;
 };
 
 export function fetchSession() {

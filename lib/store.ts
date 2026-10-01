@@ -254,7 +254,7 @@ export const useAppStore = create<AppState>()(
         lastSessionAt = Date.now();
         startPricingRefresh();
         // `pricing` is untrusted input: validated here; a server without it means "no adjustments".
-        const pricing = parsePriceAdjustments((features as (Features & { pricing?: unknown }) | null)?.pricing);
+        const pricing = parsePriceAdjustments(features?.pricing);
         const pricingChanged = setClientPriceAdjustments(pricing);
         set((s) => ({
           user,
