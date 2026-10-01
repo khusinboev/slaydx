@@ -3,7 +3,10 @@ import { ApiError } from "./api";
 import { queryOne, transaction } from "./db";
 import { env } from "./env";
 import { rateLimit, windowStartOf, type RateOptions } from "./ratelimit";
+import { recordAiUsage } from "./ai-usage";
+import { getSetting } from "./settings";
 import { complete as completeRole } from "../generation/llm-roles";
+import { trackJobCost, type JobCost } from "../generation/job-cost";
 
 /**
  * BEPUL LLM endpointlari — sarf siyosati (prod-readiness C10: EXT-02,
@@ -63,6 +66,49 @@ export function freeLlmPolicy(): FreeLlmPolicy {
 }
 
 /**
+ * Last effective `free_llm.disabled` this process read. The route-level
+ * `assertFreeLlmEnabled()` is synchronous (it runs before any DB access), so it
+ * uses this value and refreshes it in the background; `withFreeLlm` always
+ * awaits the effective value before the buckets and the provider.
+ */
+let knownDisabled: boolean | undefined;
+
+/**
+ * Effective policy (docs/admin/02-plan.md §6.10): an admin override from
+ * `app_settings` when one exists, otherwise exactly `freeLlmPolicy()` (env).
+ * `getSetting` never throws — on a DB error it serves the last good snapshot
+ * or the env value — and the fail-closed buckets below are unaffected.
+ */
+export async function effectiveFreeLlmPolicy(): Promise<FreeLlmPolicy> {
+  const [disabled, outline, udk, rewrite, polish, globalDaily] = await Promise.all([
+    getSetting("free_llm.disabled"),
+    getSetting("free_llm.daily.outline"),
+    getSetting("free_llm.daily.udk"),
+    getSetting("free_llm.daily.rewrite"),
+    getSetting("free_llm.daily.polish"),
+    getSetting("free_llm.daily.global"),
+  ]);
+  knownDisabled = disabled;
+  return { disabled, daily: { outline, udk, rewrite, polish }, globalDaily };
+}
+
+/** Kill switch for the synchronous route check: last known effective value, env until one is known. */
+function disabledNow(): boolean {
+  const value = knownDisabled ?? env.freeLlm.disabled;
+  try {
+    void getSetting("free_llm.disabled").then(
+      (v) => {
+        knownDisabled = v;
+      },
+      () => undefined,
+    );
+  } catch {
+    // The refresh is best effort; the check above already decided.
+  }
+  return value;
+}
+
+/**
  * Global hisobdagi vazn — endpointning ENG KO'P provayder chaqiruvi:
  * reja 1–2 (`buildOutline` qayta urinish bilan), UDK 1, «Tuzatish» 1,
  * «Hammasini tuzatish» ≤6 yozuvchi + 1 baholovchi. Shunda global shift
@@ -115,9 +161,16 @@ const UNPAID_TEXT =
   "AI tahrir faqat pul bilan (balans yoki Pro obuna) to'langan hujjatlarda ishlaydi. Bu hujjat bonus ballar hisobidan yaratilgan — bonus AI tahrirni qoplamaydi.";
 const BUSY_TEXT = "Bu hujjat ustida AI tahrir allaqachon ketmoqda — tugashini kuting.";
 
-/** O'chirish tugmasi — route boshida, bazadan ham OLDIN. */
-export function assertFreeLlmEnabled(policy: FreeLlmPolicy = freeLlmPolicy()): void {
-  if (policy.disabled) throw new ApiError(DISABLED_TEXT, 503, { code: "disabled" });
+/**
+ * O'chirish tugmasi — route boshida, bazadan ham OLDIN.
+ *
+ * Without `policy` it checks the last known effective setting (env until the
+ * first read completes); `withFreeLlm` re-checks the awaited effective value,
+ * so an admin "disable" always stops the provider call.
+ */
+export function assertFreeLlmEnabled(policy?: FreeLlmPolicy): void {
+  const disabled = policy ? policy.disabled : disabledNow();
+  if (disabled) throw new ApiError(DISABLED_TEXT, 503, { code: "disabled" });
 }
 
 export type FreeLlmRequest = {
@@ -148,7 +201,7 @@ export async function withFreeLlm<T>(
   run: (complete: typeof completeRole) => Promise<T>,
   deps: FreeLlmDeps = {},
 ): Promise<T> {
-  const policy = deps.policy ?? freeLlmPolicy();
+  const policy = deps.policy ?? (await effectiveFreeLlmPolicy());
   assertFreeLlmEnabled(policy);
   const now = deps.now ?? Date.now();
   const pre = deps.bucketPrefix ?? "";
@@ -169,9 +222,22 @@ export async function withFreeLlm<T>(
   };
 
   const complete = guardComplete(deps.complete ?? completeRole, r.signal);
+  /*
+   * Provider spend of this call → `ai_usage` (source 'free', admin §17.3).
+   * The meter is flushed in `finally`, so a failed or aborted call is counted
+   * too; the write is fire-and-forget and never changes the result.
+   */
+  const runMetered = async (): Promise<T> => {
+    const tracked = trackJobCost(() => run(complete));
+    try {
+      return await tracked.promise;
+    } finally {
+      flushFreeUsage(endpoint, userId, tracked.snapshot);
+    }
+  };
   if (!doc) {
     await consume();
-    return run(complete);
+    return runMetered();
   }
 
   /*
@@ -184,9 +250,18 @@ export async function withFreeLlm<T>(
   if (!lease) throw new ApiError(BUSY_TEXT, 409, { code: "busy" });
   try {
     await consume();
-    return await run(complete);
+    return await runMetered();
   } finally {
     await releaseLease(key, lease);
+  }
+}
+
+/** Records the free call's spend (nothing when no provider call was made). Never throws. */
+function flushFreeUsage(endpoint: FreeLlmEndpoint, userId: string, snapshot: () => JobCost): void {
+  try {
+    void recordAiUsage({ source: "free", outcome: "free", userId, toolId: `free:${endpoint}`, cost: snapshot().toJson() });
+  } catch {
+    // Telemetry must never affect the endpoint.
   }
 }
 

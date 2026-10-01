@@ -100,6 +100,16 @@ export function limiterFor(name: string): Semaphore {
   return s;
 }
 
+/** State of one limiter as published in `process_heartbeats.limiters` (admin system page). */
+export type LimiterSnapshot = { name: string; active: number; waiting: number; max: number };
+
+/** Read-only snapshot of every limiter in this process, sorted by name. */
+export function snapshotLimiters(): LimiterSnapshot[] {
+  return [...REGISTRY.entries()]
+    .map(([name, s]) => ({ name, active: s.active, waiting: s.waiting, max: s.max }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
 /** Testlar uchun: semaforlarni unutadi (keyingi `limiterFor` jadvaldan qayta o'qiydi). */
 export function resetLimiters(): void {
   REGISTRY.clear();
