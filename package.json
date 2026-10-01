@@ -12,6 +12,7 @@
     "db:migrate": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/migrate.ts",
     "worker": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/worker.ts",
     "topup": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/topup.mts",
+    "admin:create": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/admin-create.mts",
     "bot": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/bot.mts",
     "bot:commands": "tsx --env-file-if-exists=.env.local --conditions=react-server scripts/bot-commands.mts",
     "check": "npm run typecheck && npm run lint && npm run test && npm run test:viewer && npm run test:ui",
