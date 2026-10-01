@@ -5,6 +5,7 @@ import { persist } from "zustand/middleware";
 import * as api from "./api-client";
 import type { Features, ServerGeneration, ServerUser } from "./api-client";
 import type { UserProfile } from "./types";
+import { parsePriceAdjustments, setClientPriceAdjustments, type PriceAdjustMap } from "./tools";
 
 export type ThemeMode = "light" | "dark";
 
@@ -25,6 +26,18 @@ type AppState = {
   loggedIn: boolean;
   user: ServerUser | null;
   features: Features | null;
+
+  /**
+   * Admin price adjustments from the session (`features.pricing`, non-default
+   * tools only), validated. Mirrored into `lib/tools.ts` so `priceFor` shows
+   * what the server charges (docs/admin/02-plan.md §17.2).
+   */
+  pricing: PriceAdjustMap;
+  /**
+   * Bumped whenever `pricing` changes. Price-rendering components subscribe
+   * to it (`usePricingVersion`) so they re-render with the new prices.
+   */
+  pricingVersion: number;
 
   /**
    * Birinchi seans tekshiruvi tarmoq/server xatosi bilan tugadi (FE-04) —
@@ -122,6 +135,30 @@ function scheduleSessionRetry() {
   (sessionRetryTimer as { unref?: () => void }).unref?.();
 }
 
+/*
+ * Admin prices (docs/admin/02-plan.md §17.2) travel with the session, so the
+ * session is re-read when it is PRICING_REFRESH_MS old and the tab is visible
+ * (checked every minute and on return to the tab). A hidden tab costs no
+ * requests; the server's `expectedPrice` guard covers any staleness anyway.
+ * One timer and one listener per page, started by the first successful load.
+ */
+export const PRICING_REFRESH_MS = 5 * 60_000;
+const PRICING_CHECK_MS = 60_000;
+let pricingRefreshStarted = false;
+let lastSessionAt = 0;
+
+function startPricingRefresh() {
+  if (pricingRefreshStarted || typeof window === "undefined" || typeof document === "undefined") return;
+  pricingRefreshStarted = true;
+  const check = () => {
+    if (document.visibilityState !== "visible" || Date.now() - lastSessionAt < PRICING_REFRESH_MS) return;
+    void useAppStore.getState().refreshSession();
+  };
+  const timer = setInterval(check, PRICING_CHECK_MS);
+  (timer as { unref?: () => void }).unref?.();
+  document.addEventListener("visibilitychange", check);
+}
+
 /**
  * OS afzalligini BIR MARTA o'qiydi (birinchi tashrifda standart qiymat
  * uchun). SSR xavfsiz — `window`/`matchMedia` yo'q bo'lsa "light".
@@ -164,6 +201,8 @@ export const useAppStore = create<AppState>()(
       loggedIn: false,
       user: null,
       features: null,
+      pricing: {},
+      pricingVersion: 0,
       generations: [],
       generationsLoaded: false,
       generationsCursor: null,
@@ -212,7 +251,19 @@ export const useAppStore = create<AppState>()(
         }
         clearSessionRetry();
         const { user, features } = res;
-        set({ user, features, loggedIn: Boolean(user), sessionChecked: true, sessionError: null });
+        lastSessionAt = Date.now();
+        startPricingRefresh();
+        // `pricing` is untrusted input: validated here; a server without it means "no adjustments".
+        const pricing = parsePriceAdjustments((features as (Features & { pricing?: unknown }) | null)?.pricing);
+        const pricingChanged = setClientPriceAdjustments(pricing);
+        set((s) => ({
+          user,
+          features,
+          loggedIn: Boolean(user),
+          sessionChecked: true,
+          sessionError: null,
+          ...(pricingChanged ? { pricing, pricingVersion: s.pricingVersion + 1 } : {}),
+        }));
       },
 
       refreshGenerations: async () => {
@@ -318,6 +369,15 @@ if (typeof window !== "undefined") {
     // sessionStorage yopiq (maxfiy rejim) — u holda u yerga hech narsa yozilmagan ham.
     console.warn("[miniapp] sessionStorage:", e instanceof Error ? e.message : e);
   }
+}
+
+/**
+ * Subscribes a price-rendering component to admin price changes: the value
+ * changes whenever the adjustments do, which re-renders the caller (and its
+ * children) so `priceFor`/`clientAdjustedPrice` output is current.
+ */
+export function usePricingVersion(): number {
+  return useAppStore((s) => s.pricingVersion);
 }
 
 export function creditTotal(user: Pick<ServerUser, "points" | "quota" | "balance"> | null) {
