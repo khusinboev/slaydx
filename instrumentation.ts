@@ -62,6 +62,20 @@ export async function register() {
     return;
   }
 
+  // Admin panel hooks (docs/admin/02-plan.md §13.4): persisted error log and the
+  // web heartbeat (unref'd timer). Runtime only, never during `next build`; both
+  // are fire-and-forget and swallow their own failures, so boot is unaffected.
+  if (process.env.NEXT_PHASE !== "phase-production-build") {
+    try {
+      const { registerErrorSink } = await import("./lib/server/error-sink");
+      registerErrorSink("web");
+      const { startHeartbeat } = await import("./lib/server/heartbeat");
+      startHeartbeat({ role: "web", concurrency: 0, getRunning: () => 0 });
+    } catch (e) {
+      console.warn("[boot] admin hooklari ulanmadi:", e instanceof Error ? e.message : e);
+    }
+  }
+
   if (env.worker.inline) {
     const { startInlineWorker } = await import("./lib/server/worker");
     startInlineWorker();

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import type { FormValues, ToolConfig } from "@/lib/types";
 import { defaultPages, fieldVisible, missingRequired, priceFor, profileDefaults, toolBlockedReason } from "@/lib/tools";
 import { draftOutline, type ServerUser } from "@/lib/api-client";
-import { useAppStore, writerProfile } from "@/lib/store";
+import { useAppStore, usePricingVersion, writerProfile } from "@/lib/store";
 import { useUi } from "@/lib/ui";
 import type { UserProfile } from "@/lib/types";
 import { FieldBlock, ModeSwitch, TextInput, Legend } from "./fields";
@@ -90,6 +90,8 @@ export function ToolWorkspace({ tool }: { tool: ToolConfig }) {
   const sessionChecked = useAppStore((s) => s.sessionChecked);
   const user = useAppStore((s) => s.user);
   const features = useAppStore((s) => s.features);
+  // Admin price changes re-render the whole form subtree (no composer memoizes its price).
+  usePricingVersion();
   const open = useUi((s) => s.open);
 
   // Sessiya serverdan tasdiqlanmaguncha login modalini ochmaymiz —
@@ -190,7 +192,10 @@ function StandardForm({ tool, profile }: { tool: ToolConfig; profile: UserProfil
   const extraFields = tool.fields.filter((f) => f.extra && !(hasOutline && f.name === "tocText") && fieldVisible(f, values));
   const needsTopic = Boolean(tool.topicLegend);
   const fileMode = tool.modes && values.mode === "file";
-  const price = useMemo(() => priceFor(tool, values), [tool, values]);
+  const pricingVersion = usePricingVersion();
+  // `pricingVersion` invalidates the memo when admin adjustments change.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const price = useMemo(() => priceFor(tool, values), [tool, values, pricingVersion]);
 
   /**
    * Rejani AI tuzadi va tahrirlash uchun ko'rsatadi.

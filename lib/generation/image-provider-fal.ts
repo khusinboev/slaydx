@@ -13,6 +13,7 @@
  * uchun import yo'li o'zgarmadi.
  */
 import { requestBudget, type FalFailure, type ImageAsk, type ImageProvider, type ImageResult } from "./image-provider";
+import { recordFalImage } from "./job-cost";
 
 export type FalSize = { width: number; height: number };
 export type SlideImage = { url: string; alt?: string };
@@ -36,11 +37,16 @@ function falSteps(premium: boolean) {
   return premium ? STEPS.premium : STEPS.standard;
 }
 
-/** `.env` dagi FAL_MODEL ni hurmat qiladi — ilgari URL qattiq yozilgan edi. */
-function falUrl(premium = false) {
+/** Model id actually requested (also the cost-telemetry key). */
+function falModel(premium = false) {
   const picked = premium ? process.env.FAL_MODEL_PREMIUM || process.env.FAL_MODEL : process.env.FAL_MODEL;
   const model = (picked || FAL_DEFAULT_MODEL).trim().replace(/^\/+|\/+$/g, "");
-  return `https://fal.run/${model || FAL_DEFAULT_MODEL}`;
+  return model || FAL_DEFAULT_MODEL;
+}
+
+/** `.env` dagi FAL_MODEL ni hurmat qiladi — ilgari URL qattiq yozilgan edi. */
+function falUrl(premium = false) {
+  return `https://fal.run/${falModel(premium)}`;
 }
 
 export function falKey() {
@@ -110,6 +116,13 @@ export async function requestFalImage(
     }
     const url = data.images?.[0]?.url;
     if (!url) return { ok: false, reason: "failed", detail: "javobda rasm yo'q" };
+    // Spend telemetry only (job/free-endpoint meter, if any); billed size is the returned one.
+    const img = data.images?.[0];
+    recordFalImage(
+      falModel(tier.premium),
+      typeof img?.width === "number" ? img.width : size.width,
+      typeof img?.height === "number" ? img.height : size.height,
+    );
     return { ok: true, image: { url, alt: prompt.slice(0, 80) } };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "network";

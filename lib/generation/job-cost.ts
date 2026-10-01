@@ -16,6 +16,11 @@
  * chaqiruv (so'rov yo'li: sayqal/qayta yozish/UDK, testlar) hech narsa
  * yozmaydi. Faqat TELEMETRIYA: narx/kredit bilan aloqasi yo'q.
  *
+ * Admin cost capture (docs/admin/02-plan.md §17.3): the worker wraps the build
+ * in `trackJobCost` so the spend of failed and abandoned jobs is not lost, and
+ * `withFreeLlm` (lib/server/spend.ts) tracks the free endpoints the same way;
+ * both flush into `ai_usage`.
+ *
  * Kontekst `AsyncLocalStorage` da (faqat Node runtime — `lib/generation`
  * klientga chiqmaydi): parallel `mapPool` yo'laklari, taymerlar va
  * dinamik importlar ham o'sha ishning hisoblagichini ko'radi, ikki ish
@@ -53,13 +58,39 @@ export function imageUnitUsd(model: string): number {
   return IMAGE_DEFAULT_USD;
 }
 
+/**
+ * fal.ai price per started megapixel, by exact model id. Only models with a
+ * documented price are listed: docs/research/provider-pricing.md §3 records
+ * `fal-ai/flux/schnell` at $0.003 per megapixel (checked 2026-09-20) and no
+ * price for the other FLUX variants. Unlisted models are recorded with their
+ * image count, usd 0 and `priced: false`, so reports can show the gap.
+ */
+export const FAL_USD_PER_MEGAPIXEL: Record<string, number> = {
+  "fal-ai/flux/schnell": 0.003,
+};
+
+/**
+ * USD for one fal image of `width`×`height`, or `null` when the model has no
+ * documented price. The megapixel count is rounded UP (an upper bound, like
+ * `GROUNDING_USD`): fal bills whole megapixels.
+ */
+export function falImageUnitUsd(model: string, width: number, height: number): number | null {
+  const perMp = FAL_USD_PER_MEGAPIXEL[model];
+  if (perMp === undefined) return null;
+  const mp = Math.max(1, Math.ceil((Math.max(0, width) * Math.max(0, height)) / 1_000_000));
+  return mp * perMp;
+}
+
 type Key = `${CostPart["kind"]}|${string}|${string}`;
+
+/** A part with an optional "no documented price" marker (usd is then 0). */
+type MeterPart = CostPart & { priced?: false };
 
 /** Bitta ishning barcha sarfi — tur × provayder × model bo'yicha yig'indi. */
 export class JobCost {
-  private parts = new Map<Key, CostPart>();
+  private parts = new Map<Key, MeterPart>();
 
-  private part(kind: CostPart["kind"], provider: string, model: string): CostPart {
+  private part(kind: CostPart["kind"], provider: string, model: string): MeterPart {
     const key: Key = `${kind}|${provider}|${model}`;
     let p = this.parts.get(key);
     if (!p) {
@@ -83,6 +114,27 @@ export class JobCost {
     p.calls += count;
     p.units += count;
     p.usd += count * unitUsd;
+  }
+
+  /** An image from a model without a documented price: counted, usd 0, `priced: false`. */
+  addUnpricedImage(provider: string, model: string, count = 1): void {
+    const p = this.part("image", provider, model);
+    p.calls += count;
+    p.units += count;
+    p.priced = false;
+  }
+
+  /** Adds every part of `other` into this meter (used to merge nested meters). */
+  absorb(other: JobCost): void {
+    for (const o of other.parts.values()) {
+      const p = this.part(o.kind, o.provider, o.model);
+      p.calls += o.calls;
+      p.inputTokens += o.inputTokens;
+      p.outputTokens += o.outputTokens;
+      p.units += o.units;
+      p.usd += o.usd;
+      if (o.priced === false) p.priced = false;
+    }
   }
 
   /**
@@ -138,11 +190,57 @@ export class JobCost {
 
 const store = new AsyncLocalStorage<JobCost>();
 
+/** Meters opened inside one `trackJobCost` call (its own first). */
+type Tracker = { meters: JobCost[] };
+const trackers = new AsyncLocalStorage<Tracker>();
+
 /** `fn` ichidagi barcha sarf yangi hisoblagichga yoziladi. */
 export async function withJobCost<T>(fn: () => Promise<T>): Promise<{ value: T; cost: JobCost }> {
   const cost = new JobCost();
+  // Also visible to an enclosing `trackJobCost`, which can read it even when
+  // `fn` throws (the value below is then never returned).
+  trackers.getStore()?.meters.push(cost);
   const value = await store.run(cost, fn);
   return { value, cost };
+}
+
+export type TrackedJobCost<T> = {
+  /** Settles exactly like `fn()`. */
+  promise: Promise<T>;
+  /**
+   * Everything spent inside `fn` so far: its own meter plus every meter a
+   * nested `withJobCost` opened (they are disjoint, so the sum is exact). Valid
+   * at any time — after success, after a throw, or while an abandoned build is
+   * still running.
+   */
+  snapshot(): JobCost;
+};
+
+/**
+ * Runs `fn` with spend tracking that survives failure (admin `ai_usage`,
+ * docs/admin/02-plan.md §17.3). `buildArtifact` keeps its own `withJobCost`
+ * and its success result (`file.cost`) is unchanged; this only lets the caller
+ * also see the spend of a build that threw or was abandoned. Calls made inside
+ * `fn` but outside any nested `withJobCost` go to the tracker's own meter.
+ */
+export function trackJobCost<T>(fn: () => Promise<T>): TrackedJobCost<T> {
+  const own = new JobCost();
+  const tracker: Tracker = { meters: [own] };
+  let promise: Promise<T>;
+  try {
+    promise = trackers.run(tracker, () => store.run(own, fn));
+  } catch (e) {
+    // A synchronous throw settles the same way an async one would.
+    promise = Promise.reject(e);
+  }
+  return {
+    promise,
+    snapshot() {
+      const all = new JobCost();
+      for (const m of tracker.meters) all.absorb(m);
+      return all;
+    },
+  };
 }
 
 /** Joriy ish hisoblagichi (ish kontekstidan tashqarida — `undefined`). */
@@ -156,6 +254,15 @@ export function recordLlmUsage(u: UsageLike | undefined): void {
 
 export function recordImage(provider: string, model: string, count = 1): void {
   store.getStore()?.addImage(provider, model, count);
+}
+
+/** One successful fal.ai image (priced per megapixel when the model's price is documented). */
+export function recordFalImage(model: string, width: number, height: number): void {
+  const meter = store.getStore();
+  if (!meter) return;
+  const unitUsd = falImageUnitUsd(model, width, height);
+  if (unitUsd === null) meter.addUnpricedImage("fal", model);
+  else meter.addImage("fal", model, 1, unitUsd);
 }
 
 export function recordGrounding(queries = 1): void {

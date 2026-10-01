@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeftRight, FileText, Loader2 } from "lucide-react";
 import type { FormValues, ToolConfig } from "@/lib/types";
 
-import { preflightError, translationPrice, TRANSLATION_LANGUAGES, TRANSLATION_MAX_CHARS, TRANSLATION_MIN_CHARS, TRANSLATION_STYLES } from "@/lib/tools";
+import { clientAdjustedPrice, getClientPriceAdjust, preflightError, translationPrice, TRANSLATION_BASE_PRICE, TRANSLATION_LANGUAGES, TRANSLATION_MAX_CHARS, TRANSLATION_MIN_CHARS, TRANSLATION_STYLES } from "@/lib/tools";
 import { deleteSource, uploadSource, type SourceUploadResult } from "@/lib/api-client";
 import { useAppStore } from "@/lib/store";
 import { parseUserGlossary } from "@/lib/generation/translate/glossary";
@@ -80,7 +80,9 @@ export function TranslationForm({ tool }: { tool: ToolConfig }) {
   }, [language, sourceLang, style, userGlossary, restored, save]);
 
   const chars = mode === "file" ? (upload?.chars ?? 0) : sourceText.length;
-  const price = translationPrice(chars);
+  // Same number `priceFor(tool, values())` gives (`translationChars`), with the admin adjustment.
+  const price = clientAdjustedPrice(tool.id, translationPrice(chars));
+  const adjusted = getClientPriceAdjust(tool.id) !== undefined;
   const sameLang = sourceLang !== "avto" && sourceLang === language;
   const glossaryCount = useMemo(() => parseUserGlossary(userGlossary).length, [userGlossary]);
   const outFormat = mode === "file" ? (upload ? (KIND_LABEL[upload.kind] ?? upload.kind.toUpperCase()) : "kirish formati bilan bir xil") : "DOCX";
@@ -261,7 +263,10 @@ export function TranslationForm({ tool }: { tool: ToolConfig }) {
           </label>
         )}
         <p className="text-muted-foreground mt-2 text-[11.5px]" data-price-rule>
-          {fmt(10_000)} belgigacha {fmt(3000)} tanga · keyingi har {fmt(5000)} belgi +{fmt(1000)}
+          {/* An adjusted price is rounded, so the per-step amount is no longer exact: only the base tier is quoted. */}
+          {adjusted
+            ? `${fmt(10_000)} belgigacha ${fmt(clientAdjustedPrice(tool.id, TRANSLATION_BASE_PRICE))} tanga · keyingi har ${fmt(5000)} belgi uchun narx oshadi`
+            : <>{fmt(10_000)} belgigacha {fmt(3000)} tanga · keyingi har {fmt(5000)} belgi +{fmt(1000)}</>}
           {over ? ` · chegara ${fmt(TRANSLATION_MAX_CHARS)} — hujjatni bo‘lib yuboring` : ""}
         </p>
       </Card>
