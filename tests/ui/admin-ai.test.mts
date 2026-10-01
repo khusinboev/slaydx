@@ -245,6 +245,7 @@ test("cost: 403 renders the forbidden state, with no data", async () => {
   renderPage(Q);
   await screen.findByText("Ruxsat yo'q");
   assert.ok(!screen.queryByText("claude-sonnet-5"));
+  assert.ok(!screen.queryByRole("group", { name: "Filtrlar" }), "no filters on a forbidden screen");
 });
 
 // ───────────────────────────── providers tab
@@ -308,6 +309,15 @@ test("providers: key grid (Bor / Yo'q), open breaker red, stale process neutral 
   assert.ok(screen.getAllByText("$38,40").length >= 1);
   assert.ok(screen.getAllByText(/487\s680\s+so'm/).length >= 1, "38.4 × 12 700");
   assert.ok(screen.getAllByText("noma'lum").length >= 2);
+});
+
+test("providers: an open breaker whose window already ended says so instead of a stale countdown", async () => {
+  const past = { ...providers, breakers: [{ process: "worker@host-a:11", name: "gemini", state: "open" as const, openUntil: new Date(NOW - 60_000).toISOString(), failures: 0, stale: false }] };
+  stubFetch(() => json(200, past));
+  const { container } = renderPage("tab=providers");
+  await screen.findByText("API kalitlari");
+  const row = container.querySelector("tr[data-row-key='worker@host-a:11|gemini']") as HTMLElement;
+  assert.match(row.textContent ?? "", /muddat tugagan/);
 });
 
 test("providers: no processes yet → an empty state, not a blank table", async () => {

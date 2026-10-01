@@ -77,6 +77,7 @@ export function CostTab({
 
   return (
     <div className="flex flex-col gap-4 pt-4">
+      {state.status === "forbidden" ? null : (
       <FilterBar activeCount={activeFilters} onClear={onClear}>
         <div className="flex min-w-0 flex-col gap-1">
           <span className="text-muted-foreground text-[11px] font-semibold">Davr</span>
@@ -87,6 +88,7 @@ export function CostTab({
           <Segmented ariaLabel="Guruhlash turi" options={GROUP_BY_OPTIONS} value={groupBy} onChange={(v) => onGroupBy(v as AiGroupBy)} />
         </div>
       </FilterBar>
+      )}
 
       {state.status === "loading" ? (
         <CostSkeleton />

@@ -92,13 +92,13 @@ function ProvidersReady({ data, onRefresh }: { data: AiProvidersResponse; onRefr
         <CardHeader
           title="Jarayonlar va himoya qulflari"
           description="Har bir veb va worker jarayoni o'z holatini har 30 soniyada yozadi; qulf holati jarayon ichida saqlanadi."
-          aside={
-            <>
-              {openCount > 0 ? <Badge tone="danger" dot>{numText(openCount)} ta ochiq</Badge> : null}
-              {staleCount > 0 ? <Badge tone="warning" dot>{numText(staleCount)} ta eskirgan jarayon</Badge> : null}
-            </>
-          }
         />
+        {openCount > 0 || staleCount > 0 ? (
+          <div className="flex flex-wrap gap-2 border-b px-4 py-2.5">
+            {openCount > 0 ? <Badge tone="danger" dot>{numText(openCount)} ta ochiq</Badge> : null}
+            {staleCount > 0 ? <Badge tone="warning" dot>{numText(staleCount)} ta eskirgan jarayon</Badge> : null}
+          </div>
+        ) : null}
         {data.processes.length === 0 ? (
           <EmptyState title="Jarayonlardan signal kelmagan" description="Veb yoki worker jarayoni hali holat yozmagan yoki barchasi to'xtagan." />
         ) : (
@@ -151,7 +151,11 @@ function ProcessCell({ process, stale }: { process: string; stale: boolean }) {
   return (
     <span className="flex flex-col gap-1">
       <span className="font-mono text-xs break-all">{process}</span>
-      {stale ? <Badge tone="warning">Eskirgan</Badge> : null}
+      {stale ? (
+        <span className="self-start">
+          <Badge tone="warning">Eskirgan</Badge>
+        </span>
+      ) : null}
     </span>
   );
 }
@@ -173,7 +177,11 @@ function BreakersTable({ breakers }: { breakers: AiBreaker[] }) {
     {
       id: "until",
       header: "Ochiq muddati",
-      cell: (b) => (b.state === "open" && b.openUntil && !b.stale ? fmtRelative(b.openUntil) : "—"),
+      cell: (b) => {
+        if (b.state !== "open" || !b.openUntil || b.stale) return "—";
+        // A window that has already ended is not "open for another N seconds": say so.
+        return Date.parse(b.openUntil) > Date.now() ? fmtRelative(b.openUntil) : "muddat tugagan";
+      },
     },
     { id: "failures", header: "Ketma-ket xatolar", align: "right", className: "tabular-nums", cell: (b) => numText(b.failures) },
   ];
