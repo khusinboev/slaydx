@@ -31,7 +31,9 @@ const { useToastStore } = req("../../components/admin/ui/Toaster.tsx") as typeof
 
 const realFetch = globalThis.fetch;
 const realClick = window.HTMLAnchorElement.prototype.click;
+const realReplaceState = window.history.replaceState;
 afterEach(() => {
+  window.history.replaceState = realReplaceState;
   cleanup();
   globalThis.fetch = realFetch;
   window.HTMLAnchorElement.prototype.click = realClick;
@@ -70,9 +72,13 @@ function stubFetch(responders: Array<(c: Call) => Response | Promise<Response>>)
 const never = () => new Promise<Response>(() => {});
 const qs = (c: Call) => new URL(c.url, "http://localhost").searchParams;
 
+/** `replace` records the page's URL writes (`history.replaceState`) and any `router.replace`. */
 type RouterCalls = { replace: string[]; push: string[] };
 function makeRouter(): { router: AppRouterInstance; calls: RouterCalls } {
   const calls: RouterCalls = { replace: [], push: [] };
+  window.history.replaceState = (_data: unknown, _unused: string, url?: string | URL | null) => {
+    calls.replace.push(String(url));
+  };
   return {
     calls,
     router: {

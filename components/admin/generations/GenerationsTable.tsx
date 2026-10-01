@@ -225,9 +225,12 @@ export function GenerationsTable({ tools, fixedFilters, embedded = false, pageSi
         return;
       }
       const qs = filtersToSearch(next);
-      router.replace(`${pathname ?? ""}${qs ? `?${qs}` : ""}`, { scroll: false });
+      // Native history update: the App Router syncs `useSearchParams` with it
+      // without a server round trip (`router.replace` would re-render the
+      // dynamic page on the server and the controls would lag behind clicks).
+      window.history.replaceState(null, "", `${pathname ?? ""}${qs ? `?${qs}` : ""}`);
     },
-    [embedded, router, pathname],
+    [embedded, pathname],
   );
   const patch = (p: Partial<GenerationFilters>) => setFilters({ ...filters, ...p });
 
@@ -385,7 +388,7 @@ export function GenerationsTable({ tools, fixedFilters, embedded = false, pageSi
       <>
         <DataTable
           columns={columns}
-          rows={loading && !data ? [] : rows}
+          rows={rows}
           rowKey={(g) => g.id}
           caption={caption}
           loading={loading}
@@ -421,8 +424,9 @@ export function GenerationsTable({ tools, fixedFilters, embedded = false, pageSi
 
   return (
     <div className="flex min-w-0 flex-col gap-3">
-      <div className="flex flex-wrap items-end gap-2">
-        <div className="min-w-0 flex-1">
+      {/* Column on phones: a flex-1 bar next to the button would be squeezed to a sliver. */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+        <div className="min-w-0 sm:flex-1">
           <FilterBar activeCount={active} onClear={clearFilters}>
             <MultiSelectFilter label="Holat" values={filters.status} options={STATUS_OPTIONS} onChange={(v) => patch({ status: v as GenerationStatus[] })} />
             <SelectFilter label="Vosita" value={filters.tool} options={tools} allLabel="Barcha vositalar" onChange={(v) => patch({ tool: v })} />
@@ -446,7 +450,7 @@ export function GenerationsTable({ tools, fixedFilters, embedded = false, pageSi
           </FilterBar>
         </div>
         {canExport ? (
-          <Button onClick={exportCsv} loading={exporting} icon={<Download className="size-4" aria-hidden="true" />}>
+          <Button onClick={exportCsv} loading={exporting} className="self-start sm:self-end" icon={<Download className="size-4" aria-hidden="true" />}>
             CSV eksport
           </Button>
         ) : null}

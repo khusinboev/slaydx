@@ -69,9 +69,11 @@ function deliveredText(d: unknown): ReactNode {
 type TimelineItem = { at: string; label: string; tone: "muted" | "ok" | "bad" };
 
 function timeline(g: AdminGenerationDetail, ledger: ReadonlyArray<LedgerRow>): TimelineItem[] {
-  const items: TimelineItem[] = [{ at: g.createdAt, label: "Navbatga qo'yildi", tone: "muted" }];
-  const charge = ledger.find((t) => t.kind === "charge");
-  if (charge) items.push({ at: charge.createdAt, label: `Pul yechildi: ${chargeText(g.charged)}`, tone: "muted" });
+  // The charge is written in the enqueue transaction, so it shares the first step.
+  const charged = ledger.some((t) => t.kind === "charge");
+  const items: TimelineItem[] = [
+    { at: g.createdAt, label: charged ? `Navbatga qo'yildi · pul yechildi: ${chargeText(g.charged)}` : "Navbatga qo'yildi", tone: "muted" },
+  ];
   if (g.startedAt) items.push({ at: g.startedAt, label: `Worker oldi (${fmtNumber(g.attempts)}-urinish)`, tone: "muted" });
   if (g.finishedAt) {
     if (g.status === "COMPLETED") items.push({ at: g.finishedAt, label: "Tayyor", tone: "ok" });
@@ -250,8 +252,8 @@ export function GenerationDetail({ id, tools }: { id: string; tools: ReadonlyArr
 
       {g.stuck ? (
         <Notice tone="warn">
-          Ish {g.lockedAt ? fmtRelative(g.lockedAt) : "uzoq vaqtdan beri"} «Ishlanmoqda» holatida, budjet ({fmtDuration(g.budgetMs / 1000)}) + 30 soniyadan
-          oshgan. Worker javob bermayotgan bo&apos;lishi mumkin.
+          Ish «Ishlanmoqda» holatida osilib qolgan: {g.lockedAt ? `workerdan oxirgi belgi ${fmtRelative(g.lockedAt)} kelgan` : "ishda worker qulfi yo'q"},
+          budjet ({fmtDuration(g.budgetMs / 1000)}) + 30 soniya o&apos;tib ketgan. Worker javob bermayotgan bo&apos;lishi mumkin.
         </Notice>
       ) : null}
       {unrefunded ? (
@@ -296,7 +298,7 @@ export function GenerationDetail({ id, tools }: { id: string; tools: ReadonlyArr
                 { label: "Mavzu", value: g.topic },
                 { label: "Narx", value: <span className="tabular-nums">{fmtTanga(g.price)}</span> },
                 { label: "Yechilgan", value: <span className="tabular-nums">{chargeText(g.charged)}</span> },
-                { label: "Qaytarilgan", value: g.refunded ? <Badge tone="success">Ha</Badge> : charged ? <Badge tone="danger">Yo&apos;q</Badge> : "—" },
+                { label: "Qaytarilgan", value: g.refunded ? <Badge tone="success">Ha</Badge> : unrefunded ? <Badge tone="danger">Yo&apos;q</Badge> : "—" },
                 { label: "Bosqich", value: g.step },
                 { label: "Jarayon", value: <span className="tabular-nums">{fmtNumber(g.progress)}%</span> },
                 { label: "Urinishlar", value: <span className="tabular-nums">{fmtNumber(g.attempts)} / 2</span> },
