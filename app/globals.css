@@ -41,6 +41,15 @@
   --destructive: #b91c1c;
   --destructive-foreground: #fff8ee;
   --success: #16a34a;
+  /* Admin paneli: holat ranglari (matn sifatida ishlatiladi — kontrast AA) va grafik palitrasi. */
+  --success-text: #15803d;
+  --warning: #a16207;
+  --info: #1d4ed8;
+  --chart-1: #d97706;
+  --chart-2: #0f766e;
+  --chart-3: #b91c1c;
+  --chart-4: #6d28d9;
+  --chart-5: #64748b;
   --border: #ecdfc9;
   --input: #ecdfc9;
   --ring: #d9b78a;
@@ -74,6 +83,15 @@
   --accent: #232019;
   --accent-foreground: #f3ece2;
   --destructive: #f87171;
+  --success: #4ade80;
+  --success-text: #4ade80;
+  --warning: #fbbf24;
+  --info: #93b4ff;
+  --chart-1: #f59e0b;
+  --chart-2: #2dd4bf;
+  --chart-3: #f87171;
+  --chart-4: #a78bfa;
+  --chart-5: #94a3b8;
   --border: #2e2820;
   --input: #3a3126;
   --ring: #8a7355;
@@ -108,6 +126,15 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  --color-success: var(--success);
+  --color-success-text: var(--success-text);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
