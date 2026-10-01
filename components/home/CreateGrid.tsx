@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useEffect } from "react";
-import { TOOLS, toolBlockedReason, visibleToolGroups } from "@/lib/tools";
+import { TOOLS, clientAdjustedPrice, toolBlockedReason, visibleToolGroups } from "@/lib/tools";
 import { TOOL_ICONS } from "../shell/icons";
-import { useAppStore } from "@/lib/store";
+import { useAppStore, usePricingVersion } from "@/lib/store";
 import { useUi } from "@/lib/ui";
 
 export function CreateGrid() {
@@ -12,6 +12,8 @@ export function CreateGrid() {
   const sessionChecked = useAppStore((s) => s.sessionChecked);
   const loggedIn = useAppStore((s) => s.loggedIn);
   const features = useAppStore((s) => s.features);
+  // Re-render the "from" prices when admin adjustments change.
+  usePricingVersion();
   const open = useUi((s) => s.open);
 
   /*
@@ -65,7 +67,7 @@ export function CreateGrid() {
                       <p className="mt-3 text-xs font-medium text-amber-600 dark:text-amber-500">{blocked}</p>
                     ) : (
                       <p className="mt-3 text-xs font-medium">
-                        {t.basePrice.toLocaleString("uz-UZ")} tanga dan
+                        {clientAdjustedPrice(t.id, t.basePrice).toLocaleString("uz-UZ")} tanga dan
                       </p>
                     )}
                   </div>
