@@ -473,10 +473,10 @@ test("classifyUserQuery: id / numeric / phone / username / name", () => {
   assert.deepEqual(classifyUserQuery("123"), { kind: "numeric", value: "123" });
   assert.deepEqual(classifyUserQuery("123456789012345678"), { kind: "numeric", value: "123456789012345678" });
   assert.deepEqual(classifyUserQuery("9223372036854775807"), { kind: "numeric", value: "9223372036854775807" });
-  assert.deepEqual(classifyUserQuery("+998 90 123-45-12"), { kind: "phone", value: "998901234512" });
-  assert.deepEqual(classifyUserQuery("+998901234512"), { kind: "phone", value: "998901234512" });
-  assert.deepEqual(classifyUserQuery("(90) 123-45-12"), { kind: "phone", value: "901234512" }, ">= 9 digits with separators");
-  assert.deepEqual(classifyUserQuery("90 123 45 12"), { kind: "phone", value: "901234512" });
+  assert.deepEqual(classifyUserQuery("+998 90 123-45-67"), { kind: "phone", value: "998901234567" });
+  assert.deepEqual(classifyUserQuery("+998901234567"), { kind: "phone", value: "998901234567" });
+  assert.deepEqual(classifyUserQuery("(90) 123-45-67"), { kind: "phone", value: "901234567" }, ">= 9 digits with separators");
+  assert.deepEqual(classifyUserQuery("90 123 45 67"), { kind: "phone", value: "901234567" });
   assert.deepEqual(classifyUserQuery("+7"), { kind: "phone", value: "7" });
   assert.deepEqual(classifyUserQuery("@Ali_Valiyev"), { kind: "username", value: "ali_valiyev" });
   assert.deepEqual(classifyUserQuery("@ ali"), { kind: "username", value: "ali" });

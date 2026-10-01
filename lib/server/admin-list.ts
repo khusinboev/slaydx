@@ -503,7 +503,7 @@ const clip = (s: string, n: number): string => Array.from(s).slice(0, n).join(""
  *
  * Order matters: `#123` -> id; all digits -> numeric; leading `+` or >= 9 digits once
  * separators are stripped -> phone; `@` -> username; anything else -> name prefix.
- * A bare 9-19 digit string (`998901234512`) is `numeric` by row 1 of the §6.4.1 table,
+ * A bare 9-19 digit string (`998901234567`) is `numeric` by row 1 of the §6.4.1 table,
  * so a phone must be typed with `+` or with separators.
  */
 export function classifyUserQuery(q: string): UserQuery | null {

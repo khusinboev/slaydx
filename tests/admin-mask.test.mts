@@ -5,16 +5,16 @@ import { maskPhone, maskValues } from "../lib/server/admin-mask.ts";
 /** `lib/server/admin-mask.ts` — PII masking without `users.pii` (plan §6.0 "Masking"). */
 
 test("maskPhone: canonical Uzbek number", () => {
-  assert.equal(maskPhone("+998901234512"), "+998 ** *** ** 12");
-  assert.equal(maskPhone("998901234512"), "+998 ** *** ** 12");
-  assert.equal(maskPhone("+998 90 123-45-12"), "+998 ** *** ** 12");
-  assert.equal(maskPhone("(+998) 90 123 45 12"), "+998 ** *** ** 12");
+  assert.equal(maskPhone("+998901234567"), "+998 ** *** ** 67");
+  assert.equal(maskPhone("998901234567"), "+998 ** *** ** 67");
+  assert.equal(maskPhone("+998 90 123-45-67"), "+998 ** *** ** 67");
+  assert.equal(maskPhone("(+998) 90 123 45 67"), "+998 ** *** ** 67");
 });
 
 test("maskPhone: only the last two digits ever survive", () => {
-  const out = maskPhone("+998901234512")!;
+  const out = maskPhone("+998901234567")!;
   assert.doesNotMatch(out, /90123|1234|901/);
-  assert.equal(out.replace(/\D/g, ""), "99812", "country code and last two digits only");
+  assert.equal(out.replace(/\D/g, ""), "99867", "country code and last two digits only");
 });
 
 test("maskPhone: null / empty / non-string input is safe", () => {
@@ -23,7 +23,7 @@ test("maskPhone: null / empty / non-string input is safe", () => {
   assert.equal(maskPhone(""), null);
   assert.equal(maskPhone("   "), null);
   assert.equal(maskPhone("no digits"), null);
-  assert.equal(maskPhone(998901234512), null);
+  assert.equal(maskPhone(998901234567), null);
   assert.equal(maskPhone({}), null);
   assert.equal(maskPhone([]), null);
   assert.equal(maskPhone(true), null);
@@ -35,7 +35,7 @@ test("maskPhone: short or odd numbers reveal nothing they should not", () => {
   assert.equal(maskPhone("1234"), "+**34");
   assert.equal(maskPhone("+7 912 345-67-89"), "+*********89");
   // 13 digits starting with 998 is not a valid Uzbek number: generic masking
-  assert.equal(maskPhone("9989012345123"), "+***********23");
+  assert.equal(maskPhone("9989012345673"), "+***********73");
   // a local id that is not a phone is still masked, not echoed
   assert.doesNotMatch(maskPhone("ali_valiyev_99")!, /ali|valiyev/);
   // a huge string cannot make the output long
@@ -51,7 +51,7 @@ test("maskValues: reveal returns the input untouched", () => {
 
 test("maskValues: keys and `topic` survive, all other values are masked", () => {
   const out = maskValues(
-    { topic: "Raqamli iqtisodiyot", fullName: "Ali Valiyev", phone: "+998901234512", pages: 12, flag: true, empty: null, deep: { a: "secret", b: [1, "x", { c: "y" }] } },
+    { topic: "Raqamli iqtisodiyot", fullName: "Ali Valiyev", phone: "+998901234567", pages: 12, flag: true, empty: null, deep: { a: "secret", b: [1, "x", { c: "y" }] } },
     { reveal: false },
   );
   assert.deepEqual(out, {
