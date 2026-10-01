@@ -473,10 +473,10 @@ test("classifyUserQuery: id / numeric / phone / username / name", () => {
   assert.deepEqual(classifyUserQuery("123"), { kind: "numeric", value: "123" });
   assert.deepEqual(classifyUserQuery("123456789012345678"), { kind: "numeric", value: "123456789012345678" });
   assert.deepEqual(classifyUserQuery("9223372036854775807"), { kind: "numeric", value: "9223372036854775807" });
-  assert.deepEqual(classifyUserQuery("+998 90 123-45-12"), { kind: "phone", value: "998901234512" });
-  assert.deepEqual(classifyUserQuery("+998901234512"), { kind: "phone", value: "998901234512" });
-  assert.deepEqual(classifyUserQuery("(90) 123-45-12"), { kind: "phone", value: "901234512" }, ">= 9 digits with separators");
-  assert.deepEqual(classifyUserQuery("90 123 45 12"), { kind: "phone", value: "901234512" });
+  assert.deepEqual(classifyUserQuery("+998 90 123-45-67"), { kind: "phone", value: "998901234567" });
+  assert.deepEqual(classifyUserQuery("+998901234567"), { kind: "phone", value: "998901234567" });
+  assert.deepEqual(classifyUserQuery("(90) 123-45-67"), { kind: "phone", value: "901234567" }, ">= 9 digits with separators");
+  assert.deepEqual(classifyUserQuery("90 123 45 67"), { kind: "phone", value: "901234567" });
   assert.deepEqual(classifyUserQuery("+7"), { kind: "phone", value: "7" });
   assert.deepEqual(classifyUserQuery("@Ali_Valiyev"), { kind: "username", value: "ali_valiyev" });
   assert.deepEqual(classifyUserQuery("@ ali"), { kind: "username", value: "ali" });
@@ -628,4 +628,18 @@ test("LIKE escaping against Postgres: metacharacters match literally", { skip: h
   assert.deepEqual(await find("a\\"), ["a\\b"], "backslash is literal");
   assert.deepEqual(await find("100%"), ["100%"]);
   assert.deepEqual(await find("zzz%"), []);
+});
+
+test("parseListParams: enumList accepts comma-separated whitelisted values, dedups, rejects others", async () => {
+  const { parseListParams } = await import("../lib/server/admin-list.ts");
+  const spec = {
+    id: { column: "g.id", type: "uuid" },
+    sorts: { created_desc: { column: "g.created_at", dir: "DESC", type: "timestamptz" } },
+    filters: { status: { kind: "enumList", values: ["QUEUED", "FAILED", "COMPLETED"] } },
+  } as const;
+  const ok = parseListParams(new URL("http://x/a?status=FAILED,QUEUED,FAILED"), spec as never) as { filters: { status?: string[] } };
+  assert.deepEqual(ok.filters.status, ["FAILED", "QUEUED"]);
+  for (const bad of ["FAILED,DROP", "failed", "FAILED,,QUEUED", "A,B,C,D"]) {
+    assert.throws(() => parseListParams(new URL(`http://x/a?status=${encodeURIComponent(bad)}`), spec as never), (e: { status?: number }) => e.status === 400, bad);
+  }
 });

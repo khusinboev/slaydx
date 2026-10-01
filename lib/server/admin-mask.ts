@@ -11,7 +11,7 @@ import "server-only";
 const MASK = "•••";
 
 /**
- * `+998901234512` -> `+998 ** *** ** 12`. Only the last two digits survive.
+ * `+998901234567` -> `+998 ** *** ** 67`. Only the last two digits survive.
  * Accepts any separators. A non-Uzbek or malformed number keeps just its last two
  * digits (`+*****34`); fewer than 4 digits reveal nothing (`***`). `null`, blank
  * or non-string input -> `null`, so callers can tell "no phone" from "masked phone".

@@ -7,7 +7,7 @@ import { suggestUdk, updateProfile, type ServerUser } from "@/lib/api-client";
 import { useAppStore } from "@/lib/store";
 import { useConfirmClick } from "@/components/overlays/useConfirmClick";
 import { profilePatchFrom } from "@/lib/profile-sync";
-import { priceFor, formatTanga, ARTICLE_PRICES, THESIS_PRICES, THESIS_TYPE_IDS, thesisTypeId } from "@/lib/tools";
+import { priceFor, formatTanga, clientAdjustedPrice, ARTICLE_PRICES, THESIS_PRICES, THESIS_TYPE_IDS, thesisTypeId } from "@/lib/tools";
 import {
   ARTICLE_LIMITS,
   CITE_STYLES,
@@ -113,7 +113,9 @@ const clampFigures = (n: number, pages: PagesId) => Math.max(0, Math.min(maxFigu
 
 /** Tezis vositasi (AUDIT-19): maqola dvigatelining konferensiya turlari, o'z narx jadvali. */
 const isThesisTool = (tool: ToolConfig) => tool.id === "thesis";
-const priceLabelFor = (tool: ToolConfig, pages: PagesId) => (isThesisTool(tool) ? THESIS_PRICES[pages === "3-5" ? "3-5" : "1-2"] : ARTICLE_PRICES[pages]);
+// Displayed price: the table value with the admin adjustment (docs/admin/02-plan.md §17.2).
+const priceLabelFor = (tool: ToolConfig, pages: PagesId) =>
+  clientAdjustedPrice(tool.id, isThesisTool(tool) ? THESIS_PRICES[pages === "3-5" ? "3-5" : "1-2"] : ARTICLE_PRICES[pages]);
 
 function emptyUi(profile: UserProfile, user: ServerUser | null, tool?: ToolConfig): Ui {
   const type = tool && isThesisTool(tool) ? ARTICLE_TYPES.conference_thesis : ARTICLE_TYPES.imrad_oak;

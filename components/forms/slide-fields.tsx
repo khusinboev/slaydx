@@ -33,7 +33,7 @@ import {
   splitCsv,
   type SlideTool,
 } from "@/lib/generation/slide-params";
-import { formatTanga } from "@/lib/tools";
+import { formatTanga, getClientPriceAdjust, priceFor, TOOL_BY_ID } from "@/lib/tools";
 import { MultiChipGroup, RangeField } from "./fields";
 import { Row, Segmented, SelectField, Switch, type SegmentedOption } from "./compact";
 import { LogoField } from "./LogoField";
@@ -169,9 +169,18 @@ function SlideCountField({ values, set, tool }: { values: FormValues; set: Slide
     <div data-slide-count>
       <RangeField value={n} min={pro ? PRO_SLIDE_MIN : SLIDE_MIN} max={pro ? PRO_SLIDE_MAX : SLIDE_MAX} onChange={(v) => set("slideCount", v)} />
       <p className="text-muted-foreground mt-1.5 text-[11.5px]" data-price-rule>
-        {pro
-          ? `Har slayd ${formatTanga(PRO_SLIDE_PER_SLIDE)} · 1 slayd ≈ 2 daqiqa`
-          : `${SLIDE_INCLUDED} tagacha ${formatTanga(SLIDE_BASE_PRICE)} · keyingi har biri +${SLIDE_EXTRA_PRICE} · 1 slayd ≈ 2 daqiqa`}
+        {/*
+         * With an admin adjustment the total is rounded, so a per-slide amount
+         * is no longer exact: the rule quotes the adjusted prices at both ends
+         * of the range instead (docs/admin/02-plan.md §17.2).
+         */}
+        {getClientPriceAdjust(tool)
+          ? pro
+            ? `${PRO_SLIDE_MIN} ta — ${formatTanga(priceFor(TOOL_BY_ID[tool], { slideCount: PRO_SLIDE_MIN }))} … ${PRO_SLIDE_MAX} ta — ${formatTanga(priceFor(TOOL_BY_ID[tool], { slideCount: PRO_SLIDE_MAX }))} · 1 slayd ≈ 2 daqiqa`
+            : `${SLIDE_INCLUDED} tagacha ${formatTanga(priceFor(TOOL_BY_ID[tool], { slideCount: SLIDE_INCLUDED }))} · ${SLIDE_MAX} ta — ${formatTanga(priceFor(TOOL_BY_ID[tool], { slideCount: SLIDE_MAX }))} · 1 slayd ≈ 2 daqiqa`
+          : pro
+            ? `Har slayd ${formatTanga(PRO_SLIDE_PER_SLIDE)} · 1 slayd ≈ 2 daqiqa`
+            : `${SLIDE_INCLUDED} tagacha ${formatTanga(SLIDE_BASE_PRICE)} · keyingi har biri +${SLIDE_EXTRA_PRICE} · 1 slayd ≈ 2 daqiqa`}
       </p>
     </div>
   );

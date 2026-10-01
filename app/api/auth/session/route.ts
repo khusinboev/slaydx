@@ -2,6 +2,7 @@ import { ApiError, checkOrigin, handler, json, optionalUser, requireUser } from 
 import { clearSessionCookie, revokeAllSessions, revokeCurrentSession } from "@/lib/server/session";
 import { env, llmConfigured, paymentsConfigured } from "@/lib/server/env";
 import { pdfAvailable } from "@/lib/server/pdf";
+import { getAllToolPricing } from "@/lib/server/pricing";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,6 +20,12 @@ export const GET = handler("auth/session", async (req) => {
       devLogin: env.devLoginEnabled,
       pdf: pdfAvailable(),
       payments: paymentsConfigured(),
+      /*
+       * Admin price adjustments, non-default tools only ({} when none), so the
+       * client displays what the server charges (docs/admin/02-plan.md §17.2).
+       * Cached 15 s per process; never throws.
+       */
+      pricing: await getAllToolPricing(),
     },
   });
 });
