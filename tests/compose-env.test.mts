@@ -226,6 +226,27 @@ test("docker-compose: ADMIN_PHONES web va worker'ga uzatiladi", () => {
 });
 
 /**
+ * Admin panel (docs/admin/02-plan.md §3.4, §15.1): `ADMIN_TOTP_KEY` must reach
+ * web (login/enrollment) and worker (`npm run admin:create` runs there), be
+ * documented with its generation command, and actually be read by `env.ts` —
+ * otherwise the panel stays silently "admin_disabled" after a deploy.
+ *
+ * Mutation: drop the `ADMIN_TOTP_KEY` line from either service block, from
+ * `.env.example`, or the `str("ADMIN_TOTP_KEY")` read — an assertion fails.
+ */
+test("docker-compose: ADMIN_TOTP_KEY web va worker'ga uzatiladi, hujjatlangan va env.ts'da o'qiladi", () => {
+  const yaml = readFileSync(new URL("../docker-compose.yml", import.meta.url), "utf8");
+  for (const service of ["web", "worker"]) {
+    assert.match(envBlock(yaml, service), /^\s+ADMIN_TOTP_KEY: \$\{ADMIN_TOTP_KEY:-\}$/m, `${service}: ADMIN_TOTP_KEY compose'da uzatilmaydi`);
+  }
+  const example = readFileSync(new URL("../.env.example", import.meta.url), "utf8");
+  assert.match(example, /^ADMIN_TOTP_KEY=$/m, "ADMIN_TOTP_KEY .env.example da yo'q (qiymatsiz bo'lishi kerak)");
+  assert.match(example, /openssl rand -base64 32/, "yaratish buyrug'i hujjatlanmagan");
+  const envSrc = readFileSync(new URL("../lib/server/env.ts", import.meta.url), "utf8");
+  assert.match(envSrc, /str\("ADMIN_TOTP_KEY"\)/, "ADMIN_TOTP_KEY env.ts'da o'qilmaydi");
+});
+
+/**
  * C23 (retention.md §6): `FILE_TTL_HOURS` hech qachon o'qilmagan — o'chirib
  * tashlash o'rniga chalg'ituvchi konfiguratsiya bo'lib turardi.
  */

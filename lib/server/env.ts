@@ -165,6 +165,16 @@ export const env = {
    */
   trustProxy: bool("TRUST_PROXY", false),
 
+  /**
+   * Admin 2FA master key (docs/admin/02-plan.md §3.4): base64 of exactly 32
+   * bytes (`openssl rand -base64 32`). Missing or invalid → admin login and
+   * enrollment answer 503 `admin_disabled`; the rest of the app is unaffected.
+   * A getter, so the value is read when used (tests flip it per case). Never log it.
+   */
+  get adminTotpKey(): string {
+    return str("ADMIN_TOTP_KEY");
+  },
+
   telegramBotToken: str("TELEGRAM_BOT_TOKEN"),
   telegramBotUsername: str("NEXT_PUBLIC_TELEGRAM_BOT", ""),
 
@@ -289,6 +299,21 @@ export const env = {
   },
 } as const;
 
+/**
+ * Parses `ADMIN_TOTP_KEY`: canonical base64 (padding optional) that decodes to
+ * exactly 32 bytes, otherwise `null`. Lenient decoding is avoided on purpose:
+ * `Buffer.from(x, "base64")` silently skips junk characters, which would turn
+ * a typo into a different key instead of an error.
+ */
+export function parseAdminTotpKey(raw: string): Buffer | null {
+  const v = raw.trim();
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(v)) return null;
+  const buf = Buffer.from(v, "base64");
+  if (buf.length !== 32) return null;
+  if (buf.toString("base64").replace(/=+$/, "") !== v.replace(/=+$/, "")) return null;
+  return buf;
+}
+
 export function llmConfigured(): boolean {
   return Boolean(env.gemini.key || env.xai.key);
 }
@@ -374,6 +399,13 @@ export function runtimeWarnings(): string[] {
     warnings.push(
       "TELEGRAM_WEBHOOK_SECRET yo'q — Telegram webhook CRON_SECRET (health bearer'i) bilan himoyalanmoqda; " +
         "alohida kalit qo'ying va setWebhook ni yangi secret_token bilan qayta o'rnating",
+    );
+  }
+  // Admin panel 2FA key: a warning, not a fatal problem — without it only the
+  // admin login/enrollment is off (503 admin_disabled); the product keeps working.
+  if (isProd && !parseAdminTotpKey(env.adminTotpKey)) {
+    warnings.push(
+      "ADMIN_TOTP_KEY yo'q yoki noto'g'ri (base64, aniq 32 bayt) — admin panelga kirish o'chiq; yaratish: openssl rand -base64 32",
     );
   }
   // O'chirish tugmasidagi xato yozuv («on», «enabled») jimgina «o'chirilmagan»

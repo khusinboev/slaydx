@@ -3,7 +3,6 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
 import { env } from "./env";
 import { query, queryOne } from "./db";
-import { isAdminPhone } from "./admin-phones";
 
 /**
  * Sessiya boshqaruvi.
@@ -48,6 +47,11 @@ export type SessionUser = {
    * telefon raqamini bermaydi, admin uni botga bir marta ulashadi.
    */
   phone: string | null;
+  /**
+   * The user has an `admin_accounts` row with status active or pending
+   * (docs/admin/02-plan.md §3.1). Only drives the admin link and page gates;
+   * every admin API still requires a valid admin session (`admin-handler.ts`).
+   */
   isAdmin: boolean;
 };
 
@@ -77,6 +81,8 @@ type UserRow = {
   organization: string;
   is_blocked: boolean;
   phone: string | null;
+  /** Computed by `userColumns()` (EXISTS on `admin_accounts`). */
+  is_admin?: boolean;
 };
 
 export function rowToUser(r: UserRow): SessionUser {
@@ -107,7 +113,7 @@ export function rowToUser(r: UserRow): SessionUser {
     position: r.position ?? "",
     organization: r.organization ?? "",
     phone: r.phone,
-    isAdmin: isAdminPhone(r.phone),
+    isAdmin: r.is_admin === true,
   };
 }
 
@@ -148,7 +154,15 @@ const USER_FIELDS = [
  */
 export function userColumns(alias = ""): string {
   const p = alias ? `${alias}.` : "";
-  return USER_FIELDS.map((f) => `${p}${f}`).join(", ");
+  // `isAdmin`: one EXISTS on the unique `admin_accounts.user_id` index. The
+  // outer row is referenced by table name/alias explicitly — a bare `id`
+  // inside the subquery would bind to `admin_accounts.id`. Every user query
+  // (session, profile, login RETURNING) carries it, so `isAdmin` never
+  // differs between `/api/users/me` GET and PATCH.
+  const isAdmin =
+    `EXISTS (SELECT 1 FROM admin_accounts aa WHERE aa.user_id = ${alias || "users"}.id ` +
+    `AND aa.status IN ('active', 'pending')) AS is_admin`;
+  return [...USER_FIELDS.map((f) => `${p}${f}`), isAdmin].join(", ");
 }
 
 const USER_COLUMNS = userColumns();
@@ -212,6 +226,16 @@ export async function clearSessionCookie() {
  * yozish bazani ortiqcha yuklaydi.
  */
 export async function currentUser(): Promise<SessionUser | null> {
+  return (await currentSessionRef())?.user ?? null;
+}
+
+/**
+ * The current user AND the id of the `sessions` row behind the user cookie.
+ * Admin sessions are bound to that row (`admin_sessions.user_session_id`,
+ * docs/admin/02-plan.md §3.1): a user logout, expiry or block ends admin
+ * access too. Same checks and `last_seen_at` throttle as `currentUser()`.
+ */
+export async function currentSessionRef(): Promise<{ sessionId: string; user: SessionUser } | null> {
   const jar = await cookies();
   const token = jar.get(SESSION_COOKIE)?.value;
   if (!token) return null;
@@ -232,7 +256,7 @@ export async function currentUser(): Promise<SessionUser | null> {
       () => {},
     );
   }
-  return rowToUser(row);
+  return { sessionId: String(row.session_id), user: rowToUser(row) };
 }
 
 export async function getUserById(id: string): Promise<SessionUser | null> {
