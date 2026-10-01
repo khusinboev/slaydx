@@ -1,6 +1,6 @@
 # Admin panel — Phase 2: Implementation plan
 
-**Status:** DRAFT. Waiting for the owner's approval. Phase 3 does not start until this plan is approved.
+**Status:** APPROVED by the owner on 2026-10-01. The defaults in §16 are accepted, with two changes: Q10 (pricing becomes editable) and Q11 (accurate cost capture is in scope). The owner also added the pricing and unit-economics module (§17). Execution follows §18.
 **Input:** `docs/admin/01-analysis.md`. Citations there are `path:line` at `857b8b8`, and this plan cites the same way.
 **Audience:** a developer who has never seen this repo. Read §1–§4 first. §5–§12 are the specification. §13–§15 cover execution.
 
@@ -47,7 +47,7 @@ A production admin panel inside the existing Next.js app, built on the existing 
 
 - No change to existing user-facing behavior beyond the listed hooks. Each hook defaults to the current env-driven value, so behavior does not change until an admin acts.
 - No fixes for the product defects in analysis R15: Pro quota expiry, Pro priority, the missing-key template charge, cancel while IN_PROGRESS, lost partial refunds. They are reported only **[DEFAULT Q12]**. The panel makes several of them visible; for example, reconciliation lists lost partial refunds.
-- No price editing **[DEFAULT Q10]**. Prices are shown read-only from `lib/tools.ts`.
+- ~~No price editing~~. Superseded by §17: per-tool price adjustment is in scope. The Pro plan price (`lib/server/payments.ts:114-118`) stays out of scope.
 - No changes to the Click or Payme protocol. Payme state −2 is not implemented, and no outbound refund call is made to a provider.
 - No user hard-delete or erasure **[DEFAULT Q6]**. Blocking is the only account action.
 - No `pg_trgm` or any other extension **[DEFAULT Q13]**.
@@ -236,6 +236,8 @@ Roles are a fixed set defined in code. `admin_accounts.role` carries a CHECK con
 | errors.resolve | ✓ | ✓ | | | | | |
 | audit.view | ✓ | ✓ | | | | | |
 | audit.export | ✓ | | | | | | S |
+| pricing.view | ✓ | ✓ | ✓ | | | ✓ | |
+| pricing.edit | ✓ | ✓ | | | | | S |
 | admins.view | ✓ | ✓ | | | | | |
 | admins.manage | ✓ | ✓ (rank-limited) | | | | | S |
 
@@ -1223,10 +1225,194 @@ npm run build       # Phase 4 / integration only
 | Q7 Paid-order refunds | Record an external refund or chargeback with an optional clawback; no provider call | §6.6 |
 | Q8 Runtime settings | free-LLM switch and caps, global or per-tool generation pause, and two admin-only finance knobs | §6.10 |
 | Q9 Broadcasts | Telegram bot broadcast to non-blocked users with a `telegram_id`, plus a direct message to one user; no in-app banner | §6.9 |
-| Q10 Pricing | Read-only | §1.2 |
-| Q11 AI cost accuracy | Use the existing `cost_json`, with a coverage banner and caveats. WP-X1 runs only if you approve | §6.7, §13.2 |
+| Q10 Pricing | **Changed by owner:** prices are editable through per-tool adjustments, with cost analytics (§17) | §17 |
+| Q11 AI cost accuracy | **Approved:** WP-X1 is in scope (`ai_usage` captures failed, abandoned and free-LLM cost) | §17, §18 |
 | Q12 Product defects / A1 | Defects reported only; A1 fixed (neutral note going forward, plus the 031 scrub with the original kept in the audit log) | §5.4 |
 | Q13 Search | No `pg_trgm`; exact and prefix search with indexes | §6.4.1 |
 | Q14 nginx allow-list | Optional; a template is provided | §15 |
 | Q15 Retention | Audit kept forever; errors 90 days; heartbeats 1 day; recipients 180 days | §5.5 |
 | Q16 `scripts/topup.mts` | Left unchanged, and documented in 03-report as the unaudited legacy path. Recommendation: use the panel instead | — |
+
+
+---
+
+## 17. Pricing and unit economics module (added 2026-10-01 at the owner's request)
+
+### 17.1 Requirements (owner's words, summarised)
+
+1. Show the **real production cost** of every tool: average AI cost per job and per unit, in USD and so'm.
+2. Show the **admin-set price** of every tool next to its cost.
+3. Let the admin **analyse** prices against cost and margin, and **change** them up or down.
+4. Keep **average costs per content type** calculated continuously (a daily trend). Use them to suggest prices.
+
+### 17.2 Price model
+
+- **The code formula stays the base price.** `priceFor(tool, values)` in `lib/tools.ts:1465-1551` keeps every tier, per-slide and per-character rule. The admin does not rewrite formulas. The admin sets one adjustment per tool:
+  - `percent`: an integer from 25 to 1000, default 100;
+  - `roundTo`: 100, 500 or 1000, default 500.
+- **Effective price.** A new pure function, `applyPriceAdjust(base, adj)` in `lib/tools.ts`, computes it:
+  - if `percent === 100`, the result is exactly `base` (bit-for-bit today's behavior);
+  - otherwise it is `max(roundTo, Math.round(base * percent / 100 / roundTo) * roundTo)`.
+- **Server.** `app/api/generations/route.ts` charges `applyPriceAdjust(priceFor(tool, values), await getToolPricing(tool.id))`. `getToolPricing` lives in `lib/server/pricing.ts` and reads `tool_pricing` with a 15 s in-process cache. The server never relies on module-global client state.
+- **Client display.** `GET /api/auth/session` `features` gains `pricing: { [toolId]: { percent, roundTo } }`, listing only non-default tools.
+  - `lib/store.ts` stores it and exposes it to `lib/tools.ts` through `setClientPriceAdjustments(map)`.
+  - `priceFor(tool, values)` applies the client adjustment only when it runs in the browser (`typeof window !== "undefined"`), and only through that registry.
+  - Every displayed price, including option labels built from `ARTICLE_PRICES`, `THESIS_PRICES`, the glossary tiers and so on, must go through the adjusted path.
+  - The store refreshes pricing on session refresh, and every 5 min while the tab is visible.
+- **No silent charge mismatch.** The client sends `expectedPrice` in the `POST /api/generations` body.
+  - If present and different from the server price, the route returns **409** `{error:"Narx o'zgardi…", code:"price_changed", price}` **before** any charge.
+  - The client (`components/forms/runGeneration.ts` → `lib/api-client.ts`) then shows the new price and asks the user to confirm.
+  - When `expectedPrice` is absent (an old cached client), behavior is unchanged.
+- **Default.** With no `tool_pricing` rows, every price is identical to today's. This is verified by a test that compares `priceFor` output for every tool and tier, with and without an empty adjustment map.
+
+### 17.3 Cost data
+
+- **Successful jobs:** `generations.cost_json` (existing).
+- **Everything else (WP-X1, now in scope):** a new append-only `ai_usage` table records the cost of:
+  - failed and abandoned jobs (the meter is flushed in `finally`);
+  - free-LLM endpoints (`withFreeLlm` in `lib/server/spend.ts`);
+  - fal images.
+
+  It has no FK cascade to `generations`, so deletes do not erase spend.
+- **FX:** setting `finance.soum_per_usd` (§6.10).
+- **Units per tool** (for cost per unit):
+
+  | Tools | Unit |
+  |---|---|
+  | slide, pro-slide | slide (`values.slideCount`) |
+  | coursework, referat, mustaqil-ish, essay, article, thesis | page |
+  | translation | 1 000 characters |
+  | image | image |
+  | glossary | term |
+  | everything else | job |
+
+  The mapping lives in `lib/server/admin-pricing.ts` and is typed against `ToolId`.
+
+### 17.4 Analytics (per tool, over a date range; default 30 days)
+
+| Metric | Definition |
+|---|---|
+| jobs, completed, failed, failure rate, refund rate | from `generations` |
+| average listed price | `avg(generations.price)` |
+| average cash revenue per job | Σ(−charge − refund) of `balance_delta + quota_delta` ÷ jobs. Points are excluded as non-cash, as in `lib/server/spend.ts:231-235` |
+| average AI cost per completed job | `cost_json->>'usd'`, in USD and so'm |
+| failure overhead per completed job | Σ `ai_usage` cost of failed/abandoned jobs ÷ completed |
+| full cost per job | average AI cost + failure overhead |
+| average cost per unit | full cost per job ÷ average units per job |
+| margin % | (cash revenue − full cost in so'm) ÷ cash revenue |
+| markup × | average listed price ÷ full cost in so'm |
+| coverage % | jobs with cost data ÷ completed |
+| **daily trend** | average full cost per job per tool per Tashkent day, for 90 days. This is the "continuously calculated average"; it is computed on demand with a 60 s cache, and a nightly rollup is added only if volume requires it |
+| **recommended adjustment** | the `percent` that brings the markup to the target. The target is setting `pricing.target_markup`, default 3.0. Shown with the sample size, and labelled "low confidence" when completed jobs < 20 |
+| **simulator** | for a proposed `percent`: the new price for each tier of the tool (a tier ladder from representative inputs in `lib/server/admin-pricing.ts`), and projected 30-day revenue and margin at the same volume |
+
+### 17.5 API (all under `adminHandler`)
+
+| Method | Path | Permission | Params / body | Response |
+|---|---|---|---|---|
+| GET | `/api/admin/pricing` | pricing.view | `from,to` | `{items:[{toolId,title,unit,adjust:{percent,roundTo},ladder:[{label,base,effective}],jobs,completed,failRate,avgPrice,avgCashRevenue,avgCostUsd,avgCostSoum,overheadSoum,costPerUnitSoum,marginPct,markup,coveragePct,recommendedPercent,confidence}], fx, targetMarkup}` |
+| GET | `/api/admin/pricing/:toolId` | pricing.view | `days≤90` | `{tool, trend:[{day,avgCostSoum,jobs}], history:[{at,admin,oldPercent,newPercent,oldRoundTo,newRoundTo,reason}], ladder}` |
+| POST | `/api/admin/pricing/:toolId/simulate` | pricing.view | `{percent, roundTo}` | `{ladder, projected:{revenue30d, cost30d, marginPct}}` |
+| PUT | `/api/admin/pricing/:toolId` | pricing.edit (S) | `{percent:25..1000, roundTo∈{100,500,1000}, reason}` | `{item}`. Upserts `tool_pricing`, inserts `tool_price_history`, and writes the audit row `pricing.update` with before/after, all in one transaction. The change takes effect within 15 s server-side. |
+| DELETE | `/api/admin/pricing/:toolId` | pricing.edit (S) | `{reason}` | Resets the tool to 100 % (row deleted, history and audit written) |
+
+### 17.6 Screen S20 `/admin/pricing` ("Narxlar")
+
+- **Table:** one row per tool, with these columns:
+  - tool and unit;
+  - base price ladder (e.g. "3 000 – 6 000");
+  - current adjustment (`percent`, highlighted when ≠ 100);
+  - effective price ladder;
+  - average full cost (so'm) per job and per unit;
+  - markup ×;
+  - margin %;
+  - jobs (30 d);
+  - a 30-day cost-trend sparkline;
+  - the recommendation chip (e.g. "+20 % tavsiya").
+- **Colouring:** margin < 30 % is red, 30–60 % amber, otherwise green.
+- **Filters:** date range, tool group. **Sort:** margin, cost, volume.
+- **Row → drawer** with:
+  - a 90-day cost trend chart;
+  - the tier ladder (base → effective);
+  - the **simulator** (percent slider plus an input, live projected price and margin);
+  - the change history;
+  - an "O'zgartirish" button (pricing.edit, step-up) that requires a reason and typed confirmation when the change exceeds ±50 %;
+  - "100 % ga qaytarish".
+- **Banner:** the coverage caveat when coverage < 90 %.
+
+### 17.7 Data model (`032_pricing.sql`, `033_ai_usage.sql`)
+
+```sql
+CREATE TABLE IF NOT EXISTS tool_pricing (
+  tool_id     TEXT PRIMARY KEY,
+  percent     INT  NOT NULL CHECK (percent BETWEEN 25 AND 1000),
+  round_to    INT  NOT NULL DEFAULT 500 CHECK (round_to IN (100, 500, 1000)),
+  updated_by  BIGINT REFERENCES admin_accounts(id) ON DELETE SET NULL,
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS tool_price_history (
+  id            BIGSERIAL PRIMARY KEY,
+  tool_id       TEXT NOT NULL,
+  old_percent   INT  NOT NULL, new_percent  INT NOT NULL,
+  old_round_to  INT  NOT NULL, new_round_to INT NOT NULL,
+  reason        TEXT NOT NULL,
+  admin_id      BIGINT REFERENCES admin_accounts(id) ON DELETE SET NULL,
+  at            TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS tool_price_history_tool_idx ON tool_price_history(tool_id, at DESC);
+
+CREATE TABLE IF NOT EXISTS ai_usage (
+  id             BIGSERIAL PRIMARY KEY,
+  at             TIMESTAMPTZ NOT NULL DEFAULT now(),
+  source         TEXT NOT NULL CHECK (source IN ('job','free')),
+  outcome        TEXT NOT NULL CHECK (outcome IN ('completed','failed','abandoned','free')),
+  generation_id  UUID,            -- no FK: spend survives deletes
+  user_id        BIGINT,
+  tool_id        TEXT,            -- tool id, or 'free:outline' | 'free:udk' | 'free:rewrite' | 'free:polish'
+  calls          INT NOT NULL DEFAULT 0,
+  input_tokens   BIGINT NOT NULL DEFAULT 0,
+  output_tokens  BIGINT NOT NULL DEFAULT 0,
+  usd            NUMERIC(12,6) NOT NULL DEFAULT 0,
+  parts          JSONB NOT NULL DEFAULT '[]'
+);
+CREATE INDEX IF NOT EXISTS ai_usage_at_idx ON ai_usage(at DESC);
+CREATE INDEX IF NOT EXISTS ai_usage_tool_at_idx ON ai_usage(tool_id, at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS ai_usage_job_once_idx ON ai_usage(generation_id, outcome) WHERE generation_id IS NOT NULL;
+```
+
+Setting added to the catalog: `pricing.target_markup` (number, 1.0–20.0, default 3.0; admin only).
+
+### 17.8 Threat and risk notes
+
+- **Price manipulation by an insider:** `pricing.edit` is owner/admin only, with step-up, reason, audit and history. The 25–1000 % bounds stop accidental zero or extreme prices.
+- **Client/server drift:** prevented by the `expectedPrice` 409 guard. It is tested end to end.
+- **Cache staleness:** up to 15 s server-side. A price change is not retroactive; already-queued jobs keep their charged price.
+
+---
+
+## 18. Execution model (owner instruction 2026-10-01)
+
+- **Roles.** The lead orchestrates and reviews; agents write the code. The lead still owns every architecture decision and reviews **every** diff before merging. Security-, money- and product-hook packages go to **opus** agents with tight specs. Well-specified UI and read packages go to **sonnet**. Mechanical chores go to **haiku**.
+- **Branches.**
+  - Each package runs in its own git worktree (`isolation: worktree`) and commits on its own branch.
+  - The lead merges each one into `claude/cool-feynman-jiixoi` after review.
+  - The branch for this session is `claude/cool-feynman-jiixoi`, and push is allowed only there (Q4 default).
+- **Concurrency.** The machine has 4 CPUs, so at most 5 packages run at once. Agents run only their own tests plus the guard tests. The lead runs the full suites at merge points.
+- **Shared resources.**
+  - One local Postgres 16 at `127.0.0.1:5432`.
+  - Each agent uses its own database: `CREATE DATABASE slaydx_<pkg>` and `DATABASE_URL=postgres://slaydx:slaydx@127.0.0.1:5432/slaydx_<pkg>`.
+  - Worktrees symlink `node_modules` from the main checkout.
+
+| Wave | Package | Model | Depends on | Owns (summary; full list in §13.2 plus the changes below) |
+|---|---|---|---|---|
+| 0 | F1 Migrations + settings service | opus | — | migrations 028–033, `lib/server/settings.ts` (catalog incl. `pricing.target_markup`), `tests/admin-migrations.test.mts`, `tests/settings.test.mts` |
+| 1 | F2 Security core | opus | F1 | §13.2 F2 |
+| 1 | F4 Server helpers | sonnet | — | §13.2 F4 |
+| 1 | F3 UI foundation | sonnet | contract only | §13.2 F3 **except** `lib/api-client.ts` (removing the legacy admin functions moves to Integration) |
+| 1 | F5a Product hooks: pause + pricing | opus | F1 | `lib/tools.ts`, `lib/server/pricing.ts` (new), `app/api/generations/route.ts`, `app/api/auth/session/route.ts`, `lib/store.ts`, `lib/api-client.ts` (only `createGeneration` gains `expectedPrice`), `components/forms/runGeneration.ts`, composer files whose displayed prices bypass `priceFor`, tests |
+| 1 | F5b Ops hooks + WP-X1 | opus | F1 | `lib/server/log.ts`, `instrumentation.ts`, `lib/server/worker.ts`, `lib/server/spend.ts` (free-LLM settings + `ai_usage`), `lib/generation/job-cost.ts`, `lib/generation/llm/breaker.ts`, `limiter.ts`, `lib/generation/image-provider-fal.ts`, `lib/server/error-sink.ts`, `heartbeat.ts`, `housekeeping-status.ts`, `broadcast-delivery.ts`, `ai-usage.ts` (new), tests |
+| 2 | F6 Money actions | opus | F2, F4 | §13.2 F6 |
+| 2 | WP1–WP10 | sonnet | F2, F3, F4 | §13.2 |
+| 2 | WP11 Pricing admin | opus | F2, F3, F4, F5a | `lib/server/admin-pricing.ts`, `app/api/admin/pricing/**`, `app/(admin)/…/pricing` page, `components/admin/pricing/*`, `lib/admin-api/pricing.ts`, tests |
+| 3 | Integration | lead | all | removes the legacy admin code in `lib/api-client.ts` and `lib/server/admin.ts`, adds the `admin:seed-dev` script, runs full checks |
+| 4 | Verification | security / regression / UX reviewers | Integration | Phase 4 of the brief |
