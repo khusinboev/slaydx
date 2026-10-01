@@ -4,7 +4,7 @@ import { ApiError } from "./api";
 import { transaction } from "./db";
 import { parseDateRange, type DateRange } from "./admin-list";
 import { soumPerUsd, spendBy, spendCoverage, spendTotals, type SpendCoverage } from "./admin-cost";
-import { HEARTBEAT_INTERVAL_MS } from "./heartbeat";
+import { HEARTBEAT_STALE_SEC } from "./admin-heartbeat";
 import { TOOL_BY_ID } from "../tools";
 
 /**
@@ -29,8 +29,8 @@ const TZ = "Asia/Tashkent";
 const DAY_MS = 86_400_000;
 const CACHE_TTL_MS = 60_000;
 const CACHE_MAX_ENTRIES = 300;
-/** A worker is alive while its heartbeat (every 30 s) is younger than three beats. */
-export const WORKER_STALE_AFTER_MS = 3 * HEARTBEAT_INTERVAL_MS;
+/** A worker is alive while its heartbeat is not stale (the shared rule, admin-heartbeat.ts: 90 s). */
+export const WORKER_STALE_AFTER_MS = HEARTBEAT_STALE_SEC * 1000;
 
 // ---------------------------------------------------------------------------
 // Types (mirrored by lib/admin-api/metrics.ts for the client)
@@ -526,8 +526,8 @@ export async function live(): Promise<Live> {
           FROM inflight`,
     );
     // workersAlive / workersStale: worker heartbeat rows (one per worker
-    // process, every 30 s, heartbeat.ts) seen within three beats / older than
-    // that. Rows silent for a day are purged by the worker (purgeHeartbeats).
+    // process, every 30 s, heartbeat.ts) seen within HEARTBEAT_STALE_SEC / older
+    // than that (the same rule as the AI and system screens). Rows silent for a day are purged by the worker (purgeHeartbeats).
     const w = await c.query<{ alive: string; stale: string }>(
       `SELECT count(*) FILTER (WHERE last_seen_at >= now() - $1::int * interval '1 millisecond') AS alive,
               count(*) FILTER (WHERE last_seen_at <  now() - $1::int * interval '1 millisecond') AS stale
