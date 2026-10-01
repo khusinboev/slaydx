@@ -19,15 +19,18 @@ import { createIsolatedDb } from "./helpers/isolated-db.mts";
  *   - AI cost/coverage equal admin-cost.ts for the same range;
  *   - series are zero-filled per Tashkent day; live is never cached.
  *
- * Mutation checks (each made the named assertion fail, then restored):
- *   - revenue by created_at instead of perform_time → overview revenue (O1 moves to P);
- *   - drop `- refund_cash` from cash_spend → cashSpendTanga 15000 ≠ 7300;
- *   - count points as cash (no split) → cashSpendTanga / tools slide differ;
- *   - drop the charge-note fallback in LEDGER_TOOL → coursework row missing, sum ≠ KPI;
- *   - successRate over all jobs (incl. revoked/queued) → 50 ≠ 75;
- *   - drop `SET TRANSACTION READ ONLY` → the read-only helper test inserts a row;
- *   - cache `live` → the live-not-cached test sees the stale queue;
- *   - previous range off by one day → previous KPIs differ.
+ * Mutation checks (each made the named test fail, then restored):
+ *   - revenue by created_at instead of perform_time → overview + series;
+ *   - perform_time upper bound inclusive (O3 at the next midnight) → overview + series;
+ *   - cash spend not net of refunds → overview (15000 ≠ 7300) + tools;
+ *   - points counted as cash → overview + tools;
+ *   - no charge-note fallback for deleted jobs → tools (coursework row missing);
+ *   - successRate over all jobs (incl. revoked/queued) → overview (50 ≠ 75);
+ *   - activeUsers without the last_seen branch → overview (4 ≠ 5);
+ *   - no `SET TRANSACTION READ ONLY` → the read-only helper test inserts a row;
+ *   - the cache never hits → cache test;
+ *   - previous range one day too long → previousRangeOf;
+ *   - worker stale threshold ×10 → live (the 5-min-old worker counted alive).
  */
 
 process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";

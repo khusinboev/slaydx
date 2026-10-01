@@ -4,7 +4,7 @@ import { useCallback, useMemo } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { getOverview, getTools } from "@/lib/admin-api/metrics";
 import { fmtIsoDate, todayTashkent } from "@/lib/admin-format";
-import { Button, Card, CardHeader, DateRangePicker, EmptyState, ErrorState, Forbidden, type DateRange } from "@/components/admin/ui";
+import { Button, Card, DateRangePicker, EmptyState, ErrorState, Forbidden, type DateRange } from "@/components/admin/ui";
 import { Charts } from "./Charts";
 import { isDefaultRange, rangeFromParams } from "./format";
 import { KpiGrid, KpiGridSkeleton } from "./KpiGrid";
@@ -80,12 +80,21 @@ export function Dashboard() {
 
       <Charts range={rangeParams} />
 
-      <Card className="min-w-0">
-        <CardHeader title="Vositalar bo'yicha" aside={<span className="text-muted-foreground">Soni bo&apos;yicha saralangan</span>} />
+      <section aria-labelledby="dashboard-tools" className="flex min-w-0 flex-col gap-2">
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <h2 id="dashboard-tools" className="flex-1 text-sm font-semibold">
+            Vositalar bo&apos;yicha
+          </h2>
+          <span className="text-muted-foreground text-xs">Soni bo&apos;yicha saralangan</span>
+        </div>
         {tools.status === "error" ? (
-          <ErrorState message={tools.message} requestId={tools.requestId} onRetry={retryTools} />
+          <Card>
+            <ErrorState message={tools.message} requestId={tools.requestId} onRetry={retryTools} />
+          </Card>
         ) : tools.status === "forbidden" ? (
-          <Forbidden />
+          <Card>
+            <Forbidden />
+          </Card>
         ) : (
           <ToolsTable
             items={tools.status === "ready" ? tools.data.items : []}
@@ -105,7 +114,7 @@ export function Dashboard() {
             }
           />
         )}
-      </Card>
+      </section>
     </div>
   );
 }
