@@ -107,7 +107,7 @@ type ListBody = { items: Array<Record<string, unknown>>; nextCursor: string | nu
 
 function list(qs: string, cookie: string | null) {
   const req = new Request(`http://localhost:3000/api/admin/errors${qs}`, { headers: baseHeaders(cookie) });
-  return send<ListBody & { error?: string }>(req, () => listRoute.GET(req, undefined));
+  return send<ListBody & { error?: string; code?: string }>(req, () => listRoute.GET(req, undefined));
 }
 
 function detail(id: string, cookie: string | null) {
