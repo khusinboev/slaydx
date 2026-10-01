@@ -36,29 +36,41 @@ function emptyValues<K extends string>(keys: readonly K[]): FilterValues<K> {
   return Object.fromEntries(keys.map((k) => [k, ""])) as FilterValues<K>;
 }
 
-/** Routed mode: the URL query is the state. `keys` must be a stable (module-level) array. */
+/**
+ * Routed mode: the URL query is the state. `keys` must be a stable (module-level) array.
+ *
+ * `router.replace` on a dynamic page completes only after a server round trip,
+ * so the last patch is applied optimistically on top of the current query
+ * until the URL catches up: controls react at once, and two quick changes
+ * never overwrite each other.
+ */
 export function useUrlFilters<K extends string>(keys: readonly K[]): FilterStore<K> {
   const params = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
   const query = params?.toString() ?? "";
+  const [pending, setPending] = useState<{ base: string; patch: Partial<FilterValues<K>> } | null>(null);
+  const patch = pending && pending.base === query ? pending.patch : null;
 
   const values = useMemo(() => {
     const sp = new URLSearchParams(query);
-    return Object.fromEntries(keys.map((k) => [k, sp.get(k) ?? ""])) as FilterValues<K>;
-  }, [query, keys]);
+    const fromUrl = Object.fromEntries(keys.map((k) => [k, sp.get(k) ?? ""])) as FilterValues<K>;
+    return patch ? { ...fromUrl, ...patch } : fromUrl;
+  }, [query, keys, patch]);
 
   const set = useCallback(
-    (patch: Partial<FilterValues<K>>) => {
+    (next: Partial<FilterValues<K>>) => {
+      const merged = { ...(patch ?? {}), ...next } as Partial<FilterValues<K>>;
       const sp = new URLSearchParams(query);
-      for (const [k, v] of Object.entries(patch) as Array<[string, string | undefined]>) {
+      for (const [k, v] of Object.entries(merged) as Array<[string, string | undefined]>) {
         if (v) sp.set(k, v);
         else sp.delete(k);
       }
+      setPending({ base: query, patch: merged });
       const qs = sp.toString();
       router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
     },
-    [query, router, pathname],
+    [query, patch, router, pathname],
   );
 
   const clear = useCallback(() => set(emptyValues(keys)), [set, keys]);

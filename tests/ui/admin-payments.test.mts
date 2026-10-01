@@ -223,7 +223,7 @@ test("OrdersTable: empty without filters vs. with filters (clear removes them fr
   assert.ok(await screen.findByText("Filtrlarga mos buyurtma topilmadi"));
   const clear = screen.getAllByRole("button", { name: "Filtrlarni tozalash" });
   fireEvent.click(clear[clear.length - 1]!);
-  await waitFor(() => assert.equal(log.at(-1), "replace /admin/payments?tab=x"), "only the table's own keys are cleared");
+  await waitFor(() => assert.equal(log.at(-1), "replace /admin/payments?tab=x", "only the table's own keys are cleared"));
 });
 
 test("OrdersTable: error shows the requestId and retry refetches; 403 renders Ruxsat yo'q", async () => {
