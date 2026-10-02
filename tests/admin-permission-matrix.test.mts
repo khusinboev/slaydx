@@ -74,6 +74,12 @@ globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) =>
 }) as typeof fetch;
 
 const rbac = await import("../lib/server/admin-rbac.ts");
+// The matrix fires every method × role within one minute — far more refused
+// calls per admin than the production denied-call budget (30 / 60 s, Phase 4
+// finding 1). The budget itself is tested in admin-auth.test.mts; here it is
+// raised so every refused call still yields its 403 and one `denied` row.
+const { DENIED_RATE } = await import("../lib/server/admin-handler.ts");
+DENIED_RATE.limit = 100_000;
 const { query, queryOne, ensureMigrated, transaction, pool } = await import("../lib/server/db.ts");
 const { createSession, SESSION_COOKIE } = await import("../lib/server/session.ts");
 const { createAdminSession, adminCookieName } = await import("../lib/server/admin-session.ts");
