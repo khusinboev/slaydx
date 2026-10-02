@@ -84,3 +84,12 @@ export function chartUsd(n: number): string {
 export function dayLabel(iso: string): string {
   return `${iso.slice(8, 10)}.${iso.slice(5, 7)}`;
 }
+
+/**
+ * "2 090 000 so'm" with a breakable space before the unit (the digit groups
+ * keep their NBSP): in a narrow KPI tile the unit moves to the next line
+ * instead of the amount being cut off.
+ */
+export function unitBreakable(text: string): string {
+  return text.replace(/\u00a0(?=[^\d\u00a0]+$)/, " ");
+}

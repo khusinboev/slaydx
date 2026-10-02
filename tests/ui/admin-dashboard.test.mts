@@ -9,8 +9,8 @@ import { PathnameContext, SearchParamsContext } from "next/dist/shared/lib/hooks
 import type * as IdentityModule from "../../components/admin/shell/admin-identity.tsx";
 import { Dashboard } from "../../components/admin/dashboard/Dashboard.tsx";
 import { LIVE_REFRESH_MS, LiveStrip } from "../../components/admin/dashboard/LiveStrip.tsx";
-import { chartUsd, compactNumber, dayLabel, isDefaultRange, percentDelta, pointsDelta, rangeFromParams } from "../../components/admin/dashboard/format.ts";
-import { fmtUsd, todayTashkent, addDaysIso } from "../../lib/admin-format.ts";
+import { chartUsd, compactNumber, dayLabel, isDefaultRange, percentDelta, pointsDelta, rangeFromParams, unitBreakable } from "../../components/admin/dashboard/format.ts";
+import { fmtSoum, fmtTanga, fmtUsd, todayTashkent, addDaysIso } from "../../lib/admin-format.ts";
 
 /**
  * Dashboard S3 (docs/admin/02-plan.md §7.1, §7.0 states): KPI tiles with
@@ -199,6 +199,13 @@ test("chartUsd: cents from $1, exact trimmed sub-dollar ticks below", () => {
   assert.match(chartUsd(1234.5), /^\$1\D234,50$/);
 });
 
+test("unitBreakable: only the space before the unit may break; digit groups keep the NBSP", () => {
+  assert.equal(unitBreakable(fmtSoum(2_090_000)), "2\u00a0090\u00a0000 so'm");
+  assert.equal(unitBreakable(fmtTanga(-1_125_266)), "-1\u00a0125\u00a0266 tanga");
+  assert.equal(unitBreakable(fmtSoum(500)), "500 so'm");
+  assert.equal(unitBreakable("—"), "—");
+});
+
 // ───────────────────────────── screen states
 
 test("loading: KPI and table skeletons while requests are pending", () => {
@@ -213,6 +220,14 @@ test("ready: tiles, deltas, coverage hint, charts, tools table and live strip; d
   const calls = stubFetch(happy());
   renderDashboard();
   await waitFor(() => assert.ok(within(tile("Tushum")).getByText(`1${NB}500${NB}000${NB}so'm`)));
+  // 360 px (UX #13b): two tile columns as in the prototype, and the money value is a wrapping
+  // block whose only breakable space is before the unit, so the amount is never cut off.
+  const grid = tile("Tushum").parentElement!;
+  assert.ok(grid.className.split(" ").includes("grid-cols-2"), grid.className);
+  assert.ok(!grid.className.includes("grid-cols-1"), grid.className);
+  const value = within(tile("Tushum")).getByText(`1${NB}500${NB}000${NB}so'm`);
+  assert.ok(value.className.includes("whitespace-normal"), "the value may wrap");
+  assert.equal(value.textContent, "1\u00a0500\u00a0000 so'm");
 
   const today = todayTashkent();
   const ov = calls.find((u) => u.pathname === "/api/admin/metrics/overview");
