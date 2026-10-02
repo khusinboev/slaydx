@@ -144,7 +144,7 @@ function OrdersView({ store, fixedFilters, embedded = false, pageSize }: OrdersT
     {
       id: "purpose",
       header: "Maqsad",
-      cell: (o) => (o.purpose === "pro" ? <StatusPill tone="primary">Pro</StatusPill> : PURPOSE_LABEL.topup),
+      cell: (o) => (o.purpose === "pro" ? <StatusPill tone="primary">Pro</StatusPill> : <span className="whitespace-nowrap">To&apos;ldirish</span>),
     },
     { id: "amount", header: "Summa", align: "right", sortKey: "amount_desc", className: "tabular-nums", cell: (o) => fmtSoum(o.amountSoum) },
     {
@@ -197,7 +197,7 @@ function OrdersView({ store, fixedFilters, embedded = false, pageSize }: OrdersT
             <SearchInput
               value={v.q}
               onChange={(q) => store.set({ q })}
-              placeholder="Buyurtma ID, prepare ID yoki tranzaksiya (aniq)"
+              placeholder="Buyurtma ID yoki tranzaksiya (aniq)"
               ariaLabel="Buyurtma qidirish"
             />
             <MultiSelectFilter

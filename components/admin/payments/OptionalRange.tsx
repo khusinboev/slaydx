@@ -20,7 +20,7 @@ export function OptionalRangeFilter({
 }) {
   const on = Boolean(from || to);
   return (
-    <div className="flex min-w-0 flex-col gap-1">
+    <div className="flex min-w-0 flex-col items-start gap-1">
       <span className="text-muted-foreground text-[11px] font-semibold">{label}</span>
       <Segmented
         ariaLabel={label}

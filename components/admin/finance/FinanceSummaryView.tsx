@@ -54,7 +54,8 @@ export function FinanceSummaryView({ range, onRangeChange }: { range: DateRange;
         </div>
       ) : (
         <div className="flex min-w-0 flex-col gap-4" aria-busy={state.status === "loading" || undefined}>
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+          {/* One column on phones: two would truncate the amounts (e.g. "2 216 000 so'm"). */}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5">
             <KpiTile
               loading={loading}
               label="Tushum"

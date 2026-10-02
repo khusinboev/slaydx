@@ -96,7 +96,7 @@ export function OrderDetailPage({ id }: { id: string }) {
   return (
     <div className="flex min-w-0 flex-col gap-5" aria-busy={state.status === "loading" || undefined}>
       <BackLink />
-      <header className="flex flex-wrap items-end gap-3">
+      <header className="flex flex-col gap-3 sm:flex-row sm:items-end">
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <h1 className="flex flex-wrap items-center gap-2 text-[22px] font-semibold tracking-tight">
             <span>
@@ -127,8 +127,8 @@ export function OrderDetailPage({ id }: { id: string }) {
                   label: "ID",
                   mono: true,
                   value: (
-                    <span className="inline-flex max-w-full items-center gap-1.5">
-                      <span className="break-all">{order.id}</span>
+                    <span className="flex max-w-full flex-wrap items-center gap-1.5">
+                      <span className="min-w-0 break-all">{order.id}</span>
                       <CopyButton value={order.id} />
                     </span>
                   ),
