@@ -193,7 +193,7 @@ export function renderMetrics(m: Metrics): string {
   out.push(`  to'langan buyurtmalar:  ${fmt(m.money.paidSoum)} so'm`);
   for (const r of m.money.paidByProvider) out.push(`    ${r.provider}/${r.purpose}: ${r.orders} ta, ${fmt(r.soum)} so'm`);
   out.push(`  balansga to'ldirish:    ${fmt(m.money.topupCredited)} tanga`);
-  out.push(`  Pro obunalar:           ${m.money.subscriptions} ta`);
+  out.push(`  Pro obunalar (eski):    ${m.money.subscriptions} ta`);
   out.push(`  yechildi (jami):        ${fmt(m.money.charged)} tanga (haqiqiy balansdan ${fmt(m.money.chargedBalance)})`);
   out.push(`  qaytarildi:             ${fmt(m.money.refunded)} tanga`);
   out.push(`  sof yechim:             ${fmt(m.money.netCharged)} tanga`);

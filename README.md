@@ -301,7 +301,7 @@ npm test             # faqat testlar
 npm run db:migrate   # migratsiyalar
 npm run worker       # alohida worker (WORKER_INLINE=false bilan)
 npm run bot          # Telegram bot (long-polling, lokal uchun)
-npm run topup -- <username> <miqdor> [points|quota|balance]
+npm run topup -- <username> <miqdor> [points|balance]
 npm run smoke        # uchidan-uchiga tutun sinovi (server ishlab turishi kerak)
 ```
 
@@ -431,10 +431,11 @@ PPTX qayta yasash avtomatik bo'ladi (3 sekund debounce).
 
 ## Kredit modeli
 
-Uch qatlam, shu tartibda yechiladi: **ball** (bonus) → **kvota** (Pro) → **balans** (so'm).
+Ikkita qatlam, shu tartibda yechiladi: **ball** (bonus) → **balans** (so'm).
 
 - Yangi akkaunt: 3 000 ball
-- Pro: 15 000 so'm / 30 kun / 15 000 kvota
+- Har vosita alohida to'lanadi — foydalanuvchi balansga to'ldiradi, har mazmun qo'lga to'lanadi
+- Obunalar (Pro) 2026-10-02 dan olib tashlandi; eski **kvota** (Pro) miqdo'si migration 034 orqali balansga o'tkazildi
 - Narx **serverda** hisoblanadi — klient yuborgan `price` e'tiborsiz qoladi
 - Har harakat `transactions` jurnaliga tushadi; balans jurnaldan qayta hisoblanishi mumkin
 - Yechish va navbatga qo'yish **bitta tranzaksiyada**
@@ -476,7 +477,7 @@ ikkalasi ham doimiy vaqtli taqqoslash ishlatadi.
 
 **Ma'lumot**
 - Egalik SQL darajasida: id ni bilgan begona foydalanuvchi hujjat ham, rasm ham ola olmaydi
-- Fayl saqlash muddati (C23): **real to'lov bilan** (balans yoki Pro `quota`) yaratilgan
+- Fayl saqlash muddati (C23): **real to'lov bilan** (balans) yaratilgan
   hujjatlar — **muddatsiz**; **faqat bonus** (ro'yxatdan o'tish ballari) bilan yaratilganlar —
   **180 kun**, shundan keyin fayl/rasm o'chiriladi, lekin generatsiya yozuvi va tarix (kredit
   jurnali bilan) saqlanib qoladi — foydalanuvchi "fayl muddati tugagan" holatini ko'radi

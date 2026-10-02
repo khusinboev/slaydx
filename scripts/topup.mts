@@ -2,7 +2,7 @@
  * Qo'lda kredit qo'shish (admin vositasi).
  *
  * Foydalanish:
- *   npm run topup -- <username> <miqdor> [points|quota|balance]
+ *   npm run topup -- <username> <miqdor> [points|balance]
  *
  * Pul jurnaldan o'tadi — balansni to'g'ridan-to'g'ri UPDATE qilmaymiz,
  * shunda hisob har doim tranzaksiyalar yig'indisiga teng qoladi.
@@ -15,11 +15,11 @@ const [username, rawAmount, rawWallet = "balance"] = process.argv.slice(2);
 const amount = Number(rawAmount);
 
 if (!username || !Number.isFinite(amount) || amount <= 0) {
-  console.error("Foydalanish: npm run topup -- <username> <miqdor> [points|quota|balance]");
+  console.error("Foydalanish: npm run topup -- <username> <miqdor> [points|balance]");
   process.exit(1);
 }
-if (!["points", "quota", "balance"].includes(rawWallet)) {
-  console.error("Hamyon: points | quota | balance");
+if (!["points", "balance"].includes(rawWallet)) {
+  console.error("Hamyon: points | balance (obunalar olib tashlandi)");
   process.exit(1);
 }
 
