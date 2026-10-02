@@ -12,9 +12,10 @@ import { inRequest } from "./helpers/next-request.mts";
  *    bo'lardi, pul esa keyin qaytardi — orada xato bo'lsa ish REVOKED,
  *    pul qaytmagan (tiklash skaneri faqat FAILED ni ko'radi) va qayta
  *    urinish endi QUEUED emasligi uchun hech narsa qilmasdi.
- * 2. `activatePro` (CONC-14): kvota va obuna muddati BITTA tranzaksiyada.
- *    Ilgari kvota COMMIT bo'lib, plan UPDATE yiqilsa provayderning qayta
- *    urinishi `topUp` «allaqachon» deb qaytardi — obuna hech qachon yoqilmasdi.
+ *
+ * (`activatePro` subtesti obuna bilan birga olib tashlandi — 2026-10,
+ * docs/SUBS-REMOVAL.md; eski Pro buyurtmaning yakuni endi
+ * `payments-credit-swap.test.mts` da.)
  *
  * Xato orada TRIGGER bilan kiritiladi (alohida bazada).
  */
@@ -26,11 +27,10 @@ const hasDb = Boolean(process.env.DATABASE_URL) && !process.env.DATABASE_URL!.in
 const iso = hasDb ? await createIsolatedDb("catomic") : { isolated: false, drop: async () => {} };
 const skip = hasDb && iso.isolated ? false : "alohida Postgres baza yo'q (trigger kerak)";
 
-test("pul yo'llari atomar: bekor qilish + qaytarish, activatePro", { skip }, async (t) => {
+test("pul yo'llari atomar: bekor qilish + qaytarish", { skip }, async (t) => {
   const { query, migrate, pool } = await import("../lib/server/db.ts");
   const { createSession, SESSION_COOKIE } = await import("../lib/server/session.ts");
   const { enqueueGeneration } = await import("../lib/server/jobs.ts");
-  const { activatePro } = await import("../lib/server/credits.ts");
   const route = await import("../app/api/generations/[id]/route.ts");
   await migrate();
   t.after(async () => {
@@ -120,35 +120,5 @@ test("pul yo'llari atomar: bekor qilish + qaytarish, activatePro", { skip }, asy
     assert.equal(res.status, 409);
     assert.equal(await status(r.id), "IN_PROGRESS");
     assert.equal(await refunds(r.id), 0);
-  });
-
-  await t.test("activatePro: plan UPDATE yiqilsa kvota ham berilmaydi; provayder qayta urinishi obunani yoqadi", async () => {
-    const u = await mkUser("pro", 0);
-    const ref = `payme:w3a-${Date.now()}`;
-    await query(`CREATE TRIGGER w3a_plan_fail BEFORE UPDATE OF plan ON users
-                   FOR EACH ROW WHEN (NEW.plan = 'pro') EXECUTE FUNCTION w3a_fail()`);
-    await assert.rejects(activatePro(u.uid, 15_000, 30, ref), /kiritilgan xato/);
-    await query(`DROP TRIGGER w3a_plan_fail ON users`);
-    const mid = (
-      await query<{ quota: string; plan: string }>(`SELECT quota, plan FROM users WHERE id = $1`, [u.uid])
-    )[0];
-    // MUTATSIYA: `topUp` alohida COMMIT → kvota 15 000, plan 'free'.
-    assert.equal(Number(mid.quota), 0, "plan yoqilmadi, lekin kvota berildi");
-    assert.equal(mid.plan, "free");
-
-    assert.equal(await activatePro(u.uid, 15_000, 30, ref), true, "qayta urinish obunani yoqishi kerak edi");
-    const done = (
-      await query<{ quota: string; plan: string; days: string }>(
-        `SELECT quota, plan, round(extract(epoch FROM plan_expires_at - now()) / 86400) AS days FROM users WHERE id = $1`,
-        [u.uid],
-      )
-    )[0];
-    assert.equal(Number(done.quota), 15_000);
-    assert.equal(done.plan, "pro");
-    assert.equal(Number(done.days), 30);
-    // Takroriy webhook — ikkinchi marta hech narsa qo'shilmaydi.
-    assert.equal(await activatePro(u.uid, 15_000, 30, ref), false);
-    const again = (await query<{ quota: string }>(`SELECT quota FROM users WHERE id = $1`, [u.uid]))[0];
-    assert.equal(Number(again.quota), 15_000);
   });
 });

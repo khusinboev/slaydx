@@ -1,5 +1,6 @@
 import "server-only";
 import type { PoolClient } from "pg";
+import { refundShares } from "./credits";
 
 /**
  * To'liq qaytarishning TRANZAKSIYA ICHIDAGI varianti (`chargeInTx` ga juft).
@@ -14,7 +15,8 @@ import type { PoolClient } from "pg";
  *     (idempotent; `transactions_ref_idx` UNIQUE (kind, reference) — ikkinchi
  *     to'siq);
  *   - `charge` qatori yo'q yoki nol bo'lsa — `false`;
- *   - aks holda aynan olingan hamyonlarga (`points`/`quota`/`balance`) qaytaradi.
+ *   - aks holda olingan hamyonlarga qaytaradi: `points` → `points`, kvota va
+ *     balans ulushi → `balance` (`refundShares`: kvota yopiq, u o'smaydi).
  * Qaytaradi: pul haqiqatan qaytdimi.
  */
 export async function refundInTx(
@@ -35,22 +37,20 @@ export async function refundInTx(
   const row = charged.rows[0];
   if (!row) return false;
 
-  const points = -Number(row.points_delta);
-  const quota = -Number(row.quota_delta);
-  const balance = -Number(row.balance_delta);
-  if (points + quota + balance === 0) return false;
+  const { points, balance } = refundShares(row);
+  if (points + balance === 0) return false;
 
   await client.query("SELECT 1 FROM users WHERE id = $1 FOR UPDATE", [userId]);
   await client.query(
     `UPDATE users
-        SET points = points + $2, quota = quota + $3, balance = balance + $4, updated_at = now()
+        SET points = points + $2, balance = balance + $3, updated_at = now()
       WHERE id = $1`,
-    [userId, points, quota, balance],
+    [userId, points, balance],
   );
   await client.query(
     `INSERT INTO transactions (user_id, kind, points_delta, quota_delta, balance_delta, reference, note)
-     VALUES ($1, 'refund', $2, $3, $4, $5, $6)`,
-    [userId, points, quota, balance, reference, note],
+     VALUES ($1, 'refund', $2, 0, $3, $4, $5)`,
+    [userId, points, balance, reference, note],
   );
   return true;
 }
