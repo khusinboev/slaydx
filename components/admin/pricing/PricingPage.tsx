@@ -24,7 +24,20 @@ import {
 import { useCan } from "@/components/admin/shell";
 import { PricingDrawer } from "./PricingDrawer";
 import { PricingTable } from "./PricingTable";
-import { COVERAGE_WARN_PCT, DEFAULT_SORT, filterByGroup, lowCoverage, marginTone, markupText, parseSort, pctText, soumText, sortItems, useLoad, usd4 } from "./shared";
+import {
+  COVERAGE_WARN_PCT,
+  DEFAULT_SORT,
+  SETTING_LABEL,
+  filterByGroup,
+  lowCoverage,
+  marginTone,
+  markupText,
+  parseSort,
+  pctText,
+  sortItems,
+  useLoad,
+  usdText,
+} from "./shared";
 
 /**
  * S20 `/admin/pricing` ("Narxlar", plan §17.6): KPI tiles, the coverage
@@ -137,6 +150,15 @@ const MARGIN_TEXT: Record<ReturnType<typeof marginTone>, string> = {
   primary: "text-foreground",
 };
 
+/**
+ * A KPI money value that wraps between the number and its unit instead of
+ * being cut off by the tile at 360 px (the number itself never breaks: NBSP groups).
+ */
+function WrapMoney({ amount, unit }: { amount: number | null; unit: string }) {
+  if (amount === null) return <>—</>;
+  return <span className="block whitespace-normal">{`${fmtNumber(Math.round(amount))} ${unit}`}</span>;
+}
+
 function PricingSkeleton() {
   return (
     <div aria-busy="true" aria-label="Yuklanmoqda" className="flex flex-col gap-4">
@@ -197,12 +219,12 @@ function Ready({
         <KpiTile label="O'rtacha marja" value={<span className={MARGIN_TEXT[marginTone(totals.marginPct)]}>{pctText(totals.marginPct)}</span>} hint="naqd tushum bo'yicha tortilgan" />
         <KpiTile label="Marja < 30% vositalar" value={fmtNumber(low.length)} hint={low.length ? low.map((i) => i.title).join(", ") : "Hammasi me'yorda"} />
         <KpiTile
-          label={`AI xarajat · vositalar · ${fmtNumber(data.range.days)} kun`}
-          value={soumText(totals.costSoumTools)}
-          hint={`${usd4(totals.costUsdTools)} xato xarajati bilan · boshqa ${usd4(totals.costUsdOther)} (bepul AI, noma'lum) · jami ${usd4(totals.costUsdAll)}`}
+          label={`AI xarajat · pullik vositalar · ${fmtNumber(data.range.days)} kun`}
+          value={<WrapMoney amount={totals.costSoumTools} unit="so'm" />}
+          hint={`${usdText(totals.costUsdTools)} (xato ishlar bilan) · jami AI ${usdText(totals.costUsdAll)}, shundan boshqa ${usdText(totals.costUsdOther)} — bepul AI va noma'lum, marjaga kirmaydi`}
         />
-        <KpiTile label="Kurs (so'm / USD)" value={fmtNumber(data.fx)} hint="finance.soum_per_usd" />
-        <KpiTile label="Maqsadli ustama" value={markupText(data.targetMarkup)} hint="pricing.target_markup" />
+        <KpiTile label="Kurs (so'm / USD)" value={fmtNumber(data.fx)} hint={`Sozlama: ${SETTING_LABEL.fx}`} />
+        <KpiTile label="Maqsadli ustama" value={markupText(data.targetMarkup)} hint={`Sozlama: ${SETTING_LABEL.targetMarkup}`} />
       </div>
 
       {lowCov.length > 0 ? (
@@ -267,6 +289,7 @@ function Ready({
       </Card>
 
       <p className="text-muted-foreground text-xs">
+        Narxlar va tushum tangada, tannarx so&apos;mda; marja va ustama uchun tanga so&apos;mga o&apos;tkaziladi (1 tanga = {fmtNumber(data.soumPerCoin)} so&apos;m).
         Marja = (naqd tushum − to&apos;liq tannarx) ÷ naqd tushum (ballar naqd hisoblanmaydi). To&apos;liq tannarx = tugallangan ishning o&apos;rtacha AI xarajati + xato va tashlab
         ketilgan ishlar xarajatining tugallangan ishga ulushi. Ustama = o&apos;rtacha ro&apos;yxat narxi ÷ to&apos;liq tannarx. «Tavsiya» ustamani maqsadli{" "}
         {markupText(data.targetMarkup)} ga yetkazadigan foiz; tanlama 20 ishdan kam bo&apos;lsa «kam ishonch» deb belgilanadi. Qatorni bosing — grafik, simulyator va tarix ochiladi.

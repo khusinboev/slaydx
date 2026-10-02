@@ -11,7 +11,7 @@ import type * as IdentityModule from "../../components/admin/shell/admin-identit
 import type * as ToasterModule from "../../components/admin/ui/Toaster.tsx";
 import type { PricingDetail, PricingItem, PricingOverview, Simulation } from "../../lib/admin-api/pricing.ts";
 import { PricingPage } from "../../components/admin/pricing/PricingPage.tsx";
-import { ladderRange, marginTone, parseSort, recommendationOf, recommendationText, sortItems, trendChangePct, usd4 } from "../../components/admin/pricing/shared.ts";
+import { ladderRange, marginTone, parseSort, recommendationOf, recommendationText, sortItems, trendChangePct, usdText } from "../../components/admin/pricing/shared.ts";
 import { parsePercentText } from "../../components/admin/pricing/Simulator.tsx";
 
 /**
@@ -106,6 +106,7 @@ function item(over: Partial<PricingItem> & Pick<PricingItem, "toolId" | "title" 
     refundRate: null,
     avgPrice: null,
     avgCashRevenue: null,
+    avgCashRevenueSoum: null,
     avgUnits: null,
     avgCostUsd: null,
     avgCostSoum: null,
@@ -197,8 +198,9 @@ function overview(over: Partial<PricingOverview> = {}): PricingOverview {
   return {
     range: { from: "2026-03-10", to: "2026-03-12", days: 3 },
     items: [ESSAY, SLIDE, RESUME],
-    totals: { jobs: 1987, completed: 1913, cashRevenue: 5_900_000, costUsdTools: 310.5, costSoumTools: 3_726_000, costUsdOther: 12.25, costUsdAll: 322.75, marginPct: 36.85 },
+    totals: { jobs: 1987, completed: 1913, cashRevenue: 5_900_000, cashRevenueSoum: 5_900_000, costUsdTools: 310.5, costSoumTools: 3_726_000, costUsdOther: 12.25, costUsdAll: 322.75, marginPct: 36.85 },
     fx: 12_000,
+    soumPerCoin: 1,
     targetMarkup: 3,
     groups: [
       { id: "umumiy", label: "Umumiy vositalar" },
@@ -235,10 +237,17 @@ function simulation(toolId: string, body: Record<string, unknown>): Simulation {
     proposed: { percent, roundTo: roundTo as 100 | 500 | 1000 },
     ladder: it.ladder.map((s) => ({ ...s, effective: adj(s.base) })),
     window: { from: "2026-02-11", to: "2026-03-12", days: 30 },
-    current: { revenue30d: 1_300_000, cost30d: 400_000, marginPct: 69.23, jobs: 500 },
-    projected: { revenue30d: Math.round((1_300_000 * percent) / 100), cost30d: 400_000, marginPct: 100 - (400_000 / ((1_300_000 * percent) / 100)) * 100 },
+    // 2 so'm per tanga in this fixture, so the tanga and so'm revenue lines differ visibly.
+    current: { revenue30d: 1_300_000, revenue30dSoum: 2_600_000, cost30d: 400_000, marginPct: 84.62, jobs: 500 },
+    projected: {
+      revenue30d: Math.round((1_300_000 * percent) / 100),
+      revenue30dSoum: Math.round((2_600_000 * percent) / 100),
+      cost30d: 400_000,
+      marginPct: 100 - (400_000 / ((2_600_000 * percent) / 100)) * 100,
+    },
     partial: false,
     fx: 12_000,
+    soumPerCoin: 2,
   };
 }
 
@@ -322,16 +331,32 @@ test("loading skeleton, then KPI tiles, coverage banner with caveats and the tab
 
   // KPI tiles.
   assert.ok(screen.getByText("36,9%"));
-  assert.ok(screen.getByText("3 726 000 so'm"));
-  // AI cost tile: the tools' figure, plus the other spend (free AI, unknown) and the
-  // all-in total that equals the dashboard / AI page number (P4 money review, finding 3).
-  const costTile = screen.getByText("AI xarajat · vositalar · 3 kun").parentElement!;
+  // AI cost tile: the paid tools' so'm figure, plus the other spend (free AI, unknown) and the
+  // all-in total that equals the dashboard / AI page number (P4 money review, finding 3; UX #4).
+  const costTile = screen.getByText("AI xarajat · pullik vositalar · 3 kun").parentElement!;
+  const costValue = costTile.children[1] as HTMLElement;
+  assert.equal(costValue.textContent, nb("3 726 000 so'm"));
+  // The value wraps between the number and the unit instead of being cut off at 360 px.
+  const wrap = costValue.querySelector(".whitespace-normal");
+  assert.ok(wrap, "value wraps");
   const costHint = within(costTile).getByText(/jami/).textContent ?? "";
-  assert.ok(costHint.includes(usd4(310.5)), `tools usd in hint: ${costHint}`);
-  assert.ok(costHint.includes(`boshqa ${usd4(12.25)}`), `other spend in hint: ${costHint}`);
-  assert.ok(costHint.includes(`jami ${usd4(322.75)}`), `all-in total in hint: ${costHint}`);
+  // Dollars use 2 decimals, like the dashboard and the AI page.
+  assert.equal(usdText(310.5), "$310,50");
+  assert.ok(costHint.includes(usdText(310.5)), `tools usd in hint: ${costHint}`);
+  assert.ok(costHint.includes(`boshqa ${usdText(12.25)}`), `other spend in hint: ${costHint}`);
+  assert.ok(costHint.includes(`jami AI ${usdText(322.75)}`), `all-in total in hint: ${costHint}`);
+  assert.ok(costHint.includes("marjaga kirmaydi"), `difference explained: ${costHint}`);
+  assert.ok(!/\$\d+,\d{3}/.test(costHint), `no 4-decimal dollars: ${costHint}`);
   assert.ok(screen.getByText("12 000"));
   assert.ok(screen.getByText("3,0×"));
+  // Setting hints are Uzbek labels, never raw keys.
+  assert.ok(screen.getByText("Sozlama: Dollar kursi (so'm)"));
+  assert.ok(screen.getByText("Sozlama: Maqsadli ustama (×)"));
+  assert.ok(!document.body.textContent?.includes("finance.soum_per_usd"));
+  assert.ok(!document.body.textContent?.includes("pricing.target_markup"));
+  // Units: the price columns say tanga; the note states the tanga → so'm conversion.
+  assert.ok(screen.getByRole("columnheader", { name: "Asosiy narx, tanga" }));
+  assert.match(nb(document.body.textContent ?? ""), /1 tanga = 1 so'm/);
   assert.ok(screen.getByText("Slayd", { selector: "span" }), "tool below 30 % named in the tile hint");
 
   // Coverage banner: essay is at 66,67 %.
@@ -458,6 +483,10 @@ test("drawer: detail fetched with days=90, headline figures, ladder, trend chart
   const sim0 = calls.filter((c) => c.url.pathname.endsWith("/simulate"));
   assert.deepEqual(sim0[0].body, { percent: 120, roundTo: 500 });
   await d.findByText("1 560 000 tanga");
+  // Revenue is tanga; the margin compares its so'm value (× soumPerCoin = 2 here) with the so'm cost.
+  assert.ok(d.getByText("= 3 120 000 so'm"));
+  assert.ok(d.getByText(/so'mda, o'zgarmaydi/));
+  assert.ok(d.getByText("yaxlitlash 500 tanga"));
   fireEvent.change(d.getByLabelText("Tuzatish foizi"), { target: { value: "150" } });
   await waitFor(() => {
     const sims = calls.filter((c) => c.url.pathname.endsWith("/simulate"));
@@ -481,7 +510,7 @@ test("viewer and finance: no edit controls in the drawer, read-only badge in the
     assert.ok(screen.getByText("Faqat ko'rish"));
     assert.ok(!within(dialog).queryByRole("button", { name: "O'zgartirish" }), role);
     assert.ok(!within(dialog).queryByRole("button", { name: "100% ga qaytarish" }), role);
-    assert.ok(within(dialog).getByText(/pricing\.edit kerak/));
+    assert.ok(within(dialog).getByText(/«Narxlarni o'zgartirish» ruxsati kerak/));
     cleanup();
   }
 });
@@ -589,7 +618,7 @@ test("reset: DELETE {reason}; 409 state reloads the overview", async () => {
   fireEvent.click(within(drawer).getByRole("button", { name: "100% ga qaytarish" }));
   const dialog = (await screen.findAllByRole("dialog")).at(-1)!;
   const dq = within(dialog);
-  assert.ok(dq.getByText("120% · 500"), "before");
+  assert.ok(dq.getByText("120% · 500 tanga"), "before");
   assert.ok(dq.getByText("100% · 500", { selector: "span.font-semibold" }), "after");
   assert.ok(dq.getByText("8 000", { selector: "td.font-semibold" }), "ladder back to base");
   const confirm = dq.getByRole("button", { name: "Qaytarish" }) as HTMLButtonElement;

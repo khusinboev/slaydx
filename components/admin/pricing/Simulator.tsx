@@ -5,7 +5,7 @@ import { PRICE_PERCENT_MAX, PRICE_PERCENT_MIN, type LadderRow, type PriceAdjust,
 import { fmtNumber } from "@/lib/admin-format";
 import { Badge } from "@/components/admin/ui";
 import { LadderCompare } from "./LadderCompare";
-import { marginTone, pctText, soumText, tangaText } from "./shared";
+import { marginTone, pctText, roundToText, soumText, tangaText } from "./shared";
 import { shownSimulation, useSimulation } from "./useSimulation";
 
 /** The slider covers the everyday range; the input reaches the API maximum. */
@@ -81,12 +81,13 @@ export function Simulator({ item, ladder }: { item: Pick<PricingItem, "toolId" |
           <div className="bg-muted/50 rounded-lg px-3 py-2">
             <dt className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">Tushum · {fmtNumber(sim.window.days)} kun</dt>
             <dd className="text-base font-semibold tabular-nums">{tangaText(sim.projected.revenue30d)}</dd>
+            <dd className="text-muted-foreground text-xs tabular-nums">= {soumText(sim.projected.revenue30dSoum)}</dd>
             <dd className="text-muted-foreground text-xs tabular-nums">hozir {tangaText(sim.current.revenue30d)}</dd>
           </div>
           <div className="bg-muted/50 rounded-lg px-3 py-2">
-            <dt className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">Xarajat · {fmtNumber(sim.window.days)} kun</dt>
+            <dt className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">AI xarajat · {fmtNumber(sim.window.days)} kun</dt>
             <dd className="text-base font-semibold tabular-nums">{soumText(sim.projected.cost30d)}</dd>
-            <dd className="text-muted-foreground text-xs">o&apos;zgarmaydi</dd>
+            <dd className="text-muted-foreground text-xs">so&apos;mda, o&apos;zgarmaydi</dd>
           </div>
           <div className="bg-muted/50 rounded-lg px-3 py-2">
             <dt className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">Marja</dt>
@@ -100,8 +101,8 @@ export function Simulator({ item, ladder }: { item: Pick<PricingItem, "toolId" |
 
       <p className="text-muted-foreground text-xs">
         Hajm o&apos;zgarmaydi deb hisoblanadi (talab elastikligi hisobga olinmaydi): oxirgi {sim ? fmtNumber(sim.window.days) : "30"} kundagi{" "}
-        {sim ? `${fmtNumber(sim.current.jobs)} ta` : ""} ish yangi narxda qayta hisoblanadi, xarajat o&apos;sha davrning haqiqiy AI sarfi. Yaxlitlash:{" "}
-        {fmtNumber(item.adjust.roundTo)} so&apos;m. Qoida: 100% → asosiy narx; aks holda max({fmtNumber(item.adjust.roundTo)}, round(asosiy × % ÷ 100 ÷{" "}
+        {sim ? `${fmtNumber(sim.current.jobs)} ta` : ""} ish yangi narxda qayta hisoblanadi, xarajat o&apos;sha davrning haqiqiy AI sarfi (so&apos;m). Marja so&apos;mda hisoblanadi: tanga tushum ×{" "}
+        {sim ? fmtNumber(sim.soumPerCoin) : "1"} so&apos;m/tanga. Yaxlitlash: {roundToText(item.adjust.roundTo)}. Qoida: 100% → asosiy narx; aks holda max({fmtNumber(item.adjust.roundTo)}, round(asosiy × % ÷ 100 ÷{" "}
         {fmtNumber(item.adjust.roundTo)}) × {fmtNumber(item.adjust.roundTo)}).
         {sim?.partial ? " Davrda ishlar juda ko'p: faqat birinchi 20 000 tasi hisoblandi." : ""}
       </p>
