@@ -51,7 +51,7 @@ The brief's non-negotiable rules:
 | WP8 | Settings UI and routes (§6.10, S14) | ✅ merged 2026-10-02 (sonnet; pause verified end to end as a buyer) |
 | WP9 | Broadcasts (§6.9, S13); delivery already exists in F5b | ✅ merged 2026-10-02 (sonnet; smoke 76/76; step-up applies to every broadcasts.send route) |
 | WP10 | Audit log UI and admins UI (§6.12, §6.13, S17/S18) | ✅ merged 2026-10-02 (sonnet; smoke 113 assertions) |
-| WP11 | Pricing admin (§17.4–17.6, S20); call `invalidatePricingCache()` after commit | 🔄 in progress (fable) |
+| WP11 | Pricing admin (§17.4–17.6, S20) | ✅ merged 2026-10-02 (fable; smoke 62/62 incl. buyer charged the adjusted price and the 409 price_changed flow) |
 | I | Integration: remove the legacy admin section in `lib/api-client.ts:292-336` and the legacy `requireAdmin` in `lib/server/admin.ts` with its routes; add the `admin:seed-dev` script; full checks | ⏳ |
 | P4 | Phase 4: three independent reviews (security, regression, UX walk at 1280 px and 360 px, light and dark), fix every finding, write `03-report.md` | ⏳ |
 
@@ -183,3 +183,5 @@ Deploying earlier would leave the owner without a working admin UI. Migration `0
 - [ ] admin_audit_action_idx is plain btree; LIKE prefix uses it only under C collation (03-report; text_pattern_ops index would need a migration).
 - [ ] Extract `cancelQueuedInTx` from lib/server/admin-job-actions.ts; switch admin-users setUserBlocked to it (WP2 repeats F6's QUEUED→REVOKED update).
 - [ ] users sort last_seen_desc ≈480 ms at 50k users, balance_desc no index (03-report; index needs a migration).
+- [ ] UX: pricing table at 1280 px pushes the recommendation column into the table's own scroll; consider compacting (Phase 4 UX).
+- [ ] Pricing product calls to confirm with owner: pages unit = package midpoint; glossary without termCount excluded from per-unit cost; avg AI cost over jobs WITH cost data.
