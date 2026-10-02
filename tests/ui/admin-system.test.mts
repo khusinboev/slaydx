@@ -296,6 +296,9 @@ test("errors: loading skeleton, then the table with level, scope, message, path,
   assert.doesNotMatch(container.querySelector('tr[data-row-key="29"]')!.textContent ?? "", /\bwarn\b/);
   assert.match(row.textContent ?? "", /Ochiq/);
   assert.match(container.querySelector('tr[data-row-key="28"]')!.textContent ?? "", /Hal qilingan/);
+  // 1280 px (UX #8): the status sits next to the level, before the long message and path.
+  const headers = [...container.querySelectorAll("thead th")].map((th) => th.textContent?.trim()).filter(Boolean);
+  assert.deepEqual(headers.slice(0, 4), ["Oxirgi marta", "Soni", "Daraja", "Holat"]);
   assert.match(container.textContent ?? "", /3 ta natija/);
   // The list never shows a stack.
   assert.ok(!container.textContent?.includes("at convert"));

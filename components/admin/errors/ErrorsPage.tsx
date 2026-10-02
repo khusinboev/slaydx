@@ -114,6 +114,11 @@ export function ErrorsPage() {
       ),
     },
     {
+      id: "status",
+      header: "Holat",
+      cell: (e) => (e.resolvedAt ? <Badge tone="success">Hal qilingan</Badge> : <Badge>Ochiq</Badge>),
+    },
+    {
       id: "scope",
       header: "Joy",
       cell: (e) =>
@@ -136,13 +141,20 @@ export function ErrorsPage() {
       className: "max-w-[26rem] min-w-[14rem]",
       cell: (e) => <span className="line-clamp-2 font-mono text-xs break-words">{e.message}</span>,
     },
-    { id: "path", header: "Yo'l", hideOnCard: true, className: "max-w-[14rem]", cell: (e) => (e.path ? <span className="block truncate font-mono text-xs">{e.path}</span> : "—") },
-    { id: "process", header: "Jarayon", hideOnCard: true, cell: (e) => (e.process ? <span className="font-mono text-xs">{e.process}</span> : "—") },
     {
-      id: "status",
-      header: "Holat",
-      cell: (e) => (e.resolvedAt ? <Badge tone="success">Hal qilingan</Badge> : <Badge>Ochiq</Badge>),
+      id: "path",
+      header: "Yo'l",
+      hideOnCard: true,
+      cell: (e) =>
+        e.path ? (
+          <span className="block max-w-[14rem] truncate font-mono text-xs" title={e.path}>
+            {e.path}
+          </span>
+        ) : (
+          "—"
+        ),
     },
+    { id: "process", header: "Jarayon", hideOnCard: true, cell: (e) => (e.process ? <span className="font-mono text-xs">{e.process}</span> : "—") },
   ];
 
   const hasRange = filters.from !== "" && filters.to !== "";
