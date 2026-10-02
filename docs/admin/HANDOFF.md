@@ -42,7 +42,7 @@ The brief's non-negotiable rules:
 | F6 | Money actions: wallet adjustment, job cancel/fail/refund, external order refund with clawback, plus dialogs (`components/admin/money/*`, `lib/admin-api/money.ts`). `adminAdjustWalletInTx` extracted from `lib/server/credits.ts`; idempotency in `lib/server/admin-idempotency.ts` | ✅ merged 2026-10-02 (fable; fable review: 1 MAJOR + 3 MINOR fixed) |
 | COST | `lib/server/admin-cost.ts`: the ONE definition of AI spend (ai_usage ∪ legacy completed cost_json, no double count), groupings, coverage, `COST_CAVEATS`. WP1, WP5 and WP11 must use it | ✅ merged 2026-10-02 |
 | WP1 | Dashboard (§6.3, S3) | ✅ merged 2026-10-02 (opus; smoke 41/41) |
-| WP2 | Users (§6.4, S4/S5); rewrites the legacy `app/api/admin/users/**` | 🔄 in progress (opus) |
+| WP2 | Users (§6.4, S4/S5); rewrites the legacy `app/api/admin/users/**` | ✅ merged 2026-10-02 (opus; smoke 98/98) |
 | WP3 | Generations (§6.5, S6/S7); exports `GenerationsTable` (`fixedFilters`, `embedded`) for WP2 | ✅ merged 2026-10-02 (opus; smoke 53/53) |
 | WP4 | Payments and finance (§6.6, S8–S10); exports `OrdersTable`/`LedgerTable` for WP2 | ✅ merged 2026-10-02 (opus; smoke 79/79) |
 | WP5 | AI cost and providers (§6.7, S11) on `admin-cost`; `lib/server/admin-heartbeat.ts` (shared stale rule) | ✅ merged 2026-10-02 (sonnet; smoke 43/43) |
@@ -181,3 +181,5 @@ Deploying earlier would leave the owner without a working admin UI. Migration `0
 - [ ] Server: admins/:id/sessions/revoke on self is allowed (revokeSessionsOf has no assertNotSelf); plan §4.3 says own account goes via /admin/account → add 409 self.
 - [ ] `useLoad` lives in components/admin/system/shared and is imported by errors/audit/admins: move to components/admin/ui.
 - [ ] admin_audit_action_idx is plain btree; LIKE prefix uses it only under C collation (03-report; text_pattern_ops index would need a migration).
+- [ ] Extract `cancelQueuedInTx` from lib/server/admin-job-actions.ts; switch admin-users setUserBlocked to it (WP2 repeats F6's QUEUED→REVOKED update).
+- [ ] users sort last_seen_desc ≈480 ms at 50k users, balance_desc no index (03-report; index needs a migration).
