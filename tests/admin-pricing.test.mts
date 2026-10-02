@@ -5,6 +5,7 @@ import { createHash, randomBytes, randomInt, randomUUID } from "node:crypto";
 import { inRequest } from "./helpers/next-request.mts";
 import { createIsolatedDb } from "./helpers/isolated-db.mts";
 import type { CostJson } from "../lib/generation/types.ts";
+import type { FormValues } from "../lib/types.ts";
 
 /**
  * Pricing and unit economics (docs/admin/02-plan.md §17) through the REAL
@@ -219,10 +220,10 @@ async function detail(cookie: string | null, toolId: string, qs = ""): Promise<R
   return readResult(await inRequest(req, () => toolRoute.GET(req, ctx(toolId))));
 }
 
-async function simulate(cookie: string | null, toolId: string, body: unknown): Promise<Result> {
+async function simulate(cookie: string | null, toolId: string, body: unknown, opts: { origin?: boolean } = {}): Promise<Result> {
   const req = new Request(`http://localhost:3000/api/admin/pricing/${encodeURIComponent(toolId)}/simulate`, {
     method: "POST",
-    headers: headersFor(cookie, false),
+    headers: headersFor(cookie, opts.origin !== false),
     body: JSON.stringify(body),
   });
   return readResult(await inRequest(req, () => simRoute.POST(req, ctx(toolId))));
@@ -284,7 +285,7 @@ const itemOf = (r: Result, toolId: string): Item => {
 async function seedJob(o: {
   user: TestUser;
   toolId: "essay" | "slide" | "translation" | "image" | "glossary";
-  values: Record<string, unknown>;
+  values: FormValues;
   createdAt: string;
   status?: "COMPLETED" | "FAILED" | "QUEUED";
   finishedAt?: string;
@@ -724,6 +725,7 @@ test("metrics against a hand-computed fixture; detail; simulator; mutations; rol
 
     assert.equal((await put(owner.cookie, "essay", { percent: 110, roundTo: 500, reason: REASON }, { origin: false })).status, 403);
     assert.equal((await del(owner.cookie, "essay", { reason: REASON }, { origin: false })).status, 403);
+    assert.equal((await simulate(owner.cookie, "essay", { percent: 110, roundTo: 500 }, { origin: false })).status, 403, "POST without Origin");
 
     const plain = await mkUser("Plain");
     assert.equal((await list(`${SESSION_COOKIE}=${plain.userToken}`, RANGE)).status, 404);
