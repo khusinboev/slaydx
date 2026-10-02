@@ -5,7 +5,7 @@ import { transaction } from "./db";
 import { env } from "./env";
 import { adminTx, writeDeniedAudit } from "./admin-audit";
 import type { AdminActor } from "./admin-handler";
-import { spendRowsSql, type SpendRange } from "./admin-cost";
+import { spendForJobs } from "./admin-cost";
 import {
   buildKeyset,
   countCapped,
@@ -31,9 +31,9 @@ import { TOOLS, TOOL_BY_ID } from "../tools";
  *   - the list never touches a wide column (`values_json`, `html`, `doc_json`,
  *     `doc_prev`, `live_json`, file bytes); it reads the same narrow set as
  *     `SUMMARY_COLUMNS` in jobs.ts plus the lease/budget columns;
- *   - per-job AI cost is the canonical spend row set of `admin-cost.ts`
- *     (`spendRowsSql`) restricted to the job ids, so a job's figure here always
- *     adds up to the dashboard / AI-cost totals;
+ *   - per-job AI cost comes from `admin-cost.ts` `spendForJobs` (the canonical
+ *     spend rule, looked up by job id), so a job's figure here always adds up
+ *     to the dashboard / AI-cost totals;
  *   - every read runs in a READ ONLY transaction with a 10 s statement timeout
  *     (§9, T18), so a pathological filter cannot hold a pool connection.
  */
@@ -119,9 +119,6 @@ const CHARGED = `EXISTS (SELECT 1 FROM transactions c2 WHERE c2.kind = 'charge' 
 const REFUNDED = `EXISTS (SELECT 1 FROM transactions r2 WHERE r2.kind = 'refund' AND r2.reference = g.id::text)`;
 
 const jobTimeoutSec = (): number => Math.round(env.worker.jobTimeoutMs / 1000);
-
-/** All-time window for `spendRowsSql`: per-job cost is never range-limited. */
-const ALL_TIME: SpendRange = { fromTs: "2000-01-01T00:00:00.000Z", toTsExclusive: "2100-01-01T00:00:00.000Z" };
 
 type Queryable = Pick<PoolClient, "query">;
 
@@ -229,19 +226,10 @@ const num = (v: string | number | null | undefined): number => {
   return Number.isFinite(n) ? n : 0;
 };
 
-/** Per-job canonical spend for a set of ids (see the module comment). */
+/** Per-job canonical spend (usd) for a set of ids (see the module comment). */
 async function costsFor(db: Queryable, ids: readonly string[]): Promise<Map<string, number>> {
   const out = new Map<string, number>();
-  if (ids.length === 0) return out;
-  const spend = spendRowsSql(ALL_TIME, 1);
-  const res = await db.query<{ id: string; usd: string }>(
-    `SELECT s.generation_id::text AS id, sum(s.usd) AS usd
-       FROM (${spend.sql}) s
-      WHERE s.generation_id = ANY($${spend.nextParam}::uuid[])
-      GROUP BY 1`,
-    [...spend.params, ids],
-  );
-  for (const r of res.rows) out.set(r.id, Number(num(r.usd).toFixed(6)));
+  for (const [id, spend] of await spendForJobs(db, ids)) out.set(id, spend.usd);
   return out;
 }
 
@@ -533,22 +521,13 @@ function partOf(p: unknown, outcome: string): CostPartView {
 }
 
 async function costOf(client: Queryable, id: string): Promise<AdminGenerationDetail["cost"]> {
-  const spend = spendRowsSql(ALL_TIME, 1);
-  const res = await client.query<{ outcome: string; usd: string; parts: unknown }>(
-    `SELECT s.outcome, s.usd::text AS usd, s.parts
-       FROM (${spend.sql}) s
-      WHERE s.generation_id = $${spend.nextParam}::uuid
-      ORDER BY s.at`,
-    [...spend.params, id],
-  );
-  if (res.rows.length === 0) return null;
-  let usd = 0;
+  const spend = (await spendForJobs(client, [id])).get(id);
+  if (!spend) return null;
   const parts: CostPartView[] = [];
-  for (const r of res.rows) {
-    usd += num(r.usd);
+  for (const r of spend.rows) {
     if (Array.isArray(r.parts)) for (const p of r.parts) parts.push(partOf(p, r.outcome));
   }
-  return { usd: Number(usd.toFixed(6)), parts };
+  return { usd: spend.usd, parts };
 }
 
 /**

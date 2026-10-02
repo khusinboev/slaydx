@@ -13,6 +13,9 @@ import type { CostJson } from "../lib/generation/types.ts";
  *     generation) and free rows count; a FAILED job's `cost_json` does not;
  *   - range edges and day buckets are Asia/Tashkent days (`[from, to)`);
  *   - every grouping sums to the totals; coverage math; empty range → zeros;
+ *   - `spendForJobs` (per job, all time) applies the same rule and sums to
+ *     `spendTotals` minus free calls (mutation-checked: excluding abandoned rows
+ *     only there, or dropping the per-job SQL sum, fails it);
  *   - the fragment composes with the caller's own `$n` params and runs in a
  *     READ ONLY transaction.
  */
@@ -103,11 +106,11 @@ test("canonical spend: dedupe, legacy, outcomes, Tashkent days, groupings, cover
     c.addLlm(SONNET(20_000, 4_000));
     c.addGrounding(2);
   });
-  await gen({ tool: "article", status: "COMPLETED", finishedAt: tk(D, "23:30:00"), costJson: costB });
+  const genB = await gen({ tool: "article", status: "COMPLETED", finishedAt: tk(D, "23:30:00"), costJson: costB });
 
   // C: legacy engine CostMeter cost_json without parts.
   const costC: CostJson = { provider: "openai", model: "gpt-legacy", inputTokens: 1_000, outputTokens: 500, calls: 3, usd: 0.25 };
-  await gen({ tool: "referat", status: "COMPLETED", finishedAt: tk(D, "12:00:00"), costJson: costC });
+  const genC = await gen({ tool: "referat", status: "COMPLETED", finishedAt: tk(D, "12:00:00"), costJson: costC });
 
   // D: failed job; its cost_json was written before it failed — only the ai_usage row counts.
   const costD = meter((c) => {
@@ -120,7 +123,8 @@ test("canonical spend: dedupe, legacy, outcomes, Tashkent days, groupings, cover
 
   // E: abandoned build of a generation the user deleted (no generations row).
   const costE = meter((c) => c.addLlm(SONNET(5_000, 1_000)));
-  await usage({ at: tk(D, "14:00:00"), source: "job", outcome: "abandoned", genId: randomUUID(), tool: "image", cost: costE });
+  const genE = randomUUID();
+  await usage({ at: tk(D, "14:00:00"), source: "job", outcome: "abandoned", genId: genE, tool: "image", cost: costE });
 
   // Free call recorded without parts → the "unknown" pseudo-part.
   const costFree: CostJson = { provider: "none", model: "", inputTokens: 10, outputTokens: 5, calls: 1, usd: 0.02 };
@@ -131,7 +135,7 @@ test("canonical spend: dedupe, legacy, outcomes, Tashkent days, groupings, cover
   await usage({ at: tk(D, "00:00:00"), source: "free", outcome: "free", genId: null, tool: "free:outline", cost: costFree0 });
 
   // F: completed without any cost data (coverage denominator only).
-  await gen({ tool: "slide", status: "COMPLETED", finishedAt: tk(D, "16:00:00"), costJson: null });
+  const genF = await gen({ tool: "slide", status: "COMPLETED", finishedAt: tk(D, "16:00:00"), costJson: null });
 
   // G: completed, cost_json write failed, ai_usage row exists → counted once, covered.
   const costG = meter((c) => c.addLlm(SONNET(30_000, 6_000)));
@@ -146,7 +150,7 @@ test("canonical spend: dedupe, legacy, outcomes, Tashkent days, groupings, cover
   // --- Day D+1 and outside ---------------------------------------------------
   // H: legacy job finished 00:30 Tashkent on D+1 (19:30 UTC on D) → day D+1.
   const costH = meter((c) => c.addLlm(SONNET(70_000, 9_000)));
-  await gen({ tool: "article", status: "COMPLETED", finishedAt: tk(D1, "00:30:00"), costJson: costH });
+  const genH = await gen({ tool: "article", status: "COMPLETED", finishedAt: tk(D1, "00:30:00"), costJson: costH });
   // Free call at exactly the Tashkent midnight that ENDS day D → day D+1.
   const costFree1 = meter((c) => c.addLlm(SONNET(2_000, 300)));
   await usage({ at: tk(D1, "00:00:00"), source: "free", outcome: "free", genId: null, tool: "free:udk", cost: costFree1 });
@@ -194,6 +198,71 @@ test("canonical spend: dedupe, legacy, outcomes, Tashkent days, groupings, cover
       [...spend.params, [genA, genI, genG, genD]],
     );
     assert.deepEqual(Object.fromEntries(perJob.map((r) => [r.generation_id, Number(r.n)])), { [genA]: 1, [genI]: 1, [genG]: 1, [genD]: 1 });
+  });
+
+  await t.test("spendForJobs: the same rule by job id, summing to spendTotals minus free calls", async () => {
+    const jobsD = [genA, genB, genC, genD, genE, genG];
+    const free = (rows: Spend[]) => rows.filter((r) => r.outcome === "free");
+    for (const [range, ids, rows] of [
+      [rD, jobsD, dayD],
+      [rDD1, [...jobsD, genI, genH], [...dayD, ...dayD1]],
+    ] as const) {
+      const per = await cost.spendForJobs(pool(), ids);
+      const totals = await cost.spendTotals(pool(), range);
+      const freeSum = sumOf(free([...rows]));
+      const jobs = [...per.values()];
+      assert.equal(jobs.reduce((a, j) => a + j.records, 0), totals.records - freeSum.records, "records");
+      assert.equal(jobs.reduce((a, j) => a + j.calls, 0), totals.calls - freeSum.calls, "calls");
+      assert.equal(jobs.reduce((a, j) => a + j.inputTokens, 0), totals.inputTokens - freeSum.inputTokens, "input");
+      assert.equal(jobs.reduce((a, j) => a + j.outputTokens, 0), totals.outputTokens - freeSum.outputTokens, "output");
+      near(jobs.reduce((a, j) => a + j.usd, 0), totals.usd - freeSum.usd, "usd");
+    }
+
+    const per = await cost.spendForJobs(pool(), [genA, genB, genC, genD, genE, genF, genG, genI, randomUUID()]);
+    // A: cost_json AND a completed ai_usage row → one row (the ai_usage one).
+    assert.equal(per.get(genA)!.records, 1);
+    assert.equal(per.get(genA)!.rows[0]!.outcome, "completed");
+    assert.equal(per.get(genA)!.rows[0]!.at, tk(D, "10:00:01"), "the ai_usage row, not the legacy one");
+    near(per.get(genA)!.usd, costA.usd, "A");
+    assert.deepEqual(per.get(genA)!.rows[0]!.parts, JSON.parse(JSON.stringify(costA.parts)));
+    // C: legacy CostMeter without parts → its one attributed LLM part.
+    const partsC = per.get(genC)!.rows[0]!.parts as Array<Record<string, unknown>>;
+    assert.equal(partsC.length, 1);
+    assert.equal(partsC[0]!.provider, "openai");
+    assert.equal(partsC[0]!.model, "gpt-legacy");
+    // D: FAILED → only its ai_usage row, never its cost_json.
+    assert.equal(per.get(genD)!.records, 1);
+    assert.equal(per.get(genD)!.rows[0]!.outcome, "failed");
+    // E: abandoned spend of a deleted generation still belongs to its id.
+    assert.equal(per.get(genE)!.rows[0]!.outcome, "abandoned");
+    // I: not range-limited — its D+1 ai_usage row counts once.
+    assert.equal(per.get(genI)!.records, 1);
+    near(per.get(genI)!.usd, costI.usd, "I");
+    // F (no cost data) and an unknown id have no entry.
+    assert.ok(!per.has(genF));
+    assert.equal(per.size, 7);
+
+    // Same figures inside a READ ONLY transaction (how admin-generations calls it).
+    const inTx = await transaction(async (c) => {
+      await c.query("SET TRANSACTION READ ONLY");
+      return cost.spendForJobs(c, [genA]);
+    });
+    near(inTx.get(genA)!.usd, costA.usd, "A in tx");
+
+    // J (on its own day, outside every other range here): a retried job — a
+    // failed attempt plus the completed run (with a cost_json too) → two rows, one total.
+    const DJ = "2026-04-01";
+    const costJ1 = meter((c) => c.addLlm(SONNET(3_000, 700)));
+    const costJ2 = meter((c) => c.addLlm(SONNET(11_000, 1_300)));
+    const genJ = await gen({ tool: "slide", status: "COMPLETED", finishedAt: tk(DJ, "11:00:00"), costJson: costJ2 });
+    await usage({ at: tk(DJ, "10:00:00"), source: "job", outcome: "failed", genId: genJ, tool: "slide", cost: costJ1 });
+    await usage({ at: tk(DJ, "11:00:01"), source: "job", outcome: "completed", genId: genJ, tool: "slide", cost: costJ2 });
+    const j = (await cost.spendForJobs(pool(), [genJ])).get(genJ)!;
+    assert.deepEqual(j.rows.map((r) => r.outcome), ["failed", "completed"], "oldest first");
+    assert.equal(j.records, 2);
+    assert.equal(j.calls, costJ1.calls + costJ2.calls);
+    near(j.usd, costJ1.usd + costJ2.usd, "J total");
+    near(j.usd, (await cost.spendTotals(pool(), parseDateRange(DJ, DJ))).usd, "J = its day's spendTotals");
   });
 
   await t.test("Tashkent days: 23:30 stays on its day, 00:00 starts the next, edges are [from, to)", async () => {
@@ -377,6 +446,11 @@ test("input validation and caveats", async () => {
   const s = cost.spendRowsSql(r);
   assert.ok(!s.sql.includes(r.fromTs) && !s.sql.includes(r.toTsExclusive));
   assert.ok(!/\bhtml\b|doc_json|values_json|live_json|\*/.test(s.sql.replace(/u\.\*|s\.\*|r\.\*/g, "")), "no wide generation columns");
+  // spendForJobs: empty input never queries; malformed ids are a programming error, never SQL.
+  const never = { query: async () => assert.fail("must not query") } as never;
+  assert.equal((await cost.spendForJobs(never, [])).size, 0);
+  await assert.rejects(cost.spendForJobs(never, ["1; DROP TABLE ai_usage"]), /invalid job ids/);
+  await assert.rejects(cost.spendForJobs(never, Array.from({ length: 1_001 }, () => randomUUID())), /invalid job ids/);
   assert.ok(cost.COST_CAVEATS.length >= 8);
   assert.ok(Object.isFrozen(cost.COST_CAVEATS));
   for (const c of cost.COST_CAVEATS) assert.ok(c.length > 20 && !/TODO|FIXME/.test(c));
