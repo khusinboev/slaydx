@@ -6,13 +6,14 @@ import { createIsolatedDb } from "./helpers/isolated-db.mts";
  * TO'LOV YAKUNI — KREDIT YOZISH `credits.ts` ORQALI (W3 wrap-up (a)).
  *
  * `payments.ts` ning o'z `creditInTx` nusxasi olib tashlanib, `settleOrder`
- * endi `credits.ts topUpInTx`/`activateProInTx` ni chaqiradi. Xatti-harakat
- * AYNAN o'sha bo'lishi shart — bu fayl o'sha invariantlarni qulflaydi:
+ * endi `credits.ts topUpInTx` ni chaqiradi. Xatti-harakat AYNAN o'sha
+ * bo'lishi shart — bu fayl o'sha invariantlarni qulflaydi:
  *
  *   • hamyon = jurnal yig'indisi (`balance == SUM(balance_delta)` va h.k.);
  *   • topup: `kind='topup'`, izoh «<provider> orqali to'ldirish», faqat balans;
- *   • pro: `kind='subscription'`, izoh «Pro obuna», kvota 15 000, `plan='pro'`,
- *     muddat +30 kun (faol obuna ustiga qo'shiladi);
+ *   • ESKI pro buyurtma (obuna 2026-10 da olib tashlangan, docs/SUBS-REMOVAL.md
+ *     §A): `kind='subscription'` (admin SQL purpose → kind moslikka tayanadi),
+ *     to'langan summa BALANSGA, kvota 0, `plan`/`plan_expires_at` tegilmaydi;
  *   • takroriy va PARALLEL yakun pul qo'shmaydi va xato bermaydi.
  *
  * Postgres talab qilinadi (alohida baza).
@@ -26,7 +27,7 @@ const skip = hasDb ? false : "DATABASE_URL yo'q";
 
 test("settleOrder → credits.ts: jurnal invarianti va yozuv shakli o'zgarmagan", { skip }, async (t) => {
   const { query, migrate, pool } = await import("../lib/server/db.ts");
-  const { createOrder, attachTransaction, settleOrder, PRO_PLAN } = await import("../lib/server/payments.ts");
+  const { createOrder, attachTransaction, settleOrder, findOrder } = await import("../lib/server/payments.ts");
   await migrate();
   t.after(async () => {
     await pool().end();
@@ -90,30 +91,71 @@ test("settleOrder → credits.ts: jurnal invarianti va yozuv shakli o'zgarmagan"
     await assertLedger(uid);
   });
 
-  await t.test("pro: kvota + tarif bir tranzaksiyada, faol obuna ustiga +30 kun", async () => {
+  await t.test("eski pro buyurtma: summa balansga (kind subscription), plan/kvota tegilmaydi, idempotent", async () => {
+    // `createOrder` endi `pro` yaratmaydi — eski buyurtma to'g'ridan-to'g'ri SQL bilan.
+    const legacyPro = async (uid: string, amountSoum: number) => {
+      const [r] = await query<{ id: string }>(
+        `INSERT INTO payment_orders (id, user_id, provider, purpose, amount_soum)
+         VALUES (gen_random_uuid(), $1, 'payme', 'pro', $2) RETURNING id::text AS id`,
+        [uid, amountSoum],
+      );
+      return r.id;
+    };
+    await assert.rejects(
+      // @ts-expect-error — `pro` turdan ham olib tashlangan; runtime to'sig'i ham bor.
+      createOrder({ userId: await mkUser(), provider: "payme", purpose: "pro", amountSoum: 15_000 }),
+      /Obuna to'xtatilgan/,
+    );
+
     const uid = await mkUser();
-    const o1 = await createOrder({ userId: uid, provider: "payme", purpose: "pro", amountSoum: 0 });
-    await attachTransaction(o1.id, "pm-1", 1_000);
-    assert.equal((await settleOrder(o1.id, 2_000)).status, "paid");
+    const o1 = await legacyPro(uid, 15_000);
+    await attachTransaction(o1, "pm-1", 1_000);
+    assert.equal((await settleOrder(o1, 2_000)).status, "paid");
     let w = await wallet(uid);
-    assert.equal(w.plan, "pro");
-    assert.equal(Number(w.quota), PRO_PLAN.quota);
-    assert.ok(Math.abs(Number(w.days) - PRO_PLAN.days) < 0.01, `muddat ${w.days} kun`);
+    // MUTATSIYA: eski `activateProInTx` → kvota 15 000, plan 'pro', balans 0.
+    assert.equal(Number(w.balance), 15_000, "to'langan summa balansga tushishi kerak");
+    assert.equal(Number(w.quota), 0, "kvota o'smasligi kerak");
+    assert.equal(w.plan, "free", "plan yozilmasligi kerak");
+    assert.equal(w.days, null, "plan_expires_at yozilmasligi kerak");
     const j = await journal(uid);
     assert.equal(j.length, 1);
-    assert.equal(j[0].kind, "subscription");
-    assert.equal(j[0].note, "Pro obuna");
-    assert.equal(j[0].reference, "payme:pm-1");
-    assert.equal(Number(j[0].quota_delta), PRO_PLAN.quota);
-    assert.equal(Number(j[0].balance_delta), 0);
+    assert.deepEqual(
+      { ...j[0], points_delta: Number(j[0].points_delta), quota_delta: Number(j[0].quota_delta), balance_delta: Number(j[0].balance_delta) },
+      {
+        kind: "subscription",
+        points_delta: 0,
+        quota_delta: 0,
+        balance_delta: 15_000,
+        reference: "payme:pm-1",
+        note: "Pro obuna (eski buyurtma) — balansga",
+      },
+    );
+    assert.equal((await findOrder(o1))?.purpose, "pro", "tarixiy purpose o'qiladi");
 
-    const o2 = await createOrder({ userId: uid, provider: "payme", purpose: "pro", amountSoum: 0 });
-    await attachTransaction(o2.id, "pm-2", 1_000);
-    assert.equal((await settleOrder(o2.id, 2_000)).status, "paid");
+    // Takroriy va PARALLEL yakun — pul bir marta.
+    assert.equal((await settleOrder(o1, 3_000)).status, "already_paid");
+    const o2 = await legacyPro(uid, 20_000);
+    await attachTransaction(o2, "pm-2", 1_000);
+    const outs = await Promise.all(Array.from({ length: 4 }, () => settleOrder(o2, 2_000)));
+    assert.deepEqual(outs.map((o) => o.status).sort(), ["already_paid", "already_paid", "already_paid", "paid"]);
     w = await wallet(uid);
-    assert.equal(Number(w.quota), PRO_PLAN.quota * 2);
-    assert.ok(Math.abs(Number(w.days) - 2 * PRO_PLAN.days) < 0.01, `ustiga qo'shilmadi: ${w.days}`);
+    assert.equal(Number(w.balance), 35_000, "summa buyurtmaning o'zidan (o'chirilgan PRO_PLAN dan emas)");
+    assert.equal(Number(w.quota), 0);
+    assert.equal((await journal(uid)).length, 2);
     await assertLedger(uid);
+
+    // Faol eski obunasi bor foydalanuvchi: muddat uzaytirilmaydi.
+    const vip = await mkUser();
+    await query(`UPDATE users SET plan = 'pro', plan_expires_at = now() + interval '5 days' WHERE id = $1`, [vip]);
+    const o3 = await legacyPro(vip, 15_000);
+    await attachTransaction(o3, "pm-3", 1_000);
+    assert.equal((await settleOrder(o3, 2_000)).status, "paid");
+    const v = await wallet(vip);
+    assert.equal(v.plan, "pro");
+    assert.ok(Math.abs(Number(v.days) - 5) < 0.01, `muddat o'zgarmasligi kerak edi: ${v.days}`);
+    assert.equal(Number(v.balance), 15_000);
+    assert.equal(Number(v.quota), 0);
+    await assertLedger(vip);
   });
 
   await t.test("parallel yakun: bitta `paid`, qolganlari `already_paid`, pul bir marta", async () => {
