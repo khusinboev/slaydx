@@ -46,12 +46,12 @@ The brief's non-negotiable rules:
 | WP3 | Generations (§6.5, S6/S7); exports `GenerationsTable` (`fixedFilters`, `embedded`) for WP2 | ✅ merged 2026-10-02 (opus; smoke 53/53) |
 | WP4 | Payments and finance (§6.6, S8–S10); exports `OrdersTable`/`LedgerTable` for WP2 | 🔄 in progress (agent worktree `agent-a3a817da10f90a446`) |
 | WP5 | AI cost and providers (§6.7, S11) on `admin-cost`; `lib/server/admin-heartbeat.ts` (shared stale rule) | ✅ merged 2026-10-02 (sonnet; smoke 43/43) |
-| WP6 | Moderation (§6.8, S12) | 🔄 in progress (`agent-a85e61534c5b4932b`) |
+| WP6 | Moderation (§6.8, S12) | ✅ merged 2026-10-02 (sonnet; smoke 71/72, 1 script bug verified in SQL) |
 | WP7 | System and errors (§6.11, S15/S16) | ✅ merged 2026-10-02 (sonnet; smoke 82/82) |
-| WP8 | Settings UI and routes (§6.10, S14); call `invalidateSettingsCache()` after commit | 🔄 in progress (`agent-a017944382e434738`) |
-| WP9 | Broadcasts (§6.9, S13); delivery already exists in F5b | ⏳ |
-| WP10 | Audit log UI and admins UI (§6.12, §6.13, S17/S18) | ⏳ |
-| WP11 | Pricing admin (§17.4–17.6, S20) (opus); call `invalidatePricingCache()` after commit | ⏳ |
+| WP8 | Settings UI and routes (§6.10, S14) | ✅ merged 2026-10-02 (sonnet; pause verified end to end as a buyer) |
+| WP9 | Broadcasts (§6.9, S13); delivery already exists in F5b | 🔄 in progress |
+| WP10 | Audit log UI and admins UI (§6.12, §6.13, S17/S18) | 🔄 in progress |
+| WP11 | Pricing admin (§17.4–17.6, S20); call `invalidatePricingCache()` after commit | 🔄 in progress (fable) |
 | I | Integration: remove the legacy admin section in `lib/api-client.ts:292-336` and the legacy `requireAdmin` in `lib/server/admin.ts` with its routes; add the `admin:seed-dev` script; full checks | ⏳ |
 | P4 | Phase 4: three independent reviews (security, regression, UX walk at 1280 px and 360 px, light and dark), fix every finding, write `03-report.md` | ⏳ |
 
@@ -173,3 +173,5 @@ Deploying earlier would leave the owner without a working admin UI. Migration `0
 - [ ] components/admin/ui/charts/LineChart.tsx floors y-max at 1 (flattens < 1 values); WP1 worked around locally — fix in primitive.
 - [ ] Dashboard revenueSoum is gross (external refunds/chargebacks not subtracted) — state in 03-report / tile hint.
 - [ ] env.ts:414-416 runtimeWarnings echoes raw FREE_LLM_DISABLED value; WP7 sanitizes in admin-system safeConfigMessage. Decide: one-line env.ts fix (product file) or keep sanitizer.
+- [ ] No index on lower(generations.topic): moderation q prefix scans generations (fine now; note in 03-report).
+- [ ] settings group label 'Narxlar' (catalog) vs prototype 'Narxlash' — keep catalog.
