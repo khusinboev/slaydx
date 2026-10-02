@@ -4,15 +4,14 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Check } from "lucide-react";
 import * as api from "@/lib/api-client";
-import { useAppStore } from "@/lib/store";
+import { creditTotal, useAppStore } from "@/lib/store";
 import { useUi } from "@/lib/ui";
 
 const FEATURES = [
-  "Barcha hujjat vositalari",
-  "15 000 tanga kvota / 30 kun",
-  "Slayd, kurs ishi, insho, tezis",
-  "Tarjimon va metodik hujjatlar",
-  "Navbatda ustuvorlik",
+  "Har bir hujjat narxi yaratishdan oldin ko'rsatiladi",
+  "Faqat tayyor bo'lgan hujjat uchun yechiladi",
+  "Click yoki Payme orqali xavfsiz to'lov",
+  "Balans muddatsiz saqlanadi",
 ];
 
 export function PurchasePage() {
@@ -95,9 +94,9 @@ export function PurchasePage() {
   return (
     <div className="mx-auto w-full max-w-6xl px-4 pt-8 pb-16 sm:px-6 sm:pt-12 lg:px-8">
       <div className="mb-8 text-center sm:mb-10">
-        <h1 className="mb-3 text-3xl font-bold tracking-tight sm:text-4xl">Rejani tanlang</h1>
+        <h1 className="mb-3 text-3xl font-bold tracking-tight sm:text-4xl">Balansni to‘ldirish</h1>
         <p className="text-muted-foreground mx-auto max-w-2xl text-[15.5px] sm:text-base">
-          O‘zingizga mos rejani tanlang va barcha imkoniyatlardan to‘liq foydalaning
+          Hisobingizga mablag‘ qo‘shing — har bir hujjat uchun alohida to‘lanadi
         </p>
       </div>
 
@@ -140,43 +139,18 @@ export function PurchasePage() {
         </div>
       ) : null}
 
-      <div className="mx-auto grid max-w-3xl gap-4 sm:grid-cols-2">
-        <article className="bg-card rounded-2xl border p-6">
-          <h2 className="text-lg font-semibold">Bepul</h2>
-          <p className="mt-2 text-3xl font-bold">0 so&apos;m</p>
-          <p className="text-muted-foreground mt-1 text-sm">Yangi akkauntda 3 000 ball</p>
-          <ul className="mt-5 space-y-2 text-sm">
-            <li className="flex gap-2">
-              <Check className="text-primary mt-0.5 size-4" /> Asosiy vositalarni sinash
-            </li>
-            <li className="flex gap-2">
-              <Check className="text-primary mt-0.5 size-4" /> Fayllarni saqlash
-            </li>
-          </ul>
-          <button
-            type="button"
-            disabled
-            className="border-input mt-6 h-11 w-full rounded-full border text-sm font-medium opacity-60"
-          >
-            {user?.plan === "pro" ? "Bepul reja" : "Joriy reja"}
-          </button>
-        </article>
-
+      <div className="mx-auto max-w-md">
         <article className="bg-card ring-primary rounded-2xl border p-6 ring-2">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">Pro</h2>
-            {user?.plan === "pro" && loggedIn ? (
-              <span className="bg-primary/10 text-primary rounded-full px-2 py-0.5 text-xs font-medium">
-                Faol
-              </span>
-            ) : null}
-          </div>
-          <p className="mt-2 text-3xl font-bold">15 000 so&apos;m</p>
+          <h2 className="text-lg font-semibold">Balansni to&apos;ldirish</h2>
+          {loggedIn && user ? (
+            <p data-testid="purchase-total" className="mt-2 text-3xl font-bold tabular-nums">
+              {creditTotal(user).toLocaleString("uz-UZ")} tanga
+            </p>
+          ) : (
+            <p className="mt-2 text-3xl font-bold">10 000 so&apos;mdan</p>
+          )}
           <p className="text-muted-foreground mt-1 text-sm">
-            30 kun · 15 000 kvota
-            {user?.planExpiresAt
-              ? ` · ${new Date(user.planExpiresAt).toLocaleDateString("uz-UZ")} gacha`
-              : ""}
+            {loggedIn && user ? "Hozirgi hisobingiz" : "Summani to'lov oynasida tanlaysiz"}
           </p>
           <ul className="mt-5 space-y-2 text-sm">
             {FEATURES.map((f) => (
@@ -194,24 +168,11 @@ export function PurchasePage() {
                 open("login", { returnTo: "/uz/purchase" });
                 return;
               }
-              open("pay", { payPlan: "pro" });
+              open("pay");
             }}
             className="bg-primary text-primary-foreground mt-6 h-11 w-full rounded-full text-sm font-medium disabled:opacity-60"
           >
-            {user?.plan === "pro" ? "Muddatni uzaytirish" : "Pro'ga o'tish"}
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              if (!loggedIn) {
-                open("login", { returnTo: "/uz/purchase" });
-                return;
-              }
-              open("pay", { payPlan: "topup" });
-            }}
-            className="text-muted-foreground hover:text-foreground mt-3 h-9 w-full text-sm"
-          >
-            Yoki balansni to&apos;ldirish
+            Balansni to&apos;ldirish
           </button>
         </article>
       </div>

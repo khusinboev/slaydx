@@ -92,8 +92,8 @@ export function SearchDialog() {
               router.push("/uz/purchase");
             }}
           >
-            <span className="flex-1 font-medium">Tariflar</span>
-            <span className="text-muted-foreground text-xs">Rejani tanlang</span>
+            <span className="flex-1 font-medium">Balansni to&apos;ldirish</span>
+            <span className="text-muted-foreground text-xs">Hisobni to&apos;ldiring</span>
           </button>
           {loggedIn ? (
             <>

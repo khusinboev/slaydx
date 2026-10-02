@@ -128,11 +128,6 @@ export function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5">
                 <span className="truncate text-[14px] font-semibold">{user?.name || "Foydalanuvchi"}</span>
-                {user?.plan === "pro" ? (
-                  <span className="bg-primary text-primary-foreground shrink-0 rounded-full px-1.5 py-px text-[9.5px] font-bold tracking-wide">
-                    PRO
-                  </span>
-                ) : null}
               </div>
               <div className="text-muted-foreground mt-0.5 flex items-center gap-1 text-xs">
                 <Coins className="size-3" />
