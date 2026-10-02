@@ -412,7 +412,7 @@ test("UserDetail: block with side effects → POST body, toast, refetch; unblock
   assert.deepEqual(post.body, { blocked: true, reason: "Spam tarqatgani uchun", revokeSessions: true, cancelQueued: true, revokeLinks: false });
   assert.equal((post.init.headers as Record<string, string> | undefined)?.["Idempotency-Key"], undefined);
   await waitFor(() => assert.ok(useToastStore.getState().toasts.some((t) => t.message.includes("2 ta sessiya bekor qilindi"))));
-  await waitFor(() => assert.ok(screen.getByRole("button", { name: "Blokdan chiqarish" })), "refetched as blocked");
+  await waitFor(() => assert.ok(screen.getByRole("button", { name: "Blokdan chiqarish" }), "refetched as blocked"));
   assert.equal(calls.filter((c) => c.method === "GET").length, 2);
 
   fireEvent.click(screen.getByRole("button", { name: "Blokdan chiqarish" }));
