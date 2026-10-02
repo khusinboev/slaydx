@@ -45,6 +45,17 @@
   --success-text: #15803d;
   --warning: #a16207;
   --info: #1d4ed8;
+  /*
+   * Admin badge text on its own 15 % tint (Badge/StatusPill). The tone colours
+   * above are too light there (#15803d 3.9-4.2:1, #a16207 3.8-4.0:1: below AA
+   * for 11.5 px text). Ratios on the tint over card / background / muted:
+   * success #166534 5.93 / 5.61 / 5.09, warning #854d0e 5.55 / 5.23 / 4.77,
+   * danger #991b1b 6.33 / 5.94 / 5.41, info #1e40af 6.80 / 6.39 / 5.81.
+   */
+  --badge-success-text: #166534;
+  --badge-warning-text: #854d0e;
+  --badge-danger-text: #991b1b;
+  --badge-info-text: #1e40af;
   --chart-1: #d97706;
   --chart-2: #0f766e;
   --chart-3: #b91c1c;
@@ -87,6 +98,15 @@
   --success-text: #4ade80;
   --warning: #fbbf24;
   --info: #93b4ff;
+  /*
+   * On the dark tints the tone colours already pass (card / background / muted):
+   * success 7.32 / 8.16 / 6.72, warning 7.46 / 8.42 / 6.91,
+   * danger 5.01 / 5.56 / 4.67, info 6.32 / 7.04 / 5.87.
+   */
+  --badge-success-text: #4ade80;
+  --badge-warning-text: #fbbf24;
+  --badge-danger-text: #f87171;
+  --badge-info-text: #93b4ff;
   --chart-1: #f59e0b;
   --chart-2: #2dd4bf;
   --chart-3: #f87171;
@@ -130,6 +150,10 @@
   --color-success-text: var(--success-text);
   --color-warning: var(--warning);
   --color-info: var(--info);
+  --color-badge-success-text: var(--badge-success-text);
+  --color-badge-warning-text: var(--badge-warning-text);
+  --color-badge-danger-text: var(--badge-danger-text);
+  --color-badge-info-text: var(--badge-info-text);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);

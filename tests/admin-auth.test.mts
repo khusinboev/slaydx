@@ -815,6 +815,46 @@ test("denied flood: refused calls are rate-limited BEFORE the audit row (across 
 });
 
 /**
+ * Phase 4 security note: a refusal by the denied bucket is visible in the logs, once per
+ * admin per bucket window (a flood is not a log flood). A one-hour window keeps the test
+ * clear of a window boundary. Mutation: drop the warning → 0 lines; drop the once-per-window
+ * guard → 3 lines.
+ */
+test("denied flood: the first 429 from the denied bucket logs one warning with adminId and scope", { skip }, async (t) => {
+  const { DENIED_RATE } = await import("../lib/server/admin-handler.ts");
+  const saved = { ...DENIED_RATE };
+  const warnings: Array<Record<string, unknown>> = [];
+  t.mock.method(console, "warn", (line: unknown) => {
+    try {
+      const row = JSON.parse(String(line)) as Record<string, unknown>;
+      if (row.msg === "[admin] denied calls rate-limited") warnings.push(row);
+    } catch {
+      // Not a structured log line.
+    }
+  });
+  DENIED_RATE.limit = 2;
+  DENIED_RATE.windowSec = 3600;
+  try {
+    const v = await mkAdmin("viewer");
+    const s = await openSession(v, { reauth: true });
+    const c = cookie(v.userToken, s.token);
+    for (let i = 0; i < 2; i++) {
+      assert.equal((await call(routes.admins, "GET", "/api/admin/admins", { cookie: c })).status, 403);
+    }
+    assert.equal(warnings.length, 0, "no warning while under the limit");
+    for (let i = 0; i < 3; i++) {
+      assert.equal((await call(routes.admins, "POST", "/api/admin/admins", { cookie: c, body: { role: "viewer" } })).status, 429);
+    }
+    assert.equal(warnings.length, 1, "one warning per bucket window, not one per refused call");
+    assert.equal(warnings[0].level, "warn");
+    assert.equal(warnings[0].adminId, v.adminId);
+    assert.equal(warnings[0].scope, "admin/admins/create");
+  } finally {
+    Object.assign(DENIED_RATE, saved);
+  }
+});
+
+/**
  * Finding 2+4: the IP budget (20 / 15 min) counts FAILED codes only;
  * successful logins never consume it. Mutation: count successes again →
  * the 21st login from one IP is 429.

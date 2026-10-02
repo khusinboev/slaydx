@@ -46,6 +46,8 @@ export type ConfirmDialogProps = {
 };
 
 const REASON_MAX = 500;
+const FIELD_SELECTOR =
+  'input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 const DEFAULT_MIN = 5;
 
 /**
@@ -82,7 +84,7 @@ function ConfirmBody({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const mounted = useRef(true);
-  const firstField = useRef<HTMLTextAreaElement | HTMLInputElement | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
 
   useEffect(() => {
     mounted.current = true;
@@ -91,9 +93,14 @@ function ConfirmBody({
     };
   }, []);
 
-  // `useDialog` focuses the first button/input after a tick; the reason / typed field is the better target.
+  // `useDialog` focuses the first button/input after a tick (the X button). The first field of
+  // the form is the better target: an extra field from `children` (wallet amount, ...) when
+  // present, else the reason, else the typed confirmation. A form without fields keeps the
+  // `useDialog` default.
   useEffect(() => {
-    const t = setTimeout(() => firstField.current?.focus(), 0);
+    const t = setTimeout(() => {
+      formRef.current?.querySelector<HTMLElement>(FIELD_SELECTOR)?.focus();
+    }, 0);
     return () => clearTimeout(t);
   }, []);
 
@@ -153,7 +160,7 @@ function ConfirmBody({
         </>
       }
     >
-      <form id={formId} onSubmit={submit} className="flex flex-col gap-3">
+      <form ref={formRef} id={formId} onSubmit={submit} className="flex flex-col gap-3">
         {target ? <div className="text-[13px] font-medium">{target}</div> : null}
         {before !== undefined && after !== undefined ? (
           <div className="bg-muted flex flex-wrap items-center gap-2 rounded-lg px-3 py-2 text-[13px] tabular-nums">
@@ -176,9 +183,6 @@ function ConfirmBody({
             </label>
             <textarea
               id={`${formId}-reason`}
-              ref={(el) => {
-                firstField.current = el;
-              }}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               rows={3}
@@ -199,9 +203,6 @@ function ConfirmBody({
             </label>
             <input
               id={`${formId}-typed`}
-              ref={(el) => {
-                if (!hasReason) firstField.current = el;
-              }}
               value={typed}
               onChange={(e) => setTyped(e.target.value)}
               disabled={busy}
