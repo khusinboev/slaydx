@@ -3,8 +3,8 @@ import type { Metadata } from "next";
 import { PurchasePage } from "@/components/purchase/PurchasePage";
 
 export const metadata: Metadata = {
-  title: "Tariflar",
-  description: "Bepul va Pro rejalar — kvota, narx va to'lov usullari",
+  title: "Balansni to'ldirish",
+  description: "Hisobni to'ldirish — Click yoki Payme orqali; har bir hujjat alohida to'lanadi",
 };
 
 export default function Page() {

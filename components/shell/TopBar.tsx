@@ -88,7 +88,7 @@ export function TopBar({ onMenu }: { onMenu: () => void }) {
       ) : null}
 
       {loggedIn ? (
-        // Profil, tariflar, sozlamalar va chiqish — hammasi endi /uz/profile
+        // Profil, balansni to'ldirish, sozlamalar va chiqish — hammasi endi /uz/profile
         // sahifasining o'zida. Bu yerda ikkinchi marta takrorlash o'rniga
         // faqat o'sha sahifaga o'tuvchi bitta avatar qoladi.
         <Link

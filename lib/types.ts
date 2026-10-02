@@ -184,8 +184,6 @@ export type UserProfile = {
   points: number;
   quota: number;
   balance: number;
-  premium: boolean;
-  plan: "free" | "pro";
   university: string;
   faculty: string;
   department: string;

@@ -3,7 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
 import { query, queryOne, transaction } from "./db";
 import { safeEqual } from "./session";
-import { activateProInTx, topUpInTx } from "./credits";
+import { topUpInTx } from "./credits";
 import { log } from "./log";
 
 /**
@@ -110,13 +110,6 @@ export function paymeAuthorized(header: string | null | undefined, keys: readonl
   return valid.some((k) => safeEqual(hash(k), hash(password)));
 }
 
-/** Pro tarifi. Narx o'zgarsa faqat shu yer tahrirlanadi. */
-export const PRO_PLAN = {
-  priceSoum: 15_000,
-  days: 30,
-  quota: 15_000,
-} as const;
-
 /** Balans to'ldirishda 1 so'm = 1 tanga. */
 export const SOUM_PER_COIN = 1;
 
@@ -124,6 +117,10 @@ export const MIN_TOPUP_SOUM = 5_000;
 export const MAX_TOPUP_SOUM = 10_000_000;
 
 export type Provider = "click" | "payme";
+/**
+ * `pro` — olib tashlangan obuna (2026-10): yangi buyurtma faqat `topup`.
+ * Tur tarixiy qatorlarni (`payment_orders.purpose = 'pro'`) o'qish uchun qoladi.
+ */
 export type Purpose = "topup" | "pro";
 export type OrderState = "created" | "pending" | "paid" | "cancelled";
 
@@ -183,13 +180,18 @@ function toOrder(r: OrderRow): PaymentOrder {
 const COLS = `id, user_id, provider, purpose, amount_soum, state, provider_txn,
               create_time, perform_time, cancel_time, cancel_reason, prepare_id, created_at`;
 
+/** Obuna olib tashlangan — `pro` buyurtma endi yaratilmaydi. */
+export const PRO_REMOVED_MESSAGE = "Obuna to'xtatilgan";
+
 export async function createOrder(input: {
   userId: string;
   provider: Provider;
-  purpose: Purpose;
+  /** Faqat balansni to'ldirish. JSON dan kelgan qiymat uchun runtime da ham tekshiriladi. */
+  purpose: "topup";
   amountSoum: number;
 }): Promise<PaymentOrder> {
-  const amount = input.purpose === "pro" ? PRO_PLAN.priceSoum : Math.round(input.amountSoum);
+  if (input.purpose !== "topup") throw new Error(PRO_REMOVED_MESSAGE);
+  const amount = Math.round(input.amountSoum);
   if (amount < MIN_TOPUP_SOUM || amount > MAX_TOPUP_SOUM) {
     throw new Error(
       `Summa ${MIN_TOPUP_SOUM.toLocaleString("uz-UZ")} — ${MAX_TOPUP_SOUM.toLocaleString("uz-UZ")} so'm oralig'ida bo'lishi kerak`,
@@ -384,15 +386,27 @@ export async function settleOrder(
      * foydalanuvchi qulfi tekshiruvdan oldin (`topUpInTx` izohi).
      */
     const reference = `${order.provider}:${order.providerTxn ?? order.id}`;
+    const coins = Math.floor(order.amountSoum / SOUM_PER_COIN);
     if (order.purpose === "pro") {
-      // Kvota va tarif BIR tranzaksiyada: ilgari (`activatePro`) ular alohida
-      // yozilardi va orada yiqilish «kvota bor, plan free» holatini qoldirardi.
-      credited = await activateProInTx(client, order.userId, PRO_PLAN.quota, PRO_PLAN.days, reference);
+      /*
+       * Obuna olib tashlangan (2026-10). Deploydan oldin ochilib, keyin
+       * to'langan ESKI Pro buyurtma — to'langan summa BALANSGA tushadi;
+       * `plan`/`quota` ga tegilmaydi. `kind = 'subscription'` saqlanadi:
+       * admin SQL (purpose → kind, `CREDITED_SQL`) shu moslikka tayanadi.
+       */
+      credited = await topUpInTx(
+        client,
+        order.userId,
+        { balance: coins },
+        reference,
+        "subscription",
+        "Pro obuna (eski buyurtma) — balansga",
+      );
     } else {
       credited = await topUpInTx(
         client,
         order.userId,
-        { balance: Math.floor(order.amountSoum / SOUM_PER_COIN) },
+        { balance: coins },
         reference,
         "topup",
         `${order.provider} orqali to'ldirish`,

@@ -37,7 +37,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const user = {
   id: "u1", telegramId: null, username: null, name: "Ali", photoUrl: null, language: "uz", points: 0, quota: 0,
-  balance: 50_000, plan: "free", planExpiresAt: null, premium: false, university: "", faculty: "", department: "", group: "",
+  balance: 50_000, university: "", faculty: "", department: "", group: "",
   course: "", author: "", subject: "", teacher: "", city: "", position: "", organization: "", phone: null, isAdmin: false,
 } as unknown as ServerUser;
 

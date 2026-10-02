@@ -107,16 +107,8 @@ export function ProfilePage() {
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-xl font-semibold">{user.name || "Foydalanuvchi"}</h1>
-              {user.plan === "pro" ? (
-                <span className="bg-primary text-primary-foreground rounded-full px-2 py-0.5 text-[10.5px] font-bold tracking-wide">
-                  PRO
-                </span>
-              ) : null}
             </div>
             <p className="text-muted-foreground text-sm">
-              {user.plan === "pro" && user.planExpiresAt
-                ? `${new Date(user.planExpiresAt).toLocaleDateString("uz-UZ")} gacha · `
-                : ""}
               {creditTotal(user).toLocaleString("uz-UZ")} tanga
             </p>
           </div>
@@ -126,12 +118,11 @@ export function ProfilePage() {
             href="/uz/purchase"
             className="border-primary text-primary h-9 rounded-xl border px-4 text-sm font-medium leading-9"
           >
-            Tariflar
+            Balansni to&apos;ldirish
           </Link>
         </div>
-        <div className="mt-6 grid grid-cols-3 gap-3 text-center">
+        <div className="mt-6 grid grid-cols-2 gap-3 text-center">
           <Stat label="Ball" value={user.points} />
-          <Stat label="Kvota" value={user.quota} />
           <Stat label="Balans" value={user.balance} />
         </div>
       </div>

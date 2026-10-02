@@ -1,7 +1,7 @@
 import { ApiError, handler, json, limit, readJson, requireUser } from "@/lib/server/api";
 import { env, paymentsConfigured } from "@/lib/server/env";
 import { log } from "@/lib/server/log";
-import { PRO_PLAN, createOrder, listOrders, type Provider, type Purpose } from "@/lib/server/payments";
+import { PRO_REMOVED_MESSAGE, createOrder, listOrders, type Provider } from "@/lib/server/payments";
 import { userMessage } from "@/lib/server/user-error";
 
 export const runtime = "nodejs";
@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 export const GET = handler("payments/orders", async (req) => {
   const { user } = await requireUser(req);
-  return json({ orders: await listOrders(user.id), plan: PRO_PLAN, providers: paymentsConfigured() });
+  return json({ orders: await listOrders(user.id), providers: paymentsConfigured() });
 });
 
 /**
@@ -25,7 +25,12 @@ export const POST = handler("payments/create", async (req) => {
 
   const body = await readJson<{ provider?: string; purpose?: string; amount?: number }>(req, 4_000);
   const provider = body.provider === "payme" ? "payme" : body.provider === "click" ? "click" : null;
-  const purpose: Purpose = body.purpose === "pro" ? "pro" : "topup";
+  /*
+   * Obuna olib tashlangan (2026-10): eski ochiq tab yoki keshlangan klient
+   * `pro` yuborsa — aniq rad, jim `topup` ga aylantirilmaydi (summa boshqa).
+   */
+  if (body.purpose === "pro") throw new ApiError(PRO_REMOVED_MESSAGE, 400, { code: "pro_removed" });
+  const purpose = "topup" as const;
 
   if (!provider) throw new ApiError("To'lov usuli tanlanmagan", 400);
 

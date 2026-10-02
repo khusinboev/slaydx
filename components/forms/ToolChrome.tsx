@@ -83,7 +83,7 @@ export function ToolChrome({
 
       {/*
        * UX-03: «Balans yetarli emas» endi o'lik matn emas — yonida to'ldirish
-       * sahifasiga havola. Ilgari foydalanuvchi profil → Tariflar yo'lini
+       * sahifasiga havola. Ilgari foydalanuvchi profil → to'ldirish yo'lini
        * o'zi topishi kerak edi.
        */}
       {error ? (

@@ -24,11 +24,13 @@ export type SessionUser = {
   photoUrl: string | null;
   language: string;
   points: number;
+  /**
+   * Olib tashlangan Pro obunaning kvotasi — 034 dan keyin doim 0.
+   * Bir reliz qoldiriladi: ochiq eski tab `points + quota + balance`
+   * hisoblaydi, maydon yo'qolsa uning `creditTotal` i NaN bo'lardi.
+   */
   quota: number;
   balance: number;
-  plan: "free" | "pro";
-  planExpiresAt: string | null;
-  premium: boolean;
   university: string;
   faculty: string;
   department: string;
@@ -66,8 +68,6 @@ type UserRow = {
   points: string;
   quota: string;
   balance: string;
-  plan: "free" | "pro";
-  plan_expires_at: Date | null;
   university: string;
   faculty: string;
   department: string;
@@ -86,8 +86,6 @@ type UserRow = {
 };
 
 export function rowToUser(r: UserRow): SessionUser {
-  const expires = r.plan_expires_at ? new Date(r.plan_expires_at) : null;
-  const activePro = r.plan === "pro" && (!expires || expires.getTime() > Date.now());
   return {
     id: String(r.id),
     telegramId: r.telegram_id ? String(r.telegram_id) : null,
@@ -98,9 +96,6 @@ export function rowToUser(r: UserRow): SessionUser {
     points: Number(r.points),
     quota: Number(r.quota),
     balance: Number(r.balance),
-    plan: activePro ? "pro" : "free",
-    planExpiresAt: expires ? expires.toISOString() : null,
-    premium: activePro,
     university: r.university,
     faculty: r.faculty,
     department: r.department,
@@ -128,8 +123,6 @@ const USER_FIELDS = [
   "points",
   "quota",
   "balance",
-  "plan",
-  "plan_expires_at",
   "university",
   "faculty",
   "department",

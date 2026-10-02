@@ -34,8 +34,6 @@ const profile: UserProfile = {
   points: 0,
   quota: 0,
   balance: 100000,
-  premium: false,
-  plan: "free",
   university: "15-son umumiy o'rta ta'lim maktabi",
   faculty: "",
   department: "",

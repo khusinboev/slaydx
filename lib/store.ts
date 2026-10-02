@@ -382,7 +382,8 @@ export function usePricingVersion(): number {
 
 export function creditTotal(user: Pick<ServerUser, "points" | "quota" | "balance"> | null) {
   if (!user) return 0;
-  return user.points + user.quota + user.balance;
+  // `quota` — eski sessiya javobida (ochiq eski tab) bo'lmasligi mumkin: NaN chiqmasin.
+  return (user.points ?? 0) + (user.quota ?? 0) + (user.balance ?? 0);
 }
 
 /**
@@ -396,8 +397,6 @@ export function writerProfile(user: ServerUser | null): UserProfile {
     points: user?.points ?? 0,
     quota: user?.quota ?? 0,
     balance: user?.balance ?? 0,
-    premium: user?.premium ?? false,
-    plan: user?.plan ?? "free",
     university: user?.university ?? "",
     faculty: user?.faculty ?? "",
     department: user?.department ?? "",

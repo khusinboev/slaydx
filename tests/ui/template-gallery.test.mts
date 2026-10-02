@@ -22,7 +22,7 @@ afterEach(() => cleanup());
 
 const router: AppRouterInstance = { back() {}, forward() {}, refresh() {}, push() {}, replace() {}, prefetch() {} };
 const profile: UserProfile = {
-  name: "A", language: "uz", points: 0, quota: 0, balance: 0, premium: false, plan: "free",
+  name: "A", language: "uz", points: 0, quota: 0, balance: 0,
   university: "", faculty: "", department: "", group: "", course: "", author: "A", subject: "", teacher: "", city: "Toshkent", position: "", organization: "",
 };
 function mount() {

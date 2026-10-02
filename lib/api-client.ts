@@ -205,9 +205,6 @@ export type ServerUser = {
   points: number;
   quota: number;
   balance: number;
-  plan: "free" | "pro";
-  planExpiresAt: string | null;
-  premium: boolean;
   university: string;
   faculty: string;
   department: string;
@@ -799,27 +796,24 @@ export async function pollGeneration(
 export type PaymentOrder = {
   id: string;
   provider: "click" | "payme";
+  /** "pro" faqat eski (tarixiy) buyurtmalarda uchraydi. */
   purpose: "topup" | "pro";
   amountSoum: number;
   state: "created" | "pending" | "paid" | "cancelled";
   createdAt: string;
 };
 
-export function createOrder(input: {
-  provider: "click" | "payme";
-  purpose: "topup" | "pro";
-  amount?: number;
-}) {
+/** Faqat balansni to'ldirish: obuna (pro) buyurtmalari server tomonda to'xtatilgan. */
+export function createOrder(input: { provider: "click" | "payme"; amount?: number }) {
   return request<{ order: PaymentOrder; checkoutUrl: string }>("/api/payments/orders", {
     method: "POST",
-    body: JSON.stringify(input),
+    body: JSON.stringify({ ...input, purpose: "topup" }),
   });
 }
 
 export function listOrders() {
   return request<{
     orders: PaymentOrder[];
-    plan: { priceSoum: number; days: number; quota: number };
     providers: { click: boolean; payme: boolean };
   }>("/api/payments/orders");
 }

@@ -16,15 +16,13 @@ export type Overlay =
 type UiState = {
   overlay: Overlay;
   returnTo: string | null;
-  payPlan: string | null;
-  open: (o: Overlay, extra?: { returnTo?: string; payPlan?: string }) => void;
+  open: (o: Overlay, extra?: { returnTo?: string }) => void;
   close: () => void;
 };
 
 export const useUi = create<UiState>((set) => ({
   overlay: null,
   returnTo: null,
-  payPlan: null,
   open: (overlay, extra) =>
     set({
       overlay,
@@ -32,7 +30,6 @@ export const useUi = create<UiState>((set) => ({
       // (masalan `?returnTo=javascript:...`) kelishi mumkin — faqat
       // saytning o'zidagi "/uz" yo'li saqlanadi, aks holda `null`.
       returnTo: safeReturnTo(extra?.returnTo ?? null),
-      payPlan: extra?.payPlan ?? null,
     }),
   close: () => set({ overlay: null }),
 }));
