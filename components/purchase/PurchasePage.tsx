@@ -9,7 +9,7 @@ import { useUi } from "@/lib/ui";
 
 const FEATURES = [
   "Har bir hujjat narxi yaratishdan oldin ko'rsatiladi",
-  "Faqat tayyor bo'lgan hujjat uchun yechiladi",
+  "Hujjat yaratilmasa, pul to'liq qaytariladi",
   "Click yoki Payme orqali xavfsiz to'lov",
   "Balans muddatsiz saqlanadi",
 ];
@@ -94,9 +94,9 @@ export function PurchasePage() {
   return (
     <div className="mx-auto w-full max-w-6xl px-4 pt-8 pb-16 sm:px-6 sm:pt-12 lg:px-8">
       <div className="mb-8 text-center sm:mb-10">
-        <h1 className="mb-3 text-3xl font-bold tracking-tight sm:text-4xl">Balansni to‘ldirish</h1>
+        <h1 className="mb-3 text-3xl font-bold tracking-tight sm:text-4xl">Balansni to&apos;ldirish</h1>
         <p className="text-muted-foreground mx-auto max-w-2xl text-[15.5px] sm:text-base">
-          Hisobingizga mablag‘ qo‘shing — har bir hujjat uchun alohida to‘lanadi
+          Hisobingizga mablag&apos; qo&apos;shing — har bir hujjat uchun alohida to&apos;lanadi
         </p>
       </div>
 
