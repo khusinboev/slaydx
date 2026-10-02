@@ -876,6 +876,9 @@ async function seed(rnd: () => number, batch: number): Promise<void> {
    * writes audit rows (append-only, `--reset` could not remove them).
    */
   {
+    // A Pro bought in the last days before the removal and not spent yet: at least one holder is merged
+    // whatever the jobs above drained (they charge quota before balance).
+    await order(users[22]!, 22, { purpose: "pro", amount: LEGACY_PRO.priceSoum, outcome: "paid" }, now - 2 * DAY_MS);
     const merged = await sql<{ id: string }>(
       `WITH src AS (
          SELECT id, quota AS q FROM users WHERE id = ANY($1::bigint[]) AND quota > 0 ORDER BY id FOR UPDATE
