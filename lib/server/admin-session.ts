@@ -256,7 +256,10 @@ export async function resolveAdminContext(req?: Request): Promise<ResolveResult>
       WHERE s.token_hash = $1 AND s.admin_id = $2 AND s.revoked_at IS NULL`,
     [hashToken(token), account.id, ADMIN_REAUTH_MIN, ADMIN_SLIDE_EVERY_SEC],
   );
-  if (!row || String(row.user_session_id) !== userSessionId || account.status !== "active" || !account.totpEnabled) {
+  // Without the 2FA switch an account never holds a TOTP secret (simple mode);
+  // with it, a session of an un-enrolled account is as good as none.
+  const enrolled = account.totpEnabled || !env.admin2faRequired;
+  if (!row || String(row.user_session_id) !== userSessionId || account.status !== "active" || !enrolled) {
     return { ok: false, reason: "no_session", user, userSessionId, account };
   }
   if (!row.live) return { ok: false, reason: "expired", user, userSessionId, account };

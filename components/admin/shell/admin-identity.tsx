@@ -14,6 +14,11 @@ export type AdminIdentity = {
   permissions: ReadonlyArray<string>;
   name: string;
   username: string | null;
+  /**
+   * The server's 2FA switch (`ADMIN_2FA_REQUIRED`). `false` = simple mode: no
+   * TOTP, recovery codes, enrollment links or step-up anywhere in the UI.
+   */
+  twoFactor: boolean;
 };
 
 const AdminIdentityContext = createContext<AdminIdentity | null>(null);

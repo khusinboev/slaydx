@@ -15,29 +15,29 @@ const ID_KINDS: ReadonlyArray<{ value: IdKind; label: string }> = [
   { value: "userId", label: "Foydalanuvchi ID" },
 ];
 
+export type AddAdminProps = {
+  open: boolean;
+  onClose: () => void;
+  actorRole: string;
+  /** The server's 2FA switch: with it off there is no enrollment link (`link` is `null`). */
+  twoFactor: boolean;
+  onCreated: (created: { admin: AdminAccountItem; link: EnrollLinkView | null }) => void;
+};
+
 /**
  * "Admin qo'shish": a person who has already signed in to the site once (by
  * Telegram ID or user ID), a role strictly below the actor's rank (an owner may
  * add owners), a reason and an optional Telegram DM. The body is mounted only
  * while open (ConfirmDialog), so every open starts empty. The enrollment link is
- * handed to the parent through `onCreated` and shown once there.
+ * handed to the parent through `onCreated` and shown once there; in simple mode
+ * (2FA switch off) the account is active at once and `link` is `null`.
  */
-export function AddAdminDialog({
-  open,
-  onClose,
-  actorRole,
-  onCreated,
-}: {
-  open: boolean;
-  onClose: () => void;
-  actorRole: string;
-  onCreated: (created: { admin: AdminAccountItem; link: EnrollLinkView }) => void;
-}) {
+export function AddAdminDialog({ open, ...rest }: AddAdminProps) {
   if (!open) return null;
-  return <Body onClose={onClose} actorRole={actorRole} onCreated={onCreated} />;
+  return <Body {...rest} />;
 }
 
-function Body({ onClose, actorRole, onCreated }: { onClose: () => void; actorRole: string; onCreated: (c: { admin: AdminAccountItem; link: EnrollLinkView }) => void }) {
+function Body({ onClose, actorRole, twoFactor, onCreated }: Omit<AddAdminProps, "open">) {
   const uid = useId();
   const roles = assignableRoles(actorRole);
   const [kind, setKind] = useState<IdKind>("telegramId");
@@ -51,7 +51,11 @@ function Body({ onClose, actorRole, onCreated }: { onClose: () => void; actorRol
       open
       onClose={onClose}
       title="Admin qo'shish"
-      description="Shaxs saytga kamida bir marta Telegram orqali kirgan bo'lishi kerak. Hisob «kutilmoqda» holatida yaratiladi va ikki bosqichli himoyani o'zi sozlaydi."
+      description={
+        twoFactor
+          ? "Shaxs saytga kamida bir marta Telegram orqali kirgan bo'lishi kerak. Hisob «kutilmoqda» holatida yaratiladi va ikki bosqichli himoyani o'zi sozlaydi."
+          : "Shaxs saytga kamida bir marta Telegram orqali kirgan bo'lishi kerak. Hisob darhol faol bo'ladi: u saytdagi «Admin panel» tugmasi orqali kiradi."
+      }
       reason={{ label: "Sabab (audit jurnaliga yoziladi)" }}
       confirmLabel="Admin qo'shish"
       confirmDisabled={!idOk || role === ""}
@@ -61,13 +65,16 @@ function Body({ onClose, actorRole, onCreated }: { onClose: () => void; actorRol
         const res = await createAdmin(body);
         onCreated({
           admin: res.admin,
-          link: {
-            title: "Admin qo'shildi",
-            adminName: res.admin.name,
-            enrollUrl: res.enrollUrl,
-            expiresAt: res.expiresAt,
-            sentViaTelegram: send,
-          },
+          link:
+            res.enrollUrl && res.expiresAt
+              ? {
+                  title: "Admin qo'shildi",
+                  adminName: res.admin.name,
+                  enrollUrl: res.enrollUrl,
+                  expiresAt: res.expiresAt,
+                  sentViaTelegram: send,
+                }
+              : null,
         });
       }}
     >
@@ -112,7 +119,7 @@ function Body({ onClose, actorRole, onCreated }: { onClose: () => void; actorRol
 
       <label className="flex items-start gap-2 text-[13px]">
         <input type="checkbox" checked={send} onChange={(e) => setSend(e.target.checked)} className="accent-primary mt-0.5 size-4" />
-        <span>Havolani Telegram orqali ham yuborish</span>
+        <span>{twoFactor ? "Havolani Telegram orqali ham yuborish" : "Telegram orqali xabar yuborish"}</span>
       </label>
     </ConfirmDialog>
   );

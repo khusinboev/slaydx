@@ -4,7 +4,7 @@ import { useCallback, useState } from "react";
 import { Check, Minus, UserPlus } from "lucide-react";
 import { listAdmins, type AdminAccountItem } from "@/lib/admin-api/admins";
 import { fmtDateTime, fmtNumber } from "@/lib/admin-format";
-import { Badge, Button, Card, DataTable, EmptyState, ErrorState, Forbidden, Modal, useLoad, type Column } from "@/components/admin/ui";
+import { Badge, Button, Card, DataTable, EmptyState, ErrorState, Forbidden, Modal, toast, useLoad, type Column } from "@/components/admin/ui";
 import { roleLabel, useAdminIdentity, useCan } from "@/components/admin/shell";
 import { ActionDialogs, type RowAction } from "./ActionDialogs";
 import { AddAdminDialog } from "./AddAdminDialog";
@@ -20,6 +20,8 @@ import { STATUS_META, rowRules } from "./shared";
  */
 export function AdminsPage() {
   const identity = useAdminIdentity();
+  // 2FA switch off: no enrollment links, no 2FA column, no "2FA ni tiklash" action.
+  const twoFactor = identity.twoFactor;
   const canManage = useCan("admins.manage");
   const load = useCallback((signal: AbortSignal) => listAdmins({ signal }), []);
   const [state, reload] = useLoad(load);
@@ -61,23 +63,27 @@ export function AdminsPage() {
         </Badge>
       ),
     },
-    {
-      id: "totp",
-      header: "2FA",
-      align: "center",
-      cell: (a) =>
-        a.totpEnabled ? (
-          <span className="text-success-text inline-flex" title="Ikki bosqichli himoya yoqilgan">
-            <Check className="size-4" aria-hidden="true" />
-            <span className="sr-only">Yoqilgan</span>
-          </span>
-        ) : (
-          <span className="text-muted-foreground inline-flex" title="Hali sozlanmagan">
-            <Minus className="size-4" aria-hidden="true" />
-            <span className="sr-only">Sozlanmagan</span>
-          </span>
-        ),
-    },
+    ...(twoFactor
+      ? [
+          {
+            id: "totp",
+            header: "2FA",
+            align: "center" as const,
+            cell: (a: AdminAccountItem) =>
+              a.totpEnabled ? (
+                <span className="text-success-text inline-flex" title="Ikki bosqichli himoya yoqilgan">
+                  <Check className="size-4" aria-hidden="true" />
+                  <span className="sr-only">Yoqilgan</span>
+                </span>
+              ) : (
+                <span className="text-muted-foreground inline-flex" title="Hali sozlanmagan">
+                  <Minus className="size-4" aria-hidden="true" />
+                  <span className="sr-only">Sozlanmagan</span>
+                </span>
+              ),
+          },
+        ]
+      : []),
     { id: "last", header: "Oxirgi kirish", className: "whitespace-nowrap tabular-nums", cell: (a) => (a.lastLoginAt ? fmtDateTime(a.lastLoginAt) : "—") },
     { id: "sessions", header: "Faol sessiyalar", align: "right", className: "tabular-nums", cell: (a) => fmtNumber(a.activeSessions) },
     ...(canManage
@@ -101,7 +107,11 @@ export function AdminsPage() {
       <header className="flex flex-wrap items-start gap-3">
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <h1 className="text-[22px] font-semibold tracking-tight">Adminlar</h1>
-          <p className="text-muted-foreground text-[13px]">Har bir admin — mavjud Telegram hisobi va ikki bosqichli himoya (TOTP).</p>
+          <p className="text-muted-foreground text-[13px]">
+            {twoFactor
+              ? "Har bir admin — mavjud Telegram hisobi va ikki bosqichli himoya (TOTP)."
+              : "Har bir admin — mavjud Telegram hisobi; panelga saytdagi «Admin panel» tugmasi orqali kiradi (2FA o'chirilgan)."}
+          </p>
         </div>
         {canManage ? (
           <Button variant="primary" onClick={() => setAdding(true)} icon={<UserPlus className="size-4" aria-hidden="true" />}>
@@ -133,8 +143,10 @@ export function AdminsPage() {
         open={adding}
         onClose={() => setAdding(false)}
         actorRole={identity.role}
+        twoFactor={twoFactor}
         onCreated={(c) => {
-          setLink(c.link);
+          if (c.link) setLink(c.link);
+          else toast("Admin qo'shildi — u saytdagi «Admin panel» tugmasi orqali kiradi");
           reload();
         }}
       />
@@ -144,6 +156,7 @@ export function AdminsPage() {
         items={items}
         ownId={ownId}
         actorRole={identity.role}
+        twoFactor={twoFactor}
         onClose={() => setManaging(null)}
         onPick={(kind, admin) => {
           setManaging(null);
@@ -154,6 +167,7 @@ export function AdminsPage() {
       <ActionDialogs
         action={action}
         actorRole={identity.role}
+        twoFactor={twoFactor}
         onClose={() => setAction(null)}
         onDone={reload}
         onLink={setLink}
@@ -174,6 +188,7 @@ function ManageModal({
   items,
   ownId,
   actorRole,
+  twoFactor,
   onClose,
   onPick,
 }: {
@@ -181,6 +196,7 @@ function ManageModal({
   items: ReadonlyArray<AdminAccountItem>;
   ownId: string;
   actorRole: string;
+  twoFactor: boolean;
   onClose: () => void;
   onPick: (kind: RowAction["kind"], admin: AdminAccountItem) => void;
 }) {
@@ -191,7 +207,8 @@ function ManageModal({
         admin.status === "disabled"
           ? { kind: "enable", label: "Yoqish", why: rules.status }
           : { kind: "disable", label: "O'chirish", why: rules.status, danger: true },
-        { kind: "reset2fa", label: "2FA ni tiklash", why: rules.reset2fa, danger: true },
+        // No second factor to reset in simple mode.
+        ...(twoFactor ? [{ kind: "reset2fa" as const, label: "2FA ni tiklash", why: rules.reset2fa, danger: true }] : []),
         { kind: "revoke", label: "Sessiyalarni bekor qilish", why: rules.revoke, danger: true },
       ]
     : [];

@@ -67,6 +67,7 @@ function renderShell(role: Role, pathname = "/admin/users/42") {
         permissions: ROLE_FIXTURE[role],
         name: "Ali Valiyev",
         username: "ali",
+        twoFactor: true,
         children: h("p", null, "Sahifa mazmuni"),
       }),
       router,
@@ -160,7 +161,7 @@ test("AdminShell: sahifalarga adminId bilan identity beradi (useAdminIdentity)",
   const { router } = makeRouter();
   render(
     withRouter(
-      h(Shell, { adminId: "7", role: "support", permissions: ROLE_FIXTURE.support, name: "Ali Valiyev", username: null, children: h(Probe) }),
+      h(Shell, { adminId: "7", role: "support", permissions: ROLE_FIXTURE.support, name: "Ali Valiyev", username: null, twoFactor: true, children: h(Probe) }),
       router,
       "/admin",
     ),

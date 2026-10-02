@@ -11,6 +11,8 @@ import { createHash, randomBytes } from "node:crypto";
 const KEY_A = randomBytes(32).toString("base64");
 const KEY_B = randomBytes(32).toString("base64");
 process.env.ADMIN_TOTP_KEY = KEY_A;
+// 2FA-mode suite: the strengthened flow (TOTP, step-up) is what these tests pin (docs/admin/HANDOFF.md "Admin 2FA switch").
+process.env.ADMIN_2FA_REQUIRED = "true";
 
 const crypto = await import("../lib/server/admin-crypto.ts");
 const { parseAdminTotpKey } = await import("../lib/server/env.ts");

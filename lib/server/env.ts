@@ -175,6 +175,18 @@ export const env = {
     return str("ADMIN_TOTP_KEY");
   },
 
+  /**
+   * Admin 2FA switch (docs/admin/HANDOFF.md "Admin 2FA switch"). `false`
+   * (default, owner decision 2026-10-02): a designated admin enters the panel
+   * from the site's "Admin panel" button with no TOTP; `ADMIN_TOTP_KEY` is not
+   * needed. `true`: the strengthened flow — enrollment, TOTP login, recovery
+   * codes and step-up — exactly as before the switch. A getter: tests flip it
+   * per case, and the server reads it on every request.
+   */
+  get admin2faRequired(): boolean {
+    return bool("ADMIN_2FA_REQUIRED", false);
+  },
+
   telegramBotToken: str("TELEGRAM_BOT_TOKEN"),
   telegramBotUsername: str("NEXT_PUBLIC_TELEGRAM_BOT", ""),
 
@@ -403,7 +415,8 @@ export function runtimeWarnings(): string[] {
   }
   // Admin panel 2FA key: a warning, not a fatal problem — without it only the
   // admin login/enrollment is off (503 admin_disabled); the product keeps working.
-  if (isProd && !parseAdminTotpKey(env.adminTotpKey)) {
+  // Irrelevant while the 2FA switch is off: simple mode never touches the key.
+  if (isProd && env.admin2faRequired && !parseAdminTotpKey(env.adminTotpKey)) {
     warnings.push(
       "ADMIN_TOTP_KEY yo'q yoki noto'g'ri (base64, aniq 32 bayt) — admin panelga kirish o'chiq; yaratish: openssl rand -base64 32",
     );

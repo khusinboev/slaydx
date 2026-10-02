@@ -19,8 +19,8 @@ const ADMIN_API = join(ROOT, "app/api/admin");
 const { PERMISSIONS } = await import("../lib/server/admin-rbac.ts");
 const KNOWN = new Set<string>(PERMISSIONS);
 
-/** §6.1 routes that run before an admin session exists. */
-const AUTH_ROUTES = new Set(["session/route.ts", "auth/login/route.ts", "auth/recovery/route.ts", "auth/enroll/route.ts"]);
+/** §6.1 routes that run before an admin session exists (+ the simple-mode entry, HANDOFF "Admin 2FA switch"). */
+const AUTH_ROUTES = new Set(["session/route.ts", "auth/login/route.ts", "auth/recovery/route.ts", "auth/enroll/route.ts", "auth/auto/route.ts"]);
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const name of readdirSync(dir)) {

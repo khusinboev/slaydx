@@ -65,8 +65,16 @@ const REASON_ERROR = "Sabab 5–500 belgidan iborat bo'lishi kerak";
 
 // ───────────────────────────── input helpers
 
-/** 503 `admin_disabled` when `ADMIN_TOTP_KEY` is missing or invalid (§3.4). */
+/**
+ * Guards every TOTP-factor flow (enrollment, TOTP/recovery login, step-up,
+ * recovery codes). With the 2FA switch off they do not exist: 409 `2fa_off`,
+ * whatever the key (simple mode must work without `ADMIN_TOTP_KEY`). With it
+ * on: 503 `admin_disabled` when `ADMIN_TOTP_KEY` is missing or invalid (§3.4).
+ */
 export function requireAdminCrypto(): void {
+  if (!env.admin2faRequired) {
+    throw new ApiError("Ikki bosqichli himoya o'chirilgan", 409, { code: "2fa_off" });
+  }
   if (!adminCryptoAvailable()) {
     throw new ApiError("Admin panelga kirish vaqtincha o'chirilgan", 503, { code: "admin_disabled" });
   }
@@ -598,6 +606,53 @@ export async function regenerateRecoveryCodes(admin: AdminActor, rawCode: unknow
   return { recoveryCodes: codes };
 }
 
+/**
+ * POST /api/admin/auth/auto — simple mode only (2FA switch off): a designated
+ * admin (`active`, or `pending` → activated here, on first entry) gets an
+ * admin session with no second factor. Same `admin_sessions` row, cookie,
+ * idle/absolute expiry and user-session binding as a TOTP login; only the
+ * factor is skipped. One `auth.login` row with `meta.mode = "simple"` (and the
+ * status change when the account was pending). No Telegram notice: a session
+ * is minted on every visit after expiry, so notices would be noise. With the
+ * switch on the route does not exist (404, the cloak).
+ */
+export async function autoLogin(auth: AdminAuthContext): Promise<NewAdminSession> {
+  if (env.admin2faRequired) throw new ApiError("Topilmadi", 404);
+  const w = whoFromAuth(auth);
+  // A loop of a broken client must not mint sessions without bound.
+  const rl = await rateLimit(`admin-auto:${w.adminId}`, 30, 60, { failClosed: true });
+  if (!rl.ok) throw rateLimitedError(rl.retryAfterSec);
+  return adminTx(actorOf(w), async (client, audit) => {
+    const acc = (
+      await client.query<{ status: AdminAccount["status"] }>(`SELECT status FROM admin_accounts WHERE id = $1 FOR UPDATE`, [w.adminId])
+    ).rows[0];
+    // The handler saw pending|active a moment ago; a concurrent disable wins.
+    if (!acc || acc.status === "disabled") throw new ApiError("Topilmadi", 404);
+    const activated = acc.status === "pending";
+    await client.query(
+      `UPDATE admin_accounts SET status = 'active', last_login_at = now(), updated_at = now() WHERE id = $1`,
+      [w.adminId],
+    );
+    const s = await createAdminSession(client, {
+      adminId: w.adminId,
+      userSessionId: auth.userSessionId,
+      ip: w.ip,
+      userAgent: w.userAgent,
+      // No fresh factor to record; the step-up gate is off in this mode anyway.
+      reauth: false,
+    });
+    await audit({
+      action: "auth.login",
+      targetType: "admin",
+      targetId: w.adminId,
+      before: activated ? { status: "pending" } : null,
+      after: activated ? { status: "active" } : null,
+      meta: { mode: "simple", sessionId: s.id, activated },
+    });
+    return s;
+  });
+}
+
 /** DELETE /api/admin/session — revokes the session behind `token` (if it is this account's). */
 export async function logout(auth: AdminAuthContext, token: string | null): Promise<void> {
   if (!token) return;
@@ -762,11 +817,20 @@ export type CreateAdminInput = {
   sendViaTelegram?: unknown;
 };
 
+/**
+ * A one-time enrollment link, or `null` with the 2FA switch off: in simple mode
+ * the account is created `active` and the person enters through the site's
+ * "Admin panel" button, so there is nothing to enroll.
+ */
+export type EnrollmentLink = { enrollUrl: string | null; expiresAt: string | null };
+
+const NO_LINK: EnrollmentLink = { enrollUrl: null, expiresAt: null };
+
 /** POST /api/admin/admins. */
 export async function createAdmin(
   actor: AdminActor,
   input: CreateAdminInput,
-): Promise<{ admin: AdminListItem; enrollUrl: string; expiresAt: string }> {
+): Promise<{ admin: AdminListItem } & EnrollmentLink> {
   if (!isRole(input.role)) throw new ApiError("Rol noto'g'ri", 400);
   const role = input.role;
   const reason = parseReason(input.reason);
@@ -779,6 +843,9 @@ export async function createAdmin(
     throw new ApiError("sendViaTelegram mantiqiy qiymat bo'lishi kerak", 400);
   }
   assertRank(actor, role);
+  // Simple mode (2FA switch off): the account is usable at once, no link.
+  const twoFactor = env.admin2faRequired;
+  const status = twoFactor ? "pending" : "active";
 
   const out = await adminTx(actor, async (client, audit) => {
     const user = (
@@ -790,29 +857,35 @@ export async function createAdmin(
     if (!user) throw new ApiError("Foydalanuvchi topilmadi", 404);
     const ins = await client.query<{ id: string }>(
       `INSERT INTO admin_accounts (user_id, role, status, created_by)
-       VALUES ($1, $2, 'pending', $3)
+       VALUES ($1, $2, $4, $3)
        ON CONFLICT (user_id) DO NOTHING
        RETURNING id::text AS id`,
-      [user.id, role, actor.id],
+      [user.id, role, actor.id, status],
     );
     const id = ins.rows[0]?.id;
     if (!id) throw new ApiError("Bu foydalanuvchi allaqachon admin", 409, { code: "already_admin" });
-    const enroll = await createEnrollment(client, id, actor.id);
+    const enroll = twoFactor ? await createEnrollment(client, id, actor.id) : NO_LINK;
     await audit({
       action: "admins.create",
       targetType: "admin",
       targetId: id,
       reason,
-      after: { userId: user.id, role, status: "pending" },
-      meta: { sendViaTelegram: input.sendViaTelegram === true },
+      after: { userId: user.id, role, status },
+      meta: { sendViaTelegram: input.sendViaTelegram === true, ...(twoFactor ? {} : { mode: "simple" }) },
     });
     return { admin: await adminItem(client, id), telegramId: user.telegram_id, ...enroll };
   });
   if (input.sendViaTelegram === true) {
-    notifyAdmin(out.telegramId, "Sizni admin panelga taklif qilishdi", [
-      `Havola ${ENROLL_TTL_MIN} daqiqa amal qiladi va faqat sizning hisobingizda ochiladi:`,
-      out.enrollUrl,
-    ]);
+    if (out.enrollUrl) {
+      notifyAdmin(out.telegramId, "Sizni admin panelga taklif qilishdi", [
+        `Havola ${ENROLL_TTL_MIN} daqiqa amal qiladi va faqat sizning hisobingizda ochiladi:`,
+        out.enrollUrl,
+      ]);
+    } else {
+      notifyAdmin(out.telegramId, "Sizni admin panelga taklif qilishdi", [
+        "Saytga Telegram orqali kiring va chap menyudagi «Admin panel» tugmasini bosing.",
+      ]);
+    }
   }
   return { admin: out.admin, enrollUrl: out.enrollUrl, expiresAt: out.expiresAt };
 }
@@ -837,8 +910,10 @@ export async function updateAdmin(
     if (role !== undefined) assertRank(actor, role);
 
     const nextRole: Role = role ?? t.role;
-    // "active" restores access only for an enrolled account; otherwise it waits for enrollment.
-    const nextStatus = status === undefined ? t.status : status === "disabled" ? "disabled" : t.totp_enabled ? "active" : "pending";
+    // "active" restores access only for an enrolled account; otherwise it waits for
+    // enrollment. Without the 2FA switch there is no enrollment: "active" is final.
+    const enrolled = t.totp_enabled || !env.admin2faRequired;
+    const nextStatus = status === undefined ? t.status : status === "disabled" ? "disabled" : enrolled ? "active" : "pending";
     const before: Record<string, unknown> = {};
     const after: Record<string, unknown> = {};
     if (nextRole !== t.role) {
@@ -877,20 +952,21 @@ export async function updateAdmin(
   });
 }
 
-/** POST /api/admin/admins/:id/reset-2fa. */
-export async function resetAdmin2fa(
-  actor: AdminActor,
-  targetId: string,
-  rawReason: unknown,
-): Promise<{ enrollUrl: string; expiresAt: string }> {
+/**
+ * POST /api/admin/admins/:id/reset-2fa. With the 2FA switch off the secret and
+ * codes are still cleared and the sessions revoked, but the account stays
+ * `active` and no link is issued (the UI hides the action in that mode).
+ */
+export async function resetAdmin2fa(actor: AdminActor, targetId: string, rawReason: unknown): Promise<EnrollmentLink> {
   const reason = parseReason(rawReason);
+  const twoFactor = env.admin2faRequired;
   return adminTx(actor, async (client, audit) => {
     const t = await lockTarget(client, targetId);
     assertNotSelf(actor, t);
     assertRank(actor, t.role);
     // A disabled account stays disabled: resetting 2FA must not re-enable it.
-    const nextStatus = t.status === "disabled" ? "disabled" : "pending";
-    if (t.role === "owner" && t.status === "active") await assertOtherActiveOwner(client, t.id);
+    const nextStatus = t.status === "disabled" ? "disabled" : twoFactor ? "pending" : "active";
+    if (t.role === "owner" && t.status === "active" && nextStatus !== "active") await assertOtherActiveOwner(client, t.id);
     await client.query(
       `UPDATE admin_accounts
           SET status = $2, totp_secret_enc = NULL, totp_enabled_at = NULL, totp_last_step = 0, updated_at = now()
@@ -899,7 +975,7 @@ export async function resetAdmin2fa(
     );
     await client.query(`DELETE FROM admin_recovery_codes WHERE admin_id = $1`, [t.id]);
     const revoked = await revokeAllAdminSessions(client, t.id, "reset_2fa");
-    const enroll = await createEnrollment(client, t.id, actor.id);
+    const enroll = twoFactor ? await createEnrollment(client, t.id, actor.id) : NO_LINK;
     await audit({
       action: "admins.reset_2fa",
       targetType: "admin",
@@ -929,12 +1005,14 @@ export async function revokeSessionsOf(actor: AdminActor, targetId: string, rawR
 
 // ───────────────────────────── CLI bootstrap / break-glass (§3.2, §15.1)
 
-export type CliResult = { adminId: string; created: boolean; revokedSessions: number; enrollUrl: string; expiresAt: string };
+export type CliResult = { adminId: string; created: boolean; revokedSessions: number } & EnrollmentLink;
 
 /**
  * `npm run admin:create`: creates the account, or resets an existing one
  * (any status) to `pending` with a cleared 2FA and revoked sessions. Writes
- * one system audit row (`admin_id` NULL, `meta.via = "cli"`).
+ * one system audit row (`admin_id` NULL, `meta.via = "cli"`). With the 2FA
+ * switch off the account is `active` right away and there is no link: the
+ * person enters through the site's "Admin panel" button.
  */
 export async function cliUpsertAdmin(p: {
   userId?: string;
@@ -961,35 +1039,37 @@ export async function cliUpsertAdmin(p: {
         [user.id],
       )
     ).rows[0];
+    const twoFactor = env.admin2faRequired;
+    const status = twoFactor ? "pending" : "active";
     let adminId: string;
     let revokedSessions = 0;
     if (existing) {
       adminId = existing.id;
       await client.query(
         `UPDATE admin_accounts
-            SET role = $2, status = 'pending', totp_secret_enc = NULL, totp_enabled_at = NULL, totp_last_step = 0,
+            SET role = $2, status = $3, totp_secret_enc = NULL, totp_enabled_at = NULL, totp_last_step = 0,
                 disabled_at = NULL, disabled_reason = NULL, updated_at = now()
           WHERE id = $1`,
-        [adminId, p.role],
+        [adminId, p.role, status],
       );
       await client.query(`DELETE FROM admin_recovery_codes WHERE admin_id = $1`, [adminId]);
       revokedSessions = await revokeAllAdminSessions(client, adminId, "cli_reset");
     } else {
       const ins = await client.query<{ id: string }>(
-        `INSERT INTO admin_accounts (user_id, role, status) VALUES ($1, $2, 'pending') RETURNING id::text AS id`,
-        [user.id, p.role],
+        `INSERT INTO admin_accounts (user_id, role, status) VALUES ($1, $2, $3) RETURNING id::text AS id`,
+        [user.id, p.role, status],
       );
       adminId = ins.rows[0]!.id;
     }
-    const enroll = await createEnrollment(client, adminId, null);
+    const enroll = twoFactor ? await createEnrollment(client, adminId, null) : NO_LINK;
     await writeSystemAudit(client, {
       action: existing ? "admins.reset_2fa" : "admins.create",
       targetType: "admin",
       targetId: adminId,
       reason: existing ? "CLI break-glass reset" : "CLI bootstrap",
       before: existing ? { role: existing.role, status: existing.status, totpEnabled: existing.totp_enabled } : null,
-      after: { userId: user.id, role: p.role, status: "pending", totpEnabled: false },
-      meta: { via: "cli", host: p.host.slice(0, 100), revokedSessions },
+      after: { userId: user.id, role: p.role, status, totpEnabled: false },
+      meta: { via: "cli", host: p.host.slice(0, 100), revokedSessions, ...(twoFactor ? {} : { mode: "simple" }) },
     });
     return { adminId, created: !existing, revokedSessions, ...enroll };
   });

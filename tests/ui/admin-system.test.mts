@@ -54,7 +54,7 @@ const VIEWER = ["system.view", "errors.view"];
 
 /** `children` goes in the props: the provider's prop type requires it. */
 const withIdentity = (permissions: string[], children: ReactNode) =>
-  h(AdminIdentityProvider, { value: { adminId: "1", role: "owner", permissions, name: "Test", username: null }, children });
+  h(AdminIdentityProvider, { value: { adminId: "1", role: "owner", permissions, name: "Test", username: null, twoFactor: true }, children });
 
 function renderAt(pathname: string, query: string, page: () => ReactNode, permissions: string[] = OWNER) {
   const calls = { replace: [] as string[] };

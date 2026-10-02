@@ -65,9 +65,14 @@ export function RoleDialog({ admin, actorRole, onClose, onDone }: Common & { act
   );
 }
 
-/** "O'chirish" / "Yoqish". Disabling also ends every session of that admin (server, same transaction). */
-export function StatusDialog({ admin, to, onClose, onDone }: Common & { to: "active" | "disabled" }) {
+/**
+ * "O'chirish" / "Yoqish". Disabling also ends every session of that admin
+ * (server, same transaction). Re-enabling lands on `active` only for an
+ * enrolled account — or always with the 2FA switch off (nothing to enrol).
+ */
+export function StatusDialog({ admin, to, twoFactor, onClose, onDone }: Common & { to: "active" | "disabled"; twoFactor: boolean }) {
   const disabling = to === "disabled";
+  const enrolled = admin.totpEnabled || !twoFactor;
   return (
     <ConfirmDialog
       open
@@ -76,13 +81,15 @@ export function StatusDialog({ admin, to, onClose, onDone }: Common & { to: "act
       description={
         disabling
           ? "Admin darhol panelga kira olmaydi va barcha faol sessiyalari tugatiladi. Keyin uni qayta yoqish mumkin."
-          : admin.totpEnabled
-            ? "Admin yana panelga kira oladi (ikki bosqichli himoya saqlangan)."
-            : "Ikki bosqichli himoya sozlanmagani uchun hisob «kutilmoqda» holatiga o'tadi: «2FA ni tiklash» orqali yangi havola bering."
+          : !twoFactor
+            ? "Admin yana panelga kira oladi (saytdagi «Admin panel» tugmasi orqali)."
+            : admin.totpEnabled
+              ? "Admin yana panelga kira oladi (ikki bosqichli himoya saqlangan)."
+              : "Ikki bosqichli himoya sozlanmagani uchun hisob «kutilmoqda» holatiga o'tadi: «2FA ni tiklash» orqali yangi havola bering."
       }
       target={who(admin)}
       before={STATUS_META[admin.status].label}
-      after={disabling ? STATUS_META.disabled.label : admin.totpEnabled ? STATUS_META.active.label : STATUS_META.pending.label}
+      after={disabling ? STATUS_META.disabled.label : enrolled ? STATUS_META.active.label : STATUS_META.pending.label}
       danger={disabling}
       reason={{ label: "Sabab (audit jurnaliga yoziladi)" }}
       confirmLabel={disabling ? "O'chirish" : "Yoqish"}
@@ -109,7 +116,9 @@ export function Reset2faDialog({ admin, onClose, onDone, onLink }: Common & { on
       confirmLabel="2FA ni tiklash"
       onConfirm={async (ctx) => {
         const res = await resetAdmin2fa(admin.id, ctx.reason);
-        onLink({ title: "2FA tiklandi", adminName: who(admin), enrollUrl: res.enrollUrl, expiresAt: res.expiresAt });
+        // No link with the 2FA switch off (the action is hidden then; the server still answers).
+        if (res.enrollUrl && res.expiresAt) onLink({ title: "2FA tiklandi", adminName: who(admin), enrollUrl: res.enrollUrl, expiresAt: res.expiresAt });
+        else toast(`${admin.name}: 2FA tiklandi, sessiyalari tugatildi`);
         onDone();
       }}
     />
@@ -122,12 +131,14 @@ export type RowAction = { kind: "role" | "enable" | "disable" | "reset2fa" | "re
 export function ActionDialogs({
   action,
   actorRole,
+  twoFactor,
   onClose,
   onDone,
   onLink,
 }: {
   action: RowAction | null;
   actorRole: string;
+  twoFactor: boolean;
   onClose: () => void;
   onDone: () => void;
   onLink: (link: EnrollLinkView) => void;
@@ -138,9 +149,9 @@ export function ActionDialogs({
     case "role":
       return <RoleDialog {...common} actorRole={actorRole} />;
     case "enable":
-      return <StatusDialog {...common} to="active" />;
+      return <StatusDialog {...common} to="active" twoFactor={twoFactor} />;
     case "disable":
-      return <StatusDialog {...common} to="disabled" />;
+      return <StatusDialog {...common} to="disabled" twoFactor={twoFactor} />;
     case "reset2fa":
       return <Reset2faDialog {...common} onLink={onLink} />;
     case "revoke":

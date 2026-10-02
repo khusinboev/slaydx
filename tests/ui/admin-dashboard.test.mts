@@ -80,7 +80,7 @@ function renderDashboard(opts: { search?: string; permissions?: string[] } = {})
         h(
           SearchParamsContext.Provider,
           { value: new URLSearchParams(search) },
-          h(AdminIdentityProvider, { value: { adminId: "1", role: "viewer", permissions: opts.permissions ?? VIEWER, name: "Ali", username: null }, children: node }),
+          h(AdminIdentityProvider, { value: { adminId: "1", role: "viewer", permissions: opts.permissions ?? VIEWER, name: "Ali", username: null, twoFactor: true }, children: node }),
         ),
       ),
     );

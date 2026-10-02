@@ -26,6 +26,8 @@ process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";
 process.env.APP_URL = "http://localhost:3000";
 process.env.TRUST_PROXY = "true";
 process.env.ADMIN_TOTP_KEY = randomBytes(32).toString("base64");
+// 2FA-mode suite: the strengthened flow (TOTP, step-up) is what these tests pin (docs/admin/HANDOFF.md "Admin 2FA switch").
+process.env.ADMIN_2FA_REQUIRED = "true";
 process.env.TELEGRAM_BOT_TOKEN = "123456:admin-finance-test-token-never-called";
 const hasDb = Boolean(process.env.DATABASE_URL) && !process.env.DATABASE_URL!.includes("unused");
 process.env.DATABASE_URL = process.env.DATABASE_URL || "postgres://unused/unused";

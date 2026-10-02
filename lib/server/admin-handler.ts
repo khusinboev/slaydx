@@ -1,6 +1,7 @@
 import "server-only";
 import { ApiError, checkOrigin, handler } from "./api";
 import { ensureMigrated } from "./db";
+import { env } from "./env";
 import { addLogContext, currentLogContext, log, type LogContext } from "./log";
 import { clientIp, rateLimit } from "./ratelimit";
 import { currentSessionRef, type SessionUser } from "./session";
@@ -29,7 +30,7 @@ import {
  *   7. role lacks the permission → per-admin denied-call limit (fail-closed,
  *      across scopes; over it → 429 and NO audit row), else `denied` audit
  *      row + 403 forbidden;
- *   8. step-up permission without a reauth in the last 10 min → 401 reauth;
+ *   8. (2FA switch on) step-up permission without a reauth in the last 10 min → 401 reauth;
  *   9. per-admin, per-scope rate limit, fail-closed → 429;
  *  10. `addLogContext({ userId, adminId })`;
  *  11. `fn(req, ctx, admin)`.
@@ -150,7 +151,10 @@ export function adminHandler<C = unknown>(
       throw new ApiError("Bu amal uchun ruxsatingiz yo'q", 403, { code: "forbidden" });
     }
 
-    if (needsStepUp(opts.permission) && !session.reauthFresh) {
+    // Step 8 exists only with the 2FA switch: in simple mode there is no second
+    // factor to re-enter, so no route ever answers 401 reauth (docs/admin/HANDOFF.md
+    // "Admin 2FA switch"). Everything else of the pipeline is identical in both modes.
+    if (env.admin2faRequired && needsStepUp(opts.permission) && !session.reauthFresh) {
       throw new ApiError("Bu amal uchun kodni qayta kiriting", 401, { code: "reauth" });
     }
 

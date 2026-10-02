@@ -16,6 +16,8 @@ process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";
 process.env.APP_URL = "http://localhost:3000";
 process.env.TRUST_PROXY = "true";
 process.env.ADMIN_TOTP_KEY = randomBytes(32).toString("base64");
+// 2FA-mode suite: the strengthened flow (TOTP, step-up) is what these tests pin (docs/admin/HANDOFF.md "Admin 2FA switch").
+process.env.ADMIN_2FA_REQUIRED = "true";
 // The bot "sends" through the fetch stub below; nothing leaves the process.
 process.env.TELEGRAM_BOT_TOKEN = "123456:admin-auth-test-token-never-called";
 const hasDb = Boolean(process.env.DATABASE_URL) && !process.env.DATABASE_URL!.includes("unused");
@@ -205,6 +207,7 @@ test("enrollment: CLI link → info only for that user → wrong code 401 → ri
   const u = await mkUser();
   const res = await cliUpsertAdmin({ telegramId: u.telegramId, role: "owner", host: "test-host" });
   assert.equal(res.created, true);
+  assert.ok(res.enrollUrl, "2FA mode: the CLI issues an enrollment link");
   assert.ok(res.enrollUrl.startsWith("http://localhost:3000/admin/enroll?token="), res.enrollUrl);
   const token = new URL(res.enrollUrl).searchParams.get("token")!;
   assert.match(token, /^[A-Za-z0-9_-]{43}$/);
@@ -296,6 +299,7 @@ test("enrollment: CLI link → info only for that user → wrong code 401 → ri
 test("enrollment: the link burns after 5 wrong codes; a later right code gets 404", { skip }, async () => {
   const u = await mkUser();
   const res = await cliUpsertAdmin({ userId: u.id, role: "viewer", host: "h" });
+  assert.ok(res.enrollUrl, "2FA mode: the CLI issues an enrollment link");
   const token = new URL(res.enrollUrl).searchParams.get("token")!;
   const info = await call(routes.enroll, "GET", `/api/admin/auth/enroll?token=${token}`, { cookie: cookie(u.userToken) });
   const secret = String(info.body.secret);

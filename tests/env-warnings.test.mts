@@ -41,6 +41,32 @@ test("prod: TRUST_PROXY o'rnatilmagan — `runtimeWarnings` admin IP limiti o'ch
   assert.ok(!assertRuntimeConfig().some((p) => /TRUST_PROXY/.test(p)), "ogohlantirish, xato emas");
 });
 
+/**
+ * Admin 2FA switch (docs/admin/HANDOFF.md "Admin 2FA switch"): the missing
+ * `ADMIN_TOTP_KEY` warning belongs to the strengthened mode only. With the
+ * switch off (default) the key is unused, so a warning would be noise and
+ * would nudge ops into generating a key that nothing reads. In both modes it
+ * is never a fatal problem. Mutation: drop `env.admin2faRequired &&` from the
+ * condition → the first assertion fails.
+ */
+test("prod: ADMIN_TOTP_KEY yo'qligi haqidagi ogohlantirish faqat ADMIN_2FA_REQUIRED=true bo'lganda", () => {
+  const savedKey = process.env.ADMIN_TOTP_KEY;
+  const savedFlag = process.env.ADMIN_2FA_REQUIRED;
+  try {
+    delete process.env.ADMIN_TOTP_KEY;
+    delete process.env.ADMIN_2FA_REQUIRED;
+    assert.ok(!runtimeWarnings().some((w) => /ADMIN_TOTP_KEY/.test(w)), `standart (oddiy rejim): kalit haqida ogohlantirish bo'lmasin: ${runtimeWarnings().join(" | ")}`);
+    process.env.ADMIN_2FA_REQUIRED = "true";
+    assert.ok(runtimeWarnings().some((w) => /ADMIN_TOTP_KEY/.test(w)), "2FA rejimi: kalit yo'q — ogohlantirish bor");
+    assert.ok(!assertRuntimeConfig().some((p) => /ADMIN_TOTP_KEY/.test(p)), "ogohlantirish, xato emas");
+  } finally {
+    if (savedKey === undefined) delete process.env.ADMIN_TOTP_KEY;
+    else process.env.ADMIN_TOTP_KEY = savedKey;
+    if (savedFlag === undefined) delete process.env.ADMIN_2FA_REQUIRED;
+    else process.env.ADMIN_2FA_REQUIRED = savedFlag;
+  }
+});
+
 test("prod: TTS kalitsiz `assertRuntimeConfig` TTS haqida XATO bermaydi, `runtimeWarnings` esa ogohlantiradi", () => {
   assert.equal(ttsConfigured(), false);
   const problems = assertRuntimeConfig();

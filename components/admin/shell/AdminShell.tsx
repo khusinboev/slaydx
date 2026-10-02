@@ -61,12 +61,15 @@ function IdentityFooter({ name, username, role }: { name: string; username: stri
  * 401 `admin_auth` from any admin API call to the login page with `next`, and
  * exposes the signed-in identity to pages via `useAdminIdentity()`.
  */
-export function AdminShell({ adminId, role, permissions, name, username, children }: AdminShellProps) {
+export function AdminShell({ adminId, role, permissions, name, username, twoFactor, children }: AdminShellProps) {
   const pathname = usePathname() ?? "/admin";
   const router = useRouter();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
-  const identity = useMemo<AdminIdentity>(() => ({ adminId, role, permissions, name, username }), [adminId, role, permissions, name, username]);
+  const identity = useMemo<AdminIdentity>(
+    () => ({ adminId, role, permissions, name, username, twoFactor }),
+    [adminId, role, permissions, name, username, twoFactor],
+  );
 
   useEffect(
     () => setOnAdminAuthRequired((nextPath) => router.replace(adminLoginHref(nextPath))),
