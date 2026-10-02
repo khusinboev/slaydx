@@ -112,8 +112,11 @@ export type RevenueDay = {
 export type FinanceSummary = {
   range: { from: string; to: string; days: number };
   /**
-   * Paid orders by the provider's perform time (`perform_time`, epoch ms);
-   * a paid order without one (legacy) counts at its `updated_at`.
+   * Paid orders by the Tashkent day of the provider's perform time
+   * (`perform_time`, epoch ms) — the same definition as the dashboard
+   * (`admin-metrics.ts` revenueSoum), so both screens agree. A paid order
+   * without a perform time (never written by `settleOrder`) is not revenue here;
+   * reconciliation reports it if it also lacks the ledger row.
    */
   revenue: {
     total: RevenueBucket;
@@ -151,12 +154,9 @@ async function revenue(client: Queryable, range: DateRange): Promise<FinanceSumm
        SELECT d::date AS day FROM generate_series($1::date, $2::date, interval '1 day') d
      ), paid AS (
        SELECT o.provider, o.purpose, o.amount_soum,
-              ((CASE WHEN o.perform_time > 0 THEN to_timestamp(o.perform_time / 1000.0) ELSE o.updated_at END)
-                 AT TIME ZONE 'Asia/Tashkent')::date AS day
+              (to_timestamp(o.perform_time / 1000.0) AT TIME ZONE 'Asia/Tashkent')::date AS day
          FROM payment_orders o
-        WHERE o.state = 'paid'
-          AND ((o.perform_time >= $3::bigint AND o.perform_time < $4::bigint)
-               OR (o.perform_time = 0 AND o.updated_at >= $5::timestamptz AND o.updated_at < $6::timestamptz))
+        WHERE o.state = 'paid' AND o.perform_time >= $3::bigint AND o.perform_time < $4::bigint
      )
      SELECT to_char(d.day, 'YYYY-MM-DD') AS day,
             COALESCE(sum(p.amount_soum), 0)::text AS soum,
@@ -172,7 +172,7 @@ async function revenue(client: Queryable, range: DateRange): Promise<FinanceSumm
        FROM days d LEFT JOIN paid p ON p.day = d.day
       GROUP BY d.day
       ORDER BY d.day`,
-    [range.fromDay, range.toDay, fromMs, toMs, range.fromTs, range.toTsExclusive],
+    [range.fromDay, range.toDay, fromMs, toMs],
   );
   const total: RevenueBucket = { soum: 0, orders: 0 };
   const byProvider: Record<Provider, RevenueBucket> = { click: { soum: 0, orders: 0 }, payme: { soum: 0, orders: 0 } };

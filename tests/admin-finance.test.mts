@@ -260,12 +260,13 @@ test("summary: zero-filled Tashkent days, provider/purpose split, spend, refunds
   assert.deepEqual(rev.byDay, [
     { day: "2026-09-10", soum: 0, orders: 0, click: 0, payme: 0, topup: 0, pro: 0 },
     { day: "2026-09-11", soum: 100_000, orders: 1, click: 100_000, payme: 0, topup: 100_000, pro: 0 },
-    { day: "2026-09-12", soum: 7_000, orders: 1, click: 0, payme: 7_000, topup: 7_000, pro: 0 },
+    // The legacy paid order has no perform_time: not revenue (same rule as the dashboard), only a reconciliation hit.
+    { day: "2026-09-12", soum: 0, orders: 0, click: 0, payme: 0, topup: 0, pro: 0 },
     { day: "2026-09-13", soum: 15_000, orders: 1, click: 0, payme: 15_000, topup: 0, pro: 15_000 },
   ]);
-  assert.deepEqual(rev.total, { soum: 122_000, orders: 3 });
-  assert.deepEqual(rev.byProvider, { click: { soum: 100_000, orders: 1 }, payme: { soum: 22_000, orders: 2 } });
-  assert.deepEqual(rev.byPurpose, { topup: { soum: 107_000, orders: 2 }, pro: { soum: 15_000, orders: 1 } });
+  assert.deepEqual(rev.total, { soum: 115_000, orders: 2 });
+  assert.deepEqual(rev.byProvider, { click: { soum: 100_000, orders: 1 }, payme: { soum: 15_000, orders: 1 } });
+  assert.deepEqual(rev.byPurpose, { topup: { soum: 100_000, orders: 1 }, pro: { soum: 15_000, orders: 1 } });
 
   assert.deepEqual(r.body.cashSpend, { charges: 8, points: 0, quota: 0, balance: 26_500 });
   assert.deepEqual(r.body.refunds, { count: 2, points: 0, quota: 0, balance: 3_000 });
@@ -301,7 +302,7 @@ test("summary: cached 60 s per range; bad ranges 400; support lacks finance.view
     assert.deepEqual((again.body.revenue as Record<string, unknown>).total, { soum: 100_000, orders: 1 });
     const longer = await summary(s.cookie, "?from=2026-09-11&to=2026-09-12");
     assert.deepEqual(longer.body.range, { from: "2026-09-11", to: "2026-09-12", days: 2 }, "the cache key covers both ends of the range");
-    assert.deepEqual((longer.body.revenue as Record<string, unknown>).total, { soum: 107_001, orders: 2 });
+    assert.deepEqual((longer.body.revenue as Record<string, unknown>).total, { soum: 100_001, orders: 1 });
     clearFinanceCache();
     const fresh = await summary(s.cookie, "?from=2026-09-11&to=2026-09-11");
     assert.deepEqual((fresh.body.revenue as Record<string, unknown>).total, { soum: 100_001, orders: 1 });
