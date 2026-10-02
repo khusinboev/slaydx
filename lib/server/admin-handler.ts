@@ -1,7 +1,7 @@
 import "server-only";
 import { ApiError, checkOrigin, handler } from "./api";
 import { ensureMigrated } from "./db";
-import { addLogContext, currentLogContext, type LogContext } from "./log";
+import { addLogContext, currentLogContext, log, type LogContext } from "./log";
 import { clientIp, rateLimit } from "./ratelimit";
 import { currentSessionRef, type SessionUser } from "./session";
 import { can, needsStepUp, permissionsOf, type Permission, type Role } from "./admin-rbac";
@@ -68,6 +68,20 @@ const NOT_FOUND = "Topilmadi";
  */
 export const DENIED_RATE: { limit: number; windowSec: number } = { limit: 30, windowSec: 60 };
 
+/**
+ * When the denied bucket refuses, ops should see it (a role probing routes it lacks), but a
+ * flood must not turn into a log flood: one warning per admin per bucket window. In-process
+ * state is enough here (bounded by the number of admins; another instance warns on its own).
+ */
+const deniedLimitWarnedUntil = new Map<string, number>();
+
+function warnDeniedLimited(adminId: string, scope: string, retryAfterSec: number): void {
+  const now = Date.now();
+  if ((deniedLimitWarnedUntil.get(adminId) ?? 0) > now) return;
+  deniedLimitWarnedUntil.set(adminId, now + retryAfterSec * 1000);
+  log("warn", "[admin] denied calls rate-limited", { adminId, scope });
+}
+
 /** Step 3: mutations need a present, same-site `Origin`. */
 export function assertAdminOrigin(req: Request): void {
   if (!req.headers.get("origin") || !checkOrigin(req)) {
@@ -128,7 +142,10 @@ export function adminHandler<C = unknown>(
 
     if (!can(account.role, opts.permission)) {
       const denied = await rateLimit(`admin-denied:${account.id}`, DENIED_RATE.limit, DENIED_RATE.windowSec, { failClosed: true });
-      if (!denied.ok) throw rateLimitedError(denied.retryAfterSec);
+      if (!denied.ok) {
+        warnDeniedLimited(account.id, scope, denied.retryAfterSec);
+        throw rateLimitedError(denied.retryAfterSec);
+      }
       await writeDeniedAudit(admin, opts.permission, scope);
       throw new ApiError("Bu amal uchun ruxsatingiz yo'q", 403, { code: "forbidden" });
     }
