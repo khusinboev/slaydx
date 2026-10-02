@@ -49,7 +49,7 @@ The brief's non-negotiable rules:
 | WP6 | Moderation (§6.8, S12) | ✅ merged 2026-10-02 (sonnet; smoke 71/72, 1 script bug verified in SQL) |
 | WP7 | System and errors (§6.11, S15/S16) | ✅ merged 2026-10-02 (sonnet; smoke 82/82) |
 | WP8 | Settings UI and routes (§6.10, S14) | ✅ merged 2026-10-02 (sonnet; pause verified end to end as a buyer) |
-| WP9 | Broadcasts (§6.9, S13); delivery already exists in F5b | 🔄 in progress |
+| WP9 | Broadcasts (§6.9, S13); delivery already exists in F5b | ✅ merged 2026-10-02 (sonnet; smoke 76/76; step-up applies to every broadcasts.send route) |
 | WP10 | Audit log UI and admins UI (§6.12, §6.13, S17/S18) | 🔄 in progress |
 | WP11 | Pricing admin (§17.4–17.6, S20); call `invalidatePricingCache()` after commit | 🔄 in progress (fable) |
 | I | Integration: remove the legacy admin section in `lib/api-client.ts:292-336` and the legacy `requireAdmin` in `lib/server/admin.ts` with its routes; add the `admin:seed-dev` script; full checks | ⏳ |
