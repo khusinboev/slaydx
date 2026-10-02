@@ -48,7 +48,11 @@ export function moneyError(e: unknown): unknown {
   if (code === "idempotency_conflict") {
     return new ApiError("Bu Idempotency-Key boshqa so'rov uchun ishlatilgan. Dialogni yopib, qaytadan oching.", e.status, e.data);
   }
-  if (code === "self") return new ApiError("O'z hamyoningizni tuzata olmaysiz.", e.status, e.data);
+  // `self` comes from all three dialogs (own wallet, own order, own job).
+  if (code === "self") return new ApiError("Bu pul amalini o'zingizga nisbatan bajara olmaysiz.", e.status, e.data);
+  if (code === "admin_target") {
+    return new ApiError("Admin hisobiga ega foydalanuvchining hamyonini tuzatish uchun ruxsatingiz yo'q (admins.manage kerak).", e.status, e.data);
+  }
   if (code === "amount") {
     const remaining = typeof e.data.remaining === "number" ? e.data.remaining : null;
     return new ApiError(`Summa qolgan miqdordan oshmasligi kerak. Qolgan: ${remaining === null ? "—" : fmtNumber(remaining)} so'm`, e.status, e.data);

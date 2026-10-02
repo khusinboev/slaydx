@@ -23,8 +23,23 @@ delete process.env.AZURE_SPEECH_REGION;
 delete process.env.AISHA_API_KEY;
 delete process.env.TTS_GEMINI_MODEL;
 delete process.env.DEV_LOGIN_ENABLED;
+// `.env.local` (loaded by the test command) may set it; the admin-login IP
+// warning below is about its absence.
+delete process.env.TRUST_PROXY;
 
 const { assertRuntimeConfig, runtimeWarnings, ttsConfigured } = await import("../lib/server/env.ts");
+
+/**
+ * Admin panel Phase 4 finding 4: without `TRUST_PROXY=true` `clientIp()` is
+ * "direct" for everyone, so the admin-login per-IP limit is skipped (only the
+ * per-account lock protects). That is a WARNING at boot, never a fatal
+ * problem (the product keeps working behind no proxy). Mutation: drop the
+ * warning → first assertion; move it to `problems` → second.
+ */
+test("prod: TRUST_PROXY o'rnatilmagan — `runtimeWarnings` admin IP limiti o'chiqligi haqida ogohlantiradi, `assertRuntimeConfig` xato bermaydi", () => {
+  assert.ok(runtimeWarnings().some((w) => /TRUST_PROXY/.test(w) && /admin/i.test(w)), `ogohlantirish bor: ${runtimeWarnings().join(" | ")}`);
+  assert.ok(!assertRuntimeConfig().some((p) => /TRUST_PROXY/.test(p)), "ogohlantirish, xato emas");
+});
 
 test("prod: TTS kalitsiz `assertRuntimeConfig` TTS haqida XATO bermaydi, `runtimeWarnings` esa ogohlantiradi", () => {
   assert.equal(ttsConfigured(), false);

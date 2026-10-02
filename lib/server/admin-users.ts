@@ -730,11 +730,13 @@ function refuseSelf(actor: AdminActor, id: string, what: string): void {
 
 /**
  * §4.3 invariant: acting on an admin's user account (block, session revoke —
- * both end that admin's panel access) needs `admins.manage`, and within its
- * rank limits (`canManageRole`: strictly lower rank, owners may act on owners).
- * Pending accounts count as admin accounts, as in `SessionUser.isAdmin`.
+ * both end that admin's panel access; wallet adjustments — money on a
+ * colleague's account) needs `admins.manage`, and within its rank limits
+ * (`canManageRole`: strictly lower rank, owners may act on owners). Pending
+ * accounts count as admin accounts, as in `SessionUser.isAdmin`. Exported for
+ * `admin-wallet.ts` (Phase 4 review): one rule, one message.
  */
-async function assertMayActOn(db: Queryable, actor: AdminActor, id: string): Promise<void> {
+export async function assertMayActOn(db: Queryable, actor: AdminActor, id: string): Promise<void> {
   const account = await adminAccountOf(db, id);
   if (account && account.status !== "disabled" && !canManageRole(actor.role, account.role)) {
     throw new ApiError("Admin hisobiga ega foydalanuvchi ustida bu amal uchun ruxsatingiz yo'q", 403, { code: "admin_target" });

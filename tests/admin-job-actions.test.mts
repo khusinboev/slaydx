@@ -432,3 +432,32 @@ test("guard: jobs.cancel (support yes; finance, moderator, viewer no), jobs.refu
   assert.equal((await call("cancel", null, queued, REASON)).status, 404, "anonymous → cloak");
   assert.equal((await gen(queued))!.status, "QUEUED");
 });
+
+/**
+ * Phase 4 finding 3: the manual refund of the admin's OWN job is refused
+ * (409 `self`, the wallet rule). Cancelling or failing one's own stuck job
+ * stays allowed — that is ordinary operations, and its refund is the
+ * worker's own path, not a discretionary money action. Mutation: drop the
+ * self check in `refundJob` → 200.
+ */
+test("409 self: an admin cannot refund their own job; cancelling their own queued job is still allowed", { skip }, async () => {
+  const s = await session("support");
+  await query(`UPDATE users SET balance = 3_000 WHERE id = $1`, [s.admin.id]);
+  const own = await enqueue(s.admin.id, 1_000);
+  await query(`UPDATE generations SET status = 'FAILED', locked_by = NULL, error = 'Ish vaqti tugadi', finished_at = now() WHERE id = $1`, [own]);
+  const r = await call("refund", s.cookie, own, REASON);
+  assert.equal(r.status, 409, JSON.stringify(r.body));
+  assert.equal(r.body.code, "self");
+  assert.equal((await refunds(own)).length, 0);
+  assert.equal(await balance(s.admin.id), 2_000);
+  assert.equal((await audits(s.admin.adminId, "jobs.refund")).length, 0);
+  // Another admin with jobs.refund may refund it.
+  const other = await session("finance");
+  assert.equal((await call("refund", other.cookie, own, REASON)).status, 200);
+  assert.equal(await balance(s.admin.id), 3_000);
+
+  const queued = await enqueue(s.admin.id, 500);
+  const c = await call("cancel", s.cookie, queued, REASON);
+  assert.equal(c.status, 200, JSON.stringify(c.body));
+  assert.equal((await gen(queued))!.status, "REVOKED");
+});
