@@ -63,7 +63,7 @@ export function LadderCompare({
                     <td
                       className={cn(
                         "px-3 py-1.5 text-right tabular-nums",
-                        diff === null || diff === 0 ? "text-muted-foreground" : diff > 0 ? "text-success-text" : "text-destructive",
+                        diff === null || diff === 0 ? "text-muted-foreground" : diff > 0 ? "text-badge-success-text" : "text-destructive",
                       )}
                     >
                       {diff === null || diff === 0 ? "—" : fmtNumber(diff, { sign: true })}

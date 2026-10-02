@@ -143,8 +143,8 @@ export function PricingPage() {
 /** Static class per margin tone (Tailwind needs literal class names). */
 const MARGIN_TEXT: Record<ReturnType<typeof marginTone>, string> = {
   danger: "text-destructive",
-  warning: "text-warning",
-  success: "text-success-text",
+  warning: "text-badge-warning-text",
+  success: "text-badge-success-text",
   neutral: "text-foreground",
   info: "text-foreground",
   primary: "text-foreground",

@@ -129,7 +129,7 @@ export function PricingTable({
         return (
           <span className="inline-flex items-center gap-2">
             <Sparkline values={trendValues(r.trend)} title={`${r.title}: ${fmtNumber(trendDays)} kunlik tannarx trendi`} color={change !== null && change > 5 ? 2 : 4} width={64} height={24} formatValue={(n) => fmtNumber(Math.round(n))} />
-            <span className={`text-xs tabular-nums ${change === null ? "text-muted-foreground" : change > 5 ? "text-destructive" : change < -5 ? "text-success-text" : "text-muted-foreground"}`}>
+            <span className={`text-xs tabular-nums ${change === null ? "text-muted-foreground" : change > 5 ? "text-destructive" : change < -5 ? "text-badge-success-text" : "text-muted-foreground"}`}>
               {change === null ? "—" : fmtPercent(change, { digits: 0, sign: true })}
             </span>
           </span>

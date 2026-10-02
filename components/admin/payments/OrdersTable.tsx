@@ -158,7 +158,7 @@ function OrdersView({ store, fixedFilters, embedded = false, pageSize }: OrdersT
       align: "center",
       cell: (o) =>
         o.credited ? (
-          <Check className="text-success-text mx-auto size-4" aria-label="Ha" />
+          <Check className="text-badge-success-text mx-auto size-4" aria-label="Ha" />
         ) : o.state === "paid" ? (
           <StatusPill tone="danger">Yo&apos;q</StatusPill>
         ) : (

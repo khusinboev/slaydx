@@ -115,7 +115,7 @@ function Body({ toolId, title, adjust, ladder, onClose, onSaved }: PriceEditDial
         </p>
       ) : null}
       {big ? (
-        <p className="text-warning text-xs font-semibold">Katta o&apos;zgarish (&gt; {BIG_CHANGE_PP} punkt): tasdiqlash uchun yangi foizni qayta yozing.</p>
+        <p className="text-badge-warning-text text-xs font-semibold">Katta o&apos;zgarish (&gt; {BIG_CHANGE_PP} punkt): tasdiqlash uchun yangi foizni qayta yozing.</p>
       ) : null}
     </ConfirmDialog>
   );

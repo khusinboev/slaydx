@@ -180,7 +180,7 @@ function DiffTable({ rows }: { rows: DiffRow[] }) {
               <td className={cn("px-2.5 py-1.5 font-mono break-all whitespace-pre-wrap", r.kind === "removed" || r.kind === "changed" ? "text-destructive" : "text-muted-foreground")}>
                 {r.before ?? "—"}
               </td>
-              <td className={cn("px-2.5 py-1.5 font-mono break-all whitespace-pre-wrap", r.kind === "added" || r.kind === "changed" ? "text-success-text font-semibold" : "text-muted-foreground")}>
+              <td className={cn("px-2.5 py-1.5 font-mono break-all whitespace-pre-wrap", r.kind === "added" || r.kind === "changed" ? "text-badge-success-text font-semibold" : "text-muted-foreground")}>
                 {r.after ?? "—"}
               </td>
             </tr>
