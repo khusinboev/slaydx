@@ -58,11 +58,19 @@ async function main(): Promise<number> {
     role: args.role,
     host: hostname(),
   });
-  console.log(res.created ? `Admin account #${res.adminId} created (pending).` : `Admin account #${res.adminId} reset to pending.`);
-  if (!res.created) console.log(`2FA cleared, recovery codes deleted, ${res.revokedSessions} admin session(s) revoked.`);
-  console.log("");
-  console.log("Open this link while logged in to the site as that user (valid until " + res.expiresAt + "):");
-  console.log(res.enrollUrl);
+  if (res.enrollUrl) {
+    console.log(res.created ? `Admin account #${res.adminId} created (pending).` : `Admin account #${res.adminId} reset to pending.`);
+    if (!res.created) console.log(`2FA cleared, recovery codes deleted, ${res.revokedSessions} admin session(s) revoked.`);
+    console.log("");
+    console.log("Open this link while logged in to the site as that user (valid until " + res.expiresAt + "):");
+    console.log(res.enrollUrl);
+  } else {
+    // ADMIN_2FA_REQUIRED is off: no enrollment, the account is usable at once.
+    console.log(res.created ? `Admin account #${res.adminId} created (active).` : `Admin account #${res.adminId} reset (active).`);
+    if (!res.created) console.log(`2FA cleared, recovery codes deleted, ${res.revokedSessions} admin session(s) revoked.`);
+    console.log("");
+    console.log("2FA switch is off (ADMIN_2FA_REQUIRED): the person logs in to the site and opens the «Admin panel» button.");
+  }
   return 0;
 }
 

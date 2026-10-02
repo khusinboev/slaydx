@@ -130,6 +130,9 @@ services:
       # Admin panel 2FA master key (docs/admin/02-plan.md §3.4) — web: login/enrollment;
       # worker: `npm run admin:create`. Empty → admin login is off (503), the app runs.
       ADMIN_TOTP_KEY: ${ADMIN_TOTP_KEY:-}
+      # Admin 2FA switch (docs/admin/HANDOFF.md "Admin 2FA switch"): false = simple entry
+      # from the site's "Admin panel" button, no TOTP; true = the strengthened flow above.
+      ADMIN_2FA_REQUIRED: ${ADMIN_2FA_REQUIRED:-false}
       NEXT_PUBLIC_BRAND_NAME: ${NEXT_PUBLIC_BRAND_NAME:-SlaydX}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       NEXT_PUBLIC_TELEGRAM_BOT: ${NEXT_PUBLIC_TELEGRAM_BOT:-}
@@ -268,6 +271,9 @@ services:
       # Admin panel 2FA master key (docs/admin/02-plan.md §3.4) — web: login/enrollment;
       # worker: `npm run admin:create`. Empty → admin login is off (503), the app runs.
       ADMIN_TOTP_KEY: ${ADMIN_TOTP_KEY:-}
+      # Admin 2FA switch — `npm run admin:create` runs here and must create the account
+      # in the same mode as web (active + no link, or pending + enrollment link).
+      ADMIN_2FA_REQUIRED: ${ADMIN_2FA_REQUIRED:-false}
       # INFRA-09: PPTX/DOCX metama'lumotini worker chizadi (`buildArtifact`
       # shu konteynerda ishlaydi), `lib/brand.ts` esa `NEXT_PUBLIC_BRAND_*`ni
       # to'g'ridan-to'g'ri `process.env`dan o'qiydi — Next.js build-vaqtidagi
