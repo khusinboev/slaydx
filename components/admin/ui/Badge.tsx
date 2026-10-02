@@ -5,13 +5,14 @@ import { cn } from "@/lib/cn";
 
 export type Tone = "neutral" | "success" | "warning" | "danger" | "info" | "primary";
 
-// Static class strings so Tailwind's scanner sees every one of them.
+// Static class strings so Tailwind's scanner sees every one of them. Text uses the
+// `--badge-*-text` tokens (app/globals.css, ratios there): >= 4.5:1 on the 15 % tint in both themes.
 const TONE: Record<Tone, string> = {
   neutral: "bg-muted text-muted-foreground",
-  success: "bg-success/15 text-success-text",
-  warning: "bg-warning/15 text-warning",
-  danger: "bg-destructive/15 text-destructive",
-  info: "bg-info/15 text-info",
+  success: "bg-success/15 text-badge-success-text",
+  warning: "bg-warning/15 text-badge-warning-text",
+  danger: "bg-destructive/15 text-badge-danger-text",
+  info: "bg-info/15 text-badge-info-text",
   primary: "bg-primary/20 text-foreground",
 };
 

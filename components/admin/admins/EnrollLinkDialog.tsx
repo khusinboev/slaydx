@@ -35,7 +35,7 @@ export function EnrollLinkDialog({ link, onClose }: { link: EnrollLinkView | nul
     >
       {link ? (
         <>
-          <p role="alert" className="bg-warning/10 text-warning flex items-start gap-2 rounded-lg px-3 py-2 text-[13px]">
+          <p role="alert" className="bg-warning/10 text-badge-warning-text flex items-start gap-2 rounded-lg px-3 py-2 text-[13px]">
             <TriangleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
             <span>Bu havola faqat bir marta ko&apos;rsatiladi. Yopilgandan keyin uni qayta ko&apos;rib bo&apos;lmaydi.</span>
           </p>

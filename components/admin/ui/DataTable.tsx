@@ -45,6 +45,12 @@ export type DataTableProps<T> = {
   onSelectedChange?: (next: Set<string>) => void;
   /** Tailwind max-height for the scroll area so the sticky header actually sticks. */
   maxHeightClass?: string;
+  /**
+   * Name of the scroll region. Without `onRowClick` nothing inside may be focusable, so the
+   * region itself takes focus to let keyboard users scroll it; defaults to the caption, which
+   * keeps two tables on one page from sharing a landmark name.
+   */
+  regionLabel?: string;
 };
 
 const ALIGN: Record<Align, string> = { left: "text-left", right: "text-right", center: "text-center" };
@@ -115,6 +121,7 @@ export function DataTable<T>({
   selected,
   onSelectedChange,
   maxHeightClass = "max-h-[75vh]",
+  regionLabel,
 }: DataTableProps<T>) {
   const selectedSet = selected ?? new Set<string>();
   const keys = rows.map(rowKey);
@@ -165,7 +172,14 @@ export function DataTable<T>({
   return (
     <div className="bg-card overflow-hidden rounded-xl border" aria-busy={loading || undefined}>
       {/* Table: from `sm` up. */}
-      <div className={cn("hidden overflow-auto sm:block", maxHeightClass)}>
+      <div
+        className={cn(
+          "hidden overflow-auto sm:block",
+          !onRowClick && "focus-visible:ring-ring rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-inset",
+          maxHeightClass,
+        )}
+        {...(onRowClick ? {} : { tabIndex: 0, role: "region", "aria-label": regionLabel ?? caption })}
+      >
         <table className="w-full text-[13px]">
           <caption className="sr-only">{caption}</caption>
           <thead>
@@ -247,7 +261,8 @@ export function DataTable<T>({
                       data-row-key={key}
                       className={cn(
                         "border-b last:border-b-0",
-                        onRowClick && "hover:bg-muted/50 focus-visible:bg-muted/50 cursor-pointer outline-none",
+                        onRowClick &&
+                          "hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:ring-ring cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-inset",
                         isSelected && "bg-primary/10",
                       )}
                       {...rowProps(row)}
@@ -287,7 +302,8 @@ export function DataTable<T>({
                   data-card-key={key}
                   className={cn(
                     "flex flex-col gap-1.5 px-3.5 py-3 text-[13px]",
-                    onRowClick && "active:bg-muted/50 cursor-pointer",
+                    onRowClick &&
+                      "active:bg-muted/50 focus-visible:bg-muted/50 focus-visible:ring-ring cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-inset",
                     isSelected && "bg-primary/10",
                   )}
                   {...rowProps(row)}

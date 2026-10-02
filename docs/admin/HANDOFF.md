@@ -53,7 +53,7 @@ The brief's non-negotiable rules:
 | WP10 | Audit log UI and admins UI (§6.12, §6.13, S17/S18) | ✅ merged 2026-10-02 (sonnet; smoke 113 assertions) |
 | WP11 | Pricing admin (§17.4–17.6, S20) | ✅ merged 2026-10-02 (fable; smoke 62/62 incl. buyer charged the adjusted price and the 409 price_changed flow) |
 | I | Integration: legacy admin code removed (`lib/api-client.ts` section, `lib/server/admin.ts`), `admin:seed-dev`, shared `adminDownload`/`useLoad`/`cancelQueuedInTx`/`spendForJobs`, permission matrix test (402 cases), full checks | ✅ merged 2026-10-02 — full regression: tsc/lint clean, npm test 4032/4032, test:ui 779/779, test:viewer 248/248, build OK |
-| P4 | Phase 4: three independent reviews (security, regression, UX walk at 1280 px and 360 px, light and dark), fix every finding, write `03-report.md` | 🔄 reviews running (security fable, money fable, UX opus) |
+| P4 | Phase 4: three independent reviews (security, regression, UX walk at 1280 px and 360 px, light and dark), fix every finding, write `03-report.md` | 🔄 security APPROVE (after 3 fixes, re-verified), correctness APPROVE (after 5 fixes, re-verified), UX: 3 MEDIUM + 11 LOW being fixed (2 agents); then UX re-verify, final full regression, 03-report |
 
 Suggested order:
 1. F3b and F6 (in parallel).
