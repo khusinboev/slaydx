@@ -25,11 +25,11 @@ import { Sidebar } from "../../components/shell/Sidebar.tsx";
  * requests and what the admin sees.
  *
  * Mutation checks (each made the named assertion fail, then restored):
- *   - `AdminAutoEnter` without the `started` ref guard and with `attempt` in
- *     state only → still one POST here (React 18 without StrictMode), so the
- *     guard is pinned by the retry test instead: dropping `setAttempt` from
- *     `retry` → "retry POSTs again" fails (one call);
- *   - `router.refresh()` removed → "refreshes once";
+ *   - `router.refresh()` removed from `AdminAutoEnter` → "refreshes once";
+ *   - `setAttempt` dropped from `retry` → "retry POSTs again" (one call);
+ *   - the `started` ref guard cannot be pinned here (no StrictMode in jsdom);
+ *     the Chromium smoke is what caught the abort-on-cleanup variant that
+ *     never sent the POST in dev (`AdminAutoEnter` comment);
  *   - `twoFactor ? ... : ...` in AccountPage replaced by the 2FA branch →
  *     "simple mode hides" (button found, note missing);
  *   - the `reset2fa` row no longer filtered in `ManageModal` → "no reset

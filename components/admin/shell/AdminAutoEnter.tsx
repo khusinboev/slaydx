@@ -19,23 +19,32 @@ export function AdminAutoEnter({ next }: { next?: string }) {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
-  // One request per attempt, also under StrictMode's doubled effects.
+  // One request per attempt, also under dev StrictMode's doubled effects. The
+  // POST is deliberately NOT aborted on cleanup: StrictMode unmounts and
+  // remounts at once, and an aborted first request plus a guarded second one
+  // would leave the visitor on this screen forever (caught by the Chromium smoke).
   const started = useRef(-1);
+  const mounted = useRef(true);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (started.current === attempt) return;
     started.current = attempt;
-    const ctl = new AbortController();
-    autoLogin({ signal: ctl.signal })
+    autoLogin()
       .then(() => {
         if (next !== undefined) router.replace(sanitizeAdminNext(next));
         router.refresh();
       })
       .catch((e: unknown) => {
-        if (isAbortError(e)) return;
+        if (!mounted.current || isAbortError(e)) return;
         setError(adminErrorMessage(e));
       });
-    return () => ctl.abort();
   }, [attempt, next, router]);
 
   const retry = useCallback(() => {
