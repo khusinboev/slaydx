@@ -6,7 +6,7 @@ import { CircleCheck } from "lucide-react";
 import { getError, resolveError, type ErrorDetail } from "@/lib/admin-api/system";
 import { fmtDateTime, fmtNumber } from "@/lib/admin-format";
 import { Badge, Button, ConfirmDialog, CopyButton, Drawer, ErrorState, Forbidden, KeyValueList, Skeleton, toast, useLoad } from "@/components/admin/ui";
-import { UUID_RE } from "./shared";
+import { LEVEL_LABEL, UUID_RE } from "./shared";
 
 /**
  * Detail drawer of one error (S16): fields, the full message and the stack in a
@@ -93,7 +93,7 @@ function DetailBody({ e }: { e: ErrorDetail }) {
     <>
       <div className="flex flex-wrap items-center gap-2">
         <Badge tone={e.level === "error" ? "danger" : "warning"} dot>
-          {e.level}
+          {LEVEL_LABEL[e.level] ?? e.level}
         </Badge>
         {e.resolvedAt ? <Badge tone="success">Hal qilingan</Badge> : <Badge>Ochiq</Badge>}
         <span className="text-muted-foreground text-xs tabular-nums">{fmtNumber(e.count)} marta</span>

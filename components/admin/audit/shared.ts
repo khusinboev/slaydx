@@ -23,11 +23,16 @@ export const MAX_ACTION = 100;
 export const MAX_TARGET_TYPE = 64;
 export const MAX_TARGET_ID = 200;
 
+/** Uzbek names of the stored outcomes; the URL and the API keep the raw values. */
+export const OUTCOME_LABEL: Readonly<Record<AuditOutcome, string>> = {
+  ok: "Bajarildi",
+  denied: "Rad etildi",
+  failed: "Muvaffaqiyatsiz",
+};
+
 export const OUTCOME_OPTIONS: ReadonlyArray<{ value: AuditOutcome | ""; label: string }> = [
   { value: "", label: "Hammasi" },
-  { value: "ok", label: "ok" },
-  { value: "denied", label: "denied" },
-  { value: "failed", label: "failed" },
+  ...(Object.keys(OUTCOME_LABEL) as AuditOutcome[]).map((value) => ({ value, label: OUTCOME_LABEL[value] })),
 ];
 
 /** Target types the panel writes today (plan §8); a type from a deep link outside this list is still honoured. */
@@ -42,6 +47,11 @@ export const TARGET_TYPES: ReadonlyArray<string> = [
   "game_result",
   "error",
   "audit_log",
+  "tool",
+  "broadcast",
+  "users",
+  "orders",
+  "transactions",
 ];
 
 export const TARGET_TYPE_LABELS: Readonly<Record<string, string>> = {
@@ -55,12 +65,22 @@ export const TARGET_TYPE_LABELS: Readonly<Record<string, string>> = {
   game_result: "O'yin natijasi",
   error: "Xato",
   audit_log: "Audit jurnali",
+  tool: "Vosita",
+  broadcast: "E'lon",
+  users: "Foydalanuvchilar (eksport)",
+  orders: "To'lovlar (eksport)",
+  transactions: "Hisob kitobi (eksport)",
 };
 
 /** Dropdown options; an unknown type present in the URL is added so the select never shows a lie. */
 export function targetTypeOptions(current: string): FilterOption[] {
   const types = current && !TARGET_TYPES.includes(current) ? [...TARGET_TYPES, current] : TARGET_TYPES;
-  return types.map((t) => ({ value: t, label: TARGET_TYPE_LABELS[t] ? `${TARGET_TYPE_LABELS[t]} (${t})` : t }));
+  return types.map((t) => ({ value: t, label: targetTypeLabel(t) }));
+}
+
+/** Uzbek name of a target type; a type the panel does not know yet is shown as stored. */
+export function targetTypeLabel(type: string): string {
+  return Object.hasOwn(TARGET_TYPE_LABELS, type) ? TARGET_TYPE_LABELS[type] : type;
 }
 
 const ID_RE = /^[1-9]\d{0,18}$/;
@@ -121,6 +141,10 @@ export function targetHref(type: string | null, id: string | null): string | nul
       return "/admin/settings";
     case "game_session":
       return "/admin/moderation";
+    case "tool":
+      return id !== null && /^[a-z-]{1,40}$/.test(id) ? `/admin/pricing?tool=${id}` : null;
+    case "broadcast":
+      return id !== null && ID_RE.test(id) ? `/admin/broadcasts/${id}` : null;
     default:
       return null;
   }

@@ -289,7 +289,11 @@ test("errors: loading skeleton, then the table with level, scope, message, path,
   assert.deepEqual([...container.querySelectorAll("tr[data-row-key]")].map((r) => r.getAttribute("data-row-key")), ["30", "29", "28"]);
   const row = container.querySelector('tr[data-row-key="30"]')!;
   assert.match(row.textContent ?? "", /14/);
-  assert.match(row.textContent ?? "", /error/);
+  // Level badges are Uzbek (UX #5); the raw `error` / `warn` stay in the URL and the API only.
+  assert.match(row.textContent ?? "", /Xato/);
+  assert.doesNotMatch(row.textContent ?? "", /\berror\b/);
+  assert.match(container.querySelector('tr[data-row-key="29"]')!.textContent ?? "", /Ogohlantirish/);
+  assert.doesNotMatch(container.querySelector('tr[data-row-key="29"]')!.textContent ?? "", /\bwarn\b/);
   assert.match(row.textContent ?? "", /Ochiq/);
   assert.match(container.querySelector('tr[data-row-key="28"]')!.textContent ?? "", /Hal qilingan/);
   assert.match(container.textContent ?? "", /3 ta natija/);
@@ -309,7 +313,9 @@ test("errors: filters live in the URL; the scope chip filters; clear resets ever
   fireEvent.click(screen.getByRole("radio", { name: "Ochiq" }));
   assert.equal(calls.replace.at(-1), "/admin/errors", "the default view drops the param");
 
-  fireEvent.change(screen.getByLabelText("Daraja"), { target: { value: "warn" } });
+  const levelSelect = screen.getByLabelText("Daraja") as HTMLSelectElement;
+  assert.deepEqual([...levelSelect.options].map((o) => o.textContent), ["Barcha darajalar", "Xato", "Ogohlantirish"]);
+  fireEvent.change(levelSelect, { target: { value: "warn" } });
   assert.equal(calls.replace.at(-1), "/admin/errors?level=warn");
 
   // Clicking the scope in a row filters by it (and does not open the drawer).
@@ -419,9 +425,14 @@ test("errors: error shows the message and requestId, retry loads the data; 403 r
   cleanup();
 
   stubFetch(() => json(403, { error: "Bu amal uchun ruxsatingiz yo'q", code: "forbidden" }));
-  renderErrors();
+  renderErrors("", ["errors.view", "errors.resolve"]);
   await screen.findByText("Ruxsat yo'q");
   assert.ok(!screen.queryByText("[pdf] soffice timeout after 90000ms"));
+  // Forbidden is the only state: no filter bar, date filter or bulk action around it (UX #9).
+  assert.ok(!screen.queryByLabelText("Daraja"));
+  assert.ok(!screen.queryByRole("radio", { name: "Ochiq" }));
+  assert.ok(!screen.queryByRole("button", { name: "Sana bo'yicha filtr" }));
+  assert.ok(!screen.queryByRole("button", { name: /Hal qilindi deb belgilash/ }));
 });
 
 test("errors: a row opens the drawer via ?id=; the drawer shows the stack in a monospace scroll box", async () => {

@@ -158,14 +158,17 @@ test("loading skeleton, then rows with time, admin, role, action, target, outcom
   assert.match(text, /@admintest/);
   assert.match(text, /Admin/);
   assert.match(text, /users\.block/);
-  assert.match(text, /user/);
+  // Uzbek names for the stored enums (UX #5): target type and outcome.
+  assert.match(text, /Foydalanuvchi/);
+  assert.doesNotMatch(text, /\buser\b/);
   assert.match(text, /77/);
-  assert.match(text, /ok/);
+  assert.match(text, /Bajarildi/);
   assert.match(text, /spam akkaunt/);
   assert.match(text, /10\.9\.9\.9/);
   assert.match(container.textContent ?? "", /10 ta natija/);
   assert.match(rowOf(container, "7").textContent ?? "", /Egasi/);
-  assert.match(rowOf(container, "3").textContent ?? "", /denied/);
+  assert.match(rowOf(container, "3").textContent ?? "", /Rad etildi/);
+  assert.doesNotMatch(rowOf(container, "3").querySelector("td:nth-child(6)")?.textContent ?? "", /denied/);
   assert.match(rowOf(container, "2").textContent ?? "", /Tizim \(CLI\)/);
 });
 
@@ -212,7 +215,10 @@ test("filters live in the URL and the full filter set reaches the API", async ()
   const { calls, container } = renderAt("");
   await waitFor(() => assert.ok(rowOf(container, "9")));
 
-  fireEvent.click(screen.getByRole("radio", { name: "denied" }));
+  // The chip says "Rad etildi"; the URL keeps the raw filter value.
+  assert.ok(screen.getByRole("radio", { name: "Bajarildi" }));
+  assert.ok(screen.getByRole("radio", { name: "Muvaffaqiyatsiz" }));
+  fireEvent.click(screen.getByRole("radio", { name: "Rad etildi" }));
   assert.equal(calls.replace.at(-1), "/admin/audit?outcome=denied");
   fireEvent.click(screen.getByRole("radio", { name: "Hammasi" }));
   assert.equal(calls.replace.at(-1), "/admin/audit", "the default drops the param");
@@ -348,8 +354,12 @@ test("error shows the message and requestId, retry reloads; 403 renders Forbidde
   cleanup();
 
   stubFetch(auditApi({ list: () => json(403, { error: "Bu amal uchun ruxsatingiz yo'q", code: "forbidden" }) }));
-  renderAt("", ["audit.view"]);
+  renderAt("", ["audit.view", "audit.export"]);
   await screen.findByText("Ruxsat yo'q");
+  // Forbidden is the only state: no filter bar, date filter, export or pager above or below it (UX #9).
+  assert.ok(!screen.queryByLabelText("Amal bo'yicha filtr"));
+  assert.ok(!screen.queryByRole("button", { name: "Sana bo'yicha filtr" }));
+  assert.ok(!screen.queryByRole("button", { name: /CSV/ }));
 });
 
 /* ───────────────────────────── drawer ───────────────────────────── */
