@@ -50,7 +50,7 @@ The brief's non-negotiable rules:
 | WP7 | System and errors (§6.11, S15/S16) | ✅ merged 2026-10-02 (sonnet; smoke 82/82) |
 | WP8 | Settings UI and routes (§6.10, S14) | ✅ merged 2026-10-02 (sonnet; pause verified end to end as a buyer) |
 | WP9 | Broadcasts (§6.9, S13); delivery already exists in F5b | ✅ merged 2026-10-02 (sonnet; smoke 76/76; step-up applies to every broadcasts.send route) |
-| WP10 | Audit log UI and admins UI (§6.12, §6.13, S17/S18) | 🔄 in progress |
+| WP10 | Audit log UI and admins UI (§6.12, §6.13, S17/S18) | ✅ merged 2026-10-02 (sonnet; smoke 113 assertions) |
 | WP11 | Pricing admin (§17.4–17.6, S20); call `invalidatePricingCache()` after commit | 🔄 in progress (fable) |
 | I | Integration: remove the legacy admin section in `lib/api-client.ts:292-336` and the legacy `requireAdmin` in `lib/server/admin.ts` with its routes; add the `admin:seed-dev` script; full checks | ⏳ |
 | P4 | Phase 4: three independent reviews (security, regression, UX walk at 1280 px and 360 px, light and dark), fix every finding, write `03-report.md` | ⏳ |
@@ -177,3 +177,7 @@ Deploying earlier would leave the owner without a working admin UI. Migration `0
 - [ ] settings group label 'Narxlar' (catalog) vs prototype 'Narxlash' — keep catalog.
 - [ ] Shared step-up-aware CSV download: WP3 and WP4 each implement their own; add `adminDownload` to lib/admin-api/core.ts and switch all exports (WP3/WP4/WP10/WP2).
 - [ ] orders sort amount_desc has no index (fine now; 03-report).
+- [ ] AdminIdentity lacks the admin id (S18 reads it from getAdminSession for 'self'): add `adminId` to the shell identity.
+- [ ] Server: admins/:id/sessions/revoke on self is allowed (revokeSessionsOf has no assertNotSelf); plan §4.3 says own account goes via /admin/account → add 409 self.
+- [ ] `useLoad` lives in components/admin/system/shared and is imported by errors/audit/admins: move to components/admin/ui.
+- [ ] admin_audit_action_idx is plain btree; LIKE prefix uses it only under C collation (03-report; text_pattern_ops index would need a migration).
