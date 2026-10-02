@@ -61,6 +61,12 @@
 --   DELETE FROM schema_migrations WHERE name = '034_quota_merge.sql';
 SET LOCAL lock_timeout = '5s';
 
+-- Lock the affected user rows BEFORE the table lock on transactions: every app
+-- money path (chargeInTx, refundRatio, topUpInTx) locks the user row first and
+-- inserts into transactions last, so taking the locks in the same order avoids
+-- a deadlock with an old container still serving during the deploy window.
+SELECT 1 FROM users WHERE quota > 0 ORDER BY id FOR UPDATE;
+
 ALTER TABLE transactions DROP CONSTRAINT IF EXISTS transactions_kind_check;
 ALTER TABLE transactions ADD CONSTRAINT transactions_kind_check
   CHECK (kind IN ('charge', 'refund', 'topup', 'bonus', 'subscription', 'admin_credit', 'admin_debit', 'quota_merge'))

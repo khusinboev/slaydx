@@ -151,3 +151,13 @@ Then: integration (tests, tsc, lint, build) and mutation runs on the merge and t
 - Merged on `feat/remove-subscriptions`: WP0 (migration 034 + tests), WP4 (docs/scripts), WP2 (consumer UI).
 - Pending merge: WP1 server (`wip/subs-wp1-server`, complete, final PII/typecheck not re-run) and WP3 admin (`wip/subs-wp3-admin`, WIP, unverified — agent died on a dropped API connection).
 - Next: finish and verify WP3 on top of WP1, integrate, full regression, money review of 034 + refund fold, then the second deploy with owner approval.
+
+## 9. Pre-deploy review (2026-10-02) and post-deploy checks
+Independent money review: **GO** (034 per-user value preserved, ledger invariant holds, refund fold exact over 200 random cases, idempotent).
+- Fixed before deploy: 034 now locks the affected user rows before the `transactions` table lock (same order as the app), so it cannot deadlock with an old container serving during the switch-over.
+- Leftover quota after deploy (only possible if an old container refunds a quota-funded charge in the few seconds of the switch-over): no CLI ships; `chargeInTx` drains quota first and `wallet == Σledger` still holds. If the check below is non-zero, move it in the admin panel with two audited adjustments on that user: debit quota is not offered any more, so use SQL-free path = wait for it to be spent, or ask the lead to run the 034 merge statement for that user with reference `quota-merge:<id>:2`.
+Post-deploy checks (prod):
+1. `SELECT count(*), coalesce(sum(quota),0) FROM users WHERE quota > 0;` → `0 | 0`.
+2. `SELECT count(*) FROM transactions WHERE kind = 'quota_merge';` → 8; `SELECT count(*) FROM admin_audit_log WHERE action = 'users.wallet.quota_merge';` → 8.
+3. Σ balance rose by exactly 2 700 000 versus the pre-deploy backup.
+4. `/admin/finance` reconciliation: `wallet_ledger_mismatch` = 0.
