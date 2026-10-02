@@ -4,7 +4,7 @@ import { useCallback } from "react";
 import Link from "next/link";
 import { getAuditEntry, type AuditEntry } from "@/lib/admin-api/audit";
 import { fmtDateTime } from "@/lib/admin-format";
-import { Badge, CopyButton, Drawer, ErrorState, Forbidden, JsonView, KeyValueList, Skeleton } from "@/components/admin/ui";
+import { Badge, Button, CopyButton, Drawer, ErrorState, Forbidden, JsonView, KeyValueList, Skeleton } from "@/components/admin/ui";
 import { roleLabel } from "@/components/admin/shell";
 import { useLoad } from "@/components/admin/system/shared";
 import { cn } from "@/lib/cn";
@@ -24,7 +24,16 @@ function stampWithSeconds(iso: string): string {
  * diff with the changed keys highlighted, and `meta` as text. Every value is a
  * React text node (JSON text), never HTML.
  */
-export function AuditDrawer({ id, onClose }: { id: string; onClose: () => void }) {
+export function AuditDrawer({
+  id,
+  onClose,
+  onFilter,
+}: {
+  id: string;
+  onClose: () => void;
+  /** "Show only this action / admin": a URL patch for the list's filters. */
+  onFilter: (patch: Record<string, string | null>) => void;
+}) {
   const load = useCallback((signal: AbortSignal) => getAuditEntry(id, { signal }), [id]);
   const [state, reload] = useLoad(load);
   const data = state.status === "ready" ? state.data : null;
@@ -35,6 +44,20 @@ export function AuditDrawer({ id, onClose }: { id: string; onClose: () => void }
       onClose={onClose}
       title="Audit yozuvi"
       description={data ? <span className="font-mono text-xs break-all">#{data.id} · {data.action}</span> : undefined}
+      footer={
+        data ? (
+          <>
+            <Button size="sm" onClick={() => onFilter({ action: data.action })}>
+              Shu amal bo&apos;yicha filtrlash
+            </Button>
+            {data.adminId ? (
+              <Button size="sm" onClick={() => onFilter({ adminId: data.adminId })}>
+                Shu admin bo&apos;yicha filtrlash
+              </Button>
+            ) : null}
+          </>
+        ) : undefined
+      }
     >
       {state.status === "loading" ? (
         <div aria-busy="true" aria-label="Yuklanmoqda" className="flex flex-col gap-3">

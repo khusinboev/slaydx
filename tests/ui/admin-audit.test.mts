@@ -217,12 +217,6 @@ test("filters live in the URL and the full filter set reaches the API", async ()
   fireEvent.change(screen.getByLabelText("Admin"), { target: { value: "2" } });
   assert.equal(calls.replace.at(-1), "/admin/audit?adminId=2");
 
-  // Clicking the action / admin in a row filters by it (and does not open the drawer).
-  fireEvent.click(within(rowOf(container, "9")).getByRole("button", { name: "users.block" }));
-  assert.equal(calls.replace.at(-1), "/admin/audit?action=users.block");
-  fireEvent.click(within(rowOf(container, "9")).getByRole("button", { name: /Admin Test/ }));
-  assert.equal(calls.replace.at(-1), "/admin/audit?adminId=2");
-
   fireEvent.click(screen.getByRole("button", { name: "Sana bo'yicha filtr" }));
   const range = new URL(calls.replace.at(-1)!, "http://localhost");
   assert.ok(range.searchParams.get("from")! < range.searchParams.get("to")!);
@@ -381,6 +375,34 @@ test("a row opens the drawer via ?id=; the drawer shows who/what, a highlighted 
 
   // The target link inside the drawer points at the user screen.
   assert.equal(dialog.querySelector('a[href="/admin/users/77"]')?.getAttribute("href"), "/admin/users/77");
+});
+
+test("drawer: the filter shortcuts narrow the list by this action / admin and close the drawer; a system row has no admin shortcut", async () => {
+  stubFetch(auditApi());
+  const view = renderAt("outcome=ok&id=9");
+  const dialog = await screen.findByRole("dialog", { name: "Audit yozuvi" });
+  await within(dialog).findByText("req-block-1");
+  fireEvent.click(within(dialog).getByRole("button", { name: "Shu amal bo'yicha filtrlash" }));
+  assert.equal(view.calls.replace.at(-1), "/admin/audit?outcome=ok&action=users.block", "keeps the other filters, drops ?id=");
+  fireEvent.click(within(dialog).getByRole("button", { name: "Shu admin bo'yicha filtrlash" }));
+  assert.equal(view.calls.replace.at(-1), "/admin/audit?outcome=ok&adminId=2");
+  cleanup();
+
+  stubFetch(auditApi({ entry: (id) => json(200, { entry: { ...ENTRY, id, adminId: null, adminName: null, adminUsername: null, actorRole: null } }) }));
+  renderAt("id=2");
+  const d2 = await screen.findByRole("dialog", { name: "Audit yozuvi" });
+  await within(d2).findByText("Tizim (CLI)");
+  assert.ok(within(d2).getByRole("button", { name: "Shu amal bo'yicha filtrlash" }));
+  assert.ok(!within(d2).queryByRole("button", { name: "Shu admin bo'yicha filtrlash" }));
+});
+
+test("rows are plain text: clicking the action or admin opens the drawer instead of filtering", async () => {
+  stubFetch(auditApi());
+  const { calls: nav, container } = renderAt("");
+  await waitFor(() => assert.ok(rowOf(container, "9")));
+  assert.ok(!within(rowOf(container, "9")).queryByRole("button"), "no buttons inside a row");
+  fireEvent.click(within(rowOf(container, "9")).getByText("users.block"));
+  assert.equal(nav.replace.at(-1), "/admin/audit?id=9");
 });
 
 test("drawer: a row without snapshots says so; a missing row shows the server message", async () => {

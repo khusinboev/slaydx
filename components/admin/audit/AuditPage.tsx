@@ -125,15 +125,10 @@ export function AuditPage() {
       className: "max-w-[12rem]",
       cell: (r) =>
         r.adminId ? (
-          <button
-            type="button"
-            title="Shu admin bo'yicha filtrlash"
-            onClick={() => update({ adminId: r.adminId })}
-            className="hover:bg-muted focus-visible:ring-ring -mx-1 flex max-w-full flex-col rounded px-1 text-left outline-none focus-visible:ring-2"
-          >
+          <div className="flex max-w-full flex-col">
             <span className="truncate">{r.adminName ?? `#${r.adminId}`}</span>
             {r.adminUsername ? <span className="text-muted-foreground truncate text-xs">@{r.adminUsername}</span> : null}
-          </button>
+          </div>
         ) : (
           <span className="text-muted-foreground">Tizim (CLI)</span>
         ),
@@ -143,18 +138,9 @@ export function AuditPage() {
       id: "action",
       header: "Amal",
       className: "whitespace-nowrap",
-      cell: (r) => (
-        <button
-          type="button"
-          title="Shu amal bo'yicha filtrlash"
-          onClick={() => update({ action: r.action })}
-          className="hover:bg-muted focus-visible:ring-ring -mx-1 rounded px-1 font-mono text-xs outline-none focus-visible:ring-2"
-        >
-          {r.action}
-        </button>
-      ),
+      cell: (r) => <span className="font-mono text-xs">{r.action}</span>,
     },
-    { id: "target", header: "Nishon", className: "max-w-[14rem]", cell: (r) => <TargetCell type={r.targetType} id={r.targetId} /> },
+    { id: "target", header: "Nishon", className: "min-w-[8rem] max-w-[14rem]", cell: (r) => <TargetCell type={r.targetType} id={r.targetId} /> },
     { id: "outcome", header: "Natija", cell: (r) => <OutcomeBadge outcome={r.outcome} /> },
     {
       id: "reason",
@@ -277,7 +263,15 @@ export function AuditPage() {
         </>
       )}
 
-      {openId ? <AuditDrawer key={openId} id={openId} onClose={() => update({ id: null })} /> : null}
+      {openId ? (
+        <AuditDrawer
+          key={openId}
+          id={openId}
+          onClose={() => update({ id: null })}
+          // A filter shortcut from the drawer closes it, so the narrowed list is what the admin sees next.
+          onFilter={(patch) => update({ ...patch, id: null })}
+        />
+      ) : null}
     </div>
   );
 }
