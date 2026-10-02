@@ -166,3 +166,16 @@ test("admin bandli: /uz/admin endi faqat /admin ga server yo'naltirishi", () => 
   assert.match(src, /redirect\(\s*["']\/admin["']\s*\)/);
   assert.ok(!/["']use client["']/.test(src), "yo'naltirish serverda bo'lishi kerak");
 });
+
+/*
+ * Integration (plan §12, A8): the legacy admin section of `lib/api-client.ts`
+ * is deleted. The consumer client must not carry admin calls or types; the
+ * panel talks to the server only through `lib/admin-api/*`.
+ */
+test("admin bandli: lib/api-client.ts admin funksiyalari va turlarisiz", () => {
+  const src = readFileSync(path.join(ROOT, "lib/api-client.ts"), "utf8");
+  for (const name of ["AdminUser", "fetchAdminUsers", "fetchAdminUser", "adjustAdminWallet", "setAdminBlocked"]) {
+    assert.ok(!new RegExp(`\\b${name}\\b`).test(src), `${name} lib/api-client.ts da qolgan`);
+  }
+  assert.ok(!/["'`]\/api\/admin\/users/.test(src), "lib/api-client.ts /api/admin/users ga murojaat qilmasligi kerak");
+});

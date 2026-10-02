@@ -421,8 +421,27 @@ test("revoke sessions: rank-limited, returns the count, audited; list shows live
 
   const list2 = await call(routes.admins, "GET", "/api/admin/admins", admin);
   assert.equal((list2.body.items as Array<{ id: string; activeSessions: number }>).find((i) => i.id === fin.adminId)!.activeSessions, 0);
-  // Owners may revoke owners (including another owner's sessions).
-  assert.equal((await revokeAll(owner, owner.adminId, { reason: REASON })).status, 200);
+  // Owners may revoke owners (another owner's sessions); their own go through /admin/account (409 self, next test).
+  const owner2 = await mkAdmin("owner");
+  assert.equal((await revokeAll(owner, owner2.adminId, { reason: REASON })).status, 200);
+  assert.equal((await revokeAll(owner, owner.adminId, { reason: REASON })).status, 409);
+});
+
+test("revoke sessions on yourself: 409 self (own sessions go via /admin/account), nothing revoked or audited", { skip }, async () => {
+  // An owner passes the rank check against owners, so only the self rule stops this.
+  const owner = await mkAdmin("owner");
+  const r = await revokeAll(owner, owner.adminId, { reason: REASON });
+  assert.equal(r.status, 409, JSON.stringify(r.body));
+  assert.equal(r.body.code, "self");
+  assert.equal(await liveSessions(owner.adminId), 1, "the own session is untouched");
+  assert.equal((await audits("admins.revoke_sessions", owner.adminId)).length, 0, "a refusal is not audited");
+  // Still signed in: the next request works.
+  assert.equal((await call(routes.meSessions, "GET", "/api/admin/me/sessions", owner)).status, 200);
+  // Another owner may revoke this owner's sessions.
+  const other = await mkAdmin("owner");
+  const ok = await revokeAll(other, owner.adminId, { reason: REASON });
+  assert.equal(ok.status, 200);
+  assert.deepEqual(ok.body, { revoked: 1 });
 });
 
 test("mutations require step-up: no fresh reauth → 401 reauth and nothing written", { skip }, async () => {

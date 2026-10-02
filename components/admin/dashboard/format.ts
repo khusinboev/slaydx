@@ -1,4 +1,4 @@
-import { fmtNumber, todayTashkent } from "@/lib/admin-format";
+import { fmtNumber, fmtUsd, todayTashkent } from "@/lib/admin-format";
 import { presetRange, validateRange, type DateRange } from "@/components/admin/ui/date-range";
 import type { KpiDelta } from "@/components/admin/ui/KpiTile";
 
@@ -67,6 +67,17 @@ export function compactNumber(n: number): string {
   if (abs >= 1_000_000) return `${fmtNumber(n / 1_000_000, { digits: 1 })} mln`;
   if (abs >= 1_000) return `${fmtNumber(n / 1_000, { digits: abs >= 10_000 ? 0 : 1 })} ming`;
   return fmtNumber(n, { digits: 2 });
+}
+
+/**
+ * USD for the AI-cost chart (axis ticks and the data table): cents from $1 up;
+ * below $1 up to 4 decimals with trailing zeros trimmed, so the 1-2-5 ticks of a
+ * few-cents series stay exact and distinct (`$0,005`, `$0,01`, `$0,015`).
+ */
+export function chartUsd(n: number): string {
+  if (!Number.isFinite(n) || Math.abs(n) >= 1) return fmtUsd(n, 2);
+  const body = fmtNumber(Math.abs(n), { digits: 4 });
+  return `${n < 0 && /[1-9]/.test(body) ? "-" : ""}$${body}`;
 }
 
 /** `2026-03-10` → `10.03` (chart axis). */

@@ -19,4 +19,5 @@ export {
   type AdminNavIcon,
   type AdminNavItem,
 } from "./nav-registry";
+export { PERMISSION_LABELS, permissionLabel } from "./permission-labels";
 export { ThemeToggle } from "./ThemeToggle";

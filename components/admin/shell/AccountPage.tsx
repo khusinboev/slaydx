@@ -23,6 +23,7 @@ import {
 import { useAdminIdentity } from "./admin-identity";
 import { CODE_INPUT_CLASS, FormError, LockoutNotice, authFailure } from "./auth-common";
 import { roleLabel } from "./nav-registry";
+import { permissionLabel } from "./permission-labels";
 import { RecoveryCodes } from "./RecoveryCodes";
 
 /** "Chrome · Windows" from a User-Agent; good enough to recognise one's own devices. */
@@ -190,8 +191,8 @@ export function AccountPage() {
         <CardBody>
           <ul aria-label="Ruxsatlar ro'yxati" className="flex flex-wrap gap-1.5">
             {permissions.map((p) => (
-              <li key={p} className="bg-muted rounded-full px-2.5 py-0.5 font-mono text-[12px]">
-                {p}
+              <li key={p} data-permission={p} className="bg-muted rounded-full px-2.5 py-0.5 text-[12px]">
+                {permissionLabel(p)}
               </li>
             ))}
           </ul>

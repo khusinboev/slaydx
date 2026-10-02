@@ -315,7 +315,7 @@ function renderAccount(router: AppRouterInstance) {
   return render(
     withRouter(
       h(AdminIdentityProvider, {
-        value: { role: "support", permissions: ["dashboard.view", "users.view", "self"], name: "Ali Valiyev", username: "ali" },
+        value: { adminId: "1", role: "support", permissions: ["dashboard.view", "users.view", "self"], name: "Ali Valiyev", username: "ali" },
         children: h(AccountPage),
       }),
       router,
@@ -333,6 +333,13 @@ test("AccountPage: rol, ruxsatlar va sessiyalar; joriy sessiya belgilangan, uni 
     within(perms)
       .getAllByRole("listitem")
       .map((li) => li.textContent),
+    ["Bosh sahifani ko'rish", "Foydalanuvchilarni ko'rish", "O'z hisobim: sessiyalar va tiklash kodlari"],
+    "Uzbek labels, never raw permission keys",
+  );
+  assert.deepEqual(
+    within(perms)
+      .getAllByRole("listitem")
+      .map((li) => li.getAttribute("data-permission")),
     ["dashboard.view", "users.view", "self"],
   );
   await waitFor(() => assert.ok(document.querySelector('[data-session="8"]')));

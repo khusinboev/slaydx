@@ -11,7 +11,7 @@ import { ApiError, request, type RequestOptions } from "../api-client";
  *    401 `reauth` -> step-up dialog + exactly ONE retry, 403 / 404 -> typed errors.
  *
  * Other admin modules (`users.ts`, `generations.ts`, ...) reach the network
- * only through `adminGet` / `adminSend` below.
+ * only through `adminGet` / `adminSend` / `adminDownload` below.
  */
 
 // Re-exported so admin modules and UI check `instanceof ApiError` against the same
@@ -259,6 +259,89 @@ async function finalize(e: unknown): Promise<unknown> {
 /** GET with query parameters. */
 export function adminGet<T>(path: string, params?: AdminParams, opts: AdminCallOptions = {}): Promise<T> {
   return call<T>({ method: "GET", path: `${path}${buildQuery(params)}`, body: undefined, opts });
+}
+
+/* ───────────────────────────── file downloads ───────────────────────────── */
+
+export type AdminDownloadOptions = AdminCallOptions & {
+  /** Saved name when the response carries no usable Content-Disposition filename. */
+  fallbackName: string;
+};
+
+/**
+ * Filename from Content-Disposition: RFC 5987 `filename*=UTF-8''…` first, then
+ * the quoted ASCII `filename="…"`. Path separators are dropped (the browser
+ * sanitizes too; this keeps the contract obvious).
+ */
+export function dispositionFilename(header: string | null): string | null {
+  if (!header) return null;
+  let name: string | null = null;
+  const star = /filename\*\s*=\s*UTF-8''([^;]+)/i.exec(header);
+  if (star) {
+    try {
+      name = decodeURIComponent(star[1]!.trim());
+    } catch {
+      name = null;
+    }
+  }
+  if (!name) name = /filename\s*=\s*"([^"]*)"/i.exec(header)?.[1] ?? /filename\s*=\s*([^;\s]+)/i.exec(header)?.[1] ?? null;
+  const clean = name?.replace(/[\\/]/g, "_").trim();
+  return clean ? clean : null;
+}
+
+/** Typed error from a non-2xx download response; the body is read as JSON `{error, code, …}` when it is one. */
+async function downloadError(res: Response): Promise<ApiError> {
+  let data: Record<string, unknown> = {};
+  try {
+    const parsed: unknown = await res.json();
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) data = parsed as Record<string, unknown>;
+  } catch {
+    data = {};
+  }
+  const message = typeof data.error === "string" && data.error ? data.error : `Faylni yuklab bo'lmadi (${res.status})`;
+  return classify(new ApiError(message, res.status, data)) as ApiError;
+}
+
+/** Hands the blob to the browser as a download through a short-lived object URL. */
+function saveBlob(blob: Blob, name: string): void {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  a.rel = "noopener";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // Revoke on the next tick: some browsers start the download asynchronously.
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+/**
+ * Downloads an admin file (CSV exports): fetch → blob → object-URL download.
+ * Same error contract as `adminGet`: 401 `reauth` runs the registered step-up
+ * handler and retries ONCE; 401 `admin_auth` fires the login redirect; any
+ * other non-2xx throws the typed error carrying the server's `{error}` text.
+ * An error response is never saved as the file. Resolves with the saved name.
+ */
+export async function adminDownload(path: string, params: AdminParams | undefined, opts: AdminDownloadOptions): Promise<string> {
+  const url = `${path}${buildQuery(params)}`;
+  const attempt = () => fetch(url, { method: "GET", credentials: "same-origin", signal: opts.signal });
+  let res = await attempt();
+  if (res.status === 401) {
+    const first = await downloadError(res.clone());
+    if (codeOf(first.data) === "reauth") {
+      if (!(await runStepUp())) throw new AdminReauthCancelledError(first.data);
+      res = await attempt();
+    }
+  }
+  if (!res.ok) {
+    const err = await downloadError(res);
+    if (err instanceof AdminAuthRequiredError) (authHandler ?? defaultAuthHandler)(currentPath());
+    throw err;
+  }
+  const name = dispositionFilename(res.headers.get("content-disposition")) ?? opts.fallbackName;
+  saveBlob(await res.blob(), name);
+  return name;
 }
 
 /** POST/PUT/PATCH/DELETE. `body` is sent as JSON (`undefined` sends no body). */

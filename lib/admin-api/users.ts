@@ -1,15 +1,9 @@
 "use client";
 
 import {
-  AdminAuthRequiredError,
-  AdminForbiddenError,
-  AdminNotFoundError,
-  AdminReauthCancelledError,
-  ApiError,
+  adminDownload,
   adminGet,
   adminSend,
-  buildQuery,
-  runStepUp,
   type AdminCallOptions,
   type AdminParams,
   type ListResult,
@@ -206,59 +200,7 @@ export function messageUser(id: string, text: string, opts?: AdminCallOptions): 
 
 /* ───────────────────────────── CSV download ───────────────────────────── */
 
-function filenameOf(res: Response, fallback: string): string {
-  const m = /filename="([^"]+)"/.exec(res.headers.get("content-disposition") ?? "");
-  return m?.[1] ?? fallback;
-}
-
-async function errorOf(res: Response): Promise<ApiError> {
-  let data: Record<string, unknown> = {};
-  try {
-    data = (await res.json()) as Record<string, unknown>;
-  } catch {
-    data = {};
-  }
-  const message = typeof data.error === "string" && data.error ? data.error : `Xatolik (${res.status})`;
-  if (res.status === 403) return new AdminForbiddenError(message, data);
-  if (res.status === 404) return new AdminNotFoundError(message, data);
-  if (res.status === 401 && data.code === "admin_auth") return new AdminAuthRequiredError(message, data);
-  return new ApiError(message, res.status, data);
-}
-
-function save(blob: Blob, name: string): void {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = name;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  // Revoke on the next tick: some browsers start the download asynchronously.
-  setTimeout(() => URL.revokeObjectURL(url), 0);
-}
-
-/**
- * GET /api/admin/users/export (users.export, step-up). Fetched as a blob so a
- * 401 `reauth` opens the step-up dialog and retries once (same contract as
- * `adminGet`), and an error is never saved as the file.
- */
+/** GET /api/admin/users/export (users.export, step-up) through the shared `adminDownload`. */
 export async function downloadUsersCsv(params: UserListParams, signal?: AbortSignal): Promise<void> {
-  const url = `/api/admin/users/export${buildQuery({ ...userQuery(params), cursor: undefined, limit: undefined })}`;
-  const attempt = () => fetch(url, { credentials: "same-origin", signal });
-  let res = await attempt();
-  if (res.status === 401) {
-    const err = await errorOf(res.clone());
-    if (err.data.code === "reauth") {
-      if (!(await runStepUp())) throw new AdminReauthCancelledError(err.data);
-      res = await attempt();
-    }
-  }
-  if (!res.ok) {
-    const err = await errorOf(res);
-    if (err instanceof AdminAuthRequiredError && typeof location !== "undefined" && !location.pathname.startsWith("/admin/login")) {
-      location.assign(`/admin/login?next=${encodeURIComponent(`${location.pathname}${location.search}`)}`);
-    }
-    throw err;
-  }
-  save(await res.blob(), filenameOf(res, "foydalanuvchilar.csv"));
+  await adminDownload("/api/admin/users/export", { ...userQuery(params), cursor: undefined, limit: undefined }, { signal, fallbackName: "foydalanuvchilar.csv" });
 }

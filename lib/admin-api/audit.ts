@@ -1,11 +1,8 @@
 "use client";
 
-import { getAdminSession } from "./auth";
 import {
-  AdminReauthCancelledError,
+  adminDownload,
   adminGet,
-  buildQuery,
-  runStepUp,
   type AdminCallOptions,
   type AdminParams,
   type ListResult,
@@ -73,40 +70,11 @@ export async function getAuditEntry(id: string, opts?: AdminCallOptions): Promis
   return res.entry;
 }
 
-export function auditExportUrl(q: AuditFilterQuery): string {
-  return `/api/admin/audit/export${buildQuery({ ...q } as AdminParams)}`;
-}
-
-/** Re-confirm the TOTP when the step-up window ends within this margin (a long export must not cross it). */
-const REAUTH_MARGIN_MS = 30_000;
-
 /**
- * Starts the CSV download. `audit.export` needs a fresh step-up, and a browser
- * download cannot run the 401 → dialog → retry dance of `core.ts`, so the
- * window is checked first and the step-up dialog opened when needed. The file
- * itself is then fetched by the browser (streamed to disk). `navigate` is
- * injectable for tests.
+ * GET /api/admin/audit/export (audit.export, step-up) through the shared
+ * `adminDownload`: a 401 `reauth` opens the step-up dialog and retries once,
+ * and an error response is never saved as the file.
  */
-export async function downloadAuditCsv(
-  q: AuditFilterQuery,
-  opts: AdminCallOptions & { navigate?: (url: string) => void } = {},
-): Promise<void> {
-  const { navigate, ...call } = opts;
-  const { session } = await getAdminSession(call);
-  const until = session?.reauthUntil ? Date.parse(session.reauthUntil) : Number.NaN;
-  if (!Number.isFinite(until) || until - Date.now() < REAUTH_MARGIN_MS) {
-    if (!(await runStepUp())) throw new AdminReauthCancelledError();
-  }
-  const url = auditExportUrl(q);
-  if (navigate) {
-    navigate(url);
-    return;
-  }
-  const a = document.createElement("a");
-  a.href = url;
-  a.rel = "noopener";
-  a.download = "";
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
+export async function downloadAuditCsv(q: AuditFilterQuery, opts: AdminCallOptions = {}): Promise<void> {
+  await adminDownload("/api/admin/audit/export", { ...q } as AdminParams, { ...opts, fallbackName: "audit.csv" });
 }

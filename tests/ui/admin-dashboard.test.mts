@@ -9,8 +9,8 @@ import { PathnameContext, SearchParamsContext } from "next/dist/shared/lib/hooks
 import type * as IdentityModule from "../../components/admin/shell/admin-identity.tsx";
 import { Dashboard } from "../../components/admin/dashboard/Dashboard.tsx";
 import { LIVE_REFRESH_MS, LiveStrip } from "../../components/admin/dashboard/LiveStrip.tsx";
-import { compactNumber, dayLabel, isDefaultRange, percentDelta, pointsDelta, rangeFromParams } from "../../components/admin/dashboard/format.ts";
-import { todayTashkent, addDaysIso } from "../../lib/admin-format.ts";
+import { chartUsd, compactNumber, dayLabel, isDefaultRange, percentDelta, pointsDelta, rangeFromParams } from "../../components/admin/dashboard/format.ts";
+import { fmtUsd, todayTashkent, addDaysIso } from "../../lib/admin-format.ts";
 
 /**
  * Dashboard S3 (docs/admin/02-plan.md §7.1, §7.0 states): KPI tiles with
@@ -80,7 +80,7 @@ function renderDashboard(opts: { search?: string; permissions?: string[] } = {})
         h(
           SearchParamsContext.Provider,
           { value: new URLSearchParams(search) },
-          h(AdminIdentityProvider, { value: { role: "viewer", permissions: opts.permissions ?? VIEWER, name: "Ali", username: null }, children: node }),
+          h(AdminIdentityProvider, { value: { adminId: "1", role: "viewer", permissions: opts.permissions ?? VIEWER, name: "Ali", username: null }, children: node }),
         ),
       ),
     );
@@ -186,6 +186,19 @@ test("rangeFromParams / isDefaultRange / compactNumber / dayLabel", () => {
   assert.equal(dayLabel("2026-03-10"), "10.03");
 });
 
+test("chartUsd: cents from $1, exact trimmed sub-dollar ticks below", () => {
+  assert.equal(chartUsd(0), "$0");
+  assert.equal(chartUsd(0.005), "$0,005");
+  assert.equal(chartUsd(0.01), "$0,01");
+  assert.equal(chartUsd(0.015), "$0,015");
+  assert.equal(chartUsd(0.0123), "$0,0123");
+  assert.equal(chartUsd(0.00004), "$0", "below the 4th decimal rounds to zero, never -0 or exponent");
+  assert.equal(chartUsd(0.5), "$0,5");
+  assert.equal(chartUsd(1), "$1,00");
+  assert.equal(chartUsd(1234.5), fmtUsd(1234.5, 2), "from $1 up: the house USD format with cents");
+  assert.match(chartUsd(1234.5), /^\$1\D234,50$/);
+});
+
 // ───────────────────────────── screen states
 
 test("loading: KPI and table skeletons while requests are pending", () => {
@@ -232,6 +245,30 @@ test("ready: tiles, deltas, coverage hint, charts, tools table and live strip; d
   await waitFor(() => assert.ok(within(live).getByText("navbatda")));
   assert.ok(within(live).getByText("48 s"));
   assert.ok(within(live).getByText("worker jarayon javob bermayapti"));
+});
+
+test("AI cost chart plots dollars directly: a few-cents series keeps its shape; ticks and table are in $", async () => {
+  const aiPoints = [
+    { day: "2026-03-09", values: { usd: 0.0123, records: 3 } },
+    { day: "2026-03-10", values: { usd: 0.004, records: 1 } },
+  ];
+  stubFetch(
+    happy({
+      series: (url) =>
+        url.searchParams.get("metric") === "ai_cost"
+          ? json(200, { metric: "ai_cost", range: { from: "2026-03-09", to: "2026-03-10", days: 2 }, points: aiPoints })
+          : json(200, seriesBody(url)),
+    }),
+  );
+  renderDashboard();
+  const svg = await waitFor(() => screen.getByRole("img", { name: "Kunlik AI xarajat, dollar" }));
+  const texts = [...svg.querySelectorAll("text")].map((t) => t.textContent ?? "");
+  for (const tick of ["$0", "$0,005", "$0,01", "$0,015"]) assert.ok(texts.includes(tick), `tick ${tick} in ${JSON.stringify(texts)}`);
+  const ys = (svg.querySelector("polyline")?.getAttribute("points") ?? "").split(" ").map((xy) => Number(xy.split(",")[1]));
+  assert.equal(ys.length, 2);
+  assert.ok(ys[0]! < ys[1]! - 20, `0.0123 is drawn well above 0.004 (y ${ys.join(" / ")})`);
+  const cells = [...(svg.closest("figure")?.querySelectorAll("td") ?? [])].map((td) => td.textContent);
+  assert.ok(cells.includes("$0,0123") && cells.includes("$0,004"), `data table in dollars: ${JSON.stringify(cells)}`);
 });
 
 test("a role without ai.view sees every number but no link to the AI page", async () => {

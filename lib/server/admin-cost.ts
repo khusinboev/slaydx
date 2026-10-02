@@ -7,7 +7,8 @@ import { getSetting } from "./settings";
  * The ONE canonical definition of AI spend for the admin panel
  * (docs/admin/02-plan.md §6.3 `aiCostUsd`/`aiCoverage`, §6.7, §17.3–17.4).
  * The dashboard, the AI-cost page and the pricing module all build on
- * `spendRowsSql`, so their numbers always agree.
+ * `spendRowsSql`, and per-job figures (generations list and detail) on
+ * `spendForJobs`; both come from one rule, so their numbers always agree.
  *
  * The spend row set over a Tashkent date range is:
  *   - every `ai_usage` row with `at` in range (completed, failed and abandoned
@@ -162,10 +163,20 @@ export function spendRowsSql(range: SpendRange, firstParam = 1): SpendRowsSql {
   if (!Number.isInteger(firstParam) || firstParam < 1 || firstParam > 60_000) throw new Error("admin-cost: invalid firstParam");
   const from = `$${firstParam}::timestamptz`;
   const to = `$${firstParam + 1}::timestamptz`;
-  const sql = `SELECT u.at, u.source, u.outcome, u.generation_id, u.user_id, u.tool_id,
+  const sql = canonicalRowsSql(`u.at >= ${from} AND u.at < ${to}`, `g.finished_at >= ${from} AND g.finished_at < ${to}`);
+  return { sql, params: [range.fromTs, range.toTsExclusive], nextParam: firstParam + 2 };
+}
+
+/**
+ * THE rule of the module comment, with one constant filter per branch: `u` is
+ * `ai_usage`, `g` the legacy `generations` row. Both public forms (by range,
+ * by job ids) are built here, so they can never disagree on what counts.
+ */
+function canonicalRowsSql(usageFilter: string, legacyFilter: string): string {
+  return `SELECT u.at, u.source, u.outcome, u.generation_id, u.user_id, u.tool_id,
          u.calls::bigint AS calls, u.input_tokens, u.output_tokens, u.usd::numeric AS usd, u.parts
     FROM ai_usage u
-   WHERE u.at >= ${from} AND u.at < ${to}
+   WHERE ${usageFilter}
   UNION ALL
   SELECT g.finished_at AS at, 'job'::text AS source, 'completed'::text AS outcome, g.id AS generation_id,
          g.user_id, g.tool_id,
@@ -177,9 +188,8 @@ export function spendRowsSql(range: SpendRange, firstParam = 1): SpendRowsSql {
     FROM generations g
    WHERE g.status = 'COMPLETED'
      AND jsonb_typeof(g.cost_json) = 'object'
-     AND g.finished_at >= ${from} AND g.finished_at < ${to}
+     AND ${legacyFilter}
      AND NOT EXISTS (SELECT 1 FROM ai_usage x WHERE x.generation_id = g.id AND x.outcome = 'completed')`;
-  return { sql, params: [range.fromTs, range.toTsExclusive], nextParam: firstParam + 2 };
 }
 
 /** One part's JSON element `p`: is it recorded without a known price? */
@@ -254,6 +264,60 @@ export async function spendTotals(db: Queryable, range: SpendRange): Promise<Spe
     spend.params,
   );
   return toTotals(res.rows[0]);
+}
+
+/** One canonical spend row of a job (an `ai_usage` outcome, or the legacy `cost_json`). */
+export type JobSpendRow = {
+  at: string;
+  outcome: string;
+  usd: number;
+  /** `CostPart[]` as stored (legacy CostMeter costs get their one attributed LLM part). */
+  parts: unknown;
+};
+
+/** A job's canonical spend over all time: totals plus its rows, oldest first. */
+export type JobSpend = SpendTotals & { rows: JobSpendRow[] };
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** Callers pass a page of jobs (≤ 100) or one job; a larger set is a bug, not a request. */
+const JOB_IDS_MAX = 1_000;
+
+/**
+ * Canonical spend of specific jobs, not range-limited (a job's figure never
+ * depends on the date filter): the same rule as `spendRowsSql`, filtered by
+ * generation id, so it uses `ai_usage_job_once_idx` and the generations
+ * primary key instead of scanning all spend. For any set of jobs whose spend
+ * rows all fall inside a range, the per-job sums add up to `spendTotals` of
+ * that range minus its free calls. Jobs with no spend rows are absent.
+ */
+export async function spendForJobs(db: Queryable, ids: readonly string[]): Promise<Map<string, JobSpend>> {
+  const out = new Map<string, JobSpend>();
+  if (ids.length === 0) return out;
+  if (ids.length > JOB_IDS_MAX || !ids.every((id) => typeof id === "string" && UUID_RE.test(id))) {
+    throw new Error("admin-cost: invalid job ids");
+  }
+  const sql = canonicalRowsSql("u.generation_id = ANY($1::uuid[])", "g.id = ANY($1::uuid[])");
+  const res = await db.query<Omit<SumRow, "records"> & { id: string; at: Date | string; outcome: string; job_usd: string; parts: unknown }>(
+    `SELECT s.generation_id::text AS id, s.at, s.outcome, s.calls, s.input_tokens, s.output_tokens, s.usd::text AS usd, s.parts,
+            sum(s.usd) OVER (PARTITION BY s.generation_id)::text AS job_usd
+       FROM (${sql}) s
+      ORDER BY s.generation_id, s.at`,
+    [ids],
+  );
+  for (const r of res.rows) {
+    let job = out.get(r.id);
+    if (!job) {
+      // The job total is summed in SQL (exact numeric), then rounded once, like `spendTotals`.
+      job = { records: 0, calls: 0, inputTokens: 0, outputTokens: 0, usd: usd6(r.job_usd), rows: [] };
+      out.set(r.id, job);
+    }
+    job.records += 1;
+    job.calls += n(r.calls);
+    job.inputTokens += n(r.input_tokens);
+    job.outputTokens += n(r.output_tokens);
+    job.rows.push({ at: new Date(r.at).toISOString(), outcome: String(r.outcome), usd: usd6(r.usd), parts: r.parts });
+  }
+  return out;
 }
 
 /** Per-key aggregates over exploded parts (`p`); the same list serves every part grouping. */

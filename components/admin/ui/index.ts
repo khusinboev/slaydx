@@ -31,6 +31,7 @@ export { Skeleton } from "./Skeleton";
 export { STEP_UP_CODE_LENGTH, StepUpDialog, StepUpProvider, type StepUpDialogProps } from "./StepUpDialog";
 export { TabPanel, Tabs, type TabItem } from "./Tabs";
 export { Toaster, toast, useToastStore, type ToastOptions, type ToastTone } from "./Toaster";
+export { useLoad, type LoadState } from "./useLoad";
 export { LineChart, type LinePoint } from "./charts/LineChart";
 export { Sparkline } from "./charts/Sparkline";
 export { StackedBarChart, type BarDatum, type BarSeries } from "./charts/StackedBarChart";

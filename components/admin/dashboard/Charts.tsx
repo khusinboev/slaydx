@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { getSeries, type RangeParams, type Series, type SeriesMetric } from "@/lib/admin-api/metrics";
 import { fmtNumber, fmtSoum, fmtUsd } from "@/lib/admin-format";
 import { Card, CardBody, CardHeader, ErrorState, Forbidden, LineChart, Skeleton, StackedBarChart } from "@/components/admin/ui";
-import { compactNumber, dayLabel } from "./format";
+import { chartUsd, compactNumber, dayLabel } from "./format";
 import { useLoad, type LoadState } from "./useLoad";
 
 function useSeries<M extends SeriesMetric>(metric: M, range: RangeParams): [LoadState<Series<M>>, () => void] {
@@ -110,10 +110,8 @@ export function Charts({ range }: { range: RangeParams }) {
             title="Kunlik AI xarajat, dollar"
             valueLabel="AI xarajat, $"
             color={5}
-            // Plotted in cents: LineChart's axis never goes below 1, which would flatten daily
-            // costs of a few cents; the labels convert back to dollars.
-            formatValue={(cents) => fmtUsd(cents / 100)}
-            points={s.points.map((p) => ({ label: dayLabel(p.day), value: Math.round(p.values.usd * 1_000_000) / 10_000 }))}
+            formatValue={chartUsd}
+            points={s.points.map((p) => ({ label: dayLabel(p.day), value: p.values.usd }))}
           />
         )}
       </ChartCard>

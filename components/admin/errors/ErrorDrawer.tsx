@@ -5,8 +5,7 @@ import Link from "next/link";
 import { CircleCheck } from "lucide-react";
 import { getError, resolveError, type ErrorDetail } from "@/lib/admin-api/system";
 import { fmtDateTime, fmtNumber } from "@/lib/admin-format";
-import { Badge, Button, ConfirmDialog, CopyButton, Drawer, ErrorState, Forbidden, KeyValueList, Skeleton, toast } from "@/components/admin/ui";
-import { useLoad } from "@/components/admin/system/shared";
+import { Badge, Button, ConfirmDialog, CopyButton, Drawer, ErrorState, Forbidden, KeyValueList, Skeleton, toast, useLoad } from "@/components/admin/ui";
 import { UUID_RE } from "./shared";
 
 /**

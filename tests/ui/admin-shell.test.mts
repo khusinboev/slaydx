@@ -9,6 +9,7 @@ import { PathnameContext } from "next/dist/shared/lib/hooks-client-context.share
 import type { Permission, Role } from "../../lib/server/admin-rbac.ts";
 import type * as CoreModule from "../../lib/admin-api/core.ts";
 import type * as StoreModule from "../../lib/store.ts";
+import type * as IdentityModule from "../../components/admin/shell/admin-identity.tsx";
 import { AdminShell } from "../../components/admin/shell/AdminShell.tsx";
 import { AdminLoginRedirect } from "../../components/admin/shell/AdminLoginRedirect.tsx";
 import { ADMIN_NAV, visibleNav } from "../../components/admin/shell/nav-registry.ts";
@@ -61,6 +62,7 @@ function renderShell(role: Role, pathname = "/admin/users/42") {
   const utils = render(
     withRouter(
       h(AdminShell, {
+        adminId: "7",
         role,
         permissions: ROLE_FIXTURE[role],
         name: "Ali Valiyev",
@@ -145,6 +147,25 @@ test("AdminShell: sahifa mazmuni, ism va rol ko'rsatiladi", () => {
   assert.ok(screen.getAllByText("Ali Valiyev").length >= 1);
   assert.ok(screen.getAllByText(/@ali · Moliya/).length >= 1);
   assert.ok(document.getElementById("main"), "skip-link nishoni #main bor");
+});
+
+test("AdminShell: sahifalarga adminId bilan identity beradi (useAdminIdentity)", () => {
+  // Shell and hook from the same (require) module graph, so the context instance matches.
+  const { AdminShell: Shell } = req("../../components/admin/shell/AdminShell.tsx") as { AdminShell: typeof AdminShell };
+  const { useAdminIdentity } = req("../../components/admin/shell/admin-identity.tsx") as typeof IdentityModule;
+  function Probe() {
+    const id = useAdminIdentity();
+    return h("p", null, `id:${id.adminId}|${id.role}|${id.name}`);
+  }
+  const { router } = makeRouter();
+  render(
+    withRouter(
+      h(Shell, { adminId: "7", role: "support", permissions: ROLE_FIXTURE.support, name: "Ali Valiyev", username: null, children: h(Probe) }),
+      router,
+      "/admin",
+    ),
+  );
+  assert.ok(screen.getByText("id:7|support|Ali Valiyev"));
 });
 
 /* ───────────────────────────── drawer ───────────────────────────── */

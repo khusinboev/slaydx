@@ -22,10 +22,10 @@ import {
   SelectFilter,
   presetRange,
   toast,
+  useLoad,
   type Column,
 } from "@/components/admin/ui";
 import { useCan } from "@/components/admin/shell";
-import { useLoad } from "@/components/admin/system/shared";
 import { ErrorDrawer } from "./ErrorDrawer";
 import {
   LEVEL_OPTIONS,

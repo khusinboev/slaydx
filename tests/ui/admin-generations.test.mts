@@ -31,12 +31,16 @@ const { useToastStore } = req("../../components/admin/ui/Toaster.tsx") as typeof
 
 const realFetch = globalThis.fetch;
 const realClick = window.HTMLAnchorElement.prototype.click;
+const realCreateObjectURL = URL.createObjectURL;
+const realRevokeObjectURL = URL.revokeObjectURL;
 const realReplaceState = window.history.replaceState;
 afterEach(() => {
   window.history.replaceState = realReplaceState;
   cleanup();
   globalThis.fetch = realFetch;
   window.HTMLAnchorElement.prototype.click = realClick;
+  URL.createObjectURL = realCreateObjectURL;
+  URL.revokeObjectURL = realRevokeObjectURL;
   core.setStepUpHandler(null);
   useToastStore.getState().clear();
 });
@@ -104,7 +108,7 @@ function mount(node: ReactNode, opts: { role?: Role; search?: string; pathname?:
         h(
           SearchParamsContext.Provider,
           { value: new URLSearchParams(opts.search ?? "") },
-          h(AdminIdentityProvider, { value: { role, permissions: PERMS[role], name: "Admin", username: null }, children: node }),
+          h(AdminIdentityProvider, { value: { adminId: "1", role, permissions: PERMS[role], name: "Admin", username: null }, children: node }),
         ),
       ),
     ),
@@ -268,46 +272,54 @@ test("a filter change drops the cursor: page one of the new filter set", async (
 
 /* ───────────────────────────── export ───────────────────────────── */
 
+/**
+ * Exports go through `adminDownload` (fetch → blob → object URL); jsdom has no
+ * `URL.createObjectURL`, so it is stubbed and the saved file names are recorded.
+ */
 function captureDownloads(): string[] {
-  const hrefs: string[] = [];
+  const saved: string[] = [];
+  URL.createObjectURL = () => "blob:fake";
+  URL.revokeObjectURL = () => {};
   window.HTMLAnchorElement.prototype.click = function (this: HTMLAnchorElement) {
-    hrefs.push(this.getAttribute("href") ?? "");
+    saved.push(this.download);
   };
-  return hrefs;
+  return saved;
 }
 
+const csv = (name: string) =>
+  new Response('\uFEFF"ID"\r\n', { status: 200, headers: { "content-type": "text/csv", "content-disposition": `attachment; filename="${name}"` } });
+const reauth = () => json(401, { error: "Bu amal uchun kodni qayta kiriting", code: "reauth" });
+
 test("export: fresh step-up downloads the CSV with the current filters", async () => {
-  const hrefs = captureDownloads();
-  const future = new Date(Date.now() + 5 * 60_000).toISOString();
-  stubFetch([
-    () => json(200, page([ITEM])),
-    (c) => (assert.equal(c.url, "/api/admin/session"), json(200, { admin: {}, session: { id: "1", expiresAt: future, idleExpiresAt: future, reauthUntil: future } })),
-  ]);
+  const saved = captureDownloads();
+  const calls = stubFetch([() => json(200, page([ITEM])), () => csv("generatsiyalar-2026-10-02.csv")]);
   mount(h(GenerationsTable, { tools: TOOLS }), { search: "status=FAILED&unrefunded=1" });
   await screen.findByText("Iqtisodiyot asoslari", { selector: "tr span" });
   fireEvent.click(screen.getByRole("button", { name: "CSV eksport" }));
-  await waitFor(() => assert.equal(hrefs.length, 1));
-  assert.equal(hrefs[0], "/api/admin/generations/export?status=FAILED&unrefunded=1");
+  await waitFor(() => assert.equal(saved.length, 1));
+  assert.equal(saved[0], "generatsiyalar-2026-10-02.csv", "saved under the server's name");
+  assert.equal(calls[1]!.url, "/api/admin/generations/export?status=FAILED&unrefunded=1");
 });
 
-test("export: stale step-up opens the dialog first; cancelling downloads nothing", async () => {
-  const hrefs = captureDownloads();
+test("export: stale step-up (401 reauth) opens the dialog; cancelling downloads nothing, confirming retries once", async () => {
+  const saved = captureDownloads();
   let asked = 0;
   core.setStepUpHandler(async () => {
     asked += 1;
     return asked > 1;
   });
-  const stale = { admin: {}, session: { id: "1", expiresAt: "x", idleExpiresAt: "x", reauthUntil: null } };
-  stubFetch([() => json(200, page([ITEM])), () => json(200, stale), () => json(200, stale)]);
+  const calls = stubFetch([() => json(200, page([ITEM])), reauth, reauth, () => csv("generatsiyalar-2026-10-02.csv")]);
   mount(h(GenerationsTable, { tools: TOOLS }));
   await screen.findByText("Iqtisodiyot asoslari", { selector: "tr span" });
   fireEvent.click(screen.getByRole("button", { name: "CSV eksport" }));
   await waitFor(() => assert.equal(asked, 1));
   await waitFor(() => assert.equal((screen.getByRole("button", { name: "CSV eksport" }) as HTMLButtonElement).disabled, false));
-  assert.equal(hrefs.length, 0, "cancelled step-up: no download");
+  assert.equal(saved.length, 0, "cancelled step-up: no download");
   fireEvent.click(screen.getByRole("button", { name: "CSV eksport" }));
-  await waitFor(() => assert.equal(hrefs.length, 1));
-  assert.equal(hrefs[0], "/api/admin/generations/export");
+  await waitFor(() => assert.equal(saved.length, 1));
+  assert.equal(asked, 2);
+  assert.equal(calls.length, 4, "one export request per click plus exactly one retry");
+  assert.equal(calls[3]!.url, "/api/admin/generations/export");
 });
 
 test("export button is hidden without jobs.export", async () => {

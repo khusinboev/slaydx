@@ -1,15 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 
 /**
  * Static guard for the admin API (docs/admin/02-plan.md §4.4): every HTTP
  * method exported by every `app/api/admin/**\/route.ts` must be
  *   • `adminHandler("admin/…", { permission: "<literal that exists in admin-rbac>", … }, …)`, or
- *   • `adminAuthHandler("admin/…", …)` — only in the auth/session/enroll routes of §6.1, or
- *   • the LEGACY `handler(…)` + `await requireAdmin(req)` — only in the two files
- *     listed in LEGACY_REQUIRE_ADMIN until the integration step rewrites them.
+ *   • `adminAuthHandler("admin/…", …)` — only in the auth/session/enroll routes of §6.1.
+ * The legacy `handler(…)` + `requireAdmin(req)` guard was deleted at integration.
  * Anything else (a bare `handler`, a plain function, a re-export, a computed
  * permission) fails: a new route cannot ship without the guard.
  */
@@ -22,16 +21,6 @@ const KNOWN = new Set<string>(PERMISSIONS);
 
 /** §6.1 routes that run before an admin session exists. */
 const AUTH_ROUTES = new Set(["session/route.ts", "auth/login/route.ts", "auth/recovery/route.ts", "auth/enroll/route.ts"]);
-
-/**
- * LEGACY allowance (explicit, temporary): files that may still use the old
- * `handler` + `requireAdmin` guard. WP2 rewrote the last two
- * (`users/route.ts`, `users/[id]/route.ts`) on `adminHandler`, so it is empty;
- * the integration step deletes `requireAdmin` and this mechanism.
- */
-const LEGACY_REQUIRE_ADMIN = new Set<string>();
-
-const METHODS = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"] as const;
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const name of readdirSync(dir)) {
@@ -52,6 +41,18 @@ function methodSources(src: string): Map<string, string> {
     const nextExport = src.slice(from + 1).search(/^export /m);
     const to = nextExport >= 0 ? from + 1 + nextExport : src.length;
     out.set(starts[i]!.method, src.slice(from, to));
+  }
+  return out;
+}
+
+/** Every .ts/.tsx/.mts source under `dir` (node_modules and .next excluded). */
+function walkAll(dir: string, out: string[] = []): string[] {
+  if (!existsSync(dir)) return out;
+  for (const name of readdirSync(dir)) {
+    if (name === "node_modules" || name === ".next") continue;
+    const p = join(dir, name);
+    if (statSync(p).isDirectory()) walkAll(p, out);
+    else if (/\.(ts|tsx|mts)$/.test(name)) out.push(p);
   }
   return out;
 }
@@ -102,7 +103,6 @@ test("admin route guard: every exported method is guarded by adminHandler / admi
       const where = `${rel} ${method}`;
       const admin = body.match(/^export const \w+\s*=\s*adminHandler(?:<[^>]*>)?\(\s*"([^"]+)"\s*,\s*\{([^}]*)\}/);
       const auth = body.match(/^export const \w+\s*=\s*adminAuthHandler(?:<[^>]*>)?\(\s*"([^"]+)"\s*,/);
-      const legacy = body.match(/^export const \w+\s*=\s*handler\(\s*"([^"]+)"/);
       if (admin) {
         const [, scope, opts] = admin;
         if (!scope!.startsWith("admin/")) problems.push(`${where}: scope "${scope}" must start with "admin/"`);
@@ -117,8 +117,6 @@ test("admin route guard: every exported method is guarded by adminHandler / admi
         if (method !== "GET" && method !== "HEAD" && !/^export const \w+\s*=\s*adminAuthHandler\([^,]+,\s*\{[^}]*mutation:\s*true/.test(body)) {
           problems.push(`${where}: mutating auth method without mutation: true`);
         }
-      } else if (legacy && LEGACY_REQUIRE_ADMIN.has(rel)) {
-        if (!/await requireAdmin\(req\)/.test(body)) problems.push(`${where}: legacy handler without requireAdmin(req)`);
       } else {
         problems.push(`${where}: not wrapped in adminHandler/adminAuthHandler`);
       }
@@ -127,14 +125,19 @@ test("admin route guard: every exported method is guarded by adminHandler / admi
   assert.deepEqual(problems, []);
 });
 
-test("admin route guard: the legacy allowance lists only files that exist", () => {
-  const rels = new Set(files.map((f) => f.rel));
-  for (const rel of LEGACY_REQUIRE_ADMIN) {
-    // When WP2/integration rewrites or deletes a legacy file, drop it from the list too.
-    if (rels.has(rel)) {
-      const src = readFileSync(join(ADMIN_API, rel), "utf8");
-      assert.ok(/requireAdmin/.test(src) || /adminHandler/.test(src), `${rel}: neither guard present`);
+test("admin route guard: the legacy requireAdmin guard is gone for good", () => {
+  // Integration deleted lib/server/admin.ts (the phone-era guard); nothing may
+  // bring it back or keep importing it. isAdminPhone stays in admin-phones.ts
+  // for the bot's /admin reply only (plan §3.1).
+  assert.ok(!existsSync(join(ROOT, "lib/server/admin.ts")), "lib/server/admin.ts must not exist");
+  const offenders: string[] = [];
+  for (const top of ["app", "lib", "components", "scripts"]) {
+    for (const abs of walkAll(join(ROOT, top))) {
+      const src = readFileSync(abs, "utf8");
+      if (/\brequireAdmin\s*\(/.test(src) || /from\s+["'](?:@\/lib\/server\/admin|\.\/admin|\.\.\/server\/admin)["']/.test(src)) {
+        offenders.push(relative(ROOT, abs));
+      }
     }
   }
-  assert.ok(METHODS.length === 7);
+  assert.deepEqual(offenders, []);
 });

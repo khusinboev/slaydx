@@ -59,7 +59,7 @@ const DISABLED = acct({ id: "6", name: "O'chgan Kuzatuvchi", username: "viewer6"
 const ALL = [OWNER_ME, OWNER_2, ADMIN_A, SUPPORT, PENDING, DISABLED];
 
 /** In-memory API: the list changes with the mutations, like the real one. */
-function adminsApi(opts: { items?: AdminAccountItem[]; ownId?: string | null; sessionFails?: boolean; post?: (c: Call) => Response | null } = {}) {
+function adminsApi(opts: { items?: AdminAccountItem[]; post?: (c: Call) => Response | null } = {}) {
   const items = (opts.items ?? ALL).map((i) => ({ ...i }));
   const calls: Call[] = [];
   globalThis.fetch = (async (input: string, init: RequestInit = {}) => {
@@ -67,10 +67,6 @@ function adminsApi(opts: { items?: AdminAccountItem[]; ownId?: string | null; se
     const call: Call = { url, method: init.method ?? "GET", body: typeof init.body === "string" ? (JSON.parse(init.body) as Record<string, unknown>) : undefined };
     calls.push(call);
     const path = url.pathname;
-    if (path === "/api/admin/session") {
-      if (opts.sessionFails) return json(500, { error: "Ichki xatolik" });
-      return json(200, { admin: { id: opts.ownId ?? "1" }, session: null });
-    }
     if (call.method !== "GET" && opts.post) {
       const r = opts.post(call);
       if (r) return r;
@@ -98,19 +94,20 @@ function adminsApi(opts: { items?: AdminAccountItem[]; ownId?: string | null; se
   return { calls, items };
 }
 
-const IDENTITY = (role: string, permissions: string[]) => ({ role, permissions, name: "Test", username: null });
+/** The own admin id comes from the shell identity (server-resolved), never from an extra request. */
+const IDENTITY = (role: string, permissions: string[], adminId: string) => ({ adminId, role, permissions, name: "Test", username: null });
 const VIEW = ["admins.view"];
 const MANAGE = ["admins.view", "admins.manage"];
 
-function renderPage(role = "owner", permissions: string[] = MANAGE) {
-  return render(h(AdminIdentityProvider, { value: IDENTITY(role, permissions), children: h(AdminsPage) }));
+function renderPage(role = "owner", permissions: string[] = MANAGE, adminId = "1") {
+  return render(h(AdminIdentityProvider, { value: IDENTITY(role, permissions, adminId), children: h(AdminsPage) }));
 }
 
 const rowOf = (container: HTMLElement, id: string) => container.querySelector(`tr[data-row-key="${id}"]`) as HTMLElement;
 async function waitRows(container: HTMLElement) {
   await waitFor(() => assert.ok(rowOf(container, "1")));
-  // The own id arrives with a second request; the "Siz" badge marks that it did.
-  await waitFor(() => assert.match(rowOf(container, "1").textContent ?? "", /Siz/));
+  // The own row (identity adminId "1") carries the "Siz" badge as soon as rows render.
+  assert.match(rowOf(container, "1").textContent ?? "", /Siz/);
 }
 
 /** Opens the manage modal of one row. */
@@ -163,7 +160,7 @@ test("loading skeleton, then name, @username, role, status, 2FA, last login and 
 
 test("error shows the message and requestId, retry loads; 403 renders Forbidden; empty explains how to bootstrap", async () => {
   let n = 0;
-  const api = adminsApi();
+  adminsApi();
   const inner = globalThis.fetch;
   globalThis.fetch = (async (input: string, init?: RequestInit) => {
     if (String(input) === "/api/admin/admins" && (init?.method ?? "GET") === "GET") {
@@ -178,7 +175,7 @@ test("error shows the message and requestId, retry loads; 403 renders Forbidden;
   assert.match(alert.textContent ?? "", /req-adm-4/);
   fireEvent.click(within(alert).getByRole("button", { name: "Qayta urinish" }));
   await waitFor(() => assert.ok(rowOf(container, "1")));
-  assert.ok(api.calls.length >= 2);
+  assert.equal(n, 2, "the failed list request plus exactly one retry");
   cleanup();
 
   globalThis.fetch = (async () => json(403, { error: "Bu amal uchun ruxsatingiz yo'q", code: "forbidden" })) as typeof fetch;
@@ -267,9 +264,10 @@ test("as owner: my own row is fully disabled with the reason; every other row, o
 });
 
 test("as admin (own id 2): owners, equal rank and myself are refused with the rank / self reason; lower roles are manageable", async () => {
-  adminsApi({ ownId: "2" });
-  const { container } = renderPage("admin");
+  const api = adminsApi();
+  const { container } = renderPage("admin", MANAGE, "2");
   await waitFor(() => assert.match(rowOf(container, "2")?.textContent ?? "", /Siz/));
+  assert.ok(!api.calls.some((c) => c.url.pathname === "/api/admin/session"), "the own id needs no session request");
 
   for (const id of ["1", "4"]) {
     const d = await manage(container, id);
@@ -293,9 +291,11 @@ test("as admin (own id 2): owners, equal rank and myself are refused with the ra
   assert.deepEqual(opts, ["finance", "moderator", "viewer"]);
 });
 
-test("a sole active owner whose identity could not be resolved is guarded against demotion and disabling", async () => {
-  adminsApi({ items: [OWNER_ME, SUPPORT], sessionFails: true });
-  const { container } = renderPage("owner");
+test("the sole active owner's row is guarded against demotion and disabling (last-owner rule, not the self rule)", async () => {
+  // The own id always comes from the shell identity now; viewing as an owner id
+  // that is not in the list isolates the last-active-owner guard from the self rule.
+  adminsApi({ items: [OWNER_ME, SUPPORT] });
+  const { container } = renderPage("owner", MANAGE, "99");
   await waitFor(() => assert.ok(rowOf(container, "1")));
   const d = await manage(container, "1");
   assert.equal(actionBtn(d, "Rolni o'zgartirish").disabled, true);
@@ -368,8 +368,8 @@ test("add admin by user ID sends userId (and no sendViaTelegram unless ticked)",
 });
 
 test("as admin the role picker offers only roles below admin", async () => {
-  adminsApi({ ownId: "2" });
-  const { container } = renderPage("admin");
+  adminsApi();
+  const { container } = renderPage("admin", MANAGE, "2");
   await waitFor(() => assert.ok(rowOf(container, "2")));
   const d = await openAdd();
   const roleSel = within(d).getByLabelText("Rol") as HTMLSelectElement;
