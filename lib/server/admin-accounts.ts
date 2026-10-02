@@ -874,6 +874,8 @@ export async function revokeSessionsOf(actor: AdminActor, targetId: string, rawR
   const reason = parseReason(rawReason);
   return adminTx(actor, async (client, audit) => {
     const t = await lockTarget(client, targetId);
+    // Own sessions go through /admin/account (plan §4.3), like role, status and 2FA.
+    assertNotSelf(actor, t);
     assertRank(actor, t.role);
     const revoked = await revokeAllAdminSessions(client, t.id, "admin_revoke");
     await audit({ action: "admins.revoke_sessions", targetType: "admin", targetId: t.id, reason, meta: { revoked } });

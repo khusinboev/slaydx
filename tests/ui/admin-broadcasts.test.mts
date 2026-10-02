@@ -113,7 +113,7 @@ function mount(node: ReactNode, opts: { role?: Role; search?: string } = {}) {
         h(
           SearchParamsContext.Provider,
           { value: new URLSearchParams(opts.search ?? "") },
-          h(AdminIdentityProvider, { value: { role, permissions: PERMS[role], name: "Admin", username: null }, children: node }),
+          h(AdminIdentityProvider, { value: { adminId: "1", role, permissions: PERMS[role], name: "Admin", username: null }, children: node }),
         ),
       ),
     ),

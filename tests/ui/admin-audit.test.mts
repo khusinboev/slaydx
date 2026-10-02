@@ -63,7 +63,7 @@ function renderAt(query: string, permissions: string[] = OWNER, role = "owner") 
     replace: (href: string) => void calls.replace.push(href),
   };
   const node: ReactNode = h(AdminIdentityProvider, {
-    value: { role, permissions, name: "Test", username: null },
+    value: { adminId: "1", role, permissions, name: "Test", username: null },
     children: h(AppRouterContext.Provider, { value: router }, h(PathnameContext.Provider, { value: "/admin/audit" }, h(SearchParamsContext.Provider, { value: new URLSearchParams(query) }, h(AuditPage)))),
   });
   return { ...render(node), calls };
@@ -270,7 +270,7 @@ test("changing a filter aborts the pending request", async () => {
   const router: AppRouterInstance = { back() {}, forward() {}, refresh() {}, prefetch() {}, push() {}, replace() {} };
   first.rerender(
     h(AdminIdentityProvider, {
-      value: { role: "owner", permissions: OWNER, name: "Test", username: null },
+      value: { adminId: "1", role: "owner", permissions: OWNER, name: "Test", username: null },
       children: h(AppRouterContext.Provider, { value: router }, h(PathnameContext.Provider, { value: "/admin/audit" }, h(SearchParamsContext.Provider, { value: new URLSearchParams("outcome=failed") }, h(AuditPage)))),
     }),
   );
@@ -304,7 +304,7 @@ test("paging passes the cursor; a filter change returns to the first page", asyn
   const router: AppRouterInstance = { back() {}, forward() {}, refresh() {}, prefetch() {}, push() {}, replace() {} };
   view.rerender(
     h(AdminIdentityProvider, {
-      value: { role: "owner", permissions: OWNER, name: "Test", username: null },
+      value: { adminId: "1", role: "owner", permissions: OWNER, name: "Test", username: null },
       children: h(AppRouterContext.Provider, { value: router }, h(PathnameContext.Provider, { value: "/admin/audit" }, h(SearchParamsContext.Provider, { value: new URLSearchParams("outcome=denied") }, h(AuditPage)))),
     }),
   );

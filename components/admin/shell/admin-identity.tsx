@@ -8,6 +8,8 @@ import { createContext, useContext, type ReactNode } from "react";
  * what is allowed (the server checks every request).
  */
 export type AdminIdentity = {
+  /** `admin_accounts.id` of the signed-in admin (marks "your own account" in lists). */
+  adminId: string;
   role: string;
   permissions: ReadonlyArray<string>;
   name: string;

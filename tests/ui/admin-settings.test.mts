@@ -62,7 +62,7 @@ function stubFetch(responders: Array<(c: Call) => Response | Promise<Response>>)
 }
 
 function mount(node: ReactNode, role: Role = "owner") {
-  render(h(AdminIdentityProvider, { value: { role, permissions: PERMS[role], name: "Admin", username: null }, children: node }));
+  render(h(AdminIdentityProvider, { value: { adminId: "1", role, permissions: PERMS[role], name: "Admin", username: null }, children: node }));
 }
 
 const toasts = () => useToastStore.getState().toasts.map((t) => t.message);

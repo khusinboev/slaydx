@@ -315,7 +315,7 @@ function renderAccount(router: AppRouterInstance) {
   return render(
     withRouter(
       h(AdminIdentityProvider, {
-        value: { role: "support", permissions: ["dashboard.view", "users.view", "self"], name: "Ali Valiyev", username: "ali" },
+        value: { adminId: "1", role: "support", permissions: ["dashboard.view", "users.view", "self"], name: "Ali Valiyev", username: "ali" },
         children: h(AccountPage),
       }),
       router,

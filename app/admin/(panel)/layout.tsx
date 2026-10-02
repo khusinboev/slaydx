@@ -27,7 +27,7 @@ export default async function AdminPanelLayout({ children }: { children: React.R
   const { account, user } = resolved.ctx;
   return (
     <StepUpProvider>
-      <AdminShell role={account.role} permissions={permissionsOf(account.role)} name={user.name} username={user.username}>
+      <AdminShell adminId={account.id} role={account.role} permissions={permissionsOf(account.role)} name={user.name} username={user.username}>
         {children}
       </AdminShell>
       <Toaster />

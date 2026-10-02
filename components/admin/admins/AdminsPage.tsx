@@ -1,9 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 import { Check, Minus, UserPlus } from "lucide-react";
 import { listAdmins, type AdminAccountItem } from "@/lib/admin-api/admins";
-import { getAdminSession } from "@/lib/admin-api/auth";
 import { fmtDateTime, fmtNumber } from "@/lib/admin-format";
 import { Badge, Button, Card, DataTable, EmptyState, ErrorState, Forbidden, Modal, useLoad, type Column } from "@/components/admin/ui";
 import { roleLabel, useAdminIdentity, useCan } from "@/components/admin/shell";
@@ -25,15 +24,9 @@ export function AdminsPage() {
   const load = useCallback((signal: AbortSignal) => listAdmins({ signal }), []);
   const [state, reload] = useLoad(load);
 
-  // Own account id, to disable actions on yourself. A failure only means the server's 409 `self` decides.
-  const [ownId, setOwnId] = useState<string | null>(null);
-  useEffect(() => {
-    const ctl = new AbortController();
-    getAdminSession({ signal: ctl.signal })
-      .then((r) => setOwnId(r.admin.id))
-      .catch(() => {});
-    return () => ctl.abort();
-  }, []);
+  // Own account id (from the server-resolved shell identity), to disable actions on yourself;
+  // the server's 409 `self` is still the authority.
+  const ownId = identity.adminId;
 
   const items = state.status === "ready" ? state.data.items : [];
   const [adding, setAdding] = useState(false);
@@ -50,7 +43,7 @@ export function AdminsPage() {
         <div className="flex min-w-0 flex-col">
           <span className="flex flex-wrap items-center gap-1.5 font-medium">
             <span className="break-words">{a.name}</span>
-            {ownId !== null && a.id === ownId ? <Badge tone="info">Siz</Badge> : null}
+            {a.id === ownId ? <Badge tone="info">Siz</Badge> : null}
           </span>
           <span className="text-muted-foreground text-xs break-all">
             {a.username ? `@${a.username} · ` : ""}#{a.userId}
@@ -186,7 +179,7 @@ function ManageModal({
 }: {
   admin: AdminAccountItem | null;
   items: ReadonlyArray<AdminAccountItem>;
-  ownId: string | null;
+  ownId: string;
   actorRole: string;
   onClose: () => void;
   onPick: (kind: RowAction["kind"], admin: AdminAccountItem) => void;
