@@ -146,3 +146,8 @@ Then: integration (tests, tsc, lint, build) and mutation runs on the merge and t
 - No broadcast to the affected users.
 - Admin: legacy quota / Pro orders shown with an "(eski)" label, only when non-zero.
 - Admin panel was deployed first (prod `e57ffa5`, 2026-10-02); this sprint is a second deploy.
+
+## 8. Status (pause 2026-10-02)
+- Merged on `feat/remove-subscriptions`: WP0 (migration 034 + tests), WP4 (docs/scripts), WP2 (consumer UI).
+- Pending merge: WP1 server (`wip/subs-wp1-server`, complete, final PII/typecheck not re-run) and WP3 admin (`wip/subs-wp3-admin`, WIP, unverified — agent died on a dropped API connection).
+- Next: finish and verify WP3 on top of WP1, integrate, full regression, money review of 034 + refund fold, then the second deploy with owner approval.
