@@ -40,14 +40,14 @@ The brief's non-negotiable rules:
 | F3b | Admin layouts and pages: `app/admin/layout.tsx`, `(auth)/login`, `(auth)/enroll`, `(panel)/layout.tsx` (shell, nav, Toaster, StepUpProvider), `(panel)/error.tsx`, `loading.tsx`, `account/page.tsx`; `components/admin/shell/*` (incl. `nav-registry.ts`, `useCan`); `app/uz/admin/page.tsx` → redirect to `/admin`; Sidebar link → `/admin`; legacy `AdminPage.tsx` deleted | ✅ merged 2026-10-02 (opus; Chromium smoke 32/32) |
 | F6 | Money actions: wallet adjustment, job cancel/fail/refund, external order refund with clawback, plus dialogs (`components/admin/money/*`, `lib/admin-api/money.ts`). `adminAdjustWalletInTx` extracted from `lib/server/credits.ts`; idempotency in `lib/server/admin-idempotency.ts` | ✅ merged 2026-10-02 (fable; fable review: 1 MAJOR + 3 MINOR fixed) |
 | COST | `lib/server/admin-cost.ts`: the ONE definition of AI spend (ai_usage ∪ legacy completed cost_json, no double count), groupings, coverage, `COST_CAVEATS`. WP1, WP5 and WP11 must use it | ✅ merged 2026-10-02 |
-| WP1 | Dashboard (§6.3, S3) | ⏳ |
+| WP1 | Dashboard (§6.3, S3) | ✅ merged 2026-10-02 (opus; smoke 41/41) |
 | WP2 | Users (§6.4, S4/S5); rewrites the legacy `app/api/admin/users/**` | ⏳ |
-| WP3 | Generations (§6.5, S6/S7) | ⏳ |
-| WP4 | Payments and finance (§6.6, S8–S10) | ⏳ |
-| WP5 | AI cost and providers (§6.7, S11); use `ai_usage` and `cost_json` | ⏳ |
-| WP6 | Moderation (§6.8, S12) | ⏳ |
-| WP7 | System and errors (§6.11, S15/S16) | ⏳ |
-| WP8 | Settings UI and routes (§6.10, S14); call `invalidateSettingsCache()` after commit | ⏳ |
+| WP3 | Generations (§6.5, S6/S7); exports `GenerationsTable` (`fixedFilters`, `embedded`) for WP2 | ✅ merged 2026-10-02 (opus; smoke 53/53) |
+| WP4 | Payments and finance (§6.6, S8–S10); exports `OrdersTable`/`LedgerTable` for WP2 | 🔄 in progress (agent worktree `agent-a3a817da10f90a446`) |
+| WP5 | AI cost and providers (§6.7, S11) on `admin-cost`; `lib/server/admin-heartbeat.ts` (shared stale rule) | ✅ merged 2026-10-02 (sonnet; smoke 43/43) |
+| WP6 | Moderation (§6.8, S12) | 🔄 in progress (`agent-a85e61534c5b4932b`) |
+| WP7 | System and errors (§6.11, S15/S16) | ✅ merged 2026-10-02 (sonnet; smoke 82/82) |
+| WP8 | Settings UI and routes (§6.10, S14); call `invalidateSettingsCache()` after commit | 🔄 in progress (`agent-a017944382e434738`) |
 | WP9 | Broadcasts (§6.9, S13); delivery already exists in F5b | ⏳ |
 | WP10 | Audit log UI and admins UI (§6.12, §6.13, S17/S18) | ⏳ |
 | WP11 | Pricing admin (§17.4–17.6, S20) (opus); call `invalidatePricingCache()` after commit | ⏳ |
@@ -156,5 +156,6 @@ Deploying earlier would leave the owner without a working admin UI. Migration `0
 
 | Date | Stage | Result |
 |---|---|---|
+| 2026-10-02 | (c)/(d) wave 1 | WP1, WP3, WP5, WP7 merged (each: own tests + guards green, Chromium smoke, lead review). Agents stopped once by the API session limit; resumed via SendMessage (worktrees kept their commits). Smoke rule: dev servers ALWAYS `WORKER_INLINE=false`. Agent brief for screens: `WP-COMMON.md` (lead scratchpad; content mirrored in AGENT-BRIEF + plan). Open items list kept by the lead for Integration. Next: WP2 (after WP4), WP9, WP10, WP11. |
 | 2026-10-02 | (b) F3b + F6 + COST | merged; merged-state tsc/lint clean, admin+guard tests 338/338, admin UI 72/72; PR #2 CI green (run 36916073054). Owner #1 created in the dev DB (`sodda`, backup taken first) — enroll link to be regenerated once `/admin` has a page. Note: plain `next dev` (webpack) 500s on every page because of `instrumentation.ts` → sharp; use `--turbopack` (pre-existing). Open owner question: pro chargeback leaves plan=pro (spec: quota clawback only). |
 | 2026-10-02 | (a) baseline + CI fix | `main` fast-forwarded to `ffddd39`, branch `feat/admin-panel`. typecheck ✅, lint ✅, `npm test` 3756/3756, `test:ui` 511/511, `test:viewer` 248/248. CI flake fixed in `tests/backup-script.test.mts` (§5). AGENT-BRIEF and CLAUDE.md adapted to the laptop. Next: (b) F3b + F6 after owner approval. |
