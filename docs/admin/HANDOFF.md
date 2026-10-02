@@ -14,6 +14,7 @@ We are adding a **production admin panel** without changing existing product beh
 | `02-plan.md` | Phase 2 plan, **approved by the owner**. It covers architecture, RBAC, data model, API contract, screens, threat model, tests, work packages with file ownership, rollout and rollback. §17 is the pricing and unit-economics module the owner added. §18 is the execution model. |
 | `03-report.md` | Phase 4 final report. **Not written yet.** |
 | `AGENT-BRIEF.md` | Rules, conventions and checks for every coding agent. Give it to each agent. |
+| `WP-BRIEF.md` | Extra common instructions for screen packages (WP1–WP11): reuse contracts, smoke recipe (`WORKER_INLINE=false`), checks. Paths to the scratchpad smoke kit are session-specific; recreate the kit from F3b's pattern if missing. |
 | `prototype.html` | Clickable prototype of all screens (sample data only). Open it in a browser. It is the visual reference for the UI packages. |
 
 The brief's non-negotiable rules:
@@ -159,3 +160,16 @@ Deploying earlier would leave the owner without a working admin UI. Migration `0
 | 2026-10-02 | (c)/(d) wave 1 | WP1, WP3, WP5, WP7 merged (each: own tests + guards green, Chromium smoke, lead review). Agents stopped once by the API session limit; resumed via SendMessage (worktrees kept their commits). Smoke rule: dev servers ALWAYS `WORKER_INLINE=false`. Agent brief for screens: `WP-COMMON.md` (lead scratchpad; content mirrored in AGENT-BRIEF + plan). Open items list kept by the lead for Integration. Next: WP2 (after WP4), WP9, WP10, WP11. |
 | 2026-10-02 | (b) F3b + F6 + COST | merged; merged-state tsc/lint clean, admin+guard tests 338/338, admin UI 72/72; PR #2 CI green (run 36916073054). Owner #1 created in the dev DB (`sodda`, backup taken first) — enroll link to be regenerated once `/admin` has a page. Note: plain `next dev` (webpack) 500s on every page because of `instrumentation.ts` → sharp; use `--turbopack` (pre-existing). Open owner question: pro chargeback leaves plan=pro (spec: quota clawback only). |
 | 2026-10-02 | (a) baseline + CI fix | `main` fast-forwarded to `ffddd39`, branch `feat/admin-panel`. typecheck ✅, lint ✅, `npm test` 3756/3756, `test:ui` 511/511, `test:viewer` 248/248. CI flake fixed in `tests/backup-script.test.mts` (§5). AGENT-BRIEF and CLAUDE.md adapted to the laptop. Next: (b) F3b + F6 after owner approval. |
+
+## 8. Open items for Integration (lead-maintained)
+
+- [ ] admin-cost: add per-job helper `spendForJobs(db, ids)`; switch WP3 `costsFor/costOf` to it (WP3 currently runs spendRowsSql all-time filtered by ids).
+- [ ] components/admin/ui/FilterBar.tsx: MultiSelectFilter button accessible name = current value, should include its label (WP3 finding).
+- [ ] WP3 export download: client checks reauthUntil then plain browser download; with clock skew a 401 JSON may be saved as file — consider fetch+blob or server-side 401 page.
+- [ ] generations sort duration_desc has no index (fine at today's size; note in 03-report).
+- [ ] WP3 deviations: filters via history.replaceState (accepted); stuck = IN_PROGRESS without lock also counts (follows reclaimStaleJobs).
+- [ ] AccountPage shows raw permission keys — show Uzbek labels (UX).
+- [ ] Owner question: pro chargeback keeps plan=pro.
+- [ ] components/admin/ui/charts/LineChart.tsx floors y-max at 1 (flattens < 1 values); WP1 worked around locally — fix in primitive.
+- [ ] Dashboard revenueSoum is gross (external refunds/chargebacks not subtracted) — state in 03-report / tile hint.
+- [ ] env.ts:414-416 runtimeWarnings echoes raw FREE_LLM_DISABLED value; WP7 sanitizes in admin-system safeConfigMessage. Decide: one-line env.ts fix (product file) or keep sanitizer.
