@@ -4,10 +4,10 @@ import { useState } from "react";
 import { ApiError } from "@/lib/admin-api/core";
 import { sendBroadcast, type AdminBroadcast } from "@/lib/admin-api/broadcasts";
 import { fmtNumber } from "@/lib/admin-format";
-import { ConfirmDialog, Skeleton, toast } from "@/components/admin/ui";
+import { ConfirmDialog, toast } from "@/components/admin/ui";
 import { useAudienceCount } from "./AudiencePicker";
 import { TestSendButton } from "./TestSendButton";
-import { audienceLabel } from "./shared";
+import { InlineSkeleton, audienceLabel } from "./shared";
 
 /**
  * "Yuborish": the real send of a draft. The recipient count is fetched when the
@@ -47,7 +47,7 @@ function SendBody({ broadcast, onClose, onSent }: { broadcast: AdminBroadcast; o
       target={
         <span className="break-words">
           {audienceLabel(broadcast.audience)}:{" "}
-          {count !== null ? <b className="tabular-nums">{fmtNumber(count)} ta qabul qiluvchi</b> : live.kind === "error" ? <span className="text-destructive">{live.message}</span> : <Skeleton className="inline-block h-4 w-24 align-middle" />}
+          {count !== null ? <b className="tabular-nums">{fmtNumber(count)} ta qabul qiluvchi</b> : live.kind === "error" ? <span className="text-destructive">{live.message}</span> : <InlineSkeleton className="w-24" />}
         </span>
       }
       reason={{ minLength: 5 }}

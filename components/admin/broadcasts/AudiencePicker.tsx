@@ -4,7 +4,8 @@ import { useEffect, useId, useState } from "react";
 import { adminErrorMessage, isAbortError } from "@/lib/admin-api/core";
 import { AUDIENCE_DAYS_MAX, getAudienceCount, type Audience, type AudienceKind } from "@/lib/admin-api/broadcasts";
 import { fmtNumber } from "@/lib/admin-format";
-import { Segmented, Skeleton, type FilterOption } from "@/components/admin/ui";
+import { Segmented, type FilterOption } from "@/components/admin/ui";
+import { InlineSkeleton } from "./shared";
 
 const KIND_OPTIONS: ReadonlyArray<FilterOption> = [
   { value: "all", label: "Barchasi" },
@@ -68,7 +69,7 @@ export function AudienceCount({ state }: { state: CountState }) {
       {state.kind === "ok" ? (
         <b className="font-semibold tabular-nums">{fmtNumber(state.count)} ta</b>
       ) : state.kind === "loading" ? (
-        <Skeleton className="inline-block h-4 w-16 align-middle" />
+        <InlineSkeleton />
       ) : state.kind === "error" ? (
         <span className="text-destructive">{state.message}</span>
       ) : (

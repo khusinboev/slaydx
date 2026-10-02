@@ -332,6 +332,21 @@ test("editor: the audience picker shows a live count per audience; days are vali
   assert.equal(days.value, "", "only digits are accepted");
 });
 
+test("editor and send dialog: loading placeholders are inline (no block element inside a paragraph or span: hydration error found in the browser smoke)", async () => {
+  // The audience count never answers, so every loading placeholder stays on screen.
+  stubRoutes((c) => (c.path === "/api/admin/broadcasts/audience" ? new Promise<Response>(() => {}) : c.path === "/api/admin/broadcasts/12" ? json(200, detailOf()) : json(200, list([]))));
+  mount(h(BroadcastsPage));
+  const dialog = await openEditor();
+  assert.ok(within(dialog).getByText(/Qabul qiluvchilar/));
+  assert.ok(dialog.querySelector('[aria-live="polite"] span[aria-hidden="true"]'), "the placeholder is shown");
+  assert.ok(!dialog.querySelector("p div"), "no <div> inside a <p>");
+  cleanup();
+  mount(h(BroadcastDetail, { id: "12" }));
+  const send = await openSend();
+  assert.ok(send.querySelector("span[aria-hidden='true'].animate-pulse"), "the placeholder is shown");
+  assert.ok(!send.querySelector("p div, span div"), "no <div> inside a <p> or <span>");
+});
+
 test("editor: save POSTs the trimmed text and audience, toasts and opens the draft page", async () => {
   const calls = stubRoutes(
     editorRoutes((c) => (c.method === "POST" ? json(201, { broadcast: { ...BASE, id: "77" } }) : undefined)),

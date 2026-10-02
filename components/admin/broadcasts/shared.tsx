@@ -46,3 +46,8 @@ export function audienceLabel(a: Audience): string {
 
 /** Characters as the server counts them (code points, after trim). */
 export const textLength = (text: string): number => Array.from(text.trim()).length;
+
+/** Inline loading placeholder for a number inside a sentence (a block `Skeleton` would be invalid inside `<p>`). */
+export function InlineSkeleton({ className = "w-16" }: { className?: string }) {
+  return <span aria-hidden="true" className={`bg-muted inline-block h-4 animate-pulse rounded-md align-middle ${className}`} />;
+}
