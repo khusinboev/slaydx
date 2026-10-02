@@ -1,11 +1,8 @@
 "use client";
 
-import { getAdminSession } from "./auth";
 import {
-  AdminReauthCancelledError,
+  adminDownload,
   adminGet,
-  buildQuery,
-  runStepUp,
   type AdminCallOptions,
   type AdminParams,
   type ListResult,
@@ -166,43 +163,14 @@ export function generationFileUrl(id: string): string {
   return `/api/admin/generations/${encodeURIComponent(id)}/file`;
 }
 
-export function generationsExportUrl(q: GenerationListQuery): string {
+/**
+ * GET /api/admin/generations/export (jobs.export, step-up) through the shared
+ * `adminDownload`: a 401 `reauth` opens the step-up dialog and retries once,
+ * and an error response is never saved as the file.
+ */
+export async function downloadGenerationsCsv(q: GenerationListQuery, opts: AdminCallOptions = {}): Promise<void> {
   const { cursor: _cursor, limit: _limit, ...filters } = q;
   void _cursor;
   void _limit;
-  return `/api/admin/generations/export${buildQuery(toParams(filters))}`;
-}
-
-/** Re-confirm the TOTP when the step-up window ends within this margin (a long export must not cross it). */
-const REAUTH_MARGIN_MS = 30_000;
-
-/**
- * Starts the CSV download. `jobs.export` needs a fresh step-up, and a browser
- * download cannot run the 401 → dialog → retry dance of `core.ts`, so the
- * window is checked first and the step-up dialog opened when needed. The
- * file itself is then fetched by the browser (streamed to disk, never held in
- * memory). `navigate` is injectable for tests.
- */
-export async function downloadGenerationsCsv(
-  q: GenerationListQuery,
-  opts: AdminCallOptions & { navigate?: (url: string) => void } = {},
-): Promise<void> {
-  const { navigate, ...call } = opts;
-  const { session } = await getAdminSession(call);
-  const until = session?.reauthUntil ? Date.parse(session.reauthUntil) : Number.NaN;
-  if (!Number.isFinite(until) || until - Date.now() < REAUTH_MARGIN_MS) {
-    if (!(await runStepUp())) throw new AdminReauthCancelledError();
-  }
-  const url = generationsExportUrl(q);
-  if (navigate) {
-    navigate(url);
-    return;
-  }
-  const a = document.createElement("a");
-  a.href = url;
-  a.rel = "noopener";
-  a.download = "";
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
+  await adminDownload("/api/admin/generations/export", toParams(filters), { ...opts, fallbackName: "generatsiyalar.csv" });
 }

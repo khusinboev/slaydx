@@ -24,12 +24,16 @@ import { activeFilterCount, diffSnapshots, parseFilters, parseOpenId, targetHref
 
 const realFetch = globalThis.fetch;
 const realClick = window.HTMLAnchorElement.prototype.click;
+const realCreateObjectURL = URL.createObjectURL;
+const realRevokeObjectURL = URL.revokeObjectURL;
 afterEach(() => {
   cleanup();
   useToastStore.getState().clear();
   core.setStepUpHandler(null);
   globalThis.fetch = realFetch;
   window.HTMLAnchorElement.prototype.click = realClick;
+  URL.createObjectURL = realCreateObjectURL;
+  URL.revokeObjectURL = realRevokeObjectURL;
 });
 
 const json = (status: number, data: unknown) => new Response(JSON.stringify(data), { status, headers: { "content-type": "application/json" } });
@@ -449,27 +453,36 @@ test("diffSnapshots: key union, types stay visible, non-object snapshots compare
 
 /* ───────────────────────────── export ───────────────────────────── */
 
+/**
+ * Exports go through `adminDownload` (fetch → blob → object URL); jsdom has no
+ * `URL.createObjectURL`, so it is stubbed and the saved file names are recorded.
+ */
 function captureDownloads(): string[] {
-  const hrefs: string[] = [];
+  const saved: string[] = [];
+  URL.createObjectURL = () => "blob:fake";
+  URL.revokeObjectURL = () => {};
   window.HTMLAnchorElement.prototype.click = function (this: HTMLAnchorElement) {
-    hrefs.push(this.getAttribute("href") ?? "");
+    saved.push(this.download);
   };
-  return hrefs;
+  return saved;
 }
 
+const csv = (name: string) =>
+  new Response('\uFEFF"ID"\r\n', { status: 200, headers: { "content-type": "text/csv", "content-disposition": `attachment; filename="${name}"` } });
+const reauth = () => json(401, { error: "Bu amal uchun kodni qayta kiriting", code: "reauth" });
+
 test("export: owner with a fresh step-up downloads the CSV with the current filters", async () => {
-  const hrefs = captureDownloads();
-  const future = new Date(Date.now() + 5 * 60_000).toISOString();
+  const saved = captureDownloads();
   const api = auditApi();
-  stubFetch((c) =>
-    c.url.pathname === "/api/admin/session" ? json(200, { admin: {}, session: { id: "1", expiresAt: future, idleExpiresAt: future, reauthUntil: future } }) : api(c),
-  );
+  const calls = stubFetch((c) => (c.url.pathname === "/api/admin/audit/export" ? csv("audit-2026-10-02.csv") : api(c)));
   const { container } = renderAt("outcome=denied&action=auth.&targetType=admin");
   await waitFor(() => assert.ok(rowOf(container, "9")));
   fireEvent.click(screen.getByRole("button", { name: "CSV yuklab olish" }));
-  await waitFor(() => assert.equal(hrefs.length, 1));
-  const u = new URL(hrefs[0], "http://localhost");
-  assert.equal(u.pathname, "/api/admin/audit/export");
+  await waitFor(() => assert.equal(saved.length, 1));
+  assert.equal(saved[0], "audit-2026-10-02.csv", "saved under the server's name");
+  const exports = calls.filter((c) => c.url.pathname === "/api/admin/audit/export");
+  assert.equal(exports.length, 1);
+  const u = exports[0]!.url;
   assert.equal(u.searchParams.get("outcome"), "denied");
   assert.equal(u.searchParams.get("action"), "auth.");
   assert.equal(u.searchParams.get("targetType"), "admin");
@@ -477,25 +490,32 @@ test("export: owner with a fresh step-up downloads the CSV with the current filt
   await waitFor(() => assert.ok(useToastStore.getState().toasts.some((t) => /Eksport boshlandi/.test(t.message))));
 });
 
-test("export: a stale step-up opens the dialog first; cancelling downloads nothing", async () => {
-  const hrefs = captureDownloads();
+test("export: a stale step-up (401 reauth) opens the dialog; cancelling downloads nothing, confirming retries once", async () => {
+  const saved = captureDownloads();
   let asked = 0;
   core.setStepUpHandler(async () => {
     asked += 1;
     return asked > 1;
   });
   const api = auditApi();
-  const stale = { admin: {}, session: { id: "1", expiresAt: "x", idleExpiresAt: "x", reauthUntil: null } };
-  stubFetch((c) => (c.url.pathname === "/api/admin/session" ? json(200, stale) : api(c)));
+  let exportsSeen = 0;
+  const calls = stubFetch((c) => {
+    if (c.url.pathname !== "/api/admin/audit/export") return api(c);
+    exportsSeen += 1;
+    return exportsSeen <= 2 ? reauth() : csv("audit-2026-10-02.csv");
+  });
   const { container } = renderAt("");
   await waitFor(() => assert.ok(rowOf(container, "9")));
   fireEvent.click(screen.getByRole("button", { name: "CSV yuklab olish" }));
   await waitFor(() => assert.equal(asked, 1));
   await waitFor(() => assert.equal((screen.getByRole("button", { name: "CSV yuklab olish" }) as HTMLButtonElement).disabled, false));
-  assert.equal(hrefs.length, 0, "cancelled step-up: no download");
+  assert.equal(saved.length, 0, "cancelled step-up: no download");
   fireEvent.click(screen.getByRole("button", { name: "CSV yuklab olish" }));
-  await waitFor(() => assert.equal(hrefs.length, 1));
-  assert.equal(hrefs[0], "/api/admin/audit/export");
+  await waitFor(() => assert.equal(saved.length, 1));
+  assert.equal(asked, 2);
+  const exports = calls.filter((c) => c.url.pathname === "/api/admin/audit/export");
+  assert.equal(exports.length, 3, "one export request per click plus exactly one retry");
+  assert.equal(exports[2]!.url.search, "");
 });
 
 test("export button is hidden for a role without audit.export (admin)", async () => {

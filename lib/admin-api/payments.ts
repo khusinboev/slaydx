@@ -1,14 +1,8 @@
 "use client";
 
 import {
-  AdminAuthRequiredError,
-  AdminForbiddenError,
-  AdminNotFoundError,
-  AdminReauthCancelledError,
-  ApiError,
+  adminDownload,
   adminGet,
-  buildQuery,
-  runStepUp,
   type AdminCallOptions,
   type AdminParams,
   type ListResult,
@@ -280,70 +274,12 @@ export function listLedger(params: LedgerListParams, opts?: AdminCallOptions): P
 
 /* ───────────────────────────── CSV download ───────────────────────────── */
 
-function filenameOf(res: Response, fallback: string): string {
-  const m = /filename="([^"]+)"/.exec(res.headers.get("content-disposition") ?? "");
-  return m?.[1] ?? fallback;
+/** GET /api/admin/orders/export (payments.export, step-up) through the shared `adminDownload`. */
+export async function downloadOrdersCsv(params: OrderListParams, signal?: AbortSignal): Promise<void> {
+  await adminDownload("/api/admin/orders/export", { ...orderQuery(params), cursor: undefined, limit: undefined }, { signal, fallbackName: "buyurtmalar.csv" });
 }
 
-async function errorOf(res: Response): Promise<ApiError> {
-  let data: Record<string, unknown> = {};
-  try {
-    data = (await res.json()) as Record<string, unknown>;
-  } catch {
-    data = {};
-  }
-  const message = typeof data.error === "string" && data.error ? data.error : `Xatolik (${res.status})`;
-  if (res.status === 403) return new AdminForbiddenError(message, data);
-  if (res.status === 404) return new AdminNotFoundError(message, data);
-  if (res.status === 401 && data.code === "admin_auth") return new AdminAuthRequiredError(message, data);
-  return new ApiError(message, res.status, data);
-}
-
-function save(blob: Blob, name: string): void {
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = name;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  // Revoke on the next tick: some browsers start the download asynchronously.
-  setTimeout(() => URL.revokeObjectURL(url), 0);
-}
-
-/**
- * Downloads an admin CSV export. Exports need a fresh step-up: on 401
- * `reauth` the registered step-up dialog opens and the request is retried
- * once (same contract as `adminGet`). 401 `admin_auth` sends the admin to the
- * login page. Errors are thrown as the same typed errors `core.ts` uses.
- */
-async function downloadCsv(path: string, params: AdminParams, fallbackName: string, signal?: AbortSignal): Promise<void> {
-  const url = `${path}${buildQuery(params)}`;
-  const attempt = () => fetch(url, { credentials: "same-origin", signal });
-  let res = await attempt();
-  if (res.status === 401) {
-    const err = await errorOf(res.clone());
-    if (err.data.code === "reauth") {
-      if (!(await runStepUp())) throw new AdminReauthCancelledError(err.data);
-      res = await attempt();
-    }
-  }
-  if (!res.ok) {
-    const err = await errorOf(res);
-    if (err instanceof AdminAuthRequiredError && typeof location !== "undefined" && !location.pathname.startsWith("/admin/login")) {
-      location.assign(`/admin/login?next=${encodeURIComponent(`${location.pathname}${location.search}`)}`);
-    }
-    throw err;
-  }
-  save(await res.blob(), filenameOf(res, fallbackName));
-}
-
-/** GET /api/admin/orders/export (payments.export, step-up). */
-export function downloadOrdersCsv(params: OrderListParams, signal?: AbortSignal): Promise<void> {
-  return downloadCsv("/api/admin/orders/export", { ...orderQuery(params), cursor: undefined, limit: undefined }, "buyurtmalar.csv", signal);
-}
-
-/** GET /api/admin/transactions/export (finance.export, step-up). */
-export function downloadLedgerCsv(params: LedgerListParams, signal?: AbortSignal): Promise<void> {
-  return downloadCsv("/api/admin/transactions/export", { ...ledgerQuery(params), cursor: undefined, limit: undefined }, "hisob-kitobi.csv", signal);
+/** GET /api/admin/transactions/export (finance.export, step-up) through the shared `adminDownload`. */
+export async function downloadLedgerCsv(params: LedgerListParams, signal?: AbortSignal): Promise<void> {
+  await adminDownload("/api/admin/transactions/export", { ...ledgerQuery(params), cursor: undefined, limit: undefined }, { signal, fallbackName: "hisob-kitobi.csv" });
 }
