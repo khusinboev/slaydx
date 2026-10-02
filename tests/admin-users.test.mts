@@ -516,7 +516,7 @@ test("detail: masked by default; stats, counts, flags and lastSeenAt from the re
   const user = r.body.user as Item;
   assert.equal(user.phone, "+998 ** *** ** 33");
   assert.equal(user.localId, "+998 ** *** ** 33");
-  assert.equal((user.profile as Item).university, "•••", "MUTATSIYA: profile fields masked without reveal");
+  assert.equal((user.profile as Item).university, "TATU", "MUTATSIYA: profile fields are shown without users.pii (§6.0)");
   assert.equal((user.profile as Item).faculty, "", "empty stays empty");
   assert.equal(user.revealed, false);
   assert.ok(!r.text.includes("901112233"), "no raw phone in a masked detail");
@@ -544,7 +544,7 @@ test("detail reveal: users.pii → clear values + exactly one users.pii.view row
   assert.equal(rows.length, 1, "MUTATSIYA: exactly one reveal audit row");
   assert.equal(rows[0]!.admin_id, support.admin.adminId);
   assert.equal(rows[0]!.target_type, "user");
-  assert.deepEqual(rows[0]!.meta, { fields: ["phone", "localId", "profile"] });
+  assert.deepEqual(rows[0]!.meta, { fields: ["phone", "localId"] });
 
   for (const role of ["finance", "viewer", "moderator"] as const) {
     const s = await as(role);
@@ -552,9 +552,12 @@ test("detail reveal: users.pii → clear values + exactly one users.pii.view row
     assert.equal(d.status, 403, `${role}: MUTATSIYA reveal without users.pii`);
     assert.equal(d.body.code, "forbidden");
     assert.ok(!d.text.includes("901112233"));
+    const masked = await detail(s, u.id);
+    assert.equal(masked.status, 200, `${role} may still read the masked view`);
+    assert.equal((masked.body.user as Item).phone, "+998 ** *** ** 33", `${role}: phone stays masked`);
+    assert.equal(((masked.body.user as Item).profile as Item).university, "TATU", `${role}: profile shown`);
     const denied = await query<{ meta: Item }>(`SELECT meta FROM admin_audit_log WHERE admin_id = $1 AND outcome = 'denied'`, [s.admin.adminId]);
     assert.deepEqual(denied.at(-1)?.meta, { permission: "users.pii", scope: "admin/users/get" });
-    assert.equal((await detail(s, u.id)).status, 200, `${role} may still read the masked view`);
   }
   assert.equal((await audits("users.pii.view", u.id)).length, 1, "denied reveals write no pii.view row");
   assert.equal((await detail(support, u.id, "reveal=yes")).status, 400);

@@ -37,8 +37,9 @@ import { TelegramTransientError, sendMessage } from "./telegram";
  *   - lists and exports ALWAYS carry the masked phone (`maskPhone`), never the
  *     raw one; OTP `local_id` (often a phone) is not listed at all;
  *   - the detail is masked by default; `reveal=1` needs `users.pii`, writes one
- *     `users.pii.view` audit row and only then returns the phone, `local_id`
- *     and the profile fields in clear;
+ *     `users.pii.view` audit row and only then returns the phone and `local_id`
+ *     in clear (the OTP `local_id` is often a phone, so it follows the phone);
+ *   - profile fields (university, faculty, …) are shown to every `users.view` role (§6.0);
  *   - a reveal without `users.pii` is a 403 plus a `denied` audit row.
  *
  * Mutations (block, session revoke, message) write exactly one `ok` audit row
@@ -403,7 +404,7 @@ export type AdminUserDetail = Omit<AdminUserRow, "phoneMasked" | "generations"> 
   phone: string | null;
   /** OTP login identifier (often a phone); masked unless `revealed`. */
   localId: string | null;
-  /** Form-default profile; every non-empty value is `•••` unless `revealed`. */
+  /** Form-default profile, shown in clear to every `users.view` role (plan §6.0 Masking). */
   profile: Record<ProfileField, string>;
   language: string;
   updatedAt: string;
@@ -464,7 +465,7 @@ function toDetail(r: DetailDbRow, revealed: boolean): AdminUserDetail {
   const profile = {} as Record<ProfileField, string>;
   for (const k of PROFILE_FIELDS) {
     const v = r[k] ?? "";
-    profile[k] = revealed || v === "" ? v : MASKED;
+    profile[k] = v;
   }
   return {
     ...rest,
@@ -588,7 +589,7 @@ export async function getAdminUser(actor: AdminActor, id: string, reveal: boolea
         action: "users.pii.view",
         targetType: "user",
         targetId: id,
-        meta: { fields: ["phone", "localId", "profile"] },
+        meta: { fields: ["phone", "localId"] },
       }),
     );
   }

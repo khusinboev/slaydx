@@ -251,7 +251,7 @@ export function UserDetail({ id, tools }: { id: string; tools: ReadonlyArray<Fil
             <Card>
               <CardHeader
                 title="Profil"
-                description={user.revealed ? "Ochiq ko'rinish audit jurnaliga yozildi" : "Shaxsiy ma'lumotlar yashirilgan"}
+                description={user.revealed ? "Telefon ochildi — audit jurnaliga yozildi" : "Telefon yashirilgan"}
               />
               <CardBody>
                 <KeyValueList

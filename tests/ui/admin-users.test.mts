@@ -285,15 +285,15 @@ test("UsersPage export: 401 reauth → step-up → retried once with the filters
 /* ───────────────────────────── UserDetail (S5) ───────────────────────────── */
 
 const PROFILE = {
-  university: "•••",
+  university: "TATU",
   faculty: "",
   department: "",
   group: "",
   course: "",
-  author: "•••",
+  author: "Ali Valiyev",
   subject: "",
   teacher: "",
-  city: "•••",
+  city: "Toshkent",
   position: "",
   organization: "",
 };
@@ -325,7 +325,7 @@ const DETAIL = {
   counts: { activeSessions: 2, queuedJobs: 1, activeGameLinks: 3 },
   walletConfirmThreshold: 1_000_000,
 };
-const REVEALED = { ...DETAIL, user: { ...USER, phone: "+998901234567", revealed: true, profile: { ...PROFILE, university: "TATU", author: "Ali Valiyev", city: "Toshkent" } } };
+const REVEALED = { ...DETAIL, user: { ...USER, phone: "+998901234567", revealed: true, profile: PROFILE } };
 
 const detailUrl = "/api/admin/users/42";
 
@@ -337,7 +337,8 @@ test("UserDetail: loading skeleton, then header, wallets, profile (masked) and s
   release(json(200, DETAIL));
   assert.ok(await screen.findByRole("heading", { name: /Ali Valiyev/ }));
   assert.ok(screen.getByText("+998 ** *** ** 67"));
-  assert.ok(screen.getAllByText("•••").length >= 3, "profile masked");
+  assert.ok(screen.getByText("TATU"), "profile fields shown (§6.0)");
+  assert.ok(screen.getByText("Telefon yashirilgan"));
   assert.ok(screen.getByText(/^12\s000$/), "balance wallet tile");
   const actions = screen.getByRole("group", { name: "Amallar" });
   for (const name of ["Hamyonni tuzatish", "Bloklash", "Sessiyalarni bekor qilish", "Xabar yuborish", "Telefonni ko'rsatish"]) {
@@ -358,6 +359,8 @@ test("UserDetail: viewer sees no actions and no reveal; own account hides wallet
   await screen.findByRole("heading", { name: /Ali Valiyev/ });
   assert.ok(!screen.queryByRole("group", { name: "Amallar" }));
   assert.ok(!screen.queryByRole("button", { name: "Ko'rsatish" }));
+  assert.ok(screen.getByText("+998 ** *** ** 67"), "viewer: phone masked");
+  assert.ok(screen.getByText("TATU"), "MUTATSIYA: viewer sees profile fields (§6.0)");
   const tabs = within(screen.getByRole("tablist")).getAllByRole("tab").map((t) => t.textContent?.replace(/\d+$/, ""));
   assert.deepEqual(tabs, ["Umumiy", "Generatsiyalar", "To'lovlar", "Hisob"]);
   cleanup();
@@ -384,7 +387,7 @@ test("UserDetail: reveal asks for reveal=1 and shows the clear phone and profile
   fireEvent.click(screen.getByRole("button", { name: "Telefonni ko'rsatish" }));
   assert.ok(await screen.findByText("+998901234567"));
   assert.ok(screen.getByText("TATU"));
-  assert.ok(screen.getByText("Ochiq ko'rinish audit jurnaliga yozildi"));
+  assert.ok(screen.getByText("Telefon ochildi — audit jurnaliga yozildi"));
   assert.ok(!screen.queryByRole("button", { name: "Telefonni ko'rsatish" }));
   assert.equal(calls.filter((c) => c.params.get("reveal") === "1").length, 1);
 });
