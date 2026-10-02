@@ -847,7 +847,7 @@ test("Badge: holat matni o'z tokenida va AA kontrastda (yorug' va qorong'i)", ()
   const TOKENS = { success: "success", warning: "warning", danger: "destructive", info: "info" } as const;
   const tones = Object.keys(TOKENS) as Array<keyof typeof TOKENS>;
   for (const tone of tones) {
-    render(h(Badge, { tone }, tone));
+    render(h(Badge, { tone, children: tone }));
     const cls = screen.getByText(tone).className.split(/\s+/);
     assert.ok(cls.includes(`text-badge-${tone}-text`), `${tone}: ${cls.join(" ")}`);
     assert.ok(cls.includes(`bg-${TOKENS[tone]}/15`), `${tone} foni`);
