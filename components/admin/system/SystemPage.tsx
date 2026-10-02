@@ -190,7 +190,7 @@ function ConfigCard({ problems, warnings }: { problems: string[]; warnings: stri
         ))}
         {warnings.map((m) => (
           <p key={`w:${m}`} data-config="warning" className="border-warning/40 bg-warning/10 rounded-lg border px-3 py-2 text-[13px] [overflow-wrap:anywhere]">
-            <span className="text-warning font-semibold">Ogohlantirish: </span>
+            <span className="text-badge-warning-text font-semibold">Ogohlantirish: </span>
             {m}
           </p>
         ))}
