@@ -5,6 +5,7 @@ import { getSetting } from "./settings";
 import { parseReason } from "./admin-accounts";
 import type { AdminActor } from "./admin-handler";
 import { bodyHashOf, idempotencyConflict, idempotentMutation, type IdempotentResult } from "./admin-idempotency";
+import { assertMayActOn } from "./admin-users";
 
 /**
  * Admin wallet adjustment (docs/admin/02-plan.md §6.4, §10 T13).
@@ -14,7 +15,9 @@ import { bodyHashOf, idempotencyConflict, idempotentMutation, type IdempotentRes
  *     `UNIQUE (kind, reference)` is the last line of defence against a double
  *     write — and the neutral user-visible note "Ma'muriy tuzatish";
  *   - the actor, the reason and the reason code live only in the audit row;
- *   - an admin never adjusts their own wallet (409 `self`);
+ *   - an admin never adjusts their own wallet (409 `self`), and an active or
+ *     pending admin account's wallet only within `admins.manage` rank limits
+ *     (403 `admin_target`, the same `assertMayActOn` rule as blocking);
  *   - above `admin.wallet_confirm_threshold` the formatted amount must be
  *     typed back (400 `confirm`).
  */
@@ -106,6 +109,7 @@ export async function adjustWallet(
   const reference = `admin:${idempotencyKey}`;
 
   return idempotentMutation<WalletAdjustResponse>(actor, { action: "users.wallet.adjust", key: idempotencyKey, bodyHash }, async (client) => {
+    await assertMayActOn(client, actor, targetUserId);
     const res = await client.query<{ id: string; name: string; username: string | null; points: string; quota: string; balance: string }>(
       `SELECT id::text AS id, name, username, points, quota, balance FROM users WHERE id = $1 FOR UPDATE`,
       [targetUserId],

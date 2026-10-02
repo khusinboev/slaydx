@@ -401,3 +401,44 @@ test("guard: 403 for support (denied audit), 401 reauth when the step-up is stal
   assert.deepEqual(await wallets(u.id), { points: 0, quota: 0, balance: 0 });
   assert.equal((await ledger(u.id)).length, 0);
 });
+
+/**
+ * Phase 4 finding 3: money on an admin's own user account follows the same
+ * `assertMayActOn` rule as blocking (§4.3): an active or pending admin account
+ * may be adjusted only by an actor who could manage that role (`admins.manage`
+ * + strictly lower rank; owners may act on owners). A disabled account is a
+ * plain user again. Mutation: drop the `assertMayActOn` call → finance gets 201.
+ */
+test("403 admin_target: wallet adjustments on admin accounts need admins.manage within rank; nothing is written", { skip }, async () => {
+  const finance = await session("finance");
+  const support = await mkAdmin("support");
+  const r = await adjust(finance.cookie, support.id, GOOD);
+  assert.equal(r.status, 403, JSON.stringify(r.body));
+  assert.equal(r.body.code, "admin_target");
+  assert.equal((await wallets(support.id)).balance, 100);
+  assert.equal((await ledger(support.id)).length, 0);
+  assert.equal((await audits(finance.admin.adminId)).length, 0, "no audit row for a refused adjustment");
+
+  // Pending accounts are admin accounts too (SessionUser.isAdmin).
+  const pending = await mkUser(100);
+  await query(`INSERT INTO admin_accounts (user_id, role, status) VALUES ($1, 'viewer', 'pending')`, [pending.id]);
+  assert.equal((await adjust(finance.cookie, pending.id, GOOD)).body.code, "admin_target");
+
+  // Rank: an admin may adjust a support's wallet, never an owner's or another admin's.
+  const admin = await session("admin");
+  const owner = await mkAdmin("owner");
+  const peer = await mkAdmin("admin");
+  assert.equal((await adjust(admin.cookie, owner.id, GOOD)).body.code, "admin_target");
+  assert.equal((await adjust(admin.cookie, peer.id, GOOD)).body.code, "admin_target");
+  assert.equal((await adjust(admin.cookie, support.id, GOOD)).status, 201, "admin → support: within rank");
+  assert.equal((await wallets(support.id)).balance, 1_100);
+
+  // Owner → owner is allowed (§4.3); the self rule still wins for the owner's own wallet.
+  const boss = await session("owner");
+  assert.equal((await adjust(boss.cookie, owner.id, GOOD)).status, 201);
+  assert.equal((await adjust(boss.cookie, boss.admin.id, GOOD)).body.code, "self");
+
+  // A disabled admin account is a plain user.
+  await query(`UPDATE admin_accounts SET status = 'disabled' WHERE user_id = $1`, [peer.id]);
+  assert.equal((await adjust(finance.cookie, peer.id, GOOD)).status, 201, "disabled account → ordinary user");
+});

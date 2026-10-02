@@ -153,6 +153,10 @@ export async function recordExternalRefund(
     );
     const order = ord.rows[0];
     if (!order) throw new ApiError("Topilmadi", 404, { code: "not_found" });
+    // The wallet rule (§10 T13): no money action on one's own account.
+    if (order.user_id === actor.userId) {
+      throw new ApiError("O'z buyurtmangiz uchun qaytarishni yozib bo'lmaydi", 409, { code: "self" });
+    }
     if (order.state !== "paid") {
       throw new ApiError(`Buyurtma holati ${order.state}; faqat to'langan buyurtma uchun mumkin`, 409, { code: "state", state: order.state });
     }

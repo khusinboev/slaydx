@@ -433,3 +433,25 @@ test("guard: support → 403 (denied audit), stale step-up → 401 reauth, no Or
   assert.equal((await refundRows(order)).length, 0);
   assert.equal((await wallets(u.id)).balance, 20_000);
 });
+
+/**
+ * Phase 4 finding 3: an admin never records a refund or chargeback on their
+ * OWN order (409 `self`, like the wallet rule, §10 T13) — with or without a
+ * clawback, nothing is written. Mutation: drop the self check → 201.
+ */
+test("409 self: an admin cannot record an external refund or chargeback on their own order", { skip }, async () => {
+  const s = await session("finance");
+  const order = await paidOrder(s.admin.id, "topup", 20_000);
+  const before = (await wallets(s.admin.id)).balance;
+  for (const body of [BODY, { ...BODY, kind: "chargeback", clawback: false }]) {
+    const r = await record(s.cookie, order, body);
+    assert.equal(r.status, 409, JSON.stringify(r.body));
+    assert.equal(r.body.code, "self");
+  }
+  assert.equal((await refundRows(order)).length, 0);
+  assert.equal((await wallets(s.admin.id)).balance, before);
+  assert.equal((await audits(s.admin.adminId)).length, 0);
+  // Another finance admin may record it.
+  const other = await session("finance");
+  assert.equal((await record(other.cookie, order, BODY)).status, 201);
+});
