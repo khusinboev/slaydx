@@ -189,6 +189,8 @@ export type GenerationSample = {
   userId: string;
   userName: string;
   toolId: string;
+  /** Uzbek tool title resolved on the server. */
+  toolTitle: string;
   finishedAt: string | null;
   charged: Wallets;
   delivered: { got: number; want: number } | null;

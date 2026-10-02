@@ -155,7 +155,15 @@ function CostReady({
       header: KEY_HEADER[groupBy],
       sortKey: "key_asc",
       sortKeyReverse: "key_desc",
-      cell: (r) => <span className="font-mono text-[12.5px] break-all">{keyText(groupBy, r.key)}</span>,
+      cell: (r) =>
+        r.title ? (
+          // Tool grouping: the server-resolved Uzbek title; the raw key stays in the tooltip.
+          <span className="break-words" title={r.key}>
+            {r.title}
+          </span>
+        ) : (
+          <span className="font-mono text-[12.5px] break-all">{keyText(groupBy, r.key)}</span>
+        ),
     },
     { id: "calls", header: "Chaqiruvlar", align: "right", sortKey: "calls_desc", sortKeyReverse: "calls_asc", className: "tabular-nums", cell: (r) => numText(r.calls) },
     { id: "input", header: "Kirish tokenlari", align: "right", sortKey: "input_desc", sortKeyReverse: "input_asc", className: "tabular-nums", cell: (r) => numText(r.inputTokens) },

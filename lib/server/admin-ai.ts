@@ -12,6 +12,8 @@ import { parseDateRange, type DateRange } from "./admin-list";
 import { isStale } from "./admin-heartbeat";
 import { env } from "./env";
 import { transaction, query } from "./db";
+import type { FreeLlmEndpoint } from "./spend";
+import { TOOL_BY_ID } from "../tools";
 
 /**
  * AI cost and provider health for the admin panel (docs/admin/02-plan.md §6.7,
@@ -36,11 +38,43 @@ const CACHE_MAX_ENTRIES = 200;
 const DAY_MS = 86_400_000;
 
 // ---------------------------------------------------------------------------
+// Tool titles
+
+/** Uzbek names of the free-LLM endpoints (`free:<endpoint>` spend keys, lib/server/spend.ts). */
+const FREE_ENDPOINT_TITLES: Record<FreeLlmEndpoint, string> = {
+  outline: "reja",
+  udk: "UDK",
+  rewrite: "qayta yozish",
+  polish: "sayqal",
+};
+
+/**
+ * The Uzbek title of a spend / job tool key, resolved from the registry
+ * (`TOOL_BY_ID`), so the client never has to know tool ids:
+ *   - a registry tool → its title ("Pro slayd");
+ *   - `free:<endpoint>` → "Bepul AI: <endpoint name>";
+ *   - `unknown` or empty → "Noma'lum vosita";
+ *   - anything else (a retired tool) → the key as stored.
+ */
+export function toolKeyTitle(key: string): string {
+  if (Object.prototype.hasOwnProperty.call(TOOL_BY_ID, key)) return TOOL_BY_ID[key as keyof typeof TOOL_BY_ID].title;
+  if (key.startsWith("free:")) {
+    const endpoint = key.slice("free:".length);
+    const name = Object.prototype.hasOwnProperty.call(FREE_ENDPOINT_TITLES, endpoint) ? FREE_ENDPOINT_TITLES[endpoint as FreeLlmEndpoint] : endpoint;
+    return `Bepul AI: ${name || "noma'lum"}`;
+  }
+  if (key === "" || key === "unknown") return "Noma'lum vosita";
+  return key;
+}
+
+// ---------------------------------------------------------------------------
 // Cost
 
 export type AiCostRow = {
   /** day → YYYY-MM-DD (Asia/Tashkent); tool → tool id; provider/model/kind → the part's value. */
   key: string;
+  /** groupBy=tool: the Uzbek title of `key` (`toolKeyTitle`); `null` for the other groupings. */
+  title: string | null;
   calls: number;
   inputTokens: number;
   outputTokens: number;
@@ -148,6 +182,7 @@ export async function aiCost(range: DateRange, groupBy: AiGroupBy): Promise<AiCo
         groupBy,
         rows: rows.map((r) => ({
           key: r.key,
+          title: groupBy === "tool" ? toolKeyTitle(r.key) : null,
           calls: r.calls,
           inputTokens: r.inputTokens,
           outputTokens: r.outputTokens,

@@ -472,7 +472,7 @@ test("FinancePage reconciliation: counts, sample links by id, the timeout messag
     checks: [
       { id: "paid_without_ledger", title: "To'langan, lekin hisobga yozilmagan buyurtmalar", severity: "error", count: 1, countCapped: false, timedOut: false, sample: [{ type: "order", id: ORDER_ID, userId: "42", userName: "Ali Valiyev", provider: "click", purpose: "topup", amountSoum: 7_000, state: "paid", createdAt: "2026-09-12T07:00:00.000Z", credited: false }] },
       { id: "wallet_ledger_mismatch", title: "Hamyon qoldig'i hisob yozuvlari yig'indisiga teng emas", severity: "error", count: null, countCapped: false, timedOut: true, sample: [] },
-      { id: "failed_unrefunded", title: "Xato bilan tugagan, puli qaytarilmagan ishlar", severity: "error", count: 1, countCapped: false, timedOut: false, sample: [{ type: "generation", id: "5f0c2d1e-7b3a-4c9d-8e6f-0a1b2c3d4e5f", userId: "42", userName: "Ali Valiyev", toolId: "slide", finishedAt: "2026-10-01T07:00:00.000Z", charged: { points: 0, quota: 0, balance: 3_000 }, delivered: null }] },
+      { id: "failed_unrefunded", title: "Xato bilan tugagan, puli qaytarilmagan ishlar", severity: "error", count: 1, countCapped: false, timedOut: false, sample: [{ type: "generation", id: "5f0c2d1e-7b3a-4c9d-8e6f-0a1b2c3d4e5f", userId: "42", userName: "Ali Valiyev", toolId: "slide", toolTitle: "Slayd", finishedAt: "2026-10-01T07:00:00.000Z", charged: { points: 0, quota: 0, balance: 3_000 }, delivered: null }] },
       { id: "partial_refund_missing", title: "Qisman yetkazilgan, farqi qaytarilmagan ishlar", severity: "warning", count: 0, countCapped: false, timedOut: false, sample: [] },
       { id: "orders_pending_12h", title: "12 soatdan ortiq kutilayotgan buyurtmalar", severity: "warning", count: 0, countCapped: false, timedOut: false, sample: [] },
       { id: "orders_created_24h", title: "24 soatdan ortiq «yaratilgan» holatida qolgan buyurtmalar", severity: "info", count: 0, countCapped: false, timedOut: false, sample: [] },
@@ -491,6 +491,9 @@ test("FinancePage reconciliation: counts, sample links by id, the timeout messag
   assert.equal(within(paid).getByText("2b0d6a3e").closest("a")?.getAttribute("href"), `/admin/payments/${ORDER_ID}`);
   const failed = container.querySelector('[data-check="failed_unrefunded"]') as HTMLElement;
   assert.equal(within(failed).getByText("5f0c2d1e").closest("a")?.getAttribute("href"), "/admin/generations/5f0c2d1e-7b3a-4c9d-8e6f-0a1b2c3d4e5f");
+  // The sample names the tool by its server-resolved Uzbek title; the raw id is only the tooltip.
+  assert.equal(within(failed).getByText("Slayd").getAttribute("title"), "slide");
+  assert.ok(!within(failed).queryByText("slide"));
   assert.ok(screen.getByText("3 ta tekshiruvda topilma"));
 
   // Narrowing the wallet check: the range goes to the URL and to the request.
