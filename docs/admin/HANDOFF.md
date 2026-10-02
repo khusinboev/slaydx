@@ -44,7 +44,7 @@ The brief's non-negotiable rules:
 | WP1 | Dashboard (§6.3, S3) | ✅ merged 2026-10-02 (opus; smoke 41/41) |
 | WP2 | Users (§6.4, S4/S5); rewrites the legacy `app/api/admin/users/**` | ⏳ |
 | WP3 | Generations (§6.5, S6/S7); exports `GenerationsTable` (`fixedFilters`, `embedded`) for WP2 | ✅ merged 2026-10-02 (opus; smoke 53/53) |
-| WP4 | Payments and finance (§6.6, S8–S10); exports `OrdersTable`/`LedgerTable` for WP2 | 🔄 in progress (agent worktree `agent-a3a817da10f90a446`) |
+| WP4 | Payments and finance (§6.6, S8–S10); exports `OrdersTable`/`LedgerTable` for WP2 | ✅ merged 2026-10-02 (opus; smoke 79/79) |
 | WP5 | AI cost and providers (§6.7, S11) on `admin-cost`; `lib/server/admin-heartbeat.ts` (shared stale rule) | ✅ merged 2026-10-02 (sonnet; smoke 43/43) |
 | WP6 | Moderation (§6.8, S12) | ✅ merged 2026-10-02 (sonnet; smoke 71/72, 1 script bug verified in SQL) |
 | WP7 | System and errors (§6.11, S15/S16) | ✅ merged 2026-10-02 (sonnet; smoke 82/82) |
@@ -175,3 +175,5 @@ Deploying earlier would leave the owner without a working admin UI. Migration `0
 - [ ] env.ts:414-416 runtimeWarnings echoes raw FREE_LLM_DISABLED value; WP7 sanitizes in admin-system safeConfigMessage. Decide: one-line env.ts fix (product file) or keep sanitizer.
 - [ ] No index on lower(generations.topic): moderation q prefix scans generations (fine now; note in 03-report).
 - [ ] settings group label 'Narxlar' (catalog) vs prototype 'Narxlash' — keep catalog.
+- [ ] Shared step-up-aware CSV download: WP3 and WP4 each implement their own; add `adminDownload` to lib/admin-api/core.ts and switch all exports (WP3/WP4/WP10/WP2).
+- [ ] orders sort amount_desc has no index (fine now; 03-report).
