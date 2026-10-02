@@ -753,6 +753,9 @@ test("metrics against a hand-computed fixture; detail; simulator; mutations; rol
         [user.id],
       );
 
+    // Warm the 15 s pricing snapshot first: without `invalidatePricingCache()` after the PUT the
+    // product path would keep charging the base price until the TTL expires.
+    assert.equal(await pricingServer.effectivePrice(TOOL_BY_ID.essay, ESSAY_VALUES), base);
     assert.equal((await put(owner.cookie, "essay", { percent: 120, roundTo: 500, reason: "Narx +20 % sinovi" })).status, 200);
     const effective = applyPriceAdjust(base, { percent: 120, roundTo: 500 });
     assert.notEqual(effective, base);

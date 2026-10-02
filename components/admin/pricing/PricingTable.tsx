@@ -70,7 +70,7 @@ export function PricingTable({
         </span>
       ),
     },
-    { id: "base", header: "Asosiy narx", align: "right", className: "tabular-nums whitespace-nowrap", cell: (r) => ladderRange(r.ladder, "base") },
+    { id: "base", header: "Asosiy narx", align: "right", className: "tabular-nums whitespace-nowrap text-xs", cell: (r) => ladderRange(r.ladder, "base") },
     {
       id: "adjust",
       header: "Tuzatish",
@@ -87,7 +87,7 @@ export function PricingTable({
       id: "effective",
       header: "Amaldagi narx",
       align: "right",
-      className: "tabular-nums whitespace-nowrap",
+      className: "tabular-nums whitespace-nowrap text-xs",
       cell: (r) => <span className={isDefaultAdjust(r.adjust) ? undefined : "font-semibold"}>{ladderRange(r.ladder, "effective")}</span>,
     },
     {
@@ -125,7 +125,7 @@ export function PricingTable({
         const change = trendChangePct(r.trend);
         return (
           <span className="inline-flex items-center gap-2">
-            <Sparkline values={trendValues(r.trend)} title={`${r.title}: ${fmtNumber(days)} kunlik tannarx trendi`} color={change !== null && change > 5 ? 2 : 4} width={84} height={26} formatValue={(n) => fmtNumber(Math.round(n))} />
+            <Sparkline values={trendValues(r.trend)} title={`${r.title}: ${fmtNumber(days)} kunlik tannarx trendi`} color={change !== null && change > 5 ? 2 : 4} width={64} height={24} formatValue={(n) => fmtNumber(Math.round(n))} />
             <span className={`text-xs tabular-nums ${change === null ? "text-muted-foreground" : change > 5 ? "text-destructive" : change < -5 ? "text-success-text" : "text-muted-foreground"}`}>
               {change === null ? "—" : fmtPercent(change, { digits: 0, sign: true })}
             </span>
