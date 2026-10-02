@@ -122,19 +122,42 @@ function wrongState(row: Row, expected: string): ApiError {
   return new ApiError(`Ish holati ${row.status}; faqat ${expected} ish uchun mumkin`, 409, { code: "state", status: row.status });
 }
 
+export type CancelQueuedResult = {
+  /** The job was QUEUED and is now REVOKED. */
+  cancelled: boolean;
+  /** What the refund returned; `null` when nothing was refunded now (free job, or already refunded). */
+  refunded: ChargeSplit | null;
+};
+
+/**
+ * The one admin "cancel a queued job" step, inside the caller's transaction:
+ * QUEUED → REVOKED, then `refundInTx` with `ADMIN_CANCEL_NOTE`. Used by the
+ * admin cancel (`cancelJob`) and by blocking a user with "cancel queued jobs"
+ * (`admin-users.setUserBlocked`). The caller writes the audit row.
+ *
+ * The status guard in the UPDATE makes it safe without a prior lock: a job a
+ * worker already claimed (IN_PROGRESS) is left alone and nothing is refunded.
+ * Callers that need a 409 on the wrong state lock and check the row first.
+ */
+export async function cancelQueuedInTx(client: PoolClient, job: { id: string; userId: string }): Promise<CancelQueuedResult> {
+  const upd = await client.query(
+    `UPDATE generations
+        SET status = 'REVOKED', step = 'Bekor qilindi', progress = 100, finished_at = now()
+      WHERE id = $1 AND status = 'QUEUED'`,
+    [job.id],
+  );
+  if (!upd.rowCount) return { cancelled: false, refunded: null };
+  const refundedNow = await refundInTx(client, job.userId, job.id, ADMIN_CANCEL_NOTE);
+  return { cancelled: true, refunded: refundedNow ? await refundSplit(client, job.id) : null };
+}
+
 /** QUEUED → REVOKED plus the refund, as the user's own cancel does (`cancelGeneration`). */
 export async function cancelJob(actor: AdminActor, id: string, reason: string): Promise<JobActionResult> {
   return adminTx(actor, async (client, audit) => {
     const row = await lockGeneration(client, id);
     if (row.status !== "QUEUED") throw wrongState(row, "QUEUED");
-    await client.query(
-      `UPDATE generations
-          SET status = 'REVOKED', step = 'Bekor qilindi', progress = 100, finished_at = now()
-        WHERE id = $1 AND status = 'QUEUED'`,
-      [id],
-    );
-    const refundedNow = await refundInTx(client, row.user_id, id, ADMIN_CANCEL_NOTE);
-    const refunded = refundedNow ? await refundSplit(client, id) : null;
+    // The row is locked and QUEUED, so this always cancels.
+    const { refunded } = await cancelQueuedInTx(client, { id, userId: row.user_id });
     await audit({
       action: "jobs.cancel",
       targetType: "generation",

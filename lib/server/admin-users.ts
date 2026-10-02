@@ -23,10 +23,9 @@ import {
 } from "./admin-list";
 import { CSV_MAX_ROWS, csvResponse, flattenBatches, keysetBatches } from "./admin-csv";
 import { maskPhone } from "./admin-mask";
-import { ADMIN_CANCEL_NOTE } from "./admin-job-actions";
+import { cancelQueuedInTx } from "./admin-job-actions";
 import { LEDGER_COLUMNS, TRANSACTION_KINDS, resolveLedgerLinks, type LedgerDbRow, type TransactionKind } from "./admin-payments";
 import { escapeTelegramHtml } from "./broadcast-delivery";
-import { refundInTx } from "./refund-tx";
 import { getSetting } from "./settings";
 import { TelegramTransientError, sendMessage } from "./telegram";
 
@@ -43,8 +42,8 @@ import { TelegramTransientError, sendMessage } from "./telegram";
  *   - a reveal without `users.pii` is a 403 plus a `denied` audit row.
  *
  * Mutations (block, session revoke, message) write exactly one `ok` audit row
- * in the same transaction as their change. Money moves only through
- * `refundInTx` (the idempotent refund primitive F6 also uses); wallet
+ * in the same transaction as their change. Money moves only through F6's
+ * `cancelQueuedInTx` (QUEUED → REVOKED + the idempotent `refundInTx`); wallet
  * adjustments are F6's own route (`users/[id]/wallet-adjustments`).
  */
 
@@ -798,8 +797,8 @@ export type BlockResponse = { user: AdminUserDetail; sideEffects: BlockSideEffec
  *
  * Effect for the user: `currentSessionRef` (session.ts) refuses any session of
  * a blocked user, so the next request is anonymous even if sessions were kept.
- * Queued jobs are cancelled exactly like F6's admin cancel (`cancelJob`):
- * QUEUED → REVOKED, then `refundInTx` with the same note.
+ * Queued jobs are cancelled by the same step as F6's admin cancel
+ * (`cancelQueuedInTx`: QUEUED → REVOKED, then `refundInTx` with the same note).
  */
 export async function setUserBlocked(actor: AdminActor, id: string, input: BlockInput): Promise<BlockResponse> {
   refuseSelf(actor, id, "bloklash");
@@ -816,37 +815,30 @@ export async function setUserBlocked(actor: AdminActor, id: string, input: Block
 
     const effects: BlockSideEffects = { sessionsRevoked: 0, jobsCancelled: 0, refunds: 0, linksRevoked: 0 };
     const refunded = { points: 0, quota: 0, balance: 0 };
-    let jobIds: string[] = [];
+    const jobIds: string[] = [];
     if (input.blocked) {
       if (input.revokeSessions) effects.sessionsRevoked = await revokeUserSessionsInTx(client, id);
       if (input.cancelQueued) {
-        // Row locks on the job rows: a worker claiming one concurrently either
-        // finished its claim first (then it is IN_PROGRESS and untouched here) or
-        // waits and finds it no longer QUEUED.
-        const res = await client.query<{ id: string }>(
-          `UPDATE generations
-              SET status = 'REVOKED', step = 'Bekor qilindi', progress = 100, finished_at = now()
-            WHERE user_id = $1 AND status = 'QUEUED'
-            RETURNING id::text AS id`,
+        // Row locks on the job rows (the claim uses SKIP LOCKED): a worker
+        // claiming one concurrently either finished its claim first (then it is
+        // IN_PROGRESS and untouched here) or skips it and it is cancelled.
+        const queued = await client.query<{ id: string }>(
+          `SELECT id::text AS id FROM generations WHERE user_id = $1 AND status = 'QUEUED' ORDER BY id FOR UPDATE`,
           [id],
         );
-        jobIds = res.rows.map((r) => r.id).sort();
-        effects.jobsCancelled = jobIds.length;
-        for (const jobId of jobIds) {
-          if (await refundInTx(client, id, jobId, ADMIN_CANCEL_NOTE)) {
+        for (const { id: jobId } of queued.rows) {
+          const r = await cancelQueuedInTx(client, { id: jobId, userId: id });
+          if (!r.cancelled) continue;
+          jobIds.push(jobId);
+          if (r.refunded) {
             effects.refunds += 1;
-            const r = await client.query<{ points_delta: string; quota_delta: string; balance_delta: string }>(
-              `SELECT points_delta, quota_delta, balance_delta FROM transactions WHERE kind = 'refund' AND reference = $1`,
-              [jobId],
-            );
-            const row = r.rows[0];
-            if (row) {
-              refunded.points += Number(row.points_delta);
-              refunded.quota += Number(row.quota_delta);
-              refunded.balance += Number(row.balance_delta);
-            }
+            refunded.points += r.refunded.points;
+            refunded.quota += r.refunded.quota;
+            refunded.balance += r.refunded.balance;
           }
         }
+        jobIds.sort();
+        effects.jobsCancelled = jobIds.length;
       }
       if (input.revokeLinks) {
         const res = await client.query(
