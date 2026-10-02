@@ -27,8 +27,9 @@ import { trackJobCost, type JobCost } from "../generation/job-cost";
  *   2. barcha foydalanuvchilar bo'yicha GLOBAL kunlik chegara (vazn bilan)
  *      → 503, pullik generatsiyaga tegmaydi;
  *   3. `FREE_LLM_DISABLED=true` → darhol 503, provayder chaqirilmaydi;
- *   4. «Tuzatish»/«Hammasini tuzatish» faqat PUL bilan (balans yoki Pro
- *      kvota) to'langan hujjatda — faqat bonus ball bilan to'langanda 402;
+ *   4. «Tuzatish»/«Hammasini tuzatish» faqat PUL bilan (balans; eski
+ *      hujjatlarda — Pro kvota ham) to'langan hujjatda — faqat bonus ball
+ *      bilan to'langanda 402;
  *   5. bu chelaklar baza xatosida YOPIQ (503) — `rateLimit` ning
  *      umumiy ochiq xulqi boshqa chaqiruvchilar uchun o'zgarmaydi;
  *   6. bitta hujjatda bir vaqtda bitta AI tahrir (409 `busy`), mijoz
@@ -158,7 +159,7 @@ const GLOBAL_TEXT =
   "Bepul AI yordamchining bugungi umumiy chegarasi tugadi — ertaga (Toshkent vaqti bilan 00:00 dan keyin) qayta urinib ko'ring. Pullik generatsiya odatdagidek ishlaydi.";
 const DB_TEXT = "Xizmat hozir band — birozdan keyin qayta urinib ko'ring.";
 const UNPAID_TEXT =
-  "AI tahrir faqat pul bilan (balans yoki Pro obuna) to'langan hujjatlarda ishlaydi. Bu hujjat bonus ballar hisobidan yaratilgan — bonus AI tahrirni qoplamaydi.";
+  "AI tahrir faqat pul bilan (balans) to'langan hujjatlarda ishlaydi. Bu hujjat bonus ballar hisobidan yaratilgan — bonus AI tahrirni qoplamaydi.";
 const BUSY_TEXT = "Bu hujjat ustida AI tahrir allaqachon ketmoqda — tugashini kuting.";
 
 /**
@@ -288,7 +289,8 @@ async function hit(bucket: string, count: number, windowSec: number, opts: RateO
  * to'langanmi.
  *
  * «Pul bilan»: `charge` qatori (`reference` = generatsiya id)
- * `balance` yoki `quota` (Pro obuna — pullik) dan nimadir olgan va u
+ * `balance` yoki `quota` (olib tashlangan Pro obuna kvotasi — eski, lekin
+ * pullik; yig'indidan chiqarilmaydi) dan nimadir olgan va u
  * `refund` bilan to'liq qaytarilmagan. Faqat `points` (ro'yxatdan o'tish
  * bonusi) bilan to'langan hujjat — 402: bonus bitta hujjatga yetadi,
  * lekin cheksiz bepul AI tahrirni ochmasligi kerak. `charge` qatori
