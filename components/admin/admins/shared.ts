@@ -24,9 +24,13 @@ export function isAdminRole(v: string): v is AdminRole {
   return (ROLE_ORDER as ReadonlyArray<string>).includes(v);
 }
 
-/** `canManageRole` of the server: strictly lower rank, an owner may also manage owners. */
+/** Roles holding `admins.manage` (plan §4.3): everyone else manages nobody. */
+const MANAGER_ROLES: ReadonlyArray<AdminRole> = ["owner", "admin"];
+
+/** `canManageRole` of the server: needs `admins.manage` and a strictly lower rank; an owner may also manage owners. */
 export function canManageRole(actorRole: string, targetRole: string): boolean {
   if (!isAdminRole(actorRole) || !isAdminRole(targetRole)) return false;
+  if (!MANAGER_ROLES.includes(actorRole)) return false;
   if (actorRole === "owner") return true;
   return ROLE_RANK[targetRole] < ROLE_RANK[actorRole];
 }

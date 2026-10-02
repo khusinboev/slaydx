@@ -37,6 +37,7 @@ const { query, queryOne, ensureMigrated, transaction, pool } = await import("../
 const { createSession, SESSION_COOKIE } = await import("../lib/server/session.ts");
 const { createAdminSession, adminCookieName } = await import("../lib/server/admin-session.ts");
 const { ROLE_RANK, ROLES } = await import("../lib/server/admin-rbac.ts");
+const { canManageRole } = await import("../lib/server/admin-rbac.ts");
 const rankMirror = await import("../components/admin/admins/shared.ts");
 const listRoute = await import("../app/api/admin/audit/route.ts");
 const detailRoute = await import("../app/api/admin/audit/[id]/route.ts");
@@ -554,4 +555,8 @@ test("the client rank table mirrors the server's ROLE_RANK (UI shows only what t
   assert.deepEqual(Object.keys(rankMirror.ROLE_RANK).sort(), [...ROLES].sort());
   for (const role of ROLES) assert.equal(rankMirror.ROLE_RANK[role], ROLE_RANK[role], role);
   assert.deepEqual([...rankMirror.ROLE_ORDER], [...ROLES]);
+  // Every actor × target pair agrees with the server's rule (admins.manage + strictly lower rank, owner → owner).
+  for (const actor of ROLES) {
+    for (const target of ROLES) assert.equal(rankMirror.canManageRole(actor, target), canManageRole(actor, target), `${actor} → ${target}`);
+  }
 });
