@@ -805,6 +805,22 @@ export type BlockResponse = { user: AdminUserDetail; sideEffects: BlockSideEffec
 export async function setUserBlocked(actor: AdminActor, id: string, input: BlockInput): Promise<BlockResponse> {
   refuseSelf(actor, id, "bloklash");
   return adminTx(actor, async (client, audit) => {
+    // Lock order generations → users, like every other money path (the
+    // user's own cancel, queue-ttl, reconcile, admin cancel/fail,
+    // commitJobResult): the job rows FIRST, the user row after. The reverse
+    // order deadlocked against a concurrent user cancel (40P01 → 500).
+    // Row locks on the job rows also settle the race with a worker claim
+    // (SKIP LOCKED): a job claimed first is IN_PROGRESS and untouched below;
+    // a job locked here is skipped by the worker and cancelled. A job the user
+    // cancels meanwhile is no longer QUEUED when the lock is granted
+    // (READ COMMITTED re-check) and drops out of the list.
+    const queued =
+      input.blocked && input.cancelQueued
+        ? await client.query<{ id: string }>(
+            `SELECT id::text AS id FROM generations WHERE user_id = $1 AND status = 'QUEUED' ORDER BY id FOR UPDATE`,
+            [id],
+          )
+        : null;
     const before = await lockUser(client, id);
     await assertMayActOn(client, actor, id);
     if (before.is_blocked === input.blocked) {
@@ -820,14 +836,7 @@ export async function setUserBlocked(actor: AdminActor, id: string, input: Block
     const jobIds: string[] = [];
     if (input.blocked) {
       if (input.revokeSessions) effects.sessionsRevoked = await revokeUserSessionsInTx(client, id);
-      if (input.cancelQueued) {
-        // Row locks on the job rows (the claim uses SKIP LOCKED): a worker
-        // claiming one concurrently either finished its claim first (then it is
-        // IN_PROGRESS and untouched here) or skips it and it is cancelled.
-        const queued = await client.query<{ id: string }>(
-          `SELECT id::text AS id FROM generations WHERE user_id = $1 AND status = 'QUEUED' ORDER BY id FOR UPDATE`,
-          [id],
-        );
+      if (queued) {
         for (const { id: jobId } of queued.rows) {
           const r = await cancelQueuedInTx(client, { id: jobId, userId: id });
           if (!r.cancelled) continue;

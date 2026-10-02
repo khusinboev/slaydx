@@ -67,8 +67,13 @@ export type PricingTotals = {
   jobs: number;
   completed: number;
   cashRevenue: number;
-  costUsd: number;
-  costSoum: number;
+  /** Registry tools' spend (what `marginPct` is on). */
+  costUsdTools: number;
+  costSoumTools: number;
+  /** Free-LLM endpoints and unknown-tool spend of the same range. */
+  costUsdOther: number;
+  /** costUsdTools + costUsdOther — the dashboard / AI page figure. */
+  costUsdAll: number;
   marginPct: number | null;
 };
 

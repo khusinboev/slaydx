@@ -38,7 +38,8 @@ const { createAdminSession, adminCookieName } = await import("../lib/server/admi
 const jobs = await import("../lib/server/jobs.ts");
 const { refund } = await import("../lib/server/credits.ts");
 const { refundInTx } = await import("../lib/server/refund-tx.ts");
-const { ADMIN_CANCEL_NOTE, ADMIN_FAIL_ERROR, ADMIN_REFUND_NOTE } = await import("../lib/server/admin-job-actions.ts");
+const { ADMIN_CANCEL_NOTE, ADMIN_FAIL_ERROR, ADMIN_REFUND_NOTE, purgeFailedLeftovers } = await import("../lib/server/admin-job-actions.ts");
+const { putAssetBytes } = await import("../lib/server/assets.ts");
 const routes = {
   cancel: await import("../app/api/admin/generations/[id]/cancel/route.ts"),
   fail: await import("../app/api/admin/generations/[id]/fail/route.ts"),
@@ -379,6 +380,100 @@ test("refund racing the worker's refund: the unique ledger reference becomes 409
   assert.equal(rf.length, 1);
   assert.equal(rf[0].note, "Xatolik: worker");
   assert.equal((await audits(s.admin.adminId, "jobs.refund")).length, 0);
+});
+
+/** Sessions of this database waiting on a row lock (`pg_stat_activity`). */
+async function waitForLockWaiters(n: number): Promise<void> {
+  const deadline = Date.now() + 5_000;
+  for (;;) {
+    const row = await queryOne<{ n: number }>(
+      `SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'`,
+    );
+    if ((row?.n ?? 0) >= n) return;
+    if (Date.now() > deadline) throw new Error(`lock waiters: kutilgan ${n}, bor ${row?.n ?? 0}`);
+    await new Promise((r) => setTimeout(r, 20));
+  }
+}
+
+/**
+ * The mirror race (P4 money review, finding 2): the worker's `credits.refund`
+ * passes its "already refunded" check while an ADMIN refund is still
+ * uncommitted, waits on the users row, then its insert hits
+ * `transactions_ref_idx`. That must read as "already refunded" (`false`), not
+ * a raw 23505: `refundThenCleanup` would log a false REFUND_FAILED alert.
+ * The barrier is the admin's own uncommitted `refundInTx`.
+ */
+test("worker refund racing a committing admin refund: unique ledger reference → false (already refunded), never a raw 23505", { skip }, async () => {
+  const u = await mkUser(3_000);
+  const id = await enqueue(u.id, 1_000);
+  await query(`UPDATE generations SET status = 'FAILED', locked_by = NULL, finished_at = now() WHERE id = $1`, [id]);
+  const admin = await pool().connect();
+  let worker: Promise<boolean> | undefined;
+  try {
+    await admin.query("BEGIN");
+    assert.equal(await refundInTx(admin, u.id, id, ADMIN_REFUND_NOTE), true); // holds the users row, refund row uncommitted
+    worker = refund(u.id, id, "Xatolik: kech");
+    await waitForLockWaiters(1); // the worker sits on `SELECT … users FOR UPDATE`
+    await admin.query("COMMIT");
+  } finally {
+    await admin.query("ROLLBACK").catch(() => {});
+    admin.release();
+  }
+  assert.equal(await worker!, false, "MUTATSIYA: 23505 must become «already refunded»");
+  const rf = await refunds(id);
+  assert.equal(rf.length, 1);
+  assert.equal(rf[0].note, ADMIN_REFUND_NOTE);
+  assert.equal(await balance(u.id), 3_000, "refunded exactly once");
+});
+
+/**
+ * P4 money review, finding 5: after an admin force-fail the fenced worker may
+ * still finish an UNFENCED asset write (`LiveReporter` → `putAssets`, TTS →
+ * `putAssetBytes`), leaving orphan rows on the FAILED job; no existing purge
+ * covers them (retention: COMPLETED bonus-only; reconcile: unrefunded only).
+ * `purgeFailedLeftovers` sweeps admin-failed jobs once their budget (plus the
+ * worker's hard-stop/quiesce grace) has surely elapsed; it is idempotent and
+ * touches nothing else. Mutation checks: dropping the grace → the early sweep
+ * removes the row; dropping the ADMIN_FAIL_ERROR predicate → the worker-failed
+ * job's asset is swept too.
+ */
+test("fail: a late asset write of the fenced worker is swept by purgeFailedLeftovers after the job's budget", { skip }, async () => {
+  const s = await session("admin");
+  const u = await mkUser(3_000);
+  const id = await enqueue(u.id, 1_000); // budgetMs 60_000
+  // Claimed state by SQL: `claimJob` takes the oldest QUEUED job globally, and earlier tests leave some.
+  await query(`UPDATE generations SET status = 'IN_PROGRESS', locked_by = $2, locked_at = now() WHERE id = $1`, [id, jobs.newLease("w-late-asset")]);
+  const r = await call("fail", s.cookie, id, { reason: "Osilib qolgan ish" });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+
+  // The worker's in-flight write lands after the admin's DELETE.
+  const assetId = await putAssetBytes(id, "audio/mpeg", Buffer.from([1, 2, 3]));
+  const assets = () => query<{ asset_id: string }>(`SELECT asset_id FROM generation_assets WHERE generation_id = $1`, [id]);
+  assert.deepEqual((await assets()).map((a) => a.asset_id), [assetId], "orphan asset on the FAILED job");
+
+  // Control rows: a COMPLETED job and a job the WORKER failed keep their assets.
+  const done = await enqueue(u.id, 100);
+  await query(`UPDATE generations SET status = 'COMPLETED', finished_at = now() - interval '1 day' WHERE id = $1`, [done]);
+  const doneAsset = await putAssetBytes(done, "image/png", Buffer.from([4, 5, 6]));
+  const workerFailed = await enqueue(u.id, 100);
+  await query(`UPDATE generations SET status = 'FAILED', error = 'Provayder xatosi', finished_at = now() - interval '1 day' WHERE id = $1`, [workerFailed]);
+  const ownAsset = await putAssetBytes(workerFailed, "image/png", Buffer.from([7, 8, 9]));
+
+  assert.equal(await purgeFailedLeftovers(), 0, "within budget + grace the worker may still be writing");
+  assert.equal((await assets()).length, 1);
+  await query(`UPDATE generations SET finished_at = now() - interval '3 minutes' WHERE id = $1`, [id]); // 60 s budget + 60 s grace
+  assert.equal(await purgeFailedLeftovers(), 1);
+  assert.equal((await assets()).length, 0, "MUTATSIYA: the orphan is gone");
+  assert.equal(await purgeFailedLeftovers(), 0, "idempotent");
+  const rest = await query<{ generation_id: string; asset_id: string }>(
+    `SELECT generation_id::text AS generation_id, asset_id FROM generation_assets WHERE generation_id = ANY($1::uuid[]) ORDER BY generation_id`,
+    [[done, workerFailed]],
+  );
+  assert.deepEqual(
+    rest.sort((a, b) => a.generation_id.localeCompare(b.generation_id)),
+    [{ generation_id: done, asset_id: doneAsset }, { generation_id: workerFailed, asset_id: ownAsset }].sort((a, b) => a.generation_id.localeCompare(b.generation_id)),
+    "COMPLETED and worker-failed jobs untouched",
+  );
 });
 
 // ───────────────────────────── ids and guard

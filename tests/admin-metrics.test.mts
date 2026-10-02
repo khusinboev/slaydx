@@ -467,6 +467,45 @@ test("cache: overview/series/tools are cached 60 s per params, live is not", { s
   metrics.clearMetricsCache();
 });
 
+/**
+ * P4 money review, finding 4: only the raw aggregates may live in the 60 s
+ * cache; `soumPerUsd` and the derived `marginSoum` are applied per request, so
+ * a changed FX setting shows at once. Mutation check: caching the computed
+ * margin again → `soumPerUsd` and `marginSoum` of the second call are stale.
+ */
+test("overview: a changed finance.soum_per_usd shows in marginSoum at once while the aggregates stay cached", { skip }, async () => {
+  await seed();
+  metrics.clearMetricsCache();
+  const cookie = await session("viewer");
+  const qs = `from=${D10}&to=${D11}`;
+  const kpis = (r: { body: Record<string, unknown> }, which: "current" | "previous") =>
+    r.body[which] as { newUsers: number; aiCostUsd: number; revenueSoum: { total: number }; marginSoum: number };
+  const a = await get("overview", qs, cookie);
+  assert.equal(a.body.soumPerUsd, RATE);
+  assert.equal(kpis(a, "current").marginSoum, kpis(a, "current").revenueSoum.total - Math.round(kpis(a, "current").aiCostUsd * RATE));
+
+  const extra = await mkUser(tk(D10, "12:00:00")); // would change newUsers if the aggregates were recomputed
+  const NEW_RATE = 20_000;
+  await transaction((c) => setSettingInTx(c, "finance.soum_per_usd", NEW_RATE, null));
+  invalidateSettingsCache();
+  try {
+    const b = await get("overview", qs, cookie);
+    assert.equal(b.body.soumPerUsd, NEW_RATE, "MUTATSIYA: the rate must not come from the metrics cache");
+    for (const which of ["current", "previous"] as const) {
+      const was = kpis(a, which);
+      const now = kpis(b, which);
+      assert.equal(now.marginSoum, was.revenueSoum.total - Math.round(was.aiCostUsd * NEW_RATE), `${which} marginSoum at the new rate`);
+      assert.equal(now.aiCostUsd, was.aiCostUsd);
+      assert.equal(now.newUsers, was.newUsers, `${which} aggregates served from the cache`);
+    }
+  } finally {
+    await transaction((c) => setSettingInTx(c, "finance.soum_per_usd", RATE, null));
+    invalidateSettingsCache();
+    await query(`DELETE FROM users WHERE id = $1`, [extra]);
+    metrics.clearMetricsCache();
+  }
+});
+
 test("read-only transaction with a 10 s statement timeout", { skip }, async () => {
   await seed();
   const out = await metrics.readOnlyMetricsTx(async (c) => (await c.query<{ t: string }>("SELECT current_setting('statement_timeout') AS t")).rows[0].t);

@@ -11,7 +11,7 @@ import type * as IdentityModule from "../../components/admin/shell/admin-identit
 import type * as ToasterModule from "../../components/admin/ui/Toaster.tsx";
 import type { PricingDetail, PricingItem, PricingOverview, Simulation } from "../../lib/admin-api/pricing.ts";
 import { PricingPage } from "../../components/admin/pricing/PricingPage.tsx";
-import { ladderRange, marginTone, parseSort, recommendationOf, recommendationText, sortItems, trendChangePct } from "../../components/admin/pricing/shared.ts";
+import { ladderRange, marginTone, parseSort, recommendationOf, recommendationText, sortItems, trendChangePct, usd4 } from "../../components/admin/pricing/shared.ts";
 import { parsePercentText } from "../../components/admin/pricing/Simulator.tsx";
 
 /**
@@ -197,7 +197,7 @@ function overview(over: Partial<PricingOverview> = {}): PricingOverview {
   return {
     range: { from: "2026-03-10", to: "2026-03-12", days: 3 },
     items: [ESSAY, SLIDE, RESUME],
-    totals: { jobs: 1987, completed: 1913, cashRevenue: 5_900_000, costUsd: 310.5, costSoum: 3_726_000, marginPct: 36.85 },
+    totals: { jobs: 1987, completed: 1913, cashRevenue: 5_900_000, costUsdTools: 310.5, costSoumTools: 3_726_000, costUsdOther: 12.25, costUsdAll: 322.75, marginPct: 36.85 },
     fx: 12_000,
     targetMarkup: 3,
     groups: [
@@ -323,6 +323,13 @@ test("loading skeleton, then KPI tiles, coverage banner with caveats and the tab
   // KPI tiles.
   assert.ok(screen.getByText("36,9%"));
   assert.ok(screen.getByText("3 726 000 so'm"));
+  // AI cost tile: the tools' figure, plus the other spend (free AI, unknown) and the
+  // all-in total that equals the dashboard / AI page number (P4 money review, finding 3).
+  const costTile = screen.getByText("AI xarajat · vositalar · 3 kun").parentElement!;
+  const costHint = within(costTile).getByText(/jami/).textContent ?? "";
+  assert.ok(costHint.includes(usd4(310.5)), `tools usd in hint: ${costHint}`);
+  assert.ok(costHint.includes(`boshqa ${usd4(12.25)}`), `other spend in hint: ${costHint}`);
+  assert.ok(costHint.includes(`jami ${usd4(322.75)}`), `all-in total in hint: ${costHint}`);
   assert.ok(screen.getByText("12 000"));
   assert.ok(screen.getByText("3,0×"));
   assert.ok(screen.getByText("Slayd", { selector: "span" }), "tool below 30 % named in the tile hint");

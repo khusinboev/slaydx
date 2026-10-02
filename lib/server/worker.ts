@@ -51,6 +51,7 @@ import { log, withFreshLogContext, type LogFields } from "./log";
 import { providerOf, userMessage } from "./user-error";
 import { recordAiUsage, type AiUsageOutcome } from "./ai-usage";
 import { deliverBroadcasts } from "./broadcast-delivery";
+import { purgeFailedLeftovers } from "./admin-job-actions";
 import { registerErrorSink } from "./error-sink";
 import { processIdFor, startHeartbeat, stopHeartbeat } from "./heartbeat";
 import { recordStep } from "./housekeeping-status";
@@ -965,6 +966,8 @@ export async function purgeHousekeeping(): Promise<void> {
   await step("heartbeats", () => purgeHeartbeats());
   await step("admin-sessions", () => purgeAdminSessions());
   await step("broadcast-recipients", () => purgeBroadcastRecipients());
+  // Orphan files/assets a fenced worker wrote after an admin force-fail (admin-job-actions.ts).
+  await step("failed-leftovers", () => purgeFailedLeftovers());
 }
 
 /** In-flight broadcast delivery of this process (one at a time). */

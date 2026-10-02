@@ -196,7 +196,11 @@ function Ready({
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
         <KpiTile label="O'rtacha marja" value={<span className={MARGIN_TEXT[marginTone(totals.marginPct)]}>{pctText(totals.marginPct)}</span>} hint="naqd tushum bo'yicha tortilgan" />
         <KpiTile label="Marja < 30% vositalar" value={fmtNumber(low.length)} hint={low.length ? low.map((i) => i.title).join(", ") : "Hammasi me'yorda"} />
-        <KpiTile label={`AI xarajat · ${fmtNumber(data.range.days)} kun`} value={soumText(totals.costSoum)} hint={`${usd4(totals.costUsd)} · xato xarajati bilan`} />
+        <KpiTile
+          label={`AI xarajat · vositalar · ${fmtNumber(data.range.days)} kun`}
+          value={soumText(totals.costSoumTools)}
+          hint={`${usd4(totals.costUsdTools)} xato xarajati bilan · boshqa ${usd4(totals.costUsdOther)} (bepul AI, noma'lum) · jami ${usd4(totals.costUsdAll)}`}
+        />
         <KpiTile label="Kurs (so'm / USD)" value={fmtNumber(data.fx)} hint="finance.soum_per_usd" />
         <KpiTile label="Maqsadli ustama" value={markupText(data.targetMarkup)} hint="pricing.target_markup" />
       </div>

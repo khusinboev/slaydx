@@ -1,6 +1,7 @@
 import "server-only";
 import type { PoolClient } from "pg";
 import { ApiError } from "./api";
+import { transaction } from "./db";
 import { adminTx } from "./admin-audit";
 import type { AdminActor } from "./admin-handler";
 import { bodyHashOf, idempotentMutation, type IdempotentResult } from "./admin-idempotency";
@@ -253,5 +254,48 @@ export async function refundJob(
         after: { refunded: true, ...refunded },
       },
     };
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Leftovers of force-failed jobs (housekeeping)
+
+/**
+ * The worker's hard stop is the budget + 15 s, then up to 15 s waiting for
+ * in-flight asset writes (`quiesce`); 60 s on top of the budget covers both.
+ */
+const FAILED_LEFTOVER_GRACE_MS = 60_000;
+const FAILED_LEFTOVER_LIMIT = 200;
+
+/**
+ * `forceFailJob` deletes the files and assets of the dead attempt, but the
+ * fenced worker is still running: its live-preview images and TTS clips are
+ * written UNFENCED (`LiveReporter` → `putAssets`, `putAssetBytes`) and can
+ * land after that DELETE, leaving orphan rows on the FAILED job. No existing
+ * purge covers them (retention: COMPLETED bonus-only; reconcile: unrefunded
+ * only). This housekeeping step re-runs the same cleanup once the worker has
+ * surely stopped — `finished_at` (≥ the claim) + the job's budget + the grace —
+ * for admin-failed jobs only, so no product path changes. Idempotent, bounded,
+ * `SKIP LOCKED` across replicas. Returns the number of jobs cleaned.
+ */
+export async function purgeFailedLeftovers(): Promise<number> {
+  return transaction(async (client) => {
+    const picked = await client.query<{ id: string }>(
+      `SELECT g.id
+         FROM generations g
+        WHERE g.status = 'FAILED' AND g.error = $1
+          AND g.finished_at < now() - (g.budget_ms + $2::int) * interval '1 millisecond'
+          AND (EXISTS (SELECT 1 FROM generation_assets a WHERE a.generation_id = g.id)
+               OR EXISTS (SELECT 1 FROM generation_files f WHERE f.generation_id = g.id))
+        ORDER BY g.finished_at
+        LIMIT $3
+        FOR UPDATE OF g SKIP LOCKED`,
+      [ADMIN_FAIL_ERROR, FAILED_LEFTOVER_GRACE_MS, FAILED_LEFTOVER_LIMIT],
+    );
+    const ids = picked.rows.map((r) => r.id);
+    if (ids.length === 0) return 0;
+    await client.query("DELETE FROM generation_files WHERE generation_id = ANY($1::uuid[])", [ids]);
+    await client.query("DELETE FROM generation_assets WHERE generation_id = ANY($1::uuid[])", [ids]);
+    return ids.length;
   });
 }
