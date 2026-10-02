@@ -36,7 +36,7 @@ const iso = hasDb ? await createIsolatedDb("adminfinance") : { isolated: false, 
 const { query, queryOne, ensureMigrated, transaction, pool } = await import("../lib/server/db.ts");
 const { createSession, SESSION_COOKIE } = await import("../lib/server/session.ts");
 const { createAdminSession, adminCookieName } = await import("../lib/server/admin-session.ts");
-const { settleOrder, attachTransaction, PRO_PLAN } = await import("../lib/server/payments.ts");
+const { settleOrder, attachTransaction } = await import("../lib/server/payments.ts");
 const { charge, refund, refundPartial, topUp } = await import("../lib/server/credits.ts");
 const { clearFinanceCache, runReconciliation } = await import("../lib/server/admin-finance.ts");
 const summaryRoute = await import("../app/api/admin/finance/summary/route.ts");
@@ -112,10 +112,54 @@ const recon = (cookie: string | null, qs = "") => call(reconRoute, `/api/admin/f
 const ledger = (cookie: string | null, qs = "") => call(ledgerRoute, `/api/admin/transactions${qs}`, cookie);
 const ledgerCsv = (cookie: string | null, qs = "") => call(ledgerExportRoute, `/api/admin/transactions/export${qs}`, cookie);
 
+/** The removed Pro subscription as it was sold (the former `PRO_PLAN`): legacy orders only. */
+const LEGACY_PRO = { priceSoum: 15_000, quota: 15_000 } as const;
+
+/**
+ * A Pro order paid BEFORE the subscription removal, written by SQL (the product
+ * can no longer create or settle one this way): the order, its `subscription`
+ * ledger row crediting quota under the settlement reference, and the wallet.
+ */
+async function legacyProOrder(uid: string, provider: "click" | "payme", performTime: number): Promise<{ id: string; txn: string }> {
+  const id = randomUUID();
+  const txn = provider === "click" ? String(randomInt(100_000_000, 999_999_999)) : randomBytes(12).toString("hex");
+  await transaction(async (c) => {
+    await c.query(
+      `INSERT INTO payment_orders (id, user_id, provider, purpose, amount_soum, state, provider_txn, create_time, perform_time)
+       VALUES ($1, $2, $3, 'pro', $4, 'paid', $5, $6, $7)`,
+      [id, uid, provider, LEGACY_PRO.priceSoum, txn, performTime - 60_000, performTime],
+    );
+    await c.query(`INSERT INTO transactions (user_id, kind, quota_delta, reference, note) VALUES ($1, 'subscription', $2, $3, 'Pro obuna')`, [
+      uid,
+      LEGACY_PRO.quota,
+      `${provider}:${txn}`,
+    ]);
+    await c.query(`UPDATE users SET quota = quota + $2, plan = 'pro' WHERE id = $1`, [uid, LEGACY_PRO.quota]);
+  });
+  return { id, txn };
+}
+
+/** Migration 034's merge for one user (034 itself ran before the fixtures existed); returns the ledger row id. */
+async function mergeQuota(uid: string): Promise<string> {
+  const row = await queryOne<{ id: string }>(
+    `WITH src AS (SELECT id, quota AS q FROM users WHERE id = $1 AND quota > 0 FOR UPDATE),
+     moved AS (
+       UPDATE users u SET quota = u.quota - s.q, balance = u.balance + s.q FROM src s WHERE u.id = s.id
+       RETURNING u.id, s.q
+     )
+     INSERT INTO transactions (user_id, kind, quota_delta, balance_delta, reference, note)
+     SELECT id, 'quota_merge', -q, q, 'quota-merge:' || id::text, 'Kvota balansga o''tkazildi: ' || q::text || ' tanga' FROM moved
+     RETURNING id::text AS id`,
+    [uid],
+  );
+  assert.ok(row, "the user held quota to merge");
+  return row.id;
+}
+
 /** UTC instant of a Tashkent wall-clock time (UTC+5, no DST). */
 const tk = (y: number, mo: number, d: number, h = 0, mi = 0, s = 0, ms = 0) => Date.UTC(y, mo - 1, d, h - 5, mi, s, ms);
 
-async function paidOrder(uid: string, provider: "click" | "payme", purpose: "topup" | "pro", amount: number, performTime: number): Promise<{ id: string; txn: string }> {
+async function paidOrder(uid: string, provider: "click" | "payme", purpose: "topup", amount: number, performTime: number): Promise<{ id: string; txn: string }> {
   const id = randomUUID();
   const txn = provider === "click" ? String(randomInt(100_000_000, 999_999_999)) : randomBytes(12).toString("hex");
   await query(`INSERT INTO payment_orders (id, user_id, provider, purpose, amount_soum) VALUES ($1, $2, $3, $4, $5)`, [id, uid, provider, purpose, amount]);
@@ -170,7 +214,7 @@ before(async () => {
   // Revenue: two orders in range, two just outside it, one legacy paid order without perform_time (and without a ledger row).
   seed.a1 = await paidOrder(ali.id, "click", "topup", 100_000, tk(2026, 9, 11, 10));
   await paidOrder(ali.id, "click", "topup", 5_000, tk(2026, 9, 9, 23, 59, 59, 999));
-  seed.b1 = await paidOrder(vali.id, "payme", "pro", PRO_PLAN.priceSoum, tk(2026, 9, 13, 23, 59, 59, 999));
+  seed.b1 = await legacyProOrder(vali.id, "payme", tk(2026, 9, 13, 23, 59, 59, 999));
   await paidOrder(vali.id, "payme", "topup", 40_000, tk(2026, 9, 14));
   seed.legacy = randomUUID();
   await query(
@@ -198,7 +242,7 @@ before(async () => {
   const fin = await session("finance");
   for (const [orderId, body] of [
     [seed.a1.id, { kind: "refund", amountSoum: 10_000, reason: "Click orqali qaytarildi", clawback: true }],
-    [seed.b1.id, { kind: "chargeback", amountSoum: PRO_PLAN.priceSoum, reason: "Bank chargeback qildi", clawback: false }],
+    [seed.b1.id, { kind: "chargeback", amountSoum: LEGACY_PRO.priceSoum, reason: "Bank chargeback qildi", clawback: false }],
   ] as const) {
     const req = new Request(`http://localhost:3000/api/admin/orders/${orderId}/external-refund`, {
       method: "POST",
@@ -272,10 +316,10 @@ test("summary: zero-filled Tashkent days, provider/purpose split, spend, refunds
   assert.deepEqual(r.body.refunds, { count: 2, points: 0, quota: 0, balance: 3_000 });
   assert.deepEqual(r.body.adjustments, { count: 1, points: 0, quota: 0, balance: -10_000 });
   // ali 105 000 − 26 500 + 3 000 − 10 000; vali 40 000 + Pro quota; mismatch 1 007 + 50 points.
-  assert.deepEqual(r.body.liabilities, { points: 50, quota: PRO_PLAN.quota, balance: 71_500 + 40_000 + 1_007, users: 3 });
+  assert.deepEqual(r.body.liabilities, { points: 50, quota: LEGACY_PRO.quota, balance: 71_500 + 40_000 + 1_007, users: 3 });
   assert.deepEqual(r.body.externalRefunds, {
     count: 2,
-    amountSoum: 10_000 + PRO_PLAN.priceSoum,
+    amountSoum: 10_000 + LEGACY_PRO.priceSoum,
     refunds: 1,
     chargebacks: 1,
     clawedBack: { balance: 10_000, quota: 0 },
@@ -434,7 +478,8 @@ test("ledger: exact shape, per-wallet deltas, links resolved from references", {
   assert.deepEqual(byRef(`click:${seed.a1.txn}`).link, { type: "order", id: seed.a1.id });
   const sub = byRef(`payme:${seed.b1.txn}`);
   assert.equal(sub.kind, "subscription");
-  assert.equal(sub.quota, PRO_PLAN.quota);
+  assert.equal(sub.quota, LEGACY_PRO.quota);
+  assert.equal(sub.balance, 0, "a pre-removal Pro credit is quota only");
   assert.deepEqual(sub.link, { type: "order", id: seed.b1.id });
   const clawback = byRef(`refund:${seed.clawbackRefundId}`);
   assert.equal(clawback.kind, "admin_debit");
@@ -512,7 +557,7 @@ test("ledger export: step-up, finance.export only; CSV header, links, formula es
   assert.match(String(r.headers.get("content-disposition")), /^attachment; filename="hisob-kitobi-\d{4}-\d{2}-\d{2}\.csv"$/);
   assert.equal(r.text.charCodeAt(0), 0xfeff);
   const lines = r.text.slice(1).split("\r\n").filter(Boolean);
-  assert.equal(lines[0], `"ID","Vaqt","Foydalanuvchi ID","Foydalanuvchi","Turi","Bonus ball","Pro kvota","Balans","Havola","Izoh","Bog'liq obyekt","Bog'liq obyekt ID"`);
+  assert.equal(lines[0], `"ID","Vaqt","Foydalanuvchi ID","Foydalanuvchi","Turi","Bonus ball","Kvota (eski)","Balans","Havola","Izoh","Bog'liq obyekt","Bog'liq obyekt ID"`);
   assert.equal(lines.length, 3);
   const bonus = lines.find((l) => l.includes(`"bonus"`))!;
   assert.ok(bonus.includes(`"'=1+1"`), `formula escaped: ${bonus}`);
@@ -530,4 +575,64 @@ test("ledger export: step-up, finance.export only; CSV header, links, formula es
   assert.deepEqual(audits.map((a) => a.action), ["export.transactions", "export.transactions"]);
   assert.deepEqual(audits[0]!.meta.filters, { sort: "created_desc", kind: ["bonus", "topup"], userId: seed.mismatch });
   assert.deepEqual(audits[1]!.meta.filters, { sort: "created_desc", reference: `refund:${seed.clawbackRefundId}` });
+});
+
+// ───────────────────────────── subscription removal: the quota merge (migration 034)
+
+test("quota merge: the wallet ↔ ledger check reconciles all three columns across a quota_merge row; the ledger lists and filters it", { skip }, async () => {
+  const owner = await session("owner");
+  const u = await mkUser("Eski Pro Mijoz");
+  // History before the removal: a paid Pro order (quota), a job charged from that quota, then the 034 merge.
+  const order = await legacyProOrder(u.id, "click", tk(2026, 9, 1, 12));
+  const job = randomUUID();
+  assert.equal((await charge(u.id, 4_000, job, "Generatsiya")).ok, true);
+  const before = await queryOne<{ quota: string; balance: string }>(`SELECT quota::text AS quota, balance::text AS balance FROM users WHERE id = $1`, [u.id]);
+  assert.equal(Number(before!.quota), LEGACY_PRO.quota - 4_000, "the charge drained quota");
+  const mergeId = await mergeQuota(u.id);
+  const after = await queryOne<{ quota: string; balance: string }>(`SELECT quota::text AS quota, balance::text AS balance FROM users WHERE id = $1`, [u.id]);
+  assert.deepEqual([Number(after!.quota), Number(after!.balance)], [0, Number(before!.balance) + LEGACY_PRO.quota - 4_000]);
+
+  const mismatch = async () => ((await recon(owner.cookie)).body.checks as Check[]).find((c) => c.id === "wallet_ledger_mismatch")!;
+  const clean = await mismatch();
+  assert.equal(clean.count, 1, "only the seeded bypass write: the merged user reconciles");
+  assert.ok(!clean.sample.some((x) => x.id === u.id));
+
+  // MUTATSIYA (invariant): a merge row whose quota leg is off by one is caught although its balance leg matches,
+  // so the check must compare the quota column too, not only the cash total.
+  await query(`UPDATE transactions SET quota_delta = quota_delta + 1 WHERE id = $1`, [mergeId]);
+  try {
+    const broken = await mismatch();
+    assert.equal(broken.count, 2);
+    const hit = broken.sample.find((x) => x.id === u.id);
+    assert.ok(hit, "the merged user is reported");
+    assert.deepEqual(hit.wallet, { points: 0, quota: 0, balance: Number(after!.balance) });
+    assert.deepEqual(hit.ledger, { points: 0, quota: 1, balance: Number(after!.balance) });
+  } finally {
+    await query(`UPDATE transactions SET quota_delta = quota_delta - 1 WHERE id = $1`, [mergeId]);
+  }
+  assert.equal((await mismatch()).count, 1);
+
+  // The global ledger lists the row with both legs, filters by the new kind, and gives it no link.
+  const rows = await ledger(owner.cookie, `?userId=${u.id}&limit=100`);
+  assert.equal(rows.status, 200, rows.text);
+  const items = rows.body.items as Entry[];
+  assert.deepEqual(items.map((e) => e.kind).sort(), ["charge", "quota_merge", "subscription"]);
+  const merge = items.find((e) => e.kind === "quota_merge")!;
+  assert.deepEqual([merge.quota, merge.balance, merge.points], [-(LEGACY_PRO.quota - 4_000), LEGACY_PRO.quota - 4_000, 0]);
+  assert.equal(merge.reference, `quota-merge:${u.id}`);
+  assert.equal(merge.link, null);
+  assert.deepEqual(items.find((e) => e.kind === "subscription")!.link, { type: "order", id: order.id }, "the legacy order link still resolves");
+  const only = await ledger(owner.cookie, "?kind=quota_merge&limit=100");
+  assert.equal(only.status, 200, `MUTATSIYA: quota_merge is a known kind → ${only.status} ${only.text}`);
+  assert.deepEqual((only.body.items as Entry[]).map((e) => e.id), [mergeId]);
+
+  // Not cash and not an admin adjustment: a range holding only the merge row sums to zero everywhere.
+  await query(`UPDATE transactions SET created_at = '2026-08-20T06:00:00Z' WHERE id = $1`, [mergeId]);
+  clearFinanceCache();
+  const sum = await summary(owner.cookie, "?from=2026-08-20&to=2026-08-20");
+  assert.equal(sum.status, 200, sum.text);
+  assert.deepEqual(sum.body.cashSpend, { charges: 0, points: 0, quota: 0, balance: 0 });
+  assert.deepEqual(sum.body.refunds, { count: 0, points: 0, quota: 0, balance: 0 });
+  assert.deepEqual(sum.body.adjustments, { count: 0, points: 0, quota: 0, balance: 0 });
+  clearFinanceCache();
 });

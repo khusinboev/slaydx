@@ -19,8 +19,6 @@ import {
 
 export const USER_SORTS = ["created_desc", "created_asc", "balance_desc", "last_seen_desc"] as const;
 export type UserSort = (typeof USER_SORTS)[number];
-export type UserPlan = "free" | "pro";
-export const USER_PLANS: readonly UserPlan[] = ["free", "pro"];
 
 export type AdminUserRow = {
   id: string;
@@ -29,9 +27,8 @@ export type AdminUserRow = {
   telegramId: string | null;
   /** Always masked by the server (`+998 ** *** ** 67`). */
   phoneMasked: string | null;
-  plan: UserPlan;
-  planExpiresAt: string | null;
   points: number;
+  /** Legacy Pro quota («Kvota (eski)»), read-only; 0 for everyone after the quota merge. */
   quota: number;
   balance: number;
   isBlocked: boolean;
@@ -47,7 +44,6 @@ export type UserListParams = {
   q?: string;
   /** `true` → `1`, `false` → `0`, omitted → no filter. */
   blocked?: boolean;
-  plan?: UserPlan | "";
   isAdmin?: boolean;
   /** Signup day range, `YYYY-MM-DD` (Asia/Tashkent). */
   from?: string;
@@ -99,8 +95,17 @@ export type AdminUserDetailResponse = {
   walletConfirmThreshold: number;
 };
 
-export type TransactionKind = "charge" | "refund" | "topup" | "bonus" | "subscription" | "admin_credit" | "admin_debit";
-export const TRANSACTION_KINDS: readonly TransactionKind[] = ["charge", "refund", "topup", "bonus", "subscription", "admin_credit", "admin_debit"];
+export type TransactionKind = "charge" | "refund" | "topup" | "bonus" | "subscription" | "admin_credit" | "admin_debit" | "quota_merge";
+export const TRANSACTION_KINDS: readonly TransactionKind[] = [
+  "charge",
+  "refund",
+  "topup",
+  "bonus",
+  "subscription",
+  "admin_credit",
+  "admin_debit",
+  "quota_merge",
+];
 
 export type AdminUserTransaction = {
   id: string;
@@ -144,7 +149,6 @@ function userQuery(p: UserListParams): AdminParams {
   return {
     q: p.q?.trim() || undefined,
     blocked: p.blocked,
-    plan: p.plan || undefined,
     isAdmin: p.isAdmin,
     from: p.from || undefined,
     to: p.to || undefined,

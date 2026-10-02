@@ -23,7 +23,7 @@ const DOT: Record<ReconciliationCheck["severity"] | "ok", string> = {
 };
 
 function walletsText(w: Wallets): string {
-  return `${WALLET_LABEL.balance.toLowerCase()} ${fmtNumber(w.balance)} · kvota ${fmtNumber(w.quota)} · bonus ${fmtNumber(w.points)}`;
+  return `${WALLET_LABEL.balance.toLowerCase()} ${fmtNumber(w.balance)} · ${WALLET_LABEL.quota.toLowerCase()} ${fmtNumber(w.quota)} · bonus ${fmtNumber(w.points)}`;
 }
 
 /** One sample row: always a link to the related admin screen, built from the id. */

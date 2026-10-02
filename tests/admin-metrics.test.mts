@@ -47,7 +47,9 @@ const { query, queryOne, ensureMigrated, transaction, pool } = await import("../
 const { createSession, SESSION_COOKIE } = await import("../lib/server/session.ts");
 const { createAdminSession, adminCookieName } = await import("../lib/server/admin-session.ts");
 const { setSettingInTx, invalidateSettingsCache } = await import("../lib/server/settings.ts");
-const { createOrder, settleOrder, PRO_PLAN } = await import("../lib/server/payments.ts");
+const { createOrder, settleOrder } = await import("../lib/server/payments.ts");
+/** The removed Pro subscription's price (the former `PRO_PLAN.priceSoum`): legacy orders only. */
+const LEGACY_PRO_SOUM = 15_000;
 const metrics = await import("../lib/server/admin-metrics.ts");
 const cost = await import("../lib/server/admin-cost.ts");
 const { parseDateRange } = await import("../lib/server/admin-list.ts");
@@ -175,9 +177,19 @@ async function usage(at: string, outcome: string, genId: string | null, tool: st
     [at, outcome === "free" ? "free" : "job", outcome, genId, tool, usd],
   );
 }
-/** Paid order through the real payments path; perform_time is epoch ms. */
+/**
+ * Paid order through the real payments path; perform_time is epoch ms. A legacy
+ * Pro order is inserted by SQL (`createOrder` accepts top-ups only since the
+ * subscription removal) and then settled by the real `settleOrder`.
+ */
 async function paidOrder(user: string, provider: "click" | "payme", purpose: "topup" | "pro", amount: number, createdAt: string, performAt: string) {
-  const o = await createOrder({ userId: user, provider, purpose, amountSoum: amount });
+  const o =
+    purpose === "pro"
+      ? (await queryOne<{ id: string }>(
+          `INSERT INTO payment_orders (id, user_id, provider, purpose, amount_soum) VALUES ($1, $2, $3, 'pro', $4) RETURNING id::text AS id`,
+          [randomUUID(), user, provider, amount],
+        ))!
+      : await createOrder({ userId: user, provider, purpose, amountSoum: amount });
   await query(`UPDATE payment_orders SET created_at = $2 WHERE id = $1`, [o.id, createdAt]);
   const out = await settleOrder(o.id, ms(performAt));
   assert.equal(out.status, "paid");
@@ -257,7 +269,7 @@ function seed(): Promise<void> {
 
     // Orders. O1 created in P but performed in R; O3 performed at the first instant after R.
     await paidOrder(U0, "click", "topup", 50_000, tk(D09, "23:00:00"), tk(D10, "08:00:00"));
-    await paidOrder(U1, "payme", "pro", PRO_PLAN.priceSoum, tk(D11, "23:00:00"), tk(D11, "23:59:59"));
+    await paidOrder(U1, "payme", "pro", LEGACY_PRO_SOUM, tk(D11, "23:00:00"), tk(D11, "23:59:59"));
     await paidOrder(U0, "payme", "topup", 20_000, tk(D11, "23:00:00"), tk(D12, "00:00:00"));
     await paidOrder(U4, "click", "topup", 10_000, tk(D09, "17:00:00"), tk(D09, "18:00:00"));
     await order(U0, "pending", tk(D10, "11:00:00"));

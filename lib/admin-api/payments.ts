@@ -81,8 +81,17 @@ export type AdminPaymentEvent = {
   payload: unknown;
 };
 
-export type TransactionKind = "charge" | "refund" | "topup" | "bonus" | "subscription" | "admin_credit" | "admin_debit";
-export const TRANSACTION_KINDS: readonly TransactionKind[] = ["charge", "refund", "topup", "bonus", "subscription", "admin_credit", "admin_debit"];
+export type TransactionKind = "charge" | "refund" | "topup" | "bonus" | "subscription" | "admin_credit" | "admin_debit" | "quota_merge";
+export const TRANSACTION_KINDS: readonly TransactionKind[] = [
+  "charge",
+  "refund",
+  "topup",
+  "bonus",
+  "subscription",
+  "admin_credit",
+  "admin_debit",
+  "quota_merge",
+];
 
 export type LedgerLink = { type: "order"; id: string } | { type: "generation"; id: string };
 

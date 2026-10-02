@@ -19,16 +19,17 @@ export const ORDER_STATE_TONE: Record<OrderState, Tone> = {
 
 export const PROVIDER_LABEL: Record<OrderProvider, string> = { click: "Click", payme: "Payme" };
 
-export const PURPOSE_LABEL: Record<OrderPurpose, string> = { topup: "Balansni to'ldirish", pro: "Pro obuna" };
+export const PURPOSE_LABEL: Record<OrderPurpose, string> = { topup: "Balansni to'ldirish", pro: "Pro obuna (eski)" };
 
 export const KIND_LABEL: Record<TransactionKind, string> = {
   charge: "Yechish",
   refund: "Qaytarish",
   topup: "To'ldirish",
   bonus: "Bonus",
-  subscription: "Pro obuna",
+  subscription: "Pro obuna (eski)",
   admin_credit: "Admin: qo'shish",
   admin_debit: "Admin: yechish",
+  quota_merge: "Kvota → balans",
 };
 
 export const KIND_TONE: Record<TransactionKind, Tone> = {
@@ -39,6 +40,7 @@ export const KIND_TONE: Record<TransactionKind, Tone> = {
   subscription: "success",
   admin_credit: "warning",
   admin_debit: "danger",
+  quota_merge: "info",
 };
 
 /** Payme cancel reasons (Merchant API); other codes are shown as numbers. */

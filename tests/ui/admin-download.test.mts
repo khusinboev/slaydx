@@ -110,10 +110,10 @@ test("adminDownload: 401 reauth runs the step-up handler once, retries once and 
     () => json(401, { error: "Bu amal uchun kodni qayta kiriting", code: "reauth" }),
     () => csv('attachment; filename="foydalanuvchilar-2026-10-02.csv"'),
   ]);
-  const name = await core.adminDownload("/api/admin/users/export", { plan: "pro" }, { fallbackName: "foydalanuvchilar.csv" });
+  const name = await core.adminDownload("/api/admin/users/export", { blocked: "1" }, { fallbackName: "foydalanuvchilar.csv" });
   assert.equal(stepUps, 1);
   assert.equal(calls.length, 2);
-  assert.equal(calls[1]!.url, "/api/admin/users/export?plan=pro", "the retry repeats the same request");
+  assert.equal(calls[1]!.url, "/api/admin/users/export?blocked=1", "the retry repeats the same request");
   assert.equal(name, "foydalanuvchilar-2026-10-02.csv");
   assert.equal(saved.length, 1);
   assert.deepEqual(await bytesOf(saved[0]!.blob), new TextEncoder().encode(CSV_BODY), "the 401 JSON body is never saved");

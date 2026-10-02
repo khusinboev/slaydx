@@ -203,12 +203,13 @@ test("seed: har ekran uchun ma'lumot — har holat, buyurtma holati, jurnal turi
 
   for (const s of ["QUEUED", "IN_PROGRESS", "COMPLETED", "FAILED", "REVOKED"]) assert.ok(c.generations![s]! >= 1, `status ${s}`);
   for (const s of ["created", "pending", "paid", "cancelled"]) assert.ok(c.paymentOrders![s]! >= 1, `order ${s}`);
-  for (const k of ["charge", "refund", "topup", "bonus", "subscription", "admin_credit", "admin_debit"]) assert.ok(c.transactions![k]! >= 1, `ledger ${k}`);
+  for (const k of ["charge", "refund", "topup", "bonus", "subscription", "admin_credit", "admin_debit", "quota_merge"]) assert.ok(c.transactions![k]! >= 1, `ledger ${k}`);
   for (const k of ["quiz", "crossword", "flashcards", "sorting", "listening"]) assert.ok(c.gameSessions![k]! >= 1, `game ${k}`);
   for (const k of ["completed", "failed", "abandoned", "free"]) assert.ok(c.aiUsage![k]! >= 1, `ai_usage ${k}`);
   for (const k of ["draft", "done"]) assert.ok(c.broadcasts![k]! >= 1, `broadcast ${k}`);
   assert.equal(c.users!.total, 40);
-  assert.ok(c.users!.blocked! >= 1 && c.users!.pro! >= 1 && c.users!.withPhone! >= 1);
+  assert.ok(c.users!.blocked! >= 1 && c.users!.withPhone! >= 1);
+  assert.ok(!("pro" in c.users!), "subscriptions are removed: no Pro user count");
   const total = Object.values(c.generations!).reduce((a, b) => a + b, 0);
   assert.ok(total > 100, `enough generations for paging (${total})`);
 
@@ -238,7 +239,25 @@ test("seed: har ekran uchun ma'lumot — har holat, buyurtma holati, jurnal turi
   assert.equal(await n(`SELECT count(*)::text AS n FROM generations WHERE user_id IN (${SEED_USERS}) AND status = 'COMPLETED' AND NOT EXISTS (SELECT 1 FROM transactions t WHERE t.kind = 'charge' AND t.reference = generations.id::text) AND price > 0`), 0);
   assert.equal(await n(`SELECT count(*)::text AS n FROM generations WHERE user_id IN (${SEED_USERS}) AND status = 'REVOKED' AND NOT EXISTS (SELECT 1 FROM transactions t WHERE t.kind = 'refund' AND t.reference = generations.id::text)`), 0);
   assert.equal(await n(`SELECT count(*)::text AS n FROM payment_orders WHERE user_id IN (${SEED_USERS}) AND state = 'paid' AND perform_time = 0`), 0);
-  assert.equal(await n(`SELECT count(*)::text AS n FROM users WHERE id IN (${SEED_USERS}) AND plan = 'pro' AND plan_expires_at > now()`), c.users!.pro);
+  // Legacy Pro history (SUBS-REMOVAL §3): every paid pro order has its own `subscription` quota credit,
+  // and after the 034-style merge no seeded user holds quota; each merge row moves quota into balance 1:1.
+  assert.equal(
+    await n(
+      `SELECT count(*)::text AS n FROM payment_orders o WHERE o.user_id IN (${SEED_USERS}) AND o.purpose = 'pro' AND o.state = 'paid'
+          AND NOT EXISTS (SELECT 1 FROM transactions t WHERE t.kind = 'subscription' AND t.quota_delta = 15000 AND t.balance_delta = 0
+                             AND t.reference = o.provider || ':' || o.provider_txn)`,
+    ),
+    0,
+  );
+  assert.ok((await n(`SELECT count(*)::text AS n FROM payment_orders WHERE user_id IN (${SEED_USERS}) AND purpose = 'pro' AND state = 'paid'`)) >= 1);
+  assert.equal(await n(`SELECT count(*)::text AS n FROM users WHERE id IN (${SEED_USERS}) AND quota <> 0`), 0, "quota merged into balance");
+  assert.equal(
+    await n(
+      `SELECT count(*)::text AS n FROM transactions WHERE user_id IN (${SEED_USERS}) AND kind = 'quota_merge'
+          AND NOT (quota_delta < 0 AND balance_delta = -quota_delta AND points_delta = 0 AND reference = 'quota-merge:' || user_id::text)`,
+    ),
+    0,
+  );
 
   // Safety: nothing a worker could claim, running seed jobs can never be retried.
   assert.equal(await n(`SELECT count(*)::text AS n FROM generations WHERE status = 'QUEUED' AND run_after <= now()`), 0);

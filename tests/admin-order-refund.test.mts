@@ -35,7 +35,7 @@ const iso = hasDb ? await createIsolatedDb("adminorders") : { isolated: false, d
 const { query, queryOne, ensureMigrated, transaction, pool } = await import("../lib/server/db.ts");
 const { createSession, SESSION_COOKIE } = await import("../lib/server/session.ts");
 const { createAdminSession, adminCookieName } = await import("../lib/server/admin-session.ts");
-const { settleOrder, PRO_PLAN } = await import("../lib/server/payments.ts");
+const { settleOrder } = await import("../lib/server/payments.ts");
 const { clawbackUnits, clawbackWalletOf, parseExternalRefundBody, settlementReference } = await import("../lib/server/admin-order-refund.ts");
 const route = await import("../app/api/admin/orders/[id]/external-refund/route.ts");
 
@@ -78,6 +78,22 @@ async function session(role: Role, reauth = true): Promise<Session> {
     createAdminSession(client, { adminId: admin.adminId, userSessionId: us!.id, ip: "10.0.0.1", userAgent: "orders-test", reauth }),
   );
   return { cookie: `${SESSION_COOKIE}=${u.userToken}; ${adminCookieName()}=${s.token}`, admin };
+}
+
+/**
+ * Migration 034's quota → balance merge for one user (034 ran before the
+ * fixtures existed): one `quota_merge` row, quota −q, balance +q.
+ */
+async function mergeQuota(uid: string): Promise<void> {
+  const res = await query<{ id: string }>(
+    `WITH src AS (SELECT id, quota AS q FROM users WHERE id = $1 AND quota > 0 FOR UPDATE),
+     moved AS (UPDATE users u SET quota = u.quota - s.q, balance = u.balance + s.q FROM src s WHERE u.id = s.id RETURNING u.id, s.q)
+     INSERT INTO transactions (user_id, kind, quota_delta, balance_delta, reference, note)
+     SELECT id, 'quota_merge', -q, q, 'quota-merge:' || id::text, 'Kvota balansga o''tkazildi' FROM moved
+     RETURNING id::text AS id`,
+    [uid],
+  );
+  assert.equal(res.length, 1, "the user held quota to merge");
 }
 
 /** A real settlement (`settleOrder`) so the wallet is credited the way production does it. */
@@ -138,7 +154,7 @@ const BODY = { kind: "refund", amountSoum: 20_000, reason: "Click orqali qaytari
 
 test("clawback units: pro rata of what the ORDER credited, floored, never above the credit; settlement reference format", () => {
   assert.equal(clawbackWalletOf("topup"), "balance");
-  assert.equal(clawbackWalletOf("pro"), "quota");
+  assert.equal(clawbackWalletOf("pro"), "balance", "MUTATSIYA: legacy Pro quota was merged into balance (034)");
   assert.equal(clawbackUnits(20_000, 20_000, 20_000), 20_000);
   assert.equal(clawbackUnits(20_000, 15_000, 30_000), 10_000, "older pro plan: 20 000 quota for 30 000 so'm");
   assert.equal(clawbackUnits(15_000, 1, 15_000), 1);
@@ -270,30 +286,30 @@ test("partial amounts: the recorded total is capped at the order; no clawback �
   assert.equal((await audits(s.admin.adminId)).length, 2);
 });
 
-test("pro order: the clawback hits the quota, pro rata", { skip }, async () => {
+test("legacy pro order settled after the removal (credits balance): the clawback hits the balance, pro rata", { skip }, async () => {
   const s = await session("finance");
   const u = await mkUser();
-  const order = await paidOrder(u.id, "pro", PRO_PLAN.priceSoum);
-  assert.equal((await wallets(u.id)).quota, PRO_PLAN.quota);
-  const half = Math.floor(PRO_PLAN.priceSoum / 2);
+  const price = 15_000;
+  const order = await paidOrder(u.id, "pro", price);
+  assert.deepEqual([(await wallets(u.id)).balance, (await wallets(u.id)).quota], [price, 0], "settled into balance");
+  const half = Math.floor(price / 2);
   const r = await record(s.cookie, order, { ...BODY, amountSoum: half });
   assert.equal(r.status, 201, JSON.stringify(r.body));
-  const expected = clawbackUnits(PRO_PLAN.quota, half, PRO_PLAN.priceSoum);
-  assert.deepEqual(r.body.clawback, { wallet: "quota", requested: expected, debited: expected, shortfall: 0 });
-  assert.equal((await wallets(u.id)).quota, PRO_PLAN.quota - expected);
-  assert.equal((await wallets(u.id)).balance, 0, "balance untouched");
+  const expected = clawbackUnits(price, half, price);
+  assert.deepEqual(r.body.clawback, { wallet: "balance", requested: expected, debited: expected, shortfall: 0 });
+  assert.equal((await wallets(u.id)).balance, price - expected);
+  assert.equal((await wallets(u.id)).quota, 0, "quota untouched");
   const d = await debits(u.id);
   assert.equal(d.length, 1);
-  assert.equal(d[0].quota_delta, String(-expected));
-  assert.equal((await refundRows(order))[0].clawback_wallet, "quota");
+  assert.equal(d[0].balance_delta, String(-expected));
+  assert.equal(d[0].quota_delta, "0");
+  assert.equal((await refundRows(order))[0].clawback_wallet, "balance");
 });
 
-test("pro order settled under an OLDER plan: the clawback follows the order's own subscription row, not PRO_PLAN; no row → 409 no_credit", { skip }, async () => {
+test("pro order settled BEFORE the removal (quota credit, merged into balance): units from the order's own row (quota + balance), debited from balance; no row → 409 no_credit", { skip }, async () => {
   const s = await session("finance");
   const u = await mkUser();
-  // 30 000 so'm bought 20 000 quota back then (neither value equals today's PRO_PLAN).
-  assert.notEqual(30_000, PRO_PLAN.priceSoum);
-  assert.notEqual(20_000, PRO_PLAN.quota);
+  // 30 000 so'm bought 20 000 quota back then (an older price; nothing today is consulted).
   const order = randomUUID();
   await query(
     `INSERT INTO payment_orders (id, user_id, provider, purpose, amount_soum, state, provider_txn, perform_time) VALUES ($1, $2, 'payme', 'pro', 30000, 'paid', $3, 1)`,
@@ -304,11 +320,22 @@ test("pro order settled under an OLDER plan: the clawback follows the order's ow
     [u.id, `payme:old-${order.slice(0, 8)}`],
   );
   await query(`UPDATE users SET quota = 20000, plan = 'pro' WHERE id = $1`, [u.id]);
+  await mergeQuota(u.id);
+  assert.deepEqual(await wallets(u.id), { points: 0, quota: 0, balance: 20_000 });
 
   const r = await record(s.cookie, order, { ...BODY, amountSoum: 15_000 });
   assert.equal(r.status, 201, JSON.stringify(r.body));
-  assert.deepEqual(r.body.clawback, { wallet: "quota", requested: 10_000, debited: 10_000, shortfall: 0 }, "MUTATSIYA: 15 000 / 30 000 of 20 000 quota");
-  assert.equal((await wallets(u.id)).quota, 10_000);
+  assert.deepEqual(r.body.clawback, { wallet: "balance", requested: 10_000, debited: 10_000, shortfall: 0 }, "MUTATSIYA: 15 000 / 30 000 of the 20 000 quota the order credited");
+  assert.deepEqual(await wallets(u.id), { points: 0, quota: 0, balance: 10_000 });
+  assert.equal((await refundRows(order))[0].clawback_wallet, "balance");
+
+  // The merged coins were partly spent: the rest of the order is clawed back as far as the balance goes.
+  await query(`UPDATE users SET balance = balance - 6000 WHERE id = $1`, [u.id]);
+  await query(`INSERT INTO transactions (user_id, kind, balance_delta, reference, note) VALUES ($1, 'charge', -6000, $2, 'Generatsiya')`, [u.id, randomUUID()]);
+  const rest = await record(s.cookie, order, { ...BODY, amountSoum: 15_000 });
+  assert.equal(rest.status, 201, JSON.stringify(rest.body));
+  assert.deepEqual(rest.body.clawback, { wallet: "balance", requested: 10_000, debited: 4_000, shortfall: 6_000 });
+  assert.deepEqual(await wallets(u.id), { points: 0, quota: 0, balance: 0 });
 
   // Paid order whose credit row is missing (reconciliation case): refuse the clawback whole, record nothing.
   const u2 = await mkUser();
@@ -321,7 +348,7 @@ test("pro order settled under an OLDER plan: the clawback follows the order's ow
   assert.equal(no.status, 409);
   assert.equal(no.body.code, "no_credit");
   assert.equal((await refundRows(orphan)).length, 0, "nothing recorded on refusal");
-  assert.equal((await audits(s.admin.adminId)).length, 1);
+  assert.equal((await audits(s.admin.adminId)).length, 2);
   // Without a clawback the record itself does not need the credit row.
   const ok = await record(s.cookie, orphan, { ...BODY, amountSoum: 9_000, clawback: false });
   assert.equal(ok.status, 201, JSON.stringify(ok.body));

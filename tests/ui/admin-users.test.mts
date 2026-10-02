@@ -127,8 +127,6 @@ const ROW = {
   username: "ali",
   telegramId: "5123456789",
   phoneMasked: "+998 ** *** ** 67",
-  plan: "pro",
-  planExpiresAt: "2026-12-01T00:00:00.000Z",
   points: 300,
   quota: 40,
   balance: 12_000,
@@ -138,15 +136,15 @@ const ROW = {
   lastSeenAt: "2026-10-01T07:30:00.000Z",
   generations: 7,
 };
-const ROW2 = { ...ROW, id: "43", name: "Bek", username: null, isBlocked: false, isAdmin: false, plan: "free", phoneMasked: null };
+const ROW2 = { ...ROW, id: "43", name: "Bek", username: null, isBlocked: false, isAdmin: false, quota: 0, phoneMasked: null };
 const page = (items: unknown[], nextCursor: string | null = null, total = items.length) => ({ items, nextCursor, total, totalCapped: false });
 const dataRows = (container: HTMLElement) => container.querySelectorAll("tbody tr[data-row-key]");
 
 /* ───────────────────────────── helpers ───────────────────────────── */
 
 test("userParamsFrom: junk in the URL is dropped, never sent", () => {
-  const p = userParamsFrom({ q: "  @ali ", blocked: "2", plan: "premium", isAdmin: "1", from: "2026-09-30", to: "2026-09-01", sort: "name_asc" });
-  assert.deepEqual(p, { q: "@ali", blocked: undefined, plan: "", isAdmin: true, from: undefined, to: undefined, sort: "created_desc" });
+  const p = userParamsFrom({ q: "  @ali ", blocked: "2", isAdmin: "1", from: "2026-09-30", to: "2026-09-01", sort: "name_asc" });
+  assert.deepEqual(p, { q: "@ali", blocked: undefined, isAdmin: true, from: undefined, to: undefined, sort: "created_desc" });
   assert.equal(deviceLabel("Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/153.0 Mobile Safari/537.36"), "Chrome · Android");
   assert.equal(deviceLabel(null), "Noma'lum qurilma");
 });
@@ -156,13 +154,13 @@ test("userParamsFrom: junk in the URL is dropped, never sent", () => {
 test("UsersPage: skeleton, then rows (links from ids, masked phone, badges); URL filters sent, junk dropped", async () => {
   let release: (r: Response) => void = () => {};
   const calls = stubFetch({ "GET /api/admin/users": () => new Promise<Response>((r) => (release = r)) });
-  const { container } = mount(h(UsersPage), "/admin/users?blocked=1&plan=bogus&isAdmin=0&sort=balance_desc&q=%40ali");
+  const { container } = mount(h(UsersPage), "/admin/users?blocked=1&plan=pro&isAdmin=0&sort=balance_desc&q=%40ali");
   assert.ok(container.querySelector("[data-skeleton-row]"));
   await waitFor(() => assert.equal(calls.length, 1));
   const p = calls[0]!.params;
   assert.equal(p.get("blocked"), "1");
   assert.equal(p.get("isAdmin"), "0");
-  assert.equal(p.get("plan"), null, "junk plan never sent");
+  assert.equal(p.get("plan"), null, "the removed plan filter is never sent");
   assert.equal(p.get("sort"), "balance_desc");
   assert.equal(p.get("q"), "@ali");
   assert.equal(p.get("limit"), "50");
@@ -173,7 +171,13 @@ test("UsersPage: skeleton, then rows (links from ids, masked phone, badges); URL
   assert.ok(within(row).getByText("+998 ** *** ** 67"));
   assert.ok(within(row).getByText("Bloklangan"));
   assert.ok(within(row).getByText("Admin"));
-  assert.ok(within(row).getByText("Pro"));
+  // Subscriptions are removed: no plan column or filter; legacy quota is a column only while a row holds some.
+  assert.ok(!within(row).queryByText("Pro"));
+  assert.ok(!screen.queryByLabelText("Tarif"), "no plan filter");
+  const head = container.querySelector("thead") as HTMLElement;
+  assert.ok(!within(head).queryByText("Tarif"));
+  assert.ok(within(head).getByText("Kvota (eski)"), "ROW still holds 40 quota");
+  assert.ok(within(row).getByText("40"));
   assert.ok(screen.getByText("2 ta natija"));
   assert.ok(screen.getByRole("button", { name: "CSV yuklab olish" }));
 });
@@ -220,7 +224,7 @@ test("UsersPage: empty without and with filters; clear removes them", async () =
   assert.ok(!screen.queryByRole("button", { name: "Filtrlarni tozalash" }));
   cleanup();
   stubFetch({ "GET /api/admin/users": () => json(200, page([])) });
-  const { log } = mount(h(UsersPage), "/admin/users?q=zzz&plan=pro");
+  const { log } = mount(h(UsersPage), "/admin/users?q=zzz&blocked=1");
   assert.ok(await screen.findByText("Hech narsa topilmadi"));
   const clear = screen.getAllByRole("button", { name: "Filtrlarni tozalash" });
   fireEvent.click(clear[clear.length - 1]!);
@@ -265,14 +269,15 @@ test("UsersPage export: 401 reauth → step-up → retried once with the filters
         () => new Response("﻿\"ID\"\r\n", { status: 200, headers: { "content-type": "text/csv", "content-disposition": 'attachment; filename="foydalanuvchilar-2026-10-02.csv"' } }),
       ],
     });
-    mount(h(UsersPage), "/admin/users?plan=pro&sort=created_asc");
+    mount(h(UsersPage), "/admin/users?blocked=1&sort=created_asc");
     await waitFor(() => assert.equal(calls.length, 1));
     fireEvent.click(screen.getByRole("button", { name: "CSV yuklab olish" }));
     await waitFor(() => assert.deepEqual(saved, ["foydalanuvchilar-2026-10-02.csv"]));
     assert.equal(stepUps, 1);
     const exports = calls.filter((c) => c.path === "/api/admin/users/export");
     assert.equal(exports.length, 2);
-    assert.equal(exports[1]!.params.get("plan"), "pro");
+    assert.equal(exports[1]!.params.get("blocked"), "1");
+    assert.equal(exports[1]!.params.get("plan"), null);
     assert.equal(exports[1]!.params.get("sort"), "created_asc");
     assert.equal(exports[1]!.params.get("limit"), null);
   } finally {
@@ -302,8 +307,6 @@ const USER = {
   name: "Ali Valiyev",
   username: "ali",
   telegramId: "5123456789",
-  plan: "free",
-  planExpiresAt: null,
   points: 300,
   quota: 0,
   balance: 12_000,
@@ -342,6 +345,10 @@ test("UserDetail: loading skeleton, then header, wallets, profile (masked) and s
   // Wallet tiles carry their unit (UX #6): wallets are tanga, real money is so'm.
   assert.ok(screen.getByText(/^12\s000\stanga$/), "balance wallet tile");
   assert.ok(screen.getByText(/^300\stanga$/), "points wallet tile");
+  // Quota is 0 after the merge: no legacy quota tile, no plan badge or "Tarif" row.
+  assert.ok(!screen.queryByText(/Kvota/), "MUTATSIYA: a zero legacy quota tile is hidden");
+  assert.ok(!screen.queryByText("Tarif"));
+  assert.ok(!screen.queryByText("Pro"));
   const actions = screen.getByRole("group", { name: "Amallar" });
   for (const name of ["Hamyonni tuzatish", "Bloklash", "Sessiyalarni bekor qilish", "Xabar yuborish", "Telefonni ko'rsatish"]) {
     assert.ok(within(actions).getByRole("button", { name }), name);
@@ -539,6 +546,8 @@ test("UserDetail tabs: tab in the URL; Hisob uses the user's ledger endpoint wit
   const row = container.querySelector('tr[data-row-key="9"]') as HTMLElement;
   assert.equal(within(row).getByText(GEN).closest("a")?.getAttribute("href"), `/admin/generations/${GEN}`);
   assert.ok(within(row).getByText(/^[−-]2\s000$/));
+  const ledgerHead = container.querySelector('[role="tabpanel"] thead') as HTMLElement;
+  assert.ok(!within(ledgerHead).queryByText(/Kvota/), "MUTATSIYA: no legacy quota column when no row moved quota");
   // The kind multi-select (its button is named by the current value).
   fireEvent.click(container.querySelector('[role="tabpanel"] button[aria-haspopup="true"]') as HTMLElement);
   fireEvent.click(screen.getByRole("checkbox", { name: "To'ldirish" }));
@@ -575,4 +584,50 @@ test("UserDetail: without audit.view there is no Audit tab and no audit request"
   await screen.findByRole("heading", { name: /Ali Valiyev/ });
   assert.ok(!screen.queryByRole("tab", { name: "Audit" }));
   assert.ok(!calls.some((c) => c.path === "/api/admin/audit"));
+});
+
+/* ───────────────────────────── subscription removal ───────────────────────────── */
+
+test("UsersPage: the legacy quota column is hidden when every row on the page has 0", async () => {
+  stubFetch({ "GET /api/admin/users": () => json(200, page([ROW2, { ...ROW2, id: "44", name: "Vali" }])) });
+  const { container } = mount(h(UsersPage));
+  await waitFor(() => assert.equal(dataRows(container).length, 2));
+  const head = container.querySelector("thead") as HTMLElement;
+  assert.ok(within(head).getByText("Balans"));
+  assert.ok(!within(head).queryByText(/Kvota/), "MUTATSIYA: no all-zero quota column");
+});
+
+test("UserDetail: a non-zero legacy quota shows as a «Kvota (eski)» tile", async () => {
+  stubFetch({ [`GET ${detailUrl}`]: () => json(200, { ...DETAIL, user: { ...USER, quota: 2_500 } }) });
+  mount(h(UserDetail, { id: "42", tools: [] }), "/admin/users/42");
+  await screen.findByRole("heading", { name: /Ali Valiyev/ });
+  assert.ok(screen.getByText(/Kvota \(eski\)/));
+  assert.ok(screen.getByText(/^2\s500\stanga$/));
+});
+
+test("UserDetail Hisob: a quota_merge row renders with its label and both legs; the kind filter offers it", async () => {
+  const calls = stubFetch({
+    [`GET ${detailUrl}`]: () => json(200, DETAIL),
+    [`GET ${detailUrl}/transactions`]: () =>
+      json(
+        200,
+        page([
+          { id: "31", kind: "quota_merge", points: 0, quota: -12_000, balance: 12_000, reference: "quota-merge:42", note: "Kvota balansga o'tkazildi: 12000 tanga", createdAt: "2026-10-02T06:00:00.000Z", generationId: null, orderId: null },
+          { id: "30", kind: "subscription", points: 0, quota: 15_000, balance: 0, reference: "click:991", note: "Pro obuna", createdAt: "2026-09-02T06:00:00.000Z", generationId: null, orderId: "7a1b2c3d-4e5f-4a6b-8c7d-8e9f0a1b2c3d" },
+        ]),
+      ),
+  });
+  const { container } = mount(h(UserDetail, { id: "42", tools: [] }), "/admin/users/42?tab=ledger", OWNER_PERMS);
+  await waitFor(() => assert.ok(container.querySelector('tr[data-row-key="31"]')));
+  const merge = container.querySelector('tr[data-row-key="31"]') as HTMLElement;
+  assert.ok(within(merge).getByText("Kvota → balans"), "MUTATSIYA: KIND_LABEL.quota_merge");
+  assert.ok(within(merge).getByText(/^[−-]12\s000$/));
+  assert.ok(within(merge).getByText(/^\+12\s000$/));
+  const sub = container.querySelector('tr[data-row-key="30"]') as HTMLElement;
+  assert.ok(within(sub).getByText("Pro obuna (eski)"));
+  const panel = container.querySelector('[role="tabpanel"]') as HTMLElement;
+  assert.ok(within(panel.querySelector("thead") as HTMLElement).getByText("Kvota (eski)"), "rows moved quota → the column shows");
+  fireEvent.click(panel.querySelector('button[aria-haspopup="true"]') as HTMLElement);
+  fireEvent.click(screen.getByRole("checkbox", { name: "Kvota → balans" }));
+  await waitFor(() => assert.equal(calls.filter((c) => c.path.endsWith("/transactions")).at(-1)!.params.get("kind"), "quota_merge"));
 });

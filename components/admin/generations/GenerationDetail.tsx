@@ -124,6 +124,10 @@ const LEDGER_COLUMNS: Column<LedgerRow>[] = [
   { id: "at", header: "Vaqt", className: "tabular-nums whitespace-nowrap", cell: (t) => fmtDateTime(t.createdAt) },
 ];
 
+/** Legacy Pro quota («Kvota (eski)»): its column shows only when one of these rows moved quota. */
+const ledgerColumns = (rows: readonly LedgerRow[]): Column<LedgerRow>[] =>
+  rows.some((t) => t.quota !== 0) ? LEDGER_COLUMNS : LEDGER_COLUMNS.filter((c) => c.id !== "quota");
+
 function Notice({ tone, children }: { tone: "warn" | "bad"; children: ReactNode }) {
   return (
     <div
@@ -412,7 +416,7 @@ export function GenerationDetail({ id, tools }: { id: string; tools: ReadonlyArr
         <CardHeader title="Hisob yozuvlari" description="Shu ishga tegishli yechish va qaytarish qatorlari" />
         {ledger.length ? (
           <div className="p-3">
-            <DataTable columns={LEDGER_COLUMNS} rows={ledger} rowKey={(t) => t.id} caption="Hisob yozuvlari" maxHeightClass="max-h-96" />
+            <DataTable columns={ledgerColumns(ledger)} rows={ledger} rowKey={(t) => t.id} caption="Hisob yozuvlari" maxHeightClass="max-h-96" />
           </div>
         ) : (
           <CardBody>

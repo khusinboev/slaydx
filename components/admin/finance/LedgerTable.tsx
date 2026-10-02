@@ -95,6 +95,9 @@ function LedgerView({ store, fixedFilters, embedded = false, pageSize, onForbidd
 
   const activeCount = [v.kind, fixedUserId ? "" : v.userId, v.reference, v.lfrom || v.lto].filter(Boolean).length;
   const clear = () => store.clear();
+  const rows = state.data?.items ?? [];
+  // Legacy Pro quota («Kvota (eski)»): the column shows only while a row on this page moved quota.
+  const anyQuota = rows.some((e) => e.quota !== 0);
 
   const columns: Column<LedgerEntry>[] = [
     {
@@ -117,7 +120,7 @@ function LedgerView({ store, fixedFilters, embedded = false, pageSize, onForbidd
           },
         ]),
     { id: "balance", header: WALLET_LABEL.balance, align: "right", cell: (e) => <DeltaCell value={e.balance} /> },
-    { id: "quota", header: WALLET_LABEL.quota, align: "right", cell: (e) => <DeltaCell value={e.quota} /> },
+    ...(anyQuota ? [{ id: "quota", header: WALLET_LABEL.quota, align: "right", cell: (e) => <DeltaCell value={e.quota} /> } satisfies Column<LedgerEntry>] : []),
     { id: "points", header: WALLET_LABEL.points, align: "right", cell: (e) => <DeltaCell value={e.points} /> },
     { id: "reference", header: "Havola", className: "max-w-[14rem]", cell: (e) => <ReferenceCell reference={e.reference} link={e.link} /> },
     {
@@ -130,7 +133,6 @@ function LedgerView({ store, fixedFilters, embedded = false, pageSize, onForbidd
     { id: "created", header: "Vaqt", sortKey: "created_desc", className: "tabular-nums whitespace-nowrap", cell: (e) => fmtDateTime(e.createdAt) },
   ];
 
-  const rows = state.data?.items ?? [];
   useReportForbidden(state.status === "forbidden", onForbidden);
   // 403: the forbidden state is all there is — no filter bar or export above it.
   if (state.status === "forbidden") {

@@ -93,13 +93,13 @@ export function FinanceSummaryView({
               loading={loading}
               label="Ishlarga sarflandi"
               value={s ? fmtTanga(s.cashSpend.balance) : ""}
-              hint={s ? `kvota ${fmtNumber(s.cashSpend.quota)} · bonus ${fmtNumber(s.cashSpend.points)} · ${fmtNumber(s.cashSpend.charges)} ta ish` : null}
+              hint={s ? `${legacyQuota(s.cashSpend.quota)}bonus ${fmtNumber(s.cashSpend.points)} · ${fmtNumber(s.cashSpend.charges)} ta ish` : null}
             />
             <KpiTile
               loading={loading}
               label="Ishlarga qaytarildi"
               value={s ? fmtTanga(s.refunds.balance) : ""}
-              hint={s ? `kvota ${fmtNumber(s.refunds.quota)} · bonus ${fmtNumber(s.refunds.points)} · ${fmtNumber(s.refunds.count)} ta` : null}
+              hint={s ? `${legacyQuota(s.refunds.quota)}bonus ${fmtNumber(s.refunds.points)} · ${fmtNumber(s.refunds.count)} ta` : null}
             />
             <KpiTile
               loading={loading}
@@ -107,7 +107,9 @@ export function FinanceSummaryView({
               value={s ? fmtTanga(s.liabilities.balance) : ""}
               hint={s ? `hozir · ${fmtNumber(s.liabilities.users)} ta foydalanuvchida` : null}
             />
-            <KpiTile loading={loading} label="Majburiyat: Pro kvota" value={s ? fmtTanga(s.liabilities.quota) : ""} hint="hozir" />
+            {s && s.liabilities.quota !== 0 ? (
+              <KpiTile loading={loading} label="Majburiyat: kvota (eski)" value={fmtTanga(s.liabilities.quota)} hint="hozir" />
+            ) : null}
             <KpiTile loading={loading} label="Majburiyat: bonus ball" value={s ? fmtNumber(s.liabilities.points) : ""} hint="hozir" />
             <KpiTile
               loading={loading}
@@ -123,7 +125,7 @@ export function FinanceSummaryView({
               loading={loading}
               label="Admin tuzatishlari"
               value={s ? fmtNumber(s.adjustments.balance, { sign: true }) : ""}
-              hint={s ? `balans · kvota ${fmtNumber(s.adjustments.quota, { sign: true })} · ${fmtNumber(s.adjustments.count)} ta` : null}
+              hint={s ? `balans · ${legacyQuota(s.adjustments.quota, true)}${fmtNumber(s.adjustments.count)} ta` : null}
             />
           </div>
 
@@ -159,13 +161,19 @@ export function FinanceSummaryView({
   );
 }
 
+/** "kvota (eski) 1 000 · " for a non-zero legacy Pro quota amount, "" otherwise (quota is 0 after the merge). */
+function legacyQuota(n: number, sign = false): string {
+  return n !== 0 ? `kvota (eski) ${fmtNumber(n, sign ? { sign: true } : undefined)} · ` : "";
+}
+
 function Breakdown({ s }: { s: FinanceSummary }) {
   const total = s.revenue.total.soum;
   const rows: Array<[string, RevenueBucket]> = [
     [PROVIDER_LABEL.click, s.revenue.byProvider.click],
     [PROVIDER_LABEL.payme, s.revenue.byProvider.payme],
     [PURPOSE_LABEL.topup, s.revenue.byPurpose.topup],
-    [PURPOSE_LABEL.pro, s.revenue.byPurpose.pro],
+    // Legacy Pro orders: the row shows only when the range has any.
+    ...(s.revenue.byPurpose.pro.orders > 0 ? [[PURPOSE_LABEL.pro, s.revenue.byPurpose.pro] as [string, RevenueBucket]] : []),
   ];
   return (
     <div tabIndex={0} role="region" aria-label="Tushum taqsimoti" className="overflow-x-auto focus-visible:ring-foreground/70 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-inset">

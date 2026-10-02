@@ -19,7 +19,7 @@
  * Data goes through the product's own code paths wherever one exists:
  * `upsertTelegramUser` (signup bonus), `createSession`/`revokeAllSessions`,
  * `createOrder`/`attachTransaction`/`settleOrder`/`cancelOrder` with
- * `recordPaymentEvent`, `enqueueGeneration` → `claimJob` →
+ * `recordPaymentEvent` (legacy Pro orders: see below), `enqueueGeneration` → `claimJob` →
  * `setCost`/`commitJobResult`/`failJob` (the script drives the lifecycle
  * itself; it never starts a worker and never calls a provider),
  * `cancelGeneration`, `refundInTx`, `refundPartial`, `adminAdjustWalletInTx`,
@@ -28,8 +28,12 @@
  * snapshots, and `recordStep`. Plain SQL is used only where no such path
  * exists without an admin account (blocking a user, broadcasts, resolving
  * errors), for the phone a user shares with the bot (the bot handler itself
- * sends Telegram messages), and for backdating timestamps that the API sets
- * to now(); every such statement is marked "BACKDATE" or "PLAIN SQL" below.
+ * sends Telegram messages), for history the product can no longer write
+ * (subscriptions are removed, docs/SUBS-REMOVAL.md: a legacy Pro order and
+ * the `subscription` quota credit it got, then migration 034's quota → balance
+ * merge for the seeded users, without its audit row), and for backdating
+ * timestamps that the API sets to now(); every such statement is marked
+ * "BACKDATE" or "PLAIN SQL" below.
  * Pricing (`tool_pricing`) and runtime settings are never touched, and the
  * script never creates admin accounts or audit rows (`admin_audit_log` is
  * append-only, so `--reset` could not remove them).
@@ -59,6 +63,8 @@ const BROADCAST_TAG = "[seed-dev] ";
 /** QUEUED seed jobs are parked this far in the future so no worker ever claims them. */
 const PARK_DAYS = 3650;
 const DAY_MS = 86_400_000;
+/** The removed Pro subscription as it was sold (the former `payments.PRO_PLAN`): price, quota credited, days. */
+const LEGACY_PRO = { priceSoum: 15_000, quota: 15_000, days: 30 } as const;
 const UA = [
   "Mozilla/5.0 (Linux; Android 14; SM-A546E) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Mobile Safari/537.36",
   "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.6 Mobile/15E148 Safari/604.1",
@@ -262,7 +268,6 @@ async function summary(): Promise<Record<string, unknown>> {
     users: {
       total: await n(`SELECT count(*)::text AS n FROM users WHERE id IN ${u}`),
       blocked: await n(`SELECT count(*)::text AS n FROM users WHERE id IN ${u} AND is_blocked`),
-      pro: await n(`SELECT count(*)::text AS n FROM users WHERE id IN ${u} AND plan = 'pro'`),
       withPhone: await n(`SELECT count(*)::text AS n FROM users WHERE id IN ${u} AND phone IS NOT NULL`),
     },
     sessions: {
@@ -463,7 +468,7 @@ async function seed(rnd: () => number, batch: number): Promise<void> {
     }
   }
 
-  /* ── payment orders: real create/attach/settle/cancel + webhook trail ── */
+  /* ── payment orders: real create/attach/settle/cancel + webhook trail (legacy Pro orders: PLAIN SQL) ── */
   const fundedAt = new Map<string, number>();
   const proUsers = new Set([3, 8, 15, 22]);
   const teachers = [10, 11, 12];
@@ -507,18 +512,65 @@ async function seed(rnd: () => number, batch: number): Promise<void> {
     );
   }
 
+  /**
+   * PLAIN SQL: a legacy Pro order row, exactly as `createOrder` inserted one
+   * before the subscription removal (it now accepts top-ups only).
+   */
+  async function legacyProOrder(u: SeedUser, provider: "click" | "payme") {
+    const row = await one<{ id: string }>(
+      `INSERT INTO payment_orders (id, user_id, provider, purpose, amount_soum) VALUES ($1, $2, $3, 'pro', $4) RETURNING id::text AS id`,
+      [randomUUID(), u.id, provider, LEGACY_PRO.priceSoum],
+    );
+    return { id: row!.id, provider, amountSoum: LEGACY_PRO.priceSoum };
+  }
+
+  /**
+   * PLAIN SQL: what `settleOrder` → `activateProInTx` wrote for a Pro order
+   * before the removal — the order marked paid, a `subscription` ledger row
+   * crediting `quota` (reference `<provider>:<txn>`, like every settlement) and
+   * the plan stamp — in one transaction. The quota is merged into balance
+   * further down, as migration 034 did in production.
+   */
+  async function settleLegacyPro(o: { id: string; provider: string }, userId: string, txn: string, performTime: number) {
+    await db.transaction(async (c) => {
+      const paid = await c.query(
+        `UPDATE payment_orders
+            SET state = 'paid', perform_time = $2, create_time = CASE WHEN create_time = 0 THEN $2 ELSE create_time END, updated_at = now()
+          WHERE id = $1 AND state = 'pending'`,
+        [o.id, performTime],
+      );
+      if (paid.rowCount !== 1) throw new Error(`legacy Pro settle: order ${o.id} is not pending`);
+      await c.query(`INSERT INTO transactions (user_id, kind, quota_delta, reference, note) VALUES ($1, 'subscription', $2, $3, 'Pro obuna')`, [
+        userId,
+        LEGACY_PRO.quota,
+        `${o.provider}:${txn}`,
+      ]);
+      await c.query(
+        `UPDATE users SET quota = quota + $2, plan = 'pro', plan_expires_at = $3::timestamptz + $4::int * interval '1 day', updated_at = now() WHERE id = $1`,
+        [userId, LEGACY_PRO.quota, at(performTime), LEGACY_PRO.days],
+      );
+    });
+  }
+
   type OrderPlan = { purpose: "topup" | "pro"; amount: number; outcome: "paid" | "pending" | "created" | "cancelled" };
   async function order(u: SeedUser, idx: number, p: OrderPlan, t: number) {
     const provider = (idx + txnSeq) % 2 === 0 ? "click" : "payme";
-    const o = await payments.createOrder({ userId: u.id, provider, purpose: p.purpose, amountSoum: p.amount });
+    const o =
+      p.purpose === "pro"
+        ? await legacyProOrder(u, provider)
+        : await payments.createOrder({ userId: u.id, provider, purpose: p.purpose, amountSoum: p.amount });
     // BACKDATE: createOrder stamps now() on created_at/updated_at.
     await sql(`UPDATE payment_orders SET created_at = $2, updated_at = $2 WHERE id = $1`, [o.id, at(t)]);
     if (p.outcome === "created") return;
     const txn = provider === "click" ? clickTxn() : paymeTxn();
     await payments.attachTransaction(o.id, txn, t + 30_000);
-    if (p.outcome === "paid") {
+    if (p.outcome === "paid" && p.purpose === "pro") {
+      await settleLegacyPro(o, u.id, txn, t + 90_000);
+    } else if (p.outcome === "paid") {
       const out = await payments.settleOrder(o.id, t + 90_000);
       if (out.status !== "paid") throw new Error(`settleOrder: ${out.status}`);
+    }
+    if (p.outcome === "paid") {
       // BACKDATE: the credit ledger row and updated_at are stamped now(); perform_time is the argument above.
       await sql(`UPDATE transactions SET created_at = $2 WHERE reference = $1`, [`${provider}:${txn}`, at(t + 90_000)]);
       await sql(`UPDATE payment_orders SET updated_at = $2 WHERE id = $1`, [o.id, at(t + 90_000)]);
@@ -541,12 +593,14 @@ async function seed(rnd: () => number, batch: number): Promise<void> {
     const span = Math.max(DAY_MS, now - u.createdAt);
     const first = u.createdAt + Math.round(span * 0.05 + rnd() * span * 0.2);
     const plans: OrderPlan[] = [];
-    if (proUsers.has(i)) plans.push({ purpose: "pro", amount: payments.PRO_PLAN.priceSoum, outcome: "paid" });
+    if (proUsers.has(i)) plans.push({ purpose: "pro", amount: LEGACY_PRO.priceSoum, outcome: "paid" });
     plans.push({ purpose: "topup", amount: teachers.includes(i) ? 150_000 : amounts[Math.floor(rnd() * amounts.length)]!, outcome: "paid" });
     const extra = i % 3;
     const outcomes: OrderPlan["outcome"][] = ["paid", "pending", "created", "cancelled", "paid", "cancelled"];
     for (let k = 0; k < extra; k++) {
-      plans.push({ purpose: rnd() < 0.15 ? "pro" : "topup", amount: amounts[Math.floor(rnd() * 4)]!, outcome: outcomes[(i + k) % outcomes.length]! });
+      const pro = rnd() < 0.15;
+      const amount = amounts[Math.floor(rnd() * 4)]!;
+      plans.push({ purpose: pro ? "pro" : "topup", amount: pro ? LEGACY_PRO.priceSoum : amount, outcome: outcomes[(i + k) % outcomes.length]! });
     }
     for (let k = 0; k < plans.length; k++) {
       const t = k === 0 ? first : first + Math.round(rnd() * Math.max(1, now - first - 3_600_000));
@@ -812,6 +866,37 @@ async function seed(rnd: () => number, batch: number): Promise<void> {
     }
   }
 
+  /*
+   * ── legacy quota → balance: PLAIN SQL, migration 034's merge for the seeded users ──
+   * 034 ran when this database was migrated, before these users existed, so the
+   * seed repeats its statement here, after every job has charged and refunded
+   * (charges drained some quota first, as they did in production): one
+   * `quota_merge` row per holder (quota −q, balance +q), so each wallet column
+   * still equals its ledger sum. Without 034's audit row: the script never
+   * writes audit rows (append-only, `--reset` could not remove them).
+   */
+  {
+    // A Pro bought in the last days before the removal and not spent yet: at least one holder is merged
+    // whatever the jobs above drained (they charge quota before balance).
+    await order(users[22]!, 22, { purpose: "pro", amount: LEGACY_PRO.priceSoum, outcome: "paid" }, now - 2 * DAY_MS);
+    const merged = await sql<{ id: string }>(
+      `WITH src AS (
+         SELECT id, quota AS q FROM users WHERE id = ANY($1::bigint[]) AND quota > 0 ORDER BY id FOR UPDATE
+       ),
+       moved AS (
+         UPDATE users u SET quota = u.quota - s.q, balance = u.balance + s.q, updated_at = now()
+           FROM src s WHERE u.id = s.id
+         RETURNING u.id, s.q
+       )
+       INSERT INTO transactions (user_id, kind, quota_delta, balance_delta, reference, note)
+       SELECT id, 'quota_merge', -q, q, 'quota-merge:' || id::text, 'Kvota balansga o''tkazildi: ' || q::text || ' tanga'
+         FROM moved
+       RETURNING user_id::text AS id`,
+      [users.map((u) => u.id)],
+    );
+    if (!merged.length) throw new Error("no seeded user holds legacy quota to merge (the Pro orders above should have credited some)");
+  }
+
   /* ── blocked users: PLAIN SQL (the block route needs an admin), then the real session revoke ── */
   for (const i of BLOCKED) {
     await sql(`UPDATE users SET is_blocked = true, updated_at = now() WHERE id = $1`, [users[i]!.id]);
@@ -951,7 +1036,7 @@ async function seed(rnd: () => number, batch: number): Promise<void> {
       ]);
     }
     const DONE: Array<[string, Record<string, unknown>, number]> = [
-      ["Pro obuna 30 kun uchun 15 000 so'm — balansni to'ldiring va kvota oling.", { kind: "paid" }, 21],
+      ["Bizdan foydalanganingiz uchun rahmat! Balansni Click yoki Payme orqali bir necha soniyada to'ldirish mumkin.", { kind: "paid" }, 21],
       ["Kurs ishlari uchun yangi shablonlar qo'shildi.", { kind: "all" }, 9],
       ["Imtihonlar oldidan: referat va mustaqil ishlarni oldindan buyurtma qiling.", { kind: "active_days", days: 30 }, 2],
     ];

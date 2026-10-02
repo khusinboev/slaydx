@@ -10,8 +10,12 @@ import { adminSend, type AdminCallOptions } from "./core";
  * `lib/server/**` (tests/admin-boundary.test.mts).
  */
 
+/** Every wallet column, for display; `quota` is legacy Pro history («Kvota (eski)»), 0 after the quota merge. */
 export type WalletId = "points" | "quota" | "balance";
 export const WALLET_IDS: readonly WalletId[] = ["points", "quota", "balance"];
+/** The wallets an admin may adjust; the server answers 400 for `quota`. */
+export type AdjustableWalletId = Exclude<WalletId, "quota">;
+export const ADJUSTABLE_WALLET_IDS: readonly AdjustableWalletId[] = ["points", "balance"];
 
 export const WALLET_REASON_CODES = ["compensation", "promo", "correction", "manual_refund", "test", "other"] as const;
 export type WalletReasonCode = (typeof WALLET_REASON_CODES)[number];
@@ -20,7 +24,7 @@ export type WalletReasonCode = (typeof WALLET_REASON_CODES)[number];
 export const MAX_WALLET_DELTA = 100_000_000;
 
 export type WalletAdjustBody = {
-  wallet: WalletId;
+  wallet: AdjustableWalletId;
   /** Integer, not 0; positive credits, negative debits. */
   delta: number;
   reasonCode: WalletReasonCode;
@@ -40,7 +44,7 @@ export type WalletUserSnapshot = {
 
 export type WalletAdjustResult = {
   transactionId: string;
-  wallet: WalletId;
+  wallet: AdjustableWalletId;
   before: number;
   after: number;
   user: WalletUserSnapshot;

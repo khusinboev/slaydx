@@ -176,7 +176,7 @@ function OrdersView({ store, fixedFilters, embedded = false, pageSize }: OrdersT
     {
       id: "purpose",
       header: "Maqsad",
-      cell: (o) => (o.purpose === "pro" ? <StatusPill tone="primary">Pro</StatusPill> : <span className="whitespace-nowrap">To&apos;ldirish</span>),
+      cell: (o) => (o.purpose === "pro" ? <StatusPill tone="primary">Pro (eski)</StatusPill> : <span className="whitespace-nowrap">To&apos;ldirish</span>),
     },
     {
       id: "txn",

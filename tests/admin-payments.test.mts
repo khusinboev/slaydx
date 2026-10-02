@@ -35,7 +35,7 @@ const iso = hasDb ? await createIsolatedDb("adminpayments") : { isolated: false,
 const { query, queryOne, ensureMigrated, transaction, pool } = await import("../lib/server/db.ts");
 const { createSession, SESSION_COOKIE } = await import("../lib/server/session.ts");
 const { createAdminSession, adminCookieName } = await import("../lib/server/admin-session.ts");
-const { settleOrder, cancelOrder, attachTransaction, PRO_PLAN } = await import("../lib/server/payments.ts");
+const { settleOrder, cancelOrder, attachTransaction } = await import("../lib/server/payments.ts");
 const { recordPaymentEvent } = await import("../lib/server/payment-events.ts");
 const { classifyOrderQuery, msToIso } = await import("../lib/server/admin-payments.ts");
 const listRoute = await import("../app/api/admin/orders/route.ts");
@@ -117,6 +117,9 @@ const exportCsv = async (cookie: string | null, qs = "") => {
 
 type OrderOpts = { provider: "click" | "payme"; purpose: "topup" | "pro"; amount?: number };
 
+/** The removed Pro subscription as it was sold (the former `PRO_PLAN`): legacy orders only, inserted by SQL. */
+const LEGACY_PRO = { priceSoum: 15_000, quota: 15_000 } as const;
+
 /** created: no provider transaction yet. */
 async function createdOrder(uid: string, o: OrderOpts): Promise<string> {
   const id = randomUUID();
@@ -125,7 +128,7 @@ async function createdOrder(uid: string, o: OrderOpts): Promise<string> {
     uid,
     o.provider,
     o.purpose,
-    o.purpose === "pro" ? PRO_PLAN.priceSoum : (o.amount ?? 10_000),
+    o.purpose === "pro" ? LEGACY_PRO.priceSoum : (o.amount ?? 10_000),
   ]);
   return id;
 }
@@ -142,6 +145,25 @@ async function paidOrder(uid: string, o: OrderOpts, txn: string, createTime: num
   const id = await pendingOrder(uid, o, txn, createTime);
   const out = await settleOrder(id, performTime);
   assert.equal(out.status, "paid");
+  return id;
+}
+
+/**
+ * A Pro order paid BEFORE the subscription removal: what `settleOrder` →
+ * `activateProInTx` wrote then (state paid, a `subscription` row crediting
+ * quota under the settlement reference), by SQL — the product no longer can.
+ */
+async function legacyPaidPro(uid: string, provider: "click" | "payme", txn: string, createTime: number, performTime: number): Promise<string> {
+  const id = await pendingOrder(uid, { provider, purpose: "pro" }, txn, createTime);
+  await transaction(async (c) => {
+    await c.query(`UPDATE payment_orders SET state = 'paid', perform_time = $2 WHERE id = $1`, [id, performTime]);
+    await c.query(`INSERT INTO transactions (user_id, kind, quota_delta, reference, note) VALUES ($1, 'subscription', $2, $3, 'Pro obuna')`, [
+      uid,
+      LEGACY_PRO.quota,
+      `${provider}:${txn}`,
+    ]);
+    await c.query(`UPDATE users SET quota = quota + $2, plan = 'pro' WHERE id = $1`, [uid, LEGACY_PRO.quota]);
+  });
   return id;
 }
 
@@ -175,8 +197,9 @@ before(async () => {
   seed.vali = vali.id;
   seed.paidClickTopup = await paidOrder(ali.id, { provider: "click", purpose: "topup", amount: 20_000 }, seed.clickTxn, T0, T0 + 90_000);
   seed.paidPaymeTopup = await paidOrder(ali.id, { provider: "payme", purpose: "topup", amount: 50_000 }, seed.paymeTxn, T0 + 1000, T0 + 61_000);
+  // Legacy Pro orders: one paid after the removal (settleOrder credits balance as `subscription`), one before it (quota).
   seed.paidClickPro = await paidOrder(vali.id, { provider: "click", purpose: "pro" }, String(randomInt(100_000_000, 999_999_999)), T0, T0 + 5_000);
-  seed.paidPaymePro = await paidOrder(vali.id, { provider: "payme", purpose: "pro" }, randomBytes(12).toString("hex"), T0, T0 + 7_000);
+  seed.paidPaymePro = await legacyPaidPro(vali.id, "payme", randomBytes(12).toString("hex"), T0, T0 + 7_000);
   seed.pendingPayme = await pendingOrder(ali.id, { provider: "payme", purpose: "topup", amount: 7_000 }, randomBytes(12).toString("hex"), T0 + 2000);
   seed.pendingClick = await pendingOrder(vali.id, { provider: "click", purpose: "topup", amount: 8_000 }, String(randomInt(100_000_000, 999_999_999)), T0 + 3000);
   seed.createdClick = await createdOrder(ali.id, { provider: "click", purpose: "topup", amount: 9_000 });
@@ -468,13 +491,22 @@ test("detail: order with ms times converted, redacted webhook timeline, credit +
   assert.equal(refunds[0].shortfall, 0);
   assert.equal(refunds[0].createdByName, "Admin");
 
-  // A Pro order: the credit row is the `subscription` quota row.
+  // A legacy Pro order paid before the removal: the credit row is the `subscription` quota row.
   const pro = await detail(s.cookie, seed.paidPaymePro);
   const proLedger = pro.body.ledger as Array<Record<string, unknown>>;
   assert.equal(proLedger.length, 1);
   assert.equal(proLedger[0].kind, "subscription");
-  assert.equal(proLedger[0].quota, PRO_PLAN.quota);
+  assert.equal(proLedger[0].quota, LEGACY_PRO.quota);
+  assert.equal(proLedger[0].balance, 0);
+  assert.equal((pro.body.order as Record<string, unknown>).credited, true);
   assert.deepEqual(pro.body.events, []);
+  // ...and one paid after it: the same `subscription` kind and link, credited to balance (SUBS-REMOVAL §A).
+  const late = await detail(s.cookie, seed.paidClickPro);
+  const lateLedger = late.body.ledger as Array<Record<string, unknown>>;
+  assert.equal(lateLedger.length, 1);
+  assert.equal(lateLedger[0].kind, "subscription");
+  assert.deepEqual([lateLedger[0].quota, lateLedger[0].balance], [0, LEGACY_PRO.priceSoum]);
+  assert.equal((late.body.order as Record<string, unknown>).credited, true);
 
   // Created order: nothing attached yet.
   const created = await detail(s.cookie, seed.createdClick);

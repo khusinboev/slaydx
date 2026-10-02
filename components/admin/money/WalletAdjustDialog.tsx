@@ -5,11 +5,11 @@ import { ConfirmDialog, toast } from "@/components/admin/ui";
 import { fmtNumber } from "@/lib/admin-format";
 import {
   adjustWallet,
+  ADJUSTABLE_WALLET_IDS,
   MAX_WALLET_DELTA,
-  WALLET_IDS,
   WALLET_REASON_CODES,
+  type AdjustableWalletId,
   type WalletAdjustResult,
-  type WalletId,
   type WalletReasonCode,
   type WalletUserSnapshot,
 } from "@/lib/admin-api/money";
@@ -34,8 +34,9 @@ export type WalletAdjustDialogProps = {
 };
 
 /**
- * Wallet adjustment (plan §6.4, §7.0): wallet, direction and amount, reason
- * code, audited reason, typed confirmation for large amounts. The
+ * Wallet adjustment (plan §6.4, §7.0): wallet (bonus or balance; the legacy
+ * Pro quota is read-only since the subscription removal), direction and amount,
+ * reason code, audited reason, typed confirmation for large amounts. The
  * `Idempotency-Key` comes from `ConfirmDialog` (one per open, reused on retry).
  */
 export function WalletAdjustDialog(props: WalletAdjustDialogProps) {
@@ -45,7 +46,7 @@ export function WalletAdjustDialog(props: WalletAdjustDialogProps) {
 
 function Body({ onClose, user, confirmThreshold, onDone }: WalletAdjustDialogProps) {
   const ids = useId();
-  const [wallet, setWallet] = useState<WalletId>("balance");
+  const [wallet, setWallet] = useState<AdjustableWalletId>("balance");
   const [direction, setDirection] = useState<"credit" | "debit">("credit");
   const [amountText, setAmountText] = useState("");
   const [reasonCode, setReasonCode] = useState<WalletReasonCode>("compensation");
@@ -105,8 +106,8 @@ function Body({ onClose, user, confirmThreshold, onDone }: WalletAdjustDialogPro
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <label htmlFor={`${ids}-wallet`} className={LABEL_CLASS}>
           Hamyon
-          <select id={`${ids}-wallet`} value={wallet} onChange={(e) => setWallet(e.target.value as WalletId)} className={FIELD_CLASS}>
-            {WALLET_IDS.map((w) => (
+          <select id={`${ids}-wallet`} value={wallet} onChange={(e) => setWallet(e.target.value === "points" ? "points" : "balance")} className={FIELD_CLASS}>
+            {ADJUSTABLE_WALLET_IDS.map((w) => (
               <option key={w} value={w}>
                 {WALLET_LABEL[w]} ({fmtNumber(user[w])})
               </option>
