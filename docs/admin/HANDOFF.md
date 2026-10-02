@@ -53,7 +53,7 @@ The brief's non-negotiable rules:
 | WP10 | Audit log UI and admins UI (§6.12, §6.13, S17/S18) | ✅ merged 2026-10-02 (sonnet; smoke 113 assertions) |
 | WP11 | Pricing admin (§17.4–17.6, S20) | ✅ merged 2026-10-02 (fable; smoke 62/62 incl. buyer charged the adjusted price and the 409 price_changed flow) |
 | I | Integration: legacy admin code removed (`lib/api-client.ts` section, `lib/server/admin.ts`), `admin:seed-dev`, shared `adminDownload`/`useLoad`/`cancelQueuedInTx`/`spendForJobs`, permission matrix test (402 cases), full checks | ✅ merged 2026-10-02 — full regression: tsc/lint clean, npm test 4032/4032, test:ui 779/779, test:viewer 248/248, build OK |
-| P4 | Phase 4: three independent reviews (security, regression, UX walk at 1280 px and 360 px, light and dark), fix every finding, write `03-report.md` | 🔄 security APPROVE (after 3 fixes, re-verified), correctness APPROVE (after 5 fixes, re-verified), UX: 3 MEDIUM + 11 LOW being fixed (2 agents); then UX re-verify, final full regression, 03-report |
+| P4 | Phase 4: three independent reviews, all findings fixed or accepted, `03-report.md` written | ✅ 2026-10-02 — security APPROVE, correctness APPROVE, UX APPROVE (each re-verified after fixes); final regression at `d0a0f16`: npm test 4047/4047, test:ui 792/792, test:viewer 248/248, build OK |
 
 Suggested order:
 1. F3b and F6 (in parallel).
@@ -157,6 +157,7 @@ Deploying earlier would leave the owner without a working admin UI. Migration `0
 
 | Date | Stage | Result |
 |---|---|---|
+| 2026-10-02 | (e)/(f) Integration + Phase 4 | Done. All packages merged; reviews approved; `03-report.md` complete. NOT deployed: `main` untouched. Owner decisions pending: pro chargeback plan, pricing unit conventions, TRUST_PROXY in prod .env. |
 | 2026-10-02 | (c)/(d) wave 1 | WP1, WP3, WP5, WP7 merged (each: own tests + guards green, Chromium smoke, lead review). Agents stopped once by the API session limit; resumed via SendMessage (worktrees kept their commits). Smoke rule: dev servers ALWAYS `WORKER_INLINE=false`. Agent brief for screens: `WP-COMMON.md` (lead scratchpad; content mirrored in AGENT-BRIEF + plan). Open items list kept by the lead for Integration. Next: WP2 (after WP4), WP9, WP10, WP11. |
 | 2026-10-02 | (b) F3b + F6 + COST | merged; merged-state tsc/lint clean, admin+guard tests 338/338, admin UI 72/72; PR #2 CI green (run 36916073054). Owner #1 created in the dev DB (`sodda`, backup taken first) — enroll link to be regenerated once `/admin` has a page. Note: plain `next dev` (webpack) 500s on every page because of `instrumentation.ts` → sharp; use `--turbopack` (pre-existing). Open owner question: pro chargeback leaves plan=pro (spec: quota clawback only). |
 | 2026-10-02 | (a) baseline + CI fix | `main` fast-forwarded to `ffddd39`, branch `feat/admin-panel`. typecheck ✅, lint ✅, `npm test` 3756/3756, `test:ui` 511/511, `test:viewer` 248/248. CI flake fixed in `tests/backup-script.test.mts` (§5). AGENT-BRIEF and CLAUDE.md adapted to the laptop. Next: (b) F3b + F6 after owner approval. |

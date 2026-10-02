@@ -57,11 +57,11 @@ No new npm dependency.
 
 | Check | Result |
 |---|---|
-| `npm run typecheck`, `npm run lint` | clean |
-| `npm test` (fresh Postgres 16) | FINAL_TEST |
-| `npm run test:ui` | FINAL_UI |
-| `npm run test:viewer` | FINAL_VIEWER |
-| `npm run build` | FINAL_BUILD |
+| `npm run typecheck`, `npm run lint` | clean (final head `d0a0f16`) |
+| `npm test` (fresh Postgres 16) | **4047 / 4047** pass, 0 skipped |
+| `npm run test:ui` | **792 / 792** |
+| `npm run test:viewer` | **248 / 248** |
+| `npm run build` | compiled successfully |
 | GitHub CI (draft PR #2) | green since the backup-test fix (run 36916073054) |
 
 - **Permission matrix** (`tests/admin-permission-matrix.test.mts`): the route manifest is generated from the code; 67 methods × 6 roles = 402 cases, plus 404 cloak for anonymous / non-admin / disabled on every route, Origin required on every mutation, 401 `admin_auth` for expired or revoked sessions, 401 `reauth` for every step-up permission, one `denied` audit row per refusal, and an equality check of the code matrix against §4.3.
@@ -75,7 +75,7 @@ No new npm dependency.
 |---|---|---|---|
 | Security / RBAC | fable | 0 critical, 0 high, 2 medium, 4 low | fixed: denied-call rate limit before the audit row; IP gate counts failures only and is skipped without a trusted proxy (plus prod warning); money actions follow admin-target and self rules. Accepted: enroll token in the URL (#5), Origin check before the cloak (#6). Re-verified: **APPROVE** |
 | Correctness / money / regression | fable | 0 critical, 0 high, 1 medium, 4 low | fixed: block lock order (deadlock), racing refund false alert, force-fail leftovers sweep, pricing all-in totals, per-request FX. Hand-calculated dashboard and pricing numbers matched. Re-verified: **APPROVE** |
-| UX / performance | opus | 0 high, 3 medium, 11 low | fixed: pricing overflow, badge contrast (≥ 4.5:1), row focus ring, Uzbek labels, unit consistency with explicit tanga→so'm, hidden columns, forbidden-only states, payload cap, user audit tab, phone KPI grid, dialog focus, scroll regions, consumer calls on `/admin`. Accepted by design: filters use `router.replace`, page cursor not in the URL (#14). UX_REVERIFY |
+| UX / performance | opus | 0 high, 3 medium, 11 low | fixed: pricing overflow, badge contrast (≥ 4.5:1), row focus ring, Uzbek labels, unit consistency with explicit tanga→so'm, hidden columns, forbidden-only states, payload cap, user audit tab, phone KPI grid, dialog focus, scroll regions, consumer calls on `/admin`. Accepted by design: filters use `router.replace`, page cursor not in the URL (#14). Re-verified on a production build: **APPROVE**; its three small leftovers (focusable scroll regions, row focus-ring contrast, refresh button on a forbidden page) were fixed after. |
 
 Per-package reviews during the build also caught and fixed: an idempotency key replayed across different target users (F6, major), a client rank-mirror bug (WP10), a duplicated spend rule (WP5), profile-field masking against the plan (WP2).
 
