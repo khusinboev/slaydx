@@ -35,9 +35,17 @@ export function LineChart({
   const [ref, W] = useChartWidth();
   const n = points.length;
   const values = points.map((p) => p.value);
+  // The axis always includes 0. Small positive ranges (e.g. a few cents of USD) get
+  // their own nice ticks; only an empty or all-zero series falls back to 0..1, so the
+  // domain never collapses to a single value.
   const minV = Math.min(0, ...values);
-  const maxV = Math.max(1, ...values);
-  const { ticks, lo, hi } = niceTicks(minV, maxV, 4);
+  const dataMax = Math.max(0, ...values);
+  const maxV = dataMax > minV ? dataMax : minV + 1;
+  const nice = niceTicks(minV, maxV, 4);
+  const { lo, hi } = nice;
+  // Decimal steps accumulate float error (0.1 * 3 = 0.30000000000000004); keep the tick
+  // values themselves clean for the labels and React keys.
+  const ticks = nice.ticks.map((t) => Number(t.toPrecision(12)));
   const tickTexts = ticks.map(formatValue);
   const L = Math.max(...tickTexts.map((t) => t.length), 1) * 6.2 + 14;
 

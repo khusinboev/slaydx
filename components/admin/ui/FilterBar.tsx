@@ -195,12 +195,11 @@ export function MultiSelectFilter({
     };
   }, [open]);
 
-  const summary =
-    values.length === 0
-      ? "Hammasi"
-      : values.length === 1
-        ? (options.find((o) => o.value === values[0])?.label ?? values[0])
-        : `${values.length} ta tanlangan`;
+  const labelOf = (v: string) => options.find((o) => o.value === v)?.label ?? v;
+  const summary = values.length === 0 ? "Hammasi" : values.length === 1 ? labelOf(values[0]) : `${values.length} ta tanlangan`;
+  // The visible text is a short summary and the label above is a plain span, so the
+  // button's accessible name carries both: the filter's name and every selected value.
+  const accessibleName = `${label}: ${values.length === 0 ? "Hammasi" : values.map(labelOf).join(", ")}`;
 
   function toggle(v: string) {
     onChange(values.includes(v) ? values.filter((x) => x !== v) : [...values, v]);
@@ -212,6 +211,7 @@ export function MultiSelectFilter({
       <button
         type="button"
         aria-haspopup="true"
+        aria-label={accessibleName}
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
         onClick={() => setOpen((o) => !o)}
