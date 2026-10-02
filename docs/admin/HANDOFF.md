@@ -187,3 +187,27 @@ Deploying earlier would leave the owner without a working admin UI. Migration `0
 - [ ] users sort last_seen_desc ≈480 ms at 50k users, balance_desc no index (03-report; index needs a migration).
 - [ ] UX: pricing table at 1280 px pushes the recommendation column into the table's own scroll; consider compacting (Phase 4 UX).
 - [ ] Pricing product calls to confirm with owner: pages unit = package midpoint; glossary without termCount excluded from per-unit cost; avg AI cost over jobs WITH cost data.
+
+## 9. Admin 2FA switch (2026-10-02)
+
+**Owner decision:** the owner designates admins; a designated admin sees the existing "Admin panel" button on the site (Sidebar) and clicking it enters the panel directly, with no TOTP code. The strengthened protection (enrollment, TOTP login, recovery codes, step-up, login notices) is **kept as working code behind a switch**, not removed.
+
+**The switch:** `ADMIN_2FA_REQUIRED` (boolean, default `false`; `lib/server/env.ts` getter `env.admin2faRequired`, passed to web and worker by `docker-compose.yml`, locked by `tests/compose-env.test.mts`).
+
+| | `ADMIN_2FA_REQUIRED=false` (simple mode, default) | `ADMIN_2FA_REQUIRED=true` (strengthened) |
+|---|---|---|
+| Entry | `/admin` → panel layout finds no admin session → `AdminAutoEnter` POSTs `/api/admin/auth/auto` once → `router.refresh()` → dashboard. `/admin/login` does the same and goes to `next`. | `/admin/login` TOTP or recovery code, `/admin/enroll` from a one-time link (unchanged). |
+| `POST /api/admin/auth/auto` | `adminAuthHandler` (Origin required): active admin → session; `pending` → activated on first entry; audit `auth.login` with `meta.mode = "simple"` (+ `before/after` status when activated); 30/60 s per admin; no Telegram notice. | 404 (the cloak). |
+| Session | Same `admin_sessions` row, cookie, 30 min idle / 12 h absolute, bound to the live user session. `reauth_at` stays null. | Unchanged. |
+| Step-up | Skipped: `adminHandler` never answers 401 `reauth`; the client never opens `StepUpDialog`. | 10-minute step-up on S permissions. |
+| TOTP routes (`auth/login`, `auth/recovery`, `auth/reauth`, `auth/enroll`, `me/recovery-codes`) | 409 `2fa_off` (`requireAdminCrypto`); `ADMIN_TOTP_KEY` is not read, no boot warning. | Unchanged (503 `admin_disabled` without a valid key). |
+| Admin creation (API, CLI) / reset-2fa / re-enable | Account `active`, `enrollUrl`/`expiresAt` are `null`; reset still clears the secret and revokes sessions. UI: toast "Admin qo'shildi — u saytdagi «Admin panel» tugmasi orqali kiradi"; the 2FA column and "2FA ni tiklash" are hidden; `/admin/account` shows a "2FA off" note instead of the TOTP/recovery sections; "Chiqish" returns to `/uz`. | `pending` + one-time enrollment link (unchanged). |
+| Unchanged in both modes | RBAC matrix and the 403 `denied` audit, the 404 cloak, Origin + rate limits, audit log, idempotency/reasons/typed confirmations, rank and self rules, the user-session binding (user logout or block kills admin access). | |
+
+**Client:** `AdminIdentity.twoFactor` (from the panel layout) is the only thing the UI reads; the server decides everything (`env.admin2faRequired` is a getter, read per request).
+
+**Turning 2FA back on:** set `ADMIN_2FA_REQUIRED=true` and a valid `ADMIN_TOTP_KEY` (`openssl rand -base64 32`) in prod `.env`, restart web and worker. Sessions minted in simple mode are refused at once (no TOTP enrolled → 401 `admin_auth`), so every admin must re-enroll: an owner uses "2FA ni tiklash" in `/admin/admins` for the others, or run `npm run admin:create -- --telegram-id <id> --role <role>` in the worker container (the owner's own break-glass path). Going back to simple mode is the reverse: `ADMIN_2FA_REQUIRED=false`, restart; accounts left `pending` activate on their first entry.
+
+**Residual risk (simple mode):** admin access rests on the Telegram login alone — whoever controls the admin's Telegram account (or a stolen user-session cookie) controls the panel; there is no second factor, no step-up before money actions and no login notice. Mitigations that remain: the audit log (every entry is an `auth.login` row with IP/UA), the session bindings and expiries, the owner-only account management, and the switch itself.
+
+**Tests:** `tests/admin-simple-auth.test.mts` (runs without `ADMIN_TOTP_KEY`), `tests/ui/admin-simple-auth.test.mts`; `tests/admin-permission-matrix.test.mts` runs every cross-cutting check in both modes; every other admin test sets `ADMIN_2FA_REQUIRED=true` explicitly and is unchanged.
