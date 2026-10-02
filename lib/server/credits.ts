@@ -175,10 +175,9 @@ export async function refundPartial(
 }
 
 /**
- * `transactions_ref_idx` UNIQUE (kind, reference) ga urilgan 23505 — boshqa
- * yo'l (admin qaytarishi, tiklash skaneri) tekshiruv bilan INSERT orasida
- * o'z `refund` qatorini COMMIT qilgan. Javob tekshiruvdagi bilan bir xil:
- * «allaqachon qaytarilgan».
+ * A 23505 on `transactions_ref_idx` UNIQUE (kind, reference): another path
+ * (admin refund, the reconcile scanner) committed its own `refund` row
+ * between our check and our INSERT. Same answer as the check: already refunded.
  */
 function isRefundDuplicate(e: unknown): boolean {
   const err = e as { code?: unknown; constraint?: unknown } | null;
@@ -230,8 +229,8 @@ async function refundRatio(userId: string, reference: string, ratio: number, not
     });
   } catch (e) {
     if (!isRefundDuplicate(e)) throw e;
-    // Tranzaksiya allaqachon ROLLBACK bo'lgan (`transaction`): hamyon
-    // o'zgarmagan, qator yozilmagan — ikkinchi to'siq ishladi.
+    // `transaction` already rolled back: no wallet change, no row written —
+    // the unique index acted as the second guard.
     log("info", "[credits] pul allaqachon qaytarilgan (poyga)", { userId, reference, ratio });
     return false;
   }
