@@ -318,6 +318,8 @@ test("AdminsPage in simple mode: no 2FA column, no «2FA ni tiklash» action; ad
   const d = await screen.findByRole("dialog", { name: "Admin qo'shish" });
   assert.match(d.textContent ?? "", /darhol faol bo'ladi/);
   assert.ok(within(d).getByLabelText("Telegram orqali xabar yuborish"));
+  // The dialog opens on the user picker; Telegram ID entry is the "ID bo'yicha" fallback.
+  fireEvent.click(within(d).getByRole("button", { name: "ID bo'yicha kiritish" }));
   fireEvent.change(within(d).getByLabelText("Telegram ID"), { target: { value: "555000111" } });
   fireEvent.change(within(d).getByLabelText("Rol"), { target: { value: "support" } });
   fireEvent.change(within(d).getByLabelText(/Sabab/), { target: { value: "yangi qo'llab-quvvatlash xodimi" } });

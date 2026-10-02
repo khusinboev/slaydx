@@ -4,10 +4,10 @@ import { useCallback, useState } from "react";
 import { Check, Minus, UserPlus } from "lucide-react";
 import { listAdmins, type AdminAccountItem } from "@/lib/admin-api/admins";
 import { fmtDateTime, fmtNumber } from "@/lib/admin-format";
-import { Badge, Button, Card, DataTable, EmptyState, ErrorState, Forbidden, Modal, toast, useLoad, type Column } from "@/components/admin/ui";
+import { Badge, Button, Card, DataTable, EmptyState, ErrorState, Forbidden, Modal, useLoad, type Column } from "@/components/admin/ui";
 import { roleLabel, useAdminIdentity, useCan } from "@/components/admin/shell";
 import { ActionDialogs, type RowAction } from "./ActionDialogs";
-import { AddAdminDialog } from "./AddAdminDialog";
+import { CreateAdminDialog, announceCreated } from "./CreateAdminDialog";
 import { EnrollLinkDialog, type EnrollLinkView } from "./EnrollLinkDialog";
 import { STATUS_META, rowRules } from "./shared";
 
@@ -139,14 +139,13 @@ export function AdminsPage() {
         />
       )}
 
-      <AddAdminDialog
+      <CreateAdminDialog
         open={adding}
         onClose={() => setAdding(false)}
         actorRole={identity.role}
         twoFactor={twoFactor}
         onCreated={(c) => {
-          if (c.link) setLink(c.link);
-          else toast("Admin qo'shildi — u saytdagi «Admin panel» tugmasi orqali kiradi");
+          announceCreated(c, setLink);
           reload();
         }}
       />
