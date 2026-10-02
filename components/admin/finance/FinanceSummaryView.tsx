@@ -16,6 +16,7 @@ import { fmtDateTime, fmtIsoDate, fmtNumber, fmtPercent, fmtSoum, fmtTanga } fro
 import { getFinanceSummary, type FinanceSummary, type RevenueBucket } from "@/lib/admin-api/payments";
 import { PROVIDER_LABEL, PURPOSE_LABEL } from "@/components/admin/payments/labels";
 import { useResource } from "@/components/admin/payments/list-state";
+import { useReportForbidden } from "./forbidden";
 
 /** Axis ticks: `1,2 mln`, `350 ming`. */
 export function compactSoum(n: number): string {
@@ -34,21 +35,35 @@ function share(part: number, total: number): string {
  * purpose split, job spend and refunds, current liabilities (Σ wallets),
  * external refunds. The server caches each range for 60 s.
  */
-export function FinanceSummaryView({ range, onRangeChange }: { range: DateRange; onRangeChange: (r: DateRange) => void }) {
+export function FinanceSummaryView({
+  range,
+  onRangeChange,
+  onForbidden,
+}: {
+  range: DateRange;
+  onRangeChange: (r: DateRange) => void;
+  /** 403: the page drops its tabs (every finance tab needs the same permission). */
+  onForbidden?: () => void;
+}) {
   const key = `${range.from}:${range.to}`;
   const { state, retry } = useResource<FinanceSummary>(key, (signal) => getFinanceSummary(range, { signal }));
   const s = state.data;
   const loading = state.status === "loading" && !s;
+  useReportForbidden(state.status === "forbidden", onForbidden);
+  // 403: the forbidden state is all there is — no period picker above it.
+  if (state.status === "forbidden") {
+    return (
+      <div className="bg-card rounded-xl border">
+        <Forbidden />
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
       <DateRangePicker value={range} onChange={onRangeChange} ariaLabel="Xulosa davri" />
 
-      {state.status === "forbidden" ? (
-        <div className="bg-card rounded-xl border">
-          <Forbidden />
-        </div>
-      ) : state.status === "error" ? (
+      {state.status === "error" ? (
         <div className="bg-card rounded-xl border">
           <ErrorState message={state.message} requestId={state.requestId} onRetry={retry} />
         </div>

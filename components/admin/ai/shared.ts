@@ -7,6 +7,16 @@ import { fmtIsoDate, fmtNumber, fmtSoum, fmtUsd } from "@/lib/admin-format";
 
 /* ───────────────────────────── loading state ───────────────────────────── */
 
+/**
+ * Tells the AI page that a tab's load answered 403. Both tabs need `ai.view`,
+ * so the page then drops its tabs and shows only the forbidden state.
+ */
+export function useReportForbidden(forbidden: boolean, onForbidden: (() => void) | undefined): void {
+  useEffect(() => {
+    if (forbidden) onForbidden?.();
+  }, [forbidden, onForbidden]);
+}
+
 export type LoadState<T> =
   | { status: "loading" }
   | { status: "forbidden" }

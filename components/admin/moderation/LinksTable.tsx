@@ -262,6 +262,9 @@ export function LinksTable() {
     );
   }
 
+  // 403: the forbidden state is all there is — no filter bar above it.
+  if (current?.kind === "forbidden") return body;
+
   return (
     <div className="flex min-w-0 flex-col gap-3">
       <FilterBar activeCount={active} onClear={clearFilters}>
