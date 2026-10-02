@@ -24,12 +24,12 @@ const KNOWN = new Set<string>(PERMISSIONS);
 const AUTH_ROUTES = new Set(["session/route.ts", "auth/login/route.ts", "auth/recovery/route.ts", "auth/enroll/route.ts"]);
 
 /**
- * LEGACY allowance (explicit, temporary): the old phone-era routes still call
- * `requireAdmin`, which now delegates to the admin-session resolver
- * (owner/admin only). WP2 rewrites both files on `adminHandler`; the
- * integration step then deletes `requireAdmin` and this list.
+ * LEGACY allowance (explicit, temporary): files that may still use the old
+ * `handler` + `requireAdmin` guard. WP2 rewrote the last two
+ * (`users/route.ts`, `users/[id]/route.ts`) on `adminHandler`, so it is empty;
+ * the integration step deletes `requireAdmin` and this mechanism.
  */
-const LEGACY_REQUIRE_ADMIN = new Set(["users/route.ts", "users/[id]/route.ts"]);
+const LEGACY_REQUIRE_ADMIN = new Set<string>();
 
 const METHODS = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"] as const;
 
