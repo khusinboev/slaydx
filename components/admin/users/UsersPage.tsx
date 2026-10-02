@@ -90,8 +90,13 @@ export function UsersPage() {
         </div>
       ),
     },
-    { id: "tg", header: "Telegram ID", className: "font-mono text-[12.5px]", cell: (u) => u.telegramId ?? "—" },
-    { id: "phone", header: "Telefon", className: "font-mono text-[12.5px] whitespace-nowrap", cell: (u) => u.phoneMasked ?? "—" },
+    { id: "tg", header: "Telegram ID", cell: (u) => (u.telegramId ? <span className="font-mono text-[12.5px]">{u.telegramId}</span> : "—") },
+    {
+      id: "phone",
+      header: "Telefon",
+      className: "whitespace-nowrap",
+      cell: (u) => (u.phoneMasked ? <span className="font-mono text-[12.5px]">{u.phoneMasked}</span> : "—"),
+    },
     {
       id: "plan",
       header: "Tarif",

@@ -258,10 +258,9 @@ export function UserDetail({ id, tools }: { id: string; tools: ReadonlyArray<Fil
                   items={[
                     {
                       label: "ID",
-                      mono: true,
                       value: (
                         <span className="inline-flex items-center gap-1.5">
-                          {user.id}
+                          <span className="font-mono text-[12.5px]">{user.id}</span>
                           <CopyButton value={user.id} />
                         </span>
                       ),
