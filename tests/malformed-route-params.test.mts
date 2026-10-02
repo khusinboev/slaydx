@@ -72,6 +72,13 @@ test("admin/users/[id]: raqam bo'lmagan yoki chegaradan tashqari id — 404 (500
   const { queryOne } = await import("../lib/server/db.ts");
   const { createSession, SESSION_COOKIE } = await import("../lib/server/session.ts");
   const route = await import("../app/api/admin/users/[id]/route.ts");
+  // The legacy PUT (block) and PATCH (wallet) are replaced by these routes on the same `[id]` (WP2, F6).
+  const blockRoute = await import("../app/api/admin/users/[id]/block/route.ts");
+  const walletRoute = await import("../app/api/admin/users/[id]/wallet-adjustments/route.ts");
+  const txRoute = await import("../app/api/admin/users/[id]/transactions/route.ts");
+  const sessionsRoute = await import("../app/api/admin/users/[id]/sessions/route.ts");
+  const revokeRoute = await import("../app/api/admin/users/[id]/sessions/revoke/route.ts");
+  const messageRoute = await import("../app/api/admin/users/[id]/message/route.ts");
   const row = await queryOne<{ id: string }>(`INSERT INTO users (username, phone) VALUES ($1, $2) RETURNING id::text AS id`, [
     `w4e_adm_${randomBytes(5).toString("hex")}`,
     ADMIN_PHONE,
@@ -80,7 +87,7 @@ test("admin/users/[id]: raqam bo'lmagan yoki chegaradan tashqari id — 404 (500
   const { token } = await createSession(row!.id);
   // Admin identity is an admin_accounts row + an admin session bound to the user
   // session (docs/admin/02-plan.md §3), no longer the phone allow-list. Reauth is
-  // fresh so the legacy mutations reach their id validation.
+  // fresh so the step-up mutation (wallet) reaches its id validation.
   const { transaction } = await import("../lib/server/db.ts");
   const { createAdminSession, adminCookieName } = await import("../lib/server/admin-session.ts");
   const { createHash } = await import("node:crypto");
@@ -97,20 +104,47 @@ test("admin/users/[id]: raqam bo'lmagan yoki chegaradan tashqari id — 404 (500
   });
   const cookie = `${SESSION_COOKIE}=${token}; ${adminCookieName()}=${adminToken}`;
 
-  const call = async (method: "GET" | "PATCH" | "PUT", id: string, body?: unknown) => {
-    const req = new Request(`http://localhost:3000/api/admin/users/${encodeURIComponent(id)}`, {
+  type RouteFn = (r: Request, c: { params: Promise<{ id: string }> }) => Promise<Response>;
+  const call = async (
+    method: "GET" | "POST",
+    id: string,
+    opts: { fn?: RouteFn; sub?: string; body?: unknown; headers?: Record<string, string> } = {},
+  ) => {
+    const req = new Request(`http://localhost:3000/api/admin/users/${encodeURIComponent(id)}${opts.sub ?? ""}`, {
       method,
-      headers: { cookie, origin: "http://localhost:3000", host: "localhost:3000", "content-type": "application/json" },
-      ...(body ? { body: JSON.stringify(body) } : {}),
+      headers: { cookie, origin: "http://localhost:3000", host: "localhost:3000", "content-type": "application/json", ...opts.headers },
+      ...(opts.body ? { body: JSON.stringify(opts.body) } : {}),
     });
-    const fn = route[method] as (r: Request, c: { params: Promise<{ id: string }> }) => Promise<Response>;
+    const fn = opts.fn ?? (route.GET as RouteFn);
     return (await inRequest(req, () => fn(req, { params: Promise.resolve({ id }) }))).status;
   };
+  const { randomUUID } = await import("node:crypto");
 
   for (const id of ["abc", "1.5", "-1", "0", "99999999999999999999", "1e3", " 1"]) {
     assert.equal(await call("GET", id), 404, `MUTATSIYA: GET id=${id}`);
-    assert.equal(await call("PUT", id, { blocked: true }), 404, `PUT id=${id}`);
-    assert.equal(await call("PATCH", id, { wallet: "balance", delta: 1 }), 404, `PATCH id=${id}`);
+    assert.equal(
+      await call("POST", id, { fn: blockRoute.POST as RouteFn, sub: "/block", body: { blocked: true, reason: "Sinov uchun bloklash" } }),
+      404,
+      `MUTATSIYA: POST block id=${id}`,
+    );
+    assert.equal(
+      await call("POST", id, {
+        fn: walletRoute.POST as RouteFn,
+        sub: "/wallet-adjustments",
+        body: { wallet: "balance", delta: 1, reasonCode: "test", reason: "Sinov uchun tuzatish" },
+        headers: { "Idempotency-Key": randomUUID() },
+      }),
+      404,
+      `MUTATSIYA: POST wallet-adjustments id=${id}`,
+    );
+    assert.equal(await call("GET", id, { fn: txRoute.GET as RouteFn, sub: "/transactions" }), 404, `GET transactions id=${id}`);
+    assert.equal(await call("GET", id, { fn: sessionsRoute.GET as RouteFn, sub: "/sessions" }), 404, `GET sessions id=${id}`);
+    assert.equal(
+      await call("POST", id, { fn: revokeRoute.POST as RouteFn, sub: "/sessions/revoke", body: { reason: "Sinov uchun bekor qilish" } }),
+      404,
+      `POST sessions/revoke id=${id}`,
+    );
+    assert.equal(await call("POST", id, { fn: messageRoute.POST as RouteFn, sub: "/message", body: { text: "Salom" } }), 404, `POST message id=${id}`);
   }
   // Haqiqiy id — oddiy yo'l ishlaydi.
   assert.equal(await call("GET", row!.id), 200);
