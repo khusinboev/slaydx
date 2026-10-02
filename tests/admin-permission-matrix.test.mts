@@ -77,6 +77,11 @@ const rbac = await import("../lib/server/admin-rbac.ts");
 const { query, queryOne, ensureMigrated, transaction, pool } = await import("../lib/server/db.ts");
 const { createSession, SESSION_COOKIE } = await import("../lib/server/session.ts");
 const { createAdminSession, adminCookieName } = await import("../lib/server/admin-session.ts");
+const { TOOL_BY_ID } = await import("../lib/tools.ts");
+
+/** `pricing/[toolId]` segment: a real tool id from the registry (plan §17.5), never a fake. */
+const PRICING_TOOL_ID = "essay";
+assert.ok(PRICING_TOOL_ID in TOOL_BY_ID, `${PRICING_TOOL_ID} is not in the tool registry`);
 
 type Role = (typeof rbac.ROLES)[number];
 type Permission = (typeof rbac.PERMISSIONS)[number];
@@ -332,11 +337,29 @@ const PATH_FAMILIES: ReadonlyArray<readonly [RegExp, readonly string[]]> = [
   [/^(me\/|auth\/reauth\/)/, ["self"]],
 ];
 
+/**
+ * The ONLY non-GET routes allowed on a `*.view` permission, each with its plan
+ * reference. Every entry must exist in the manifest (a removed route is a stale
+ * entry) and must be proven write-free by its own test below. Never widen the
+ * rule itself.
+ */
+const VIEW_MUTATION_ALLOWLIST: ReadonlyMap<string, string> = new Map([
+  [
+    "pricing/[toolId]/simulate/route.ts POST",
+    "plan §17.5: a read-only what-if on {percent, roundTo}; POST only for its body, writes no row and no audit",
+  ],
+]);
+
 test("manifest: every route's permission fits its path family and verb class (least privilege)", () => {
   const problems: string[] = [];
+  const known = new Set(ADMIN_ENTRIES.map((e) => `${e.rel} ${e.method}`));
+  for (const key of VIEW_MUTATION_ALLOWLIST.keys()) {
+    if (!known.has(key)) problems.push(`allow-list entry "${key}" is not a route any more — remove it`);
+  }
   for (const e of ADMIN_ENTRIES) {
     const perm = e.permission!;
     const where = `${e.rel} ${e.method} [${perm}]`;
+    const allowed = VIEW_MUTATION_ALLOWLIST.has(`${e.rel} ${e.method}`);
     const family = PATH_FAMILIES.find(([re]) => re.test(e.rel));
     if (!family) {
       problems.push(`${where}: path family unknown — extend PATH_FAMILIES`);
@@ -346,7 +369,8 @@ test("manifest: every route's permission fits its path family and verb class (le
     if (!family[1].includes(ns)) problems.push(`${where}: namespace "${ns}" does not belong to ${family[0]}`);
     if (/\/export\//.test(e.rel) && !perm.endsWith(".export")) problems.push(`${where}: an export path must use a *.export permission`);
     if (!/\/export\//.test(e.rel) && perm.endsWith(".export")) problems.push(`${where}: *.export on a non-export path`);
-    if (e.mutation && perm.endsWith(".view")) problems.push(`${where}: a mutation guarded by a *.view permission`);
+    if (e.mutation && perm.endsWith(".view") && !allowed) problems.push(`${where}: a mutation guarded by a *.view permission`);
+    if (allowed && !(e.mutation && perm.endsWith(".view"))) problems.push(`${where}: allow-listed but no longer a *.view mutation — remove the entry`);
     if (!e.mutation && PLAN_STEP_UP.has(perm) && !perm.endsWith(".export")) problems.push(`${where}: a read guarded by a step-up (money/admin) permission`);
   }
   assert.deepEqual(problems, []);
@@ -482,13 +506,18 @@ function paramsFor(e: Entry, role: Role | null): Record<string, string> {
     else if (/^(audit|errors|broadcasts)\/\[id\]/.test(e.rel)) value = "900000000000";
     else if (/^(generations|orders|moderation\/game-links|moderation\/game-results)\/\[id\]/.test(e.rel)) value = randomUUID();
     else if (e.rel.startsWith("settings/[key]")) value = "no_such_setting";
+    else if (e.rel.startsWith("pricing/[toolId]")) value = PRICING_TOOL_ID;
     assert.ok(value !== null, `${e.rel}: no fixture value for dynamic segment [${name}] — extend paramsFor()`);
     out[name] = value;
   }
   return out;
 }
 
-async function call(e: Entry, cookie: string | null, opts: { origin?: boolean | string; role?: Role | null } = {}): Promise<Result> {
+async function call(
+  e: Entry,
+  cookie: string | null,
+  opts: { origin?: boolean | string; role?: Role | null; body?: Record<string, unknown> } = {},
+): Promise<Result> {
   const params = paramsFor(e, opts.role ?? null);
   const path = e.path.replace(/\[([^\]]+)\]/g, (_m, name: string) => encodeURIComponent(params[name]!));
   const headers: Record<string, string> = { host: "localhost:3000", "x-forwarded-for": freshIp(), "user-agent": "permission-matrix-test" };
@@ -500,7 +529,7 @@ async function call(e: Entry, cookie: string | null, opts: { origin?: boolean | 
   if (e.mutation) {
     headers["content-type"] = "application/json";
     headers["Idempotency-Key"] = randomUUID();
-    body = "{}";
+    body = JSON.stringify(opts.body ?? {});
   }
   const req = new Request(`http://localhost:3000${path}`, { method: e.method, headers, body });
   const res = await inRequest(req, () => e.fn(req, { params: Promise.resolve(params) }));
@@ -588,6 +617,27 @@ test("matrix: no route answered 5xx to the minimal request of a permitted role",
   assert.deepEqual(serverErrors, []);
 });
 
+test("allow-list: pricing/[toolId]/simulate POST on pricing.view really writes nothing (no pricing row, no history, no audit)", { skip }, async () => {
+  const s = seed!;
+  const e = ADMIN_ENTRIES.find((x) => x.rel === "pricing/[toolId]/simulate/route.ts" && x.method === "POST");
+  assert.ok(e, "the allow-listed route exists");
+  const counts = async () => {
+    const r = await queryOne<{ pricing: number; history: number; audit: number }>(
+      `SELECT (SELECT count(*) FROM tool_pricing)::int AS pricing,
+              (SELECT count(*) FROM tool_price_history)::int AS history,
+              (SELECT count(*) FROM admin_audit_log)::int AS audit`,
+    );
+    return r!;
+  };
+  const before = await counts();
+  // viewer holds pricing.view but not pricing.edit: the weakest role the route admits.
+  const viewer = s.admins.viewer;
+  const r = await call(e, cookieOf(viewer, viewer.fresh), { role: "viewer", body: { percent: 150, roundTo: 100 } });
+  assert.equal(r.status, 200, show(r));
+  assert.ok(Array.isArray(r.body.ladder), "a simulation answers with a ladder");
+  assert.deepEqual(await counts(), before, "the simulation wrote a row");
+});
+
 // ───────────────────────────── cross-cutting checks
 
 test("step-up: every route of every S permission answers 401 reauth to a permitted role whose reauth_at is stale", { skip }, async () => {
@@ -605,12 +655,10 @@ test("step-up: every route of every S permission answers 401 reauth to a permitt
     }
   }
   assert.deepEqual(failures, []);
+  // Every S permission of §4.3 has at least one route by now (WP11 brought pricing.edit), and each one was exercised.
   const routed = new Set<string>(ADMIN_ENTRIES.map((e) => e.permission!));
-  const withRoutes = [...PLAN_STEP_UP].filter((p) => routed.has(p));
-  assert.ok(withRoutes.length >= 10, `only ${withRoutes.length} step-up permissions have a route`);
-  assert.deepEqual([...covered].sort(), withRoutes.sort(), "every routed S permission is covered by at least one route");
-  const unrouted = [...PLAN_STEP_UP].filter((p) => !routed.has(p));
-  if (unrouted.length) console.log(`step-up permissions without any route yet: ${unrouted.join(", ")}`);
+  assert.deepEqual([...PLAN_STEP_UP].filter((p) => !routed.has(p)), [], "a step-up permission has no route");
+  assert.deepEqual([...covered].sort(), [...PLAN_STEP_UP].sort(), "every S permission is covered by at least one route");
   // A stale session is not a broken session: a non-S route still works with it.
   const plain = ADMIN_ENTRIES.find((e) => e.rel === "me/sessions/route.ts" && e.method === "GET")!;
   const r = await call(plain, cookieOf(s.admins.owner, s.admins.owner.stale), { role: "owner" });
