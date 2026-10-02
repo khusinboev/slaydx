@@ -339,7 +339,9 @@ test("UserDetail: loading skeleton, then header, wallets, profile (masked) and s
   assert.ok(screen.getByText("+998 ** *** ** 67"));
   assert.ok(screen.getByText("TATU"), "profile fields shown (§6.0)");
   assert.ok(screen.getByText("Telefon yashirilgan"));
-  assert.ok(screen.getByText(/^12\s000$/), "balance wallet tile");
+  // Wallet tiles carry their unit (UX #6): wallets are tanga, real money is so'm.
+  assert.ok(screen.getByText(/^12\s000\stanga$/), "balance wallet tile");
+  assert.ok(screen.getByText(/^300\stanga$/), "points wallet tile");
   const actions = screen.getByRole("group", { name: "Amallar" });
   for (const name of ["Hamyonni tuzatish", "Bloklash", "Sessiyalarni bekor qilish", "Xabar yuborish", "Telefonni ko'rsatish"]) {
     assert.ok(within(actions).getByRole("button", { name }), name);
@@ -511,6 +513,16 @@ test("UserDetail tabs: tab in the URL; Hisob uses the user's ledger endpoint wit
     [`GET ${detailUrl}`]: () => json(200, DETAIL),
     [`GET ${detailUrl}/transactions`]: () =>
       json(200, page([{ id: "9", kind: "charge", points: 0, quota: 0, balance: -2_000, reference: GEN, note: "slide: Mavzu", createdAt: "2026-09-20T06:00:00.000Z", generationId: GEN, orderId: null }])),
+    "GET /api/admin/audit": () =>
+      json(200, {
+        items: [
+          { id: "71", at: "2026-10-01T06:00:00.000Z", adminId: "3", adminName: "Dilnoza Owner", adminUsername: null, actorRole: "owner", action: "users.block", targetType: "user", targetId: "42", outcome: "ok", reason: "Spam xabarlar", ip: "10.0.0.1" },
+          { id: "70", at: "2026-09-30T06:00:00.000Z", adminId: "5", adminName: "Jasur", adminUsername: null, actorRole: "support", action: "users.wallet.adjust", targetType: "user", targetId: "42", outcome: "denied", reason: null, ip: null },
+        ],
+        nextCursor: "c1",
+        total: 14,
+        totalCapped: false,
+      }),
     [`GET ${detailUrl}/sessions`]: () =>
       json(200, {
         items: [
@@ -541,4 +553,26 @@ test("UserDetail tabs: tab in the URL; Hisob uses the user's ledger endpoint wit
   assert.equal(screen.getByRole("link", { name: "Moderatsiyada ochish" }).getAttribute("href"), "/admin/moderation?userId=42");
   fireEvent.click(screen.getByRole("tab", { name: "Audit" }));
   assert.equal(screen.getByRole("link", { name: "Audit jurnalida ochish" }).getAttribute("href"), "/admin/audit?targetType=user&targetId=42");
+  // Plan S5: the tab itself lists the audit rows targeting this user (UX #13a).
+  await waitFor(() => assert.ok(container.querySelector('tr[data-row-key="71"]')));
+  const auditCall = calls.filter((c) => c.path === "/api/admin/audit").at(-1)!;
+  assert.equal(auditCall.params.get("targetType"), "user");
+  assert.equal(auditCall.params.get("targetId"), "42");
+  assert.equal(auditCall.params.get("limit"), "10");
+  const r71 = container.querySelector('tr[data-row-key="71"]') as HTMLElement;
+  assert.match(r71.textContent ?? "", /users\.block/);
+  assert.match(r71.textContent ?? "", /Bajarildi/);
+  assert.match(r71.textContent ?? "", /Spam xabarlar/);
+  assert.match(container.querySelector('tr[data-row-key="70"]')!.textContent ?? "", /Rad etildi/);
+  assert.match(container.textContent ?? "", /jami 14 ta/);
+  fireEvent.click(r71);
+  assert.equal(log.at(-1), "push /admin/audit?targetType=user&targetId=42&id=71");
+});
+
+test("UserDetail: without audit.view there is no Audit tab and no audit request", async () => {
+  const calls = stubFetch({ [`GET ${detailUrl}`]: () => json(200, DETAIL) });
+  mount(h(UserDetail, { id: "42", tools: [] }), "/admin/users/42?tab=audit", SUPPORT_PERMS);
+  await screen.findByRole("heading", { name: /Ali Valiyev/ });
+  assert.ok(!screen.queryByRole("tab", { name: "Audit" }));
+  assert.ok(!calls.some((c) => c.path === "/api/admin/audit"));
 });

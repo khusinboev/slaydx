@@ -31,6 +31,7 @@ import { adminErrorMessage } from "@/lib/admin-api/core";
 import { PROFILE_FIELDS, getUser, type AdminUserDetailResponse } from "@/lib/admin-api/users";
 import { PROFILE_LABEL } from "./labels";
 import { BlockDialog, MessageDialog, RevokeSessionsDialog, type UserTarget } from "./UserDialogs";
+import { UserAuditTab } from "./UserAuditTab";
 import { UserLedgerTable } from "./UserLedgerTable";
 import { UserSessionsTab } from "./UserSessionsTab";
 
@@ -231,7 +232,8 @@ export function UserDetail({ id, tools }: { id: string; tools: ReadonlyArray<Fil
               <span className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">
                 {label} · {hint}
               </span>
-              <div className="mt-1 text-[22px] font-semibold tabular-nums">{fmtNumber(value)}</div>
+              {/* Every wallet is counted in tanga (prices are charged across them in tanga); real money is so'm. */}
+              <div className="mt-1 text-[22px] font-semibold tabular-nums">{fmtTanga(value)}</div>
             </CardBody>
           </Card>
         ))}
@@ -333,12 +335,7 @@ export function UserDetail({ id, tools }: { id: string; tools: ReadonlyArray<Fil
             label="Moderatsiyada ochish"
           />
         ) : (
-          <LinkCard
-            title="Audit"
-            text="Shu foydalanuvchiga nisbatan bajarilgan barcha admin amallari audit jurnalida."
-            href={`/admin/audit?targetType=user&targetId=${encodeURIComponent(user.id)}`}
-            label="Audit jurnalida ochish"
-          />
+          <UserAuditTab userId={user.id} reloadKey={reloadKey} />
         )}
       </TabPanel>
 
