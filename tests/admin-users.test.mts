@@ -1,6 +1,6 @@
 import test, { after } from "node:test";
 import assert from "node:assert/strict";
-import { createHash, randomBytes, randomInt, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomInt } from "node:crypto";
 import { inRequest } from "./helpers/next-request.mts";
 import { createIsolatedDb } from "./helpers/isolated-db.mts";
 
