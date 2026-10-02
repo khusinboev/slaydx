@@ -76,7 +76,7 @@ function renderPage(query = "", role: Role = "owner") {
   };
   const node: ReactNode = h(
     AdminIdentityProvider,
-    { value: { role, permissions: PERMS[role], name: "Admin", username: null }, children: h(
+    { value: { adminId: "1", role, permissions: PERMS[role], name: "Admin", username: null }, children: h(
       AppRouterContext.Provider,
       { value: router },
       h(PathnameContext.Provider, { value: "/admin/pricing" }, h(SearchParamsContext.Provider, { value: new URLSearchParams(query) }, h(PricingPage))),
