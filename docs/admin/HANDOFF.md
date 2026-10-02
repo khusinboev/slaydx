@@ -52,8 +52,8 @@ The brief's non-negotiable rules:
 | WP9 | Broadcasts (§6.9, S13); delivery already exists in F5b | ✅ merged 2026-10-02 (sonnet; smoke 76/76; step-up applies to every broadcasts.send route) |
 | WP10 | Audit log UI and admins UI (§6.12, §6.13, S17/S18) | ✅ merged 2026-10-02 (sonnet; smoke 113 assertions) |
 | WP11 | Pricing admin (§17.4–17.6, S20) | ✅ merged 2026-10-02 (fable; smoke 62/62 incl. buyer charged the adjusted price and the 409 price_changed flow) |
-| I | Integration: remove the legacy admin section in `lib/api-client.ts:292-336` and the legacy `requireAdmin` in `lib/server/admin.ts` with its routes; add the `admin:seed-dev` script; full checks | ⏳ |
-| P4 | Phase 4: three independent reviews (security, regression, UX walk at 1280 px and 360 px, light and dark), fix every finding, write `03-report.md` | ⏳ |
+| I | Integration: legacy admin code removed (`lib/api-client.ts` section, `lib/server/admin.ts`), `admin:seed-dev`, shared `adminDownload`/`useLoad`/`cancelQueuedInTx`/`spendForJobs`, permission matrix test (402 cases), full checks | ✅ merged 2026-10-02 — full regression: tsc/lint clean, npm test 4032/4032, test:ui 779/779, test:viewer 248/248, build OK |
+| P4 | Phase 4: three independent reviews (security, regression, UX walk at 1280 px and 360 px, light and dark), fix every finding, write `03-report.md` | 🔄 reviews running (security fable, money fable, UX opus) |
 
 Suggested order:
 1. F3b and F6 (in parallel).
