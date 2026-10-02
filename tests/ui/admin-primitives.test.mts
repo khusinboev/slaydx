@@ -1,12 +1,15 @@
 import "./setup.ts";
 import test, { afterEach, beforeEach } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { createElement as h, useState } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type * as CoreModule from "../../lib/admin-api/core.ts";
 import { fmtNumber } from "../../lib/admin-format.ts";
+import { Badge } from "../../components/admin/ui/Badge.tsx";
 import { ConfirmDialog, type ConfirmContext } from "../../components/admin/ui/ConfirmDialog.tsx";
+import { Sparkline } from "../../components/admin/ui/charts/Sparkline.tsx";
 import { CursorPager } from "../../components/admin/ui/CursorPager.tsx";
 import { DataTable, type Column } from "../../components/admin/ui/DataTable.tsx";
 import { DateRangePicker, type DateRange } from "../../components/admin/ui/DateRangePicker.tsx";
@@ -761,4 +764,127 @@ test("Toaster: xabar muddati o'tgach o'zi yo'qoladi", async () => {
   });
   assert.ok(screen.getByText("Tez o'tadi"));
   await waitFor(() => assert.ok(screen.queryByText("Tez o'tadi") === null));
+});
+
+/* ───────────────────────────── Phase 4 UX review fixes ───────────────────────────── */
+
+/*
+ * Finding 3 (row focus). Mutation: drop the row ring classes → fails; give the scroll area
+ * tabIndex even with clickable rows → the "no region" assertion fails.
+ */
+test("DataTable: bosiladigan qatorda ko'rinadigan fokus halqasi; scroll maydoni o'zi fokuslanmaydi", () => {
+  render(h(DataTable<Row>, { columns: COLUMNS, rows: ROWS, rowKey: (r) => r.id, caption: "Foydalanuvchilar", onRowClick: () => {} }));
+  const row = document.querySelector("tr[data-row-key='a']") as HTMLElement;
+  assert.equal(row.tabIndex, 0);
+  const rowCls = row.className.split(/\s+/);
+  for (const cls of ["focus-visible:ring-2", "focus-visible:ring-ring", "focus-visible:ring-inset", "focus-visible:bg-muted/50"]) {
+    assert.ok(rowCls.includes(cls), `qator klassi: ${cls}`);
+  }
+  const card = document.querySelector("li[data-card-key='a']") as HTMLElement;
+  assert.ok(card.className.split(/\s+/).includes("focus-visible:ring-2"), "kartochka ham halqa oladi");
+  assert.ok(!document.querySelector("[role='region']"), "qatorlar fokuslanadi — maydon tab tartibiga qo'shilmaydi");
+});
+
+/* Finding 11. Mutation: drop tabIndex/role from the scroll area → the region lookup fails. */
+test("DataTable: onRowClick bo'lmasa scroll maydoni klaviatura bilan aylantiriladi (region, tabIndex, nom)", () => {
+  const { rerender } = render(h(DataTable<Row>, { columns: COLUMNS, rows: ROWS, rowKey: (r) => r.id, caption: "Foydalanuvchilar" }));
+  const region = screen.getByRole("region", { name: "Foydalanuvchilar" });
+  assert.equal(region.tabIndex, 0);
+  assert.ok(region.querySelector("table"), "region jadvalni o'rab turadi");
+  assert.ok(region.className.split(/\s+/).includes("focus-visible:ring-2"), "fokus ko'rinadi");
+
+  rerender(h(DataTable<Row>, { columns: COLUMNS, rows: ROWS, rowKey: (r) => r.id, caption: "Foydalanuvchilar", regionLabel: "Jarayonlar jadvali" }));
+  assert.ok(screen.getByRole("region", { name: "Jarayonlar jadvali" }));
+});
+
+/*
+ * Finding 10. Mutation: focus the reason textarea first (the old ref logic) → the
+ * wallet-style amount assertion fails.
+ */
+test("ConfirmDialog: boshlang'ich fokus birinchi qo'shimcha maydonga (hamyon miqdori), bo'lmasa sababga", async () => {
+  openConfirm({
+    reason: { minLength: 5 },
+    onConfirm: () => {},
+    children: h("label", null, "Miqdor", h("input", { "data-testid": "amount", inputMode: "numeric" })),
+  });
+  await waitFor(() => assert.ok(document.activeElement === screen.getByTestId("amount"), "miqdor maydoni fokusda"));
+  cleanup();
+
+  openConfirm({ reason: { minLength: 5 }, onConfirm: () => {} });
+  await waitFor(() => assert.ok(document.activeElement === screen.getByLabelText("Sabab"), "sabab fokusda"));
+  cleanup();
+
+  openConfirm({ typedConfirmation: "OK", onConfirm: () => {} });
+  await waitFor(() => assert.ok(document.activeElement === screen.getByLabelText(/Tasdiqlash uchun/), "yozib tasdiqlash fokusda"));
+});
+
+/*
+ * Finding 1. The sr-only data table must sit inside a clipped block: a `table` ignores the
+ * 1px width / overflow of `sr-only` and widened /admin/pricing by 773 px. Mutation: put
+ * `sr-only` back on the table itself → fails.
+ */
+test("Sparkline: ekran o'quvchi jadvali sr-only blok ichida, figura relative", () => {
+  render(h(Sparkline, { values: [1, 2, 3, 40], title: "Tannarx trendi" }));
+  const figure = document.querySelector("figure") as HTMLElement;
+  assert.ok(figure.className.split(/\s+/).includes("relative"));
+  const tableEl = figure.querySelector("table") as HTMLElement;
+  assert.ok(tableEl);
+  assert.ok(!tableEl.className.includes("sr-only"), "jadvalning o'zi sr-only emas");
+  const wrap = tableEl.parentElement as HTMLElement;
+  assert.equal(wrap.tagName, "DIV");
+  assert.ok(wrap.className.split(/\s+/).includes("sr-only"));
+  assert.ok(wrap.parentElement === figure);
+  assert.equal(tableEl.querySelectorAll("td").length, 4);
+});
+
+/*
+ * Finding 2. Badge text uses dedicated tokens whose contrast on the badge tint is computed
+ * here from app/globals.css (WCAG 2.x relative luminance; 15 % tint composited over card,
+ * page background and muted). Mutation: point Badge back at `text-warning`, or set
+ * `--badge-warning-text` to #a16207 → fails.
+ */
+test("Badge: holat matni o'z tokenida va AA kontrastda (yorug' va qorong'i)", () => {
+  const TOKENS = { success: "success", warning: "warning", danger: "destructive", info: "info" } as const;
+  const tones = Object.keys(TOKENS) as Array<keyof typeof TOKENS>;
+  for (const tone of tones) {
+    render(h(Badge, { tone }, tone));
+    const cls = screen.getByText(tone).className.split(/\s+/);
+    assert.ok(cls.includes(`text-badge-${tone}-text`), `${tone}: ${cls.join(" ")}`);
+    assert.ok(cls.includes(`bg-${TOKENS[tone]}/15`), `${tone} foni`);
+    cleanup();
+  }
+
+  const css = readFileSync(new URL("../../app/globals.css", import.meta.url), "utf8");
+  const block = (sel: RegExp) => {
+    const m = sel.exec(css);
+    assert.ok(m, String(sel));
+    return css.slice(m.index, css.indexOf("\n}", m.index));
+  };
+  const varOf = (b: string, name: string) => {
+    const m = new RegExp(`--${name}:\\s*(#[0-9a-f]{6})`, "i").exec(b);
+    assert.ok(m, `--${name}`);
+    return m[1];
+  };
+  for (const tone of tones) assert.match(css, new RegExp(`--color-badge-${tone}-text:\\s*var\\(--badge-${tone}-text\\)`));
+  const rgb = (x: string) => [1, 3, 5].map((i) => parseInt(x.slice(i, i + 2), 16));
+  const lum = (c: number[]) => {
+    const [r, g, b] = c.map((v) => (v / 255 <= 0.03928 ? v / 255 / 12.92 : ((v / 255 + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const ratio = (a: number[], b: number[]) => {
+    const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x);
+    return (hi + 0.05) / (lo + 0.05);
+  };
+  for (const [theme, b] of [["light", block(/^:root \{/m)], ["dark", block(/^\.dark \{/m)]] as const) {
+    for (const tone of tones) {
+      const text = rgb(varOf(b, `badge-${tone}-text`));
+      const tint = rgb(varOf(b, TOKENS[tone]));
+      for (const parent of ["card", "background", "muted"]) {
+        const under = rgb(varOf(b, parent));
+        const bg = tint.map((v, i) => v * 0.15 + under[i] * 0.85);
+        const r = ratio(text, bg);
+        assert.ok(r >= 4.5, `${theme} ${tone} on ${parent}: ${r.toFixed(2)}:1`);
+      }
+    }
+  }
 });

@@ -30,22 +30,31 @@ export function Sparkline({
   const line = values.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
 
   return (
-    <figure className={cn("m-0 inline-block align-middle", CHART_TEXT[color])}>
+    // `relative` anchors the absolutely positioned sr-only wrapper to the figure.
+    <figure className={cn("relative m-0 inline-block align-middle", CHART_TEXT[color])}>
       <svg viewBox={`0 0 ${width} ${height}`} width={width} height={height} role="img" aria-label={title} className="block max-w-full">
         <title>{title}</title>
         {n > 1 ? <polyline points={line} fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" /> : null}
         {n > 0 ? <circle cx={x(n - 1)} cy={y(values[n - 1])} r={2.2} fill="currentColor" /> : null}
       </svg>
-      <table className="sr-only">
-        <caption>{title}</caption>
-        <tbody>
-          <tr>
-            {values.map((v, i) => (
-              <td key={i}>{formatValue(v)}</td>
-            ))}
-          </tr>
-        </tbody>
-      </table>
+      {/*
+        The data table is wrapped, not marked `sr-only` itself: a table ignores the
+        1px width and `overflow: hidden`, so a long row still widened the page
+        (773 px of horizontal overflow on /admin/pricing). The wrapping block
+        clips it, so it no longer adds to the page's scrollable area.
+      */}
+      <div className="sr-only">
+        <table>
+          <caption>{title}</caption>
+          <tbody>
+            <tr>
+              {values.map((v, i) => (
+                <td key={i}>{formatValue(v)}</td>
+              ))}
+            </tr>
+          </tbody>
+        </table>
+      </div>
     </figure>
   );
 }
