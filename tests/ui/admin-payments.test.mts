@@ -176,6 +176,15 @@ test("OrdersTable: skeleton while loading, then rows with links built from ids; 
   assert.ok(within(row).getByText("771234567"));
   assert.ok(screen.getByText("2 ta natija"));
   assert.ok(screen.getByRole("button", { name: "CSV yuklab olish" }), "export shown with payments.export");
+  // 1280 px layout (UX #8): the default sort column, credited and external refunds come
+  // before provider details and the long txn id; long text is capped with a `title`.
+  const headers = [...container.querySelectorAll("thead th")].map((th) => th.textContent?.trim());
+  assert.deepEqual(headers.slice(0, 7), ["Buyurtma", "Foydalanuvchi", "Summa", "Holat", "Yaratilgan", "Hisobga yozildi", "Tashqi qaytarish"]);
+  const user = within(row).getByText("Ali Valiyev");
+  assert.ok(user.className.includes("max-w-[9rem]") && user.className.includes("truncate"));
+  assert.equal(user.getAttribute("title"), "Ali Valiyev");
+  const txn = within(row).getByText("771234567");
+  assert.ok(txn.className.includes("max-w-[10rem]") && txn.className.includes("truncate"));
 });
 
 test("OrdersTable: filter change writes the URL, resets paging and aborts the stale request", async () => {
@@ -433,6 +442,29 @@ test("FinancePage summary: range from the URL, KPI tiles, tab switch writes the 
   fireEvent.click(screen.getByRole("tab", { name: "Hisob kitobi" }));
   await waitFor(() => assert.equal(log.at(-1), "replace /admin/finance?from=2026-09-10&to=2026-09-11&tab=ledger"));
   assert.ok(await screen.findByText("Hisob yozuvlari yo'q"));
+});
+
+test("FinancePage 403 on any tab: only the forbidden state, no tabs, period or filters (UX #9)", async () => {
+  const forbidden = () => json(403, { error: "Bu amal uchun ruxsatingiz yo'q", code: "forbidden" });
+  for (const [url, label] of [
+    ["/admin/finance", "Xulosa davri"],
+    ["/admin/finance?tab=ledger", "Havola bo'yicha filtr"],
+    ["/admin/finance?tab=reconciliation", "Qayta tekshirish"],
+  ] as const) {
+    stubFetch({
+      "GET /api/admin/finance/summary": forbidden,
+      "GET /api/admin/transactions": forbidden,
+      "GET /api/admin/finance/reconciliation": forbidden,
+    });
+    mount(h(FinancePage), url);
+    await screen.findByText("Ruxsat yo'q");
+    await waitFor(() => assert.ok(!screen.queryByRole("tablist"), `${url}: no tabs`));
+    assert.ok(!screen.queryByLabelText(label), `${url}: no ${label}`);
+    assert.ok(!screen.queryByRole("button", { name: label }), `${url}: no ${label} button`);
+    assert.ok(!screen.queryByRole("group", { name: "Filtrlar" }), `${url}: no filter bar`);
+    assert.equal(screen.getAllByText("Ruxsat yo'q").length, 1);
+    cleanup();
+  }
 });
 
 test("FinancePage reconciliation: counts, sample links by id, the timeout message; error + retry", async () => {

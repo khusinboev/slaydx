@@ -51,6 +51,21 @@ export function toolLabel(tools: ReadonlyArray<FilterOption>, toolId: string): s
 
 export const isCharged = (c: ChargeSplit): boolean => c.points + c.quota + c.balance !== 0;
 
+/** One line per charged wallet ("800 balans"), so the column stays narrow; `—` when nothing was charged. */
+export function ChargeLines({ charged }: { charged: ChargeSplit }) {
+  const parts = (["balance", "quota", "points"] as const).filter((w) => charged[w] !== 0);
+  if (parts.length === 0) return <>—</>;
+  return (
+    <span className="flex flex-col">
+      {parts.map((w) => (
+        <span key={w} className="whitespace-nowrap">
+          {fmtNumber(charged[w])} {WALLET_LABEL[w].toLowerCase()}
+        </span>
+      ))}
+    </span>
+  );
+}
+
 /** "800 balans · 200 bonus ball"; `—` when nothing was charged. */
 export function chargeText(c: ChargeSplit): string {
   const parts = (["balance", "quota", "points"] as const)

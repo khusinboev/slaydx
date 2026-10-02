@@ -174,6 +174,18 @@ test("list: skeleton while loading, then rows with tool label, status, money and
   assert.ok(cells.getByText("$0,0123"));
   assert.ok(cells.getByText("3fa1c2d4"));
   assert.ok(screen.getByText("1 ta natija"));
+  // 1280 px layout (UX #8): status and the default sort column come before the secondary
+  // numbers; long text is capped, truncated and carries its full value in `title`.
+  const headers = [...container.querySelectorAll("thead th")].map((th) => th.textContent?.trim());
+  assert.deepEqual(headers.slice(0, 5), ["Mavzu · ID", "Foydalanuvchi", "Vosita", "Holat", "Yaratilgan"]);
+  assert.ok(headers.includes("Narx, tanga") && headers.includes("Yechilgan, tanga"), "money headers carry the unit");
+  const topic = cells.getByText("Iqtisodiyot asoslari");
+  assert.equal(topic.getAttribute("title"), "Iqtisodiyot asoslari");
+  assert.ok(topic.className.includes("truncate"));
+  assert.match(topic.parentElement!.className, /w-\[15rem\]/, "the topic column has a fixed cap");
+  const tool = cells.getByText("Referat");
+  assert.equal(tool.getAttribute("title"), "Referat");
+  assert.ok(tool.className.includes("max-w-[8rem]") && tool.className.includes("truncate"));
 });
 
 test("list: empty with filters offers 'Filtrlarni tozalash', which resets the URL", async () => {
