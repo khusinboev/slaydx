@@ -168,7 +168,7 @@ function Breakdown({ s }: { s: FinanceSummary }) {
     [PURPOSE_LABEL.pro, s.revenue.byPurpose.pro],
   ];
   return (
-    <div className="overflow-x-auto">
+    <div tabIndex={0} role="region" aria-label="Tushum taqsimoti" className="overflow-x-auto focus-visible:ring-foreground/70 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-inset">
       <table className="w-full text-[13px]">
         <caption className="sr-only">Tushum taqsimoti</caption>
         <thead>

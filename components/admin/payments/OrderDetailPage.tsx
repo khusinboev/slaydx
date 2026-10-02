@@ -242,7 +242,7 @@ function LedgerCard({ rows }: { rows: OrderLedgerEntry[] }) {
       {rows.length === 0 ? (
         <EmptyState title="Hisob yozuvi yo'q" description="Buyurtma to'lanmagan yoki kredit hali yozilmagan." />
       ) : (
-        <div className="overflow-x-auto">
+        <div tabIndex={0} role="region" aria-label="Buyurtma bo'yicha hisob yozuvlari" className="overflow-x-auto focus-visible:ring-foreground/70 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-inset">
           <table className="w-full text-[13px]">
             <caption className="sr-only">Buyurtma bo&apos;yicha hisob yozuvlari</caption>
             <thead>

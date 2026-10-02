@@ -50,7 +50,7 @@ function CrosswordView({ view }: { view: Extract<PublicGameView, { kind: "crossw
   const numberAt = new Map(view.grid.numbers.map((n) => [`${n.row}:${n.col}`, n.number]));
   return (
     <div className="flex flex-col gap-3 text-[13px]">
-      <div className="max-w-full overflow-x-auto">
+      <div tabIndex={0} role="region" aria-label="Krossvord to'ri" className="focus-visible:ring-foreground/70 max-w-full overflow-x-auto rounded-md outline-none focus-visible:ring-2 focus-visible:ring-inset">
         <div
           role="img"
           aria-label={`Krossvord to'ri: ${view.grid.rows} qator, ${view.grid.cols} ustun`}

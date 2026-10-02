@@ -777,7 +777,7 @@ test("DataTable: bosiladigan qatorda ko'rinadigan fokus halqasi; scroll maydoni 
   const row = document.querySelector("tr[data-row-key='a']") as HTMLElement;
   assert.equal(row.tabIndex, 0);
   const rowCls = row.className.split(/\s+/);
-  for (const cls of ["focus-visible:ring-2", "focus-visible:ring-ring", "focus-visible:ring-inset", "focus-visible:bg-muted/50"]) {
+  for (const cls of ["focus-visible:ring-2", "focus-visible:ring-foreground/70", "focus-visible:ring-inset", "focus-visible:bg-muted/50"]) {
     assert.ok(rowCls.includes(cls), `qator klassi: ${cls}`);
   }
   const card = document.querySelector("li[data-card-key='a']") as HTMLElement;

@@ -31,9 +31,11 @@ export function SystemPage() {
           <h1 className="text-[22px] font-semibold tracking-tight">Tizim holati</h1>
           <p className="text-muted-foreground text-[13px]">Baza, navbat, jarayonlar va fon vazifalari.</p>
         </div>
-        <Button onClick={reload} loading={state.status === "loading"} icon={<RefreshCw className="size-3.5" aria-hidden="true" />}>
-          Yangilash
-        </Button>
+        {state.status !== "forbidden" && (
+          <Button onClick={reload} loading={state.status === "loading"} icon={<RefreshCw className="size-3.5" aria-hidden="true" />}>
+            Yangilash
+          </Button>
+        )}
       </header>
 
       {state.status === "loading" ? (

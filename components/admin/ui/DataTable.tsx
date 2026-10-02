@@ -175,7 +175,7 @@ export function DataTable<T>({
       <div
         className={cn(
           "hidden overflow-auto sm:block",
-          !onRowClick && "focus-visible:ring-ring rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-inset",
+          !onRowClick && "focus-visible:ring-foreground/70 rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-inset",
           maxHeightClass,
         )}
         {...(onRowClick ? {} : { tabIndex: 0, role: "region", "aria-label": regionLabel ?? caption })}
@@ -214,7 +214,7 @@ export function DataTable<T>({
                         type="button"
                         onClick={() => onSortChange(target)}
                         className={cn(
-                          "hover:text-foreground focus-visible:ring-ring -mx-1 inline-flex items-center gap-1 rounded px-1 outline-none focus-visible:ring-2",
+                          "hover:text-foreground focus-visible:ring-foreground/70 -mx-1 inline-flex items-center gap-1 rounded px-1 outline-none focus-visible:ring-2",
                           JUSTIFY[align],
                           sorted && sorted !== "none" && "text-foreground",
                         )}
@@ -262,7 +262,7 @@ export function DataTable<T>({
                       className={cn(
                         "border-b last:border-b-0",
                         onRowClick &&
-                          "hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:ring-ring cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-inset",
+                          "hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:ring-foreground/70 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-inset",
                         isSelected && "bg-primary/10",
                       )}
                       {...rowProps(row)}
@@ -303,7 +303,7 @@ export function DataTable<T>({
                   className={cn(
                     "flex flex-col gap-1.5 px-3.5 py-3 text-[13px]",
                     onRowClick &&
-                      "active:bg-muted/50 focus-visible:bg-muted/50 focus-visible:ring-ring cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-inset",
+                      "active:bg-muted/50 focus-visible:bg-muted/50 focus-visible:ring-foreground/70 cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-inset",
                     isSelected && "bg-primary/10",
                   )}
                   {...rowProps(row)}
