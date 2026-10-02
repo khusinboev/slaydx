@@ -1,0 +1,152 @@
+"use client";
+
+import type { ReactNode } from "react";
+import type { PricingItem } from "@/lib/admin-api/pricing";
+import { fmtNumber, fmtPercent } from "@/lib/admin-format";
+import { Badge, DataTable, Sparkline, type Column } from "@/components/admin/ui";
+import {
+  isDefaultAdjust,
+  ladderRange,
+  marginTone,
+  markupText,
+  pctText,
+  percentLabel,
+  recommendationOf,
+  recommendationText,
+  soumText,
+  trendChangePct,
+  trendValues,
+} from "./shared";
+
+/** The recommendation chip (§17.6): "Mos", "+20 % tavsiya", "−10 % tavsiya", plus "kam ishonch" below 20 completed jobs. */
+export function RecommendationChip({ item }: { item: PricingItem }) {
+  const rec = recommendationOf(item);
+  const tone = rec.kind === "ok" ? "success" : rec.kind === "up" ? (item.marginPct !== null && item.marginPct < 30 ? "danger" : "warning") : rec.kind === "down" ? "info" : "neutral";
+  const tip =
+    rec.kind === "none"
+      ? "Tavsiya uchun ustama ma'lum emas (xarajat yoki narx yo'q)"
+      : `Tavsiya: ${percentLabel(rec.percent)} (ustama ${markupText(item.markup)}) · tanlama: ${fmtNumber(item.sampleSize)} ta tayyor ish`;
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1" title={tip}>
+      <Badge tone={tone}>{recommendationText(rec)}</Badge>
+      {item.confidence === "low" ? <Badge tone="neutral">kam ishonch</Badge> : null}
+    </span>
+  );
+}
+
+function Stacked({ main, sub }: { main: ReactNode; sub: ReactNode }) {
+  return (
+    <span className="flex flex-col items-end gap-0.5">
+      <span>{main}</span>
+      <span className="text-muted-foreground text-xs">{sub}</span>
+    </span>
+  );
+}
+
+/** One row per tool (§17.6); sortable by margin, cost and volume; row click opens the drawer. */
+export function PricingTable({
+  items,
+  days,
+  sort,
+  onSortChange,
+  onRowClick,
+  empty,
+}: {
+  items: ReadonlyArray<PricingItem>;
+  days: number;
+  sort: string;
+  onSortChange: (sort: string) => void;
+  onRowClick: (item: PricingItem) => void;
+  empty: ReactNode;
+}) {
+  const columns: Column<PricingItem>[] = [
+    {
+      id: "tool",
+      header: "Vosita",
+      cell: (r) => (
+        <span className="flex flex-col">
+          <b>{r.title}</b>
+          <span className="text-muted-foreground text-xs">birlik: {r.unitLabel}</span>
+        </span>
+      ),
+    },
+    { id: "base", header: "Asosiy narx", align: "right", className: "tabular-nums whitespace-nowrap text-xs", cell: (r) => ladderRange(r.ladder, "base") },
+    {
+      id: "adjust",
+      header: "Tuzatish",
+      cell: (r) =>
+        isDefaultAdjust(r.adjust) ? (
+          <Badge tone="neutral">100%</Badge>
+        ) : (
+          <Badge tone="primary" title={`Yaxlitlash ${fmtNumber(r.adjust.roundTo)} so'm`}>
+            {r.adjust.percent > 100 ? "▲" : "▼"} {percentLabel(r.adjust.percent)}
+          </Badge>
+        ),
+    },
+    {
+      id: "effective",
+      header: "Amaldagi narx",
+      align: "right",
+      className: "tabular-nums whitespace-nowrap text-xs",
+      cell: (r) => <span className={isDefaultAdjust(r.adjust) ? undefined : "font-semibold"}>{ladderRange(r.ladder, "effective")}</span>,
+    },
+    {
+      id: "cost",
+      header: "O'rtacha tannarx",
+      align: "right",
+      sortKey: "cost_desc",
+      sortKeyReverse: "cost_asc",
+      className: "tabular-nums whitespace-nowrap",
+      cell: (r) => <Stacked main={`${soumText(r.fullCostSoum)} / ish`} sub={`${soumText(r.costPerUnitSoum)} / ${r.unitLabel}`} />,
+    },
+    { id: "markup", header: "Ustama ×", align: "right", className: "tabular-nums", cell: (r) => markupText(r.markup) },
+    {
+      id: "margin",
+      header: "Marja %",
+      sortKey: "margin_asc",
+      sortKeyReverse: "margin_desc",
+      cell: (r) => <Badge tone={marginTone(r.marginPct)}>{pctText(r.marginPct, 0)}</Badge>,
+    },
+    {
+      id: "jobs",
+      header: `Ishlar (${fmtNumber(days)} kun)`,
+      align: "right",
+      sortKey: "volume_desc",
+      sortKeyReverse: "volume_asc",
+      className: "tabular-nums",
+      cell: (r) => <Stacked main={fmtNumber(r.jobs)} sub={`xato ${pctText(r.failRate)}`} />,
+    },
+    {
+      id: "trend",
+      header: `Trend (${fmtNumber(days)} kun)`,
+      hideOnCard: true,
+      className: "whitespace-nowrap",
+      cell: (r) => {
+        const change = trendChangePct(r.trend);
+        return (
+          <span className="inline-flex items-center gap-2">
+            <Sparkline values={trendValues(r.trend)} title={`${r.title}: ${fmtNumber(days)} kunlik tannarx trendi`} color={change !== null && change > 5 ? 2 : 4} width={64} height={24} formatValue={(n) => fmtNumber(Math.round(n))} />
+            <span className={`text-xs tabular-nums ${change === null ? "text-muted-foreground" : change > 5 ? "text-destructive" : change < -5 ? "text-success-text" : "text-muted-foreground"}`}>
+              {change === null ? "—" : fmtPercent(change, { digits: 0, sign: true })}
+            </span>
+          </span>
+        );
+      },
+    },
+    { id: "rec", header: "Tavsiya", className: "whitespace-nowrap", cell: (r) => <RecommendationChip item={r} /> },
+  ];
+
+  return (
+    <DataTable
+      caption="Vositalar bo'yicha narx va tannarx"
+      columns={columns}
+      rows={items}
+      rowKey={(r) => r.toolId}
+      sort={sort}
+      onSortChange={onSortChange}
+      onRowClick={onRowClick}
+      empty={empty}
+      maxHeightClass="max-h-[70vh]"
+    />
+  );
+}
