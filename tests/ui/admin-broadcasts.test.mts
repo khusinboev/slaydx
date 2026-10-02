@@ -241,7 +241,7 @@ test("list: the status filter writes the URL and the request carries it; 'Keying
   const router = mount(h(BroadcastsTable), { search: "status=draft,queued" });
   await waitFor(() => assert.ok(document.querySelector('tr[data-row-key="12"]')));
   assert.equal(calls[0].search.get("status"), "draft,queued");
-  fireEvent.click(screen.getByRole("button", { name: "2 ta tanlangan" }));
+  fireEvent.click(screen.getByRole("button", { name: "Holat: Qoralama, Navbatda" }));
   fireEvent.click(screen.getByRole("checkbox", { name: "Yuborildi" }));
   assert.deepEqual(router.replace, ["/admin/broadcasts?status=draft,queued,done"]);
 
