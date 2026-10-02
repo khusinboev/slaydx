@@ -38,7 +38,8 @@ const { createAdminSession, adminCookieName } = await import("../lib/server/admi
 const jobs = await import("../lib/server/jobs.ts");
 const { refund } = await import("../lib/server/credits.ts");
 const { refundInTx } = await import("../lib/server/refund-tx.ts");
-const { ADMIN_CANCEL_NOTE, ADMIN_FAIL_ERROR, ADMIN_REFUND_NOTE } = await import("../lib/server/admin-job-actions.ts");
+const { ADMIN_CANCEL_NOTE, ADMIN_FAIL_ERROR, ADMIN_REFUND_NOTE, purgeFailedLeftovers } = await import("../lib/server/admin-job-actions.ts");
+const { putAssetBytes } = await import("../lib/server/assets.ts");
 const routes = {
   cancel: await import("../app/api/admin/generations/[id]/cancel/route.ts"),
   fail: await import("../app/api/admin/generations/[id]/fail/route.ts"),
@@ -423,6 +424,56 @@ test("worker refund racing a committing admin refund: unique ledger reference �
   assert.equal(rf.length, 1);
   assert.equal(rf[0].note, ADMIN_REFUND_NOTE);
   assert.equal(await balance(u.id), 3_000, "refunded exactly once");
+});
+
+/**
+ * P4 money review, finding 5: after an admin force-fail the fenced worker may
+ * still finish an UNFENCED asset write (`LiveReporter` → `putAssets`, TTS →
+ * `putAssetBytes`), leaving orphan rows on the FAILED job; no existing purge
+ * covers them (retention: COMPLETED bonus-only; reconcile: unrefunded only).
+ * `purgeFailedLeftovers` sweeps admin-failed jobs once their budget (plus the
+ * worker's hard-stop/quiesce grace) has surely elapsed; it is idempotent and
+ * touches nothing else. Mutation checks: dropping the grace → the early sweep
+ * removes the row; dropping the ADMIN_FAIL_ERROR predicate → the worker-failed
+ * job's asset is swept too.
+ */
+test("fail: a late asset write of the fenced worker is swept by purgeFailedLeftovers after the job's budget", { skip }, async () => {
+  const s = await session("admin");
+  const u = await mkUser(3_000);
+  const id = await enqueue(u.id, 1_000); // budgetMs 60_000
+  // Claimed state by SQL: `claimJob` takes the oldest QUEUED job globally, and earlier tests leave some.
+  await query(`UPDATE generations SET status = 'IN_PROGRESS', locked_by = $2, locked_at = now() WHERE id = $1`, [id, jobs.newLease("w-late-asset")]);
+  const r = await call("fail", s.cookie, id, { reason: "Osilib qolgan ish" });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+
+  // The worker's in-flight write lands after the admin's DELETE.
+  const assetId = await putAssetBytes(id, "audio/mpeg", Buffer.from([1, 2, 3]));
+  const assets = () => query<{ asset_id: string }>(`SELECT asset_id FROM generation_assets WHERE generation_id = $1`, [id]);
+  assert.deepEqual((await assets()).map((a) => a.asset_id), [assetId], "orphan asset on the FAILED job");
+
+  // Control rows: a COMPLETED job and a job the WORKER failed keep their assets.
+  const done = await enqueue(u.id, 100);
+  await query(`UPDATE generations SET status = 'COMPLETED', finished_at = now() - interval '1 day' WHERE id = $1`, [done]);
+  const doneAsset = await putAssetBytes(done, "image/png", Buffer.from([4, 5, 6]));
+  const workerFailed = await enqueue(u.id, 100);
+  await query(`UPDATE generations SET status = 'FAILED', error = 'Provayder xatosi', finished_at = now() - interval '1 day' WHERE id = $1`, [workerFailed]);
+  const ownAsset = await putAssetBytes(workerFailed, "image/png", Buffer.from([7, 8, 9]));
+
+  assert.equal(await purgeFailedLeftovers(), 0, "within budget + grace the worker may still be writing");
+  assert.equal((await assets()).length, 1);
+  await query(`UPDATE generations SET finished_at = now() - interval '3 minutes' WHERE id = $1`, [id]); // 60 s budget + 60 s grace
+  assert.equal(await purgeFailedLeftovers(), 1);
+  assert.equal((await assets()).length, 0, "MUTATSIYA: the orphan is gone");
+  assert.equal(await purgeFailedLeftovers(), 0, "idempotent");
+  const rest = await query<{ generation_id: string; asset_id: string }>(
+    `SELECT generation_id::text AS generation_id, asset_id FROM generation_assets WHERE generation_id = ANY($1::uuid[]) ORDER BY generation_id`,
+    [[done, workerFailed]],
+  );
+  assert.deepEqual(
+    rest.sort((a, b) => a.generation_id.localeCompare(b.generation_id)),
+    [{ generation_id: done, asset_id: doneAsset }, { generation_id: workerFailed, asset_id: ownAsset }].sort((a, b) => a.generation_id.localeCompare(b.generation_id)),
+    "COMPLETED and worker-failed jobs untouched",
+  );
 });
 
 // ───────────────────────────── ids and guard
