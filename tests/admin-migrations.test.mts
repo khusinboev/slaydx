@@ -273,8 +273,9 @@ test("admin migratsiyalari 028–033 (haqiqiy Postgres)", { skip }, async (t) =>
     assert.deepEqual((await legacyAudit()).map((r) => r.id), auditIds, "audit takrorlandi");
   });
 
-  await t.test("rollback 033→028 toza o'chiradi, keyin hammasi qayta qo'llanadi", async () => {
-    for (const f of [...NEW].reverse()) {
+  await t.test("rollback 034→028 toza o'chiradi, keyin hammasi qayta qo'llanadi", async () => {
+    // 034 (quota merge, docs/SUBS-REMOVAL.md) sits on top of the admin migrations and is rolled back first.
+    for (const f of ["034_quota_merge.sql", ...[...NEW].reverse()]) {
       await runSql(rollbackSql(f));
       assert.ok(!(await applied()).includes(f), `${f}: schema_migrations qatori qoldi`);
     }
