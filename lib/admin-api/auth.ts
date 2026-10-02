@@ -74,6 +74,15 @@ export function login(code: string, opts?: AdminCallOptions): Promise<AdminLogin
   return adminSend<AdminLoginResponse>("POST", "/api/admin/auth/login", { code }, opts);
 }
 
+/**
+ * POST /api/admin/auth/auto: simple-mode entry (2FA switch off) — an admin
+ * session with no code. 404 (AdminNotFoundError) when the switch is on or the
+ * user is not an admin.
+ */
+export function autoLogin(opts?: AdminCallOptions): Promise<AdminLoginResponse> {
+  return adminSend<AdminLoginResponse>("POST", "/api/admin/auth/auto", {}, opts);
+}
+
 /** POST /api/admin/auth/recovery with a one-time recovery code (`XXXX-XXXX-XX`). */
 export function loginWithRecovery(code: string, opts?: AdminCallOptions): Promise<AdminRecoveryLoginResponse> {
   return adminSend<AdminRecoveryLoginResponse>("POST", "/api/admin/auth/recovery", { code }, opts);

@@ -27,8 +27,11 @@ export type AdminAccountItem = {
   activeSessions: number;
 };
 
-/** One-time link: show it once, it is not retrievable later. */
-export type EnrollmentLink = { enrollUrl: string; expiresAt: string };
+/**
+ * One-time link: show it once, it is not retrievable later. Both `null` with
+ * the 2FA switch off (the account is active at once; nothing to enroll).
+ */
+export type EnrollmentLink = { enrollUrl: string | null; expiresAt: string | null };
 
 export type CreateAdminBody = (
   | { userId: string; telegramId?: never }

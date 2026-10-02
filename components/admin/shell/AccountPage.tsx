@@ -65,10 +65,12 @@ type SessionsState =
 /**
  * S19 `/admin/account`: role and permissions, own admin sessions (revoke any
  * but the current one; the current one ends with "Chiqish"), recovery-code
- * regeneration (a fresh TOTP in the body), logout.
+ * regeneration (a fresh TOTP in the body), logout. With the 2FA switch off
+ * the TOTP and recovery-code parts are replaced by a note, and "Chiqish"
+ * returns to the site (the login page would only re-enter at once).
  */
 export function AccountPage() {
-  const { role, permissions, name, username } = useAdminIdentity();
+  const { role, permissions, name, username, twoFactor } = useAdminIdentity();
   const router = useRouter();
   const [sessions, setSessions] = useState<SessionsState>({ status: "loading" });
   const [reload, setReload] = useState(0);
@@ -96,7 +98,9 @@ export function AccountPage() {
     setLoggingOut(true);
     try {
       await logout();
-      router.replace("/admin/login");
+      // Simple mode: the login page would re-enter at once, so leave to the site;
+      // the sidebar's "Admin panel" button enters again on the next click.
+      router.replace(twoFactor ? "/admin/login" : "/uz");
       router.refresh();
     } catch (e) {
       setLoggingOut(false);
@@ -163,25 +167,49 @@ export function AccountPage() {
         <Card>
           <CardHeader title="Xavfsizlik" />
           <CardBody className="flex flex-col gap-3">
-            <KeyValueList
-              items={[
-                {
-                  label: "2FA (TOTP)",
-                  value: (
-                    <Badge tone="success" dot>
-                      Yoqilgan
-                    </Badge>
-                  ),
-                },
-                { label: "Sessiya muddati", value: "30 daqiqa harakatsizlikdan yoki 12 soatdan keyin tugaydi" },
-                { label: "Qayta tasdiqlash", value: "Muhim amallar uchun har 10 daqiqada kod so'raladi" },
-              ]}
-            />
-            <div>
-              <Button onClick={() => setRegenOpen(true)} icon={<KeyRound className="size-4" aria-hidden="true" />}>
-                Yangi tiklash kodlari
-              </Button>
-            </div>
+            {twoFactor ? (
+              <>
+                <KeyValueList
+                  items={[
+                    {
+                      label: "2FA (TOTP)",
+                      value: (
+                        <Badge tone="success" dot>
+                          Yoqilgan
+                        </Badge>
+                      ),
+                    },
+                    { label: "Sessiya muddati", value: "30 daqiqa harakatsizlikdan yoki 12 soatdan keyin tugaydi" },
+                    { label: "Qayta tasdiqlash", value: "Muhim amallar uchun har 10 daqiqada kod so'raladi" },
+                  ]}
+                />
+                <div>
+                  <Button onClick={() => setRegenOpen(true)} icon={<KeyRound className="size-4" aria-hidden="true" />}>
+                    Yangi tiklash kodlari
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <>
+                <KeyValueList
+                  items={[
+                    {
+                      label: "2FA (TOTP)",
+                      value: (
+                        <Badge tone="neutral" dot>
+                          O&apos;chirilgan
+                        </Badge>
+                      ),
+                    },
+                    { label: "Sessiya muddati", value: "30 daqiqa harakatsizlikdan yoki 12 soatdan keyin tugaydi" },
+                  ]}
+                />
+                <p data-note="2fa-off" className="text-muted-foreground text-[13px]">
+                  Ikki bosqichli himoya o&apos;chirilgan: panelga saytdagi «Admin panel» tugmasi orqali, kodsiz kiriladi. Kirish
+                  Telegram hisobingizga tayanadi.
+                </p>
+              </>
+            )}
           </CardBody>
         </Card>
       </div>
@@ -217,7 +245,7 @@ export function AccountPage() {
         }}
       />
 
-      <RegenerateCodesDialog open={regenOpen} onClose={() => setRegenOpen(false)} />
+      {twoFactor ? <RegenerateCodesDialog open={regenOpen} onClose={() => setRegenOpen(false)} /> : null}
     </div>
   );
 }

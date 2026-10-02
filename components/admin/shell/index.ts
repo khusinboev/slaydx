@@ -1,4 +1,5 @@
 export { AccountPage } from "./AccountPage";
+export { AdminAutoEnter } from "./AdminAutoEnter";
 export { AdminIdentityProvider, useAdminIdentity, useCan, type AdminIdentity } from "./admin-identity";
 export { AdminLoginRedirect } from "./AdminLoginRedirect";
 export { AdminNav } from "./AdminNav";
