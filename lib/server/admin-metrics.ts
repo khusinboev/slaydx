@@ -267,7 +267,10 @@ FROM
           COALESCE(sum(points_delta) FILTER (WHERE kind = 'refund'), 0) AS refund_points
      FROM transactions WHERE kind IN ('charge', 'refund') AND created_at >= $1 AND created_at < $2) l`;
 
-async function kpisFor(c: PoolClient, r: DateRange, rate: number): Promise<Kpis> {
+/** The cached part of a period: every KPI except the FX-dependent `marginSoum`. */
+type RawKpis = Omit<Kpis, "marginSoum">;
+
+async function kpisFor(c: PoolClient, r: DateRange): Promise<RawKpis> {
   const res = await c.query<KpiRow>(KPI_SQL, rangeParams(r));
   const k = res.rows[0] ?? {};
   // aiCostUsd / aiCoverage: the canonical spend set (admin-cost.ts), same range.
@@ -295,27 +298,35 @@ async function kpisFor(c: PoolClient, r: DateRange, rate: number): Promise<Kpis>
     refunds: { count: num(k.refund_count), tanga: num(k.refund_cash), points: num(k.refund_points) },
     aiCostUsd: spend.usd,
     aiCoverage: coverage,
-    // marginSoum: cash received minus AI spend converted at the CURRENT
-    // finance.soum_per_usd rate (rounded to whole so'm). A cash-flow proxy:
-    // wallet balances bought but not yet spent are not deferred, and other
-    // costs (hosting, provider fees) are not included.
-    marginSoum: revenueTotal - Math.round(spend.usd * rate),
     pendingOrders: num(k.pending_orders),
   };
+}
+
+/**
+ * marginSoum: cash received minus AI spend converted at the CURRENT
+ * finance.soum_per_usd rate (rounded to whole so'm). A cash-flow proxy:
+ * wallet balances bought but not yet spent are not deferred, and other
+ * costs (hosting, provider fees) are not included. Applied per request, not
+ * cached: a changed rate must show at once.
+ */
+function withMargin(k: RawKpis, rate: number): Kpis {
+  return { ...k, marginSoum: k.revenueSoum.total - Math.round(k.aiCostUsd * rate) };
 }
 
 export async function overview(url: URL): Promise<Overview> {
   const r = metricsRangeOf(url);
   const prev = previousRangeOf(r);
-  return cached(`overview|${r.fromDay}|${r.toDay}`, async () => {
-    const rate = await soumPerUsd();
-    return readOnlyMetricsTx(async (c) => ({
-      range: { ...publicRange(r), previous: publicRange(prev) },
-      soumPerUsd: rate,
-      current: await kpisFor(c, r, rate),
-      previous: await kpisFor(c, prev, rate),
-    }));
-  });
+  // Only the aggregates are cached; the FX rate and the derived margin are per request.
+  const raw = await cached(`overview|${r.fromDay}|${r.toDay}`, () =>
+    readOnlyMetricsTx(async (c) => ({ current: await kpisFor(c, r), previous: await kpisFor(c, prev) })),
+  );
+  const rate = await soumPerUsd();
+  return {
+    range: { ...publicRange(r), previous: publicRange(prev) },
+    soumPerUsd: rate,
+    current: withMargin(raw.current, rate),
+    previous: withMargin(raw.previous, rate),
+  };
 }
 
 // ---------------------------------------------------------------------------
