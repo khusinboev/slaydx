@@ -38,8 +38,6 @@ const profile: UserProfile = {
   points: 0,
   quota: 0,
   balance: 100000,
-  premium: false,
-  plan: "free",
   university: "Toshkent davlat pedagogika universiteti",
   faculty: "Pedagogika fakulteti",
   department: "Boshlang'ich ta'lim kafedrasi",

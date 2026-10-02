@@ -25,7 +25,7 @@ const pushes: string[] = [];
 const router: AppRouterInstance = { back() {}, forward() {}, refresh() {}, push: (u: string) => void pushes.push(u), replace() {}, prefetch() {} };
 const tool = TOOL_BY_ID.resume;
 const profile: UserProfile = {
-  name: "Karimova Dilnoza", language: "uz", points: 0, quota: 0, balance: 100000, premium: false, plan: "free",
+  name: "Karimova Dilnoza", language: "uz", points: 0, quota: 0, balance: 100000,
   university: "", faculty: "", department: "", group: "", course: "", author: "Karimova Dilnoza", subject: "",
   teacher: "", city: "Toshkent", position: "", organization: "",
 };

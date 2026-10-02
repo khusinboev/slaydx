@@ -34,7 +34,6 @@ function stubOrders(stateAt: (ms: number) => "pending" | "paid" | "cancelled") {
       calls++;
       return json(200, {
         orders: [{ id: "o1", provider: "click", purpose: "topup", amountSoum: 10_000, state: stateAt(now), createdAt: "2026-09-24T08:00:00.000Z" }],
-        plan: { priceSoum: 15_000, days: 30, quota: 15_000 },
         providers: { click: true, payme: false },
       });
     }

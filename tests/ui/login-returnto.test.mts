@@ -24,7 +24,7 @@ const originalFetch = globalThis.fetch;
 
 afterEach(() => {
   cleanup();
-  useUi.setState({ overlay: null, returnTo: null, payPlan: null });
+  useUi.setState({ overlay: null, returnTo: null });
   (globalThis as unknown as { fetch: unknown }).fetch = originalFetch;
 });
 
@@ -41,7 +41,7 @@ function stubAuthApi() {
       return json(200, {
         user: {
           id: "u1", telegramId: null, username: null, name: "Test User", photoUrl: null, language: "uz",
-          points: 0, quota: 0, balance: 0, plan: "free", planExpiresAt: null, premium: false,
+          points: 0, quota: 0, balance: 0,
           university: "", faculty: "", department: "", group: "", course: "", author: "", subject: "",
           teacher: "", city: "", position: "", organization: "", phone: "+998900000000", isAdmin: false,
         },
@@ -78,7 +78,7 @@ test("LoginModal: javascript: returnTo bilan router.push HECH QACHON chaqirilmay
   // Xavfli qiymat to'g'ridan-to'g'ri holatga qo'yiladi — `useUi.open`
   // qatlamini CHETLAB o'tib, `LoginModal`dagi push'dan oldingi ikkinchi
   // tekshiruvni alohida sinaydi.
-  useUi.setState({ overlay: "login", returnTo: "javascript:alert(1)", payPlan: null });
+  useUi.setState({ overlay: "login", returnTo: "javascript:alert(1)" });
 
   render(h(AppRouterContext.Provider, { value: router }, h(LoginModal)));
   await completePhoneLogin();
@@ -96,7 +96,7 @@ test("LoginModal: xavfsiz /uz yo'li bilan router.push aynan shu yo'l bilan chaqi
     push: (u: string) => { pushes.push(u); }, replace() {}, prefetch() {},
   };
 
-  useUi.setState({ overlay: "login", returnTo: "/uz/purchase", payPlan: null });
+  useUi.setState({ overlay: "login", returnTo: "/uz/purchase" });
 
   render(h(AppRouterContext.Provider, { value: router }, h(LoginModal)));
   await completePhoneLogin();

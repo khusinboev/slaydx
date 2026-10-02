@@ -23,7 +23,7 @@ afterEach(() => cleanup());
 
 const router: AppRouterInstance = { back() {}, forward() {}, refresh() {}, push() {}, replace() {}, prefetch() {} };
 const profile: UserProfile = {
-  name: "Aliyev Ali", language: "uz", points: 0, quota: 0, balance: 100000, premium: false, plan: "free",
+  name: "Aliyev Ali", language: "uz", points: 0, quota: 0, balance: 100000,
   university: "TDPU", faculty: "", department: "", group: "", course: "", author: "Aliyev Ali", subject: "Biologiya",
   teacher: "", city: "Toshkent", position: "Katta o‘qituvchi", organization: "",
 };

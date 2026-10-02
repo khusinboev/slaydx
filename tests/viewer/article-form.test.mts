@@ -26,8 +26,6 @@ const profile: UserProfile = {
   points: 0,
   quota: 0,
   balance: 100000,
-  premium: false,
-  plan: "free",
   university: "",
   faculty: "",
   department: "",

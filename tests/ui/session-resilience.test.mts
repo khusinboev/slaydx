@@ -33,7 +33,7 @@ const realFetch = globalThis.fetch;
 afterEach(() => {
   cleanup();
   globalThis.fetch = realFetch;
-  useUi.setState({ overlay: null, returnTo: null, payPlan: null });
+  useUi.setState({ overlay: null, returnTo: null });
 });
 
 const json = (status: number, data: unknown) =>
@@ -41,7 +41,7 @@ const json = (status: number, data: unknown) =>
 
 const user = {
   id: "u1", telegramId: "42", username: "ali", name: "Ali", photoUrl: null, language: "uz", points: 0, quota: 0,
-  balance: 5000, plan: "free" as const, planExpiresAt: null, premium: false, university: "", faculty: "", department: "",
+  balance: 5000, university: "", faculty: "", department: "",
   group: "", course: "", author: "", subject: "", teacher: "", city: "", position: "", organization: "", phone: null,
   isAdmin: false,
 };
