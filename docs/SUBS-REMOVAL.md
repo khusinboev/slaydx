@@ -161,3 +161,6 @@ Post-deploy checks (prod):
 2. `SELECT count(*) FROM transactions WHERE kind = 'quota_merge';` → 8; `SELECT count(*) FROM admin_audit_log WHERE action = 'users.wallet.quota_merge';` → 8.
 3. Σ balance rose by exactly 2 700 000 versus the pre-deploy backup.
 4. `/admin/finance` reconciliation: `wallet_ledger_mismatch` = 0.
+
+## 10. Deployed (2026-10-02)
+Prod `e57ffa5` → `7e766fd` (subscriptions removed + simple admin entry). Backup `slaydx-20261002185603.dump`, rollback `e57ffa5` + images `slaydx-{web,worker}:pre-subs`. Post-deploy: 034 applied; Σbalance 2 709 000 → 5 409 000 (+2 700 000 exactly), Σquota 0, holders 0; 8 `quota_merge` rows and 8 audit rows; ledger mismatch 0; 0 errors. Owner direct entry verified on prod (auto 200, owner session, account activated).
