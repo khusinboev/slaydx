@@ -22,11 +22,11 @@ import {
   SelectFilter,
   presetRange,
   toast,
+  useLoad,
   type Column,
   type FilterOption,
 } from "@/components/admin/ui";
 import { roleLabel, useCan } from "@/components/admin/shell";
-import { useLoad } from "@/components/admin/system/shared";
 import { AuditDrawer } from "./AuditDrawer";
 import { OutcomeBadge, TargetCell } from "./cells";
 import {
