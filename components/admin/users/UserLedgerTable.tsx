@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Button, CursorPager, DataTable, EmptyState, ErrorState, FilterBar, Forbidden, MultiSelectFilter, StatusPill, type Column } from "@/components/admin/ui";
 import { DeltaCell, KIND_LABEL, KIND_TONE, ReferenceCell, useCursorList } from "@/components/admin/payments";
+import { WALLET_LABEL } from "@/components/admin/money";
 import { fmtDateTime } from "@/lib/admin-format";
 import { TRANSACTION_KINDS, listUserTransactions, type AdminUserTransaction, type TransactionKind } from "@/lib/admin-api/users";
 
@@ -28,6 +29,8 @@ export function UserLedgerTable({ userId }: { userId: string }) {
     listUserTransactions(userId, { kind: kinds, cursor: c, limit: PAGE_SIZE }, { signal }),
   );
   const rows = state.data?.items ?? [];
+  // Legacy Pro quota («Kvota (eski)»): the column shows only while a row on this page moved quota.
+  const anyQuota = rows.some((t) => t.quota !== 0);
 
   const columns: Column<AdminUserTransaction>[] = [
     { id: "at", header: "Vaqt", className: "tabular-nums whitespace-nowrap", cell: (t) => fmtDateTime(t.createdAt) },
@@ -37,7 +40,7 @@ export function UserLedgerTable({ userId }: { userId: string }) {
       cell: (t) => <StatusPill tone={KIND_TONE[t.kind]}>{KIND_LABEL[t.kind]}</StatusPill>,
     },
     { id: "points", header: "Ball", align: "right", cell: (t) => <DeltaCell value={t.points} /> },
-    { id: "quota", header: "Kvota", align: "right", cell: (t) => <DeltaCell value={t.quota} /> },
+    ...(anyQuota ? [{ id: "quota", header: WALLET_LABEL.quota, align: "right", cell: (t) => <DeltaCell value={t.quota} /> } satisfies Column<AdminUserTransaction>] : []),
     { id: "balance", header: "Balans", align: "right", cell: (t) => <DeltaCell value={t.balance} /> },
     { id: "ref", header: "Havola", className: "max-w-[14rem]", cell: (t) => <ReferenceCell reference={t.reference} link={linkOf(t)} /> },
     {

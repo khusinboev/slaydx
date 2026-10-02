@@ -28,7 +28,8 @@ import type { OrderState, Provider, Purpose } from "./payments";
  * (order uuid, `prepare_id` or `provider_txn`), never substring-scanned.
  *
  * "Credited" means the settlement ledger row exists: `settleOrder` writes
- * `topup` (top-up) or `subscription` (Pro) with
+ * `topup` (top-up) or `subscription` (a legacy Pro order; since the subscription
+ * removal it credits `balance`, before it credited `quota`) with
  * `reference = <provider>:<provider_txn ?? order id>` — the same reference
  * `admin-order-refund.ts settlementReference` and the `payment_ledger` view use.
  */
@@ -344,7 +345,8 @@ export async function exportAdminOrders(url: URL, actor: AuditActor): Promise<Re
 /* Ledger rows and their links (shared with admin-finance.ts)                  */
 /* -------------------------------------------------------------------------- */
 
-export const TRANSACTION_KINDS = ["charge", "refund", "topup", "bonus", "subscription", "admin_credit", "admin_debit"] as const;
+/** Every `transactions.kind` (001 + 008 + 034); `quota_merge` is the one-off legacy quota → balance move (no link, not cash). */
+export const TRANSACTION_KINDS = ["charge", "refund", "topup", "bonus", "subscription", "admin_credit", "admin_debit", "quota_merge"] as const;
 export type TransactionKind = (typeof TRANSACTION_KINDS)[number];
 
 /** What a ledger `reference` resolves to, for a link in the UI (built from ids, never from raw data). */

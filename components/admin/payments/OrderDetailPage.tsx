@@ -236,6 +236,8 @@ function EventsCard({ events, capped }: { events: AdminPaymentEvent[]; capped: b
 }
 
 function LedgerCard({ rows }: { rows: OrderLedgerEntry[] }) {
+  // Legacy Pro quota («Kvota (eski)»): a pre-removal Pro credit moved quota; otherwise the column is hidden.
+  const anyQuota = rows.some((r) => r.quota !== 0);
   return (
     <Card>
       <CardHeader title="Hisob yozuvlari" description="Kredit yozuvi va tashqi qaytarishdagi yechimlar" />
@@ -249,7 +251,7 @@ function LedgerCard({ rows }: { rows: OrderLedgerEntry[] }) {
               <tr className="text-muted-foreground text-[11.5px]">
                 <th scope="col" className="border-b px-4 py-2 text-left font-semibold">Turi</th>
                 <th scope="col" className="border-b px-3 py-2 text-right font-semibold">{WALLET_LABEL.balance}</th>
-                <th scope="col" className="border-b px-3 py-2 text-right font-semibold">{WALLET_LABEL.quota}</th>
+                {anyQuota ? <th scope="col" className="border-b px-3 py-2 text-right font-semibold">{WALLET_LABEL.quota}</th> : null}
                 <th scope="col" className="border-b px-3 py-2 text-left font-semibold">Havola</th>
                 <th scope="col" className="border-b px-4 py-2 text-left font-semibold">Vaqt</th>
               </tr>
@@ -266,9 +268,11 @@ function LedgerCard({ rows }: { rows: OrderLedgerEntry[] }) {
                   <td className="px-3 py-2 text-right">
                     <DeltaCell value={r.balance} />
                   </td>
-                  <td className="px-3 py-2 text-right">
-                    <DeltaCell value={r.quota} />
-                  </td>
+                  {anyQuota ? (
+                    <td className="px-3 py-2 text-right">
+                      <DeltaCell value={r.quota} />
+                    </td>
+                  ) : null}
                   <td className="max-w-[16rem] px-3 py-2">
                     <ReferenceCell reference={r.reference} link={null} />
                   </td>

@@ -192,8 +192,12 @@ export function UserDetail({ id, tools }: { id: string; tools: ReadonlyArray<Fil
     ) : null,
   ].filter(Boolean);
 
-  const plan =
-    user.plan === "pro" ? `Pro${user.planExpiresAt ? ` · ${fmtDate(user.planExpiresAt)} gacha` : ""}` : "Free";
+  // Legacy Pro quota is read-only history: its tile shows only while it is non-zero (0 for everyone after the merge).
+  const wallets: ReadonlyArray<readonly [label: string, hint: string, value: number]> = [
+    ["Ball", "bonus", user.points],
+    ...(user.quota !== 0 ? [["Kvota (eski)", "Pro", user.quota] as const] : []),
+    ["Balans", "haqiqiy pul", user.balance],
+  ];
 
   return (
     <div className="flex min-w-0 flex-col gap-5" aria-busy={state.status === "loading" || undefined}>
@@ -211,7 +215,6 @@ export function UserDetail({ id, tools }: { id: string; tools: ReadonlyArray<Fil
               Admin{flags.adminRole ? ` · ${roleLabel(flags.adminRole)}` : ""}
             </Badge>
           ) : null}
-          {user.plan === "pro" ? <Badge tone="primary">Pro</Badge> : null}
         </h1>
         <p className="text-muted-foreground text-[13px]">
           #{user.id} · {user.username ? `@${user.username}` : "username yo'q"}
@@ -219,14 +222,8 @@ export function UserDetail({ id, tools }: { id: string; tools: ReadonlyArray<Fil
         </p>
       </header>
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        {(
-          [
-            ["Ball", "bonus", user.points],
-            ["Kvota", "Pro", user.quota],
-            ["Balans", "haqiqiy pul", user.balance],
-          ] as const
-        ).map(([label, hint, value]) => (
+      <div className={`grid gap-3 ${wallets.length === 3 ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
+        {wallets.map(([label, hint, value]) => (
           <Card key={label}>
             <CardBody>
               <span className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">
@@ -274,7 +271,6 @@ export function UserDetail({ id, tools }: { id: string; tools: ReadonlyArray<Fil
                       value: <MaskedText value={user.phone} onReveal={canPii && !user.revealed ? reveal : undefined} />,
                     },
                     ...(user.localId ? [{ label: "Kirish identifikatori", mono: true, value: user.localId }] : []),
-                    { label: "Tarif", value: plan },
                     { label: "Til", value: user.language },
                     { label: "Ro'yxatdan o'tgan", value: <span className="tabular-nums">{fmtDateTime(user.createdAt)}</span> },
                     { label: "Oxirgi faollik", value: user.lastSeenAt ? <span className="tabular-nums">{fmtDateTime(user.lastSeenAt)}</span> : null },

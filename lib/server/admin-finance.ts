@@ -125,7 +125,7 @@ export type FinanceSummary = {
     byProvider: Record<Provider, RevenueBucket>;
     byPurpose: Record<Purpose, RevenueBucket>;
   };
-  /** Spent on jobs (`charge` rows, as positive amounts): balance is real-money tanga, quota is Pro, points are bonus. */
+  /** Spent on jobs (`charge` rows, as positive amounts): balance is real-money tanga, quota is legacy Pro (0 after the merge), points are bonus. */
   cashSpend: Wallets & { charges: number };
   /** Job refunds (`refund` rows), full and partial. */
   refunds: Wallets & { count: number };
@@ -204,6 +204,7 @@ async function ledgerTotals(client: Queryable, range: DateRange) {
             COALESCE(sum(t.balance_delta), 0)::text AS balance
        FROM transactions t
       WHERE t.created_at >= $1::timestamptz AND t.created_at < $2::timestamptz
+        -- 'quota_merge' (034) moves value between two wallets of one user: not cash, not an adjustment.
         AND t.kind IN ('charge', 'refund', 'admin_credit', 'admin_debit')
       GROUP BY t.kind`,
     [range.fromTs, range.toTsExclusive],
@@ -707,7 +708,7 @@ export const LEDGER_CSV_HEADER = [
   "Foydalanuvchi",
   "Turi",
   "Bonus ball",
-  "Pro kvota",
+  "Kvota (eski)",
   "Balans",
   "Havola",
   "Izoh",

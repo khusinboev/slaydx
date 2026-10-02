@@ -14,13 +14,17 @@ import { bodyHashOf, idempotentMutation, type IdempotentResult } from "./admin-i
  * The provider already paid the money back outside the system; finance
  * records it here and optionally claws the credited wallet back:
  *   - the order must be `paid`; the recorded total never exceeds the order;
- *   - the clawback hits the wallet the settlement credited (`settleOrder`:
- *     topup → `balance`, pro → `quota`) by what THAT order's ledger row
- *     actually credited (`topup` / `subscription` row with reference
- *     `<provider>:<provider_txn ?? order id>`), pro rata for a partial amount
- *     — today's plan constants are never consulted, so an order settled under
- *     an older price or quota is clawed back correctly; no credit row → 409
- *     `no_credit`. Never below zero — the rest is `shortfall`;
+ *   - the clawback always debits `balance`: subscriptions are removed and
+ *     migration 034 merged every legacy Pro quota into `balance`, so that is
+ *     where a legacy Pro order's credit lives now (a pro order settled after
+ *     the removal credits `balance` directly). The amount is what THAT
+ *     order's ledger row actually credited (`topup` / `subscription` row with
+ *     reference `<provider>:<provider_txn ?? order id>`, `quota_delta +
+ *     balance_delta`, so an old quota credit and a new balance credit both
+ *     count), pro rata for a partial amount — today's prices are never
+ *     consulted, so an order settled under an older price is clawed back
+ *     correctly; no credit row → 409 `no_credit`. Never below zero — the
+ *     rest is `shortfall`;
  *   - the debit is an `admin_debit` ledger row with
  *     `reference = 'refund:' || payment_refunds.id`, so it can never be
  *     written twice for the same record.
@@ -77,9 +81,15 @@ export function parseExternalRefundBody(body: Record<string, unknown>): External
   return { kind: body.kind, amountSoum: amount, reason, clawback: body.clawback };
 }
 
-/** The wallet `settleOrder` credited for this purpose. */
+/**
+ * The wallet a clawback debits: `balance` for every purpose. A legacy Pro
+ * order's quota credit was merged into `balance` (migration 034) and quota is
+ * never credited again, so debiting `quota` would always come up short.
+ * Historical `payment_refunds.clawback_wallet = 'quota'` rows stay as written.
+ */
 export function clawbackWalletOf(purpose: Purpose): Wallet {
-  return purpose === "pro" ? "quota" : "balance";
+  void purpose;
+  return "balance";
 }
 
 /** `amountSoum / orderSoum` of what the order credited, floored (never more than the credit). */
@@ -95,12 +105,15 @@ export function settlementReference(order: Pick<OrderRow, "id" | "provider" | "p
   return `${order.provider}:${order.provider_txn ?? order.id}`;
 }
 
-/** Units the settlement wrote for this order (`topup.balance_delta` / `subscription.quota_delta`); `null` when there is no row. */
+/**
+ * Units the settlement wrote for this order: `quota_delta + balance_delta` of
+ * its own `topup` / `subscription` row (a pre-removal Pro order credited
+ * quota, a later one balance). `null` when there is no row.
+ */
 async function creditedUnits(client: PoolClient, order: OrderRow): Promise<number | null> {
   const kind = order.purpose === "pro" ? "subscription" : "topup";
-  const col = order.purpose === "pro" ? "quota_delta" : "balance_delta";
   const res = await client.query<{ units: string }>(
-    `SELECT ${col}::text AS units FROM transactions WHERE kind = $1 AND reference = $2`,
+    `SELECT (quota_delta + balance_delta)::text AS units FROM transactions WHERE kind = $1 AND reference = $2`,
     [kind, settlementReference(order)],
   );
   return res.rows[0] ? Number(res.rows[0].units) : null;

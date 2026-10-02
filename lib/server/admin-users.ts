@@ -49,9 +49,6 @@ import { TelegramTransientError, sendMessage } from "./telegram";
 
 type Queryable = Pick<PoolClient, "query">;
 
-export const USER_PLANS = ["free", "pro"] as const;
-export type UserPlan = (typeof USER_PLANS)[number];
-
 /** Search text longer than this is a 400 (the classifier clips names anyway). */
 const MAX_Q_CHARS = 200;
 /** Masked stand-in for a non-empty PII text field. */
@@ -81,7 +78,6 @@ export const USER_LIST_SPEC = {
   id: { column: "u.id", type: "bigint" },
   filters: {
     blocked: { kind: "flag" },
-    plan: { kind: "enum", values: USER_PLANS },
     isAdmin: { kind: "flag" },
   },
   range: { maxDays: 366 },
@@ -114,8 +110,6 @@ function parseUserFilter(url: URL): UserFilter {
 /* Shared SQL                                                                  */
 /* -------------------------------------------------------------------------- */
 
-/** Effective Pro, the same rule as `rowToUser` in session.ts (an expired Pro is free). */
-const PRO_SQL = `(u.plan = 'pro' AND (u.plan_expires_at IS NULL OR u.plan_expires_at > now()))`;
 /** "Is an admin" exactly as `SessionUser.isAdmin` (session.ts `userColumns`): an active or pending account. */
 const IS_ADMIN_SQL = `EXISTS (SELECT 1 FROM admin_accounts aa WHERE aa.user_id = u.id AND aa.status IN ('active', 'pending'))`;
 const LAST_SEEN_JOIN = `LEFT JOIN LATERAL (SELECT max(s.last_seen_at) AS last_seen_at FROM sessions s WHERE s.user_id = u.id) ls ON TRUE`;
@@ -130,8 +124,6 @@ function userFromWhere(f: UserFilter, withLastSeen: boolean): { sql: string; par
   };
   const { filters, range } = f.parsed;
   if (filters.blocked !== undefined) conds.push(`u.is_blocked = ${p(filters.blocked)}::boolean`);
-  if (filters.plan === "pro") conds.push(PRO_SQL);
-  if (filters.plan === "free") conds.push(`NOT ${PRO_SQL}`);
   if (filters.isAdmin === true) conds.push(IS_ADMIN_SQL);
   if (filters.isAdmin === false) conds.push(`NOT ${IS_ADMIN_SQL}`);
   if (range) conds.push(`u.created_at >= ${p(range.fromTs)}::timestamptz AND u.created_at < ${p(range.toTsExclusive)}::timestamptz`);
@@ -171,10 +163,6 @@ function userFromWhere(f: UserFilter, withLastSeen: boolean): { sql: string; par
 
 const iso = (d: Date | null): string | null => (d ? new Date(d).toISOString() : null);
 
-function effectivePlan(plan: string, expires: Date | null): UserPlan {
-  return plan === "pro" && (!expires || new Date(expires).getTime() > Date.now()) ? "pro" : "free";
-}
-
 /* -------------------------------------------------------------------------- */
 /* List (S4)                                                                   */
 /* -------------------------------------------------------------------------- */
@@ -186,10 +174,8 @@ export type AdminUserRow = {
   telegramId: string | null;
   /** Always masked (`+998 ** *** ** 67`); `null` when the user has no phone. */
   phoneMasked: string | null;
-  /** Effective plan (an expired Pro is `free`), as the product sees it. */
-  plan: UserPlan;
-  planExpiresAt: string | null;
   points: number;
+  /** Legacy Pro quota («Kvota (eski)»): read-only history, 0 for everyone after migration 034. */
   quota: number;
   balance: number;
   isBlocked: boolean;
@@ -206,8 +192,6 @@ type UserDbRow = {
   username: string | null;
   telegram_id: string | null;
   phone: string | null;
-  plan: string;
-  plan_expires_at: Date | null;
   points: string;
   quota: string;
   balance: string;
@@ -217,7 +201,7 @@ type UserDbRow = {
 };
 
 /** Narrow columns only; the raw phone is read just to be masked before it leaves this module. */
-const ROW_COLUMNS = `u.id::text AS id, u.name, u.username, u.telegram_id::text AS telegram_id, u.phone, u.plan, u.plan_expires_at,
+const ROW_COLUMNS = `u.id::text AS id, u.name, u.username, u.telegram_id::text AS telegram_id, u.phone,
   u.points::text AS points, u.quota::text AS quota, u.balance::text AS balance, u.is_blocked, ${IS_ADMIN_SQL} AS is_admin, u.created_at`;
 
 /**
@@ -246,8 +230,6 @@ function toUserRow(r: UserDbRow, extra: { generations: number; lastSeenAt: strin
     username: r.username,
     telegramId: r.telegram_id,
     phoneMasked: maskPhone(r.phone),
-    plan: effectivePlan(r.plan, r.plan_expires_at),
-    planExpiresAt: iso(r.plan_expires_at),
     points: Number(r.points),
     quota: Number(r.quota),
     balance: Number(r.balance),
@@ -310,7 +292,6 @@ function userFilterMeta(f: UserFilter): Record<string, unknown> {
   return {
     sort: sortKey,
     ...(filters.blocked !== undefined ? { blocked: filters.blocked } : {}),
-    ...(filters.plan ? { plan: filters.plan } : {}),
     ...(filters.isAdmin !== undefined ? { isAdmin: filters.isAdmin } : {}),
     ...(range ? { from: range.fromDay, to: range.toDay } : {}),
     ...(q ? { qKind: q.kind, q: q.kind === "phone" ? maskPhone(`+${q.value}`) : q.value } : {}),
@@ -323,10 +304,8 @@ export const USER_CSV_HEADER = [
   "Username",
   "Telegram ID",
   "Telefon (yashirilgan)",
-  "Tarif",
-  "Tarif tugashi",
   "Ball",
-  "Kvota",
+  "Kvota (eski)",
   "Balans",
   "Bloklangan",
   "Admin",
@@ -344,8 +323,6 @@ function userCsvRow(u: AdminUserRow): unknown[] {
     u.username,
     u.telegramId,
     u.phoneMasked,
-    u.plan,
-    isoToDate(u.planExpiresAt),
     u.points,
     u.quota,
     u.balance,

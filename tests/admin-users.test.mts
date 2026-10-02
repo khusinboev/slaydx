@@ -303,8 +303,6 @@ test("list: exact row shape, phone always masked, generation count, total", { sk
     "lastSeenAt",
     "name",
     "phoneMasked",
-    "plan",
-    "planExpiresAt",
     "points",
     "quota",
     "telegramId",
@@ -337,19 +335,17 @@ test("list: q classes — #id, numeric id / telegram id, +phone exact, @username
   assert.deepEqual(ids(await list(v, `q=${encodeURIComponent("'; DROP TABLE users; --")}`)), [], "injection text is just a name prefix");
 });
 
-test("list: filters blocked / plan (effective) / isAdmin / signup range", { skip }, async () => {
+test("list: filters blocked / isAdmin / signup range", { skip }, async () => {
   const s = await seedList();
   const v = await as("viewer");
   const blocked = await lsOnly(ids(await list(v, "blocked=1&limit=100")));
   assert.deepEqual(blocked, [s.blocked.id]);
   const active = await lsOnly(ids(await list(v, "blocked=0&limit=100")));
   assert.ok(!active.includes(s.blocked.id) && active.includes(s.ali.id));
-  const pro = await lsOnly(ids(await list(v, "plan=pro&limit=100")));
-  assert.deepEqual(pro, [s.bek.id], "MUTATSIYA: an expired Pro is not pro");
-  const free = await lsOnly(ids(await list(v, "plan=free&limit=100")));
-  assert.ok(free.includes(s.expired.id) && !free.includes(s.bek.id));
-  const proRow = items(await list(v, `q=%23${s.expired.id}`))[0]!;
-  assert.equal(proRow.plan, "free");
+  // Subscriptions are removed: a legacy `users.plan` is never read; its quota is shown as read-only history.
+  const bekRow = items(await list(v, `q=%23${s.bek.id}`))[0]!;
+  assert.ok(!("plan" in bekRow) && !("planExpiresAt" in bekRow), "MUTATSIYA: no plan keys");
+  assert.equal(bekRow.quota, 40);
   const admins = await lsOnly(ids(await list(v, "isAdmin=1&limit=100")));
   assert.deepEqual(admins, [s.adminUser.id]);
   assert.equal(items(await list(v, `q=%23${s.adminUser.id}`))[0]!.isAdmin, true);
@@ -401,7 +397,6 @@ test("list: bad params are 400, never 500 (sort / cursor / limit / flags / range
     "blocked=2",
     "blocked=true",
     "isAdmin=yes",
-    "plan=premium",
     "from=2026-13-01",
     "from=2026-09-10&to=2026-09-01",
     "from=2024-01-01&to=2026-01-01",

@@ -14,17 +14,16 @@ import {
   Forbidden,
   SearchInput,
   SelectFilter,
-  StatusPill,
   type Column,
 } from "@/components/admin/ui";
 import { useCan } from "@/components/admin/shell";
 import { ExportButton, OptionalRangeFilter, useCursorList, useUrlFilters } from "@/components/admin/payments";
 import { fmtDate, fmtDateTime, fmtNumber } from "@/lib/admin-format";
-import { USER_PLANS, USER_SORTS, downloadUsersCsv, listUsers, type AdminUserRow, type UserListParams, type UserPlan, type UserSort } from "@/lib/admin-api/users";
+import { USER_SORTS, downloadUsersCsv, listUsers, type AdminUserRow, type UserListParams, type UserSort } from "@/lib/admin-api/users";
 import { SORT_LABEL } from "./labels";
 
 /** URL filter keys of the users list. */
-export const USER_FILTER_KEYS = ["q", "blocked", "plan", "isAdmin", "from", "to", "sort"] as const;
+export const USER_FILTER_KEYS = ["q", "blocked", "isAdmin", "from", "to", "sort"] as const;
 type UserFilterKey = (typeof USER_FILTER_KEYS)[number];
 
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -39,7 +38,6 @@ export function userParamsFrom(v: Record<UserFilterKey, string>): UserListParams
   return {
     q: v.q.trim() || undefined,
     blocked: flag(v.blocked),
-    plan: (USER_PLANS as readonly string[]).includes(v.plan) ? (v.plan as UserPlan) : "",
     isAdmin: flag(v.isAdmin),
     from: datesOk ? v.from : undefined,
     to: datesOk ? v.to : undefined,
@@ -51,9 +49,11 @@ const PAGE_SIZE = 50;
 
 /**
  * S4 `/admin/users` (plan §7.1): search (`#id`, Telegram id, `+phone`,
- * `@username`, name prefix — classified on the server), blocked / plan / admin
- * / signup-range filters in the URL, whitelisted sorts, keyset paging, CSV
- * export (`users.export`, step-up). The phone is always masked here.
+ * `@username`, name prefix — classified on the server), blocked / admin /
+ * signup-range filters in the URL, whitelisted sorts, keyset paging, CSV
+ * export (`users.export`, step-up). The phone is always masked here. The
+ * legacy Pro quota column («Kvota (eski)») shows only when a row on the page
+ * still holds quota (none does after the quota merge).
  */
 export function UsersPage() {
   const router = useRouter();
@@ -66,9 +66,10 @@ export function UsersPage() {
     listUsers({ ...params, cursor: c, limit: PAGE_SIZE }, { signal }),
   );
 
-  const activeCount = [params.q, params.blocked !== undefined, params.plan, params.isAdmin !== undefined, params.from].filter(Boolean).length;
+  const activeCount = [params.q, params.blocked !== undefined, params.isAdmin !== undefined, params.from].filter(Boolean).length;
   const clear = () => store.clear();
   const rows = state.data?.items ?? [];
+  const anyQuota = rows.some((u) => u.quota !== 0);
 
   const columns: Column<AdminUserRow>[] = [
     {
@@ -97,13 +98,10 @@ export function UsersPage() {
       className: "whitespace-nowrap",
       cell: (u) => (u.phoneMasked ? <span className="font-mono text-[12.5px]">{u.phoneMasked}</span> : "—"),
     },
-    {
-      id: "plan",
-      header: "Tarif",
-      cell: (u) => (u.plan === "pro" ? <StatusPill tone="primary">Pro</StatusPill> : <StatusPill>Free</StatusPill>),
-    },
     { id: "points", header: "Ball", align: "right", className: "tabular-nums", cell: (u) => fmtNumber(u.points) },
-    { id: "quota", header: "Kvota", align: "right", className: "tabular-nums", cell: (u) => fmtNumber(u.quota) },
+    ...(anyQuota
+      ? [{ id: "quota", header: "Kvota (eski)", align: "right", className: "tabular-nums", cell: (u) => fmtNumber(u.quota) } satisfies Column<AdminUserRow>]
+      : []),
     { id: "balance", header: "Balans", align: "right", sortKey: "balance_desc", className: "tabular-nums", cell: (u) => fmtNumber(u.balance) },
     { id: "gens", header: "Ishlar", align: "right", className: "tabular-nums", cell: (u) => fmtNumber(u.generations) },
     {
@@ -149,15 +147,6 @@ export function UsersPage() {
           options={[
             { value: "0", label: "Faol" },
             { value: "1", label: "Bloklangan" },
-          ]}
-        />
-        <SelectFilter
-          label="Tarif"
-          value={params.plan ?? ""}
-          onChange={(plan) => store.set({ plan })}
-          options={[
-            { value: "free", label: "Free" },
-            { value: "pro", label: "Pro" },
           ]}
         />
         <SelectFilter

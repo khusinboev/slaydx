@@ -11,6 +11,7 @@ const KIND_LABEL: Record<RefundKind, string> = { refund: "Qaytarish (refund)", c
 export type ExternalRefundTarget = {
   id: string;
   amountSoum: number;
+  /** `pro` is a legacy subscription order; its clawback debits the balance too. */
   purpose: "topup" | "pro";
   /** Soum already recorded against this order. */
   recordedSoum: number;
@@ -26,8 +27,8 @@ export type ExternalRefundDialogProps = {
 
 /**
  * Records an external refund / chargeback (plan §6.6). Above half of the
- * order the amount is typed back. The clawback debits the wallet the order
- * credited (balance for a top-up, Pro quota for a subscription), never below zero.
+ * order the amount is typed back. The clawback debits the balance (also for a
+ * legacy Pro order, whose quota was merged into the balance), never below zero.
  */
 export function ExternalRefundDialog(props: ExternalRefundDialogProps) {
   if (!props.open) return null;
@@ -45,7 +46,8 @@ function Body({ onClose, order, onDone }: ExternalRefundDialogProps) {
   const amountOk = amount !== null && amount > 0 && amount <= remaining;
   const big = amountOk && amount > order.amountSoum / 2;
   const typed = big ? confirmText(amount) : undefined;
-  const wallet = order.purpose === "pro" ? "quota" : "balance";
+  // Every clawback debits balance: a legacy Pro order's quota was merged into it (migration 034).
+  const wallet = "balance";
 
   const hint =
     remaining === 0

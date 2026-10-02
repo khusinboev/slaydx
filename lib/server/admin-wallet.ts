@@ -19,10 +19,15 @@ import { assertMayActOn } from "./admin-users";
  *     pending admin account's wallet only within `admins.manage` rank limits
  *     (403 `admin_target`, the same `assertMayActOn` rule as blocking);
  *   - above `admin.wallet_confirm_threshold` the formatted amount must be
- *     typed back (400 `confirm`).
+ *     typed back (400 `confirm`);
+ *   - only `points` and `balance` are adjustable: subscriptions are removed and
+ *     migration 034 merged every legacy `quota` into `balance`, so a new quota
+ *     credit would recreate a wallet nothing sells any more (400).
  */
 
-export const WALLETS: readonly Wallet[] = ["points", "quota", "balance"];
+/** The adjustable wallets; `quota` stays in `Wallet` and in the snapshot as read-only history. */
+export type AdjustableWallet = Exclude<Wallet, "quota">;
+export const WALLETS: readonly AdjustableWallet[] = ["points", "balance"];
 export const WALLET_REASON_CODES = ["compensation", "promo", "correction", "manual_refund", "test", "other"] as const;
 export type WalletReasonCode = (typeof WALLET_REASON_CODES)[number];
 
@@ -32,7 +37,7 @@ export const MAX_DELTA = 100_000_000;
 export const ADMIN_LEDGER_NOTE = "Ma'muriy tuzatish";
 
 export type WalletAdjustInput = {
-  wallet: Wallet;
+  wallet: AdjustableWallet;
   delta: number;
   reasonCode: WalletReasonCode;
   reason: string;
@@ -50,13 +55,13 @@ export type WalletUserSnapshot = {
 
 export type WalletAdjustResponse = {
   transactionId: string;
-  wallet: Wallet;
+  wallet: AdjustableWallet;
   before: number;
   after: number;
   user: WalletUserSnapshot;
 };
 
-function isWallet(v: unknown): v is Wallet {
+function isWallet(v: unknown): v is AdjustableWallet {
   return typeof v === "string" && (WALLETS as readonly string[]).includes(v);
 }
 
