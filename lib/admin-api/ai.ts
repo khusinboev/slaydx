@@ -15,6 +15,8 @@ export type AiGroupBy = "day" | "tool" | "provider" | "model" | "kind";
 export type AiCostRow = {
   /** day → `YYYY-MM-DD`; tool → tool id or `free:<endpoint>`; provider/model/kind → the part's value. */
   key: string;
+  /** groupBy=tool: the Uzbek tool title (free endpoints "Bepul AI: …"); `null` for the other groupings. */
+  title: string | null;
   calls: number;
   inputTokens: number;
   outputTokens: number;

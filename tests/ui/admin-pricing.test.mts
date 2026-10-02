@@ -355,7 +355,10 @@ test("loading skeleton, then KPI tiles, coverage banner with caveats and the tab
   assert.ok(!document.body.textContent?.includes("finance.soum_per_usd"));
   assert.ok(!document.body.textContent?.includes("pricing.target_markup"));
   // Units: the price columns say tanga; the note states the tanga → so'm conversion.
-  assert.ok(screen.getByRole("columnheader", { name: "Asosiy narx, tanga" }));
+  assert.ok(screen.getByRole("columnheader", { name: "Narx, tanga" }));
+  // 1280 px: base and effective share one column and the chip sits under the margin, so
+  // there is no separate "Tavsiya" column to fall off the card's right edge.
+  assert.ok(!screen.queryByRole("columnheader", { name: "Tavsiya" }));
   assert.match(nb(document.body.textContent ?? ""), /1 tanga = 1 so'm/);
   assert.ok(screen.getByText("Slayd", { selector: "span" }), "tool below 30 % named in the tile hint");
 
@@ -375,7 +378,7 @@ test("loading skeleton, then KPI tiles, coverage banner with caveats and the tab
   const slide = rowOf("Slayd");
   assert.ok(within(slide).getByText("▲ 120%"), "adjustment highlighted");
   assert.ok(within(slide).getByText("3 500 – 9 500"));
-  assert.ok(within(slide).getByText("3 000 – 8 000"));
+  assert.ok(within(slide).getByText("asosiy 3 000 – 8 000"));
   assert.ok(within(slide).getByText("22%"));
   assert.ok(within(slide).getByText("+145% tavsiya"));
   assert.ok(within(slide).getByText("2 640 so'm / ish"));

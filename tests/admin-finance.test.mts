@@ -357,6 +357,7 @@ test("reconciliation: every check finds its seeded positive and none of its nega
   assert.equal(g1.type, "generation");
   assert.equal(g1.userId, seed.ali);
   assert.equal(g1.toolId, "slide");
+  assert.equal((g1 as { toolTitle?: string }).toolTitle, "Slayd", "the server resolves the Uzbek tool title; toolId is unchanged");
   assert.deepEqual(g1.charged, { points: 0, quota: 0, balance: 3_000 });
 
   assert.equal(by.partial_refund_missing!.count, 2);

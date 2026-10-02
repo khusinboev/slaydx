@@ -199,7 +199,7 @@ async function seed(): Promise<void> {
 type CostBody = {
   range: { from: string; to: string; days: number };
   groupBy: string;
-  rows: Array<{ key: string; calls: number; inputTokens: number; outputTokens: number; units: number | null; usd: number; records: number; unpricedCalls: number }>;
+  rows: Array<{ key: string; title: string | null; calls: number; inputTokens: number; outputTokens: number; units: number | null; usd: number; records: number; unpricedCalls: number }>;
   totals: { records: number; calls: number; inputTokens: number; outputTokens: number; usd: number; unpricedCalls: number };
   coverage: { jobsWithCost: number; jobsCompleted: number; pct: number };
   caveats: string[];
@@ -240,7 +240,7 @@ test("cost: every groupBy equals admin-cost exactly; totals, coverage, caveats, 
 
     // Rows equal spendBy, field for field (the API maps groupBy 1:1 onto SpendGroupBy).
     const want = await cost.spendBy(pool(), range, by);
-    assert.deepEqual(b.rows, want.map((w) => ({ key: w.key, calls: w.calls, inputTokens: w.inputTokens, outputTokens: w.outputTokens, units: w.units, usd: w.usd, records: w.records, unpricedCalls: w.unpricedCalls })), `${by} rows`);
+    assert.deepEqual(b.rows, want.map((w) => ({ key: w.key, title: by === "tool" ? ai.toolKeyTitle(w.key) : null, calls: w.calls, inputTokens: w.inputTokens, outputTokens: w.outputTokens, units: w.units, usd: w.usd, records: w.records, unpricedCalls: w.unpricedCalls })), `${by} rows`);
 
     // Totals equal spendTotals exactly (+ the unpriced count, which is the same for every grouping).
     assert.deepEqual({ ...b.totals, unpricedCalls: undefined }, { ...totalsWant, unpricedCalls: undefined }, `${by} totals`);
@@ -255,9 +255,26 @@ test("cost: every groupBy equals admin-cost exactly; totals, coverage, caveats, 
     assert.deepEqual(b.caveats, [...cost.COST_CAVEATS], `${by} caveats`);
     assert.ok(b.caveats.length >= 9 && b.caveats.every((c) => typeof c === "string" && c.length > 20));
     assert.equal(typeof b.soumPerUsd, "number");
+    // Only the tool grouping carries a title (the key itself is never rewritten).
+    if (by === "tool") assert.ok(b.rows.every((x) => typeof x.title === "string" && x.title.length > 0), "tool: titles");
+    else assert.ok(b.rows.every((x) => x.title === null), `${by}: no title`);
     if (by === "day" || by === "tool") assert.ok(b.rows.every((x) => x.units === null), `${by}: no mixed units`);
     else assert.ok(b.rows.every((x) => typeof x.units === "number"), `${by}: units present`);
   }
+});
+
+test("toolKeyTitle: registry titles, Uzbek free endpoints, unknown and retired keys", () => {
+  assert.equal(ai.toolKeyTitle("pro-slide"), "Pro slayd");
+  assert.equal(ai.toolKeyTitle("texnologik-xarita"), "Texnologik xarita");
+  assert.equal(ai.toolKeyTitle("free:outline"), "Bepul AI: reja");
+  assert.equal(ai.toolKeyTitle("free:udk"), "Bepul AI: UDK");
+  assert.equal(ai.toolKeyTitle("free:rewrite"), "Bepul AI: qayta yozish");
+  assert.equal(ai.toolKeyTitle("free:polish"), "Bepul AI: sayqal");
+  assert.equal(ai.toolKeyTitle("free:new-endpoint"), "Bepul AI: new-endpoint");
+  assert.equal(ai.toolKeyTitle("unknown"), "Noma'lum vosita");
+  assert.equal(ai.toolKeyTitle(""), "Noma'lum vosita");
+  assert.equal(ai.toolKeyTitle("retired-tool"), "retired-tool", "a retired tool keeps its stored id");
+  assert.equal(ai.toolKeyTitle("__proto__"), "__proto__", "no prototype lookup");
 });
 
 test("cost: completed, failed, abandoned, free and legacy rows are each counted once", { skip }, async () => {
@@ -272,6 +289,11 @@ test("cost: completed, failed, abandoned, free and legacy rows are each counted 
   assert.equal(byTool["pro-slide"].unpricedCalls, 2);
   near(byTool.referat.usd, 0.25, "legacy referat");
   near(byTool["free:polish"].usd, 0.02, "free");
+  // Titles resolved on the server from the registry; free endpoints are readable in Uzbek.
+  assert.equal(byTool["pro-slide"].title, "Pro slayd");
+  assert.equal(byTool.slide.title, "Slayd");
+  assert.equal(byTool.referat.title, "Referat");
+  assert.equal(byTool["free:polish"].title, "Bepul AI: sayqal");
   // Coverage: 4 completed jobs on D (A, B, referat, one without cost), 3 have cost data.
   assert.deepEqual(r.body.coverage, { jobsWithCost: 3, jobsCompleted: 4, pct: 75 });
 

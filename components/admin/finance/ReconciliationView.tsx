@@ -55,7 +55,9 @@ function SampleRow({ s }: { s: ReconciliationSample }) {
         <Link href={`/admin/users/${s.userId}`} className="min-w-0 truncate underline-offset-2 hover:underline">
           {s.userName || `#${s.userId}`}
         </Link>
-        <span className="text-muted-foreground font-mono">{s.toolId}</span>
+        <span className="text-muted-foreground" title={s.toolId}>
+          {s.toolTitle}
+        </span>
         {s.delivered ? (
           <span className="text-muted-foreground tabular-nums">
             yetkazildi {fmtNumber(s.delivered.got)} / {fmtNumber(s.delivered.want)}

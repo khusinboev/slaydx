@@ -73,7 +73,6 @@ export function PricingTable({
         </span>
       ),
     },
-    { id: "base", header: "Asosiy narx, tanga", align: "right", className: "tabular-nums whitespace-nowrap text-xs", cell: (r) => ladderRange(r.ladder, "base") },
     {
       id: "adjust",
       header: "Tuzatish",
@@ -87,11 +86,18 @@ export function PricingTable({
         ),
     },
     {
-      id: "effective",
-      header: "Amaldagi narx, tanga",
+      // Effective ladder on top, the code-formula base under it: one column instead of two,
+      // so the whole table fits the 956 px card at 1280.
+      id: "price",
+      header: "Narx, tanga",
       align: "right",
       className: "tabular-nums whitespace-nowrap text-xs",
-      cell: (r) => <span className={isDefaultAdjust(r.adjust) ? undefined : "font-semibold"}>{ladderRange(r.ladder, "effective")}</span>,
+      cell: (r) => (
+        <Stacked
+          main={<span className={isDefaultAdjust(r.adjust) ? undefined : "font-semibold"}>{ladderRange(r.ladder, "effective")}</span>}
+          sub={isDefaultAdjust(r.adjust) ? "asosiy narx" : `asosiy ${ladderRange(r.ladder, "base")}`}
+        />
+      ),
     },
     {
       id: "cost",
@@ -105,10 +111,16 @@ export function PricingTable({
     { id: "markup", header: "Ustama ×", align: "right", className: "tabular-nums", cell: (r) => markupText(r.markup) },
     {
       id: "margin",
-      header: "Marja %",
+      header: "Marja % · tavsiya",
       sortKey: "margin_asc",
       sortKeyReverse: "margin_desc",
-      cell: (r) => <Badge tone={marginTone(r.marginPct)}>{pctText(r.marginPct, 0)}</Badge>,
+      // The recommendation sits under the margin it is derived from (§17.6 chip).
+      cell: (r) => (
+        <span className="flex flex-col items-start gap-1">
+          <Badge tone={marginTone(r.marginPct)}>{pctText(r.marginPct, 0)}</Badge>
+          <RecommendationChip item={r} />
+        </span>
+      ),
     },
     {
       id: "jobs",
@@ -136,7 +148,6 @@ export function PricingTable({
         );
       },
     },
-    { id: "rec", header: "Tavsiya", className: "whitespace-nowrap", cell: (r) => <RecommendationChip item={r} /> },
   ];
 
   return (

@@ -29,6 +29,7 @@ import {
   type LedgerEntry,
 } from "./admin-payments";
 import type { Provider, Purpose } from "./payments";
+import { toolKeyTitle } from "./admin-ai";
 
 /**
  * Finance for the admin panel (docs/admin/02-plan.md §6.6, §7.1 S10, §9):
@@ -328,6 +329,8 @@ export type GenerationSample = {
   userId: string;
   userName: string;
   toolId: string;
+  /** Uzbek title of `toolId` (`toolKeyTitle`); `toolId` itself is unchanged. */
+  toolTitle: string;
   finishedAt: string | null;
   charged: Wallets;
   delivered: { got: number; want: number } | null;
@@ -448,6 +451,7 @@ function toGenSample(r: GenSampleRow): GenerationSample {
     userId: r.user_id,
     userName: r.user_name,
     toolId: r.tool_id,
+    toolTitle: toolKeyTitle(r.tool_id),
     finishedAt: r.finished_at ? new Date(r.finished_at).toISOString() : null,
     charged: { points: num(r.points), quota: num(r.quota), balance: num(r.balance) },
     delivered: r.got !== null && r.want !== null ? { got: Number(r.got), want: Number(r.want) } : null,

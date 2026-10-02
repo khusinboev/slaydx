@@ -61,9 +61,9 @@ function costBody(over: Partial<AiCostResponse> = {}): AiCostResponse {
     range: { from: "2026-03-10", to: "2026-03-12", days: 3 },
     groupBy: "model",
     rows: [
-      { key: "gpt-small", calls: 3, inputTokens: 1_000, outputTokens: 500, units: 0, usd: 0.0042, records: 2, unpricedCalls: 0 },
-      { key: "claude-sonnet-5", calls: 12, inputTokens: 2_500_000, outputTokens: 120_000, units: 0, usd: 12.4, records: 5, unpricedCalls: 0 },
-      { key: "mystery-model", calls: 4, inputTokens: 100, outputTokens: 50, units: 0, usd: 0, records: 1, unpricedCalls: 4 },
+      { key: "gpt-small", calls: 3, inputTokens: 1_000, outputTokens: 500, units: 0, usd: 0.0042, records: 2, unpricedCalls: 0, title: null },
+      { key: "claude-sonnet-5", calls: 12, inputTokens: 2_500_000, outputTokens: 120_000, units: 0, usd: 12.4, records: 5, unpricedCalls: 0, title: null },
+      { key: "mystery-model", calls: 4, inputTokens: 100, outputTokens: 50, units: 0, usd: 0, records: 1, unpricedCalls: 4, title: null },
     ],
     totals: { records: 8, calls: 19, inputTokens: 2_501_100, outputTokens: 120_550, usd: 12.4042, unpricedCalls: 4 },
     coverage: { jobsWithCost: 9, jobsCompleted: 10, pct: 90 },
@@ -74,9 +74,9 @@ function costBody(over: Partial<AiCostResponse> = {}): AiCostResponse {
 }
 
 const DAY_ROWS: AiCostResponse["rows"] = [
-  { key: "2026-03-10", calls: 5, inputTokens: 1, outputTokens: 1, units: null, usd: 1.5, records: 2, unpricedCalls: 0 },
-  { key: "2026-03-11", calls: 0, inputTokens: 0, outputTokens: 0, units: null, usd: 0, records: 0, unpricedCalls: 0 },
-  { key: "2026-03-12", calls: 14, inputTokens: 2, outputTokens: 2, units: null, usd: 10.9042, records: 6, unpricedCalls: 4 },
+  { key: "2026-03-10", calls: 5, inputTokens: 1, outputTokens: 1, units: null, usd: 1.5, records: 2, unpricedCalls: 0, title: null },
+  { key: "2026-03-11", calls: 0, inputTokens: 0, outputTokens: 0, units: null, usd: 0, records: 0, unpricedCalls: 0, title: null },
+  { key: "2026-03-12", calls: 14, inputTokens: 2, outputTokens: 2, units: null, usd: 10.9042, records: 6, unpricedCalls: 4, title: null },
 ];
 
 /** Answers `groupBy=day` with the daily rows and any other grouping with `costBody`. */
@@ -87,6 +87,24 @@ const costHandler = (url: URL) => {
 };
 
 const Q = "from=2026-03-10&to=2026-03-12";
+
+test("cost: groupBy=tool shows the server's Uzbek tool titles; the raw key stays in the tooltip", async () => {
+  const toolRows: AiCostResponse["rows"] = [
+    { key: "pro-slide", title: "Pro slayd", calls: 7, inputTokens: 10, outputTokens: 5, units: null, usd: 3.5, records: 3, unpricedCalls: 0 },
+    { key: "free:outline", title: "Bepul AI: reja", calls: 2, inputTokens: 1, outputTokens: 1, units: null, usd: 0.2, records: 2, unpricedCalls: 0 },
+  ];
+  stubFetch((url) => {
+    const by = url.searchParams.get("groupBy");
+    return json(200, by === "day" ? costBody({ groupBy: "day", rows: DAY_ROWS }) : costBody({ groupBy: "tool", rows: toolRows }));
+  });
+  renderPage(`${Q}&groupBy=tool`);
+  // Table and phone card list both render the cell.
+  const pro = await screen.findAllByText("Pro slayd");
+  assert.ok(pro.length >= 1 && pro.every((el) => el.getAttribute("title") === "pro-slide"));
+  assert.ok(screen.getAllByText("Bepul AI: reja").length >= 1);
+  assert.ok(!screen.queryByText("pro-slide"), "the raw tool id is not shown as text");
+  assert.ok(!screen.queryByText("free:outline"));
+});
 
 // ───────────────────────────── cost tab
 
