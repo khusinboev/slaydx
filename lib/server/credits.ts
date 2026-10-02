@@ -22,9 +22,13 @@ export type ChargeResult =
 const ZERO: ChargeSplit = { points: 0, quota: 0, balance: 0 };
 
 /**
- * Hamyonlardan navbat bilan yechadi: avval bonus ball, keyin Pro kvota,
- * oxirida haqiqiy balans. Shu tartib foydalanuvchi uchun eng foydali —
- * muddati o'tuvchi mablag' avval sarflanadi.
+ * Hamyonlardan navbat bilan yechadi: avval bonus ball, keyin kvota,
+ * oxirida haqiqiy balans.
+ *
+ * Kvota — olib tashlangan Pro obunaning qoldig'i: 034 `quota_merge` uni
+ * balansga o'tkazgan va hech bir yo'l uni endi oshirmaydi, ya'ni u doim 0.
+ * Navbatda qoldirilgani himoya uchun: almashinuv paytida eski konteyner
+ * yozib qo'ygan kvota bo'lsa, u birinchi bo'lib sarflanadi.
  */
 function splitFor(amount: number, w: ChargeSplit): ChargeSplit {
   let left = amount;
@@ -184,6 +188,31 @@ function isRefundDuplicate(e: unknown): boolean {
   return Boolean(err) && err!.code === "23505" && err!.constraint === "transactions_ref_idx";
 }
 
+/**
+ * Qaytariladigan ulush hamyonlar bo'yicha — `refundRatio` va `refundInTx`
+ * (`refund-tx.ts`) uchun YAGONA qoida.
+ *
+ * Obuna olib tashlangach kvota yopiq hamyon: 034 uni balansga o'tkazgan.
+ * Shu sababli eski (konversiyadan oldingi) yechimning kvota ulushi
+ * BALANSGA qaytadi (`quota_delta = 0`, `balance_delta = q + b`), aks holda
+ * har qaytarish kvotani qayta tug'dirardi. Ustunlar bo'yicha invariant
+ * (hamyon = jurnal yig'indisi) saqlanadi: kvotadan olingan, balansga
+ * qaytgan — jami o'zgarmaydi.
+ *
+ * Kvota va balans ulushlari BIRGA yaxlitlanadi (avval qo'shib, keyin
+ * `splitRatio`): alohida yaxlitlash qisman qaytarishda 1 tanga yo'qotardi.
+ */
+export function refundShares(
+  charged: { points_delta: string | number; quota_delta: string | number; balance_delta: string | number },
+  ratio = 1,
+): ChargeSplit {
+  const [points, balance] = splitRatio(
+    [-Number(charged.points_delta), -Number(charged.quota_delta) - Number(charged.balance_delta)],
+    ratio,
+  );
+  return { points, quota: 0, balance };
+}
+
 async function refundRatio(userId: string, reference: string, ratio: number, note: string): Promise<boolean> {
   let amount: ChargeSplit = ZERO;
   let ok: boolean;
@@ -206,25 +235,23 @@ async function refundRatio(userId: string, reference: string, ratio: number, not
       const row = charged.rows[0];
       if (!row) return false;
 
-      const [points, quota, balance] = splitRatio(
-        [-Number(row.points_delta), -Number(row.quota_delta), -Number(row.balance_delta)],
-        ratio,
-      );
-      if (points + quota + balance === 0) return false;
+      // Kvota ulushi balansga qaytadi (`refundShares`): kvota endi o'smaydi.
+      const back = refundShares(row, ratio);
+      if (back.points + back.balance === 0) return false;
 
       await client.query("SELECT 1 FROM users WHERE id = $1 FOR UPDATE", [userId]);
       await client.query(
         `UPDATE users
-            SET points = points + $2, quota = quota + $3, balance = balance + $4, updated_at = now()
+            SET points = points + $2, balance = balance + $3, updated_at = now()
           WHERE id = $1`,
-        [userId, points, quota, balance],
+        [userId, back.points, back.balance],
       );
       await client.query(
         `INSERT INTO transactions (user_id, kind, points_delta, quota_delta, balance_delta, reference, note)
-         VALUES ($1, 'refund', $2, $3, $4, $5, $6)`,
-        [userId, points, quota, balance, reference, note],
+         VALUES ($1, 'refund', $2, 0, $3, $4, $5)`,
+        [userId, back.points, back.balance, reference, note],
       );
-      amount = { points, quota, balance };
+      amount = back;
       return true;
     });
   } catch (e) {
@@ -239,15 +266,31 @@ async function refundRatio(userId: string, reference: string, ratio: number, not
   return ok;
 }
 
+/**
+ * Kredit qo'shiladigan hamyonlar. Kvota bu yerda YO'Q: obuna olib tashlangan,
+ * kvota faqat kamayadi (eski yechimlar va admin `admin_debit`).
+ */
+export type TopUpDelta = { points?: number; balance?: number };
+
+/**
+ * Kvotaga kredit urinishi — JS/JSON dan kelgan qiymat TS turini chetlab
+ * o'tishi mumkin, shuning uchun runtime da ham to'siladi.
+ */
+function assertNoQuota(delta: TopUpDelta): void {
+  const quota = (delta as { quota?: unknown }).quota;
+  if (quota !== undefined && quota !== 0) throw new Error("Kvota hamyoni yopilgan: kredit faqat ball yoki balansga");
+}
+
 /** Balansni to'ldirish (to'lov webhook idan). `reference` — provider tranzaksiya id. */
 export async function topUp(
   userId: string,
-  delta: Partial<ChargeSplit>,
+  delta: TopUpDelta,
   reference: string,
   kind: "topup" | "bonus" | "subscription" = "topup",
   note = "",
 ): Promise<boolean> {
-  if ((delta.points ?? 0) + (delta.quota ?? 0) + (delta.balance ?? 0) <= 0) return false;
+  assertNoQuota(delta);
+  if ((delta.points ?? 0) + (delta.balance ?? 0) <= 0) return false;
   const ok = await transaction((client) => topUpInTx(client, userId, delta, reference, kind, note));
   log("info", ok ? `[credits] ${kind} yozildi` : `[credits] ${kind} takror — yozilmadi`, { userId, reference, kind, ...delta });
   return ok;
@@ -257,15 +300,15 @@ export async function topUp(
 export async function topUpInTx(
   client: PoolClient,
   userId: string,
-  delta: Partial<ChargeSplit>,
+  delta: TopUpDelta,
   reference: string,
   kind: "topup" | "bonus" | "subscription" = "topup",
   note = "",
 ): Promise<boolean> {
+  assertNoQuota(delta);
   const points = delta.points ?? 0;
-  const quota = delta.quota ?? 0;
   const balance = delta.balance ?? 0;
-  if (points + quota + balance <= 0) return false;
+  if (points + balance <= 0) return false;
 
   /*
    * Foydalanuvchi qulfi idempotentlik tekshiruvidan OLDIN (CONC-02 b; ilgari
@@ -284,56 +327,14 @@ export async function topUpInTx(
 
   await client.query(
     `UPDATE users
-        SET points = points + $2, quota = quota + $3, balance = balance + $4, updated_at = now()
+        SET points = points + $2, balance = balance + $3, updated_at = now()
       WHERE id = $1`,
-    [userId, points, quota, balance],
+    [userId, points, balance],
   );
   await client.query(
     `INSERT INTO transactions (user_id, kind, points_delta, quota_delta, balance_delta, reference, note)
-     VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-    [userId, kind, points, quota, balance, reference, note],
-  );
-  return true;
-}
-
-/**
- * Pro obunani yoqadi va kvota beradi — BITTA tranzaksiyada (CONC-14).
- *
- * Ilgari kvota (`topUp`) alohida COMMIT bo'lib, plan UPDATE keyin
- * ishlardi: orada xato bo'lsa foydalanuvchida kvota bor, obuna esa
- * yoqilmagan qolardi, provayderning qayta urinishi `topUp` «allaqachon»
- * deb qaytgani uchun plan UPDATE ga hech qachon yetmasdi. Endi biri
- * yiqilsa ikkalasi ham bekor — qayta urinish ikkalasini birga bajaradi.
- */
-export async function activatePro(
-  userId: string,
-  quotaAmount: number,
-  days: number,
-  reference: string,
-): Promise<boolean> {
-  const ok = await transaction((client) => activateProInTx(client, userId, quotaAmount, days, reference));
-  log("info", ok ? "[credits] Pro obuna yoqildi" : "[credits] Pro obuna takror — yozilmadi", { userId, reference, quota: quotaAmount, days });
-  return ok;
-}
-
-/** `activatePro`ning tranzaksiya ichidagi varianti — to'lov yakuni bilan bitta tranzaksiyada chaqirish uchun. */
-export async function activateProInTx(
-  client: PoolClient,
-  userId: string,
-  quotaAmount: number,
-  days: number,
-  reference: string,
-): Promise<boolean> {
-  const added = await topUpInTx(client, userId, { quota: quotaAmount }, reference, "subscription", "Pro obuna");
-  if (!added) return false;
-  await client.query(
-    `UPDATE users
-        SET plan = 'pro',
-            -- Faol obuna ustiga qo'shiladi, tugagani yangidan boshlanadi.
-            plan_expires_at = GREATEST(COALESCE(plan_expires_at, now()), now()) + ($2 || ' days')::interval,
-            updated_at = now()
-      WHERE id = $1`,
-    [userId, String(days)],
+     VALUES ($1, $2, $3, 0, $4, $5, $6)`,
+    [userId, kind, points, balance, reference, note],
   );
   return true;
 }
@@ -402,6 +403,8 @@ export async function adminAdjustWalletInTx(client: PoolClient, input: AdminAdju
   );
   const row = res.rows[0];
   if (!row) throw new Error("Foydalanuvchi topilmadi");
+  // Kvota yopiq hamyon (obuna olib tashlangan): faqat yechish mumkin, kredit — yo'q.
+  if (wallet === "quota" && amount > 0) throw new Error("Kvota hamyoni yopilgan: kredit faqat ball yoki balansga");
   const before = Number(row[wallet]);
   const after = before + amount;
   if (after < 0) return { ok: false as const, reason: "insufficient" as const, available: before };

@@ -231,8 +231,8 @@ test("Payme: kalit sozlanmagan bo'lsa hech kim kira olmaydi", async () => {
 });
 
 test("Payme: summa tiyinda — so'mni 100 ga ko'paytiramiz", async () => {
-  const { PRO_PLAN } = await import("../lib/server/payments.ts");
+  const { MIN_TOPUP_SOUM } = await import("../lib/server/payments.ts");
   // Payme summani TIYINDA kutadi. Xato bo'lsa 100 barobar kam yoki ko'p
-  // to'lov o'tardi.
-  assert.equal(PRO_PLAN.priceSoum * 100, 1_500_000);
+  // to'lov o'tardi. (Ilgari o'chirilgan `PRO_PLAN.priceSoum` ustida edi.)
+  assert.equal(MIN_TOPUP_SOUM * 100, 500_000);
 });

@@ -68,9 +68,9 @@ test("to'lov buyurtmalari: Payme JSON-RPC + Click holat mashinasi", { skip: hasD
     );
     return String(r[0].id);
   };
-  const mkOrder = async (provider: "payme" | "click", amountSoum = 10_000, purpose: "topup" | "pro" = "topup") => {
+  const mkOrder = async (provider: "payme" | "click", amountSoum = 10_000) => {
     const uid = await mkUser();
-    const order = await createOrder({ userId: uid, provider, purpose, amountSoum });
+    const order = await createOrder({ userId: uid, provider, purpose: "topup", amountSoum });
     return { uid, order };
   };
   let rpcSeq = 1;
@@ -236,15 +236,22 @@ test("to'lov buyurtmalari: Payme JSON-RPC + Click holat mashinasi", { skip: hasD
     await assertLedger(uid);
   });
 
-  await t.test("Payme: Pro buyurtma — kvota + plan bitta tranzaksiyada", async () => {
-    const { uid, order } = await mkOrder("payme", 0, "pro");
-    const txn = `pm-pro-${order.id.slice(0, 8)}`;
-    const amount = order.amountSoum * 100;
-    await rpc("CreateTransaction", { id: txn, time: Date.now(), amount, account: { order_id: order.id } });
+  await t.test("Payme: ESKI Pro buyurtma — summa balansga, kvota/plan tegilmaydi (obuna olib tashlangan)", async () => {
+    // `createOrder` endi `pro` yaratmaydi: deploydan oldin ochilgan buyurtma SQL bilan.
+    const uid = await mkUser();
+    const [row] = await query<{ id: string }>(
+      `INSERT INTO payment_orders (id, user_id, provider, purpose, amount_soum)
+       VALUES (gen_random_uuid(), $1, 'payme', 'pro', 15000) RETURNING id::text AS id`,
+      [uid],
+    );
+    const txn = `pm-pro-${row.id.slice(0, 8)}`;
+    const amount = 15_000 * 100;
+    await rpc("CreateTransaction", { id: txn, time: Date.now(), amount, account: { order_id: row.id } });
     assert.equal((await rpc("PerformTransaction", { id: txn })).result?.state, 2);
     const w = await wallet(uid);
-    assert.equal(w.quota, 15_000);
-    assert.equal(w.plan, "pro");
+    assert.deepEqual(w, { points: 0, quota: 0, balance: 15_000, plan: "free" });
+    const [t1] = await query<{ kind: string }>(`SELECT kind FROM transactions WHERE user_id = $1`, [uid]);
+    assert.equal(t1.kind, "subscription");
     await assertLedger(uid);
   });
 
