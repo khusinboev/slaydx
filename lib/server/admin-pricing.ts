@@ -7,6 +7,7 @@ import type { AdminActor } from "./admin-handler";
 import { COST_CAVEATS, soumPerUsd, spendCoverageByTool, spendRowsSql, spendTotals, type Queryable, type SpendRange } from "./admin-cost";
 import { parseDateRange, type DateRange } from "./admin-list";
 import { pool, query, transaction } from "./db";
+import { SOUM_PER_COIN } from "./payments";
 import { invalidatePricingCache } from "./pricing";
 import { getSetting } from "./settings";
 import {
@@ -53,6 +54,13 @@ import type { FormValues, ToolGroup, ToolId } from "../types";
  *   - "outcomes" (completed, failed, AI cost, overhead, coverage): jobs
  *     FINISHED in the range — the same basis as `admin-cost.ts`, so the cost
  *     figures here equal the AI screen's.
+ *
+ * Two money units, never mixed silently:
+ *   - tanga: prices, the ladder and the cash revenue (wallet ledger deltas);
+ *   - so'm: every cost (USD × `finance.soum_per_usd`).
+ * Margin, markup and the simulator's margin convert tanga to so'm first with
+ * `SOUM_PER_COIN` (lib/server/payments.ts: what one tanga costs at top-up), so
+ * a change of that rate moves the economics instead of being ignored.
  */
 
 const TZ = "Asia/Tashkent";
@@ -60,6 +68,8 @@ const CACHE_TTL_MS = 60_000;
 const CACHE_MAX_ENTRIES = 200;
 const DAY_MS = 86_400_000;
 const TREND_MAX_DAYS = 90;
+/** The list's per-tool sparkline covers at most the last 30 days of the range (§17.6); the 90-day trend is the detail endpoint's. */
+export const LIST_TREND_DAYS = 30;
 const HISTORY_LIMIT = 100;
 /** Jobs read for the simulator's projection; above this the projection is partial (noted in the result). */
 const PROJECTION_MAX_JOBS = 20_000;
@@ -255,6 +265,15 @@ async function adjustmentOf(db: Queryable, toolId: ToolId): Promise<PriceAdjust>
   return rowToAdjust(res.rows[0]);
 }
 
+/** Test seam for the tanga → so'm rate; production always uses `SOUM_PER_COIN`. */
+export type MoneyOptions = { soumPerCoin?: number };
+
+function soumPerCoinOf(opts: MoneyOptions | undefined): number {
+  const k = opts?.soumPerCoin ?? SOUM_PER_COIN;
+  if (!Number.isFinite(k) || !(k > 0)) throw new Error(`admin-pricing: bad soumPerCoin ${k}`);
+  return k;
+}
+
 const sameAdjust = (a: PriceAdjust, b: PriceAdjust): boolean => a.percent === b.percent && a.roundTo === b.roundTo;
 
 // ---------------------------------------------------------------------------
@@ -359,8 +378,10 @@ export type PricingItem = {
   refundRate: number | null;
   /** `avg(generations.price)` over jobs created in range (tanga); `null` without jobs. */
   avgPrice: number | null;
-  /** Σ(−charge − refund) of balance_delta + quota_delta over those jobs ÷ jobs; points excluded. */
+  /** Σ(−charge − refund) of balance_delta + quota_delta over those jobs ÷ jobs, tanga; points excluded. */
   avgCashRevenue: number | null;
+  /** avgCashRevenue × SOUM_PER_COIN: the so'm the margin is computed on. */
+  avgCashRevenueSoum: number | null;
   /** Average units per job (see the units note); `null` when no job has a readable value. */
   avgUnits: number | null;
   /** Completed spend ÷ completed jobs WITH cost data (USD / so'm); `null` without such jobs. */
@@ -373,9 +394,9 @@ export type PricingItem = {
   fullCostSoum: number | null;
   /** fullCostSoum ÷ avgUnits; `null` when either is unknown. */
   costPerUnitSoum: number | null;
-  /** (avgCashRevenue − fullCostSoum) ÷ avgCashRevenue × 100; `null` without cash revenue or cost. */
+  /** (avgCashRevenueSoum − fullCostSoum) ÷ avgCashRevenueSoum × 100; `null` without cash revenue or cost. */
   marginPct: number | null;
-  /** avgPrice ÷ fullCostSoum; `null` without a price or a positive cost. */
+  /** avgPrice × SOUM_PER_COIN ÷ fullCostSoum; `null` without a price or a positive cost. */
   markup: number | null;
   /** Completed jobs with cost data ÷ completed × 100 (`spendCoverageByTool`); `null` without completed jobs. */
   coveragePct: number | null;
@@ -385,7 +406,7 @@ export type PricingItem = {
   /** Sample size = completed jobs; "low" below LOW_CONFIDENCE_BELOW. */
   sampleSize: number;
   confidence: "low" | "ok";
-  /** Daily average full cost per job over the range (zero-filled days). */
+  /** Daily average full cost per job over the LAST `LIST_TREND_DAYS` days of the range (zero-filled). */
   trend: TrendPoint[];
 };
 
@@ -394,6 +415,8 @@ export type PricingTotals = {
   completed: number;
   /** Σ cash revenue of the registry tools, tanga. */
   cashRevenue: number;
+  /** cashRevenue × SOUM_PER_COIN. */
+  cashRevenueSoum: number;
   /** Σ spend of every outcome of the registry tools, USD and so'm (what the margin is on). */
   costUsdTools: number;
   costSoumTools: number;
@@ -401,7 +424,7 @@ export type PricingTotals = {
   costUsdOther: number;
   /** costUsdTools + costUsdOther = `spendTotals` of the range — the dashboard and AI-page figure. */
   costUsdAll: number;
-  /** (cashRevenue − costSoumTools) ÷ cashRevenue × 100; `null` without cash revenue. */
+  /** (cashRevenueSoum − costSoumTools) ÷ cashRevenueSoum × 100; `null` without cash revenue. */
   marginPct: number | null;
 };
 
@@ -411,6 +434,8 @@ export type PricingOverview = {
   totals: PricingTotals;
   /** `finance.soum_per_usd`. */
   fx: number;
+  /** So'm per tanga (`SOUM_PER_COIN`) used to compare tanga revenue with so'm cost. */
+  soumPerCoin: number;
   /** `pricing.target_markup`. */
   targetMarkup: number;
   groups: ReadonlyArray<{ id: ToolGroup; label: string }>;
@@ -577,15 +602,16 @@ export function parsePricingParams(url: URL): { range: DateRange } {
   return { range: parseDateRange(single("from"), single("to")) };
 }
 
-export async function pricingOverview(range: DateRange): Promise<PricingOverview> {
+export async function pricingOverview(range: DateRange, opts?: MoneyOptions): Promise<PricingOverview> {
+  const k = soumPerCoinOf(opts);
   const [agg, adjustments, fx, targetMarkup] = await Promise.all([
     cachedAggregates(range),
     adjustmentsOf(pool()),
     soumPerUsd(),
     getSetting("pricing.target_markup"),
   ]);
-  const days = daysOf(range);
-  const totals: PricingTotals = { jobs: 0, completed: 0, cashRevenue: 0, costUsdTools: 0, costSoumTools: 0, costUsdOther: 0, costUsdAll: 0, marginPct: null };
+  const days = daysOf(range).slice(-LIST_TREND_DAYS);
+  const totals: PricingTotals = { jobs: 0, completed: 0, cashRevenue: 0, cashRevenueSoum: 0, costUsdTools: 0, costSoumTools: 0, costUsdOther: 0, costUsdAll: 0, marginPct: null };
 
   const items: PricingItem[] = TOOLS.map((tool) => {
     const id = tool.id;
@@ -597,13 +623,15 @@ export async function pricingOverview(range: DateRange): Promise<PricingOverview
     const cov = agg.coverage.get(id);
 
     const avgCashRevenue = ratio(cash, o.jobs);
+    const avgCashRevenueSoum = avgCashRevenue === null ? null : avgCashRevenue * k;
     const avgCostUsd = ratio(sp.completedUsd, sp.completedRecords);
     const overheadUsd = ratio(sp.failedUsd, oc.completed);
     const fullCostUsd = avgCostUsd === null || overheadUsd === null ? null : avgCostUsd + overheadUsd;
     const fullCostSoum = fullCostUsd === null ? null : fullCostUsd * fx;
     const costPerUnitSoum = fullCostSoum === null || o.avgUnits === null || !(o.avgUnits > 0) ? null : fullCostSoum / o.avgUnits;
-    const marginPct = avgCashRevenue === null || !(avgCashRevenue > 0) || fullCostSoum === null ? null : ((avgCashRevenue - fullCostSoum) / avgCashRevenue) * 100;
-    const markup = o.avgPrice === null || fullCostSoum === null || !(fullCostSoum > 0) ? null : o.avgPrice / fullCostSoum;
+    const marginPct =
+      avgCashRevenueSoum === null || !(avgCashRevenueSoum > 0) || fullCostSoum === null ? null : ((avgCashRevenueSoum - fullCostSoum) / avgCashRevenueSoum) * 100;
+    const markup = o.avgPrice === null || fullCostSoum === null || !(fullCostSoum > 0) ? null : (o.avgPrice * k) / fullCostSoum;
 
     totals.jobs += o.jobs;
     totals.completed += oc.completed;
@@ -626,6 +654,7 @@ export async function pricingOverview(range: DateRange): Promise<PricingOverview
       refundRate: r2(o.jobs > 0 ? (o.refunded / o.jobs) * 100 : null),
       avgPrice: r2(o.avgPrice),
       avgCashRevenue: r2(avgCashRevenue),
+      avgCashRevenueSoum: r2(avgCashRevenueSoum),
       avgUnits: r2(o.avgUnits),
       avgCostUsd: avgCostUsd === null ? null : round(avgCostUsd, 6),
       avgCostSoum: r2(avgCostUsd === null ? null : avgCostUsd * fx),
@@ -650,13 +679,15 @@ export async function pricingOverview(range: DateRange): Promise<PricingOverview
   // is exactly the free-LLM / unknown spend and tools + other = all.
   totals.costUsdAll = agg.spendAllUsd;
   totals.costUsdOther = round(Math.max(0, agg.spendAllUsd - totals.costUsdTools), 6);
-  totals.marginPct = totals.cashRevenue > 0 ? round(((totals.cashRevenue - totals.costSoumTools) / totals.cashRevenue) * 100, 2) : null;
+  totals.cashRevenueSoum = round(totals.cashRevenue * k, 2);
+  totals.marginPct = totals.cashRevenueSoum > 0 ? round(((totals.cashRevenueSoum - totals.costSoumTools) / totals.cashRevenueSoum) * 100, 2) : null;
 
   return {
     range: { from: range.fromDay, to: range.toDay, days: range.days },
     items,
     totals,
     fx,
+    soumPerCoin: k,
     targetMarkup,
     groups: TOOL_GROUPS,
     caveats: [...COST_CAVEATS],
@@ -762,9 +793,11 @@ export async function pricingDetail(toolId: ToolId, days: number): Promise<Prici
 export type Projection = {
   /** Σ listed price of the tool's jobs in the window, tanga. */
   revenue30d: number;
+  /** revenue30d × SOUM_PER_COIN, so'm. */
+  revenue30dSoum: number;
   /** Σ AI spend of every outcome in the window, so'm. */
   cost30d: number;
-  /** (revenue30d − cost30d) ÷ revenue30d × 100; `null` without revenue. */
+  /** (revenue30dSoum − cost30d) ÷ revenue30dSoum × 100; `null` without revenue. */
   marginPct: number | null;
 };
 
@@ -780,6 +813,8 @@ export type Simulation = {
   /** `true` when the window held more than PROJECTION_MAX_JOBS jobs and only the first ones were re-priced. */
   partial: boolean;
   fx: number;
+  /** So'm per tanga (`SOUM_PER_COIN`). */
+  soumPerCoin: number;
 };
 
 /** Validated `{percent, roundTo}` of a request body (400 with an Uzbek message). */
@@ -840,12 +875,14 @@ async function projectionInputs(toolId: ToolId): Promise<ProjectionInputs> {
  * Projection formula (the same 30-day window for volume and cost):
  *   projected.revenue30d = Σ_jobs applyPriceAdjust(basePriceFor(tool, job inputs), proposed)
  *   current.revenue30d   = Σ_jobs generations.price            (what was actually listed)
- *   cost30d              = Σ spend rows of the tool, every outcome × fx   (a price change does not change cost)
- *   marginPct            = (revenue30d − cost30d) ÷ revenue30d × 100
+ *   cost30d              = Σ spend rows of the tool, every outcome × fx   (so'm; a price change does not change cost)
+ *   revenue30dSoum       = revenue30d × SOUM_PER_COIN                     (tanga → so'm)
+ *   marginPct            = (revenue30dSoum − cost30d) ÷ revenue30dSoum × 100
  * Volume is held constant (no demand elasticity). Revenue here is the listed
  * price of every job (points included), not the cash revenue of §17.4.
  */
-export async function simulatePricing(toolId: ToolId, proposed: PriceAdjust): Promise<Simulation> {
+export async function simulatePricing(toolId: ToolId, proposed: PriceAdjust, opts?: MoneyOptions): Promise<Simulation> {
+  const k = soumPerCoinOf(opts);
   const [inputs, fx] = await Promise.all([projectionInputs(toolId), soumPerUsd()]);
   const adj: PriceAdjust | null = proposed.percent === 100 ? null : proposed;
   const cost30d = round(inputs.costUsd * fx, 2);
@@ -855,11 +892,15 @@ export async function simulatePricing(toolId: ToolId, proposed: PriceAdjust): Pr
     currentRevenue += j.price;
     projectedRevenue += applyPriceAdjust(j.base, adj);
   }
-  const projection = (revenue: number): Projection => ({
-    revenue30d: revenue,
-    cost30d,
-    marginPct: revenue > 0 ? round(((revenue - cost30d) / revenue) * 100, 2) : null,
-  });
+  const projection = (revenue: number): Projection => {
+    const revenueSoum = round(revenue * k, 2);
+    return {
+      revenue30d: revenue,
+      revenue30dSoum: revenueSoum,
+      cost30d,
+      marginPct: revenueSoum > 0 ? round(((revenueSoum - cost30d) / revenueSoum) * 100, 2) : null,
+    };
+  };
   return {
     toolId,
     proposed,
@@ -869,6 +910,7 @@ export async function simulatePricing(toolId: ToolId, proposed: PriceAdjust): Pr
     projected: projection(projectedRevenue),
     partial: inputs.partial,
     fx,
+    soumPerCoin: k,
   };
 }
 

@@ -41,7 +41,9 @@ import type { FormValues } from "../lib/types.ts";
  *   - `applyPriceAdjust` roundTo ignored in the simulator → projected revenue;
  *   - `invalidatePricingCache()` dropped after PUT → the e2e charge keeps the base price;
  *   - history insert moved outside `adminTx` → the rollback test finds a stray history row;
- *   - audit `before` built from the new values → before/after assertions.
+ *   - audit `before` built from the new values → before/after assertions;
+ *   - `* k` dropped from the cash revenue / avgPrice → the injected-rate money-units test;
+ *   - list trend not sliced to the last 30 days → the payload-shape test.
  */
 
 process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";
@@ -69,6 +71,7 @@ const ap = await import("../lib/server/admin-pricing.ts");
 const cost = await import("../lib/server/admin-cost.ts");
 const { aiCost } = await import("../lib/server/admin-ai.ts");
 const { parseDateRange } = await import("../lib/server/admin-list.ts");
+const { SOUM_PER_COIN } = await import("../lib/server/payments.ts");
 const { env } = await import("../lib/server/env.ts");
 const { applyPriceAdjust, basePriceFor, priceFor, TOOL_BY_ID, TOOLS } = await import("../lib/tools.ts");
 const listRoute = await import("../app/api/admin/pricing/route.ts");
@@ -512,6 +515,65 @@ test("metrics against a hand-computed fixture; detail; simulator; mutations; rol
     near(totals.costUsdAll, (await aiCost(spendRange, "tool")).totals.usd, "all = AI page total", 1e-6);
     // The margin is on the tools' cash revenue, so it keeps using the tools' cost.
     near(totals.marginPct, ((26000 - tools * FX) / 26000) * 100, "marginPct from tools cost");
+  });
+
+  await t.test("money units: tanga revenue is converted with SOUM_PER_COIN before margin, markup and the simulator", async () => {
+    // Production rate: the route answers with it and the so'm revenue equals the tanga revenue × rate.
+    const r = await list(owner.cookie, RANGE);
+    assert.equal(r.body.soumPerCoin, SOUM_PER_COIN);
+    const e1 = itemOf(r, "essay");
+    assert.equal(e1.avgCashRevenueSoum, (e1.avgCashRevenue as number) * SOUM_PER_COIN);
+    assert.equal((r.body.totals as { cashRevenueSoum: number }).cashRevenueSoum, 26000 * SOUM_PER_COIN);
+
+    // Injected rate 2 so'm per tanga: every tanga figure doubles in so'm, costs stay.
+    const o = await ap.pricingOverview(parseDateRange(D, D2), { soumPerCoin: 2 });
+    assert.equal(o.soumPerCoin, 2);
+    const e = o.items.find((i) => i.toolId === "essay")!;
+    assert.equal(e.avgCashRevenue, 1800, "tanga figure unchanged");
+    assert.equal(e.avgCashRevenueSoum, 3600);
+    assert.equal(e.fullCostSoum, 800, "cost is already so'm");
+    // margin (3 600 − 800) ÷ 3 600 = 77.78 %; markup 2 700 × 2 ÷ 800 = 6.75; recommendation 100 × 3 ÷ 6.75 = 44.4 → 45.
+    assert.equal(e.marginPct, 77.78);
+    assert.equal(e.markup, 6.75);
+    assert.equal(e.recommendedPercent, 45);
+    const s = o.items.find((i) => i.toolId === "slide")!;
+    assert.equal(s.marginPct, 76);
+    assert.equal(o.totals.cashRevenue, 26000);
+    assert.equal(o.totals.cashRevenueSoum, 52000);
+    const tools = 0.14 + 0.66 + 0.5 + 0.034;
+    near(o.totals.marginPct, ((52000 - tools * FX) / 52000) * 100, "totals margin on so'm revenue");
+
+    const sim = await ap.simulatePricing("essay", { percent: 120, roundTo: 500 }, { soumPerCoin: 2 });
+    assert.equal(sim.soumPerCoin, 2);
+    assert.equal(sim.current.revenue30d, 13500);
+    assert.equal(sim.current.revenue30dSoum, 27000);
+    assert.equal(sim.current.cost30d, 1680);
+    // (27 000 − 1 680) ÷ 27 000 = 93.78 %; projected (32 000 − 1 680) ÷ 32 000 = 94.75 %.
+    assert.equal(sim.current.marginPct, 93.78);
+    assert.equal(sim.projected.revenue30dSoum, 32000);
+    assert.equal(sim.projected.marginPct, 94.75);
+    await assert.rejects(() => ap.pricingOverview(parseDateRange(D, D2), { soumPerCoin: 0 }));
+  });
+
+  await t.test("list payload: trend capped to the last 30 days of the range; the detail keeps 90", async () => {
+    const from = tkDay(-59);
+    const to = tkDay(0);
+    const r = await list(owner.cookie, `?from=${from}&to=${to}`);
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    assert.deepEqual(Object.keys(r.body).sort(), ["caveats", "fx", "groups", "items", "range", "soumPerCoin", "targetMarkup", "totals"]);
+    assert.equal((r.body.range as { days: number }).days, 60);
+    for (const it of r.body.items as Item[]) {
+      assert.equal(it.trend.length, 30, `${it.toolId}: 30 trend points`);
+      assert.equal(it.trend[0].day, tkDay(-29));
+      assert.equal(it.trend[29].day, to);
+      for (const p of it.trend) assert.deepEqual(Object.keys(p).sort(), ["avgCostSoum", "day", "jobs"]);
+    }
+    // Inside the last 30 days the points are the same as in a short range.
+    assert.deepEqual(itemOf(r, "slide").trend.find((p) => p.day === D), { day: D, avgCostSoum: 1800, jobs: 2 });
+    // A range shorter than 30 days keeps all of its days.
+    assert.equal(itemOf(await list(owner.cookie, RANGE), "slide").trend.length, 3);
+    // The drawer's 90-day trend is unaffected.
+    assert.equal(((await detail(owner.cookie, "slide")).body.trend as unknown[]).length, 90);
   });
 
   await t.test("range params: default 30 days, bad dates 400, > 366 days 400, repeated param 400", async () => {

@@ -44,8 +44,12 @@ export type PricingItem = {
   failed: number;
   failRate: number | null;
   refundRate: number | null;
+  /** Tanga. */
   avgPrice: number | null;
+  /** Tanga. */
   avgCashRevenue: number | null;
+  /** avgCashRevenue converted with `soumPerCoin` (what the margin is on). */
+  avgCashRevenueSoum: number | null;
   avgUnits: number | null;
   avgCostUsd: number | null;
   avgCostSoum: number | null;
@@ -60,13 +64,17 @@ export type PricingItem = {
   recommendedPercent: number | null;
   sampleSize: number;
   confidence: "low" | "ok";
+  /** The last ≤ 30 days of the range (the sparkline); the 90-day trend comes from the detail endpoint. */
   trend: TrendPoint[];
 };
 
 export type PricingTotals = {
   jobs: number;
   completed: number;
+  /** Tanga. */
   cashRevenue: number;
+  /** cashRevenue × soumPerCoin. */
+  cashRevenueSoum: number;
   /** Registry tools' spend (what `marginPct` is on). */
   costUsdTools: number;
   costSoumTools: number;
@@ -83,6 +91,8 @@ export type PricingOverview = {
   totals: PricingTotals;
   /** `finance.soum_per_usd`. */
   fx: number;
+  /** So'm per tanga: tanga revenue is converted with it before margin and markup. */
+  soumPerCoin: number;
   /** `pricing.target_markup`. */
   targetMarkup: number;
   groups: ReadonlyArray<{ id: ToolGroupId; label: string }>;
@@ -109,7 +119,8 @@ export type PricingDetail = {
   fx: number;
 };
 
-export type Projection = { revenue30d: number; cost30d: number; marginPct: number | null };
+/** revenue30d in tanga, revenue30dSoum and cost30d in so'm; the margin compares the two so'm figures. */
+export type Projection = { revenue30d: number; revenue30dSoum: number; cost30d: number; marginPct: number | null };
 
 export type Simulation = {
   toolId: string;
@@ -120,6 +131,7 @@ export type Simulation = {
   projected: Projection;
   partial: boolean;
   fx: number;
+  soumPerCoin: number;
 };
 
 export type PricingItemResult = { toolId: string; title: string; adjust: PriceAdjust; ladder: LadderRow[]; history: PriceHistoryRow[] };
