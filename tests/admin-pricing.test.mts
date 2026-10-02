@@ -66,6 +66,9 @@ const { recordAiUsage, flushAiUsage } = await import("../lib/server/ai-usage.ts"
 const settings = await import("../lib/server/settings.ts");
 const pricingServer = await import("../lib/server/pricing.ts");
 const ap = await import("../lib/server/admin-pricing.ts");
+const cost = await import("../lib/server/admin-cost.ts");
+const { aiCost } = await import("../lib/server/admin-ai.ts");
+const { parseDateRange } = await import("../lib/server/admin-list.ts");
 const { env } = await import("../lib/server/env.ts");
 const { applyPriceAdjust, basePriceFor, priceFor, TOOL_BY_ID, TOOLS } = await import("../lib/tools.ts");
 const listRoute = await import("../app/api/admin/pricing/route.ts");
@@ -492,13 +495,23 @@ test("metrics against a hand-computed fixture; detail; simulator; mutations; rol
       none.trend.map((p) => p.avgCostSoum),
       [null, null, null],
     );
-    // Totals over the registry tools: free:* rows are not tools.
+    // Totals over the registry tools: free:* rows are not tools, but they are
+    // spend — carried separately so the all-in figure equals the dashboard/AI number.
     const totals = r.body.totals as Record<string, number | null>;
     assert.equal(totals.jobs, 5 + 2 + 1 + 1);
     assert.equal(totals.completed, 3 + 3 + 1 + 1);
     assert.equal(totals.cashRevenue, 9000 + 11000 + 4000 + 2000);
-    near(totals.costUsd, 0.14 + 0.66 + 0.5 + 0.034, "costUsd", 1e-6);
-    near(totals.costSoum, (0.14 + 0.66 + 0.5 + 0.034) * FX, "costSoum");
+    const tools = 0.14 + 0.66 + 0.5 + 0.034;
+    near(totals.costUsdTools, tools, "costUsdTools", 1e-6);
+    near(totals.costSoumTools, tools * FX, "costSoumTools");
+    near(totals.costUsdOther, 9, "costUsdOther = the free:outline row", 1e-6);
+    near(totals.costUsdAll, tools + 9, "costUsdAll", 1e-6);
+    near(totals.costUsdAll, (totals.costUsdTools ?? 0) + (totals.costUsdOther ?? 0), "tools + other = all", 1e-6);
+    const spendRange = parseDateRange(D, D2);
+    near(totals.costUsdAll, (await cost.spendTotals(pool(), spendRange)).usd, "MUTATSIYA: all = spendTotals (dashboard aiCostUsd)", 1e-6);
+    near(totals.costUsdAll, (await aiCost(spendRange, "tool")).totals.usd, "all = AI page total", 1e-6);
+    // The margin is on the tools' cash revenue, so it keeps using the tools' cost.
+    near(totals.marginPct, ((26000 - tools * FX) / 26000) * 100, "marginPct from tools cost");
   });
 
   await t.test("range params: default 30 days, bad dates 400, > 366 days 400, repeated param 400", async () => {

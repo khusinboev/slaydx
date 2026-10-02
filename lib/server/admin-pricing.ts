@@ -4,7 +4,7 @@ import { ApiError } from "./api";
 import { adminTx } from "./admin-audit";
 import { parseReason } from "./admin-accounts";
 import type { AdminActor } from "./admin-handler";
-import { COST_CAVEATS, soumPerUsd, spendCoverageByTool, spendRowsSql, type Queryable, type SpendRange } from "./admin-cost";
+import { COST_CAVEATS, soumPerUsd, spendCoverageByTool, spendRowsSql, spendTotals, type Queryable, type SpendRange } from "./admin-cost";
 import { parseDateRange, type DateRange } from "./admin-list";
 import { pool, query, transaction } from "./db";
 import { invalidatePricingCache } from "./pricing";
@@ -394,10 +394,14 @@ export type PricingTotals = {
   completed: number;
   /** Σ cash revenue of the registry tools, tanga. */
   cashRevenue: number;
-  /** Σ spend of every outcome of the registry tools, USD and so'm. */
-  costUsd: number;
-  costSoum: number;
-  /** (cashRevenue − costSoum) ÷ cashRevenue × 100; `null` without cash revenue. */
+  /** Σ spend of every outcome of the registry tools, USD and so'm (what the margin is on). */
+  costUsdTools: number;
+  costSoumTools: number;
+  /** Spend outside the registry tools in the same range: free-LLM endpoints (`free:*`), unknown tool. */
+  costUsdOther: number;
+  /** costUsdTools + costUsdOther = `spendTotals` of the range — the dashboard and AI-page figure. */
+  costUsdAll: number;
+  /** (cashRevenue − costSoumTools) ÷ cashRevenue × 100; `null` without cash revenue. */
   marginPct: number | null;
 };
 
@@ -426,6 +430,8 @@ type Aggregates = {
   spend: Map<string, { completedUsd: number; completedRecords: number; failedUsd: number }>;
   coverage: Map<string, { jobsWithCost: number; jobsCompleted: number; pct: number }>;
   trend: Map<string, Map<string, TrendRow>>;
+  /** All-in spend of the range (`spendTotals`), tools or not. */
+  spendAllUsd: number;
 };
 
 /** The cached part of the overview: pure aggregates for a range (no adjustments, no settings). */
@@ -505,8 +511,9 @@ async function aggregates(db: Queryable, range: DateRange): Promise<Aggregates> 
   );
 
   const coverageRows = await spendCoverageByTool(db, spendRange);
+  const spendAll = await spendTotals(db, spendRange);
 
-  const out: Aggregates = { orders: new Map(), cash: new Map(), outcomes: new Map(), spend: new Map(), coverage: new Map(), trend: new Map() };
+  const out: Aggregates = { orders: new Map(), cash: new Map(), outcomes: new Map(), spend: new Map(), coverage: new Map(), trend: new Map(), spendAllUsd: spendAll.usd };
   for (const r of orders.rows) {
     out.orders.set(r.tool_id, { jobs: num(r.jobs), avgPrice: numOrNull(r.avg_price), refunded: num(r.refunded), avgUnits: numOrNull(r.avg_units) });
   }
@@ -578,7 +585,7 @@ export async function pricingOverview(range: DateRange): Promise<PricingOverview
     getSetting("pricing.target_markup"),
   ]);
   const days = daysOf(range);
-  const totals: PricingTotals = { jobs: 0, completed: 0, cashRevenue: 0, costUsd: 0, costSoum: 0, marginPct: null };
+  const totals: PricingTotals = { jobs: 0, completed: 0, cashRevenue: 0, costUsdTools: 0, costSoumTools: 0, costUsdOther: 0, costUsdAll: 0, marginPct: null };
 
   const items: PricingItem[] = TOOLS.map((tool) => {
     const id = tool.id;
@@ -601,7 +608,7 @@ export async function pricingOverview(range: DateRange): Promise<PricingOverview
     totals.jobs += o.jobs;
     totals.completed += oc.completed;
     totals.cashRevenue += cash;
-    totals.costUsd += sp.completedUsd + sp.failedUsd;
+    totals.costUsdTools += sp.completedUsd + sp.failedUsd;
 
     const r2 = (v: number | null): number | null => (v === null ? null : round(v, 2));
     return {
@@ -637,9 +644,13 @@ export async function pricingOverview(range: DateRange): Promise<PricingOverview
     };
   });
 
-  totals.costUsd = round(totals.costUsd, 6);
-  totals.costSoum = round(totals.costUsd * fx, 2);
-  totals.marginPct = totals.cashRevenue > 0 ? round(((totals.cashRevenue - totals.costSoum) / totals.cashRevenue) * 100, 2) : null;
+  totals.costUsdTools = round(totals.costUsdTools, 6);
+  totals.costSoumTools = round(totals.costUsdTools * fx, 2);
+  // The tools' rows are a subset of the range's spend rows, so the remainder
+  // is exactly the free-LLM / unknown spend and tools + other = all.
+  totals.costUsdAll = agg.spendAllUsd;
+  totals.costUsdOther = round(Math.max(0, agg.spendAllUsd - totals.costUsdTools), 6);
+  totals.marginPct = totals.cashRevenue > 0 ? round(((totals.cashRevenue - totals.costSoumTools) / totals.cashRevenue) * 100, 2) : null;
 
   return {
     range: { from: range.fromDay, to: range.toDay, days: range.days },
