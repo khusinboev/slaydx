@@ -431,6 +431,8 @@ test("export: step-up CSV with the list filters, masked phone, formula guard, on
   assert.match(r.headers.get("content-disposition") ?? "", /attachment; filename="foydalanuvchilar-\d{4}-\d{2}-\d{2}\.csv"/);
   const lines = r.text.replace(/^﻿/, "").trim().split("\r\n");
   assert.equal(lines[0], USER_CSV_HEADER.map((h) => `"${h}"`).join(","));
+  // Subscriptions are removed: no plan columns; the legacy quota column is labelled as history.
+  assert.ok(USER_CSV_HEADER.includes("Kvota (eski)") && !USER_CSV_HEADER.some((h) => h.startsWith("Tarif")), USER_CSV_HEADER.join(","));
   assert.equal(lines.length, 2);
   // A leading "+" is a formula trigger in spreadsheets, so the shared CSV guard prefixes an apostrophe.
   assert.ok(lines[1]!.includes(`"'+998 ** *** ** 67"`), lines[1]);

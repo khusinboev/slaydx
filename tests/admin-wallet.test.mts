@@ -164,6 +164,8 @@ test("parseWalletAdjustBody: every field is validated from unknown", () => {
   assert.equal(parseWalletAdjustBody({ ...GOOD, confirm: "1 000" }).confirm, "1 000");
   const bad: Array<Record<string, unknown>> = [
     { ...GOOD, wallet: "hacked" },
+    // Subscriptions are removed: the legacy quota wallet is read-only.
+    { ...GOOD, wallet: "quota" },
     { ...GOOD, wallet: ["balance"] },
     { ...GOOD, delta: "1000" },
     { ...GOOD, delta: 0 },
@@ -300,19 +302,33 @@ test("concurrency: four parallel identical requests → one ledger row, one audi
 
 test("409 insufficient (with available) leaves nothing behind; a debit to exactly zero is fine", { skip }, async () => {
   const s = await session("admin");
-  const u = await mkUser(0, 0, 300);
-  const r = await adjust(s.cookie, u.id, { wallet: "quota", delta: -301, reasonCode: "correction", reason: "Kvota tuzatish" });
+  const u = await mkUser(300, 0, 0);
+  const r = await adjust(s.cookie, u.id, { wallet: "balance", delta: -301, reasonCode: "correction", reason: "Balans tuzatish" });
   assert.equal(r.status, 409);
   assert.equal(r.body.code, "insufficient");
   assert.equal(r.body.available, 300);
-  assert.deepEqual(await wallets(u.id), { points: 0, quota: 300, balance: 0 });
+  assert.deepEqual(await wallets(u.id), { points: 0, quota: 0, balance: 300 });
   assert.equal((await ledger(u.id)).length, 0);
   assert.equal((await audits(s.admin.adminId)).length, 0, "domain refusals are not audited");
 
-  const ok = await adjust(s.cookie, u.id, { wallet: "quota", delta: -300, reasonCode: "correction", reason: "Kvota tuzatish" });
+  const ok = await adjust(s.cookie, u.id, { wallet: "balance", delta: -300, reasonCode: "correction", reason: "Balans tuzatish" });
   assert.equal(ok.status, 201);
   assert.equal((await ledger(u.id))[0].kind, "admin_debit");
   assert.deepEqual(await wallets(u.id), { points: 0, quota: 0, balance: 0 });
+});
+
+test("400 quota: the legacy Pro quota is read-only — neither a credit nor a debit, nothing written, not audited", { skip }, async () => {
+  const s = await session("owner");
+  // A user still holding legacy quota (an old container refunded into it during the deploy swap).
+  const u = await mkUser(0, 0, 300);
+  for (const delta of [-300, 500]) {
+    const r = await adjust(s.cookie, u.id, { wallet: "quota", delta, reasonCode: "correction", reason: "Kvota tuzatish" });
+    assert.equal(r.status, 400, `MUTATSIYA: quota ${delta} → ${r.status}`);
+    assert.match(String(r.body.error), /points \| balance/);
+  }
+  assert.deepEqual(await wallets(u.id), { points: 0, quota: 300, balance: 0 });
+  assert.equal((await ledger(u.id)).length, 0);
+  assert.equal((await audits(s.admin.adminId)).length, 0);
 });
 
 test("409 self: an admin cannot adjust their own wallet (T13)", { skip }, async () => {
