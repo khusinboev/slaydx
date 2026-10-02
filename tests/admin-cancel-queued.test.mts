@@ -2,6 +2,7 @@ import test, { after } from "node:test";
 import assert from "node:assert/strict";
 import { randomBytes, randomInt } from "node:crypto";
 import { createIsolatedDb } from "./helpers/isolated-db.mts";
+import type { AdminActor } from "../lib/server/admin-handler.ts";
 
 /**
  * `cancelQueuedInTx` (lib/server/admin-job-actions.ts): the one transaction-
@@ -28,6 +29,7 @@ const iso = hasDb ? await createIsolatedDb("cancelq") : { isolated: false, drop:
 const { query, queryOne, ensureMigrated, transaction, pool } = await import("../lib/server/db.ts");
 const jobs = await import("../lib/server/jobs.ts");
 const { ADMIN_CANCEL_NOTE, cancelQueuedInTx } = await import("../lib/server/admin-job-actions.ts");
+const { setUserBlocked } = await import("../lib/server/admin-users.ts");
 
 after(async () => {
   if (!hasDb) return;
@@ -112,4 +114,83 @@ test("cancelQueuedInTx: a free job is cancelled with nothing to refund; a rollba
   assert.equal(await status(paid), "QUEUED", "runs inside the caller's transaction");
   assert.equal((await refundRows(paid)).length, 0);
   assert.equal(await balance(uid), 600);
+});
+
+// ───────────────────────────── lock order (P4 money review, finding 1)
+
+/** Sessions of this database waiting on a row lock (`pg_stat_activity`). */
+async function waitForLockWaiters(n: number): Promise<void> {
+  const deadline = Date.now() + 5_000;
+  for (;;) {
+    const row = await queryOne<{ n: number }>(
+      `SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'`,
+    );
+    if ((row?.n ?? 0) >= n) return;
+    if (Date.now() > deadline) throw new Error(`lock waiters: kutilgan ${n}, bor ${row?.n ?? 0}`);
+    await new Promise((r) => setTimeout(r, 20));
+  }
+}
+
+async function mkActor(): Promise<AdminActor> {
+  const userId = await mkUser(0);
+  const acc = await queryOne<{ id: string }>(
+    `INSERT INTO admin_accounts (user_id, role, status, totp_enabled_at, totp_secret_enc)
+     VALUES ($1, 'owner', 'active', now(), 'v1.fixture-never-opened') RETURNING id::text AS id`,
+    [userId],
+  );
+  return { id: acc!.id, userId, role: "owner", permissions: [], sessionId: "0", ip: "10.0.0.1", userAgent: null, requestId: null, user: {} as never, session: {} as never };
+}
+
+/**
+ * Deterministic version of the race the review reproduced: block(cancelQueued)
+ * against the user's own DELETE of a queued job. Every other money path locks
+ * generations → users (`cancelGeneration`, queue-ttl, reconcile, admin
+ * cancel/fail, `commitJobResult`); the block must do the same, otherwise the
+ * two wait on each other and one dies with 40P01 (a 500, nothing cancelled).
+ *
+ * Interleaving, forced with a row-lock barrier on the LOWER-id job (the block
+ * locks `ORDER BY id`, so it stops there before reaching the higher one):
+ *   1. the barrier holds job `lo`;
+ *   2. the block starts and waits on `lo`;
+ *   3. the user cancels `hi`: it locks `hi`, then needs the users row —
+ *      with the old order the block already holds it (deadlock once the
+ *      barrier lifts); with the fixed order the cancel just completes;
+ *   4. the barrier lifts.
+ * Mutation check: locking the users row before the jobs again → one side is
+ * rejected with 40P01.
+ */
+test("setUserBlocked(cancelQueued) vs the user's own cancel: no deadlock, exactly one refund per job", { skip }, async () => {
+  const actor = await mkActor();
+  const uid = await mkUser(10_000);
+  const [lo, hi] = [await enqueue(uid, 1_000), await enqueue(uid, 1_000)].sort();
+  assert.equal(await balance(uid), 8_000);
+
+  const barrier = await pool().connect();
+  let block: Promise<unknown> | undefined;
+  let cancel: Promise<boolean> | undefined;
+  try {
+    await barrier.query("BEGIN");
+    await barrier.query(`SELECT 1 FROM generations WHERE id = $1 FOR UPDATE`, [lo]);
+    block = setUserBlocked(actor, uid, { blocked: true, reason: "Poyga sinovi", revokeSessions: false, cancelQueued: true, revokeLinks: false });
+    await waitForLockWaiters(1);
+    cancel = jobs.cancelGeneration(hi, uid);
+    // Old order: the cancel holds `hi` and waits on the users row (2 waiters). Fixed order: it finishes.
+    await Promise.race([waitForLockWaiters(2), cancel]);
+  } finally {
+    await barrier.query("ROLLBACK").catch(() => {});
+    barrier.release();
+  }
+  const [b, c] = await Promise.allSettled([block!, cancel!]);
+  assert.equal(b.status, "fulfilled", `block: ${b.status === "rejected" ? String((b.reason as Error).message) : ""}`);
+  assert.equal(c.status, "fulfilled", `cancel: ${c.status === "rejected" ? String((c.reason as Error).message) : ""}`);
+  assert.equal(c.status === "fulfilled" && c.value, true, "the user's cancel of `hi` wins");
+  const effects = (b as PromiseFulfilledResult<{ sideEffects: { jobsCancelled: number; refunds: number } }>).value.sideEffects;
+  assert.deepEqual({ jobsCancelled: effects.jobsCancelled, refunds: effects.refunds }, { jobsCancelled: 1, refunds: 1 }, "the block cancels only `lo`");
+
+  assert.equal(await status(lo), "REVOKED");
+  assert.equal(await status(hi), "REVOKED");
+  assert.equal((await refundRows(lo)).length, 1);
+  assert.equal((await refundRows(hi)).length, 1);
+  assert.equal(await balance(uid), 10_000, "each job refunded exactly once");
+  assert.equal((await queryOne<{ is_blocked: boolean }>(`SELECT is_blocked FROM users WHERE id = $1`, [uid]))!.is_blocked, true);
 });
