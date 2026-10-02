@@ -108,6 +108,13 @@ test("WalletAdjustDialog: credit → POST with one Idempotency-Key, exact body, 
   assert.ok(toasts().some((m) => m.includes("Balans tuzatildi")), `toast: ${toasts().join(" | ")}`);
 });
 
+test("WalletAdjustDialog: only bonus and balance are adjustable — no legacy quota option, even for a quota holder", () => {
+  openWallet({ user: { ...USER, quota: 5_000 } });
+  const options = Array.from((screen.getByLabelText("Hamyon") as HTMLSelectElement).options).map((o) => o.value);
+  assert.deepEqual(options, ["points", "balance"], "MUTATSIYA: quota is read-only since the subscription removal");
+  assert.ok(!screen.queryByRole("option", { name: /Kvota/ }));
+});
+
 test("WalletAdjustDialog: 409 insufficient shows the available amount inline, the retry reuses the same key", async () => {
   const calls = stubFetch([
     () => json(409, { error: "Mablag' yetarli emas", code: "insufficient", available: 40 }),
@@ -255,6 +262,9 @@ test("ExternalRefundDialog: 409 amount shows the remaining soum inline; unchecki
   const calls = stubFetch([() => json(409, { error: "Summa oshdi", code: "amount", remaining: 2000 })]);
   const order = { id: "7a1b2c3d-4e5f-4a6b-8c7d-8e9f0a1b2c3d", amountSoum: 10_000, purpose: "pro" as const, recordedSoum: 0 };
   render(h(ExternalRefundDialog, { open: true, onClose: () => {}, order }));
+  // A legacy Pro order is clawed back from the balance (its quota was merged into it).
+  assert.ok(screen.getByText(/^Balansdan shu summaga mos miqdor yechiladi/), "MUTATSIYA: pro → balance, not quota");
+  assert.ok(!screen.queryByText(/kvota/i));
   fireEvent.change(screen.getByLabelText("Summa (so'm)"), { target: { value: "3000" } });
   fireEvent.click(screen.getByLabelText(/Hamyondan yechish/));
   fireEvent.change(screen.getByLabelText("Sabab"), { target: { value: "Payme chargeback" } });

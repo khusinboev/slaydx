@@ -523,3 +523,58 @@ test("LedgerTable: reference rendered as a link only when it resolved; embedded 
   assert.equal(calls[1]!.params.get("reference"), "signup:42");
   assert.deepEqual(log, []);
 });
+
+/* ───────────────────────────── subscription removal: legacy "(eski)" labels ───────────────────────────── */
+
+test("FinancePage summary: legacy Pro revenue and quota liability show with «(eski)» only while non-zero", async () => {
+  stubFetch({ "GET /api/admin/finance/summary": () => json(200, SUMMARY) });
+  mount(h(FinancePage), "/admin/finance?from=2026-09-10&to=2026-09-11");
+  await screen.findByText("112 507 tanga");
+  assert.ok(screen.getByText("Majburiyat: kvota (eski)"), "15 000 legacy quota is still owed");
+  assert.ok(screen.getByText("15 000 tanga"));
+  const breakdown = screen.getByRole("region", { name: "Tushum taqsimoti" });
+  assert.ok(within(breakdown).getByText("Pro obuna (eski)"), "a legacy Pro order in range");
+  assert.ok(!screen.queryByText(/Pro kvota/));
+  cleanup();
+
+  const none = {
+    ...SUMMARY,
+    revenue: { ...SUMMARY.revenue, byPurpose: { topup: { soum: 120_000, orders: 2 }, pro: { soum: 0, orders: 0 } } },
+    cashSpend: { ...SUMMARY.cashSpend, quota: 0 },
+    adjustments: { ...SUMMARY.adjustments, quota: 0 },
+    liabilities: { ...SUMMARY.liabilities, quota: 0 },
+  };
+  stubFetch({ "GET /api/admin/finance/summary": () => json(200, none) });
+  mount(h(FinancePage), "/admin/finance?from=2026-09-10&to=2026-09-11");
+  await screen.findByText("112 507 tanga");
+  assert.ok(!screen.queryByText(/kvota/i), "MUTATSIYA: no quota tile or hint once everything is 0");
+  const b2 = screen.getByRole("region", { name: "Tushum taqsimoti" });
+  assert.ok(within(b2).getByText("Balansni to'ldirish"));
+  assert.ok(!within(b2).queryByText(/Pro/), "MUTATSIYA: no Pro row without Pro orders");
+});
+
+test("OrdersTable: a legacy Pro order is marked «Pro (eski)»; the purpose filter says «Pro obuna (eski)»", async () => {
+  stubFetch({ "GET /api/admin/orders": () => json(200, page([{ ...ORDER, id: ORDER_ID, purpose: "pro", amountSoum: 15_000 }])) });
+  const { container } = mount(h(OrdersTable));
+  await waitFor(() => assert.equal(dataRows(container).length, 1));
+  assert.ok(within(dataRows(container)[0] as HTMLElement).getByText("Pro (eski)"));
+  const purpose = screen.getByLabelText("Maqsad") as HTMLSelectElement;
+  assert.ok(Array.from(purpose.options).some((o) => o.value === "pro" && o.textContent === "Pro obuna (eski)"));
+});
+
+test("LedgerTable: a quota_merge row shows «Kvota → balans»; the quota column hides when no row on the page moved quota", async () => {
+  const merge = { id: "8", userId: "42", userName: "Ali Valiyev", kind: "quota_merge", points: 0, quota: -12_000, balance: 12_000, reference: "quota-merge:42", note: "Kvota balansga o'tkazildi: 12000 tanga", createdAt: "2026-10-02T06:00:00.000Z", link: null };
+  const topup = { id: "7", userId: "42", userName: "Ali Valiyev", kind: "topup", points: 0, quota: 0, balance: 20_000, reference: "click:1", note: null, createdAt: "2026-10-01T06:00:00.000Z", link: null };
+  stubFetch({ "GET /api/admin/transactions": () => json(200, page([merge, topup])) });
+  const { container } = mount(h(LedgerTable, { embedded: true, fixedFilters: { userId: "42" } }), "/admin/users/42");
+  await waitFor(() => assert.equal(dataRows(container).length, 2));
+  const row = container.querySelector('tr[data-row-key="8"]') as HTMLElement;
+  assert.ok(within(row).getByText("Kvota → balans"));
+  assert.ok(within(container.querySelector("thead") as HTMLElement).getByText("Kvota (eski)"));
+  cleanup();
+
+  stubFetch({ "GET /api/admin/transactions": () => json(200, page([topup])) });
+  const second = mount(h(LedgerTable, { embedded: true, fixedFilters: { userId: "42" } }), "/admin/users/42");
+  await waitFor(() => assert.equal(dataRows(second.container).length, 1));
+  assert.ok(!within(second.container.querySelector("thead") as HTMLElement).queryByText(/Kvota/), "MUTATSIYA: an all-zero quota column is hidden");
+});
