@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { AiGroupBy } from "@/lib/admin-api/ai";
 import { isIsoDate } from "@/lib/admin-format";
-import { TabPanel, Tabs, presetRange, validateRange, type DateRange } from "@/components/admin/ui";
+import { Card, Forbidden, TabPanel, Tabs, presetRange, validateRange, type DateRange } from "@/components/admin/ui";
 import { CostTab } from "./CostTab";
 import { ProvidersTab } from "./ProvidersTab";
 import { DEFAULT_COST_SORT, DEFAULT_GROUP_BY, GROUP_BY_VALUES } from "./shared";
@@ -39,6 +39,9 @@ export function AiPage() {
   const rawGroup = params.get("groupBy");
   const groupBy: AiGroupBy = GROUP_BY_VALUES.includes(rawGroup as AiGroupBy) ? (rawGroup as AiGroupBy) : DEFAULT_GROUP_BY;
   const sort = params.get("sort");
+  // A 403 from either tab (both need ai.view): only the forbidden state is shown, without tabs.
+  const [forbidden, setForbidden] = useState(false);
+  const onForbidden = useCallback(() => setForbidden(true), []);
 
   const update = useCallback(
     (patch: Record<string, string | null>) => {
@@ -60,25 +63,32 @@ export function AiPage() {
         <p className="text-muted-foreground text-[13px]">Xarajat manbasi: tugagan, xato bilan tugagan va bepul AI chaqiruvlari yozuvlari (admin hisoboti).</p>
       </header>
 
-      <div>
-        <Tabs tabs={TABS} value={tab} onChange={(id) => update({ tab: id === "cost" ? null : id })} ariaLabel="AI bo'limlari" idPrefix={ID_PREFIX} />
-        <TabPanel idPrefix={ID_PREFIX} id={tab}>
-          {tab === "cost" ? (
-            <CostTab
-              range={range}
-              defaultRange={defaultRange}
-              groupBy={groupBy}
-              sort={sort}
-              onRange={(r) => update({ from: r.from, to: r.to })}
-              onGroupBy={(g) => update({ groupBy: g === DEFAULT_GROUP_BY ? null : g })}
-              onSort={(s) => update({ sort: s === DEFAULT_COST_SORT ? null : s })}
-              onClear={() => update({ from: null, to: null, groupBy: null, sort: null })}
-            />
-          ) : (
-            <ProvidersTab />
-          )}
-        </TabPanel>
-      </div>
+      {forbidden ? (
+        <Card>
+          <Forbidden />
+        </Card>
+      ) : (
+        <div>
+          <Tabs tabs={TABS} value={tab} onChange={(id) => update({ tab: id === "cost" ? null : id })} ariaLabel="AI bo'limlari" idPrefix={ID_PREFIX} />
+          <TabPanel idPrefix={ID_PREFIX} id={tab}>
+            {tab === "cost" ? (
+              <CostTab
+                range={range}
+                defaultRange={defaultRange}
+                groupBy={groupBy}
+                sort={sort}
+                onRange={(r) => update({ from: r.from, to: r.to })}
+                onGroupBy={(g) => update({ groupBy: g === DEFAULT_GROUP_BY ? null : g })}
+                onSort={(s) => update({ sort: s === DEFAULT_COST_SORT ? null : s })}
+                onClear={() => update({ from: null, to: null, groupBy: null, sort: null })}
+                onForbidden={onForbidden}
+              />
+            ) : (
+              <ProvidersTab onForbidden={onForbidden} />
+            )}
+          </TabPanel>
+        </div>
+      )}
     </div>
   );
 }

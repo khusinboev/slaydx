@@ -9,7 +9,7 @@ import type { LedgerLink } from "@/lib/admin-api/payments";
 export function DeltaCell({ value }: { value: number }) {
   if (!value) return <span className="text-muted-foreground">—</span>;
   return (
-    <span className={cn("tabular-nums font-medium", value > 0 ? "text-success-text" : "text-destructive")}>
+    <span className={cn("tabular-nums font-medium", value > 0 ? "text-badge-success-text" : "text-destructive")}>
       {fmtNumber(value, { sign: true })}
     </span>
   );

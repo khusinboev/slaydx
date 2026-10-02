@@ -235,6 +235,10 @@ test("list: 403 renders Forbidden", async () => {
   stubRoutes(() => json(403, { error: "Ruxsat yo'q", code: "forbidden" }));
   mount(h(LinksTable));
   await screen.findByText("Ruxsat yo'q");
+  // Forbidden is the only state: no filter bar above it (UX #9).
+  assert.ok(!screen.queryByLabelText("Mavzu bo'yicha qidirish"));
+  assert.ok(!screen.queryByRole("radiogroup", { name: "Havola holati" }));
+  assert.ok(!screen.queryByLabelText("Turi"));
 });
 
 test("list: filters write the URL and the request carries them", async () => {

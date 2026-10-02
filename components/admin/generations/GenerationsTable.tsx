@@ -43,7 +43,7 @@ import {
   type FilterOption,
 } from "@/components/admin/ui";
 import { useCan } from "@/components/admin/shell/admin-identity";
-import { GenerationStatusPill, SORT_OPTIONS, STATUS_OPTIONS, chargeText, isCharged, shortId, toolLabel } from "./shared";
+import { ChargeLines, GenerationStatusPill, SORT_OPTIONS, STATUS_OPTIONS, isCharged, shortId, toolLabel } from "./shared";
 
 /* ───────────────────────────── filter state ───────────────────────────── */
 
@@ -297,46 +297,73 @@ export function GenerationsTable({ tools, fixedFilters, embedded = false, pageSi
 
   const clearFilters = () => setFilters({ ...EMPTY_FILTERS, sort: filters.sort });
 
+  // Order and widths keep the default sort column (Yaratilgan) and the status inside the
+  // 990 px content box at 1280: long text is capped and truncated (full text in `title`),
+  // the short id rides under the topic, and the secondary numbers come last.
   const columns: Column<AdminGenerationListItem>[] = [
     {
       id: "topic",
-      header: "Mavzu",
-      className: "min-w-[12rem] max-w-[20rem]",
+      header: "Mavzu · ID",
       cell: (g) => (
-        <div className="flex min-w-0 flex-col gap-0.5">
-          <span className="line-clamp-2 break-words">{g.topic || "—"}</span>
-          {g.error ? (
-            <span className="text-destructive truncate text-xs" title={g.error}>
-              {g.error}
+        <div className="flex w-[15rem] max-w-full min-w-0 flex-col gap-0.5">
+          <span className="truncate" title={g.topic || undefined}>
+            {g.topic || "—"}
+          </span>
+          <span className="flex min-w-0 items-baseline gap-1.5 text-xs">
+            <span className="text-muted-foreground shrink-0 font-mono" title={g.id}>
+              {shortId(g.id)}
             </span>
-          ) : null}
+            {g.error ? (
+              <span className="text-destructive truncate" title={g.error}>
+                {g.error}
+              </span>
+            ) : null}
+          </span>
         </div>
       ),
     },
-    { id: "id", header: "ID", className: "font-mono text-xs", cell: (g) => shortId(g.id) },
     ...(pinnedUser
       ? []
       : [
           {
             id: "user",
             header: "Foydalanuvchi",
-            className: "max-w-[12rem]",
             cell: (g: AdminGenerationListItem) => (
-              <Link href={`/admin/users/${encodeURIComponent(g.userId)}`} className="hover:text-primary block truncate underline-offset-2 hover:underline">
+              <Link
+                href={`/admin/users/${encodeURIComponent(g.userId)}`}
+                title={g.userName || `#${g.userId}`}
+                className="hover:text-primary block max-w-[9rem] truncate underline-offset-2 hover:underline"
+              >
                 {g.userName || `#${g.userId}`}
               </Link>
             ),
           },
         ]),
-    { id: "tool", header: "Vosita", className: "whitespace-nowrap", cell: (g) => toolLabel(tools, g.toolId) },
+    {
+      id: "tool",
+      header: "Vosita",
+      cell: (g) => (
+        <span className="block max-w-[8rem] truncate" title={toolLabel(tools, g.toolId)}>
+          {toolLabel(tools, g.toolId)}
+        </span>
+      ),
+    },
     { id: "status", header: "Holat", cell: (g) => <GenerationStatusPill status={g.status} stuck={g.stuck} /> },
-    { id: "price", header: "Narx", align: "right", className: "tabular-nums whitespace-nowrap", cell: (g) => fmtNumber(g.price) },
+    {
+      id: "created",
+      header: "Yaratilgan",
+      sortKey: "created_desc",
+      sortKeyReverse: "created_asc",
+      className: "tabular-nums whitespace-nowrap",
+      cell: (g) => fmtDateTime(g.createdAt),
+    },
+    { id: "price", header: "Narx, tanga", align: "right", className: "tabular-nums whitespace-nowrap", cell: (g) => fmtNumber(g.price) },
     {
       id: "charged",
-      header: "Yechilgan",
-      className: "text-xs whitespace-nowrap tabular-nums",
+      header: "Yechilgan, tanga",
+      className: "text-xs tabular-nums",
       hideOnCard: true,
-      cell: (g) => chargeText(g.charged),
+      cell: (g) => <ChargeLines charged={g.charged} />,
     },
     {
       id: "refunded",
@@ -360,14 +387,6 @@ export function GenerationsTable({ tools, fixedFilters, embedded = false, pageSi
       cell: (g) => fmtDuration(g.durationSec),
     },
     { id: "cost", header: "AI $", align: "right", className: "tabular-nums whitespace-nowrap", cell: (g) => (g.costUsd === null ? "—" : fmtUsd(g.costUsd, 4)) },
-    {
-      id: "created",
-      header: "Yaratilgan",
-      sortKey: "created_desc",
-      sortKeyReverse: "created_asc",
-      className: "tabular-nums whitespace-nowrap",
-      cell: (g) => fmtDateTime(g.createdAt),
-    },
   ];
 
   let body: ReactNode;

@@ -10,6 +10,7 @@ import { getReconciliation, type Reconciliation, type ReconciliationCheck, type 
 import { ORDER_STATE_LABEL, PROVIDER_LABEL, PURPOSE_LABEL, shortId } from "@/components/admin/payments/labels";
 import { useResource } from "@/components/admin/payments/list-state";
 import { OptionalRangeFilter } from "@/components/admin/payments/OptionalRange";
+import { useReportForbidden } from "./forbidden";
 
 export const TIMEOUT_TEXT = "Vaqt tugadi — oraliqni toraytiring";
 
@@ -125,14 +126,26 @@ function CheckRow({ c }: { c: ReconciliationCheck }) {
 export function ReconciliationView({
   walletRange,
   onWalletRangeChange,
+  onForbidden,
 }: {
   walletRange: { from: string; to: string };
   onWalletRangeChange: (r: { from: string; to: string }) => void;
+  /** 403: the page drops its tabs. */
+  onForbidden?: () => void;
 }) {
   const key = `${walletRange.from}:${walletRange.to}`;
   const { state, retry } = useResource<Reconciliation>(key, (signal) => getReconciliation(walletRange, { signal }));
   const data = state.data;
   const issues = data?.checks.filter((c) => c.timedOut || (c.count ?? 0) > 0).length ?? 0;
+  useReportForbidden(state.status === "forbidden", onForbidden);
+  // 403: the forbidden state is all there is — no range filter or re-check button above it.
+  if (state.status === "forbidden") {
+    return (
+      <div className="bg-card rounded-xl border">
+        <Forbidden />
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-w-0 flex-col gap-4">
@@ -150,11 +163,7 @@ export function ReconciliationView({
         </Button>
       </div>
 
-      {state.status === "forbidden" ? (
-        <div className="bg-card rounded-xl border">
-          <Forbidden />
-        </div>
-      ) : state.status === "error" ? (
+      {state.status === "error" ? (
         <div className="bg-card rounded-xl border">
           <ErrorState message={state.message} requestId={state.requestId} onRetry={retry} />
         </div>

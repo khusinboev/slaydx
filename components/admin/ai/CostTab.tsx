@@ -34,6 +34,7 @@ import {
   sortCostRows,
   usdText,
   useLoad,
+  useReportForbidden,
 } from "./shared";
 
 type CostData = { table: AiCostResponse; daily: AiCostResponse };
@@ -51,6 +52,7 @@ export function CostTab({
   onGroupBy,
   onSort,
   onClear,
+  onForbidden,
 }: {
   range: DateRange;
   defaultRange: DateRange;
@@ -60,6 +62,8 @@ export function CostTab({
   onGroupBy: (g: AiGroupBy) => void;
   onSort: (sort: string) => void;
   onClear: () => void;
+  /** 403: the page drops its tabs. */
+  onForbidden?: () => void;
 }) {
   const { from, to } = range;
   const load = useCallback(
@@ -72,6 +76,7 @@ export function CostTab({
     [from, to, groupBy],
   );
   const [state, retry] = useLoad(load);
+  useReportForbidden(state.status === "forbidden", onForbidden);
 
   const activeFilters = Number(from !== defaultRange.from || to !== defaultRange.to) + Number(groupBy !== DEFAULT_GROUP_BY);
 

@@ -26,9 +26,12 @@ export const RESOLVED_OPTIONS: ReadonlyArray<{ value: ResolvedView; label: strin
   { value: "all", label: "Hammasi" },
 ];
 
+/** Uzbek level names; the URL and the API keep `error` / `warn`. */
+export const LEVEL_LABEL: Readonly<Record<ErrorLevel, string>> = { error: "Xato", warn: "Ogohlantirish" };
+
 export const LEVEL_OPTIONS: ReadonlyArray<{ value: ErrorLevel; label: string }> = [
-  { value: "error", label: "error" },
-  { value: "warn", label: "warn" },
+  { value: "error", label: LEVEL_LABEL.error },
+  { value: "warn", label: LEVEL_LABEL.warn },
 ];
 
 const ID_RE = /^[1-9]\d{0,18}$/;

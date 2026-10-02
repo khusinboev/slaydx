@@ -4,7 +4,7 @@ import { RefreshCw } from "lucide-react";
 import { getAiProviders, type AiBreaker, type AiLimiter, type AiProcess, type AiProviderKeyName, type AiProvidersResponse, type AiUsage24h } from "@/lib/admin-api/ai";
 import { fmtPercent, fmtRelative } from "@/lib/admin-format";
 import { Badge, Button, Card, CardBody, CardHeader, DataTable, EmptyState, ErrorState, Forbidden, Skeleton, type Column, type Tone } from "@/components/admin/ui";
-import { numText, soumText, usdText, useLoad } from "./shared";
+import { numText, soumText, usdText, useLoad, useReportForbidden } from "./shared";
 
 /** Order and Uzbek names of the key grid (the API sends one boolean per name). */
 const KEY_LABELS: ReadonlyArray<{ name: AiProviderKeyName; label: string; hint: string }> = [
@@ -26,8 +26,9 @@ const BREAKER_TONE: Record<AiBreaker["state"], Tone> = { closed: "success", open
 const loadProviders = (signal: AbortSignal): Promise<AiProvidersResponse> => getAiProviders({ signal });
 
 /** Tab "Provayderlar": key presence, breaker states and limiter load per process, 24 h usage. */
-export function ProvidersTab() {
+export function ProvidersTab({ onForbidden }: { onForbidden?: () => void } = {}) {
   const [state, retry] = useLoad(loadProviders);
+  useReportForbidden(state.status === "forbidden", onForbidden);
 
   return (
     <div className="flex flex-col gap-4 pt-4">

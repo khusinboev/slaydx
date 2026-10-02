@@ -1,6 +1,7 @@
 "use client";
 
-import { TabPanel, Tabs, presetRange, validateRange, type DateRange } from "@/components/admin/ui";
+import { useCallback, useState } from "react";
+import { Forbidden, TabPanel, Tabs, presetRange, validateRange, type DateRange } from "@/components/admin/ui";
 import { isIsoDate } from "@/lib/admin-format";
 import { useUrlFilters } from "@/components/admin/payments/list-state";
 import { FinanceSummaryView } from "./FinanceSummaryView";
@@ -31,6 +32,9 @@ export function FinancePage() {
   const tab: TabId = TABS.some((t) => t.id === v.tab) ? (v.tab as TabId) : "summary";
   const urlRange = { from: v.from, to: v.to };
   const range: DateRange = isValidRange(urlRange) ? urlRange : presetRange("30d");
+  // A 403 from any tab: every tab needs finance.view, so only the forbidden state is shown, without tabs.
+  const [forbidden, setForbidden] = useState(false);
+  const onForbidden = useCallback(() => setForbidden(true), []);
 
   return (
     <div className="flex min-w-0 flex-col gap-5">
@@ -38,22 +42,34 @@ export function FinancePage() {
         <h1 className="text-[22px] font-semibold tracking-tight">Moliya</h1>
         <p className="text-muted-foreground text-[13px]">Tushum, majburiyatlar, hisob kitobi va muvofiqlashtirish</p>
       </header>
-      <Tabs
-        idPrefix="finance"
-        ariaLabel="Moliya bo'limlari"
-        tabs={TABS}
-        value={tab}
-        onChange={(id) => store.set({ tab: id === "summary" ? "" : id })}
-      />
-      <TabPanel idPrefix="finance" id={tab}>
-        {tab === "summary" ? (
-          <FinanceSummaryView range={range} onRangeChange={(r) => store.set({ from: r.from, to: r.to })} />
-        ) : tab === "ledger" ? (
-          <LedgerTable />
-        ) : (
-          <ReconciliationView walletRange={{ from: v.wfrom, to: v.wto }} onWalletRangeChange={(r) => store.set({ wfrom: r.from, wto: r.to })} />
-        )}
-      </TabPanel>
+      {forbidden ? (
+        <div className="bg-card rounded-xl border">
+          <Forbidden />
+        </div>
+      ) : (
+        <>
+        <Tabs
+          idPrefix="finance"
+          ariaLabel="Moliya bo'limlari"
+          tabs={TABS}
+          value={tab}
+          onChange={(id) => store.set({ tab: id === "summary" ? "" : id })}
+        />
+        <TabPanel idPrefix="finance" id={tab}>
+          {tab === "summary" ? (
+            <FinanceSummaryView range={range} onRangeChange={(r) => store.set({ from: r.from, to: r.to })} onForbidden={onForbidden} />
+          ) : tab === "ledger" ? (
+            <LedgerTable onForbidden={onForbidden} />
+          ) : (
+            <ReconciliationView
+              walletRange={{ from: v.wfrom, to: v.wto }}
+              onWalletRangeChange={(r) => store.set({ wfrom: r.from, wto: r.to })}
+              onForbidden={onForbidden}
+            />
+          )}
+        </TabPanel>
+        </>
+      )}
     </div>
   );
 }

@@ -5,7 +5,7 @@ import type { Overview } from "@/lib/admin-api/metrics";
 import { fmtNumber, fmtPercent, fmtSoum, fmtTanga, fmtUsd } from "@/lib/admin-format";
 import { KpiTile } from "@/components/admin/ui";
 import { useCan } from "@/components/admin/shell/admin-identity";
-import { percentDelta, pointsDelta } from "./format";
+import { percentDelta, pointsDelta, unitBreakable } from "./format";
 
 /** Tile labels in display order (the skeleton shows them while loading). */
 const LABELS = [
@@ -20,8 +20,14 @@ const LABELS = [
   "Marja",
   "Kutilayotgan to'lovlar",
 ] as const;
-// One column on narrow phones: exact money figures ("2 090 000 so'm") must not truncate.
-const GRID = "grid grid-cols-1 gap-2.5 min-[420px]:grid-cols-2 md:grid-cols-3 xl:grid-cols-5";
+// Two columns on phones, as in the prototype; money values wrap before the unit
+// (`Money`) instead of being cut off, so exact figures stay readable at 360 px.
+const GRID = "grid grid-cols-2 gap-2.5 md:grid-cols-3 xl:grid-cols-5";
+
+/** A formatted amount that may wrap between the number and its unit (one text node). */
+function Money({ text }: { text: string }) {
+  return <span className="block whitespace-normal">{unitBreakable(text)}</span>;
+}
 
 export function KpiGridSkeleton() {
   return (
@@ -72,19 +78,19 @@ export function KpiGrid({ data }: { data: Overview }) {
         />
         <KpiTile
           label="Tushum"
-          value={fmtSoum(c.revenueSoum.total)}
+          value={<Money text={fmtSoum(c.revenueSoum.total)} />}
           delta={percentDelta(c.revenueSoum.total, p.revenueSoum.total, "up-good")}
           hint={`${fmtNumber(c.paidOrders)} ta to'lov · Click ${fmtNumber(c.revenueSoum.click)} · Payme ${fmtNumber(c.revenueSoum.payme)}`}
         />
         <KpiTile
           label="Naqd sarf"
-          value={fmtTanga(c.cashSpendTanga)}
+          value={<Money text={fmtTanga(c.cashSpendTanga)} />}
           delta={percentDelta(c.cashSpendTanga, p.cashSpendTanga, "up-good")}
           hint={`Bonus ball: ${fmtNumber(c.bonusSpendPoints)}`}
         />
         <KpiTile
           label="Qaytarishlar"
-          value={fmtTanga(c.refunds.tanga)}
+          value={<Money text={fmtTanga(c.refunds.tanga)} />}
           delta={percentDelta(c.refunds.tanga, p.refunds.tanga, "up-bad")}
           hint={`${fmtNumber(c.refunds.count)} ta · ${fmtNumber(c.refunds.points)} ball`}
         />
@@ -96,7 +102,7 @@ export function KpiGrid({ data }: { data: Overview }) {
         />
         <KpiTile
           label="Marja"
-          value={fmtSoum(c.marginSoum)}
+          value={<Money text={fmtSoum(c.marginSoum)} />}
           delta={percentDelta(c.marginSoum, p.marginSoum, "up-good")}
           hint={`Tushum − AI × ${fmtNumber(data.soumPerUsd)} so'm/$`}
         />

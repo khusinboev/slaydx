@@ -116,6 +116,8 @@ export function AuditPage() {
   }
 
   const items = state.status === "ready" ? state.data.items : [];
+  // 403: the forbidden state is all there is — no filters, export or pager around it.
+  const forbidden = state.status === "forbidden";
 
   const columns: Column<AuditItem>[] = [
     { id: "at", header: "Vaqt", className: "whitespace-nowrap tabular-nums", cell: (r) => fmtDateTime(r.at) },
@@ -159,68 +161,70 @@ export function AuditPage() {
           <h1 className="text-[22px] font-semibold tracking-tight">Audit jurnali</h1>
           <p className="text-muted-foreground text-[13px]">Faqat qo&apos;shiladi — o&apos;zgartirish yoki o&apos;chirish bazada taqiqlangan.</p>
         </div>
-        {canExport ? (
+        {canExport && !forbidden ? (
           <Button onClick={exportCsv} loading={exporting} icon={<Download className="size-4" aria-hidden="true" />}>
             CSV yuklab olish
           </Button>
         ) : null}
       </header>
 
-      <Card className="flex flex-col gap-3 p-3">
-        <FilterBar activeCount={active} onClear={clearFilters}>
-          <SelectFilter label="Admin" value={filters.adminId} onChange={(v) => update({ adminId: v })} options={adminOptions} allLabel="Barcha adminlar" />
-          <SearchInput
-            value={filters.action}
-            onChange={(v) => update({ action: v.trim() })}
-            placeholder="Amal boshlanishi, masalan users.wallet"
-            ariaLabel="Amal bo'yicha filtr"
-          />
-          <SelectFilter
-            label="Nishon turi"
-            value={filters.targetType}
-            onChange={(v) => update({ targetType: v })}
-            options={targetTypeOptions(filters.targetType)}
-            allLabel="Barcha turlar"
-          />
-          <SearchInput
-            value={filters.targetId}
-            onChange={(v) => update({ targetId: v.trim() })}
-            placeholder="Nishon ID (aniq)"
-            ariaLabel="Nishon identifikatori bo'yicha filtr"
-          />
-          <div className="flex min-w-0 flex-col gap-1">
-            <span className="text-muted-foreground text-[11px] font-semibold">Natija</span>
-            <Segmented
-              ariaLabel="Natija bo'yicha"
-              options={OUTCOME_OPTIONS}
-              value={filters.outcome}
-              onChange={(v) => update({ outcome: v })}
+      {forbidden ? null : (
+        <Card className="flex flex-col gap-3 p-3">
+          <FilterBar activeCount={active} onClear={clearFilters}>
+            <SelectFilter label="Admin" value={filters.adminId} onChange={(v) => update({ adminId: v })} options={adminOptions} allLabel="Barcha adminlar" />
+            <SearchInput
+              value={filters.action}
+              onChange={(v) => update({ action: v.trim() })}
+              placeholder="Amal boshlanishi, masalan users.wallet"
+              ariaLabel="Amal bo'yicha filtr"
             />
-          </div>
-        </FilterBar>
-        <div className="flex flex-wrap items-center gap-2">
-          {filters.from && filters.to ? (
-            <>
-              <DateRangePicker ariaLabel="Davr" value={{ from: filters.from, to: filters.to }} onChange={(r) => update({ from: r.from, to: r.to })} />
-              <Button size="sm" variant="ghost" onClick={() => update({ from: null, to: null })}>
-                Sanani olib tashlash
+            <SelectFilter
+              label="Nishon turi"
+              value={filters.targetType}
+              onChange={(v) => update({ targetType: v })}
+              options={targetTypeOptions(filters.targetType)}
+              allLabel="Barcha turlar"
+            />
+            <SearchInput
+              value={filters.targetId}
+              onChange={(v) => update({ targetId: v.trim() })}
+              placeholder="Nishon ID (aniq)"
+              ariaLabel="Nishon identifikatori bo'yicha filtr"
+            />
+            <div className="flex min-w-0 flex-col gap-1">
+              <span className="text-muted-foreground text-[11px] font-semibold">Natija</span>
+              <Segmented
+                ariaLabel="Natija bo'yicha"
+                options={OUTCOME_OPTIONS}
+                value={filters.outcome}
+                onChange={(v) => update({ outcome: v })}
+              />
+            </div>
+          </FilterBar>
+          <div className="flex flex-wrap items-center gap-2">
+            {filters.from && filters.to ? (
+              <>
+                <DateRangePicker ariaLabel="Davr" value={{ from: filters.from, to: filters.to }} onChange={(r) => update({ from: r.from, to: r.to })} />
+                <Button size="sm" variant="ghost" onClick={() => update({ from: null, to: null })}>
+                  Sanani olib tashlash
+                </Button>
+              </>
+            ) : (
+              <Button
+                size="sm"
+                onClick={() => {
+                  const r = presetRange("7d");
+                  update({ from: r.from, to: r.to });
+                }}
+              >
+                Sana bo&apos;yicha filtr
               </Button>
-            </>
-          ) : (
-            <Button
-              size="sm"
-              onClick={() => {
-                const r = presetRange("7d");
-                update({ from: r.from, to: r.to });
-              }}
-            >
-              Sana bo&apos;yicha filtr
-            </Button>
-          )}
-        </div>
-      </Card>
+            )}
+          </div>
+        </Card>
+      )}
 
-      {state.status === "forbidden" ? (
+      {forbidden ? (
         <Card>
           <Forbidden />
         </Card>

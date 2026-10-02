@@ -3,15 +3,15 @@
 import Link from "next/link";
 import type { AuditOutcome } from "@/lib/admin-api/audit";
 import { Badge, type Tone } from "@/components/admin/ui";
-import { TARGET_TYPE_LABELS, targetHref } from "./shared";
+import { OUTCOME_LABEL, targetHref, targetTypeLabel } from "./shared";
 
 const OUTCOME_TONE: Record<AuditOutcome, Tone> = { ok: "success", denied: "danger", failed: "warning" };
 
-/** ok / denied / failed with a dot, so the outcome is not conveyed by colour alone. */
+/** Bajarildi / Rad etildi / Muvaffaqiyatsiz with a dot, so the outcome is not conveyed by colour alone. */
 export function OutcomeBadge({ outcome }: { outcome: AuditOutcome }) {
   return (
     <Badge tone={OUTCOME_TONE[outcome] ?? "neutral"} dot>
-      {outcome}
+      {OUTCOME_LABEL[outcome] ?? outcome}
     </Badge>
   );
 }
@@ -25,9 +25,7 @@ export function TargetCell({ type, id }: { type: string | null; id: string | nul
   // Type on the first line, id on the second: long ids (setting keys) wrap under the type instead of splitting mid-word.
   const label = (
     <span className="flex min-w-0 flex-col">
-      <span className="text-muted-foreground" title={type ? TARGET_TYPE_LABELS[type] : undefined}>
-        {type ?? "?"}
-      </span>
+      <span className="text-muted-foreground font-sans">{type ? targetTypeLabel(type) : "?"}</span>
       {id ? <span className="break-words">{/^[0-9a-f-]{36}$/i.test(id) ? `${id.slice(0, 8)}…` : id}</span> : null}
     </span>
   );

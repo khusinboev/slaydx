@@ -13,10 +13,9 @@ import {
   type PriceRoundTo,
   type PricingItemResult,
 } from "@/lib/admin-api/pricing";
-import { fmtNumber } from "@/lib/admin-format";
 import { LadderCompare } from "./LadderCompare";
 import { parsePercentText } from "./Simulator";
-import { BIG_CHANGE_PP, marginTone, pctText, percentLabel, PROPAGATION_NOTE } from "./shared";
+import { BIG_CHANGE_PP, marginTone, pctText, percentLabel, PROPAGATION_NOTE, roundToText } from "./shared";
 import { shownSimulation, useSimulation } from "./useSimulation";
 import { Badge } from "@/components/admin/ui";
 
@@ -61,9 +60,9 @@ function Body({ toolId, title, adjust, ladder, onClose, onSaved }: PriceEditDial
       open
       onClose={onClose}
       title={`Narxni o'zgartirish — ${title}`}
-      description={`Hozir ${percentLabel(adjust.percent)} · yaxlitlash ${fmtNumber(adjust.roundTo)}. ${PROPAGATION_NOTE}`}
-      before={`${percentLabel(adjust.percent)} · ${fmtNumber(adjust.roundTo)}`}
-      after={next === null ? "—" : `${percentLabel(next.percent)} · ${fmtNumber(next.roundTo)}`}
+      description={`Hozir ${percentLabel(adjust.percent)} · yaxlitlash ${roundToText(adjust.roundTo)}. ${PROPAGATION_NOTE}`}
+      before={`${percentLabel(adjust.percent)} · ${roundToText(adjust.roundTo)}`}
+      after={next === null ? "—" : `${percentLabel(next.percent)} · ${roundToText(next.roundTo)}`}
       reason={{ minLength: 5 }}
       typedConfirmation={big && next ? String(next.percent) : undefined}
       confirmLabel="Qo'llash"
@@ -101,7 +100,7 @@ function Body({ toolId, title, adjust, ladder, onClose, onSaved }: PriceEditDial
           <select id={`${ids}-rt`} value={roundTo} onChange={(e) => setRoundTo(Number(e.target.value) as PriceRoundTo)} className={FIELD}>
             {PRICE_ROUND_TO.map((r) => (
               <option key={r} value={r}>
-                {fmtNumber(r)} so&apos;m
+                {roundToText(r)}
               </option>
             ))}
           </select>
@@ -116,7 +115,7 @@ function Body({ toolId, title, adjust, ladder, onClose, onSaved }: PriceEditDial
         </p>
       ) : null}
       {big ? (
-        <p className="text-warning text-xs font-semibold">Katta o&apos;zgarish (&gt; {BIG_CHANGE_PP} punkt): tasdiqlash uchun yangi foizni qayta yozing.</p>
+        <p className="text-badge-warning-text text-xs font-semibold">Katta o&apos;zgarish (&gt; {BIG_CHANGE_PP} punkt): tasdiqlash uchun yangi foizni qayta yozing.</p>
       ) : null}
     </ConfirmDialog>
   );

@@ -116,6 +116,8 @@ function OrdersView({ store, fixedFilters, embedded = false, pageSize }: OrdersT
 
   const activeCount = [v.state, v.provider, v.purpose, fixedUserId ? "" : v.userId, v.q, v.from || v.to].filter(Boolean).length;
 
+  // Key columns first (amount, state, the default sort Yaratilgan, credited, external refunds),
+  // so they fit the 990 px content box at 1280; provider details and the long txn id follow.
   const columns: Column<AdminOrderRow>[] = [
     {
       id: "id",
@@ -132,21 +134,14 @@ function OrdersView({ store, fixedFilters, embedded = false, pageSize }: OrdersT
           {
             id: "user",
             header: "Foydalanuvchi",
-            className: "max-w-[12rem]",
             cell: (o: AdminOrderRow) => (
-              <Link href={`/admin/users/${o.userId}`} className="block truncate underline-offset-2 hover:underline" title={o.userName}>
+              <Link href={`/admin/users/${o.userId}`} className="block max-w-[9rem] truncate underline-offset-2 hover:underline" title={o.userName || `#${o.userId}`}>
                 {o.userName || `#${o.userId}`}
               </Link>
             ),
           },
         ]),
-    { id: "provider", header: "Provayder", cell: (o) => PROVIDER_LABEL[o.provider] },
-    {
-      id: "purpose",
-      header: "Maqsad",
-      cell: (o) => (o.purpose === "pro" ? <StatusPill tone="primary">Pro</StatusPill> : <span className="whitespace-nowrap">To&apos;ldirish</span>),
-    },
-    { id: "amount", header: "Summa", align: "right", sortKey: "amount_desc", className: "tabular-nums", cell: (o) => fmtSoum(o.amountSoum) },
+    { id: "amount", header: "Summa", align: "right", sortKey: "amount_desc", className: "tabular-nums whitespace-nowrap", cell: (o) => fmtSoum(o.amountSoum) },
     {
       id: "state",
       header: "Holat",
@@ -156,21 +151,14 @@ function OrdersView({ store, fixedFilters, embedded = false, pageSize }: OrdersT
         </StatusPill>
       ),
     },
-    {
-      id: "txn",
-      header: "Tranzaksiya",
-      className: "max-w-[10rem]",
-      cell: (o) => (o.providerTxn ? <span className="block truncate font-mono text-[12px]" title={o.providerTxn}>{o.providerTxn}</span> : "—"),
-    },
     { id: "created", header: "Yaratilgan", sortKey: "created_desc", className: "tabular-nums whitespace-nowrap", cell: (o) => fmtDateTime(o.createdAt) },
-    { id: "performed", header: "To'langan", className: "tabular-nums whitespace-nowrap", cell: (o) => fmtDateTime(o.performTime) },
     {
       id: "credited",
       header: "Hisobga yozildi",
       align: "center",
       cell: (o) =>
         o.credited ? (
-          <Check className="text-success-text mx-auto size-4" aria-label="Ha" />
+          <Check className="text-badge-success-text mx-auto size-4" aria-label="Ha" />
         ) : o.state === "paid" ? (
           <StatusPill tone="danger">Yo&apos;q</StatusPill>
         ) : (
@@ -184,6 +172,18 @@ function OrdersView({ store, fixedFilters, embedded = false, pageSize }: OrdersT
       className: "tabular-nums",
       cell: (o) => (o.externalRefunds > 0 ? <StatusPill tone="danger">{fmtNumber(o.externalRefunds)}</StatusPill> : "—"),
     },
+    { id: "provider", header: "Provayder", cell: (o) => PROVIDER_LABEL[o.provider] },
+    {
+      id: "purpose",
+      header: "Maqsad",
+      cell: (o) => (o.purpose === "pro" ? <StatusPill tone="primary">Pro</StatusPill> : <span className="whitespace-nowrap">To&apos;ldirish</span>),
+    },
+    {
+      id: "txn",
+      header: "Tranzaksiya",
+      cell: (o) => (o.providerTxn ? <span className="block max-w-[10rem] truncate font-mono text-[12px]" title={o.providerTxn}>{o.providerTxn}</span> : "—"),
+    },
+    { id: "performed", header: "To'langan", className: "tabular-nums whitespace-nowrap", cell: (o) => fmtDateTime(o.performTime) },
   ];
 
   const clear = () => store.clear();

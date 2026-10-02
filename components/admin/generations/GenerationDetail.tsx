@@ -297,7 +297,7 @@ export function GenerationDetail({ id, tools }: { id: string; tools: ReadonlyArr
                 },
                 { label: "Mavzu", value: g.topic },
                 { label: "Narx", value: <span className="tabular-nums">{fmtTanga(g.price)}</span> },
-                { label: "Yechilgan", value: <span className="tabular-nums">{chargeText(g.charged)}</span> },
+                { label: "Yechilgan, tanga", value: <span className="tabular-nums">{chargeText(g.charged)}</span> },
                 { label: "Qaytarilgan", value: g.refunded ? <Badge tone="success">Ha</Badge> : unrefunded ? <Badge tone="danger">Yo&apos;q</Badge> : "—" },
                 { label: "Bosqich", value: g.step },
                 { label: "Jarayon", value: <span className="tabular-nums">{fmtNumber(g.progress)}%</span> },

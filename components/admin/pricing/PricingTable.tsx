@@ -7,12 +7,14 @@ import { Badge, DataTable, Sparkline, type Column } from "@/components/admin/ui"
 import {
   isDefaultAdjust,
   ladderRange,
+  listTrendDays,
   marginTone,
   markupText,
   pctText,
   percentLabel,
   recommendationOf,
   recommendationText,
+  roundToText,
   soumText,
   trendChangePct,
   trendValues,
@@ -59,6 +61,7 @@ export function PricingTable({
   onRowClick: (item: PricingItem) => void;
   empty: ReactNode;
 }) {
+  const trendDays = listTrendDays(days);
   const columns: Column<PricingItem>[] = [
     {
       id: "tool",
@@ -70,7 +73,7 @@ export function PricingTable({
         </span>
       ),
     },
-    { id: "base", header: "Asosiy narx", align: "right", className: "tabular-nums whitespace-nowrap text-xs", cell: (r) => ladderRange(r.ladder, "base") },
+    { id: "base", header: "Asosiy narx, tanga", align: "right", className: "tabular-nums whitespace-nowrap text-xs", cell: (r) => ladderRange(r.ladder, "base") },
     {
       id: "adjust",
       header: "Tuzatish",
@@ -78,14 +81,14 @@ export function PricingTable({
         isDefaultAdjust(r.adjust) ? (
           <Badge tone="neutral">100%</Badge>
         ) : (
-          <Badge tone="primary" title={`Yaxlitlash ${fmtNumber(r.adjust.roundTo)} so'm`}>
+          <Badge tone="primary" title={`Yaxlitlash ${roundToText(r.adjust.roundTo)}`}>
             {r.adjust.percent > 100 ? "▲" : "▼"} {percentLabel(r.adjust.percent)}
           </Badge>
         ),
     },
     {
       id: "effective",
-      header: "Amaldagi narx",
+      header: "Amaldagi narx, tanga",
       align: "right",
       className: "tabular-nums whitespace-nowrap text-xs",
       cell: (r) => <span className={isDefaultAdjust(r.adjust) ? undefined : "font-semibold"}>{ladderRange(r.ladder, "effective")}</span>,
@@ -118,15 +121,15 @@ export function PricingTable({
     },
     {
       id: "trend",
-      header: `Trend (${fmtNumber(days)} kun)`,
+      header: `Trend (${fmtNumber(trendDays)} kun)`,
       hideOnCard: true,
       className: "whitespace-nowrap",
       cell: (r) => {
         const change = trendChangePct(r.trend);
         return (
           <span className="inline-flex items-center gap-2">
-            <Sparkline values={trendValues(r.trend)} title={`${r.title}: ${fmtNumber(days)} kunlik tannarx trendi`} color={change !== null && change > 5 ? 2 : 4} width={64} height={24} formatValue={(n) => fmtNumber(Math.round(n))} />
-            <span className={`text-xs tabular-nums ${change === null ? "text-muted-foreground" : change > 5 ? "text-destructive" : change < -5 ? "text-success-text" : "text-muted-foreground"}`}>
+            <Sparkline values={trendValues(r.trend)} title={`${r.title}: ${fmtNumber(trendDays)} kunlik tannarx trendi`} color={change !== null && change > 5 ? 2 : 4} width={64} height={24} formatValue={(n) => fmtNumber(Math.round(n))} />
+            <span className={`text-xs tabular-nums ${change === null ? "text-muted-foreground" : change > 5 ? "text-destructive" : change < -5 ? "text-badge-success-text" : "text-muted-foreground"}`}>
               {change === null ? "—" : fmtPercent(change, { digits: 0, sign: true })}
             </span>
           </span>

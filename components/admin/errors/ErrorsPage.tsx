@@ -28,6 +28,7 @@ import {
 import { useCan } from "@/components/admin/shell";
 import { ErrorDrawer } from "./ErrorDrawer";
 import {
+  LEVEL_LABEL,
   LEVEL_OPTIONS,
   PAGE_LIMIT,
   RESOLVED_OPTIONS,
@@ -91,6 +92,8 @@ export function ErrorsPage() {
   const [bulkOpen, setBulkOpen] = useState(false);
 
   const items = state.status === "ready" ? state.data.items : [];
+  // 403: the forbidden state is all there is — no filters, bulk action or pager around it.
+  const forbidden = state.status === "forbidden";
   // Resolved rows can be ticked by "select all" but are never sent: the server would skip them anyway.
   const selectedOpen = items.filter((e) => selected.has(e.id) && !e.resolvedAt).map((e) => e.id);
 
@@ -106,9 +109,14 @@ export function ErrorsPage() {
       header: "Daraja",
       cell: (e) => (
         <Badge tone={e.level === "error" ? "danger" : "warning"} dot>
-          {e.level}
+          {LEVEL_LABEL[e.level] ?? e.level}
         </Badge>
       ),
+    },
+    {
+      id: "status",
+      header: "Holat",
+      cell: (e) => (e.resolvedAt ? <Badge tone="success">Hal qilingan</Badge> : <Badge>Ochiq</Badge>),
     },
     {
       id: "scope",
@@ -133,13 +141,20 @@ export function ErrorsPage() {
       className: "max-w-[26rem] min-w-[14rem]",
       cell: (e) => <span className="line-clamp-2 font-mono text-xs break-words">{e.message}</span>,
     },
-    { id: "path", header: "Yo'l", hideOnCard: true, className: "max-w-[14rem]", cell: (e) => (e.path ? <span className="block truncate font-mono text-xs">{e.path}</span> : "—") },
-    { id: "process", header: "Jarayon", hideOnCard: true, cell: (e) => (e.process ? <span className="font-mono text-xs">{e.process}</span> : "—") },
     {
-      id: "status",
-      header: "Holat",
-      cell: (e) => (e.resolvedAt ? <Badge tone="success">Hal qilingan</Badge> : <Badge>Ochiq</Badge>),
+      id: "path",
+      header: "Yo'l",
+      hideOnCard: true,
+      cell: (e) =>
+        e.path ? (
+          <span className="block max-w-[14rem] truncate font-mono text-xs" title={e.path}>
+            {e.path}
+          </span>
+        ) : (
+          "—"
+        ),
     },
+    { id: "process", header: "Jarayon", hideOnCard: true, cell: (e) => (e.process ? <span className="font-mono text-xs">{e.process}</span> : "—") },
   ];
 
   const hasRange = filters.from !== "" && filters.to !== "";
@@ -151,7 +166,7 @@ export function ErrorsPage() {
           <h1 className="text-[22px] font-semibold tracking-tight">Xatolar</h1>
           <p className="text-muted-foreground text-[13px]">Bir xil xatolar birlashtiriladi. 90 kun saqlanadi.</p>
         </div>
-        {canResolve ? (
+        {canResolve && !forbidden ? (
           <Button
             variant="primary"
             disabled={selectedOpen.length === 0 || selectedOpen.length > BULK_RESOLVE_LIMIT}
@@ -163,48 +178,50 @@ export function ErrorsPage() {
         ) : null}
       </header>
 
-      <Card className="flex flex-col gap-3 p-3">
-        <FilterBar activeCount={active} onClear={clearFilters}>
-          <div className="flex min-w-0 flex-col gap-1">
-            <span className="text-muted-foreground text-[11px] font-semibold">Holat</span>
-            <Segmented
-              ariaLabel="Holat bo'yicha"
-              options={RESOLVED_OPTIONS}
-              value={filters.resolved}
-              onChange={(v) => update({ resolved: urlValueOfResolved(v as ResolvedView) })}
-            />
-          </div>
-          <SelectFilter
-            label="Daraja"
-            value={filters.level}
-            onChange={(v) => update({ level: v })}
-            options={LEVEL_OPTIONS}
-            allLabel="Barcha darajalar"
-          />
-          <SearchInput value={filters.scope} onChange={(v) => update({ scope: v.trim() })} placeholder="Joy (scope), masalan pdf" ariaLabel="Joy bo'yicha qidirish" />
-          <SearchInput value={filters.q} onChange={(v) => update({ q: v.trim() })} placeholder="Xabar boshlanishi bo'yicha qidirish" ariaLabel="Xabar bo'yicha qidirish" />
-        </FilterBar>
-        <div className="flex flex-wrap items-center gap-2">
-          {hasRange ? (
-            <>
-              <DateRangePicker
-                ariaLabel="Oxirgi ko'rilgan davr"
-                value={{ from: filters.from, to: filters.to }}
-                onChange={(r) => update({ from: r.from, to: r.to })}
+      {forbidden ? null : (
+        <Card className="flex flex-col gap-3 p-3">
+          <FilterBar activeCount={active} onClear={clearFilters}>
+            <div className="flex min-w-0 flex-col gap-1">
+              <span className="text-muted-foreground text-[11px] font-semibold">Holat</span>
+              <Segmented
+                ariaLabel="Holat bo'yicha"
+                options={RESOLVED_OPTIONS}
+                value={filters.resolved}
+                onChange={(v) => update({ resolved: urlValueOfResolved(v as ResolvedView) })}
               />
-              <Button size="sm" variant="ghost" onClick={() => update({ from: null, to: null })}>
-                Sanani olib tashlash
+            </div>
+            <SelectFilter
+              label="Daraja"
+              value={filters.level}
+              onChange={(v) => update({ level: v })}
+              options={LEVEL_OPTIONS}
+              allLabel="Barcha darajalar"
+            />
+            <SearchInput value={filters.scope} onChange={(v) => update({ scope: v.trim() })} placeholder="Joy (scope), masalan pdf" ariaLabel="Joy bo'yicha qidirish" />
+            <SearchInput value={filters.q} onChange={(v) => update({ q: v.trim() })} placeholder="Xabar boshlanishi bo'yicha qidirish" ariaLabel="Xabar bo'yicha qidirish" />
+          </FilterBar>
+          <div className="flex flex-wrap items-center gap-2">
+            {hasRange ? (
+              <>
+                <DateRangePicker
+                  ariaLabel="Oxirgi ko'rilgan davr"
+                  value={{ from: filters.from, to: filters.to }}
+                  onChange={(r) => update({ from: r.from, to: r.to })}
+                />
+                <Button size="sm" variant="ghost" onClick={() => update({ from: null, to: null })}>
+                  Sanani olib tashlash
+                </Button>
+              </>
+            ) : (
+              <Button size="sm" onClick={() => update(rangeParams())}>
+                Sana bo&apos;yicha filtr
               </Button>
-            </>
-          ) : (
-            <Button size="sm" onClick={() => update(rangeParams())}>
-              Sana bo&apos;yicha filtr
-            </Button>
-          )}
-        </div>
-      </Card>
+            )}
+          </div>
+        </Card>
+      )}
 
-      {state.status === "forbidden" ? (
+      {forbidden ? (
         <Card>
           <Forbidden />
         </Card>

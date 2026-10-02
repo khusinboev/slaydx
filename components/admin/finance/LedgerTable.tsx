@@ -24,6 +24,7 @@ import { KIND_LABEL, KIND_TONE } from "@/components/admin/payments/labels";
 import { DeltaCell, ReferenceCell } from "@/components/admin/payments/ledger-cells";
 import { useCursorList, useLocalFilters, useUrlFilters, type FilterStore } from "@/components/admin/payments/list-state";
 import { OptionalRangeFilter } from "@/components/admin/payments/OptionalRange";
+import { useReportForbidden } from "./forbidden";
 
 /**
  * Filter keys. On the finance page they share the URL with the summary's
@@ -33,6 +34,8 @@ export const LEDGER_FILTER_KEYS = ["kind", "userId", "reference", "lfrom", "lto"
 type LedgerFilterKey = (typeof LEDGER_FILTER_KEYS)[number];
 
 export type LedgerTableProps = {
+  /** 403: the finance page drops its tabs and shows only the forbidden state. */
+  onForbidden?: () => void;
   /**
    * Filters pinned by the parent page (e.g. WP2's user page passes
    * `{ userId }`): applied to every request and the export, the control and
@@ -81,7 +84,7 @@ function EmbeddedLedger(props: LedgerTableProps) {
   return <LedgerView store={store} {...props} />;
 }
 
-function LedgerView({ store, fixedFilters, embedded = false, pageSize }: LedgerTableProps & { store: FilterStore<LedgerFilterKey> }) {
+function LedgerView({ store, fixedFilters, embedded = false, pageSize, onForbidden }: LedgerTableProps & { store: FilterStore<LedgerFilterKey> }) {
   const canExport = useCan("finance.export");
   const fixedUserId = fixedFilters?.userId;
   const v = store.values;
@@ -128,6 +131,15 @@ function LedgerView({ store, fixedFilters, embedded = false, pageSize }: LedgerT
   ];
 
   const rows = state.data?.items ?? [];
+  useReportForbidden(state.status === "forbidden", onForbidden);
+  // 403: the forbidden state is all there is — no filter bar or export above it.
+  if (state.status === "forbidden") {
+    return (
+      <div className="bg-card rounded-xl border">
+        <Forbidden />
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-w-0 flex-col gap-3">
@@ -162,11 +174,7 @@ function LedgerView({ store, fixedFilters, embedded = false, pageSize }: LedgerT
         {canExport ? <ExportButton onExport={() => downloadLedgerCsv(params)} /> : null}
       </div>
 
-      {state.status === "forbidden" ? (
-        <div className="bg-card rounded-xl border">
-          <Forbidden />
-        </div>
-      ) : state.status === "error" ? (
+      {state.status === "error" ? (
         <div className="bg-card rounded-xl border">
           <ErrorState message={state.message} requestId={state.requestId} onRetry={retry} />
         </div>

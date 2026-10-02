@@ -246,6 +246,9 @@ test("cost: 403 renders the forbidden state, with no data", async () => {
   await screen.findByText("Ruxsat yo'q");
   assert.ok(!screen.queryByText("claude-sonnet-5"));
   assert.ok(!screen.queryByRole("group", { name: "Filtrlar" }), "no filters on a forbidden screen");
+  // No tabs either: both tabs need ai.view, so the forbidden state is the whole screen (UX #9).
+  await waitFor(() => assert.ok(!screen.queryByRole("tablist")));
+  assert.ok(screen.getByText("Ruxsat yo'q"));
 });
 
 // ───────────────────────────── providers tab
@@ -345,6 +348,7 @@ test("providers: error with requestId and retry; 403 forbidden", async () => {
   renderPage("tab=providers");
   await screen.findByText("Ruxsat yo'q");
   assert.ok(!screen.queryByText("API kalitlari"));
+  await waitFor(() => assert.ok(!screen.queryByRole("tablist"), "no tabs above the forbidden state"));
 });
 
 test("providers: the refresh button reloads", async () => {

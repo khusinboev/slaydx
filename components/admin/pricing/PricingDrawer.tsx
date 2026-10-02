@@ -4,7 +4,7 @@ import { useCallback, useState } from "react";
 import { getPricingDetail, type PricingDetail, type PricingItem, type PricingItemResult } from "@/lib/admin-api/pricing";
 import { fmtDate, fmtNumber } from "@/lib/admin-format";
 import { Badge, Button, Card, CardBody, CardHeader, Drawer, ErrorState, Forbidden, KeyValueList, LineChart, Skeleton } from "@/components/admin/ui";
-import { useCan } from "@/components/admin/shell";
+import { permissionLabel, useCan } from "@/components/admin/shell";
 import { LadderCompare } from "./LadderCompare";
 import { PriceEditDialog } from "./PriceEditDialog";
 import { PriceResetDialog } from "./PriceResetDialog";
@@ -17,6 +17,7 @@ import {
   percentLabel,
   recommendationOf,
   recommendationText,
+  roundToText,
   shortDay,
   soumText,
   tangaText,
@@ -76,7 +77,7 @@ export function PricingDrawer({
             </Button>
           </>
         ) : (
-          <span className="text-muted-foreground text-xs">Faqat ko&apos;rish rejimi: narxni o&apos;zgartirish uchun pricing.edit kerak.</span>
+          <span className="text-muted-foreground text-xs">Faqat ko&apos;rish rejimi: narxni o&apos;zgartirish uchun «{permissionLabel("pricing.edit")}» ruxsati kerak.</span>
         )
       }
     >
@@ -87,7 +88,7 @@ export function PricingDrawer({
             value: (
               <span className="flex flex-wrap items-center gap-2">
                 <Badge tone={isDefaultAdjust(item.adjust) ? "neutral" : "primary"}>{percentLabel(item.adjust.percent)}</Badge>
-                <span className="text-muted-foreground text-xs">yaxlitlash {fmtNumber(item.adjust.roundTo)}</span>
+                <span className="text-muted-foreground text-xs">yaxlitlash {roundToText(item.adjust.roundTo)}</span>
               </span>
             ),
           },
@@ -180,7 +181,7 @@ export function PricingDrawer({
                     {h.oldRoundTo !== h.newRoundTo ? (
                       <span className="text-muted-foreground tabular-nums">
                         {" "}
-                        · yaxlitlash {fmtNumber(h.oldRoundTo)} → {fmtNumber(h.newRoundTo)}
+                        · yaxlitlash {fmtNumber(h.oldRoundTo)} → {roundToText(h.newRoundTo)}
                       </span>
                     ) : null}
                     <span className="text-muted-foreground"> · {h.admin ?? "o'chirilgan admin"}</span>

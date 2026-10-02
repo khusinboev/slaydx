@@ -3,9 +3,8 @@
 import { ConfirmDialog, toast } from "@/components/admin/ui";
 import { ApiError } from "@/lib/admin-api/core";
 import { resetPricing, type LadderRow, type PriceAdjust, type PricingItemResult } from "@/lib/admin-api/pricing";
-import { fmtNumber } from "@/lib/admin-format";
 import { LadderCompare } from "./LadderCompare";
-import { percentLabel, PROPAGATION_NOTE } from "./shared";
+import { percentLabel, PROPAGATION_NOTE, roundToText } from "./shared";
 
 export type PriceResetDialogProps = {
   open: boolean;
@@ -31,7 +30,7 @@ export function PriceResetDialog({ open, toolId, title, adjust, ladder, onClose,
       onClose={onClose}
       title={`100% ga qaytarish — ${title}`}
       description={`Tuzatish ${percentLabel(adjust.percent)} dan 100% ga (kod formulasi) qaytariladi, yaxlitlash 500 ga. ${PROPAGATION_NOTE}`}
-      before={`${percentLabel(adjust.percent)} · ${fmtNumber(adjust.roundTo)}`}
+      before={`${percentLabel(adjust.percent)} · ${roundToText(adjust.roundTo)}`}
       after="100% · 500"
       reason={{ minLength: 5 }}
       confirmLabel="Qaytarish"
