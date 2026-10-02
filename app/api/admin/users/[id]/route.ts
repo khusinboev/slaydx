@@ -6,6 +6,7 @@ import { getAdminUser, parseReveal } from "@/lib/server/admin-users";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+/** Same text as the literal below (the route guard test requires a literal scope); used for the denied-reveal audit row. */
 const SCOPE = "admin/users/get";
 
 /**
@@ -13,7 +14,7 @@ const SCOPE = "admin/users/get";
  * and is audited (`users.pii.view`). The legacy PATCH (wallet) and PUT (block)
  * are gone: `wallet-adjustments` (F6) and `block` replace them.
  */
-export const GET = adminHandler(SCOPE, { permission: "users.view" }, async (req, { params }: { params: Promise<{ id: string }> }, admin) => {
+export const GET = adminHandler("admin/users/get", { permission: "users.view" }, async (req, { params }: { params: Promise<{ id: string }> }, admin) => {
   const id = parseBigintId((await params).id);
   if (!id) throw new ApiError("Topilmadi", 404, { code: "not_found" });
   const reveal = parseReveal(new URL(req.url));
