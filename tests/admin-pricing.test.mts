@@ -51,6 +51,8 @@ process.env.APP_URL = "http://localhost:3000";
 process.env.TRUST_PROXY = "true";
 process.env.WORKER_INLINE = "false";
 process.env.ADMIN_TOTP_KEY = randomBytes(32).toString("base64");
+// 2FA-mode suite: the strengthened flow (TOTP, step-up) is what these tests pin (docs/admin/HANDOFF.md "Admin 2FA switch").
+process.env.ADMIN_2FA_REQUIRED = "true";
 process.env.TELEGRAM_BOT_TOKEN = "123456:admin-pricing-test-token-never-called";
 delete process.env.SOUM_PER_USD;
 const hasDb = Boolean(process.env.DATABASE_URL) && !process.env.DATABASE_URL!.includes("unused");

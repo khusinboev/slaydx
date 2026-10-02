@@ -95,7 +95,7 @@ function adminsApi(opts: { items?: AdminAccountItem[]; post?: (c: Call) => Respo
 }
 
 /** The own admin id comes from the shell identity (server-resolved), never from an extra request. */
-const IDENTITY = (role: string, permissions: string[], adminId: string) => ({ adminId, role, permissions, name: "Test", username: null });
+const IDENTITY = (role: string, permissions: string[], adminId: string) => ({ adminId, role, permissions, name: "Test", username: null, twoFactor: true });
 const VIEW = ["admins.view"];
 const MANAGE = ["admins.view", "admins.manage"];
 

@@ -33,6 +33,8 @@ const SECRETS = {
 process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";
 process.env.APP_URL = "http://localhost:3000";
 process.env.TRUST_PROXY = "true";
+// 2FA-mode suite (docs/admin/HANDOFF.md "Admin 2FA switch").
+process.env.ADMIN_2FA_REQUIRED = "true";
 process.env.TELEGRAM_BOT_TOKEN = "123456:admin-system-test-token-never-called";
 delete process.env.NEXT_PUBLIC_TELEGRAM_BOT; // → a config PROBLEM (token without bot username)
 delete process.env.TELEGRAM_WEBHOOK_SECRET; // → a config WARNING (webhook guarded by CRON_SECRET)

@@ -92,7 +92,7 @@ function Harness({ initial, log, perms, children }: { initial: string; log: stri
       h(
         SearchParamsContext.Provider,
         { value: new URLSearchParams(search) },
-        h(AdminIdentityProvider, { value: { adminId: "1", role: "support", permissions: perms, name: "Yordam", username: null }, children }),
+        h(AdminIdentityProvider, { value: { adminId: "1", role: "support", permissions: perms, name: "Yordam", username: null, twoFactor: true }, children }),
       ),
     ),
   );

@@ -247,6 +247,31 @@ test("docker-compose: ADMIN_TOTP_KEY web va worker'ga uzatiladi, hujjatlangan va
 });
 
 /**
+ * Admin 2FA switch (docs/admin/HANDOFF.md "Admin 2FA switch", owner 2026-10-02):
+ * `ADMIN_2FA_REQUIRED` must reach web (panel entry) AND worker (`npm run
+ * admin:create` creates the account in the same mode), default `false`, be
+ * documented, and be read by `env.ts` — a value that stays in `.env` would
+ * silently leave one container in the other mode.
+ *
+ * Mutation: drop the line from either block, change the default, or remove the
+ * `bool("ADMIN_2FA_REQUIRED"` read — an assertion fails.
+ */
+test("docker-compose: ADMIN_2FA_REQUIRED web va worker'ga uzatiladi (standart false), hujjatlangan va env.ts'da o'qiladi", () => {
+  const yaml = readFileSync(new URL("../docker-compose.yml", import.meta.url), "utf8");
+  for (const service of ["web", "worker"]) {
+    assert.match(
+      envBlock(yaml, service),
+      /^\s+ADMIN_2FA_REQUIRED: \$\{ADMIN_2FA_REQUIRED:-false\}$/m,
+      `${service}: ADMIN_2FA_REQUIRED compose'da (standart false bilan) uzatilmaydi`,
+    );
+  }
+  const example = readFileSync(new URL("../.env.example", import.meta.url), "utf8");
+  assert.match(example, /^ADMIN_2FA_REQUIRED=false$/m, "ADMIN_2FA_REQUIRED .env.example da yo'q (standart false)");
+  const envSrc = readFileSync(new URL("../lib/server/env.ts", import.meta.url), "utf8");
+  assert.match(envSrc, /bool\("ADMIN_2FA_REQUIRED", false\)/, "ADMIN_2FA_REQUIRED env.ts'da standart false bilan o'qilmaydi");
+});
+
+/**
  * C23 (retention.md §6): `FILE_TTL_HOURS` hech qachon o'qilmagan — o'chirib
  * tashlash o'rniga chalg'ituvchi konfiguratsiya bo'lib turardi.
  */

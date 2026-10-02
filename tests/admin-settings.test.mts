@@ -39,6 +39,8 @@ process.env.APP_URL = "http://localhost:3000";
 process.env.TRUST_PROXY = "true";
 process.env.WORKER_INLINE = "false";
 process.env.ADMIN_TOTP_KEY = randomBytes(32).toString("base64");
+// 2FA-mode suite: the strengthened flow (TOTP, step-up) is what these tests pin (docs/admin/HANDOFF.md "Admin 2FA switch").
+process.env.ADMIN_2FA_REQUIRED = "true";
 process.env.TELEGRAM_BOT_TOKEN = "123456:admin-settings-test-token-never-called";
 // Env behind two settings: one set (→ source "env"), the rest unset (→ "default").
 process.env.FREE_LLM_DAILY_OUTLINE = "7";

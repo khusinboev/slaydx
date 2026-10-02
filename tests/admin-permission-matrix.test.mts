@@ -22,7 +22,10 @@ import { createIsolatedDb } from "./helpers/isolated-db.mts";
  *   • a mutation without (or with a foreign) `Origin` → 403;
  *   • expired / revoked admin sessions → 401 `admin_auth`;
  *   • the code matrix equals the §4.3 table, transcribed here as a literal AND
- *     parsed from the plan file, so a drift in either direction fails.
+ *     parsed from the plan file, so a drift in either direction fails;
+ *   • all of the above in BOTH positions of the 2FA switch (`MODES`): the
+ *     refused set is identical, and with the switch off a stale step-up is
+ *     simply "no reauth needed" (HANDOFF "Admin 2FA switch").
  *
  * `fetch` is stubbed for the whole file: nothing leaves the process, and the
  * last test asserts no route tried to reach an external host.
@@ -55,6 +58,8 @@ process.env.SESSION_SECRET = "test-session-secret-at-least-32-characters";
 process.env.APP_URL = "http://localhost:3000";
 process.env.TRUST_PROXY = "true";
 process.env.ADMIN_TOTP_KEY = randomBytes(32).toString("base64");
+// 2FA-mode suite: the strengthened flow (TOTP, step-up) is what these tests pin (docs/admin/HANDOFF.md "Admin 2FA switch").
+process.env.ADMIN_2FA_REQUIRED = "true";
 // The bot "sends" through the fetch stub below; nothing leaves the process.
 process.env.TELEGRAM_BOT_TOKEN = "123456:admin-permission-matrix-token-never-called";
 const hasDb = Boolean(process.env.DATABASE_URL) && !process.env.DATABASE_URL!.includes("unused");
@@ -93,6 +98,29 @@ type Role = (typeof rbac.ROLES)[number];
 type Permission = (typeof rbac.PERMISSIONS)[number];
 const ROLES: readonly Role[] = rbac.ROLES;
 
+// ───────────────────────────── the 2FA switch
+
+/**
+ * Both positions of `ADMIN_2FA_REQUIRED` (docs/admin/HANDOFF.md "Admin 2FA
+ * switch"). The RBAC matrix, the denied audit, the cloak, the Origin rule and
+ * the session binding must be identical in both; only step-up differs: with
+ * the switch off no route ever answers 401 reauth. `env.admin2faRequired` is a
+ * getter, so flipping the variable between tests re-modes the same handlers.
+ */
+const MODES = [
+  { name: "2fa", flag: "true", stepUp: true },
+  { name: "simple", flag: "false", stepUp: false },
+] as const;
+type Mode = (typeof MODES)[number];
+type ModeName = Mode["name"];
+
+let currentMode: Mode = MODES[0];
+
+function setMode(mode: Mode): void {
+  currentMode = mode;
+  process.env.ADMIN_2FA_REQUIRED = mode.flag;
+}
+
 after(async () => {
   globalThis.fetch = realFetch;
   if (!hasDb) return;
@@ -113,8 +141,8 @@ type SeededAdmin = TestUser & {
   fresh: Session;
   /** `reauth: false` — step-up permissions must answer 401 reauth. */
   stale: Session;
-  /** A second live session, the target of `me/sessions/[id]/revoke`. */
-  spare: Session;
+  /** A second live session per mode, the target of `me/sessions/[id]/revoke` (consumed by the call). */
+  spare: Record<ModeName, Session>;
 };
 
 const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");
@@ -162,7 +190,7 @@ async function seedAdmin(role: Role): Promise<SeededAdmin> {
     adminId,
     fresh: await openSession(u, adminId, true),
     stale: await openSession(u, adminId, false),
-    spare: await openSession(u, adminId, true),
+    spare: { "2fa": await openSession(u, adminId, true), simple: await openSession(u, adminId, true) },
   };
 }
 
@@ -311,10 +339,10 @@ test("manifest: every exported method of every admin route has a determinable gu
     assert.ok(e.scope.startsWith("admin/"), `${e.rel} ${e.method}: scope ${e.scope}`);
     if (e.method !== "GET" && e.method !== "HEAD") assert.equal(e.mutation, true, `${e.rel} ${e.method}: mutation: true missing`);
   }
-  // Auth routes (§6.1) are the only adminAuthHandler users.
+  // Auth routes (§6.1) plus the simple-mode entry are the only adminAuthHandler users.
   assert.deepEqual(
     [...new Set(ENTRIES.filter((e) => e.kind === "auth").map((e) => e.rel))].sort(),
-    ["auth/enroll/route.ts", "auth/login/route.ts", "auth/recovery/route.ts", "session/route.ts"],
+    ["auth/auto/route.ts", "auth/enroll/route.ts", "auth/login/route.ts", "auth/recovery/route.ts", "session/route.ts"],
   );
 });
 
@@ -508,7 +536,7 @@ function paramsFor(e: Entry, role: Role | null): Record<string, string> {
     let value: string | null = null;
     if (e.rel.startsWith("users/[id]")) value = s.targetUser.id;
     else if (e.rel.startsWith("admins/[id]")) value = s.targetAdmin.adminId;
-    else if (e.rel.startsWith("me/sessions/[id]")) value = role ? s.admins[role].spare.id : "900000000000";
+    else if (e.rel.startsWith("me/sessions/[id]")) value = role ? s.admins[role].spare[currentMode.name].id : "900000000000";
     else if (/^(audit|errors|broadcasts)\/\[id\]/.test(e.rel)) value = "900000000000";
     else if (/^(generations|orders|moderation\/game-links|moderation\/game-results)\/\[id\]/.test(e.rel)) value = randomUUID();
     else if (e.rel.startsWith("settings/[key]")) value = "no_such_setting";
@@ -559,51 +587,66 @@ function flag(key: string, msg: string): string {
   return KNOWN_BUGS.includes(key) ? `KNOWN_BUG ${msg}` : msg;
 }
 
+const emptyByRole = (): Record<Role, string[]> => ({ owner: [], admin: [], finance: [], support: [], moderator: [], viewer: [] });
+
 // ───────────────────────────── the matrix
 
-/** (permission, scope) of every refused call, per admin — the expected `denied` rows. */
-const expectedDenied: Record<Role, string[]> = { owner: [], admin: [], finance: [], support: [], moderator: [], viewer: [] };
+/** (permission, scope) of every refused call, per admin and per mode — the expected `denied` rows. */
+const expectedDeniedByMode: Record<Mode["name"], Record<Role, string[]>> = { "2fa": emptyByRole(), simple: emptyByRole() };
 const serverErrors: string[] = [];
 let matrixCases = 0;
 
-test("matrix: every route × method × role — 403 forbidden without the permission, never 403/401/cloak with it", { skip }, async () => {
-  const s = seed!;
-  const failures: string[] = [];
-  const histogram = new Map<string, number>();
-  for (const e of ADMIN_ENTRIES) {
-    for (const role of ROLES) {
-      const a = s.admins[role];
-      const r = await call(e, cookieOf(a, a.fresh), { role });
-      matrixCases++;
-      const bucket = `${r.status}${typeof r.body.code === "string" ? ` ${r.body.code}` : ""}`;
-      histogram.set(bucket, (histogram.get(bucket) ?? 0) + 1);
-      const key = `${e.rel} ${e.method} ${role}`;
-      if (r.status >= 500) serverErrors.push(`${label(e, role)} → ${show(r)}`);
-      if (planAllows(role, e.permission!)) {
-        if (isForbidden(r) || r.status === 401 || isCloak(r)) {
-          failures.push(flag(key, `${label(e, role)}: has the permission but got ${show(r)}`));
+for (const mode of MODES) {
+  test(`[${mode.name}] matrix: every route × method × role — 403 forbidden without the permission, never 403/401/cloak with it`, { skip }, async () => {
+    setMode(mode);
+    const s = seed!;
+    const expectedDenied = expectedDeniedByMode[mode.name];
+    const failures: string[] = [];
+    const histogram = new Map<string, number>();
+    let cases = 0;
+    for (const e of ADMIN_ENTRIES) {
+      for (const role of ROLES) {
+        const a = s.admins[role];
+        const r = await call(e, cookieOf(a, a.fresh), { role });
+        cases++;
+        const bucket = `${r.status}${typeof r.body.code === "string" ? ` ${r.body.code}` : ""}`;
+        histogram.set(bucket, (histogram.get(bucket) ?? 0) + 1);
+        const key = `${e.rel} ${e.method} ${role}`;
+        if (r.status >= 500) serverErrors.push(`[${mode.name}] ${label(e, role)} → ${show(r)}`);
+        if (planAllows(role, e.permission!)) {
+          if (isForbidden(r) || r.status === 401 || isCloak(r)) {
+            failures.push(flag(key, `[${mode.name}] ${label(e, role)}: has the permission but got ${show(r)}`));
+          }
+        } else {
+          expectedDenied[role].push(`${e.permission}|${e.scope}`);
+          if (!isForbidden(r)) failures.push(flag(key, `[${mode.name}] ${label(e, role)}: lacks the permission, expected 403 forbidden, got ${show(r)}`));
         }
-      } else {
-        expectedDenied[role].push(`${e.permission}|${e.scope}`);
-        if (!isForbidden(r)) failures.push(flag(key, `${label(e, role)}: lacks the permission, expected 403 forbidden, got ${show(r)}`));
       }
     }
-  }
-  console.log(
-    `matrix: ${ADMIN_ENTRIES.length} methods × ${ROLES.length} roles = ${matrixCases} cases; statuses: ${[...histogram].sort().map(([k, v]) => `${k}=${v}`).join(", ")}`,
-  );
-  assert.deepEqual(failures, []);
-  assert.equal(matrixCases, ADMIN_ENTRIES.length * ROLES.length);
-  // Every role is refused somewhere and allowed somewhere: the matrix is exercised in both directions.
+    matrixCases += cases;
+    console.log(
+      `matrix [${mode.name}]: ${ADMIN_ENTRIES.length} methods × ${ROLES.length} roles = ${cases} cases; statuses: ${[...histogram].sort().map(([k, v]) => `${k}=${v}`).join(", ")}`,
+    );
+    assert.deepEqual(failures, []);
+    assert.equal(cases, ADMIN_ENTRIES.length * ROLES.length);
+    // Every role is refused somewhere and allowed somewhere: the matrix is exercised in both directions.
+    for (const role of ROLES) {
+      if (role !== "owner") assert.ok(expectedDenied[role].length > 0, `${role} was never refused`);
+      assert.ok(expectedDenied[role].length < ADMIN_ENTRIES.length, `${role} was never allowed`);
+    }
+  });
+}
+
+test("matrix: the switch changes no 403 — the refused set of every role is the same in both modes", { skip }, () => {
+  assert.ok(matrixCases > 0, "the matrix tests did not run");
   for (const role of ROLES) {
-    if (role !== "owner") assert.ok(expectedDenied[role].length > 0, `${role} was never refused`);
-    assert.ok(expectedDenied[role].length < ADMIN_ENTRIES.length, `${role} was never allowed`);
+    assert.deepEqual([...expectedDeniedByMode.simple[role]].sort(), [...expectedDeniedByMode["2fa"][role]].sort(), `refused calls of ${role}`);
   }
 });
 
-test("matrix: each refused call wrote exactly one `auth.denied` audit row (permission + scope), allowed calls none", { skip }, async () => {
+test("matrix: each refused call wrote exactly one `auth.denied` audit row (permission + scope) in each mode, allowed calls none", { skip }, async () => {
   const s = seed!;
-  assert.ok(matrixCases > 0, "the matrix test did not run");
+  assert.ok(matrixCases > 0, "the matrix tests did not run");
   for (const role of ROLES) {
     const rows = await query<{ outcome: string; actor_role: string; meta: { permission?: string; scope?: string } | null }>(
       `SELECT outcome, actor_role, meta FROM admin_audit_log WHERE admin_id = $1 AND action = 'auth.denied' ORDER BY id`,
@@ -614,7 +657,8 @@ test("matrix: each refused call wrote exactly one `auth.denied` audit row (permi
       assert.equal(r.actor_role, role);
     }
     const got = rows.map((r) => `${r.meta?.permission}|${r.meta?.scope}`).sort();
-    assert.deepEqual(got, [...expectedDenied[role]].sort(), `denied audit rows of ${role}`);
+    const expected = MODES.flatMap((m) => expectedDeniedByMode[m.name][role]).sort();
+    assert.deepEqual(got, expected, `denied audit rows of ${role}`);
   }
 });
 
@@ -646,94 +690,117 @@ test("allow-list: pricing/[toolId]/simulate POST on pricing.view really writes n
 
 // ───────────────────────────── cross-cutting checks
 
-test("step-up: every route of every S permission answers 401 reauth to a permitted role whose reauth_at is stale", { skip }, async () => {
-  const s = seed!;
-  const failures: string[] = [];
-  const covered = new Set<Permission>();
-  for (const e of ADMIN_ENTRIES) {
-    if (!planStepUp(e.permission!)) continue;
-    for (const role of ROLES) {
-      if (!planAllows(role, e.permission!)) continue;
-      const a = s.admins[role];
-      const r = await call(e, cookieOf(a, a.stale), { role });
-      if (r.status === 401 && r.body.code === "reauth") covered.add(e.permission!);
-      else failures.push(flag(`${e.rel} ${e.method} ${role} stale`, `${label(e, `${role} (stale step-up)`)}: expected 401 reauth, got ${show(r)}`));
+for (const mode of MODES) {
+  test(
+    mode.stepUp
+      ? `[${mode.name}] step-up: every route of every S permission answers 401 reauth to a permitted role whose reauth_at is stale`
+      : `[${mode.name}] step-up: no route answers 401 reauth — a stale reauth_at is irrelevant without a second factor`,
+    { skip },
+    async () => {
+      setMode(mode);
+      const s = seed!;
+      const failures: string[] = [];
+      const covered = new Set<Permission>();
+      for (const e of ADMIN_ENTRIES) {
+        if (!planStepUp(e.permission!)) continue;
+        for (const role of ROLES) {
+          if (!planAllows(role, e.permission!)) continue;
+          const a = s.admins[role];
+          const r = await call(e, cookieOf(a, a.stale), { role });
+          const reauth = r.status === 401 && r.body.code === "reauth";
+          if (mode.stepUp) {
+            if (reauth) covered.add(e.permission!);
+            else failures.push(flag(`${e.rel} ${e.method} ${role} stale`, `${label(e, `${role} (stale step-up)`)}: expected 401 reauth, got ${show(r)}`));
+          } else {
+            // Same answer as a fresh session: never reauth, forbidden, 401 or the cloak.
+            if (reauth || isForbidden(r) || r.status === 401 || isCloak(r)) {
+              failures.push(`[simple] ${label(e, `${role} (stale step-up)`)}: expected no reauth, got ${show(r)}`);
+            } else {
+              covered.add(e.permission!);
+            }
+          }
+        }
+      }
+      assert.deepEqual(failures, []);
+      // Every S permission of §4.3 has at least one route by now (WP11 brought pricing.edit), and each one was exercised.
+      const routed = new Set<string>(ADMIN_ENTRIES.map((e) => e.permission!));
+      assert.deepEqual([...PLAN_STEP_UP].filter((p) => !routed.has(p)), [], "a step-up permission has no route");
+      assert.deepEqual([...covered].sort(), [...PLAN_STEP_UP].sort(), "every S permission is covered by at least one route");
+      // A stale session is not a broken session: a non-S route still works with it.
+      const plain = ADMIN_ENTRIES.find((e) => e.rel === "me/sessions/route.ts" && e.method === "GET")!;
+      const r = await call(plain, cookieOf(s.admins.owner, s.admins.owner.stale), { role: "owner" });
+      assert.equal(r.status, 200, show(r));
+    },
+  );
+
+  test(`[${mode.name}] cloak: non-admin and anonymous callers get 404 on every route (auth routes included)`, { skip }, async () => {
+    setMode(mode);
+    const s = seed!;
+    const failures: string[] = [];
+    for (const e of ENTRIES) {
+      for (const [who, cookie] of [
+        ["anonymous", null],
+        ["non-admin user", cookieOf(s.plainUser)],
+      ] as const) {
+        const r = await call(e, cookie);
+        if (r.status !== 404 || r.body.code === "not_found") failures.push(`${label(e, who)}: expected the 404 cloak, got ${show(r)}`);
+      }
     }
-  }
-  assert.deepEqual(failures, []);
-  // Every S permission of §4.3 has at least one route by now (WP11 brought pricing.edit), and each one was exercised.
-  const routed = new Set<string>(ADMIN_ENTRIES.map((e) => e.permission!));
-  assert.deepEqual([...PLAN_STEP_UP].filter((p) => !routed.has(p)), [], "a step-up permission has no route");
-  assert.deepEqual([...covered].sort(), [...PLAN_STEP_UP].sort(), "every S permission is covered by at least one route");
-  // A stale session is not a broken session: a non-S route still works with it.
-  const plain = ADMIN_ENTRIES.find((e) => e.rel === "me/sessions/route.ts" && e.method === "GET")!;
-  const r = await call(plain, cookieOf(s.admins.owner, s.admins.owner.stale), { role: "owner" });
-  assert.equal(r.status, 200, show(r));
-});
+    assert.deepEqual(failures, []);
+  });
 
-test("cloak: non-admin and anonymous callers get 404 on every route (auth routes included)", { skip }, async () => {
-  const s = seed!;
-  const failures: string[] = [];
-  for (const e of ENTRIES) {
-    for (const [who, cookie] of [
-      ["anonymous", null],
-      ["non-admin user", cookieOf(s.plainUser)],
-    ] as const) {
-      const r = await call(e, cookie);
-      if (r.status !== 404 || r.body.code === "not_found") failures.push(`${label(e, who)}: expected the 404 cloak, got ${show(r)}`);
+  test(`[${mode.name}] cloak: a disabled admin account gets 404 on every route, even with a live admin session cookie`, { skip }, async () => {
+    setMode(mode);
+    const s = seed!;
+    const failures: string[] = [];
+    for (const e of ENTRIES) {
+      const r = await call(e, cookieOf(s.disabled.user, s.disabled.session));
+      if (r.status !== 404 || r.body.code === "not_found") failures.push(`${label(e, "disabled owner")}: expected the 404 cloak, got ${show(r)}`);
     }
-  }
-  assert.deepEqual(failures, []);
-});
+    assert.deepEqual(failures, []);
+  });
 
-test("cloak: a disabled admin account gets 404 on every route, even with a live admin session cookie", { skip }, async () => {
-  const s = seed!;
-  const failures: string[] = [];
-  for (const e of ENTRIES) {
-    const r = await call(e, cookieOf(s.disabled.user, s.disabled.session));
-    if (r.status !== 404 || r.body.code === "not_found") failures.push(`${label(e, "disabled owner")}: expected the 404 cloak, got ${show(r)}`);
-  }
-  assert.deepEqual(failures, []);
-});
-
-test("origin: every mutation without an Origin header, or with a foreign one, gets 403 — before any auth step", { skip }, async () => {
-  const s = seed!;
-  const owner = s.admins.owner;
-  const failures: string[] = [];
-  assert.ok(MUTATIONS.length >= 25, `only ${MUTATIONS.length} mutations found`);
-  for (const e of MUTATIONS) {
-    const none = await call(e, cookieOf(owner, owner.fresh), { origin: false, role: "owner" });
-    if (none.status !== 403 || none.body.code === "forbidden") failures.push(`${label(e, "owner, no Origin")}: expected 403, got ${show(none)}`);
-    const evil = await call(e, cookieOf(owner, owner.fresh), { origin: "https://evil.example", role: "owner" });
-    if (evil.status !== 403 || evil.body.code === "forbidden") failures.push(`${label(e, "owner, foreign Origin")}: expected 403, got ${show(evil)}`);
-    // Anonymous without Origin: still 403 (the Origin check runs before the cloak).
-    const anon = await call(e, null, { origin: false });
-    if (anon.status !== 403) failures.push(`${label(e, "anonymous, no Origin")}: expected 403, got ${show(anon)}`);
-  }
-  assert.deepEqual(failures, []);
-  // Reads do not need an Origin.
-  const read = ADMIN_ENTRIES.find((e) => e.rel === "me/sessions/route.ts" && e.method === "GET")!;
-  assert.equal((await call(read, cookieOf(owner, owner.fresh), { origin: false, role: "owner" })).status, 200);
-});
-
-test("sessions: an expired or revoked admin session gets 401 admin_auth on every adminHandler route", { skip }, async () => {
-  const s = seed!;
-  const owner = s.admins.owner;
-  const failures: string[] = [];
-  for (const e of ADMIN_ENTRIES) {
-    for (const [state, session] of [
-      ["expired", s.expired],
-      ["revoked", s.revoked],
-    ] as const) {
-      const r = await call(e, cookieOf(owner, session), { role: "owner" });
-      if (r.status !== 401 || r.body.code !== "admin_auth") failures.push(`${label(e, `owner (${state} session)`)}: expected 401 admin_auth, got ${show(r)}`);
+  test(`[${mode.name}] origin: every mutation without an Origin header, or with a foreign one, gets 403 — before any auth step`, { skip }, async () => {
+    setMode(mode);
+    const s = seed!;
+    const owner = s.admins.owner;
+    const failures: string[] = [];
+    assert.ok(MUTATIONS.length >= 25, `only ${MUTATIONS.length} mutations found`);
+    for (const e of MUTATIONS) {
+      const none = await call(e, cookieOf(owner, owner.fresh), { origin: false, role: "owner" });
+      if (none.status !== 403 || none.body.code === "forbidden") failures.push(`${label(e, "owner, no Origin")}: expected 403, got ${show(none)}`);
+      const evil = await call(e, cookieOf(owner, owner.fresh), { origin: "https://evil.example", role: "owner" });
+      if (evil.status !== 403 || evil.body.code === "forbidden") failures.push(`${label(e, "owner, foreign Origin")}: expected 403, got ${show(evil)}`);
+      // Anonymous without Origin: still 403 (the Origin check runs before the cloak).
+      const anon = await call(e, null, { origin: false });
+      if (anon.status !== 403) failures.push(`${label(e, "anonymous, no Origin")}: expected 403, got ${show(anon)}`);
     }
-    // A user session without any admin cookie is the same 401 (an admin that has not logged in to the panel).
-    const r = await call(e, cookieOf(owner, null), { role: "owner" });
-    if (r.status !== 401 || r.body.code !== "admin_auth") failures.push(`${label(e, "owner (no admin cookie)")}: expected 401 admin_auth, got ${show(r)}`);
-  }
-  assert.deepEqual(failures, []);
-});
+    assert.deepEqual(failures, []);
+    // Reads do not need an Origin.
+    const read = ADMIN_ENTRIES.find((e) => e.rel === "me/sessions/route.ts" && e.method === "GET")!;
+    assert.equal((await call(read, cookieOf(owner, owner.fresh), { origin: false, role: "owner" })).status, 200);
+  });
+
+  test(`[${mode.name}] sessions: an expired or revoked admin session gets 401 admin_auth on every adminHandler route`, { skip }, async () => {
+    setMode(mode);
+    const s = seed!;
+    const owner = s.admins.owner;
+    const failures: string[] = [];
+    for (const e of ADMIN_ENTRIES) {
+      for (const [state, session] of [
+        ["expired", s.expired],
+        ["revoked", s.revoked],
+      ] as const) {
+        const r = await call(e, cookieOf(owner, session), { role: "owner" });
+        if (r.status !== 401 || r.body.code !== "admin_auth") failures.push(`${label(e, `owner (${state} session)`)}: expected 401 admin_auth, got ${show(r)}`);
+      }
+      // A user session without any admin cookie is the same 401 (an admin that has not logged in to the panel).
+      const r = await call(e, cookieOf(owner, null), { role: "owner" });
+      if (r.status !== 401 || r.body.code !== "admin_auth") failures.push(`${label(e, "owner (no admin cookie)")}: expected 401 admin_auth, got ${show(r)}`);
+    }
+    assert.deepEqual(failures, []);
+  });
+}
 
 test("audit: the cross-cutting checks (cloak, step-up, origin, sessions) never write a `denied` row", { skip }, async () => {
   const s = seed!;
@@ -742,7 +809,7 @@ test("audit: the cross-cutting checks (cloak, step-up, origin, sessions) never w
     `SELECT count(*)::int AS n FROM admin_audit_log WHERE action = 'auth.denied' AND (admin_id = ANY($1::bigint[]) OR admin_id IS NULL)`,
     [ids],
   );
-  const expected = ROLES.reduce((acc, r) => acc + expectedDenied[r].length, 0);
+  const expected = MODES.reduce((acc, m) => acc + ROLES.reduce((inner, r) => inner + expectedDeniedByMode[m.name][r].length, 0), 0);
   assert.ok(expected > 0, "the matrix test did not run");
   assert.equal(n!.n, expected);
   const other = await queryOne<{ n: number }>(`SELECT count(*)::int AS n FROM admin_audit_log WHERE action = 'auth.denied' AND admin_id <> ALL($1::bigint[])`, [ids]);
