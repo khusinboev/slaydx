@@ -381,6 +381,50 @@ test("refund racing the worker's refund: the unique ledger reference becomes 409
   assert.equal((await audits(s.admin.adminId, "jobs.refund")).length, 0);
 });
 
+/** Sessions of this database waiting on a row lock (`pg_stat_activity`). */
+async function waitForLockWaiters(n: number): Promise<void> {
+  const deadline = Date.now() + 5_000;
+  for (;;) {
+    const row = await queryOne<{ n: number }>(
+      `SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'`,
+    );
+    if ((row?.n ?? 0) >= n) return;
+    if (Date.now() > deadline) throw new Error(`lock waiters: kutilgan ${n}, bor ${row?.n ?? 0}`);
+    await new Promise((r) => setTimeout(r, 20));
+  }
+}
+
+/**
+ * The mirror race (P4 money review, finding 2): the worker's `credits.refund`
+ * passes its "already refunded" check while an ADMIN refund is still
+ * uncommitted, waits on the users row, then its insert hits
+ * `transactions_ref_idx`. That must read as "already refunded" (`false`), not
+ * a raw 23505: `refundThenCleanup` would log a false REFUND_FAILED alert.
+ * The barrier is the admin's own uncommitted `refundInTx`.
+ */
+test("worker refund racing a committing admin refund: unique ledger reference → false (already refunded), never a raw 23505", { skip }, async () => {
+  const u = await mkUser(3_000);
+  const id = await enqueue(u.id, 1_000);
+  await query(`UPDATE generations SET status = 'FAILED', locked_by = NULL, finished_at = now() WHERE id = $1`, [id]);
+  const admin = await pool().connect();
+  let worker: Promise<boolean> | undefined;
+  try {
+    await admin.query("BEGIN");
+    assert.equal(await refundInTx(admin, u.id, id, ADMIN_REFUND_NOTE), true); // holds the users row, refund row uncommitted
+    worker = refund(u.id, id, "Xatolik: kech");
+    await waitForLockWaiters(1); // the worker sits on `SELECT … users FOR UPDATE`
+    await admin.query("COMMIT");
+  } finally {
+    await admin.query("ROLLBACK").catch(() => {});
+    admin.release();
+  }
+  assert.equal(await worker!, false, "MUTATSIYA: 23505 must become «already refunded»");
+  const rf = await refunds(id);
+  assert.equal(rf.length, 1);
+  assert.equal(rf[0].note, ADMIN_REFUND_NOTE);
+  assert.equal(await balance(u.id), 3_000, "refunded exactly once");
+});
+
 // ───────────────────────────── ids and guard
 
 test("ids: non-UUID or unknown → 404 not_found (never 500)", { skip }, async () => {

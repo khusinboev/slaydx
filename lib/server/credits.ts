@@ -174,47 +174,67 @@ export async function refundPartial(
   return refundRatio(userId, reference, Math.min(1, ratio), note);
 }
 
+/**
+ * `transactions_ref_idx` UNIQUE (kind, reference) ga urilgan 23505 — boshqa
+ * yo'l (admin qaytarishi, tiklash skaneri) tekshiruv bilan INSERT orasida
+ * o'z `refund` qatorini COMMIT qilgan. Javob tekshiruvdagi bilan bir xil:
+ * «allaqachon qaytarilgan».
+ */
+function isRefundDuplicate(e: unknown): boolean {
+  const err = e as { code?: unknown; constraint?: unknown } | null;
+  return Boolean(err) && err!.code === "23505" && err!.constraint === "transactions_ref_idx";
+}
+
 async function refundRatio(userId: string, reference: string, ratio: number, note: string): Promise<boolean> {
   let amount: ChargeSplit = ZERO;
-  const ok = await transaction(async (client) => {
-    amount = ZERO;
-    const done = await client.query("SELECT 1 FROM transactions WHERE kind = 'refund' AND reference = $1", [
-      reference,
-    ]);
-    if (done.rows[0]) return false;
+  let ok: boolean;
+  try {
+    ok = await transaction(async (client) => {
+      amount = ZERO;
+      const done = await client.query("SELECT 1 FROM transactions WHERE kind = 'refund' AND reference = $1", [
+        reference,
+      ]);
+      if (done.rows[0]) return false;
 
-    const charged = await client.query<{
-      points_delta: string;
-      quota_delta: string;
-      balance_delta: string;
-    }>(
-      "SELECT points_delta, quota_delta, balance_delta FROM transactions WHERE kind = 'charge' AND reference = $1",
-      [reference],
-    );
-    const row = charged.rows[0];
-    if (!row) return false;
+      const charged = await client.query<{
+        points_delta: string;
+        quota_delta: string;
+        balance_delta: string;
+      }>(
+        "SELECT points_delta, quota_delta, balance_delta FROM transactions WHERE kind = 'charge' AND reference = $1",
+        [reference],
+      );
+      const row = charged.rows[0];
+      if (!row) return false;
 
-    const [points, quota, balance] = splitRatio(
-      [-Number(row.points_delta), -Number(row.quota_delta), -Number(row.balance_delta)],
-      ratio,
-    );
-    if (points + quota + balance === 0) return false;
+      const [points, quota, balance] = splitRatio(
+        [-Number(row.points_delta), -Number(row.quota_delta), -Number(row.balance_delta)],
+        ratio,
+      );
+      if (points + quota + balance === 0) return false;
 
-    await client.query("SELECT 1 FROM users WHERE id = $1 FOR UPDATE", [userId]);
-    await client.query(
-      `UPDATE users
-          SET points = points + $2, quota = quota + $3, balance = balance + $4, updated_at = now()
-        WHERE id = $1`,
-      [userId, points, quota, balance],
-    );
-    await client.query(
-      `INSERT INTO transactions (user_id, kind, points_delta, quota_delta, balance_delta, reference, note)
-       VALUES ($1, 'refund', $2, $3, $4, $5, $6)`,
-      [userId, points, quota, balance, reference, note],
-    );
-    amount = { points, quota, balance };
-    return true;
-  });
+      await client.query("SELECT 1 FROM users WHERE id = $1 FOR UPDATE", [userId]);
+      await client.query(
+        `UPDATE users
+            SET points = points + $2, quota = quota + $3, balance = balance + $4, updated_at = now()
+          WHERE id = $1`,
+        [userId, points, quota, balance],
+      );
+      await client.query(
+        `INSERT INTO transactions (user_id, kind, points_delta, quota_delta, balance_delta, reference, note)
+         VALUES ($1, 'refund', $2, $3, $4, $5, $6)`,
+        [userId, points, quota, balance, reference, note],
+      );
+      amount = { points, quota, balance };
+      return true;
+    });
+  } catch (e) {
+    if (!isRefundDuplicate(e)) throw e;
+    // Tranzaksiya allaqachon ROLLBACK bo'lgan (`transaction`): hamyon
+    // o'zgarmagan, qator yozilmagan — ikkinchi to'siq ishladi.
+    log("info", "[credits] pul allaqachon qaytarilgan (poyga)", { userId, reference, ratio });
+    return false;
+  }
   // COMMIT dan keyin (OBS-02): pul harakati jurnalda, `reference` (= ish id si) bilan.
   if (ok) log("info", "[credits] pul qaytarildi", { userId, reference, ratio, ...amount });
   return ok;
