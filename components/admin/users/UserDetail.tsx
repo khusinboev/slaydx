@@ -26,7 +26,7 @@ import { roleLabel, useCan } from "@/components/admin/shell";
 import { WalletAdjustDialog } from "@/components/admin/money";
 import { GenerationsTable } from "@/components/admin/generations";
 import { OrdersTable, useResource, useUrlFilters } from "@/components/admin/payments";
-import { fmtBytes, fmtDate, fmtDateTime, fmtNumber, fmtSoum, fmtTanga } from "@/lib/admin-format";
+import { fmtBytes, fmtDateTime, fmtNumber, fmtSoum, fmtTanga } from "@/lib/admin-format";
 import { adminErrorMessage } from "@/lib/admin-api/core";
 import { PROFILE_FIELDS, getUser, type AdminUserDetailResponse } from "@/lib/admin-api/users";
 import { PROFILE_LABEL } from "./labels";
