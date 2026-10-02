@@ -408,6 +408,13 @@ export function runtimeWarnings(): string[] {
       "ADMIN_TOTP_KEY yo'q yoki noto'g'ri (base64, aniq 32 bayt) — admin panelga kirish o'chiq; yaratish: openssl rand -base64 32",
     );
   }
+  // Admin panel: TRUST_PROXY bo'lmasa `clientIp` hamma uchun "direct" — admin
+  // kirishdagi IP bo'yicha limit o'chiq qoladi (hisob bo'yicha qulf ishlaydi).
+  if (isProd && !env.trustProxy) {
+    warnings.push(
+      "TRUST_PROXY=true emas — admin panelga kirishda IP bo'yicha limit ishonchli proxy'siz o'chiq (faqat hisob bo'yicha qulf himoya qiladi); reverse proxy ortida TRUST_PROXY=true qo'ying",
+    );
+  }
   // O'chirish tugmasidagi xato yozuv («on», «enabled») jimgina «o'chirilmagan»
   // bo'lib qolardi — ya'ni bepul LLM sarfi davom etardi.
   const killSwitch = str("FREE_LLM_DISABLED").toLowerCase();

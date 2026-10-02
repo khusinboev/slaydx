@@ -179,10 +179,52 @@ function actorOf(w: Who): AuditActor {
 
 const failBucket = (adminId: string) => `admin-auth-fail:${adminId}`;
 
-/** Every code attempt (any flow) counts against the caller's IP. */
+const ipBucket = (ip: string) => `admin-auth-ip:${ip}`;
+
+/**
+ * The IP budget only makes sense for a real client address. `clientIp` is
+ * "direct" for everyone without `TRUST_PROXY` and "unknown" when the proxy
+ * sent no address: one shared bucket would let a single admin's failures lock
+ * every other admin out (Phase 4 review). The per-account lock still applies;
+ * `runtimeWarnings` flags the missing proxy in production.
+ */
+export function ipGateApplies(ip: string): boolean {
+  return ip !== "" && ip !== "direct" && ip !== "unknown";
+}
+
+/**
+ * Refuses before verifying anything once the IP's FAILED codes (any flow)
+ * reached the limit. Reads the counter through a zero-weight upsert — the
+ * same statement path the counter uses — so an unavailable store refuses
+ * (fail-closed) without counting the attempt; successes never consume the
+ * budget (`countIpFailure` does).
+ */
 async function ipGate(ip: string): Promise<void> {
-  const r = await rateLimit(`admin-auth-ip:${ip}`, IP_LIMIT, IP_WINDOW_SEC, { failClosed: true });
-  if (!r.ok) throw rateLimitedError(r.retryAfterSec);
+  if (!ipGateApplies(ip)) return;
+  const now = Date.now();
+  const windowStart = windowStartOf(now, IP_WINDOW_SEC);
+  let hits: number;
+  try {
+    const row = await queryOne<{ hits: number }>(
+      `INSERT INTO rate_limits (bucket, window_start, hits) VALUES ($1, $2, 0)
+       ON CONFLICT (bucket, window_start) DO UPDATE SET hits = rate_limits.hits
+       RETURNING hits`,
+      [ipBucket(ip), windowStart],
+    );
+    hits = row?.hits ?? 0;
+  } catch (e) {
+    log("error", "[admin] IP limit check failed", { err: e });
+    throw rateLimitedError(30);
+  }
+  if (hits >= IP_LIMIT) {
+    throw rateLimitedError(Math.max(1, Math.ceil((windowStart.getTime() + IP_WINDOW_SEC * 1000 - now) / 1000)));
+  }
+}
+
+/** One failed code against the caller's IP; the NEXT attempt's `ipGate` refuses once over the limit. */
+async function countIpFailure(ip: string): Promise<void> {
+  if (!ipGateApplies(ip)) return;
+  await rateLimit(ipBucket(ip), IP_LIMIT, IP_WINDOW_SEC, { failClosed: true });
 }
 
 /** Refuses before verifying anything while the account is locked. Fail-closed. */
@@ -216,6 +258,7 @@ async function lockGate(adminId: string): Promise<void> {
  */
 async function failCode(w: Who, flow: string): Promise<never> {
   const r = await rateLimit(failBucket(w.adminId), FAIL_LIMIT, FAIL_WINDOW_SEC, { failClosed: true });
+  await countIpFailure(w.ip);
   await writeFailedAudit(actorOf(w), { action: "auth.login_failed", targetType: "admin", targetId: w.adminId, meta: { flow } });
   if (r.error) throw rateLimitedError(r.retryAfterSec);
   if (!r.ok || r.remaining === 0) {
@@ -426,6 +469,7 @@ export async function confirmEnrollment(
 
   if (out.kind === "gone") throw new ApiError(ENROLL_GONE, 404);
   if (out.kind === "bad") {
+    await countIpFailure(auth.ip);
     await writeFailedAudit(actorOf(w), {
       action: "auth.login_failed",
       targetType: "admin",

@@ -220,6 +220,9 @@ export async function refundJob(
   const bodyHash = bodyHashOf({ id, reason });
   return idempotentMutation<JobRefundResponse>(actor, { action: "jobs.refund", key: idempotencyKey, bodyHash }, async (client) => {
     const row = await lockGeneration(client, id);
+    // The wallet rule (§10 T13): no discretionary money action on one's own
+    // account. Cancel/fail of one's own stuck job stay allowed — ordinary ops.
+    if (row.user_id === actor.userId) throw new ApiError("O'z ishingiz uchun pul qaytara olmaysiz", 409, { code: "self" });
     const refuse = (why: string) =>
       new ApiError(`Qaytarib bo'lmaydi: ${why}`, 409, { code: "not_refundable", status: row.status });
     if (row.status !== "FAILED") throw refuse(`ish holati ${row.status}`);

@@ -26,7 +26,9 @@ import {
  *      (the panel's existence is not revealed);
  *   5. no valid admin session bound to the current user session → 401 admin_auth;
  *   6. slide the idle expiry (at most one write per 60 s);
- *   7. role lacks the permission → `denied` audit row + 403 forbidden;
+ *   7. role lacks the permission → per-admin denied-call limit (fail-closed,
+ *      across scopes; over it → 429 and NO audit row), else `denied` audit
+ *      row + 403 forbidden;
  *   8. step-up permission without a reauth in the last 10 min → 401 reauth;
  *   9. per-admin, per-scope rate limit, fail-closed → 429;
  *  10. `addLogContext({ userId, adminId })`;
@@ -55,6 +57,16 @@ export type AdminHandlerOptions = {
 };
 
 const NOT_FOUND = "Topilmadi";
+
+/**
+ * Refused calls (step 7) share one bucket per admin, `admin-denied:<adminId>`,
+ * checked BEFORE the `denied` audit row is written: otherwise a role could
+ * flood the audit log with 403s at no cost (Phase 4 review). Under the limit
+ * every refused call still writes exactly one row. Mutable on purpose: the
+ * permission-matrix test fires every route × role within a minute and raises
+ * `limit`; production never changes it.
+ */
+export const DENIED_RATE: { limit: number; windowSec: number } = { limit: 30, windowSec: 60 };
 
 /** Step 3: mutations need a present, same-site `Origin`. */
 export function assertAdminOrigin(req: Request): void {
@@ -115,6 +127,8 @@ export function adminHandler<C = unknown>(
     };
 
     if (!can(account.role, opts.permission)) {
+      const denied = await rateLimit(`admin-denied:${account.id}`, DENIED_RATE.limit, DENIED_RATE.windowSec, { failClosed: true });
+      if (!denied.ok) throw rateLimitedError(denied.retryAfterSec);
       await writeDeniedAudit(admin, opts.permission, scope);
       throw new ApiError("Bu amal uchun ruxsatingiz yo'q", 403, { code: "forbidden" });
     }

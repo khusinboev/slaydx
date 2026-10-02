@@ -41,7 +41,7 @@ const { createSession, SESSION_COOKIE } = await import("../lib/server/session.ts
 const { seal, generateRecoveryCode, hmacCode, RECOVERY_CODE_RE } = await import("../lib/server/admin-crypto.ts");
 const { generateTotpSecret, totpCode, totpStep } = await import("../lib/server/admin-totp.ts");
 const { createAdminSession } = await import("../lib/server/admin-session.ts");
-const { cliUpsertAdmin } = await import("../lib/server/admin-accounts.ts");
+const { cliUpsertAdmin, IP_LIMIT } = await import("../lib/server/admin-accounts.ts");
 
 const routes = {
   session: await import("../app/api/admin/session/route.ts"),
@@ -767,4 +767,106 @@ test("audit log is append-only (028 trigger): UPDATE and DELETE are refused", { 
   assert.ok(row);
   await assert.rejects(query(`UPDATE admin_audit_log SET action = 'x' WHERE id = $1`, [row!.id]), /append-only/);
   await assert.rejects(query(`DELETE FROM admin_audit_log WHERE id = $1`, [row!.id]), /append-only/);
+});
+
+// ───────────────────────────── Phase 4 security review fixes
+
+/**
+ * Finding 1: a refused call must cost the caller something. Before the fix
+ * the `auth.denied` row was written BEFORE any rate limit, so a viewer could
+ * flood the audit log (320 denied rows, zero 429). Now a dedicated bucket
+ * `admin-denied:<adminId>` (`DENIED_RATE`, across scopes) runs first,
+ * fail-closed; once over it the call is 429 and NO audit row is written.
+ * Allowed calls never touch that bucket.
+ *
+ * Mutation: move the bucket after `writeDeniedAudit` → the row count is 31;
+ * drop the bucket → the 31st call is 403.
+ */
+test("denied flood: refused calls are rate-limited BEFORE the audit row (across scopes); allowed calls unaffected", { skip }, async () => {
+  const { DENIED_RATE } = await import("../lib/server/admin-handler.ts");
+  assert.equal(DENIED_RATE.limit, 30, "production default");
+  const v = await mkAdmin("viewer");
+  const s = await openSession(v, { reauth: true });
+  const c = cookie(v.userToken, s.token);
+  const statuses: number[] = [];
+  for (let i = 0; i < DENIED_RATE.limit; i++) {
+    // Two different scopes: the budget is per admin, not per scope.
+    const r =
+      i % 2 === 0
+        ? await call(routes.admins, "GET", "/api/admin/admins", { cookie: c })
+        : await call(routes.admins, "POST", "/api/admin/admins", { cookie: c, body: { role: "viewer" } });
+    statuses.push(r.status);
+    assert.equal(r.body.code, "forbidden", `call #${i + 1}`);
+  }
+  assert.deepEqual(statuses, Array(DENIED_RATE.limit).fill(403));
+  assert.equal((await auditRows(v.adminId, "auth.denied")).length, DENIED_RATE.limit, "one denied row per refused call under the limit");
+
+  const over = await call(routes.admins, "GET", "/api/admin/admins", { cookie: c });
+  assert.equal(over.status, 429, JSON.stringify(over.body));
+  assert.equal(typeof over.body.retryAfterSec, "number");
+  assert.notEqual(over.body.code, "forbidden");
+  const overPost = await call(routes.admins, "POST", "/api/admin/admins", { cookie: c, body: { role: "viewer" } });
+  assert.equal(overPost.status, 429, "the other scope is limited too (one bucket per admin)");
+  assert.equal((await auditRows(v.adminId, "auth.denied")).length, DENIED_RATE.limit, "no audit row once limited");
+
+  // The same admin's allowed calls are not throttled by the denied bucket.
+  assert.equal((await call(routes.meSessions, "GET", "/api/admin/me/sessions", { cookie: c })).status, 200);
+  assert.equal((await call(routes.session, "GET", "/api/admin/session", { cookie: c })).status, 200);
+});
+
+/**
+ * Finding 2+4: the IP budget (20 / 15 min) counts FAILED codes only;
+ * successful logins never consume it. Mutation: count successes again →
+ * the 21st login from one IP is 429.
+ */
+test("per-IP limit counts failed codes only: successful logins from one IP never consume the budget", { skip }, async () => {
+  const ip = `198.19.${randomInt(0, 256)}.${randomInt(1, 255)}`;
+  const admins: TestAdmin[] = [];
+  for (let i = 0; i < 3; i++) admins.push(await mkAdmin("viewer"));
+  for (let i = 0; i < IP_LIMIT + 1; i++) {
+    const a = admins[i % admins.length]!;
+    await resetStep(a);
+    const r = await call(routes.login, "POST", "/api/admin/auth/login", { cookie: cookie(a.userToken), body: { code: nowCode(a.secret) }, ip });
+    assert.equal(r.status, 200, `login #${i + 1} from ${ip}: ${JSON.stringify(r.body)}`);
+  }
+  // One wrong code afterwards is an ordinary 401: the budget was untouched.
+  const a = admins[0]!;
+  const wrong = await call(routes.login, "POST", "/api/admin/auth/login", { cookie: cookie(a.userToken), body: { code: wrongCode(a.secret) }, ip });
+  assert.equal(wrong.status, 401);
+  assert.equal(wrong.body.code, "bad_code");
+});
+
+/**
+ * Finding 2+4: when the client IP is not trustworthy (`clientIp` → "direct"
+ * without TRUST_PROXY, "unknown" with it but no forwarded header) every admin
+ * would share ONE global budget — one admin's failures lock everyone out. The
+ * IP gate is skipped for such values; the per-account lock (5 / 15 min) still
+ * protects. Mutation: gate "unknown" again → the 21st attempt is 429.
+ */
+test("untrustworthy client IP (unknown/direct): the IP gate is skipped, the per-account lock still applies", { skip }, async () => {
+  const { ipGateApplies } = await import("../lib/server/admin-accounts.ts");
+  assert.equal(ipGateApplies("direct"), false);
+  assert.equal(ipGateApplies("unknown"), false);
+  assert.equal(ipGateApplies(""), false);
+  assert.equal(ipGateApplies("10.0.0.1"), true);
+  assert.equal(ipGateApplies("2001:db8::1"), true);
+
+  // An empty `x-forwarded-for` falls through to "unknown" in `clientIp`.
+  const admins: TestAdmin[] = [];
+  for (let i = 0; i < 6; i++) admins.push(await mkAdmin("viewer"));
+  const statuses: number[] = [];
+  for (let i = 0; i < 24; i++) {
+    const target = admins[Math.floor(i / 4)]!;
+    const r = await call(routes.login, "POST", "/api/admin/auth/login", { cookie: cookie(target.userToken), body: { code: wrongCode(target.secret) }, ip: "" });
+    statuses.push(r.status);
+  }
+  assert.deepEqual(statuses, Array(24).fill(401), "no shared global budget for an unknown IP");
+  const failed = await auditRows(admins[0]!.adminId, "auth.login_failed");
+  assert.equal(failed.length, 4);
+  assert.equal(failed[0]!.ip, "unknown", "the test really exercised the untrustworthy-IP path");
+  // The per-account lock is untouched: the 5th wrong code locks that account.
+  const first = admins[0]!;
+  const fifth = await call(routes.login, "POST", "/api/admin/auth/login", { cookie: cookie(first.userToken), body: { code: wrongCode(first.secret) }, ip: "" });
+  assert.equal(fifth.status, 429);
+  assert.equal(fifth.body.code, "locked");
 });
