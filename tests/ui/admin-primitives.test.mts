@@ -10,7 +10,8 @@ import { ConfirmDialog, type ConfirmContext } from "../../components/admin/ui/Co
 import { CursorPager } from "../../components/admin/ui/CursorPager.tsx";
 import { DataTable, type Column } from "../../components/admin/ui/DataTable.tsx";
 import { DateRangePicker, type DateRange } from "../../components/admin/ui/DateRangePicker.tsx";
-import { SearchInput } from "../../components/admin/ui/FilterBar.tsx";
+import { MultiSelectFilter, SearchInput } from "../../components/admin/ui/FilterBar.tsx";
+import { LineChart } from "../../components/admin/ui/charts/LineChart.tsx";
 import { StepUpDialog, StepUpProvider } from "../../components/admin/ui/StepUpDialog.tsx";
 import { Toaster, toast, useToastStore } from "../../components/admin/ui/Toaster.tsx";
 import { presetRange, previousRange, validateRange } from "../../components/admin/ui/date-range.ts";
@@ -443,6 +444,85 @@ test("SearchInput: debounce, Enter darhol, tashqi tozalash matnni tiklaydi", asy
   assert.deepEqual(seen, ["al", "ali"], "Enter kutmaydi");
   fireEvent.click(screen.getByText("tashqaridan tozalash"));
   assert.equal(input.value, "", "tashqi qiymat o'zgardi — maydon yangilanadi");
+});
+
+/* ───────────────────────────── MultiSelectFilter ───────────────────────────── */
+
+test("MultiSelectFilter: tugmaning nomi filtr yorlig'i va tanlangan qiymatlarni o'z ichiga oladi", () => {
+  const STATUS = [
+    { value: "QUEUED", label: "Navbatda" },
+    { value: "FAILED", label: "Xato" },
+    { value: "COMPLETED", label: "Tayyor" },
+  ];
+  function Harness() {
+    const [v, setV] = useState<string[]>(["FAILED", "QUEUED"]);
+    return h(MultiSelectFilter, { label: "Holat", values: v, options: STATUS, onChange: setV });
+  }
+  render(h(Harness));
+  // Selection order is kept; the visible text stays the short summary.
+  const button = screen.getByRole("button", { name: "Holat: Xato, Navbatda" });
+  assert.equal(button.textContent, "2 ta tanlangan");
+  assert.equal(button.getAttribute("aria-haspopup"), "true");
+
+  fireEvent.click(button);
+  fireEvent.click(screen.getByRole("checkbox", { name: "Xato" }));
+  assert.equal(screen.getByRole("button", { name: "Holat: Navbatda" }).textContent, "Navbatda");
+
+  fireEvent.click(screen.getByRole("button", { name: "Tanlovni tozalash" }));
+  assert.equal(screen.getByRole("button", { name: "Holat: Hammasi" }).textContent, "Hammasi");
+});
+
+/* ───────────────────────────── LineChart ───────────────────────────── */
+
+/** Tick labels (gridline texts) and the line's y coordinates of a rendered LineChart. */
+function lineChartGeometry(title: string) {
+  const svg = screen.getByRole("img", { name: title });
+  const tickTexts = [...svg.querySelectorAll("g > text")].map((t) => t.textContent ?? "");
+  const pts = (svg.querySelector("polyline")?.getAttribute("points") ?? "").split(" ").filter(Boolean);
+  const ys = pts.map((p) => Number(p.split(",")[1]));
+  return { svg, tickTexts, ys };
+}
+
+test("LineChart: 1 dan kichik qiymatlar o'z shkalasini oladi (tekis chiziqqa aylanmaydi)", () => {
+  const title = "Kunlik AI xarajat";
+  render(
+    h(LineChart, {
+      title,
+      formatValue: (n: number) => String(n),
+      points: [
+        { label: "01.10", value: 0.012 },
+        { label: "02.10", value: 0.03 },
+        { label: "03.10", value: 0.021 },
+      ],
+    }),
+  );
+  const { tickTexts, ys } = lineChartGeometry(title);
+  assert.deepEqual(tickTexts, ["0", "0.01", "0.02", "0.03"], "nice 0.01 steps, top tick at the data maximum");
+  assert.ok(ys.every((y) => Number.isFinite(y)));
+  // Plot height = 200 - 12 - 26 = 162 px; the series spans most of it instead of ~3 %.
+  const spread = Math.max(...ys) - Math.min(...ys);
+  assert.ok(spread > 80, `the line uses the plot height (spread ${spread.toFixed(1)} px)`);
+});
+
+test("LineChart: hammasi nol bo'lgan qator — domen 0..1, chiziq nol chizig'ida, NaN yo'q", () => {
+  const title = "Kunlik ro'yxatdan o'tish";
+  render(
+    h(LineChart, {
+      title,
+      formatValue: (n: number) => String(n),
+      points: [
+        { label: "01.10", value: 0 },
+        { label: "02.10", value: 0 },
+        { label: "03.10", value: 0 },
+      ],
+    }),
+  );
+  const { svg, tickTexts, ys } = lineChartGeometry(title);
+  assert.deepEqual(tickTexts, ["0", "0.5", "1"]);
+  assert.equal(ys.length, 3);
+  assert.ok(ys.every((y) => Number.isFinite(y) && y === ys[0]), "flat line, finite coordinates");
+  assert.equal(ys[0], 200 - 26, "on the zero baseline at the bottom of the plot");
+  assert.ok(!svg.innerHTML.includes("NaN"));
 });
 
 /* ───────────────────────────── StepUpDialog ───────────────────────────── */
