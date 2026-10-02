@@ -283,7 +283,8 @@ test("paging passes the cursor; a filter change returns to the first page", asyn
           : json(200, listBody({ items: ITEMS.slice(0, 2), nextCursor: "CUR1", total: 10 })),
     }),
   );
-  const { container } = renderAt("");
+  const view = renderAt("");
+  const { container } = view;
   await waitFor(() => assert.ok(rowOf(container, "9")));
   fireEvent.click(screen.getByRole("button", { name: "Keyingi" }));
   await waitFor(() => assert.ok(rowOf(container, "10")));
@@ -292,6 +293,19 @@ test("paging passes the cursor; a filter change returns to the first page", asyn
   fireEvent.click(screen.getByRole("button", { name: "Oldingi" }));
   await waitFor(() => assert.ok(rowOf(container, "9")));
   assert.equal(listCalls(calls).at(-1)!.url.searchParams.get("cursor"), null, "back to the first page");
+
+  // A filter change while on page two starts again at page one (a cursor belongs to one filter set).
+  fireEvent.click(screen.getByRole("button", { name: "Keyingi" }));
+  await waitFor(() => assert.equal(listCalls(calls).at(-1)!.url.searchParams.get("cursor"), "CUR1"));
+  const router: AppRouterInstance = { back() {}, forward() {}, refresh() {}, prefetch() {}, push() {}, replace() {} };
+  view.rerender(
+    h(AdminIdentityProvider, {
+      value: { role: "owner", permissions: OWNER, name: "Test", username: null },
+      children: h(AppRouterContext.Provider, { value: router }, h(PathnameContext.Provider, { value: "/admin/audit" }, h(SearchParamsContext.Provider, { value: new URLSearchParams("outcome=denied") }, h(AuditPage)))),
+    }),
+  );
+  await waitFor(() => assert.equal(listCalls(calls).at(-1)!.url.searchParams.get("outcome"), "denied"));
+  assert.equal(listCalls(calls).at(-1)!.url.searchParams.get("cursor"), null, "the new filter set starts at the first page");
 });
 
 test("empty: with filters it offers to clear them; without filters it just says there is nothing", async () => {
