@@ -1,18 +1,44 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
+import { usePathname } from "next/navigation";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
 import { LoginModal } from "../overlays/LoginModal";
 import { SearchDialog } from "../overlays/SearchDialog";
 import { NotificationsPanel } from "../overlays/NotificationsPanel";
 import { PayDialog } from "../overlays/PayDialog";
+import { useOverlayHistory } from "@/components/nav/useOverlayHistory";
 import { useUi } from "@/lib/ui";
 import { useAppStore } from "@/lib/store";
+
+const NARROW_QUERY = "(max-width: 767.98px)";
+
+function subscribeNarrow(cb: () => void) {
+  if (typeof window.matchMedia !== "function") return () => {};
+  const mq = window.matchMedia(NARROW_QUERY);
+  mq.addEventListener("change", cb);
+  return () => mq.removeEventListener("change", cb);
+}
+
+/** Below Tailwind's `md` (where the drawer is visible); no `matchMedia` (jsdom) counts as narrow. */
+function isNarrow() {
+  return typeof window.matchMedia !== "function" || window.matchMedia(NARROW_QUERY).matches;
+}
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const open = useUi((s) => s.open);
+  const pathname = usePathname();
+
+  // Phone back / Telegram BackButton closes the drawer first (docs/nav/PLAN.md).
+  // The drawer is `md:hidden`: on a wide screen the menu button shows nothing, so no history entry either.
+  const narrow = useSyncExternalStore(subscribeNarrow, isNarrow, () => true);
+  useOverlayHistory(mobileOpen, () => setMobileOpen(false), { enabled: narrow });
+  // A route change never leaves the drawer open over the new page.
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [pathname]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

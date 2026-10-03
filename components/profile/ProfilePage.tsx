@@ -5,6 +5,7 @@ import Link from "next/link";
 import * as api from "@/lib/api-client";
 import { creditTotal, useAppStore } from "@/lib/store";
 import { useUi } from "@/lib/ui";
+import { PageBack } from "../shell/PageBack";
 
 const FIELDS = [
   ["author", "Muallif (F.I.Sh)"],
@@ -99,6 +100,9 @@ export function ProfilePage() {
 
   return (
     <div className="mx-auto w-full max-w-4xl px-4 py-8">
+      <div className="mb-4">
+        <PageBack />
+      </div>
       <div className="bg-card mb-6 rounded-2xl border p-6">
         <div className="flex items-center gap-4">
           <div className="bg-primary text-primary-foreground ring-primary ring-offset-card flex size-16 shrink-0 items-center justify-center rounded-full text-2xl font-bold ring-[3px] ring-offset-[3px]">

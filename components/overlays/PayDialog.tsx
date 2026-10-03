@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import * as api from "@/lib/api-client";
 import { useAppStore } from "@/lib/store";
+import { useNav } from "@/components/nav/NavProvider";
 import { useUi } from "@/lib/ui";
 import { useDialog } from "./useDialog";
 
@@ -27,6 +28,7 @@ export function PayDialog() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const panelRef = useDialog(open, close);
+  const nav = useNav();
 
   // Har ochilganda oldingi xato/kutish holati tozalansin.
   useEffect(() => {
@@ -56,7 +58,9 @@ export function PayDialog() {
         amount,
       });
       // Provayder sahifasi — qaytganda `/uz/purchase?order=...` ochiladi.
-      window.location.href = checkoutUrl;
+      // Dialog tarix yozuvi avval olib tashlanadi: aks holda provayderdan
+      // «orqaga» o'lik (dialogsiz) yozuvga tushardi.
+      nav.navigateFromOverlay(checkoutUrl, { external: true });
     } catch (e) {
       setError(e instanceof Error ? e.message : "To'lov boshlanmadi");
       setBusy(null);
