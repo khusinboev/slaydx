@@ -45,10 +45,15 @@ function nextUpdateId(): number {
 
 type Caught = { url: string; body: Record<string, unknown> };
 
-/** `sendMessage` payload'idagi birinchi inline tugma URL'i (bo'lsa). */
+/**
+ * `sendMessage` payload'idagi birinchi `url` tugmasi (bo'lsa). `/start` va
+ * `/login` endi avval `web_app` tugmasini qo'yadi (uning `url` maydoni yo'q),
+ * shuning uchun sayt havolasi qatorlar bo'ylab qidiriladi; aniq klaviatura
+ * shakli `tests/telegram-webapp-buttons.test.mts` da qulflangan.
+ */
 function buttonUrl(body: Record<string, unknown>): string | undefined {
   const markup = body.reply_markup as { inline_keyboard?: { url?: string }[][] } | undefined;
-  return markup?.inline_keyboard?.[0]?.[0]?.url;
+  return markup?.inline_keyboard?.flat().find((b) => typeof b.url === "string")?.url;
 }
 
 let calls: Caught[] = [];
@@ -127,7 +132,7 @@ test("createBotLoginLink token BIR MARTA ishlaydi — ikkinchisi 'expired'", asy
   assert.deepEqual(second, { ok: false, reason: "expired" });
 });
 
-test("handleUpdate: nonce'siz /start — sendMessage 'Saytga kirish' tugmasi bilan, havola ishlaydi", async () => {
+test("handleUpdate: nonce'siz /start — sendMessage 'Saytda ochish' tugmasi bilan, havola ishlaydi", async () => {
   installFetchMock();
   const fromId = 700000101;
   const telegramId = trackId(String(fromId));
