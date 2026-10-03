@@ -26,6 +26,7 @@
  * Even then the bridge logs in only when there is NO session at all, so an
  * existing session (the same or a different user) is never replaced.
  */
+import { isRootPath } from "./nav/parents";
 
 export const TELEGRAM_WEB_APP_SCRIPT = "https://telegram.org/js/telegram-web-app.js";
 
@@ -90,4 +91,51 @@ export type AutoLoginState = {
 /** Silent Mini App login only for a genuine webview with no session of any user. */
 export function shouldAutoLogin(s: AutoLoginState): boolean {
   return s.webAppReady && s.initData.length > 0 && s.sessionChecked && !s.loggedIn && !s.attempted;
+}
+
+/**
+ * Telegram BackButton and closing confirmation (docs/nav/R4-back-nav.md §4).
+ *
+ * The decision is pure; `MiniAppBridge` applies it. On Android the hardware /
+ * gesture back fires `backButtonClicked` while the button is visible and
+ * closes the Mini App otherwise (asking first when closing confirmation is
+ * on); it never walks the WebView history. So the button is visible exactly
+ * when back has something in-app to do: an overlay to close, or a non-root
+ * page to leave. Roots (`/uz`, `/o/*`, `/admin`, …) hide it, and back there
+ * closes the app.
+ */
+export type TelegramBackInput = {
+  /** Open overlay layers (`lib/nav/history.ts` snapshot). */
+  overlays: number;
+  pathname: string;
+  /** Some leave guard has unsaved work. */
+  pending: boolean;
+  /** `Telegram.WebApp.isVersionAtLeast`: members newer than the client are never called. */
+  isVersionAtLeast: (version: string) => boolean;
+};
+
+export type TelegramBackState = {
+  /** `true` show, `false` hide, `null` the client has no BackButton (< 6.1): do not touch it. */
+  backButton: boolean | null;
+  /** `true` enable, `false` disable, `null` unsupported (< 6.2). */
+  closingConfirmation: boolean | null;
+};
+
+/** `BackButton` and `backButtonClicked`. */
+export const TG_BACK_BUTTON_VERSION = "6.1";
+/** `enableClosingConfirmation` / `disableClosingConfirmation`. */
+export const TG_CLOSING_CONFIRMATION_VERSION = "6.2";
+
+function supports(check: (v: string) => boolean, v: string): boolean {
+  try {
+    return check(v) === true;
+  } catch {
+    return false;
+  }
+}
+
+export function telegramBackState(s: TelegramBackInput): TelegramBackState {
+  const backButton = supports(s.isVersionAtLeast, TG_BACK_BUTTON_VERSION) ? s.overlays > 0 || !isRootPath(s.pathname) : null;
+  const closingConfirmation = supports(s.isVersionAtLeast, TG_CLOSING_CONFIRMATION_VERSION) ? s.pending : null;
+  return { backButton, closingConfirmation };
 }

@@ -4,6 +4,7 @@ import { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import { applyTheme, useAppStore } from "@/lib/store";
 import { MiniAppBridge } from "@/components/telegram/MiniAppBridge";
+import { NavProvider } from "@/components/nav/NavProvider";
 
 /**
  * The admin panel (`/admin/**`) has its own session (`/api/admin/session`) and never reads the
@@ -51,6 +52,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <>
+      {/* History engine, back navigation, overlay/scroll handling: consumer AND admin pages. */}
+      <NavProvider />
       {children}
       {/* Telegram Mini App: inert outside a genuine Telegram webview. */}
       {onAdmin ? null : <MiniAppBridge />}

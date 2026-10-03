@@ -1,14 +1,37 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import * as api from "@/lib/api-client";
 import { useAppStore } from "@/lib/store";
 import { useUi } from "@/lib/ui";
 import { safeReturnTo } from "@/lib/safe-return";
-import { TELEGRAM_WEB_APP_SCRIPT, isTelegramWebApp, shouldAutoLogin, type LaunchEnv } from "@/lib/telegram-miniapp";
+import {
+  TELEGRAM_WEB_APP_SCRIPT,
+  isTelegramWebApp,
+  shouldAutoLogin,
+  telegramBackState,
+  type LaunchEnv,
+} from "@/lib/telegram-miniapp";
+import { getNavSnapshot, getServerNavSnapshot, subscribeNav } from "@/lib/nav/history";
+import { useNav } from "@/components/nav/NavProvider";
 
-type TelegramWebApp = { initData?: string; ready?: () => void; expand?: () => void };
+type TelegramBackButton = {
+  show?: () => void;
+  hide?: () => void;
+  onClick?: (cb: () => void) => void;
+  offClick?: (cb: () => void) => void;
+};
+type TelegramWebApp = {
+  initData?: string;
+  version?: string;
+  ready?: () => void;
+  expand?: () => void;
+  isVersionAtLeast?: (version: string) => boolean;
+  BackButton?: TelegramBackButton;
+  enableClosingConfirmation?: () => void;
+  disableClosingConfirmation?: () => void;
+};
 type TelegramWindow = Window & { Telegram?: { WebApp?: TelegramWebApp } };
 
 /**
@@ -57,11 +80,13 @@ export function MiniAppBridge() {
 
 function MiniAppSession() {
   const router = useRouter();
+  const nav = useNav();
   const sessionChecked = useAppStore((s) => s.sessionChecked);
   const loggedIn = useAppStore((s) => s.loggedIn);
   const setUser = useAppStore((s) => s.setUser);
   const refreshGenerations = useAppStore((s) => s.refreshGenerations);
   const [webAppReady, setWebAppReady] = useState(false);
+  const [webApp, setWebApp] = useState<TelegramWebApp | null>(null);
   const attempted = useRef(false);
 
   useEffect(() => {
@@ -76,6 +101,7 @@ function MiniAppSession() {
       } catch (e) {
         console.warn("[miniapp] ready/expand:", e instanceof Error ? e.message : e);
       }
+      setWebApp(wa);
       setWebAppReady(true);
     });
     return () => {
@@ -96,11 +122,75 @@ function MiniAppSession() {
         const ui = useUi.getState();
         const target = ui.overlay === "login" ? safeReturnTo(ui.returnTo) : null;
         if (ui.overlay === "login") ui.close();
-        if (target) router.push(target);
+        // The login modal's history entry is replaced by the target (back does not reopen it).
+        if (target) nav.navigateFromOverlay(target);
         else router.refresh();
       })
       .catch((e) => console.warn("[miniapp] login:", e instanceof Error ? e.message : e));
-  }, [webAppReady, sessionChecked, loggedIn, setUser, refreshGenerations, router]);
+  }, [webAppReady, sessionChecked, loggedIn, setUser, refreshGenerations, router, nav]);
 
+  useTelegramBack(webApp);
   return null;
+}
+
+/**
+ * Telegram BackButton + closing confirmation (docs/nav/R4-back-nav.md §4),
+ * from the pure `telegramBackState`. Every member is gated by the client's
+ * `isVersionAtLeast`; the click handler is removed with `offClick` on unmount
+ * (StrictMode mounts twice: no stacked handlers).
+ */
+function useTelegramBack(wa: TelegramWebApp | null) {
+  const nav = useNav();
+  const pathname = usePathname() ?? "/uz";
+  const snap = useSyncExternalStore(subscribeNav, getNavSnapshot, getServerNavSnapshot);
+  const state = wa
+    ? telegramBackState({
+        overlays: snap.overlays,
+        pathname,
+        pending: snap.guardPending,
+        isVersionAtLeast: (v) => wa.isVersionAtLeast?.(v) === true,
+      })
+    : null;
+  const back = state?.backButton ?? null;
+  const confirm = state?.closingConfirmation ?? null;
+  const supportsBack = back !== null;
+
+  useEffect(() => {
+    const bb = wa?.BackButton;
+    if (!supportsBack || !bb) return;
+    const onBack = () => nav.systemBack();
+    try {
+      bb.onClick?.(onBack);
+    } catch (e) {
+      console.warn("[miniapp] BackButton.onClick:", e instanceof Error ? e.message : e);
+    }
+    return () => {
+      try {
+        bb.offClick?.(onBack);
+      } catch {
+        /* the webview is going away */
+      }
+    };
+  }, [wa, supportsBack, nav]);
+
+  useEffect(() => {
+    const bb = wa?.BackButton;
+    if (back === null || !bb) return;
+    try {
+      if (back) bb.show?.();
+      else bb.hide?.();
+    } catch (e) {
+      console.warn("[miniapp] BackButton:", e instanceof Error ? e.message : e);
+    }
+  }, [wa, back]);
+
+  useEffect(() => {
+    if (!wa || confirm === null) return;
+    try {
+      if (confirm) wa.enableClosingConfirmation?.();
+      else wa.disableClosingConfirmation?.();
+    } catch (e) {
+      console.warn("[miniapp] closing confirmation:", e instanceof Error ? e.message : e);
+    }
+  }, [wa, confirm]);
 }
