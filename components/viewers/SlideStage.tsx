@@ -43,6 +43,7 @@ export function SlideStage({
   imageWait = false,
   reveal,
   hideSrc,
+  onFitScale,
 }: {
   slide?: SlideModel;
   theme: SlideTheme;
@@ -72,33 +73,101 @@ export function SlideStage({
   reveal?: number;
   /** Tahrirlanayotgan qatlam kaliti — `SlideCanvas` uni yashiradi (ustida tahrir maydoni turadi). */
   hideSrc?: string;
+  /**
+   * «Moslash» masshtabi (taqdimotda ishlatiladigan o'sha qiymat) — asboblar
+   * paneli yorlig'iga HAQIQIY foizni berish uchun. O'lcham o'zgarganda
+   * chaqiriladi; qiymat 0.001 ga yaxlitlanadi. Barqaror callback
+   * (`setState`) kutiladi.
+   */
+  onFitScale?: (scale: number) => void;
 }) {
   const stageRef = useRef<HTMLDivElement>(null);
   const [fitScale, setFitScale] = useState(0.6);
+  /*
+   * Sensorli tanlov: teginish qurilmasida rasm tugmalari («O‘z rasmim»,
+   * «Rasmsiz») slayd ustida DOIM turmaydi — slaydga tegilganda chiqadi.
+   * Sichqoncha uchun hech narsa o'zgarmaydi (CSS `hover: none` bilan
+   * cheklangan, pastda).
+   */
+  const [touchSel, setTouchSel] = useState(false);
 
   useEffect(() => {
     const el = stageRef.current;
     if (!el) return;
     const ro = new ResizeObserver(() => {
       const r = el.getBoundingClientRect();
-      const pad = present ? 24 : 32;
-      setFitScale(Math.min((r.width - pad) / SLIDE.w, (r.height - pad) / SLIDE.h));
+      if (present) {
+        // Taqdimot — AVVALGIDEK: butun rect, 24 px zaxira.
+        setFitScale(Math.min((r.width - 24) / SLIDE.w, (r.height - 24) / SLIDE.h));
+        return;
+      }
+      /*
+       * Oddiy rejim: ichki bo'sh joy (`padding`) haqiqiy hisobdan, shuning
+       * uchun mobilda (kichik padding) slayd kengligi to'liq ishlatiladi.
+       * `clientWidth` — aylantirgich o'rnini chiqarib tashlaydi.
+       */
+      const cs = getComputedStyle(el);
+      const padX = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+      const padY = (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
+      const w = (el.clientWidth || r.width) - padX;
+      const h = (el.clientHeight || r.height) - padY;
+      setFitScale(Math.min(w / SLIDE.w, h / SLIDE.h));
     });
     ro.observe(el);
     return () => ro.disconnect();
   }, [present, presenter]);
 
-  const scale = present || fitOn ? Math.max(0.18, fitScale) : zoom / 100;
+  const fitEff = Math.round(Math.max(0.18, fitScale) * 1000) / 1000;
+  const scale = present || fitOn ? fitEff : zoom / 100;
 
+  useEffect(() => {
+    onFitScale?.(fitEff);
+  }, [fitEff, onFitScale]);
+
+  // Boshqa slaydga o'tilganda tanlov tushadi.
+  useEffect(() => setTouchSel(false), [index]);
+
+  /*
+   * `m-auto` (justify/items-center EMAS): kontent sig'sa markazda, sig'masa
+   * (over-zoom) chap/yuqori chetdan boshlanadi va aylantirgich bilan
+   * to'liq yetib boriladi — `justify-center` chap yarmini aylantirib
+   * bo'lmaydigan joyga chiqarib yuborardi. «Moslash»da aylantirgich yo'q
+   * (`overflow-hidden`): slayd har doim sig'adi va markazda turadi.
+   * Taqdimot klasslari AVVALGIDEK.
+   */
   return (
     <div
       ref={stageRef}
-      className="flex min-h-0 flex-1 items-center justify-center"
+      data-slide-stage={present ? "present" : fitOn ? "fit" : "zoom"}
+      className={cn(
+        "flex min-h-0 flex-1",
+        present
+          ? "items-center justify-center"
+          : cn(
+              // Mobil: slayd kengligi bo'yicha (16:9) — pastda eskizlar uchun joy qoladi.
+              fitOn && "max-md:aspect-video max-md:flex-none",
+              "p-2 md:p-4",
+              fitOn ? "overflow-hidden" : "overflow-auto",
+            ),
+      )}
       onClick={() => present && onAdvance?.()}
+      onPointerDown={(e) => {
+        // Slayd tashqarisiga (qora maydonga) tegilsa tanlov tushadi.
+        if (!present && e.target === e.currentTarget) setTouchSel(false);
+      }}
     >
       <div
         style={{ width: SLIDE.w * scale, height: SLIDE.h * scale }}
-        className={cn("relative", !present && "shadow-2xl")}
+        className={cn(
+          "relative m-auto shrink-0",
+          !present && "shadow-2xl",
+          // Sensorli qurilmada rasm tugmalari faqat slayd tanlanganda ko'rinadi.
+          !present && "[@media(hover:none)]:[&:not([data-touch-sel])_[data-slide-image-controls]]:hidden",
+        )}
+        data-touch-sel={touchSel ? "" : undefined}
+        onPointerDown={(e) => {
+          if (!present && e.pointerType !== "mouse") setTouchSel(true);
+        }}
         /*
           Tahrir qatlami hodisalarni SHU ramkada tinglaydi: bu yagona
           tugun bo'lib, ichida ham slayd (`data-src` li matnlar), ham
