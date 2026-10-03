@@ -45,6 +45,8 @@ type Layer = {
   dead: boolean;
   /** Released on top; the pop runs in a microtask unless a new layer takes the entry over. */
   releasing: boolean;
+  /** `inputSeq` when opened: same value at a navigation = opened by the gesture that navigated. */
+  openedInput: number;
 };
 type Sx = { i: number; o?: string };
 /** A traversal we started ourselves: matched FIFO by its delta, not by a user press. */
@@ -65,7 +67,15 @@ export type NavSnapshot = {
 };
 
 export type NavigateKind = "push" | "replace" | "traverse";
-export type NavigateEvent = { kind: NavigateKind; href: string; pathname: string; index: number; from: string };
+export type NavigateEvent = {
+  kind: NavigateKind;
+  href: string;
+  pathname: string;
+  index: number;
+  from: string;
+  /** `inputSequence()` at commit: overlays opened before this input belong to the old page. */
+  input: number;
+};
 
 export type LeaveGuard = {
   isPending: () => boolean;
@@ -86,6 +96,8 @@ let curSx: Sx = { i: 0 };
 let lastHref = "";
 let lastState: unknown = null;
 let navSeq = 0;
+/** Bumped on every pointerdown/keydown: tells "opened with this navigation" from "left open". */
+let inputSeq = 0;
 let tokenSeq = 0;
 let router: NavRouter | null = null;
 let layers: Layer[] = [];
@@ -183,7 +195,7 @@ function notify() {
 
 function emitNavigate(kind: NavigateKind, from: string) {
   const href = lastHref;
-  const e: NavigateEvent = { kind, href, pathname: pathOf(href), index: cur, from };
+  const e: NavigateEvent = { kind, href, pathname: pathOf(href), index: cur, from, input: inputSeq };
   queueMicrotask(() => {
     for (const l of [...navListeners]) l(e);
   });
@@ -232,8 +244,14 @@ export function installNav(): void {
   // Capture: at-target capture listeners run before Next's (non-capture) popstate one.
   window.addEventListener("popstate", onPopState, true);
   window.addEventListener("click", onClickCapture, true);
+  window.addEventListener("pointerdown", onInput, true);
+  window.addEventListener("keydown", onInput, true);
 
   boot();
+}
+
+function onInput() {
+  inputSeq += 1;
 }
 
 function boot() {
@@ -314,14 +332,15 @@ function onPush(data: unknown, unused: string, url?: string | URL | null) {
   const from = window.location.href;
   const own = readSx(data);
   let d = data;
+  let kept: Layer[] = [];
   if (own) {
     // Our own layer push.
     cur = own.i;
     curSx = own;
   } else {
     // A navigation (Next `router.push`, `<Link>`, third-party pushState): a
-    // new entry on top. Every layer is now in the past: abandon them.
-    abandonAll();
+    // new entry on top. Every layer is now in the past.
+    kept = abandonAll();
     cur += 1;
     curSx = { i: cur };
     d = withSx(data, curSx);
@@ -335,6 +354,7 @@ function onPush(data: unknown, unused: string, url?: string | URL | null) {
     rememberListUrl(lastHref);
     emitNavigate("push", from);
   }
+  repushLater(kept);
   notify();
   return ret;
 }
@@ -344,13 +364,14 @@ function onReplace(data: unknown, unused: string, url?: string | URL | null) {
   const to = resolveHref(url);
   const own = readSx(data);
   let d = data;
+  let kept: Layer[] = [];
   if (own) {
     cur = own.i;
     curSx = own;
   } else {
     if (pathOf(to) !== pathOf(from)) {
       // `router.replace` to another page: the layers' UI is leaving.
-      abandonAll();
+      kept = abandonAll();
       curSx = { i: cur };
       navSeq += 1;
     }
@@ -366,6 +387,7 @@ function onReplace(data: unknown, unused: string, url?: string | URL | null) {
     rememberListUrl(lastHref);
     emitNavigate("replace", from);
   }
+  repushLater(kept);
   notify();
   return ret;
 }
@@ -503,12 +525,29 @@ function closeLater(gone: Layer[], kinds: LayerKind[] = ["overlay", "guard"]) {
   }, 0);
 }
 
-/** Every layer's entry is now behind a navigation: forget them and close their UI. */
-function abandonAll() {
-  if (!layers.length) return;
-  const gone = layers;
-  layers = [];
-  closeLater(gone);
+/**
+ * Every layer's entry is now behind a navigation. Overlays opened by the very
+ * gesture that navigated (no input since: "open login, then router.push") are
+ * meant for the new page and are returned to be re-pushed on top of it; the
+ * rest are forgotten and their UI closed.
+ */
+function abandonAll(): Layer[] {
+  if (!layers.length) return [];
+  const sameGesture = (l: Layer) => l.kind === "overlay" && isLive(l) && l.openedInput === inputSeq;
+  const kept = layers.filter(sameGesture);
+  closeLater(layers.filter((l) => !sameGesture(l)));
+  layers = kept;
+  for (const l of kept) l.index = -1;
+  return kept;
+}
+
+/** Re-push same-gesture overlays after the navigation's own entry (outside Next's insertion effect). */
+function repushLater(kept: Layer[]) {
+  if (!kept.length) return;
+  queueMicrotask(() => {
+    for (const l of kept) if (layers.includes(l) && l.index < 0 && !l.dead) doPush(l);
+    notify();
+  });
 }
 
 // ---------------------------------------------------------------- layers
@@ -553,14 +592,14 @@ export function pushLayer(kind: LayerKind, onPop: (info: PopInfo) => void): stri
   if (!hasWindow()) return token;
   const top = layers[layers.length - 1];
   if (top && top.releasing && top.index >= 0) {
-    Object.assign(top, { token, kind, onPop, releasing: false, dead: false });
+    Object.assign(top, { token, kind, onPop, releasing: false, dead: false, openedInput: inputSeq });
     if (cur === top.index) {
       window.history.replaceState(withSx(window.history.state, { i: top.index, o: token }), "");
     }
     notify();
     return token;
   }
-  const layer: Layer = { token, kind, index: -1, onPop, dead: false, releasing: false };
+  const layer: Layer = { token, kind, index: -1, onPop, dead: false, releasing: false, openedInput: inputSeq };
   layers.push(layer);
   pruneExpected();
   if (expected.length) {
@@ -865,6 +904,11 @@ export function onNavigate(listener: (e: NavigateEvent) => void): () => void {
   };
 }
 
+/** Increments on every pointerdown/keydown (see `NavigateEvent.input`). */
+export function inputSequence(): number {
+  return inputSeq;
+}
+
 /** Increments on every navigation to another entry/page; read synchronously. */
 export function navSequence(): number {
   return navSeq;
@@ -884,6 +928,8 @@ export function __resetNavForTests(): void {
     if (h.replaceState === ourReplace && prevReplace) h.replaceState = prevReplace;
     window.removeEventListener("popstate", onPopState, true);
     window.removeEventListener("click", onClickCapture, true);
+    window.removeEventListener("pointerdown", onInput, true);
+    window.removeEventListener("keydown", onInput, true);
   }
   if (flushTimer) clearTimeout(flushTimer);
   flushTimer = null;
@@ -893,6 +939,7 @@ export function __resetNavForTests(): void {
   lastHref = "";
   lastState = null;
   navSeq = 0;
+  inputSeq = 0;
   router = null;
   layers = [];
   expected = [];

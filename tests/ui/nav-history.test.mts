@@ -117,6 +117,8 @@ function mount(node: React.ReactElement, strict = false) {
 }
 
 const isOpen = (name: string) => Boolean(document.querySelector(`[role=dialog][aria-label="${name}"]`));
+/** A user input (the engine tells gestures apart by pointerdown/keydown). */
+const tap = () => window.dispatchEvent(new window.Event("pointerdown"));
 
 // --------------------------------------------------------------- index stamping
 
@@ -368,7 +370,8 @@ test("overlay: orphan entries (overlay gone after a navigation / reload) are ski
   fresh("/uz");
   mount(h(Pair));
   act(() => ctl.a!(true)); // entry 1 = A
-  act(() => router.push("/uz/create")); // navigation from inside the overlay: entry 2
+  tap(); // a later gesture navigates while the overlay is still open
+  act(() => router.push("/uz/create")); // entry 2
   await settle();
   assert.ok(!isOpen("A"), "the abandoned overlay closes with the route change");
   assert.equal(sx()?.i, 2);
@@ -525,4 +528,65 @@ test("useOverlayHistory directly (drawer/menu): back closes, onClose identity ma
   assert.ok(!document.querySelector("[role=menu]"));
   assert.equal(here(), "/uz/create");
   assert.ok(renders >= 3);
+});
+
+test("overlay opened by the gesture that navigates (open login, then router.push) stays open on the new page", async () => {
+  fresh("/uz");
+  mount(h(Pair));
+  tap();
+  act(() => {
+    ctl.a!(true);
+  });
+  act(() => router.push("/uz/create"));
+  await settle();
+  assert.ok(isOpen("A"), "meant for the destination");
+  assert.equal(here(), "/uz/create");
+  assert.ok(sx()?.o, "re-pushed on top of the new page");
+  const top = sx()!.i;
+  window.history.back();
+  await settle();
+  assert.ok(!isOpen("A"));
+  assert.equal(here(), "/uz/create");
+  assert.equal(sx()?.i, top - 1);
+  window.history.back();
+  await settle();
+  assert.equal(here(), "/uz", "the stale entry under the new page is skipped");
+  assert.equal(sx()?.i, 0);
+});
+
+test("NavProvider: the overlay store closes on a route change unless opened by that gesture or the new page", async () => {
+  const { NavProvider } = await import("../../components/nav/NavProvider.tsx");
+  const { useUi } = await import("../../lib/ui.ts");
+  const { PathnameContext } = await import("next/dist/shared/lib/hooks-client-context.shared-runtime");
+  fresh("/uz");
+  render(h(AppRouterContext.Provider, { value: router }, h(PathnameContext.Provider, { value: "/uz" }, h(NavProvider))));
+  await settle();
+
+  tap();
+  act(() => useUi.getState().open("notifications"));
+  tap(); // a later click navigates
+  act(() => router.push("/uz/create"));
+  await settle();
+  assert.equal(useUi.getState().overlay, null, "left-open overlay closed with the route change");
+
+  tap();
+  act(() => {
+    useUi.getState().open("login", { returnTo: "/uz/slide" });
+    router.push("/uz/slide");
+  });
+  await settle();
+  assert.equal(useUi.getState().overlay, "login", "opened by the navigating gesture");
+  act(() => useUi.getState().close());
+
+  tap();
+  act(() => router.push("/uz?returnTo=%2Fuz%2Fcreate"));
+  act(() => useUi.getState().open("login", { returnTo: "/uz/create" })); // the new page opens it on mount
+  await settle();
+  assert.equal(useUi.getState().overlay, "login");
+
+  tap();
+  act(() => router.replace("/uz?filter=docs")); // same page: search-param state, not a route change
+  await settle();
+  assert.equal(useUi.getState().overlay, "login");
+  act(() => useUi.getState().close());
 });

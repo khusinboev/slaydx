@@ -7,7 +7,7 @@ import {
   backTo,
   currentIndex,
   installNav,
-  navSequence,
+  inputSequence,
   navigateFromOverlay,
   onNavigate,
   setNavRouter,
@@ -43,17 +43,18 @@ export function NavProvider({ children }: { children?: React.ReactNode }) {
     return () => setNavRouter(null);
   }, [router]);
 
-  // Overlay store: an overlay opened before a navigation closes with it; one
-  // opened by the new page (e.g. login from `?returnTo`) stays.
+  // Overlay store: an overlay left open on the previous page closes with the
+  // route change. One opened by the gesture that navigated ("open login, then
+  // router.push") or by the new page itself (login from `?returnTo`) stays.
   useEffect(() => {
-    let openedAt = useUi.getState().overlay ? navSequence() : -1;
+    let openedInput = useUi.getState().overlay ? inputSequence() : -1;
     const offUi = useUi.subscribe((s, p) => {
-      if (s.overlay && s.overlay !== p.overlay) openedAt = navSequence();
+      if (s.overlay && s.overlay !== p.overlay) openedInput = inputSequence();
     });
     const offNav = onNavigate((e) => {
       if (pathOf(e.from) === e.pathname) return;
       const ui = useUi.getState();
-      if (ui.overlay && openedAt < navSequence()) ui.close();
+      if (ui.overlay && openedInput < e.input) ui.close();
     });
     return () => {
       offUi();
