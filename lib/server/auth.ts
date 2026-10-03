@@ -22,9 +22,15 @@ export type TelegramProfile = {
   photoUrl: string | null;
 };
 
+/*
+ * Data-check-string: every received field except `hash`. Mini App initData
+ * from Bot API 8.0+ clients also carries `signature` (Ed25519, meant for
+ * third-party validation) and the bot-token HMAC covers it too; excluding it
+ * made every real Mini App login fail. The Login Widget never sends it.
+ */
 function checkString(pairs: Map<string, string>): string {
   return [...pairs.entries()]
-    .filter(([k]) => k !== "hash" && k !== "signature")
+    .filter(([k]) => k !== "hash")
     .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
     .map(([k, v]) => `${k}=${v}`)
     .join("\n");

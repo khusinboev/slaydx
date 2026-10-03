@@ -73,6 +73,8 @@ const ENTRIES = [
    * o'quvchi havolani umuman ocha olmasdi.
    */
   "components/game/Player.tsx",
+  // Telegram Mini App bridge: mounted from `Providers` on every consumer page.
+  "components/telegram/MiniAppBridge.tsx",
 ];
 
 for (const e of ENTRIES) {

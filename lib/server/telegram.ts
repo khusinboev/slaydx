@@ -383,15 +383,43 @@ const WELCOME = [
   "",
   "SlaydX — AI yordamida slayd, referat, kurs ishi, maqola va o'qituvchi hujjatlarini yaratadi.",
   "",
-  "Saytga kirish uchun quyidagi tugmani bosing va ochilgan sahifada «Kirish» ni tasdiqlang.",
-  "Havola <b>bir martalik</b> va 5 daqiqa amal qiladi. Yangi havola kerak bo'lsa /login yozing.",
+  "📱 <b>Ilovada ochish</b> — SlaydX shu yerning o'zida, Telegram ichida ochiladi va siz avtomatik kirasiz.",
+  "🌐 <b>Saytda ochish</b> — brauzerda ochiladi; sahifadagi «Kirish» ni tasdiqlang.",
+  "Sayt havolasi <b>bir martalik</b> va 5 daqiqa amal qiladi. Yangi havola kerak bo'lsa /login yozing.",
 ].join("\n");
 
-/** Kirish havolasi tugmasi — Telegram `localhost` URL ni rad etadi, shunda havola matnda ketadi. */
-function loginButton(link: string, label = "🔑 Saytga kirish"): Record<string, unknown> {
-  const isPublic = /^https:\/\//.test(link) && !/localhost|127\.0\.0\.1|0\.0\.0\.0/.test(link);
+/** `/login` matni — xuddi shu ikki yo'l, qisqaroq. */
+const LOGIN_TEXT = [
+  "Qayerda ochishni tanlang 👇",
+  "",
+  "📱 <b>Ilovada ochish</b> — Telegram ichida, avtomatik kirish bilan.",
+  "🌐 <b>Saytda ochish</b> — brauzerda; havola <b>bir martalik</b> va 5 daqiqa amal qiladi.",
+].join("\n");
+
+/** Mini App (Telegram ichidagi WebApp) ochiladigan sahifa. */
+const WEB_APP_PATH = "/uz";
+
+/**
+ * `/start` va `/login` tugmalari — har biri o'z qatorida (telefonda yozuvlar
+ * qisqarmasin): avval Mini App (`web_app`), keyin bir martalik sayt havolasi.
+ *
+ * Telegram `localhost` va ichki manzillarni ham `url`, ham `web_app` tugmasi
+ * sifatida rad etadi («Wrong HTTP URL»; `web_app` faqat https qabul qiladi),
+ * shuning uchun lokal ishlab chiqishda tugmasiz yuboramiz — `sendLoginLink`
+ * havolani matnga qo'shadi.
+ */
+function loginButton(link: string): Record<string, unknown> {
+  const app = `${env.appUrl}${WEB_APP_PATH}`;
+  const isPublic = [link, app].every((u) => /^https:\/\//.test(u) && !/localhost|127\.0\.0\.1|0\.0\.0\.0/.test(u));
   if (!isPublic) return {};
-  return { reply_markup: { inline_keyboard: [[{ text: label, url: link }]] } };
+  return {
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "📱 Ilovada ochish", web_app: { url: app } }],
+        [{ text: "🌐 Saytda ochish", url: link }],
+      ],
+    },
+  };
 }
 
 /**
@@ -568,7 +596,7 @@ async function processUpdate(update: TelegramUpdate): Promise<void> {
 
   // `/login` — qayta havola (masalan, oldingisi eskirgan bo'lsa).
   if (text.startsWith("/login")) {
-    await sendLoginLink(msg.chat.id, await createBotLoginLink(profile), "Kirish uchun quyidagi tugmani bosing 👇\n\nHavola <b>bir martalik</b> va 5 daqiqa amal qiladi.");
+    await sendLoginLink(msg.chat.id, await createBotLoginLink(profile), LOGIN_TEXT);
     return;
   }
 
