@@ -1,7 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, type ReactNode } from "react";
-import { cn } from "@/lib/cn";
+import { useCallback, useEffect, useId, useRef } from "react";
 import { useDialog } from "@/components/overlays/useDialog";
 
 /**
@@ -9,6 +8,16 @@ import { useDialog } from "@/components/overlays/useDialog";
  *
  * «O'yindan chiqasizmi? Javoblaringiz saqlanmaydi» xabari bilan
  * «Qolish» va «Chiqish» tugmalari. Escape = Qolish.
+ *
+ * TARIX (docs/nav/PLAN.md, N4): `useDialog` odatdagidek o'z tarix yozuvini
+ * oladi — `{ history: false }` BERILMAYDI. Sabab: qo'riqchi (`useLeaveGuard`)
+ * orqaga bosilganda O'Z yozuvini allaqachon yeb bo'lgan (pop), dialog esa
+ * shu pop ichidan ochiladi. Dialogning yozuvi bo'lmasa, dialog ochiq turganda
+ * ikkinchi «orqaga» sahifadan indamay chiqarib yuborardi (qo'riqchi yo'q,
+ * dialog tarixi yo'q). Yozuv bilan: ikkinchi «orqaga» dialogni yopadi (=
+ * «Qolish»), qo'riqchi qayta o'rnatiladi. «Qolish» da dialog yozuvi qo'riqchiga
+ * topshiriladi (yangi yozuv qo'shilmaydi). «Chiqish» da dialog yozuvi + sahifa
+ * ortga yuriladi — Chromium smoke da bitta harakat (scratchpad/n4b).
  */
 export function LeaveGameDialog({
   open,
@@ -73,7 +82,7 @@ export function LeaveGameDialog({
           </button>
           <button
             type="button"
-            onClick={onConfirmRef.current}
+            onClick={() => onConfirmRef.current()}
             className="bg-destructive text-destructive-foreground h-10 rounded-lg px-4 text-[15px] font-medium"
             data-leave
           >
