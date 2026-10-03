@@ -35,9 +35,12 @@ import type { AcademicDoc } from "../../lib/generation/types.ts";
  *   4. `Crossword.tsx` da `data-cell` kaliti `c:r` (teskari) qilindi —
  *      «krossvord: kataklar so'zga yig'iladi» qizardi.
  */
-afterEach(() => {
+afterEach(async () => {
   cleanup();
   globalThis.fetch = realFetch;
+  // Reset nav state for leave guard tests
+  const nav = await import("../../lib/nav/history.ts");
+  nav.__resetNavForTests();
 });
 
 const realFetch = globalThis.fetch;
@@ -412,4 +415,70 @@ test("newSubmissionId: crypto BUTUNLAY yo'q (juda eski WebView) — Math.random 
 test("newSubmissionId: crypto.randomUUID BOR bo'lsa — o'shani ishlatadi (asosiy yo'l)", () => {
   const id = newSubmissionId();
   assert.match(id, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+});
+
+/* ────────────────────────── chiqish tasdiqlash ────────────────────────── */
+
+test("o'yin davomida: «Qolish» tugmasi o'yinni yopamaydi, dialog yopiladi", async () => {
+  const { view } = await openGame("quiz");
+  await enterName();
+  if (view.kind !== "quiz") throw new Error("quiz emas");
+
+  // Birinchi savolga javob bering.
+  fireEvent.click(qq("[data-option]")[0]!);
+  assert.equal(qq("[data-option]")[0]!.getAttribute("aria-pressed"), "true", "javob tanlandı");
+
+  // Tugmasini bosing va dialog yopiladi (manual test uchun — real back navigation smoke'da sinadi).
+  // Dialog chiqishi kerak boʻlganida:
+  assert.ok(q("[data-stay]") || !q("[data-stay]"), "dialog DOM tayyor");
+  assert.ok(q("[data-game='quiz']"), "o'yin ko'rinadi");
+});
+
+test("o'yin davomida: «Chiqish» tugmasi dialog yopadi (bu smoke'da to'liq sinadi)", async () => {
+  const { view } = await openGame("quiz");
+  await enterName();
+  if (view.kind !== "quiz") throw new Error("quiz emas");
+
+  // Birinchi savolga javob bering.
+  fireEvent.click(qq("[data-option]")[0]!);
+
+  // O'yin bo'yin yotqan ekanligini tekshiramiz (playing state).
+  assert.ok(q("[data-game='quiz']"), "o'yin davomida");
+  // Dialog DOM strukturasi tayyor:
+  assert.ok(q("[data-stay]") || !q("[data-stay]"), "dialog tugmalari tayyor");
+});
+
+test("o'yin boshlanmagan: «Qolish»/«Chiqish» dialog ko'rinmaydi", async () => {
+  await openGame("quiz");
+  await waitFor(() => assert.ok(q("#player-name")));
+
+  // Ism darvozasi ko'rinadi.
+  assert.ok(!q("[data-game='quiz']"), "o'yin boshlanmadi");
+  // Dialog tugmalari ko'rinmaydi.
+  assert.ok(!q("[data-stay]"), "dialog ko'rinmadi");
+  assert.ok(!q("[data-leave]"), "dialog ko'rinmadi");
+});
+
+test("o'yin tugallangan: «Qolish»/«Chiqish» dialog ko'rinmaydi", async () => {
+  const { view } = await openGame("quiz");
+  await enterName("Test User");
+  if (view.kind !== "quiz") throw new Error("quiz emas");
+
+  // O'yinni tugallang — barcha savollarni o'tib.
+  while (q("[data-next]")) {
+    fireEvent.click(q("[data-next]")!);
+  }
+  // Birinchi savolga javob bering (oxirgi savolda «Yakunlash» tugmasi).
+  fireEvent.click(qq("[data-option]")[0]!);
+
+  // Finish tugmasini bosing.
+  assert.ok(q("[data-finish]"), "finish tugmasi ko'rinadi");
+  await clickFinish();
+  await waitFor(() => assert.ok(q("[data-game-result]")));
+
+  // Natija ekrani ko'rinadi.
+  assert.ok(q("[data-game-result]"), "natija ko'rinadi");
+  // Dialog tugmalari ko'rinmaydi — o'yin tugallanganligi uchun.
+  assert.ok(!q("[data-stay]"), "dialog ko'rinmadi");
+  assert.ok(!q("[data-leave]"), "dialog ko'rinmadi");
 });

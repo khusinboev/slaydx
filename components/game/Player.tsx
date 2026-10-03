@@ -3,10 +3,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createGame, elapsed, finish, GAME_KIND_LABEL, isLast, next, prev, progress, type GameState } from "@/lib/game/engine";
 import type { PublicGameView } from "@/lib/game/public";
+import { useLeaveGuard } from "@/components/nav/useLeaveGuard";
 import { cn } from "@/lib/cn";
 import { Cards } from "./Cards";
 import { Crossword } from "./Crossword";
 import { Listening } from "./Listening";
+import { LeaveGameDialog } from "./LeaveGameDialog";
 import { NameGate } from "./NameGate";
 import { Quiz } from "./Quiz";
 import { Result } from "./Result";
@@ -90,6 +92,8 @@ export function GamePlayer({ token }: { token: string }) {
    * blokLaydi va BIRINCHI natijani qaytaradi.
    */
   const submissionIdRef = useRef("");
+  const [showLeaveDialog, setShowLeaveDialog] = useState(false);
+  const leaveResolveRef = useRef<((result: boolean) => void) | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -154,6 +158,17 @@ export function GamePlayer({ token }: { token: string }) {
       setSending(false);
     }
   }, [state, sending, token, name]);
+
+  const confirmLeave = useCallback(async (): Promise<boolean> => {
+    return new Promise((resolve) => {
+      leaveResolveRef.current = resolve;
+      setShowLeaveDialog(true);
+    });
+  }, []);
+
+  // O'yin davomida chiqish tasdiqlash — phone back, browser back, Telegram.
+  const playing = state !== null && result === null;
+  useLeaveGuard(playing ? 1 : 0, confirmLeave, { onError: () => {} });
 
   if (loadError) {
     return (
@@ -266,6 +281,18 @@ export function GamePlayer({ token }: { token: string }) {
       {left > 0 && (!perItem || isLast(state)) ? (
         <p className="text-muted-foreground text-center text-xs">{left} ta topshiriq javobsiz qoldi.</p>
       ) : null}
+
+      <LeaveGameDialog
+        open={showLeaveDialog}
+        onCancel={() => {
+          setShowLeaveDialog(false);
+          leaveResolveRef.current?.(false);
+        }}
+        onConfirm={() => {
+          setShowLeaveDialog(false);
+          leaveResolveRef.current?.(true);
+        }}
+      />
     </section>
   );
 }
