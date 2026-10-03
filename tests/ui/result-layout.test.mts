@@ -233,7 +233,12 @@ test("ramka shartnomasi: slayd — fill, qolganlari — flow; fill/boxed balandl
   }
   assert.equal(VIEWER_FRAME.translation.boxed, false, "tarjima allaqachon oqimda");
   assert.match(frameClass(VIEWER_FRAME.slides), /h-\[var\(--result-fill-h/);
-  assert.match(frameClass(VIEWER_FRAME.article), /h-\[var\(--result-fill-h/, "V1 gacha: eski ichki scroll ishlashi uchun qat'iy balandlik");
+  // V1: Word/rezyume ko'ruvchilari haqiqiy oqimda — qat'iy quti (`boxed`) ko'prigi olib tashlandi.
+  for (const k of ["academic", "essay", "article", "teacher", "game", "resume"] as const) {
+    assert.equal(VIEWER_FRAME[k].boxed, false, `${k}: V1 dan keyin oqimda`);
+    assert.match(frameClass(VIEWER_FRAME[k]), /(^|\s)min-h-\[var\(--result-fill-h/, k);
+    assert.doesNotMatch(frameClass(VIEWER_FRAME[k]), /(^|\s)h-\[/, `${k}: oqimda qat'iy balandlik yo'q`);
+  }
   assert.match(frameClass(VIEWER_FRAME.translation), /min-h-\[var\(--result-fill-h/);
   assert.doesNotMatch(frameClass(VIEWER_FRAME.translation), /(^|\s)h-\[/, "oqimda qat'iy balandlik yo'q");
 });

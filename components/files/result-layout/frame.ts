@@ -21,12 +21,12 @@ export type FrameSpec = { mode: FrameMode; boxed: boolean };
 
 export const VIEWER_FRAME: Record<ViewerKind, FrameSpec> = {
   slides: { mode: "fill", boxed: false }, // V2
-  academic: { mode: "flow", boxed: true }, // V1
-  essay: { mode: "flow", boxed: true }, // V1
-  article: { mode: "flow", boxed: true }, // V1
-  teacher: { mode: "flow", boxed: true }, // V1
-  game: { mode: "flow", boxed: true }, // V1
-  resume: { mode: "flow", boxed: true }, // V1
+  academic: { mode: "flow", boxed: false }, // V1
+  essay: { mode: "flow", boxed: false }, // V1
+  article: { mode: "flow", boxed: false }, // V1
+  teacher: { mode: "flow", boxed: false }, // V1
+  game: { mode: "flow", boxed: false }, // V1
+  resume: { mode: "flow", boxed: false }, // V1
   image: { mode: "flow", boxed: false }, // V4
   audio: { mode: "flow", boxed: false }, // V4
   translation: { mode: "flow", boxed: false }, // V4

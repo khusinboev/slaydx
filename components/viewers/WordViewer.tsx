@@ -16,7 +16,7 @@ import { columnPercents, evenPercents } from "@/lib/generation/table-columns";
 import { ESSAY_DESIGNS } from "@/lib/languages";
 import type { AcademicDoc, DocTable } from "@/lib/generation/types";
 import { docToFlow, titleModel, tocRows, type FlowItem, type TocRow } from "@/lib/viewers/flow";
-import { A4, contentHeightPx, mmPx, sheetMetrics, ZOOM_STEPS } from "@/lib/viewers/metrics";
+import { A4, contentHeightPx, mmPx, sheetMetrics } from "@/lib/viewers/metrics";
 import { continuationTableFor, packPages } from "@/lib/viewers/paginate";
 import { splitByHeight, type TextSplitter } from "@/lib/viewers/split";
 import { useArticleEdit } from "../files/useArticleEdit";
@@ -25,9 +25,10 @@ import { useTeacherEdit } from "../files/useTeacherEdit";
 import type { EditActionsState } from "../files/EditActions";
 import { ArticleHeadItem, CiteText } from "./ArticleHead";
 import { ArticleEditor, articleEditTargets, isTeacherEditorOp, isWorkOp, legacyEditTargets, targetAttr, teacherEditTargets, workEditTargets, type EditCitePlan, type EditTarget } from "./ArticleEditor";
-import { ZoomFrame, Workspace } from "./sheet";
+import { PageRow, ZoomFrame, Workspace } from "./sheet";
 import { TitlePage } from "./TitlePage";
-import { ViewerToolbar } from "./toolbar";
+import { VIEWER_TOOLBAR_H, ViewerToolbar } from "./toolbar";
+import { useFitZoom } from "./useFitZoom";
 import { useVisiblePage } from "./useVisiblePage";
 
 /**
@@ -304,30 +305,19 @@ export function WordViewer({
     if (doc.meta.toolId !== "essay") return null;
     return ESSAY_DESIGNS.find((d) => d.value === doc.meta.design)?.from ?? null;
   }, [doc.meta.toolId, doc.meta.design]);
-  const [zoom, setZoom] = useState(100);
   const [pages, setPages] = useState<FlowItem[][] | null>(null);
   const measureRef = useRef<HTMLDivElement>(null);
   const stackRef = useRef<HTMLDivElement>(null);
-  const scrollRef = useRef<HTMLDivElement>(null);
+  /** Varaqlar foni (`Workspace`) — scroll qutisi EMAS (viewer redesign V1). */
+  const workRef = useRef<HTMLDivElement>(null);
   const pageRefs = useRef<(HTMLDivElement | null)[]>([]);
-  const hostRef = useRef<HTMLDivElement>(null);
 
-  const fit = useCallback(() => {
-    const el = hostRef.current;
-    if (!el) return;
-    const w = el.clientWidth - 32;
-    // Albom varaq kengroq — «sig'dirish» uning O'Z enidan hisoblanadi.
-    const next = Math.max(50, Math.min(150, Math.round((w / sheetW) * 100)));
-    const snap = ZOOM_STEPS.reduce((a, b) => (Math.abs(b - next) < Math.abs(a - next) ? b : a));
-    setZoom(snap);
-  }, [sheetW]);
-
-  useEffect(() => {
-    fit();
-    const on = () => fit();
-    window.addEventListener("resize", on);
-    return () => window.removeEventListener("resize", on);
-  }, [fit]);
+  /*
+   * Standart zoom — ustun eniga sig'dirish (`useFitZoom`: ramka
+   * ResizeObserver, floor, 125 % chegara, telefonda haqiqiy sig'dirish).
+   * Albom varaq kengroq — «sig'dirish» uning O'Z enidan hisoblanadi.
+   */
+  const { zoom, setZoom, fit, wide } = useFitZoom(workRef, sheetW);
 
   useLayoutEffect(() => {
     const root = measureRef.current;
@@ -350,12 +340,14 @@ export function WordViewer({
 
   // Scroll paytida ko'rinib turgan varaqni kuzatish — barcha ko'ruvchilar
   // uchun yagona hook (`useVisiblePage`).
-  const [page, setPage] = useVisiblePage(scrollRef, () => pageRefs.current, [pages, zoom]);
+  const [page, setPage] = useVisiblePage(workRef, () => pageRefs.current, [pages, zoom], { topInset: VIEWER_TOOLBAR_H });
 
   function go(n: number) {
     const next = Math.max(1, Math.min(pages?.length ?? 1, n));
     setPage(next);
-    pageRefs.current[next - 1]?.scrollIntoView({ behavior: "smooth", block: "start" });
+    // Qator (`PageRow`) — `scroll-mt` u yerda: varaq sarlavha/toolbar ostida qolmasin.
+    const el = pageRefs.current[next - 1];
+    (el?.closest<HTMLElement>("[data-page-row]") ?? el)?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
   /* ═══ tahrir (Maqola 2 WP7; talaba ishi — AUDIT-19 WP-C) ═══ */
@@ -472,9 +464,17 @@ export function WordViewer({
    * maqola muallif/tashkilot ma'lumoti esa titulda allaqachon bor.
    */
 
+  /*
+   * Viewer redesign V1 — `flow` ramka: ko'ruvchi SAHIFA scroll'ida oqadi.
+   * Ildizda qat'iy balandlik yo'q (ilgari `h-full min-h-[70vh]` —
+   * `overflow-hidden` ota ichida aynan shu min-balandlik scroll qutisini
+   * kesardi), `grow` — qisqa hujjatda kulrang fon ramkani to'ldiradi.
+   * Toolbar natija sarlavhasi ostiga yopishadi.
+   */
   return (
-    <div className="flex h-full min-h-[70vh] flex-col">
+    <div className="flex grow flex-col" data-viewer-root="word">
       <ViewerToolbar
+        sticky
         zoom={zoom}
         onZoom={setZoom}
         page={page}
@@ -491,8 +491,7 @@ export function WordViewer({
           </button>
         </div>
       ) : null}
-      <div ref={hostRef} className="min-h-0 flex-1">
-        <Workspace ref={scrollRef} className="h-full">
+      <Workspace ref={workRef} className="grow">
           {/*
             Tahrir qatlami iqtibos rejasini (`refs`/`cite`) so'raydi —
             o'qituvchi hujjatida manba ro'yxati YO'Q, shuning uchun u
@@ -505,7 +504,8 @@ export function WordViewer({
             {(pages ?? []).map((pg, i) => {
               const isTitle = pg.length === 1 && pg[0]?.type === "title";
               return (
-                <ZoomFrame key={i} zoom={zoom / 100} width={sheetW} height={sheetH}>
+                <PageRow key={i} wide={wide}>
+                <ZoomFrame zoom={zoom / 100} width={sheetW} height={sheetH}>
                   <div
                     ref={(el) => {
                       pageRefs.current[i] = el;
@@ -532,12 +532,12 @@ export function WordViewer({
                     {!isTitle ? <div className="word-footer-num">{i + 1}</div> : null}
                   </div>
                 </ZoomFrame>
+                </PageRow>
               );
             })}
           </div>
           </MaybeEditor>
-        </Workspace>
-      </div>
+      </Workspace>
 
       {/*
         `invisible` (visibility:hidden) — MUHIM: element layout'da qoladi,

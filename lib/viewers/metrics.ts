@@ -26,6 +26,48 @@ export const SLIDE = {
 
 export const ZOOM_STEPS = [50, 75, 90, 100, 125, 150] as const;
 
+/**
+ * Standart masshtab — «enga sig'dirish» (viewer redesign V1, egasi qarori).
+ *
+ * - Yuqori chegara {@link FIT_MAX} (125 %): 150 % da bitta A4 varaq
+ *   1 920 px ekranda 1,8 ekran bo'yi edi (R2).
+ * - Hech qachon ustundan KENG emas — qiymat doim PASTGA yaxlitlanadi.
+ *   Ilgari eng yaqin zinaga yaxlitlanardi va albom varaq (96 % → 100 %)
+ *   har o'lchamda yonga chiqib ketardi.
+ * - Varaq 100 % da sig'sa — `ZOOM_STEPS` zinasiga pastga (100 yoki 125):
+ *   yorliq toza, yo'qotish ≤ 20 %.
+ * - Sig'masa (telefon, tor ustun, albom varaq) — HAQIQIY sig'dirish,
+ *   butun foizga pastga: 50 % «pol» yo'q (390 px telefonda 50 % varaq
+ *   19 px yonga chiqardi), 50/75 zinasi esa albom varaqni ustunning
+ *   to'rtdan biricha bo'sh qoldirardi.
+ *
+ * `availPx` — varaqlar uchun bo'sh kenglik (ramka eni minus Workspace
+ * chekinishi), `sheetPx` — varaqning 100 % dagi eni (A4 794, albom 1 123).
+ */
+export const FIT_MAX = 125;
+/** Haqiqiy sig'dirishning eng past qiymati — 0/manfiy kenglikdan himoya. */
+export const FIT_MIN = 10;
+
+export function fitZoom(availPx: number, sheetPx: number): number {
+  if (!(availPx > 0) || !(sheetPx > 0)) return 100;
+  // 1e-9 — 794/794*100 = 99.99999… bo'lib 90 ga tushib ketmasin.
+  const raw = Math.min(FIT_MAX, (availPx / sheetPx) * 100 + 1e-9);
+  if (raw >= 100) {
+    for (let i = ZOOM_STEPS.length - 1; i >= 0; i--) if (ZOOM_STEPS[i] <= raw) return ZOOM_STEPS[i];
+  }
+  return Math.max(FIT_MIN, Math.floor(raw));
+}
+
+/** Qo'lda kichraytirish/kattalashtirish — joriy qiymatdan QO'SHNI zina (zinada bo'lmasa ham). */
+export function zoomStep(zoom: number, dir: -1 | 1): number {
+  if (dir < 0) {
+    for (let i = ZOOM_STEPS.length - 1; i >= 0; i--) if (ZOOM_STEPS[i] < zoom) return ZOOM_STEPS[i];
+    return Math.min(zoom, ZOOM_STEPS[0]);
+  }
+  for (const s of ZOOM_STEPS) if (s > zoom) return s;
+  return Math.max(zoom, ZOOM_STEPS[ZOOM_STEPS.length - 1]);
+}
+
 export function contentHeightPx(opts?: { footer?: boolean }) {
   const footer = opts?.footer === false ? 0 : A4.footerPx;
   return A4.hPx - A4.padTopPx - A4.padBottomPx - footer;
