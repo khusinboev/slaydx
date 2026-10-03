@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { ArrowLeft, ChevronDown } from "lucide-react";
+import { BackLink } from "@/components/nav/BackLink";
 import { formatTanga } from "@/lib/tools";
 import { creditTotal, useAppStore } from "@/lib/store";
 import { DraftNotice } from "./DraftNotice";
@@ -54,13 +55,10 @@ export function ToolChrome({
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-8 pb-28">
       <nav className="mb-6 flex items-center gap-2.5">
-        <Link
-          href="/uz/create"
-          aria-label="Orqaga"
-          className="text-muted-foreground hover:text-foreground hover:bg-muted -ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full"
-        >
+        {/* Parent from `parentOf` (`/uz/create`); a fresh-tab deep link replaces, never leaves the site. */}
+        <BackLink className="text-muted-foreground hover:text-foreground hover:bg-muted -ml-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full">
           <ArrowLeft className="h-5 w-5" />
-        </Link>
+        </BackLink>
         <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
       </nav>
 
