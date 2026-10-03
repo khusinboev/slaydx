@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Copy, Check, Link2, RefreshCw } from "lucide-react";
 import { request } from "@/lib/api-client";
 import { GAME_KIND_LABEL } from "@/lib/game/engine";
 import type { PublicGameKind } from "@/lib/game/public";
 import { cn } from "@/lib/cn";
+import { shareSummary, type ShareSummary } from "./result-layout/summary";
 
 /**
  * O'YIN HAVOLASI PANELI (AUDIT-22 WP-C) — EGASI tomoni.
@@ -34,7 +35,27 @@ type ResultsPage = { results?: Row[]; total?: number; nextCursor?: Cursor | null
 const resultsUrl = (id: string, c: Cursor | null) =>
   `/api/generations/${id}/results${c ? `?before=${encodeURIComponent(c.createdAt)}&beforeId=${encodeURIComponent(c.id)}` : ""}`;
 
-export function GameSharePanel({ id, kind }: { id: string; kind: PublicGameKind }) {
+export function GameSharePanel({
+  id,
+  kind,
+  onSummary,
+  compact = true,
+}: {
+  id: string;
+  kind: PublicGameKind;
+  /**
+   * Sarlavha chipi uchun xulosa (havola bormi, natijalar soni): panel
+   * yuklangach va havola/natijalar soni o'zgarganda chaqiriladi
+   * (`ResultView` chip matnini shundan oladi).
+   */
+  onSummary?: (s: ShareSummary) => void;
+  /**
+   * Yon panel rejimi (standart): `ResultLayout` paneli «O‘yin havolasi»
+   * nomini allaqachon ko'rsatadi, shuning uchun ichki sarlavha o'rniga
+   * faqat o'yin turi chiziladi. `false` — mustaqil blok (sarlavha bilan).
+   */
+  compact?: boolean;
+}) {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [active, setActive] = useState(0);
   const [rows, setRows] = useState<Row[]>([]);
@@ -53,6 +74,23 @@ export function GameSharePanel({ id, kind }: { id: string; kind: PublicGameKind 
   const [copied, setCopied] = useState(false);
 
   const session = sessions[active];
+
+  /*
+   * Chip xulosasi: yuklanish tugagach, havola bor-yo'qligi yoki natijalar
+   * soni o'zgarganda. Callback ref orqali — ota komponent har renderda
+   * yangi funksiya bersa ham effekt qayta yurmaydi (`ResultView` ning
+   * `setState` i barqaror, lekin shartnoma buni talab qilmaydi).
+   */
+  const summaryRef = useRef(onSummary);
+  useEffect(() => {
+    summaryRef.current = onSummary;
+  }, [onSummary]);
+  const hasLink = Boolean(session);
+  const resultCount = hasLink ? (total ?? rows.length) : 0;
+  useEffect(() => {
+    if (loading) return;
+    summaryRef.current?.(shareSummary({ hasLink, results: resultCount }));
+  }, [loading, hasLink, resultCount]);
 
   const takePage = useCallback((r: ResultsPage) => {
     setTotal(typeof r.total === "number" ? r.total : null);
@@ -163,16 +201,32 @@ export function GameSharePanel({ id, kind }: { id: string; kind: PublicGameKind 
     );
   }, [session]);
 
+  /*
+   * V3: panel `ResultLayout` yon panelida (xl: ≈356 px) yoki pastki varaqda
+   * chiziladi — VIEWPORT breakpoint'lari bu yerda noto'g'ri. Tartib
+   * KONTEYNER so'roviga bog'langan (`@container`): QR havola maydoni
+   * USTIDA, havola maydoni to'liq kenglikda (+ nusxalash); natijalar —
+   * tor konteynerda KARTOCHKA qatorlari (yon scroll yo'q), kengda jadval.
+   * Panel ichida `max-h`/`overflow` YO'Q: yagona scroll `[data-panel-body]`.
+   */
   return (
-    <section className="no-print" data-game-share>
-      <div className="flex items-center gap-2">
-        <Link2 className="text-muted-foreground size-4 shrink-0" aria-hidden />
-        <h2 className="text-sm font-medium">O‘yin havolasi</h2>
-        <span className="text-muted-foreground text-xs">{GAME_KIND_LABEL[kind]}</span>
-      </div>
+    <section className="no-print @container min-w-0" data-game-share data-share-compact={compact ? "1" : undefined}>
+      {compact ? (
+        /* Panel sarlavhasi «O‘yin havolasi» ni allaqachon ko'rsatadi — faqat o'yin turi. */
+        <p className="text-muted-foreground flex items-center gap-1.5 text-xs" data-share-kind>
+          <Link2 className="size-3.5 shrink-0" aria-hidden />
+          {GAME_KIND_LABEL[kind]}
+        </p>
+      ) : (
+        <div className="flex items-center gap-2">
+          <Link2 className="text-muted-foreground size-4 shrink-0" aria-hidden />
+          <h2 className="text-sm font-medium">O‘yin havolasi</h2>
+          <span className="text-muted-foreground text-xs">{GAME_KIND_LABEL[kind]}</span>
+        </div>
+      )}
 
       {error ? (
-        <p role="alert" className="text-destructive mt-2 text-sm" data-share-error>
+        <p role="alert" className="text-destructive mt-2 text-sm break-words" data-share-error>
           {error}
         </p>
       ) : null}
@@ -193,7 +247,7 @@ export function GameSharePanel({ id, kind }: { id: string; kind: PublicGameKind 
           <button
             type="button"
             data-share-create
-            className="bg-primary text-primary-foreground mt-3 h-10 rounded-lg px-4 text-sm font-medium disabled:opacity-50"
+            className="bg-primary text-primary-foreground mt-3 h-10 w-full rounded-lg px-4 text-sm font-medium disabled:opacity-50 @sm:w-auto"
             disabled={busy}
             onClick={() => void create()}
           >
@@ -201,10 +255,10 @@ export function GameSharePanel({ id, kind }: { id: string; kind: PublicGameKind 
           </button>
         </div>
       ) : (
-        <div className="mt-3 flex flex-col gap-4 sm:flex-row">
+        <div className="mt-3 flex flex-col gap-3 @2xl:flex-row @2xl:items-start" data-share-link-block>
           {qr ? (
             <div
-              className="bg-background mx-auto size-[168px] shrink-0 rounded-xl border p-2 [&>svg]:size-full"
+              className="bg-background mx-auto aspect-square w-full max-w-44 shrink-0 rounded-xl border p-2 @2xl:mx-0 [&>svg]:size-full"
               data-share-qr
               aria-label="O‘yin havolasining QR kodi"
               // QR — o'zimiz yaratgan SVG (havola matnidan), tashqi
@@ -214,11 +268,13 @@ export function GameSharePanel({ id, kind }: { id: string; kind: PublicGameKind 
           ) : null}
 
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
+            {/* Havola maydoni to'liq kenglikda; nusxalash sig'masa pastga o'raladi (maydon ≥ 12rem). */}
+            <div className="flex flex-wrap items-center gap-2" data-share-url-row>
               <input
                 readOnly
                 data-share-url
-                className="border-input bg-muted/40 h-9 min-w-0 flex-1 rounded-lg border px-2.5 text-xs"
+                aria-label="O‘yin havolasi"
+                className="border-input bg-muted/40 h-9 min-w-0 flex-1 basis-48 rounded-lg border px-2.5 text-xs"
                 value={session.url}
                 onFocus={(e) => e.currentTarget.select()}
               />
@@ -271,38 +327,47 @@ export function GameSharePanel({ id, kind }: { id: string; kind: PublicGameKind 
       )}
 
       {session ? (
-        <div className="mt-4">
-          <div className="flex items-center gap-2">
+        <div className="mt-4" data-share-results>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
             <h3 className="text-sm font-medium">Natijalar</h3>
             <span className="text-muted-foreground text-xs" data-results-total>
               {total !== null && total > rows.length ? `${rows.length} ta ko‘rsatilgan · jami ${total} ta` : `${total ?? rows.length} ta`}
             </span>
-            <button
-              type="button"
-              data-results-refresh
-              className="text-muted-foreground hover:text-foreground ml-auto inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs disabled:opacity-50"
-              disabled={busy}
-              onClick={() => void refresh()}
-            >
-              <RefreshCw className="size-3.5" aria-hidden />
-              Yangilash
-            </button>
-            {rows.length ? (
-              <a
-                data-results-csv
-                href={`/api/generations/${id}/results?format=csv`}
-                className="bg-card inline-flex h-8 items-center rounded-lg border px-2.5 text-xs font-medium"
-                download
+            <span className="ml-auto flex items-center gap-1.5">
+              <button
+                type="button"
+                data-results-refresh
+                className="text-muted-foreground hover:text-foreground inline-flex h-8 items-center gap-1.5 rounded-lg px-2 text-xs disabled:opacity-50"
+                disabled={busy}
+                onClick={() => void refresh()}
               >
-                CSV
-              </a>
-            ) : null}
+                <RefreshCw className="size-3.5" aria-hidden />
+                Yangilash
+              </button>
+              {rows.length ? (
+                <a
+                  data-results-csv
+                  href={`/api/generations/${id}/results?format=csv`}
+                  className="bg-card inline-flex h-8 items-center rounded-lg border px-2.5 text-xs font-medium"
+                  download
+                >
+                  CSV
+                </a>
+              ) : null}
+            </span>
           </div>
 
           {rows.length ? (
-            <div className="mt-2 overflow-x-auto">
-              <table className="w-full min-w-[420px] text-left text-sm" data-results-table>
-                <thead className="text-muted-foreground text-xs">
+            <div className="mt-2">
+              {/*
+                * Jadval: konteyner ≥ 28rem — oddiy jadval (5 ustun); undan tor
+                * (dock/telefon) — har natija KARTOCHKA qatori: ism tepada,
+                * ball · foiz · vaqt · sana pastda (`@max-md:` — jadval
+                * elementlari `display` almashadi, `min-w-*` va yon scroll yo'q).
+                * Sarlavha qatori tor rejimda faqat ekran o'quvchiga qoladi.
+                */}
+              <table className="w-full text-left text-sm @max-md:block" data-results-table>
+                <thead className="text-muted-foreground text-xs @max-md:sr-only">
                   <tr>
                     <th className="py-1.5 pr-2 font-medium">Ism</th>
                     <th className="py-1.5 pr-2 font-medium">Ball</th>
@@ -311,16 +376,20 @@ export function GameSharePanel({ id, kind }: { id: string; kind: PublicGameKind 
                     <th className="py-1.5 font-medium">Sana</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="@max-md:block">
                   {rows.map((r) => (
-                    <tr key={r.id} className="border-t" data-result-row={r.id}>
-                      <td className="py-1.5 pr-2">{r.playerName}</td>
-                      <td className="py-1.5 pr-2 tabular-nums">
+                    <tr
+                      key={r.id}
+                      className="border-t @max-md:flex @max-md:flex-wrap @max-md:items-baseline @max-md:gap-x-3 @max-md:gap-y-0.5 @max-md:py-2"
+                      data-result-row={r.id}
+                    >
+                      <td className="py-1.5 pr-2 break-words @max-md:basis-full @max-md:p-0 @max-md:font-medium">{r.playerName}</td>
+                      <td className="py-1.5 pr-2 tabular-nums @max-md:p-0">
                         {r.score} / {r.total}
                       </td>
-                      <td className="py-1.5 pr-2 tabular-nums">{r.percent}%</td>
-                      <td className="text-muted-foreground py-1.5 pr-2 tabular-nums">{mmss(r.seconds)}</td>
-                      <td className="text-muted-foreground py-1.5 text-xs">{dateText(r.createdAt, true)}</td>
+                      <td className="py-1.5 pr-2 tabular-nums @max-md:p-0">{r.percent}%</td>
+                      <td className="text-muted-foreground py-1.5 pr-2 tabular-nums @max-md:p-0">{mmss(r.seconds)}</td>
+                      <td className="text-muted-foreground py-1.5 text-xs @max-md:p-0">{dateText(r.createdAt, true)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -329,7 +398,7 @@ export function GameSharePanel({ id, kind }: { id: string; kind: PublicGameKind 
                 <button
                   type="button"
                   data-results-more
-                  className="bg-card mt-2 h-9 rounded-lg border px-3 text-sm disabled:opacity-50"
+                  className="bg-card mt-2 h-9 w-full rounded-lg border px-3 text-sm disabled:opacity-50 @sm:w-auto"
                   disabled={more || busy}
                   aria-busy={more || undefined}
                   onClick={() => void loadMore()}
