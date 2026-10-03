@@ -45,6 +45,28 @@ export function mostVisible(rects: ({ top: number; bottom: number } | null)[], t
   return best;
 }
 
+/** Elementni aylantiradigan eng yaqin scroll qutisi (natija sahifasida — AppShell `<main>`). */
+function scrollParent(el: Element): Element | null {
+  for (let p = el.parentElement; p; p = p.parentElement) {
+    const o = getComputedStyle(p).overflowY;
+    if ((o === "auto" || o === "scroll") && p.scrollHeight > p.clientHeight) return p;
+  }
+  return document.scrollingElement;
+}
+
+/**
+ * Scroll OXIRIGA yetilganda (pastga yana surib bo'lmaydi) va oxirgi varaq
+ * to'liq ko'rinsa — hisoblagich oxirgi varaqni ko'rsatadi. Aks holda bir
+ * nechta kichik varaq (telefonda albom 32 %) birga to'liq ko'ringanda
+ * «eng ko'p piksel» tenglikda oldingisini tanlardi va hujjat oxirida
+ * «3 / 4» qolardi.
+ */
+function atEndOn(sc: Element | null, last: { top: number; bottom: number } | null, top: number, bottom: number): boolean {
+  if (!sc || !last) return false;
+  const end = sc.scrollTop > 0 && sc.scrollTop + sc.clientHeight >= sc.scrollHeight - 2;
+  return end && last.top >= top - 1 && last.bottom <= bottom + 1;
+}
+
 /**
  * Scroll paytida ko'rinib turgan varaqni kuzatadi.
  *
@@ -85,12 +107,13 @@ export function useVisiblePage(
     if (!anchor || typeof IntersectionObserver === "undefined") return;
     const top = () => stickyTopPx(anchor) + topInset;
     const pick = () => {
+      // Har safar qaytadan: sahifalashdan oldin `<main>` hali scroll bo'lmasligi mumkin.
+      const sc = scrollParent(anchor);
       const els = getEls();
-      const idx = mostVisible(
-        els.map((el) => (el ? el.getBoundingClientRect() : null)),
-        top(),
-        window.innerHeight,
-      );
+      const rects = els.map((el) => (el ? el.getBoundingClientRect() : null));
+      const t = top();
+      const b = window.innerHeight;
+      const idx = atEndOn(sc, rects[rects.length - 1] ?? null, t, b) ? rects.length - 1 : mostVisible(rects, t, b);
       if (idx >= 0) setPage(idx + 1);
     };
     const io = new IntersectionObserver(pick, {

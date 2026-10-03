@@ -241,6 +241,30 @@ test("WordViewer: sahifa hisoblagichi viewport bo'yicha — root null, rootMargi
   assert.equal(counter(container), `2 / ${n}`);
 });
 
+test("WordViewer: hujjat OXIRIDA bir nechta kichik varaq to'liq ko'rinsa — hisoblagich oxirgisini ko'rsatadi (telefonda albom 4 / 4, 3 / 4 emas)", async () => {
+  const { container } = render(
+    h("main", { style: { overflowY: "auto" }, "data-test-scroller": "" }, inFrame("article", h(WordViewer, { doc: sampleArticleDoc(META) }))),
+  );
+  await settle();
+  const n = container.querySelectorAll("[data-page]").length;
+  assert.ok(n >= 3);
+  const sc = container.querySelector("[data-test-scroller]") as HTMLElement;
+  let scrollTop = 0;
+  Object.defineProperty(sc, "scrollHeight", { configurable: true, get: () => 5000 });
+  Object.defineProperty(sc, "clientHeight", { configurable: true, get: () => 700 });
+  Object.defineProperty(sc, "scrollTop", { configurable: true, get: () => scrollTop });
+  const io = ios.find((r) => r.els.some((e) => e.hasAttribute("data-page")));
+  assert.ok(io);
+  // Oxirgi ikki varaq ham to'liq ko'rinadi (sarlavha 196 dan pastda).
+  pageRects = { [String(n - 1)]: { top: 230, bottom: 484 }, [String(n)]: { top: 516, bottom: 770 } };
+  scrollTop = 1000; // hali oxirida emas — tenglikda oldingisi (o'qish tartibi)
+  await act(async () => io.cb());
+  assert.equal(counter(container), `${n - 1} / ${n}`);
+  scrollTop = 4300; // 4300 + 700 = 5000 — oxiri
+  await act(async () => io.cb());
+  assert.equal(counter(container), `${n} / ${n}`);
+});
+
 function resumeDoc(): AcademicDoc {
   return docFromResume(sampleResume("modern", undefined, false), { ...META, toolId: "resume", workLabel: "Rezyume" } as unknown as DocMeta);
 }
