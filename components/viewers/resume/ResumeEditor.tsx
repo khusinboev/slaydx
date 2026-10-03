@@ -50,9 +50,12 @@ export function ResumeEditor({ layout, model, pageItems, pageIndex, total, onOps
   onOpsRef.current = onOps;
 
   const close = useCallback((el: HTMLElement) => {
+    // Clear the open field FIRST: removing `contenteditable` blurs the element and the
+    // browser fires `focusout` synchronously; with the ref still set that handler
+    // committed the same edit a second time (one keystroke → two undo steps).
+    openRef.current = null;
     el.removeAttribute("contenteditable");
     el.removeAttribute("data-resume-editing");
-    openRef.current = null;
   }, []);
 
   const commit = useCallback(() => {

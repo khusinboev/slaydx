@@ -167,6 +167,25 @@ test("dblclick → Enter: bitta saqlanmagan o'zgarish, tarmoqqa chiqilmaydi", as
   assert.ok(screen.getByText("Yangi Ism"), "ekranda yangi matn yo'q");
 });
 
+test("Enter commits once even when closing the field fires focusout (real-browser blur)", async () => {
+  const s = stubServer();
+  openEditor(s);
+  const el = byPath("identity.fullName");
+  // Browsers fire focusout synchronously when contenteditable is removed from the
+  // focused element; jsdom does not, so simulate it on this element.
+  const original = el.removeAttribute.bind(el);
+  el.removeAttribute = (name: string) => {
+    original(name);
+    if (name === "contenteditable") el.dispatchEvent(new (el.ownerDocument.defaultView!.FocusEvent)("focusout", { bubbles: true }));
+  };
+  typeInto(el, "Bir marta");
+  await pause(0);
+
+  const btn = saveBtn();
+  assert.ok(btn, "«Saqlash» tugmasi chiqmadi");
+  assert.match(btn!.textContent ?? "", /· 1\b/, "bitta tahrir ikki marta navbatga tushdi");
+});
+
 test("Esc tahrirni bekor qiladi — matn ham, navbat ham o'zgarmaydi", async () => {
   const s = stubServer();
   openEditor(s);
