@@ -110,3 +110,17 @@ Parity contract (`.word-sheet*`, `.word-inner`, measuring box, `packPages`, slid
 - **Mobile (< md):** secondary actions (delete slide, template name, legacy note) live in the «Boshqa amallar» menu (`aria-haspopup=menu`, focus on first item, ↑/↓, Escape returns focus, outside tap closes). In fit mode the stage is `aspect-video` (sized by width, 8 px padding) and `SlideRail variant="strip"` becomes a 3/4-column thumbnail grid filling the rest of the frame (`data-strip-layout="grid"`); with manual zoom the stage takes the frame and the strip is the old one-row strip (`"row"`).
 - **Touch image buttons:** `SlideEditor` marks the image control layer `data-slide-image-controls` (only change in that file). On `@media (hover: none)` it is hidden until a non-mouse pointerdown lands on the slide (`data-touch-sel` on the frame); it resets on slide change or when the empty stage is tapped. Desktop is unchanged.
 - **Smoke hooks:** `[data-slide-toolbar]`, `[data-slide-stage=fit|zoom|present]`, `[data-zoom-label][data-zoom-mode]`, `[data-zoom-fit]`, `[data-slide-page]`, `[data-slide-more]`, `[data-slide-more-panel]`, `[data-rail=strip][data-strip-layout]`.
+
+## Phase 2 — polish (after the prod AFTER audit, 2026-10-03)
+AFTER audit (`R3` in the lead's scratchpad; summary): end of document reachable 21/21 (was 11/21), content traps 0, listening/sorting first-viewport content 8/0/0 % → 55/40/78 %. Remaining:
+1. Phones: A4 fitted to width is ≈46 % (landscape 32 %) — text illegible. **Owner decision: phones open paged documents in a reflowed «O'qish» (reading) mode by default; one toggle switches to «Varaq» (exact A4 view); editing only in «Varaq».** Reading mode renders from the same document model (`lib/viewers/flow.ts` blocks), never touches the sheet/parity path.
+2. Dock open by default at 1366 squeezes content (40 %) → default open only at ≥ 1600 px; below that chips open it.
+3. Mobile document/resume toolbars still scroll sideways → overflow «⋯» menu like slides.
+4. Header + toolbar take 188 px on phones → compact header when scrolled.
+5. Loading feedback: infographic black box while loading; a lazy viewer once stuck on «Yuklanmoqda…» → placeholder + error boundary with «Qayta urinish».
+6. Download button duplicated (header + image bar) → keep one.
+7. Slide image overlay buttons visible on touch → verify with a touch device emulation (V2 hid them until tap).
+| WP | Scope | Model |
+|---|---|---|
+| V5a | reading mode (new components under `components/viewers/reading/*`), toggle + mobile overflow menu in `components/viewers/toolbar.tsx`, `WordViewer.tsx`/`ResumeViewer.tsx` wiring (resume: «Varaq» only — reading mode not required, but its toolbar gets the overflow menu) | opus |
+| V5b | `components/files/ResultLayout.tsx` (+ `result-layout/*`): dock default by width, compact mobile header; `ImageViewer.tsx`: one download, loading placeholder; `ArtifactViewer.tsx`: error boundary + retry for lazy viewer chunks; slide overlay touch check (`SlideEditor.tsx` only if needed) | sonnet |
