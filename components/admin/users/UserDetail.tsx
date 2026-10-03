@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
-import { ArrowLeft, Ban, Eye, LogOut, MessageSquare, ShieldCheck, Wallet } from "lucide-react";
+import { ArrowLeft, Ban, Eye, LogOut, MessageSquare, ShieldCheck, UserCog, Wallet } from "lucide-react";
 import {
   Badge,
   Button,
@@ -22,7 +22,10 @@ import {
   type TabItem,
   toast,
 } from "@/components/admin/ui";
-import { roleLabel, useCan } from "@/components/admin/shell";
+import { roleLabel, useAdminIdentity, useCan } from "@/components/admin/shell";
+import { BLOCKED_USER, CreateAdminDialog, announceCreated } from "@/components/admin/admins/CreateAdminDialog";
+import { EnrollLinkDialog, type EnrollLinkView } from "@/components/admin/admins/EnrollLinkDialog";
+import { STATUS_META, assignableRoles } from "@/components/admin/admins/shared";
 import { WalletAdjustDialog } from "@/components/admin/money";
 import { GenerationsTable } from "@/components/admin/generations";
 import { OrdersTable, useResource, useUrlFilters } from "@/components/admin/payments";
@@ -40,7 +43,7 @@ const TAB_KEYS = ["tab"] as const;
 const TABS_ID = "user-tabs";
 
 type TabId = "overview" | "generations" | "payments" | "ledger" | "sessions" | "links" | "audit";
-type Dialog = "wallet" | "block" | "sessions" | "message" | null;
+type Dialog = "wallet" | "block" | "sessions" | "message" | "admin" | null;
 
 function BackLink() {
   return (
@@ -73,6 +76,8 @@ export function UserDetail({ id, tools }: { id: string; tools: ReadonlyArray<Fil
   const { state, retry } = useResource<AdminUserDetailResponse>(`${id}:${reloadKey}`, (signal) => getUser(id, { signal }), valid);
   const [revealed, setRevealed] = useState<AdminUserDetailResponse | null>(null);
   const [dialog, setDialog] = useState<Dialog>(null);
+  const [enrollLink, setEnrollLink] = useState<EnrollLinkView | null>(null);
+  const identity = useAdminIdentity();
   const tabStore = useUrlFilters(TAB_KEYS);
 
   const canWallet = useCan("users.wallet");
@@ -85,6 +90,7 @@ export function UserDetail({ id, tools }: { id: string; tools: ReadonlyArray<Fil
   const canPayments = useCan("payments.view");
   const canModeration = useCan("moderation.view");
   const canAudit = useCan("audit.view");
+  const canViewAdmins = useCan("admins.view");
 
   if (!valid || (state.status === "error" && state.notFound)) {
     return (
@@ -127,6 +133,9 @@ export function UserDetail({ id, tools }: { id: string; tools: ReadonlyArray<Fil
   // An admin target ends that admin's panel access when blocked or signed out:
   // the server requires admins.manage (and rank); the UI mirrors the first part.
   const mayActOnTarget = !flags.self && (!flags.isAdminAccount || canManageAdmins);
+  // Any admin_accounts row (a disabled one too) makes the server answer 409 `already_admin`.
+  const hasAdminAccount = flags.isAdminAccount || flags.adminStatus !== null;
+  const mayMakeAdmin = canManageAdmins && !flags.self && !hasAdminAccount && assignableRoles(identity.role).length > 0;
 
   const refresh = () => {
     setRevealed(null);
@@ -185,6 +194,17 @@ export function UserDetail({ id, tools }: { id: string; tools: ReadonlyArray<Fil
         Xabar yuborish
       </Button>
     ) : null,
+    mayMakeAdmin ? (
+      <Button
+        key="admin"
+        icon={<UserCog className="size-4" aria-hidden="true" />}
+        disabled={user.isBlocked}
+        aria-describedby={user.isBlocked ? "make-admin-why" : undefined}
+        onClick={() => setDialog("admin")}
+      >
+        Admin qilish
+      </Button>
+    ) : null,
     canPii && !user.revealed ? (
       <Button key="reveal" variant="ghost" icon={<Eye className="size-4" aria-hidden="true" />} onClick={() => void reveal().catch((e: unknown) => toast(adminErrorMessage(e), { tone: "error" }))}>
         Telefonni ko&apos;rsatish
@@ -210,9 +230,12 @@ export function UserDetail({ id, tools }: { id: string; tools: ReadonlyArray<Fil
               Bloklangan
             </Badge>
           ) : null}
-          {flags.isAdminAccount ? (
+          {hasAdminAccount ? (
             <Badge tone="primary">
               Admin{flags.adminRole ? ` · ${roleLabel(flags.adminRole)}` : ""}
+              {flags.adminStatus && flags.adminStatus !== "active" && flags.adminStatus in STATUS_META
+                ? ` (${STATUS_META[flags.adminStatus as keyof typeof STATUS_META].label.toLowerCase()})`
+                : ""}
             </Badge>
           ) : null}
         </h1>
@@ -220,6 +243,11 @@ export function UserDetail({ id, tools }: { id: string; tools: ReadonlyArray<Fil
           #{user.id} · {user.username ? `@${user.username}` : "username yo'q"}
           {flags.self ? " · bu sizning hisobingiz" : ""}
         </p>
+        {hasAdminAccount && canViewAdmins ? (
+          <Link href="/admin/admins" className="text-foreground hover:text-primary w-fit text-[12.5px] font-medium underline underline-offset-2">
+            Adminlar bo&apos;limida ko&apos;rish
+          </Link>
+        ) : null}
       </header>
 
       <div className={`grid gap-3 ${wallets.length === 3 ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
@@ -240,6 +268,11 @@ export function UserDetail({ id, tools }: { id: string; tools: ReadonlyArray<Fil
         <div role="group" aria-label="Amallar" className="flex flex-wrap gap-2">
           {actions}
         </div>
+      ) : null}
+      {mayMakeAdmin && user.isBlocked ? (
+        <p id="make-admin-why" className="text-muted-foreground -mt-3 text-xs">
+          {BLOCKED_USER}
+        </p>
       ) : null}
 
       <Tabs tabs={tabs} value={tab} onChange={setTab} ariaLabel="Foydalanuvchi bo'limlari" idPrefix={TABS_ID} />
@@ -345,6 +378,18 @@ export function UserDetail({ id, tools }: { id: string; tools: ReadonlyArray<Fil
       <BlockDialog open={dialog === "block"} onClose={() => setDialog(null)} user={target} onDone={refresh} />
       <RevokeSessionsDialog open={dialog === "sessions"} onClose={() => setDialog(null)} user={target} onDone={refresh} />
       <MessageDialog open={dialog === "message"} onClose={() => setDialog(null)} user={target} />
+      <CreateAdminDialog
+        open={dialog === "admin"}
+        onClose={() => setDialog(null)}
+        actorRole={identity.role}
+        twoFactor={identity.twoFactor}
+        target={{ id: user.id, name: user.name, username: user.username }}
+        onCreated={(c) => {
+          announceCreated(c, setEnrollLink);
+          refresh();
+        }}
+      />
+      <EnrollLinkDialog link={enrollLink} onClose={() => setEnrollLink(null)} />
     </div>
   );
 }

@@ -310,6 +310,8 @@ async function openAdd() {
   return screen.findByRole("dialog", { name: "Admin qo'shish" });
 }
 const confirmBtn = (d: HTMLElement) => within(d).getByRole("button", { name: "Admin qo'shish" }) as HTMLButtonElement;
+/** The dialog opens on the user picker; Telegram ID / user ID entry is the "ID bo'yicha" fallback. */
+const byId = (d: HTMLElement) => fireEvent.click(within(d).getByRole("button", { name: "ID bo'yicha kiritish" }));
 
 test("add admin by Telegram ID: confirm needs id + role + reason; the one-time enroll URL is shown with copy and expiry, then gone", async () => {
   const api = adminsApi();
@@ -322,6 +324,7 @@ test("add admin by Telegram ID: confirm needs id + role + reason; the one-time e
   const roleSel = within(d).getByLabelText("Rol") as HTMLSelectElement;
   assert.deepEqual([...roleSel.options].map((o) => o.value).filter(Boolean), ["owner", "admin", "finance", "support", "moderator", "viewer"]);
 
+  byId(d);
   fireEvent.change(within(d).getByLabelText("Telegram ID"), { target: { value: "12abc" } });
   assert.ok(within(d).getByText(/Faqat raqamlar kiriting/));
   fireEvent.change(within(d).getByLabelText("Telegram ID"), { target: { value: "555000111" } });
@@ -358,6 +361,7 @@ test("add admin by user ID sends userId (and no sendViaTelegram unless ticked)",
   const { container } = renderPage("owner");
   await waitRows(container);
   const d = await openAdd();
+  byId(d);
   fireEvent.click(within(d).getByRole("radio", { name: "Foydalanuvchi ID" }));
   fireEvent.change(within(d).getByLabelText("Foydalanuvchi ID"), { target: { value: "42" } });
   fireEvent.change(within(d).getByLabelText("Rol"), { target: { value: "viewer" } });
@@ -387,6 +391,7 @@ test("add admin: the server's 404 / 409 / 403 messages stay inline and the dialo
   const { container } = renderPage("owner");
   await waitRows(container);
   const d = await openAdd();
+  byId(d);
   fireEvent.change(within(d).getByLabelText("Telegram ID"), { target: { value: "1" } });
   fireEvent.change(within(d).getByLabelText("Rol"), { target: { value: "admin" } });
   fireEvent.change(within(d).getByLabelText(/Sabab/), { target: { value: "sabab matni" } });
@@ -417,6 +422,7 @@ test("a stale step-up is handled by core: the dialog asks once and the add is re
   const { container } = renderPage("owner");
   await waitRows(container);
   const d = await openAdd();
+  byId(d);
   fireEvent.change(within(d).getByLabelText("Telegram ID"), { target: { value: "7" } });
   fireEvent.change(within(d).getByLabelText("Rol"), { target: { value: "finance" } });
   fireEvent.change(within(d).getByLabelText(/Sabab/), { target: { value: "moliya xodimi" } });
