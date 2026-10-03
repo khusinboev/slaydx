@@ -80,3 +80,21 @@ test("eski hujjat (translation yo'q) → WordViewer fallback", () => {
   assert.ok(!html.includes("data-translation-header"));
   assert.ok(html.includes("Photosynthesis"), "WordViewer matnni chizadi");
 });
+
+test("V4: juftlar tor ekranda BITTA ustun (grid-cols-1 md:grid-cols-2), ustun sarlavhasi faqat md+ da", () => {
+  const html = render(report());
+  // MUTATSIYA 4: juft qatorini qat'iy `grid-cols-2` ga qaytarish -> qizaradi.
+  const row = html.match(/data-pair="a"[^>]*class="([^"]*)"/);
+  const cls = row?.[1] ?? "";
+  assert.match(cls, /\bgrid-cols-1\b/, "tor ekranda bitta ustun");
+  assert.match(cls, /\bmd:grid-cols-2\b/, "md+ da ikki ustun");
+  assert.doesNotMatch(cls, /(^|\s)grid-cols-2\b/, "shartsiz grid-cols-2 qolmasin");
+  assert.match(html, /class="[^"]*\bhidden\b[^"]*\bmd:grid\b[^"]*"><span>Asl<\/span>/, "Asl/Tarjima sarlavhasi tor ekranda yashirin");
+});
+
+test("V4: tarjima ko'ruvchisi oqimda: overflow/h-full/100vh yo'q, <details> bloklari saqlangan", () => {
+  const html = render(report({ warnings: [{ code: "numbers", id: "c", detail: "2024" }] }));
+  assert.doesNotMatch(html, /overflow-(y-)?(auto|scroll)/, "ichki vertikal scroller yo'q");
+  assert.doesNotMatch(html, /\bh-full\b|100vh/, "qat'iy balandlik yo'q");
+  assert.ok(html.includes("data-warnings") && html.includes("data-glossary"), "<details> bloklari funksiyasi saqlangan");
+});

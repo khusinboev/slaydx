@@ -158,8 +158,9 @@ test("`AudioViewer` pleeri `inline=1` bilan, transkript esa `doc.audio.script` d
   // Transkript YAGONA manbadan — model, `sections` emas.
   assert.match(src, /doc\.audio/, "transkript modeldan o'qilmayapti");
   assert.ok(!/doc\.sections/.test(src), "MUTATSIYA: transkript `sections` dan chizilyapti — audio bilan ajralib ketardi");
-  // Yuklab olish havolasi `inline` SIZ (aks holda fayl tabda ochilib qolardi).
-  assert.match(src, /href=\{`\/api\/generations\/\$\{gen\.id\}\/file`\}/);
+  // V4: yuklab olish BITTA — natija sarlavhasida (`ResultView`, `inline` SIZ). Ko'ruvchi ichida ikkinchi yuklash havolasi yo'q.
+  assert.ok(!/href=\{`\/api\/generations\/\$\{gen\.id\}\/file`\}/.test(src), "ko'ruvchida takroriy MP3 yuklash havolasi");
+  assert.ok(!/<a\s[\s\S]{0,120}\/file/.test(src), "ko'ruvchida fayl havolasi bo'lmasin");
 });
 
 test("MP3 fayl javobi: `Accept-Ranges` bor, `inline` esa parametrga bog'liq", () => {

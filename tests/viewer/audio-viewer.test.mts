@@ -47,8 +47,9 @@ test("AudioViewer: <audio> pleer ANIQ id dan quriladi va transkript ssenariydan 
   // Pleer — AYNAN generatsiya id sidan, `inline=1` bilan (yuklab olishga o'tmasin).
   assert.ok(html.includes("<audio"), "pleer chizilmadi");
   assert.match(html, /src="\/api\/generations\/gen-1\/file\?inline=1"/, "pleer manbasi noto'g'ri");
-  // Yuklab olish havolasi — `inline` SIZ (yuklab olinadigan aynan shu fayl).
-  assert.match(html, /href="\/api\/generations\/gen-1\/file"/);
+  // V4: yuklab olish BITTA — natija sarlavhasida (`ResultView`). Ko'ruvchi ichida ikkinchi havola yo'q.
+  assert.ok(!html.includes('href="/api/generations/gen-1/file"'), "ko'ruvchida takroriy «MP3 yuklab olish» havolasi bo'lmasligi kerak");
+  assert.ok(!html.includes("MP3 yuklab olish"), "takroriy yuklash yozuvi");
 
   // Transkript — ikkala replika matni ekranda, rol belgisi bilan.
   assert.ok(html.includes("Nega bu mavzu bugun muhim?"), "birinchi replika chizilmadi");
@@ -69,4 +70,14 @@ test("AudioViewer: `doc.audio` yo'q bo'lsa pleer YO'Q va foydalanuvchiga tushuna
   // MUTATSIYA 2 tekshiruvi: dvigatel ssenariy bermagan holatda pleer chizilmasin (o'ynatib bo'lmaydigan fayl ko'rsatilmasin).
   assert.ok(!html.includes("<audio"), "audiosiz hujjatda ham pleer chizildi");
   assert.ok(html.includes("Ssenariy yaratilmadi"), "xabar chiqmadi");
+});
+
+test("AudioViewer (V4, flow): ichki scroll qutisi yo'q, transkript sahifa oqimida, pleer bloki md+ da sticky (--result-header-h)", () => {
+  const model: AudioModel = { v: 1, kind: "podcast", type: "intervyu", language: "uz", seconds: 60, script: [{ speaker: "A", text: "Salom" }] };
+  const html = renderToStaticMarkup(h(AudioViewer, { doc: docOf(model, "Mavzu"), gen: { id: "gen-3" } }));
+  // MUTATSIYA 3: transkript qutisiga `overflow-auto` qaytarilsa yoki `min-h-[70vh]`/`h-full` qo'shilsa — qizaradi.
+  assert.doesNotMatch(html, /overflow-(y-)?(auto|scroll)/, "ichki vertikal scroller bo'lmasligi kerak");
+  assert.doesNotMatch(html, /\bh-full\b|min-h-\[70vh\]/, "ko'ruvchi qat'iy balandlikka bog'lanmasin");
+  assert.match(html, /class="[^"]*md:sticky md:top-\[var\(--result-header-h,0px\)\][^"]*"[^>]*data-audio-player/, "pleer bloki sarlavha ostida sticky");
+  assert.ok(html.indexOf("data-audio-player") < html.indexOf("data-audio-transcript"), "pleer transkriptdan oldin");
 });
