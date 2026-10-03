@@ -21,6 +21,9 @@ import { TOOL_BY_ID } from "@/lib/tools";
 import { useConfirmClick } from "../overlays/useConfirmClick";
 import { EditActions, type EditActionsState } from "./EditActions";
 import { GameSharePanel } from "./GameSharePanel";
+import { ResultLayout, type PanelSection } from "./ResultLayout";
+import { frameClass, viewerFrame } from "./result-layout/frame";
+import { reviewSummary } from "./result-layout/summary";
 import { publicGameKindOf } from "@/lib/game/public";
 /*
  * Jonli slayd ko'ruvchisi ALOHIDA bo'lakda (FE-11): u faqat slayd
@@ -333,13 +336,12 @@ export function ResultView({ id }: { id: string }) {
   /** Ko'ruvchida tahrir bo'lgan, PPTX hali qayta yasalmagan. */
   const fileStale = (gen.fileVersion ?? 0) < (gen.docVersion ?? 0);
   /*
-   * OQIM rejimi (AUDIT-16 §7): tarjima natijasida butun sahifa scroll
-   * bo'ladi — peshtoq (sarlavha, yuklab olish), chiplar va tablar mazmun
-   * bilan birga yuqoriga suriladi, PDF ko'rinishi esa ekranni to'liq oladi.
-   * Boshqa ko'ruvchilar (slayd, hujjat) o'z ichki scroll'i bilan qat'iy
-   * balandlikda qoladi — ular sahifalash/klaviatura uchun shunga tayanadi.
+   * Ko'ruvchi ramkasi (viewer redesign V0): HAMMA tur sahifa scroll'ida
+   * (AppShell `<main>`), sarlavha sticky. Slayd — `fill` (qolgan ekran),
+   * qolganlari — `flow`. Ilgari faqat tarjima oqimda edi (AUDIT-16 §7),
+   * boshqalari `overflow-hidden` quti ichida kesilardi (R1 §1).
    */
-  const flow = completed && gen.type === "translation";
+  const frame = viewerFrame(viewerKind(gen.type));
 
   /*
    * Tayyorlik hisoboti — YAGONA o'qish nuqtasi: maqola/tezisda
@@ -421,116 +423,211 @@ export function ResultView({ id }: { id: string }) {
    */
   const shareKind = completed && !expired ? publicGameKindOf(gen.type) : null;
 
-  return (
-    <div className={cn("flex h-full min-h-0 flex-1 flex-col", flow ? "overflow-y-auto" : "overflow-hidden")} data-result-flow={flow ? "1" : undefined}>
-      <nav
-        className={cn(
-          "no-print bg-background/95 z-10 flex items-center gap-2 border-b px-3 py-2 sm:px-4",
-          flow ? "shrink-0" : "sticky top-0",
-        )}
-      >
-        <Link
-          href="/uz"
-          aria-label="Orqaga"
-          className="text-muted-foreground hover:bg-muted flex size-8 items-center justify-center rounded-full"
-        >
-          <ArrowLeft className="size-5" />
-        </Link>
-        <div className="min-w-0 flex-1">
-          <h1 className="truncate text-[15px] font-semibold">{gen.topic}</h1>
-          <p className="text-muted-foreground truncate text-xs">
-            {tool?.title} · {completed ? (expired ? "Topilmadi" : "Tayyor") : gen.step} ·{" "}
-            {gen.price.toLocaleString("uz-UZ")} tanga
-          </p>
-        </div>
-        {completed ? (
-          <div className="flex shrink-0 items-center gap-2">
-            <EditActions state={editState} />
-            {!expired ? (
-            <button
-              type="button"
-              className="bg-primary text-primary-foreground inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm font-medium disabled:opacity-60"
-              disabled={busy || !gen.hasFile}
-              onClick={() => void onDownload()}
-            >
-              <Download className="size-4" />
-              {/*
-                Tahrirdan keyin fayl hujjatdan orqada qolgan bo'lsa
-                tugma shuni AYTADI (va bosilganda avval qayta yasaladi) —
-                foydalanuvchi eski PPTX ni olib ketmasin.
-              */}
-              <span className="hidden sm:inline">
-                {fileStale || downloading === "file" ? "Fayl yangilanmoqda…" : "Yuklab olish"}
-              </span>
-              <span className="text-primary-foreground/80 hidden text-xs md:inline">
-                {gen.format.toUpperCase()}
-              </span>
-            </button>
-            ) : null}
-            {/*
-              PDF talab bo'yicha o'giriladi va bazada saqlanmaydi.
-              Server LibreOffice'siz bo'lsa bayroq `false` va tugma chiqmaydi.
-
-              Ro'yxat RUXSAT ETILGANLAR, taqiqlanganlar emas (AUDIT-5 P1-9):
-              shart `format !== "png"` edi, ya'ni bir nechta rasm uchun
-              chiqadigan ZIP ham o'tib ketardi. Tugma ko'rinar, bosilganda
-              esa server 400 qaytarardi («Bu fayl allaqachon tayyor
-              formatda») — ishlamaydigan tugma ko'rsatilmagani yaxshi.
-            */}
-            {!expired && features?.pdf && PDF_CONVERTIBLE.has(gen.format) ? (
+  /*
+   * Ikkinchi darajali bloklar — `ResultLayout` paneliga (≥ 1280 px o'ngda,
+   * torroqda pastki varaq). Ilgari ular ko'ruvchi TEPASIDA, har biri
+   * `max-h-[45vh]` va o'z scroll'i bilan turardi va hujjatni ekrandan
+   * chiqarib yuborardi (R2: tinglash/saralashda 0 %). Tartib saqlanadi:
+   * avval «hujjat tayyormi» (hisobot), so'ng «sinfga berish» (havola).
+   */
+  const sections: PanelSection[] = [
+    ...(review && completed && !expired
+      ? [
+          {
+            id: "review",
+            title: "Tayyorlik hisoboti",
+            ...chipOf(reviewSummary(review)),
+            content: (
               /*
-                O'girish 1 daqiqagacha davom etadi (UX-08): tugma shuni
-                AYTADI — aylanuvchi belgi + «PDF tayyorlanmoqda…» —
-                aks holda o'chgan tugma «ishlamay qoldi» deb o'qilardi.
-              */
-              <button
-                type="button"
-                className="bg-card inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm disabled:opacity-60"
-                disabled={busy || !gen.hasFile}
-                aria-busy={downloading === "pdf"}
-                data-pdf-busy={downloading === "pdf" ? "1" : undefined}
-                onClick={() => void onDownload("pdf")}
-                title="PDF ga o‘girib yuklab olish"
-              >
-                {downloading === "pdf" ? (
-                  <>
-                    <Loader2 className="size-4 animate-spin" />
-                    <span className="hidden sm:inline">PDF tayyorlanmoqda…</span>
-                    <span className="sm:hidden">PDF…</span>
-                  </>
-                ) : (
-                  <>
-                    <Download className="size-4" />
-                    PDF
-                  </>
-                )}
-              </button>
-            ) : null}
+               * Tayyorlik hisoboti (Maqola 2, WP5; insho — AUDIT-19 WP-E1).
+               *
+               * «Tuzatish» (`onFix` → `POST …/rewrite`) inshoda va
+               * PLAKATDA chizilmaydi (`noFix`): ikkalasida ham nishon
+               * bitta va har bandi butun matnga tegishli, shuning uchun
+               * bandma-band tuzatish «Hammasini tuzatish» ning
+               * baholovchisiz nusxasi bo'lardi (server ham 422 qaytaradi).
+               * O'yinlarda esa bor — ta'rif/karta matni to'rga tegmasdan
+               * almashadi.
+               *
+               * AUDIODA (`noPolish`) «Hammasini tuzatish» HAM yo'q —
+               * boshqa `noFix` oilalaridan farqi shu: ularda avto-sayqal
+               * baribir ishlaydi, audioda esa sayqal MP3 sintezidan OLDIN
+               * dvigatel ichida allaqachon bajarilgan (qayta chaqirish —
+               * TTS ni ikkinchi marta to'lash). Hisobot (`review`) o'zi
+               * baribir ko'rinadi.
+               */
+              <div data-article-review-panel>
+                {isEssay ? (
+                  // AUDIT-24 WP-C: nega «Tuzatish» yo'qligi tushuntirilmasdi
+                  // (forms3-talaba.md topilmasi) — endi bitta qatorlik izoh.
+                  <p className="text-muted-foreground mb-2 text-[11.5px]" data-essay-nofix-note>
+                    Insho bitta matn — «Hammasini tuzatish» butun matnni qayta ko‘radi.
+                  </p>
+                ) : null}
+                {aiLocked ? (
+                  // 402 `unpaid`: tugmalar o'chadi, sabab (server matni) shu yerda turadi.
+                  <p className="mb-2 rounded-md bg-amber-50 px-2 py-1.5 text-[11.5px] text-amber-800" data-ai-unpaid>
+                    {aiLocked}
+                  </p>
+                ) : null}
+                <ArticleReviewPanel
+                  review={review}
+                  hrefBase={`/uz/${gen.type}`}
+                  {...(aiLocked ? {} : noFix ? {} : { onFix: (fix: NonNullable<ReviewCheck["fix"]>) => void onFix(fix) })}
+                  fixing={fixing}
+                  {...(aiLocked ? {} : noPolish ? {} : { onPolish: () => void onPolish(), polishing })}
+                  {...(hideGroups ? { hideGroups } : {})}
+                />
+              </div>
+            ),
+          },
+        ]
+      : []),
+    ...(shareKind
+      ? [
+          {
+            /*
+             * Hisobot bo'limidan KEYIN: o'qituvchi avval «hujjat tayyormi» ni
+             * ko'radi, so'ng uni SINFGA beradi. Havola, QR va natijalar
+             * hujjat ustida emas — panelda.
+             */
+            id: "share",
+            title: "O‘yin havolasi",
+            chip: "O‘yin havolasi",
+            content: <GameSharePanel id={gen.id} kind={shareKind} />,
+          },
+        ]
+      : []),
+  ];
+
+  const header = (
+    <nav className="flex items-center gap-2 px-3 py-2 sm:px-4">
+      <Link
+        href="/uz"
+        aria-label="Orqaga"
+        className="text-muted-foreground hover:bg-muted flex size-8 items-center justify-center rounded-full"
+      >
+        <ArrowLeft className="size-5" />
+      </Link>
+      <div className="min-w-0 flex-1">
+        <h1 className="truncate text-[15px] font-semibold">{gen.topic}</h1>
+        <p className="text-muted-foreground truncate text-xs">
+          {tool?.title} · {completed ? (expired ? "Topilmadi" : "Tayyor") : gen.step} ·{" "}
+          {gen.price.toLocaleString("uz-UZ")} tanga
+        </p>
+      </div>
+      {completed ? (
+        <div className="flex shrink-0 items-center gap-2">
+          <EditActions state={editState} />
+          {!expired ? (
+          <button
+            type="button"
+            className="bg-primary text-primary-foreground inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm font-medium disabled:opacity-60"
+            disabled={busy || !gen.hasFile}
+            onClick={() => void onDownload()}
+            data-file-stale={fileStale ? "1" : undefined}
+            title={fileStale ? "Fayl oxirgi tahrirlar bilan yangilanib yuklanadi" : undefined}
+          >
+            <Download className="size-4" />
+            {/*
+              «Fayl yangilanmoqda…» FAQAT fayl haqiqatan qayta yasalayotganda
+              (bosilgandan keyin `ensureGenerationFresh` → yuklash). Ilgari
+              `fileStale` ning o'zi ham shu yozuvni chiqarardi: server AI
+              tahriri (`rewrite`/`polish`) `doc_version` ni oshiradi, faylni
+              esa yuklashgacha qayta yasamaydi — yozuv abadiy turardi (R2,
+              maqola). Eski fayl baribir olib ketilmaydi: bosishda avval
+              qayta yasaladi.
+            */}
+            <span className="hidden sm:inline">
+              {downloading === "file" ? "Fayl yangilanmoqda…" : "Yuklab olish"}
+            </span>
+            <span className="text-primary-foreground/80 hidden text-xs md:inline">
+              {gen.format.toUpperCase()}
+            </span>
+          </button>
+          ) : null}
+          {/*
+            PDF talab bo'yicha o'giriladi va bazada saqlanmaydi.
+            Server LibreOffice'siz bo'lsa bayroq `false` va tugma chiqmaydi.
+
+            Ro'yxat RUXSAT ETILGANLAR, taqiqlanganlar emas (AUDIT-5 P1-9):
+            shart `format !== "png"` edi, ya'ni bir nechta rasm uchun
+            chiqadigan ZIP ham o'tib ketardi. Tugma ko'rinar, bosilganda
+            esa server 400 qaytarardi («Bu fayl allaqachon tayyor
+            formatda») — ishlamaydigan tugma ko'rsatilmagani yaxshi.
+          */}
+          {!expired && features?.pdf && PDF_CONVERTIBLE.has(gen.format) ? (
+            /*
+              O'girish 1 daqiqagacha davom etadi (UX-08): tugma shuni
+              AYTADI — aylanuvchi belgi + «PDF tayyorlanmoqda…» —
+              aks holda o'chgan tugma «ishlamay qoldi» deb o'qilardi.
+            */
             <button
               type="button"
-              className={
-                del.armed
-                  ? "bg-destructive text-destructive-foreground inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm font-medium disabled:opacity-60"
-                  : "bg-card inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm disabled:opacity-60"
-              }
-              disabled={busy}
-              onClick={del.trigger}
+              className="bg-card inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm disabled:opacity-60"
+              disabled={busy || !gen.hasFile}
+              aria-busy={downloading === "pdf"}
+              data-pdf-busy={downloading === "pdf" ? "1" : undefined}
+              onClick={() => void onDownload("pdf")}
+              title="PDF ga o‘girib yuklab olish"
             >
-              <Trash2 className="size-4" />
-              <span className={del.armed ? "inline" : "hidden sm:inline"}>
-                {del.armed ? "Rostdan?" : "O’chirish"}
-              </span>
+              {downloading === "pdf" ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  <span className="hidden sm:inline">PDF tayyorlanmoqda…</span>
+                  <span className="sm:hidden">PDF…</span>
+                </>
+              ) : (
+                <>
+                  <Download className="size-4" />
+                  PDF
+                </>
+              )}
             </button>
-          </div>
-        ) : null}
-      </nav>
-
-      {downloading === "pdf" ? (
-        <p role="status" className="text-muted-foreground no-print px-4 pt-3 text-sm" data-pdf-status>
-          PDF tayyorlanmoqda — bu 1 daqiqagacha davom etishi mumkin.
-        </p>
+          ) : null}
+          <button
+            type="button"
+            className={
+              del.armed
+                ? "bg-destructive text-destructive-foreground inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm font-medium disabled:opacity-60"
+                : "bg-card inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm disabled:opacity-60"
+            }
+            disabled={busy}
+            onClick={del.trigger}
+          >
+            <Trash2 className="size-4" />
+            <span className={del.armed ? "inline" : "hidden sm:inline"}>
+              {del.armed ? "Rostdan?" : "O’chirish"}
+            </span>
+          </button>
+        </div>
       ) : null}
+    </nav>
+  );
 
+  /*
+   * Qisqa holat qatorlari sticky sarlavha ICHIDA: sahifa endi scroll
+   * bo'ladi, ya'ni hujjat oxirida bosilgan «PDF» ning holati yoki xatosi
+   * tepada, ko'rinmaydigan joyda qolib ketmasin.
+   */
+  const notices =
+    downloading === "pdf" || (error && !running) ? (
+      <>
+        {downloading === "pdf" ? (
+          <p role="status" className="text-muted-foreground px-4 pb-2 text-sm" data-pdf-status>
+            PDF tayyorlanmoqda — bu 1 daqiqagacha davom etishi mumkin.
+          </p>
+        ) : null}
+        {error && !running ? (
+          <p role="alert" className="text-destructive px-4 pb-2 text-sm">
+            {error}
+          </p>
+        ) : null}
+      </>
+    ) : null;
+
+  return (
+    <ResultLayout header={header} notices={notices} sections={sections} frame={completed && !expired ? frame.mode : undefined}>
       {/*
         C20: polling taslim bo'lsa (`error`) yoki qiynalsa (`issue` —
         uzilish, odatdan uzoq navbat) — ish ketayotgan holatda ham
@@ -561,12 +658,6 @@ export function ResultView({ id }: { id: string }) {
         </div>
       ) : null}
 
-      {error && !running ? (
-        <p role="alert" className="text-destructive px-4 pt-3 text-sm">
-          {error}
-        </p>
-      ) : null}
-
       {expired ? (
         <div className="mx-auto w-full max-w-2xl px-4 py-8">
           <div className="bg-card rounded-2xl border p-6">
@@ -585,7 +676,7 @@ export function ResultView({ id }: { id: string }) {
           </div>
         </div>
       ) : completed ? (
-        <div className={cn("flex flex-col", flow ? "shrink-0" : "min-h-0 flex-1 overflow-hidden")}>
+        <>
           {gen.delivered ? (
             /*
              * Va'da qilinganidan kam yetkazilgan (AUDIT-6 C7).
@@ -593,8 +684,12 @@ export function ResultView({ id }: { id: string }) {
              * Ilgari bu farq faqat qisman qaytarish tranzaksiyasining
              * izohida qolardi — sahifa "Tayyor" deb ko'rsatar,
              * foydalanuvchi nega kam rasm/qator kelganini bilmasdi.
+             *
+             * V0: ixcham qator MAZMUN USTIDA (panelda emas) — u hujjatning
+             * o'zi haqida (nechta rasm/slayd yetkazildi), bitta qator va
+             * sahifa bilan birga scroll bo'lib ketadi.
              */
-            <p className="border-b bg-amber-50 px-4 py-2 text-center text-xs text-amber-800">
+            <p className="no-print border-b bg-amber-50 px-4 py-1.5 text-center text-xs text-amber-800" data-delivered>
               {/*
                * `unit` — nima sanalgani («slayd», «rasm», «atama»).
                * Slayd dekasida ikkita miqdor kam chiqishi mumkin, ya'ni
@@ -612,67 +707,6 @@ export function ResultView({ id }: { id: string }) {
               {(gen.delivered.refundShare ?? 1) > 0 ? " — farq balansingizga qaytarildi." : "."}
             </p>
           ) : null}
-          {review ? (
-            /*
-             * Tayyorlik hisoboti (Maqola 2, WP5; insho — AUDIT-19 WP-E1)
-             * — ko'ruvchi TEPASIDA, yig'iladigan `<details open>`:
-             * ko'ruvchi o'z ichki scroll'i bilan qoladi, panel esa
-             * `shrink-0` va o'z balandligi chegarasi bilan.
-             *
-             * «Tuzatish» (`onFix` → `POST …/rewrite`) inshoda va
-             * PLAKATDA chizilmaydi (`noFix`): ikkalasida ham nishon
-             * bitta va har bandi butun matnga tegishli, shuning uchun
-             * bandma-band tuzatish «Hammasini tuzatish» ning
-             * baholovchisiz nusxasi bo'lardi (server ham 422 qaytaradi).
-             * O'yinlarda esa bor — ta'rif/karta matni to'rga tegmasdan
-             * almashadi.
-             *
-             * AUDIODA (`noPolish`) «Hammasini tuzatish» HAM yo'q —
-             * boshqa `noFix` oilalaridan farqi shu: ularda avto-sayqal
-             * baribir ishlaydi, audioda esa sayqal MP3 sintezidan OLDIN
-             * dvigatel ichida allaqachon bajarilgan (qayta chaqirish —
-             * TTS ni ikkinchi marta to'lash). Hisobot (`review`) o'zi
-             * baribir ko'rinadi.
-             */
-            <details open className="no-print max-h-[45vh] shrink-0 overflow-y-auto border-b px-3 py-2 sm:px-4" data-article-review-panel>
-              <summary className="cursor-pointer text-sm font-medium select-none">
-                Tayyorlik hisoboti · {review.score} ball
-              </summary>
-              <div className="mt-2">
-                {isEssay ? (
-                  // AUDIT-24 WP-C: nega «Tuzatish» yo'qligi tushuntirilmasdi
-                  // (forms3-talaba.md topilmasi) — endi bitta qatorlik izoh.
-                  <p className="text-muted-foreground mb-2 text-[11.5px]" data-essay-nofix-note>
-                    Insho bitta matn — «Hammasini tuzatish» butun matnni qayta ko‘radi.
-                  </p>
-                ) : null}
-                {aiLocked ? (
-                  // 402 `unpaid`: tugmalar o'chadi, sabab (server matni) shu yerda turadi.
-                  <p className="mb-2 rounded-md bg-amber-50 px-2 py-1.5 text-[11.5px] text-amber-800" data-ai-unpaid>
-                    {aiLocked}
-                  </p>
-                ) : null}
-                <ArticleReviewPanel
-                  review={review}
-                  hrefBase={`/uz/${gen.type}`}
-                  {...(aiLocked ? {} : noFix ? {} : { onFix: (fix: NonNullable<ReviewCheck["fix"]>) => void onFix(fix) })}
-                  fixing={fixing}
-                  {...(aiLocked ? {} : noPolish ? {} : { onPolish: () => void onPolish(), polishing })}
-                  {...(hideGroups ? { hideGroups } : {})}
-                />
-              </div>
-            </details>
-          ) : null}
-          {shareKind ? (
-            /*
-             * Hisobot panelining OSTIDA va ko'ruvchining USTIDA: o'qituvchi
-             * avval «hujjat tayyormi» ni ko'radi, so'ng uni SINFGA beradi.
-             * `shrink-0` + o'z scroll'i — ko'ruvchi balandligini yemasin.
-             */
-            <div className="no-print max-h-[45vh] shrink-0 overflow-y-auto border-b px-3 py-3 sm:px-4">
-              <GameSharePanel id={gen.id} kind={shareKind} />
-            </div>
-          ) : null}
           <ArtifactViewer
             gen={toLegacyShape(gen)}
             detail={gen}
@@ -680,10 +714,15 @@ export function ResultView({ id }: { id: string }) {
             onEditState={setEditState}
             pdf={Boolean(features?.pdf)}
           />
-        </div>
+        </>
       ) : null}
-    </div>
+    </ResultLayout>
   );
+}
+
+/** Hisobot xulosasi → chip (`ResultLayout` sarlavhasida). */
+function chipOf(s: ReturnType<typeof reviewSummary>): Pick<PanelSection, "chip" | "tone"> {
+  return { chip: s.label, tone: s.tone };
 }
 
 /**
@@ -715,8 +754,14 @@ export function RunningPanel({ gen }: { gen: api.GenerationDetail }) {
   );
 
   if (live && liveDoc) {
+    /*
+     * Jonli slayd ham `fill` ramkasida (V0): sarlavha ostidagi qolgan
+     * ekran — tayyor slayd bilan bir xil o'lcham, jonli → tayyor o'tishda
+     * sahna sakramaydi. Ilgari `flex-1 overflow-hidden` edi, ya'ni
+     * balandlik `overflow-hidden` ota qutiga bog'liq edi.
+     */
     return (
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className={frameClass({ mode: "fill", boxed: false })} data-viewer-frame="fill" data-viewer-kind="slides">
         <Suspense fallback={<div className="text-muted-foreground p-8 text-sm">Yuklanmoqda...</div>}>
           <SlideViewer doc={liveDoc} live={live} />
         </Suspense>

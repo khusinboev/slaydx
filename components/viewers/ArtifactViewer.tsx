@@ -6,6 +6,7 @@ import type { AcademicDoc } from "@/lib/generation/types";
 import type { EditActionsState } from "../files/EditActions";
 import { academicDocFromHtml } from "@/lib/viewers/from-html";
 import { viewerKind } from "@/lib/viewers/kind";
+import { frameClass, viewerFrame } from "../files/result-layout/frame";
 
 /*
  * Har ko'ruvchi ALOHIDA bo'lakda (FE-11): ilgari hujjat sahifasi har
@@ -47,7 +48,24 @@ export function ArtifactViewer({
   onEditState?: (s: EditActionsState | null) => void;
 }) {
   const doc = gen.doc ?? academicDocFromHtml(gen.html, gen);
-  return <Suspense fallback={VIEWER_LOADING}>{viewerFor({ gen, doc, detail, onDetail, onEditState, pdf })}</Suspense>;
+  /*
+   * Ko'ruvchi ramkasi (viewer redesign V0, `result-layout/frame.ts`):
+   * slayd — `fill` (sarlavha ostidagi qolgan ekran), qolganlari — `flow`
+   * (sahifa scroll'ida). Ramka ko'ruvchi bo'lagi yuklanguncha ham bor —
+   * «Yuklanmoqda...» dan keyin sahifa sakramaydi.
+   */
+  const kind = viewerKind(gen.type);
+  const frame = viewerFrame(kind);
+  return (
+    <div
+      className={frameClass(frame)}
+      data-viewer-frame={frame.mode}
+      data-viewer-kind={kind}
+      data-viewer-boxed={frame.boxed ? "1" : undefined}
+    >
+      <Suspense fallback={VIEWER_LOADING}>{viewerFor({ gen, doc, detail, onDetail, onEditState, pdf })}</Suspense>
+    </div>
+  );
 }
 
 /** Hujjat turi → uning ko'ruvchisi (bo'lagi kerak bo'lganda yuklanadi). */
