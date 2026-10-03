@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { ArrowRight } from "lucide-react";
 import { adminErrorMessage, isAbortError, newIdempotencyKey } from "@/lib/admin-api/core";
+import { AutoTextarea } from "@/components/common/AutoTextarea";
 import { Button } from "./Button";
 import { Modal } from "./Modal";
 
@@ -181,15 +182,16 @@ function ConfirmBody({
             <label htmlFor={`${formId}-reason`} className="font-semibold">
               {cfg.label ?? "Sabab"}
             </label>
-            <textarea
+            <AutoTextarea
               id={`${formId}-reason`}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              rows={3}
+              minRows={2}
+              maxRows={6}
               maxLength={REASON_MAX}
               disabled={busy}
               aria-describedby={`${formId}-hint`}
-              className="border-input bg-card focus:ring-ring w-full resize-y rounded-lg border px-2.5 py-2 text-[13px] outline-none focus:ring-2 disabled:opacity-60"
+              className="border-input bg-card focus:ring-ring w-full rounded-lg border px-2.5 py-2 text-[13px] outline-none focus:ring-2 disabled:opacity-60"
             />
             <span id={`${formId}-hint`} className="text-muted-foreground text-xs">
               {reasonHint}

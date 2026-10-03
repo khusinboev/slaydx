@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useState, type ReactNode } from "react";
+import { AutoTextarea } from "@/components/common/AutoTextarea";
 import { ConfirmDialog, toast } from "@/components/admin/ui";
 import { fmtNumber } from "@/lib/admin-format";
 import { MESSAGE_MAX, messageUser, revokeUserSessions, setUserBlocked, type BlockSideEffects } from "@/lib/admin-api/users";
@@ -174,13 +175,14 @@ function MessageBody({ onClose, user }: { onClose: () => void; user: UserTarget 
         <label htmlFor={id} className="font-semibold">
           Xabar
         </label>
-        <textarea
+        <AutoTextarea
           id={id}
           value={text}
           onChange={(e) => setText(e.target.value)}
-          rows={5}
+          minRows={4}
+          maxRows={12}
           maxLength={MESSAGE_MAX}
-          className="border-input bg-card focus:ring-ring w-full resize-y rounded-lg border px-2.5 py-2 text-[13px] outline-none focus:ring-2"
+          className="border-input bg-card focus:ring-ring w-full rounded-lg border px-2.5 py-2 text-[13px] outline-none focus:ring-2"
         />
         <span className="text-muted-foreground text-xs tabular-nums">
           {fmtNumber(trimmed.length)} / {fmtNumber(MESSAGE_MAX)}
