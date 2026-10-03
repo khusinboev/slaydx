@@ -7,7 +7,18 @@ import { ArrowDownUp, ChevronDown, FileX, FolderOpen, Plus, Trash2 } from "lucid
 import * as api from "@/lib/api-client";
 import { useAppStore } from "@/lib/store";
 import { TOOL_BY_ID } from "@/lib/tools";
-import { FILE_FILTERS, FILE_SORTS, fileFilterMatch, type FileFilterId, useUi } from "@/lib/ui";
+import {
+  FILE_FILTERS,
+  FILE_SORTS,
+  fileFilterMatch,
+  readFileView,
+  replaceSearch,
+  writeFileView,
+  type FileFilterId,
+  type FileView,
+  useUi,
+} from "@/lib/ui";
+import { useOverlayHistory } from "@/components/nav/useOverlayHistory";
 import { cn } from "@/lib/cn";
 import { FilePreview } from "./FilePreview";
 import { confirmAccepted, confirmClock } from "../overlays/useConfirmClick";
@@ -24,10 +35,30 @@ export function HomeFiles() {
   const overlay = useUi((s) => s.overlay);
   const close = useUi((s) => s.close);
   const params = useSearchParams();
-  const [filter, setFilter] = useState<FileFilterId>("all");
-  const [sort, setSort] = useState<(typeof FILE_SORTS)[number]["id"]>("modified");
-  const [desc, setDesc] = useState(true);
+  /*
+   * Filtr/tartib URLda yashaydi (`?filter=docs&sort=name&desc=0`, standart
+   * qiymatlar URLga chiqmaydi): faylni ochib «orqaga» qaytganda ro'yxat
+   * o'sha ko'rinishda turadi. Holat mahalliy ham saqlanadi (bosish zahoti
+   * qayta chiziladi), URL esa `replace` bilan yangilanadi — tarixda yangi
+   * yozuv yo'q.
+   */
+  const [view, setView] = useState<FileView>(() => readFileView(params));
+  const { filter, sort, desc } = view;
   const [error, setError] = useState<string | null>(null);
+
+  function changeView(patch: Partial<FileView>) {
+    const next = { ...view, ...patch };
+    setView(next);
+    replaceSearch(writeFileView(new URLSearchParams(window.location.search), next));
+  }
+
+  // URL tashqaridan o'zgarsa (masalan yon paneldagi «Bosh sahifa») ko'rinish ergashadi.
+  useEffect(() => {
+    const fromUrl = readFileView(params);
+    setView((cur) =>
+      cur.filter === fromUrl.filter && cur.sort === fromUrl.sort && cur.desc === fromUrl.desc ? cur : fromUrl,
+    );
+  }, [params]);
 
   useEffect(() => {
     // `ret` so'rov parametridan (masalan `?returnTo=javascript:...`)
@@ -35,8 +66,19 @@ export function HomeFiles() {
     // (`lib/ui.ts`, `safeReturnTo`) yagona joyda bajariladi, shu bois
     // bu yerda xom qiymat shunchaki uzatiladi (C02/FE-01/SECA-02).
     const ret = params.get("returnTo");
-    if (ret && sessionChecked && !loggedIn) open("login", { returnTo: ret });
+    if (!ret || !sessionChecked) return;
+    if (!loggedIn) open("login", { returnTo: ret });
+    // Qiymat do'konga o'tdi (yoki foydalanuvchi allaqachon kirgan): URLda qolsa,
+    // yangilash kirish oynasini qayta ochardi.
+    const rest = new URLSearchParams(params.toString());
+    rest.delete("returnTo");
+    replaceSearch(rest);
   }, [params, loggedIn, sessionChecked, open]);
+
+  // Saralash oynasi ham tarix yozuviga ega: telefonning «orqaga»si uni yopadi.
+  useOverlayHistory(overlay === "sort", () => {
+    if (useUi.getState().overlay === "sort") close();
+  });
 
   /*
    * Navbatdagi ish tugaguncha ro'yxatni yangilab turamiz — foydalanuvchi
@@ -183,7 +225,7 @@ export function HomeFiles() {
               key={f.id}
               type="button"
               aria-pressed={filter === f.id}
-              onClick={() => setFilter(f.id)}
+              onClick={() => changeView({ filter: f.id })}
               className={cn(
                 "inline-flex h-9 flex-none items-center rounded-full border px-4 text-sm font-medium whitespace-nowrap transition-colors",
                 filter === f.id
@@ -199,7 +241,7 @@ export function HomeFiles() {
           <select
             className="border-input bg-background h-10 w-full rounded-full border px-4 text-sm font-medium"
             value={filter}
-            onChange={(e) => setFilter(e.target.value as typeof filter)}
+            onChange={(e) => changeView({ filter: e.target.value as FileFilterId })}
           >
             {FILE_FILTERS.map((f) => (
               <option key={f.id} value={f.id}>
@@ -226,7 +268,7 @@ export function HomeFiles() {
                   type="button"
                   className="hover:bg-muted w-full rounded-lg px-3 py-2 text-left text-sm"
                   onClick={() => {
-                    setSort(s.id);
+                    changeView({ sort: s.id });
                     close();
                   }}
                 >
@@ -237,7 +279,7 @@ export function HomeFiles() {
           ) : null}
           <button
             type="button"
-            onClick={() => setDesc((v) => !v)}
+            onClick={() => changeView({ desc: !desc })}
             className="border-input bg-background hover:bg-accent flex size-10 items-center justify-center rounded-full border"
             aria-label="Tartibni o'zgartirish"
           >

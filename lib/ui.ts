@@ -81,3 +81,49 @@ export const FILE_SORTS = [
   { id: "created", label: "Avval yaratilgan" },
   { id: "name", label: "Nomi" },
 ] as const;
+
+export type FileSortId = (typeof FILE_SORTS)[number]["id"];
+
+/** «Mening fayllarim» ko'rinishi — URLda yashaydi, shuning uchun orqaga qaytganda saqlanadi. */
+export type FileView = { filter: FileFilterId; sort: FileSortId; desc: boolean };
+
+export const DEFAULT_FILE_VIEW: FileView = { filter: "all", sort: "modified", desc: true };
+
+/** Noma'lum/buzuq qiymat standartga tushadi (URLni foydalanuvchi qo'lda tahrirlashi mumkin). */
+export function readFileView(params: { get(name: string): string | null } | null | undefined): FileView {
+  const filter = params?.get("filter");
+  const sort = params?.get("sort");
+  return {
+    filter: FILE_FILTERS.some((f) => f.id === filter) ? (filter as FileFilterId) : DEFAULT_FILE_VIEW.filter,
+    sort: FILE_SORTS.some((s) => s.id === sort) ? (sort as FileSortId) : DEFAULT_FILE_VIEW.sort,
+    desc: params?.get("desc") === "0" ? false : DEFAULT_FILE_VIEW.desc,
+  };
+}
+
+/**
+ * `view` ni so'rov qatoriga yozadi; standart qiymatlar URLga CHIQMAYDI
+ * (`/uz` toza qoladi). Boshqa parametrlar (`returnTo` …) tegilmaydi.
+ */
+export function writeFileView(base: URLSearchParams, view: FileView): URLSearchParams {
+  const next = new URLSearchParams(base);
+  next.delete("filter");
+  next.delete("sort");
+  next.delete("desc");
+  if (view.filter !== DEFAULT_FILE_VIEW.filter) next.set("filter", view.filter);
+  if (view.sort !== DEFAULT_FILE_VIEW.sort) next.set("sort", view.sort);
+  if (view.desc !== DEFAULT_FILE_VIEW.desc) next.set("desc", "0");
+  return next;
+}
+
+/**
+ * Joriy yozuvning so'rov qatorini almashtiradi (yangi tarix yozuvi YO'Q).
+ * `router.replace` o'rniga `history.replaceState`: Next uni `useSearchParams` bilan
+ * sinxronlaydi, server so'rovi (RSC) yo'q, tarix indeksi (`lib/nav`) saqlanadi.
+ */
+export function replaceSearch(next: URLSearchParams): void {
+  if (typeof window === "undefined") return;
+  const qs = next.toString();
+  const url = window.location.pathname + (qs ? `?${qs}` : "") + window.location.hash;
+  if (url === window.location.pathname + window.location.search + window.location.hash) return;
+  window.history.replaceState(window.history.state, "", url);
+}
