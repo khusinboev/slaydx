@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import { applyTheme, useAppStore } from "@/lib/store";
+import { MiniAppBridge } from "@/components/telegram/MiniAppBridge";
 
 /**
  * The admin panel (`/admin/**`) has its own session (`/api/admin/session`) and never reads the
@@ -48,5 +49,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
     document.documentElement.setAttribute("dir", dir);
   }, [theme, dir, hydrated]);
 
-  return children;
+  return (
+    <>
+      {children}
+      {/* Telegram Mini App: inert outside a genuine Telegram webview. */}
+      {onAdmin ? null : <MiniAppBridge />}
+    </>
+  );
 }
