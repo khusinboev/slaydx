@@ -331,6 +331,7 @@ test("reading CSS: legible body, scroll blocks, images and formulas fit the widt
   assert.match(css, /\.reading-shell \.reading-doc\{[^}]*font-size:17px/);
   assert.match(css, /\.reading-scroll\{[^}]*max-width:100%;overflow-x:auto/);
   assert.match(css, /\.reading-scroll--cols>table\{min-width:max\(100%,calc\(var\(--reading-cols,1\) \* 7\.5rem\)\)\}/);
+  assert.match(css, /\.reading-scroll--cols>table\{table-layout:auto!important\}/);
   assert.match(css, /\.word-figure-img\{max-width:100%;height:auto/);
   assert.match(css, /\.word-formula-body\{[^}]*min-width:0;overflow-x:auto/);
   assert.match(css, /\.dark \.reading-shell \.reading-doc \.word-table :is\(th,td\)\{border-color:/);
@@ -494,8 +495,8 @@ test("toolbar: right-hand controls are container-collapsed (never a sideways scr
   assert.ok(tb.classList.contains("@container"), "toolbar container query qutisi emas");
   assert.ok(!/overflow-x-auto/.test(tb.innerHTML.replace(/data-extra[^>]*>/g, "")), "toolbarda yon scroll qoldi");
   const inline = c.querySelector("[data-toolbar-right]")!;
-  assert.match(inline.className, /\bhidden\b.*@3xl:flex/);
-  assert.match(c.querySelector("[data-viewer-more]")!.parentElement!.className, /@3xl:hidden/);
+  assert.match(inline.className, /\bhidden\b.*@2xl:flex/);
+  assert.match(c.querySelector("[data-viewer-more]")!.parentElement!.className, /@2xl:hidden/);
   assert.match(c.querySelector("[data-zoom-inline]")!.className, /\bhidden\b.*@lg:flex/);
   // Counter and toggle are not inside any collapsing wrapper.
   for (const sel of ["[data-page-counter]", "[data-view-toggle]"]) {
@@ -504,7 +505,7 @@ test("toolbar: right-hand controls are container-collapsed (never a sideways scr
   }
   cleanup();
   c = bar({ right, rightWidth: "wide" });
-  assert.match(c.querySelector("[data-toolbar-right]")!.className, /@5xl:flex/);
+  assert.match(c.querySelector("[data-toolbar-right]")!.className, /@3xl:flex/);
   assert.ok(!c.querySelector("[data-view-toggle]"), "rezyumeda O'qish/Varaq yo'q");
 });
 
@@ -530,7 +531,7 @@ test("«Boshqa amallar»: opens with focus on the first control, arrows move, Es
   // Zoom (collapsed below @lg) comes first, then the right-hand controls.
   assert.equal(document.activeElement?.getAttribute("aria-label"), "Kichraytirish");
   assert.ok(panel.querySelector("[data-more-zoom]"));
-  assert.match(panel.querySelector("[data-more-right]")!.className, /@3xl:hidden/);
+  assert.match(panel.querySelector("[data-more-right]")!.className, /@2xl:hidden/);
   fireEvent.keyDown(document.activeElement!, { key: "ArrowUp" });
   assert.equal(document.activeElement?.textContent, "B", "↑ oxirgisiga aylanmadi");
   fireEvent.keyDown(document.activeElement!, { key: "ArrowDown" });

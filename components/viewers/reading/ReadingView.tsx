@@ -38,6 +38,7 @@ export const READING_CSS = `
 .reading-shell .reading-doc .reading-scroll{max-width:100%;overflow-x:auto;overscroll-behavior-x:contain;margin:.4em 0 1.1em}
 .reading-shell .reading-doc .reading-scroll:focus-visible{outline:2px solid var(--ring);outline-offset:2px}
 .reading-shell .reading-doc .reading-scroll--cols>table{min-width:max(100%,calc(var(--reading-cols,1) * 7.5rem))}
+.reading-shell .reading-doc .reading-scroll--cols>table{table-layout:auto!important}
 .reading-shell .reading-doc .word-figure{margin:1em 0 1.2em}
 .reading-shell .reading-doc .word-figure-img{max-width:100%;height:auto;max-height:80vh}
 .reading-shell .reading-doc .word-formula{grid-template-columns:minmax(0,1fr) auto;column-gap:.75em}
@@ -114,7 +115,9 @@ export function ReadingTitle({ title }: { title: TitleModel }) {
  * Horizontal scroll block for a table (or a printed card grid): wide tables
  * scroll inside it and never widen the page. `cols` gives the table a
  * minimum width per column (7.5rem), so a 6-column texnologik xarita stays
- * readable instead of being squeezed to the phone width. `paper` keeps a
+ * readable instead of being squeezed to the phone width; auto table layout
+ * (over the sheet's inline `fixed`) keeps a narrow column such as «Hafta»
+ * from breaking inside the word. `paper` keeps a
  * white sheet under fixed-colour print content (game cards) in dark mode.
  * Focusable (`tabIndex=0`) so keyboard users can scroll it.
  */

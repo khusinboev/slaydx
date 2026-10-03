@@ -13,12 +13,13 @@ export const VIEWER_TOOLBAR_H = 40;
  * When the right-hand controls fit inline, measured on the TOOLBAR's own
  * width (container query), not the viewport: the result column narrows when
  * the side panel opens. Below the breakpoint they move into «Boshqa amallar».
- * - `narrow`: undo/redo/«Tahrirlash» (Word viewer), inline from 48rem.
- * - `wide`: template + palette selects, photo, undo/redo, «Tahrirlash» (resume), inline from 64rem.
+ * Breakpoints from the measured natural width at 1920 (Chromium, V5a smoke):
+ * - `narrow`: undo/redo/«Tahrirlash» (Word viewer). Everything inline ≈ 545 px → from 42rem (672 px).
+ * - `wide`: template + palette selects, photo, undo/redo, «Tahrirlash» (resume). ≈ 670 px → from 48rem (768 px).
  * Literal class strings: Tailwind only generates classes it can find in the source.
  */
-const RIGHT_INLINE = { narrow: "hidden @3xl:flex", wide: "hidden @5xl:flex" } as const;
-const RIGHT_IN_MENU = { narrow: "@3xl:hidden", wide: "@5xl:hidden" } as const;
+const RIGHT_INLINE = { narrow: "hidden @2xl:flex", wide: "hidden @3xl:flex" } as const;
+const RIGHT_IN_MENU = { narrow: "@2xl:hidden", wide: "@3xl:hidden" } as const;
 
 export function ViewerToolbar({
   zoom,
