@@ -10,6 +10,8 @@ import { scoreAnswers, scorePercent } from "../../lib/game/score.ts";
 import { sampleGameDoc } from "../../lib/generation/games/samples.ts";
 import { sampleTeacherDoc } from "../../lib/generation/teacher/samples.ts";
 import type { AcademicDoc } from "../../lib/generation/types.ts";
+import * as nav from "../../lib/nav/history.ts";
+import { AppRouterContext, type AppRouterInstance } from "next/dist/shared/lib/app-router-context.shared-runtime";
 
 /**
  * O'YINCHI TOMONI (AUDIT-22 WP-C) — jsdom oqimi.
@@ -35,9 +37,11 @@ import type { AcademicDoc } from "../../lib/generation/types.ts";
  *   4. `Crossword.tsx` da `data-cell` kaliti `c:r` (teskari) qilindi —
  *      «krossvord: kataklar so'zga yig'iladi» qizardi.
  */
-afterEach(() => {
+afterEach(async () => {
   cleanup();
   globalThis.fetch = realFetch;
+  await settle();
+  nav.__resetNavForTests();
 });
 
 const realFetch = globalThis.fetch;
@@ -412,4 +416,234 @@ test("newSubmissionId: crypto BUTUNLAY yo'q (juda eski WebView) — Math.random 
 test("newSubmissionId: crypto.randomUUID BOR bo'lsa — o'shani ishlatadi (asosiy yo'l)", () => {
   const id = newSubmissionId();
   assert.match(id, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
+});
+
+/* ────────────────────────── chiqish tasdiqlash (N4) ──────────────────────────
+ *
+ * HAQIQIY tarix mexanizmi (lib/nav/history.ts) bilan: «orqaga» bosilishi
+ * `window.history.back()`. Brauzerdagi to'liq ketma-ketlik (Chromium, touch +
+ * desktop, Telegram stub) `scratchpad/n4b/smoke.cjs` da yuritilgan.
+ *
+ * MUTATSIYALAR (tasdiqlangan):
+ *   1. `playing` sharti `state !== null` ga (natijani hisobga olmay) — «tugagach
+ *      qo'riqchi yo'q» qizardi;
+ *   2. `playing` sharti doim 0 — «o'yin davomida orqaga dialog ochadi» qizardi;
+ *   3. `onCancel` da `leaveResolveRef.current?.(false)` olib tashlandi — «Qolish
+ *      qo'riqchini qayta o'rnatadi» qizardi;
+ *   4. `LeaveGameDialog` da `useDialog(open, close, { history: false })` —
+ *      «dialog ochiqligida orqaga uni yopadi» qizardi.
+ */
+
+async function settle() {
+  await act(async () => {
+    for (let i = 0; i < 10; i++) await new Promise((r) => setTimeout(r, 2));
+  });
+}
+
+const tree = (href: string) => ["", { children: [href] }];
+const router = {
+  push(href: string) {
+    window.history.pushState({ __NA: true, __PRIVATE_NEXTJS_INTERNALS_TREE: tree(href) }, "", href);
+  },
+  replace(href: string) {
+    window.history.replaceState({ __NA: true, __PRIVATE_NEXTJS_INTERNALS_TREE: tree(href) }, "", href);
+  },
+  refresh() {},
+  back() {},
+  forward() {},
+  prefetch() {},
+} as unknown as AppRouterInstance;
+
+const sx = () => (window.history.state as { sx?: { i: number; o?: string } } | null)?.sx;
+const here = () => window.location.pathname;
+const GAME_PATH = `/o/${TOKEN}`;
+const leaveText = "O'yindan chiqasizmi?";
+
+/** Oldingi sahifa + o'yin sahifasi; `inApp: false` — QR koddan (ilovadan oldingi yozuv yo'q). */
+async function openAt(inApp: boolean) {
+  nav.__resetNavForTests();
+  window.sessionStorage.clear();
+  if (inApp) {
+    window.history.pushState(null, "", "/uz");
+    nav.installNav();
+    nav.setNavRouter(router);
+    router.push(GAME_PATH);
+  } else {
+    window.history.pushState(null, "", "/somewhere-before");
+    window.history.pushState(null, "", GAME_PATH);
+    nav.installNav();
+    nav.setNavRouter(router);
+  }
+  const view = viewOf("quiz");
+  const calls = stubApi("quiz", view);
+  await act(async () => {
+    render(h(AppRouterContext.Provider, { value: router }, h(GamePlayer, { token: TOKEN })));
+  });
+  return { view, calls };
+}
+
+async function startAndAnswer() {
+  await enterName();
+  fireEvent.click(qq("[data-option]")[0]!);
+  await settle();
+}
+
+const dialogText = () => q("[role='dialog']")?.textContent ?? "";
+const answered = () => qq("[data-option]")[0]?.getAttribute("aria-pressed") === "true";
+
+async function pressBack() {
+  await act(async () => {
+    window.history.back();
+  });
+  await settle();
+}
+
+test("N4: o'yin boshlanmagan — qo'riqchi yo'q, orqaga dialogsiz chiqadi", async () => {
+  await openAt(true);
+  await waitFor(() => assert.ok(q("#player-name")));
+  assert.equal(sx()?.o, undefined, "tarix yozuvi qo'shilmadi");
+  assert.equal(nav.getNavSnapshot().guardPending, false);
+  await pressBack();
+  assert.equal(here(), "/uz");
+  assert.ok(!q("[role='dialog']"));
+});
+
+test("N4: o'yin davomida orqaga — dialog, URL va javob saqlanadi", async () => {
+  await openAt(true);
+  await startAndAnswer();
+  assert.ok(sx()?.o, "o'yin boshlangach qo'riqchi yozuvi bor");
+  assert.equal(nav.getNavSnapshot().guardPending, true, "Telegram: yopish tasdig'i yoqiladi");
+  const before = window.history.length;
+  await pressBack();
+  assert.equal(here(), GAME_PATH, "URL o'zgarmadi");
+  assert.ok(q("[role='dialog']"), "dialog chiqdi");
+  assert.ok(dialogText().includes(leaveText) && dialogText().includes("Javoblaringiz saqlanmaydi"), dialogText());
+  assert.ok(q("[data-stay]") && q("[data-leave]"));
+  assert.ok(answered(), "javob saqlanib qoldi");
+  assert.equal(window.history.length, before, "yozuvlar ko'paymadi");
+});
+
+test("N4: «Qolish» — dialog yopiladi, qo'riqchi qayta o'rnatiladi, keyingi orqaga yana so'raydi", async () => {
+  await openAt(true);
+  await startAndAnswer();
+  await pressBack();
+  await act(async () => {
+    fireEvent.click(q("[data-stay]")!);
+  });
+  await settle();
+  assert.ok(!q("[role='dialog']"), "dialog yopildi");
+  assert.equal(here(), GAME_PATH);
+  assert.ok(answered());
+  assert.ok(sx()?.o, "qo'riqchi yozuvi qayta turibdi (aks holda keyingi orqaga indamay chiqib ketadi)");
+  await pressBack();
+  assert.ok(q("[role='dialog']"), "yana so'radi");
+  assert.equal(here(), GAME_PATH);
+});
+
+test("N4: Escape = «Qolish»", async () => {
+  await openAt(true);
+  await startAndAnswer();
+  await pressBack();
+  await act(async () => {
+    fireEvent.keyDown(window, { key: "Escape" });
+  });
+  await settle();
+  assert.ok(!q("[role='dialog']"));
+  assert.equal(here(), GAME_PATH);
+  assert.ok(sx()?.o, "qo'riqchi qayta o'rnatildi");
+  await pressBack();
+  assert.ok(q("[role='dialog']"));
+});
+
+test("N4: dialog ochiqligida orqaga — dialog yopiladi (Qolish), sahifadan chiqmaydi, qo'riqchi qayta o'rnatiladi", async () => {
+  await openAt(true);
+  await startAndAnswer();
+  await pressBack();
+  assert.ok(q("[role='dialog']"));
+  await pressBack();
+  assert.ok(!q("[role='dialog']"), "ikkinchi orqaga dialogni yopdi");
+  assert.equal(here(), GAME_PATH, "sahifa joyida");
+  assert.ok(sx()?.o, "qo'riqchi qayta o'rnatildi");
+  await pressBack();
+  assert.ok(q("[role='dialog']"), "uchinchi orqaga yana so'raydi");
+});
+
+/**
+ * «Chiqish»: engine qancha qadam orqaga yurganini yozib boradi. jsdom `history.go`
+ * deltasini CHAQIRUV paytida hisoblaydi (brauzer — bajarilganda), shuning uchun
+ * oxirgi URL ni bu yerda tekshirib bo'lmaydi; Chromium da to'liq yurish smoke
+ * (`scratchpad/n4b/smoke.cjs`, 5-ketma-ketlik) da tasdiqlangan. Bu yerda esa
+ * «bitta harakat» = dialog yozuvi + sahifaning o'zi, jami -2 qadam.
+ */
+function recordSteps(): { steps: () => number; stop: () => void } {
+  const h = window.history;
+  const go = h.go.bind(h);
+  const back = h.back.bind(h);
+  let total = 0;
+  h.go = (d?: number) => {
+    total += d ?? 0;
+    go(d);
+  };
+  h.back = () => {
+    total -= 1;
+    back();
+  };
+  return {
+    steps: () => total,
+    stop: () => {
+      delete (h as unknown as Record<string, unknown>).go;
+      delete (h as unknown as Record<string, unknown>).back;
+    },
+  };
+}
+
+test("N4: «Chiqish» — bitta harakat: dialog yozuvi + sahifa (ilovadan oldingi sahifaga)", async () => {
+  await openAt(true);
+  await startAndAnswer();
+  await pressBack();
+  const rec = recordSteps();
+  try {
+    await act(async () => {
+      fireEvent.click(q("[data-leave]")!);
+    });
+    await settle();
+    await settle();
+    assert.ok(!q("[role='dialog']"));
+    assert.equal(rec.steps(), -2, "dialog yozuvi + o'yin sahifasi: ikkinchi bosish kerak emas");
+  } finally {
+    rec.stop();
+  }
+});
+
+test("N4: «Chiqish» QR koddan ochilgan sahifada (ilova tarixi yo'q) — dialog yozuvi + haqiqiy orqaga", async () => {
+  await openAt(false);
+  await startAndAnswer();
+  await pressBack();
+  assert.ok(q("[role='dialog']"));
+  const rec = recordSteps();
+  try {
+    await act(async () => {
+      fireEvent.click(q("[data-leave]")!);
+    });
+    await settle();
+    await settle();
+    assert.ok(!q("[role='dialog']"));
+    assert.equal(rec.steps(), -2, "ikkinchi bosish talab qilinmadi");
+  } finally {
+    rec.stop();
+  }
+});
+
+test("N4: o'yin tugagach — qo'riqchi yo'q, orqaga dialogsiz chiqadi", async () => {
+  await openAt(true);
+  await startAndAnswer();
+  while (q("[data-next]")) fireEvent.click(q("[data-next]")!);
+  await clickFinish();
+  await waitFor(() => assert.ok(q("[data-game-result]")));
+  await settle();
+  assert.equal(nav.getNavSnapshot().guardPending, false);
+  assert.equal(sx()?.o, undefined, "qo'riqchi yozuvi olib tashlandi");
+  await pressBack();
+  assert.equal(here(), "/uz");
+  assert.ok(!q("[role='dialog']"));
 });
