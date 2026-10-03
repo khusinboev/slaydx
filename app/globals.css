@@ -572,4 +572,18 @@ button {
     box-shadow: none;
     break-after: page;
   }
+  /*
+    Natija sahifasi (viewer redesign V1): varaqlar AppShell `<main>`
+    scroll'ida oqadi. Bosmada `h-svh overflow-hidden` qobiq butun
+    hujjatni bitta ekran bo'lagiga qirqardi — ajdodlar ochiladi, ilova
+    qobig'i (yon panel, TopBar) bosilmaydi.
+  */
+  body:has([data-result-layout]) *:has([data-result-layout]) {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+  body:has([data-result-layout]) :is(aside, header):not([data-result-layout] *) {
+    display: none !important;
+  }
 }

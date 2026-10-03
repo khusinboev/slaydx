@@ -63,7 +63,8 @@ export function PageRow({ wide, children }: { wide: boolean; children: ReactNode
     <div
       data-page-row
       className={cn(
-        "max-w-full scroll-mt-[calc(var(--result-header-h,0px)+3rem)]",
+        // Bosmada varaq ikki qog'ozga bo'linmasin.
+        "max-w-full scroll-mt-[calc(var(--result-header-h,0px)+3rem)] print:break-inside-avoid",
         wide && "overflow-x-auto overscroll-x-contain",
       )}
     >
