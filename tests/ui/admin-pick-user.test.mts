@@ -483,3 +483,23 @@ test("user page in 2FA mode: the one-time enroll URL dialog (the admins page's c
   fireEvent.click(within(link).getByRole("button", { name: "Nusxaladim, yopish" }));
   await waitFor(() => assert.ok(!document.body.textContent?.includes("USER-ONCE")));
 });
+
+test("the server's 409 blocked (e.g. through the ID fallback) is mapped to the actionable message inline; the dialog stays open", async () => {
+  const { routes } = adminsRoutes({
+    "POST /api/admin/admins": () => json(409, { error: "Bloklangan foydalanuvchini admin qilib bo'lmaydi", code: "blocked" }),
+  });
+  const calls = stubFetch(routes);
+  renderAdmins();
+  const d = await openAdd();
+  fireEvent.click(within(d).getByRole("button", { name: "ID bo'yicha kiritish" }));
+  fireEvent.click(within(d).getByRole("radio", { name: "Foydalanuvchi ID" }));
+  fireEvent.change(within(d).getByLabelText("Foydalanuvchi ID"), { target: { value: "13" } });
+  fireEvent.change(within(d).getByLabelText("Rol"), { target: { value: "viewer" } });
+  fireEvent.change(within(d).getByLabelText(/Sabab/), { target: { value: "kuzatuvchi kerak" } });
+  fireEvent.click(within(d).getByRole("button", { name: "Admin qo'shish" }));
+  const alert = await within(d).findByRole("alert");
+  assert.equal(alert.textContent, BLOCKED_USER, "MUTATSIYA: code `blocked` → the UI wording with the next step");
+  assert.ok(screen.getByRole("dialog", { name: "Admin qo'shish" }));
+  assert.deepEqual(calls.find((c) => c.method === "POST")!.body, { userId: "13", role: "viewer", reason: "kuzatuvchi kerak" });
+  assert.deepEqual(toasts(), []);
+});

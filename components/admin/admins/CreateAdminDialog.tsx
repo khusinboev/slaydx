@@ -2,6 +2,7 @@
 
 import { useId, useState } from "react";
 import { createAdmin, type AdminAccountItem } from "@/lib/admin-api/admins";
+import { ApiError } from "@/lib/admin-api/core";
 import type { AdminRole } from "@/lib/admin-api/auth";
 import type { AdminUserRow } from "@/lib/admin-api/users";
 import { Button, ConfirmDialog, Segmented, toast } from "@/components/admin/ui";
@@ -22,7 +23,7 @@ export const ADMIN_ADDED_TOAST = "Admin qo'shildi — u saytdagi «Admin panel»
 
 /** Why a listed user cannot be made an admin (mirrors the server's 409 `already_admin`). */
 export const ALREADY_ADMIN = "Allaqachon admin";
-/** The server does not refuse a blocked user, but a blocked user cannot sign in to use the panel. */
+/** A blocked user cannot sign in to use the panel; the server refuses with 409 `blocked`. */
 export const BLOCKED_USER = "Bloklangan foydalanuvchini admin qilib bo'lmaydi — avval blokdan chiqaring.";
 
 export type CreatedAdmin = { admin: AdminAccountItem; link: EnrollLinkView | null };
@@ -120,7 +121,15 @@ function Body({ onClose, actorRole, twoFactor, target, onCreated }: Omit<CreateA
       confirmDisabled={who === null || role === ""}
       onConfirm={async (ctx) => {
         if (!who || role === "") return;
-        const res = await createAdmin({ ...who, role, reason: ctx.reason, ...(send ? { sendViaTelegram: true } : {}) });
+        let res: Awaited<ReturnType<typeof createAdmin>>;
+        try {
+          res = await createAdmin({ ...who, role, reason: ctx.reason, ...(send ? { sendViaTelegram: true } : {}) });
+        } catch (e) {
+          // The ID fallback (or a block that happened after the search) reaches the server's
+          // 409 `blocked`: say what to do about it, inline like every other refusal.
+          if (e instanceof ApiError && e.status === 409 && e.data.code === "blocked") throw new ApiError(BLOCKED_USER, 409, e.data);
+          throw e;
+        }
         onCreated({
           admin: res.admin,
           link:

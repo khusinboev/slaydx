@@ -217,6 +217,34 @@ test("create: validation, rank, unknown user, already-admin; success returns a o
   assert.equal((await post(owner, { userId: u2.id, role: "owner", reason: REASON })).status, 201);
 });
 
+test("create: a blocked user is refused with 409 blocked (by user id and Telegram id); nothing written, no DM; after unblocking it works", { skip }, async () => {
+  const owner = await mkAdmin("owner");
+  const target = await mkUser();
+  await query(`UPDATE users SET is_blocked = true WHERE id = $1`, [target.id]);
+  const post = (body: unknown) => call(routes.admins, "POST", "/api/admin/admins", owner, { body });
+  const before = sent.length;
+  for (const body of [
+    { userId: target.id, role: "support", reason: REASON, sendViaTelegram: true },
+    { telegramId: target.telegramId, role: "viewer", reason: REASON },
+  ]) {
+    const r = await post(body);
+    assert.equal(r.status, 409, JSON.stringify(r.body));
+    assert.equal(r.body.code, "blocked");
+    assert.equal(r.body.error, "Bloklangan foydalanuvchini admin qilib bo'lmaydi");
+  }
+  assert.equal((await queryOne<{ n: number }>(`SELECT count(*)::int AS n FROM admin_accounts WHERE user_id = $1`, [target.id]))!.n, 0);
+  assert.equal(
+    (await queryOne<{ n: number }>(`SELECT count(*)::int AS n FROM admin_audit_log WHERE action = 'admins.create' AND outcome = 'ok' AND after->>'userId' = $1`, [target.id]))!.n,
+    0,
+    "no ok audit row for a refused create",
+  );
+  await new Promise((r) => setTimeout(r, 50));
+  assert.ok(!sent.slice(before).some((m) => String(m.chat_id) === target.telegramId), "no invitation DM");
+
+  await query(`UPDATE users SET is_blocked = false WHERE id = $1`, [target.id]);
+  assert.equal((await post({ userId: target.id, role: "support", reason: REASON })).status, 201);
+});
+
 // ───────────────────────────── update
 
 test("update: self 409, rank 403 (target and new role), no-op 400; role change audits only the changed field", { skip }, async () => {

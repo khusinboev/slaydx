@@ -849,12 +849,14 @@ export async function createAdmin(
 
   const out = await adminTx(actor, async (client, audit) => {
     const user = (
-      await client.query<{ id: string; telegram_id: string | null }>(
-        `SELECT id::text AS id, telegram_id::text AS telegram_id FROM users WHERE ${hasUser ? "id" : "telegram_id"} = $1`,
+      await client.query<{ id: string; telegram_id: string | null; is_blocked: boolean }>(
+        `SELECT id::text AS id, telegram_id::text AS telegram_id, is_blocked FROM users WHERE ${hasUser ? "id" : "telegram_id"} = $1`,
         [key],
       )
     ).rows[0];
     if (!user) throw new ApiError("Foydalanuvchi topilmadi", 404);
+    // A blocked user cannot sign in, so the account would be dead on arrival; unblock first.
+    if (user.is_blocked) throw new ApiError("Bloklangan foydalanuvchini admin qilib bo'lmaydi", 409, { code: "blocked" });
     const ins = await client.query<{ id: string }>(
       `INSERT INTO admin_accounts (user_id, role, status, created_by)
        VALUES ($1, $2, $4, $3)
