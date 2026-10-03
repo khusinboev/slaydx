@@ -286,6 +286,7 @@ test("shartnoma: `ResultView` panelni `publicGameKindOf` bo'yicha chizadi", () =
   const viewerAt = src.indexOf("<ArtifactViewer");
   assert.ok(layoutAt > 0 && viewerAt > layoutAt, "ko'ruvchi ResultLayout mazmunida");
   assert.ok(!src.slice(layoutAt, viewerAt).includes("GameSharePanel"), "havola ko'ruvchi ustida (mazmun ustunida) emas");
+  assert.ok(!/sections\.map|\.content\b/.test(src.slice(layoutAt, viewerAt)), "panel bo'limlari mazmun ustunida qayta chizilmaydi");
   assert.match(src, /id: "share",[\s\S]{0,200}?content: <GameSharePanel id=\{gen\.id\} kind=\{shareKind\} \/>/, "«O‘yin havolasi» bo'limi");
   assert.ok(src.indexOf('id: "review"') < src.indexOf('id: "share"') && src.indexOf('id: "share"') < layoutAt, "bo'lim tartibi: hisobot, keyin havola");
   assert.ok(src.indexOf("ArticleReviewPanel\n") < src.indexOf("<GameSharePanel"), "tayyorlik hisoboti panelidan KEYIN");

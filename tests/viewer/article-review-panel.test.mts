@@ -231,6 +231,7 @@ test("ResultView: article natijasida `doc.article.review` bo'lsa hisobot ResultL
   assert.ok(layoutAt > 0 && viewerAt > layoutAt, "ko'ruvchi ResultLayout mazmunida");
   assert.match(src.slice(layoutAt, viewerAt), /sections=\{sections\}/, "bo'limlar panelga uzatiladi");
   assert.ok(!/ArticleReviewPanel|data-article-review-panel/.test(src.slice(layoutAt, viewerAt)), "hisobot ko'ruvchi ustida (mazmun ustunida) emas");
+  assert.ok(!/sections\.map|\.content\b/.test(src.slice(layoutAt, viewerAt)), "panel bo'limlari mazmun ustunida qayta chizilmaydi");
   assert.ok(src.indexOf("data-article-review-panel") < layoutAt, "hisobot `sections` ichida");
 });
 
