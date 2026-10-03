@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from "react";
 import { FileText, Loader2 } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { AutoTextarea } from "@/components/common/AutoTextarea";
 import { EXTRACT_ACCEPT, EXTRACT_MAX_BYTES } from "@/lib/extract-limits";
 import { extractText } from "@/lib/api-client";
 import { SOURCE_TEXT_LIMIT } from "@/lib/generation/meta";
@@ -172,14 +173,15 @@ export function LimitedTextarea({
 }) {
   return (
     <span className="block">
-      <textarea
+      <AutoTextarea
         value={value}
         aria-label={ariaLabel}
         onChange={(e) => onChange(e.target.value.slice(0, limit))}
         placeholder={placeholder}
-        rows={rows}
+        minRows={Math.min(rows, 12)}
+        maxRows={12}
         maxLength={limit}
-        className="border-input bg-card focus:ring-ring w-full resize-y rounded-xl border px-3.5 py-2.5 text-[14px] outline-none focus:ring-2"
+        className="border-input bg-card focus:ring-ring w-full rounded-xl border px-3.5 py-2.5 text-[14px] outline-none focus:ring-2"
       />
       <Counter len={value.length} limit={limit} />
     </span>

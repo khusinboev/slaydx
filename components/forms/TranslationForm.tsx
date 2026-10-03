@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeftRight, FileText, Loader2 } from "lucide-react";
+import { AutoTextarea } from "@/components/common/AutoTextarea";
 import type { FormValues, ToolConfig } from "@/lib/types";
 
 import { clientAdjustedPrice, getClientPriceAdjust, preflightError, translationPrice, TRANSLATION_BASE_PRICE, TRANSLATION_LANGUAGES, TRANSLATION_MAX_CHARS, TRANSLATION_MIN_CHARS, TRANSLATION_STYLES } from "@/lib/tools";
@@ -180,11 +181,12 @@ export function TranslationForm({ tool }: { tool: ToolConfig }) {
           />
         </div>
         {mode === "text" ? (
-          <textarea
+          <AutoTextarea
             aria-label="Tarjima qilinadigan matn"
             value={sourceText}
             onChange={(e) => setSourceText(e.target.value)}
-            rows={10}
+            minRows={6}
+            maxHeight="60vh"
             className="border-input bg-card focus:ring-ring w-full rounded-xl border px-3.5 py-2.5 text-[15px] outline-none focus:ring-2"
             placeholder="Matnni shu yerga yozing yoki joylashtiring…"
           />
@@ -302,11 +304,12 @@ export function TranslationForm({ tool }: { tool: ToolConfig }) {
             <Segmented ariaLabel="Uslub" options={TRANSLATION_STYLES.map((s) => ({ value: s.value, label: s.label }))} value={style} onChange={setStyle} />
           </Row>
           <Row label="O‘z lug‘atim" hint="Har qatorda «atama = tarjima». Tarjimon shu juftliklarga qat’iy rioya qiladi." wide>
-            <textarea
+            <AutoTextarea
               aria-label="O‘z lug‘atim"
               value={userGlossary}
               onChange={(e) => setUserGlossary(e.target.value)}
-              rows={3}
+              minRows={3}
+              maxRows={10}
               placeholder={"fotosintez = photosynthesis\nOliy Majlis = Oliy Majlis"}
               className="border-input bg-card focus:ring-ring w-full rounded-lg border px-3 py-2 text-[13px] outline-none focus:ring-2"
             />
