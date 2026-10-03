@@ -172,6 +172,19 @@ test("phone back press: guard entry pops, auto-save, then the navigation continu
   assert.equal(here(), "/uz");
 });
 
+test("root with no in-app history (/o from a QR code): a let-through back press does the real back", async () => {
+  window.history.pushState(null, "", "/somewhere-before");
+  fresh("/o/Ab3dEf");
+  mount();
+  act(() => setPending(1));
+  window.history.back();
+  await settle();
+  await settle();
+  assert.equal(saves, 1);
+  assert.deepEqual(calls, [], "no parent to replace with");
+  assert.equal(here(), "/somewhere-before", "left as the user asked");
+});
+
 test("phone back press, save fails: stays, error surfaced, guard entry re-armed", async () => {
   fresh("/uz");
   router.push("/uz/files/1");

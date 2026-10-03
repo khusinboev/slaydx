@@ -835,9 +835,14 @@ export async function runGuard(g: LeaveGuard): Promise<boolean> {
   }
 }
 
-/** Continues a back press after a guard saved (its entry is already popped). */
+/**
+ * Continues a phone back press after a guard let it through (its entry is
+ * already popped): in-app back, else the parent page. On a root with no
+ * in-app history (`/o/<token>` opened from a QR code) there is nothing in-app
+ * to go to, and the user did press the system back: do the real one.
+ */
 export function continueBack(opts?: NavOpts): void {
-  backToUnguarded(undefined, opts?.router ?? router);
+  if (!backToUnguarded(undefined, opts?.router ?? router) && hasWindow()) window.history.back();
 }
 
 /** The target of a plain left click on a same-origin `<a>` that leaves this page, else `null`. */
