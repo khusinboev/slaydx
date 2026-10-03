@@ -1,8 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import Link from "next/link";
-import { ArrowLeft, Ban, Rocket } from "lucide-react";
+import { Ban, Rocket } from "lucide-react";
 import { cn } from "@/lib/cn";
 import {
   AdminAuthRequiredError,
@@ -28,6 +27,7 @@ import {
   toast,
 } from "@/components/admin/ui";
 import { useCan } from "@/components/admin/shell/admin-identity";
+import { DetailBack } from "@/components/admin/shell/DetailBack";
 import { SendDialog } from "./SendDialog";
 import { STATUS_LABEL, StatusPill, audienceLabel, isCancellable, isInFlight } from "./shared";
 import { TestSendButton } from "./TestSendButton";
@@ -142,10 +142,7 @@ export function BroadcastDetail({ id }: { id: string }) {
   }, [polling, refresh]);
 
   const back = (
-    <Link href="/admin/broadcasts" className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-[12.5px]">
-      <ArrowLeft className="size-3.5" aria-hidden="true" />
-      E&apos;lonlar
-    </Link>
+    <DetailBack label="E'lonlar" />
   );
 
   if (!state) return <DetailSkeleton />;

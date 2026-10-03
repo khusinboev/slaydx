@@ -57,13 +57,13 @@ const withIdentity = (permissions: string[], children: ReactNode) =>
   h(AdminIdentityProvider, { value: { adminId: "1", role: "owner", permissions, name: "Test", username: null, twoFactor: true }, children });
 
 function renderAt(pathname: string, query: string, page: () => ReactNode, permissions: string[] = OWNER) {
-  const calls = { replace: [] as string[] };
+  const calls = { replace: [] as string[], push: [] as string[] };
   const router: AppRouterInstance = {
     back() {},
     forward() {},
     refresh() {},
     prefetch() {},
-    push() {},
+    push: (href: string) => void calls.push.push(href),
     replace: (href: string) => void calls.replace.push(href),
   };
   const node: ReactNode = withIdentity(
@@ -443,7 +443,9 @@ test("errors: a row opens the drawer via ?id=; the drawer shows the stack in a m
   const { calls: nav, container } = renderErrors();
   await screen.findAllByText("[pdf] soffice timeout after 90000ms");
   fireEvent.click(container.querySelector('tr[data-row-key="30"]') as HTMLElement);
-  assert.equal(nav.replace.at(-1), "/admin/errors?id=30");
+  // N3: the row PUSHES ?id= (the URL entry is the drawer's history entry).
+  assert.equal(nav.push.at(-1), "/admin/errors?id=30");
+  assert.equal(nav.replace.length, 0);
   cleanup();
 
   // The URL carries the open id: the drawer loads the detail.

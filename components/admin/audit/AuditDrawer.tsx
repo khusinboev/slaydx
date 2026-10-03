@@ -40,6 +40,8 @@ export function AuditDrawer({
   return (
     <Drawer
       open
+      // The `?id=` URL entry (pushed by the list) is this drawer's history entry.
+      history={false}
       onClose={onClose}
       title="Audit yozuvi"
       description={data ? <span className="font-mono text-xs break-all">#{data.id} · {data.action}</span> : undefined}

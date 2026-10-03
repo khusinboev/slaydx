@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Undo2 } from "lucide-react";
+import { Undo2 } from "lucide-react";
 import {
   Badge,
   Button,
@@ -19,6 +19,7 @@ import {
   StatusPill,
 } from "@/components/admin/ui";
 import { useCan } from "@/components/admin/shell";
+import { DetailBack } from "@/components/admin/shell/DetailBack";
 import { ExternalRefundDialog, WALLET_LABEL } from "@/components/admin/money";
 import { fmtDateTime, fmtNumber, fmtSoum } from "@/lib/admin-format";
 import { getOrder, type AdminOrderDetailResponse, type AdminPaymentEvent, type OrderLedgerEntry, type AdminOrderRefund } from "@/lib/admin-api/payments";
@@ -27,15 +28,6 @@ import { DeltaCell, ReferenceCell } from "./ledger-cells";
 import { useResource } from "./list-state";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function BackLink() {
-  return (
-    <Link href="/admin/payments" className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-[12.5px]">
-      <ArrowLeft className="size-3.5" aria-hidden="true" />
-      To&apos;lovlar
-    </Link>
-  );
-}
 
 /**
  * S9 `/admin/payments/[id]` (plan §7.1): order fields (provider times are
@@ -53,7 +45,7 @@ export function OrderDetailPage({ id }: { id: string }) {
   if (!valid || (state.status === "error" && state.notFound)) {
     return (
       <div className="flex flex-col gap-4">
-        <BackLink />
+        <DetailBack label="To'lovlar" />
         <div className="bg-card rounded-xl border">
           <EmptyState title="Buyurtma topilmadi" description="Havola noto'g'ri yoki buyurtma o'chirilgan." />
         </div>
@@ -70,7 +62,7 @@ export function OrderDetailPage({ id }: { id: string }) {
   if (state.status === "error") {
     return (
       <div className="flex flex-col gap-4">
-        <BackLink />
+        <DetailBack label="To'lovlar" />
         <div className="bg-card rounded-xl border">
           <ErrorState message={state.message} requestId={state.requestId} onRetry={retry} />
         </div>
@@ -95,7 +87,7 @@ export function OrderDetailPage({ id }: { id: string }) {
 
   return (
     <div className="flex min-w-0 flex-col gap-5" aria-busy={state.status === "loading" || undefined}>
-      <BackLink />
+      <DetailBack label="To'lovlar" />
       <header className="flex flex-col gap-3 sm:flex-row sm:items-end">
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <h1 className="flex flex-wrap items-center gap-2 text-[22px] font-semibold tracking-tight">
