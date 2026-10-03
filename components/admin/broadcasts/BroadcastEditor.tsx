@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { adminErrorMessage, isAbortError } from "@/lib/admin-api/core";
 import { BROADCAST_TEXT_MAX, createBroadcast, type AudienceKind } from "@/lib/admin-api/broadcasts";
 import { fmtNumber } from "@/lib/admin-format";
+import { AutoTextarea } from "@/components/common/AutoTextarea";
 import { Button, Modal, toast } from "@/components/admin/ui";
 import { AudienceCount, AudiencePicker, audienceFrom, useAudienceCount } from "./AudiencePicker";
 import { textLength } from "./shared";
@@ -88,16 +89,17 @@ function EditorBody({ onClose, onCreated }: { onClose: () => void; onCreated: (i
               {fmtNumber(length)} / {fmtNumber(BROADCAST_TEXT_MAX)}
             </span>
           </label>
-          <textarea
+          <AutoTextarea
             id={`${formId}-text`}
             ref={area}
             value={text}
             onChange={(e) => setText(e.target.value)}
-            rows={7}
+            minRows={5}
+            maxRows={16}
             disabled={busy}
             aria-invalid={tooLong}
             aria-describedby={`${formId}-hint`}
-            className="border-input bg-card focus:ring-ring w-full resize-y rounded-lg border px-2.5 py-2 text-[13px] outline-none focus:ring-2 disabled:opacity-60"
+            className="border-input bg-card focus:ring-ring w-full rounded-lg border px-2.5 py-2 text-[13px] outline-none focus:ring-2 disabled:opacity-60"
           />
           <span id={`${formId}-hint`} className="text-muted-foreground text-xs">
             Oddiy matn: &lt; &gt; &amp; belgilari Telegramga xavfsiz yuboriladi, formatlash ishlamaydi.
