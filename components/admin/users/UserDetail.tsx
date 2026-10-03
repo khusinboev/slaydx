@@ -244,7 +244,7 @@ export function UserDetail({ id, tools }: { id: string; tools: ReadonlyArray<Fil
           {flags.self ? " · bu sizning hisobingiz" : ""}
         </p>
         {hasAdminAccount && canViewAdmins ? (
-          <Link href="/admin/admins" className="text-primary w-fit text-[12.5px] font-medium underline-offset-2 hover:underline">
+          <Link href="/admin/admins" className="text-foreground hover:text-primary w-fit text-[12.5px] font-medium underline underline-offset-2">
             Adminlar bo&apos;limida ko&apos;rish
           </Link>
         ) : null}
