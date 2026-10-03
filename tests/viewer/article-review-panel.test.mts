@@ -171,7 +171,7 @@ test("sayqal jurnali: qabul → «74 → 86 ball, N band tuzatildi; M band sizni
   assert.ok(!html(REVIEW).includes("data-polish-log"), "jurnal bo'lmasa satr yo'q");
 });
 
-test("ResultView: article natijasida `doc.article.review` bo'lsa ko'ruvchi tepasida <details open> panel", () => {
+test("ResultView: article natijasida `doc.article.review` bo'lsa hisobot ResultLayout panelida (ko'ruvchi tepasida emas)", () => {
   const src = readFileSync(new URL("../../components/files/ResultView.tsx", import.meta.url), "utf8");
   /*
    * AUDIT-19: hisobot YAGONA nuqtadan o'qiladi — maqola/tezisda
@@ -187,8 +187,9 @@ test("ResultView: article natijasida `doc.article.review` bo'lsa ko'ruvchi tepas
     /gen\.doc\?\.article\?\.review \?\?\s*\n\s*gen\.doc\?\.essay\?\.review \?\?\s*\n\s*gen\.doc\?\.work\?\.review \?\?\s*\n\s*gen\.doc\?\.teacher\?\.review \?\?\s*\n\s*gen\.doc\?\.game\?\.review \?\?\s*\n\s*gen\.doc\?\.infographic\?\.review \?\?\s*\n\s*gen\.doc\?\.audio\?\.review;/,
     "hisobot SAKKIZ modeldan (maqola/tezis, insho, talaba ishi, o'qituvchi, o'yin, plakat, audio)",
   );
-  assert.match(src, /\{review \? \(/, "panel sharti — hisobot bor");
-  assert.match(src, /<details open[^>]*data-article-review-panel/, "yig'iladigan panel");
+  // V0: panel sharti — hisobot bor (va hujjat ko'rinadigan holatda); bo'lim `ResultLayout` paneliga.
+  assert.match(src, /\.\.\.\(review && completed && !expired\s*\?\s*\[\s*\{\s*id: "review",/, "panel sharti — hisobot bor");
+  assert.match(src, /id: "review",[\s\S]{0,2500}?<div data-article-review-panel>/, "hisobot paneli bo'limi");
   // WP7: `onFix` → `rewriteArticle` (POST …/rewrite), `fixing` — yuklanish holati.
   assert.match(src, /<ArticleReviewPanel\s+review=\{review\}/, "panel hisobotni oladi");
   assert.match(src, /fixing=\{fixing\}/, "«Tuzatish» yuklanish holati (WP7)");
@@ -217,7 +218,20 @@ test("ResultView: article natijasida `doc.article.review` bo'lsa ko'ruvchi tepas
   assert.match(src, /const isAudio = Boolean\(gen\.doc\?\.audio\);/, "audio — hujjat modelidan");
   assert.match(src, /rewriteArticle\(cur\.id, base, fix\)/, "«Tuzatish» rewrite marshrutiga bormaydi");
   assert.match(src, /polishArticle\(cur\.id, base\)/, "«Hammasini tuzatish» polish marshrutiga bormaydi");
-  assert.ok(src.indexOf("data-article-review-panel") < src.indexOf("<ArtifactViewer"), "panel ko'ruvchidan OLDIN");
+  /*
+   * V0 (viewer redesign): hisobot ko'ruvchi TEPASIDA emas — `ResultLayout`
+   * paneliga (`sections`) beriladi. Ilgari: `indexOf("data-article-review-panel")
+   * < indexOf("<ArtifactViewer")` («panel ko'ruvchidan OLDIN»). Endi: hisobot
+   * `sections` da e'lon qilinadi, `<ResultLayout …>` dan `<ArtifactViewer`
+   * gacha bo'lgan mazmun qismida YO'Q. DOM tekshiruvi (panel ichida, mazmun
+   * ustunida emas) — `tests/ui/result-layout.test.mts`.
+   */
+  const layoutAt = src.indexOf("<ResultLayout ");
+  const viewerAt = src.indexOf("<ArtifactViewer");
+  assert.ok(layoutAt > 0 && viewerAt > layoutAt, "ko'ruvchi ResultLayout mazmunida");
+  assert.match(src.slice(layoutAt, viewerAt), /sections=\{sections\}/, "bo'limlar panelga uzatiladi");
+  assert.ok(!/ArticleReviewPanel|data-article-review-panel/.test(src.slice(layoutAt, viewerAt)), "hisobot ko'ruvchi ustida (mazmun ustunida) emas");
+  assert.ok(src.indexOf("data-article-review-panel") < layoutAt, "hisobot `sections` ichida");
 });
 
 test("ResultView: audioda review ko'rinadi, lekin «Tuzatish»/«Hammasini tuzatish» tugmalari YO'Q (qayta sintez = ikkinchi marta TTS to'lovi)", () => {
