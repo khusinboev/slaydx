@@ -23,7 +23,7 @@ import { EditActions, type EditActionsState } from "./EditActions";
 import { GameSharePanel } from "./GameSharePanel";
 import { ResultLayout, type PanelSection } from "./ResultLayout";
 import { frameClass, viewerFrame } from "./result-layout/frame";
-import { reviewSummary } from "./result-layout/summary";
+import { reviewSummary, type ChipSummary, type ShareSummary } from "./result-layout/summary";
 import { publicGameKindOf } from "@/lib/game/public";
 /*
  * Jonli slayd ko'ruvchisi ALOHIDA bo'lakda (FE-11): u faqat slayd
@@ -90,6 +90,8 @@ export function ResultView({ id }: { id: string }) {
   const [fixing, setFixing] = useState<string | null>(null);
   /** «Hammasini tuzatish» (AUDIT-18) — sayqal davomida panel tugmalari o'chiq. */
   const [polishing, setPolishing] = useState(false);
+  /** «O‘yin havolasi» chipi (natijalar soni) — `GameSharePanel.onSummary` (V3). */
+  const [shareSum, setShareSum] = useState<ShareSummary | null>(null);
   const genRef = useRef<api.GenerationDetail | null>(null);
   genRef.current = gen;
   /** Sahifadan chiqilganda uzoq AI tahrirning natija tekshiruvi to'xtaydi (FE-15, W4-D N2). */
@@ -493,8 +495,8 @@ export function ResultView({ id }: { id: string }) {
              */
             id: "share",
             title: "O‘yin havolasi",
-            chip: "O‘yin havolasi",
-            content: <GameSharePanel id={gen.id} kind={shareKind} />,
+            ...(shareSum ? chipOf(shareSum) : { chip: "O‘yin havolasi" }),
+            content: <GameSharePanel id={gen.id} kind={shareKind} onSummary={setShareSum} />,
           },
         ]
       : []),
@@ -721,7 +723,7 @@ export function ResultView({ id }: { id: string }) {
 }
 
 /** Hisobot xulosasi → chip (`ResultLayout` sarlavhasida). */
-function chipOf(s: ReturnType<typeof reviewSummary>): Pick<PanelSection, "chip" | "tone"> {
+function chipOf(s: ChipSummary): Pick<PanelSection, "chip" | "tone"> {
   return { chip: s.label, tone: s.tone };
 }
 

@@ -18,6 +18,16 @@ import type { ArticleReview, PolishLog, ReviewCheck, ReviewLevel } from "@/lib/g
  * (server hisoblaydi, panel FAQAT o'qiydi: `polish.ts` mijoz bundle'iga
  * kirmaydi); (3) sayqal jurnali — `review.polish` (`polishText`).
  *
+ * V3 (viewer redesign): panel yon panelda (xl: ≈356 px dock) yoki pastki
+ * varaqda chiziladi, ya'ni VIEWPORT breakpoint'lari bu yerda noto'g'ri —
+ * tartib KONTEYNER so'roviga (`@container`, `@xl:`…) bog'langan: bir
+ * ustun (dock/telefon), konteyner kengaysa 2–3 ustun. Har guruh qutisi
+ * ham `@container`: «Tuzatish» tugmasi qutiga sig'masa matn OSTIGA
+ * tushadi (ustma-ust tushmaydi). `compact` (standart) — panel sarlavhasi
+ * bo'lim nomini allaqachon ko'rsatadi, shuning uchun ichki «Tayyorlik
+ * hisoboti» sarlavhasi va kartochka ramkasi chizilmaydi. Panel ichida
+ * `max-h`/`overflow` yo'q — yagona scroll `[data-panel-body]`.
+ *
  * SSR-toza: hook yo'q, `review` dan tashqari hech narsaga bog'liq emas —
  * `renderToStaticMarkup` bilan sinaladi (`tests/viewer/article-review-panel`).
  * Guruh jadvali SHU YERDA (review.ts emas): review.ts dvigatelni import
@@ -62,14 +72,14 @@ const TONE_CLASS: Record<"green" | "yellow" | "red", string> = {
 };
 
 /** Ball halqasi — SVG, radius 26, aylana ≈163.4; `stroke-dasharray` ulushga qarab. */
-function ScoreRing({ score }: { score: number }) {
+function ScoreRing({ score, small }: { score: number; small?: boolean }) {
   const r = 26;
   const c = 2 * Math.PI * r;
   const tone = scoreTone(score);
   const filled = (Math.max(0, Math.min(100, score)) / 100) * c;
   return (
-    <div className="relative size-16 shrink-0" data-review-score={score} data-review-tone={tone} title={`Tayyorlik: ${score}/100`}>
-      <svg viewBox="0 0 64 64" className="size-16 -rotate-90" aria-hidden="true">
+    <div className={small ? "relative size-12 shrink-0" : "relative size-16 shrink-0"} data-review-score={score} data-review-tone={tone} title={`Tayyorlik: ${score}/100`}>
+      <svg viewBox="0 0 64 64" className="size-full -rotate-90" aria-hidden="true">
         <circle cx="32" cy="32" r={r} fill="none" stroke="currentColor" strokeWidth="6" className="text-muted/60" />
         <circle
           cx="32"
@@ -83,7 +93,7 @@ function ScoreRing({ score }: { score: number }) {
           className={TONE_CLASS[tone]}
         />
       </svg>
-      <div className={`absolute inset-0 flex items-center justify-center text-lg font-semibold ${TONE_CLASS[tone]}`}>{score}</div>
+      <div className={`absolute inset-0 flex items-center justify-center font-semibold ${small ? "text-base" : "text-lg"} ${TONE_CLASS[tone]}`}>{score}</div>
     </div>
   );
 }
@@ -93,19 +103,30 @@ type FixFn = (fix: NonNullable<ReviewCheck["fix"]>) => void;
 function CheckRow({ c, onFix, fixing }: { c: ReviewCheck; onFix?: FixFn; fixing?: string | null }) {
   const busy = Boolean(fixing);
   const mine = Boolean(c.fix && fixing === c.fix.target);
+  /*
+   * Ustma-ust tushmaydigan tuzilma: qator — GRID (belgi | matn [| tugma]).
+   * Guruh qutisi (`@container`) tor bo'lsa tugma matn OSTIGA (2-ustun,
+   * keyingi qator), keng bo'lsa — o'ng ustunga. Matn ustuni
+   * `minmax(0,1fr)` + `break-words`: uzun yorliq tugmani bosib ketmaydi,
+   * o'zi o'raladi.
+   */
   return (
-    <li className="flex items-start gap-2 py-1 text-sm" data-review-check={c.id} data-review-level={c.level}>
+    <li
+      className="grid grid-cols-[auto_minmax(0,1fr)] items-start gap-x-2 gap-y-1 py-1 text-sm @[20rem]:grid-cols-[auto_minmax(0,1fr)_auto]"
+      data-review-check={c.id}
+      data-review-level={c.level}
+    >
       <span className="shrink-0" role="img" aria-label={LEVEL_WORD[c.level]}>
         {ICON[c.level]}
       </span>
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 break-words">
         <div className="font-medium">{c.label}</div>
         {c.detail ? <div className="text-muted-foreground text-xs">{c.detail}</div> : null}
       </div>
       {c.fix && c.level !== "green" ? (
         <button
           type="button"
-          className="bg-card shrink-0 rounded-md border px-2 py-0.5 text-xs disabled:opacity-50"
+          className="bg-card col-start-2 shrink-0 justify-self-start rounded-md border px-2 py-0.5 text-xs disabled:opacity-50 @[20rem]:col-start-3 @[20rem]:row-start-1 @[20rem]:justify-self-end"
           disabled={!onFix || busy}
           title={onFix ? c.fix.instruction : "Tez orada"}
           onClick={onFix && !busy ? () => onFix(c.fix!) : undefined}
@@ -173,6 +194,7 @@ function needHref(id: string, hrefBase?: string): string | undefined {
   return NEED_HREF[id];
 }
 
+
 export function ArticleReviewPanel({
   review,
   onFix,
@@ -181,6 +203,7 @@ export function ArticleReviewPanel({
   polishing,
   hideGroups,
   hrefBase,
+  compact = true,
 }: {
   review: ArticleReview;
   onFix?: FixFn;
@@ -197,6 +220,13 @@ export function ArticleReviewPanel({
   hideGroups?: readonly ReviewGroupId[];
   /** «Sizdan kutiladi» havolalari uchun forma yo'li (`/uz/<vosita>`); berilmasa maqola/insho standarti. */
   hrefBase?: string;
+  /**
+   * Yon panel rejimi (V3, standart): ichki «Tayyorlik hisoboti» sarlavhasi
+   * va kartochka ramkasi chizilmaydi — `ResultLayout` paneli bo'lim nomini
+   * va ramkani o'zi beradi; ball halqasi ixchamroq. `false` — mustaqil
+   * kartochka (sarlavha bilan).
+   */
+  compact?: boolean;
 }) {
   const groups = hideGroups?.length ? REVIEW_GROUPS.filter((g) => !hideGroups.includes(g.id)) : REVIEW_GROUPS;
   const byGroup = new Map<ReviewGroupId, ReviewCheck[]>(REVIEW_GROUPS.map((g) => [g.id, []]));
@@ -208,26 +238,28 @@ export function ArticleReviewPanel({
   const needs = review.userNeeds ?? [];
   const busy = Boolean(polishing) || Boolean(fixing);
   return (
-    <section className="bg-card rounded-xl border p-3 text-sm" data-article-review aria-label="Tayyorlik hisoboti">
-      <header className="flex flex-wrap items-center gap-3">
-        <ScoreRing score={review.score} />
-        <div className="min-w-0 flex-1">
-          <div className="font-semibold">Tayyorlik hisoboti</div>
+    <section
+      className={compact ? "@container min-w-0 text-sm" : "bg-card @container min-w-0 rounded-xl border p-3 text-sm"}
+      data-article-review
+      data-review-compact={compact ? "1" : undefined}
+      aria-label="Tayyorlik hisoboti"
+    >
+      <header className="flex flex-wrap items-center gap-x-3 gap-y-2" data-review-header>
+        <ScoreRing score={review.score} small={compact} />
+        <div className="min-w-0 flex-1 basis-40 break-words">
+          {compact ? null : <div className="font-semibold">Tayyorlik hisoboti</div>}
+          <div className={compact ? "font-medium" : "text-muted-foreground text-xs"}>
+            {red ? `${red} xato` : "xato yo‘q"} · {yellow ? `${yellow} e’tibor` : "e’tibor talab qilmaydi"}
+          </div>
           <div className="text-muted-foreground text-xs">
-            {red ? `${red} xato` : "xato yo‘q"} · {yellow ? `${yellow} e’tibor` : "e’tibor talab qilmaydi"} · tasdiqlangan manbalar {Math.round(review.verifiedShare * 100)}% · yangi manbalar{" "}
-            {Math.round(review.recentShare * 100)}%
+            tasdiqlangan manbalar {Math.round(review.verifiedShare * 100)}% · yangi manbalar {Math.round(review.recentShare * 100)}%
             {built && !Number.isNaN(built.getTime()) ? ` · ${built.toLocaleDateString("uz-UZ")}` : ""}
           </div>
-          {review.polish ? (
-            <p className="mt-1 text-xs" data-polish-log data-polish-accepted={review.polish.accepted ? "1" : "0"}>
-              {polishText(review.polish)}
-            </p>
-          ) : null}
         </div>
         {onPolish ? (
           <button
             type="button"
-            className="bg-primary text-primary-foreground shrink-0 rounded-md px-3 py-1.5 text-xs font-medium disabled:opacity-50"
+            className="bg-primary text-primary-foreground w-full shrink-0 rounded-md px-3 py-1.5 text-xs font-medium disabled:opacity-50 @sm:w-auto"
             disabled={!fixable || busy}
             title={fixable ? "AI tuzatiladigan bandlarni o‘zi tuzatadi va qayta baholaydi (~1 daqiqa); ball oshsa qabul qilinadi" : "Tuzatiladigan band yo‘q — qolganlari sizning ma’lumotingizni kutmoqda"}
             onClick={fixable && !busy ? onPolish : undefined}
@@ -237,13 +269,18 @@ export function ArticleReviewPanel({
             {polishing ? "Tuzatilmoqda… ~1 daqiqa" : "Hammasini tuzatish"}
           </button>
         ) : null}
+        {review.polish ? (
+          <p className="w-full text-xs break-words" data-polish-log data-polish-accepted={review.polish.accepted ? "1" : "0"}>
+            {polishText(review.polish)}
+          </p>
+        ) : null}
       </header>
       {needs.length ? (
         <div className="mt-3 rounded-lg border border-amber-300/60 bg-amber-50/40 p-2 dark:bg-amber-950/20" data-user-needs>
           <div className="mb-1 text-xs font-semibold uppercase tracking-wide">Sizdan kutiladi</div>
           <ul className="space-y-1 text-sm">
             {needs.map((n) => (
-              <li key={n.id} className="flex flex-wrap items-baseline gap-x-2" data-user-need={n.id}>
+              <li key={n.id} className="flex flex-wrap items-baseline gap-x-2 break-words" data-user-need={n.id}>
                 <span className="font-medium">{n.label}</span>
                 <span className="text-muted-foreground text-xs">{n.hint}</span>
                 {needHref(n.id, hrefBase) ? (
@@ -256,11 +293,12 @@ export function ArticleReviewPanel({
           </ul>
         </div>
       ) : null}
-      <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {/* Konteyner so'rovi: dock/telefon (< 36rem) — 1 ustun; keng varaq/konteynerda 2–3 ustun. */}
+      <div className="mt-3 grid grid-cols-1 gap-3 @xl:grid-cols-2 @4xl:grid-cols-3" data-review-grid>
         {groups.map((g) => {
           const items = byGroup.get(g.id) ?? [];
           return (
-            <div key={g.id} className="rounded-lg border p-2" data-review-group={g.id}>
+            <div key={g.id} className="@container min-w-0 rounded-lg border p-2" data-review-group={g.id}>
               <div className="mb-1 text-xs font-semibold uppercase tracking-wide">{g.label}</div>
               {items.length ? (
                 <ul className="divide-y">
@@ -274,10 +312,10 @@ export function ArticleReviewPanel({
             </div>
           );
         })}
-        <div className="rounded-lg border p-2 sm:col-span-2 lg:col-span-3" data-review-notes>
+        <div className="min-w-0 rounded-lg border p-2 @xl:col-span-2 @4xl:col-span-3" data-review-notes>
           <div className="mb-1 text-xs font-semibold uppercase tracking-wide">Baholovchi izohlari</div>
           {review.judgeNotes.length ? (
-            <ul className="list-disc space-y-1 pl-5 text-sm">
+            <ul className="list-disc space-y-1.5 pl-5 text-sm leading-snug break-words">
               {review.judgeNotes.map((n, i) => (
                 <li key={i}>{n}</li>
               ))}
