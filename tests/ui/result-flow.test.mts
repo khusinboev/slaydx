@@ -30,7 +30,7 @@ test("ResultView/ResultLayout: bitta sahifa scroll'i — ildizda overflow yo'q, 
   // Ildiz: oqimli flex ustun, overflow yo'q (ilgari: `flow ? "overflow-y-auto" : "overflow-hidden"`).
   assert.match(layout, /data-result-layout\s+data-result-frame=\{frame\}\s+className="flex shrink-0 grow flex-col"/, "ildiz klassi");
   // Sarlavha: shartsiz sticky (ilgari: `flow ? "shrink-0" : "sticky top-0"`).
-  assert.match(layout, /data-result-header className="[^"]*\bsticky top-0\b[^"]*"/, "sarlavha har doim sticky");
+  assert.match(layout, /data-result-header\s+className="[^"]*\bsticky top-0\b[^"]*"/, "sarlavha har doim sticky");
   assert.match(layout, /setProperty\("--result-header-h"/, "sarlavha balandligi o'zgaruvchisi");
   assert.doesNotMatch(src + layout, /data-result-flow/, "eski belgi o'rniga `data-result-frame`/`data-viewer-frame`");
 });

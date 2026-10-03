@@ -45,12 +45,19 @@ if (!("IntersectionObserver" in globalThis)) {
 
 const win = window as unknown as { matchMedia?: (q: string) => MediaQueryList };
 let wide = false;
+/** Viewport eni (px). `wide = true` — 1920; ikkalasi ham yo'q — 1000 (xl dan tor, telefon emas). */
+let vw: number | null = null;
+const width = () => vw ?? (wide ? 1920 : 1000);
 
 before(() => {
   Object.defineProperty(document, "hidden", { configurable: true, get: () => false });
   win.matchMedia = (q: string) =>
     ({
-      matches: wide && q.includes("1280"),
+      matches: (() => {
+        const min = /min-width:\s*(\d+)px/.exec(q);
+        const max = /max-width:\s*(\d+)px/.exec(q);
+        return min ? width() >= Number(min[1]) : max ? width() <= Number(max[1]) : false;
+      })(),
       media: q,
       addEventListener() {},
       removeEventListener() {},
@@ -62,6 +69,7 @@ afterEach(() => {
   cleanup();
   globalThis.fetch = realFetch;
   wide = false;
+  vw = null;
   try {
     window.localStorage.clear();
   } catch {
@@ -406,4 +414,151 @@ test("ResultView (maqola): «Fayl yangilanmoqda…» faqat yuklash paytida — e
   assert.match(btn.textContent ?? "", /Yuklab olish/);
   assert.doesNotMatch(btn.textContent ?? "", /Fayl yangilanmoqda/, "MUTATSIYA: `fileStale ||` qaytarilsa yozuv abadiy turardi");
   assert.equal(btn.getAttribute("title"), "Fayl oxirgi tahrirlar bilan yangilanib yuklanadi");
+});
+
+/* ───────────────── V5b: dock standarti eniga qarab, ixcham sarlavha ───────────────── */
+
+/*
+ * Mutatsiyalar (V5b, har biri qizardi):
+ *   1. `dockOpen = dockPref ?? dockByDefault` → `dockPref ?? true` (eski «doim ochiq») →
+ *      «1366 da standart yopiq» va «1280 da standart yopiq» qizardi;
+ *   2. `dockPref ?? dockByDefault` → `dockByDefault` (saqlangan tanlov e'tiborsiz) →
+ *      «saqlangan tanlov standartdan ustun» qizardi;
+ *   3. `COMPACT_ENTER` sharti olib tashlandi (tepada ham ixchamlashadi) / `compactNow` doim false →
+ *      «pastga aylantirilganda ixcham, tepaga — tiklanadi» qizardi.
+ */
+
+test("dock standarti: 1920 — ochiq; 1600 — ochiq (chegara)", () => {
+  for (const w of [1920, 1600]) {
+    vw = w;
+    layout();
+    assert.equal(q("[data-result-panel]")!.getAttribute("data-result-panel"), "dock", `${w}: dock`);
+    assert.equal(q("[data-result-panel]")!.getAttribute("data-panel-open"), "1", `${w}: standart ochiq`);
+    cleanup();
+  }
+});
+
+test("dock standarti: 1366 va 1280 — dock bor, lekin standart YOPIQ; chip ochadi", async () => {
+  for (const w of [1599, 1366, 1280]) {
+    vw = w;
+    layout();
+    const panel = q("[data-result-panel]")!;
+    assert.equal(panel.getAttribute("data-result-panel"), "dock", `${w}: keng rejim (dock)`);
+    assert.equal(panel.getAttribute("data-panel-open"), "0", `${w}: standart yopiq (mazmun siqilmasin)`);
+    assert.match(panel.className, /xl:hidden/, `${w}: ko'rinmaydi`);
+    assert.equal(window.localStorage.getItem(PANEL_PREF_KEY), null, "standart tanlov yozilmaydi");
+    await act(async () => fireEvent.click(q('[data-panel-chip="review"]')!));
+    assert.equal(panel.getAttribute("data-panel-open"), "1", `${w}: chip ochadi`);
+    assert.ok(!/xl:hidden/.test(panel.className));
+    cleanup();
+    window.localStorage.clear();
+  }
+  // Almashtirish tugmasi ham ochadi.
+  vw = 1366;
+  layout();
+  await act(async () => fireEvent.click(q("[data-panel-toggle]")!));
+  assert.equal(q("[data-result-panel]")!.getAttribute("data-panel-open"), "1");
+});
+
+test("dock standarti: saqlangan tanlov standartdan ustun (1366 da «ochiq», 1920 da «yopiq»)", () => {
+  vw = 1366;
+  window.localStorage.setItem(PANEL_PREF_KEY, "1");
+  layout();
+  assert.equal(q("[data-result-panel]")!.getAttribute("data-panel-open"), "1", "1366: saqlangan «ochiq» ustun");
+  cleanup();
+  vw = 1920;
+  window.localStorage.setItem(PANEL_PREF_KEY, "0");
+  layout();
+  assert.equal(q("[data-result-panel]")!.getAttribute("data-panel-open"), "0", "1920: saqlangan «yopiq» ustun");
+});
+
+test("dock standarti: tor ekranda (< 1280) varaq o'zgarmagan — yopiq, chip dialog ochadi", async () => {
+  vw = 1100;
+  layout();
+  assert.equal(q("[data-result-panel]")!.getAttribute("data-result-panel"), "sheet");
+  assert.equal(q("[data-result-panel]")!.getAttribute("data-panel-open"), "0");
+  await act(async () => fireEvent.click(q('[data-panel-chip="share"]')!));
+  assert.equal(q("[data-result-panel]")!.getAttribute("role"), "dialog");
+});
+
+/** Sahifani aylantiruvchi ota (AppShell `<main>`) o'rnida: inline `overflow-y: auto` + boshqariladigan `scrollTop`. */
+function scrolledLayout() {
+  let y = 0;
+  const r = render(
+    h(
+      "div",
+      { "data-scroller": "", style: { overflowY: "auto" } },
+      h(ResultLayout, {
+        header: h("nav", { "data-test-nav": "" }, h("button", { type: "button" }, "Orqaga")),
+        sections: SECTIONS,
+        frame: "flow",
+        children: h("div", { "data-test-content": "" }, "Hujjat"),
+      }),
+    ),
+  );
+  const sc = q("[data-scroller]")!;
+  Object.defineProperty(sc, "scrollTop", { configurable: true, get: () => y });
+  const scrollTo = async (to: number) => {
+    y = to;
+    await act(async () => {
+      sc.dispatchEvent(new window.Event("scroll"));
+      await new Promise((res) => setTimeout(res, 20));
+    });
+  };
+  return { r, scrollTo };
+}
+
+test("ixcham sarlavha (telefon): pastga aylantirilganda yig'iladi, tepaga aylantirilganda yoki tepada tiklanadi", async () => {
+  vw = 390;
+  const { scrollTo } = scrolledLayout();
+  const head = () => q("[data-result-header]")!;
+  assert.ok(!head().hasAttribute("data-compact"), "boshida to'liq");
+  assert.equal(q("[data-panel-chip-more]"), null, "boshida «Ma'lumot» chipi yo'q — alohida chiplar bor");
+  assert.ok(q('[data-panel-chip="review"]'));
+  await scrollTo(40);
+  assert.ok(!head().hasAttribute("data-compact"), "kichik siljishda yig'ilmaydi (gisterezis)");
+  await scrollTo(400);
+  assert.equal(head().getAttribute("data-compact"), "1", "pastga aylantirilganda ixcham");
+  const more = q("[data-panel-chip-more]")!;
+  assert.ok(more, "chiplar bitta «⋯ Ma'lumot» chipiga yig'ildi");
+  assert.match(more.textContent ?? "", /Ma’lumot/);
+  assert.match(q("[data-result-header-inner]")!.className, /data-\[compact=1\]:grid/, "bitta qatorli panjara");
+  // Muzlatilgan tashqi quti: ichki qatlam qisqarsa ham oqim balandligi o'zgarmaydi.
+  assert.ok(head().className.includes("pointer-events-none"), "shaffof qism ostidagi toolbarni to'smaydi");
+  // Tepaga aylantirish — tiklanadi (kichik, lekin UP dan katta).
+  await scrollTo(380);
+  assert.ok(!head().hasAttribute("data-compact"), "tepaga aylantirilganda tiklandi");
+  assert.equal(q("[data-panel-chip-more]"), null);
+  await scrollTo(700);
+  assert.equal(head().getAttribute("data-compact"), "1", "yana pastga — yana ixcham");
+  await scrollTo(0);
+  assert.ok(!head().hasAttribute("data-compact"), "tepada tiklandi");
+});
+
+test("ixcham sarlavha: «Ma'lumot» chipi varaqni ochadi (birinchi bo'lim); keng ekranda ixchamlashmaydi", async () => {
+  vw = 390;
+  const { scrollTo } = scrolledLayout();
+  await scrollTo(500);
+  await act(async () => fireEvent.click(q("[data-panel-chip-more]")!));
+  assert.equal(q("[data-result-panel]")!.getAttribute("data-panel-open"), "1");
+  assert.equal(q("[data-result-panel]")!.getAttribute("role"), "dialog");
+  cleanup();
+  vw = 1000;
+  const wideRun = scrolledLayout();
+  await wideRun.scrollTo(900);
+  assert.ok(!q("[data-result-header]")!.hasAttribute("data-compact"), "telefon bo'lmagan ekranda sarlavha o'zgarmaydi");
+});
+
+test("ixcham sarlavha: --result-header-h holat almashganda yangilanadi (toolbar offseti ergashadi)", async () => {
+  vw = 390;
+  const { scrollTo } = scrolledLayout();
+  const inner = q("[data-result-header-inner]")!;
+  let h0 = 120;
+  inner.getBoundingClientRect = () => ({ height: h0, width: 390, top: 0, left: 0, right: 390, bottom: h0, x: 0, y: 0, toJSON() {} }) as DOMRect;
+  const root = q("[data-result-layout]")!;
+  h0 = 56;
+  await scrollTo(600);
+  assert.equal(root.style.getPropertyValue("--result-header-h"), "56px", "ixcham balandlik o'zgaruvchiga yozildi");
+  // O'lchanadigani ICHKI qatlam: tashqi quti muzlatilgan balandlikda qoladi.
+  assert.ok(q("[data-result-header]")!.contains(inner));
 });
