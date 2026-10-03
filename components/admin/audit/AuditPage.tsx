@@ -27,6 +27,7 @@ import {
   type FilterOption,
 } from "@/components/admin/ui";
 import { roleLabel, useCan } from "@/components/admin/shell";
+import { useUrlDrawer } from "@/components/admin/shell/url-drawer";
 import { AuditDrawer } from "./AuditDrawer";
 import { OutcomeBadge, TargetCell } from "./cells";
 import {
@@ -73,6 +74,8 @@ export function AuditPage() {
   );
 
   // The cursor belongs to one filter set: another filter set starts again at the first page.
+  const drawer = useUrlDrawer();
+
   const [paging, setPaging] = useState<{ key: string; cursor: string | null }>({ key: filterKey, cursor: null });
   const cursor = paging.key === filterKey ? paging.cursor : null;
   const setCursor = (c: string | null) => setPaging({ key: filterKey, cursor: c });
@@ -240,7 +243,7 @@ export function AuditPage() {
             rows={items}
             rowKey={(r) => r.id}
             loading={state.status === "loading"}
-            onRowClick={(r) => update({ id: r.id })}
+            onRowClick={(r) => drawer.open(r.id)}
             empty={
               <EmptyState
                 title={active > 0 ? "Filtrlarga mos yozuv topilmadi" : "Audit yozuvlari yo'q"}
@@ -271,7 +274,7 @@ export function AuditPage() {
         <AuditDrawer
           key={openId}
           id={openId}
-          onClose={() => update({ id: null })}
+          onClose={drawer.close}
           // A filter shortcut from the drawer closes it, so the narrowed list is what the admin sees next.
           onFilter={(patch) => update({ ...patch, id: null })}
         />

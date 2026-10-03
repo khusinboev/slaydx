@@ -12,7 +12,13 @@ export function Drawer({
   description,
   children,
   footer,
+  history = true,
 }: {
+  /**
+   * `false` only when the open state already lives in the URL (`?id=` pushed by
+   * `useUrlDrawer`): the URL entry is then the drawer's history entry.
+   */
+  history?: boolean;
   open: boolean;
   onClose: () => void;
   title: string;
@@ -27,7 +33,7 @@ export function Drawer({
     closeRef.current = onClose;
   });
   const close = useCallback(() => closeRef.current(), []);
-  const panelRef = useDialog(open, close);
+  const panelRef = useDialog(open, close, { history });
 
   if (!open) return null;
 

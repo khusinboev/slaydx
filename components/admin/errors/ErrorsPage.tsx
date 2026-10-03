@@ -26,6 +26,7 @@ import {
   type Column,
 } from "@/components/admin/ui";
 import { useCan } from "@/components/admin/shell";
+import { useUrlDrawer } from "@/components/admin/shell/url-drawer";
 import { ErrorDrawer } from "./ErrorDrawer";
 import {
   LEVEL_LABEL,
@@ -75,6 +76,8 @@ export function ErrorsPage() {
   );
 
   // The cursor belongs to one filter set: another filter set starts again at the first page.
+  const drawer = useUrlDrawer();
+
   const [paging, setPaging] = useState<{ key: string; cursor: string | null }>({ key: filterKey, cursor: null });
   const cursor = paging.key === filterKey ? paging.cursor : null;
   const setCursor = (c: string | null) => setPaging({ key: filterKey, cursor: c });
@@ -237,7 +240,7 @@ export function ErrorsPage() {
             rows={items}
             rowKey={(e) => e.id}
             loading={state.status === "loading"}
-            onRowClick={(e) => update({ id: e.id })}
+            onRowClick={(e) => drawer.open(e.id)}
             selectable={canResolve}
             selected={selected}
             onSelectedChange={(ids) => setSel({ key: selKey, ids })}
@@ -272,7 +275,7 @@ export function ErrorsPage() {
       )}
 
       {openId ? (
-        <ErrorDrawer key={openId} id={openId} canResolve={canResolve} onClose={() => update({ id: null })} onChanged={reload} />
+        <ErrorDrawer key={openId} id={openId} canResolve={canResolve} onClose={drawer.close} onChanged={reload} />
       ) : null}
 
       {canResolve ? (

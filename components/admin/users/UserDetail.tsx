@@ -2,7 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
-import { ArrowLeft, Ban, Eye, LogOut, MessageSquare, ShieldCheck, UserCog, Wallet } from "lucide-react";
+import { Ban, Eye, LogOut, MessageSquare, ShieldCheck, UserCog, Wallet } from "lucide-react";
 import {
   Badge,
   Button,
@@ -23,6 +23,7 @@ import {
   toast,
 } from "@/components/admin/ui";
 import { roleLabel, useAdminIdentity, useCan } from "@/components/admin/shell";
+import { DetailBack } from "@/components/admin/shell/DetailBack";
 import { BLOCKED_USER, CreateAdminDialog, announceCreated } from "@/components/admin/admins/CreateAdminDialog";
 import { EnrollLinkDialog, type EnrollLinkView } from "@/components/admin/admins/EnrollLinkDialog";
 import { STATUS_META, assignableRoles } from "@/components/admin/admins/shared";
@@ -45,19 +46,10 @@ const TABS_ID = "user-tabs";
 type TabId = "overview" | "generations" | "payments" | "ledger" | "sessions" | "links" | "audit";
 type Dialog = "wallet" | "block" | "sessions" | "message" | "admin" | null;
 
-function BackLink() {
-  return (
-    <Link href="/admin/users" className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-[12.5px]">
-      <ArrowLeft className="size-3.5" aria-hidden="true" />
-      Foydalanuvchilar
-    </Link>
-  );
-}
-
 function Shell({ children }: { children: ReactNode }) {
   return (
     <div className="flex flex-col gap-4">
-      <BackLink />
+      <DetailBack label="Foydalanuvchilar" />
       <div className="bg-card rounded-xl border">{children}</div>
     </div>
   );
@@ -221,7 +213,7 @@ export function UserDetail({ id, tools }: { id: string; tools: ReadonlyArray<Fil
 
   return (
     <div className="flex min-w-0 flex-col gap-5" aria-busy={state.status === "loading" || undefined}>
-      <BackLink />
+      <DetailBack label="Foydalanuvchilar" />
       <header className="flex min-w-0 flex-col gap-1">
         <h1 className="flex flex-wrap items-center gap-2 text-[22px] font-semibold tracking-tight">
           <span className="min-w-0 break-words">{user.name || `#${user.id}`}</span>

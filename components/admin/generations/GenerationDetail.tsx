@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { ArrowLeft, Ban, Download, Eye, OctagonX, Undo2 } from "lucide-react";
+import { Ban, Download, Eye, OctagonX, Undo2 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import {
   AdminForbiddenError,
@@ -39,6 +39,7 @@ import {
 } from "@/components/admin/ui";
 import { JobActionDialog, WALLET_LABEL, type JobAction } from "@/components/admin/money";
 import { useCan } from "@/components/admin/shell/admin-identity";
+import { DetailBack } from "@/components/admin/shell/DetailBack";
 import { GenerationStatusPill, chargeText, isCharged, toolLabel } from "./shared";
 
 type State =
@@ -200,10 +201,7 @@ export function GenerationDetail({ id, tools }: { id: string; tools: ReadonlyArr
   }
 
   const back = (
-    <Link href="/admin/generations" className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1 text-[12.5px]">
-      <ArrowLeft className="size-3.5" aria-hidden="true" />
-      Generatsiyalar
-    </Link>
+    <DetailBack label="Generatsiyalar" />
   );
 
   if (!shown) return <DetailSkeleton />;

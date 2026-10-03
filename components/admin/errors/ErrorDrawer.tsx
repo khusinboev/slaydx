@@ -35,6 +35,8 @@ export function ErrorDrawer({
     <>
       <Drawer
         open
+        // The `?id=` URL entry (pushed by the list) is this drawer's history entry.
+        history={false}
         // Escape is a window-level listener in both dialogs: while the confirm is open it must not close the drawer too.
         onClose={() => {
           if (!confirmOpen) onClose();

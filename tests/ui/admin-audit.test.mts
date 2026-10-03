@@ -53,13 +53,13 @@ const OWNER = ["audit.view", "audit.export", "admins.view"];
 const ADMIN = ["audit.view", "admins.view"];
 
 function renderAt(query: string, permissions: string[] = OWNER, role = "owner") {
-  const calls = { replace: [] as string[] };
+  const calls = { replace: [] as string[], push: [] as string[] };
   const router: AppRouterInstance = {
     back() {},
     forward() {},
     refresh() {},
     prefetch() {},
-    push() {},
+    push: (href: string) => void calls.push.push(href),
     replace: (href: string) => void calls.replace.push(href),
   };
   const node: ReactNode = h(AdminIdentityProvider, {
@@ -369,7 +369,9 @@ test("a row opens the drawer via ?id=; the drawer shows who/what, a highlighted 
   const { calls: nav, container } = renderAt("");
   await waitFor(() => assert.ok(rowOf(container, "9")));
   fireEvent.click(rowOf(container, "9"));
-  assert.equal(nav.replace.at(-1), "/admin/audit?id=9");
+  // N3: the row PUSHES ?id=, so the URL entry is the drawer's history entry (phone back closes it).
+  assert.equal(nav.push.at(-1), "/admin/audit?id=9");
+  assert.equal(nav.replace.length, 0, "opening the drawer is not a replace");
   cleanup();
 
   const calls = stubFetch(auditApi());
@@ -430,7 +432,7 @@ test("rows are plain text: clicking the action or admin opens the drawer instead
   await waitFor(() => assert.ok(rowOf(container, "9")));
   assert.ok(!within(rowOf(container, "9")).queryByRole("button"), "no buttons inside a row");
   fireEvent.click(within(rowOf(container, "9")).getByText("users.block"));
-  assert.equal(nav.replace.at(-1), "/admin/audit?id=9");
+  assert.equal(nav.push.at(-1), "/admin/audit?id=9");
 });
 
 test("drawer: a row without snapshots says so; a missing row shows the server message", async () => {
