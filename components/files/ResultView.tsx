@@ -503,7 +503,7 @@ export function ResultView({ id }: { id: string }) {
   ];
 
   const header = (
-    <nav className="flex items-center gap-2 px-3 py-2 sm:px-4">
+    <nav className="flex items-center gap-2 px-3 py-2 group-data-[compact=1]/hdr:py-1 sm:px-4">
       <Link
         href="/uz"
         aria-label="Orqaga"
@@ -513,7 +513,7 @@ export function ResultView({ id }: { id: string }) {
       </Link>
       <div className="min-w-0 flex-1">
         <h1 className="truncate text-[15px] font-semibold">{gen.topic}</h1>
-        <p className="text-muted-foreground truncate text-xs">
+        <p className="text-muted-foreground truncate text-xs group-data-[compact=1]/hdr:hidden">
           {tool?.title} · {completed ? (expired ? "Topilmadi" : "Tayyor") : gen.step} ·{" "}
           {gen.price.toLocaleString("uz-UZ")} tanga
         </p>
@@ -566,7 +566,7 @@ export function ResultView({ id }: { id: string }) {
             */
             <button
               type="button"
-              className="bg-card inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm disabled:opacity-60"
+              className="bg-card inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm disabled:opacity-60 group-data-[compact=1]/hdr:hidden"
               disabled={busy || !gen.hasFile}
               aria-busy={downloading === "pdf"}
               data-pdf-busy={downloading === "pdf" ? "1" : undefined}
@@ -592,7 +592,7 @@ export function ResultView({ id }: { id: string }) {
             className={
               del.armed
                 ? "bg-destructive text-destructive-foreground inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm font-medium disabled:opacity-60"
-                : "bg-card inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm disabled:opacity-60"
+                : "bg-card inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm disabled:opacity-60 group-data-[compact=1]/hdr:hidden"
             }
             disabled={busy}
             onClick={del.trigger}

@@ -1,10 +1,10 @@
 "use client";
 
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
-import { ChevronRight, PanelRightClose, PanelRightOpen, X } from "lucide-react";
+import { ChevronRight, MoreHorizontal, PanelRightClose, PanelRightOpen, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { useDialog } from "../overlays/useDialog";
-import { readPanelOpen, useWide, writePanelOpen } from "./result-layout/prefs";
+import { readPanelOpen, useDockDefaultOpen, usePhone, useWide, writePanelOpen } from "./result-layout/prefs";
 import type { ChipTone } from "./result-layout/summary";
 
 /**
@@ -46,6 +46,26 @@ export type PanelSection = {
   content: ReactNode;
 };
 
+/** Ixcham sarlavha chegaralari (px): ≥ ENTER va ≥ DOWN pastga → yig'iladi; < EXIT yoki ≥ UP tepaga → tiklanadi. */
+const COMPACT_ENTER = 96;
+const COMPACT_DOWN = 24;
+const COMPACT_EXIT = 24;
+const COMPACT_UP = 12;
+
+/** Sahifani aylantiruvchi eng yaqin ota (AppShell `<main>`); topilmasa — oyna. */
+function scrollParent(el: HTMLElement): HTMLElement | Window {
+  for (let p = el.parentElement; p; p = p.parentElement) {
+    const oy = window.getComputedStyle(p).overflowY;
+    if (oy === "auto" || oy === "scroll") return p;
+  }
+  return window;
+}
+
+const TONE_RANK: ChipTone[] = ["neutral", "green", "yellow", "red"];
+function worstTone(sections: PanelSection[]): ChipTone {
+  return sections.reduce<ChipTone>((w, s) => (TONE_RANK.indexOf(s.tone ?? "neutral") > TONE_RANK.indexOf(w) ? (s.tone ?? "neutral") : w), "neutral");
+}
+
 const TONE_DOT: Record<ChipTone, string> = {
   green: "bg-emerald-500",
   yellow: "bg-amber-500",
@@ -71,37 +91,113 @@ export function ResultLayout({
 }) {
   const rootRef = useRef<HTMLDivElement>(null);
   const headRef = useRef<HTMLDivElement>(null);
+  const outerRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const panelId = useId();
   const wide = useWide();
+  const dockByDefault = useDockDefaultOpen();
+  const phone = usePhone();
   const hasPanel = sections.length > 0;
+
+  /*
+   * Ixcham sarlavha (faqat telefon, `< md`). Sahifa `<main>` da aylanadi:
+   * pastga aylantirilganda sarlavha bitta qatorga (orqaga, sarlavha,
+   * asosiy yuklash, «⋯ Ma'lumot») qisqaradi; tepaga aylantirilganda yoki
+   * tepada tiklanadi. Gisterezis (`COMPACT_*`) chegarada titramasligi uchun.
+   */
+  const [compact, setCompact] = useState(false);
+  const compactNow = compact && phone;
+  /*
+   * Ixchamlashishdan OLDINGI to'liq balandlik: tashqi sticky quti shuncha
+   * turadi (shaffof), faqat ICHKI qatlam qisqaradi — oqim balandligi
+   * o'zgarmaydi, mazmun barmoq ostidan siljimaydi (scroll anchoring kerak emas).
+   */
+  const [frozenH, setFrozenH] = useState<number | null>(null);
 
   /*
    * Sarlavha balandligi → `--result-header-h`. To'g'ridan-to'g'ri
    * `style.setProperty` (React holati emas): o'lcham o'zgarganda butun
-   * ko'ruvchi daraxti qayta chizilmasin.
+   * ko'ruvchi daraxti qayta chizilmasin. O'lchanadigani ICHKI qatlam
+   * (`headRef`): toolbar haqiqiy ko'rinadigan sarlavha ostiga yopishadi.
    */
-  useLayoutEffect(() => {
+  const syncHeaderH = useCallback(() => {
     const root = rootRef.current;
     const head = headRef.current;
-    if (!root || !head) return;
-    const apply = () => root.style.setProperty("--result-header-h", `${Math.round(head.getBoundingClientRect().height)}px`);
-    apply();
+    if (root && head) root.style.setProperty("--result-header-h", `${Math.round(head.getBoundingClientRect().height)}px`);
+  }, []);
+  useLayoutEffect(() => {
+    const head = headRef.current;
+    if (!head) return;
+    syncHeaderH();
     if (typeof ResizeObserver === "undefined") return;
-    const ro = new ResizeObserver(apply);
+    const ro = new ResizeObserver(syncHeaderH);
     ro.observe(head);
     return () => ro.disconnect();
-  }, []);
+  }, [syncHeaderH]);
+  // Holat almashgan zahoti (ResizeObserver'ni kutmasdan): toolbar offseti shu kadrdayoq ergashadi.
+  useLayoutEffect(() => {
+    syncHeaderH();
+  }, [compactNow, syncHeaderH]);
 
-  /* Keng ekrandagi panel — standart OCHIQ (mazmun bo'lsa), tanlov eslab qolinadi. */
-  const [dockOpen, setDockOpen] = useState<boolean>(() => readPanelOpen() ?? true);
+  const compactRef = useRef(false);
+  useEffect(() => {
+    compactRef.current = false;
+    setCompact(false);
+    setFrozenH(null);
+    if (!phone) return;
+    const root = rootRef.current;
+    if (!root) return;
+    const scroller = scrollParent(root);
+    const pos = () => (scroller === window ? window.scrollY : (scroller as HTMLElement).scrollTop);
+    // trough — ixchamlashguncha eng past (tepadagi) nuqta, peak — ixchamlashgandan keyingi eng chuqur nuqta.
+    let trough = pos();
+    let peak = trough;
+    let raf = 0;
+    const tick = () => {
+      raf = 0;
+      const y = pos();
+      if (!compactRef.current) {
+        trough = Math.min(trough, y);
+        if (y > COMPACT_ENTER && y - trough > COMPACT_DOWN) {
+          compactRef.current = true;
+          peak = y;
+          // Muzlatish setCompact bilan BIR batch'da: o'lchov hali to'liq sarlavhadan.
+          setFrozenH(outerRef.current?.getBoundingClientRect().height ?? null);
+          setCompact(true);
+        }
+      } else {
+        peak = Math.max(peak, y);
+        if (y < COMPACT_EXIT || peak - y > COMPACT_UP) {
+          compactRef.current = false;
+          trough = y;
+          setCompact(false);
+        }
+      }
+    };
+    const onScroll = () => {
+      if (!raf) raf = requestAnimationFrame(tick);
+    };
+    scroller.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      scroller.removeEventListener("scroll", onScroll);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [phone]);
+
+  /*
+   * Keng ekrandagi panel: saqlangan tanlov (localStorage) HAR DOIM ustun;
+   * tanlov yo'q bo'lsa standart — faqat ≥ 1600 px da ochiq. 1280…1599 px da
+   * panel bor, lekin yopiq (chip/tugma ochadi): mazmun ustuni siqilmaydi.
+   */
+  const [dockPref, setDockPref] = useState<boolean | null>(() => readPanelOpen());
+  const dockOpen = dockPref ?? dockByDefault;
   /* Tor ekrandagi varaq — standart YOPIQ: ochilgan varaq hujjatni to'sardi. */
   const [sheetOpen, setSheetOpen] = useState(false);
   /** Chip bosilganda ko'rsatiladigan bo'lim (panel ochilgach unga suriladi). */
   const [target, setTarget] = useState<{ id: string; n: number } | null>(null);
 
   const setDock = useCallback((open: boolean) => {
-    setDockOpen(open);
+    setDockPref(open);
     writePanelOpen(open);
   }, []);
   const closeSheet = useCallback(() => setSheetOpen(false), []);
@@ -150,11 +246,47 @@ export function ResultLayout({
         ["--result-fill-h" as string]: "calc(100svh - var(--app-topbar-h) - var(--result-header-h, 0px))",
       }}
     >
-      <div ref={headRef} data-result-header className="no-print bg-background/95 sticky top-0 z-20 border-b backdrop-blur">
+      {/*
+        Tashqi quti — sticky, ixchamlashganda shaffof va to'liq balandlikda
+        (oqim siljimaydi; `pointer-events-none` — shaffof qism ostidagi
+        toolbarni to'smaydi). Ko'rinadigan sarlavha — ichki qatlam.
+        ResultView sarlavhasidagi ikkinchi darajali elementlar
+        `group-data-[compact=1]/hdr:hidden` bilan ixcham holatda yashirinadi.
+      */}
+      <div
+        ref={outerRef}
+        data-compact={compactNow ? "1" : undefined}
+        data-result-header
+        className="no-print pointer-events-none sticky top-0 z-20"
+        style={compactNow && frozenH ? { minHeight: frozenH } : undefined}
+      >
+      <div
+        ref={headRef}
+        data-result-header-inner
+        data-compact={compactNow ? "1" : undefined}
+        className="group/hdr bg-background/95 pointer-events-auto border-b backdrop-blur data-[compact=1]:grid data-[compact=1]:grid-cols-[minmax(0,1fr)_auto] data-[compact=1]:items-center"
+      >
         {header}
-        {notices}
+        {notices ? <div className="group-data-[compact=1]/hdr:col-span-2 group-data-[compact=1]/hdr:row-start-2" data-result-notices>{notices}</div> : null}
         {hasPanel ? (
-          <div className="flex flex-wrap items-center gap-1.5 px-3 pb-2 sm:px-4" data-result-chips>
+          <div
+            className="flex flex-wrap items-center gap-1.5 px-3 pb-2 group-data-[compact=1]/hdr:col-start-2 group-data-[compact=1]/hdr:row-start-1 group-data-[compact=1]/hdr:flex-nowrap group-data-[compact=1]/hdr:pb-0 sm:px-4"
+            data-result-chips
+          >
+            {compactNow ? (
+              <button
+                type="button"
+                data-panel-chip-more
+                aria-controls={panelId}
+                aria-expanded={panelVisible}
+                onClick={() => openSection(sections[0].id)}
+                className="bg-card hover:bg-muted inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium"
+              >
+                <span className={cn("size-2 shrink-0 rounded-full", TONE_DOT[worstTone(sections)])} aria-hidden />
+                <MoreHorizontal className="size-3.5 shrink-0" aria-hidden />
+                Ma’lumot
+              </button>
+            ) : null}
             {sections.map((s) => (
               <button
                 key={s.id}
@@ -163,7 +295,7 @@ export function ResultLayout({
                 aria-controls={panelId}
                 aria-expanded={panelVisible}
                 onClick={() => openSection(s.id)}
-                className="bg-card hover:bg-muted inline-flex h-7 max-w-full items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium"
+                className="bg-card hover:bg-muted inline-flex h-7 max-w-full items-center gap-1.5 rounded-full border px-2.5 text-xs font-medium group-data-[compact=1]/hdr:hidden"
               >
                 <span className={cn("size-2 shrink-0 rounded-full", TONE_DOT[s.tone ?? "neutral"])} aria-hidden />
                 <span className="truncate">{s.chip}</span>
@@ -184,6 +316,7 @@ export function ResultLayout({
             </button>
           </div>
         ) : null}
+      </div>
       </div>
 
       <div className="flex grow items-start" data-result-body>

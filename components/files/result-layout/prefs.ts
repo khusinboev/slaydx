@@ -1,6 +1,6 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 
 /**
  * Yon panel holati — har brauzerda eslab qolinadi (egasi qarori 1).
@@ -29,24 +29,40 @@ export function writePanelOpen(open: boolean): void {
 
 /** Keng ekran (`xl`, ≥ 1280 px): panel o'ngda; torroqda — pastki varaq. */
 export const WIDE_QUERY = "(min-width: 1280px)";
+/**
+ * Panel standart OCHIQ bo'ladigan eni (`min-width`). 1280…1599 px da panel
+ * mavjud, lekin standart YOPIQ (mazmun ustuni 40 % ga siqilmasin, R3);
+ * chip/tugma uni ochadi, saqlangan tanlov (`readPanelOpen`) esa har doim ustun.
+ */
+export const DOCK_DEFAULT_OPEN_QUERY = "(min-width: 1600px)";
+/** Telefon (`< md`): sticky sarlavha pastga aylantirilganda ixchamlashadi. */
+export const PHONE_QUERY = "(max-width: 767px)";
 
-function mql(): MediaQueryList | null {
+function mq(query: string): MediaQueryList | null {
   if (typeof window === "undefined" || typeof window.matchMedia !== "function") return null;
-  return window.matchMedia(WIDE_QUERY);
+  return window.matchMedia(query);
 }
 
-function subscribe(cb: () => void): () => void {
-  const m = mql();
-  if (!m) return () => {};
-  m.addEventListener("change", cb);
-  return () => m.removeEventListener("change", cb);
-}
-
-/** `matchMedia` yo'q muhitda (jsdom, SSR) — tor ekran deb olinadi. */
-export function useWide(): boolean {
+/** `matchMedia` yo'q muhitda (jsdom, SSR) — `false`. */
+function useMedia(query: string): boolean {
+  const subscribe = useCallback(
+    (cb: () => void) => {
+      const m = mq(query);
+      if (!m) return () => {};
+      m.addEventListener("change", cb);
+      return () => m.removeEventListener("change", cb);
+    },
+    [query],
+  );
   return useSyncExternalStore(
     subscribe,
-    () => mql()?.matches ?? false,
+    () => mq(query)?.matches ?? false,
     () => false,
   );
 }
+
+/** `matchMedia` yo'q muhitda (jsdom, SSR) — tor ekran deb olinadi. */
+export const useWide = (): boolean => useMedia(WIDE_QUERY);
+/** ≥ 1600 px: panel saqlangan tanlovsiz ochiq turadi. */
+export const useDockDefaultOpen = (): boolean => useMedia(DOCK_DEFAULT_OPEN_QUERY);
+export const usePhone = (): boolean => useMedia(PHONE_QUERY);

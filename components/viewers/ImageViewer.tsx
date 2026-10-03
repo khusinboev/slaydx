@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, Download, Maximize2, Minimize2, X } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight, Download, ImageOff, Maximize2, Minimize2, X } from "lucide-react";
 import type { AcademicDoc, GenImage } from "@/lib/generation/types";
 import { imageExt } from "@/lib/viewers/kind";
 import { imageRatioById, imageStyleById } from "@/lib/generation/image-studio-options";
@@ -82,10 +82,6 @@ export function ImageViewer({ doc }: { doc: AcademicDoc }) {
               <Maximize2 className="size-3.5" />
               To‘liq o‘lcham
             </button>
-            <button type="button" className={barBtn} onClick={() => downloadImage(images[0], 0)} aria-label="Yuklab olish">
-              <Download className="size-3.5" />
-              <span className="hidden sm:inline">Yuklab olish</span>
-            </button>
           </span>
         ) : null}
       </div>
@@ -106,26 +102,16 @@ export function ImageViewer({ doc }: { doc: AcademicDoc }) {
             data-image-grid
           >
             {images.map((im, i) => (
-              <figure key={im.id} className="relative overflow-hidden rounded-xl bg-black">
-                <button type="button" className="block w-full cursor-zoom-in" onClick={() => openAt(i)} aria-label="Kattalashtirish">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={im.url}
-                    alt={im.alt || ""}
-                    className={cn("h-auto w-full", poster ? "object-contain" : "object-cover")}
-                    style={{ aspectRatio: `${im.w} / ${im.h}` }}
-                  />
-                </button>
-                {/* Doim ko'rinadi (sensorli ekranda hover yo'q), 40 px tegish maydoni. */}
-                <div className="absolute right-2 bottom-2 flex gap-1" data-image-actions>
-                  <button type="button" className={act} onClick={() => openAt(i)} aria-label="Kattalashtirish">
-                    <Maximize2 className="size-4" />
-                  </button>
-                  <button type="button" className={act} onClick={() => downloadImage(im, i)} aria-label="Yuklab olish">
-                    <Download className="size-4" />
-                  </button>
-                </div>
-              </figure>
+              <ImageTile
+                key={im.id}
+                im={im}
+                poster={!!poster}
+                onOpen={() => openAt(i)}
+                // Bitta rasm: sarlavhadagi «Yuklab olish» AYNAN shu PNG ni beradi — takror yo'q.
+                // Bir nechta rasm: sarlavha ZIP beradi, bu esa BITTA PNG — boshqa fayl, shuning uchun qoladi.
+                onDownload={single ? undefined : () => downloadImage(im, i)}
+                actClass={act}
+              />
             ))}
           </div>
         )}
@@ -185,9 +171,11 @@ export function ImageViewer({ doc }: { doc: AcademicDoc }) {
               >
                 {actual ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
               </button>
-              <button type="button" className={act} onClick={() => downloadImage(images[open], open)} aria-label="Yuklab olish">
-                <Download className="size-4" />
-              </button>
+              {single ? null : (
+                <button type="button" className={act} onClick={() => downloadImage(images[open], open)} aria-label="Yuklab olish">
+                  <Download className="size-4" />
+                </button>
+              )}
             </div>
             <div className={cn("min-h-0 max-w-full", actual ? "max-h-[calc(100svh-5rem)] overflow-auto" : "")} data-lightbox-stage>
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -202,6 +190,93 @@ export function ImageViewer({ doc }: { doc: AcademicDoc }) {
         </div>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * Bitta rasm katagi: yuklanguncha rasm NISBATIDAGI neytral skelet (qora quti
+ * emas), yuklangach yumshoq paydo bo'lish, xatoda — xabar va «Qayta urinish».
+ * Nisbat `im.w/im.h` dan (yo'q bo'lsa 1:1) — rasm kelganda sahifa sakramaydi.
+ */
+function ImageTile({
+  im,
+  poster,
+  onOpen,
+  onDownload,
+  actClass,
+}: {
+  im: GenImage;
+  poster: boolean;
+  onOpen: () => void;
+  onDownload?: () => void;
+  actClass: string;
+}) {
+  const [status, setStatus] = useState<"loading" | "loaded" | "error">("loading");
+  const [attempt, setAttempt] = useState(0);
+  const ref = useRef<HTMLImageElement>(null);
+  // Brauzer keshidan darhol kelgan rasmda `load` hodisasi gidratsiyadan OLDIN o'tib ketgan bo'lishi mumkin.
+  useEffect(() => {
+    const el = ref.current;
+    if (el && el.complete && el.naturalWidth > 0) setStatus("loaded");
+  }, [attempt]);
+  const ratio = im.w > 0 && im.h > 0 ? `${im.w} / ${im.h}` : "1 / 1";
+  return (
+    <figure
+      className={cn("relative overflow-hidden rounded-xl", status === "loaded" ? "bg-black" : "bg-white/[0.06]")}
+      data-image-tile
+      data-image-state={status}
+    >
+      <button type="button" className="block w-full cursor-zoom-in" onClick={onOpen} aria-label="Kattalashtirish" disabled={status === "error"}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          key={attempt}
+          ref={ref}
+          src={im.url}
+          alt={im.alt || ""}
+          onLoad={() => setStatus("loaded")}
+          onError={() => setStatus("error")}
+          className={cn(
+            "h-auto w-full transition-opacity duration-300",
+            poster ? "object-contain" : "object-cover",
+            status === "loaded" ? "opacity-100" : "opacity-0",
+          )}
+          style={{ aspectRatio: ratio }}
+        />
+      </button>
+      {status === "loading" ? (
+        <div className="pointer-events-none absolute inset-0 animate-pulse bg-white/[0.04]" role="status" aria-label="Rasm yuklanmoqda" data-image-skeleton />
+      ) : null}
+      {status === "error" ? (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-4 text-center text-white/70" role="alert" data-image-error>
+          <ImageOff className="size-6" aria-hidden />
+          <p className="text-sm">Rasm yuklanmadi</p>
+          <button
+            type="button"
+            className="inline-flex h-9 items-center rounded-lg bg-white/10 px-4 text-sm text-white hover:bg-white/20"
+            onClick={() => {
+              setStatus("loading");
+              setAttempt((n) => n + 1);
+            }}
+            data-image-retry
+          >
+            Qayta urinish
+          </button>
+        </div>
+      ) : null}
+      {/* Doim ko'rinadi (sensorli ekranda hover yo'q), 40 px tegish maydoni. Xatoda rasm yo'q — amallar ham yo'q. */}
+      {status !== "error" ? (
+        <div className="absolute right-2 bottom-2 flex gap-1" data-image-actions>
+          <button type="button" className={actClass} onClick={onOpen} aria-label="Kattalashtirish">
+            <Maximize2 className="size-4" />
+          </button>
+          {onDownload ? (
+            <button type="button" className={actClass} onClick={onDownload} aria-label="Yuklab olish">
+              <Download className="size-4" />
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+    </figure>
   );
 }
 
